@@ -7,10 +7,6 @@ import {
   handleAskQuestionResponse,
   parseAskAnswerCommand,
 } from './ask-user-question.js';
-import {
-  handleWorkflowResumeCommand,
-  parseWorkflowResumeCommand,
-} from './workflow-interrupt-command.js';
 import { createCardActionHandler } from './card-action-router.js';
 import {
   ASSISTANT_NAME,
@@ -79,7 +75,6 @@ import {
   setSession,
   storeChatMetadata,
   storeMessage,
-  getWorkflow,
 } from './db.js';
 import {
   activateConfiguredFeatures,
@@ -90,10 +85,6 @@ import { backfillWebMessageModel, clearWebMessages } from './web-db.js';
 import { GroupQueue, OneShotAgentSlotEvent } from './group-queue.js';
 import { resolveGroupFolderPath } from './group-folder.js';
 import { startIpcWatcher } from './ipc.js';
-import { initWorkflow } from './workflow.js';
-import { initWorkbenchEvents } from './workbench-events.js';
-import { WorkbenchBroadcastService } from './workbench-broadcast.js';
-import { resolveAskAnswerGroupFolder } from './workbench-broadcast-actions.js';
 import {
   findChannel,
   formatMessages,
@@ -151,7 +142,6 @@ import {
   consumeModelResolution,
 } from './model-resolution.js';
 import { selectModel } from './model-selector.js';
-import { getWorkflowTypeConfig } from './workflow-config.js';
 import { InternalAgentRunOnceService } from './internal-agent-run-once/service.js';
 import { InternalAgentChatService } from './internal-agent-run-once/chat-service.js';
 import { startInternalAgentRunOnceServer } from './internal-agent-run-once/server.js';
@@ -206,12 +196,7 @@ interface OneShotTraceContext {
 }
 
 type AgentExecutionContext = {
-  workflowId?: string;
-  stageKey?: string;
   delegationId?: string;
-  workflowType?: string;
-  service?: string;
-  role?: string;
 };
 
 const channels: Channel[] = [];
@@ -521,12 +506,10 @@ function finalizePendingQueryBatch(result: ContainerOutput): {
   };
 }
 
-function isWorkflowDelegationExecutionContext(
+function isDelegationExecutionContext(
   executionContext?: AgentExecutionContext,
 ): boolean {
-  return Boolean(
-    executionContext?.workflowId && executionContext?.delegationId,
-  );
+  return Boolean(executionContext?.delegationId);
 }
 
 function isCompleteDelegationToolResult(output: ContainerOutput): boolean {
@@ -565,11 +548,6 @@ function createMessageQueryTrace(params: {
   runId: string;
   chatJid: string;
   groupFolder: string;
-  workflowType?: string;
-  service?: string;
-  role?: string;
-  workflowId?: string;
-  stageKey?: string;
   delegationId?: string;
   sourceRefId?: string | null;
   selectedModel: string;
@@ -585,22 +563,17 @@ function createMessageQueryTrace(params: {
   retryOfQueryId?: string | null;
   retryAttempt?: number | null;
 }): void {
-  const sourceType = params.delegationId ? 'workflow_delegation' : 'message';
+  const sourceType = params.delegationId ? 'delegation' : 'message';
   agentQueryTraceManager.startQuery({
     queryId: params.queryId,
     runId: params.runId,
     sourceType,
     sourceRefId:
-      sourceType === 'workflow_delegation'
+      sourceType === 'delegation'
         ? (params.delegationId ?? null)
         : (params.sourceRefId ?? null),
     chatJid: params.chatJid,
     groupFolder: params.groupFolder,
-    workflowType: params.workflowType,
-    service: params.service,
-    role: params.role,
-    workflowId: params.workflowId,
-    stageKey: params.stageKey,
     delegationId: params.delegationId,
     selectedModel: params.selectedModel,
     selectedModelReason: params.selectedModelReason,
@@ -667,23 +640,16 @@ function createMessageQueryTrace(params: {
     status: 'running',
     summary: 'Waiting for agent output',
   });
-  if (params.delegationId || params.workflowId) {
+  if (params.delegationId) {
     agentQueryTraceManager.appendStructuredEvent({
       queryId: params.queryId,
       stepId: executionStepId,
-      category: 'workflow',
-      eventName: 'workflow_delegation_created',
+      category: 'delegation',
+      eventName: 'delegation_started',
       status: 'running',
-      summary: params.stageKey
-        ? `Workflow delegation started: ${params.stageKey}`
-        : 'Workflow delegation started',
+      summary: 'Delegation started',
       payload: {
-        workflowId: params.workflowId ?? null,
-        workflowType: params.workflowType ?? null,
-        stageKey: params.stageKey ?? null,
         delegationId: params.delegationId ?? null,
-        role: params.role ?? null,
-        service: params.service ?? null,
       },
     });
   }
@@ -775,25 +741,20 @@ function finishMessageQueryTrace(
   });
   agentQueryTraceManager.completeStep(queryId, finishStepId, status);
   const record = agentQueryTraceManager.getQuery(queryId);
-  if (record?.delegation_id || record?.workflow_id) {
+  if (record?.delegation_id) {
     agentQueryTraceManager.appendStructuredEvent({
       queryId,
       stepId: activeStepId,
-      category: 'workflow',
-      eventName: 'workflow_delegation_completed',
+      category: 'delegation',
+      eventName: 'delegation_completed',
       status,
       severity: status === 'error' ? 'error' : 'info',
       summary:
         status === 'error'
-          ? 'Workflow delegation failed'
-          : 'Workflow delegation completed',
+          ? 'Delegation failed'
+          : 'Delegation completed',
       payload: {
-        workflowId: record.workflow_id,
-        workflowType: record.workflow_type,
-        stageKey: record.stage_key,
         delegationId: record.delegation_id,
-        role: record.role,
-        service: record.service,
       },
     });
   }
@@ -883,11 +844,7 @@ async function handleAskAnswerCommand(opts: {
     return true;
   }
 
-  const effectiveGroupFolder = resolveAskAnswerGroupFolder({
-    requestId: parsed.requestId,
-    currentGroupFolder: group.folder,
-    registeredGroups,
-  });
+  const effectiveGroupFolder = group.folder;
 
   const result = await handleAskQuestionResponse({
     requestId: parsed.requestId,
@@ -927,35 +884,6 @@ async function handleAskAnswerCommand(opts: {
       },
     });
   }
-  return true;
-}
-
-async function handleWorkflowResumeTextCommand(opts: {
-  chatJid: string;
-  group: RegisteredGroup;
-  channel: Channel;
-  messages: NewMessage[];
-}): Promise<boolean> {
-  const { chatJid, group, channel, messages } = opts;
-  const cmdMsg = messages.find(
-    (m) => parseWorkflowResumeCommand(m.content, TRIGGER_PATTERN) !== null,
-  );
-  if (!cmdMsg) return false;
-
-  const parsed = parseWorkflowResumeCommand(cmdMsg.content, TRIGGER_PATTERN);
-  if (!parsed) return false;
-
-  lastAgentTimestamp[chatJid] = messages[messages.length - 1].timestamp;
-  saveState();
-
-  const result = handleWorkflowResumeCommand({
-    command: parsed,
-    currentChatJid: chatJid,
-    currentGroupFolder: group.folder,
-    registeredGroups,
-    userId: cmdMsg.sender || 'unknown',
-  });
-  await channel.sendMessage(chatJid, result.message);
   return true;
 }
 
@@ -1130,17 +1058,6 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
     return true;
   }
 
-  if (
-    await handleWorkflowResumeTextCommand({
-      chatJid,
-      group,
-      channel,
-      messages: missedMessages,
-    })
-  ) {
-    return true;
-  }
-
   // --- Session command interception (before trigger check) ---
   const cmdResult = await handleSessionCommand({
     missedMessages,
@@ -1253,8 +1170,7 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
   const initialQueryId = createExecutionId();
   const promptHash = crypto.createHash('sha256').update(prompt).digest('hex');
   const executionContext = resolveExecutionContext(group, missedMessages);
-  const isWorkflowDelegationRun =
-    isWorkflowDelegationExecutionContext(executionContext);
+  const isDelegationRun = isDelegationExecutionContext(executionContext);
   const isWecomDelegationRun =
     channel.name === 'wecom' &&
     missedMessages.some((message) =>
@@ -1275,11 +1191,6 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
     runId,
     chatJid,
     groupFolder: group.folder,
-    workflowId: executionContext?.workflowId,
-    workflowType: executionContext?.workflowType,
-    service: executionContext?.service,
-    role: executionContext?.role,
-    stageKey: executionContext?.stageKey,
     delegationId: executionContext?.delegationId,
     sourceRefId: lastMsg.id,
     selectedModel: modelSelection.selectedModel,
@@ -1358,9 +1269,9 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
         // keep query traces in sync with the latest resumed session id
       }
       if (result.event) {
-        if (isWorkflowDelegationRun && isCompleteDelegationToolResult(result)) {
+        if (isDelegationRun && isCompleteDelegationToolResult(result)) {
           queue.closeStdin(chatJid, {
-            reason: 'workflow_delegation_complete_tool_result',
+            reason: 'delegation_complete_tool_result',
             details: { groupName: group.name, runId, queryId },
           });
         }
@@ -1535,9 +1446,9 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
         !result.result &&
         result.final !== false
       ) {
-        if (isWorkflowDelegationRun) {
+        if (isDelegationRun) {
           queue.closeStdin(chatJid, {
-            reason: 'workflow_delegation_session_update',
+            reason: 'delegation_session_update',
             details: { groupName: group.name, runId, queryId },
           });
         } else {
@@ -1559,9 +1470,9 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
         !result.event &&
         !result.result
       ) {
-        if (isWorkflowDelegationRun) {
+        if (isDelegationRun) {
           queue.closeStdin(chatJid, {
-            reason: 'workflow_delegation_session_update',
+            reason: 'delegation_session_update',
             details: { groupName: group.name, runId, queryId },
           });
         } else {
@@ -1570,9 +1481,9 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
       }
 
       if (result.status === 'error') {
-        if (isWorkflowDelegationRun) {
+        if (isDelegationRun) {
           queue.closeStdin(chatJid, {
-            reason: 'workflow_delegation_error',
+            reason: 'delegation_error',
             details: { groupName: group.name, runId, queryId },
           });
         }
@@ -1617,14 +1528,14 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
     initialQueryId,
     executionContext,
     undefined,
-    isWorkflowDelegationRun,
+    isDelegationRun,
   );
 
   await channel.setTyping?.(chatJid, false);
   if (idleTimer) clearTimeout(idleTimer);
-  if (isWorkflowDelegationRun) {
+  if (isDelegationRun) {
     queue.closeStdin(chatJid, {
-      reason: 'workflow_delegation_run_finished',
+      reason: 'delegation_run_finished',
       details: { groupName: group.name, runId, initialQueryId },
     });
   }
@@ -2008,7 +1919,6 @@ function assistantActionPurposeLabel(
   purpose: AssistantActionAgentInput['purpose'],
 ): string {
   if (purpose === 'coding_anomaly_scan') return 'Coding 异常扫描';
-  if (purpose === 'workbench_action') return '工作台待处理项处理';
   if (purpose === 'repair') return '修复';
   return '排查';
 }
@@ -2018,9 +1928,6 @@ function assistantActionStepName(
 ): string {
   if (purpose === 'coding_anomaly_scan') {
     return 'assistant_coding_anomaly_scan_request';
-  }
-  if (purpose === 'workbench_action') {
-    return 'assistant_workbench_action_request';
   }
   return purpose === 'repair'
     ? 'assistant_repair_request'
@@ -2610,17 +2517,6 @@ async function startMessageLoop(): Promise<void> {
             continue;
           }
 
-          if (
-            await handleWorkflowResumeTextCommand({
-              chatJid,
-              group,
-              channel,
-              messages: groupMessages,
-            })
-          ) {
-            continue;
-          }
-
           // --- Session command interception (message loop) ---
           // Scan ALL messages in the batch for a session command.
           const loopCmdMsg = groupMessages.find(
@@ -2731,8 +2627,8 @@ async function startMessageLoop(): Promise<void> {
             group,
             allPending,
           );
-          const isWorkflowDelegationRun =
-            isWorkflowDelegationExecutionContext(loopExecutionContext);
+          const isDelegationRun =
+            isDelegationExecutionContext(loopExecutionContext);
           if (allPending.length === 0) {
             logger.debug(
               {
@@ -2748,7 +2644,7 @@ async function startMessageLoop(): Promise<void> {
           const formatted = formatMessages(messagesToSend, TIMEZONE);
           const runId = activeRunIds.get(chatJid);
           if (
-            isWorkflowDelegationRun ||
+            isDelegationRun ||
             !runId ||
             !queue.canPipeMessage(chatJid)
           ) {
@@ -2873,37 +2769,13 @@ function ensureContainerSystemRunning(): void {
 
 function resolveExecutionContext(
   group: RegisteredGroup,
-  messages: NewMessage[],
+  _messages: NewMessage[],
 ): AgentExecutionContext | undefined {
-  const workflowId = [...messages]
-    .reverse()
-    .find(
-      (message) =>
-        typeof message.workflow_id === 'string' && message.workflow_id.trim(),
-    )
-    ?.workflow_id?.trim();
-  let workflow = workflowId ? getWorkflow(workflowId) : undefined;
-
-  if (!workflow) {
-    const pendingDelegations = getDelegationsByTarget(group.folder).filter(
-      (delegation) => delegation.status === 'pending' && delegation.workflow_id,
-    );
-    if (pendingDelegations.length === 1) {
-      workflow = getWorkflow(pendingDelegations[0].workflow_id || '');
-    }
-  }
-
-  if (!workflow) return undefined;
-  return {
-    workflowId: workflow.id,
-    stageKey: workflow.status,
-    delegationId: workflow.current_delegation_id || undefined,
-    workflowType: workflow.workflow_type,
-    service: workflow.service,
-    role:
-      getWorkflowTypeConfig(workflow.workflow_type)?.states[workflow.status]
-        ?.role || undefined,
-  };
+  const pendingDelegations = getDelegationsByTarget(group.folder).filter(
+    (delegation) => delegation.status === 'pending',
+  );
+  if (pendingDelegations.length !== 1) return undefined;
+  return { delegationId: pendingDelegations[0].id };
 }
 
 async function main(): Promise<void> {
@@ -3190,7 +3062,7 @@ async function main(): Promise<void> {
       }
     : undefined;
 
-  // Wire up card action callback → workflow engine (all channels that support it)
+  // Wire up card actions for channels that support interactive cards.
   const cardActionHandler = createCardActionHandler({
     registeredGroups: () => registeredGroups,
     sendCard: sendCardFn,
@@ -3275,20 +3147,6 @@ async function main(): Promise<void> {
       return channel.captureDesktop(options);
     },
   });
-  initWorkflow({
-    registeredGroups: () => registeredGroups,
-    enqueueMessageCheck: (jid) => queue.enqueueMessageCheck(jid),
-    sendCard: sendCardFn,
-  });
-  const workbenchBroadcast = new WorkbenchBroadcastService({
-    registeredGroups: () => registeredGroups,
-    sendCard: sendCardFn,
-    sendMessage: async (jid, text) => {
-      const ch = findChannel(channels, jid);
-      if (!ch) return;
-      await ch.sendMessage(jid, text);
-    },
-  });
   const assistantInboxBroadcast = new AssistantInboxBroadcastService({
     registeredGroups: () => registeredGroups,
     sendCard: sendCardFn,
@@ -3297,18 +3155,6 @@ async function main(): Promise<void> {
       if (!ch) return;
       await ch.sendMessage(jid, text);
     },
-  });
-  initWorkbenchEvents((event) => {
-    for (const ch of channels) {
-      if (ch.name === 'web' && 'broadcastWorkbenchEvent' in ch) {
-        (
-          ch as typeof ch & {
-            broadcastWorkbenchEvent: (payload: typeof event) => void;
-          }
-        ).broadcastWorkbenchEvent(event);
-      }
-    }
-    void workbenchBroadcast.handleEvent(event);
   });
   initAssistantEvents((event) => {
     for (const ch of channels) {
@@ -3329,15 +3175,6 @@ async function main(): Promise<void> {
         purpose,
         item,
       }),
-    workbenchActionRuntime: {
-      registeredGroups: () => registeredGroups,
-      sendCard: sendCardFn,
-      sendMessage: async (jid, text) => {
-        const ch = findChannel(channels, jid);
-        if (!ch) return;
-        await ch.sendMessage(jid, text);
-      },
-    },
   });
   configureEvolutionEngine({
     agentRunner: runEvolutionActionAgent,

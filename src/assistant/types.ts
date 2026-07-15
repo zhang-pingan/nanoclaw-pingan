@@ -17,9 +17,6 @@ export type AssistantTriggerRuleKey =
   | 'today_plan.missing_today_plan'
   | 'today_plan.unfinished_previous_plan'
   | 'today_plan.service_coding_anomaly'
-  | 'workbench.pending_action_item'
-  | 'workbench.task_failed_or_cancelled'
-  | 'workbench.task_stale'
   | 'scheduler.task_failed'
   | 'agent_runs.query_failed'
   | 'online.error_logs';
@@ -159,28 +156,6 @@ export const ASSISTANT_TRIGGER_RULE_CAPABILITIES: AssistantTriggerRuleCapability
       label: '服务 coding 异常排查',
       sourceLabel: '今日计划',
       supportsInvestigation: false,
-      supportsRepair: true,
-    },
-    {
-      key: 'workbench.pending_action_item',
-      label: '工作台待处理项',
-      sourceLabel: '工作台',
-      supportsInvestigation: false,
-      supportsRepair: false,
-      supportsAutoAction: true,
-    },
-    {
-      key: 'workbench.task_failed_or_cancelled',
-      label: '工作台任务失败或取消',
-      sourceLabel: '工作台',
-      supportsInvestigation: true,
-      supportsRepair: true,
-    },
-    {
-      key: 'workbench.task_stale',
-      label: '工作台任务长时间无进展',
-      sourceLabel: '工作台',
-      supportsInvestigation: true,
       supportsRepair: true,
     },
     {

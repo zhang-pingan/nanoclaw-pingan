@@ -48,7 +48,6 @@ describe('today-plan-mail', () => {
       title: '推进今日开发',
       detail: '完成计划邮件闭环设计',
       associations: {
-        workbench_task_ids: [],
         chat_selections: [],
         services: [],
       },
@@ -72,7 +71,9 @@ describe('today-plan-mail', () => {
     expect(draft.body).toContain('完成计划邮件闭环设计');
     expect(draft.to).toEqual(['daily@example.com']);
     expect(draft.cc).toEqual(['team@example.com']);
-    expect(getTodayPlanMailDraftDetail(draft.id)?.status).toBe('pending_confirm');
+    expect(getTodayPlanMailDraftDetail(draft.id)?.status).toBe(
+      'pending_confirm',
+    );
   });
 
   it('uses custom to and cc when provided', async () => {
@@ -83,7 +84,6 @@ describe('today-plan-mail', () => {
       title: '推进今日开发',
       detail: '完成计划邮件闭环设计',
       associations: {
-        workbench_task_ids: [],
         chat_selections: [],
         services: [],
       },
@@ -117,7 +117,6 @@ describe('today-plan-mail', () => {
       title: '推进今日开发',
       detail: '完成计划邮件闭环设计',
       associations: {
-        workbench_task_ids: [],
         chat_selections: [],
         services: [],
       },
@@ -131,8 +130,7 @@ describe('today-plan-mail', () => {
       },
       {
         loadProfile: buildMailProfile,
-        summarizeBody: async () =>
-          '1. 推进今日开发\n- 第一次生成的草稿正文',
+        summarizeBody: async () => '1. 推进今日开发\n- 第一次生成的草稿正文',
       },
     );
 
@@ -144,16 +142,15 @@ describe('today-plan-mail', () => {
       },
       {
         loadProfile: buildMailProfile,
-        summarizeBody: async () =>
-          '1. 推进今日开发\n- 第二次生成的草稿正文',
+        summarizeBody: async () => '1. 推进今日开发\n- 第二次生成的草稿正文',
       },
     );
 
     expect(secondDraft.id).not.toBe(firstDraft.id);
     expect(getTodayPlanMailDraftDetail(firstDraft.id)).toBeNull();
-    expect(listTodayPlanMailDraftsByPlan(plan.id).map((item) => item.id)).toEqual([
-      secondDraft.id,
-    ]);
+    expect(
+      listTodayPlanMailDraftsByPlan(plan.id).map((item) => item.id),
+    ).toEqual([secondDraft.id]);
   });
 
   it('confirms and sends a prepared draft without re-summarizing', async () => {
@@ -164,7 +161,6 @@ describe('today-plan-mail', () => {
       title: '推进今日开发',
       detail: '完成计划邮件闭环设计',
       associations: {
-        workbench_task_ids: [],
         chat_selections: [],
         services: [],
       },
@@ -225,7 +221,6 @@ describe('today-plan-mail', () => {
       title: '推进今日开发',
       detail: '完成计划邮件闭环设计',
       associations: {
-        workbench_task_ids: [],
         chat_selections: [],
         services: [],
       },

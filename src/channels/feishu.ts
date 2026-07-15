@@ -15,11 +15,6 @@ import {
   OnChatMetadata,
   RegisteredGroup,
 } from '../types.js';
-import {
-  getWorkbenchActionItem,
-  listWorkbenchActionItemsBySource,
-  listWorkbenchActionItemsByTask,
-} from '../db.js';
 import { ATTACHMENTS_DIR } from '../config.js';
 import { readEnvFile } from '../env.js';
 import { logger } from '../logger.js';
@@ -383,7 +378,7 @@ class FeishuChannel implements Channel {
       });
     }
 
-    // Sections (workflow list items)
+    // Sections
     if (card.sections) {
       for (let i = 0; i < card.sections.length; i++) {
         const section = card.sections[i];
@@ -508,106 +503,6 @@ class FeishuChannel implements Channel {
     return null;
   }
 
-  private inferActionValueFromActionName(
-    actionName: string,
-  ): Record<string, string> | undefined {
-    const workflowRevisePrefix = 'wb-rv-';
-    if (
-      actionName.startsWith(workflowRevisePrefix) &&
-      actionName.length > workflowRevisePrefix.length
-    ) {
-      return {
-        action: 'wb_broadcast_revise',
-        task_id: actionName.slice(workflowRevisePrefix.length),
-      };
-    }
-
-    const workflowSubmitPrefix = 'wb-su-';
-    if (
-      actionName.startsWith(workflowSubmitPrefix) &&
-      actionName.length > workflowSubmitPrefix.length
-    ) {
-      return {
-        action: 'wb_broadcast_submit',
-        task_id: actionName.slice(workflowSubmitPrefix.length),
-      };
-    }
-
-    const askReplyPrefix = 'wb-reply-';
-    if (
-      actionName.startsWith(askReplyPrefix) &&
-      actionName.length > askReplyPrefix.length
-    ) {
-      return {
-        action: 'wb_broadcast_reply',
-        request_id: actionName.slice(askReplyPrefix.length),
-      };
-    }
-
-    const suffixMap: Array<[string, string]> = [
-      ['-submit-access-token', 'wb_broadcast_submit'],
-      ['-revise', 'wb_broadcast_revise'],
-      ['-reply', 'wb_broadcast_reply'],
-    ];
-
-    for (const [suffix, action] of suffixMap) {
-      if (!actionName.endsWith(suffix) || actionName.length <= suffix.length) {
-        continue;
-      }
-      return {
-        action,
-        action_item_id: actionName.slice(0, -suffix.length),
-      };
-    }
-
-    return undefined;
-  }
-
-  private resolveAskActionItemByRequestId(requestId: string): {
-    actionItemId: string;
-    taskId?: string;
-  } | null {
-    for (const sourceType of [
-      'ask_user_question',
-      'request_human_input',
-    ] as const) {
-      const items = listWorkbenchActionItemsBySource(sourceType, requestId);
-      const item =
-        items.find((entry) => entry.status === 'pending') || items[0];
-      if (item) {
-        return {
-          actionItemId: item.id,
-          taskId: item.task_id,
-        };
-      }
-    }
-    return null;
-  }
-
-  private resolvePendingWorkflowActionItemByTaskId(taskId: string): {
-    actionItemId: string;
-  } | null {
-    const items = listWorkbenchActionItemsByTask(taskId);
-    const item =
-      items.find(
-        (entry) =>
-          entry.source_type === 'workflow' && entry.status === 'pending',
-      ) ||
-      items.find(
-        (entry) =>
-          entry.source_type === 'workflow_interrupt' &&
-          entry.status === 'pending',
-      ) ||
-      items.find(
-        (entry) =>
-          entry.source_type === 'workflow' ||
-          entry.source_type === 'workflow_interrupt',
-      );
-    if (!item) return null;
-    return {
-      actionItemId: item.id,
-    };
-  }
 
   private async updateDelayedCard(input: {
     token: string;
@@ -952,14 +847,8 @@ class FeishuChannel implements Channel {
     res: ServerResponse,
   ): Promise<void> {
     const action = payload.event?.action;
-    const actionName =
-      typeof action?.name === 'string' ? action.name.trim() : '';
-    const value = action?.value as
-      | { workflow_id?: string; action?: string; group_folder?: string }
-      | undefined;
-    const inferredValue = this.inferActionValueFromActionName(actionName);
-    const resolvedValue =
-      value && typeof value.action === 'string' ? value : inferredValue;
+    const value = action?.value as Record<string, string> | undefined;
+    const resolvedValue = value && typeof value.action === 'string' ? value : undefined;
     const userId = payload.event?.operator?.user_id || '';
     const operatorOpenId = payload.event?.operator?.open_id || '';
     const messageId = payload.event?.context?.open_message_id || '';
@@ -989,68 +878,6 @@ class FeishuChannel implements Channel {
             mergedFormValue[key] = candidate;
           }
         }
-        if (
-          !mergedFormValue.action_item_id &&
-          typeof mergedFormValue.request_id === 'string'
-        ) {
-          try {
-            const resolvedItem = this.resolveAskActionItemByRequestId(
-              mergedFormValue.request_id,
-            );
-            if (resolvedItem?.actionItemId) {
-              mergedFormValue.action_item_id = resolvedItem.actionItemId;
-            }
-            if (!mergedFormValue.task_id && resolvedItem?.taskId) {
-              mergedFormValue.task_id = resolvedItem.taskId;
-            }
-          } catch (err) {
-            logger.debug(
-              { err, requestId: mergedFormValue.request_id },
-              'Failed to resolve action item for Feishu ask reply fallback',
-            );
-          }
-        }
-        if (
-          !mergedFormValue.action_item_id &&
-          typeof mergedFormValue.task_id === 'string' &&
-          (resolvedValue.action === 'wb_broadcast_revise' ||
-            resolvedValue.action === 'wb_broadcast_submit' ||
-            resolvedValue.action === 'wb_broadcast_resume')
-        ) {
-          try {
-            const resolvedItem = this.resolvePendingWorkflowActionItemByTaskId(
-              mergedFormValue.task_id,
-            );
-            if (resolvedItem?.actionItemId) {
-              mergedFormValue.action_item_id = resolvedItem.actionItemId;
-            }
-          } catch (err) {
-            logger.debug(
-              {
-                err,
-                taskId: mergedFormValue.task_id,
-                action: resolvedValue.action,
-              },
-              'Failed to resolve workflow action item for Feishu form fallback',
-            );
-          }
-        }
-        if (
-          !mergedFormValue.task_id &&
-          typeof mergedFormValue.action_item_id === 'string'
-        ) {
-          try {
-            const item = getWorkbenchActionItem(mergedFormValue.action_item_id);
-            if (item?.task_id) {
-              mergedFormValue.task_id = item.task_id;
-            }
-          } catch (err) {
-            logger.debug(
-              { err, actionItemId: mergedFormValue.action_item_id },
-              'Failed to resolve task_id for Feishu card action fallback',
-            );
-          }
-        }
         result = await this.onCardAction({
           action: resolvedValue.action,
           user_id: userId,
@@ -1058,7 +885,6 @@ class FeishuChannel implements Channel {
           actor_channel: 'feishu',
           group_jid: groupJid,
           group_folder: resolvedValue.group_folder,
-          workflow_id: resolvedValue.workflow_id,
           form_value: mergedFormValue,
         });
       }

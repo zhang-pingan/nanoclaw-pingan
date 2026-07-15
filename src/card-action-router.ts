@@ -10,11 +10,6 @@ import {
   InteractiveCard,
   RegisteredGroup,
 } from './types.js';
-import { handleCardAction as handleWorkflowCardAction } from './workflow.js';
-import {
-  handleWorkbenchBroadcastCardAction,
-  logWorkbenchBroadcastActionFailure,
-} from './workbench-broadcast-actions.js';
 import {
   buildCardStringFormValues,
   parseNestedCardStringPayload,
@@ -86,29 +81,6 @@ export function createCardActionHandler(deps: {
       });
     }
 
-    if (action.action.startsWith('wb_broadcast_')) {
-      try {
-        return await handleWorkbenchBroadcastCardAction({
-          action: action.action,
-          formValue: action.form_value,
-          registeredGroups: deps.registeredGroups(),
-          sendCard: deps.sendCard,
-          sendMessage: deps.sendMessage,
-          userId: action.user_id || 'unknown',
-          actorChannel: action.actor_channel,
-          messageId: action.message_id,
-        });
-      } catch (err) {
-        logWorkbenchBroadcastActionFailure(action.action, err);
-        return {
-          toast: {
-            type: 'error' as const,
-            content: '处理工作台广播卡片失败，请稍后重试。',
-          },
-        };
-      }
-    }
-
     if (action.action.startsWith(ASSISTANT_INBOX_BROADCAST_ACTION_PREFIX)) {
       try {
         return await handleAssistantInboxBroadcastCardAction({
@@ -137,7 +109,10 @@ export function createCardActionHandler(deps: {
       action.action !== ASK_ACTION_ANSWER &&
       action.action !== ASK_ACTION_SKIP
     ) {
-      return handleWorkflowCardAction(action);
+      return {
+        ok: false,
+        toast: { type: 'error' as const, content: '不支持的卡片操作。' },
+      };
     }
 
     const requestId = action.form_value?.request_id;

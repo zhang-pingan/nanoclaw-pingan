@@ -11,14 +11,10 @@ import {
 import { AgentStatusInfo, StopAgentResult } from './types.js';
 export { AgentStatusInfo, StopAgentResult } from './types.js';
 import {
-  getAllActiveWorkflows,
-  getDelegationsByTarget,
-  updateDelegation,
   updateTask,
 } from './db.js';
 import { stopContainer } from './container-runtime.js';
 import { logger } from './logger.js';
-import { cancelWorkflow } from './workflow.js';
 
 interface QueuedTask {
   id: string;
@@ -177,8 +173,6 @@ export class GroupQueue {
    * Return all currently active agents with their status info.
    */
   getActiveAgents(): AgentStatusInfo[] {
-    const activeWorkflowByTargetFolder =
-      this.getActiveWorkflowCountByTargetFolder();
     const result: AgentStatusInfo[] = [];
     for (const [groupJid, state] of this.groups) {
       if (!state.active || !state.startedAt) continue;
@@ -197,8 +191,6 @@ export class GroupQueue {
         pendingMessages: state.pendingMessages,
         pendingTaskCount: state.pendingTasks.length,
         pendingOneShotCount: state.pendingOneShots.length,
-        activeWorkflowCount:
-          activeWorkflowByTargetFolder.get(state.groupFolder || '') || 0,
       });
     }
     return result;
@@ -641,13 +633,12 @@ export class GroupQueue {
       updateTask(stoppedTaskId, { status: 'paused' });
     }
 
-    const cancelledWorkflowIds = this.cancelActiveWorkflowsForGroup(state);
 
     const proc = state.process;
     const containerName = state.containerName;
     if (!proc && !containerName) {
       this.emitStatusChange();
-      return { ok: true, stoppedTaskId, cancelledWorkflowIds };
+      return { ok: true, stoppedTaskId };
     }
 
     await new Promise<void>((resolve) => {
@@ -699,7 +690,7 @@ export class GroupQueue {
       }
     });
 
-    return { ok: true, stoppedTaskId, cancelledWorkflowIds };
+    return { ok: true, stoppedTaskId };
   }
 
   /**
@@ -1087,63 +1078,6 @@ export class GroupQueue {
       state.pendingMessages ||
       state.pendingOneShots.length > 0
     );
-  }
-
-  private cancelActiveWorkflowsForGroup(state: GroupState): string[] {
-    if (!state.groupFolder) return [];
-
-    const pendingDelegations = getDelegationsByTarget(state.groupFolder).filter(
-      (delegation) => delegation.status === 'pending',
-    );
-    if (pendingDelegations.length === 0) return [];
-
-    const activeWorkflowByDelegation = new Map(
-      getAllActiveWorkflows()
-        .filter((workflow) => workflow.current_delegation_id)
-        .map((workflow) => [workflow.current_delegation_id, workflow.id]),
-    );
-
-    const cancelledWorkflowIds: string[] = [];
-    for (const delegation of pendingDelegations) {
-      const workflowId = activeWorkflowByDelegation.get(delegation.id);
-      if (!workflowId) continue;
-
-      updateDelegation(delegation.id, {
-        status: 'failed',
-        outcome: 'failure',
-        result: 'Agent stopped manually from Agent Status panel.',
-      });
-
-      const result = cancelWorkflow(workflowId);
-      if (!result.error) {
-        cancelledWorkflowIds.push(workflowId);
-      }
-    }
-
-    return cancelledWorkflowIds;
-  }
-
-  private getActiveWorkflowCountByTargetFolder(): Map<string, number> {
-    const counts = new Map<string, number>();
-    const activeWorkflowByDelegation = new Map(
-      getAllActiveWorkflows()
-        .filter((workflow) => workflow.current_delegation_id)
-        .map((workflow) => [workflow.current_delegation_id, workflow.id]),
-    );
-
-    for (const state of this.groups.values()) {
-      if (!state.groupFolder) continue;
-      const activeCount = getDelegationsByTarget(state.groupFolder).filter(
-        (delegation) =>
-          delegation.status === 'pending' &&
-          activeWorkflowByDelegation.has(delegation.id),
-      ).length;
-      if (activeCount > 0) {
-        counts.set(state.groupFolder, activeCount);
-      }
-    }
-
-    return counts;
   }
 
   private drainWaiting(): void {

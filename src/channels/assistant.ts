@@ -149,7 +149,6 @@ class AssistantChannel {
       timestamp,
       is_from_me: 0,
       is_bot_message: 1,
-      workflow_id: null,
     };
     storeChatMetadata(jid, timestamp, ASSISTANT_MAIN_NAME, 'assistant', true);
     storeAssistantChatMessage({
@@ -179,7 +178,6 @@ class AssistantChannel {
       timestamp,
       is_from_me: 0,
       is_bot_message: 1,
-      workflow_id: null,
       file_path: filePath,
     };
     storeChatMetadata(jid, timestamp, ASSISTANT_MAIN_NAME, 'assistant', true);
@@ -229,7 +227,6 @@ class AssistantChannel {
       ...msg,
       is_from_me: true,
       is_bot_message: false,
-      workflow_id: msg.workflow_id ?? null,
     });
     this.opts.enqueueMessageCheck?.(ASSISTANT_MAIN_JID);
 

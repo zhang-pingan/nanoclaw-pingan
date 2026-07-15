@@ -1,27 +1,9 @@
-import { createHash } from 'crypto';
-
 import {
   getAgentQuery,
   getAllTasks,
-  getWorkbenchActionItem,
-  getWorkbenchTaskById,
   listAgentQueryEvents,
   listAgentQuerySteps,
-  listWorkbenchActionItemsByTask,
-  listWorkbenchEventsByTask,
-  listWorkbenchSubtasksByTask,
 } from '../db.js';
-import { handleAskQuestionResponse } from '../ask-user-question.js';
-import {
-  getWorkbenchTaskDetail,
-  runWorkbenchActionItemAction,
-  type WorkbenchActionItem,
-  type WorkbenchArtifact,
-  type WorkbenchStageEvaluation,
-  type WorkbenchSubtask,
-  type WorkbenchTaskDetail,
-  type WorkbenchTimelineEvent,
-} from '../workbench.js';
 import {
   createAssistantActionLog,
   getAgentInboxItem,
@@ -30,11 +12,6 @@ import {
 } from './agent-inbox-store.js';
 import type { AgentInboxItemView, AssistantTriggerRuleKey } from './types.js';
 import { logger } from '../logger.js';
-import type {
-  InteractiveCard,
-  RegisteredGroup,
-  WorkbenchActionItemRecord,
-} from '../types.js';
 
 export interface AssistantAgentRunResult {
   ok: boolean;
@@ -45,8 +22,7 @@ export interface AssistantAgentRunResult {
 export type AssistantAgentPurpose =
   | 'investigation'
   | 'repair'
-  | 'coding_anomaly_scan'
-  | 'workbench_action';
+  | 'coding_anomaly_scan';
 
 export type AssistantAgentRunner = (input: {
   prompt: string;
@@ -91,56 +67,7 @@ interface RepairResult {
   next_action: string | null;
 }
 
-type WorkbenchActionDecisionValue =
-  | 'approve'
-  | 'confirm'
-  | 'revise'
-  | 'submit'
-  | 'answer'
-  | 'resolve'
-  | 'reject'
-  | 'skip'
-  | 'cancel'
-  | 'defer';
-
-type WorkbenchExecutableAction =
-  | 'confirm'
-  | 'approve'
-  | 'reject'
-  | 'revise'
-  | 'submit'
-  | 'skip'
-  | 'cancel'
-  | 'resolve';
-
-interface WorkbenchActionDecision {
-  ok: boolean;
-  decision: WorkbenchActionDecisionValue;
-  confidence: 'high' | 'medium' | 'low' | 'unknown';
-  reason: string;
-  payload: Record<string, unknown>;
-  evidence: Array<{ label: string; value: string }>;
-  unresolved_gaps: string[];
-}
-
-interface WorkbenchActionExecutionResult {
-  executed: boolean;
-  deferred: boolean;
-  summary: string;
-  action?: string;
-  completed?: boolean;
-  result?: Record<string, unknown>;
-}
-
 let agentRunner: AssistantAgentRunner | null = null;
-let workbenchActionRuntime: {
-  registeredGroups: () => Record<string, RegisteredGroup>;
-  sendCard?: (
-    jid: string,
-    card: InteractiveCard,
-  ) => Promise<string | undefined>;
-  sendMessage?: (jid: string, text: string) => Promise<void>;
-} | null = null;
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === 'object' && !Array.isArray(value));
@@ -292,59 +219,6 @@ function parseRepairResult(text: string): RepairResult {
   };
 }
 
-function parseUnknownRecord(value: unknown): Record<string, unknown> {
-  return isObject(value) ? value : {};
-}
-
-function parseStringList(value: unknown, limit: number): string[] {
-  if (!Array.isArray(value)) return [];
-  return value
-    .map((item) => (typeof item === 'string' ? item.trim() : ''))
-    .filter(Boolean)
-    .slice(0, limit);
-}
-
-function parseConfidence(
-  value: unknown,
-): WorkbenchActionDecision['confidence'] {
-  return value === 'high' || value === 'medium' || value === 'low'
-    ? value
-    : 'unknown';
-}
-
-function parseWorkbenchDecisionValue(
-  value: unknown,
-): WorkbenchActionDecisionValue {
-  if (
-    value === 'approve' ||
-    value === 'confirm' ||
-    value === 'revise' ||
-    value === 'submit' ||
-    value === 'answer' ||
-    value === 'resolve' ||
-    value === 'reject' ||
-    value === 'skip' ||
-    value === 'cancel' ||
-    value === 'defer'
-  ) {
-    return value;
-  }
-  return 'defer';
-}
-
-function parseWorkbenchActionDecision(text: string): WorkbenchActionDecision {
-  const parsed = readJsonObject(text);
-  return {
-    ok: parsed.ok !== false,
-    decision: parseWorkbenchDecisionValue(parsed.decision),
-    confidence: parseConfidence(parsed.confidence),
-    reason: stringValue(parsed.reason, 'Agent 未返回处理理由。'),
-    payload: parseUnknownRecord(parsed.payload),
-    evidence: parseEvidence(parsed.evidence),
-    unresolved_gaps: parseStringList(parsed.unresolved_gaps, 20),
-  };
-}
-
 function stringifyContext(value: unknown): string {
   return JSON.stringify(value, null, 2).slice(0, 20000);
 }
@@ -365,11 +239,7 @@ function buildInvestigationWorkflowInstructions(
 - 如果工具取证失败或证据不足，summary 要说明“证据不足”，root_cause 为 null，repairable 为 false，并把还缺哪些日志/权限/上下文写入 required_user_action。`;
   }
 
-  if (
-    ruleKey === 'workbench.task_failed_or_cancelled' ||
-    ruleKey === 'workbench.task_stale' ||
-    ruleKey === 'scheduler.task_failed'
-  ) {
+  if (ruleKey === 'scheduler.task_failed') {
     return `调查流程：
 - 你运行在容器 agent 中，可以使用 Bash/Read/Grep/Glob 等工具；最终回复只返回 JSON，但在最终回复前应先用工具验证关键事实。
 - 结合上下文中的任务、事件和状态，必要时读取 /workspace/project/logs、/workspace/group/logs 以及相关源码，确认失败阶段、最近动作和可恢复性。
@@ -413,315 +283,6 @@ function normalizeOnlineErrorLogContext(
   };
 }
 
-function parseJsonRecord(
-  value: string | null | undefined,
-): Record<string, unknown> {
-  if (!value) return {};
-  try {
-    const parsed = JSON.parse(value) as unknown;
-    return isObject(parsed) ? parsed : {};
-  } catch {
-    return {};
-  }
-}
-
-function compactText(value: unknown, max = 700): string | null {
-  if (typeof value !== 'string') return null;
-  const text = value.replace(/\s+/g, ' ').trim();
-  if (!text) return null;
-  return text.length > max ? `${text.slice(0, max - 3)}...` : text;
-}
-
-function compactTaskContext(value: unknown): Record<string, unknown> {
-  if (!isObject(value)) return {};
-  const result: Record<string, unknown> = {};
-  for (const key of [
-    'main_branch',
-    'work_branch',
-    'staging_base_branch',
-    'staging_work_branch',
-    'deliverable',
-    'requirement_preset',
-    'access_token',
-  ]) {
-    const field = value[key];
-    if (
-      typeof field === 'string' ||
-      typeof field === 'number' ||
-      typeof field === 'boolean'
-    ) {
-      result[key] = field;
-    }
-  }
-  if (typeof value.requirement_description === 'string') {
-    result.requirement_description = compactText(
-      value.requirement_description,
-      1200,
-    );
-  }
-  if (Array.isArray(value.requirement_files)) {
-    result.requirement_files = value.requirement_files
-      .filter((entry): entry is string => typeof entry === 'string')
-      .slice(0, 10);
-  }
-  return result;
-}
-
-function compactActionExtra(
-  extra: Record<string, unknown>,
-): Record<string, unknown> {
-  const result: Record<string, unknown> = {};
-  const allowedActions =
-    parseStringArray(extra.allowedActions, 12).length > 0
-      ? parseStringArray(extra.allowedActions, 12)
-      : parseStringArray(extra.allowed_actions, 12);
-  if (allowedActions.length > 0) result.allowed_actions = allowedActions;
-  if (isObject(extra.payloadSchema))
-    result.payload_schema = extra.payloadSchema;
-  if (isObject(extra.payload_schema))
-    result.payload_schema = extra.payload_schema;
-  for (const key of [
-    'action_mode',
-    'approval_type',
-    'interruptId',
-    'request_id',
-  ]) {
-    const field = extra[key];
-    if (typeof field === 'string' && field.trim()) result[key] = field;
-  }
-  if (isObject(extra.current_question)) {
-    result.current_question = extra.current_question;
-  }
-  if (Array.isArray(extra.questions)) {
-    result.questions = extra.questions.slice(0, 5);
-  }
-  return result;
-}
-
-function compactPersistedActionItem(
-  item: WorkbenchActionItemRecord,
-  options: { includeBody?: boolean; includeRefs?: boolean } = {},
-): Record<string, unknown> {
-  const extra = compactActionExtra(parseJsonRecord(item.extra_json));
-  return {
-    id: item.id,
-    title: item.title,
-    ...(options.includeBody ? { body: compactText(item.body, 900) } : {}),
-    item_type: item.item_type,
-    source_type: item.source_type,
-    status: item.status,
-    stage_key: item.stage_key,
-    replyable: item.replyable === 1,
-    ...(Object.keys(extra).length > 0 ? { extra } : {}),
-    ...(options.includeRefs
-      ? {
-          refs: {
-            task_id: item.task_id,
-            workflow_id: item.workflow_id,
-            source_ref_id: item.source_ref_id,
-            group_folder: item.group_folder,
-            delegation_id: item.delegation_id,
-          },
-        }
-      : {}),
-  };
-}
-
-function compactViewActionItem(
-  item: WorkbenchActionItem,
-): Record<string, unknown> {
-  return {
-    id: item.id,
-    title: item.title,
-    body: compactText(item.body, 900),
-    item_type: item.item_type,
-    source_type: item.source_type,
-    status: item.status,
-    stage_key: item.stage_key,
-    replyable: item.replyable,
-    action_mode: item.action_mode,
-    extra: item.extra ? compactActionExtra(item.extra) : undefined,
-  };
-}
-
-function compactSubtask(item: WorkbenchSubtask): Record<string, unknown> {
-  return {
-    id: item.id,
-    title: item.title,
-    stage_key: item.stage_key,
-    stage_label: item.stage_label,
-    stage_type: item.stage_type,
-    status: item.status,
-    role: item.role,
-    skill: item.skill,
-    target_folder: item.target_folder,
-    result: compactText(item.result, 1000),
-  };
-}
-
-function compactEvaluation(
-  item: WorkbenchStageEvaluation,
-): Record<string, unknown> {
-  return {
-    stage_key: item.stage_key,
-    stage_label: item.stage_label,
-    status: item.status,
-    score: item.score,
-    summary: compactText(item.summary, 800),
-    findings: item.findings.slice(0, 5).map((finding) => ({
-      severity: finding.severity,
-      code: finding.code,
-      message: compactText(finding.message, 500),
-      path: finding.path,
-      suggestion: compactText(finding.suggestion, 400),
-    })),
-    evidence: item.evidence.slice(0, 5).map((evidence) => ({
-      type: evidence.type,
-      refId: evidence.refId,
-      path: evidence.path,
-      summary: compactText(evidence.summary, 500),
-    })),
-  };
-}
-
-function compactArtifact(item: WorkbenchArtifact): Record<string, unknown> {
-  return {
-    id: item.id,
-    title: item.title,
-    artifact_type: item.artifact_type,
-    path: item.path,
-    exists: item.exists,
-  };
-}
-
-function compactTimelineEvent(
-  item: WorkbenchTimelineEvent,
-): Record<string, unknown> {
-  return {
-    type: item.type,
-    title: item.title,
-    body: compactText(item.body, 700),
-    status: item.status,
-    created_at: item.created_at,
-  };
-}
-
-function compactWorkbenchEvent(
-  item: ReturnType<typeof listWorkbenchEventsByTask>[number],
-): Record<string, unknown> {
-  return {
-    event_type: item.event_type,
-    title: item.title,
-    body: compactText(item.body, 700),
-    raw_ref_type: item.raw_ref_type,
-    raw_ref_id: item.raw_ref_id,
-    created_at: item.created_at,
-  };
-}
-
-function buildCompactWorkbenchTask(
-  detail: WorkbenchTaskDetail | null,
-  taskRecord: ReturnType<typeof getWorkbenchTaskById> | null,
-  taskId: string,
-): Record<string, unknown> {
-  const task = detail?.task;
-  return {
-    id: taskRecord?.id || task?.id || taskId,
-    title: taskRecord?.title || task?.title || '',
-    service: taskRecord?.service || task?.service || '',
-    workflow_type: taskRecord?.workflow_type || task?.workflow_type || '',
-    start_from: taskRecord?.start_from || task?.start_from || '',
-    current_stage: taskRecord?.current_stage || task?.workflow_stage || '',
-    current_stage_label: task?.workflow_stage_label || '',
-    workflow_status: taskRecord?.status || task?.workflow_status || '',
-    task_state: taskRecord?.task_state || task?.task_state || '',
-    active_delegation_id: task?.active_delegation_id || '',
-    context: compactTaskContext(task?.context),
-  };
-}
-
-function buildWorkbenchPendingActionContext(
-  item: AgentInboxItemView,
-): Record<string, unknown> | null {
-  const actionItemId = item.source_ref_id || '';
-  const actionItem = actionItemId ? getWorkbenchActionItem(actionItemId) : null;
-  const taskId =
-    (typeof item.extra.taskId === 'string' ? item.extra.taskId : '') ||
-    actionItem?.task_id ||
-    '';
-  if (!taskId && !actionItem) return null;
-
-  const detail = taskId ? getWorkbenchTaskDetail(taskId) : null;
-  const taskRecord = taskId ? getWorkbenchTaskById(taskId) || null : null;
-  const rawActionItems = taskId ? listWorkbenchActionItemsByTask(taskId) : [];
-  const pendingActionItems = rawActionItems.filter(
-    (entry) => entry.status === 'pending',
-  );
-  const currentSubtasks = (detail?.subtasks || []).filter(
-    (entry) => entry.status === 'current',
-  );
-  const recentStageResults = (detail?.subtasks || [])
-    .filter((entry) =>
-      ['current', 'completed', 'failed', 'cancelled'].includes(entry.status),
-    )
-    .slice(-6);
-  const targetActionFromDetail = detail?.action_items.find(
-    (entry) => entry.id === actionItemId,
-  );
-
-  return {
-    task: buildCompactWorkbenchTask(detail, taskRecord, taskId),
-    target_action_item: actionItem
-      ? compactPersistedActionItem(actionItem, {
-          includeBody: true,
-          includeRefs: true,
-        })
-      : targetActionFromDetail
-        ? compactViewActionItem(targetActionFromDetail)
-        : null,
-    current_node: {
-      stage_key:
-        taskRecord?.current_stage || detail?.task.workflow_stage || null,
-      stage_label: detail?.task.workflow_stage_label || null,
-      workflow_status:
-        taskRecord?.status || detail?.task.workflow_status || null,
-      task_state: taskRecord?.task_state || detail?.task.task_state || null,
-      current_subtasks: currentSubtasks.map(compactSubtask),
-    },
-    decision_evidence: {
-      recent_stage_results: recentStageResults.map(compactSubtask),
-      evaluations: (detail?.evaluations || []).slice(-6).map(compactEvaluation),
-      artifacts: (detail?.artifacts || []).slice(0, 12).map(compactArtifact),
-      recent_timeline: (detail?.timeline || [])
-        .slice(-12)
-        .map(compactTimelineEvent),
-    },
-    auxiliary_evidence: {
-      pending_action_items: pendingActionItems
-        .filter((entry) => entry.id !== actionItemId)
-        .slice(0, 8)
-        .map((entry) => compactPersistedActionItem(entry)),
-      comments: (detail?.comments || []).slice(-5).map((entry) => ({
-        author: entry.author,
-        content: compactText(entry.content, 500),
-        created_at: entry.created_at,
-      })),
-      assets: (detail?.assets || []).slice(-8).map((entry) => ({
-        title: entry.title,
-        asset_type: entry.asset_type,
-        path: entry.path,
-        url: entry.url,
-        note: compactText(entry.note, 500),
-      })),
-      recent_events: taskId
-        ? listWorkbenchEventsByTask(taskId)
-            .slice(-15)
-            .map(compactWorkbenchEvent)
-        : [],
-    },
-  };
-}
-
 function buildContext(item: AgentInboxItemView): Record<string, unknown> {
   const ruleKey = toRuleKey(item.extra.ruleKey);
   const inboxExtra =
@@ -743,27 +304,6 @@ function buildContext(item: AgentInboxItemView): Record<string, unknown> {
       extra: inboxExtra,
     },
   };
-
-  if (
-    ruleKey === 'workbench.task_failed_or_cancelled' ||
-    ruleKey === 'workbench.task_stale'
-  ) {
-    const taskId =
-      typeof item.extra.taskId === 'string'
-        ? item.extra.taskId
-        : item.source_ref_id || '';
-    context.workbench = {
-      taskRecord: taskId ? getWorkbenchTaskById(taskId) || null : null,
-      detail: taskId ? getWorkbenchTaskDetail(taskId) : null,
-      actionItems: taskId ? listWorkbenchActionItemsByTask(taskId) : [],
-      subtasks: taskId ? listWorkbenchSubtasksByTask(taskId) : [],
-      events: taskId ? listWorkbenchEventsByTask(taskId).slice(-30) : [],
-    };
-  }
-
-  if (ruleKey === 'workbench.pending_action_item') {
-    context.workbench = buildWorkbenchPendingActionContext(item);
-  }
 
   if (ruleKey === 'scheduler.task_failed') {
     const task = getAllTasks().find((entry) => entry.id === item.source_ref_id);
@@ -879,51 +419,10 @@ ${stringifyContext(context)}
 `;
 }
 
-function buildWorkbenchActionPrompt(
-  item: AgentInboxItemView,
-  context: Record<string, unknown>,
-): string {
-  return `你是 Icarus 主群个人助手的工作台待处理项处理 Agent。目标：主动取证并尽可能推进待办。
-
-只返回 JSON：
-{
-  "ok": true,
-  "decision": "approve|confirm|revise|submit|answer|resolve|reject|skip|cancel|defer",
-  "confidence": "high|medium|low",
-  "reason": "基于哪些已核实事实",
-  "payload": {},
-  "evidence": [{"label":"证据名","value":"证据内容"}],
-  "unresolved_gaps": []
-}
-
-规则：
-- 你必须主动获取相关信息，直到能基于证据给出答案、表单内容或审批决策；不要只看 Inbox 摘要。
-- 先读上下文里的 task、target_action_item、current_node、decision_evidence；必要时再查产物路径、日志、源码或上下文资产。
-- 凭据、token、外部操作、产品判断也要尽力从合法事实源查找；能给出有依据内容时就给出。
-- 不编造事实、凭据、token 或审批依据；不要仅因“风险较高”就 defer。
-- 只有信息无法访问、事实冲突、没有合法来源、必须外部授权、或继续处理会要求编造秘密/事实时，才 defer，并在 unresolved_gaps 写明具体缺口。
-- payload 必须包含执行动作所需字段，例如 answer/reply_text、revision_text、access_token 或 payload_schema 要求的字段。
-- evidence 写具体来源，不复制超长日志。最终回复只返回 JSON。
-
-触发项：${item.title}
-上下文：
-${stringifyContext(context)}
-`;
-}
-
 export function initAssistantAutoFlow(input: {
   agentRunner?: AssistantAgentRunner | null;
-  workbenchActionRuntime?: {
-    registeredGroups: () => Record<string, RegisteredGroup>;
-    sendCard?: (
-      jid: string,
-      card: InteractiveCard,
-    ) => Promise<string | undefined>;
-    sendMessage?: (jid: string, text: string) => Promise<void>;
-  } | null;
 }): void {
   agentRunner = input.agentRunner || null;
-  workbenchActionRuntime = input.workbenchActionRuntime || null;
 }
 
 export async function runAssistantAgent(input: {
@@ -937,274 +436,9 @@ export async function runAssistantAgent(input: {
   return agentRunner(input);
 }
 
-function canonicalJson(value: unknown): string {
-  if (!value || typeof value !== 'object') return JSON.stringify(value);
-  if (Array.isArray(value)) {
-    return `[${value.map((item) => canonicalJson(item)).join(',')}]`;
-  }
-  const objectValue = value as Record<string, unknown>;
-  return `{${Object.keys(objectValue)
-    .sort()
-    .map((key) => `${JSON.stringify(key)}:${canonicalJson(objectValue[key])}`)
-    .join(',')}}`;
-}
-
-function payloadDigest(value: Record<string, unknown>): string {
-  return createHash('sha256')
-    .update(canonicalJson(value))
-    .digest('hex')
-    .slice(0, 16);
-}
-
-function isSensitiveKey(key: string): boolean {
-  return /(?:token|secret|password|credential|access[_-]?token|key)/i.test(key);
-}
-
-function redactSensitive(value: unknown, keyHint = ''): unknown {
-  if (isSensitiveKey(keyHint) && value !== null && value !== undefined) {
-    return '[redacted]';
-  }
-  if (Array.isArray(value)) {
-    return value.map((item) => redactSensitive(item));
-  }
-  if (!isObject(value)) return value;
-  return Object.fromEntries(
-    Object.entries(value).map(([key, entry]) => [
-      key,
-      redactSensitive(entry, key),
-    ]),
-  );
-}
-
-function workbenchTargetForInbox(item: AgentInboxItemView): {
-  taskId: string;
-  actionItem: WorkbenchActionItemRecord;
-} {
-  const actionItemId = item.source_ref_id || '';
-  const actionItem = actionItemId ? getWorkbenchActionItem(actionItemId) : null;
-  if (!actionItem) throw new Error('Workbench action item not found');
-  const taskId =
-    (typeof item.extra.taskId === 'string' ? item.extra.taskId : '') ||
-    actionItem.task_id;
-  if (!taskId) throw new Error('Workbench task id missing');
-  if (taskId !== actionItem.task_id) {
-    throw new Error('Workbench action item task mismatch');
-  }
-  return { taskId, actionItem };
-}
-
-function assertWorkbenchActionStillCurrent(input: {
-  taskId: string;
-  actionItem: WorkbenchActionItemRecord;
-}): void {
-  if (input.actionItem.status !== 'pending') {
-    throw new Error(
-      `Workbench action item is no longer pending: ${input.actionItem.status}`,
-    );
-  }
-  const task = getWorkbenchTaskById(input.taskId);
-  if (
-    task &&
-    input.actionItem.stage_key &&
-    task.current_stage &&
-    input.actionItem.stage_key !== task.current_stage
-  ) {
-    throw new Error(
-      `Workbench action item stage is stale: ${input.actionItem.stage_key} != ${task.current_stage}`,
-    );
-  }
-}
-
-function getWorkbenchAllowedActions(
-  actionItem: WorkbenchActionItemRecord,
-): string[] {
-  const extra = parseJsonRecord(actionItem.extra_json);
-  const allowed = Array.isArray(extra.allowedActions)
-    ? extra.allowedActions
-    : Array.isArray(extra.allowed_actions)
-      ? extra.allowed_actions
-      : [];
-  return allowed
-    .map((entry) => (typeof entry === 'string' ? entry.trim() : ''))
-    .filter(Boolean);
-}
-
-function workbenchDecisionToAction(
-  decision: WorkbenchActionDecisionValue,
-): WorkbenchExecutableAction {
-  if (decision === 'answer') return 'submit';
-  if (decision === 'defer') return 'resolve';
-  return decision;
-}
-
-function assertDecisionAllowed(input: {
-  actionItem: WorkbenchActionItemRecord;
-  action: string;
-}): void {
-  if (input.actionItem.source_type !== 'workflow_interrupt') return;
-  const allowed = getWorkbenchAllowedActions(input.actionItem);
-  if (allowed.length === 0) return;
-  const normalized =
-    input.action === 'confirm' || input.action === 'resolve'
-      ? 'approve'
-      : input.action;
-  if (!allowed.includes(normalized)) {
-    throw new Error(
-      `Workbench action ${input.action} is not allowed for this item (${allowed.join(', ')})`,
-    );
-  }
-}
-
-function payloadToStringRecord(
-  payload: Record<string, unknown>,
-): Record<string, string> {
-  return Object.fromEntries(
-    Object.entries(payload).map(([key, value]) => [
-      key,
-      typeof value === 'string' ? value : JSON.stringify(value),
-    ]),
-  );
-}
-
-function resolveAnswerText(payload: Record<string, unknown>): string {
-  const direct =
-    stringOrNull(payload.answer) ||
-    stringOrNull(payload.reply_text) ||
-    stringOrNull(payload.replyText) ||
-    stringOrNull(payload.value);
-  if (direct) return direct;
-  const entries = Object.entries(payload);
-  if (entries.length === 1) {
-    const value = entries[0][1];
-    return typeof value === 'string' ? value : JSON.stringify(value);
-  }
-  return '';
-}
-
-async function executeWorkbenchActionDecision(
-  item: AgentInboxItemView,
-  decision: WorkbenchActionDecision,
-): Promise<WorkbenchActionExecutionResult> {
-  if (!decision.ok || decision.decision === 'defer') {
-    return {
-      executed: false,
-      deferred: true,
-      summary: decision.reason,
-    };
-  }
-
-  const { taskId, actionItem } = workbenchTargetForInbox(item);
-  assertWorkbenchActionStillCurrent({ taskId, actionItem });
-
-  if (
-    actionItem.source_type === 'ask_user_question' ||
-    actionItem.source_type === 'request_human_input'
-  ) {
-    if (
-      decision.decision !== 'answer' &&
-      decision.decision !== 'submit' &&
-      decision.decision !== 'skip' &&
-      decision.decision !== 'reject' &&
-      decision.decision !== 'cancel'
-    ) {
-      throw new Error(
-        `Unsupported decision for question action item: ${decision.decision}`,
-      );
-    }
-    if (!workbenchActionRuntime) {
-      throw new Error('Workbench action runtime is not initialized');
-    }
-    if (!actionItem.source_ref_id || !actionItem.group_folder) {
-      throw new Error(
-        'Question action item request id or group folder missing',
-      );
-    }
-    const skip = decision.decision === 'skip';
-    const reject =
-      decision.decision === 'reject' || decision.decision === 'cancel';
-    const result = await handleAskQuestionResponse({
-      requestId: actionItem.source_ref_id,
-      groupFolder: actionItem.group_folder,
-      userId: 'personal-assistant',
-      answer: skip || reject ? undefined : resolveAnswerText(decision.payload),
-      formValues: payloadToStringRecord(decision.payload),
-      skip,
-      reject,
-      registeredGroups: workbenchActionRuntime.registeredGroups(),
-      sendCard: workbenchActionRuntime.sendCard,
-      sendMessage: workbenchActionRuntime.sendMessage,
-    });
-    if (!result.ok) {
-      throw new Error(result.userMessage || 'Question answer failed');
-    }
-    return {
-      executed: true,
-      deferred: false,
-      summary: result.userMessage,
-      action: decision.decision,
-      completed: result.completed,
-      result: {
-        userMessage: result.userMessage,
-        completed: result.completed,
-      },
-    };
-  }
-
-  const action: WorkbenchExecutableAction =
-    actionItem.source_type === 'send_message'
-      ? 'resolve'
-      : workbenchDecisionToAction(decision.decision);
-  if (
-    action !== 'confirm' &&
-    action !== 'approve' &&
-    action !== 'reject' &&
-    action !== 'revise' &&
-    action !== 'submit' &&
-    action !== 'skip' &&
-    action !== 'cancel' &&
-    action !== 'resolve'
-  ) {
-    throw new Error(
-      `Unsupported workbench action decision: ${decision.decision}`,
-    );
-  }
-  assertDecisionAllowed({ actionItem, action });
-
-  const result = runWorkbenchActionItemAction({
-    taskId,
-    actionItemId: actionItem.id,
-    action,
-    payload: decision.payload,
-    actor: {
-      channel: 'assistant',
-      userId: 'personal-assistant',
-      displayName: '个人助手',
-    },
-    idempotencyKey: [
-      'assistant-workbench',
-      item.id,
-      actionItem.id,
-      action,
-      payloadDigest(decision.payload),
-    ].join(':'),
-  });
-  if (result.error) throw new Error(result.error);
-
-  return {
-    executed: true,
-    deferred: false,
-    summary: `已执行 ${action}`,
-    action,
-    completed: true,
-    result: result as Record<string, unknown>,
-  };
-}
-
 export function canInvestigateInboxItem(item: AgentInboxItemView): boolean {
   const ruleKey = toRuleKey(item.extra.ruleKey);
   return (
-    ruleKey === 'workbench.task_failed_or_cancelled' ||
-    ruleKey === 'workbench.task_stale' ||
     ruleKey === 'scheduler.task_failed' ||
     ruleKey === 'agent_runs.query_failed' ||
     ruleKey === 'online.error_logs' ||
@@ -1225,22 +459,8 @@ export function canRepairInboxItem(item: AgentInboxItemView): boolean {
   );
 }
 
-export function canAutoHandleWorkbenchActionItem(
-  item: AgentInboxItemView,
-): boolean {
-  return (
-    toRuleKey(item.extra.ruleKey) === 'workbench.pending_action_item' &&
-    item.source_type === 'workbench_action_item' &&
-    typeof item.source_ref_id === 'string' &&
-    item.source_ref_id.length > 0
-  );
-}
-
 export function shouldAutoProcessInboxItem(item: AgentInboxItemView): boolean {
-  if (
-    !canInvestigateInboxItem(item) &&
-    !canAutoHandleWorkbenchActionItem(item)
-  ) {
+  if (!canInvestigateInboxItem(item)) {
     return false;
   }
   const status = item.extra.autoFlowStatus;
@@ -1435,137 +655,13 @@ export async function repairAgentInboxItem(
   }
 }
 
-function resolveWorkbenchActionOutput(
-  output: AssistantAgentRunResult,
-): WorkbenchActionDecision {
-  let result: WorkbenchActionDecision | null = null;
-  let parseError: unknown = null;
-  try {
-    result = parseWorkbenchActionDecision(output.text);
-  } catch (err) {
-    parseError = err;
-  }
-
-  if (!result) {
-    if (!output.ok) {
-      throw new Error(
-        output.error ||
-          output.text ||
-          errorMessage(parseError) ||
-          'Workbench action agent failed',
-      );
-    }
-    throw parseError;
-  }
-  return result;
-}
-
-export async function handleWorkbenchActionInboxItem(itemId: string): Promise<{
-  item: AgentInboxItemView;
-  decision: WorkbenchActionDecision;
-  execution: WorkbenchActionExecutionResult;
-}> {
-  const item = getAgentInboxItem(itemId);
-  if (!item) throw new Error('Agent inbox item not found');
-  if (!canAutoHandleWorkbenchActionItem(item)) {
-    throw new Error('This inbox item does not support workbench auto action');
-  }
-  if (!agentRunner) {
-    throw new Error(
-      'Assistant workbench action agent runner is not initialized',
-    );
-  }
-
-  const context = buildContext(item);
-  updateAgentInboxItemExtra(item.id, {
-    autoFlowStatus: 'processing',
-    lastWorkbenchActionError: null,
-  });
-  createAssistantActionLog({
-    itemId: item.id,
-    action: 'workbench_action',
-    status: 'success',
-    title: item.title,
-    sourceType: item.source_type,
-    sourceRefId: item.source_ref_id,
-    payload: { ruleKey: item.extra.ruleKey },
-  });
-
-  try {
-    const output = await runAssistantAgent({
-      purpose: 'workbench_action',
-      item,
-      prompt: buildWorkbenchActionPrompt(item, context),
-    });
-    const decision = resolveWorkbenchActionOutput(output);
-    const execution = await executeWorkbenchActionDecision(item, decision);
-    const extraPatch = {
-      autoFlowStatus: execution.deferred ? 'deferred' : 'handled',
-      workbenchActionDecision: redactSensitive(
-        decision as unknown as Record<string, unknown>,
-      ) as Record<string, unknown>,
-      workbenchActionResult: redactSensitive(
-        execution as unknown as Record<string, unknown>,
-      ) as Record<string, unknown>,
-      lastWorkbenchActionError: null,
-    };
-    const updated = updateAgentInboxItemExtra(item.id, extraPatch);
-    const finalItem = execution.deferred
-      ? updated
-      : updateAgentInboxItemStatus(item.id, 'done');
-    createAssistantActionLog({
-      itemId: item.id,
-      action: 'workbench_action_result',
-      status: execution.deferred ? 'skipped' : 'success',
-      title: item.title,
-      sourceType: item.source_type,
-      sourceRefId: item.source_ref_id,
-      result: redactSensitive({
-        decision,
-        execution,
-      }) as Record<string, unknown>,
-    });
-    return { item: finalItem, decision, execution };
-  } catch (err) {
-    const message = errorMessage(err);
-    updateAgentInboxItemExtra(item.id, {
-      autoFlowStatus: 'failed',
-      lastWorkbenchActionError: message,
-    });
-    createAssistantActionLog({
-      itemId: item.id,
-      action: 'workbench_action_result',
-      status: 'error',
-      title: item.title,
-      sourceType: item.source_type,
-      sourceRefId: item.source_ref_id,
-      result: { error: message },
-    });
-    throw err;
-  }
-}
-
 export async function autoProcessAgentInboxItem(itemId: string): Promise<{
   item: AgentInboxItemView;
   investigation?: InvestigationResult;
   repairs?: RepairResult[];
-  workbenchAction?: {
-    decision: WorkbenchActionDecision;
-    execution: WorkbenchActionExecutionResult;
-  };
 }> {
   const existing = getAgentInboxItem(itemId);
   if (!existing) throw new Error('Agent inbox item not found');
-  if (canAutoHandleWorkbenchActionItem(existing)) {
-    const result = await handleWorkbenchActionInboxItem(itemId);
-    return {
-      item: result.item,
-      workbenchAction: {
-        decision: result.decision,
-        execution: result.execution,
-      },
-    };
-  }
   const existingInvestigation = isObject(existing.extra.investigation)
     ? (existing.extra.investigation as unknown as InvestigationResult)
     : null;

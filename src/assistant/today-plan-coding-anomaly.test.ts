@@ -4,11 +4,7 @@ import path from 'path';
 import { execFileSync } from 'child_process';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import {
-  _initTestDatabase,
-  createWorkflow,
-  createWorkbenchTask,
-} from '../db.js';
+import { _initTestDatabase } from '../db.js';
 import {
   createOrContinueTodayPlan,
   createTodayPlanItemForPlan,
@@ -77,7 +73,6 @@ function createPlanWithService(input: {
     itemId: item.id,
     title: '计划项',
     associations: {
-      workbench_task_ids: [],
       chat_selections: [],
       services: [
         {
@@ -161,15 +156,22 @@ describe('today plan coding anomaly scan', () => {
       cwd: process.cwd(),
       encoding: 'utf-8',
     }).trim();
+    const currentHeadDate = execFileSync(
+      'git',
+      ['show', '-s', '--format=%cs', 'HEAD'],
+      {
+        cwd: process.cwd(),
+        encoding: 'utf-8',
+      },
+    ).trim();
     const plan = createOrContinueTodayPlan({
-      planDate: new Date().toISOString().slice(0, 10),
+      planDate: currentHeadDate,
     });
     const item = createTodayPlanItemForPlan(plan.id);
     patchTodayPlanItem({
       itemId: item.id,
       title: '主体项目',
       associations: {
-        workbench_task_ids: [],
         chat_selections: [],
         services: [{ service: 'icarus', branches: ['HEAD'] }],
       },
@@ -177,7 +179,7 @@ describe('today plan coding anomaly scan', () => {
 
     await scanTodayPlanCodingAnomalyRule({
       settings,
-      now: new Date(),
+      now: new Date(`${currentHeadDate}T12:00:00`),
       registry: { icarus: { repo_path: 'ignored-for-special-case' } },
       agentRunner: runner,
     });
@@ -185,69 +187,6 @@ describe('today plan coding anomaly scan', () => {
     const prompt = runner.mock.calls[0]?.[0].prompt || '';
     expect(prompt).toContain('/workspace/project');
     expect(prompt).toContain(currentHead);
-  });
-
-  it('uses workbench task service branches when collecting revisions', () => {
-    const repo = createRepoWithDatedCommit({
-      service: 'catstory',
-      branch: 'feature/task',
-      date: '2026-05-13',
-    });
-    createWorkflow({
-      id: 'wf-1',
-      name: 'Task 1',
-      service: 'catstory',
-      start_from: 'dev',
-      context: { work_branch: 'feature/task' },
-      status: 'dev',
-      current_delegation_id: '',
-      round: 0,
-      source_jid: 'web:main',
-      paused_from: null,
-      workflow_type: 'dev_test',
-      created_at: '1',
-      updated_at: '1',
-    });
-    createWorkbenchTask({
-      id: 'wb-wf-1',
-      workflow_id: 'wf-1',
-      source_jid: 'web:main',
-      title: 'Task 1',
-      service: 'catstory',
-      start_from: 'dev',
-      workflow_type: 'dev_test',
-      status: 'dev',
-      task_state: 'running',
-      current_stage: 'dev',
-      summary: null,
-      created_at: '1',
-      updated_at: '1',
-      last_event_at: '1',
-    });
-    const plan = createOrContinueTodayPlan({ planDate: '2026-05-13' });
-    const item = createTodayPlanItemForPlan(plan.id);
-    patchTodayPlanItem({
-      itemId: item.id,
-      title: '关联任务',
-      associations: {
-        workbench_task_ids: ['wb-wf-1'],
-        chat_selections: [],
-        services: [],
-      },
-    });
-
-    const items = collectTodayPlanCodingScanItems({
-      now: new Date(2026, 4, 14, 10, 0, 0),
-      lookbackDays: 2,
-      registry: { catstory: { repo_path: repo.repoPath } },
-    });
-
-    expect(items).toMatchObject([
-      {
-        service: 'catstory',
-        revisions: [repo.commit],
-      },
-    ]);
   });
 
   it('only creates inbox candidates when the agent reports anomalies', async () => {

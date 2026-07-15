@@ -142,7 +142,6 @@ function buildExtraLines(item: AgentInboxItemView): string[] {
   const lastError =
     stringValue(item.extra.lastInvestigationError) ||
     stringValue(item.extra.lastRepairError) ||
-    stringValue(item.extra.lastWorkbenchActionError) ||
     stringValue(item.extra.lastAutoFlowError);
 
   if (ruleKey) lines.push(`规则: ${ruleKey}`);

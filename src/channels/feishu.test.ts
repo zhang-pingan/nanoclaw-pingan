@@ -28,14 +28,14 @@ describe('FeishuChannel form cards', () => {
           id: 'skip',
           label: '跳过鉴权直接测试',
           value: {
-            action: 'wb_broadcast_skip',
-            task_id: 'task-1',
-            action_item_id: 'item-1',
+            action: 'ask_question_skip',
+            request_id: 'request-1',
+            group_folder: 'main',
           },
         },
       ],
       form: {
-        name: 'wb-submit-item-1',
+        name: 'ask-question-request-1',
         inputs: [
           {
             name: 'access_token',
@@ -45,13 +45,13 @@ describe('FeishuChannel form cards', () => {
           },
         ],
         submitButton: {
-          id: 'item-1-submit-access-token',
+          id: 'ask-question-submit',
           label: '填写 access_token 并开始测试',
           type: 'primary',
           value: {
-            action: 'wb_broadcast_submit',
-            task_id: 'task-1',
-            action_item_id: 'item-1',
+            action: 'ask_question_answer',
+            request_id: 'request-1',
+            group_folder: 'main',
           },
         },
       },
@@ -64,7 +64,7 @@ describe('FeishuChannel form cards', () => {
 
     expect(form).toMatchObject({
       tag: 'form',
-      name: 'wb-submit-item-1',
+      name: 'ask-question-request-1',
     });
     expect(form?.elements).toEqual([
       {
@@ -77,7 +77,7 @@ describe('FeishuChannel form cards', () => {
       },
       {
         tag: 'button',
-        name: 'item-1-submit-access-token',
+        name: 'ask-question-submit',
         text: {
           tag: 'plain_text',
           content: '填写 access_token 并开始测试',
@@ -85,9 +85,9 @@ describe('FeishuChannel form cards', () => {
         action_type: 'form_submit',
         type: 'primary',
         value: {
-          action: 'wb_broadcast_submit',
-          task_id: 'task-1',
-          action_item_id: 'item-1',
+          action: 'ask_question_answer',
+          request_id: 'request-1',
+          group_folder: 'main',
         },
       },
     ]);
@@ -128,7 +128,7 @@ describe('FeishuChannel form cards', () => {
         submitButton: {
           id: 'submit',
           label: '提交',
-          value: { action: 'wb_broadcast_resume' },
+          value: { action: 'ask_question_answer' },
         },
       },
     };
@@ -199,7 +199,11 @@ describe('FeishuChannel form cards', () => {
         {
           id: 'approve',
           label: '确认',
-          value: { action: 'wb_broadcast_confirm' },
+          value: {
+            action: 'assistant_evolution_action',
+            item_id: 'evolution-1',
+            evolution_action: 'adopt',
+          },
         },
       ],
     };
@@ -231,17 +235,13 @@ describe('FeishuChannel form cards', () => {
 });
 
 describe('FeishuChannel card action callbacks', () => {
-  it('forwards workbench broadcast actions without workflow_id or group_folder', async () => {
+  it('forwards typed Ask User Question actions and form values', async () => {
     const channel = createChannel();
     const onCardAction = vi.fn(async () => ({
       toast: { type: 'success' as const, content: 'ok' },
     }));
     channel.onCardAction = onCardAction;
-
-    const res = {
-      writeHead: vi.fn(),
-      end: vi.fn(),
-    };
+    const res = { writeHead: vi.fn(), end: vi.fn() };
 
     await (channel as any).handleCardActionEvent(
       {
@@ -250,13 +250,11 @@ describe('FeishuChannel card action callbacks', () => {
           context: { open_message_id: 'msg-1', open_chat_id: 'oc_demo' },
           action: {
             value: {
-              action: 'wb_broadcast_submit',
-              task_id: 'task-1',
-              action_item_id: 'item-1',
+              action: 'ask_question_answer',
+              request_id: 'request-1',
+              group_folder: 'main',
             },
-            form_value: {
-              access_token: 'demo-token',
-            },
+            form_value: { answer: '继续' },
           },
         },
       },
@@ -264,45 +262,35 @@ describe('FeishuChannel card action callbacks', () => {
     );
 
     expect(onCardAction).toHaveBeenCalledWith({
-      action: 'wb_broadcast_submit',
+      action: 'ask_question_answer',
       user_id: 'user-1',
       message_id: 'msg-1',
       actor_channel: 'feishu',
       group_jid: 'feishu:oc_demo',
-      group_folder: undefined,
-      workflow_id: undefined,
+      group_folder: 'main',
       form_value: {
-        action: 'wb_broadcast_submit',
-        task_id: 'task-1',
-        action_item_id: 'item-1',
-        access_token: 'demo-token',
-        payload: JSON.stringify({ access_token: 'demo-token' }),
+        action: 'ask_question_answer',
+        request_id: 'request-1',
+        group_folder: 'main',
+        answer: '继续',
+        payload: JSON.stringify({ answer: '继续' }),
       },
     });
     expect(res.writeHead).toHaveBeenCalledWith(200, {
       'Content-Type': 'application/json',
     });
     expect(res.end).toHaveBeenCalledWith(
-      JSON.stringify({
-        toast: {
-          type: 'success',
-          content: 'ok',
-        },
-      }),
+      JSON.stringify({ toast: { type: 'success', content: 'ok' } }),
     );
   });
 
-  it('infers workbench broadcast submit action from form button name when value is absent', async () => {
+  it('forwards typed Assistant evolution actions', async () => {
     const channel = createChannel();
     const onCardAction = vi.fn(async () => ({
-      toast: { type: 'success' as const, content: 'ok' },
+      toast: { type: 'success' as const, content: 'adopted' },
     }));
     channel.onCardAction = onCardAction;
-
-    const res = {
-      writeHead: vi.fn(),
-      end: vi.fn(),
-    };
+    const res = { writeHead: vi.fn(), end: vi.fn() };
 
     await (channel as any).handleCardActionEvent(
       {
@@ -310,9 +298,10 @@ describe('FeishuChannel card action callbacks', () => {
           operator: { user_id: 'user-2' },
           context: { open_message_id: 'msg-2' },
           action: {
-            name: 'item-1-submit-access-token',
-            form_value: {
-              access_token: 'demo-token',
+            value: {
+              action: 'assistant_evolution_action',
+              item_id: 'evolution-1',
+              evolution_action: 'adopt',
             },
           },
         },
@@ -321,108 +310,16 @@ describe('FeishuChannel card action callbacks', () => {
     );
 
     expect(onCardAction).toHaveBeenCalledWith({
-      action: 'wb_broadcast_submit',
+      action: 'assistant_evolution_action',
       user_id: 'user-2',
       message_id: 'msg-2',
       actor_channel: 'feishu',
       group_jid: undefined,
       group_folder: undefined,
-      workflow_id: undefined,
       form_value: {
-        action: 'wb_broadcast_submit',
-        action_item_id: 'item-1',
-        access_token: 'demo-token',
-        payload: JSON.stringify({ access_token: 'demo-token' }),
-      },
-    });
-  });
-
-  it('infers ask-question broadcast reply action from compact request-based form names', async () => {
-    const channel = createChannel();
-    const onCardAction = vi.fn(async () => ({
-      toast: { type: 'success' as const, content: 'ok' },
-    }));
-    channel.onCardAction = onCardAction;
-
-    const res = {
-      writeHead: vi.fn(),
-      end: vi.fn(),
-    };
-
-    await (channel as any).handleCardActionEvent(
-      {
-        event: {
-          operator: { user_id: 'user-3' },
-          context: { open_message_id: 'msg-3' },
-          action: {
-            name: 'wb-reply-aq-123',
-            form_value: {
-              reply_text: '继续',
-            },
-          },
-        },
-      },
-      res,
-    );
-
-    expect(onCardAction).toHaveBeenCalledWith({
-      action: 'wb_broadcast_reply',
-      user_id: 'user-3',
-      message_id: 'msg-3',
-      actor_channel: 'feishu',
-      group_jid: undefined,
-      group_folder: undefined,
-      workflow_id: undefined,
-      form_value: {
-        action: 'wb_broadcast_reply',
-        request_id: 'aq-123',
-        reply_text: '继续',
-        payload: JSON.stringify({ reply_text: '继续' }),
-      },
-    });
-  });
-
-  it('infers workflow broadcast submit action from compact task-based form names', async () => {
-    const channel = createChannel();
-    const onCardAction = vi.fn(async () => ({
-      toast: { type: 'success' as const, content: 'ok' },
-    }));
-    channel.onCardAction = onCardAction;
-
-    const res = {
-      writeHead: vi.fn(),
-      end: vi.fn(),
-    };
-
-    await (channel as any).handleCardActionEvent(
-      {
-        event: {
-          operator: { user_id: 'user-4' },
-          context: { open_message_id: 'msg-4' },
-          action: {
-            name: 'wb-su-task-1',
-            form_value: {
-              access_token: 'demo-token',
-            },
-          },
-        },
-      },
-      res,
-    );
-
-    expect(onCardAction).toHaveBeenCalledWith({
-      action: 'wb_broadcast_submit',
-      user_id: 'user-4',
-      message_id: 'msg-4',
-      actor_channel: 'feishu',
-      group_jid: undefined,
-      group_folder: undefined,
-      workflow_id: undefined,
-      form_value: {
-        action: 'wb_broadcast_submit',
-        task_id: 'task-1',
-        access_token: 'demo-token',
-        payload: JSON.stringify({ access_token: 'demo-token' }),
+        action: 'assistant_evolution_action',
+        item_id: 'evolution-1',
+        evolution_action: 'adopt',
       },
     });
   });

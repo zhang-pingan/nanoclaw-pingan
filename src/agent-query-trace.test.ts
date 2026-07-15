@@ -65,7 +65,6 @@ describe('agent query trace manager', () => {
       queryId: 'trace-structured-events',
       sourceType: 'message',
       sourceRefId: 'msg-1',
-      workflowType: 'bugfix',
       service: 'catstory',
       role: 'developer',
     });
@@ -103,9 +102,9 @@ describe('agent query trace manager', () => {
       eventName: 'file_edit',
       status: 'success',
       resourceType: 'file',
-      resourceRef: 'src/workflow.ts',
+      resourceRef: 'src/example.ts',
       payload: {
-        path: 'src/workflow.ts',
+        path: 'src/example.ts',
         operation: 'edit',
         additions: 2,
         deletions: 1,
@@ -136,7 +135,6 @@ describe('agent query trace manager', () => {
     });
 
     const detail = buildAgentQueryTraceDetail('trace-structured-events');
-    expect(detail?.query.workflow_type).toBe('bugfix');
     expect(detail?.summary.toolCallCount).toBe(1);
     expect(detail?.summary.changedFileCount).toBe(1);
     expect(detail?.summary.modelCallCount).toBe(1);

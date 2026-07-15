@@ -9,7 +9,6 @@ export type FailureType =
   | 'tool_contract_error'
   | 'timeout'
   | 'routing_error'
-  | 'workflow_transition_error'
   | 'evaluator_error'
   | 'invalid_input'
   | 'invalid_config'
@@ -25,7 +24,6 @@ export type FailureOrigin =
   | 'model'
   | 'tool'
   | 'scheduler'
-  | 'workflow'
   | 'router'
   | 'container'
   | 'db'
@@ -43,8 +41,6 @@ export interface ClassifiedFailure {
 export interface ClassifyFailureContext {
   module: string;
   action?: string;
-  workflowId?: string;
-  stageKey?: string;
   defaultType?: FailureType;
   defaultSubtype?: string;
   defaultOrigin?: FailureOrigin;
@@ -98,8 +94,6 @@ function withContextDetails(
   return {
     module: context.module,
     ...(context.action ? { action: context.action } : {}),
-    ...(context.workflowId ? { workflowId: context.workflowId } : {}),
-    ...(context.stageKey ? { stageKey: context.stageKey } : {}),
     ...details,
   };
 }

@@ -25,7 +25,6 @@ import {
   SSH_KEY_PATH,
   TIMEZONE,
 } from './config.js';
-import { getWorkflow } from './db.js';
 import { readEnvFile } from './env.js';
 import { resolveGroupFolderPath, resolveGroupIpcPath } from './group-folder.js';
 import { logger } from './logger.js';
@@ -46,11 +45,6 @@ import {
 } from './features/container-resources.js';
 import { validateAdditionalMounts } from './mount-security.js';
 import { RegisteredGroup } from './types.js';
-import {
-  getFeatureDataRoot,
-  listExternalFeatureDataRoots,
-  getWorkflowRuntimeRoot,
-} from './workflow-storage.js';
 
 const HOME_DIR = process.env.HOME || os.homedir();
 const DEFAULT_HOST_MAVEN_SETTINGS_PATH = path.join(
@@ -96,8 +90,6 @@ export interface ContainerInput {
   isOneShot?: boolean;
   assistantName?: string;
   executionContext?: {
-    workflowId?: string;
-    stageKey?: string;
     delegationId?: string;
   };
 }
@@ -420,7 +412,7 @@ function emitTraceEvent(
 function buildVolumeMounts(
   group: RegisteredGroup,
   isMain: boolean,
-  opts: { externalSystemOnce?: boolean; workflowId?: string } = {},
+  opts: { externalSystemOnce?: boolean } = {},
 ): VolumeMount[] {
   const mounts: VolumeMount[] = [];
   const projectRoot = process.cwd();
@@ -480,39 +472,6 @@ function buildVolumeMounts(
         containerPath: '/workspace/global',
         readonly: true,
       });
-    }
-  }
-
-  if (opts.workflowId) {
-    const workflow = getWorkflow(opts.workflowId);
-    const runtimeRoot = getWorkflowRuntimeRoot(opts.workflowId);
-    fs.mkdirSync(runtimeRoot.hostPath, { recursive: true });
-    mounts.push({
-      hostPath: runtimeRoot.hostPath,
-      containerPath: runtimeRoot.containerPath,
-      readonly: false,
-    });
-    if (workflow?.feature_id) {
-      const featureDataRoot = getFeatureDataRoot(workflow.feature_id);
-      fs.mkdirSync(featureDataRoot.rootPath, { recursive: true });
-      mounts.push({
-        hostPath: featureDataRoot.rootPath,
-        containerPath: `/workspace/features/${featureDataRoot.featureId}/data`,
-        readonly: false,
-      });
-      for (const externalRoot of listExternalFeatureDataRoots(
-        workflow.feature_id,
-      )) {
-        if (!fs.existsSync(externalRoot.rootPath)) {
-          if (externalRoot.readonly !== false) continue;
-          fs.mkdirSync(externalRoot.rootPath, { recursive: true });
-        }
-        mounts.push({
-          hostPath: externalRoot.rootPath,
-          containerPath: `/workspace/features/${externalRoot.featureId}/external/${externalRoot.rootId}`,
-          readonly: externalRoot.readonly !== false,
-        });
-      }
     }
   }
 
@@ -865,7 +824,6 @@ export async function runContainerAgent(
 
   const mounts = buildVolumeMounts(group, input.isMain, {
     externalSystemOnce: input.executionMode === 'external_system_once',
-    workflowId: input.executionContext?.workflowId,
   });
   const safeName = group.folder.replace(/[^a-zA-Z0-9-]/g, '-');
   const containerName = `icarus-${safeName}-${Date.now()}`;

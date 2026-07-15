@@ -32,7 +32,6 @@ import {
   expirePendingAskQuestions,
   normalizeAskQuestions,
 } from './ask-user-question.js';
-import { onDelegationComplete as onWorkflowDelegationComplete } from './workflow.js';
 import { AvailableGroup } from './container-runner.js';
 import {
   createDelegation,
@@ -68,12 +67,6 @@ import {
   InteractiveCard,
   RegisteredGroup,
 } from './types.js';
-import { queryWorkbenchTaskStatuses } from './workbench-query.js';
-import {
-  createWorkbenchInteractionItem,
-  updateWorkbenchInteractionItemStatus,
-} from './workbench-store.js';
-import { validateWorkflowHandoffResult } from './workflow-handoff.js';
 import { runLocalHostScript } from './host-script-runner.js';
 import { getWikiPageDetail } from './wiki.js';
 import {
@@ -186,7 +179,6 @@ export function startIpcWatcher(deps: IpcDeps): void {
       await expirePendingAskQuestions({
         registeredGroups,
         sendMessage: deps.sendMessage,
-        onDelegationComplete: onWorkflowDelegationComplete,
       });
     } catch (err) {
       logger.warn({ err }, 'Failed to expire pending ask questions');
@@ -219,35 +211,8 @@ export function startIpcWatcher(deps: IpcDeps): void {
                 if (
                   isMain ||
                   (targetGroup && targetGroup.folder === sourceGroup)
-                ) {
-                  await deps.sendMessage(data.chatJid, data.text);
-                  if (
-                    typeof data.workflowId === 'string' &&
-                    data.workflowId &&
-                    typeof data.stageKey === 'string' &&
-                    data.stageKey &&
-                    typeof data.sourceRefId === 'string' &&
-                    data.sourceRefId
                   ) {
-                    createWorkbenchInteractionItem({
-                      workflowId: data.workflowId,
-                      stageKey: data.stageKey,
-                      delegationId:
-                        typeof data.delegationId === 'string' &&
-                        data.delegationId
-                          ? data.delegationId
-                          : null,
-                      groupFolder: sourceGroup,
-                      sourceType: 'send_message',
-                      sourceRefId: data.sourceRefId,
-                      title: data.sender ? `${data.sender} 消息` : '节点消息',
-                      body: typeof data.text === 'string' ? data.text : '',
-                      createdAt:
-                        typeof data.timestamp === 'string'
-                          ? data.timestamp
-                          : new Date().toISOString(),
-                    });
-                  }
+                    await deps.sendMessage(data.chatJid, data.text);
                   logger.info(
                     { chatJid: data.chatJid, sourceGroup },
                     'IPC message sent',
@@ -687,7 +652,7 @@ function buildArchiveExtractionSystemPrompt(): string {
     'Extraction policy: working is for explicit current tasks, short-term goals, or immediate context mentioned by the user in the latest conversation.',
     'Extraction policy: episodic is for clearly completed outcomes or recent event summaries only when completion is explicit.',
     'For episodic memories, keep only concrete outcomes with specific deliverables, blockers, causes, IDs, branches, builds, documents, APIs, or other actionable details.',
-    'Never extract generic workflow boilerplate such as "已完成委派测试并回传结果", "已完成复核并回传结果", "已按委派要求执行并回传结果", or similar handoff/completion chatter.',
+    'Never extract generic process boilerplate such as "已完成委派测试并回传结果", "已完成复核并回传结果", "已按委派要求执行并回传结果", or similar completion chatter.',
     'If a message starts with a generic completion sentence but later includes concrete details, extract the concrete details instead of the generic lead-in.',
     'If the user clearly asks the assistant to do something in the current conversation, prefer outputting one working summary memory for that task.',
     'When both a long-term preference and a current task are present, output both instead of choosing only one.',
@@ -960,13 +925,7 @@ export async function processTaskIpc(
     limit?: number;
     mode?: string;
     requestId?: string;
-    task_id?: string;
-    include_terminal?: boolean;
-    include_detail?: boolean;
     status?: string;
-    task_state?: 'running' | 'success' | 'failed' | 'cancelled';
-    workflow_status?: string;
-    keyword?: string;
     days?: number;
     date?: string;
     start_date?: string;
@@ -991,14 +950,10 @@ export async function processTaskIpc(
     task?: string;
     result?: string;
     outcome?: string;
-    // For workflow
-    service?: string;
     // For ask_user_question
     questions?: unknown;
     timeoutSec?: number;
     metadata?: Record<string, string>;
-    workflowId?: string;
-    stageKey?: string;
     sourceType?: string;
     sourceRefId?: string;
     scriptPath?: string;
@@ -1053,23 +1008,6 @@ export async function processTaskIpc(
       'ipc',
       groupFolder,
       'delegation-results',
-    );
-    fs.mkdirSync(resultsDir, { recursive: true });
-    const responsePath = path.join(resultsDir, `${requestId}.json`);
-    const tempPath = `${responsePath}.tmp`;
-    fs.writeFileSync(tempPath, JSON.stringify(payload, null, 2));
-    fs.renameSync(tempPath, responsePath);
-  };
-  const writeWorkbenchResult = (
-    groupFolder: string,
-    requestId: string,
-    payload: object,
-  ) => {
-    const resultsDir = path.join(
-      DATA_DIR,
-      'ipc',
-      groupFolder,
-      'workbench-results',
     );
     fs.mkdirSync(resultsDir, { recursive: true });
     const responsePath = path.join(resultsDir, `${requestId}.json`);
@@ -1662,32 +1600,6 @@ export async function processTaskIpc(
         timeoutSec: timeout,
         metadata: data.metadata,
       });
-      if (data.workflowId && data.stageKey) {
-        const firstQuestion = normalized.questions[0];
-        createWorkbenchInteractionItem({
-          workflowId: data.workflowId,
-          stageKey: data.stageKey,
-          delegationId: data.delegationId || null,
-          groupFolder: sourceGroup,
-          sourceType:
-            data.metadata?.source_type === 'request_human_input'
-              ? 'request_human_input'
-              : 'ask_user_question',
-          sourceRefId: data.requestId,
-          title:
-            data.metadata?.title ||
-            (data.metadata?.source_type === 'request_human_input'
-              ? '人工输入请求'
-              : '节点提问'),
-          body: firstQuestion?.question || '',
-          createdAt: new Date().toISOString(),
-          extra: {
-            request_id: data.requestId,
-            question_count: normalized.questions.length,
-            questions: normalized.questions,
-          },
-        });
-      }
 
       const dispatch = await dispatchCurrentAskQuestion({
         requestId: data.requestId,
@@ -1714,14 +1626,6 @@ export async function processTaskIpc(
           },
           'ask_user_question rejected: failed to dispatch question',
         );
-        updateWorkbenchInteractionItemStatus({
-          sourceType:
-            data.metadata?.source_type === 'request_human_input'
-              ? 'request_human_input'
-              : 'ask_user_question',
-          sourceRefId: data.requestId,
-          status: 'cancelled',
-        });
       } else {
         logger.info(
           {
@@ -1980,7 +1884,6 @@ export async function processTaskIpc(
           status: d.status,
           result: d.result,
           outcome: d.outcome || null,
-          workflow_id: d.workflow_id || null,
           created_at: d.created_at,
           updated_at: d.updated_at,
         })),
@@ -2019,10 +1922,6 @@ export async function processTaskIpc(
         break;
       }
 
-      const handoffValidation = delegation.handoff_contract_json
-        ? validateWorkflowHandoffResult(data.result, delegation)
-        : null;
-
       // Update delegation status
       updateDelegation(data.delegationId, {
         status: 'completed',
@@ -2032,13 +1931,6 @@ export async function processTaskIpc(
             | 'success'
             | 'failure'
             | null) || null,
-        handoff_result_json: handoffValidation?.payload
-          ? JSON.stringify(handoffValidation.payload)
-          : null,
-        handoff_validation_status: handoffValidation?.status || null,
-        handoff_validation_errors_json: handoffValidation
-          ? JSON.stringify(handoffValidation.errors)
-          : null,
       });
 
       // Find the target group name for the result message
@@ -2050,9 +1942,6 @@ export async function processTaskIpc(
       const requesterGroup = requesterJid
         ? registeredGroups[requesterJid]
         : null;
-      const delegationWorkflowId =
-        (delegation as { workflow_id?: string | null }).workflow_id ||
-        undefined;
       const resultContent = `[委派结果 | 来自:${targetName} | ID:${data.delegationId}]\n\n${data.result}`;
       const resultMsgId = `del-result-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       const resultNow = Date.now().toString();
@@ -2066,7 +1955,6 @@ export async function processTaskIpc(
         timestamp: resultNow,
         is_from_me: true,
         is_bot_message: false,
-        workflow_id: delegationWorkflowId,
       });
 
       // Wake up the source (main) group's agent
@@ -2087,7 +1975,6 @@ export async function processTaskIpc(
             timestamp: resultNow,
             is_from_me: true,
             is_bot_message: false,
-            workflow_id: delegationWorkflowId,
           });
           deps.enqueueMessageCheck(requesterJid);
         } else {
@@ -2109,16 +1996,6 @@ export async function processTaskIpc(
         },
         'Delegation completed via IPC',
       );
-
-      // Workflow hook: check if this delegation belongs to a workflow
-      try {
-        onWorkflowDelegationComplete(data.delegationId);
-      } catch (err) {
-        logger.error(
-          { err, delegationId: data.delegationId },
-          'Workflow delegation hook failed',
-        );
-      }
 
       break;
     }
@@ -2284,54 +2161,6 @@ export async function processTaskIpc(
       break;
     }
 
-    case 'query_workbench_tasks': {
-      if (!data.requestId || typeof data.requestId !== 'string') {
-        logger.warn({ sourceGroup }, 'query_workbench_tasks missing requestId');
-        break;
-      }
-      if (!isMain) {
-        writeWorkbenchResult(sourceGroup, data.requestId, {
-          error: 'only the main group can query workbench tasks',
-        });
-        logger.warn(
-          { sourceGroup, requestId: data.requestId },
-          'Unauthorized query_workbench_tasks attempt blocked',
-        );
-        break;
-      }
-
-      const result = queryWorkbenchTaskStatuses({
-        task_id: typeof data.task_id === 'string' ? data.task_id : undefined,
-        keyword: typeof data.keyword === 'string' ? data.keyword : undefined,
-        status: typeof data.status === 'string' ? data.status : undefined,
-        task_state:
-          typeof data.task_state === 'string' ? data.task_state : undefined,
-        workflow_status:
-          typeof data.workflow_status === 'string'
-            ? data.workflow_status
-            : undefined,
-        include_terminal: data.include_terminal === true,
-        include_detail: data.include_detail === true,
-        limit: typeof data.limit === 'number' ? data.limit : undefined,
-      });
-
-      writeWorkbenchResult(sourceGroup, data.requestId, result);
-      logger.info(
-        {
-          sourceGroup,
-          requestId: data.requestId,
-          matchedCount: result.matched_count,
-          taskId: data.task_id,
-          keyword: data.keyword,
-          status: data.status,
-          taskState: data.task_state,
-          workflowStatus: data.workflow_status,
-        },
-        'query_workbench_tasks completed',
-      );
-      break;
-    }
-
     case 'query_recent_today_plan_details': {
       if (!data.requestId || typeof data.requestId !== 'string') {
         logger.warn(
@@ -2356,7 +2185,6 @@ export async function processTaskIpc(
           days: result.query.days,
           planCount: result.plans.length,
           serviceCount: result.services.length,
-          taskCount: result.tasks.length,
         },
         'query_recent_today_plan_details completed',
       );

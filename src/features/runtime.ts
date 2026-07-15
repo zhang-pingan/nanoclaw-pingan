@@ -52,13 +52,9 @@ let state: FeatureRuntimeState = {
 let activeHosts: ActiveFeatureHost[] = [];
 
 const RESOURCE_KINDS: Array<keyof FeatureResources> = [
-  'workflowDefinitions',
-  'cards',
   'skills',
   'agents',
   'mcp',
-  'artifactContracts',
-  'workflowEvaluators',
   'scripts',
   'templates',
 ];
@@ -394,7 +390,6 @@ function createFeatureContext(feature: LoadedFeatureManifest): FeatureContext {
       registry: featureApiRoutes,
     }),
     nav: featureNavigation,
-    workflowAssets: featureResources,
     containerResources: featureResources,
     mcp: featureResources,
     db: featureMigrations,

@@ -45,8 +45,6 @@ interface ContainerInput {
   isOneShot?: boolean;
   assistantName?: string;
   executionContext?: {
-    workflowId?: string;
-    stageKey?: string;
     delegationId?: string;
   };
 }
@@ -1563,9 +1561,6 @@ function buildQueryOptions(
               ICARUS_CHAT_JID: containerInput.chatJid,
               ICARUS_GROUP_FOLDER: containerInput.groupFolder,
               ICARUS_IS_MAIN: containerInput.isMain ? '1' : '0',
-              ICARUS_WORKFLOW_ID:
-                containerInput.executionContext?.workflowId || '',
-              ICARUS_STAGE_KEY: containerInput.executionContext?.stageKey || '',
               ICARUS_DELEGATION_ID:
                 containerInput.executionContext?.delegationId || '',
             },

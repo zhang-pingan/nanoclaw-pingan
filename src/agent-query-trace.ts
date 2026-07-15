@@ -43,13 +43,10 @@ interface StartQueryInput {
   sourceRefId?: string | null;
   chatJid?: string | null;
   groupFolder?: string | null;
-  workflowType?: string | null;
   service?: string | null;
   role?: string | null;
   taskId?: string | null;
   taskTitle?: string | null;
-  workflowId?: string | null;
-  stageKey?: string | null;
   delegationId?: string | null;
   sessionId?: string | null;
   selectedModel?: string | null;
@@ -172,13 +169,10 @@ export class AgentQueryTraceManager {
       source_ref_id: input.sourceRefId ?? null,
       chat_jid: input.chatJid ?? null,
       group_folder: input.groupFolder ?? null,
-      workflow_type: input.workflowType ?? null,
       service: input.service ?? null,
       role: input.role ?? null,
       task_id: input.taskId ?? null,
       task_title: input.taskTitle ?? null,
-      workflow_id: input.workflowId ?? null,
-      stage_key: input.stageKey ?? null,
       delegation_id: input.delegationId ?? null,
       session_id: input.sessionId ?? null,
       selected_model: input.selectedModel ?? null,
@@ -236,11 +230,8 @@ export class AgentQueryTraceManager {
       runId: input.runId ?? null,
       groupJid: input.chatJid ?? null,
       groupFolder: input.groupFolder ?? null,
-      workflowType: input.workflowType ?? null,
       service: input.service ?? null,
       role: input.role ?? null,
-      workflowId: input.workflowId ?? null,
-      stageKey: input.stageKey ?? null,
       sessionId: input.sessionId ?? null,
       selectedModel: input.selectedModel ?? null,
       actualModel: null,
@@ -524,7 +515,6 @@ export class AgentQueryTraceManager {
     const query = this.activeQueries.get(queryId);
     if (query) {
       if (patch.run_id !== undefined) query.runId = patch.run_id;
-      if (patch.workflow_type !== undefined) query.workflowType = patch.workflow_type;
       if (patch.service !== undefined) query.service = patch.service;
       if (patch.role !== undefined) query.role = patch.role;
       if (patch.session_id !== undefined) query.sessionId = patch.session_id;

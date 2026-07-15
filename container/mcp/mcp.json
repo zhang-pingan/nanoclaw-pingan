@@ -24,7 +24,6 @@
       "cancel_task",
       "update_task"
     ],
-    "workbench-main": ["query_workbench_tasks"],
     "group-admin-main": ["register_group"],
     "delegation-main": ["delegate_task", "list_delegations"],
     "delegation-worker": [
@@ -38,28 +37,24 @@
   "groups": {
     "global": ["base", "knowledge", "tasking"],
     "main": [
-      "workbench-main",
       "group-admin-main",
       "delegation-main",
       "desktop-main",
       "image-main"
     ],
     "feishu_main": [
-      "workbench-main",
       "group-admin-main",
       "delegation-main",
       "desktop-main",
       "image-main"
     ],
     "web_main": [
-      "workbench-main",
       "group-admin-main",
       "delegation-main",
       "desktop-main",
       "image-main"
     ],
     "assistant_main": [
-      "workbench-main",
       "group-admin-main",
       "delegation-main",
       "desktop-main",

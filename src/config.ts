@@ -17,7 +17,6 @@ const envConfig = readEnvFile([
   'ICARUS_INTERNAL_AGENT_MAX_INPUT_CHARS',
   'REPOS_DIR',
   'SSH_KEY_PATH',
-  'WORKBENCH_BROADCAST_TARGETS',
   'ASSISTANT_INBOX_BROADCAST_TARGETS',
   'ONE_SHOT_AGENT_SLOT_TIMEOUT_MS',
   'ONE_SHOT_AGENT_MAX_QUEUE_LENGTH',
@@ -191,11 +190,6 @@ function parseCsvList(value?: string): string[] {
     .map((item) => item.trim())
     .filter(Boolean);
 }
-
-export const WORKBENCH_BROADCAST_TARGETS = parseCsvList(
-  process.env.WORKBENCH_BROADCAST_TARGETS ||
-    envConfig.WORKBENCH_BROADCAST_TARGETS,
-);
 
 export const ASSISTANT_INBOX_BROADCAST_TARGETS = parseCsvList(
   process.env.ASSISTANT_INBOX_BROADCAST_TARGETS ||

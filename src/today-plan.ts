@@ -18,7 +18,6 @@ import {
   updateTodayPlanItem,
 } from './db.js';
 import { logger } from './logger.js';
-import { buildHumanInputCard } from './human-input-card.js';
 import {
   type RegisteredGroup,
   type StoredChatMessageRecord,
@@ -30,11 +29,6 @@ import {
   listWebMessagesByIds,
   type WebMessage,
 } from './web-db.js';
-import {
-  getWorkbenchTaskDetail,
-  type WorkbenchTaskDetail,
-} from './workbench.js';
-import { WORKFLOW_CONTEXT_KEYS } from './workflow-context.js';
 
 export interface ServiceConfig {
   repo_path?: string;
@@ -55,7 +49,6 @@ export interface TodayPlanServiceSelection {
 }
 
 export interface TodayPlanAssociations {
-  workbench_task_ids: string[];
   chat_selections: TodayPlanChatSelection[];
   services: TodayPlanServiceSelection[];
 }
@@ -68,7 +61,6 @@ export interface TodayPlanConversationMessage {
   timestamp: string;
   is_from_me: boolean;
   is_bot_message: boolean;
-  workflow_id: string | null;
   reply_to_id?: string | null;
   reply_preview?: string | null;
 }
@@ -78,18 +70,6 @@ export interface TodayPlanChatGroupDetail {
   group_name: string;
   message_count: number;
   messages: TodayPlanConversationMessage[];
-}
-
-export interface TodayPlanTaskAssociationDetail {
-  task_id: string;
-  title: string;
-  description: string;
-  service: string;
-  workflow_stage_label: string;
-  workflow_status_label: string;
-  task_state: string;
-  task: WorkbenchTaskDetail['task'];
-  action_items: WorkbenchTaskDetail['action_items'];
 }
 
 export interface TodayPlanServiceCommit {
@@ -102,7 +82,7 @@ export interface TodayPlanServiceCommit {
 
 export interface TodayPlanServiceBranchDetail {
   name: string;
-  source: 'manual' | 'workbench';
+  source: 'manual';
   ref: string | null;
   commits: TodayPlanServiceCommit[];
   error?: string;
@@ -121,7 +101,6 @@ export interface TodayPlanItemDetail {
   detail: string;
   order_index: number;
   associations: TodayPlanAssociations;
-  related_tasks: TodayPlanTaskAssociationDetail[];
   related_chats: TodayPlanChatGroupDetail[];
   related_services: TodayPlanServiceDetail[];
   created_at: string;
@@ -143,27 +122,11 @@ export interface RecentTodayPlanItemRef {
   title: string;
 }
 
-export interface RecentTodayPlanTaskSummary {
-  task_id: string;
-  found: boolean;
-  title: string;
-  description: string;
-  service: string;
-  work_branch: string | null;
-  workflow_stage_label: string;
-  workflow_status_label: string;
-  task_state: string;
-  updated_at: string | null;
-  plan_dates: string[];
-  plan_items: RecentTodayPlanItemRef[];
-}
-
 export interface RecentTodayPlanServiceBranchSummary {
   name: string;
-  sources: Array<'manual' | 'workbench'>;
+  sources: Array<'manual'>;
   plan_dates: string[];
   plan_items: RecentTodayPlanItemRef[];
-  task_ids: string[];
   ref: string | null;
   commits: TodayPlanServiceCommit[];
   errors: string[];
@@ -175,7 +138,6 @@ export interface RecentTodayPlanServiceSummary {
   repo_exists: boolean;
   plan_dates: string[];
   plan_items: RecentTodayPlanItemRef[];
-  task_ids: string[];
   branches: RecentTodayPlanServiceBranchSummary[];
 }
 
@@ -191,7 +153,6 @@ export interface RecentTodayPlanPlanSummary {
     title: string;
     detail: string;
     order_index: number;
-    workbench_task_ids: string[];
     services: TodayPlanServiceSelection[];
   }>;
 }
@@ -209,7 +170,6 @@ export interface RecentTodayPlanDetails {
   };
   plans: RecentTodayPlanPlanSummary[];
   services: RecentTodayPlanServiceSummary[];
-  tasks: RecentTodayPlanTaskSummary[];
 }
 
 export interface TodayPlanServiceOption {
@@ -295,7 +255,6 @@ function toConversationMessage(
     timestamp: message.timestamp,
     is_from_me: message.is_from_me === 1,
     is_bot_message: message.is_bot_message === 1,
-    workflow_id: message.workflow_id || null,
   };
 }
 
@@ -325,7 +284,6 @@ function toWebConversationMessages(
     timestamp: message.timestamp,
     is_from_me: Boolean(message.is_from_me),
     is_bot_message: Boolean(message.is_bot_message),
-    workflow_id: message.workflow_id || null,
     reply_to_id: message.reply_to_id || null,
     reply_preview: message.reply_to_id
       ? replyPreviewById.get(message.reply_to_id) || null
@@ -366,7 +324,6 @@ function normalizeAssociations(
 ): TodayPlanAssociations {
   if (!raw) {
     return {
-      workbench_task_ids: [],
       chat_selections: [],
       services: [],
     };
@@ -374,16 +331,6 @@ function normalizeAssociations(
 
   try {
     const parsed = JSON.parse(raw) as Partial<TodayPlanAssociations>;
-    const workbenchTaskIds = Array.isArray(parsed.workbench_task_ids)
-      ? Array.from(
-          new Set(
-            parsed.workbench_task_ids.filter(
-              (item): item is string =>
-                typeof item === 'string' && item.trim().length > 0,
-            ),
-          ),
-        )
-      : [];
     const chatSelections = Array.isArray(parsed.chat_selections)
       ? parsed.chat_selections
           .filter(
@@ -430,13 +377,11 @@ function normalizeAssociations(
       : [];
 
     return {
-      workbench_task_ids: workbenchTaskIds,
       chat_selections: chatSelections,
       services,
     };
   } catch {
     return {
-      workbench_task_ids: [],
       chat_selections: [],
       services: [],
     };
@@ -445,7 +390,6 @@ function normalizeAssociations(
 
 function serializeAssociations(input: TodayPlanAssociations): string {
   return JSON.stringify({
-    workbench_task_ids: Array.from(new Set(input.workbench_task_ids)),
     chat_selections: input.chat_selections.map((item) => ({
       group_jid: item.group_jid,
       message_ids: Array.from(new Set(item.message_ids || [])),
@@ -542,26 +486,6 @@ function getTodayPlanRecord(input: {
   if (input.planId) return getTodayPlanById(input.planId) || null;
   if (input.planDate) return getTodayPlanByDate(input.planDate) || null;
   return null;
-}
-
-function getTaskDescription(detail: WorkbenchTaskDetail): string {
-  const description =
-    typeof detail.task.context?.[
-      WORKFLOW_CONTEXT_KEYS.requirementDescription
-    ] === 'string'
-      ? String(
-          detail.task.context[WORKFLOW_CONTEXT_KEYS.requirementDescription],
-        )
-      : '';
-  return description.trim();
-}
-
-function getTaskWorkBranch(detail: WorkbenchTaskDetail): string {
-  const branch =
-    typeof detail.task.context?.[WORKFLOW_CONTEXT_KEYS.workBranch] === 'string'
-      ? String(detail.task.context[WORKFLOW_CONTEXT_KEYS.workBranch])
-      : '';
-  return branch.trim();
 }
 
 function resolveRepoPathFromConfig(
@@ -971,13 +895,9 @@ function getTodayPlanChatMessagesBySelection(
 
 function mergeServiceSelections(input: {
   manual: TodayPlanServiceSelection[];
-  tasks: WorkbenchTaskDetail[];
   planDate: string;
 }): TodayPlanServiceDetail[] {
-  const serviceBranches = new Map<
-    string,
-    Map<string, 'manual' | 'workbench'>
-  >();
+  const serviceBranches = new Map<string, Map<string, 'manual'>>();
 
   for (const selection of input.manual) {
     const branches = serviceBranches.get(selection.service) || new Map();
@@ -985,17 +905,6 @@ function mergeServiceSelections(input: {
       branches.set(branch, 'manual');
     }
     serviceBranches.set(selection.service, branches);
-  }
-
-  for (const taskDetail of input.tasks) {
-    const service = taskDetail.task.service;
-    const branch = getTaskWorkBranch(taskDetail);
-    if (!service || !branch) continue;
-    const branches = serviceBranches.get(service) || new Map();
-    if (!branches.has(branch)) {
-      branches.set(branch, 'workbench');
-    }
-    serviceBranches.set(service, branches);
   }
 
   return Array.from(serviceBranches.entries())
@@ -1020,25 +929,6 @@ function buildTodayPlanItemDetail(input: {
   groups: Record<string, RegisteredGroup>;
 }): TodayPlanItemDetail {
   const associations = normalizeAssociations(input.item.associations_json);
-  const taskDetails = associations.workbench_task_ids
-    .map((taskId) => getWorkbenchTaskDetail(taskId))
-    .filter((item): item is WorkbenchTaskDetail => Boolean(item));
-  const relatedTasks: TodayPlanTaskAssociationDetail[] = taskDetails.map(
-    (detail) => ({
-      task_id: detail.task.id,
-      title: detail.task.title,
-      description: getTaskDescription(detail),
-      service: detail.task.service,
-      workflow_stage_label: detail.task.workflow_stage_label,
-      workflow_status_label: detail.task.workflow_status_label,
-      task_state: detail.task.task_state,
-      task: detail.task,
-      action_items: detail.action_items.map((item) => ({
-        ...item,
-        card: buildHumanInputCard(item, detail.task),
-      })),
-    }),
-  );
   const relatedChats = associations.chat_selections
     .map((selection) => {
       const messages = getTodayPlanChatMessagesBySelection(selection);
@@ -1054,7 +944,6 @@ function buildTodayPlanItemDetail(input: {
     .filter((item): item is TodayPlanChatGroupDetail => Boolean(item));
   const relatedServices = mergeServiceSelections({
     manual: associations.services,
-    tasks: taskDetails,
     planDate: input.planDate,
   });
 
@@ -1064,7 +953,6 @@ function buildTodayPlanItemDetail(input: {
     detail: input.item.detail || '',
     order_index: input.item.order_index,
     associations,
-    related_tasks: relatedTasks,
     related_chats: relatedChats,
     related_services: relatedServices,
     created_at: input.item.created_at,
@@ -1237,7 +1125,7 @@ type MutableRecentTodayPlanServiceBranchSummary = Omit<
   RecentTodayPlanServiceBranchSummary,
   'sources' | 'commits'
 > & {
-  sources: Set<'manual' | 'workbench'>;
+  sources: Set<'manual'>;
   commits: Map<string, TodayPlanServiceCommit>;
 };
 
@@ -1255,7 +1143,6 @@ function ensureRecentServiceSummary(
     repo_exists: Boolean(repoPath && fs.existsSync(repoPath)),
     plan_dates: [],
     plan_items: [],
-    task_ids: [],
     branches: new Map(),
   };
   services.set(service, created);
@@ -1273,7 +1160,6 @@ function ensureRecentServiceBranchSummary(
     sources: new Set(),
     plan_dates: [],
     plan_items: [],
-    task_ids: [],
     ref: null,
     commits: new Map(),
     errors: [],
@@ -1289,8 +1175,7 @@ function attachRecentServicePlanRef(input: {
   planDate: string;
   itemRef: RecentTodayPlanItemRef;
   branch?: string;
-  source?: 'manual' | 'workbench';
-  taskId?: string;
+  source?: 'manual';
 }): void {
   const serviceName = input.service.trim();
   if (!serviceName) return;
@@ -1301,7 +1186,6 @@ function attachRecentServicePlanRef(input: {
   );
   addUniqueString(service.plan_dates, input.planDate);
   addPlanItemRef(service.plan_items, input.itemRef);
-  if (input.taskId) addUniqueString(service.task_ids, input.taskId);
 
   const branchName = input.branch?.trim();
   if (!branchName) return;
@@ -1309,7 +1193,6 @@ function attachRecentServicePlanRef(input: {
   if (input.source) branch.sources.add(input.source);
   addUniqueString(branch.plan_dates, input.planDate);
   addPlanItemRef(branch.plan_items, input.itemRef);
-  if (input.taskId) addUniqueString(branch.task_ids, input.taskId);
 }
 
 function sortDateKeysDescending(values: string[]): string[] {
@@ -1367,14 +1250,12 @@ function finalizeRecentServiceSummary(
     repo_exists: service.repo_exists,
     plan_dates: sortDateKeysDescending(service.plan_dates),
     plan_items: sortPlanItemRefs(service.plan_items),
-    task_ids: [...service.task_ids].sort(),
     branches: Array.from(service.branches.values())
       .map((branch) => ({
         name: branch.name,
         sources: Array.from(branch.sources).sort(),
         plan_dates: sortDateKeysDescending(branch.plan_dates),
         plan_items: sortPlanItemRefs(branch.plan_items),
-        task_ids: [...branch.task_ids].sort(),
         ref: branch.ref,
         commits: Array.from(branch.commits.values())
           .sort((a, b) => b.committed_at.localeCompare(a.committed_at))
@@ -1405,7 +1286,6 @@ export function getRecentTodayPlanDetails(
   });
   const dates = query.dates;
   const services = new Map<string, MutableRecentTodayPlanServiceSummary>();
-  const tasks = new Map<string, RecentTodayPlanTaskSummary>();
   const plans: RecentTodayPlanPlanSummary[] = [];
 
   for (const planDate of dates) {
@@ -1434,7 +1314,6 @@ export function getRecentTodayPlanDetails(
         title: item.title || '',
         detail: item.detail || '',
         order_index: item.order_index,
-        workbench_task_ids: associations.workbench_task_ids,
         services: associations.services,
       });
 
@@ -1459,58 +1338,6 @@ export function getRecentTodayPlanDetails(
         }
       }
 
-      for (const taskId of associations.workbench_task_ids) {
-        const detail = getWorkbenchTaskDetail(taskId);
-        const workBranch = detail ? getTaskWorkBranch(detail) : '';
-        let summary = tasks.get(taskId);
-        if (!summary) {
-          summary = detail
-            ? {
-                task_id: taskId,
-                found: true,
-                title: detail.task.title,
-                description: getTaskDescription(detail),
-                service: detail.task.service,
-                work_branch: workBranch || null,
-                workflow_stage_label: detail.task.workflow_stage_label,
-                workflow_status_label: detail.task.workflow_status_label,
-                task_state: detail.task.task_state,
-                updated_at: detail.task.updated_at,
-                plan_dates: [],
-                plan_items: [],
-              }
-            : {
-                task_id: taskId,
-                found: false,
-                title: '',
-                description: '',
-                service: '',
-                work_branch: null,
-                workflow_stage_label: '',
-                workflow_status_label: '',
-                task_state: '',
-                updated_at: null,
-                plan_dates: [],
-                plan_items: [],
-              };
-          tasks.set(taskId, summary);
-        }
-        addUniqueString(summary.plan_dates, plan.plan_date);
-        addPlanItemRef(summary.plan_items, itemRef);
-
-        if (detail && detail.task.service && workBranch) {
-          attachRecentServicePlanRef({
-            services,
-            registry: input.registry,
-            service: detail.task.service,
-            branch: workBranch,
-            source: 'workbench',
-            planDate: plan.plan_date,
-            itemRef,
-            taskId,
-          });
-        }
-      }
     }
 
     plans.push(planSummary);
@@ -1522,11 +1349,6 @@ export function getRecentTodayPlanDetails(
     services: Array.from(services.values())
       .map((service) => finalizeRecentServiceSummary(service, input.registry))
       .sort((a, b) => a.service.localeCompare(b.service, 'zh-CN')),
-    tasks: Array.from(tasks.values()).map((task) => ({
-      ...task,
-      plan_dates: sortDateKeysDescending(task.plan_dates),
-      plan_items: sortPlanItemRefs(task.plan_items),
-    })),
   };
 }
 
@@ -1542,7 +1364,6 @@ export function createTodayPlanItemForPlan(
     title: '',
     detail: '',
     associations_json: serializeAssociations({
-      workbench_task_ids: [],
       chat_selections: [],
       services: [],
     }),
@@ -1608,25 +1429,6 @@ function formatChatGroupForMail(group: TodayPlanChatGroupDetail): string {
   );
 }
 
-function formatTaskForMail(task: TodayPlanTaskAssociationDetail): string {
-  const actionLines =
-    task.action_items.length > 0
-      ? task.action_items.map(
-          (item) =>
-            `- [${item.status}] ${item.title}${item.body ? `：${truncateText(item.body, 180)}` : ''}`,
-        )
-      : ['- 无待处理项'];
-  return [
-    `任务：${task.title}`,
-    `服务：${task.service || '未设置'}`,
-    `当前节点：${task.workflow_stage_label || task.workflow_status_label}`,
-    `任务态：${task.task_state}`,
-    `描述：${task.description || '无'}`,
-    '待处理项：',
-    ...actionLines,
-  ].join('\n');
-}
-
 function formatServiceForMail(service: TodayPlanServiceDetail): string {
   const branchLines =
     service.branches.length > 0
@@ -1654,7 +1456,7 @@ function formatServiceForMail(service: TodayPlanServiceDetail): string {
 function buildTodayPlanMailTemplate(): string {
   return [
     '1. <计划标题 1>',
-    '- 根据`关联任务`、`关联群聊`、`关联服务分支` 信息汇总实际执行项列表',
+    '- 根据`关联群聊`、`关联服务分支` 信息汇总实际执行项列表',
     '',
     '2. <计划标题 2>',
     '- 按实际计划数量继续展开；如果只有一条计划，则不要保留这一条示例。',
@@ -1678,13 +1480,6 @@ export function buildTodayPlanMailPrompt(input: {
           `## 计划 ${index + 1}: ${item.title || `未命名计划 ${index + 1}`}`,
           `计划内容：${item.detail || '无'}`,
         ];
-
-        if (item.related_tasks.length > 0) {
-          sections.push(
-            '### 关联工作台任务',
-            item.related_tasks.map(formatTaskForMail).join('\n\n'),
-          );
-        }
 
         if (item.related_chats.length > 0) {
           sections.push('### 关联群聊消息');
@@ -1712,7 +1507,7 @@ export function buildTodayPlanMailPrompt(input: {
     '1. 仅依据下面提供的信息进行总结，不要自行编造。',
     '2. 你只输出邮件正文，不要输出主题、收件人、抄送、解释、前后缀说明。',
     '3. 邮件正文按模板逐条输出计划项，每条只保留实际执行项列表。',
-    '4. 每条计划的执行项只能根据对应的关联任务、关联群聊、关联服务分支信息提炼。',
+    '4. 每条计划的执行项只能根据对应的关联群聊、关联服务分支信息提炼。',
     '5. 邮件正文请严格使用下面的纯文本模板输出，不要保留尖括号占位符，不要输出代码块。',
     '6. 如果没有任何计划项，请输出：',
     '1. 今日计划为空',

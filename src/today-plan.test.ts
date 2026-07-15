@@ -6,9 +6,6 @@ import { execFileSync } from 'child_process';
 
 import {
   _initTestDatabase,
-  createWorkbenchActionItem,
-  createWorkbenchTask,
-  createWorkflow,
   getTodayPlanById,
   storeChatMetadata,
 } from './db.js';
@@ -201,158 +198,12 @@ describe('today-plan', () => {
     });
   });
 
-  it('auto-associates workbench task service and work branch into today plan detail', () => {
-    createWorkflow({
-      id: 'wf-1',
-      name: 'Task 1',
-      service: 'catstory',
-      start_from: 'dev',
-      context: {
-        work_branch: 'feature/today-plan',
-        requirement_description: '补充今日计划聚合页',
-      },
-      status: 'dev',
-      current_delegation_id: '',
-      round: 0,
-      source_jid: 'web:main',
-      paused_from: null,
-      workflow_type: 'dev_test',
-      created_at: '2026-04-20T00:00:00.000Z',
-      updated_at: '2026-04-20T00:00:00.000Z',
-    });
-    createWorkbenchTask({
-      id: 'wb-wf-1',
-      workflow_id: 'wf-1',
-      source_jid: 'web:main',
-      title: 'Task 1',
-      service: 'catstory',
-      start_from: 'dev',
-      workflow_type: 'dev_test',
-      status: 'dev',
-      task_state: 'running',
-      current_stage: 'dev',
-      summary: 'summary',
-      created_at: '2026-04-20T00:00:00.000Z',
-      updated_at: '2026-04-20T00:00:00.000Z',
-      last_event_at: '2026-04-20T00:00:00.000Z',
-    });
-    createWorkbenchActionItem({
-      id: 'wai-today-plan-1',
-      task_id: 'wb-wf-1',
-      workflow_id: 'wf-1',
-      subtask_id: null,
-      stage_key: 'dev',
-      delegation_id: null,
-      group_folder: null,
-      item_type: 'interactive',
-      status: 'pending',
-      title: '需要处理',
-      body: '请确认今日计划待办',
-      source_type: 'send_message',
-      source_ref_id: 'msg-1',
-      replyable: 0,
-      created_at: '2026-04-20T00:00:00.000Z',
-      updated_at: '2026-04-20T00:00:00.000Z',
-      resolved_at: null,
-      extra_json: JSON.stringify({ keep_visible_when_current_stage: true }),
-    });
-
-    const plan = ensureTodayPlan('2026-04-20');
-    const item = createTodayPlanItemForPlan(plan.id);
-    patchTodayPlanItem({
-      itemId: item.id,
-      title: '推进今日开发',
-      associations: {
-        workbench_task_ids: ['wb-wf-1'],
-        chat_selections: [],
-        services: [],
-      },
-    });
-
-    const detail = getTodayPlanDetail({
-      planId: plan.id,
-      groups: {
-        'web:main': {
-          name: 'Main Group',
-          folder: 'main',
-          trigger: '@Andy',
-          added_at: '2026-04-20T00:00:00.000Z',
-          isMain: true,
-        },
-      },
-    });
-
-    expect(detail).toBeTruthy();
-    if (!detail) {
-      throw new Error('expected today plan detail to exist');
-    }
-    expect(detail.items).toHaveLength(1);
-    expect(detail.items[0].related_tasks).toHaveLength(1);
-    expect(detail.items[0].related_tasks[0].description).toContain('今日计划');
-    expect(
-      detail.items[0].related_tasks[0].action_items[0]?.card,
-    ).toMatchObject({
-      header: { title: '需要处理' },
-      buttons: [
-        {
-          value: {
-            action: 'workbench_action_item',
-            workbench_action: 'resolve',
-          },
-        },
-      ],
-    });
-    expect(detail.items[0].related_services).toHaveLength(1);
-    expect(detail.items[0].related_services[0].service).toBe('catstory');
-    expect(detail.items[0].related_services[0].branches[0].name).toBe(
-      'feature/today-plan',
-    );
-    expect(detail.items[0].related_services[0].branches[0].source).toBe(
-      'workbench',
-    );
-  });
-
-  it('summarizes recent today plans by deduped service branches and task list', () => {
+  it('summarizes recent today plans by deduped manually selected service branches', () => {
     const repo = createRepoWithDatedCommit({
       service: 'catstory',
       branch: 'feature/recent',
       date: '2026-05-13',
     });
-    createWorkflow({
-      id: 'wf-recent',
-      name: 'Recent Task',
-      service: 'catstory',
-      start_from: 'dev',
-      context: {
-        work_branch: 'feature/recent',
-        requirement_description: '补充最近计划上下文查询',
-      },
-      status: 'dev',
-      current_delegation_id: '',
-      round: 0,
-      source_jid: 'web:main',
-      paused_from: null,
-      workflow_type: 'dev_test',
-      created_at: '2026-05-13T00:00:00.000Z',
-      updated_at: '2026-05-13T01:00:00.000Z',
-    });
-    createWorkbenchTask({
-      id: 'wb-wf-recent',
-      workflow_id: 'wf-recent',
-      source_jid: 'web:main',
-      title: 'Recent Task',
-      service: 'catstory',
-      start_from: 'dev',
-      workflow_type: 'dev_test',
-      status: 'dev',
-      task_state: 'running',
-      current_stage: 'dev',
-      summary: null,
-      created_at: '2026-05-13T00:00:00.000Z',
-      updated_at: '2026-05-13T01:00:00.000Z',
-      last_event_at: '2026-05-13T01:00:00.000Z',
-    });
-
     const firstPlan = ensureTodayPlan('2026-05-13');
     const firstItem = createTodayPlanItemForPlan(firstPlan.id);
     patchTodayPlanItem({
@@ -360,7 +211,6 @@ describe('today-plan', () => {
       title: '实现查询工具',
       detail: '给 agent 补充最近上下文',
       associations: {
-        workbench_task_ids: ['wb-wf-recent'],
         chat_selections: [],
         services: [
           {
@@ -375,7 +225,6 @@ describe('today-plan', () => {
       itemId: secondItem.id,
       title: '重复关联服务',
       associations: {
-        workbench_task_ids: [],
         chat_selections: [],
         services: [
           {
@@ -391,7 +240,6 @@ describe('today-plan', () => {
       itemId: oldItem.id,
       title: '另一个服务',
       associations: {
-        workbench_task_ids: [],
         chat_selections: [],
         services: [
           {
@@ -427,7 +275,6 @@ describe('today-plan', () => {
     );
     expect(catstory).toBeTruthy();
     expect(catstory?.repo_path).toBe(repo.repoPath);
-    expect(catstory?.task_ids).toEqual(['wb-wf-recent']);
     expect(catstory?.plan_items.map((item) => item.title)).toEqual([
       '实现查询工具',
       '重复关联服务',
@@ -435,22 +282,12 @@ describe('today-plan', () => {
     expect(catstory?.branches).toHaveLength(1);
     expect(catstory?.branches[0]).toMatchObject({
       name: 'feature/recent',
-      sources: ['manual', 'workbench'],
-      task_ids: ['wb-wf-recent'],
+      sources: ['manual'],
     });
     expect(catstory?.branches[0].commits[0]).toMatchObject({
       hash: repo.commit,
       short_hash: repo.shortCommit,
       subject: 'catstory change',
-    });
-    expect(summary.tasks).toHaveLength(1);
-    expect(summary.tasks[0]).toMatchObject({
-      task_id: 'wb-wf-recent',
-      title: 'Recent Task',
-      service: 'catstory',
-      work_branch: 'feature/recent',
-      description: '补充最近计划上下文查询',
-      plan_dates: ['2026-05-13'],
     });
   });
 
@@ -462,7 +299,6 @@ describe('today-plan', () => {
         itemId: item.id,
         title: `${date} 计划`,
         associations: {
-          workbench_task_ids: [],
           chat_selections: [],
           services: [],
         },
@@ -511,7 +347,6 @@ describe('today-plan', () => {
       itemId: item.id,
       title: '先占位服务',
       associations: {
-        workbench_task_ids: [],
         chat_selections: [],
         services: [
           {
@@ -551,7 +386,6 @@ describe('today-plan', () => {
       title: '昨天未完成的计划',
       detail: '继续推进剩余部分',
       associations: {
-        workbench_task_ids: [],
         chat_selections: [],
         services: [],
       },
@@ -596,7 +430,6 @@ describe('today-plan', () => {
       title: '推进今日开发',
       detail: '完成聚合页与发送链路梳理',
       associations: {
-        workbench_task_ids: [],
         chat_selections: [],
         services: [],
       },
@@ -614,7 +447,7 @@ describe('today-plan', () => {
     expect(payload?.prompt).toContain('只输出邮件正文');
     expect(payload?.prompt).toContain('1. <计划标题 1>');
     expect(payload?.prompt).toContain(
-      '- 根据`关联任务`、`关联群聊`、`关联服务分支` 信息汇总实际执行项列表',
+      '- 根据`关联群聊`、`关联服务分支` 信息汇总实际执行项列表',
     );
     expect(payload?.prompt).toContain('2. <计划标题 2>');
     expect(payload?.prompt).toContain('不要保留尖括号占位符');

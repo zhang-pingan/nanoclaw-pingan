@@ -10,8 +10,6 @@ import {
   getTodayPlanDateKey,
   type TodayPlanAssociations,
 } from '../today-plan.js';
-import { getWorkbenchTaskDetail } from '../workbench.js';
-import { WORKFLOW_CONTEXT_KEYS } from '../workflow-context.js';
 import type {
   AgentInboxItemView,
   AssistantSettings,
@@ -124,7 +122,6 @@ function normalizeAssociations(
 ): TodayPlanAssociations {
   if (!value) {
     return {
-      workbench_task_ids: [],
       chat_selections: [],
       services: [],
     };
@@ -133,7 +130,6 @@ function normalizeAssociations(
     const parsed = JSON.parse(value) as unknown;
     if (!isRecord(parsed)) throw new Error('associations is not object');
     return {
-      workbench_task_ids: parseStringArray(parsed.workbench_task_ids, 200),
       chat_selections: [],
       services: Array.isArray(parsed.services)
         ? parsed.services
@@ -147,7 +143,6 @@ function normalizeAssociations(
     };
   } catch {
     return {
-      workbench_task_ids: [],
       chat_selections: [],
       services: [],
     };
@@ -264,23 +259,6 @@ function getPlanDates(input: { now: Date; lookbackDays: number }): string[] {
   return Array.from(dates).sort();
 }
 
-function getTaskWorkBranch(taskId: string): {
-  service: string;
-  branch: string;
-} | null {
-  const detail = getWorkbenchTaskDetail(taskId);
-  if (!detail) return null;
-  const branch =
-    typeof detail.task.context?.[WORKFLOW_CONTEXT_KEYS.workBranch] === 'string'
-      ? String(detail.task.context[WORKFLOW_CONTEXT_KEYS.workBranch]).trim()
-      : '';
-  if (!detail.task.service || !branch) return null;
-  return {
-    service: detail.task.service,
-    branch,
-  };
-}
-
 function collectServiceBranches(
   associations: TodayPlanAssociations,
 ): Array<{ service: string; branches: string[] }> {
@@ -299,11 +277,6 @@ function collectServiceBranches(
   for (const selection of associations.services) {
     add(selection.service, selection.branches);
   }
-  for (const taskId of associations.workbench_task_ids) {
-    const taskBranch = getTaskWorkBranch(taskId);
-    if (taskBranch) add(taskBranch.service, [taskBranch.branch]);
-  }
-
   return Array.from(branchesByService.entries()).map(([service, branches]) => ({
     service,
     branches: Array.from(branches).sort(),

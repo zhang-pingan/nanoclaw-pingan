@@ -46,7 +46,6 @@ export interface FeatureContext {
   logger: FeatureLogger;
   api: FeatureApiRegistry;
   nav: NavigationRegistry;
-  workflowAssets: FeatureResourceRegistry;
   containerResources: FeatureResourceRegistry;
   mcp: FeatureResourceRegistry;
   db: FeatureMigrationRegistry;

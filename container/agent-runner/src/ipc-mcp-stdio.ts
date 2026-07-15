@@ -20,8 +20,6 @@ const MCP_CONFIG_PATH = '/workspace/mcp/mcp.json';
 const chatJid = process.env.ICARUS_CHAT_JID!;
 const groupFolder = process.env.ICARUS_GROUP_FOLDER!;
 const isMain = process.env.ICARUS_IS_MAIN === '1';
-const workflowId = process.env.ICARUS_WORKFLOW_ID || '';
-const stageKey = process.env.ICARUS_STAGE_KEY || '';
 const delegationId = process.env.ICARUS_DELEGATION_ID || '';
 
 type ToolVisibility = 'all' | 'main' | 'non_main';
@@ -37,7 +35,6 @@ const BUILTIN_TOOL_VISIBILITY: Record<string, ToolVisibility> = {
   ai_image_generate_image: 'main',
   schedule_task: 'all',
   list_tasks: 'all',
-  query_workbench_tasks: 'main',
   query_recent_today_plan_details: 'all',
   pause_task: 'all',
   resume_task: 'all',
@@ -303,7 +300,6 @@ type RecentTodayPlanMcpResult = {
       title: string;
       detail: string;
       order_index: number;
-      workbench_task_ids: string[];
       services: Array<{ service: string; branches: string[] }>;
     }>;
   }>;
@@ -313,13 +309,11 @@ type RecentTodayPlanMcpResult = {
     repo_exists: boolean;
     plan_dates: string[];
     plan_items: Array<{ plan_date: string; item_id: string; title: string }>;
-    task_ids: string[];
     branches: Array<{
       name: string;
-      sources: Array<'manual' | 'workbench'>;
+      sources: Array<'manual'>;
       plan_dates: string[];
       plan_items: Array<{ plan_date: string; item_id: string; title: string }>;
-      task_ids: string[];
       ref: string | null;
       commits: Array<{
         hash: string;
@@ -330,20 +324,6 @@ type RecentTodayPlanMcpResult = {
       }>;
       errors: string[];
     }>;
-  }>;
-  tasks?: Array<{
-    task_id: string;
-    found: boolean;
-    title: string;
-    description: string;
-    service: string;
-    work_branch: string | null;
-    workflow_stage_label: string;
-    workflow_status_label: string;
-    task_state: string;
-    updated_at: string | null;
-    plan_dates: string[];
-    plan_items: Array<{ plan_date: string; item_id: string; title: string }>;
   }>;
 };
 
@@ -437,8 +417,6 @@ server.tool(
       text: args.text,
       sender: args.sender || undefined,
       groupFolder,
-      workflowId: workflowId || undefined,
-      stageKey: stageKey || undefined,
       delegationId: delegationId || undefined,
       sourceType: 'send_message',
       sourceRefId: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -809,227 +787,10 @@ server.tool(
   },
 );
 
-server.tool(
-  'query_workbench_tasks',
-  '主群专用：查询工作台任务。返回统一字段 `workflow_status` / `workflow_status_label` / `workflow_stage` / `workflow_stage_label` / `task_state`；可按 task_id 精确查询，也可按关键词与显式筛选条件检索。',
-  {
-    task_id: z
-      .string()
-      .optional()
-      .describe('工作台任务 ID，例如 "wb-wf-..."。传入后返回该任务详情。'),
-    keyword: z
-      .string()
-      .optional()
-      .describe(
-        '按标题、服务名、流程类型、任务态、流程状态文案、当前阶段文案等模糊搜索',
-      ),
-    status: z
-      .string()
-      .optional()
-      .describe(
-        '兼容旧参数：同时匹配 task_state、workflow_status 或 workflow_stage；新调用建议改用 task_state / workflow_status',
-      ),
-    task_state: z
-      .enum(['running', 'success', 'failed', 'cancelled'])
-      .optional()
-      .describe('按任务状态精确筛选'),
-    workflow_status: z
-      .string()
-      .optional()
-      .describe(
-        '按 workflow_status 或 workflow_stage 精确筛选，例如 "plan_review"、"dev"、"testing"',
-      ),
-    include_terminal: z
-      .boolean()
-      .optional()
-      .default(false)
-      .describe('是否包含已结束任务，默认 false'),
-    include_detail: z
-      .boolean()
-      .optional()
-      .default(false)
-      .describe('当筛选结果仅 1 条时，是否返回该任务的子任务/待办/时间线摘要'),
-    limit: z
-      .number()
-      .optional()
-      .default(10)
-      .describe('最多返回多少条任务，1-20，默认 10'),
-  },
-  async (args) => {
-    if (!isMain) {
-      return {
-        content: [
-          {
-            type: 'text' as const,
-            text: 'Only the main group can query workbench tasks.',
-          },
-        ],
-        isError: true,
-      };
-    }
-
-    const requestId = `wbq-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    writeIpcFile(TASKS_DIR, {
-      type: 'query_workbench_tasks',
-      requestId,
-      task_id: args.task_id,
-      keyword: args.keyword,
-      status: args.status,
-      task_state: args.task_state,
-      workflow_status: args.workflow_status,
-      include_terminal: args.include_terminal === true,
-      include_detail: args.include_detail === true || !!args.task_id,
-      limit: args.limit || 10,
-      timestamp: new Date().toISOString(),
-    });
-
-    const resultPath = path.join(
-      IPC_DIR,
-      'workbench-results',
-      `${requestId}.json`,
-    );
-    const result = await waitForIpcResult<{
-      error?: string;
-      matched_count?: number;
-      tasks?: Array<{
-        id: string;
-        title: string;
-        service: string;
-        workflow_status: string;
-        task_state: 'running' | 'success' | 'failed' | 'cancelled';
-        workflow_status_label: string;
-        workflow_stage: string;
-        workflow_stage_label: string;
-        pending_action_count: number;
-        active_delegation_id: string;
-        updated_at: string;
-      }>;
-      detail?: {
-        task: {
-          id: string;
-          title: string;
-          service: string;
-          workflow_status: string;
-          task_state: 'running' | 'success' | 'failed' | 'cancelled';
-          workflow_status_label: string;
-          workflow_stage: string;
-          workflow_stage_label: string;
-          pending_action_count: number;
-          active_delegation_id: string;
-          updated_at: string;
-        };
-        subtasks?: Array<{
-          title: string;
-          status: string;
-          stage_label: string;
-          role?: string;
-          target_folder?: string;
-        }>;
-        action_items?: Array<{
-          title: string;
-          status: string;
-          item_type: string;
-          source_type: string;
-        }>;
-        timeline?: Array<{
-          created_at: string;
-          title: string;
-          type: string;
-        }>;
-        artifacts?: Array<{
-          title: string;
-          artifact_type: string;
-          path: string;
-          exists: boolean;
-        }>;
-      };
-    }>(resultPath);
-
-    if (!result) {
-      return {
-        content: [
-          {
-            type: 'text' as const,
-            text: `query_workbench_tasks timed out waiting for response (requestId=${requestId}).`,
-          },
-        ],
-        isError: true,
-      };
-    }
-    if (result.error) {
-      return {
-        content: [{ type: 'text' as const, text: result.error }],
-        isError: true,
-      };
-    }
-
-    const tasks = Array.isArray(result.tasks) ? result.tasks : [];
-    if (tasks.length === 0) {
-      return {
-        content: [
-          { type: 'text' as const, text: '没有找到匹配的工作台任务。' },
-        ],
-      };
-    }
-
-    const lines: string[] = [];
-    lines.push(`匹配到 ${result.matched_count || tasks.length} 个工作台任务：`);
-    for (const task of tasks) {
-      lines.push(
-        `- [${task.id}] ${task.title} | 服务:${task.service} | 任务状态:${task.task_state} | 流程状态:${task.workflow_status_label} | 当前阶段:${task.workflow_stage_label} | 待处理:${task.pending_action_count} | 更新时间:${task.updated_at}${task.active_delegation_id ? ` | 委派:${task.active_delegation_id}` : ''}`,
-      );
-    }
-
-    if (result.detail) {
-      const detail = result.detail;
-      lines.push('');
-      lines.push(
-        `详情: [${detail.task.id}] ${detail.task.title} | 任务状态:${detail.task.task_state} | 流程状态:${detail.task.workflow_status_label} | 当前阶段:${detail.task.workflow_stage_label}`,
-      );
-      if (Array.isArray(detail.subtasks) && detail.subtasks.length > 0) {
-        lines.push('子任务:');
-        for (const item of detail.subtasks.slice(0, 8)) {
-          lines.push(
-            `- ${item.stage_label} / ${item.title} | ${item.status}${item.role ? ` | 角色:${item.role}` : ''}${item.target_folder ? ` | 目标群:${item.target_folder}` : ''}`,
-          );
-        }
-      }
-      if (
-        Array.isArray(detail.action_items) &&
-        detail.action_items.length > 0
-      ) {
-        lines.push('待处理事项:');
-        for (const item of detail.action_items.slice(0, 5)) {
-          lines.push(
-            `- ${item.title} | ${item.item_type}/${item.source_type} | ${item.status}`,
-          );
-        }
-      }
-      if (Array.isArray(detail.timeline) && detail.timeline.length > 0) {
-        lines.push('最近时间线:');
-        for (const item of detail.timeline.slice(0, 5)) {
-          lines.push(`- ${item.created_at} | ${item.type} | ${item.title}`);
-        }
-      }
-      if (Array.isArray(detail.artifacts) && detail.artifacts.length > 0) {
-        lines.push('产物:');
-        for (const item of detail.artifacts.slice(0, 5)) {
-          lines.push(
-            `- ${item.title} | ${item.artifact_type} | ${item.exists ? 'exists' : 'missing'} | ${item.path}`,
-          );
-        }
-      }
-    }
-
-    return {
-      content: [{ type: 'text' as const, text: lines.join('\n') }],
-    };
-  },
-);
 
 server.tool(
   'query_recent_today_plan_details',
-  '查询今日计划详情，用于了解用户最近在做什么。默认查最近 3 天；也可用 date 查询单日，或用 start_date/end_date 查询闭区间（最多 30 天）。按关联服务与分支去重汇总提交、计划项和相关任务，并按关联任务汇总任务列表。',
+  '查询今日计划详情，用于了解用户最近在做什么。默认查最近 3 天；也可用 date 查询单日，或用 start_date/end_date 查询闭区间（最多 30 天）。按关联服务与分支去重汇总提交和计划项。',
   {
     days: z
       .number()
@@ -1119,10 +880,6 @@ server.tool(
           `- ${plan.plan_date} ${plan.title || '今日计划'} | 状态:${plan.status} | 计划项:${plan.item_count}`,
         );
         for (const item of plan.items.slice(0, 8)) {
-          const taskSuffix =
-            item.workbench_task_ids.length > 0
-              ? ` | 任务:${item.workbench_task_ids.join(',')}`
-              : '';
           const serviceSuffix =
             item.services.length > 0
               ? ` | 服务:${item.services
@@ -1133,7 +890,7 @@ server.tool(
                   .join(';')}`
               : '';
           lines.push(
-            `  - ${item.title || '未命名计划项'}${item.detail ? `：${item.detail}` : ''}${taskSuffix}${serviceSuffix}`,
+            `  - ${item.title || '未命名计划项'}${item.detail ? `：${item.detail}` : ''}${serviceSuffix}`,
           );
         }
         if (plan.items.length > 8) {
@@ -1150,7 +907,7 @@ server.tool(
     } else {
       for (const service of services) {
         lines.push(
-          `- ${service.service} | 仓库:${service.repo_path || '未配置'} | 日期:${service.plan_dates.join(',') || '-'} | 任务:${service.task_ids.join(',') || '-'}`,
+          `- ${service.service} | 仓库:${service.repo_path || '未配置'} | 日期:${service.plan_dates.join(',') || '-'}`,
         );
         if (service.branches.length === 0) {
           lines.push('  - 未关联分支');
@@ -1171,35 +928,13 @@ server.tool(
                 ? `错误:${branch.errors.join('; ')}`
                 : '无提交';
           lines.push(
-            `  - ${branch.name} | 来源:${sourceText} | 日期:${branch.plan_dates.join(',') || '-'} | 任务:${branch.task_ids.join(',') || '-'} | 提交:${commitText}`,
+            `  - ${branch.name} | 来源:${sourceText} | 日期:${branch.plan_dates.join(',') || '-'} | 提交:${commitText}`,
           );
           if (branch.commits.length > 10) {
             lines.push(
               `    - ... 其余 ${branch.commits.length - 10} 个提交已省略`,
             );
           }
-        }
-      }
-    }
-
-    const tasks = Array.isArray(result.tasks) ? result.tasks : [];
-    lines.push('');
-    lines.push(`关联任务：${tasks.length} 个`);
-    if (tasks.length === 0) {
-      lines.push('- 未关联工作台任务');
-    } else {
-      for (const task of tasks) {
-        if (!task.found) {
-          lines.push(
-            `- [${task.task_id}] 任务不存在 | 日期:${task.plan_dates.join(',') || '-'}`,
-          );
-          continue;
-        }
-        lines.push(
-          `- [${task.task_id}] ${task.title} | 服务:${task.service || '未设置'}${task.work_branch ? ` | 分支:${task.work_branch}` : ''} | 任务态:${task.task_state} | 阶段:${task.workflow_stage_label || task.workflow_status_label} | 日期:${task.plan_dates.join(',') || '-'} | 更新时间:${task.updated_at || '-'}`,
-        );
-        if (task.description) {
-          lines.push(`  描述:${task.description}`);
         }
       }
     }
@@ -1518,8 +1253,6 @@ Users can answer via interactive cards (when supported) or by replying:
       timeoutSec,
       metadata: args.metadata,
       groupFolder,
-      workflowId: workflowId || undefined,
-      stageKey: stageKey || undefined,
       delegationId: delegationId || undefined,
       timestamp: new Date().toISOString(),
     };
@@ -1613,7 +1346,7 @@ server.tool(
   'request_human_input',
   'Create a standard human-input request, send it to the user, and wait for a free-text reply.',
   {
-    title: z.string().describe('Short title shown in the workbench'),
+    title: z.string().describe('Short title shown to the user'),
     text: z.string().describe('Question or prompt sent to the user'),
     timeout_sec: z
       .number()
@@ -1650,8 +1383,6 @@ server.tool(
         source_type: 'request_human_input',
       },
       groupFolder,
-      workflowId: workflowId || undefined,
-      stageKey: stageKey || undefined,
       delegationId: delegationId || undefined,
       timestamp: new Date().toISOString(),
     };

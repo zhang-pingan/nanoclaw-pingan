@@ -509,8 +509,6 @@ export function deleteLegacyActiveAgentInboxItemsWithoutTriggerRule(): number {
        WHERE source_type IN (
            'today_plan',
            'today_plan_coding_anomaly',
-           'workbench_action_item',
-           'workbench_task',
            'scheduled_task',
            'agent_query'
          )

@@ -24,81 +24,82 @@ export interface WebMessage {
   reply_to_id?: string | null;
   model?: string | null;
   model_reason?: string | null;
-  workflow_id?: string | null;
   file_path?: string | null;
+}
+
+function createWebSchema(database: Database.Database): void {
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS messages (
+      id          TEXT,
+      chat_jid    TEXT,
+      sender      TEXT,
+      sender_name TEXT,
+      content     TEXT,
+      timestamp   TEXT,
+      is_from_me  INTEGER,
+      is_bot_message INTEGER,
+      model TEXT,
+      model_reason TEXT,
+      PRIMARY KEY (chat_jid, id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_messages_chat_time
+      ON messages (chat_jid, timestamp);
+  `);
+
+  let columns = database.pragma('table_info(messages)') as { name: string }[];
+  const legacyColumns = columns.filter((entry) =>
+    entry.name.startsWith('workflow_'),
+  );
+  const legacyColumnNames = new Set(legacyColumns.map((column) => column.name));
+  const indexes = database.pragma('index_list(messages)') as Array<{
+    name: string;
+    origin: string;
+  }>;
+  for (const index of indexes) {
+    if (index.origin !== 'c') continue;
+    const indexColumns = database.pragma(
+      `index_info("${index.name.replaceAll('"', '""')}")`,
+    ) as Array<{ name: string }>;
+    if (indexColumns.some((column) => legacyColumnNames.has(column.name))) {
+      database.exec(`DROP INDEX "${index.name.replaceAll('"', '""')}"`);
+    }
+  }
+  for (const column of legacyColumns) {
+    database.exec(`ALTER TABLE messages DROP COLUMN "${column.name}"`);
+  }
+  columns = database.pragma('table_info(messages)') as { name: string }[];
+
+  if (!columns.some((c) => c.name === 'reply_to_id')) {
+    database.exec('ALTER TABLE messages ADD COLUMN reply_to_id TEXT');
+    logger.info('Web DB migrated: added reply_to_id column');
+  }
+  if (!columns.some((c) => c.name === 'model')) {
+    database.exec('ALTER TABLE messages ADD COLUMN model TEXT');
+    logger.info('Web DB migrated: added model column');
+  }
+  if (!columns.some((c) => c.name === 'model_reason')) {
+    database.exec('ALTER TABLE messages ADD COLUMN model_reason TEXT');
+    logger.info('Web DB migrated: added model_reason column');
+  }
+  if (!columns.some((c) => c.name === 'file_path')) {
+    database.exec('ALTER TABLE messages ADD COLUMN file_path TEXT');
+    logger.info('Web DB migrated: added file_path column');
+  }
 }
 
 export function initWebDb(): void {
   const dbPath = path.join(STORE_DIR, 'web-messages.db');
   fs.mkdirSync(path.dirname(dbPath), { recursive: true });
   db = new Database(dbPath);
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS messages (
-      id          TEXT,
-      chat_jid    TEXT,
-      sender      TEXT,
-      sender_name TEXT,
-      content     TEXT,
-      timestamp   TEXT,
-      is_from_me  INTEGER,
-      is_bot_message INTEGER,
-      model TEXT,
-      model_reason TEXT,
-      PRIMARY KEY (chat_jid, id)
-    );
-    CREATE INDEX IF NOT EXISTS idx_messages_chat_time
-      ON messages (chat_jid, timestamp);
-  `);
-
-  // Schema migration: add reply_to_id column if missing
-  const columns = db.pragma('table_info(messages)') as { name: string }[];
-  if (!columns.some((c) => c.name === 'reply_to_id')) {
-    db.exec('ALTER TABLE messages ADD COLUMN reply_to_id TEXT');
-    logger.info('Web DB migrated: added reply_to_id column');
-  }
-  if (!columns.some((c) => c.name === 'model')) {
-    db.exec('ALTER TABLE messages ADD COLUMN model TEXT');
-    logger.info('Web DB migrated: added model column');
-  }
-  if (!columns.some((c) => c.name === 'model_reason')) {
-    db.exec('ALTER TABLE messages ADD COLUMN model_reason TEXT');
-    logger.info('Web DB migrated: added model_reason column');
-  }
-  if (!columns.some((c) => c.name === 'workflow_id')) {
-    db.exec('ALTER TABLE messages ADD COLUMN workflow_id TEXT');
-    logger.info('Web DB migrated: added workflow_id column');
-  }
-  if (!columns.some((c) => c.name === 'file_path')) {
-    db.exec('ALTER TABLE messages ADD COLUMN file_path TEXT');
-    logger.info('Web DB migrated: added file_path column');
-  }
+  createWebSchema(db);
 
   logger.info({ path: dbPath }, 'Web message DB initialized');
 }
 
 /** @internal - for tests only. Creates a fresh in-memory database. */
-export function _initTestWebDb(): void {
-  db = new Database(':memory:');
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS messages (
-      id          TEXT,
-      chat_jid    TEXT,
-      sender      TEXT,
-      sender_name TEXT,
-      content     TEXT,
-      timestamp   TEXT,
-      is_from_me  INTEGER,
-      is_bot_message INTEGER,
-      model TEXT,
-      model_reason TEXT,
-      reply_to_id TEXT,
-      workflow_id TEXT,
-      file_path TEXT,
-      PRIMARY KEY (chat_jid, id)
-    );
-    CREATE INDEX IF NOT EXISTS idx_messages_chat_time
-      ON messages (chat_jid, timestamp);
-  `);
+export function _initTestWebDb(database?: Database.Database): void {
+  db = database ?? new Database(':memory:');
+  createWebSchema(db);
 }
 
 export function storeWebMessage(msg: {
@@ -113,16 +114,16 @@ export function storeWebMessage(msg: {
   reply_to_id?: string | null;
   model?: string | null;
   model_reason?: string | null;
-  workflow_id?: string | null;
   file_path?: string | null;
 }): void {
   ensureWebDbInitialized();
   const isBotMessage = msg.is_bot_message ? 1 : 0;
 
-  db.prepare(`
+  db.prepare(
+    `
     INSERT INTO messages
-      (id, chat_jid, sender, sender_name, content, timestamp, is_from_me, is_bot_message, reply_to_id, model, model_reason, workflow_id, file_path)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      (id, chat_jid, sender, sender_name, content, timestamp, is_from_me, is_bot_message, reply_to_id, model, model_reason, file_path)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(chat_jid, id) DO UPDATE SET
       sender = excluded.sender,
       sender_name = excluded.sender_name,
@@ -133,9 +134,9 @@ export function storeWebMessage(msg: {
       reply_to_id = COALESCE(excluded.reply_to_id, messages.reply_to_id),
       model = COALESCE(excluded.model, messages.model),
       model_reason = COALESCE(excluded.model_reason, messages.model_reason),
-      workflow_id = COALESCE(excluded.workflow_id, messages.workflow_id),
       file_path = COALESCE(excluded.file_path, messages.file_path)
-  `).run(
+  `,
+  ).run(
     msg.id,
     msg.chat_jid,
     msg.sender,
@@ -147,7 +148,6 @@ export function storeWebMessage(msg: {
     msg.reply_to_id || null,
     msg.model ?? null,
     msg.model_reason ?? null,
-    msg.workflow_id ?? null,
     msg.file_path ?? null,
   );
 }
@@ -263,7 +263,10 @@ export function clearWebMessages(chatJid: string): void {
   db.prepare('DELETE FROM messages WHERE chat_jid = ?').run(chatJid);
 }
 
-export function deleteWebMessagesByIds(chatJid: string, messageIds: string[]): number {
+export function deleteWebMessagesByIds(
+  chatJid: string,
+  messageIds: string[],
+): number {
   ensureWebDbInitialized();
   if (!chatJid || messageIds.length === 0) return 0;
   const del = db.prepare('DELETE FROM messages WHERE chat_jid = ? AND id = ?');
@@ -292,7 +295,7 @@ export function listWebMessagesByChat(
       SELECT id, chat_jid, sender, sender_name, content, timestamp,
              CAST(is_from_me AS INTEGER) AS is_from_me,
              CAST(is_bot_message AS INTEGER) AS is_bot_message,
-             reply_to_id, model, model_reason, workflow_id, file_path
+             reply_to_id, model, model_reason, file_path
         FROM messages
        WHERE chat_jid = ?
        ORDER BY timestamp DESC
@@ -308,7 +311,11 @@ export function listWebMessagesByIds(
 ): WebMessage[] {
   ensureWebDbInitialized();
   const normalizedIds = Array.from(
-    new Set(ids.filter((id): id is string => typeof id === 'string' && id.trim().length > 0)),
+    new Set(
+      ids.filter(
+        (id): id is string => typeof id === 'string' && id.trim().length > 0,
+      ),
+    ),
   );
   if (normalizedIds.length === 0) return [];
   const placeholders = normalizedIds.map(() => '?').join(', ');
@@ -318,7 +325,7 @@ export function listWebMessagesByIds(
       SELECT id, chat_jid, sender, sender_name, content, timestamp,
              CAST(is_from_me AS INTEGER) AS is_from_me,
              CAST(is_bot_message AS INTEGER) AS is_bot_message,
-             reply_to_id, model, model_reason, workflow_id, file_path
+             reply_to_id, model, model_reason, file_path
         FROM messages
        WHERE chat_jid = ? AND id IN (${placeholders})
     `,

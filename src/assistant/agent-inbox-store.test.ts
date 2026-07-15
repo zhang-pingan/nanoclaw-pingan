@@ -3,9 +3,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   _initTestDatabase,
   createAgentQuery,
-  createWorkbenchActionItem,
-  createWorkbenchTask,
-  getWorkbenchActionItem,
   getDatabase,
   updateAgentQuery,
 } from '../db.js';
@@ -34,62 +31,6 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-function createStoredWorkbenchTask(input: {
-  id: string;
-  status: string;
-  taskState: 'running' | 'success' | 'failed' | 'cancelled';
-  updatedAt: string;
-}): void {
-  createWorkbenchTask({
-    id: input.id,
-    workflow_id: input.id.replace(/^wb-/, ''),
-    source_jid: 'main@g.us',
-    title: '工作台测试任务',
-    service: 'catstory',
-    start_from: 'dev',
-    workflow_type: 'dev_test',
-    status: input.status,
-    task_state: input.taskState,
-    current_stage: input.status,
-    summary: null,
-    created_at: input.updatedAt,
-    updated_at: input.updatedAt,
-    last_event_at: input.updatedAt,
-  });
-}
-
-function createStoredWorkbenchActionItem(input: {
-  id: string;
-  taskId: string;
-  workflowId: string;
-  stageKey: string;
-  sourceType?: string;
-  title?: string;
-  body?: string;
-  extra?: Record<string, unknown>;
-}): void {
-  createWorkbenchActionItem({
-    id: input.id,
-    task_id: input.taskId,
-    workflow_id: input.workflowId,
-    subtask_id: null,
-    stage_key: input.stageKey,
-    delegation_id: null,
-    group_folder: null,
-    item_type: 'interactive',
-    status: 'pending',
-    title: input.title || '自动处理测试待办',
-    body: input.body || '这是一条工作台待处理项',
-    source_type: input.sourceType || 'send_message',
-    source_ref_id: `source-${input.id}`,
-    replyable: 0,
-    created_at: Date.now().toString(),
-    updated_at: Date.now().toString(),
-    resolved_at: null,
-    extra_json: input.extra ? JSON.stringify(input.extra) : null,
-  });
-}
-
 function createStoredAgentQuery(input: {
   queryId: string;
   status: 'running' | 'success' | 'error' | 'cancelled' | 'timeout';
@@ -103,13 +44,10 @@ function createStoredAgentQuery(input: {
     source_ref_id: `message-${input.queryId}`,
     chat_jid: 'main@g.us',
     group_folder: 'main',
-    workflow_type: null,
     service: null,
     role: null,
     task_id: null,
     task_title: null,
-    workflow_id: null,
-    stage_key: null,
     delegation_id: null,
     session_id: null,
     selected_model: null,
@@ -159,18 +97,12 @@ function createStoredAgentQuery(input: {
   });
 }
 
-function flushAsyncWork(): Promise<void> {
-  return new Promise((resolve) => {
-    setImmediate(resolve);
-  });
-}
-
 describe('agent inbox store', () => {
   it('merges assistant settings without dropping nested defaults', () => {
     const settings = updateAssistantSettings({
       enabled: false,
       triggerRules: {
-        'workbench.task_stale': {
+        'scheduler.task_failed': {
           enabled: false,
           investigationEnabled: true,
           autoEnabled: true,
@@ -182,11 +114,11 @@ describe('agent inbox store', () => {
     });
 
     expect(settings.enabled).toBe(false);
-    expect(settings.triggerRules['workbench.task_stale'].enabled).toBe(false);
+    expect(settings.triggerRules['scheduler.task_failed'].enabled).toBe(false);
     expect(
-      settings.triggerRules['workbench.task_stale'].investigationEnabled,
+      settings.triggerRules['scheduler.task_failed'].investigationEnabled,
     ).toBe(true);
-    expect(settings.triggerRules['workbench.task_stale'].autoEnabled).toBe(
+    expect(settings.triggerRules['scheduler.task_failed'].autoEnabled).toBe(
       true,
     );
     expect(settings.triggerRules['today_plan.missing_today_plan'].enabled).toBe(
@@ -195,28 +127,6 @@ describe('agent inbox store', () => {
     expect(settings.desktopAssistant.allowMovement).toBe(false);
     expect(settings.desktopAssistant.alwaysOnTop).toBe(true);
     expect(getAssistantSettings().enabled).toBe(false);
-  });
-
-  it('allows workbench pending action items to enable auto handling', () => {
-    const settings = updateAssistantSettings({
-      triggerRules: {
-        'workbench.pending_action_item': {
-          enabled: true,
-          investigationEnabled: false,
-          autoEnabled: true,
-          selectedServices: [],
-          lookbackDays: 3,
-        },
-      },
-    });
-
-    expect(
-      settings.triggerRules['workbench.pending_action_item'].autoEnabled,
-    ).toBe(true);
-    expect(
-      settings.triggerRules['workbench.pending_action_item']
-        .investigationEnabled,
-    ).toBe(false);
   });
 
   it('merges assistant evolution settings without enabling automation by default', () => {
@@ -248,7 +158,6 @@ describe('agent inbox store', () => {
           enabled: true,
           dataSources: {
             todayPlan: false,
-            workbench: true,
             scheduler: true,
             agentRuns: true,
           },
@@ -302,8 +211,8 @@ describe('agent inbox store', () => {
       dedupeKey: 'test:item-with-flow',
       kind: 'risk',
       title: 'Old title',
-      triggerRuleKey: 'workbench.task_stale',
-      sourceType: 'workbench_task',
+      triggerRuleKey: 'online.error_logs',
+      sourceType: 'online_error_log',
       sourceRefId: 'task-1',
       extra: {
         investigation: { repairable: true, summary: '已排查' },
@@ -315,8 +224,8 @@ describe('agent inbox store', () => {
       dedupeKey: 'test:item-with-flow',
       kind: 'risk',
       title: 'New title',
-      triggerRuleKey: 'workbench.task_stale',
-      sourceType: 'workbench_task',
+      triggerRuleKey: 'online.error_logs',
+      sourceType: 'online_error_log',
       sourceRefId: 'task-1',
       extra: { staleHours: 6 },
     });
@@ -444,183 +353,6 @@ describe('agent inbox store', () => {
         (item) => item.dedupe_key === 'today-plan:missing:2026-04-28',
       ),
     ).toBe(false);
-  });
-
-  it('does not stale-alert successful workbench tasks', async () => {
-    const now = new Date(2026, 3, 28, 9, 0, 0);
-    const updatedAt = String(now.getTime() - 6 * 60 * 60 * 1000);
-    createStoredWorkbenchTask({
-      id: 'wb-success-task',
-      status: 'passed',
-      taskState: 'success',
-      updatedAt,
-    });
-
-    await runProactiveScan({ now });
-
-    expect(
-      listAgentInboxItems({ status: 'active' }).some(
-        (item) => item.dedupe_key === 'workbench:task-stale:wb-success-task',
-      ),
-    ).toBe(false);
-  });
-
-  it('resolves obsolete workbench stale inbox items after task success', async () => {
-    const now = new Date(2026, 3, 28, 9, 0, 0);
-    const updatedAt = String(now.getTime() - 6 * 60 * 60 * 1000);
-    const stale = createOrUpdateAgentInboxItem({
-      dedupeKey: 'workbench:task-stale:wb-resolved-success-task',
-      kind: 'risk',
-      priority: 'normal',
-      title: '任务长时间没有进展：工作台测试任务',
-      triggerRuleKey: 'workbench.task_stale',
-      sourceType: 'workbench_task',
-      sourceRefId: 'wb-resolved-success-task',
-    });
-    createStoredWorkbenchTask({
-      id: 'wb-resolved-success-task',
-      status: 'passed',
-      taskState: 'success',
-      updatedAt,
-    });
-
-    await runProactiveScan({ now });
-
-    expect(getAgentInboxItem(stale.id)?.status).toBe('done');
-  });
-
-  it('does not repeatedly auto-process an inbox item after investigation exists', async () => {
-    const now = new Date(2026, 3, 28, 9, 0, 0);
-    const updatedAt = String(now.getTime() - 6 * 60 * 60 * 1000);
-    const runner = vi.fn(async () => ({
-      ok: true,
-      text: JSON.stringify({
-        ok: true,
-        summary: '排查完成',
-        root_cause: '任务无进展',
-        repairable: false,
-        repair_plan: null,
-        risk_level: 'medium',
-        required_user_action: '需要人工确认',
-        evidence: [],
-        groups: [
-          {
-            id: 'stale-task',
-            title: '任务无进展',
-            log_indexes: [],
-            count: 1,
-            root_cause: '任务无进展',
-            repairable: false,
-            repair_plan: null,
-            risk_level: 'medium',
-            required_user_action: '需要人工确认',
-            evidence: [],
-          },
-        ],
-      }),
-    }));
-    initAssistantAutoFlow({ agentRunner: runner });
-    updateAssistantSettings({
-      triggerRules: {
-        'workbench.task_stale': {
-          enabled: true,
-          investigationEnabled: true,
-          autoEnabled: true,
-          selectedServices: [],
-          lookbackDays: 3,
-        },
-      },
-    });
-    createStoredWorkbenchTask({
-      id: 'wb-auto-stale-task',
-      status: 'running',
-      taskState: 'running',
-      updatedAt,
-    });
-
-    await runProactiveScan({ now });
-    await flushAsyncWork();
-
-    expect(runner).toHaveBeenCalledTimes(1);
-    runner.mockClear();
-
-    await runProactiveScan({ now });
-    await flushAsyncWork();
-
-    expect(runner).not.toHaveBeenCalled();
-    const item = listAgentInboxItems({ status: 'active' }).find(
-      (entry) => entry.dedupe_key === 'workbench:task-stale:wb-auto-stale-task',
-    );
-    expect(item?.extra.autoFlowStatus).toBe('investigated');
-  });
-
-  it('auto-handles workbench pending action items through a workbench action agent', async () => {
-    const now = new Date(2026, 3, 28, 9, 0, 0);
-    const updatedAt = String(now.getTime());
-    const workflowId = 'auto-action-workflow';
-    const taskId = 'wb-auto-action-workflow';
-    const actionItemId = 'wb-action-auto-message';
-    createStoredWorkbenchTask({
-      id: taskId,
-      status: 'review',
-      taskState: 'running',
-      updatedAt,
-    });
-    createStoredWorkbenchActionItem({
-      id: actionItemId,
-      taskId,
-      workflowId,
-      stageKey: 'review',
-      title: '阅读执行通知',
-      body: '执行通知已送达，确认后可关闭待办。',
-    });
-    let capturedPrompt = '';
-    const purposes: string[] = [];
-    const runner = vi.fn(async ({ purpose, prompt }) => {
-      purposes.push(purpose);
-      capturedPrompt = prompt;
-      return {
-        ok: true,
-        text: JSON.stringify({
-          ok: true,
-          decision: 'resolve',
-          confidence: 'high',
-          reason: '该待办是 send_message 通知，标记已读即可关闭。',
-          payload: {},
-          evidence: [{ label: '待办类型', value: 'send_message' }],
-          unresolved_gaps: [],
-        }),
-      };
-    });
-    initAssistantAutoFlow({ agentRunner: runner });
-    updateAssistantSettings({
-      triggerRules: {
-        'workbench.pending_action_item': {
-          enabled: true,
-          investigationEnabled: false,
-          autoEnabled: true,
-          selectedServices: [],
-          lookbackDays: 3,
-        },
-      },
-    });
-
-    await runProactiveScan({ now });
-    await flushAsyncWork();
-    await flushAsyncWork();
-
-    expect(purposes).toEqual(['workbench_action']);
-    expect(capturedPrompt).toContain('必须主动获取相关信息');
-    expect(capturedPrompt).toContain(actionItemId);
-    expect(getWorkbenchActionItem(actionItemId)?.status).toBe('resolved');
-    const inbox = listAgentInboxItems({ status: 'all' }).find(
-      (entry) => entry.dedupe_key === `workbench:action-item:${actionItemId}`,
-    );
-    expect(inbox?.status).toBe('done');
-    expect(inbox?.extra.autoFlowStatus).toBe('handled');
-    expect(inbox?.extra.workbenchActionDecision).toMatchObject({
-      decision: 'resolve',
-    });
   });
 
   it('stores a parseable investigation result even when the runner reports an error status', async () => {

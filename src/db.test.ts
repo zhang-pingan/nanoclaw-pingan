@@ -5,17 +5,7 @@ import {
   _initTestDatabase,
   createDelegation,
   createMemory,
-  createWorkbenchActionItem,
-  createWorkbenchArtifact,
-  createWorkbenchComment,
-  createWorkbenchContextAsset,
-  createWorkbenchEvent,
-  createWorkbenchSubtask,
-  createWorkbenchTask,
   createTask,
-  createWorkflow,
-  deleteAllWorkbenchTaskData,
-  deleteWorkbenchTaskData,
   deleteMemory,
   deleteTask,
   doctorMemories,
@@ -25,8 +15,8 @@ import {
   getMemoryMetricSummary,
   getAllChats,
   getAllRegisteredGroups,
-  getAllWorkflows,
   getAgentQuery,
+  getDatabase,
   getMessagesSince,
   getNewMessages,
   getTaskById,
@@ -326,380 +316,142 @@ describe('getNewMessages', () => {
   });
 });
 
-describe('deleteAllWorkbenchTaskData', () => {
-  it('removes workflow and workbench records together', () => {
-    createWorkflow({
-      id: 'wf-1',
-      name: 'Task 1',
-      service: 'svc-a',
-      start_from: 'dev',
-      context: {
-        main_branch: '',
-        work_branch: 'feature/task-1',
-        staging_base_branch: 'staging',
-        deliverable: 'req-1',
-        staging_work_branch: '',
-        access_token: '',
-      },
-      status: 'dev',
-      current_delegation_id: 'del-1',
-      round: 0,
-      source_jid: 'group@g.us',
-      created_at: '2024-01-01T00:00:00.000Z',
-      updated_at: '2024-01-01T00:00:00.000Z',
-      workflow_type: 'dev_test',
-      paused_from: null,
-    });
+describe('removed runtime schema cleanup', () => {
+  function legacySchemaObjects(): string[] {
+    return (
+      getDatabase()
+        .prepare(
+          `SELECT name
+           FROM sqlite_schema
+           WHERE name = 'workflows'
+              OR name GLOB 'workflow_*'
+              OR name GLOB 'workbench_*'
+           ORDER BY name`,
+        )
+        .all() as Array<{ name: string }>
+    ).map((row) => row.name);
+  }
 
-    createDelegation({
-      id: 'del-1',
-      source_jid: 'group@g.us',
-      source_folder: 'main',
-      target_jid: 'dev@g.us',
-      target_folder: 'dev',
-      task: 'Implement feature',
-      status: 'pending',
-      result: null,
-      outcome: null,
-      requester_jid: 'group@g.us',
-      workflow_id: 'wf-1',
-      created_at: '2024-01-01T00:00:00.000Z',
-      updated_at: '2024-01-01T00:00:00.000Z',
-    });
+  function columnNames(table: string): string[] {
+    return (
+      getDatabase()
+        .prepare(`SELECT name FROM pragma_table_info(?)`)
+        .all(table) as Array<{ name: string }>
+    ).map((column) => column.name);
+  }
 
-    createWorkbenchTask({
-      id: 'wb-wf-1',
-      workflow_id: 'wf-1',
-      source_jid: 'group@g.us',
-      title: 'Task 1',
-      service: 'svc-a',
-      start_from: 'dev',
-      workflow_type: 'dev_test',
-      status: 'dev',
-      task_state: 'running',
-      current_stage: 'dev',
-      summary: 'summary',
-      created_at: '2024-01-01T00:00:00.000Z',
-      updated_at: '2024-01-01T00:00:00.000Z',
-      last_event_at: '2024-01-01T00:00:00.000Z',
-    });
-    createWorkbenchSubtask({
-      id: 'sub-1',
-      task_id: 'wb-wf-1',
-      workflow_id: 'wf-1',
-      delegation_id: 'del-1',
-      stage_key: 'dev',
-      title: '开发',
-      role: 'dev',
-      group_folder: 'dev',
-      status: 'current',
-      input_summary: 'input',
-      output_summary: 'output',
-      started_at: '2024-01-01T00:00:00.000Z',
-      finished_at: null,
-      updated_at: '2024-01-01T00:00:00.000Z',
-    });
-    createWorkbenchEvent({
-      id: 'event-1',
-      task_id: 'wb-wf-1',
-      subtask_id: 'sub-1',
-      event_type: 'workflow_created',
-      title: 'Created',
-      body: 'body',
-      raw_ref_type: 'workflow',
-      raw_ref_id: 'wf-1',
-      created_at: '2024-01-01T00:00:00.000Z',
-    });
-    createWorkbenchArtifact({
-      id: 'artifact-1',
-      task_id: 'wb-wf-1',
-      workflow_id: 'wf-1',
-      artifact_type: 'plan_doc',
-      title: 'Plan',
-      path: 'projects/svc-a/iteration/req-1/plan.md',
-      source_role: 'planner',
-      created_at: '2024-01-01T00:00:00.000Z',
-    });
-    createWorkbenchActionItem({
-      id: 'action-1',
-      task_id: 'wb-wf-1',
-      workflow_id: 'wf-1',
-      subtask_id: 'sub-1',
-      stage_key: 'dev',
-      delegation_id: 'del-1',
-      group_folder: 'dev',
-      item_type: 'approval',
-      status: 'pending',
-      source_type: 'workflow',
-      source_ref_id: 'confirm_dev',
-      replyable: 0,
-      title: 'Approve',
-      body: 'body',
-      created_at: '2024-01-01T00:00:00.000Z',
-      updated_at: '2024-01-01T00:00:00.000Z',
-      resolved_at: null,
-      extra_json: null,
-    });
-    createWorkbenchComment({
-      id: 'comment-1',
-      task_id: 'wb-wf-1',
-      workflow_id: 'wf-1',
-      author: 'Alice',
-      content: 'note',
-      created_at: '2024-01-01T00:00:00.000Z',
-    });
-    createWorkbenchContextAsset({
-      id: 'asset-1',
-      task_id: 'wb-wf-1',
-      workflow_id: 'wf-1',
-      asset_type: 'link',
-      title: 'Spec',
-      path: null,
-      url: 'https://example.com',
-      note: 'reference',
-      created_at: '2024-01-01T00:00:00.000Z',
-    });
-
-    const deleted = deleteAllWorkbenchTaskData();
-
-    expect(deleted).toMatchObject({
-      workflows: 1,
-      delegations: 1,
-      workbench_tasks: 1,
-      workbench_subtasks: 1,
-      workbench_events: 1,
-      workbench_artifacts: 1,
-      workbench_action_items: 1,
-      workbench_comments: 1,
-      workbench_context_assets: 1,
-    });
-    expect(getAllWorkflows()).toHaveLength(0);
-    expect(deleteAllWorkbenchTaskData()).toMatchObject({
-      workflows: 0,
-      delegations: 0,
-      workbench_tasks: 0,
-      workbench_subtasks: 0,
-      workbench_events: 0,
-      workbench_artifacts: 0,
-      workbench_action_items: 0,
-      workbench_comments: 0,
-      workbench_context_assets: 0,
-    });
+  it('does not create removed tables, columns, or indexes in a fresh database', () => {
+    expect(legacySchemaObjects()).toEqual([]);
+    expect(
+      columnNames('messages').filter((name) => name.startsWith('workflow_')),
+    ).toEqual([]);
+    expect(
+      columnNames('assistant_chat_messages').filter((name) =>
+        name.startsWith('workflow_'),
+      ),
+    ).toEqual([]);
+    expect(
+      columnNames('delegations').filter(
+        (name) => name.startsWith('workflow_') || name.startsWith('handoff_'),
+      ),
+    ).toEqual([]);
+    expect(
+      columnNames('agent_queries').filter(
+        (name) => name.startsWith('workflow_') || name === 'stage_key',
+      ),
+    ).toEqual([]);
   });
 
-  it('removes only the targeted workbench task and workflow data', () => {
-    createWorkflow({
-      id: 'wf-1',
-      name: 'Task 1',
-      service: 'svc-a',
-      start_from: 'dev',
-      context: {
-        main_branch: '',
-        work_branch: 'feature/task-1',
-        staging_base_branch: 'staging',
-        deliverable: 'req-1',
-        staging_work_branch: '',
-        access_token: '',
-      },
-      status: 'dev',
-      current_delegation_id: 'del-1',
-      round: 0,
-      source_jid: 'group@g.us',
-      created_at: '2024-01-01T00:00:00.000Z',
-      updated_at: '2024-01-01T00:00:00.000Z',
-      workflow_type: 'dev_test',
-      paused_from: null,
+  it('removes an existing legacy schema while preserving active data', () => {
+    storeChatMetadata('protected@g.us', '2026-07-14T00:00:00.000Z');
+    store({
+      id: 'protected-message',
+      chat_jid: 'protected@g.us',
+      sender: 'user@example.com',
+      sender_name: 'User',
+      content: 'keep this message',
+      timestamp: '2026-07-14T00:00:01.000Z',
     });
-    createWorkflow({
-      id: 'wf-2',
-      name: 'Task 2',
-      service: 'svc-b',
-      start_from: 'plan',
-      context: {
-        main_branch: '',
-        work_branch: 'feature/task-2',
-        staging_base_branch: 'staging',
-        deliverable: 'req-2',
-        staging_work_branch: '',
-        access_token: '',
-      },
-      status: 'plan',
-      current_delegation_id: 'del-2',
-      round: 0,
-      source_jid: 'group@g.us',
-      created_at: '2024-01-01T00:00:00.000Z',
-      updated_at: '2024-01-01T00:00:00.000Z',
-      workflow_type: 'dev_test',
-      paused_from: null,
-    });
-
     createDelegation({
-      id: 'del-1',
-      source_jid: 'group@g.us',
+      id: 'protected-delegation',
+      source_jid: 'protected@g.us',
       source_folder: 'main',
-      target_jid: 'dev@g.us',
-      target_folder: 'dev',
-      task: 'Implement feature 1',
+      target_jid: 'target@g.us',
+      target_folder: 'target',
+      task: 'Keep this delegation',
       status: 'pending',
       result: null,
       outcome: null,
-      requester_jid: 'group@g.us',
-      workflow_id: 'wf-1',
-      created_at: '2024-01-01T00:00:00.000Z',
-      updated_at: '2024-01-01T00:00:00.000Z',
+      requester_jid: 'protected@g.us',
+      created_at: '2026-07-14T00:00:00.000Z',
+      updated_at: '2026-07-14T00:00:00.000Z',
     });
-    createDelegation({
-      id: 'del-2',
-      source_jid: 'group@g.us',
-      source_folder: 'main',
-      target_jid: 'dev@g.us',
-      target_folder: 'dev',
-      task: 'Implement feature 2',
-      status: 'pending',
-      result: null,
-      outcome: null,
-      requester_jid: 'group@g.us',
-      workflow_id: 'wf-2',
-      created_at: '2024-01-01T00:00:00.000Z',
-      updated_at: '2024-01-01T00:00:00.000Z',
+    createTask({
+      id: 'protected-task',
+      group_folder: 'main',
+      chat_jid: 'protected@g.us',
+      prompt: 'Keep this scheduled task',
+      schedule_type: 'once',
+      schedule_value: '2026-07-15T00:00:00.000Z',
+      context_mode: 'isolated',
+      next_run: '2026-07-15T00:00:00.000Z',
+      status: 'active',
+      created_at: '2026-07-14T00:00:00.000Z',
     });
-
-    createWorkbenchTask({
-      id: 'wb-wf-1',
-      workflow_id: 'wf-1',
-      source_jid: 'group@g.us',
-      title: 'Task 1',
-      service: 'svc-a',
-      start_from: 'dev',
-      workflow_type: 'dev_test',
-      status: 'dev',
-      task_state: 'running',
-      current_stage: 'dev',
-      summary: 'summary',
-      created_at: '2024-01-01T00:00:00.000Z',
-      updated_at: '2024-01-01T00:00:00.000Z',
-      last_event_at: '2024-01-01T00:00:00.000Z',
-    });
-    createWorkbenchTask({
-      id: 'wb-wf-2',
-      workflow_id: 'wf-2',
-      source_jid: 'group@g.us',
-      title: 'Task 2',
-      service: 'svc-b',
-      start_from: 'plan',
-      workflow_type: 'dev_test',
-      status: 'plan',
-      task_state: 'running',
-      current_stage: 'plan',
-      summary: 'summary',
-      created_at: '2024-01-01T00:00:00.000Z',
-      updated_at: '2024-01-01T00:00:00.000Z',
-      last_event_at: '2024-01-01T00:00:00.000Z',
-    });
-    createWorkbenchSubtask({
-      id: 'sub-1',
-      task_id: 'wb-wf-1',
-      workflow_id: 'wf-1',
-      delegation_id: 'del-1',
-      stage_key: 'dev',
-      title: '开发',
-      role: 'dev',
-      group_folder: 'dev',
-      status: 'current',
-      input_summary: 'input',
-      output_summary: 'output',
-      started_at: '2024-01-01T00:00:00.000Z',
-      finished_at: null,
-      updated_at: '2024-01-01T00:00:00.000Z',
-    });
-    createWorkbenchEvent({
-      id: 'event-1',
-      task_id: 'wb-wf-1',
-      subtask_id: 'sub-1',
-      event_type: 'workflow_created',
-      title: 'Created',
-      body: 'body',
-      raw_ref_type: 'workflow',
-      raw_ref_id: 'wf-1',
-      created_at: '2024-01-01T00:00:00.000Z',
-    });
-    createWorkbenchArtifact({
-      id: 'artifact-1',
-      task_id: 'wb-wf-1',
-      workflow_id: 'wf-1',
-      artifact_type: 'plan_doc',
-      title: 'Plan',
-      path: 'projects/svc-a/iteration/req-1/plan.md',
-      source_role: 'planner',
-      created_at: '2024-01-01T00:00:00.000Z',
-    });
-    createWorkbenchActionItem({
-      id: 'action-1',
-      task_id: 'wb-wf-1',
-      workflow_id: 'wf-1',
-      subtask_id: 'sub-1',
-      stage_key: 'dev',
-      delegation_id: 'del-1',
-      group_folder: 'dev',
-      item_type: 'approval',
-      status: 'pending',
-      source_type: 'workflow',
-      source_ref_id: 'confirm_dev',
-      replyable: 0,
-      title: 'Approve',
-      body: 'body',
-      created_at: '2024-01-01T00:00:00.000Z',
-      updated_at: '2024-01-01T00:00:00.000Z',
-      resolved_at: null,
-      extra_json: null,
-    });
-    createWorkbenchComment({
-      id: 'comment-1',
-      task_id: 'wb-wf-1',
-      workflow_id: 'wf-1',
-      author: 'Alice',
-      content: 'note',
-      created_at: '2024-01-01T00:00:00.000Z',
-    });
-    createWorkbenchContextAsset({
-      id: 'asset-1',
-      task_id: 'wb-wf-1',
-      workflow_id: 'wf-1',
-      asset_type: 'link',
-      title: 'Spec',
-      path: null,
-      url: 'https://example.com',
-      note: 'reference',
-      created_at: '2024-01-01T00:00:00.000Z',
+    createMemory({
+      group_folder: 'main',
+      layer: 'canonical',
+      memory_type: 'fact',
+      content: 'Keep this memory',
     });
 
-    const deleted = deleteWorkbenchTaskData('wb-wf-1');
+    const existing = getDatabase();
+    existing.exec(`
+      ALTER TABLE messages ADD COLUMN workflow_id TEXT;
+      ALTER TABLE assistant_chat_messages ADD COLUMN workflow_id TEXT;
+      ALTER TABLE assistant_chat_messages ADD COLUMN workflow_stage TEXT;
+      ALTER TABLE delegations ADD COLUMN workflow_id TEXT;
+      ALTER TABLE delegations ADD COLUMN handoff_context_json TEXT;
+      ALTER TABLE agent_queries ADD COLUMN workflow_type TEXT;
+      ALTER TABLE agent_queries ADD COLUMN workflow_id TEXT;
+      ALTER TABLE agent_queries ADD COLUMN stage_key TEXT;
+      CREATE INDEX idx_messages_workflow_id ON messages(workflow_id);
+      CREATE INDEX idx_delegations_handoff_context ON delegations(handoff_context_json);
+      CREATE INDEX idx_agent_queries_workflow_id ON agent_queries(workflow_id);
+      CREATE TABLE workflows (id TEXT PRIMARY KEY);
+      CREATE TABLE workflow_runs (id TEXT PRIMARY KEY);
+      CREATE TABLE workbench_tasks (id TEXT PRIMARY KEY);
+      INSERT INTO workflows (id) VALUES ('legacy-runtime');
+      INSERT INTO workflow_runs (id) VALUES ('legacy-run');
+      INSERT INTO workbench_tasks (id) VALUES ('legacy-task');
+    `);
 
-    expect(deleted).toMatchObject({
-      workflow_id: 'wf-1',
-      workflows: 1,
-      delegations: 1,
-      workbench_tasks: 1,
-      workbench_subtasks: 1,
-      workbench_events: 1,
-      workbench_artifacts: 1,
-      workbench_action_items: 1,
-      workbench_comments: 1,
-      workbench_context_assets: 1,
-    });
-    expect(getAllWorkflows().map((workflow) => workflow.id)).toEqual(['wf-2']);
-    expect(deleteWorkbenchTaskData('wb-wf-1')).toBeNull();
-    expect(deleteAllWorkbenchTaskData()).toMatchObject({
-      workflows: 1,
-      delegations: 1,
-      workbench_tasks: 1,
-      workbench_subtasks: 0,
-      workbench_events: 0,
-      workbench_artifacts: 0,
-      workbench_action_items: 0,
-      workbench_comments: 0,
-      workbench_context_assets: 0,
-    });
+    _initTestDatabase(existing);
+
+    expect(legacySchemaObjects()).toEqual([]);
+    expect(columnNames('messages')).not.toContain('workflow_id');
+    expect(columnNames('assistant_chat_messages')).not.toContain('workflow_id');
+    expect(columnNames('assistant_chat_messages')).not.toContain(
+      'workflow_stage',
+    );
+    expect(columnNames('delegations')).not.toContain('workflow_id');
+    expect(columnNames('delegations')).not.toContain('handoff_context_json');
+    expect(columnNames('agent_queries')).not.toContain('workflow_type');
+    expect(columnNames('agent_queries')).not.toContain('workflow_id');
+    expect(columnNames('agent_queries')).not.toContain('stage_key');
+
+    for (const table of [
+      'chats',
+      'messages',
+      'delegations',
+      'scheduled_tasks',
+      'memories',
+    ]) {
+      const row = getDatabase()
+        .prepare(`SELECT COUNT(*) AS count FROM ${table}`)
+        .get() as { count: number };
+      expect(row.count).toBe(1);
+    }
   });
 });
 

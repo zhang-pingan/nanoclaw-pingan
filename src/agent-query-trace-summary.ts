@@ -65,7 +65,6 @@ export function traceEventCategory(
   if (name.startsWith('container_')) return 'container';
   if (name.startsWith('queue_')) return 'queue';
   if (name.startsWith('ipc_')) return 'ipc';
-  if (name.startsWith('workflow_')) return 'workflow';
   if (name.includes('evaluation') || name.includes('judge')) return 'evaluation';
   if (name.startsWith('human_')) return 'human';
   if (name.startsWith('artifact_')) return 'artifact';

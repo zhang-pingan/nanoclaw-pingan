@@ -31,10 +31,7 @@ function setupFeatureWorkspace(): string {
   fs.mkdirSync(path.join(featureRoot, 'container', 'groups', 'main'), {
     recursive: true,
   });
-  fs.mkdirSync(path.join(featureRoot, 'container', 'workflow-definitions'), {
-    recursive: true,
-  });
-  fs.mkdirSync(path.join(featureRoot, 'container', 'cards'), {
+  fs.mkdirSync(path.join(featureRoot, 'container', 'skills'), {
     recursive: true,
   });
 
@@ -81,33 +78,17 @@ function setupFeatureWorkspace(): string {
       },
     ],
     resources: {
-      workflowDefinitions: './container/workflow-definitions',
-      cards: './container/cards',
+      skills: './container/skills',
     },
   });
   writeJson(path.join(tempDir, 'local', 'features.json'), {
     enabled: ['example-feature', 'example-feature'],
   });
-  writeJson(
-    path.join(
-      featureRoot,
-      'container',
-      'workflow-definitions',
-      'example_flow.json',
-    ),
-    {
-      key: 'example_flow',
-      versions: [],
-    },
+  fs.writeFileSync(
+    path.join(featureRoot, 'container', 'skills', 'SKILL.md'),
+    '# Example skill\n',
+    'utf-8',
   );
-  writeJson(path.join(featureRoot, 'container', 'cards', 'example_flow.json'), {
-    start: {
-      pattern: 'info',
-      header: { title: 'Example', color: 'blue' },
-      body: 'Example',
-      actions: [],
-    },
-  });
 
   return tempDir;
 }
@@ -157,17 +138,6 @@ describe('feature runtime', () => {
     expect(handled).toBe(true);
     expect(writes).toEqual(['{"ok":true,"featureId":"example-feature"}']);
 
-    const workflowFiles = await import('../workflow-definition-files.js');
-    const cardFiles = await import('../card-files.js');
-    expect(
-      workflowFiles.readWorkflowDefinitionRegistryFromDir().definitions
-        .example_flow,
-    ).toMatchObject({ key: 'example_flow' });
-    expect(
-      cardFiles.readCardRegistryFromDir().example_flow.start,
-    ).toMatchObject({
-      body: 'Example',
-    });
     expect(() =>
       runtime.resolveEnabledFeatureStaticPath(
         '/features/example-feature/feature.json',
@@ -190,7 +160,7 @@ describe('feature runtime', () => {
         'features',
         'example-feature',
         'container',
-        'cards',
+        'skills',
       ),
       { recursive: true, force: true },
     );
@@ -199,8 +169,29 @@ describe('feature runtime', () => {
     const runtime = await import('./runtime.js');
 
     await expect(runtime.activateConfiguredFeatures()).rejects.toThrow(
-      /resources.cards not found/,
+      /resources.skills not found/,
     );
+  });
+
+  it('rejects removed runtime resource declarations', async () => {
+    const { normalizeFeatureManifest } = await import('./manifest.js');
+    for (const removedKey of [
+      'workflowDefinitions',
+      'cards',
+      'artifactContracts',
+      'workflowEvaluators',
+    ]) {
+      const result = normalizeFeatureManifest({
+        id: 'example-feature',
+        name: 'Example Feature',
+        version: '0.1.0',
+        resources: { [removedKey]: './container/removed' },
+      });
+      expect(result.manifest).toBeUndefined();
+      expect(result.errors).toContain(
+        `resources.${removedKey} is no longer supported`,
+      );
+    }
   });
 
   it('applies feature disable immediately by clearing runtime registries', async () => {

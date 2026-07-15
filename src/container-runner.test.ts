@@ -100,11 +100,9 @@ vi.mock('child_process', async () => {
 });
 
 import { runContainerAgent, ContainerOutput } from './container-runner.js';
-import { _initTestDatabase, createWorkflow } from './db.js';
 import { readEnvFile } from './env.js';
 import { validateAdditionalMounts } from './mount-security.js';
 import type { RegisteredGroup } from './types.js';
-import { registerExternalFeatureDataRoot } from './workflow-storage.js';
 
 const testGroup: RegisteredGroup = {
   name: 'Test Group',
@@ -703,63 +701,4 @@ describe('container-runner timeout behavior', () => {
     );
   });
 
-  it('mounts registered external feature data roots for workflow containers', async () => {
-    _initTestDatabase();
-    createWorkflow({
-      id: 'wf-external-feature-root',
-      name: 'External feature data',
-      service: 'demo',
-      start_from: 'start',
-      context: {},
-      status: 'running',
-      current_delegation_id: '',
-      round: 0,
-      source_jid: 'main@g.us',
-      paused_from: null,
-      workflow_type: 'feature_flow',
-      feature_id: 'feature-one',
-      created_at: '2026-04-08T00:00:00.000Z',
-      updated_at: '2026-04-08T00:00:00.000Z',
-    });
-    registerExternalFeatureDataRoot({
-      featureId: 'feature-one',
-      rootId: 'reports',
-      rootPath: '/external/report-root',
-      readonly: true,
-    });
-    vi.mocked(fs.existsSync).mockImplementation((targetPath) => {
-      return String(targetPath) === '/external/report-root';
-    });
-
-    const resultPromise = runContainerAgent(
-      testGroup,
-      {
-        ...testInput,
-        executionContext: { workflowId: 'wf-external-feature-root' },
-      },
-      () => {},
-    );
-
-    emitOutputMarker(fakeProc, {
-      status: 'success',
-      result: 'ok',
-    });
-    await vi.advanceTimersByTimeAsync(10);
-    fakeProc.emit('close', 0);
-    await vi.advanceTimersByTimeAsync(10);
-    await resultPromise;
-
-    const { spawn } = await import('child_process');
-    const calls = vi.mocked(spawn).mock.calls;
-    const args = calls[calls.length - 1][1] as string[];
-    expect(args).toContain(
-      '/tmp/icarus-test-data/workflows/wf-external-feature-root:/workspace/workflows/wf-external-feature-root',
-    );
-    expect(args).toContain(
-      '/tmp/icarus-test-data/features/feature-one:/workspace/features/feature-one/data',
-    );
-    expect(args).toContain(
-      '/external/report-root:/workspace/features/feature-one/external/reports:ro',
-    );
-  });
 });

@@ -12,11 +12,9 @@ import {
   createTask,
   createTodayPlan,
   createTodayPlanItem,
-  createWorkflow,
   getAllTasks,
   getAskQuestion,
   listMemories,
-  listWorkbenchActionItemsBySource,
   getMessagesSince,
   getRegisteredGroup,
   getTaskById,
@@ -31,8 +29,6 @@ import { callAnthropicMessages } from './agent-api.js';
 import { processTaskIpc, IpcDeps } from './ipc.js';
 import { RegisteredGroup } from './types.js';
 import { handleAskQuestionResponse } from './ask-user-question.js';
-import { initWorkflow } from './workflow.js';
-import { syncWorkbenchOnWorkflowCreated } from './workbench-store.js';
 
 // Set up registered groups used across tests
 const MAIN_GROUP: RegisteredGroup = {
@@ -1018,42 +1014,12 @@ describe('ask_user_question', () => {
     expect(res.answers.checks).toEqual(['回归', '额外巡检']);
   });
 
-  it('keeps workbench ask options aligned with the current question', async () => {
-    initWorkflow({
-      registeredGroups: () => groups,
-      enqueueMessageCheck: () => {},
-    });
-    createWorkflow({
-      id: 'wf-ask-workbench-sync',
-      name: '工作台提问同步',
-      service: 'order-service',
-      start_from: 'testing',
-      context: {
-        main_branch: '',
-        work_branch: 'feature/ask-sync',
-        staging_base_branch: 'staging',
-        deliverable: '2026-04-15_ask_sync',
-        staging_work_branch: 'staging-deploy/feature-ask-sync',
-        access_token: '',
-      },
-      status: 'testing',
-      current_delegation_id: '',
-      round: 0,
-      source_jid: 'main@g.us',
-      paused_from: null,
-      workflow_type: 'dev_test',
-      created_at: '2026-04-15T00:00:00.000Z',
-      updated_at: '2026-04-15T00:00:00.000Z',
-    });
-    syncWorkbenchOnWorkflowCreated('wf-ask-workbench-sync');
-
+  it('advances the stored current question after each answer', async () => {
     const requestId = rid('aq');
     await processTaskIpc(
       {
         type: 'ask_user_question',
         requestId,
-        workflowId: 'wf-ask-workbench-sync',
-        stageKey: 'testing',
         questions: [
           {
             id: 'env',
@@ -1072,14 +1038,11 @@ describe('ask_user_question', () => {
       deps,
     );
 
-    let item = listWorkbenchActionItemsBySource(
-      'ask_user_question',
-      requestId,
-    )[0];
-    let extra = item?.extra_json ? JSON.parse(item.extra_json) : undefined;
-    expect(item?.body).toBe('请选择环境');
-    expect(extra?.current_index).toBe(0);
-    expect(extra?.current_question).toMatchObject({
+    let question = getAskQuestion(requestId);
+    expect(question?.current_index).toBe(0);
+    expect(
+      JSON.parse(question?.payload_json || '{}').questions[0],
+    ).toMatchObject({
       id: 'env',
       options: [{ label: '测试' }, { label: '预发' }],
     });
@@ -1096,11 +1059,11 @@ describe('ask_user_question', () => {
     expect(answered.ok).toBe(true);
     expect(answered.completed).toBe(false);
 
-    item = listWorkbenchActionItemsBySource('ask_user_question', requestId)[0];
-    extra = item?.extra_json ? JSON.parse(item.extra_json) : undefined;
-    expect(item?.body).toBe('请选择发布策略');
-    expect(extra?.current_index).toBe(1);
-    expect(extra?.current_question).toMatchObject({
+    question = getAskQuestion(requestId);
+    expect(question?.current_index).toBe(1);
+    expect(
+      JSON.parse(question?.payload_json || '{}').questions[1],
+    ).toMatchObject({
       id: 'strategy',
       options: [{ label: '灰度' }, { label: '全量' }],
     });
@@ -2430,7 +2393,6 @@ describe('query_recent_today_plan_details authorization', () => {
       plan_id: plan.id,
       title: '整理上下文',
       associations_json: JSON.stringify({
-        workbench_task_ids: [],
         chat_selections: [],
         services: [{ service: 'icarus', branches: [] }],
       }),
@@ -2468,7 +2430,6 @@ describe('query_recent_today_plan_details authorization', () => {
       plan_id: plan.id,
       title: '同步上下文',
       associations_json: JSON.stringify({
-        workbench_task_ids: [],
         chat_selections: [],
         services: [],
       }),

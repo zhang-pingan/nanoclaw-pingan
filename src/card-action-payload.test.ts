@@ -6,10 +6,10 @@ import {
 } from './card-action-payload.js';
 
 describe('card-action-payload', () => {
-  it('prefers nested payload JSON over legacy flat form values', () => {
+  it('prefers nested payload JSON over flat form values', () => {
     expect(
       buildCardActionPayload({
-        action: 'workflow_interrupt_resume',
+        action: 'assistant_evolution_action',
         resume_action: 'submit',
         payload: JSON.stringify({ answer: 'nested', count: 2 }),
         answer: 'flat',
@@ -20,7 +20,7 @@ describe('card-action-payload', () => {
   it('falls back to flat values with reserved fields removed', () => {
     expect(
       buildCardActionPayload({
-        action: 'workflow_interrupt_resume',
+        action: 'ask_question_answer',
         answer: 'flat',
         resume_action: 'submit',
       }),

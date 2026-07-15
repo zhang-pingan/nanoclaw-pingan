@@ -38,28 +38,7 @@ import {
   WikiPageRecord,
   WikiRelationRecord,
   WikiSearchResult,
-  WorkbenchActionItemRecord,
-  WorkbenchArtifactRecord,
-  WorkbenchCommentRecord,
-  WorkbenchContextAssetRecord,
-  WorkbenchEventRecord,
-  WorkbenchSubtaskRecord,
-  WorkbenchTaskRecord,
-  WorkflowStageEvaluationRecord,
-  WorkflowCheckpointRecord,
-  WorkflowEventRecord,
-  WorkflowInterruptRecord,
-  WorkflowInterruptResumeAttemptRecord,
-  WorkflowOutboxRecord,
-  Workflow,
 } from './types.js';
-import {
-  cloneWorkflowContext,
-  mergeWorkflowContext,
-  parseWorkflowContext,
-  serializeWorkflowContext,
-  WorkflowContext,
-} from './workflow-context.js';
 
 let db: Database.Database;
 
@@ -216,7 +195,92 @@ function recreateWikiFtsIfNeeded(database: Database.Database): void {
   logger.info('Wiki page FTS schema rebuilt with search aliases');
 }
 
+function quoteSqlIdentifier(value: string): string {
+  return `"${value.replaceAll('"', '""')}"`;
+}
+
+function removeLegacyColumns(
+  database: Database.Database,
+  tableName: string,
+  isLegacyColumn: (columnName: string) => boolean,
+): void {
+  const tableExists = database
+    .prepare(
+      `SELECT 1 FROM sqlite_schema WHERE type = 'table' AND name = ? LIMIT 1`,
+    )
+    .get(tableName);
+  if (!tableExists) return;
+
+  const columns = database
+    .prepare(`SELECT name FROM pragma_table_info(?)`)
+    .all(tableName) as Array<{ name: string }>;
+  const legacyColumns = columns
+    .map((column) => column.name)
+    .filter(isLegacyColumn);
+  if (legacyColumns.length === 0) return;
+
+  const legacyColumnSet = new Set(legacyColumns);
+  const indexes = database
+    .prepare(`SELECT name, origin FROM pragma_index_list(?)`)
+    .all(tableName) as Array<{ name: string; origin: string }>;
+  for (const index of indexes) {
+    if (index.origin !== 'c') continue;
+    const indexColumns = database
+      .prepare(`SELECT name FROM pragma_index_info(?)`)
+      .all(index.name) as Array<{ name: string }>;
+    if (indexColumns.some((column) => legacyColumnSet.has(column.name))) {
+      database.exec(`DROP INDEX ${quoteSqlIdentifier(index.name)}`);
+    }
+  }
+
+  for (const columnName of legacyColumns) {
+    database.exec(
+      `ALTER TABLE ${quoteSqlIdentifier(tableName)} DROP COLUMN ${quoteSqlIdentifier(columnName)}`,
+    );
+  }
+}
+
+function removeLegacyRuntimeSchema(database: Database.Database): void {
+  const cleanup = database.transaction(() => {
+    const legacyTables = database
+      .prepare(
+        `SELECT name
+          FROM sqlite_schema
+          WHERE type = 'table'
+            AND (name = 'workflows' OR name GLOB 'workflow_*' OR name GLOB 'workbench_*')`,
+      )
+      .all() as Array<{ name: string }>;
+    for (const table of legacyTables) {
+      database.exec(`DROP TABLE ${quoteSqlIdentifier(table.name)}`);
+    }
+
+    removeLegacyColumns(
+      database,
+      'messages',
+      (column) => column.startsWith('workflow_'),
+    );
+    removeLegacyColumns(
+      database,
+      'assistant_chat_messages',
+      (column) => column.startsWith('workflow_'),
+    );
+    removeLegacyColumns(
+      database,
+      'delegations',
+      (column) =>
+        column.startsWith('workflow_') || column.startsWith('handoff_'),
+    );
+    removeLegacyColumns(
+      database,
+      'agent_queries',
+      (column) => column.startsWith('workflow_') || column === 'stage_key',
+    );
+  });
+  cleanup();
+}
+
 function createSchema(database: Database.Database): void {
+  removeLegacyRuntimeSchema(database);
   database.exec(`
     CREATE TABLE IF NOT EXISTS chats (
       jid TEXT PRIMARY KEY,
@@ -312,13 +376,10 @@ function createSchema(database: Database.Database): void {
       source_ref_id TEXT,
       chat_jid TEXT,
       group_folder TEXT,
-      workflow_type TEXT,
       service TEXT,
       role TEXT,
       task_id TEXT,
       task_title TEXT,
-      workflow_id TEXT,
-      stage_key TEXT,
       delegation_id TEXT,
       session_id TEXT,
       selected_model TEXT,
@@ -370,8 +431,6 @@ function createSchema(database: Database.Database): void {
       ON agent_queries(started_at DESC);
     CREATE INDEX IF NOT EXISTS idx_agent_queries_group_status
       ON agent_queries(group_folder, status, started_at DESC);
-    CREATE INDEX IF NOT EXISTS idx_agent_queries_workflow
-      ON agent_queries(workflow_id, stage_key, started_at DESC);
     CREATE INDEX IF NOT EXISTS idx_agent_queries_failure
       ON agent_queries(failure_type, started_at DESC);
     CREATE INDEX IF NOT EXISTS idx_agent_queries_source
@@ -423,7 +482,6 @@ function createSchema(database: Database.Database): void {
   `);
 
   for (const statement of [
-    `ALTER TABLE agent_queries ADD COLUMN workflow_type TEXT`,
     `ALTER TABLE agent_queries ADD COLUMN service TEXT`,
     `ALTER TABLE agent_queries ADD COLUMN role TEXT`,
     `ALTER TABLE agent_queries ADD COLUMN task_id TEXT`,
@@ -457,8 +515,6 @@ function createSchema(database: Database.Database): void {
   database.exec(`
     CREATE INDEX IF NOT EXISTS idx_agent_queries_service
       ON agent_queries(service, started_at DESC);
-    CREATE INDEX IF NOT EXISTS idx_agent_queries_workflow_type
-      ON agent_queries(workflow_type, stage_key, started_at DESC);
   `);
 
   // Add context_mode column if it doesn't exist (migration for existing DBs)
@@ -537,266 +593,13 @@ function createSchema(database: Database.Database): void {
       task TEXT NOT NULL,
       status TEXT NOT NULL DEFAULT 'pending',
       result TEXT,
+      outcome TEXT,
+      requester_jid TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_delegations_source ON delegations(source_jid, status);
     CREATE INDEX IF NOT EXISTS idx_delegations_target ON delegations(target_jid, status);
-  `);
-
-  // Add workflows table if it doesn't exist (migration for existing DBs)
-  database.exec(`
-    CREATE TABLE IF NOT EXISTS workflows (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      service TEXT NOT NULL,
-      start_from TEXT NOT NULL DEFAULT 'plan',
-      context_json TEXT NOT NULL DEFAULT '{}',
-      status TEXT NOT NULL DEFAULT 'dev',
-      current_delegation_id TEXT DEFAULT '',
-      round INTEGER DEFAULT 0,
-      source_jid TEXT NOT NULL,
-      paused_from TEXT,
-      workflow_type TEXT DEFAULT 'dev_test',
-      feature_id TEXT,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    );
-    CREATE INDEX IF NOT EXISTS idx_workflows_status ON workflows(status);
-    CREATE INDEX IF NOT EXISTS idx_workflows_delegation ON workflows(current_delegation_id);
-  `);
-
-  database.exec(`
-    CREATE TABLE IF NOT EXISTS workbench_tasks (
-      id TEXT PRIMARY KEY,
-      workflow_id TEXT NOT NULL UNIQUE,
-      source_jid TEXT NOT NULL,
-      title TEXT NOT NULL,
-      service TEXT NOT NULL,
-      start_from TEXT NOT NULL DEFAULT 'plan',
-      workflow_type TEXT NOT NULL,
-      status TEXT NOT NULL,
-      task_state TEXT NOT NULL DEFAULT 'running',
-      current_stage TEXT NOT NULL,
-      summary TEXT,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL,
-      last_event_at TEXT
-    );
-    CREATE INDEX IF NOT EXISTS idx_workbench_tasks_status ON workbench_tasks(status, updated_at);
-
-    CREATE TABLE IF NOT EXISTS workbench_subtasks (
-      id TEXT PRIMARY KEY,
-      task_id TEXT NOT NULL,
-      workflow_id TEXT NOT NULL,
-      delegation_id TEXT,
-      stage_key TEXT NOT NULL,
-      title TEXT NOT NULL,
-      role TEXT,
-      group_folder TEXT,
-      status TEXT NOT NULL,
-      input_summary TEXT,
-      output_summary TEXT,
-      started_at TEXT,
-      finished_at TEXT,
-      updated_at TEXT NOT NULL
-    );
-    CREATE INDEX IF NOT EXISTS idx_workbench_subtasks_task ON workbench_subtasks(task_id, updated_at);
-    CREATE INDEX IF NOT EXISTS idx_workbench_subtasks_workflow_stage ON workbench_subtasks(workflow_id, stage_key);
-
-    CREATE TABLE IF NOT EXISTS workbench_events (
-      id TEXT PRIMARY KEY,
-      task_id TEXT NOT NULL,
-      subtask_id TEXT,
-      event_type TEXT NOT NULL,
-      title TEXT NOT NULL,
-      body TEXT,
-      raw_ref_type TEXT,
-      raw_ref_id TEXT,
-      created_at TEXT NOT NULL
-    );
-    CREATE INDEX IF NOT EXISTS idx_workbench_events_task ON workbench_events(task_id, created_at);
-
-    CREATE TABLE IF NOT EXISTS workbench_artifacts (
-      id TEXT PRIMARY KEY,
-      task_id TEXT NOT NULL,
-      workflow_id TEXT NOT NULL,
-      artifact_type TEXT NOT NULL,
-      title TEXT NOT NULL,
-      path TEXT NOT NULL,
-      location_kind TEXT,
-      location_uri TEXT,
-      host_path TEXT,
-      container_path TEXT,
-      feature_id TEXT,
-      metadata_json TEXT,
-      source_role TEXT,
-      created_at TEXT NOT NULL
-    );
-    CREATE INDEX IF NOT EXISTS idx_workbench_artifacts_task ON workbench_artifacts(task_id, created_at);
-
-    CREATE TABLE IF NOT EXISTS workbench_action_items (
-      id TEXT PRIMARY KEY,
-      task_id TEXT NOT NULL,
-      workflow_id TEXT NOT NULL,
-      subtask_id TEXT,
-      stage_key TEXT,
-      delegation_id TEXT,
-      group_folder TEXT,
-      item_type TEXT NOT NULL,
-      status TEXT NOT NULL,
-      title TEXT NOT NULL,
-      body TEXT,
-      source_type TEXT NOT NULL,
-      source_ref_id TEXT,
-      replyable INTEGER NOT NULL DEFAULT 0,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL,
-      resolved_at TEXT,
-      extra_json TEXT
-    );
-    CREATE INDEX IF NOT EXISTS idx_workbench_action_items_task ON workbench_action_items(task_id, created_at);
-    CREATE INDEX IF NOT EXISTS idx_workbench_action_items_stage ON workbench_action_items(workflow_id, stage_key, status, updated_at);
-    CREATE INDEX IF NOT EXISTS idx_workbench_action_items_source ON workbench_action_items(source_type, source_ref_id);
-
-    CREATE TABLE IF NOT EXISTS workbench_comments (
-      id TEXT PRIMARY KEY,
-      task_id TEXT NOT NULL,
-      workflow_id TEXT NOT NULL,
-      author TEXT NOT NULL,
-      content TEXT NOT NULL,
-      created_at TEXT NOT NULL
-    );
-    CREATE INDEX IF NOT EXISTS idx_workbench_comments_task ON workbench_comments(task_id, created_at);
-
-    CREATE TABLE IF NOT EXISTS workbench_context_assets (
-      id TEXT PRIMARY KEY,
-      task_id TEXT NOT NULL,
-      workflow_id TEXT NOT NULL,
-      asset_type TEXT NOT NULL,
-      title TEXT NOT NULL,
-      path TEXT,
-      url TEXT,
-      note TEXT,
-      created_at TEXT NOT NULL
-    );
-    CREATE INDEX IF NOT EXISTS idx_workbench_assets_task ON workbench_context_assets(task_id, created_at);
-
-    CREATE TABLE IF NOT EXISTS workflow_stage_evaluations (
-      id TEXT PRIMARY KEY,
-      workflow_id TEXT NOT NULL,
-      delegation_id TEXT,
-      stage_key TEXT NOT NULL,
-      evaluator_type TEXT NOT NULL,
-      status TEXT NOT NULL,
-      score INTEGER DEFAULT 0,
-      summary TEXT,
-      findings_json TEXT,
-      evidence_json TEXT,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    );
-    CREATE INDEX IF NOT EXISTS idx_workflow_stage_evals_workflow_stage
-      ON workflow_stage_evaluations(workflow_id, stage_key, updated_at);
-
-    CREATE TABLE IF NOT EXISTS workflow_interrupts (
-      id TEXT PRIMARY KEY,
-      workflow_id TEXT NOT NULL,
-      state_key TEXT NOT NULL,
-      kind TEXT NOT NULL,
-      status TEXT NOT NULL,
-      title TEXT NOT NULL,
-      body TEXT,
-      resume_payload_schema_json TEXT,
-      allowed_actions_json TEXT NOT NULL,
-      allowed_channels_json TEXT,
-      assigned_role TEXT,
-      action_payload_json TEXT,
-      created_by TEXT NOT NULL,
-      resumed_by TEXT,
-      resume_action TEXT,
-      resume_payload_json TEXT,
-      resume_error TEXT,
-      idempotency_key TEXT NOT NULL UNIQUE,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL,
-      expires_at TEXT,
-      resumed_at TEXT,
-      cancelled_at TEXT,
-      expired_at TEXT
-    );
-    CREATE INDEX IF NOT EXISTS idx_workflow_interrupts_workflow
-      ON workflow_interrupts(workflow_id, status, updated_at);
-    CREATE INDEX IF NOT EXISTS idx_workflow_interrupts_status
-      ON workflow_interrupts(status, expires_at);
-
-    CREATE TABLE IF NOT EXISTS workflow_events (
-      id TEXT PRIMARY KEY,
-      workflow_id TEXT NOT NULL,
-      event_type TEXT NOT NULL,
-      state_key TEXT,
-      ref_type TEXT,
-      ref_id TEXT,
-      actor_json TEXT,
-      payload_json TEXT,
-      idempotency_key TEXT,
-      created_at TEXT NOT NULL
-    );
-    CREATE INDEX IF NOT EXISTS idx_workflow_events_workflow
-      ON workflow_events(workflow_id, created_at);
-    CREATE UNIQUE INDEX IF NOT EXISTS idx_workflow_events_idempotency
-      ON workflow_events(idempotency_key)
-      WHERE idempotency_key IS NOT NULL;
-
-    CREATE TABLE IF NOT EXISTS workflow_interrupt_resume_attempts (
-      id TEXT PRIMARY KEY,
-      interrupt_id TEXT NOT NULL,
-      workflow_id TEXT NOT NULL,
-      actor_json TEXT NOT NULL,
-      resume_action TEXT NOT NULL,
-      resume_payload_json TEXT,
-      idempotency_key TEXT,
-      status TEXT NOT NULL,
-      result_json TEXT,
-      conflict_reason TEXT,
-      created_at TEXT NOT NULL
-    );
-    CREATE UNIQUE INDEX IF NOT EXISTS idx_workflow_interrupt_resume_attempts_idempotency
-      ON workflow_interrupt_resume_attempts(interrupt_id, idempotency_key)
-      WHERE idempotency_key IS NOT NULL;
-    CREATE INDEX IF NOT EXISTS idx_workflow_interrupt_resume_attempts_interrupt
-      ON workflow_interrupt_resume_attempts(interrupt_id, created_at);
-
-    CREATE TABLE IF NOT EXISTS workflow_checkpoints (
-      id TEXT PRIMARY KEY,
-      workflow_id TEXT NOT NULL,
-      state_key TEXT NOT NULL,
-      checkpoint_version INTEGER NOT NULL,
-      checkpoint_json TEXT NOT NULL,
-      created_at TEXT NOT NULL
-    );
-    CREATE INDEX IF NOT EXISTS idx_workflow_checkpoints_workflow
-      ON workflow_checkpoints(workflow_id, checkpoint_version DESC);
-
-    CREATE TABLE IF NOT EXISTS workflow_outbox (
-      id TEXT PRIMARY KEY,
-      workflow_id TEXT NOT NULL,
-      event_id TEXT,
-      effect_type TEXT NOT NULL,
-      channel TEXT,
-      status TEXT NOT NULL,
-      payload_json TEXT NOT NULL,
-      idempotency_key TEXT NOT NULL UNIQUE,
-      attempts INTEGER NOT NULL DEFAULT 0,
-      next_attempt_at TEXT,
-      last_error TEXT,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    );
-    CREATE INDEX IF NOT EXISTS idx_workflow_outbox_status
-      ON workflow_outbox(status, next_attempt_at);
-    CREATE INDEX IF NOT EXISTS idx_workflow_outbox_workflow
-      ON workflow_outbox(workflow_id, created_at);
   `);
 
   database.exec(`
@@ -922,7 +725,6 @@ function createSchema(database: Database.Database): void {
       timestamp TEXT,
       is_from_me INTEGER,
       is_bot_message INTEGER DEFAULT 0,
-      workflow_id TEXT,
       file_path TEXT,
       PRIMARY KEY (chat_jid, id)
     );
@@ -1023,7 +825,6 @@ function createSchema(database: Database.Database): void {
       timestamp,
       is_from_me,
       is_bot_message,
-      workflow_id,
       file_path
     )
     SELECT
@@ -1035,7 +836,6 @@ function createSchema(database: Database.Database): void {
       timestamp,
       is_from_me,
       is_bot_message,
-      NULL,
       NULL
     FROM messages
     WHERE chat_jid LIKE 'assistant:%';
@@ -1079,39 +879,6 @@ function createSchema(database: Database.Database): void {
     /* column already exists */
   }
 
-  // Add start_from column to workflows (migration for existing DBs)
-  try {
-    database.exec(
-      `ALTER TABLE workflows ADD COLUMN start_from TEXT DEFAULT 'plan'`,
-    );
-  } catch {
-    /* column already exists */
-  }
-
-  // Add paused_from column to workflows before schema normalization.
-  try {
-    database.exec(`ALTER TABLE workflows ADD COLUMN paused_from TEXT`);
-  } catch {
-    /* column already exists */
-  }
-
-  // Add workflow_type column to workflows before schema normalization.
-  try {
-    database.exec(
-      `ALTER TABLE workflows ADD COLUMN workflow_type TEXT DEFAULT 'dev_test'`,
-    );
-  } catch {
-    /* column already exists */
-  }
-
-  try {
-    database.exec(`ALTER TABLE workflows ADD COLUMN feature_id TEXT`);
-  } catch {
-    /* column already exists */
-  }
-
-  normalizeWorkflowSchema(database);
-
   try {
     database.exec(
       `ALTER TABLE today_plans ADD COLUMN status TEXT NOT NULL DEFAULT 'active'`,
@@ -1141,96 +908,6 @@ function createSchema(database: Database.Database): void {
     );
   } catch {
     /* ignore */
-  }
-
-  // Add start_from column to workbench_tasks (migration for existing DBs)
-  try {
-    database.exec(
-      `ALTER TABLE workbench_tasks ADD COLUMN start_from TEXT DEFAULT 'plan'`,
-    );
-  } catch {
-    /* column already exists */
-  }
-
-  // Add persisted task_state to workbench_tasks (migration for existing DBs).
-  try {
-    database.exec(
-      `ALTER TABLE workbench_tasks ADD COLUMN task_state TEXT NOT NULL DEFAULT 'running'`,
-    );
-  } catch {
-    /* column already exists */
-  }
-  database.exec(`
-    UPDATE workbench_tasks
-    SET task_state = CASE
-      WHEN LOWER(status) IN ('cancelled', 'canceled') THEN 'cancelled'
-      WHEN LOWER(status) IN (
-        'passed', 'completed', 'complete', 'done', 'success', 'succeeded',
-        'closed', 'resolved'
-      ) THEN 'success'
-      WHEN LOWER(status) IN ('failed', 'error', 'ops_failed') THEN 'failed'
-      WHEN LOWER(status) LIKE '%_passed'
-        OR LOWER(status) LIKE '%_completed'
-        OR LOWER(status) LIKE '%_done'
-        OR LOWER(status) LIKE '%_success' THEN 'success'
-      WHEN LOWER(status) LIKE '%_failed'
-        OR LOWER(status) LIKE '%_error' THEN 'failed'
-      ELSE task_state
-    END
-    WHERE task_state IS NULL
-      OR task_state = 'running'
-      OR task_state NOT IN ('running', 'success', 'failed', 'cancelled')
-  `);
-
-  for (const column of [
-    'location_kind TEXT',
-    'location_uri TEXT',
-    'host_path TEXT',
-    'container_path TEXT',
-    'feature_id TEXT',
-    'metadata_json TEXT',
-  ]) {
-    try {
-      database.exec(`ALTER TABLE workbench_artifacts ADD COLUMN ${column}`);
-    } catch {
-      /* column already exists */
-    }
-  }
-
-  // Add workflow_id column to delegations (migration for existing DBs)
-  try {
-    database.exec(`ALTER TABLE delegations ADD COLUMN workflow_id TEXT`);
-    database.exec(
-      `CREATE INDEX IF NOT EXISTS idx_delegations_workflow ON delegations(workflow_id)`,
-    );
-  } catch {
-    /* column already exists */
-  }
-
-  for (const column of [
-    'handoff_role TEXT',
-    'handoff_skill TEXT',
-    'handoff_contract_json TEXT',
-    'handoff_input_json TEXT',
-    'handoff_result_json TEXT',
-    'handoff_validation_status TEXT',
-    'handoff_validation_errors_json TEXT',
-  ]) {
-    try {
-      database.exec(`ALTER TABLE delegations ADD COLUMN ${column}`);
-    } catch {
-      /* column already exists */
-    }
-  }
-
-  // Add workflow_id column to messages (migration for existing DBs)
-  try {
-    database.exec(`ALTER TABLE messages ADD COLUMN workflow_id TEXT`);
-    database.exec(
-      `CREATE INDEX IF NOT EXISTS idx_messages_workflow ON messages(workflow_id)`,
-    );
-  } catch {
-    /* column already exists */
   }
 
   // Structured memory store (new memory system, independent from file-based memory).
@@ -1495,149 +1172,6 @@ function createSchema(database: Database.Database): void {
   }
 }
 
-function normalizeWorkflowSchema(database: Database.Database): void {
-  const columns = database.pragma('table_info(workflows)') as Array<{
-    name: string;
-  }>;
-  const columnNames = new Set(columns.map((column) => column.name));
-  const hasLegacyContextColumns =
-    columnNames.has('main_branch') ||
-    columnNames.has('work_branch') ||
-    columnNames.has('deliverable') ||
-    columnNames.has('staging_base_branch') ||
-    columnNames.has('staging_work_branch') ||
-    columnNames.has('access_token');
-  const needsContextColumn = !columnNames.has('context_json');
-
-  if (!hasLegacyContextColumns && !needsContextColumn) {
-    return;
-  }
-
-  database.exec(`
-    BEGIN;
-    CREATE TABLE workflows_next (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      service TEXT NOT NULL,
-      start_from TEXT NOT NULL DEFAULT 'plan',
-      context_json TEXT NOT NULL DEFAULT '{}',
-      status TEXT NOT NULL DEFAULT 'dev',
-      current_delegation_id TEXT DEFAULT '',
-      round INTEGER DEFAULT 0,
-      source_jid TEXT NOT NULL,
-      paused_from TEXT,
-      workflow_type TEXT DEFAULT 'dev_test',
-      feature_id TEXT,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    );
-  `);
-
-  const selectRows = database.prepare(`
-    SELECT
-      id,
-      name,
-      service,
-      start_from,
-      status,
-      current_delegation_id,
-      round,
-      source_jid,
-      paused_from,
-      workflow_type,
-      ${columnNames.has('feature_id') ? 'feature_id' : 'NULL AS feature_id'},
-      created_at,
-      updated_at,
-      ${columnNames.has('context_json') ? 'context_json' : 'NULL AS context_json'},
-      ${columnNames.has('main_branch') ? 'main_branch' : "'' AS main_branch"},
-      ${columnNames.has('work_branch') ? 'work_branch' : "'' AS work_branch"},
-      ${columnNames.has('deliverable') ? 'deliverable' : "'' AS deliverable"},
-      ${columnNames.has('staging_base_branch') ? 'staging_base_branch' : "'' AS staging_base_branch"},
-      ${columnNames.has('staging_work_branch') ? 'staging_work_branch' : "'' AS staging_work_branch"},
-      ${columnNames.has('access_token') ? 'access_token' : "'' AS access_token"}
-    FROM workflows
-  `);
-
-  const insertRow = database.prepare(`
-    INSERT INTO workflows_next (
-      id, name, service, start_from, context_json, status,
-      current_delegation_id, round, source_jid, paused_from,
-      workflow_type, feature_id, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
-
-  for (const row of selectRows.all() as Array<Record<string, unknown>>) {
-    const context = mergeWorkflowContext(
-      parseWorkflowContext(
-        typeof row.context_json === 'string' ? row.context_json : undefined,
-      ),
-      {
-        main_branch: row.main_branch,
-        work_branch: row.work_branch,
-        deliverable: row.deliverable,
-        staging_base_branch: row.staging_base_branch,
-        staging_work_branch: row.staging_work_branch,
-        access_token: row.access_token,
-      },
-    );
-    insertRow.run(
-      row.id,
-      row.name,
-      row.service,
-      row.start_from,
-      serializeWorkflowContext(context),
-      row.status,
-      row.current_delegation_id,
-      row.round,
-      row.source_jid,
-      row.paused_from ?? null,
-      row.workflow_type ?? 'dev_test',
-      row.feature_id ?? null,
-      row.created_at,
-      row.updated_at,
-    );
-  }
-
-  database.exec(`
-    DROP TABLE workflows;
-    ALTER TABLE workflows_next RENAME TO workflows;
-    CREATE INDEX idx_workflows_status ON workflows(status);
-    CREATE INDEX idx_workflows_delegation ON workflows(current_delegation_id);
-    COMMIT;
-  `);
-}
-
-function hydrateWorkflowRow(
-  row: Record<string, unknown> | undefined,
-): Workflow | undefined {
-  if (!row) return undefined;
-  const context = parseWorkflowContext(
-    typeof row.context_json === 'string' ? row.context_json : undefined,
-  );
-  return {
-    id: String(row.id),
-    name: String(row.name),
-    service: String(row.service),
-    start_from: String(row.start_from),
-    context,
-    status: String(row.status),
-    current_delegation_id: String(row.current_delegation_id || ''),
-    round: Number(row.round || 0),
-    source_jid: String(row.source_jid),
-    paused_from:
-      row.paused_from === null || row.paused_from === undefined
-        ? null
-        : String(row.paused_from),
-    workflow_type: String(row.workflow_type || 'dev_test'),
-    feature_id:
-      row.feature_id === null || row.feature_id === undefined
-        ? null
-        : String(row.feature_id),
-    created_at: String(row.created_at),
-    updated_at: String(row.updated_at),
-  };
-}
-
 export function initDatabase(): void {
   const dbPath = path.join(STORE_DIR, 'messages.db');
   fs.mkdirSync(path.dirname(dbPath), { recursive: true });
@@ -1650,8 +1184,8 @@ export function initDatabase(): void {
 }
 
 /** @internal - for tests only. Creates a fresh in-memory database. */
-export function _initTestDatabase(): void {
-  db = new Database(':memory:');
+export function _initTestDatabase(database?: Database.Database): void {
+  db = database ?? new Database(':memory:');
   createSchema(db);
 }
 
@@ -1789,9 +1323,8 @@ export function storeMessage(msg: NewMessage): void {
       is_from_me,
       is_bot_message,
       model,
-      model_reason,
-      workflow_id
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      model_reason
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id, chat_jid) DO UPDATE SET
       sender = excluded.sender,
       sender_name = excluded.sender_name,
@@ -1800,8 +1333,7 @@ export function storeMessage(msg: NewMessage): void {
       is_from_me = excluded.is_from_me,
       is_bot_message = excluded.is_bot_message,
       model = COALESCE(excluded.model, messages.model),
-      model_reason = COALESCE(excluded.model_reason, messages.model_reason),
-      workflow_id = COALESCE(excluded.workflow_id, messages.workflow_id)`,
+      model_reason = COALESCE(excluded.model_reason, messages.model_reason)`,
   ).run(
     msg.id,
     msg.chat_jid,
@@ -1813,7 +1345,6 @@ export function storeMessage(msg: NewMessage): void {
     msg.is_bot_message ? 1 : 0,
     msg.model ?? null,
     msg.model_reason ?? null,
-    msg.workflow_id ?? null,
   );
 }
 
@@ -1867,7 +1398,6 @@ export function storeMessageDirect(msg: {
   is_bot_message?: boolean;
   model?: string | null;
   model_reason?: string | null;
-  workflow_id?: string | null;
 }): void {
   db.prepare(
     `INSERT INTO messages (
@@ -1880,9 +1410,8 @@ export function storeMessageDirect(msg: {
       is_from_me,
       is_bot_message,
       model,
-      model_reason,
-      workflow_id
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      model_reason
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id, chat_jid) DO UPDATE SET
       sender = excluded.sender,
       sender_name = excluded.sender_name,
@@ -1891,8 +1420,7 @@ export function storeMessageDirect(msg: {
       is_from_me = excluded.is_from_me,
       is_bot_message = excluded.is_bot_message,
       model = COALESCE(excluded.model, messages.model),
-      model_reason = COALESCE(excluded.model_reason, messages.model_reason),
-      workflow_id = COALESCE(excluded.workflow_id, messages.workflow_id)`,
+      model_reason = COALESCE(excluded.model_reason, messages.model_reason)`,
   ).run(
     msg.id,
     msg.chat_jid,
@@ -1904,7 +1432,6 @@ export function storeMessageDirect(msg: {
     msg.is_bot_message ? 1 : 0,
     msg.model ?? null,
     msg.model_reason ?? null,
-    msg.workflow_id ?? null,
   );
 }
 
@@ -1917,7 +1444,6 @@ export function storeAssistantChatMessage(msg: {
   timestamp: string;
   is_from_me: boolean;
   is_bot_message?: boolean;
-  workflow_id?: string | null;
   file_path?: string | null;
 }): void {
   db.prepare(
@@ -1930,9 +1456,8 @@ export function storeAssistantChatMessage(msg: {
       timestamp,
       is_from_me,
       is_bot_message,
-      workflow_id,
       file_path
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(chat_jid, id) DO UPDATE SET
       sender = excluded.sender,
       sender_name = excluded.sender_name,
@@ -1940,7 +1465,6 @@ export function storeAssistantChatMessage(msg: {
       timestamp = excluded.timestamp,
       is_from_me = excluded.is_from_me,
       is_bot_message = excluded.is_bot_message,
-      workflow_id = COALESCE(excluded.workflow_id, assistant_chat_messages.workflow_id),
       file_path = COALESCE(excluded.file_path, assistant_chat_messages.file_path)`,
   ).run(
     msg.id,
@@ -1951,7 +1475,6 @@ export function storeAssistantChatMessage(msg: {
     msg.timestamp,
     msg.is_from_me ? 1 : 0,
     msg.is_bot_message ? 1 : 0,
-    msg.workflow_id ?? null,
     msg.file_path ?? null,
   );
 }
@@ -1969,7 +1492,6 @@ export function listAssistantChatMessageRecords(
       SELECT id, chat_jid, sender, sender_name, content, timestamp,
              CAST(is_from_me AS INTEGER) AS is_from_me,
              CAST(is_bot_message AS INTEGER) AS is_bot_message,
-             workflow_id,
              file_path
         FROM assistant_chat_messages
        WHERE chat_jid = ?
@@ -1991,7 +1513,6 @@ export function getAssistantChatMessageById(
       SELECT id, chat_jid, sender, sender_name, content, timestamp,
              CAST(is_from_me AS INTEGER) AS is_from_me,
              CAST(is_bot_message AS INTEGER) AS is_bot_message,
-             workflow_id,
              file_path
         FROM assistant_chat_messages
        WHERE chat_jid = ? AND id = ?
@@ -2143,8 +1664,7 @@ export function listStoredMessagesByChat(
       `
       SELECT id, chat_jid, sender, sender_name, content, timestamp,
              CAST(is_from_me AS INTEGER) AS is_from_me,
-             CAST(is_bot_message AS INTEGER) AS is_bot_message,
-             workflow_id
+             CAST(is_bot_message AS INTEGER) AS is_bot_message
         FROM messages
        WHERE chat_jid = ?
        ORDER BY rowid DESC
@@ -2152,30 +1672,6 @@ export function listStoredMessagesByChat(
     `,
     )
     .all(chatJid, normalizedLimit) as StoredChatMessageRecord[];
-}
-
-export function listStoredMessagesByWorkflow(
-  chatJid: string,
-  workflowId: string,
-  limit: number = 1000,
-): StoredChatMessageRecord[] {
-  const normalizedLimit = Number.isFinite(limit)
-    ? Math.max(1, Math.trunc(limit))
-    : 1000;
-  return db
-    .prepare(
-      `
-      SELECT id, chat_jid, sender, sender_name, content, timestamp,
-             CAST(is_from_me AS INTEGER) AS is_from_me,
-             CAST(is_bot_message AS INTEGER) AS is_bot_message,
-             workflow_id
-        FROM messages
-       WHERE chat_jid = ? AND workflow_id = ?
-       ORDER BY rowid DESC
-       LIMIT ?
-    `,
-    )
-    .all(chatJid, workflowId, normalizedLimit) as StoredChatMessageRecord[];
 }
 
 export function listStoredMessagesByIds(
@@ -2196,8 +1692,7 @@ export function listStoredMessagesByIds(
       `
       SELECT id, chat_jid, sender, sender_name, content, timestamp,
              CAST(is_from_me AS INTEGER) AS is_from_me,
-             CAST(is_bot_message AS INTEGER) AS is_bot_message,
-             workflow_id
+             CAST(is_bot_message AS INTEGER) AS is_bot_message
         FROM messages
        WHERE chat_jid = ? AND id IN (${placeholders})
       `,
@@ -2692,18 +2187,10 @@ export function createDelegation(delegation: Delegation): void {
       status,
       result,
       requester_jid,
-      workflow_id,
-      handoff_role,
-      handoff_skill,
-      handoff_contract_json,
-      handoff_input_json,
-      handoff_result_json,
-      handoff_validation_status,
-      handoff_validation_errors_json,
       created_at,
       updated_at
     )
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     delegation.id,
     delegation.source_jid,
@@ -2714,14 +2201,6 @@ export function createDelegation(delegation: Delegation): void {
     delegation.status,
     delegation.result,
     delegation.requester_jid,
-    delegation.workflow_id ?? null,
-    delegation.handoff_role ?? null,
-    delegation.handoff_skill ?? null,
-    delegation.handoff_contract_json ?? null,
-    delegation.handoff_input_json ?? null,
-    delegation.handoff_result_json ?? null,
-    delegation.handoff_validation_status ?? null,
-    delegation.handoff_validation_errors_json ?? null,
     delegation.created_at,
     delegation.updated_at,
   );
@@ -2736,15 +2215,7 @@ export function getDelegation(id: string): Delegation | undefined {
 export function updateDelegation(
   id: string,
   updates: Partial<
-    Pick<
-      Delegation,
-      | 'status'
-      | 'result'
-      | 'outcome'
-      | 'handoff_result_json'
-      | 'handoff_validation_status'
-      | 'handoff_validation_errors_json'
-    >
+    Pick<Delegation, 'status' | 'result' | 'outcome'>
   >,
 ): void {
   const fields: string[] = ['updated_at = ?'];
@@ -2762,19 +2233,6 @@ export function updateDelegation(
     fields.push('outcome = ?');
     values.push(updates.outcome);
   }
-  if (updates.handoff_result_json !== undefined) {
-    fields.push('handoff_result_json = ?');
-    values.push(updates.handoff_result_json);
-  }
-  if (updates.handoff_validation_status !== undefined) {
-    fields.push('handoff_validation_status = ?');
-    values.push(updates.handoff_validation_status);
-  }
-  if (updates.handoff_validation_errors_json !== undefined) {
-    fields.push('handoff_validation_errors_json = ?');
-    values.push(updates.handoff_validation_errors_json);
-  }
-
   values.push(id);
   db.prepare(`UPDATE delegations SET ${fields.join(', ')} WHERE id = ?`).run(
     ...values,
@@ -2885,1273 +2343,6 @@ export function getExpiredPendingAskQuestions(
        ORDER BY expires_at ASC`,
     )
     .all(nowIso) as AskQuestionRecord[];
-}
-
-// --- Workflow accessors ---
-
-export function createWorkflow(workflow: Workflow): void {
-  db.prepare(
-    `INSERT INTO workflows (id, name, service, start_from, context_json, status, current_delegation_id, round, source_jid, paused_from, workflow_type, feature_id, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(
-    workflow.id,
-    workflow.name,
-    workflow.service,
-    workflow.start_from,
-    serializeWorkflowContext(workflow.context),
-    workflow.status,
-    workflow.current_delegation_id,
-    workflow.round,
-    workflow.source_jid,
-    workflow.paused_from || null,
-    workflow.workflow_type,
-    workflow.feature_id || null,
-    workflow.created_at,
-    workflow.updated_at,
-  );
-}
-
-export function getWorkflow(id: string): Workflow | undefined {
-  return hydrateWorkflowRow(
-    db.prepare('SELECT * FROM workflows WHERE id = ?').get(id) as
-      | Record<string, unknown>
-      | undefined,
-  );
-}
-
-export function updateWorkflow(
-  id: string,
-  updates: Partial<
-    Pick<
-      Workflow,
-      | 'status'
-      | 'current_delegation_id'
-      | 'round'
-      | 'paused_from'
-      | 'workflow_type'
-    >
-  > & {
-    context?: WorkflowContext;
-  },
-): void {
-  const fields: string[] = ['updated_at = ?'];
-  const values: unknown[] = [Date.now().toString()];
-  if (updates.context !== undefined) {
-    const currentContext = getWorkflow(id)?.context || {};
-    fields.push('context_json = ?');
-    values.push(
-      serializeWorkflowContext(
-        mergeWorkflowContext(currentContext, updates.context),
-      ),
-    );
-  }
-  if (updates.status !== undefined) {
-    fields.push('status = ?');
-    values.push(updates.status);
-  }
-  if (updates.current_delegation_id !== undefined) {
-    fields.push('current_delegation_id = ?');
-    values.push(updates.current_delegation_id);
-  }
-  if (updates.round !== undefined) {
-    fields.push('round = ?');
-    values.push(updates.round);
-  }
-  if (updates.paused_from !== undefined) {
-    fields.push('paused_from = ?');
-    values.push(updates.paused_from);
-  }
-  if (updates.workflow_type !== undefined) {
-    fields.push('workflow_type = ?');
-    values.push(updates.workflow_type);
-  }
-
-  values.push(id);
-  db.prepare(`UPDATE workflows SET ${fields.join(', ')} WHERE id = ?`).run(
-    ...values,
-  );
-}
-
-export function getWorkflowByDelegation(
-  delegationId: string,
-): Workflow | undefined {
-  // First try via delegation record's workflow_id (supports historical delegations)
-  const delegation = getDelegation(delegationId);
-  if (delegation?.workflow_id) {
-    return getWorkflow(delegation.workflow_id);
-  }
-  // Fallback: old records without workflow_id — match via current_delegation_id
-  return hydrateWorkflowRow(
-    db
-      .prepare('SELECT * FROM workflows WHERE current_delegation_id = ?')
-      .get(delegationId) as Record<string, unknown> | undefined,
-  );
-}
-
-export function getDelegationsByWorkflow(workflowId: string): Delegation[] {
-  return db
-    .prepare(
-      'SELECT * FROM delegations WHERE workflow_id = ? ORDER BY created_at ASC',
-    )
-    .all(workflowId) as Delegation[];
-}
-
-export function createWorkflowStageEvaluation(
-  record: WorkflowStageEvaluationRecord,
-): void {
-  db.prepare(
-    `INSERT OR REPLACE INTO workflow_stage_evaluations (
-      id, workflow_id, delegation_id, stage_key, evaluator_type, status, score,
-      summary, findings_json, evidence_json, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(
-    record.id,
-    record.workflow_id,
-    record.delegation_id,
-    record.stage_key,
-    record.evaluator_type,
-    record.status,
-    record.score,
-    record.summary,
-    record.findings_json,
-    record.evidence_json,
-    record.created_at,
-    record.updated_at,
-  );
-}
-
-export function getWorkflowStageEvaluation(
-  id: string,
-): WorkflowStageEvaluationRecord | undefined {
-  return db
-    .prepare('SELECT * FROM workflow_stage_evaluations WHERE id = ?')
-    .get(id) as WorkflowStageEvaluationRecord | undefined;
-}
-
-export function getLatestWorkflowStageEvaluation(
-  workflowId: string,
-  stageKey: string,
-): WorkflowStageEvaluationRecord | undefined {
-  return db
-    .prepare(
-      `SELECT * FROM workflow_stage_evaluations
-       WHERE workflow_id = ? AND stage_key = ?
-       ORDER BY updated_at DESC, rowid DESC
-       LIMIT 1`,
-    )
-    .get(workflowId, stageKey) as WorkflowStageEvaluationRecord | undefined;
-}
-
-export function listWorkflowStageEvaluationsByWorkflow(
-  workflowId: string,
-): WorkflowStageEvaluationRecord[] {
-  return db
-    .prepare(
-      `SELECT * FROM workflow_stage_evaluations
-       WHERE workflow_id = ?
-       ORDER BY updated_at DESC, rowid DESC`,
-    )
-    .all(workflowId) as WorkflowStageEvaluationRecord[];
-}
-
-export function createWorkflowInterrupt(record: WorkflowInterruptRecord): void {
-  db.prepare(
-    `INSERT OR IGNORE INTO workflow_interrupts (
-      id, workflow_id, state_key, kind, status, title, body,
-      resume_payload_schema_json, allowed_actions_json, allowed_channels_json,
-      assigned_role, action_payload_json, created_by, resumed_by,
-      resume_action, resume_payload_json, resume_error, idempotency_key,
-      created_at, updated_at, expires_at, resumed_at, cancelled_at, expired_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(
-    record.id,
-    record.workflow_id,
-    record.state_key,
-    record.kind,
-    record.status,
-    record.title,
-    record.body,
-    record.resume_payload_schema_json,
-    record.allowed_actions_json,
-    record.allowed_channels_json,
-    record.assigned_role,
-    record.action_payload_json,
-    record.created_by,
-    record.resumed_by,
-    record.resume_action,
-    record.resume_payload_json,
-    record.resume_error,
-    record.idempotency_key,
-    record.created_at,
-    record.updated_at,
-    record.expires_at,
-    record.resumed_at,
-    record.cancelled_at,
-    record.expired_at,
-  );
-}
-
-export function getWorkflowInterrupt(
-  id: string,
-): WorkflowInterruptRecord | undefined {
-  return db
-    .prepare('SELECT * FROM workflow_interrupts WHERE id = ?')
-    .get(id) as WorkflowInterruptRecord | undefined;
-}
-
-export function getWorkflowInterruptByIdempotencyKey(
-  idempotencyKey: string,
-): WorkflowInterruptRecord | undefined {
-  return db
-    .prepare('SELECT * FROM workflow_interrupts WHERE idempotency_key = ?')
-    .get(idempotencyKey) as WorkflowInterruptRecord | undefined;
-}
-
-export function getPendingWorkflowInterruptForState(
-  workflowId: string,
-  stateKey: string,
-): WorkflowInterruptRecord | undefined {
-  return db
-    .prepare(
-      `SELECT * FROM workflow_interrupts
-       WHERE workflow_id = ? AND state_key = ? AND status = 'pending'
-       ORDER BY created_at DESC
-       LIMIT 1`,
-    )
-    .get(workflowId, stateKey) as WorkflowInterruptRecord | undefined;
-}
-
-export function listWorkflowInterruptsByWorkflow(
-  workflowId: string,
-): WorkflowInterruptRecord[] {
-  return db
-    .prepare(
-      `SELECT * FROM workflow_interrupts
-       WHERE workflow_id = ?
-       ORDER BY created_at DESC`,
-    )
-    .all(workflowId) as WorkflowInterruptRecord[];
-}
-
-export function listPendingWorkflowInterruptsByWorkflow(
-  workflowId: string,
-): WorkflowInterruptRecord[] {
-  return db
-    .prepare(
-      `SELECT * FROM workflow_interrupts
-       WHERE workflow_id = ? AND status = 'pending'
-       ORDER BY created_at DESC`,
-    )
-    .all(workflowId) as WorkflowInterruptRecord[];
-}
-
-export function markWorkflowInterruptResumed(input: {
-  interruptId: string;
-  resumedBy: string;
-  resumeAction: string;
-  resumePayloadJson: string | null;
-  updatedAt: string;
-}): boolean {
-  const result = db
-    .prepare(
-      `UPDATE workflow_interrupts
-       SET status = 'resumed',
-           resumed_by = ?,
-           resume_action = ?,
-           resume_payload_json = ?,
-           updated_at = ?,
-           resumed_at = ?
-       WHERE id = ? AND status = 'pending'`,
-    )
-    .run(
-      input.resumedBy,
-      input.resumeAction,
-      input.resumePayloadJson,
-      input.updatedAt,
-      input.updatedAt,
-      input.interruptId,
-    );
-  return result.changes === 1;
-}
-
-export function closePendingWorkflowInterrupts(
-  workflowId: string,
-  status: 'cancelled' | 'expired',
-  updatedAt: string,
-): WorkflowInterruptRecord[] {
-  const pending = listPendingWorkflowInterruptsByWorkflow(workflowId);
-  if (pending.length === 0) return [];
-  const column = status === 'cancelled' ? 'cancelled_at' : 'expired_at';
-  db.prepare(
-    `UPDATE workflow_interrupts
-     SET status = ?, updated_at = ?, ${column} = ?
-     WHERE workflow_id = ? AND status = 'pending'`,
-  ).run(status, updatedAt, updatedAt, workflowId);
-  return pending;
-}
-
-export function listExpiredPendingWorkflowInterrupts(
-  nowIso: string,
-): WorkflowInterruptRecord[] {
-  return db
-    .prepare(
-      `SELECT * FROM workflow_interrupts
-       WHERE status = 'pending' AND expires_at IS NOT NULL AND expires_at <= ?
-       ORDER BY expires_at ASC`,
-    )
-    .all(nowIso) as WorkflowInterruptRecord[];
-}
-
-export function markWorkflowInterruptExpired(input: {
-  interruptId: string;
-  updatedAt: string;
-}): boolean {
-  const result = db
-    .prepare(
-      `UPDATE workflow_interrupts
-       SET status = 'expired',
-           updated_at = ?,
-           expired_at = ?
-       WHERE id = ? AND status = 'pending'`,
-    )
-    .run(input.updatedAt, input.updatedAt, input.interruptId);
-  return result.changes === 1;
-}
-
-export function createWorkflowEvent(record: WorkflowEventRecord): void {
-  db.prepare(
-    `INSERT OR IGNORE INTO workflow_events (
-      id, workflow_id, event_type, state_key, ref_type, ref_id, actor_json,
-      payload_json, idempotency_key, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(
-    record.id,
-    record.workflow_id,
-    record.event_type,
-    record.state_key,
-    record.ref_type,
-    record.ref_id,
-    record.actor_json,
-    record.payload_json,
-    record.idempotency_key,
-    record.created_at,
-  );
-}
-
-export function listWorkflowEvents(workflowId: string): WorkflowEventRecord[] {
-  return db
-    .prepare(
-      `SELECT * FROM workflow_events
-       WHERE workflow_id = ?
-       ORDER BY created_at ASC`,
-    )
-    .all(workflowId) as WorkflowEventRecord[];
-}
-
-export function getWorkflowEventByIdempotencyKey(
-  idempotencyKey: string,
-): WorkflowEventRecord | undefined {
-  return db
-    .prepare('SELECT * FROM workflow_events WHERE idempotency_key = ? LIMIT 1')
-    .get(idempotencyKey) as WorkflowEventRecord | undefined;
-}
-
-export function createWorkflowInterruptResumeAttempt(
-  record: WorkflowInterruptResumeAttemptRecord,
-): void {
-  db.prepare(
-    `INSERT OR IGNORE INTO workflow_interrupt_resume_attempts (
-      id, interrupt_id, workflow_id, actor_json, resume_action,
-      resume_payload_json, idempotency_key, status, result_json,
-      conflict_reason, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(
-    record.id,
-    record.interrupt_id,
-    record.workflow_id,
-    record.actor_json,
-    record.resume_action,
-    record.resume_payload_json,
-    record.idempotency_key,
-    record.status,
-    record.result_json,
-    record.conflict_reason,
-    record.created_at,
-  );
-}
-
-export function getWorkflowInterruptResumeAttemptByIdempotency(
-  interruptId: string,
-  idempotencyKey: string,
-): WorkflowInterruptResumeAttemptRecord | undefined {
-  return db
-    .prepare(
-      `SELECT * FROM workflow_interrupt_resume_attempts
-       WHERE interrupt_id = ? AND idempotency_key = ?
-       LIMIT 1`,
-    )
-    .get(interruptId, idempotencyKey) as
-    | WorkflowInterruptResumeAttemptRecord
-    | undefined;
-}
-
-export function getLatestWorkflowCheckpoint(
-  workflowId: string,
-): WorkflowCheckpointRecord | undefined {
-  return db
-    .prepare(
-      `SELECT * FROM workflow_checkpoints
-       WHERE workflow_id = ?
-       ORDER BY checkpoint_version DESC
-       LIMIT 1`,
-    )
-    .get(workflowId) as WorkflowCheckpointRecord | undefined;
-}
-
-export function createWorkflowCheckpoint(
-  record: WorkflowCheckpointRecord,
-): void {
-  db.prepare(
-    `INSERT INTO workflow_checkpoints (
-      id, workflow_id, state_key, checkpoint_version, checkpoint_json, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?)`,
-  ).run(
-    record.id,
-    record.workflow_id,
-    record.state_key,
-    record.checkpoint_version,
-    record.checkpoint_json,
-    record.created_at,
-  );
-}
-
-export function createWorkflowOutbox(record: WorkflowOutboxRecord): void {
-  db.prepare(
-    `INSERT OR IGNORE INTO workflow_outbox (
-      id, workflow_id, event_id, effect_type, channel, status, payload_json,
-      idempotency_key, attempts, next_attempt_at, last_error, created_at,
-      updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(
-    record.id,
-    record.workflow_id,
-    record.event_id,
-    record.effect_type,
-    record.channel,
-    record.status,
-    record.payload_json,
-    record.idempotency_key,
-    record.attempts,
-    record.next_attempt_at,
-    record.last_error,
-    record.created_at,
-    record.updated_at,
-  );
-}
-
-export function listRunnableWorkflowOutbox(
-  nowIso: string,
-  limit = 50,
-): WorkflowOutboxRecord[] {
-  return db
-    .prepare(
-      `SELECT * FROM workflow_outbox
-       WHERE status IN ('pending', 'failed')
-         AND (next_attempt_at IS NULL OR next_attempt_at <= ?)
-       ORDER BY created_at ASC
-       LIMIT ?`,
-    )
-    .all(nowIso, limit) as WorkflowOutboxRecord[];
-}
-
-export function markWorkflowOutboxProcessing(input: {
-  id: string;
-  updatedAt: string;
-}): WorkflowOutboxRecord | undefined {
-  const result = db
-    .prepare(
-      `UPDATE workflow_outbox
-       SET status = 'processing',
-           attempts = attempts + 1,
-           updated_at = ?
-       WHERE id = ? AND status IN ('pending', 'failed')`,
-    )
-    .run(input.updatedAt, input.id);
-  if (result.changes !== 1) return undefined;
-  return db
-    .prepare('SELECT * FROM workflow_outbox WHERE id = ?')
-    .get(input.id) as WorkflowOutboxRecord | undefined;
-}
-
-export function markWorkflowOutboxSucceeded(input: {
-  id: string;
-  updatedAt: string;
-}): void {
-  db.prepare(
-    `UPDATE workflow_outbox
-     SET status = 'succeeded',
-         updated_at = ?,
-         next_attempt_at = NULL,
-         last_error = NULL
-     WHERE id = ?`,
-  ).run(input.updatedAt, input.id);
-}
-
-export function markWorkflowOutboxFailed(input: {
-  id: string;
-  updatedAt: string;
-  nextAttemptAt: string | null;
-  lastError: string;
-  deadLetter?: boolean;
-}): void {
-  db.prepare(
-    `UPDATE workflow_outbox
-     SET status = ?,
-         updated_at = ?,
-         next_attempt_at = ?,
-         last_error = ?
-     WHERE id = ?`,
-  ).run(
-    input.deadLetter ? 'dead_letter' : 'failed',
-    input.updatedAt,
-    input.nextAttemptAt,
-    input.lastError,
-    input.id,
-  );
-}
-
-export function runWorkflowTransaction<T>(fn: () => T): T {
-  return db.transaction(fn)();
-}
-
-export function getAllActiveWorkflows(): Workflow[] {
-  return (
-    db
-      .prepare(
-        `SELECT * FROM workflows WHERE status NOT IN ('passed', 'ops_failed', 'cancelled') ORDER BY created_at DESC`,
-      )
-      .all() as Record<string, unknown>[]
-  )
-    .map((row) => hydrateWorkflowRow(row))
-    .filter((workflow): workflow is Workflow => Boolean(workflow));
-}
-
-export function getAllWorkflows(): Workflow[] {
-  return (
-    db
-      .prepare(`SELECT * FROM workflows ORDER BY created_at DESC`)
-      .all() as Record<string, unknown>[]
-  )
-    .map((row) => hydrateWorkflowRow(row))
-    .filter((workflow): workflow is Workflow => Boolean(workflow));
-}
-
-export function deleteAllWorkbenchTaskData(): {
-  workflows: number;
-  delegations: number;
-  workflow_stage_evaluations: number;
-  workflow_interrupts: number;
-  workflow_events: number;
-  workflow_interrupt_resume_attempts: number;
-  workflow_checkpoints: number;
-  workflow_outbox: number;
-  workbench_tasks: number;
-  workbench_subtasks: number;
-  workbench_events: number;
-  workbench_artifacts: number;
-  workbench_action_items: number;
-  workbench_comments: number;
-  workbench_context_assets: number;
-} {
-  const count = (sql: string) =>
-    (db.prepare(sql).get() as { count: number }).count;
-
-  const summary = {
-    workflows: count('SELECT COUNT(*) AS count FROM workflows'),
-    delegations: count(
-      'SELECT COUNT(*) AS count FROM delegations WHERE workflow_id IS NOT NULL',
-    ),
-    workflow_stage_evaluations: count(
-      'SELECT COUNT(*) AS count FROM workflow_stage_evaluations',
-    ),
-    workflow_interrupts: count(
-      'SELECT COUNT(*) AS count FROM workflow_interrupts',
-    ),
-    workflow_events: count('SELECT COUNT(*) AS count FROM workflow_events'),
-    workflow_interrupt_resume_attempts: count(
-      'SELECT COUNT(*) AS count FROM workflow_interrupt_resume_attempts',
-    ),
-    workflow_checkpoints: count(
-      'SELECT COUNT(*) AS count FROM workflow_checkpoints',
-    ),
-    workflow_outbox: count('SELECT COUNT(*) AS count FROM workflow_outbox'),
-    workbench_tasks: count('SELECT COUNT(*) AS count FROM workbench_tasks'),
-    workbench_subtasks: count(
-      'SELECT COUNT(*) AS count FROM workbench_subtasks',
-    ),
-    workbench_events: count('SELECT COUNT(*) AS count FROM workbench_events'),
-    workbench_artifacts: count(
-      'SELECT COUNT(*) AS count FROM workbench_artifacts',
-    ),
-    workbench_action_items: count(
-      'SELECT COUNT(*) AS count FROM workbench_action_items',
-    ),
-    workbench_comments: count(
-      'SELECT COUNT(*) AS count FROM workbench_comments',
-    ),
-    workbench_context_assets: count(
-      'SELECT COUNT(*) AS count FROM workbench_context_assets',
-    ),
-  };
-
-  const clear = db.transaction(() => {
-    db.prepare('DELETE FROM workflow_outbox').run();
-    db.prepare('DELETE FROM workflow_checkpoints').run();
-    db.prepare('DELETE FROM workflow_interrupt_resume_attempts').run();
-    db.prepare('DELETE FROM workflow_events').run();
-    db.prepare('DELETE FROM workflow_interrupts').run();
-    db.prepare('DELETE FROM workbench_context_assets').run();
-    db.prepare('DELETE FROM workbench_comments').run();
-    db.prepare('DELETE FROM workbench_action_items').run();
-    db.prepare('DELETE FROM workbench_artifacts').run();
-    db.prepare('DELETE FROM workbench_events').run();
-    db.prepare('DELETE FROM workbench_subtasks').run();
-    db.prepare('DELETE FROM workbench_tasks').run();
-    db.prepare('DELETE FROM workflow_stage_evaluations').run();
-    db.prepare('DELETE FROM delegations WHERE workflow_id IS NOT NULL').run();
-    db.prepare('DELETE FROM workflows').run();
-  });
-
-  clear();
-  return summary;
-}
-
-export function deleteWorkbenchTaskData(taskId: string): {
-  workflow_id: string;
-  workflows: number;
-  delegations: number;
-  workflow_stage_evaluations: number;
-  workflow_interrupts: number;
-  workflow_events: number;
-  workflow_interrupt_resume_attempts: number;
-  workflow_checkpoints: number;
-  workflow_outbox: number;
-  workbench_tasks: number;
-  workbench_subtasks: number;
-  workbench_events: number;
-  workbench_artifacts: number;
-  workbench_action_items: number;
-  workbench_comments: number;
-  workbench_context_assets: number;
-} | null {
-  const task = getWorkbenchTaskById(taskId);
-  if (!task) return null;
-
-  const count = (sql: string, ...params: unknown[]) =>
-    (db.prepare(sql).get(...params) as { count: number }).count;
-
-  const summary = {
-    workflow_id: task.workflow_id,
-    workflows: count(
-      'SELECT COUNT(*) AS count FROM workflows WHERE id = ?',
-      task.workflow_id,
-    ),
-    delegations: count(
-      'SELECT COUNT(*) AS count FROM delegations WHERE workflow_id = ?',
-      task.workflow_id,
-    ),
-    workflow_stage_evaluations: count(
-      'SELECT COUNT(*) AS count FROM workflow_stage_evaluations WHERE workflow_id = ?',
-      task.workflow_id,
-    ),
-    workflow_interrupts: count(
-      'SELECT COUNT(*) AS count FROM workflow_interrupts WHERE workflow_id = ?',
-      task.workflow_id,
-    ),
-    workflow_events: count(
-      'SELECT COUNT(*) AS count FROM workflow_events WHERE workflow_id = ?',
-      task.workflow_id,
-    ),
-    workflow_interrupt_resume_attempts: count(
-      'SELECT COUNT(*) AS count FROM workflow_interrupt_resume_attempts WHERE workflow_id = ?',
-      task.workflow_id,
-    ),
-    workflow_checkpoints: count(
-      'SELECT COUNT(*) AS count FROM workflow_checkpoints WHERE workflow_id = ?',
-      task.workflow_id,
-    ),
-    workflow_outbox: count(
-      'SELECT COUNT(*) AS count FROM workflow_outbox WHERE workflow_id = ?',
-      task.workflow_id,
-    ),
-    workbench_tasks: count(
-      'SELECT COUNT(*) AS count FROM workbench_tasks WHERE id = ?',
-      task.id,
-    ),
-    workbench_subtasks: count(
-      'SELECT COUNT(*) AS count FROM workbench_subtasks WHERE task_id = ?',
-      task.id,
-    ),
-    workbench_events: count(
-      'SELECT COUNT(*) AS count FROM workbench_events WHERE task_id = ?',
-      task.id,
-    ),
-    workbench_artifacts: count(
-      'SELECT COUNT(*) AS count FROM workbench_artifacts WHERE task_id = ?',
-      task.id,
-    ),
-    workbench_action_items: count(
-      'SELECT COUNT(*) AS count FROM workbench_action_items WHERE task_id = ?',
-      task.id,
-    ),
-    workbench_comments: count(
-      'SELECT COUNT(*) AS count FROM workbench_comments WHERE task_id = ?',
-      task.id,
-    ),
-    workbench_context_assets: count(
-      'SELECT COUNT(*) AS count FROM workbench_context_assets WHERE task_id = ?',
-      task.id,
-    ),
-  };
-
-  const clear = db.transaction(() => {
-    db.prepare('DELETE FROM workbench_context_assets WHERE task_id = ?').run(
-      task.id,
-    );
-    db.prepare('DELETE FROM workbench_comments WHERE task_id = ?').run(task.id);
-    db.prepare('DELETE FROM workbench_action_items WHERE task_id = ?').run(
-      task.id,
-    );
-    db.prepare('DELETE FROM workbench_artifacts WHERE task_id = ?').run(
-      task.id,
-    );
-    db.prepare('DELETE FROM workbench_events WHERE task_id = ?').run(task.id);
-    db.prepare('DELETE FROM workbench_subtasks WHERE task_id = ?').run(task.id);
-    db.prepare('DELETE FROM workbench_tasks WHERE id = ?').run(task.id);
-    db.prepare(
-      'DELETE FROM workflow_stage_evaluations WHERE workflow_id = ?',
-    ).run(task.workflow_id);
-    db.prepare('DELETE FROM workflow_outbox WHERE workflow_id = ?').run(
-      task.workflow_id,
-    );
-    db.prepare('DELETE FROM workflow_checkpoints WHERE workflow_id = ?').run(
-      task.workflow_id,
-    );
-    db.prepare(
-      'DELETE FROM workflow_interrupt_resume_attempts WHERE workflow_id = ?',
-    ).run(task.workflow_id);
-    db.prepare('DELETE FROM workflow_events WHERE workflow_id = ?').run(
-      task.workflow_id,
-    );
-    db.prepare('DELETE FROM workflow_interrupts WHERE workflow_id = ?').run(
-      task.workflow_id,
-    );
-    db.prepare('DELETE FROM delegations WHERE workflow_id = ?').run(
-      task.workflow_id,
-    );
-    db.prepare('DELETE FROM workflows WHERE id = ?').run(task.workflow_id);
-  });
-
-  clear();
-  return summary;
-}
-
-// --- Workbench accessors ---
-
-export function createWorkbenchTask(record: WorkbenchTaskRecord): void {
-  db.prepare(
-    `INSERT INTO workbench_tasks (
-      id, workflow_id, source_jid, title, service, start_from, workflow_type,
-      status, task_state, current_stage, summary, created_at, updated_at,
-      last_event_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(
-    record.id,
-    record.workflow_id,
-    record.source_jid,
-    record.title,
-    record.service,
-    record.start_from,
-    record.workflow_type,
-    record.status,
-    record.task_state,
-    record.current_stage,
-    record.summary,
-    record.created_at,
-    record.updated_at,
-    record.last_event_at,
-  );
-}
-
-export function getWorkbenchTaskById(
-  id: string,
-): WorkbenchTaskRecord | undefined {
-  return db.prepare('SELECT * FROM workbench_tasks WHERE id = ?').get(id) as
-    | WorkbenchTaskRecord
-    | undefined;
-}
-
-export function getWorkbenchTaskByWorkflowId(
-  workflowId: string,
-): WorkbenchTaskRecord | undefined {
-  return db
-    .prepare('SELECT * FROM workbench_tasks WHERE workflow_id = ?')
-    .get(workflowId) as WorkbenchTaskRecord | undefined;
-}
-
-export function listWorkbenchTasks(): WorkbenchTaskRecord[] {
-  return db
-    .prepare('SELECT * FROM workbench_tasks ORDER BY updated_at DESC, id DESC')
-    .all() as WorkbenchTaskRecord[];
-}
-
-export function updateWorkbenchTask(
-  id: string,
-  updates: Partial<
-    Pick<
-      WorkbenchTaskRecord,
-      | 'status'
-      | 'task_state'
-      | 'current_stage'
-      | 'summary'
-      | 'updated_at'
-      | 'last_event_at'
-      | 'title'
-    >
-  >,
-): void {
-  const fields: string[] = [];
-  const values: unknown[] = [];
-
-  if (updates.status !== undefined) {
-    fields.push('status = ?');
-    values.push(updates.status);
-  }
-  if (updates.task_state !== undefined) {
-    fields.push('task_state = ?');
-    values.push(updates.task_state);
-  }
-  if (updates.current_stage !== undefined) {
-    fields.push('current_stage = ?');
-    values.push(updates.current_stage);
-  }
-  if (updates.summary !== undefined) {
-    fields.push('summary = ?');
-    values.push(updates.summary);
-  }
-  if (updates.updated_at !== undefined) {
-    fields.push('updated_at = ?');
-    values.push(updates.updated_at);
-  }
-  if (updates.last_event_at !== undefined) {
-    fields.push('last_event_at = ?');
-    values.push(updates.last_event_at);
-  }
-  if (updates.title !== undefined) {
-    fields.push('title = ?');
-    values.push(updates.title);
-  }
-
-  if (fields.length === 0) return;
-  values.push(id);
-  db.prepare(
-    `UPDATE workbench_tasks SET ${fields.join(', ')} WHERE id = ?`,
-  ).run(...values);
-}
-
-export function createWorkbenchSubtask(record: WorkbenchSubtaskRecord): void {
-  db.prepare(
-    `INSERT INTO workbench_subtasks (
-      id, task_id, workflow_id, delegation_id, stage_key, title, role, group_folder,
-      status, input_summary, output_summary, started_at, finished_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(
-    record.id,
-    record.task_id,
-    record.workflow_id,
-    record.delegation_id,
-    record.stage_key,
-    record.title,
-    record.role,
-    record.group_folder,
-    record.status,
-    record.input_summary,
-    record.output_summary,
-    record.started_at,
-    record.finished_at,
-    record.updated_at,
-  );
-}
-
-export function getWorkbenchSubtaskByStage(
-  taskId: string,
-  stageKey: string,
-): WorkbenchSubtaskRecord | undefined {
-  return db
-    .prepare(
-      'SELECT * FROM workbench_subtasks WHERE task_id = ? AND stage_key = ? ORDER BY rowid DESC LIMIT 1',
-    )
-    .get(taskId, stageKey) as WorkbenchSubtaskRecord | undefined;
-}
-
-export function getWorkbenchSubtaskByDelegationId(
-  taskId: string,
-  delegationId: string,
-): WorkbenchSubtaskRecord | undefined {
-  return db
-    .prepare(
-      'SELECT * FROM workbench_subtasks WHERE task_id = ? AND delegation_id = ? ORDER BY rowid DESC LIMIT 1',
-    )
-    .get(taskId, delegationId) as WorkbenchSubtaskRecord | undefined;
-}
-
-export function listWorkbenchSubtasksByTask(
-  taskId: string,
-): WorkbenchSubtaskRecord[] {
-  return db
-    .prepare(
-      'SELECT * FROM workbench_subtasks WHERE task_id = ? ORDER BY rowid ASC',
-    )
-    .all(taskId) as WorkbenchSubtaskRecord[];
-}
-
-export function updateWorkbenchSubtask(
-  id: string,
-  updates: Partial<
-    Pick<
-      WorkbenchSubtaskRecord,
-      | 'delegation_id'
-      | 'group_folder'
-      | 'status'
-      | 'input_summary'
-      | 'output_summary'
-      | 'started_at'
-      | 'finished_at'
-      | 'updated_at'
-    >
-  >,
-): void {
-  const fields: string[] = [];
-  const values: unknown[] = [];
-
-  if (updates.delegation_id !== undefined) {
-    fields.push('delegation_id = ?');
-    values.push(updates.delegation_id);
-  }
-  if (updates.group_folder !== undefined) {
-    fields.push('group_folder = ?');
-    values.push(updates.group_folder);
-  }
-  if (updates.status !== undefined) {
-    fields.push('status = ?');
-    values.push(updates.status);
-  }
-  if (updates.input_summary !== undefined) {
-    fields.push('input_summary = ?');
-    values.push(updates.input_summary);
-  }
-  if (updates.output_summary !== undefined) {
-    fields.push('output_summary = ?');
-    values.push(updates.output_summary);
-  }
-  if (updates.started_at !== undefined) {
-    fields.push('started_at = ?');
-    values.push(updates.started_at);
-  }
-  if (updates.finished_at !== undefined) {
-    fields.push('finished_at = ?');
-    values.push(updates.finished_at);
-  }
-  if (updates.updated_at !== undefined) {
-    fields.push('updated_at = ?');
-    values.push(updates.updated_at);
-  }
-
-  if (fields.length === 0) return;
-  values.push(id);
-  db.prepare(
-    `UPDATE workbench_subtasks SET ${fields.join(', ')} WHERE id = ?`,
-  ).run(...values);
-}
-
-export function createWorkbenchEvent(record: WorkbenchEventRecord): void {
-  db.prepare(
-    `INSERT OR IGNORE INTO workbench_events (
-      id, task_id, subtask_id, event_type, title, body, raw_ref_type, raw_ref_id, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(
-    record.id,
-    record.task_id,
-    record.subtask_id,
-    record.event_type,
-    record.title,
-    record.body,
-    record.raw_ref_type,
-    record.raw_ref_id,
-    record.created_at,
-  );
-}
-
-export function listWorkbenchEventsByTask(
-  taskId: string,
-): WorkbenchEventRecord[] {
-  return db
-    .prepare(
-      'SELECT * FROM workbench_events WHERE task_id = ? ORDER BY created_at DESC',
-    )
-    .all(taskId) as WorkbenchEventRecord[];
-}
-
-export function createWorkbenchArtifact(record: WorkbenchArtifactRecord): void {
-  db.prepare(
-    `INSERT OR REPLACE INTO workbench_artifacts (
-      id, task_id, workflow_id, artifact_type, title, path,
-      location_kind, location_uri, host_path, container_path, feature_id,
-      metadata_json, source_role, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(
-    record.id,
-    record.task_id,
-    record.workflow_id,
-    record.artifact_type,
-    record.title,
-    record.path,
-    record.location_kind || null,
-    record.location_uri || null,
-    record.host_path || null,
-    record.container_path || null,
-    record.feature_id || null,
-    record.metadata_json || null,
-    record.source_role,
-    record.created_at,
-  );
-}
-
-export function listWorkbenchArtifactsByTask(
-  taskId: string,
-): WorkbenchArtifactRecord[] {
-  return db
-    .prepare(
-      'SELECT * FROM workbench_artifacts WHERE task_id = ? ORDER BY created_at DESC',
-    )
-    .all(taskId) as WorkbenchArtifactRecord[];
-}
-
-export function listUnmigratedWorkbenchArtifacts(
-  limit = 50,
-): WorkbenchArtifactRecord[] {
-  return db
-    .prepare(
-      `SELECT * FROM workbench_artifacts
-       WHERE location_kind IS NULL OR location_uri IS NULL OR location_kind = '' OR location_uri = ''
-       ORDER BY created_at DESC
-       LIMIT ?`,
-    )
-    .all(limit) as WorkbenchArtifactRecord[];
-}
-
-export function assertWorkbenchArtifactLocationsMigrated(): void {
-  const records = listUnmigratedWorkbenchArtifacts(10);
-  if (records.length === 0) return;
-  const examples = records.map((item) => `${item.id}:${item.path}`).join(', ');
-  throw new Error(
-    `Workbench artifact location migration required for ${records.length} record(s): ${examples}`,
-  );
-}
-
-export function createWorkbenchActionItem(
-  record: WorkbenchActionItemRecord,
-): void {
-  db.prepare(
-    `INSERT OR REPLACE INTO workbench_action_items (
-      id, task_id, workflow_id, subtask_id, stage_key, delegation_id, group_folder,
-      item_type, status, title, body, source_type, source_ref_id, replyable,
-      created_at, updated_at, resolved_at, extra_json
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(
-    record.id,
-    record.task_id,
-    record.workflow_id,
-    record.subtask_id,
-    record.stage_key,
-    record.delegation_id,
-    record.group_folder,
-    record.item_type,
-    record.status,
-    record.title,
-    record.body,
-    record.source_type,
-    record.source_ref_id,
-    record.replyable,
-    record.created_at,
-    record.updated_at,
-    record.resolved_at,
-    record.extra_json,
-  );
-}
-
-export function getWorkbenchActionItem(
-  id: string,
-): WorkbenchActionItemRecord | undefined {
-  return db
-    .prepare('SELECT * FROM workbench_action_items WHERE id = ?')
-    .get(id) as WorkbenchActionItemRecord | undefined;
-}
-
-export function listWorkbenchActionItemsByTask(
-  taskId: string,
-): WorkbenchActionItemRecord[] {
-  return db
-    .prepare(
-      'SELECT * FROM workbench_action_items WHERE task_id = ? ORDER BY created_at DESC',
-    )
-    .all(taskId) as WorkbenchActionItemRecord[];
-}
-
-export function listWorkbenchActionItemsBySource(
-  sourceType: string,
-  sourceRefId: string,
-): WorkbenchActionItemRecord[] {
-  return db
-    .prepare(
-      'SELECT * FROM workbench_action_items WHERE source_type = ? AND source_ref_id = ? ORDER BY created_at DESC',
-    )
-    .all(sourceType, sourceRefId) as WorkbenchActionItemRecord[];
-}
-
-export function updateWorkbenchActionItem(
-  id: string,
-  updates: Partial<
-    Pick<
-      WorkbenchActionItemRecord,
-      | 'status'
-      | 'title'
-      | 'body'
-      | 'replyable'
-      | 'updated_at'
-      | 'resolved_at'
-      | 'extra_json'
-    >
-  >,
-): void {
-  const fields: string[] = [];
-  const values: unknown[] = [];
-
-  if (updates.status !== undefined) {
-    fields.push('status = ?');
-    values.push(updates.status);
-  }
-  if (updates.title !== undefined) {
-    fields.push('title = ?');
-    values.push(updates.title);
-  }
-  if (updates.body !== undefined) {
-    fields.push('body = ?');
-    values.push(updates.body);
-  }
-  if (updates.replyable !== undefined) {
-    fields.push('replyable = ?');
-    values.push(updates.replyable ? 1 : 0);
-  }
-  if (updates.updated_at !== undefined) {
-    fields.push('updated_at = ?');
-    values.push(updates.updated_at);
-  }
-  if (updates.resolved_at !== undefined) {
-    fields.push('resolved_at = ?');
-    values.push(updates.resolved_at);
-  }
-  if (updates.extra_json !== undefined) {
-    fields.push('extra_json = ?');
-    values.push(updates.extra_json);
-  }
-
-  if (fields.length === 0) return;
-  values.push(id);
-  db.prepare(
-    `UPDATE workbench_action_items SET ${fields.join(', ')} WHERE id = ?`,
-  ).run(...values);
-}
-
-export function resolveWorkbenchActionItemsBySource(
-  sourceType: string,
-  sourceRefId: string,
-  status: string,
-  resolvedAt: string,
-): void {
-  db.prepare(
-    `UPDATE workbench_action_items
-     SET status = ?, updated_at = ?, resolved_at = ?
-     WHERE source_type = ? AND source_ref_id = ? AND status = 'pending'`,
-  ).run(status, resolvedAt, resolvedAt, sourceType, sourceRefId);
-}
-
-export function resolveWorkbenchActionItemsByStage(
-  workflowId: string,
-  stageKey: string,
-  status: string,
-  resolvedAt: string,
-): void {
-  db.prepare(
-    `UPDATE workbench_action_items
-     SET status = ?, updated_at = ?, resolved_at = ?
-     WHERE workflow_id = ? AND stage_key = ? AND status IN ('pending', 'confirmed')`,
-  ).run(status, resolvedAt, resolvedAt, workflowId, stageKey);
-}
-
-export function createWorkbenchComment(record: WorkbenchCommentRecord): void {
-  db.prepare(
-    `INSERT INTO workbench_comments (
-      id, task_id, workflow_id, author, content, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?)`,
-  ).run(
-    record.id,
-    record.task_id,
-    record.workflow_id,
-    record.author,
-    record.content,
-    record.created_at,
-  );
-}
-
-export function listWorkbenchCommentsByTask(
-  taskId: string,
-): WorkbenchCommentRecord[] {
-  return db
-    .prepare(
-      'SELECT * FROM workbench_comments WHERE task_id = ? ORDER BY created_at DESC',
-    )
-    .all(taskId) as WorkbenchCommentRecord[];
-}
-
-export function createWorkbenchContextAsset(
-  record: WorkbenchContextAssetRecord,
-): void {
-  db.prepare(
-    `INSERT INTO workbench_context_assets (
-      id, task_id, workflow_id, asset_type, title, path, url, note, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(
-    record.id,
-    record.task_id,
-    record.workflow_id,
-    record.asset_type,
-    record.title,
-    record.path,
-    record.url,
-    record.note,
-    record.created_at,
-  );
-}
-
-export function listWorkbenchContextAssetsByTask(
-  taskId: string,
-): WorkbenchContextAssetRecord[] {
-  return db
-    .prepare(
-      'SELECT * FROM workbench_context_assets WHERE task_id = ? ORDER BY created_at DESC',
-    )
-    .all(taskId) as WorkbenchContextAssetRecord[];
 }
 
 // --- Today plan accessors ---
@@ -5878,13 +4069,10 @@ export function createAgentQuery(record: AgentQueryRecord): void {
       source_ref_id,
       chat_jid,
       group_folder,
-      workflow_type,
       service,
       role,
       task_id,
       task_title,
-      workflow_id,
-      stage_key,
       delegation_id,
       session_id,
       selected_model,
@@ -5931,7 +4119,7 @@ export function createAgentQuery(record: AgentQueryRecord): void {
       latency_ms,
       created_at,
       updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     record.id,
     record.query_id,
@@ -5940,13 +4128,10 @@ export function createAgentQuery(record: AgentQueryRecord): void {
     record.source_ref_id,
     record.chat_jid,
     record.group_folder,
-    record.workflow_type,
     record.service,
     record.role,
     record.task_id,
     record.task_title,
-    record.workflow_id,
-    record.stage_key,
     record.delegation_id,
     record.session_id,
     record.selected_model,
@@ -6014,13 +4199,10 @@ export function updateAgentQuery(
   assign('source_ref_id');
   assign('chat_jid');
   assign('group_folder');
-  assign('workflow_type');
   assign('service');
   assign('role');
   assign('task_id');
   assign('task_title');
-  assign('workflow_id');
-  assign('stage_key');
   assign('delegation_id');
   assign('session_id');
   assign('selected_model');
@@ -6085,12 +4267,9 @@ export interface ListAgentQueriesOptions {
   status?: string;
   failureType?: string;
   service?: string;
-  workflowType?: string;
-  stageKey?: string;
   role?: string;
   hasFileChanges?: boolean;
   hasErrors?: boolean;
-  workflowId?: string;
   delegationId?: string;
 }
 
@@ -6104,13 +4283,6 @@ export interface AgentQueriesOverview {
   topFailureTypes: Array<{
     failureType: string;
     count: number;
-  }>;
-  slowStages: Array<{
-    workflowType: string | null;
-    stageKey: string | null;
-    count: number;
-    avgLatencyMs: number;
-    maxLatencyMs: number;
   }>;
   pendingHumanReviews: number;
 }
@@ -6142,14 +4314,6 @@ export function listAgentQueries(
   if (options.service) {
     conditions.push('service = ?');
     values.push(options.service);
-  }
-  if (options.workflowType) {
-    conditions.push('workflow_type = ?');
-    values.push(options.workflowType);
-  }
-  if (options.stageKey) {
-    conditions.push('stage_key = ?');
-    values.push(options.stageKey);
   }
   if (options.role) {
     conditions.push('role = ?');
@@ -6188,10 +4352,6 @@ export function listAgentQueries(
           )
       ))`,
     );
-  }
-  if (options.workflowId) {
-    conditions.push('workflow_id = ?');
-    values.push(options.workflowId);
   }
   if (options.delegationId) {
     conditions.push('delegation_id = ?');
@@ -6248,41 +4408,16 @@ export function getAgentQueriesOverview(
         LIMIT 5`,
     )
     .all(since) as Array<{ failureType: string; count: number }>;
-  const slowStages = db
-    .prepare(
-      `SELECT
-          workflow_type AS workflowType,
-          stage_key AS stageKey,
-          COUNT(*) AS count,
-          ROUND(AVG(latency_ms)) AS avgLatencyMs,
-          MAX(latency_ms) AS maxLatencyMs
-         FROM agent_queries
-        WHERE started_at >= ?
-          AND latency_ms IS NOT NULL
-          AND (workflow_type IS NOT NULL OR stage_key IS NOT NULL)
-        GROUP BY workflow_type, stage_key
-        ORDER BY avgLatencyMs DESC
-        LIMIT 5`,
-    )
-    .all(since) as Array<{
-    workflowType: string | null;
-    stageKey: string | null;
-    count: number;
-    avgLatencyMs: number;
-    maxLatencyMs: number;
-  }>;
   const pendingHumanReviews = countQuery(
     `SELECT COUNT(*) AS count
-       FROM workbench_action_items
-      WHERE status = 'pending'
-        AND item_type IN ('approval', 'revision_request', 'credential', 'human_input', 'interactive')`,
+       FROM ask_questions
+      WHERE status = 'pending'`,
   );
 
   return {
     activeQueryCount,
     last24h: { success, failure, total },
     topFailureTypes,
-    slowStages,
     pendingHumanReviews,
   };
 }

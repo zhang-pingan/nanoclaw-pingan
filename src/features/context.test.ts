@@ -6,13 +6,13 @@ describe('feature context services', () => {
     const received: unknown[] = [];
     context
       .createEventRegistry('example-feature')
-      .subscribe('workflow.updated', (event) => received.push(event));
+      .subscribe('feature.updated', (event) => received.push(event));
 
-    context.publishFeatureEvent('workflow.updated', { id: 'wf-1' });
+    context.publishFeatureEvent('feature.updated', { id: 'feature-1' });
     context.clearFeatureEventSubscriptions('example-feature');
-    context.publishFeatureEvent('workflow.updated', { id: 'wf-2' });
+    context.publishFeatureEvent('feature.updated', { id: 'feature-2' });
 
-    expect(received).toEqual([{ id: 'wf-1' }]);
+    expect(received).toEqual([{ id: 'feature-1' }]);
   });
 
   it('records feature audit events in the database', async () => {

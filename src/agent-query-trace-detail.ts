@@ -52,7 +52,6 @@ export interface AgentQueryTraceHighlights {
   models: AgentQueryEventRecord[];
   ipc: AgentQueryEventRecord[];
   containers: AgentQueryEventRecord[];
-  workflow: AgentQueryEventRecord[];
   evaluation: AgentQueryEventRecord[];
 }
 
@@ -189,7 +188,6 @@ export function buildAgentQueryTraceDetail(
     models: [],
     ipc: [],
     containers: [],
-    workflow: [],
     evaluation: [],
   };
 
@@ -295,7 +293,6 @@ export function buildAgentQueryTraceDetail(
       if (name.includes('request') || name.includes('call')) ipcCallCount += 1;
     }
 
-    if (category === 'workflow') highlights.workflow.push(event);
     if (category === 'evaluation') highlights.evaluation.push(event);
     if (category === 'artifact') {
       highlights.artifacts.push(event);

@@ -12,20 +12,15 @@ import {
   loadFeatureRuntimeConfig,
   saveLocalFeatureRuntimeConfig,
 } from './config.js';
-import { assertPathInsideFeature, LoadedFeatureManifest } from './manifest.js';
+import { LoadedFeatureManifest } from './manifest.js';
 import {
   activateConfiguredFeatures,
   scanInstalledFeatures,
 } from './runtime.js';
-import { getWorkflowDefinitionsDir } from '../workflow-definition-files.js';
-import { clearWorkflowArtifactContractCache } from '../workflow-artifact-contract.js';
-import { loadWorkflowConfigs } from '../workflow-config.js';
 import {
   getFeatureDataRoot,
-  getWorkflowRuntimeRoot,
   listExternalFeatureDataRoots,
-} from '../workflow-storage.js';
-import { clearWorkflowEvaluatorRegistryCache } from '../workflow-evaluator-registry.js';
+} from './data-roots.js';
 import { getFeatureOwnedTablePrefixes } from './naming.js';
 
 export interface FeatureOwnedTableSummary {
@@ -35,7 +30,6 @@ export interface FeatureOwnedTableSummary {
 
 export interface FeatureDeletionSummary {
   featureId: string;
-  workflowTypes: string[];
   groups: Array<{ key: string; jid: string; folder: string }>;
   projectionTables: FeatureOwnedTableSummary[];
   externalDataRoots: Array<{
@@ -146,7 +140,6 @@ export async function setFeatureEnabledAndApply(input: {
 
   try {
     await activateConfiguredFeatures();
-    reloadFeatureDependentRegistries();
     reloadRegisteredGroupsFromHost();
     return {
       ...result,
@@ -158,7 +151,6 @@ export async function setFeatureEnabledAndApply(input: {
       saveLocalFeatureRuntimeConfig(previous.enabled);
       try {
         await activateConfiguredFeatures();
-        reloadFeatureDependentRegistries();
         reloadRegisteredGroupsFromHost();
       } catch (rollbackErr) {
         logger.error(
@@ -181,8 +173,7 @@ export async function setFeatureEnabledAndApply(input: {
 export function getFeatureDeletionSummary(
   featureId: string,
 ): FeatureDeletionSummary {
-  const feature = getInstalledFeature(featureId);
-  const workflowTypes = listFeatureWorkflowTypes(feature);
+  getInstalledFeature(featureId);
   const groups = listFeatureGroupBindings(featureId).map((binding) => ({
     key: binding.group_key,
     jid: binding.group_jid,
@@ -190,10 +181,6 @@ export function getFeatureDeletionSummary(
   }));
   const groupFolders = groups.map((group) => group.folder);
   const groupJids = groups.map((group) => group.jid);
-  const legacyWorkflowTypes = listLegacyWorkflowTypesSafeForDeletion(
-    featureId,
-    workflowTypes,
-  );
   const projectionTables = listFeatureOwnedProjectionTables(featureId);
   const externalDataRoots = listExternalFeatureDataRoots(featureId).map(
     (root) => ({
@@ -202,26 +189,11 @@ export function getFeatureDeletionSummary(
       readonly: root.readonly !== false,
     }),
   );
-  const workflowIds = listOwnedWorkflowIds({
-    featureId,
-    workflowTypes: legacyWorkflowTypes,
-    groupJids,
-  });
-  const taskIds = listOwnedWorkbenchTaskIds(workflowIds, legacyWorkflowTypes);
-  const queryIds = listOwnedAgentQueryIds(
-    workflowIds,
-    legacyWorkflowTypes,
-    groupFolders,
-  );
+  const queryIds = listOwnedAgentQueryIds(groupFolders);
   const counts = {
     groups: groups.length,
-    workflow_types: workflowTypes.length,
-    workflows: workflowIds.length,
-    workbench_tasks: taskIds.length,
     agent_queries: queryIds.length,
-    messages:
-      countRowsByValues('messages', 'chat_jid', groupJids) +
-      countRowsByValues('messages', 'workflow_id', workflowIds),
+    messages: countRowsByValues('messages', 'chat_jid', groupJids),
     chats: countRowsByValues('chats', 'jid', groupJids),
     sessions: countRowsByValues('sessions', 'group_folder', groupFolders),
     feature_migrations: countRows(
@@ -239,9 +211,6 @@ export function getFeatureDeletionSummary(
   const featureDataRoot = getFeatureDataRoot(featureId);
   const paths = [
     featureDataRoot.rootPath,
-    ...workflowIds.map(
-      (workflowId) => getWorkflowRuntimeRoot(workflowId).hostPath,
-    ),
     ...groups.flatMap((group) => [
       path.join(GROUPS_DIR, group.folder),
       path.join(DATA_DIR, 'sessions', group.folder),
@@ -250,7 +219,6 @@ export function getFeatureDeletionSummary(
   ];
   return {
     featureId,
-    workflowTypes,
     groups,
     projectionTables,
     externalDataRoots,
@@ -278,21 +246,7 @@ export async function deleteFeatureData(featureId: string): Promise<{
 
   const groupFolders = summary.groups.map((group) => group.folder);
   const groupJids = summary.groups.map((group) => group.jid);
-  const legacyWorkflowTypes = listLegacyWorkflowTypesSafeForDeletion(
-    featureId,
-    summary.workflowTypes,
-  );
-  const workflowIds = listOwnedWorkflowIds({
-    featureId,
-    workflowTypes: legacyWorkflowTypes,
-    groupJids,
-  });
-  const taskIds = listOwnedWorkbenchTaskIds(workflowIds, legacyWorkflowTypes);
-  const queryIds = listOwnedAgentQueryIds(
-    workflowIds,
-    legacyWorkflowTypes,
-    groupFolders,
-  );
+  const queryIds = listOwnedAgentQueryIds(groupFolders);
 
   for (const targetPath of summary.paths) {
     if (!fs.existsSync(targetPath)) continue;
@@ -304,28 +258,6 @@ export async function deleteFeatureData(featureId: string): Promise<{
     deleteByValues('agent_query_events', 'query_id', queryIds);
     deleteByValues('agent_query_steps', 'query_id', queryIds);
     deleteByValues('agent_queries', 'query_id', queryIds);
-
-    deleteByValues('workbench_context_assets', 'task_id', taskIds);
-    deleteByValues('workbench_comments', 'task_id', taskIds);
-    deleteByValues('workbench_action_items', 'task_id', taskIds);
-    deleteByValues('workbench_artifacts', 'task_id', taskIds);
-    deleteByValues('workbench_events', 'task_id', taskIds);
-    deleteByValues('workbench_subtasks', 'task_id', taskIds);
-    deleteByValues('workbench_tasks', 'id', taskIds);
-
-    deleteByValues('workflow_stage_evaluations', 'workflow_id', workflowIds);
-    deleteByValues('workflow_outbox', 'workflow_id', workflowIds);
-    deleteByValues('workflow_checkpoints', 'workflow_id', workflowIds);
-    deleteByValues(
-      'workflow_interrupt_resume_attempts',
-      'workflow_id',
-      workflowIds,
-    );
-    deleteByValues('workflow_events', 'workflow_id', workflowIds);
-    deleteByValues('workflow_interrupts', 'workflow_id', workflowIds);
-    deleteByValues('delegations', 'workflow_id', workflowIds);
-    deleteByValues('messages', 'workflow_id', workflowIds);
-    deleteByValues('workflows', 'id', workflowIds);
 
     deleteByValues('scheduled_tasks', 'group_folder', groupFolders);
     deleteByValues('ask_questions', 'group_folder', groupFolders);
@@ -364,57 +296,6 @@ function getInstalledFeature(featureId: string): LoadedFeatureManifest {
   return feature;
 }
 
-function listFeatureWorkflowTypes(feature: LoadedFeatureManifest): string[] {
-  const resources = feature.manifest.resources || {};
-  const relativeDir =
-    resources.workflowDefinitions || './container/workflow-definitions';
-  const dir = assertPathInsideFeature(
-    feature.root,
-    relativeDir,
-    'resources.workflowDefinitions',
-  );
-  if (!fs.existsSync(dir)) return [];
-  return fs
-    .readdirSync(dir)
-    .filter((fileName) => fileName.endsWith('.json'))
-    .map((fileName) => path.basename(fileName, '.json'))
-    .sort((a, b) => a.localeCompare(b));
-}
-
-function listCoreWorkflowTypes(): Set<string> {
-  const dir = getWorkflowDefinitionsDir();
-  if (!fs.existsSync(dir)) return new Set();
-  return new Set(
-    fs
-      .readdirSync(dir)
-      .filter((fileName) => fileName.endsWith('.json'))
-      .map((fileName) => path.basename(fileName, '.json')),
-  );
-}
-
-function listLegacyWorkflowTypesSafeForDeletion(
-  featureId: string,
-  workflowTypes: string[],
-): string[] {
-  const protectedTypes = listCoreWorkflowTypes();
-  for (const feature of scanInstalledFeatures()) {
-    if (feature.manifest.id === featureId) continue;
-    for (const workflowType of listFeatureWorkflowTypes(feature)) {
-      protectedTypes.add(workflowType);
-    }
-  }
-  return workflowTypes.filter((workflowType) => {
-    if (protectedTypes.has(workflowType)) {
-      logger.warn(
-        { featureId, workflowType },
-        'Skipping legacy feature data deletion by workflow_type because the type is also declared elsewhere',
-      );
-      return false;
-    }
-    return true;
-  });
-}
-
 function countRows(table: string, where: string, ...values: unknown[]): number {
   const row = getDatabase()
     .prepare(`SELECT COUNT(*) AS count FROM ${table} WHERE ${where}`)
@@ -437,12 +318,6 @@ function countRowsByValues(
     count += Number(row?.count || 0);
   }
   return count;
-}
-
-function reloadFeatureDependentRegistries(): void {
-  clearWorkflowArtifactContractCache();
-  clearWorkflowEvaluatorRegistryCache();
-  loadWorkflowConfigs();
 }
 
 function reloadRegisteredGroupsFromHost(): void {
@@ -508,67 +383,7 @@ function dropFeatureOwnedProjectionTables(
   }
 }
 
-function listOwnedWorkflowIds(input: {
-  featureId: string;
-  workflowTypes: string[];
-  groupJids: string[];
-}): string[] {
-  const database = getDatabase();
-  const ids = new Set<string>();
-  for (const row of database
-    .prepare('SELECT id FROM workflows WHERE feature_id = ?')
-    .all(input.featureId) as Array<{ id: string }>) {
-    ids.add(row.id);
-  }
-  const byType = database.prepare(
-    'SELECT id FROM workflows WHERE workflow_type = ? AND feature_id IS NULL',
-  );
-  for (const workflowType of input.workflowTypes) {
-    for (const row of byType.all(workflowType) as Array<{ id: string }>) {
-      ids.add(row.id);
-    }
-  }
-  const bySourceJid = database.prepare(
-    'SELECT id FROM workflows WHERE source_jid = ?',
-  );
-  for (const groupJid of input.groupJids) {
-    for (const row of bySourceJid.all(groupJid) as Array<{ id: string }>) {
-      ids.add(row.id);
-    }
-  }
-  return [...ids];
-}
-
-function listOwnedWorkbenchTaskIds(
-  workflowIds: string[],
-  workflowTypes: string[],
-): string[] {
-  const database = getDatabase();
-  const ids = new Set<string>();
-  const byWorkflow = database.prepare(
-    'SELECT id FROM workbench_tasks WHERE workflow_id = ?',
-  );
-  for (const workflowId of workflowIds) {
-    for (const row of byWorkflow.all(workflowId) as Array<{ id: string }>) {
-      ids.add(row.id);
-    }
-  }
-  const byType = database.prepare(
-    'SELECT id FROM workbench_tasks WHERE workflow_type = ?',
-  );
-  for (const workflowType of workflowTypes) {
-    for (const row of byType.all(workflowType) as Array<{ id: string }>) {
-      ids.add(row.id);
-    }
-  }
-  return [...ids];
-}
-
-function listOwnedAgentQueryIds(
-  workflowIds: string[],
-  workflowTypes: string[],
-  groupFolders: string[],
-): string[] {
+function listOwnedAgentQueryIds(groupFolders: string[]): string[] {
   const database = getDatabase();
   const ids = new Set<string>();
   const addBy = (column: string, values: string[]) => {
@@ -581,8 +396,6 @@ function listOwnedAgentQueryIds(
       }
     }
   };
-  addBy('workflow_id', workflowIds);
-  addBy('workflow_type', workflowTypes);
   addBy('group_folder', groupFolders);
   return [...ids];
 }

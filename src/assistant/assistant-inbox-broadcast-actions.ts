@@ -18,9 +18,9 @@ import { isAssistantInboxBroadcastGroup } from './assistant-inbox-broadcast-conf
 import type { AgentInboxItemView } from './types.js';
 import type {
   CardActionResult,
+  CardActorChannel,
   InteractiveCard,
   RegisteredGroup,
-  WorkflowInterruptActorChannel,
 } from '../types.js';
 import { logger } from '../logger.js';
 
@@ -108,7 +108,7 @@ function digest(value: Record<string, unknown>): string {
 }
 
 function buildActor(input: {
-  actorChannel?: WorkflowInterruptActorChannel;
+  actorChannel?: CardActorChannel;
   userId: string;
   messageId?: string;
   targetJid?: string;
@@ -123,7 +123,7 @@ function buildActor(input: {
 
 function buildActionPayload(input: {
   action: MobileInboxAction;
-  actorChannel?: WorkflowInterruptActorChannel;
+  actorChannel?: CardActorChannel;
   userId: string;
   messageId?: string;
   targetJid?: string;
@@ -243,7 +243,7 @@ export async function handleAssistantInboxBroadcastCardAction(input: {
   formValue?: Record<string, string>;
   registeredGroups: Record<string, RegisteredGroup>;
   userId: string;
-  actorChannel?: WorkflowInterruptActorChannel;
+  actorChannel?: CardActorChannel;
   messageId?: string;
   targetJid?: string;
   sendCard?: (

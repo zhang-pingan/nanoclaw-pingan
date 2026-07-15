@@ -13,6 +13,35 @@ import {
   getAgentQueriesOverview,
   listAgentQueries,
 } from '../db.js';
+import { getChannelFactory } from './registry.js';
+
+async function requestWebStatus(
+  pathname: string,
+  method: 'GET' | 'POST' | 'PATCH' | 'DELETE' = 'GET',
+): Promise<number> {
+  const channel = getChannelFactory('web')?.({
+    onMessage: () => {},
+    onChatMetadata: () => {},
+    registeredGroups: () => ({}),
+  });
+  if (!channel) throw new Error('web channel factory not registered');
+
+  const response = {
+    statusCode: 0,
+    setHeader: () => undefined,
+    writeHead(statusCode: number) {
+      this.statusCode = statusCode;
+      return this;
+    },
+    end: () => undefined,
+  };
+  await (
+    channel as unknown as {
+      handleHttp: (request: unknown, response: unknown) => Promise<void>;
+    }
+  ).handleHttp({ method, url: pathname, headers: {} }, response);
+  return response.statusCode;
+}
 
 describe('web trace detail helpers', () => {
   it('builds detail response compatible with the trace detail API shape', () => {
@@ -50,17 +79,14 @@ describe('web trace detail helpers', () => {
     expect(listAgentQueries(10, 0, { service: 'billing' })).toHaveLength(1);
   });
 
-  it('filters trace history by workflow metadata and derived error/file flags', () => {
+  it('filters trace history by delegation metadata and derived error/file flags', () => {
     _initTestDatabase();
     agentQueryTraceManager.startQuery({
       queryId: 'web-trace-filter-dev',
-      sourceType: 'workflow_delegation',
+      sourceType: 'delegation',
       sourceRefId: 'del-filter-dev',
-      workflowType: 'dev_test',
       service: 'billing',
       role: 'dev',
-      workflowId: 'wf-filter',
-      stageKey: 'dev',
       delegationId: 'del-filter-dev',
     });
     agentQueryTraceManager.appendStructuredEvent({
@@ -74,13 +100,10 @@ describe('web trace detail helpers', () => {
 
     agentQueryTraceManager.startQuery({
       queryId: 'web-trace-filter-test',
-      sourceType: 'workflow_delegation',
+      sourceType: 'delegation',
       sourceRefId: 'del-filter-test',
-      workflowType: 'dev_test',
       service: 'billing',
       role: 'test',
-      workflowId: 'wf-filter',
-      stageKey: 'testing',
       delegationId: 'del-filter-test',
     });
     agentQueryTraceManager.appendStructuredEvent({
@@ -94,13 +117,10 @@ describe('web trace detail helpers', () => {
 
     agentQueryTraceManager.startQuery({
       queryId: 'web-trace-filter-attempt-only',
-      sourceType: 'workflow_delegation',
+      sourceType: 'delegation',
       sourceRefId: 'del-filter-attempt',
-      workflowType: 'dev_test',
       service: 'billing',
       role: 'dev',
-      workflowId: 'wf-filter',
-      stageKey: 'dev',
       delegationId: 'del-filter-attempt',
     });
     agentQueryTraceManager.appendStructuredEvent({
@@ -117,15 +137,14 @@ describe('web trace detail helpers', () => {
 
     expect(
       listAgentQueries(10, 0, {
-        workflowType: 'dev_test',
-        stageKey: 'dev',
+        sourceType: 'delegation',
         role: 'dev',
         hasFileChanges: true,
       }).map((item) => item.query_id),
     ).toEqual(['web-trace-filter-dev']);
     expect(
       listAgentQueries(10, 0, {
-        workflowId: 'wf-filter',
+        sourceType: 'delegation',
         hasErrors: true,
       }).map((item) => item.query_id),
     ).toEqual(['web-trace-filter-test']);
@@ -144,7 +163,23 @@ describe('web trace detail helpers', () => {
       total: 3,
     });
     expect(overview.topFailureTypes[0]?.failureType).toBe('error');
-    expect(overview.slowStages.map((item) => item.stageKey)).toContain('dev');
+  });
+});
+
+describe('removed management APIs', () => {
+  it.each([
+    ['/api/workflow-definitions', 'GET'],
+    ['/api/workflow-definitions/example', 'GET'],
+    ['/api/workflow-artifact-contracts', 'GET'],
+    ['/api/workflow-actions', 'GET'],
+    ['/api/cards', 'GET'],
+    ['/api/cards/example', 'GET'],
+    ['/api/workflow/create-options', 'GET'],
+    ['/api/workflow/requirement', 'POST'],
+    ['/api/workbench/tasks', 'GET'],
+    ['/api/workbench/tasks/example/retry', 'POST'],
+  ] as const)('returns 404 for %s', async (pathname, method) => {
+    expect(await requestWebStatus(pathname, method)).toBe(404);
   });
 });
 
@@ -183,7 +218,7 @@ describe('web upload helpers', () => {
     const boundary = '----WebKitFormBoundaryFields';
     const body = Buffer.concat([
       Buffer.from(
-        `--${boundary}\r\nContent-Disposition: form-data; name="workflow_type"\r\n\r\n`,
+        `--${boundary}\r\nContent-Disposition: form-data; name="request_type"\r\n\r\n`,
         'utf-8',
       ),
       Buffer.from('dev_test', 'utf-8'),
@@ -197,7 +232,7 @@ describe('web upload helpers', () => {
 
     const parts = parseMultipartParts(body, boundary);
     expect(parts).toHaveLength(2);
-    expect(parts[0]).toMatchObject({ name: 'workflow_type' });
+    expect(parts[0]).toMatchObject({ name: 'request_type' });
     expect(parts[0]?.data.toString('utf-8')).toBe('dev_test');
     expect(parts[1]).toMatchObject({ name: 'file_0', filename: '方案.md' });
   });

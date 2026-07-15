@@ -21,13 +21,9 @@ export interface FeatureRequiredGroup {
 }
 
 export interface FeatureResources {
-  workflowDefinitions?: string;
-  cards?: string;
   skills?: string;
   agents?: string;
   mcp?: string;
-  artifactContracts?: string;
-  workflowEvaluators?: string;
   scripts?: string;
   templates?: string;
 }
@@ -221,26 +217,20 @@ function normalizeResources(
     errors.push('resources must be an object');
     return undefined;
   }
+  for (const removedKey of [
+    'workflowDefinitions',
+    'cards',
+    'artifactContracts',
+    'workflowEvaluators',
+  ]) {
+    if (value[removedKey] !== undefined) {
+      errors.push(`resources.${removedKey} is no longer supported`);
+    }
+  }
   return {
-    workflowDefinitions: optionalString(
-      value.workflowDefinitions,
-      'resources.workflowDefinitions',
-      errors,
-    ),
-    cards: optionalString(value.cards, 'resources.cards', errors),
     skills: optionalString(value.skills, 'resources.skills', errors),
     agents: optionalString(value.agents, 'resources.agents', errors),
     mcp: optionalString(value.mcp, 'resources.mcp', errors),
-    artifactContracts: optionalString(
-      value.artifactContracts,
-      'resources.artifactContracts',
-      errors,
-    ),
-    workflowEvaluators: optionalString(
-      value.workflowEvaluators,
-      'resources.workflowEvaluators',
-      errors,
-    ),
     scripts: optionalString(value.scripts, 'resources.scripts', errors),
     templates: optionalString(value.templates, 'resources.templates', errors),
   };

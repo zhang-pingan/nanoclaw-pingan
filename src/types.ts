@@ -55,7 +55,6 @@ export interface NewMessage {
   is_bot_message?: boolean;
   model?: string | null;
   model_reason?: string | null;
-  workflow_id?: string | null;
 }
 
 export interface ScheduledTask {
@@ -85,217 +84,6 @@ export interface Delegation {
   result: string | null;
   outcome: 'success' | 'failure' | null;
   requester_jid?: string | null;
-  workflow_id?: string | null;
-  handoff_role?: string | null;
-  handoff_skill?: string | null;
-  handoff_contract_json?: string | null;
-  handoff_input_json?: string | null;
-  handoff_result_json?: string | null;
-  handoff_validation_status?: 'valid' | 'invalid' | 'not_json' | null;
-  handoff_validation_errors_json?: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
-export type WorkflowStageEvaluationStatus =
-  | 'passed'
-  | 'failed'
-  | 'needs_revision'
-  | 'pending';
-
-export type WorkflowStageEvaluatorType =
-  | 'rules'
-  | 'schema'
-  | 'artifact'
-  | 'stage_rules'
-  | 'context_coverage'
-  | 'evidence'
-  | 'consistency'
-  | 'execution'
-  | 'llm_judge'
-  | 'quality_gate'
-  | 'hybrid'
-  | 'manual';
-
-export interface WorkflowEvalFinding {
-  code: string;
-  severity: 'low' | 'medium' | 'high' | 'critical';
-  message: string;
-  stageKey: string;
-  path?: string;
-  suggestion?: string;
-}
-
-export interface WorkflowEvalEvidence {
-  type:
-    | 'artifact'
-    | 'message'
-    | 'workflow_state'
-    | 'test_result'
-    | 'user_feedback'
-    | 'input'
-    | 'codebase_location'
-    | 'code'
-    | 'command'
-    | 'wiki'
-    | 'log'
-    | 'provider';
-  refId?: string;
-  path?: string;
-  location_kind?: string;
-  location_uri?: string;
-  host_path?: string;
-  container_path?: string;
-  root_location_uri?: string;
-  source?: string;
-  service?: string;
-  repo?: string;
-  repoPath?: string;
-  branch?: string;
-  commit?: string;
-  symbol?: string;
-  url?: string;
-  title?: string;
-  command?: string;
-  cwd?: string;
-  exitCode?: number;
-  hash?: string;
-  retrievedAt?: string;
-  scope?: string;
-  locator?: string;
-  timeRange?: string;
-  query?: string;
-  reportPath?: string;
-  lineStart?: number;
-  lineEnd?: number;
-  metadata?: Record<string, unknown>;
-  summary: string;
-}
-
-export interface WorkflowStageEvalResult {
-  status: WorkflowStageEvaluationStatus;
-  score: number;
-  summary: string;
-  findings: WorkflowEvalFinding[];
-  evidence: WorkflowEvalEvidence[];
-  evaluatorType: WorkflowStageEvaluatorType;
-}
-
-export interface WorkflowStageEvaluationRecord {
-  id: string;
-  workflow_id: string;
-  delegation_id: string | null;
-  stage_key: string;
-  evaluator_type: WorkflowStageEvaluatorType;
-  status: WorkflowStageEvaluationStatus;
-  score: number;
-  summary: string | null;
-  findings_json: string | null;
-  evidence_json: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
-export type WorkflowInterruptKind =
-  | 'approval'
-  | 'revision_request'
-  | 'credential'
-  | 'human_input'
-  | 'external_blocker';
-
-export type WorkflowInterruptStatus =
-  | 'pending'
-  | 'resumed'
-  | 'cancelled'
-  | 'expired';
-
-export type WorkflowInterruptActorChannel =
-  | 'web'
-  | 'feishu'
-  | 'assistant'
-  | 'system';
-
-export interface WorkflowInterruptRecord {
-  id: string;
-  workflow_id: string;
-  state_key: string;
-  kind: WorkflowInterruptKind;
-  status: WorkflowInterruptStatus;
-  title: string;
-  body: string | null;
-  resume_payload_schema_json: string | null;
-  allowed_actions_json: string;
-  allowed_channels_json: string | null;
-  assigned_role: string | null;
-  action_payload_json: string | null;
-  created_by: string;
-  resumed_by: string | null;
-  resume_action: string | null;
-  resume_payload_json: string | null;
-  resume_error: string | null;
-  idempotency_key: string;
-  created_at: string;
-  updated_at: string;
-  expires_at: string | null;
-  resumed_at: string | null;
-  cancelled_at: string | null;
-  expired_at: string | null;
-}
-
-export interface WorkflowEventRecord {
-  id: string;
-  workflow_id: string;
-  event_type: string;
-  state_key: string | null;
-  ref_type: string | null;
-  ref_id: string | null;
-  actor_json: string | null;
-  payload_json: string | null;
-  idempotency_key: string | null;
-  created_at: string;
-}
-
-export type WorkflowInterruptResumeAttemptStatus =
-  | 'accepted'
-  | 'duplicate'
-  | 'conflict'
-  | 'rejected';
-
-export interface WorkflowInterruptResumeAttemptRecord {
-  id: string;
-  interrupt_id: string;
-  workflow_id: string;
-  actor_json: string;
-  resume_action: string;
-  resume_payload_json: string | null;
-  idempotency_key: string | null;
-  status: WorkflowInterruptResumeAttemptStatus;
-  result_json: string | null;
-  conflict_reason: string | null;
-  created_at: string;
-}
-
-export interface WorkflowCheckpointRecord {
-  id: string;
-  workflow_id: string;
-  state_key: string;
-  checkpoint_version: number;
-  checkpoint_json: string;
-  created_at: string;
-}
-
-export interface WorkflowOutboxRecord {
-  id: string;
-  workflow_id: string;
-  event_id: string | null;
-  effect_type: string;
-  channel: string | null;
-  status: 'pending' | 'processing' | 'succeeded' | 'failed' | 'dead_letter';
-  payload_json: string;
-  idempotency_key: string;
-  attempts: number;
-  next_attempt_at: string | null;
-  last_error: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -347,11 +135,6 @@ export interface AskQuestionRecord {
   responder_user_id: string | null;
 }
 
-/** Workflow status is now a plain string — valid values are defined in workflow-definitions/*.json per type. */
-export type WorkflowStatus = string;
-
-export type WorkbenchTaskState = 'running' | 'success' | 'failed' | 'cancelled';
-
 /** Agent status info for the Agent Status panel. */
 export interface AgentStatusInfo {
   groupJid: string;
@@ -368,7 +151,6 @@ export interface AgentStatusInfo {
   pendingMessages: boolean;
   pendingTaskCount: number;
   pendingOneShotCount?: number;
-  activeWorkflowCount: number;
 }
 
 export type AgentQueryStatus =
@@ -381,7 +163,7 @@ export type AgentQueryStatus =
 export type AgentQuerySourceType =
   | 'message'
   | 'scheduled_task'
-  | 'workflow_delegation'
+  | 'delegation'
   | 'web_action'
   | 'assistant_evolution'
   | 'assistant_action'
@@ -396,13 +178,10 @@ export interface AgentQueryRecord {
   source_ref_id: string | null;
   chat_jid: string | null;
   group_folder: string | null;
-  workflow_type: string | null;
   service: string | null;
   role: string | null;
   task_id: string | null;
   task_title: string | null;
-  workflow_id: string | null;
-  stage_key: string | null;
   delegation_id: string | null;
   session_id: string | null;
   selected_model: string | null;
@@ -488,11 +267,8 @@ export interface ActiveAgentQueryTrace {
   runId: string | null;
   groupJid: string | null;
   groupFolder: string | null;
-  workflowType?: string | null;
   service?: string | null;
   role?: string | null;
-  workflowId: string | null;
-  stageKey: string | null;
   sessionId: string | null;
   selectedModel: string | null;
   actualModel: string | null;
@@ -522,7 +298,6 @@ export interface ActiveAgentQueryTrace {
 export interface StopAgentResult {
   ok: boolean;
   stoppedTaskId?: string | null;
-  cancelledWorkflowIds?: string[];
   error?: string;
 }
 
@@ -585,128 +360,6 @@ export interface DesktopCaptureResult {
   details?: string;
 }
 
-export interface Workflow {
-  id: string;
-  name: string;
-  service: string;
-  start_from: string;
-  context: Record<string, unknown>;
-  status: WorkflowStatus;
-  current_delegation_id: string;
-  round: number;
-  source_jid: string;
-  paused_from: WorkflowStatus | null;
-  workflow_type: string;
-  feature_id?: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface WorkbenchTaskRecord {
-  id: string;
-  workflow_id: string;
-  source_jid: string;
-  title: string;
-  service: string;
-  start_from: string;
-  workflow_type: string;
-  status: string;
-  task_state: WorkbenchTaskState;
-  current_stage: string;
-  summary: string | null;
-  created_at: string;
-  updated_at: string;
-  last_event_at: string | null;
-}
-
-export interface WorkbenchSubtaskRecord {
-  id: string;
-  task_id: string;
-  workflow_id: string;
-  delegation_id: string | null;
-  stage_key: string;
-  title: string;
-  role: string | null;
-  group_folder: string | null;
-  status: string;
-  input_summary: string | null;
-  output_summary: string | null;
-  started_at: string | null;
-  finished_at: string | null;
-  updated_at: string;
-}
-
-export interface WorkbenchEventRecord {
-  id: string;
-  task_id: string;
-  subtask_id: string | null;
-  event_type: string;
-  title: string;
-  body: string | null;
-  raw_ref_type: string | null;
-  raw_ref_id: string | null;
-  created_at: string;
-}
-
-export interface WorkbenchArtifactRecord {
-  id: string;
-  task_id: string;
-  workflow_id: string;
-  artifact_type: string;
-  title: string;
-  path: string;
-  location_kind?: string | null;
-  location_uri?: string | null;
-  host_path?: string | null;
-  container_path?: string | null;
-  feature_id?: string | null;
-  metadata_json?: string | null;
-  source_role: string | null;
-  created_at: string;
-}
-
-export interface WorkbenchActionItemRecord {
-  id: string;
-  task_id: string;
-  workflow_id: string;
-  subtask_id: string | null;
-  stage_key: string | null;
-  delegation_id: string | null;
-  group_folder: string | null;
-  item_type: string;
-  status: string;
-  title: string;
-  body: string | null;
-  source_type: string;
-  source_ref_id: string | null;
-  replyable: number;
-  created_at: string;
-  updated_at: string;
-  resolved_at: string | null;
-  extra_json: string | null;
-}
-
-export interface WorkbenchCommentRecord {
-  id: string;
-  task_id: string;
-  workflow_id: string;
-  author: string;
-  content: string;
-  created_at: string;
-}
-
-export interface WorkbenchContextAssetRecord {
-  id: string;
-  task_id: string;
-  workflow_id: string;
-  asset_type: string;
-  title: string;
-  path: string | null;
-  url: string | null;
-  note: string | null;
-  created_at: string;
-}
-
 export interface TodayPlanRecord {
   id: string;
   plan_date: string;
@@ -764,7 +417,6 @@ export interface StoredChatMessageRecord {
   timestamp: string;
   is_from_me: number;
   is_bot_message: number;
-  workflow_id: string | null;
   file_path?: string | null;
 }
 
@@ -958,23 +610,24 @@ export interface CardSection {
   buttons?: CardButton[];
 }
 
+export type CardActorChannel = 'web' | 'feishu' | 'assistant' | 'system';
+
 export interface InteractiveCard {
   header: { title: string; color?: CardHeaderColor };
   body?: string;
   buttons?: CardButton[];
   form?: CardForm;
   sections?: CardSection[];
-  allowed_channels?: WorkflowInterruptActorChannel[];
+  allowed_channels?: CardActorChannel[];
 }
 
 export type CardActionHandler = (action: {
   action: string;
   user_id: string;
   message_id: string;
-  actor_channel?: WorkflowInterruptActorChannel;
+  actor_channel?: CardActorChannel;
   group_jid?: string;
   group_folder?: string; // Plan item primary key
-  workflow_id?: string; // Workflow operations primary key (approve/pause/resume)
   form_value?: Record<string, string>;
 }) => void | CardActionResult | Promise<void | CardActionResult>;
 

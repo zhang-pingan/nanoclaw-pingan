@@ -14,18 +14,6 @@ vi.mock('./ask-user-question.js', () => ({
   })),
 }));
 
-vi.mock('./workflow.js', () => ({
-  handleCardAction: vi.fn(),
-}));
-
-vi.mock('./workbench-broadcast-actions.js', () => ({
-  handleWorkbenchBroadcastCardAction: vi.fn(async () => ({
-    ok: true,
-    toast: { type: 'success', content: 'ok' },
-  })),
-  logWorkbenchBroadcastActionFailure: vi.fn(),
-}));
-
 const handleAssistantEvolutionCardActionMock = vi.hoisted(() =>
   vi.fn(async () => ({
     ok: true,
@@ -54,8 +42,6 @@ vi.mock('./assistant/assistant-inbox-broadcast-actions.js', () => ({
 
 import { createCardActionHandler } from './card-action-router.js';
 import { handleAskQuestionResponse } from './ask-user-question.js';
-import { handleCardAction } from './workflow.js';
-import { handleWorkbenchBroadcastCardAction } from './workbench-broadcast-actions.js';
 
 describe('card-action-router ask dedupe', () => {
   beforeEach(() => {
@@ -132,68 +118,6 @@ describe('card-action-router ask dedupe', () => {
     await new Promise((r) => setTimeout(r, 0));
 
     expect(handleAskQuestionResponse).toHaveBeenCalledTimes(2);
-  });
-
-  it('returns workflow card action results to the channel', async () => {
-    vi.mocked(handleCardAction).mockReturnValueOnce({
-      ok: false,
-      toast: { type: 'error', content: 'channel not allowed' },
-    });
-    const handler = createCardActionHandler({
-      registeredGroups: () => ({}),
-      sendMessage: async () => {},
-    });
-
-    const result = await handler({
-      action: 'workflow_interrupt_resume',
-      user_id: 'u1',
-      message_id: 'm3',
-      form_value: {
-        interrupt_id: 'wi-1',
-        resume_action: 'approve',
-      },
-    });
-
-    expect(result).toEqual({
-      ok: false,
-      toast: { type: 'error', content: 'channel not allowed' },
-    });
-  });
-
-  it('forwards broadcast message ids to the workbench handler', async () => {
-    const handler = createCardActionHandler({
-      registeredGroups: () => ({}),
-      sendMessage: async () => {},
-    });
-
-    const result = await handler({
-      action: 'wb_broadcast_submit',
-      user_id: 'u1',
-      message_id: 'msg-1',
-      actor_channel: 'feishu',
-      form_value: {
-        task_id: 'task-1',
-        action_item_id: 'item-1',
-      },
-    });
-
-    expect(handleWorkbenchBroadcastCardAction).toHaveBeenCalledWith({
-      action: 'wb_broadcast_submit',
-      formValue: {
-        task_id: 'task-1',
-        action_item_id: 'item-1',
-      },
-      registeredGroups: {},
-      sendCard: undefined,
-      sendMessage: expect.any(Function),
-      userId: 'u1',
-      actorChannel: 'feishu',
-      messageId: 'msg-1',
-    });
-    expect(result).toEqual({
-      ok: true,
-      toast: { type: 'success', content: 'ok' },
-    });
   });
 
   it('routes assistant evolution card actions', async () => {
