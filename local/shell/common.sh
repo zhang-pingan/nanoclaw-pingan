@@ -9,6 +9,9 @@ LAUNCH_AGENT_PLIST="$LAUNCH_AGENT_DIR/$LAUNCHD_LABEL.plist"
 LAUNCH_AGENT_TEMPLATE="$ROOT_DIR/launchd/$LAUNCHD_LABEL.plist"
 LAUNCH_AGENT_PLIST_CHANGED=0
 BACKEND_ENTRY="$ROOT_DIR/dist/index.js"
+RUNTIME_TOOLCHAIN="$ROOT_DIR/scripts/runtime-toolchain.sh"
+RUNTIME_HOME="$HOME/Library/Application Support/Icarus"
+RUNTIME_LAUNCHER="$RUNTIME_HOME/bin/icarus-runtime"
 
 ensure_logs_dir() {
   mkdir -p "$ROOT_DIR/logs"
@@ -33,16 +36,12 @@ get_web_port() {
   printf '3000\n'
 }
 
-ensure_node_bin() {
-  if [ -n "${NODE_BIN:-}" ]; then
-    return 0
-  fi
-
-  NODE_BIN="$(command -v node 2>/dev/null || true)"
-  if [ -z "$NODE_BIN" ]; then
-    echo "node binary not found in PATH"
-    return 1
-  fi
+ensure_core_runtime_binding() {
+  "$RUNTIME_TOOLCHAIN" install
+  "$RUNTIME_TOOLCHAIN" verify
+  "$RUNTIME_TOOLCHAIN" bind-core \
+    --project-root "$ROOT_DIR" \
+    --entry "dist/index.js"
 }
 
 escape_sed_replacement() {
@@ -50,25 +49,22 @@ escape_sed_replacement() {
 }
 
 install_launch_agent_plist() {
-  local node_escaped
-  local node_bin_dir_escaped
+  local launcher_escaped
   local root_escaped
   local home_escaped
   local rendered
 
   ensure_logs_dir
-  ensure_node_bin
+  ensure_core_runtime_binding
   mkdir -p "$LAUNCH_AGENT_DIR"
 
-  node_escaped="$(escape_sed_replacement "$NODE_BIN")"
-  node_bin_dir_escaped="$(escape_sed_replacement "$(dirname "$NODE_BIN")")"
+  launcher_escaped="$(escape_sed_replacement "$RUNTIME_LAUNCHER")"
   root_escaped="$(escape_sed_replacement "$ROOT_DIR")"
   home_escaped="$(escape_sed_replacement "$HOME")"
   rendered="$(mktemp)"
 
   sed \
-    -e "s/{{NODE_PATH}}/$node_escaped/g" \
-    -e "s/{{NODE_BIN_DIR}}/$node_bin_dir_escaped/g" \
+    -e "s/{{RUNTIME_LAUNCHER}}/$launcher_escaped/g" \
     -e "s/{{PROJECT_ROOT}}/$root_escaped/g" \
     -e "s/{{HOME}}/$home_escaped/g" \
     "$LAUNCH_AGENT_TEMPLATE" > "$rendered"

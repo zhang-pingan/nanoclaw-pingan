@@ -14,8 +14,9 @@ if [ -n "$containers" ]; then
   echo "containers stopped"
 fi
 
-# Build host TypeScript
-npm run build
+# Build host TypeScript with the managed Core toolchain
+"$RUNTIME_TOOLCHAIN" install
+"$RUNTIME_TOOLCHAIN" exec -- npm run build
 echo "typescript compiled"
 
 # Rebuild container image

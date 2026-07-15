@@ -1,0 +1,18 @@
+{
+  "format": "icarus.managed-node-runtime-distribution/1",
+  "ref": {
+    "id": "nodejs.node-v26.5.0-darwin-arm64",
+    "version": "1.0.0"
+  },
+  "node_runtime_version": "26.5.0",
+  "npm_version": "11.17.0",
+  "platform": "darwin",
+  "arch": "arm64",
+  "distribution_origin": "nodejs_official",
+  "archive_filename": "node-v26.5.0-darwin-arm64.tar.gz",
+  "archive_url": "https://nodejs.org/dist/v26.5.0/node-v26.5.0-darwin-arm64.tar.gz",
+  "archive_sha256": "sha256:ee920559aaa2391569cff4d737e3b83963430e3a14dedd91bfe0ff53171b5af9",
+  "node_executable_relative_path": "bin/node",
+  "node_executable_sha256": "sha256:cbee2298aee5cc476bf8d5441e7348b627254a39d869743a5b04489028c729d4",
+  "manifest_hash": "sha256:0824f5044057d6ff26dc45022b842342f148b2dda2f0dd0feb17dd0b045f6cad"
+}

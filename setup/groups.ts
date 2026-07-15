@@ -4,7 +4,7 @@
  * Other channels discover group names at runtime — this step auto-skips for them.
  * Replaces 05-sync-groups.sh + 05b-list-groups.sh
  */
-import { execSync } from 'child_process';
+import { execFileSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 
@@ -84,10 +84,19 @@ async function syncGroups(projectRoot: string): Promise<void> {
   }
 
   // Build TypeScript first
-  logger.info('Building TypeScript');
+  logger.info('Building TypeScript through the managed Core toolchain');
   let buildOk = false;
   try {
-    execSync('npm run build', {
+    const runtimeToolchainPath = path.join(
+      projectRoot,
+      'scripts',
+      'runtime-toolchain.sh',
+    );
+    execFileSync(runtimeToolchainPath, ['install'], {
+      cwd: projectRoot,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    execFileSync(runtimeToolchainPath, ['exec', '--', 'npm', 'run', 'build'], {
       cwd: projectRoot,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
@@ -191,7 +200,11 @@ sock.ev.on('connection.update', async (update) => {
       syncOk = output.includes('SYNCED:');
       logger.info({ output: output.trim() }, 'Sync output');
     } finally {
-      try { fs.unlinkSync(tmpScript); } catch { /* ignore cleanup errors */ }
+      try {
+        fs.unlinkSync(tmpScript);
+      } catch {
+        /* ignore cleanup errors */
+      }
     }
   } catch (err) {
     logger.error({ err }, 'Sync failed');

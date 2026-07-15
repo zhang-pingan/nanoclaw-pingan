@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://icarus.local/schemas/managed-node-runtime-distribution.schema.json",
+  "title": "ManagedNodeRuntimeDistributionManifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "ref",
+    "node_runtime_version",
+    "npm_version",
+    "platform",
+    "arch",
+    "distribution_origin",
+    "archive_filename",
+    "archive_url",
+    "archive_sha256",
+    "node_executable_relative_path",
+    "node_executable_sha256",
+    "manifest_hash"
+  ],
+  "properties": {
+    "format": {
+      "const": "icarus.managed-node-runtime-distribution/1"
+    },
+    "ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "version"],
+      "properties": {
+        "id": {
+          "const": "nodejs.node-v26.5.0-darwin-arm64"
+        },
+        "version": {
+          "const": "1.0.0"
+        }
+      }
+    },
+    "node_runtime_version": {
+      "const": "26.5.0"
+    },
+    "npm_version": {
+      "const": "11.17.0"
+    },
+    "platform": {
+      "const": "darwin"
+    },
+    "arch": {
+      "const": "arm64"
+    },
+    "distribution_origin": {
+      "const": "nodejs_official"
+    },
+    "archive_filename": {
+      "const": "node-v26.5.0-darwin-arm64.tar.gz"
+    },
+    "archive_url": {
+      "const": "https://nodejs.org/dist/v26.5.0/node-v26.5.0-darwin-arm64.tar.gz"
+    },
+    "archive_sha256": {
+      "const": "sha256:ee920559aaa2391569cff4d737e3b83963430e3a14dedd91bfe0ff53171b5af9"
+    },
+    "node_executable_relative_path": {
+      "const": "bin/node"
+    },
+    "node_executable_sha256": {
+      "const": "sha256:cbee2298aee5cc476bf8d5441e7348b627254a39d869743a5b04489028c729d4"
+    },
+    "manifest_hash": {
+      "const": "sha256:0824f5044057d6ff26dc45022b842342f148b2dda2f0dd0feb17dd0b045f6cad"
+    }
+  }
+}

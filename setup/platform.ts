@@ -98,12 +98,12 @@ export function getServiceManager(): ServiceManager {
   return 'none';
 }
 
-export function getNodePath(): string {
-  try {
-    return execSync('command -v node', { encoding: 'utf-8' }).trim();
-  } catch {
-    return process.execPath;
-  }
+export function getRuntimeHome(homeDir: string = os.homedir()): string {
+  return `${homeDir}/Library/Application Support/Icarus`;
+}
+
+export function getRuntimeLauncherPath(homeDir: string = os.homedir()): string {
+  return `${getRuntimeHome(homeDir)}/bin/icarus-runtime`;
 }
 
 export function commandExists(name: string): boolean {

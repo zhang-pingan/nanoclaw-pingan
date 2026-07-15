@@ -6,8 +6,7 @@
     <string>com.icarus</string>
     <key>ProgramArguments</key>
     <array>
-        <string>{{NODE_PATH}}</string>
-        <string>{{PROJECT_ROOT}}/dist/index.js</string>
+        <string>{{RUNTIME_LAUNCHER}}</string>
     </array>
     <key>WorkingDirectory</key>
     <string>{{PROJECT_ROOT}}</string>
@@ -18,7 +17,7 @@
     <key>EnvironmentVariables</key>
     <dict>
         <key>PATH</key>
-        <string>{{NODE_BIN_DIR}}:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/local/sbin:/usr/bin:/bin:/usr/sbin:/sbin:{{HOME}}/.local/bin</string>
+        <string>/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/local/sbin:/usr/bin:/bin:/usr/sbin:/sbin:{{HOME}}/.local/bin</string>
         <key>HOME</key>
         <string>{{HOME}}</string>
     </dict>

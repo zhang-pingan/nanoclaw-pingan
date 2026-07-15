@@ -1,0 +1,62 @@
+{
+  "format": "icarus.workflow-compiler-toolchain-inputs/1",
+  "ref": {
+    "id": "icarus.workflow-compiler-toolchain-inputs",
+    "version": "1.0.0"
+  },
+  "identity_scope": "g0.1_locked_inputs",
+  "node_runtime_version": "26.5.0",
+  "npm_version": "11.17.0",
+  "package_lock_sha256": "sha256:2b8c87e5549915e2d53c1eecdabef3ebb149bc8f03054d40f1924d93bf2bd085",
+  "direct_packages": [
+    {
+      "package_name": "@types/better-sqlite3",
+      "dependency_kind": "dev",
+      "exact_version": "7.6.13",
+      "lockfile_integrity": "sha512-NMv9ASNARoKksWtsq/SHakpYAYnhBrQgGD8zkLYk/jaK8jUGn08CfEdTRgYhMypUQAfzSP8W6gNLe0q19/t4VA=="
+    },
+    {
+      "package_name": "@types/node",
+      "dependency_kind": "dev",
+      "exact_version": "26.1.1",
+      "lockfile_integrity": "sha512-nxAkRSVkN1Y0JC1W8ky/fTfkGsMmcrRsbx+3XoZE+rMOX71kLYTV7fLXpqud1GpbpP5TuffXFqfX7fH2GgZREw=="
+    },
+    {
+      "package_name": "ajv",
+      "dependency_kind": "runtime",
+      "exact_version": "8.20.0",
+      "lockfile_integrity": "sha512-Thbli+OlOj+iMPYFBVBfJ3OmCAnaSyNn4M1vz9T6Gka5Jt9ba/HIR56joy65tY6kx/FCF5VXNB819Y7/GUrBGA=="
+    },
+    {
+      "package_name": "ajv-formats",
+      "dependency_kind": "runtime",
+      "exact_version": "3.0.1",
+      "lockfile_integrity": "sha512-8iUql50EUR+uUcdRQ3HDqa6EVyo3docL8g5WJ3FNcWmu62IbkGUue/pEyLBW8VGKKucTPgqeks4fIU1DA4yowQ=="
+    },
+    {
+      "package_name": "better-sqlite3",
+      "dependency_kind": "runtime",
+      "exact_version": "12.11.1",
+      "lockfile_integrity": "sha512-dq9AtApgg5PGFtBzPFSBl3HZQjHok5gaQCM6zh2Yk0aSmDCs1CbnVI8/HgASQkNKsWFpseIO9beg5xxpYhbIfA=="
+    },
+    {
+      "package_name": "fast-check",
+      "dependency_kind": "dev",
+      "exact_version": "4.9.0",
+      "lockfile_integrity": "sha512-7ms6T7SybUev/PQITciI0yLM2pOSFy5zpG8Ty7tQofcVaQUvrMXp6CBwqF6fThLCLOrfBtuHAtwq6Yu4XPCllg=="
+    },
+    {
+      "package_name": "json-canonicalize",
+      "dependency_kind": "runtime",
+      "exact_version": "2.0.0",
+      "lockfile_integrity": "sha512-yyrnK/mEm6Na3ChbJUWueXdapueW0p380RUyTW87XGb1ww8l8hU0pRrGC3vSWHe9CxrbPHX2fGUOZpNiHR0IIg=="
+    },
+    {
+      "package_name": "jsonc-parser",
+      "dependency_kind": "runtime",
+      "exact_version": "3.3.1",
+      "lockfile_integrity": "sha512-HUgH65KyejrUFPvHFPbqOY0rsFip3Bo5wb4ngvdi1EpCYWUQDC5V+Y7mZws+DLkr4M//zQJoanu1SP+87Dv1oQ=="
+    }
+  ],
+  "identity_hash": "sha256:3ad720b0283ec45be37acb596f8afb1e50a40f177fbc0c3ee2ff419aba43557b"
+}

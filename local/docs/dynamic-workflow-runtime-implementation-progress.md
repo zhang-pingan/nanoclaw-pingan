@@ -1,8 +1,8 @@
 # Dynamic Workflow Runtime 实施进度
 
-> **状态**: READY
+> **状态**: IN_PROGRESS
 > **当前 Gate**: G0 Contract Pack / Static Baseline
-> **下一施工切片**: G0.1 Toolchain Identity
+> **下一施工切片**: G0.2 Contract Pack Foundation
 > **最后更新**: 2026-07-15
 > **规范权威**: `local/docs/dynamic-workflow-dag-framework.md`
 
@@ -104,7 +104,7 @@ Agent Container 运行于独立 VM，Node identity 由 VM image gate 保证；�
 
 | Gate | 状态 | 依赖 | 退出证据 | 完成提交 |
 | --- | --- | --- | --- | --- |
-| G0 Contract Pack / Static Baseline | `READY` | 无 | managed distribution/Launcher proof + schemas/catalogs/protocols/safety/draft bundle + absence/coverage/candidate hashes | - |
+| G0 Contract Pack / Static Baseline | `IN_PROGRESS` | 无 | managed distribution/Launcher proof + schemas/catalogs/protocols/safety/draft bundle + absence/coverage/candidate hashes | - |
 | G1 DDL / Store | `NOT_READY` | G0 | executable migration + Schema Manifest + SQLite fixtures | - |
 | G2 Compiler / Golden | `NOT_READY` | G0 | sealed Golden Bundle + compiler/toolchain hash | - |
 | G3 Registry / Authoring / Publish | `NOT_READY` | G1 + G2 | manifest/authoring/publish/retention/ABI fixtures | - |
@@ -130,7 +130,7 @@ Agent Container 运行于独立 VM，Node identity 由 VM image gate 保证；�
 | I8 | Subgraph、Expand、Map、child scope | `NOT_READY` | G6 起 |
 | I9 | Completion、Cancel、Compensation、Finalization、Recovery | `NOT_READY` | G6/G7 |
 | I10 | Runtime Command、Runtime Center、Trace | `NOT_READY` | G7 起 |
-| I11 | Contract Pack、managed runtime toolchain/launcher、测试模型、发布门禁、absence baseline | `READY` | G0.1 |
+| I11 | Contract Pack、managed runtime toolchain/launcher、测试模型、发布门禁、absence baseline | `DONE` | G0.1（本原子提交） |
 
 ## G0 施工切片
 
@@ -138,8 +138,8 @@ G0 只有全部切片满足退出条件后才能标记 `DONE`。切片编号描�
 
 | 切片 | 内容 | 状态 | 主要退出条件 | 完成提交 |
 | --- | --- | --- | --- | --- |
-| G0.1 | Toolchain Identity | `READY` | Node/npm/direct dependency/lock/CI/managed distribution/launcher identity 一致，基础构建与测试通过 | - |
-| G0.2 | Contract Pack Foundation | `NOT_READY` | artifact envelope、VersionedRef、hash/domain、strict parse、目录与 CI 骨架 | - |
+| G0.1 | Toolchain Identity | `DONE` | Node/npm/direct dependency/lock/CI/managed distribution/launcher identity 一致，基础构建与测试通过 | 本原子提交 |
+| G0.2 | Contract Pack Foundation | `READY` | artifact envelope、VersionedRef、hash/domain、strict parse、目录与 CI 骨架 | - |
 | G0.3 | Closed Schemas | `NOT_READY` | Definition/Recipe/Command/Transition/Feature/Card/Source/Compiled IR schemas 与 negative fixtures | - |
 | G0.4 | Catalogs and Protocol Tables | `NOT_READY` | Error/Fact/Event/Permission/Reason/Denial、状态与 T0-T8/T6e 表机器化 | - |
 | G0.5 | Safety / Retention / SQLite Contracts | `NOT_READY` | Safety、Capacity schema/baseline、Product Floor、Retention、SQLite Profile、Enforcement Matrix | - |
@@ -150,7 +150,7 @@ G0 只有全部切片满足退出条件后才能标记 `DONE`。切片编号描�
 
 ## 当前施工切片：G0.1 Toolchain Identity
 
-**状态**：`READY`
+**状态**：`DONE`
 
 **工作包**：I11
 
@@ -214,6 +214,8 @@ npm --version
 ./scripts/runtime-toolchain.sh exec -- npm test
 ./scripts/runtime-toolchain.sh exec -- npx vitest run setup/toolchain-identity.test.ts setup/runtime-toolchain.test.ts setup/service.test.ts
 ./scripts/runtime-toolchain.sh exec -- npx vitest run setup/legacy-workflow-boundary.test.ts
+./scripts/runtime-toolchain.sh exec -- npm run build
+./scripts/runtime-toolchain.sh bind-core --project-root "$PWD" --entry dist/index.js
 command -v node
 node --version
 command -v npm
@@ -225,19 +227,55 @@ git diff --check
 
 ## 施工记录
 
-尚无完成的 Dynamic Workflow Runtime 施工切片。
+### 2026-07-15：G0.1 Toolchain Identity（DONE）
+
+I11/G0.1 已完成最终实现审计、fail-closed 加固、完整退出验证和原子交付；G0 总 Gate 仍为 `IN_PROGRESS`，下一切片 G0.2 仅转为 `READY`，没有开始其实现。
+
+已完成交付：
+
+- `.nvmrc=26.5.0`、`packageManager=npm@11.17.0`，CI 改为 `node-version-file: .nvmrc` 并在 `npm ci` 前验证 Node/npm exact identity。
+- 规范指定的 direct runtime/dev dependency 已固定 exact version，`package-lock.json` 已由 managed npm `11.17.0` 更新；最小 Compiler locked-input identity 固定 lock hash 与 direct package integrity，不宣称完整 Compiler Toolchain Manifest。
+- 已提交候选 `ManagedNodeRuntimeDistributionManifest`/closed schema，固定 official darwin/arm64 archive、archive hash、Node executable hash和 bundled npm identity。
+- `scripts/runtime-toolchain.sh` 已实现 download/local-fixture、archive/executable/npm verify、安全 entry/link 检查、同 filesystem 临时安装、side-by-side content-addressed layout、原子 active pointer、verify/exec 和 development Core binding；不调用或修改 Homebrew/nvm/fnm/Volta/system Node。
+- `scripts/runtime-toolchain.sh` 对 Manifest/Core binding 执行 closed keyset、canonical JSON bytes 和 domain hash 校验，拒绝 archive traversal/unsafe link、安装目录或 active pointer 越界、Node executable 越界、partial install、identity mismatch 与 binding tamper；相同 content-addressed install 重放完整复验。
+- `scripts/runtime-launcher.sh` 从自身 realpath 推导 runtime root，固定解析工具 PATH，调用同布局内 toolchain verifier，验证 active distribution/Core binding 后以 absolute managed `bin/node` exec；继承的 `HOME/PATH/ICARUS_*_HOME/NODE_OPTIONS/NODE_PATH` 不能改写 runtime root 或触发 system Node fallback。
+- launchd `ProgramArguments`、setup service、systemd/nohup renderer、本地 restart、setup group-sync build 和 `package.json start` 已切换到 stable Runtime Launcher/managed exec；Core binding 明确为 `development_checkout`，没有伪造 Core Release、Feature Executor Artifact、native release certification、SQLite Profile 或 Supported Limits identity。
+- 新增 `setup/toolchain-identity.test.ts`、`setup/runtime-toolchain.test.ts` 和重写的 `setup/service.test.ts`，覆盖 exact manifest/lock/native identity、fresh-home 幂等 install、archive/executable/npm mismatch、traversal/unsafe symlink、malformed Manifest/Core binding、partial/external install、invalid pointer、Launcher realpath/PATH 隔离、Core binding tamper 与所有 Core service/restart binding。
+
+当前验证证据：
+
+| 命令/证据 | 结果 |
+| --- | --- |
+| official archive 手工下载 + `shasum -a 256` | PASS；archive `ee920559aaa2391569cff4d737e3b83963430e3a14dedd91bfe0ff53171b5af9`，`bin/node` `cbee2298aee5cc476bf8d5441e7348b627254a39d869743a5b04489028c729d4`，Node `v26.5.0`，npm `11.17.0` |
+| system identity before/after `./setup.sh` and full exit suite | PASS；两次均为 Node `/opt/homebrew/bin/node v26.5.0`、npm `/opt/homebrew/bin/npm 11.17.0`；setup 输出 `SYSTEM_IDENTITY_UNCHANGED=true` |
+| `./scripts/runtime-toolchain.sh install` / `verify` / managed version probes | PASS；active Node `/Users/chelaile/Library/Application Support/Icarus/toolchains/node/26.5.0/darwin-arm64/ee920559aaa2391569cff4d737e3b83963430e3a14dedd91bfe0ff53171b5af9/bin/node`，Node `v26.5.0`，npm `11.17.0`，Manifest `sha256:0824f5044057d6ff26dc45022b842342f148b2dda2f0dd0feb17dd0b045f6cad` |
+| managed `npm ci` | PASS；554 packages installed；lock SHA-256 `2b8c87e5549915e2d53c1eecdabef3ebb149bc8f03054d40f1924d93bf2bd085`；npm audit 报告 30 项依赖告警，未执行会改变 exact lock 的自动修复 |
+| Compiler locked-input conformance | PASS；8 个指定 direct package 的 exact version/integrity 与当前 lock 逐项匹配；identity hash `sha256:3ad720b0283ec45be37acb596f8afb1e50a40f177fbc0c3ee2ff419aba43557b` |
+| managed native load | PASS；`process.execPath` 属于 active content-addressed install，`better-sqlite3=12.11.1`；开发机构建的 native binary SHA-256 `0000d73c6e2e94318ed2b9339139623d5a0908b195f1e761c16cfd98f9cc6229`，仅作 G0.1 load 证据，不是 release/SQLite certification |
+| managed `npm run typecheck` | PASS |
+| managed `npm test` | PASS，68 files / 619 tests |
+| managed `npx vitest run setup/toolchain-identity.test.ts setup/runtime-toolchain.test.ts setup/service.test.ts` | PASS，3 files / 13 tests |
+| managed `npx vitest run setup/legacy-workflow-boundary.test.ts` | PASS，1 file / 6 tests |
+| managed `npm run build` + `bind-core` | PASS；binding kind `development_checkout`，entry SHA-256 `11848f85176747fe1914d7f3193a4cf47f58a3590aa7f53ed2e099440a846155`，binding hash `f0e74f405b34d1ca4026b9e1e3fe9be6032421799019b71db97d025695330c11` |
+| final source/installed hashes | Launcher source=installed `70377ade0ba2f3e969c62bab240a91549e1173270354e1d3f815282dd5213ae0`；toolchain source=installed `fbed1cfdc01e7f7915f68ca4f340e2417b7ffc64467555c03a9a83f3b8969824`；package-lock `2b8c87e5549915e2d53c1eecdabef3ebb149bc8f03054d40f1924d93bf2bd085` |
+| `bash -n` / `git diff --check` / final fallback and file-boundary scan | PASS；无 Core system-Node launch fallback；`container/` 和 Electron 文件无改动；无无关生成物 |
+
+身份边界证据：本切片没有修改 `container/` 或 Electron 文件。Agent Container Node 继续由独立 VM image gate 所有；Feature Executor Artifact/immutable Node Bundle 属于 G3，尚未创建；Electron 内置 Node 仍只是 API client identity；三者都不进入本机 Core managed distribution、G0.1 Compiler locked inputs 或 SQLite certification key。
+
+G0.1 的实现、测试和本进度账本由同一个原子提交交付。Agent Container/VM image 与 Electron 文件没有改动；Feature Executor Artifact/immutable Node Bundle 仍属于 G3；Core Release、native release identity、SQLite certification 与 Supported Limits 仍属于 G8/G9，当前只存在显式 `development_checkout` binding。
 
 ## 当前风险与待验证项
 
 | ID | 类型 | 状态 | 描述 | 处理 Gate/切片 |
 | --- | --- | --- | --- | --- |
-| R-001 | Toolchain | OPEN | 当前 Node/npm/依赖/CI 与规范 exact identity 不一致，且 managed distribution/bootstrap/exec wrapper 尚不存在 | G0.1 |
-| R-002 | Host launch identity | OPEN | 当前 launchd/setup/restart path 直接解析 `/opt/homebrew/bin/node` 或 `command -v node`；必须改为 managed distribution + stable Launcher，且无 system fallback | G0.1 |
+| R-001 | Toolchain | CLOSED | exact Node/npm/direct dependency/lock/CI/managed distribution 已落地，最终 managed install/ci/typecheck/test/build 全部通过 | G0.1 |
+| R-002 | Host launch identity | CLOSED | 所有 Core service/start/restart path 已切到 stable Launcher/managed build；realpath/环境隔离/fail-closed、最终 hash和 Core rebind 已验证 | G0.1 |
 | R-003 | Static proof | OPEN | 当前只有定向 legacy boundary test，尚无规范要求的 AST/API/UI/schema/filesystem/resource manifests | G0.7 |
 | R-004 | Contract drift | OPEN | 规范尚未转换为 Machine-readable Contract Pack，Markdown 与未来机器合同的一致性尚未由 CI 证明 | G0.2-G0.9 |
 | R-005 | DDL feasibility | DEFERRED | Logical Schema 尚未转换为 executable migration；不代表已发现冲突，但 G1 必须以真实 SQLite Gate 验证 | G1 |
 | R-006 | Certification | DEFERRED | Product Floor 和 profile 已冻结；Launcher/Core Release/Managed Node executable/native module 完整 key、Supported Limits 与事务预算尚未 benchmark 认证 | G8 |
+| R-007 | Dependency audit | OPEN_OUT_OF_SCOPE | exact lock 的 `npm ci` 报告 30 项 transitive dependency audit 告警；G0.1 不运行会漂移规范 pinned identity 的自动修复，需独立依赖维护评审 | 独立维护 |
 
 ## 下一步
 
-开始 `G0.1 Toolchain Identity`。完成并提交后，把 G0.1 标为 `DONE`，把 G0.2 标为 `READY`，更新 Gate/工作包证据、施工记录和风险表；随后由会话最终回复生成 G0.2 的新会话 Prompt。
+开始 `G0.2 Contract Pack Foundation`。保持 G0 总 Gate 为 `IN_PROGRESS`，工作包仍按实现索引重新确认；只实现 artifact envelope、VersionedRef、domain-separated hash、strict parse、Contract Pack 目录/CI 骨架及其 fixture，不开始 G0.3 closed schema、G1 Store/DDL、G2 Compiler lowering/Golden、Registry、T0-T8 或 UI。新会话仍须完整阅读架构规范和本文，并从本原子提交检查工作树与 G0.1 最终证据。

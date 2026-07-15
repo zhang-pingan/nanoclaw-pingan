@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # setup.sh — Bootstrap script for Icarus
-# Handles Node.js/npm setup, then hands off to the Node.js setup modules.
+# Installs the managed Node.js/npm runtime without changing the system runtime.
 # This is the only bash script in the setup flow.
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -38,64 +38,74 @@ detect_platform() {
   log "Platform: $PLATFORM, WSL: $IS_WSL, Root: $IS_ROOT"
 }
 
-# --- Node.js check ---
+# --- System identity snapshot ---
 
-check_node() {
-  NODE_OK="false"
-  NODE_VERSION="not_found"
-  NODE_PATH_FOUND=""
-
-  if command -v node >/dev/null 2>&1; then
-    NODE_VERSION=$(node --version 2>/dev/null | sed 's/^v//')
-    NODE_PATH_FOUND=$(command -v node)
-    local major
-    major=$(echo "$NODE_VERSION" | cut -d. -f1)
-    if [ "$major" -ge 20 ] 2>/dev/null; then
-      NODE_OK="true"
-    fi
-    log "Node $NODE_VERSION at $NODE_PATH_FOUND (major=$major, ok=$NODE_OK)"
-  else
-    log "Node not found"
-  fi
+capture_system_identity() {
+  SYSTEM_NODE_PATH_BEFORE="$(command -v node 2>/dev/null || true)"
+  SYSTEM_NODE_VERSION_BEFORE="$(node --version 2>/dev/null || true)"
+  SYSTEM_NPM_PATH_BEFORE="$(command -v npm 2>/dev/null || true)"
+  SYSTEM_NPM_VERSION_BEFORE="$(npm --version 2>/dev/null || true)"
+  log "System Node before: ${SYSTEM_NODE_PATH_BEFORE:-not_found} ${SYSTEM_NODE_VERSION_BEFORE:-not_found}"
+  log "System npm before: ${SYSTEM_NPM_PATH_BEFORE:-not_found} ${SYSTEM_NPM_VERSION_BEFORE:-not_found}"
 }
 
-# --- npm install ---
+# --- Managed runtime and npm install ---
 
-install_deps() {
+install_managed_runtime_and_deps() {
+  MANAGED_OK="false"
   DEPS_OK="false"
   NATIVE_OK="false"
 
-  if [ "$NODE_OK" = "false" ]; then
-    log "Skipping npm install — Node not available"
-    return
-  fi
-
   cd "$PROJECT_ROOT"
 
-  # npm install with --unsafe-perm if root (needed for native modules)
-  local npm_flags=""
-  if [ "$IS_ROOT" = "true" ]; then
-    npm_flags="--unsafe-perm"
-    log "Running as root, using --unsafe-perm"
+  log "Installing and verifying managed Node distribution"
+  if ! "$PROJECT_ROOT/scripts/runtime-toolchain.sh" install >> "$LOG_FILE" 2>&1; then
+    log "Managed Node install failed"
+    return
   fi
+  if ! "$PROJECT_ROOT/scripts/runtime-toolchain.sh" verify >> "$LOG_FILE" 2>&1; then
+    log "Managed Node verification failed"
+    return
+  fi
+  MANAGED_OK="true"
 
-  log "Running npm ci $npm_flags"
-  if npm ci $npm_flags >> "$LOG_FILE" 2>&1; then
+  MANAGED_NODE_PATH="$("$PROJECT_ROOT/scripts/runtime-toolchain.sh" active-path)/bin/node"
+  MANAGED_NODE_VERSION="$("$PROJECT_ROOT/scripts/runtime-toolchain.sh" exec -- node --version)"
+  MANAGED_NPM_VERSION="$("$PROJECT_ROOT/scripts/runtime-toolchain.sh" exec -- npm --version)"
+
+  log "Running npm ci through managed runtime"
+  if "$PROJECT_ROOT/scripts/runtime-toolchain.sh" exec -- npm ci >> "$LOG_FILE" 2>&1; then
     DEPS_OK="true"
-    log "npm install succeeded"
+    log "Managed npm ci succeeded"
   else
-    log "npm install failed"
+    log "Managed npm ci failed"
     return
   fi
 
   # Verify native module (better-sqlite3)
   log "Verifying native modules"
-  if node -e "require('better-sqlite3')" >> "$LOG_FILE" 2>&1; then
+  if "$PROJECT_ROOT/scripts/runtime-toolchain.sh" exec -- node -e "require('better-sqlite3')" >> "$LOG_FILE" 2>&1; then
     NATIVE_OK="true"
     log "better-sqlite3 loads OK"
   else
     log "better-sqlite3 failed to load"
   fi
+}
+
+verify_system_identity_unchanged() {
+  SYSTEM_NODE_PATH_AFTER="$(command -v node 2>/dev/null || true)"
+  SYSTEM_NODE_VERSION_AFTER="$(node --version 2>/dev/null || true)"
+  SYSTEM_NPM_PATH_AFTER="$(command -v npm 2>/dev/null || true)"
+  SYSTEM_NPM_VERSION_AFTER="$(npm --version 2>/dev/null || true)"
+  SYSTEM_IDENTITY_UNCHANGED="false"
+
+  if [ "$SYSTEM_NODE_PATH_BEFORE" = "$SYSTEM_NODE_PATH_AFTER" ] && \
+     [ "$SYSTEM_NODE_VERSION_BEFORE" = "$SYSTEM_NODE_VERSION_AFTER" ] && \
+     [ "$SYSTEM_NPM_PATH_BEFORE" = "$SYSTEM_NPM_PATH_AFTER" ] && \
+     [ "$SYSTEM_NPM_VERSION_BEFORE" = "$SYSTEM_NPM_VERSION_AFTER" ]; then
+    SYSTEM_IDENTITY_UNCHANGED="true"
+  fi
+  log "System runtime identity unchanged: $SYSTEM_IDENTITY_UNCHANGED"
 }
 
 # --- Build tools check ---
@@ -121,14 +131,17 @@ check_build_tools() {
 log "=== Bootstrap started ==="
 
 detect_platform
-check_node
-install_deps
+capture_system_identity
+install_managed_runtime_and_deps
+verify_system_identity_unchanged
 check_build_tools
 
 # Emit status block
 STATUS="success"
-if [ "$NODE_OK" = "false" ]; then
-  STATUS="node_missing"
+if [ "$MANAGED_OK" = "false" ]; then
+  STATUS="managed_runtime_failed"
+elif [ "$SYSTEM_IDENTITY_UNCHANGED" = "false" ]; then
+  STATUS="system_identity_changed"
 elif [ "$DEPS_OK" = "false" ]; then
   STATUS="deps_failed"
 elif [ "$NATIVE_OK" = "false" ]; then
@@ -140,9 +153,15 @@ cat <<EOF
 PLATFORM: $PLATFORM
 IS_WSL: $IS_WSL
 IS_ROOT: $IS_ROOT
-NODE_VERSION: $NODE_VERSION
-NODE_OK: $NODE_OK
-NODE_PATH: ${NODE_PATH_FOUND:-not_found}
+SYSTEM_NODE_PATH: ${SYSTEM_NODE_PATH_BEFORE:-not_found}
+SYSTEM_NODE_VERSION: ${SYSTEM_NODE_VERSION_BEFORE:-not_found}
+SYSTEM_NPM_PATH: ${SYSTEM_NPM_PATH_BEFORE:-not_found}
+SYSTEM_NPM_VERSION: ${SYSTEM_NPM_VERSION_BEFORE:-not_found}
+SYSTEM_IDENTITY_UNCHANGED: $SYSTEM_IDENTITY_UNCHANGED
+MANAGED_NODE_PATH: ${MANAGED_NODE_PATH:-not_found}
+MANAGED_NODE_VERSION: ${MANAGED_NODE_VERSION:-not_found}
+MANAGED_NPM_VERSION: ${MANAGED_NPM_VERSION:-not_found}
+MANAGED_OK: $MANAGED_OK
 DEPS_OK: $DEPS_OK
 NATIVE_OK: $NATIVE_OK
 HAS_BUILD_TOOLS: $HAS_BUILD_TOOLS
@@ -153,8 +172,11 @@ EOF
 
 log "=== Bootstrap completed: $STATUS ==="
 
-if [ "$NODE_OK" = "false" ]; then
+if [ "$MANAGED_OK" = "false" ]; then
   exit 2
+fi
+if [ "$SYSTEM_IDENTITY_UNCHANGED" = "false" ]; then
+  exit 4
 fi
 if [ "$DEPS_OK" = "false" ] || [ "$NATIVE_OK" = "false" ]; then
   exit 1

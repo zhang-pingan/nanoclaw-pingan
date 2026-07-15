@@ -4,7 +4,7 @@
  *
  * Fixes: Root→system systemd, WSL nohup fallback, no `|| true` swallowing errors.
  */
-import { execSync } from 'child_process';
+import { execFileSync, execSync } from 'child_process';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -12,18 +12,16 @@ import path from 'path';
 import { logger } from '../src/logger.js';
 import {
   getPlatform,
-  getNodePath,
+  getRuntimeLauncherPath,
   getServiceManager,
-  hasSystemd,
   isRoot,
-  isWSL,
 } from './platform.js';
 import { emitStatus } from './status.js';
 import { renderLaunchdPlist } from './launchd.js';
 
-function servicePath(nodePath: string, homeDir: string): string {
+function servicePath(runtimeLauncherPath: string, homeDir: string): string {
   return [
-    path.dirname(nodePath),
+    path.dirname(runtimeLauncherPath),
     '/opt/homebrew/bin',
     '/opt/homebrew/sbin',
     '/home/linuxbrew/.linuxbrew/bin',
@@ -41,27 +39,47 @@ function servicePath(nodePath: string, homeDir: string): string {
 export async function run(_args: string[]): Promise<void> {
   const projectRoot = process.cwd();
   const platform = getPlatform();
-  const nodePath = getNodePath();
   const homeDir = os.homedir();
+  const runtimeLauncherPath = getRuntimeLauncherPath(homeDir);
+  const runtimeToolchainPath = path.join(
+    projectRoot,
+    'scripts',
+    'runtime-toolchain.sh',
+  );
 
-  logger.info({ platform, nodePath, projectRoot }, 'Setting up service');
+  logger.info(
+    { platform, runtimeLauncherPath, projectRoot },
+    'Setting up service',
+  );
 
-  // Build first
-  logger.info('Building TypeScript');
+  // Install and build through the managed runtime, then bind the immutable build bytes.
+  logger.info('Installing managed runtime and building TypeScript');
   try {
-    execSync('npm run build', {
+    execFileSync(runtimeToolchainPath, ['install'], {
       cwd: projectRoot,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
-    logger.info('Build succeeded');
+    execFileSync(runtimeToolchainPath, ['exec', '--', 'npm', 'run', 'build'], {
+      cwd: projectRoot,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    execFileSync(
+      runtimeToolchainPath,
+      ['bind-core', '--project-root', projectRoot, '--entry', 'dist/index.js'],
+      {
+        cwd: projectRoot,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      },
+    );
+    logger.info('Managed build and Core launch binding succeeded');
   } catch {
-    logger.error('Build failed');
+    logger.error('Managed runtime setup or build failed');
     emitStatus('SETUP_SERVICE', {
       SERVICE_TYPE: 'unknown',
-      NODE_PATH: nodePath,
+      RUNTIME_LAUNCHER: runtimeLauncherPath,
       PROJECT_PATH: projectRoot,
       STATUS: 'failed',
-      ERROR: 'build_failed',
+      ERROR: 'managed_runtime_or_build_failed',
       LOG: 'logs/setup.log',
     });
     process.exit(1);
@@ -70,13 +88,13 @@ export async function run(_args: string[]): Promise<void> {
   fs.mkdirSync(path.join(projectRoot, 'logs'), { recursive: true });
 
   if (platform === 'macos') {
-    setupLaunchd(projectRoot, nodePath, homeDir);
+    setupLaunchd(projectRoot, runtimeLauncherPath, homeDir);
   } else if (platform === 'linux') {
-    setupLinux(projectRoot, nodePath, homeDir);
+    setupLinux(projectRoot, runtimeLauncherPath, homeDir);
   } else {
     emitStatus('SETUP_SERVICE', {
       SERVICE_TYPE: 'unknown',
-      NODE_PATH: nodePath,
+      RUNTIME_LAUNCHER: runtimeLauncherPath,
       PROJECT_PATH: projectRoot,
       STATUS: 'failed',
       ERROR: 'unsupported_platform',
@@ -88,7 +106,7 @@ export async function run(_args: string[]): Promise<void> {
 
 function setupLaunchd(
   projectRoot: string,
-  nodePath: string,
+  runtimeLauncherPath: string,
   homeDir: string,
 ): void {
   const plistPath = path.join(
@@ -99,7 +117,7 @@ function setupLaunchd(
   );
   fs.mkdirSync(path.dirname(plistPath), { recursive: true });
 
-  const plist = renderLaunchdPlist(projectRoot, nodePath, homeDir);
+  const plist = renderLaunchdPlist(projectRoot, runtimeLauncherPath, homeDir);
 
   fs.writeFileSync(plistPath, plist);
   logger.info({ plistPath }, 'Wrote launchd plist');
@@ -124,7 +142,7 @@ function setupLaunchd(
 
   emitStatus('SETUP_SERVICE', {
     SERVICE_TYPE: 'launchd',
-    NODE_PATH: nodePath,
+    RUNTIME_LAUNCHER: runtimeLauncherPath,
     PROJECT_PATH: projectRoot,
     PLIST_PATH: plistPath,
     SERVICE_LOADED: serviceLoaded,
@@ -135,16 +153,16 @@ function setupLaunchd(
 
 function setupLinux(
   projectRoot: string,
-  nodePath: string,
+  runtimeLauncherPath: string,
   homeDir: string,
 ): void {
   const serviceManager = getServiceManager();
 
   if (serviceManager === 'systemd') {
-    setupSystemd(projectRoot, nodePath, homeDir);
+    setupSystemd(projectRoot, runtimeLauncherPath, homeDir);
   } else {
     // WSL without systemd or other Linux without systemd
-    setupNohupFallback(projectRoot, nodePath, homeDir);
+    setupNohupFallback(projectRoot, runtimeLauncherPath);
   }
 }
 
@@ -192,7 +210,7 @@ function checkDockerGroupStale(): boolean {
 
 function setupSystemd(
   projectRoot: string,
-  nodePath: string,
+  runtimeLauncherPath: string,
   homeDir: string,
 ): void {
   const runningAsRoot = isRoot();
@@ -213,7 +231,7 @@ function setupSystemd(
       logger.warn(
         'systemd user session not available — falling back to nohup wrapper',
       );
-      setupNohupFallback(projectRoot, nodePath, homeDir);
+      setupNohupFallback(projectRoot, runtimeLauncherPath);
       return;
     }
     const unitDir = path.join(homeDir, '.config', 'systemd', 'user');
@@ -222,23 +240,12 @@ function setupSystemd(
     systemctlPrefix = 'systemctl --user';
   }
 
-  const unit = `[Unit]
-Description=Icarus Personal Assistant
-After=network.target
-
-[Service]
-Type=simple
-ExecStart=${nodePath} ${projectRoot}/dist/index.js
-WorkingDirectory=${projectRoot}
-Restart=always
-RestartSec=5
-Environment=HOME=${homeDir}
-Environment=PATH=${servicePath(nodePath, homeDir)}
-StandardOutput=append:${projectRoot}/logs/icarus.log
-StandardError=append:${projectRoot}/logs/icarus.error.log
-
-[Install]
-WantedBy=${runningAsRoot ? 'multi-user.target' : 'default.target'}`;
+  const unit = renderSystemdUnit(
+    runtimeLauncherPath,
+    projectRoot,
+    homeDir,
+    runningAsRoot,
+  );
 
   fs.writeFileSync(unitPath, unit);
   logger.info({ unitPath }, 'Wrote systemd unit');
@@ -284,7 +291,7 @@ WantedBy=${runningAsRoot ? 'multi-user.target' : 'default.target'}`;
 
   emitStatus('SETUP_SERVICE', {
     SERVICE_TYPE: runningAsRoot ? 'systemd-system' : 'systemd-user',
-    NODE_PATH: nodePath,
+    RUNTIME_LAUNCHER: runtimeLauncherPath,
     PROJECT_PATH: projectRoot,
     UNIT_PATH: unitPath,
     SERVICE_LOADED: serviceLoaded,
@@ -294,16 +301,62 @@ WantedBy=${runningAsRoot ? 'multi-user.target' : 'default.target'}`;
   });
 }
 
+export function renderSystemdUnit(
+  runtimeLauncherPath: string,
+  projectRoot: string,
+  homeDir: string,
+  isSystem: boolean,
+): string {
+  return `[Unit]
+Description=Icarus Personal Assistant
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=${JSON.stringify(runtimeLauncherPath)}
+WorkingDirectory=${projectRoot}
+Restart=always
+RestartSec=5
+Environment=HOME=${homeDir}
+Environment=PATH=${servicePath(runtimeLauncherPath, homeDir)}
+StandardOutput=append:${projectRoot}/logs/icarus.log
+StandardError=append:${projectRoot}/logs/icarus.error.log
+
+[Install]
+WantedBy=${isSystem ? 'multi-user.target' : 'default.target'}`;
+}
+
 function setupNohupFallback(
   projectRoot: string,
-  nodePath: string,
-  homeDir: string,
+  runtimeLauncherPath: string,
 ): void {
   logger.warn('No systemd detected — generating nohup wrapper script');
 
   const wrapperPath = path.join(projectRoot, 'start-icarus.sh');
   const pidFile = path.join(projectRoot, 'icarus.pid');
 
+  const wrapper = renderNohupWrapper(runtimeLauncherPath, projectRoot, pidFile);
+
+  fs.writeFileSync(wrapperPath, wrapper, { mode: 0o755 });
+  logger.info({ wrapperPath }, 'Wrote nohup wrapper script');
+
+  emitStatus('SETUP_SERVICE', {
+    SERVICE_TYPE: 'nohup',
+    RUNTIME_LAUNCHER: runtimeLauncherPath,
+    PROJECT_PATH: projectRoot,
+    WRAPPER_PATH: wrapperPath,
+    SERVICE_LOADED: false,
+    FALLBACK: 'wsl_no_systemd',
+    STATUS: 'success',
+    LOG: 'logs/setup.log',
+  });
+}
+
+export function renderNohupWrapper(
+  runtimeLauncherPath: string,
+  projectRoot: string,
+  pidFile: string,
+): string {
   const lines = [
     '#!/bin/bash',
     '# start-icarus.sh — Start Icarus without systemd',
@@ -324,7 +377,7 @@ function setupNohupFallback(
     'fi',
     '',
     'echo "Starting Icarus..."',
-    `nohup ${JSON.stringify(nodePath)} ${JSON.stringify(projectRoot + '/dist/index.js')} \\`,
+    `nohup ${JSON.stringify(runtimeLauncherPath)} \\`,
     `  >> ${JSON.stringify(projectRoot + '/logs/icarus.log')} \\`,
     `  2>> ${JSON.stringify(projectRoot + '/logs/icarus.error.log')} &`,
     '',
@@ -332,19 +385,5 @@ function setupNohupFallback(
     'echo "Icarus started (PID $!)"',
     `echo "Logs: tail -f ${projectRoot}/logs/icarus.log"`,
   ];
-  const wrapper = lines.join('\n') + '\n';
-
-  fs.writeFileSync(wrapperPath, wrapper, { mode: 0o755 });
-  logger.info({ wrapperPath }, 'Wrote nohup wrapper script');
-
-  emitStatus('SETUP_SERVICE', {
-    SERVICE_TYPE: 'nohup',
-    NODE_PATH: nodePath,
-    PROJECT_PATH: projectRoot,
-    WRAPPER_PATH: wrapperPath,
-    SERVICE_LOADED: false,
-    FALLBACK: 'wsl_no_systemd',
-    STATUS: 'success',
-    LOG: 'logs/setup.log',
-  });
+  return lines.join('\n') + '\n';
 }
