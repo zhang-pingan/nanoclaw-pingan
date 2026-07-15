@@ -84,3 +84,33 @@ export type {
   RunTransactionProtocolId,
   RuntimeCommandTargetKind,
 } from './protocol-table-types.js';
+export {
+  CAPACITY_LIMIT_PATHS,
+  DEPLOYMENT_CAPACITY_KEYS,
+  DEPLOYMENT_CAPACITY_RELOAD_CONTRACT,
+  DEPLOYMENT_RUNTIME_CAPACITY_BASELINE_WITHOUT_HASH,
+  ENFORCEMENT_RECORD_KEYS,
+  LOCAL_SINGLE_USER_PRODUCT_FLOOR,
+  LOCAL_SINGLE_USER_RETENTION_POLICY,
+  LOCAL_SINGLE_USER_SAFETY_PROFILE,
+  LOCAL_SINGLE_USER_SQLITE_CANDIDATE,
+  PRODUCT_FLOOR_BENCHMARK_KEYS,
+  PRODUCT_FLOOR_LIMIT_KEYS,
+  RETENTION_DURATION_KEYS,
+  RETENTION_RULE_KEYS,
+  SAFETY_CEILING_GROUP_KEYS,
+  SAFETY_ENFORCEMENT_RECORD_SEEDS,
+  SAFETY_LIMIT_PATHS,
+  SQLITE_PROFILE_KEYS,
+} from './safety-sqlite-types.js';
+export type {
+  DeploymentRuntimeCapacity,
+  EnforcementSettlementMode,
+  LocalSingleUserProductFloor,
+  LocalSingleUserRetentionPolicy,
+  SQLiteExecutionProfileCandidate,
+  WorkflowRuntimeSafetyProfile,
+  WorkflowRuntimeSafetyCeilings,
+  WorkflowSafetyEnforcementRecord,
+  WorkflowSafetyEnforcementRecordSeed,
+} from './safety-sqlite-types.js';

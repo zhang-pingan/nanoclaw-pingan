@@ -1,0 +1,205 @@
+{
+  "format": "icarus.workflow-contract-pack-safety-sqlite/1",
+  "ref": {
+    "id": "icarus.workflow-contract-pack-safety-sqlite",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-contract-pack-safety-sqlite:1\n",
+  "hash": "sha256:76b8e1196ac422500be9c79a767e673e9c30fa3d9bbb1dc12fc54613cd40b428",
+  "payload": {
+    "gate": "G0.5",
+    "status": "safety_retention_sqlite_contracts",
+    "foundation_manifest_hash": "sha256:e85b654581c036f8129677d7443a0704ebc8b8fbe87907b842aaefe1501e637d",
+    "closed_schema_manifest_hash": "sha256:c5ea281d64480787322e8b6ef619b2f90784084d87ba4373c94288ed5e7aa3a8",
+    "catalog_protocol_manifest_hash": "sha256:e4947c515a28b3baf6782a980db9c26d32612b3c6acd3cd04348e73bd54ff607",
+    "schema_count": 6,
+    "safety_limit_count": 69,
+    "capacity_limit_count": 7,
+    "enforcement_record_count": 76,
+    "positive_case_count": 7,
+    "negative_case_count": 30,
+    "sqlite_profile_status": "candidate",
+    "certification_status": "not_certified",
+    "artifacts": [
+      {
+        "path": "catalogs/safety-sqlite-domain-separators.json",
+        "format": "icarus.workflow-safety-sqlite-domain-separators/1",
+        "ref": {
+          "id": "icarus.workflow-safety-sqlite-domain-separators",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-safety-sqlite-domain-separators:1\n",
+        "hash": "sha256:a66e80ce5a092c0c98518e34aa584871d2bd09f56dc28a96c43affa95ad14b54"
+      },
+      {
+        "path": "conformance/safety-sqlite/negative-cases.json",
+        "format": "icarus.workflow-safety-sqlite-negative-cases/1",
+        "ref": {
+          "id": "icarus.workflow-safety-sqlite-negative-cases",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-safety-sqlite-negative-cases:1\n",
+        "hash": "sha256:77dbd01c5db61eaecfc80fc3654f8b2d207f400a58c30b54ecfb6a24225c7f8e"
+      },
+      {
+        "path": "conformance/safety-sqlite/positive-cases.json",
+        "format": "icarus.workflow-safety-sqlite-positive-cases/1",
+        "ref": {
+          "id": "icarus.workflow-safety-sqlite-positive-cases",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-safety-sqlite-positive-cases:1\n",
+        "hash": "sha256:7aaa6b5f6465d30ad359cac36d86a33c3ef4321f0901e65b8485be938c94b814"
+      },
+      {
+        "path": "safety/deployment-runtime-capacity-schema.json",
+        "format": "icarus.deployment-runtime-capacity-schema/1",
+        "ref": {
+          "id": "icarus.deployment-runtime-capacity-schema",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:deployment-runtime-capacity-schema:1\n",
+        "hash": "sha256:30aa123506c8f37a3d0c291d20feab150e7103c3f83c12775c49d323f9de7ec4"
+      },
+      {
+        "path": "safety/local_single_user_product_floor@1.json",
+        "format": "icarus.workflow-runtime-product-floor/1",
+        "ref": {
+          "id": "icarus.local-single-user-product-floor",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-runtime-product-floor:1\n",
+        "hash": "sha256:370e01e401d98a25ca89088560edbb88d1a5cdb19d3409a877f9be5f39004521"
+      },
+      {
+        "path": "safety/local_single_user_retention@1.json",
+        "format": "icarus.workflow-runtime-retention-policy/1",
+        "ref": {
+          "id": "icarus.local-single-user-retention",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-runtime-retention-policy:1\n",
+        "hash": "sha256:3adc19f9a8ee92421faa349ec12e706f2d9862e90c0c74e53eb041794e2b805d"
+      },
+      {
+        "path": "safety/local_single_user_safety@1.json",
+        "format": "icarus.workflow-runtime-safety-profile/1",
+        "ref": {
+          "id": "icarus.local-single-user-safety",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-runtime-safety-profile:1\n",
+        "hash": "sha256:822bf524138d5283e1b94b709765a913a0d6a94f5190efcd55bb7ba546453491"
+      },
+      {
+        "path": "safety/local_single_user_safety_enforcement_matrix@1.json",
+        "format": "icarus.workflow-safety-enforcement-matrix/1",
+        "ref": {
+          "id": "icarus.local-single-user-safety-enforcement-matrix",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-safety-enforcement-matrix:1\n",
+        "hash": "sha256:fcd51e0f36865f34dcd03641754116db872d791c4d9362110a7a1548e76a545d"
+      },
+      {
+        "path": "safety/workflow-runtime-product-floor-schema.json",
+        "format": "icarus.workflow-runtime-product-floor-schema/1",
+        "ref": {
+          "id": "icarus.workflow-runtime-product-floor-schema",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-runtime-product-floor-schema:1\n",
+        "hash": "sha256:7ca06751fe0479f71fd2b6901cf27722b4061a469d5f3a74e3a57f1c69e8a7bf"
+      },
+      {
+        "path": "safety/workflow-runtime-retention-policy-schema.json",
+        "format": "icarus.workflow-runtime-retention-policy-schema/1",
+        "ref": {
+          "id": "icarus.workflow-runtime-retention-policy-schema",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-runtime-retention-policy-schema:1\n",
+        "hash": "sha256:7a99fe14f31ed2023556c2938f68fb2a1c672efd6c27f71a91915efc52d4d832"
+      },
+      {
+        "path": "safety/workflow-runtime-safety-profile-schema.json",
+        "format": "icarus.workflow-runtime-safety-profile-schema/1",
+        "ref": {
+          "id": "icarus.workflow-runtime-safety-profile-schema",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-runtime-safety-profile-schema:1\n",
+        "hash": "sha256:26c6fce6c69d31ac01b7b17bd0f1a2a0d6976cb2d8f03ad88bf5ba8039bf3a7a"
+      },
+      {
+        "path": "safety/workflow-safety-enforcement-matrix-schema.json",
+        "format": "icarus.workflow-safety-enforcement-matrix-schema/1",
+        "ref": {
+          "id": "icarus.workflow-safety-enforcement-matrix-schema",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-safety-enforcement-matrix-schema:1\n",
+        "hash": "sha256:dff6f0ae613e4155357aefd207abb54b49600578694e8bbd7aa2127c05372b0f"
+      },
+      {
+        "path": "sqlite/local_single_user_sqlite@1.json",
+        "format": "icarus.sqlite-execution-profile/1",
+        "ref": {
+          "id": "icarus.local-single-user-sqlite",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:sqlite-execution-profile:1\n",
+        "hash": "sha256:3d69742dad2fefa8bef4ba47e375defd705e3b32920a92b105a43726436fb7af"
+      },
+      {
+        "path": "sqlite/sqlite-execution-profile-schema.json",
+        "format": "icarus.sqlite-execution-profile-schema/1",
+        "ref": {
+          "id": "icarus.sqlite-execution-profile-schema",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:sqlite-execution-profile-schema:1\n",
+        "hash": "sha256:773de58564b4d9d4c561b8a359cfc0e52a06765dc73e0bfa1104d4dd945d2aa8"
+      }
+    ],
+    "capacity_baseline": {
+      "path": "config/workflow-runtime-capacity.json",
+      "format": "icarus.deployment-runtime-capacity/1",
+      "hash": "sha256:970a63fdba1e263189c3070201a543f01508180abb1e8c15cf649a3780c17542"
+    },
+    "capacity_reload_contract": {
+      "update_mode": "atomic_complete_validated_snapshot",
+      "semantic_role": "admission_only_not_plan_semantics",
+      "lowering_existing_admissions": "never_cancel_existing_work",
+      "hard_blob_below_current_allocation": "enter_over_capacity_block_new_allocation_and_trigger_gc",
+      "minimum_free_disk_update": "increase_only",
+      "safety_quota_effect": "cannot_relax_pinned_safety"
+    },
+    "next_reserved_directories": [
+      "conformance/draft",
+      "conformance/sealed"
+    ],
+    "explicitly_absent_artifacts": [
+      "runtime_supported_limits_certification",
+      "executable_ddl",
+      "schema_manifest",
+      "query_catalog",
+      "sealed_golden_bundle"
+    ]
+  }
+}

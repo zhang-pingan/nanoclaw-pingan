@@ -1,0 +1,49 @@
+{
+  "format": "icarus.workflow-safety-sqlite-positive-cases/1",
+  "ref": {
+    "id": "icarus.workflow-safety-sqlite-positive-cases",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-safety-sqlite-positive-cases:1\n",
+  "hash": "sha256:7aaa6b5f6465d30ad359cac36d86a33c3ef4321f0901e65b8485be938c94b814",
+  "payload": {
+    "cases": [
+      {
+        "case_id": "safety_profile_exact",
+        "target_format": "icarus.workflow-runtime-safety-profile/1",
+        "assertion": "valid_exact_contract"
+      },
+      {
+        "case_id": "deployment_capacity_exact",
+        "target_format": "icarus.deployment-runtime-capacity/1",
+        "assertion": "valid_exact_contract"
+      },
+      {
+        "case_id": "product_floor_exact",
+        "target_format": "icarus.workflow-runtime-product-floor/1",
+        "assertion": "valid_exact_contract"
+      },
+      {
+        "case_id": "retention_policy_exact",
+        "target_format": "icarus.workflow-runtime-retention-policy/1",
+        "assertion": "valid_exact_contract"
+      },
+      {
+        "case_id": "enforcement_matrix_complete",
+        "target_format": "icarus.workflow-safety-enforcement-matrix/1",
+        "assertion": "complete_per_field_enforcement"
+      },
+      {
+        "case_id": "sqlite_profile_candidate_exact",
+        "target_format": "icarus.sqlite-execution-profile/1",
+        "assertion": "valid_exact_contract"
+      },
+      {
+        "case_id": "sqlite_candidate_release_identity_unbound",
+        "target_format": "icarus.sqlite-execution-profile/1",
+        "assertion": "candidate_identity_unbound"
+      }
+    ]
+  }
+}

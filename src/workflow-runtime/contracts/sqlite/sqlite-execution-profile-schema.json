@@ -1,0 +1,207 @@
+{
+  "format": "icarus.sqlite-execution-profile-schema/1",
+  "ref": {
+    "id": "icarus.sqlite-execution-profile-schema",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:sqlite-execution-profile-schema:1\n",
+  "hash": "sha256:773de58564b4d9d4c561b8a359cfc0e52a06765dc73e0bfa1104d4dd945d2aa8",
+  "payload": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:icarus:sqlite-execution-profile:1",
+    "title": "SQLite Execution Profile v1 candidate payload",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "profile_id",
+      "certification_status",
+      "deployment_profile",
+      "runtime_surface",
+      "platform",
+      "arch",
+      "journal_mode",
+      "synchronous",
+      "foreign_keys",
+      "busy_timeout_ms",
+      "page_size",
+      "auto_vacuum",
+      "temp_store",
+      "wal_autocheckpoint_pages",
+      "journal_size_limit_bytes",
+      "cache_size_kib",
+      "mmap_size_bytes",
+      "trusted_schema",
+      "recursive_triggers",
+      "read_uncommitted",
+      "locking_mode",
+      "read_only_query_only",
+      "sqlite_version",
+      "sqlite_source_id",
+      "sqlite_compile_options_hash",
+      "better_sqlite3_version",
+      "better_sqlite3_native_module_hash",
+      "managed_node_distribution_ref",
+      "managed_node_distribution_hash",
+      "node_runtime_version",
+      "node_executable_hash",
+      "release_artifact_hash",
+      "runtime_launcher_hash",
+      "identity_binding_rule",
+      "profile_application"
+    ],
+    "properties": {
+      "profile_id": {
+        "const": "local_single_user_sqlite@1"
+      },
+      "certification_status": {
+        "const": "candidate"
+      },
+      "deployment_profile": {
+        "const": "local_single_user"
+      },
+      "runtime_surface": {
+        "const": "node_service"
+      },
+      "platform": {
+        "const": "darwin"
+      },
+      "arch": {
+        "const": "arm64"
+      },
+      "journal_mode": {
+        "const": "wal"
+      },
+      "synchronous": {
+        "const": "full"
+      },
+      "foreign_keys": {
+        "const": true
+      },
+      "busy_timeout_ms": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 9007199254740991
+      },
+      "page_size": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 9007199254740991
+      },
+      "auto_vacuum": {
+        "const": "incremental"
+      },
+      "temp_store": {
+        "const": "memory"
+      },
+      "wal_autocheckpoint_pages": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 9007199254740991
+      },
+      "journal_size_limit_bytes": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 9007199254740991
+      },
+      "cache_size_kib": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 9007199254740991
+      },
+      "mmap_size_bytes": {
+        "const": 0
+      },
+      "trusted_schema": {
+        "const": false
+      },
+      "recursive_triggers": {
+        "const": false
+      },
+      "read_uncommitted": {
+        "const": false
+      },
+      "locking_mode": {
+        "const": "normal"
+      },
+      "read_only_query_only": {
+        "const": true
+      },
+      "sqlite_version": {
+        "type": "null"
+      },
+      "sqlite_source_id": {
+        "type": "null"
+      },
+      "sqlite_compile_options_hash": {
+        "type": "null"
+      },
+      "better_sqlite3_version": {
+        "const": "12.11.1"
+      },
+      "better_sqlite3_native_module_hash": {
+        "type": "null"
+      },
+      "managed_node_distribution_ref": {
+        "$ref": "#/$defs/versioned_ref"
+      },
+      "managed_node_distribution_hash": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      },
+      "node_runtime_version": {
+        "const": "26.5.0"
+      },
+      "node_executable_hash": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      },
+      "release_artifact_hash": {
+        "type": "null"
+      },
+      "runtime_launcher_hash": {
+        "type": "null"
+      },
+      "identity_binding_rule": {
+        "const": "release_build_generated_at_g8"
+      },
+      "profile_application": {
+        "const": "immutable_restart_and_recertification_required"
+      }
+    },
+    "$defs": {
+      "versioned_ref": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "version"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._:/-]{0,253}[A-Za-z0-9])?$"
+          },
+          "version": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,62}[A-Za-z0-9])?$",
+            "not": {
+              "anyOf": [
+                {
+                  "pattern": "^(?:[Cc][Uu][Rr][Rr][Ee][Nn][Tt]|[Hh][Ee][Aa][Dd]|[Ll][Aa][Tt][Ee][Ss][Tt]|[Mm][Aa][Ii][Nn]|[Mm][Aa][Ss][Tt][Ee][Rr]|[Nn][Ee][Xx][Tt]|[Ss][Nn][Aa][Pp][Ss][Hh][Oo][Tt])$"
+                },
+                {
+                  "pattern": "(?:^|[._-])[xX](?:$|[._-])"
+                }
+              ]
+            }
+          }
+        }
+      }
+    }
+  }
+}

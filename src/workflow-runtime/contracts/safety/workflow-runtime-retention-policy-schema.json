@@ -1,0 +1,171 @@
+{
+  "format": "icarus.workflow-runtime-retention-policy-schema/1",
+  "ref": {
+    "id": "icarus.workflow-runtime-retention-policy-schema",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-runtime-retention-policy-schema:1\n",
+  "hash": "sha256:7a99fe14f31ed2023556c2938f68fb2a1c672efd6c27f71a91915efc52d4d832",
+  "payload": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:icarus:workflow-runtime-retention-policy:1",
+    "title": "Workflow Runtime Retention Policy v1 payload",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "profile_id",
+      "deployment_profile",
+      "mutability",
+      "durations_ms",
+      "rules"
+    ],
+    "properties": {
+      "profile_id": {
+        "const": "local_single_user_retention@1"
+      },
+      "deployment_profile": {
+        "const": "local_single_user"
+      },
+      "mutability": {
+        "const": "immutable_versioned"
+      },
+      "durations_ms": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "transient_payload_retention_ms",
+          "run_recovery_closed_retention_ms",
+          "workflow_audit_payload_retention_ms",
+          "workflow_audit_metadata_retention_ms",
+          "user_artifact_default_retention_ms",
+          "retired_execution_registry_replay_retention_ms",
+          "blob_temp_file_grace_ms",
+          "blob_expired_write_intent_grace_ms",
+          "blob_final_orphan_grace_ms",
+          "inbox_rejected_late_unmatched_payload_retention_ms",
+          "inbox_rejected_late_unmatched_audit_retention_ms",
+          "closed_workflow_command_runtime_event_audit_retention_ms",
+          "backup_default_expiry_ms",
+          "pending_signal_safety_ttl_ms"
+        ],
+        "properties": {
+          "transient_payload_retention_ms": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "run_recovery_closed_retention_ms": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "workflow_audit_payload_retention_ms": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "workflow_audit_metadata_retention_ms": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "user_artifact_default_retention_ms": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "retired_execution_registry_replay_retention_ms": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "blob_temp_file_grace_ms": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "blob_expired_write_intent_grace_ms": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "blob_final_orphan_grace_ms": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "inbox_rejected_late_unmatched_payload_retention_ms": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "inbox_rejected_late_unmatched_audit_retention_ms": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "closed_workflow_command_runtime_event_audit_retention_ms": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "backup_default_expiry_ms": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "pending_signal_safety_ttl_ms": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          }
+        }
+      },
+      "rules": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "duration_origin",
+          "run_recovery_strong_states",
+          "user_artifact_not_before_workflow_closed",
+          "feature_policy_may_only_extend_user_artifact",
+          "manual_pin_may_extend_backup",
+          "existing_objects_pin_policy_ref_and_hash"
+        ],
+        "properties": {
+          "duration_origin": {
+            "const": "entered_eligible_state_at_ms"
+          },
+          "run_recovery_strong_states": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "active",
+                "closing",
+                "action_required",
+                "quarantined"
+              ]
+            },
+            "minItems": 4,
+            "maxItems": 4,
+            "uniqueItems": true
+          },
+          "user_artifact_not_before_workflow_closed": {
+            "const": true
+          },
+          "feature_policy_may_only_extend_user_artifact": {
+            "const": true
+          },
+          "manual_pin_may_extend_backup": {
+            "const": true
+          },
+          "existing_objects_pin_policy_ref_and_hash": {
+            "const": true
+          }
+        }
+      }
+    }
+  }
+}

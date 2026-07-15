@@ -1,0 +1,68 @@
+{
+  "format": "icarus.deployment-runtime-capacity-schema/1",
+  "ref": {
+    "id": "icarus.deployment-runtime-capacity-schema",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:deployment-runtime-capacity-schema:1\n",
+  "hash": "sha256:30aa123506c8f37a3d0c291d20feab150e7103c3f83c12775c49d323f9de7ec4",
+  "payload": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:icarus:deployment-runtime-capacity:1",
+    "title": "Deployment Runtime Capacity v1",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "max_active_executions",
+      "max_active_waits",
+      "max_pending_signals",
+      "max_outbox_inflight",
+      "max_physical_blob_bytes",
+      "soft_blob_high_water_bytes",
+      "minimum_free_disk_bytes",
+      "config_hash"
+    ],
+    "properties": {
+      "max_active_executions": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 9007199254740991
+      },
+      "max_active_waits": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 9007199254740991
+      },
+      "max_pending_signals": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 9007199254740991
+      },
+      "max_outbox_inflight": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 9007199254740991
+      },
+      "max_physical_blob_bytes": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 9007199254740991
+      },
+      "soft_blob_high_water_bytes": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 9007199254740991
+      },
+      "minimum_free_disk_bytes": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 9007199254740991
+      },
+      "config_hash": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      }
+    }
+  }
+}

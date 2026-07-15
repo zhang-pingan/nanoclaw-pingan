@@ -1,0 +1,44 @@
+{
+  "format": "icarus.workflow-runtime-retention-policy/1",
+  "ref": {
+    "id": "icarus.local-single-user-retention",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-runtime-retention-policy:1\n",
+  "hash": "sha256:3adc19f9a8ee92421faa349ec12e706f2d9862e90c0c74e53eb041794e2b805d",
+  "payload": {
+    "profile_id": "local_single_user_retention@1",
+    "deployment_profile": "local_single_user",
+    "mutability": "immutable_versioned",
+    "durations_ms": {
+      "transient_payload_retention_ms": 86400000,
+      "run_recovery_closed_retention_ms": 2592000000,
+      "workflow_audit_payload_retention_ms": 7776000000,
+      "workflow_audit_metadata_retention_ms": 31536000000,
+      "user_artifact_default_retention_ms": 31536000000,
+      "retired_execution_registry_replay_retention_ms": 7776000000,
+      "blob_temp_file_grace_ms": 86400000,
+      "blob_expired_write_intent_grace_ms": 86400000,
+      "blob_final_orphan_grace_ms": 86400000,
+      "inbox_rejected_late_unmatched_payload_retention_ms": 604800000,
+      "inbox_rejected_late_unmatched_audit_retention_ms": 2592000000,
+      "closed_workflow_command_runtime_event_audit_retention_ms": 31536000000,
+      "backup_default_expiry_ms": 2592000000,
+      "pending_signal_safety_ttl_ms": 604800000
+    },
+    "rules": {
+      "duration_origin": "entered_eligible_state_at_ms",
+      "run_recovery_strong_states": [
+        "active",
+        "closing",
+        "action_required",
+        "quarantined"
+      ],
+      "user_artifact_not_before_workflow_closed": true,
+      "feature_policy_may_only_extend_user_artifact": true,
+      "manual_pin_may_extend_backup": true,
+      "existing_objects_pin_policy_ref_and_hash": true
+    }
+  }
+}

@@ -10,6 +10,10 @@ import {
   checkContractPackCatalogProtocols,
   generateContractPackCatalogProtocols,
 } from './catalog-protocol-pack.js';
+import {
+  checkContractPackSafetySqlite,
+  generateContractPackSafetySqlite,
+} from './safety-sqlite-pack.js';
 
 function usage(): never {
   console.error('Usage: contract-pack <generate|check>');
@@ -24,8 +28,11 @@ if (
   usage();
 }
 
-let currentPack: 'foundation' | 'closed_schemas' | 'catalog_protocols' =
-  'foundation';
+let currentPack:
+  | 'foundation'
+  | 'closed_schemas'
+  | 'catalog_protocols'
+  | 'safety_sqlite' = 'foundation';
 
 try {
   const foundationManifest =
@@ -52,6 +59,14 @@ try {
   console.log(
     `contract_pack_catalog_protocols_hash=${catalogProtocolManifest.hash}`,
   );
+
+  currentPack = 'safety_sqlite';
+  const safetySqliteManifest =
+    command === 'generate'
+      ? generateContractPackSafetySqlite()
+      : checkContractPackSafetySqlite();
+  console.log(`contract_pack_safety_sqlite=${command}:ok`);
+  console.log(`contract_pack_safety_sqlite_hash=${safetySqliteManifest.hash}`);
 } catch (error) {
   console.error(
     `contract_pack_${currentPack}=${command}:failed: ${

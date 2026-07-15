@@ -1,0 +1,82 @@
+{
+  "format": "icarus.workflow-safety-sqlite-domain-separators/1",
+  "ref": {
+    "id": "icarus.workflow-safety-sqlite-domain-separators",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-safety-sqlite-domain-separators:1\n",
+  "hash": "sha256:a66e80ce5a092c0c98518e34aa584871d2bd09f56dc28a96c43affa95ad14b54",
+  "payload": {
+    "entries": [
+      {
+        "format": "icarus.deployment-runtime-capacity-schema/1",
+        "domain_separator": "icarus:deployment-runtime-capacity-schema:1\n"
+      },
+      {
+        "format": "icarus.deployment-runtime-capacity/1",
+        "domain_separator": "icarus:deployment-runtime-capacity:1\n"
+      },
+      {
+        "format": "icarus.sqlite-execution-profile-schema/1",
+        "domain_separator": "icarus:sqlite-execution-profile-schema:1\n"
+      },
+      {
+        "format": "icarus.sqlite-execution-profile/1",
+        "domain_separator": "icarus:sqlite-execution-profile:1\n"
+      },
+      {
+        "format": "icarus.workflow-contract-pack-safety-sqlite/1",
+        "domain_separator": "icarus:workflow-contract-pack-safety-sqlite:1\n"
+      },
+      {
+        "format": "icarus.workflow-runtime-product-floor-schema/1",
+        "domain_separator": "icarus:workflow-runtime-product-floor-schema:1\n"
+      },
+      {
+        "format": "icarus.workflow-runtime-product-floor/1",
+        "domain_separator": "icarus:workflow-runtime-product-floor:1\n"
+      },
+      {
+        "format": "icarus.workflow-runtime-retention-policy-schema/1",
+        "domain_separator": "icarus:workflow-runtime-retention-policy-schema:1\n"
+      },
+      {
+        "format": "icarus.workflow-runtime-retention-policy/1",
+        "domain_separator": "icarus:workflow-runtime-retention-policy:1\n"
+      },
+      {
+        "format": "icarus.workflow-runtime-safety-profile-schema/1",
+        "domain_separator": "icarus:workflow-runtime-safety-profile-schema:1\n"
+      },
+      {
+        "format": "icarus.workflow-runtime-safety-profile/1",
+        "domain_separator": "icarus:workflow-runtime-safety-profile:1\n"
+      },
+      {
+        "format": "icarus.workflow-safety-enforcement-matrix-schema/1",
+        "domain_separator": "icarus:workflow-safety-enforcement-matrix-schema:1\n"
+      },
+      {
+        "format": "icarus.workflow-safety-enforcement-matrix/1",
+        "domain_separator": "icarus:workflow-safety-enforcement-matrix:1\n"
+      },
+      {
+        "format": "icarus.workflow-safety-enforcement-record/1",
+        "domain_separator": "icarus:workflow-safety-enforcement-record:1\n"
+      },
+      {
+        "format": "icarus.workflow-safety-sqlite-domain-separators/1",
+        "domain_separator": "icarus:workflow-safety-sqlite-domain-separators:1\n"
+      },
+      {
+        "format": "icarus.workflow-safety-sqlite-negative-cases/1",
+        "domain_separator": "icarus:workflow-safety-sqlite-negative-cases:1\n"
+      },
+      {
+        "format": "icarus.workflow-safety-sqlite-positive-cases/1",
+        "domain_separator": "icarus:workflow-safety-sqlite-positive-cases:1\n"
+      }
+    ]
+  }
+}

@@ -2,7 +2,7 @@
 
 > **状态**: IN_PROGRESS
 > **当前 Gate**: G0 Contract Pack / Static Baseline
-> **下一施工切片**: G0.5 Safety / Retention / SQLite Contracts
+> **下一施工切片**: G0.6 Logical Schema Metadata
 > **最后更新**: 2026-07-15
 > **规范权威**: `local/docs/dynamic-workflow-dag-framework.md`
 
@@ -130,7 +130,7 @@ Agent Container 运行于独立 VM，Node identity 由 VM image gate 保证；�
 | I8 | Subgraph、Expand、Map、child scope | `NOT_READY` | G6 起 |
 | I9 | Completion、Cancel、Compensation、Finalization、Recovery | `NOT_READY` | G6/G7 |
 | I10 | Runtime Command、Runtime Center、Trace | `NOT_READY` | G7 起 |
-| I11 | Contract Pack、managed runtime toolchain/launcher、测试模型、发布门禁、absence baseline | `IN_PROGRESS` | G0.1-G0.4 DONE；G0.5 READY |
+| I11 | Contract Pack、managed runtime toolchain/launcher、测试模型、发布门禁、absence baseline | `IN_PROGRESS` | G0.1-G0.5 DONE；G0.6 READY |
 
 ## G0 施工切片
 
@@ -142,11 +142,61 @@ G0 只有全部切片满足退出条件后才能标记 `DONE`。切片编号描�
 | G0.2 | Contract Pack Foundation | `DONE` | artifact envelope、VersionedRef、hash/domain、strict parse、目录与 CI 骨架 | 本原子提交 |
 | G0.3 | Closed Schemas | `DONE` | Definition/Recipe/Command/Transition/Feature/Card/Source/Compiled IR schemas 与 negative fixtures | 本原子提交 |
 | G0.4 | Catalogs and Protocol Tables | `DONE` | Error/Fact/Event/Permission/Reason/Denial、状态与 T0-T8/T6e 表机器化 | 本原子提交 |
-| G0.5 | Safety / Retention / SQLite Contracts | `READY` | Safety、Capacity schema/baseline、Product Floor、Retention、SQLite Profile、Enforcement Matrix | - |
-| G0.6 | Logical Schema Metadata | `NOT_READY` | 全对象 Logical Schema manifest source、typed relation metadata、query catalog | - |
+| G0.5 | Safety / Retention / SQLite Contracts | `DONE` | Safety、Capacity schema/baseline、Product Floor、Retention、SQLite Profile、Enforcement Matrix | 本原子提交 |
+| G0.6 | Logical Schema Metadata | `READY` | 全对象 Logical Schema manifest source、typed relation metadata、query catalog | - |
 | G0.7 | Static Absence and Surface Gates | `NOT_READY` | absence、surface coverage、candidate boundary generator/manifest/negative fixtures | - |
 | G0.8 | Golden Draft and Review Input | `NOT_READY` | raw cases、hand-authored semantic assertions、review request；不得伪造 sealed expected output | - |
 | G0.9 | G0 Conformance Exit | `NOT_READY` | Markdown/Contract 双向覆盖、完整 G0 CI、artifact hashes 和 Gate review | - |
+
+## 已完成切片：G0.5 Safety / Retention / SQLite Contracts
+
+**状态**：`DONE`
+
+**工作包**：I11；合同联动 I4/I5/I9，仅冻结 Safety/Capacity/Retention/SQLite/Enforcement 机器合同，不实现 DDL、Store、Compiler、Registry、Runtime 或认证语义。
+
+I11/G0.5 已完成 `local_single_user_safety@1`、Deployment Capacity closed schema/checked-in baseline、`local_single_user_product_floor@1`、`local_single_user_retention@1`、`local_single_user_sqlite@1` candidate 与完整逐字段 Enforcement Matrix 的机器化、TypeScript conformance、正反例、确定性生成/只读检查和 CI 接入。G0 总 Gate 继续为 `IN_PROGRESS`，仅 G0.6 转为 `READY`；G1-G9 未推进。
+
+已完成交付：
+
+- `local_single_user_safety@1` 逐项冻结规范的 10 组 69 个有限正 safe-integer ceiling；closed schema 与 TypeScript group/leaf keyset 双向校验，Workflow `max_graph_runs <= max_state_activations - 1`、Product Floor 对齐和既有 Run pinning 语义进入机器检查。
+- `config/workflow-runtime-capacity.json` 固定 `5/256/2048/16 + 20/16/5 GiB` baseline，使用独立 domain-separated `config_hash`；Capacity closed schema 拒绝 unknown/missing/zero/unsafe 字段，G0.5 manifest 冻结 atomic full-snapshot reload、existing admission 不 cancel、Blob over-capacity/GC、minimum-free-disk increase-only 与不得放宽 pinned Safety 的合同。
+- `local_single_user_product_floor@1` 冻结 15 个 minimum certified dimension，以及 M2/16 GiB/APFS/internal SSD/AC/release、禁止并发 benchmark 干扰、10 次 warmup、至少 100 次 measurement、25/50/100% scaling、p50/p95/p99/max/WAL/RSS/affected-row 必报指标、Beyond Limit 原子写前拒绝和 T3/T7/T8 p99 `250/1000/500 ms`、max 不超过 p99 budget 2 倍的发布下限。
+- `local_single_user_retention@1` 将 24 小时、7/30/90/365 天窗口全部换算为 UTC millisecond safe integer，固定 active/closing/action-required/quarantined 强 retention root、user artifact only-extend、manual backup pin 与 existing-object exact policy pinning；Pending Signal 7 天 TTL 与 Safety 一致。
+- `local_single_user_sqlite@1` 固定 WAL/FULL/FK、全部 database/connection PRAGMA、managed Node `26.5.0` Distribution ref/hash/executable hash和 `better-sqlite3@12.11.1` target，但显式保持 `certification_status=candidate`；SQLite/source/compile-options/native module/release artifact/Launcher observation 字段全部为 null，并由 schema/negative fixture 阻止伪装 `certified` 或抄入开发机 identity。
+- Enforcement Matrix 展开为 76 条 concrete record：69 个 Safety 叶字段与 7 个 Capacity 字段恰好各一条，无通配行、重复 owner 或缺失 checkpoint。每条记录固定 business limit、resource/account/consumer、component/checkpoint、settlement、failure、Plan hash、Supported Limit 与 T7 fence mapping，并具有独立 `record_hash`；Safety 全部进入 Plan hash，Capacity 全部不进入且不伪造 Supported/T7 mapping。
+- 新增 6 个 Draft 2020-12 closed schema artifact，内嵌 `VersionedRef` 与 G0.2 standalone schema canonical 语义一致；7 positive / 30 negative fixtures 覆盖 exact baseline、unknown/missing/zero、mutable ref、terminal activation reserve、Capacity hash/watermark、Product Floor 下调/并发 benchmark 干扰、Retention 缩短、SQLite candidate identity spoof、Enforcement 漏项/重复/wildcard/checkpoint/Plan/hash drift。
+- 新增独立 `safety-sqlite-domain-separators` registry 与 `contract-pack-safety-sqlite` manifest；CLI `generate/check` 和 CI 统一检查 G0.2-G0.5。G0.2 foundation、G0.3 closed-schema 与 G0.4 catalog/protocol manifest 被 exact hash pin 住，既有 JSON bytes 未改。
+- `sqlite/` 只包含 candidate profile/schema；没有 Logical Schema metadata、typed relation/query catalog、executable migration、Schema Manifest、Connection Factory、真实 SQLite open/PRAGMA、Supported Limits 或 certification。`conformance/draft/` 与 `sealed/` 仍只含 `.gitkeep`，没有开始 G0.6、G1、G2 或 Golden。
+
+最终 Artifact hashes：
+
+| Artifact | Hash |
+| --- | --- |
+| G0.5 Safety/Retention/SQLite manifest | `sha256:76b8e1196ac422500be9c79a767e673e9c30fa3d9bbb1dc12fc54613cd40b428` |
+| `local_single_user_safety@1` | `sha256:822bf524138d5283e1b94b709765a913a0d6a94f5190efcd55bb7ba546453491` |
+| Deployment Capacity schema / baseline config | `sha256:30aa123506c8f37a3d0c291d20feab150e7103c3f83c12775c49d323f9de7ec4` / `sha256:970a63fdba1e263189c3070201a543f01508180abb1e8c15cf649a3780c17542` |
+| `local_single_user_product_floor@1` | `sha256:370e01e401d98a25ca89088560edbb88d1a5cdb19d3409a877f9be5f39004521` |
+| `local_single_user_retention@1` | `sha256:3adc19f9a8ee92421faa349ec12e706f2d9862e90c0c74e53eb041794e2b805d` |
+| Enforcement Matrix | `sha256:fcd51e0f36865f34dcd03641754116db872d791c4d9362110a7a1548e76a545d` |
+| `local_single_user_sqlite@1` candidate | `sha256:3d69742dad2fefa8bef4ba47e375defd705e3b32920a92b105a43726436fb7af` |
+| Positive / negative fixture artifacts | `sha256:7aaa6b5f6465d30ad359cac36d86a33c3ef4321f0901e65b8485be938c94b814` / `sha256:77dbd01c5db61eaecfc80fc3654f8b2d207f400a58c30b54ecfb6a24225c7f8e` |
+
+最终退出验证证据：
+
+| 命令/证据 | 结果 |
+| --- | --- |
+| managed `npm ci` | PASS；554 packages installed；`package-lock.json` SHA-256 保持 `2b8c87e5549915e2d53c1eecdabef3ebb149bc8f03054d40f1924d93bf2bd085`；30 项既有 audit 告警保持 R-007 |
+| managed `npm run contracts:generate`（连续两次） | PASS；两次 G0.5 manifest 均为 `sha256:76b8e1196ac422500be9c79a767e673e9c30fa3d9bbb1dc12fc54613cd40b428`，G0.2/G0.3/G0.4 保持指定 hash；完整 JSON/config/reserved tree 初始、第一次、第二次 digest 均为 `a854a43f39394b310df32c3080d0757af924feb215505d2783ea9b32bef7533c`；仅有 R-010 DEP0205 非阻塞告警 |
+| managed `npm run contracts:check` | PASS；四个 pack 均只读通过，check 后 tree digest 仍为 `a854a43f39394b310df32c3080d0757af924feb215505d2783ea9b32bef7533c` |
+| managed `npm run typecheck` | PASS |
+| managed `npm run test:g0.2` / `test:g0.3` / `test:g0.4` / `test:g0.5` | PASS；11 / 5 / 7 / 9 tests；G0.5 check 内执行 7 positive / 30 negative fixtures |
+| managed legacy boundary | PASS，1 file / 6 tests |
+| managed `npm test` | 最终 post-expansion run 为 71/72 files、650/651 tests；唯一失败为范围外 R-012 `credential-proxy` 250ms async trace intermittent baseline，G0.5 与其余测试全部通过；此前同会话完整 run 曾为 72 files / 651 tests PASS |
+| managed `npm run build` | PASS |
+| managed targeted Prettier `--check` | PASS；全部 `src/workflow-runtime/contracts/*.ts` 符合 pinned Prettier |
+| R-012 定向复核 | 会话开始时单文件与最终 post-expansion 完整 suite 均只观察到 `model_request_started`，分别为 20/21 与总计 650/651 tests；中间完整 suite 曾全部通过，确认其为范围外 intermittent baseline。G0.5 未修改 credential-proxy/trace 文件或测试 |
+| prior-pack/boundary scan | PASS；G0.4 原子提交 `6483be9`、六类 Catalog、13 Command、22 状态机、18 transaction、9/20 fixtures 已复核；G0.2/G0.3/G0.4 manifests 和 `package-lock.json` identity 未改；无 DDL/Store/Compiler/Golden/Registry/Runtime/UI artifact |
+| `git diff --check` | PASS |
 
 ## 已完成切片：G0.4 Catalogs and Protocol Tables
 
@@ -486,16 +536,16 @@ G0.1 的实现、测试和本进度账本由同一个原子提交交付。Agent 
 | R-001 | Toolchain | CLOSED | exact Node/npm/direct dependency/lock/CI/managed distribution 已落地，最终 managed install/ci/typecheck/test/build 全部通过 | G0.1 |
 | R-002 | Host launch identity | CLOSED | 所有 Core service/start/restart path 已切到 stable Launcher/managed build；realpath/环境隔离/fail-closed、最终 hash和 Core rebind 已验证 | G0.1 |
 | R-003 | Static proof | OPEN | 当前只有定向 legacy boundary test，尚无规范要求的 AST/API/UI/schema/filesystem/resource manifests | G0.7 |
-| R-004 | Contract drift | PARTIALLY_MITIGATED | G0.2 foundation、G0.3 closed Domain Schema 与 G0.4 Catalog/Protocol 已原子交付；Safety/Retention/SQLite、DDL metadata、absence/surface 与完整 Markdown 双向覆盖仍未完成 | G0.5-G0.9 |
+| R-004 | Contract drift | PARTIALLY_MITIGATED | G0.2 foundation、G0.3 closed Domain Schema、G0.4 Catalog/Protocol 与 G0.5 Safety/Retention/SQLite 已原子交付；Logical Schema metadata、absence/surface、Golden Draft 与完整 Markdown 双向覆盖仍未完成 | G0.6-G0.9 |
 | R-005 | DDL feasibility | DEFERRED | Logical Schema 尚未转换为 executable migration；不代表已发现冲突，但 G1 必须以真实 SQLite Gate 验证 | G1 |
-| R-006 | Certification | DEFERRED | Product Floor 和 profile 已冻结；Launcher/Core Release/Managed Node executable/native module 完整 key、Supported Limits 与事务预算尚未 benchmark 认证 | G8 |
+| R-006 | Certification | DEFERRED | Product Floor、Safety/Retention 与 SQLite candidate 已冻结；SQLite/source/compile-options/native module、Launcher/Core Release 完整 key、Supported Limits 与事务预算尚未 benchmark 认证，candidate identity 字段保持 null | G8 |
 | R-007 | Dependency audit | OPEN_OUT_OF_SCOPE | exact lock 的 `npm ci` 报告 30 项 transitive dependency audit 告警；G0.1 不运行会漂移规范 pinned identity 的自动修复，需独立依赖维护评审 | 独立维护 |
 | R-008 | Formatting baseline | OPEN_OUT_OF_SCOPE | 仓库既有 `npm run format:check` 对 34 个 G0.2 外旧 TypeScript 文件报差异；G0.2 新文件 targeted Prettier 通过，未把无关批量格式化混入原子提交 | 独立维护 |
 | R-009 | Concurrent repository change | CLOSED | `32f3c51` 只新增范围外 evaluation 文档；G0.2 最终 HEAD/边界和 staged set 已验证，提交保留且未混入 G0.2 内容 | G0.2 |
 | R-010 | Node loader deprecation | OPEN_OUT_OF_SCOPE | Node 26 下 pinned `tsx` loader 在 `contracts:generate/check` 报 `DEP0205 module.register()` deprecation warning，但命令退出码为 0；G0.2 不升级非规范依赖或替换工具链 | 独立工具链维护 |
 | R-011 | Concurrent repository change | CLOSED | G0.4 施工期间新增 `982e3b6/5989b8e`，只对进度文档同一句措辞修改后逐字回退，净 tree 未改变；G0.4 保留提交并在其上原子交付 | G0.4 |
-| R-012 | Full regression baseline | OPEN_OUT_OF_SCOPE | managed full suite 的范围外 `credential-proxy` async trace test 未在 250ms 内观察到 `model_resolution`，完整与单文件重跑均复现；G0.4 未修改相关文件，全部 Contract/Boundary/Build 验证通过 | 独立测试稳定性维护 |
+| R-012 | Full regression baseline | OPEN_OUT_OF_SCOPE | G0.5 会话开始时范围外 `credential-proxy` async trace 单文件在 250ms 内只观察到 `model_request_started`（20 PASS / 1 FAIL）；中间完整 suite 曾全部通过，最终 post-expansion 完整 suite 再次复现同一唯一失败（71/72 files、650/651 tests）。属于 intermittent baseline；G0.5 未修改相关文件或测试 | 独立测试稳定性维护 |
 
 ## 下一步
 
-下一会话开始 `G0.5 Safety / Retention / SQLite Contracts`。先完整阅读架构规范和本文，复核本次 G0.4 原子提交、六类 Catalog、Command Catalog、22 个状态机、18 个事务协议、9 positive / 20 negative fixtures、manifest hash 与 G0.2/G0.3 identity，再只按 G0.5 范围机器化 `local_single_user_safety@1`、Deployment Capacity schema/baseline、`local_single_user_product_floor@1`、`local_single_user_retention@1`、`local_single_user_sqlite@1` candidate 和逐字段 Enforcement Matrix。G0 总 Gate 继续为 `IN_PROGRESS`；不得越过 G0.5 开始 G0.6、G1 Store/DDL、G2 Compiler lowering/normalization/proof、Golden sealing、Registry、T0-T8 Runtime 语义、Runtime Center 或 UI。开始前复核 R-012，但不要把范围外测试修复混入 G0.5 原子提交。
+下一会话开始 `G0.6 Logical Schema Metadata`。先完整阅读架构规范和本文，复核本次 G0.5 原子提交、6 个 closed schema、69/7/76 字段覆盖、7 positive / 30 negative fixtures、G0.5 manifest 与 G0.2/G0.3/G0.4 identity，再只按 G0.6 范围机器化覆盖本文全部 Normative Logical Schema 对象的 canonical manifest source、逐列 metadata、typed relation/external ref metadata、CHECK/UK/FK/index intent 和 query catalog。G0.6 仍不是 executable migration 或 Store：不得开始 G1 DDL/Store、真实 SQLite Connection Factory/PRAGMA、G2 Compiler、Golden sealing、Registry、T0-T8 Runtime 语义、Runtime Center 或 UI；不得把 `local_single_user_sqlite@1` candidate 伪装为 certified，不得修复范围外 R-012。

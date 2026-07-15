@@ -1,0 +1,220 @@
+{
+  "format": "icarus.workflow-safety-enforcement-matrix-schema/1",
+  "ref": {
+    "id": "icarus.workflow-safety-enforcement-matrix-schema",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-safety-enforcement-matrix-schema:1\n",
+  "hash": "sha256:dff6f0ae613e4155357aefd207abb54b49600578694e8bbd7aa2127c05372b0f",
+  "payload": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:icarus:workflow-safety-enforcement-matrix:1",
+    "title": "Workflow Safety Enforcement Matrix v1 payload",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "matrix_id",
+      "safety_profile_ref",
+      "safety_profile_hash",
+      "capacity_config_hash",
+      "safety_limit_count",
+      "capacity_limit_count",
+      "records"
+    ],
+    "properties": {
+      "matrix_id": {
+        "const": "local_single_user_safety_enforcement_matrix@1"
+      },
+      "safety_profile_ref": {
+        "$ref": "#/$defs/versioned_ref"
+      },
+      "safety_profile_hash": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      },
+      "capacity_config_hash": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      },
+      "safety_limit_count": {
+        "const": 69
+      },
+      "capacity_limit_count": {
+        "const": 7
+      },
+      "records": {
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/enforcement_record"
+        },
+        "minItems": 76,
+        "maxItems": 76
+      }
+    },
+    "$defs": {
+      "versioned_ref": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "version"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._:/-]{0,253}[A-Za-z0-9])?$"
+          },
+          "version": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,62}[A-Za-z0-9])?$",
+            "not": {
+              "anyOf": [
+                {
+                  "pattern": "^(?:[Cc][Uu][Rr][Rr][Ee][Nn][Tt]|[Hh][Ee][Aa][Dd]|[Ll][Aa][Tt][Ee][Ss][Tt]|[Mm][Aa][Ii][Nn]|[Mm][Aa][Ss][Tt][Ee][Rr]|[Nn][Ee][Xx][Tt]|[Ss][Nn][Aa][Pp][Ss][Hh][Oo][Tt])$"
+                },
+                {
+                  "pattern": "(?:^|[._-])[xX](?:$|[._-])"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "enforcement_record": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "limit_path",
+          "business_limit_path",
+          "resource_type",
+          "account_scope",
+          "consumer_kind",
+          "enforcement_component",
+          "reservation_point",
+          "settlement_mode",
+          "failure_code",
+          "failure_outcome",
+          "included_in_plan_hash",
+          "supported_limit_path",
+          "t7_fence_dimension",
+          "record_hash"
+        ],
+        "properties": {
+          "limit_path": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]*(?:\\.[a-z][a-z0-9_]*)+$"
+          },
+          "business_limit_path": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_]*(?:\\.[a-z][a-z0-9_]*)+$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "resource_type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_]*$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "account_scope": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_]*$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "consumer_kind": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_]*$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "enforcement_component": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]*$"
+          },
+          "reservation_point": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_]*$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "settlement_mode": {
+            "enum": [
+              "consume_on_create",
+              "hold_then_release",
+              "incremental",
+              null
+            ]
+          },
+          "failure_code": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]*$"
+          },
+          "failure_outcome": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]*$"
+          },
+          "included_in_plan_hash": {
+            "type": "boolean"
+          },
+          "supported_limit_path": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_]*(?:\\.[a-z][a-z0-9_]*)+$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "t7_fence_dimension": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_]*(?:\\.[a-z][a-z0-9_]*)+$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "record_hash": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          }
+        }
+      }
+    }
+  }
+}

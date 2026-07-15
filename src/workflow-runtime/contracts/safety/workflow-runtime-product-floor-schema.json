@@ -1,0 +1,271 @@
+{
+  "format": "icarus.workflow-runtime-product-floor-schema/1",
+  "ref": {
+    "id": "icarus.workflow-runtime-product-floor-schema",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-runtime-product-floor-schema:1\n",
+  "hash": "sha256:7ca06751fe0479f71fd2b6901cf27722b4061a469d5f3a74e3a57f1c69e8a7bf",
+  "payload": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:icarus:workflow-runtime-product-floor:1",
+    "title": "Workflow Runtime Product Floor v1 payload",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "profile_id",
+      "deployment_profile",
+      "runtime_surface",
+      "platform",
+      "arch",
+      "semantics",
+      "limits",
+      "benchmark_requirements"
+    ],
+    "properties": {
+      "profile_id": {
+        "const": "local_single_user_product_floor@1"
+      },
+      "deployment_profile": {
+        "const": "local_single_user"
+      },
+      "runtime_surface": {
+        "const": "node_service"
+      },
+      "platform": {
+        "const": "darwin"
+      },
+      "arch": {
+        "const": "arm64"
+      },
+      "semantics": {
+        "const": "minimum_certified_values"
+      },
+      "limits": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "max_scopes_total",
+          "max_nodes_total",
+          "max_nodes_per_scope",
+          "max_edges_total",
+          "max_edges_per_scope",
+          "max_map_items_total",
+          "max_items_per_map",
+          "max_attempts_total",
+          "max_waits_total",
+          "max_builds_total",
+          "max_effect_operations_total",
+          "max_facts_per_transaction",
+          "max_frontier_bytes",
+          "max_nesting_depth",
+          "max_required_child_creations_per_t8"
+        ],
+        "properties": {
+          "max_scopes_total": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "max_nodes_total": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "max_nodes_per_scope": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "max_edges_total": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "max_edges_per_scope": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "max_map_items_total": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "max_items_per_map": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "max_attempts_total": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "max_waits_total": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "max_builds_total": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "max_effect_operations_total": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "max_facts_per_transaction": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "max_frontier_bytes": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "max_nesting_depth": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "max_required_child_creations_per_t8": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          }
+        }
+      },
+      "benchmark_requirements": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "reference_machine_minimum",
+          "minimum_memory_gib",
+          "filesystem_type",
+          "storage_class",
+          "power_source",
+          "build_kind",
+          "concurrent_benchmark_interference",
+          "warmup_iterations",
+          "measurement_iterations",
+          "scaling_profiles_percent",
+          "required_report_metrics",
+          "beyond_limit_rejection",
+          "t3_p99_budget_ms",
+          "t7_root_fence_p99_budget_ms",
+          "t8_required_child_p99_budget_ms",
+          "max_to_p99_budget_multiplier"
+        ],
+        "properties": {
+          "reference_machine_minimum": {
+            "const": "apple_silicon_m2"
+          },
+          "minimum_memory_gib": {
+            "type": "integer",
+            "minimum": 16,
+            "maximum": 9007199254740991
+          },
+          "filesystem_type": {
+            "const": "apfs"
+          },
+          "storage_class": {
+            "const": "internal_ssd"
+          },
+          "power_source": {
+            "const": "ac_power"
+          },
+          "build_kind": {
+            "const": "release"
+          },
+          "concurrent_benchmark_interference": {
+            "const": "forbidden"
+          },
+          "warmup_iterations": {
+            "type": "integer",
+            "minimum": 10,
+            "maximum": 9007199254740991
+          },
+          "measurement_iterations": {
+            "type": "integer",
+            "minimum": 100,
+            "maximum": 9007199254740991
+          },
+          "scaling_profiles_percent": {
+            "type": "array",
+            "prefixItems": [
+              {
+                "const": 25
+              },
+              {
+                "const": 50
+              },
+              {
+                "const": 100
+              }
+            ],
+            "items": false,
+            "minItems": 3,
+            "maxItems": 3
+          },
+          "required_report_metrics": {
+            "type": "array",
+            "prefixItems": [
+              {
+                "const": "p50_ms"
+              },
+              {
+                "const": "p95_ms"
+              },
+              {
+                "const": "p99_ms"
+              },
+              {
+                "const": "max_ms"
+              },
+              {
+                "const": "wal_bytes"
+              },
+              {
+                "const": "peak_rss_bytes"
+              },
+              {
+                "const": "affected_rows"
+              }
+            ],
+            "items": false,
+            "minItems": 7,
+            "maxItems": 7
+          },
+          "beyond_limit_rejection": {
+            "const": "before_atomic_write"
+          },
+          "t3_p99_budget_ms": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "t7_root_fence_p99_budget_ms": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "t8_required_child_p99_budget_ms": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "max_to_p99_budget_multiplier": {
+            "type": "integer",
+            "minimum": 2,
+            "maximum": 9007199254740991
+          }
+        }
+      }
+    }
+  }
+}

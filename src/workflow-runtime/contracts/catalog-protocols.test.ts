@@ -208,19 +208,14 @@ describe('G0.4 catalog and protocol Contract Pack', () => {
     expect(() => checkContractPackCatalogProtocols()).not.toThrow();
   });
 
-  it('keeps G0.5+, Golden, and Store directories reserved', () => {
+  it('keeps Golden directories reserved', () => {
     expect(readArtifact('contract-pack-foundation.json').hash).toBe(
       'sha256:e85b654581c036f8129677d7443a0704ebc8b8fbe87907b842aaefe1501e637d',
     );
     expect(readArtifact('contract-pack-closed-schemas.json').hash).toBe(
       'sha256:c5ea281d64480787322e8b6ef619b2f90784084d87ba4373c94288ed5e7aa3a8',
     );
-    for (const directory of [
-      'safety',
-      'sqlite',
-      'conformance/draft',
-      'conformance/sealed',
-    ]) {
+    for (const directory of ['conformance/draft', 'conformance/sealed']) {
       expect(fs.readdirSync(path.join(contractsRoot, directory))).toEqual([
         '.gitkeep',
       ]);

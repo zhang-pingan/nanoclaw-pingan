@@ -1,0 +1,550 @@
+{
+  "format": "icarus.workflow-runtime-safety-profile-schema/1",
+  "ref": {
+    "id": "icarus.workflow-runtime-safety-profile-schema",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-runtime-safety-profile-schema:1\n",
+  "hash": "sha256:26c6fce6c69d31ac01b7b17bd0f1a2a0d6976cb2d8f03ad88bf5ba8039bf3a7a",
+  "payload": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:icarus:workflow-runtime-safety-profile:1",
+    "title": "Workflow Runtime Safety Profile v1 payload",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "profile_id",
+      "deployment_profile",
+      "mutability",
+      "pinning_scope",
+      "ceilings"
+    ],
+    "properties": {
+      "profile_id": {
+        "const": "local_single_user_safety@1"
+      },
+      "deployment_profile": {
+        "const": "local_single_user"
+      },
+      "mutability": {
+        "const": "immutable_versioned"
+      },
+      "pinning_scope": {
+        "const": "workflow_and_run_creation"
+      },
+      "ceilings": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "routing",
+          "workflow",
+          "run",
+          "scope",
+          "map",
+          "registry",
+          "execution",
+          "wait",
+          "reconciliation",
+          "value"
+        ],
+        "properties": {
+          "routing": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "max_task_input_bytes",
+              "max_route_hops",
+              "max_schema_bytes",
+              "max_schema_nodes",
+              "max_schema_ref_depth",
+              "max_schema_union_variants",
+              "max_schema_validation_steps"
+            ],
+            "properties": {
+              "max_task_input_bytes": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "max_route_hops": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "max_schema_bytes": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "max_schema_nodes": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "max_schema_ref_depth": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "max_schema_union_variants": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "max_schema_validation_steps": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              }
+            }
+          },
+          "workflow": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "max_duration_ms",
+              "max_state_activations",
+              "max_graph_runs",
+              "max_state_transitions",
+              "max_child_workflows_per_workflow",
+              "max_child_workflow_depth",
+              "max_descendant_workflows_total",
+              "max_required_child_creations_per_transition"
+            ],
+            "properties": {
+              "max_duration_ms": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "max_state_activations": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "max_graph_runs": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "max_state_transitions": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "max_child_workflows_per_workflow": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "max_child_workflow_depth": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "max_descendant_workflows_total": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "max_required_child_creations_per_transition": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              }
+            }
+          },
+          "run": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "max_scopes_total",
+              "max_nodes_total",
+              "max_edges_total",
+              "max_map_items_total",
+              "max_attempts_total",
+              "max_waits_total",
+              "max_builds_total",
+              "max_build_attempts_total",
+              "max_evaluator_attempts_total",
+              "max_effect_operations_total",
+              "max_logical_output_bytes_total",
+              "max_stored_bytes_total",
+              "max_facts_total"
+            ],
+            "properties": {
+              "max_scopes_total": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "max_nodes_total": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "max_edges_total": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "max_map_items_total": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "max_attempts_total": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "max_waits_total": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "max_builds_total": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "max_build_attempts_total": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "max_evaluator_attempts_total": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "max_effect_operations_total": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "max_logical_output_bytes_total": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "max_stored_bytes_total": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "max_facts_total": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              }
+            }
+          },
+          "scope": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "max_nodes_per_scope",
+              "max_edges_per_scope",
+              "max_scope_spec_bytes",
+              "max_nesting_depth",
+              "max_frontier_bytes"
+            ],
+            "properties": {
+              "max_nodes_per_scope": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "max_edges_per_scope": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "max_scope_spec_bytes": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "max_nesting_depth": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "max_frontier_bytes": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              }
+            }
+          },
+          "map": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "max_items_per_map",
+              "max_child_concurrency_per_map"
+            ],
+            "properties": {
+              "max_items_per_map": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "max_child_concurrency_per_map": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              }
+            }
+          },
+          "registry": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "max_snapshot_entries",
+              "max_dependency_depth",
+              "max_execution_artifact_bytes",
+              "max_total_pinned_execution_bytes_per_run"
+            ],
+            "properties": {
+              "max_snapshot_entries": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "max_dependency_depth": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "max_execution_artifact_bytes": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "max_total_pinned_execution_bytes_per_run": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              }
+            }
+          },
+          "execution": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "max_attempts_per_node",
+              "max_attempt_duration_ms",
+              "max_dispatch_duration_ms",
+              "max_retry_backoff_ms",
+              "max_build_attempts_per_build",
+              "max_build_duration_ms",
+              "max_evaluator_attempts_per_evaluation",
+              "max_evaluator_duration_ms",
+              "max_outbox_attempts_per_message",
+              "max_outbox_reconcile_attempts_per_message",
+              "max_outbox_attempt_duration_ms",
+              "max_outbox_delivery_duration_ms",
+              "max_root_finalization_attempts_per_schedule",
+              "max_root_finalization_duration_ms",
+              "max_operational_remediation_attempts_per_blocker",
+              "max_operational_remediation_duration_ms"
+            ],
+            "properties": {
+              "max_attempts_per_node": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "max_attempt_duration_ms": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "max_dispatch_duration_ms": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "max_retry_backoff_ms": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "max_build_attempts_per_build": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "max_build_duration_ms": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "max_evaluator_attempts_per_evaluation": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "max_evaluator_duration_ms": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "max_outbox_attempts_per_message": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "max_outbox_reconcile_attempts_per_message": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "max_outbox_attempt_duration_ms": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "max_outbox_delivery_duration_ms": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "max_root_finalization_attempts_per_schedule": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "max_root_finalization_duration_ms": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "max_operational_remediation_attempts_per_blocker": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "max_operational_remediation_duration_ms": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              }
+            }
+          },
+          "wait": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "max_finite_wait_duration_ms",
+              "max_pending_signals_per_workflow",
+              "max_pending_signals_per_run",
+              "max_pending_signals_per_principal",
+              "max_pending_signal_age_ms",
+              "max_signal_payload_bytes",
+              "max_correlation_key_bytes"
+            ],
+            "properties": {
+              "max_finite_wait_duration_ms": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "max_pending_signals_per_workflow": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "max_pending_signals_per_run": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "max_pending_signals_per_principal": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "max_pending_signal_age_ms": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "max_signal_payload_bytes": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "max_correlation_key_bytes": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              }
+            }
+          },
+          "reconciliation": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "max_condition_ast_nodes",
+              "max_condition_steps_per_evaluation",
+              "max_facts_per_transaction"
+            ],
+            "properties": {
+              "max_condition_ast_nodes": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "max_condition_steps_per_evaluation": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "max_facts_per_transaction": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              }
+            }
+          },
+          "value": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "max_single_value_bytes",
+              "max_single_artifact_bytes",
+              "max_artifact_files",
+              "max_artifact_manifest_bytes"
+            ],
+            "properties": {
+              "max_single_value_bytes": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "max_single_artifact_bytes": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "max_artifact_files": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "max_artifact_manifest_bytes": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

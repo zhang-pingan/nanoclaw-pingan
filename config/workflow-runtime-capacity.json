@@ -1,0 +1,10 @@
+{
+  "max_active_executions": 5,
+  "max_active_waits": 256,
+  "max_pending_signals": 2048,
+  "max_outbox_inflight": 16,
+  "max_physical_blob_bytes": 21474836480,
+  "soft_blob_high_water_bytes": 17179869184,
+  "minimum_free_disk_bytes": 5368709120,
+  "config_hash": "sha256:970a63fdba1e263189c3070201a543f01508180abb1e8c15cf649a3780c17542"
+}

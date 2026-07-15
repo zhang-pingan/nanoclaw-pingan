@@ -47,9 +47,14 @@ const positiveCasesPath = 'conformance/catalog-protocols/positive-cases.json';
 const negativeCasesPath = 'conformance/catalog-protocols/negative-cases.json';
 const domainCatalogPath = 'catalogs/catalog-protocol-domain-separators.json';
 
-const futureReservedDirectories = [
+const recordedFutureReservedDirectories = [
   'safety',
   'sqlite',
+  'conformance/draft',
+  'conformance/sealed',
+] as const;
+
+const stillReservedDirectories = [
   'conformance/draft',
   'conformance/sealed',
 ] as const;
@@ -219,7 +224,7 @@ function buildManifest(
         .sort((left, right) =>
           asciiCompare(String(left.path), String(right.path)),
         ),
-      future_reserved_directories: [...futureReservedDirectories],
+      future_reserved_directories: [...recordedFutureReservedDirectories],
     },
   );
 }
@@ -625,10 +630,17 @@ function validateDirectoryBoundaries(): void {
       (descriptor) => descriptor.artifact_kind === 'catalog',
     ).map((descriptor) => path.basename(descriptor.artifact_path)),
   ].sort(asciiCompare);
+  const allowedCatalogFiles = new Set([
+    ...expectedCatalogFiles,
+    'safety-sqlite-domain-separators.json',
+  ]);
   const actualCatalogFiles = fs
     .readdirSync(absoluteContractPath('catalogs'))
     .sort(asciiCompare);
-  if (actualCatalogFiles.join('\n') !== expectedCatalogFiles.join('\n')) {
+  if (
+    expectedCatalogFiles.some((file) => !actualCatalogFiles.includes(file)) ||
+    actualCatalogFiles.some((file) => !allowedCatalogFiles.has(file))
+  ) {
     throw new Error(
       'Catalog directory contains missing or out-of-slice artifacts',
     );
@@ -652,7 +664,7 @@ function validateDirectoryBoundaries(): void {
   if (fixtureFiles.join('\n') !== 'negative-cases.json\npositive-cases.json') {
     throw new Error('G0.4 conformance fixture directory boundary drift');
   }
-  for (const directory of futureReservedDirectories) {
+  for (const directory of stillReservedDirectories) {
     const entries = fs
       .readdirSync(absoluteContractPath(directory))
       .sort(asciiCompare);
