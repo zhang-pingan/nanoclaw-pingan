@@ -1,0 +1,39 @@
+{
+  "format": "icarus.workflow-compiler-contract-repair-fixtures/1",
+  "ref": {
+    "id": "icarus.workflow-compiler-contract-repair-fixtures",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-compiler-contract-repair-fixtures:1\n",
+  "hash": "sha256:d888eeaf8b504e4923384e50c4be0d6c42cf21ade6214e6f20e379adcc2ca6c7",
+  "payload": {
+    "format": "icarus.workflow-compiler-contract-repair-fixtures/1",
+    "positive_cases": [
+      "compiled_ir_v2_closed",
+      "condition_operand_types_hashed",
+      "map_result_order_explicit",
+      "static_child_closure_embedded",
+      "static_lowering_outcomes_disjoint",
+      "single_assertion_target",
+      "g0_8_inputs_additively_bound",
+      "historical_bytes_unchanged"
+    ],
+    "negative_cases": [
+      "compiled_ir_v1_field_injection",
+      "operand_types_missing",
+      "map_result_order_missing",
+      "closure_members_external_or_unhashed",
+      "engine_error_as_named_exit",
+      "local_cancel_as_named_exit",
+      "assertion_target_review_projection",
+      "g0_8_absent_identity_treated_as_g2_identity",
+      "resolved_binding_missing_exact_hash",
+      "draft_review_before_binding",
+      "historical_artifact_rewrite",
+      "sealed_output_created_by_repair"
+    ],
+    "positive_case_count": 8,
+    "negative_case_count": 12
+  }
+}

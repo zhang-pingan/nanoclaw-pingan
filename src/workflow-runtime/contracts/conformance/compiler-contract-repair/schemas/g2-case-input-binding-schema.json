@@ -1,0 +1,260 @@
+{
+  "format": "icarus.workflow-compiler-g2-case-input-binding-schema/1",
+  "ref": {
+    "id": "icarus.workflow-compiler-g2-case-input-binding-schema",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-compiler-g2-case-input-binding-schema:1\n",
+  "hash": "sha256:7a716008d8b65ea9764a808def81a3b22bd46902dc5712e168a570339039d632",
+  "payload": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://icarus.local/schemas/icarus-workflow-compiler-g2-case-input-binding/1",
+    "title": "icarus.workflow-compiler-g2-case-input-binding/1",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "format",
+      "binding_version",
+      "historical_g0_8_manifest_ref",
+      "historical_g0_8_manifest_hash",
+      "historical_case_catalog_ref",
+      "historical_case_catalog_hash",
+      "compiler_toolchain_manifest_ref",
+      "compiler_toolchain_hash",
+      "compiler_version",
+      "compiler_build_hash",
+      "canonical_normalizer_version",
+      "canonical_normalizer_hash",
+      "proof_algorithm_version",
+      "proof_algorithm_hash",
+      "error_catalog_ref",
+      "error_catalog_hash",
+      "compiled_ir_schema_ref",
+      "compiled_ir_schema_hash",
+      "conformance_result_schema_ref",
+      "conformance_result_schema_hash",
+      "case_inputs",
+      "binding_hash"
+    ],
+    "properties": {
+      "format": {
+        "const": "icarus.workflow-compiler-g2-case-input-binding/1"
+      },
+      "binding_version": {
+        "type": "string",
+        "minLength": 1
+      },
+      "historical_g0_8_manifest_ref": {
+        "type": "string",
+        "pattern": "^contract-pack-golden-draft.json$"
+      },
+      "historical_g0_8_manifest_hash": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      },
+      "historical_case_catalog_ref": {
+        "type": "string",
+        "pattern": "^conformance/draft/[A-Za-z0-9.@_/-]+$"
+      },
+      "historical_case_catalog_hash": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      },
+      "compiler_toolchain_manifest_ref": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "version"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._:/-]{0,253}[A-Za-z0-9])?$"
+          },
+          "version": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,62}[A-Za-z0-9])?$"
+          }
+        }
+      },
+      "compiler_toolchain_hash": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      },
+      "compiler_version": {
+        "type": "string",
+        "minLength": 1
+      },
+      "compiler_build_hash": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      },
+      "canonical_normalizer_version": {
+        "type": "string",
+        "minLength": 1
+      },
+      "canonical_normalizer_hash": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      },
+      "proof_algorithm_version": {
+        "type": "string",
+        "minLength": 1
+      },
+      "proof_algorithm_hash": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      },
+      "error_catalog_ref": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "version"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._:/-]{0,253}[A-Za-z0-9])?$"
+          },
+          "version": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,62}[A-Za-z0-9])?$"
+          }
+        }
+      },
+      "error_catalog_hash": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      },
+      "compiled_ir_schema_ref": {
+        "type": "string",
+        "pattern": "^conformance/compiler-contract-repair/[A-Za-z0-9.@_/-]+$"
+      },
+      "compiled_ir_schema_hash": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      },
+      "conformance_result_schema_ref": {
+        "type": "string",
+        "pattern": "^conformance/compiler-contract-repair/[A-Za-z0-9.@_/-]+$"
+      },
+      "conformance_result_schema_hash": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      },
+      "case_inputs": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "case_id",
+            "raw_source_bytes_ref",
+            "raw_source_bytes_hash",
+            "historical_input_snapshot_ref",
+            "historical_input_snapshot_hash",
+            "effective_case_input_hash"
+          ],
+          "properties": {
+            "case_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,254}$"
+            },
+            "raw_source_bytes_ref": {
+              "type": "string",
+              "pattern": "^conformance/draft/[A-Za-z0-9.@_/-]+$"
+            },
+            "raw_source_bytes_hash": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "historical_input_snapshot_ref": {
+              "type": "string",
+              "pattern": "^conformance/draft/[A-Za-z0-9.@_/-]+$"
+            },
+            "historical_input_snapshot_hash": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "effective_case_input_hash": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            }
+          }
+        },
+        "minItems": 40,
+        "maxItems": 40,
+        "uniqueItems": true
+      },
+      "binding_hash": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      }
+    },
+    "$defs": {
+      "json_value": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "string"
+          },
+          {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/json_value"
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/$defs/json_value"
+            }
+          }
+        ]
+      },
+      "versioned_ref": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "version"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._:/-]{0,253}[A-Za-z0-9])?$"
+          },
+          "version": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,62}[A-Za-z0-9])?$"
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,14 +1,14 @@
 # Dynamic Workflow Runtime 实施进度
 
 > **状态**: IN_PROGRESS
-> **当前 Gate**: G2 Compiler / Sealed Golden（BLOCKED_BY_SPEC）
-> **下一施工切片**: G2 normalization/lowering/Golden oracle contract repair
+> **当前 Gate**: G2 Compiler / Sealed Golden（READY）
+> **下一施工切片**: G2 Production Compiler implementation + exact case-input identity binding（不含 Golden approval/seal）
 > **最后更新**: 2026-07-16
-> **规范权威**: `local/docs/dynamic-workflow-dag-framework.md`
+> **规范权威**: `local/docs/dynamic-workflow-dag-framework.md` + R-016 additive `local/docs/dynamic-workflow-g2-contract-repair-v1.md`
 
 ## 文档职责
 
-本文是 Dynamic Workflow Runtime 的实施状态账本，用于跨会话记录已经完成的施工切片、实际交付物、验证证据、提交和下一步。本文不定义 Runtime 语义，也不替代架构规范；类型、状态、事务、Logical Schema、Gate 和验收条款冲突时，始终以 `local/docs/dynamic-workflow-dag-framework.md` 为权威，并先修正规范或 Contract Pack，不能由实现自行选择语义。
+本文是 Dynamic Workflow Runtime 的实施状态账本，用于跨会话记录已经完成的施工切片、实际交付物、验证证据、提交和下一步。本文不定义 Runtime 语义，也不替代架构规范；类型、状态、事务、Logical Schema、Gate 和验收条款冲突时，始终以 `local/docs/dynamic-workflow-dag-framework.md` 及其明确列出的 versioned normative addendum为权威，并先修正规范或 Contract Pack，不能由实现自行选择语义。R-016 topics由 `local/docs/dynamic-workflow-g2-contract-repair-v1.md` additive覆盖，base spec bytes因已进入 G0.10/G1 published identity而保持 immutable。
 
 下一会话 Prompt 不写入本文。每个施工切片完成并提交后，由当前会话在最终回复中根据实际 commit 和验证结果生成下一会话 Prompt。
 
@@ -16,7 +16,7 @@
 
 每个新会话开始施工前必须：
 
-1. 完整阅读 `local/docs/dynamic-workflow-dag-framework.md`，不得用本文或局部摘要代替全文。
+1. 完整阅读 `local/docs/dynamic-workflow-dag-framework.md` 及本文列出的全部 normative addendum，不得用本文或局部摘要代替全文。
 2. 阅读本文，确认当前 Gate、下一施工切片、已完成证据和未解决风险。
 3. 执行 `git status --short`、`git branch --show-current`、`git log -5 --oneline`，并阅读本文记录的最后一个施工提交。
 4. 根据规范“实现索引”确定工作包 ID，重点复读其主要入口、必须联读、核心不变量和完整验收标准。
@@ -106,7 +106,7 @@ Agent Container 运行于独立 VM，Node identity 由 VM image gate 保证；�
 | --- | --- | --- | --- | --- |
 | G0 Contract Pack / Static Baseline | `DONE` | 无 | G0.1-G0.9 historical root + G0.10 additive Capacity Admin/publication/CAP/Logical Schema/coverage root | 本原子提交 |
 | G1 DDL / Store | `DONE` | G0.10 | frozen executable migration/Schema Manifest + unified Connection Factory + Store lifecycle/transaction host + real-file SQLite/identity gates | 本原子提交（G1.2） |
-| G2 Compiler / Golden | `BLOCKED_BY_SPEC` | G0.1-G0.9；G0.10 不改变 Compiler/Plan 语义 | sealed Golden Bundle + compiler/toolchain hash | - |
+| G2 Compiler / Golden | `READY` | G0.1-G0.9；R-016 spec/Contract repair；G0.10 不改变 Compiler/Plan 语义 | sealed Golden Bundle + compiler/toolchain hash | - |
 | G3 Registry / Authoring / Publish | `NOT_READY` | G1 + G2 | manifest/authoring/publish/retention/ABI fixtures | - |
 | G4 Test Bootstrap | `NOT_READY` | G1 + G2 + G3 | isolated bootstrap profile | - |
 | G5 Basic Runtime | `NOT_READY` | G4 | T0-T6e model/fault fixtures | - |
@@ -121,8 +121,8 @@ Agent Container 运行于独立 VM，Node identity 由 VM image gate 保证；�
 | --- | --- | --- | --- |
 | I0 | Publish、Registry、Recipe 与执行版本固定 | `NOT_READY` | G3 起 |
 | I1 | Intake、Routing、幂等创建、Child provenance、Claim | `NOT_READY` | G5 起 |
-| I2 | Definition、State lowering、Context、transition | `BLOCKED_BY_SPEC` | G2 frozen lowering/oracle contract 冲突；Runtime 仍从 G5 起 |
-| I3 | Source/Compiled IR、Port、Compiler | `BLOCKED_BY_SPEC` | G2 frozen normalized assertion/Compiled IR 冲突 |
+| I2 | Definition、State lowering、Context、transition | `READY` | R-016 已冻结 lowering outcome Contract；下一步只实现 G2 static lowerer，Runtime 仍从 G5 起 |
+| I3 | Source/Compiled IR、Port、Compiler | `READY` | R-016 已发布 Compiled IR v2/result/binding Contract；下一步实现 G2 Compiler |
 | I4 | Runtime Store、SQLite relation、Value/Blob、migration | `IN_PROGRESS` | G1 migration/Schema Manifest/Store Base/Connection Factory DONE；Value/Blob 从 G3 起 |
 | I5 | Graph 状态机、reconcile、Scheduler、Ledger | `NOT_READY` | G5 起 |
 | I6 | Delegation/System、Capability Effect、Outbox | `NOT_READY` | G5 起 |
@@ -156,9 +156,55 @@ G0.1-G0.9 已按当时规范完成并保留历史 identity。后续确认的 Cap
 | G1.1 | Executable DDL / Schema Manifest | `DONE` | G0.6 + G0.10 全量 canonical SQLite migration、closed introspected Manifest、schema lint、constraint/trigger/query-plan fixtures、真实文件与 managed identity gate | 本原子提交 |
 | G1.2 | Store Base / Connection Factory | `DONE` | production-target Store 基础、连接生命周期/完整 PRAGMA/read-only policy、identity gate、参数化 query API 与短写事务 host 的 candidate 开发验证 | 本原子提交 |
 
-## G2 开工审计：BLOCKED_BY_SPEC
+## G2 R-016 Spec/Contract Repair：DONE
 
-**状态**：`BLOCKED_BY_SPEC`
+**状态**：`DONE`；R-016 `CLOSED`，G2/I2/I3 由 `BLOCKED_BY_SPEC` 转为 `READY`。
+
+**工作包**：I2/I3 Contract 边界。本切片只修改架构规范、additive Contract Pack、Golden Draft v2、定向测试和本账本；没有实现 Compiler、normalizer、lowerer、proof/program，没有创建 Golden approval/seal、`conformance/sealed/` artifact、`test:g2`，也没有开始 G3+、G8/G9 identity、SQLite certification 或 production activation。
+
+2026-07-16 从 clean `main@7b74df2` 开始，完整阅读架构规范与本账本，并复核分支、最近五个提交和 `7b74df2` diff。Base framework bytes已被 G0.10/G1 published identity精确引用，因此不原地改写；R-016以 versioned normative addendum `dynamic-workflow-g2-contract-repair-v1.md` 发布 S38单一方案，并由 repair decision/root绑定其 raw hash：
+
+1. Normalized semantic assertions 的唯一 target 固定为 closed `icarus.workflow-compiler-conformance-case-result/1`。Canonical bytes 是包含 `result_hash` 的完整 UTF-8 RFC 8785 JCS；`result_hash` 使用 domain `icarus:workflow-compiler-conformance-case-result:1\n` 对去除自身字段的 result JCS 计算。Compiled branch 的 static-lowering ref/hash 必须成对 null 或成对 non-null。
+2. Delegation/system static lowering 的 normal named exits 只允许 `success/failure`。Engine error 产生 `errored -> on_error`；local graph cancel 产生 `cancelled/local_graph -> on_local_cancel`；global workflow cancel 产生 `cancelled/workflow` 并终止 Workflow、不得读取 state transition。Error/cancel 都没有 named exit。
+3. Current Compiled IR bump 为 `icarus.workflow-graph-scope-plan/2`。`CompiledConditionProgramV2.operand_types`、Map `result_order:'item_index'` 和 embedded hashed `static_child_plan_closure.members` 全部进入 Plan canonical bytes/hash；Child Plan bytes继续是独立 content-addressed Plan refs，不创建第二份 sealed oracle。
+4. `icarus.workflow-compiler-g2-case-input-binding/1` additive binding 精确包含 Toolchain Manifest、Compiler build/version、Canonical Normalizer、Proof Algorithm、Error Catalog、Compiled IR schema与 Conformance Result schema ref/version/hash，并为每个 frozen G0.8 raw/snapshot pair计算 effective input hash。Historical snapshot 的三个 `absent` 只表示 G0 stage fact，不是 G2 identity。
+5. G0.3 Compiled IR v1与 G0.8 Draft v1/published snapshots保持原 bytes/hash。R-016 发布隔离的 Draft v2，复用全部 40 个 historical raw/snapshot refs/hashes但保持 `blocked_pending_exact_g2_identity`；真实实现 identity/expected results 只能由未来新 Draft version发布，不能覆盖 v1或 repair v2。
+
+新增机器 Contract 位于 `src/workflow-runtime/contracts/conformance/compiler-contract-repair/`，根目录与 `conformance/sealed/` 完全分离：
+
+| Artifact | Identity |
+| --- | --- |
+| R-016 repair root | `sha256:8c38201cd37c93bf4acef88151b1b8375ab23ce5566c5bc718d19c25d4484b35` |
+| Repair decision | `sha256:ed49446e51abc873f728ee1b8a47c0f9268c34a79815346301d6d8cabd41fc93` |
+| Normative repair spec raw bytes | `sha256:28452a21f49f92ce81769d4655771b9999e74b3c50f03e4b750f0652c27b1466` |
+| Compiled Scope Plan schema v2 | `sha256:4d4e325f94b55a6767f3e8596e1e9b880df2b402d3c89f587a10a23f0eadbd46` |
+| Conformance Case Result schema v1 | `sha256:019a4ba80ed8ae57b6c862d9fda62d9edcb8aca9c4910fde6bbb580c09af8706` |
+| Static lowering Contract v1 | `sha256:9e78643e882446209207cd42da8b635a143d4ef74a859941f5faaca4322184e5` |
+| G2 binding requirement v1 | `sha256:1a5af203e39516b21ae12d598be37be5c70b9599e27b4acb73443b52cefab0d5` |
+| Golden Draft cases v2 | `sha256:049bb1ff11a03b038f0128497511e4b10c8e70ff283a2bb70309f323a49c251b` |
+| Golden Draft manifest v2 | `sha256:6b3d3e337c2486b71508f2b6d37f0ce4d2f475d24229f5b87af4f96fec8215e1` |
+
+`contracts:generate/check` 现在在 G0.10 后生成或只读验证隔离 repair root；CI 新增 `test:g2:contract`，只验证 Contract repair，不冒充 G2 Compiler Gate。7 个定向测试覆盖 deterministic generation/read-only check、G0.3/G0.8 semantic/raw byte pins、IR v2 closed positive/negative shape、result canonical/hash target、lowering outcome disjointness、40-case additive identity binding和 Compiler/Golden/G3+/G8/G9 absence boundary。
+
+G1.1 的 `historicalContractTreeDigest()` 原先会把未来新增 Contract JSON也纳入“历史”闭包，导致 additive R-016目录改变 G1 expected digest。该函数现显式排除 `conformance/compiler-contract-repair/`；G1.1 root仍为 `sha256:54c120e211ed28a9c2dcc2907ec728b39ce68748a07dc631d307c9aa59693f78`，historical tree digest仍为 `241f17fa352b15b198cfcb5c28cb892b669d22ca1d3736a90c99622a0431f2f3`，`schema:check`证明没有改写任何 G1 artifact。
+
+最终验证全部通过 managed runtime串行执行；Node 26 `DEP0205 module.register()`告警保持既有 R-010：
+
+| 命令/证据 | 结果 |
+| --- | --- |
+| managed repair generate（连续两次） | PASS；两次 repair root均为 `sha256:8c38201cd37c93bf4acef88151b1b8375ab23ce5566c5bc718d19c25d4484b35`，repair tree digest均为 `3110c1518e70f1edb218dd285218d34fbddf26a4d3f162383971a5b43428fabc` |
+| managed `npm run contracts:check` | PASS；G0.3 `c5ea…`、G0.8 `52fc…`、G0.9 `df30…`、G0.10 `c964…`、G1.1 root `54c1…`与 Store candidate identity全部保持，repair root read-only check通过 |
+| managed `npm run test:g0` | PASS，15 files / 109 tests；包含 G0.8 frozen Draft、G0.9 historical与 G0.10 deterministic replay |
+| managed `npm run test:g1.1` | PASS，1 file / 8 tests；G1 artifacts byte-identical |
+| managed `npm run test:g1.2` | PASS，1 file / 10 tests |
+| managed `npm run test:g2:contract` | PASS，1 file / 7 tests |
+| managed `npm run typecheck` | PASS |
+| managed `npm test` | 79/80 files、723/724 tests；唯一失败为既有 R-012 `credential-proxy` 250ms async trace，单文件重放同为 20/21；R-016与其余 723 tests通过，未修改或放宽该范围外测试 |
+| managed `npm run build` | PASS |
+
+### 2026-07-16：G2 开工审计（historical blocker record）
+
+**当时状态**：`BLOCKED_BY_SPEC`；上述 R-016 repair 已关闭该 blocker，本段保留最小复现与审计证据，不再表示 current Gate 状态。
 
 **工作包**：I2/I3；本次只完成 G2 开工前规范/Contract Pack 一致性审计，没有实现 Compiler、normalizer、lowerer、proof/program、Golden review/seal，也没有修改任何 G0 published JSON、G1.1 schema artifact 或 G1.2 Store/Factory contract。
 
@@ -948,14 +994,14 @@ G0.1 的实现、测试和本进度账本由同一个原子提交交付。Agent 
 | R-009 | Concurrent repository change | CLOSED | `32f3c51` 只新增范围外 evaluation 文档；G0.2 最终 HEAD/边界和 staged set 已验证，提交保留且未混入 G0.2 内容 | G0.2 |
 | R-010 | Node loader deprecation | OPEN_OUT_OF_SCOPE | Node 26 下 pinned `tsx` loader 在 `contracts:generate/check` 报 `DEP0205 module.register()` deprecation warning，但命令退出码为 0；G0.2 不升级非规范依赖或替换工具链 | 独立工具链维护 |
 | R-011 | Concurrent repository change | CLOSED | G0.4 施工期间新增 `982e3b6/5989b8e`，只对进度文档同一句措辞修改后逐字回退，净 tree 未改变；G0.4 保留提交并在其上原子交付 | G0.4 |
-| R-012 | Full regression baseline | OPEN_OUT_OF_SCOPE | G1.2 两次串行完整 suite 均为 78/79 files、716/717 tests，唯一失败继续是 `credential-proxy` async trace 250ms intermittent；G1.2 10/10 与其余 716 tests 均通过，未修改 credential-proxy/trace 文件或测试 | 独立测试稳定性维护 |
+| R-012 | Full regression baseline | OPEN_OUT_OF_SCOPE | G1.2 两次串行完整 suite均只失败 `credential-proxy` async trace 250ms；R-016 full suite为 79/80 files、723/724 tests，单文件20/21，同一断言继续失败。R-016/G0/G1与其余723 tests通过，未修改 credential-proxy/trace文件或测试 | 独立测试稳定性维护 |
 | R-013 | Contract test timing baseline | OPEN_OUT_OF_SCOPE | G1.1 曾在并发负载下复现 G0.6 5s timing；G1.2 串行 `test:g0` 15/15 files、109/109 tests 和两次完整 suite 均未复现。G1.2 不调整 timeout 或 G0.6 既有实现 | 独立测试稳定性维护 |
 | R-014 | Capacity governance | CLOSED | G0.10 已机器化 closed publication/command、权限/Actor/entrypoint/delegation、revision/hash CAS、reason/denial、immutable audit tables、唯一 Publisher/Watcher protocol、Admission lineage、crash recovery 与 additive Gate evidence；G1 DDL 可开始 | G0.10 |
 | R-015 | Toolchain test timing | OPEN_OUT_OF_SCOPE | G1.1 曾复现 runtime-toolchain 5s timing；G1.2 串行 `test:g0` 和两次完整 suite 均未复现，toolchain tests 通过。G1.2 不调整 timeout 或 managed toolchain 既有实现 | 独立测试稳定性维护 |
-| R-016 | Compiler/Golden contract | OPEN_BLOCKING_G2 | G0.8 normalized assertions 要求 G0.3 Compiled IR 不存在的 `operand_types/result_order/static_child_plan_closure.members`，且 static lowering assertion 与 error/local-cancel 独立 outcome 语义冲突；per-case G2 toolchain identity 与 frozen G0.8 `absent` identity 也缺少 additive binding contract | G2 spec/Contract repair |
+| R-016 | Compiler/Golden contract | CLOSED | S38 与 additive repair root 已冻结唯一 Conformance Case Result target/hash、lowering outcome 分离、Compiled IR v2 execution fields/closure和 frozen G0.8 -> exact G2 identity binding；Draft v2保持 blocked，未越过 Compiler/Golden seal 边界 | G2 spec/Contract repair |
 
 ## 下一步
 
-G0.1-G0.9 historical identity、G0.10 additive current root 与 G1.1/G1.2 executable schema/Store Base 均已完成；current G0/I11 与 G1 为 `DONE`。G2 在开工前审计中因 R-016 标记为 `BLOCKED_BY_SPEC`，I2/I3 同步阻塞，G3-G9 继续 `NOT_READY`。
+G0.1-G0.9 historical identity、G0.10 additive current root、G1.1/G1.2 executable schema/Store Base与 R-016 spec/Contract repair 均已完成；current G0/I11 与 G1 为 `DONE`，G2/I2/I3 为 `READY`，G3-G9 继续 `NOT_READY`。
 
-下一施工切片必须先做 G2 spec/Contract repair，而不是编写 Compiler：明确 normalized semantic assertion 的唯一 target artifact/schema/domain/hash，统一 static lowering 的 normal named exits 与 error/local-cancel outcome 表达，决定 `operand_types/result_order/static child closure members` 是进入 bumped Compiled IR 还是独立 sealed artifact，并定义 frozen G0.8 case input 到 exact G2 Toolchain Manifest 的 additive binding。修复必须发布新的 Contract/Draft version 并保留 G0.3/G0.8 historical bytes；随后重新执行 Golden Draft 独立人工审核，才可恢复 Production Compiler/Golden sealing。不得在修复前实现 G3+、伪造 approval、SQLite certification、release identity 或 production activation；R-012/R-013/R-015 继续作为范围外 timing baseline。
+下一施工切片实现 G2 Production Compiler 的最小完整 vertical slice：locked strict parser、closed Source/Definition validation、Registry/Policy/Safety snapshot binding、Definition static lowering、Plan v2 normalization、condition/program/proof/hash与 deterministic diagnostics，并发布真实 `WorkflowCompilerToolchainManifest` 和 resolved exact case-input binding的新 version。该切片必须以 repair Contract 为输入并先生成 actual candidate case results；不得修改 G0.3/G0.8或 repair Draft v2，不得由 Compiler反向生成/批准 expected oracle，也不得执行 `GoldenSemanticReview`、`golden-seal`、G3+、SQLite certification、G8/G9 release identity或 production activation。Compiler完成并有真实 identity后，另开独立会话发布新的 resolved Draft version，再交给 `human:local-owner` 语义审核。R-012/R-013/R-015 继续作为范围外 timing baseline。

@@ -1,0 +1,96 @@
+{
+  "format": "icarus.workflow-compiler-contract-repair-decision/1",
+  "ref": {
+    "id": "icarus.workflow-compiler-contract-repair-decision",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-compiler-contract-repair-decision-artifact:1\n",
+  "hash": "sha256:ed49446e51abc873f728ee1b8a47c0f9268c34a79815346301d6d8cabd41fc93",
+  "payload": {
+    "format": "icarus.workflow-compiler-contract-repair-decision/1",
+    "repair_id": "R-016",
+    "repair_status": "spec_and_contract_repaired",
+    "normative_spec": {
+      "base_spec_ref": "local/docs/dynamic-workflow-dag-framework.md",
+      "base_spec_raw_sha256": "sha256:8f860bcba8c7f7e314d0ce115d505cbb00519d431fcfebce9bd2c387b70d8f1c",
+      "additive_repair_spec_ref": "local/docs/dynamic-workflow-g2-contract-repair-v1.md",
+      "additive_repair_spec_raw_sha256": "sha256:28452a21f49f92ce81769d4655771b9999e74b3c50f03e4b750f0652c27b1466",
+      "precedence": "repair_addendum_overrides_r016_topics_only"
+    },
+    "historical_contracts": {
+      "g0_3_manifest_hash": "sha256:c5ea281d64480787322e8b6ef619b2f90784084d87ba4373c94288ed5e7aa3a8",
+      "g0_8_manifest_hash": "sha256:52fc0266020c03a54527d7a2f735dfaef0494b5d7ae3f12dd1bf9b58a547fd22",
+      "compiled_ir_v1_schema_hash": "sha256:7d2371a5df632220ba82ab0739b163134978885b8baaae6d7b247d53623be400",
+      "golden_draft_v1_case_catalog_hash": "sha256:20be39783a5c775c0d804ce16db683540b72bcc2aa1750f9f1b93c9b7c1c4aa3",
+      "mutation_policy": "immutable_history"
+    },
+    "normalized_assertion_target": {
+      "artifact_format": "icarus.workflow-compiler-conformance-case-result/1",
+      "schema_ref": "conformance/compiler-contract-repair/schemas/compiler-conformance-case-result-schema.json",
+      "schema_hash": "sha256:019a4ba80ed8ae57b6c862d9fda62d9edcb8aca9c4910fde6bbb580c09af8706",
+      "pointer_root": "",
+      "canonicalization": "rfc8785_jcs",
+      "encoding": "utf-8",
+      "canonical_bytes": "jcs_full_result_including_result_hash",
+      "hash_field": "result_hash",
+      "hash_domain_separator": "icarus:workflow-compiler-conformance-case-result:1\n",
+      "hash_preimage": "jcs_result_without_result_hash"
+    },
+    "compiled_ir_v2": {
+      "format": "icarus.workflow-graph-scope-plan/2",
+      "schema_ref": "conformance/compiler-contract-repair/schemas/compiled-scope-plan-v2-schema.json",
+      "schema_hash": "sha256:4d4e325f94b55a6767f3e8596e1e9b880df2b402d3c89f587a10a23f0eadbd46",
+      "plan_hash_domain_separator": "icarus:workflow-graph-plan:2\n",
+      "operand_types": "required_in_compiled_condition_program",
+      "operand_type_order": "normalized_ast_left_to_right_evaluation_order",
+      "map_result_order": "required_literal_item_index",
+      "static_child_closure_storage": "embedded_hashed_member_manifest",
+      "static_child_member_order": "parent_before_descendant_then_closure_key_ascending",
+      "static_child_plan_bytes": "independent_content_addressed_plan_ref_not_separate_golden_oracle",
+      "condition_program_hash_domain_separator": "icarus:workflow-condition-program:2\n",
+      "closure_member_hash_domain_separator": "icarus:workflow-static-child-plan-closure-member:1\n",
+      "closure_hash_domain_separator": "icarus:workflow-static-child-plan-closure:1\n"
+    },
+    "static_lowering": {
+      "contract_ref": "conformance/compiler-contract-repair/contracts/definition-static-lowering-contract@1.json",
+      "contract_hash": "sha256:905b433c6909d6e61663a65d532850f60b0e62a9c6c5f039a1280e3dad44b430",
+      "normal_named_exits": [
+        "success",
+        "failure"
+      ],
+      "engine_error": "errored_outcome_to_on_error_not_named_exit",
+      "local_cancel": "cancelled_local_graph_outcome_to_on_local_cancel_not_named_exit",
+      "global_cancel": "cancelled_workflow_outcome_terminates_without_state_transition"
+    },
+    "additive_g2_identity_binding": {
+      "resolved_format": "icarus.workflow-compiler-g2-case-input-binding/1",
+      "resolved_schema_ref": "conformance/compiler-contract-repair/schemas/g2-case-input-binding-schema.json",
+      "resolved_schema_hash": "sha256:7a716008d8b65ea9764a808def81a3b22bd46902dc5712e168a570339039d632",
+      "requirement_ref": "conformance/compiler-contract-repair/draft/g2-case-input-binding-requirement@1.json",
+      "requirement_hash": "sha256:1a5af203e39516b21ae12d598be37be5c70b9599e27b4acb73443b52cefab0d5",
+      "effective_case_input_domain_separator": "icarus:workflow-compiler-effective-case-input:1\n",
+      "binding_domain_separator": "icarus:workflow-compiler-g2-case-input-binding:1\n",
+      "g0_8_absent_identity_semantics": "historical_stage_fact_never_an_effective_g2_identity",
+      "current_status": "pending_real_g2_implementation_hashes"
+    },
+    "golden_draft_v2": {
+      "manifest_ref": "conformance/compiler-contract-repair/draft/golden-draft-manifest@2.json",
+      "manifest_hash": "sha256:6b3d3e337c2486b71508f2b6d37f0ce4d2f475d24229f5b87af4f96fec8215e1",
+      "case_count": 40,
+      "raw_source_policy": "reuse_historical_refs_and_hashes",
+      "input_snapshot_policy": "reuse_historical_refs_and_hashes",
+      "review_status": "blocked_pending_exact_g2_identity",
+      "future_mutation_policy": "publish_new_version_never_rewrite"
+    },
+    "forbidden_outputs": [
+      "production_compiler",
+      "golden_semantic_approval",
+      "golden_seal",
+      "conformance_sealed_artifact",
+      "g3_or_later_implementation",
+      "g8_or_g9_identity"
+    ],
+    "repair_hash": "sha256:b2475a347cf0a8205eb4d3e8d1f8646020b0e5f9608de38a81b61786044c3a1f"
+  }
+}

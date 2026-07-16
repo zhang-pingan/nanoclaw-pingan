@@ -24,6 +24,8 @@ jobs:
         run: npm run test:g0
       - name: G1 Store boundary
         run: npm run test:g1.1 && npm run test:g1.2
+      - name: G2 compiler Contract repair
+        run: npm run test:g2:contract
       - name: Format check
         run: npm run format:check
 

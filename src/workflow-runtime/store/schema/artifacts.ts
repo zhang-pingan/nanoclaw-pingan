@@ -88,7 +88,11 @@ function listJsonFiles(root: string, current = root): string[] {
 
 export function historicalContractTreeDigest(): string {
   const hash = crypto.createHash('sha256');
-  for (const relativePath of listJsonFiles(contractsRoot)) {
+  const historicalFiles = listJsonFiles(contractsRoot).filter(
+    (relativePath) =>
+      !relativePath.startsWith('conformance/compiler-contract-repair/'),
+  );
+  for (const relativePath of historicalFiles) {
     hash.update(relativePath, 'utf8');
     hash.update('\0');
     hash.update(fs.readFileSync(path.join(contractsRoot, relativePath)));

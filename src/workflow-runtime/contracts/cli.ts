@@ -31,6 +31,10 @@ import {
   checkHistoricalG0_9Conformance,
   generateContractPackCapacityControlPlane,
 } from './capacity-control-plane-pack.js';
+import {
+  checkContractPackCompilerContractRepair,
+  generateContractPackCompilerContractRepair,
+} from './compiler-contract-repair-pack.js';
 
 function usage(): never {
   console.error('Usage: contract-pack <generate|check>');
@@ -54,7 +58,8 @@ let currentPack:
   | 'static_absence'
   | 'golden_draft'
   | 'g0_historical'
-  | 'capacity_control_plane' = 'foundation';
+  | 'capacity_control_plane'
+  | 'compiler_contract_repair' = 'foundation';
 
 try {
   const foundationManifest =
@@ -133,6 +138,16 @@ try {
   console.log(`contract_pack_capacity_control_plane=${command}:ok`);
   console.log(
     `contract_pack_capacity_control_plane_hash=${capacityControlPlaneManifest.hash}`,
+  );
+
+  currentPack = 'compiler_contract_repair';
+  const compilerContractRepairManifest =
+    command === 'generate'
+      ? generateContractPackCompilerContractRepair()
+      : checkContractPackCompilerContractRepair();
+  console.log(`contract_pack_compiler_contract_repair=${command}:ok`);
+  console.log(
+    `contract_pack_compiler_contract_repair_hash=${compilerContractRepairManifest.hash}`,
   );
 } catch (error) {
   console.error(

@@ -1,0 +1,52 @@
+{
+  "format": "icarus.workflow-definition-static-lowering-contract/1",
+  "ref": {
+    "id": "icarus.workflow-definition-static-lowering-contract",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-definition-static-lowering-contract-artifact:1\n",
+  "hash": "sha256:9e78643e882446209207cd42da8b635a143d4ef74a859941f5faaca4322184e5",
+  "payload": {
+    "format": "icarus.workflow-definition-static-lowering-contract/1",
+    "applies_to_state_types": [
+      "delegation",
+      "system"
+    ],
+    "normal_named_exits": [
+      "success",
+      "failure"
+    ],
+    "capability_terminal_routes": [
+      {
+        "terminal_status": "succeeded",
+        "named_exit": "success",
+        "transition_slot": "on_complete.success"
+      },
+      {
+        "terminal_status": "failed",
+        "named_exit": "failure",
+        "transition_slot": "on_complete.failure"
+      }
+    ],
+    "engine_error": {
+      "scope_outcome_kind": "errored",
+      "named_exit": null,
+      "transition_slot": "on_error"
+    },
+    "local_graph_cancel": {
+      "scope_outcome_kind": "cancelled",
+      "reason": "local_graph",
+      "named_exit": null,
+      "transition_slot": "on_local_cancel"
+    },
+    "global_workflow_cancel": {
+      "scope_outcome_kind": "cancelled",
+      "reason": "workflow",
+      "named_exit": null,
+      "transition_slot": null,
+      "disposition": "terminate_workflow_without_state_transition"
+    },
+    "contract_hash": "sha256:905b433c6909d6e61663a65d532850f60b0e62a9c6c5f039a1280e3dad44b430"
+  }
+}
