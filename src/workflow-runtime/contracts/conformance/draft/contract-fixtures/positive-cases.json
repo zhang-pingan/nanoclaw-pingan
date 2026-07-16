@@ -1,0 +1,46 @@
+{
+  "format": "icarus.workflow-golden-draft-positive-fixtures/1",
+  "ref": {
+    "id": "icarus.workflow-golden-draft-positive-fixtures",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-golden-draft-positive-fixtures:1\n",
+  "hash": "sha256:f551fce0959cd400108405c17cbe9f4ba8e12cdf03cf7a376c9d09bc5ed78a2f",
+  "payload": {
+    "fixtures": [
+      {
+        "fixture_id": "complete-case-catalog",
+        "expected_result": "pass"
+      },
+      {
+        "fixture_id": "complete-input-snapshots",
+        "expected_result": "pass"
+      },
+      {
+        "fixture_id": "all-raw-bytes-hash-bound",
+        "expected_result": "pass"
+      },
+      {
+        "fixture_id": "all-error-codes-covered",
+        "expected_result": "pass"
+      },
+      {
+        "fixture_id": "all-positive-topics-covered",
+        "expected_result": "pass"
+      },
+      {
+        "fixture_id": "expected-plan-proof-program-null",
+        "expected_result": "pass"
+      },
+      {
+        "fixture_id": "review-owner-local-owner",
+        "expected_result": "pass"
+      },
+      {
+        "fixture_id": "review-and-seal-absent",
+        "expected_result": "pass"
+      }
+    ]
+  }
+}

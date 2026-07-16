@@ -215,7 +215,7 @@ describe('G0.4 catalog and protocol Contract Pack', () => {
     expect(readArtifact('contract-pack-closed-schemas.json').hash).toBe(
       'sha256:c5ea281d64480787322e8b6ef619b2f90784084d87ba4373c94288ed5e7aa3a8',
     );
-    for (const directory of ['conformance/draft', 'conformance/sealed']) {
+    for (const directory of ['conformance/sealed']) {
       expect(fs.readdirSync(path.join(contractsRoot, directory))).toEqual([
         '.gitkeep',
       ]);

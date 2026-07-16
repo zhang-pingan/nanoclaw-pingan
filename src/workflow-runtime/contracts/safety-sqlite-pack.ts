@@ -70,6 +70,7 @@ const stillReservedDirectories = [
   'conformance/draft',
   'conformance/sealed',
 ] as const;
+const currentlyReservedDirectories = ['conformance/sealed'] as const;
 
 export class SafetySqliteContractError extends Error {
   readonly code = 'safety_sqlite_contract_drift';
@@ -938,7 +939,7 @@ function validateDirectoryBoundaries(): void {
   if (fixtureFiles.join('\n') !== 'negative-cases.json\npositive-cases.json') {
     throw new Error('G0.5 fixture directory boundary drift');
   }
-  for (const directory of stillReservedDirectories) {
+  for (const directory of currentlyReservedDirectories) {
     const entries = fs
       .readdirSync(absoluteContractPath(directory))
       .sort(asciiCompare);

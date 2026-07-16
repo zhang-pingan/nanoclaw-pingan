@@ -220,7 +220,7 @@ describe('G0.7 Static Absence and Surface Gates', () => {
     }
   });
 
-  it('keeps G0.7 free of Golden, DDL, Store, Runtime, UI and certification artifacts', () => {
+  it('keeps the G0.7 artifact free of sealed Golden, DDL, Store, Runtime, UI and certification claims', () => {
     const manifest = readArtifact('contract-pack-static-absence.json');
     expect(manifest.payload).toMatchObject({
       gate: 'G0.7',
@@ -230,7 +230,7 @@ describe('G0.7 Static Absence and Surface Gates', () => {
       sqlite_runtime_execution_status: 'absent',
       candidate_content_source_scan_status: 'forbidden_and_zero',
     });
-    for (const directory of ['conformance/draft', 'conformance/sealed']) {
+    for (const directory of ['conformance/sealed']) {
       expect(fs.readdirSync(path.join(contractsRoot, directory))).toEqual([
         '.gitkeep',
       ]);

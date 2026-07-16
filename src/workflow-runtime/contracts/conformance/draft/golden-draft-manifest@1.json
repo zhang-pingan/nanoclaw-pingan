@@ -1,0 +1,86 @@
+{
+  "format": "icarus.workflow-compiler-golden-draft-manifest/1",
+  "ref": {
+    "id": "icarus.workflow-compiler-golden-draft-manifest",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-compiler-golden-draft-manifest-artifact:1\n",
+  "hash": "sha256:b6cc1dc5512b4a7d50973304ba81e1b6f05ce6a3c684559194b2b3bf4e02e72b",
+  "payload": {
+    "format": "icarus.workflow-compiler-golden-draft-manifest/1",
+    "bundle_version": "1.0.0-draft",
+    "draft_status": "candidate_pending_human_review",
+    "draft_author_actor_ref": "codex:draft-author",
+    "review_owner_actor_ref": "human:local-owner",
+    "draft_generator_tool_hash": "sha256:154b8beb4e2e498b168548a606a10c6ec9c6510029892a7c05e6fc79fcce2060",
+    "case_catalog_ref": "conformance/draft/golden-draft-cases@1.json",
+    "case_catalog_hash": "sha256:20be39783a5c775c0d804ce16db683540b72bcc2aa1750f9f1b93c9b7c1c4aa3",
+    "input_snapshots": [
+      {
+        "ref": "conformance/draft/snapshots/complete-base@1.json",
+        "hash": "sha256:0c251df1bb92f331c953ac00938d9a0903a07270d25525a372683bd17e58a6e9"
+      },
+      {
+        "ref": "conformance/draft/snapshots/compiler-integrity-mismatch@1.json",
+        "hash": "sha256:bfd174e78250899dc3a3e7c4de43684f75b8d3ec01ee307d9da3bdda87eef3c1"
+      }
+    ],
+    "raw_source_count": 40,
+    "raw_source_aggregate_hash": "sha256:6e091c253086ed3df9a7dddeb90c0d1ef5c5038e92688c5f08a9e5ff847b40c5",
+    "positive_case_count": 10,
+    "negative_case_count": 30,
+    "positive_coverage": [
+      "static_lowering",
+      "condition_route",
+      "wait",
+      "subgraph",
+      "expand",
+      "map",
+      "policy_intersection",
+      "quality_revision_capability_binding",
+      "sound_subtype_different_hash",
+      "static_child_closure"
+    ],
+    "negative_error_code_coverage": [
+      "json_syntax_invalid",
+      "json_duplicate_key",
+      "schema_unknown_field",
+      "schema_profile_keyword_unsupported",
+      "registry_ref_unpinned",
+      "registry_ref_not_found",
+      "graph_id_duplicate",
+      "graph_endpoint_not_found",
+      "graph_cross_scope_edge",
+      "graph_dependency_cycle",
+      "condition_type_mismatch",
+      "condition_complexity_exceeded",
+      "json_pointer_non_total",
+      "schema_not_assignable",
+      "route_group_ambiguous",
+      "trigger_contract_invalid",
+      "completion_contract_invalid",
+      "early_completion_non_monotone",
+      "early_completion_cancellation_unsafe",
+      "capability_not_allowed",
+      "policy_escalation",
+      "quality_revision_contract_invalid",
+      "quality_revision_effect_key_incompatible",
+      "child_recipe_set_mismatch",
+      "child_recipe_dependency_cycle",
+      "runtime_safety_limit_exceeded",
+      "compiler_integrity_mismatch"
+    ],
+    "additional_negative_coverage": [
+      "quality_revision_missing_feedback_schema",
+      "quality_revision_missing_quality_gate",
+      "definition_notification_delivery_requirement_removed",
+      "definition_child_creation_key_template_removed"
+    ],
+    "expected_plan_artifact_status": "all_null_pending_review",
+    "expected_proof_program_status": "all_null_pending_review",
+    "golden_semantic_review_status": "absent",
+    "sealed_bundle_status": "absent",
+    "manifest_hash": "sha256:49138f6f5f8bee48a12c3f3ccf3cd910eafd68595263c3bedb8171f088dcbe87"
+  }
+}

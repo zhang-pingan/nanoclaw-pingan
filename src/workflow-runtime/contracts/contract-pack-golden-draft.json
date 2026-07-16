@@ -1,0 +1,202 @@
+{
+  "format": "icarus.workflow-contract-pack-golden-draft/1",
+  "ref": {
+    "id": "icarus.workflow-contract-pack-golden-draft",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-contract-pack-golden-draft:1\n",
+  "hash": "sha256:52fc0266020c03a54527d7a2f735dfaef0494b5d7ae3f12dd1bf9b58a547fd22",
+  "payload": {
+    "gate": "G0.8",
+    "status": "golden_draft_and_review_input",
+    "foundation_manifest_hash": "sha256:e85b654581c036f8129677d7443a0704ebc8b8fbe87907b842aaefe1501e637d",
+    "closed_schema_manifest_hash": "sha256:c5ea281d64480787322e8b6ef619b2f90784084d87ba4373c94288ed5e7aa3a8",
+    "catalog_protocol_manifest_hash": "sha256:e4947c515a28b3baf6782a980db9c26d32612b3c6acd3cd04348e73bd54ff607",
+    "safety_sqlite_manifest_hash": "sha256:76b8e1196ac422500be9c79a767e673e9c30fa3d9bbb1dc12fc54613cd40b428",
+    "logical_schema_manifest_hash": "sha256:32de639cc0ee6c6f33aa4291ea03ffa55b0a22752190fb88862e72a3f6857520",
+    "static_absence_manifest_hash": "sha256:a75736bf253ab67b22ba6abb0edf8e943c5d643f0b2ff36d63defbdf6336f7d2",
+    "generated_by_tool_hash": "sha256:154b8beb4e2e498b168548a606a10c6ec9c6510029892a7c05e6fc79fcce2060",
+    "draft_manifest_hash": "sha256:b6cc1dc5512b4a7d50973304ba81e1b6f05ce6a3c684559194b2b3bf4e02e72b",
+    "positive_case_count": 10,
+    "negative_case_count": 30,
+    "compiler_error_code_count": 27,
+    "closed_schema_count": 5,
+    "input_snapshot_count": 2,
+    "review_owner_actor_ref": "human:local-owner",
+    "review_request_status": "pending",
+    "review_report_status": "not_generated",
+    "golden_semantic_review_status": "absent",
+    "golden_seal_status": "not_run",
+    "sealed_bundle_status": "absent",
+    "expected_plan_bytes_status": "all_null",
+    "expected_plan_hash_status": "all_null",
+    "expected_proof_program_hash_status": "all_null",
+    "production_compiler_status": "absent",
+    "canonical_normalizer_status": "absent",
+    "definition_lowerer_status": "absent",
+    "proof_algorithm_status": "absent",
+    "executable_ddl_status": "absent",
+    "workflow_runtime_store_status": "absent",
+    "registry_runtime_status": "absent",
+    "runtime_center_ui_status": "absent",
+    "sqlite_profile_status": "candidate",
+    "certification_status": "not_certified",
+    "artifacts": [
+      {
+        "path": "catalogs/golden-draft-domain-separators.json",
+        "format": "icarus.workflow-golden-draft-domain-separators/1",
+        "ref": {
+          "id": "icarus.workflow-golden-draft-domain-separators",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-golden-draft-domain-separators:1\n",
+        "hash": "sha256:9e689283712159e9613bc603a2d4f1cec6fb026b89def13aedccc802f2395377"
+      },
+      {
+        "path": "conformance/draft/contract-fixtures/negative-cases.json",
+        "format": "icarus.workflow-golden-draft-negative-fixtures/1",
+        "ref": {
+          "id": "icarus.workflow-golden-draft-negative-fixtures",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-golden-draft-negative-fixtures:1\n",
+        "hash": "sha256:02d430cfa7b4c3d27d99f4fba948d9c5066b35ee05d64609f859f7e3897c9b6c"
+      },
+      {
+        "path": "conformance/draft/contract-fixtures/positive-cases.json",
+        "format": "icarus.workflow-golden-draft-positive-fixtures/1",
+        "ref": {
+          "id": "icarus.workflow-golden-draft-positive-fixtures",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-golden-draft-positive-fixtures:1\n",
+        "hash": "sha256:f551fce0959cd400108405c17cbe9f4ba8e12cdf03cf7a376c9d09bc5ed78a2f"
+      },
+      {
+        "path": "conformance/draft/golden-draft-cases@1.json",
+        "format": "icarus.workflow-compiler-golden-draft-cases/1",
+        "ref": {
+          "id": "icarus.workflow-compiler-golden-draft-cases",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-compiler-golden-draft-cases-artifact:1\n",
+        "hash": "sha256:20be39783a5c775c0d804ce16db683540b72bcc2aa1750f9f1b93c9b7c1c4aa3"
+      },
+      {
+        "path": "conformance/draft/golden-draft-manifest@1.json",
+        "format": "icarus.workflow-compiler-golden-draft-manifest/1",
+        "ref": {
+          "id": "icarus.workflow-compiler-golden-draft-manifest",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-compiler-golden-draft-manifest-artifact:1\n",
+        "hash": "sha256:b6cc1dc5512b4a7d50973304ba81e1b6f05ce6a3c684559194b2b3bf4e02e72b"
+      },
+      {
+        "path": "conformance/draft/golden-review-report-input@1.json",
+        "format": "icarus.workflow-golden-review-report-input/1",
+        "ref": {
+          "id": "icarus.workflow-golden-review-report-input.g0.8",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-golden-review-report-input-artifact:1\n",
+        "hash": "sha256:be2369a273934d1eec07bc3425a1818bd4091ce9d911710dca7dcd60ed88e855"
+      },
+      {
+        "path": "conformance/draft/golden-review-request@1.json",
+        "format": "icarus.workflow-golden-review-request/1",
+        "ref": {
+          "id": "icarus.workflow-golden-review-request.g0.8",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-golden-review-request-artifact:1\n",
+        "hash": "sha256:9c3946f938f2f3589abdc6d2c24eb1692d1534bac3ddbbf2160fc523cbe49722"
+      },
+      {
+        "path": "conformance/draft/schemas/compiler-input-snapshot-schema.json",
+        "format": "icarus.workflow-compiler-input-snapshot-schema/1",
+        "ref": {
+          "id": "icarus.workflow-compiler-input-snapshot-schema",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-compiler-input-snapshot-schema:1\n",
+        "hash": "sha256:9d6931c548a8a9d7159bc44a733975cc1a750e8fb91d60a671427ede163d0aab"
+      },
+      {
+        "path": "conformance/draft/schemas/golden-draft-cases-schema.json",
+        "format": "icarus.workflow-compiler-golden-draft-cases-schema/1",
+        "ref": {
+          "id": "icarus.workflow-compiler-golden-draft-cases-schema",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-compiler-golden-draft-cases-schema:1\n",
+        "hash": "sha256:6ab497a13787ade61fd27dbf251d4b7de73f8fe14700b26783fd3612a1bf7528"
+      },
+      {
+        "path": "conformance/draft/schemas/golden-draft-manifest-schema.json",
+        "format": "icarus.workflow-compiler-golden-draft-manifest-schema/1",
+        "ref": {
+          "id": "icarus.workflow-compiler-golden-draft-manifest-schema",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-compiler-golden-draft-manifest-schema:1\n",
+        "hash": "sha256:05b4a30921e4caccb4dd69d834780121e49f159a415b50d85897130969112261"
+      },
+      {
+        "path": "conformance/draft/schemas/golden-review-report-input-schema.json",
+        "format": "icarus.workflow-golden-review-report-input-schema/1",
+        "ref": {
+          "id": "icarus.workflow-golden-review-report-input-schema",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-golden-review-report-input-schema:1\n",
+        "hash": "sha256:ee8f9f66c4f10fbb3a8b99d5d7916a91084fd11f6c52451511750f252b21d46b"
+      },
+      {
+        "path": "conformance/draft/schemas/golden-review-request-schema.json",
+        "format": "icarus.workflow-golden-review-request-schema/1",
+        "ref": {
+          "id": "icarus.workflow-golden-review-request-schema",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-golden-review-request-schema:1\n",
+        "hash": "sha256:b3c616080fa8fc744af528e546caa592b2283e57fdc47280d873746161d9f2a1"
+      },
+      {
+        "path": "conformance/draft/snapshots/compiler-integrity-mismatch@1.json",
+        "format": "icarus.workflow-compiler-input-snapshot/1",
+        "ref": {
+          "id": "icarus.workflow-compiler-input-snapshot.compiler-integrity-mismatch",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-compiler-input-snapshot-artifact:1\n",
+        "hash": "sha256:bfd174e78250899dc3a3e7c4de43684f75b8d3ec01ee307d9da3bdda87eef3c1"
+      },
+      {
+        "path": "conformance/draft/snapshots/complete-base@1.json",
+        "format": "icarus.workflow-compiler-input-snapshot/1",
+        "ref": {
+          "id": "icarus.workflow-compiler-input-snapshot.complete-base",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-compiler-input-snapshot-artifact:1\n",
+        "hash": "sha256:0c251df1bb92f331c953ac00938d9a0903a07270d25525a372683bd17e58a6e9"
+      }
+    ]
+  }
+}

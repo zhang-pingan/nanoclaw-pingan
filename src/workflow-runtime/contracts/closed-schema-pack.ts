@@ -48,10 +48,7 @@ const recordedFutureReservedDirectories = [
   'conformance/sealed',
 ] as const;
 
-const stillReservedDirectories = [
-  'conformance/draft',
-  'conformance/sealed',
-] as const;
+const stillReservedDirectories = ['conformance/sealed'] as const;
 
 function asciiCompare(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0;

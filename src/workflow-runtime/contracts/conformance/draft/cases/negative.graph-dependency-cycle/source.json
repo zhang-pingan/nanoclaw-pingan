@@ -1,0 +1,103 @@
+{
+  "format": "icarus.workflow-graph-scope/1",
+  "scope_key": "cycle",
+  "interface_ref": {
+    "id": "fixture.interface.root",
+    "version": "1.0.0"
+  },
+  "nodes": [
+    {
+      "id": "a",
+      "type": "system",
+      "trigger": {
+        "type": "all",
+        "edge_ids": [
+          "edge.ba"
+        ]
+      },
+      "capability_ref": {
+        "id": "fixture.capability.static",
+        "version": "1.0.0"
+      }
+    },
+    {
+      "id": "b",
+      "type": "system",
+      "trigger": {
+        "type": "all",
+        "edge_ids": [
+          "edge.ab"
+        ]
+      },
+      "capability_ref": {
+        "id": "fixture.capability.static",
+        "version": "1.0.0"
+      }
+    }
+  ],
+  "control_edges": [
+    {
+      "id": "edge.ab",
+      "kind": "control",
+      "from_node_id": "a",
+      "to_node_id": "b",
+      "on": {
+        "statuses": [
+          "succeeded"
+        ]
+      }
+    },
+    {
+      "id": "edge.ba",
+      "kind": "control",
+      "from_node_id": "b",
+      "to_node_id": "a",
+      "on": {
+        "statuses": [
+          "succeeded"
+        ]
+      }
+    }
+  ],
+  "data_edges": [],
+  "completion": {
+    "settled_rules": [
+      {
+        "id": "select_done",
+        "phase": "settled",
+        "priority": 100,
+        "when": {
+          "fact": "all_nodes_terminal"
+        },
+        "select": {
+          "exits": [
+            "done"
+          ],
+          "pick": {
+            "type": "lowest_terminal_node_id"
+          }
+        }
+      }
+    ],
+    "no_match": "error",
+    "early_close": "cancel_and_fence_remaining"
+  },
+  "requested_limits": {
+    "max_scopes": null,
+    "max_nodes": null,
+    "max_nodes_per_scope": null,
+    "max_edges_per_scope": null,
+    "max_nesting_depth": null,
+    "max_map_items": null,
+    "max_concurrency": null,
+    "max_total_attempts": null,
+    "max_total_waits": null,
+    "max_total_output_bytes": null,
+    "max_scope_spec_bytes": null,
+    "max_condition_steps": null,
+    "max_wait_duration_ms": null,
+    "max_pending_signals": null,
+    "max_fixed_point_facts": null,
+    "max_frontier_bytes": null
+  }
+}

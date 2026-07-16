@@ -236,7 +236,7 @@ describe('G0.6 Logical Schema Metadata Contract Pack', () => {
     expect(
       fs.existsSync(path.join(contractsRoot, '../store/runtime-store.ts')),
     ).toBe(false);
-    for (const directory of ['conformance/draft', 'conformance/sealed']) {
+    for (const directory of ['conformance/sealed']) {
       expect(fs.readdirSync(path.join(contractsRoot, directory))).toEqual([
         '.gitkeep',
       ]);

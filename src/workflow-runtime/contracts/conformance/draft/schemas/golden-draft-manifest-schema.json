@@ -1,0 +1,239 @@
+{
+  "format": "icarus.workflow-compiler-golden-draft-manifest-schema/1",
+  "ref": {
+    "id": "icarus.workflow-compiler-golden-draft-manifest-schema",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-compiler-golden-draft-manifest-schema:1\n",
+  "hash": "sha256:05b4a30921e4caccb4dd69d834780121e49f159a415b50d85897130969112261",
+  "payload": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://icarus.local/schemas/icarus-workflow-compiler-golden-draft-manifest/1",
+    "title": "icarus.workflow-compiler-golden-draft-manifest/1",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "format",
+      "bundle_version",
+      "draft_status",
+      "draft_author_actor_ref",
+      "review_owner_actor_ref",
+      "draft_generator_tool_hash",
+      "case_catalog_ref",
+      "case_catalog_hash",
+      "input_snapshots",
+      "raw_source_count",
+      "raw_source_aggregate_hash",
+      "positive_case_count",
+      "negative_case_count",
+      "positive_coverage",
+      "negative_error_code_coverage",
+      "additional_negative_coverage",
+      "expected_plan_artifact_status",
+      "expected_proof_program_status",
+      "golden_semantic_review_status",
+      "sealed_bundle_status",
+      "manifest_hash"
+    ],
+    "properties": {
+      "format": {
+        "const": "icarus.workflow-compiler-golden-draft-manifest/1"
+      },
+      "bundle_version": {
+        "const": "1.0.0-draft"
+      },
+      "draft_status": {
+        "const": "candidate_pending_human_review"
+      },
+      "draft_author_actor_ref": {
+        "const": "codex:draft-author"
+      },
+      "review_owner_actor_ref": {
+        "const": "human:local-owner"
+      },
+      "draft_generator_tool_hash": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      },
+      "case_catalog_ref": {
+        "type": "string",
+        "minLength": 1,
+        "pattern": "^conformance/draft/[A-Za-z0-9.@_/-]+$"
+      },
+      "case_catalog_hash": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      },
+      "input_snapshots": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "ref",
+            "hash"
+          ],
+          "properties": {
+            "ref": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "^conformance/draft/[A-Za-z0-9.@_/-]+$"
+            },
+            "hash": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            }
+          }
+        },
+        "minItems": 1
+      },
+      "raw_source_count": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 9007199254740991
+      },
+      "raw_source_aggregate_hash": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      },
+      "positive_case_count": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 9007199254740991
+      },
+      "negative_case_count": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 9007199254740991
+      },
+      "positive_coverage": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,254}$"
+        },
+        "minItems": 1,
+        "uniqueItems": true
+      },
+      "negative_error_code_coverage": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "enum": [
+            "json_syntax_invalid",
+            "json_duplicate_key",
+            "schema_unknown_field",
+            "schema_profile_keyword_unsupported",
+            "registry_ref_unpinned",
+            "registry_ref_not_found",
+            "graph_id_duplicate",
+            "graph_endpoint_not_found",
+            "graph_cross_scope_edge",
+            "graph_dependency_cycle",
+            "condition_type_mismatch",
+            "condition_complexity_exceeded",
+            "json_pointer_non_total",
+            "schema_not_assignable",
+            "route_group_ambiguous",
+            "trigger_contract_invalid",
+            "completion_contract_invalid",
+            "early_completion_non_monotone",
+            "early_completion_cancellation_unsafe",
+            "capability_not_allowed",
+            "policy_escalation",
+            "quality_revision_contract_invalid",
+            "quality_revision_effect_key_incompatible",
+            "child_recipe_set_mismatch",
+            "child_recipe_dependency_cycle",
+            "runtime_safety_limit_exceeded",
+            "compiler_integrity_mismatch"
+          ]
+        },
+        "minItems": 1,
+        "uniqueItems": true
+      },
+      "additional_negative_coverage": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,254}$"
+        },
+        "minItems": 1,
+        "uniqueItems": true
+      },
+      "expected_plan_artifact_status": {
+        "const": "all_null_pending_review"
+      },
+      "expected_proof_program_status": {
+        "const": "all_null_pending_review"
+      },
+      "golden_semantic_review_status": {
+        "const": "absent"
+      },
+      "sealed_bundle_status": {
+        "const": "absent"
+      },
+      "manifest_hash": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      }
+    },
+    "$defs": {
+      "json_value": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "string"
+          },
+          {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/json_value"
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/$defs/json_value"
+            }
+          }
+        ]
+      },
+      "versioned_ref": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "version"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._:/-]{0,253}[A-Za-z0-9])?$"
+          },
+          "version": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,62}[A-Za-z0-9])?$"
+          }
+        }
+      }
+    }
+  }
+}

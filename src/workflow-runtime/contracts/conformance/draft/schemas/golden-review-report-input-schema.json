@@ -1,0 +1,178 @@
+{
+  "format": "icarus.workflow-golden-review-report-input-schema/1",
+  "ref": {
+    "id": "icarus.workflow-golden-review-report-input-schema",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-golden-review-report-input-schema:1\n",
+  "hash": "sha256:ee8f9f66c4f10fbb3a8b99d5d7916a91084fd11f6c52451511750f252b21d46b",
+  "payload": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://icarus.local/schemas/icarus-workflow-golden-review-report-input/1",
+    "title": "icarus.workflow-golden-review-report-input/1",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "format",
+      "report_input_id",
+      "review_request_ref",
+      "review_request_hash",
+      "draft_manifest_ref",
+      "draft_manifest_hash",
+      "case_catalog_ref",
+      "case_catalog_hash",
+      "input_snapshots",
+      "allowed_operations",
+      "forbidden_module_classes",
+      "report_generation_status",
+      "semantic_decision_status",
+      "immutable_input_hash"
+    ],
+    "properties": {
+      "format": {
+        "const": "icarus.workflow-golden-review-report-input/1"
+      },
+      "report_input_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 255,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,254}$"
+      },
+      "review_request_ref": {
+        "type": "string",
+        "minLength": 1,
+        "pattern": "^conformance/draft/[A-Za-z0-9.@_/-]+$"
+      },
+      "review_request_hash": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      },
+      "draft_manifest_ref": {
+        "type": "string",
+        "minLength": 1,
+        "pattern": "^conformance/draft/[A-Za-z0-9.@_/-]+$"
+      },
+      "draft_manifest_hash": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      },
+      "case_catalog_ref": {
+        "type": "string",
+        "minLength": 1,
+        "pattern": "^conformance/draft/[A-Za-z0-9.@_/-]+$"
+      },
+      "case_catalog_hash": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      },
+      "input_snapshots": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "ref",
+            "hash"
+          ],
+          "properties": {
+            "ref": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "^conformance/draft/[A-Za-z0-9.@_/-]+$"
+            },
+            "hash": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            }
+          }
+        },
+        "minItems": 1
+      },
+      "allowed_operations": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,254}$"
+        },
+        "minItems": 1,
+        "uniqueItems": true
+      },
+      "forbidden_module_classes": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,254}$"
+        },
+        "minItems": 1,
+        "uniqueItems": true
+      },
+      "report_generation_status": {
+        "const": "not_run"
+      },
+      "semantic_decision_status": {
+        "const": "pending"
+      },
+      "immutable_input_hash": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      }
+    },
+    "$defs": {
+      "json_value": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "string"
+          },
+          {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/json_value"
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/$defs/json_value"
+            }
+          }
+        ]
+      },
+      "versioned_ref": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "version"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._:/-]{0,253}[A-Za-z0-9])?$"
+          },
+          "version": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,62}[A-Za-z0-9])?$"
+          }
+        }
+      }
+    }
+  }
+}

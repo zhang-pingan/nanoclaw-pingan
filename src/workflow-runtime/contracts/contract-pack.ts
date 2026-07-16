@@ -72,10 +72,7 @@ const foundationReservedDirectories = [
   'conformance/sealed',
 ] as const;
 
-const stillReservedDirectories = [
-  'conformance/draft',
-  'conformance/sealed',
-] as const;
+const stillReservedDirectories = ['conformance/sealed'] as const;
 
 const g01DirectPackages = [
   {

@@ -2,7 +2,7 @@
 
 > **状态**: IN_PROGRESS
 > **当前 Gate**: G0 Contract Pack / Static Baseline
-> **下一施工切片**: G0.8 Golden Draft and Review Input
+> **下一施工切片**: G0.9 G0 Conformance Exit
 > **最后更新**: 2026-07-16
 > **规范权威**: `local/docs/dynamic-workflow-dag-framework.md`
 
@@ -130,7 +130,7 @@ Agent Container 运行于独立 VM，Node identity 由 VM image gate 保证；�
 | I8 | Subgraph、Expand、Map、child scope | `NOT_READY` | G6 起 |
 | I9 | Completion、Cancel、Compensation、Finalization、Recovery | `NOT_READY` | G6/G7 |
 | I10 | Runtime Command、Runtime Center、Trace | `NOT_READY` | G7 起 |
-| I11 | Contract Pack、managed runtime toolchain/launcher、测试模型、发布门禁、absence baseline | `IN_PROGRESS` | G0.1-G0.7 DONE；G0.8 READY |
+| I11 | Contract Pack、managed runtime toolchain/launcher、测试模型、发布门禁、absence baseline | `IN_PROGRESS` | G0.1-G0.8 DONE；G0.9 READY |
 
 ## G0 施工切片
 
@@ -145,8 +145,57 @@ G0 只有全部切片满足退出条件后才能标记 `DONE`。切片编号描�
 | G0.5 | Safety / Retention / SQLite Contracts | `DONE` | Safety、Capacity schema/baseline、Product Floor、Retention、SQLite Profile、Enforcement Matrix | 本原子提交 |
 | G0.6 | Logical Schema Metadata | `DONE` | 全对象 Logical Schema manifest source、typed relation metadata、query catalog | 本原子提交 |
 | G0.7 | Static Absence and Surface Gates | `DONE` | absence、surface coverage、candidate boundary generator/manifest/negative fixtures | 本原子提交 |
-| G0.8 | Golden Draft and Review Input | `READY` | raw cases、hand-authored semantic assertions、review request；不得伪造 sealed expected output | - |
-| G0.9 | G0 Conformance Exit | `NOT_READY` | Markdown/Contract 双向覆盖、完整 G0 CI、artifact hashes 和 Gate review | - |
+| G0.8 | Golden Draft and Review Input | `DONE` | raw cases、hand-authored semantic assertions、review request；不得伪造 sealed expected output | 本原子提交 |
+| G0.9 | G0 Conformance Exit | `READY` | Markdown/Contract 双向覆盖、完整 G0 CI、artifact hashes 和 Gate review | - |
+
+## 已完成切片：G0.8 Golden Draft and Review Input
+
+**状态**：`DONE`
+
+**工作包**：I11；只实现未 sealed 的 Compiler Golden Draft、完整 test-only Compiler 输入 snapshot、手写 diagnostics/normalized semantic assertions 与 immutable review input，不实现 Golden approval/sealing、Production Compiler、DDL/Store、Registry、Runtime 或 UI。
+
+I11/G0.8 已完成规范要求的全部 Compiler positive/negative conformance draft case、raw source bytes、Registry/Interface/Policy/Safety snapshot、closed schema、domain hash、TypeScript conformance、review request/report input、正反例和确定性 generate/read-only check。G0 总 Gate 继续为 `IN_PROGRESS`，仅 G0.9 转为 `READY`；G1-G9 未推进。
+
+已完成交付：
+
+- `conformance/draft/cases/` 保存 40 份完整 raw source bytes；10 个正例覆盖 static lowering、condition/route、wait、subgraph、expand、map、policy intersection、quality revision capability binding、不同 hash 的 sound subtype proof 与 static child closure。
+- 30 个负例覆盖全部 27 个 `WorkflowCompilerErrorCode`、quality revision 缺少 feedback schema/quality gate，以及 Definition Notification `delivery_requirement` 和 Child `creation_key_template` 两个 removed field；diagnostic code/phase/pointer/stable object id 与 normalized semantic assertions 均为 hand-authored 输入。
+- 两份完整、`test_only` 的 Compiler 输入 snapshot 冻结 Registry resources、Interface、complete Policy、`local_single_user_safety@1` 和 Compiler/toolchain/error-catalog identity；integrity mismatch 使用独立 snapshot，snapshot 不可用于 production launch。
+- 新增 5 个 Draft 2020-12 closed schema、TypeScript keyset/enum conformance、独立 domain-separator registry，以及 8 positive / 25 negative Contract Pack fixtures；正反例覆盖 hash/coverage/snapshot/diagnostic/review/sealed/oracle isolation/candidate certification 边界。
+- review owner 固定为 `human:local-owner`；immutable review request 与 golden-review report input 均为 `pending/not_run`。所有 case 的 expected Plan bytes/ref/hash、proof hash 和 program hash 保持 `null`，未创建或伪造 `GoldenSemanticReview`、approval record、review report、reviewed expected bytes/hash 或 Golden Bundle。
+- generate/check 只使用 strict parse、generic JCS/domain hash 和 Draft source；未 import 或调用 Production Compiler、normalizer、lowerer 或 proof 实现。`conformance/sealed/` 仍只有 `.gitkeep`，未运行或创建 `golden-seal`。
+- CLI、public export、Contract Pack README 与 `test:g0.8` 已接入；G0.2-G0.7 manifest identity 精确 pin 住。`local_single_user_sqlite@1` 继续为 `candidate/not_certified`，没有 executable DDL、Schema Manifest、Store/Connection Factory、Registry/Runtime、Runtime Center/UI 或 certification。
+
+最终 Artifact hashes：
+
+| Artifact                                                                 | Hash                                                                                                                                                                                                                                                                                                                                                                                      |
+| ------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| G0.8 Golden Draft Contract Pack manifest                                 | `sha256:52fc0266020c03a54527d7a2f735dfaef0494b5d7ae3f12dd1bf9b58a547fd22`                                                                                                                                                                                                                                                                                                                 |
+| Golden Draft manifest / case catalog                                     | `sha256:b6cc1dc5512b4a7d50973304ba81e1b6f05ce6a3c684559194b2b3bf4e02e72b` / `sha256:20be39783a5c775c0d804ce16db683540b72bcc2aa1750f9f1b93c9b7c1c4aa3`                                                                                                                                                                                                                                     |
+| Complete base / integrity-mismatch input snapshot                        | `sha256:0c251df1bb92f331c953ac00938d9a0903a07270d25525a372683bd17e58a6e9` / `sha256:bfd174e78250899dc3a3e7c4de43684f75b8d3ec01ee307d9da3bdda87eef3c1`                                                                                                                                                                                                                                     |
+| Review request / review report input                                     | `sha256:9c3946f938f2f3589abdc6d2c24eb1692d1534bac3ddbbf2160fc523cbe49722` / `sha256:be2369a273934d1eec07bc3425a1818bd4091ce9d911710dca7dcd60ed88e855`                                                                                                                                                                                                                                     |
+| Snapshot / case / Draft manifest / review request / report input schemas | `sha256:9d6931c548a8a9d7159bc44a733975cc1a750e8fb91d60a671427ede163d0aab` / `sha256:6ab497a13787ade61fd27dbf251d4b7de73f8fe14700b26783fd3612a1bf7528` / `sha256:05b4a30921e4caccb4dd69d834780121e49f159a415b50d85897130969112261` / `sha256:b3c616080fa8fc744af528e546caa592b2283e57fdc47280d873746161d9f2a1` / `sha256:ee8f9f66c4f10fbb3a8b99d5d7916a91084fd11f6c52451511750f252b21d46b` |
+| Positive / negative fixture artifacts                                    | `sha256:f551fce0959cd400108405c17cbe9f4ba8e12cdf03cf7a376c9d09bc5ed78a2f` / `sha256:02d430cfa7b4c3d27d99f4fba948d9c5066b35ee05d64609f859f7e3897c9b6c`                                                                                                                                                                                                                                     |
+| Golden Draft domain separators                                           | `sha256:9e689283712159e9613bc603a2d4f1cec6fb026b89def13aedccc802f2395377`                                                                                                                                                                                                                                                                                                                 |
+| Raw source aggregate / generator tool                                    | `sha256:6e091c253086ed3df9a7dddeb90c0d1ef5c5038e92688c5f08a9e5ff847b40c5` / `sha256:154b8beb4e2e498b168548a606a10c6ec9c6510029892a7c05e6fc79fcce2060`                                                                                                                                                                                                                                     |
+
+Prior Contract Pack identity 保持不变：G0.2 `sha256:e85b654581c036f8129677d7443a0704ebc8b8fbe87907b842aaefe1501e637d`、G0.3 `sha256:c5ea281d64480787322e8b6ef619b2f90784084d87ba4373c94288ed5e7aa3a8`、G0.4 `sha256:e4947c515a28b3baf6782a980db9c26d32612b3c6acd3cd04348e73bd54ff607`、G0.5 `sha256:76b8e1196ac422500be9c79a767e673e9c30fa3d9bbb1dc12fc54613cd40b428`、G0.6 `sha256:32de639cc0ee6c6f33aa4291ea03ffa55b0a22752190fb88862e72a3f6857520`、G0.7 `sha256:a75736bf253ab67b22ba6abb0edf8e943c5d643f0b2ff36d63defbdf6336f7d2`。
+
+最终退出验证证据：
+
+| 命令/证据                                        | 结果                                                                                                                                                                                                                                                                                                                                                                                           |
+| ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| managed `npm run contracts:generate`（重复执行） | PASS；G0.8 manifest 稳定为 `sha256:52fc026...fd22`，G0.2-G0.7 identity 均精确不变；仅有 R-010 DEP0205 非阻塞告警                                                                                                                                                                                                                                                                               |
+| managed `npm run contracts:check`                | PASS；G0.2-G0.8 完整合同只读检查通过，hash 与 generate 一致                                                                                                                                                                                                                                                                                                                                    |
+| managed `npm run typecheck`                      | PASS                                                                                                                                                                                                                                                                                                                                                                                           |
+| managed G0.2-G0.8 directed tests                 | PASS，7 files / 67 tests；分别为 11 / 5 / 7 / 9 / 8 / 18 / 9 tests，G0.8 check 内执行 8 positive / 25 negative Contract Pack fixtures并验证 10 positive / 30 negative Compiler cases                                                                                                                                                                                                           |
+| managed `npm test`                               | 首次 74/75 files、685/686 tests，仅命中范围外 R-012；最终复跑 73/75 files、684/686 tests，除 R-012 外，既有 G0.6 deterministic test 在并发负载下以 5.011s 超过默认 5s timeout，随后单文件 8/8 tests、4.29s PASS。G0.8 全部通过；未修改 credential-proxy/trace 或 G0.6 timeout/实现                                                                                                               |
+| managed run-once root isolation tests            | PASS，2 files / 10 tests                                                                                                                                                                                                                                                                                                                                                                       |
+| managed legacy boundary                          | PASS，1 file / 6 tests；继续消费 G0.7 machine proof                                                                                                                                                                                                                                                                                                                                            |
+| managed `npm run build`                          | PASS                                                                                                                                                                                                                                                                                                                                                                                           |
+| managed targeted Prettier `--check`              | PASS；全部本切片 TypeScript/README/package 符合 pinned Prettier                                                                                                                                                                                                                                                                                                                        |
+| final draft/review/absence/boundary scan         | PASS；40 raw source、2 snapshot、5 schema、10/30 Compiler case 全覆盖；sealed 目录只有 `.gitkeep`，无 GoldenSemanticReview/approval/golden-seal/Golden Bundle、Compiler/normalizer/lowerer/proof、DDL/Store/Registry/Runtime/UI/certification artifact，16 candidate archive files、12 active/10 removed surfaces 和 credential-proxy/container/Electron/assistant/setup/build/lock 边界无改动 |
+| `git diff --check`                               | PASS                                                                                                                                                                                                                                                                                                                                                                                           |
 
 ## 已完成切片：G0.7 Static Absence and Surface Gates
 
@@ -630,7 +679,7 @@ G0.1 的实现、测试和本进度账本由同一个原子提交交付。Agent 
 | R-001 | Toolchain | CLOSED | exact Node/npm/direct dependency/lock/CI/managed distribution 已落地，最终 managed install/ci/typecheck/test/build 全部通过 | G0.1 |
 | R-002 | Host launch identity | CLOSED | 所有 Core service/start/restart path 已切到 stable Launcher/managed build；realpath/环境隔离/fail-closed、最终 hash和 Core rebind 已验证 | G0.1 |
 | R-003 | Static proof | CLOSED | G0.7 已交付 TypeScript AST/import graph、Web route、Electron DOM、Feature manifest、SQLite schema、filesystem root 的机器生成 absence/surface/candidate manifests、正反例与 legacy boundary 集成 | G0.7 |
-| R-004 | Contract drift | PARTIALLY_MITIGATED | G0.2-G0.7 已原子交付 foundation、closed schema、catalog/protocol、Safety/Retention/SQLite、Logical Schema Metadata 与 absence/surface/candidate boundary；Golden Draft、完整 Markdown 双向覆盖与 G0 exit 仍未完成 | G0.8-G0.9 |
+| R-004 | Contract drift | PARTIALLY_MITIGATED | G0.2-G0.8 已原子交付 foundation、closed schema、catalog/protocol、Safety/Retention/SQLite、Logical Schema Metadata、absence/surface/candidate boundary 与 Golden Draft/Review Input；完整 Markdown 双向覆盖与 G0 exit 仍未完成 | G0.9 |
 | R-005 | DDL feasibility | DEFERRED | Logical Schema metadata 已冻结但尚未转换为 executable migration；不代表已发现冲突，G1 必须以真实 SQLite Gate 验证 | G1 |
 | R-006 | Certification | DEFERRED | Product Floor、Safety/Retention 与 SQLite candidate 已冻结；SQLite/source/compile-options/native module、Launcher/Core Release 完整 key、Supported Limits 与事务预算尚未 benchmark 认证，candidate identity 字段保持 null | G8 |
 | R-007 | Dependency audit | OPEN_OUT_OF_SCOPE | exact lock 的 `npm ci` 报告 30 项 transitive dependency audit 告警；G0.1 不运行会漂移规范 pinned identity 的自动修复，需独立依赖维护评审 | 独立维护 |
@@ -638,8 +687,9 @@ G0.1 的实现、测试和本进度账本由同一个原子提交交付。Agent 
 | R-009 | Concurrent repository change | CLOSED | `32f3c51` 只新增范围外 evaluation 文档；G0.2 最终 HEAD/边界和 staged set 已验证，提交保留且未混入 G0.2 内容 | G0.2 |
 | R-010 | Node loader deprecation | OPEN_OUT_OF_SCOPE | Node 26 下 pinned `tsx` loader 在 `contracts:generate/check` 报 `DEP0205 module.register()` deprecation warning，但命令退出码为 0；G0.2 不升级非规范依赖或替换工具链 | 独立工具链维护 |
 | R-011 | Concurrent repository change | CLOSED | G0.4 施工期间新增 `982e3b6/5989b8e`，只对进度文档同一句措辞修改后逐字回退，净 tree 未改变；G0.4 保留提交并在其上原子交付 | G0.4 |
-| R-012 | Full regression baseline | OPEN_OUT_OF_SCOPE | G0.7 完整 suite 仍只复现 `credential-proxy` async trace 250ms intermittent，结果为 73/74 files、676/677 tests；断言前只观察到 `model_request_started`，未及时观察到 `model_resolution`。G0.7 未修改 credential-proxy/trace 文件或测试 | 独立测试稳定性维护 |
+| R-012 | Full regression baseline | OPEN_OUT_OF_SCOPE | G0.8 完整 suite 仍只复现 `credential-proxy` async trace 250ms intermittent，结果为 74/75 files、685/686 tests；断言前只观察到 `model_request_started`，未及时观察到 `model_resolution`。G0.8 未修改 credential-proxy/trace 文件或测试 | 独立测试稳定性维护 |
+| R-013 | Contract test timing baseline | OPEN_OUT_OF_SCOPE | 最终完整 suite 并发负载下，既有 G0.6 deterministic test 以 5.011s 超过默认 5s timeout；同会话 G0.2-G0.8 定向组合中 G0.6 8/8 PASS，随后单文件 8/8 tests、4.29s PASS，确认 artifact/hash 无漂移。G0.8 不调整既有 timeout 或 G0.6 实现 | 独立测试稳定性维护 |
 
 ## 下一步
 
-下一会话开始 `G0.8 Golden Draft and Review Input`。先完整阅读架构规范和本文，复核本次 G0.7 原子提交、3 个 static-gate closed schemas、12 active / 10 removed surfaces、16 candidate archive files、10 positive / 30 negative fixtures、G0.7 manifest 与 G0.2-G0.6 identity。然后只按 G0.8 范围准备 raw cases、hand-authored semantic assertions、candidate expected output 与独立 review request；不得伪造 sealed expected output、review approval 或 Golden Bundle，不得开始 G0.9 exit、G1 DDL/Store/SQLite execution、G2 Compiler/Golden sealing、Registry、T0-T8 Runtime 语义、Runtime Center 或 UI，不得把 candidate 宣称为 certified，不得修复范围外 R-012。
+下一会话开始 `G0.9 G0 Conformance Exit`。先完整阅读架构规范和本文，复核本次 G0.8 原子提交、40 份 raw source bytes、2 份完整 Registry/Interface/Policy/Safety snapshot、5 个 closed schema、10 positive / 30 negative Compiler cases、8 positive / 25 negative Contract Pack fixtures、immutable pending review request/report input、G0.8 manifest 与 G0.2-G0.7 identity。然后只按 G0.9 范围完成 Markdown/Contract 双向覆盖、完整 G0 CI、artifact hash inventory 与 Gate review；不得创建或批准 `GoldenSemanticReview`，不得运行 `golden-seal` 或写入 `conformance/sealed/`，不得开始 G1 DDL/Store/SQLite execution、G2 Production Compiler/normalizer/lowerer/proof/Golden sealing、Registry、T0-T8 Runtime 语义、Runtime Center 或 UI，不得把 SQLite candidate 宣称为 certified，不得修复范围外 R-012。

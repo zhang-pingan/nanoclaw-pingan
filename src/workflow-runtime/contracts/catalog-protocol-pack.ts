@@ -54,10 +54,7 @@ const recordedFutureReservedDirectories = [
   'conformance/sealed',
 ] as const;
 
-const stillReservedDirectories = [
-  'conformance/draft',
-  'conformance/sealed',
-] as const;
+const stillReservedDirectories = ['conformance/sealed'] as const;
 
 export class CatalogProtocolContractError extends Error {
   readonly code = 'catalog_protocol_contract_drift';
@@ -635,6 +632,7 @@ function validateDirectoryBoundaries(): void {
     'safety-sqlite-domain-separators.json',
     'logical-schema-domain-separators.json',
     'static-absence-domain-separators.json',
+    'golden-draft-domain-separators.json',
   ]);
   const actualCatalogFiles = fs
     .readdirSync(absoluteContractPath('catalogs'))

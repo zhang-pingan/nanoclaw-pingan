@@ -259,7 +259,7 @@ describe('G0.5 Safety, Retention, and SQLite Contract Pack', () => {
     expect(sqliteFiles).toContain('sqlite-execution-profile-schema.json');
     expect(sqliteFiles).not.toContain('workflow-runtime-schema-manifest.json');
     expect(sqliteFiles).not.toContain('workflow-runtime-migration.sql');
-    for (const directory of ['conformance/draft', 'conformance/sealed']) {
+    for (const directory of ['conformance/sealed']) {
       expect(fs.readdirSync(path.join(contractsRoot, directory))).toEqual([
         '.gitkeep',
       ]);

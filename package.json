@@ -31,6 +31,7 @@
     "test:g0.5": "vitest run src/workflow-runtime/contracts/safety-sqlite.test.ts",
     "test:g0.6": "vitest run src/workflow-runtime/contracts/logical-schema.test.ts",
     "test:g0.7": "vitest run src/workflow-runtime/contracts/static-absence.test.ts",
+    "test:g0.8": "vitest run src/workflow-runtime/contracts/golden-draft.test.ts",
     "test:watch": "vitest"
   },
   "dependencies": {

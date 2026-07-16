@@ -22,6 +22,10 @@ import {
   checkContractPackStaticAbsence,
   generateContractPackStaticAbsence,
 } from './static-absence-pack.js';
+import {
+  checkContractPackGoldenDraft,
+  generateContractPackGoldenDraft,
+} from './golden-draft-pack.js';
 
 function usage(): never {
   console.error('Usage: contract-pack <generate|check>');
@@ -42,7 +46,8 @@ let currentPack:
   | 'catalog_protocols'
   | 'safety_sqlite'
   | 'logical_schema'
-  | 'static_absence' = 'foundation';
+  | 'static_absence'
+  | 'golden_draft' = 'foundation';
 
 try {
   const foundationManifest =
@@ -97,6 +102,14 @@ try {
   console.log(
     `contract_pack_static_absence_hash=${staticAbsenceManifest.hash}`,
   );
+
+  currentPack = 'golden_draft';
+  const goldenDraftManifest =
+    command === 'generate'
+      ? generateContractPackGoldenDraft()
+      : checkContractPackGoldenDraft();
+  console.log(`contract_pack_golden_draft=${command}:ok`);
+  console.log(`contract_pack_golden_draft_hash=${goldenDraftManifest.hash}`);
 } catch (error) {
   console.error(
     `contract_pack_${currentPack}=${command}:failed: ${

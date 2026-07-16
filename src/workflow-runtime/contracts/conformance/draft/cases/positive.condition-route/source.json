@@ -1,0 +1,128 @@
+{
+  "format": "icarus.workflow-graph-scope/1",
+  "scope_key": "condition_route",
+  "interface_ref": {
+    "id": "fixture.interface.root",
+    "version": "1.0.0"
+  },
+  "nodes": [
+    {
+      "id": "classify",
+      "type": "system",
+      "trigger": {
+        "type": "root"
+      },
+      "capability_ref": {
+        "id": "fixture.capability.route",
+        "version": "1.0.0"
+      }
+    },
+    {
+      "id": "accepted",
+      "type": "terminal",
+      "trigger": {
+        "type": "all",
+        "edge_ids": [
+          "edge.accepted"
+        ]
+      },
+      "exit": "done"
+    },
+    {
+      "id": "rejected",
+      "type": "terminal",
+      "trigger": {
+        "type": "all",
+        "edge_ids": [
+          "edge.rejected"
+        ]
+      },
+      "exit": "done"
+    }
+  ],
+  "control_edges": [
+    {
+      "id": "edge.accepted",
+      "kind": "control",
+      "from_node_id": "classify",
+      "to_node_id": "accepted",
+      "on": {
+        "statuses": [
+          "succeeded"
+        ]
+      },
+      "route_group_id": "route.classify",
+      "priority": 100,
+      "when": {
+        "op": "eq",
+        "left": {
+          "ref": {
+            "source": "edge_source_output",
+            "port": "result",
+            "pointer": "/ok"
+          }
+        },
+        "right": {
+          "literal": true
+        }
+      }
+    },
+    {
+      "id": "edge.rejected",
+      "kind": "control",
+      "from_node_id": "classify",
+      "to_node_id": "rejected",
+      "route_group_id": "route.classify",
+      "default": true
+    }
+  ],
+  "data_edges": [],
+  "completion": {
+    "settled_rules": [
+      {
+        "id": "select_result",
+        "phase": "settled",
+        "priority": 100,
+        "when": {
+          "fact": "all_nodes_terminal"
+        },
+        "select": {
+          "exits": [
+            "done"
+          ],
+          "pick": {
+            "type": "lowest_terminal_node_id"
+          }
+        }
+      }
+    ],
+    "no_match": "error",
+    "early_close": "cancel_and_fence_remaining"
+  },
+  "requested_limits": {
+    "max_scopes": null,
+    "max_nodes": null,
+    "max_nodes_per_scope": null,
+    "max_edges_per_scope": null,
+    "max_nesting_depth": null,
+    "max_map_items": null,
+    "max_concurrency": null,
+    "max_total_attempts": null,
+    "max_total_waits": null,
+    "max_total_output_bytes": null,
+    "max_scope_spec_bytes": null,
+    "max_condition_steps": null,
+    "max_wait_duration_ms": null,
+    "max_pending_signals": null,
+    "max_fixed_point_facts": null,
+    "max_frontier_bytes": null
+  },
+  "route_groups": [
+    {
+      "id": "route.classify",
+      "from_node_id": "classify",
+      "mode": "first_matching",
+      "no_match": "error"
+    }
+  ]
+}

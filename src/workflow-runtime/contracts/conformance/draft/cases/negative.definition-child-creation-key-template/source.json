@@ -1,0 +1,199 @@
+{
+  "format": "icarus.workflow-definition/1",
+  "ref": {
+    "id": "fixture.definition.main",
+    "version": "1.0.0"
+  },
+  "owner_feature_id": "fixture-feature",
+  "name": "Golden draft fixture",
+  "context_contract_ref": {
+    "id": "fixture.context",
+    "version": "1.0.0"
+  },
+  "entry_points": {
+    "default": {
+      "state_key": "start"
+    }
+  },
+  "states": {
+    "start": {
+      "type": "delegation",
+      "capability_ref": {
+        "id": "fixture.capability.static",
+        "version": "1.0.0"
+      },
+      "policy": {
+        "allowed_node_types": [
+          "delegation",
+          "system",
+          "wait",
+          "join",
+          "subgraph",
+          "expand",
+          "map",
+          "terminal"
+        ],
+        "allowed_capabilities": [
+          {
+            "id": "fixture.capability.static",
+            "version": "1.0.0"
+          },
+          {
+            "id": "fixture.capability.route",
+            "version": "1.0.0"
+          },
+          {
+            "id": "fixture.capability.quality",
+            "version": "1.0.0"
+          },
+          {
+            "id": "fixture.capability.producer-string",
+            "version": "1.0.0"
+          },
+          {
+            "id": "fixture.capability.consumer-string",
+            "version": "1.0.0"
+          },
+          {
+            "id": "fixture.capability.consumer-number",
+            "version": "1.0.0"
+          },
+          {
+            "id": "fixture.capability.unsafe-cancel",
+            "version": "1.0.0"
+          },
+          {
+            "id": "fixture.capability.missing-feedback-schema",
+            "version": "1.0.0"
+          },
+          {
+            "id": "fixture.capability.missing-quality-gate",
+            "version": "1.0.0"
+          },
+          {
+            "id": "fixture.capability.incompatible-effect-key",
+            "version": "1.0.0"
+          }
+        ],
+        "allowed_templates": [
+          {
+            "id": "fixture.template.child",
+            "version": "1.0.0"
+          }
+        ],
+        "allowed_interface_refs": [
+          {
+            "id": "fixture.interface.root",
+            "version": "1.0.0"
+          },
+          {
+            "id": "fixture.interface.child",
+            "version": "1.0.0"
+          }
+        ],
+        "allowed_wait_contracts": [
+          {
+            "id": "fixture.wait.approval",
+            "version": "1.0.0"
+          }
+        ],
+        "allowed_child_policy_refs": [
+          {
+            "id": "fixture.policy.child-tight",
+            "version": "1.0.0"
+          }
+        ],
+        "allowed_claim_ids": [],
+        "allow_early_close": true,
+        "allow_indefinite_waits": false,
+        "effect_policy": {
+          "allowed_recovery_kinds": [
+            "pure",
+            "idempotent",
+            "compensatable"
+          ],
+          "max_impact": "mutable_effects"
+        },
+        "build_retry": null,
+        "limits": {
+          "max_scopes": null,
+          "max_nodes": null,
+          "max_nodes_per_scope": null,
+          "max_edges_per_scope": null,
+          "max_nesting_depth": null,
+          "max_map_items": null,
+          "max_concurrency": null,
+          "max_total_attempts": null,
+          "max_total_waits": null,
+          "max_total_output_bytes": null,
+          "max_scope_spec_bytes": null,
+          "max_condition_steps": null,
+          "max_wait_duration_ms": null,
+          "max_pending_signals": null,
+          "max_fixed_point_facts": null,
+          "max_frontier_bytes": null
+        },
+        "usage_budget": {
+          "max_total_tool_calls": null,
+          "max_total_input_tokens": null,
+          "max_total_output_tokens": null,
+          "max_total_cost_micros": null
+        }
+      },
+      "input_bindings": {},
+      "retry_request": null,
+      "timeout_ms": null,
+      "on_complete": {
+        "success": {
+          "target": "done",
+          "effects": {
+            "operations": [
+              {
+                "id": "child.follow-up",
+                "type": "start_child_workflow",
+                "recipe_ref": {
+                  "id": "fixture.recipe.child",
+                  "version": "1.0.0"
+                },
+                "routing_scope_ref": {
+                  "id": "fixture.routing.child",
+                  "version": "1.0.0"
+                },
+                "principal_binding": "inherit_parent_principal",
+                "creation_domain": "parent_workflow_lineage",
+                "relation_kind": "follow_up",
+                "input_bindings": {},
+                "delivery_requirement": "required",
+                "finalization_policy_ref": {
+                  "id": "fixture.finalization",
+                  "version": "1.0.0"
+                },
+                "creation_key_template": "forbidden-{workflow_id}"
+              }
+            ]
+          }
+        },
+        "failure": {
+          "target": "done"
+        }
+      },
+      "on_error": {
+        "target": "done"
+      },
+      "on_local_cancel": {
+        "target": "done"
+      }
+    },
+    "done": {
+      "type": "terminal",
+      "terminal_kind": "normal",
+      "output_binding": {
+        "source": "constant",
+        "value": {
+          "status": "done"
+        }
+      }
+    }
+  },
+  "definition_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+}

@@ -204,3 +204,26 @@ export {
   checkContractPackStaticAbsence,
   generateContractPackStaticAbsence,
 } from './static-absence-pack.js';
+export {
+  checkContractPackGoldenDraft,
+  generateContractPackGoldenDraft,
+} from './golden-draft-pack.js';
+export {
+  GOLDEN_DRAFT_ADDITIONAL_NEGATIVE_COVERAGE,
+  GOLDEN_DRAFT_CASE_SEEDS,
+  GOLDEN_DRAFT_POSITIVE_COVERAGE,
+} from './golden-draft-source.js';
+export type {
+  GoldenDraftAssertionOperator,
+  GoldenDraftCase,
+  GoldenDraftCaseCatalog,
+  GoldenDraftCasePolarity,
+  GoldenDraftCompilerInputSnapshot,
+  GoldenDraftDiagnostic,
+  GoldenDraftManifest,
+  GoldenDraftReviewReportInput,
+  GoldenDraftReviewRequest,
+  GoldenDraftReviewStatus,
+  GoldenDraftSemanticAssertion,
+  GoldenDraftSourceKind,
+} from './golden-draft-types.js';
