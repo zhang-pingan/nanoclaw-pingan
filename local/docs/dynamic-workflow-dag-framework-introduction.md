@@ -34,11 +34,11 @@
 | [第一部分](#part-1) | 全局心智模型 | 已展开 | Workflow、Run、Scope、Node、Attempt 分别是什么？ |
 | [第二部分](#part-2) | Task Intake、Recipe 与创建入口 | 已展开 | 一个请求怎样安全地变成 Workflow？ |
 | [第三部分](#part-3) | State 与 Graph 的统一 | 已展开 | 五类 State 怎样 lower 到统一 Runtime？ |
-| [第四部分](#part-4) | Graph 静态合同与 Compiler | 部分展开 | Interface、Port、Registry、Source 和 Plan 怎样配合？ |
-| [第五部分](#part-5) | DAG 执行语义 | 部分展开 | Condition、Edge、Trigger、Input Aggregation和 Input Seal如何决定 Ready？ |
+| [第四部分](#part-4) | Graph 静态合同与 Compiler | 已展开 | Source怎样变成可信、受限、可重放的Plan？ |
+| [第五部分](#part-5) | DAG 执行语义 | 已展开 | Edge、Input、Fact Wave和Admission怎样推进DAG？ |
 | [第六部分](#part-6) | Node 与动态结构 | 部分展开 | 八类 Node 以及 Subgraph、Expand、Map 如何工作？ |
 | [第七部分](#part-7) | Completion 与外层推进 | 部分展开 | Candidate 如何变成 Cut，T8 如何推进 State？ |
-| [第八部分](#part-8) | 可靠性、资源与副作用 | 导读 | Retry、Outbox、Compensation、Ledger、Safety 如何闭环？ |
+| [第八部分](#part-8) | 可靠性、资源与副作用 | 部分展开 | Retry、Effect、Quota、Capacity和Lease如何闭环？ |
 | [第九部分](#part-9) | 持久化、事务与恢复 | 导读 | SQLite、CAS、T0-T8、Checkpoint 如何保证恢复？ |
 | [第十部分](#part-10) | 控制面、产品化与实施 | 导读 | Command、Runtime Center、Trace、测试和 Gate 如何落地？ |
 
@@ -963,7 +963,13 @@ Required Output在 Node成功时必须 `present` 且通过 Schema/Hash/Size验�
 | [4.6](#part-4-6) | Source、Plan 与 Compiler边界 |
 | [4.7](#part-4-7) | Compiler Proof |
 | [4.8](#part-4-8) | Program Hash |
-| [4.9](#part-4-9) | 后续需要补充的 Compiler主题 |
+| [4.9](#part-4-9) | Strict JSON、Canonical Bytes 与 Domain Hash |
+| [4.10](#part-4-10) | Source Canonicalization 与 Plan Normalizer |
+| [4.11](#part-4-11) | Schema Profile、Assignability 与 Total Pointer |
+| [4.12](#part-4-12) | Policy Intersection 与 Safety Enforcement |
+| [4.13](#part-4-13) | Complexity Summary 与 Conservative Upper Bound |
+| [4.14](#part-4-14) | Static Child Plan Closure |
+| [4.15](#part-4-15) | Toolchain、Diagnostics 与 Golden Bundle |
 
 原规范入口：
 
@@ -1267,15 +1273,216 @@ Program Hash证明内容身份和完整性，不证明逻辑在业务上正确�
 
 <a id="part-4-9"></a>
 
-### 4.9 后续需要补充的 Compiler主题
+### 4.9 Strict JSON、Canonical Bytes 与 Domain Hash
 
-本部分后续讲解需要继续覆盖：
+Compiler从不直接执行调用方解析好的开放对象，而是从 Raw JSON Bytes开始：
 
-- Strict JSON、Duplicate Key和 Closed Schema。
-- RFC 8785 Canonicalization和 Domain-separated Hash。
-- Policy Intersection和 Safety Enforcement Matrix。
-- Static Child Plan Closure。
-- Compiler Toolchain Manifest、Error Catalog和 Sealed Golden Bundle。
+```text
+Raw JSON Bytes
+  -> Strict Parse
+  -> Closed Schema Validation
+  -> Canonical Source
+  -> Bind
+  -> Prove
+  -> Compile
+  -> Immutable Plan
+```
+
+Strict Parser拒绝 Duplicate Key、Comment、Trailing Comma、`NaN`、`Infinity`、`undefined`和非 JSON对象。Duplicate Key不能采用“最后一个胜出”，否则 Parser、Validator、日志和 Hash实现可能看到不同事实。Closed Schema继续拒绝未知字段、类型强转、自动 Default和删除额外字段；显式 `metadata`等开放 Slot只有在 Schema授权时才开放。
+
+合法 Parsed JSON随后使用 RFC 8785 JCS形成 Canonical JSON String，再显式编码为 UTF-8 Bytes。Hash处理的是 Bytes而不是 JavaScript Object：
+
+```text
+JCS决定写哪些字符
+UTF-8决定字符对应哪些Bytes
+SHA-256只接收最终Bytes
+```
+
+例如 Canonical JSON `{"a":1}` 的 UTF-8 Hex是：
+
+```text
+7b 22 61 22 3a 31 7d
+```
+
+Canonical输出不包含 BOM、缩进或文件末尾换行。`中`和字面字符`中`解析为同一 Code Point，因此产生相同 Canonical UTF-8 Bytes；但系统不做额外 Unicode Normalization，组合字符序列不同仍会得到不同 Hash。
+
+Hash还要加入公开、固定、版本化的 Domain Separator：
+
+```text
+source_hash = SHA-256(
+  UTF8("icarus:workflow-graph-source:1\n")
+  || canonical_source_bytes
+)
+```
+
+Source、Plan、Proof、Completion Cut等对象使用不同 Domain。Domain Separator绑定对象类型和格式版本，防止相同 Payload在不同协议中自然得到同一身份；它不是随机 Salt、HMAC、签名或权限令牌。
+
+<a id="part-4-10"></a>
+
+### 4.10 Source Canonicalization 与 Plan Normalizer
+
+两者都生成稳定Bytes，但目标不同：
+
+| 维度 | Source Canonicalization | Plan Normalizer |
+| --- | --- | --- |
+| 输入 | 通过Schema的Parsed Source | 已Bind、Prove、Compile的Plan |
+| 是否理解Graph语义 | 否，只理解JSON | 是，理解Compiled Format字段 |
+| Object Key | JCS固定排序 | 最终仍由JCS排序 |
+| Array | 保留原顺序 | Set-like排序，Business-order保留 |
+| 主要目的 | 固定提交内容和Source Hash | 固定可执行布局和Plan Hash |
+
+Source阶段不能猜测 `nodes`是不是集合、`args`是否有 Short-circuit语义，因此忠实保留全部 Array顺序。Plan阶段已经知道字段含义，可以把 Node、Edge、Rule、Allowlist等 Set-like Collection按 Stable Key排序，消除 Compiler遍历顺序和数据库返回顺序的影响。
+
+有业务顺序的 Array必须保留，例如：
+
+```text
+Condition and/or args
+first_matching ordered_edge_ids
+Completion exit_priority
+Input selection的resolution order
+Map Item原始Index顺序
+```
+
+Plan Normalizer不是Optimizer：它不会交换逻辑等价表达式、自动合并Node或删除Edge。Normalizer本身具有 Version/Hash，规则改变必须更新 Compiler身份并重跑 Golden Bundle。Source顺序变化会改变 Source Provenance；即使可执行部分归一化后相同，也不能据此假设完整 Plan Identity相同。
+
+<a id="part-4-11"></a>
+
+### 4.11 Schema Profile、Assignability 与 Total Pointer
+
+完整 JSON Schema适合验证单个值，但难以稳定证明两个 Schema的包含关系。Runtime因此使用受限 `icarus.workflow-schema/1` Profile，允许 Closed Object、`type/const/enum/properties/required/items`、有限边界、Pinned `$ref`和固定判别字段的 Discriminated Union；禁止递归 Ref、`$dynamicRef`、开放式 `anyOf/not/if-then-else`、任意 `allOf`等难以有限证明的组合。
+
+Data Edge需要证明：
+
+```text
+Producer Value Set ⊆ Consumer Accepted Value Set
+```
+
+相同 Schema Hash直接使用 `identical_schema`；不同 Hash必须由 Versioned Assignability Algorithm生成 Sound Proof。算法可以保守拒绝实际兼容但不会证明的连接，这是 False Negative；绝不能批准实际不兼容的连接，否则形成 False Positive并破坏 Soundness。
+
+主要规则包括 Enum/Const集合子集、Numeric Range子集、Closed Object、Array Item和 Discriminated Union递归子类型。Closed Consumer下，Producer允许额外字段也可能不安全；重命名、合并、类型转换或版本升级必须使用显式 Versioned Adapter Node。
+
+带 JSON Pointer的 Edge还要证明 Totality：
+
+> 对 Producer Schema允许的每一个合法值，Pointer都存在、每一段都可遍历，并能推导出唯一兼容的 Derived Schema。
+
+`/report/summary` 只有在 `report`和`summary`沿所有 Object/Union分支均 Required且中间类型可遍历时才是 Total；这里的 `summary`只是普通业务字段“摘要”，不是Runtime预置枚举。字段在测试数据中总是出现并不构成证明；Array `/0`要 Total，Schema至少要保证 `minItems >= 1`。第一版不根据 Control Condition自动 Narrow Union。
+
+非 Total Pointer默认拒绝；只有显式 `on_missing=unavailable`且目标 Aggregation能处理 Unavailable时，才能保存 `pointer_totality=may_be_missing`。JSON `null`是存在的值，不等于 Missing；但不能继续从 `null`向下解析字段。
+
+<a id="part-4-12"></a>
+
+### 4.12 Policy Intersection 与 Safety Enforcement
+
+Effective Business Policy按 Global、Workflow/Recipe、State、Parent Compiled Snapshot、Child Profile Request和 Source Requested Limits逐层收紧：
+
+| 字段 | 求交规则 |
+| --- | --- |
+| Allowlist/Recovery Kind | 集合交集 |
+| Boolean Permission | 逻辑 AND |
+| Numeric Limit/Usage Budget | 最小非 Null值 |
+| Max Impact | 选择影响更小的一档 |
+| Build Retry | 只能减少次数/时长，不能重新启用或改写Backoff |
+
+Child Request中的 `null`表示继承，不表示全部允许；Numeric `null`表示本层不增加业务 Ceiling，`0`表示禁止消费。空 Allowlist表示全部禁止。Child Source实际引用交集外的 Capability、Template或 Wait Contract时，Compiler必须拒绝。
+
+Plan同时保存 Nullable Effective Business Limits和全部有限、Versioned、Pinned的 Runtime Safety Snapshot。实际硬上限是业务非 Null Ceiling与 Safety对应字段中的更严格值；业务层不能关闭或放宽 Safety。
+
+每个 Safety字段都必须进入 Enforcement Matrix：
+
+```text
+字段 -> 作用对象 -> 检查阶段 -> 超限结果
+```
+
+静态 Node/Edge、Condition复杂度在 Compile检查；Scope/Node/Map Slot在 Materialize事务中原子 Reserve Ledger；Attempt、Wait、Output、Fact和 Effect在 Runtime创建前继续预留或记账。超限不能静默截断。Live Deployment Capacity只控制 Admission并产生 Backpressure，不进入 Plan语义，也不能放宽 Pinned Quota。
+
+<a id="part-4-13"></a>
+
+### 4.13 Complexity Summary 与 Conservative Upper Bound
+
+Compiler为每个Plan生成复杂度摘要：
+
+```ts
+interface CompiledComplexitySummary {
+  node_count: number;
+  control_edge_count: number;
+  data_edge_count: number;
+  max_source_fan_out: number;
+  max_condition_steps: number;
+  max_trigger_steps: number;
+  max_completion_steps: number;
+  max_reconcile_facts_per_ingress: number;
+  max_frontier_bytes: number;
+  summary_hash: string;
+}
+```
+
+Node/Edge是精确静态计数；Condition Steps、Fact Wave和 Frontier Bytes是 Conservative Upper Bound：
+
+```text
+任意合法运行的Actual Usage
+  <= Compiler Upper Bound
+  <= Effective Limit / Runtime Safety
+```
+
+保守上界可以高估而导致安全但保守的拒绝，绝不能低估。Condition按最坏 Short-circuit路径计算抽象操作数；Fact Wave估算一个 Ingress最多派生多少 Durable Fact；Frontier估算 Completion/Close Snapshot的最大 Canonical Bytes。它们不是平均值、P99或已消费 Quota。
+
+Runtime仍使用 Step Counter、Fact Preflight和实际 Canonical Byte Length验证 Actual没有突破 Pinned Bound。`max_reconcile_facts_per_ingress`必须不超过单事务 Fact Safety，因为一次 Ingress及其 Early Eligibility不能在任意位置截成半个 Fixed Point。
+
+<a id="part-4-14"></a>
+
+### 4.14 Static Child Plan Closure
+
+Subgraph和 Map Body的 Inline/Template Source在 Parent Compile时已知，因此 Parent Compiler会递归编译全部传递 Static Child：
+
+```text
+Root R
+├─ Child Plan A
+│  └─ Grandchild Plan C
+└─ Map Body Plan B
+   └─ Grandchild Plan C
+
+Static Child Closure = {A, B, C}
+```
+
+Static Template引用必须无环；相同 Content-addressed Plan可以共享。Parent的 Compiled Owner Node保存 `precompiled_plan_hash`，Parent Plan保存 `static_child_plan_closure_hash`。T2a在事务外生成 Parent和Closure，再以短事务原子持久化全部缺失Plan；任何Child失败都不能留下部分可执行Parent。
+
+Closure保存的是Plan依赖，不创建Scope Instance、不绑定实际Input，也不消费Scope/Node Quota。Subgraph和Map运行时只 Materialize Pinned Precompiled Plan；Expand要等 Graph Spec Input Seal后使用同一 Pinned Compiler生成 Dynamic Child Plan及其内部 Static Closure。
+
+<a id="part-4-15"></a>
+
+### 4.15 Toolchain、Diagnostics 与 Golden Bundle
+
+相同 `compiler_version`不足以标识Compiler。Toolchain Manifest还固定 Node/npm、package-lock、Strict Parser、Ajv、JCS、Wrapper/Profile、Normalizer、Proof Algorithm和 Compiler Build的 exact version/integrity/hash。实际进程身份不匹配时返回 `compiler_integrity_mismatch`，不能回退系统Node或当前Latest依赖。
+
+Compiler失败输出结构化 Diagnostic，而不是把本地化 Message当权威：
+
+```ts
+interface WorkflowCompilerDiagnostic {
+  code: WorkflowCompilerErrorCode;
+  phase: 'parse' | 'schema' | 'bind' | 'prove' | 'normalize' | 'hash';
+  instance_pointer: string;
+  schema_pointer: string | null;
+  stable_object_id: string | null;
+  detail_ref: string | null;
+}
+```
+
+Versioned Error Catalog固定 Closed Error Code、Default Phase和修复归属：`source_revision_required`表示必须产生新Source Candidate，`registry_revision_required`表示需要发布或修正可信资源，`never`表示同一输入重试无效；这些分类都不表示后台自动重编同一 Frozen Source。多个 Diagnostic按稳定Tuple排序，Ajv原始文本和遍历顺序不进入契约Hash。
+
+Sealed Golden Bundle是独立审阅的Compiler标准答案集合。每个Case保存 Raw Source Bytes、完整 Registry/Policy/Safety输入、Expected Source/Plan/Proof/Program Hash和 Expected Diagnostics。Positive Case证明合法输入产生精确Plan；Negative Case防止非法输入和 False Positive被错误接受。
+
+维护流程固定为：
+
+```text
+Draft
+  -> golden-review可读Diff
+  -> human:local-owner语义批准Exact Draft Hash
+  -> golden-seal只用Generic Parser/JCS/Hash打包
+  -> CI调用Production Compiler逐字节重放
+  -> Publish Gate
+```
+
+Production Compiler、AI和CI都不能用 `--accept`把 Actual覆盖为 Expected。Compiler Bug应修Compiler并保持Oracle；有意语义变更或Oracle纠错都必须创建新Bundle Version、重新Review和Seal，旧Sealed Bundle按Published/Active/Run Retention保留。
 
 ---
 
@@ -1293,7 +1500,8 @@ Program Hash证明内容身份和完整性，不证明逻辑在业务上正确�
 | [5.4](#part-5-4) | Node Input Aggregation |
 | [5.5](#part-5-5) | Input Seal |
 | [5.6](#part-5-6) | Node Ready/Skip判断 |
-| [5.7](#part-5-7) | 后续需要补充的执行语义 |
+| [5.7](#part-5-7) | Ingress Fact、Fact Wave 与 Fixed Point |
+| [5.8](#part-5-8) | Scheduler Admission、Fairness 与 Backpressure |
 
 原规范入口：
 
@@ -1524,12 +1732,56 @@ Control/Data/Trigger/Input Seal分离后，系统可以明确表达无数据控�
 
 <a id="part-5-7"></a>
 
-### 5.7 后续需要补充的执行语义
+### 5.7 Ingress Fact、Fact Wave 与 Fixed Point
 
-本部分后续讲解需要继续覆盖：
+Fact是影响Runtime权威决策的结构化持久事实；Value是业务数据，普通Projection/Trace Event也不一定是Fact。Ingress Fact表示上一轮 Fixed Point之后新提交、并触发下一轮Reconcile的首个权威事实，例如 Attempt结果使Node Terminal、Signal到达、Timer到期、Child Cut可消费或Build完成。
 
-- Fixed-point Reconcile顺序。
-- Scheduler Fairness、Admission和 Backpressure。
+同一个事实可能同时是上游活动的终点和下游传播的入口：
+
+```text
+Attempt完成
+  -> Node A succeeded       A执行的终点 / 本轮Ingress
+  -> Edge A->B taken        Derived Fact
+  -> Trigger B true         Derived Fact
+  -> Input B sealed         Derived Fact
+  -> B ready
+```
+
+Wave内部推导出的 `Node C skipped`虽然也是Terminal Fact，却不是本轮Ingress。`Ingress/Derived`描述因果角色，`Terminal`描述事实内容。
+
+Reconciler把Ingress放入确定性Queue，按 `(causal_wave, fact_kind_rank, stable_object_id)`处理并为每个Fact分配连续 Durable Event Sequence。每写一个Fact都基于Post-state评估Early Eligibility，保存首次满足的Event Seq；不能等Wave结束后再按最终集合重选。
+
+```text
+Ingress Fact
+  -> Edge/Trigger/Input/Skip/Candidate/Eligibility传播
+  -> Queue为空
+  -> Fixed Point
+```
+
+Fixed Point是当前Scope状态的收敛性质：再次执行Reconcile不会产生新Fact，即 `Reconcile(S)=S`。它不是Scope对象、Scope Input Port、Checkpoint或Completion Cut。同一个Scope可多次达到Fixed Point；Active Attempt、Armed Wait或Ready Node等待Admission时也可能暂时处于Fixed Point，新的Result/Signal会启动下一Wave。
+
+一个Ingress及其必须原子产生的Derived Facts和Early Eligibility不能在任意位置截断，否则其他事务会看到半解析Edge或漏失First Eligibility。Compiler因此给出 `max_reconcile_facts_per_ingress`保守上界，Runtime在T3事务前Preflight。Commit前Crash整Wave回滚，Commit后整Wave存在；若发现本应同事务生成的Fact/Eligibility缺失，Recovery必须判为Invariant Violation，不能事后猜测补齐。
+
+<a id="part-5-8"></a>
+
+### 5.8 Scheduler Admission、Fairness 与 Backpressure
+
+Ready只证明Node逻辑上可以执行；Admission回答它现在是否可以占用物理执行槽：
+
+```text
+Pending
+  -> Trigger/Input满足
+  -> Ready
+  -> Admission
+  -> Claim/Lease
+  -> Attempt/Dispatch
+```
+
+Admission同时检查Run=`running/healthy`、Scope/Work Fence有效、Pinned Run/Child/Map/Execution Group并发限制、Ledger Reservation和Deployment Live Capacity。任一可释放槽不足时，Node保持Ready形成Backpressure，不转成Engine Error。
+
+例如20个Node Ready、Plan `max_concurrency=10`、Live `max_active_executions=5`且已有3个Active，本轮最多再Admission 2个。Capacity调低不Cancel已Admission工作，只阻止新Admission；调高也不能突破Plan、Ancestor Scope或Execution Group的Pinned限制。Armed Wait可占Active Wait账户，但不占Active Execution Slot。
+
+符合Policy的Ready Node先按Workflow Run做持久化Round-robin，优先 `last_admission_seq`更小或从未获得槽位的Run；Run内按 `eligible_event_seq`、`scope_manifest_seq`、`node_key`稳定选择。成功Claim在同一事务分配Global Admission Seq、更新Fairness Cursor、Reserve Slot并写Admission Event，Crash后不会丢失调度游标。Route Group Priority只控制条件匹配，不是Scheduler Priority。
 
 ---
 
@@ -1546,7 +1798,10 @@ Control/Data/Trigger/Input Seal分离后，系统可以明确表达无数据控�
 | [6.3](#part-6-3) | Expand |
 | [6.4](#part-6-4) | Map |
 | [6.5](#part-6-5) | 三者对比和触发时机 |
-| [6.6](#part-6-6) | 后续需要补充的 Node语义 |
+| [6.6](#part-6-6) | Child Scope Instance |
+| [6.7](#part-6-7) | Plan、Closure、Manifest 与 Build层级 |
+| [6.8](#part-6-8) | Sealed Manifest、Crash 与 Recovery |
+| [6.9](#part-6-9) | 后续需要补充的 Node语义 |
 
 原规范入口：
 
@@ -1656,7 +1911,99 @@ Map先冻结 Collection Hash、Item Index/Key和所有 Result Slot，再按 Conc
 
 <a id="part-6-6"></a>
 
-### 6.6 后续需要补充的 Node语义
+### 6.6 Child Scope Instance
+
+Child Scope Instance是某个Child Plan在当前Graph Run中的一次实际运行：
+
+```text
+Child Plan          = 函数代码
+Child Scope Instance = 这次函数调用
+Input Snapshot      = 调用参数
+Completion Cut      = 返回结果
+```
+
+它具有 `graph_run_id + parent_scope_id + owner_node_id + child_key`、Plan/Input Hash、Depth、Lifecycle、Work Fence Epoch及自己的Node、Edge、Attempt、Wait、Candidate、Close Request和Cut。唯一键 `(parent_scope_id, owner_node_id, child_key)`保证Recovery不重复创建；Subgraph/Expand通常使用 `child_key=single`，Map为每个Frozen Item使用稳定Key。
+
+Child只有在Build获得合法Plan并成功Materialize后才创建，不存在长期 `plan=null`的Child Shell。Materialize原子验证Parent/Owner/Fence/Input、Reserve Scope/Node/Edge Ledger、创建实例行和Local DAG并写Run Manifest。多个Map Item可以引用同一个Plan，但各自拥有不同Scope ID、Input Snapshot和Runtime状态。
+
+Parent通过 Owner Sealed Input绑定Child Scope Input，不能跨Scope连接内部Edge；Child Cut经Completion Envelope和Expose Port变成Owner Output。Owner必须等待Child Cut后才Terminal，因此Child不会成为Detached Branch。Child共享当前Run的Registry Snapshot、Deadline、Run Ledger和Control状态，但拥有逐层收紧的Scope Policy和自己的Completion边界。
+
+<a id="part-6-7"></a>
+
+### 6.7 Plan、Closure、Manifest 与 Build层级
+
+`Pinned Precompiled Plan`不是新IR类型，而是被Parent Owner用Exact Hash提前绑定的普通Plan。相关对象分为四层：
+
+| 层 | 对象 | 回答的问题 | 变更方式 |
+| --- | --- | --- | --- |
+| 编译蓝图 | Plan / Pinned Precompiled Plan | 这个Scope执行什么？ | Immutable |
+| 编译依赖 | Static Child Closure | Parent可达的Static Child Plan是否完整？ | Immutable |
+| 运行意图 | Expansion Manifest | 本次Owner决定创建哪些Child？ | Seal后Immutable |
+| 创建进度 | Scope Build | Child创建到哪一步？ | 按状态机向前推进 |
+
+完整关系：
+
+```text
+Compile Time
+Parent Plan
+├─ Owner.precompiled_plan_hash -> Child Plan
+└─ static_child_plan_closure_hash -> {Child/Grandchild Plans}
+
+Runtime
+Owner Ready
+  -> Expansion Manifest
+  -> Scope Build
+       -> bind/compile exact Plan
+       -> validate Input/Fence/Ledger
+       -> Materialize
+  -> Child Scope Instance -> references Plan
+```
+
+Expansion Manifest统一覆盖 `subgraph | expand | map`：Subgraph冻结Single Invocation和Pinned Plan/Input；Expand冻结Dynamic Graph Source/Input/Policy；Map冻结Collection Hash、Item Index/Key/Input Hash、全部Result Slot和Body Plan。Manifest说明“要创建什么”，但不保存Lease、Retry、Reservation和创建进度。
+
+Build补充这些运行状态：`invocation_key`、Input/Compiler Hash、Pinned Work Epoch、Lease、Attempt/Retry、Reservation Group、Status、Plan Hash、Scope ID和Error。Static Subgraph Build不会重新运行Compiler，只绑定Existing `precompiled_plan_hash`；Expand Build才对Frozen Source调用Pinned Compiler；Map为N个Item创建N个Build和Scope，但共享一个Body Plan。
+
+数量关系：
+
+```text
+Subgraph: 1 Owner -> 1 Manifest -> 1 Build -> 1 Child Scope -> 1 Plan
+Map:      1 Owner -> 1 Manifest -> N Builds -> N Child Scopes -> 1 shared Plan
+```
+
+Static Closure是Plan依赖图，不是Runtime Ownership Tree，也不是跨Scope DAG。Hash只证明Closure内容身份，不能替代实际Plan Records；Plan缺失或Hash不匹配时不能重新读取Latest Template修复。
+
+<a id="part-6-8"></a>
+
+### 6.8 Sealed Manifest、Crash 与 Recovery
+
+Sealed Expansion Manifest表示Child创建意图已完整提交并不可修改。Owner必须先构造完整Canonical Manifest，再在短事务中验证Input/Fence/Limit、插入Manifest并为Map原子创建全部Open Result Slot；Commit前Crash全部回滚，Commit后不能出现“Manifest已Seal但部分Slot缺失”的合法状态。
+
+Seal不表示Child已经创建：
+
+```text
+Manifest = sealed
+Build count = 0
+Child Scope count = 0
+```
+
+它只冻结Source、Item集合、顺序、Key、Input Hash、Plan Binding和Completion Policy。Crash后Live Collection新增Item或Template升级都不能改写旧Manifest。
+
+Recovery不是重新规划或从头执行，而是：
+
+```text
+Validate persisted facts
+  + Reclaim expired work
+  + Complete uniquely missing idempotent steps
+  + Reject ambiguity
+```
+
+Recovery读取Sealed Manifest、Pinned Plan/Compiler、Build、Scope、Result Slot、Fence Epoch、Lease和Ledger。Manifest存在但Build缺失时按稳定Invocation Key补建；Build=`compiled`但Scope未Materialize时继续相同Build；Child Cut存在但Owner未消费时执行唯一Consumption CAS。已经存在的Build/Scope只验证，不重复创建。
+
+如果Parent在Crash期间被Close，Saved Work Epoch不匹配，Recovery把未Materialize Build Fence掉而不是继续创建。Paused Run可以保存Pure Compile结果为`compiled`，但Resume前不Materialize。Manifest Hash不匹配、Sealed Map缺Slot、出现Manifest未声明的Child、同一Invocation绑定两个Plan或Ownership链错误时进入Quarantine，禁止通过重读Source猜测修复。
+
+<a id="part-6-9"></a>
+
+### 6.9 后续需要补充的 Node语义
 
 本部分后续讲解需要继续覆盖：
 
@@ -1814,7 +2161,10 @@ Input Seal
 | --- | --- |
 | [8.1](#part-8-1) | 本部分学习目标 |
 | [8.2](#part-8-2) | 已建立的基础概念 |
-| [8.3](#part-8-3) | 后续讲解路线 |
+| [8.3](#part-8-3) | Limit、Quota 与 Capacity |
+| [8.4](#part-8-4) | Admission、Claim、Lease 与 Fence |
+| [8.5](#part-8-5) | Live Capacity发布与治理 |
+| [8.6](#part-8-6) | 后续讲解路线 |
 
 原规范入口：
 
@@ -1854,7 +2204,66 @@ Input Seal
 
 <a id="part-8-3"></a>
 
-### 8.3 后续讲解路线
+### 8.3 Limit、Quota 与 Capacity
+
+三者都限制资源，但生命周期和失败语义不同：
+
+| 概念 | 回答的问题 | 示例 | 不足时 |
+| --- | --- | --- | --- |
+| Limit | 这一个对象/动作最多多大？ | `max_nodes_per_scope`、单Value Bytes、Wait时长 | Compile/Contract/Materialize拒绝 |
+| Quota | 某个账户在生命周期内总共还能消费多少？ | Total Attempts、Waits、Output Bytes、Tool Calls、Cost | Reservation失败并产生稳定Exhaustion结果 |
+| Capacity | 当前同时还能处理多少？ | Active Executions/Waits、Outbox Inflight | Ready/Pending保持并Backpressure |
+
+Quota是一类需要记账的累计Limit。Account保存Limit、已Posting Usage和Active Reservation，剩余额度是 `limit - posted - reserved`；创建Scope、Attempt、Wait或Effect前必须通过事务型Reservation，多个Worker不能先读余额再分别超支。一次消费若同时命中Workflow、Run、Scope、Node、Map Owner和Execution Group账户，必须在同一Reservation Group中全成或全不成。
+
+累计Quota通常不会因工作完成而返还，例如Attempt完成仍计入`max_total_attempts`；可释放Active Slot才属于Capacity。Pinned `max_concurrency`是Plan语义Limit，Live `max_active_executions`是部署Capacity，实际Admission取两者及Ancestor限制中的更严格值。
+
+<a id="part-8-4"></a>
+
+### 8.4 Admission、Claim、Lease 与 Fence
+
+相关协议顺序是：
+
+```text
+Ready        逻辑上可以执行
+  -> Admission  当前资源允许开始
+  -> Claim      某个Worker通过CAS成为Owner
+  -> Lease      该Owner的提交权在有限时间内有效
+```
+
+多个Worker同时看到Ready Work时，只有一个能以Expected Row Version、状态、Work Epoch和Capacity Reservation成功Claim。Claim写入 `lease_owner + lease_token + lease_expires_at`；Heartbeat可续租。Lease过期后Recovery可以用新Token接管，旧Worker晚到提交因Token不匹配被拒绝。
+
+Lease过期只表示提交权过期，不表示外部物理操作没有发生。Effectful Attempt在Lease丢失后必须按Operation Key、External ID和Receipt先Reconcile；Pure/Idempotent/Compensatable/Unknown Outcome分别走自己的恢复合同，不能盲目重复副作用。
+
+Scope Close还会递增Work Fence Epoch。即使Lease尚有效，只要Saved Run/Scope Epoch不匹配，普通Late Result也不能发布；Lease解决Worker换代，Fence解决Scope生命周期关闭。
+
+`Work Claim/Lease`与`Domain Claim`不同：前者由Worker短期领取Runtime工作，后者由Workflow持久占有Workspace、Package或Git Target等业务资源，并使用Exclusive Fencing Token阻止旧Workflow修改外部资源。
+
+<a id="part-8-5"></a>
+
+### 8.5 Live Capacity发布与治理
+
+`DeploymentRuntimeCapacity`包含Active Execution/Wait、Pending Signal、Outbox Inflight和Blob物理容量等可释放部署槽位。它不进入Plan语义，可以在不重启Runtime、不发布新Safety Version的情况下热更新，但不能放宽Pinned Policy、Quota或Safety。
+
+Production v1区分：
+
+```text
+config/workflow-runtime-capacity.json
+  = Fresh Deployment的checked-in Bootstrap Baseline
+
+data/workflow-runtime/workflow-runtime-capacity.json
+  = 唯一活动Capacity Publication
+```
+
+普通修改只能由服务端认证的 `human:local-owner`通过独立Capacity Admin Gateway并持有 `runtime.capacity.manage`发起。Feature、Workflow、Automation、Executor、Card和业务API不能代理该权限；`system:production-activation`只在Fresh DB没有Head时拥有一次性Genesis Grant。
+
+修改提交完整Snapshot而不是Field Patch，并携带Idempotency Key、Expected Capacity Revision/Config Hash、Reason和Evidence。Gateway执行认证授权、Closed Schema/Transition验证和CAS，写不可变Command/Invocation/Change Event，再以原子File Replace安装新的Versioned Publication；Watcher只接受与审计Head、Revision、Change ID、Config/Publication Hash一致的活动文件，并原子发布完整Validated Snapshot。OS文件权限只是Defense-in-depth，能写文件不等于应用授权。
+
+每次Admission记录当时的 `capacity_revision + capacity_change_id + capacity_config_hash`。Capacity调低不Cancel已Admission工作，只暂停新Admission；相同内容回滚也要创建新Revision，不能只靠Config Hash区分修改事件。Blob Hard Limit降低到当前Allocation以下时进入可观测Over-capacity并阻止新Allocation，仍被引用的数据不能被删除。
+
+<a id="part-8-6"></a>
+
+### 8.6 后续讲解路线
 
 后续按以下顺序展开：
 
@@ -1864,8 +2273,7 @@ Capability完整执行合同
   -> External Effect Intent/Receipt
   -> Outbox Delivery/Reconcile
   -> Compensation
-  -> Ledger Reservation/Posting
-  -> Safety与 Capacity
+  -> Ledger Posting和资源守恒深度
   -> Pause/Cancel/Operational Blocker
 ```
 
@@ -2057,15 +2465,28 @@ Command Union和授权
 | Registry和 Snapshot有什么区别？ | [4.4](#part-4-4)、[4.5](#part-4-5) |
 | Compiler生成的 Proof证明什么？ | [4.7](#part-4-7) |
 | Program Hash标识什么？ | [4.8](#part-4-8) |
+| Strict JSON怎样形成Canonical UTF-8和Domain Hash？ | [4.9](#part-4-9) |
+| Source Canonicalization和 Plan Normalizer有什么区别？ | [4.10](#part-4-10) |
+| Assignability、False Positive和Total Pointer是什么？ | [4.11](#part-4-11) |
+| Effective Policy、Safety和Complexity怎样配合？ | [4.12](#part-4-12)、[4.13](#part-4-13) |
+| Static Child Closure和Golden Bundle是什么？ | [4.14](#part-4-14)、[4.15](#part-4-15) |
 | Control Edge和 Data Edge有什么区别？ | [5.1](#part-5-1) |
 | Control Edge四种状态分别是什么？ | [5.1](#part-5-1) |
 | Condition和 Trigger有什么区别？ | [5.2](#part-5-2)、[5.3](#part-5-3) |
 | Node Input的 Single/List如何聚合？ | [5.4](#part-5-4) |
 | Trigger、Input Seal和 Ready如何配合？ | [5.3](#part-5-3)、[5.5](#part-5-5)、[5.6](#part-5-6) |
+| Ingress Fact、Fact Wave和 Fixed Point是什么？ | [5.7](#part-5-7) |
+| Ready、Admission和 Backpressure是什么关系？ | [5.8](#part-5-8) |
 | Subgraph、Expand、Map分别是什么？ | [6.2](#part-6-2)、[6.3](#part-6-3)、[6.4](#part-6-4) |
+| Child Scope Instance是什么？ | [6.6](#part-6-6) |
+| Plan、Closure、Manifest和Build是什么层级？ | [6.7](#part-6-7) |
+| Sealed Manifest怎样支持Crash Recovery？ | [6.8](#part-6-8) |
 | Candidate、Close Request和 Cut是什么关系？ | [7.1](#part-7-1)、[7.2](#part-7-2)、[7.3](#part-7-3) |
 | Transition和 Graph Edge有什么区别？ | [7.4](#part-7-4) |
 | T8如何推进外层 State？ | [7.5](#part-7-5) |
+| Limit、Quota和Capacity有什么区别？ | [8.3](#part-8-3) |
+| Admission、Claim、Lease和Fence有什么区别？ | [8.4](#part-8-4) |
+| Live Capacity由谁修改、怎样发布？ | [8.5](#part-8-5) |
 
 ## 最终总览
 
@@ -2081,22 +2502,26 @@ Unified Execution
 
 Static Contract
   Registry Snapshot + Interface + Policy + Source
-  -> Compiler -> Proof/Program Hash -> Plan
+  -> Canonicalize/Bind/Prove/Normalize
+  -> Proof/Program/Complexity/Closure -> Plan
 
 Runtime Dataflow
   Condition -> Control Edge -> Trigger
   Data Edge -> Input Aggregation -> Input Seal
   Trigger + Inputs -> Ready
+  Ingress -> Fact Wave -> Fixed Point
 
 Execution
-  Node -> Attempt/Wait/Child Scope -> Typed Output
+  Ready -> Admission -> Claim/Lease -> Attempt/Wait
+  Owner -> Manifest -> Build -> Child Scope -> Typed Output
 
 Completion
   Terminal Candidate -> Completion Coordinator -> Close Request
   -> Fence/Cleanup -> Completion Cut -> T8 Transition
 
 Reliability
-  CAS + Idempotency + Lease + Work Fence + Ledger + Outbox + Compensation
+  CAS + Idempotency + Work Fence + Ledger/Quota + Capacity
+  + Outbox/Reconcile + Compensation
 
 Product Surface
   Runtime Store -> Projection/Trace
