@@ -1,8 +1,8 @@
 # Dynamic Workflow Runtime 实施进度
 
 > **状态**: IN_PROGRESS
-> **当前 Gate**: G1 DDL / Store（IN_PROGRESS；G1.1 DONE，G2 仍 READY）
-> **下一施工切片**: G1.2 Store Base / Connection Factory
+> **当前 Gate**: G1 DDL / Store（DONE；G2 READY）
+> **下一施工切片**: G2 Compiler / Sealed Golden
 > **最后更新**: 2026-07-16
 > **规范权威**: `local/docs/dynamic-workflow-dag-framework.md`
 
@@ -105,7 +105,7 @@ Agent Container 运行于独立 VM，Node identity 由 VM image gate 保证；�
 | Gate | 状态 | 依赖 | 退出证据 | 完成提交 |
 | --- | --- | --- | --- | --- |
 | G0 Contract Pack / Static Baseline | `DONE` | 无 | G0.1-G0.9 historical root + G0.10 additive Capacity Admin/publication/CAP/Logical Schema/coverage root | 本原子提交 |
-| G1 DDL / Store | `IN_PROGRESS` | G0.10 | G1.1 executable migration + Schema Manifest + SQLite fixtures 已完成；Store/Connection Factory 尚未开始 | 本原子提交（G1.1） |
+| G1 DDL / Store | `DONE` | G0.10 | frozen executable migration/Schema Manifest + unified Connection Factory + Store lifecycle/transaction host + real-file SQLite/identity gates | 本原子提交（G1.2） |
 | G2 Compiler / Golden | `READY` | G0.1-G0.9；G0.10 不改变 Compiler/Plan 语义 | sealed Golden Bundle + compiler/toolchain hash | - |
 | G3 Registry / Authoring / Publish | `NOT_READY` | G1 + G2 | manifest/authoring/publish/retention/ABI fixtures | - |
 | G4 Test Bootstrap | `NOT_READY` | G1 + G2 + G3 | isolated bootstrap profile | - |
@@ -123,7 +123,7 @@ Agent Container 运行于独立 VM，Node identity 由 VM image gate 保证；�
 | I1 | Intake、Routing、幂等创建、Child provenance、Claim | `NOT_READY` | G5 起 |
 | I2 | Definition、State lowering、Context、transition | `READY` | G2 Definition lowering 起；Runtime 仍从 G5 起 |
 | I3 | Source/Compiled IR、Port、Compiler | `READY` | G2 实现 |
-| I4 | Runtime Store、SQLite relation、Value/Blob、migration | `IN_PROGRESS` | G1.1 migration/Schema Manifest DONE；下一切片 G1.2 Store Base / Connection Factory；Value/Blob 从 G3 起 |
+| I4 | Runtime Store、SQLite relation、Value/Blob、migration | `IN_PROGRESS` | G1 migration/Schema Manifest/Store Base/Connection Factory DONE；Value/Blob 从 G3 起 |
 | I5 | Graph 状态机、reconcile、Scheduler、Ledger | `NOT_READY` | G5 起 |
 | I6 | Delegation/System、Capability Effect、Outbox | `NOT_READY` | G5 起 |
 | I7 | Durable Wait、Signal/Timer/Approval、Inbox | `NOT_READY` | G5 起 |
@@ -154,7 +154,65 @@ G0.1-G0.9 已按当时规范完成并保留历史 identity。后续确认的 Cap
 | 切片 | 内容 | 状态 | 主要退出条件 | 完成提交 |
 | --- | --- | --- | --- | --- |
 | G1.1 | Executable DDL / Schema Manifest | `DONE` | G0.6 + G0.10 全量 canonical SQLite migration、closed introspected Manifest、schema lint、constraint/trigger/query-plan fixtures、真实文件与 managed identity gate | 本原子提交 |
-| G1.2 | Store Base / Connection Factory | `READY` | production Store 基础、连接生命周期/PRAGMA/read-only policy 与 query API 的规范范围实现和测试 | - |
+| G1.2 | Store Base / Connection Factory | `DONE` | production-target Store 基础、连接生命周期/完整 PRAGMA/read-only policy、identity gate、参数化 query API 与短写事务 host 的 candidate 开发验证 | 本原子提交 |
+
+## 已完成切片：G1.2 Store Base / Connection Factory
+
+**状态**：`DONE`
+
+**工作包**：I4；只实现独立 `workflow-runtime.db` 的统一 Connection Factory、`WorkflowRuntimeStore` 基座、连接/Profile/identity gate、参数化基础查询与同步短写事务 host。没有实现 Graph Store 领域操作、Runtime、Scheduler、Watchdog、Recovery、Outbox Worker、Capacity Gateway/Publisher/Watcher、Compiler/Golden、Registry、Runtime Center/UI、Supported Limits certification 或 production activation。
+
+I4/G1.2 把 G1.1 migration、Schema Manifest 与发布 hashes 当作 frozen 数据库结构输入。loader 精确 pin G0.10 root、G1.1 root、schema hash、migration SHA-256、deterministic digest、Schema Manifest、Executable DDL 和 SQLite Profile artifact；启动时同时重渲染 migration、重建 introspected Manifest 并逐字节比较，任一 drift 都 fail-closed，未改写任何 G0 published JSON 或 G1.1 artifact。
+
+Store/Factory contracts：
+
+- 所有测试、只读和写连接都由 `WorkflowRuntimeConnectionFactory` 创建；拒绝 `:memory:`、SQLite URI、非 `workflow-runtime.db` 文件名和 symlink database。Factory 区分显式 `create` 与 `open_existing`，现有数据库绝不自动 bootstrap 或迁移。
+- fresh bootstrap 先设置并回验 `page_size=4096`、`auto_vacuum=incremental`，再执行 frozen migration，切换 WAL 后关闭并以正式 writer/read-only 连接重开。已有数据库在发出任何 Profile setting PRAGMA 前先验证 WAL/page size/auto vacuum，不为迎合 Profile 自动修改 database-level 属性。
+- strict Profile loader 使用 closed keyset/literal enum/boolean；全部 numeric 字段必须是 finite safe positive integer，唯一例外是明确固定为 `0` 的 `mmap_size_bytes`。验证完成前没有 Profile 值进入 PRAGMA。
+- writer 设置并回验 WAL/FULL/FK、busy timeout、temp store、WAL checkpoint、journal/cache/mmap、trusted schema、recursive trigger、read-uncommitted、locking mode 和 `query_only=OFF`。read-only 连接使用 SQLite readonly open，先只读验证已有 WAL/database-level Profile，再设置 connection-local Profile 和强制 `query_only=ON`；写入与关闭后查询均被拒绝。
+- `WorkflowRuntimeStore` 私有持有唯一 in-process raw writer，并为基础查询持有独立 Factory read-only connection；公开 API 只有显式生命周期、参数化 row-returning query 和受限 DML transaction surface，未来 API/Scheduler 调用方拿不到 raw `better-sqlite3` writer。
+- `withImmediateTransaction` 使用 `BEGIN IMMEDIATE`，拒绝 nested/concurrent、`async` function 和 thenable 返回值；callback 异常或违规完整 rollback。transaction surface 只接受参数化 INSERT/UPDATE/DELETE/REPLACE 与 readonly query，拒绝 DDL、PRAGMA、ATTACH、VACUUM、transaction control 和 row-returning write；Agent/tool/file/network 工作禁止进入 callback。
+
+真实文件 SQLite 测试使用临时目录下的 `workflow-runtime.db`，不以 `:memory:` 替代 WAL/durability/competition：覆盖 fresh bootstrap/reopen、78-table frozen schema、已有 schema 和 WAL Profile mismatch、只读写拒绝/`query_only`、唯一 writer lifecycle、跨进程 writer contention、`BEGIN IMMEDIATE` commit/rollback、async/DDL 拒绝、连接 close，以及 production/platform identity 在数据库创建前 fail-closed。R-005 的 executable DDL feasibility 已由 G1.1 的全量 migration/constraint/trigger/query-plan/真实 SQLite Gate 实际关闭；G1.2 不修改其 artifact identity。
+
+Frozen inputs 保持不变：
+
+| Input                        | Identity                                                                  |
+| ---------------------------- | ------------------------------------------------------------------------- |
+| G0.10 current root           | `sha256:c9649b31acc99a4cb0d98e558d2be9ee4be840be2c4289803f8f5e0c7c0ce1f7` |
+| G1.1 executable schema root  | `sha256:54c120e211ed28a9c2dcc2907ec728b39ce68748a07dc631d307c9aa59693f78` |
+| domain-separated schema hash | `sha256:33f843e57ddc1cdae80e67d5f0254653985cd7062017a9ecee9409b389fdd26e` |
+| canonical migration SHA-256  | `sha256:d89829995e164355ad485fc117db88dd67a72409f00ec3c3c54253f30a589f61` |
+| deterministic digest         | `sha256:b97c8075984dc2ffb741dfa5b218155af28e5067d44ab2032de54f3258281dcb` |
+| SQLite Profile artifact      | `sha256:3d69742dad2fefa8bef4ba47e375defd705e3b32920a92b105a43726436fb7af` |
+
+Identity evidence：
+
+| Identity                         | Observed value                                                                                                                                                                                                                     |
+| -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Deployment/runtime surface       | `local_single_user` / `node_service`；`darwin/arm64`                                                                                                                                                                               |
+| Managed Node                     | `v26.5.0`；distribution `nodejs.node-v26.5.0-darwin-arm64@1.0.0` / `sha256:0824f5044057d6ff26dc45022b842342f148b2dda2f0dd0feb17dd0b045f6cad`；executable `sha256:cbee2298aee5cc476bf8d5441e7348b627254a39d869743a5b04489028c729d4` |
+| `better-sqlite3` / native module | `12.11.1` / `sha256:0000d73c6e2e94318ed2b9339139623d5a0908b195f1e761c16cfd98f9cc6229`                                                                                                                                              |
+| SQLite version / source id       | `3.53.2` / `2026-06-03 19:12:13 d6e03d8c777cfa2d35e3b60d8ec3e0187f3e9f99d8e2ee9cac695fd6fcdf1a24`                                                                                                                                  |
+| SQLite compile-options           | `sha256:b7145e6588d91dfdd16bd436e94007463fd4d69b6644beacc3d11ab111625d12`                                                                                                                                                          |
+| Runtime Launcher                 | installed/checked-in bytes match；observed `sha256:70377ade0ba2f3e969c62bab240a91549e1173270354e1d3f815282dd5213ae0`                                                                                                               |
+| Core release/certification       | development checkout binding 可验证；Profile release/launcher certification identity 保持 `null`，`release_identity_status=missing_until_g8`，整体为 `candidate/not_certified`                                                     |
+
+规范可明确区分 G1.2 candidate 开发验证与 G8 production identity enforcement：candidate 模式验证当前可用 managed Node/native SQLite/installed Launcher/development Core binding，production 模式在创建或打开数据库前因 Profile 未认证且 release/launcher identity 缺失而 fail-closed，没有伪造 G8 identity 或放宽 gate。
+
+最终退出验证证据（全部命令均通过 `./scripts/runtime-toolchain.sh exec -- <command>` 串行执行）：
+
+| 命令/证据                              | 结果                                                                                                                                                                                            |
+| -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `npm run contracts:check`              | PASS；含 deterministic/read-only `store:check`，fresh real-file bootstrap + reopen、frozen schema/Profile/identity 全通过；仅有既有 R-010 DEP0205 非阻塞告警                                    |
+| `npm run test:g1.1`                    | PASS，1 file / 8 tests；G1.1 historical executable schema verification 保持通过                                                                                                                 |
+| `npm run test:g1.2`                    | PASS，1 file / 10 tests；覆盖 strict Profile/drift、bootstrap/reopen/mismatch、readonly/query-only、writer ownership/contention、transaction/close/identity fail-closed                         |
+| `npm run typecheck`                    | PASS                                                                                                                                                                                            |
+| `npm run test:g0`                      | PASS，15 files / 109 tests；G0 historical verification 全部通过                                                                                                                                 |
+| `npm test`（连续两次串行复核）         | 两次均为 78/79 files、716/717 tests；G1.2 两次 10/10、G1.1/G0.6/toolchain 及其余 716 tests 通过，唯一失败均为范围外 R-012 `credential-proxy` 250ms async trace intermittent；未修改或放宽该测试 |
+| `npm run build`                        | PASS                                                                                                                                                                                            |
+| targeted Prettier / `git diff --check` | PASS                                                                                                                                                                                            |
+| frozen/boundary scan                   | PASS；G0 published JSON、G1.1 JSON/SQL/Schema source 无 diff；无 Graph Store 领域操作、Runtime/Scheduler/Recovery/Outbox/Capacity/Compiler/Registry/UI/certification/activation 越界实现        |
 
 ## 已完成切片：G1.1 Executable DDL / Schema Manifest
 
@@ -849,18 +907,18 @@ G0.1 的实现、测试和本进度账本由同一个原子提交交付。Agent 
 | R-002 | Host launch identity | CLOSED | 所有 Core service/start/restart path 已切到 stable Launcher/managed build；realpath/环境隔离/fail-closed、最终 hash和 Core rebind 已验证 | G0.1 |
 | R-003 | Static proof | CLOSED | G0.7 已交付 TypeScript AST/import graph、Web route、Electron DOM、Feature manifest、SQLite schema、filesystem root 的机器生成 absence/surface/candidate manifests、正反例与 legacy boundary 集成 | G0.7 |
 | R-004 | Contract drift | CLOSED | G0.9 已完成 199 项 Markdown/Contract 双向 coverage、133 项完整 artifact inventory、G0.1-G0.8 exact identity pin、Gate review 与完整 G0 CI/conformance 入口 | G0.9 |
-| R-005 | DDL feasibility | DEFERRED | Logical Schema metadata 已冻结但尚未转换为 executable migration；不代表已发现冲突，G1 必须以真实 SQLite Gate 验证 | G1 |
-| R-006 | Certification | DEFERRED | Product Floor、Safety/Retention 与 SQLite candidate 已冻结；SQLite/source/compile-options/native module、Launcher/Core Release 完整 key、Supported Limits 与事务预算尚未 benchmark 认证，candidate identity 字段保持 null | G8 |
+| R-005 | DDL feasibility | CLOSED | G1.1 已将完整 Logical Schema 转为 frozen executable migration/Schema Manifest，并通过真实文件 SQLite migration/reopen、constraint/trigger/query-plan、integrity/FK/introspection Gate；G1.2 只消费并验证该 identity，没有改写 artifact | G1.1 |
+| R-006 | Certification | DEFERRED | G1.2 已验证 candidate 环境的 SQLite/source/compile-options/native module、managed Node、installed Launcher 与 development Core binding；Profile release/launcher identity 仍按规范保持 null，Supported Limits 与事务预算尚未 benchmark 认证，production mode fail-closed 至 G8 | G8 |
 | R-007 | Dependency audit | OPEN_OUT_OF_SCOPE | exact lock 的 `npm ci` 报告 30 项 transitive dependency audit 告警；G0.1 不运行会漂移规范 pinned identity 的自动修复，需独立依赖维护评审 | 独立维护 |
 | R-008 | Formatting baseline | OPEN_OUT_OF_SCOPE | 仓库既有 `npm run format:check` 对 34 个 G0.2 外旧 TypeScript 文件报差异；G0.2 新文件 targeted Prettier 通过，未把无关批量格式化混入原子提交 | 独立维护 |
 | R-009 | Concurrent repository change | CLOSED | `32f3c51` 只新增范围外 evaluation 文档；G0.2 最终 HEAD/边界和 staged set 已验证，提交保留且未混入 G0.2 内容 | G0.2 |
 | R-010 | Node loader deprecation | OPEN_OUT_OF_SCOPE | Node 26 下 pinned `tsx` loader 在 `contracts:generate/check` 报 `DEP0205 module.register()` deprecation warning，但命令退出码为 0；G0.2 不升级非规范依赖或替换工具链 | 独立工具链维护 |
 | R-011 | Concurrent repository change | CLOSED | G0.4 施工期间新增 `982e3b6/5989b8e`，只对进度文档同一句措辞修改后逐字回退，净 tree 未改变；G0.4 保留提交并在其上原子交付 | G0.4 |
-| R-012 | Full regression baseline | OPEN_OUT_OF_SCOPE | G1.1 最终完整 suite 为 77/78 files、706/707 tests，唯一失败继续是 `credential-proxy` async trace 250ms intermittent；G1.1 未修改 credential-proxy/trace 文件或测试 | 独立测试稳定性维护 |
-| R-013 | Contract test timing baseline | OPEN_OUT_OF_SCOPE | G1.1 较早完整 suite 并发负载下 G0.6 deterministic test 超过默认 5s；最终串行 `test:g0` 和后续完整 suite 中 G0.6 均 8/8 通过。G1.1 不调整 timeout 或 G0.6 既有实现 | 独立测试稳定性维护 |
+| R-012 | Full regression baseline | OPEN_OUT_OF_SCOPE | G1.2 两次串行完整 suite 均为 78/79 files、716/717 tests，唯一失败继续是 `credential-proxy` async trace 250ms intermittent；G1.2 10/10 与其余 716 tests 均通过，未修改 credential-proxy/trace 文件或测试 | 独立测试稳定性维护 |
+| R-013 | Contract test timing baseline | OPEN_OUT_OF_SCOPE | G1.1 曾在并发负载下复现 G0.6 5s timing；G1.2 串行 `test:g0` 15/15 files、109/109 tests 和两次完整 suite 均未复现。G1.2 不调整 timeout 或 G0.6 既有实现 | 独立测试稳定性维护 |
 | R-014 | Capacity governance | CLOSED | G0.10 已机器化 closed publication/command、权限/Actor/entrypoint/delegation、revision/hash CAS、reason/denial、immutable audit tables、唯一 Publisher/Watcher protocol、Admission lineage、crash recovery 与 additive Gate evidence；G1 DDL 可开始 | G0.10 |
-| R-015 | Toolchain test timing | OPEN_OUT_OF_SCOPE | G1.1 较早完整 suite 命中两项 5s timeout；最终串行 `test:g0` 的 launcher case 以 5.484s timeout，但紧随其后的完整 suite 中 toolchain 5/5 PASS。G1.1 不调整 timeout 或 managed toolchain 既有实现 | 独立测试稳定性维护 |
+| R-015 | Toolchain test timing | OPEN_OUT_OF_SCOPE | G1.1 曾复现 runtime-toolchain 5s timing；G1.2 串行 `test:g0` 和两次完整 suite 均未复现，toolchain tests 通过。G1.2 不调整 timeout 或 managed toolchain 既有实现 | 独立测试稳定性维护 |
 
 ## 下一步
 
-G0.1-G0.9 historical identity、G0.10 additive current root 与 G1.1 executable schema 均已完成；current G0/I11 为 `DONE`，G1 为 `IN_PROGRESS`，G2 仍为 `READY`。下一会话实施 `G1.2 Store Base / Connection Factory`：以 G1.1 frozen migration/Schema Manifest 为唯一数据库结构输入，按规范实现 production Store 基础、连接生命周期/PRAGMA/read-only policy 与 query API 的本切片范围；不得越过 Runtime/Scheduler、Compiler/Golden、Registry、Runtime Center/UI 或 production activation Gate，并继续保留 R-012/R-013 为范围外基线。
+G0.1-G0.9 historical identity、G0.10 additive current root 与 G1.1/G1.2 executable schema/Store Base 均已完成；current G0/I11 与 G1 为 `DONE`，G2 为 `READY`。下一会话实施 `G2 Compiler / Sealed Golden`：只按规范完成 Production Compiler/normalizer/lowerer/proof、Golden semantic review/approval/sealing 与 compiler/toolchain identity，不开始 G3 Registry/Authoring/Publish、G4 bootstrap、Runtime/Scheduler/Capacity、Runtime Center/UI、Supported Limits certification 或 production activation，并继续保留 R-012/R-013/R-015 为范围外基线。
