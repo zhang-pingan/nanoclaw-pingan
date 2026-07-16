@@ -1,6 +1,6 @@
 # Dynamic Workflow Graph Runtime 完整架构方案
 
-> **状态**: 已确认目标架构、部署边界、创建溯源、恢复协议、首发产品下限、精确工具链、首个 Safety/Capacity/SQLite Profile、Command/Golden 治理与开发期 absence baseline（可直接启动 Contract Pack/Spec Stabilization；Store 开工受 Executable DDL Gate 约束，Production Runtime 激活受 certified Supported Limits、静态 absence baseline 与产品 surface coverage 门禁约束）
+> **状态**: 已确认目标架构、部署边界、创建溯源、恢复协议、首发产品下限、精确工具链、首个 Safety/Capacity/SQLite Profile、Capacity Admin 控制面、Command/Golden 治理与开发期 absence baseline（Store 开工受 Capacity Control-Plane Contract Addendum 与 Executable DDL Gate 约束，Production Runtime 激活受 certified Supported Limits、静态 absence baseline 与产品 surface coverage 门禁约束）
 > **范围**: Icarus core workflow runtime
 > **目标**: 统一静态 workflow、并行执行、运行时 DAG、条件路由、局部汇合、持久等待、子图和受约束动态扩图。
 
@@ -13,6 +13,7 @@
 - [Scope Interface、Source IR 与 fixture](#scope-interface-与-source-ir)
 - [Edge、Port、Node 与 Completion 语义](#control-edgecondition-与-trigger)
 - [Capability、Policy 与 Compiler](#capability-catalog-与-effect-contract)
+- [Capacity 管理、发布与审计](#capacity-管理发布与审计)
 - [状态、Ledger 与持久化模型](#graph-与-node-状态模型)
 - [事务、CAS、Cancel 与恢复](#事务边界与-cas)
 - [测试策略与模型验证](#测试策略与模型验证)
@@ -48,13 +49,13 @@
 | I1 | Task Intake、Routing、幂等创建、Required Child provenance 与 Domain Claim | [Task Intake、Recipe Catalog 与 Macro Routing](#task-intakerecipe-catalog-与-macro-routing) | [Durable Domain Resource Claims](#durable-domain-resource-claims)、[Intake、Routing 与 Creation](#intakerouting-与-creation)、[Workflow 与 Run](#workflow-与-run)、[与 Domain Recipe 的关系](#与-domain-recipe-的关系) | T0、T0p、T1、T8 |
 | I2 | Workflow Definition、State lowering、Context 与外层 transition | [State 与 Graph 的统一](#state-与-graph-的统一) | [Scope Interface 与 Source IR](#scope-interface-与-source-ir)、[Completion Policy、Early Close 与 Named Exit](#completion-policyearly-close-与-named-exit)、[Context、Artifact 与 Quality Gate](#contextartifact-与-quality-gate)、[Snapshot 与 Checkpoint](#snapshot-与-checkpoint) | T1、T8 |
 | I3 | Source Schema、IR、Port assignability 与 Graph Compiler | [Scope Interface 与 Source IR](#scope-interface-与-source-ir)、[Compiler](#compiler) | [Compiler Conformance Toolchain](#compiler-conformance-toolchain)、[Control Edge、Condition 与 Trigger](#control-edgecondition-与-trigger)、[Data Edge、Port 与 Input Seal](#data-edgeport-与-input-seal)、[完整 Node Union](#完整-node-union)、[Completion Policy、Early Close 与 Named Exit](#completion-policyearly-close-与-named-exit)、[Capability Catalog 与 Effect Contract](#capability-catalog-与-effect-contract) | Toolchain/Error Catalog/Golden Bundle、T2a、T2b |
-| I4 | Runtime Store、SQLite typed relation、Value/Blob 与 executable migration | [持久化字段、时间与 SQLite 约束](#持久化字段时间与-sqlite-约束)、[持久化模型](#持久化模型) | [SQLite 关系展开规则](#sqlite-关系展开规则)、[Immutable Value/Blob Store](#immutable-valueblob-store)、[事务边界与 CAS](#事务边界与-cas)、[SQLite Execution Profile](#sqlite-execution-profile)、[Snapshot 与 Checkpoint](#snapshot-与-checkpoint) | Executable DDL Gate、Schema Manifest、schema-lint/constraint/query-plan fixtures |
-| I5 | Graph 状态机、fixed-point reconcile、Scheduler 与 Ledger | [Graph 与 Node 状态模型](#graph-与-node-状态模型)、[Resource Ledger 与调度](#resource-ledger-与调度) | [Control Edge、Condition 与 Trigger](#control-edgecondition-与-trigger)、[Data Edge、Port 与 Input Seal](#data-edgeport-与-input-seal)、[Completion Policy、Early Close 与 Named Exit](#completion-policyearly-close-与-named-exit)、[事务边界与 CAS](#事务边界与-cas) | T2b、T3a、T3b、T4、Supported Limits |
+| I4 | Runtime Store、SQLite typed relation、Value/Blob 与 executable migration | [持久化字段、时间与 SQLite 约束](#持久化字段时间与-sqlite-约束)、[持久化模型](#持久化模型) | [Capacity 管理、发布与审计](#capacity-管理发布与审计)、[SQLite 关系展开规则](#sqlite-关系展开规则)、[Immutable Value/Blob Store](#immutable-valueblob-store)、[事务边界与 CAS](#事务边界与-cas)、[SQLite Execution Profile](#sqlite-execution-profile)、[Snapshot 与 Checkpoint](#snapshot-与-checkpoint) | Capacity Admin Logical Schema、Executable DDL Gate、Schema Manifest、schema-lint/constraint/query-plan fixtures |
+| I5 | Graph 状态机、fixed-point reconcile、Scheduler 与 Ledger | [Graph 与 Node 状态模型](#graph-与-node-状态模型)、[Resource Ledger 与调度](#resource-ledger-与调度) | [Capacity 管理、发布与审计](#capacity-管理发布与审计)、[Control Edge、Condition 与 Trigger](#control-edgecondition-与-trigger)、[Data Edge、Port 与 Input Seal](#data-edgeport-与-input-seal)、[Completion Policy、Early Close 与 Named Exit](#completion-policyearly-close-与-named-exit)、[事务边界与 CAS](#事务边界与-cas) | Capacity revision/change lineage、T2b、T3a、T3b、T4、Supported Limits |
 | I6 | Delegation/System Attempt、Capability Effect 与 Outbox | [Capability Catalog 与 Effect Contract](#capability-catalog-与-effect-contract)、[Delegation 与 System](#delegation-与-system) | [Node、Attempt 与 Wait](#nodeattempt-与-wait)、[Inbox、Late Result、Event 与 Effect Journal](#inboxlate-resultevent-与-effect-journal)、[Durable Domain Resource Claims](#durable-domain-resource-claims)、[Outbox、Lease 与恢复](#outboxlease-与恢复) | T4、T5、T6a、T6b、T6d、T7a |
 | I7 | Durable Wait、Signal/Timer/Approval 与 Inbox | [Wait](#wait) | [Workflow 级执行 Policy 与 Runtime Safety](#workflow-级执行-policy-与-runtime-safety)、[Node、Attempt 与 Wait](#nodeattempt-与-wait)、[Inbox、Late Result、Event 与 Effect Journal](#inboxlate-resultevent-与-effect-journal)、[Outbox、Lease 与恢复](#outboxlease-与恢复) | T4、T6c、T6d、wait CAS/fault fixtures |
 | I8 | Subgraph、Expand、Map 与 child scope lifecycle | [Subgraph 与 Expand](#subgraph-与-expand)、[Map](#map) | [Scope Build 与 Expansion Manifest](#scope-build-与-expansion-manifest)、[Resource Ledger 与调度](#resource-ledger-与调度)、[Completion Policy、Early Close 与 Named Exit](#completion-policyearly-close-与-named-exit)、[Edge Resolution、Candidate 与 Cut](#edge-resolutioncandidate-与-cut) | T2a、T2b、T3、T7a、T7b |
 | I9 | Completion、Pause/Cancel、Compensation、Operational Blocker、Root Finalization、Root Coordinator 与 Recovery | [Completion Policy、Early Close 与 Named Exit](#completion-policyearly-close-与-named-exit)、[Retry、Pause、Cancel 与 Compensation](#retrypausecancel-与-compensation) | [Edge Resolution、Candidate 与 Cut](#edge-resolutioncandidate-与-cut)、[Workflow 与 Run](#workflow-与-run)、[事务边界与 CAS](#事务边界与-cas)、[Outbox、Lease 与恢复](#outboxlease-与恢复)、[Snapshot 与 Checkpoint](#snapshot-与-checkpoint) | T3b、T6e、T7a、T7b、T7c、T8、Root Finalization/Recovery/Fault fixtures |
-| I10 | Runtime Command、权限、Runtime Center 与 Trace | [Workflow Runtime Command 授权与审计](#workflow-runtime-command-授权与审计)、[Runtime Center（运行中心）与 Trace](#runtime-center运行中心与-trace) | [权限与安全](#权限与安全)、[SQLite Execution Profile](#sqlite-execution-profile)、[Outbox、Lease 与恢复](#outboxlease-与恢复)、[模块边界](#模块边界) | T7c、T8、Command/Trace properties、projection outbox |
+| I10 | Runtime Command、Capacity Admin、权限、Runtime Center 与 Trace | [Workflow Runtime Command 授权与审计](#workflow-runtime-command-授权与审计)、[Capacity 管理、发布与审计](#capacity-管理发布与审计)、[Runtime Center（运行中心）与 Trace](#runtime-center运行中心与-trace) | [权限与安全](#权限与安全)、[SQLite Execution Profile](#sqlite-execution-profile)、[Outbox、Lease 与恢复](#outboxlease-与恢复)、[模块边界](#模块边界) | Capacity Admin CAS/publication recovery、T7c、T8、Command/Trace properties、projection outbox |
 | I11 | Contract Pack、managed runtime toolchain/launcher、测试模型、发布门禁、静态 absence baseline 与开发期交付 | [测试策略与模型验证](#测试策略与模型验证) | [Compiler Conformance Toolchain](#compiler-conformance-toolchain)、[开发期实施顺序](#开发期实施顺序)、[开发期直接重构约束](#开发期直接重构约束)、[完整验收标准](#完整验收标准)、[SQLite Execution Profile](#sqlite-execution-profile) | Managed distribution/Launcher proof、Contract Pack、Sealed Golden、Fixture/Property/Model/Fault、Product Floor benchmark、absence/coverage gate |
 
 ### 变更联动检查
@@ -65,6 +66,7 @@
 | Source IR、Node/Port/Condition 或 Compiled IR | closed schema、canonicalization/hash、assignability proof、Compiler error、plan snapshot、fixture 与 property generator |
 | Workflow/Run/Scope/Node 状态或持久化字段 | Logical Schema、CHECK/FK/Index、CAS、T0-T8、Recovery、Checkpoint、projection 与 model/fault test |
 | Policy、Safety Limit、Ledger Account 或 Supported Limit | policy intersection、Compiler/materialize preflight、reservation/posting、scheduler admission、root-fence 终止性与 benchmark profile |
+| Capacity payload、publication、权限或活动 head | Capacity Admin Command/Permission/Reason/Denial、revision/hash CAS、Logical Schema、atomic file replace、Watcher/recovery、Admission lineage、Runtime Center 与 fault fixture |
 | Capability、Wait、外部 Effect 或 Domain Claim | Registry closure、claim binding/fencing token、Attempt/Inbox/Outbox/Effect Journal、retry/reconcile/compensation、权限与 recovery |
 | Candidate、Completion、Close Request 或 Cut | route/data fact、eligibility arbitration、subtree fence、child consumption、required compensation barrier、T3/T7/T8 与 checkpoint uniqueness |
 | Command、运行中心 Projection 或 Trace correlation | Actor/Delegation/Policy Guard、immutable audit、Runtime Store 写边界、projection outbox、lineage validation 与独立 Trace 语义 |
@@ -151,6 +153,7 @@
 | S34 | Runtime Center 使用可重建 Projection API、稳定 deep link 和独立 renderer bundle；Feature renderer 保持独立 entry | Runtime Center、Projection、模块边界 |
 | S35 | 单 Agent 目标迭代复用同一 logical Node 的 immutable Attempt；`needs_revision` 通过 typed feedback continuation 创建下一 Attempt，耗尽后确定性失败，不新增 loop State/Node 或 Graph cycle | Delegation/System、Attempt、Retry、Recovery |
 | S36 | 本机 Core `node_service` 由项目托管的 content-addressed Node distribution 与稳定 Runtime Launcher 启动；launchd 不直接引用系统 Node，缺失或 identity mismatch 时禁止 fallback | Compiler Toolchain、SQLite Profile、模块边界、Production Gate |
+| S37 | Live Capacity 使用独立部署级 Capacity Admin Gateway；Production v1 只有认证 `human:local-owner` 持有 `runtime.capacity.manage`，完整快照以 revision+hash CAS、append-only audit、唯一 Publisher、可恢复原子文件替换和 Watcher head 校验发布 | Capacity 管理、Scheduler Admission、Runtime Center、DDL/Recovery |
 
 ## 背景
 
@@ -718,13 +721,130 @@ Production v1 固定发布 `local_single_user_safety@1`。下列值是首个目�
 
 `local_single_user_safety@1` immutable；调整任何字段必须发布新 version/hash。已有 Workflow/Run 始终使用创建时 pinned Safety，不因 reload 收紧或放宽。新 Safety 调低只影响新创建对象；调高必须先证明不超过当前完整 certification key 的 Supported Limits，否则 Production loader 拒绝。Test-only bootstrap 可以发布更小的独立 profile，但不得复用 production ref/status。
 
-配置载体固定分离：immutable Safety 位于 `src/workflow-runtime/contracts/safety/local_single_user_safety@1.json`，可热更新 Capacity 位于 `config/workflow-runtime-capacity.json`，immutable SQLite Profile 位于 `src/workflow-runtime/contracts/sqlite/local_single_user_sqlite@1.json`。三者都先 strict parse/closed-schema/hash 再使用；Capacity watcher 只能原子发布完整 validated snapshot，Safety/SQLite 文件变更必须走 Publish/version gate而不是文件监听。
+配置载体固定分离：immutable Safety 位于 `src/workflow-runtime/contracts/safety/local_single_user_safety@1.json`，checked-in Capacity bootstrap baseline 位于 `config/workflow-runtime-capacity.json`，Production 活动 Capacity publication 位于 `data/workflow-runtime/workflow-runtime-capacity.json`，immutable SQLite Profile 位于 `src/workflow-runtime/contracts/sqlite/local_single_user_sqlite@1.json`。checked-in baseline 只用于 fresh deployment genesis，不是运行期活动文件；setup/upgrade 不得覆盖已有活动 publication。三者都先 strict parse/closed-schema/hash 再使用；Capacity watcher 只能从活动 publication 原子发布完整 validated snapshot，Safety/SQLite 文件变更必须走 Publish/version gate 而不是文件监听。
 
 Safety ceilings 是 pinned、确定性的命名配置，不是隐藏默认值；启动时必须提供全部有限正整数并记录 config hash。字段名称必须显式表达 `total/per_*` 作用域。Effective enforcement 取 safety ceiling 与所有 non-null global/Recipe/Definition/State/child business limit 的最小值；业务 `null` 表示不进一步收紧，`0` 表示禁止消费。Plan、Run、routing decision 和运行中心必须同时展示 business policy snapshot 与 safety snapshot/hash。Effective Workflow policy 还必须满足 `max_graph_runs <= max_state_activations - 1`，为最终 terminal activation 保留一个确定额度；不满足时在 Policy Publish/T0 拒绝。Global cancel 或 administrative abandon 未使用该额度是合法的。
 
-`DeploymentRuntimeCapacity` 是可热更新的物理容量，不进入 Plan 语义；不足时产生 backpressure，ready work 保持 ready，不得转成 engine error。Production v1 baseline 固定为 `max_active_executions=5`、`max_active_waits=256`、`max_pending_signals=2048`、`max_outbox_inflight=16`、`max_physical_blob_bytes=21474836480`（20 GiB）、`soft_blob_high_water_bytes=17179869184`（16 GiB）、`minimum_free_disk_bytes=5368709120`（5 GiB）。每次 admission 记录当时 capacity config hash；reload 必须原子替换完整配置，不能逐字段暴露中间值。
+`DeploymentRuntimeCapacity` 是可热更新的物理容量，不进入 Plan 语义；不足时产生 backpressure，ready work 保持 ready，不得转成 engine error。Production v1 baseline 固定为 `max_active_executions=5`、`max_active_waits=256`、`max_pending_signals=2048`、`max_outbox_inflight=16`、`max_physical_blob_bytes=21474836480`（20 GiB）、`soft_blob_high_water_bytes=17179869184`（16 GiB）、`minimum_free_disk_bytes=5368709120`（5 GiB）。每次 admission 记录当时 `capacity_revision/capacity_change_id/capacity_config_hash`；reload 必须原子替换完整配置，不能逐字段暴露中间值。`config_hash` 证明内容相同但不能区分同一内容被多次启用，因此不能单独作为修改事件或 Admission 治理 lineage。
 
 Capacity 调低不会 cancel 已 admission 的工作；只停止新 admission，直到使用量回到新值以下。Blob hard limit 调低到当前 allocation 以下时进入可观测 `over_capacity`，阻止新 allocation并触发 GC，不删除仍被引用的数据；`minimum_free_disk_bytes` 只能调高，达到新阈值后立即阻止新 allocation。Capacity 改变不创建新 Safety version，也不能用于放宽 pinned quota。
+
+### Capacity 管理、发布与审计
+
+Capacity 是 deployment-level control plane，不是 Workflow/Plan/Recipe Policy，也不是 `WorkflowRuntimeCommand` 的第七种 target。Production v1 的普通修改只能由服务端认证后的 `human:local-owner` 发起并要求独立权限 `runtime.capacity.manage`；Feature Service、Automation、Workflow、Executor、Card action 和业务 API 均不得获得或代理该权限。CLI、部署工具和 Runtime Center 只是可信 `entrypoint`，不能自报 Actor、Session、roles 或 permission；代表 Human 调用时仍记录 Human Actor 与真实 Session/entrypoint。`system:production-activation` 只有在 fresh DB 不存在 Capacity head 时才持有绑定 `initial_provisioning + exact Core release/config hash` 的一次性 genesis grant，不能修改已存在 deployment。
+
+活动文件不是裸 `DeploymentRuntimeCapacity`，而是唯一关联审计 revision 的 closed publication envelope：
+
+```ts
+interface DeploymentRuntimeCapacityPublication {
+  format: 'icarus.deployment-runtime-capacity-publication/1';
+  deployment_profile: 'local_single_user';
+  capacity_revision: number; // 从 1 开始并严格递增
+  capacity_change_id: string;
+  previous_config_hash: string | null; // 仅 revision=1 时为 null
+  capacity: DeploymentRuntimeCapacity;
+  publication_hash: string;
+}
+
+type CapacityChangeReasonCode =
+  | 'initial_provisioning'
+  | 'planned_tuning'
+  | 'incident_mitigation'
+  | 'host_resource_change'
+  | 'storage_pressure'
+  | 'rollback';
+
+interface InitializeDeploymentCapacityCommand {
+  command_type: 'initialize_deployment_capacity';
+  command_id: string;
+  idempotency_key: string;
+  proposed_capacity: DeploymentRuntimeCapacity;
+  reason_code: 'initial_provisioning';
+  core_release_hash: string;
+  evidence_refs: string[];
+}
+
+interface ReplaceDeploymentCapacityCommand {
+  command_type: 'replace_deployment_capacity';
+  command_id: string;
+  idempotency_key: string;
+  expected_capacity_revision: number;
+  expected_config_hash: string;
+  proposed_capacity: DeploymentRuntimeCapacity;
+  reason_code: Exclude<CapacityChangeReasonCode, 'initial_provisioning'>;
+  reason_text: string;
+  evidence_refs: string[];
+}
+
+type CapacityAdminCommand =
+  | InitializeDeploymentCapacityCommand
+  | ReplaceDeploymentCapacityCommand;
+```
+
+`capacity.config_hash` 是对移除自身字段后的完整 Capacity payload 计算的 domain-separated hash；`publication_hash` 是对移除自身字段后的完整 publication envelope 计算的独立 domain-separated hash。`initialize_deployment_capacity` 不是产品 API，只能由 Production Activation 在 head 不存在时以一次性 genesis grant 调用，并把 exact Core release/baseline hash 写入 evidence；head 已存在时稳定拒绝，不能退化为 replace。普通修改的 `reason_text` 是必填、受长度限制的审计 Value，不得包含 Credential/Secret；Reason Catalog 固定每种 reason 是否要求 evidence。修改只接受完整 snapshot，不提供 field patch、环境变量 override 或产品模块文件写接口。`rollback` 只是以旧内容创建新 revision，仍必须通过当前 transition validation，不能降低 `minimum_free_disk_bytes` 或绕过其他 increase-only/closed-schema 约束。
+
+Capacity Admin Gateway 复用统一 Authentication Session、Actor/Delegation 解析、idempotency domain 与 immutable Invocation 基础设施，但使用独立 Command Schema、Permission/Reason/Denial Catalog 和事务，不受 Recipe/Definition `WorkflowCommandPolicy` 控制。denial code 至少固定为 `permission_denied | actor_kind_denied | capacity_already_initialized | capacity_snapshot_invalid | capacity_transition_invalid | expected_capacity_revision_conflict | expected_config_hash_conflict | capacity_change_in_progress | idempotency_conflict | audit_unavailable | publication_failed`。OS owner/mode 只是 defense-in-depth；Watcher 不得把“能写文件”解释成应用层授权。
+
+Normative Logical Schema 增加：
+
+```text
+runtime_capacity_head
+  - singleton_key                    CHECK singleton_key = 1
+  - current_capacity_revision/current_change_id
+  - current_config_hash/current_publication_hash
+  - pending_change_id
+  - row_version/created_at_ms/updated_at_ms
+
+runtime_capacity_admin_commands
+  - command_id
+  - idempotency_domain/idempotency_key
+  - command_type                     initialize_deployment_capacity |
+                                     replace_deployment_capacity
+  - expected_capacity_revision/expected_config_hash
+  - assigned_capacity_revision/assigned_change_id
+  - genesis_core_release_hash
+  - proposed_capacity_json/proposed_config_hash/request_hash
+  - reason_code/reason_text_value_id/reason_text_hash
+  - evidence_manifest_value_id/evidence_manifest_hash
+  - canonical_result_value_id/canonical_result_hash
+  - created_at_ms/finalized_at_ms
+
+runtime_capacity_admin_invocations
+  - id/command_id/invocation_no/submitted_request_hash
+  - actor_ref/actor_kind/auth_session_ref/entrypoint/delegation_chain_ref
+  - required_permission/authorization_result/execution_result/denial_code
+  - observed_capacity_revision/observed_config_hash
+  - requested_at_ms/decided_at_ms/applied_at_ms
+
+runtime_capacity_change_events
+  - event_seq INTEGER PRIMARY KEY AUTOINCREMENT
+  - change_id/command_id/capacity_revision
+  - event_type                       prepared | file_installed |
+                                     head_committed | watcher_published |
+                                     recovered | failed | unauthorized_file_rejected
+  - config_hash/publication_hash
+  - previous_event_hash/event_hash
+  - detail_value_id/detail_hash/created_at_ms
+
+UNIQUE(idempotency_domain, idempotency_key)
+UNIQUE(command_id, invocation_no)
+UNIQUE(assigned_capacity_revision) WHERE assigned_capacity_revision IS NOT NULL
+UNIQUE(assigned_change_id) WHERE assigned_change_id IS NOT NULL
+```
+
+Command Header 保存 canonical request/result；每次 authenticated invocation 都追加 allowed/denied/conflict/duplicate/failed 审计。`runtime_capacity_change_events` 是 append-only hash chain，不更新或删除既有事件；`runtime_capacity_head` 是唯一可变 CAS pointer。`proposed_capacity_json` 必须由 closed schema 验证并按 canonical bytes 保存，不能保存开放部分 patch。Executable DDL 必须为 head/current/pending、Command finalization、Invocation result 和事件 hash chain 建立 CHECK/FK/UK，并把这些对象纳入 Schema Manifest、backup、integrity 和 retention root。
+
+SQLite 与文件系统之间没有跨介质原子事务，因此“原子发布”固定解释为单文件原子替换加 durable journal/recovery，而不是虚构一次 DB+filesystem commit。协议固定为：
+
+1. **CAP0 Authenticate/Validate**：Gateway strict parse closed Command，服务端解析 Actor/Session/entrypoint；initialize 要求一次性 genesis grant、head absent、`initial_provisioning` 与 exact release evidence，replace 要求 `runtime.capacity.manage`、reason/evidence、完整 snapshot hash、cross-field constraint 与相对当前 snapshot 的 transition constraint。认证失败只进入独立 authentication security log，不能伪造 Command Actor；认证成功后的授权或验证失败仍追加 Invocation，且不建立 pending change。
+2. **CAP1 Prepare**：`BEGIN IMMEDIATE` 内，initialize 以 `head does not exist` CAS 并分配 revision 1，replace 按 `(expected_capacity_revision, expected_config_hash, head.row_version, pending_change_id IS NULL)` CAS 并分配严格递增 revision；两者都写 Command Header/allowed Invocation、唯一 change id、canonical snapshot、pending head 和 `prepared` event 后提交。并发 initialize/stale replace 全部不改变 head，返回稳定 conflict；相同 idempotency domain/key/request 返回 canonical 原结果并追加 duplicate Invocation。
+3. **CAP2 Install File**：唯一 `CapacitySnapshotPublisher` 只从 CAP1 durable record 生成 envelope，在活动文件同目录使用 exclusive temp、限制权限、写完整 bytes、`fsync(file)`、atomic rename、`fsync(directory)`；任何产品模块、Runtime Center、setup upgrade 或 Watcher 都不能直接写该路径。成功后追加 `file_installed` event。
+4. **CAP3 Commit Head**：短事务重新校验 pending change、旧 head、磁盘 publication bytes/hash 后原子推进 current revision/change/config/publication hash、清空 pending 并追加 `head_committed`。文件已替换但 head 未提交时，Watcher 必须等待/拒绝该 envelope，不能抢先生效。
+5. **CAP4 Watcher Publish**：Watcher strict parse完整 envelope，并从 Runtime Store 验证 revision/change id/config/publication hash 与 committed head 全部相等后，以单个 immutable in-memory pointer 发布 snapshot；成功追加 `watcher_published` 并 finalise Command canonical result。Scheduler、Wait/Signal、Outbox 和 Blob Coordinator 每次 admission/allocation 只读取一次该 pointer，不能跨 snapshot 拼接字段。
+
+Recovery 必须覆盖每个 CAP 边界：CAP1 后 crash 重试同一 publication；rename 后、CAP3 前 crash 时 Watcher 不接受未 committed 文件，Recovery 根据 pending journal 完成 head 或恢复最后 audited envelope；CAP3 后、CAP4 前 crash 时启动 Watcher 从 committed head 重放。活动文件与 audited head 不匹配、revision 未知、hash 虽合法但无 change record，均追加 `unauthorized_file_rejected`，保持最后已发布 snapshot并由唯一 Publisher 恢复 audited envelope；cold start 无可验证 head/snapshot 时禁止新 admission并 fail closed，不能把磁盘文件自动提升为授权事实。Runtime DB/audit 不可用时新修改一律拒绝。Production upgrade 必须保留现有 head、audit 和活动文件，不能用 checked-in baseline 隐式重置。
+
+上述不可变审计在 `local_single_user` 信任边界内防止产品旁路、并发丢更新和无记录文件生效；拥有主机 root 且能同时篡改 DB、binary 和文件的对手不在 v1 威胁模型内。若未来要求抵抗本机管理员或提供不可否认性，必须把事件 hash chain 外送到签名/远程 append-only audit sink 后重新认证，不能只扩大 Actor Catalog。
 
 `RuntimeSupportedLimits` 不是手写默认值；它必须由相同 deployment/runtime/platform/arch/release artifact、DDL/schema hash、Core build、Runtime Launcher、Managed Node Distribution、Node executable、SQLite binary/compile options、完整 `SQLiteExecutionProfile` 和参考机器上的发布 benchmark 生成并以 `status=certified` 发布。Production v1 唯一首发认证目标是 `local_single_user + node_service + darwin/arm64`；系统 Node、Electron Renderer/Main、测试 Node、Rosetta/x64 或其他系统不得复用该认证。Electron 只通过 Runtime API/Command Gateway 访问，不得打开 Runtime DB。缺少 certified profile、profile 与当前完整认证键不匹配，或配置超过认证值时生产 Runtime 启动失败。
 
@@ -3318,13 +3438,15 @@ workflow_graph_scheduler_admissions
   - graph_run_id/scope_id/node_id/attempt_id
   - eligible_event_seq
   - execution_reservation_id
-  - capacity_config_hash/runtime_supported_limits_hash
+  - capacity_revision/capacity_change_id/capacity_config_hash
+  - runtime_supported_limits_hash
   - created_at_ms
 ```
 
 - Account 表示额度作用域，Reservation 表示具体消费者；两者都按 SQLite 关系展开规则使用 typed columns + exactly-one CHECK。Map 使用 `node_id` account scope，不增加 map owner 类型；原 `target group` 统一改成 Capability Catalog 固定的 versioned `execution_group_ref`，Planner/Source 不能选择 group 规避容量。Executable DDL 为每个 typed scope/consumer 建对应 partial UNIQUE index，不能把本行的紧凑说明实现为 expression 拼接 key。
 - 一个 Reservation 通过 Posting 在同一事务 CAS 全部相关 Account，例如 deployment/workflow/run/scope/map-node/execution-group。任何 Account 不足则全部不变，不能部分占额。主错误按 `deployment -> workflow -> run -> scope -> node -> execution_group -> account_id` 固定顺序返回 `resource_limit_exceeded` 及 hard/reserved/consumed/requested。
 - Account `hard_limit` 是对应 pinned runtime safety ceiling 与所有 non-null business limits 的最小值，因此受 Ledger 管理的结构资源始终 finite。业务 limit 为 `null` 只表示不额外收紧 safety ceiling，不会把 effective `hard_limit` 变成 `null`。Live deployment capacity 单独由 Scheduler admission 执行，暂时不足只 backpressure；`tokens/tool_calls/cost_micros` 只在显式配置 finite business budget且执行网关可可靠归集时创建 account。
+- Scheduler admission 必须从同一个 Watcher-published immutable pointer 读取 `capacity_revision/capacity_change_id/config_hash` 与全部 Capacity 值，并把三者一起写入 Admission；相同 `config_hash` 的不同 revision 仍是不同治理事件。Admission 不得只按文件当前 hash 事后补 lineage，也不得在一个 admission 内跨 revision 读取不同字段。
 - Ledger entries 是事实源；account counters 是可从 hash chain 验证和重建的 cache。Run 保存 `ledger_seq/ledger_head_hash`。
 - 一个 logical admission 使用 `reservation_group_id` 聚合，但每种 resource 都创建独立 reservation；不能用一个 header status 同时表示永久 attempt 消费、可释放 executor slot和其他增量 charge。
 - Materialize scope 时分别创建并 commit `scopes_total/nodes_total` reservation。
@@ -3492,7 +3614,7 @@ WHERE status IN ('preparing', 'installed');
 3. CI 必须在空的真实文件 SQLite 上先按 `SQLiteExecutionProfile` 设置 database-level `page_size/auto_vacuum`，再按顺序执行 migration、切换 WAL 并关闭连接；重新打开后通过 `PRAGMA integrity_check`、`PRAGMA foreign_key_check`，并逐项验证 `journal_mode/synchronous/foreign_keys/busy_timeout/page_size/auto_vacuum/temp_store/wal_autocheckpoint/journal_size_limit/cache_size/mmap_size/trusted_schema/recursive_triggers/read_uncommitted/locking_mode/query_only`。同时校验 `sqlite_version()/sqlite_source_id()`、排序后的 compile options hash、`better-sqlite3` version/native module hash 与 Node runtime version；任一不匹配都使 DDL Gate/Certification 失败。随后从 `sqlite_schema` 与 `pragma_table_info/foreign_key_list/index_list` 重建 Manifest 并逐字节匹配发布快照。
 4. Constraint fixture 必须证明每个 enum 非法值、负数/溢出时间、Activation `active/completed/abandoned` 与 `finished_at_ms/state_type/graph_run_id` 的非法组合、Workflow business status/operational state 非法组合、Operational Blocker zero/multi-source 与非法 resolution 组合、typed relation zero/multi-target、Attempt initial/non-initial continuation、parent 同 Node/相邻序号、quality-feedback ref/hash nullability 与单后继的非法组合、terminal 字段互斥错误、cross-run/cross-scope FK、重复 idempotency key、第二个 root scope/cut/close request 和 stale composite lineage 均由 SQLite 拒绝，而不是只由 TypeScript 拒绝。
 5. Query-plan fixture 对 Scheduler、Watchdog、Recovery、Operational Blocker/T6e、T3/T7、Root Finalization、GC 和 Outbox 的固定查询运行 `EXPLAIN QUERY PLAN`，断言使用认证 index。任何 Logical Schema 新字段或状态变更必须先更新 migration、Manifest、fixtures 和 `database_schema_version`，再更新 Runtime 代码。
-6. 首个可执行 migration 的验收包括本文所有持久化对象，不能只建 Graph happy-path 表；Intake/Creation、Registry/Retention、Value/Blob/typed ownership、Ledger/Claim、Workflow/Activation/Transition/Root Finalization、Run/Scope/Node/Fact/Operational Blocker、Inbox/Outbox/Effect、Command/Confirmation/Audit 和 Checkpoint 同属 v1 原子交付边界。
+6. 首个可执行 migration 的验收包括本文所有持久化对象，不能只建 Graph happy-path 表；Intake/Creation、Registry/Retention、Value/Blob/typed ownership、Ledger/Claim、Capacity Head/Admin Command/Invocation/Change Event、Workflow/Activation/Transition/Root Finalization、Run/Scope/Node/Fact/Operational Blocker、Inbox/Outbox/Effect、Command/Confirmation/Audit 和 Checkpoint 同属 v1 原子交付边界。Capacity publication fault fixture 必须覆盖 prepare、file fsync、rename、directory fsync、head commit、Watcher publish 各边界以及 direct-file tamper/restart recovery。
 
 当前文档中的 SQL index 示例必须引用 Logical Schema 实际存在的列。例如 Workflow deadline 位于 `workflows.deadline_at_ms`，不得在没有该列的 `workflow_graph_runs` 上建索引；Outbox due index 同时覆盖 `pending/reconciling`。DDL Gate 的 empty-database smoke test 必须在提交首个 Runtime Store patch 时先落地并作为后续实现的前置依赖。
 
@@ -4980,6 +5102,8 @@ Production v1 的 `local_single_user_product_floor@1` 是发布最低能力，�
 
 运行中心、Feature Page、Feature Host API、External API 与 Automation 都只是入口，统一调用 Workflow Runtime Command Gateway；任何入口都不得直接写 Runtime 表或通过 Projection 改变权威状态。Feature UI 负责领域任务发起、领域产出解释和 typed Business Command；运行中心负责跨 Feature 查询、统一待处理、通用 Runtime Command、诊断和审计，不复制 Feature 的完整业务工作面。
 
+Workflow Runtime Command 只控制既有 Workflow/Run/Node/Effect/Operational Blocker，不控制 deployment Capacity。`replace_deployment_capacity` 必须调用独立 Capacity Admin Gateway、`runtime.capacity.manage` 与 revision/hash CAS；不得扩展下列 Workflow Command union、复用 `WorkflowCommandPolicy`、伪造 Workflow target，或由 Feature/Automation delegation 获得 Capacity authority。
+
 ```ts
 type WorkflowCommandActorKind =
   | 'human'
@@ -5367,6 +5491,7 @@ Graph-to-Graph transition 时 `completed` 保存旧 run 的完整水位，`curre
 ## 权限与安全
 
 - Production v1 的确认部署边界是 `local_single_user + node_service + darwin/arm64`：唯一人工主体为稳定 `human:local-owner`，不存在相互不信任 tenant，也不把 Runtime API 暴露为远程多用户服务。Electron 仅是 API client，不持有 Runtime DB write/read connection；其他 platform/arch/runtime surface 必须单独认证。Publisher、Feature Execution Artifact 与 Executor 均来自已签名或本地批准的可信 TCB；未受信任 Plugin/Executor 在 Container/OS hostile-code sandbox 门禁落地前一律不能发布或装载。
+- `runtime.capacity.manage` 是 deployment-level 专用权限，Production v1 只授予认证 `human:local-owner`；`system:production-activation` 只持有 fresh deployment genesis grant。文件 owner/mode、CLI 可执行权限、Feature Manifest ceiling、Workflow ownership 或普通 Runtime admin 权限均不能推出该权限，所有修改必须经过 Capacity Admin Gateway 和 immutable audit。
 - 在上述边界内明确接受第一版不提供 Value payload 机密性/Value 级读取隔离；完整性、hash/schema/provenance、secret-ref、有限 retention/容量与 Credential 原文不落盘仍是强制合同。部署边界一旦扩大，必须先增加 Value 访问控制/加密与不可信执行 sandbox，并重新认证 Runtime，不能仅修改配置开启远程或多用户模式。
 - Source spec 只能选择 policy allowlist 中的 capability/template/interface/policy。
 - Compiler 解析的 capability binding 固化到 plan；dispatch 只检查资源仍可用，不重新解析或 fallback。
@@ -5389,6 +5514,10 @@ Runtime Center 是新 Runtime 的顶层控制面和观测面，不继承任何�
 - `Trace`：保留全局 Trace 列表和详情展示，覆盖 Workflow 与非 Workflow 执行，并增加来源类型、Feature、Workflow、会话和 Agent execution 过滤条件。
 
 通用 Intake 可以作为运行中心的可选入口，但仍必须使用 pinned Routing Scope 与 deterministic resolver；运行中心不得暴露一个可任意选择全局 Definition/Policy/Capability 的创建器。
+
+Capacity 管理位于 Runtime Center 的诊断/管理子页，不增加第五个一级执行视图。页面通过 authoritative Capacity Admin API 展示 current revision/change id/config hash、完整 snapshot、实时 usage/backpressure/over-capacity、pending publication、Watcher 状态与 immutable change history；修改界面只能提交完整 snapshot，并必须展示 before/after diff、预期背压或 Blob over-capacity 后果、必填 reason text 与 evidence 要求。API 固定为 `GET /api/runtime-admin/capacity`、`GET /api/runtime-admin/capacity/changes` 和 `POST /api/runtime-admin/capacity/changes`；POST 只接受 closed `ReplaceDeploymentCapacityCommand`，要求认证 Human Session 与 `runtime.capacity.manage`，并调用 Capacity Admin Gateway。Renderer、Projection Worker、CLI 和部署工具均不得直接写活动文件或 Runtime DB。
+
+Capacity Admin API 不是 Projection API：current/head 与 change result 从权威 Runtime Store/Gateway 读取，history 可以有可重建 projection，但按钮状态、expected revision/hash 和 authorization 必须在提交事务中重验。Projection degraded 不得把未经验证的旧 revision 提交为 current；Gateway 返回 conflict 后 UI 必须重新读取完整 snapshot，不能自动 merge field patch。
 
 ### Projection API 与重建边界
 
@@ -5447,7 +5576,7 @@ Rebuild API 只允许有诊断权限的 Human 调用，返回幂等 rebuild job 
 Workflow 以 state activation 为一个顶层阶段，内部展示：
 
 - Task Intake、routing scope/attempt、selected Recipe/Definition/entrypoint、confidence/reason code、launch confirmation 与 creation key replay。
-- Workflow lifetime counters/deadline、runtime safety snapshot、supported-limit/capacity hash、domain resource claims/fencing token 和 parent/child Workflow lineage。
+- Workflow lifetime counters/deadline、runtime safety snapshot、supported-limit hash、Admission 使用的 capacity revision/change id/config hash、domain resource claims/fencing token 和 parent/child Workflow lineage。
 - Root run lifecycle/control、named exit、budget 和 registry snapshot。
 - 可折叠 scope ownership tree，以及每个 scope 的 immutable plan hash。
 - Scope 内 control/data edge、实时 resolution、trigger 和 sealed input。
@@ -5591,13 +5720,15 @@ root scope
 | `runtime/outbox.ts` | finite Delivery/Reconcile、Attempt History、Dead Letter |
 | `runtime/operational-blockers.ts` | blocker creation、T6e remediation/integrity restoration |
 | `runtime/commands.ts` | Actor/Delegation、授权、typed command 与 immutable audit |
+| `runtime/capacity-admin.ts` | Capacity Admin closed command、Actor/Session/permission、idempotency、revision/hash CAS 与 immutable audit；不属于 Workflow Command union |
+| `runtime/capacity-publication.ts` | 唯一活动 Capacity file writer、publication envelope、file/directory fsync、Watcher atomic pointer 与 CAP recovery；其他产品模块禁止写活动文件 |
 | `runtime/card-presentation.ts` | CardPresentationContract、deterministic render 与 typed action ingress |
 | `runtime/graph-runtime.ts` | lifecycle、pause/cancel、claim、closing 与 recovery coordination |
 | `projection/workflow-projection.ts` | Runtime Center read model、projection generation/rebuild 与 outbox consumer |
 | `projection/runtime-center-api.ts` | closed list/detail cursor/filter/sort、status 与 typed deep link API |
 | `projection/runtime-center-renderer/` | 独立 Runtime Center renderer entry/bundle；不得 import Feature renderer |
 
-依赖方向固定为 `contracts <- compiler/registry/store <- creation/runtime <- projection/host adapters`。`contracts` 不 import DB、Feature 或 Runtime；Compiler 只读 immutable contract/registry snapshot，不 import Store transaction；Store 不 import Compiler 或业务 Adapter；Projection/Renderer 不获得 write connection；外部 Worker/Adapter 只能调用 Callback/Broker/Command API。Host bootstrap/launcher 只能读取 closed Toolchain/Core Release Manifest，不得 import Runtime TypeScript、打开 Runtime DB、读取 Feature resource 或根据 PATH 猜 Node。CI 使用 dependency test 扫描 import graph，发现逆向依赖、Runtime DB 直写或 system-Node fallback 即失败。
+依赖方向固定为 `contracts <- compiler/registry/store <- creation/runtime <- projection/host adapters`。`contracts` 不 import DB、Feature 或 Runtime；Compiler 只读 immutable contract/registry snapshot，不 import Store transaction；Store 不 import Compiler 或业务 Adapter；Projection/Renderer 不获得 write connection；外部 Worker/Adapter 只能调用 Callback/Broker/Command API。`runtime/capacity-publication.ts` 是 runtime data root 中活动 Capacity publication 的唯一 filesystem writer，但仍只能通过 Store 中 CAP journal/head 驱动，不能成为第二个权威状态源。Host bootstrap/launcher 只能读取 closed Toolchain/Core Release Manifest，不得 import Runtime TypeScript、打开 Runtime DB、读取 Feature resource 或根据 PATH 猜 Node；setup 只能在 fresh deployment 安装 checked-in Capacity baseline，不得覆盖已有活动 publication。CI 使用 dependency test 扫描 import graph，发现逆向依赖、Runtime DB 直写、活动 Capacity 旁路 writer 或 system-Node fallback 即失败。
 
 新的 outer workflow coordinator 只负责 activation 边界和 root completion 后的外层 transition；开发 baseline 已不存在可复用的旧 orchestration implementation。Graph Runtime 不依赖 Runtime Center UI；UI 通过 projection/query 和 command API 交互。全局 Trace 查询依赖通用 Trace Store 与 correlation query，不把独立 Agent execution 反向写成 Workflow Projection。
 
@@ -5635,12 +5766,13 @@ action-required/quarantine blocker; remediation success/retry/exhaustion
 | Outbox | delivery/reconcile 尝试有限；unknown outcome 不盲重投；Dead Letter 不会按错误 Effect 语义推进 Graph；required child 永不进入 Outbox；notification failure 不回滚 Workflow |
 | Blob | DB 引用只指向 durable live Blob；GC 不删除新引用/Backup Pin；Crash 后只产生可识别 orphan 或 quarantine |
 | Command | Feature/运行中心提交同一 closed command 得到相同授权；Actor/WorkflowControlOwnership 不可伪造；command-to-target/permission/reason 映射封闭；Header 幂等且每次调用追加 Invocation；denied/duplicate/late 不改变目标状态；Administrative Abandon Confirmation 绑定同一 Human Session/request/evidence/version、5 分钟过期且最多消费一次 |
+| Capacity Admin | 只有 local-owner/一次性 genesis grant 可授权；完整 snapshot 同时满足 revision+hash CAS；同 hash 新 revision 保留不同 change lineage；并发 stale command 至多一个成功；denied/conflict/duplicate 不改变 head；Admission 的 revision/change/hash 与实际使用的单一 immutable snapshot 一致；direct-file write 永不成为授权事实 |
 | Absence/Coverage | source/API/UI/schema/filesystem/resource absence 全部匹配同一 source build；removed surface 具有 negative fixture 且 replacement=null；候选资料 source/build/release/runtime reachability 全部为零 |
 | Operational | open blocker severity 与 Run/Workflow operational state 双向一致且不覆盖 Workflow business status；T6e 不能提前恢复、非法降级 quarantine、重置 fence/ledger/deadline 或丢失失败 restoration attempt |
 | Trace | 独立 Agent Trace 不要求 Workflow；non-null Workflow correlation 所属链完整；对话发起 Workflow 可同时按 causation 与 Attempt 查询；禁止 orphan/伪造关联 |
 | Time/DDL | 权威时间均为 safe-integer `*_at_ms`；Activation/Finalization/Fact/Blocker/Command 的状态 CHECK、row version、typed FK/exactly-one 与 partial-index 查询覆盖一致；database/connection PRAGMA 与完整 certification key 逐项匹配 Profile |
 
-所有时间测试使用 Virtual Clock，禁止真实 `sleep()`；Fake Adapter 可确定性返回 `not_applied/applied_with_receipt/applied_but_receipt_lost/still_running/unknown/cancelled/compensated`。Fault Injection 覆盖 managed Node archive download/hash/安全解包、temp install/fsync/no-replace/active-pointer swap、Launcher verify/exec，intent、dispatch、external apply、receipt、Evaluator decision/feedback envelope/quality-revision Schedule/next Attempt、quality exhaustion detail、Node output、Fact/Event、Close Request、T0p transition provenance、Root Finalization preflight/retry、T8 required-child + Intake/Creation Request + source-activation completion原子提交、Operational Blocker create/T6e resolve/last-blocker state restore、Administrative Abandon request/expiry/confirm/consume、Notification intent/delivery failure、Completion Cut、Workflow transition，以及 Blob file fsync/install/directory fsync/DB commit、GC mark/delete/finalize和backup pin/copy边界；SQLite 事务内 crash 必须全回滚，外部 effect 边界按 operation key/receipt/reconciliation 收敛。Upgrade fixture 覆盖 managed Node side-by-side install/rollback、Core Protocol/ABI 兼容与拒绝、Prompt Rebase pass/fail、安全 section 覆盖和旧 Run exact snapshot。
+所有时间测试使用 Virtual Clock，禁止真实 `sleep()`；Fake Adapter 可确定性返回 `not_applied/applied_with_receipt/applied_but_receipt_lost/still_running/unknown/cancelled/compensated`。Fault Injection 覆盖 managed Node archive download/hash/安全解包、temp install/fsync/no-replace/active-pointer swap、Launcher verify/exec，Capacity CAP1 prepare、temp write/file fsync/rename/directory fsync、CAP3 head commit、CAP4 Watcher publish、direct-file tamper、相同 hash 新 revision与冷启动恢复，intent、dispatch、external apply、receipt、Evaluator decision/feedback envelope/quality-revision Schedule/next Attempt、quality exhaustion detail、Node output、Fact/Event、Close Request、T0p transition provenance、Root Finalization preflight/retry、T8 required-child + Intake/Creation Request + source-activation completion原子提交、Operational Blocker create/T6e resolve/last-blocker state restore、Administrative Abandon request/expiry/confirm/consume、Notification intent/delivery failure、Completion Cut、Workflow transition，以及 Blob file fsync/install/directory fsync/DB commit、GC mark/delete/finalize和backup pin/copy边界；SQLite 事务内 crash 必须全回滚，外部 effect 边界按 operation key/receipt/reconciliation 收敛。Upgrade fixture 覆盖 managed Node side-by-side install/rollback、不得覆盖活动 Capacity publication、Core Protocol/ABI 兼容与拒绝、Prompt Rebase pass/fail、安全 section 覆盖和旧 Run exact snapshot。
 
 CI 分层：普通提交运行 managed toolchain manifest/bootstrap/launcher/launchd conformance（使用临时 runtime home 和本地 archive fixture，不写系统目录）、Contract Pack conformance、Sealed Compiler Golden Bundle、固定 seed、小型 exhaustive、数百组 property、真实 data/store root write boundary、静态 absence baseline、removed surface negative fixtures 与候选目录不可达证明；完整回归扩大 seed、事件长度和 crash point；发布门禁另运行真实 managed darwin/arm64 Node distribution、真实 SQLite 的 Supported Limit T3/T7/Root Finalization benchmark，并对同一 source build 重新生成 absence/coverage hash。所有随机失败都必须能由 seed + shrunk event list 完整重放。
 
@@ -5650,31 +5782,32 @@ CI 分层：普通提交运行 managed toolchain manifest/bootstrap/launcher/lau
 
 本文批准即授权从第 1 步开始实施，不再等待额外架构确认。Contract Pack、Executable DDL、Schema Manifest、Sealed Golden Bundle 与 certified Supported Limits 是对应 gate 必须实际生成并由 CI/benchmark 证明的 exit artifact，不是批准本文前要伪造的附件，也不能因目标架构已确认而跳过。下列编号表示 capability gate，不表示所有工作必须串行；只有依赖 gate 通过后才能合并依赖它的实现。当前“可直接执行”指可以从 Contract Pack/Spec Stabilization 开工，不表示 Store 或 Production 已提前通过后续门禁。
 
-1. **Spec Stabilization / Contract Pack Gate**：在 `src/workflow-runtime/contracts/` 冻结 Managed Node Runtime Distribution/Compiler Toolchain、Definition/Recipe/Command/Transition、Feature Manifest vNext、Card Presentation、Source/Compiled IR、Logical Schema typed relation metadata、Operational Blocker/T6e、`local_single_user_safety@1`/Capacity baseline/Product Floor/Retention、`local_single_user_sqlite@1`、Command/Permission/Reason/Denial Catalog 和 Golden Draft/Review；按本文 S25 固定 Node/npm/package identity，并交付不修改系统 Node 的 side-by-side bootstrap、managed exec wrapper、stable Runtime Launcher、launchd binding 与 fail-closed fixture；生成并通过静态 absence、surface coverage 与 candidate boundary manifest，不实现 durable T0。
-2. **DDL 与 Store 基座 Gate**：产出覆盖全部持久化对象的 canonical executable migration、Schema Manifest、typed-FK/schema-lint、constraint/query-plan fixtures 和 empty-file SQLite DDL Gate；通过后实现独立 `workflow-runtime.db`、Connection Factory、短事务/CAS 与基础 query API。
+1. **Spec Stabilization / Contract Pack Gate**：在 `src/workflow-runtime/contracts/` 冻结 Managed Node Runtime Distribution/Compiler Toolchain、Definition/Recipe/Command/Transition、Feature Manifest vNext、Card Presentation、Source/Compiled IR、Logical Schema typed relation metadata、Operational Blocker/T6e、`local_single_user_safety@1`/Capacity baseline/Product Floor/Retention、`local_single_user_sqlite@1`、Command/Permission/Reason/Denial Catalog 和 Golden Draft/Review；按本文 S25 固定 Node/npm/package identity，并交付不修改系统 Node 的 side-by-side bootstrap、managed exec wrapper、stable Runtime Launcher、launchd binding 与 fail-closed fixture；生成并通过静态 absence、surface coverage 与 candidate boundary manifest，不实现 durable T0。G0.1-G0.9 完成后新增的 Capacity control-plane 合同以 G0.10 additive root 发布：必须 pin 住既有 G0.9 root，新增 Capacity Admin Command/Permission/Reason/Denial、publication envelope、CAP protocol、Logical Schema delta、coverage/inventory/fixtures，不改写或冒充既有完成 hash。
+2. **DDL 与 Store 基座 Gate**：只有 current Contract Pack root 已包含 G0.10 Capacity control-plane addendum 后，才产出覆盖全部持久化对象的 canonical executable migration、Schema Manifest、typed-FK/schema-lint、constraint/query-plan fixtures 和 empty-file SQLite DDL Gate；通过后实现独立 `workflow-runtime.db`、Connection Factory、短事务/CAS 与基础 query API。
 3. **确定性 Compiler / Sealed Golden Gate**：可在第 1 步通过后与第 2 步并行；按 pinned Toolchain 实现 strict parser、Schema/Profile、RFC 8785/domain hash、Definition/Scope Compiler、binding、DAG、condition/trigger/input、completion、policy/safety、Proof/Program 与 static child closure。Expected Plan/diagnostics 由独立 oracle review + `golden-seal` 生成 sealed artifact；逐字节通过完整 Sealed Golden Bundle 后才允许 Publisher 激活 executable resource。
 4. **Value/Registry/Authoring/Publish 基座**：实现 Value/Blob Write Intent/GC/Backup、Registry/Closure/Snapshot/Retention、Feature Manifest vNext、staged Publish、Execution Artifact 与 Core Protocol/ABI compatibility preflight；实现 `scaffold -> validate -> compile -> dry-run -> review -> publish -> activate` developer toolchain。此时尚不开放 Workflow 创建入口。
 5. **Test-only bootstrap**：提供只允许固定 fixture、Fake Adapter、临时数据目录且禁止 Feature/API/Automation 入口的 benchmark/bootstrap profile，用于开发 Store/T0-T8 和生成首个认证数据。它不是 `certified`，必须在 production build/startup 中 fail-closed，不能成为“开发默认配置”。
-6. **Durable Creation 与基础 Runtime**：在 Store/Registry/Compiler 已存在后实现 Task Intake、durable T0/T0p、claims/ledger、State Activation、T1/T2、delegation/system/wait/join/terminal、T3/T4/T5/T6a-e、Operational Blocker、effect key/mutable receipt、versioned Outbox Policy、typed adapter 与 Inbox/Outbox。
+6. **Durable Creation 与基础 Runtime**：在 Store/Registry/Compiler 已存在后实现 Task Intake、durable T0/T0p、claims/ledger、State Activation、T1/T2、delegation/system/wait/join/terminal、T3/T4/T5/T6a-e、Operational Blocker、effect key/mutable receipt、versioned Outbox Policy、typed adapter 与 Inbox/Outbox；Scheduler/Wait/Signal/Outbox/Blob 开始消费 Live Capacity 前必须实现 Capacity Admin Gateway、唯一 Publisher、Watcher immutable pointer、CAP recovery 与 Admission revision/change/hash lineage。
 7. **动态结构与关闭协议**：实现 subgraph/expand/map、quorum/fail-fast、hierarchical fence、Fact Store、Root Finalization Schedule、required/best-effort child Workflow effect、T7/T8 与 compensation barrier。
-8. **控制、Card、Projection 与恢复**：实现 pause/resuming/cancel、root coordinator、checkpoint、domain claim handoff/release、T6e、Recovery、Runtime Command Gateway、Card Presentation/typed action、Runtime Center Projection/API/deep link 与独立 renderer bundle；仍只在 test-only bootstrap 下执行未认证 Runtime。
+8. **控制、Card、Projection 与恢复**：实现 pause/resuming/cancel、root coordinator、checkpoint、domain claim handoff/release、T6e、Recovery、Runtime Command Gateway、Card Presentation/typed action、Runtime Center Projection/API/deep link、Capacity 诊断/管理子页与独立 renderer bundle；Capacity UI 只能调用 authoritative Capacity Admin API，仍只在 test-only bootstrap 下执行未认证 Runtime。
 9. **认证门禁**：完成独立 Reference Model、Property/Model/Fault tests 与真实 SQLite Supported Limit T3/T7/Root-Finalization benchmark，达到 Product Floor/transaction budget，并发布与完整 certification key 精确绑定的首个 certified profile。
-10. **Production Activation**：对同一 release build 重新生成并校验 `WorkflowRuntimeAbsenceBaseline`、`ProductSurfaceCoverageManifest` 与 `MigrationCandidateBoundaryManifest`，由 stable Launcher 启动 active managed Node distribution，验证 Launcher/Core Release/Distribution/Node executable/native module/SQLite Profile 完整 certification key并运行 startup smoke；随后原子激活 Core/Feature Registry pointer 与 Runtime Center Projection generation。Production Recipe inventory 可以为空；为空时验证通用 Intake=`no_route_available`、Runtime Center Workflow/待处理空状态和非 Workflow Trace 正常。存在 Published Recipe 时只验证其标准 Publish/Activate 合同，不增加任何历史候选特例。
+10. **Production Activation**：对同一 release build 重新生成并校验 `WorkflowRuntimeAbsenceBaseline`、`ProductSurfaceCoverageManifest` 与 `MigrationCandidateBoundaryManifest`，由 stable Launcher 启动 active managed Node distribution，验证 Launcher/Core Release/Distribution/Node executable/native module/SQLite Profile 完整 certification key并运行 startup smoke；fresh deployment 以 `system:production-activation` 一次性 grant 从 checked-in baseline 创建 revision 1 genesis audit/publication，existing deployment 则验证并保留原 Capacity head/file，不得重置。随后原子激活 Core/Feature Registry pointer 与 Runtime Center Projection generation。Production Recipe inventory 可以为空；为空时验证通用 Intake=`no_route_available`、Runtime Center Workflow/待处理空状态和非 Workflow Trace 正常。存在 Published Recipe 时只验证其标准 Publish/Activate 合同，不增加任何历史候选特例。
 
 Gate 依赖与可并行关系固定如下：
 
 | Gate | Depends on | 可并行工作 | Exit artifact |
 | --- | --- | --- | --- |
 | G0 Contract Pack/Static Baseline | 无 | 无 | managed toolchain/launcher proof + schemas/catalogs/protocols/safety/draft bundle + absence/coverage/candidate hashes |
-| G1 DDL/Store | G0 | G2 Compiler | migration + Schema Manifest + SQLite fixtures |
-| G2 Compiler/Golden | G0 | G1 DDL | sealed Golden Bundle + compiler/toolchain hash |
+| G0.10 Capacity Control-Plane Addendum | G0.1-G0.9 | G2 Compiler | additive current root + Capacity Admin/publication/CAP/Logical Schema delta + coverage/inventory/fixtures |
+| G1 DDL/Store | G0.10 | G2 Compiler | migration + Schema Manifest + SQLite fixtures |
+| G2 Compiler/Golden | G0.1-G0.9；G0.10 不改变 Plan/Compiler 语义 | G0.10/G1 DDL | sealed Golden Bundle + compiler/toolchain hash |
 | G3 Registry/Authoring/Publish | G1 + G2 | Reference Model skeleton | manifest/authoring/publish/retention/ABI fixtures |
 | G4 Test Bootstrap | G1 + G2 + G3 | Reference Model skeleton | isolated bootstrap profile |
 | G5 Basic Runtime | G4 | optional Domain Recipe authoring | T0-T6e model/fault fixtures |
 | G6 Dynamic/Close | G5 | projection query model | T7/T8/child/compensation fixtures |
 | G7 Control/Card/Projection/Recovery | G6 | Runtime Center renderer | command/card/projection/recovery/operational blocker fixtures |
 | G8 Certification | G7 | optional Domain Recipe release | certified profile meeting Product Floor |
-| G9 Production Activation | G8 + fresh G0 manifests | 无 | activation audit + startup/empty-state or launchable-Recipe smoke |
+| G9 Production Activation | G8 + fresh current G0/G0.10 manifests | 无 | activation + Capacity genesis/preservation audit + startup/empty-state or launchable-Recipe smoke |
 
 ```ts
 interface WorkflowRuntimeAbsenceBaseline {
@@ -5803,6 +5936,7 @@ Absence generator 使用 TypeScript AST/import graph、Web route enumeration、E
 - Ledger 明确区分 account scope 与 consumer；一个 Reservation 通过 Posting 原子更新 deployment/workflow/run/scope/node/execution-group accounts，保持 non-negative/under-limit/守恒与确定性失败顺序。
 - 每条进入 T3 fixed-point 的 ingress/derived Fact 都先消费 `facts_total`，再与同 seq Event 原子持久化；closed taxonomy、fact key 和 causal wave 可重放。纯 Projection/Trace/Notification 审计不计入 Fact。
 - RuntimeSafetyCeilings 按 workflow/run/scope/map/execution/wait/value 等作用域分组、全部显式 finite并进入 hash；首个 Production target 必须逐字段等于 `local_single_user_safety@1`，Pinned Safety immutable versioned，Live Capacity 使用已确认的 `5/256/2048/16 + 20/16/5 GiB` baseline并可原子热调，logical/stored/physical bytes 分开计账，每项均有一对一 Enforcement Matrix。已有 Run 不受新 Safety version影响，Capacity 调低只背压；Safety 调高超过 certified Supported Limits 时启动拒绝。启动必须验证 run total 不超过一次 T7 root fence 的 scopes/nodes/edges/attempts/waits/builds/map slots/effects认证上限。
+- Capacity 普通修改只有认证 `human:local-owner + runtime.capacity.manage` 可以发起；CLI/部署工具/Runtime Center 只是 entrypoint，Feature/Automation/Workflow/Executor 无 delegation path。完整 snapshot 以 expected revision+hash CAS，活动 publication 携带 revision/change id/config/publication hash，唯一 Publisher 执行 file/directory fsync + atomic rename，Watcher 只发布与 committed head 完全一致的单一 immutable pointer。Command/Invocation/Event audit 可回答 who/why/request/result/recovery；相同 config hash 的多次启用由不同 revision/change id 区分，Admission 保存三者。direct-file tamper、DB/文件各 crash point、cold start mismatch、upgrade preservation 和 genesis grant 均有 fail-closed fixture。
 - Workflow lifetime ledger 跨 activation/run 强制 activation、transition、child workflow、duration 与 usage budget；业务循环不能通过新 activation 重置累计额度。
 - Shared claim 只读、mutation 必须 exclusive；Capability claim slot 原子绑定全部 required claims，mutation gateway 在最终提交前逐项验证 held/current fencing token。第一版禁止 Graph 运行时动态抢锁。
 - Inline value、large output 和 artifact 统一经 immutable Value/Blob Store；Blob 使用 Write Intent、容量预留、file fsync、no-replace install、directory fsync、最后 DB ref commit。GC 使用 `live -> gc_candidate -> deleting -> deleted` 与 Backup Pin；temp/final orphan、missing/corrupt 与一致备份均有 crash fixture。
@@ -5813,19 +5947,19 @@ Absence generator 使用 TypeScript AST/import graph、Web route enumeration、E
 - Mutable mutation 的 crash fixture 覆盖 intent 前后、外部 apply 前后、receipt/snapshot 前后；跨 attempt 使用 node/business key 时不会重复 promote/commit，stale fencing token 被拒绝，结果不确定进入 action-required。
 - Run/Workflow operational state=`action_required/quarantined` 与 open Operational Blocker 双向一致；Workflow business status 不被 post-terminal blocker 覆盖。T6e 逐 blocker 验证和关闭，只有最后一个 open blocker 消失才恢复 operational state=`healthy`；恢复不回退 lifecycle/control/fence/ledger/deadline，quarantine 不能通过普通 remediation 降级绕过。
 - Pause 不丢弃 active result、signal 或 timeout，也不延长 deadline；resume 先进入 recoverable `resuming` barrier，drain pending error/eligibility/settled fact 后才开放 scheduler。
-- Scheduler 按 durable Run round-robin admission，再按 eligible event/scope manifest/node key 排序；Graph Source 不能声明 scheduler priority，wait 不占 execution slot。
+- Scheduler 按 durable Run round-robin admission，再按 eligible event/scope manifest/node key 排序；Graph Source 不能声明 scheduler priority，wait 不占 execution slot；每个 Admission 从一个 Watcher-published Capacity pointer 原子读取并保存 revision/change id/config hash，不能跨 snapshot 拼字段或事后按当前文件补 lineage。
 - Recovery 能覆盖 snapshot/compile/materialize、attempt preparation/execution/evaluation、wait、child scope、route resolution、cut、compensation 和 outbox lease。
 - 普通 node 不写共享 workflow context；只有 root coordinator 在 T8 提交受信任 typed Context Patch 和 terminal output binding。一个 Patch Header 可以原子包含多个 set/clear Operation，同一 Patch 不得重复 target slot，任一 Operation 失败时全部不提交。
 - Transition history 与 checkpoint unique key 证明 root cut 只推进一次；checkpoint 的 nullable root plan、Run Manifest、ledger、close/cut/output hashes 能定位完整动态执行历史。
 - Trusted child-workflow effect 固定 completed-output port、delivery requirement、principal binding、creation domain 与 routing scope。Required effect 通过 finite Root Finalization Schedule/Attempt preflight，并与 Root Cut/transition/Claim handoff/Child/Relation 在 T8 原子提交；best-effort 只写 Outbox。两者的 creation domain/key 由 Run Protocol 根据 root lineage、Parent、source activation/close request 与 effect id 固定派生，Definition 不含自由模板；相同 key 的 Recipe/principal/input 漂移由 `creation_intent_hash` 拒绝。两者均受 Parent Recipe exact allowlist、direct/depth/root-descendant budget 约束；需要同步结果的流程使用 subgraph 或显式 wait/signal。
-- Runtime Center、Feature Page、API 与 Automation 共用 Runtime Command Gateway；只接受本文 closed Command Union、六种 typed target、closed Permission/Reason/Denial Catalog，不存在开放 `command_type/target_ref`。T0 冻结 first-class `WorkflowControlOwnership`，`creation_domain`/Recipe owner 不直接授予 `own`；Command Header 对 `(idempotency_domain,key)` 保存 canonical request/result，每次 authenticated 调用都追加 Invocation，Human/Feature Service/System Actor、Delegation Chain、Permission/Policy/State Guard 和 applied/denied/conflict/duplicate/late 审计均可验证。Receipt remediation 不能人工改成功，Administrative Abandon 必须由 `human:local-owner` 以 5 分钟 intent-bound Confirmation 二次确认且不伪造 cut/outcome。
-- Runtime Center 提供工作流、Agent 执行、待处理和 Trace 四类视图；Projection API 使用 closed cursor/filter/sort、generation rebuild 和 ready/rebuilding/degraded 状态，零数据空状态与断链原因可区分。Workflow 详情展示 scope tree、DAG、edge resolution、input seal、attempt/wait、ledger、candidate 和 completion cut；typed deep link 双向验证 lineage，Projection button 只作提示且 Command Gateway 重验 expected row version/权限/state guard。
+- Runtime Center、Feature Page、API 与 Automation 共用 Runtime Command Gateway；只接受本文 closed Command Union、六种 typed target、closed Permission/Reason/Denial Catalog，不存在开放 `command_type/target_ref`。T0 冻结 first-class `WorkflowControlOwnership`，`creation_domain`/Recipe owner 不直接授予 `own`；Command Header 对 `(idempotency_domain,key)` 保存 canonical request/result，每次 authenticated 调用都追加 Invocation，Human/Feature Service/System Actor、Delegation Chain、Permission/Policy/State Guard 和 applied/denied/conflict/duplicate/late 审计均可验证。Receipt remediation 不能人工改成功，Administrative Abandon 必须由 `human:local-owner` 以 5 分钟 intent-bound Confirmation 二次确认且不伪造 cut/outcome。Capacity Admin 是独立 deployment gateway/permission/catalog/CAS，不扩展 Workflow Command target 或继承 Workflow ownership/policy。
+- Runtime Center 提供工作流、Agent 执行、待处理和 Trace 四类一级视图，以及不增加一级执行类型的 Capacity 诊断/管理子页；Projection API 使用 closed cursor/filter/sort、generation rebuild 和 ready/rebuilding/degraded 状态，零数据空状态与断链原因可区分。Workflow 详情展示 scope tree、DAG、edge resolution、input seal、attempt/wait、ledger、candidate 和 completion cut；typed deep link 双向验证 lineage，Projection button 只作提示且 Command/Capacity Admin Gateway 重验 expected version/权限/state guard。
 - Core Runtime Center 与每个 Feature UI 使用独立 renderer entry/bundle，只通过 typed deep link、API client 与 Gateway 协作；import/build fixture 阻止 Runtime Center、DAG viewer、projection client 或 Feature 业务继续进入 monolithic `electron/renderer/app.js`。
 - 全局 Trace 保留 Workflow 与非 Workflow 执行；独立对话 Trace 只要求 conversation/message/agent execution correlation，Workflow Trace 的 activation/run/scope/node/attempt 所属链可验证。对话发起 Workflow 时支持 causation 与 Attempt 双向查询，禁止为了统一展示创建伪 Workflow。
 - Feature UI 负责领域任务发起、产出解释和 typed Business Command；Runtime Center 只提供跨 Feature 索引、统一待处理、通用 Runtime Command、诊断、审计和深链，不重复实现完整领域工作面。
 - Engine error、action-required 与 quarantine 边界明确；integrity quarantine 停止所有状态推进且不能伪造 cut，只能恢复可信数据或写独立审计的 administrative abandon。
 - Workflow 权威事实只写独立 `workflow-runtime.db`，`messages.db` 仅保存可重建的新 Projection；跨库只走幂等 Outbox。Bootstrap 在建表前固定 database-level `page_size=4096/auto_vacuum=incremental`；所有 Runtime 连接由统一 Factory 按 `local_single_user_sqlite@1` 设置并回验 WAL/FULL/FK、timeout/temp/checkpoint、journal/cache/mmap 与 trusted-schema/trigger/read/locking/query-only 全部 PRAGMA，启动同时核对 SQLite/source/compile-options、`better-sqlite3@12.11.1` native module、Managed Node Distribution ref/hash、Node `26.5.0` executable hash 与 stable Launcher/Core Release identity。SQLite Profile 只能通过新 version、重启和重新认证修改，不能 production hot reload。
-- Logical Schema 不含 `control_epoch`、无后缀时间或 `version/timestamps` 缩写；absolute time 全部是 UTC Unix millisecond `*_at_ms`，CAS 使用 `row_version`，状态组合由 SQLite CHECK，Deadline/Retry/Lease/Outbox/TTL 使用 Partial Index。内部多类型关系全部展开为 typed nullable FK + exactly-one CHECK，external ref 在 Manifest 显式标注；migration 不含 polymorphic `kind/id`、`error fields/error_json` 或无 target metadata 的裸 ref。Executable DDL Gate 必须覆盖 Value ownership、Registry/Retention/Backup、Activation/Transition/Root Finalization、Fact/Operational Blocker、Command/Confirmation/Invocation 等全部持久化对象，并通过真实文件 SQLite migration、reopen、integrity/foreign-key check、Schema Manifest、constraint/schema-lint fixture 与固定查询的 query-plan fixture。
+- Logical Schema 不含 `control_epoch`、无后缀时间或 `version/timestamps` 缩写；absolute time 全部是 UTC Unix millisecond `*_at_ms`，CAS 使用 `row_version`，状态组合由 SQLite CHECK，Deadline/Retry/Lease/Outbox/TTL 使用 Partial Index。内部多类型关系全部展开为 typed nullable FK + exactly-one CHECK，external ref 在 Manifest 显式标注；migration 不含 polymorphic `kind/id`、`error fields/error_json` 或无 target metadata 的裸 ref。Executable DDL Gate 必须覆盖 Value ownership、Registry/Retention/Backup、Capacity Head/Admin Command/Invocation/Change Event、Activation/Transition/Root Finalization、Fact/Operational Blocker、Command/Confirmation/Invocation 等全部持久化对象，并通过真实文件 SQLite migration、reopen、integrity/foreign-key check、Schema Manifest、constraint/schema-lint fixture 与固定查询的 query-plan fixture。
 - Checkpoint schema v7 不含 `controlEpoch`，只保存用于水位定位的 `rowVersion`；权威更新时间使用 `updatedAtMs` safe integer，ISO 时间只能由 API/运行中心 projection 派生。
 - Fixture、Property Test、独立 Reference Model、Virtual Clock/Fake Adapter 与 Fault Injection 同为强制门禁；随机失败保存 seed、shrinking 后转成永久回归 Fixture。
 - T3/T7/Root Finalization 使用真实文件 SQLite 在 versioned Supported Limit 上覆盖最坏 Graph/Scope/required-child 形状；certified profile 达到 `local_single_user_product_floor@1`，并通过 T3/T7/T8 p99 250/1000/500 ms、复杂度和正确性预算；配置不得超过认证上限。

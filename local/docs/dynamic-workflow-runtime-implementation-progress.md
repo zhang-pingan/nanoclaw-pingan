@@ -1,8 +1,8 @@
 # Dynamic Workflow Runtime 实施进度
 
 > **状态**: IN_PROGRESS
-> **当前 Gate**: G1 DDL / Store 与 G2 Compiler / Golden（均 READY）
-> **下一施工切片**: G1.1 Executable DDL / Schema Manifest Gate
+> **当前 Gate**: G0.10 Capacity Control-Plane Addendum（READY；G1 NOT_READY，G2 仍 READY）
+> **下一施工切片**: G0.10 Capacity Admin / Publication / Audit Contract Addendum
 > **最后更新**: 2026-07-16
 > **规范权威**: `local/docs/dynamic-workflow-dag-framework.md`
 
@@ -52,7 +52,7 @@
 - 单次会话只限制施工范围，不限制规范上下文；每次都完整阅读规范。
 - 架构规范是语义权威，Contract Pack 是落地后的机器权威，本文只记录进度。
 - 所有新 Runtime 语义实现位于 `src/workflow-runtime/`；不得向 `src/` 顶层增加新的 Workflow Runtime 模块。无 Node 前置依赖的 managed toolchain bootstrap/launcher 与既有 setup/launchd renderer 是唯一 host-infrastructure 例外，不得包含 Runtime 语义。
-- 严格遵守 G0-G9 依赖。G0 完成前不得开始 Store、Compiler 或 durable T0；Executable DDL Gate 完成前不得实现 `WorkflowRuntimeStore`、Reconciler 或 production Domain Definition。
+- 严格遵守 G0-G9 依赖。G0.1-G0.9 的历史完成 identity 保持不变；current Contract Pack root 必须完成 G0.10 Capacity control-plane addendum 后才能开始 G1 Store/DDL。G2 Compiler/Golden 不依赖 Capacity control-plane 语义，仍可基于 G0.1-G0.9 开始；Executable DDL Gate 完成前不得实现 `WorkflowRuntimeStore`、Reconciler 或 production Domain Definition。
 - G0 后只有规范声明可并行的工作并行；并行工作必须拥有不重叠的文件边界和独立退出证据。
 - 每个提交对应一个可独立复核、可独立回退的施工切片，不以一个巨大提交跨越多个 Gate。
 - 不恢复 legacy Workflow、Workbench、Card authoring 或兼容读取路径；migration candidate 保持不可执行、不可达。
@@ -104,16 +104,16 @@ Agent Container 运行于独立 VM，Node identity 由 VM image gate 保证；�
 
 | Gate | 状态 | 依赖 | 退出证据 | 完成提交 |
 | --- | --- | --- | --- | --- |
-| G0 Contract Pack / Static Baseline | `DONE` | 无 | managed distribution/Launcher proof + schemas/catalogs/protocols/safety/draft bundle + absence/coverage/candidate hashes | 本原子提交 |
-| G1 DDL / Store | `READY` | G0 | executable migration + Schema Manifest + SQLite fixtures | - |
-| G2 Compiler / Golden | `READY` | G0 | sealed Golden Bundle + compiler/toolchain hash | - |
+| G0 Contract Pack / Static Baseline | `IN_PROGRESS` | 无 | G0.1-G0.9 historical root + G0.10 additive Capacity Admin/publication/CAP/Logical Schema/coverage root | G0.1-G0.9 已完成；G0.10 - |
+| G1 DDL / Store | `NOT_READY` | G0.10 | executable migration + Schema Manifest + SQLite fixtures | - |
+| G2 Compiler / Golden | `READY` | G0.1-G0.9；G0.10 不改变 Compiler/Plan 语义 | sealed Golden Bundle + compiler/toolchain hash | - |
 | G3 Registry / Authoring / Publish | `NOT_READY` | G1 + G2 | manifest/authoring/publish/retention/ABI fixtures | - |
 | G4 Test Bootstrap | `NOT_READY` | G1 + G2 + G3 | isolated bootstrap profile | - |
 | G5 Basic Runtime | `NOT_READY` | G4 | T0-T6e model/fault fixtures | - |
 | G6 Dynamic / Close | `NOT_READY` | G5 | T7/T8/child/compensation fixtures | - |
 | G7 Control / Card / Projection / Recovery | `NOT_READY` | G6 | command/card/projection/recovery/blocker fixtures | - |
 | G8 Certification | `NOT_READY` | G7 | certified profile meeting Product Floor | - |
-| G9 Production Activation | `NOT_READY` | G8 + fresh G0 manifests | activation audit + startup/empty-state or Recipe smoke | - |
+| G9 Production Activation | `NOT_READY` | G8 + fresh current G0/G0.10 manifests | activation + Capacity genesis/preservation audit + startup/empty-state or Recipe smoke | - |
 
 ## 工作包总览
 
@@ -123,18 +123,18 @@ Agent Container 运行于独立 VM，Node identity 由 VM image gate 保证；�
 | I1 | Intake、Routing、幂等创建、Child provenance、Claim | `NOT_READY` | G5 起 |
 | I2 | Definition、State lowering、Context、transition | `READY` | G2 Definition lowering 起；Runtime 仍从 G5 起 |
 | I3 | Source/Compiled IR、Port、Compiler | `READY` | G2 实现 |
-| I4 | Runtime Store、SQLite relation、Value/Blob、migration | `READY` | G1 migration/Store 基座起；Value/Blob 从 G3 起 |
+| I4 | Runtime Store、SQLite relation、Value/Blob、migration | `NOT_READY` | 先完成 G0.10，再从 G1 migration/Store 基座起；Value/Blob 从 G3 起 |
 | I5 | Graph 状态机、reconcile、Scheduler、Ledger | `NOT_READY` | G5 起 |
 | I6 | Delegation/System、Capability Effect、Outbox | `NOT_READY` | G5 起 |
 | I7 | Durable Wait、Signal/Timer/Approval、Inbox | `NOT_READY` | G5 起 |
 | I8 | Subgraph、Expand、Map、child scope | `NOT_READY` | G6 起 |
 | I9 | Completion、Cancel、Compensation、Finalization、Recovery | `NOT_READY` | G6/G7 |
-| I10 | Runtime Command、Runtime Center、Trace | `NOT_READY` | G7 起 |
-| I11 | Contract Pack、managed runtime toolchain/launcher、测试模型、发布门禁、absence baseline | `DONE` | G0.1-G0.9 DONE |
+| I10 | Runtime Command、Capacity Admin、Runtime Center、Trace | `NOT_READY` | G5 实现 Capacity Gateway/Publisher/Watcher，G7 实现管理 UI；当前只做 G0.10 合同 |
+| I11 | Contract Pack、managed runtime toolchain/launcher、测试模型、发布门禁、absence baseline | `IN_PROGRESS` | G0.1-G0.9 historical DONE；G0.10 READY |
 
 ## G0 施工切片
 
-G0 只有全部切片满足退出条件后才能标记 `DONE`。切片编号描述推荐施工边界，不修改规范中的 Gate 依赖。
+G0.1-G0.9 已按当时规范完成并保留历史 identity。后续确认的 Capacity control-plane 缺口以 additive G0.10 current root 补齐，不改写或冒充既有完成 hash；current G0 只有 G0.10 满足退出条件后才能重新标记 `DONE`。
 
 | 切片 | 内容 | 状态 | 主要退出条件 | 完成提交 |
 | --- | --- | --- | --- | --- |
@@ -147,6 +147,28 @@ G0 只有全部切片满足退出条件后才能标记 `DONE`。切片编号描�
 | G0.7 | Static Absence and Surface Gates | `DONE` | absence、surface coverage、candidate boundary generator/manifest/negative fixtures | 本原子提交 |
 | G0.8 | Golden Draft and Review Input | `DONE` | raw cases、hand-authored semantic assertions、review request；不得伪造 sealed expected output | 本原子提交 |
 | G0.9 | G0 Conformance Exit | `DONE` | Markdown/Contract 双向覆盖、完整 G0 CI、artifact hashes 和 Gate review | 本原子提交 |
+| G0.10 | Capacity Control-Plane Addendum | `READY` | Capacity Admin/publication/CAP/Logical Schema delta、Admission lineage、additive coverage/inventory/root manifest 与正反/fault-model fixtures；pin G0.9 historical root | - |
+
+## 待实施切片：G0.10 Capacity Control-Plane Addendum
+
+**状态**：`READY`
+
+**工作包**：I11；合同联动 I4/I5/I10。只补齐 Capacity Admin 控制面机器合同、Logical Schema metadata delta 和 conformance，不实现 executable DDL、Store、Capacity Gateway/Publisher/Watcher、Scheduler、Runtime Center 或 UI。
+
+架构规范已确认：Production v1 普通修改只允许认证 `human:local-owner + runtime.capacity.manage`；部署工具/CLI/Runtime Center 只是 entrypoint。修改使用 closed full-snapshot Command、expected revision+config hash CAS、必填 reason、immutable Command/Invocation/Event audit、唯一 Publisher、file/directory fsync + atomic rename、committed-head Watcher validation 与 crash recovery。checked-in `config/workflow-runtime-capacity.json` 保持 bootstrap baseline，活动 publication 位于 `data/workflow-runtime/workflow-runtime-capacity.json`；Admission 必须保存 `capacity_revision/capacity_change_id/capacity_config_hash`。
+
+必须交付：
+
+- 新增 closed `DeploymentRuntimeCapacityPublication` 与 `CapacityAdminCommand` union（一次性 `InitializeDeploymentCapacityCommand` + 普通 `ReplaceDeploymentCapacityCommand`）schema/type/domain hash/positive-negative fixtures，不修改既有 7-field Capacity payload 和 G0.5 checked-in baseline bytes/hash。
+- 新增独立 `runtime.capacity.manage` Permission、Capacity Reason/Denial Catalog 与 CAP0-CAP4 declarative protocol；不得把 Capacity 扩展成 Workflow Runtime Command target，不改变既有 Workflow Command union/catalog bytes。
+- 以 additive Logical Schema delta 定义 `runtime_capacity_head`、`runtime_capacity_admin_commands`、`runtime_capacity_admin_invocations`、`runtime_capacity_change_events`，并扩展 Scheduler Admission metadata 为 revision/change id/config hash；固定 CHECK/FK/UK/index/query intents 与 transition/hash-chain invariants。
+- 新增授权、stale CAS、相同 hash 新 revision、minimum-free-disk increase-only、idempotency duplicate/conflict、direct-file tamper、CAP crash/restart recovery、genesis/upgrade-preservation 的 fixture/model manifest；本切片不实现实际 filesystem writer 或 SQLite transaction。
+- 新增 G0.10 additive manifest、Markdown/Contract delta coverage、artifact inventory 与 Gate review，精确 pin 住 G0.9 root 和 G0.1-G0.9 historical identities；current G0 root 只包含显式 prior-root + addendum closure，不回写既有 G0.9 artifact inventory 冒充原始完成证据。
+- 接入 deterministic generate/read-only check、TypeScript conformance、targeted Vitest 与完整 `test:g0`；更新静态边界，保证本切片没有创建 DDL/Store/Runtime/Runtime Center/UI 或 `conformance/sealed/` artifact。
+
+规范修改后的预期红灯基线：managed `npm run test:g0.9` 为 6/8 tests PASS，2 tests 因 `markdown_values_without_contract` 拒绝新增 `semantic_format:icarus.deployment-runtime-capacity-publication/1`。这证明 G0.9 drift gate 正常工作；G0.10 必须通过 additive coverage/manifest 关闭该红灯，不能通过删除正文格式、放宽 closed schema 或改写既有 G0.9 expected artifact 绕过。
+
+退出后：current G0/I11 恢复 `DONE`，G1 变为 `READY` 并以新的 composite Contract Pack root 开始 G1.1；G2 保持 `READY`。任何实现中发现无法以 additive Logical Schema/root 表达、必须改写 G0.1-G0.9 历史 artifact 的情况，先标记 `BLOCKED_BY_SPEC`，不得静默重生成旧 manifest/hash。
 
 ## 已完成切片：G0.9 G0 Conformance Exit
 
@@ -738,7 +760,8 @@ G0.1 的实现、测试和本进度账本由同一个原子提交交付。Agent 
 | R-011 | Concurrent repository change | CLOSED | G0.4 施工期间新增 `982e3b6/5989b8e`，只对进度文档同一句措辞修改后逐字回退，净 tree 未改变；G0.4 保留提交并在其上原子交付 | G0.4 |
 | R-012 | Full regression baseline | OPEN_OUT_OF_SCOPE | G0.9 完整 suite 复现 `credential-proxy` async trace 250ms intermittent，结果为 75/76 files、693/694 tests；仍只观察到 `model_request_started`，未及时观察到 `model_resolution`。完整 G0 14/14 files、104/104 tests 与 G0.2-G0.9 定向 75/75 tests 通过；G0.9 未修改 credential-proxy/trace 文件或测试 | 独立测试稳定性维护 |
 | R-013 | Contract test timing baseline | OPEN_OUT_OF_SCOPE | G0.9 本次未复现；G0.6 在完整 G0、G0.2-G0.9 定向和全量 suite 中均通过。此前并发负载下 5.011s 超过默认 5s 的记录继续保留；G0.9 不调整 timeout 或 G0.6 实现 | 独立测试稳定性维护 |
+| R-014 | Capacity governance | OPEN_BLOCKING_G1 | G0.5 只冻结 Capacity payload/reload semantics，尚无修改 Command、权限、Actor、revision/hash CAS、reason、immutable change audit、唯一 Publisher、Watcher audited-head validation 或 Runtime Center 管理合同；架构语义已补齐，必须由 G0.10 机器化后才能开始 G1 DDL | G0.10 |
 
 ## 下一步
 
-G0 已完成，G1 DDL/Store 与 G2 Compiler/Golden 依规范可并行且均为 `READY`。下一会话优先开始 `G1.1 Executable DDL / Schema Manifest Gate`：先完整阅读架构规范和本文，复核 G0.9 原子提交、G0.1-G0.9 identity、74 个 Logical Schema 对象/1,221 列、345 typed FK、43 external refs、129 UK、759 CHECK、25 index intent 和 24 query intent。只实施 canonical executable migration、Schema Manifest、typed-FK/schema-lint、constraint/query-plan fixtures 与 empty-file SQLite DDL Gate；在该 Gate 全部通过前不得实现 `WorkflowRuntimeStore`、Reconciler、Production Compiler/Golden sealing、Registry、Runtime、Runtime Center 或 UI。SQLite Profile 继续保持 candidate，G8 前不得宣称 certified；不得创建或批准 `GoldenSemanticReview`、运行 `golden-seal` 或写入 `conformance/sealed/`，不得修复范围外 R-012/R-013。
+G0.1-G0.9 保持 historical `DONE`，但 current G0 因新确认的 Capacity governance contract delta 转为 `IN_PROGRESS`；G1 DDL/Store 在 G0.10 前为 `NOT_READY`，G2 Compiler/Golden 因 Capacity 不进入 Plan/Compiler 语义仍为 `READY`。下一会话优先实施 `G0.10 Capacity Control-Plane Addendum`：完整阅读架构规范和本文，复核 G0.9 原子提交与全部 G0.1-G0.9 identity，只新增 additive Capacity Admin/publication/CAP/Logical Schema delta、Admission lineage、fixtures 和 composite coverage/inventory/root manifest。不得改写既有 G0.1-G0.9 artifact bytes/hash，不得开始 executable DDL、`WorkflowRuntimeStore`、Capacity runtime writer/watcher、Reconciler、Production Compiler/Golden sealing、Registry、Runtime、Runtime Center 或 UI；不得创建或批准 `GoldenSemanticReview`、运行 `golden-seal` 或写入 `conformance/sealed/`，不得修复范围外 R-012/R-013。
