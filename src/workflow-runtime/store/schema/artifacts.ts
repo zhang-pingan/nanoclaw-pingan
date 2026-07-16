@@ -1,0 +1,541 @@
+import crypto from 'crypto';
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
+
+import {
+  calculateArtifactHash,
+  domainSeparatedSha256,
+} from '../../contracts/hash.js';
+import type {
+  ContractArtifactEnvelope,
+  JsonObject,
+  JsonValue,
+} from '../../contracts/types.js';
+import { buildQueryFixtures, renderMigration } from './ddl.js';
+import {
+  assertClosedSchemaManifest,
+  payloadAsJsonObject,
+  reconstructSchemaManifest,
+} from './manifest.js';
+import { loadExecutableSchemaSource } from './source.js';
+import {
+  collectSqliteEnvironmentEvidence,
+  createMigratedDatabase,
+  verifyQueryPlans,
+  verifyReadOnlyConnection,
+} from './sqlite-gate.js';
+import type {
+  ExecutableSchemaSource,
+  WorkflowRuntimeSchemaManifestPayload,
+} from './types.js';
+
+const schemaRoot = import.meta.dirname;
+const contractsRoot = path.resolve(schemaRoot, '../../contracts');
+
+export const G1_ARTIFACT_PATHS = {
+  migration: 'migration/workflow-runtime-schema-v1.sql',
+  manifest: 'artifacts/workflow-runtime-schema-manifest@1.json',
+  manifestContract:
+    'artifacts/workflow-runtime-schema-manifest-contract@1.json',
+  executableDdl: 'artifacts/workflow-runtime-executable-ddl@1.json',
+  queryFixtures: 'fixtures/workflow-runtime-query-plan-fixtures@1.json',
+  constraintFixtures:
+    'fixtures/workflow-runtime-constraint-trigger-fixtures@1.json',
+  schemaLint: 'artifacts/workflow-runtime-schema-lint@1.json',
+  domains: 'catalogs/workflow-runtime-schema-domain-separators@1.json',
+  root: 'contract-pack-g1-executable-schema.json',
+} as const;
+
+function asJson(value: unknown): JsonValue {
+  return value as JsonValue;
+}
+
+function buildArtifact(
+  format: string,
+  refId: string,
+  domainSeparator: string,
+  payload: JsonObject,
+): ContractArtifactEnvelope {
+  const artifact: ContractArtifactEnvelope = {
+    format,
+    ref: { id: refId, version: '1' },
+    version: 1,
+    domain_separator: domainSeparator,
+    hash: 'sha256:0000000000000000000000000000000000000000000000000000000000000000',
+    payload,
+  };
+  artifact.hash = calculateArtifactHash(artifact);
+  return artifact;
+}
+
+function rawSha256(value: string): `sha256:${string}` {
+  return `sha256:${crypto.createHash('sha256').update(value, 'utf8').digest('hex')}`;
+}
+
+function listJsonFiles(root: string, current = root): string[] {
+  return fs
+    .readdirSync(current, { withFileTypes: true })
+    .flatMap((entry) => {
+      const absolute = path.join(current, entry.name);
+      if (entry.isDirectory()) return listJsonFiles(root, absolute);
+      return entry.isFile() && entry.name.endsWith('.json')
+        ? [path.relative(root, absolute)]
+        : [];
+    })
+    .sort();
+}
+
+export function historicalContractTreeDigest(): string {
+  const hash = crypto.createHash('sha256');
+  for (const relativePath of listJsonFiles(contractsRoot)) {
+    hash.update(relativePath, 'utf8');
+    hash.update('\0');
+    hash.update(fs.readFileSync(path.join(contractsRoot, relativePath)));
+    hash.update('\0');
+  }
+  return hash.digest('hex');
+}
+
+function buildManifestContractArtifact(): ContractArtifactEnvelope {
+  return buildArtifact(
+    'icarus.workflow-runtime-schema-manifest-contract/1',
+    'icarus.workflow-runtime-schema-manifest-contract',
+    'icarus:workflow-runtime-schema-manifest-contract:1\n',
+    {
+      contract_kind: 'closed_keysets',
+      unknown_fields: 'rejected',
+      validator_owner: 'workflow_runtime_schema_gate',
+      top_level_keys: [
+        'schema_id',
+        'database_name',
+        'database_schema_version',
+        'logical_inputs',
+        'migration_path',
+        'migration_sha256',
+        'migration_statement_count',
+        'table_count',
+        'column_count',
+        'primary_key_count',
+        'unique_key_count',
+        'foreign_key_count',
+        'check_count',
+        'index_count',
+        'trigger_count',
+        'external_reference_count',
+        'tables',
+        'triggers',
+        'query_fixtures',
+        'schema_hash',
+      ],
+      table_keys: [
+        'ordinal',
+        'name',
+        'sql',
+        'columns',
+        'primary_key',
+        'unique_keys',
+        'foreign_keys',
+        'checks',
+        'indexes',
+      ],
+      column_keys: [
+        'cid',
+        'name',
+        'sqlite_type',
+        'nullable',
+        'default_sql',
+        'primary_key_ordinal',
+        'logical_type',
+        'external_reference',
+      ],
+      primary_key_keys: ['columns', 'auto_increment'],
+      unique_key_keys: [
+        'key_id',
+        'columns',
+        'predicate_intent',
+        'origin',
+        'sql',
+      ],
+      foreign_key_keys: [
+        'relation_id',
+        'source_columns',
+        'target_table',
+        'target_columns',
+        'on_delete',
+        'deferrability',
+        'pragma_id',
+      ],
+      check_keys: [
+        'check_id',
+        'kind',
+        'columns',
+        'expression_intent',
+        'expression_sql',
+      ],
+      index_keys: [
+        'index_id',
+        'kind',
+        'columns',
+        'predicate_intent',
+        'supports_query_ids',
+        'unique',
+        'sql',
+      ],
+      external_reference_keys: [
+        'validator_owner',
+        'reference_domain',
+        'immutable',
+      ],
+      trigger_keys: ['name', 'table', 'timing', 'event', 'owner_intent', 'sql'],
+      query_fixture_keys: [
+        'query_id',
+        'owner',
+        'coverage_area',
+        'sql',
+        'parameter_count',
+        'required_index_id',
+      ],
+      schema_hash_domain_separator: 'icarus:workflow-runtime-schema:1\n',
+    },
+  );
+}
+
+function buildConstraintFixtureArtifact(
+  source: ExecutableSchemaSource,
+): ContractArtifactEnvelope {
+  const enumChecks = source.tables.flatMap((table) =>
+    table.checks
+      .filter((check) => check.kind === 'enum_membership')
+      .map((check) => `${table.name}:${check.check_id}`),
+  );
+  return buildArtifact(
+    'icarus.workflow-runtime-constraint-trigger-fixtures/1',
+    'icarus.workflow-runtime-constraint-trigger-fixtures',
+    'icarus:workflow-runtime-constraint-trigger-fixtures:1\n',
+    {
+      execution_target: 'real_file_sqlite',
+      enum_check_count: enumChecks.length,
+      enum_checks: enumChecks,
+      required_cases: [
+        'invalid_enum_values',
+        'negative_and_overflow_safe_integer',
+        'activation_state_run_terminal_combinations',
+        'workflow_business_and_operational_state_combinations',
+        'operational_blocker_zero_and_multi_source',
+        'typed_relation_zero_and_multi_target',
+        'attempt_initial_and_non_initial_lineage',
+        'attempt_quality_feedback_and_single_successor',
+        'terminal_field_mutual_exclusion',
+        'cross_run_and_cross_scope_foreign_keys',
+        'duplicate_idempotency_key',
+        'second_root_scope_close_request_and_cut',
+        'stale_composite_lineage',
+        'operational_blocker_cache_triggers',
+        'capacity_event_hash_chain_and_immutability',
+        'capacity_milestone_partial_unique_repetition',
+        'capacity_head_revision_commit_trigger',
+      ],
+      trigger_names: renderMigration(source).triggers.map(
+        (trigger) => trigger.name,
+      ),
+    },
+  );
+}
+
+function buildSchemaLintArtifact(
+  source: ExecutableSchemaSource,
+): ContractArtifactEnvelope {
+  return buildArtifact(
+    'icarus.workflow-runtime-schema-lint/1',
+    'icarus.workflow-runtime-schema-lint',
+    'icarus:workflow-runtime-schema-lint:1\n',
+    {
+      status: 'closed_fail_on_violation',
+      rules: [
+        'all_v1_logical_tables_present',
+        'internal_relations_use_typed_foreign_keys',
+        'typed_multi_targets_use_nullable_columns_and_exactly_one_check',
+        'external_refs_have_validator_owner_and_reference_domain',
+        'no_bare_internal_kind_id',
+        'no_unowned_ref_column',
+        'no_generic_error_json_error_text_or_error_fields',
+        'no_ref_or_hash_abbreviation',
+        'all_logical_checks_have_executable_named_sql',
+        'all_query_intents_have_fixed_explain_fixture',
+      ],
+      table_count: source.tables.length,
+      query_count: source.queries.length,
+      result: 'pass',
+    },
+  );
+}
+
+function runSchemaLint(
+  source: ExecutableSchemaSource,
+  manifest: WorkflowRuntimeSchemaManifestPayload,
+  migrationSql: string,
+): void {
+  const forbidden = [
+    /\bowner_kind\b/,
+    /\bowner_id\b/,
+    /\btarget_kind\b/,
+    /\btarget_id\b/,
+    /\berror_json\b/,
+    /\berror_text\b/,
+    /\berror fields\b/i,
+  ];
+  for (const pattern of forbidden) {
+    if (pattern.test(migrationSql)) {
+      throw new Error(`Schema lint forbidden SQL token: ${pattern.source}`);
+    }
+  }
+  for (const table of source.tables) {
+    const physical = manifest.tables.find(
+      (candidate) => candidate.name === table.name,
+    );
+    if (!physical) throw new Error(`Schema lint missing table ${table.name}`);
+    for (const column of table.columns) {
+      if (column.name.endsWith('_ref') && !column.external_reference) {
+        throw new Error(
+          `Schema lint unowned reference: ${table.name}.${column.name}`,
+        );
+      }
+      if (
+        column.external_reference &&
+        (!column.external_reference.validator_owner ||
+          !column.external_reference.reference_domain)
+      ) {
+        throw new Error(
+          `Schema lint incomplete external ref: ${table.name}.${column.name}`,
+        );
+      }
+    }
+    for (const relation of table.foreign_keys) {
+      if (
+        !physical.foreign_keys.some(
+          (candidate) => candidate.relation_id === relation.relation_id,
+        )
+      ) {
+        throw new Error(`Schema lint missing FK ${relation.relation_id}`);
+      }
+    }
+  }
+}
+
+export interface BuiltG1Artifacts {
+  migrationSql: string;
+  manifest: ContractArtifactEnvelope;
+  artifacts: Array<[string, ContractArtifactEnvelope]>;
+  schemaHash: string;
+  environmentSummary: ReturnType<typeof collectSqliteEnvironmentEvidence>;
+}
+
+export function buildG1Artifacts(): BuiltG1Artifacts {
+  const source = loadExecutableSchemaSource();
+  const migration = renderMigration(source);
+  const temporaryRoot = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'icarus-g1-schema-'),
+  );
+  const databasePath = path.join(temporaryRoot, 'workflow-runtime.db');
+  const database = createMigratedDatabase(databasePath, migration.sql);
+  let manifestPayload: WorkflowRuntimeSchemaManifestPayload;
+  let environmentSummary: ReturnType<typeof collectSqliteEnvironmentEvidence>;
+  try {
+    manifestPayload = reconstructSchemaManifest(
+      database,
+      source,
+      migration.sql,
+      migration.statement_count,
+      migration.triggers,
+    );
+    assertClosedSchemaManifest(manifestPayload);
+    runSchemaLint(source, manifestPayload, migration.sql);
+    verifyQueryPlans(database, buildQueryFixtures(source));
+    environmentSummary = collectSqliteEnvironmentEvidence(database);
+  } finally {
+    database.close();
+  }
+  verifyReadOnlyConnection(databasePath);
+  fs.rmSync(temporaryRoot, { recursive: true, force: true });
+
+  const manifestContract = buildManifestContractArtifact();
+  const manifest = buildArtifact(
+    'icarus.workflow-runtime-schema-manifest/1',
+    'icarus.workflow-runtime-schema-manifest',
+    'icarus:workflow-runtime-schema-manifest:1\n',
+    payloadAsJsonObject(manifestPayload),
+  );
+  const executableDdl = buildArtifact(
+    'icarus.workflow-runtime-executable-ddl/1',
+    'icarus.workflow-runtime-executable-ddl',
+    'icarus:workflow-runtime-executable-ddl:1\n',
+    {
+      schema_id: source.schema_id,
+      database_schema_version: source.database_schema_version,
+      logical_inputs: source.logical_inputs,
+      migration_path: G1_ARTIFACT_PATHS.migration,
+      migration_sha256: rawSha256(migration.sql),
+      statement_count: migration.statement_count,
+      table_count: source.tables.length,
+      trigger_count: migration.triggers.length,
+      schema_hash: manifestPayload.schema_hash,
+      executable_status: 'canonical_migration',
+    } as unknown as JsonObject,
+  );
+  const queryFixtures = buildArtifact(
+    'icarus.workflow-runtime-query-plan-fixtures/1',
+    'icarus.workflow-runtime-query-plan-fixtures',
+    'icarus:workflow-runtime-query-plan-fixtures:1\n',
+    {
+      schema_hash: manifestPayload.schema_hash,
+      execution_target: 'real_file_sqlite',
+      query_count: source.queries.length,
+      fixtures: asJson(buildQueryFixtures(source)),
+      required_coverage: [
+        'scheduler',
+        'watchdog',
+        'recovery',
+        't6e',
+        't3',
+        't7',
+        'root_finalization',
+        'gc',
+        'outbox',
+      ],
+    },
+  );
+  const constraintFixtures = buildConstraintFixtureArtifact(source);
+  const schemaLint = buildSchemaLintArtifact(source);
+  const domains = buildArtifact(
+    'icarus.workflow-runtime-schema-domain-separators/1',
+    'icarus.workflow-runtime-schema-domain-separators',
+    'icarus:workflow-runtime-schema-domain-separators:1\n',
+    {
+      entries: [
+        'icarus:workflow-runtime-schema:1\n',
+        manifestContract.domain_separator,
+        manifest.domain_separator,
+        executableDdl.domain_separator,
+        queryFixtures.domain_separator,
+        constraintFixtures.domain_separator,
+        schemaLint.domain_separator,
+        'icarus:workflow-runtime-schema-determinism:1\n',
+        'icarus:workflow-runtime-schema-domain-separators:1\n',
+        'icarus:workflow-contract-pack-g1-executable-schema:1\n',
+      ].sort(),
+    },
+  );
+  const members: Array<[string, ContractArtifactEnvelope]> = [
+    [G1_ARTIFACT_PATHS.manifestContract, manifestContract],
+    [G1_ARTIFACT_PATHS.manifest, manifest],
+    [G1_ARTIFACT_PATHS.executableDdl, executableDdl],
+    [G1_ARTIFACT_PATHS.queryFixtures, queryFixtures],
+    [G1_ARTIFACT_PATHS.constraintFixtures, constraintFixtures],
+    [G1_ARTIFACT_PATHS.schemaLint, schemaLint],
+    [G1_ARTIFACT_PATHS.domains, domains],
+  ];
+  const root = buildArtifact(
+    'icarus.workflow-contract-pack-g1-executable-schema/1',
+    'icarus.workflow-contract-pack-g1-executable-schema',
+    'icarus:workflow-contract-pack-g1-executable-schema:1\n',
+    {
+      gate: 'G1.1',
+      status: 'executable_ddl_schema_manifest',
+      g0_10_root_hash: source.logical_inputs.g0_10_root_hash,
+      g0_6_manifest_hash: source.logical_inputs.g0_6_manifest_hash,
+      historical_contract_json_tree_digest: historicalContractTreeDigest(),
+      schema_hash: manifestPayload.schema_hash,
+      migration_sha256: rawSha256(migration.sql),
+      deterministic_digest: domainSeparatedSha256(
+        'icarus:workflow-runtime-schema-determinism:1\n',
+        asJson({
+          migration_sha256: rawSha256(migration.sql),
+          schema_hash: manifestPayload.schema_hash,
+          member_hashes: members.map(([, artifact]) => artifact.hash),
+        }),
+      ),
+      member_count: members.length,
+      members: members.map(([artifactPath, artifact]) => ({
+        path: artifactPath,
+        format: artifact.format,
+        hash: artifact.hash,
+      })),
+      sqlite_profile_status: 'candidate',
+      certification_status: 'not_certified',
+      environment_verification: [
+        'database_and_connection_pragmas',
+        'sqlite_version_source_id_compile_options',
+        'better_sqlite3_version_and_native_module',
+        'managed_node_distribution_and_executable',
+      ],
+      absent_components: [
+        'workflow_runtime_store',
+        'sqlite_connection_factory',
+        'runtime_query_api',
+        'workflow_runtime',
+        'scheduler',
+        'compiler_or_golden',
+        'registry',
+        'runtime_center_or_ui',
+        'production_activation',
+        'supported_limits_certification',
+      ],
+    },
+  );
+  members.push([G1_ARTIFACT_PATHS.root, root]);
+  return {
+    migrationSql: migration.sql,
+    manifest,
+    artifacts: members,
+    schemaHash: manifestPayload.schema_hash,
+    environmentSummary,
+  };
+}
+
+function renderJson(artifact: ContractArtifactEnvelope): string {
+  return `${JSON.stringify(artifact, null, 2)}\n`;
+}
+
+function absoluteSchemaPath(relativePath: string): string {
+  const absolute = path.resolve(schemaRoot, relativePath);
+  if (!absolute.startsWith(`${schemaRoot}${path.sep}`)) {
+    throw new Error(`Schema artifact escapes root: ${relativePath}`);
+  }
+  return absolute;
+}
+
+function writeAtomic(relativePath: string, bytes: string): void {
+  const absolute = absoluteSchemaPath(relativePath);
+  fs.mkdirSync(path.dirname(absolute), { recursive: true });
+  const temporary = `${absolute}.tmp-${process.pid}`;
+  fs.writeFileSync(temporary, bytes, { encoding: 'utf8', mode: 0o644 });
+  fs.renameSync(temporary, absolute);
+}
+
+export function generateG1Artifacts(): BuiltG1Artifacts {
+  const built = buildG1Artifacts();
+  writeAtomic(G1_ARTIFACT_PATHS.migration, built.migrationSql);
+  for (const [artifactPath, artifact] of built.artifacts) {
+    writeAtomic(artifactPath, renderJson(artifact));
+  }
+  return built;
+}
+
+export function checkG1Artifacts(): BuiltG1Artifacts {
+  const built = buildG1Artifacts();
+  const migrationBytes = fs.readFileSync(
+    absoluteSchemaPath(G1_ARTIFACT_PATHS.migration),
+    'utf8',
+  );
+  if (migrationBytes !== built.migrationSql) {
+    throw new Error('Canonical migration drifted; run npm run schema:generate');
+  }
+  for (const [artifactPath, artifact] of built.artifacts) {
+    const actual = fs.readFileSync(absoluteSchemaPath(artifactPath), 'utf8');
+    if (actual !== renderJson(artifact)) {
+      throw new Error(`${artifactPath} drifted; run npm run schema:generate`);
+    }
+  }
+  return built;
+}

@@ -1,8 +1,8 @@
 # Dynamic Workflow Runtime 实施进度
 
 > **状态**: IN_PROGRESS
-> **当前 Gate**: G1 DDL / Store（READY；G0/I11 DONE，G2 仍 READY）
-> **下一施工切片**: G1.1 Executable DDL / Schema Manifest
+> **当前 Gate**: G1 DDL / Store（IN_PROGRESS；G1.1 DONE，G2 仍 READY）
+> **下一施工切片**: G1.2 Store Base / Connection Factory
 > **最后更新**: 2026-07-16
 > **规范权威**: `local/docs/dynamic-workflow-dag-framework.md`
 
@@ -105,7 +105,7 @@ Agent Container 运行于独立 VM，Node identity 由 VM image gate 保证；�
 | Gate | 状态 | 依赖 | 退出证据 | 完成提交 |
 | --- | --- | --- | --- | --- |
 | G0 Contract Pack / Static Baseline | `DONE` | 无 | G0.1-G0.9 historical root + G0.10 additive Capacity Admin/publication/CAP/Logical Schema/coverage root | 本原子提交 |
-| G1 DDL / Store | `READY` | G0.10 | executable migration + Schema Manifest + SQLite fixtures | - |
+| G1 DDL / Store | `IN_PROGRESS` | G0.10 | G1.1 executable migration + Schema Manifest + SQLite fixtures 已完成；Store/Connection Factory 尚未开始 | 本原子提交（G1.1） |
 | G2 Compiler / Golden | `READY` | G0.1-G0.9；G0.10 不改变 Compiler/Plan 语义 | sealed Golden Bundle + compiler/toolchain hash | - |
 | G3 Registry / Authoring / Publish | `NOT_READY` | G1 + G2 | manifest/authoring/publish/retention/ABI fixtures | - |
 | G4 Test Bootstrap | `NOT_READY` | G1 + G2 + G3 | isolated bootstrap profile | - |
@@ -123,7 +123,7 @@ Agent Container 运行于独立 VM，Node identity 由 VM image gate 保证；�
 | I1 | Intake、Routing、幂等创建、Child provenance、Claim | `NOT_READY` | G5 起 |
 | I2 | Definition、State lowering、Context、transition | `READY` | G2 Definition lowering 起；Runtime 仍从 G5 起 |
 | I3 | Source/Compiled IR、Port、Compiler | `READY` | G2 实现 |
-| I4 | Runtime Store、SQLite relation、Value/Blob、migration | `READY` | G1.1 migration/Schema Manifest 起；Value/Blob 从 G3 起 |
+| I4 | Runtime Store、SQLite relation、Value/Blob、migration | `IN_PROGRESS` | G1.1 migration/Schema Manifest DONE；下一切片 G1.2 Store Base / Connection Factory；Value/Blob 从 G3 起 |
 | I5 | Graph 状态机、reconcile、Scheduler、Ledger | `NOT_READY` | G5 起 |
 | I6 | Delegation/System、Capability Effect、Outbox | `NOT_READY` | G5 起 |
 | I7 | Durable Wait、Signal/Timer/Approval、Inbox | `NOT_READY` | G5 起 |
@@ -148,6 +148,64 @@ G0.1-G0.9 已按当时规范完成并保留历史 identity。后续确认的 Cap
 | G0.8 | Golden Draft and Review Input | `DONE` | raw cases、hand-authored semantic assertions、review request；不得伪造 sealed expected output | 本原子提交 |
 | G0.9 | G0 Conformance Exit | `DONE` | Markdown/Contract 双向覆盖、完整 G0 CI、artifact hashes 和 Gate review | 本原子提交 |
 | G0.10 | Capacity Control-Plane Addendum | `DONE` | Capacity Admin/publication/CAP/Logical Schema delta、Admission lineage、additive coverage/inventory/root manifest 与正反/fault-model fixtures；pin G0.9 historical root | 本原子提交 |
+
+## G1 施工切片
+
+| 切片 | 内容 | 状态 | 主要退出条件 | 完成提交 |
+| --- | --- | --- | --- | --- |
+| G1.1 | Executable DDL / Schema Manifest | `DONE` | G0.6 + G0.10 全量 canonical SQLite migration、closed introspected Manifest、schema lint、constraint/trigger/query-plan fixtures、真实文件与 managed identity gate | 本原子提交 |
+| G1.2 | Store Base / Connection Factory | `READY` | production Store 基础、连接生命周期/PRAGMA/read-only policy 与 query API 的规范范围实现和测试 | - |
+
+## 已完成切片：G1.1 Executable DDL / Schema Manifest
+
+**状态**：`DONE`
+
+**工作包**：I4；只实现 executable SQLite migration、closed Schema Manifest、introspection/environment gate、schema lint 与 fixtures。没有实现 production `WorkflowRuntimeStore`、Connection Factory、query API、Runtime、Scheduler、Compiler/Golden、Registry、Runtime Center/UI、production activation 或 Supported Limits certification。
+
+I4/G1.1 以 immutable G0.6 Logical Schema 与 additive G0.10 Capacity Logical Schema delta 为唯一逻辑输入，生成覆盖全部 v1 持久化对象的 canonical migration。最终包含 78 tables、1,283 columns、78 PK、136 UK、355 FK、814 CHECK、32 logical indexes、10 immediate triggers、46 external references、31 fixed query-plan fixtures，共 257 条 migration statements；不是 Graph happy path 子集。
+
+closed Schema Manifest 固定逐表 SQL、column/type/nullability/default、PK/UK/FK/CHECK/index、typed relation target metadata、external reference validator owner 与 query fixtures，并使用 `icarus:workflow-runtime-schema:1\n` 计算 domain-separated `schema_hash`。真实 SQLite 文件在 migration 前设置 `page_size=4096` 与 `auto_vacuum=incremental`，migration 后切换 WAL、关闭并重开，再验证 database/connection PRAGMA、writer/read-only `query_only`、`integrity_check` 和 `foreign_key_check`。Manifest 从 `sqlite_schema`、`pragma_table_info`、`foreign_key_list`、`index_list` 重建后与发布快照逐字节一致。
+
+内部多类型关系全部展开为 typed nullable FK 加 exactly-one CHECK；lint 拒绝裸 polymorphic kind/id、无 target metadata 的 internal `*_ref`、generic `error_json/error_text/error` 字段和 `ref/hash` 缩写。Capacity Head/Admin Command/Invocation/Change Event 的 CHECK/FK/UK/index/hash-chain intent 已进入 DDL 与 fixtures，并明确验证重复 `recovered`、`failed`、`unauthorized_file_rejected` 不受错误的全局 UNIQUE 限制。
+
+SQLite 可执行性判定：G0.10 的 nullable lineage parent keys `assigned_change` 与 `assigned_lineage` 不能作为 SQLite partial UNIQUE index 的 FK parent，因此 migration 使用普通 UNIQUE index；SQLite 对多个 NULL 的既有语义保持等价，同时 parent key 对 FK 合法。Confirmation TTL 依赖 parent Command 的 `created_at_ms`，无法由 row-local CHECK 精确表达，因此由命名 INSERT/UPDATE immediate triggers 强制 `expires_at_ms = command.created_at_ms + 300000`，未放宽约束。
+
+最终 Artifact hashes：
+
+| Artifact | Hash |
+| --- | --- |
+| G1.1 executable schema root | `sha256:54c120e211ed28a9c2dcc2907ec728b39ce68748a07dc631d307c9aa59693f78` |
+| domain-separated schema hash | `sha256:33f843e57ddc1cdae80e67d5f0254653985cd7062017a9ecee9409b389fdd26e` |
+| canonical migration SHA-256 | `sha256:d89829995e164355ad485fc117db88dd67a72409f00ec3c3c54253f30a589f61` |
+| deterministic digest | `sha256:b97c8075984dc2ffb741dfa5b218155af28e5067d44ab2032de54f3258281dcb` |
+| Schema Manifest / contract | `sha256:42db16f9f104c5a6ebc7570baced9049a80dbfb047ddfcb46f478a62b04091b0` / `sha256:2c2394f481fc9b57d8d8f396e1e2a9ce5319f1ea59a214c915b2a330a86b4afd` |
+| Executable DDL artifact | `sha256:61d3e32bfb5733d8adcc3b5b93c7f61462b836eb69fb04df0a5dbcb834bd5d58` |
+| Query plan / constraint-trigger fixtures | `sha256:35b7a27e241d32436de70dc937ce9b20c7bfd46041835ac8c4712b85a27dc076` / `sha256:71b738b6bd63dfadd5e960665767c5f191c60de12f81a46380604f6a900cce61` |
+| Schema lint / domain separator catalog | `sha256:fd6c4381d3c3012325bfbd2a780ce6514289360dd86f4038337b9d74e3981905` / `sha256:49065b8d9063e25754a80d731b47b1088bcb67fc71720487c909b11a26147eaf` |
+| G1 historical Contract JSON verification digest | `241f17fa352b15b198cfcb5c28cb892b669d22ca1d3736a90c99622a0431f2f3` |
+
+SQLite / runtime identity：
+
+| Identity | Observed value |
+| --- | --- |
+| Managed Node | `v26.5.0`；active content-addressed `darwin/arm64` executable，非 Homebrew/system Node |
+| `better-sqlite3` / native module | `12.11.1` / `sha256:0000d73c6e2e94318ed2b9339139623d5a0908b195f1e761c16cfd98f9cc6229` |
+| SQLite version / source id | `3.53.2` / `2026-06-03 19:12:13 d6e03d8c777cfa2d35e3b60d8ec3e0187f3e9f99d8e2ee9cac695fd6fcdf1a24` |
+| SQLite compile-options hash | `sha256:b7145e6588d91dfdd16bd436e94007463fd4d69b6644beacc3d11ab111625d12` |
+| SQLite profile / certification | `candidate` / `not_certified` |
+
+最终退出验证证据：
+
+| 命令/证据 | 结果 |
+| --- | --- |
+| managed `npm run contracts:generate`（连续两次） | PASS；G1 root、schema hash、migration hash 与 deterministic digest 两次逐字节一致；先只读验证 immutable G0，再只生成 additive G1 artifact |
+| managed `npm run contracts:check` / `npm run schema:check` | PASS；read-only check，真实 SQLite 文件、完整 PRAGMA/identity/integrity/FK/introspection gate 全通过；仅有 R-010 DEP0205 非阻塞告警 |
+| managed `npm run test:g1.1` | PASS，1 file / 8 tests；覆盖递归 closed keyset、快照重建、全部 enum CHECK、typed exactly-one relation、Capacity 重复结果/hash chain/TTL trigger、query-plan fixtures 与 lint |
+| managed `npm run test:g0` | 首次 PASS，15 files / 109 tests；最终串行重跑为 14/15 files、108/109 tests，G0.6 8/8 与所有 Contract gates 通过，唯一失败为 R-015 launcher case 5.484s 超过默认 5s；紧随其后的完整 suite 中同一 toolchain file 5/5 PASS |
+| managed `npm run typecheck` / `npm run build` | PASS |
+| managed `npm test` | 最终串行 run 为 77/78 files、706/707 tests；G1.1 8/8、G0.6 8/8、toolchain 5/5 与其余 706 tests 通过，唯一失败为范围外 R-012。更早一次 full-suite run 为 75/78 files、702/706 tests，另命中 R-013 与 R-015 timing；未修改这些范围外测试 |
+| targeted Prettier / `git diff --check` | PASS |
+| historical/boundary scan | PASS；G0.1-G0.10 published JSON 无 diff，G0.10 root 仍为 `sha256:c964...1f7`；无 Store/Connection Factory/query API/Runtime/Scheduler/Compiler/Golden/Registry/Runtime Center/UI 实现 |
 
 ## 已完成切片：G0.10 Capacity Control-Plane Addendum
 
@@ -798,10 +856,11 @@ G0.1 的实现、测试和本进度账本由同一个原子提交交付。Agent 
 | R-009 | Concurrent repository change | CLOSED | `32f3c51` 只新增范围外 evaluation 文档；G0.2 最终 HEAD/边界和 staged set 已验证，提交保留且未混入 G0.2 内容 | G0.2 |
 | R-010 | Node loader deprecation | OPEN_OUT_OF_SCOPE | Node 26 下 pinned `tsx` loader 在 `contracts:generate/check` 报 `DEP0205 module.register()` deprecation warning，但命令退出码为 0；G0.2 不升级非规范依赖或替换工具链 | 独立工具链维护 |
 | R-011 | Concurrent repository change | CLOSED | G0.4 施工期间新增 `982e3b6/5989b8e`，只对进度文档同一句措辞修改后逐字回退，净 tree 未改变；G0.4 保留提交并在其上原子交付 | G0.4 |
-| R-012 | Full regression baseline | OPEN_OUT_OF_SCOPE | G0.10 完整 suite 复现 `credential-proxy` async trace 250ms intermittent，结果为 75/77 files、697/699 tests 中的一项失败；单文件仍为 20/21，只观察到 `model_request_started`。G0.10 未修改 credential-proxy/trace 文件或测试 | 独立测试稳定性维护 |
-| R-013 | Contract test timing baseline | OPEN_OUT_OF_SCOPE | G0.10 完整 suite 并发负载下 G0.6 deterministic test 超过默认 5s；随后单文件 8/8 tests、4.635s PASS，定向与完整 G0 也通过。G0.10 不调整 timeout 或 G0.6 实现 | 独立测试稳定性维护 |
+| R-012 | Full regression baseline | OPEN_OUT_OF_SCOPE | G1.1 最终完整 suite 为 77/78 files、706/707 tests，唯一失败继续是 `credential-proxy` async trace 250ms intermittent；G1.1 未修改 credential-proxy/trace 文件或测试 | 独立测试稳定性维护 |
+| R-013 | Contract test timing baseline | OPEN_OUT_OF_SCOPE | G1.1 较早完整 suite 并发负载下 G0.6 deterministic test 超过默认 5s；最终串行 `test:g0` 和后续完整 suite 中 G0.6 均 8/8 通过。G1.1 不调整 timeout 或 G0.6 既有实现 | 独立测试稳定性维护 |
 | R-014 | Capacity governance | CLOSED | G0.10 已机器化 closed publication/command、权限/Actor/entrypoint/delegation、revision/hash CAS、reason/denial、immutable audit tables、唯一 Publisher/Watcher protocol、Admission lineage、crash recovery 与 additive Gate evidence；G1 DDL 可开始 | G0.10 |
+| R-015 | Toolchain test timing | OPEN_OUT_OF_SCOPE | G1.1 较早完整 suite 命中两项 5s timeout；最终串行 `test:g0` 的 launcher case 以 5.484s timeout，但紧随其后的完整 suite 中 toolchain 5/5 PASS。G1.1 不调整 timeout 或 managed toolchain 既有实现 | 独立测试稳定性维护 |
 
 ## 下一步
 
-G0.1-G0.9 historical identity 与 G0.10 additive current root 均已完成，current G0/I11 为 `DONE`；G1 和 G2 均为 `READY`。下一会话实施 `G1.1 Executable DDL / Schema Manifest`：从冻结的 G0.6 Logical Schema 与 G0.10 Capacity delta 生成并验证真实 SQLite migration 和 exact Schema Manifest，继续遵守 candidate/not-certified、无 production Store/Runtime/Compiler/Golden/Registry/UI 的 Gate 边界，并保留 R-012/R-013 为范围外基线。
+G0.1-G0.9 historical identity、G0.10 additive current root 与 G1.1 executable schema 均已完成；current G0/I11 为 `DONE`，G1 为 `IN_PROGRESS`，G2 仍为 `READY`。下一会话实施 `G1.2 Store Base / Connection Factory`：以 G1.1 frozen migration/Schema Manifest 为唯一数据库结构输入，按规范实现 production Store 基础、连接生命周期/PRAGMA/read-only policy 与 query API 的本切片范围；不得越过 Runtime/Scheduler、Compiler/Golden、Registry、Runtime Center/UI 或 production activation Gate，并继续保留 R-012/R-013 为范围外基线。

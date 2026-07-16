@@ -9,6 +9,8 @@ assistant/renderer/dist/
 
 # Local data & auth
 store/
+!src/workflow-runtime/store/
+!src/workflow-runtime/store/**
 data/
 logs/
 

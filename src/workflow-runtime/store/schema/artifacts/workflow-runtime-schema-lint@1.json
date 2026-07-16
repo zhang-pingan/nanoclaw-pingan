@@ -1,0 +1,28 @@
+{
+  "format": "icarus.workflow-runtime-schema-lint/1",
+  "ref": {
+    "id": "icarus.workflow-runtime-schema-lint",
+    "version": "1"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-runtime-schema-lint:1\n",
+  "hash": "sha256:fd6c4381d3c3012325bfbd2a780ce6514289360dd86f4038337b9d74e3981905",
+  "payload": {
+    "status": "closed_fail_on_violation",
+    "rules": [
+      "all_v1_logical_tables_present",
+      "internal_relations_use_typed_foreign_keys",
+      "typed_multi_targets_use_nullable_columns_and_exactly_one_check",
+      "external_refs_have_validator_owner_and_reference_domain",
+      "no_bare_internal_kind_id",
+      "no_unowned_ref_column",
+      "no_generic_error_json_error_text_or_error_fields",
+      "no_ref_or_hash_abbreviation",
+      "all_logical_checks_have_executable_named_sql",
+      "all_query_intents_have_fixed_explain_fixture"
+    ],
+    "table_count": 78,
+    "query_count": 31,
+    "result": "pass"
+  }
+}
