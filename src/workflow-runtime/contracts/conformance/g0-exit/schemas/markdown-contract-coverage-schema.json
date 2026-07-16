@@ -1,0 +1,190 @@
+{
+  "format": "icarus.workflow-markdown-contract-coverage-schema/1",
+  "ref": {
+    "id": "icarus.workflow-markdown-contract-coverage-schema",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-markdown-contract-coverage-schema:1\n",
+  "hash": "sha256:b4bfd409d3f201c966a69339dae1135cacac9cbc50f1edbac08841b30a4acb67",
+  "payload": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:icarus:workflow-markdown-contract-coverage:1",
+    "title": "Workflow Markdown and Contract Pack bidirectional coverage v1",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "format",
+      "architecture_path",
+      "architecture_sha256",
+      "extraction_policy",
+      "categories",
+      "entries",
+      "category_counts",
+      "contract_value_count",
+      "markdown_value_count",
+      "contract_values_without_markdown",
+      "markdown_values_without_contract",
+      "coverage_hash"
+    ],
+    "properties": {
+      "format": {
+        "const": "icarus.workflow-markdown-contract-coverage/1"
+      },
+      "architecture_path": {
+        "const": "local/docs/dynamic-workflow-dag-framework.md"
+      },
+      "architecture_sha256": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      },
+      "extraction_policy": {
+        "const": "conformance_only_no_runtime_markdown_extraction"
+      },
+      "categories": {
+        "const": [
+          "semantic_format",
+          "compiler_error_code",
+          "runtime_fact_kind",
+          "runtime_event_type",
+          "runtime_state_value"
+        ]
+      },
+      "entries": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "coverage_id",
+            "category",
+            "value",
+            "contract_path",
+            "contract_pointer",
+            "markdown_section",
+            "markdown_anchor",
+            "change_impact",
+            "fixture_refs",
+            "entry_hash"
+          ],
+          "properties": {
+            "coverage_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "category": {
+              "enum": [
+                "semantic_format",
+                "compiler_error_code",
+                "runtime_fact_kind",
+                "runtime_event_type",
+                "runtime_state_value"
+              ]
+            },
+            "value": {
+              "type": "string",
+              "minLength": 1
+            },
+            "contract_path": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9._@/-]+$"
+            },
+            "contract_pointer": {
+              "type": "string",
+              "pattern": "^/(?:[^~/]|~[01])*(?:/(?:[^~/]|~[01])*)*$"
+            },
+            "markdown_section": {
+              "type": "string",
+              "minLength": 1
+            },
+            "markdown_anchor": {
+              "type": "string",
+              "pattern": "^#[a-z0-9一-鿿-]+$"
+            },
+            "change_impact": {
+              "enum": [
+                "new_format_or_major_contract_version_required",
+                "compiler_contract_version_and_golden_review_required",
+                "run_protocol_version_and_fixture_update_required"
+              ]
+            },
+            "fixture_refs": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9._@/-]+$"
+              },
+              "minItems": 1,
+              "uniqueItems": true
+            },
+            "entry_hash": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            }
+          }
+        },
+        "minItems": 1
+      },
+      "category_counts": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "semantic_format",
+          "compiler_error_code",
+          "runtime_fact_kind",
+          "runtime_event_type",
+          "runtime_state_value"
+        ],
+        "properties": {
+          "semantic_format": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "compiler_error_code": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "runtime_fact_kind": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "runtime_event_type": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "runtime_state_value": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          }
+        }
+      },
+      "contract_value_count": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 9007199254740991
+      },
+      "markdown_value_count": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 9007199254740991
+      },
+      "contract_values_without_markdown": {
+        "const": []
+      },
+      "markdown_values_without_contract": {
+        "const": []
+      },
+      "coverage_hash": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      }
+    }
+  }
+}

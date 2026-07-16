@@ -1,0 +1,293 @@
+{
+  "format": "icarus.workflow-g0-gate-review-schema/1",
+  "ref": {
+    "id": "icarus.workflow-g0-gate-review-schema",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-g0-gate-review-schema:1\n",
+  "hash": "sha256:25d535765586e3f4ff1452647f6a24790bb65808348dee5bfe9ce8fac0720555",
+  "payload": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:icarus:workflow-g0-gate-review:1",
+    "title": "Workflow G0 conformance exit review v1",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "format",
+      "gate_id",
+      "review_kind",
+      "decision",
+      "slice_identities",
+      "exit_criteria",
+      "markdown_coverage_hash",
+      "artifact_inventory_hash",
+      "absence_proof",
+      "status_proof",
+      "gate_statuses",
+      "conformance_entrypoint",
+      "review_hash"
+    ],
+    "properties": {
+      "format": {
+        "const": "icarus.workflow-g0-gate-review/1"
+      },
+      "gate_id": {
+        "const": "G0"
+      },
+      "review_kind": {
+        "const": "machine_conformance_exit_review"
+      },
+      "decision": {
+        "const": "pass"
+      },
+      "slice_identities": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "slice_id",
+            "identity_kind",
+            "primary_identity_hash",
+            "supporting_identity_hashes"
+          ],
+          "properties": {
+            "slice_id": {
+              "enum": [
+                "G0.1",
+                "G0.2",
+                "G0.3",
+                "G0.4",
+                "G0.5",
+                "G0.6",
+                "G0.7",
+                "G0.8"
+              ]
+            },
+            "identity_kind": {
+              "enum": [
+                "toolchain_manifest",
+                "contract_pack_manifest"
+              ]
+            },
+            "primary_identity_hash": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "supporting_identity_hashes": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              },
+              "minItems": 0
+            }
+          }
+        },
+        "minItems": 8
+      },
+      "exit_criteria": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "criterion_id",
+            "status",
+            "evidence_hashes"
+          ],
+          "properties": {
+            "criterion_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "status": {
+              "const": "pass"
+            },
+            "evidence_hashes": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              },
+              "minItems": 1
+            }
+          }
+        },
+        "minItems": 9
+      },
+      "markdown_coverage_hash": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      },
+      "artifact_inventory_hash": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      },
+      "absence_proof": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "workflow_runtime_absence_hash",
+          "product_surface_coverage_hash",
+          "migration_candidate_boundary_hash",
+          "production_source_hits",
+          "removed_api_hits",
+          "removed_ui_hits",
+          "legacy_schema_hits",
+          "legacy_filesystem_hits",
+          "active_resource_hits",
+          "candidate_reachability_hits"
+        ],
+        "properties": {
+          "workflow_runtime_absence_hash": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "product_surface_coverage_hash": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "migration_candidate_boundary_hash": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "production_source_hits": {
+            "const": 0
+          },
+          "removed_api_hits": {
+            "const": 0
+          },
+          "removed_ui_hits": {
+            "const": 0
+          },
+          "legacy_schema_hits": {
+            "const": 0
+          },
+          "legacy_filesystem_hits": {
+            "const": 0
+          },
+          "active_resource_hits": {
+            "const": 0
+          },
+          "candidate_reachability_hits": {
+            "const": 0
+          }
+        }
+      },
+      "status_proof": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "golden_review_request_status",
+          "golden_review_report_status",
+          "golden_semantic_review_status",
+          "golden_seal_status",
+          "sealed_bundle_status",
+          "sealed_directory_entry",
+          "expected_plan_bytes_status",
+          "expected_plan_hash_status",
+          "expected_proof_program_hash_status",
+          "sqlite_profile_status",
+          "sqlite_certification_status",
+          "executable_ddl_status",
+          "schema_manifest_status",
+          "workflow_runtime_store_status",
+          "production_compiler_status",
+          "golden_bundle_status",
+          "registry_runtime_status",
+          "runtime_center_ui_status"
+        ],
+        "properties": {
+          "golden_review_request_status": {
+            "const": "pending"
+          },
+          "golden_review_report_status": {
+            "const": "not_run"
+          },
+          "golden_semantic_review_status": {
+            "const": "absent"
+          },
+          "golden_seal_status": {
+            "const": "not_run"
+          },
+          "sealed_bundle_status": {
+            "const": "absent"
+          },
+          "sealed_directory_entry": {
+            "const": ".gitkeep"
+          },
+          "expected_plan_bytes_status": {
+            "const": "all_null"
+          },
+          "expected_plan_hash_status": {
+            "const": "all_null"
+          },
+          "expected_proof_program_hash_status": {
+            "const": "all_null"
+          },
+          "sqlite_profile_status": {
+            "const": "candidate"
+          },
+          "sqlite_certification_status": {
+            "const": "not_certified"
+          },
+          "executable_ddl_status": {
+            "const": "absent"
+          },
+          "schema_manifest_status": {
+            "const": "absent"
+          },
+          "workflow_runtime_store_status": {
+            "const": "absent"
+          },
+          "production_compiler_status": {
+            "const": "absent"
+          },
+          "golden_bundle_status": {
+            "const": "absent"
+          },
+          "registry_runtime_status": {
+            "const": "absent"
+          },
+          "runtime_center_ui_status": {
+            "const": "absent"
+          }
+        }
+      },
+      "gate_statuses": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "gate_id",
+            "status"
+          ],
+          "properties": {
+            "gate_id": {
+              "pattern": "^G[0-9]+$",
+              "type": "string"
+            },
+            "status": {
+              "enum": [
+                "DONE",
+                "READY",
+                "NOT_READY"
+              ]
+            }
+          }
+        },
+        "minItems": 10
+      },
+      "conformance_entrypoint": {
+        "const": "npm run test:g0"
+      },
+      "review_hash": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      }
+    }
+  }
+}

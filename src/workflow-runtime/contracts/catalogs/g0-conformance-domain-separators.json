@@ -1,0 +1,65 @@
+{
+  "format": "icarus.workflow-g0-conformance-domain-separators/1",
+  "ref": {
+    "id": "icarus.workflow-g0-conformance-domain-separators",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-g0-conformance-domain-separators:1\n",
+  "hash": "sha256:f41aa416190c5d670e02f0ff15940461a5250e82d69a234b00e93ee56b432238",
+  "payload": {
+    "registry_version": 1,
+    "entries": [
+      {
+        "format": "icarus.workflow-contract-pack-g0-conformance-exit/1",
+        "domain_separator": "icarus:workflow-contract-pack-g0-conformance-exit:1\n",
+        "artifact_path": "contract-pack-g0-conformance-exit.json"
+      },
+      {
+        "format": "icarus.workflow-g0-artifact-hash-inventory-schema/1",
+        "domain_separator": "icarus:workflow-g0-artifact-hash-inventory-schema:1\n",
+        "artifact_path": "conformance/g0-exit/schemas/artifact-hash-inventory-schema.json"
+      },
+      {
+        "format": "icarus.workflow-g0-artifact-hash-inventory/1",
+        "domain_separator": "icarus:workflow-g0-artifact-hash-inventory-artifact:1\n",
+        "artifact_path": "conformance/g0-exit/artifact-hash-inventory@1.json"
+      },
+      {
+        "format": "icarus.workflow-g0-conformance-domain-separators/1",
+        "domain_separator": "icarus:workflow-g0-conformance-domain-separators:1\n",
+        "artifact_path": "catalogs/g0-conformance-domain-separators.json"
+      },
+      {
+        "format": "icarus.workflow-g0-conformance-negative-cases/1",
+        "domain_separator": "icarus:workflow-g0-conformance-negative-cases:1\n",
+        "artifact_path": "conformance/g0-exit/negative-cases.json"
+      },
+      {
+        "format": "icarus.workflow-g0-conformance-positive-cases/1",
+        "domain_separator": "icarus:workflow-g0-conformance-positive-cases:1\n",
+        "artifact_path": "conformance/g0-exit/positive-cases.json"
+      },
+      {
+        "format": "icarus.workflow-g0-gate-review-schema/1",
+        "domain_separator": "icarus:workflow-g0-gate-review-schema:1\n",
+        "artifact_path": "conformance/g0-exit/schemas/g0-gate-review-schema.json"
+      },
+      {
+        "format": "icarus.workflow-g0-gate-review/1",
+        "domain_separator": "icarus:workflow-g0-gate-review-artifact:1\n",
+        "artifact_path": "conformance/g0-exit/g0-gate-review@1.json"
+      },
+      {
+        "format": "icarus.workflow-markdown-contract-coverage-schema/1",
+        "domain_separator": "icarus:workflow-markdown-contract-coverage-schema:1\n",
+        "artifact_path": "conformance/g0-exit/schemas/markdown-contract-coverage-schema.json"
+      },
+      {
+        "format": "icarus.workflow-markdown-contract-coverage/1",
+        "domain_separator": "icarus:workflow-markdown-contract-coverage-artifact:1\n",
+        "artifact_path": "conformance/g0-exit/markdown-contract-coverage@1.json"
+      }
+    ]
+  }
+}

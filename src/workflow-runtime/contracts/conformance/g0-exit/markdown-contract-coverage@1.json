@@ -1,0 +1,2850 @@
+{
+  "format": "icarus.workflow-markdown-contract-coverage/1",
+  "ref": {
+    "id": "icarus.workflow-markdown-contract-coverage",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-markdown-contract-coverage-artifact:1\n",
+  "hash": "sha256:67fd65c6a14cf94afc042582f4fe07da8f4c4127ec7971b03dfc95205aab626a",
+  "payload": {
+    "format": "icarus.workflow-markdown-contract-coverage/1",
+    "architecture_path": "local/docs/dynamic-workflow-dag-framework.md",
+    "architecture_sha256": "sha256:5c7cefd1494e83291f7b0aacb8ea8f9d4a59271a0e52060f4c030fb4acaa04f6",
+    "extraction_policy": "conformance_only_no_runtime_markdown_extraction",
+    "categories": [
+      "semantic_format",
+      "compiler_error_code",
+      "runtime_fact_kind",
+      "runtime_event_type",
+      "runtime_state_value"
+    ],
+    "entries": [
+      {
+        "coverage_id": "compiler_error_code:capability_not_allowed",
+        "category": "compiler_error_code",
+        "value": "capability_not_allowed",
+        "contract_path": "catalogs/workflow-compiler-error-catalog.json",
+        "contract_pointer": "/payload/error_codes/19",
+        "markdown_section": "Compiler Conformance Toolchain",
+        "markdown_anchor": "#compiler-conformance-toolchain",
+        "change_impact": "compiler_contract_version_and_golden_review_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json",
+          "conformance/draft/golden-draft-cases@1.json"
+        ],
+        "entry_hash": "sha256:1babd323afc35667ffa0f86a857eee1b8880032c8c0ef070898c448a04a17c90"
+      },
+      {
+        "coverage_id": "compiler_error_code:child_recipe_dependency_cycle",
+        "category": "compiler_error_code",
+        "value": "child_recipe_dependency_cycle",
+        "contract_path": "catalogs/workflow-compiler-error-catalog.json",
+        "contract_pointer": "/payload/error_codes/24",
+        "markdown_section": "Compiler Conformance Toolchain",
+        "markdown_anchor": "#compiler-conformance-toolchain",
+        "change_impact": "compiler_contract_version_and_golden_review_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json",
+          "conformance/draft/golden-draft-cases@1.json"
+        ],
+        "entry_hash": "sha256:8d5ab93bff76411bbdcf33e36845fa1074f9c55bd7935a21027e04c1413c70c0"
+      },
+      {
+        "coverage_id": "compiler_error_code:child_recipe_set_mismatch",
+        "category": "compiler_error_code",
+        "value": "child_recipe_set_mismatch",
+        "contract_path": "catalogs/workflow-compiler-error-catalog.json",
+        "contract_pointer": "/payload/error_codes/23",
+        "markdown_section": "Compiler Conformance Toolchain",
+        "markdown_anchor": "#compiler-conformance-toolchain",
+        "change_impact": "compiler_contract_version_and_golden_review_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json",
+          "conformance/draft/golden-draft-cases@1.json"
+        ],
+        "entry_hash": "sha256:e46d29413c4f085bc69feff0d931a33cf5b210b5ac11ea97b7b64e2563c04294"
+      },
+      {
+        "coverage_id": "compiler_error_code:compiler_integrity_mismatch",
+        "category": "compiler_error_code",
+        "value": "compiler_integrity_mismatch",
+        "contract_path": "catalogs/workflow-compiler-error-catalog.json",
+        "contract_pointer": "/payload/error_codes/26",
+        "markdown_section": "Compiler Conformance Toolchain",
+        "markdown_anchor": "#compiler-conformance-toolchain",
+        "change_impact": "compiler_contract_version_and_golden_review_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json",
+          "conformance/draft/golden-draft-cases@1.json"
+        ],
+        "entry_hash": "sha256:8acba65b63c52cc6eeab2be182f92b1125e9aa5074ef1ad9ed97ec9fd01dcac3"
+      },
+      {
+        "coverage_id": "compiler_error_code:completion_contract_invalid",
+        "category": "compiler_error_code",
+        "value": "completion_contract_invalid",
+        "contract_path": "catalogs/workflow-compiler-error-catalog.json",
+        "contract_pointer": "/payload/error_codes/16",
+        "markdown_section": "Compiler Conformance Toolchain",
+        "markdown_anchor": "#compiler-conformance-toolchain",
+        "change_impact": "compiler_contract_version_and_golden_review_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json",
+          "conformance/draft/golden-draft-cases@1.json"
+        ],
+        "entry_hash": "sha256:932b74581d31398eda522dd2d202234da63a023defb675de29473420c3456b06"
+      },
+      {
+        "coverage_id": "compiler_error_code:condition_complexity_exceeded",
+        "category": "compiler_error_code",
+        "value": "condition_complexity_exceeded",
+        "contract_path": "catalogs/workflow-compiler-error-catalog.json",
+        "contract_pointer": "/payload/error_codes/11",
+        "markdown_section": "Compiler Conformance Toolchain",
+        "markdown_anchor": "#compiler-conformance-toolchain",
+        "change_impact": "compiler_contract_version_and_golden_review_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json",
+          "conformance/draft/golden-draft-cases@1.json"
+        ],
+        "entry_hash": "sha256:5eed1b80cc06084cef3e4d40e354e7768e49d27ff813c893861d6107518a16a2"
+      },
+      {
+        "coverage_id": "compiler_error_code:condition_type_mismatch",
+        "category": "compiler_error_code",
+        "value": "condition_type_mismatch",
+        "contract_path": "catalogs/workflow-compiler-error-catalog.json",
+        "contract_pointer": "/payload/error_codes/10",
+        "markdown_section": "Compiler Conformance Toolchain",
+        "markdown_anchor": "#compiler-conformance-toolchain",
+        "change_impact": "compiler_contract_version_and_golden_review_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json",
+          "conformance/draft/golden-draft-cases@1.json"
+        ],
+        "entry_hash": "sha256:1a5f7bc3730d7dd19660ee2d105356f02b8e81c1e33b789c2477e054d187ab69"
+      },
+      {
+        "coverage_id": "compiler_error_code:early_completion_cancellation_unsafe",
+        "category": "compiler_error_code",
+        "value": "early_completion_cancellation_unsafe",
+        "contract_path": "catalogs/workflow-compiler-error-catalog.json",
+        "contract_pointer": "/payload/error_codes/18",
+        "markdown_section": "Compiler Conformance Toolchain",
+        "markdown_anchor": "#compiler-conformance-toolchain",
+        "change_impact": "compiler_contract_version_and_golden_review_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json",
+          "conformance/draft/golden-draft-cases@1.json"
+        ],
+        "entry_hash": "sha256:ba69298d31ce0c1f33a7ff6edf8722595f6703a71712e1cf1c6aa94c3184f970"
+      },
+      {
+        "coverage_id": "compiler_error_code:early_completion_non_monotone",
+        "category": "compiler_error_code",
+        "value": "early_completion_non_monotone",
+        "contract_path": "catalogs/workflow-compiler-error-catalog.json",
+        "contract_pointer": "/payload/error_codes/17",
+        "markdown_section": "Compiler Conformance Toolchain",
+        "markdown_anchor": "#compiler-conformance-toolchain",
+        "change_impact": "compiler_contract_version_and_golden_review_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json",
+          "conformance/draft/golden-draft-cases@1.json"
+        ],
+        "entry_hash": "sha256:89f5b5514da1d5c3500f5369d9432a3905308d26be6dcca0f74cc10933c4b7c4"
+      },
+      {
+        "coverage_id": "compiler_error_code:graph_cross_scope_edge",
+        "category": "compiler_error_code",
+        "value": "graph_cross_scope_edge",
+        "contract_path": "catalogs/workflow-compiler-error-catalog.json",
+        "contract_pointer": "/payload/error_codes/8",
+        "markdown_section": "Compiler Conformance Toolchain",
+        "markdown_anchor": "#compiler-conformance-toolchain",
+        "change_impact": "compiler_contract_version_and_golden_review_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json",
+          "conformance/draft/golden-draft-cases@1.json"
+        ],
+        "entry_hash": "sha256:219ed2c2ebd5341add2e3f4983fea0c6f71d256c726c6e0d15f820e41a89592c"
+      },
+      {
+        "coverage_id": "compiler_error_code:graph_dependency_cycle",
+        "category": "compiler_error_code",
+        "value": "graph_dependency_cycle",
+        "contract_path": "catalogs/workflow-compiler-error-catalog.json",
+        "contract_pointer": "/payload/error_codes/9",
+        "markdown_section": "Compiler Conformance Toolchain",
+        "markdown_anchor": "#compiler-conformance-toolchain",
+        "change_impact": "compiler_contract_version_and_golden_review_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json",
+          "conformance/draft/golden-draft-cases@1.json"
+        ],
+        "entry_hash": "sha256:8deff3a3126adbf13395f409004a3041ab4978f70a1e1fff70860d572c9bd20b"
+      },
+      {
+        "coverage_id": "compiler_error_code:graph_endpoint_not_found",
+        "category": "compiler_error_code",
+        "value": "graph_endpoint_not_found",
+        "contract_path": "catalogs/workflow-compiler-error-catalog.json",
+        "contract_pointer": "/payload/error_codes/7",
+        "markdown_section": "Compiler Conformance Toolchain",
+        "markdown_anchor": "#compiler-conformance-toolchain",
+        "change_impact": "compiler_contract_version_and_golden_review_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json",
+          "conformance/draft/golden-draft-cases@1.json"
+        ],
+        "entry_hash": "sha256:2727e0dd80a3d99bdec3759c1fda98504810fcb1a5dea86defe872e731abbad7"
+      },
+      {
+        "coverage_id": "compiler_error_code:graph_id_duplicate",
+        "category": "compiler_error_code",
+        "value": "graph_id_duplicate",
+        "contract_path": "catalogs/workflow-compiler-error-catalog.json",
+        "contract_pointer": "/payload/error_codes/6",
+        "markdown_section": "Compiler Conformance Toolchain",
+        "markdown_anchor": "#compiler-conformance-toolchain",
+        "change_impact": "compiler_contract_version_and_golden_review_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json",
+          "conformance/draft/golden-draft-cases@1.json"
+        ],
+        "entry_hash": "sha256:73df385229eda66bc09a03056a7132489a3f8ccfc75af835c89a96235930285b"
+      },
+      {
+        "coverage_id": "compiler_error_code:json_duplicate_key",
+        "category": "compiler_error_code",
+        "value": "json_duplicate_key",
+        "contract_path": "catalogs/workflow-compiler-error-catalog.json",
+        "contract_pointer": "/payload/error_codes/1",
+        "markdown_section": "Compiler Conformance Toolchain",
+        "markdown_anchor": "#compiler-conformance-toolchain",
+        "change_impact": "compiler_contract_version_and_golden_review_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json",
+          "conformance/draft/golden-draft-cases@1.json"
+        ],
+        "entry_hash": "sha256:50c9b7f8ec4a166098bbac9eb8147191a142069d784f7c7b7e7bacbb7838f098"
+      },
+      {
+        "coverage_id": "compiler_error_code:json_pointer_non_total",
+        "category": "compiler_error_code",
+        "value": "json_pointer_non_total",
+        "contract_path": "catalogs/workflow-compiler-error-catalog.json",
+        "contract_pointer": "/payload/error_codes/12",
+        "markdown_section": "Compiler Conformance Toolchain",
+        "markdown_anchor": "#compiler-conformance-toolchain",
+        "change_impact": "compiler_contract_version_and_golden_review_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json",
+          "conformance/draft/golden-draft-cases@1.json"
+        ],
+        "entry_hash": "sha256:ee0b35ccc84eaf6d74db9c64089e8a895116f497d0473e87aa44b1f6c233bc8f"
+      },
+      {
+        "coverage_id": "compiler_error_code:json_syntax_invalid",
+        "category": "compiler_error_code",
+        "value": "json_syntax_invalid",
+        "contract_path": "catalogs/workflow-compiler-error-catalog.json",
+        "contract_pointer": "/payload/error_codes/0",
+        "markdown_section": "Compiler Conformance Toolchain",
+        "markdown_anchor": "#compiler-conformance-toolchain",
+        "change_impact": "compiler_contract_version_and_golden_review_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json",
+          "conformance/draft/golden-draft-cases@1.json"
+        ],
+        "entry_hash": "sha256:fb79b95ca834faab3841e591f507e2f8f7e52d9cc6052d5586083b974b13add9"
+      },
+      {
+        "coverage_id": "compiler_error_code:policy_escalation",
+        "category": "compiler_error_code",
+        "value": "policy_escalation",
+        "contract_path": "catalogs/workflow-compiler-error-catalog.json",
+        "contract_pointer": "/payload/error_codes/20",
+        "markdown_section": "Compiler Conformance Toolchain",
+        "markdown_anchor": "#compiler-conformance-toolchain",
+        "change_impact": "compiler_contract_version_and_golden_review_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json",
+          "conformance/draft/golden-draft-cases@1.json"
+        ],
+        "entry_hash": "sha256:6ec7c313719cb2cbc2532d5bfac62be1489dfdf00ad16fd9c26e4e8619c84676"
+      },
+      {
+        "coverage_id": "compiler_error_code:quality_revision_contract_invalid",
+        "category": "compiler_error_code",
+        "value": "quality_revision_contract_invalid",
+        "contract_path": "catalogs/workflow-compiler-error-catalog.json",
+        "contract_pointer": "/payload/error_codes/21",
+        "markdown_section": "Compiler Conformance Toolchain",
+        "markdown_anchor": "#compiler-conformance-toolchain",
+        "change_impact": "compiler_contract_version_and_golden_review_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json",
+          "conformance/draft/golden-draft-cases@1.json"
+        ],
+        "entry_hash": "sha256:c81be53c611808bf7088cb2137b466ee8e505988c1e6bd043d5721337e3758be"
+      },
+      {
+        "coverage_id": "compiler_error_code:quality_revision_effect_key_incompatible",
+        "category": "compiler_error_code",
+        "value": "quality_revision_effect_key_incompatible",
+        "contract_path": "catalogs/workflow-compiler-error-catalog.json",
+        "contract_pointer": "/payload/error_codes/22",
+        "markdown_section": "Compiler Conformance Toolchain",
+        "markdown_anchor": "#compiler-conformance-toolchain",
+        "change_impact": "compiler_contract_version_and_golden_review_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json",
+          "conformance/draft/golden-draft-cases@1.json"
+        ],
+        "entry_hash": "sha256:4c9b577355da422fa0fb238645b9b96bf009a10f2725a0ec57a8fdebd08f5167"
+      },
+      {
+        "coverage_id": "compiler_error_code:registry_ref_not_found",
+        "category": "compiler_error_code",
+        "value": "registry_ref_not_found",
+        "contract_path": "catalogs/workflow-compiler-error-catalog.json",
+        "contract_pointer": "/payload/error_codes/5",
+        "markdown_section": "Compiler Conformance Toolchain",
+        "markdown_anchor": "#compiler-conformance-toolchain",
+        "change_impact": "compiler_contract_version_and_golden_review_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json",
+          "conformance/draft/golden-draft-cases@1.json"
+        ],
+        "entry_hash": "sha256:fe5c967223b5f33c5faac17aa177083350ef52837893bf5f6e29fefec3fc25e7"
+      },
+      {
+        "coverage_id": "compiler_error_code:registry_ref_unpinned",
+        "category": "compiler_error_code",
+        "value": "registry_ref_unpinned",
+        "contract_path": "catalogs/workflow-compiler-error-catalog.json",
+        "contract_pointer": "/payload/error_codes/4",
+        "markdown_section": "Compiler Conformance Toolchain",
+        "markdown_anchor": "#compiler-conformance-toolchain",
+        "change_impact": "compiler_contract_version_and_golden_review_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json",
+          "conformance/draft/golden-draft-cases@1.json"
+        ],
+        "entry_hash": "sha256:891e74a641657d2cee201cf5abc090f4033ee57dc93016efe1203501b45e9e5f"
+      },
+      {
+        "coverage_id": "compiler_error_code:route_group_ambiguous",
+        "category": "compiler_error_code",
+        "value": "route_group_ambiguous",
+        "contract_path": "catalogs/workflow-compiler-error-catalog.json",
+        "contract_pointer": "/payload/error_codes/14",
+        "markdown_section": "Compiler Conformance Toolchain",
+        "markdown_anchor": "#compiler-conformance-toolchain",
+        "change_impact": "compiler_contract_version_and_golden_review_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json",
+          "conformance/draft/golden-draft-cases@1.json"
+        ],
+        "entry_hash": "sha256:2238269d8fbe57b68cb5445bf48db87f616991245f01fb2ac13e30d3d1d31fd7"
+      },
+      {
+        "coverage_id": "compiler_error_code:runtime_safety_limit_exceeded",
+        "category": "compiler_error_code",
+        "value": "runtime_safety_limit_exceeded",
+        "contract_path": "catalogs/workflow-compiler-error-catalog.json",
+        "contract_pointer": "/payload/error_codes/25",
+        "markdown_section": "Compiler Conformance Toolchain",
+        "markdown_anchor": "#compiler-conformance-toolchain",
+        "change_impact": "compiler_contract_version_and_golden_review_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json",
+          "conformance/draft/golden-draft-cases@1.json"
+        ],
+        "entry_hash": "sha256:20d2467112c52a3fc20bfeb8a540d755d38819b425fe210a71f383ab5acde293"
+      },
+      {
+        "coverage_id": "compiler_error_code:schema_not_assignable",
+        "category": "compiler_error_code",
+        "value": "schema_not_assignable",
+        "contract_path": "catalogs/workflow-compiler-error-catalog.json",
+        "contract_pointer": "/payload/error_codes/13",
+        "markdown_section": "Compiler Conformance Toolchain",
+        "markdown_anchor": "#compiler-conformance-toolchain",
+        "change_impact": "compiler_contract_version_and_golden_review_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json",
+          "conformance/draft/golden-draft-cases@1.json"
+        ],
+        "entry_hash": "sha256:3f1e7cf628ad31d561894f204eee4a85260f35de499308de064c73965c7b59ae"
+      },
+      {
+        "coverage_id": "compiler_error_code:schema_profile_keyword_unsupported",
+        "category": "compiler_error_code",
+        "value": "schema_profile_keyword_unsupported",
+        "contract_path": "catalogs/workflow-compiler-error-catalog.json",
+        "contract_pointer": "/payload/error_codes/3",
+        "markdown_section": "Compiler Conformance Toolchain",
+        "markdown_anchor": "#compiler-conformance-toolchain",
+        "change_impact": "compiler_contract_version_and_golden_review_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json",
+          "conformance/draft/golden-draft-cases@1.json"
+        ],
+        "entry_hash": "sha256:41b4f0cfd75d8a4991260aa05084245405b557a2a77a4e6b720be80f8153ec87"
+      },
+      {
+        "coverage_id": "compiler_error_code:schema_unknown_field",
+        "category": "compiler_error_code",
+        "value": "schema_unknown_field",
+        "contract_path": "catalogs/workflow-compiler-error-catalog.json",
+        "contract_pointer": "/payload/error_codes/2",
+        "markdown_section": "Compiler Conformance Toolchain",
+        "markdown_anchor": "#compiler-conformance-toolchain",
+        "change_impact": "compiler_contract_version_and_golden_review_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json",
+          "conformance/draft/golden-draft-cases@1.json"
+        ],
+        "entry_hash": "sha256:f2b9bd9c6b7262aa9496a86b0adef8687cdb21f81da0793e4d318fe30c578f27"
+      },
+      {
+        "coverage_id": "compiler_error_code:trigger_contract_invalid",
+        "category": "compiler_error_code",
+        "value": "trigger_contract_invalid",
+        "contract_path": "catalogs/workflow-compiler-error-catalog.json",
+        "contract_pointer": "/payload/error_codes/15",
+        "markdown_section": "Compiler Conformance Toolchain",
+        "markdown_anchor": "#compiler-conformance-toolchain",
+        "change_impact": "compiler_contract_version_and_golden_review_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json",
+          "conformance/draft/golden-draft-cases@1.json"
+        ],
+        "entry_hash": "sha256:90a9ec599f28cb690066bf7fbd0876a7adea8b0e27d5ba7884c4afeb44ca11ea"
+      },
+      {
+        "coverage_id": "runtime_event_type:attempt_created",
+        "category": "runtime_event_type",
+        "value": "attempt_created",
+        "contract_path": "catalogs/workflow-runtime-event-catalog.json",
+        "contract_pointer": "/payload/entries/19/event_type",
+        "markdown_section": "Inbox、Late Result、Event 与 Effect Journal",
+        "markdown_anchor": "#inboxlate-resultevent-与-effect-journal",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:c8ada03a4f65c82c43dde20a331898c85f6c8a0fc225a7aa0c3132ac4cc66572"
+      },
+      {
+        "coverage_id": "runtime_event_type:attempt_phase_changed",
+        "category": "runtime_event_type",
+        "value": "attempt_phase_changed",
+        "contract_path": "catalogs/workflow-runtime-event-catalog.json",
+        "contract_pointer": "/payload/entries/20/event_type",
+        "markdown_section": "Inbox、Late Result、Event 与 Effect Journal",
+        "markdown_anchor": "#inboxlate-resultevent-与-effect-journal",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:cef2529bcf8638d2cbdf8fd11145984ea2ae404c9f035f24c528f1d438e8478b"
+      },
+      {
+        "coverage_id": "runtime_event_type:build_failed",
+        "category": "runtime_event_type",
+        "value": "build_failed",
+        "contract_path": "catalogs/workflow-runtime-event-catalog.json",
+        "contract_pointer": "/payload/entries/3/event_type",
+        "markdown_section": "Inbox、Late Result、Event 与 Effect Journal",
+        "markdown_anchor": "#inboxlate-resultevent-与-effect-journal",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:f66cb816b77cd04de610febac7470ab40c3e01d118c422961fad456ec49343ec"
+      },
+      {
+        "coverage_id": "runtime_event_type:child_completion_consumed",
+        "category": "runtime_event_type",
+        "value": "child_completion_consumed",
+        "contract_path": "catalogs/workflow-runtime-event-catalog.json",
+        "contract_pointer": "/payload/entries/29/event_type",
+        "markdown_section": "Inbox、Late Result、Event 与 Effect Journal",
+        "markdown_anchor": "#inboxlate-resultevent-与-effect-journal",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:20ead9758f90cff338abd0036e7f32ad1c7f4a429dfd2fea89637c4d9fdfef5a"
+      },
+      {
+        "coverage_id": "runtime_event_type:compensation_changed",
+        "category": "runtime_event_type",
+        "value": "compensation_changed",
+        "contract_path": "catalogs/workflow-runtime-event-catalog.json",
+        "contract_pointer": "/payload/entries/27/event_type",
+        "markdown_section": "Inbox、Late Result、Event 与 Effect Journal",
+        "markdown_anchor": "#inboxlate-resultevent-与-effect-journal",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:6a0106117359dbd6a979c44b1359c10f7749028ec45b53546590a9a618bb95f9"
+      },
+      {
+        "coverage_id": "runtime_event_type:completion_cut_committed",
+        "category": "runtime_event_type",
+        "value": "completion_cut_committed",
+        "contract_path": "catalogs/workflow-runtime-event-catalog.json",
+        "contract_pointer": "/payload/entries/28/event_type",
+        "markdown_section": "Inbox、Late Result、Event 与 Effect Journal",
+        "markdown_anchor": "#inboxlate-resultevent-与-effect-journal",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:7e8b82b257f672087606b4c13ae3376fa113c28c8cdc4aa27659489d97801f7a"
+      },
+      {
+        "coverage_id": "runtime_event_type:completion_eligibility",
+        "category": "runtime_event_type",
+        "value": "completion_eligibility",
+        "contract_path": "catalogs/workflow-runtime-event-catalog.json",
+        "contract_pointer": "/payload/entries/11/event_type",
+        "markdown_section": "Inbox、Late Result、Event 与 Effect Journal",
+        "markdown_anchor": "#inboxlate-resultevent-与-effect-journal",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:3ddf27d20ec25bf4e13c018ff99a0a744fbc5e36cc462a9123108990666755e2"
+      },
+      {
+        "coverage_id": "runtime_event_type:control_edge_resolved",
+        "category": "runtime_event_type",
+        "value": "control_edge_resolved",
+        "contract_path": "catalogs/workflow-runtime-event-catalog.json",
+        "contract_pointer": "/payload/entries/4/event_type",
+        "markdown_section": "Inbox、Late Result、Event 与 Effect Journal",
+        "markdown_anchor": "#inboxlate-resultevent-与-effect-journal",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:244b7acea66a1e4ce9f73b9277b28bd67540977d6125ee94f3832a73d1a81b1e"
+      },
+      {
+        "coverage_id": "runtime_event_type:data_edge_resolved",
+        "category": "runtime_event_type",
+        "value": "data_edge_resolved",
+        "contract_path": "catalogs/workflow-runtime-event-catalog.json",
+        "contract_pointer": "/payload/entries/5/event_type",
+        "markdown_section": "Inbox、Late Result、Event 与 Effect Journal",
+        "markdown_anchor": "#inboxlate-resultevent-与-effect-journal",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:2d2063e1f10546cfde6ec2007ead8536b2f04f3de9793688c7dcacd138312b34"
+      },
+      {
+        "coverage_id": "runtime_event_type:domain_claim_changed",
+        "category": "runtime_event_type",
+        "value": "domain_claim_changed",
+        "contract_path": "catalogs/workflow-runtime-event-catalog.json",
+        "contract_pointer": "/payload/entries/36/event_type",
+        "markdown_section": "Inbox、Late Result、Event 与 Effect Journal",
+        "markdown_anchor": "#inboxlate-resultevent-与-effect-journal",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:c09710eb7a1206533c0ce84c9c0c574d12afe124e00696f232a2dcdfb6090426"
+      },
+      {
+        "coverage_id": "runtime_event_type:effect_operation_changed",
+        "category": "runtime_event_type",
+        "value": "effect_operation_changed",
+        "contract_path": "catalogs/workflow-runtime-event-catalog.json",
+        "contract_pointer": "/payload/entries/26/event_type",
+        "markdown_section": "Inbox、Late Result、Event 与 Effect Journal",
+        "markdown_anchor": "#inboxlate-resultevent-与-effect-journal",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:60deb9e0e1e43195ef03500392491c09d85f72f3bdf79f94a1fb3cfd92cbd167"
+      },
+      {
+        "coverage_id": "runtime_event_type:expansion_sealed",
+        "category": "runtime_event_type",
+        "value": "expansion_sealed",
+        "contract_path": "catalogs/workflow-runtime-event-catalog.json",
+        "contract_pointer": "/payload/entries/17/event_type",
+        "markdown_section": "Inbox、Late Result、Event 与 Effect Journal",
+        "markdown_anchor": "#inboxlate-resultevent-与-effect-journal",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:5709ed8e0b39c48ba0289558c70e5433dfe48c63ba1baa5afc135757f8e15838"
+      },
+      {
+        "coverage_id": "runtime_event_type:input_sealed",
+        "category": "runtime_event_type",
+        "value": "input_sealed",
+        "contract_path": "catalogs/workflow-runtime-event-catalog.json",
+        "contract_pointer": "/payload/entries/7/event_type",
+        "markdown_section": "Inbox、Late Result、Event 与 Effect Journal",
+        "markdown_anchor": "#inboxlate-resultevent-与-effect-journal",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:7fe5367dda865191f0c1c307bcc911aaf93b64c6f1e208266333c69c2d665bab"
+      },
+      {
+        "coverage_id": "runtime_event_type:ledger_posting_committed",
+        "category": "runtime_event_type",
+        "value": "ledger_posting_committed",
+        "contract_path": "catalogs/workflow-runtime-event-catalog.json",
+        "contract_pointer": "/payload/entries/37/event_type",
+        "markdown_section": "Inbox、Late Result、Event 与 Effect Journal",
+        "markdown_anchor": "#inboxlate-resultevent-与-effect-journal",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:d0e014c6f7b56ee6197009868f0b0504df894f8c9468979b5cae25e694236ac7"
+      },
+      {
+        "coverage_id": "runtime_event_type:node_output_published",
+        "category": "runtime_event_type",
+        "value": "node_output_published",
+        "contract_path": "catalogs/workflow-runtime-event-catalog.json",
+        "contract_pointer": "/payload/entries/1/event_type",
+        "markdown_section": "Inbox、Late Result、Event 与 Effect Journal",
+        "markdown_anchor": "#inboxlate-resultevent-与-effect-journal",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:49d665dc7b7383ff376a523e2746d68e699aff322a53115b48b688b161dac4ca"
+      },
+      {
+        "coverage_id": "runtime_event_type:node_ready",
+        "category": "runtime_event_type",
+        "value": "node_ready",
+        "contract_path": "catalogs/workflow-runtime-event-catalog.json",
+        "contract_pointer": "/payload/entries/8/event_type",
+        "markdown_section": "Inbox、Late Result、Event 与 Effect Journal",
+        "markdown_anchor": "#inboxlate-resultevent-与-effect-journal",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:3db05f3d9070d1050df908df36215e336ff3dcd2a6ea50a9d9b2efe75295a8bb"
+      },
+      {
+        "coverage_id": "runtime_event_type:node_skipped",
+        "category": "runtime_event_type",
+        "value": "node_skipped",
+        "contract_path": "catalogs/workflow-runtime-event-catalog.json",
+        "contract_pointer": "/payload/entries/9/event_type",
+        "markdown_section": "Inbox、Late Result、Event 与 Effect Journal",
+        "markdown_anchor": "#inboxlate-resultevent-与-effect-journal",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:92a1daa577ba1f432201d3c2526695cf29f497ac6f1dc62bd84e28e073dd9f14"
+      },
+      {
+        "coverage_id": "runtime_event_type:node_terminal",
+        "category": "runtime_event_type",
+        "value": "node_terminal",
+        "contract_path": "catalogs/workflow-runtime-event-catalog.json",
+        "contract_pointer": "/payload/entries/0/event_type",
+        "markdown_section": "Inbox、Late Result、Event 与 Effect Journal",
+        "markdown_anchor": "#inboxlate-resultevent-与-effect-journal",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:97e8db94b11d0fe245f7d03e0230f1ffa532bf15281ca4b76c0dcbe96d9ac174"
+      },
+      {
+        "coverage_id": "runtime_event_type:operational_blocker_changed",
+        "category": "runtime_event_type",
+        "value": "operational_blocker_changed",
+        "contract_path": "catalogs/workflow-runtime-event-catalog.json",
+        "contract_pointer": "/payload/entries/31/event_type",
+        "markdown_section": "Inbox、Late Result、Event 与 Effect Journal",
+        "markdown_anchor": "#inboxlate-resultevent-与-effect-journal",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:ca0ee212d2e71e61c829fcf55ae3dc9bf2c0a25825be7d724910f8b8cd7100c5"
+      },
+      {
+        "coverage_id": "runtime_event_type:orchestration_error",
+        "category": "runtime_event_type",
+        "value": "orchestration_error",
+        "contract_path": "catalogs/workflow-runtime-event-catalog.json",
+        "contract_pointer": "/payload/entries/12/event_type",
+        "markdown_section": "Inbox、Late Result、Event 与 Effect Journal",
+        "markdown_anchor": "#inboxlate-resultevent-与-effect-journal",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:c3c4ccccb1d739ee4e89dea9044f0d4ee2ae32ee503e26a9e0b2fbc9d0e6625a"
+      },
+      {
+        "coverage_id": "runtime_event_type:recovery_decision_recorded",
+        "category": "runtime_event_type",
+        "value": "recovery_decision_recorded",
+        "contract_path": "catalogs/workflow-runtime-event-catalog.json",
+        "contract_pointer": "/payload/entries/38/event_type",
+        "markdown_section": "Inbox、Late Result、Event 与 Effect Journal",
+        "markdown_anchor": "#inboxlate-resultevent-与-effect-journal",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:400dcf8e289363be7f37558851a3bf4ec4f8053a9e9e0f9fd987ed9fcadd8145"
+      },
+      {
+        "coverage_id": "runtime_event_type:retry_schedule_consumed",
+        "category": "runtime_event_type",
+        "value": "retry_schedule_consumed",
+        "contract_path": "catalogs/workflow-runtime-event-catalog.json",
+        "contract_pointer": "/payload/entries/22/event_type",
+        "markdown_section": "Inbox、Late Result、Event 与 Effect Journal",
+        "markdown_anchor": "#inboxlate-resultevent-与-effect-journal",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:6d6c186dc3cbe2a032252c510dfcd362caec213f92b3bad4c1445a527ed08f6f"
+      },
+      {
+        "coverage_id": "runtime_event_type:retry_schedule_created",
+        "category": "runtime_event_type",
+        "value": "retry_schedule_created",
+        "contract_path": "catalogs/workflow-runtime-event-catalog.json",
+        "contract_pointer": "/payload/entries/21/event_type",
+        "markdown_section": "Inbox、Late Result、Event 与 Effect Journal",
+        "markdown_anchor": "#inboxlate-resultevent-与-effect-journal",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:a159447d64395567e8b8280b63c242c2899bc0f4ede45c8e5def79d77561a167"
+      },
+      {
+        "coverage_id": "runtime_event_type:root_finalization_changed",
+        "category": "runtime_event_type",
+        "value": "root_finalization_changed",
+        "contract_path": "catalogs/workflow-runtime-event-catalog.json",
+        "contract_pointer": "/payload/entries/35/event_type",
+        "markdown_section": "Inbox、Late Result、Event 与 Effect Journal",
+        "markdown_anchor": "#inboxlate-resultevent-与-effect-journal",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:8970e07dfd7f5815c418b2f83b5f25499c64500e875779da1429563b5becf086"
+      },
+      {
+        "coverage_id": "runtime_event_type:run_control_changed",
+        "category": "runtime_event_type",
+        "value": "run_control_changed",
+        "contract_path": "catalogs/workflow-runtime-event-catalog.json",
+        "contract_pointer": "/payload/entries/30/event_type",
+        "markdown_section": "Inbox、Late Result、Event 与 Effect Journal",
+        "markdown_anchor": "#inboxlate-resultevent-与-effect-journal",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:7bd879025098e9b70fcaa44d0cc9c5d03b73ab7fac91d8b1e14fb5c7198da52b"
+      },
+      {
+        "coverage_id": "runtime_event_type:run_created",
+        "category": "runtime_event_type",
+        "value": "run_created",
+        "contract_path": "catalogs/workflow-runtime-event-catalog.json",
+        "contract_pointer": "/payload/entries/15/event_type",
+        "markdown_section": "Inbox、Late Result、Event 与 Effect Journal",
+        "markdown_anchor": "#inboxlate-resultevent-与-effect-journal",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:59f40f04716b936fb623a46f6695c39cf7d59774cb153b93b46b1a3834f0d909"
+      },
+      {
+        "coverage_id": "runtime_event_type:runtime_command_decided",
+        "category": "runtime_event_type",
+        "value": "runtime_command_decided",
+        "contract_path": "catalogs/workflow-runtime-event-catalog.json",
+        "contract_pointer": "/payload/entries/32/event_type",
+        "markdown_section": "Inbox、Late Result、Event 与 Effect Journal",
+        "markdown_anchor": "#inboxlate-resultevent-与-effect-journal",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:67aba74f9471ec70059b5612805e09bc9793f071e66d1383653d5def13306355"
+      },
+      {
+        "coverage_id": "runtime_event_type:scheduler_admitted",
+        "category": "runtime_event_type",
+        "value": "scheduler_admitted",
+        "contract_path": "catalogs/workflow-runtime-event-catalog.json",
+        "contract_pointer": "/payload/entries/18/event_type",
+        "markdown_section": "Inbox、Late Result、Event 与 Effect Journal",
+        "markdown_anchor": "#inboxlate-resultevent-与-effect-journal",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:49aed4382b818c0dc5e79e0c8485f90a7377ab2fb1b3a1593b2be67f96fcedd2"
+      },
+      {
+        "coverage_id": "runtime_event_type:scope_close_requested",
+        "category": "runtime_event_type",
+        "value": "scope_close_requested",
+        "contract_path": "catalogs/workflow-runtime-event-catalog.json",
+        "contract_pointer": "/payload/entries/24/event_type",
+        "markdown_section": "Inbox、Late Result、Event 与 Effect Journal",
+        "markdown_anchor": "#inboxlate-resultevent-与-effect-journal",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:3905ddc484c0d37789b5a5c5e205df7c07a16ce60aabe314fe1f9f6cdf817374"
+      },
+      {
+        "coverage_id": "runtime_event_type:scope_materialized",
+        "category": "runtime_event_type",
+        "value": "scope_materialized",
+        "contract_path": "catalogs/workflow-runtime-event-catalog.json",
+        "contract_pointer": "/payload/entries/16/event_type",
+        "markdown_section": "Inbox、Late Result、Event 与 Effect Journal",
+        "markdown_anchor": "#inboxlate-resultevent-与-effect-journal",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:486687ac556b7b648ea8331abc9c2effdf44ab277933b686444152f63994f682"
+      },
+      {
+        "coverage_id": "runtime_event_type:state_activation_created",
+        "category": "runtime_event_type",
+        "value": "state_activation_created",
+        "contract_path": "catalogs/workflow-runtime-event-catalog.json",
+        "contract_pointer": "/payload/entries/14/event_type",
+        "markdown_section": "Inbox、Late Result、Event 与 Effect Journal",
+        "markdown_anchor": "#inboxlate-resultevent-与-effect-journal",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:ea10497ecb21ceadb3579922dbd2f377e9ff391d9dca0dfbb149439d234e5f02"
+      },
+      {
+        "coverage_id": "runtime_event_type:subtree_fenced",
+        "category": "runtime_event_type",
+        "value": "subtree_fenced",
+        "contract_path": "catalogs/workflow-runtime-event-catalog.json",
+        "contract_pointer": "/payload/entries/25/event_type",
+        "markdown_section": "Inbox、Late Result、Event 与 Effect Journal",
+        "markdown_anchor": "#inboxlate-resultevent-与-effect-journal",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:82acbf7e4524c96281deb5e22ea66f40ae533a9b8403f7b3f388448234ea123e"
+      },
+      {
+        "coverage_id": "runtime_event_type:terminal_candidate",
+        "category": "runtime_event_type",
+        "value": "terminal_candidate",
+        "contract_path": "catalogs/workflow-runtime-event-catalog.json",
+        "contract_pointer": "/payload/entries/10/event_type",
+        "markdown_section": "Inbox、Late Result、Event 与 Effect Journal",
+        "markdown_anchor": "#inboxlate-resultevent-与-effect-journal",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:80c64be2e8d5d9fb4867205b13bdeeaba6f8f4f3ad9f013792da59267db7824e"
+      },
+      {
+        "coverage_id": "runtime_event_type:trigger_decided",
+        "category": "runtime_event_type",
+        "value": "trigger_decided",
+        "contract_path": "catalogs/workflow-runtime-event-catalog.json",
+        "contract_pointer": "/payload/entries/6/event_type",
+        "markdown_section": "Inbox、Late Result、Event 与 Effect Journal",
+        "markdown_anchor": "#inboxlate-resultevent-与-effect-journal",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:848336544e8fb07b2970b0271d59d17bd5db751d31788dca0b59b3d5cec9033d"
+      },
+      {
+        "coverage_id": "runtime_event_type:wait_armed",
+        "category": "runtime_event_type",
+        "value": "wait_armed",
+        "contract_path": "catalogs/workflow-runtime-event-catalog.json",
+        "contract_pointer": "/payload/entries/23/event_type",
+        "markdown_section": "Inbox、Late Result、Event 与 Effect Journal",
+        "markdown_anchor": "#inboxlate-resultevent-与-effect-journal",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:84a50fecea042d17cd67e6fc53c03255b31cbeb3a3c31baa3bbbc9ee54479b33"
+      },
+      {
+        "coverage_id": "runtime_event_type:wait_resolved",
+        "category": "runtime_event_type",
+        "value": "wait_resolved",
+        "contract_path": "catalogs/workflow-runtime-event-catalog.json",
+        "contract_pointer": "/payload/entries/2/event_type",
+        "markdown_section": "Inbox、Late Result、Event 与 Effect Journal",
+        "markdown_anchor": "#inboxlate-resultevent-与-effect-journal",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:f4727c8b0c074a521ef42446da6fc4516dfc413a9b196da3b6eaa6fddab54581"
+      },
+      {
+        "coverage_id": "runtime_event_type:workflow_created",
+        "category": "runtime_event_type",
+        "value": "workflow_created",
+        "contract_path": "catalogs/workflow-runtime-event-catalog.json",
+        "contract_pointer": "/payload/entries/13/event_type",
+        "markdown_section": "Inbox、Late Result、Event 与 Effect Journal",
+        "markdown_anchor": "#inboxlate-resultevent-与-effect-journal",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:f5004e86c20b67b059ab49fa335d79504fee2906b7a3b2b3cf1687973fee3216"
+      },
+      {
+        "coverage_id": "runtime_event_type:workflow_terminal_committed",
+        "category": "runtime_event_type",
+        "value": "workflow_terminal_committed",
+        "contract_path": "catalogs/workflow-runtime-event-catalog.json",
+        "contract_pointer": "/payload/entries/34/event_type",
+        "markdown_section": "Inbox、Late Result、Event 与 Effect Journal",
+        "markdown_anchor": "#inboxlate-resultevent-与-effect-journal",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:33c3317c97bda9989180c2e86dde0a5b28212f009fbca7ef0e2a73bc354d51e3"
+      },
+      {
+        "coverage_id": "runtime_event_type:workflow_transition_committed",
+        "category": "runtime_event_type",
+        "value": "workflow_transition_committed",
+        "contract_path": "catalogs/workflow-runtime-event-catalog.json",
+        "contract_pointer": "/payload/entries/33/event_type",
+        "markdown_section": "Inbox、Late Result、Event 与 Effect Journal",
+        "markdown_anchor": "#inboxlate-resultevent-与-effect-journal",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:e1d0f53dd7ddfd4643c8317cc596f632e91af206a259fb58940196b82051d3a5"
+      },
+      {
+        "coverage_id": "runtime_fact_kind:build_failed",
+        "category": "runtime_fact_kind",
+        "value": "build_failed",
+        "contract_path": "catalogs/workflow-runtime-fact-catalog.json",
+        "contract_pointer": "/payload/entries/3/fact_kind",
+        "markdown_section": "Inbox、Late Result、Event 与 Effect Journal",
+        "markdown_anchor": "#inboxlate-resultevent-与-effect-journal",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:5123c288a959fbe71966b9beb3775e0d9f63fa478d62e09604c007c08f8f1a0a"
+      },
+      {
+        "coverage_id": "runtime_fact_kind:completion_eligibility",
+        "category": "runtime_fact_kind",
+        "value": "completion_eligibility",
+        "contract_path": "catalogs/workflow-runtime-fact-catalog.json",
+        "contract_pointer": "/payload/entries/11/fact_kind",
+        "markdown_section": "Inbox、Late Result、Event 与 Effect Journal",
+        "markdown_anchor": "#inboxlate-resultevent-与-effect-journal",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:2221b41dce28215d72b7c5134559da8a04288fd21314489a46dea6f4c3e04f21"
+      },
+      {
+        "coverage_id": "runtime_fact_kind:control_edge_resolved",
+        "category": "runtime_fact_kind",
+        "value": "control_edge_resolved",
+        "contract_path": "catalogs/workflow-runtime-fact-catalog.json",
+        "contract_pointer": "/payload/entries/4/fact_kind",
+        "markdown_section": "Inbox、Late Result、Event 与 Effect Journal",
+        "markdown_anchor": "#inboxlate-resultevent-与-effect-journal",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:9d39e613d45173dbff6733262768bdeab05f2d98b902e17bfb52da7c1cad9b46"
+      },
+      {
+        "coverage_id": "runtime_fact_kind:data_edge_resolved",
+        "category": "runtime_fact_kind",
+        "value": "data_edge_resolved",
+        "contract_path": "catalogs/workflow-runtime-fact-catalog.json",
+        "contract_pointer": "/payload/entries/5/fact_kind",
+        "markdown_section": "Inbox、Late Result、Event 与 Effect Journal",
+        "markdown_anchor": "#inboxlate-resultevent-与-effect-journal",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:8fde4a6c019fca8e2438a5cee83975bcd20bd1d81bcbc3ef1bbd625d32316e47"
+      },
+      {
+        "coverage_id": "runtime_fact_kind:input_sealed",
+        "category": "runtime_fact_kind",
+        "value": "input_sealed",
+        "contract_path": "catalogs/workflow-runtime-fact-catalog.json",
+        "contract_pointer": "/payload/entries/7/fact_kind",
+        "markdown_section": "Inbox、Late Result、Event 与 Effect Journal",
+        "markdown_anchor": "#inboxlate-resultevent-与-effect-journal",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:e69068e66a8613a3fff250538618687dc28cfb34f7c94abdeb81160e3c9bb089"
+      },
+      {
+        "coverage_id": "runtime_fact_kind:node_output_published",
+        "category": "runtime_fact_kind",
+        "value": "node_output_published",
+        "contract_path": "catalogs/workflow-runtime-fact-catalog.json",
+        "contract_pointer": "/payload/entries/1/fact_kind",
+        "markdown_section": "Inbox、Late Result、Event 与 Effect Journal",
+        "markdown_anchor": "#inboxlate-resultevent-与-effect-journal",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:03aec409e2316431e2557196d7f28b519661970cc84fdea340dc6a6fe7d4b942"
+      },
+      {
+        "coverage_id": "runtime_fact_kind:node_ready",
+        "category": "runtime_fact_kind",
+        "value": "node_ready",
+        "contract_path": "catalogs/workflow-runtime-fact-catalog.json",
+        "contract_pointer": "/payload/entries/8/fact_kind",
+        "markdown_section": "Inbox、Late Result、Event 与 Effect Journal",
+        "markdown_anchor": "#inboxlate-resultevent-与-effect-journal",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:906f588cd6c7ec69a5fe4efc927a549ed24ea6a16636814f5ab05c4d90c5eb3c"
+      },
+      {
+        "coverage_id": "runtime_fact_kind:node_skipped",
+        "category": "runtime_fact_kind",
+        "value": "node_skipped",
+        "contract_path": "catalogs/workflow-runtime-fact-catalog.json",
+        "contract_pointer": "/payload/entries/9/fact_kind",
+        "markdown_section": "Inbox、Late Result、Event 与 Effect Journal",
+        "markdown_anchor": "#inboxlate-resultevent-与-effect-journal",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:03e26fe343c13149096f78887c28a83ec11b545212f43c714fcb4bd608d75a80"
+      },
+      {
+        "coverage_id": "runtime_fact_kind:node_terminal",
+        "category": "runtime_fact_kind",
+        "value": "node_terminal",
+        "contract_path": "catalogs/workflow-runtime-fact-catalog.json",
+        "contract_pointer": "/payload/entries/0/fact_kind",
+        "markdown_section": "Inbox、Late Result、Event 与 Effect Journal",
+        "markdown_anchor": "#inboxlate-resultevent-与-effect-journal",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:af7bc4f742df6c1a28bd142d9674671c6273c698effbf19c446bfe3b5e04340a"
+      },
+      {
+        "coverage_id": "runtime_fact_kind:orchestration_error",
+        "category": "runtime_fact_kind",
+        "value": "orchestration_error",
+        "contract_path": "catalogs/workflow-runtime-fact-catalog.json",
+        "contract_pointer": "/payload/entries/12/fact_kind",
+        "markdown_section": "Inbox、Late Result、Event 与 Effect Journal",
+        "markdown_anchor": "#inboxlate-resultevent-与-effect-journal",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:9e596637af8a5270bc9996db1f5a2db8d15e963bda959d322792793ce6cdaa44"
+      },
+      {
+        "coverage_id": "runtime_fact_kind:terminal_candidate",
+        "category": "runtime_fact_kind",
+        "value": "terminal_candidate",
+        "contract_path": "catalogs/workflow-runtime-fact-catalog.json",
+        "contract_pointer": "/payload/entries/10/fact_kind",
+        "markdown_section": "Inbox、Late Result、Event 与 Effect Journal",
+        "markdown_anchor": "#inboxlate-resultevent-与-effect-journal",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:2c075836786f2f76e9d86b572fba170cee1f7be60baa46859ee3a76007d5bc7f"
+      },
+      {
+        "coverage_id": "runtime_fact_kind:trigger_decided",
+        "category": "runtime_fact_kind",
+        "value": "trigger_decided",
+        "contract_path": "catalogs/workflow-runtime-fact-catalog.json",
+        "contract_pointer": "/payload/entries/6/fact_kind",
+        "markdown_section": "Inbox、Late Result、Event 与 Effect Journal",
+        "markdown_anchor": "#inboxlate-resultevent-与-effect-journal",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:86a00a6a03bf7eb9d86bed1089b1abacc41efedf840cc747ea5192dfeb6e83e1"
+      },
+      {
+        "coverage_id": "runtime_fact_kind:wait_resolved",
+        "category": "runtime_fact_kind",
+        "value": "wait_resolved",
+        "contract_path": "catalogs/workflow-runtime-fact-catalog.json",
+        "contract_pointer": "/payload/entries/2/fact_kind",
+        "markdown_section": "Inbox、Late Result、Event 与 Effect Journal",
+        "markdown_anchor": "#inboxlate-resultevent-与-effect-journal",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:63f35d0f235d13c897c5c5af3ab0dc96d836ba30c7dd29fb8c7ad83e0ecdcfd4"
+      },
+      {
+        "coverage_id": "runtime_state_value:attempt_phase:dispatch_pending",
+        "category": "runtime_state_value",
+        "value": "dispatch_pending",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/9/values/1/value",
+        "markdown_section": "Node、Attempt 与 Wait",
+        "markdown_anchor": "#nodeattempt-与-wait",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:a6027aaac647bb6a3b77e9ba91675cab3bc0614ff20e63196663cba8e00e2131"
+      },
+      {
+        "coverage_id": "runtime_state_value:attempt_phase:evaluating",
+        "category": "runtime_state_value",
+        "value": "evaluating",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/9/values/3/value",
+        "markdown_section": "Node、Attempt 与 Wait",
+        "markdown_anchor": "#nodeattempt-与-wait",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:2dcafa840511ccd0475408a3fe668924bfc479c15728e1e7076713f971f98e2d"
+      },
+      {
+        "coverage_id": "runtime_state_value:attempt_phase:preparing",
+        "category": "runtime_state_value",
+        "value": "preparing",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/9/values/0/value",
+        "markdown_section": "Node、Attempt 与 Wait",
+        "markdown_anchor": "#nodeattempt-与-wait",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:aaf56a1880774317f74e50e0c57f0d6cf59f9b055a1fa7d8573a3417e97d88cb"
+      },
+      {
+        "coverage_id": "runtime_state_value:attempt_phase:running",
+        "category": "runtime_state_value",
+        "value": "running",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/9/values/2/value",
+        "markdown_section": "Node、Attempt 与 Wait",
+        "markdown_anchor": "#nodeattempt-与-wait",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:fa89d7760b7bfbf58a8f2088fc5b6c77fa90364658d50e4b18f6ecbfade2e243"
+      },
+      {
+        "coverage_id": "runtime_state_value:attempt_phase:terminal",
+        "category": "runtime_state_value",
+        "value": "terminal",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/9/values/4/value",
+        "markdown_section": "Node、Attempt 与 Wait",
+        "markdown_anchor": "#nodeattempt-与-wait",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:2392cf4fd6eef385adfac82c0fe136e16c9b12a76243a4bf4987075da7de7b8c"
+      },
+      {
+        "coverage_id": "runtime_state_value:command_confirmation_status:consumed",
+        "category": "runtime_state_value",
+        "value": "consumed",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/21/values/1/value",
+        "markdown_section": "Workflow Runtime Command 授权与审计",
+        "markdown_anchor": "#workflow-runtime-command-授权与审计",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:110eb011668366853d09e0320f93ef8d97869f57360ce11eb289f650ccbc8082"
+      },
+      {
+        "coverage_id": "runtime_state_value:command_confirmation_status:expired",
+        "category": "runtime_state_value",
+        "value": "expired",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/21/values/2/value",
+        "markdown_section": "Workflow Runtime Command 授权与审计",
+        "markdown_anchor": "#workflow-runtime-command-授权与审计",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:0c60eb373cb4c82d451278085230b0a6f08c6b1e561ce69557ac8279c999b45c"
+      },
+      {
+        "coverage_id": "runtime_state_value:command_confirmation_status:pending",
+        "category": "runtime_state_value",
+        "value": "pending",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/21/values/0/value",
+        "markdown_section": "Workflow Runtime Command 授权与审计",
+        "markdown_anchor": "#workflow-runtime-command-授权与审计",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:c468059fe85fc48fec47db842355fc4d9b99913ad7b864840bb21d6a9c6c4bdc"
+      },
+      {
+        "coverage_id": "runtime_state_value:control_edge_resolution:error",
+        "category": "runtime_state_value",
+        "value": "error",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/13/values/3/value",
+        "markdown_section": "Edge Resolution、Candidate 与 Cut",
+        "markdown_anchor": "#edge-resolutioncandidate-与-cut",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:04634af68a51ac47c7d59b4bf99b3f54db69c92f45d4da4c85b44c1d305130dc"
+      },
+      {
+        "coverage_id": "runtime_state_value:control_edge_resolution:not_taken",
+        "category": "runtime_state_value",
+        "value": "not_taken",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/13/values/2/value",
+        "markdown_section": "Edge Resolution、Candidate 与 Cut",
+        "markdown_anchor": "#edge-resolutioncandidate-与-cut",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:b2a9221e2a608dec84a2a1c7d1d1feb68ddc3f4e3ed09e1208968bc765894e07"
+      },
+      {
+        "coverage_id": "runtime_state_value:control_edge_resolution:taken",
+        "category": "runtime_state_value",
+        "value": "taken",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/13/values/1/value",
+        "markdown_section": "Edge Resolution、Candidate 与 Cut",
+        "markdown_anchor": "#edge-resolutioncandidate-与-cut",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:f553d78f3833819b2a7614ba7899dfb0091f36e1ac57df81879e2c71b40404b5"
+      },
+      {
+        "coverage_id": "runtime_state_value:control_edge_resolution:unresolved",
+        "category": "runtime_state_value",
+        "value": "unresolved",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/13/values/0/value",
+        "markdown_section": "Edge Resolution、Candidate 与 Cut",
+        "markdown_anchor": "#edge-resolutioncandidate-与-cut",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:d14af5d9e3188926e99fe9faaaffd55ff5cfd453aae6fed23cc6aca130d5d402"
+      },
+      {
+        "coverage_id": "runtime_state_value:controller_state:closing_remaining",
+        "category": "runtime_state_value",
+        "value": "closing_remaining",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/16/values/2/value",
+        "markdown_section": "Node、Attempt 与 Wait",
+        "markdown_anchor": "#nodeattempt-与-wait",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:268c3502da02b94b7346c44e786a74b64bb7fb3d3058d82362dc6701aa9e433a"
+      },
+      {
+        "coverage_id": "runtime_state_value:controller_state:running",
+        "category": "runtime_state_value",
+        "value": "running",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/16/values/1/value",
+        "markdown_section": "Node、Attempt 与 Wait",
+        "markdown_anchor": "#nodeattempt-与-wait",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:d4bb78de806f6a9794010f9bd7e9c38d780c948defa320c2750bedb276284dda"
+      },
+      {
+        "coverage_id": "runtime_state_value:controller_state:sealing",
+        "category": "runtime_state_value",
+        "value": "sealing",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/16/values/0/value",
+        "markdown_section": "Node、Attempt 与 Wait",
+        "markdown_anchor": "#nodeattempt-与-wait",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:1cd849b6485bca72285508253fa881176ae66dc2af377a1e1000bf6508d9ef8e"
+      },
+      {
+        "coverage_id": "runtime_state_value:controller_state:settled",
+        "category": "runtime_state_value",
+        "value": "settled",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/16/values/3/value",
+        "markdown_section": "Node、Attempt 与 Wait",
+        "markdown_anchor": "#nodeattempt-与-wait",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:2c3aa67f0af46f87d2d491461c67a6b737d4d5b626ab5e13b19c644efaa98704"
+      },
+      {
+        "coverage_id": "runtime_state_value:data_edge_resolution:available",
+        "category": "runtime_state_value",
+        "value": "available",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/14/values/1/value",
+        "markdown_section": "Edge Resolution、Candidate 与 Cut",
+        "markdown_anchor": "#edge-resolutioncandidate-与-cut",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:f96bd26133433b982ccbb445f7b9f331377fd465e9dd63c8ca0de4e40b5a3d04"
+      },
+      {
+        "coverage_id": "runtime_state_value:data_edge_resolution:error",
+        "category": "runtime_state_value",
+        "value": "error",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/14/values/3/value",
+        "markdown_section": "Edge Resolution、Candidate 与 Cut",
+        "markdown_anchor": "#edge-resolutioncandidate-与-cut",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:17b72d8c8736b093e48ab5a933c0620d6da6d680916365d992e26b506040ddb3"
+      },
+      {
+        "coverage_id": "runtime_state_value:data_edge_resolution:unavailable",
+        "category": "runtime_state_value",
+        "value": "unavailable",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/14/values/2/value",
+        "markdown_section": "Edge Resolution、Candidate 与 Cut",
+        "markdown_anchor": "#edge-resolutioncandidate-与-cut",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:ffd9f1121ee02ec31740760b12584ecacab77eec17672f3b5dc8077f76a457e2"
+      },
+      {
+        "coverage_id": "runtime_state_value:data_edge_resolution:unresolved",
+        "category": "runtime_state_value",
+        "value": "unresolved",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/14/values/0/value",
+        "markdown_section": "Edge Resolution、Candidate 与 Cut",
+        "markdown_anchor": "#edge-resolutioncandidate-与-cut",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:d2c7b96ce8e1d292ec224c5cfbc9f45726a5d15f4e5731bb2c9948c119d248d9"
+      },
+      {
+        "coverage_id": "runtime_state_value:effect_operation_status:action_required",
+        "category": "runtime_state_value",
+        "value": "action_required",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/17/values/7/value",
+        "markdown_section": "Inbox、Late Result、Event 与 Effect Journal",
+        "markdown_anchor": "#inboxlate-resultevent-与-effect-journal",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:52fe62586f7de2f47e0e03db941aa5f8faf71b78c61fe8b348f56db1a6e7e745"
+      },
+      {
+        "coverage_id": "runtime_state_value:effect_operation_status:compensated",
+        "category": "runtime_state_value",
+        "value": "compensated",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/17/values/5/value",
+        "markdown_section": "Inbox、Late Result、Event 与 Effect Journal",
+        "markdown_anchor": "#inboxlate-resultevent-与-effect-journal",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:6a1f5afd2a3aed9ea4fc17100a4c45200865a22c735b336a86a133f36eb7c2fd"
+      },
+      {
+        "coverage_id": "runtime_state_value:effect_operation_status:compensation_not_required",
+        "category": "runtime_state_value",
+        "value": "compensation_not_required",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/17/values/6/value",
+        "markdown_section": "Inbox、Late Result、Event 与 Effect Journal",
+        "markdown_anchor": "#inboxlate-resultevent-与-effect-journal",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:2e8f8c549cba9d6d0f0289d6b692982f29b79a849b82e7c30936116a38cc7be1"
+      },
+      {
+        "coverage_id": "runtime_state_value:effect_operation_status:compensation_pending",
+        "category": "runtime_state_value",
+        "value": "compensation_pending",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/17/values/4/value",
+        "markdown_section": "Inbox、Late Result、Event 与 Effect Journal",
+        "markdown_anchor": "#inboxlate-resultevent-与-effect-journal",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:35ea0f30afa80e08e9024c6c2003eeb3055feb21fb38f093728a87b9f7629e5f"
+      },
+      {
+        "coverage_id": "runtime_state_value:effect_operation_status:dispatched",
+        "category": "runtime_state_value",
+        "value": "dispatched",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/17/values/1/value",
+        "markdown_section": "Inbox、Late Result、Event 与 Effect Journal",
+        "markdown_anchor": "#inboxlate-resultevent-与-effect-journal",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:d10003f35f5966c2b8c4f619856a7e31d80434e0d8cfbd854f95bf31bf14331e"
+      },
+      {
+        "coverage_id": "runtime_state_value:effect_operation_status:failed",
+        "category": "runtime_state_value",
+        "value": "failed",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/17/values/3/value",
+        "markdown_section": "Inbox、Late Result、Event 与 Effect Journal",
+        "markdown_anchor": "#inboxlate-resultevent-与-effect-journal",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:2a81f2ea411ac6e3b7ed670f5e235f7f5a6eae1e2538c3251a6c787fe37e23e1"
+      },
+      {
+        "coverage_id": "runtime_state_value:effect_operation_status:intended",
+        "category": "runtime_state_value",
+        "value": "intended",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/17/values/0/value",
+        "markdown_section": "Inbox、Late Result、Event 与 Effect Journal",
+        "markdown_anchor": "#inboxlate-resultevent-与-effect-journal",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:1bcf18422ca01209f6b0a06426293afbbe42762173cbaf53d18d83dc100d5ed0"
+      },
+      {
+        "coverage_id": "runtime_state_value:effect_operation_status:succeeded",
+        "category": "runtime_state_value",
+        "value": "succeeded",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/17/values/2/value",
+        "markdown_section": "Inbox、Late Result、Event 与 Effect Journal",
+        "markdown_anchor": "#inboxlate-resultevent-与-effect-journal",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:8084a2b964bc5415d8cb1cbf62f59026f5902c9dd6ccb4d4adfc93f600b2c657"
+      },
+      {
+        "coverage_id": "runtime_state_value:map_item_outcome_state:cancelled",
+        "category": "runtime_state_value",
+        "value": "cancelled",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/15/values/3/value",
+        "markdown_section": "Scope Build 与 Expansion Manifest",
+        "markdown_anchor": "#scope-build-与-expansion-manifest",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:9eb5774e0b331a5f93bd0d478aebf7d5a0ed1fa9a801b4d02de988e531f0e2ab"
+      },
+      {
+        "coverage_id": "runtime_state_value:map_item_outcome_state:completed",
+        "category": "runtime_state_value",
+        "value": "completed",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/15/values/1/value",
+        "markdown_section": "Scope Build 与 Expansion Manifest",
+        "markdown_anchor": "#scope-build-与-expansion-manifest",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:32da8a60a90a6330731b77027d2e9781e9929f0a9160babbb2d69e76e0947976"
+      },
+      {
+        "coverage_id": "runtime_state_value:map_item_outcome_state:errored",
+        "category": "runtime_state_value",
+        "value": "errored",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/15/values/2/value",
+        "markdown_section": "Scope Build 与 Expansion Manifest",
+        "markdown_anchor": "#scope-build-与-expansion-manifest",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:6a2851438f2834dff75b3c64b1cdce7794393071ac47d0ba5b5ae2efbbb1f842"
+      },
+      {
+        "coverage_id": "runtime_state_value:map_item_outcome_state:fenced",
+        "category": "runtime_state_value",
+        "value": "fenced",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/15/values/4/value",
+        "markdown_section": "Scope Build 与 Expansion Manifest",
+        "markdown_anchor": "#scope-build-与-expansion-manifest",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:64dd87870f099c4fc1efbb8c366f61e6b929bffce5eee4c95e94f99f4795109c"
+      },
+      {
+        "coverage_id": "runtime_state_value:map_item_outcome_state:open",
+        "category": "runtime_state_value",
+        "value": "open",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/15/values/0/value",
+        "markdown_section": "Scope Build 与 Expansion Manifest",
+        "markdown_anchor": "#scope-build-与-expansion-manifest",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:8d0d93f3ccdb88a598ab7473b58c6f5b7b5057a15f2e9d16f9a6b35715d75335"
+      },
+      {
+        "coverage_id": "runtime_state_value:node_input_state:error",
+        "category": "runtime_state_value",
+        "value": "error",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/8/values/3/value",
+        "markdown_section": "Node、Attempt 与 Wait",
+        "markdown_anchor": "#nodeattempt-与-wait",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:49a15ab3ccabe3c9c76d80a8a39914f1d0acd0871be9a08100b7f10a7d352664"
+      },
+      {
+        "coverage_id": "runtime_state_value:node_input_state:impossible",
+        "category": "runtime_state_value",
+        "value": "impossible",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/8/values/2/value",
+        "markdown_section": "Node、Attempt 与 Wait",
+        "markdown_anchor": "#nodeattempt-与-wait",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:8eddcfc8b59d39b9335fe8dd6db1cf54f38247787b5d16e9129c86f8d59c60d1"
+      },
+      {
+        "coverage_id": "runtime_state_value:node_input_state:open",
+        "category": "runtime_state_value",
+        "value": "open",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/8/values/0/value",
+        "markdown_section": "Node、Attempt 与 Wait",
+        "markdown_anchor": "#nodeattempt-与-wait",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:6a298a964930d02c793b916c9a6e9a59fb081f70033148ea75d90f63abd951df"
+      },
+      {
+        "coverage_id": "runtime_state_value:node_input_state:sealed",
+        "category": "runtime_state_value",
+        "value": "sealed",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/8/values/1/value",
+        "markdown_section": "Node、Attempt 与 Wait",
+        "markdown_anchor": "#nodeattempt-与-wait",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:23c3cf45c418892eb0e322ab3830282b36ef755efac26932295e7246cf083432"
+      },
+      {
+        "coverage_id": "runtime_state_value:node_phase:active",
+        "category": "runtime_state_value",
+        "value": "active",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/6/values/2/value",
+        "markdown_section": "Graph 与 Node 状态模型",
+        "markdown_anchor": "#graph-与-node-状态模型",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:c1d7d2e36c5e5c3a7d928dc048da2e91d9e4d8ff34de86df21fbd1f18bb60704"
+      },
+      {
+        "coverage_id": "runtime_state_value:node_phase:pending",
+        "category": "runtime_state_value",
+        "value": "pending",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/6/values/0/value",
+        "markdown_section": "Graph 与 Node 状态模型",
+        "markdown_anchor": "#graph-与-node-状态模型",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:e606f7bef5912f5ce94a6f67a3ce5af549c79444f40c03f5fb7656e8a4364d87"
+      },
+      {
+        "coverage_id": "runtime_state_value:node_phase:ready",
+        "category": "runtime_state_value",
+        "value": "ready",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/6/values/1/value",
+        "markdown_section": "Graph 与 Node 状态模型",
+        "markdown_anchor": "#graph-与-node-状态模型",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:5c153ebcb8ffa7a97320778314588d97f0dbf98ce2f49e580099bab341d30d32"
+      },
+      {
+        "coverage_id": "runtime_state_value:node_phase:retry_wait",
+        "category": "runtime_state_value",
+        "value": "retry_wait",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/6/values/4/value",
+        "markdown_section": "Graph 与 Node 状态模型",
+        "markdown_anchor": "#graph-与-node-状态模型",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:715efcee2b4fba8b222886c6f1543bd1e0377958bc8b007c8af2b380bf83b70f"
+      },
+      {
+        "coverage_id": "runtime_state_value:node_phase:terminal",
+        "category": "runtime_state_value",
+        "value": "terminal",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/6/values/5/value",
+        "markdown_section": "Graph 与 Node 状态模型",
+        "markdown_anchor": "#graph-与-node-状态模型",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:cbed6292b9572e9ad4c3c830937f961ea6aca404b6e35054d8128d5cf4681688"
+      },
+      {
+        "coverage_id": "runtime_state_value:node_phase:waiting",
+        "category": "runtime_state_value",
+        "value": "waiting",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/6/values/3/value",
+        "markdown_section": "Graph 与 Node 状态模型",
+        "markdown_anchor": "#graph-与-node-状态模型",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:8c5a1100c424d5d668f05350ffc4dd461acebf95fb45b42121b9f5a1dd510025"
+      },
+      {
+        "coverage_id": "runtime_state_value:node_trigger_state:error",
+        "category": "runtime_state_value",
+        "value": "error",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/7/values/3/value",
+        "markdown_section": "Node、Attempt 与 Wait",
+        "markdown_anchor": "#nodeattempt-与-wait",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:7a9b03b0a7db78b5d870c9e0cc36a2207ef36fd0613b831b973eba1fc867f98f"
+      },
+      {
+        "coverage_id": "runtime_state_value:node_trigger_state:false",
+        "category": "runtime_state_value",
+        "value": "false",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/7/values/2/value",
+        "markdown_section": "Node、Attempt 与 Wait",
+        "markdown_anchor": "#nodeattempt-与-wait",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:0b070ea075bbb32e03634d0b77e79b18590fefe0a0ec40aba94d015f3f4fca55"
+      },
+      {
+        "coverage_id": "runtime_state_value:node_trigger_state:true",
+        "category": "runtime_state_value",
+        "value": "true",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/7/values/1/value",
+        "markdown_section": "Node、Attempt 与 Wait",
+        "markdown_anchor": "#nodeattempt-与-wait",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:8b89c25e4989bb6e00c7f642b4d332f549b4f3d0f57101198cb486e001fea17d"
+      },
+      {
+        "coverage_id": "runtime_state_value:node_trigger_state:unknown",
+        "category": "runtime_state_value",
+        "value": "unknown",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/7/values/0/value",
+        "markdown_section": "Node、Attempt 与 Wait",
+        "markdown_anchor": "#nodeattempt-与-wait",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:95d40b0ba193fe663fcbd79433fdf4059ab90893c72b61569ece553c4b8f756d"
+      },
+      {
+        "coverage_id": "runtime_state_value:operational_blocker_status:abandoned",
+        "category": "runtime_state_value",
+        "value": "abandoned",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/19/values/2/value",
+        "markdown_section": "Workflow 与 Run",
+        "markdown_anchor": "#workflow-与-run",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:d452ed4449c631a38c361ae64778c335ae2e56c84a676823915d26a7ca476026"
+      },
+      {
+        "coverage_id": "runtime_state_value:operational_blocker_status:open",
+        "category": "runtime_state_value",
+        "value": "open",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/19/values/0/value",
+        "markdown_section": "Workflow 与 Run",
+        "markdown_anchor": "#workflow-与-run",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:62a0f19beb89b1db1d0b080d8658d57a20b9e2d5dbd564c9029f700e81905d73"
+      },
+      {
+        "coverage_id": "runtime_state_value:operational_blocker_status:resolved",
+        "category": "runtime_state_value",
+        "value": "resolved",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/19/values/1/value",
+        "markdown_section": "Workflow 与 Run",
+        "markdown_anchor": "#workflow-与-run",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:1e2f8f4a5ad9ac29a9e0116032ce297d7c8408219be75175a922735f0d4c5605"
+      },
+      {
+        "coverage_id": "runtime_state_value:outbox_status:action_required",
+        "category": "runtime_state_value",
+        "value": "action_required",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/18/values/5/value",
+        "markdown_section": "Outbox、Lease 与恢复",
+        "markdown_anchor": "#outboxlease-与恢复",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:002c4353daf7faea69db5a4dc52f3742f731c28fa14b8db6faa3bff36985a6fd"
+      },
+      {
+        "coverage_id": "runtime_state_value:outbox_status:dead_letter",
+        "category": "runtime_state_value",
+        "value": "dead_letter",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/18/values/4/value",
+        "markdown_section": "Outbox、Lease 与恢复",
+        "markdown_anchor": "#outboxlease-与恢复",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:e0c8a602c787e539a67857d057bfb27b11716b9dc3f97d574ea2e0d791be08a7"
+      },
+      {
+        "coverage_id": "runtime_state_value:outbox_status:pending",
+        "category": "runtime_state_value",
+        "value": "pending",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/18/values/0/value",
+        "markdown_section": "Outbox、Lease 与恢复",
+        "markdown_anchor": "#outboxlease-与恢复",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:34337f94e6816e9d480949d57e8ad821c1077ad8a24f89158e97f0bae695dc57"
+      },
+      {
+        "coverage_id": "runtime_state_value:outbox_status:processing",
+        "category": "runtime_state_value",
+        "value": "processing",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/18/values/1/value",
+        "markdown_section": "Outbox、Lease 与恢复",
+        "markdown_anchor": "#outboxlease-与恢复",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:47ca5d051ac43d34247c3987b27bcb82be8e0504dd3a45145ba47c360bb9d886"
+      },
+      {
+        "coverage_id": "runtime_state_value:outbox_status:reconciling",
+        "category": "runtime_state_value",
+        "value": "reconciling",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/18/values/2/value",
+        "markdown_section": "Outbox、Lease 与恢复",
+        "markdown_anchor": "#outboxlease-与恢复",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:a55b03d77a90b22855aa5d413c7a0ecaf98c620a32adfdce64edeb63c99ae473"
+      },
+      {
+        "coverage_id": "runtime_state_value:outbox_status:succeeded",
+        "category": "runtime_state_value",
+        "value": "succeeded",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/18/values/3/value",
+        "markdown_section": "Outbox、Lease 与恢复",
+        "markdown_anchor": "#outboxlease-与恢复",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:cdc2991d489fe71c33a4cfad1264ca2b49c7938e35207ff24133734468019db8"
+      },
+      {
+        "coverage_id": "runtime_state_value:retry_schedule_status:cancelled",
+        "category": "runtime_state_value",
+        "value": "cancelled",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/10/values/2/value",
+        "markdown_section": "Node、Attempt 与 Wait",
+        "markdown_anchor": "#nodeattempt-与-wait",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:46d59e4169622853a432e14c6cfe9f1fd355fff7d43acf54d6e67a9ac0ab36de"
+      },
+      {
+        "coverage_id": "runtime_state_value:retry_schedule_status:consumed",
+        "category": "runtime_state_value",
+        "value": "consumed",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/10/values/1/value",
+        "markdown_section": "Node、Attempt 与 Wait",
+        "markdown_anchor": "#nodeattempt-与-wait",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:a5eeb00c91cc49777b2ec33e4f9df205ec545c44ef8164e01e20c554dcc3c189"
+      },
+      {
+        "coverage_id": "runtime_state_value:retry_schedule_status:scheduled",
+        "category": "runtime_state_value",
+        "value": "scheduled",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/10/values/0/value",
+        "markdown_section": "Node、Attempt 与 Wait",
+        "markdown_anchor": "#nodeattempt-与-wait",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:638529eeb09d90565d8a1d814ac52cae1872dd5b901f28b9d27fc34630f55a69"
+      },
+      {
+        "coverage_id": "runtime_state_value:root_finalization_status:cancelled",
+        "category": "runtime_state_value",
+        "value": "cancelled",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/20/values/5/value",
+        "markdown_section": "Workflow 与 Run",
+        "markdown_anchor": "#workflow-与-run",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:8fabad368081cb3619013589eb6a83352307a7990aa664e1dbb4bbaf32aa218c"
+      },
+      {
+        "coverage_id": "runtime_state_value:root_finalization_status:exhausted",
+        "category": "runtime_state_value",
+        "value": "exhausted",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/20/values/4/value",
+        "markdown_section": "Workflow 与 Run",
+        "markdown_anchor": "#workflow-与-run",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:d49eedc057435c6eee31611ca4be6e9673f5e97a921f736c2a5e19c6050a4ba6"
+      },
+      {
+        "coverage_id": "runtime_state_value:root_finalization_status:pending",
+        "category": "runtime_state_value",
+        "value": "pending",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/20/values/0/value",
+        "markdown_section": "Workflow 与 Run",
+        "markdown_anchor": "#workflow-与-run",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:a024ffe14fbc991492e9eea28278e74e552b687ca74c49c7fff594df1c279cb1"
+      },
+      {
+        "coverage_id": "runtime_state_value:root_finalization_status:ready",
+        "category": "runtime_state_value",
+        "value": "ready",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/20/values/2/value",
+        "markdown_section": "Workflow 与 Run",
+        "markdown_anchor": "#workflow-与-run",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:c6a5e7360ee41f20b27320d3d4185c708f6ce5799b8efc32176d8da280c3f067"
+      },
+      {
+        "coverage_id": "runtime_state_value:root_finalization_status:retry_wait",
+        "category": "runtime_state_value",
+        "value": "retry_wait",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/20/values/1/value",
+        "markdown_section": "Workflow 与 Run",
+        "markdown_anchor": "#workflow-与-run",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:ebec7169b3d9ffac5dea22afbdcd50f76db2357d9488e64d3e351af3129d1341"
+      },
+      {
+        "coverage_id": "runtime_state_value:root_finalization_status:succeeded",
+        "category": "runtime_state_value",
+        "value": "succeeded",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/20/values/3/value",
+        "markdown_section": "Workflow 与 Run",
+        "markdown_anchor": "#workflow-与-run",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:e523de94f32ad722410f4ee6d95a8cc18111843b5bcd8db37e7c481d4db011b5"
+      },
+      {
+        "coverage_id": "runtime_state_value:run_control:cancelling",
+        "category": "runtime_state_value",
+        "value": "cancelling",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/3/values/3/value",
+        "markdown_section": "Graph 与 Node 状态模型",
+        "markdown_anchor": "#graph-与-node-状态模型",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:42fbf03403ea40f9f45c8f6ce2ee25aa0e4877897481e19e4d147324f3ae32c2"
+      },
+      {
+        "coverage_id": "runtime_state_value:run_control:paused",
+        "category": "runtime_state_value",
+        "value": "paused",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/3/values/1/value",
+        "markdown_section": "Graph 与 Node 状态模型",
+        "markdown_anchor": "#graph-与-node-状态模型",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:bb72ed2b1e1607500e5c66688825330132cad55875cb5313ebcc199cbae4012c"
+      },
+      {
+        "coverage_id": "runtime_state_value:run_control:resuming",
+        "category": "runtime_state_value",
+        "value": "resuming",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/3/values/2/value",
+        "markdown_section": "Graph 与 Node 状态模型",
+        "markdown_anchor": "#graph-与-node-状态模型",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:ee8224f5ccbce42f68b3f4dab10b654b997099e9d1b7c26c6219a07bfd3eab48"
+      },
+      {
+        "coverage_id": "runtime_state_value:run_control:running",
+        "category": "runtime_state_value",
+        "value": "running",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/3/values/0/value",
+        "markdown_section": "Graph 与 Node 状态模型",
+        "markdown_anchor": "#graph-与-node-状态模型",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:e746acae19599cbbea680b424a45d87b946290aebdf3e3b3a5662cbbc0248431"
+      },
+      {
+        "coverage_id": "runtime_state_value:run_lifecycle:closed",
+        "category": "runtime_state_value",
+        "value": "closed",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/2/values/3/value",
+        "markdown_section": "Graph 与 Node 状态模型",
+        "markdown_anchor": "#graph-与-node-状态模型",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:d9531ad86c2ce4eb7ea5a2e8f41f92d3f8a3f9b379c3411978e6f57e46f2a5ff"
+      },
+      {
+        "coverage_id": "runtime_state_value:run_lifecycle:closing",
+        "category": "runtime_state_value",
+        "value": "closing",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/2/values/2/value",
+        "markdown_section": "Graph 与 Node 状态模型",
+        "markdown_anchor": "#graph-与-node-状态模型",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:311833f690b559b2b082db080f704c48698d27ed835a67a9bffc682d3d866407"
+      },
+      {
+        "coverage_id": "runtime_state_value:run_lifecycle:executing",
+        "category": "runtime_state_value",
+        "value": "executing",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/2/values/1/value",
+        "markdown_section": "Graph 与 Node 状态模型",
+        "markdown_anchor": "#graph-与-node-状态模型",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:10e6cf930a7fdc1493f9cfacccba2b8bfc1f9aa1da6c7fe2ccf60bbc34085a6c"
+      },
+      {
+        "coverage_id": "runtime_state_value:run_lifecycle:initializing",
+        "category": "runtime_state_value",
+        "value": "initializing",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/2/values/0/value",
+        "markdown_section": "Graph 与 Node 状态模型",
+        "markdown_anchor": "#graph-与-node-状态模型",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:a12e3be76ff3e9980bb12e911f9a0ab56da2dd39ee9213aa895a19bb38e32ec6"
+      },
+      {
+        "coverage_id": "runtime_state_value:run_operational_state:action_required",
+        "category": "runtime_state_value",
+        "value": "action_required",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/4/values/1/value",
+        "markdown_section": "Graph 与 Node 状态模型",
+        "markdown_anchor": "#graph-与-node-状态模型",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:742e8f370d27cbccf32f11e6bfe79dd602494819e54652519bacf03206647b13"
+      },
+      {
+        "coverage_id": "runtime_state_value:run_operational_state:administratively_abandoned",
+        "category": "runtime_state_value",
+        "value": "administratively_abandoned",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/4/values/3/value",
+        "markdown_section": "Graph 与 Node 状态模型",
+        "markdown_anchor": "#graph-与-node-状态模型",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:6cd7f478e75a0b5c999a392cfb076856fa6b5d005c761d43dfdd8f8f09bc7a17"
+      },
+      {
+        "coverage_id": "runtime_state_value:run_operational_state:healthy",
+        "category": "runtime_state_value",
+        "value": "healthy",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/4/values/0/value",
+        "markdown_section": "Graph 与 Node 状态模型",
+        "markdown_anchor": "#graph-与-node-状态模型",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:c273ed2b4922e3dba87f077ef1bfbc99bfa876a4cdb2d27d1dd1a23cb70b6271"
+      },
+      {
+        "coverage_id": "runtime_state_value:run_operational_state:quarantined",
+        "category": "runtime_state_value",
+        "value": "quarantined",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/4/values/2/value",
+        "markdown_section": "Graph 与 Node 状态模型",
+        "markdown_anchor": "#graph-与-node-状态模型",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:956558d9ea38118cffb4992d50ec851ebd4077c1fdc7eed89d436b8d341a24a0"
+      },
+      {
+        "coverage_id": "runtime_state_value:scope_build_status:compiled",
+        "category": "runtime_state_value",
+        "value": "compiled",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/12/values/3/value",
+        "markdown_section": "Scope Build 与 Expansion Manifest",
+        "markdown_anchor": "#scope-build-与-expansion-manifest",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:fdbcd7a6e9b877ef538a1dcd921b208cf50ab7a0487e5ad59fbeeb99823e1b24"
+      },
+      {
+        "coverage_id": "runtime_state_value:scope_build_status:compiling",
+        "category": "runtime_state_value",
+        "value": "compiling",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/12/values/2/value",
+        "markdown_section": "Scope Build 与 Expansion Manifest",
+        "markdown_anchor": "#scope-build-与-expansion-manifest",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:8cb125bb3b99cb94cfd17a3b77f7a07ffd4b66c2fe026b347a9d959379b0f9d6"
+      },
+      {
+        "coverage_id": "runtime_state_value:scope_build_status:failed",
+        "category": "runtime_state_value",
+        "value": "failed",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/12/values/5/value",
+        "markdown_section": "Scope Build 与 Expansion Manifest",
+        "markdown_anchor": "#scope-build-与-expansion-manifest",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:ef4ea52d09e8b294c4a9467a3c9acc5a61376599dcb13a90198cc9b1bba03677"
+      },
+      {
+        "coverage_id": "runtime_state_value:scope_build_status:fenced",
+        "category": "runtime_state_value",
+        "value": "fenced",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/12/values/6/value",
+        "markdown_section": "Scope Build 与 Expansion Manifest",
+        "markdown_anchor": "#scope-build-与-expansion-manifest",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:b7a6a69ce634eb0192800a4cf70f921f3b993610b29bc651810cd416638fcee1"
+      },
+      {
+        "coverage_id": "runtime_state_value:scope_build_status:materialized",
+        "category": "runtime_state_value",
+        "value": "materialized",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/12/values/4/value",
+        "markdown_section": "Scope Build 与 Expansion Manifest",
+        "markdown_anchor": "#scope-build-与-expansion-manifest",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:5d8314504649f64d2ccde2cd22de2c6ee2c438f68592ccab1196af07fcf193a2"
+      },
+      {
+        "coverage_id": "runtime_state_value:scope_build_status:pending_snapshot",
+        "category": "runtime_state_value",
+        "value": "pending_snapshot",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/12/values/0/value",
+        "markdown_section": "Scope Build 与 Expansion Manifest",
+        "markdown_anchor": "#scope-build-与-expansion-manifest",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:846eb92d5ee1f02b245aed08499964e8fae97be75f0dbcd4ad8ec2d5b840facd"
+      },
+      {
+        "coverage_id": "runtime_state_value:scope_build_status:ready_to_compile",
+        "category": "runtime_state_value",
+        "value": "ready_to_compile",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/12/values/1/value",
+        "markdown_section": "Scope Build 与 Expansion Manifest",
+        "markdown_anchor": "#scope-build-与-expansion-manifest",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:bd9158f35b65d8844ce80de411161cdfa2e824d9a3ac3da2c574084a071a5c5c"
+      },
+      {
+        "coverage_id": "runtime_state_value:scope_lifecycle:active",
+        "category": "runtime_state_value",
+        "value": "active",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/5/values/1/value",
+        "markdown_section": "Graph 与 Node 状态模型",
+        "markdown_anchor": "#graph-与-node-状态模型",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:cdc6db37d05521f7f9713626655d0001cab1c8b9028f68ca3032c4800eb742cc"
+      },
+      {
+        "coverage_id": "runtime_state_value:scope_lifecycle:closed",
+        "category": "runtime_state_value",
+        "value": "closed",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/5/values/3/value",
+        "markdown_section": "Graph 与 Node 状态模型",
+        "markdown_anchor": "#graph-与-node-状态模型",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:7c1d9e6d115c63a3b25d804506efc859f605e9ac55bb272ecaaa4e624f516841"
+      },
+      {
+        "coverage_id": "runtime_state_value:scope_lifecycle:closing",
+        "category": "runtime_state_value",
+        "value": "closing",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/5/values/2/value",
+        "markdown_section": "Graph 与 Node 状态模型",
+        "markdown_anchor": "#graph-与-node-状态模型",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:cc4278ef7b639b603cc0b2094802fa0d480fdd8e4a24e2442f422a04d8fd9fea"
+      },
+      {
+        "coverage_id": "runtime_state_value:scope_lifecycle:materializing",
+        "category": "runtime_state_value",
+        "value": "materializing",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/5/values/0/value",
+        "markdown_section": "Graph 与 Node 状态模型",
+        "markdown_anchor": "#graph-与-node-状态模型",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:bf8fb7afbcd6652ddec945695ee6437a0b5307ef003a008bb6d9120bad3305bd"
+      },
+      {
+        "coverage_id": "runtime_state_value:state_activation_status:abandoned",
+        "category": "runtime_state_value",
+        "value": "abandoned",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/1/values/2/value",
+        "markdown_section": "Workflow 与 Run",
+        "markdown_anchor": "#workflow-与-run",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:ea5184454a5156bb89b2cf1afd4742a63fecb6f01ba340c9402ac9def988abcf"
+      },
+      {
+        "coverage_id": "runtime_state_value:state_activation_status:active",
+        "category": "runtime_state_value",
+        "value": "active",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/1/values/0/value",
+        "markdown_section": "Workflow 与 Run",
+        "markdown_anchor": "#workflow-与-run",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:35c86a00d21ac2f4f08d41bfa861b215ec9d137de15294cea3073774aff599c5"
+      },
+      {
+        "coverage_id": "runtime_state_value:state_activation_status:completed",
+        "category": "runtime_state_value",
+        "value": "completed",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/1/values/1/value",
+        "markdown_section": "Workflow 与 Run",
+        "markdown_anchor": "#workflow-与-run",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:820884c1541aa5cc50ecc39f07f036034ae44edaadf289013865b92349c11181"
+      },
+      {
+        "coverage_id": "runtime_state_value:wait_status:armed",
+        "category": "runtime_state_value",
+        "value": "armed",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/11/values/1/value",
+        "markdown_section": "Node、Attempt 与 Wait",
+        "markdown_anchor": "#nodeattempt-与-wait",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:237e81f964267ab4eaf18cd20d6473e0dbf4bd38a40f37714f907319070ba264"
+      },
+      {
+        "coverage_id": "runtime_state_value:wait_status:cancelled",
+        "category": "runtime_state_value",
+        "value": "cancelled",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/11/values/4/value",
+        "markdown_section": "Node、Attempt 与 Wait",
+        "markdown_anchor": "#nodeattempt-与-wait",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:7b3c082f6b8e869defa7e0dd43954117b1ea453c067d8a9b63ad951f68f5d728"
+      },
+      {
+        "coverage_id": "runtime_state_value:wait_status:registering",
+        "category": "runtime_state_value",
+        "value": "registering",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/11/values/0/value",
+        "markdown_section": "Node、Attempt 与 Wait",
+        "markdown_anchor": "#nodeattempt-与-wait",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:61029cd7767e972cad7a9d08656d9542e57d104b2d23037aaa6a259583febd4e"
+      },
+      {
+        "coverage_id": "runtime_state_value:wait_status:resolved",
+        "category": "runtime_state_value",
+        "value": "resolved",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/11/values/2/value",
+        "markdown_section": "Node、Attempt 与 Wait",
+        "markdown_anchor": "#nodeattempt-与-wait",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:aed142f34a1d33eb964c9b588eb42a73e5399518d7e018423ea720b483bd32b3"
+      },
+      {
+        "coverage_id": "runtime_state_value:wait_status:timed_out",
+        "category": "runtime_state_value",
+        "value": "timed_out",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/11/values/3/value",
+        "markdown_section": "Node、Attempt 与 Wait",
+        "markdown_anchor": "#nodeattempt-与-wait",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:f917775de10f12c7c7080f027b175289e54df197a8e9ba0820f6e352410093b3"
+      },
+      {
+        "coverage_id": "runtime_state_value:workflow_status:active",
+        "category": "runtime_state_value",
+        "value": "active",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/0/values/0/value",
+        "markdown_section": "Workflow 与 Run",
+        "markdown_anchor": "#workflow-与-run",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:6a45f0a5581f468e9aa5d769ce1fe99d1498c8579be4f12d90ade45225dda7f9"
+      },
+      {
+        "coverage_id": "runtime_state_value:workflow_status:administratively_abandoned",
+        "category": "runtime_state_value",
+        "value": "administratively_abandoned",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/0/values/4/value",
+        "markdown_section": "Workflow 与 Run",
+        "markdown_anchor": "#workflow-与-run",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:bbc5cdddf47d356369582999d438c5aec4da0f163a6b48f1576dee4d3ff7b22b"
+      },
+      {
+        "coverage_id": "runtime_state_value:workflow_status:cancelled",
+        "category": "runtime_state_value",
+        "value": "cancelled",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/0/values/3/value",
+        "markdown_section": "Workflow 与 Run",
+        "markdown_anchor": "#workflow-与-run",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:862cee4ac6f0cf92940dfa6701910cab70d3f2c68b94565eca705430db9a4235"
+      },
+      {
+        "coverage_id": "runtime_state_value:workflow_status:completed",
+        "category": "runtime_state_value",
+        "value": "completed",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/0/values/1/value",
+        "markdown_section": "Workflow 与 Run",
+        "markdown_anchor": "#workflow-与-run",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:562521eaea05abe4149c0a4eac789885f9e6e1002d5baee5e0cfed9e786e9d3d"
+      },
+      {
+        "coverage_id": "runtime_state_value:workflow_status:errored",
+        "category": "runtime_state_value",
+        "value": "errored",
+        "contract_path": "protocols/workflow-runtime-state-transition-tables.json",
+        "contract_pointer": "/payload/machines/0/values/2/value",
+        "markdown_section": "Workflow 与 Run",
+        "markdown_anchor": "#workflow-与-run",
+        "change_impact": "run_protocol_version_and_fixture_update_required",
+        "fixture_refs": [
+          "conformance/catalog-protocols/positive-cases.json"
+        ],
+        "entry_hash": "sha256:b67608d342c28e465668a327d726e022d30521ea9d4dae32c4320851e376795e"
+      },
+      {
+        "coverage_id": "semantic_format:icarus.card-presentation/1",
+        "category": "semantic_format",
+        "value": "icarus.card-presentation/1",
+        "contract_path": "schemas/card-presentation-schema.json",
+        "contract_pointer": "/payload/properties/format/const",
+        "markdown_section": "State 与 Graph 的统一",
+        "markdown_anchor": "#state-与-graph-的统一",
+        "change_impact": "new_format_or_major_contract_version_required",
+        "fixture_refs": [
+          "conformance/g0-exit/positive-cases.json"
+        ],
+        "entry_hash": "sha256:536a29e743b7fc3a2c4b3fc628670c01937830b9a1cb45432e282c3479cc6d80"
+      },
+      {
+        "coverage_id": "semantic_format:icarus.feature-manifest/2",
+        "category": "semantic_format",
+        "value": "icarus.feature-manifest/2",
+        "contract_path": "schemas/feature-manifest-v2-schema.json",
+        "contract_pointer": "/payload/properties/format/const",
+        "markdown_section": "Feature Manifest vNext",
+        "markdown_anchor": "#feature-manifest-vnext",
+        "change_impact": "new_format_or_major_contract_version_required",
+        "fixture_refs": [
+          "conformance/g0-exit/positive-cases.json"
+        ],
+        "entry_hash": "sha256:78d22090bff8669ad077a3b4868d555671e4626d95c09e87f0251ed9c766a922"
+      },
+      {
+        "coverage_id": "semantic_format:icarus.feature-release-manifest/2",
+        "category": "semantic_format",
+        "value": "icarus.feature-release-manifest/2",
+        "contract_path": "conformance/g0-exit/markdown-contract-coverage@1.json",
+        "contract_pointer": "/payload/entries",
+        "markdown_section": "Feature Manifest vNext",
+        "markdown_anchor": "#feature-manifest-vnext",
+        "change_impact": "new_format_or_major_contract_version_required",
+        "fixture_refs": [
+          "conformance/g0-exit/negative-cases.json"
+        ],
+        "entry_hash": "sha256:45c4f91204a4e72ad83655e6f790bed121473ab1b267804b26b8736590d7e48e"
+      },
+      {
+        "coverage_id": "semantic_format:icarus.managed-node-runtime-distribution/1",
+        "category": "semantic_format",
+        "value": "icarus.managed-node-runtime-distribution/1",
+        "contract_path": "toolchain/managed-node-runtime-distribution.schema.json",
+        "contract_pointer": "/properties/format/const",
+        "markdown_section": "Compiler Conformance Toolchain",
+        "markdown_anchor": "#compiler-conformance-toolchain",
+        "change_impact": "new_format_or_major_contract_version_required",
+        "fixture_refs": [
+          "conformance/g0-exit/positive-cases.json"
+        ],
+        "entry_hash": "sha256:b4d2cb929f9732ab8ecdc4bd185864458df6e291708e5cafa9d85f0a53c9cbd5"
+      },
+      {
+        "coverage_id": "semantic_format:icarus.migration-candidate-boundary/1",
+        "category": "semantic_format",
+        "value": "icarus.migration-candidate-boundary/1",
+        "contract_path": "static/migration-candidate-boundary-schema.json",
+        "contract_pointer": "/payload/properties/format/const",
+        "markdown_section": "开发期实施顺序",
+        "markdown_anchor": "#开发期实施顺序",
+        "change_impact": "new_format_or_major_contract_version_required",
+        "fixture_refs": [
+          "conformance/g0-exit/positive-cases.json"
+        ],
+        "entry_hash": "sha256:45217d0325ee653fa242d055c64ddfa65a516d97bb3575127290d22eb6f824b2"
+      },
+      {
+        "coverage_id": "semantic_format:icarus.product-surface-coverage/1",
+        "category": "semantic_format",
+        "value": "icarus.product-surface-coverage/1",
+        "contract_path": "static/product-surface-coverage-schema.json",
+        "contract_pointer": "/payload/properties/format/const",
+        "markdown_section": "开发期实施顺序",
+        "markdown_anchor": "#开发期实施顺序",
+        "change_impact": "new_format_or_major_contract_version_required",
+        "fixture_refs": [
+          "conformance/g0-exit/positive-cases.json"
+        ],
+        "entry_hash": "sha256:4476395fcec6af97fae87222b0d53ba01291c4e9d2fa9f74908e345ad6f45d52"
+      },
+      {
+        "coverage_id": "semantic_format:icarus.runtime-link/1",
+        "category": "semantic_format",
+        "value": "icarus.runtime-link/1",
+        "contract_path": "conformance/g0-exit/markdown-contract-coverage@1.json",
+        "contract_pointer": "/payload/entries",
+        "markdown_section": "Deep Link 与 Renderer Bundle",
+        "markdown_anchor": "#deep-link-与-renderer-bundle",
+        "change_impact": "new_format_or_major_contract_version_required",
+        "fixture_refs": [
+          "conformance/g0-exit/negative-cases.json"
+        ],
+        "entry_hash": "sha256:a39160b48596bba927f1cef4293fdcb72c6079385c99871975a2b081c7ed907e"
+      },
+      {
+        "coverage_id": "semantic_format:icarus.workflow-compiler-conformance/1",
+        "category": "semantic_format",
+        "value": "icarus.workflow-compiler-conformance/1",
+        "contract_path": "conformance/g0-exit/markdown-contract-coverage@1.json",
+        "contract_pointer": "/payload/entries",
+        "markdown_section": "Compiler Conformance Toolchain",
+        "markdown_anchor": "#compiler-conformance-toolchain",
+        "change_impact": "new_format_or_major_contract_version_required",
+        "fixture_refs": [
+          "conformance/g0-exit/negative-cases.json"
+        ],
+        "entry_hash": "sha256:b1287377de185547ca6ab400bbdda93ff60dba4ad4ce86828f5c9ff239f5eea6"
+      },
+      {
+        "coverage_id": "semantic_format:icarus.workflow-compiler-error-catalog/1",
+        "category": "semantic_format",
+        "value": "icarus.workflow-compiler-error-catalog/1",
+        "contract_path": "catalogs/workflow-compiler-error-catalog.json",
+        "contract_pointer": "/payload/error_codes",
+        "markdown_section": "Compiler Conformance Toolchain",
+        "markdown_anchor": "#compiler-conformance-toolchain",
+        "change_impact": "new_format_or_major_contract_version_required",
+        "fixture_refs": [
+          "conformance/g0-exit/positive-cases.json"
+        ],
+        "entry_hash": "sha256:4fcad7768dde7ff1f7ce69fb4301b9883a07f7266fe9283a46c2b0589d354faa"
+      },
+      {
+        "coverage_id": "semantic_format:icarus.workflow-compiler-toolchain/1",
+        "category": "semantic_format",
+        "value": "icarus.workflow-compiler-toolchain/1",
+        "contract_path": "conformance/g0-exit/markdown-contract-coverage@1.json",
+        "contract_pointer": "/payload/entries",
+        "markdown_section": "Compiler Conformance Toolchain",
+        "markdown_anchor": "#compiler-conformance-toolchain",
+        "change_impact": "new_format_or_major_contract_version_required",
+        "fixture_refs": [
+          "conformance/g0-exit/negative-cases.json"
+        ],
+        "entry_hash": "sha256:dc85a57bdcc6589326a490eef6c816bf32e5b4661cd5f54c1fc7643a2493549a"
+      },
+      {
+        "coverage_id": "semantic_format:icarus.workflow-definition/1",
+        "category": "semantic_format",
+        "value": "icarus.workflow-definition/1",
+        "contract_path": "schemas/workflow-definition-schema.json",
+        "contract_pointer": "/payload/properties/format/const",
+        "markdown_section": "State 与 Graph 的统一",
+        "markdown_anchor": "#state-与-graph-的统一",
+        "change_impact": "new_format_or_major_contract_version_required",
+        "fixture_refs": [
+          "conformance/g0-exit/positive-cases.json"
+        ],
+        "entry_hash": "sha256:7a336f93af109e446add512ed6678c05844bf00c5ec957f376b9c5172e0cd350"
+      },
+      {
+        "coverage_id": "semantic_format:icarus.workflow-graph-scope-plan/1",
+        "category": "semantic_format",
+        "value": "icarus.workflow-graph-scope-plan/1",
+        "contract_path": "schemas/compiled-scope-plan-schema.json",
+        "contract_pointer": "/payload/properties/format/const",
+        "markdown_section": "Compiled Scope Plan",
+        "markdown_anchor": "#compiled-scope-plan",
+        "change_impact": "new_format_or_major_contract_version_required",
+        "fixture_refs": [
+          "conformance/g0-exit/positive-cases.json"
+        ],
+        "entry_hash": "sha256:8aac70ea524b7d02a6db219a38ff0be50913cd7896673a746bb6c05dfc6a4aa9"
+      },
+      {
+        "coverage_id": "semantic_format:icarus.workflow-graph-scope/1",
+        "category": "semantic_format",
+        "value": "icarus.workflow-graph-scope/1",
+        "contract_path": "schemas/graph-scope-source-schema.json",
+        "contract_pointer": "/payload/properties/format/const",
+        "markdown_section": "Scope Interface 与 Source IR",
+        "markdown_anchor": "#scope-interface-与-source-ir",
+        "change_impact": "new_format_or_major_contract_version_required",
+        "fixture_refs": [
+          "conformance/g0-exit/positive-cases.json"
+        ],
+        "entry_hash": "sha256:8c988e61c6a9463d7b1d148c5218d4ef5c0e9acba69acda51fa4d62804d77063"
+      },
+      {
+        "coverage_id": "semantic_format:icarus.workflow-quality-revision-exhaustion/1",
+        "category": "semantic_format",
+        "value": "icarus.workflow-quality-revision-exhaustion/1",
+        "contract_path": "conformance/g0-exit/markdown-contract-coverage@1.json",
+        "contract_pointer": "/payload/entries",
+        "markdown_section": "Delegation 与 System",
+        "markdown_anchor": "#delegation-与-system",
+        "change_impact": "new_format_or_major_contract_version_required",
+        "fixture_refs": [
+          "conformance/g0-exit/negative-cases.json"
+        ],
+        "entry_hash": "sha256:dd3a12552fbb2fdfa8b98a60c7663c4ed655842c259fbb8900201e9f917b0d9e"
+      },
+      {
+        "coverage_id": "semantic_format:icarus.workflow-quality-revision-feedback/1",
+        "category": "semantic_format",
+        "value": "icarus.workflow-quality-revision-feedback/1",
+        "contract_path": "conformance/g0-exit/markdown-contract-coverage@1.json",
+        "contract_pointer": "/payload/entries",
+        "markdown_section": "Delegation 与 System",
+        "markdown_anchor": "#delegation-与-system",
+        "change_impact": "new_format_or_major_contract_version_required",
+        "fixture_refs": [
+          "conformance/g0-exit/negative-cases.json"
+        ],
+        "entry_hash": "sha256:38826e26e377df3e41db7e651e944f5b020c62704a1a8ed33af4065cd9d04fd0"
+      },
+      {
+        "coverage_id": "semantic_format:icarus.workflow-runtime-absence-baseline/1",
+        "category": "semantic_format",
+        "value": "icarus.workflow-runtime-absence-baseline/1",
+        "contract_path": "static/workflow-runtime-absence-baseline-schema.json",
+        "contract_pointer": "/payload/properties/format/const",
+        "markdown_section": "开发期实施顺序",
+        "markdown_anchor": "#开发期实施顺序",
+        "change_impact": "new_format_or_major_contract_version_required",
+        "fixture_refs": [
+          "conformance/g0-exit/positive-cases.json"
+        ],
+        "entry_hash": "sha256:23866b94c38cf87cd8353301c8ef9e2ba9ad5a9e3171a2235ec31808f4990faf"
+      },
+      {
+        "coverage_id": "semantic_format:icarus.workflow-schema/1",
+        "category": "semantic_format",
+        "value": "icarus.workflow-schema/1",
+        "contract_path": "conformance/g0-exit/markdown-contract-coverage@1.json",
+        "contract_pointer": "/payload/entries",
+        "markdown_section": "JSON、Canonicalization 与 Hash",
+        "markdown_anchor": "#jsoncanonicalization-与-hash",
+        "change_impact": "new_format_or_major_contract_version_required",
+        "fixture_refs": [
+          "conformance/g0-exit/positive-cases.json"
+        ],
+        "entry_hash": "sha256:5789ba63722bbdf11d50d62ce11e9c517424451f3c9f26a98c429430af4a7eb0"
+      },
+      {
+        "coverage_id": "semantic_format:icarus.workflow-task/1",
+        "category": "semantic_format",
+        "value": "icarus.workflow-task/1",
+        "contract_path": "conformance/g0-exit/markdown-contract-coverage@1.json",
+        "contract_pointer": "/payload/entries",
+        "markdown_section": "Task Intake、Recipe Catalog 与 Macro Routing",
+        "markdown_anchor": "#task-intakerecipe-catalog-与-macro-routing",
+        "change_impact": "new_format_or_major_contract_version_required",
+        "fixture_refs": [
+          "conformance/g0-exit/positive-cases.json"
+        ],
+        "entry_hash": "sha256:f41dd1355da5ce29011eaf6eb7f3b3d3881b66c7067c8cb0ba71e68a63ff5ba6"
+      },
+      {
+        "coverage_id": "semantic_format:icarus.workflow-terminal-quality-evaluation/1",
+        "category": "semantic_format",
+        "value": "icarus.workflow-terminal-quality-evaluation/1",
+        "contract_path": "conformance/g0-exit/markdown-contract-coverage@1.json",
+        "contract_pointer": "/payload/entries",
+        "markdown_section": "Delegation 与 System",
+        "markdown_anchor": "#delegation-与-system",
+        "change_impact": "new_format_or_major_contract_version_required",
+        "fixture_refs": [
+          "conformance/g0-exit/negative-cases.json"
+        ],
+        "entry_hash": "sha256:aa65e882c3b288c17e12c34f26dcf732d1d9413340a7b51d6da5a091bd2fff23"
+      }
+    ],
+    "category_counts": {
+      "semantic_format": 19,
+      "compiler_error_code": 27,
+      "runtime_fact_kind": 13,
+      "runtime_event_type": 39,
+      "runtime_state_value": 101
+    },
+    "contract_value_count": 199,
+    "markdown_value_count": 199,
+    "contract_values_without_markdown": [],
+    "markdown_values_without_contract": [],
+    "coverage_hash": "sha256:f9820ff3c702eb6cd90f7b182e7083e1e705ca32ba0e9100034a199bfcc10cf3"
+  }
+}

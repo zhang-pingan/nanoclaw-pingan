@@ -26,6 +26,10 @@ import {
   checkContractPackGoldenDraft,
   generateContractPackGoldenDraft,
 } from './golden-draft-pack.js';
+import {
+  checkContractPackG0Conformance,
+  generateContractPackG0Conformance,
+} from './g0-conformance-pack.js';
 
 function usage(): never {
   console.error('Usage: contract-pack <generate|check>');
@@ -47,7 +51,8 @@ let currentPack:
   | 'safety_sqlite'
   | 'logical_schema'
   | 'static_absence'
-  | 'golden_draft' = 'foundation';
+  | 'golden_draft'
+  | 'g0_conformance' = 'foundation';
 
 try {
   const foundationManifest =
@@ -110,6 +115,16 @@ try {
       : checkContractPackGoldenDraft();
   console.log(`contract_pack_golden_draft=${command}:ok`);
   console.log(`contract_pack_golden_draft_hash=${goldenDraftManifest.hash}`);
+
+  currentPack = 'g0_conformance';
+  const g0ConformanceManifest =
+    command === 'generate'
+      ? generateContractPackG0Conformance()
+      : checkContractPackG0Conformance();
+  console.log(`contract_pack_g0_conformance=${command}:ok`);
+  console.log(
+    `contract_pack_g0_conformance_hash=${g0ConformanceManifest.hash}`,
+  );
 } catch (error) {
   console.error(
     `contract_pack_${currentPack}=${command}:failed: ${

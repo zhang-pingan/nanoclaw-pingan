@@ -227,3 +227,42 @@ export type {
   GoldenDraftSemanticAssertion,
   GoldenDraftSourceKind,
 } from './golden-draft-types.js';
+export {
+  checkContractPackG0Conformance,
+  generateContractPackG0Conformance,
+} from './g0-conformance-pack.js';
+export {
+  G0_1_IDENTITY_HASHES,
+  G0_MARKDOWN_SEMANTIC_FORMATS,
+  G0_PRIOR_MANIFEST_IDENTITIES,
+  buildG0ArtifactHashInventory,
+  buildG0GateReview,
+  buildG0MarkdownContractCoverage,
+} from './g0-conformance-source.js';
+export {
+  G0_ARTIFACT_INVENTORY_ENTRY_KEYS,
+  G0_ARTIFACT_INVENTORY_KEYS,
+  G0_CHANGE_IMPACTS,
+  G0_CONFORMANCE_FIXTURE_MUTATIONS,
+  G0_COVERAGE_CATEGORIES,
+  G0_GATE_REVIEW_KEYS,
+  G0_INVENTORY_CLASSES,
+  G0_MARKDOWN_COVERAGE_ENTRY_KEYS,
+  G0_MARKDOWN_COVERAGE_KEYS,
+  G0_SEMANTIC_HASH_KINDS,
+} from './g0-conformance-types.js';
+export type {
+  G0ArtifactHashInventory,
+  G0ArtifactHashInventoryEntry,
+  G0ChangeImpact,
+  G0ConformanceFixtureMutation,
+  G0CoverageCategory,
+  G0ExitCriterion,
+  G0GateReview,
+  G0GateStatusRecord,
+  G0InventoryClass,
+  G0MarkdownContractCoverage,
+  G0MarkdownCoverageEntry,
+  G0SemanticHashKind,
+  G0SliceIdentityPin,
+} from './g0-conformance-types.js';

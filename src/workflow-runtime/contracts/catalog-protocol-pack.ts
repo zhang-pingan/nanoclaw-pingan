@@ -633,6 +633,7 @@ function validateDirectoryBoundaries(): void {
     'logical-schema-domain-separators.json',
     'static-absence-domain-separators.json',
     'golden-draft-domain-separators.json',
+    'g0-conformance-domain-separators.json',
   ]);
   const actualCatalogFiles = fs
     .readdirSync(absoluteContractPath('catalogs'))
