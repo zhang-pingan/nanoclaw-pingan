@@ -14,7 +14,7 @@
 2. 再理解 Workflow 如何被可信地创建。
 3. 再理解 State 如何统一进入 Graph Runtime。
 4. 然后学习 Graph 的静态合同和 Compiler。
-5. 再学习 Edge、Trigger、Input Seal 的运行语义。
+5. 再学习 Edge、Condition、Trigger、Input Aggregation 和 Input Seal 的运行语义。
 6. 再展开八类 Node 和动态 Child Scope。
 7. 再理解 Candidate、Close Request、Cut 和 T8。
 8. 然后进入重试、副作用、资源和安全上限。
@@ -35,7 +35,7 @@
 | [第二部分](#part-2) | Task Intake、Recipe 与创建入口 | 已展开 | 一个请求怎样安全地变成 Workflow？ |
 | [第三部分](#part-3) | State 与 Graph 的统一 | 已展开 | 五类 State 怎样 lower 到统一 Runtime？ |
 | [第四部分](#part-4) | Graph 静态合同与 Compiler | 部分展开 | Interface、Port、Registry、Source 和 Plan 怎样配合？ |
-| [第五部分](#part-5) | DAG 执行语义 | 部分展开 | Control、Data、Trigger、Input Seal 如何决定 ready？ |
+| [第五部分](#part-5) | DAG 执行语义 | 部分展开 | Condition、Edge、Trigger、Input Aggregation和 Input Seal如何决定 Ready？ |
 | [第六部分](#part-6) | Node 与动态结构 | 部分展开 | 八类 Node 以及 Subgraph、Expand、Map 如何工作？ |
 | [第七部分](#part-7) | Completion 与外层推进 | 部分展开 | Candidate 如何变成 Cut，T8 如何推进 State？ |
 | [第八部分](#part-8) | 可靠性、资源与副作用 | 导读 | Retry、Outbox、Compensation、Ledger、Safety 如何闭环？ |
@@ -961,7 +961,9 @@ Required Output在 Node成功时必须 `present` 且通过 Schema/Hash/Size验�
 | [4.4](#part-4-4) | Versioned Registry |
 | [4.5](#part-4-5) | Registry Snapshot 生命周期 |
 | [4.6](#part-4-6) | Source、Plan 与 Compiler边界 |
-| [4.7](#part-4-7) | 后续需要补充的 Compiler主题 |
+| [4.7](#part-4-7) | Compiler Proof |
+| [4.8](#part-4-8) | Program Hash |
+| [4.9](#part-4-9) | 后续需要补充的 Compiler主题 |
 
 原规范入口：
 
@@ -1022,7 +1024,29 @@ analyze.report Output Port
 
 每个 Port至少绑定 Schema和可选业务字节上限。Compiler证明 Producer Schema可以赋值给 Consumer Schema；不同 Schema不能隐式转换，必须有 sound proof或显式 Versioned Adapter Node。
 
-Input Port还定义聚合策略：
+`request`、`locale` 这类名称不是 Runtime预置枚举，而是具体 Interface声明的业务 `PortName`：
+
+```ts
+type PortName = string;
+
+interface ScopeInputPortContract {
+  schema_ref: VersionedRef;
+  max_bytes: number | null;
+  required: boolean;
+  default?: JsonValue;
+}
+```
+
+| 字段 | 含义 |
+| --- | --- |
+| `schema_ref` | 输入必须满足的 exact versioned Schema |
+| `max_bytes` | 该 Port的业务字节上限；`null` 表示不额外收紧部署级 Safety |
+| `required` | 最终 Scope Input Snapshot是否必须具有该值 |
+| `default` | 调用方没有提供值时使用的 typed默认值 |
+
+Root Scope的输入可以绑定 Workflow Input、Context Slot、Artifact或 Constant；Child Scope的输入只能来自 Owner Node已经 Sealed的 Input或 Plan中的 Literal。Map Item还可以通过固定的 `item_child_input_port` 注入。无论来源如何，Materialize都会校验实际值的 Schema、Hash和大小，再冻结 Scope Input Snapshot。
+
+Scope Input Port本身没有聚合策略，因为它在 Scope边界处已经是一个冻结参数。Node Input Port可以由多条 Data Edge提供值，因此额外定义以下聚合策略，详见[5.4](#part-5-4)：
 
 ```text
 single/only
@@ -1136,14 +1160,119 @@ Runtime只解释 Compiled Plan，不重新解析 Source Condition、不重新证
 
 <a id="part-4-7"></a>
 
-### 4.7 后续需要补充的 Compiler主题
+### 4.7 Compiler Proof
+
+Compiler Proof不是自然语言解释、运行日志或通用形式化证明，而是结构化、版本化、可哈希的静态安全证书。它回答“为什么这项执行合同可以被接受”，而不证明 Agent业务结果一定正确。
+
+主要 Proof包括：
+
+| Proof | 证明内容 |
+| --- | --- |
+| Data Edge Compatibility Proof | Producer全部合法值是否都是 Consumer可接受值 |
+| Completion Monotonicity Proof | Early Completion一旦成立，未来新增事实是否不会推翻它 |
+| Cancellation Safety Proof | Early Close后剩余 Node是否都可安全 Fence、Cancel、Reconcile或 Compensate |
+
+Data Edge Compatibility的核心命题是：
+
+```text
+Producer Value Set ⊆ Consumer Accepted Value Set
+```
+
+例如 Producer输出 `integer [0, 100]`，Consumer接受 `number [0, 1000]`，Compiler可以用 `numeric_range_subset` 规则生成 Proof。反过来若 Producer允许 `[0, 1000]` 而 Consumer只接受 `[0, 100]`，就必须返回 `schema_not_assignable`，不能因为部分值可用而放行。
+
+第一版允许的结构化证明规则包括：
+
+```text
+identical_schema
+const_subset
+enum_subset
+numeric_range_subset
+closed_object_subtype
+array_item_subtype
+discriminated_union_subtype
+```
+
+重命名、字段合并或类型转换不属于 Proof；这类变化必须使用显式 Versioned Adapter Node。
+
+Early Completion还必须同时具有：
+
+```text
+Monotonicity Proof
++ Cancellation Safety Proof
+= 允许 Early Close
+```
+
+`accepted_count >= 2` 随事实增加只会保持 True，因此可以证明单调；`error_count == 0` 可能被晚到 Error Fact推翻，不能用于 Early Rule。即使 Predicate单调，仍要证明所有可能被截断的 effectful Node具有可信的 cancellation contract，否则返回 `early_completion_cancellation_unsafe`。
+
+生成过程是：
+
+```text
+冻结 Source/Schema/Policy/Safety/Registry Snapshot
+  -> 构造待证明命题
+  -> 使用 pinned Proof Algorithm和有限 Proof Rule推导
+  -> 成功：保存 Proof Detail/Hash并写入 Plan
+  -> 失败：返回稳定 Compiler Diagnostic
+```
+
+Proof保存 Algorithm Version/Hash、输入 Schema或 Node Contract Hash、采用的规则、Detail Ref/Hash和最终 Proof Hash。Runtime只验证完整性并执行 Plan，不在 Recovery时重新证明；Proof或 Algorithm Hash缺失、不匹配时进入 Quarantine。
+
+<a id="part-4-8"></a>
+
+### 4.8 Program Hash
+
+Program是 Compiler从 Source表达式生成的一小段 normalized executable logic，例如 Condition、Trigger、Completion Fact或 Input Selection程序。Program Hash回答：
+
+> Runtime这次究竟按照哪一段确定性逻辑做出了判断？
+
+Condition Program典型包含：
+
+```ts
+interface CompiledConditionProgram {
+  normalized_ast: ConditionExpr;
+  operand_schema_hashes: Record<string, string>;
+  max_steps: number;
+  program_hash: string;
+}
+```
+
+概念上的计算过程是：
+
+```text
+canonical program payload
+  = normalized AST
+  + bound schema hashes
+  + execution limits
+  + program format/version
+
+program_hash
+  = SHA-256(domain separator + canonical program payload)
+```
+
+精确字段和 Domain Separator由 Contract Pack固定。Program Hash基于编译结果而不是原始 JSON，因为同一 AST在不同 Operand Schema、Short-circuit顺序或 Limit下可能具有不同执行合同。
+
+Runtime在 Trigger Cut、Input Snapshot和 Completion Eligibility等权威决策中保存对应 Program Hash。恢复时可以验证“这个结果确实由当前 Pinned Plan中的同一程序产生”，而不是从 Source重新编译并猜测旧逻辑。
+
+几个 Hash的边界：
+
+| Hash | 标识内容 |
+| --- | --- |
+| Source Hash | 原始 Graph Source的 canonical内容 |
+| Program Hash | 一小段已编译可执行逻辑 |
+| Proof Hash | 某项静态安全证明和证明细节 |
+| Compiled Edge Hash | 一条完整 Compiled Edge |
+| Plan Hash | 整个 Compiled Scope Plan |
+| Value Hash | 一次实际输入或输出值 |
+
+Program Hash证明内容身份和完整性，不证明逻辑在业务上正确，也不是签名、权限令牌或结果 Hash。两段人类看来等价的表达式也不保证具有相同 Hash，除非 Pinned Normalizer明确把它们归一化为同一 Program。尤其 `and/or` 采用从左到右 Short-circuit，参数顺序可能改变 Error语义，不能随意排序。
+
+<a id="part-4-9"></a>
+
+### 4.9 后续需要补充的 Compiler主题
 
 本部分后续讲解需要继续覆盖：
 
 - Strict JSON、Duplicate Key和 Closed Schema。
 - RFC 8785 Canonicalization和 Domain-separated Hash。
-- Workflow Schema Profile和 Assignability Proof。
-- Condition/Trigger/Completion Program。
 - Policy Intersection和 Safety Enforcement Matrix。
 - Static Child Plan Closure。
 - Compiler Toolchain Manifest、Error Catalog和 Sealed Golden Bundle。
@@ -1159,10 +1288,12 @@ Runtime只解释 Compiled Plan，不重新解析 Source Condition、不重新证
 | 小节 | 内容 |
 | --- | --- |
 | [5.1](#part-5-1) | Control Edge 与 Data Edge |
-| [5.2](#part-5-2) | Trigger |
-| [5.3](#part-5-3) | Input Seal |
-| [5.4](#part-5-4) | Node Ready/Skip判断 |
-| [5.5](#part-5-5) | 后续需要补充的执行语义 |
+| [5.2](#part-5-2) | Condition 与 Route Group |
+| [5.3](#part-5-3) | Trigger |
+| [5.4](#part-5-4) | Node Input Aggregation |
+| [5.5](#part-5-5) | Input Seal |
+| [5.6](#part-5-6) | Node Ready/Skip判断 |
+| [5.7](#part-5-7) | 后续需要补充的执行语义 |
 
 原规范入口：
 
@@ -1185,7 +1316,20 @@ Control Edge状态：
 unresolved -> taken | not_taken | error
 ```
 
-它根据 Source Node的 terminal status、code、child exit和受限 Condition产生路由事实。Trigger再组合这些事实决定 Node是否被激活。
+后三种都是不可逆解析结果：
+
+| 状态 | 含义 | 对 Trigger的影响 |
+| --- | --- | --- |
+| `unresolved` | 还没有权威路由结论，通常是 Source Node尚未 Terminal | 对应事实尚未知，Trigger可能保持 Unknown |
+| `taken` | `on`、Condition和 Route Group仲裁后确定选择该路径 | 向 Trigger贡献 True |
+| `not_taken` | 已确定不走该路径，不是暂时没有选中 | 向 Trigger贡献 False |
+| `error` | Condition、Route合同或完整性校验无法可信完成 | 触发 Scope Orchestration Error |
+
+`unresolved` 不等于 False。Source Node仍在执行时，未来可能将 Edge解析为任一最终状态。Edge一旦变成 `taken/not_taken/error`，就不能被 Late Fact或 Recovery改写。
+
+`not_taken` 的常见原因包括：Source Outcome与 `on` 不匹配、Condition=False、`first_matching` 中更高优先级 Edge已经胜出、Default前已有匹配项，或 `no_match=allow`。`error` 不能降级为 `not_taken`，否则 Schema错误、Pointer拼错或非法路由会被伪装成正常业务分支未命中。
+
+Source Node=`failed` 也不等于 Edge=`error`。前者是正常 Terminal Fact，可以被 `on.statuses=['failed']` 的 Failure Fallback Edge匹配为 `taken`；后者表示路由机制自身失败。
 
 Data Edge状态：
 
@@ -1204,7 +1348,64 @@ Data Edge可以绑定 `guard_control_edge_id`。Guard=`not_taken` 时 Data Edge�
 
 <a id="part-5-2"></a>
 
-### 5.2 Trigger
+### 5.2 Condition 与 Route Group
+
+Condition挂在单条 Control Edge上，回答“Source Node已经结束后，这条 Edge是否匹配”。执行顺序固定为：
+
+```text
+Source Node Terminal
+  -> on匹配 status/code/child_exit
+  -> when Condition求值
+  -> Route Group仲裁
+  -> Edge = taken | not_taken | error
+```
+
+Condition只能读取：
+
+```text
+frozen Scope Input
+Edge Source Node已经发布的 Output
+Edge Source Node的 terminal status/code/child_exit
+```
+
+它不能读取其他任意 Node、Live Workflow Context、时钟、随机数、模型、Tool或外部 API。支持的受限 typed AST操作包括：
+
+```text
+and / or / not
+exists
+eq / ne
+lt / lte / gt / gte
+in
+```
+
+Evaluator采用 Total、严格类型语义：
+
+- JSON Pointer缺失产生内部 `absent` Sentinel；JSON `null` 仍是存在的值。
+- `exists` 只判断 Operand是否非 Absent。
+- `eq/ne` 要求双方存在且类型兼容，使用 Canonical JSON结构相等。
+- 大小比较只允许 Number-Number或 String-String，禁止隐式类型转换。
+- `in` 要求右侧为 Array。
+- 非 `exists` 操作遇到 Absent、类型不匹配、非有限 Number或 Safety Limit溢出时产生 Condition Error。
+- `and/or` 按参数顺序从左到右 Short-circuit，未求值分支不产生 Error。
+
+因此检查可选字段时应先写 `exists(score) AND score >= 80`。如果直接比较缺失字段，结果是 Error而不是 False；这可以防止字段拼错被静默当成业务不匹配。
+
+Route Group决定同一 Source Node的多条 Edge如何共同解析：
+
+| Mode | 语义 |
+| --- | --- |
+| `all_matching` | 每条 Edge独立求值，可以同时有多条 `taken` |
+| `first_matching` | 按唯一整数 Priority从高到低求值，只取第一条匹配 Edge |
+
+`first_matching` 最多有一个 Default Edge。Default不允许声明 `on/when/priority`，只在前面的 Edge都不匹配时 `taken`；如果已有匹配，Default=`not_taken`。`all_matching` 禁止 Default和 Priority。
+
+没有匹配且没有 Default时，`no_match=allow` 将组内 Edge全部解析为 `not_taken`；`no_match=error` 产生 Orchestration Error。同一 Source Node的全部 Route Group和 Ungrouped Edge在 Source Terminal事务中原子解析，避免部分 Edge看到不同事实。
+
+Compiler把 Condition绑定 Operand Schema、校验 Pointer和类型、固定 Short-circuit顺序与最大步骤，再生成 Normalized Condition Program和 Program Hash。Runtime只执行该 Pinned Program。
+
+<a id="part-5-3"></a>
+
+### 5.3 Trigger
 
 Trigger根据 Incoming Control Edge的三值状态决定 Node是否激活：
 
@@ -1216,11 +1417,74 @@ quorum(edge_ids, min_taken)
 expression(EdgeTruthExpr)
 ```
 
-Trigger结果是 `true | false | unknown`。首次从 Unknown不可逆变为 True时冻结 Trigger Cut，记录 Witness Edge、Resolution Sequence和 Truth Program Hash。Late Edge不会改变已冻结 Trigger Cut。
+Trigger与 Condition不同：Condition判断一条 Edge，Trigger组合进入同一个 Node的多条 Edge。
 
-<a id="part-5-3"></a>
+| Trigger | True | False | Unknown |
+| --- | --- | --- | --- |
+| `root` | Node没有 Incoming Control Edge | 非法配置 | Scope尚未 Materialize |
+| `all` | 全部 Edge=`taken` | 任一 Edge=`not_taken` | 其余情况仍有 `unresolved` |
+| `any` | 任一 Edge=`taken` | 全部 Edge=`not_taken` | 尚无 `taken` 且仍有 `unresolved` |
+| `quorum(N)` | Taken数量达到 N | Taken + Unresolved已不足 N | 其他情况 |
+| `expression` | Strong Kleene三值表达式为 True | 表达式为 False | 表达式为 Unknown |
 
-### 5.3 Input Seal
+Trigger首次从 Unknown不可逆变为 True时立即冻结 Trigger Cut，记录 Witness Edge、Resolution Sequence和 Truth Program Hash。它不会等待 Data Input Seal才选择 Witness，Late Edge也不会改变已冻结 Cut。任何 Incoming Edge=`error` 都是 Scope Orchestration Error，不能由 Trigger忽略。
+
+<a id="part-5-4"></a>
+
+### 5.4 Node Input Aggregation
+
+Scope Input Port在 Materialize时已经是单个冻结参数；Node Input Port可以接收多条 Data Edge，因此必须声明“选择哪些值”和“何时封闭”的聚合策略：
+
+```text
+single/only
+single/first_resolved
+single/lowest_edge_id
+list/all_sources_resolved
+list/first_n_available
+```
+
+`single` 表示最终选择一个来源，不表示业务值只能是 Scalar；选中的值仍然可以是 Object或 Array。
+
+| Single策略 | 语义 |
+| --- | --- |
+| `only` | 最多一条 Source Edge；适合普通唯一参数 |
+| `first_resolved` | 选择第一条变为 `available` 的 Edge，显式接受完成顺序影响结果 |
+| `lowest_edge_id` | 等全部 Source封闭后，选择 ID最小的 Available Edge |
+
+`first_resolved` 不是第一条变成 `unavailable` 的 Edge；同一事务有多个 Available值时按 Edge ID Tie-break。`lowest_edge_id` 与物理完成顺序无关，适合要求稳定重放的场景。
+
+Single Port还声明 `required` 和可选 Default：
+
+```text
+有 Available值                         -> 选择真实值
+全部 Source封闭且没有值，但有 Default -> 使用 Default
+没有值/Default且 required=false       -> Seal为显式 Absent
+没有值/Default且 required=true        -> Input Impossible
+```
+
+Default只在全部 Source Resolution封闭且没有 Available值后使用，不与真实值竞争。
+
+`list` 收集多个来源，使用 `min_items` 表示最低可用数量：
+
+| List策略 | 语义 |
+| --- | --- |
+| `all_sources_resolved` | 等全部来源封闭，再收集所有 Available值 |
+| `first_n_available(N)` | 收到 N个 Available值后立即 Seal，不等待其余来源 |
+
+如果所有来源先封闭而 `first_n_available` 尚未达到 N，只要 Available数量仍满足 `min_items`，就用全部 Available值 Seal；少于 `min_items` 才是 Input Impossible。Seal之后的 Late Value只保留审计，不能进入 Snapshot。
+
+List顺序必须显式选择：
+
+| Order | 含义 |
+| --- | --- |
+| `edge_id` | 按稳定 Edge ID排序，不依赖完成顺序 |
+| `resolution_seq` | 按 Runtime持久化的权威解析顺序排序，同 Sequence再按 Edge ID Tie-break |
+
+聚合只负责选择、封闭和排序，不执行 Dedupe、Score、Merge、Reduce或业务判断。这些计算必须由显式 System、Delegation或其他业务 Node完成。
+
+<a id="part-5-5"></a>
+
+### 5.5 Input Seal
 
 Input Seal表示一个 Input Port的最终选择已经确定，或者已经确定 Required Input不可能满足。它不是简单的“某个值到了”。
 
@@ -1236,9 +1500,11 @@ Seal后 Late Value不能重新选择输入。
 
 例如 List Port使用 `first_n_available(count=3)`，达到三个 Available Value后立即 Seal。其余 Late Value保留审计，但不能进入 Snapshot。
 
-<a id="part-5-4"></a>
+Optional只表示全部来源封闭且没有值时可以 Seal为 Absent，不表示 Runtime可以忽略仍为 `unresolved` 的 Source Edge。Data Edge=`error` 也不能被聚合策略跳过，而是触发 Scope Orchestration Error。
 
-### 5.4 Node Ready/Skip判断
+<a id="part-5-6"></a>
+
+### 5.6 Node Ready/Skip判断
 
 ```text
 Trigger Cut = true
@@ -1256,16 +1522,12 @@ Trigger Cut = true
 
 Control/Data/Trigger/Input Seal分离后，系统可以明确表达无数据控制依赖、带数据但未选中的分支、Any/Quorum路由、确定性 Fan-in和 Failure Fallback。
 
-<a id="part-5-5"></a>
+<a id="part-5-7"></a>
 
-### 5.5 后续需要补充的执行语义
+### 5.7 后续需要补充的执行语义
 
 本部分后续讲解需要继续覆盖：
 
-- Route Group的 `all_matching` 与 `first_matching`。
-- Default Edge、Priority和 No Match。
-- Condition Total Semantics、Absent Sentinel和 Short Circuit。
-- Input Aggregation完整真值和 Tie-break。
 - Fixed-point Reconcile顺序。
 - Scheduler Fairness、Admission和 Backpressure。
 
@@ -1790,10 +2052,16 @@ Command Union和授权
 | T2a和 T2b分别做什么？ | [3.8](#part-3-8) |
 | Attempt何时发布 Typed Output？ | [3.9](#part-3-9) |
 | Port、Required和 Optional是什么意思？ | [4.2](#part-4-2) |
+| `request`、`locale` 是固定 Scope Input枚举吗？ | [4.2](#part-4-2) |
 | Scope Interface和 Named Exit是什么？ | [4.1](#part-4-1)、[4.3](#part-4-3) |
 | Registry和 Snapshot有什么区别？ | [4.4](#part-4-4)、[4.5](#part-4-5) |
+| Compiler生成的 Proof证明什么？ | [4.7](#part-4-7) |
+| Program Hash标识什么？ | [4.8](#part-4-8) |
 | Control Edge和 Data Edge有什么区别？ | [5.1](#part-5-1) |
-| Trigger、Input Seal和 Ready如何配合？ | [5.2](#part-5-2)、[5.3](#part-5-3)、[5.4](#part-5-4) |
+| Control Edge四种状态分别是什么？ | [5.1](#part-5-1) |
+| Condition和 Trigger有什么区别？ | [5.2](#part-5-2)、[5.3](#part-5-3) |
+| Node Input的 Single/List如何聚合？ | [5.4](#part-5-4) |
+| Trigger、Input Seal和 Ready如何配合？ | [5.3](#part-5-3)、[5.5](#part-5-5)、[5.6](#part-5-6) |
 | Subgraph、Expand、Map分别是什么？ | [6.2](#part-6-2)、[6.3](#part-6-3)、[6.4](#part-6-4) |
 | Candidate、Close Request和 Cut是什么关系？ | [7.1](#part-7-1)、[7.2](#part-7-2)、[7.3](#part-7-3) |
 | Transition和 Graph Edge有什么区别？ | [7.4](#part-7-4) |
@@ -1812,11 +2080,12 @@ Unified Execution
   Non-terminal State -> Graph Run -> Scope Tree -> Local DAG
 
 Static Contract
-  Registry Snapshot + Interface + Policy + Source -> Compiler -> Plan
+  Registry Snapshot + Interface + Policy + Source
+  -> Compiler -> Proof/Program Hash -> Plan
 
 Runtime Dataflow
-  Control Edge -> Trigger
-  Data Edge -> Input Seal
+  Condition -> Control Edge -> Trigger
+  Data Edge -> Input Aggregation -> Input Seal
   Trigger + Inputs -> Ready
 
 Execution
