@@ -1,8 +1,8 @@
 # Dynamic Workflow Runtime 实施进度
 
 > **状态**: IN_PROGRESS
-> **当前 Gate**: G1 DDL / Store（DONE；G2 READY）
-> **下一施工切片**: G2 Compiler / Sealed Golden
+> **当前 Gate**: G2 Compiler / Sealed Golden（BLOCKED_BY_SPEC）
+> **下一施工切片**: G2 normalization/lowering/Golden oracle contract repair
 > **最后更新**: 2026-07-16
 > **规范权威**: `local/docs/dynamic-workflow-dag-framework.md`
 
@@ -106,7 +106,7 @@ Agent Container 运行于独立 VM，Node identity 由 VM image gate 保证；�
 | --- | --- | --- | --- | --- |
 | G0 Contract Pack / Static Baseline | `DONE` | 无 | G0.1-G0.9 historical root + G0.10 additive Capacity Admin/publication/CAP/Logical Schema/coverage root | 本原子提交 |
 | G1 DDL / Store | `DONE` | G0.10 | frozen executable migration/Schema Manifest + unified Connection Factory + Store lifecycle/transaction host + real-file SQLite/identity gates | 本原子提交（G1.2） |
-| G2 Compiler / Golden | `READY` | G0.1-G0.9；G0.10 不改变 Compiler/Plan 语义 | sealed Golden Bundle + compiler/toolchain hash | - |
+| G2 Compiler / Golden | `BLOCKED_BY_SPEC` | G0.1-G0.9；G0.10 不改变 Compiler/Plan 语义 | sealed Golden Bundle + compiler/toolchain hash | - |
 | G3 Registry / Authoring / Publish | `NOT_READY` | G1 + G2 | manifest/authoring/publish/retention/ABI fixtures | - |
 | G4 Test Bootstrap | `NOT_READY` | G1 + G2 + G3 | isolated bootstrap profile | - |
 | G5 Basic Runtime | `NOT_READY` | G4 | T0-T6e model/fault fixtures | - |
@@ -121,8 +121,8 @@ Agent Container 运行于独立 VM，Node identity 由 VM image gate 保证；�
 | --- | --- | --- | --- |
 | I0 | Publish、Registry、Recipe 与执行版本固定 | `NOT_READY` | G3 起 |
 | I1 | Intake、Routing、幂等创建、Child provenance、Claim | `NOT_READY` | G5 起 |
-| I2 | Definition、State lowering、Context、transition | `READY` | G2 Definition lowering 起；Runtime 仍从 G5 起 |
-| I3 | Source/Compiled IR、Port、Compiler | `READY` | G2 实现 |
+| I2 | Definition、State lowering、Context、transition | `BLOCKED_BY_SPEC` | G2 frozen lowering/oracle contract 冲突；Runtime 仍从 G5 起 |
+| I3 | Source/Compiled IR、Port、Compiler | `BLOCKED_BY_SPEC` | G2 frozen normalized assertion/Compiled IR 冲突 |
 | I4 | Runtime Store、SQLite relation、Value/Blob、migration | `IN_PROGRESS` | G1 migration/Schema Manifest/Store Base/Connection Factory DONE；Value/Blob 从 G3 起 |
 | I5 | Graph 状态机、reconcile、Scheduler、Ledger | `NOT_READY` | G5 起 |
 | I6 | Delegation/System、Capability Effect、Outbox | `NOT_READY` | G5 起 |
@@ -155,6 +155,40 @@ G0.1-G0.9 已按当时规范完成并保留历史 identity。后续确认的 Cap
 | --- | --- | --- | --- | --- |
 | G1.1 | Executable DDL / Schema Manifest | `DONE` | G0.6 + G0.10 全量 canonical SQLite migration、closed introspected Manifest、schema lint、constraint/trigger/query-plan fixtures、真实文件与 managed identity gate | 本原子提交 |
 | G1.2 | Store Base / Connection Factory | `DONE` | production-target Store 基础、连接生命周期/完整 PRAGMA/read-only policy、identity gate、参数化 query API 与短写事务 host 的 candidate 开发验证 | 本原子提交 |
+
+## G2 开工审计：BLOCKED_BY_SPEC
+
+**状态**：`BLOCKED_BY_SPEC`
+
+**工作包**：I2/I3；本次只完成 G2 开工前规范/Contract Pack 一致性审计，没有实现 Compiler、normalizer、lowerer、proof/program、Golden review/seal，也没有修改任何 G0 published JSON、G1.1 schema artifact 或 G1.2 Store/Factory contract。
+
+2026-07-16 从 clean `main@b893b6b` 开始，完整阅读架构规范和本账本，并复核 `b893b6b`、`64923ca` 与范围外介绍文档提交 `61f6685`。G0.3 closed Source/Compiled IR、G0.4 Error Catalog、G0.8 全部 40 个 raw case/hand-authored assertions/input snapshots 和 G0.9 identity 均保持 frozen。开工审计发现下列最小冲突；任一项都无法在不扩展 closed schema、发明未定义 artifact 或改变 frozen Golden Draft 语义的情况下唯一实现：
+
+1. **Static lowering result-set conflict**：规范 `State 与 Graph 的统一` 明确 delegation/system lower 为“单 capability node + success/failure terminal”，并在 `Root Graph 的四类结果` 中规定 engine error 与 local graph cancel 走 named exit 之外的 `on_error/on_local_cancel` 独立路径。G0.8 `positive.static-lowering` 却要求 `/normalized/interface/exits` 精确包含 `success/failure/error/local_cancel`。若把 error/cancel 加入 `GraphScopeInterfaceContract.exits`，会把独立 outcome 错写成 normal named exit；若不加入则 frozen assertion 失败。
+2. **Condition program shape conflict**：规范 `CompiledConditionProgram` 和 G0.3 `compiled-scope-plan-schema.json` 只允许 `normalized_ast/operand_schema_hashes/max_steps/program_hash`。G0.8 `positive.condition-route` 要求 `/normalized/control_edges/0/condition_program/operand_types=[boolean,boolean]`。把 `operand_types` 写入 Plan 会被 closed schema 拒绝；规范没有定义包含该字段的第二个 normalized artifact、canonicalization 或 hash domain。
+3. **Map normalized field conflict**：G0.3 `CompiledMapNode` 没有 `result_order`，Map 顺序语义由正文固定为 item index。G0.8 `positive.map` 要求 `/normalized/nodes/map_items/result_order=item_index`。规范没有说明该 assertion 指向 Plan、review projection 还是其他 sealed bytes，也没有定义该额外字段进入哪个 hash。
+4. **Static child closure representation conflict**：规范/G0.3 Plan 只包含 `static_child_plan_closure_hash`，static child plans 作为 content-addressed closure 单独持久化；G0.8 `positive.static-child-closure` 要求 `/normalized/static_child_plan_closure/members` 包含 `nested_child/leaf_child`。Golden Bundle contract 只声明 expected Plan bytes/ref/hash 与 proof/program hashes，没有定义 closure member artifact 的 schema、bytes ref、domain separator、排序或它与 `static_child_plan_closure_hash` 的覆盖关系。
+
+此外，G0.8 frozen input snapshot 按其 G0 阶段职责把 `production_compiler_status/canonical_normalizer_status/proof_algorithm_status` 固定为 `absent`，而规范的 G2 Compiler input 又要求 exact `WorkflowCompilerToolchainManifest`、Compiler build、Normalizer 与 Proof ref/hash。G2 可以新增 top-level toolchain artifact，但正文没有定义如何在不改写 G0.8 snapshot bytes/hash 的前提下形成该 exact per-case Compiler input identity。
+
+禁止的临时处理包括：给 G0.3 Plan 增加字段、把 error/cancel 冒充 named exit、由 Production Compiler 生成一个自定义 `/normalized` review projection、只为 fixture 特判 assertion、修改 G0.8 expected assertion 或 snapshot、以当前 Compiler 输出反向生成 oracle、伪造 `human:local-owner` approval。按强制会话协议，必须先由规范明确唯一方案并发布相应 additive/bumped Contract Pack + Golden Draft version，再恢复 G2；当前不得创建 `conformance/sealed/` artifact 或 `test:g2` 成功门禁。
+
+受影响退出条件：production Compiler 的 normalized bytes、Definition lowering、program/proof hash、独立 GoldenSemanticReview、sealed Bundle byte identity、deterministic replay 和 G2 Gate 状态。G3-G9 继续 `NOT_READY`，SQLite Profile 继续 `candidate/not_certified`，release identity 继续 `missing_until_g8`。
+
+开工审计验证全部通过 `./scripts/runtime-toolchain.sh exec -- <command>` 串行执行：
+
+| 命令/证据                 | 结果                                                                                                                                                                                                     |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `npm run contracts:check` | PASS；G0.2-G0.10、G1.1 schema 与 G1.2 Store read-only check 全通过；G0.10/G1.1/schema/migration/deterministic identity 未漂移，SQLite 仍为 candidate/not-certified、release identity 仍 missing-until-G8 |
+| `npm run test:g0`         | PASS，15 files / 109 tests；包含 G0.8 frozen Draft 与 G0.9 historical verification                                                                                                                       |
+| `npm run test:g1.1`       | PASS，1 file / 8 tests                                                                                                                                                                                   |
+| `npm run test:g1.2`       | PASS，1 file / 10 tests                                                                                                                                                                                  |
+| `npm run test:g2`         | FAIL，npm 明确报告 `Missing script: "test:g2"`；G2 因上述规范冲突尚未合法建立，未增加空测试、skip 或伪绿色门禁                                                                                           |
+| `npm run typecheck`       | PASS                                                                                                                                                                                                     |
+| `npm test`                | 77/79 files、715/717 tests；仅复现范围外既有 R-012 credential-proxy 250ms async trace intermittent 与 R-013 G0.6 5s timing intermittent；其余 715 tests 通过，未修改或放宽两项测试                       |
+| `npm run build`           | PASS                                                                                                                                                                                                     |
+
+Targeted Prettier 对本次 G2 blocker section 的独立 Markdown snippet 为 PASS；整份账本的 `prettier --check` 在修改前 HEAD 与当前版本均为既有 FAIL，因此没有批量格式化历史账本。`git diff --check` 为 PASS。Frozen/boundary scan 为 PASS：G0 published contracts/config、G1.1 schema tree 与 G1.2 Store/Factory tree 均无 diff，`conformance/sealed/` 仍只有 `.gitkeep`，没有 G2 Compiler 或 G3+ artifact，范围外提交 `61f6685` 仍为 HEAD 祖先。
 
 ## 已完成切片：G1.2 Store Base / Connection Factory
 
@@ -918,7 +952,10 @@ G0.1 的实现、测试和本进度账本由同一个原子提交交付。Agent 
 | R-013 | Contract test timing baseline | OPEN_OUT_OF_SCOPE | G1.1 曾在并发负载下复现 G0.6 5s timing；G1.2 串行 `test:g0` 15/15 files、109/109 tests 和两次完整 suite 均未复现。G1.2 不调整 timeout 或 G0.6 既有实现 | 独立测试稳定性维护 |
 | R-014 | Capacity governance | CLOSED | G0.10 已机器化 closed publication/command、权限/Actor/entrypoint/delegation、revision/hash CAS、reason/denial、immutable audit tables、唯一 Publisher/Watcher protocol、Admission lineage、crash recovery 与 additive Gate evidence；G1 DDL 可开始 | G0.10 |
 | R-015 | Toolchain test timing | OPEN_OUT_OF_SCOPE | G1.1 曾复现 runtime-toolchain 5s timing；G1.2 串行 `test:g0` 和两次完整 suite 均未复现，toolchain tests 通过。G1.2 不调整 timeout 或 managed toolchain 既有实现 | 独立测试稳定性维护 |
+| R-016 | Compiler/Golden contract | OPEN_BLOCKING_G2 | G0.8 normalized assertions 要求 G0.3 Compiled IR 不存在的 `operand_types/result_order/static_child_plan_closure.members`，且 static lowering assertion 与 error/local-cancel 独立 outcome 语义冲突；per-case G2 toolchain identity 与 frozen G0.8 `absent` identity 也缺少 additive binding contract | G2 spec/Contract repair |
 
 ## 下一步
 
-G0.1-G0.9 historical identity、G0.10 additive current root 与 G1.1/G1.2 executable schema/Store Base 均已完成；current G0/I11 与 G1 为 `DONE`，G2 为 `READY`。下一会话实施 `G2 Compiler / Sealed Golden`：只按规范完成 Production Compiler/normalizer/lowerer/proof、Golden semantic review/approval/sealing 与 compiler/toolchain identity，不开始 G3 Registry/Authoring/Publish、G4 bootstrap、Runtime/Scheduler/Capacity、Runtime Center/UI、Supported Limits certification 或 production activation，并继续保留 R-012/R-013/R-015 为范围外基线。
+G0.1-G0.9 historical identity、G0.10 additive current root 与 G1.1/G1.2 executable schema/Store Base 均已完成；current G0/I11 与 G1 为 `DONE`。G2 在开工前审计中因 R-016 标记为 `BLOCKED_BY_SPEC`，I2/I3 同步阻塞，G3-G9 继续 `NOT_READY`。
+
+下一施工切片必须先做 G2 spec/Contract repair，而不是编写 Compiler：明确 normalized semantic assertion 的唯一 target artifact/schema/domain/hash，统一 static lowering 的 normal named exits 与 error/local-cancel outcome 表达，决定 `operand_types/result_order/static child closure members` 是进入 bumped Compiled IR 还是独立 sealed artifact，并定义 frozen G0.8 case input 到 exact G2 Toolchain Manifest 的 additive binding。修复必须发布新的 Contract/Draft version 并保留 G0.3/G0.8 historical bytes；随后重新执行 Golden Draft 独立人工审核，才可恢复 Production Compiler/Golden sealing。不得在修复前实现 G3+、伪造 approval、SQLite certification、release identity 或 production activation；R-012/R-013/R-015 继续作为范围外 timing baseline。
