@@ -1,0 +1,158 @@
+{
+  "format": "icarus.workflow-contract-pack-static-absence/1",
+  "ref": {
+    "id": "icarus.workflow-contract-pack-static-absence",
+    "version": "1"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-contract-pack-static-absence:1\n",
+  "payload": {
+    "gate": "G0.7",
+    "status": "static_absence_and_surface_contract",
+    "foundation_manifest_hash": "sha256:e85b654581c036f8129677d7443a0704ebc8b8fbe87907b842aaefe1501e637d",
+    "closed_schema_manifest_hash": "sha256:c5ea281d64480787322e8b6ef619b2f90784084d87ba4373c94288ed5e7aa3a8",
+    "catalog_protocol_manifest_hash": "sha256:e4947c515a28b3baf6782a980db9c26d32612b3c6acd3cd04348e73bd54ff607",
+    "safety_sqlite_manifest_hash": "sha256:76b8e1196ac422500be9c79a767e673e9c30fa3d9bbb1dc12fc54613cd40b428",
+    "logical_schema_manifest_hash": "sha256:32de639cc0ee6c6f33aa4291ea03ffa55b0a22752190fb88862e72a3f6857520",
+    "source_core_build_hash": "sha256:e30c683e8c9c444738bca81892ff12a4048e396dd5cba01c9b374b4562b22bf6",
+    "generated_by_tool_hash": "sha256:665ed737637c65ba80a0ff6255338a22c81c07f9a3f833d323071e1c94315ef1",
+    "absence_baseline_hash": "sha256:16d5919ffab06dbdf4f6f3e962175883ba2cd785ef4f33f4cd19e2eb9ba576b7",
+    "product_surface_manifest_hash": "sha256:156d76d01e3fa2bfd99c689b1440436f2f149c441704c8e7552e39511e95b6c8",
+    "migration_candidate_boundary_hash": "sha256:3c191ffb10f9c8c11564f88dd0b36f6305526c70076648f7df3a1c7c8f7b101f",
+    "schema_count": 3,
+    "active_surface_count": 12,
+    "removed_surface_count": 10,
+    "archived_candidate_file_count": 16,
+    "positive_case_count": 10,
+    "negative_case_count": 30,
+    "proof_sources": [
+      "typescript_ast_import_graph",
+      "web_route_enumeration",
+      "electron_dom_inventory",
+      "feature_manifest_parser",
+      "sqlite_schema_inspection",
+      "configured_filesystem_roots"
+    ],
+    "candidate_content_source_scan_status": "forbidden_and_zero",
+    "test_root_policy": "isolated_temporary_data_and_store_roots",
+    "sqlite_profile_status": "candidate",
+    "certification_status": "not_certified",
+    "executable_ddl_status": "absent",
+    "sqlite_runtime_execution_status": "absent",
+    "artifacts": [
+      {
+        "path": "catalogs/static-absence-domain-separators.json",
+        "format": "icarus.workflow-static-absence-domain-separators/1",
+        "ref": {
+          "id": "icarus.workflow-static-absence-domain-separators",
+          "version": "1"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-static-absence-domain-separators:1\n",
+        "hash": "sha256:c58bf739f48a51d60c2b57d78096929706ed2a827fbe2a808d7054488ab323ea"
+      },
+      {
+        "path": "conformance/static-absence/negative-cases.json",
+        "format": "icarus.workflow-static-absence-negative-cases/1",
+        "ref": {
+          "id": "icarus.workflow-static-absence-negative-cases",
+          "version": "1"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-static-absence-negative-cases:1\n",
+        "hash": "sha256:08287f8b30ec6bacb2aaa2632463b516b4b004f8f22c723bc195e059abcc2247"
+      },
+      {
+        "path": "conformance/static-absence/positive-cases.json",
+        "format": "icarus.workflow-static-absence-positive-cases/1",
+        "ref": {
+          "id": "icarus.workflow-static-absence-positive-cases",
+          "version": "1"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-static-absence-positive-cases:1\n",
+        "hash": "sha256:5b46ba9d21db6302d600abd91a0ab5e22a5b7e96acc9a9e7ff36ef3c805254be"
+      },
+      {
+        "path": "static/migration-candidate-boundary-schema.json",
+        "format": "icarus.migration-candidate-boundary-schema/1",
+        "ref": {
+          "id": "icarus.migration-candidate-boundary-schema",
+          "version": "1"
+        },
+        "version": 1,
+        "domain_separator": "icarus:migration-candidate-boundary-schema:1\n",
+        "hash": "sha256:191b9e501b9c9fd0770f9e88642d056d0614b1483e99d0fdb4edcba3a8bda842"
+      },
+      {
+        "path": "static/migration-candidate-boundary@1.json",
+        "format": "icarus.migration-candidate-boundary/1",
+        "ref": {
+          "id": "icarus.migration-candidate-boundary",
+          "version": "1"
+        },
+        "version": 1,
+        "domain_separator": "icarus:migration-candidate-boundary-artifact:1\n",
+        "hash": "sha256:4e17809710d91d72e1537533ef036109ebe9c50496e3492813d13a3896d80890"
+      },
+      {
+        "path": "static/product-surface-coverage-schema.json",
+        "format": "icarus.product-surface-coverage-schema/1",
+        "ref": {
+          "id": "icarus.product-surface-coverage-schema",
+          "version": "1"
+        },
+        "version": 1,
+        "domain_separator": "icarus:product-surface-coverage-schema:1\n",
+        "hash": "sha256:a4ed8a846786367937cb5573fcb936a484236eb638f7a99bbf23e06118e17373"
+      },
+      {
+        "path": "static/product-surface-coverage@1.json",
+        "format": "icarus.product-surface-coverage/1",
+        "ref": {
+          "id": "icarus.product-surface-coverage",
+          "version": "1"
+        },
+        "version": 1,
+        "domain_separator": "icarus:product-surface-coverage-artifact:1\n",
+        "hash": "sha256:27f7f3f99d0485732953972e35181f48491aa058ba7e468c06352330bc64cd19"
+      },
+      {
+        "path": "static/workflow-runtime-absence-baseline-schema.json",
+        "format": "icarus.workflow-runtime-absence-baseline-schema/1",
+        "ref": {
+          "id": "icarus.workflow-runtime-absence-baseline-schema",
+          "version": "1"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-runtime-absence-baseline-schema:1\n",
+        "hash": "sha256:2282610bd544aaf7514ef81274ccb9669a4d206afe91fa9663921281f45b9571"
+      },
+      {
+        "path": "static/workflow-runtime-absence-baseline@1.json",
+        "format": "icarus.workflow-runtime-absence-baseline/1",
+        "ref": {
+          "id": "icarus.workflow-runtime-absence-baseline",
+          "version": "1"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-runtime-absence-baseline-artifact:1\n",
+        "hash": "sha256:8331ba82daaa2e4950e9e02cf4c637e3d6ecf2c78dbbcb2038ea154d8d01e697"
+      }
+    ],
+    "next_reserved_directories": [
+      "conformance/draft",
+      "conformance/sealed"
+    ],
+    "explicitly_absent_artifacts": [
+      "golden_draft_or_review_input",
+      "executable_migration_or_schema_manifest",
+      "workflow_runtime_store_or_sqlite_factory",
+      "compiler_or_golden_sealing",
+      "registry_or_runtime_semantics",
+      "runtime_center_or_ui",
+      "certified_sqlite_profile_or_supported_limits"
+    ]
+  },
+  "hash": "sha256:a75736bf253ab67b22ba6abb0edf8e943c5d643f0b2ff36d63defbdf6336f7d2"
+}

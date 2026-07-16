@@ -18,6 +18,10 @@ import {
   checkContractPackLogicalSchema,
   generateContractPackLogicalSchema,
 } from './logical-schema-pack.js';
+import {
+  checkContractPackStaticAbsence,
+  generateContractPackStaticAbsence,
+} from './static-absence-pack.js';
 
 function usage(): never {
   console.error('Usage: contract-pack <generate|check>');
@@ -37,7 +41,8 @@ let currentPack:
   | 'closed_schemas'
   | 'catalog_protocols'
   | 'safety_sqlite'
-  | 'logical_schema' = 'foundation';
+  | 'logical_schema'
+  | 'static_absence' = 'foundation';
 
 try {
   const foundationManifest =
@@ -81,6 +86,16 @@ try {
   console.log(`contract_pack_logical_schema=${command}:ok`);
   console.log(
     `contract_pack_logical_schema_hash=${logicalSchemaManifest.hash}`,
+  );
+
+  currentPack = 'static_absence';
+  const staticAbsenceManifest =
+    command === 'generate'
+      ? generateContractPackStaticAbsence()
+      : checkContractPackStaticAbsence();
+  console.log(`contract_pack_static_absence=${command}:ok`);
+  console.log(
+    `contract_pack_static_absence_hash=${staticAbsenceManifest.hash}`,
   );
 } catch (error) {
   console.error(

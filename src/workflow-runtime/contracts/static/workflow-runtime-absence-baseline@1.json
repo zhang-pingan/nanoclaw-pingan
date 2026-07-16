@@ -1,0 +1,25 @@
+{
+  "format": "icarus.workflow-runtime-absence-baseline/1",
+  "ref": {
+    "id": "icarus.workflow-runtime-absence-baseline",
+    "version": "1"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-runtime-absence-baseline-artifact:1\n",
+  "payload": {
+    "format": "icarus.workflow-runtime-absence-baseline/1",
+    "source_core_build_hash": "sha256:e30c683e8c9c444738bca81892ff12a4048e396dd5cba01c9b374b4562b22bf6",
+    "generated_by_tool_hash": "sha256:665ed737637c65ba80a0ff6255338a22c81c07f9a3f833d323071e1c94315ef1",
+    "production_source_absence_hash": "sha256:f96169ec05a2e21f88973f7ab4ab901e134e1adbd939659a36c822cabb6860da",
+    "removed_api_negative_fixture_hash": "sha256:3b212d7275e7ea1fa608b024649b591ba59ed2ea618ba47827326920bda2a074",
+    "removed_ui_negative_fixture_hash": "sha256:42ff5e05b9910eff25f7727fc04cf1ce0e46a705c95e7aeb900a6ca911578689",
+    "schema_absence_hash": "sha256:c3e3a9867e0dc50c99dc7b5f4e68685b8a29e05d6c5e8de95ff727cec2cbf149",
+    "filesystem_absence_hash": "sha256:e4addda29bb0959e05146e38863674d4a6da114b4a908c7424c64b4f2c39c499",
+    "active_resource_absence_hash": "sha256:6595e1a0e1ed5ddb9648e31b01037dace4de8406cf1eedabb240486c2db26324",
+    "protected_capability_fixture_hash": "sha256:c2f9bb00727ce8e9a7ac2b156d670a0cb73d6b18ee692705d7f6dcc60c933eee",
+    "test_data_root_isolation_hash": "sha256:d0b628c7b600924256382eee36a7a39a15ccf51212f9d34025871b94a831eef7",
+    "migration_candidate_boundary_hash": "sha256:3c191ffb10f9c8c11564f88dd0b36f6305526c70076648f7df3a1c7c8f7b101f",
+    "baseline_hash": "sha256:16d5919ffab06dbdf4f6f3e962175883ba2cd785ef4f33f4cd19e2eb9ba576b7"
+  },
+  "hash": "sha256:8331ba82daaa2e4950e9e02cf4c637e3d6ecf2c78dbbcb2038ea154d8d01e697"
+}

@@ -6,7 +6,16 @@ import type {
 } from 'http';
 import fs from 'fs';
 import path from 'path';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
+
+const { TEST_DATA_DIR } = vi.hoisted(() => ({
+  TEST_DATA_DIR: `${process.env.TMPDIR || '/tmp'}/icarus-run-once-handler-${process.pid}`,
+}));
+
+vi.mock('../config.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../config.js')>()),
+  DATA_DIR: TEST_DATA_DIR,
+}));
 
 import { _initTestDatabase } from '../db.js';
 import { GroupQueue } from '../group-queue.js';
@@ -204,10 +213,17 @@ function multipartBody(parts: {
 describe('internal run-once handler', () => {
   beforeEach(() => {
     _initTestDatabase();
-    fs.rmSync(path.resolve('data/run-once-workspaces/handler_l3agent'), {
-      recursive: true,
-      force: true,
-    });
+    fs.rmSync(
+      path.join(TEST_DATA_DIR, 'run-once-workspaces', 'handler_l3agent'),
+      {
+        recursive: true,
+        force: true,
+      },
+    );
+  });
+
+  afterAll(() => {
+    fs.rmSync(TEST_DATA_DIR, { recursive: true, force: true });
   });
 
   it('keeps the existing JSON body contract', async () => {
@@ -303,7 +319,9 @@ describe('internal run-once handler', () => {
     expect(uploaded).toBeDefined();
     if (!uploaded?.relative_path) throw new Error('upload was not captured');
     const hostPath = path.resolve(
-      'data/run-once-workspaces/handler_l3agent',
+      TEST_DATA_DIR,
+      'run-once-workspaces',
+      'handler_l3agent',
       uploaded.relative_path,
     );
     expect(fs.readFileSync(hostPath, 'utf-8')).toBe('# 风险\n');
@@ -350,7 +368,9 @@ describe('internal run-once handler', () => {
     );
     const relativePath = 'outputs/run-download/report.md';
     const hostPath = path.resolve(
-      'data/run-once-workspaces/handler_l3agent',
+      TEST_DATA_DIR,
+      'run-once-workspaces',
+      'handler_l3agent',
       relativePath,
     );
     fs.mkdirSync(path.dirname(hostPath), { recursive: true });

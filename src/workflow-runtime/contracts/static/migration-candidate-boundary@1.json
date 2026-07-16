@@ -1,0 +1,26 @@
+{
+  "format": "icarus.migration-candidate-boundary/1",
+  "ref": {
+    "id": "icarus.migration-candidate-boundary",
+    "version": "1"
+  },
+  "version": 1,
+  "domain_separator": "icarus:migration-candidate-boundary-artifact:1\n",
+  "payload": {
+    "format": "icarus.migration-candidate-boundary/1",
+    "source_core_build_hash": "sha256:e30c683e8c9c444738bca81892ff12a4048e396dd5cba01c9b374b4562b22bf6",
+    "candidate_root": "local/migration-candidates/",
+    "archive_manifest_hash": "sha256:1315e1d3fd1f1726544ae7364e3ba0b2cd8ef4acc39cbdeab2c0466c2163db3c",
+    "checksum_manifest_hash": "sha256:17815addf29bf0843c7393a6a7418200df99d3ed124ec9df354dc1ca1f5167a7",
+    "archived_file_count": 16,
+    "production_import_reachability_hash": "sha256:5b380ca1fb4e422ae07e8b7ebe6bc632575c8c8b7f1983a7174b8a574fc92de1",
+    "test_helper_reachability_hash": "sha256:53b9d59c23da7270803a9169bad4efcf1e901d058aec3cf90c8c21b3f21344b4",
+    "setup_reachability_hash": "sha256:1b329b1af1288cd096ff59f8cdc7d45f35658b27b08b8466645f989355e49e18",
+    "feature_registry_reachability_hash": "sha256:ae0e452acce4ed0f56d95defbfa822096623330372ffdd3ac9b2142cbd092e69",
+    "compiler_fixture_reachability_hash": "sha256:add6a9a28b6906a17e98cc025d747074a7a91a566b776c19308341c1ad852814",
+    "build_context_reachability_hash": "sha256:a1ee6d6e93af500bdeabd2ba98c3a92185abfd67dc84926f1d8016be3b0c9bd0",
+    "release_artifact_reachability_hash": "sha256:b55aa7dceca7361d911ab2d8c054b2dbd1ff200163230bc6af95c5e935634a6d",
+    "boundary_hash": "sha256:3c191ffb10f9c8c11564f88dd0b36f6305526c70076648f7df3a1c7c8f7b101f"
+  },
+  "hash": "sha256:4e17809710d91d72e1537533ef036109ebe9c50496e3492813d13a3896d80890"
+}

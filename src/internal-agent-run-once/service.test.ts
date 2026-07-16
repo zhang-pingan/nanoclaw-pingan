@@ -1,6 +1,15 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import fs from 'fs';
 import path from 'path';
+
+const { TEST_DATA_DIR } = vi.hoisted(() => ({
+  TEST_DATA_DIR: `${process.env.TMPDIR || '/tmp'}/icarus-run-once-service-${process.pid}`,
+}));
+
+vi.mock('../config.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../config.js')>()),
+  DATA_DIR: TEST_DATA_DIR,
+}));
 
 vi.mock('../container-runner.js', async () => {
   const actual = await vi.importActual<typeof import('../container-runner.js')>(
@@ -42,10 +51,14 @@ describe('InternalAgentRunOnceService', () => {
   beforeEach(() => {
     _initTestDatabase();
     vi.mocked(runContainerAgent).mockReset();
-    fs.rmSync(path.resolve('data/run-once-workspaces/l3agent'), {
+    fs.rmSync(path.join(TEST_DATA_DIR, 'run-once-workspaces', 'l3agent'), {
       recursive: true,
       force: true,
     });
+  });
+
+  afterAll(() => {
+    fs.rmSync(TEST_DATA_DIR, { recursive: true, force: true });
   });
 
   it('runs the container in external system one-shot mode', async () => {
@@ -206,7 +219,9 @@ describe('InternalAgentRunOnceService', () => {
           '',
         );
         const outputHostDir = path.resolve(
-          'data/run-once-workspaces/l3agent',
+          TEST_DATA_DIR,
+          'run-once-workspaces',
+          'l3agent',
           outputRelativeDir,
         );
         fs.mkdirSync(outputHostDir, { recursive: true });
@@ -320,7 +335,9 @@ describe('InternalAgentRunOnceService', () => {
     });
 
     const hostTracePath = path.resolve(
-      'data/run-once-workspaces/l3agent',
+      TEST_DATA_DIR,
+      'run-once-workspaces',
+      'l3agent',
       result.trace_path!.replace(/^\/workspace\/run-once\//, ''),
     );
     const trace = JSON.parse(fs.readFileSync(hostTracePath, 'utf-8'));

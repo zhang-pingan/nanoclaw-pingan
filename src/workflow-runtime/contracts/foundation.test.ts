@@ -259,12 +259,15 @@ describe('G0.2 Contract Pack conformance', () => {
   it('keeps production Contract Pack imports inside the foundation boundary', () => {
     const allowedPackages = new Set([
       'ajv/dist/2020.js',
+      'better-sqlite3',
       'crypto',
       'fs',
       'json-canonicalize',
       'jsonc-parser',
       'node:util',
+      'os',
       'path',
+      'typescript',
     ]);
     const files = fs
       .readdirSync(contractsRoot, { recursive: true, withFileTypes: true })

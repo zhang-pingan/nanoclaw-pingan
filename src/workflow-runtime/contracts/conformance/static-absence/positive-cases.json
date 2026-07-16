@@ -1,0 +1,64 @@
+{
+  "format": "icarus.workflow-static-absence-positive-cases/1",
+  "ref": {
+    "id": "icarus.workflow-static-absence-positive-cases",
+    "version": "1"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-static-absence-positive-cases:1\n",
+  "payload": {
+    "cases": [
+      {
+        "case_id": "current-production-import-closure-is-clean",
+        "proof_kind": "source",
+        "expected_result": "pass"
+      },
+      {
+        "case_id": "removed-api-falls-through-to-404",
+        "proof_kind": "api",
+        "expected_result": "pass"
+      },
+      {
+        "case_id": "removed-electron-dom-is-absent",
+        "proof_kind": "ui",
+        "expected_result": "pass"
+      },
+      {
+        "case_id": "fresh-and-existing-schema-is-clean",
+        "proof_kind": "schema",
+        "expected_result": "pass"
+      },
+      {
+        "case_id": "configured-filesystem-roots-are-clean",
+        "proof_kind": "filesystem",
+        "expected_result": "pass"
+      },
+      {
+        "case_id": "active-resource-roots-are-clean",
+        "proof_kind": "resource",
+        "expected_result": "pass"
+      },
+      {
+        "case_id": "protected-product-capabilities-remain-present",
+        "proof_kind": "protected_capability",
+        "expected_result": "pass"
+      },
+      {
+        "case_id": "runtime-test-roots-are-isolated",
+        "proof_kind": "test_root",
+        "expected_result": "pass"
+      },
+      {
+        "case_id": "candidate-is-outside-all-executable-closures",
+        "proof_kind": "candidate_production",
+        "expected_result": "pass"
+      },
+      {
+        "case_id": "surface-status-contract-is-closed",
+        "proof_kind": "surface",
+        "expected_result": "pass"
+      }
+    ]
+  },
+  "hash": "sha256:5b46ba9d21db6302d600abd91a0ab5e22a5b7e96acc9a9e7ff36ef3c805254be"
+}

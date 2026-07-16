@@ -1,0 +1,240 @@
+{
+  "format": "icarus.product-surface-coverage/1",
+  "ref": {
+    "id": "icarus.product-surface-coverage",
+    "version": "1"
+  },
+  "version": 1,
+  "domain_separator": "icarus:product-surface-coverage-artifact:1\n",
+  "payload": {
+    "format": "icarus.product-surface-coverage/1",
+    "source_core_build_hash": "sha256:e30c683e8c9c444738bca81892ff12a4048e396dd5cba01c9b374b4562b22bf6",
+    "generated_by_tool_hash": "sha256:665ed737637c65ba80a0ff6255338a22c81c07f9a3f833d323071e1c94315ef1",
+    "entries": [
+      {
+        "surface_id": "protected.agent_container",
+        "surface_kind": "launch",
+        "owner_feature_id": null,
+        "status": "active",
+        "replacement_ref": "protected-capability:agent_container",
+        "contract_fixture_hash": "sha256:8dcae053cf01c4a3d9b79f358fa02cf0aeb86e9eaed6a6b849a6544f5e98f92b",
+        "removal_fixture_hash": null,
+        "entry_hash": "sha256:5b8546ebd7150d6b36e8076a8000a9d25bc0db5e799f1e1e545d73c62a926d37"
+      },
+      {
+        "surface_id": "protected.ask_user_question",
+        "surface_kind": "launch",
+        "owner_feature_id": null,
+        "status": "active",
+        "replacement_ref": "protected-capability:ask_user_question",
+        "contract_fixture_hash": "sha256:b9b827b65407a398a0efa53e970efa0f31ef7cb123072ae03f4aae8e1fd905df",
+        "removal_fixture_hash": null,
+        "entry_hash": "sha256:90469022a3663c714abcc247d505ccbf7802c0e9cd4461d43fa77d82b180bfdf"
+      },
+      {
+        "surface_id": "protected.assistant",
+        "surface_kind": "launch",
+        "owner_feature_id": null,
+        "status": "active",
+        "replacement_ref": "protected-capability:assistant",
+        "contract_fixture_hash": "sha256:4f79fc743e5a4ef6d6f54b03e7e7b3d42f9a3ecdfb5552f0386f5fa884cf322d",
+        "removal_fixture_hash": null,
+        "entry_hash": "sha256:7598d3f70bd25ee47a000aa4030913f6eb004c682f77982c360887c9eab845b2"
+      },
+      {
+        "surface_id": "protected.chat",
+        "surface_kind": "launch",
+        "owner_feature_id": null,
+        "status": "active",
+        "replacement_ref": "protected-capability:chat",
+        "contract_fixture_hash": "sha256:63b96fa658154a6b77d35894a2281856b70176b579d636ae7eceb19a36ab1d01",
+        "removal_fixture_hash": null,
+        "entry_hash": "sha256:87ec4e31ed5c45e76906de2b542a27f492fcb16422ffd073da8a23cfce6dc292"
+      },
+      {
+        "surface_id": "protected.delegation",
+        "surface_kind": "launch",
+        "owner_feature_id": null,
+        "status": "active",
+        "replacement_ref": "protected-capability:delegation",
+        "contract_fixture_hash": "sha256:dabbdad9b8d4cbb594313ff5729e97d7fc9aaf55f9bf8c78e82a519da8451484",
+        "removal_fixture_hash": null,
+        "entry_hash": "sha256:e269880c54616af81a32c42552c99aa97af007f882fd107ffe5331ff443ff8d2"
+      },
+      {
+        "surface_id": "protected.feature_runtime",
+        "surface_kind": "launch",
+        "owner_feature_id": null,
+        "status": "active",
+        "replacement_ref": "protected-capability:feature_runtime",
+        "contract_fixture_hash": "sha256:b86b501e816bc58820e441638b935627f98a406e38ddb86ab3fc63c7ae9ad46a",
+        "removal_fixture_hash": null,
+        "entry_hash": "sha256:50ab0fcfad23a8062696d4ef00df7bb287ad31214fd601eed448f2ea1c6372e7"
+      },
+      {
+        "surface_id": "protected.interactive_card_channel",
+        "surface_kind": "launch",
+        "owner_feature_id": null,
+        "status": "active",
+        "replacement_ref": "protected-capability:interactive_card_channel",
+        "contract_fixture_hash": "sha256:986a4a13ea68ee509feb931a551eee43aa7e1a7d2c7d55378ca0ec3be1b96f03",
+        "removal_fixture_hash": null,
+        "entry_hash": "sha256:7f18222eba29be0596febcf5fb50e0337ed57621c4e2a9d3c471b6fa9243b313"
+      },
+      {
+        "surface_id": "protected.memory",
+        "surface_kind": "launch",
+        "owner_feature_id": null,
+        "status": "active",
+        "replacement_ref": "protected-capability:memory",
+        "contract_fixture_hash": "sha256:62505d7f95b9865b6eaab56db9ba384443ec03da4ba3744f24ecd04be15c2ee0",
+        "removal_fixture_hash": null,
+        "entry_hash": "sha256:81246a3facc6775c547918e704186d226e9759ed20893dcc19e765ddfa80765f"
+      },
+      {
+        "surface_id": "protected.scheduled_task",
+        "surface_kind": "launch",
+        "owner_feature_id": null,
+        "status": "active",
+        "replacement_ref": "protected-capability:scheduled_task",
+        "contract_fixture_hash": "sha256:e54d745618fcde25af7e76b41f389a7918797d63f6875981bc8ab339d4d38e55",
+        "removal_fixture_hash": null,
+        "entry_hash": "sha256:5ff502886d96ec29c97b3561ccf595cf1ab5d4878bc44e12d01948c441650837"
+      },
+      {
+        "surface_id": "protected.today_plan",
+        "surface_kind": "launch",
+        "owner_feature_id": null,
+        "status": "active",
+        "replacement_ref": "protected-capability:today_plan",
+        "contract_fixture_hash": "sha256:a723a9b9bde16a8a7e198b4f62cbccafab36ee5cb78d68e7cd0c325711b1f7b5",
+        "removal_fixture_hash": null,
+        "entry_hash": "sha256:311a4db8620e36d802813801581c87118d5e983b414a0bb51765460401d24a1f"
+      },
+      {
+        "surface_id": "protected.trace",
+        "surface_kind": "projection",
+        "owner_feature_id": null,
+        "status": "active",
+        "replacement_ref": "protected-capability:trace",
+        "contract_fixture_hash": "sha256:5c3705ea77a914194ee58208957591e3494142c5ce33149b788eb76267d54a69",
+        "removal_fixture_hash": null,
+        "entry_hash": "sha256:e3bf4d854d525e5c6afb2577b82e701971007fe23e0bd10e40f849571ab94587"
+      },
+      {
+        "surface_id": "protected.wiki",
+        "surface_kind": "launch",
+        "owner_feature_id": null,
+        "status": "active",
+        "replacement_ref": "protected-capability:wiki",
+        "contract_fixture_hash": "sha256:b3b4397c40c73c9243d9035b88f6548c05206f56cfabfafe8721ae6db3938068",
+        "removal_fixture_hash": null,
+        "entry_hash": "sha256:4d9add06c76a25bb14b1edc424c9cbf71df44863b3f5a36e576907f88cd83b5a"
+      },
+      {
+        "surface_id": "removed.card_management",
+        "surface_kind": "authoring",
+        "owner_feature_id": null,
+        "status": "removed",
+        "replacement_ref": null,
+        "contract_fixture_hash": null,
+        "removal_fixture_hash": "sha256:42ff5e05b9910eff25f7727fc04cf1ce0e46a705c95e7aeb900a6ca911578689",
+        "entry_hash": "sha256:d68ddb31b0146171fbeee986023a1de38631df342c880a36bac4c3b41c7bdaf3"
+      },
+      {
+        "surface_id": "removed.legacy_feature_resource_keys",
+        "surface_kind": "resource_schema",
+        "owner_feature_id": null,
+        "status": "removed",
+        "replacement_ref": null,
+        "contract_fixture_hash": null,
+        "removal_fixture_hash": "sha256:6595e1a0e1ed5ddb9648e31b01037dace4de8406cf1eedabb240486c2db26324",
+        "entry_hash": "sha256:db17d975f6ce7f85b40fdcd01e4dd8ec1b9bf38fb06fa71b12ca43528cf23f74"
+      },
+      {
+        "surface_id": "removed.migration_candidate_launch",
+        "surface_kind": "launch",
+        "owner_feature_id": null,
+        "status": "removed",
+        "replacement_ref": null,
+        "contract_fixture_hash": null,
+        "removal_fixture_hash": "sha256:5b380ca1fb4e422ae07e8b7ebe6bc632575c8c8b7f1983a7174b8a574fc92de1",
+        "entry_hash": "sha256:dcff69cb189d322af326c734b5903883712efc2bfc0aa08ed7da8fb21ebf1593"
+      },
+      {
+        "surface_id": "removed.workbench_control",
+        "surface_kind": "control",
+        "owner_feature_id": null,
+        "status": "removed",
+        "replacement_ref": null,
+        "contract_fixture_hash": null,
+        "removal_fixture_hash": "sha256:f96169ec05a2e21f88973f7ab4ab901e134e1adbd939659a36c822cabb6860da",
+        "entry_hash": "sha256:103c6766d221b18c151738ec8ebddff6dc3d1eae6e2f86f468b141a270849308"
+      },
+      {
+        "surface_id": "removed.workbench_launch",
+        "surface_kind": "launch",
+        "owner_feature_id": null,
+        "status": "removed",
+        "replacement_ref": null,
+        "contract_fixture_hash": null,
+        "removal_fixture_hash": "sha256:3b212d7275e7ea1fa608b024649b591ba59ed2ea618ba47827326920bda2a074",
+        "entry_hash": "sha256:db9a1a1dba7c7c521da7d7cb86aa4c5d87e8301da235fa21088f7f6fc82a872e"
+      },
+      {
+        "surface_id": "removed.workbench_projection",
+        "surface_kind": "projection",
+        "owner_feature_id": null,
+        "status": "removed",
+        "replacement_ref": null,
+        "contract_fixture_hash": null,
+        "removal_fixture_hash": "sha256:42ff5e05b9910eff25f7727fc04cf1ce0e46a705c95e7aeb900a6ca911578689",
+        "entry_hash": "sha256:9b08f124815ad5ee460a1813255261e76afb580dc9eb243849247506df4c6dd2"
+      },
+      {
+        "surface_id": "removed.workflow_management_authoring",
+        "surface_kind": "authoring",
+        "owner_feature_id": null,
+        "status": "removed",
+        "replacement_ref": null,
+        "contract_fixture_hash": null,
+        "removal_fixture_hash": "sha256:f96169ec05a2e21f88973f7ab4ab901e134e1adbd939659a36c822cabb6860da",
+        "entry_hash": "sha256:a700d85f18734ee86d88a253635e1affd88736b4b4b35a089738f6ba71d302c7"
+      },
+      {
+        "surface_id": "removed.workflow_management_control",
+        "surface_kind": "control",
+        "owner_feature_id": null,
+        "status": "removed",
+        "replacement_ref": null,
+        "contract_fixture_hash": null,
+        "removal_fixture_hash": "sha256:3b212d7275e7ea1fa608b024649b591ba59ed2ea618ba47827326920bda2a074",
+        "entry_hash": "sha256:f729c5e8d3afc00859ff55e491a575ea119d44440b149a55413d02b54d0822d8"
+      },
+      {
+        "surface_id": "removed.workflow_management_launch",
+        "surface_kind": "launch",
+        "owner_feature_id": null,
+        "status": "removed",
+        "replacement_ref": null,
+        "contract_fixture_hash": null,
+        "removal_fixture_hash": "sha256:3b212d7275e7ea1fa608b024649b591ba59ed2ea618ba47827326920bda2a074",
+        "entry_hash": "sha256:f7da6c43219750d36d593937f42978e13d59c5fb9be045f2bc080f832e40cc46"
+      },
+      {
+        "surface_id": "removed.workflow_management_projection",
+        "surface_kind": "projection",
+        "owner_feature_id": null,
+        "status": "removed",
+        "replacement_ref": null,
+        "contract_fixture_hash": null,
+        "removal_fixture_hash": "sha256:42ff5e05b9910eff25f7727fc04cf1ce0e46a705c95e7aeb900a6ca911578689",
+        "entry_hash": "sha256:6e7d95945b87e1b4256eac8d82a314235911c8f899b7dbfcf3559f61677bc9b8"
+      }
+    ],
+    "active_surface_count": 12,
+    "removed_surface_count": 10,
+    "manifest_hash": "sha256:156d76d01e3fa2bfd99c689b1440436f2f149c441704c8e7552e39511e95b6c8"
+  },
+  "hash": "sha256:27f7f3f99d0485732953972e35181f48491aa058ba7e468c06352330bc64cd19"
+}
