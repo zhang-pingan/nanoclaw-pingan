@@ -1,0 +1,124 @@
+{
+  "format": "icarus.workflow-capacity-control-plane-gate-review/1",
+  "ref": {
+    "id": "icarus.workflow-capacity-control-plane-gate-review",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-capacity-control-plane-gate-review-artifact:1\n",
+  "hash": "sha256:5c1182aa5a6dbc65392ffde79fddcb75d4853cc22a98409412d1649f76732eaa",
+  "payload": {
+    "format": "icarus.workflow-capacity-control-plane-gate-review/1",
+    "gate_id": "G0.10",
+    "review_kind": "capacity_control_plane_addendum",
+    "decision": "pass",
+    "prior_g0_9_root_hash": "sha256:df3058a93eaeb85bdb3eeadc7923148a9a543f63c33d0ede2cc7be0a758c9f5e",
+    "historical_identity_hashes": {
+      "G0.2": "sha256:e85b654581c036f8129677d7443a0704ebc8b8fbe87907b842aaefe1501e637d",
+      "G0.3": "sha256:c5ea281d64480787322e8b6ef619b2f90784084d87ba4373c94288ed5e7aa3a8",
+      "G0.4": "sha256:e4947c515a28b3baf6782a980db9c26d32612b3c6acd3cd04348e73bd54ff607",
+      "G0.5": "sha256:76b8e1196ac422500be9c79a767e673e9c30fa3d9bbb1dc12fc54613cd40b428",
+      "G0.6": "sha256:32de639cc0ee6c6f33aa4291ea03ffa55b0a22752190fb88862e72a3f6857520",
+      "G0.7": "sha256:a75736bf253ab67b22ba6abb0edf8e943c5d643f0b2ff36d63defbdf6336f7d2",
+      "G0.8": "sha256:52fc0266020c03a54527d7a2f735dfaef0494b5d7ae3f12dd1bf9b58a547fd22",
+      "G0.9": "sha256:df3058a93eaeb85bdb3eeadc7923148a9a543f63c33d0ede2cc7be0a758c9f5e",
+      "capacity_schema": "sha256:30aa123506c8f37a3d0c291d20feab150e7103c3f83c12775c49d323f9de7ec4",
+      "capacity_baseline": "sha256:970a63fdba1e263189c3070201a543f01508180abb1e8c15cf649a3780c17542"
+    },
+    "exit_criteria": [
+      {
+        "criterion_id": "g0_9_historical_root_exactly_pinned",
+        "status": "pass",
+        "evidence_hashes": [
+          "sha256:df3058a93eaeb85bdb3eeadc7923148a9a543f63c33d0ede2cc7be0a758c9f5e"
+        ]
+      },
+      {
+        "criterion_id": "capacity_payload_and_baseline_identity_preserved",
+        "status": "pass",
+        "evidence_hashes": [
+          "sha256:30aa123506c8f37a3d0c291d20feab150e7103c3f83c12775c49d323f9de7ec4",
+          "sha256:970a63fdba1e263189c3070201a543f01508180abb1e8c15cf649a3780c17542"
+        ]
+      },
+      {
+        "criterion_id": "publication_and_admin_command_closed_contracts",
+        "status": "pass",
+        "evidence_hashes": [
+          "sha256:2e949f96d4dc3cc5d50c8540ec082439218ade90ef031cdea3db050a8206ab8c"
+        ]
+      },
+      {
+        "criterion_id": "permission_reason_and_denial_catalogs_closed",
+        "status": "pass",
+        "evidence_hashes": [
+          "sha256:5e28911e61181fdcb9c84114b9de1e4f94747d618b2091e8cdfda81d7f90f68c"
+        ]
+      },
+      {
+        "criterion_id": "cap0_cap4_protocol_and_crash_boundaries",
+        "status": "pass",
+        "evidence_hashes": [
+          "sha256:f18571b4e9e48d31e9a60b31d7311921ece4565d7e2865c5ecbbafa5fc3bc4de"
+        ]
+      },
+      {
+        "criterion_id": "logical_schema_and_admission_lineage_additive_delta",
+        "status": "pass",
+        "evidence_hashes": [
+          "sha256:5c1c3dce4b28c1670fd38c540f8e3861b342f2bc30e69c4705e994a222619a53"
+        ]
+      },
+      {
+        "criterion_id": "markdown_delta_and_artifact_inventory_complete",
+        "status": "pass",
+        "evidence_hashes": [
+          "sha256:42ac7e849edd0a7a84ba0ab1d272fa27e22d780f883768741e69aa619a1e5b52",
+          "sha256:c74237dbd60acc7fa9059323b5bd5c38e360c3ffc0b333ad075d94b2907ea23b"
+        ]
+      },
+      {
+        "criterion_id": "positive_negative_fault_and_typescript_conformance",
+        "status": "pass",
+        "evidence_hashes": [
+          "sha256:c54c9d6d444749516acd41671419934236e68876ac74dbe9ab01a4be50ec1575"
+        ]
+      },
+      {
+        "criterion_id": "deterministic_generate_and_read_only_check",
+        "status": "pass",
+        "evidence_hashes": [
+          "sha256:2f1ad8dec32941c19f35865d8003c11288cb635e46000d7d58a46f648a88e04b"
+        ]
+      },
+      {
+        "criterion_id": "forbidden_runtime_ddl_golden_and_ui_boundaries_absent",
+        "status": "pass",
+        "evidence_hashes": [
+          "sha256:0c06f475e4973d604bc0ca5cec636907dc8973984fbf984598f1ceaca3b11cf4"
+        ]
+      }
+    ],
+    "markdown_delta_coverage_hash": "sha256:42ac7e849edd0a7a84ba0ab1d272fa27e22d780f883768741e69aa619a1e5b52",
+    "artifact_inventory_hash": "sha256:c74237dbd60acc7fa9059323b5bd5c38e360c3ffc0b333ad075d94b2907ea23b",
+    "status_proof": {
+      "g0_status": "DONE",
+      "i11_status": "DONE",
+      "g1_status": "READY",
+      "g2_status": "READY",
+      "g3_through_g9_status": "NOT_READY",
+      "r014_status": "CLOSED",
+      "executable_ddl_status": "absent",
+      "workflow_runtime_store_status": "absent",
+      "capacity_gateway_status": "absent",
+      "capacity_publisher_status": "absent",
+      "capacity_watcher_status": "absent",
+      "scheduler_status": "absent",
+      "runtime_center_ui_status": "absent",
+      "golden_semantic_review_status": "absent",
+      "golden_seal_status": "not_run",
+      "sealed_directory_entry": ".gitkeep"
+    },
+    "review_hash": "sha256:e29e0fbee09aef914ed60a83960e1944db2460490f00c526c37549f130fbe86b"
+  }
+}

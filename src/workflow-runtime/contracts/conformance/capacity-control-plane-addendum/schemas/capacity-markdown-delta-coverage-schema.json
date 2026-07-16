@@ -1,0 +1,215 @@
+{
+  "format": "icarus.workflow-capacity-control-plane-markdown-delta-coverage-schema/1",
+  "ref": {
+    "id": "icarus.workflow-capacity-control-plane-markdown-delta-coverage-schema",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-capacity-control-plane-markdown-delta-coverage-schema:1\n",
+  "hash": "sha256:4f8d14c46176d19c1ffbc5c251347d78217ad7cab53cbba995083119b43d8a49",
+  "payload": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:icarus:workflow-capacity-control-plane-markdown-delta-coverage:1",
+    "title": "Capacity Control-Plane Markdown Delta Coverage v1",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "format",
+      "architecture_path",
+      "architecture_sha256",
+      "prior_g0_9_root_hash",
+      "extraction_policy",
+      "categories",
+      "entries",
+      "category_counts",
+      "contract_value_count",
+      "markdown_value_count",
+      "contract_values_without_markdown",
+      "markdown_values_without_contract",
+      "coverage_hash"
+    ],
+    "properties": {
+      "format": {
+        "const": "icarus.workflow-capacity-control-plane-markdown-delta-coverage/1"
+      },
+      "architecture_path": {
+        "const": "local/docs/dynamic-workflow-dag-framework.md"
+      },
+      "architecture_sha256": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      },
+      "prior_g0_9_root_hash": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      },
+      "extraction_policy": {
+        "const": "g0_10_delta_only_no_runtime_markdown_extraction"
+      },
+      "categories": {
+        "const": [
+          "semantic_format",
+          "command_type",
+          "permission",
+          "reason_code",
+          "denial_code",
+          "protocol_id",
+          "logical_table",
+          "admission_lineage_field"
+        ]
+      },
+      "entries": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "coverage_id",
+            "category",
+            "value",
+            "contract_path",
+            "contract_pointer",
+            "markdown_section",
+            "fixture_refs",
+            "change_impact",
+            "entry_hash"
+          ],
+          "properties": {
+            "coverage_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "category": {
+              "enum": [
+                "semantic_format",
+                "command_type",
+                "permission",
+                "reason_code",
+                "denial_code",
+                "protocol_id",
+                "logical_table",
+                "admission_lineage_field"
+              ]
+            },
+            "value": {
+              "type": "string",
+              "minLength": 1
+            },
+            "contract_path": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9._@/-]+$"
+            },
+            "contract_pointer": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "^/"
+            },
+            "markdown_section": {
+              "type": "string",
+              "minLength": 1
+            },
+            "fixture_refs": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9._@/-]+$"
+              },
+              "minItems": 1,
+              "uniqueItems": true
+            },
+            "change_impact": {
+              "enum": [
+                "capacity_contract_version_required",
+                "capacity_protocol_and_fixture_update_required",
+                "g1_schema_manifest_and_ddl_update_required"
+              ]
+            },
+            "entry_hash": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            }
+          }
+        },
+        "minItems": 1
+      },
+      "category_counts": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "semantic_format",
+          "command_type",
+          "permission",
+          "reason_code",
+          "denial_code",
+          "protocol_id",
+          "logical_table",
+          "admission_lineage_field"
+        ],
+        "properties": {
+          "semantic_format": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "command_type": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "permission": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "reason_code": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "denial_code": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "protocol_id": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "logical_table": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "admission_lineage_field": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          }
+        }
+      },
+      "contract_value_count": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 9007199254740991
+      },
+      "markdown_value_count": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 9007199254740991
+      },
+      "contract_values_without_markdown": {
+        "const": []
+      },
+      "markdown_values_without_contract": {
+        "const": []
+      },
+      "coverage_hash": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      }
+    }
+  }
+}

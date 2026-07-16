@@ -1,0 +1,473 @@
+{
+  "format": "icarus.workflow-capacity-control-plane-markdown-delta-coverage/1",
+  "ref": {
+    "id": "icarus.workflow-capacity-control-plane-markdown-delta-coverage",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-capacity-control-plane-markdown-delta-coverage-artifact:1\n",
+  "hash": "sha256:f18571b4e9e48d31e9a60b31d7311921ece4565d7e2865c5ecbbafa5fc3bc4de",
+  "payload": {
+    "format": "icarus.workflow-capacity-control-plane-markdown-delta-coverage/1",
+    "architecture_path": "local/docs/dynamic-workflow-dag-framework.md",
+    "architecture_sha256": "sha256:8f860bcba8c7f7e314d0ce115d505cbb00519d431fcfebce9bd2c387b70d8f1c",
+    "prior_g0_9_root_hash": "sha256:df3058a93eaeb85bdb3eeadc7923148a9a543f63c33d0ede2cc7be0a758c9f5e",
+    "extraction_policy": "g0_10_delta_only_no_runtime_markdown_extraction",
+    "categories": [
+      "semantic_format",
+      "command_type",
+      "permission",
+      "reason_code",
+      "denial_code",
+      "protocol_id",
+      "logical_table",
+      "admission_lineage_field"
+    ],
+    "entries": [
+      {
+        "coverage_id": "admission_lineage_field:capacity_change_id",
+        "category": "admission_lineage_field",
+        "value": "capacity_change_id",
+        "contract_path": "conformance/capacity-control-plane-addendum/sqlite/capacity-control-plane-logical-schema-delta@1.json",
+        "contract_pointer": "/payload/extended_tables/0/added_columns/1/name",
+        "markdown_section": "Resource Ledger 与调度",
+        "fixture_refs": [
+          "conformance/capacity-control-plane-addendum/positive-cases.json"
+        ],
+        "change_impact": "g1_schema_manifest_and_ddl_update_required",
+        "entry_hash": "sha256:981e07959d978127784eefc8bed354122b989031b1ab6d3ff3df73b0b8948dce"
+      },
+      {
+        "coverage_id": "admission_lineage_field:capacity_config_hash",
+        "category": "admission_lineage_field",
+        "value": "capacity_config_hash",
+        "contract_path": "conformance/capacity-control-plane-addendum/sqlite/capacity-control-plane-logical-schema-delta@1.json",
+        "contract_pointer": "/payload/extended_tables/0/added_checks/0/columns/2",
+        "markdown_section": "Resource Ledger 与调度",
+        "fixture_refs": [
+          "conformance/capacity-control-plane-addendum/positive-cases.json"
+        ],
+        "change_impact": "g1_schema_manifest_and_ddl_update_required",
+        "entry_hash": "sha256:f9f38161e2ad2d59f751252e071cc0883f37347dfdf68e77cca9e5aa227b6b6d"
+      },
+      {
+        "coverage_id": "admission_lineage_field:capacity_revision",
+        "category": "admission_lineage_field",
+        "value": "capacity_revision",
+        "contract_path": "conformance/capacity-control-plane-addendum/sqlite/capacity-control-plane-logical-schema-delta@1.json",
+        "contract_pointer": "/payload/extended_tables/0/added_columns/0/name",
+        "markdown_section": "Resource Ledger 与调度",
+        "fixture_refs": [
+          "conformance/capacity-control-plane-addendum/positive-cases.json"
+        ],
+        "change_impact": "g1_schema_manifest_and_ddl_update_required",
+        "entry_hash": "sha256:bc71d0095c30a6db458e8e392e7d21195b7db5a21cdcdebe9af34dd1575d0609"
+      },
+      {
+        "coverage_id": "command_type:initialize_deployment_capacity",
+        "category": "command_type",
+        "value": "initialize_deployment_capacity",
+        "contract_path": "conformance/capacity-control-plane-addendum/schemas/capacity-admin-command-schema.json",
+        "contract_pointer": "/payload/oneOf/0/properties/command_type/const",
+        "markdown_section": "Capacity 管理、发布与审计",
+        "fixture_refs": [
+          "conformance/capacity-control-plane-addendum/positive-cases.json"
+        ],
+        "change_impact": "capacity_contract_version_required",
+        "entry_hash": "sha256:95e9b29c3a56cc1288452a7f0e519302025e64c50f3632f3144c5550ac4e3d58"
+      },
+      {
+        "coverage_id": "command_type:replace_deployment_capacity",
+        "category": "command_type",
+        "value": "replace_deployment_capacity",
+        "contract_path": "conformance/capacity-control-plane-addendum/schemas/capacity-admin-command-schema.json",
+        "contract_pointer": "/payload/oneOf/1/properties/command_type/const",
+        "markdown_section": "Capacity 管理、发布与审计",
+        "fixture_refs": [
+          "conformance/capacity-control-plane-addendum/positive-cases.json"
+        ],
+        "change_impact": "capacity_contract_version_required",
+        "entry_hash": "sha256:1dcb79d88bbd03e71658c611c0eccda38ef0e7a66c117fd5d150687ca7305b19"
+      },
+      {
+        "coverage_id": "denial_code:actor_kind_denied",
+        "category": "denial_code",
+        "value": "actor_kind_denied",
+        "contract_path": "conformance/capacity-control-plane-addendum/catalogs/capacity-denial-catalog.json",
+        "contract_pointer": "/payload/entries/1/denial_code",
+        "markdown_section": "Capacity 管理、发布与审计",
+        "fixture_refs": [
+          "conformance/capacity-control-plane-addendum/negative-cases.json"
+        ],
+        "change_impact": "capacity_contract_version_required",
+        "entry_hash": "sha256:4a8e8e4a289fe68c3b503660c2dac4480e1af2f6b0cc925b3956b515b92c64bd"
+      },
+      {
+        "coverage_id": "denial_code:audit_unavailable",
+        "category": "denial_code",
+        "value": "audit_unavailable",
+        "contract_path": "conformance/capacity-control-plane-addendum/catalogs/capacity-denial-catalog.json",
+        "contract_pointer": "/payload/entries/9/denial_code",
+        "markdown_section": "Capacity 管理、发布与审计",
+        "fixture_refs": [
+          "conformance/capacity-control-plane-addendum/negative-cases.json"
+        ],
+        "change_impact": "capacity_contract_version_required",
+        "entry_hash": "sha256:fb7f9f40f4a5b0248b6a3d1c24bbc894d0e734697661c355c7acab2e24b37f4a"
+      },
+      {
+        "coverage_id": "denial_code:capacity_already_initialized",
+        "category": "denial_code",
+        "value": "capacity_already_initialized",
+        "contract_path": "conformance/capacity-control-plane-addendum/catalogs/capacity-denial-catalog.json",
+        "contract_pointer": "/payload/entries/2/denial_code",
+        "markdown_section": "Capacity 管理、发布与审计",
+        "fixture_refs": [
+          "conformance/capacity-control-plane-addendum/negative-cases.json"
+        ],
+        "change_impact": "capacity_contract_version_required",
+        "entry_hash": "sha256:88fc195dff1cbbf55353428df3b4e7ceb3c3cefe63ae359713c204c422ec9d61"
+      },
+      {
+        "coverage_id": "denial_code:capacity_change_in_progress",
+        "category": "denial_code",
+        "value": "capacity_change_in_progress",
+        "contract_path": "conformance/capacity-control-plane-addendum/catalogs/capacity-denial-catalog.json",
+        "contract_pointer": "/payload/entries/7/denial_code",
+        "markdown_section": "Capacity 管理、发布与审计",
+        "fixture_refs": [
+          "conformance/capacity-control-plane-addendum/negative-cases.json"
+        ],
+        "change_impact": "capacity_contract_version_required",
+        "entry_hash": "sha256:baf33ebcca941051e3ab142c4b008f3c289580f0c7b5bab40794bc30f7226dbb"
+      },
+      {
+        "coverage_id": "denial_code:capacity_snapshot_invalid",
+        "category": "denial_code",
+        "value": "capacity_snapshot_invalid",
+        "contract_path": "conformance/capacity-control-plane-addendum/catalogs/capacity-denial-catalog.json",
+        "contract_pointer": "/payload/entries/3/denial_code",
+        "markdown_section": "Capacity 管理、发布与审计",
+        "fixture_refs": [
+          "conformance/capacity-control-plane-addendum/negative-cases.json"
+        ],
+        "change_impact": "capacity_contract_version_required",
+        "entry_hash": "sha256:b3e05aa5c44cd92aef8b51ec5ebc7274ac4425580c34b8736a9af76a272f7f6b"
+      },
+      {
+        "coverage_id": "denial_code:capacity_transition_invalid",
+        "category": "denial_code",
+        "value": "capacity_transition_invalid",
+        "contract_path": "conformance/capacity-control-plane-addendum/catalogs/capacity-denial-catalog.json",
+        "contract_pointer": "/payload/entries/4/denial_code",
+        "markdown_section": "Capacity 管理、发布与审计",
+        "fixture_refs": [
+          "conformance/capacity-control-plane-addendum/negative-cases.json"
+        ],
+        "change_impact": "capacity_contract_version_required",
+        "entry_hash": "sha256:86d445f673ac9a282b362c8874b396df458247252ea53e9791f6535e7c5c56f7"
+      },
+      {
+        "coverage_id": "denial_code:expected_capacity_revision_conflict",
+        "category": "denial_code",
+        "value": "expected_capacity_revision_conflict",
+        "contract_path": "conformance/capacity-control-plane-addendum/catalogs/capacity-denial-catalog.json",
+        "contract_pointer": "/payload/entries/5/denial_code",
+        "markdown_section": "Capacity 管理、发布与审计",
+        "fixture_refs": [
+          "conformance/capacity-control-plane-addendum/negative-cases.json"
+        ],
+        "change_impact": "capacity_contract_version_required",
+        "entry_hash": "sha256:26ddca3415ea1bdf97308230043abfef024a2a93ad0371f6c40cbf7e22dafb7c"
+      },
+      {
+        "coverage_id": "denial_code:expected_config_hash_conflict",
+        "category": "denial_code",
+        "value": "expected_config_hash_conflict",
+        "contract_path": "conformance/capacity-control-plane-addendum/catalogs/capacity-denial-catalog.json",
+        "contract_pointer": "/payload/entries/6/denial_code",
+        "markdown_section": "Capacity 管理、发布与审计",
+        "fixture_refs": [
+          "conformance/capacity-control-plane-addendum/negative-cases.json"
+        ],
+        "change_impact": "capacity_contract_version_required",
+        "entry_hash": "sha256:e5cd2bc11ba7e662bda5a8d76b6b839ce4c36eb74c3a3adf66428fcf81ee719e"
+      },
+      {
+        "coverage_id": "denial_code:idempotency_conflict",
+        "category": "denial_code",
+        "value": "idempotency_conflict",
+        "contract_path": "conformance/capacity-control-plane-addendum/catalogs/capacity-denial-catalog.json",
+        "contract_pointer": "/payload/entries/8/denial_code",
+        "markdown_section": "Capacity 管理、发布与审计",
+        "fixture_refs": [
+          "conformance/capacity-control-plane-addendum/negative-cases.json"
+        ],
+        "change_impact": "capacity_contract_version_required",
+        "entry_hash": "sha256:5b3fffdc93508dfa7e153b47ef600503935c6a518a4241c2e0674e202fe4607a"
+      },
+      {
+        "coverage_id": "denial_code:permission_denied",
+        "category": "denial_code",
+        "value": "permission_denied",
+        "contract_path": "conformance/capacity-control-plane-addendum/catalogs/capacity-denial-catalog.json",
+        "contract_pointer": "/payload/entries/0/denial_code",
+        "markdown_section": "Capacity 管理、发布与审计",
+        "fixture_refs": [
+          "conformance/capacity-control-plane-addendum/negative-cases.json"
+        ],
+        "change_impact": "capacity_contract_version_required",
+        "entry_hash": "sha256:c78a5bff5a14429c0ed565a05d6fd54af824acb04c889e15654f837d8dfafc5d"
+      },
+      {
+        "coverage_id": "denial_code:publication_failed",
+        "category": "denial_code",
+        "value": "publication_failed",
+        "contract_path": "conformance/capacity-control-plane-addendum/catalogs/capacity-denial-catalog.json",
+        "contract_pointer": "/payload/entries/10/denial_code",
+        "markdown_section": "Capacity 管理、发布与审计",
+        "fixture_refs": [
+          "conformance/capacity-control-plane-addendum/negative-cases.json"
+        ],
+        "change_impact": "capacity_contract_version_required",
+        "entry_hash": "sha256:2d74487a599b6971c6fb6f67d33f2cfdfd38c0685be212425eeeb8990d77c81e"
+      },
+      {
+        "coverage_id": "logical_table:runtime_capacity_admin_commands",
+        "category": "logical_table",
+        "value": "runtime_capacity_admin_commands",
+        "contract_path": "conformance/capacity-control-plane-addendum/sqlite/capacity-control-plane-logical-schema-delta@1.json",
+        "contract_pointer": "/payload/added_tables/1/name",
+        "markdown_section": "Capacity 管理、发布与审计",
+        "fixture_refs": [
+          "conformance/capacity-control-plane-addendum/positive-cases.json"
+        ],
+        "change_impact": "g1_schema_manifest_and_ddl_update_required",
+        "entry_hash": "sha256:3c6c050136644b456588905a13a5b801340d8d2ff147899302b1c9696d199952"
+      },
+      {
+        "coverage_id": "logical_table:runtime_capacity_admin_invocations",
+        "category": "logical_table",
+        "value": "runtime_capacity_admin_invocations",
+        "contract_path": "conformance/capacity-control-plane-addendum/sqlite/capacity-control-plane-logical-schema-delta@1.json",
+        "contract_pointer": "/payload/added_tables/2/name",
+        "markdown_section": "Capacity 管理、发布与审计",
+        "fixture_refs": [
+          "conformance/capacity-control-plane-addendum/positive-cases.json"
+        ],
+        "change_impact": "g1_schema_manifest_and_ddl_update_required",
+        "entry_hash": "sha256:60d4ae94df3d46b4185e460607cd5b329c81450fb2e0db9fd527e2dba9cc6c2f"
+      },
+      {
+        "coverage_id": "logical_table:runtime_capacity_change_events",
+        "category": "logical_table",
+        "value": "runtime_capacity_change_events",
+        "contract_path": "conformance/capacity-control-plane-addendum/sqlite/capacity-control-plane-logical-schema-delta@1.json",
+        "contract_pointer": "/payload/added_tables/3/name",
+        "markdown_section": "Capacity 管理、发布与审计",
+        "fixture_refs": [
+          "conformance/capacity-control-plane-addendum/positive-cases.json"
+        ],
+        "change_impact": "g1_schema_manifest_and_ddl_update_required",
+        "entry_hash": "sha256:ff91a34508439e528b658992aa43bb41617944dff05f9bfbf292afec71239b94"
+      },
+      {
+        "coverage_id": "logical_table:runtime_capacity_head",
+        "category": "logical_table",
+        "value": "runtime_capacity_head",
+        "contract_path": "conformance/capacity-control-plane-addendum/sqlite/capacity-control-plane-logical-schema-delta@1.json",
+        "contract_pointer": "/payload/added_tables/0/name",
+        "markdown_section": "Capacity 管理、发布与审计",
+        "fixture_refs": [
+          "conformance/capacity-control-plane-addendum/positive-cases.json"
+        ],
+        "change_impact": "g1_schema_manifest_and_ddl_update_required",
+        "entry_hash": "sha256:50dc0f470a11b6993d652f77eac3d12fb763d808b3f6d04710fc2c1b97c343f8"
+      },
+      {
+        "coverage_id": "permission:runtime.capacity.manage",
+        "category": "permission",
+        "value": "runtime.capacity.manage",
+        "contract_path": "conformance/capacity-control-plane-addendum/catalogs/capacity-permission-catalog.json",
+        "contract_pointer": "/payload/entries/0/permission",
+        "markdown_section": "Capacity 管理、发布与审计",
+        "fixture_refs": [
+          "conformance/capacity-control-plane-addendum/negative-cases.json"
+        ],
+        "change_impact": "capacity_contract_version_required",
+        "entry_hash": "sha256:1c103b0158cc68610cfd8812b4312dd293f28a4687d6a73f3fb8ba9c6654a4a7"
+      },
+      {
+        "coverage_id": "protocol_id:CAP0",
+        "category": "protocol_id",
+        "value": "CAP0",
+        "contract_path": "conformance/capacity-control-plane-addendum/protocols/capacity-control-plane-protocol@1.json",
+        "contract_pointer": "/payload/steps/0/protocol_id",
+        "markdown_section": "Capacity 管理、发布与审计",
+        "fixture_refs": [
+          "conformance/capacity-control-plane-addendum/fault-cases.json"
+        ],
+        "change_impact": "capacity_protocol_and_fixture_update_required",
+        "entry_hash": "sha256:2588fa6919cca230d4df477c4f6a02d030bb602e293daea3b739e22abcf42f17"
+      },
+      {
+        "coverage_id": "protocol_id:CAP1",
+        "category": "protocol_id",
+        "value": "CAP1",
+        "contract_path": "conformance/capacity-control-plane-addendum/protocols/capacity-control-plane-protocol@1.json",
+        "contract_pointer": "/payload/steps/1/protocol_id",
+        "markdown_section": "Capacity 管理、发布与审计",
+        "fixture_refs": [
+          "conformance/capacity-control-plane-addendum/fault-cases.json"
+        ],
+        "change_impact": "capacity_protocol_and_fixture_update_required",
+        "entry_hash": "sha256:fde168bcc2aae70cca993d3bfca8649300635c62d85f6d7bf4669d14dbdd1a73"
+      },
+      {
+        "coverage_id": "protocol_id:CAP2",
+        "category": "protocol_id",
+        "value": "CAP2",
+        "contract_path": "conformance/capacity-control-plane-addendum/protocols/capacity-control-plane-protocol@1.json",
+        "contract_pointer": "/payload/steps/2/protocol_id",
+        "markdown_section": "Capacity 管理、发布与审计",
+        "fixture_refs": [
+          "conformance/capacity-control-plane-addendum/fault-cases.json"
+        ],
+        "change_impact": "capacity_protocol_and_fixture_update_required",
+        "entry_hash": "sha256:2d8c84e975db72bbb90b54407991fe32acb760ee7eaf4560fbac1331086cad8c"
+      },
+      {
+        "coverage_id": "protocol_id:CAP3",
+        "category": "protocol_id",
+        "value": "CAP3",
+        "contract_path": "conformance/capacity-control-plane-addendum/protocols/capacity-control-plane-protocol@1.json",
+        "contract_pointer": "/payload/steps/3/protocol_id",
+        "markdown_section": "Capacity 管理、发布与审计",
+        "fixture_refs": [
+          "conformance/capacity-control-plane-addendum/fault-cases.json"
+        ],
+        "change_impact": "capacity_protocol_and_fixture_update_required",
+        "entry_hash": "sha256:ce61f91e7ce09b133a806e47b6701815a774fb5a9bdff0b9749563a9d7202af0"
+      },
+      {
+        "coverage_id": "protocol_id:CAP4",
+        "category": "protocol_id",
+        "value": "CAP4",
+        "contract_path": "conformance/capacity-control-plane-addendum/protocols/capacity-control-plane-protocol@1.json",
+        "contract_pointer": "/payload/steps/4/protocol_id",
+        "markdown_section": "Capacity 管理、发布与审计",
+        "fixture_refs": [
+          "conformance/capacity-control-plane-addendum/fault-cases.json"
+        ],
+        "change_impact": "capacity_protocol_and_fixture_update_required",
+        "entry_hash": "sha256:cdddb10184b9bc2782fec6a736ef5f1c77471e809350e7abfe32ad56f26ea977"
+      },
+      {
+        "coverage_id": "reason_code:host_resource_change",
+        "category": "reason_code",
+        "value": "host_resource_change",
+        "contract_path": "conformance/capacity-control-plane-addendum/catalogs/capacity-reason-catalog.json",
+        "contract_pointer": "/payload/entries/3/reason_code",
+        "markdown_section": "Capacity 管理、发布与审计",
+        "fixture_refs": [
+          "conformance/capacity-control-plane-addendum/positive-cases.json"
+        ],
+        "change_impact": "capacity_contract_version_required",
+        "entry_hash": "sha256:75042a856994fd9c05059e7ff6792ba059d71535927660fd3c20b9a92380e133"
+      },
+      {
+        "coverage_id": "reason_code:incident_mitigation",
+        "category": "reason_code",
+        "value": "incident_mitigation",
+        "contract_path": "conformance/capacity-control-plane-addendum/catalogs/capacity-reason-catalog.json",
+        "contract_pointer": "/payload/entries/2/reason_code",
+        "markdown_section": "Capacity 管理、发布与审计",
+        "fixture_refs": [
+          "conformance/capacity-control-plane-addendum/positive-cases.json"
+        ],
+        "change_impact": "capacity_contract_version_required",
+        "entry_hash": "sha256:49c150a2a5e504be411de9506cca0694112b8bc439351cf3433fb6dd4271d2c5"
+      },
+      {
+        "coverage_id": "reason_code:initial_provisioning",
+        "category": "reason_code",
+        "value": "initial_provisioning",
+        "contract_path": "conformance/capacity-control-plane-addendum/catalogs/capacity-reason-catalog.json",
+        "contract_pointer": "/payload/entries/0/reason_code",
+        "markdown_section": "Capacity 管理、发布与审计",
+        "fixture_refs": [
+          "conformance/capacity-control-plane-addendum/positive-cases.json"
+        ],
+        "change_impact": "capacity_contract_version_required",
+        "entry_hash": "sha256:7350e25b6b205452dc89c9c543c881e339bc5ec737c713e0af54034796c1c38a"
+      },
+      {
+        "coverage_id": "reason_code:planned_tuning",
+        "category": "reason_code",
+        "value": "planned_tuning",
+        "contract_path": "conformance/capacity-control-plane-addendum/catalogs/capacity-reason-catalog.json",
+        "contract_pointer": "/payload/entries/1/reason_code",
+        "markdown_section": "Capacity 管理、发布与审计",
+        "fixture_refs": [
+          "conformance/capacity-control-plane-addendum/positive-cases.json"
+        ],
+        "change_impact": "capacity_contract_version_required",
+        "entry_hash": "sha256:48d790134db75b9a824860a462184199101ac17ab6642270024a024d3b95fac2"
+      },
+      {
+        "coverage_id": "reason_code:rollback",
+        "category": "reason_code",
+        "value": "rollback",
+        "contract_path": "conformance/capacity-control-plane-addendum/catalogs/capacity-reason-catalog.json",
+        "contract_pointer": "/payload/entries/5/reason_code",
+        "markdown_section": "Capacity 管理、发布与审计",
+        "fixture_refs": [
+          "conformance/capacity-control-plane-addendum/positive-cases.json"
+        ],
+        "change_impact": "capacity_contract_version_required",
+        "entry_hash": "sha256:8528936d7ecd20ba2ce91a50103471da857a4ad5f8e22498a475089cc65935fd"
+      },
+      {
+        "coverage_id": "reason_code:storage_pressure",
+        "category": "reason_code",
+        "value": "storage_pressure",
+        "contract_path": "conformance/capacity-control-plane-addendum/catalogs/capacity-reason-catalog.json",
+        "contract_pointer": "/payload/entries/4/reason_code",
+        "markdown_section": "Capacity 管理、发布与审计",
+        "fixture_refs": [
+          "conformance/capacity-control-plane-addendum/positive-cases.json"
+        ],
+        "change_impact": "capacity_contract_version_required",
+        "entry_hash": "sha256:dbaf82896f0eecbffc623dbe18156b12d06899014889a04ca64ccaa39d406476"
+      },
+      {
+        "coverage_id": "semantic_format:icarus.deployment-runtime-capacity-publication/1",
+        "category": "semantic_format",
+        "value": "icarus.deployment-runtime-capacity-publication/1",
+        "contract_path": "conformance/capacity-control-plane-addendum/schemas/deployment-runtime-capacity-publication-schema.json",
+        "contract_pointer": "/payload/properties/format/const",
+        "markdown_section": "Capacity 管理、发布与审计",
+        "fixture_refs": [
+          "conformance/capacity-control-plane-addendum/positive-cases.json"
+        ],
+        "change_impact": "capacity_contract_version_required",
+        "entry_hash": "sha256:07f2a9e384619c8b8c755a12321ef442fccf069f041084d05c13e407adda0d4e"
+      }
+    ],
+    "category_counts": {
+      "semantic_format": 1,
+      "command_type": 2,
+      "permission": 1,
+      "reason_code": 6,
+      "denial_code": 11,
+      "protocol_id": 5,
+      "logical_table": 4,
+      "admission_lineage_field": 3
+    },
+    "contract_value_count": 33,
+    "markdown_value_count": 33,
+    "contract_values_without_markdown": [],
+    "markdown_values_without_contract": [],
+    "coverage_hash": "sha256:42ac7e849edd0a7a84ba0ab1d272fa27e22d780f883768741e69aa619a1e5b52"
+  }
+}

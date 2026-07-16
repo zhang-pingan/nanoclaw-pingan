@@ -33,7 +33,8 @@
     "test:g0.7": "vitest run src/workflow-runtime/contracts/static-absence.test.ts",
     "test:g0.8": "vitest run src/workflow-runtime/contracts/golden-draft.test.ts",
     "test:g0.9": "vitest run src/workflow-runtime/contracts/g0-conformance.test.ts",
-    "test:g0": "npm run contracts:check && vitest run setup/toolchain-identity.test.ts setup/runtime-toolchain.test.ts setup/service.test.ts src/workflow-runtime/contracts/foundation.test.ts src/workflow-runtime/contracts/closed-schemas.test.ts src/workflow-runtime/contracts/catalog-protocols.test.ts src/workflow-runtime/contracts/safety-sqlite.test.ts src/workflow-runtime/contracts/logical-schema.test.ts src/workflow-runtime/contracts/static-absence.test.ts src/workflow-runtime/contracts/golden-draft.test.ts src/workflow-runtime/contracts/g0-conformance.test.ts setup/legacy-workflow-boundary.test.ts src/internal-agent-run-once/handler.test.ts src/internal-agent-run-once/service.test.ts",
+    "test:g0.10": "vitest run src/workflow-runtime/contracts/capacity-control-plane.test.ts",
+    "test:g0": "npm run contracts:check && vitest run setup/toolchain-identity.test.ts setup/runtime-toolchain.test.ts setup/service.test.ts src/workflow-runtime/contracts/foundation.test.ts src/workflow-runtime/contracts/closed-schemas.test.ts src/workflow-runtime/contracts/catalog-protocols.test.ts src/workflow-runtime/contracts/safety-sqlite.test.ts src/workflow-runtime/contracts/logical-schema.test.ts src/workflow-runtime/contracts/static-absence.test.ts src/workflow-runtime/contracts/golden-draft.test.ts src/workflow-runtime/contracts/g0-conformance.test.ts src/workflow-runtime/contracts/capacity-control-plane.test.ts setup/legacy-workflow-boundary.test.ts src/internal-agent-run-once/handler.test.ts src/internal-agent-run-once/service.test.ts",
     "test:watch": "vitest"
   },
   "dependencies": {

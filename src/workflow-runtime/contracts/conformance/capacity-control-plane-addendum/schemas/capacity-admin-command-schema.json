@@ -1,0 +1,241 @@
+{
+  "format": "icarus.capacity-admin-command-schema/1",
+  "ref": {
+    "id": "icarus.capacity-admin-command-schema",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:capacity-admin-command-schema:1\n",
+  "hash": "sha256:2f1ad8dec32941c19f35865d8003c11288cb635e46000d7d58a46f648a88e04b",
+  "payload": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:icarus:capacity-admin-command:1",
+    "title": "Capacity Admin Command closed union v1",
+    "oneOf": [
+      {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "command_type",
+          "command_id",
+          "idempotency_key",
+          "proposed_capacity",
+          "evidence_refs",
+          "reason_code",
+          "core_release_hash"
+        ],
+        "properties": {
+          "command_type": {
+            "const": "initialize_deployment_capacity"
+          },
+          "command_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,255}$"
+          },
+          "idempotency_key": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,255}$"
+          },
+          "proposed_capacity": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "max_active_executions",
+              "max_active_waits",
+              "max_pending_signals",
+              "max_outbox_inflight",
+              "max_physical_blob_bytes",
+              "soft_blob_high_water_bytes",
+              "minimum_free_disk_bytes",
+              "config_hash"
+            ],
+            "properties": {
+              "max_active_executions": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "max_active_waits": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "max_pending_signals": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "max_outbox_inflight": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "max_physical_blob_bytes": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "soft_blob_high_water_bytes": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "minimum_free_disk_bytes": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "config_hash": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              }
+            }
+          },
+          "evidence_refs": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,255}$"
+            },
+            "minItems": 0,
+            "uniqueItems": true
+          },
+          "reason_code": {
+            "const": "initial_provisioning"
+          },
+          "core_release_hash": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          }
+        }
+      },
+      {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "command_type",
+          "command_id",
+          "idempotency_key",
+          "proposed_capacity",
+          "evidence_refs",
+          "expected_capacity_revision",
+          "expected_config_hash",
+          "reason_code",
+          "reason_text"
+        ],
+        "properties": {
+          "command_type": {
+            "const": "replace_deployment_capacity"
+          },
+          "command_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,255}$"
+          },
+          "idempotency_key": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,255}$"
+          },
+          "proposed_capacity": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "max_active_executions",
+              "max_active_waits",
+              "max_pending_signals",
+              "max_outbox_inflight",
+              "max_physical_blob_bytes",
+              "soft_blob_high_water_bytes",
+              "minimum_free_disk_bytes",
+              "config_hash"
+            ],
+            "properties": {
+              "max_active_executions": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "max_active_waits": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "max_pending_signals": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "max_outbox_inflight": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "max_physical_blob_bytes": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "soft_blob_high_water_bytes": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "minimum_free_disk_bytes": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "config_hash": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              }
+            }
+          },
+          "evidence_refs": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,255}$"
+            },
+            "minItems": 0,
+            "uniqueItems": true
+          },
+          "expected_capacity_revision": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "expected_config_hash": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "reason_code": {
+            "enum": [
+              "planned_tuning",
+              "incident_mitigation",
+              "host_resource_change",
+              "storage_pressure",
+              "rollback"
+            ]
+          },
+          "reason_text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096
+          }
+        }
+      }
+    ]
+  }
+}

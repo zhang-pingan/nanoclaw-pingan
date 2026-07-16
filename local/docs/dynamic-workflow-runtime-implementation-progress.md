@@ -1,8 +1,8 @@
 # Dynamic Workflow Runtime 实施进度
 
 > **状态**: IN_PROGRESS
-> **当前 Gate**: G0.10 Capacity Control-Plane Addendum（READY；G1 NOT_READY，G2 仍 READY）
-> **下一施工切片**: G0.10 Capacity Admin / Publication / Audit Contract Addendum
+> **当前 Gate**: G1 DDL / Store（READY；G0/I11 DONE，G2 仍 READY）
+> **下一施工切片**: G1.1 Executable DDL / Schema Manifest
 > **最后更新**: 2026-07-16
 > **规范权威**: `local/docs/dynamic-workflow-dag-framework.md`
 
@@ -104,8 +104,8 @@ Agent Container 运行于独立 VM，Node identity 由 VM image gate 保证；�
 
 | Gate | 状态 | 依赖 | 退出证据 | 完成提交 |
 | --- | --- | --- | --- | --- |
-| G0 Contract Pack / Static Baseline | `IN_PROGRESS` | 无 | G0.1-G0.9 historical root + G0.10 additive Capacity Admin/publication/CAP/Logical Schema/coverage root | G0.1-G0.9 已完成；G0.10 - |
-| G1 DDL / Store | `NOT_READY` | G0.10 | executable migration + Schema Manifest + SQLite fixtures | - |
+| G0 Contract Pack / Static Baseline | `DONE` | 无 | G0.1-G0.9 historical root + G0.10 additive Capacity Admin/publication/CAP/Logical Schema/coverage root | 本原子提交 |
+| G1 DDL / Store | `READY` | G0.10 | executable migration + Schema Manifest + SQLite fixtures | - |
 | G2 Compiler / Golden | `READY` | G0.1-G0.9；G0.10 不改变 Compiler/Plan 语义 | sealed Golden Bundle + compiler/toolchain hash | - |
 | G3 Registry / Authoring / Publish | `NOT_READY` | G1 + G2 | manifest/authoring/publish/retention/ABI fixtures | - |
 | G4 Test Bootstrap | `NOT_READY` | G1 + G2 + G3 | isolated bootstrap profile | - |
@@ -123,14 +123,14 @@ Agent Container 运行于独立 VM，Node identity 由 VM image gate 保证；�
 | I1 | Intake、Routing、幂等创建、Child provenance、Claim | `NOT_READY` | G5 起 |
 | I2 | Definition、State lowering、Context、transition | `READY` | G2 Definition lowering 起；Runtime 仍从 G5 起 |
 | I3 | Source/Compiled IR、Port、Compiler | `READY` | G2 实现 |
-| I4 | Runtime Store、SQLite relation、Value/Blob、migration | `NOT_READY` | 先完成 G0.10，再从 G1 migration/Store 基座起；Value/Blob 从 G3 起 |
+| I4 | Runtime Store、SQLite relation、Value/Blob、migration | `READY` | G1.1 migration/Schema Manifest 起；Value/Blob 从 G3 起 |
 | I5 | Graph 状态机、reconcile、Scheduler、Ledger | `NOT_READY` | G5 起 |
 | I6 | Delegation/System、Capability Effect、Outbox | `NOT_READY` | G5 起 |
 | I7 | Durable Wait、Signal/Timer/Approval、Inbox | `NOT_READY` | G5 起 |
 | I8 | Subgraph、Expand、Map、child scope | `NOT_READY` | G6 起 |
 | I9 | Completion、Cancel、Compensation、Finalization、Recovery | `NOT_READY` | G6/G7 |
 | I10 | Runtime Command、Capacity Admin、Runtime Center、Trace | `NOT_READY` | G5 实现 Capacity Gateway/Publisher/Watcher，G7 实现管理 UI；当前只做 G0.10 合同 |
-| I11 | Contract Pack、managed runtime toolchain/launcher、测试模型、发布门禁、absence baseline | `IN_PROGRESS` | G0.1-G0.9 historical DONE；G0.10 READY |
+| I11 | Contract Pack、managed runtime toolchain/launcher、测试模型、发布门禁、absence baseline | `DONE` | G0.1-G0.10 DONE |
 
 ## G0 施工切片
 
@@ -147,11 +147,11 @@ G0.1-G0.9 已按当时规范完成并保留历史 identity。后续确认的 Cap
 | G0.7 | Static Absence and Surface Gates | `DONE` | absence、surface coverage、candidate boundary generator/manifest/negative fixtures | 本原子提交 |
 | G0.8 | Golden Draft and Review Input | `DONE` | raw cases、hand-authored semantic assertions、review request；不得伪造 sealed expected output | 本原子提交 |
 | G0.9 | G0 Conformance Exit | `DONE` | Markdown/Contract 双向覆盖、完整 G0 CI、artifact hashes 和 Gate review | 本原子提交 |
-| G0.10 | Capacity Control-Plane Addendum | `READY` | Capacity Admin/publication/CAP/Logical Schema delta、Admission lineage、additive coverage/inventory/root manifest 与正反/fault-model fixtures；pin G0.9 historical root | - |
+| G0.10 | Capacity Control-Plane Addendum | `DONE` | Capacity Admin/publication/CAP/Logical Schema delta、Admission lineage、additive coverage/inventory/root manifest 与正反/fault-model fixtures；pin G0.9 historical root | 本原子提交 |
 
-## 待实施切片：G0.10 Capacity Control-Plane Addendum
+## 已完成切片：G0.10 Capacity Control-Plane Addendum
 
-**状态**：`READY`
+**状态**：`DONE`
 
 **工作包**：I11；合同联动 I4/I5/I10。只补齐 Capacity Admin 控制面机器合同、Logical Schema metadata delta 和 conformance，不实现 executable DDL、Store、Capacity Gateway/Publisher/Watcher、Scheduler、Runtime Center 或 UI。
 
@@ -168,7 +168,47 @@ G0.1-G0.9 已按当时规范完成并保留历史 identity。后续确认的 Cap
 
 规范修改后的预期红灯基线：managed `npm run test:g0.9` 为 6/8 tests PASS，2 tests 因 `markdown_values_without_contract` 拒绝新增 `semantic_format:icarus.deployment-runtime-capacity-publication/1`。这证明 G0.9 drift gate 正常工作；G0.10 必须通过 additive coverage/manifest 关闭该红灯，不能通过删除正文格式、放宽 closed schema 或改写既有 G0.9 expected artifact 绕过。
 
-退出后：current G0/I11 恢复 `DONE`，G1 变为 `READY` 并以新的 composite Contract Pack root 开始 G1.1；G2 保持 `READY`。任何实现中发现无法以 additive Logical Schema/root 表达、必须改写 G0.1-G0.9 历史 artifact 的情况，先标记 `BLOCKED_BY_SPEC`，不得静默重生成旧 manifest/hash。
+### 2026-07-16：G0.10 施工暂停检查点（IN_PROGRESS）
+
+本次从规范提交 `4f51b7913e54a1316e63a2ab6d4a28dc0d7449dc` 开始，已完整阅读架构规范和本进度账本，复核其父提交为 G0.9 原子提交 `b8d1b7f95bba26f825b588c466379c2f529c9aa4`，并复现 managed `npm run test:g0.9` 的预期 6/8 PASS 红灯。暂停时工作树只有 6 个未跟踪 TypeScript 草稿；没有 G0.10 JSON、没有修改 G0.1-G0.9 historical JSON、没有创建提交。
+
+暂停前 managed `npm run typecheck` 为 FAIL，共 8 个错误：3 个 readonly catalog array 与 mutable `JsonValue` 不兼容；mapped Capacity reason entry 的 `reason_code` 扩大为 `string` 并引发 3 个关联错误；historical hash 的 literal-union `includes` 不接受一般 `sha256` 值；historical inventory entry 的 `owning_slice/artifact_class` 扩大为 `string`。当时 Gate 状态保持 current G0/I11 `IN_PROGRESS`、G1 `NOT_READY`、G2 `READY`，R-014 保持 `OPEN_BLOCKING_G1`。
+
+### 2026-07-16：G0.10 最终完成
+
+I11/G0.10 已交付 additive Capacity control-plane machine contract，并保持 G0.1-G0.9 published JSON 和 G0.9 generator source 的 historical identity。closed publication 与 command union 精确复用 G0.5 七字段 Capacity schema；独立 permission/reason/denial catalog、CAP0-CAP4 声明协议、四表 Logical Schema delta、三字段 Admission lineage、coverage/inventory/Gate review/root manifest 与 7 positive / 23 negative / 13 fault cases 均已闭合。授权模型在幂等判定前拒绝 delegation chain、Feature、Automation、Workflow 和 business API proxy。
+
+G0.10 仅在 `src/workflow-runtime/contracts/conformance/capacity-control-plane-addendum/` 生成 26 个 JSON（25 个 manifest member + root）；没有 executable DDL、Store/Connection Factory、Capacity Gateway/Publisher/Watcher、Scheduler、Runtime Center/UI、Golden review/seal 或 `conformance/sealed/` 写入。current G0/I11 恢复 `DONE`，G1 转为 `READY`，G2 保持 `READY`，R-014 关闭。
+
+最终 Artifact hashes：
+
+| Artifact | Hash |
+| --- | --- |
+| G0.10 Capacity Control-Plane Addendum root | `sha256:c9649b31acc99a4cb0d98e558d2be9ee4be840be2c4289803f8f5e0c7c0ce1f7` |
+| Generator tool | `sha256:cf6979d2dedb52923f37028e71636522c0e6bbc32eefb456a016aec3ac51f513` |
+| Markdown delta coverage | `sha256:42ac7e849edd0a7a84ba0ab1d272fa27e22d780f883768741e69aa619a1e5b52` |
+| Artifact inventory | `sha256:c74237dbd60acc7fa9059323b5bd5c38e360c3ffc0b333ad075d94b2907ea23b` |
+| Gate review | `sha256:e29e0fbee09aef914ed60a83960e1944db2460490f00c526c37549f130fbe86b` |
+| CAP0-CAP4 protocol | `sha256:ce4276b4a5902ffb646d22b834ff8cf07cddd619afa51096c510305e0b27e3a0` |
+| Logical Schema delta | `sha256:e8917c737b1eae0f62abfa2de2dec6dc71875122a763882a46aee34c5c84cae6` |
+| Full Contract JSON tree / G0.10 isolated tree digest | `2bcc69bdcf2853e4158cc656d39fec5b721914d48282687777cb53e0517b6464` / `c6921a6e7fb1b51ace3004cfcce2fee82f9cd68d1552fb814aae194c86056067` |
+
+Historical identities 精确保持：G0.9 `sha256:df3058a93eaeb85bdb3eeadc7923148a9a543f63c33d0ede2cc7be0a758c9f5e`、G0.2-G0.8 均保持原 manifest hash、Capacity schema `sha256:30aa123506c8f37a3d0c291d20feab150e7103c3f83c12775c49d323f9de7ec4`、Capacity baseline `sha256:970a63fdba1e263189c3070201a543f01508180abb1e8c15cf649a3780c17542`。
+
+最终退出验证证据：
+
+| 命令/证据 | 结果 |
+| --- | --- |
+| managed `npm run contracts:generate`（连续两次） | PASS；完整 Contract JSON tree 与 G0.10 isolated tree 两次 digest 分别一致为 `2bcc69bd...6464` / `c6921a6e...6067`；仅有 R-010 DEP0205 非阻塞告警 |
+| managed `npm run contracts:check` | PASS；check 前后两个 tree digest 和 `git status --short` 完全一致，证明只读 |
+| managed `npm run typecheck` | PASS |
+| managed G0.2-G0.10 directed tests | PASS，9 files / 80 tests |
+| managed `npm run test:g0` | PASS，15 files / 109 tests；包含 Contract check、G0.1-G0.10、legacy boundary 与 run-once isolation |
+| managed `npm test` | 75/77 files、697/699 tests；只复现范围外既有 R-012 与 R-013。G0.10 和其余 697 tests 通过；R-012 单文件仍为 20/21，R-013 单文件 8/8 PASS（4.635s）；未修改相关文件 |
+| managed legacy boundary / run-once root isolation | PASS，1 file / 6 tests；2 files / 10 tests |
+| managed `npm run build` | PASS |
+| managed targeted Prettier `--check` / `git diff --check` | PASS |
+| historical identity / absence / sealed / DDL-Store-Runtime-UI scan | PASS；G0.1-G0.9 JSON 无 diff，sealed 仅 `.gitkeep`，G0.10 26 个隔离 JSON，无越界实现或活动 publication |
 
 ## 已完成切片：G0.9 G0 Conformance Exit
 
@@ -758,10 +798,10 @@ G0.1 的实现、测试和本进度账本由同一个原子提交交付。Agent 
 | R-009 | Concurrent repository change | CLOSED | `32f3c51` 只新增范围外 evaluation 文档；G0.2 最终 HEAD/边界和 staged set 已验证，提交保留且未混入 G0.2 内容 | G0.2 |
 | R-010 | Node loader deprecation | OPEN_OUT_OF_SCOPE | Node 26 下 pinned `tsx` loader 在 `contracts:generate/check` 报 `DEP0205 module.register()` deprecation warning，但命令退出码为 0；G0.2 不升级非规范依赖或替换工具链 | 独立工具链维护 |
 | R-011 | Concurrent repository change | CLOSED | G0.4 施工期间新增 `982e3b6/5989b8e`，只对进度文档同一句措辞修改后逐字回退，净 tree 未改变；G0.4 保留提交并在其上原子交付 | G0.4 |
-| R-012 | Full regression baseline | OPEN_OUT_OF_SCOPE | G0.9 完整 suite 复现 `credential-proxy` async trace 250ms intermittent，结果为 75/76 files、693/694 tests；仍只观察到 `model_request_started`，未及时观察到 `model_resolution`。完整 G0 14/14 files、104/104 tests 与 G0.2-G0.9 定向 75/75 tests 通过；G0.9 未修改 credential-proxy/trace 文件或测试 | 独立测试稳定性维护 |
-| R-013 | Contract test timing baseline | OPEN_OUT_OF_SCOPE | G0.9 本次未复现；G0.6 在完整 G0、G0.2-G0.9 定向和全量 suite 中均通过。此前并发负载下 5.011s 超过默认 5s 的记录继续保留；G0.9 不调整 timeout 或 G0.6 实现 | 独立测试稳定性维护 |
-| R-014 | Capacity governance | OPEN_BLOCKING_G1 | G0.5 只冻结 Capacity payload/reload semantics，尚无修改 Command、权限、Actor、revision/hash CAS、reason、immutable change audit、唯一 Publisher、Watcher audited-head validation 或 Runtime Center 管理合同；架构语义已补齐，必须由 G0.10 机器化后才能开始 G1 DDL | G0.10 |
+| R-012 | Full regression baseline | OPEN_OUT_OF_SCOPE | G0.10 完整 suite 复现 `credential-proxy` async trace 250ms intermittent，结果为 75/77 files、697/699 tests 中的一项失败；单文件仍为 20/21，只观察到 `model_request_started`。G0.10 未修改 credential-proxy/trace 文件或测试 | 独立测试稳定性维护 |
+| R-013 | Contract test timing baseline | OPEN_OUT_OF_SCOPE | G0.10 完整 suite 并发负载下 G0.6 deterministic test 超过默认 5s；随后单文件 8/8 tests、4.635s PASS，定向与完整 G0 也通过。G0.10 不调整 timeout 或 G0.6 实现 | 独立测试稳定性维护 |
+| R-014 | Capacity governance | CLOSED | G0.10 已机器化 closed publication/command、权限/Actor/entrypoint/delegation、revision/hash CAS、reason/denial、immutable audit tables、唯一 Publisher/Watcher protocol、Admission lineage、crash recovery 与 additive Gate evidence；G1 DDL 可开始 | G0.10 |
 
 ## 下一步
 
-G0.1-G0.9 保持 historical `DONE`，但 current G0 因新确认的 Capacity governance contract delta 转为 `IN_PROGRESS`；G1 DDL/Store 在 G0.10 前为 `NOT_READY`，G2 Compiler/Golden 因 Capacity 不进入 Plan/Compiler 语义仍为 `READY`。下一会话优先实施 `G0.10 Capacity Control-Plane Addendum`：完整阅读架构规范和本文，复核 G0.9 原子提交与全部 G0.1-G0.9 identity，只新增 additive Capacity Admin/publication/CAP/Logical Schema delta、Admission lineage、fixtures 和 composite coverage/inventory/root manifest。不得改写既有 G0.1-G0.9 artifact bytes/hash，不得开始 executable DDL、`WorkflowRuntimeStore`、Capacity runtime writer/watcher、Reconciler、Production Compiler/Golden sealing、Registry、Runtime、Runtime Center 或 UI；不得创建或批准 `GoldenSemanticReview`、运行 `golden-seal` 或写入 `conformance/sealed/`，不得修复范围外 R-012/R-013。
+G0.1-G0.9 historical identity 与 G0.10 additive current root 均已完成，current G0/I11 为 `DONE`；G1 和 G2 均为 `READY`。下一会话实施 `G1.1 Executable DDL / Schema Manifest`：从冻结的 G0.6 Logical Schema 与 G0.10 Capacity delta 生成并验证真实 SQLite migration 和 exact Schema Manifest，继续遵守 candidate/not-certified、无 production Store/Runtime/Compiler/Golden/Registry/UI 的 Gate 边界，并保留 R-012/R-013 为范围外基线。

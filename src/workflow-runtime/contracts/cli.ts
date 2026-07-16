@@ -27,9 +27,10 @@ import {
   generateContractPackGoldenDraft,
 } from './golden-draft-pack.js';
 import {
-  checkContractPackG0Conformance,
-  generateContractPackG0Conformance,
-} from './g0-conformance-pack.js';
+  checkContractPackCapacityControlPlane,
+  checkHistoricalG0_9Conformance,
+  generateContractPackCapacityControlPlane,
+} from './capacity-control-plane-pack.js';
 
 function usage(): never {
   console.error('Usage: contract-pack <generate|check>');
@@ -52,7 +53,8 @@ let currentPack:
   | 'logical_schema'
   | 'static_absence'
   | 'golden_draft'
-  | 'g0_conformance' = 'foundation';
+  | 'g0_historical'
+  | 'capacity_control_plane' = 'foundation';
 
 try {
   const foundationManifest =
@@ -116,14 +118,21 @@ try {
   console.log(`contract_pack_golden_draft=${command}:ok`);
   console.log(`contract_pack_golden_draft_hash=${goldenDraftManifest.hash}`);
 
-  currentPack = 'g0_conformance';
-  const g0ConformanceManifest =
-    command === 'generate'
-      ? generateContractPackG0Conformance()
-      : checkContractPackG0Conformance();
-  console.log(`contract_pack_g0_conformance=${command}:ok`);
+  currentPack = 'g0_historical';
+  const g0ConformanceManifest = checkHistoricalG0_9Conformance();
+  console.log('contract_pack_g0_conformance=historical:ok');
   console.log(
     `contract_pack_g0_conformance_hash=${g0ConformanceManifest.hash}`,
+  );
+
+  currentPack = 'capacity_control_plane';
+  const capacityControlPlaneManifest =
+    command === 'generate'
+      ? generateContractPackCapacityControlPlane()
+      : checkContractPackCapacityControlPlane();
+  console.log(`contract_pack_capacity_control_plane=${command}:ok`);
+  console.log(
+    `contract_pack_capacity_control_plane_hash=${capacityControlPlaneManifest.hash}`,
   );
 } catch (error) {
   console.error(

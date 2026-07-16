@@ -1,0 +1,1836 @@
+{
+  "format": "icarus.workflow-capacity-control-plane-logical-schema-delta/1",
+  "ref": {
+    "id": "icarus.workflow-capacity-control-plane-logical-schema-delta",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-capacity-control-plane-logical-schema-delta-artifact:1\n",
+  "hash": "sha256:5d9e79b5f9330a5111e6f61b8d04164c87839a60d55ea350c0aa87b8b1559e66",
+  "payload": {
+    "format": "icarus.workflow-capacity-control-plane-logical-schema-delta/1",
+    "schema_id": "workflow-runtime-schema-v1",
+    "base_logical_schema_manifest_hash": "sha256:32de639cc0ee6c6f33aa4291ea03ffa55b0a22752190fb88862e72a3f6857520",
+    "delta_mode": "additive_only",
+    "contract_stage": "logical_metadata",
+    "executable_status": "non_executable",
+    "ddl_generation_status": "forbidden_in_g0_10",
+    "sqlite_open_status": "forbidden_in_g0_10",
+    "added_tables": [
+      {
+        "ordinal": 1,
+        "name": "runtime_capacity_head",
+        "source_section": "Capacity management publication and audit",
+        "columns": [
+          {
+            "ordinal": 1,
+            "name": "singleton_key",
+            "logical_type": "integer",
+            "sqlite_type_intent": "INTEGER",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "positive",
+            "enum_values": [],
+            "external_reference": null,
+            "relation_ids": []
+          },
+          {
+            "ordinal": 2,
+            "name": "current_capacity_revision",
+            "logical_type": "integer",
+            "sqlite_type_intent": "INTEGER",
+            "nullable": true,
+            "default_intent": null,
+            "safe_integer_intent": "positive",
+            "enum_values": [],
+            "external_reference": null,
+            "relation_ids": [
+              "fk:capacity_head:current_command_lineage"
+            ]
+          },
+          {
+            "ordinal": 3,
+            "name": "current_change_id",
+            "logical_type": "identifier",
+            "sqlite_type_intent": "TEXT",
+            "nullable": true,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "external_reference": null,
+            "relation_ids": [
+              "fk:capacity_head:current_command_lineage"
+            ]
+          },
+          {
+            "ordinal": 4,
+            "name": "current_config_hash",
+            "logical_type": "hash",
+            "sqlite_type_intent": "TEXT",
+            "nullable": true,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "external_reference": null,
+            "relation_ids": [
+              "fk:capacity_head:current_command_lineage"
+            ]
+          },
+          {
+            "ordinal": 5,
+            "name": "current_publication_hash",
+            "logical_type": "hash",
+            "sqlite_type_intent": "TEXT",
+            "nullable": true,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "external_reference": null,
+            "relation_ids": []
+          },
+          {
+            "ordinal": 6,
+            "name": "pending_change_id",
+            "logical_type": "identifier",
+            "sqlite_type_intent": "TEXT",
+            "nullable": true,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "external_reference": null,
+            "relation_ids": [
+              "fk:capacity_head:pending_command"
+            ]
+          },
+          {
+            "ordinal": 7,
+            "name": "row_version",
+            "logical_type": "integer",
+            "sqlite_type_intent": "INTEGER",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "non_negative",
+            "enum_values": [],
+            "external_reference": null,
+            "relation_ids": []
+          },
+          {
+            "ordinal": 8,
+            "name": "created_at_ms",
+            "logical_type": "integer",
+            "sqlite_type_intent": "INTEGER",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "non_negative",
+            "enum_values": [],
+            "external_reference": null,
+            "relation_ids": []
+          },
+          {
+            "ordinal": 9,
+            "name": "updated_at_ms",
+            "logical_type": "integer",
+            "sqlite_type_intent": "INTEGER",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "non_negative",
+            "enum_values": [],
+            "external_reference": null,
+            "relation_ids": []
+          }
+        ],
+        "primary_key": {
+          "columns": [
+            "singleton_key"
+          ],
+          "auto_increment_intent": false
+        },
+        "foreign_keys": [
+          {
+            "relation_id": "fk:capacity_head:current_command_lineage",
+            "source_columns": [
+              "current_capacity_revision",
+              "current_change_id",
+              "current_config_hash"
+            ],
+            "target_table": "runtime_capacity_admin_commands",
+            "target_columns": [
+              "assigned_capacity_revision",
+              "assigned_change_id",
+              "proposed_config_hash"
+            ],
+            "on_delete": "restrict",
+            "deferrability": "deferred"
+          },
+          {
+            "relation_id": "fk:capacity_head:pending_command",
+            "source_columns": [
+              "pending_change_id"
+            ],
+            "target_table": "runtime_capacity_admin_commands",
+            "target_columns": [
+              "assigned_change_id"
+            ],
+            "on_delete": "restrict",
+            "deferrability": "deferred"
+          }
+        ],
+        "unique_keys": [],
+        "checks": [
+          {
+            "check_id": "ck:runtime_capacity_head:singleton_key:safe_integer",
+            "kind": "safe_integer",
+            "columns": [
+              "singleton_key"
+            ],
+            "expression_intent": "positive JavaScript safe integer"
+          },
+          {
+            "check_id": "ck:runtime_capacity_head:current_capacity_revision:safe_integer",
+            "kind": "safe_integer",
+            "columns": [
+              "current_capacity_revision"
+            ],
+            "expression_intent": "positive JavaScript safe integer"
+          },
+          {
+            "check_id": "ck:runtime_capacity_head:current_config_hash:hash",
+            "kind": "hash_format",
+            "columns": [
+              "current_config_hash"
+            ],
+            "expression_intent": "nullable or sha256:<64 lowercase hexadecimal characters>"
+          },
+          {
+            "check_id": "ck:runtime_capacity_head:current_publication_hash:hash",
+            "kind": "hash_format",
+            "columns": [
+              "current_publication_hash"
+            ],
+            "expression_intent": "nullable or sha256:<64 lowercase hexadecimal characters>"
+          },
+          {
+            "check_id": "ck:runtime_capacity_head:row_version:safe_integer",
+            "kind": "safe_integer",
+            "columns": [
+              "row_version"
+            ],
+            "expression_intent": "non_negative JavaScript safe integer"
+          },
+          {
+            "check_id": "ck:runtime_capacity_head:created_at_ms:safe_integer",
+            "kind": "safe_integer",
+            "columns": [
+              "created_at_ms"
+            ],
+            "expression_intent": "non_negative JavaScript safe integer"
+          },
+          {
+            "check_id": "ck:runtime_capacity_head:updated_at_ms:safe_integer",
+            "kind": "safe_integer",
+            "columns": [
+              "updated_at_ms"
+            ],
+            "expression_intent": "non_negative JavaScript safe integer"
+          },
+          {
+            "check_id": "ck:capacity_head:singleton",
+            "kind": "cross_column_equality",
+            "columns": [
+              "singleton_key"
+            ],
+            "expression_intent": "singleton_key equals 1"
+          },
+          {
+            "check_id": "ck:capacity_head:current_lineage_all_or_none",
+            "kind": "all_or_none",
+            "columns": [
+              "current_capacity_revision",
+              "current_change_id",
+              "current_config_hash",
+              "current_publication_hash"
+            ],
+            "expression_intent": "current revision/change/config/publication lineage is all null or all non-null"
+          },
+          {
+            "check_id": "ck:capacity_head:pending_differs_from_current",
+            "kind": "state_field_consistency",
+            "columns": [
+              "pending_change_id",
+              "current_change_id"
+            ],
+            "expression_intent": "pending change is null or differs from current change"
+          }
+        ],
+        "indexes": [
+          {
+            "index_id": "idx:capacity_head:singleton",
+            "kind": "lookup",
+            "columns": [
+              "singleton_key"
+            ],
+            "predicate_intent": null,
+            "supports_query_ids": [
+              "capacity_admin_load_head",
+              "capacity_watcher_verify_committed_head"
+            ]
+          },
+          {
+            "index_id": "idx:capacity_head:pending",
+            "kind": "recovery",
+            "columns": [
+              "pending_change_id"
+            ],
+            "predicate_intent": "pending_change_id is not null",
+            "supports_query_ids": [
+              "capacity_recovery_load_pending_change"
+            ]
+          }
+        ]
+      },
+      {
+        "ordinal": 2,
+        "name": "runtime_capacity_admin_commands",
+        "source_section": "Capacity management publication and audit",
+        "columns": [
+          {
+            "ordinal": 1,
+            "name": "command_id",
+            "logical_type": "identifier",
+            "sqlite_type_intent": "TEXT",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "external_reference": null,
+            "relation_ids": []
+          },
+          {
+            "ordinal": 2,
+            "name": "idempotency_domain",
+            "logical_type": "text",
+            "sqlite_type_intent": "TEXT",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "external_reference": null,
+            "relation_ids": []
+          },
+          {
+            "ordinal": 3,
+            "name": "idempotency_key",
+            "logical_type": "text",
+            "sqlite_type_intent": "TEXT",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "external_reference": null,
+            "relation_ids": []
+          },
+          {
+            "ordinal": 4,
+            "name": "command_type",
+            "logical_type": "text",
+            "sqlite_type_intent": "TEXT",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [
+              "initialize_deployment_capacity",
+              "replace_deployment_capacity"
+            ],
+            "external_reference": null,
+            "relation_ids": []
+          },
+          {
+            "ordinal": 5,
+            "name": "expected_capacity_revision",
+            "logical_type": "integer",
+            "sqlite_type_intent": "INTEGER",
+            "nullable": true,
+            "default_intent": null,
+            "safe_integer_intent": "positive",
+            "enum_values": [],
+            "external_reference": null,
+            "relation_ids": []
+          },
+          {
+            "ordinal": 6,
+            "name": "expected_config_hash",
+            "logical_type": "hash",
+            "sqlite_type_intent": "TEXT",
+            "nullable": true,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "external_reference": null,
+            "relation_ids": []
+          },
+          {
+            "ordinal": 7,
+            "name": "assigned_capacity_revision",
+            "logical_type": "integer",
+            "sqlite_type_intent": "INTEGER",
+            "nullable": true,
+            "default_intent": null,
+            "safe_integer_intent": "positive",
+            "enum_values": [],
+            "external_reference": null,
+            "relation_ids": []
+          },
+          {
+            "ordinal": 8,
+            "name": "assigned_change_id",
+            "logical_type": "identifier",
+            "sqlite_type_intent": "TEXT",
+            "nullable": true,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "external_reference": null,
+            "relation_ids": []
+          },
+          {
+            "ordinal": 9,
+            "name": "genesis_core_release_hash",
+            "logical_type": "hash",
+            "sqlite_type_intent": "TEXT",
+            "nullable": true,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "external_reference": null,
+            "relation_ids": []
+          },
+          {
+            "ordinal": 10,
+            "name": "proposed_capacity_json",
+            "logical_type": "canonical_json",
+            "sqlite_type_intent": "TEXT",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "external_reference": null,
+            "relation_ids": []
+          },
+          {
+            "ordinal": 11,
+            "name": "proposed_config_hash",
+            "logical_type": "hash",
+            "sqlite_type_intent": "TEXT",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "external_reference": null,
+            "relation_ids": []
+          },
+          {
+            "ordinal": 12,
+            "name": "request_hash",
+            "logical_type": "hash",
+            "sqlite_type_intent": "TEXT",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "external_reference": null,
+            "relation_ids": []
+          },
+          {
+            "ordinal": 13,
+            "name": "reason_code",
+            "logical_type": "text",
+            "sqlite_type_intent": "TEXT",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [
+              "initial_provisioning",
+              "planned_tuning",
+              "incident_mitigation",
+              "host_resource_change",
+              "storage_pressure",
+              "rollback"
+            ],
+            "external_reference": null,
+            "relation_ids": []
+          },
+          {
+            "ordinal": 14,
+            "name": "reason_text_value_id",
+            "logical_type": "identifier",
+            "sqlite_type_intent": "TEXT",
+            "nullable": true,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "external_reference": null,
+            "relation_ids": [
+              "fk:capacity_commands:reason_text_value"
+            ]
+          },
+          {
+            "ordinal": 15,
+            "name": "reason_text_hash",
+            "logical_type": "hash",
+            "sqlite_type_intent": "TEXT",
+            "nullable": true,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "external_reference": null,
+            "relation_ids": [
+              "fk:capacity_commands:reason_text_value"
+            ]
+          },
+          {
+            "ordinal": 16,
+            "name": "evidence_manifest_value_id",
+            "logical_type": "identifier",
+            "sqlite_type_intent": "TEXT",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "external_reference": null,
+            "relation_ids": [
+              "fk:capacity_commands:evidence_value"
+            ]
+          },
+          {
+            "ordinal": 17,
+            "name": "evidence_manifest_hash",
+            "logical_type": "hash",
+            "sqlite_type_intent": "TEXT",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "external_reference": null,
+            "relation_ids": [
+              "fk:capacity_commands:evidence_value"
+            ]
+          },
+          {
+            "ordinal": 18,
+            "name": "canonical_result_value_id",
+            "logical_type": "identifier",
+            "sqlite_type_intent": "TEXT",
+            "nullable": true,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "external_reference": null,
+            "relation_ids": [
+              "fk:capacity_commands:result_value"
+            ]
+          },
+          {
+            "ordinal": 19,
+            "name": "canonical_result_hash",
+            "logical_type": "hash",
+            "sqlite_type_intent": "TEXT",
+            "nullable": true,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "external_reference": null,
+            "relation_ids": [
+              "fk:capacity_commands:result_value"
+            ]
+          },
+          {
+            "ordinal": 20,
+            "name": "created_at_ms",
+            "logical_type": "integer",
+            "sqlite_type_intent": "INTEGER",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "non_negative",
+            "enum_values": [],
+            "external_reference": null,
+            "relation_ids": []
+          },
+          {
+            "ordinal": 21,
+            "name": "finalized_at_ms",
+            "logical_type": "integer",
+            "sqlite_type_intent": "INTEGER",
+            "nullable": true,
+            "default_intent": null,
+            "safe_integer_intent": "non_negative",
+            "enum_values": [],
+            "external_reference": null,
+            "relation_ids": []
+          }
+        ],
+        "primary_key": {
+          "columns": [
+            "command_id"
+          ],
+          "auto_increment_intent": false
+        },
+        "foreign_keys": [
+          {
+            "relation_id": "fk:capacity_commands:reason_text_value",
+            "source_columns": [
+              "reason_text_value_id",
+              "reason_text_hash"
+            ],
+            "target_table": "workflow_values",
+            "target_columns": [
+              "id",
+              "content_hash"
+            ],
+            "on_delete": "restrict",
+            "deferrability": "deferred"
+          },
+          {
+            "relation_id": "fk:capacity_commands:evidence_value",
+            "source_columns": [
+              "evidence_manifest_value_id",
+              "evidence_manifest_hash"
+            ],
+            "target_table": "workflow_values",
+            "target_columns": [
+              "id",
+              "content_hash"
+            ],
+            "on_delete": "restrict",
+            "deferrability": "deferred"
+          },
+          {
+            "relation_id": "fk:capacity_commands:result_value",
+            "source_columns": [
+              "canonical_result_value_id",
+              "canonical_result_hash"
+            ],
+            "target_table": "workflow_values",
+            "target_columns": [
+              "id",
+              "content_hash"
+            ],
+            "on_delete": "restrict",
+            "deferrability": "deferred"
+          }
+        ],
+        "unique_keys": [
+          {
+            "key_id": "uk:capacity_commands:idempotency",
+            "columns": [
+              "idempotency_domain",
+              "idempotency_key"
+            ],
+            "predicate_intent": null
+          },
+          {
+            "key_id": "uk:capacity_commands:assigned_revision",
+            "columns": [
+              "assigned_capacity_revision"
+            ],
+            "predicate_intent": "assigned_capacity_revision is not null"
+          },
+          {
+            "key_id": "uk:capacity_commands:assigned_change",
+            "columns": [
+              "assigned_change_id"
+            ],
+            "predicate_intent": "assigned_change_id is not null"
+          },
+          {
+            "key_id": "uk:capacity_commands:assigned_lineage",
+            "columns": [
+              "assigned_capacity_revision",
+              "assigned_change_id",
+              "proposed_config_hash"
+            ],
+            "predicate_intent": "assigned_capacity_revision and assigned_change_id are not null"
+          }
+        ],
+        "checks": [
+          {
+            "check_id": "ck:runtime_capacity_admin_commands:command_type:enum",
+            "kind": "enum_membership",
+            "columns": [
+              "command_type"
+            ],
+            "expression_intent": "value is one of initialize_deployment_capacity | replace_deployment_capacity"
+          },
+          {
+            "check_id": "ck:runtime_capacity_admin_commands:expected_capacity_revision:safe_integer",
+            "kind": "safe_integer",
+            "columns": [
+              "expected_capacity_revision"
+            ],
+            "expression_intent": "positive JavaScript safe integer"
+          },
+          {
+            "check_id": "ck:runtime_capacity_admin_commands:expected_config_hash:hash",
+            "kind": "hash_format",
+            "columns": [
+              "expected_config_hash"
+            ],
+            "expression_intent": "nullable or sha256:<64 lowercase hexadecimal characters>"
+          },
+          {
+            "check_id": "ck:runtime_capacity_admin_commands:assigned_capacity_revision:safe_integer",
+            "kind": "safe_integer",
+            "columns": [
+              "assigned_capacity_revision"
+            ],
+            "expression_intent": "positive JavaScript safe integer"
+          },
+          {
+            "check_id": "ck:runtime_capacity_admin_commands:genesis_core_release_hash:hash",
+            "kind": "hash_format",
+            "columns": [
+              "genesis_core_release_hash"
+            ],
+            "expression_intent": "nullable or sha256:<64 lowercase hexadecimal characters>"
+          },
+          {
+            "check_id": "ck:runtime_capacity_admin_commands:proposed_config_hash:hash",
+            "kind": "hash_format",
+            "columns": [
+              "proposed_config_hash"
+            ],
+            "expression_intent": "nullable or sha256:<64 lowercase hexadecimal characters>"
+          },
+          {
+            "check_id": "ck:runtime_capacity_admin_commands:request_hash:hash",
+            "kind": "hash_format",
+            "columns": [
+              "request_hash"
+            ],
+            "expression_intent": "nullable or sha256:<64 lowercase hexadecimal characters>"
+          },
+          {
+            "check_id": "ck:runtime_capacity_admin_commands:reason_code:enum",
+            "kind": "enum_membership",
+            "columns": [
+              "reason_code"
+            ],
+            "expression_intent": "value is one of initial_provisioning | planned_tuning | incident_mitigation | host_resource_change | storage_pressure | rollback"
+          },
+          {
+            "check_id": "ck:runtime_capacity_admin_commands:reason_text_hash:hash",
+            "kind": "hash_format",
+            "columns": [
+              "reason_text_hash"
+            ],
+            "expression_intent": "nullable or sha256:<64 lowercase hexadecimal characters>"
+          },
+          {
+            "check_id": "ck:runtime_capacity_admin_commands:evidence_manifest_hash:hash",
+            "kind": "hash_format",
+            "columns": [
+              "evidence_manifest_hash"
+            ],
+            "expression_intent": "nullable or sha256:<64 lowercase hexadecimal characters>"
+          },
+          {
+            "check_id": "ck:runtime_capacity_admin_commands:canonical_result_hash:hash",
+            "kind": "hash_format",
+            "columns": [
+              "canonical_result_hash"
+            ],
+            "expression_intent": "nullable or sha256:<64 lowercase hexadecimal characters>"
+          },
+          {
+            "check_id": "ck:runtime_capacity_admin_commands:created_at_ms:safe_integer",
+            "kind": "safe_integer",
+            "columns": [
+              "created_at_ms"
+            ],
+            "expression_intent": "non_negative JavaScript safe integer"
+          },
+          {
+            "check_id": "ck:runtime_capacity_admin_commands:finalized_at_ms:safe_integer",
+            "kind": "safe_integer",
+            "columns": [
+              "finalized_at_ms"
+            ],
+            "expression_intent": "non_negative JavaScript safe integer"
+          },
+          {
+            "check_id": "ck:capacity_commands:expected_pair",
+            "kind": "all_or_none",
+            "columns": [
+              "expected_capacity_revision",
+              "expected_config_hash"
+            ],
+            "expression_intent": "expected revision and config hash are both null or both non-null"
+          },
+          {
+            "check_id": "ck:capacity_commands:assigned_pair",
+            "kind": "all_or_none",
+            "columns": [
+              "assigned_capacity_revision",
+              "assigned_change_id"
+            ],
+            "expression_intent": "assigned revision and change id are both null or both non-null"
+          },
+          {
+            "check_id": "ck:capacity_commands:command_mapping",
+            "kind": "closed_target_mapping",
+            "columns": [
+              "command_type",
+              "expected_capacity_revision",
+              "expected_config_hash",
+              "genesis_core_release_hash",
+              "reason_code",
+              "reason_text_value_id",
+              "reason_text_hash"
+            ],
+            "expression_intent": "initialize has no expected pair, requires genesis release, initial reason and no reason text; replace requires expected pair, non-initial reason and reason text"
+          },
+          {
+            "check_id": "ck:capacity_commands:reason_text_pair",
+            "kind": "all_or_none",
+            "columns": [
+              "reason_text_value_id",
+              "reason_text_hash"
+            ],
+            "expression_intent": "reason text value and hash are both null or both non-null"
+          },
+          {
+            "check_id": "ck:capacity_commands:result_pair",
+            "kind": "all_or_none",
+            "columns": [
+              "canonical_result_value_id",
+              "canonical_result_hash"
+            ],
+            "expression_intent": "canonical result value and hash are both null or both non-null"
+          },
+          {
+            "check_id": "ck:capacity_commands:finalization",
+            "kind": "state_field_consistency",
+            "columns": [
+              "canonical_result_value_id",
+              "finalized_at_ms"
+            ],
+            "expression_intent": "finalized timestamp is non-null exactly when canonical result is non-null"
+          }
+        ],
+        "indexes": [
+          {
+            "index_id": "idx:capacity_commands:idempotency",
+            "kind": "lookup",
+            "columns": [
+              "idempotency_domain",
+              "idempotency_key"
+            ],
+            "predicate_intent": null,
+            "supports_query_ids": [
+              "capacity_admin_find_idempotency"
+            ]
+          },
+          {
+            "index_id": "idx:capacity_commands:assigned_change",
+            "kind": "recovery",
+            "columns": [
+              "assigned_change_id"
+            ],
+            "predicate_intent": "assigned_change_id is not null",
+            "supports_query_ids": [
+              "capacity_recovery_load_pending_change"
+            ]
+          }
+        ]
+      },
+      {
+        "ordinal": 3,
+        "name": "runtime_capacity_admin_invocations",
+        "source_section": "Capacity management publication and audit",
+        "columns": [
+          {
+            "ordinal": 1,
+            "name": "id",
+            "logical_type": "identifier",
+            "sqlite_type_intent": "TEXT",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "external_reference": null,
+            "relation_ids": []
+          },
+          {
+            "ordinal": 2,
+            "name": "command_id",
+            "logical_type": "identifier",
+            "sqlite_type_intent": "TEXT",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "external_reference": null,
+            "relation_ids": [
+              "fk:capacity_invocations:command"
+            ]
+          },
+          {
+            "ordinal": 3,
+            "name": "invocation_no",
+            "logical_type": "integer",
+            "sqlite_type_intent": "INTEGER",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "positive",
+            "enum_values": [],
+            "external_reference": null,
+            "relation_ids": []
+          },
+          {
+            "ordinal": 4,
+            "name": "submitted_request_hash",
+            "logical_type": "hash",
+            "sqlite_type_intent": "TEXT",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "external_reference": null,
+            "relation_ids": []
+          },
+          {
+            "ordinal": 5,
+            "name": "actor_ref",
+            "logical_type": "external_reference",
+            "sqlite_type_intent": "TEXT",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "external_reference": {
+              "validator_owner": "capacity_admin_gateway",
+              "reference_domain": "principal",
+              "immutable": true
+            },
+            "relation_ids": []
+          },
+          {
+            "ordinal": 6,
+            "name": "actor_kind",
+            "logical_type": "text",
+            "sqlite_type_intent": "TEXT",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [
+              "human",
+              "feature_service",
+              "automation",
+              "system"
+            ],
+            "external_reference": null,
+            "relation_ids": []
+          },
+          {
+            "ordinal": 7,
+            "name": "auth_session_ref",
+            "logical_type": "external_reference",
+            "sqlite_type_intent": "TEXT",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "external_reference": {
+              "validator_owner": "authentication_service",
+              "reference_domain": "auth_session",
+              "immutable": true
+            },
+            "relation_ids": []
+          },
+          {
+            "ordinal": 8,
+            "name": "entrypoint",
+            "logical_type": "text",
+            "sqlite_type_intent": "TEXT",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "external_reference": null,
+            "relation_ids": []
+          },
+          {
+            "ordinal": 9,
+            "name": "delegation_chain_ref",
+            "logical_type": "external_reference",
+            "sqlite_type_intent": "TEXT",
+            "nullable": true,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "external_reference": {
+              "validator_owner": "authorization_service",
+              "reference_domain": "delegation_chain",
+              "immutable": true
+            },
+            "relation_ids": []
+          },
+          {
+            "ordinal": 10,
+            "name": "required_permission",
+            "logical_type": "text",
+            "sqlite_type_intent": "TEXT",
+            "nullable": true,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [
+              "runtime.capacity.manage"
+            ],
+            "external_reference": null,
+            "relation_ids": []
+          },
+          {
+            "ordinal": 11,
+            "name": "authorization_result",
+            "logical_type": "text",
+            "sqlite_type_intent": "TEXT",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [
+              "allowed",
+              "denied"
+            ],
+            "external_reference": null,
+            "relation_ids": []
+          },
+          {
+            "ordinal": 12,
+            "name": "execution_result",
+            "logical_type": "text",
+            "sqlite_type_intent": "TEXT",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [
+              "applied",
+              "denied",
+              "conflict",
+              "duplicate",
+              "failed"
+            ],
+            "external_reference": null,
+            "relation_ids": []
+          },
+          {
+            "ordinal": 13,
+            "name": "denial_code",
+            "logical_type": "text",
+            "sqlite_type_intent": "TEXT",
+            "nullable": true,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [
+              "permission_denied",
+              "actor_kind_denied",
+              "capacity_already_initialized",
+              "capacity_snapshot_invalid",
+              "capacity_transition_invalid",
+              "expected_capacity_revision_conflict",
+              "expected_config_hash_conflict",
+              "capacity_change_in_progress",
+              "idempotency_conflict",
+              "audit_unavailable",
+              "publication_failed"
+            ],
+            "external_reference": null,
+            "relation_ids": []
+          },
+          {
+            "ordinal": 14,
+            "name": "observed_capacity_revision",
+            "logical_type": "integer",
+            "sqlite_type_intent": "INTEGER",
+            "nullable": true,
+            "default_intent": null,
+            "safe_integer_intent": "positive",
+            "enum_values": [],
+            "external_reference": null,
+            "relation_ids": []
+          },
+          {
+            "ordinal": 15,
+            "name": "observed_config_hash",
+            "logical_type": "hash",
+            "sqlite_type_intent": "TEXT",
+            "nullable": true,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "external_reference": null,
+            "relation_ids": []
+          },
+          {
+            "ordinal": 16,
+            "name": "requested_at_ms",
+            "logical_type": "integer",
+            "sqlite_type_intent": "INTEGER",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "non_negative",
+            "enum_values": [],
+            "external_reference": null,
+            "relation_ids": []
+          },
+          {
+            "ordinal": 17,
+            "name": "decided_at_ms",
+            "logical_type": "integer",
+            "sqlite_type_intent": "INTEGER",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "non_negative",
+            "enum_values": [],
+            "external_reference": null,
+            "relation_ids": []
+          },
+          {
+            "ordinal": 18,
+            "name": "applied_at_ms",
+            "logical_type": "integer",
+            "sqlite_type_intent": "INTEGER",
+            "nullable": true,
+            "default_intent": null,
+            "safe_integer_intent": "non_negative",
+            "enum_values": [],
+            "external_reference": null,
+            "relation_ids": []
+          }
+        ],
+        "primary_key": {
+          "columns": [
+            "id"
+          ],
+          "auto_increment_intent": false
+        },
+        "foreign_keys": [
+          {
+            "relation_id": "fk:capacity_invocations:command",
+            "source_columns": [
+              "command_id"
+            ],
+            "target_table": "runtime_capacity_admin_commands",
+            "target_columns": [
+              "command_id"
+            ],
+            "on_delete": "restrict",
+            "deferrability": "deferred"
+          }
+        ],
+        "unique_keys": [
+          {
+            "key_id": "uk:capacity_invocations:command_no",
+            "columns": [
+              "command_id",
+              "invocation_no"
+            ],
+            "predicate_intent": null
+          }
+        ],
+        "checks": [
+          {
+            "check_id": "ck:runtime_capacity_admin_invocations:invocation_no:safe_integer",
+            "kind": "safe_integer",
+            "columns": [
+              "invocation_no"
+            ],
+            "expression_intent": "positive JavaScript safe integer"
+          },
+          {
+            "check_id": "ck:runtime_capacity_admin_invocations:submitted_request_hash:hash",
+            "kind": "hash_format",
+            "columns": [
+              "submitted_request_hash"
+            ],
+            "expression_intent": "nullable or sha256:<64 lowercase hexadecimal characters>"
+          },
+          {
+            "check_id": "ck:runtime_capacity_admin_invocations:actor_kind:enum",
+            "kind": "enum_membership",
+            "columns": [
+              "actor_kind"
+            ],
+            "expression_intent": "value is one of human | feature_service | automation | system"
+          },
+          {
+            "check_id": "ck:runtime_capacity_admin_invocations:required_permission:enum",
+            "kind": "enum_membership",
+            "columns": [
+              "required_permission"
+            ],
+            "expression_intent": "value is one of runtime.capacity.manage"
+          },
+          {
+            "check_id": "ck:runtime_capacity_admin_invocations:authorization_result:enum",
+            "kind": "enum_membership",
+            "columns": [
+              "authorization_result"
+            ],
+            "expression_intent": "value is one of allowed | denied"
+          },
+          {
+            "check_id": "ck:runtime_capacity_admin_invocations:execution_result:enum",
+            "kind": "enum_membership",
+            "columns": [
+              "execution_result"
+            ],
+            "expression_intent": "value is one of applied | denied | conflict | duplicate | failed"
+          },
+          {
+            "check_id": "ck:runtime_capacity_admin_invocations:denial_code:enum",
+            "kind": "enum_membership",
+            "columns": [
+              "denial_code"
+            ],
+            "expression_intent": "value is one of permission_denied | actor_kind_denied | capacity_already_initialized | capacity_snapshot_invalid | capacity_transition_invalid | expected_capacity_revision_conflict | expected_config_hash_conflict | capacity_change_in_progress | idempotency_conflict | audit_unavailable | publication_failed"
+          },
+          {
+            "check_id": "ck:runtime_capacity_admin_invocations:observed_capacity_revision:safe_integer",
+            "kind": "safe_integer",
+            "columns": [
+              "observed_capacity_revision"
+            ],
+            "expression_intent": "positive JavaScript safe integer"
+          },
+          {
+            "check_id": "ck:runtime_capacity_admin_invocations:observed_config_hash:hash",
+            "kind": "hash_format",
+            "columns": [
+              "observed_config_hash"
+            ],
+            "expression_intent": "nullable or sha256:<64 lowercase hexadecimal characters>"
+          },
+          {
+            "check_id": "ck:runtime_capacity_admin_invocations:requested_at_ms:safe_integer",
+            "kind": "safe_integer",
+            "columns": [
+              "requested_at_ms"
+            ],
+            "expression_intent": "non_negative JavaScript safe integer"
+          },
+          {
+            "check_id": "ck:runtime_capacity_admin_invocations:decided_at_ms:safe_integer",
+            "kind": "safe_integer",
+            "columns": [
+              "decided_at_ms"
+            ],
+            "expression_intent": "non_negative JavaScript safe integer"
+          },
+          {
+            "check_id": "ck:runtime_capacity_admin_invocations:applied_at_ms:safe_integer",
+            "kind": "safe_integer",
+            "columns": [
+              "applied_at_ms"
+            ],
+            "expression_intent": "non_negative JavaScript safe integer"
+          },
+          {
+            "check_id": "ck:capacity_invocations:observed_pair",
+            "kind": "all_or_none",
+            "columns": [
+              "observed_capacity_revision",
+              "observed_config_hash"
+            ],
+            "expression_intent": "observed revision and config hash are both null or both non-null"
+          },
+          {
+            "check_id": "ck:capacity_invocations:result_consistency",
+            "kind": "state_field_consistency",
+            "columns": [
+              "authorization_result",
+              "execution_result",
+              "denial_code",
+              "applied_at_ms"
+            ],
+            "expression_intent": "denied authorization has denied result and denial code; applied result has applied timestamp and no denial code"
+          }
+        ],
+        "indexes": [
+          {
+            "index_id": "idx:capacity_invocations:command_history",
+            "kind": "ordering",
+            "columns": [
+              "command_id",
+              "invocation_no"
+            ],
+            "predicate_intent": null,
+            "supports_query_ids": [
+              "capacity_admin_load_invocations"
+            ]
+          }
+        ]
+      },
+      {
+        "ordinal": 4,
+        "name": "runtime_capacity_change_events",
+        "source_section": "Capacity management publication and audit",
+        "columns": [
+          {
+            "ordinal": 1,
+            "name": "event_seq",
+            "logical_type": "integer",
+            "sqlite_type_intent": "INTEGER",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "positive",
+            "enum_values": [],
+            "external_reference": null,
+            "relation_ids": []
+          },
+          {
+            "ordinal": 2,
+            "name": "change_id",
+            "logical_type": "identifier",
+            "sqlite_type_intent": "TEXT",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "external_reference": null,
+            "relation_ids": [
+              "fk:capacity_events:command_lineage"
+            ]
+          },
+          {
+            "ordinal": 3,
+            "name": "command_id",
+            "logical_type": "identifier",
+            "sqlite_type_intent": "TEXT",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "external_reference": null,
+            "relation_ids": [
+              "fk:capacity_events:command"
+            ]
+          },
+          {
+            "ordinal": 4,
+            "name": "capacity_revision",
+            "logical_type": "integer",
+            "sqlite_type_intent": "INTEGER",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "positive",
+            "enum_values": [],
+            "external_reference": null,
+            "relation_ids": [
+              "fk:capacity_events:command_lineage"
+            ]
+          },
+          {
+            "ordinal": 5,
+            "name": "event_type",
+            "logical_type": "text",
+            "sqlite_type_intent": "TEXT",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [
+              "prepared",
+              "file_installed",
+              "head_committed",
+              "watcher_published",
+              "recovered",
+              "failed",
+              "unauthorized_file_rejected"
+            ],
+            "external_reference": null,
+            "relation_ids": []
+          },
+          {
+            "ordinal": 6,
+            "name": "config_hash",
+            "logical_type": "hash",
+            "sqlite_type_intent": "TEXT",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "external_reference": null,
+            "relation_ids": [
+              "fk:capacity_events:command_lineage"
+            ]
+          },
+          {
+            "ordinal": 7,
+            "name": "publication_hash",
+            "logical_type": "hash",
+            "sqlite_type_intent": "TEXT",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "external_reference": null,
+            "relation_ids": []
+          },
+          {
+            "ordinal": 8,
+            "name": "previous_event_hash",
+            "logical_type": "hash",
+            "sqlite_type_intent": "TEXT",
+            "nullable": true,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "external_reference": null,
+            "relation_ids": []
+          },
+          {
+            "ordinal": 9,
+            "name": "event_hash",
+            "logical_type": "hash",
+            "sqlite_type_intent": "TEXT",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "external_reference": null,
+            "relation_ids": []
+          },
+          {
+            "ordinal": 10,
+            "name": "detail_value_id",
+            "logical_type": "identifier",
+            "sqlite_type_intent": "TEXT",
+            "nullable": true,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "external_reference": null,
+            "relation_ids": [
+              "fk:capacity_events:detail_value"
+            ]
+          },
+          {
+            "ordinal": 11,
+            "name": "detail_hash",
+            "logical_type": "hash",
+            "sqlite_type_intent": "TEXT",
+            "nullable": true,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "external_reference": null,
+            "relation_ids": [
+              "fk:capacity_events:detail_value"
+            ]
+          },
+          {
+            "ordinal": 12,
+            "name": "created_at_ms",
+            "logical_type": "integer",
+            "sqlite_type_intent": "INTEGER",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "non_negative",
+            "enum_values": [],
+            "external_reference": null,
+            "relation_ids": []
+          }
+        ],
+        "primary_key": {
+          "columns": [
+            "event_seq"
+          ],
+          "auto_increment_intent": true
+        },
+        "foreign_keys": [
+          {
+            "relation_id": "fk:capacity_events:command",
+            "source_columns": [
+              "command_id"
+            ],
+            "target_table": "runtime_capacity_admin_commands",
+            "target_columns": [
+              "command_id"
+            ],
+            "on_delete": "restrict",
+            "deferrability": "deferred"
+          },
+          {
+            "relation_id": "fk:capacity_events:command_lineage",
+            "source_columns": [
+              "capacity_revision",
+              "change_id",
+              "config_hash"
+            ],
+            "target_table": "runtime_capacity_admin_commands",
+            "target_columns": [
+              "assigned_capacity_revision",
+              "assigned_change_id",
+              "proposed_config_hash"
+            ],
+            "on_delete": "restrict",
+            "deferrability": "deferred"
+          },
+          {
+            "relation_id": "fk:capacity_events:detail_value",
+            "source_columns": [
+              "detail_value_id",
+              "detail_hash"
+            ],
+            "target_table": "workflow_values",
+            "target_columns": [
+              "id",
+              "content_hash"
+            ],
+            "on_delete": "restrict",
+            "deferrability": "deferred"
+          }
+        ],
+        "unique_keys": [
+          {
+            "key_id": "uk:capacity_events:single_commit_milestone",
+            "columns": [
+              "change_id",
+              "event_type"
+            ],
+            "predicate_intent": "event_type is one of prepared | file_installed | head_committed | watcher_published"
+          },
+          {
+            "key_id": "uk:capacity_events:event_hash",
+            "columns": [
+              "event_hash"
+            ],
+            "predicate_intent": null
+          }
+        ],
+        "checks": [
+          {
+            "check_id": "ck:runtime_capacity_change_events:event_seq:safe_integer",
+            "kind": "safe_integer",
+            "columns": [
+              "event_seq"
+            ],
+            "expression_intent": "positive JavaScript safe integer"
+          },
+          {
+            "check_id": "ck:runtime_capacity_change_events:capacity_revision:safe_integer",
+            "kind": "safe_integer",
+            "columns": [
+              "capacity_revision"
+            ],
+            "expression_intent": "positive JavaScript safe integer"
+          },
+          {
+            "check_id": "ck:runtime_capacity_change_events:event_type:enum",
+            "kind": "enum_membership",
+            "columns": [
+              "event_type"
+            ],
+            "expression_intent": "value is one of prepared | file_installed | head_committed | watcher_published | recovered | failed | unauthorized_file_rejected"
+          },
+          {
+            "check_id": "ck:runtime_capacity_change_events:config_hash:hash",
+            "kind": "hash_format",
+            "columns": [
+              "config_hash"
+            ],
+            "expression_intent": "nullable or sha256:<64 lowercase hexadecimal characters>"
+          },
+          {
+            "check_id": "ck:runtime_capacity_change_events:publication_hash:hash",
+            "kind": "hash_format",
+            "columns": [
+              "publication_hash"
+            ],
+            "expression_intent": "nullable or sha256:<64 lowercase hexadecimal characters>"
+          },
+          {
+            "check_id": "ck:runtime_capacity_change_events:previous_event_hash:hash",
+            "kind": "hash_format",
+            "columns": [
+              "previous_event_hash"
+            ],
+            "expression_intent": "nullable or sha256:<64 lowercase hexadecimal characters>"
+          },
+          {
+            "check_id": "ck:runtime_capacity_change_events:event_hash:hash",
+            "kind": "hash_format",
+            "columns": [
+              "event_hash"
+            ],
+            "expression_intent": "nullable or sha256:<64 lowercase hexadecimal characters>"
+          },
+          {
+            "check_id": "ck:runtime_capacity_change_events:detail_hash:hash",
+            "kind": "hash_format",
+            "columns": [
+              "detail_hash"
+            ],
+            "expression_intent": "nullable or sha256:<64 lowercase hexadecimal characters>"
+          },
+          {
+            "check_id": "ck:runtime_capacity_change_events:created_at_ms:safe_integer",
+            "kind": "safe_integer",
+            "columns": [
+              "created_at_ms"
+            ],
+            "expression_intent": "non_negative JavaScript safe integer"
+          },
+          {
+            "check_id": "ck:capacity_events:detail_pair",
+            "kind": "all_or_none",
+            "columns": [
+              "detail_value_id",
+              "detail_hash"
+            ],
+            "expression_intent": "detail value and hash are both null or both non-null"
+          },
+          {
+            "check_id": "ck:capacity_events:hash_chain",
+            "kind": "state_field_consistency",
+            "columns": [
+              "event_seq",
+              "previous_event_hash",
+              "event_hash"
+            ],
+            "expression_intent": "event_seq 1 has null previous hash; later events reference the immediately preceding event hash"
+          }
+        ],
+        "indexes": [
+          {
+            "index_id": "idx:capacity_events:change_history",
+            "kind": "ordering",
+            "columns": [
+              "change_id",
+              "event_seq"
+            ],
+            "predicate_intent": null,
+            "supports_query_ids": [
+              "capacity_admin_load_change_history"
+            ]
+          },
+          {
+            "index_id": "idx:capacity_events:global_chain",
+            "kind": "ordering",
+            "columns": [
+              "event_seq"
+            ],
+            "predicate_intent": null,
+            "supports_query_ids": [
+              "capacity_recovery_verify_event_chain"
+            ]
+          }
+        ]
+      }
+    ],
+    "extended_tables": [
+      {
+        "name": "workflow_graph_scheduler_admissions",
+        "base_table_hash": "sha256:3ba78e18eae9534913ef2558fc0e25d95b380943ee7b1809934b0bad8b9c4677",
+        "added_columns": [
+          {
+            "ordinal": 1,
+            "name": "capacity_revision",
+            "logical_type": "integer",
+            "sqlite_type_intent": "INTEGER",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "positive",
+            "enum_values": [],
+            "external_reference": null,
+            "relation_ids": [
+              "fk:scheduler_admissions:capacity_lineage"
+            ]
+          },
+          {
+            "ordinal": 2,
+            "name": "capacity_change_id",
+            "logical_type": "identifier",
+            "sqlite_type_intent": "TEXT",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "external_reference": null,
+            "relation_ids": [
+              "fk:scheduler_admissions:capacity_lineage"
+            ]
+          }
+        ],
+        "added_foreign_keys": [
+          {
+            "relation_id": "fk:scheduler_admissions:capacity_lineage",
+            "source_columns": [
+              "capacity_revision",
+              "capacity_change_id",
+              "capacity_config_hash"
+            ],
+            "target_table": "runtime_capacity_admin_commands",
+            "target_columns": [
+              "assigned_capacity_revision",
+              "assigned_change_id",
+              "proposed_config_hash"
+            ],
+            "on_delete": "restrict",
+            "deferrability": "deferred"
+          }
+        ],
+        "added_unique_keys": [],
+        "added_checks": [
+          {
+            "check_id": "ck:scheduler_admissions:capacity_lineage_complete",
+            "kind": "all_or_none",
+            "columns": [
+              "capacity_revision",
+              "capacity_change_id",
+              "capacity_config_hash"
+            ],
+            "expression_intent": "revision/change/config lineage is always non-null and comes from one immutable watcher pointer"
+          }
+        ],
+        "added_indexes": []
+      }
+    ],
+    "query_intents": [
+      {
+        "query_id": "capacity_admin_load_head",
+        "owner": "command_gateway",
+        "purpose": "Load the singleton Capacity head for CAP0/CAP1 CAS validation",
+        "table": "runtime_capacity_head",
+        "join_tables": [],
+        "equality_columns": [
+          "singleton_key"
+        ],
+        "range_columns": [],
+        "state_predicate_intent": "singleton_key equals 1",
+        "order_by": [],
+        "result_cardinality": "zero_or_one",
+        "required_index_id": "idx:capacity_head:singleton",
+        "execution_status": "intent_only"
+      },
+      {
+        "query_id": "capacity_admin_find_idempotency",
+        "owner": "command_gateway",
+        "purpose": "Resolve same-request duplicate or conflicting Capacity idempotency key",
+        "table": "runtime_capacity_admin_commands",
+        "join_tables": [],
+        "equality_columns": [
+          "idempotency_domain",
+          "idempotency_key"
+        ],
+        "range_columns": [],
+        "state_predicate_intent": null,
+        "order_by": [],
+        "result_cardinality": "zero_or_one",
+        "required_index_id": "idx:capacity_commands:idempotency",
+        "execution_status": "intent_only"
+      },
+      {
+        "query_id": "capacity_admin_load_invocations",
+        "owner": "command_gateway",
+        "purpose": "Read immutable invocation history for an authenticated Capacity command",
+        "table": "runtime_capacity_admin_invocations",
+        "join_tables": [],
+        "equality_columns": [
+          "command_id"
+        ],
+        "range_columns": [],
+        "state_predicate_intent": null,
+        "order_by": [
+          {
+            "column": "invocation_no",
+            "direction": "asc"
+          }
+        ],
+        "result_cardinality": "many",
+        "required_index_id": "idx:capacity_invocations:command_history",
+        "execution_status": "intent_only"
+      },
+      {
+        "query_id": "capacity_admin_load_change_history",
+        "owner": "command_gateway",
+        "purpose": "Read immutable event history for one Capacity change",
+        "table": "runtime_capacity_change_events",
+        "join_tables": [],
+        "equality_columns": [
+          "change_id"
+        ],
+        "range_columns": [],
+        "state_predicate_intent": null,
+        "order_by": [
+          {
+            "column": "event_seq",
+            "direction": "asc"
+          }
+        ],
+        "result_cardinality": "many",
+        "required_index_id": "idx:capacity_events:change_history",
+        "execution_status": "intent_only"
+      },
+      {
+        "query_id": "capacity_recovery_load_pending_change",
+        "owner": "recovery",
+        "purpose": "Load the durable CAP1 journal selected by the pending head",
+        "table": "runtime_capacity_head",
+        "join_tables": [
+          "runtime_capacity_admin_commands"
+        ],
+        "equality_columns": [],
+        "range_columns": [],
+        "state_predicate_intent": "pending_change_id is not null",
+        "order_by": [],
+        "result_cardinality": "zero_or_one",
+        "required_index_id": "idx:capacity_head:pending",
+        "execution_status": "intent_only"
+      },
+      {
+        "query_id": "capacity_recovery_verify_event_chain",
+        "owner": "recovery",
+        "purpose": "Replay the append-only Capacity change event hash chain",
+        "table": "runtime_capacity_change_events",
+        "join_tables": [],
+        "equality_columns": [],
+        "range_columns": [],
+        "state_predicate_intent": null,
+        "order_by": [
+          {
+            "column": "event_seq",
+            "direction": "asc"
+          }
+        ],
+        "result_cardinality": "bounded_batch",
+        "required_index_id": "idx:capacity_events:global_chain",
+        "execution_status": "intent_only"
+      },
+      {
+        "query_id": "capacity_watcher_verify_committed_head",
+        "owner": "recovery",
+        "purpose": "Verify publication revision/change/config/publication lineage before pointer swap",
+        "table": "runtime_capacity_head",
+        "join_tables": [],
+        "equality_columns": [
+          "singleton_key"
+        ],
+        "range_columns": [],
+        "state_predicate_intent": "all publication lineage fields are non-null and equal the parsed envelope",
+        "order_by": [],
+        "result_cardinality": "zero_or_one",
+        "required_index_id": "idx:capacity_head:singleton",
+        "execution_status": "intent_only"
+      }
+    ],
+    "invariants": [
+      "runtime_capacity_head is the only mutable CAS pointer",
+      "runtime_capacity_change_events is append-only and hash chained",
+      "prepared file_installed head_committed and watcher_published occur at most once per change while recovered failed and unauthorized_file_rejected may repeat",
+      "command idempotency is unique by trusted domain and key while every authenticated invocation appends audit",
+      "assigned revision and change id are unique and strictly advance from the committed head",
+      "Scheduler Admission stores revision change id and config hash from one watcher-published immutable pointer",
+      "G0.10 metadata is additive and does not mutate the G0.6 historical logical schema artifact"
+    ],
+    "delta_hash": "sha256:e8917c737b1eae0f62abfa2de2dec6dc71875122a763882a46aee34c5c84cae6"
+  }
+}

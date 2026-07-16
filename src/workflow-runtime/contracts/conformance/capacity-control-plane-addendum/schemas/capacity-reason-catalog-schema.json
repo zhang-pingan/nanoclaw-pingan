@@ -1,0 +1,91 @@
+{
+  "format": "icarus.workflow-capacity-reason-catalog-schema/1",
+  "ref": {
+    "id": "icarus.workflow-capacity-reason-catalog-schema",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-capacity-reason-catalog-schema:1\n",
+  "hash": "sha256:965fc578bd6388606f8f7d5e1f9680054808bafbb92c1d22d8f362549256ceb5",
+  "payload": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:icarus:workflow-capacity-reason-catalog:1",
+    "title": "Capacity Reason Catalog v1",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "format",
+      "reason_codes",
+      "entries",
+      "catalog_hash"
+    ],
+    "properties": {
+      "format": {
+        "const": "icarus.workflow-capacity-reason-catalog/1"
+      },
+      "reason_codes": {
+        "const": [
+          "initial_provisioning",
+          "planned_tuning",
+          "incident_mitigation",
+          "host_resource_change",
+          "storage_pressure",
+          "rollback"
+        ]
+      },
+      "entries": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "reason_code",
+            "allowed_command_types",
+            "reason_text_required",
+            "evidence_required",
+            "minimum_evidence_refs"
+          ],
+          "properties": {
+            "reason_code": {
+              "enum": [
+                "initial_provisioning",
+                "planned_tuning",
+                "incident_mitigation",
+                "host_resource_change",
+                "storage_pressure",
+                "rollback"
+              ]
+            },
+            "allowed_command_types": {
+              "type": "array",
+              "items": {
+                "enum": [
+                  "initialize_deployment_capacity",
+                  "replace_deployment_capacity"
+                ]
+              },
+              "minItems": 1,
+              "uniqueItems": true
+            },
+            "reason_text_required": {
+              "type": "boolean"
+            },
+            "evidence_required": {
+              "type": "boolean"
+            },
+            "minimum_evidence_refs": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          }
+        },
+        "minItems": 6
+      },
+      "catalog_hash": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      }
+    }
+  }
+}

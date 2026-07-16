@@ -1,0 +1,260 @@
+{
+  "format": "icarus.workflow-capacity-control-plane-artifact-inventory/1",
+  "ref": {
+    "id": "icarus.workflow-capacity-control-plane-artifact-inventory",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-capacity-control-plane-artifact-inventory-artifact:1\n",
+  "hash": "sha256:d89d998698b8a8589e086f8f5b9ab58528b4cae688894664a649588f07f42415",
+  "payload": {
+    "format": "icarus.workflow-capacity-control-plane-artifact-inventory/1",
+    "inventory_scope": "g0_9_historical_root_and_g0_10_non_recursive_leaf_artifacts",
+    "closure_policy": "inventory_gate_domain_and_root_owned_by_g0_10_manifest",
+    "entries": [
+      {
+        "artifact_id": "G0.10:src/workflow-runtime/contracts/conformance/capacity-control-plane-addendum/catalogs/capacity-denial-catalog.json",
+        "owning_slice": "G0.10",
+        "artifact_class": "catalog",
+        "path": "src/workflow-runtime/contracts/conformance/capacity-control-plane-addendum/catalogs/capacity-denial-catalog.json",
+        "format": "icarus.workflow-capacity-denial-catalog/1",
+        "byte_length": 3793,
+        "raw_sha256": "sha256:1b7e8c3891abf2b89485823a2467b84683a302bd55784d5f8349448771a93744",
+        "semantic_hash": "sha256:a1156b4166f46a1f4e52f4ff1c90d3c137edd14fd3eb98ffaf48f1945c79ef69"
+      },
+      {
+        "artifact_id": "G0.10:src/workflow-runtime/contracts/conformance/capacity-control-plane-addendum/catalogs/capacity-permission-catalog.json",
+        "owning_slice": "G0.10",
+        "artifact_class": "catalog",
+        "path": "src/workflow-runtime/contracts/conformance/capacity-control-plane-addendum/catalogs/capacity-permission-catalog.json",
+        "format": "icarus.workflow-capacity-permission-catalog/1",
+        "byte_length": 1076,
+        "raw_sha256": "sha256:76db53d29fee29b1ad285671a4b928875fdd52ebb5b2406361feaea9cbd290ed",
+        "semantic_hash": "sha256:eabc7b3e98bc8804aa129cd264a9892cbea1945ba3d47cace0d48f9f8d855f04"
+      },
+      {
+        "artifact_id": "G0.10:src/workflow-runtime/contracts/conformance/capacity-control-plane-addendum/catalogs/capacity-reason-catalog.json",
+        "owning_slice": "G0.10",
+        "artifact_class": "catalog",
+        "path": "src/workflow-runtime/contracts/conformance/capacity-control-plane-addendum/catalogs/capacity-reason-catalog.json",
+        "format": "icarus.workflow-capacity-reason-catalog/1",
+        "byte_length": 2233,
+        "raw_sha256": "sha256:e39fd89dddf819f00de2783717b7f4e8bc06296b5517f59fa4087a9febe010b2",
+        "semantic_hash": "sha256:2e949f96d4dc3cc5d50c8540ec082439218ade90ef031cdea3db050a8206ab8c"
+      },
+      {
+        "artifact_id": "G0.10:src/workflow-runtime/contracts/conformance/capacity-control-plane-addendum/fault-cases.json",
+        "owning_slice": "G0.10",
+        "artifact_class": "fixture",
+        "path": "src/workflow-runtime/contracts/conformance/capacity-control-plane-addendum/fault-cases.json",
+        "format": "icarus.workflow-capacity-control-plane-fault-cases/1",
+        "byte_length": 5301,
+        "raw_sha256": "sha256:20e3547206446e66f54a1a7969d2e6677bc77a41e2a4933c251080a47f44892f",
+        "semantic_hash": "sha256:5e28911e61181fdcb9c84114b9de1e4f94747d618b2091e8cdfda81d7f90f68c"
+      },
+      {
+        "artifact_id": "G0.10:src/workflow-runtime/contracts/conformance/capacity-control-plane-addendum/markdown-delta-coverage@1.json",
+        "owning_slice": "G0.10",
+        "artifact_class": "coverage",
+        "path": "src/workflow-runtime/contracts/conformance/capacity-control-plane-addendum/markdown-delta-coverage@1.json",
+        "format": "icarus.workflow-capacity-control-plane-markdown-delta-coverage/1",
+        "byte_length": 23897,
+        "raw_sha256": "sha256:e788f2578095eced0baaab61c27dec1202652864e21ac770723231062bc8badf",
+        "semantic_hash": "sha256:f18571b4e9e48d31e9a60b31d7311921ece4565d7e2865c5ecbbafa5fc3bc4de"
+      },
+      {
+        "artifact_id": "G0.10:src/workflow-runtime/contracts/conformance/capacity-control-plane-addendum/negative-cases.json",
+        "owning_slice": "G0.10",
+        "artifact_class": "fixture",
+        "path": "src/workflow-runtime/contracts/conformance/capacity-control-plane-addendum/negative-cases.json",
+        "format": "icarus.workflow-capacity-control-plane-negative-cases/1",
+        "byte_length": 8589,
+        "raw_sha256": "sha256:1a926a9b77fc510ae8c84fa2bd8053e6ed5a9379ae169a942fe3804e4378099f",
+        "semantic_hash": "sha256:5c1c3dce4b28c1670fd38c540f8e3861b342f2bc30e69c4705e994a222619a53"
+      },
+      {
+        "artifact_id": "G0.10:src/workflow-runtime/contracts/conformance/capacity-control-plane-addendum/positive-cases.json",
+        "owning_slice": "G0.10",
+        "artifact_class": "fixture",
+        "path": "src/workflow-runtime/contracts/conformance/capacity-control-plane-addendum/positive-cases.json",
+        "format": "icarus.workflow-capacity-control-plane-positive-cases/1",
+        "byte_length": 2826,
+        "raw_sha256": "sha256:e44eaaff785975e5a4011d74ea888b35ed0e3a3950f5448ed704e6a839a7e595",
+        "semantic_hash": "sha256:78184e7d5a80c47d59b5a853b3e2ac3480dcfe9989997bcdd2ccd777e31e48b9"
+      },
+      {
+        "artifact_id": "G0.10:src/workflow-runtime/contracts/conformance/capacity-control-plane-addendum/protocols/capacity-control-plane-protocol@1.json",
+        "owning_slice": "G0.10",
+        "artifact_class": "protocol",
+        "path": "src/workflow-runtime/contracts/conformance/capacity-control-plane-addendum/protocols/capacity-control-plane-protocol@1.json",
+        "format": "icarus.workflow-capacity-control-plane-protocol/1",
+        "byte_length": 10176,
+        "raw_sha256": "sha256:ce8d380c4f755edfec89c0c5327b83970ded3d9239a4bc8f104749485f401b0c",
+        "semantic_hash": "sha256:c54c9d6d444749516acd41671419934236e68876ac74dbe9ab01a4be50ec1575"
+      },
+      {
+        "artifact_id": "G0.10:src/workflow-runtime/contracts/conformance/capacity-control-plane-addendum/schemas/capacity-admin-command-schema.json",
+        "owning_slice": "G0.10",
+        "artifact_class": "schema",
+        "path": "src/workflow-runtime/contracts/conformance/capacity-control-plane-addendum/schemas/capacity-admin-command-schema.json",
+        "format": "icarus.capacity-admin-command-schema/1",
+        "byte_length": 7343,
+        "raw_sha256": "sha256:e3c1ddfc10e4f91c7509c5666ee056961d5730fd6b48c61676649e737fe19e94",
+        "semantic_hash": "sha256:2f1ad8dec32941c19f35865d8003c11288cb635e46000d7d58a46f648a88e04b"
+      },
+      {
+        "artifact_id": "G0.10:src/workflow-runtime/contracts/conformance/capacity-control-plane-addendum/schemas/capacity-artifact-inventory-schema.json",
+        "owning_slice": "G0.10",
+        "artifact_class": "schema",
+        "path": "src/workflow-runtime/contracts/conformance/capacity-control-plane-addendum/schemas/capacity-artifact-inventory-schema.json",
+        "format": "icarus.workflow-capacity-control-plane-artifact-inventory-schema/1",
+        "byte_length": 4503,
+        "raw_sha256": "sha256:0a748db6bca38fc83c696bb3079a37d7d6f1fc68334f50cf463ad26f27c3e3d8",
+        "semantic_hash": "sha256:0c06f475e4973d604bc0ca5cec636907dc8973984fbf984598f1ceaca3b11cf4"
+      },
+      {
+        "artifact_id": "G0.10:src/workflow-runtime/contracts/conformance/capacity-control-plane-addendum/schemas/capacity-control-plane-protocol-schema.json",
+        "owning_slice": "G0.10",
+        "artifact_class": "schema",
+        "path": "src/workflow-runtime/contracts/conformance/capacity-control-plane-addendum/schemas/capacity-control-plane-protocol-schema.json",
+        "format": "icarus.workflow-capacity-control-plane-protocol-schema/1",
+        "byte_length": 5024,
+        "raw_sha256": "sha256:ce6d9b647b9727cd6e876096100e7860a53cdb2902d7e91080f53901f8f65cbc",
+        "semantic_hash": "sha256:e46c989e761232f7589a6723c2c39000e7b40b3566cdbf3e83384c5568abd79b"
+      },
+      {
+        "artifact_id": "G0.10:src/workflow-runtime/contracts/conformance/capacity-control-plane-addendum/schemas/capacity-denial-catalog-schema.json",
+        "owning_slice": "G0.10",
+        "artifact_class": "schema",
+        "path": "src/workflow-runtime/contracts/conformance/capacity-control-plane-addendum/schemas/capacity-denial-catalog-schema.json",
+        "format": "icarus.workflow-capacity-denial-catalog-schema/1",
+        "byte_length": 2824,
+        "raw_sha256": "sha256:e42fce0e224beb56817e3db7cd298c7364a2d1b3478b06e74001efa964b5f391",
+        "semantic_hash": "sha256:e1954c9088d2339b1e5baa3a56f9d34c0f6500926c1ff084b553e13624249379"
+      },
+      {
+        "artifact_id": "G0.10:src/workflow-runtime/contracts/conformance/capacity-control-plane-addendum/schemas/capacity-fault-cases-schema.json",
+        "owning_slice": "G0.10",
+        "artifact_class": "schema",
+        "path": "src/workflow-runtime/contracts/conformance/capacity-control-plane-addendum/schemas/capacity-fault-cases-schema.json",
+        "format": "icarus.workflow-capacity-control-plane-fault-cases-schema/1",
+        "byte_length": 2549,
+        "raw_sha256": "sha256:b7621c784f750cb0a795d04dff4d9a2d1df4ee74894a91fcdf7974d82a1347ce",
+        "semantic_hash": "sha256:dc1a58f109de44eb3751f793f7efa0f10fcc5fafcdb0680beeb079643aaa1f0e"
+      },
+      {
+        "artifact_id": "G0.10:src/workflow-runtime/contracts/conformance/capacity-control-plane-addendum/schemas/capacity-gate-review-schema.json",
+        "owning_slice": "G0.10",
+        "artifact_class": "schema",
+        "path": "src/workflow-runtime/contracts/conformance/capacity-control-plane-addendum/schemas/capacity-gate-review-schema.json",
+        "format": "icarus.workflow-capacity-control-plane-gate-review-schema/1",
+        "byte_length": 5969,
+        "raw_sha256": "sha256:fa265fe40265dac8ec53cb5712a3c2dca83c0759465ac666b2c4ed3328792e60",
+        "semantic_hash": "sha256:c653e86ff5c1ee365a9f2c5f5c2a4c4968f016e59ff8e8b42b6f2df000de435d"
+      },
+      {
+        "artifact_id": "G0.10:src/workflow-runtime/contracts/conformance/capacity-control-plane-addendum/schemas/capacity-logical-schema-delta-schema.json",
+        "owning_slice": "G0.10",
+        "artifact_class": "schema",
+        "path": "src/workflow-runtime/contracts/conformance/capacity-control-plane-addendum/schemas/capacity-logical-schema-delta-schema.json",
+        "format": "icarus.workflow-capacity-control-plane-logical-schema-delta-schema/1",
+        "byte_length": 31366,
+        "raw_sha256": "sha256:7c36e667efcb6c1fceaf7a97648c66505bf199d3a03752bc2bac5b202388a6ac",
+        "semantic_hash": "sha256:fd64e68421abb95ca0bbe01b6ef530536e66db6c0361099d66416431c9b0d593"
+      },
+      {
+        "artifact_id": "G0.10:src/workflow-runtime/contracts/conformance/capacity-control-plane-addendum/schemas/capacity-markdown-delta-coverage-schema.json",
+        "owning_slice": "G0.10",
+        "artifact_class": "schema",
+        "path": "src/workflow-runtime/contracts/conformance/capacity-control-plane-addendum/schemas/capacity-markdown-delta-coverage-schema.json",
+        "format": "icarus.workflow-capacity-control-plane-markdown-delta-coverage-schema/1",
+        "byte_length": 6058,
+        "raw_sha256": "sha256:d55c54723d5a16ac0299716002fa83c34c2fdfca523a6ae5e62ee2ee4c62694c",
+        "semantic_hash": "sha256:4f8d14c46176d19c1ffbc5c251347d78217ad7cab53cbba995083119b43d8a49"
+      },
+      {
+        "artifact_id": "G0.10:src/workflow-runtime/contracts/conformance/capacity-control-plane-addendum/schemas/capacity-negative-cases-schema.json",
+        "owning_slice": "G0.10",
+        "artifact_class": "schema",
+        "path": "src/workflow-runtime/contracts/conformance/capacity-control-plane-addendum/schemas/capacity-negative-cases-schema.json",
+        "format": "icarus.workflow-capacity-control-plane-negative-cases-schema/1",
+        "byte_length": 2567,
+        "raw_sha256": "sha256:a3b47345c2ea369cc348d662409e59b8af9947942ba65147ad479976d50252f9",
+        "semantic_hash": "sha256:4087026c61ecc48df7356b0760f1a8b33a1c51c2014ccc4a45a7591e33997256"
+      },
+      {
+        "artifact_id": "G0.10:src/workflow-runtime/contracts/conformance/capacity-control-plane-addendum/schemas/capacity-permission-catalog-schema.json",
+        "owning_slice": "G0.10",
+        "artifact_class": "schema",
+        "path": "src/workflow-runtime/contracts/conformance/capacity-control-plane-addendum/schemas/capacity-permission-catalog-schema.json",
+        "format": "icarus.workflow-capacity-permission-catalog-schema/1",
+        "byte_length": 2428,
+        "raw_sha256": "sha256:72d05f957baa031891eaa0a036ae808f3b9d7e0a0216cee57b876d49d2b81b01",
+        "semantic_hash": "sha256:2a8cd5460fedc04c184574b6de3e6cc69fcd54bd7544aafd94f583d1551db9a8"
+      },
+      {
+        "artifact_id": "G0.10:src/workflow-runtime/contracts/conformance/capacity-control-plane-addendum/schemas/capacity-positive-cases-schema.json",
+        "owning_slice": "G0.10",
+        "artifact_class": "schema",
+        "path": "src/workflow-runtime/contracts/conformance/capacity-control-plane-addendum/schemas/capacity-positive-cases-schema.json",
+        "format": "icarus.workflow-capacity-control-plane-positive-cases-schema/1",
+        "byte_length": 2567,
+        "raw_sha256": "sha256:79f0e5b79ea6b277d8f14798d422d778d554a0172fda2be33d37aa5112f0dee7",
+        "semantic_hash": "sha256:8ee07adb98cd7a596b7432e9ebcbe2127540b7f7fb0ad68f946e428115c4e1ef"
+      },
+      {
+        "artifact_id": "G0.10:src/workflow-runtime/contracts/conformance/capacity-control-plane-addendum/schemas/capacity-reason-catalog-schema.json",
+        "owning_slice": "G0.10",
+        "artifact_class": "schema",
+        "path": "src/workflow-runtime/contracts/conformance/capacity-control-plane-addendum/schemas/capacity-reason-catalog-schema.json",
+        "format": "icarus.workflow-capacity-reason-catalog-schema/1",
+        "byte_length": 2519,
+        "raw_sha256": "sha256:00dbee6a3a8759146e196d4bba0ea202d0a7516167f665f655559a528cb626a2",
+        "semantic_hash": "sha256:965fc578bd6388606f8f7d5e1f9680054808bafbb92c1d22d8f362549256ceb5"
+      },
+      {
+        "artifact_id": "G0.10:src/workflow-runtime/contracts/conformance/capacity-control-plane-addendum/schemas/deployment-runtime-capacity-publication-schema.json",
+        "owning_slice": "G0.10",
+        "artifact_class": "schema",
+        "path": "src/workflow-runtime/contracts/conformance/capacity-control-plane-addendum/schemas/deployment-runtime-capacity-publication-schema.json",
+        "format": "icarus.deployment-runtime-capacity-publication-schema/1",
+        "byte_length": 3224,
+        "raw_sha256": "sha256:798bab05653cebc6a42b2c936b662af30fa12f22781d881e7b7b647a9f37ca72",
+        "semantic_hash": "sha256:387cb56559ea5c1853b42c0513229fe0058352a2c023aaa158fc7e79bcf29c99"
+      },
+      {
+        "artifact_id": "G0.10:src/workflow-runtime/contracts/conformance/capacity-control-plane-addendum/sqlite/capacity-control-plane-logical-schema-delta@1.json",
+        "owning_slice": "G0.10",
+        "artifact_class": "logical_schema_delta",
+        "path": "src/workflow-runtime/contracts/conformance/capacity-control-plane-addendum/sqlite/capacity-control-plane-logical-schema-delta@1.json",
+        "format": "icarus.workflow-capacity-control-plane-logical-schema-delta/1",
+        "byte_length": 62834,
+        "raw_sha256": "sha256:91ba963f3983a525983ab3b0cd17f194f3d50738d0b8399ce43e9d51212c5616",
+        "semantic_hash": "sha256:5d9e79b5f9330a5111e6f61b8d04164c87839a60d55ea350c0aa87b8b1559e66"
+      },
+      {
+        "artifact_id": "G0.9:src/workflow-runtime/contracts/contract-pack-g0-conformance-exit.json",
+        "owning_slice": "G0.9",
+        "artifact_class": "historical_root",
+        "path": "src/workflow-runtime/contracts/contract-pack-g0-conformance-exit.json",
+        "format": "icarus.workflow-contract-pack-g0-conformance-exit/1",
+        "byte_length": 6865,
+        "raw_sha256": "sha256:549b58538b221de02a0ce1d07a4577b4903e1a940af1a9029bf95ddf9fd4d490",
+        "semantic_hash": "sha256:df3058a93eaeb85bdb3eeadc7923148a9a543f63c33d0ede2cc7be0a758c9f5e"
+      }
+    ],
+    "entry_count": 23,
+    "class_counts": {
+      "historical_root": 1,
+      "schema": 13,
+      "catalog": 3,
+      "protocol": 1,
+      "logical_schema_delta": 1,
+      "coverage": 1,
+      "fixture": 3
+    },
+    "duplicate_paths": [],
+    "missing_paths": [],
+    "inventory_hash": "sha256:c74237dbd60acc7fa9059323b5bd5c38e360c3ffc0b333ad075d94b2907ea23b"
+  }
+}

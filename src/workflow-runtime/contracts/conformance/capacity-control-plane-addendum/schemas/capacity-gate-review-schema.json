@@ -1,0 +1,222 @@
+{
+  "format": "icarus.workflow-capacity-control-plane-gate-review-schema/1",
+  "ref": {
+    "id": "icarus.workflow-capacity-control-plane-gate-review-schema",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-capacity-control-plane-gate-review-schema:1\n",
+  "hash": "sha256:c653e86ff5c1ee365a9f2c5f5c2a4c4968f016e59ff8e8b42b6f2df000de435d",
+  "payload": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:icarus:workflow-capacity-control-plane-gate-review:1",
+    "title": "Capacity Control-Plane Gate Review v1",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "format",
+      "gate_id",
+      "review_kind",
+      "decision",
+      "prior_g0_9_root_hash",
+      "historical_identity_hashes",
+      "exit_criteria",
+      "markdown_delta_coverage_hash",
+      "artifact_inventory_hash",
+      "status_proof",
+      "review_hash"
+    ],
+    "properties": {
+      "format": {
+        "const": "icarus.workflow-capacity-control-plane-gate-review/1"
+      },
+      "gate_id": {
+        "const": "G0.10"
+      },
+      "review_kind": {
+        "const": "capacity_control_plane_addendum"
+      },
+      "decision": {
+        "const": "pass"
+      },
+      "prior_g0_9_root_hash": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      },
+      "historical_identity_hashes": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "G0.2",
+          "G0.3",
+          "G0.4",
+          "G0.5",
+          "G0.6",
+          "G0.7",
+          "G0.8",
+          "G0.9",
+          "capacity_schema",
+          "capacity_baseline"
+        ],
+        "properties": {
+          "G0.2": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "G0.3": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "G0.4": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "G0.5": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "G0.6": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "G0.7": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "G0.8": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "G0.9": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "capacity_schema": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "capacity_baseline": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          }
+        }
+      },
+      "exit_criteria": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "criterion_id",
+            "status",
+            "evidence_hashes"
+          ],
+          "properties": {
+            "criterion_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,255}$"
+            },
+            "status": {
+              "const": "pass"
+            },
+            "evidence_hashes": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              },
+              "minItems": 1
+            }
+          }
+        },
+        "minItems": 10
+      },
+      "markdown_delta_coverage_hash": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      },
+      "artifact_inventory_hash": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      },
+      "status_proof": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "g0_status",
+          "i11_status",
+          "g1_status",
+          "g2_status",
+          "g3_through_g9_status",
+          "r014_status",
+          "executable_ddl_status",
+          "workflow_runtime_store_status",
+          "capacity_gateway_status",
+          "capacity_publisher_status",
+          "capacity_watcher_status",
+          "scheduler_status",
+          "runtime_center_ui_status",
+          "golden_semantic_review_status",
+          "golden_seal_status",
+          "sealed_directory_entry"
+        ],
+        "properties": {
+          "g0_status": {
+            "const": "DONE"
+          },
+          "i11_status": {
+            "const": "DONE"
+          },
+          "g1_status": {
+            "const": "READY"
+          },
+          "g2_status": {
+            "const": "READY"
+          },
+          "g3_through_g9_status": {
+            "const": "NOT_READY"
+          },
+          "r014_status": {
+            "const": "CLOSED"
+          },
+          "executable_ddl_status": {
+            "const": "absent"
+          },
+          "workflow_runtime_store_status": {
+            "const": "absent"
+          },
+          "capacity_gateway_status": {
+            "const": "absent"
+          },
+          "capacity_publisher_status": {
+            "const": "absent"
+          },
+          "capacity_watcher_status": {
+            "const": "absent"
+          },
+          "scheduler_status": {
+            "const": "absent"
+          },
+          "runtime_center_ui_status": {
+            "const": "absent"
+          },
+          "golden_semantic_review_status": {
+            "const": "absent"
+          },
+          "golden_seal_status": {
+            "const": "not_run"
+          },
+          "sealed_directory_entry": {
+            "const": ".gitkeep"
+          }
+        }
+      },
+      "review_hash": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      }
+    }
+  }
+}

@@ -1,0 +1,155 @@
+{
+  "format": "icarus.workflow-capacity-control-plane-domain-separators/1",
+  "ref": {
+    "id": "icarus.workflow-capacity-control-plane-domain-separators",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-capacity-control-plane-domain-separators:1\n",
+  "hash": "sha256:51aa73545238e3d41b798b8efdd748587c4ea800b32645d67bceee10bfb2dded",
+  "payload": {
+    "registry_version": 1,
+    "entries": [
+      {
+        "format": "icarus.capacity-admin-command-request/1",
+        "domain_separator": "icarus:capacity-admin-command-request:1\n",
+        "artifact_path": "conformance/capacity-control-plane-addendum/schemas/capacity-admin-command-schema.json"
+      },
+      {
+        "format": "icarus.capacity-admin-command-schema/1",
+        "domain_separator": "icarus:capacity-admin-command-schema:1\n",
+        "artifact_path": "conformance/capacity-control-plane-addendum/schemas/capacity-admin-command-schema.json"
+      },
+      {
+        "format": "icarus.deployment-runtime-capacity-publication-schema/1",
+        "domain_separator": "icarus:deployment-runtime-capacity-publication-schema:1\n",
+        "artifact_path": "conformance/capacity-control-plane-addendum/schemas/deployment-runtime-capacity-publication-schema.json"
+      },
+      {
+        "format": "icarus.deployment-runtime-capacity-publication/1",
+        "domain_separator": "icarus:deployment-runtime-capacity-publication:1\n",
+        "artifact_path": "conformance/capacity-control-plane-addendum/schemas/deployment-runtime-capacity-publication-schema.json"
+      },
+      {
+        "format": "icarus.workflow-capacity-control-plane-artifact-inventory-schema/1",
+        "domain_separator": "icarus:workflow-capacity-control-plane-artifact-inventory-schema:1\n",
+        "artifact_path": "conformance/capacity-control-plane-addendum/schemas/capacity-artifact-inventory-schema.json"
+      },
+      {
+        "format": "icarus.workflow-capacity-control-plane-artifact-inventory/1",
+        "domain_separator": "icarus:workflow-capacity-control-plane-artifact-inventory-artifact:1\n",
+        "artifact_path": "conformance/capacity-control-plane-addendum/artifact-inventory@1.json"
+      },
+      {
+        "format": "icarus.workflow-capacity-control-plane-domain-separators/1",
+        "domain_separator": "icarus:workflow-capacity-control-plane-domain-separators:1\n",
+        "artifact_path": "conformance/capacity-control-plane-addendum/catalogs/capacity-control-plane-domain-separators.json"
+      },
+      {
+        "format": "icarus.workflow-capacity-control-plane-fault-cases-schema/1",
+        "domain_separator": "icarus:workflow-capacity-control-plane-fault-cases-schema:1\n",
+        "artifact_path": "conformance/capacity-control-plane-addendum/schemas/capacity-fault-cases-schema.json"
+      },
+      {
+        "format": "icarus.workflow-capacity-control-plane-fault-cases/1",
+        "domain_separator": "icarus:workflow-capacity-control-plane-fault-cases:1\n",
+        "artifact_path": "conformance/capacity-control-plane-addendum/fault-cases.json"
+      },
+      {
+        "format": "icarus.workflow-capacity-control-plane-gate-review-schema/1",
+        "domain_separator": "icarus:workflow-capacity-control-plane-gate-review-schema:1\n",
+        "artifact_path": "conformance/capacity-control-plane-addendum/schemas/capacity-gate-review-schema.json"
+      },
+      {
+        "format": "icarus.workflow-capacity-control-plane-gate-review/1",
+        "domain_separator": "icarus:workflow-capacity-control-plane-gate-review-artifact:1\n",
+        "artifact_path": "conformance/capacity-control-plane-addendum/gate-review@1.json"
+      },
+      {
+        "format": "icarus.workflow-capacity-control-plane-logical-schema-delta-schema/1",
+        "domain_separator": "icarus:workflow-capacity-control-plane-logical-schema-delta-schema:1\n",
+        "artifact_path": "conformance/capacity-control-plane-addendum/schemas/capacity-logical-schema-delta-schema.json"
+      },
+      {
+        "format": "icarus.workflow-capacity-control-plane-logical-schema-delta/1",
+        "domain_separator": "icarus:workflow-capacity-control-plane-logical-schema-delta-artifact:1\n",
+        "artifact_path": "conformance/capacity-control-plane-addendum/sqlite/capacity-control-plane-logical-schema-delta@1.json"
+      },
+      {
+        "format": "icarus.workflow-capacity-control-plane-markdown-delta-coverage-schema/1",
+        "domain_separator": "icarus:workflow-capacity-control-plane-markdown-delta-coverage-schema:1\n",
+        "artifact_path": "conformance/capacity-control-plane-addendum/schemas/capacity-markdown-delta-coverage-schema.json"
+      },
+      {
+        "format": "icarus.workflow-capacity-control-plane-markdown-delta-coverage/1",
+        "domain_separator": "icarus:workflow-capacity-control-plane-markdown-delta-coverage-artifact:1\n",
+        "artifact_path": "conformance/capacity-control-plane-addendum/markdown-delta-coverage@1.json"
+      },
+      {
+        "format": "icarus.workflow-capacity-control-plane-negative-cases-schema/1",
+        "domain_separator": "icarus:workflow-capacity-control-plane-negative-cases-schema:1\n",
+        "artifact_path": "conformance/capacity-control-plane-addendum/schemas/capacity-negative-cases-schema.json"
+      },
+      {
+        "format": "icarus.workflow-capacity-control-plane-negative-cases/1",
+        "domain_separator": "icarus:workflow-capacity-control-plane-negative-cases:1\n",
+        "artifact_path": "conformance/capacity-control-plane-addendum/negative-cases.json"
+      },
+      {
+        "format": "icarus.workflow-capacity-control-plane-positive-cases-schema/1",
+        "domain_separator": "icarus:workflow-capacity-control-plane-positive-cases-schema:1\n",
+        "artifact_path": "conformance/capacity-control-plane-addendum/schemas/capacity-positive-cases-schema.json"
+      },
+      {
+        "format": "icarus.workflow-capacity-control-plane-positive-cases/1",
+        "domain_separator": "icarus:workflow-capacity-control-plane-positive-cases:1\n",
+        "artifact_path": "conformance/capacity-control-plane-addendum/positive-cases.json"
+      },
+      {
+        "format": "icarus.workflow-capacity-control-plane-protocol-schema/1",
+        "domain_separator": "icarus:workflow-capacity-control-plane-protocol-schema:1\n",
+        "artifact_path": "conformance/capacity-control-plane-addendum/schemas/capacity-control-plane-protocol-schema.json"
+      },
+      {
+        "format": "icarus.workflow-capacity-control-plane-protocol/1",
+        "domain_separator": "icarus:workflow-capacity-control-plane-protocol-artifact:1\n",
+        "artifact_path": "conformance/capacity-control-plane-addendum/protocols/capacity-control-plane-protocol@1.json"
+      },
+      {
+        "format": "icarus.workflow-capacity-denial-catalog-schema/1",
+        "domain_separator": "icarus:workflow-capacity-denial-catalog-schema:1\n",
+        "artifact_path": "conformance/capacity-control-plane-addendum/schemas/capacity-denial-catalog-schema.json"
+      },
+      {
+        "format": "icarus.workflow-capacity-denial-catalog/1",
+        "domain_separator": "icarus:workflow-capacity-denial-catalog:1\n",
+        "artifact_path": "conformance/capacity-control-plane-addendum/catalogs/capacity-denial-catalog.json"
+      },
+      {
+        "format": "icarus.workflow-capacity-permission-catalog-schema/1",
+        "domain_separator": "icarus:workflow-capacity-permission-catalog-schema:1\n",
+        "artifact_path": "conformance/capacity-control-plane-addendum/schemas/capacity-permission-catalog-schema.json"
+      },
+      {
+        "format": "icarus.workflow-capacity-permission-catalog/1",
+        "domain_separator": "icarus:workflow-capacity-permission-catalog:1\n",
+        "artifact_path": "conformance/capacity-control-plane-addendum/catalogs/capacity-permission-catalog.json"
+      },
+      {
+        "format": "icarus.workflow-capacity-reason-catalog-schema/1",
+        "domain_separator": "icarus:workflow-capacity-reason-catalog-schema:1\n",
+        "artifact_path": "conformance/capacity-control-plane-addendum/schemas/capacity-reason-catalog-schema.json"
+      },
+      {
+        "format": "icarus.workflow-capacity-reason-catalog/1",
+        "domain_separator": "icarus:workflow-capacity-reason-catalog:1\n",
+        "artifact_path": "conformance/capacity-control-plane-addendum/catalogs/capacity-reason-catalog.json"
+      },
+      {
+        "format": "icarus.workflow-contract-pack-capacity-control-plane-addendum/1",
+        "domain_separator": "icarus:workflow-contract-pack-capacity-control-plane-addendum:1\n",
+        "artifact_path": "conformance/capacity-control-plane-addendum/contract-pack-capacity-control-plane-addendum.json"
+      }
+    ]
+  }
+}

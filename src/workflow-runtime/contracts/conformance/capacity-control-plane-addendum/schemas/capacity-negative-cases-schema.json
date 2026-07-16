@@ -1,0 +1,90 @@
+{
+  "format": "icarus.workflow-capacity-control-plane-negative-cases-schema/1",
+  "ref": {
+    "id": "icarus.workflow-capacity-control-plane-negative-cases-schema",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-capacity-control-plane-negative-cases-schema:1\n",
+  "hash": "sha256:4087026c61ecc48df7356b0760f1a8b33a1c51c2014ccc4a45a7591e33997256",
+  "payload": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:icarus:workflow-capacity-control-plane-negative-cases:1",
+    "title": "icarus.workflow-capacity-control-plane-negative-cases/1 closed fixture artifact",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "format",
+      "cases",
+      "case_count"
+    ],
+    "properties": {
+      "format": {
+        "const": "icarus.workflow-capacity-control-plane-negative-cases/1"
+      },
+      "cases": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "case_id",
+            "area",
+            "scenario",
+            "expected_result",
+            "expected_head_effect",
+            "assertion"
+          ],
+          "properties": {
+            "case_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,255}$"
+            },
+            "area": {
+              "enum": [
+                "authorization",
+                "cas",
+                "idempotency",
+                "transition",
+                "genesis",
+                "integrity",
+                "publication_recovery",
+                "upgrade",
+                "admission_lineage"
+              ]
+            },
+            "scenario": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,255}$"
+            },
+            "expected_result": {
+              "type": "string",
+              "minLength": 1
+            },
+            "expected_head_effect": {
+              "enum": [
+                "unchanged",
+                "pending_prepared",
+                "committed"
+              ]
+            },
+            "assertion": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "minItems": 1
+      },
+      "case_count": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 9007199254740991
+      }
+    }
+  }
+}

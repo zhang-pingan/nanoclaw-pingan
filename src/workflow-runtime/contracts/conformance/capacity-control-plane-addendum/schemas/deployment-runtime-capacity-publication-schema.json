@@ -1,0 +1,115 @@
+{
+  "format": "icarus.deployment-runtime-capacity-publication-schema/1",
+  "ref": {
+    "id": "icarus.deployment-runtime-capacity-publication-schema",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:deployment-runtime-capacity-publication-schema:1\n",
+  "hash": "sha256:387cb56559ea5c1853b42c0513229fe0058352a2c023aaa158fc7e79bcf29c99",
+  "payload": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:icarus:deployment-runtime-capacity-publication:1",
+    "title": "Deployment Runtime Capacity Publication v1",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "format",
+      "deployment_profile",
+      "capacity_revision",
+      "capacity_change_id",
+      "previous_config_hash",
+      "capacity",
+      "publication_hash"
+    ],
+    "properties": {
+      "format": {
+        "const": "icarus.deployment-runtime-capacity-publication/1"
+      },
+      "deployment_profile": {
+        "const": "local_single_user"
+      },
+      "capacity_revision": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 9007199254740991
+      },
+      "capacity_change_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 256,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,255}$"
+      },
+      "previous_config_hash": {
+        "oneOf": [
+          {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "capacity": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "max_active_executions",
+          "max_active_waits",
+          "max_pending_signals",
+          "max_outbox_inflight",
+          "max_physical_blob_bytes",
+          "soft_blob_high_water_bytes",
+          "minimum_free_disk_bytes",
+          "config_hash"
+        ],
+        "properties": {
+          "max_active_executions": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "max_active_waits": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "max_pending_signals": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "max_outbox_inflight": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "max_physical_blob_bytes": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "soft_blob_high_water_bytes": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "minimum_free_disk_bytes": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "config_hash": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          }
+        }
+      },
+      "publication_hash": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      }
+    }
+  }
+}
