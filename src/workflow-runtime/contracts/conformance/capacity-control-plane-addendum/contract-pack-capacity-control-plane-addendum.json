@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-contract-pack-capacity-control-plane-addendum:1\n",
-  "hash": "sha256:c9649b31acc99a4cb0d98e558d2be9ee4be840be2c4289803f8f5e0c7c0ce1f7",
+  "hash": "sha256:21d06c2d9d45a47f6ebc68c24b9d0acec29c8ae1726d5387bd38c460a7a0a7ec",
   "payload": {
     "gate": "G0.10",
     "status": "capacity_control_plane_addendum",
@@ -26,12 +26,12 @@
     },
     "capacity_schema_hash": "sha256:30aa123506c8f37a3d0c291d20feab150e7103c3f83c12775c49d323f9de7ec4",
     "capacity_baseline_hash": "sha256:970a63fdba1e263189c3070201a543f01508180abb1e8c15cf649a3780c17542",
-    "generated_by_tool_hash": "sha256:cf6979d2dedb52923f37028e71636522c0e6bbc32eefb456a016aec3ac51f513",
-    "markdown_delta_coverage_hash": "sha256:42ac7e849edd0a7a84ba0ab1d272fa27e22d780f883768741e69aa619a1e5b52",
+    "generated_by_tool_hash": "sha256:59bbbaf715dee32fa51b8f475966e39c01639ba91cb0b5034397cf4d6a002c48",
+    "markdown_delta_coverage_hash": "sha256:f450a6cf49d9a4859253098f49b736f10ae2bb50a8741f0b052156c5319d8bcc",
     "markdown_delta_coverage_entry_count": 33,
-    "artifact_inventory_hash": "sha256:c74237dbd60acc7fa9059323b5bd5c38e360c3ffc0b333ad075d94b2907ea23b",
+    "artifact_inventory_hash": "sha256:7af9bce89ea771d18a7365f2d1551c9c4ba03866bc788d9a5f2752893429a6a3",
     "artifact_inventory_entry_count": 23,
-    "gate_review_hash": "sha256:e29e0fbee09aef914ed60a83960e1944db2460490f00c526c37549f130fbe86b",
+    "gate_review_hash": "sha256:771bc7b6b4a23c5d4523bfb1cce0c56085b62c4f444b9ae41fcbc7a8651c3a75",
     "exit_criterion_count": 10,
     "protocol_hash": "sha256:ce4276b4a5902ffb646d22b834ff8cf07cddd619afa51096c510305e0b27e3a0",
     "protocol_step_count": 5,
@@ -72,7 +72,7 @@
         },
         "version": 1,
         "domain_separator": "icarus:workflow-capacity-control-plane-artifact-inventory-artifact:1\n",
-        "hash": "sha256:d89d998698b8a8589e086f8f5b9ab58528b4cae688894664a649588f07f42415"
+        "hash": "sha256:b5510c39337d1376c192d6147a5d1785cac979b1938ed97fc40f48cff9cdbb0a"
       },
       {
         "path": "conformance/capacity-control-plane-addendum/catalogs/capacity-control-plane-domain-separators.json",
@@ -138,7 +138,7 @@
         },
         "version": 1,
         "domain_separator": "icarus:workflow-capacity-control-plane-gate-review-artifact:1\n",
-        "hash": "sha256:5c1182aa5a6dbc65392ffde79fddcb75d4853cc22a98409412d1649f76732eaa"
+        "hash": "sha256:77939ab7de850e9f95fa50f4ba4a38a15e32a74d29e5f15a863d660734835a19"
       },
       {
         "path": "conformance/capacity-control-plane-addendum/markdown-delta-coverage@1.json",
@@ -149,7 +149,7 @@
         },
         "version": 1,
         "domain_separator": "icarus:workflow-capacity-control-plane-markdown-delta-coverage-artifact:1\n",
-        "hash": "sha256:f18571b4e9e48d31e9a60b31d7311921ece4565d7e2865c5ecbbafa5fc3bc4de"
+        "hash": "sha256:7bf04f63057d80ea3e07331bb945b78ca6bd0d5f0300e2980e04edad263cb361"
       },
       {
         "path": "conformance/capacity-control-plane-addendum/negative-cases.json",
@@ -270,7 +270,7 @@
         },
         "version": 1,
         "domain_separator": "icarus:workflow-capacity-control-plane-markdown-delta-coverage-schema:1\n",
-        "hash": "sha256:4f8d14c46176d19c1ffbc5c251347d78217ad7cab53cbba995083119b43d8a49"
+        "hash": "sha256:5d0cb20152495da3b2c8ff3481269faf6b5fa4739552a6bd2ed576e0d31a5b15"
       },
       {
         "path": "conformance/capacity-control-plane-addendum/schemas/capacity-negative-cases-schema.json",

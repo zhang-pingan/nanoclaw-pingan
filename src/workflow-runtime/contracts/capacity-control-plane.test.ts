@@ -41,6 +41,7 @@ import {
   CAPACITY_BASELINE_HISTORICAL_HASH,
   G0_10_HISTORICAL_IDENTITIES,
   G0_9_HISTORICAL_ROOT_HASH,
+  buildCapacityMarkdownDeltaCoverage,
   buildDeploymentCapacityPublication,
   calculateCapacityAdminRequestHash,
   validateCapacityPublication,
@@ -390,6 +391,7 @@ describe('G0.10 Capacity Control-Plane Addendum', () => {
       `${CAPACITY_CONTROL_PLANE_ADDENDUM_ROOT}/markdown-delta-coverage@1.json`,
     );
     expect(coverage).toMatchObject({
+      spec_binding_scope: 'capacity_contract_values_only',
       prior_g0_9_root_hash: G0_9_HISTORICAL_ROOT_HASH,
       contract_value_count: 33,
       markdown_value_count: 33,
@@ -406,6 +408,24 @@ describe('G0.10 Capacity Control-Plane Addendum', () => {
       logical_table: 4,
       admission_lineage_field: 3,
     });
+
+    const architecture = fs.readFileSync(
+      path.join(repoRoot, 'local/docs/dynamic-workflow-dag-framework.md'),
+      'utf8',
+    );
+    expect(
+      buildCapacityMarkdownDeltaCoverage(
+        `${architecture}\n\nUnrelated Compiler-only prose.\n`,
+      ).coverage_hash,
+    ).toBe(coverage.coverage_hash);
+    expect(
+      buildCapacityMarkdownDeltaCoverage(
+        architecture.replaceAll(
+          'runtime.capacity.manage',
+          'removed.capacity.permission.for-test',
+        ),
+      ).contract_values_without_markdown,
+    ).toContain('permission:runtime.capacity.manage');
 
     const inventory = readPayload<CapacityArtifactInventory>(
       `${CAPACITY_CONTROL_PLANE_ADDENDUM_ROOT}/artifact-inventory@1.json`,

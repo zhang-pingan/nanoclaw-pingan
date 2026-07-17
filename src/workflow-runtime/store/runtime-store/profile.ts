@@ -22,19 +22,19 @@ import { assertClosedSchemaManifest } from '../schema/manifest.js';
 import type { WorkflowRuntimeSchemaManifestPayload } from '../schema/types.js';
 
 export const FROZEN_G1_1_IDENTITIES = {
-  root: 'sha256:54c120e211ed28a9c2dcc2907ec728b39ce68748a07dc631d307c9aa59693f78',
+  root: 'sha256:8950c4be872f34b1e048fe28fd1c267ed2da97a685e0e874eba1dc14deba4c52',
   schema:
-    'sha256:33f843e57ddc1cdae80e67d5f0254653985cd7062017a9ecee9409b389fdd26e',
+    'sha256:9e75471258a4fa4d28c67859b39b7fb36ce9142eacb91d38a70b45b155ba79ce',
   migration:
     'sha256:d89829995e164355ad485fc117db88dd67a72409f00ec3c3c54253f30a589f61',
   deterministic:
-    'sha256:b97c8075984dc2ffb741dfa5b218155af28e5067d44ab2032de54f3258281dcb',
+    'sha256:6e88f0618e94294647d7ff72bb64a20dddb490a6bdee4da6ee38d06fd7a7fcb2',
   manifest:
-    'sha256:42db16f9f104c5a6ebc7570baced9049a80dbfb047ddfcb46f478a62b04091b0',
+    'sha256:50219aa0bfe410763d07c7f0d340eb372c166957ee8039c28f4ed4eb010a009e',
   executableDdl:
-    'sha256:61d3e32bfb5733d8adcc3b5b93c7f61462b836eb69fb04df0a5dbcb834bd5d58',
+    'sha256:05bc24ca63d1b770c3248b9f0b15de9952c9e8ef08a14967aec0a274d5fdd7aa',
   g0_10:
-    'sha256:c9649b31acc99a4cb0d98e558d2be9ee4be840be2c4289803f8f5e0c7c0ce1f7',
+    'sha256:21d06c2d9d45a47f6ebc68c24b9d0acec29c8ae1726d5387bd38c460a7a0a7ec',
   profile:
     'sha256:3d69742dad2fefa8bef4ba47e375defd705e3b32920a92b105a43726436fb7af',
 } as const;

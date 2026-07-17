@@ -28,7 +28,7 @@ const EXPECTED = {
   query_catalog:
     'sha256:6a6368f1300a5d732a6a63b73f593b9dd930880beafdd14958517bc92463ed2d',
   g0_10_root:
-    'sha256:c9649b31acc99a4cb0d98e558d2be9ee4be840be2c4289803f8f5e0c7c0ce1f7',
+    'sha256:21d06c2d9d45a47f6ebc68c24b9d0acec29c8ae1726d5387bd38c460a7a0a7ec',
   capacity_delta:
     'sha256:5d9e79b5f9330a5111e6f61b8d04164c87839a60d55ea350c0aa87b8b1559e66',
 } as const;

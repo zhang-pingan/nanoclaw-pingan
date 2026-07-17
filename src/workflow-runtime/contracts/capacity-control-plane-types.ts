@@ -257,7 +257,7 @@ export interface CapacityMarkdownDeltaCoverageEntry {
 export interface CapacityMarkdownDeltaCoverage {
   format: 'icarus.workflow-capacity-control-plane-markdown-delta-coverage/1';
   architecture_path: 'local/docs/dynamic-workflow-dag-framework.md';
-  architecture_sha256: Sha256Hash;
+  spec_binding_scope: 'capacity_contract_values_only';
   prior_g0_9_root_hash: Sha256Hash;
   extraction_policy: 'g0_10_delta_only_no_runtime_markdown_extraction';
   categories: CapacityMarkdownDeltaCategory[];

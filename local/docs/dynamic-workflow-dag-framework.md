@@ -154,6 +154,8 @@
 | S35 | 单 Agent 目标迭代复用同一 logical Node 的 immutable Attempt；`needs_revision` 通过 typed feedback continuation 创建下一 Attempt，耗尽后确定性失败，不新增 loop State/Node 或 Graph cycle | Delegation/System、Attempt、Retry、Recovery |
 | S36 | 本机 Core `node_service` 由项目托管的 content-addressed Node distribution 与稳定 Runtime Launcher 启动；launchd 不直接引用系统 Node，缺失或 identity mismatch 时禁止 fallback | Compiler Toolchain、SQLite Profile、模块边界、Production Gate |
 | S37 | Live Capacity 使用独立部署级 Capacity Admin Gateway；Production v1 只有认证 `human:local-owner` 持有 `runtime.capacity.manage`，完整快照以 revision+hash CAS、append-only audit、唯一 Publisher、可恢复原子文件替换和 Watcher head 校验发布 | Capacity 管理、Scheduler Admission、Runtime Center、DDL/Recovery |
+| S38 | Compiler semantic assertion唯一指向closed Conformance Case Result；Compiled IR v2纳入operand type、Map结果顺序和hashed static child closure；normal exit与error/cancel outcome分离；frozen case input additive绑定exact G2 identity | Compiler、Compiled Plan、Golden Conformance、Definition lowering |
+| S39 | v1完整验收后冻结归档本文并退出日常CI/agent必读；施工期Markdown/Gate验证转入可选archive audit，机器Contract、Schema/DDL、Compiler/Golden、Plan/Toolchain与Runtime/Release identity继续作为活动门禁 | 实施顺序、归档生命周期、测试与发布门禁 |
 
 ## 背景
 
@@ -2118,6 +2120,7 @@ interface CompiledMapNode extends CompiledGraphNodeBase {
   effective_child_concurrency: number | null;
   completion: MapCompletionPolicy;
   child_policy: CompiledChildPolicyBinding;
+  result_order: 'item_index';
 }
 
 interface CompiledTerminalNode extends CompiledGraphNodeBase {
@@ -2898,6 +2901,93 @@ scaffold/validate/compile/dry-run/review 是开发工具，不是产品管理 AP
 
 Workflow Definition Compiler、Scope Compiler 和 Static Lowerer 是不同信任边界，但共享 schema、canonical JSON、interface resolver、policy intersection 和 capability binding。
 
+### R-016：Compiler/Golden Contract 决议
+
+本节是R-016的唯一规范决议。对应machine Contract位于`src/workflow-runtime/contracts/conformance/compiler-contract-repair/`；machine Contract只绑定本节，不以整份本文的raw hash作为Compiler或Capacity identity输入。
+
+Normalized semantic assertions的唯一target artifact固定为closed `WorkflowCompilerConformanceCaseResult/1`：
+
+```ts
+type WorkflowCompilerConformanceCaseResult =
+  | {
+      format: 'icarus.workflow-compiler-conformance-case-result/1';
+      case_id: string;
+      source_kind: 'graph_scope' | 'workflow_definition' | 'workflow_schema';
+      source_hash: string;
+      outcome: 'compiled';
+      normalized_plan: CompiledScopePlan;
+      static_lowering_contract_ref: VersionedRef | null;
+      static_lowering_contract_hash: string | null;
+      diagnostics: [];
+      proof_hashes: string[];
+      program_hashes: string[];
+      result_hash: string;
+    }
+  | {
+      format: 'icarus.workflow-compiler-conformance-case-result/1';
+      case_id: string;
+      source_kind: 'graph_scope' | 'workflow_definition' | 'workflow_schema';
+      source_hash: string | null;
+      outcome: 'rejected';
+      normalized_plan: null;
+      static_lowering_contract_ref: null;
+      static_lowering_contract_hash: null;
+      diagnostics: WorkflowCompilerDiagnostic[];
+      proof_hashes: string[];
+      program_hashes: string[];
+      result_hash: string;
+    };
+```
+
+Compiled branch的lowering ref/hash必须同时为null或同时non-null；rejected branch必须同时为null。Unknown fields一律拒绝。每条assertion只保存从完整result root开始的RFC 6901 `subject_pointer`；operator closed union为`equals | set_equals | ordered_equals | contains | present | absent`。`/normalized` review projection、Golden report、Plan fragment或其他隐式对象都不是target。
+
+Canonical bytes与result identity固定为：
+
+```text
+result_hash = SHA-256(
+  ASCII("icarus:workflow-compiler-conformance-case-result:1\n")
+  || UTF8(RFC8785_JCS(result_without_result_hash))
+)
+
+canonical_result_bytes = UTF8(RFC8785_JCS(full_result_including_result_hash))
+```
+
+Delegation/system static lowering的normal named exits只能是`success`和`failure`；error/cancel没有named exit，且四种route不得互相fallback：
+
+| Capability / Runtime fact | GraphScopeOutcome | Named exit | Definition route |
+| --- | --- | --- | --- |
+| capability `succeeded` | `completed` | `success` | `on_complete.success` |
+| capability `failed` | `completed` | `failure` | `on_complete.failure` |
+| engine/invariant/compiler error | `errored` | null | `on_error` |
+| local graph cancel | `cancelled/local_graph` | null | `on_local_cancel` |
+| global workflow cancel | `cancelled/workflow` | null | 无transition；终止Workflow |
+
+Current executable Compiled IR固定为`icarus.workflow-graph-scope-plan/2`。G0.3发布的Plan `/1`只作为historical artifact保留，不再作为G2 Compiler output。IR v2必须满足：
+
+- `CompiledConditionProgram.operand_types`按normalized AST从左到右的operand evaluation order保存每个operand的JSON category，并进入`icarus:workflow-condition-program:2\n` program hash。
+- `CompiledMapNode.result_order`是required literal `item_index`，进入Plan canonical bytes/hash；Runtime不得从source、object insertion order或child completion order重新推导。
+- `CompiledScopePlan.static_child_plan_closure`内嵌完整hashed member manifest；members按parent-before-descendant、同层`closure_key` ascending排序，member count等于长度且key唯一。
+- closure member、closure和Plan分别使用`icarus:workflow-static-child-plan-closure-member:1\n`、`icarus:workflow-static-child-plan-closure:1\n`和`icarus:workflow-graph-plan:2\n`计算domain-separated hash。
+- Child Plan bytes继续是独立content-addressed Plan，由`plan_ref/plan_hash`引用；closure manifest嵌入parent Plan，不创建第二份sealed Golden oracle。
+
+Frozen G0.8 case input与真实G2 implementation identity通过`icarus.workflow-compiler-g2-case-input-binding/1` additive绑定。Binding必须精确包含historical G0.8 manifest/case catalog、Toolchain Manifest、Compiler version/build、Canonical Normalizer、Proof Algorithm、Error Catalog、Compiled IR schema和Conformance Result schema的ref/version/hash，并为每个case保存historical raw source/snapshot ref/hash与`effective_case_input_hash`。
+
+```text
+effective_case_input_hash = SHA-256(
+  ASCII("icarus:workflow-compiler-effective-case-input:1\n")
+  || JCS(case raw/snapshot identity + exact G2 implementation identity)
+)
+
+binding_hash = SHA-256(
+  ASCII("icarus:workflow-compiler-g2-case-input-binding:1\n")
+  || JCS(binding_without_binding_hash)
+)
+```
+
+G0.8 snapshot中的`production_compiler_status/canonical_normalizer_status/proof_algorithm_status=absent`只描述G0阶段事实，不是有效G2 identity。真实implementation hashes不存在时只能发布pending binding requirement，不得使用零值、占位或Draft自身hash伪装resolved identity。
+
+G0.3 Compiled IR v1与G0.8 Golden Draft v1的manifest、schemas、cases、raw bytes、snapshots和hashes保持historical evidence。R-016的Golden Draft v2复用40个historical raw/snapshot refs和hashes，但exact G2 identity与expected case result refs/hashes保持null，状态为`blocked_pending_exact_g2_identity`；`GoldenSemanticReview` absent且seal not run。Compiler完成后必须发布新的Draft version绑定真实identity和candidate results，不得由Production Compiler生成、覆盖或批准expected oracle。
+
 ### JSON、Canonicalization 与 Hash
 
 - Source IR、registry contract、typed input/output 和 wait payload 以 JSON Schema Draft 2020-12 为 dialect，但 Workflow Port 只允许 sound、受限的 `icarus.workflow-schema/1` Profile。对象默认 closed-world (`additionalProperties: false`)，`$ref` 只能解析到 pinned registry 中的精确 schema version，禁止 runtime network ref。
@@ -2907,7 +2997,7 @@ Workflow Definition Compiler、Scope Compiler 和 Static Lowerer 是不同信任
 - JSON 内部寻址统一使用 RFC 6901 JSON Pointer。Condition、data edge 和 artifact binding 不接受 dotted path、JSONPath 或自定义混合语法。
 - 输入使用能检测 duplicate object key 的 strict JSON parser；拒绝 duplicate key、`NaN`、`Infinity`、`undefined`、`BigInt` 和非 JSON 对象。结构字段数字必须是 JavaScript safe integer；高精度 decimal、money 和 64-bit integer 使用 string schema。
 - Canonical JSON 使用 RFC 8785 JCS 和 UTF-8；不额外做 Unicode normalization，stable id 使用 ASCII pattern。Source hash 对 parsed source 做 JCS 并保留业务 array 顺序；Plan hash 使用 versioned canonical normalizer：object key 排序，nodes/edges/rules/allowlists/recovery-kind 等 set-like collection 按 exact stable key 排序，route priority、selector priority、input aggregation、item order 等有业务顺序的 array 保持原序。Canonical Normalizer version/hash 进入 compiler version 与 golden fixture。
-- Hash 统一为 `sha256:<64 lowercase hex>`，并在 canonical bytes 前加入 object type/format domain separator，例如 `icarus:workflow-graph-source:1\n`、`icarus:workflow-graph-plan:1\n`、`icarus:workflow-graph-completion-cut:1\n`，禁止不同对象类型之间混用相同 payload hash。
+- Hash 统一为 `sha256:<64 lowercase hex>`，并在 canonical bytes 前加入 object type/format domain separator，例如 `icarus:workflow-graph-source:1\n`、`icarus:workflow-graph-plan:2\n`、`icarus:workflow-graph-completion-cut:1\n`，禁止不同对象类型之间混用相同 payload hash。
 - Parser、2020-12 Validator、Profile、format registry、assignability checker 和 JCS canonicalizer 的兼容版本进入 `compiler_version`；Validator 禁止 coercion、删除字段或写入 default。相同 compiler version、source、schema、interface、policy 和 catalog snapshot 必须产生逐字节相同的 plan/hash。
 
 ### Compiler Conformance Toolchain
@@ -3064,7 +3154,7 @@ interface WorkflowCompilerErrorCatalog {
 
 Error Code、phase、pointer 和 stable object id 是权威输出；本地化 message 只是 Projection。多个 Diagnostic 必须按 `(instance_pointer, code, stable_object_id, schema_pointer)` 排序后 canonicalize，Ajv 的原始错误顺序或文本不得进入契约 Hash。
 
-Compiler 编码前必须提交 Golden Draft Bundle，至少包含全部 raw source、完整 Registry/Policy/Safety 输入、hand-authored expected diagnostics/normalized semantic assertions 和 review owner；Draft 允许 positive case 的 expected Plan bytes/hash 暂为空，但不能用于 Publisher。Compiler 首次 publish/activation 前必须把全部必选 case 独立 seal 成 first-class Golden Conformance Bundle：
+Compiler 编码前必须提交 Golden Draft Bundle，至少包含全部 raw source、完整 Registry/Policy/Safety 输入、hand-authored expected diagnostics、以完整`WorkflowCompilerConformanceCaseResult/1`为唯一target的normalized semantic assertions和review owner；Draft允许positive case的expected result/Plan bytes/hash暂为空，但不能用于Publisher。Compiler首次publish/activation前必须把全部必选case独立seal成first-class Golden Conformance Bundle：
 
 ```ts
 interface WorkflowCompilerConformanceBundle {
@@ -3150,6 +3240,7 @@ interface DataEdgeCompatibilityProof {
 interface CompiledConditionProgram {
   normalized_ast: ConditionExpr;
   operand_schema_hashes: Record<string, string>;
+  operand_types: Array<'null' | 'boolean' | 'number' | 'string' | 'array' | 'object'>;
   max_steps: number;
   program_hash: string;
 }
@@ -3287,8 +3378,28 @@ Compiler CI 必须先以实际 Toolchain 逐字节重放完整 Golden Conformanc
 ### Compiled Scope Plan
 
 ```ts
+interface CompiledStaticChildPlanClosureMember {
+  closure_key: string;
+  parent_closure_key: string | null;
+  scope_key: string;
+  owner_node_path: string[];
+  factory_kind: 'inline' | 'template';
+  source_ref: VersionedRef | null;
+  source_hash: string;
+  plan_ref: string;
+  plan_hash: string;
+  interface_snapshot_hash: string;
+  member_hash: string;
+}
+
+interface CompiledStaticChildPlanClosure {
+  members: CompiledStaticChildPlanClosureMember[];
+  member_count: number;
+  closure_hash: string;
+}
+
 interface CompiledScopePlan {
-  format: 'icarus.workflow-graph-scope-plan/1';
+  format: 'icarus.workflow-graph-scope-plan/2';
   compiler_version: string;
   compiler_build_hash: string;
   compiler_toolchain_ref: VersionedRef;
@@ -3312,7 +3423,7 @@ interface CompiledScopePlan {
   data_edges: CompiledDataEdge[];
   completion: CompiledScopeCompletionPolicy;
   complexity_summary: CompiledComplexitySummary;
-  static_child_plan_closure_hash: string;
+  static_child_plan_closure: CompiledStaticChildPlanClosure;
   effective_limits: NullableWorkflowGraphLimits;
   effective_usage_budget: NullableWorkflowUsageBudget;
   runtime_safety_snapshot: WorkflowRuntimeSafetyCeilings;
@@ -3320,7 +3431,7 @@ interface CompiledScopePlan {
 }
 ```
 
-Plan 保存完整 effective business policy、runtime safety snapshot、Compiler/Toolchain/Error Catalog、Compiled Programs、Compatibility/Safety Proof、complexity summary 和 static child plan closure hash；hash 只是完整 canonical snapshot 的校验值，不能替代后续 child compile 所需的 allowlist、wait、effect、build、limit 和 safety 字段。`plan_hash` 对排除自身 hash 字段的 canonical payload 计算，并排除 instance id、actual input value/hash、ledger reservation、timestamp、lease 和运行状态。相同 source、input schema、interface、policy、safety、catalog 和 compiler 必须产生相同 plan hash，因此不同 map item 可以复用同一 plan。Actual input values 只在 scope materialize 时校验并写 instance input snapshot/hash 与 Run Manifest entry。
+Plan保存完整effective business policy、runtime safety snapshot、Compiler/Toolchain/Error Catalog、Compiled Programs、Compatibility/Safety Proof、complexity summary和embedded static child plan closure member manifest；hash只是完整canonical snapshot的校验值，不能替代后续child compile所需的allowlist、wait、effect、build、limit和safety字段。`plan_hash`使用`icarus:workflow-graph-plan:2\n`对排除自身hash字段的canonical payload计算，并排除instance id、actual input value/hash、ledger reservation、timestamp、lease和运行状态。Closure members按parent-before-descendant、同层`closure_key` ascending排序；member/closure hash按S38公式验证。相同source、input schema、interface、policy、safety、catalog和compiler必须产生相同plan hash，因此不同map item可以复用同一plan。Actual input values只在scope materialize时校验并写instance input snapshot/hash与Run Manifest entry。
 
 第一版 Runtime 直接解释 normalized typed AST，不引入自定义 bytecode。Runtime 禁止 recompile、re-prove、重新解析 Source Condition 或重新选择 Route 顺序；它只验证 Plan/Proof/Schema Snapshot 完整性以及实际 Value 的 schema/hash/pointer/byte-length。Source Snapshot 仅用于审计，执行唯一来源是 pinned Compiled Plan。Plan、Proof、Program 或 algorithm hash 缺失/不匹配属于 integrity violation，进入 quarantine，Recovery 不得重新生成并覆盖旧结果。
 
@@ -5792,6 +5903,7 @@ CI 分层：普通提交运行 managed toolchain manifest/bootstrap/launcher/lau
 8. **控制、Card、Projection 与恢复**：实现 pause/resuming/cancel、root coordinator、checkpoint、domain claim handoff/release、T6e、Recovery、Runtime Command Gateway、Card Presentation/typed action、Runtime Center Projection/API/deep link、Capacity 诊断/管理子页与独立 renderer bundle；Capacity UI 只能调用 authoritative Capacity Admin API，仍只在 test-only bootstrap 下执行未认证 Runtime。
 9. **认证门禁**：完成独立 Reference Model、Property/Model/Fault tests 与真实 SQLite Supported Limit T3/T7/Root-Finalization benchmark，达到 Product Floor/transaction budget，并发布与完整 certification key 精确绑定的首个 certified profile。
 10. **Production Activation**：对同一 release build 重新生成并校验 `WorkflowRuntimeAbsenceBaseline`、`ProductSurfaceCoverageManifest` 与 `MigrationCandidateBoundaryManifest`，由 stable Launcher 启动 active managed Node distribution，验证 Launcher/Core Release/Distribution/Node executable/native module/SQLite Profile 完整 certification key并运行 startup smoke；fresh deployment 以 `system:production-activation` 一次性 grant 从 checked-in baseline 创建 revision 1 genesis audit/publication，existing deployment 则验证并保留原 Capacity head/file，不得重置。随后原子激活 Core/Feature Registry pointer 与 Runtime Center Projection generation。Production Recipe inventory 可以为空；为空时验证通用 Intake=`no_route_available`、Runtime Center Workflow/待处理空状态和非 Workflow Trace 正常。存在 Published Recipe 时只验证其标准 Publish/Activate 合同，不增加任何历史候选特例。
+11. **规范归档与验证生命周期切换**：G9和本文完整验收全部通过后，执行下文归档审计；冻结本文为v1只读设计底稿，移除agent全文必读和活动CI/identity依赖，将阶段性Gate证据转入可选archive audit。该步骤不得删除Schema、DDL、Store、Compiler、Golden、Plan、Toolchain、Release或Runtime启动验证，也不得改变已经激活release的identity。
 
 Gate 依赖与可并行关系固定如下：
 
@@ -5877,6 +5989,26 @@ Absence generator 使用 TypeScript AST/import graph、Web route enumeration、E
 `dev_test/fix_test` 资源已作为不可执行 migration candidate 独立保存；是否迁移由 Runtime v1 完成后的独立产品决策决定，不属于本文实现、认证、Product Floor 或 Production Activation。
 
 所有测试使用临时 `DATA_DIR/STORE_DIR`，不得写真实用户数据或把候选资料复制到 fixture root。Pure resolver/Compiler 与 test-only benchmark 可以在没有 certified profile 时运行；任何真实 ingress/Adapter 的 Runtime 必须通过 G8/G9。Production v1 仍固定本地单用户 `node_service + darwin/arm64`；真实文件 SQLite 的 T3/T7/Root Finalization Supported Limit、WAL、复杂度和绝对事务时长是发布门禁。若未来部署边界变为多用户、远程服务、多机或分布式 scheduler，必须重新打开 Threat Model、权限隔离、Value 机密性和存储选型，不得沿用本版本认证结论。
+
+## v1验收完成后的规范归档与验证生命周期
+
+本文是Dynamic Workflow Runtime v1重构期间的完整施工设计底稿，不是Production Runtime输入，也不是永久日常开发入口。只有同时满足以下条件才允许归档：G0-G9和完整验收基于同一release全部通过；所有Normative字段、状态、事务、恢复和发布规则均已落入TypeScript/JSON Schema/Contract、DDL约束、实现或正反/Model/Fault测试；Sealed Golden、certified Profile、Core Release Manifest和G9 activation audit已发布；Production build/startup不读取本文；最终coverage audit没有发现只存在于Markdown的关键规则。
+
+归档操作固定为：
+
+1. 冻结本文为`Dynamic Workflow Runtime v1`只读历史设计底稿，保留Git和审计可达性但不再原地扩写；后续局部语义变化使用领域文档、ADR和新Contract version，下一次整体重构建立新的versioned设计底稿。
+2. 从实施进度账本和agent协议删除“开工前全文阅读本文”；默认开发入口改为简短architecture/index、受影响领域文档、当前machine Contract和对应测试。
+3. 从默认CI、构建和Runtime identity中移除对归档Markdown的读取、raw hash、字符串coverage和章节hash；Production Runtime、Compiler、Publisher、Store和Launcher不得解析归档文档。
+4. 保留历史G0/G1/R-016 root、旧Markdown coverage和阶段Gate artifact作为只读审计证据；若仍需复验，只能在对应release tag/commit上通过独立`archive:verify:v1`类入口运行，不进入普通提交、发布或Production启动必跑路径。
+5. 将默认验证拆成current machine Contract、Schema/DDL/Store、Compiler/Golden、Runtime行为和Release/startup identity；归档不得以“阶段已完成”为由删除这些长期安全门禁。
+
+归档时应退出活动流程的施工期验证包括：G0.9/G0.10从主Markdown抽取或覆盖字符串的检查、R-016规范章节hash、Gate状态必须为`READY/NOT_READY`的里程碑断言、以及“后续Compiler/Registry/Runtime尚不存在”的absence断言。旧artifact中的这些字段和hash保持历史事实，不回写；退出活动流程表示默认工具不再用当前仓库或归档文档重新计算它们。
+
+归档后必须继续执行的验证包括：Contract artifact format/ref/version/hash与closed schema；Definition/Plan/Policy/Safety exact identity；Compiler Toolchain和Sealed Golden replay；Schema Manifest、migration SQL、SQLite Profile、constraint/index/trigger与Store transaction/reopen/mismatch测试；Runtime的CAS/fencing/idempotency/recovery/model/fault测试；Core/Feature Release、Launcher、managed Node、native module和G9 startup identity。它们验证当前机器输入和运行行为，与本文是否归档无关。
+
+G1的`historicalContractTreeDigest()`属于施工期过宽目录快照，不得成为归档后current G1、Store或Production启动identity。继续G2/G3新增大量Contract前应将current G1改为显式dependency manifest，只列出实际影响Schema/DDL的G0.6 Logical Schema、typed relation/query catalog、G0.10 Capacity Logical Schema delta、SQLite Profile、Schema Manifest和migration等成员及exact hash；新增无关Compiler/Golden/Registry JSON不得改变G1 identity。旧G1 artifact可保留原tree digest供archive audit，current Store则由Core Release Manifest绑定schema/migration/profile ref/hash，不再硬编码施工阶段`FROZEN_G1_1_IDENTITIES`作为永久release identity。
+
+归档完成后的默认验证职责应等价于：`contracts:check`只检查current machine artifacts；Schema/Store套件长期验证数据库；Compiler conformance重放sealed expected；Runtime/Release startup检查实际激活identity；历史阶段验证单独、按需运行。归档是验证职责迁移，不是删除hash机制，也不是降低Production门禁。
 
 ## 开发期直接重构约束
 

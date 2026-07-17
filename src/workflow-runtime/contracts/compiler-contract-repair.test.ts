@@ -29,6 +29,7 @@ import {
   COMPILER_CASE_RESULT_DOMAIN_SEPARATOR,
   COMPILER_CONTRACT_REPAIR_ROOT,
   COMPILER_CONTRACT_REPAIR_SPEC_PATH,
+  COMPILER_CONTRACT_REPAIR_SPEC_SECTION,
   G2_CASE_INPUT_BINDING_DOMAIN_SEPARATOR,
   G2_CASE_INPUT_DOMAIN_SEPARATOR,
   HISTORICAL_COMPILED_IR_SCHEMA_HASH,
@@ -41,7 +42,9 @@ import {
   calculateCompilerConformanceCaseResultHash,
   calculateEffectiveG2CaseInputHash,
   calculateG2CaseInputBindingHash,
-  compilerContractRepairSpecHash,
+  compilerContractRepairSpecSectionBytes,
+  compilerContractRepairSpecSectionHash,
+  extractCompilerContractRepairSpecSectionBytes,
   validateSemanticHash,
 } from './compiler-contract-repair-source.js';
 import { canonicalJson, domainSeparatedSha256 } from './hash.js';
@@ -163,7 +166,7 @@ describe('R-016 Compiler spec and Contract repair', () => {
         'conformance/capacity-control-plane-addendum/contract-pack-capacity-control-plane-addendum.json',
       ).hash,
     ).toBe(
-      'sha256:c9649b31acc99a4cb0d98e558d2be9ee4be840be2c4289803f8f5e0c7c0ce1f7',
+      'sha256:21d06c2d9d45a47f6ebc68c24b9d0acec29c8ae1726d5387bd38c460a7a0a7ec',
     );
     expect(readArtifact('schemas/compiled-scope-plan-schema.json').hash).toBe(
       HISTORICAL_COMPILED_IR_SCHEMA_HASH,
@@ -177,17 +180,34 @@ describe('R-016 Compiler spec and Contract repair', () => {
     expect(rawSha256('conformance/draft/golden-draft-cases@1.json')).toBe(
       HISTORICAL_G0_8_CASE_CATALOG_RAW_SHA256,
     );
-    const specRawHash = `sha256:${crypto
+    const sectionBytes = compilerContractRepairSpecSectionBytes();
+    expect(sectionBytes.toString('utf8')).toMatch(
+      new RegExp(`^${COMPILER_CONTRACT_REPAIR_SPEC_SECTION}`),
+    );
+    const specSectionHash = `sha256:${crypto
       .createHash('sha256')
-      .update(
-        fs.readFileSync(
-          path.join(repoRoot, COMPILER_CONTRACT_REPAIR_SPEC_PATH),
-        ),
-      )
+      .update(sectionBytes)
       .digest('hex')}`;
-    expect(compilerContractRepairSpecHash()).toBe(specRawHash);
+    expect(compilerContractRepairSpecSectionHash()).toBe(specSectionHash);
+    const architecture = fs.readFileSync(
+      path.join(repoRoot, COMPILER_CONTRACT_REPAIR_SPEC_PATH),
+      'utf8',
+    );
+    expect(
+      extractCompilerContractRepairSpecSectionBytes(
+        `# Unrelated preface\n\n${architecture}`,
+      ),
+    ).toEqual(sectionBytes);
+    expect(
+      extractCompilerContractRepairSpecSectionBytes(
+        architecture.replace(
+          'blocked_pending_exact_g2_identity',
+          'changed_r016_contract_value',
+        ),
+      ),
+    ).not.toEqual(sectionBytes);
     expect(historicalContractTreeDigest()).toBe(
-      '241f17fa352b15b198cfcb5c28cb892b669d22ca1d3736a90c99622a0431f2f3',
+      'a40e2e801ae4bb331a90b49eca457c48e29cc88c3eb32670dedd3c90387a8d15',
     );
   });
 
@@ -570,7 +590,9 @@ describe('R-016 Compiler spec and Contract repair', () => {
       g3_through_g9_status: 'NOT_READY',
       release_identity_status: 'missing_until_g8',
       normative_spec_ref: COMPILER_CONTRACT_REPAIR_SPEC_PATH,
-      normative_spec_raw_sha256: compilerContractRepairSpecHash(),
+      normative_spec_section: COMPILER_CONTRACT_REPAIR_SPEC_SECTION,
+      normative_spec_section_raw_sha256:
+        compilerContractRepairSpecSectionHash(),
     });
     expect(
       fs.readdirSync(path.join(contractsRoot, 'conformance/sealed')),

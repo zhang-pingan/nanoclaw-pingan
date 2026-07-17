@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-contract-pack-compiler-contract-repair:1\n",
-  "hash": "sha256:8c38201cd37c93bf4acef88151b1b8375ab23ce5566c5bc718d19c25d4484b35",
+  "hash": "sha256:776d516ba6c8c73a7da33895a4f4f3680054a1e93fbf056acdfc3ec36550b324",
   "payload": {
     "gate": "G2-contract-repair",
     "repair_id": "R-016",
@@ -15,10 +15,11 @@
     "historical_g0_3_manifest_hash": "sha256:c5ea281d64480787322e8b6ef619b2f90784084d87ba4373c94288ed5e7aa3a8",
     "historical_g0_8_manifest_hash": "sha256:52fc0266020c03a54527d7a2f735dfaef0494b5d7ae3f12dd1bf9b58a547fd22",
     "historical_g0_8_case_catalog_hash": "sha256:20be39783a5c775c0d804ce16db683540b72bcc2aa1750f9f1b93c9b7c1c4aa3",
-    "normative_spec_ref": "local/docs/dynamic-workflow-g2-contract-repair-v1.md",
-    "normative_spec_raw_sha256": "sha256:28452a21f49f92ce81769d4655771b9999e74b3c50f03e4b750f0652c27b1466",
-    "generated_by_tool_hash": "sha256:9dce1315fdc4bb73e956e244a3d0082c32548968fdac0b3b7234113a6c670465",
-    "repair_decision_hash": "sha256:ed49446e51abc873f728ee1b8a47c0f9268c34a79815346301d6d8cabd41fc93",
+    "normative_spec_ref": "local/docs/dynamic-workflow-dag-framework.md",
+    "normative_spec_section": "### R-016：Compiler/Golden Contract 决议",
+    "normative_spec_section_raw_sha256": "sha256:dfb1fdf45a5858f52a39f0dd10e382a4f2b2dfe6e35eddc4d9637a99497c84d5",
+    "generated_by_tool_hash": "sha256:b1ed1a100dbc0345dee3c8cc2d4dc3a2261a9bf25b4ef8e415659e3e705c5a6e",
+    "repair_decision_hash": "sha256:de8aa61350073001dd8835bcdceb63ba490729acdd32fbdc3e2aaa716299e5c7",
     "golden_draft_v2_hash": "sha256:6b3d3e337c2486b71508f2b6d37f0ce4d2f475d24229f5b87af4f96fec8215e1",
     "fixture_hash": "sha256:d888eeaf8b504e4923384e50c4be0d6c42cf21ade6214e6f20e379adcc2ca6c7",
     "artifact_count": 14,
@@ -58,7 +59,7 @@
         },
         "version": 1,
         "domain_separator": "icarus:workflow-compiler-contract-repair-decision-artifact:1\n",
-        "hash": "sha256:ed49446e51abc873f728ee1b8a47c0f9268c34a79815346301d6d8cabd41fc93"
+        "hash": "sha256:de8aa61350073001dd8835bcdceb63ba490729acdd32fbdc3e2aaa716299e5c7"
       },
       {
         "path": "conformance/compiler-contract-repair/contract-fixtures/repair-cases@1.json",

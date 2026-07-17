@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-capacity-control-plane-artifact-inventory-artifact:1\n",
-  "hash": "sha256:d89d998698b8a8589e086f8f5b9ab58528b4cae688894664a649588f07f42415",
+  "hash": "sha256:b5510c39337d1376c192d6147a5d1785cac979b1938ed97fc40f48cff9cdbb0a",
   "payload": {
     "format": "icarus.workflow-capacity-control-plane-artifact-inventory/1",
     "inventory_scope": "g0_9_historical_root_and_g0_10_non_recursive_leaf_artifacts",
@@ -58,9 +58,9 @@
         "artifact_class": "coverage",
         "path": "src/workflow-runtime/contracts/conformance/capacity-control-plane-addendum/markdown-delta-coverage@1.json",
         "format": "icarus.workflow-capacity-control-plane-markdown-delta-coverage/1",
-        "byte_length": 23897,
-        "raw_sha256": "sha256:e788f2578095eced0baaab61c27dec1202652864e21ac770723231062bc8badf",
-        "semantic_hash": "sha256:f18571b4e9e48d31e9a60b31d7311921ece4565d7e2865c5ecbbafa5fc3bc4de"
+        "byte_length": 23854,
+        "raw_sha256": "sha256:cf55acbc899b85060b4dc431b7fcb35c1fec46e24d945cdc4edef54c00131622",
+        "semantic_hash": "sha256:7bf04f63057d80ea3e07331bb945b78ca6bd0d5f0300e2980e04edad263cb361"
       },
       {
         "artifact_id": "G0.10:src/workflow-runtime/contracts/conformance/capacity-control-plane-addendum/negative-cases.json",
@@ -168,9 +168,9 @@
         "artifact_class": "schema",
         "path": "src/workflow-runtime/contracts/conformance/capacity-control-plane-addendum/schemas/capacity-markdown-delta-coverage-schema.json",
         "format": "icarus.workflow-capacity-control-plane-markdown-delta-coverage-schema/1",
-        "byte_length": 6058,
-        "raw_sha256": "sha256:d55c54723d5a16ac0299716002fa83c34c2fdfca523a6ae5e62ee2ee4c62694c",
-        "semantic_hash": "sha256:4f8d14c46176d19c1ffbc5c251347d78217ad7cab53cbba995083119b43d8a49"
+        "byte_length": 6036,
+        "raw_sha256": "sha256:07f366317e3672456f740b1b422fb3f921a4e4d93a3f5b691ff030120052032e",
+        "semantic_hash": "sha256:5d0cb20152495da3b2c8ff3481269faf6b5fa4739552a6bd2ed576e0d31a5b15"
       },
       {
         "artifact_id": "G0.10:src/workflow-runtime/contracts/conformance/capacity-control-plane-addendum/schemas/capacity-negative-cases-schema.json",
@@ -255,6 +255,6 @@
     },
     "duplicate_paths": [],
     "missing_paths": [],
-    "inventory_hash": "sha256:c74237dbd60acc7fa9059323b5bd5c38e360c3ffc0b333ad075d94b2907ea23b"
+    "inventory_hash": "sha256:7af9bce89ea771d18a7365f2d1551c9c4ba03866bc788d9a5f2752893429a6a3"
   }
 }

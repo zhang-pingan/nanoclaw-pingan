@@ -123,7 +123,7 @@ describe('G1.1 executable workflow runtime schema', () => {
     expect(built.artifacts.at(-1)?.[1].payload).toMatchObject({
       gate: 'G1.1',
       g0_10_root_hash:
-        'sha256:c9649b31acc99a4cb0d98e558d2be9ee4be840be2c4289803f8f5e0c7c0ce1f7',
+        'sha256:21d06c2d9d45a47f6ebc68c24b9d0acec29c8ae1726d5387bd38c460a7a0a7ec',
     });
     withDatabase((database, databasePath) => {
       const manifest = reconstructSchemaManifest(

@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-capacity-control-plane-markdown-delta-coverage-schema:1\n",
-  "hash": "sha256:4f8d14c46176d19c1ffbc5c251347d78217ad7cab53cbba995083119b43d8a49",
+  "hash": "sha256:5d0cb20152495da3b2c8ff3481269faf6b5fa4739552a6bd2ed576e0d31a5b15",
   "payload": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "$id": "urn:icarus:workflow-capacity-control-plane-markdown-delta-coverage:1",
@@ -16,7 +16,7 @@
     "required": [
       "format",
       "architecture_path",
-      "architecture_sha256",
+      "spec_binding_scope",
       "prior_g0_9_root_hash",
       "extraction_policy",
       "categories",
@@ -35,9 +35,8 @@
       "architecture_path": {
         "const": "local/docs/dynamic-workflow-dag-framework.md"
       },
-      "architecture_sha256": {
-        "type": "string",
-        "pattern": "^sha256:[0-9a-f]{64}$"
+      "spec_binding_scope": {
+        "const": "capacity_contract_values_only"
       },
       "prior_g0_9_root_hash": {
         "type": "string",

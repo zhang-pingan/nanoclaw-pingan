@@ -6,17 +6,17 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-compiler-contract-repair-decision-artifact:1\n",
-  "hash": "sha256:ed49446e51abc873f728ee1b8a47c0f9268c34a79815346301d6d8cabd41fc93",
+  "hash": "sha256:de8aa61350073001dd8835bcdceb63ba490729acdd32fbdc3e2aaa716299e5c7",
   "payload": {
     "format": "icarus.workflow-compiler-contract-repair-decision/1",
     "repair_id": "R-016",
     "repair_status": "spec_and_contract_repaired",
     "normative_spec": {
-      "base_spec_ref": "local/docs/dynamic-workflow-dag-framework.md",
-      "base_spec_raw_sha256": "sha256:8f860bcba8c7f7e314d0ce115d505cbb00519d431fcfebce9bd2c387b70d8f1c",
-      "additive_repair_spec_ref": "local/docs/dynamic-workflow-g2-contract-repair-v1.md",
-      "additive_repair_spec_raw_sha256": "sha256:28452a21f49f92ce81769d4655771b9999e74b3c50f03e4b750f0652c27b1466",
-      "precedence": "repair_addendum_overrides_r016_topics_only"
+      "spec_ref": "local/docs/dynamic-workflow-dag-framework.md",
+      "section_heading": "### R-016：Compiler/Golden Contract 决议",
+      "section_raw_sha256": "sha256:dfb1fdf45a5858f52a39f0dd10e382a4f2b2dfe6e35eddc4d9637a99497c84d5",
+      "binding_scope": "r016_section_only",
+      "authority": "integrated_primary_spec"
     },
     "historical_contracts": {
       "g0_3_manifest_hash": "sha256:c5ea281d64480787322e8b6ef619b2f90784084d87ba4373c94288ed5e7aa3a8",
@@ -91,6 +91,6 @@
       "g3_or_later_implementation",
       "g8_or_g9_identity"
     ],
-    "repair_hash": "sha256:b2475a347cf0a8205eb4d3e8d1f8646020b0e5f9608de38a81b61786044c3a1f"
+    "repair_hash": "sha256:740c9d72897813a93bcc6b369cce6b1069f335e690fcf8cd0cb75ac7fb261b26"
   }
 }

@@ -4,11 +4,11 @@
 > **当前 Gate**: G2 Compiler / Sealed Golden（READY）
 > **下一施工切片**: G2 Production Compiler implementation + exact case-input identity binding（不含 Golden approval/seal）
 > **最后更新**: 2026-07-16
-> **规范权威**: `local/docs/dynamic-workflow-dag-framework.md` + R-016 additive `local/docs/dynamic-workflow-g2-contract-repair-v1.md`
+> **规范权威**: `local/docs/dynamic-workflow-dag-framework.md`
 
 ## 文档职责
 
-本文是 Dynamic Workflow Runtime 的实施状态账本，用于跨会话记录已经完成的施工切片、实际交付物、验证证据、提交和下一步。本文不定义 Runtime 语义，也不替代架构规范；类型、状态、事务、Logical Schema、Gate 和验收条款冲突时，始终以 `local/docs/dynamic-workflow-dag-framework.md` 及其明确列出的 versioned normative addendum为权威，并先修正规范或 Contract Pack，不能由实现自行选择语义。R-016 topics由 `local/docs/dynamic-workflow-g2-contract-repair-v1.md` additive覆盖，base spec bytes因已进入 G0.10/G1 published identity而保持 immutable。
+本文是 Dynamic Workflow Runtime 的实施状态账本，用于跨会话记录已经完成的施工切片、实际交付物、验证证据、提交和下一步。本文不定义 Runtime 语义，也不替代架构规范；类型、状态、事务、Logical Schema、Gate 和验收条款冲突时，始终以 `local/docs/dynamic-workflow-dag-framework.md` 为权威，并先修正规范或 Contract Pack，不能由实现自行选择语义。Machine Contract只绑定自己拥有的规范章节或closed contract values，不得以整份持续编辑的主规范raw hash作为无关领域identity输入。
 
 下一会话 Prompt 不写入本文。每个施工切片完成并提交后，由当前会话在最终回复中根据实际 commit 和验证结果生成下一会话 Prompt。
 
@@ -16,7 +16,7 @@
 
 每个新会话开始施工前必须：
 
-1. 完整阅读 `local/docs/dynamic-workflow-dag-framework.md` 及本文列出的全部 normative addendum，不得用本文或局部摘要代替全文。
+1. 完整阅读 `local/docs/dynamic-workflow-dag-framework.md`，不得用本文或局部摘要代替全文。
 2. 阅读本文，确认当前 Gate、下一施工切片、已完成证据和未解决风险。
 3. 执行 `git status --short`、`git branch --show-current`、`git log -5 --oneline`，并阅读本文记录的最后一个施工提交。
 4. 根据规范“实现索引”确定工作包 ID，重点复读其主要入口、必须联读、核心不变量和完整验收标准。
@@ -160,9 +160,11 @@ G0.1-G0.9 已按当时规范完成并保留历史 identity。后续确认的 Cap
 
 **状态**：`DONE`；R-016 `CLOSED`，G2/I2/I3 由 `BLOCKED_BY_SPEC` 转为 `READY`。
 
-**工作包**：I2/I3 Contract 边界。本切片只修改架构规范、additive Contract Pack、Golden Draft v2、定向测试和本账本；没有实现 Compiler、normalizer、lowerer、proof/program，没有创建 Golden approval/seal、`conformance/sealed/` artifact、`test:g2`，也没有开始 G3+、G8/G9 identity、SQLite certification 或 production activation。
+**工作包**：I2/I3 Contract 边界。本切片只修改主架构规范、Contract Pack、Golden Draft v2、定向测试和本账本；没有实现 Compiler、normalizer、lowerer、proof/program，没有创建 Golden approval/seal、`conformance/sealed/` artifact、`test:g2`，也没有开始 G3+、G8/G9 identity、SQLite certification 或 production activation。
 
-2026-07-16 从 clean `main@7b74df2` 开始，完整阅读架构规范与本账本，并复核分支、最近五个提交和 `7b74df2` diff。Base framework bytes已被 G0.10/G1 published identity精确引用，因此不原地改写；R-016以 versioned normative addendum `dynamic-workflow-g2-contract-repair-v1.md` 发布 S38单一方案，并由 repair decision/root绑定其 raw hash：
+R-016最初以独立addendum交付，原因是G0.10错误地把整份主规范raw hash纳入Capacity identity。后续开发审查确认该绑定范围过宽：Compiler正文变化不应级联改变Capacity语义。当前已完成开发期有意重新基线，删除独立addendum，把S38和完整R-016决议合并回`dynamic-workflow-dag-framework.md`，并同步修正原文中的Compiled IR、Map、condition和Golden target定义。主规范恢复为唯一规范入口。
+
+G0.10 Markdown coverage不再保存整份架构文档`architecture_sha256`，而以`spec_binding_scope=capacity_contract_values_only`只绑定33个Capacity closed contract values及coverage结果。定向测试证明追加无关Compiler正文不改变Capacity coverage hash，删除Capacity permission value会进入`contract_values_without_markdown`并失败。R-016 repair pack只绑定主规范的`### R-016：Compiler/Golden Contract 决议`章节raw bytes，不绑定整份主规范。
 
 1. Normalized semantic assertions 的唯一 target 固定为 closed `icarus.workflow-compiler-conformance-case-result/1`。Canonical bytes 是包含 `result_hash` 的完整 UTF-8 RFC 8785 JCS；`result_hash` 使用 domain `icarus:workflow-compiler-conformance-case-result:1\n` 对去除自身字段的 result JCS 计算。Compiled branch 的 static-lowering ref/hash 必须成对 null 或成对 non-null。
 2. Delegation/system static lowering 的 normal named exits 只允许 `success/failure`。Engine error 产生 `errored -> on_error`；local graph cancel 产生 `cancelled/local_graph -> on_local_cancel`；global workflow cancel 产生 `cancelled/workflow` 并终止 Workflow、不得读取 state transition。Error/cancel 都没有 named exit。
@@ -174,9 +176,9 @@ G0.1-G0.9 已按当时规范完成并保留历史 identity。后续确认的 Cap
 
 | Artifact | Identity |
 | --- | --- |
-| R-016 repair root | `sha256:8c38201cd37c93bf4acef88151b1b8375ab23ce5566c5bc718d19c25d4484b35` |
-| Repair decision | `sha256:ed49446e51abc873f728ee1b8a47c0f9268c34a79815346301d6d8cabd41fc93` |
-| Normative repair spec raw bytes | `sha256:28452a21f49f92ce81769d4655771b9999e74b3c50f03e4b750f0652c27b1466` |
+| R-016 repair root | `sha256:776d516ba6c8c73a7da33895a4f4f3680054a1e93fbf056acdfc3ec36550b324` |
+| Repair decision | `sha256:de8aa61350073001dd8835bcdceb63ba490729acdd32fbdc3e2aaa716299e5c7` |
+| Integrated R-016 spec section raw bytes | `sha256:dfb1fdf45a5858f52a39f0dd10e382a4f2b2dfe6e35eddc4d9637a99497c84d5` |
 | Compiled Scope Plan schema v2 | `sha256:4d4e325f94b55a6767f3e8596e1e9b880df2b402d3c89f587a10a23f0eadbd46` |
 | Conformance Case Result schema v1 | `sha256:019a4ba80ed8ae57b6c862d9fda62d9edcb8aca9c4910fde6bbb580c09af8706` |
 | Static lowering Contract v1 | `sha256:9e78643e882446209207cd42da8b635a143d4ef74a859941f5faaca4322184e5` |
@@ -186,21 +188,21 @@ G0.1-G0.9 已按当时规范完成并保留历史 identity。后续确认的 Cap
 
 `contracts:generate/check` 现在在 G0.10 后生成或只读验证隔离 repair root；CI 新增 `test:g2:contract`，只验证 Contract repair，不冒充 G2 Compiler Gate。7 个定向测试覆盖 deterministic generation/read-only check、G0.3/G0.8 semantic/raw byte pins、IR v2 closed positive/negative shape、result canonical/hash target、lowering outcome disjointness、40-case additive identity binding和 Compiler/Golden/G3+/G8/G9 absence boundary。
 
-G1.1 的 `historicalContractTreeDigest()` 原先会把未来新增 Contract JSON也纳入“历史”闭包，导致 additive R-016目录改变 G1 expected digest。该函数现显式排除 `conformance/compiler-contract-repair/`；G1.1 root仍为 `sha256:54c120e211ed28a9c2dcc2907ec728b39ce68748a07dc631d307c9aa59693f78`，historical tree digest仍为 `241f17fa352b15b198cfcb5c28cb892b669d22ca1d3736a90c99622a0431f2f3`，`schema:check`证明没有改写任何 G1 artifact。
+G0.10 current root有意重新基线为`sha256:21d06c2d9d45a47f6ebc68c24b9d0acec29c8ae1726d5387bd38c460a7a0a7ec`。G1 provenance随上游更新，G1.1 root为`sha256:8950c4be872f34b1e048fe28fd1c267ed2da97a685e0e874eba1dc14deba4c52`，historical Contract tree digest为`a40e2e801ae4bb331a90b49eca457c48e29cc88c3eb32670dedd3c90387a8d15`。Physical SQLite migration raw hash仍为`sha256:d89829995e164355ad485fc117db88dd67a72409f00ec3c3c54253f30a589f61`，因此本次只改变spec binding和provenance，不改变78-table executable SQL。
 
 最终验证全部通过 managed runtime串行执行；Node 26 `DEP0205 module.register()`告警保持既有 R-010：
 
 | 命令/证据 | 结果 |
 | --- | --- |
-| managed repair generate（连续两次） | PASS；两次 repair root均为 `sha256:8c38201cd37c93bf4acef88151b1b8375ab23ce5566c5bc718d19c25d4484b35`，repair tree digest均为 `3110c1518e70f1edb218dd285218d34fbddf26a4d3f162383971a5b43428fabc` |
-| managed `npm run contracts:check` | PASS；G0.3 `c5ea…`、G0.8 `52fc…`、G0.9 `df30…`、G0.10 `c964…`、G1.1 root `54c1…`与 Store candidate identity全部保持，repair root read-only check通过 |
-| managed `npm run test:g0` | PASS，15 files / 109 tests；包含 G0.8 frozen Draft、G0.9 historical与 G0.10 deterministic replay |
-| managed `npm run test:g1.1` | PASS，1 file / 8 tests；G1 artifacts byte-identical |
-| managed `npm run test:g1.2` | PASS，1 file / 10 tests |
+| managed Contract generation | PASS；G0.2-G0.9 identities保持，G0.10=`21d06c…a0a7ec`，R-016=`776d51…50b324` |
+| managed G1 generation | PASS；G1.1 root=`8950c4…ba4c52`，physical migration hash保持`d89829…9f61` |
+| managed `npm run test:g0.10` | PASS，1 file / 10 tests；包含spec-binding scope正反验证 |
+| managed `npm run contracts:check` / `npm run test:g0` | PASS；read-only全链通过，15 files / 109 tests |
+| managed `npm run test:g1.1` / `npm run test:g1.2` | PASS；8/8与10/10，真实文件SQLite bootstrap/reopen和identity gate通过 |
 | managed `npm run test:g2:contract` | PASS，1 file / 7 tests |
 | managed `npm run typecheck` | PASS |
-| managed `npm test` | 79/80 files、723/724 tests；唯一失败为既有 R-012 `credential-proxy` 250ms async trace，单文件重放同为 20/21；R-016与其余 723 tests通过，未修改或放宽该范围外测试 |
 | managed `npm run build` | PASS |
+| managed `npm test` | 77/80 files、721/724 tests；失败仅为已登记R-012 trace 250ms、R-013 G0.6 5s与R-015 toolchain 5s；三者对应定向套件均通过，未修改范围外timeout或测试 |
 
 ### 2026-07-16：G2 开工审计（historical blocker record）
 
@@ -259,11 +261,11 @@ Frozen inputs 保持不变：
 
 | Input                        | Identity                                                                  |
 | ---------------------------- | ------------------------------------------------------------------------- |
-| G0.10 current root           | `sha256:c9649b31acc99a4cb0d98e558d2be9ee4be840be2c4289803f8f5e0c7c0ce1f7` |
-| G1.1 executable schema root  | `sha256:54c120e211ed28a9c2dcc2907ec728b39ce68748a07dc631d307c9aa59693f78` |
-| domain-separated schema hash | `sha256:33f843e57ddc1cdae80e67d5f0254653985cd7062017a9ecee9409b389fdd26e` |
+| G0.10 current root           | `sha256:21d06c2d9d45a47f6ebc68c24b9d0acec29c8ae1726d5387bd38c460a7a0a7ec` |
+| G1.1 executable schema root  | `sha256:8950c4be872f34b1e048fe28fd1c267ed2da97a685e0e874eba1dc14deba4c52` |
+| domain-separated schema hash | `sha256:9e75471258a4fa4d28c67859b39b7fb36ce9142eacb91d38a70b45b155ba79ce` |
 | canonical migration SHA-256  | `sha256:d89829995e164355ad485fc117db88dd67a72409f00ec3c3c54253f30a589f61` |
-| deterministic digest         | `sha256:b97c8075984dc2ffb741dfa5b218155af28e5067d44ab2032de54f3258281dcb` |
+| deterministic digest         | `sha256:6e88f0618e94294647d7ff72bb64a20dddb490a6bdee4da6ee38d06fd7a7fcb2` |
 | SQLite Profile artifact      | `sha256:3d69742dad2fefa8bef4ba47e375defd705e3b32920a92b105a43726436fb7af` |
 
 Identity evidence：
@@ -312,15 +314,15 @@ SQLite 可执行性判定：G0.10 的 nullable lineage parent keys `assigned_cha
 
 | Artifact | Hash |
 | --- | --- |
-| G1.1 executable schema root | `sha256:54c120e211ed28a9c2dcc2907ec728b39ce68748a07dc631d307c9aa59693f78` |
-| domain-separated schema hash | `sha256:33f843e57ddc1cdae80e67d5f0254653985cd7062017a9ecee9409b389fdd26e` |
+| G1.1 executable schema root | `sha256:8950c4be872f34b1e048fe28fd1c267ed2da97a685e0e874eba1dc14deba4c52` |
+| domain-separated schema hash | `sha256:9e75471258a4fa4d28c67859b39b7fb36ce9142eacb91d38a70b45b155ba79ce` |
 | canonical migration SHA-256 | `sha256:d89829995e164355ad485fc117db88dd67a72409f00ec3c3c54253f30a589f61` |
-| deterministic digest | `sha256:b97c8075984dc2ffb741dfa5b218155af28e5067d44ab2032de54f3258281dcb` |
-| Schema Manifest / contract | `sha256:42db16f9f104c5a6ebc7570baced9049a80dbfb047ddfcb46f478a62b04091b0` / `sha256:2c2394f481fc9b57d8d8f396e1e2a9ce5319f1ea59a214c915b2a330a86b4afd` |
-| Executable DDL artifact | `sha256:61d3e32bfb5733d8adcc3b5b93c7f61462b836eb69fb04df0a5dbcb834bd5d58` |
+| deterministic digest | `sha256:6e88f0618e94294647d7ff72bb64a20dddb490a6bdee4da6ee38d06fd7a7fcb2` |
+| Schema Manifest / contract | `sha256:50219aa0bfe410763d07c7f0d340eb372c166957ee8039c28f4ed4eb010a009e` / `sha256:2c2394f481fc9b57d8d8f396e1e2a9ce5319f1ea59a214c915b2a330a86b4afd` |
+| Executable DDL artifact | `sha256:05bc24ca63d1b770c3248b9f0b15de9952c9e8ef08a14967aec0a274d5fdd7aa` |
 | Query plan / constraint-trigger fixtures | `sha256:35b7a27e241d32436de70dc937ce9b20c7bfd46041835ac8c4712b85a27dc076` / `sha256:71b738b6bd63dfadd5e960665767c5f191c60de12f81a46380604f6a900cce61` |
 | Schema lint / domain separator catalog | `sha256:fd6c4381d3c3012325bfbd2a780ce6514289360dd86f4038337b9d74e3981905` / `sha256:49065b8d9063e25754a80d731b47b1088bcb67fc71720487c909b11a26147eaf` |
-| G1 historical Contract JSON verification digest | `241f17fa352b15b198cfcb5c28cb892b669d22ca1d3736a90c99622a0431f2f3` |
+| G1 historical Contract JSON verification digest | `a40e2e801ae4bb331a90b49eca457c48e29cc88c3eb32670dedd3c90387a8d15` |
 
 SQLite / runtime identity：
 
@@ -380,7 +382,7 @@ G0.10 仅在 `src/workflow-runtime/contracts/conformance/capacity-control-plane-
 
 | Artifact | Hash |
 | --- | --- |
-| G0.10 Capacity Control-Plane Addendum root | `sha256:c9649b31acc99a4cb0d98e558d2be9ee4be840be2c4289803f8f5e0c7c0ce1f7` |
+| G0.10 Capacity Control-Plane Addendum root | `sha256:21d06c2d9d45a47f6ebc68c24b9d0acec29c8ae1726d5387bd38c460a7a0a7ec` |
 | Generator tool | `sha256:cf6979d2dedb52923f37028e71636522c0e6bbc32eefb456a016aec3ac51f513` |
 | Markdown delta coverage | `sha256:42ac7e849edd0a7a84ba0ab1d272fa27e22d780f883768741e69aa619a1e5b52` |
 | Artifact inventory | `sha256:c74237dbd60acc7fa9059323b5bd5c38e360c3ffc0b333ad075d94b2907ea23b` |
@@ -999,6 +1001,12 @@ G0.1 的实现、测试和本进度账本由同一个原子提交交付。Agent 
 | R-014 | Capacity governance | CLOSED | G0.10 已机器化 closed publication/command、权限/Actor/entrypoint/delegation、revision/hash CAS、reason/denial、immutable audit tables、唯一 Publisher/Watcher protocol、Admission lineage、crash recovery 与 additive Gate evidence；G1 DDL 可开始 | G0.10 |
 | R-015 | Toolchain test timing | OPEN_OUT_OF_SCOPE | G1.1 曾复现 runtime-toolchain 5s timing；G1.2 串行 `test:g0` 和两次完整 suite 均未复现，toolchain tests 通过。G1.2 不调整 timeout 或 managed toolchain 既有实现 | 独立测试稳定性维护 |
 | R-016 | Compiler/Golden contract | CLOSED | S38 与 additive repair root 已冻结唯一 Conformance Case Result target/hash、lowering outcome 分离、Compiled IR v2 execution fields/closure和 frozen G0.8 -> exact G2 identity binding；Draft v2保持 blocked，未越过 Compiler/Golden seal 边界 | G2 spec/Contract repair |
+
+## v1完成后的归档计划：PLANNED
+
+主规范S39已定义G9和完整验收后的生命周期切换。当前仍处于G2施工期，`dynamic-workflow-dag-framework.md`继续作为完整规范权威并保持会话全文必读；只有G0-G9、Sealed Golden、certified Profile、Core Release/G9 activation和“无关键规则只存在于Markdown”审计全部通过后才能冻结归档。
+
+归档切片必须完成：将主规范移出默认CI/identity与agent必读；退役G0.9/G0.10 Markdown coverage、R-016章节hash、阶段状态/absence断言的活动验证；保留其历史artifact并提供可选archive audit；保留Contract/Schema/DDL/Store/Compiler/Golden/Runtime/Release/startup长期验证。`historicalContractTreeDigest()`应在继续大规模新增G2/G3 Contract前由显式G1 dependency manifest替代，旧digest只保留为历史证据；Production Store identity最终由Core Release Manifest绑定schema/migration/profile，不永久依赖施工阶段`FROZEN_G1_1_IDENTITIES`。
 
 ## 下一步
 

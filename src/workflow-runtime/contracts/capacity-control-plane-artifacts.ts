@@ -665,7 +665,7 @@ function coverageSchema(): Schema {
       architecture_path: {
         const: 'local/docs/dynamic-workflow-dag-framework.md',
       },
-      architecture_sha256: hash,
+      spec_binding_scope: { const: 'capacity_contract_values_only' },
       prior_g0_9_root_hash: hash,
       extraction_policy: {
         const: 'g0_10_delta_only_no_runtime_markdown_extraction',

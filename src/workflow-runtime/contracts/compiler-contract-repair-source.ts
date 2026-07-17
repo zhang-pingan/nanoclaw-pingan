@@ -50,9 +50,9 @@ export const COMPILER_CONTRACT_REPAIR_DECISION_PATH =
 export const COMPILER_CONTRACT_REPAIR_FIXTURES_PATH =
   `${COMPILER_CONTRACT_REPAIR_ROOT}/contract-fixtures/repair-cases@1.json` as const;
 export const COMPILER_CONTRACT_REPAIR_SPEC_PATH =
-  'local/docs/dynamic-workflow-g2-contract-repair-v1.md' as const;
-export const COMPILER_CONTRACT_REPAIR_BASE_SPEC_PATH =
   'local/docs/dynamic-workflow-dag-framework.md' as const;
+export const COMPILER_CONTRACT_REPAIR_SPEC_SECTION =
+  '### R-016：Compiler/Golden Contract 决议' as const;
 
 export const HISTORICAL_G0_3_MANIFEST_HASH =
   'sha256:c5ea281d64480787322e8b6ef619b2f90784084d87ba4373c94288ed5e7aa3a8' as const;
@@ -70,9 +70,6 @@ export const HISTORICAL_COMPILED_IR_SCHEMA_RAW_SHA256 =
   'sha256:b89d1a2a6a30b2c2c3d2526be6f12a492fb29314b1e38fb5c2856be0a47d5157' as const;
 export const HISTORICAL_G0_8_CASE_CATALOG_RAW_SHA256 =
   'sha256:81c1d7e9d54c29b0785f50d340e2278a96c5866e77427a0f8719ec79e9b5f5a3' as const;
-export const HISTORICAL_BASE_SPEC_RAW_SHA256 =
-  'sha256:8f860bcba8c7f7e314d0ce115d505cbb00519d431fcfebce9bd2c387b70d8f1c' as const;
-
 export const COMPILED_PLAN_V2_DOMAIN_SEPARATOR =
   'icarus:workflow-graph-plan:2\n' as const;
 export const CONDITION_PROGRAM_V2_DOMAIN_SEPARATOR =
@@ -141,8 +138,30 @@ function rawSha256(bytes: Uint8Array): Sha256Hash {
   return `sha256:${crypto.createHash('sha256').update(bytes).digest('hex')}`;
 }
 
-export function compilerContractRepairSpecHash(): Sha256Hash {
-  return rawSha256(readRepoBytes(COMPILER_CONTRACT_REPAIR_SPEC_PATH));
+export function extractCompilerContractRepairSpecSectionBytes(
+  markdown: string,
+): Buffer {
+  const start = markdown.indexOf(`${COMPILER_CONTRACT_REPAIR_SPEC_SECTION}\n`);
+  if (start < 0) throw new Error('R-016 normative spec section is missing');
+  const remainder = markdown.slice(
+    start + COMPILER_CONTRACT_REPAIR_SPEC_SECTION.length + 1,
+  );
+  const nextHeading = remainder.search(/\n#{1,3} /);
+  const end =
+    nextHeading < 0
+      ? markdown.length
+      : start + COMPILER_CONTRACT_REPAIR_SPEC_SECTION.length + 1 + nextHeading;
+  return Buffer.from(`${markdown.slice(start, end).trimEnd()}\n`, 'utf8');
+}
+
+export function compilerContractRepairSpecSectionBytes(): Buffer {
+  return extractCompilerContractRepairSpecSectionBytes(
+    readRepoBytes(COMPILER_CONTRACT_REPAIR_SPEC_PATH).toString('utf8'),
+  );
+}
+
+export function compilerContractRepairSpecSectionHash(): Sha256Hash {
+  return rawSha256(compilerContractRepairSpecSectionBytes());
 }
 
 function withSemanticHash<T extends JsonObject>(
@@ -197,11 +216,6 @@ export function assertHistoricalCompilerContractInputs(): void {
   for (const [relativePath, expectedHash] of rawPins)
     if (rawSha256(readRepoBytes(relativePath)) !== expectedHash)
       throw new Error(`Historical compiler raw bytes drift: ${relativePath}`);
-  if (
-    rawSha256(readRepoBytes(COMPILER_CONTRACT_REPAIR_BASE_SPEC_PATH)) !==
-    HISTORICAL_BASE_SPEC_RAW_SHA256
-  )
-    throw new Error('Historical base architecture spec bytes drift');
 }
 
 export function readHistoricalGoldenCases(): HistoricalCase[] {
@@ -642,11 +656,11 @@ export function buildRepairDecision(
       repair_id: 'R-016',
       repair_status: 'spec_and_contract_repaired',
       normative_spec: {
-        base_spec_ref: COMPILER_CONTRACT_REPAIR_BASE_SPEC_PATH,
-        base_spec_raw_sha256: HISTORICAL_BASE_SPEC_RAW_SHA256,
-        additive_repair_spec_ref: COMPILER_CONTRACT_REPAIR_SPEC_PATH,
-        additive_repair_spec_raw_sha256: compilerContractRepairSpecHash(),
-        precedence: 'repair_addendum_overrides_r016_topics_only',
+        spec_ref: COMPILER_CONTRACT_REPAIR_SPEC_PATH,
+        section_heading: COMPILER_CONTRACT_REPAIR_SPEC_SECTION,
+        section_raw_sha256: compilerContractRepairSpecSectionHash(),
+        binding_scope: 'r016_section_only',
+        authority: 'integrated_primary_spec',
       },
       historical_contracts: {
         g0_3_manifest_hash: HISTORICAL_G0_3_MANIFEST_HASH,

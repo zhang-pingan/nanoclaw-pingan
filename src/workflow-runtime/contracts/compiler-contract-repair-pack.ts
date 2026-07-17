@@ -27,6 +27,7 @@ import {
   COMPILER_CONTRACT_REPAIR_MANIFEST_PATH,
   COMPILER_CONTRACT_REPAIR_ROOT,
   COMPILER_CONTRACT_REPAIR_SPEC_PATH,
+  COMPILER_CONTRACT_REPAIR_SPEC_SECTION,
   COMPILER_CONTRACT_REPAIR_STATIC_LOWERING_PATH,
   G2_CASE_INPUT_BINDING_DOMAIN_SEPARATOR,
   HISTORICAL_G0_3_MANIFEST_HASH,
@@ -44,7 +45,7 @@ import {
   calculateEffectiveG2CaseInputHash,
   calculateG2CaseInputBindingHash,
   compilerContractRepairToolHash,
-  compilerContractRepairSpecHash,
+  compilerContractRepairSpecSectionHash,
   readHistoricalGoldenCases,
   validateSemanticHash,
 } from './compiler-contract-repair-source.js';
@@ -274,7 +275,9 @@ function buildManifest(
       historical_g0_8_manifest_hash: HISTORICAL_G0_8_MANIFEST_HASH,
       historical_g0_8_case_catalog_hash: HISTORICAL_G0_8_CASE_CATALOG_HASH,
       normative_spec_ref: COMPILER_CONTRACT_REPAIR_SPEC_PATH,
-      normative_spec_raw_sha256: compilerContractRepairSpecHash(),
+      normative_spec_section: COMPILER_CONTRACT_REPAIR_SPEC_SECTION,
+      normative_spec_section_raw_sha256:
+        compilerContractRepairSpecSectionHash(),
       generated_by_tool_hash: compilerContractRepairToolHash(),
       repair_decision_hash: decision.hash,
       golden_draft_v2_hash: draft.hash,

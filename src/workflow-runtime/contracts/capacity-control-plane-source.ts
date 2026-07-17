@@ -670,8 +670,11 @@ function coverageImpact(
   return 'capacity_contract_version_required';
 }
 
-export function buildCapacityMarkdownDeltaCoverage(): CapacityMarkdownDeltaCoverage {
-  const markdown = readRepoBytes(architecturePath).toString('utf8');
+export function buildCapacityMarkdownDeltaCoverage(
+  markdownOverride?: string,
+): CapacityMarkdownDeltaCoverage {
+  const markdown =
+    markdownOverride ?? readRepoBytes(architecturePath).toString('utf8');
   const entries = CAPACITY_MARKDOWN_DELTA_SEEDS.map((seed) => {
     const withoutHash = {
       coverage_id: `${seed.category}:${seed.value}`,
@@ -711,7 +714,7 @@ export function buildCapacityMarkdownDeltaCoverage(): CapacityMarkdownDeltaCover
     format:
       'icarus.workflow-capacity-control-plane-markdown-delta-coverage/1' as const,
     architecture_path: architecturePath,
-    architecture_sha256: rawSha256(markdown),
+    spec_binding_scope: 'capacity_contract_values_only' as const,
     prior_g0_9_root_hash: G0_9_HISTORICAL_ROOT_HASH,
     extraction_policy:
       'g0_10_delta_only_no_runtime_markdown_extraction' as const,

@@ -6,11 +6,11 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-capacity-control-plane-markdown-delta-coverage-artifact:1\n",
-  "hash": "sha256:f18571b4e9e48d31e9a60b31d7311921ece4565d7e2865c5ecbbafa5fc3bc4de",
+  "hash": "sha256:7bf04f63057d80ea3e07331bb945b78ca6bd0d5f0300e2980e04edad263cb361",
   "payload": {
     "format": "icarus.workflow-capacity-control-plane-markdown-delta-coverage/1",
     "architecture_path": "local/docs/dynamic-workflow-dag-framework.md",
-    "architecture_sha256": "sha256:8f860bcba8c7f7e314d0ce115d505cbb00519d431fcfebce9bd2c387b70d8f1c",
+    "spec_binding_scope": "capacity_contract_values_only",
     "prior_g0_9_root_hash": "sha256:df3058a93eaeb85bdb3eeadc7923148a9a543f63c33d0ede2cc7be0a758c9f5e",
     "extraction_policy": "g0_10_delta_only_no_runtime_markdown_extraction",
     "categories": [
@@ -468,6 +468,6 @@
     "markdown_value_count": 33,
     "contract_values_without_markdown": [],
     "markdown_values_without_contract": [],
-    "coverage_hash": "sha256:42ac7e849edd0a7a84ba0ab1d272fa27e22d780f883768741e69aa619a1e5b52"
+    "coverage_hash": "sha256:f450a6cf49d9a4859253098f49b736f10ae2bb50a8741f0b052156c5319d8bcc"
   }
 }

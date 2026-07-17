@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-capacity-control-plane-gate-review-artifact:1\n",
-  "hash": "sha256:5c1182aa5a6dbc65392ffde79fddcb75d4853cc22a98409412d1649f76732eaa",
+  "hash": "sha256:77939ab7de850e9f95fa50f4ba4a38a15e32a74d29e5f15a863d660734835a19",
   "payload": {
     "format": "icarus.workflow-capacity-control-plane-gate-review/1",
     "gate_id": "G0.10",
@@ -59,7 +59,7 @@
         "criterion_id": "cap0_cap4_protocol_and_crash_boundaries",
         "status": "pass",
         "evidence_hashes": [
-          "sha256:f18571b4e9e48d31e9a60b31d7311921ece4565d7e2865c5ecbbafa5fc3bc4de"
+          "sha256:7bf04f63057d80ea3e07331bb945b78ca6bd0d5f0300e2980e04edad263cb361"
         ]
       },
       {
@@ -73,8 +73,8 @@
         "criterion_id": "markdown_delta_and_artifact_inventory_complete",
         "status": "pass",
         "evidence_hashes": [
-          "sha256:42ac7e849edd0a7a84ba0ab1d272fa27e22d780f883768741e69aa619a1e5b52",
-          "sha256:c74237dbd60acc7fa9059323b5bd5c38e360c3ffc0b333ad075d94b2907ea23b"
+          "sha256:f450a6cf49d9a4859253098f49b736f10ae2bb50a8741f0b052156c5319d8bcc",
+          "sha256:7af9bce89ea771d18a7365f2d1551c9c4ba03866bc788d9a5f2752893429a6a3"
         ]
       },
       {
@@ -99,8 +99,8 @@
         ]
       }
     ],
-    "markdown_delta_coverage_hash": "sha256:42ac7e849edd0a7a84ba0ab1d272fa27e22d780f883768741e69aa619a1e5b52",
-    "artifact_inventory_hash": "sha256:c74237dbd60acc7fa9059323b5bd5c38e360c3ffc0b333ad075d94b2907ea23b",
+    "markdown_delta_coverage_hash": "sha256:f450a6cf49d9a4859253098f49b736f10ae2bb50a8741f0b052156c5319d8bcc",
+    "artifact_inventory_hash": "sha256:7af9bce89ea771d18a7365f2d1551c9c4ba03866bc788d9a5f2752893429a6a3",
     "status_proof": {
       "g0_status": "DONE",
       "i11_status": "DONE",
@@ -119,6 +119,6 @@
       "golden_seal_status": "not_run",
       "sealed_directory_entry": ".gitkeep"
     },
-    "review_hash": "sha256:e29e0fbee09aef914ed60a83960e1944db2460490f00c526c37549f130fbe86b"
+    "review_hash": "sha256:771bc7b6b4a23c5d4523bfb1cce0c56085b62c4f444b9ae41fcbc7a8651c3a75"
   }
 }
