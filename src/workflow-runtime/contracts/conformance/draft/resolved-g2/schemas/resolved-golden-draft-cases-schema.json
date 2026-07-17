@@ -1,0 +1,596 @@
+{
+  "format": "icarus.workflow-compiler-resolved-golden-draft-cases-schema/1",
+  "ref": {
+    "id": "icarus.workflow-compiler-resolved-golden-draft-cases-schema",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-compiler-resolved-golden-draft-cases-schema:1\n",
+  "hash": "sha256:43f697d54db9551cce9845cc574ca0706bbdb953eb2bd864638bb75ab83584b4",
+  "payload": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://icarus.local/schemas/resolved-golden-draft-cases-v3",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "format",
+      "bundle_version",
+      "draft_status",
+      "historical_g0_8_manifest_ref",
+      "historical_g0_8_manifest_hash",
+      "historical_r016_draft_ref",
+      "historical_r016_draft_hash",
+      "exact_g2_identity",
+      "candidate_output_disposition",
+      "review_input_disposition",
+      "expected_oracle_disposition",
+      "assertion_target",
+      "cases",
+      "positive_case_count",
+      "negative_case_count",
+      "catalog_hash"
+    ],
+    "properties": {
+      "format": {
+        "const": "icarus.workflow-compiler-golden-draft-cases/3"
+      },
+      "bundle_version": {
+        "const": "3.0.0-resolved-draft"
+      },
+      "draft_status": {
+        "const": "resolved_identity_pending_human_semantic_review"
+      },
+      "historical_g0_8_manifest_ref": {
+        "const": "contract-pack-golden-draft.json"
+      },
+      "historical_g0_8_manifest_hash": {
+        "const": "sha256:52fc0266020c03a54527d7a2f735dfaef0494b5d7ae3f12dd1bf9b58a547fd22"
+      },
+      "historical_r016_draft_ref": {
+        "const": "conformance/compiler-contract-repair/draft/golden-draft-manifest@2.json"
+      },
+      "historical_r016_draft_hash": {
+        "const": "sha256:6b3d3e337c2486b71508f2b6d37f0ce4d2f475d24229f5b87af4f96fec8215e1"
+      },
+      "exact_g2_identity": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "production_compiler_root_ref",
+          "production_compiler_root_hash",
+          "compiler_toolchain_file_ref",
+          "compiler_toolchain_manifest_ref",
+          "compiler_toolchain_hash",
+          "compiler_version",
+          "compiler_build_hash",
+          "canonical_normalizer_version",
+          "canonical_normalizer_hash",
+          "proof_algorithm_version",
+          "proof_algorithm_hash",
+          "error_catalog_ref",
+          "error_catalog_hash",
+          "compiled_ir_schema_ref",
+          "compiled_ir_schema_hash",
+          "conformance_result_schema_ref",
+          "conformance_result_schema_hash",
+          "case_input_binding_ref",
+          "case_input_binding_hash",
+          "candidate_results_manifest_ref",
+          "candidate_results_manifest_hash"
+        ],
+        "properties": {
+          "production_compiler_root_ref": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9.@_/-]*$"
+          },
+          "production_compiler_root_hash": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "compiler_toolchain_file_ref": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9.@_/-]*$"
+          },
+          "compiler_toolchain_manifest_ref": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "version"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._:/-]{0,253}[A-Za-z0-9])?$"
+              },
+              "version": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,62}[A-Za-z0-9])?$"
+              }
+            }
+          },
+          "compiler_toolchain_hash": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "compiler_version": {
+            "const": "2.0.0"
+          },
+          "compiler_build_hash": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "canonical_normalizer_version": {
+            "const": "2.0.0"
+          },
+          "canonical_normalizer_hash": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "proof_algorithm_version": {
+            "const": "2.0.0"
+          },
+          "proof_algorithm_hash": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "error_catalog_ref": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "version"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._:/-]{0,253}[A-Za-z0-9])?$"
+              },
+              "version": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,62}[A-Za-z0-9])?$"
+              }
+            }
+          },
+          "error_catalog_hash": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "compiled_ir_schema_ref": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9.@_/-]*$"
+          },
+          "compiled_ir_schema_hash": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "conformance_result_schema_ref": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9.@_/-]*$"
+          },
+          "conformance_result_schema_hash": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "case_input_binding_ref": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9.@_/-]*$"
+          },
+          "case_input_binding_hash": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "candidate_results_manifest_ref": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9.@_/-]*$"
+          },
+          "candidate_results_manifest_hash": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          }
+        }
+      },
+      "candidate_output_disposition": {
+        "const": "actual_compiler_output_not_golden_oracle"
+      },
+      "review_input_disposition": {
+        "const": "hand_authored_semantic_review_input"
+      },
+      "expected_oracle_disposition": {
+        "const": "absent_pending_independent_human_semantic_review"
+      },
+      "assertion_target": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "artifact_format",
+          "schema_ref",
+          "schema_hash",
+          "pointer_root",
+          "canonicalization",
+          "encoding",
+          "canonical_bytes",
+          "hash_field",
+          "hash_preimage",
+          "hash_domain_separator"
+        ],
+        "properties": {
+          "artifact_format": {
+            "const": "icarus.workflow-compiler-conformance-case-result/1"
+          },
+          "schema_ref": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9.@_/-]*$"
+          },
+          "schema_hash": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "pointer_root": {
+            "const": ""
+          },
+          "canonicalization": {
+            "const": "rfc8785_jcs"
+          },
+          "encoding": {
+            "const": "utf-8"
+          },
+          "canonical_bytes": {
+            "const": "jcs_full_result_including_result_hash"
+          },
+          "hash_field": {
+            "const": "result_hash"
+          },
+          "hash_preimage": {
+            "const": "jcs_result_without_result_hash"
+          },
+          "hash_domain_separator": {
+            "const": "icarus:workflow-compiler-conformance-case-result:1\n"
+          }
+        }
+      },
+      "cases": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "case_id",
+            "polarity",
+            "source_kind",
+            "coverage_tags",
+            "raw_source_bytes_ref",
+            "raw_source_bytes_hash",
+            "historical_input_snapshot_ref",
+            "historical_input_snapshot_hash",
+            "g2_case_input_binding_ref",
+            "g2_case_input_binding_hash",
+            "effective_case_input_hash",
+            "review_input",
+            "actual_compiler_candidate",
+            "expected_golden_oracle",
+            "review_owner",
+            "review_status"
+          ],
+          "properties": {
+            "case_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "polarity": {
+              "type": "string",
+              "enum": [
+                "positive",
+                "negative"
+              ]
+            },
+            "source_kind": {
+              "type": "string",
+              "enum": [
+                "graph_scope",
+                "workflow_definition",
+                "workflow_schema"
+              ]
+            },
+            "coverage_tags": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "minItems": 1,
+              "uniqueItems": true
+            },
+            "raw_source_bytes_ref": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9.@_/-]*$"
+            },
+            "raw_source_bytes_hash": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "historical_input_snapshot_ref": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9.@_/-]*$"
+            },
+            "historical_input_snapshot_hash": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "g2_case_input_binding_ref": {
+              "const": "conformance/candidate/g2/g2-case-input-binding@1.json"
+            },
+            "g2_case_input_binding_hash": {
+              "const": "sha256:538e77e33aeb8ca684388a83ee5a5a63a1b70aaa5cacc239be5f65814e9c18dc"
+            },
+            "effective_case_input_hash": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "review_input": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "role",
+                "draft_source_hash_candidate",
+                "draft_diagnostics_candidate",
+                "semantic_assertions",
+                "authored_by"
+              ],
+              "properties": {
+                "role": {
+                  "const": "hand_authored_review_input_not_expected_oracle"
+                },
+                "draft_source_hash_candidate": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "pattern": "^sha256:[0-9a-f]{64}$"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "draft_diagnostics_candidate": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "code",
+                      "phase",
+                      "instance_pointer",
+                      "schema_pointer",
+                      "stable_object_id",
+                      "detail_ref"
+                    ],
+                    "properties": {
+                      "code": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "phase": {
+                        "type": "string",
+                        "enum": [
+                          "parse",
+                          "schema",
+                          "bind",
+                          "prove",
+                          "normalize",
+                          "hash"
+                        ]
+                      },
+                      "instance_pointer": {
+                        "type": "string",
+                        "pattern": "^(?:/(?:[^~/]|~[01])*)*$"
+                      },
+                      "schema_pointer": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "stable_object_id": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "detail_ref": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                },
+                "semantic_assertions": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "assertion_id",
+                      "subject_pointer",
+                      "operator",
+                      "expected",
+                      "rationale"
+                    ],
+                    "properties": {
+                      "assertion_id": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "subject_pointer": {
+                        "type": "string",
+                        "pattern": "^(?:/(?:[^~/]|~[01])*)*$"
+                      },
+                      "operator": {
+                        "type": "string",
+                        "enum": [
+                          "equals",
+                          "set_equals",
+                          "ordered_equals",
+                          "contains",
+                          "present",
+                          "absent"
+                        ]
+                      },
+                      "expected": {
+                        "$ref": "#/$defs/json_value"
+                      },
+                      "rationale": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    }
+                  },
+                  "minItems": 1
+                },
+                "authored_by": {
+                  "const": "codex:contract-repair-author"
+                }
+              }
+            },
+            "actual_compiler_candidate": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "role",
+                "outcome",
+                "result_ref",
+                "result_hash",
+                "result_raw_bytes_hash"
+              ],
+              "properties": {
+                "role": {
+                  "const": "actual_compiler_output_not_golden_oracle"
+                },
+                "outcome": {
+                  "type": "string",
+                  "enum": [
+                    "compiled",
+                    "rejected"
+                  ]
+                },
+                "result_ref": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9.@_/-]*$"
+                },
+                "result_hash": {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                },
+                "result_raw_bytes_hash": {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                }
+              }
+            },
+            "expected_golden_oracle": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "status",
+                "expected_case_result_bytes_ref",
+                "expected_case_result_hash",
+                "expected_plan_hash",
+                "expected_proof_hashes",
+                "expected_program_hashes",
+                "expected_diagnostics"
+              ],
+              "properties": {
+                "status": {
+                  "const": "pending_independent_human_semantic_review"
+                },
+                "expected_case_result_bytes_ref": {
+                  "type": "null"
+                },
+                "expected_case_result_hash": {
+                  "type": "null"
+                },
+                "expected_plan_hash": {
+                  "type": "null"
+                },
+                "expected_proof_hashes": {
+                  "type": "null"
+                },
+                "expected_program_hashes": {
+                  "type": "null"
+                },
+                "expected_diagnostics": {
+                  "type": "null"
+                }
+              }
+            },
+            "review_owner": {
+              "const": "human:local-owner"
+            },
+            "review_status": {
+              "const": "pending_human_semantic_review"
+            }
+          }
+        },
+        "minItems": 40,
+        "maxItems": 40
+      },
+      "positive_case_count": {
+        "const": 10
+      },
+      "negative_case_count": {
+        "const": 30
+      },
+      "catalog_hash": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      }
+    },
+    "$defs": {
+      "json_value": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "string"
+          },
+          {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/json_value"
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/$defs/json_value"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

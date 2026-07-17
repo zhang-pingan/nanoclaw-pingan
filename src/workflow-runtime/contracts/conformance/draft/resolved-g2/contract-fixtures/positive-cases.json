@@ -1,0 +1,36 @@
+{
+  "format": "icarus.workflow-compiler-resolved-golden-draft-positive-cases/1",
+  "ref": {
+    "id": "icarus.workflow-compiler-resolved-golden-draft-positive-cases",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-compiler-resolved-golden-draft-positive-cases-artifact:1\n",
+  "hash": "sha256:4a10be38cc81e4fdcd8e1bf9bc21e853c0f85a16657999826962fe4d789aff5c",
+  "payload": {
+    "format": "icarus.workflow-compiler-resolved-golden-draft-positive-cases/1",
+    "cases": [
+      {
+        "case_id": "exact-g2-identity-resolved",
+        "assertion": "All Compiler/toolchain/build/normalizer/proof/input/candidate identities are exact and non-placeholder."
+      },
+      {
+        "case_id": "three-way-artifact-separation",
+        "assertion": "Actual Compiler output, hand-authored review input, and expected Golden oracle are separate closed objects."
+      },
+      {
+        "case_id": "human-review-pending",
+        "assertion": "All 40 cases are pending semantic review by human:local-owner and no decision is recorded."
+      },
+      {
+        "case_id": "expected-oracle-absent",
+        "assertion": "Every expected Golden result/Plan/proof/program/diagnostic field is null."
+      },
+      {
+        "case_id": "historical-and-downstream-boundaries",
+        "assertion": "Historical v1/v2 remain frozen, sealed contains only .gitkeep, and G3+ remains absent."
+      }
+    ],
+    "case_count": 5
+  }
+}

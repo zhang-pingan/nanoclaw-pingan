@@ -1,9 +1,9 @@
 # Dynamic Workflow Runtime 实施进度
 
 > **状态**: IN_PROGRESS
-> **当前 Gate**: G2 Compiler / Sealed Golden（IN_PROGRESS；Production Compiler slice DONE，Golden pending）
-> **下一施工切片**: G2 resolved Golden Draft 新版本发布与独立语义审核交接准备（不得 approval/seal，不得开始 G3+）
-> **最后更新**: 2026-07-16
+> **当前 Gate**: G2 Compiler / Sealed Golden（IN_PROGRESS；Production Compiler与Resolved Draft publication DONE，human semantic review/seal pending）
+> **下一施工切片**: G2 独立human semantic review，由`human:local-owner`逐case判断Draft v3 review input与actual candidate；不得机械采用Compiler输出，不得在同一切片approval/seal，不得开始G3+
+> **最后更新**: 2026-07-17
 > **规范权威**: `local/docs/dynamic-workflow-dag-framework.md`
 
 ## 文档职责
@@ -106,7 +106,7 @@ Agent Container 运行于独立 VM，Node identity 由 VM image gate 保证；�
 | --- | --- | --- | --- | --- |
 | G0 Contract Pack / Static Baseline | `DONE` | 无 | G0.1-G0.9 historical root + G0.10 additive Capacity Admin/publication/CAP/Logical Schema/coverage root | 本原子提交 |
 | G1 DDL / Store | `DONE` | G0.10 | closed Schema Dependency Manifest + frozen executable migration/Schema Manifest + unified Connection Factory + Store lifecycle/transaction host + real-file SQLite/identity gates | 本原子提交（dependency identity repair） |
-| G2 Compiler / Golden | `IN_PROGRESS` | G0.1-G0.9；R-016 spec/Contract repair；G0.10 不改变 Compiler/Plan 语义 | Production Compiler/toolchain/exact case-input binding/actual candidates DONE；resolved Draft、独立审核与 sealed Golden 仍 pending | 本原子提交（Compiler slice） |
+| G2 Compiler / Golden | `IN_PROGRESS` | G0.1-G0.9；R-016 spec/Contract repair；G0.10 不改变 Compiler/Plan 语义 | Production Compiler/toolchain/exact case-input binding/actual candidates与Resolved Draft publication DONE；独立human review与sealed Golden仍pending | 本原子提交（Resolved Draft slice） |
 | G3 Registry / Authoring / Publish | `NOT_READY` | G1 + G2 | manifest/authoring/publish/retention/ABI fixtures | - |
 | G4 Test Bootstrap | `NOT_READY` | G1 + G2 + G3 | isolated bootstrap profile | - |
 | G5 Basic Runtime | `NOT_READY` | G4 | T0-T6e model/fault fixtures | - |
@@ -121,8 +121,8 @@ Agent Container 运行于独立 VM，Node identity 由 VM image gate 保证；�
 | --- | --- | --- | --- |
 | I0 | Publish、Registry、Recipe 与执行版本固定 | `NOT_READY` | G3 起 |
 | I1 | Intake、Routing、幂等创建、Child provenance、Claim | `NOT_READY` | G5 起 |
-| I2 | Definition、State lowering、Context、transition | `IN_PROGRESS` | G2 static lowering DONE；resolved Golden pending，Runtime transition 仍从 G5 起 |
-| I3 | Source/Compiled IR、Port、Compiler | `IN_PROGRESS` | G2 Production Compiler/IR v2/result/binding/candidates DONE；resolved Golden pending |
+| I2 | Definition、State lowering、Context、transition | `IN_PROGRESS` | G2 static lowering与Resolved Draft publication DONE；human review/seal pending，Runtime transition仍从G5起 |
+| I3 | Source/Compiled IR、Port、Compiler | `IN_PROGRESS` | G2 Production Compiler/IR v2/result/binding/candidates与Resolved Draft publication DONE；human review/seal pending |
 | I4 | Runtime Store、SQLite relation、Value/Blob、migration | `IN_PROGRESS` | G1 migration/Schema Manifest/Store Base/Connection Factory DONE；Value/Blob 从 G3 起 |
 | I5 | Graph 状态机、reconcile、Scheduler、Ledger | `NOT_READY` | G5 起 |
 | I6 | Delegation/System、Capability Effect、Outbox | `NOT_READY` | G5 起 |
@@ -163,7 +163,42 @@ G0.1-G0.9 已按当时规范完成并保留历史 identity。后续确认的 Cap
 | --- | --- | --- | --- | --- |
 | G2.1 | R-016 Spec/Contract Repair | `DONE` | lowering outcome、Compiled IR v2、完整 case result target、exact input binding requirement与 blocked Draft v2冻结 | 本原子提交（历史） |
 | G2.2 | Production Compiler / Exact Case-Input Identity | `DONE` | locked strict parser、closed validation、snapshot binding、static lowering、Plan normalization、program/proof/hash/diagnostic、真实 toolchain与40个actual candidate results | 本原子提交 |
-| G2.3 | Resolved Draft / Semantic Review / Seal | `READY` | 发布不覆盖历史版本的resolved Draft；由独立 human review决定 expected oracle；审核通过后才可seal | - |
+| G2.3 | Resolved Draft / Semantic Review / Seal | `IN_PROGRESS` | additive resolved Draft v3与pending review handoff已发布；由独立human review决定expected oracle；审核通过后才可另行approval/seal | 本原子提交（Draft publication） |
+
+## 已完成切片：G2.3 Resolved Golden Draft Publication / Semantic-Review Handoff
+
+**状态**：Draft publication与semantic-review handoff preparation为`DONE`；G2.3及G2总Gate保持`IN_PROGRESS`，`human:local-owner`尚未作任何语义决定，Golden approval/seal均未开始。
+
+**工作包**：I2/I3，合同验证联动I11。本切片只发布additive Resolved Golden Draft v3与read-only review handoff，不覆盖G0.8 Draft v1或R-016 repair Draft v2，不修改Production Compiler或actual candidate output，不从Compiler输出机械反向生成expected oracle；没有执行`GoldenSemanticReview`决定、approval、`golden-seal`、`conformance/sealed/`写入、G3+、SQLite certification、Core Release、G8/G9 identity或production activation。
+
+交付内容：
+
+- `conformance/draft/resolved-g2/`发布11个artifact：40-case resolved catalog、pending semantic-review handoff、5个closed schema、正反fixture、完整inventory和root manifest。v3逐项精确绑定G2 Compiler root、toolchain、build、normalizer、proof、case-input binding和actual candidate manifest，以及全部40份actual result ref/hash（10 compiled / 30 rejected）。
+- 每个case把`actual_compiler_candidate`、hand-authored `review_input`和`expected_golden_oracle`建模为三个独立closed对象；actual disposition固定为comparison input only，expected oracle字段全部固定为`null`且状态为absent pending human decision，不能由Production Compiler输出冒充或填充。
+- handoff owner固定为`human:local-owner`，40个case均为`pending_human_semantic_review`；root同时固定`GoldenSemanticReview=pending_not_run`、approval/seal/sealed-write=`not_run`及G3-G9=`not_started`。20个negative mutations覆盖identity、candidate/review/oracle混淆、伪造reviewer/decision/approval/seal/sealed path和G3+越界。
+- 新增独立deterministic generator与read-only checker，Contract入口只读验证G0.8/R-016历史identity；generator位于`contracts/`且不import Production Compiler，只读取并校验已发布candidate bytes/hash。历史live generator没有恢复。
+
+关键identity：
+
+| Artifact | Identity |
+| --- | --- |
+| Resolved Golden Draft v3 root | `sha256:659caf9b4add7027116bf780c83b2b85dc95ca0baae9cb8b9840d760a785132b` |
+| Resolved 40-case catalog | `sha256:36ad5b6f2da11c6a7dcfef298dfb1c878070baec1897cd3636c8cf6b77e3bf11` |
+| Semantic-review handoff | `sha256:9e85abe94231efcbd35e39fd69d49eb10e8f1d6fe36117ba57d3fa60dc2a67f0` |
+| Artifact inventory | `sha256:8d69f92a89c343a0282750c78e8b5f519fdb2a474e6e54f1f460a6660db275f8` |
+| Deterministic generator | `sha256:2e883f1097e9c04b61fd8cc582ae0a105b62028ec97797a69c88c53ccda84f27` |
+
+验证证据：
+
+| 命令/证据 | 结果 |
+| --- | --- |
+| managed `npm run golden:draft:generate`（连续两次）/ `golden:draft:check` | PASS；两次生成与只读check的tree digest均为`d9775d43ea55858941480d31fc1ed7fc473fc7757a06e73746ba9dd092c7e485`，Draft root=`659caf…5132b`，expected oracle仍全部为null |
+| managed `npm run contracts:generate` / `npm run contracts:check` | PASS；Resolved Draft纳入统一入口，G0.8/R-016 historical verifier保持只读，G2/G0/G1 roots逐项通过 |
+| managed `npm run test:g2` / `test:g2:contract` | PASS，2 files / 14 tests与1 file / 7 tests；40-case三方分离、closed schema、20个negative mutations、边界与R-016冻结验证通过 |
+| managed `npm run test:g0` / `test:g1.1` / `test:g1.2` | PASS，15 files / 109 tests、12/12、11/11；新增Contract import改用既有允许的Node builtin specifier，未放宽G0边界 |
+| managed `npm run typecheck` / `npm run build` | PASS |
+| managed `npm test` | 78/82 files、739/743 tests；失败仅为既有范围外R-012 trace 250ms、R-013 G0.6 5s、R-015 toolchain 5s与G0.7 static-absence 5s baseline；后三项定向复跑分别8/8、5/5、18/18通过，R-012单文件维持20/21 baseline；未修改或放宽相关测试/timeout |
+| targeted Prettier / `git diff --check` / frozen boundary scan | PASS；G0.3/G0.8、R-016、G0.10、G1、migration与G2 Compiler/candidate bytes/identity均未漂移；sealed仅`.gitkeep`，无approval/seal/G3+/certification/release/activation产物 |
 
 ## 已完成切片：G2.2 Production Compiler / Exact Case-Input Identity
 
