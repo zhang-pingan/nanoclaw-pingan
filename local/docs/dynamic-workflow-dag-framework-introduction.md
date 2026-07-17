@@ -36,7 +36,7 @@
 | [第三部分](#part-3) | State 与 Graph 的统一 | 已展开 | 五类 State 怎样 lower 到统一 Runtime？ |
 | [第四部分](#part-4) | Graph 静态合同与 Compiler | 已展开 | Source怎样变成可信、受限、可重放的Plan？ |
 | [第五部分](#part-5) | DAG 执行语义 | 已展开 | Edge、Input、Fact Wave和Admission怎样推进DAG？ |
-| [第六部分](#part-6) | Node 与动态结构 | 部分展开 | 八类 Node 以及 Subgraph、Expand、Map 如何工作？ |
+| [第六部分](#part-6) | Node 与动态结构 | 已展开 | 八类 Node 以及 Subgraph、Expand、Map 如何工作？ |
 | [第七部分](#part-7) | Completion 与外层推进 | 部分展开 | Candidate 如何变成 Cut，T8 如何推进 State？ |
 | [第八部分](#part-8) | 可靠性、资源与副作用 | 部分展开 | Retry、Effect、Quota、Capacity和Lease如何闭环？ |
 | [第九部分](#part-9) | 持久化、事务与恢复 | 导读 | SQLite、CAS、T0-T8、Checkpoint 如何保证恢复？ |
@@ -1801,7 +1801,13 @@ Admission同时检查Run=`running/healthy`、Scope/Work Fence有效、Pinned Run
 | [6.6](#part-6-6) | Child Scope Instance |
 | [6.7](#part-6-7) | Plan、Closure、Manifest 与 Build层级 |
 | [6.8](#part-6-8) | Sealed Manifest、Crash 与 Recovery |
-| [6.9](#part-6-9) | 后续需要补充的 Node语义 |
+| [6.9](#part-6-9) | Delegation/System、Continuation 与 Effect Key |
+| [6.10](#part-6-10) | Wait Inbox-first、授权与 Deadline竞争 |
+| [6.11](#part-6-11) | Join的结构化 Fan-in边界 |
+| [6.12](#part-6-12) | Child Completion Envelope与 Expose Port |
+| [6.13](#part-6-13) | Map Quorum、Closing Remaining与 Result Manifest |
+| [6.14](#part-6-14) | Terminal Node与 Candidate Sequence |
+| [6.15](#part-6-15) | 第六部分记忆公式 |
 
 原规范入口：
 
@@ -2003,16 +2009,429 @@ Recovery读取Sealed Manifest、Pinned Plan/Compiler、Build、Scope、Result Sl
 
 <a id="part-6-9"></a>
 
-### 6.9 后续需要补充的 Node语义
+### 6.9 Delegation/System、Continuation 与 Effect Key
 
-本部分后续讲解需要继续覆盖：
+Delegation和System使用相同的Node/Attempt骨架：一个Node表示稳定逻辑目标，每次真实执行创建一个immutable Attempt。Delegation面向LLM、Agent、检索和生成等开放式能力；System面向已注册的确定性系统能力。同一Node的所有Attempt必须使用Plan中固定的同一个Capability、Executor、Port、Permission、Effect和Retry/Quality Binding，不能在重试时切换到另一个Capability。
 
-- Delegation/System Continuation Context和 Effect Key。
-- Wait Inbox-first、Authorization和 Deadline竞争。
-- Join的结构化 Fan-in边界。
-- Child Completion Envelope和 Expose Port。
-- Map Quorum Winner、Closing Remaining和 Result Manifest。
-- Terminal Node Candidate Sequence。
+```text
+generate_report Node
+├─ Attempt 1: initial
+├─ Attempt 2: execution_retry
+└─ Attempt 3: quality_revision
+```
+
+三种Continuation含义如下：
+
+```ts
+type AttemptContinuationKind =
+  | 'initial'
+  | 'execution_retry'
+  | 'quality_revision';
+```
+
+| Continuation | 上一轮状态 | 新Attempt额外获得什么 |
+| --- | --- | --- |
+| `initial` | 无上一轮 | 只有Frozen Node Input |
+| `execution_retry` | Execution Failed | Parent Attempt和结构化Retry Reason |
+| `quality_revision` | Execution Succeeded、Evaluator=`needs_revision` | 上一轮Candidate、Evaluation和Typed Feedback引用 |
+
+Node Input Snapshot在所有Attempt之间保持不变；每个Attempt拥有自己的Context Pack：
+
+```text
+Context Pack
+├─ Attempt identity
+├─ Node Input Snapshot ref/hash
+├─ Pinned Capability/Executor binding
+└─ AttemptContinuationContext
+```
+
+Context Pack不是Agent长期记忆，也不是权限包。V1只引用紧邻上一Attempt的Candidate/Evaluation/Feedback，不重复注入完整历史；完整Lineage仍保存在Attempt Rows和Trace。Recovery只能从已持久化事实重建相同Bytes/Hash，不能重新调用模型总结Feedback或读取Live Workflow Context。Feedback按不可信业务Data处理，不能覆盖Trusted Prompt、Skill/Tool/MCP/file allowlist、Claim、Credential或Effect Key Strategy。
+
+Execution Retry和Quality Revision都会重新执行并消耗一个Attempt，但触发规则不同：
+
+| 维度 | Execution Retry | Quality Revision |
+| --- | --- | --- |
+| 仲裁来源 | Failure Code是否位于`retry_on` | Evaluator合法返回`needs_revision` |
+| 上下文 | Retry Reason | Candidate、Evaluation、Typed Feedback |
+| Evaluator=`fail` | 不适用 | Node立即`failed/quality_rejected` |
+
+两者共享同一个Effective Node Attempt Ceiling、Run Attempt Ledger、Workflow Deadline和Usage Budget，不能各自重置次数。允许Quality Revision不意味着可以换Capability；固定Capability可以在已授权Prompt、Skill集合和Tool范围内根据Feedback改变执行方法。确实需要另一种Role、Skill集合、权限或执行合同时，必须建模为另一个Node并使用显式Control Edge路由。
+
+Capability Effect Contract定义外部副作用如何恢复：
+
+```ts
+type CapabilityEffectContract =
+  | { type: 'pure' }
+  | { type: 'idempotent'; key: CapabilityEffectKeyStrategy }
+  | {
+      type: 'compensatable';
+      operation_key: CapabilityEffectKeyStrategy;
+      compensate_action_ref: VersionedRef;
+    };
+```
+
+Effect Key是外部操作的稳定身份。Runtime先持久化Intent，再执行外部操作，最后持久化Receipt；Crash后使用同一个Key对账，不能盲目重复Mutation。
+
+| Key Scope | 去重边界 |
+| --- | --- |
+| `attempt` | 只去重同一Attempt的重复投递 |
+| `node` | 同一Node的多个Attempt复用同一业务操作 |
+| `workflow` | 一个Workflow在指定Namespace下只执行一次 |
+| `business_input` | 对指定Frozen Typed Inputs做Canonical Hash |
+
+Quality Revision要求每轮真正产生新执行，因此Capability只能是`pure`，或使用`attempt` Operation Key的`idempotent/compensatable` Effect。若使用`node/workflow/business_input` Key，下一轮会被外部系统错误去重为上一轮，Publisher必须拒绝。上一Attempt已经提交的副作用不会因为`needs_revision`自动回滚；不允许暴露中间副作用时，应先写Staging，Quality Pass后再由独立可信Capability Promote。
+
+<a id="part-6-10"></a>
+
+### 6.10 Wait Inbox-first、授权与 Deadline竞争
+
+Wait Node统一承载Signal、Timer和Approval：Approval不是独立Node Type，而是Wait Contract的一种。Wait Armed后进入`waiting`，不占Executor Concurrency Slot，并可跨进程重启恢复。
+
+Inbox-first允许外部事件在Wait Armed之前到达：
+
+```text
+External Event
+  -> Ingress基础验证
+  -> Durable Inbox pending
+  -> Wait Armed并计算Correlation
+  -> Binding Authorization
+  -> Resolve或Reject Event
+```
+
+Ingress只验证Provider、Contract、基础权限、Payload Schema/Size和Provider Event去重；Wait Armed后，Runtime才能结合Frozen Node Input、Workflow Principal、目标业务对象和Action做Binding Authorization。未授权事件标记为Rejected，但Wait仍保持Armed，不能阻止后续合法事件。
+
+三个Key承担不同职责：
+
+| Key | 作用 |
+| --- | --- |
+| `correlation_key` | Event属于哪个Wait实例 |
+| `provider_event_id` | Provider Event去重 |
+| `registration_key` | 外部监听注册操作去重 |
+
+同一`(graph_run_id, contract_ref, correlation_key_hash)`在Run内最多创建一次；多轮审批必须在Correlation中加入Generation或Nonce。Pending Event受有限TTL和分层数量/字节上限约束，不能无限等待未来Wait。
+
+有限Signal/Approval在Arm事务中冻结：
+
+```text
+deadline_at_ms = armed_at_ms + timeout_ms
+```
+
+Timer从Typed Input获得绝对Deadline。Restart和Pause都不延长已冻结Deadline；所有权威时间使用Runtime UTC Unix Milliseconds，不信任Provider Timestamp。Inbox事务同时分配单调`inbox_seq`和Runtime `received_at_ms`。
+
+Signal/Approval Resolve、Timeout/Timer Fire和Cancel竞争同一CAS：
+
+```text
+wait.status = armed
++ saved work fence epochs匹配
++ expected row_version匹配
+```
+
+第一个成功提交者冻结结果。只有已经提交、`received_at_ms <= deadline_at_ms`且最终授权通过的Event能击败Timeout；网络层先到但尚未提交的请求不是权威事实。多个合法Event按`inbox_seq`确定先后。输掉竞争的Signal、Timeout或Cancel只写Late Audit，不能改写Wait和Node结果。
+
+<a id="part-6-11"></a>
+
+### 6.11 Join的结构化 Fan-in边界
+
+Join没有普通Attempt，也不调用Executor。它只在Trigger=True且Inputs Sealed后，在短事务中把指定Input原样暴露为Output：
+
+```text
+Control Edge Resolution -> Trigger
+Data Edge Resolution -> Input Aggregation -> Input Seal
+Trigger=True + Inputs Sealed
+  -> Join expose
+  -> Join succeeded
+```
+
+Join的Fan-in由三个独立合同共同表达：
+
+| 层 | 回答的问题 |
+| --- | --- |
+| Trigger | 哪些控制路径满足时激活？ |
+| Input Aggregation | 多个Data Value中选择哪些、何时Seal？ |
+| Expose | 哪个Sealed Input发布成哪个Output Port？ |
+
+典型组合：
+
+```text
+All:
+  trigger = all(edges)
+  input = list/all_sources_resolved
+
+Any:
+  trigger = any(edges)
+  input = single/first_resolved
+
+Quorum(N):
+  trigger = quorum(edges, N)
+  input = list/first_n_available(count=N)
+```
+
+Trigger Quorum只证明至少N条Control Path被选择；Data Quorum才证明至少N个Value可用，两者独立计算。Guarded Data Edge在对应Control Edge=`not_taken`时变为`unavailable`，避免Join等待永远不会到达的值。
+
+Join可以选择、收集、排序和Seal Value，但不能Dedupe、Score、Rank、Merge Object、解决冲突、Reduce或做模型判断；这些业务计算必须由后续System/Delegation完成。下游Capability本身也可声明多来源Input Aggregation，因此只有需要显式、可复用、可审计汇合边界时才需要独立Join。
+
+<a id="part-6-12"></a>
+
+### 6.12 Child Completion Envelope与 Expose Port
+
+Parent、Owner和Child的准确关系是：Parent是上层Scope，Owner是Parent Scope内的Subgraph/Expand/Map Node，Child是Owner创建并等待的Child Scope Instance。
+
+```text
+Parent Scope
+├─ upstream
+├─ Owner Node
+│  └─ Child Scope
+│     ├─ Child Nodes
+│     └─ Child Terminal
+└─ downstream
+```
+
+可类比函数调用：Parent Scope是调用方，Owner Node是调用点，Child Plan是函数代码，Child Scope Instance是这次调用。Parent与Child不能直接建立Edge，只能通过Owner的Sealed Input和Output通信。
+
+Child正常完成某个Named Exit时，先冻结该Exit的`NodeOutputEnvelope`，再形成Completion Cut。Owner消费Cut后，对Parent发布两类独立Output Port：
+
+| Owner Output | 内容 | 用途 |
+| --- | --- | --- |
+| Completion Port | `ChildCompletionEnvelope` | Exit、Scope、Plan、Cut和完整Child Output引用 |
+| Expose Port | 某个Child Exit Port的原始Value Ref | Parent下游直接消费具体业务值 |
+
+```ts
+interface ChildCompletionEnvelope {
+  scope_id: string;
+  exit: ExitName;
+  output_envelope_ref: string;
+  output_envelope_hash: string;
+  plan_hash: string;
+  cut_event_seq: number;
+}
+```
+
+`output_envelope_ref/hash`指向Child Exit的`NodeOutputEnvelope`，后者是Child业务Output Port清单：
+
+```text
+ChildCompletionEnvelope
+  -> output_envelope_ref
+  -> Child NodeOutputEnvelope
+       ├─ document.value_ref
+       └─ message.value_ref
+```
+
+Expose由Owner声明：
+
+```ts
+interface ChildOutputExposeSpec {
+  from_exit: ExitName;
+  child_port: PortName;
+  required: boolean;
+}
+```
+
+如果Child以匹配Exit完成，Owner Expose Port直接复用对应Child Port的`value_ref/hash/schema_hash/byte_length`，不复制业务Value，也不重复收取Logical Output Bytes。不匹配实际Exit的Expose为Absent或按Required Contract失败，Runtime不能跨Exit猜值。
+
+一个Owner的完整返回关系可以表示为：
+
+```text
+Owner NodeOutputEnvelope
+├─ completion.value_ref
+│  -> ChildCompletionEnvelope
+│     -> Child NodeOutputEnvelope
+│        ├─ document.value_ref -> Document Value
+│        └─ message.value_ref  -> String Value
+├─ reviewed_document.value_ref -> 同一个Document Value
+└─ review_message.value_ref    -> 同一个String Value
+```
+
+Completion Port和Expose Port都是Owner Output Envelope中的兄弟Port。Parent Plan可以为两者分别声明零条、一条或多条Data Edge；连接策略在Compile时固定，目标Input再决定Aggregation。若下游连接Completion Port，其Input Snapshot得到Completion Value Ref；若连接Expose Port，则直接得到业务Value Ref。
+
+规范中的Published Port只保存引用元数据，不内嵌业务正文：
+
+```ts
+type PublishedNodeOutputPort =
+  | {
+      state: 'present';
+      value_ref: string;
+      value_hash: string;
+      schema_hash: string;
+      byte_length: number;
+    }
+  | { state: 'absent'; schema_hash: string };
+```
+
+这些`value_ref`通常引用`workflow_values`中的逻辑Value。小型Canonical JSON可`inline`保存；大型JSON、Text、Binary或Artifact Snapshot使用Content-addressed Blob；Logical Value Ref与Physical Blob Hash不是同一个身份。
+
+例如Child同时返回PDF文档和字符串（以下`val_*`和Hash只是讲解用示例，不规定真实ID格式）：
+
+```text
+Document Port
+  value_ref = val_doc_001
+  workflow_values[val_doc_001].storage_kind = blob
+  workflow_values[val_doc_001].blob_hash = sha256:pdf-bytes
+
+Message Port
+  value_ref = val_message_001
+  workflow_values[val_message_001].storage_kind = inline
+  workflow_values[val_message_001].inline_canonical_json = "审核通过"
+```
+
+通过Completion Port读取文档：
+
+```text
+Owner Output
+-> completion.value_ref
+-> ChildCompletionEnvelope.output_envelope_ref
+-> Child NodeOutputEnvelope.ports.document.value_ref
+-> Document Logical Value
+-> Blob bytes
+```
+
+通过Expose Port读取同一文档：
+
+```text
+Owner Output
+-> reviewed_document.value_ref
+-> 同一个Document Logical Value
+-> Blob bytes
+```
+
+Storage Resolver负责解引用并校验Value Hash和Schema，Executor不能直接查询Runtime DB。Child Cut与Parent Fence并发时，数据库提交顺序决定Consumption Disposition：Owner仍Accepting则Publish；Parent先Fence则Child结果只能Non-publish Audit，不能复活已关闭路径。
+
+<a id="part-6-13"></a>
+
+### 6.13 Map Quorum、Closing Remaining与 Result Manifest
+
+Map在创建任何Child Build前先Seal Expansion Manifest，并原子创建覆盖全部Frozen Index的Open Result Slot：
+
+```text
+Expansion Manifest
+├─ Collection Hash和Item Count
+├─ 每个Item的Index、Stable Key和Input Hash
+├─ Shared Input和Body Plan Binding
+├─ Completion Policy
+└─ 全部Ordered Result Slot
+```
+
+每个Slot只允许一次`open -> completed | errored | cancelled | fenced` CAS。未Materialize即被截断的Item写`fenced/scope_id=null`；Build Failure写`errored/scope_id=null`；Completed Item引用Child Exit Output Envelope。
+
+三种Completion Policy：
+
+| Policy | 成功条件 |
+| --- | --- |
+| `all_settled` | 全部Item得到Terminal Outcome，Error按`record/fail_node`处理 |
+| `all_accepted` | 全部Item进入允许Exit，Rejected按`wait_then_fail/fail_fast`处理 |
+| `quorum` | 至少`min_accepted`个Item进入允许Exit |
+
+Item Index与Completion Sequence不可混淆：
+
+```text
+index          = Item在Frozen Collection中的原始位置
+completion_seq = Map持久化接纳该Item结果的权威顺序
+cut_event_seq  = Child自身Completion Cut的事件序号
+```
+
+Quorum Winner按`(completion_seq ASC, index ASC)`选择前N个Accepted Item；相同Completion Sequence以Index打破平局。Winner Membership按完成顺序确定，但最终`MapItemResultsManifest.items`始终覆盖全部Index并按Index排序，便于稳定映射回原集合。
+
+达到Quorum不等于Map立即Terminal。Controller必须先进入durable `closing_remaining`：
+
+```text
+quorum reached
+  -> freeze selected_indices
+  -> fence未Materialize Slot/Build
+  -> 为已Materialize Remainder创建parent_close
+  -> 等待Non-publish Cut
+  -> 等待Required Compensation
+  -> 清零Open Build和Controller Reservation
+  -> Seal Result Manifest
+  -> Map Owner Terminal
+```
+
+Winner Set冻结后，Late Accepted Child不能加入Winner；已Fenced Slot也不能被Late Completion覆盖。Required Compensation为`action_required`时Map保持`closing_remaining`并阻止Owner Output和Cut。
+
+最终Map发布的是引用清单，而不是所有Child业务值组成的大数组：
+
+```ts
+interface MapResultManifest {
+  expansion_manifest_ref: string;
+  expansion_manifest_hash: string;
+  completion_policy_hash: string;
+  selected_indices: number[];
+  item_results_manifest_ref: string;
+  item_results_manifest_hash: string;
+  item_count: number;
+}
+```
+
+查询某个Winner Value时：
+
+```text
+MapResultManifest
+-> item_results_manifest_ref
+-> items[index]
+-> output_envelope_ref
+-> Child NodeOutputEnvelope
+-> target_port.value_ref
+-> Business Value
+```
+
+需要完整业务数组时，必须显式调用Versioned Deterministic Materializer/Reducer，按Index分页解引用、校验Hash/Schema和Bytes Limit，再发布新的普通Value；Map自身只负责Child Orchestration。
+
+<a id="part-6-14"></a>
+
+### 6.14 Terminal Node与 Candidate Sequence
+
+Terminal Input Port由Named Exit Contract推导。每个Required Exit Port必须恰有一条Data Edge，每个Optional Port最多一条，Aggregation固定为`single/only`。多值、Fallback、Quorum或业务Reduce必须先由Join/System/Delegation归一化。
+
+Terminal Trigger=True且Inputs Sealed后，在一个事务中：
+
+```text
+冻结Exit Output Snapshot
++ 分配scope-local candidate_seq
++ 创建immutable Terminal Candidate
++ Terminal Node terminalize
+```
+
+Candidate保存`scope_id + terminal_node_id + exit_name + output_snapshot_ref/hash + candidate_seq`。同一Terminal Node只能提交一个Candidate。Candidate表示“Scope可以通过这个Named Exit和这组输出正常结束”的提议，不表示Scope已经关闭；多个并行Terminal可以各自产生Candidate，Completion Policy最终只选择一个。
+
+`candidate_seq`是Candidate成为持久化事实的Scope内单调顺序，不是Worker Timestamp、质量分数或业务Priority：
+
+```text
+candidate_seq=1 -> 第一个持久化Candidate
+candidate_seq=2 -> 第二个持久化Candidate
+```
+
+`first_reached` Selector在其Eligibility Fact Snapshot中使用最小`candidate_seq`。需要“高优先级Exit覆盖较早低优先级Exit”时，必须等待Candidate集合封闭并使用Settled `exit_priority_then_first`；Early Rule不能预测未来是否会出现更高优先级结果。
+
+Candidate被选中后，Coordinator创建Close Request、冻结Candidate和Fact Frontier并Fence剩余Work；Required Cleanup收敛后才写Completion Cut。Engine Error、Local/Workflow Cancel和Parent Close不伪装成业务Candidate，而是走各自的Close Request协议。
+
+<a id="part-6-15"></a>
+
+### 6.15 第六部分记忆公式
+
+```text
+Node = 稳定逻辑目标
+Attempt = 一次真实执行
+
+动态结构
+= Immutable Parent Plan
++ Sealed Expansion Manifest
++ Recoverable Scope Build
++ Immutable Child Scope
++ Completion Envelope
+
+Parent Scope
+  contains Owner Node
+    owns Child Scope
+      returns through Owner Output
+
+Map Quorum Reached
+  -> Closing Remaining
+  -> Safe Cleanup
+  -> Result Manifest
+
+Terminal Candidate
+  -> Completion Policy
+  -> Close Request
+  -> Completion Cut
+```
 
 ---
 
@@ -2068,6 +2487,57 @@ Completion Coordinator是确定性数据库协调逻辑，不是 Agent或隐藏 
 它不会合并 Candidate、做业务评分或直接推进 Workflow。业务聚合必须由显式 Node完成。
 
 Early Rule使用 First Eligibility Event竞速语义，允许在全部 Node结束前选择结果；Settled Rule等 Candidate集合封闭和 Scope达到 Fixed Point后按 Priority仲裁。
+
+#### Early Rule 与 Eligibility Event Sequence
+
+Early Rule表达“Scope尚未全部收敛，但已经出现一个不可被未来事实推翻的充分结果，可以提前关闭剩余工作”。一条Rule只有在`when=true`且Selector至少匹配一个Persisted Candidate时才Eligible。例如：
+
+```text
+when: approved Candidate count >= 1
+select: first_reached among approved Candidates
+phase: early
+arbitration: first_eligible
+```
+
+Early Predicate必须是单调的：`count >= N`以及正向`and/or`一旦为True，未来新增Fact不会使其变回False；`eq`、`lte`、负向`not`或“不存在失败”等判断可能被未来事实推翻，不能用于Early Close。需要等待更高优先级结果或时间窗口时，应使用Settled Rule或显式Timer/Join，不能声明隐藏Grace Window。
+
+每个Candidate或Node Terminal Fact事务先分配Durable Event Sequence，再根据事务Post-state计算Early Rules。Rule第一次适用时写immutable Eligibility Record：
+
+```text
+workflow_graph_completion_eligibilities
+  - scope_id/rule_id
+  - phase = early
+  - eligibility_event_seq
+  - selected_candidate_id
+  - fact_snapshot_json/hash
+```
+
+`eligibility_event_seq`表示“这条Rule第一次具备结束Scope资格”的权威事件序号，不是Provider Timestamp、Worker Clock或网络到达时间。后续更多Candidate不会改写该记录。
+
+多条Early Rule按以下顺序仲裁：
+
+```text
+eligibility_event_seq ASC
+same_event_priority DESC
+rule_id ASC
+```
+
+Priority只在多条Rule被同一个Event同时激活时生效，不能让较晚的高Priority Rule覆盖较早Eligible Rule。Paused Run只积累Eligibility；Resume仍按原`eligibility_event_seq`仲裁，不能根据恢复时看到的最终Candidate集合重选历史。
+
+`candidate_seq`与`eligibility_event_seq`属于两个层次：
+
+| Sequence | 作用 |
+| --- | --- |
+| `candidate_seq` | 同一Scope内Candidate持久化的先后；供`first_reached`等Selector选Candidate |
+| `eligibility_event_seq` | Completion Rule第一次可适用的Fact Event顺序；用于多Rule仲裁 |
+
+因此完整选择过程是：
+
+```text
+先按Eligibility顺序选择Completion Rule
+  -> 再由该Rule的Selector从Fact Snapshot选择一个Candidate
+  -> 创建唯一Close Request
+```
 
 <a id="part-7-3"></a>
 
