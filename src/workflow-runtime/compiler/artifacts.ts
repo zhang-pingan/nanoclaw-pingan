@@ -233,35 +233,51 @@ function validateBoundaries(): void {
 }
 
 export function generateG2ProductionCompilerArtifacts(): ContractArtifactEnvelope {
-  validateBoundaries();
-  const files = expectedFiles();
-  validateCandidateSchemas(files);
-  for (const [relativePath, contents] of files)
-    writeAtomic(relativePath, contents);
-  return parseContractArtifactEnvelope(
-    strictParseJsonBytes(
-      Buffer.from(files.get(G2_ROOT_MANIFEST_PATH) ?? '', 'utf8'),
-    ),
-  );
+  return checkG2ProductionCompilerArtifacts();
 }
 
 export function checkG2ProductionCompilerArtifacts(): ContractArtifactEnvelope {
   validateBoundaries();
-  const files = expectedFiles();
-  validateCandidateSchemas(files);
-  const actualFiles = listCandidateFiles();
-  const expectedPaths = [...files.keys()].sort();
-  if (JSON.stringify(actualFiles) !== JSON.stringify(expectedPaths)) {
-    throw new Error('G2 candidate artifact inventory drift');
-  }
-  for (const [relativePath, contents] of files) {
-    const actual = fs.readFileSync(absoluteContractPath(relativePath), 'utf8');
-    if (actual !== contents)
-      throw new Error(`G2 candidate artifact drift: ${relativePath}`);
-  }
-  return parseContractArtifactEnvelope(
+  const root = parseContractArtifactEnvelope(
     strictParseJsonBytes(
-      Buffer.from(files.get(G2_ROOT_MANIFEST_PATH) ?? '', 'utf8'),
+      fs.readFileSync(absoluteContractPath(G2_ROOT_MANIFEST_PATH)),
     ),
   );
+  if (
+    root.hash !==
+    'sha256:c78a12ffdec353d3d3ec40350aeb6676e991e92cd5d6645946d5e21fcb013a77'
+  ) {
+    throw new Error('Frozen G2 Production Compiler root drift');
+  }
+  const manifest = strictParseJsonBytes(
+    fs.readFileSync(absoluteContractPath(G2_RESULTS_MANIFEST_PATH)),
+  );
+  assertJsonObject(manifest);
+  if (
+    manifest.manifest_hash !==
+    'sha256:c471bcf03ea23ce2d84d5a785b026ae222ec47f7d5fd5948bb8e19c89904b1d2'
+  ) {
+    throw new Error('Frozen G2 candidate manifest drift');
+  }
+  const inventory = root.payload.artifact_inventory;
+  if (!Array.isArray(inventory) || inventory.length !== 43) {
+    throw new Error('Frozen G2 artifact inventory drift');
+  }
+  const expectedPaths = new Set<string>([G2_ROOT_MANIFEST_PATH]);
+  for (const value of inventory) {
+    assertJsonObject(value);
+    const relativePath = String(value.path);
+    expectedPaths.add(relativePath);
+    const actual = fs.readFileSync(absoluteContractPath(relativePath), 'utf8');
+    if (actualRawHash(actual) !== value.raw_bytes_hash) {
+      throw new Error(`Frozen G2 candidate bytes drift: ${relativePath}`);
+    }
+  }
+  if (
+    JSON.stringify(listCandidateFiles()) !==
+    JSON.stringify([...expectedPaths].sort())
+  ) {
+    throw new Error('Frozen G2 candidate file set drift');
+  }
+  return root;
 }

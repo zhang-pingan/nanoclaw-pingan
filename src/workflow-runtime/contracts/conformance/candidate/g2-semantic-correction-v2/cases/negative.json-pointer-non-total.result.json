@@ -1,0 +1,23 @@
+{
+  "format": "icarus.workflow-compiler-conformance-case-result/1",
+  "case_id": "negative.json-pointer-non-total",
+  "source_kind": "graph_scope",
+  "source_hash": "sha256:1500a7034f1c2c063c80379812d555f761867f4a738cfb3afcb2e184d22e7418",
+  "outcome": "rejected",
+  "normalized_plan": null,
+  "static_lowering_contract_ref": null,
+  "static_lowering_contract_hash": null,
+  "diagnostics": [
+    {
+      "code": "json_pointer_non_total",
+      "phase": "prove",
+      "instance_pointer": "/data_edges/0/from/pointer",
+      "schema_pointer": null,
+      "stable_object_id": "data.pointer",
+      "detail_ref": null
+    }
+  ],
+  "proof_hashes": [],
+  "program_hashes": [],
+  "result_hash": "sha256:26daa61d0ca36bf235a75ffde13f260f335054f0608f4b99d29cd64ae232360f"
+}

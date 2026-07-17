@@ -366,6 +366,25 @@ function nodePortContract(
     if (value && typeof value === 'object' && !Array.isArray(value))
       return value;
   }
+  const wait = node.wait;
+  if (wait && typeof wait === 'object' && !Array.isArray(wait)) {
+    const contractRef = wait.contract_ref;
+    if (
+      contractRef &&
+      typeof contractRef === 'object' &&
+      !Array.isArray(contractRef)
+    ) {
+      const contract = snapshot.resourceByKey.get(refKey(contractRef));
+      if (contract?.resourceType === 'wait_contract') {
+        const ports = contract.content[direction];
+        assertJsonObject(ports);
+        const value = ports[port];
+        if (value && typeof value === 'object' && !Array.isArray(value)) {
+          return value;
+        }
+      }
+    }
+  }
   const ports = node[direction];
   if (ports && typeof ports === 'object' && !Array.isArray(ports)) {
     const value = ports[port];

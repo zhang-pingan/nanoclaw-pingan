@@ -17,7 +17,7 @@ export interface SnapshotResource {
 
 export interface BoundCompilerSnapshot {
   snapshotHash: Sha256Hash;
-  identityMatch: boolean;
+  compilerIdentity: JsonObject;
   resources: SnapshotResource[];
   resourceByKey: Map<string, SnapshotResource>;
   interfaces: JsonObject[];
@@ -91,7 +91,7 @@ export function bindCompilerSnapshot(
   }
   return {
     snapshotHash: asHash(snapshot.snapshot_hash, 'snapshot_hash'),
-    identityMatch: snapshot.compiler_identity.identity_match === true,
+    compilerIdentity: snapshot.compiler_identity,
     resources,
     resourceByKey,
     interfaces,

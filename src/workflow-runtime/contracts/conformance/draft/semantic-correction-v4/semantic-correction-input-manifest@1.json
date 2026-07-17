@@ -1,0 +1,374 @@
+{
+  "format": "icarus.workflow-semantic-correction-input-manifest/1",
+  "ref": {
+    "id": "icarus.workflow-semantic-correction-input-manifest",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-semantic-correction-input-manifest-artifact:1\n",
+  "hash": "sha256:01ae1b52c6ed3b7423e2f0bda70e72f8e678d96c5ae558e64a960558fbf5ad0e",
+  "payload": {
+    "gate": "G2",
+    "status": "ADDITIVE_INPUTS_PUBLISHED",
+    "case_catalog_ref": "conformance/draft/semantic-correction-v4/semantic-review-input-cases@4.json",
+    "case_catalog_hash": "sha256:d26adb161be66619ee7a9a5dfb1b9adc86e2194727686509d1e20d274e9091b5",
+    "compiler_identity": {
+      "compiler_toolchain_manifest_ref": {
+        "id": "icarus.workflow-compiler-toolchain",
+        "version": "3.0.0"
+      },
+      "compiler_toolchain_hash": "sha256:b92ad48c78c2af3129e471f484c68067b957bfa124187490df64aae1801cdfb6",
+      "compiler_version": "3.0.0",
+      "compiler_build_hash": "sha256:39d875d520c70493165704c5ab7e0b9edbe4eb337413e0e67f7aa5ff61acd629",
+      "canonical_normalizer_version": "2.0.0",
+      "canonical_normalizer_hash": "sha256:7d08408f780ca4350e153d99fd60810554daefe3826b39fe5e2fa5abee340b60",
+      "proof_algorithm_version": "2.0.0",
+      "proof_algorithm_hash": "sha256:4aa814c349c213fdaec4e48b4414a5bab728bb54328639c9d8c1aa0da680ca88",
+      "error_catalog_ref": {
+        "id": "icarus.workflow-compiler-error-catalog",
+        "version": "2.0.0"
+      },
+      "error_catalog_hash": "sha256:8fc7139b29cdddf3c1e13e0f9d8bc6b19a1d32c02c1e7f4b7e33023fcece91ef",
+      "compiled_ir_schema_ref": "conformance/compiler-contract-repair/schemas/compiled-scope-plan-v2-schema.json",
+      "compiled_ir_schema_hash": "sha256:4d4e325f94b55a6767f3e8596e1e9b880df2b402d3c89f587a10a23f0eadbd46",
+      "conformance_result_schema_ref": "conformance/compiler-contract-repair/schemas/compiler-conformance-case-result-schema.json",
+      "conformance_result_schema_hash": "sha256:019a4ba80ed8ae57b6c862d9fda62d9edcb8aca9c4910fde6bbb580c09af8706"
+    },
+    "case_count": 40,
+    "per_case_snapshot_count": 40,
+    "input_snapshot_format": "icarus.workflow-compiler-input-snapshot/2",
+    "identity_match_boolean": "forbidden",
+    "artifact_inventory": [
+      {
+        "path": "conformance/draft/semantic-correction-v4/semantic-review-input-cases@4.json",
+        "raw_sha256": "sha256:d6a5ce842c06716ddaf66b0b019e5511fb962631b5914e3ef71f61d1dd1d880b"
+      },
+      {
+        "path": "conformance/draft/semantic-correction-v4/snapshots/negative.capability-not-allowed@2.json",
+        "raw_sha256": "sha256:8379f53c720815c9796e5348bd5038ae3f8e2d2ca7e5327d73e59d7b234f420c"
+      },
+      {
+        "path": "conformance/draft/semantic-correction-v4/snapshots/negative.child-recipe-dependency-cycle@2.json",
+        "raw_sha256": "sha256:ba83c8dc7772dace70129acc885b0dd0ee70eaeefbb4a056cd6131b6ca98c714"
+      },
+      {
+        "path": "conformance/draft/semantic-correction-v4/snapshots/negative.child-recipe-set-mismatch@2.json",
+        "raw_sha256": "sha256:cb2e7580fae0e4c9887c9971765b50a2824e5e57dff998dfce6693fba27b5843"
+      },
+      {
+        "path": "conformance/draft/semantic-correction-v4/snapshots/negative.compiler-integrity-mismatch@2.json",
+        "raw_sha256": "sha256:bc66baf1a874ccee9af0e80b984b175236b2fbaf87c4a2f3ed61366ef45792c0"
+      },
+      {
+        "path": "conformance/draft/semantic-correction-v4/snapshots/negative.completion-contract-invalid@2.json",
+        "raw_sha256": "sha256:53f1679652cf63b052f5ed9d99664d148fea35a85f64e48ecb9966a2b6316a9f"
+      },
+      {
+        "path": "conformance/draft/semantic-correction-v4/snapshots/negative.condition-complexity-exceeded@2.json",
+        "raw_sha256": "sha256:546045ccb8646e3f3c63d96015ac08626fde42f4865f1125d731733e24a98c8e"
+      },
+      {
+        "path": "conformance/draft/semantic-correction-v4/snapshots/negative.condition-type-mismatch@2.json",
+        "raw_sha256": "sha256:415884085f0444b8039b31f61539c1e6d1ee75b53cf04b6caa001d2089c5a5b9"
+      },
+      {
+        "path": "conformance/draft/semantic-correction-v4/snapshots/negative.definition-child-creation-key-template@2.json",
+        "raw_sha256": "sha256:300e00c66049dda149174587d4171553f6bfffe08b6abc16ef401261961366a4"
+      },
+      {
+        "path": "conformance/draft/semantic-correction-v4/snapshots/negative.definition-notification-delivery-requirement@2.json",
+        "raw_sha256": "sha256:b867988998c286336f0c7f0363324599a627d042f90b49063c99bb7327daa21d"
+      },
+      {
+        "path": "conformance/draft/semantic-correction-v4/snapshots/negative.early-completion-non-monotone@2.json",
+        "raw_sha256": "sha256:d7d3129338be4dd9cba245989d94077dc2e0b362cc9ffa857cf48e8d13a5db67"
+      },
+      {
+        "path": "conformance/draft/semantic-correction-v4/snapshots/negative.graph-cross-scope-edge@2.json",
+        "raw_sha256": "sha256:21b3a474b60911430c2d3e3804796b3fc09c7fc92ac83f5d266e329f13350e05"
+      },
+      {
+        "path": "conformance/draft/semantic-correction-v4/snapshots/negative.graph-dependency-cycle@2.json",
+        "raw_sha256": "sha256:30f630ae441ce1a051d1b5ae021dba606f22adcd5f6d026290443de82fc5ba55"
+      },
+      {
+        "path": "conformance/draft/semantic-correction-v4/snapshots/negative.graph-endpoint-not-found@2.json",
+        "raw_sha256": "sha256:6ed566de818271659abcbe4e86d1cf1f6272e3de0483f92ca0acc4b063068e71"
+      },
+      {
+        "path": "conformance/draft/semantic-correction-v4/snapshots/negative.graph-id-duplicate@2.json",
+        "raw_sha256": "sha256:73803841ec95d932f7dad0914d0f0576ce2ea0fe8e9bafb9278dfc2a587ad781"
+      },
+      {
+        "path": "conformance/draft/semantic-correction-v4/snapshots/negative.json-duplicate-key@2.json",
+        "raw_sha256": "sha256:18505bc4a5ccf5376106e8c102bee321d0e914e5fffce4f1b39646e33df4a9ca"
+      },
+      {
+        "path": "conformance/draft/semantic-correction-v4/snapshots/negative.json-pointer-non-total@2.json",
+        "raw_sha256": "sha256:dd783ba907d755b62c3a5df382aa96f43503076da61fe05932d90c56bc94d76d"
+      },
+      {
+        "path": "conformance/draft/semantic-correction-v4/snapshots/negative.json-syntax-invalid@2.json",
+        "raw_sha256": "sha256:1b925962bebb8040078526b84226830d9a8bb5b8883bb7431302480930ce127f"
+      },
+      {
+        "path": "conformance/draft/semantic-correction-v4/snapshots/negative.policy-escalation@2.json",
+        "raw_sha256": "sha256:7def15d0804b891af6e832e54dace5da0a2b8aae797d256a733d8d728c948058"
+      },
+      {
+        "path": "conformance/draft/semantic-correction-v4/snapshots/negative.quality-revision-effect-key-incompatible@2.json",
+        "raw_sha256": "sha256:3cdb4908af177737897b4a5ad346df307aa89d542e9fea817dd065f3b6a0307d"
+      },
+      {
+        "path": "conformance/draft/semantic-correction-v4/snapshots/negative.quality-revision-missing-feedback-schema@2.json",
+        "raw_sha256": "sha256:be18e5afe7783b46e979bf57d64f53d2e2078dafbeecbf9aeb0dc0e4b575e2ce"
+      },
+      {
+        "path": "conformance/draft/semantic-correction-v4/snapshots/negative.quality-revision-missing-quality-gate@2.json",
+        "raw_sha256": "sha256:0517db373de928723c6ee8df6719179d8e87b87419bc4bf8cf7cdbe7da9a1a70"
+      },
+      {
+        "path": "conformance/draft/semantic-correction-v4/snapshots/negative.registry-ref-not-found@2.json",
+        "raw_sha256": "sha256:ec2eeb4a5664d0b774d580f7c2bfde1546be13079da518e04a88346718198bd7"
+      },
+      {
+        "path": "conformance/draft/semantic-correction-v4/snapshots/negative.registry-ref-unpinned@2.json",
+        "raw_sha256": "sha256:81e14ccbf09dd7763d7379f59208c5c99fc31f561bb0200e6bd0d5527dc8e8a0"
+      },
+      {
+        "path": "conformance/draft/semantic-correction-v4/snapshots/negative.route-group-ambiguous@2.json",
+        "raw_sha256": "sha256:0bda0eb629cf6df19c43e33465543e9aa756a60918bfa2d802325dcb3ed12b35"
+      },
+      {
+        "path": "conformance/draft/semantic-correction-v4/snapshots/negative.runtime-safety-limit-exceeded@2.json",
+        "raw_sha256": "sha256:ec856e2789c5342b1ca1aab5a439cdb46c057d376fc6a5961fdb3579fc23317e"
+      },
+      {
+        "path": "conformance/draft/semantic-correction-v4/snapshots/negative.schema-not-assignable@2.json",
+        "raw_sha256": "sha256:0c17a4d2fb1c01ce6a7d87ad77af2412a559a5a21424d73a1144671d6429a242"
+      },
+      {
+        "path": "conformance/draft/semantic-correction-v4/snapshots/negative.schema-profile-keyword-unsupported@2.json",
+        "raw_sha256": "sha256:8a1263d9c7da5567ee4bd10c3f65afb39703e30392893b1325c286d6512877e2"
+      },
+      {
+        "path": "conformance/draft/semantic-correction-v4/snapshots/negative.schema-unknown-field@2.json",
+        "raw_sha256": "sha256:c1113ef834b29e88a162be538a2df7a4d789eba7afb1d8810721e90ee2148193"
+      },
+      {
+        "path": "conformance/draft/semantic-correction-v4/snapshots/negative.trigger-contract-invalid@2.json",
+        "raw_sha256": "sha256:c262f417095931fd6dbcd394835501f3366189e899b7e2c44a602b34cc56d206"
+      },
+      {
+        "path": "conformance/draft/semantic-correction-v4/snapshots/positive.compiler-integrity-match-control@2.json",
+        "raw_sha256": "sha256:cf7b889d8e6d01b0d2243395a6a96b65bbfff2ce835773ee88810c870fbf5d5f"
+      },
+      {
+        "path": "conformance/draft/semantic-correction-v4/snapshots/positive.condition-route@2.json",
+        "raw_sha256": "sha256:b3e0c8b11b396031cba5a07e37f2da6fd6e96d3b4e430bde6a751383be9ffd33"
+      },
+      {
+        "path": "conformance/draft/semantic-correction-v4/snapshots/positive.expand@2.json",
+        "raw_sha256": "sha256:6d066c0da5bfaa4290b1da68259eb7fa87565d2fd87089b768693cbb7dba790a"
+      },
+      {
+        "path": "conformance/draft/semantic-correction-v4/snapshots/positive.map@2.json",
+        "raw_sha256": "sha256:4bac144fb5b098c10b3211f694715406905715048a6806f4fcd070e80be8c4ad"
+      },
+      {
+        "path": "conformance/draft/semantic-correction-v4/snapshots/positive.policy-intersection@2.json",
+        "raw_sha256": "sha256:de3e62d746e0bbcde606038a95c2136ebb0fdd4c0f3b54718432b1b97f91a5ad"
+      },
+      {
+        "path": "conformance/draft/semantic-correction-v4/snapshots/positive.quality-revision-binding@2.json",
+        "raw_sha256": "sha256:81562a4262e2a449f702e3ecfddfaa5225e52e9d3000ed728e61fc2175295aa0"
+      },
+      {
+        "path": "conformance/draft/semantic-correction-v4/snapshots/positive.sound-subtype-different-hash@2.json",
+        "raw_sha256": "sha256:123e5ee4c9caefe4ec12f1318466d43d1dc9dc5655fdee4cbad796913d361acb"
+      },
+      {
+        "path": "conformance/draft/semantic-correction-v4/snapshots/positive.static-child-closure@2.json",
+        "raw_sha256": "sha256:4ef51d2d84bd0a2d95bde78d2803905185b7b400bc61887edf0697a7075787ca"
+      },
+      {
+        "path": "conformance/draft/semantic-correction-v4/snapshots/positive.static-lowering@2.json",
+        "raw_sha256": "sha256:7f8b497fb2d20c0bb8656950a93434cff0adff1e258adbac28411f1033e35e3b"
+      },
+      {
+        "path": "conformance/draft/semantic-correction-v4/snapshots/positive.subgraph@2.json",
+        "raw_sha256": "sha256:a7adfe6981915b71922d98e7df3fa916b41554a4400ff30016b0052d358fb67a"
+      },
+      {
+        "path": "conformance/draft/semantic-correction-v4/snapshots/positive.wait@2.json",
+        "raw_sha256": "sha256:1785fc6fa2cc58a8b29b678724c94881e3ec41c6595f2e37320660bfc35fd7b0"
+      },
+      {
+        "path": "conformance/draft/semantic-correction-v4/sources/negative.capability-not-allowed/source.json",
+        "raw_sha256": "sha256:055a8db991bf2677c078e1f02bd0e3c41dc060c6fdc1c57cd4d5b090bf8d800f"
+      },
+      {
+        "path": "conformance/draft/semantic-correction-v4/sources/negative.child-recipe-dependency-cycle/source.json",
+        "raw_sha256": "sha256:3c8a78d338950091afe49ceae01fbf1b386d996b851e089cef0f7f21fa1a0598"
+      },
+      {
+        "path": "conformance/draft/semantic-correction-v4/sources/negative.child-recipe-set-mismatch/source.json",
+        "raw_sha256": "sha256:a12517eb9f6c8b9506368e44b77c212d30ad17341e8b578461d7dff4d91a307a"
+      },
+      {
+        "path": "conformance/draft/semantic-correction-v4/sources/negative.compiler-integrity-mismatch/source.json",
+        "raw_sha256": "sha256:4f2e30369783cdfddeb830abc7ca2313b240f5ea7b62bb8c4331e16b9c73acbd"
+      },
+      {
+        "path": "conformance/draft/semantic-correction-v4/sources/negative.completion-contract-invalid/source.json",
+        "raw_sha256": "sha256:a245ad8e8b5bfe89baa29dca5e34ce5c3920e89478e1858a8942dfa2032dcae3"
+      },
+      {
+        "path": "conformance/draft/semantic-correction-v4/sources/negative.condition-complexity-exceeded/source.json",
+        "raw_sha256": "sha256:255f10ade9e7c59366177b903eccb238c841ae42d81dc2e6a0ea073806bc1729"
+      },
+      {
+        "path": "conformance/draft/semantic-correction-v4/sources/negative.condition-type-mismatch/source.json",
+        "raw_sha256": "sha256:19c866cd4981a83e6b5036f3df78ebd98e9dedfa5a371f9c77dbf8dc252d7695"
+      },
+      {
+        "path": "conformance/draft/semantic-correction-v4/sources/negative.definition-child-creation-key-template/source.json",
+        "raw_sha256": "sha256:d8895a3e929d4528eeaa366436c428862fa755099e07ed78ee1b12eb4c579730"
+      },
+      {
+        "path": "conformance/draft/semantic-correction-v4/sources/negative.definition-notification-delivery-requirement/source.json",
+        "raw_sha256": "sha256:57ba710f86a3c1f22c15b1bef753c4e43a422be979ce606e0385d6e2b00fdd58"
+      },
+      {
+        "path": "conformance/draft/semantic-correction-v4/sources/negative.early-completion-non-monotone/source.json",
+        "raw_sha256": "sha256:2c97b893410bb298ff1524a5aa90d40876ea268a84562f338a0f7b4c78f67191"
+      },
+      {
+        "path": "conformance/draft/semantic-correction-v4/sources/negative.graph-cross-scope-edge/source.json",
+        "raw_sha256": "sha256:26ad44b8bea470efd28cfb92233aefa451dba9e60247dbb807e11992a7280b3a"
+      },
+      {
+        "path": "conformance/draft/semantic-correction-v4/sources/negative.graph-dependency-cycle/source.json",
+        "raw_sha256": "sha256:74de239d46de6b4dbcefb641017046396f65f56f8eaaf20c1668e4ea09c14686"
+      },
+      {
+        "path": "conformance/draft/semantic-correction-v4/sources/negative.graph-endpoint-not-found/source.json",
+        "raw_sha256": "sha256:3b9c37b723bdeeebcc4a81f429006cef57fe84bc7f9f985ecd6c4734be4d0a16"
+      },
+      {
+        "path": "conformance/draft/semantic-correction-v4/sources/negative.graph-id-duplicate/source.json",
+        "raw_sha256": "sha256:ab546e55684ccde713294297b06a916843abb4a541bdf9373b81d0bcfc95ce98"
+      },
+      {
+        "path": "conformance/draft/semantic-correction-v4/sources/negative.json-duplicate-key/source.json",
+        "raw_sha256": "sha256:17eff513e8b200604882189a92ec75a23b5cc6cb9d645bf9fa243f29a93d7be8"
+      },
+      {
+        "path": "conformance/draft/semantic-correction-v4/sources/negative.json-pointer-non-total/source.json",
+        "raw_sha256": "sha256:5d3bffad964e874cead84a70c9adc36f796d3518cbf482c300ee6f46694a0c77"
+      },
+      {
+        "path": "conformance/draft/semantic-correction-v4/sources/negative.json-syntax-invalid/source.json",
+        "raw_sha256": "sha256:93854b93e37cdb128d1ab12965b4c9c1a66293a923999616d77af658807d9a22"
+      },
+      {
+        "path": "conformance/draft/semantic-correction-v4/sources/negative.policy-escalation/source.json",
+        "raw_sha256": "sha256:278b978a57fc643d4ed51810785174ad27a9bb48839554fffa727bfd3b830703"
+      },
+      {
+        "path": "conformance/draft/semantic-correction-v4/sources/negative.quality-revision-effect-key-incompatible/source.json",
+        "raw_sha256": "sha256:916728ef35e39c3f904837eb4a8c893d9df3260ea55db999b0055ba04bc1b325"
+      },
+      {
+        "path": "conformance/draft/semantic-correction-v4/sources/negative.quality-revision-missing-feedback-schema/source.json",
+        "raw_sha256": "sha256:bfbe5bd7934e21ae0c2cfe5c84e1752abeacdfcbea6f78d9bc1d38107668ecf3"
+      },
+      {
+        "path": "conformance/draft/semantic-correction-v4/sources/negative.quality-revision-missing-quality-gate/source.json",
+        "raw_sha256": "sha256:860f521eff46be13191e6b25669c69765968213e010ac6eccb6bc9416a0d9da1"
+      },
+      {
+        "path": "conformance/draft/semantic-correction-v4/sources/negative.registry-ref-not-found/source.json",
+        "raw_sha256": "sha256:26e56e368aeffd85f440292b4cc27f41cb149ff9afce9d7ac78b58959d115ed6"
+      },
+      {
+        "path": "conformance/draft/semantic-correction-v4/sources/negative.registry-ref-unpinned/source.json",
+        "raw_sha256": "sha256:7e0a972849e51acf7a3f51c87b59739e3c1addac1a0a19033c10c1c533b515e6"
+      },
+      {
+        "path": "conformance/draft/semantic-correction-v4/sources/negative.route-group-ambiguous/source.json",
+        "raw_sha256": "sha256:73feddbc5a989ccf654b5a8ef2852db379f6d289795c0ae1738d0c203d244a6a"
+      },
+      {
+        "path": "conformance/draft/semantic-correction-v4/sources/negative.runtime-safety-limit-exceeded/source.json",
+        "raw_sha256": "sha256:e143ef2e0557d496ab0d7299fe5c91a67ea201b99080357bc79c696c78121cd8"
+      },
+      {
+        "path": "conformance/draft/semantic-correction-v4/sources/negative.schema-not-assignable/source.json",
+        "raw_sha256": "sha256:e45030dd4cbaf2554ab7593073668f5e7571eb75dbfce9d955b47027d7bc8955"
+      },
+      {
+        "path": "conformance/draft/semantic-correction-v4/sources/negative.schema-profile-keyword-unsupported/source.json",
+        "raw_sha256": "sha256:6b4deaf748203c7a32ff8acb6989d551931604274d69789bc9e57846e1519c41"
+      },
+      {
+        "path": "conformance/draft/semantic-correction-v4/sources/negative.schema-unknown-field/source.json",
+        "raw_sha256": "sha256:d8747867fbe5f33a18995043dcd1d515f725832d9b1c414b9d226f470b4ca25e"
+      },
+      {
+        "path": "conformance/draft/semantic-correction-v4/sources/negative.trigger-contract-invalid/source.json",
+        "raw_sha256": "sha256:38a5143c2b7f5e1aa9e381b81704a9ca56f4492106eec570ebe7e53f56a967b9"
+      },
+      {
+        "path": "conformance/draft/semantic-correction-v4/sources/positive.compiler-integrity-match-control/source.json",
+        "raw_sha256": "sha256:4f2e30369783cdfddeb830abc7ca2313b240f5ea7b62bb8c4331e16b9c73acbd"
+      },
+      {
+        "path": "conformance/draft/semantic-correction-v4/sources/positive.condition-route/source.json",
+        "raw_sha256": "sha256:740b12b581a9bc3c09a4b07d999a9d2f3cd9a5be73f508149f946d74ddea10e2"
+      },
+      {
+        "path": "conformance/draft/semantic-correction-v4/sources/positive.expand/source.json",
+        "raw_sha256": "sha256:44799d206f3fb26508844b0ab13a1f3141b1d5c67bfce6d8f1102d578f9b19cd"
+      },
+      {
+        "path": "conformance/draft/semantic-correction-v4/sources/positive.map/source.json",
+        "raw_sha256": "sha256:2bbada97d833d5b1dd03fdad7fe8662d5dfa12723bae18d5a06596f474d22201"
+      },
+      {
+        "path": "conformance/draft/semantic-correction-v4/sources/positive.policy-intersection/source.json",
+        "raw_sha256": "sha256:14833e1693caacff8ae65479b7735ca6cc8beac24e51487756212339f1a85768"
+      },
+      {
+        "path": "conformance/draft/semantic-correction-v4/sources/positive.quality-revision-binding/source.json",
+        "raw_sha256": "sha256:5dd3345f91ad92759da1d51ab38fec00bbcccf460f3de39bdf7328f79719f42c"
+      },
+      {
+        "path": "conformance/draft/semantic-correction-v4/sources/positive.sound-subtype-different-hash/source.json",
+        "raw_sha256": "sha256:bc3383910dc1f15ef156eb27a4a4668c80004c7fca1f3364b6ddbc27b1b8e7c4"
+      },
+      {
+        "path": "conformance/draft/semantic-correction-v4/sources/positive.static-child-closure/source.json",
+        "raw_sha256": "sha256:cadb37aad6b0438a14dd6de76538a7edb45909405b2266f9f90105141cab1803"
+      },
+      {
+        "path": "conformance/draft/semantic-correction-v4/sources/positive.static-lowering/source.json",
+        "raw_sha256": "sha256:6bf9bcfd3d046852a293042b276524589d3f6a66f78e5c097878fa2f337d97c3"
+      },
+      {
+        "path": "conformance/draft/semantic-correction-v4/sources/positive.subgraph/source.json",
+        "raw_sha256": "sha256:0a97e2fc7763c5fd418c00869bde9b53017004d5bed5fd7d75be208a993e1ac8"
+      },
+      {
+        "path": "conformance/draft/semantic-correction-v4/sources/positive.wait/source.json",
+        "raw_sha256": "sha256:8277bfc33d268d98624bdcde423551018e7976939c7ad4ad960c83cf5f8d26f1"
+      }
+    ],
+    "expected_oracle_status": "absent_pending_fresh_human_review",
+    "golden_semantic_review_status": "not_run",
+    "approval_status": "not_run",
+    "golden_seal_status": "not_run",
+    "sealed_write_status": "not_run",
+    "g3_through_g9_status": "not_started"
+  }
+}

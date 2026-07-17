@@ -1,0 +1,23 @@
+{
+  "format": "icarus.workflow-compiler-conformance-case-result/1",
+  "case_id": "negative.completion-contract-invalid",
+  "source_kind": "graph_scope",
+  "source_hash": "sha256:082c903f785a158457ea1ecc72d796a3a041711ee772daf3a8fd47ea36f17e21",
+  "outcome": "rejected",
+  "normalized_plan": null,
+  "static_lowering_contract_ref": null,
+  "static_lowering_contract_hash": null,
+  "diagnostics": [
+    {
+      "code": "completion_contract_invalid",
+      "phase": "prove",
+      "instance_pointer": "/completion/settled_rules/0/select/exits/0",
+      "schema_pointer": null,
+      "stable_object_id": "select_missing_exit",
+      "detail_ref": null
+    }
+  ],
+  "proof_hashes": [],
+  "program_hashes": [],
+  "result_hash": "sha256:53cc88552f42ce302b470e4ee0e173918f59069964c00f3a7121147d29a0003c"
+}

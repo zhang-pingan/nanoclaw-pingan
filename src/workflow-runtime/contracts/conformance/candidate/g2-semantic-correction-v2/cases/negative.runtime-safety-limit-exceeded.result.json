@@ -1,0 +1,23 @@
+{
+  "format": "icarus.workflow-compiler-conformance-case-result/1",
+  "case_id": "negative.runtime-safety-limit-exceeded",
+  "source_kind": "graph_scope",
+  "source_hash": "sha256:7cd07deb66856aaf219c392056614c29d51119f10ba2849101c2f3a02c8952b0",
+  "outcome": "rejected",
+  "normalized_plan": null,
+  "static_lowering_contract_ref": null,
+  "static_lowering_contract_hash": null,
+  "diagnostics": [
+    {
+      "code": "runtime_safety_limit_exceeded",
+      "phase": "prove",
+      "instance_pointer": "/nodes",
+      "schema_pointer": null,
+      "stable_object_id": "safety_nodes",
+      "detail_ref": null
+    }
+  ],
+  "proof_hashes": [],
+  "program_hashes": [],
+  "result_hash": "sha256:3b359aacd451602703d6b0b2a68ad67c7ab485f9c7ea3c70adfa6d89a89f00b6"
+}

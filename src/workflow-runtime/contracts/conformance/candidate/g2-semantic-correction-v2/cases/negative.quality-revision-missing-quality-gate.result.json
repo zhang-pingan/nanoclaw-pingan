@@ -1,0 +1,23 @@
+{
+  "format": "icarus.workflow-compiler-conformance-case-result/1",
+  "case_id": "negative.quality-revision-missing-quality-gate",
+  "source_kind": "graph_scope",
+  "source_hash": "sha256:02fb279d617e97e198c7c9f0fa5fd335f5c643cefab259f54805a1fbf987d19e",
+  "outcome": "rejected",
+  "normalized_plan": null,
+  "static_lowering_contract_ref": null,
+  "static_lowering_contract_hash": null,
+  "diagnostics": [
+    {
+      "code": "quality_revision_contract_invalid",
+      "phase": "bind",
+      "instance_pointer": "/nodes/0/capability_ref",
+      "schema_pointer": null,
+      "stable_object_id": "quality",
+      "detail_ref": null
+    }
+  ],
+  "proof_hashes": [],
+  "program_hashes": [],
+  "result_hash": "sha256:ad76e200c8f2a1d527b907fb5a53f357289e402abe796c8db5ba32344dacf5f2"
+}

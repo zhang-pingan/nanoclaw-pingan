@@ -1,0 +1,23 @@
+{
+  "format": "icarus.workflow-compiler-conformance-case-result/1",
+  "case_id": "negative.schema-unknown-field",
+  "source_kind": "graph_scope",
+  "source_hash": "sha256:ac78b9c46af8e48d7dba6de0893f6938b95d86ab1b1670a33e07dc50a5511f46",
+  "outcome": "rejected",
+  "normalized_plan": null,
+  "static_lowering_contract_ref": null,
+  "static_lowering_contract_hash": null,
+  "diagnostics": [
+    {
+      "code": "schema_unknown_field",
+      "phase": "schema",
+      "instance_pointer": "/compiler_hint",
+      "schema_pointer": "#/additionalProperties",
+      "stable_object_id": null,
+      "detail_ref": null
+    }
+  ],
+  "proof_hashes": [],
+  "program_hashes": [],
+  "result_hash": "sha256:f66a3437ea4c35f91b829cecb5051aaff7ecbeb39a8ddc33b462c34973c5a090"
+}

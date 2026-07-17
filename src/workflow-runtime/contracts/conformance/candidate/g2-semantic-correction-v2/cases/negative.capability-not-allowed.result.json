@@ -1,0 +1,23 @@
+{
+  "format": "icarus.workflow-compiler-conformance-case-result/1",
+  "case_id": "negative.capability-not-allowed",
+  "source_kind": "graph_scope",
+  "source_hash": "sha256:f2dcad4a01eeef562f820042a47d41cec0b0b941a47d44bac5f362c46860a6b2",
+  "outcome": "rejected",
+  "normalized_plan": null,
+  "static_lowering_contract_ref": null,
+  "static_lowering_contract_hash": null,
+  "diagnostics": [
+    {
+      "code": "capability_not_allowed",
+      "phase": "bind",
+      "instance_pointer": "/nodes/0/capability_ref",
+      "schema_pointer": null,
+      "stable_object_id": "forbidden",
+      "detail_ref": null
+    }
+  ],
+  "proof_hashes": [],
+  "program_hashes": [],
+  "result_hash": "sha256:30fec537392e40439d75091d8c2d062a829579a2afb0e33e6ba64724d1f0ccc6"
+}

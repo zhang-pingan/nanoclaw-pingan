@@ -1,0 +1,23 @@
+{
+  "format": "icarus.workflow-compiler-conformance-case-result/1",
+  "case_id": "negative.condition-type-mismatch",
+  "source_kind": "graph_scope",
+  "source_hash": "sha256:ee24d0b92beeccdae5199a938725bc10230bbfac8d59d033088992b640bc03c5",
+  "outcome": "rejected",
+  "normalized_plan": null,
+  "static_lowering_contract_ref": null,
+  "static_lowering_contract_hash": null,
+  "diagnostics": [
+    {
+      "code": "condition_type_mismatch",
+      "phase": "prove",
+      "instance_pointer": "/control_edges/0/when",
+      "schema_pointer": null,
+      "stable_object_id": "edge.condition",
+      "detail_ref": null
+    }
+  ],
+  "proof_hashes": [],
+  "program_hashes": [],
+  "result_hash": "sha256:9dec0d5653942005a5362110a28082e37e0af8719e0bb3a1df8db55896264a54"
+}

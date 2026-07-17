@@ -1,0 +1,36 @@
+{
+  "format": "icarus.workflow-contract-pack-compiler-semantic-correction/1",
+  "ref": {
+    "id": "icarus.workflow-contract-pack-compiler-semantic-correction",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-contract-pack-compiler-semantic-correction:1\n",
+  "hash": "sha256:5211d9b655d047c75ffbcbae7d9f70126ba4bccbdc6dffec04e7f3f8435bb5b1",
+  "payload": {
+    "gate": "G2",
+    "status": "ADDITIVE_CONTRACT_CORRECTION",
+    "decision_ref": "conformance/compiler-semantic-correction/semantic-correction-contract@1.json",
+    "decision_hash": "sha256:581231f568ae38f8c42320501667e5968b47bbf67e257c6005b51ff79bbd851a",
+    "error_catalog_ref": "conformance/compiler-semantic-correction/workflow-compiler-error-catalog@2.json",
+    "error_catalog_hash": "sha256:8fc7139b29cdddf3c1e13e0f9d8bc6b19a1d32c02c1e7f4b7e33023fcece91ef",
+    "frozen_r016_root": "sha256:776d516ba6c8c73a7da33895a4f4f3680054a1e93fbf056acdfc3ec36550b324",
+    "frozen_g2_root": "sha256:c78a12ffdec353d3d3ec40350aeb6676e991e92cd5d6645946d5e21fcb013a77",
+    "frozen_draft_v3_root": "sha256:659caf9b4add7027116bf780c83b2b85dc95ca0baae9cb8b9840d760a785132b",
+    "artifact_inventory": [
+      {
+        "path": "conformance/compiler-semantic-correction/semantic-correction-contract@1.json",
+        "raw_sha256": "sha256:f308536c22766d94a22ba75a045245f7c3d351d3f98539fd20585635f1e93aa6"
+      },
+      {
+        "path": "conformance/compiler-semantic-correction/workflow-compiler-error-catalog@2.json",
+        "raw_sha256": "sha256:769b88b972d188c23608cba7d67325df6b18fa7ec3db0852658708f4340bd84f"
+      }
+    ],
+    "golden_semantic_review_status": "not_run",
+    "approval_status": "not_run",
+    "golden_seal_status": "not_run",
+    "sealed_write_status": "not_run",
+    "g3_through_g9_status": "not_started"
+  }
+}

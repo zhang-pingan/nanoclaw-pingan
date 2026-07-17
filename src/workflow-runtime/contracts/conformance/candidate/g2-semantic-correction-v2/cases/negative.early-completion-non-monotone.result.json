@@ -1,0 +1,23 @@
+{
+  "format": "icarus.workflow-compiler-conformance-case-result/1",
+  "case_id": "negative.early-completion-non-monotone",
+  "source_kind": "graph_scope",
+  "source_hash": "sha256:4e89e35b580eba30d9bb7a2dbcd9a95cb6952142933b7916e041c3f1051a7617",
+  "outcome": "rejected",
+  "normalized_plan": null,
+  "static_lowering_contract_ref": null,
+  "static_lowering_contract_hash": null,
+  "diagnostics": [
+    {
+      "code": "early_completion_non_monotone",
+      "phase": "prove",
+      "instance_pointer": "/completion/early_rules/0/when",
+      "schema_pointer": null,
+      "stable_object_id": "early_eq",
+      "detail_ref": null
+    }
+  ],
+  "proof_hashes": [],
+  "program_hashes": [],
+  "result_hash": "sha256:721b573be6a0a4650367a9839bad2091d1e3d13d36310444c963c5433bec7c4e"
+}

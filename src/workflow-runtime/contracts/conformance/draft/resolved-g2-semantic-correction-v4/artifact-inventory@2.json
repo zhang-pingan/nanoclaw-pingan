@@ -1,0 +1,38 @@
+{
+  "format": "icarus.workflow-compiler-semantic-correction-draft-inventory/2",
+  "ref": {
+    "id": "icarus.workflow-compiler-semantic-correction-draft-inventory",
+    "version": "2.0.0"
+  },
+  "version": 2,
+  "domain_separator": "icarus:workflow-compiler-semantic-correction-draft-inventory:2\n",
+  "hash": "sha256:6aaac8162d3c7c9599cfed3043671bed5b1e13e4d1558abc4b63891fcd02a976",
+  "payload": {
+    "format": "icarus.workflow-compiler-semantic-correction-draft-inventory/2",
+    "inventory_version": "2.0.0-additive-semantic-correction",
+    "entry_count": 2,
+    "entries": [
+      {
+        "path": "conformance/draft/resolved-g2-semantic-correction-v4/golden-draft-cases@4.json",
+        "format": "icarus.workflow-compiler-golden-draft-cases/4",
+        "ref": {
+          "id": "icarus.workflow-compiler-golden-draft-cases",
+          "version": "4.0.0"
+        },
+        "artifact_hash": "sha256:2ffcee41a44a2d6d1d7fd3abc421973ccb0c7badbd874b11803936ae7453ba75",
+        "raw_bytes_hash": "sha256:793b795b290d2ea609099d49a7f5950492eea05d6ec1321e7622e1b671da4234"
+      },
+      {
+        "path": "conformance/draft/resolved-g2-semantic-correction-v4/semantic-review-handoff@2.json",
+        "format": "icarus.workflow-compiler-semantic-review-handoff/2",
+        "ref": {
+          "id": "icarus.workflow-compiler-semantic-review-handoff",
+          "version": "2.0.0"
+        },
+        "artifact_hash": "sha256:b33dea9f05f55067c7b0eb599b189e4e681e8b21ee26f6413d74e5bc72accdf7",
+        "raw_bytes_hash": "sha256:8384da8c163668cebc3d6b7c9ec7d901ecbaba0edefb3ef1860d8c8663bfc077"
+      }
+    ],
+    "inventory_hash": "sha256:dfa49a1e2684d2ed4313b8e65711ad95f40ca23d0a66877259b09ff151e5c9e5"
+  }
+}

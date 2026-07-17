@@ -1,0 +1,98 @@
+{
+  "format": "icarus.workflow-graph-scope/1",
+  "scope_key": "condition_types",
+  "interface_ref": {
+    "id": "fixture.interface.root",
+    "version": "1.0.0"
+  },
+  "nodes": [
+    {
+      "id": "source",
+      "type": "system",
+      "trigger": {
+        "type": "root"
+      },
+      "capability_ref": {
+        "id": "fixture.capability.route",
+        "version": "1.0.0"
+      }
+    },
+    {
+      "id": "done",
+      "type": "terminal",
+      "trigger": {
+        "type": "all",
+        "edge_ids": [
+          "edge.condition"
+        ]
+      },
+      "exit": "done"
+    }
+  ],
+  "control_edges": [
+    {
+      "id": "edge.condition",
+      "kind": "control",
+      "from_node_id": "source",
+      "to_node_id": "done",
+      "on": {
+        "statuses": [
+          "succeeded"
+        ]
+      },
+      "when": {
+        "op": "lt",
+        "left": {
+          "literal": "text"
+        },
+        "right": {
+          "literal": 2
+        }
+      }
+    }
+  ],
+  "data_edges": [],
+  "completion": {
+    "settled_rules": [
+      {
+        "id": "select_done",
+        "phase": "settled",
+        "priority": 100,
+        "when": {
+          "fact": "all_nodes_terminal"
+        },
+        "select": {
+          "exits": [
+            "done"
+          ],
+          "pick": {
+            "type": "lowest_terminal_node_id"
+          }
+        }
+      }
+    ],
+    "no_match": "error",
+    "early_close": "cancel_and_fence_remaining"
+  },
+  "requested_limits": {
+    "max_scopes": null,
+    "max_nodes": null,
+    "max_nodes_per_scope": null,
+    "max_edges_per_scope": null,
+    "max_nesting_depth": null,
+    "max_map_items": null,
+    "max_concurrency": null,
+    "max_total_attempts": null,
+    "max_total_waits": null,
+    "max_total_output_bytes": null,
+    "max_scope_spec_bytes": null,
+    "max_condition_steps": null,
+    "max_wait_duration_ms": null,
+    "max_pending_signals": null,
+    "max_fixed_point_facts": null,
+    "max_frontier_bytes": null
+  },
+  "metadata": {
+    "semantic_correction_version": "4.0.0-draft"
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "format": "icarus.workflow-compiler-conformance-case-result/1",
+  "case_id": "negative.policy-escalation",
+  "source_kind": "graph_scope",
+  "source_hash": "sha256:9e69bc7f98fce5c61710be24c6a1d2753077b07c8d71fdc2f8967b40202e26fe",
+  "outcome": "rejected",
+  "normalized_plan": null,
+  "static_lowering_contract_ref": null,
+  "static_lowering_contract_hash": null,
+  "diagnostics": [
+    {
+      "code": "policy_escalation",
+      "phase": "bind",
+      "instance_pointer": "/nodes/0/child_policy_ref",
+      "schema_pointer": null,
+      "stable_object_id": "child",
+      "detail_ref": null
+    }
+  ],
+  "proof_hashes": [],
+  "program_hashes": [],
+  "result_hash": "sha256:10bbcc3a27e2db6600ec624cf5f66d600eadaf4de73b29fd72e57c8049b2f81f"
+}

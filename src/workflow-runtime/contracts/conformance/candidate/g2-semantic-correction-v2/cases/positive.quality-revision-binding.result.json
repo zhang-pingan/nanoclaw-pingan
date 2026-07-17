@@ -1,0 +1,424 @@
+{
+  "format": "icarus.workflow-compiler-conformance-case-result/1",
+  "case_id": "positive.quality-revision-binding",
+  "source_kind": "graph_scope",
+  "source_hash": "sha256:f603f6d4297f5a063ced60ba8058030b1533d55a12f8ce31985a0e53dae857f6",
+  "outcome": "compiled",
+  "normalized_plan": {
+    "format": "icarus.workflow-graph-scope-plan/2",
+    "compiler_version": "3.0.0",
+    "compiler_build_hash": "sha256:39d875d520c70493165704c5ab7e0b9edbe4eb337413e0e67f7aa5ff61acd629",
+    "compiler_toolchain_ref": {
+      "id": "icarus.workflow-compiler-toolchain",
+      "version": "3.0.0"
+    },
+    "compiler_toolchain_hash": "sha256:b92ad48c78c2af3129e471f484c68067b957bfa124187490df64aae1801cdfb6",
+    "compiler_error_catalog_hash": "sha256:8fc7139b29cdddf3c1e13e0f9d8bc6b19a1d32c02c1e7f4b7e33023fcece91ef",
+    "canonical_normalizer_version": "2.0.0",
+    "canonical_normalizer_hash": "sha256:7d08408f780ca4350e153d99fd60810554daefe3826b39fe5e2fa5abee340b60",
+    "proof_algorithm_version": "2.0.0",
+    "proof_algorithm_hash": "sha256:4aa814c349c213fdaec4e48b4414a5bab728bb54328639c9d8c1aa0da680ca88",
+    "source_hash": "sha256:f603f6d4297f5a063ced60ba8058030b1533d55a12f8ce31985a0e53dae857f6",
+    "interface_snapshot_hash": "sha256:227da6ec31bdc9889a198e9b902823b247add8ecae5752630ab6218b01de6131",
+    "policy_snapshot_hash": "sha256:993ef423c99adc5fe78a297bb68e508a3f0cc32b32e54a48b6daf722543961ff",
+    "effective_policy_snapshot": {
+      "allowed_node_types": [
+        "system",
+        "terminal",
+        "delegation",
+        "wait",
+        "join",
+        "subgraph",
+        "expand",
+        "map"
+      ],
+      "allowed_capabilities": [
+        {
+          "id": "fixture.capability.quality",
+          "version": "1.0.0"
+        }
+      ],
+      "allowed_templates": [],
+      "allowed_interface_refs": [
+        {
+          "id": "fixture.interface.root",
+          "version": "1.0.0"
+        }
+      ],
+      "allowed_wait_contracts": [],
+      "allowed_child_policy_refs": [],
+      "allowed_claim_ids": [],
+      "allow_early_close": true,
+      "allow_indefinite_waits": false,
+      "effect_policy": {
+        "allowed_recovery_kinds": [
+          "pure",
+          "idempotent",
+          "compensatable"
+        ],
+        "max_impact": "mutable_effects"
+      },
+      "build_retry": null,
+      "limits": {
+        "max_scopes": null,
+        "max_nodes": null,
+        "max_nodes_per_scope": null,
+        "max_edges_per_scope": null,
+        "max_nesting_depth": null,
+        "max_map_items": null,
+        "max_concurrency": null,
+        "max_total_attempts": null,
+        "max_total_waits": null,
+        "max_total_output_bytes": null,
+        "max_scope_spec_bytes": null,
+        "max_condition_steps": null,
+        "max_wait_duration_ms": null,
+        "max_pending_signals": null,
+        "max_fixed_point_facts": null,
+        "max_frontier_bytes": null
+      },
+      "usage_budget": {
+        "max_total_tool_calls": null,
+        "max_total_input_tokens": null,
+        "max_total_output_tokens": null,
+        "max_total_cost_micros": null
+      }
+    },
+    "capability_catalog_hash": "sha256:82598ede7d804ba01d02b73a6af5fa90bce564707d3026cb9635a2b5edde57b8",
+    "wait_contract_catalog_hash": "sha256:3b98e6803b19ab475841a8669cc6f403298d6e4f6270724d2a5edbffd64d3d03",
+    "interface_snapshot": {
+      "ref": {
+        "id": "fixture.interface.root",
+        "version": "1.0.0"
+      },
+      "inputs": {},
+      "exits": {
+        "done": {
+          "output_ports": {}
+        }
+      }
+    },
+    "nodes": [
+      {
+        "id": "done",
+        "type": "terminal",
+        "source_config_hash": "sha256:976f2e032b0b4edfd7b9ce7715a0462047f8c3ddc43c7f6695f5752f1a33625e",
+        "trigger_program": {
+          "normalized_expression": {
+            "edge_ids": [
+              "edge.quality"
+            ],
+            "type": "all"
+          },
+          "referenced_edge_ids": [
+            "edge.quality"
+          ],
+          "max_steps": 1,
+          "truth_program_hash": "sha256:455bcf018e8cdcacc18f93f8b435d751c5e6ef5776b7f4abee13bcfe6b1c5dab"
+        },
+        "input_ports": {},
+        "output_ports": {},
+        "effective_limits": {},
+        "exit": "done"
+      },
+      {
+        "id": "quality",
+        "type": "system",
+        "source_config_hash": "sha256:f8e1e56aa6dc807a2e08eda52a3ca72dcdbdeab93cdf0251d0d1be16d25e8d75",
+        "trigger_program": {
+          "normalized_expression": {
+            "type": "root"
+          },
+          "referenced_edge_ids": [],
+          "max_steps": 1,
+          "truth_program_hash": "sha256:a51758dbd90dbd199d38eb84181697630737fd69f0c85831398d2dfa985e4fb6"
+        },
+        "input_ports": {},
+        "output_ports": {
+          "result": {
+            "schema": {
+              "type": "registry",
+              "ref": {
+                "id": "fixture.schema.route-result",
+                "version": "1.0.0"
+              },
+              "schema_hash": "sha256:bdfd3abce4597fb35b3c75344c42369997dc5888bd9043652de796d9b60f5ab9"
+            },
+            "max_bytes": 4096,
+            "required": true
+          }
+        },
+        "effective_limits": {},
+        "capability_binding": {
+          "ref": {
+            "id": "fixture.capability.quality",
+            "version": "1.0.0"
+          },
+          "node_type": "system",
+          "executor_ref": {
+            "id": "fixture.executor",
+            "version": "1.0.0"
+          },
+          "skill_refs": [],
+          "input_ports": {},
+          "output_ports": {
+            "result": {
+              "schema_ref": {
+                "id": "fixture.schema.route-result",
+                "version": "1.0.0"
+              },
+              "max_bytes": 4096,
+              "required": true
+            }
+          },
+          "no_artifact_expected": true,
+          "quality_revision_policy": {
+            "feedback_schema_ref": {
+              "id": "fixture.schema.feedback",
+              "version": "1.0.0"
+            },
+            "max_feedback_bytes": 4096,
+            "context_mode": "base_input_plus_latest_revision"
+          },
+          "required_tools": [],
+          "required_mcp_methods": [],
+          "required_file_scopes": [],
+          "required_claims": [],
+          "allowed_groups": [],
+          "retry_policy": {
+            "max_attempts": 3,
+            "retry_on": [],
+            "backoff": "fixed"
+          },
+          "timeout_ceiling_ms": 60000,
+          "effect_impact": "read_only",
+          "effect": {
+            "type": "pure"
+          },
+          "cancellation": {
+            "type": "fence_only",
+            "safe_to_abandon": true
+          },
+          "dependency_closure_hash": "sha256:7dee19ad63946b27ae0d67045c30fd54455597d45c44fa447b427183dedbbb82",
+          "evaluator_ref": {
+            "id": "fixture.evaluator",
+            "version": "1.0.0"
+          },
+          "quality_gate_ref": {
+            "id": "fixture.quality-gate",
+            "version": "1.0.0"
+          }
+        },
+        "effective_retry_policy": {
+          "effective_node_max_attempts": 3,
+          "effective_retry_on": [],
+          "backoff": "fixed",
+          "quality_revision": {
+            "feedback_schema_ref": {
+              "id": "fixture.schema.feedback",
+              "version": "1.0.0"
+            },
+            "feedback_schema_hash": "sha256:d8edb1baea3487ce1eac41785621b843737f1a4a70671de25831d953b0776831",
+            "effective_max_feedback_bytes": 4096,
+            "context_mode": "base_input_plus_latest_revision"
+          },
+          "policy_hash": "sha256:dddbee08cf7f25346695cde3722cbcaf9ff7b5a770b77c14511e7668e88fc713"
+        }
+      }
+    ],
+    "route_groups": [],
+    "control_edges": [
+      {
+        "id": "edge.quality",
+        "from_node_id": "quality",
+        "to_node_id": "done",
+        "outcome_match": {
+          "statuses": [
+            "succeeded"
+          ]
+        },
+        "condition_program": null,
+        "route_group_id": null,
+        "priority": null,
+        "is_default": false,
+        "source_config_hash": "sha256:f3b586f6c222e932d12d0a564d4c13f37321b4958dc091d5213d4b68ce69c553",
+        "compiled_edge_hash": "sha256:500168cf970caf3aa216a9ed6565c59578a3fdcc972698c0a5317e852d5d45f2"
+      }
+    ],
+    "data_edges": [],
+    "completion": {
+      "early_rules": [],
+      "settled_rules": [
+        {
+          "id": "select_done",
+          "phase": "settled",
+          "normalized_fact_expression": {
+            "fact": "all_nodes_terminal"
+          },
+          "fact_program_hash": "sha256:8708fcdb69ff07601fabf91ba6e0d0f11578d55f8e46983486c65a2373d539b4",
+          "max_steps": 1,
+          "selector": {
+            "exits": [
+              "done"
+            ],
+            "pick": {
+              "type": "lowest_terminal_node_id"
+            }
+          },
+          "selector_contract_hash": "sha256:46a19556e9a6a80296a5eb9239bd0066def42f676cbbfc1491ad9c5ee33cc636",
+          "priority": 100,
+          "monotonicity_proof": null,
+          "cancellation_safety_proof": null,
+          "rule_hash": "sha256:cd2040b073b09110a1a01532bcbeb8cb4a04ec3465647ec126dd945a736fe4c2"
+        }
+      ],
+      "no_match": "error",
+      "early_close": "cancel_and_fence_remaining",
+      "policy_hash": "sha256:110a2805e96015458998ae764079123aee612a6212a700fe43e53824e4e5df61"
+    },
+    "complexity_summary": {
+      "node_count": 2,
+      "control_edge_count": 1,
+      "data_edge_count": 0,
+      "max_source_fan_out": 1,
+      "max_condition_steps": 0,
+      "max_trigger_steps": 1,
+      "max_completion_steps": 1,
+      "max_reconcile_facts_per_ingress": 3,
+      "max_frontier_bytes": 128,
+      "summary_hash": "sha256:f37f8eecd1444ac84d3702075a3ceb84648b26579cae90d5da3b66281d746ff1"
+    },
+    "static_child_plan_closure": {
+      "members": [],
+      "member_count": 0,
+      "closure_hash": "sha256:1b8db0ae35aa94a0a803b0c041a73c5d5017178d882135edc08af224fdf9334f"
+    },
+    "effective_limits": {
+      "max_scopes": 128,
+      "max_nodes": 1024,
+      "max_nodes_per_scope": 128,
+      "max_edges_per_scope": 512,
+      "max_nesting_depth": 8,
+      "max_map_items": 128,
+      "max_concurrency": 16,
+      "max_total_attempts": 4096,
+      "max_total_waits": 512,
+      "max_total_output_bytes": 1073741824,
+      "max_scope_spec_bytes": 2097152,
+      "max_condition_steps": 4096,
+      "max_wait_duration_ms": 2592000000,
+      "max_pending_signals": 128,
+      "max_fixed_point_facts": 16384,
+      "max_frontier_bytes": 16777216
+    },
+    "effective_usage_budget": {
+      "max_total_tool_calls": null,
+      "max_total_input_tokens": null,
+      "max_total_output_tokens": null,
+      "max_total_cost_micros": null
+    },
+    "runtime_safety_snapshot": {
+      "routing": {
+        "max_task_input_bytes": 1048576,
+        "max_route_hops": 8,
+        "max_schema_bytes": 262144,
+        "max_schema_nodes": 4096,
+        "max_schema_ref_depth": 32,
+        "max_schema_union_variants": 64,
+        "max_schema_validation_steps": 100000
+      },
+      "workflow": {
+        "max_duration_ms": 2592000000,
+        "max_state_activations": 128,
+        "max_graph_runs": 127,
+        "max_state_transitions": 127,
+        "max_child_workflows_per_workflow": 32,
+        "max_child_workflow_depth": 4,
+        "max_descendant_workflows_total": 128,
+        "max_required_child_creations_per_transition": 8
+      },
+      "run": {
+        "max_scopes_total": 128,
+        "max_nodes_total": 1024,
+        "max_edges_total": 4096,
+        "max_map_items_total": 256,
+        "max_attempts_total": 4096,
+        "max_waits_total": 512,
+        "max_builds_total": 512,
+        "max_build_attempts_total": 1536,
+        "max_evaluator_attempts_total": 8192,
+        "max_effect_operations_total": 2048,
+        "max_logical_output_bytes_total": 1073741824,
+        "max_stored_bytes_total": 2147483648,
+        "max_facts_total": 262144
+      },
+      "scope": {
+        "max_nodes_per_scope": 128,
+        "max_edges_per_scope": 512,
+        "max_scope_spec_bytes": 2097152,
+        "max_nesting_depth": 8,
+        "max_frontier_bytes": 16777216
+      },
+      "map": {
+        "max_items_per_map": 128,
+        "max_child_concurrency_per_map": 16
+      },
+      "registry": {
+        "max_snapshot_entries": 4096,
+        "max_dependency_depth": 32,
+        "max_execution_artifact_bytes": 268435456,
+        "max_total_pinned_execution_bytes_per_run": 1073741824
+      },
+      "execution": {
+        "max_attempts_per_node": 4,
+        "max_attempt_duration_ms": 1800000,
+        "max_dispatch_duration_ms": 120000,
+        "max_retry_backoff_ms": 3600000,
+        "max_build_attempts_per_build": 3,
+        "max_build_duration_ms": 600000,
+        "max_evaluator_attempts_per_evaluation": 3,
+        "max_evaluator_duration_ms": 600000,
+        "max_outbox_attempts_per_message": 32,
+        "max_outbox_reconcile_attempts_per_message": 16,
+        "max_outbox_attempt_duration_ms": 300000,
+        "max_outbox_delivery_duration_ms": 259200000,
+        "max_root_finalization_attempts_per_schedule": 8,
+        "max_root_finalization_duration_ms": 900000,
+        "max_operational_remediation_attempts_per_blocker": 16,
+        "max_operational_remediation_duration_ms": 259200000
+      },
+      "wait": {
+        "max_finite_wait_duration_ms": 2592000000,
+        "max_pending_signals_per_workflow": 256,
+        "max_pending_signals_per_run": 128,
+        "max_pending_signals_per_principal": 1024,
+        "max_pending_signal_age_ms": 604800000,
+        "max_signal_payload_bytes": 1048576,
+        "max_correlation_key_bytes": 512
+      },
+      "reconciliation": {
+        "max_condition_ast_nodes": 256,
+        "max_condition_steps_per_evaluation": 4096,
+        "max_facts_per_transaction": 16384
+      },
+      "value": {
+        "max_single_value_bytes": 16777216,
+        "max_single_artifact_bytes": 268435456,
+        "max_artifact_files": 4096,
+        "max_artifact_manifest_bytes": 4194304
+      }
+    },
+    "runtime_safety_hash": "sha256:7f8c0b1babf451cb03ab5f99b436d3ae187b587783875850686188d893059259",
+    "plan_hash": "sha256:2e93c19ebf5b831f685bf892f4d008ab88f43ac17531669cacd7ca25fb7bd872"
+  },
+  "static_lowering_contract_ref": null,
+  "static_lowering_contract_hash": null,
+  "diagnostics": [],
+  "proof_hashes": [],
+  "program_hashes": [
+    "sha256:455bcf018e8cdcacc18f93f8b435d751c5e6ef5776b7f4abee13bcfe6b1c5dab",
+    "sha256:8708fcdb69ff07601fabf91ba6e0d0f11578d55f8e46983486c65a2373d539b4",
+    "sha256:a51758dbd90dbd199d38eb84181697630737fd69f0c85831398d2dfa985e4fb6"
+  ],
+  "result_hash": "sha256:238dadd238bfbe7d3aae431dc6317964367175bf935e07641e38652788f13dd1"
+}

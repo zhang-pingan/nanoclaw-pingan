@@ -2988,6 +2988,29 @@ G0.8 snapshot中的`production_compiler_status/canonical_normalizer_status/proof
 
 G0.3 Compiled IR v1与G0.8 Golden Draft v1的manifest、schemas、cases、raw bytes、snapshots和hashes保持historical evidence。R-016的Golden Draft v2复用40个historical raw/snapshot refs和hashes，但exact G2 identity与expected case result refs/hashes保持null，状态为`blocked_pending_exact_g2_identity`；`GoldenSemanticReview` absent且seal not run。Compiler完成后必须发布新的Draft version绑定真实identity和candidate results，不得由Production Compiler生成、覆盖或批准expected oracle。
 
+### R-017：G2 Additive Semantic Correction 决议
+
+本节关闭Draft v3独立human review暴露的Compiler/case合同歧义，并由additive `icarus.workflow-compiler-semantic-correction-contract/1`机器合同绑定。它不修改R-016、G0.8、Draft v1/v2/v3、既有G2 candidate或任何sealed artifact。
+
+Closed Source IR `/1`的control/data endpoint只包含普通scope-local `NodeId`和`PortName`字段，不存在child path、qualified Node ID或`::`分隔语法。任意字符串（包括`child::child_done`）都先按完整普通Node ID查找；不存在时唯一诊断为`graph_endpoint_not_found`。Parent/Child只能通过Owner Node的typed input/output port通信，因此合法closed Source IR没有可表达的cross-scope edge。`graph_cross_scope_edge`在Error Catalog v2中保留为historical/reserved code，但其`source_reachability=unreachable_in_closed_source_ir_v1`，不得由Production Compiler对Source `/1`产生；未来若新增可表达scope-qualified endpoint的Source revision，必须先发布新Source schema/format和Error Catalog version。
+
+每个可发布Capability必须具有完整且内部一致的Effect/Cancellation合同：`fence_only`证明late result可安全丢弃，`cooperative`证明cancel丢失仍可安全abandon，`requires_compensation`必须且只能与`effect.type=compensatable`配对并由Cut barrier等待成功补偿。因而所有独立有效的Published Capability都可被early close安全fence/cancel/compensate；`early_completion_cancellation_unsafe`在Error Catalog v2中保留为historical/reserved code，但其`source_reachability=unreachable_after_capability_contract_validation`，不得靠非法Capability pairing产生。非法pairing必须在Capability/Registry binding边界以Capability contract rejection拒绝；合法compensatable+requires-compensation必须产生non-null cancellation safety proof并允许monotone early rule编译。
+
+Compiler不得信任input snapshot中的预计算`identity_match`或其他boolean verdict。Additive snapshot `/2`必须逐项携带并由Compiler自行比较以下exact identity：Toolchain Manifest ref/hash、Compiler version/build hash、Canonical Normalizer version/hash、Proof Algorithm version/hash、Error Catalog ref/hash、Compiled IR schema ref/hash、Conformance Result schema ref/hash。比较顺序固定为上述字段顺序；首个不一致字段产生唯一`compiler_integrity_mismatch/hash`，`instance_pointer=/compiler_identity/<field>`。相同source与matching identity必须编译成功；mismatch fixture只能修改一个具体字段，其余snapshot必须最小且独立有效。
+
+Definition fixture的`definition_hash`不得使用零值或占位。当前hash固定为：
+
+```text
+definition_hash = SHA-256(
+  ASCII("icarus:workflow-definition:1\n")
+  || JCS(definition_without_definition_hash)
+)
+```
+
+Compiler在closed-schema validation之后、Definition binding之前验证该值；不匹配使用`compiler_integrity_mismatch/hash`并指向`/definition_hash`。Registry resource content、Capability dependency closure、Wait contract、Interface、Policy、Safety与snapshot同样必须使用各自机器合同声明的domain-separated真实hash，不能复用零值。
+
+Draft v3的40/40 `CHANGES_REQUESTED`只属于其历史review。修正发布必须使用新路径/version/hash的raw source、逐case隔离snapshot、hand-authored review input、case-input binding、Compiler candidate与Draft；case count保持40，actual Compiler result只作为comparison input，expected full result/Plan/proof/program bytes/hash全部保持null。新Draft的human judgment重置为40/40 pending fresh review，不得复用Draft v3 decision，不得创建`GoldenSemanticReview`、approval、signature、seal或`conformance/sealed/`内容。
+
 ### JSON、Canonicalization 与 Hash
 
 - Source IR、registry contract、typed input/output 和 wait payload 以 JSON Schema Draft 2020-12 为 dialect，但 Workflow Port 只允许 sound、受限的 `icarus.workflow-schema/1` Profile。对象默认 closed-world (`additionalProperties: false`)，`$ref` 只能解析到 pinned registry 中的精确 schema version，禁止 runtime network ref。

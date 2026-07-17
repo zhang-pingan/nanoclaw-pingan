@@ -1,0 +1,23 @@
+{
+  "format": "icarus.workflow-compiler-conformance-case-result/1",
+  "case_id": "negative.registry-ref-unpinned",
+  "source_kind": "graph_scope",
+  "source_hash": "sha256:e6f5f57042cf7e75a7b2cf57e4ac641d9dadf012081bb0ca102d47c12461b931",
+  "outcome": "rejected",
+  "normalized_plan": null,
+  "static_lowering_contract_ref": null,
+  "static_lowering_contract_hash": null,
+  "diagnostics": [
+    {
+      "code": "registry_ref_unpinned",
+      "phase": "bind",
+      "instance_pointer": "/interface_ref/version",
+      "schema_pointer": null,
+      "stable_object_id": "fixture.interface.root",
+      "detail_ref": null
+    }
+  ],
+  "proof_hashes": [],
+  "program_hashes": [],
+  "result_hash": "sha256:0287fb96cf7427d75c8e946794b9b4dc96f348303df08e51b91d7e20b5656dd0"
+}

@@ -22,12 +22,12 @@ import type {
 } from './types.js';
 import { compareAscii } from './normalizer.js';
 
-export const WORKFLOW_COMPILER_VERSION = '2.0.0';
+export const WORKFLOW_COMPILER_VERSION = '3.0.0';
 export const CANONICAL_NORMALIZER_VERSION = '2.0.0';
 export const PROOF_ALGORITHM_VERSION = '2.0.0';
 export const WORKFLOW_COMPILER_TOOLCHAIN_REF = {
   id: 'icarus.workflow-compiler-toolchain',
-  version: '2.0.0',
+  version: '3.0.0',
 } as const;
 
 const compilerRoot = import.meta.dirname;
@@ -52,7 +52,7 @@ const RESULT_SCHEMA_REF =
   'conformance/compiler-contract-repair/schemas/compiler-conformance-case-result-schema.json';
 const ERROR_CATALOG_REF = {
   id: 'icarus.workflow-compiler-error-catalog',
-  version: '1.0.0',
+  version: '2.0.0',
 } as const;
 
 function repoBytes(relativePath: string): Buffer {
@@ -140,7 +140,7 @@ export function buildWorkflowCompilerToolchainManifest(): WorkflowCompilerToolch
   const irSchema = artifact(COMPILED_IR_SCHEMA_REF);
   const resultSchema = artifact(RESULT_SCHEMA_REF);
   const errorCatalog = artifact(
-    'catalogs/workflow-compiler-error-catalog.json',
+    'conformance/compiler-semantic-correction/workflow-compiler-error-catalog@2.json',
   );
   const strictParserWrapperRef =
     'src/workflow-runtime/contracts/strict-json.ts';

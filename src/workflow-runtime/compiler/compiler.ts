@@ -44,6 +44,7 @@ import {
   refKey,
   type SnapshotResource,
 } from './snapshot.js';
+import { COMPILER_EXACT_IDENTITY_FIELDS_V2 } from '../contracts/compiler-semantic-correction-contract.js';
 import type {
   WorkflowCompilerFailure,
   WorkflowCompilerIdentity,
@@ -69,6 +70,8 @@ const SOURCE_DOMAINS: Record<WorkflowCompilerSourceKind, string> = {
 interface CompilationState {
   snapshot: BoundCompilerSnapshot;
   identity: WorkflowCompilerIdentity;
+  policy: JsonObject;
+  policyHash: Sha256Hash;
   proofHashes: Set<Sha256Hash>;
   programHashes: Set<Sha256Hash>;
 }
@@ -210,6 +213,16 @@ function validateGraphBindings(
       ),
     );
   }
+  if (!refAllowed(source.interface_ref, state.policy.allowed_interface_refs)) {
+    throw new CompilerDiagnosticError(
+      diagnostic(
+        'capability_not_allowed',
+        'bind',
+        '/interface_ref',
+        String(source.interface_ref.id),
+      ),
+    );
+  }
   const nodes = graphNodes(source);
   const seen = new Set<string>();
   nodes.forEach((node, index) => {
@@ -223,8 +236,8 @@ function validateGraphBindings(
   });
   for (const [index, node] of nodes.entries()) {
     if (
-      !Array.isArray(snapshot.rootPolicy.allowed_node_types) ||
-      !snapshot.rootPolicy.allowed_node_types.includes(node.type)
+      !Array.isArray(state.policy.allowed_node_types) ||
+      !state.policy.allowed_node_types.includes(node.type)
     ) {
       throw new CompilerDiagnosticError(
         diagnostic(
@@ -253,9 +266,7 @@ function validateGraphBindings(
           ),
         );
       }
-      if (
-        !refAllowed(capabilityRef, snapshot.rootPolicy.allowed_capabilities)
-      ) {
+      if (!refAllowed(capabilityRef, state.policy.allowed_capabilities)) {
         throw new CompilerDiagnosticError(
           diagnostic(
             'capability_not_allowed',
@@ -265,6 +276,21 @@ function validateGraphBindings(
           ),
         );
       }
+      if (capability.content.node_type !== node.type) {
+        throw new CompilerDiagnosticError(
+          diagnostic(
+            'capability_not_allowed',
+            'bind',
+            `/nodes/${index}/capability_ref`,
+            String(node.id),
+          ),
+        );
+      }
+      validateCapabilityContract(
+        capability,
+        `/nodes/${index}/capability_ref`,
+        String(node.id),
+      );
       validateQualityRevision(capability, index, String(node.id));
     }
     const wait = objectRef(node.wait);
@@ -285,10 +311,114 @@ function validateGraphBindings(
           ),
         );
       }
+      if (!refAllowed(wait.contract_ref, state.policy.allowed_wait_contracts)) {
+        throw new CompilerDiagnosticError(
+          diagnostic(
+            'capability_not_allowed',
+            'bind',
+            `/nodes/${index}/wait/contract_ref`,
+            String(node.id),
+          ),
+        );
+      }
     }
     const childPolicyRef = objectRef(node.child_policy_ref);
     if (childPolicyRef)
-      validateChildPolicyBinding(childPolicyRef, index, node, snapshot);
+      validateChildPolicyBinding(childPolicyRef, index, node, state);
+  }
+  validateRequiredNodeInputs(source, state);
+}
+
+function validateCapabilityContract(
+  capability: SnapshotResource,
+  sourcePointer: string,
+  nodeId: string,
+): void {
+  const effect = objectRef(capability.content.effect);
+  const cancellation = objectRef(capability.content.cancellation);
+  const valid =
+    (cancellation?.type === 'fence_only' &&
+      cancellation.safe_to_abandon === true) ||
+    (cancellation?.type === 'cooperative' &&
+      cancellation.ack_required_before_close === false &&
+      cancellation.safe_if_cancel_lost === true) ||
+    (cancellation?.type === 'requires_compensation' &&
+      effect?.type === 'compensatable');
+  if (!valid) {
+    throw new CompilerDiagnosticError(
+      diagnostic('capability_not_allowed', 'bind', sourcePointer, nodeId),
+    );
+  }
+}
+
+function nodeInputContracts(
+  node: JsonObject,
+  state: CompilationState,
+): JsonObject {
+  const capabilityRef = objectRef(node.capability_ref);
+  if (capabilityRef) {
+    const capability = resourceForRef(
+      state.snapshot,
+      capabilityRef,
+      'capability',
+    );
+    if (!capability) return {};
+    assertJsonObject(capability.content.input_ports);
+    return capability.content.input_ports;
+  }
+  const wait = objectRef(node.wait);
+  if (wait) {
+    const contractRef = objectRef(wait.contract_ref);
+    const contract = contractRef
+      ? resourceForRef(state.snapshot, contractRef, 'wait_contract')
+      : null;
+    if (!contract) return {};
+    assertJsonObject(contract.content.input_ports);
+    return contract.content.input_ports;
+  }
+  return objectRef(node.input_ports) ?? {};
+}
+
+function validateRequiredNodeInputs(
+  source: JsonObject,
+  state: CompilationState,
+): void {
+  const edges = dataEdges(source);
+  for (const [nodeIndex, node] of graphNodes(source).entries()) {
+    const ports = nodeInputContracts(node, state);
+    for (const [portName, contractValue] of Object.entries(ports)) {
+      assertJsonObject(contractValue);
+      const aggregation = objectRef(contractValue.aggregation);
+      if (!aggregation || aggregation.type !== 'single') continue;
+      const sources = edges.filter((edge) => {
+        const target = objectRef(edge.to);
+        return target?.node_id === node.id && target.port === portName;
+      });
+      if (aggregation.select === 'only' && sources.length > 1) {
+        throw new CompilerDiagnosticError(
+          diagnostic(
+            'schema_not_assignable',
+            'bind',
+            `/nodes/${nodeIndex}`,
+            String(node.id),
+          ),
+        );
+      }
+      if (
+        aggregation.required === true &&
+        aggregation.default === undefined &&
+        sources.length === 0
+      ) {
+        throw new CompilerDiagnosticError(
+          diagnostic(
+            'schema_not_assignable',
+            'bind',
+            `/nodes/${nodeIndex}`,
+            String(node.id),
+          ),
+        );
+      }
+    }
   }
 }
 
@@ -330,9 +460,9 @@ function validateChildPolicyBinding(
   ref: JsonObject,
   index: number,
   node: JsonObject,
-  snapshot: BoundCompilerSnapshot,
+  state: CompilationState,
 ): void {
-  const binding = childPolicy(snapshot, ref);
+  const binding = childPolicy(state.snapshot, ref);
   if (!binding) {
     throw new CompilerDiagnosticError(
       diagnostic(
@@ -343,8 +473,18 @@ function validateChildPolicyBinding(
       ),
     );
   }
+  if (!refAllowed(ref, state.policy.allowed_child_policy_refs)) {
+    throw new CompilerDiagnosticError(
+      diagnostic(
+        'policy_escalation',
+        'bind',
+        `/nodes/${index}/child_policy_ref`,
+        String(node.id),
+      ),
+    );
+  }
   const request = binding.request;
-  const root = snapshot.rootPolicy;
+  const root = state.policy;
   const subsetFields = [
     'allowed_node_types',
     'allowed_capabilities',
@@ -403,16 +543,6 @@ function validateGraphStructure(
   for (const [index, edge] of edges.entries()) {
     for (const field of ['from_node_id', 'to_node_id'] as const) {
       const endpoint = String(edge[field]);
-      if (endpoint.includes('::')) {
-        throw new CompilerDiagnosticError(
-          diagnostic(
-            'graph_cross_scope_edge',
-            'bind',
-            `/control_edges/${index}/${field}`,
-            String(edge.id),
-          ),
-        );
-      }
       if (!nodeIds.has(endpoint)) {
         throw new CompilerDiagnosticError(
           diagnostic(
@@ -457,6 +587,16 @@ function validateGraphStructure(
     }
   }
   assertAcyclic(edges);
+  if (!nodes.some((node) => node.type === 'terminal')) {
+    throw new CompilerDiagnosticError(
+      diagnostic(
+        'completion_contract_invalid',
+        'prove',
+        '/nodes',
+        String(source.scope_key),
+      ),
+    );
+  }
   validateRouteGroups(source);
   validateCompletion(source, state);
   validateSafety(source, state.snapshot);
@@ -564,27 +704,6 @@ function validateCompletion(source: JsonObject, state: CompilationState): void {
             ),
           );
         }
-        const unsafe = graphNodes(source).some((node) => {
-          const ref = objectRef(node.capability_ref);
-          const capability = ref
-            ? resourceForRef(state.snapshot, ref, 'capability')
-            : null;
-          return (
-            capability?.content.cancellation &&
-            objectRef(capability.content.cancellation)?.type ===
-              'requires_compensation'
-          );
-        });
-        if (unsafe) {
-          throw new CompilerDiagnosticError(
-            diagnostic(
-              'early_completion_cancellation_unsafe',
-              'prove',
-              `/completion/early_rules/${index}`,
-              String(value.id),
-            ),
-          );
-        }
       }
     }
   }
@@ -643,6 +762,21 @@ function validateDefinitionBindings(
           ),
         );
       }
+      if (capability.content.node_type !== value.type) {
+        throw new CompilerDiagnosticError(
+          diagnostic(
+            'capability_not_allowed',
+            'bind',
+            `/states/${stateKey}/capability_ref`,
+            stateKey,
+          ),
+        );
+      }
+      validateCapabilityContract(
+        capability,
+        `/states/${stateKey}/capability_ref`,
+        stateKey,
+      );
     }
     for (const slot of definitionTransitions(value, stateKey)) {
       const operations = objectRef(slot.transition.effects)?.operations;
@@ -707,13 +841,7 @@ function validateDefinitionBindings(
       );
     }
   }
-  const cycleRoots =
-    owningRecipes.length > 0
-      ? owningRecipes
-      : recipeResources.filter(
-          (resource) => !objectRef(resource.content.definition_ref),
-        );
-  const cycleStart = findRecipeCycle(state.snapshot, cycleRoots);
+  const cycleStart = findRecipeCycle(state.snapshot, owningRecipes);
   if (cycleStart) {
     throw new CompilerDiagnosticError(
       diagnostic('child_recipe_dependency_cycle', 'prove', '/ref', cycleStart),
@@ -1020,6 +1148,7 @@ function compileFactory(
   factory: JsonObject,
   ownerPath: string[],
   state: CompilationState,
+  childPolicyRef: JsonObject,
 ): FactoryCompilation {
   let childSource: JsonObject;
   let sourceRef: VersionedRef | null = null;
@@ -1040,7 +1169,16 @@ function compileFactory(
     childSource = factory.scope;
     sourceSnapshotRef = `inline:${ownerPath.join('/')}`;
   }
-  const childPlan = compileGraphPlan(childSource, state);
+  const policyBinding = childPolicy(state.snapshot, childPolicyRef);
+  if (!policyBinding) throw new Error('Child policy binding disappeared');
+  const childState: CompilationState = {
+    ...state,
+    policy: policyBinding.request,
+    policyHash: policyBinding.hash,
+  };
+  validateGraphBindings(childSource, childState);
+  validateGraphStructure(childSource, childState);
+  const childPlan = compileGraphPlan(childSource, childState);
   const hash = sourceHash('graph_scope', childSource);
   return {
     binding: {
@@ -1111,7 +1249,13 @@ function compileGraphNode(
   if (node.type === 'subgraph') {
     assertJsonObject(node.scope);
     assertJsonObject(node.child_policy_ref);
-    const factory = compileFactory(node.scope, ownerPath, state);
+    const factory = compileFactory(
+      node.scope,
+      ownerPath,
+      state,
+      node.child_policy_ref,
+    );
+    validateChildInputBindings(node, factory.childPlan.interface_snapshot);
     factoryByNode.set(String(node.id), factory);
     return {
       ...base,
@@ -1129,6 +1273,14 @@ function compileGraphNode(
       refKey(node.child_interface_ref),
     );
     if (!childInterface) throw new Error('Expand child interface disappeared');
+    if (
+      !refAllowed(node.child_interface_ref, state.policy.allowed_interface_refs)
+    ) {
+      throw new CompilerDiagnosticError(
+        diagnostic('capability_not_allowed', 'bind', '/nodes', String(node.id)),
+      );
+    }
+    validateChildInputBindings(node, childInterface);
     return {
       ...base,
       graph_spec_input_port: node.graph_spec_input_port,
@@ -1142,7 +1294,13 @@ function compileGraphNode(
   if (node.type === 'map') {
     assertJsonObject(node.body);
     assertJsonObject(node.child_policy_ref);
-    const factory = compileFactory(node.body, ownerPath, state);
+    const factory = compileFactory(
+      node.body,
+      ownerPath,
+      state,
+      node.child_policy_ref,
+    );
+    validateMapChildBinding(node, factory.childPlan.interface_snapshot);
     factoryByNode.set(String(node.id), factory);
     assertJsonObject(state.snapshot.safety.map);
     return {
@@ -1175,6 +1333,60 @@ function compileGraphNode(
   throw new Error(`Unsupported compiled node type: ${String(node.type)}`);
 }
 
+function validateChildInputBindings(
+  node: JsonObject,
+  childInterface: JsonObject,
+): void {
+  assertJsonObject(childInterface.inputs);
+  const bindings = objectRef(node.child_input_bindings) ?? {};
+  for (const [name, value] of Object.entries(childInterface.inputs)) {
+    assertJsonObject(value);
+    if (
+      value.required === true &&
+      value.default === undefined &&
+      !(name in bindings)
+    ) {
+      throw new CompilerDiagnosticError(
+        diagnostic('schema_not_assignable', 'bind', '/nodes', String(node.id)),
+      );
+    }
+  }
+  for (const name of Object.keys(bindings)) {
+    if (!(name in childInterface.inputs)) {
+      throw new CompilerDiagnosticError(
+        diagnostic('schema_not_assignable', 'bind', '/nodes', String(node.id)),
+      );
+    }
+  }
+}
+
+function validateMapChildBinding(
+  node: JsonObject,
+  childInterface: JsonObject,
+): void {
+  assertJsonObject(childInterface.inputs);
+  const itemPort = String(node.item_child_input_port);
+  if (!(itemPort in childInterface.inputs)) {
+    throw new CompilerDiagnosticError(
+      diagnostic('schema_not_assignable', 'bind', '/nodes', String(node.id)),
+    );
+  }
+  const shared = objectRef(node.shared_child_input_bindings) ?? {};
+  for (const [name, value] of Object.entries(childInterface.inputs)) {
+    if (name === itemPort) continue;
+    assertJsonObject(value);
+    if (
+      value.required === true &&
+      value.default === undefined &&
+      !(name in shared)
+    ) {
+      throw new CompilerDiagnosticError(
+        diagnostic('schema_not_assignable', 'bind', '/nodes', String(node.id)),
+      );
+    }
+  }
+}
+
 function compileControlEdges(
   source: JsonObject,
   state: CompilationState,
@@ -1185,7 +1397,7 @@ function compileControlEdges(
   );
   const limits = effectiveLimits(
     source.requested_limits as JsonObject,
-    state.snapshot.rootPolicy,
+    state.policy,
     state.snapshot.safety,
   );
   return controlEdges(source)
@@ -1366,6 +1578,63 @@ function compileCompletion(
           'icarus:workflow-completion-selector:1\n',
           value.select,
         );
+        const early = value.phase === 'early';
+        const monotonicityDetail = {
+          rule_id: value.id,
+          normalized_fact_expression: sortObjectKeys(value.when),
+        };
+        const monotonicityProof = early
+          ? {
+              algorithm_version: '2.0.0',
+              classification: 'monotone',
+              proof_detail_ref: `inline:completion-monotonicity:${String(value.id)}`,
+              proof_detail_hash: semanticHash(
+                'icarus:workflow-completion-monotonicity-detail:1\n',
+                monotonicityDetail,
+              ),
+              proof_hash: semanticHash(
+                'icarus:workflow-completion-monotonicity-proof:1\n',
+                monotonicityDetail,
+              ),
+            }
+          : null;
+        const coveredContracts = early
+          ? graphNodes(source)
+              .map((node) => objectRef(node.capability_ref))
+              .filter((ref): ref is JsonObject => ref !== null)
+              .map((ref) => resourceForRef(state.snapshot, ref, 'capability'))
+              .filter(
+                (resource): resource is SnapshotResource => resource !== null,
+              )
+              .map((resource) => resource.contentHash)
+              .sort()
+          : [];
+        const cancellationDetail = {
+          rule_id: value.id,
+          covered_node_contract_hashes: coveredContracts,
+          valid_contract_model: 'fence_or_cooperative_or_compensation_barrier',
+        };
+        const cancellationSafetyProof = early
+          ? {
+              algorithm_version: '3.0.0',
+              covered_node_contract_hashes: coveredContracts,
+              proof_detail_ref: `inline:cancellation-safety:${String(value.id)}`,
+              proof_detail_hash: semanticHash(
+                'icarus:workflow-cancellation-safety-detail:1\n',
+                cancellationDetail,
+              ),
+              proof_hash: semanticHash(
+                'icarus:workflow-cancellation-safety-proof:1\n',
+                cancellationDetail,
+              ),
+            }
+          : null;
+        if (monotonicityProof) {
+          state.proofHashes.add(monotonicityProof.proof_hash);
+        }
+        if (cancellationSafetyProof) {
+          state.proofHashes.add(cancellationSafetyProof.proof_hash);
+        }
         const withoutHash = {
           id: value.id,
           phase: value.phase,
@@ -1378,8 +1647,8 @@ function compileCompletion(
             typeof value.priority === 'number'
               ? value.priority
               : Number(value.same_event_priority),
-          monotonicity_proof: null,
-          cancellation_safety_proof: null,
+          monotonicity_proof: monotonicityProof,
+          cancellation_safety_proof: cancellationSafetyProof,
         };
         return {
           ...withoutHash,
@@ -1537,6 +1806,51 @@ function complexitySummary(
   };
 }
 
+function compileLiteralExpandCandidates(
+  source: JsonObject,
+  state: CompilationState,
+): void {
+  const edges = dataEdges(source);
+  for (const node of graphNodes(source)) {
+    if (node.type !== 'expand') continue;
+    const candidateEdge = edges.find((edge) => {
+      const target = objectRef(edge.to);
+      return (
+        target?.node_id === node.id &&
+        target.port === node.graph_spec_input_port
+      );
+    });
+    const from = candidateEdge ? objectRef(candidateEdge.from) : null;
+    const candidate = from?.type === 'literal' ? objectRef(from.value) : null;
+    if (!candidate) continue;
+    assertJsonObject(node.child_interface_ref);
+    assertJsonObject(node.child_policy_ref);
+    assertJsonObject(candidate.interface_ref);
+    if (
+      !versionedRefsEqual(candidate.interface_ref, node.child_interface_ref)
+    ) {
+      throw new CompilerDiagnosticError(
+        diagnostic(
+          'schema_not_assignable',
+          'bind',
+          '/data_edges',
+          String(node.id),
+        ),
+      );
+    }
+    const policyBinding = childPolicy(state.snapshot, node.child_policy_ref);
+    if (!policyBinding) throw new Error('Expand child policy disappeared');
+    const childState: CompilationState = {
+      ...state,
+      policy: policyBinding.request,
+      policyHash: policyBinding.hash,
+    };
+    validateGraphBindings(candidate, childState);
+    validateGraphStructure(candidate, childState);
+    compileGraphPlan(candidate, childState);
+  }
+}
+
 function compileGraphPlan(
   source: JsonObject,
   state: CompilationState,
@@ -1548,6 +1862,7 @@ function compileGraphPlan(
   );
   if (!interfaceEntry) throw new Error('Graph interface binding disappeared');
   const interfaceSnapshot = interfacePlanSnapshot(interfaceEntry);
+  compileLiteralExpandCandidates(source, state);
   const factoryByNode = new Map<string, FactoryCompilation>();
   const nodes = graphNodes(source)
     .map((node) =>
@@ -1572,8 +1887,8 @@ function compileGraphPlan(
     proof_algorithm_hash: state.identity.proof_algorithm_hash,
     source_hash: sourceHash('graph_scope', source),
     interface_snapshot_hash: interfaceIdentity(interfaceEntry),
-    policy_snapshot_hash: state.snapshot.rootPolicyHash,
-    effective_policy_snapshot: state.snapshot.rootPolicy,
+    policy_snapshot_hash: state.policyHash,
+    effective_policy_snapshot: state.policy,
     capability_catalog_hash: catalogHash(state.snapshot, 'capability'),
     wait_contract_catalog_hash: catalogHash(state.snapshot, 'wait_contract'),
     interface_snapshot: interfaceSnapshot,
@@ -1586,10 +1901,10 @@ function compileGraphPlan(
     static_child_plan_closure: closure,
     effective_limits: effectiveLimits(
       source.requested_limits,
-      state.snapshot.rootPolicy,
+      state.policy,
       state.snapshot.safety,
     ),
-    effective_usage_budget: state.snapshot.rootPolicy.usage_budget,
+    effective_usage_budget: state.policy.usage_budget,
     runtime_safety_snapshot: state.snapshot.safety,
     runtime_safety_hash: state.snapshot.safetyHash,
   };
@@ -1715,11 +2030,25 @@ function compileSuccess(
   const state: CompilationState = {
     snapshot,
     identity: request.identity,
+    policy: snapshot.rootPolicy,
+    policyHash: snapshot.rootPolicyHash,
     proofHashes: new Set(),
     programHashes: new Set(),
   };
   let plan: CompiledScopePlanV2Document;
   if (request.sourceKind === 'workflow_definition') {
+    assertJsonObject(source.entry_points);
+    assertJsonObject(source.states);
+    const entry = source.entry_points.default;
+    assertJsonObject(entry);
+    const definitionState = source.states[String(entry.state_key)];
+    assertJsonObject(definitionState);
+    assertJsonObject(definitionState.policy);
+    state.policy = definitionState.policy;
+    state.policyHash = semanticHash(
+      'icarus:workflow-definition-effective-policy:1\n',
+      definitionState.policy,
+    );
     validateDefinitionBindings(source, state);
     plan = compileDefinitionPlan(source, state);
   } else if (request.sourceKind === 'graph_scope') {
@@ -1744,6 +2073,37 @@ function compileSuccess(
     programHashes: [...state.programHashes].sort(),
     staticLowering: request.sourceKind === 'workflow_definition',
   };
+}
+
+function identityFieldEqual(left: JsonValue, right: JsonValue): boolean {
+  return (
+    JSON.stringify(sortObjectKeys(left)) ===
+    JSON.stringify(sortObjectKeys(right))
+  );
+}
+
+function firstIdentityMismatch(
+  snapshot: JsonObject,
+  identity: WorkflowCompilerIdentity,
+): string | null {
+  assertJsonObject(snapshot.compiler_identity);
+  const actual = snapshot.compiler_identity;
+  const expected = identity as unknown as JsonObject;
+  for (const field of COMPILER_EXACT_IDENTITY_FIELDS_V2) {
+    if (!identityFieldEqual(actual[field], expected[field])) return field;
+  }
+  return null;
+}
+
+function definitionIdentityMatches(source: JsonObject): boolean {
+  const { definition_hash: definitionHash, ...withoutHash } = source;
+  return (
+    definitionHash ===
+    domainSeparatedSha256(
+      'icarus:workflow-definition:1\n',
+      withoutHash as JsonValue,
+    )
+  );
 }
 
 export function compileWorkflow(
@@ -1774,13 +2134,30 @@ export function compileWorkflow(
     }
     const schemaIssue = validateClosedSource(request.sourceKind, source);
     if (schemaIssue) return reject(hash, schemaIssue);
-    const snapshot = bindCompilerSnapshot(request.inputSnapshot);
-    if (!snapshot.identityMatch) {
+    if (
+      request.sourceKind === 'workflow_definition' &&
+      !definitionIdentityMatches(source)
+    ) {
       return reject(
         hash,
-        diagnostic('compiler_integrity_mismatch', 'hash', ''),
+        diagnostic('compiler_integrity_mismatch', 'hash', '/definition_hash'),
       );
     }
+    const identityMismatch = firstIdentityMismatch(
+      request.inputSnapshot,
+      request.identity,
+    );
+    if (identityMismatch) {
+      return reject(
+        hash,
+        diagnostic(
+          'compiler_integrity_mismatch',
+          'hash',
+          `/compiler_identity/${identityMismatch}`,
+        ),
+      );
+    }
+    const snapshot = bindCompilerSnapshot(request.inputSnapshot);
     return { ok: true, value: compileSuccess(request, source, hash, snapshot) };
   } catch (error) {
     if (error instanceof CompilerDiagnosticError) {

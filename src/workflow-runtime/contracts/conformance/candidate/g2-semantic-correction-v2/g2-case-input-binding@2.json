@@ -1,0 +1,352 @@
+{
+  "format": "icarus.workflow-compiler-g2-case-input-binding/2",
+  "binding_version": "2.0.0-additive-semantic-correction",
+  "semantic_correction_contract_ref": "conformance/compiler-semantic-correction/contract-pack-compiler-semantic-correction.json",
+  "semantic_correction_input_manifest_ref": "conformance/draft/semantic-correction-v4/semantic-correction-input-manifest@1.json",
+  "semantic_correction_input_manifest_hash": "sha256:01ae1b52c6ed3b7423e2f0bda70e72f8e678d96c5ae558e64a960558fbf5ad0e",
+  "case_catalog_ref": "conformance/draft/semantic-correction-v4/semantic-review-input-cases@4.json",
+  "case_catalog_hash": "sha256:d26adb161be66619ee7a9a5dfb1b9adc86e2194727686509d1e20d274e9091b5",
+  "compiler_toolchain_manifest_ref": {
+    "id": "icarus.workflow-compiler-toolchain",
+    "version": "3.0.0"
+  },
+  "compiler_toolchain_hash": "sha256:b92ad48c78c2af3129e471f484c68067b957bfa124187490df64aae1801cdfb6",
+  "compiler_version": "3.0.0",
+  "compiler_build_hash": "sha256:39d875d520c70493165704c5ab7e0b9edbe4eb337413e0e67f7aa5ff61acd629",
+  "canonical_normalizer_version": "2.0.0",
+  "canonical_normalizer_hash": "sha256:7d08408f780ca4350e153d99fd60810554daefe3826b39fe5e2fa5abee340b60",
+  "proof_algorithm_version": "2.0.0",
+  "proof_algorithm_hash": "sha256:4aa814c349c213fdaec4e48b4414a5bab728bb54328639c9d8c1aa0da680ca88",
+  "error_catalog_ref": {
+    "id": "icarus.workflow-compiler-error-catalog",
+    "version": "2.0.0"
+  },
+  "error_catalog_hash": "sha256:8fc7139b29cdddf3c1e13e0f9d8bc6b19a1d32c02c1e7f4b7e33023fcece91ef",
+  "compiled_ir_schema_ref": "conformance/compiler-contract-repair/schemas/compiled-scope-plan-v2-schema.json",
+  "compiled_ir_schema_hash": "sha256:4d4e325f94b55a6767f3e8596e1e9b880df2b402d3c89f587a10a23f0eadbd46",
+  "conformance_result_schema_ref": "conformance/compiler-contract-repair/schemas/compiler-conformance-case-result-schema.json",
+  "conformance_result_schema_hash": "sha256:019a4ba80ed8ae57b6c862d9fda62d9edcb8aca9c4910fde6bbb580c09af8706",
+  "case_inputs": [
+    {
+      "case_id": "positive.static-lowering",
+      "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/positive.static-lowering/source.json",
+      "raw_source_bytes_hash": "sha256:2ff581e6599426c801e40d832941da392fb46042360e8552bfca4e6b6c0f6375",
+      "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/positive.static-lowering@2.json",
+      "input_snapshot_hash": "sha256:96ed16e9522eb034033e3b4591a2653644c4766e4a2d740aa9f362829692639c",
+      "effective_case_input_hash": "sha256:a8a2524555a06886ebd4f113db21934d970c34f11741ed911df2ed79555b06fd"
+    },
+    {
+      "case_id": "positive.condition-route",
+      "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/positive.condition-route/source.json",
+      "raw_source_bytes_hash": "sha256:d458bfa95f27892acd18d96188a80b133973300eeafc1d0ae480dad6f8303244",
+      "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/positive.condition-route@2.json",
+      "input_snapshot_hash": "sha256:d2a9feb9d178b00f71d9d91c71d2325e016ed5191ea2c967c157273052ad78a0",
+      "effective_case_input_hash": "sha256:a77e68b84abe791c3127745c394ca00f93e8a1c8e722fcee9fc86a88b8d94df3"
+    },
+    {
+      "case_id": "positive.wait",
+      "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/positive.wait/source.json",
+      "raw_source_bytes_hash": "sha256:d48f310e7ee7f354eb678c160f2f81b9164ef308aaee0b4122f2ef6968d6aa58",
+      "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/positive.wait@2.json",
+      "input_snapshot_hash": "sha256:10315f25589412e8b9e56c3de6dd6824a8e5ff1533f014e6a3b0cda16ae966b2",
+      "effective_case_input_hash": "sha256:2ed8101523bf7e5e2844f70f74c04abb278307ecdcb9bc50bad6ab2a626f406b"
+    },
+    {
+      "case_id": "positive.subgraph",
+      "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/positive.subgraph/source.json",
+      "raw_source_bytes_hash": "sha256:85a77d148cee807bd6c5680c54f126d9276c4936ed715e48df78cb7bf53bfba1",
+      "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/positive.subgraph@2.json",
+      "input_snapshot_hash": "sha256:d00c09c43da4a64f1477adf154c72ad18fec81889c2aa15aa80a8cd45d73c9ca",
+      "effective_case_input_hash": "sha256:2485da2470ffb85823e30772a1e32b7415b3f3286e26eb908fbe5f9cdad789f8"
+    },
+    {
+      "case_id": "positive.expand",
+      "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/positive.expand/source.json",
+      "raw_source_bytes_hash": "sha256:1dbc84279ea0ef9bbcc01be05c51e0040b57cd977836ff2789a75beabf9fb029",
+      "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/positive.expand@2.json",
+      "input_snapshot_hash": "sha256:a8068edacab0008f9b480d24d6599628f51d670017106f9bb0fb2f466fa7dfa0",
+      "effective_case_input_hash": "sha256:062dd848bf47371983f315219e68fde280423f4a76465447d95320ec5ae62d0d"
+    },
+    {
+      "case_id": "positive.map",
+      "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/positive.map/source.json",
+      "raw_source_bytes_hash": "sha256:717c1b178feb79f9cac383cfa2341a2185950bb8e4c108e744e78bc1e4f9e105",
+      "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/positive.map@2.json",
+      "input_snapshot_hash": "sha256:c26ddd87fd2dc8fa53947810ed3c6b0f31399be93bfb6e77d765bcbe2a16bf59",
+      "effective_case_input_hash": "sha256:22ce22b2deaaa72c56e3edfbced2455ce5bbd6801b279e4a9f5b9d25db32899e"
+    },
+    {
+      "case_id": "positive.policy-intersection",
+      "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/positive.policy-intersection/source.json",
+      "raw_source_bytes_hash": "sha256:1625fc84758bde9c364b88f2c94570c4ee96abf5abde5b3ea98db1b77f643240",
+      "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/positive.policy-intersection@2.json",
+      "input_snapshot_hash": "sha256:1a5e9e831eb817a3178ccc5ab7a92e27082904b0a675780bf4794a078a4b0969",
+      "effective_case_input_hash": "sha256:7cc3b5176fe4515a07abd7c09676faab6e20982216087f25dfdd6aa8ba5ea3a9"
+    },
+    {
+      "case_id": "positive.quality-revision-binding",
+      "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/positive.quality-revision-binding/source.json",
+      "raw_source_bytes_hash": "sha256:ad0357d45e4e0297478fa8f18ea4fbe437376296ec15ea44cc7969217b3532f7",
+      "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/positive.quality-revision-binding@2.json",
+      "input_snapshot_hash": "sha256:85c2d974ee48e608637ad02d3abed0fb7b2b9877f738c1234be9e337214d0e84",
+      "effective_case_input_hash": "sha256:91157168b86e5f987964b4a18564f16022d2d2691505a1da6086e2652c4d71fd"
+    },
+    {
+      "case_id": "positive.sound-subtype-different-hash",
+      "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/positive.sound-subtype-different-hash/source.json",
+      "raw_source_bytes_hash": "sha256:b99aa58a4249b2d945e745e4f65bcd59475a764ea40ce713c5259f04a599a41c",
+      "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/positive.sound-subtype-different-hash@2.json",
+      "input_snapshot_hash": "sha256:725a05fa9de5dedd6483c44066ab692b0a660dbdf45931a9d1f3734b7a68c321",
+      "effective_case_input_hash": "sha256:5b7343299e9bfcd3109cbdd11a68b4a486424b475b7d99d0e3d8c308347e3408"
+    },
+    {
+      "case_id": "positive.static-child-closure",
+      "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/positive.static-child-closure/source.json",
+      "raw_source_bytes_hash": "sha256:bd187256b838fe4a410e935ed3158e8e95f3d613246038d2256a918654c1db25",
+      "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/positive.static-child-closure@2.json",
+      "input_snapshot_hash": "sha256:98533b02cf2c9bd09145df9f8f294e8505a5d677e4ea11853b17a8074a69ecad",
+      "effective_case_input_hash": "sha256:900c70df9dfabf778b971b9d0547eae2ecb7c3d0fa22126cce6c3f2f07b45e75"
+    },
+    {
+      "case_id": "negative.json-syntax-invalid",
+      "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/negative.json-syntax-invalid/source.json",
+      "raw_source_bytes_hash": "sha256:1de314242c7f8dfde49d4c5f2c3f7b51f299fd2120fa25ed1f6f155399480cf4",
+      "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/negative.json-syntax-invalid@2.json",
+      "input_snapshot_hash": "sha256:ffddb8e5e92f70ec0f8d54ea3bdae64571eade3a2670fd1400b637d1c90fe46a",
+      "effective_case_input_hash": "sha256:8fe1a3569dd20edca501bcfb2cea5724eaeec0f7f504ec2b5955dd07c6a65e10"
+    },
+    {
+      "case_id": "negative.json-duplicate-key",
+      "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/negative.json-duplicate-key/source.json",
+      "raw_source_bytes_hash": "sha256:befdfa568fb31e78b9c83a1beb294aea8d216bc84f47bdbda5af0508ae03612b",
+      "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/negative.json-duplicate-key@2.json",
+      "input_snapshot_hash": "sha256:df1a724c6677cfe0fd878fc8328969caaf8e3c491eaab9a69c64ec9902e512b0",
+      "effective_case_input_hash": "sha256:3dbc995776f812dbc0319237f3c04eeab1f9d539145a07e13e5e7409ac9fccaa"
+    },
+    {
+      "case_id": "negative.schema-unknown-field",
+      "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/negative.schema-unknown-field/source.json",
+      "raw_source_bytes_hash": "sha256:bc476ab08339a5be43514e863416239245fdd042e91b0998ba0d8ef5e58f5a16",
+      "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/negative.schema-unknown-field@2.json",
+      "input_snapshot_hash": "sha256:0645a5c77fddaae4c48ba4a5874f5a8b244b48e65d0836da224bf8be58adf643",
+      "effective_case_input_hash": "sha256:79be02735d2bf06564536cc499d968a8dac927e678b9e91495e3190956fb7c01"
+    },
+    {
+      "case_id": "negative.schema-profile-keyword-unsupported",
+      "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/negative.schema-profile-keyword-unsupported/source.json",
+      "raw_source_bytes_hash": "sha256:a817204105e364a76b1ec511670e37f39bdc5002873548763bdba20348a8a85d",
+      "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/negative.schema-profile-keyword-unsupported@2.json",
+      "input_snapshot_hash": "sha256:0f8ded0c87ed00c29b2888e9d29c95339ca40ef5a07ba3d9f6be6927a55ba13e",
+      "effective_case_input_hash": "sha256:f00161341931fbbb330c46c36365e38f10c2bfd8fd034c995b49e5009810da71"
+    },
+    {
+      "case_id": "negative.registry-ref-unpinned",
+      "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/negative.registry-ref-unpinned/source.json",
+      "raw_source_bytes_hash": "sha256:85f3d69e7cf42bfe12d16e7e9d7b79481a784be2aeb5989cca06e3b09160c65d",
+      "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/negative.registry-ref-unpinned@2.json",
+      "input_snapshot_hash": "sha256:d3da868bd5f090e27f9f076bc7b7e05cce45ba0ba888ac0310ea905f44dfbef3",
+      "effective_case_input_hash": "sha256:722953b67f4297ba51568024ec9a0b1fed26794ce5e33c234fa34eb631b58ba0"
+    },
+    {
+      "case_id": "negative.registry-ref-not-found",
+      "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/negative.registry-ref-not-found/source.json",
+      "raw_source_bytes_hash": "sha256:5c10d61cba54c8bf3858e8e4cf4ef642089b1ff57e64eb301762747e44bc482a",
+      "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/negative.registry-ref-not-found@2.json",
+      "input_snapshot_hash": "sha256:71ed236bf35dbf2c6150c23d612762a1c5d5e05a22bc15fd4f2f046dead499da",
+      "effective_case_input_hash": "sha256:50920258165a657b4e875ed0108c0e5bd9728a0ca0d98dceae00dfedbaf07887"
+    },
+    {
+      "case_id": "negative.graph-id-duplicate",
+      "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/negative.graph-id-duplicate/source.json",
+      "raw_source_bytes_hash": "sha256:d60e3bea30d45947da8d70d73725a7bb02f1acf6da82553c61375840536e2d65",
+      "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/negative.graph-id-duplicate@2.json",
+      "input_snapshot_hash": "sha256:cf1ce9d43f04086fc50e3e020b4e3a83da22dabd1704489a707a269bb715d5f5",
+      "effective_case_input_hash": "sha256:87801ad96ab63a78df4179e4ee335ef46ed10fc08b47f77883f5e480547f2bfd"
+    },
+    {
+      "case_id": "negative.graph-endpoint-not-found",
+      "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/negative.graph-endpoint-not-found/source.json",
+      "raw_source_bytes_hash": "sha256:7d42dfc3c1ca47be79afc21dc216fe61cf42f0aa24eb15dff1f252f1c52d5fcb",
+      "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/negative.graph-endpoint-not-found@2.json",
+      "input_snapshot_hash": "sha256:867a81d37f5f3bf8fea5837b7e60d4cd1c804c2f26f2b7ede183bc41a10b4468",
+      "effective_case_input_hash": "sha256:e7e41d8da5d489af9f15d84a827076c913fbfb5a72ace899619cfc50f915cdb5"
+    },
+    {
+      "case_id": "negative.graph-cross-scope-edge",
+      "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/negative.graph-cross-scope-edge/source.json",
+      "raw_source_bytes_hash": "sha256:c6db17673ef1d5e7c66ac83d09f925ca9793ba73d5eed3ae1d52583f93c8cb19",
+      "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/negative.graph-cross-scope-edge@2.json",
+      "input_snapshot_hash": "sha256:4b539937420e03ed21a415c381870f89c4a34dfcfa03d6a0bfe5fd2d7d5f20e5",
+      "effective_case_input_hash": "sha256:1827b1ed175d2443f69b162ea9dd3866a849c43140705cf2769751585fdf8dfc"
+    },
+    {
+      "case_id": "negative.graph-dependency-cycle",
+      "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/negative.graph-dependency-cycle/source.json",
+      "raw_source_bytes_hash": "sha256:17436cceced05691ebce9e54ed56bdae6464de5436b383410aab067c097610a5",
+      "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/negative.graph-dependency-cycle@2.json",
+      "input_snapshot_hash": "sha256:e36d99a03fe4e84047c4af35ef51c7b9c4ffeee2366d7646f5c8613e086fb397",
+      "effective_case_input_hash": "sha256:f48db233e2fbce7414d0278b8662d4ed7125c6615943dad24590e91dcca016a1"
+    },
+    {
+      "case_id": "negative.condition-type-mismatch",
+      "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/negative.condition-type-mismatch/source.json",
+      "raw_source_bytes_hash": "sha256:2f59afe5b3d55fc04054c6a0d4bbefa6ded78b74791d5d3937a2a44f72591d32",
+      "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/negative.condition-type-mismatch@2.json",
+      "input_snapshot_hash": "sha256:bc8e89513d7210ef58e4495fe4c8a2e82022a64ac1e6c573366d2a96a0817a78",
+      "effective_case_input_hash": "sha256:9d6e18a3d4bca36f7a3611a655ca4073ab4c82086b8b77d807d8ce30d155cdaa"
+    },
+    {
+      "case_id": "negative.condition-complexity-exceeded",
+      "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/negative.condition-complexity-exceeded/source.json",
+      "raw_source_bytes_hash": "sha256:cb7ed34e45de388c3f555026d8f3ea866f7b0930af637588da09a66a9a32a798",
+      "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/negative.condition-complexity-exceeded@2.json",
+      "input_snapshot_hash": "sha256:96564069f96cad342bf5279d1bda0ce261118ba7a81505e133b9590f1ffe5f8d",
+      "effective_case_input_hash": "sha256:1c23c83cae54d45e900fe77de0c06f7020f608556ec229fc5f94d26ccfcf8c97"
+    },
+    {
+      "case_id": "negative.json-pointer-non-total",
+      "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/negative.json-pointer-non-total/source.json",
+      "raw_source_bytes_hash": "sha256:018e79f40d6cd11879cd1b620466b2f2484179617d5a4c184ea788b9559f9849",
+      "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/negative.json-pointer-non-total@2.json",
+      "input_snapshot_hash": "sha256:a9c6828f19126abaff7a7415fbaa7d0ebd4bf2f11f98a3d7ae0b773523d0a720",
+      "effective_case_input_hash": "sha256:4f2593f0957a27fd808b1da1cd5c2fd99353a1c427b9d7ae5f268d0d4916df51"
+    },
+    {
+      "case_id": "negative.schema-not-assignable",
+      "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/negative.schema-not-assignable/source.json",
+      "raw_source_bytes_hash": "sha256:18868dccadfcda81e645ba786f3a8c77ab3aea43e518681361a3927487d7d17e",
+      "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/negative.schema-not-assignable@2.json",
+      "input_snapshot_hash": "sha256:8b2cca505a0cc3fb0a0639add4775bebdf7072b44caee503d3fd98221ff90f23",
+      "effective_case_input_hash": "sha256:28d98ac391511d8b0119b338811b582a27b041ee197f3d6c949d946c1d7b11eb"
+    },
+    {
+      "case_id": "negative.route-group-ambiguous",
+      "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/negative.route-group-ambiguous/source.json",
+      "raw_source_bytes_hash": "sha256:0a0307ac507a37f012e3d2d9213bdcc67cb3c4d984b2d5daa25e161cf43ab937",
+      "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/negative.route-group-ambiguous@2.json",
+      "input_snapshot_hash": "sha256:c6612efc056d9e7b194e1f8ac899f711ca1bf277a4b21caefbad8c9c941bab65",
+      "effective_case_input_hash": "sha256:48ed860e917c7c47a47ee2f254dff8ef9827e2604887079b46c1ff4569d374b5"
+    },
+    {
+      "case_id": "negative.trigger-contract-invalid",
+      "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/negative.trigger-contract-invalid/source.json",
+      "raw_source_bytes_hash": "sha256:231cdee1fc0af13069e724bbb256497786ce7e37077370fac89ca8e0d75eae40",
+      "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/negative.trigger-contract-invalid@2.json",
+      "input_snapshot_hash": "sha256:bf64f3950ea633e53d4ed833a63ed942212b874c89547e089fab2a07815bca61",
+      "effective_case_input_hash": "sha256:3407ad7194a938ed8d21224037574fa5af344f86e0ae55b988b48be73572f16b"
+    },
+    {
+      "case_id": "negative.completion-contract-invalid",
+      "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/negative.completion-contract-invalid/source.json",
+      "raw_source_bytes_hash": "sha256:84a86149e0c6624b4ec421d29ea5a96474fba800cbb737422347f10633ca48c7",
+      "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/negative.completion-contract-invalid@2.json",
+      "input_snapshot_hash": "sha256:3f6a41b121662780e24bcb360581df89bb373dc4d4cef6fb6c8f2785c3a29c30",
+      "effective_case_input_hash": "sha256:b2603e6173b7f9c40b20f068ad6e042920bff92661af03d6cfe2d2a08fcfc62c"
+    },
+    {
+      "case_id": "negative.early-completion-non-monotone",
+      "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/negative.early-completion-non-monotone/source.json",
+      "raw_source_bytes_hash": "sha256:f6d14206b89a794f892629e2a7132fd27ed65ce6e44121f2a910a28e159dcd3a",
+      "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/negative.early-completion-non-monotone@2.json",
+      "input_snapshot_hash": "sha256:7edc1d96491f3bb2ae9549023199d48a31b25a5252968949b11a616cf139cf1c",
+      "effective_case_input_hash": "sha256:fa71ce7809f08c0a265806593881574654dc5859ebd28704693c30590904329c"
+    },
+    {
+      "case_id": "positive.compiler-integrity-match-control",
+      "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/positive.compiler-integrity-match-control/source.json",
+      "raw_source_bytes_hash": "sha256:3fd14b979a61d33505eab8708771f3b8db9ec879e88708d6431ea8ce6c9a3951",
+      "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/positive.compiler-integrity-match-control@2.json",
+      "input_snapshot_hash": "sha256:ac4ffffba5095d6211a8a944271dd43bf5ef2efad9873b10e389bbc6dbeb3440",
+      "effective_case_input_hash": "sha256:a4aef94052887a28bbbfd84f7871b7c5bda1a81505e03ccbeacd9d4189817fce"
+    },
+    {
+      "case_id": "negative.capability-not-allowed",
+      "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/negative.capability-not-allowed/source.json",
+      "raw_source_bytes_hash": "sha256:3f4409c72d553b304b6ba3f7aad809e64619bc3640ddd90d1f491cbfcd02e9d0",
+      "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/negative.capability-not-allowed@2.json",
+      "input_snapshot_hash": "sha256:02579a06228612a22f2c559947a6f24165f3e546ffdccf7348d8af46b6cc00b4",
+      "effective_case_input_hash": "sha256:90c95fc67ad2e7d37963ff5eab85a6f3330c3c13b0d9e5977efb09b27437073b"
+    },
+    {
+      "case_id": "negative.policy-escalation",
+      "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/negative.policy-escalation/source.json",
+      "raw_source_bytes_hash": "sha256:e462312374feb35da9df7ca2627188a6caa6e94dca960269daaefdaebf1ac0ad",
+      "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/negative.policy-escalation@2.json",
+      "input_snapshot_hash": "sha256:3314fc424eb4ba0dbb587ad2e0208290d3eb25f04120dbfd00788df79c44d8b2",
+      "effective_case_input_hash": "sha256:09b40f102ea86ebcf24fea15178af339ef2d7890764f52b7a4254f5198816ec4"
+    },
+    {
+      "case_id": "negative.quality-revision-missing-feedback-schema",
+      "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/negative.quality-revision-missing-feedback-schema/source.json",
+      "raw_source_bytes_hash": "sha256:04a77810e6cfac0a9556a5f542a2d83914f92c93f6af14bf40889d0aedbd4045",
+      "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/negative.quality-revision-missing-feedback-schema@2.json",
+      "input_snapshot_hash": "sha256:d464d3b50a64e2249a81694b2672dfdd143e046531364730f8ff3d769a06834d",
+      "effective_case_input_hash": "sha256:21dd643f4782c314b103df36d439536f254429130d713a63e76b668390e17aed"
+    },
+    {
+      "case_id": "negative.quality-revision-effect-key-incompatible",
+      "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/negative.quality-revision-effect-key-incompatible/source.json",
+      "raw_source_bytes_hash": "sha256:7b260aeebca87c6174655e15db0d71d4f394f9b203ac10afde24e99ed3eb4466",
+      "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/negative.quality-revision-effect-key-incompatible@2.json",
+      "input_snapshot_hash": "sha256:e221c99da35e05a6a387af47cd7716f2d3f539f8237a4b3bf7481fbb2e8a6af7",
+      "effective_case_input_hash": "sha256:195516208e0fd1b9d0c0218f60a8fd063df8e205aba277bdcdf474cd1b598e7c"
+    },
+    {
+      "case_id": "negative.child-recipe-set-mismatch",
+      "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/negative.child-recipe-set-mismatch/source.json",
+      "raw_source_bytes_hash": "sha256:3a641426b7fc7e475ae48f879c23b33af77607bde8e69d8e80702758ca3ed9bb",
+      "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/negative.child-recipe-set-mismatch@2.json",
+      "input_snapshot_hash": "sha256:80872f28e1fa4584d1c9edfc6fbe3aa08e7530c8ba3fade35653bf7aeab9271b",
+      "effective_case_input_hash": "sha256:85d17763b4f1a395839a48a15a1feb211c5a94126d1d7c2be5602c1c279ffda5"
+    },
+    {
+      "case_id": "negative.child-recipe-dependency-cycle",
+      "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/negative.child-recipe-dependency-cycle/source.json",
+      "raw_source_bytes_hash": "sha256:6958494e8112059188207529a7bf651633d993743ee553ade70771ed02b4587e",
+      "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/negative.child-recipe-dependency-cycle@2.json",
+      "input_snapshot_hash": "sha256:7cff33b02ecde34ec98357e933f9231f283202b96af156a5417295d2478ac075",
+      "effective_case_input_hash": "sha256:5e0c453f86e5cb6865d872eb04a56b15c084ea6efe40027a86b8c98bcad387dc"
+    },
+    {
+      "case_id": "negative.runtime-safety-limit-exceeded",
+      "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/negative.runtime-safety-limit-exceeded/source.json",
+      "raw_source_bytes_hash": "sha256:0d5bbf5010b38f8be71a5309cad5a9fd7448fff89cdf35a8fb6ed115f10fbace",
+      "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/negative.runtime-safety-limit-exceeded@2.json",
+      "input_snapshot_hash": "sha256:74780936e9f9c5de5d09b578fb75ec877ddb2c351c7d231427709948f857240e",
+      "effective_case_input_hash": "sha256:dc771eff2b7d880a9ee9675d031f771c60a2dba1880b801913d306342380f613"
+    },
+    {
+      "case_id": "negative.compiler-integrity-mismatch",
+      "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/negative.compiler-integrity-mismatch/source.json",
+      "raw_source_bytes_hash": "sha256:3fd14b979a61d33505eab8708771f3b8db9ec879e88708d6431ea8ce6c9a3951",
+      "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/negative.compiler-integrity-mismatch@2.json",
+      "input_snapshot_hash": "sha256:3638cfafa54f79e68ad3b1f1448139120d225d35faf91fb498df456d8d8dad0f",
+      "effective_case_input_hash": "sha256:c68720c1f5bae3bce08329e809005f353051e6c2e33a6677830953875c583113"
+    },
+    {
+      "case_id": "negative.quality-revision-missing-quality-gate",
+      "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/negative.quality-revision-missing-quality-gate/source.json",
+      "raw_source_bytes_hash": "sha256:51df8b28d9544d00298d83aaf3859a138744f97523b7bfacf35b20f31a4c8c96",
+      "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/negative.quality-revision-missing-quality-gate@2.json",
+      "input_snapshot_hash": "sha256:ee089bffb360ab10920d9c32a05cfe8df5d6fcda22c1785db4f3c6c5e582add9",
+      "effective_case_input_hash": "sha256:555fc6ff5a68a5d83c8e9b27eaf348bd7fef46999e4c3a58427547de83cfd1e7"
+    },
+    {
+      "case_id": "negative.definition-notification-delivery-requirement",
+      "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/negative.definition-notification-delivery-requirement/source.json",
+      "raw_source_bytes_hash": "sha256:1cbcad7aabc4f9a6787040c64f523f6a2afb72b426a617d2b4b6f6752441cdb1",
+      "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/negative.definition-notification-delivery-requirement@2.json",
+      "input_snapshot_hash": "sha256:3f0f68b2988c077d7444942ac11b23d567c8f51643b4da424f6b2d26e6fec4d2",
+      "effective_case_input_hash": "sha256:130a1b2334e4c60e1400eed24a5f88e31678f4aa553de76b3a349ee6b692797a"
+    },
+    {
+      "case_id": "negative.definition-child-creation-key-template",
+      "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/negative.definition-child-creation-key-template/source.json",
+      "raw_source_bytes_hash": "sha256:647fa51666aa27e7f95a3078b1096b6266959da3e7a48cd8850b927c8eb010b8",
+      "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/negative.definition-child-creation-key-template@2.json",
+      "input_snapshot_hash": "sha256:81807f292d9c35325dd3e7d9bffb030c9bb62c7f310568fe10107c6249803cec",
+      "effective_case_input_hash": "sha256:5eff07a1d5089898c992ab47e82cd1ea2a3b3d8e00d49f71b1a7478b5e6f404c"
+    }
+  ],
+  "binding_hash": "sha256:2e6832400922ef7bee306b26f5e2bf8d0cf7b87be1fa89f10186c0920f021085"
+}

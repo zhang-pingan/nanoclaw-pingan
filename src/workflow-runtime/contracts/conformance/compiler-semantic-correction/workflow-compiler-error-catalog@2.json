@@ -1,0 +1,233 @@
+{
+  "format": "icarus.workflow-compiler-error-catalog/2",
+  "ref": {
+    "id": "icarus.workflow-compiler-error-catalog",
+    "version": "2.0.0"
+  },
+  "version": 2,
+  "domain_separator": "icarus:workflow-compiler-error-catalog:2\n",
+  "hash": "sha256:8fc7139b29cdddf3c1e13e0f9d8bc6b19a1d32c02c1e7f4b7e33023fcece91ef",
+  "payload": {
+    "diagnostic_phases": [
+      "parse",
+      "schema",
+      "bind",
+      "prove",
+      "normalize",
+      "hash"
+    ],
+    "retryabilities": [
+      "source_revision_required",
+      "registry_revision_required",
+      "never"
+    ],
+    "error_codes": [
+      "json_syntax_invalid",
+      "json_duplicate_key",
+      "schema_unknown_field",
+      "schema_profile_keyword_unsupported",
+      "registry_ref_unpinned",
+      "registry_ref_not_found",
+      "graph_id_duplicate",
+      "graph_endpoint_not_found",
+      "graph_cross_scope_edge",
+      "graph_dependency_cycle",
+      "condition_type_mismatch",
+      "condition_complexity_exceeded",
+      "json_pointer_non_total",
+      "schema_not_assignable",
+      "route_group_ambiguous",
+      "trigger_contract_invalid",
+      "completion_contract_invalid",
+      "early_completion_non_monotone",
+      "early_completion_cancellation_unsafe",
+      "capability_not_allowed",
+      "policy_escalation",
+      "quality_revision_contract_invalid",
+      "quality_revision_effect_key_incompatible",
+      "child_recipe_set_mismatch",
+      "child_recipe_dependency_cycle",
+      "runtime_safety_limit_exceeded",
+      "compiler_integrity_mismatch"
+    ],
+    "entries": {
+      "json_syntax_invalid": {
+        "retryability": "source_revision_required",
+        "default_phase": "parse",
+        "source_reachability": "reachable",
+        "production_emission": "allowed"
+      },
+      "json_duplicate_key": {
+        "retryability": "source_revision_required",
+        "default_phase": "parse",
+        "source_reachability": "reachable",
+        "production_emission": "allowed"
+      },
+      "schema_unknown_field": {
+        "retryability": "source_revision_required",
+        "default_phase": "schema",
+        "source_reachability": "reachable",
+        "production_emission": "allowed"
+      },
+      "schema_profile_keyword_unsupported": {
+        "retryability": "source_revision_required",
+        "default_phase": "schema",
+        "source_reachability": "reachable",
+        "production_emission": "allowed"
+      },
+      "registry_ref_unpinned": {
+        "retryability": "source_revision_required",
+        "default_phase": "bind",
+        "source_reachability": "reachable",
+        "production_emission": "allowed"
+      },
+      "registry_ref_not_found": {
+        "retryability": "registry_revision_required",
+        "default_phase": "bind",
+        "source_reachability": "reachable",
+        "production_emission": "allowed"
+      },
+      "graph_id_duplicate": {
+        "retryability": "source_revision_required",
+        "default_phase": "bind",
+        "source_reachability": "reachable",
+        "production_emission": "allowed"
+      },
+      "graph_endpoint_not_found": {
+        "retryability": "source_revision_required",
+        "default_phase": "bind",
+        "source_reachability": "reachable",
+        "production_emission": "allowed"
+      },
+      "graph_cross_scope_edge": {
+        "retryability": "source_revision_required",
+        "default_phase": "bind",
+        "source_reachability": "unreachable_in_closed_source_ir_v1",
+        "production_emission": "forbidden_reserved"
+      },
+      "graph_dependency_cycle": {
+        "retryability": "source_revision_required",
+        "default_phase": "prove",
+        "source_reachability": "reachable",
+        "production_emission": "allowed"
+      },
+      "condition_type_mismatch": {
+        "retryability": "source_revision_required",
+        "default_phase": "prove",
+        "source_reachability": "reachable",
+        "production_emission": "allowed"
+      },
+      "condition_complexity_exceeded": {
+        "retryability": "source_revision_required",
+        "default_phase": "prove",
+        "source_reachability": "reachable",
+        "production_emission": "allowed"
+      },
+      "json_pointer_non_total": {
+        "retryability": "source_revision_required",
+        "default_phase": "prove",
+        "source_reachability": "reachable",
+        "production_emission": "allowed"
+      },
+      "schema_not_assignable": {
+        "retryability": "source_revision_required",
+        "default_phase": "prove",
+        "source_reachability": "reachable",
+        "production_emission": "allowed"
+      },
+      "route_group_ambiguous": {
+        "retryability": "source_revision_required",
+        "default_phase": "prove",
+        "source_reachability": "reachable",
+        "production_emission": "allowed"
+      },
+      "trigger_contract_invalid": {
+        "retryability": "source_revision_required",
+        "default_phase": "prove",
+        "source_reachability": "reachable",
+        "production_emission": "allowed"
+      },
+      "completion_contract_invalid": {
+        "retryability": "source_revision_required",
+        "default_phase": "prove",
+        "source_reachability": "reachable",
+        "production_emission": "allowed"
+      },
+      "early_completion_non_monotone": {
+        "retryability": "source_revision_required",
+        "default_phase": "prove",
+        "source_reachability": "reachable",
+        "production_emission": "allowed"
+      },
+      "early_completion_cancellation_unsafe": {
+        "retryability": "source_revision_required",
+        "default_phase": "prove",
+        "source_reachability": "unreachable_after_capability_contract_validation",
+        "production_emission": "forbidden_reserved"
+      },
+      "capability_not_allowed": {
+        "retryability": "source_revision_required",
+        "default_phase": "bind",
+        "source_reachability": "reachable",
+        "production_emission": "allowed"
+      },
+      "policy_escalation": {
+        "retryability": "source_revision_required",
+        "default_phase": "bind",
+        "source_reachability": "reachable",
+        "production_emission": "allowed"
+      },
+      "quality_revision_contract_invalid": {
+        "retryability": "registry_revision_required",
+        "default_phase": "bind",
+        "source_reachability": "reachable",
+        "production_emission": "allowed"
+      },
+      "quality_revision_effect_key_incompatible": {
+        "retryability": "registry_revision_required",
+        "default_phase": "bind",
+        "source_reachability": "reachable",
+        "production_emission": "allowed"
+      },
+      "child_recipe_set_mismatch": {
+        "retryability": "registry_revision_required",
+        "default_phase": "bind",
+        "source_reachability": "reachable",
+        "production_emission": "allowed"
+      },
+      "child_recipe_dependency_cycle": {
+        "retryability": "registry_revision_required",
+        "default_phase": "prove",
+        "source_reachability": "reachable",
+        "production_emission": "allowed"
+      },
+      "runtime_safety_limit_exceeded": {
+        "retryability": "source_revision_required",
+        "default_phase": "prove",
+        "source_reachability": "reachable",
+        "production_emission": "allowed"
+      },
+      "compiler_integrity_mismatch": {
+        "retryability": "never",
+        "default_phase": "hash",
+        "source_reachability": "reachable",
+        "production_emission": "allowed"
+      }
+    },
+    "diagnostic_sort_key": [
+      "instance_pointer",
+      "code",
+      "stable_object_id",
+      "schema_pointer"
+    ],
+    "historical_catalog_ref": {
+      "id": "icarus.workflow-compiler-error-catalog",
+      "version": "1.0.0"
+    },
+    "historical_catalog_hash": "sha256:a5b27ca8ed6c6ad6ffa018f085c1333f09a7eb380435fd61f03b7f260fdca540",
+    "correction_contract_ref": {
+      "id": "icarus.workflow-compiler-semantic-correction-contract",
+      "version": "1.0.0"
+    }
+  }
+}
