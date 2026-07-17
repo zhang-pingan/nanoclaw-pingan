@@ -6,13 +6,16 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-runtime-schema-domain-separators:1\n",
-  "hash": "sha256:49065b8d9063e25754a80d731b47b1088bcb67fc71720487c909b11a26147eaf",
+  "hash": "sha256:aff1edfd130d86112ade608a75a4769804292dc4e51af725a59aa80784335f14",
   "payload": {
     "entries": [
       "icarus:workflow-contract-pack-g1-executable-schema:1\n",
       "icarus:workflow-runtime-constraint-trigger-fixtures:1\n",
       "icarus:workflow-runtime-executable-ddl:1\n",
+      "icarus:workflow-runtime-physical-schema-identity:1\n",
       "icarus:workflow-runtime-query-plan-fixtures:1\n",
+      "icarus:workflow-runtime-schema-dependency-manifest-contract:1\n",
+      "icarus:workflow-runtime-schema-dependency-manifest:1\n",
       "icarus:workflow-runtime-schema-determinism:1\n",
       "icarus:workflow-runtime-schema-domain-separators:1\n",
       "icarus:workflow-runtime-schema-lint:1\n",

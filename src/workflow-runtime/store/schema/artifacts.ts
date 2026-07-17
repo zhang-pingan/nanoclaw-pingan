@@ -12,6 +12,11 @@ import type {
   JsonObject,
   JsonValue,
 } from '../../contracts/types.js';
+import {
+  G1_PHYSICAL_SCHEMA_IDENTITY_DOMAIN_SEPARATOR,
+  G1_SCHEMA_DEPENDENCY_MANIFEST_DOMAIN_SEPARATOR,
+  buildSchemaDependencyManifestArtifact,
+} from './dependencies.js';
 import { buildQueryFixtures, renderMigration } from './ddl.js';
 import {
   assertClosedSchemaManifest,
@@ -27,14 +32,18 @@ import {
 } from './sqlite-gate.js';
 import type {
   ExecutableSchemaSource,
+  G1SchemaDependencyManifestPayload,
   WorkflowRuntimeSchemaManifestPayload,
 } from './types.js';
 
 const schemaRoot = import.meta.dirname;
-const contractsRoot = path.resolve(schemaRoot, '../../contracts');
 
 export const G1_ARTIFACT_PATHS = {
   migration: 'migration/workflow-runtime-schema-v1.sql',
+  dependencyManifest:
+    'artifacts/workflow-runtime-schema-dependency-manifest@1.json',
+  dependencyManifestContract:
+    'artifacts/workflow-runtime-schema-dependency-manifest-contract@1.json',
   manifest: 'artifacts/workflow-runtime-schema-manifest@1.json',
   manifestContract:
     'artifacts/workflow-runtime-schema-manifest-contract@1.json',
@@ -73,32 +82,52 @@ function rawSha256(value: string): `sha256:${string}` {
   return `sha256:${crypto.createHash('sha256').update(value, 'utf8').digest('hex')}`;
 }
 
-function listJsonFiles(root: string, current = root): string[] {
-  return fs
-    .readdirSync(current, { withFileTypes: true })
-    .flatMap((entry) => {
-      const absolute = path.join(current, entry.name);
-      if (entry.isDirectory()) return listJsonFiles(root, absolute);
-      return entry.isFile() && entry.name.endsWith('.json')
-        ? [path.relative(root, absolute)]
-        : [];
-    })
-    .sort();
-}
-
-export function historicalContractTreeDigest(): string {
-  const hash = crypto.createHash('sha256');
-  const historicalFiles = listJsonFiles(contractsRoot).filter(
-    (relativePath) =>
-      !relativePath.startsWith('conformance/compiler-contract-repair/'),
+function buildDependencyManifestContractArtifact(): ContractArtifactEnvelope {
+  return buildArtifact(
+    'icarus.workflow-runtime-schema-dependency-manifest-contract/1',
+    'icarus.workflow-runtime-schema-dependency-manifest-contract',
+    'icarus:workflow-runtime-schema-dependency-manifest-contract:1\n',
+    {
+      contract_kind: 'closed_required_members',
+      unknown_fields: 'rejected',
+      validator_owner: 'workflow_runtime_schema_gate',
+      path_model: 'exact_required_members_only',
+      directory_exclusions: 'forbidden',
+      top_level_keys: [
+        'dependency_set_id',
+        'identity_scope',
+        'member_count',
+        'physical_member_count',
+        'construction_provenance_count',
+        'members',
+        'physical_schema_identity',
+      ],
+      member_keys: [
+        'role',
+        'identity_effect',
+        'path',
+        'format',
+        'ref',
+        'version',
+        'semantic_hash',
+        'raw_sha256',
+      ],
+      ref_keys: ['id', 'version'],
+      required_roles: [
+        'g0_6_logical_schema_manifest',
+        'logical_schema_source',
+        'typed_relation_catalog',
+        'query_catalog',
+        'g0_10_capacity_logical_schema_delta',
+        'sqlite_execution_profile',
+        'schema_manifest',
+        'canonical_migration',
+      ],
+      member_order: 'required_roles_order',
+      physical_identity_domain_separator:
+        G1_PHYSICAL_SCHEMA_IDENTITY_DOMAIN_SEPARATOR,
+    },
   );
-  for (const relativePath of historicalFiles) {
-    hash.update(relativePath, 'utf8');
-    hash.update('\0');
-    hash.update(fs.readFileSync(path.join(contractsRoot, relativePath)));
-    hash.update('\0');
-  }
-  return hash.digest('hex');
 }
 
 function buildManifestContractArtifact(): ContractArtifactEnvelope {
@@ -330,13 +359,16 @@ function runSchemaLint(
 export interface BuiltG1Artifacts {
   migrationSql: string;
   manifest: ContractArtifactEnvelope;
+  dependencyManifest: ContractArtifactEnvelope;
   artifacts: Array<[string, ContractArtifactEnvelope]>;
   schemaHash: string;
   environmentSummary: ReturnType<typeof collectSqliteEnvironmentEvidence>;
 }
 
-export function buildG1Artifacts(): BuiltG1Artifacts {
-  const source = loadExecutableSchemaSource();
+export function buildG1Artifacts(
+  options: { contractsRoot?: string } = {},
+): BuiltG1Artifacts {
+  const source = loadExecutableSchemaSource(options.contractsRoot);
   const migration = renderMigration(source);
   const temporaryRoot = fs.mkdtempSync(
     path.join(os.tmpdir(), 'icarus-g1-schema-'),
@@ -369,6 +401,12 @@ export function buildG1Artifacts(): BuiltG1Artifacts {
     'icarus.workflow-runtime-schema-manifest',
     'icarus:workflow-runtime-schema-manifest:1\n',
     payloadAsJsonObject(manifestPayload),
+  );
+  const dependencyManifestContract = buildDependencyManifestContractArtifact();
+  const dependencyManifest = buildSchemaDependencyManifestArtifact(
+    manifest,
+    migration.sql,
+    { contractsRoot: options.contractsRoot },
   );
   const executableDdl = buildArtifact(
     'icarus.workflow-runtime-executable-ddl/1',
@@ -418,6 +456,9 @@ export function buildG1Artifacts(): BuiltG1Artifacts {
     {
       entries: [
         'icarus:workflow-runtime-schema:1\n',
+        G1_SCHEMA_DEPENDENCY_MANIFEST_DOMAIN_SEPARATOR,
+        G1_PHYSICAL_SCHEMA_IDENTITY_DOMAIN_SEPARATOR,
+        dependencyManifestContract.domain_separator,
         manifestContract.domain_separator,
         manifest.domain_separator,
         executableDdl.domain_separator,
@@ -431,6 +472,8 @@ export function buildG1Artifacts(): BuiltG1Artifacts {
     },
   );
   const members: Array<[string, ContractArtifactEnvelope]> = [
+    [G1_ARTIFACT_PATHS.dependencyManifestContract, dependencyManifestContract],
+    [G1_ARTIFACT_PATHS.dependencyManifest, dependencyManifest],
     [G1_ARTIFACT_PATHS.manifestContract, manifestContract],
     [G1_ARTIFACT_PATHS.manifest, manifest],
     [G1_ARTIFACT_PATHS.executableDdl, executableDdl],
@@ -446,9 +489,10 @@ export function buildG1Artifacts(): BuiltG1Artifacts {
     {
       gate: 'G1.1',
       status: 'executable_ddl_schema_manifest',
-      g0_10_root_hash: source.logical_inputs.g0_10_root_hash,
-      g0_6_manifest_hash: source.logical_inputs.g0_6_manifest_hash,
-      historical_contract_json_tree_digest: historicalContractTreeDigest(),
+      schema_dependency_manifest_hash: dependencyManifest.hash,
+      physical_schema_identity: (
+        dependencyManifest.payload as unknown as G1SchemaDependencyManifestPayload
+      ).physical_schema_identity,
       schema_hash: manifestPayload.schema_hash,
       migration_sha256: rawSha256(migration.sql),
       deterministic_digest: domainSeparatedSha256(
@@ -491,6 +535,7 @@ export function buildG1Artifacts(): BuiltG1Artifacts {
   return {
     migrationSql: migration.sql,
     manifest,
+    dependencyManifest,
     artifacts: members,
     schemaHash: manifestPayload.schema_hash,
     environmentSummary,

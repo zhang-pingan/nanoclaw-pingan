@@ -6,18 +6,17 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-runtime-schema-manifest:1\n",
-  "hash": "sha256:50219aa0bfe410763d07c7f0d340eb372c166957ee8039c28f4ed4eb010a009e",
+  "hash": "sha256:02e8d7511386c82458120d65ea6eb97f3ed26941abd757d2314e58ccc91fcb3b",
   "payload": {
     "schema_id": "workflow-runtime-schema-v1",
     "database_name": "workflow-runtime.db",
     "database_schema_version": 1,
     "logical_inputs": {
-      "g0_6_manifest_hash": "sha256:32de639cc0ee6c6f33aa4291ea03ffa55b0a22752190fb88862e72a3f6857520",
       "logical_schema_source_hash": "sha256:ef5221d3465f1214c3c0aad3660f57b119d03eb4b5127428d6a1f881a6260214",
       "typed_relation_catalog_hash": "sha256:20babbfc787ac8a6006243180ef6e867bef8b454c41a527f4b8f20c8f6dd0d99",
       "query_catalog_hash": "sha256:6a6368f1300a5d732a6a63b73f593b9dd930880beafdd14958517bc92463ed2d",
-      "g0_10_root_hash": "sha256:21d06c2d9d45a47f6ebc68c24b9d0acec29c8ae1726d5387bd38c460a7a0a7ec",
-      "capacity_delta_hash": "sha256:5d9e79b5f9330a5111e6f61b8d04164c87839a60d55ea350c0aa87b8b1559e66"
+      "capacity_delta_hash": "sha256:5d9e79b5f9330a5111e6f61b8d04164c87839a60d55ea350c0aa87b8b1559e66",
+      "sqlite_profile_hash": "sha256:3d69742dad2fefa8bef4ba47e375defd705e3b32920a92b105a43726436fb7af"
     },
     "migration_path": "migration/workflow-runtime-schema-v1.sql",
     "migration_sha256": "sha256:d89829995e164355ad485fc117db88dd67a72409f00ec3c3c54253f30a589f61",
@@ -29596,6 +29595,6 @@
         "required_index_id": "idx:capacity_head:singleton"
       }
     ],
-    "schema_hash": "sha256:9e75471258a4fa4d28c67859b39b7fb36ce9142eacb91d38a70b45b155ba79ce"
+    "schema_hash": "sha256:4d8c373387ad515c36fd292b705665e6c197c73021c1b7e55da5317bc140efbd"
   }
 }

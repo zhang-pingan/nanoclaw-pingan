@@ -1,0 +1,124 @@
+{
+  "format": "icarus.workflow-runtime-schema-dependency-manifest/1",
+  "ref": {
+    "id": "icarus.workflow-runtime-schema-dependency-manifest",
+    "version": "1"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-runtime-schema-dependency-manifest:1\n",
+  "hash": "sha256:ea039f582f0ebff2fb9bc7e512825612cf8f0f93ccdd4c5e43345f56ca2b7b89",
+  "payload": {
+    "dependency_set_id": "workflow-runtime-schema-v1",
+    "identity_scope": "physical_schema_and_migration",
+    "member_count": 8,
+    "physical_member_count": 7,
+    "construction_provenance_count": 1,
+    "members": [
+      {
+        "role": "g0_6_logical_schema_manifest",
+        "identity_effect": "construction_provenance",
+        "path": "contracts/contract-pack-logical-schema.json",
+        "format": "icarus.workflow-contract-pack-logical-schema/1",
+        "ref": {
+          "id": "icarus.workflow-contract-pack-logical-schema",
+          "version": "1"
+        },
+        "version": 1,
+        "semantic_hash": "sha256:32de639cc0ee6c6f33aa4291ea03ffa55b0a22752190fb88862e72a3f6857520",
+        "raw_sha256": "sha256:21a6555f421af4e97a69963d88e6d2383e3e13e638bbe00c0f082d76377993d1"
+      },
+      {
+        "role": "logical_schema_source",
+        "identity_effect": "physical_schema_input",
+        "path": "contracts/sqlite/workflow-runtime-logical-schema-source@1.json",
+        "format": "icarus.workflow-runtime-logical-schema-source/1",
+        "ref": {
+          "id": "icarus.workflow-runtime-logical-schema-source",
+          "version": "1"
+        },
+        "version": 1,
+        "semantic_hash": "sha256:ef5221d3465f1214c3c0aad3660f57b119d03eb4b5127428d6a1f881a6260214",
+        "raw_sha256": "sha256:7e7e2ddb81f9ef3ec38cadab03b9d87c785a797f4bebe4627e68dc21e248ec09"
+      },
+      {
+        "role": "typed_relation_catalog",
+        "identity_effect": "physical_schema_input",
+        "path": "contracts/sqlite/workflow-runtime-typed-relation-catalog@1.json",
+        "format": "icarus.workflow-runtime-typed-relation-catalog/1",
+        "ref": {
+          "id": "icarus.workflow-runtime-typed-relation-catalog",
+          "version": "1"
+        },
+        "version": 1,
+        "semantic_hash": "sha256:20babbfc787ac8a6006243180ef6e867bef8b454c41a527f4b8f20c8f6dd0d99",
+        "raw_sha256": "sha256:0079f5cc40f2345ab4f29f3ee5378a0b2b78839f41f1bd7664ca3b385417b67f"
+      },
+      {
+        "role": "query_catalog",
+        "identity_effect": "physical_schema_input",
+        "path": "contracts/sqlite/workflow-runtime-query-catalog@1.json",
+        "format": "icarus.workflow-runtime-query-catalog/1",
+        "ref": {
+          "id": "icarus.workflow-runtime-query-catalog",
+          "version": "1"
+        },
+        "version": 1,
+        "semantic_hash": "sha256:6a6368f1300a5d732a6a63b73f593b9dd930880beafdd14958517bc92463ed2d",
+        "raw_sha256": "sha256:3b23432859f30039554ffff19e907589d3b1d23592046e09f0c6c1568fd15d73"
+      },
+      {
+        "role": "g0_10_capacity_logical_schema_delta",
+        "identity_effect": "physical_schema_input",
+        "path": "contracts/conformance/capacity-control-plane-addendum/sqlite/capacity-control-plane-logical-schema-delta@1.json",
+        "format": "icarus.workflow-capacity-control-plane-logical-schema-delta/1",
+        "ref": {
+          "id": "icarus.workflow-capacity-control-plane-logical-schema-delta",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "semantic_hash": "sha256:5d9e79b5f9330a5111e6f61b8d04164c87839a60d55ea350c0aa87b8b1559e66",
+        "raw_sha256": "sha256:91ba963f3983a525983ab3b0cd17f194f3d50738d0b8399ce43e9d51212c5616"
+      },
+      {
+        "role": "sqlite_execution_profile",
+        "identity_effect": "physical_schema_input",
+        "path": "contracts/sqlite/local_single_user_sqlite@1.json",
+        "format": "icarus.sqlite-execution-profile/1",
+        "ref": {
+          "id": "icarus.local-single-user-sqlite",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "semantic_hash": "sha256:3d69742dad2fefa8bef4ba47e375defd705e3b32920a92b105a43726436fb7af",
+        "raw_sha256": "sha256:fafac63ee1d805c88b99afeb7d516ebfca0c3781c1c8c1d3581f1ee9379f8d00"
+      },
+      {
+        "role": "schema_manifest",
+        "identity_effect": "physical_schema_output",
+        "path": "store/schema/artifacts/workflow-runtime-schema-manifest@1.json",
+        "format": "icarus.workflow-runtime-schema-manifest/1",
+        "ref": {
+          "id": "icarus.workflow-runtime-schema-manifest",
+          "version": "1"
+        },
+        "version": 1,
+        "semantic_hash": "sha256:02e8d7511386c82458120d65ea6eb97f3ed26941abd757d2314e58ccc91fcb3b",
+        "raw_sha256": "sha256:473132f99f616dae253ac7b82c3791f8a063329bec1cee8b6931e986f3d26817"
+      },
+      {
+        "role": "canonical_migration",
+        "identity_effect": "physical_schema_output",
+        "path": "store/schema/migration/workflow-runtime-schema-v1.sql",
+        "format": "icarus.workflow-runtime-sqlite-migration/1",
+        "ref": {
+          "id": "icarus.workflow-runtime-schema-v1-migration",
+          "version": "1"
+        },
+        "version": 1,
+        "semantic_hash": "sha256:d89829995e164355ad485fc117db88dd67a72409f00ec3c3c54253f30a589f61",
+        "raw_sha256": "sha256:d89829995e164355ad485fc117db88dd67a72409f00ec3c3c54253f30a589f61"
+      }
+    ],
+    "physical_schema_identity": "sha256:8c667d62f69a8c67ba1edde467562e370377342a058b6dc4673ab9a383fe05a1"
+  }
+}

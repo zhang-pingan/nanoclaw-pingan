@@ -55,7 +55,6 @@ import type {
   JsonValue,
   Sha256Hash,
 } from './types.js';
-import { historicalContractTreeDigest } from '../store/schema/artifacts.js';
 
 const contractsRoot = import.meta.dirname;
 const repoRoot = path.resolve(contractsRoot, '../../..');
@@ -206,9 +205,6 @@ describe('R-016 Compiler spec and Contract repair', () => {
         ),
       ),
     ).not.toEqual(sectionBytes);
-    expect(historicalContractTreeDigest()).toBe(
-      'a40e2e801ae4bb331a90b49eca457c48e29cc88c3eb32670dedd3c90387a8d15',
-    );
   });
 
   it('publishes a closed Compiled IR v2 with the execution fields in hashed Plan bytes', () => {

@@ -1,57 +1,15 @@
-import fs from 'fs';
-import path from 'path';
-
-import { parseContractArtifactEnvelope } from '../../contracts/artifact.js';
 import type {
   LogicalQueryCatalogPayload,
   LogicalSchemaSourcePayload,
   LogicalTableMetadata,
   TypedRelationCatalogPayload,
 } from '../../contracts/logical-schema-types.js';
-import { strictParseJsonBytes } from '../../contracts/strict-json.js';
 import type {
   CapacityLogicalExtendedTableDelta,
   CapacityLogicalSchemaDelta,
 } from '../../contracts/capacity-control-plane-types.js';
-import type { ContractArtifactEnvelope } from '../../contracts/types.js';
+import { readPinnedSchemaInputArtifacts } from './dependencies.js';
 import type { ExecutableSchemaSource } from './types.js';
-
-const contractsRoot = path.resolve(import.meta.dirname, '../../contracts');
-
-const EXPECTED = {
-  g0_6_manifest:
-    'sha256:32de639cc0ee6c6f33aa4291ea03ffa55b0a22752190fb88862e72a3f6857520',
-  logical_source:
-    'sha256:ef5221d3465f1214c3c0aad3660f57b119d03eb4b5127428d6a1f881a6260214',
-  typed_relations:
-    'sha256:20babbfc787ac8a6006243180ef6e867bef8b454c41a527f4b8f20c8f6dd0d99',
-  query_catalog:
-    'sha256:6a6368f1300a5d732a6a63b73f593b9dd930880beafdd14958517bc92463ed2d',
-  g0_10_root:
-    'sha256:21d06c2d9d45a47f6ebc68c24b9d0acec29c8ae1726d5387bd38c460a7a0a7ec',
-  capacity_delta:
-    'sha256:5d9e79b5f9330a5111e6f61b8d04164c87839a60d55ea350c0aa87b8b1559e66',
-} as const;
-
-function readArtifact(relativePath: string): ContractArtifactEnvelope {
-  return parseContractArtifactEnvelope(
-    strictParseJsonBytes(
-      fs.readFileSync(path.resolve(contractsRoot, relativePath)),
-    ),
-  );
-}
-
-function expectHash(
-  artifact: ContractArtifactEnvelope,
-  expected: string,
-  label: string,
-): void {
-  if (artifact.hash !== expected) {
-    throw new Error(
-      `${label} historical identity drifted: expected ${expected}, received ${artifact.hash}`,
-    );
-  }
-}
 
 function mergeExtension(
   table: LogicalTableMetadata,
@@ -158,30 +116,16 @@ function assertBaseRelations(
   }
 }
 
-export function loadExecutableSchemaSource(): ExecutableSchemaSource {
-  const g0_6Manifest = readArtifact('contract-pack-logical-schema.json');
-  const logicalSource = readArtifact(
-    'sqlite/workflow-runtime-logical-schema-source@1.json',
-  );
-  const typedRelations = readArtifact(
-    'sqlite/workflow-runtime-typed-relation-catalog@1.json',
-  );
-  const queryCatalog = readArtifact(
-    'sqlite/workflow-runtime-query-catalog@1.json',
-  );
-  const g0_10Root = readArtifact(
-    'conformance/capacity-control-plane-addendum/contract-pack-capacity-control-plane-addendum.json',
-  );
-  const capacityDelta = readArtifact(
-    'conformance/capacity-control-plane-addendum/sqlite/capacity-control-plane-logical-schema-delta@1.json',
-  );
-
-  expectHash(g0_6Manifest, EXPECTED.g0_6_manifest, 'G0.6 manifest');
-  expectHash(logicalSource, EXPECTED.logical_source, 'G0.6 logical source');
-  expectHash(typedRelations, EXPECTED.typed_relations, 'G0.6 typed relations');
-  expectHash(queryCatalog, EXPECTED.query_catalog, 'G0.6 query catalog');
-  expectHash(g0_10Root, EXPECTED.g0_10_root, 'G0.10 root');
-  expectHash(capacityDelta, EXPECTED.capacity_delta, 'G0.10 capacity delta');
+export function loadExecutableSchemaSource(
+  contractsRoot?: string,
+): ExecutableSchemaSource {
+  const inputs = readPinnedSchemaInputArtifacts(contractsRoot);
+  const g0_6Manifest = inputs.g0_6_logical_schema_manifest.artifact;
+  const logicalSource = inputs.logical_schema_source.artifact;
+  const typedRelations = inputs.typed_relation_catalog.artifact;
+  const queryCatalog = inputs.query_catalog.artifact;
+  const capacityDelta = inputs.g0_10_capacity_logical_schema_delta.artifact;
+  const sqliteProfile = inputs.sqlite_execution_profile.artifact;
 
   const base = logicalSource.payload as unknown as LogicalSchemaSourcePayload;
   const relations =
@@ -199,7 +143,7 @@ export function loadExecutableSchemaSource(): ExecutableSchemaSource {
   if (
     delta.schema_id !== base.schema_id ||
     delta.delta_mode !== 'additive_only' ||
-    delta.base_logical_schema_manifest_hash !== EXPECTED.g0_6_manifest ||
+    delta.base_logical_schema_manifest_hash !== g0_6Manifest.hash ||
     delta.added_tables.length !== 4 ||
     delta.extended_tables.length !== 1 ||
     delta.delta_hash !==
@@ -229,12 +173,11 @@ export function loadExecutableSchemaSource(): ExecutableSchemaSource {
     tables,
     queries: [...baseQueries.queries, ...delta.query_intents],
     logical_inputs: {
-      g0_6_manifest_hash: g0_6Manifest.hash,
       logical_schema_source_hash: logicalSource.hash,
       typed_relation_catalog_hash: typedRelations.hash,
       query_catalog_hash: queryCatalog.hash,
-      g0_10_root_hash: g0_10Root.hash,
       capacity_delta_hash: capacityDelta.hash,
+      sqlite_profile_hash: sqliteProfile.hash,
     },
   };
   assertExecutableSource(result);

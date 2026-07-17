@@ -451,12 +451,11 @@ export function assertClosedSchemaManifest(
   exactKeys(
     payload.logical_inputs,
     [
-      'g0_6_manifest_hash',
       'logical_schema_source_hash',
       'typed_relation_catalog_hash',
       'query_catalog_hash',
-      'g0_10_root_hash',
       'capacity_delta_hash',
+      'sqlite_profile_hash',
     ],
     'Schema Manifest logical_inputs',
   );

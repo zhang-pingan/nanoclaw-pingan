@@ -18,23 +18,29 @@ import type {
   Sha256Hash,
 } from '../../contracts/types.js';
 import { parseVersionedRef } from '../../contracts/versioned-ref.js';
+import { verifySchemaDependencyManifestArtifact } from '../schema/dependencies.js';
 import { assertClosedSchemaManifest } from '../schema/manifest.js';
-import type { WorkflowRuntimeSchemaManifestPayload } from '../schema/types.js';
+import type {
+  G1SchemaDependencyManifestPayload,
+  WorkflowRuntimeSchemaManifestPayload,
+} from '../schema/types.js';
 
 export const FROZEN_G1_1_IDENTITIES = {
-  root: 'sha256:8950c4be872f34b1e048fe28fd1c267ed2da97a685e0e874eba1dc14deba4c52',
+  root: 'sha256:769800fbca754586f1eda90c28e876255a6af3fbe452c397a4dabfd4aec5b756',
+  dependencyManifest:
+    'sha256:ea039f582f0ebff2fb9bc7e512825612cf8f0f93ccdd4c5e43345f56ca2b7b89',
+  physicalSchema:
+    'sha256:8c667d62f69a8c67ba1edde467562e370377342a058b6dc4673ab9a383fe05a1',
   schema:
-    'sha256:9e75471258a4fa4d28c67859b39b7fb36ce9142eacb91d38a70b45b155ba79ce',
+    'sha256:4d8c373387ad515c36fd292b705665e6c197c73021c1b7e55da5317bc140efbd',
   migration:
     'sha256:d89829995e164355ad485fc117db88dd67a72409f00ec3c3c54253f30a589f61',
   deterministic:
-    'sha256:6e88f0618e94294647d7ff72bb64a20dddb490a6bdee4da6ee38d06fd7a7fcb2',
+    'sha256:f3dc5f3364a31c153cbf78ac0276d6467627c547e0939ac8e56e6f1ce8e65f15',
   manifest:
-    'sha256:50219aa0bfe410763d07c7f0d340eb372c166957ee8039c28f4ed4eb010a009e',
+    'sha256:02e8d7511386c82458120d65ea6eb97f3ed26941abd757d2314e58ccc91fcb3b',
   executableDdl:
-    'sha256:05bc24ca63d1b770c3248b9f0b15de9952c9e8ef08a14967aec0a274d5fdd7aa',
-  g0_10:
-    'sha256:21d06c2d9d45a47f6ebc68c24b9d0acec29c8ae1726d5387bd38c460a7a0a7ec',
+    'sha256:d25fdd25fee0d1cd579c7229237ad4dddd0f0a80779505012a6743b656b84ec5',
   profile:
     'sha256:3d69742dad2fefa8bef4ba47e375defd705e3b32920a92b105a43726436fb7af',
 } as const;
@@ -208,6 +214,9 @@ export interface FrozenWorkflowRuntimeStoreInputs {
   readonly migrationSha256: Sha256Hash;
   readonly schemaManifest: Readonly<WorkflowRuntimeSchemaManifestPayload>;
   readonly schemaManifestArtifactHash: Sha256Hash;
+  readonly schemaDependencyManifest: Readonly<G1SchemaDependencyManifestPayload>;
+  readonly schemaDependencyManifestArtifactHash: Sha256Hash;
+  readonly physicalSchemaIdentity: Sha256Hash;
   readonly schemaHash: Sha256Hash;
   readonly g1RootHash: Sha256Hash;
   readonly deterministicDigest: Sha256Hash;
@@ -230,6 +239,27 @@ export function loadFrozenWorkflowRuntimeStoreInputs(
   );
   const profile = parseSQLiteExecutionProfilePayload(profileArtifact.payload);
 
+  const dependencyManifestArtifact = readArtifact(
+    schemaRoot,
+    'artifacts/workflow-runtime-schema-dependency-manifest@1.json',
+  );
+  expectArtifact(
+    dependencyManifestArtifact,
+    FROZEN_G1_1_IDENTITIES.dependencyManifest,
+    'icarus.workflow-runtime-schema-dependency-manifest/1',
+    'G1 Schema Dependency Manifest',
+  );
+  const dependencyManifest = verifySchemaDependencyManifestArtifact(
+    dependencyManifestArtifact,
+    { contractsRoot, schemaRoot },
+  );
+  if (
+    dependencyManifest.physical_schema_identity !==
+    FROZEN_G1_1_IDENTITIES.physicalSchema
+  ) {
+    throw new Error('G1 physical schema identity drifted');
+  }
+
   const root = readArtifact(
     schemaRoot,
     'contract-pack-g1-executable-schema.json',
@@ -242,7 +272,10 @@ export function loadFrozenWorkflowRuntimeStoreInputs(
   );
   const rootPayload = root.payload;
   if (
-    rootPayload.g0_10_root_hash !== FROZEN_G1_1_IDENTITIES.g0_10 ||
+    rootPayload.schema_dependency_manifest_hash !==
+      FROZEN_G1_1_IDENTITIES.dependencyManifest ||
+    rootPayload.physical_schema_identity !==
+      FROZEN_G1_1_IDENTITIES.physicalSchema ||
     rootPayload.schema_hash !== FROZEN_G1_1_IDENTITIES.schema ||
     rootPayload.migration_sha256 !== FROZEN_G1_1_IDENTITIES.migration ||
     rootPayload.deterministic_digest !== FROZEN_G1_1_IDENTITIES.deterministic ||
@@ -307,6 +340,9 @@ export function loadFrozenWorkflowRuntimeStoreInputs(
     migrationSha256,
     schemaManifest: structuredClone(manifest),
     schemaManifestArtifactHash: manifestArtifact.hash,
+    schemaDependencyManifest: structuredClone(dependencyManifest),
+    schemaDependencyManifestArtifactHash: dependencyManifestArtifact.hash,
+    physicalSchemaIdentity: dependencyManifest.physical_schema_identity,
     schemaHash: manifest.schema_hash,
     g1RootHash: root.hash,
     deterministicDigest: parseSha256Hash(rootPayload.deterministic_digest),

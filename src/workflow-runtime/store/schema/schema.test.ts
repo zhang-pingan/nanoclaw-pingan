@@ -6,8 +6,19 @@ import path from 'path';
 import type Database from 'better-sqlite3';
 import { describe, expect, it } from 'vitest';
 
+import { calculateArtifactHash } from '../../contracts/hash.js';
 import type { LogicalTableMetadata } from '../../contracts/logical-schema-types.js';
-import { checkG1Artifacts } from './artifacts.js';
+import type {
+  ContractArtifactEnvelope,
+  JsonObject,
+} from '../../contracts/types.js';
+import { buildG1Artifacts, checkG1Artifacts } from './artifacts.js';
+import {
+  assertClosedSchemaDependencyManifest,
+  buildSchemaDependencyManifestArtifact,
+  calculatePhysicalSchemaIdentity,
+  verifySchemaDependencyManifestArtifact,
+} from './dependencies.js';
 import { buildQueryFixtures, renderMigration } from './ddl.js';
 import {
   assertClosedSchemaManifest,
@@ -19,7 +30,10 @@ import {
   verifyQueryPlans,
   verifyReadOnlyConnection,
 } from './sqlite-gate.js';
-import type { WorkflowRuntimeSchemaManifestPayload } from './types.js';
+import type {
+  G1SchemaDependencyManifestPayload,
+  WorkflowRuntimeSchemaManifestPayload,
+} from './types.js';
 
 const source = loadExecutableSchemaSource();
 const migration = renderMigration(source);
@@ -28,7 +42,7 @@ function q(identifier: string): string {
   return `"${identifier.replaceAll('"', '""')}"`;
 }
 
-function hash(label: string): string {
+function hash(label: string): `sha256:${string}` {
   return `sha256:${crypto.createHash('sha256').update(label).digest('hex')}`;
 }
 
@@ -122,9 +136,15 @@ describe('G1.1 executable workflow runtime schema', () => {
     expect(built.environmentSummary.better_sqlite3_version).toBe('12.11.1');
     expect(built.artifacts.at(-1)?.[1].payload).toMatchObject({
       gate: 'G1.1',
-      g0_10_root_hash:
-        'sha256:21d06c2d9d45a47f6ebc68c24b9d0acec29c8ae1726d5387bd38c460a7a0a7ec',
+      schema_dependency_manifest_hash: built.dependencyManifest.hash,
+      physical_schema_identity: (
+        built.dependencyManifest
+          .payload as unknown as G1SchemaDependencyManifestPayload
+      ).physical_schema_identity,
     });
+    expect(built.artifacts.at(-1)?.[1].payload).not.toHaveProperty(
+      'g0_10_root_hash',
+    );
     withDatabase((database, databasePath) => {
       const manifest = reconstructSchemaManifest(
         database,
@@ -139,6 +159,257 @@ describe('G1.1 executable workflow runtime schema', () => {
       database.close();
       verifyReadOnlyConnection(databasePath);
     });
+  });
+
+  it('publishes a closed exact-member dependency manifest without directory exclusions', () => {
+    const built = checkG1Artifacts();
+    const payload = built.dependencyManifest
+      .payload as unknown as G1SchemaDependencyManifestPayload;
+    expect(() => assertClosedSchemaDependencyManifest(payload)).not.toThrow();
+    expect(payload).toMatchObject({
+      member_count: 8,
+      physical_member_count: 7,
+      construction_provenance_count: 1,
+    });
+    expect(payload.members.map((member) => member.role)).toEqual([
+      'g0_6_logical_schema_manifest',
+      'logical_schema_source',
+      'typed_relation_catalog',
+      'query_catalog',
+      'g0_10_capacity_logical_schema_delta',
+      'sqlite_execution_profile',
+      'schema_manifest',
+      'canonical_migration',
+    ]);
+    expect(payload.members).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          role: 'canonical_migration',
+          semantic_hash:
+            'sha256:d89829995e164355ad485fc117db88dd67a72409f00ec3c3c54253f30a589f61',
+          raw_sha256:
+            'sha256:d89829995e164355ad485fc117db88dd67a72409f00ec3c3c54253f30a589f61',
+        }),
+      ]),
+    );
+    for (const member of payload.members) {
+      expect(member).toMatchObject({
+        role: expect.any(String),
+        identity_effect: expect.stringMatching(
+          /^(construction_provenance|physical_schema_input|physical_schema_output)$/,
+        ),
+        path: expect.any(String),
+        format: expect.any(String),
+        ref: { id: expect.any(String), version: expect.any(String) },
+        version: 1,
+        semantic_hash: expect.stringMatching(/^sha256:[0-9a-f]{64}$/),
+        raw_sha256: expect.stringMatching(/^sha256:[0-9a-f]{64}$/),
+      });
+    }
+    expect(payload.members[0].identity_effect).toBe('construction_provenance');
+    expect(
+      built.artifacts.find(
+        ([, artifact]) =>
+          artifact.format ===
+          'icarus.workflow-runtime-schema-dependency-manifest-contract/1',
+      )?.[1].payload,
+    ).toMatchObject({
+      path_model: 'exact_required_members_only',
+      directory_exclusions: 'forbidden',
+    });
+    const provenanceOnly = structuredClone(payload.members);
+    provenanceOnly[0].raw_sha256 = hash('changed-construction-provenance');
+    expect(calculatePhysicalSchemaIdentity(provenanceOnly)).toBe(
+      payload.physical_schema_identity,
+    );
+    const physicalDrift = structuredClone(payload.members);
+    physicalDrift[1].raw_sha256 = hash('changed-physical-input');
+    expect(calculatePhysicalSchemaIdentity(physicalDrift)).not.toBe(
+      payload.physical_schema_identity,
+    );
+  });
+
+  it('ignores unrelated Contract JSON without an exclusion list', () => {
+    const built = checkG1Artifacts();
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'icarus-g1-deps-'));
+    const copiedContracts = path.join(root, 'contracts');
+    fs.cpSync(
+      path.resolve(import.meta.dirname, '../../contracts'),
+      copiedContracts,
+      {
+        recursive: true,
+      },
+    );
+    try {
+      const before = buildSchemaDependencyManifestArtifact(
+        built.manifest,
+        built.migrationSql,
+        { contractsRoot: copiedContracts },
+      );
+      for (const relativePath of [
+        'unrelated/new-contract.json',
+        'conformance/compiler-contract-repair/unrelated-contract.json',
+        'conformance/future-registry/unrelated-contract.json',
+      ]) {
+        const absolute = path.join(copiedContracts, relativePath);
+        fs.mkdirSync(path.dirname(absolute), { recursive: true });
+        fs.writeFileSync(absolute, '{"unrelated":true}\n');
+      }
+      const after = buildSchemaDependencyManifestArtifact(
+        built.manifest,
+        built.migrationSql,
+        { contractsRoot: copiedContracts },
+      );
+      expect(after).toEqual(before);
+      expect(after).toEqual(built.dependencyManifest);
+      expect(built.artifacts.at(-1)?.[1].payload).toMatchObject({
+        schema_dependency_manifest_hash: after.hash,
+      });
+      expect(
+        buildG1Artifacts({ contractsRoot: copiedContracts }).artifacts.at(
+          -1,
+        )?.[1].hash,
+      ).toBe(built.artifacts.at(-1)?.[1].hash);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('changes explicit identity for required raw-byte drift and fails on semantic or missing input', () => {
+    const built = checkG1Artifacts();
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'icarus-g1-deps-'));
+    const copiedContracts = path.join(root, 'contracts');
+    fs.cpSync(
+      path.resolve(import.meta.dirname, '../../contracts'),
+      copiedContracts,
+      {
+        recursive: true,
+      },
+    );
+    try {
+      const queryPath = path.join(
+        copiedContracts,
+        'sqlite/workflow-runtime-query-catalog@1.json',
+      );
+      fs.appendFileSync(queryPath, '\n');
+      const changed = buildSchemaDependencyManifestArtifact(
+        built.manifest,
+        built.migrationSql,
+        { contractsRoot: copiedContracts },
+      );
+      const originalPayload = built.dependencyManifest
+        .payload as unknown as G1SchemaDependencyManifestPayload;
+      const changedPayload =
+        changed.payload as unknown as G1SchemaDependencyManifestPayload;
+      expect(changed.hash).not.toBe(built.dependencyManifest.hash);
+      expect(changedPayload.physical_schema_identity).not.toBe(
+        originalPayload.physical_schema_identity,
+      );
+      expect(
+        changedPayload.members.find((member) => member.role === 'query_catalog')
+          ?.semantic_hash,
+      ).toBe(
+        originalPayload.members.find(
+          (member) => member.role === 'query_catalog',
+        )?.semantic_hash,
+      );
+      expect(() =>
+        verifySchemaDependencyManifestArtifact(built.dependencyManifest, {
+          contractsRoot: copiedContracts,
+        }),
+      ).toThrow('query_catalog raw hash mismatch');
+      expect(() =>
+        verifySchemaDependencyManifestArtifact(changed, {
+          contractsRoot: copiedContracts,
+        }),
+      ).not.toThrow();
+
+      const queryArtifact = JSON.parse(
+        fs.readFileSync(queryPath, 'utf8'),
+      ) as ContractArtifactEnvelope;
+      (queryArtifact.payload as JsonObject).query_count = 999;
+      queryArtifact.hash = calculateArtifactHash(queryArtifact);
+      fs.writeFileSync(
+        queryPath,
+        `${JSON.stringify(queryArtifact, null, 2)}\n`,
+      );
+      expect(() =>
+        buildSchemaDependencyManifestArtifact(
+          built.manifest,
+          built.migrationSql,
+          { contractsRoot: copiedContracts },
+        ),
+      ).toThrow('query_catalog published semantic identity drifted');
+
+      fs.rmSync(
+        path.join(
+          copiedContracts,
+          'sqlite/workflow-runtime-typed-relation-catalog@1.json',
+        ),
+      );
+      expect(() =>
+        buildSchemaDependencyManifestArtifact(
+          built.manifest,
+          built.migrationSql,
+          { contractsRoot: copiedContracts },
+        ),
+      ).toThrow();
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects missing members, duplicate role/path, unknown fields, and hash mismatch', () => {
+    const built = checkG1Artifacts();
+    const clonePayload = (): G1SchemaDependencyManifestPayload =>
+      structuredClone(
+        built.dependencyManifest.payload,
+      ) as unknown as G1SchemaDependencyManifestPayload;
+
+    const missing = clonePayload() as unknown as Record<string, unknown>;
+    (missing.members as unknown[]).pop();
+    missing.member_count = 7;
+    expect(() =>
+      assertClosedSchemaDependencyManifest(
+        missing as unknown as G1SchemaDependencyManifestPayload,
+      ),
+    ).toThrow('required members are missing');
+
+    const duplicateRole = clonePayload();
+    duplicateRole.members[1].role = duplicateRole.members[0].role;
+    expect(() => assertClosedSchemaDependencyManifest(duplicateRole)).toThrow(
+      'duplicate role',
+    );
+
+    const duplicatePath = clonePayload();
+    duplicatePath.members[1].path = duplicatePath.members[0].path;
+    expect(() => assertClosedSchemaDependencyManifest(duplicatePath)).toThrow(
+      'duplicate path',
+    );
+
+    const unknown = clonePayload() as unknown as Record<string, unknown>;
+    unknown.directory_exclusions = ['future-bypass'];
+    expect(() =>
+      assertClosedSchemaDependencyManifest(
+        unknown as unknown as G1SchemaDependencyManifestPayload,
+      ),
+    ).toThrow('is not closed');
+
+    const mismatch = clonePayload();
+    mismatch.members[1].raw_sha256 = hash('mismatch');
+    expect(() => assertClosedSchemaDependencyManifest(mismatch)).toThrow(
+      'physical schema identity hash mismatch',
+    );
+
+    mismatch.physical_schema_identity = calculatePhysicalSchemaIdentity(
+      mismatch.members,
+    );
+    const mismatchArtifact = structuredClone(built.dependencyManifest);
+    mismatchArtifact.payload = mismatch as unknown as JsonObject;
+    mismatchArtifact.hash = calculateArtifactHash(mismatchArtifact);
+    expect(() =>
+      verifySchemaDependencyManifestArtifact(mismatchArtifact),
+    ).toThrow('raw hash mismatch');
   });
 
   it('rejects unknown fields at every nested Schema Manifest object level', () => {

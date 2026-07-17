@@ -149,6 +149,9 @@ describe.sequential('G1.2 Workflow Runtime Store base', () => {
     const inputs = loadFrozenWorkflowRuntimeStoreInputs();
     expect(inputs).toMatchObject({
       g1RootHash: FROZEN_G1_1_IDENTITIES.root,
+      schemaDependencyManifestArtifactHash:
+        FROZEN_G1_1_IDENTITIES.dependencyManifest,
+      physicalSchemaIdentity: FROZEN_G1_1_IDENTITIES.physicalSchema,
       schemaHash: FROZEN_G1_1_IDENTITIES.schema,
       migrationSha256: FROZEN_G1_1_IDENTITIES.migration,
       deterministicDigest: FROZEN_G1_1_IDENTITIES.deterministic,
@@ -165,7 +168,36 @@ describe.sequential('G1.2 Workflow Runtime Store base', () => {
     );
     expect(() =>
       loadFrozenWorkflowRuntimeStoreInputs({ schemaRoot: copiedSchema }),
-    ).toThrow('migration drifted');
+    ).toThrow(/canonical_migration raw hash mismatch|migration drifted/);
+  });
+
+  it('loads exact Store dependencies regardless of unrelated Contract JSON', () => {
+    const expected = loadFrozenWorkflowRuntimeStoreInputs();
+    const { root } = temporaryDatabase();
+    const copiedContracts = path.join(root, 'contracts');
+    fs.cpSync(
+      path.resolve(import.meta.dirname, '../../contracts'),
+      copiedContracts,
+      { recursive: true },
+    );
+    const unrelated = path.join(
+      copiedContracts,
+      'conformance/future-registry/unrelated-contract.json',
+    );
+    fs.mkdirSync(path.dirname(unrelated), { recursive: true });
+    fs.writeFileSync(unrelated, '{"unrelated":true}\n');
+
+    const observed = loadFrozenWorkflowRuntimeStoreInputs({
+      contractsRoot: copiedContracts,
+    });
+    expect(observed).toMatchObject({
+      g1RootHash: expected.g1RootHash,
+      schemaDependencyManifestArtifactHash:
+        expected.schemaDependencyManifestArtifactHash,
+      physicalSchemaIdentity: expected.physicalSchemaIdentity,
+      schemaHash: expected.schemaHash,
+      migrationSha256: expected.migrationSha256,
+    });
   });
 
   it('bootstraps a fresh real-file database, reopens it, and reports candidate identity evidence', () => {
