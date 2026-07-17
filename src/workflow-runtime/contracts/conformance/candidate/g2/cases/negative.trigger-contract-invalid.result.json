@@ -1,0 +1,23 @@
+{
+  "format": "icarus.workflow-compiler-conformance-case-result/1",
+  "case_id": "negative.trigger-contract-invalid",
+  "source_kind": "graph_scope",
+  "source_hash": "sha256:e1fa9d79a4c4495aa8d0685bba9e61fad56cb0b7163dbfa90bc52d4617f478fd",
+  "outcome": "rejected",
+  "normalized_plan": null,
+  "static_lowering_contract_ref": null,
+  "static_lowering_contract_hash": null,
+  "diagnostics": [
+    {
+      "code": "trigger_contract_invalid",
+      "phase": "prove",
+      "instance_pointer": "/nodes/1/trigger",
+      "schema_pointer": null,
+      "stable_object_id": "done",
+      "detail_ref": null
+    }
+  ],
+  "proof_hashes": [],
+  "program_hashes": [],
+  "result_hash": "sha256:9c92d7a452b8e5d1460c44b4e556e3b77e9b7d5e4fb3e9e16a6971a3c210ea8c"
+}

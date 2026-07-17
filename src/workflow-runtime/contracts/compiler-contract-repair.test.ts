@@ -24,6 +24,7 @@ import {
   checkContractPackCompilerContractRepair,
   generateContractPackCompilerContractRepair,
 } from './compiler-contract-repair-pack.js';
+import { checkHistoricalCompilerContractRepair } from './compiler-contract-repair-historical.js';
 import {
   COMPILED_PLAN_V2_DOMAIN_SEPARATOR,
   COMPILER_CASE_RESULT_DOMAIN_SEPARATOR,
@@ -129,8 +130,8 @@ function validatorForPlanDefinition(definition: string): ValidateFunction {
 }
 
 describe('R-016 Compiler spec and Contract repair', () => {
-  it('generates deterministically and keeps the check path read-only', () => {
-    const first = generateContractPackCompilerContractRepair();
+  it('keeps the frozen historical repair root and check path read-only', () => {
+    const first = checkHistoricalCompilerContractRepair();
     const files = repairFiles();
     const firstBytes = new Map(
       files.map((relativePath) => [
@@ -139,9 +140,8 @@ describe('R-016 Compiler spec and Contract repair', () => {
       ]),
     );
 
-    const second = generateContractPackCompilerContractRepair();
+    const second = checkHistoricalCompilerContractRepair();
     expect(second.hash).toBe(first.hash);
-    expect(checkContractPackCompilerContractRepair().hash).toBe(first.hash);
     expect(files).toHaveLength(COMPILER_CONTRACT_REPAIR_ARTIFACT_COUNT + 1);
     expect(first.payload.artifact_count).toBe(
       COMPILER_CONTRACT_REPAIR_ARTIFACT_COUNT,
@@ -568,7 +568,7 @@ describe('R-016 Compiler spec and Contract repair', () => {
     expect(validateBinding(missingCase)).toBe(false);
   });
 
-  it('keeps review, seal, Compiler, G3+, and G8/G9 identity outside the repair', () => {
+  it('keeps review, seal, G3+, and G8/G9 identity outside the historical repair', () => {
     const manifest = readArtifact(
       `${COMPILER_CONTRACT_REPAIR_ROOT}/contract-pack-compiler-contract-repair.json`,
     );
@@ -594,7 +594,7 @@ describe('R-016 Compiler spec and Contract repair', () => {
       fs.readdirSync(path.join(contractsRoot, 'conformance/sealed')),
     ).toEqual(['.gitkeep']);
     expect(fs.existsSync(path.join(workflowRuntimeRoot, 'compiler'))).toBe(
-      false,
+      true,
     );
     for (const forbidden of [
       'registry',

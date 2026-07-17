@@ -22,19 +22,13 @@ import {
   checkContractPackStaticAbsence,
   generateContractPackStaticAbsence,
 } from './static-absence-pack.js';
-import {
-  checkContractPackGoldenDraft,
-  generateContractPackGoldenDraft,
-} from './golden-draft-pack.js';
+import { checkHistoricalGoldenDraft } from './golden-draft-historical.js';
 import {
   checkContractPackCapacityControlPlane,
   checkHistoricalG0_9Conformance,
   generateContractPackCapacityControlPlane,
 } from './capacity-control-plane-pack.js';
-import {
-  checkContractPackCompilerContractRepair,
-  generateContractPackCompilerContractRepair,
-} from './compiler-contract-repair-pack.js';
+import { checkHistoricalCompilerContractRepair } from './compiler-contract-repair-historical.js';
 
 function usage(): never {
   console.error('Usage: contract-pack <generate|check>');
@@ -116,11 +110,8 @@ try {
   );
 
   currentPack = 'golden_draft';
-  const goldenDraftManifest =
-    command === 'generate'
-      ? generateContractPackGoldenDraft()
-      : checkContractPackGoldenDraft();
-  console.log(`contract_pack_golden_draft=${command}:ok`);
+  const goldenDraftManifest = checkHistoricalGoldenDraft();
+  console.log('contract_pack_golden_draft=historical:ok');
   console.log(`contract_pack_golden_draft_hash=${goldenDraftManifest.hash}`);
 
   currentPack = 'g0_historical';
@@ -142,10 +133,8 @@ try {
 
   currentPack = 'compiler_contract_repair';
   const compilerContractRepairManifest =
-    command === 'generate'
-      ? generateContractPackCompilerContractRepair()
-      : checkContractPackCompilerContractRepair();
-  console.log(`contract_pack_compiler_contract_repair=${command}:ok`);
+    checkHistoricalCompilerContractRepair();
+  console.log('contract_pack_compiler_contract_repair=historical:ok');
   console.log(
     `contract_pack_compiler_contract_repair_hash=${compilerContractRepairManifest.hash}`,
   );

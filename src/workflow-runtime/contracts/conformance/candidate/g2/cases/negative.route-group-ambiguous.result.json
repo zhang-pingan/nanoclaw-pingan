@@ -1,0 +1,23 @@
+{
+  "format": "icarus.workflow-compiler-conformance-case-result/1",
+  "case_id": "negative.route-group-ambiguous",
+  "source_kind": "graph_scope",
+  "source_hash": "sha256:dcfe474f0d0a50a906926d7e0db24a81926d2fca169418f03e201b7e745d9145",
+  "outcome": "rejected",
+  "normalized_plan": null,
+  "static_lowering_contract_ref": null,
+  "static_lowering_contract_hash": null,
+  "diagnostics": [
+    {
+      "code": "route_group_ambiguous",
+      "phase": "prove",
+      "instance_pointer": "/route_groups/0",
+      "schema_pointer": null,
+      "stable_object_id": "route.source",
+      "detail_ref": null
+    }
+  ],
+  "proof_hashes": [],
+  "program_hashes": [],
+  "result_hash": "sha256:d7dd6abbebc4d2c159b177ec017a5f52304434c070353c63fd7f96a7d43ffa73"
+}

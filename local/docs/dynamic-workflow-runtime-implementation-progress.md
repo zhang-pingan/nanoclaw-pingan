@@ -1,8 +1,8 @@
 # Dynamic Workflow Runtime 实施进度
 
 > **状态**: IN_PROGRESS
-> **当前 Gate**: G2 Compiler / Sealed Golden（READY）
-> **下一施工切片**: G2 Production Compiler implementation + exact case-input identity binding（不含 Golden approval/seal；G1 dependency identity repair 已完成）
+> **当前 Gate**: G2 Compiler / Sealed Golden（IN_PROGRESS；Production Compiler slice DONE，Golden pending）
+> **下一施工切片**: G2 resolved Golden Draft 新版本发布与独立语义审核交接准备（不得 approval/seal，不得开始 G3+）
 > **最后更新**: 2026-07-16
 > **规范权威**: `local/docs/dynamic-workflow-dag-framework.md`
 
@@ -106,7 +106,7 @@ Agent Container 运行于独立 VM，Node identity 由 VM image gate 保证；�
 | --- | --- | --- | --- | --- |
 | G0 Contract Pack / Static Baseline | `DONE` | 无 | G0.1-G0.9 historical root + G0.10 additive Capacity Admin/publication/CAP/Logical Schema/coverage root | 本原子提交 |
 | G1 DDL / Store | `DONE` | G0.10 | closed Schema Dependency Manifest + frozen executable migration/Schema Manifest + unified Connection Factory + Store lifecycle/transaction host + real-file SQLite/identity gates | 本原子提交（dependency identity repair） |
-| G2 Compiler / Golden | `READY` | G0.1-G0.9；R-016 spec/Contract repair；G0.10 不改变 Compiler/Plan 语义 | sealed Golden Bundle + compiler/toolchain hash | - |
+| G2 Compiler / Golden | `IN_PROGRESS` | G0.1-G0.9；R-016 spec/Contract repair；G0.10 不改变 Compiler/Plan 语义 | Production Compiler/toolchain/exact case-input binding/actual candidates DONE；resolved Draft、独立审核与 sealed Golden 仍 pending | 本原子提交（Compiler slice） |
 | G3 Registry / Authoring / Publish | `NOT_READY` | G1 + G2 | manifest/authoring/publish/retention/ABI fixtures | - |
 | G4 Test Bootstrap | `NOT_READY` | G1 + G2 + G3 | isolated bootstrap profile | - |
 | G5 Basic Runtime | `NOT_READY` | G4 | T0-T6e model/fault fixtures | - |
@@ -121,8 +121,8 @@ Agent Container 运行于独立 VM，Node identity 由 VM image gate 保证；�
 | --- | --- | --- | --- |
 | I0 | Publish、Registry、Recipe 与执行版本固定 | `NOT_READY` | G3 起 |
 | I1 | Intake、Routing、幂等创建、Child provenance、Claim | `NOT_READY` | G5 起 |
-| I2 | Definition、State lowering、Context、transition | `READY` | R-016 已冻结 lowering outcome Contract；下一步只实现 G2 static lowerer，Runtime 仍从 G5 起 |
-| I3 | Source/Compiled IR、Port、Compiler | `READY` | R-016 已发布 Compiled IR v2/result/binding Contract；下一步实现 G2 Compiler |
+| I2 | Definition、State lowering、Context、transition | `IN_PROGRESS` | G2 static lowering DONE；resolved Golden pending，Runtime transition 仍从 G5 起 |
+| I3 | Source/Compiled IR、Port、Compiler | `IN_PROGRESS` | G2 Production Compiler/IR v2/result/binding/candidates DONE；resolved Golden pending |
 | I4 | Runtime Store、SQLite relation、Value/Blob、migration | `IN_PROGRESS` | G1 migration/Schema Manifest/Store Base/Connection Factory DONE；Value/Blob 从 G3 起 |
 | I5 | Graph 状态机、reconcile、Scheduler、Ledger | `NOT_READY` | G5 起 |
 | I6 | Delegation/System、Capability Effect、Outbox | `NOT_READY` | G5 起 |
@@ -156,6 +156,54 @@ G0.1-G0.9 已按当时规范完成并保留历史 identity。后续确认的 Cap
 | G1.1 | Executable DDL / Schema Manifest | `DONE` | G0.6 + G0.10 全量 canonical SQLite migration、closed introspected Manifest、schema lint、constraint/trigger/query-plan fixtures、真实文件与 managed identity gate | 本原子提交 |
 | G1.2 | Store Base / Connection Factory | `DONE` | production-target Store 基础、连接生命周期/完整 PRAGMA/read-only policy、identity gate、参数化 query API 与短写事务 host 的 candidate 开发验证 | 本原子提交 |
 | G1.3 | Dependency Identity Repair | `DONE` | closed exact-member dependency manifest；physical identity与Gate provenance分离；Store不扫描Contract目录；migration bytes/78 tables/行为不变 | 本原子提交 |
+
+## G2 施工切片
+
+| 切片 | 内容 | 状态 | 主要退出条件 | 完成提交 |
+| --- | --- | --- | --- | --- |
+| G2.1 | R-016 Spec/Contract Repair | `DONE` | lowering outcome、Compiled IR v2、完整 case result target、exact input binding requirement与 blocked Draft v2冻结 | 本原子提交（历史） |
+| G2.2 | Production Compiler / Exact Case-Input Identity | `DONE` | locked strict parser、closed validation、snapshot binding、static lowering、Plan normalization、program/proof/hash/diagnostic、真实 toolchain与40个actual candidate results | 本原子提交 |
+| G2.3 | Resolved Draft / Semantic Review / Seal | `READY` | 发布不覆盖历史版本的resolved Draft；由独立 human review决定 expected oracle；审核通过后才可seal | - |
+
+## 已完成切片：G2.2 Production Compiler / Exact Case-Input Identity
+
+**状态**：`DONE`；G2总Gate为`IN_PROGRESS`，仅Production Compiler vertical slice完成，Golden review/seal仍未开始。
+
+**工作包**：I2/I3，合同验证联动I11。本切片实现Production Compiler与actual candidate证据，不修改G0.3/G0.8 historical artifacts或R-016 repair Draft v2，不由Compiler生成或批准expected oracle；没有执行`GoldenSemanticReview`、`golden-seal`、conformance/sealed写入、G3+、SQLite certification、Core Release、G8/G9 identity或production activation。
+
+交付内容：
+
+- `src/workflow-runtime/compiler/`实现locked strict JSON parser接入、closed Graph Source/Workflow Definition与locked Workflow Schema profile、Registry/Interface/Policy/Safety snapshot binding、Definition delegation/system static lowering、八类Graph node lowering、route/trigger/completion/safety/policy/quality/child recipe检查、Compiled IR v2 normalization及完整Plan hash；Recipe owner/closure解析只依赖snapshot exact refs，不依赖fixture/case命名。
+- condition program固定left-to-right operand evaluation order、`operand_types`、schema hashes、steps与program hash；data edge生成canonical pointer tokens、totality/assignability proof和proof hash，支持不同schema hash的sound `enum_subset`；Map固定`result_order=item_index`，static child closure按parent-before-descendant完整嵌入并重算member/closure hash。
+- 发布真实`WorkflowCompilerToolchainManifest`，绑定managed Node/npm、exact lock/integrity、strict parser wrapper、Graph/Definition schema profile、normalizer/proof/compiler源码集、Error Catalog、IR v2与result schema exact identity；frozen G0.8 snapshot中的三个`absent`只保留为历史事实，不参与resolved G2 identity。
+- 发布`g2-case-input-binding@1.json`新版本，对40个frozen raw/snapshot pair逐项绑定14个exact identity字段并计算effective input hash；发布40份由真实Compiler生成的完整actual case result（10 compiled / 30 rejected）及candidate manifest/root。candidate disposition明确为`actual_compiler_output_not_golden_oracle`。
+- G0.8与R-016旧live generator都包含当时“Compiler不存在”的构造边界；本切片未改其generator/source/artifact bytes，新增frozen root/inventory verifier并让日常Contract入口只读验证历史identity。G2 generator/checker作为独立package步骤运行，保持`contracts/`不反向依赖`compiler/`。
+
+关键identity：
+
+| Artifact | Identity |
+| --- | --- |
+| G2 Production Compiler root | `sha256:c78a12ffdec353d3d3ec40350aeb6676e991e92cd5d6645946d5e21fcb013a77` |
+| WorkflowCompilerToolchainManifest | `sha256:8bbbdf888bc531ed135adbd3641ea5bdd8aa605e332ab7ac3ac919a45a90ef45` |
+| Production Compiler build | `sha256:acfeea59ca1e8ad117642152f51043dd1c581f1153942efaded44e9dc165c7ee` |
+| Canonical Normalizer | `sha256:7d08408f780ca4350e153d99fd60810554daefe3826b39fe5e2fa5abee340b60` |
+| Proof Algorithm | `sha256:e1f32fc4ceec2efa7cb9c19bbf91abd0487d044fa62aee682de836c0b2c03a5b` |
+| resolved exact case-input binding | `sha256:538e77e33aeb8ca684388a83ee5a5a63a1b70aaa5cacc239be5f65814e9c18dc` |
+| actual candidate results manifest | `sha256:c471bcf03ea23ce2d84d5a785b026ae222ec47f7d5fd5948bb8e19c89904b1d2` |
+
+验证证据：
+
+| 命令/证据 | 结果 |
+| --- | --- |
+| managed `npm run compiler:g2:generate` / `npm run compiler:g2:check` | PASS；生成后read-only replay逐字节一致，G2 root=`c78a12…013a77` |
+| managed `npm run test:g2` | PASS，1 file / 8 tests；40-case deterministic replay、30个hand-authored diagnostic tuple、10个positive semantic assertions、Plan/result/program/proof/toolchain/binding identity、额外literal/nested-condition/recipe-name-independence负例与boundary全通过 |
+| managed `npm run test:g2:contract` | PASS，1 file / 7 tests；R-016 root=`776d51…50b324`与全部repair artifacts保持冻结 |
+| managed `npm run contracts:generate` / `npm run contracts:check` | PASS；G0.8、G0.10、R-016、G1、G2 roots与Store candidate/not-certified状态逐项通过 |
+| managed `npm run test:g0` | PASS，15 files / 109 tests；historical G0.8 verifier替代已过期absence construction check，Draft bytes未改 |
+| managed `npm run test:g1.1` / `npm run test:g1.2` | PASS，12/12与11/11；G1 identity、78-table migration与Store行为未漂移 |
+| managed `npm run typecheck` / `npm run build` | PASS |
+| managed `npm test` | 最终79/81 files、735/737 tests通过；仅R-012 credential trace与R-013 logical-schema 5s既有范围外timing baseline失败，R-015 runtime-toolchain本次5/5通过；G2 8/8通过。前一run另命中R-015与G0.7 5s，G0.7随后定向18/18且最终全量通过；未放宽测试 |
+| targeted Prettier / `git diff --check` / boundary scan | PASS；sealed仅`.gitkeep`，无Golden approval/seal、G3+、certification/release/activation文件；G0.3/G0.8/R-016/G1/migration identities保持 |
 
 ## 已完成切片：G1.3 Dependency Identity Repair
 
@@ -1042,7 +1090,7 @@ G0.1 的实现、测试和本进度账本由同一个原子提交交付。Agent 
 | R-013 | Contract test timing baseline | OPEN_OUT_OF_SCOPE | G1.1 曾在并发负载下复现 G0.6 5s timing；G1.2 串行 `test:g0` 15/15 files、109/109 tests 和两次完整 suite 均未复现。G1.2 不调整 timeout 或 G0.6 既有实现 | 独立测试稳定性维护 |
 | R-014 | Capacity governance | CLOSED | G0.10 已机器化 closed publication/command、权限/Actor/entrypoint/delegation、revision/hash CAS、reason/denial、immutable audit tables、唯一 Publisher/Watcher protocol、Admission lineage、crash recovery 与 additive Gate evidence；G1 DDL 可开始 | G0.10 |
 | R-015 | Toolchain test timing | OPEN_OUT_OF_SCOPE | G1.1 曾复现 runtime-toolchain 5s timing；G1.2 串行 `test:g0` 和两次完整 suite 均未复现，toolchain tests 通过。G1.2 不调整 timeout 或 managed toolchain 既有实现 | 独立测试稳定性维护 |
-| R-016 | Compiler/Golden contract | CLOSED | S38 与 additive repair root 已冻结唯一 Conformance Case Result target/hash、lowering outcome 分离、Compiled IR v2 execution fields/closure和 frozen G0.8 -> exact G2 identity binding；Draft v2保持 blocked，未越过 Compiler/Golden seal 边界 | G2 spec/Contract repair |
+| R-016 | Compiler/Golden contract | CLOSED | S38与additive repair root已冻结唯一Case Result target/hash、lowering outcome、IR v2与exact binding；G2 Production Compiler已消费该Contract并发布真实identity/actual candidates，repair Draft v2仍冻结blocked且未越过Golden review/seal边界 | G2 spec/Contract repair + Compiler slice |
 
 ## v1完成后的归档计划：PLANNED
 
@@ -1052,6 +1100,6 @@ G0.1 的实现、测试和本进度账本由同一个原子提交交付。Agent 
 
 ## 下一步
 
-G0.1-G0.9 historical identity、G0.10 additive current root、G1.1/G1.2 executable schema/Store Base、G1.3 dependency identity repair与 R-016 spec/Contract repair 均已完成；current G0/I11 与 G1 为 `DONE`，G2/I2/I3 为 `READY`，G3-G9 继续 `NOT_READY`。
+G0.1-G0.9 historical identity、G0.10 additive current root、G1.1/G1.2 executable schema/Store Base、G1.3 dependency identity repair、R-016 spec/Contract repair与G2 Production Compiler/exact case-input identity/actual candidates均已完成；current G0/I11与G1为`DONE`，G2/I2/I3为`IN_PROGRESS`且只剩Golden流程，G3-G9继续`NOT_READY`。
 
-下一施工切片实现 G2 Production Compiler 的最小完整 vertical slice：locked strict parser、closed Source/Definition validation、Registry/Policy/Safety snapshot binding、Definition static lowering、Plan v2 normalization、condition/program/proof/hash与 deterministic diagnostics，并发布真实 `WorkflowCompilerToolchainManifest` 和 resolved exact case-input binding的新 version。该切片必须以 repair Contract 为输入并先生成 actual candidate case results；不得修改 G0.3/G0.8或 repair Draft v2，不得由 Compiler反向生成/批准 expected oracle，也不得执行 `GoldenSemanticReview`、`golden-seal`、G3+、SQLite certification、G8/G9 release identity或 production activation。Compiler完成并有真实 identity后，另开独立会话发布新的 resolved Draft version，再交给 `human:local-owner` 语义审核。R-012/R-013/R-015 继续作为范围外 timing baseline。
+下一施工切片只发布不覆盖G0.8 Draft v1或R-016 repair Draft v2的resolved Golden Draft新版本，并准备交给`human:local-owner`的独立语义审核输入。新Draft必须绑定本账本记录的真实Compiler/toolchain/binding/candidate identities；expected oracle仍须独立作者/审核流程决定，不能由Production Compiler输出反向生成或自动批准。本切片不得执行approval、`GoldenSemanticReview`最终决定、`golden-seal`、conformance/sealed写入，不得开始G3+、SQLite certification、Core Release、G8/G9 identity或production activation。R-012/R-013/R-015继续作为范围外timing baseline，不放宽测试。

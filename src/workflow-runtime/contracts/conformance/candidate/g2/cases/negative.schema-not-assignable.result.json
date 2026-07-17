@@ -1,0 +1,23 @@
+{
+  "format": "icarus.workflow-compiler-conformance-case-result/1",
+  "case_id": "negative.schema-not-assignable",
+  "source_kind": "graph_scope",
+  "source_hash": "sha256:522eaf4d04f0eae2371f19ee1a3bcaf854d7206ba62b138b6752a0c766165a34",
+  "outcome": "rejected",
+  "normalized_plan": null,
+  "static_lowering_contract_ref": null,
+  "static_lowering_contract_hash": null,
+  "diagnostics": [
+    {
+      "code": "schema_not_assignable",
+      "phase": "prove",
+      "instance_pointer": "/data_edges/0",
+      "schema_pointer": null,
+      "stable_object_id": "data.value",
+      "detail_ref": null
+    }
+  ],
+  "proof_hashes": [],
+  "program_hashes": [],
+  "result_hash": "sha256:f5869a18ed03a5abe6124693f66cf3dee6b3b1be3af29c0eeb91a3745a06cda7"
+}

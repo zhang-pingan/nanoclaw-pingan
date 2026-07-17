@@ -15,6 +15,7 @@ import {
   evaluateGoldenDraftNegativeFixture,
   generateContractPackGoldenDraft,
 } from './golden-draft-pack.js';
+import { checkHistoricalGoldenDraft } from './golden-draft-historical.js';
 import {
   GOLDEN_DRAFT_ADDITIONAL_NEGATIVE_COVERAGE,
   GOLDEN_DRAFT_CASE_SEEDS,
@@ -53,8 +54,8 @@ function draftFiles(): string[] {
 }
 
 describe('G0.8 Golden Draft and Review Input', () => {
-  it('generates deterministically, keeps check read-only, and pins G0.2-G0.7 identities', () => {
-    const first = generateContractPackGoldenDraft();
+  it('keeps the frozen draft check read-only and pins G0.2-G0.7 identities', () => {
+    const first = checkHistoricalGoldenDraft();
     const tracked = [
       ...draftFiles(),
       'catalogs/golden-draft-domain-separators.json',
@@ -66,9 +67,8 @@ describe('G0.8 Golden Draft and Review Input', () => {
         fs.readFileSync(path.join(contractsRoot, relativePath)),
       ]),
     );
-    const second = generateContractPackGoldenDraft();
+    const second = checkHistoricalGoldenDraft();
     expect(second.hash).toBe(first.hash);
-    expect(checkContractPackGoldenDraft().hash).toBe(first.hash);
     for (const [relativePath, bytes] of firstBytes) {
       expect(fs.readFileSync(path.join(contractsRoot, relativePath))).toEqual(
         bytes,
