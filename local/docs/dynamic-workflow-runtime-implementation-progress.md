@@ -2,7 +2,7 @@
 
 > **状态**: IN_PROGRESS
 > **当前 Gate**: G2 Compiler / Sealed Golden（IN_PROGRESS；Production Compiler与Resolved Draft publication DONE，human semantic review/seal pending）
-> **下一施工切片**: G2 独立human semantic review，由`human:local-owner`逐case判断Draft v3 review input与actual candidate；不得机械采用Compiler输出，不得在同一切片approval/seal，不得开始G3+
+> **下一施工切片**: G2 独立human semantic review继续；`human:local-owner`须逐case处理worksheet的SR-001至SR-011并明确判断，仍不得在同一切片approval/seal，不得开始G3+
 > **最后更新**: 2026-07-17
 > **规范权威**: `local/docs/dynamic-workflow-dag-framework.md`
 
@@ -163,7 +163,35 @@ G0.1-G0.9 已按当时规范完成并保留历史 identity。后续确认的 Cap
 | --- | --- | --- | --- | --- |
 | G2.1 | R-016 Spec/Contract Repair | `DONE` | lowering outcome、Compiled IR v2、完整 case result target、exact input binding requirement与 blocked Draft v2冻结 | 本原子提交（历史） |
 | G2.2 | Production Compiler / Exact Case-Input Identity | `DONE` | locked strict parser、closed validation、snapshot binding、static lowering、Plan normalization、program/proof/hash/diagnostic、真实 toolchain与40个actual candidate results | 本原子提交 |
-| G2.3 | Resolved Draft / Semantic Review / Seal | `IN_PROGRESS` | additive resolved Draft v3与pending review handoff已发布；由独立human review决定expected oracle；审核通过后才可另行approval/seal | 本原子提交（Draft publication） |
+| G2.3 | Resolved Draft / Semantic Review / Seal | `IN_PROGRESS` | additive resolved Draft v3与pending review handoff已发布；40-case preparatory worksheet完成但human decision仍为0/40；审核通过后才可另行approval/seal | 本原子提交（Draft publication + worksheet） |
+
+## G2.3 Independent Human Semantic-Review Preparation
+
+**状态**：逐case preparatory review coverage为`DONE`；独立human semantic decision仍为`PENDING`。G2.3与G2总Gate保持`IN_PROGRESS`，G3-G9保持`NOT_READY`。
+
+**工作包**：I2/I3，合同验证联动I11。本切片完整读取主规范与本账本，逐项检查40份raw source、case-bound historical snapshot、hand-authored review input和actual candidate。Production Compiler结果只作为comparison input；没有生成expected case-result bytes，没有替`human:local-owner`写任何case decision，也没有创建`GoldenSemanticReview`、approval、seal或sealed artifact。
+
+交付内容与实际coverage：
+
+- 新增`local/docs/dynamic-workflow-g2-independent-semantic-review-worksheet.md`，它是非权威审查工作表，不进入Contract、oracle、approval或seal identity。
+- 40/40 raw source、40/40 snapshot binding、40/40 hand-authored review input与40/40 actual candidate均已逐项检查；39个case使用`complete-base@1`，integrity case使用`compiler-integrity-mismatch@1`。
+- Mechanical candidate comparison为40/40：10个compiled candidate满足现有稀疏assertion，30个rejected candidate的diagnostic tuple与review input一致。该结果不等于语义批准。
+- Independently authored full expected case result为0/40；`human:local-owner`明确case judgment为0/40；`GoldenSemanticReview`、approval、`golden-seal`和sealed write均为0/not run。
+- Worksheet记录SR-001至SR-011未决项：static lowering node/capability kind冲突、Wait required input无binding、static child interface/policy与Map item binding冲突、Expand positive coverage缺口、nested closure policy冲突、未定义`::`跨scope语法、未绑定owning Recipe的cycle诊断、9个negative case的secondary dead-end、unsafe cancellation/effect pairing，以及共享test-only snapshot的invalid-resource隔离边界。
+
+只读与边界证据：
+
+| 命令/证据 | 结果 |
+| --- | --- |
+| managed `npm run golden:draft:check` | PASS；root=`sha256:659caf9b4add7027116bf780c83b2b85dc95ca0baae9cb8b9840d760a785132b`；仅既有R-010 `DEP0205` warning |
+| resolved-g2 tree digest before/after | 两次均为`4ce26fc340952095467f0b8ed77b14788a77771a1c18d7b4e4a0694cb93e1600`；check前后Git status/diff为空，证明只读 |
+| managed `npm run test:g2:draft` / `test:g2:contract` | PASS；1 file / 6 tests与1 file / 7 tests；Draft与R-016 historical check均保持read-only |
+| managed `npm run test:g2` | PASS；2 files / 14 tests；证明candidate deterministic replay与既有稀疏review-input comparison保持，但不构成独立语义批准，也不消解worksheet findings |
+| managed `npm run contracts:check` | PASS；G0.10=`21d06c...a0a7ec`、R-016=`776d51...50b324`、G2 Compiler=`c78a12...013a77`、Draft v3=`659caf...5132b`、G1 root=`769800...5b756`逐项保持；Store仍为candidate/not-certified且release identity missing-until-G8 |
+| targeted Prettier `--check` | PASS；新worksheet符合pinned格式，原账本未做范围外全文件格式化 |
+| frozen boundary | Draft v1/v2/v3、Production Compiler/candidates、G0/G1/R-016/migration均未修改；`conformance/sealed/`仍只有`.gitkeep`；无approval/seal/G3+/certification/release/activation写入 |
+
+下一边界：继续由`human:local-owner`在G2独立语义审查中逐项处理SR-001至SR-011并对40个case明确判断。需要修正时只能发布additive新Draft/candidate版本，不得覆盖frozen v1/v2/v3。即使全部case通过，approval、immutable`GoldenSemanticReview`、`golden-seal`、sealed写入和CI replay仍须拆分到后续独立切片；G3+不得提前开始。
 
 ## 已完成切片：G2.3 Resolved Golden Draft Publication / Semantic-Review Handoff
 
