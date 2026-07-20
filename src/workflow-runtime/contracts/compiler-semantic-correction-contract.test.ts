@@ -79,6 +79,17 @@ describe('G2 working semantic correction Contract', () => {
     ).not.toHaveProperty('review_history_draft_v3_root');
   });
 
+  it('does not make mutable Markdown or Git history a current dependency', () => {
+    const source = fs.readFileSync(
+      path.join(contractsRoot, 'compiler-semantic-correction-contract.ts'),
+      'utf8',
+    );
+    expect(source).not.toContain('dynamic-workflow-dag-framework.md');
+    expect(source).not.toContain('git log');
+    expect(source).not.toContain('git show');
+    expect(source).not.toContain('/.git/');
+  });
+
   it('records the unique reachability and identity conclusions', () => {
     const decision = artifact(
       COMPILER_SEMANTIC_CORRECTION_DECISION_PATH,

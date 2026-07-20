@@ -23,6 +23,8 @@
 5. 使用 `rg` 搜索本次涉及的类型、表、事务编号、Error Code、状态值和验收关键词在规范全文与仓库中的全部引用。
 6. 明确本次允许修改的模块、禁止越过的 Gate 和验收命令后再编辑文件。
 
+执行冻结RC fresh independent review的新会话不适用上面的进度账本与Git历史读取要求。该会话的输入必须且只能是current架构规范语义、current machine Contract、Contract README和唯一冻结RC bundle；不得读取本文、`git log`/`git show`、archive review artifacts、历史worksheet或任何历史review结果。review prompt不得包含历史判断、逐case结果、finding来源或review结论。
+
 每个施工切片结束前必须：
 
 1. 完成本切片定义的代码、Contract、fixture 和测试，不把必要测试推迟到未记录的后续工作。
@@ -123,8 +125,8 @@ Agent Container 运行于独立 VM，Node identity 由 VM image gate 保证；�
 | --- | --- | --- | --- |
 | I0 | Publish、Registry、Recipe 与执行版本固定 | `NOT_READY` | G3 起 |
 | I1 | Intake、Routing、幂等创建、Child provenance、Claim | `NOT_READY` | G5 起 |
-| I2 | Definition、State lowering、Context、transition | `IN_PROGRESS` | static lowering mechanical correction已进入git-history-only唯一RC；fresh independent review pending；Runtime transition仍从G5起 |
-| I3 | Source/Compiled IR、Port、Compiler | `IN_PROGRESS` | D4-SR-001至D4-SR-007 correction已进入git-history-only唯一RC；fresh independent review pending |
+| I2 | Definition、State lowering、Context、transition | `IN_PROGRESS` | current static lowering语义已进入git-history-only唯一RC；fresh independent review pending；Runtime transition仍从G5起 |
+| I3 | Source/Compiled IR、Port、Compiler | `IN_PROGRESS` | current Compiler/fixture语义已进入git-history-only唯一RC；fresh independent review pending |
 | I4 | Runtime Store、SQLite relation、Value/Blob、migration | `IN_PROGRESS` | G1 migration/Schema Manifest/Store Base/Connection Factory DONE；Value/Blob 从 G3 起 |
 | I5 | Graph 状态机、reconcile、Scheduler、Ledger | `NOT_READY` | G5 起 |
 | I6 | Delegation/System、Capability Effect、Outbox | `NOT_READY` | G5 起 |
@@ -165,7 +167,7 @@ G0.1-G0.9 已按当时规范完成并保留历史 identity。后续确认的 Cap
 | --- | --- | --- | --- | --- |
 | G2.1 | R-016 Spec/Contract Repair | `DONE` | lowering outcome、Compiled IR v2、完整 case result target、exact input binding requirement与 blocked Draft v2冻结 | 本原子提交（历史） |
 | G2.2 | Production Compiler / Exact Case-Input Identity | `DONE` | locked strict parser、closed validation、snapshot binding、static lowering、Plan normalization、program/proof/hash/diagnostic、真实 toolchain与40个actual candidate results | 本原子提交 |
-| G2.3 | Working Correction / RC Review / Seal | `IN_PROGRESS` | phase=`RC_REVIEW`；D4-SR-001至D4-SR-007已完成mechanical correction；worksheet已移除，四个git-history-only Working root及唯一新RC通过双轮确定性验证；expected bytes仍0/40，fresh review/approval/signature/seal未开始 | 本原子提交（prepare-rc） |
+| G2.3 | Working Correction / RC Review / Seal | `IN_PROGRESS` | phase=`RC_REVIEW`；current mechanical checks通过；worksheet已移除，四个git-history-only Working root及唯一新RC通过双轮确定性验证；expected bytes仍0/40，fresh review/approval/signature/seal未开始 | 本原子提交（prepare-rc） |
 
 ## Runtime v1施工治理调整
 
@@ -178,12 +180,10 @@ WORKING -> RC_REVIEW -> BASELINE_ACCEPTED -> CONSTRUCTION_ARCHIVED
 ```
 
 - 当前G2处于`RC_REVIEW`。R-017 Contract、40份隔离input、actual candidate和working review bundle已按`git_history_only`治理连续两轮重生成；旧RC已失效且未保留为current结果，唯一新RC绑定下列exact roots。
-- Draft v3/v4 review只作为Git commit history中的历史事实保留（Draft v3 decision=`604b178`，Draft v4 findings=`d80dc47`）；它们不再要求后续创建Draft v5，也不作为当前Working集合的兼容依赖。旧施工artifact的独立复验属于archive入口，不进入默认current链。
-- D4-SR-001至D4-SR-007已在current Working实现、fixture和生成物中完成机械修正；四个root保持不变，定向/完整G2机械测试通过。
+- 历史review evidence只存在于Git commits，不是current dependency；旧施工artifact的独立复验属于archive入口，不进入默认current链。
+- Current Working实现、fixture和生成物满足当前正式语义要求；四个root保持不变，定向/完整G2机械测试通过。
 - 新四个Working root连续两轮一致后，显式独立`prepare-rc`已冻结单一新RC；任一绑定source/toolchain/compiler/Contract/input/candidate/working-review identity变化都使RC check fail-closed并退回Working。下一边界仅是一次完整fresh independent review；只有该review通过后的后续授权才可创建`GoldenSemanticReview`并seal。
 - G0-G9与同一release验收完成后归档本施工生命周期；长期保留的是生产资源版本控制和旧Run exact artifact pinning，而不是G0-G9施工Draft链。
-
-既有Draft v3/v4 publication与review段落保留为变更前历史记录；其中“下一边界/additive v5”已被本节和文首当前边界取代，不再构成施工授权。
 
 Current Working identity：
 
@@ -198,24 +198,25 @@ Current Review Candidate identity：
 
 | Artifact | Hash / status |
 | --- | --- |
-| RC root | `sha256:53ab413e880436d04e619ac3ae75d5659afb4bccc20139425568898677271b61` / `RC_REVIEW` |
+| RC root | `sha256:bd144c45c9600d2a62efe9d70ed664f70d92095ce7c782af2474ff96d560818f` / `RC_REVIEW` |
 | RC cases | `sha256:1f374fd89cdfb90a98eb88372e8552e9eda96ffe486a68c65e1e9966631555b0` / 40 cases |
 | Fresh-review handoff | `sha256:4a80964b5af42ea83c049c9a9fe5e0b33606ad738423f221ee2f8ed0dba6ad9f` / review not requested |
 | RC leaf inventory | `sha256:dd28f3ffbef73e26cedaae30b512a5d8af5e1d6cd78b671a742f184b226be359` / 2 exact leaf entries |
-| RC artifact tree | `conformance/review-candidate/g2-semantic-correction/` / 4 artifacts / tree digest `sha256:cc7efc16da8a711455eb074b561524b5f3782f842afd21fe1d6ea13831316579` |
+| RC artifact tree | `conformance/review-candidate/g2-semantic-correction/` / 4 artifacts / tree digest `sha256:e1e2ef2e4d76118e0b80f0225989d12f8b9b60c4c3ae70bd3201e62ad16add8f` |
 
 验证与边界证据：
 
 | 命令/证据 | 结果 |
 | --- | --- |
 | managed `npm run typecheck` | PASS |
-| managed `npm run test:g2:working` | PASS；3 files / 22 tests；40-case replay保持11 compiled / 29 rejected |
-| managed `npm run test:g2` | PASS；5 files / 31 tests；40-case replay保持11 compiled / 29 rejected |
-| managed `npm run test:g2:prepare-rc` | PASS；1 file / 6 tests；覆盖prepare/check、identity tamper、Working root drift、重复冻结、冲突RC与非法lifecycle |
-| managed `npm run prepare-rc` + `npm run prepare-rc:check`（连续两轮） | PASS；两轮RC root均为`sha256:53ab413e880436d04e619ac3ae75d5659afb4bccc20139425568898677271b61`，artifact tree digest均为`sha256:cc7efc16da8a711455eb074b561524b5f3782f842afd21fe1d6ea13831316579` |
-| managed Working generators（连续两轮） | PASS；两轮Contract/input/candidate/review roots均为`61f476...d47e` / `83080d...72dc8` / `54ba5b...341a` / `d14d2e...e179`，四树digest均为`sha256:93c04610a1002febe1f59e8308c0788cf5262eb11240236d5428fa52e39694a2`；无Draft v5/v6路径 |
-| `git_history_only` governance scan | PASS；独立review工作表已从current checkout删除；machine Contract不再绑定Draft v3 review root；current/archive checks与Production Runtime没有`.git`/`git log`依赖；历史判断只引用Git commits `604b178`、`d80dc47` |
-| managed `npm run contracts:check` | PASS；默认链只读验证current machine artifacts、四个Working roots、唯一RC、Schema与Store |
+| managed `npm run test:g2:working` | PASS；3 files / 23 tests；40-case replay保持11 compiled / 29 rejected；Working Contract不读取持续编辑Markdown或Git history |
+| managed `npm run test:g2` | PASS；5 files / 41 tests；40-case replay保持11 compiled / 29 rejected |
+| managed `npm run test:g2:prepare-rc` | PASS；1 file / 15 tests；覆盖无RC WORKING、合法RC、损坏RC、冲突RC、identity drift、重复冻结及顶层/嵌套/draft前缀v5/v6路径 |
+| 无RC lifecycle checks | PASS；strict `npm run prepare-rc:check`按预期失败并报告RC未准备；默认`npm run contracts:check`验证四个Working roots、`WORKING` lifecycle、Schema/Store后成功 |
+| managed `npm run prepare-rc` + `npm run prepare-rc:check`（连续两轮） | PASS；两轮RC root均为`sha256:bd144c45c9600d2a62efe9d70ed664f70d92095ce7c782af2474ff96d560818f`，artifact tree digest均为`sha256:e1e2ef2e4d76118e0b80f0225989d12f8b9b60c4c3ae70bd3201e62ad16add8f` |
+| managed Working identity checks | PASS；Contract/input/candidate/review roots保持`61f476...d47e` / `83080d...72dc8` / `54ba5b...341a` / `d14d2e...e179`；无Draft v5/v6路径 |
+| `git_history_only` governance scan | PASS；current规范/账本不保存历史review判断、逐case结果、finding来源或review结论；Working Contract root保持不变且current checks/Production Runtime不读取Markdown、`.git`或`git log`；fresh reviewer不读取账本、Git history或archive review artifacts |
+| 新RC managed `npm run contracts:check` | PASS；默认链报告`RC_REVIEW`并严格验证current machine artifacts、四个Working roots、唯一RC、全部绑定、Schema与Store |
 | managed `npm run contracts:archive:check` | PASS；历史G0/G0.8/G0.9/R-016/Draft v3通过显式archive入口复验 |
 | managed `npm run test:g2:archive` | PASS；2 files / 13 tests |
 | existing managed `npm test` baseline（本切片未重跑） | 83/85 files、754/756 tests通过；失败仅为既有R-012 `credential-proxy` 250ms async trace断言与并发负载下R-013 G0.6 5s timeout；R-015 toolchain 5s同样保留为已登记范围外timing baseline |
@@ -226,179 +227,11 @@ Current Review Candidate identity：
 | expected/review/seal boundary | PASS；40/40 expected full result/Plan/proof/program bytes/hash为null；human judgment 0/40/not requested；approval/signature/seal absent；sealed artifact count=0 |
 | production boundary | PASS；未修改Schema/Store、Production Registry/Feature Release/Core Release、Run exact pinning、Retention/compatibility preflight；`conformance/sealed/`仍只有`.gitkeep` |
 
-## G2 Draft v4 Fresh Independent Human Semantic Review
+## G2 review history boundary
 
-**状态**：Draft v4 fresh independent human semantic review为`DONE / CHANGES_REQUESTED`。G2.3与G2总Gate保持`IN_PROGRESS`，R-017保持`OPEN_BLOCKING_G2`，G3-G9保持`NOT_READY`。
+历史review evidence只存在于Git commits，不是current dependency。Current checkout不保存历史review判断、逐case结果、finding来源或review结论；这些信息不进入current规范、进度账本、machine Contract、默认current检查或fresh reviewer输入。
 
-**工作包**：I2/I3，合同验证联动I11。本切片仅由`human:local-owner`独立复核新的40份raw source、逐case snapshot、hand-authored review input与actual comparison result，并逐case记录新判断；该历史记录现仅由Git commit `d80dc47`保留。没有复用Draft v3 decision，没有把actual Compiler result视为expected oracle，没有修改Draft v1/v2/v3/v4、旧candidate、Contract、Compiler、snapshot或任何冻结identity。
-
-Fresh review结论：
-
-- 40/40 raw source、40/40 isolated snapshot、40/40 hand-authored review input与40/40 actual comparison result均独立逐项检查；actual为11 compiled / 29 rejected。
-- 29/29 negative diagnostic与11/11 positive sparse assertion机械匹配，但只作为comparison evidence，不构成semantic approval。
-- 新human judgment为40/40：14 `PASS` / 26 `CHANGES_REQUESTED`，pending=0；这些判断没有从Draft v3复制。
-- 独立发现D4-SR-001至D4-SR-007：static lowering Plan缺少`success/failure` terminal nodes；structural child owner没有generated typed completion/result output ports；Map items不能赋值给child `item`；20个capability-bearing snapshot缺少可枚举dependency closure及`fixture.executor`等reachable execution dependencies；Wait snapshot缺少authorization dependency；policy-escalation包含多项invalidity；三个Recipe case仍有缺失Definition binding或secondary set mismatch。
-- Independently authored expected full case-result bytes保持0/40。`GoldenSemanticReview`、approval、签名、`golden-seal`、sealed write与CI sealed replay均为0/not run。
-
-逐case finding、judgment basis及14/26完整映射仅保留在Git commit `d80dc47`。该历史decision不回写Draft manifest或其他frozen artifact，也不属于current checkout或active dependency graph。
-
-验证与边界证据：
-
-| 命令/证据 | 结果 |
-| --- | --- |
-| Draft v4 review coverage scan | PASS；raw/snapshot/review input/actual comparison均40/40；human judgment 40/40，14 `PASS` / 26 `CHANGES_REQUESTED` |
-| managed `npm run test:g2` | PASS；5 files / 26 tests；40-case replay、review targets与只读tree checks通过；这是机械合同验证，不消解D4-SR findings |
-| managed `npm run test:g2:contract` | PASS；2 files / 10 tests；R-016 historical与R-017 additive Contract保持通过 |
-| managed `npm run test:g2:draft` | PASS；2 files / 10 tests；Draft v3/v4 checker保持只读 |
-| managed `npm run contracts:check` | PASS；Draft v4 root=`6155b5...b07f4b`，R-017/candidate/Draft v3/G0/G1 identity逐项保持；仅既有R-010 `DEP0205` warning |
-| historical review record formatting / `git diff --check` | PASS；证据见Git commit `d80dc47`；进度账本全文件仍有既有formatting baseline，未做范围外历史重排 |
-| frozen boundary | PASS；历史review record与本账本变更见Git commit `d80dc47`；Draft v1/v2/v3/v4、旧candidate、Contract/Compiler/snapshot均无diff；`conformance/sealed/`仍只有`.gitkeep` |
-
-当时记录的下一边界曾要求additive发布Draft v5并再次full review；该要求已由上方“Runtime v1施工治理调整”和文首当前边界明确撤销，仅作为Draft v4 publication-time历史保留，不得用于后续施工。
-
-## G2 Additive Semantic Correction / Draft v4 Publication
-
-**当时状态**：additive correction publication为`DONE`；Draft v4 fresh independent human review为`PENDING 40/40`。本段保留publication-time状态；当前fresh review结果见上一节。
-
-**工作包**：I2/I3，合同验证联动I11。本切片只修正Draft v3 human review暴露的Compiler/case语义并发布新Contract、case input、candidate和Draft版本；没有覆盖Draft v1/v2/v3、既有candidate、G0/G1/R-016、migration或任何sealed artifact，没有创建`GoldenSemanticReview`、approval、签名或seal，没有开始G3+、certification、Core Release、G8/G9或activation。
-
-合同与实现结论：
-
-- R-017固定closed Source IR `/1`不存在qualified child endpoint或`::`语法；`child::child_done`按普通未知Node ID产生`graph_endpoint_not_found`，`graph_cross_scope_edge`在Error Catalog v2中reserved/unreachable。
-- Capability effect/cancellation必须在Registry binding边界独立有效；`fence_only`、安全`cooperative`或`requires_compensation + compensatable`均可安全收敛early close，非法pairing以`capability_not_allowed`拒绝。因此`early_completion_cancellation_unsafe`在完成Capability validation后reserved/unreachable，合法compensatable early close产生non-null safety proof。
-- Compiler不再读取`identity_match` boolean，按固定顺序比较Toolchain/Compiler/Normalizer/Proof/Error Catalog/IR/result的14个exact identity字段；首差异产生`/compiler_identity/<field>`。Mismatch与matching control使用相同source，且只在`proof_algorithm_hash`不同。
-- Definition state、lowered node与Capability `node_type`一致；Wait required correlation port有真实root input/data binding；Subgraph/Map/Expand/static child递归执行interface、node与child-policy allowlist检查；literal Expand positive真实执行child compile。
-- Recipe cycle只检查selected owning Recipe的reachable closure；cycle negative有真实`start_child_workflow(cycle-b)` binding。SR-009九个negative graph均补齐独立terminal path，每例actual result只保留一个目标diagnostic。
-- 40份snapshot全部隔离，单份只含1-9个reachable resource；Definition、resource、dependency、Wait、Interface、Policy、Safety、snapshot均使用真实domain-separated hash，没有零hash、预计算identity verdict、无关unsafe Capability或unowned cycle污染。
-
-Additive identity：
-
-| Artifact | Hash |
-| --- | --- |
-| Semantic correction Contract root | `sha256:5211d9b655d047c75ffbcbae7d9f70126ba4bccbdc6dffec04e7f3f8435bb5b1` |
-| Decision / Error Catalog v2 | `sha256:581231f568ae38f8c42320501667e5968b47bbf67e257c6005b51ff79bbd851a` / `sha256:8fc7139b29cdddf3c1e13e0f9d8bc6b19a1d32c02c1e7f4b7e33023fcece91ef` |
-| Input manifest / case catalog | `sha256:01ae1b52c6ed3b7423e2f0bda70e72f8e678d96c5ae558e64a960558fbf5ad0e` / `sha256:d26adb161be66619ee7a9a5dfb1b9adc86e2194727686509d1e20d274e9091b5` |
-| Compiler Toolchain / build | `sha256:b92ad48c78c2af3129e471f484c68067b957bfa124187490df64aae1801cdfb6` / `sha256:39d875d520c70493165704c5ab7e0b9edbe4eb337413e0e67f7aa5ff61acd629` |
-| Case binding / result manifest | `sha256:2e6832400922ef7bee306b26f5e2bf8d0cf7b87be1fa89f10186c0920f021085` / `sha256:61ded7c9032ae2a6ec31610b95f89d16711d9113de069391034068a19a790654` |
-| Compiler candidate root | `sha256:afd726dee7150a32e64765781790ccdec49bcd675230d54bccb283ff0467d5eb` |
-| Draft v4 cases / handoff / inventory | `sha256:2ffcee41a44a2d6d1d7fd3abc421973ccb0c7badbd874b11803936ae7453ba75` / `sha256:b33dea9f05f55067c7b0eb599b189e4e681e8b21ee26f6413d74e5bc72accdf7` / `sha256:6aaac8162d3c7c9599cfed3043671bed5b1e13e4d1558abc4b63891fcd02a976` |
-| Draft v4 root | `sha256:6155b5e78fba2ff2987ea4795b1a0c7bc520125292821943d13199d105b07f4b` |
-
-Coverage与边界：
-
-- 新candidate deterministic replay为40/40：11 compiled / 29 rejected；所有negative只有一个目标diagnostic，全部hand-authored diagnostics/assertions机械匹配。Actual仍只是comparison input，不是expected oracle。
-- Draft v3历史review保持11/11 SR和40/40 `CHANGES_REQUESTED`；Draft v4 judgment重置为0/40，pending fresh review=40/40，independently authored expected full case-result bytes仍为0/40。
-- Draft v4 manifest明确`GoldenSemanticReview/approval/golden-seal/sealed-write=not_run`、`G3-G9=not_started`。`conformance/sealed/`仍只有`.gitkeep`。
-
-验证证据：
-
-| 命令/证据 | 结果 |
-| --- | --- |
-| managed `npm run test:g2` | PASS；5 files / 26 tests；含40-case replay、全部review assertions、identity首差异、Wait/child/Recipe/cancellation正反行为与旧candidate只读检查 |
-| managed `npm run test:g2:contract` | PASS；2 files / 10 tests；R-016 historical与R-017 additive Contract均通过 |
-| managed `npm run test:g2:draft` | PASS；2 files / 10 tests；Draft v3与Draft v4 checker均只读 |
-| managed `npm run contracts:check` | PASS；G0.10、R-016、旧G2 candidate、Draft v3、R-017、新candidate、Draft v4、G1 schema/store逐项通过 |
-| managed `npm run typecheck` | PASS |
-| managed `npm run build` | PASS |
-| additive generators连续两轮 / combined tree digest | PASS；两轮Contract=`5211d9...5bb5b1`、candidate=`afd726...7d5eb`、Draft=`6155b5...b07f4b`；combined digest均为`ed0ca6c9ed912cfbdcf738fdc6067e031481fbaf479435bb55bc3f778398c969` |
-| old `golden:draft:check` / resolved-g2 tree digest | PASS；root=`659caf...5132b`；before/after digest均为`4ce26fc340952095467f0b8ed77b14788a77771a1c18d7b4e4a0694cb93e1600`；旧candidate/Draft diff为空 |
-| managed full `npm test -- --maxWorkers=1` | 84/85 files、754/755 tests PASS；唯一失败为范围外`src/credential-proxy.test.ts`的`updates trace events with token usage without estimating price`，单独复跑仍为20/21且credential源码/测试无本切片diff |
-| initial parallel full regression timeout follow-up | runtime-toolchain 5/5、logical-schema 8/8、static-absence 18/18单独复跑PASS；semantic correction高成本deterministic test增加15秒显式预算并在串行全套通过 |
-| targeted Prettier | 本切片TypeScript与`package.json`全部PASS；当时review record局部write后PASS（现仅见Git commit `d80dc47`）；主规范/进度账本全文件既有baseline分别会产生1064/1186行历史churn，未做范围外重排 |
-| `git diff --check` | PASS |
-
-当时下一边界：仍留在G2，只执行Draft v4 fresh independent human semantic review。必须逐项检查40份新raw source、隔离snapshot、hand-authored review input与actual comparison result，并由`human:local-owner`明确记录新的case judgment；不得复用Draft v3 decision，不得把actual candidate转成oracle。该边界已由Git commit `d80dc47`记录为完成，结果为14 `PASS` / 26 `CHANGES_REQUESTED`；Golden/seal/G3+仍未开始。
-
-## G2.3 Independent Human Semantic-Review Decision
-
-**状态**：Draft v3独立human semantic review为`DONE / CHANGES_REQUESTED`；G2.3与G2总Gate保持`IN_PROGRESS`，G3-G9保持`NOT_READY`。
-
-**工作包**：I2/I3，合同验证联动I11。本切片只记录`human:local-owner`对既有review input的明确判断；该历史记录现仅由Git commit `604b178`保留。不修改Draft v1/v2/v3、Production Compiler、actual candidates、G0/G1/R-016、migration或任何expected oracle bytes；没有创建immutable`GoldenSemanticReview`、approval、签名、seal或sealed artifact。
-
-Human decision与实际coverage：
-
-- Reviewer明确声明身份为`human:local-owner`，对SR-001至SR-011逐项选择A，即全部`CHANGES_REQUESTED`。
-- Reviewer随后明确确认全部40个case均为`CHANGES_REQUESTED`；explicit human case judgment coverage由0/40更新为40/40，pass=0、changes-requested=40。
-- Independently authored full expected case-result bytes仍为0/40；Production Compiler 40份actual result继续只作为comparison input，不能成为oracle。
-- `GoldenSemanticReview` immutable record、Golden approval、`golden-seal`、sealed write与CI sealed replay仍为0/not run；该human decision不是approval或签名。
-- SR-011的隔离要求适用于全部case。进一步复核确认integrity case的专用snapshot仍复制`complete-base`的23个Registry资源，并以预计算`identity_match=false`触发拒绝；后续修正版必须使用其余内容有效的最小snapshot、具体exact identity mismatch和Compiler-derived comparison，并提供matching-identity positive control。
-
-本切片只读与边界证据：
-
-| 命令/证据 | 结果 |
-| --- | --- |
-| managed `npm run golden:draft:check` | PASS；root=`sha256:659caf9b4add7027116bf780c83b2b85dc95ca0baae9cb8b9840d760a785132b`；仅既有R-010 `DEP0205` warning |
-| resolved-g2 tree digest before/after | 两次均为`4ce26fc340952095467f0b8ed77b14788a77771a1c18d7b4e4a0694cb93e1600`；Draft tree diff为空，check保持只读 |
-| managed `npm run test:g2:draft` / `test:g2` / `test:g2:contract` | PASS；1 file / 6 tests、2 files / 14 tests、1 file / 7 tests；Draft/Compiler/R-016 replay均保持read-only |
-| managed `npm run contracts:check` | PASS；G0.10=`21d06c...a0a7ec`、R-016=`776d51...50b324`、G2 Compiler=`c78a12...013a77`、Draft v3=`659caf...5132b`、G1 root=`769800...5b756`逐项保持；Store仍为candidate/not-certified且release identity missing-until-G8 |
-| remaining frozen identities | PASS；G1 dependency=`ea039f...b7b89`、physical=`8c667d...05a1`、migration=`d89829...9f61`、candidate manifest=`c471bc...b1d2`、handoff artifact=`9e85ab...67f0` |
-| historical decision coverage / targeted Prettier | PASS；SR decision=11/11 `CHANGES_REQUESTED`、case judgment=40/40 `CHANGES_REQUESTED`、`PENDING`=0；证据仅见Git commit `604b178` |
-| frozen boundary | Draft v1/v2/v3、Production Compiler/candidates、G0/G1/R-016/migration均未修改；`conformance/sealed/`仍只有`.gitkeep`；无approval/seal/G3+/certification/release/activation写入 |
-
-下一边界：仍留在G2。先对SR-007的`graph_cross_scope_edge`可达语义、SR-010的`early_completion_cancellation_unsafe`合法可达语义和integrity exact-identity comparison形成唯一合同，再修复Compiler与case inputs，发布additive candidate/Draft新版本并重新进行40-case独立human review。不得覆盖Draft v1/v2/v3；本次changes-requested不能被复用为新Draft approval。Approval、immutable`GoldenSemanticReview`、`golden-seal`和sealed写入仍须在未来独立切片执行；G3+不得开始。
-
-## 已完成切片：G2.3 Independent Human Semantic-Review Preparation
-
-**当时状态**：逐case preparatory review coverage为`DONE`；独立human semantic decision当时为`PENDING`。本段保留human decision前的准备证据。
-
-**工作包**：I2/I3，合同验证联动I11。本切片完整读取主规范与本账本，逐项检查40份raw source、case-bound historical snapshot、hand-authored review input和actual candidate。Production Compiler结果只作为comparison input；没有生成expected case-result bytes，没有替`human:local-owner`写任何case decision，也没有创建`GoldenSemanticReview`、approval、seal或sealed artifact。
-
-交付内容与实际coverage：
-
-- Git commit `e40dfb7`曾引入非权威review preparation record；该文件已退出current checkout，历史只由Git commit history保留，从未进入Contract、oracle、approval或seal identity。
-- 40/40 raw source、40/40 snapshot binding、40/40 hand-authored review input与40/40 actual candidate均已逐项检查；39个case使用`complete-base@1`，integrity case使用`compiler-integrity-mismatch@1`。
-- Mechanical candidate comparison为40/40：10个compiled candidate满足现有稀疏assertion，30个rejected candidate的diagnostic tuple与review input一致。该结果不等于语义批准。
-- Independently authored full expected case result为0/40；`human:local-owner`明确case judgment为0/40；`GoldenSemanticReview`、approval、`golden-seal`和sealed write均为0/not run。
-- Git commit `e40dfb7`记录SR-001至SR-011未决项：static lowering node/capability kind冲突、Wait required input无binding、static child interface/policy与Map item binding冲突、Expand positive coverage缺口、nested closure policy冲突、未定义`::`跨scope语法、未绑定owning Recipe的cycle诊断、9个negative case的secondary dead-end、unsafe cancellation/effect pairing，以及共享test-only snapshot的invalid-resource隔离边界。
-
-只读与边界证据：
-
-| 命令/证据 | 结果 |
-| --- | --- |
-| managed `npm run golden:draft:check` | PASS；root=`sha256:659caf9b4add7027116bf780c83b2b85dc95ca0baae9cb8b9840d760a785132b`；仅既有R-010 `DEP0205` warning |
-| resolved-g2 tree digest before/after | 两次均为`4ce26fc340952095467f0b8ed77b14788a77771a1c18d7b4e4a0694cb93e1600`；check前后Git status/diff为空，证明只读 |
-| managed `npm run test:g2:draft` / `test:g2:contract` | PASS；1 file / 6 tests与1 file / 7 tests；Draft与R-016 historical check均保持read-only |
-| managed `npm run test:g2` | PASS；2 files / 14 tests；证明candidate deterministic replay与既有稀疏review-input comparison保持，但不构成独立语义批准，也不消解Git commit `e40dfb7`记录的findings |
-| managed `npm run contracts:check` | PASS；G0.10=`21d06c...a0a7ec`、R-016=`776d51...50b324`、G2 Compiler=`c78a12...013a77`、Draft v3=`659caf...5132b`、G1 root=`769800...5b756`逐项保持；Store仍为candidate/not-certified且release identity missing-until-G8 |
-| historical review record Prettier `--check` | PASS；证据见Git commit `e40dfb7`，原账本未做范围外全文件格式化 |
-| frozen boundary | Draft v1/v2/v3、Production Compiler/candidates、G0/G1/R-016/migration均未修改；`conformance/sealed/`仍只有`.gitkeep`；无approval/seal/G3+/certification/release/activation写入 |
-
-下一边界：继续由`human:local-owner`在G2独立语义审查中逐项处理SR-001至SR-011并对40个case明确判断。需要修正时只能发布additive新Draft/candidate版本，不得覆盖frozen v1/v2/v3。即使全部case通过，approval、immutable`GoldenSemanticReview`、`golden-seal`、sealed写入和CI replay仍须拆分到后续独立切片；G3+不得提前开始。
-
-## 已完成切片：G2.3 Resolved Golden Draft Publication / Semantic-Review Handoff
-
-**状态**：Draft publication与semantic-review handoff preparation为`DONE`；G2.3及G2总Gate保持`IN_PROGRESS`，`human:local-owner`尚未作任何语义决定，Golden approval/seal均未开始。
-
-**工作包**：I2/I3，合同验证联动I11。本切片只发布additive Resolved Golden Draft v3与read-only review handoff，不覆盖G0.8 Draft v1或R-016 repair Draft v2，不修改Production Compiler或actual candidate output，不从Compiler输出机械反向生成expected oracle；没有执行`GoldenSemanticReview`决定、approval、`golden-seal`、`conformance/sealed/`写入、G3+、SQLite certification、Core Release、G8/G9 identity或production activation。
-
-交付内容：
-
-- `conformance/draft/resolved-g2/`发布11个artifact：40-case resolved catalog、pending semantic-review handoff、5个closed schema、正反fixture、完整inventory和root manifest。v3逐项精确绑定G2 Compiler root、toolchain、build、normalizer、proof、case-input binding和actual candidate manifest，以及全部40份actual result ref/hash（10 compiled / 30 rejected）。
-- 每个case把`actual_compiler_candidate`、hand-authored `review_input`和`expected_golden_oracle`建模为三个独立closed对象；actual disposition固定为comparison input only，expected oracle字段全部固定为`null`且状态为absent pending human decision，不能由Production Compiler输出冒充或填充。
-- handoff owner固定为`human:local-owner`，40个case均为`pending_human_semantic_review`；root同时固定`GoldenSemanticReview=pending_not_run`、approval/seal/sealed-write=`not_run`及G3-G9=`not_started`。20个negative mutations覆盖identity、candidate/review/oracle混淆、伪造reviewer/decision/approval/seal/sealed path和G3+越界。
-- 新增独立deterministic generator与read-only checker，Contract入口只读验证G0.8/R-016历史identity；generator位于`contracts/`且不import Production Compiler，只读取并校验已发布candidate bytes/hash。历史live generator没有恢复。
-
-关键identity：
-
-| Artifact | Identity |
-| --- | --- |
-| Resolved Golden Draft v3 root | `sha256:659caf9b4add7027116bf780c83b2b85dc95ca0baae9cb8b9840d760a785132b` |
-| Resolved 40-case catalog | `sha256:36ad5b6f2da11c6a7dcfef298dfb1c878070baec1897cd3636c8cf6b77e3bf11` |
-| Semantic-review handoff | `sha256:9e85abe94231efcbd35e39fd69d49eb10e8f1d6fe36117ba57d3fa60dc2a67f0` |
-| Artifact inventory | `sha256:8d69f92a89c343a0282750c78e8b5f519fdb2a474e6e54f1f460a6660db275f8` |
-| Deterministic generator | `sha256:2e883f1097e9c04b61fd8cc582ae0a105b62028ec97797a69c88c53ccda84f27` |
-
-验证证据：
-
-| 命令/证据 | 结果 |
-| --- | --- |
-| managed `npm run golden:draft:generate`（连续两次）/ `golden:draft:check` | PASS；两次生成与只读check的tree digest均为`d9775d43ea55858941480d31fc1ed7fc473fc7757a06e73746ba9dd092c7e485`，Draft root=`659caf…5132b`，expected oracle仍全部为null |
-| managed `npm run contracts:generate` / `npm run contracts:check` | PASS；Resolved Draft纳入统一入口，G0.8/R-016 historical verifier保持只读，G2/G0/G1 roots逐项通过 |
-| managed `npm run test:g2` / `test:g2:contract` | PASS，2 files / 14 tests与1 file / 7 tests；40-case三方分离、closed schema、20个negative mutations、边界与R-016冻结验证通过 |
-| managed `npm run test:g0` / `test:g1.1` / `test:g1.2` | PASS，15 files / 109 tests、12/12、11/11；新增Contract import改用既有允许的Node builtin specifier，未放宽G0边界 |
-| managed `npm run typecheck` / `npm run build` | PASS |
-| managed `npm test` | 78/82 files、739/743 tests；失败仅为既有范围外R-012 trace 250ms、R-013 G0.6 5s、R-015 toolchain 5s与G0.7 static-absence 5s baseline；后三项定向复跑分别8/8、5/5、18/18通过，R-012单文件维持20/21 baseline；未修改或放宽相关测试/timeout |
-| targeted Prettier / `git diff --check` / frozen boundary scan | PASS；G0.3/G0.8、R-016、G0.10、G1、migration与G2 Compiler/candidate bytes/identity均未漂移；sealed仅`.gitkeep`，无approval/seal/G3+/certification/release/activation产物 |
+`contracts:archive:check`只复验施工artifact的机器identity，不向fresh reviewer提供历史review内容。Current G2状态、Working roots、唯一RC identity、机械验证和未越过边界只记录在上方current evidence中。
 
 ## 已完成切片：G2.2 Production Compiler / Exact Case-Input Identity
 
@@ -1326,7 +1159,7 @@ G0.1 的实现、测试和本进度账本由同一个原子提交交付。Agent 
 | R-014 | Capacity governance | CLOSED | G0.10 已机器化 closed publication/command、权限/Actor/entrypoint/delegation、revision/hash CAS、reason/denial、immutable audit tables、唯一 Publisher/Watcher protocol、Admission lineage、crash recovery 与 additive Gate evidence；G1 DDL 可开始 | G0.10 |
 | R-015 | Toolchain test timing | OPEN_OUT_OF_SCOPE | G1.1 曾复现 runtime-toolchain 5s timing；G1.2 串行 `test:g0` 和两次完整 suite 均未复现，toolchain tests 通过。G1.2 不调整 timeout 或 managed toolchain 既有实现 | 独立测试稳定性维护 |
 | R-016 | Compiler/Golden contract | CLOSED | S38与additive repair root已冻结唯一Case Result target/hash、lowering outcome、IR v2与exact binding；G2 Production Compiler已消费该Contract并发布真实identity/actual candidates，repair Draft v2仍冻结blocked且未越过Golden review/seal边界 | G2 spec/Contract repair + Compiler slice |
-| R-017 | G2 semantic correction | OPEN_BLOCKING_G2 | phase=`RC_REVIEW`；Draft v3/v4判断只由Git commits `604b178`/`d80dc47`保留，不是current dependency；D4-SR-001至D4-SR-007已完成mechanical correction，剩余已知Working correction finding为0；唯一RC root=`sha256:53ab413e880436d04e619ac3ae75d5659afb4bccc20139425568898677271b61`。Fresh independent review未执行，expected bytes仍0/40，human judgment 0/40，approval/signature/seal absent，G3+未就绪 | G2 RC fresh independent review；下一允许边界为独立新会话只审当前RC |
+| R-017 | G2 semantic correction | OPEN_BLOCKING_G2 | phase=`RC_REVIEW`；历史review evidence只存在于Git commits，不是current dependency；current mechanical checks通过；唯一RC root=`sha256:bd144c45c9600d2a62efe9d70ed664f70d92095ce7c782af2474ff96d560818f`。Fresh independent review未执行，expected bytes仍0/40，human judgment 0/40，approval/signature/seal absent，G3+未就绪 | G2 RC fresh independent review；下一允许边界为独立新会话只审当前RC |
 
 ## v1完成后的归档计划：PLANNED
 
@@ -1338,8 +1171,8 @@ G0.1 的实现、测试和本进度账本由同一个原子提交交付。Agent 
 
 G0.1-G0.9 historical identity、G0.10 current root、G1.1/G1.2 executable schema/Store Base、G1.3 dependency identity repair、R-016 spec/Contract repair与G2 Production Compiler基础均已完成；既有hash是construction provenance，不把未Seal的后续G2修正变成additive发布义务。Current G0/I11与G1为`DONE`，G2/I2/I3为`IN_PROGRESS/RC_REVIEW`且仍限于semantic correction/Golden流程，G3-G9继续`NOT_READY`。
 
-Draft v3的40/40 `CHANGES_REQUESTED`与Draft v4的14 `PASS` / 26 `CHANGES_REQUESTED`仅由Git commits `604b178`与`d80dc47`保留，没有复制、重置或替换；current checkout与active dependency graph不再包含独立review工作表。D4-SR-001至D4-SR-007已在current Working代码、isolated inputs、actual comparison与working review bundle中完成机械修正；这不是新human judgment或semantic approval。显式`prepare-rc`已从重生成后的exact四个Working root冻结唯一Review Candidate；Expected full case-result/Plan/proof/program bytes/hash仍全部为null，human judgment仍0/40/not requested，approval、signature、immutable`GoldenSemanticReview`、`golden-seal`和sealed write均未运行。
+历史review evidence只存在于Git commits，不是current dependency；current checkout与active dependency graph不包含历史review判断、逐case结果、finding来源、review结论或独立review工作表。Current Working代码、isolated inputs、actual comparison与working review bundle满足当前正式语义要求；这不是新human judgment或semantic approval。显式`prepare-rc`已从重生成后的exact四个Working root冻结唯一Review Candidate；Expected full case-result/Plan/proof/program bytes/hash仍全部为null，human judgment仍0/40/not requested，approval、signature、immutable`GoldenSemanticReview`、`golden-seal`和sealed write均未运行。
 
-本原子提交的终点是G2 `RC_REVIEW`：四个git-history-only Working root经双轮确定性重生成后冻结，唯一RC不可发布且Production不可达，40-case actual comparison保持11 compiled / 29 rejected，剩余已知Working correction finding为0。下一允许边界只能是独立新会话对该exact RC执行一次完整fresh independent review。不得创建Draft v5/v6或additive RC，不得修改Working/RC identity，不请求、复制或重置历史human judgment；Draft v4的14/26 decision仅由Git commit `d80dc47`保留。
+本原子提交的终点是G2 `RC_REVIEW`：四个git-history-only Working root经双轮确定性重生成后冻结，唯一RC不可发布且Production不可达，40-case actual comparison保持11 compiled / 29 rejected。下一允许边界只能是独立新会话对该exact RC执行一次完整fresh independent review。不得创建Draft v5/v6或additive RC，不得修改Working/RC identity，也不得读取、请求、复制或重置任何历史human judgment。
 
 本切片仅执行`prepare-rc`及其确定性check；未执行fresh independent review或Golden approval，未创建immutable`GoldenSemanticReview`、approval/signature、运行`golden-seal`或写入`conformance/sealed/`，也未开始G3+、SQLite certification、Core Release、G8/G9 identity或production activation。R-010 Node loader deprecation与R-012/R-013/R-015 timing继续作为既有范围外baseline，不升级工具链、不放宽测试。

@@ -8,7 +8,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { JsonObject } from './types.js';
 import {
   buildSemanticCorrectionReviewCandidateArtifactsForTest,
-  checkSemanticCorrectionReviewCandidate,
+  checkSemanticCorrectionCurrentLifecycleAtRootForTest,
   checkSemanticCorrectionReviewCandidateAtRootForTest,
   EXPECTED_G2_WORKING_ROOTS,
   prepareSemanticCorrectionReviewCandidateAtRootForTest,
@@ -16,6 +16,7 @@ import {
   SEMANTIC_CORRECTION_REVIEW_CANDIDATE_CASES_PATH,
   SEMANTIC_CORRECTION_REVIEW_CANDIDATE_INVENTORY_PATH,
   SEMANTIC_CORRECTION_REVIEW_CANDIDATE_MANIFEST_PATH,
+  validateSemanticCorrectionConformancePathBoundariesForTest,
   validateSemanticCorrectionReviewCandidateWorkingIdentityForTest,
 } from './semantic-correction-review-candidate.js';
 
@@ -41,6 +42,14 @@ function digestTree(root: string): string {
 
 function cloneIdentity(): JsonObject {
   return structuredClone(workingIdentity);
+}
+
+function conformanceFixture(name: string): string {
+  const root = path.join(temporaryRoot, name);
+  const sealed = path.join(root, 'sealed');
+  fs.mkdirSync(sealed, { recursive: true });
+  fs.writeFileSync(path.join(sealed, '.gitkeep'), '');
+  return root;
 }
 
 beforeAll(() => {
@@ -88,7 +97,11 @@ describe('G2 prepare-rc Review Candidate', () => {
         }),
       );
     }
-    expect(checkSemanticCorrectionReviewCandidate().payload).toMatchObject({
+    const root = firstArtifacts.find(
+      ([artifactPath]) =>
+        artifactPath === SEMANTIC_CORRECTION_REVIEW_CANDIDATE_MANIFEST_PATH,
+    )![1];
+    expect(root.payload).toMatchObject({
       construction_phase: 'RC_REVIEW',
       publishable: false,
       production_reachable: false,
@@ -98,7 +111,11 @@ describe('G2 prepare-rc Review Candidate', () => {
   });
 
   it('prepares atomically and treats an exact repeated freeze as idempotent', () => {
-    const target = path.join(temporaryRoot, 'repeat-freeze');
+    const target = path.join(
+      temporaryRoot,
+      'repeat-freeze',
+      'g2-semantic-correction',
+    );
     const first = prepareSemanticCorrectionReviewCandidateAtRootForTest(target);
     const firstDigest = digestTree(target);
     const second =
@@ -110,10 +127,37 @@ describe('G2 prepare-rc Review Candidate', () => {
       checkSemanticCorrectionReviewCandidateAtRootForTest(target).hash,
     ).toBe(first.hash);
     expect(digestTree(target)).toBe(beforeCheck);
+    expect(
+      checkSemanticCorrectionCurrentLifecycleAtRootForTest(target),
+    ).toMatchObject({
+      construction_phase: 'RC_REVIEW',
+      review_candidate_root: first.hash,
+    });
+  });
+
+  it('accepts a legal no-RC WORKING state while strict RC check still fails', () => {
+    const target = path.join(
+      temporaryRoot,
+      'working-without-rc',
+      'g2-semantic-correction',
+    );
+    expect(
+      checkSemanticCorrectionCurrentLifecycleAtRootForTest(target),
+    ).toMatchObject({
+      construction_phase: 'WORKING',
+      review_candidate_root: null,
+    });
+    expect(() =>
+      checkSemanticCorrectionReviewCandidateAtRootForTest(target),
+    ).toThrow(/has not been prepared/);
   });
 
   it('fails closed on an existing unregistered or tampered RC tree', () => {
-    const target = path.join(temporaryRoot, 'conflicting-freeze');
+    const target = path.join(
+      temporaryRoot,
+      'conflicting-freeze',
+      'g2-semantic-correction',
+    );
     prepareSemanticCorrectionReviewCandidateAtRootForTest(target);
     fs.writeFileSync(path.join(target, 'unregistered.json'), '{}\n');
     expect(() =>
@@ -122,6 +166,20 @@ describe('G2 prepare-rc Review Candidate', () => {
     expect(() =>
       checkSemanticCorrectionReviewCandidateAtRootForTest(target),
     ).toThrow(/inventory conflict/);
+    expect(() =>
+      checkSemanticCorrectionCurrentLifecycleAtRootForTest(target),
+    ).toThrow(/inventory conflict/);
+  });
+
+  it('does not downgrade a conflicting RC parent to WORKING', () => {
+    const parent = path.join(temporaryRoot, 'conflicting-parent');
+    const target = path.join(parent, 'g2-semantic-correction');
+    fs.mkdirSync(path.join(parent, 'second-review-candidate'), {
+      recursive: true,
+    });
+    expect(() =>
+      checkSemanticCorrectionCurrentLifecycleAtRootForTest(target),
+    ).toThrow(/Multiple or conflicting Review Candidate paths/);
   });
 
   it('rejects exact identity tamper and Working root drift', () => {
@@ -159,7 +217,10 @@ describe('G2 prepare-rc Review Candidate', () => {
   });
 
   it('keeps expected, judgment, approval, signature, seal, and Production absent', () => {
-    const root = checkSemanticCorrectionReviewCandidate().payload;
+    const root = buildSemanticCorrectionReviewCandidateArtifactsForTest().find(
+      ([artifactPath]) =>
+        artifactPath === SEMANTIC_CORRECTION_REVIEW_CANDIDATE_MANIFEST_PATH,
+    )![1].payload;
     const expected = root.expected_golden_oracle as JsonObject;
     expect(
       Object.entries(expected).filter(([key]) => key !== 'status'),
@@ -199,5 +260,34 @@ describe('G2 prepare-rc Review Candidate', () => {
       expect(entry.review_status).toBe('not_requested');
       expect(entry.human_judgment).toBeNull();
     }
+  });
+
+  it.each([
+    'v5/file.json',
+    'v6/file.json',
+    'draft-v5/file.json',
+    'draft-v6/file.json',
+    'foo/v5/bar.json',
+    'foo/v6/bar.json',
+  ])('rejects forbidden v5/v6 path segments: %s', (relativePath) => {
+    const root = conformanceFixture(
+      `path-${relativePath.replaceAll('/', '-')}`,
+    );
+    const target = path.join(root, relativePath);
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.writeFileSync(target, '{}\n');
+    expect(() =>
+      validateSemanticCorrectionConformancePathBoundariesForTest(root),
+    ).toThrow(/Draft v5\/v6 path is forbidden/);
+  });
+
+  it('allows non-v5/v6 path segments', () => {
+    const root = conformanceFixture('path-control');
+    const target = path.join(root, 'foo', 'draft-v4', 'file.json');
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.writeFileSync(target, '{}\n');
+    expect(() =>
+      validateSemanticCorrectionConformancePathBoundariesForTest(root),
+    ).not.toThrow();
   });
 });

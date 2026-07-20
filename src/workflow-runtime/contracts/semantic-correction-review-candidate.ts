@@ -212,14 +212,13 @@ function diskArtifactIdentity(
   );
 }
 
-function validateSealedAndVersionBoundaries(): void {
-  const sealed = fs.readdirSync(absoluteContractPath('conformance/sealed'));
+function validateSealedAndVersionBoundariesAt(conformanceRoot: string): void {
+  const sealed = fs.readdirSync(path.join(conformanceRoot, 'sealed'));
   if (sealed.length !== 1 || sealed[0] !== '.gitkeep') {
     throw new SemanticCorrectionReviewCandidateError(
       'prepare-rc crossed the sealed boundary',
     );
   }
-  const conformanceRoot = absoluteContractPath('conformance');
   const visit = (directory: string): void => {
     for (const name of fs.readdirSync(directory).sort()) {
       const absolute = path.join(directory, name);
@@ -233,7 +232,10 @@ function validateSealedAndVersionBoundaries(): void {
           `Conformance tree contains a symlink: ${relative}`,
         );
       }
-      if (/(^|[-_@])v[56]($|[-_.@])/.test(relative)) {
+      const hasForbiddenVersionSegment = relative
+        .split('/')
+        .some((segment) => /(^|[-_@])v[56]($|[-_.@])/.test(segment));
+      if (hasForbiddenVersionSegment) {
         throw new SemanticCorrectionReviewCandidateError(
           `Draft v5/v6 path is forbidden: ${relative}`,
         );
@@ -242,6 +244,10 @@ function validateSealedAndVersionBoundaries(): void {
     }
   };
   visit(conformanceRoot);
+}
+
+function validateSealedAndVersionBoundaries(): void {
+  validateSealedAndVersionBoundariesAt(absoluteContractPath('conformance'));
 }
 
 function buildSourceEntries(
@@ -1000,12 +1006,60 @@ function checkAt(targetRoot: string): ContractArtifactEnvelope {
   return rootArtifact(artifacts);
 }
 
+function hasCurrentReviewCandidate(targetRoot: string): boolean {
+  const parent = path.dirname(targetRoot);
+  if (!fs.existsSync(parent)) return false;
+  if (!fs.lstatSync(parent).isDirectory()) {
+    throw new SemanticCorrectionReviewCandidateError(
+      'Review Candidate parent is not a directory',
+    );
+  }
+  const expectedName = path.basename(targetRoot);
+  const entries = fs.readdirSync(parent).sort();
+  if (entries.length === 0) return false;
+  if (entries.length !== 1 || entries[0] !== expectedName) {
+    throw new SemanticCorrectionReviewCandidateError(
+      'Multiple or conflicting Review Candidate paths are forbidden',
+    );
+  }
+  return true;
+}
+
+export interface SemanticCorrectionCurrentLifecycleCheck {
+  construction_phase: 'WORKING' | 'RC_REVIEW';
+  review_candidate_root: Sha256Hash | null;
+  working_roots: JsonObject;
+}
+
+function checkCurrentAt(
+  targetRoot: string,
+): SemanticCorrectionCurrentLifecycleCheck {
+  if (!hasCurrentReviewCandidate(targetRoot)) {
+    const working = loadWorkingSet();
+    return {
+      construction_phase: 'WORKING',
+      review_candidate_root: null,
+      working_roots: object(working.summary.working_roots, 'Working roots'),
+    };
+  }
+  const root = checkAt(targetRoot);
+  return {
+    construction_phase: 'RC_REVIEW',
+    review_candidate_root: root.hash,
+    working_roots: object(root.payload.bound_working_roots, 'Working roots'),
+  };
+}
+
 export function prepareSemanticCorrectionReviewCandidate(): ContractArtifactEnvelope {
   return prepareAt(defaultTargetRoot());
 }
 
 export function checkSemanticCorrectionReviewCandidate(): ContractArtifactEnvelope {
   return checkAt(defaultTargetRoot());
+}
+
+export function checkSemanticCorrectionCurrentLifecycle(): SemanticCorrectionCurrentLifecycleCheck {
+  return checkCurrentAt(defaultTargetRoot());
 }
 
 export function prepareSemanticCorrectionReviewCandidateAtRootForTest(
@@ -1018,4 +1072,16 @@ export function checkSemanticCorrectionReviewCandidateAtRootForTest(
   targetRoot: string,
 ): ContractArtifactEnvelope {
   return checkAt(path.resolve(targetRoot));
+}
+
+export function checkSemanticCorrectionCurrentLifecycleAtRootForTest(
+  targetRoot: string,
+): SemanticCorrectionCurrentLifecycleCheck {
+  return checkCurrentAt(path.resolve(targetRoot));
+}
+
+export function validateSemanticCorrectionConformancePathBoundariesForTest(
+  conformanceRoot: string,
+): void {
+  validateSealedAndVersionBoundariesAt(path.resolve(conformanceRoot));
 }

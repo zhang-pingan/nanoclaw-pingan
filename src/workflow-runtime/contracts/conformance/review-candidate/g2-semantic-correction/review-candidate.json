@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-compiler-g2-review-candidate:1\n",
-  "hash": "sha256:53ab413e880436d04e619ac3ae75d5659afb4bccc20139425568898677271b61",
+  "hash": "sha256:bd144c45c9600d2a62efe9d70ed664f70d92095ce7c782af2474ff96d560818f",
   "payload": {
     "candidate_id": "g2-semantic-correction",
     "gate": "G2",
@@ -291,8 +291,8 @@
     },
     "generator_source": {
       "path": "src/workflow-runtime/contracts/semantic-correction-review-candidate.ts",
-      "raw_bytes_hash": "sha256:298ee442fa65cc369323c6e881a4681b77005d64f78cf4e5a58ca9b998766130"
+      "raw_bytes_hash": "sha256:19f6bc2348dbcc8be13de56fbc039789ba975f11ee1d8fceceb4f30def8ec5be"
     },
-    "review_candidate_hash": "sha256:284001f8d391c376b4cec4b14aa6cd3e3bf3665733db83dc6abb7ea811b6de01"
+    "review_candidate_hash": "sha256:06ab2fc9edad1e7d526bc4162ae68ce262b4b0a6c817438e7a0786212cb24b09"
   }
 }
