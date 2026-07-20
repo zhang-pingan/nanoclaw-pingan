@@ -183,7 +183,7 @@ function registryResources(snapshot: JsonObject): JsonObject[] {
   });
 }
 
-describe('G2 additive semantic correction candidate', () => {
+describe('G2 working semantic correction candidate', () => {
   it('replays all 40 cases deterministically and checks both trees read-only', () => {
     const roots = [INPUT_ROOT, G2_SEMANTIC_CORRECTION_CANDIDATE_ROOT];
     const before = treeDigest(roots);
@@ -191,9 +191,21 @@ describe('G2 additive semantic correction candidate', () => {
     const second = buildSemanticCorrectionCandidate();
     expect([...second.files]).toEqual([...first.files]);
     expect(second.root.hash).toBe(first.root.hash);
-    expect(first.root.hash).toBe(
-      'sha256:afd726dee7150a32e64765781790ccdec49bcd675230d54bccb283ff0467d5eb',
-    );
+    expect(first.root.hash).toMatch(/^sha256:[0-9a-f]{64}$/);
+    expect(first.root.payload).toMatchObject({
+      status: 'WORKING_COMPILER_COMPARISON',
+      construction_phase: 'WORKING',
+      publishable: false,
+      production_reachable: false,
+      human_review_status: 'not_requested_until_prepare_rc',
+    });
+    expect(first.inputs.manifest.payload).toMatchObject({
+      status: 'WORKING_INPUTS_CURRENT',
+      construction_phase: 'WORKING',
+      publishable: false,
+      production_reachable: false,
+      human_review_status: 'not_requested_until_prepare_rc',
+    });
     expect(first.results).toHaveLength(40);
     expect(
       first.results.filter((entry) => entry.outcome === 'compiled'),

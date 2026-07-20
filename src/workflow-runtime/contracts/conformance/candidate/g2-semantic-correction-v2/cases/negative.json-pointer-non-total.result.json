@@ -2,7 +2,7 @@
   "format": "icarus.workflow-compiler-conformance-case-result/1",
   "case_id": "negative.json-pointer-non-total",
   "source_kind": "graph_scope",
-  "source_hash": "sha256:1500a7034f1c2c063c80379812d555f761867f4a738cfb3afcb2e184d22e7418",
+  "source_hash": "sha256:2cab041abf3cd79892057d43be92edfcfe1a9438a5dca3663f4bbd43c6c4c5db",
   "outcome": "rejected",
   "normalized_plan": null,
   "static_lowering_contract_ref": null,
@@ -19,5 +19,5 @@
   ],
   "proof_hashes": [],
   "program_hashes": [],
-  "result_hash": "sha256:26daa61d0ca36bf235a75ffde13f260f335054f0608f4b99d29cd64ae232360f"
+  "result_hash": "sha256:91cbde1f43db77e57686dabc77dc199db822d551feac18a838732fa4f2f21b2e"
 }

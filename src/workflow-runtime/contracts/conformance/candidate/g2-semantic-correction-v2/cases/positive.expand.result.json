@@ -2,7 +2,7 @@
   "format": "icarus.workflow-compiler-conformance-case-result/1",
   "case_id": "positive.expand",
   "source_kind": "graph_scope",
-  "source_hash": "sha256:55a3abba2ed9228b013a61e20c11896f2dab47d3756e89852b528c96c9fa6928",
+  "source_hash": "sha256:dfa4d11e55f1d3f5ff37ebb83c79c2cc037718c087e0c1307d45398d132300ac",
   "outcome": "compiled",
   "normalized_plan": {
     "format": "icarus.workflow-graph-scope-plan/2",
@@ -18,7 +18,7 @@
     "canonical_normalizer_hash": "sha256:7d08408f780ca4350e153d99fd60810554daefe3826b39fe5e2fa5abee340b60",
     "proof_algorithm_version": "2.0.0",
     "proof_algorithm_hash": "sha256:4aa814c349c213fdaec4e48b4414a5bab728bb54328639c9d8c1aa0da680ca88",
-    "source_hash": "sha256:55a3abba2ed9228b013a61e20c11896f2dab47d3756e89852b528c96c9fa6928",
+    "source_hash": "sha256:dfa4d11e55f1d3f5ff37ebb83c79c2cc037718c087e0c1307d45398d132300ac",
     "interface_snapshot_hash": "sha256:227da6ec31bdc9889a198e9b902823b247add8ecae5752630ab6218b01de6131",
     "policy_snapshot_hash": "sha256:9ee346a9709b80570675634adaf8226079ff6935317ed02f1ebdea1f638ccc8c",
     "effective_policy_snapshot": {
@@ -523,7 +523,7 @@
       }
     },
     "runtime_safety_hash": "sha256:7f8c0b1babf451cb03ab5f99b436d3ae187b587783875850686188d893059259",
-    "plan_hash": "sha256:762fe8f771ebede1115d5c56db3dace37864a3546969d845de1a2995d7535f73"
+    "plan_hash": "sha256:1b392cf672c691578ee7fc3b6ca6c75cd3f58d976733082cc0fe7c54640c6aa8"
   },
   "static_lowering_contract_ref": null,
   "static_lowering_contract_hash": null,
@@ -536,5 +536,5 @@
     "sha256:a51758dbd90dbd199d38eb84181697630737fd69f0c85831398d2dfa985e4fb6",
     "sha256:f3ce1c33ede73411e5ad9749123de79add2aa8775eb0028676fc45464a536980"
   ],
-  "result_hash": "sha256:d5db23f929871d0e6aca390c3a059313c176a349aa6b1ae0a03c44f82ea1f9df"
+  "result_hash": "sha256:db82368487edaf8f663e362ccca2c9a4ab72b4c9c48376966bcfcb4f8e905a5b"
 }

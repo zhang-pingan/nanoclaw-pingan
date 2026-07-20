@@ -8,9 +8,7 @@ if (
   process.argv.length !== 3 ||
   (command !== 'generate' && command !== 'check')
 ) {
-  console.error(
-    'Usage: workflow-compiler-semantic-correction <generate|check>',
-  );
+  console.error('Usage: workflow-compiler-working-set <generate|check>');
   process.exit(64);
 }
 
@@ -19,11 +17,11 @@ try {
     command === 'generate'
       ? generateSemanticCorrectionCandidate()
       : checkSemanticCorrectionCandidate();
-  console.log(`g2_semantic_correction_candidate=${command}:ok`);
-  console.log(`g2_semantic_correction_candidate_root=${root.hash}`);
+  console.log(`g2_working_candidate=${command}:ok`);
+  console.log(`g2_working_candidate_root=${root.hash}`);
 } catch (error) {
   console.error(
-    `g2_semantic_correction_candidate=${command}:failed: ${
+    `g2_working_candidate=${command}:failed: ${
       error instanceof Error ? error.message : String(error)
     }`,
   );

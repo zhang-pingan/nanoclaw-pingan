@@ -109,7 +109,7 @@ function compileCase(
   const sourceText = inputs.files.get(input.raw_source_bytes_ref);
   const snapshotText = inputs.files.get(input.input_snapshot_ref);
   if (!sourceText || !snapshotText) {
-    throw new Error(`Missing additive case input: ${input.case_id}`);
+    throw new Error(`Missing working case input: ${input.case_id}`);
   }
   const snapshotArtifact = parseContractArtifactEnvelope(
     strictParseJsonBytes(Buffer.from(snapshotText, 'utf8')),
@@ -166,7 +166,7 @@ function buildBinding(
 ): JsonObject {
   const common: JsonObject = {
     format: 'icarus.workflow-compiler-g2-case-input-binding/2',
-    binding_version: '2.0.0-additive-semantic-correction',
+    binding_version: 'working-g2',
     semantic_correction_contract_ref:
       COMPILER_SEMANTIC_CORRECTION_MANIFEST_PATH,
     semantic_correction_input_manifest_ref:
@@ -244,7 +244,7 @@ export function buildSemanticCorrectionCandidate(): BuiltSemanticCorrectionCandi
   });
   const manifestWithoutHash = {
     format: 'icarus.workflow-compiler-candidate-results-manifest/2',
-    candidate_version: '2.0.0-additive-semantic-correction',
+    candidate_version: 'working-g2',
     disposition: 'actual_compiler_output_not_golden_oracle',
     compiler_toolchain_ref: G2_SEMANTIC_CORRECTION_TOOLCHAIN_PATH,
     compiler_toolchain_hash: toolchain.toolchain_hash,
@@ -255,7 +255,7 @@ export function buildSemanticCorrectionCandidate(): BuiltSemanticCorrectionCandi
       .length,
     rejected_count: results.filter((result) => result.outcome === 'rejected')
       .length,
-    expected_oracle_status: 'absent_pending_fresh_human_review',
+    expected_oracle_status: 'absent_working_not_review_candidate',
   };
   const resultsManifest = {
     ...manifestWithoutHash,
@@ -281,7 +281,10 @@ export function buildSemanticCorrectionCandidate(): BuiltSemanticCorrectionCandi
     ROOT_DOMAIN,
     {
       gate: 'G2',
-      status: 'ADDITIVE_COMPILER_CANDIDATE',
+      status: 'WORKING_COMPILER_COMPARISON',
+      construction_phase: 'WORKING',
+      publishable: false,
+      production_reachable: false,
       semantic_correction_contract_ref:
         COMPILER_SEMANTIC_CORRECTION_MANIFEST_PATH,
       semantic_correction_input_manifest_ref:
@@ -299,11 +302,12 @@ export function buildSemanticCorrectionCandidate(): BuiltSemanticCorrectionCandi
       case_count: 40,
       compiled_count: resultsManifest.compiled_count,
       rejected_count: resultsManifest.rejected_count,
-      frozen_prior_g2_root:
+      construction_seed_g2_root:
         'sha256:c78a12ffdec353d3d3ec40350aeb6676e991e92cd5d6645946d5e21fcb013a77',
-      frozen_prior_candidate_manifest:
+      construction_seed_candidate_manifest:
         'sha256:c471bcf03ea23ce2d84d5a785b026ae222ec47f7d5fd5948bb8e19c89904b1d2',
       artifact_inventory: inventory,
+      human_review_status: 'not_requested_until_prepare_rc',
       golden_semantic_review_status: 'not_run',
       approval_status: 'not_run',
       golden_seal_status: 'not_run',

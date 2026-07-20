@@ -2,7 +2,7 @@
   "format": "icarus.workflow-compiler-conformance-case-result/1",
   "case_id": "negative.runtime-safety-limit-exceeded",
   "source_kind": "graph_scope",
-  "source_hash": "sha256:7cd07deb66856aaf219c392056614c29d51119f10ba2849101c2f3a02c8952b0",
+  "source_hash": "sha256:b0c1708ecdfe276abadca71826d04d567df4735b834b7f8b4063c88f820b5b9f",
   "outcome": "rejected",
   "normalized_plan": null,
   "static_lowering_contract_ref": null,
@@ -19,5 +19,5 @@
   ],
   "proof_hashes": [],
   "program_hashes": [],
-  "result_hash": "sha256:3b359aacd451602703d6b0b2a68ad67c7ab485f9c7ea3c70adfa6d89a89f00b6"
+  "result_hash": "sha256:6788ad318eddb05584e4e136d727faad747781d0cd3bb4cf81786875c3610b63"
 }

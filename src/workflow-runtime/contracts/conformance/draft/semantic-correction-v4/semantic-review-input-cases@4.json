@@ -6,10 +6,13 @@
   },
   "version": 4,
   "domain_separator": "icarus:workflow-semantic-review-input-cases-artifact:4\n",
-  "hash": "sha256:d26adb161be66619ee7a9a5dfb1b9adc86e2194727686509d1e20d274e9091b5",
+  "hash": "sha256:76a29eb561cab8785c19ba3318f3b060b007b3ac1d30452110a6db2389b1480b",
   "payload": {
     "format": "icarus.workflow-semantic-review-input-cases/4",
-    "bundle_version": "4.0.0-additive-semantic-correction",
+    "bundle_version": "working-g2",
+    "construction_phase": "WORKING",
+    "publishable": false,
+    "production_reachable": false,
     "correction_contract_ref": "conformance/compiler-semantic-correction/contract-pack-compiler-semantic-correction.json",
     "error_catalog_ref": "conformance/compiler-semantic-correction/workflow-compiler-error-catalog@2.json",
     "case_count": 40,
@@ -84,10 +87,10 @@
           "condition_route"
         ],
         "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/positive.condition-route/source.json",
-        "raw_source_bytes_hash": "sha256:d458bfa95f27892acd18d96188a80b133973300eeafc1d0ae480dad6f8303244",
+        "raw_source_bytes_hash": "sha256:e5afdbfaf15bcd51248dd690f8d24d2c9fbe0e10462303836f0579ffd79161aa",
         "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/positive.condition-route@2.json",
         "input_snapshot_hash": "sha256:d2a9feb9d178b00f71d9d91c71d2325e016ed5191ea2c967c157273052ad78a0",
-        "expected_source_hash": "sha256:3201736015721197ff6bb1792c76968bbda6801e4678ade0aa86e6b41c6d47c8",
+        "expected_source_hash": "sha256:7d5b14038e1eb02fe552d9304a42bd7a7cd424bb211f8d7cfc13590609d8576d",
         "review_input": {
           "role": "hand_authored_review_input_not_expected_oracle",
           "expected_diagnostics": [],
@@ -123,10 +126,10 @@
           "wait"
         ],
         "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/positive.wait/source.json",
-        "raw_source_bytes_hash": "sha256:d48f310e7ee7f354eb678c160f2f81b9164ef308aaee0b4122f2ef6968d6aa58",
+        "raw_source_bytes_hash": "sha256:cb98184e425d0cea2c45945204c2c17c9f5416f2a6870940f435a2f4c99b4be1",
         "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/positive.wait@2.json",
         "input_snapshot_hash": "sha256:10315f25589412e8b9e56c3de6dd6824a8e5ff1533f014e6a3b0cda16ae966b2",
-        "expected_source_hash": "sha256:8fc136f822ab3823894d474ce1da414411f88242cb9841fc8022dbc5c5f9778f",
+        "expected_source_hash": "sha256:f4908704d8790db544897735f582d92573de18c34f5da905dc3ac5c4e0141187",
         "review_input": {
           "role": "hand_authored_review_input_not_expected_oracle",
           "expected_diagnostics": [],
@@ -159,10 +162,10 @@
           "subgraph"
         ],
         "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/positive.subgraph/source.json",
-        "raw_source_bytes_hash": "sha256:85a77d148cee807bd6c5680c54f126d9276c4936ed715e48df78cb7bf53bfba1",
+        "raw_source_bytes_hash": "sha256:1514c5978cfd1dc479a326a3efda6dbe2145914b4fba6728f57dff7048e57583",
         "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/positive.subgraph@2.json",
         "input_snapshot_hash": "sha256:d00c09c43da4a64f1477adf154c72ad18fec81889c2aa15aa80a8cd45d73c9ca",
-        "expected_source_hash": "sha256:2d18bac8d20169264de04e53cbf4969950bd6acf97ca9604c2f03878fda9cc1f",
+        "expected_source_hash": "sha256:f104e12f89a85220928c05919bf3ee4e4132df2a9a9bc113adacf7b2d65d2b80",
         "review_input": {
           "role": "hand_authored_review_input_not_expected_oracle",
           "expected_diagnostics": [],
@@ -185,10 +188,10 @@
           "expand"
         ],
         "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/positive.expand/source.json",
-        "raw_source_bytes_hash": "sha256:1dbc84279ea0ef9bbcc01be05c51e0040b57cd977836ff2789a75beabf9fb029",
+        "raw_source_bytes_hash": "sha256:ae55106db6354cf2be27e559a6e60d394b79c933a6474dcf022d9e53d0d320b5",
         "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/positive.expand@2.json",
         "input_snapshot_hash": "sha256:a8068edacab0008f9b480d24d6599628f51d670017106f9bb0fb2f466fa7dfa0",
-        "expected_source_hash": "sha256:55a3abba2ed9228b013a61e20c11896f2dab47d3756e89852b528c96c9fa6928",
+        "expected_source_hash": "sha256:dfa4d11e55f1d3f5ff37ebb83c79c2cc037718c087e0c1307d45398d132300ac",
         "review_input": {
           "role": "hand_authored_review_input_not_expected_oracle",
           "expected_diagnostics": [],
@@ -218,10 +221,10 @@
           "map"
         ],
         "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/positive.map/source.json",
-        "raw_source_bytes_hash": "sha256:717c1b178feb79f9cac383cfa2341a2185950bb8e4c108e744e78bc1e4f9e105",
+        "raw_source_bytes_hash": "sha256:cde38905b11d005b398c99d91c63a96bfaeb9c5e0036eadd5acb78ef371f10e5",
         "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/positive.map@2.json",
         "input_snapshot_hash": "sha256:c26ddd87fd2dc8fa53947810ed3c6b0f31399be93bfb6e77d765bcbe2a16bf59",
-        "expected_source_hash": "sha256:9d97684b3a1ee11373cb6997518fcfd7ee741b2153701152ef5a724f7a667cdc",
+        "expected_source_hash": "sha256:6905eb07b32d30ce16ad3a652a132e83f038edfde60f619ab3c11f8e0f280a1d",
         "review_input": {
           "role": "hand_authored_review_input_not_expected_oracle",
           "expected_diagnostics": [],
@@ -244,10 +247,10 @@
           "policy_intersection"
         ],
         "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/positive.policy-intersection/source.json",
-        "raw_source_bytes_hash": "sha256:1625fc84758bde9c364b88f2c94570c4ee96abf5abde5b3ea98db1b77f643240",
+        "raw_source_bytes_hash": "sha256:675fd0232dd501fa8dfcd3eab3d4841fba62d78a7ed592bf1a2b268f3f99cdf4",
         "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/positive.policy-intersection@2.json",
         "input_snapshot_hash": "sha256:1a5e9e831eb817a3178ccc5ab7a92e27082904b0a675780bf4794a078a4b0969",
-        "expected_source_hash": "sha256:4cfe2f41acaf3349e1e7c017c0fb9548b963f399af73182017c62a4ec62062c4",
+        "expected_source_hash": "sha256:359d8d64e06bc0fbfb1dc68655bcede3135323f3607ea7c0ba46f4dfe210e8ab",
         "review_input": {
           "role": "hand_authored_review_input_not_expected_oracle",
           "expected_diagnostics": [],
@@ -270,10 +273,10 @@
           "quality_revision_capability_binding"
         ],
         "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/positive.quality-revision-binding/source.json",
-        "raw_source_bytes_hash": "sha256:ad0357d45e4e0297478fa8f18ea4fbe437376296ec15ea44cc7969217b3532f7",
+        "raw_source_bytes_hash": "sha256:9ebf77d5a67cc3c01faf7346ec1ad77d75874d8078ed586ce98839c77c287f98",
         "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/positive.quality-revision-binding@2.json",
         "input_snapshot_hash": "sha256:85c2d974ee48e608637ad02d3abed0fb7b2b9877f738c1234be9e337214d0e84",
-        "expected_source_hash": "sha256:f603f6d4297f5a063ced60ba8058030b1533d55a12f8ce31985a0e53dae857f6",
+        "expected_source_hash": "sha256:fd0f346b6652267680c8f6f97839ce2759286f93fe2fb8eaafcd83a001acef84",
         "review_input": {
           "role": "hand_authored_review_input_not_expected_oracle",
           "expected_diagnostics": [],
@@ -299,10 +302,10 @@
           "sound_subtype_different_hash"
         ],
         "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/positive.sound-subtype-different-hash/source.json",
-        "raw_source_bytes_hash": "sha256:b99aa58a4249b2d945e745e4f65bcd59475a764ea40ce713c5259f04a599a41c",
+        "raw_source_bytes_hash": "sha256:7494cf363261d784f64194c6e3ae183ab0aec81530bca88034a6eb8bc540b223",
         "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/positive.sound-subtype-different-hash@2.json",
         "input_snapshot_hash": "sha256:725a05fa9de5dedd6483c44066ab692b0a660dbdf45931a9d1f3734b7a68c321",
-        "expected_source_hash": "sha256:0b74fba318b19525542d91c6458dac474dc75c39b214d698651b189bcf9228ae",
+        "expected_source_hash": "sha256:cab48de9afd5a07cc17078191988efe771fdff5c839f263afeb6d6fc7e62a403",
         "review_input": {
           "role": "hand_authored_review_input_not_expected_oracle",
           "expected_diagnostics": [],
@@ -325,10 +328,10 @@
           "static_child_closure"
         ],
         "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/positive.static-child-closure/source.json",
-        "raw_source_bytes_hash": "sha256:bd187256b838fe4a410e935ed3158e8e95f3d613246038d2256a918654c1db25",
+        "raw_source_bytes_hash": "sha256:95003607a882135dacd0840e64848b38d812db92a1fdf1703b161b029d6605f6",
         "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/positive.static-child-closure@2.json",
         "input_snapshot_hash": "sha256:98533b02cf2c9bd09145df9f8f294e8505a5d677e4ea11853b17a8074a69ecad",
-        "expected_source_hash": "sha256:b1d47bf6649ddd4f56393c386ff05b21a228bf6ce301c2d8a62626884d95a537",
+        "expected_source_hash": "sha256:ca57caef5754cf1cbb3453e1437e0c1ca7bc18586e23ced6326fc1e137f70540",
         "review_input": {
           "role": "hand_authored_review_input_not_expected_oracle",
           "expected_diagnostics": [],
@@ -442,10 +445,10 @@
           "schema_unknown_field"
         ],
         "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/negative.schema-unknown-field/source.json",
-        "raw_source_bytes_hash": "sha256:bc476ab08339a5be43514e863416239245fdd042e91b0998ba0d8ef5e58f5a16",
+        "raw_source_bytes_hash": "sha256:876a758b55e4be95b74b9a4d50544fd3aab8a76e7ef79328e45134e0079c7fcc",
         "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/negative.schema-unknown-field@2.json",
         "input_snapshot_hash": "sha256:0645a5c77fddaae4c48ba4a5874f5a8b244b48e65d0836da224bf8be58adf643",
-        "expected_source_hash": "sha256:ac78b9c46af8e48d7dba6de0893f6938b95d86ab1b1670a33e07dc50a5511f46",
+        "expected_source_hash": "sha256:12544f0ca94fb3c900c1f26ae91467d4310d3afb29f5a3961dc630aa958d60c7",
         "review_input": {
           "role": "hand_authored_review_input_not_expected_oracle",
           "expected_diagnostics": [
@@ -526,10 +529,10 @@
           "registry_ref_unpinned"
         ],
         "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/negative.registry-ref-unpinned/source.json",
-        "raw_source_bytes_hash": "sha256:85f3d69e7cf42bfe12d16e7e9d7b79481a784be2aeb5989cca06e3b09160c65d",
+        "raw_source_bytes_hash": "sha256:d59b468f1955e1dc7c99909a0c6cb5a03f5d1df48cce52006a0d4c41afc591ce",
         "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/negative.registry-ref-unpinned@2.json",
         "input_snapshot_hash": "sha256:d3da868bd5f090e27f9f076bc7b7e05cce45ba0ba888ac0310ea905f44dfbef3",
-        "expected_source_hash": "sha256:e6f5f57042cf7e75a7b2cf57e4ac641d9dadf012081bb0ca102d47c12461b931",
+        "expected_source_hash": "sha256:18c48ce3f7805b7f0c25a464bc21ae7ff7f12d56f70455134cda152b1db19ec9",
         "review_input": {
           "role": "hand_authored_review_input_not_expected_oracle",
           "expected_diagnostics": [
@@ -568,10 +571,10 @@
           "registry_ref_not_found"
         ],
         "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/negative.registry-ref-not-found/source.json",
-        "raw_source_bytes_hash": "sha256:5c10d61cba54c8bf3858e8e4cf4ef642089b1ff57e64eb301762747e44bc482a",
+        "raw_source_bytes_hash": "sha256:523d10fe2da3f9b2578731fb624aad1b3c993eb2c2c915e2e8016634aba48b27",
         "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/negative.registry-ref-not-found@2.json",
         "input_snapshot_hash": "sha256:71ed236bf35dbf2c6150c23d612762a1c5d5e05a22bc15fd4f2f046dead499da",
-        "expected_source_hash": "sha256:f56f279840dec3b42d29e5c223ab93440ba94c0cd426f5532afbebd9743d3553",
+        "expected_source_hash": "sha256:6bde5aa618ac36c7184ce71851d21ff819198a3e547e2a85f28a6ce957e683f2",
         "review_input": {
           "role": "hand_authored_review_input_not_expected_oracle",
           "expected_diagnostics": [
@@ -610,10 +613,10 @@
           "graph_id_duplicate"
         ],
         "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/negative.graph-id-duplicate/source.json",
-        "raw_source_bytes_hash": "sha256:d60e3bea30d45947da8d70d73725a7bb02f1acf6da82553c61375840536e2d65",
+        "raw_source_bytes_hash": "sha256:1c8ab4d75c1a34c6ddacb0bc0d25b804185e0faec3b3f68e46796656605236f7",
         "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/negative.graph-id-duplicate@2.json",
         "input_snapshot_hash": "sha256:cf1ce9d43f04086fc50e3e020b4e3a83da22dabd1704489a707a269bb715d5f5",
-        "expected_source_hash": "sha256:5192fcd23c16c7cbc707260fd3adacda1f021a7c9bdaea78db0ce27e8dcc4ea9",
+        "expected_source_hash": "sha256:1b34e0d0bbdcaf581c20f9ba78ddc16fbd8079f25ea989e8052a61b7e9e787eb",
         "review_input": {
           "role": "hand_authored_review_input_not_expected_oracle",
           "expected_diagnostics": [
@@ -652,10 +655,10 @@
           "graph_endpoint_not_found"
         ],
         "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/negative.graph-endpoint-not-found/source.json",
-        "raw_source_bytes_hash": "sha256:7d42dfc3c1ca47be79afc21dc216fe61cf42f0aa24eb15dff1f252f1c52d5fcb",
+        "raw_source_bytes_hash": "sha256:356a7bd04dae89a3752f81a3497102baf4f0db096a45ffada33e58a757fba0bc",
         "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/negative.graph-endpoint-not-found@2.json",
         "input_snapshot_hash": "sha256:867a81d37f5f3bf8fea5837b7e60d4cd1c804c2f26f2b7ede183bc41a10b4468",
-        "expected_source_hash": "sha256:e8800e77768da2bcecf16bdfbc2ad9acfc14862b6b70efcf4fee64025690f64a",
+        "expected_source_hash": "sha256:a2e845341699e6ade977e2346b581bf81e866604ab5b3d5119bad7fa4bb32feb",
         "review_input": {
           "role": "hand_authored_review_input_not_expected_oracle",
           "expected_diagnostics": [
@@ -695,10 +698,10 @@
           "cross_scope_syntax_absent"
         ],
         "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/negative.graph-cross-scope-edge/source.json",
-        "raw_source_bytes_hash": "sha256:c6db17673ef1d5e7c66ac83d09f925ca9793ba73d5eed3ae1d52583f93c8cb19",
+        "raw_source_bytes_hash": "sha256:bccb8606f5322e3c54ee95f160bfd78b99f3d3019c04a04eac64954cb35d236c",
         "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/negative.graph-cross-scope-edge@2.json",
         "input_snapshot_hash": "sha256:4b539937420e03ed21a415c381870f89c4a34dfcfa03d6a0bfe5fd2d7d5f20e5",
-        "expected_source_hash": "sha256:9ce4d7de5979f274f627ec7e1c3f60ed61e4294095c314aacfeb02cb1ff34b67",
+        "expected_source_hash": "sha256:699a89ed4a87f86d59d679a1be30c0619d74adbe8696446b451d299ee5a49529",
         "review_input": {
           "role": "hand_authored_review_input_not_expected_oracle",
           "expected_diagnostics": [
@@ -737,10 +740,10 @@
           "graph_dependency_cycle"
         ],
         "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/negative.graph-dependency-cycle/source.json",
-        "raw_source_bytes_hash": "sha256:17436cceced05691ebce9e54ed56bdae6464de5436b383410aab067c097610a5",
+        "raw_source_bytes_hash": "sha256:d6eacdfa648a421231d3836a6618f789da839625e773b33fc27895a50ee44aa5",
         "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/negative.graph-dependency-cycle@2.json",
         "input_snapshot_hash": "sha256:e36d99a03fe4e84047c4af35ef51c7b9c4ffeee2366d7646f5c8613e086fb397",
-        "expected_source_hash": "sha256:e5f3140498e21fa32df7b5465b282be38083a90d621918db0e342ee187bc7dc3",
+        "expected_source_hash": "sha256:1cdbfd4a9d67974f38cf1a952043c278bf8a4b11874407ead4c2e024e9091b63",
         "review_input": {
           "role": "hand_authored_review_input_not_expected_oracle",
           "expected_diagnostics": [
@@ -779,10 +782,10 @@
           "condition_type_mismatch"
         ],
         "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/negative.condition-type-mismatch/source.json",
-        "raw_source_bytes_hash": "sha256:2f59afe5b3d55fc04054c6a0d4bbefa6ded78b74791d5d3937a2a44f72591d32",
+        "raw_source_bytes_hash": "sha256:c4514dd6ba73b7f25fb677d89a75d5d296e1a6067797b003981ffeae862f0e81",
         "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/negative.condition-type-mismatch@2.json",
         "input_snapshot_hash": "sha256:bc8e89513d7210ef58e4495fe4c8a2e82022a64ac1e6c573366d2a96a0817a78",
-        "expected_source_hash": "sha256:ee24d0b92beeccdae5199a938725bc10230bbfac8d59d033088992b640bc03c5",
+        "expected_source_hash": "sha256:c2e4862348fcac76596454e38bff0f960ff227a33d36a7a242cbbf34118b17d5",
         "review_input": {
           "role": "hand_authored_review_input_not_expected_oracle",
           "expected_diagnostics": [
@@ -821,10 +824,10 @@
           "condition_complexity_exceeded"
         ],
         "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/negative.condition-complexity-exceeded/source.json",
-        "raw_source_bytes_hash": "sha256:cb7ed34e45de388c3f555026d8f3ea866f7b0930af637588da09a66a9a32a798",
+        "raw_source_bytes_hash": "sha256:3f826dc323d04beafe2457894460b0485c7fff1b276a11f40bbff7376259066f",
         "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/negative.condition-complexity-exceeded@2.json",
         "input_snapshot_hash": "sha256:96564069f96cad342bf5279d1bda0ce261118ba7a81505e133b9590f1ffe5f8d",
-        "expected_source_hash": "sha256:a8382c1af9a4f6c32c00513011513db55300297347a60989ff23235a8024477e",
+        "expected_source_hash": "sha256:b12a9601d4990268193c7d07ce1efa9f50bc990f365678f15a58c4bd6a1c3a05",
         "review_input": {
           "role": "hand_authored_review_input_not_expected_oracle",
           "expected_diagnostics": [
@@ -863,10 +866,10 @@
           "json_pointer_non_total"
         ],
         "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/negative.json-pointer-non-total/source.json",
-        "raw_source_bytes_hash": "sha256:018e79f40d6cd11879cd1b620466b2f2484179617d5a4c184ea788b9559f9849",
+        "raw_source_bytes_hash": "sha256:38117236d671e9145a2b79d85bb7853d6e574ffc51fb48f7aa8fc1e6b49595ec",
         "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/negative.json-pointer-non-total@2.json",
         "input_snapshot_hash": "sha256:a9c6828f19126abaff7a7415fbaa7d0ebd4bf2f11f98a3d7ae0b773523d0a720",
-        "expected_source_hash": "sha256:1500a7034f1c2c063c80379812d555f761867f4a738cfb3afcb2e184d22e7418",
+        "expected_source_hash": "sha256:2cab041abf3cd79892057d43be92edfcfe1a9438a5dca3663f4bbd43c6c4c5db",
         "review_input": {
           "role": "hand_authored_review_input_not_expected_oracle",
           "expected_diagnostics": [
@@ -905,10 +908,10 @@
           "schema_not_assignable"
         ],
         "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/negative.schema-not-assignable/source.json",
-        "raw_source_bytes_hash": "sha256:18868dccadfcda81e645ba786f3a8c77ab3aea43e518681361a3927487d7d17e",
+        "raw_source_bytes_hash": "sha256:dc3e83f1a4bf7f3ef60fff7a9565541c91523df02ad49c303f1c03f63d207cca",
         "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/negative.schema-not-assignable@2.json",
         "input_snapshot_hash": "sha256:8b2cca505a0cc3fb0a0639add4775bebdf7072b44caee503d3fd98221ff90f23",
-        "expected_source_hash": "sha256:6d12f99d3f5f7bf8cbe23dfd8edf727ac5bdb91110e23c5388b0ee53554055f7",
+        "expected_source_hash": "sha256:7c3fac48ca5f46ba6109250b14724044a9079ba1fb7d3e2c73506b6f2046aa5e",
         "review_input": {
           "role": "hand_authored_review_input_not_expected_oracle",
           "expected_diagnostics": [
@@ -947,10 +950,10 @@
           "route_group_ambiguous"
         ],
         "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/negative.route-group-ambiguous/source.json",
-        "raw_source_bytes_hash": "sha256:0a0307ac507a37f012e3d2d9213bdcc67cb3c4d984b2d5daa25e161cf43ab937",
+        "raw_source_bytes_hash": "sha256:ead93010823d1a2a091066d8af0b3bf3b301669f37b64975b8ff62fff9991ccc",
         "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/negative.route-group-ambiguous@2.json",
         "input_snapshot_hash": "sha256:c6612efc056d9e7b194e1f8ac899f711ca1bf277a4b21caefbad8c9c941bab65",
-        "expected_source_hash": "sha256:8135b7b17d5ee64f47c28b23b68c6b0f3e8fe45c4d289cd342076eef2469e3a5",
+        "expected_source_hash": "sha256:7017b4093cac89e3b18bcc95fd3bb273c253408c5f794846868371ee10210d5e",
         "review_input": {
           "role": "hand_authored_review_input_not_expected_oracle",
           "expected_diagnostics": [
@@ -989,10 +992,10 @@
           "trigger_contract_invalid"
         ],
         "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/negative.trigger-contract-invalid/source.json",
-        "raw_source_bytes_hash": "sha256:231cdee1fc0af13069e724bbb256497786ce7e37077370fac89ca8e0d75eae40",
+        "raw_source_bytes_hash": "sha256:9ff3ff71fd019c9ed98644aa09f194341d91e08dca0a3bb2ad3ee634d18ecb06",
         "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/negative.trigger-contract-invalid@2.json",
         "input_snapshot_hash": "sha256:bf64f3950ea633e53d4ed833a63ed942212b874c89547e089fab2a07815bca61",
-        "expected_source_hash": "sha256:bab699c319e46845fbb30de767811b4dce1810a2c90bdf490cfb2b33ecaf29b2",
+        "expected_source_hash": "sha256:c5ecd6a5dae9c782f1e53c8ae9548d93e3d6431127d458cf3985065bc7c6742d",
         "review_input": {
           "role": "hand_authored_review_input_not_expected_oracle",
           "expected_diagnostics": [
@@ -1031,10 +1034,10 @@
           "completion_contract_invalid"
         ],
         "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/negative.completion-contract-invalid/source.json",
-        "raw_source_bytes_hash": "sha256:84a86149e0c6624b4ec421d29ea5a96474fba800cbb737422347f10633ca48c7",
+        "raw_source_bytes_hash": "sha256:3cb7bb9aa5ef9286eb642935a948150d25f2a1a16231712137153f2b8beb05a0",
         "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/negative.completion-contract-invalid@2.json",
         "input_snapshot_hash": "sha256:3f6a41b121662780e24bcb360581df89bb373dc4d4cef6fb6c8f2785c3a29c30",
-        "expected_source_hash": "sha256:082c903f785a158457ea1ecc72d796a3a041711ee772daf3a8fd47ea36f17e21",
+        "expected_source_hash": "sha256:ad88875226e4edc000e625a4c5ec2204febaab52bd49954897acdefbfc58a4f4",
         "review_input": {
           "role": "hand_authored_review_input_not_expected_oracle",
           "expected_diagnostics": [
@@ -1073,10 +1076,10 @@
           "early_completion_non_monotone"
         ],
         "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/negative.early-completion-non-monotone/source.json",
-        "raw_source_bytes_hash": "sha256:f6d14206b89a794f892629e2a7132fd27ed65ce6e44121f2a910a28e159dcd3a",
+        "raw_source_bytes_hash": "sha256:6f20c172d4dcbf7e72c7b088a7b1b8bfa745f9713fcc522fc7ef15e95f35c989",
         "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/negative.early-completion-non-monotone@2.json",
         "input_snapshot_hash": "sha256:7edc1d96491f3bb2ae9549023199d48a31b25a5252968949b11a616cf139cf1c",
-        "expected_source_hash": "sha256:4e89e35b580eba30d9bb7a2dbcd9a95cb6952142933b7916e041c3f1051a7617",
+        "expected_source_hash": "sha256:44533623b2e13136c08f6c550c902c9fa2f6fd4b394721393b4f1c96cbde6e6f",
         "review_input": {
           "role": "hand_authored_review_input_not_expected_oracle",
           "expected_diagnostics": [
@@ -1115,10 +1118,10 @@
           "compiler_integrity_matching_control"
         ],
         "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/positive.compiler-integrity-match-control/source.json",
-        "raw_source_bytes_hash": "sha256:3fd14b979a61d33505eab8708771f3b8db9ec879e88708d6431ea8ce6c9a3951",
+        "raw_source_bytes_hash": "sha256:481cdf19686ef9646d45c111b2a8710be5c2cb3be964b535abf895e2ca227436",
         "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/positive.compiler-integrity-match-control@2.json",
         "input_snapshot_hash": "sha256:ac4ffffba5095d6211a8a944271dd43bf5ef2efad9873b10e389bbc6dbeb3440",
-        "expected_source_hash": "sha256:ca9c684a9c50f632fc7a3742453c213fb477bb6f95e6a2bbba5682b82c155b68",
+        "expected_source_hash": "sha256:7cb87c873b654914c44225be5cdcebc742bd49c459071701892e072eadd0599c",
         "review_input": {
           "role": "hand_authored_review_input_not_expected_oracle",
           "expected_diagnostics": [],
@@ -1141,10 +1144,10 @@
           "capability_not_allowed"
         ],
         "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/negative.capability-not-allowed/source.json",
-        "raw_source_bytes_hash": "sha256:3f4409c72d553b304b6ba3f7aad809e64619bc3640ddd90d1f491cbfcd02e9d0",
+        "raw_source_bytes_hash": "sha256:c44ab22e8485ac45bd115450ccba0a2eb4c3883cb9bb36f34320e95559babaa2",
         "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/negative.capability-not-allowed@2.json",
         "input_snapshot_hash": "sha256:02579a06228612a22f2c559947a6f24165f3e546ffdccf7348d8af46b6cc00b4",
-        "expected_source_hash": "sha256:f2dcad4a01eeef562f820042a47d41cec0b0b941a47d44bac5f362c46860a6b2",
+        "expected_source_hash": "sha256:2d19e62d7e09bddbcdbe5f95cdbbe7a4dac080974fe90594800959cbba959d82",
         "review_input": {
           "role": "hand_authored_review_input_not_expected_oracle",
           "expected_diagnostics": [
@@ -1183,10 +1186,10 @@
           "policy_escalation"
         ],
         "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/negative.policy-escalation/source.json",
-        "raw_source_bytes_hash": "sha256:e462312374feb35da9df7ca2627188a6caa6e94dca960269daaefdaebf1ac0ad",
+        "raw_source_bytes_hash": "sha256:4ebe79099cd5c7e3c4868c02495d747e61d21b85c68f8769356bf9d7620c8582",
         "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/negative.policy-escalation@2.json",
         "input_snapshot_hash": "sha256:3314fc424eb4ba0dbb587ad2e0208290d3eb25f04120dbfd00788df79c44d8b2",
-        "expected_source_hash": "sha256:9e69bc7f98fce5c61710be24c6a1d2753077b07c8d71fdc2f8967b40202e26fe",
+        "expected_source_hash": "sha256:5db40d0fd2f627aa750d67e47025b5748c0f98dd4d1f2f00701dc1ed4f317edd",
         "review_input": {
           "role": "hand_authored_review_input_not_expected_oracle",
           "expected_diagnostics": [
@@ -1226,10 +1229,10 @@
           "quality_revision_missing_feedback_schema"
         ],
         "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/negative.quality-revision-missing-feedback-schema/source.json",
-        "raw_source_bytes_hash": "sha256:04a77810e6cfac0a9556a5f542a2d83914f92c93f6af14bf40889d0aedbd4045",
+        "raw_source_bytes_hash": "sha256:b01039c59ef3023a97bb277bfa04df4004774e7a1bc2044936d349d44bcaa41e",
         "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/negative.quality-revision-missing-feedback-schema@2.json",
         "input_snapshot_hash": "sha256:d464d3b50a64e2249a81694b2672dfdd143e046531364730f8ff3d769a06834d",
-        "expected_source_hash": "sha256:f3de3c9d0b4aa7848f4b2d42430054130198dde7c3045ae9db68a8521742a814",
+        "expected_source_hash": "sha256:69842347a51d75ced284eab93b025000d156925abcd08e65f309269ae10ceff8",
         "review_input": {
           "role": "hand_authored_review_input_not_expected_oracle",
           "expected_diagnostics": [
@@ -1268,10 +1271,10 @@
           "quality_revision_effect_key_incompatible"
         ],
         "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/negative.quality-revision-effect-key-incompatible/source.json",
-        "raw_source_bytes_hash": "sha256:7b260aeebca87c6174655e15db0d71d4f394f9b203ac10afde24e99ed3eb4466",
+        "raw_source_bytes_hash": "sha256:4618a8ce3038ff55575e68af108edf3e6d1eaf8b0827652726820f295a33bcf2",
         "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/negative.quality-revision-effect-key-incompatible@2.json",
         "input_snapshot_hash": "sha256:e221c99da35e05a6a387af47cd7716f2d3f539f8237a4b3bf7481fbb2e8a6af7",
-        "expected_source_hash": "sha256:6f6b2cb62b88d61563d8b969d3a6974ac38deb456e1c0c5dea0c9e8a3238778c",
+        "expected_source_hash": "sha256:f12c99e9b7132048dd4baca8cddcc1a3d0f03a3f69b4bbe1535e9884fd2bc913",
         "review_input": {
           "role": "hand_authored_review_input_not_expected_oracle",
           "expected_diagnostics": [
@@ -1394,10 +1397,10 @@
           "runtime_safety_limit_exceeded"
         ],
         "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/negative.runtime-safety-limit-exceeded/source.json",
-        "raw_source_bytes_hash": "sha256:0d5bbf5010b38f8be71a5309cad5a9fd7448fff89cdf35a8fb6ed115f10fbace",
+        "raw_source_bytes_hash": "sha256:5dfe6cf019131213a304f30b19e1933ca2670327bdab4e720c5feb91acc9dcaf",
         "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/negative.runtime-safety-limit-exceeded@2.json",
         "input_snapshot_hash": "sha256:74780936e9f9c5de5d09b578fb75ec877ddb2c351c7d231427709948f857240e",
-        "expected_source_hash": "sha256:7cd07deb66856aaf219c392056614c29d51119f10ba2849101c2f3a02c8952b0",
+        "expected_source_hash": "sha256:b0c1708ecdfe276abadca71826d04d567df4735b834b7f8b4063c88f820b5b9f",
         "review_input": {
           "role": "hand_authored_review_input_not_expected_oracle",
           "expected_diagnostics": [
@@ -1436,10 +1439,10 @@
           "compiler_integrity_mismatch"
         ],
         "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/negative.compiler-integrity-mismatch/source.json",
-        "raw_source_bytes_hash": "sha256:3fd14b979a61d33505eab8708771f3b8db9ec879e88708d6431ea8ce6c9a3951",
+        "raw_source_bytes_hash": "sha256:481cdf19686ef9646d45c111b2a8710be5c2cb3be964b535abf895e2ca227436",
         "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/negative.compiler-integrity-mismatch@2.json",
         "input_snapshot_hash": "sha256:3638cfafa54f79e68ad3b1f1448139120d225d35faf91fb498df456d8d8dad0f",
-        "expected_source_hash": "sha256:ca9c684a9c50f632fc7a3742453c213fb477bb6f95e6a2bbba5682b82c155b68",
+        "expected_source_hash": "sha256:7cb87c873b654914c44225be5cdcebc742bd49c459071701892e072eadd0599c",
         "review_input": {
           "role": "hand_authored_review_input_not_expected_oracle",
           "expected_diagnostics": [
@@ -1486,10 +1489,10 @@
           "quality_revision_missing_quality_gate"
         ],
         "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/negative.quality-revision-missing-quality-gate/source.json",
-        "raw_source_bytes_hash": "sha256:51df8b28d9544d00298d83aaf3859a138744f97523b7bfacf35b20f31a4c8c96",
+        "raw_source_bytes_hash": "sha256:beb23549193eda9f4d71d532202b0549c2176edc7258ad431b1317165f65bc69",
         "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/negative.quality-revision-missing-quality-gate@2.json",
         "input_snapshot_hash": "sha256:ee089bffb360ab10920d9c32a05cfe8df5d6fcda22c1785db4f3c6c5e582add9",
-        "expected_source_hash": "sha256:02fb279d617e97e198c7c9f0fa5fd335f5c643cefab259f54805a1fbf987d19e",
+        "expected_source_hash": "sha256:4b2521af8051d1e3011df039eaeeb6d69eb4ff8c8dc9fb45e8c662bd60bcbd05",
         "review_input": {
           "role": "hand_authored_review_input_not_expected_oracle",
           "expected_diagnostics": [
@@ -1609,7 +1612,7 @@
     ],
     "expected_full_case_result_bytes_authored": 0,
     "human_judgment_coverage": 0,
-    "fresh_review_status": "pending_40_of_40",
+    "review_status": "not_requested_until_prepare_rc",
     "golden_semantic_review_status": "not_run",
     "approval_status": "not_run",
     "golden_seal_status": "not_run",

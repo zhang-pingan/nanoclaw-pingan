@@ -35,11 +35,6 @@ const CANDIDATE_ROOT_PATH = `${CANDIDATE_ROOT}/contract-pack-g2-semantic-correct
 const TOOLCHAIN_PATH = `${CANDIDATE_ROOT}/workflow-compiler-toolchain@3.json`;
 const BINDING_PATH = `${CANDIDATE_ROOT}/g2-case-input-binding@2.json`;
 const RESULTS_MANIFEST_PATH = `${CANDIDATE_ROOT}/candidate-results-manifest@2.json`;
-const HISTORICAL_DRAFT_V3_PATH =
-  'conformance/draft/resolved-g2/golden-draft-manifest@3.json';
-const HISTORICAL_DRAFT_V3_HASH =
-  'sha256:659caf9b4add7027116bf780c83b2b85dc95ca0baae9cb8b9840d760a785132b';
-
 const RESULT_DOMAIN = 'icarus:workflow-compiler-conformance-case-result:1\n';
 const RAW_SOURCE_DOMAIN = 'icarus:workflow-semantic-correction-raw-source:1\n';
 const TOOLCHAIN_DOMAIN = 'icarus:workflow-compiler-toolchain-manifest:1\n';
@@ -164,10 +159,6 @@ interface LoadedDraftInputs {
 
 function loadInputs(): LoadedDraftInputs {
   const contract = checkCompilerSemanticCorrectionContract();
-  const historicalDraft = readArtifact(HISTORICAL_DRAFT_V3_PATH);
-  if (historicalDraft.hash !== HISTORICAL_DRAFT_V3_HASH) {
-    throw new SemanticCorrectionDraftError('Historical Draft v3 drift');
-  }
   const inputCatalog = readArtifact(INPUT_CATALOG_PATH);
   const inputManifest = readArtifact(INPUT_MANIFEST_PATH);
   const candidateRoot = readArtifact(CANDIDATE_ROOT_PATH);
@@ -180,7 +171,7 @@ function loadInputs(): LoadedDraftInputs {
     inputManifest.payload.case_count !== 40 ||
     inputManifest.payload.per_case_snapshot_count !== 40
   ) {
-    throw new SemanticCorrectionDraftError('Additive input manifest drift');
+    throw new SemanticCorrectionDraftError('Working input manifest drift');
   }
   if (
     candidateRoot.payload.semantic_correction_input_manifest_ref !==
@@ -199,7 +190,7 @@ function loadInputs(): LoadedDraftInputs {
     candidateRoot.payload.candidate_disposition !==
       'actual_compiler_output_not_golden_oracle'
   ) {
-    throw new SemanticCorrectionDraftError('Additive candidate root drift');
+    throw new SemanticCorrectionDraftError('Working candidate root drift');
   }
   if (
     hashWithoutField(toolchain, 'toolchain_hash', TOOLCHAIN_DOMAIN) !==
@@ -212,7 +203,7 @@ function loadInputs(): LoadedDraftInputs {
       RESULTS_MANIFEST_DOMAIN,
     ) !== resultsManifest.manifest_hash
   ) {
-    throw new SemanticCorrectionDraftError('Additive candidate hash drift');
+    throw new SemanticCorrectionDraftError('Working candidate hash drift');
   }
   const exactIdentity: JsonObject = Object.fromEntries(
     COMPILER_EXACT_IDENTITY_FIELDS_V2.map((field) => {
@@ -345,7 +336,7 @@ function buildCasesArtifact(
         result_raw_bytes_hash: result.result_raw_bytes_hash,
       },
       expected_golden_oracle: {
-        status: 'pending_fresh_independent_human_semantic_review',
+        status: 'not_authored_working_not_review_candidate',
         expected_case_result_bytes_ref: null,
         expected_case_result_hash: null,
         expected_source_hash: null,
@@ -355,16 +346,17 @@ function buildCasesArtifact(
         expected_diagnostics: null,
       },
       review_owner: 'human:local-owner',
-      review_status: 'pending_fresh_independent_human_semantic_review',
+      review_status: 'not_requested_until_prepare_rc',
       human_judgment: null,
     };
   });
   const withoutHash: JsonObject = {
     format: 'icarus.workflow-compiler-golden-draft-cases/4',
-    bundle_version: '4.0.0-additive-semantic-correction',
-    draft_status: 'published_pending_fresh_independent_human_review',
-    historical_resolved_draft_v3_ref: HISTORICAL_DRAFT_V3_PATH,
-    historical_resolved_draft_v3_hash: HISTORICAL_DRAFT_V3_HASH,
+    bundle_version: 'working-g2',
+    construction_phase: 'WORKING',
+    publishable: false,
+    production_reachable: false,
+    draft_status: 'working_not_review_candidate',
     semantic_correction_contract_ref:
       COMPILER_SEMANTIC_CORRECTION_MANIFEST_PATH,
     semantic_correction_contract_hash: inputs.contract.hash,
@@ -375,19 +367,18 @@ function buildCasesArtifact(
     exact_compiler_identity: inputs.exactIdentity,
     candidate_output_disposition: 'actual_compiler_output_not_golden_oracle',
     review_input_disposition: 'hand_authored_semantic_review_input',
-    expected_oracle_disposition:
-      'all_null_pending_fresh_independent_human_semantic_review',
+    expected_oracle_disposition: 'all_null_working_not_review_candidate',
     case_count: 40,
     positive_case_count: 11,
     negative_case_count: 29,
     human_judgment_coverage: 0,
-    fresh_review_status: 'pending_40_of_40',
+    review_status: 'not_requested_until_prepare_rc',
     cases,
   };
   return artifact(
     'icarus.workflow-compiler-golden-draft-cases/4',
     'icarus.workflow-compiler-golden-draft-cases',
-    '4.0.0',
+    '4.0.0-working',
     CASES_DOMAIN,
     {
       ...withoutHash,
@@ -409,20 +400,22 @@ function buildHandoffArtifact(
       actual_candidate_result_hash: entry.actual_compiler_candidate.result_hash,
       expected_golden_oracle_pointer: `/cases/${index}/expected_golden_oracle`,
       review_owner: 'human:local-owner',
-      review_status: 'pending_fresh_independent_human_semantic_review',
+      review_status: 'not_requested_until_prepare_rc',
       human_judgment: null,
     };
   });
   const withoutHash: JsonObject = {
     format: 'icarus.workflow-compiler-semantic-review-handoff/2',
-    handoff_version: '2.0.0-additive-semantic-correction',
+    handoff_version: 'working-g2',
+    construction_phase: 'WORKING',
+    publishable: false,
     cases_ref: SEMANTIC_CORRECTION_DRAFT_CASES_PATH,
     cases_hash: casesArtifact.hash,
     review_owner: 'human:local-owner',
-    review_scope: 'fresh_independent_review_of_all_40_cases',
-    review_decision_status: 'pending_not_recorded',
+    review_scope: 'not_requested_until_prepare_rc',
+    review_decision_status: 'not_requested_working',
     human_judgment_coverage: 0,
-    pending_case_count: 40,
+    pending_case_count: 0,
     golden_semantic_review_record_ref: null,
     approval_status: 'not_run',
     golden_seal_status: 'not_run',
@@ -433,7 +426,7 @@ function buildHandoffArtifact(
   return artifact(
     'icarus.workflow-compiler-semantic-review-handoff/2',
     'icarus.workflow-compiler-semantic-review-handoff',
-    '2.0.0',
+    '2.0.0-working',
     HANDOFF_DOMAIN,
     {
       ...withoutHash,
@@ -463,14 +456,15 @@ function buildInventoryArtifact(
     .sort((left, right) => String(left.path).localeCompare(String(right.path)));
   const withoutHash: JsonObject = {
     format: 'icarus.workflow-compiler-semantic-correction-draft-inventory/2',
-    inventory_version: '2.0.0-additive-semantic-correction',
+    inventory_version: 'working-g2',
+    construction_phase: 'WORKING',
     entry_count: entries.length,
     entries,
   };
   return artifact(
     'icarus.workflow-compiler-semantic-correction-draft-inventory/2',
     'icarus.workflow-compiler-semantic-correction-draft-inventory',
-    '2.0.0',
+    '2.0.0-working',
     INVENTORY_DOMAIN,
     {
       ...withoutHash,
@@ -487,10 +481,13 @@ function buildManifestArtifact(
 ): ContractArtifactEnvelope {
   const withoutHash: JsonObject = {
     format: 'icarus.workflow-compiler-golden-draft-manifest/4',
-    bundle_version: '4.0.0-additive-semantic-correction',
+    bundle_version: 'working-g2',
     gate: 'G2',
     gate_status: 'IN_PROGRESS',
-    draft_status: 'published_pending_fresh_independent_human_review',
+    construction_phase: 'WORKING',
+    publishable: false,
+    production_reachable: false,
+    draft_status: 'working_not_review_candidate',
     cases_ref: SEMANTIC_CORRECTION_DRAFT_CASES_PATH,
     cases_hash: cases.hash,
     semantic_review_handoff_ref: SEMANTIC_CORRECTION_DRAFT_HANDOFF_PATH,
@@ -507,14 +504,12 @@ function buildManifestArtifact(
     candidate_results_manifest_ref: RESULTS_MANIFEST_PATH,
     candidate_results_manifest_hash: inputs.resultsManifest.manifest_hash,
     exact_compiler_identity: inputs.exactIdentity,
-    historical_resolved_draft_v3_ref: HISTORICAL_DRAFT_V3_PATH,
-    historical_resolved_draft_v3_hash: HISTORICAL_DRAFT_V3_HASH,
     actual_candidate_output_status: 'bound_review_comparison_only',
-    review_input_status: 'published_pending_fresh_human_review',
+    review_input_status: 'working_not_submitted_for_review',
     expected_golden_oracle_status: 'all_null',
     expected_full_case_result_bytes_authored: 0,
     human_judgment_coverage: 0,
-    pending_case_count: 40,
+    pending_case_count: 0,
     golden_semantic_review_status: 'not_run',
     approval_status: 'not_run',
     golden_seal_status: 'not_run',
@@ -532,7 +527,7 @@ function buildManifestArtifact(
   return artifact(
     'icarus.workflow-compiler-golden-draft-manifest/4',
     'icarus.workflow-compiler-golden-draft-manifest',
-    '4.0.0',
+    '4.0.0-working',
     MANIFEST_DOMAIN,
     {
       ...withoutHash,

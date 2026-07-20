@@ -6,10 +6,10 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-compiler-semantic-correction-contract-artifact:1\n",
-  "hash": "sha256:581231f568ae38f8c42320501667e5968b47bbf67e257c6005b51ff79bbd851a",
+  "hash": "sha256:efce5907c2659ef8caef281fb19c149672ac801bccca2ccb7696c2b123b8e327",
   "payload": {
     "gate": "G2",
-    "correction_kind": "additive_semantic_correction",
+    "correction_kind": "working_semantic_correction",
     "source_ir_contract": {
       "format": "icarus.workflow-graph-scope/1",
       "endpoint_model": "ordinary_scope_local_node_id_only",
@@ -58,23 +58,29 @@
       "payload": "definition_without_definition_hash",
       "placeholder_hash_allowed": false
     },
-    "additive_publication": {
+    "construction_lifecycle": {
+      "phase": "WORKING",
+      "mutable_current_artifacts": true,
+      "publishable": false,
+      "production_reachable": false,
+      "history_owner": "git_and_review_worksheet",
       "corrected_case_count": 40,
       "per_case_isolated_snapshot_required": true,
       "actual_candidate_role": "actual_compiler_output_not_golden_oracle",
-      "expected_oracle_status": "all_null_pending_fresh_human_review",
-      "draft_v1_v2_v3_mutation": "forbidden",
-      "existing_candidate_mutation": "forbidden",
+      "expected_oracle_status": "all_null_working_not_review_candidate",
+      "human_review_status": "not_requested_until_prepare_rc",
+      "prepare_rc_precondition": "all_known_findings_fixed_current_checks_green_and_boundary_clean",
+      "rc_invalidation": "any_bound_identity_change_returns_to_working",
       "golden_semantic_review": "not_run",
       "approval": "not_run",
       "golden_seal": "not_run",
       "sealed_write": "not_run",
       "g3_through_g9": "not_started"
     },
-    "spec_section_heading": "### R-017：G2 Additive Semantic Correction 决议",
-    "spec_section_raw_sha256": "sha256:d200ea5c8d15e18239706537643089d40e6076f846bf603b07cbebbd9e93946b",
-    "spec_section_semantic_hash": "sha256:f0881ca12f5b612139e081a29a2b141e363c7279f062d79996d4bfc1199d5726",
-    "frozen_inputs": {
+    "spec_section_heading": "### R-017：G2 Working Semantic Correction 决议",
+    "spec_section_raw_sha256": "sha256:d492ebb8ceacf511b12d24c5cf6397bd98ea88c7ad74002396a82cb0eb9b6aac",
+    "spec_section_semantic_hash": "sha256:a922802f22cff3a86a1c9d6007e159762446fbcc71d037f534cc61eb75a1ae19",
+    "construction_seed_inputs": {
       "r016_root": "sha256:776d516ba6c8c73a7da33895a4f4f3680054a1e93fbf056acdfc3ec36550b324",
       "g2_compiler_root": "sha256:c78a12ffdec353d3d3ec40350aeb6676e991e92cd5d6645946d5e21fcb013a77",
       "g2_candidate_manifest": "sha256:c471bcf03ea23ce2d84d5a785b026ae222ec47f7d5fd5948bb8e19c89904b1d2",

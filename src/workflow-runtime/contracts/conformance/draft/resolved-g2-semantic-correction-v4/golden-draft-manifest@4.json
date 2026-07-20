@@ -2,31 +2,34 @@
   "format": "icarus.workflow-compiler-golden-draft-manifest/4",
   "ref": {
     "id": "icarus.workflow-compiler-golden-draft-manifest",
-    "version": "4.0.0"
+    "version": "4.0.0-working"
   },
   "version": 4,
   "domain_separator": "icarus:workflow-compiler-semantic-correction-golden-draft-manifest:4\n",
-  "hash": "sha256:6155b5e78fba2ff2987ea4795b1a0c7bc520125292821943d13199d105b07f4b",
+  "hash": "sha256:90cde6d43923b6f1c09d044438fc0697492289def4c2111eaf03cdf4e2c5e007",
   "payload": {
     "format": "icarus.workflow-compiler-golden-draft-manifest/4",
-    "bundle_version": "4.0.0-additive-semantic-correction",
+    "bundle_version": "working-g2",
     "gate": "G2",
     "gate_status": "IN_PROGRESS",
-    "draft_status": "published_pending_fresh_independent_human_review",
+    "construction_phase": "WORKING",
+    "publishable": false,
+    "production_reachable": false,
+    "draft_status": "working_not_review_candidate",
     "cases_ref": "conformance/draft/resolved-g2-semantic-correction-v4/golden-draft-cases@4.json",
-    "cases_hash": "sha256:2ffcee41a44a2d6d1d7fd3abc421973ccb0c7badbd874b11803936ae7453ba75",
+    "cases_hash": "sha256:c5b4fef4100ed6311775e135b6b072090dcb73ad2592c5188211f713bb9ac8ec",
     "semantic_review_handoff_ref": "conformance/draft/resolved-g2-semantic-correction-v4/semantic-review-handoff@2.json",
-    "semantic_review_handoff_hash": "sha256:b33dea9f05f55067c7b0eb599b189e4e681e8b21ee26f6413d74e5bc72accdf7",
+    "semantic_review_handoff_hash": "sha256:78f7641c1a301e89023ece9e534c967934fb00747e94a44cffeded56e0180fdc",
     "artifact_inventory_ref": "conformance/draft/resolved-g2-semantic-correction-v4/artifact-inventory@2.json",
-    "artifact_inventory_hash": "sha256:6aaac8162d3c7c9599cfed3043671bed5b1e13e4d1558abc4b63891fcd02a976",
+    "artifact_inventory_hash": "sha256:c96967efd9edf991cd44d64d8b0f5d162c085567ad6fcb283e02c123b9490797",
     "semantic_correction_contract_ref": "conformance/compiler-semantic-correction/contract-pack-compiler-semantic-correction.json",
-    "semantic_correction_contract_hash": "sha256:5211d9b655d047c75ffbcbae7d9f70126ba4bccbdc6dffec04e7f3f8435bb5b1",
+    "semantic_correction_contract_hash": "sha256:8f0f6e397cfe64a619027abfb8cd341322928ad70a6217b4aafedc5c01eb5f79",
     "semantic_correction_input_manifest_ref": "conformance/draft/semantic-correction-v4/semantic-correction-input-manifest@1.json",
-    "semantic_correction_input_manifest_hash": "sha256:01ae1b52c6ed3b7423e2f0bda70e72f8e678d96c5ae558e64a960558fbf5ad0e",
+    "semantic_correction_input_manifest_hash": "sha256:387fab5a004f061204a926a00c31845c257b15bd4fc2faac6c02dcf2fd96599a",
     "candidate_root_ref": "conformance/candidate/g2-semantic-correction-v2/contract-pack-g2-semantic-correction-candidate.json",
-    "candidate_root_hash": "sha256:afd726dee7150a32e64765781790ccdec49bcd675230d54bccb283ff0467d5eb",
+    "candidate_root_hash": "sha256:302b2acff6bf5b97d010fdd7006dca949caa2361b5778e1928b46e584088617d",
     "candidate_results_manifest_ref": "conformance/candidate/g2-semantic-correction-v2/candidate-results-manifest@2.json",
-    "candidate_results_manifest_hash": "sha256:61ded7c9032ae2a6ec31610b95f89d16711d9113de069391034068a19a790654",
+    "candidate_results_manifest_hash": "sha256:e29cb5a6aa84e07e2e2af6ed7874736848a5d4d3b81306663cf9a4cabf13ec97",
     "exact_compiler_identity": {
       "compiler_toolchain_manifest_ref": {
         "id": "icarus.workflow-compiler-toolchain",
@@ -49,14 +52,12 @@
       "conformance_result_schema_ref": "conformance/compiler-contract-repair/schemas/compiler-conformance-case-result-schema.json",
       "conformance_result_schema_hash": "sha256:019a4ba80ed8ae57b6c862d9fda62d9edcb8aca9c4910fde6bbb580c09af8706"
     },
-    "historical_resolved_draft_v3_ref": "conformance/draft/resolved-g2/golden-draft-manifest@3.json",
-    "historical_resolved_draft_v3_hash": "sha256:659caf9b4add7027116bf780c83b2b85dc95ca0baae9cb8b9840d760a785132b",
     "actual_candidate_output_status": "bound_review_comparison_only",
-    "review_input_status": "published_pending_fresh_human_review",
+    "review_input_status": "working_not_submitted_for_review",
     "expected_golden_oracle_status": "all_null",
     "expected_full_case_result_bytes_authored": 0,
     "human_judgment_coverage": 0,
-    "pending_case_count": 40,
+    "pending_case_count": 0,
     "golden_semantic_review_status": "not_run",
     "approval_status": "not_run",
     "golden_seal_status": "not_run",
@@ -67,7 +68,7 @@
     "positive_case_count": 11,
     "negative_case_count": 29,
     "generated_artifact_count": 4,
-    "generator_source_raw_hash": "sha256:8fc7aed9f24e5eefff4c1305151f18cd87faf51351447006f66bddced5f482b3",
-    "manifest_hash": "sha256:27efb94a8a85b45f827d8987d6210873fb69b89ee50b3d8ea001b353e8244ce9"
+    "generator_source_raw_hash": "sha256:ab739b8fa4e0ebb24047d19d426f6385d1dd34e16e9cc140995241b5fecac572",
+    "manifest_hash": "sha256:841af72e1d8d480dc39a5091e396e71b272947b6dd1da65fef86c6f475d894ab"
   }
 }

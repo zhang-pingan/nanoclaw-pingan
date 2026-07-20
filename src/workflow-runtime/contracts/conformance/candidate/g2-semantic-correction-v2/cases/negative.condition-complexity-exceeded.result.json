@@ -2,7 +2,7 @@
   "format": "icarus.workflow-compiler-conformance-case-result/1",
   "case_id": "negative.condition-complexity-exceeded",
   "source_kind": "graph_scope",
-  "source_hash": "sha256:a8382c1af9a4f6c32c00513011513db55300297347a60989ff23235a8024477e",
+  "source_hash": "sha256:b12a9601d4990268193c7d07ce1efa9f50bc990f365678f15a58c4bd6a1c3a05",
   "outcome": "rejected",
   "normalized_plan": null,
   "static_lowering_contract_ref": null,
@@ -19,5 +19,5 @@
   ],
   "proof_hashes": [],
   "program_hashes": [],
-  "result_hash": "sha256:4879775eaada4ae704f9910e363eff7586226074eaed90226261d942548cb9d0"
+  "result_hash": "sha256:b66d4eb73f64c21d0c0d2724e2d4704c9192a47f1874e0e12870f76019972673"
 }

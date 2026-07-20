@@ -2,7 +2,7 @@
   "format": "icarus.workflow-compiler-conformance-case-result/1",
   "case_id": "negative.graph-cross-scope-edge",
   "source_kind": "graph_scope",
-  "source_hash": "sha256:9ce4d7de5979f274f627ec7e1c3f60ed61e4294095c314aacfeb02cb1ff34b67",
+  "source_hash": "sha256:699a89ed4a87f86d59d679a1be30c0619d74adbe8696446b451d299ee5a49529",
   "outcome": "rejected",
   "normalized_plan": null,
   "static_lowering_contract_ref": null,
@@ -19,5 +19,5 @@
   ],
   "proof_hashes": [],
   "program_hashes": [],
-  "result_hash": "sha256:10bac0c39673a1abdfb6a6dbe12bd02b4166f1b13c055ce54c6731c3d74c6973"
+  "result_hash": "sha256:6da01274dce29f28a4b488bf7389e6e617d064e0b378ac1d6c569dfeb244b6f5"
 }

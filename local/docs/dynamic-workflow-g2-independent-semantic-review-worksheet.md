@@ -232,8 +232,8 @@ Draft v4 的 `PASS` 只表示本 worksheet 对该 case 当前 raw/snapshot/revie
 
 Draft v4 fresh judgment 总计为 14 `PASS` / 26 `CHANGES_REQUESTED`。Pending worksheet judgment 已从 40/40 降为 0/40；这不改变 Draft manifest 内仍冻结的 publication-time pending state，也不向 frozen artifact 回写 human decision。
 
-## Next Boundary
+## Current Working Boundary
 
-下一会话必须仍留在 G2，只处理 D4-SR-001 至 D4-SR-007 的 additive semantic correction：补齐 static lowering terminal topology、structural child owner typed outputs、Map item assignability、真实且可枚举的 dependency closure、Wait authorization dependency，并把 policy/Recipe negative fixtures 收敛为 single-invalidity inputs。只能发布不覆盖 Draft v1/v2/v3/v4 和旧 candidate 的新 Contract/input/candidate/Draft v5；新 Draft judgment 必须重置为 0/40，之后再由独立会话 fresh review，不得复用本次 14/26 judgment。
+2026-07-19施工治理调整后，本文中的Draft v3/v4 judgment继续作为不可回写的历史review evidence，但不再驱动additive Draft v5发布链。当前G2回到`WORKING`：下一会话只处理D4-SR-001至D4-SR-007，补齐static lowering terminal topology、structural child owner typed outputs、Map item assignability、真实且可枚举的dependency closure、Wait authorization dependency，并把policy/Recipe negative fixtures收敛为single-invalidity inputs；直接重建单一current Working Contract/input/candidate/review bundle，不创建Draft v5/v6，不请求或重置human judgment。
 
-下一会话仍不得创建 immutable `GoldenSemanticReview`、approval、签名或 seal，不得运行 `golden-seal`，不得写 `conformance/sealed/`，不得开始 G3+、certification、Core Release、G8/G9 或 activation。Independently authored expected full case-result bytes保持0/40。
+全部已知finding完成、current生成连续两轮一致且机械验证通过之前不得`prepare-rc`。当前仍不得创建immutable`GoldenSemanticReview`、approval、签名或seal，不得运行`golden-seal`，不得写`conformance/sealed/`，不得开始G3+、certification、Core Release、G8/G9或activation。Independently authored expected full case-result bytes保持0/40；未来只有显式冻结的单一RC才执行一次完整fresh independent review。

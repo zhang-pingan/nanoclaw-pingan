@@ -22,7 +22,7 @@ export const COMPILER_ERROR_CATALOG_V2_PATH = `${COMPILER_SEMANTIC_CORRECTION_RO
 export const COMPILER_SEMANTIC_CORRECTION_MANIFEST_PATH = `${COMPILER_SEMANTIC_CORRECTION_ROOT}/contract-pack-compiler-semantic-correction.json`;
 
 export const COMPILER_SEMANTIC_CORRECTION_SPEC_HEADING =
-  '### R-017：G2 Additive Semantic Correction 决议';
+  '### R-017：G2 Working Semantic Correction 决议';
 
 export const COMPILER_EXACT_IDENTITY_FIELDS_V2 = [
   'compiler_toolchain_manifest_ref',
@@ -112,7 +112,7 @@ function buildDecision(): ContractArtifactEnvelope {
     DECISION_DOMAIN,
     {
       gate: 'G2',
-      correction_kind: 'additive_semantic_correction',
+      correction_kind: 'working_semantic_correction',
       source_ir_contract: {
         format: 'icarus.workflow-graph-scope/1',
         endpoint_model: 'ordinary_scope_local_node_id_only',
@@ -149,13 +149,20 @@ function buildDecision(): ContractArtifactEnvelope {
         payload: 'definition_without_definition_hash',
         placeholder_hash_allowed: false,
       },
-      additive_publication: {
+      construction_lifecycle: {
+        phase: 'WORKING',
+        mutable_current_artifacts: true,
+        publishable: false,
+        production_reachable: false,
+        history_owner: 'git_and_review_worksheet',
         corrected_case_count: 40,
         per_case_isolated_snapshot_required: true,
         actual_candidate_role: 'actual_compiler_output_not_golden_oracle',
-        expected_oracle_status: 'all_null_pending_fresh_human_review',
-        draft_v1_v2_v3_mutation: 'forbidden',
-        existing_candidate_mutation: 'forbidden',
+        expected_oracle_status: 'all_null_working_not_review_candidate',
+        human_review_status: 'not_requested_until_prepare_rc',
+        prepare_rc_precondition:
+          'all_known_findings_fixed_current_checks_green_and_boundary_clean',
+        rc_invalidation: 'any_bound_identity_change_returns_to_working',
         golden_semantic_review: 'not_run',
         approval: 'not_run',
         golden_seal: 'not_run',
@@ -168,7 +175,7 @@ function buildDecision(): ContractArtifactEnvelope {
         SPEC_SECTION_DOMAIN,
         section,
       ),
-      frozen_inputs: {
+      construction_seed_inputs: {
         r016_root:
           'sha256:776d516ba6c8c73a7da33895a4f4f3680054a1e93fbf056acdfc3ec36550b324',
         g2_compiler_root:
@@ -254,16 +261,19 @@ function expectedFiles(): Map<string, string> {
     ROOT_DOMAIN,
     {
       gate: 'G2',
-      status: 'ADDITIVE_CONTRACT_CORRECTION',
+      status: 'WORKING_MUTABLE_NOT_PUBLISHABLE',
+      construction_phase: 'WORKING',
+      publishable: false,
+      production_reachable: false,
       decision_ref: COMPILER_SEMANTIC_CORRECTION_DECISION_PATH,
       decision_hash: decision.hash,
       error_catalog_ref: COMPILER_ERROR_CATALOG_V2_PATH,
       error_catalog_hash: errorCatalog.hash,
-      frozen_r016_root:
+      construction_seed_r016_root:
         'sha256:776d516ba6c8c73a7da33895a4f4f3680054a1e93fbf056acdfc3ec36550b324',
-      frozen_g2_root:
+      construction_seed_g2_root:
         'sha256:c78a12ffdec353d3d3ec40350aeb6676e991e92cd5d6645946d5e21fcb013a77',
-      frozen_draft_v3_root:
+      review_history_draft_v3_root:
         'sha256:659caf9b4add7027116bf780c83b2b85dc95ca0baae9cb8b9840d760a785132b',
       artifact_inventory: [...files.entries()].map(([file, contents]) => ({
         path: file,

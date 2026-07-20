@@ -8,9 +8,7 @@ if (
   process.argv.length !== 3 ||
   (command !== 'generate' && command !== 'check')
 ) {
-  console.error(
-    'Usage: compiler-semantic-correction-contract <generate|check>',
-  );
+  console.error('Usage: compiler-working-contract <generate|check>');
   process.exit(64);
 }
 
@@ -19,11 +17,11 @@ try {
     command === 'generate'
       ? generateCompilerSemanticCorrectionContract()
       : checkCompilerSemanticCorrectionContract();
-  console.log(`compiler_semantic_correction_contract=${command}:ok`);
-  console.log(`compiler_semantic_correction_contract_root=${manifest.hash}`);
+  console.log(`compiler_working_contract=${command}:ok`);
+  console.log(`compiler_working_contract_root=${manifest.hash}`);
 } catch (error) {
   console.error(
-    `compiler_semantic_correction_contract=${command}:failed: ${
+    `compiler_working_contract=${command}:failed: ${
       error instanceof Error ? error.message : String(error)
     }`,
   );

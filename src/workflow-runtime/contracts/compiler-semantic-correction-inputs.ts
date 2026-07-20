@@ -312,7 +312,7 @@ function transformSource(
     !Array.isArray(source.metadata)
       ? source.metadata
       : {}),
-    semantic_correction_version: '4.0.0-draft',
+    semantic_correction_version: 'working-g2',
   };
   if (replacementId === 'positive.wait') {
     assertJsonObject(source.interface_ref);
@@ -995,7 +995,10 @@ export function buildSemanticCorrectionInputs(
     CASE_CATALOG_DOMAIN,
     {
       format: 'icarus.workflow-semantic-review-input-cases/4',
-      bundle_version: '4.0.0-additive-semantic-correction',
+      bundle_version: 'working-g2',
+      construction_phase: 'WORKING',
+      publishable: false,
+      production_reachable: false,
       correction_contract_ref: COMPILER_SEMANTIC_CORRECTION_MANIFEST_PATH,
       error_catalog_ref: COMPILER_ERROR_CATALOG_V2_PATH,
       case_count: cases.length,
@@ -1008,7 +1011,7 @@ export function buildSemanticCorrectionInputs(
       cases,
       expected_full_case_result_bytes_authored: 0,
       human_judgment_coverage: 0,
-      fresh_review_status: 'pending_40_of_40',
+      review_status: 'not_requested_until_prepare_rc',
       golden_semantic_review_status: 'not_run',
       approval_status: 'not_run',
       golden_seal_status: 'not_run',
@@ -1030,7 +1033,10 @@ export function buildSemanticCorrectionInputs(
     INPUT_MANIFEST_DOMAIN,
     {
       gate: 'G2',
-      status: 'ADDITIVE_INPUTS_PUBLISHED',
+      status: 'WORKING_INPUTS_CURRENT',
+      construction_phase: 'WORKING',
+      publishable: false,
+      production_reachable: false,
       case_catalog_ref: SEMANTIC_CORRECTION_CASE_CATALOG_PATH,
       case_catalog_hash: catalog.hash,
       compiler_identity: identity,
@@ -1039,7 +1045,8 @@ export function buildSemanticCorrectionInputs(
       input_snapshot_format: 'icarus.workflow-compiler-input-snapshot/2',
       identity_match_boolean: 'forbidden',
       artifact_inventory: inventory,
-      expected_oracle_status: 'absent_pending_fresh_human_review',
+      expected_oracle_status: 'absent_working_not_review_candidate',
+      human_review_status: 'not_requested_until_prepare_rc',
       golden_semantic_review_status: 'not_run',
       approval_status: 'not_run',
       golden_seal_status: 'not_run',

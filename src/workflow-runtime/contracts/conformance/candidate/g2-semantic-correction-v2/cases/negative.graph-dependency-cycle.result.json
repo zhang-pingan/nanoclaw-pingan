@@ -2,7 +2,7 @@
   "format": "icarus.workflow-compiler-conformance-case-result/1",
   "case_id": "negative.graph-dependency-cycle",
   "source_kind": "graph_scope",
-  "source_hash": "sha256:e5f3140498e21fa32df7b5465b282be38083a90d621918db0e342ee187bc7dc3",
+  "source_hash": "sha256:1cdbfd4a9d67974f38cf1a952043c278bf8a4b11874407ead4c2e024e9091b63",
   "outcome": "rejected",
   "normalized_plan": null,
   "static_lowering_contract_ref": null,
@@ -19,5 +19,5 @@
   ],
   "proof_hashes": [],
   "program_hashes": [],
-  "result_hash": "sha256:3545ec7081299c8321d589aab84cf001bb5abbb80fa665773a4341a36c0f18fd"
+  "result_hash": "sha256:b21dc62a6c39e6e8d2f93fd882aab67c74146465d04386bdb5600484fcd44571"
 }

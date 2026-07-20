@@ -6,12 +6,15 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-semantic-correction-input-manifest-artifact:1\n",
-  "hash": "sha256:01ae1b52c6ed3b7423e2f0bda70e72f8e678d96c5ae558e64a960558fbf5ad0e",
+  "hash": "sha256:387fab5a004f061204a926a00c31845c257b15bd4fc2faac6c02dcf2fd96599a",
   "payload": {
     "gate": "G2",
-    "status": "ADDITIVE_INPUTS_PUBLISHED",
+    "status": "WORKING_INPUTS_CURRENT",
+    "construction_phase": "WORKING",
+    "publishable": false,
+    "production_reachable": false,
     "case_catalog_ref": "conformance/draft/semantic-correction-v4/semantic-review-input-cases@4.json",
-    "case_catalog_hash": "sha256:d26adb161be66619ee7a9a5dfb1b9adc86e2194727686509d1e20d274e9091b5",
+    "case_catalog_hash": "sha256:76a29eb561cab8785c19ba3318f3b060b007b3ac1d30452110a6db2389b1480b",
     "compiler_identity": {
       "compiler_toolchain_manifest_ref": {
         "id": "icarus.workflow-compiler-toolchain",
@@ -41,7 +44,7 @@
     "artifact_inventory": [
       {
         "path": "conformance/draft/semantic-correction-v4/semantic-review-input-cases@4.json",
-        "raw_sha256": "sha256:d6a5ce842c06716ddaf66b0b019e5511fb962631b5914e3ef71f61d1dd1d880b"
+        "raw_sha256": "sha256:229a38d9e0e3c344dd9dc42cda2101e46c6e83b58a6a9859b4725bb8df823f58"
       },
       {
         "path": "conformance/draft/semantic-correction-v4/snapshots/negative.capability-not-allowed@2.json",
@@ -205,7 +208,7 @@
       },
       {
         "path": "conformance/draft/semantic-correction-v4/sources/negative.capability-not-allowed/source.json",
-        "raw_sha256": "sha256:055a8db991bf2677c078e1f02bd0e3c41dc060c6fdc1c57cd4d5b090bf8d800f"
+        "raw_sha256": "sha256:4e582a18224587fc1aa584776f18c6458a4c4a109933f1ea5fed6c8c8bf7540b"
       },
       {
         "path": "conformance/draft/semantic-correction-v4/sources/negative.child-recipe-dependency-cycle/source.json",
@@ -217,19 +220,19 @@
       },
       {
         "path": "conformance/draft/semantic-correction-v4/sources/negative.compiler-integrity-mismatch/source.json",
-        "raw_sha256": "sha256:4f2e30369783cdfddeb830abc7ca2313b240f5ea7b62bb8c4331e16b9c73acbd"
+        "raw_sha256": "sha256:5f7458cec11efd0a0ccc5f2d867524fabf03d88f0b1884ffa6e264a5a64b8577"
       },
       {
         "path": "conformance/draft/semantic-correction-v4/sources/negative.completion-contract-invalid/source.json",
-        "raw_sha256": "sha256:a245ad8e8b5bfe89baa29dca5e34ce5c3920e89478e1858a8942dfa2032dcae3"
+        "raw_sha256": "sha256:ec6b19ca9966277faadaadf01efeb4ab6ed852cb64ece429627705e4ec57c638"
       },
       {
         "path": "conformance/draft/semantic-correction-v4/sources/negative.condition-complexity-exceeded/source.json",
-        "raw_sha256": "sha256:255f10ade9e7c59366177b903eccb238c841ae42d81dc2e6a0ea073806bc1729"
+        "raw_sha256": "sha256:0b98e0d86fd2b1307aabe20da39f1e1ce1c0225aa45807c630ec9e2801ab5385"
       },
       {
         "path": "conformance/draft/semantic-correction-v4/sources/negative.condition-type-mismatch/source.json",
-        "raw_sha256": "sha256:19c866cd4981a83e6b5036f3df78ebd98e9dedfa5a371f9c77dbf8dc252d7695"
+        "raw_sha256": "sha256:e936e11aadb4999a4f14755802c728327a17e3568258074405397e88753a6826"
       },
       {
         "path": "conformance/draft/semantic-correction-v4/sources/negative.definition-child-creation-key-template/source.json",
@@ -241,23 +244,23 @@
       },
       {
         "path": "conformance/draft/semantic-correction-v4/sources/negative.early-completion-non-monotone/source.json",
-        "raw_sha256": "sha256:2c97b893410bb298ff1524a5aa90d40876ea268a84562f338a0f7b4c78f67191"
+        "raw_sha256": "sha256:3f516fd39b987f03cc48a3ddff23769b7569ec2e9c60797f14646b3ea3aecfe0"
       },
       {
         "path": "conformance/draft/semantic-correction-v4/sources/negative.graph-cross-scope-edge/source.json",
-        "raw_sha256": "sha256:26ad44b8bea470efd28cfb92233aefa451dba9e60247dbb807e11992a7280b3a"
+        "raw_sha256": "sha256:9af5123332d2fffadf4ce2545ab4aa0dae12a5c994978ef1ef3bd9480316e738"
       },
       {
         "path": "conformance/draft/semantic-correction-v4/sources/negative.graph-dependency-cycle/source.json",
-        "raw_sha256": "sha256:74de239d46de6b4dbcefb641017046396f65f56f8eaaf20c1668e4ea09c14686"
+        "raw_sha256": "sha256:c669eacbc23123996f1e9c68f3fe73bc748c98bba2bf146e8b8d8bd448ccfd84"
       },
       {
         "path": "conformance/draft/semantic-correction-v4/sources/negative.graph-endpoint-not-found/source.json",
-        "raw_sha256": "sha256:3b9c37b723bdeeebcc4a81f429006cef57fe84bc7f9f985ecd6c4734be4d0a16"
+        "raw_sha256": "sha256:22dcc5c449caee2c47f541661ff32f40888446003d0214d0cf491c9ad49335ca"
       },
       {
         "path": "conformance/draft/semantic-correction-v4/sources/negative.graph-id-duplicate/source.json",
-        "raw_sha256": "sha256:ab546e55684ccde713294297b06a916843abb4a541bdf9373b81d0bcfc95ce98"
+        "raw_sha256": "sha256:d113ad77ad1229b2f8a051b1ef1532fb0c7e90e196780d4ac3b84ff65444ce02"
       },
       {
         "path": "conformance/draft/semantic-correction-v4/sources/negative.json-duplicate-key/source.json",
@@ -265,7 +268,7 @@
       },
       {
         "path": "conformance/draft/semantic-correction-v4/sources/negative.json-pointer-non-total/source.json",
-        "raw_sha256": "sha256:5d3bffad964e874cead84a70c9adc36f796d3518cbf482c300ee6f46694a0c77"
+        "raw_sha256": "sha256:250c4b55261c7ef504a298442bcc920e52e0ab7f612ba34504aa213fde8b968e"
       },
       {
         "path": "conformance/draft/semantic-correction-v4/sources/negative.json-syntax-invalid/source.json",
@@ -273,39 +276,39 @@
       },
       {
         "path": "conformance/draft/semantic-correction-v4/sources/negative.policy-escalation/source.json",
-        "raw_sha256": "sha256:278b978a57fc643d4ed51810785174ad27a9bb48839554fffa727bfd3b830703"
+        "raw_sha256": "sha256:533eb031d74e13d382fd315c5078de4a466db8ecf65b70f81dc34a3e4a1980ef"
       },
       {
         "path": "conformance/draft/semantic-correction-v4/sources/negative.quality-revision-effect-key-incompatible/source.json",
-        "raw_sha256": "sha256:916728ef35e39c3f904837eb4a8c893d9df3260ea55db999b0055ba04bc1b325"
+        "raw_sha256": "sha256:605f1d71149064e8798e9e58da05d0ae8c177f427400f7e88fbc9691fb6e414b"
       },
       {
         "path": "conformance/draft/semantic-correction-v4/sources/negative.quality-revision-missing-feedback-schema/source.json",
-        "raw_sha256": "sha256:bfbe5bd7934e21ae0c2cfe5c84e1752abeacdfcbea6f78d9bc1d38107668ecf3"
+        "raw_sha256": "sha256:4ab8bc453027f4a7c29b00234e327e18e5507e2d9fa92ee2afb97d08463fce5e"
       },
       {
         "path": "conformance/draft/semantic-correction-v4/sources/negative.quality-revision-missing-quality-gate/source.json",
-        "raw_sha256": "sha256:860f521eff46be13191e6b25669c69765968213e010ac6eccb6bc9416a0d9da1"
+        "raw_sha256": "sha256:47e8d727fb94fb8bb7a47716b69510b8f04e617ec18673ee31a7fd90270971f1"
       },
       {
         "path": "conformance/draft/semantic-correction-v4/sources/negative.registry-ref-not-found/source.json",
-        "raw_sha256": "sha256:26e56e368aeffd85f440292b4cc27f41cb149ff9afce9d7ac78b58959d115ed6"
+        "raw_sha256": "sha256:fec7cac3f467848e8a7ee899310e8a9b641af134652993199b0f44abc021a745"
       },
       {
         "path": "conformance/draft/semantic-correction-v4/sources/negative.registry-ref-unpinned/source.json",
-        "raw_sha256": "sha256:7e0a972849e51acf7a3f51c87b59739e3c1addac1a0a19033c10c1c533b515e6"
+        "raw_sha256": "sha256:3e9a957e912854c14eac2a3c292d32f1ebd00b9086e4f8042344281f44f6a15a"
       },
       {
         "path": "conformance/draft/semantic-correction-v4/sources/negative.route-group-ambiguous/source.json",
-        "raw_sha256": "sha256:73feddbc5a989ccf654b5a8ef2852db379f6d289795c0ae1738d0c203d244a6a"
+        "raw_sha256": "sha256:ad82d80e734ca875bb625a4d31425cf34dbd6863ccc1c778d92b7dd5138abd36"
       },
       {
         "path": "conformance/draft/semantic-correction-v4/sources/negative.runtime-safety-limit-exceeded/source.json",
-        "raw_sha256": "sha256:e143ef2e0557d496ab0d7299fe5c91a67ea201b99080357bc79c696c78121cd8"
+        "raw_sha256": "sha256:2b6e705bcf78a8a44e34ba0d197cdf735a017729c802d747cd36fa108086d15b"
       },
       {
         "path": "conformance/draft/semantic-correction-v4/sources/negative.schema-not-assignable/source.json",
-        "raw_sha256": "sha256:e45030dd4cbaf2554ab7593073668f5e7571eb75dbfce9d955b47027d7bc8955"
+        "raw_sha256": "sha256:af08f9171315360faa64e7cf3e2cf5cd4fc8a90dc587ac714d5c5bbc8fefd87b"
       },
       {
         "path": "conformance/draft/semantic-correction-v4/sources/negative.schema-profile-keyword-unsupported/source.json",
@@ -313,43 +316,43 @@
       },
       {
         "path": "conformance/draft/semantic-correction-v4/sources/negative.schema-unknown-field/source.json",
-        "raw_sha256": "sha256:d8747867fbe5f33a18995043dcd1d515f725832d9b1c414b9d226f470b4ca25e"
+        "raw_sha256": "sha256:a70599b6a0601d91213991d93c1ffad26b31c78c94b82128b49041ce2dfbf7ce"
       },
       {
         "path": "conformance/draft/semantic-correction-v4/sources/negative.trigger-contract-invalid/source.json",
-        "raw_sha256": "sha256:38a5143c2b7f5e1aa9e381b81704a9ca56f4492106eec570ebe7e53f56a967b9"
+        "raw_sha256": "sha256:df5de8d743ed24f455f4e6234e78ac5ef1bae032c01fc839c69b794e7c70260f"
       },
       {
         "path": "conformance/draft/semantic-correction-v4/sources/positive.compiler-integrity-match-control/source.json",
-        "raw_sha256": "sha256:4f2e30369783cdfddeb830abc7ca2313b240f5ea7b62bb8c4331e16b9c73acbd"
+        "raw_sha256": "sha256:5f7458cec11efd0a0ccc5f2d867524fabf03d88f0b1884ffa6e264a5a64b8577"
       },
       {
         "path": "conformance/draft/semantic-correction-v4/sources/positive.condition-route/source.json",
-        "raw_sha256": "sha256:740b12b581a9bc3c09a4b07d999a9d2f3cd9a5be73f508149f946d74ddea10e2"
+        "raw_sha256": "sha256:45fa7baf9a8bca73167840ab8ace0eb081af1873f267df6e7595cc4762fb0060"
       },
       {
         "path": "conformance/draft/semantic-correction-v4/sources/positive.expand/source.json",
-        "raw_sha256": "sha256:44799d206f3fb26508844b0ab13a1f3141b1d5c67bfce6d8f1102d578f9b19cd"
+        "raw_sha256": "sha256:6f1518615e19d2ec49a4568f3d1999471cbb26f416a1b3b6b2a523caaa72d62f"
       },
       {
         "path": "conformance/draft/semantic-correction-v4/sources/positive.map/source.json",
-        "raw_sha256": "sha256:2bbada97d833d5b1dd03fdad7fe8662d5dfa12723bae18d5a06596f474d22201"
+        "raw_sha256": "sha256:61e82a410244f6d9a681394be9d8782f56158818fe71a8b5e3a6af32824b4e6d"
       },
       {
         "path": "conformance/draft/semantic-correction-v4/sources/positive.policy-intersection/source.json",
-        "raw_sha256": "sha256:14833e1693caacff8ae65479b7735ca6cc8beac24e51487756212339f1a85768"
+        "raw_sha256": "sha256:4bfa616cbcea23dd752ba879159e664ed2c5f618f8797972d3127c135b7f6149"
       },
       {
         "path": "conformance/draft/semantic-correction-v4/sources/positive.quality-revision-binding/source.json",
-        "raw_sha256": "sha256:5dd3345f91ad92759da1d51ab38fec00bbcccf460f3de39bdf7328f79719f42c"
+        "raw_sha256": "sha256:89fe94d5f9c0c465e7d63756771f158b60d621f6d49e2e94e1d2fc9dbbf70aad"
       },
       {
         "path": "conformance/draft/semantic-correction-v4/sources/positive.sound-subtype-different-hash/source.json",
-        "raw_sha256": "sha256:bc3383910dc1f15ef156eb27a4a4668c80004c7fca1f3364b6ddbc27b1b8e7c4"
+        "raw_sha256": "sha256:68134ff8aba0ff89945b56a7e280e762da8e836d9ec3e9541c8f7a24e9401b31"
       },
       {
         "path": "conformance/draft/semantic-correction-v4/sources/positive.static-child-closure/source.json",
-        "raw_sha256": "sha256:cadb37aad6b0438a14dd6de76538a7edb45909405b2266f9f90105141cab1803"
+        "raw_sha256": "sha256:e00d231bb96f5b669dc399ac3ba8acd7e396d82b139546f121b28fba7a2d2a48"
       },
       {
         "path": "conformance/draft/semantic-correction-v4/sources/positive.static-lowering/source.json",
@@ -357,14 +360,15 @@
       },
       {
         "path": "conformance/draft/semantic-correction-v4/sources/positive.subgraph/source.json",
-        "raw_sha256": "sha256:0a97e2fc7763c5fd418c00869bde9b53017004d5bed5fd7d75be208a993e1ac8"
+        "raw_sha256": "sha256:47c9d691f565f3b9df290b6f65357d03ed47bd755694e6884e78f86ea7c6987f"
       },
       {
         "path": "conformance/draft/semantic-correction-v4/sources/positive.wait/source.json",
-        "raw_sha256": "sha256:8277bfc33d268d98624bdcde423551018e7976939c7ad4ad960c83cf5f8d26f1"
+        "raw_sha256": "sha256:b9b051e49d6413ae9a809f5308cb2d57bd8058fa2633b361f366b5f037770096"
       }
     ],
-    "expected_oracle_status": "absent_pending_fresh_human_review",
+    "expected_oracle_status": "absent_working_not_review_candidate",
+    "human_review_status": "not_requested_until_prepare_rc",
     "golden_semantic_review_status": "not_run",
     "approval_status": "not_run",
     "golden_seal_status": "not_run",

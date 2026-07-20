@@ -2,23 +2,24 @@
   "format": "icarus.workflow-compiler-golden-draft-cases/4",
   "ref": {
     "id": "icarus.workflow-compiler-golden-draft-cases",
-    "version": "4.0.0"
+    "version": "4.0.0-working"
   },
   "version": 4,
   "domain_separator": "icarus:workflow-compiler-semantic-correction-golden-draft-cases:4\n",
-  "hash": "sha256:2ffcee41a44a2d6d1d7fd3abc421973ccb0c7badbd874b11803936ae7453ba75",
+  "hash": "sha256:c5b4fef4100ed6311775e135b6b072090dcb73ad2592c5188211f713bb9ac8ec",
   "payload": {
     "format": "icarus.workflow-compiler-golden-draft-cases/4",
-    "bundle_version": "4.0.0-additive-semantic-correction",
-    "draft_status": "published_pending_fresh_independent_human_review",
-    "historical_resolved_draft_v3_ref": "conformance/draft/resolved-g2/golden-draft-manifest@3.json",
-    "historical_resolved_draft_v3_hash": "sha256:659caf9b4add7027116bf780c83b2b85dc95ca0baae9cb8b9840d760a785132b",
+    "bundle_version": "working-g2",
+    "construction_phase": "WORKING",
+    "publishable": false,
+    "production_reachable": false,
+    "draft_status": "working_not_review_candidate",
     "semantic_correction_contract_ref": "conformance/compiler-semantic-correction/contract-pack-compiler-semantic-correction.json",
-    "semantic_correction_contract_hash": "sha256:5211d9b655d047c75ffbcbae7d9f70126ba4bccbdc6dffec04e7f3f8435bb5b1",
+    "semantic_correction_contract_hash": "sha256:8f0f6e397cfe64a619027abfb8cd341322928ad70a6217b4aafedc5c01eb5f79",
     "semantic_correction_input_manifest_ref": "conformance/draft/semantic-correction-v4/semantic-correction-input-manifest@1.json",
-    "semantic_correction_input_manifest_hash": "sha256:01ae1b52c6ed3b7423e2f0bda70e72f8e678d96c5ae558e64a960558fbf5ad0e",
+    "semantic_correction_input_manifest_hash": "sha256:387fab5a004f061204a926a00c31845c257b15bd4fc2faac6c02dcf2fd96599a",
     "candidate_root_ref": "conformance/candidate/g2-semantic-correction-v2/contract-pack-g2-semantic-correction-candidate.json",
-    "candidate_root_hash": "sha256:afd726dee7150a32e64765781790ccdec49bcd675230d54bccb283ff0467d5eb",
+    "candidate_root_hash": "sha256:302b2acff6bf5b97d010fdd7006dca949caa2361b5778e1928b46e584088617d",
     "exact_compiler_identity": {
       "compiler_toolchain_manifest_ref": {
         "id": "icarus.workflow-compiler-toolchain",
@@ -43,12 +44,12 @@
     },
     "candidate_output_disposition": "actual_compiler_output_not_golden_oracle",
     "review_input_disposition": "hand_authored_semantic_review_input",
-    "expected_oracle_disposition": "all_null_pending_fresh_independent_human_semantic_review",
+    "expected_oracle_disposition": "all_null_working_not_review_candidate",
     "case_count": 40,
     "positive_case_count": 11,
     "negative_case_count": 29,
     "human_judgment_coverage": 0,
-    "fresh_review_status": "pending_40_of_40",
+    "review_status": "not_requested_until_prepare_rc",
     "cases": [
       {
         "case_id": "positive.static-lowering",
@@ -62,7 +63,7 @@
         "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/positive.static-lowering@2.json",
         "input_snapshot_hash": "sha256:96ed16e9522eb034033e3b4591a2653644c4766e4a2d740aa9f362829692639c",
         "case_input_binding_ref": "conformance/candidate/g2-semantic-correction-v2/g2-case-input-binding@2.json",
-        "case_input_binding_hash": "sha256:2e6832400922ef7bee306b26f5e2bf8d0cf7b87be1fa89f10186c0920f021085",
+        "case_input_binding_hash": "sha256:0372ab7faa2a0baea660bf6eb477b88501512e001de21c004dd1c7f0c5cf3e8a",
         "effective_case_input_hash": "sha256:a8a2524555a06886ebd4f113db21934d970c34f11741ed911df2ed79555b06fd",
         "review_input": {
           "role": "hand_authored_review_input_not_expected_oracle",
@@ -119,7 +120,7 @@
           "result_raw_bytes_hash": "sha256:526d463ce8e24eb7f9b91baf651f7162c1b5f71b5cc5ceec29154436fd9c14c2"
         },
         "expected_golden_oracle": {
-          "status": "pending_fresh_independent_human_semantic_review",
+          "status": "not_authored_working_not_review_candidate",
           "expected_case_result_bytes_ref": null,
           "expected_case_result_hash": null,
           "expected_source_hash": null,
@@ -129,7 +130,7 @@
           "expected_diagnostics": null
         },
         "review_owner": "human:local-owner",
-        "review_status": "pending_fresh_independent_human_semantic_review",
+        "review_status": "not_requested_until_prepare_rc",
         "human_judgment": null
       },
       {
@@ -140,12 +141,12 @@
           "condition_route"
         ],
         "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/positive.condition-route/source.json",
-        "raw_source_bytes_hash": "sha256:d458bfa95f27892acd18d96188a80b133973300eeafc1d0ae480dad6f8303244",
+        "raw_source_bytes_hash": "sha256:e5afdbfaf15bcd51248dd690f8d24d2c9fbe0e10462303836f0579ffd79161aa",
         "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/positive.condition-route@2.json",
         "input_snapshot_hash": "sha256:d2a9feb9d178b00f71d9d91c71d2325e016ed5191ea2c967c157273052ad78a0",
         "case_input_binding_ref": "conformance/candidate/g2-semantic-correction-v2/g2-case-input-binding@2.json",
-        "case_input_binding_hash": "sha256:2e6832400922ef7bee306b26f5e2bf8d0cf7b87be1fa89f10186c0920f021085",
-        "effective_case_input_hash": "sha256:a77e68b84abe791c3127745c394ca00f93e8a1c8e722fcee9fc86a88b8d94df3",
+        "case_input_binding_hash": "sha256:0372ab7faa2a0baea660bf6eb477b88501512e001de21c004dd1c7f0c5cf3e8a",
+        "effective_case_input_hash": "sha256:38ec8f9cb510ca545da27bd68afd6763470bcfeed1a3b34f2b4eff67e357735a",
         "review_input": {
           "role": "hand_authored_review_input_not_expected_oracle",
           "expected_diagnostics": [],
@@ -176,11 +177,11 @@
           "role": "actual_compiler_output_not_golden_oracle",
           "outcome": "compiled",
           "result_ref": "conformance/candidate/g2-semantic-correction-v2/cases/positive.condition-route.result.json",
-          "result_hash": "sha256:7f4935bc334d7f9fb1e1efa9cdd5d289ba11f4f0b4e49994b07bec3a74259c8c",
-          "result_raw_bytes_hash": "sha256:fbca514134ea83c2e182f28579a7ab07e960be52880fa2276ced2a8ab1676f8b"
+          "result_hash": "sha256:5578a77b901a0b2550c05716936f2de30b62ae8a5435caad4ed4d52c8d29a1f5",
+          "result_raw_bytes_hash": "sha256:69d55ccc8f506eb1a31b7a67678b3102be0fe68d26cc981a35e3eabc13494fb9"
         },
         "expected_golden_oracle": {
-          "status": "pending_fresh_independent_human_semantic_review",
+          "status": "not_authored_working_not_review_candidate",
           "expected_case_result_bytes_ref": null,
           "expected_case_result_hash": null,
           "expected_source_hash": null,
@@ -190,7 +191,7 @@
           "expected_diagnostics": null
         },
         "review_owner": "human:local-owner",
-        "review_status": "pending_fresh_independent_human_semantic_review",
+        "review_status": "not_requested_until_prepare_rc",
         "human_judgment": null
       },
       {
@@ -201,12 +202,12 @@
           "wait"
         ],
         "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/positive.wait/source.json",
-        "raw_source_bytes_hash": "sha256:d48f310e7ee7f354eb678c160f2f81b9164ef308aaee0b4122f2ef6968d6aa58",
+        "raw_source_bytes_hash": "sha256:cb98184e425d0cea2c45945204c2c17c9f5416f2a6870940f435a2f4c99b4be1",
         "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/positive.wait@2.json",
         "input_snapshot_hash": "sha256:10315f25589412e8b9e56c3de6dd6824a8e5ff1533f014e6a3b0cda16ae966b2",
         "case_input_binding_ref": "conformance/candidate/g2-semantic-correction-v2/g2-case-input-binding@2.json",
-        "case_input_binding_hash": "sha256:2e6832400922ef7bee306b26f5e2bf8d0cf7b87be1fa89f10186c0920f021085",
-        "effective_case_input_hash": "sha256:2ed8101523bf7e5e2844f70f74c04abb278307ecdcb9bc50bad6ab2a626f406b",
+        "case_input_binding_hash": "sha256:0372ab7faa2a0baea660bf6eb477b88501512e001de21c004dd1c7f0c5cf3e8a",
+        "effective_case_input_hash": "sha256:ed90bdb1b7647e22385803c129a0c877f1baf234d2e06e1106c5148a97e5fed0",
         "review_input": {
           "role": "hand_authored_review_input_not_expected_oracle",
           "expected_diagnostics": [],
@@ -234,11 +235,11 @@
           "role": "actual_compiler_output_not_golden_oracle",
           "outcome": "compiled",
           "result_ref": "conformance/candidate/g2-semantic-correction-v2/cases/positive.wait.result.json",
-          "result_hash": "sha256:7cc289a7fbacbd6dbf7f05d9ce0fe442a0a7c0c16b803391852346eba15223df",
-          "result_raw_bytes_hash": "sha256:dd94697f5c69ccc3d8da9410528d1ce7e258bf0d7b39ce8cad265737acf758a7"
+          "result_hash": "sha256:a7ca83997bbc64c46d6963a78cdf0b4408e1a709b32b1b0d04b71f72e328720b",
+          "result_raw_bytes_hash": "sha256:6eaded5ab24b5a2bca8139185ece41b91cc75591c71a2c339144192ce2397782"
         },
         "expected_golden_oracle": {
-          "status": "pending_fresh_independent_human_semantic_review",
+          "status": "not_authored_working_not_review_candidate",
           "expected_case_result_bytes_ref": null,
           "expected_case_result_hash": null,
           "expected_source_hash": null,
@@ -248,7 +249,7 @@
           "expected_diagnostics": null
         },
         "review_owner": "human:local-owner",
-        "review_status": "pending_fresh_independent_human_semantic_review",
+        "review_status": "not_requested_until_prepare_rc",
         "human_judgment": null
       },
       {
@@ -259,12 +260,12 @@
           "subgraph"
         ],
         "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/positive.subgraph/source.json",
-        "raw_source_bytes_hash": "sha256:85a77d148cee807bd6c5680c54f126d9276c4936ed715e48df78cb7bf53bfba1",
+        "raw_source_bytes_hash": "sha256:1514c5978cfd1dc479a326a3efda6dbe2145914b4fba6728f57dff7048e57583",
         "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/positive.subgraph@2.json",
         "input_snapshot_hash": "sha256:d00c09c43da4a64f1477adf154c72ad18fec81889c2aa15aa80a8cd45d73c9ca",
         "case_input_binding_ref": "conformance/candidate/g2-semantic-correction-v2/g2-case-input-binding@2.json",
-        "case_input_binding_hash": "sha256:2e6832400922ef7bee306b26f5e2bf8d0cf7b87be1fa89f10186c0920f021085",
-        "effective_case_input_hash": "sha256:2485da2470ffb85823e30772a1e32b7415b3f3286e26eb908fbe5f9cdad789f8",
+        "case_input_binding_hash": "sha256:0372ab7faa2a0baea660bf6eb477b88501512e001de21c004dd1c7f0c5cf3e8a",
+        "effective_case_input_hash": "sha256:486002407115f2595ace6b0602045149fd986aeacb0673551fff0052d890b9be",
         "review_input": {
           "role": "hand_authored_review_input_not_expected_oracle",
           "expected_diagnostics": [],
@@ -282,11 +283,11 @@
           "role": "actual_compiler_output_not_golden_oracle",
           "outcome": "compiled",
           "result_ref": "conformance/candidate/g2-semantic-correction-v2/cases/positive.subgraph.result.json",
-          "result_hash": "sha256:ce4020cc22810ddfa3302d2e18eaf9249bc09a85136ade0630b377048bd585cf",
-          "result_raw_bytes_hash": "sha256:9e8777d52bd8bcf97d44fce8feebcbfd42966c84c92f228d0a0f370a1e952222"
+          "result_hash": "sha256:d104ef2cce4e014cab19bda87d8bb58ded6a4622e8a30ab53c3d4773972bdd52",
+          "result_raw_bytes_hash": "sha256:0cc52067bf3f8682c21701e4e4012f0b8382a047dc3b031892bab3ec2f20b329"
         },
         "expected_golden_oracle": {
-          "status": "pending_fresh_independent_human_semantic_review",
+          "status": "not_authored_working_not_review_candidate",
           "expected_case_result_bytes_ref": null,
           "expected_case_result_hash": null,
           "expected_source_hash": null,
@@ -296,7 +297,7 @@
           "expected_diagnostics": null
         },
         "review_owner": "human:local-owner",
-        "review_status": "pending_fresh_independent_human_semantic_review",
+        "review_status": "not_requested_until_prepare_rc",
         "human_judgment": null
       },
       {
@@ -307,12 +308,12 @@
           "expand"
         ],
         "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/positive.expand/source.json",
-        "raw_source_bytes_hash": "sha256:1dbc84279ea0ef9bbcc01be05c51e0040b57cd977836ff2789a75beabf9fb029",
+        "raw_source_bytes_hash": "sha256:ae55106db6354cf2be27e559a6e60d394b79c933a6474dcf022d9e53d0d320b5",
         "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/positive.expand@2.json",
         "input_snapshot_hash": "sha256:a8068edacab0008f9b480d24d6599628f51d670017106f9bb0fb2f466fa7dfa0",
         "case_input_binding_ref": "conformance/candidate/g2-semantic-correction-v2/g2-case-input-binding@2.json",
-        "case_input_binding_hash": "sha256:2e6832400922ef7bee306b26f5e2bf8d0cf7b87be1fa89f10186c0920f021085",
-        "effective_case_input_hash": "sha256:062dd848bf47371983f315219e68fde280423f4a76465447d95320ec5ae62d0d",
+        "case_input_binding_hash": "sha256:0372ab7faa2a0baea660bf6eb477b88501512e001de21c004dd1c7f0c5cf3e8a",
+        "effective_case_input_hash": "sha256:6bb9857017815d1382129e899c229c5d0b9a74ebd54b74a55204d2adeb6878b6",
         "review_input": {
           "role": "hand_authored_review_input_not_expected_oracle",
           "expected_diagnostics": [],
@@ -337,11 +338,11 @@
           "role": "actual_compiler_output_not_golden_oracle",
           "outcome": "compiled",
           "result_ref": "conformance/candidate/g2-semantic-correction-v2/cases/positive.expand.result.json",
-          "result_hash": "sha256:d5db23f929871d0e6aca390c3a059313c176a349aa6b1ae0a03c44f82ea1f9df",
-          "result_raw_bytes_hash": "sha256:9b03e13939fd0a7c8478f006fd26fc39b6faed10bdbad1b80d3a9b64bdaf23f8"
+          "result_hash": "sha256:db82368487edaf8f663e362ccca2c9a4ab72b4c9c48376966bcfcb4f8e905a5b",
+          "result_raw_bytes_hash": "sha256:ff27763db77ad3725590026d8e67c8249577e172b045e524d1e0f6daffdcfc04"
         },
         "expected_golden_oracle": {
-          "status": "pending_fresh_independent_human_semantic_review",
+          "status": "not_authored_working_not_review_candidate",
           "expected_case_result_bytes_ref": null,
           "expected_case_result_hash": null,
           "expected_source_hash": null,
@@ -351,7 +352,7 @@
           "expected_diagnostics": null
         },
         "review_owner": "human:local-owner",
-        "review_status": "pending_fresh_independent_human_semantic_review",
+        "review_status": "not_requested_until_prepare_rc",
         "human_judgment": null
       },
       {
@@ -362,12 +363,12 @@
           "map"
         ],
         "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/positive.map/source.json",
-        "raw_source_bytes_hash": "sha256:717c1b178feb79f9cac383cfa2341a2185950bb8e4c108e744e78bc1e4f9e105",
+        "raw_source_bytes_hash": "sha256:cde38905b11d005b398c99d91c63a96bfaeb9c5e0036eadd5acb78ef371f10e5",
         "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/positive.map@2.json",
         "input_snapshot_hash": "sha256:c26ddd87fd2dc8fa53947810ed3c6b0f31399be93bfb6e77d765bcbe2a16bf59",
         "case_input_binding_ref": "conformance/candidate/g2-semantic-correction-v2/g2-case-input-binding@2.json",
-        "case_input_binding_hash": "sha256:2e6832400922ef7bee306b26f5e2bf8d0cf7b87be1fa89f10186c0920f021085",
-        "effective_case_input_hash": "sha256:22ce22b2deaaa72c56e3edfbced2455ce5bbd6801b279e4a9f5b9d25db32899e",
+        "case_input_binding_hash": "sha256:0372ab7faa2a0baea660bf6eb477b88501512e001de21c004dd1c7f0c5cf3e8a",
+        "effective_case_input_hash": "sha256:b5fd294175b7ee441da6bb32eb0cdd7f52e63790ad4e3816b7cb623beee58bec",
         "review_input": {
           "role": "hand_authored_review_input_not_expected_oracle",
           "expected_diagnostics": [],
@@ -385,11 +386,11 @@
           "role": "actual_compiler_output_not_golden_oracle",
           "outcome": "compiled",
           "result_ref": "conformance/candidate/g2-semantic-correction-v2/cases/positive.map.result.json",
-          "result_hash": "sha256:02d0d178a282a0e42760e765551f05ad04dc3e0ab71d1c2c0e14261a7cb29f8e",
-          "result_raw_bytes_hash": "sha256:74cdf29304016032b78ca48b5a059bfb7395f63cabb9ce5503fe11623b25e63e"
+          "result_hash": "sha256:c25ee1276346aa9c2f73cd27ce6b00f384194dbecf52b7145d343e0c31803331",
+          "result_raw_bytes_hash": "sha256:94f87b086878b3d465d7a862edaca0e0f29c2d284cd1800b5b8d3c69080e8d67"
         },
         "expected_golden_oracle": {
-          "status": "pending_fresh_independent_human_semantic_review",
+          "status": "not_authored_working_not_review_candidate",
           "expected_case_result_bytes_ref": null,
           "expected_case_result_hash": null,
           "expected_source_hash": null,
@@ -399,7 +400,7 @@
           "expected_diagnostics": null
         },
         "review_owner": "human:local-owner",
-        "review_status": "pending_fresh_independent_human_semantic_review",
+        "review_status": "not_requested_until_prepare_rc",
         "human_judgment": null
       },
       {
@@ -410,12 +411,12 @@
           "policy_intersection"
         ],
         "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/positive.policy-intersection/source.json",
-        "raw_source_bytes_hash": "sha256:1625fc84758bde9c364b88f2c94570c4ee96abf5abde5b3ea98db1b77f643240",
+        "raw_source_bytes_hash": "sha256:675fd0232dd501fa8dfcd3eab3d4841fba62d78a7ed592bf1a2b268f3f99cdf4",
         "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/positive.policy-intersection@2.json",
         "input_snapshot_hash": "sha256:1a5e9e831eb817a3178ccc5ab7a92e27082904b0a675780bf4794a078a4b0969",
         "case_input_binding_ref": "conformance/candidate/g2-semantic-correction-v2/g2-case-input-binding@2.json",
-        "case_input_binding_hash": "sha256:2e6832400922ef7bee306b26f5e2bf8d0cf7b87be1fa89f10186c0920f021085",
-        "effective_case_input_hash": "sha256:7cc3b5176fe4515a07abd7c09676faab6e20982216087f25dfdd6aa8ba5ea3a9",
+        "case_input_binding_hash": "sha256:0372ab7faa2a0baea660bf6eb477b88501512e001de21c004dd1c7f0c5cf3e8a",
+        "effective_case_input_hash": "sha256:59009cc2b95d3282438f347be411ea8606b384a12969f32cf8eaa451580acd08",
         "review_input": {
           "role": "hand_authored_review_input_not_expected_oracle",
           "expected_diagnostics": [],
@@ -433,11 +434,11 @@
           "role": "actual_compiler_output_not_golden_oracle",
           "outcome": "compiled",
           "result_ref": "conformance/candidate/g2-semantic-correction-v2/cases/positive.policy-intersection.result.json",
-          "result_hash": "sha256:45c537c24eda2a17ff462c75ec0eb6a34dbc7526e42a198407f193b6481a61b9",
-          "result_raw_bytes_hash": "sha256:8b4fffb2160ba6b4a8657a788fc0a5bc2ece0de509c21726fad4cdaeb6cc3e1c"
+          "result_hash": "sha256:c929f11f0aa9ab7807aea7e5ebcea973f152a79ac8ab664736f59aef20c8b839",
+          "result_raw_bytes_hash": "sha256:afd0b6b5ff63094d54afa3f95204239af5d18ee7adeed4630cca7b66deefde6a"
         },
         "expected_golden_oracle": {
-          "status": "pending_fresh_independent_human_semantic_review",
+          "status": "not_authored_working_not_review_candidate",
           "expected_case_result_bytes_ref": null,
           "expected_case_result_hash": null,
           "expected_source_hash": null,
@@ -447,7 +448,7 @@
           "expected_diagnostics": null
         },
         "review_owner": "human:local-owner",
-        "review_status": "pending_fresh_independent_human_semantic_review",
+        "review_status": "not_requested_until_prepare_rc",
         "human_judgment": null
       },
       {
@@ -458,12 +459,12 @@
           "quality_revision_capability_binding"
         ],
         "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/positive.quality-revision-binding/source.json",
-        "raw_source_bytes_hash": "sha256:ad0357d45e4e0297478fa8f18ea4fbe437376296ec15ea44cc7969217b3532f7",
+        "raw_source_bytes_hash": "sha256:9ebf77d5a67cc3c01faf7346ec1ad77d75874d8078ed586ce98839c77c287f98",
         "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/positive.quality-revision-binding@2.json",
         "input_snapshot_hash": "sha256:85c2d974ee48e608637ad02d3abed0fb7b2b9877f738c1234be9e337214d0e84",
         "case_input_binding_ref": "conformance/candidate/g2-semantic-correction-v2/g2-case-input-binding@2.json",
-        "case_input_binding_hash": "sha256:2e6832400922ef7bee306b26f5e2bf8d0cf7b87be1fa89f10186c0920f021085",
-        "effective_case_input_hash": "sha256:91157168b86e5f987964b4a18564f16022d2d2691505a1da6086e2652c4d71fd",
+        "case_input_binding_hash": "sha256:0372ab7faa2a0baea660bf6eb477b88501512e001de21c004dd1c7f0c5cf3e8a",
+        "effective_case_input_hash": "sha256:8c4d6cb6d32b4d62bda2de201fd3ff6700e81693cf046e0427e59cee7d0fcc56",
         "review_input": {
           "role": "hand_authored_review_input_not_expected_oracle",
           "expected_diagnostics": [],
@@ -484,11 +485,11 @@
           "role": "actual_compiler_output_not_golden_oracle",
           "outcome": "compiled",
           "result_ref": "conformance/candidate/g2-semantic-correction-v2/cases/positive.quality-revision-binding.result.json",
-          "result_hash": "sha256:238dadd238bfbe7d3aae431dc6317964367175bf935e07641e38652788f13dd1",
-          "result_raw_bytes_hash": "sha256:bf8d27b9eaa8f0408cd1b1162b399a0b65266b05d9facbc9e8b602b1ac5a6eaf"
+          "result_hash": "sha256:e1bec659af66bd410501fb861ff2374317a18e9acf434be651c2037ce3c4b94a",
+          "result_raw_bytes_hash": "sha256:8dfa75256b098fe4719b487829bd6a17257b35c7accb275f359f60ad946f750b"
         },
         "expected_golden_oracle": {
-          "status": "pending_fresh_independent_human_semantic_review",
+          "status": "not_authored_working_not_review_candidate",
           "expected_case_result_bytes_ref": null,
           "expected_case_result_hash": null,
           "expected_source_hash": null,
@@ -498,7 +499,7 @@
           "expected_diagnostics": null
         },
         "review_owner": "human:local-owner",
-        "review_status": "pending_fresh_independent_human_semantic_review",
+        "review_status": "not_requested_until_prepare_rc",
         "human_judgment": null
       },
       {
@@ -509,12 +510,12 @@
           "sound_subtype_different_hash"
         ],
         "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/positive.sound-subtype-different-hash/source.json",
-        "raw_source_bytes_hash": "sha256:b99aa58a4249b2d945e745e4f65bcd59475a764ea40ce713c5259f04a599a41c",
+        "raw_source_bytes_hash": "sha256:7494cf363261d784f64194c6e3ae183ab0aec81530bca88034a6eb8bc540b223",
         "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/positive.sound-subtype-different-hash@2.json",
         "input_snapshot_hash": "sha256:725a05fa9de5dedd6483c44066ab692b0a660dbdf45931a9d1f3734b7a68c321",
         "case_input_binding_ref": "conformance/candidate/g2-semantic-correction-v2/g2-case-input-binding@2.json",
-        "case_input_binding_hash": "sha256:2e6832400922ef7bee306b26f5e2bf8d0cf7b87be1fa89f10186c0920f021085",
-        "effective_case_input_hash": "sha256:5b7343299e9bfcd3109cbdd11a68b4a486424b475b7d99d0e3d8c308347e3408",
+        "case_input_binding_hash": "sha256:0372ab7faa2a0baea660bf6eb477b88501512e001de21c004dd1c7f0c5cf3e8a",
+        "effective_case_input_hash": "sha256:afabf8f964d1edc858d0bb537cb2d78d6ece6ed32fa099659804274d349031f4",
         "review_input": {
           "role": "hand_authored_review_input_not_expected_oracle",
           "expected_diagnostics": [],
@@ -532,11 +533,11 @@
           "role": "actual_compiler_output_not_golden_oracle",
           "outcome": "compiled",
           "result_ref": "conformance/candidate/g2-semantic-correction-v2/cases/positive.sound-subtype-different-hash.result.json",
-          "result_hash": "sha256:c32b00de230851acf5010bd6c2fee27853853bcf602e7a1e7d1ac9fe44b92094",
-          "result_raw_bytes_hash": "sha256:a139daf1eb884e91724575256dd8149bfc809a4c25914e5b66ef25c4a855cc83"
+          "result_hash": "sha256:1b85b0344a7f7086c8be1d2f01ce25146e7b62850ed840715c2e85fc146e2f66",
+          "result_raw_bytes_hash": "sha256:9fee4fa41560ac441ba8cfb38a980b51018dfaf7ebbfb144b4409e137f8af5f5"
         },
         "expected_golden_oracle": {
-          "status": "pending_fresh_independent_human_semantic_review",
+          "status": "not_authored_working_not_review_candidate",
           "expected_case_result_bytes_ref": null,
           "expected_case_result_hash": null,
           "expected_source_hash": null,
@@ -546,7 +547,7 @@
           "expected_diagnostics": null
         },
         "review_owner": "human:local-owner",
-        "review_status": "pending_fresh_independent_human_semantic_review",
+        "review_status": "not_requested_until_prepare_rc",
         "human_judgment": null
       },
       {
@@ -557,12 +558,12 @@
           "static_child_closure"
         ],
         "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/positive.static-child-closure/source.json",
-        "raw_source_bytes_hash": "sha256:bd187256b838fe4a410e935ed3158e8e95f3d613246038d2256a918654c1db25",
+        "raw_source_bytes_hash": "sha256:95003607a882135dacd0840e64848b38d812db92a1fdf1703b161b029d6605f6",
         "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/positive.static-child-closure@2.json",
         "input_snapshot_hash": "sha256:98533b02cf2c9bd09145df9f8f294e8505a5d677e4ea11853b17a8074a69ecad",
         "case_input_binding_ref": "conformance/candidate/g2-semantic-correction-v2/g2-case-input-binding@2.json",
-        "case_input_binding_hash": "sha256:2e6832400922ef7bee306b26f5e2bf8d0cf7b87be1fa89f10186c0920f021085",
-        "effective_case_input_hash": "sha256:900c70df9dfabf778b971b9d0547eae2ecb7c3d0fa22126cce6c3f2f07b45e75",
+        "case_input_binding_hash": "sha256:0372ab7faa2a0baea660bf6eb477b88501512e001de21c004dd1c7f0c5cf3e8a",
+        "effective_case_input_hash": "sha256:357852b70f04806d69a8bce60250405e221b54a9661dbf2ac7e4bcd0a50168b6",
         "review_input": {
           "role": "hand_authored_review_input_not_expected_oracle",
           "expected_diagnostics": [],
@@ -587,11 +588,11 @@
           "role": "actual_compiler_output_not_golden_oracle",
           "outcome": "compiled",
           "result_ref": "conformance/candidate/g2-semantic-correction-v2/cases/positive.static-child-closure.result.json",
-          "result_hash": "sha256:0dd447099c7c4d9102ca814c945b4cf5eb2c98f2b9942b8222ac18a1fb98187e",
-          "result_raw_bytes_hash": "sha256:3db962a0af34b3f99572386bbab61637ba5b440013fff80e3e88c9f01e6e8c04"
+          "result_hash": "sha256:fb3fe31d36dcb30b1dbadacf7dd94af97b5f849f28e34868d72c2526ed917278",
+          "result_raw_bytes_hash": "sha256:b29ad9b7a3fae77667459cf7495818bf5f86418f685e498de6947f9fda517ab1"
         },
         "expected_golden_oracle": {
-          "status": "pending_fresh_independent_human_semantic_review",
+          "status": "not_authored_working_not_review_candidate",
           "expected_case_result_bytes_ref": null,
           "expected_case_result_hash": null,
           "expected_source_hash": null,
@@ -601,7 +602,7 @@
           "expected_diagnostics": null
         },
         "review_owner": "human:local-owner",
-        "review_status": "pending_fresh_independent_human_semantic_review",
+        "review_status": "not_requested_until_prepare_rc",
         "human_judgment": null
       },
       {
@@ -616,7 +617,7 @@
         "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/negative.json-syntax-invalid@2.json",
         "input_snapshot_hash": "sha256:ffddb8e5e92f70ec0f8d54ea3bdae64571eade3a2670fd1400b637d1c90fe46a",
         "case_input_binding_ref": "conformance/candidate/g2-semantic-correction-v2/g2-case-input-binding@2.json",
-        "case_input_binding_hash": "sha256:2e6832400922ef7bee306b26f5e2bf8d0cf7b87be1fa89f10186c0920f021085",
+        "case_input_binding_hash": "sha256:0372ab7faa2a0baea660bf6eb477b88501512e001de21c004dd1c7f0c5cf3e8a",
         "effective_case_input_hash": "sha256:8fe1a3569dd20edca501bcfb2cea5724eaeec0f7f504ec2b5955dd07c6a65e10",
         "review_input": {
           "role": "hand_authored_review_input_not_expected_oracle",
@@ -655,7 +656,7 @@
           "result_raw_bytes_hash": "sha256:937b1bb0dd72eed4e2d38773708f671f5680d7d54a3f227c25b9ddde3e313579"
         },
         "expected_golden_oracle": {
-          "status": "pending_fresh_independent_human_semantic_review",
+          "status": "not_authored_working_not_review_candidate",
           "expected_case_result_bytes_ref": null,
           "expected_case_result_hash": null,
           "expected_source_hash": null,
@@ -665,7 +666,7 @@
           "expected_diagnostics": null
         },
         "review_owner": "human:local-owner",
-        "review_status": "pending_fresh_independent_human_semantic_review",
+        "review_status": "not_requested_until_prepare_rc",
         "human_judgment": null
       },
       {
@@ -680,7 +681,7 @@
         "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/negative.json-duplicate-key@2.json",
         "input_snapshot_hash": "sha256:df1a724c6677cfe0fd878fc8328969caaf8e3c491eaab9a69c64ec9902e512b0",
         "case_input_binding_ref": "conformance/candidate/g2-semantic-correction-v2/g2-case-input-binding@2.json",
-        "case_input_binding_hash": "sha256:2e6832400922ef7bee306b26f5e2bf8d0cf7b87be1fa89f10186c0920f021085",
+        "case_input_binding_hash": "sha256:0372ab7faa2a0baea660bf6eb477b88501512e001de21c004dd1c7f0c5cf3e8a",
         "effective_case_input_hash": "sha256:3dbc995776f812dbc0319237f3c04eeab1f9d539145a07e13e5e7409ac9fccaa",
         "review_input": {
           "role": "hand_authored_review_input_not_expected_oracle",
@@ -719,7 +720,7 @@
           "result_raw_bytes_hash": "sha256:e50dce8306284015864053becef851141aa7d0651b3e828952b9b5536ab8f155"
         },
         "expected_golden_oracle": {
-          "status": "pending_fresh_independent_human_semantic_review",
+          "status": "not_authored_working_not_review_candidate",
           "expected_case_result_bytes_ref": null,
           "expected_case_result_hash": null,
           "expected_source_hash": null,
@@ -729,7 +730,7 @@
           "expected_diagnostics": null
         },
         "review_owner": "human:local-owner",
-        "review_status": "pending_fresh_independent_human_semantic_review",
+        "review_status": "not_requested_until_prepare_rc",
         "human_judgment": null
       },
       {
@@ -740,12 +741,12 @@
           "schema_unknown_field"
         ],
         "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/negative.schema-unknown-field/source.json",
-        "raw_source_bytes_hash": "sha256:bc476ab08339a5be43514e863416239245fdd042e91b0998ba0d8ef5e58f5a16",
+        "raw_source_bytes_hash": "sha256:876a758b55e4be95b74b9a4d50544fd3aab8a76e7ef79328e45134e0079c7fcc",
         "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/negative.schema-unknown-field@2.json",
         "input_snapshot_hash": "sha256:0645a5c77fddaae4c48ba4a5874f5a8b244b48e65d0836da224bf8be58adf643",
         "case_input_binding_ref": "conformance/candidate/g2-semantic-correction-v2/g2-case-input-binding@2.json",
-        "case_input_binding_hash": "sha256:2e6832400922ef7bee306b26f5e2bf8d0cf7b87be1fa89f10186c0920f021085",
-        "effective_case_input_hash": "sha256:79be02735d2bf06564536cc499d968a8dac927e678b9e91495e3190956fb7c01",
+        "case_input_binding_hash": "sha256:0372ab7faa2a0baea660bf6eb477b88501512e001de21c004dd1c7f0c5cf3e8a",
+        "effective_case_input_hash": "sha256:c683e4b6d656642616e28c2da46f2e8214d8bea3eeef5e3a8d49cc13c36e8c12",
         "review_input": {
           "role": "hand_authored_review_input_not_expected_oracle",
           "expected_diagnostics": [
@@ -779,11 +780,11 @@
           "role": "actual_compiler_output_not_golden_oracle",
           "outcome": "rejected",
           "result_ref": "conformance/candidate/g2-semantic-correction-v2/cases/negative.schema-unknown-field.result.json",
-          "result_hash": "sha256:f66a3437ea4c35f91b829cecb5051aaff7ecbeb39a8ddc33b462c34973c5a090",
-          "result_raw_bytes_hash": "sha256:293c2693f6a605e466b03247d5e67ad1067b19092aa8265cd909931bf4a3befc"
+          "result_hash": "sha256:dbf93cd9a3c096dfb0fec133f21a87815a92e7a52bc1c5950b8cca17c22b9e58",
+          "result_raw_bytes_hash": "sha256:405d1536dfcd0af83fee4fe480aabdfc617b92652c41606f920735ea350d5e54"
         },
         "expected_golden_oracle": {
-          "status": "pending_fresh_independent_human_semantic_review",
+          "status": "not_authored_working_not_review_candidate",
           "expected_case_result_bytes_ref": null,
           "expected_case_result_hash": null,
           "expected_source_hash": null,
@@ -793,7 +794,7 @@
           "expected_diagnostics": null
         },
         "review_owner": "human:local-owner",
-        "review_status": "pending_fresh_independent_human_semantic_review",
+        "review_status": "not_requested_until_prepare_rc",
         "human_judgment": null
       },
       {
@@ -808,7 +809,7 @@
         "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/negative.schema-profile-keyword-unsupported@2.json",
         "input_snapshot_hash": "sha256:0f8ded0c87ed00c29b2888e9d29c95339ca40ef5a07ba3d9f6be6927a55ba13e",
         "case_input_binding_ref": "conformance/candidate/g2-semantic-correction-v2/g2-case-input-binding@2.json",
-        "case_input_binding_hash": "sha256:2e6832400922ef7bee306b26f5e2bf8d0cf7b87be1fa89f10186c0920f021085",
+        "case_input_binding_hash": "sha256:0372ab7faa2a0baea660bf6eb477b88501512e001de21c004dd1c7f0c5cf3e8a",
         "effective_case_input_hash": "sha256:f00161341931fbbb330c46c36365e38f10c2bfd8fd034c995b49e5009810da71",
         "review_input": {
           "role": "hand_authored_review_input_not_expected_oracle",
@@ -847,7 +848,7 @@
           "result_raw_bytes_hash": "sha256:17412e1eae035ecb65af605df19c442dd4cd96a2cf76c6cd63e39f56fd0a5056"
         },
         "expected_golden_oracle": {
-          "status": "pending_fresh_independent_human_semantic_review",
+          "status": "not_authored_working_not_review_candidate",
           "expected_case_result_bytes_ref": null,
           "expected_case_result_hash": null,
           "expected_source_hash": null,
@@ -857,7 +858,7 @@
           "expected_diagnostics": null
         },
         "review_owner": "human:local-owner",
-        "review_status": "pending_fresh_independent_human_semantic_review",
+        "review_status": "not_requested_until_prepare_rc",
         "human_judgment": null
       },
       {
@@ -868,12 +869,12 @@
           "registry_ref_unpinned"
         ],
         "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/negative.registry-ref-unpinned/source.json",
-        "raw_source_bytes_hash": "sha256:85f3d69e7cf42bfe12d16e7e9d7b79481a784be2aeb5989cca06e3b09160c65d",
+        "raw_source_bytes_hash": "sha256:d59b468f1955e1dc7c99909a0c6cb5a03f5d1df48cce52006a0d4c41afc591ce",
         "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/negative.registry-ref-unpinned@2.json",
         "input_snapshot_hash": "sha256:d3da868bd5f090e27f9f076bc7b7e05cce45ba0ba888ac0310ea905f44dfbef3",
         "case_input_binding_ref": "conformance/candidate/g2-semantic-correction-v2/g2-case-input-binding@2.json",
-        "case_input_binding_hash": "sha256:2e6832400922ef7bee306b26f5e2bf8d0cf7b87be1fa89f10186c0920f021085",
-        "effective_case_input_hash": "sha256:722953b67f4297ba51568024ec9a0b1fed26794ce5e33c234fa34eb631b58ba0",
+        "case_input_binding_hash": "sha256:0372ab7faa2a0baea660bf6eb477b88501512e001de21c004dd1c7f0c5cf3e8a",
+        "effective_case_input_hash": "sha256:54eb31583b16a14fd9939eff3d22f9d1ea9bf19d38c1657e76e606bb2d84e3be",
         "review_input": {
           "role": "hand_authored_review_input_not_expected_oracle",
           "expected_diagnostics": [
@@ -907,11 +908,11 @@
           "role": "actual_compiler_output_not_golden_oracle",
           "outcome": "rejected",
           "result_ref": "conformance/candidate/g2-semantic-correction-v2/cases/negative.registry-ref-unpinned.result.json",
-          "result_hash": "sha256:0287fb96cf7427d75c8e946794b9b4dc96f348303df08e51b91d7e20b5656dd0",
-          "result_raw_bytes_hash": "sha256:907b6f8dabb8c7e05c5663c8bb67d1afd4d47f5566465b43f155ac99dc58d60a"
+          "result_hash": "sha256:ac8b9a484b2ddf98c557394eade4a155b8d8c85b623d0bf2f587875d5e48434e",
+          "result_raw_bytes_hash": "sha256:eb647ec529bf199178c68f9e574b306f8aa7b548cd1d7a6dd8aac6452f831d99"
         },
         "expected_golden_oracle": {
-          "status": "pending_fresh_independent_human_semantic_review",
+          "status": "not_authored_working_not_review_candidate",
           "expected_case_result_bytes_ref": null,
           "expected_case_result_hash": null,
           "expected_source_hash": null,
@@ -921,7 +922,7 @@
           "expected_diagnostics": null
         },
         "review_owner": "human:local-owner",
-        "review_status": "pending_fresh_independent_human_semantic_review",
+        "review_status": "not_requested_until_prepare_rc",
         "human_judgment": null
       },
       {
@@ -932,12 +933,12 @@
           "registry_ref_not_found"
         ],
         "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/negative.registry-ref-not-found/source.json",
-        "raw_source_bytes_hash": "sha256:5c10d61cba54c8bf3858e8e4cf4ef642089b1ff57e64eb301762747e44bc482a",
+        "raw_source_bytes_hash": "sha256:523d10fe2da3f9b2578731fb624aad1b3c993eb2c2c915e2e8016634aba48b27",
         "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/negative.registry-ref-not-found@2.json",
         "input_snapshot_hash": "sha256:71ed236bf35dbf2c6150c23d612762a1c5d5e05a22bc15fd4f2f046dead499da",
         "case_input_binding_ref": "conformance/candidate/g2-semantic-correction-v2/g2-case-input-binding@2.json",
-        "case_input_binding_hash": "sha256:2e6832400922ef7bee306b26f5e2bf8d0cf7b87be1fa89f10186c0920f021085",
-        "effective_case_input_hash": "sha256:50920258165a657b4e875ed0108c0e5bd9728a0ca0d98dceae00dfedbaf07887",
+        "case_input_binding_hash": "sha256:0372ab7faa2a0baea660bf6eb477b88501512e001de21c004dd1c7f0c5cf3e8a",
+        "effective_case_input_hash": "sha256:4ca5ed53b010ba91d1c6b5291e01419b830ac46cdeb109b4cf6edf0ae88e8807",
         "review_input": {
           "role": "hand_authored_review_input_not_expected_oracle",
           "expected_diagnostics": [
@@ -971,11 +972,11 @@
           "role": "actual_compiler_output_not_golden_oracle",
           "outcome": "rejected",
           "result_ref": "conformance/candidate/g2-semantic-correction-v2/cases/negative.registry-ref-not-found.result.json",
-          "result_hash": "sha256:7eb2615305c4d4f1494f754f4db706ee069587e2cb9f2c9689962828ae65f0d6",
-          "result_raw_bytes_hash": "sha256:4a5478cb80568b1f917d1db62c50fcffcf2013d010d1c507dc9cb2387c633e5d"
+          "result_hash": "sha256:d63589474da6b4eeddc69ef8286b846dddea6548a7a70c531a7b0daedfcf9cd2",
+          "result_raw_bytes_hash": "sha256:8503c530121c77e8a19198539fffbf069c3a7613e51b98a2f748ff44e5a5916a"
         },
         "expected_golden_oracle": {
-          "status": "pending_fresh_independent_human_semantic_review",
+          "status": "not_authored_working_not_review_candidate",
           "expected_case_result_bytes_ref": null,
           "expected_case_result_hash": null,
           "expected_source_hash": null,
@@ -985,7 +986,7 @@
           "expected_diagnostics": null
         },
         "review_owner": "human:local-owner",
-        "review_status": "pending_fresh_independent_human_semantic_review",
+        "review_status": "not_requested_until_prepare_rc",
         "human_judgment": null
       },
       {
@@ -996,12 +997,12 @@
           "graph_id_duplicate"
         ],
         "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/negative.graph-id-duplicate/source.json",
-        "raw_source_bytes_hash": "sha256:d60e3bea30d45947da8d70d73725a7bb02f1acf6da82553c61375840536e2d65",
+        "raw_source_bytes_hash": "sha256:1c8ab4d75c1a34c6ddacb0bc0d25b804185e0faec3b3f68e46796656605236f7",
         "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/negative.graph-id-duplicate@2.json",
         "input_snapshot_hash": "sha256:cf1ce9d43f04086fc50e3e020b4e3a83da22dabd1704489a707a269bb715d5f5",
         "case_input_binding_ref": "conformance/candidate/g2-semantic-correction-v2/g2-case-input-binding@2.json",
-        "case_input_binding_hash": "sha256:2e6832400922ef7bee306b26f5e2bf8d0cf7b87be1fa89f10186c0920f021085",
-        "effective_case_input_hash": "sha256:87801ad96ab63a78df4179e4ee335ef46ed10fc08b47f77883f5e480547f2bfd",
+        "case_input_binding_hash": "sha256:0372ab7faa2a0baea660bf6eb477b88501512e001de21c004dd1c7f0c5cf3e8a",
+        "effective_case_input_hash": "sha256:64e814f0e521802bf205581fb7231b5b1e1eb6cd1906aaa17c22f69a0b0a4560",
         "review_input": {
           "role": "hand_authored_review_input_not_expected_oracle",
           "expected_diagnostics": [
@@ -1035,11 +1036,11 @@
           "role": "actual_compiler_output_not_golden_oracle",
           "outcome": "rejected",
           "result_ref": "conformance/candidate/g2-semantic-correction-v2/cases/negative.graph-id-duplicate.result.json",
-          "result_hash": "sha256:23f0c3332af134d1dcddd8d3fa86ad8e4f39f88cb7489501b694c3877e1bb82a",
-          "result_raw_bytes_hash": "sha256:c07bcd1c1ec25e731be9f5f60f5c62f5d496ae048bf0c699081e6c4001fa2dc2"
+          "result_hash": "sha256:4a960d8b76374c193e9502d0131ef7b0372e4bf0a9f0e16030129ddb7f01e9af",
+          "result_raw_bytes_hash": "sha256:740aab24192fad2c93aa45e5b4b5ab731d5f9ed6e1b97dec06e3f3633725fd8c"
         },
         "expected_golden_oracle": {
-          "status": "pending_fresh_independent_human_semantic_review",
+          "status": "not_authored_working_not_review_candidate",
           "expected_case_result_bytes_ref": null,
           "expected_case_result_hash": null,
           "expected_source_hash": null,
@@ -1049,7 +1050,7 @@
           "expected_diagnostics": null
         },
         "review_owner": "human:local-owner",
-        "review_status": "pending_fresh_independent_human_semantic_review",
+        "review_status": "not_requested_until_prepare_rc",
         "human_judgment": null
       },
       {
@@ -1060,12 +1061,12 @@
           "graph_endpoint_not_found"
         ],
         "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/negative.graph-endpoint-not-found/source.json",
-        "raw_source_bytes_hash": "sha256:7d42dfc3c1ca47be79afc21dc216fe61cf42f0aa24eb15dff1f252f1c52d5fcb",
+        "raw_source_bytes_hash": "sha256:356a7bd04dae89a3752f81a3497102baf4f0db096a45ffada33e58a757fba0bc",
         "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/negative.graph-endpoint-not-found@2.json",
         "input_snapshot_hash": "sha256:867a81d37f5f3bf8fea5837b7e60d4cd1c804c2f26f2b7ede183bc41a10b4468",
         "case_input_binding_ref": "conformance/candidate/g2-semantic-correction-v2/g2-case-input-binding@2.json",
-        "case_input_binding_hash": "sha256:2e6832400922ef7bee306b26f5e2bf8d0cf7b87be1fa89f10186c0920f021085",
-        "effective_case_input_hash": "sha256:e7e41d8da5d489af9f15d84a827076c913fbfb5a72ace899619cfc50f915cdb5",
+        "case_input_binding_hash": "sha256:0372ab7faa2a0baea660bf6eb477b88501512e001de21c004dd1c7f0c5cf3e8a",
+        "effective_case_input_hash": "sha256:7df2d1ef53ffa00d4c4ebc8ec0d4e851e089cd67029f9064ee27c9321134f7e8",
         "review_input": {
           "role": "hand_authored_review_input_not_expected_oracle",
           "expected_diagnostics": [
@@ -1099,11 +1100,11 @@
           "role": "actual_compiler_output_not_golden_oracle",
           "outcome": "rejected",
           "result_ref": "conformance/candidate/g2-semantic-correction-v2/cases/negative.graph-endpoint-not-found.result.json",
-          "result_hash": "sha256:c7ac5d764beab086bf6b801f4762656dcd54c9a13f6bbabbe3bd28ded02ebf70",
-          "result_raw_bytes_hash": "sha256:887077ec5128150648a5e3d21b06cacc2343a40a0071a4ed1f856f3482d5a7a1"
+          "result_hash": "sha256:42459b590dcb5c69345f4e9be89c38fb3c246f5af58a13182fb26c5d6306c766",
+          "result_raw_bytes_hash": "sha256:a62f7eb6afbd5907988b5d7302fd83240ac1fff1f6c3ce20153fee68055fae68"
         },
         "expected_golden_oracle": {
-          "status": "pending_fresh_independent_human_semantic_review",
+          "status": "not_authored_working_not_review_candidate",
           "expected_case_result_bytes_ref": null,
           "expected_case_result_hash": null,
           "expected_source_hash": null,
@@ -1113,7 +1114,7 @@
           "expected_diagnostics": null
         },
         "review_owner": "human:local-owner",
-        "review_status": "pending_fresh_independent_human_semantic_review",
+        "review_status": "not_requested_until_prepare_rc",
         "human_judgment": null
       },
       {
@@ -1125,12 +1126,12 @@
           "cross_scope_syntax_absent"
         ],
         "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/negative.graph-cross-scope-edge/source.json",
-        "raw_source_bytes_hash": "sha256:c6db17673ef1d5e7c66ac83d09f925ca9793ba73d5eed3ae1d52583f93c8cb19",
+        "raw_source_bytes_hash": "sha256:bccb8606f5322e3c54ee95f160bfd78b99f3d3019c04a04eac64954cb35d236c",
         "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/negative.graph-cross-scope-edge@2.json",
         "input_snapshot_hash": "sha256:4b539937420e03ed21a415c381870f89c4a34dfcfa03d6a0bfe5fd2d7d5f20e5",
         "case_input_binding_ref": "conformance/candidate/g2-semantic-correction-v2/g2-case-input-binding@2.json",
-        "case_input_binding_hash": "sha256:2e6832400922ef7bee306b26f5e2bf8d0cf7b87be1fa89f10186c0920f021085",
-        "effective_case_input_hash": "sha256:1827b1ed175d2443f69b162ea9dd3866a849c43140705cf2769751585fdf8dfc",
+        "case_input_binding_hash": "sha256:0372ab7faa2a0baea660bf6eb477b88501512e001de21c004dd1c7f0c5cf3e8a",
+        "effective_case_input_hash": "sha256:f59b3c68f7b3f45043fd0cb7793fa269763a21577ebf7050c6c25088b68c0cad",
         "review_input": {
           "role": "hand_authored_review_input_not_expected_oracle",
           "expected_diagnostics": [
@@ -1164,11 +1165,11 @@
           "role": "actual_compiler_output_not_golden_oracle",
           "outcome": "rejected",
           "result_ref": "conformance/candidate/g2-semantic-correction-v2/cases/negative.graph-cross-scope-edge.result.json",
-          "result_hash": "sha256:10bac0c39673a1abdfb6a6dbe12bd02b4166f1b13c055ce54c6731c3d74c6973",
-          "result_raw_bytes_hash": "sha256:26855a8c6cd4a7eea6a24e25f46977a9a9f560bfb8d54ec5d5975483a6567c92"
+          "result_hash": "sha256:6da01274dce29f28a4b488bf7389e6e617d064e0b378ac1d6c569dfeb244b6f5",
+          "result_raw_bytes_hash": "sha256:f57fe05bdf4ef6605d3aa8ca25cb326e19214eaf363960b17cda9d586b430364"
         },
         "expected_golden_oracle": {
-          "status": "pending_fresh_independent_human_semantic_review",
+          "status": "not_authored_working_not_review_candidate",
           "expected_case_result_bytes_ref": null,
           "expected_case_result_hash": null,
           "expected_source_hash": null,
@@ -1178,7 +1179,7 @@
           "expected_diagnostics": null
         },
         "review_owner": "human:local-owner",
-        "review_status": "pending_fresh_independent_human_semantic_review",
+        "review_status": "not_requested_until_prepare_rc",
         "human_judgment": null
       },
       {
@@ -1189,12 +1190,12 @@
           "graph_dependency_cycle"
         ],
         "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/negative.graph-dependency-cycle/source.json",
-        "raw_source_bytes_hash": "sha256:17436cceced05691ebce9e54ed56bdae6464de5436b383410aab067c097610a5",
+        "raw_source_bytes_hash": "sha256:d6eacdfa648a421231d3836a6618f789da839625e773b33fc27895a50ee44aa5",
         "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/negative.graph-dependency-cycle@2.json",
         "input_snapshot_hash": "sha256:e36d99a03fe4e84047c4af35ef51c7b9c4ffeee2366d7646f5c8613e086fb397",
         "case_input_binding_ref": "conformance/candidate/g2-semantic-correction-v2/g2-case-input-binding@2.json",
-        "case_input_binding_hash": "sha256:2e6832400922ef7bee306b26f5e2bf8d0cf7b87be1fa89f10186c0920f021085",
-        "effective_case_input_hash": "sha256:f48db233e2fbce7414d0278b8662d4ed7125c6615943dad24590e91dcca016a1",
+        "case_input_binding_hash": "sha256:0372ab7faa2a0baea660bf6eb477b88501512e001de21c004dd1c7f0c5cf3e8a",
+        "effective_case_input_hash": "sha256:eb8ae6e89ccfe6d55f79a74197d294b295f111d7b2203cb2c30b1a3415159eae",
         "review_input": {
           "role": "hand_authored_review_input_not_expected_oracle",
           "expected_diagnostics": [
@@ -1228,11 +1229,11 @@
           "role": "actual_compiler_output_not_golden_oracle",
           "outcome": "rejected",
           "result_ref": "conformance/candidate/g2-semantic-correction-v2/cases/negative.graph-dependency-cycle.result.json",
-          "result_hash": "sha256:3545ec7081299c8321d589aab84cf001bb5abbb80fa665773a4341a36c0f18fd",
-          "result_raw_bytes_hash": "sha256:199aa6aa124d0bec605208046452a80efbfaf5aa1d9a7595480376898331b89b"
+          "result_hash": "sha256:b21dc62a6c39e6e8d2f93fd882aab67c74146465d04386bdb5600484fcd44571",
+          "result_raw_bytes_hash": "sha256:7ea86aced74b8f542bb40f356287c4b67e51356c88e630a970994beea8c81099"
         },
         "expected_golden_oracle": {
-          "status": "pending_fresh_independent_human_semantic_review",
+          "status": "not_authored_working_not_review_candidate",
           "expected_case_result_bytes_ref": null,
           "expected_case_result_hash": null,
           "expected_source_hash": null,
@@ -1242,7 +1243,7 @@
           "expected_diagnostics": null
         },
         "review_owner": "human:local-owner",
-        "review_status": "pending_fresh_independent_human_semantic_review",
+        "review_status": "not_requested_until_prepare_rc",
         "human_judgment": null
       },
       {
@@ -1253,12 +1254,12 @@
           "condition_type_mismatch"
         ],
         "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/negative.condition-type-mismatch/source.json",
-        "raw_source_bytes_hash": "sha256:2f59afe5b3d55fc04054c6a0d4bbefa6ded78b74791d5d3937a2a44f72591d32",
+        "raw_source_bytes_hash": "sha256:c4514dd6ba73b7f25fb677d89a75d5d296e1a6067797b003981ffeae862f0e81",
         "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/negative.condition-type-mismatch@2.json",
         "input_snapshot_hash": "sha256:bc8e89513d7210ef58e4495fe4c8a2e82022a64ac1e6c573366d2a96a0817a78",
         "case_input_binding_ref": "conformance/candidate/g2-semantic-correction-v2/g2-case-input-binding@2.json",
-        "case_input_binding_hash": "sha256:2e6832400922ef7bee306b26f5e2bf8d0cf7b87be1fa89f10186c0920f021085",
-        "effective_case_input_hash": "sha256:9d6e18a3d4bca36f7a3611a655ca4073ab4c82086b8b77d807d8ce30d155cdaa",
+        "case_input_binding_hash": "sha256:0372ab7faa2a0baea660bf6eb477b88501512e001de21c004dd1c7f0c5cf3e8a",
+        "effective_case_input_hash": "sha256:e37a9e41ca9224dc7d92e550a42013dbc23aaf1a3eb173c687c2400986398eec",
         "review_input": {
           "role": "hand_authored_review_input_not_expected_oracle",
           "expected_diagnostics": [
@@ -1292,11 +1293,11 @@
           "role": "actual_compiler_output_not_golden_oracle",
           "outcome": "rejected",
           "result_ref": "conformance/candidate/g2-semantic-correction-v2/cases/negative.condition-type-mismatch.result.json",
-          "result_hash": "sha256:9dec0d5653942005a5362110a28082e37e0af8719e0bb3a1df8db55896264a54",
-          "result_raw_bytes_hash": "sha256:1a32b8951cd25eaa89314d57801e567869a89d6bca5010d14423541b1b0c8c59"
+          "result_hash": "sha256:2a1b649b4f06eec42a905b2fac2273ae2013e0a22aa2de04aae64b770e594909",
+          "result_raw_bytes_hash": "sha256:032ded0d55d2c80417c349f4700dbc562549ab7514b8cb4ba6947995d0b9b644"
         },
         "expected_golden_oracle": {
-          "status": "pending_fresh_independent_human_semantic_review",
+          "status": "not_authored_working_not_review_candidate",
           "expected_case_result_bytes_ref": null,
           "expected_case_result_hash": null,
           "expected_source_hash": null,
@@ -1306,7 +1307,7 @@
           "expected_diagnostics": null
         },
         "review_owner": "human:local-owner",
-        "review_status": "pending_fresh_independent_human_semantic_review",
+        "review_status": "not_requested_until_prepare_rc",
         "human_judgment": null
       },
       {
@@ -1317,12 +1318,12 @@
           "condition_complexity_exceeded"
         ],
         "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/negative.condition-complexity-exceeded/source.json",
-        "raw_source_bytes_hash": "sha256:cb7ed34e45de388c3f555026d8f3ea866f7b0930af637588da09a66a9a32a798",
+        "raw_source_bytes_hash": "sha256:3f826dc323d04beafe2457894460b0485c7fff1b276a11f40bbff7376259066f",
         "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/negative.condition-complexity-exceeded@2.json",
         "input_snapshot_hash": "sha256:96564069f96cad342bf5279d1bda0ce261118ba7a81505e133b9590f1ffe5f8d",
         "case_input_binding_ref": "conformance/candidate/g2-semantic-correction-v2/g2-case-input-binding@2.json",
-        "case_input_binding_hash": "sha256:2e6832400922ef7bee306b26f5e2bf8d0cf7b87be1fa89f10186c0920f021085",
-        "effective_case_input_hash": "sha256:1c23c83cae54d45e900fe77de0c06f7020f608556ec229fc5f94d26ccfcf8c97",
+        "case_input_binding_hash": "sha256:0372ab7faa2a0baea660bf6eb477b88501512e001de21c004dd1c7f0c5cf3e8a",
+        "effective_case_input_hash": "sha256:b9fbf505b4928d3011453dc8174e72c99e1ac2c36033a111708adb84b03325d7",
         "review_input": {
           "role": "hand_authored_review_input_not_expected_oracle",
           "expected_diagnostics": [
@@ -1356,11 +1357,11 @@
           "role": "actual_compiler_output_not_golden_oracle",
           "outcome": "rejected",
           "result_ref": "conformance/candidate/g2-semantic-correction-v2/cases/negative.condition-complexity-exceeded.result.json",
-          "result_hash": "sha256:4879775eaada4ae704f9910e363eff7586226074eaed90226261d942548cb9d0",
-          "result_raw_bytes_hash": "sha256:128868ccc9091ede7475a04142f19c758ebb1f2c297dad547693981f64fb2a39"
+          "result_hash": "sha256:b66d4eb73f64c21d0c0d2724e2d4704c9192a47f1874e0e12870f76019972673",
+          "result_raw_bytes_hash": "sha256:0568120d95592f4d332f0e9f92de14bed3abdf6b2130893eabe0748e4d49a578"
         },
         "expected_golden_oracle": {
-          "status": "pending_fresh_independent_human_semantic_review",
+          "status": "not_authored_working_not_review_candidate",
           "expected_case_result_bytes_ref": null,
           "expected_case_result_hash": null,
           "expected_source_hash": null,
@@ -1370,7 +1371,7 @@
           "expected_diagnostics": null
         },
         "review_owner": "human:local-owner",
-        "review_status": "pending_fresh_independent_human_semantic_review",
+        "review_status": "not_requested_until_prepare_rc",
         "human_judgment": null
       },
       {
@@ -1381,12 +1382,12 @@
           "json_pointer_non_total"
         ],
         "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/negative.json-pointer-non-total/source.json",
-        "raw_source_bytes_hash": "sha256:018e79f40d6cd11879cd1b620466b2f2484179617d5a4c184ea788b9559f9849",
+        "raw_source_bytes_hash": "sha256:38117236d671e9145a2b79d85bb7853d6e574ffc51fb48f7aa8fc1e6b49595ec",
         "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/negative.json-pointer-non-total@2.json",
         "input_snapshot_hash": "sha256:a9c6828f19126abaff7a7415fbaa7d0ebd4bf2f11f98a3d7ae0b773523d0a720",
         "case_input_binding_ref": "conformance/candidate/g2-semantic-correction-v2/g2-case-input-binding@2.json",
-        "case_input_binding_hash": "sha256:2e6832400922ef7bee306b26f5e2bf8d0cf7b87be1fa89f10186c0920f021085",
-        "effective_case_input_hash": "sha256:4f2593f0957a27fd808b1da1cd5c2fd99353a1c427b9d7ae5f268d0d4916df51",
+        "case_input_binding_hash": "sha256:0372ab7faa2a0baea660bf6eb477b88501512e001de21c004dd1c7f0c5cf3e8a",
+        "effective_case_input_hash": "sha256:18859241b9eb19c4bf95e2e0c245f8416cec36d78496c4a81a60cd26fa49a236",
         "review_input": {
           "role": "hand_authored_review_input_not_expected_oracle",
           "expected_diagnostics": [
@@ -1420,11 +1421,11 @@
           "role": "actual_compiler_output_not_golden_oracle",
           "outcome": "rejected",
           "result_ref": "conformance/candidate/g2-semantic-correction-v2/cases/negative.json-pointer-non-total.result.json",
-          "result_hash": "sha256:26daa61d0ca36bf235a75ffde13f260f335054f0608f4b99d29cd64ae232360f",
-          "result_raw_bytes_hash": "sha256:fdf1470ee1cb97ee370c3c51db2d733be867ba8f051721a12d1a51d7b398f30a"
+          "result_hash": "sha256:91cbde1f43db77e57686dabc77dc199db822d551feac18a838732fa4f2f21b2e",
+          "result_raw_bytes_hash": "sha256:801aeee75082944963863d82f613c34ea5ac60d8a1b2c68b664fd1bb9142ffce"
         },
         "expected_golden_oracle": {
-          "status": "pending_fresh_independent_human_semantic_review",
+          "status": "not_authored_working_not_review_candidate",
           "expected_case_result_bytes_ref": null,
           "expected_case_result_hash": null,
           "expected_source_hash": null,
@@ -1434,7 +1435,7 @@
           "expected_diagnostics": null
         },
         "review_owner": "human:local-owner",
-        "review_status": "pending_fresh_independent_human_semantic_review",
+        "review_status": "not_requested_until_prepare_rc",
         "human_judgment": null
       },
       {
@@ -1445,12 +1446,12 @@
           "schema_not_assignable"
         ],
         "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/negative.schema-not-assignable/source.json",
-        "raw_source_bytes_hash": "sha256:18868dccadfcda81e645ba786f3a8c77ab3aea43e518681361a3927487d7d17e",
+        "raw_source_bytes_hash": "sha256:dc3e83f1a4bf7f3ef60fff7a9565541c91523df02ad49c303f1c03f63d207cca",
         "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/negative.schema-not-assignable@2.json",
         "input_snapshot_hash": "sha256:8b2cca505a0cc3fb0a0639add4775bebdf7072b44caee503d3fd98221ff90f23",
         "case_input_binding_ref": "conformance/candidate/g2-semantic-correction-v2/g2-case-input-binding@2.json",
-        "case_input_binding_hash": "sha256:2e6832400922ef7bee306b26f5e2bf8d0cf7b87be1fa89f10186c0920f021085",
-        "effective_case_input_hash": "sha256:28d98ac391511d8b0119b338811b582a27b041ee197f3d6c949d946c1d7b11eb",
+        "case_input_binding_hash": "sha256:0372ab7faa2a0baea660bf6eb477b88501512e001de21c004dd1c7f0c5cf3e8a",
+        "effective_case_input_hash": "sha256:a194d1e9666f7fb68a8eb7050fea0bb25b712033c59c6597dbb312cad6d0f208",
         "review_input": {
           "role": "hand_authored_review_input_not_expected_oracle",
           "expected_diagnostics": [
@@ -1484,11 +1485,11 @@
           "role": "actual_compiler_output_not_golden_oracle",
           "outcome": "rejected",
           "result_ref": "conformance/candidate/g2-semantic-correction-v2/cases/negative.schema-not-assignable.result.json",
-          "result_hash": "sha256:7bbd091578a11a98041a18b3f790c95434ddc33d44ded3ec8136323241753b6d",
-          "result_raw_bytes_hash": "sha256:f682e29ed44ce449b9e995d8a31cf83a8b9599afa95d99dd9c38467e518a01be"
+          "result_hash": "sha256:a2834ebef0a1e400139fc587be5162a07b5b186fa7679ffa51e0812fe533ff6e",
+          "result_raw_bytes_hash": "sha256:12205295af551dfeb4aca51ceba071eb5ed172fc7fa4ba253f5f4bcfe158f4de"
         },
         "expected_golden_oracle": {
-          "status": "pending_fresh_independent_human_semantic_review",
+          "status": "not_authored_working_not_review_candidate",
           "expected_case_result_bytes_ref": null,
           "expected_case_result_hash": null,
           "expected_source_hash": null,
@@ -1498,7 +1499,7 @@
           "expected_diagnostics": null
         },
         "review_owner": "human:local-owner",
-        "review_status": "pending_fresh_independent_human_semantic_review",
+        "review_status": "not_requested_until_prepare_rc",
         "human_judgment": null
       },
       {
@@ -1509,12 +1510,12 @@
           "route_group_ambiguous"
         ],
         "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/negative.route-group-ambiguous/source.json",
-        "raw_source_bytes_hash": "sha256:0a0307ac507a37f012e3d2d9213bdcc67cb3c4d984b2d5daa25e161cf43ab937",
+        "raw_source_bytes_hash": "sha256:ead93010823d1a2a091066d8af0b3bf3b301669f37b64975b8ff62fff9991ccc",
         "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/negative.route-group-ambiguous@2.json",
         "input_snapshot_hash": "sha256:c6612efc056d9e7b194e1f8ac899f711ca1bf277a4b21caefbad8c9c941bab65",
         "case_input_binding_ref": "conformance/candidate/g2-semantic-correction-v2/g2-case-input-binding@2.json",
-        "case_input_binding_hash": "sha256:2e6832400922ef7bee306b26f5e2bf8d0cf7b87be1fa89f10186c0920f021085",
-        "effective_case_input_hash": "sha256:48ed860e917c7c47a47ee2f254dff8ef9827e2604887079b46c1ff4569d374b5",
+        "case_input_binding_hash": "sha256:0372ab7faa2a0baea660bf6eb477b88501512e001de21c004dd1c7f0c5cf3e8a",
+        "effective_case_input_hash": "sha256:3fbfd6a830630877601275749a9d6f99794c65cf12524ea4d17e9ede21d1f3ba",
         "review_input": {
           "role": "hand_authored_review_input_not_expected_oracle",
           "expected_diagnostics": [
@@ -1548,11 +1549,11 @@
           "role": "actual_compiler_output_not_golden_oracle",
           "outcome": "rejected",
           "result_ref": "conformance/candidate/g2-semantic-correction-v2/cases/negative.route-group-ambiguous.result.json",
-          "result_hash": "sha256:823cc19f6b93c145e5b4f382f61d6c3ad1f6d11aacf40ea719123a3b79433b78",
-          "result_raw_bytes_hash": "sha256:d4ea06752c50ae0461e4c0e7a1dc01e9b3c0c52023bd6a20aa19268800a38411"
+          "result_hash": "sha256:4b4cb7f9f520cb511be0ce728074664401c35e25816e345010bde264722d0b13",
+          "result_raw_bytes_hash": "sha256:f32df1716f9300db49988d6107f481d3ea7af78648ff5bc9e6f94385f6a3415d"
         },
         "expected_golden_oracle": {
-          "status": "pending_fresh_independent_human_semantic_review",
+          "status": "not_authored_working_not_review_candidate",
           "expected_case_result_bytes_ref": null,
           "expected_case_result_hash": null,
           "expected_source_hash": null,
@@ -1562,7 +1563,7 @@
           "expected_diagnostics": null
         },
         "review_owner": "human:local-owner",
-        "review_status": "pending_fresh_independent_human_semantic_review",
+        "review_status": "not_requested_until_prepare_rc",
         "human_judgment": null
       },
       {
@@ -1573,12 +1574,12 @@
           "trigger_contract_invalid"
         ],
         "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/negative.trigger-contract-invalid/source.json",
-        "raw_source_bytes_hash": "sha256:231cdee1fc0af13069e724bbb256497786ce7e37077370fac89ca8e0d75eae40",
+        "raw_source_bytes_hash": "sha256:9ff3ff71fd019c9ed98644aa09f194341d91e08dca0a3bb2ad3ee634d18ecb06",
         "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/negative.trigger-contract-invalid@2.json",
         "input_snapshot_hash": "sha256:bf64f3950ea633e53d4ed833a63ed942212b874c89547e089fab2a07815bca61",
         "case_input_binding_ref": "conformance/candidate/g2-semantic-correction-v2/g2-case-input-binding@2.json",
-        "case_input_binding_hash": "sha256:2e6832400922ef7bee306b26f5e2bf8d0cf7b87be1fa89f10186c0920f021085",
-        "effective_case_input_hash": "sha256:3407ad7194a938ed8d21224037574fa5af344f86e0ae55b988b48be73572f16b",
+        "case_input_binding_hash": "sha256:0372ab7faa2a0baea660bf6eb477b88501512e001de21c004dd1c7f0c5cf3e8a",
+        "effective_case_input_hash": "sha256:6c6b0b22bc26e8ef2447cab248fd7960c53d37d6e6feeefe4ddd510e166b538a",
         "review_input": {
           "role": "hand_authored_review_input_not_expected_oracle",
           "expected_diagnostics": [
@@ -1612,11 +1613,11 @@
           "role": "actual_compiler_output_not_golden_oracle",
           "outcome": "rejected",
           "result_ref": "conformance/candidate/g2-semantic-correction-v2/cases/negative.trigger-contract-invalid.result.json",
-          "result_hash": "sha256:c312117b85ba0fdfc72d05f98aceeefabaee463517ba51ed67defa59fe6ae5eb",
-          "result_raw_bytes_hash": "sha256:cf15a99381b8ba7e3e3a1ba1a5ab56af8b349eddd44f77ac78782d1328364e97"
+          "result_hash": "sha256:47a8dc3c9a139a66e8a82d80fff482e3c4805b168fa56cc760c47e027a35c30b",
+          "result_raw_bytes_hash": "sha256:a117ed22326c1d4100ab797bffe992c89d9753c4611bcd24b94d15a8aaf7d5fc"
         },
         "expected_golden_oracle": {
-          "status": "pending_fresh_independent_human_semantic_review",
+          "status": "not_authored_working_not_review_candidate",
           "expected_case_result_bytes_ref": null,
           "expected_case_result_hash": null,
           "expected_source_hash": null,
@@ -1626,7 +1627,7 @@
           "expected_diagnostics": null
         },
         "review_owner": "human:local-owner",
-        "review_status": "pending_fresh_independent_human_semantic_review",
+        "review_status": "not_requested_until_prepare_rc",
         "human_judgment": null
       },
       {
@@ -1637,12 +1638,12 @@
           "completion_contract_invalid"
         ],
         "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/negative.completion-contract-invalid/source.json",
-        "raw_source_bytes_hash": "sha256:84a86149e0c6624b4ec421d29ea5a96474fba800cbb737422347f10633ca48c7",
+        "raw_source_bytes_hash": "sha256:3cb7bb9aa5ef9286eb642935a948150d25f2a1a16231712137153f2b8beb05a0",
         "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/negative.completion-contract-invalid@2.json",
         "input_snapshot_hash": "sha256:3f6a41b121662780e24bcb360581df89bb373dc4d4cef6fb6c8f2785c3a29c30",
         "case_input_binding_ref": "conformance/candidate/g2-semantic-correction-v2/g2-case-input-binding@2.json",
-        "case_input_binding_hash": "sha256:2e6832400922ef7bee306b26f5e2bf8d0cf7b87be1fa89f10186c0920f021085",
-        "effective_case_input_hash": "sha256:b2603e6173b7f9c40b20f068ad6e042920bff92661af03d6cfe2d2a08fcfc62c",
+        "case_input_binding_hash": "sha256:0372ab7faa2a0baea660bf6eb477b88501512e001de21c004dd1c7f0c5cf3e8a",
+        "effective_case_input_hash": "sha256:47efc6be52116253bead727b4bb3a9b694874ba57577a4b5ca67cbbbdbac069f",
         "review_input": {
           "role": "hand_authored_review_input_not_expected_oracle",
           "expected_diagnostics": [
@@ -1676,11 +1677,11 @@
           "role": "actual_compiler_output_not_golden_oracle",
           "outcome": "rejected",
           "result_ref": "conformance/candidate/g2-semantic-correction-v2/cases/negative.completion-contract-invalid.result.json",
-          "result_hash": "sha256:53cc88552f42ce302b470e4ee0e173918f59069964c00f3a7121147d29a0003c",
-          "result_raw_bytes_hash": "sha256:185119f4d2a47182a631f8f45dfe9f2f7999128c217d0f1c390d68890076123f"
+          "result_hash": "sha256:ab16948d4f4658bab290a3201ebcd0aa4ea753df445289a21231d3d8a756c149",
+          "result_raw_bytes_hash": "sha256:fa5a0dafeec546ccce93bcecb46d33cd87ee22fd084cddd08e6ec755aac6af5b"
         },
         "expected_golden_oracle": {
-          "status": "pending_fresh_independent_human_semantic_review",
+          "status": "not_authored_working_not_review_candidate",
           "expected_case_result_bytes_ref": null,
           "expected_case_result_hash": null,
           "expected_source_hash": null,
@@ -1690,7 +1691,7 @@
           "expected_diagnostics": null
         },
         "review_owner": "human:local-owner",
-        "review_status": "pending_fresh_independent_human_semantic_review",
+        "review_status": "not_requested_until_prepare_rc",
         "human_judgment": null
       },
       {
@@ -1701,12 +1702,12 @@
           "early_completion_non_monotone"
         ],
         "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/negative.early-completion-non-monotone/source.json",
-        "raw_source_bytes_hash": "sha256:f6d14206b89a794f892629e2a7132fd27ed65ce6e44121f2a910a28e159dcd3a",
+        "raw_source_bytes_hash": "sha256:6f20c172d4dcbf7e72c7b088a7b1b8bfa745f9713fcc522fc7ef15e95f35c989",
         "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/negative.early-completion-non-monotone@2.json",
         "input_snapshot_hash": "sha256:7edc1d96491f3bb2ae9549023199d48a31b25a5252968949b11a616cf139cf1c",
         "case_input_binding_ref": "conformance/candidate/g2-semantic-correction-v2/g2-case-input-binding@2.json",
-        "case_input_binding_hash": "sha256:2e6832400922ef7bee306b26f5e2bf8d0cf7b87be1fa89f10186c0920f021085",
-        "effective_case_input_hash": "sha256:fa71ce7809f08c0a265806593881574654dc5859ebd28704693c30590904329c",
+        "case_input_binding_hash": "sha256:0372ab7faa2a0baea660bf6eb477b88501512e001de21c004dd1c7f0c5cf3e8a",
+        "effective_case_input_hash": "sha256:6b1f980fcf2f1bac62a070c75d114480f554f2ef5ce3e2d20a8547978a718076",
         "review_input": {
           "role": "hand_authored_review_input_not_expected_oracle",
           "expected_diagnostics": [
@@ -1740,11 +1741,11 @@
           "role": "actual_compiler_output_not_golden_oracle",
           "outcome": "rejected",
           "result_ref": "conformance/candidate/g2-semantic-correction-v2/cases/negative.early-completion-non-monotone.result.json",
-          "result_hash": "sha256:721b573be6a0a4650367a9839bad2091d1e3d13d36310444c963c5433bec7c4e",
-          "result_raw_bytes_hash": "sha256:c2cfbb5878f2286304313cb462e8c4b9d589e19e3f950cfe9af81278380ce0f5"
+          "result_hash": "sha256:f962a08b0d0294a7e219e423a2e738468403f90fbd3b6ffaf7b9b506479f1895",
+          "result_raw_bytes_hash": "sha256:3442ad93970a61ac0d707dde04ee07e893818bae44d733645e52e95e428e23cc"
         },
         "expected_golden_oracle": {
-          "status": "pending_fresh_independent_human_semantic_review",
+          "status": "not_authored_working_not_review_candidate",
           "expected_case_result_bytes_ref": null,
           "expected_case_result_hash": null,
           "expected_source_hash": null,
@@ -1754,7 +1755,7 @@
           "expected_diagnostics": null
         },
         "review_owner": "human:local-owner",
-        "review_status": "pending_fresh_independent_human_semantic_review",
+        "review_status": "not_requested_until_prepare_rc",
         "human_judgment": null
       },
       {
@@ -1765,12 +1766,12 @@
           "compiler_integrity_matching_control"
         ],
         "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/positive.compiler-integrity-match-control/source.json",
-        "raw_source_bytes_hash": "sha256:3fd14b979a61d33505eab8708771f3b8db9ec879e88708d6431ea8ce6c9a3951",
+        "raw_source_bytes_hash": "sha256:481cdf19686ef9646d45c111b2a8710be5c2cb3be964b535abf895e2ca227436",
         "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/positive.compiler-integrity-match-control@2.json",
         "input_snapshot_hash": "sha256:ac4ffffba5095d6211a8a944271dd43bf5ef2efad9873b10e389bbc6dbeb3440",
         "case_input_binding_ref": "conformance/candidate/g2-semantic-correction-v2/g2-case-input-binding@2.json",
-        "case_input_binding_hash": "sha256:2e6832400922ef7bee306b26f5e2bf8d0cf7b87be1fa89f10186c0920f021085",
-        "effective_case_input_hash": "sha256:a4aef94052887a28bbbfd84f7871b7c5bda1a81505e03ccbeacd9d4189817fce",
+        "case_input_binding_hash": "sha256:0372ab7faa2a0baea660bf6eb477b88501512e001de21c004dd1c7f0c5cf3e8a",
+        "effective_case_input_hash": "sha256:b17f356d4a9704484619478d78a424f07ad8b46463e5571b78d0c953058f87ed",
         "review_input": {
           "role": "hand_authored_review_input_not_expected_oracle",
           "expected_diagnostics": [],
@@ -1788,11 +1789,11 @@
           "role": "actual_compiler_output_not_golden_oracle",
           "outcome": "compiled",
           "result_ref": "conformance/candidate/g2-semantic-correction-v2/cases/positive.compiler-integrity-match-control.result.json",
-          "result_hash": "sha256:211662514aee0da602942983bca88cefd7ed7fcfc0d9d63bbf0eeb7240ed2359",
-          "result_raw_bytes_hash": "sha256:eef25e7fe2d0d70f6ac135536b7598cb20bd47db086e7de6c2a84ae944711db9"
+          "result_hash": "sha256:6d5983196dcb55d29fa079efb0814f01a3bc5185071d8e045eb842c3b74cb33c",
+          "result_raw_bytes_hash": "sha256:70bf53deafdbf27c2eb4085a1e465e40a65d7dca617da60b3f3aaea6bf6bb3b6"
         },
         "expected_golden_oracle": {
-          "status": "pending_fresh_independent_human_semantic_review",
+          "status": "not_authored_working_not_review_candidate",
           "expected_case_result_bytes_ref": null,
           "expected_case_result_hash": null,
           "expected_source_hash": null,
@@ -1802,7 +1803,7 @@
           "expected_diagnostics": null
         },
         "review_owner": "human:local-owner",
-        "review_status": "pending_fresh_independent_human_semantic_review",
+        "review_status": "not_requested_until_prepare_rc",
         "human_judgment": null
       },
       {
@@ -1813,12 +1814,12 @@
           "capability_not_allowed"
         ],
         "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/negative.capability-not-allowed/source.json",
-        "raw_source_bytes_hash": "sha256:3f4409c72d553b304b6ba3f7aad809e64619bc3640ddd90d1f491cbfcd02e9d0",
+        "raw_source_bytes_hash": "sha256:c44ab22e8485ac45bd115450ccba0a2eb4c3883cb9bb36f34320e95559babaa2",
         "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/negative.capability-not-allowed@2.json",
         "input_snapshot_hash": "sha256:02579a06228612a22f2c559947a6f24165f3e546ffdccf7348d8af46b6cc00b4",
         "case_input_binding_ref": "conformance/candidate/g2-semantic-correction-v2/g2-case-input-binding@2.json",
-        "case_input_binding_hash": "sha256:2e6832400922ef7bee306b26f5e2bf8d0cf7b87be1fa89f10186c0920f021085",
-        "effective_case_input_hash": "sha256:90c95fc67ad2e7d37963ff5eab85a6f3330c3c13b0d9e5977efb09b27437073b",
+        "case_input_binding_hash": "sha256:0372ab7faa2a0baea660bf6eb477b88501512e001de21c004dd1c7f0c5cf3e8a",
+        "effective_case_input_hash": "sha256:cdde7e258a439c32239f7537b3073522e58391a3fb50c9e0e5c13247fc6919da",
         "review_input": {
           "role": "hand_authored_review_input_not_expected_oracle",
           "expected_diagnostics": [
@@ -1852,11 +1853,11 @@
           "role": "actual_compiler_output_not_golden_oracle",
           "outcome": "rejected",
           "result_ref": "conformance/candidate/g2-semantic-correction-v2/cases/negative.capability-not-allowed.result.json",
-          "result_hash": "sha256:30fec537392e40439d75091d8c2d062a829579a2afb0e33e6ba64724d1f0ccc6",
-          "result_raw_bytes_hash": "sha256:ee2d47e68d853447073afb2beb1c4d7d70f2cd3d9188e432dab5b74456580c2c"
+          "result_hash": "sha256:d65447a304cdb84de22c5ad9a822d596c3d078f447d42a7b7e2871dc9391b23a",
+          "result_raw_bytes_hash": "sha256:f1e27360ee2bc8b6256ccedb9ce9a0440a269e8aeb5b6d87d41f8d20c21cd664"
         },
         "expected_golden_oracle": {
-          "status": "pending_fresh_independent_human_semantic_review",
+          "status": "not_authored_working_not_review_candidate",
           "expected_case_result_bytes_ref": null,
           "expected_case_result_hash": null,
           "expected_source_hash": null,
@@ -1866,7 +1867,7 @@
           "expected_diagnostics": null
         },
         "review_owner": "human:local-owner",
-        "review_status": "pending_fresh_independent_human_semantic_review",
+        "review_status": "not_requested_until_prepare_rc",
         "human_judgment": null
       },
       {
@@ -1877,12 +1878,12 @@
           "policy_escalation"
         ],
         "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/negative.policy-escalation/source.json",
-        "raw_source_bytes_hash": "sha256:e462312374feb35da9df7ca2627188a6caa6e94dca960269daaefdaebf1ac0ad",
+        "raw_source_bytes_hash": "sha256:4ebe79099cd5c7e3c4868c02495d747e61d21b85c68f8769356bf9d7620c8582",
         "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/negative.policy-escalation@2.json",
         "input_snapshot_hash": "sha256:3314fc424eb4ba0dbb587ad2e0208290d3eb25f04120dbfd00788df79c44d8b2",
         "case_input_binding_ref": "conformance/candidate/g2-semantic-correction-v2/g2-case-input-binding@2.json",
-        "case_input_binding_hash": "sha256:2e6832400922ef7bee306b26f5e2bf8d0cf7b87be1fa89f10186c0920f021085",
-        "effective_case_input_hash": "sha256:09b40f102ea86ebcf24fea15178af339ef2d7890764f52b7a4254f5198816ec4",
+        "case_input_binding_hash": "sha256:0372ab7faa2a0baea660bf6eb477b88501512e001de21c004dd1c7f0c5cf3e8a",
+        "effective_case_input_hash": "sha256:3900e64bd10448aa315843c2d1093b97daf77fd3c29a6e2c9b5c516288458c5b",
         "review_input": {
           "role": "hand_authored_review_input_not_expected_oracle",
           "expected_diagnostics": [
@@ -1916,11 +1917,11 @@
           "role": "actual_compiler_output_not_golden_oracle",
           "outcome": "rejected",
           "result_ref": "conformance/candidate/g2-semantic-correction-v2/cases/negative.policy-escalation.result.json",
-          "result_hash": "sha256:10bbcc3a27e2db6600ec624cf5f66d600eadaf4de73b29fd72e57c8049b2f81f",
-          "result_raw_bytes_hash": "sha256:b310ba97e9b0ec79276f0f8cd63d9985f691bace0cc4f2cb6bff957a9b878d6c"
+          "result_hash": "sha256:9891b18b7ba5629c2a783d6e2d7a923a69a7aa9bc76321ffbe4f8a1fc56d5704",
+          "result_raw_bytes_hash": "sha256:204ba69c15ce5d63c8f21b0a09998a2796281a8e22a3b964a9a96b5311815bd3"
         },
         "expected_golden_oracle": {
-          "status": "pending_fresh_independent_human_semantic_review",
+          "status": "not_authored_working_not_review_candidate",
           "expected_case_result_bytes_ref": null,
           "expected_case_result_hash": null,
           "expected_source_hash": null,
@@ -1930,7 +1931,7 @@
           "expected_diagnostics": null
         },
         "review_owner": "human:local-owner",
-        "review_status": "pending_fresh_independent_human_semantic_review",
+        "review_status": "not_requested_until_prepare_rc",
         "human_judgment": null
       },
       {
@@ -1942,12 +1943,12 @@
           "quality_revision_missing_feedback_schema"
         ],
         "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/negative.quality-revision-missing-feedback-schema/source.json",
-        "raw_source_bytes_hash": "sha256:04a77810e6cfac0a9556a5f542a2d83914f92c93f6af14bf40889d0aedbd4045",
+        "raw_source_bytes_hash": "sha256:b01039c59ef3023a97bb277bfa04df4004774e7a1bc2044936d349d44bcaa41e",
         "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/negative.quality-revision-missing-feedback-schema@2.json",
         "input_snapshot_hash": "sha256:d464d3b50a64e2249a81694b2672dfdd143e046531364730f8ff3d769a06834d",
         "case_input_binding_ref": "conformance/candidate/g2-semantic-correction-v2/g2-case-input-binding@2.json",
-        "case_input_binding_hash": "sha256:2e6832400922ef7bee306b26f5e2bf8d0cf7b87be1fa89f10186c0920f021085",
-        "effective_case_input_hash": "sha256:21dd643f4782c314b103df36d439536f254429130d713a63e76b668390e17aed",
+        "case_input_binding_hash": "sha256:0372ab7faa2a0baea660bf6eb477b88501512e001de21c004dd1c7f0c5cf3e8a",
+        "effective_case_input_hash": "sha256:5ab16a85cd8a7f5ea2ba023d276c03ca137bcd8b519f1c72c64de55e1ea5f8c1",
         "review_input": {
           "role": "hand_authored_review_input_not_expected_oracle",
           "expected_diagnostics": [
@@ -1981,11 +1982,11 @@
           "role": "actual_compiler_output_not_golden_oracle",
           "outcome": "rejected",
           "result_ref": "conformance/candidate/g2-semantic-correction-v2/cases/negative.quality-revision-missing-feedback-schema.result.json",
-          "result_hash": "sha256:59922eeecd67a41154fe2c311e7a715788e2c2fb056ba8654fabc70135ecc8cd",
-          "result_raw_bytes_hash": "sha256:a3d7162107f6db3a52beb239cf22f06f16c1266845059bd4b292319657c18ac9"
+          "result_hash": "sha256:2ddd3993c64c6bf26ed44696d78de6d361ca4a563c7ce2c7d86ad04e4d6eea8d",
+          "result_raw_bytes_hash": "sha256:929b76cd9ce2ba6fb99ef5ae6696fa3a02d2e7739f9b7b4a3519e6baf8c0b7e3"
         },
         "expected_golden_oracle": {
-          "status": "pending_fresh_independent_human_semantic_review",
+          "status": "not_authored_working_not_review_candidate",
           "expected_case_result_bytes_ref": null,
           "expected_case_result_hash": null,
           "expected_source_hash": null,
@@ -1995,7 +1996,7 @@
           "expected_diagnostics": null
         },
         "review_owner": "human:local-owner",
-        "review_status": "pending_fresh_independent_human_semantic_review",
+        "review_status": "not_requested_until_prepare_rc",
         "human_judgment": null
       },
       {
@@ -2006,12 +2007,12 @@
           "quality_revision_effect_key_incompatible"
         ],
         "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/negative.quality-revision-effect-key-incompatible/source.json",
-        "raw_source_bytes_hash": "sha256:7b260aeebca87c6174655e15db0d71d4f394f9b203ac10afde24e99ed3eb4466",
+        "raw_source_bytes_hash": "sha256:4618a8ce3038ff55575e68af108edf3e6d1eaf8b0827652726820f295a33bcf2",
         "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/negative.quality-revision-effect-key-incompatible@2.json",
         "input_snapshot_hash": "sha256:e221c99da35e05a6a387af47cd7716f2d3f539f8237a4b3bf7481fbb2e8a6af7",
         "case_input_binding_ref": "conformance/candidate/g2-semantic-correction-v2/g2-case-input-binding@2.json",
-        "case_input_binding_hash": "sha256:2e6832400922ef7bee306b26f5e2bf8d0cf7b87be1fa89f10186c0920f021085",
-        "effective_case_input_hash": "sha256:195516208e0fd1b9d0c0218f60a8fd063df8e205aba277bdcdf474cd1b598e7c",
+        "case_input_binding_hash": "sha256:0372ab7faa2a0baea660bf6eb477b88501512e001de21c004dd1c7f0c5cf3e8a",
+        "effective_case_input_hash": "sha256:5388f0175052bf6e82139d2a93804dd2aa0609daf16982e9e34e18d4a7a96474",
         "review_input": {
           "role": "hand_authored_review_input_not_expected_oracle",
           "expected_diagnostics": [
@@ -2045,11 +2046,11 @@
           "role": "actual_compiler_output_not_golden_oracle",
           "outcome": "rejected",
           "result_ref": "conformance/candidate/g2-semantic-correction-v2/cases/negative.quality-revision-effect-key-incompatible.result.json",
-          "result_hash": "sha256:b4f826f14316b18bcc16a2d177691c359293a95f9900593b6a23f6df37f47bd9",
-          "result_raw_bytes_hash": "sha256:2c31b1a489ed0bcbcf07421a4529360c0e854f7a98b1b7eb6b3876e857cc3a6f"
+          "result_hash": "sha256:e1b6b334fbc81988a7e0bfdda392f7bd11738cba7528be74e93aaf59991388dd",
+          "result_raw_bytes_hash": "sha256:d63ec88a1f4027b91f8cb32f804b0b2864cbc6d6f394f1dfa6c3153ff6070d79"
         },
         "expected_golden_oracle": {
-          "status": "pending_fresh_independent_human_semantic_review",
+          "status": "not_authored_working_not_review_candidate",
           "expected_case_result_bytes_ref": null,
           "expected_case_result_hash": null,
           "expected_source_hash": null,
@@ -2059,7 +2060,7 @@
           "expected_diagnostics": null
         },
         "review_owner": "human:local-owner",
-        "review_status": "pending_fresh_independent_human_semantic_review",
+        "review_status": "not_requested_until_prepare_rc",
         "human_judgment": null
       },
       {
@@ -2074,7 +2075,7 @@
         "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/negative.child-recipe-set-mismatch@2.json",
         "input_snapshot_hash": "sha256:80872f28e1fa4584d1c9edfc6fbe3aa08e7530c8ba3fade35653bf7aeab9271b",
         "case_input_binding_ref": "conformance/candidate/g2-semantic-correction-v2/g2-case-input-binding@2.json",
-        "case_input_binding_hash": "sha256:2e6832400922ef7bee306b26f5e2bf8d0cf7b87be1fa89f10186c0920f021085",
+        "case_input_binding_hash": "sha256:0372ab7faa2a0baea660bf6eb477b88501512e001de21c004dd1c7f0c5cf3e8a",
         "effective_case_input_hash": "sha256:85d17763b4f1a395839a48a15a1feb211c5a94126d1d7c2be5602c1c279ffda5",
         "review_input": {
           "role": "hand_authored_review_input_not_expected_oracle",
@@ -2113,7 +2114,7 @@
           "result_raw_bytes_hash": "sha256:6175e6854fcedb38b9969ef97af1dcce283d5f31d05bc19a28c4d79fb60e52c0"
         },
         "expected_golden_oracle": {
-          "status": "pending_fresh_independent_human_semantic_review",
+          "status": "not_authored_working_not_review_candidate",
           "expected_case_result_bytes_ref": null,
           "expected_case_result_hash": null,
           "expected_source_hash": null,
@@ -2123,7 +2124,7 @@
           "expected_diagnostics": null
         },
         "review_owner": "human:local-owner",
-        "review_status": "pending_fresh_independent_human_semantic_review",
+        "review_status": "not_requested_until_prepare_rc",
         "human_judgment": null
       },
       {
@@ -2138,7 +2139,7 @@
         "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/negative.child-recipe-dependency-cycle@2.json",
         "input_snapshot_hash": "sha256:7cff33b02ecde34ec98357e933f9231f283202b96af156a5417295d2478ac075",
         "case_input_binding_ref": "conformance/candidate/g2-semantic-correction-v2/g2-case-input-binding@2.json",
-        "case_input_binding_hash": "sha256:2e6832400922ef7bee306b26f5e2bf8d0cf7b87be1fa89f10186c0920f021085",
+        "case_input_binding_hash": "sha256:0372ab7faa2a0baea660bf6eb477b88501512e001de21c004dd1c7f0c5cf3e8a",
         "effective_case_input_hash": "sha256:5e0c453f86e5cb6865d872eb04a56b15c084ea6efe40027a86b8c98bcad387dc",
         "review_input": {
           "role": "hand_authored_review_input_not_expected_oracle",
@@ -2177,7 +2178,7 @@
           "result_raw_bytes_hash": "sha256:1d1bd4a3ac7b1964d1cc62de59aa5de5e9d946b249e108163a6b95e355c03c1d"
         },
         "expected_golden_oracle": {
-          "status": "pending_fresh_independent_human_semantic_review",
+          "status": "not_authored_working_not_review_candidate",
           "expected_case_result_bytes_ref": null,
           "expected_case_result_hash": null,
           "expected_source_hash": null,
@@ -2187,7 +2188,7 @@
           "expected_diagnostics": null
         },
         "review_owner": "human:local-owner",
-        "review_status": "pending_fresh_independent_human_semantic_review",
+        "review_status": "not_requested_until_prepare_rc",
         "human_judgment": null
       },
       {
@@ -2198,12 +2199,12 @@
           "runtime_safety_limit_exceeded"
         ],
         "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/negative.runtime-safety-limit-exceeded/source.json",
-        "raw_source_bytes_hash": "sha256:0d5bbf5010b38f8be71a5309cad5a9fd7448fff89cdf35a8fb6ed115f10fbace",
+        "raw_source_bytes_hash": "sha256:5dfe6cf019131213a304f30b19e1933ca2670327bdab4e720c5feb91acc9dcaf",
         "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/negative.runtime-safety-limit-exceeded@2.json",
         "input_snapshot_hash": "sha256:74780936e9f9c5de5d09b578fb75ec877ddb2c351c7d231427709948f857240e",
         "case_input_binding_ref": "conformance/candidate/g2-semantic-correction-v2/g2-case-input-binding@2.json",
-        "case_input_binding_hash": "sha256:2e6832400922ef7bee306b26f5e2bf8d0cf7b87be1fa89f10186c0920f021085",
-        "effective_case_input_hash": "sha256:dc771eff2b7d880a9ee9675d031f771c60a2dba1880b801913d306342380f613",
+        "case_input_binding_hash": "sha256:0372ab7faa2a0baea660bf6eb477b88501512e001de21c004dd1c7f0c5cf3e8a",
+        "effective_case_input_hash": "sha256:64ab3d52e1561ff9b6cbcd1757afa1b4f3e05306a9df2a38d23d5cc5086660de",
         "review_input": {
           "role": "hand_authored_review_input_not_expected_oracle",
           "expected_diagnostics": [
@@ -2237,11 +2238,11 @@
           "role": "actual_compiler_output_not_golden_oracle",
           "outcome": "rejected",
           "result_ref": "conformance/candidate/g2-semantic-correction-v2/cases/negative.runtime-safety-limit-exceeded.result.json",
-          "result_hash": "sha256:3b359aacd451602703d6b0b2a68ad67c7ab485f9c7ea3c70adfa6d89a89f00b6",
-          "result_raw_bytes_hash": "sha256:2317bd2c497806526f17e50de07ebcf3ba2927bb774aee50cb2896f4e3e75563"
+          "result_hash": "sha256:6788ad318eddb05584e4e136d727faad747781d0cd3bb4cf81786875c3610b63",
+          "result_raw_bytes_hash": "sha256:866ccfde159d2cbc4460588e0145d05155205981de86133c67e5de65618603dd"
         },
         "expected_golden_oracle": {
-          "status": "pending_fresh_independent_human_semantic_review",
+          "status": "not_authored_working_not_review_candidate",
           "expected_case_result_bytes_ref": null,
           "expected_case_result_hash": null,
           "expected_source_hash": null,
@@ -2251,7 +2252,7 @@
           "expected_diagnostics": null
         },
         "review_owner": "human:local-owner",
-        "review_status": "pending_fresh_independent_human_semantic_review",
+        "review_status": "not_requested_until_prepare_rc",
         "human_judgment": null
       },
       {
@@ -2262,12 +2263,12 @@
           "compiler_integrity_mismatch"
         ],
         "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/negative.compiler-integrity-mismatch/source.json",
-        "raw_source_bytes_hash": "sha256:3fd14b979a61d33505eab8708771f3b8db9ec879e88708d6431ea8ce6c9a3951",
+        "raw_source_bytes_hash": "sha256:481cdf19686ef9646d45c111b2a8710be5c2cb3be964b535abf895e2ca227436",
         "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/negative.compiler-integrity-mismatch@2.json",
         "input_snapshot_hash": "sha256:3638cfafa54f79e68ad3b1f1448139120d225d35faf91fb498df456d8d8dad0f",
         "case_input_binding_ref": "conformance/candidate/g2-semantic-correction-v2/g2-case-input-binding@2.json",
-        "case_input_binding_hash": "sha256:2e6832400922ef7bee306b26f5e2bf8d0cf7b87be1fa89f10186c0920f021085",
-        "effective_case_input_hash": "sha256:c68720c1f5bae3bce08329e809005f353051e6c2e33a6677830953875c583113",
+        "case_input_binding_hash": "sha256:0372ab7faa2a0baea660bf6eb477b88501512e001de21c004dd1c7f0c5cf3e8a",
+        "effective_case_input_hash": "sha256:87ee9a53b0d3b789fe4b7978ac98153cd8981df6ffdd35729107a171f1b9ba62",
         "review_input": {
           "role": "hand_authored_review_input_not_expected_oracle",
           "expected_diagnostics": [
@@ -2308,11 +2309,11 @@
           "role": "actual_compiler_output_not_golden_oracle",
           "outcome": "rejected",
           "result_ref": "conformance/candidate/g2-semantic-correction-v2/cases/negative.compiler-integrity-mismatch.result.json",
-          "result_hash": "sha256:fbcd0834b62d34f39d5ee4d1ee86503a88691ef663a40b42293f1c3c9063ba57",
-          "result_raw_bytes_hash": "sha256:cd6053dfe834c86a966e9fa6ef0a055e9e02b14ac837f5b4f37e7a298686e2bf"
+          "result_hash": "sha256:aff3242c3060304e64b69fb259b1e428634201cd56ed35848b7c9b63afc2f484",
+          "result_raw_bytes_hash": "sha256:125fc601e7a9cea7dfefa1ab5bec7b373a94c6448b2a8bf703f46cb4aed60ff3"
         },
         "expected_golden_oracle": {
-          "status": "pending_fresh_independent_human_semantic_review",
+          "status": "not_authored_working_not_review_candidate",
           "expected_case_result_bytes_ref": null,
           "expected_case_result_hash": null,
           "expected_source_hash": null,
@@ -2322,7 +2323,7 @@
           "expected_diagnostics": null
         },
         "review_owner": "human:local-owner",
-        "review_status": "pending_fresh_independent_human_semantic_review",
+        "review_status": "not_requested_until_prepare_rc",
         "human_judgment": null
       },
       {
@@ -2334,12 +2335,12 @@
           "quality_revision_missing_quality_gate"
         ],
         "raw_source_bytes_ref": "conformance/draft/semantic-correction-v4/sources/negative.quality-revision-missing-quality-gate/source.json",
-        "raw_source_bytes_hash": "sha256:51df8b28d9544d00298d83aaf3859a138744f97523b7bfacf35b20f31a4c8c96",
+        "raw_source_bytes_hash": "sha256:beb23549193eda9f4d71d532202b0549c2176edc7258ad431b1317165f65bc69",
         "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/negative.quality-revision-missing-quality-gate@2.json",
         "input_snapshot_hash": "sha256:ee089bffb360ab10920d9c32a05cfe8df5d6fcda22c1785db4f3c6c5e582add9",
         "case_input_binding_ref": "conformance/candidate/g2-semantic-correction-v2/g2-case-input-binding@2.json",
-        "case_input_binding_hash": "sha256:2e6832400922ef7bee306b26f5e2bf8d0cf7b87be1fa89f10186c0920f021085",
-        "effective_case_input_hash": "sha256:555fc6ff5a68a5d83c8e9b27eaf348bd7fef46999e4c3a58427547de83cfd1e7",
+        "case_input_binding_hash": "sha256:0372ab7faa2a0baea660bf6eb477b88501512e001de21c004dd1c7f0c5cf3e8a",
+        "effective_case_input_hash": "sha256:ec2fac27e2e17943394b88311db84897e9aa25f9112517de3a1239955eb20e5c",
         "review_input": {
           "role": "hand_authored_review_input_not_expected_oracle",
           "expected_diagnostics": [
@@ -2373,11 +2374,11 @@
           "role": "actual_compiler_output_not_golden_oracle",
           "outcome": "rejected",
           "result_ref": "conformance/candidate/g2-semantic-correction-v2/cases/negative.quality-revision-missing-quality-gate.result.json",
-          "result_hash": "sha256:ad76e200c8f2a1d527b907fb5a53f357289e402abe796c8db5ba32344dacf5f2",
-          "result_raw_bytes_hash": "sha256:09dc31d1365689029a9bcc983bb9549883202a7a98e3edd8ea926b268e96daf4"
+          "result_hash": "sha256:8cf152272eabaed77e47a59126590f39803143600252b1aa9b44198029d1cb20",
+          "result_raw_bytes_hash": "sha256:d782f3697f0ad939f8d08a5d13cd95cf245645219a57c61b2ebc403dabb4009b"
         },
         "expected_golden_oracle": {
-          "status": "pending_fresh_independent_human_semantic_review",
+          "status": "not_authored_working_not_review_candidate",
           "expected_case_result_bytes_ref": null,
           "expected_case_result_hash": null,
           "expected_source_hash": null,
@@ -2387,7 +2388,7 @@
           "expected_diagnostics": null
         },
         "review_owner": "human:local-owner",
-        "review_status": "pending_fresh_independent_human_semantic_review",
+        "review_status": "not_requested_until_prepare_rc",
         "human_judgment": null
       },
       {
@@ -2403,7 +2404,7 @@
         "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/negative.definition-notification-delivery-requirement@2.json",
         "input_snapshot_hash": "sha256:3f0f68b2988c077d7444942ac11b23d567c8f51643b4da424f6b2d26e6fec4d2",
         "case_input_binding_ref": "conformance/candidate/g2-semantic-correction-v2/g2-case-input-binding@2.json",
-        "case_input_binding_hash": "sha256:2e6832400922ef7bee306b26f5e2bf8d0cf7b87be1fa89f10186c0920f021085",
+        "case_input_binding_hash": "sha256:0372ab7faa2a0baea660bf6eb477b88501512e001de21c004dd1c7f0c5cf3e8a",
         "effective_case_input_hash": "sha256:130a1b2334e4c60e1400eed24a5f88e31678f4aa553de76b3a349ee6b692797a",
         "review_input": {
           "role": "hand_authored_review_input_not_expected_oracle",
@@ -2442,7 +2443,7 @@
           "result_raw_bytes_hash": "sha256:450e97fec6bf0f3c1124d513b285719c3bb0dce906e71144ff86d7685c8f7620"
         },
         "expected_golden_oracle": {
-          "status": "pending_fresh_independent_human_semantic_review",
+          "status": "not_authored_working_not_review_candidate",
           "expected_case_result_bytes_ref": null,
           "expected_case_result_hash": null,
           "expected_source_hash": null,
@@ -2452,7 +2453,7 @@
           "expected_diagnostics": null
         },
         "review_owner": "human:local-owner",
-        "review_status": "pending_fresh_independent_human_semantic_review",
+        "review_status": "not_requested_until_prepare_rc",
         "human_judgment": null
       },
       {
@@ -2468,7 +2469,7 @@
         "input_snapshot_ref": "conformance/draft/semantic-correction-v4/snapshots/negative.definition-child-creation-key-template@2.json",
         "input_snapshot_hash": "sha256:81807f292d9c35325dd3e7d9bffb030c9bb62c7f310568fe10107c6249803cec",
         "case_input_binding_ref": "conformance/candidate/g2-semantic-correction-v2/g2-case-input-binding@2.json",
-        "case_input_binding_hash": "sha256:2e6832400922ef7bee306b26f5e2bf8d0cf7b87be1fa89f10186c0920f021085",
+        "case_input_binding_hash": "sha256:0372ab7faa2a0baea660bf6eb477b88501512e001de21c004dd1c7f0c5cf3e8a",
         "effective_case_input_hash": "sha256:5eff07a1d5089898c992ab47e82cd1ea2a3b3d8e00d49f71b1a7478b5e6f404c",
         "review_input": {
           "role": "hand_authored_review_input_not_expected_oracle",
@@ -2507,7 +2508,7 @@
           "result_raw_bytes_hash": "sha256:47e2fd98b8efce3ba1a683bb634b576e7e7ad6ab36d1a8b9cabb3fc42b303ffd"
         },
         "expected_golden_oracle": {
-          "status": "pending_fresh_independent_human_semantic_review",
+          "status": "not_authored_working_not_review_candidate",
           "expected_case_result_bytes_ref": null,
           "expected_case_result_hash": null,
           "expected_source_hash": null,
@@ -2517,10 +2518,10 @@
           "expected_diagnostics": null
         },
         "review_owner": "human:local-owner",
-        "review_status": "pending_fresh_independent_human_semantic_review",
+        "review_status": "not_requested_until_prepare_rc",
         "human_judgment": null
       }
     ],
-    "catalog_hash": "sha256:f3bf364473c741335979e9fa41af42db00325e5203a98242a2d0daf7f8b8324c"
+    "catalog_hash": "sha256:ebff65243e57e7317f5eb8c7256766dcab4000bd26f9e29bb424e72d8f9bb68a"
   }
 }

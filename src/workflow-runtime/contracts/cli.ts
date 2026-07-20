@@ -31,17 +31,20 @@ import {
 import { checkHistoricalCompilerContractRepair } from './compiler-contract-repair-historical.js';
 
 function usage(): never {
-  console.error('Usage: contract-pack <generate|check>');
+  console.error('Usage: contract-pack <generate|check|archive-check>');
   process.exit(64);
 }
 
 const command = process.argv[2];
 if (
   process.argv.length !== 3 ||
-  (command !== 'generate' && command !== 'check')
+  (command !== 'generate' && command !== 'check' && command !== 'archive-check')
 ) {
   usage();
 }
+
+const action = command === 'generate' ? 'generate' : 'check';
+const includeConstructionArchive = command === 'archive-check';
 
 let currentPack:
   | 'foundation'
@@ -109,17 +112,19 @@ try {
     `contract_pack_static_absence_hash=${staticAbsenceManifest.hash}`,
   );
 
-  currentPack = 'golden_draft';
-  const goldenDraftManifest = checkHistoricalGoldenDraft();
-  console.log('contract_pack_golden_draft=historical:ok');
-  console.log(`contract_pack_golden_draft_hash=${goldenDraftManifest.hash}`);
+  if (includeConstructionArchive) {
+    currentPack = 'golden_draft';
+    const goldenDraftManifest = checkHistoricalGoldenDraft();
+    console.log('contract_pack_golden_draft=archive:ok');
+    console.log(`contract_pack_golden_draft_hash=${goldenDraftManifest.hash}`);
 
-  currentPack = 'g0_historical';
-  const g0ConformanceManifest = checkHistoricalG0_9Conformance();
-  console.log('contract_pack_g0_conformance=historical:ok');
-  console.log(
-    `contract_pack_g0_conformance_hash=${g0ConformanceManifest.hash}`,
-  );
+    currentPack = 'g0_historical';
+    const g0ConformanceManifest = checkHistoricalG0_9Conformance();
+    console.log('contract_pack_g0_conformance=archive:ok');
+    console.log(
+      `contract_pack_g0_conformance_hash=${g0ConformanceManifest.hash}`,
+    );
+  }
 
   currentPack = 'capacity_control_plane';
   const capacityControlPlaneManifest =
@@ -131,16 +136,18 @@ try {
     `contract_pack_capacity_control_plane_hash=${capacityControlPlaneManifest.hash}`,
   );
 
-  currentPack = 'compiler_contract_repair';
-  const compilerContractRepairManifest =
-    checkHistoricalCompilerContractRepair();
-  console.log('contract_pack_compiler_contract_repair=historical:ok');
-  console.log(
-    `contract_pack_compiler_contract_repair_hash=${compilerContractRepairManifest.hash}`,
-  );
+  if (includeConstructionArchive) {
+    currentPack = 'compiler_contract_repair';
+    const compilerContractRepairManifest =
+      checkHistoricalCompilerContractRepair();
+    console.log('contract_pack_compiler_contract_repair=archive:ok');
+    console.log(
+      `contract_pack_compiler_contract_repair_hash=${compilerContractRepairManifest.hash}`,
+    );
+  }
 } catch (error) {
   console.error(
-    `contract_pack_${currentPack}=${command}:failed: ${
+    `contract_pack_${currentPack}=${action}:failed: ${
       error instanceof Error ? error.message : String(error)
     }`,
   );

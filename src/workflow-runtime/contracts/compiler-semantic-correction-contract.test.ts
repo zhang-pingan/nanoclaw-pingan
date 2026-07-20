@@ -10,6 +10,7 @@ import {
   checkCompilerSemanticCorrectionContract,
   COMPILER_ERROR_CATALOG_V2_PATH,
   COMPILER_SEMANTIC_CORRECTION_DECISION_PATH,
+  COMPILER_SEMANTIC_CORRECTION_MANIFEST_PATH,
   COMPILER_SEMANTIC_CORRECTION_ROOT,
 } from './compiler-semantic-correction-contract.js';
 import { strictParseJsonBytes } from './strict-json.js';
@@ -34,8 +35,8 @@ function artifact(relativePath: string) {
   );
 }
 
-describe('G2 additive semantic correction Contract', () => {
-  it('rebuilds deterministic bytes and checks the publication read-only', () => {
+describe('G2 working semantic correction Contract', () => {
+  it('rebuilds deterministic current bytes and checks them read-only', () => {
     const first = [
       ...buildCompilerSemanticCorrectionContractArtifactsForTest(),
     ];
@@ -45,13 +46,33 @@ describe('G2 additive semantic correction Contract', () => {
     expect(second).toEqual(first);
     const before = treeDigest();
     const root = checkCompilerSemanticCorrectionContract();
-    expect(root.hash).toBe(
-      'sha256:5211d9b655d047c75ffbcbae7d9f70126ba4bccbdc6dffec04e7f3f8435bb5b1',
-    );
+    expect(root.hash).toMatch(/^sha256:[0-9a-f]{64}$/);
     expect(treeDigest()).toBe(before);
   });
 
-  it('publishes the unique reachability and identity conclusions', () => {
+  it('keeps the construction Contract mutable and production unreachable', () => {
+    const decision = artifact(
+      COMPILER_SEMANTIC_CORRECTION_DECISION_PATH,
+    ).payload;
+    expect(decision.correction_kind).toBe('working_semantic_correction');
+    expect(decision.construction_lifecycle).toMatchObject({
+      phase: 'WORKING',
+      mutable_current_artifacts: true,
+      publishable: false,
+      production_reachable: false,
+      human_review_status: 'not_requested_until_prepare_rc',
+    });
+    expect(
+      artifact(COMPILER_SEMANTIC_CORRECTION_MANIFEST_PATH).payload,
+    ).toMatchObject({
+      status: 'WORKING_MUTABLE_NOT_PUBLISHABLE',
+      construction_phase: 'WORKING',
+      publishable: false,
+      production_reachable: false,
+    });
+  });
+
+  it('records the unique reachability and identity conclusions', () => {
     const decision = artifact(
       COMPILER_SEMANTIC_CORRECTION_DECISION_PATH,
     ).payload;

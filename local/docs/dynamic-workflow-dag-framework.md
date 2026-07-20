@@ -2988,15 +2988,15 @@ G0.8 snapshot中的`production_compiler_status/canonical_normalizer_status/proof
 
 G0.3 Compiled IR v1与G0.8 Golden Draft v1的manifest、schemas、cases、raw bytes、snapshots和hashes保持historical evidence。R-016的Golden Draft v2复用40个historical raw/snapshot refs和hashes，但exact G2 identity与expected case result refs/hashes保持null，状态为`blocked_pending_exact_g2_identity`；`GoldenSemanticReview` absent且seal not run。Compiler完成后必须发布新的Draft version绑定真实identity和candidate results，不得由Production Compiler生成、覆盖或批准expected oracle。
 
-### R-017：G2 Additive Semantic Correction 决议
+### R-017：G2 Working Semantic Correction 决议
 
-本节关闭Draft v3独立human review暴露的Compiler/case合同歧义，并由additive `icarus.workflow-compiler-semantic-correction-contract/1`机器合同绑定。它不修改R-016、G0.8、Draft v1/v2/v3、既有G2 candidate或任何sealed artifact。
+本节关闭Draft v3/v4独立human review暴露的Compiler/case合同歧义，并由当前`icarus.workflow-compiler-semantic-correction-contract/1`机器合同绑定。该合同、逐case输入、actual candidate和review bundle在G2 Seal前属于施工期`WORKING`集合：它们计算精确identity并接受byte-for-byte current check，但可以在同一路径重新生成，不形成additive发布链，不是Published Registry resource，也不能被Production Run引用。Draft v1-v4的历史判断由Git提交和worksheet保留；它们不是当前Working Contract的依赖根。R-016、G0.8和任何sealed artifact不由本节静默改写；若Working修正需要改变仍被当前实现消费的上游合同，必须显式reopen对应Gate并重建全部下游current证据。
 
 Closed Source IR `/1`的control/data endpoint只包含普通scope-local `NodeId`和`PortName`字段，不存在child path、qualified Node ID或`::`分隔语法。任意字符串（包括`child::child_done`）都先按完整普通Node ID查找；不存在时唯一诊断为`graph_endpoint_not_found`。Parent/Child只能通过Owner Node的typed input/output port通信，因此合法closed Source IR没有可表达的cross-scope edge。`graph_cross_scope_edge`在Error Catalog v2中保留为historical/reserved code，但其`source_reachability=unreachable_in_closed_source_ir_v1`，不得由Production Compiler对Source `/1`产生；未来若新增可表达scope-qualified endpoint的Source revision，必须先发布新Source schema/format和Error Catalog version。
 
 每个可发布Capability必须具有完整且内部一致的Effect/Cancellation合同：`fence_only`证明late result可安全丢弃，`cooperative`证明cancel丢失仍可安全abandon，`requires_compensation`必须且只能与`effect.type=compensatable`配对并由Cut barrier等待成功补偿。因而所有独立有效的Published Capability都可被early close安全fence/cancel/compensate；`early_completion_cancellation_unsafe`在Error Catalog v2中保留为historical/reserved code，但其`source_reachability=unreachable_after_capability_contract_validation`，不得靠非法Capability pairing产生。非法pairing必须在Capability/Registry binding边界以Capability contract rejection拒绝；合法compensatable+requires-compensation必须产生non-null cancellation safety proof并允许monotone early rule编译。
 
-Compiler不得信任input snapshot中的预计算`identity_match`或其他boolean verdict。Additive snapshot `/2`必须逐项携带并由Compiler自行比较以下exact identity：Toolchain Manifest ref/hash、Compiler version/build hash、Canonical Normalizer version/hash、Proof Algorithm version/hash、Error Catalog ref/hash、Compiled IR schema ref/hash、Conformance Result schema ref/hash。比较顺序固定为上述字段顺序；首个不一致字段产生唯一`compiler_integrity_mismatch/hash`，`instance_pointer=/compiler_identity/<field>`。相同source与matching identity必须编译成功；mismatch fixture只能修改一个具体字段，其余snapshot必须最小且独立有效。
+Compiler不得信任input snapshot中的预计算`identity_match`或其他boolean verdict。Working snapshot `/2`必须逐项携带并由Compiler自行比较以下exact identity：Toolchain Manifest ref/hash、Compiler version/build hash、Canonical Normalizer version/hash、Proof Algorithm version/hash、Error Catalog ref/hash、Compiled IR schema ref/hash、Conformance Result schema ref/hash。比较顺序固定为上述字段顺序；首个不一致字段产生唯一`compiler_integrity_mismatch/hash`，`instance_pointer=/compiler_identity/<field>`。相同source与matching identity必须编译成功；mismatch fixture只能修改一个具体字段，其余snapshot必须最小且独立有效。
 
 Definition fixture的`definition_hash`不得使用零值或占位。当前hash固定为：
 
@@ -3009,7 +3009,28 @@ definition_hash = SHA-256(
 
 Compiler在closed-schema validation之后、Definition binding之前验证该值；不匹配使用`compiler_integrity_mismatch/hash`并指向`/definition_hash`。Registry resource content、Capability dependency closure、Wait contract、Interface、Policy、Safety与snapshot同样必须使用各自机器合同声明的domain-separated真实hash，不能复用零值。
 
-Draft v3的40/40 `CHANGES_REQUESTED`只属于其历史review。修正发布必须使用新路径/version/hash的raw source、逐case隔离snapshot、hand-authored review input、case-input binding、Compiler candidate与Draft；case count保持40，actual Compiler result只作为comparison input，expected full result/Plan/proof/program bytes/hash全部保持null。新Draft的human judgment重置为40/40 pending fresh review，不得复用Draft v3 decision，不得创建`GoldenSemanticReview`、approval、signature、seal或`conformance/sealed/`内容。
+Draft v3的40/40 `CHANGES_REQUESTED`与Draft v4的14 `PASS` / 26 `CHANGES_REQUESTED`只属于各自历史review。当前修正直接更新单一Working集合中的raw source、逐case隔离snapshot、hand-authored review input、case-input binding、Compiler actual candidate与working review bundle；case count保持40，actual Compiler result只作为comparison input，expected full result/Plan/proof/program bytes/hash全部保持null。Working期间`human_judgment`为not requested，不为每次修正创建Draft v5/v6或重置40-case judgment。只有全部已知finding完成、current生成连续两轮一致、定向/完整机械测试通过且工作树边界干净后，才允许显式`prepare-rc`冻结一个Review Candidate root并请求一次完整fresh independent review；RC任一绑定输入变化即失效并退回Working。不得在Working阶段创建`GoldenSemanticReview`、approval、signature、seal或`conformance/sealed/`内容。
+
+### Runtime v1施工生命周期与生产发布生命周期
+
+Runtime v1重构期间使用临时施工生命周期：
+
+```text
+WORKING -> RC_REVIEW -> BASELINE_ACCEPTED -> CONSTRUCTION_ARCHIVED
+```
+
+- `WORKING`：current Contract、Schema、Compiler、Fixture与生成物可在原路径修改和重建；identity用于确定性、依赖一致性和影响检测，不承诺历史兼容。失败或被拒的中间候选只由Git/worksheet保留，不进入active Contract graph、默认current check、Registry retention或Production启动。
+- `RC_REVIEW`：只能由显式`prepare-rc`从测试通过且边界干净的Working集合生成。RC绑定完整source/toolchain/compiler/input/candidate hash；任一绑定值变化立即使RC失效并回到`WORKING`。独立review只审当前RC，Production Compiler actual不得成为expected oracle。
+- `BASELINE_ACCEPTED`：完整fresh independent review通过后才能写`GoldenSemanticReview`并运行`golden-seal`。G3-G9若发现基础语义缺口，必须显式reopen受影响Gate、使当前未投产baseline失效并重建下游证据，不能伪装成兼容修补。
+- `CONSTRUCTION_ARCHIVED`：G0-G9、同一release完整验收和G9 activation完成后执行S39归档。施工状态、Draft历史、Markdown coverage和Gate provenance退出默认开发/CI；Git tag与可选archive audit保存历史。
+
+上述临时生命周期不替代、放宽或修改长期生产发布生命周期：
+
+```text
+AUTHORING -> STAGED -> PUBLISHED -> ACTIVE -> DRAINING/RETIRED
+```
+
+生产`PUBLISHED`资源仍按Versioned Registry、Feature/Core Release、Execution Artifact、Run Snapshot、Retention Handle和compatibility preflight规则不可变；修改只能发布新exact version。已创建Run继续固定旧Definition/Plan/Policy/Capability/Executor/Prompt/Protocol/ABI ref/hash，任何current/latest指针变化不得影响其执行、恢复或审计。施工期允许重建只适用于尚未Seal、未Published且Production不可达的current Working集合。
 
 ### JSON、Canonicalization 与 Hash
 
@@ -5914,9 +5935,11 @@ CI 分层：普通提交运行 managed toolchain manifest/bootstrap/launcher/lau
 
 前置清理已在开发期建立静态 baseline：不存在需要收敛的旧 Workflow instance、writer、interrupt、outbox、schema、UI/API 或业务数据。Dynamic Runtime 从这个干净 baseline 开始，不实现运行期切换状态机、旧 writer 协调器、历史导入器或数据删除 executor。Spec Stabilization 只验证并固定 source/API/UI/schema/filesystem/resource absence、测试 data/store root 隔离、removed surface coverage 和 migration candidate 不可达证明；同一证明在普通 CI 与 Production activation 前重新生成。
 
+G0-G9施工使用上文临时施工生命周期。Gate标记`DONE`表示下游可以依赖当时current输出，不把未Seal/未Published的施工候选提升为生产兼容承诺；真实finding需要改变上游时，必须显式reopen Gate、记录影响并重建全部受影响下游current evidence。Working输出不得为了保留开发历史而强制additive命名或逐版全量human review；Git负责开发历史，只有显式RC、Sealed Golden、Published Registry resource和已激活Release进入不可变边界。历史G0/G1/R-016 artifact在本次治理切换前已经形成，继续作为construction provenance保留，但不授权后续Working修正复制同样的additive流程。
+
 本文批准即授权从第 1 步开始实施，不再等待额外架构确认。Contract Pack、Executable DDL、Schema Manifest、Sealed Golden Bundle 与 certified Supported Limits 是对应 gate 必须实际生成并由 CI/benchmark 证明的 exit artifact，不是批准本文前要伪造的附件，也不能因目标架构已确认而跳过。下列编号表示 capability gate，不表示所有工作必须串行；只有依赖 gate 通过后才能合并依赖它的实现。当前“可直接执行”指可以从 Contract Pack/Spec Stabilization 开工，不表示 Store 或 Production 已提前通过后续门禁。
 
-1. **Spec Stabilization / Contract Pack Gate**：在 `src/workflow-runtime/contracts/` 冻结 Managed Node Runtime Distribution/Compiler Toolchain、Definition/Recipe/Command/Transition、Feature Manifest vNext、Card Presentation、Source/Compiled IR、Logical Schema typed relation metadata、Operational Blocker/T6e、`local_single_user_safety@1`/Capacity baseline/Product Floor/Retention、`local_single_user_sqlite@1`、Command/Permission/Reason/Denial Catalog 和 Golden Draft/Review；按本文 S25 固定 Node/npm/package identity，并交付不修改系统 Node 的 side-by-side bootstrap、managed exec wrapper、stable Runtime Launcher、launchd binding 与 fail-closed fixture；生成并通过静态 absence、surface coverage 与 candidate boundary manifest，不实现 durable T0。G0.1-G0.9 完成后新增的 Capacity control-plane 合同以 G0.10 additive root 发布：必须 pin 住既有 G0.9 root，新增 Capacity Admin Command/Permission/Reason/Denial、publication envelope、CAP protocol、Logical Schema delta、coverage/inventory/fixtures，不改写或冒充既有完成 hash。
+1. **Spec Stabilization / Contract Pack Gate**：在 `src/workflow-runtime/contracts/` 形成 Managed Node Runtime Distribution/Compiler Toolchain、Definition/Recipe/Command/Transition、Feature Manifest vNext、Card Presentation、Source/Compiled IR、Logical Schema typed relation metadata、Operational Blocker/T6e、`local_single_user_safety@1`/Capacity baseline/Product Floor/Retention、`local_single_user_sqlite@1`、Command/Permission/Reason/Denial Catalog 和 Golden Draft/Review的current machine baseline；按本文 S25 固定Node/npm/package identity，并交付不修改系统Node的side-by-side bootstrap、managed exec wrapper、stable Runtime Launcher、launchd binding与fail-closed fixture；生成并通过静态absence、surface coverage与candidate boundary manifest，不实现durable T0。G0.1-G0.9完成后新增Capacity control-plane时曾以G0.10 additive root保留当时施工证据；该历史处理不构成后续Working candidate必须additive的通用规则。
 2. **DDL 与 Store 基座 Gate**：只有 current Contract Pack root 已包含 G0.10 Capacity control-plane addendum 后，才产出覆盖全部持久化对象的 canonical executable migration、Schema Manifest、typed-FK/schema-lint、constraint/query-plan fixtures 和 empty-file SQLite DDL Gate；通过后实现独立 `workflow-runtime.db`、Connection Factory、短事务/CAS 与基础 query API。
 3. **确定性 Compiler / Sealed Golden Gate**：可在第 1 步通过后与第 2 步并行；按 pinned Toolchain 实现 strict parser、Schema/Profile、RFC 8785/domain hash、Definition/Scope Compiler、binding、DAG、condition/trigger/input、completion、policy/safety、Proof/Program 与 static child closure。Expected Plan/diagnostics 由独立 oracle review + `golden-seal` 生成 sealed artifact；逐字节通过完整 Sealed Golden Bundle 后才允许 Publisher 激活 executable resource。
 4. **Value/Registry/Authoring/Publish 基座**：实现 Value/Blob Write Intent/GC/Backup、Registry/Closure/Snapshot/Retention、Feature Manifest vNext、staged Publish、Execution Artifact 与 Core Protocol/ABI compatibility preflight；实现 `scaffold -> validate -> compile -> dry-run -> review -> publish -> activate` developer toolchain。此时尚不开放 Workflow 创建入口。
@@ -6024,6 +6047,8 @@ Absence generator 使用 TypeScript AST/import graph、Web route enumeration、E
 3. 从默认CI、构建和Runtime identity中移除对归档Markdown的读取、raw hash、字符串coverage和章节hash；Production Runtime、Compiler、Publisher、Store和Launcher不得解析归档文档。
 4. 保留历史G0/G1/R-016 root、旧Markdown coverage和阶段Gate artifact作为只读审计证据；若仍需复验，只能在对应release tag/commit上通过独立`archive:verify:v1`类入口运行，不进入普通提交、发布或Production启动必跑路径。
 5. 将默认验证拆成current machine Contract、Schema/DDL/Store、Compiler/Golden、Runtime行为和Release/startup identity；归档不得以“阶段已完成”为由删除这些长期安全门禁。
+
+归档完成即终止`WORKING/RC_REVIEW/BASELINE_ACCEPTED/CONSTRUCTION_ARCHIVED`施工状态机本身；后续普通代码迭代不继续维护G0-G9阶段账本或施工Draft链。仍长期存在的是`AUTHORING/STAGED/PUBLISHED/ACTIVE/DRAINING/RETIRED`生产资源生命周期、current machine Contract和Release兼容验证。后续若进行新的整体协议重构，应建立新的施工设计底稿和独立construction lifecycle，不复活本次v1施工状态。
 
 归档时应退出活动流程的施工期验证包括：G0.9/G0.10从主Markdown抽取或覆盖字符串的检查、R-016规范章节hash、Gate状态必须为`READY/NOT_READY`的里程碑断言、以及“后续Compiler/Registry/Runtime尚不存在”的absence断言。旧artifact中的这些字段和hash保持历史事实，不回写；退出活动流程表示默认工具不再用当前仓库或归档文档重新计算它们。
 

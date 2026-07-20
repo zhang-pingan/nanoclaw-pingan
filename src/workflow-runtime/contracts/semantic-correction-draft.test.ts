@@ -43,7 +43,7 @@ function treeDigest(): string {
   return hash.digest('hex');
 }
 
-describe('G2 semantic correction Draft v4', () => {
+describe('G2 semantic correction working review bundle', () => {
   it('builds deterministic expected bytes without importing Production Compiler', () => {
     const first = buildSemanticCorrectionDraftExpectedArtifactsForTest().map(
       ([relativePath, value]) => [relativePath, JSON.stringify(value)],
@@ -55,20 +55,18 @@ describe('G2 semantic correction Draft v4', () => {
     expect(first).toHaveLength(4);
   });
 
-  it('checks the published Draft without changing any byte', () => {
+  it('checks the current working bundle without changing any byte', () => {
     const before = treeDigest();
     const first = checkSemanticCorrectionDraft();
     const middle = treeDigest();
     const second = checkSemanticCorrectionDraft();
-    expect(first.hash).toBe(
-      'sha256:6155b5e78fba2ff2987ea4795b1a0c7bc520125292821943d13199d105b07f4b',
-    );
+    expect(first.hash).toMatch(/^sha256:[0-9a-f]{64}$/);
     expect(second.hash).toBe(first.hash);
     expect(middle).toBe(before);
     expect(treeDigest()).toBe(before);
   });
 
-  it('keeps actual comparison input separate from the all-null oracle', () => {
+  it('keeps actual comparison input separate from the unrequested oracle', () => {
     const payload = artifact(SEMANTIC_CORRECTION_DRAFT_CASES_PATH).payload;
     const cases = payload.cases as JsonObject[];
     expect(cases).toHaveLength(40);
@@ -79,26 +77,26 @@ describe('G2 semantic correction Draft v4', () => {
       const actual = entry.actual_compiler_candidate as JsonObject;
       const expected = entry.expected_golden_oracle as JsonObject;
       expect(actual.role).toBe('actual_compiler_output_not_golden_oracle');
-      expect(expected.status).toBe(
-        'pending_fresh_independent_human_semantic_review',
-      );
+      expect(expected.status).toBe('not_authored_working_not_review_candidate');
       expect(
         Object.entries(expected).filter(([key]) => key !== 'status'),
       ).toSatisfy((entries: Array<[string, unknown]>) =>
         entries.every(([, value]) => value === null),
       );
-      expect(entry.review_status).toBe(
-        'pending_fresh_independent_human_semantic_review',
-      );
+      expect(entry.review_status).toBe('not_requested_until_prepare_rc');
       expect(entry.human_judgment).toBeNull();
     }
   });
 
-  it('records only the pending G2 boundary', () => {
+  it('records only the working G2 boundary', () => {
     const manifest = artifact(SEMANTIC_CORRECTION_DRAFT_MANIFEST_PATH).payload;
     expect(manifest.gate_status).toBe('IN_PROGRESS');
+    expect(manifest.construction_phase).toBe('WORKING');
+    expect(manifest.publishable).toBe(false);
+    expect(manifest.production_reachable).toBe(false);
     expect(manifest.expected_full_case_result_bytes_authored).toBe(0);
     expect(manifest.human_judgment_coverage).toBe(0);
+    expect(manifest.pending_case_count).toBe(0);
     expect(manifest.golden_semantic_review_status).toBe('not_run');
     expect(manifest.approval_status).toBe('not_run');
     expect(manifest.golden_seal_status).toBe('not_run');

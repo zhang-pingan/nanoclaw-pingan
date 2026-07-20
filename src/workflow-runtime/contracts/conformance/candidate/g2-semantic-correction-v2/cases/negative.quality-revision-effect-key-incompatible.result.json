@@ -2,7 +2,7 @@
   "format": "icarus.workflow-compiler-conformance-case-result/1",
   "case_id": "negative.quality-revision-effect-key-incompatible",
   "source_kind": "graph_scope",
-  "source_hash": "sha256:6f6b2cb62b88d61563d8b969d3a6974ac38deb456e1c0c5dea0c9e8a3238778c",
+  "source_hash": "sha256:f12c99e9b7132048dd4baca8cddcc1a3d0f03a3f69b4bbe1535e9884fd2bc913",
   "outcome": "rejected",
   "normalized_plan": null,
   "static_lowering_contract_ref": null,
@@ -19,5 +19,5 @@
   ],
   "proof_hashes": [],
   "program_hashes": [],
-  "result_hash": "sha256:b4f826f14316b18bcc16a2d177691c359293a95f9900593b6a23f6df37f47bd9"
+  "result_hash": "sha256:e1b6b334fbc81988a7e0bfdda392f7bd11738cba7528be74e93aaf59991388dd"
 }

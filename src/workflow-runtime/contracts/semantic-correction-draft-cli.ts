@@ -8,7 +8,7 @@ if (
   process.argv.length !== 3 ||
   (command !== 'generate' && command !== 'check')
 ) {
-  console.error('Usage: semantic-correction-draft <generate|check>');
+  console.error('Usage: semantic-correction-working-bundle <generate|check>');
   process.exit(64);
 }
 
@@ -17,11 +17,11 @@ try {
     command === 'generate'
       ? generateSemanticCorrectionDraft()
       : checkSemanticCorrectionDraft();
-  console.log(`semantic_correction_draft=${command}:ok`);
-  console.log(`semantic_correction_draft_root=${manifest.hash}`);
+  console.log(`semantic_correction_working_bundle=${command}:ok`);
+  console.log(`semantic_correction_working_bundle_root=${manifest.hash}`);
 } catch (error) {
   console.error(
-    `semantic_correction_draft=${command}:failed: ${
+    `semantic_correction_working_bundle=${command}:failed: ${
       error instanceof Error ? error.message : String(error)
     }`,
   );
