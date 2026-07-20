@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-contract-pack-g2-semantic-correction-candidate:1\n",
-  "hash": "sha256:302b2acff6bf5b97d010fdd7006dca949caa2361b5778e1928b46e584088617d",
+  "hash": "sha256:54ba5b80b92a9c053e4439964fbea03326c9c8b7fc3cc3fe244dffa2144d341a",
   "payload": {
     "gate": "G2",
     "status": "WORKING_COMPILER_COMPARISON",
@@ -15,14 +15,14 @@
     "production_reachable": false,
     "semantic_correction_contract_ref": "conformance/compiler-semantic-correction/contract-pack-compiler-semantic-correction.json",
     "semantic_correction_input_manifest_ref": "conformance/draft/semantic-correction-v4/semantic-correction-input-manifest@1.json",
-    "semantic_correction_input_manifest_hash": "sha256:387fab5a004f061204a926a00c31845c257b15bd4fc2faac6c02dcf2fd96599a",
+    "semantic_correction_input_manifest_hash": "sha256:83080db01627d5b42046ce0a2e229ee3f4099208a8bfa2b028fc9b6241272dc8",
     "compiler_toolchain_ref": "conformance/candidate/g2-semantic-correction-v2/workflow-compiler-toolchain@3.json",
-    "compiler_toolchain_hash": "sha256:b92ad48c78c2af3129e471f484c68067b957bfa124187490df64aae1801cdfb6",
-    "compiler_build_hash": "sha256:39d875d520c70493165704c5ab7e0b9edbe4eb337413e0e67f7aa5ff61acd629",
+    "compiler_toolchain_hash": "sha256:d8bd2ce6cffeebb9de442c22c35749e21276c590c751c257a57514e6cfaca597",
+    "compiler_build_hash": "sha256:3f605b87ec0f2b8e4413b9c4eb9a42d49c1022cee2d45c48c002aee7b18b7ead",
     "case_input_binding_ref": "conformance/candidate/g2-semantic-correction-v2/g2-case-input-binding@2.json",
-    "case_input_binding_hash": "sha256:0372ab7faa2a0baea660bf6eb477b88501512e001de21c004dd1c7f0c5cf3e8a",
+    "case_input_binding_hash": "sha256:f59893f564de430caf7375c47ff82888e20339886aec06efa5abb9625c259329",
     "candidate_results_manifest_ref": "conformance/candidate/g2-semantic-correction-v2/candidate-results-manifest@2.json",
-    "candidate_results_manifest_hash": "sha256:e29cb5a6aa84e07e2e2af6ed7874736848a5d4d3b81306663cf9a4cabf13ec97",
+    "candidate_results_manifest_hash": "sha256:7275619d34371bc4211d1621f4bd0fdfb4212dbed5c6437f4f58c36fe60fdfab",
     "candidate_disposition": "actual_compiler_output_not_golden_oracle",
     "case_count": 40,
     "compiled_count": 11,
@@ -32,7 +32,7 @@
     "artifact_inventory": [
       {
         "path": "conformance/candidate/g2-semantic-correction-v2/candidate-results-manifest@2.json",
-        "raw_sha256": "sha256:983f9e4330414e69342e7f175e686184349abc36b14bb38e73b2355bc725fa36"
+        "raw_sha256": "sha256:cb835fcfffe18a5a48d207de46062e49d9c1b7968b0767d1eab1f1b364eb3639"
       },
       {
         "path": "conformance/candidate/g2-semantic-correction-v2/cases/negative.capability-not-allowed.result.json",
@@ -104,7 +104,7 @@
       },
       {
         "path": "conformance/candidate/g2-semantic-correction-v2/cases/negative.policy-escalation.result.json",
-        "raw_sha256": "sha256:204ba69c15ce5d63c8f21b0a09998a2796281a8e22a3b964a9a96b5311815bd3"
+        "raw_sha256": "sha256:39626d41dac0bd8c30748d19cba611751be22d8ed99f24cce7d396e66e8ef178"
       },
       {
         "path": "conformance/candidate/g2-semantic-correction-v2/cases/negative.quality-revision-effect-key-incompatible.result.json",
@@ -152,55 +152,55 @@
       },
       {
         "path": "conformance/candidate/g2-semantic-correction-v2/cases/positive.compiler-integrity-match-control.result.json",
-        "raw_sha256": "sha256:70bf53deafdbf27c2eb4085a1e465e40a65d7dca617da60b3f3aaea6bf6bb3b6"
+        "raw_sha256": "sha256:52dcc16fd0555fa21a878342df92d878ee9894f14ed40abd72ace8880a383016"
       },
       {
         "path": "conformance/candidate/g2-semantic-correction-v2/cases/positive.condition-route.result.json",
-        "raw_sha256": "sha256:69d55ccc8f506eb1a31b7a67678b3102be0fe68d26cc981a35e3eabc13494fb9"
+        "raw_sha256": "sha256:19d922f7f3c55af04db41617c78cba51cd4468b24b743e88d50c618989c2faea"
       },
       {
         "path": "conformance/candidate/g2-semantic-correction-v2/cases/positive.expand.result.json",
-        "raw_sha256": "sha256:ff27763db77ad3725590026d8e67c8249577e172b045e524d1e0f6daffdcfc04"
+        "raw_sha256": "sha256:317b8ec77a6f41556e1fb77adb596df9b7735029c915ae07a66165757184e2d2"
       },
       {
         "path": "conformance/candidate/g2-semantic-correction-v2/cases/positive.map.result.json",
-        "raw_sha256": "sha256:94f87b086878b3d465d7a862edaca0e0f29c2d284cd1800b5b8d3c69080e8d67"
+        "raw_sha256": "sha256:2c0d7e35b4150c2def7cd5766219a02a59537a2af10bcdd0fcd188ba2b2117aa"
       },
       {
         "path": "conformance/candidate/g2-semantic-correction-v2/cases/positive.policy-intersection.result.json",
-        "raw_sha256": "sha256:afd0b6b5ff63094d54afa3f95204239af5d18ee7adeed4630cca7b66deefde6a"
+        "raw_sha256": "sha256:45c1dc474acd586064941519a840a736723cf4e9606f7a292c7694e3d601742b"
       },
       {
         "path": "conformance/candidate/g2-semantic-correction-v2/cases/positive.quality-revision-binding.result.json",
-        "raw_sha256": "sha256:8dfa75256b098fe4719b487829bd6a17257b35c7accb275f359f60ad946f750b"
+        "raw_sha256": "sha256:4ccd8a161a669a8e69acd30af0fcbbca09d7e19ce664eb296385533374af18e2"
       },
       {
         "path": "conformance/candidate/g2-semantic-correction-v2/cases/positive.sound-subtype-different-hash.result.json",
-        "raw_sha256": "sha256:9fee4fa41560ac441ba8cfb38a980b51018dfaf7ebbfb144b4409e137f8af5f5"
+        "raw_sha256": "sha256:5478eb76d9937bf0672053044a0bc2131bfe795c592afee06adc3d5716ca02bd"
       },
       {
         "path": "conformance/candidate/g2-semantic-correction-v2/cases/positive.static-child-closure.result.json",
-        "raw_sha256": "sha256:b29ad9b7a3fae77667459cf7495818bf5f86418f685e498de6947f9fda517ab1"
+        "raw_sha256": "sha256:53093da812fcd1cfabac3d585e42cb23afa5b65b792ec7eb187b76736067cabb"
       },
       {
         "path": "conformance/candidate/g2-semantic-correction-v2/cases/positive.static-lowering.result.json",
-        "raw_sha256": "sha256:526d463ce8e24eb7f9b91baf651f7162c1b5f71b5cc5ceec29154436fd9c14c2"
+        "raw_sha256": "sha256:db41ed0357327a868af88fb79a6d17d04d4280683863798ee3fa50e8978f6b2c"
       },
       {
         "path": "conformance/candidate/g2-semantic-correction-v2/cases/positive.subgraph.result.json",
-        "raw_sha256": "sha256:0cc52067bf3f8682c21701e4e4012f0b8382a047dc3b031892bab3ec2f20b329"
+        "raw_sha256": "sha256:678d9b6815455784021b9e72128c6e0aa205a4bbf58560fa33c5abc78ce5e08a"
       },
       {
         "path": "conformance/candidate/g2-semantic-correction-v2/cases/positive.wait.result.json",
-        "raw_sha256": "sha256:6eaded5ab24b5a2bca8139185ece41b91cc75591c71a2c339144192ce2397782"
+        "raw_sha256": "sha256:3d17ca6c905ba10951895d5695e1b6762a6d5ee8a5c04659b11d9cba7cf02595"
       },
       {
         "path": "conformance/candidate/g2-semantic-correction-v2/g2-case-input-binding@2.json",
-        "raw_sha256": "sha256:4176d682e4ad3354c1854bb0a0d5c65c73ef295bc76424b588088e0015d1454e"
+        "raw_sha256": "sha256:8f03e4c13105a702047bf827ed2a0e31ba86adfc25e1c6faa07bccbb20aaf670"
       },
       {
         "path": "conformance/candidate/g2-semantic-correction-v2/workflow-compiler-toolchain@3.json",
-        "raw_sha256": "sha256:92d02d75340c3ba7b0254f563c1d09f391b309f9d9f1cdff90fcf30e59df96fc"
+        "raw_sha256": "sha256:2a95258655742e3423141c7b983455eef57ece13d6c86a06c850a9fa7593bf91"
       }
     ],
     "human_review_status": "not_requested_until_prepare_rc",

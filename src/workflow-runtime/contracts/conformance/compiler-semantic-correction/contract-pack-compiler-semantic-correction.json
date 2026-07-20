@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-contract-pack-compiler-semantic-correction:1\n",
-  "hash": "sha256:8f0f6e397cfe64a619027abfb8cd341322928ad70a6217b4aafedc5c01eb5f79",
+  "hash": "sha256:3bfaff4acd658a826e2b51f7fd53e1f938a6b0b1e78a2b6b696597d7b4a05124",
   "payload": {
     "gate": "G2",
     "status": "WORKING_MUTABLE_NOT_PUBLISHABLE",
@@ -14,7 +14,7 @@
     "publishable": false,
     "production_reachable": false,
     "decision_ref": "conformance/compiler-semantic-correction/semantic-correction-contract@1.json",
-    "decision_hash": "sha256:efce5907c2659ef8caef281fb19c149672ac801bccca2ccb7696c2b123b8e327",
+    "decision_hash": "sha256:53e24e8649aca872da87862e084925073d906c89a6c6d280152f50532331acb1",
     "error_catalog_ref": "conformance/compiler-semantic-correction/workflow-compiler-error-catalog@2.json",
     "error_catalog_hash": "sha256:8fc7139b29cdddf3c1e13e0f9d8bc6b19a1d32c02c1e7f4b7e33023fcece91ef",
     "construction_seed_r016_root": "sha256:776d516ba6c8c73a7da33895a4f4f3680054a1e93fbf056acdfc3ec36550b324",
@@ -23,7 +23,7 @@
     "artifact_inventory": [
       {
         "path": "conformance/compiler-semantic-correction/semantic-correction-contract@1.json",
-        "raw_sha256": "sha256:d01de03a453c3eac71c9ac10f1fc6a345ab5e0c704990dfd058d96ffec9e02e5"
+        "raw_sha256": "sha256:0fdb56f574fbda995d6a1c943721171d9660f8e3a60d520be0a6e88e4dc99b8c"
       },
       {
         "path": "conformance/compiler-semantic-correction/workflow-compiler-error-catalog@2.json",

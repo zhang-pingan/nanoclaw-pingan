@@ -7,17 +7,17 @@
   "normalized_plan": {
     "format": "icarus.workflow-graph-scope-plan/2",
     "compiler_version": "3.0.0",
-    "compiler_build_hash": "sha256:39d875d520c70493165704c5ab7e0b9edbe4eb337413e0e67f7aa5ff61acd629",
+    "compiler_build_hash": "sha256:3f605b87ec0f2b8e4413b9c4eb9a42d49c1022cee2d45c48c002aee7b18b7ead",
     "compiler_toolchain_ref": {
       "id": "icarus.workflow-compiler-toolchain",
       "version": "3.0.0"
     },
-    "compiler_toolchain_hash": "sha256:b92ad48c78c2af3129e471f484c68067b957bfa124187490df64aae1801cdfb6",
+    "compiler_toolchain_hash": "sha256:d8bd2ce6cffeebb9de442c22c35749e21276c590c751c257a57514e6cfaca597",
     "compiler_error_catalog_hash": "sha256:8fc7139b29cdddf3c1e13e0f9d8bc6b19a1d32c02c1e7f4b7e33023fcece91ef",
     "canonical_normalizer_version": "2.0.0",
     "canonical_normalizer_hash": "sha256:7d08408f780ca4350e153d99fd60810554daefe3826b39fe5e2fa5abee340b60",
     "proof_algorithm_version": "2.0.0",
-    "proof_algorithm_hash": "sha256:4aa814c349c213fdaec4e48b4414a5bab728bb54328639c9d8c1aa0da680ca88",
+    "proof_algorithm_hash": "sha256:9bea73c915187b6d6af5ddca7e55c59accd86df0fa02d003385b5dfdf3e5184f",
     "source_hash": "sha256:359d8d64e06bc0fbfb1dc68655bcede3135323f3607ea7c0ba46f4dfe210e8ab",
     "interface_snapshot_hash": "sha256:227da6ec31bdc9889a198e9b902823b247add8ecae5752630ab6218b01de6131",
     "policy_snapshot_hash": "sha256:08d4a08a4df7e30c154d07da406dd2584cf6b6fdd380f3d62834d914b8e16f93",
@@ -278,7 +278,7 @@
       }
     },
     "runtime_safety_hash": "sha256:7f8c0b1babf451cb03ab5f99b436d3ae187b587783875850686188d893059259",
-    "plan_hash": "sha256:6ac6908b48b78765558719678b04e54c31853b54e28804b36ca5e01212671f87"
+    "plan_hash": "sha256:6f0e8b887af00981abb6bead923466508882d997577d49ca6370608af250ee49"
   },
   "static_lowering_contract_ref": null,
   "static_lowering_contract_hash": null,
@@ -288,5 +288,5 @@
     "sha256:8708fcdb69ff07601fabf91ba6e0d0f11578d55f8e46983486c65a2373d539b4",
     "sha256:a51758dbd90dbd199d38eb84181697630737fd69f0c85831398d2dfa985e4fb6"
   ],
-  "result_hash": "sha256:c929f11f0aa9ab7807aea7e5ebcea973f152a79ac8ab664736f59aef20c8b839"
+  "result_hash": "sha256:0fa33cb108c6b3b336561abb483b7b383b17fd314ba47b03200b19edb0e02e08"
 }

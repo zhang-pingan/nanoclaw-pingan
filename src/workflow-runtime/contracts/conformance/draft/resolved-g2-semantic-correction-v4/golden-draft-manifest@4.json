@@ -6,7 +6,7 @@
   },
   "version": 4,
   "domain_separator": "icarus:workflow-compiler-semantic-correction-golden-draft-manifest:4\n",
-  "hash": "sha256:90cde6d43923b6f1c09d044438fc0697492289def4c2111eaf03cdf4e2c5e007",
+  "hash": "sha256:25b561d28a2dc4515378d2879ae588751d73397f13e72e6791cf3506453fe288",
   "payload": {
     "format": "icarus.workflow-compiler-golden-draft-manifest/4",
     "bundle_version": "working-g2",
@@ -17,31 +17,31 @@
     "production_reachable": false,
     "draft_status": "working_not_review_candidate",
     "cases_ref": "conformance/draft/resolved-g2-semantic-correction-v4/golden-draft-cases@4.json",
-    "cases_hash": "sha256:c5b4fef4100ed6311775e135b6b072090dcb73ad2592c5188211f713bb9ac8ec",
+    "cases_hash": "sha256:c0e5555919c2d723b4f3c2595582f087a47299bd5a87686ec813114531a2a709",
     "semantic_review_handoff_ref": "conformance/draft/resolved-g2-semantic-correction-v4/semantic-review-handoff@2.json",
-    "semantic_review_handoff_hash": "sha256:78f7641c1a301e89023ece9e534c967934fb00747e94a44cffeded56e0180fdc",
+    "semantic_review_handoff_hash": "sha256:13263f69278bb38c7016b9a34998bb597db1cbc0643f0d0bcff073ad71f384d5",
     "artifact_inventory_ref": "conformance/draft/resolved-g2-semantic-correction-v4/artifact-inventory@2.json",
-    "artifact_inventory_hash": "sha256:c96967efd9edf991cd44d64d8b0f5d162c085567ad6fcb283e02c123b9490797",
+    "artifact_inventory_hash": "sha256:bae338a1447451089b39c1087718adcfead0f3ab5a59c7c6c88a3bf8541fb9a1",
     "semantic_correction_contract_ref": "conformance/compiler-semantic-correction/contract-pack-compiler-semantic-correction.json",
-    "semantic_correction_contract_hash": "sha256:8f0f6e397cfe64a619027abfb8cd341322928ad70a6217b4aafedc5c01eb5f79",
+    "semantic_correction_contract_hash": "sha256:3bfaff4acd658a826e2b51f7fd53e1f938a6b0b1e78a2b6b696597d7b4a05124",
     "semantic_correction_input_manifest_ref": "conformance/draft/semantic-correction-v4/semantic-correction-input-manifest@1.json",
-    "semantic_correction_input_manifest_hash": "sha256:387fab5a004f061204a926a00c31845c257b15bd4fc2faac6c02dcf2fd96599a",
+    "semantic_correction_input_manifest_hash": "sha256:83080db01627d5b42046ce0a2e229ee3f4099208a8bfa2b028fc9b6241272dc8",
     "candidate_root_ref": "conformance/candidate/g2-semantic-correction-v2/contract-pack-g2-semantic-correction-candidate.json",
-    "candidate_root_hash": "sha256:302b2acff6bf5b97d010fdd7006dca949caa2361b5778e1928b46e584088617d",
+    "candidate_root_hash": "sha256:54ba5b80b92a9c053e4439964fbea03326c9c8b7fc3cc3fe244dffa2144d341a",
     "candidate_results_manifest_ref": "conformance/candidate/g2-semantic-correction-v2/candidate-results-manifest@2.json",
-    "candidate_results_manifest_hash": "sha256:e29cb5a6aa84e07e2e2af6ed7874736848a5d4d3b81306663cf9a4cabf13ec97",
+    "candidate_results_manifest_hash": "sha256:7275619d34371bc4211d1621f4bd0fdfb4212dbed5c6437f4f58c36fe60fdfab",
     "exact_compiler_identity": {
       "compiler_toolchain_manifest_ref": {
         "id": "icarus.workflow-compiler-toolchain",
         "version": "3.0.0"
       },
-      "compiler_toolchain_hash": "sha256:b92ad48c78c2af3129e471f484c68067b957bfa124187490df64aae1801cdfb6",
+      "compiler_toolchain_hash": "sha256:d8bd2ce6cffeebb9de442c22c35749e21276c590c751c257a57514e6cfaca597",
       "compiler_version": "3.0.0",
-      "compiler_build_hash": "sha256:39d875d520c70493165704c5ab7e0b9edbe4eb337413e0e67f7aa5ff61acd629",
+      "compiler_build_hash": "sha256:3f605b87ec0f2b8e4413b9c4eb9a42d49c1022cee2d45c48c002aee7b18b7ead",
       "canonical_normalizer_version": "2.0.0",
       "canonical_normalizer_hash": "sha256:7d08408f780ca4350e153d99fd60810554daefe3826b39fe5e2fa5abee340b60",
       "proof_algorithm_version": "2.0.0",
-      "proof_algorithm_hash": "sha256:4aa814c349c213fdaec4e48b4414a5bab728bb54328639c9d8c1aa0da680ca88",
+      "proof_algorithm_hash": "sha256:9bea73c915187b6d6af5ddca7e55c59accd86df0fa02d003385b5dfdf3e5184f",
       "error_catalog_ref": {
         "id": "icarus.workflow-compiler-error-catalog",
         "version": "2.0.0"
@@ -69,6 +69,6 @@
     "negative_case_count": 29,
     "generated_artifact_count": 4,
     "generator_source_raw_hash": "sha256:ab739b8fa4e0ebb24047d19d426f6385d1dd34e16e9cc140995241b5fecac572",
-    "manifest_hash": "sha256:841af72e1d8d480dc39a5091e396e71b272947b6dd1da65fef86c6f475d894ab"
+    "manifest_hash": "sha256:bff9fd11897475e075cb34cdcb72123f0873bb6f4f85c07b338c6c8b2efe411c"
   }
 }

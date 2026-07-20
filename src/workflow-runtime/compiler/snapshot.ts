@@ -15,11 +15,27 @@ export interface SnapshotResource {
   content: JsonObject;
 }
 
+export interface SnapshotDependencyClosureMember {
+  resourceType: string;
+  ref: VersionedRef;
+  contentHash: Sha256Hash;
+}
+
+export interface SnapshotDependencyClosure {
+  rootResourceType: string;
+  rootRef: VersionedRef;
+  members: SnapshotDependencyClosureMember[];
+  memberCount: number;
+  closureHash: Sha256Hash;
+}
+
 export interface BoundCompilerSnapshot {
   snapshotHash: Sha256Hash;
   compilerIdentity: JsonObject;
   resources: SnapshotResource[];
   resourceByKey: Map<string, SnapshotResource>;
+  dependencyClosures: SnapshotDependencyClosure[];
+  dependencyClosureByKey: Map<string, SnapshotDependencyClosure>;
   interfaces: JsonObject[];
   interfaceByKey: Map<string, JsonObject>;
   rootPolicy: JsonObject;
@@ -50,6 +66,35 @@ function asObjectArray(value: JsonValue, label: string): JsonObject[] {
   });
 }
 
+function dependencyClosureKey(resourceType: string, ref: VersionedRef): string {
+  return `${resourceType}:${refKey(ref)}`;
+}
+
+export function resourceDependencyRefs(
+  resource: SnapshotResource,
+): VersionedRef[] {
+  const dependencies = new Map<string, VersionedRef>();
+  const rootKey = refKey(resource.ref);
+  const visit = (value: JsonValue): void => {
+    if (!value || typeof value !== 'object') return;
+    if (Array.isArray(value)) {
+      value.forEach(visit);
+      return;
+    }
+    if (typeof value.id === 'string' && typeof value.version === 'string') {
+      const dependency = value as VersionedRef;
+      const key = refKey(dependency);
+      if (key !== rootKey) dependencies.set(key, dependency);
+      return;
+    }
+    Object.values(value).forEach(visit);
+  };
+  visit(resource.content);
+  return [...dependencies.values()].sort((left, right) =>
+    compareAscii(refKey(left), refKey(right)),
+  );
+}
+
 export function bindCompilerSnapshot(
   snapshot: JsonObject,
 ): BoundCompilerSnapshot {
@@ -72,6 +117,33 @@ export function bindCompilerSnapshot(
       content: entry.content,
     };
   });
+  const dependencyClosures = asObjectArray(
+    snapshot.registry_snapshot.dependency_closures ?? [],
+    'registry dependency closures',
+  ).map((entry): SnapshotDependencyClosure => {
+    assertJsonObject(entry.root_ref);
+    const members = asObjectArray(
+      entry.members,
+      'registry dependency closure members',
+    ).map((member): SnapshotDependencyClosureMember => {
+      assertJsonObject(member.ref);
+      return {
+        resourceType: String(member.resource_type),
+        ref: member.ref as VersionedRef,
+        contentHash: asHash(
+          member.content_hash,
+          'dependency member content_hash',
+        ),
+      };
+    });
+    return {
+      rootResourceType: String(entry.root_resource_type),
+      rootRef: entry.root_ref as VersionedRef,
+      members,
+      memberCount: Number(entry.member_count),
+      closureHash: asHash(entry.closure_hash, 'dependency closure_hash'),
+    };
+  });
   const interfaces = asObjectArray(
     snapshot.interface_snapshot.interfaces,
     'interfaces',
@@ -84,6 +156,12 @@ export function bindCompilerSnapshot(
   const resourceByKey = new Map(
     resources.map((resource) => [refKey(resource.ref), resource]),
   );
+  const dependencyClosureByKey = new Map(
+    dependencyClosures.map((closure) => [
+      dependencyClosureKey(closure.rootResourceType, closure.rootRef),
+      closure,
+    ]),
+  );
   const interfaceByKey = new Map<string, JsonObject>();
   for (const entry of interfaces) {
     assertJsonObject(entry.ref);
@@ -94,6 +172,8 @@ export function bindCompilerSnapshot(
     compilerIdentity: snapshot.compiler_identity,
     resources,
     resourceByKey,
+    dependencyClosures,
+    dependencyClosureByKey,
     interfaces,
     interfaceByKey,
     rootPolicy: completePolicy.root_policy,

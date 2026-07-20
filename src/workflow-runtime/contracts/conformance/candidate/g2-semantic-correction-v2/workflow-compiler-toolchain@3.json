@@ -55,7 +55,7 @@
     "implementation_refs": [
       "src/workflow-runtime/compiler/proofs.ts"
     ],
-    "implementation_hash": "sha256:4aa814c349c213fdaec4e48b4414a5bab728bb54328639c9d8c1aa0da680ca88"
+    "implementation_hash": "sha256:9bea73c915187b6d6af5ddca7e55c59accd86df0fa02d003385b5dfdf3e5184f"
   },
   "compiler_build": {
     "implementation_refs": [
@@ -67,7 +67,7 @@
       "src/workflow-runtime/compiler/snapshot.ts",
       "src/workflow-runtime/compiler/types.ts"
     ],
-    "implementation_hash": "sha256:39d875d520c70493165704c5ab7e0b9edbe4eb337413e0e67f7aa5ff61acd629"
+    "implementation_hash": "sha256:3f605b87ec0f2b8e4413b9c4eb9a42d49c1022cee2d45c48c002aee7b18b7ead"
   },
   "error_catalog_ref": {
     "id": "icarus.workflow-compiler-error-catalog",
@@ -78,5 +78,5 @@
   "compiled_ir_schema_hash": "sha256:4d4e325f94b55a6767f3e8596e1e9b880df2b402d3c89f587a10a23f0eadbd46",
   "conformance_result_schema_ref": "conformance/compiler-contract-repair/schemas/compiler-conformance-case-result-schema.json",
   "conformance_result_schema_hash": "sha256:019a4ba80ed8ae57b6c862d9fda62d9edcb8aca9c4910fde6bbb580c09af8706",
-  "toolchain_hash": "sha256:b92ad48c78c2af3129e471f484c68067b957bfa124187490df64aae1801cdfb6"
+  "toolchain_hash": "sha256:d8bd2ce6cffeebb9de442c22c35749e21276c590c751c257a57514e6cfaca597"
 }

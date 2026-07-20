@@ -6,7 +6,7 @@
   },
   "version": 2,
   "domain_separator": "icarus:workflow-compiler-input-snapshot-artifact:2\n",
-  "hash": "sha256:3638cfafa54f79e68ad3b1f1448139120d225d35faf91fb498df456d8d8dad0f",
+  "hash": "sha256:704789f5d4b92d20a79bfd6dd96d48cea91b89cce479bc0e6690f2d1c6fd08c7",
   "payload": {
     "format": "icarus.workflow-compiler-input-snapshot/2",
     "snapshot_id": "semantic-correction:negative.compiler-integrity-mismatch",
@@ -16,9 +16,9 @@
         "id": "icarus.workflow-compiler-toolchain",
         "version": "3.0.0"
       },
-      "compiler_toolchain_hash": "sha256:b92ad48c78c2af3129e471f484c68067b957bfa124187490df64aae1801cdfb6",
+      "compiler_toolchain_hash": "sha256:d8bd2ce6cffeebb9de442c22c35749e21276c590c751c257a57514e6cfaca597",
       "compiler_version": "3.0.0",
-      "compiler_build_hash": "sha256:39d875d520c70493165704c5ab7e0b9edbe4eb337413e0e67f7aa5ff61acd629",
+      "compiler_build_hash": "sha256:3f605b87ec0f2b8e4413b9c4eb9a42d49c1022cee2d45c48c002aee7b18b7ead",
       "canonical_normalizer_version": "2.0.0",
       "canonical_normalizer_hash": "sha256:7d08408f780ca4350e153d99fd60810554daefe3826b39fe5e2fa5abee340b60",
       "proof_algorithm_version": "2.0.0",
@@ -35,9 +35,11 @@
     },
     "registry_snapshot": {
       "snapshot_ref": "test-only:registry:semantic-correction:negative.compiler-integrity-mismatch@1",
-      "snapshot_hash": "sha256:bdc9474267001eb2b524c6272d993c31f1f064daf3873717876af51d5a24ef99",
+      "snapshot_hash": "sha256:cca479240bb22f685add81b73a6905a91e49cb6832de7655318b428954655796",
       "resource_count": 0,
-      "resources": []
+      "resources": [],
+      "dependency_closure_count": 0,
+      "dependency_closures": []
     },
     "interface_snapshot": {
       "snapshot_ref": "test-only:interfaces:semantic-correction:negative.compiler-integrity-mismatch@1",
@@ -231,6 +233,6 @@
         }
       }
     },
-    "snapshot_hash": "sha256:1144dae3bec21f5a15467601354373539dd927c3e2559eba0a20609a2a9b3758"
+    "snapshot_hash": "sha256:b40930de164aa6ff7de5e0349b360f692a1ccc5803460931fbe80011335a9ff7"
   }
 }

@@ -136,8 +136,8 @@
       "from": {
         "type": "literal",
         "value": [
-          "a",
-          "b"
+          "accepted",
+          "rejected"
         ]
       },
       "to": {

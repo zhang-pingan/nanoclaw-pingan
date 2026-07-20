@@ -436,6 +436,13 @@ function proofRule(producer: JsonObject, consumer: JsonObject): string | null {
   return null;
 }
 
+export function schemaAssignable(
+  producer: JsonObject,
+  consumer: JsonObject,
+): boolean {
+  return proofRule(producer, consumer) !== null;
+}
+
 function objectSchema(value: JsonValue | undefined): JsonObject | null {
   return value && typeof value === 'object' && !Array.isArray(value)
     ? value

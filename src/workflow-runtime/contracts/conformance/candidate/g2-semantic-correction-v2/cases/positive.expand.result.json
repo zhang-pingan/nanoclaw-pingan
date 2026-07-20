@@ -7,20 +7,20 @@
   "normalized_plan": {
     "format": "icarus.workflow-graph-scope-plan/2",
     "compiler_version": "3.0.0",
-    "compiler_build_hash": "sha256:39d875d520c70493165704c5ab7e0b9edbe4eb337413e0e67f7aa5ff61acd629",
+    "compiler_build_hash": "sha256:3f605b87ec0f2b8e4413b9c4eb9a42d49c1022cee2d45c48c002aee7b18b7ead",
     "compiler_toolchain_ref": {
       "id": "icarus.workflow-compiler-toolchain",
       "version": "3.0.0"
     },
-    "compiler_toolchain_hash": "sha256:b92ad48c78c2af3129e471f484c68067b957bfa124187490df64aae1801cdfb6",
+    "compiler_toolchain_hash": "sha256:d8bd2ce6cffeebb9de442c22c35749e21276c590c751c257a57514e6cfaca597",
     "compiler_error_catalog_hash": "sha256:8fc7139b29cdddf3c1e13e0f9d8bc6b19a1d32c02c1e7f4b7e33023fcece91ef",
     "canonical_normalizer_version": "2.0.0",
     "canonical_normalizer_hash": "sha256:7d08408f780ca4350e153d99fd60810554daefe3826b39fe5e2fa5abee340b60",
     "proof_algorithm_version": "2.0.0",
-    "proof_algorithm_hash": "sha256:4aa814c349c213fdaec4e48b4414a5bab728bb54328639c9d8c1aa0da680ca88",
+    "proof_algorithm_hash": "sha256:9bea73c915187b6d6af5ddca7e55c59accd86df0fa02d003385b5dfdf3e5184f",
     "source_hash": "sha256:dfa4d11e55f1d3f5ff37ebb83c79c2cc037718c087e0c1307d45398d132300ac",
     "interface_snapshot_hash": "sha256:227da6ec31bdc9889a198e9b902823b247add8ecae5752630ab6218b01de6131",
-    "policy_snapshot_hash": "sha256:9ee346a9709b80570675634adaf8226079ff6935317ed02f1ebdea1f638ccc8c",
+    "policy_snapshot_hash": "sha256:c4234ff512724362b711e49d22dcc68aa315c3ab875dad0919e8b7d368854051",
     "effective_policy_snapshot": {
       "allowed_node_types": [
         "expand",
@@ -36,11 +36,11 @@
       "allowed_templates": [],
       "allowed_interface_refs": [
         {
-          "id": "fixture.interface.root",
+          "id": "fixture.interface.child",
           "version": "1.0.0"
         },
         {
-          "id": "fixture.interface.child",
+          "id": "fixture.interface.root",
           "version": "1.0.0"
         }
       ],
@@ -155,7 +155,59 @@
             }
           }
         },
-        "output_ports": {},
+        "output_ports": {
+          "completion": {
+            "schema": {
+              "type": "generated",
+              "generator": "child_completion",
+              "parameter_hash": "sha256:a30b64766dab25f2faabd5aac46232b9524e6f2ffec135730e7c47a7de1f920a",
+              "schema_json": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "scope_id",
+                  "exit",
+                  "output_envelope_ref",
+                  "output_envelope_hash",
+                  "plan_hash",
+                  "cut_event_seq"
+                ],
+                "properties": {
+                  "scope_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "exit": {
+                    "type": "string",
+                    "enum": [
+                      "done"
+                    ]
+                  },
+                  "output_envelope_ref": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "output_envelope_hash": {
+                    "type": "string",
+                    "pattern": "^sha256:[0-9a-f]{64}$"
+                  },
+                  "plan_hash": {
+                    "type": "string",
+                    "pattern": "^sha256:[0-9a-f]{64}$"
+                  },
+                  "cut_event_seq": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9007199254740991
+                  }
+                }
+              },
+              "schema_hash": "sha256:577419ed1b4cfdea8fd02f1dd2986c652b9a8ee47215ffa34fb0bf7a6e84c640"
+            },
+            "max_bytes": null,
+            "required": true
+          }
+        },
         "effective_limits": {},
         "graph_spec_input_port": "graph_spec",
         "child_interface_snapshot": {
@@ -345,7 +397,7 @@
         "consumer_schema_hash": "sha256:f613000c1a79f2f468c14dbcc1715c7a0a2e763ff57590c1b313d3e8d7121131",
         "compatibility_proof": {
           "proof_algorithm_version": "2.0.0",
-          "proof_algorithm_hash": "sha256:4aa814c349c213fdaec4e48b4414a5bab728bb54328639c9d8c1aa0da680ca88",
+          "proof_algorithm_hash": "sha256:9bea73c915187b6d6af5ddca7e55c59accd86df0fa02d003385b5dfdf3e5184f",
           "producer_schema_hash": "sha256:f613000c1a79f2f468c14dbcc1715c7a0a2e763ff57590c1b313d3e8d7121131",
           "canonical_pointer": null,
           "pointer_totality": "total",
@@ -354,10 +406,10 @@
           "proof_rule": "identical_schema",
           "proof_detail_ref": "embedded:sha256:62baf5d7de5d6dc1bb3434159176ae0ea9e087b02982aa43d6149a2c57b3b181",
           "proof_detail_hash": "sha256:62baf5d7de5d6dc1bb3434159176ae0ea9e087b02982aa43d6149a2c57b3b181",
-          "proof_hash": "sha256:6ffcbf596735c30445b043be4b5710142af9db681e1e35ba300e7d1c162c8bbe"
+          "proof_hash": "sha256:1841cb822289a1306452bca6102b01deea68061f1ae1f659ab8c47fc0b8e9f40"
         },
         "source_config_hash": "sha256:0f512970048390adf7dc72035c0f4bd87366527ee656919781ba457e344eaad5",
-        "compiled_edge_hash": "sha256:22a9a8b740e629667f2809ac1a29d6e3e7fb9a69b5b8318b8f44d624354163da"
+        "compiled_edge_hash": "sha256:672d574dac671fec591ba087fe11739e6ff3a871427097f57a7fecc0732a2f71"
       }
     ],
     "completion": {
@@ -523,18 +575,18 @@
       }
     },
     "runtime_safety_hash": "sha256:7f8c0b1babf451cb03ab5f99b436d3ae187b587783875850686188d893059259",
-    "plan_hash": "sha256:1b392cf672c691578ee7fc3b6ca6c75cd3f58d976733082cc0fe7c54640c6aa8"
+    "plan_hash": "sha256:4bbfb739d2237d2102584a3b2a2a824a2dfd9bcb1229f5c9cbf3a3b8875b5b0f"
   },
   "static_lowering_contract_ref": null,
   "static_lowering_contract_hash": null,
   "diagnostics": [],
   "proof_hashes": [
-    "sha256:6ffcbf596735c30445b043be4b5710142af9db681e1e35ba300e7d1c162c8bbe"
+    "sha256:1841cb822289a1306452bca6102b01deea68061f1ae1f659ab8c47fc0b8e9f40"
   ],
   "program_hashes": [
     "sha256:8708fcdb69ff07601fabf91ba6e0d0f11578d55f8e46983486c65a2373d539b4",
     "sha256:a51758dbd90dbd199d38eb84181697630737fd69f0c85831398d2dfa985e4fb6",
     "sha256:f3ce1c33ede73411e5ad9749123de79add2aa8775eb0028676fc45464a536980"
   ],
-  "result_hash": "sha256:db82368487edaf8f663e362ccca2c9a4ab72b4c9c48376966bcfcb4f8e905a5b"
+  "result_hash": "sha256:0da905586e1466ef0a4610d6659c5f0bed0cd97e538f7b63fa16976f393c89d0"
 }

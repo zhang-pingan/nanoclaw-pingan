@@ -41,6 +41,9 @@ export const COMPILER_EXACT_IDENTITY_FIELDS_V2 = [
   'conformance_result_schema_hash',
 ] as const;
 
+export const COMPILER_SNAPSHOT_DEPENDENCY_CLOSURE_DOMAIN_V1 =
+  'icarus:workflow-registry-dependency-closure:1\n';
+
 const DECISION_DOMAIN =
   'icarus:workflow-compiler-semantic-correction-contract-artifact:1\n';
 const ERROR_CATALOG_DOMAIN = 'icarus:workflow-compiler-error-catalog:2\n';
@@ -148,6 +151,28 @@ function buildDecision(): ContractArtifactEnvelope {
         domain_separator: 'icarus:workflow-definition:1\n',
         payload: 'definition_without_definition_hash',
         placeholder_hash_allowed: false,
+      },
+      static_lowering_topology: {
+        capability_node_count: 1,
+        terminal_nodes: ['success', 'failure'],
+        outcome_control_edges: ['succeeded_to_success', 'failed_to_failure'],
+        completion_candidate_owner: 'terminal_nodes',
+      },
+      structural_owner_outputs: {
+        subgraph_and_expand_generator: 'child_completion',
+        map_generator: 'map_result',
+        generated_schema_bytes_required: true,
+        parameter_hash_required: true,
+        schema_hash_required: true,
+        map_item_assignability_required: true,
+      },
+      snapshot_dependency_closure: {
+        format: 'icarus.workflow-registry-dependency-closure/1',
+        domain_separator: COMPILER_SNAPSHOT_DEPENDENCY_CLOSURE_DOMAIN_V1,
+        roots: ['capability', 'wait_contract', 'recipe'],
+        member_order: 'resource_ref_ascii_ascending',
+        exact_transitive_member_set_required: true,
+        reachable_resource_presence_required: true,
       },
       construction_lifecycle: {
         phase: 'WORKING',

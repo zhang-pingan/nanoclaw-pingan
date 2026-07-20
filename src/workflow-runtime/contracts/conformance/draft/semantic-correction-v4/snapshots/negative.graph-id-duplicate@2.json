@@ -6,7 +6,7 @@
   },
   "version": 2,
   "domain_separator": "icarus:workflow-compiler-input-snapshot-artifact:2\n",
-  "hash": "sha256:cf1ce9d43f04086fc50e3e020b4e3a83da22dabd1704489a707a269bb715d5f5",
+  "hash": "sha256:bbb6f7fee68441ef9c28ab73b0444518f4a23be291012f9565309d397808e31c",
   "payload": {
     "format": "icarus.workflow-compiler-input-snapshot/2",
     "snapshot_id": "semantic-correction:negative.graph-id-duplicate",
@@ -16,13 +16,13 @@
         "id": "icarus.workflow-compiler-toolchain",
         "version": "3.0.0"
       },
-      "compiler_toolchain_hash": "sha256:b92ad48c78c2af3129e471f484c68067b957bfa124187490df64aae1801cdfb6",
+      "compiler_toolchain_hash": "sha256:d8bd2ce6cffeebb9de442c22c35749e21276c590c751c257a57514e6cfaca597",
       "compiler_version": "3.0.0",
-      "compiler_build_hash": "sha256:39d875d520c70493165704c5ab7e0b9edbe4eb337413e0e67f7aa5ff61acd629",
+      "compiler_build_hash": "sha256:3f605b87ec0f2b8e4413b9c4eb9a42d49c1022cee2d45c48c002aee7b18b7ead",
       "canonical_normalizer_version": "2.0.0",
       "canonical_normalizer_hash": "sha256:7d08408f780ca4350e153d99fd60810554daefe3826b39fe5e2fa5abee340b60",
       "proof_algorithm_version": "2.0.0",
-      "proof_algorithm_hash": "sha256:4aa814c349c213fdaec4e48b4414a5bab728bb54328639c9d8c1aa0da680ca88",
+      "proof_algorithm_hash": "sha256:9bea73c915187b6d6af5ddca7e55c59accd86df0fa02d003385b5dfdf3e5184f",
       "error_catalog_ref": {
         "id": "icarus.workflow-compiler-error-catalog",
         "version": "2.0.0"
@@ -35,9 +35,11 @@
     },
     "registry_snapshot": {
       "snapshot_ref": "test-only:registry:semantic-correction:negative.graph-id-duplicate@1",
-      "snapshot_hash": "sha256:bdc9474267001eb2b524c6272d993c31f1f064daf3873717876af51d5a24ef99",
+      "snapshot_hash": "sha256:cca479240bb22f685add81b73a6905a91e49cb6832de7655318b428954655796",
       "resource_count": 0,
-      "resources": []
+      "resources": [],
+      "dependency_closure_count": 0,
+      "dependency_closures": []
     },
     "interface_snapshot": {
       "snapshot_ref": "test-only:interfaces:semantic-correction:negative.graph-id-duplicate@1",
@@ -231,6 +233,6 @@
         }
       }
     },
-    "snapshot_hash": "sha256:2aed0a8d863e6765e77b25513d028c0eb2c1eae92364bc8e642d3f9826f004e5"
+    "snapshot_hash": "sha256:5af5dd4ee2ebd6ac24ef35666b21592719c8b546c3fdbb0a6c449c70cafe1572"
   }
 }

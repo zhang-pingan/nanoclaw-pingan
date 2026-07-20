@@ -3,79 +3,79 @@
   "candidate_version": "working-g2",
   "disposition": "actual_compiler_output_not_golden_oracle",
   "compiler_toolchain_ref": "conformance/candidate/g2-semantic-correction-v2/workflow-compiler-toolchain@3.json",
-  "compiler_toolchain_hash": "sha256:b92ad48c78c2af3129e471f484c68067b957bfa124187490df64aae1801cdfb6",
+  "compiler_toolchain_hash": "sha256:d8bd2ce6cffeebb9de442c22c35749e21276c590c751c257a57514e6cfaca597",
   "case_input_binding_ref": "conformance/candidate/g2-semantic-correction-v2/g2-case-input-binding@2.json",
-  "case_input_binding_hash": "sha256:0372ab7faa2a0baea660bf6eb477b88501512e001de21c004dd1c7f0c5cf3e8a",
+  "case_input_binding_hash": "sha256:f59893f564de430caf7375c47ff82888e20339886aec06efa5abb9625c259329",
   "case_results": [
     {
       "case_id": "positive.static-lowering",
       "outcome": "compiled",
       "result_ref": "conformance/candidate/g2-semantic-correction-v2/cases/positive.static-lowering.result.json",
-      "result_hash": "sha256:8b2b32d1ee54df1b08aef34ea9a9bc300aa0c1977efe748bc12625c4335bedfa",
-      "result_raw_bytes_hash": "sha256:526d463ce8e24eb7f9b91baf651f7162c1b5f71b5cc5ceec29154436fd9c14c2"
+      "result_hash": "sha256:518b820b974f863498e38ab62610057900c1674760cfeeaf08538af897d3c3e9",
+      "result_raw_bytes_hash": "sha256:db41ed0357327a868af88fb79a6d17d04d4280683863798ee3fa50e8978f6b2c"
     },
     {
       "case_id": "positive.condition-route",
       "outcome": "compiled",
       "result_ref": "conformance/candidate/g2-semantic-correction-v2/cases/positive.condition-route.result.json",
-      "result_hash": "sha256:5578a77b901a0b2550c05716936f2de30b62ae8a5435caad4ed4d52c8d29a1f5",
-      "result_raw_bytes_hash": "sha256:69d55ccc8f506eb1a31b7a67678b3102be0fe68d26cc981a35e3eabc13494fb9"
+      "result_hash": "sha256:defe5c59f93c66236b2c77995ec8806b1db58c594dfada9d209109acb7d3467f",
+      "result_raw_bytes_hash": "sha256:19d922f7f3c55af04db41617c78cba51cd4468b24b743e88d50c618989c2faea"
     },
     {
       "case_id": "positive.wait",
       "outcome": "compiled",
       "result_ref": "conformance/candidate/g2-semantic-correction-v2/cases/positive.wait.result.json",
-      "result_hash": "sha256:a7ca83997bbc64c46d6963a78cdf0b4408e1a709b32b1b0d04b71f72e328720b",
-      "result_raw_bytes_hash": "sha256:6eaded5ab24b5a2bca8139185ece41b91cc75591c71a2c339144192ce2397782"
+      "result_hash": "sha256:93795ee66f0c08b7bdf08005c7753b8d305f29267781419a566145dfd444b780",
+      "result_raw_bytes_hash": "sha256:3d17ca6c905ba10951895d5695e1b6762a6d5ee8a5c04659b11d9cba7cf02595"
     },
     {
       "case_id": "positive.subgraph",
       "outcome": "compiled",
       "result_ref": "conformance/candidate/g2-semantic-correction-v2/cases/positive.subgraph.result.json",
-      "result_hash": "sha256:d104ef2cce4e014cab19bda87d8bb58ded6a4622e8a30ab53c3d4773972bdd52",
-      "result_raw_bytes_hash": "sha256:0cc52067bf3f8682c21701e4e4012f0b8382a047dc3b031892bab3ec2f20b329"
+      "result_hash": "sha256:2a7238f15a19f09188fa2c93470669e7c392642beb0094a27b185e7d0da48f13",
+      "result_raw_bytes_hash": "sha256:678d9b6815455784021b9e72128c6e0aa205a4bbf58560fa33c5abc78ce5e08a"
     },
     {
       "case_id": "positive.expand",
       "outcome": "compiled",
       "result_ref": "conformance/candidate/g2-semantic-correction-v2/cases/positive.expand.result.json",
-      "result_hash": "sha256:db82368487edaf8f663e362ccca2c9a4ab72b4c9c48376966bcfcb4f8e905a5b",
-      "result_raw_bytes_hash": "sha256:ff27763db77ad3725590026d8e67c8249577e172b045e524d1e0f6daffdcfc04"
+      "result_hash": "sha256:0da905586e1466ef0a4610d6659c5f0bed0cd97e538f7b63fa16976f393c89d0",
+      "result_raw_bytes_hash": "sha256:317b8ec77a6f41556e1fb77adb596df9b7735029c915ae07a66165757184e2d2"
     },
     {
       "case_id": "positive.map",
       "outcome": "compiled",
       "result_ref": "conformance/candidate/g2-semantic-correction-v2/cases/positive.map.result.json",
-      "result_hash": "sha256:c25ee1276346aa9c2f73cd27ce6b00f384194dbecf52b7145d343e0c31803331",
-      "result_raw_bytes_hash": "sha256:94f87b086878b3d465d7a862edaca0e0f29c2d284cd1800b5b8d3c69080e8d67"
+      "result_hash": "sha256:decce10317bb0bef59a3f0f46b391c3b4175c80bbcdf07c75b30b25c2a208b12",
+      "result_raw_bytes_hash": "sha256:2c0d7e35b4150c2def7cd5766219a02a59537a2af10bcdd0fcd188ba2b2117aa"
     },
     {
       "case_id": "positive.policy-intersection",
       "outcome": "compiled",
       "result_ref": "conformance/candidate/g2-semantic-correction-v2/cases/positive.policy-intersection.result.json",
-      "result_hash": "sha256:c929f11f0aa9ab7807aea7e5ebcea973f152a79ac8ab664736f59aef20c8b839",
-      "result_raw_bytes_hash": "sha256:afd0b6b5ff63094d54afa3f95204239af5d18ee7adeed4630cca7b66deefde6a"
+      "result_hash": "sha256:0fa33cb108c6b3b336561abb483b7b383b17fd314ba47b03200b19edb0e02e08",
+      "result_raw_bytes_hash": "sha256:45c1dc474acd586064941519a840a736723cf4e9606f7a292c7694e3d601742b"
     },
     {
       "case_id": "positive.quality-revision-binding",
       "outcome": "compiled",
       "result_ref": "conformance/candidate/g2-semantic-correction-v2/cases/positive.quality-revision-binding.result.json",
-      "result_hash": "sha256:e1bec659af66bd410501fb861ff2374317a18e9acf434be651c2037ce3c4b94a",
-      "result_raw_bytes_hash": "sha256:8dfa75256b098fe4719b487829bd6a17257b35c7accb275f359f60ad946f750b"
+      "result_hash": "sha256:350a61c6905344f9a647ef17a6d2f8f5016c67c426f248b89bb46490bbb072d7",
+      "result_raw_bytes_hash": "sha256:4ccd8a161a669a8e69acd30af0fcbbca09d7e19ce664eb296385533374af18e2"
     },
     {
       "case_id": "positive.sound-subtype-different-hash",
       "outcome": "compiled",
       "result_ref": "conformance/candidate/g2-semantic-correction-v2/cases/positive.sound-subtype-different-hash.result.json",
-      "result_hash": "sha256:1b85b0344a7f7086c8be1d2f01ce25146e7b62850ed840715c2e85fc146e2f66",
-      "result_raw_bytes_hash": "sha256:9fee4fa41560ac441ba8cfb38a980b51018dfaf7ebbfb144b4409e137f8af5f5"
+      "result_hash": "sha256:f6cf49a09a93a08f6e4dec8a4561ec46497447eb811fb897f97e80229dd1019d",
+      "result_raw_bytes_hash": "sha256:5478eb76d9937bf0672053044a0bc2131bfe795c592afee06adc3d5716ca02bd"
     },
     {
       "case_id": "positive.static-child-closure",
       "outcome": "compiled",
       "result_ref": "conformance/candidate/g2-semantic-correction-v2/cases/positive.static-child-closure.result.json",
-      "result_hash": "sha256:fb3fe31d36dcb30b1dbadacf7dd94af97b5f849f28e34868d72c2526ed917278",
-      "result_raw_bytes_hash": "sha256:b29ad9b7a3fae77667459cf7495818bf5f86418f685e498de6947f9fda517ab1"
+      "result_hash": "sha256:828d4f6a74fcdb6da6a926370c57af52025b233c90a3cec5c02a07a78e7ba8c5",
+      "result_raw_bytes_hash": "sha256:53093da812fcd1cfabac3d585e42cb23afa5b65b792ec7eb187b76736067cabb"
     },
     {
       "case_id": "negative.json-syntax-invalid",
@@ -207,8 +207,8 @@
       "case_id": "positive.compiler-integrity-match-control",
       "outcome": "compiled",
       "result_ref": "conformance/candidate/g2-semantic-correction-v2/cases/positive.compiler-integrity-match-control.result.json",
-      "result_hash": "sha256:6d5983196dcb55d29fa079efb0814f01a3bc5185071d8e045eb842c3b74cb33c",
-      "result_raw_bytes_hash": "sha256:70bf53deafdbf27c2eb4085a1e465e40a65d7dca617da60b3f3aaea6bf6bb3b6"
+      "result_hash": "sha256:914e44b633c13830da889ab7b27ab58fab64c13bf83dd6c3954ae09e963a0501",
+      "result_raw_bytes_hash": "sha256:52dcc16fd0555fa21a878342df92d878ee9894f14ed40abd72ace8880a383016"
     },
     {
       "case_id": "negative.capability-not-allowed",
@@ -221,8 +221,8 @@
       "case_id": "negative.policy-escalation",
       "outcome": "rejected",
       "result_ref": "conformance/candidate/g2-semantic-correction-v2/cases/negative.policy-escalation.result.json",
-      "result_hash": "sha256:9891b18b7ba5629c2a783d6e2d7a923a69a7aa9bc76321ffbe4f8a1fc56d5704",
-      "result_raw_bytes_hash": "sha256:204ba69c15ce5d63c8f21b0a09998a2796281a8e22a3b964a9a96b5311815bd3"
+      "result_hash": "sha256:a1b3969df17bd81263bac35bdffe740c310fca7f3a617545bdfb57e0c68c9034",
+      "result_raw_bytes_hash": "sha256:39626d41dac0bd8c30748d19cba611751be22d8ed99f24cce7d396e66e8ef178"
     },
     {
       "case_id": "negative.quality-revision-missing-feedback-schema",
@@ -291,5 +291,5 @@
   "compiled_count": 11,
   "rejected_count": 29,
   "expected_oracle_status": "absent_working_not_review_candidate",
-  "manifest_hash": "sha256:e29cb5a6aa84e07e2e2af6ed7874736848a5d4d3b81306663cf9a4cabf13ec97"
+  "manifest_hash": "sha256:7275619d34371bc4211d1621f4bd0fdfb4212dbed5c6437f4f58c36fe60fdfab"
 }

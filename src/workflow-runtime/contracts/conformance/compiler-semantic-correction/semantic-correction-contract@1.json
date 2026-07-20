@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-compiler-semantic-correction-contract-artifact:1\n",
-  "hash": "sha256:efce5907c2659ef8caef281fb19c149672ac801bccca2ccb7696c2b123b8e327",
+  "hash": "sha256:53e24e8649aca872da87862e084925073d906c89a6c6d280152f50532331acb1",
   "payload": {
     "gate": "G2",
     "correction_kind": "working_semantic_correction",
@@ -58,6 +58,38 @@
       "payload": "definition_without_definition_hash",
       "placeholder_hash_allowed": false
     },
+    "static_lowering_topology": {
+      "capability_node_count": 1,
+      "terminal_nodes": [
+        "success",
+        "failure"
+      ],
+      "outcome_control_edges": [
+        "succeeded_to_success",
+        "failed_to_failure"
+      ],
+      "completion_candidate_owner": "terminal_nodes"
+    },
+    "structural_owner_outputs": {
+      "subgraph_and_expand_generator": "child_completion",
+      "map_generator": "map_result",
+      "generated_schema_bytes_required": true,
+      "parameter_hash_required": true,
+      "schema_hash_required": true,
+      "map_item_assignability_required": true
+    },
+    "snapshot_dependency_closure": {
+      "format": "icarus.workflow-registry-dependency-closure/1",
+      "domain_separator": "icarus:workflow-registry-dependency-closure:1\n",
+      "roots": [
+        "capability",
+        "wait_contract",
+        "recipe"
+      ],
+      "member_order": "resource_ref_ascii_ascending",
+      "exact_transitive_member_set_required": true,
+      "reachable_resource_presence_required": true
+    },
     "construction_lifecycle": {
       "phase": "WORKING",
       "mutable_current_artifacts": true,
@@ -78,8 +110,8 @@
       "g3_through_g9": "not_started"
     },
     "spec_section_heading": "### R-017：G2 Working Semantic Correction 决议",
-    "spec_section_raw_sha256": "sha256:d492ebb8ceacf511b12d24c5cf6397bd98ea88c7ad74002396a82cb0eb9b6aac",
-    "spec_section_semantic_hash": "sha256:a922802f22cff3a86a1c9d6007e159762446fbcc71d037f534cc61eb75a1ae19",
+    "spec_section_raw_sha256": "sha256:1e712fa40bdce855c867349ff0ba3da1889deeae726390d7897a3d17a93aeac0",
+    "spec_section_semantic_hash": "sha256:aa8f9d6d08e97c7cd1c3aa2c3a7cdab2d62fa500527eaa35cc7567829e66719e",
     "construction_seed_inputs": {
       "r016_root": "sha256:776d516ba6c8c73a7da33895a4f4f3680054a1e93fbf056acdfc3ec36550b324",
       "g2_compiler_root": "sha256:c78a12ffdec353d3d3ec40350aeb6676e991e92cd5d6645946d5e21fcb013a77",

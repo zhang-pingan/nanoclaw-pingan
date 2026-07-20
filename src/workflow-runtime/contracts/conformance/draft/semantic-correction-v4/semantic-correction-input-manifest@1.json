@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-semantic-correction-input-manifest-artifact:1\n",
-  "hash": "sha256:387fab5a004f061204a926a00c31845c257b15bd4fc2faac6c02dcf2fd96599a",
+  "hash": "sha256:83080db01627d5b42046ce0a2e229ee3f4099208a8bfa2b028fc9b6241272dc8",
   "payload": {
     "gate": "G2",
     "status": "WORKING_INPUTS_CURRENT",
@@ -14,19 +14,19 @@
     "publishable": false,
     "production_reachable": false,
     "case_catalog_ref": "conformance/draft/semantic-correction-v4/semantic-review-input-cases@4.json",
-    "case_catalog_hash": "sha256:76a29eb561cab8785c19ba3318f3b060b007b3ac1d30452110a6db2389b1480b",
+    "case_catalog_hash": "sha256:d76921fdd48d7a600052d274b119d54774c492eb6d423e3fcc89cd89ee282bf4",
     "compiler_identity": {
       "compiler_toolchain_manifest_ref": {
         "id": "icarus.workflow-compiler-toolchain",
         "version": "3.0.0"
       },
-      "compiler_toolchain_hash": "sha256:b92ad48c78c2af3129e471f484c68067b957bfa124187490df64aae1801cdfb6",
+      "compiler_toolchain_hash": "sha256:d8bd2ce6cffeebb9de442c22c35749e21276c590c751c257a57514e6cfaca597",
       "compiler_version": "3.0.0",
-      "compiler_build_hash": "sha256:39d875d520c70493165704c5ab7e0b9edbe4eb337413e0e67f7aa5ff61acd629",
+      "compiler_build_hash": "sha256:3f605b87ec0f2b8e4413b9c4eb9a42d49c1022cee2d45c48c002aee7b18b7ead",
       "canonical_normalizer_version": "2.0.0",
       "canonical_normalizer_hash": "sha256:7d08408f780ca4350e153d99fd60810554daefe3826b39fe5e2fa5abee340b60",
       "proof_algorithm_version": "2.0.0",
-      "proof_algorithm_hash": "sha256:4aa814c349c213fdaec4e48b4414a5bab728bb54328639c9d8c1aa0da680ca88",
+      "proof_algorithm_hash": "sha256:9bea73c915187b6d6af5ddca7e55c59accd86df0fa02d003385b5dfdf3e5184f",
       "error_catalog_ref": {
         "id": "icarus.workflow-compiler-error-catalog",
         "version": "2.0.0"
@@ -44,167 +44,167 @@
     "artifact_inventory": [
       {
         "path": "conformance/draft/semantic-correction-v4/semantic-review-input-cases@4.json",
-        "raw_sha256": "sha256:229a38d9e0e3c344dd9dc42cda2101e46c6e83b58a6a9859b4725bb8df823f58"
+        "raw_sha256": "sha256:a881f5f7a813f4027f69d9fc48abc9bf332224ee6acee0f8cda6e1172ad2664a"
       },
       {
         "path": "conformance/draft/semantic-correction-v4/snapshots/negative.capability-not-allowed@2.json",
-        "raw_sha256": "sha256:8379f53c720815c9796e5348bd5038ae3f8e2d2ca7e5327d73e59d7b234f420c"
+        "raw_sha256": "sha256:4448aa65a1fad79f88bbac12ec15d2ef047e859c3efe367025a99d470cae2c25"
       },
       {
         "path": "conformance/draft/semantic-correction-v4/snapshots/negative.child-recipe-dependency-cycle@2.json",
-        "raw_sha256": "sha256:ba83c8dc7772dace70129acc885b0dd0ee70eaeefbb4a056cd6131b6ca98c714"
+        "raw_sha256": "sha256:87a1043cc665ff613f7c970b98d7561bc48b931ed7964c2af287938932f811d3"
       },
       {
         "path": "conformance/draft/semantic-correction-v4/snapshots/negative.child-recipe-set-mismatch@2.json",
-        "raw_sha256": "sha256:cb2e7580fae0e4c9887c9971765b50a2824e5e57dff998dfce6693fba27b5843"
+        "raw_sha256": "sha256:e36326aa3b9f77a6189a66a649153a2f8176f2b6dfd3d966f68bf215bb0eb985"
       },
       {
         "path": "conformance/draft/semantic-correction-v4/snapshots/negative.compiler-integrity-mismatch@2.json",
-        "raw_sha256": "sha256:bc66baf1a874ccee9af0e80b984b175236b2fbaf87c4a2f3ed61366ef45792c0"
+        "raw_sha256": "sha256:6b3161ab5915f69de83aac0ad7d81c82e1772c3c6410f10c58fc83a7f720471f"
       },
       {
         "path": "conformance/draft/semantic-correction-v4/snapshots/negative.completion-contract-invalid@2.json",
-        "raw_sha256": "sha256:53f1679652cf63b052f5ed9d99664d148fea35a85f64e48ecb9966a2b6316a9f"
+        "raw_sha256": "sha256:a23ffc15dd6981ca0be440b4d79f0f8c77b65c998da58d84e54e6106fbada3ec"
       },
       {
         "path": "conformance/draft/semantic-correction-v4/snapshots/negative.condition-complexity-exceeded@2.json",
-        "raw_sha256": "sha256:546045ccb8646e3f3c63d96015ac08626fde42f4865f1125d731733e24a98c8e"
+        "raw_sha256": "sha256:29cfe6770e4d07cdcf0ff700244adff82cfe50b44e085fe43dcea249815b8cd5"
       },
       {
         "path": "conformance/draft/semantic-correction-v4/snapshots/negative.condition-type-mismatch@2.json",
-        "raw_sha256": "sha256:415884085f0444b8039b31f61539c1e6d1ee75b53cf04b6caa001d2089c5a5b9"
+        "raw_sha256": "sha256:ddbeaf151b2895430af9796c10264ab30cbe6018eebdc3df16fcbea4e72ba01d"
       },
       {
         "path": "conformance/draft/semantic-correction-v4/snapshots/negative.definition-child-creation-key-template@2.json",
-        "raw_sha256": "sha256:300e00c66049dda149174587d4171553f6bfffe08b6abc16ef401261961366a4"
+        "raw_sha256": "sha256:641a7a592cf957c2aae728b6ed0a79af195267534a43eb5db1ef03006dbc6df9"
       },
       {
         "path": "conformance/draft/semantic-correction-v4/snapshots/negative.definition-notification-delivery-requirement@2.json",
-        "raw_sha256": "sha256:b867988998c286336f0c7f0363324599a627d042f90b49063c99bb7327daa21d"
+        "raw_sha256": "sha256:3ad6de795e649f5aa5600479a43b305c180abc1e44e32c99980d631e17a6a00a"
       },
       {
         "path": "conformance/draft/semantic-correction-v4/snapshots/negative.early-completion-non-monotone@2.json",
-        "raw_sha256": "sha256:d7d3129338be4dd9cba245989d94077dc2e0b362cc9ffa857cf48e8d13a5db67"
+        "raw_sha256": "sha256:6625d073e082caa647d654c67fb0e230e1203843a19bddbac5b0fe2b794d6b42"
       },
       {
         "path": "conformance/draft/semantic-correction-v4/snapshots/negative.graph-cross-scope-edge@2.json",
-        "raw_sha256": "sha256:21b3a474b60911430c2d3e3804796b3fc09c7fc92ac83f5d266e329f13350e05"
+        "raw_sha256": "sha256:4d4753bb25f78b972ad30c9d72c247e4a6c1edd20d9f9d93db1cf3c597878a03"
       },
       {
         "path": "conformance/draft/semantic-correction-v4/snapshots/negative.graph-dependency-cycle@2.json",
-        "raw_sha256": "sha256:30f630ae441ce1a051d1b5ae021dba606f22adcd5f6d026290443de82fc5ba55"
+        "raw_sha256": "sha256:5ec2b8f56a42c297367b5247ce55843992f4e23eb2f0ff8d18795e196ee4572d"
       },
       {
         "path": "conformance/draft/semantic-correction-v4/snapshots/negative.graph-endpoint-not-found@2.json",
-        "raw_sha256": "sha256:6ed566de818271659abcbe4e86d1cf1f6272e3de0483f92ca0acc4b063068e71"
+        "raw_sha256": "sha256:73349c68a87563da766ff142ae86f397207180bdee6d73c15bb631c4ea9dbe50"
       },
       {
         "path": "conformance/draft/semantic-correction-v4/snapshots/negative.graph-id-duplicate@2.json",
-        "raw_sha256": "sha256:73803841ec95d932f7dad0914d0f0576ce2ea0fe8e9bafb9278dfc2a587ad781"
+        "raw_sha256": "sha256:9fea2ccd751f3f51361d23cebcad995781570d78487a5f6035228917a44a85dc"
       },
       {
         "path": "conformance/draft/semantic-correction-v4/snapshots/negative.json-duplicate-key@2.json",
-        "raw_sha256": "sha256:18505bc4a5ccf5376106e8c102bee321d0e914e5fffce4f1b39646e33df4a9ca"
+        "raw_sha256": "sha256:fc7117744ccb270e81d754012ee9672ec1478ead1567e45cb2cc8558314b2a21"
       },
       {
         "path": "conformance/draft/semantic-correction-v4/snapshots/negative.json-pointer-non-total@2.json",
-        "raw_sha256": "sha256:dd783ba907d755b62c3a5df382aa96f43503076da61fe05932d90c56bc94d76d"
+        "raw_sha256": "sha256:e8277348185761e38dacdc8c1202703003af79af7ee6f0f17bec3dd8488bf71f"
       },
       {
         "path": "conformance/draft/semantic-correction-v4/snapshots/negative.json-syntax-invalid@2.json",
-        "raw_sha256": "sha256:1b925962bebb8040078526b84226830d9a8bb5b8883bb7431302480930ce127f"
+        "raw_sha256": "sha256:0089326990ef1413eed7a44d292eb91e00450c26e936cfd5234912178cf968f6"
       },
       {
         "path": "conformance/draft/semantic-correction-v4/snapshots/negative.policy-escalation@2.json",
-        "raw_sha256": "sha256:7def15d0804b891af6e832e54dace5da0a2b8aae797d256a733d8d728c948058"
+        "raw_sha256": "sha256:4e18e21312f8fd26b1e00e76775de5d4a16aa59c9f7a32d046d5823acfc21945"
       },
       {
         "path": "conformance/draft/semantic-correction-v4/snapshots/negative.quality-revision-effect-key-incompatible@2.json",
-        "raw_sha256": "sha256:3cdb4908af177737897b4a5ad346df307aa89d542e9fea817dd065f3b6a0307d"
+        "raw_sha256": "sha256:c219aa578881a016a88238dcef64ad90e291b721fa22bf0c958632f750a2e3be"
       },
       {
         "path": "conformance/draft/semantic-correction-v4/snapshots/negative.quality-revision-missing-feedback-schema@2.json",
-        "raw_sha256": "sha256:be18e5afe7783b46e979bf57d64f53d2e2078dafbeecbf9aeb0dc0e4b575e2ce"
+        "raw_sha256": "sha256:d36c688fdce02806239d77cd57522e8e3eead9c6143b23a7f5bb4f210292dec6"
       },
       {
         "path": "conformance/draft/semantic-correction-v4/snapshots/negative.quality-revision-missing-quality-gate@2.json",
-        "raw_sha256": "sha256:0517db373de928723c6ee8df6719179d8e87b87419bc4bf8cf7cdbe7da9a1a70"
+        "raw_sha256": "sha256:85c548cfff69e6d834846231b1a542c8d31c83f66382242f60092faa024bcc32"
       },
       {
         "path": "conformance/draft/semantic-correction-v4/snapshots/negative.registry-ref-not-found@2.json",
-        "raw_sha256": "sha256:ec2eeb4a5664d0b774d580f7c2bfde1546be13079da518e04a88346718198bd7"
+        "raw_sha256": "sha256:a6331ad5bba22afee111b4c7e481c45a4b38a7dd061f8dddaf089d259421d0ff"
       },
       {
         "path": "conformance/draft/semantic-correction-v4/snapshots/negative.registry-ref-unpinned@2.json",
-        "raw_sha256": "sha256:81e14ccbf09dd7763d7379f59208c5c99fc31f561bb0200e6bd0d5527dc8e8a0"
+        "raw_sha256": "sha256:14f222e09db18e65aa98e1b90f1335d652b1b642fd83a1af07e3ef05864d2f7a"
       },
       {
         "path": "conformance/draft/semantic-correction-v4/snapshots/negative.route-group-ambiguous@2.json",
-        "raw_sha256": "sha256:0bda0eb629cf6df19c43e33465543e9aa756a60918bfa2d802325dcb3ed12b35"
+        "raw_sha256": "sha256:512ffc2b2f87f2863a85dff19651737f17e6f99a80cfad86187b5cf9a212bdbe"
       },
       {
         "path": "conformance/draft/semantic-correction-v4/snapshots/negative.runtime-safety-limit-exceeded@2.json",
-        "raw_sha256": "sha256:ec856e2789c5342b1ca1aab5a439cdb46c057d376fc6a5961fdb3579fc23317e"
+        "raw_sha256": "sha256:f2a3ce946651af6e4dfc47fa8baeab9fbff6a34d01d9e37001ca65b6442ef684"
       },
       {
         "path": "conformance/draft/semantic-correction-v4/snapshots/negative.schema-not-assignable@2.json",
-        "raw_sha256": "sha256:0c17a4d2fb1c01ce6a7d87ad77af2412a559a5a21424d73a1144671d6429a242"
+        "raw_sha256": "sha256:c4bd882a6c2e7f9f9764d3c031a3d1158144709b80e6b868c3926bc91670f55e"
       },
       {
         "path": "conformance/draft/semantic-correction-v4/snapshots/negative.schema-profile-keyword-unsupported@2.json",
-        "raw_sha256": "sha256:8a1263d9c7da5567ee4bd10c3f65afb39703e30392893b1325c286d6512877e2"
+        "raw_sha256": "sha256:89c2ffef3f3d3590c15f3832ed7437af92db3493f1f3299dd6de5d323a6b4a41"
       },
       {
         "path": "conformance/draft/semantic-correction-v4/snapshots/negative.schema-unknown-field@2.json",
-        "raw_sha256": "sha256:c1113ef834b29e88a162be538a2df7a4d789eba7afb1d8810721e90ee2148193"
+        "raw_sha256": "sha256:236ca4df955899c6943e3c4af64c84dd56d210a347f54999e85ab5fce60313a8"
       },
       {
         "path": "conformance/draft/semantic-correction-v4/snapshots/negative.trigger-contract-invalid@2.json",
-        "raw_sha256": "sha256:c262f417095931fd6dbcd394835501f3366189e899b7e2c44a602b34cc56d206"
+        "raw_sha256": "sha256:211834300d8f8b87df24aa1ec824b6866b7daa017293540dcf7e094b67485c9e"
       },
       {
         "path": "conformance/draft/semantic-correction-v4/snapshots/positive.compiler-integrity-match-control@2.json",
-        "raw_sha256": "sha256:cf7b889d8e6d01b0d2243395a6a96b65bbfff2ce835773ee88810c870fbf5d5f"
+        "raw_sha256": "sha256:7393968ba47f6666086674329998233d15afaffee03988667d7529cfa62f6eeb"
       },
       {
         "path": "conformance/draft/semantic-correction-v4/snapshots/positive.condition-route@2.json",
-        "raw_sha256": "sha256:b3e0c8b11b396031cba5a07e37f2da6fd6e96d3b4e430bde6a751383be9ffd33"
+        "raw_sha256": "sha256:b1f315513213aab5f4af9612c556d7ad981f50a6ebfb74ba34ff4c6de21aafda"
       },
       {
         "path": "conformance/draft/semantic-correction-v4/snapshots/positive.expand@2.json",
-        "raw_sha256": "sha256:6d066c0da5bfaa4290b1da68259eb7fa87565d2fd87089b768693cbb7dba790a"
+        "raw_sha256": "sha256:31f2089b22c3f5de96dec2152f852bd63e3b0d884c68dc8fc4581d45a7a85c80"
       },
       {
         "path": "conformance/draft/semantic-correction-v4/snapshots/positive.map@2.json",
-        "raw_sha256": "sha256:4bac144fb5b098c10b3211f694715406905715048a6806f4fcd070e80be8c4ad"
+        "raw_sha256": "sha256:615192b3e7fffff92ce8001089b34cfdf3c1a2baf66ec0298f3a5b2e61869166"
       },
       {
         "path": "conformance/draft/semantic-correction-v4/snapshots/positive.policy-intersection@2.json",
-        "raw_sha256": "sha256:de3e62d746e0bbcde606038a95c2136ebb0fdd4c0f3b54718432b1b97f91a5ad"
+        "raw_sha256": "sha256:4d136b3cb073f844c06b2b6d5a9ff17474b55fba8945481a4c86644964f8173e"
       },
       {
         "path": "conformance/draft/semantic-correction-v4/snapshots/positive.quality-revision-binding@2.json",
-        "raw_sha256": "sha256:81562a4262e2a449f702e3ecfddfaa5225e52e9d3000ed728e61fc2175295aa0"
+        "raw_sha256": "sha256:b077f7ef1ede8fc68b4c1005c44a36c02bbee2bf67ba83e5a3738227ddedb2c3"
       },
       {
         "path": "conformance/draft/semantic-correction-v4/snapshots/positive.sound-subtype-different-hash@2.json",
-        "raw_sha256": "sha256:123e5ee4c9caefe4ec12f1318466d43d1dc9dc5655fdee4cbad796913d361acb"
+        "raw_sha256": "sha256:04e2d26a9f4d3bfb88df9316a51873df4cc5c932268a0f6b92c891f5a1477ded"
       },
       {
         "path": "conformance/draft/semantic-correction-v4/snapshots/positive.static-child-closure@2.json",
-        "raw_sha256": "sha256:4ef51d2d84bd0a2d95bde78d2803905185b7b400bc61887edf0697a7075787ca"
+        "raw_sha256": "sha256:e12d1982647b406360e963a81afe537d52c3536f4ce34bb0b51085c85543eac0"
       },
       {
         "path": "conformance/draft/semantic-correction-v4/snapshots/positive.static-lowering@2.json",
-        "raw_sha256": "sha256:7f8b497fb2d20c0bb8656950a93434cff0adff1e258adbac28411f1033e35e3b"
+        "raw_sha256": "sha256:add632daf49224a66622972211e896f42afee4d88b80c3e7e5880b2932fcde0b"
       },
       {
         "path": "conformance/draft/semantic-correction-v4/snapshots/positive.subgraph@2.json",
-        "raw_sha256": "sha256:a7adfe6981915b71922d98e7df3fa916b41554a4400ff30016b0052d358fb67a"
+        "raw_sha256": "sha256:5ebaa12b59637f29cd8349870e7488baae95ff7a8883ac2596f3ae5c87c15bb2"
       },
       {
         "path": "conformance/draft/semantic-correction-v4/snapshots/positive.wait@2.json",
-        "raw_sha256": "sha256:1785fc6fa2cc58a8b29b678724c94881e3ec41c6595f2e37320660bfc35fd7b0"
+        "raw_sha256": "sha256:69bae298feb30c3cad6d4e96310de2ff2e72c6ea18e45d73e8520b89179dd7ca"
       },
       {
         "path": "conformance/draft/semantic-correction-v4/sources/negative.capability-not-allowed/source.json",
@@ -276,7 +276,7 @@
       },
       {
         "path": "conformance/draft/semantic-correction-v4/sources/negative.policy-escalation/source.json",
-        "raw_sha256": "sha256:533eb031d74e13d382fd315c5078de4a466db8ecf65b70f81dc34a3e4a1980ef"
+        "raw_sha256": "sha256:ef4185af554ddc82c1fdd21a3124a49e24fb223c1c5ae411a59936d69e008553"
       },
       {
         "path": "conformance/draft/semantic-correction-v4/sources/negative.quality-revision-effect-key-incompatible/source.json",
@@ -336,7 +336,7 @@
       },
       {
         "path": "conformance/draft/semantic-correction-v4/sources/positive.map/source.json",
-        "raw_sha256": "sha256:61e82a410244f6d9a681394be9d8782f56158818fe71a8b5e3a6af32824b4e6d"
+        "raw_sha256": "sha256:99de853d7b67b3fb153eba19ceaea973a9da06611cd52b3b92cb2b0a98083c8e"
       },
       {
         "path": "conformance/draft/semantic-correction-v4/sources/positive.policy-intersection/source.json",

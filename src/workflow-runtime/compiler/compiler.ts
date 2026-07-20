@@ -32,6 +32,7 @@ import {
   compileCompatibilityProof,
   compileConditionProgram,
   CompilerProofError,
+  schemaAssignable,
 } from './proofs.js';
 import { assertSourceObject, validateClosedSource } from './schema-profile.js';
 import {
@@ -42,9 +43,14 @@ import {
   interfaceIdentity,
   interfacePlanSnapshot,
   refKey,
+  resourceDependencyRefs,
+  type SnapshotDependencyClosure,
   type SnapshotResource,
 } from './snapshot.js';
-import { COMPILER_EXACT_IDENTITY_FIELDS_V2 } from '../contracts/compiler-semantic-correction-contract.js';
+import {
+  COMPILER_EXACT_IDENTITY_FIELDS_V2,
+  COMPILER_SNAPSHOT_DEPENDENCY_CLOSURE_DOMAIN_V1,
+} from '../contracts/compiler-semantic-correction-contract.js';
 import type {
   WorkflowCompilerFailure,
   WorkflowCompilerIdentity,
@@ -196,6 +202,99 @@ function resourceForRef(
     : null;
 }
 
+function dependencyClosurePayload(
+  closure: SnapshotDependencyClosure,
+): JsonObject {
+  return {
+    format: 'icarus.workflow-registry-dependency-closure/1',
+    root_resource_type: closure.rootResourceType,
+    root_ref: closure.rootRef,
+    members: closure.members.map((member) => ({
+      resource_type: member.resourceType,
+      ref: member.ref,
+      content_hash: member.contentHash,
+    })),
+    member_count: closure.memberCount,
+  };
+}
+
+function validateResourceDependencyClosure(
+  root: SnapshotResource,
+  sourcePointer: string,
+  stableObjectId: string,
+  state: CompilationState,
+): void {
+  const closure = state.snapshot.dependencyClosureByKey.get(
+    `${root.resourceType}:${refKey(root.ref)}`,
+  );
+  if (!closure) {
+    throw new CompilerDiagnosticError(
+      diagnostic(
+        'compiler_integrity_mismatch',
+        'hash',
+        sourcePointer,
+        stableObjectId,
+      ),
+    );
+  }
+  const expected = new Map<string, SnapshotResource>();
+  const visited = new Set<string>([refKey(root.ref)]);
+  const queue = resourceDependencyRefs(root);
+  while (queue.length > 0) {
+    const dependencyRef = queue.shift() as VersionedRef;
+    const key = refKey(dependencyRef);
+    if (visited.has(key)) continue;
+    visited.add(key);
+    const dependency = state.snapshot.resourceByKey.get(key);
+    if (!dependency) {
+      throw new CompilerDiagnosticError(
+        diagnostic(
+          'registry_ref_not_found',
+          'bind',
+          sourcePointer,
+          String(dependencyRef.id),
+        ),
+      );
+    }
+    expected.set(key, dependency);
+    queue.push(...resourceDependencyRefs(dependency));
+  }
+  const expectedMembers = [...expected.values()]
+    .sort((left, right) => compareAscii(refKey(left.ref), refKey(right.ref)))
+    .map((resource) => ({
+      resource_type: resource.resourceType,
+      ref: resource.ref,
+      content_hash: resource.contentHash,
+    }));
+  const actualPayload = dependencyClosurePayload(closure);
+  const expectedPayload: JsonObject = {
+    format: 'icarus.workflow-registry-dependency-closure/1',
+    root_resource_type: root.resourceType,
+    root_ref: root.ref,
+    members: expectedMembers,
+    member_count: expectedMembers.length,
+  };
+  const expectedHash = domainSeparatedSha256(
+    COMPILER_SNAPSHOT_DEPENDENCY_CLOSURE_DOMAIN_V1,
+    expectedPayload,
+  );
+  if (
+    JSON.stringify(actualPayload) !== JSON.stringify(expectedPayload) ||
+    closure.closureHash !== expectedHash ||
+    (root.resourceType === 'capability' &&
+      root.content.dependency_closure_hash !== expectedHash)
+  ) {
+    throw new CompilerDiagnosticError(
+      diagnostic(
+        'compiler_integrity_mismatch',
+        'hash',
+        sourcePointer,
+        stableObjectId,
+      ),
+    );
+  }
+}
+
 function validateGraphBindings(
   source: JsonObject,
   state: CompilationState,
@@ -291,6 +390,12 @@ function validateGraphBindings(
         `/nodes/${index}/capability_ref`,
         String(node.id),
       );
+      validateResourceDependencyClosure(
+        capability,
+        `/nodes/${index}/capability_ref`,
+        String(node.id),
+        state,
+      );
       validateQualityRevision(capability, index, String(node.id));
     }
     const wait = objectRef(node.wait);
@@ -301,7 +406,12 @@ function validateGraphBindings(
         `/nodes/${index}/wait/contract_ref`,
         String(node.id),
       );
-      if (!resourceForRef(snapshot, wait.contract_ref, 'wait_contract')) {
+      const waitContract = resourceForRef(
+        snapshot,
+        wait.contract_ref,
+        'wait_contract',
+      );
+      if (!waitContract) {
         throw new CompilerDiagnosticError(
           diagnostic(
             'registry_ref_not_found',
@@ -311,6 +421,12 @@ function validateGraphBindings(
           ),
         );
       }
+      validateResourceDependencyClosure(
+        waitContract,
+        `/nodes/${index}/wait/contract_ref`,
+        String(node.id),
+        state,
+      );
       if (!refAllowed(wait.contract_ref, state.policy.allowed_wait_contracts)) {
         throw new CompilerDiagnosticError(
           diagnostic(
@@ -777,6 +893,12 @@ function validateDefinitionBindings(
         `/states/${stateKey}/capability_ref`,
         stateKey,
       );
+      validateResourceDependencyClosure(
+        capability,
+        `/states/${stateKey}/capability_ref`,
+        stateKey,
+        state,
+      );
     }
     for (const slot of definitionTransitions(value, stateKey)) {
       const operations = objectRef(slot.transition.effects)?.operations;
@@ -815,6 +937,12 @@ function validateDefinitionBindings(
     }
   }
   if (owningRecipe) {
+    validateResourceDependencyClosure(
+      owningRecipe,
+      '/ref',
+      String(owningRecipe.ref.id),
+      state,
+    );
     const allowed = Array.isArray(
       owningRecipe.content.allowed_child_recipe_refs,
     )
@@ -1028,6 +1156,158 @@ function compileOutputPorts(
         ];
       }),
   );
+}
+
+function generatedCompiledSchema(
+  generator: 'child_completion' | 'map_result',
+  parameters: JsonObject,
+  schemaJson: JsonObject,
+): JsonObject {
+  const domainGenerator = generator.replaceAll('_', '-');
+  return {
+    type: 'generated',
+    generator,
+    parameter_hash: semanticHash(
+      `icarus:workflow-${domainGenerator}-schema-parameters:1\n`,
+      parameters,
+    ),
+    schema_json: schemaJson,
+    schema_hash: semanticHash(
+      `icarus:workflow-${domainGenerator}-schema:1\n`,
+      schemaJson,
+    ),
+  };
+}
+
+function childCompletionSchema(childInterface: JsonObject): JsonObject {
+  assertJsonObject(childInterface.exits);
+  return {
+    type: 'object',
+    additionalProperties: false,
+    required: [
+      'scope_id',
+      'exit',
+      'output_envelope_ref',
+      'output_envelope_hash',
+      'plan_hash',
+      'cut_event_seq',
+    ],
+    properties: {
+      scope_id: { type: 'string', minLength: 1 },
+      exit: { type: 'string', enum: Object.keys(childInterface.exits).sort() },
+      output_envelope_ref: { type: 'string', minLength: 1 },
+      output_envelope_hash: {
+        type: 'string',
+        pattern: '^sha256:[0-9a-f]{64}$',
+      },
+      plan_hash: { type: 'string', pattern: '^sha256:[0-9a-f]{64}$' },
+      cut_event_seq: {
+        type: 'integer',
+        minimum: 1,
+        maximum: Number.MAX_SAFE_INTEGER,
+      },
+    },
+  };
+}
+
+function childOwnerOutputPorts(
+  node: JsonObject,
+  childInterface: JsonObject,
+  state: CompilationState,
+): JsonObject {
+  const completionPort = String(node.completion_output_port);
+  const schemaJson = childCompletionSchema(childInterface);
+  const output: JsonObject = {
+    [completionPort]: {
+      schema: generatedCompiledSchema(
+        'child_completion',
+        { child_interface: childInterface },
+        schemaJson,
+      ),
+      max_bytes: null,
+      required: true,
+    },
+  };
+  const expose = objectRef(node.expose) ?? {};
+  assertJsonObject(childInterface.exits);
+  for (const [portName, exposeValue] of Object.entries(expose)) {
+    if (portName === completionPort) {
+      throw new CompilerDiagnosticError(
+        diagnostic('schema_not_assignable', 'bind', '/nodes', String(node.id)),
+      );
+    }
+    assertJsonObject(exposeValue);
+    const exit = childInterface.exits[String(exposeValue.from_exit)];
+    assertJsonObject(exit);
+    assertJsonObject(exit.output_ports);
+    const childPort = exit.output_ports[String(exposeValue.child_port)];
+    assertJsonObject(childPort);
+    assertJsonObject(childPort.schema_ref);
+    output[portName] = {
+      schema: compiledSchema(state.snapshot, childPort.schema_ref),
+      max_bytes:
+        typeof childPort.max_bytes === 'number' ? childPort.max_bytes : null,
+      required: exposeValue.required === true,
+    };
+  }
+  return output;
+}
+
+function mapResultSchema(): JsonObject {
+  const hash = { type: 'string', pattern: '^sha256:[0-9a-f]{64}$' };
+  return {
+    type: 'object',
+    additionalProperties: false,
+    required: [
+      'expansion_manifest_ref',
+      'expansion_manifest_hash',
+      'completion_policy_hash',
+      'selected_indices',
+      'item_results_manifest_ref',
+      'item_results_manifest_hash',
+      'item_count',
+    ],
+    properties: {
+      expansion_manifest_ref: { type: 'string', minLength: 1 },
+      expansion_manifest_hash: hash,
+      completion_policy_hash: hash,
+      selected_indices: {
+        type: 'array',
+        items: {
+          type: 'integer',
+          minimum: 0,
+          maximum: Number.MAX_SAFE_INTEGER,
+        },
+      },
+      item_results_manifest_ref: { type: 'string', minLength: 1 },
+      item_results_manifest_hash: hash,
+      item_count: {
+        type: 'integer',
+        minimum: 0,
+        maximum: Number.MAX_SAFE_INTEGER,
+      },
+    },
+  };
+}
+
+function mapOwnerOutputPorts(node: JsonObject): JsonObject {
+  const resultPort = String(node.result_output_port);
+  const schemaJson = mapResultSchema();
+  return {
+    [resultPort]: {
+      schema: generatedCompiledSchema(
+        'map_result',
+        {
+          body: node.body,
+          completion: node.completion,
+          result_order: 'item_index',
+        },
+        schemaJson,
+      ),
+      max_bytes: null,
+      required: true,
+    },
+  };
 }
 
 function nodeBase(node: JsonObject, state: CompilationState): JsonObject {
@@ -1259,6 +1539,11 @@ function compileGraphNode(
     factoryByNode.set(String(node.id), factory);
     return {
       ...base,
+      output_ports: childOwnerOutputPorts(
+        node,
+        factory.childPlan.interface_snapshot,
+        state,
+      ),
       factory_binding: factory.binding,
       child_input_bindings: node.child_input_bindings,
       completion_output_port: node.completion_output_port,
@@ -1283,6 +1568,7 @@ function compileGraphNode(
     validateChildInputBindings(node, childInterface);
     return {
       ...base,
+      output_ports: childOwnerOutputPorts(node, childInterface, state),
       graph_spec_input_port: node.graph_spec_input_port,
       child_interface_snapshot: interfacePlanSnapshot(childInterface),
       child_input_bindings: node.child_input_bindings,
@@ -1300,11 +1586,12 @@ function compileGraphNode(
       state,
       node.child_policy_ref,
     );
-    validateMapChildBinding(node, factory.childPlan.interface_snapshot);
+    validateMapChildBinding(node, factory.childPlan.interface_snapshot, state);
     factoryByNode.set(String(node.id), factory);
     assertJsonObject(state.snapshot.safety.map);
     return {
       ...base,
+      output_ports: mapOwnerOutputPorts(node),
       body_binding: factory.binding,
       items_input_port: node.items_input_port,
       item_child_input_port: node.item_child_input_port,
@@ -1363,10 +1650,42 @@ function validateChildInputBindings(
 function validateMapChildBinding(
   node: JsonObject,
   childInterface: JsonObject,
+  state: CompilationState,
 ): void {
   assertJsonObject(childInterface.inputs);
   const itemPort = String(node.item_child_input_port);
   if (!(itemPort in childInterface.inputs)) {
+    throw new CompilerDiagnosticError(
+      diagnostic('schema_not_assignable', 'bind', '/nodes', String(node.id)),
+    );
+  }
+  const inputPorts = objectRef(node.input_ports) ?? {};
+  const itemsContract = inputPorts[String(node.items_input_port)];
+  const childItemContract = childInterface.inputs[itemPort];
+  assertJsonObject(itemsContract);
+  assertJsonObject(childItemContract);
+  assertJsonObject(itemsContract.schema_ref);
+  assertJsonObject(childItemContract.schema_ref);
+  const itemsSchema = resourceForRef(
+    state.snapshot,
+    itemsContract.schema_ref,
+    'schema',
+  );
+  const childItemSchema = resourceForRef(
+    state.snapshot,
+    childItemContract.schema_ref,
+    'schema',
+  );
+  const itemSchema = itemsSchema
+    ? objectRef(itemsSchema.content.items)
+    : null;
+  if (
+    !itemsSchema ||
+    itemsSchema.content.type !== 'array' ||
+    !itemSchema ||
+    !childItemSchema ||
+    !schemaAssignable(itemSchema, childItemSchema.content)
+  ) {
     throw new CompilerDiagnosticError(
       diagnostic('schema_not_assignable', 'bind', '/nodes', String(node.id)),
     );
@@ -1942,14 +2261,47 @@ function compileDefinitionPlan(
     'icarus:workflow-generated-definition-interface:1\n',
     generatedInterface,
   );
-  const nodeSource = {
-    id: stateKey,
-    type: definitionState.type,
-    trigger: { type: 'root' },
-    capability_ref: definitionState.capability_ref,
-  } as JsonObject;
-  const node = compileCapabilityNode(nodeSource, state);
-  const completionSource = {
+  const successNodeId = `${stateKey}_success`;
+  const failureNodeId = `${stateKey}_failure`;
+  const loweredSource = {
+    nodes: [
+      {
+        id: stateKey,
+        type: definitionState.type,
+        trigger: { type: 'root' },
+        capability_ref: definitionState.capability_ref,
+      },
+      {
+        id: successNodeId,
+        type: 'terminal',
+        trigger: { type: 'all', edge_ids: ['capability.succeeded'] },
+        exit: 'success',
+      },
+      {
+        id: failureNodeId,
+        type: 'terminal',
+        trigger: { type: 'all', edge_ids: ['capability.failed'] },
+        exit: 'failure',
+      },
+    ],
+    control_edges: [
+      {
+        id: 'capability.succeeded',
+        kind: 'control',
+        from_node_id: stateKey,
+        to_node_id: successNodeId,
+        on: { statuses: ['succeeded'] },
+      },
+      {
+        id: 'capability.failed',
+        kind: 'control',
+        from_node_id: stateKey,
+        to_node_id: failureNodeId,
+        on: { statuses: ['failed'] },
+      },
+    ],
+    data_edges: [],
+    requested_limits: definitionState.policy.limits,
     completion: {
       settled_rules: [
         {
@@ -1967,7 +2319,18 @@ function compileDefinitionPlan(
       early_close: 'cancel_and_fence_remaining',
     },
   } as JsonObject;
-  const completion = compileCompletion(completionSource, state);
+  const factoryByNode = new Map<string, FactoryCompilation>();
+  const nodes = graphNodes(loweredSource)
+    .map((node) =>
+      compileGraphNode(node, state, [String(node.id)], factoryByNode),
+    )
+    .sort(compareStableId);
+  const controls = compileControlEdges(
+    loweredSource,
+    state,
+    generatedInterface,
+  );
+  const completion = compileCompletion(loweredSource, state);
   const closureWithoutHash = { members: [], member_count: 0 };
   const closure = {
     ...closureWithoutHash,
@@ -1999,12 +2362,12 @@ function compileDefinitionPlan(
     capability_catalog_hash: catalogHash(state.snapshot, 'capability'),
     wait_contract_catalog_hash: catalogHash(state.snapshot, 'wait_contract'),
     interface_snapshot: generatedInterface,
-    nodes: [node],
+    nodes,
     route_groups: [],
-    control_edges: [],
+    control_edges: controls,
     data_edges: [],
     completion,
-    complexity_summary: complexitySummary([node], [], [], completion),
+    complexity_summary: complexitySummary(nodes, controls, [], completion),
     static_child_plan_closure: closure,
     effective_limits: effectiveLimits(
       requestedLimits,

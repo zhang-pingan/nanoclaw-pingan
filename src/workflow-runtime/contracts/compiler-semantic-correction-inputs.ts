@@ -6,6 +6,7 @@ import { parseContractArtifactEnvelope } from './artifact.js';
 import { calculateArtifactHash, domainSeparatedSha256 } from './hash.js';
 import {
   COMPILER_ERROR_CATALOG_V2_PATH,
+  COMPILER_SNAPSHOT_DEPENDENCY_CLOSURE_DOMAIN_V1,
   COMPILER_SEMANTIC_CORRECTION_MANIFEST_PATH,
 } from './compiler-semantic-correction-contract.js';
 import { assertJsonObject, strictParseJsonBytes } from './strict-json.js';
@@ -106,6 +107,10 @@ function ref(id: string, version = '1.0.0'): VersionedRef {
 
 function refKey(value: JsonObject | VersionedRef): string {
   return `${String(value.id)}@${String(value.version)}`;
+}
+
+function compareAscii(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0;
 }
 
 function rawSha256(bytes: Uint8Array): Sha256Hash {
@@ -348,6 +353,13 @@ function transformSource(
       ? ((owner.body as JsonObject).scope as JsonObject)
       : null;
     if (body) body.interface_ref = ref('fixture.interface.child');
+    const itemsEdge = asObjects(source.data_edges).find(
+      (edge) => (edge.to as JsonObject)?.node_id === owner?.id,
+    );
+    if (itemsEdge) {
+      assertJsonObject(itemsEdge.from);
+      itemsEdge.from.value = ['accepted', 'rejected'];
+    }
   }
   if (replacementId === 'positive.static-child-closure') {
     const rootOwner = asObjects(source.nodes).find(
@@ -368,6 +380,15 @@ function transformSource(
     }
   }
   if (replacementId === 'negative.graph-cross-scope-edge') {
+    const owner = asObjects(source.nodes).find(
+      (node) => node.type === 'subgraph',
+    );
+    const child = owner
+      ? (((owner.scope as JsonObject).scope as JsonObject) ?? null)
+      : null;
+    if (child) child.interface_ref = ref('fixture.interface.child');
+  }
+  if (replacementId === 'negative.policy-escalation') {
     const owner = asObjects(source.nodes).find(
       (node) => node.type === 'subgraph',
     );
@@ -445,6 +466,32 @@ function correctedReviewInput(
       rationale:
         'Definition state, lowered node, and bound Capability use one execution kind.',
     });
+    assertions.push(
+      {
+        assertion_id: 'lowered-failure-terminal-node',
+        subject_pointer: '/normalized_plan/nodes/1/exit',
+        operator: 'equals',
+        expected: 'failure',
+        rationale:
+          'The lowered failure route terminates through a first-class Terminal Node.',
+      },
+      {
+        assertion_id: 'lowered-success-terminal-node',
+        subject_pointer: '/normalized_plan/nodes/2/exit',
+        operator: 'equals',
+        expected: 'success',
+        rationale:
+          'The lowered success route terminates through a first-class Terminal Node.',
+      },
+      {
+        assertion_id: 'lowered-outcome-control-edge-count',
+        subject_pointer: '/normalized_plan/complexity_summary/control_edge_count',
+        operator: 'equals',
+        expected: 2,
+        rationale:
+          'Succeeded and failed capability facts have distinct terminal routes.',
+      },
+    );
   }
   if (caseId === 'positive.wait') {
     assertions.push({
@@ -466,11 +513,43 @@ function correctedReviewInput(
         'The literal candidate implements the pinned child interface and is child-compiled.',
     });
   }
+  const ownerIndex =
+    caseId === 'positive.subgraph'
+      ? 0
+      : caseId === 'positive.expand' ||
+          caseId === 'positive.map' ||
+          caseId === 'positive.static-child-closure'
+        ? 1
+        : null;
+  if (ownerIndex !== null) {
+    const portName = caseId === 'positive.map' ? 'results' : 'completion';
+    const generator =
+      caseId === 'positive.map' ? 'map_result' : 'child_completion';
+    assertions.push({
+      assertion_id: `${caseId}-typed-owner-output`,
+      subject_pointer: `/normalized_plan/nodes/${ownerIndex}/output_ports/${portName}/schema/generator`,
+      operator: 'equals',
+      expected: generator,
+      rationale:
+        'The structural owner freezes its declared completion/result port as a generated typed output.',
+    });
+  }
   return {
     role: 'hand_authored_review_input_not_expected_oracle',
     expected_diagnostics: diagnostics,
     semantic_assertions: assertions,
   };
+}
+
+function dependencyResourceType(id: string): string {
+  if (id.includes('.executor')) return 'executor_implementation';
+  if (id.includes('.evaluator')) return 'evaluator';
+  if (id.includes('.quality-gate')) return 'quality_gate';
+  if (id.includes('.authorization')) return 'authorization_policy';
+  if (id.includes('.context')) return 'context_contract';
+  if (id.includes('.routing.')) return 'routing_scope';
+  if (id.includes('.finalization')) return 'root_finalization_policy';
+  return 'dependency_contract';
 }
 
 function contractResource(id: string): JsonObject {
@@ -479,7 +558,7 @@ function contractResource(id: string): JsonObject {
     contract_kind: id.split('.')[1] ?? 'dependency',
   };
   return {
-    resource_type: 'dependency_contract',
+    resource_type: dependencyResourceType(id),
     ref: ref(id),
     content: {
       ...contentWithoutHash,
@@ -489,6 +568,153 @@ function contractResource(id: string): JsonObject {
       ),
     },
   };
+}
+
+function childCreationEffect(recipeId: string): JsonObject {
+  return {
+    operations: [
+      {
+        id: `child.${recipeId}`,
+        type: 'start_child_workflow',
+        recipe_ref: ref(recipeId),
+        routing_scope_ref: ref('fixture.routing.child'),
+        principal_binding: 'inherit_parent_principal',
+        creation_domain: 'parent_workflow_lineage',
+        relation_kind: 'follow_up',
+        input_bindings: {},
+        delivery_requirement: 'required',
+        finalization_policy_ref: ref('fixture.finalization'),
+      },
+    ],
+  };
+}
+
+function definitionFixture(id: string, childRecipeId: string | null): JsonObject {
+  const source: JsonObject = {
+    format: 'icarus.workflow-definition/1',
+    ref: ref(id),
+    owner_feature_id: 'fixture-feature',
+    name: `Definition binding for ${id}`,
+    context_contract_ref: ref('fixture.context'),
+    entry_points: { default: { state_key: 'start' } },
+    states: {
+      start: {
+        type: 'delegation',
+        capability_ref: ref('fixture.capability.static'),
+        input_bindings: {},
+        retry_request: null,
+        timeout_ms: null,
+        on_complete: {
+          success: {
+            target: 'done',
+            ...(childRecipeId
+              ? { effects: childCreationEffect(childRecipeId) }
+              : {}),
+          },
+          failure: { target: 'done' },
+        },
+        on_error: { target: 'done' },
+        on_local_cancel: { target: 'done' },
+      },
+      done: {
+        type: 'terminal',
+        terminal_kind: 'normal',
+        output_binding: { source: 'constant', value: { status: 'done' } },
+      },
+    },
+    definition_hash: `sha256:${'0'.repeat(64)}`,
+  };
+  transformDefinitionPolicy(source);
+  source.definition_hash = definitionHash(source);
+  return source;
+}
+
+function recipeResource(
+  id: string,
+  definitionId: string,
+  childRecipeIds: string[],
+): JsonObject {
+  return {
+    resource_type: 'recipe',
+    ref: ref(id),
+    content: {
+      ref: ref(id),
+      definition_ref: ref(definitionId),
+      allowed_child_recipe_refs: childRecipeIds.map((child) => ref(child)),
+    },
+  };
+}
+
+function recipeResourceForCase(id: string, caseId: string): JsonObject | null {
+  if (id === 'fixture.recipe.parent') {
+    return recipeResource(
+      id,
+      'fixture.definition.main',
+      caseId === 'negative.definition-child-creation-key-template'
+        ? ['fixture.recipe.child']
+        : [],
+    );
+  }
+  if (id === 'fixture.recipe.child') {
+    return recipeResource(id, 'fixture.definition.child', []);
+  }
+  if (id === 'fixture.recipe.cycle-a') {
+    return recipeResource(id, 'fixture.definition.cycle-a', [
+      'fixture.recipe.cycle-b',
+    ]);
+  }
+  if (id === 'fixture.recipe.cycle-b') {
+    return recipeResource(id, 'fixture.definition.cycle-b', [
+      'fixture.recipe.cycle-a',
+    ]);
+  }
+  return null;
+}
+
+function definitionResource(
+  id: string,
+  source: JsonObject | null,
+): JsonObject {
+  const sourceRef = source ? (source.ref as JsonObject | undefined) : undefined;
+  const content =
+    source?.format === 'icarus.workflow-definition/1' &&
+    sourceRef &&
+    refKey(sourceRef) === refKey(ref(id))
+      ? clone(source)
+      : definitionFixture(
+          id,
+          id === 'fixture.definition.cycle-b'
+            ? 'fixture.recipe.cycle-a'
+            : null,
+        );
+  const sanitize = (value: JsonValue): void => {
+    if (!value || typeof value !== 'object') return;
+    if (Array.isArray(value)) {
+      value.forEach(sanitize);
+      return;
+    }
+    delete value.creation_key_template;
+    if ('contract_ref' in value && 'input_bindings' in value) {
+      delete value.delivery_requirement;
+    }
+    Object.values(value).forEach(sanitize);
+  };
+  sanitize(content);
+  content.definition_hash = definitionHash(content);
+  return { resource_type: 'definition', ref: ref(id), content };
+}
+
+function syntheticResource(
+  dependency: VersionedRef,
+  source: JsonObject | null,
+  caseId: string,
+): JsonObject {
+  const recipe = recipeResourceForCase(dependency.id, caseId);
+  if (recipe) return recipe;
+  if (dependency.id.startsWith('fixture.definition.')) {
+    return definitionResource(dependency.id, source);
+  }
+  return contractResource(dependency.id);
 }
 
 function fixResource(
@@ -527,11 +753,6 @@ function fixResource(
       visit(source);
     }
     if (usedNodeTypes.size === 1) content.node_type = [...usedNodeTypes][0];
-    const { dependency_closure_hash: _ignored, ...dependencyInput } = content;
-    content.dependency_closure_hash = domainSeparatedSha256(
-      'icarus:workflow-capability-dependency-closure:1\n',
-      dependencyInput,
-    );
   }
   if (resource.resource_type === 'wait_contract') {
     const { contract_hash: _ignored, ...withoutHash } = content;
@@ -552,6 +773,109 @@ function fixResource(
     ...resource,
     content_hash: domainSeparatedSha256(RESOURCE_DOMAIN, content),
   };
+}
+
+function dependencyMembers(
+  root: JsonObject,
+  resourcesByKey: Map<string, JsonObject>,
+): JsonObject[] {
+  assertJsonObject(root.ref);
+  assertJsonObject(root.content);
+  const rootKey = refKey(root.ref);
+  const visited = new Set<string>([rootKey]);
+  const selected = new Map<string, JsonObject>();
+  const queue = [...allRefs(root.content).values()];
+  while (queue.length > 0) {
+    const dependencyRef = queue.shift() as VersionedRef;
+    const key = refKey(dependencyRef);
+    if (visited.has(key)) continue;
+    visited.add(key);
+    const dependency = resourcesByKey.get(key);
+    if (!dependency) {
+      throw new Error(
+        `Dependency closure for ${rootKey} is missing ${key}`,
+      );
+    }
+    selected.set(key, dependency);
+    assertJsonObject(dependency.content);
+    queue.push(...allRefs(dependency.content).values());
+  }
+  return [...selected.values()]
+    .sort((left, right) =>
+      compareAscii(
+        refKey(left.ref as JsonObject),
+        refKey(right.ref as JsonObject),
+      ),
+    )
+    .map((resource) => ({
+      resource_type: resource.resource_type,
+      ref: resource.ref,
+      content_hash: resource.content_hash,
+    }));
+}
+
+function dependencyClosure(
+  root: JsonObject,
+  resourcesByKey: Map<string, JsonObject>,
+): JsonObject {
+  assertJsonObject(root.ref);
+  const members = dependencyMembers(root, resourcesByKey);
+  const withoutHash: JsonObject = {
+    format: 'icarus.workflow-registry-dependency-closure/1',
+    root_resource_type: root.resource_type,
+    root_ref: root.ref,
+    members,
+    member_count: members.length,
+  };
+  return {
+    ...withoutHash,
+    closure_hash: domainSeparatedSha256(
+      COMPILER_SNAPSHOT_DEPENDENCY_CLOSURE_DOMAIN_V1,
+      withoutHash,
+    ),
+  };
+}
+
+function finalizeResources(
+  selected: Map<string, JsonObject>,
+  source: JsonObject | null,
+): { resources: JsonObject[]; dependencyClosures: JsonObject[] } {
+  const resources = [...selected.values()].map((resource) =>
+    fixResource(resource, source),
+  );
+  resources.sort((left, right) =>
+    compareAscii(
+      refKey(left.ref as JsonObject),
+      refKey(right.ref as JsonObject),
+    ),
+  );
+  const byKey = new Map(
+    resources.map((resource) => [refKey(resource.ref as JsonObject), resource]),
+  );
+  for (const capability of resources.filter(
+    (resource) => resource.resource_type === 'capability',
+  )) {
+    const closure = dependencyClosure(capability, byKey);
+    assertJsonObject(capability.content);
+    capability.content.dependency_closure_hash = closure.closure_hash;
+    capability.content_hash = domainSeparatedSha256(
+      RESOURCE_DOMAIN,
+      capability.content,
+    );
+  }
+  const dependencyClosures = resources
+    .filter((resource) =>
+      ['capability', 'wait_contract', 'recipe'].includes(
+        String(resource.resource_type),
+      ),
+    )
+    .map((resource) => dependencyClosure(resource, byKey))
+    .sort((left, right) => {
+      assertJsonObject(left.root_ref);
+      assertJsonObject(right.root_ref);
+      return compareAscii(refKey(left.root_ref), refKey(right.root_ref));
+    });
+  return { resources, dependencyClosures };
 }
 
 function correctedInterface(
@@ -664,78 +988,66 @@ function buildSnapshot(
     source = null;
   }
   const refs = source ? allRefs(source) : new Map<string, VersionedRef>();
-  if (caseId === 'negative.child-recipe-set-mismatch') {
-    refs.set('fixture.recipe.parent@1.0.0', ref('fixture.recipe.parent'));
-    refs.set('fixture.recipe.child@1.0.0', ref('fixture.recipe.child'));
-  }
-  if (caseId === 'negative.child-recipe-dependency-cycle') {
-    refs.set('fixture.recipe.cycle-a@1.0.0', ref('fixture.recipe.cycle-a'));
-    refs.set('fixture.recipe.cycle-b@1.0.0', ref('fixture.recipe.cycle-b'));
-  }
   if (source?.format === 'icarus.workflow-definition/1') {
-    refs.set('fixture.recipe.parent@1.0.0', ref('fixture.recipe.parent'));
+    assertJsonObject(source.ref);
+    const owningRecipe =
+      source.ref.id === 'fixture.definition.cycle-a'
+        ? ref('fixture.recipe.cycle-a')
+        : ref('fixture.recipe.parent');
+    refs.set(refKey(owningRecipe), owningRecipe);
   }
   const selected = new Map<string, JsonObject>();
+  const selectedInterfaces = new Map<string, JsonObject>();
   const queue = [...refs.values()];
   while (queue.length > 0) {
     const current = queue.shift() as VersionedRef;
     const key = refKey(current);
-    if (selected.has(key)) continue;
-    const resource = oldResourceByKey.get(key);
-    if (!resource) continue;
+    if (selected.has(key) || selectedInterfaces.has(key)) continue;
+    if (key.startsWith('fixture.policy.')) continue;
+    const oldInterface = oldInterfaces.find(
+      (entry) => refKey(entry.ref as JsonObject) === key,
+    );
+    if (oldInterface) {
+      const interfaceEntry = correctedInterface(oldInterface, caseId);
+      selectedInterfaces.set(key, interfaceEntry);
+      for (const dependency of allRefs(interfaceEntry).values()) {
+        refs.set(refKey(dependency), dependency);
+        queue.push(dependency);
+      }
+      continue;
+    }
+    if (current.id.startsWith('fixture.interface.')) continue;
+    const resource =
+      recipeResourceForCase(current.id, caseId) ??
+      clone(
+        oldResourceByKey.get(key) ??
+          syntheticResource(current, source, caseId),
+      );
     selected.set(key, resource);
     assertJsonObject(resource.content);
-    for (const dependency of allRefs(resource.content).values())
-      queue.push(dependency);
-  }
-  if (caseId === 'negative.child-recipe-set-mismatch') {
-    const parent = selected.get('fixture.recipe.parent@1.0.0');
-    if (parent) {
-      assertJsonObject(parent.content);
-      parent.content.allowed_child_recipe_refs = [];
-    }
-    selected.set('fixture.recipe.child@1.0.0', {
-      resource_type: 'recipe',
-      ref: ref('fixture.recipe.child'),
-      content: {
-        ref: ref('fixture.recipe.child'),
-        definition_ref: ref('fixture.definition.child'),
-        allowed_child_recipe_refs: [],
-      },
-    });
-  }
-  if (caseId === 'negative.child-recipe-dependency-cycle') {
-    const cycleA = selected.get('fixture.recipe.cycle-a@1.0.0');
-    if (cycleA) {
-      assertJsonObject(cycleA.content);
-      cycleA.content.definition_ref = ref('fixture.definition.cycle-a');
-    }
-    selected.delete('fixture.recipe.parent@1.0.0');
-  }
-  const interfaceRefs = new Set(
-    [...refs.keys()].filter((key) => key.startsWith('fixture.interface.')),
-  );
-  const interfaces = oldInterfaces
-    .filter((entry) => interfaceRefs.has(refKey(entry.ref as JsonObject)))
-    .map((entry) => correctedInterface(entry, caseId));
-  for (const interfaceEntry of interfaces) {
-    for (const dependency of allRefs(interfaceEntry).values())
+    for (const dependency of allRefs(resource.content).values()) {
       refs.set(refKey(dependency), dependency);
+      queue.push(dependency);
+    }
   }
-  for (const dependency of refs.values()) {
-    const key = refKey(dependency);
-    if (selected.has(key) || interfaceRefs.has(key)) continue;
-    if (key.startsWith('fixture.policy.')) continue;
-    selected.set(key, contractResource(dependency.id));
+  if (caseId === 'positive.map') {
+    const arraySchema = selected.get('fixture.schema.string-array@1.0.0');
+    if (!arraySchema) throw new Error('Map items schema is missing');
+    assertJsonObject(arraySchema.content);
+    arraySchema.content.items = {
+      type: 'string',
+      enum: ['accepted', 'rejected'],
+    };
   }
-  let resources = [...selected.values()].map((resource) =>
-    fixResource(resource, source),
-  );
-  resources.sort((left, right) =>
-    refKey(left.ref as JsonObject).localeCompare(
+  const interfaces = [...selectedInterfaces.values()].sort((left, right) =>
+    compareAscii(
+      refKey(left.ref as JsonObject),
       refKey(right.ref as JsonObject),
     ),
   );
+  const finalized = finalizeResources(selected, source);
+  const resources = finalized.resources;
+  const dependencyClosures = finalized.dependencyClosures;
   let childProfiles: JsonObject[] = [];
   const sourceRefs = new Set(refs.keys());
   if (sourceRefs.has('fixture.policy.child-tight@1.0.0')) {
@@ -752,22 +1064,14 @@ function buildSnapshot(
     );
   }
   if (sourceRefs.has('fixture.policy.child-escalating@1.0.0')) {
+    const escalating = profile('fixture.policy.child-escalating', [
+      'terminal',
+    ]);
+    assertJsonObject(escalating.request);
+    assertJsonObject(escalating.request.effect_policy);
+    escalating.request.effect_policy.max_impact = 'irreversible';
     childProfiles.push({
-      ...profile('fixture.policy.child-escalating', [
-        'delegation',
-        'system',
-        'terminal',
-      ]),
-      request: {
-        ...(profile('fixture.policy.child-escalating', ['terminal'])
-          .request as JsonObject),
-        allowed_capabilities: [ref('fixture.capability.forbidden')],
-        allow_early_close: true,
-        effect_policy: {
-          allowed_recovery_kinds: ['pure', 'idempotent'],
-          max_impact: 'irreversible',
-        },
-      },
+      ...escalating,
     });
   }
   const sourceNodes =
@@ -853,11 +1157,18 @@ function buildSnapshot(
   const safetyHash = domainSeparatedSha256(SAFETY_DOMAIN, safety);
   const registryHash = domainSeparatedSha256(
     'icarus:workflow-semantic-correction-registry-snapshot:1\n',
-    resources.map((resource) => ({
-      ref: resource.ref,
-      resource_type: resource.resource_type,
-      content_hash: resource.content_hash,
-    })),
+    {
+      resources: resources.map((resource) => ({
+        ref: resource.ref,
+        resource_type: resource.resource_type,
+        content_hash: resource.content_hash,
+      })),
+      dependency_closures: dependencyClosures.map((closure) => ({
+        root_resource_type: closure.root_resource_type,
+        root_ref: closure.root_ref,
+        closure_hash: closure.closure_hash,
+      })),
+    },
   );
   const interfaceHash = domainSeparatedSha256(
     'icarus:workflow-semantic-correction-interface-snapshot:1\n',
@@ -877,6 +1188,8 @@ function buildSnapshot(
       snapshot_hash: registryHash,
       resource_count: resources.length,
       resources,
+      dependency_closure_count: dependencyClosures.length,
+      dependency_closures: dependencyClosures,
     },
     interface_snapshot: {
       snapshot_ref: `test-only:interfaces:semantic-correction:${caseId}@1`,
@@ -1025,7 +1338,7 @@ export function buildSemanticCorrectionInputs(
       path: artifactPath,
       raw_sha256: rawSha256(Buffer.from(contents, 'utf8')),
     }))
-    .sort((left, right) => left.path.localeCompare(right.path));
+    .sort((left, right) => compareAscii(left.path, right.path));
   const manifest = artifact(
     'icarus.workflow-semantic-correction-input-manifest/1',
     'icarus.workflow-semantic-correction-input-manifest',

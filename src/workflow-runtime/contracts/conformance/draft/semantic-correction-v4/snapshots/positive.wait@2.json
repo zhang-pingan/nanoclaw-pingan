@@ -6,7 +6,7 @@
   },
   "version": 2,
   "domain_separator": "icarus:workflow-compiler-input-snapshot-artifact:2\n",
-  "hash": "sha256:10315f25589412e8b9e56c3de6dd6824a8e5ff1533f014e6a3b0cda16ae966b2",
+  "hash": "sha256:6f9dc277bd5ad8a996174c09b5b8866393fdb00827e792b29bcac61928a04f6f",
   "payload": {
     "format": "icarus.workflow-compiler-input-snapshot/2",
     "snapshot_id": "semantic-correction:positive.wait",
@@ -16,13 +16,13 @@
         "id": "icarus.workflow-compiler-toolchain",
         "version": "3.0.0"
       },
-      "compiler_toolchain_hash": "sha256:b92ad48c78c2af3129e471f484c68067b957bfa124187490df64aae1801cdfb6",
+      "compiler_toolchain_hash": "sha256:d8bd2ce6cffeebb9de442c22c35749e21276c590c751c257a57514e6cfaca597",
       "compiler_version": "3.0.0",
-      "compiler_build_hash": "sha256:39d875d520c70493165704c5ab7e0b9edbe4eb337413e0e67f7aa5ff61acd629",
+      "compiler_build_hash": "sha256:3f605b87ec0f2b8e4413b9c4eb9a42d49c1022cee2d45c48c002aee7b18b7ead",
       "canonical_normalizer_version": "2.0.0",
       "canonical_normalizer_hash": "sha256:7d08408f780ca4350e153d99fd60810554daefe3826b39fe5e2fa5abee340b60",
       "proof_algorithm_version": "2.0.0",
-      "proof_algorithm_hash": "sha256:4aa814c349c213fdaec4e48b4414a5bab728bb54328639c9d8c1aa0da680ca88",
+      "proof_algorithm_hash": "sha256:9bea73c915187b6d6af5ddca7e55c59accd86df0fa02d003385b5dfdf3e5184f",
       "error_catalog_ref": {
         "id": "icarus.workflow-compiler-error-catalog",
         "version": "2.0.0"
@@ -35,9 +35,25 @@
     },
     "registry_snapshot": {
       "snapshot_ref": "test-only:registry:semantic-correction:positive.wait@1",
-      "snapshot_hash": "sha256:c9553c6afe23fca3f81dedbd812240a88c11d8680adffddf792227504fdcd9e6",
-      "resource_count": 3,
+      "snapshot_hash": "sha256:e68a51d6caf1f752b3b25aeeb106fa8ca96168cfac2e04a803a01cafbb98a55e",
+      "resource_count": 4,
       "resources": [
+        {
+          "resource_type": "authorization_policy",
+          "ref": {
+            "id": "fixture.authorization",
+            "version": "1.0.0"
+          },
+          "content": {
+            "ref": {
+              "id": "fixture.authorization",
+              "version": "1.0.0"
+            },
+            "contract_kind": "authorization",
+            "contract_hash": "sha256:217766a5d886a4fa2050047ca87c70a0a75a398e6624dae58cb22c04de6fc6c6"
+          },
+          "content_hash": "sha256:d905a155b56dec4382128c47f8ff11afbff8c1bc0c50aed58e467889d1e48899"
+        },
         {
           "resource_type": "schema",
           "ref": {
@@ -122,6 +138,45 @@
             "contract_hash": "sha256:8f28e4d64839947b5a7c3fa339f444b0c9d036316ec297a4fd7ad9c950ed4291"
           },
           "content_hash": "sha256:21649bd260dad3f3bc9221411f05e87252f4b8abd883a5c6955daab8fe81a445"
+        }
+      ],
+      "dependency_closure_count": 1,
+      "dependency_closures": [
+        {
+          "format": "icarus.workflow-registry-dependency-closure/1",
+          "root_resource_type": "wait_contract",
+          "root_ref": {
+            "id": "fixture.wait.approval",
+            "version": "1.0.0"
+          },
+          "members": [
+            {
+              "resource_type": "authorization_policy",
+              "ref": {
+                "id": "fixture.authorization",
+                "version": "1.0.0"
+              },
+              "content_hash": "sha256:d905a155b56dec4382128c47f8ff11afbff8c1bc0c50aed58e467889d1e48899"
+            },
+            {
+              "resource_type": "schema",
+              "ref": {
+                "id": "fixture.schema.route-result",
+                "version": "1.0.0"
+              },
+              "content_hash": "sha256:bdfd3abce4597fb35b3c75344c42369997dc5888bd9043652de796d9b60f5ab9"
+            },
+            {
+              "resource_type": "schema",
+              "ref": {
+                "id": "fixture.schema.string-wide",
+                "version": "1.0.0"
+              },
+              "content_hash": "sha256:45785263c4ef9a0240a44c59d805a5fe92467ea50be911a68831060a7593c647"
+            }
+          ],
+          "member_count": 3,
+          "closure_hash": "sha256:734fc93a19fc471889274bc1c1a0c81069996c43fec3beb56ccdbac7e8e3946e"
         }
       ]
     },
@@ -331,6 +386,6 @@
         }
       }
     },
-    "snapshot_hash": "sha256:32cb7d46226a995b83aac1a0e59f47bc1b631436df99dc61247d063665c5f4dd"
+    "snapshot_hash": "sha256:923c87a9a4f88b9124267192638353753df5fd3205b1efdae8fc12effb8e2c0b"
   }
 }

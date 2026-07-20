@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 
 import { parseContractArtifactEnvelope } from '../contracts/artifact.js';
 import { domainSeparatedSha256 } from '../contracts/hash.js';
+import { COMPILER_SNAPSHOT_DEPENDENCY_CLOSURE_DOMAIN_V1 } from '../contracts/compiler-semantic-correction-contract.js';
 import {
   assertJsonObject,
   strictParseJsonBytes,
@@ -183,6 +184,35 @@ function registryResources(snapshot: JsonObject): JsonObject[] {
   });
 }
 
+function versionedRefs(value: JsonValue): Map<string, JsonObject> {
+  const output = new Map<string, JsonObject>();
+  const visit = (candidate: JsonValue): void => {
+    if (!candidate || typeof candidate !== 'object') return;
+    if (Array.isArray(candidate)) {
+      candidate.forEach(visit);
+      return;
+    }
+    if (
+      typeof candidate.id === 'string' &&
+      typeof candidate.version === 'string'
+    ) {
+      output.set(`${candidate.id}@${candidate.version}`, candidate);
+      return;
+    }
+    Object.values(candidate).forEach(visit);
+  };
+  visit(value);
+  return output;
+}
+
+function rehashDefinition(source: JsonObject): void {
+  const { definition_hash: _ignored, ...withoutHash } = source;
+  source.definition_hash = domainSeparatedSha256(
+    'icarus:workflow-definition:1\n',
+    withoutHash,
+  );
+}
+
 describe('G2 working semantic correction candidate', () => {
   it('replays all 40 cases deterministically and checks both trees read-only', () => {
     const roots = [INPUT_ROOT, G2_SEMANTIC_CORRECTION_CANDIDATE_ROOT];
@@ -263,23 +293,13 @@ describe('G2 working semantic correction candidate', () => {
         ),
       );
       const resources = registryResources(payload);
-      expect(resources.length, input.case_id).toBeLessThanOrEqual(9);
+      expect(resources.length, input.case_id).toBeLessThanOrEqual(24);
       for (const resource of resources) {
         assertJsonObject(resource.content);
         expect(
           resource.content_hash,
           `${input.case_id}/${String(resource.resource_type)}`,
         ).toBe(domainSeparatedSha256(RESOURCE_DOMAIN, resource.content));
-        if (resource.resource_type === 'capability') {
-          const { dependency_closure_hash: hash, ...withoutHash } =
-            resource.content;
-          expect(hash).toBe(
-            domainSeparatedSha256(
-              'icarus:workflow-capability-dependency-closure:1\n',
-              withoutHash,
-            ),
-          );
-        }
         if (resource.resource_type === 'wait_contract') {
           const { contract_hash: hash, ...withoutHash } = resource.content;
           expect(hash).toBe(
@@ -313,6 +333,119 @@ describe('G2 working semantic correction candidate', () => {
         );
       }
     }
+  });
+
+  it('enumerates and verifies every reachable Capability, Wait, and Recipe dependency', () => {
+    const built = buildSemanticCorrectionCandidate();
+    let capabilityBearingSnapshots = 0;
+    for (const input of built.inputs.cases) {
+      const snapshot = snapshotFor(built, input.case_id).payload;
+      assertJsonObject(snapshot.registry_snapshot);
+      const resources = registryResources(snapshot);
+      const byKey = new Map<string, JsonObject>(
+        resources.map((resource) => {
+          assertJsonObject(resource.ref);
+          return [
+            `${resource.ref.id}@${resource.ref.version}`,
+            resource,
+          ] as const;
+        }),
+      );
+      const closures = snapshot.registry_snapshot.dependency_closures;
+      if (!Array.isArray(closures)) {
+        throw new Error(`Dependency closures missing: ${input.case_id}`);
+      }
+      expect(
+        snapshot.registry_snapshot.dependency_closure_count,
+        input.case_id,
+      ).toBe(closures.length);
+      if (resources.some((resource) => resource.resource_type === 'capability')) {
+        capabilityBearingSnapshots += 1;
+      }
+      for (const closure of closures) {
+        assertJsonObject(closure);
+        assertJsonObject(closure.root_ref);
+        const rootKey = `${closure.root_ref.id}@${closure.root_ref.version}`;
+        const root = byKey.get(rootKey);
+        assertJsonObject(root);
+        assertJsonObject(root.content);
+        expect(root.resource_type).toBe(closure.root_resource_type);
+        const visited = new Set([rootKey]);
+        const transitive = new Map<string, JsonObject>();
+        const queue = [...versionedRefs(root.content).values()];
+        while (queue.length > 0) {
+          const dependencyRef = queue.shift() as JsonObject;
+          const key = `${dependencyRef.id}@${dependencyRef.version}`;
+          if (visited.has(key)) continue;
+          visited.add(key);
+          const dependency = byKey.get(key);
+          assertJsonObject(dependency);
+          transitive.set(key, dependency);
+          assertJsonObject(dependency.content);
+          queue.push(...versionedRefs(dependency.content).values());
+        }
+        const expectedMembers = [...transitive.values()]
+          .sort((left, right) => {
+            assertJsonObject(left.ref);
+            assertJsonObject(right.ref);
+            const leftKey = `${left.ref.id}@${left.ref.version}`;
+            const rightKey = `${right.ref.id}@${right.ref.version}`;
+            return leftKey < rightKey ? -1 : leftKey > rightKey ? 1 : 0;
+          })
+          .map((resource) => ({
+            resource_type: resource.resource_type,
+            ref: resource.ref,
+            content_hash: resource.content_hash,
+          }));
+        expect(closure.members, `${input.case_id}/${rootKey}`).toEqual(
+          expectedMembers,
+        );
+        expect(closure.member_count).toBe(expectedMembers.length);
+        const { closure_hash: closureHash, ...withoutHash } = closure;
+        expect(closureHash).toBe(
+          domainSeparatedSha256(
+            COMPILER_SNAPSHOT_DEPENDENCY_CLOSURE_DOMAIN_V1,
+            withoutHash,
+          ),
+        );
+        if (root.resource_type === 'capability') {
+          expect(root.content.dependency_closure_hash).toBe(closureHash);
+          expect(
+            expectedMembers.some(
+              (member) =>
+                (member.ref as JsonObject).id === 'fixture.executor' &&
+                member.resource_type === 'executor_implementation',
+            ),
+            `${input.case_id}/${rootKey}`,
+          ).toBe(true);
+        }
+      }
+    }
+    expect(capabilityBearingSnapshots).toBe(20);
+
+    const waitSnapshot = snapshotFor(built, 'positive.wait').payload;
+    const waitResources = registryResources(waitSnapshot);
+    expect(waitResources).toContainEqual(
+      expect.objectContaining({
+        resource_type: 'authorization_policy',
+        ref: { id: 'fixture.authorization', version: '1.0.0' },
+      }),
+    );
+    const qualityResources = registryResources(
+      snapshotFor(built, 'positive.quality-revision-binding').payload,
+    );
+    expect(qualityResources).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          resource_type: 'evaluator',
+          ref: { id: 'fixture.evaluator', version: '1.0.0' },
+        }),
+        expect.objectContaining({
+          resource_type: 'quality_gate',
+          ref: { id: 'fixture.quality-gate', version: '1.0.0' },
+        }),
+      ]),
+    );
   });
 
   it('derives integrity mismatch from one exact field and compiles the matching control', () => {
@@ -364,6 +497,24 @@ describe('G2 working semantic correction candidate', () => {
 
   it('enforces Definition kind and Wait required-input contracts', () => {
     const built = buildSemanticCorrectionCandidate();
+    const lowered = built.results.find(
+      (entry) => entry.case_id === 'positive.static-lowering',
+    );
+    expect(lowered?.outcome).toBe('compiled');
+    if (lowered?.outcome === 'compiled') {
+      expect(
+        (lowered.normalized_plan.nodes as JsonObject[]).map((node) => ({
+          id: node.id,
+          type: node.type,
+          exit: node.exit,
+        })),
+      ).toEqual([
+        { id: 'start', type: 'delegation', exit: undefined },
+        { id: 'start_failure', type: 'terminal', exit: 'failure' },
+        { id: 'start_success', type: 'terminal', exit: 'success' },
+      ]);
+      expect(lowered.normalized_plan.control_edges).toHaveLength(2);
+    }
     const definitionMismatch = compileMutation(
       built,
       'positive.static-lowering',
@@ -397,6 +548,89 @@ describe('G2 working semantic correction candidate', () => {
         code: 'schema_not_assignable',
         phase: 'bind',
       });
+    }
+  });
+
+  it('freezes typed structural-owner outputs and proves Map item assignability', () => {
+    const built = buildSemanticCorrectionCandidate();
+    const resultByCase = new Map(
+      built.results.map((entry) => [entry.case_id, entry]),
+    );
+    for (const [caseId, port, generator] of [
+      ['positive.subgraph', 'completion', 'child_completion'],
+      ['positive.expand', 'completion', 'child_completion'],
+      ['positive.map', 'results', 'map_result'],
+      ['positive.static-child-closure', 'completion', 'child_completion'],
+    ] as const) {
+      const result = resultByCase.get(caseId);
+      expect(result?.outcome, caseId).toBe('compiled');
+      if (result?.outcome !== 'compiled') continue;
+      const owner = (result.normalized_plan.nodes as JsonObject[]).find(
+        (node) =>
+          node.type === 'subgraph' ||
+          node.type === 'expand' ||
+          node.type === 'map',
+      );
+      assertJsonObject(owner);
+      assertJsonObject(owner.output_ports);
+      assertJsonObject(owner.output_ports[port]);
+      assertJsonObject((owner.output_ports[port] as JsonObject).schema);
+      expect(
+        ((owner.output_ports[port] as JsonObject).schema as JsonObject)
+          .generator,
+        caseId,
+      ).toBe(generator);
+      expect(
+        ((owner.output_ports[port] as JsonObject).schema as JsonObject)
+          .schema_json,
+        caseId,
+      ).toBeTruthy();
+    }
+
+    const mapSource = sourceFor(built, 'positive.map');
+    const itemsEdge = (mapSource.data_edges as JsonObject[])[0];
+    assertJsonObject(itemsEdge);
+    assertJsonObject(itemsEdge.from);
+    expect(itemsEdge.from.value).toEqual(['accepted', 'rejected']);
+    const mapSnapshot = snapshotFor(built, 'positive.map').payload;
+    const mapSchemas = registryResources(mapSnapshot);
+    const itemsSchema = mapSchemas.find((resource) => {
+      assertJsonObject(resource.ref);
+      return resource.ref.id === 'fixture.schema.string-array';
+    });
+    const childSchema = mapSchemas.find((resource) => {
+      assertJsonObject(resource.ref);
+      return resource.ref.id === 'fixture.schema.string-wide';
+    });
+    assertJsonObject(itemsSchema);
+    assertJsonObject(itemsSchema.content);
+    assertJsonObject(itemsSchema.content.items);
+    assertJsonObject(childSchema);
+    expect(itemsSchema.content.items).toMatchObject({
+      type: 'string',
+      enum: ['accepted', 'rejected'],
+    });
+    expect(childSchema.resource_type).toBe('schema');
+
+    const incompatible = compileMutation(
+      built,
+      'positive.map',
+      undefined,
+      (snapshot) => {
+        const schema = registryResources(snapshot).find((resource) => {
+          assertJsonObject(resource.ref);
+          return resource.ref.id === 'fixture.schema.string-array';
+        });
+        assertJsonObject(schema);
+        assertJsonObject(schema.content);
+        schema.content.items = { type: 'string' };
+      },
+    );
+    expect(incompatible.ok).toBe(false);
+    if (!incompatible.ok) {
+      expect(incompatible.value.diagnostics[0].code).toBe(
+        'schema_not_assignable',
+      );
     }
   });
 
@@ -489,6 +723,128 @@ describe('G2 working semantic correction candidate', () => {
       },
     );
     expect(unrelatedCycle.ok).toBe(true);
+  });
+
+  it('rejects missing reachable execution and Wait authorization dependencies', () => {
+    const built = buildSemanticCorrectionCandidate();
+    const missingExecutor = compileMutation(
+      built,
+      'positive.static-lowering',
+      undefined,
+      (snapshot) => {
+        assertJsonObject(snapshot.registry_snapshot);
+        snapshot.registry_snapshot.resources = registryResources(
+          snapshot,
+        ).filter((resource) => {
+          assertJsonObject(resource.ref);
+          return resource.ref.id !== 'fixture.executor';
+        });
+      },
+    );
+    expect(missingExecutor.ok).toBe(false);
+    if (!missingExecutor.ok) {
+      expect(missingExecutor.value.diagnostics[0]).toMatchObject({
+        code: 'registry_ref_not_found',
+        stable_object_id: 'fixture.executor',
+      });
+    }
+    const missingAuthorization = compileMutation(
+      built,
+      'positive.wait',
+      undefined,
+      (snapshot) => {
+        assertJsonObject(snapshot.registry_snapshot);
+        snapshot.registry_snapshot.resources = registryResources(
+          snapshot,
+        ).filter((resource) => {
+          assertJsonObject(resource.ref);
+          return resource.ref.id !== 'fixture.authorization';
+        });
+      },
+    );
+    expect(missingAuthorization.ok).toBe(false);
+    if (!missingAuthorization.ok) {
+      expect(missingAuthorization.value.diagnostics[0]).toMatchObject({
+        code: 'registry_ref_not_found',
+        stable_object_id: 'fixture.authorization',
+      });
+    }
+  });
+
+  it('keeps policy and Recipe negatives single-invalidity inputs', () => {
+    const built = buildSemanticCorrectionCandidate();
+    const repairedPolicy = compileMutation(
+      built,
+      'negative.policy-escalation',
+      undefined,
+      (snapshot) => {
+        const escalating = childProfile(
+          snapshot,
+          'fixture.policy.child-escalating',
+        );
+        assertJsonObject(escalating.request);
+        assertJsonObject(escalating.request.effect_policy);
+        escalating.request.effect_policy.max_impact = 'mutable_effects';
+      },
+    );
+    expect(repairedPolicy.ok).toBe(true);
+
+    const repairedSet = compileMutation(
+      built,
+      'negative.child-recipe-set-mismatch',
+      (source) => {
+        assertJsonObject(source.states);
+        assertJsonObject(source.states.start);
+        assertJsonObject(source.states.start.on_complete);
+        assertJsonObject(source.states.start.on_complete.success);
+        delete source.states.start.on_complete.success.effects;
+        rehashDefinition(source);
+      },
+    );
+    expect(repairedSet.ok).toBe(true);
+
+    const repairedRemovedField = compileMutation(
+      built,
+      'negative.definition-child-creation-key-template',
+      (source) => {
+        assertJsonObject(source.states);
+        assertJsonObject(source.states.start);
+        assertJsonObject(source.states.start.on_complete);
+        assertJsonObject(source.states.start.on_complete.success);
+        assertJsonObject(source.states.start.on_complete.success.effects);
+        const operations = source.states.start.on_complete.success.effects
+          .operations as JsonObject[];
+        delete operations[0].creation_key_template;
+        rehashDefinition(source);
+      },
+    );
+    expect(repairedRemovedField.ok).toBe(true);
+
+    for (const caseId of [
+      'negative.child-recipe-set-mismatch',
+      'negative.child-recipe-dependency-cycle',
+      'negative.definition-child-creation-key-template',
+    ]) {
+      const resources = registryResources(snapshotFor(built, caseId).payload);
+      const definitions = new Set(
+        resources
+          .filter((resource) => resource.resource_type === 'definition')
+          .map((resource) => {
+            assertJsonObject(resource.ref);
+            return String(resource.ref.id);
+          }),
+      );
+      for (const recipe of resources.filter(
+        (resource) => resource.resource_type === 'recipe',
+      )) {
+        assertJsonObject(recipe.content);
+        assertJsonObject(recipe.content.definition_ref);
+        expect(
+          definitions.has(String(recipe.content.definition_ref.id)),
+          `${caseId}/${String((recipe.ref as JsonObject).id)}`,
+        ).toBe(true);
+      }
+    }
   });
 
   it('validates cancellation pairings before producing safe early-close proof', () => {

@@ -3009,6 +3009,14 @@ definition_hash = SHA-256(
 
 Compiler在closed-schema validation之后、Definition binding之前验证该值；不匹配使用`compiler_integrity_mismatch/hash`并指向`/definition_hash`。Registry resource content、Capability dependency closure、Wait contract、Interface、Policy、Safety与snapshot同样必须使用各自机器合同声明的domain-separated真实hash，不能复用零值。
 
+Delegation/system static lowering必须生成一个Capability Node、一个`success` Terminal Node、一个`failure` Terminal Node，以及分别匹配Capability `succeeded`和`failed`事实的两条scope-local Control Edge。只有两个Terminal Node可以提交normal named-exit candidate；Capability Node不能直接充当candidate，engine error和cancel也不能伪装成第三个Terminal。Lowered Plan必须保存完整三Node topology、trigger program、control edge与complexity summary，不能只生成interface exits。
+
+Subgraph/Expand的`completion_output_port`必须生成`generator=child_completion`的typed compiled output contract；Map的`result_output_port`必须生成`generator=map_result`的typed compiled output contract。Generated contract保存canonical `schema_json`、generator parameter hash和schema hash并进入Plan hash；Subgraph/Expand expose port继续从指定child exit port合同派生。Map compile还必须从items array schema取得element schema，证明其可赋值给body interface的`item_child_input_port`，literal collection同时必须满足该array schema。
+
+Working input snapshot `/2`的Registry snapshot必须为每个Capability、Wait Contract和Recipe root保存`icarus.workflow-registry-dependency-closure/1` manifest。Manifest按resource ref ASCII升序枚举exact transitive dependency members及其resource type/content hash，使用`icarus:workflow-registry-dependency-closure:1\n`计算closure hash；Capability内容中的`dependency_closure_hash`必须与对应manifest一致。Compiler对实际使用root验证member count/order/hash、exact transitive set和每个reachable resource存在且hash匹配。Executor、Evaluator、Quality Gate、Wait authorization与Recipe Definition都不能只作为未解析ref存在。
+
+Working negative input必须保持single-invalidity：`policy_escalation`只改变一个独立policy维度；Recipe set/cycle/removed-field case除目标invalidity外必须具有完整Definition binding、精确direct-child set和隔离closure。Compiler的fail-fast顺序不能用来掩盖第二项错误。
+
 Draft v3的40/40 `CHANGES_REQUESTED`与Draft v4的14 `PASS` / 26 `CHANGES_REQUESTED`只属于各自历史review。当前修正直接更新单一Working集合中的raw source、逐case隔离snapshot、hand-authored review input、case-input binding、Compiler actual candidate与working review bundle；case count保持40，actual Compiler result只作为comparison input，expected full result/Plan/proof/program bytes/hash全部保持null。Working期间`human_judgment`为not requested，不为每次修正创建Draft v5/v6或重置40-case judgment。只有全部已知finding完成、current生成连续两轮一致、定向/完整机械测试通过且工作树边界干净后，才允许显式`prepare-rc`冻结一个Review Candidate root并请求一次完整fresh independent review；RC任一绑定输入变化即失效并退回Working。不得在Working阶段创建`GoldenSemanticReview`、approval、signature、seal或`conformance/sealed/`内容。
 
 ### Runtime v1施工生命周期与生产发布生命周期

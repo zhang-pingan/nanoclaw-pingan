@@ -7,17 +7,17 @@
   "normalized_plan": {
     "format": "icarus.workflow-graph-scope-plan/2",
     "compiler_version": "3.0.0",
-    "compiler_build_hash": "sha256:39d875d520c70493165704c5ab7e0b9edbe4eb337413e0e67f7aa5ff61acd629",
+    "compiler_build_hash": "sha256:3f605b87ec0f2b8e4413b9c4eb9a42d49c1022cee2d45c48c002aee7b18b7ead",
     "compiler_toolchain_ref": {
       "id": "icarus.workflow-compiler-toolchain",
       "version": "3.0.0"
     },
-    "compiler_toolchain_hash": "sha256:b92ad48c78c2af3129e471f484c68067b957bfa124187490df64aae1801cdfb6",
+    "compiler_toolchain_hash": "sha256:d8bd2ce6cffeebb9de442c22c35749e21276c590c751c257a57514e6cfaca597",
     "compiler_error_catalog_hash": "sha256:8fc7139b29cdddf3c1e13e0f9d8bc6b19a1d32c02c1e7f4b7e33023fcece91ef",
     "canonical_normalizer_version": "2.0.0",
     "canonical_normalizer_hash": "sha256:7d08408f780ca4350e153d99fd60810554daefe3826b39fe5e2fa5abee340b60",
     "proof_algorithm_version": "2.0.0",
-    "proof_algorithm_hash": "sha256:4aa814c349c213fdaec4e48b4414a5bab728bb54328639c9d8c1aa0da680ca88",
+    "proof_algorithm_hash": "sha256:9bea73c915187b6d6af5ddca7e55c59accd86df0fa02d003385b5dfdf3e5184f",
     "source_hash": "sha256:9c0282b7f2625214cc4f7212bd43054168ad6455b83205b7053f22ba07f5dd98",
     "interface_snapshot_hash": "sha256:1cb705aa8a036e8c30d0593a732d53abe8f576fb00172a7f0a2d8bbb89150624",
     "policy_snapshot_hash": "sha256:b4db41601fa481e39a98b56e557006fe132d6347369066f6b93a08ae64ef3f8f",
@@ -71,7 +71,7 @@
         "max_total_cost_micros": null
       }
     },
-    "capability_catalog_hash": "sha256:ddc8247a9e55da28c1c41c4d35fec40a87700717679ef4b33094cdf8554d880c",
+    "capability_catalog_hash": "sha256:d1cb8256030d97276eb0d2b39ed770f6df0b99c8612f1ed158f91e426d220c42",
     "wait_contract_catalog_hash": "sha256:3b98e6803b19ab475841a8669cc6f403298d6e4f6270724d2a5edbffd64d3d03",
     "interface_snapshot": {
       "ref": {
@@ -161,7 +161,7 @@
             "type": "fence_only",
             "safe_to_abandon": true
           },
-          "dependency_closure_hash": "sha256:55d58b6fa61d3d3ebf975ec095d2a541b77b7c4e1daa150c5c86d39db866bd05"
+          "dependency_closure_hash": "sha256:37fdfe84aa17bebbbdde1ea703c3a670ebe4429d0240b49d0a4cb5f9f083a8d5"
         },
         "effective_retry_policy": {
           "effective_node_max_attempts": 1,
@@ -170,10 +170,87 @@
           "quality_revision": null,
           "policy_hash": "sha256:15cee627f88c1045394bb9cd456818d8b14b0ab0351cf642315962fba4b345fe"
         }
+      },
+      {
+        "id": "start_failure",
+        "type": "terminal",
+        "source_config_hash": "sha256:5ea55dc3c142568ee2ddbe601fd0970955ff02e175ee7ab3113e17e278aa695a",
+        "trigger_program": {
+          "normalized_expression": {
+            "edge_ids": [
+              "capability.failed"
+            ],
+            "type": "all"
+          },
+          "referenced_edge_ids": [
+            "capability.failed"
+          ],
+          "max_steps": 1,
+          "truth_program_hash": "sha256:4cdd8d88b2915854d15fca715f1b6242a7b09c43585cc0078c004f7636570183"
+        },
+        "input_ports": {},
+        "output_ports": {},
+        "effective_limits": {},
+        "exit": "failure"
+      },
+      {
+        "id": "start_success",
+        "type": "terminal",
+        "source_config_hash": "sha256:c5d4f12838d2bdfd508c50b2f0b555ce3f0e6c1467337d6e7f201882eecd0f22",
+        "trigger_program": {
+          "normalized_expression": {
+            "edge_ids": [
+              "capability.succeeded"
+            ],
+            "type": "all"
+          },
+          "referenced_edge_ids": [
+            "capability.succeeded"
+          ],
+          "max_steps": 1,
+          "truth_program_hash": "sha256:effec991dfadf6b2c514b9cd61b262c4465f5060b92ff78f9b6a1444aa10ea74"
+        },
+        "input_ports": {},
+        "output_ports": {},
+        "effective_limits": {},
+        "exit": "success"
       }
     ],
     "route_groups": [],
-    "control_edges": [],
+    "control_edges": [
+      {
+        "id": "capability.failed",
+        "from_node_id": "start",
+        "to_node_id": "start_failure",
+        "outcome_match": {
+          "statuses": [
+            "failed"
+          ]
+        },
+        "condition_program": null,
+        "route_group_id": null,
+        "priority": null,
+        "is_default": false,
+        "source_config_hash": "sha256:d124267052b3ac745d04ab8530da4da3e5578cbb33bc276ab2d79b4e2b01be32",
+        "compiled_edge_hash": "sha256:15a5565e9813ce7f8d3424c86bf65123a1a21f6fd646f203dd480cba059e2369"
+      },
+      {
+        "id": "capability.succeeded",
+        "from_node_id": "start",
+        "to_node_id": "start_success",
+        "outcome_match": {
+          "statuses": [
+            "succeeded"
+          ]
+        },
+        "condition_program": null,
+        "route_group_id": null,
+        "priority": null,
+        "is_default": false,
+        "source_config_hash": "sha256:4b6a0b46ad08e2e313f42e2cdc833443482c860ccf6124719586a6c8970e192d",
+        "compiled_edge_hash": "sha256:cc77b1f4226b1e808c0e5cc84e2b16906c4b441621794802335ae022733a9cb2"
+      }
+    ],
     "data_edges": [],
     "completion": {
       "early_rules": [],
@@ -207,16 +284,16 @@
       "policy_hash": "sha256:8fc464b9293da55fbdcba43386a58875ccfbc118e1b1d26492c490ad711fe84e"
     },
     "complexity_summary": {
-      "node_count": 1,
-      "control_edge_count": 0,
+      "node_count": 3,
+      "control_edge_count": 2,
       "data_edge_count": 0,
-      "max_source_fan_out": 0,
+      "max_source_fan_out": 2,
       "max_condition_steps": 0,
       "max_trigger_steps": 1,
       "max_completion_steps": 1,
-      "max_reconcile_facts_per_ingress": 1,
-      "max_frontier_bytes": 64,
-      "summary_hash": "sha256:d2ffe57557f5388616a9ddd6536b124d81c303d1d075ba8ed38ec69d24fc29c2"
+      "max_reconcile_facts_per_ingress": 5,
+      "max_frontier_bytes": 192,
+      "summary_hash": "sha256:ae702c27621b531093155f707c45055b4318bc31d1cad3dc79f19aa86446903c"
     },
     "static_child_plan_closure": {
       "members": [],
@@ -339,7 +416,7 @@
       }
     },
     "runtime_safety_hash": "sha256:7f8c0b1babf451cb03ab5f99b436d3ae187b587783875850686188d893059259",
-    "plan_hash": "sha256:323f6c59dd75e12a8f425f0b82eac44f413ddaea847dc8d3f1f2618bc329697e"
+    "plan_hash": "sha256:3b34e34fcf2216e5c9f95301be684e96dd306b5d516646335807e78d018647a4"
   },
   "static_lowering_contract_ref": {
     "id": "icarus.workflow-definition-static-lowering-contract",
@@ -349,8 +426,10 @@
   "diagnostics": [],
   "proof_hashes": [],
   "program_hashes": [
+    "sha256:4cdd8d88b2915854d15fca715f1b6242a7b09c43585cc0078c004f7636570183",
     "sha256:8708fcdb69ff07601fabf91ba6e0d0f11578d55f8e46983486c65a2373d539b4",
-    "sha256:a51758dbd90dbd199d38eb84181697630737fd69f0c85831398d2dfa985e4fb6"
+    "sha256:a51758dbd90dbd199d38eb84181697630737fd69f0c85831398d2dfa985e4fb6",
+    "sha256:effec991dfadf6b2c514b9cd61b262c4465f5060b92ff78f9b6a1444aa10ea74"
   ],
-  "result_hash": "sha256:8b2b32d1ee54df1b08aef34ea9a9bc300aa0c1977efe748bc12625c4335bedfa"
+  "result_hash": "sha256:518b820b974f863498e38ab62610057900c1674760cfeeaf08538af897d3c3e9"
 }

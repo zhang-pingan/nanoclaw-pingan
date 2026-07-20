@@ -18,7 +18,7 @@
           "format": "icarus.workflow-graph-scope/1",
           "scope_key": "policy_child",
           "interface_ref": {
-            "id": "fixture.interface.root",
+            "id": "fixture.interface.child",
             "version": "1.0.0"
           },
           "nodes": [

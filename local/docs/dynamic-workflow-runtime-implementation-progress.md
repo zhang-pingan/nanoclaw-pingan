@@ -165,7 +165,7 @@ G0.1-G0.9 已按当时规范完成并保留历史 identity。后续确认的 Cap
 | --- | --- | --- | --- | --- |
 | G2.1 | R-016 Spec/Contract Repair | `DONE` | lowering outcome、Compiled IR v2、完整 case result target、exact input binding requirement与 blocked Draft v2冻结 | 本原子提交（历史） |
 | G2.2 | Production Compiler / Exact Case-Input Identity | `DONE` | locked strict parser、closed validation、snapshot binding、static lowering、Plan normalization、program/proof/hash/diagnostic、真实 toolchain与40个actual candidate results | 本原子提交 |
-| G2.3 | Working Correction / RC Review / Seal | `IN_PROGRESS` | phase=`WORKING`；D4-SR-001至D4-SR-007待修正；无有效RC，expected bytes仍0/40，approval/seal未开始 | 本原子提交（施工治理调整） |
+| G2.3 | Working Correction / RC Review / Seal | `IN_PROGRESS` | phase=`WORKING`；D4-SR-001至D4-SR-007已在current Working实现/fixture中机械修正并通过双轮确定性生成；无有效RC，expected bytes仍0/40，fresh review/approval/seal未开始 | 本原子提交（Working semantic correction） |
 
 ## Runtime v1施工治理调整
 
@@ -179,7 +179,7 @@ WORKING -> RC_REVIEW -> BASELINE_ACCEPTED -> CONSTRUCTION_ARCHIVED
 
 - 当前G2处于`WORKING`。R-017 Contract、40份隔离input、actual candidate和working review bundle继续计算精确hash并由current check逐字节验证，但允许在同一路径重建，不是additive publication或Production resource。
 - Draft v3/v4 review及其hash继续作为Git/worksheet中的历史事实；它们不再要求后续创建Draft v5，也不作为当前Working集合的兼容依赖。旧施工artifact的独立复验属于archive入口，不进入默认current链。
-- D4-SR-001至D4-SR-007全部完成且current生成连续两轮一致、机械测试通过、边界干净之前，不得`prepare-rc`。Working阶段不请求human judgment，不重置40-case decision。
+- D4-SR-001至D4-SR-007已在current Working实现、fixture和生成物中完成机械修正；四个root连续两轮一致且定向/完整G2机械测试通过。本切片仍不得`prepare-rc`；Working阶段不请求human judgment，不重置40-case decision。
 - 显式`prepare-rc`后才冻结单一RC并进行一次完整fresh independent review；任一绑定输入变化使RC失效并退回Working。只有完整review通过后才能创建`GoldenSemanticReview`并seal。
 - G0-G9与同一release验收完成后归档本施工生命周期；长期保留的是生产资源版本控制和旧Run exact artifact pinning，而不是G0-G9施工Draft链。
 
@@ -189,27 +189,28 @@ Current Working identity：
 
 | Artifact | Hash / status |
 | --- | --- |
-| G2 Working Contract root | `sha256:8f0f6e397cfe64a619027abfb8cd341322928ad70a6217b4aafedc5c01eb5f79` / `WORKING_MUTABLE_NOT_PUBLISHABLE` |
-| G2 Working input manifest | `sha256:387fab5a004f061204a926a00c31845c257b15bd4fc2faac6c02dcf2fd96599a` / `WORKING_INPUTS_CURRENT` |
-| G2 Working actual candidate root | `sha256:302b2acff6bf5b97d010fdd7006dca949caa2361b5778e1928b46e584088617d` / `WORKING_COMPILER_COMPARISON` |
-| G2 Working review bundle root | `sha256:90cde6d43923b6f1c09d044438fc0697492289def4c2111eaf03cdf4e2c5e007` / `working_not_review_candidate` |
+| G2 Working Contract root | `sha256:3bfaff4acd658a826e2b51f7fd53e1f938a6b0b1e78a2b6b696597d7b4a05124` / `WORKING_MUTABLE_NOT_PUBLISHABLE` |
+| G2 Working input manifest | `sha256:83080db01627d5b42046ce0a2e229ee3f4099208a8bfa2b028fc9b6241272dc8` / `WORKING_INPUTS_CURRENT` |
+| G2 Working actual candidate root | `sha256:54ba5b80b92a9c053e4439964fbea03326c9c8b7fc3cc3fe244dffa2144d341a` / `WORKING_COMPILER_COMPARISON` |
+| G2 Working review bundle root | `sha256:25b561d28a2dc4515378d2879ae588751d73397f13e72e6791cf3506453fe288` / `working_not_review_candidate` |
 
 验证与边界证据：
 
 | 命令/证据 | 结果 |
 | --- | --- |
 | managed `npm run typecheck` | PASS |
-| managed `npm run test:g2:working` | PASS；3 files / 18 tests |
-| managed `npm run test:g2` | PASS；4 files / 21 tests |
-| managed `npm run contracts:generate` | PASS；在既有Working路径重建，无Draft v5/v6路径 |
+| managed `npm run test:g2:working` | PASS；3 files / 22 tests；40-case replay保持11 compiled / 29 rejected |
+| managed `npm run test:g2` | PASS；4 files / 25 tests |
+| managed Working generators（连续两轮） | PASS；`contract:g2:working:generate`、`compiler:g2:working:generate`、`golden:working:generate`两轮root与生成树bytes一致；只在既有Working路径原地重建，无Draft v5/v6路径 |
 | managed `npm run contracts:check` | PASS；默认链验证current machine artifacts、Working roots、Schema与Store |
 | managed `npm run contracts:archive:check` | PASS；历史G0/G0.8/G0.9/R-016/Draft v3通过显式archive入口复验 |
 | managed `npm run test:g2:archive` | PASS；2 files / 13 tests |
-| managed `npm test` | 83/85 files、754/756 tests通过；失败仅为既有R-012 `credential-proxy` 250ms async trace断言与并发负载下R-013 G0.6 5s timeout；本次G2 Working、Schema、Store及其余测试通过 |
+| existing managed `npm test` baseline（本切片未重跑） | 83/85 files、754/756 tests通过；失败仅为既有R-012 `credential-proxy` 250ms async trace断言与并发负载下R-013 G0.6 5s timeout；R-015 toolchain 5s同样保留为已登记范围外timing baseline |
 | managed standalone G0.6 | PASS；1 file / 8 tests，确认完整suite中的G0.6失败仍为既有负载timing基线 |
 | managed standalone `credential-proxy` | 20/21通过；同一R-012 async trace断言在257ms失败，未修改该模块或放宽测试 |
+| `git diff --check` | PASS |
 | active Working publication scan | PASS；四个active root均为`construction_phase=WORKING`、`publishable=false`、`production_reachable=false`，active trees无`ADDITIVE`或pending fresh-review状态 |
-| production boundary | PASS；未修改Schema/Store、Production Compiler core、Registry/Release/Run/Retention实现或`conformance/sealed/` |
+| production boundary | PASS；未修改Schema/Store、Production Registry/Feature Release/Core Release、Run exact pinning、Retention/compatibility preflight或`conformance/sealed/` |
 
 ## G2 Draft v4 Fresh Independent Human Semantic Review
 
@@ -1311,7 +1312,7 @@ G0.1 的实现、测试和本进度账本由同一个原子提交交付。Agent 
 | R-014 | Capacity governance | CLOSED | G0.10 已机器化 closed publication/command、权限/Actor/entrypoint/delegation、revision/hash CAS、reason/denial、immutable audit tables、唯一 Publisher/Watcher protocol、Admission lineage、crash recovery 与 additive Gate evidence；G1 DDL 可开始 | G0.10 |
 | R-015 | Toolchain test timing | OPEN_OUT_OF_SCOPE | G1.1 曾复现 runtime-toolchain 5s timing；G1.2 串行 `test:g0` 和两次完整 suite 均未复现，toolchain tests 通过。G1.2 不调整 timeout 或 managed toolchain 既有实现 | 独立测试稳定性维护 |
 | R-016 | Compiler/Golden contract | CLOSED | S38与additive repair root已冻结唯一Case Result target/hash、lowering outcome、IR v2与exact binding；G2 Production Compiler已消费该Contract并发布真实identity/actual candidates，repair Draft v2仍冻结blocked且未越过Golden review/seal边界 | G2 spec/Contract repair + Compiler slice |
-| R-017 | G2 semantic correction | OPEN_BLOCKING_G2 | phase=`WORKING`；Draft v4 fresh review的14 `PASS` / 26 `CHANGES_REQUESTED`转为历史finding输入；D4-SR-001至D4-SR-007要求修复terminal topology、typed child outputs、Map assignability、dependency closure、Wait authorization及policy/Recipe isolation。Expected bytes仍0/40，无有效RC，approval/seal禁止，G3+未就绪 | G2 Working semantic correction |
+| R-017 | G2 semantic correction | OPEN_BLOCKING_G2 | phase=`WORKING`；Draft v4 fresh review的14 `PASS` / 26 `CHANGES_REQUESTED`只作为历史finding输入；D4-SR-001至D4-SR-007已在current Working实现/fixture中机械修正，剩余已知Working correction finding为0，但未执行fresh independent review。Expected bytes仍0/40，无有效RC，approval/seal禁止，G3+未就绪 | G2 Working semantic correction；下一允许边界为另行显式授权的`prepare-rc` |
 
 ## v1完成后的归档计划：PLANNED
 
@@ -1323,8 +1324,8 @@ G0.1 的实现、测试和本进度账本由同一个原子提交交付。Agent 
 
 G0.1-G0.9 historical identity、G0.10 current root、G1.1/G1.2 executable schema/Store Base、G1.3 dependency identity repair、R-016 spec/Contract repair与G2 Production Compiler基础均已完成；既有hash是construction provenance，不把未Seal的后续G2修正变成additive发布义务。Current G0/I11与G1为`DONE`，G2/I2/I3为`IN_PROGRESS/WORKING`且仍限于semantic correction/Golden流程，G3-G9继续`NOT_READY`。
 
-Draft v3的40/40 `CHANGES_REQUESTED`与Draft v4的14 `PASS` / 26 `CHANGES_REQUESTED`作为Git/worksheet历史保留；D4-SR-001至D4-SR-007仍阻塞G2。当前没有有效Review Candidate，Expected full case-result bytes仍为0/40，approval、immutable`GoldenSemanticReview`、`golden-seal`和sealed write仍未运行。
+Draft v3的40/40 `CHANGES_REQUESTED`与Draft v4的14 `PASS` / 26 `CHANGES_REQUESTED`作为Git/worksheet历史保留，没有复制、重置或替换。D4-SR-001至D4-SR-007已在current Working代码、isolated inputs、actual comparison与working review bundle中完成机械修正；这不是新human judgment或semantic approval。当前没有有效Review Candidate，Expected full case-result/Plan/proof/program bytes/hash仍全部为null，approval、immutable`GoldenSemanticReview`、`golden-seal`和sealed write仍未运行。
 
-下一施工切片继续留在G2 `WORKING`，只处理D4-SR-001至D4-SR-007：修复static lowering terminal topology、structural child owner typed output、Map item assignability、Capability/Wait真实dependency closure，以及policy/Recipe negative fixture isolation；直接重建单一current Working Contract/input/candidate/review bundle及相应测试，不创建Draft v5/v6，不发布新construction version，不请求或重置human judgment。Draft v4的14/26 decision仅作为finding输入，不是current judgment或approval。
+本原子提交的终点仍是G2 `WORKING`：四个current root均不可发布、Production不可达，40-case actual comparison保持11 compiled / 29 rejected，剩余已知Working correction finding为0。下一允许边界只能由新会话另行显式授权`prepare-rc`，届时冻结单一Review Candidate；在该授权之前不得自行进入RC review。不得创建Draft v5/v6，不发布新construction version，不请求、复制或重置human judgment；Draft v4的14/26 decision仍只作为历史finding输入。
 
-该后续切片不得`prepare-rc`、执行fresh independent review或Golden approval，不得创建immutable`GoldenSemanticReview`、运行`golden-seal`、写入`conformance/sealed/`，不得开始G3+、SQLite certification、Core Release、G8/G9 identity或production activation。R-012/R-013/R-015继续作为范围外timing baseline，不放宽测试。
+本切片未`prepare-rc`、未执行fresh independent review或Golden approval，未创建immutable`GoldenSemanticReview`、运行`golden-seal`或写入`conformance/sealed/`，也未开始G3+、SQLite certification、Core Release、G8/G9 identity或production activation。R-012/R-013/R-015继续作为范围外timing baseline，不放宽测试。

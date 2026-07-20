@@ -6,7 +6,7 @@
   },
   "version": 2,
   "domain_separator": "icarus:workflow-compiler-input-snapshot-artifact:2\n",
-  "hash": "sha256:7cff33b02ecde34ec98357e933f9231f283202b96af156a5417295d2478ac075",
+  "hash": "sha256:5ecf36bfc159f6861bad5085f47c729d32211f9e810718cf45377af506de110c",
   "payload": {
     "format": "icarus.workflow-compiler-input-snapshot/2",
     "snapshot_id": "semantic-correction:negative.child-recipe-dependency-cycle",
@@ -16,13 +16,13 @@
         "id": "icarus.workflow-compiler-toolchain",
         "version": "3.0.0"
       },
-      "compiler_toolchain_hash": "sha256:b92ad48c78c2af3129e471f484c68067b957bfa124187490df64aae1801cdfb6",
+      "compiler_toolchain_hash": "sha256:d8bd2ce6cffeebb9de442c22c35749e21276c590c751c257a57514e6cfaca597",
       "compiler_version": "3.0.0",
-      "compiler_build_hash": "sha256:39d875d520c70493165704c5ab7e0b9edbe4eb337413e0e67f7aa5ff61acd629",
+      "compiler_build_hash": "sha256:3f605b87ec0f2b8e4413b9c4eb9a42d49c1022cee2d45c48c002aee7b18b7ead",
       "canonical_normalizer_version": "2.0.0",
       "canonical_normalizer_hash": "sha256:7d08408f780ca4350e153d99fd60810554daefe3826b39fe5e2fa5abee340b60",
       "proof_algorithm_version": "2.0.0",
-      "proof_algorithm_hash": "sha256:4aa814c349c213fdaec4e48b4414a5bab728bb54328639c9d8c1aa0da680ca88",
+      "proof_algorithm_hash": "sha256:9bea73c915187b6d6af5ddca7e55c59accd86df0fa02d003385b5dfdf3e5184f",
       "error_catalog_ref": {
         "id": "icarus.workflow-compiler-error-catalog",
         "version": "2.0.0"
@@ -35,8 +35,8 @@
     },
     "registry_snapshot": {
       "snapshot_ref": "test-only:registry:semantic-correction:negative.child-recipe-dependency-cycle@1",
-      "snapshot_hash": "sha256:16e83bc8d1dd53648d9659357fc96c549a714ae1d53d04fd72f9dd73a1284a4c",
-      "resource_count": 9,
+      "snapshot_hash": "sha256:6cd866c63dafd8e36cd877f8786910fb853c0910d9553f4ebd441828ebe92d68",
+      "resource_count": 10,
       "resources": [
         {
           "resource_type": "capability",
@@ -88,12 +88,12 @@
               "type": "fence_only",
               "safe_to_abandon": true
             },
-            "dependency_closure_hash": "sha256:55d58b6fa61d3d3ebf975ec095d2a541b77b7c4e1daa150c5c86d39db866bd05"
+            "dependency_closure_hash": "sha256:37fdfe84aa17bebbbdde1ea703c3a670ebe4429d0240b49d0a4cb5f9f083a8d5"
           },
-          "content_hash": "sha256:21fcb34fe71a5b0955771a6bea80f9857bc3b2752a1b93762ff66d7bcdf798b7"
+          "content_hash": "sha256:f55efd2ef271382c203eee19b863f68c572340ae4e96864866741335bd3ee8df"
         },
         {
-          "resource_type": "dependency_contract",
+          "resource_type": "context_contract",
           "ref": {
             "id": "fixture.context",
             "version": "1.0.0"
@@ -109,23 +109,299 @@
           "content_hash": "sha256:eab2a97e48bb016256646ff61c5d390777e891a37d319d82e30601b167a14ce8"
         },
         {
-          "resource_type": "dependency_contract",
+          "resource_type": "definition",
           "ref": {
             "id": "fixture.definition.cycle-a",
             "version": "1.0.0"
           },
           "content": {
+            "format": "icarus.workflow-definition/1",
             "ref": {
               "id": "fixture.definition.cycle-a",
               "version": "1.0.0"
             },
-            "contract_kind": "definition",
-            "contract_hash": "sha256:a3b136d8b011df2531892b9ab411e47115fe3956a98602892e837d9015d668cb"
+            "owner_feature_id": "fixture-feature",
+            "name": "G2 semantic correction fixture",
+            "context_contract_ref": {
+              "id": "fixture.context",
+              "version": "1.0.0"
+            },
+            "entry_points": {
+              "default": {
+                "state_key": "start"
+              }
+            },
+            "states": {
+              "start": {
+                "type": "delegation",
+                "capability_ref": {
+                  "id": "fixture.capability.static",
+                  "version": "1.0.0"
+                },
+                "policy": {
+                  "allowed_node_types": [
+                    "delegation",
+                    "terminal"
+                  ],
+                  "allowed_capabilities": [
+                    {
+                      "id": "fixture.capability.static",
+                      "version": "1.0.0"
+                    }
+                  ],
+                  "allowed_templates": [],
+                  "allowed_interface_refs": [],
+                  "allowed_wait_contracts": [],
+                  "allowed_child_policy_refs": [],
+                  "allowed_claim_ids": [],
+                  "allow_early_close": false,
+                  "allow_indefinite_waits": false,
+                  "effect_policy": {
+                    "allowed_recovery_kinds": [
+                      "pure"
+                    ],
+                    "max_impact": "read_only"
+                  },
+                  "build_retry": null,
+                  "limits": {
+                    "max_scopes": null,
+                    "max_nodes": null,
+                    "max_nodes_per_scope": null,
+                    "max_edges_per_scope": null,
+                    "max_nesting_depth": null,
+                    "max_map_items": null,
+                    "max_concurrency": null,
+                    "max_total_attempts": null,
+                    "max_total_waits": null,
+                    "max_total_output_bytes": null,
+                    "max_scope_spec_bytes": null,
+                    "max_condition_steps": null,
+                    "max_wait_duration_ms": null,
+                    "max_pending_signals": null,
+                    "max_fixed_point_facts": null,
+                    "max_frontier_bytes": null
+                  },
+                  "usage_budget": {
+                    "max_total_tool_calls": null,
+                    "max_total_input_tokens": null,
+                    "max_total_output_tokens": null,
+                    "max_total_cost_micros": null
+                  }
+                },
+                "input_bindings": {},
+                "retry_request": null,
+                "timeout_ms": null,
+                "on_complete": {
+                  "success": {
+                    "target": "done",
+                    "effects": {
+                      "operations": [
+                        {
+                          "id": "child.cycle-b",
+                          "type": "start_child_workflow",
+                          "recipe_ref": {
+                            "id": "fixture.recipe.cycle-b",
+                            "version": "1.0.0"
+                          },
+                          "routing_scope_ref": {
+                            "id": "fixture.routing.child",
+                            "version": "1.0.0"
+                          },
+                          "principal_binding": "inherit_parent_principal",
+                          "creation_domain": "parent_workflow_lineage",
+                          "relation_kind": "follow_up",
+                          "input_bindings": {},
+                          "delivery_requirement": "required",
+                          "finalization_policy_ref": {
+                            "id": "fixture.finalization",
+                            "version": "1.0.0"
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "failure": {
+                    "target": "done"
+                  }
+                },
+                "on_error": {
+                  "target": "done"
+                },
+                "on_local_cancel": {
+                  "target": "done"
+                }
+              },
+              "done": {
+                "type": "terminal",
+                "terminal_kind": "normal",
+                "output_binding": {
+                  "source": "constant",
+                  "value": {
+                    "status": "done"
+                  }
+                }
+              }
+            },
+            "definition_hash": "sha256:79533240063f848d009b1522c6d48048079a8e4283af9bf206b7fab7ca528f25"
           },
-          "content_hash": "sha256:19371c544fdf167e1e3717f8e28511893f50ad46eecf7ad65c38086b94ca71db"
+          "content_hash": "sha256:e2f6061d25af115dea9f64d9173f09ce153982877ac2c85b0f6cf33fde1d144f"
         },
         {
-          "resource_type": "dependency_contract",
+          "resource_type": "definition",
+          "ref": {
+            "id": "fixture.definition.cycle-b",
+            "version": "1.0.0"
+          },
+          "content": {
+            "format": "icarus.workflow-definition/1",
+            "ref": {
+              "id": "fixture.definition.cycle-b",
+              "version": "1.0.0"
+            },
+            "owner_feature_id": "fixture-feature",
+            "name": "G2 semantic correction fixture",
+            "context_contract_ref": {
+              "id": "fixture.context",
+              "version": "1.0.0"
+            },
+            "entry_points": {
+              "default": {
+                "state_key": "start"
+              }
+            },
+            "states": {
+              "start": {
+                "type": "delegation",
+                "capability_ref": {
+                  "id": "fixture.capability.static",
+                  "version": "1.0.0"
+                },
+                "input_bindings": {},
+                "retry_request": null,
+                "timeout_ms": null,
+                "on_complete": {
+                  "success": {
+                    "target": "done",
+                    "effects": {
+                      "operations": [
+                        {
+                          "id": "child.fixture.recipe.cycle-a",
+                          "type": "start_child_workflow",
+                          "recipe_ref": {
+                            "id": "fixture.recipe.cycle-a",
+                            "version": "1.0.0"
+                          },
+                          "routing_scope_ref": {
+                            "id": "fixture.routing.child",
+                            "version": "1.0.0"
+                          },
+                          "principal_binding": "inherit_parent_principal",
+                          "creation_domain": "parent_workflow_lineage",
+                          "relation_kind": "follow_up",
+                          "input_bindings": {},
+                          "delivery_requirement": "required",
+                          "finalization_policy_ref": {
+                            "id": "fixture.finalization",
+                            "version": "1.0.0"
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "failure": {
+                    "target": "done"
+                  }
+                },
+                "on_error": {
+                  "target": "done"
+                },
+                "on_local_cancel": {
+                  "target": "done"
+                },
+                "policy": {
+                  "allowed_node_types": [
+                    "delegation",
+                    "terminal"
+                  ],
+                  "allowed_capabilities": [
+                    {
+                      "id": "fixture.capability.static",
+                      "version": "1.0.0"
+                    }
+                  ],
+                  "allowed_templates": [],
+                  "allowed_interface_refs": [],
+                  "allowed_wait_contracts": [],
+                  "allowed_child_policy_refs": [],
+                  "allowed_claim_ids": [],
+                  "allow_early_close": false,
+                  "allow_indefinite_waits": false,
+                  "effect_policy": {
+                    "allowed_recovery_kinds": [
+                      "pure"
+                    ],
+                    "max_impact": "read_only"
+                  },
+                  "build_retry": null,
+                  "limits": {
+                    "max_scopes": null,
+                    "max_nodes": null,
+                    "max_nodes_per_scope": null,
+                    "max_edges_per_scope": null,
+                    "max_nesting_depth": null,
+                    "max_map_items": null,
+                    "max_concurrency": null,
+                    "max_total_attempts": null,
+                    "max_total_waits": null,
+                    "max_total_output_bytes": null,
+                    "max_scope_spec_bytes": null,
+                    "max_condition_steps": null,
+                    "max_wait_duration_ms": null,
+                    "max_pending_signals": null,
+                    "max_fixed_point_facts": null,
+                    "max_frontier_bytes": null
+                  },
+                  "usage_budget": {
+                    "max_total_tool_calls": null,
+                    "max_total_input_tokens": null,
+                    "max_total_output_tokens": null,
+                    "max_total_cost_micros": null
+                  }
+                }
+              },
+              "done": {
+                "type": "terminal",
+                "terminal_kind": "normal",
+                "output_binding": {
+                  "source": "constant",
+                  "value": {
+                    "status": "done"
+                  }
+                }
+              }
+            },
+            "definition_hash": "sha256:eda4ee9e1ae02efcf0860601018aaf91dfa4decc4461c1570824c0ef4999e9a9"
+          },
+          "content_hash": "sha256:61c1217b548133cd969145116d15ea728c8f8877e812ffee5de17d62d7104a74"
+        },
+        {
+          "resource_type": "executor_implementation",
+          "ref": {
+            "id": "fixture.executor",
+            "version": "1.0.0"
+          },
+          "content": {
+            "ref": {
+              "id": "fixture.executor",
+              "version": "1.0.0"
+            },
+            "contract_kind": "executor",
+            "contract_hash": "sha256:650b326e42e15500da443e0d30d85774ae80709d8da5990c6314481e74985be3"
+          },
+          "content_hash": "sha256:225bd1a64042ad7052f8ef57b8e09dc25fe30cadec131e146917028456464247"
+        },
+        {
+          "resource_type": "root_finalization_policy",
           "ref": {
             "id": "fixture.finalization",
             "version": "1.0.0"
@@ -151,16 +427,16 @@
               "id": "fixture.recipe.cycle-a",
               "version": "1.0.0"
             },
+            "definition_ref": {
+              "id": "fixture.definition.cycle-a",
+              "version": "1.0.0"
+            },
             "allowed_child_recipe_refs": [
               {
                 "id": "fixture.recipe.cycle-b",
                 "version": "1.0.0"
               }
             ],
-            "definition_ref": {
-              "id": "fixture.definition.cycle-a",
-              "version": "1.0.0"
-            },
             "recipe_hash": "sha256:eb0bad8bd6fc1780f3eda5334f6263dfad8222cccea2fe9e882a45a5f113e52f"
           },
           "content_hash": "sha256:afa4b5296486191e483f732c7481426af362663f50965bb2c497363f51adfaf3"
@@ -176,34 +452,22 @@
               "id": "fixture.recipe.cycle-b",
               "version": "1.0.0"
             },
+            "definition_ref": {
+              "id": "fixture.definition.cycle-b",
+              "version": "1.0.0"
+            },
             "allowed_child_recipe_refs": [
               {
                 "id": "fixture.recipe.cycle-a",
                 "version": "1.0.0"
               }
             ],
-            "recipe_hash": "sha256:59bdad55d6f87fa317c38b3ddfe7584ada4d2fac5021c663493339e6b11998c7"
+            "recipe_hash": "sha256:781073d5af1202de6fcc7cdcd98e547ff894be08780c49fb56756ed21389c9cf"
           },
-          "content_hash": "sha256:c5afa2f8d389693e9a9e7400ad4868417da09e5dbb0583aefd4b76a5c5af0055"
+          "content_hash": "sha256:29b005d7f005abf1a08f59a2a92f372c1df95e06f970a762e5f971344a088704"
         },
         {
-          "resource_type": "dependency_contract",
-          "ref": {
-            "id": "fixture.recipe.parent",
-            "version": "1.0.0"
-          },
-          "content": {
-            "ref": {
-              "id": "fixture.recipe.parent",
-              "version": "1.0.0"
-            },
-            "contract_kind": "recipe",
-            "contract_hash": "sha256:30505be65384fc113e15fc06bdf1f612059c8b02bbc015b235fc1a5a678ff1e3"
-          },
-          "content_hash": "sha256:f7ae677b0bd65534729c72573a680ac3f4dd68681c735339a42be56f1cde4396"
-        },
-        {
-          "resource_type": "dependency_contract",
+          "resource_type": "routing_scope",
           "ref": {
             "id": "fixture.routing.child",
             "version": "1.0.0"
@@ -239,6 +503,205 @@
             }
           },
           "content_hash": "sha256:bdfd3abce4597fb35b3c75344c42369997dc5888bd9043652de796d9b60f5ab9"
+        }
+      ],
+      "dependency_closure_count": 3,
+      "dependency_closures": [
+        {
+          "format": "icarus.workflow-registry-dependency-closure/1",
+          "root_resource_type": "capability",
+          "root_ref": {
+            "id": "fixture.capability.static",
+            "version": "1.0.0"
+          },
+          "members": [
+            {
+              "resource_type": "executor_implementation",
+              "ref": {
+                "id": "fixture.executor",
+                "version": "1.0.0"
+              },
+              "content_hash": "sha256:225bd1a64042ad7052f8ef57b8e09dc25fe30cadec131e146917028456464247"
+            },
+            {
+              "resource_type": "schema",
+              "ref": {
+                "id": "fixture.schema.route-result",
+                "version": "1.0.0"
+              },
+              "content_hash": "sha256:bdfd3abce4597fb35b3c75344c42369997dc5888bd9043652de796d9b60f5ab9"
+            }
+          ],
+          "member_count": 2,
+          "closure_hash": "sha256:37fdfe84aa17bebbbdde1ea703c3a670ebe4429d0240b49d0a4cb5f9f083a8d5"
+        },
+        {
+          "format": "icarus.workflow-registry-dependency-closure/1",
+          "root_resource_type": "recipe",
+          "root_ref": {
+            "id": "fixture.recipe.cycle-a",
+            "version": "1.0.0"
+          },
+          "members": [
+            {
+              "resource_type": "capability",
+              "ref": {
+                "id": "fixture.capability.static",
+                "version": "1.0.0"
+              },
+              "content_hash": "sha256:f55efd2ef271382c203eee19b863f68c572340ae4e96864866741335bd3ee8df"
+            },
+            {
+              "resource_type": "context_contract",
+              "ref": {
+                "id": "fixture.context",
+                "version": "1.0.0"
+              },
+              "content_hash": "sha256:eab2a97e48bb016256646ff61c5d390777e891a37d319d82e30601b167a14ce8"
+            },
+            {
+              "resource_type": "definition",
+              "ref": {
+                "id": "fixture.definition.cycle-a",
+                "version": "1.0.0"
+              },
+              "content_hash": "sha256:e2f6061d25af115dea9f64d9173f09ce153982877ac2c85b0f6cf33fde1d144f"
+            },
+            {
+              "resource_type": "definition",
+              "ref": {
+                "id": "fixture.definition.cycle-b",
+                "version": "1.0.0"
+              },
+              "content_hash": "sha256:61c1217b548133cd969145116d15ea728c8f8877e812ffee5de17d62d7104a74"
+            },
+            {
+              "resource_type": "executor_implementation",
+              "ref": {
+                "id": "fixture.executor",
+                "version": "1.0.0"
+              },
+              "content_hash": "sha256:225bd1a64042ad7052f8ef57b8e09dc25fe30cadec131e146917028456464247"
+            },
+            {
+              "resource_type": "root_finalization_policy",
+              "ref": {
+                "id": "fixture.finalization",
+                "version": "1.0.0"
+              },
+              "content_hash": "sha256:924a730977eed2eab60309c612b37002c7fdd0f9907e9f212e5fbb474bab7f57"
+            },
+            {
+              "resource_type": "recipe",
+              "ref": {
+                "id": "fixture.recipe.cycle-b",
+                "version": "1.0.0"
+              },
+              "content_hash": "sha256:29b005d7f005abf1a08f59a2a92f372c1df95e06f970a762e5f971344a088704"
+            },
+            {
+              "resource_type": "routing_scope",
+              "ref": {
+                "id": "fixture.routing.child",
+                "version": "1.0.0"
+              },
+              "content_hash": "sha256:99434613325a816947de2f2d2a65c02c05acde2e489ab0606fc2b4d6edd47036"
+            },
+            {
+              "resource_type": "schema",
+              "ref": {
+                "id": "fixture.schema.route-result",
+                "version": "1.0.0"
+              },
+              "content_hash": "sha256:bdfd3abce4597fb35b3c75344c42369997dc5888bd9043652de796d9b60f5ab9"
+            }
+          ],
+          "member_count": 9,
+          "closure_hash": "sha256:74ebb3a319f7971797a017f94cdbe229bc8435a82bb0a18e165142ad7ad97062"
+        },
+        {
+          "format": "icarus.workflow-registry-dependency-closure/1",
+          "root_resource_type": "recipe",
+          "root_ref": {
+            "id": "fixture.recipe.cycle-b",
+            "version": "1.0.0"
+          },
+          "members": [
+            {
+              "resource_type": "capability",
+              "ref": {
+                "id": "fixture.capability.static",
+                "version": "1.0.0"
+              },
+              "content_hash": "sha256:f55efd2ef271382c203eee19b863f68c572340ae4e96864866741335bd3ee8df"
+            },
+            {
+              "resource_type": "context_contract",
+              "ref": {
+                "id": "fixture.context",
+                "version": "1.0.0"
+              },
+              "content_hash": "sha256:eab2a97e48bb016256646ff61c5d390777e891a37d319d82e30601b167a14ce8"
+            },
+            {
+              "resource_type": "definition",
+              "ref": {
+                "id": "fixture.definition.cycle-a",
+                "version": "1.0.0"
+              },
+              "content_hash": "sha256:e2f6061d25af115dea9f64d9173f09ce153982877ac2c85b0f6cf33fde1d144f"
+            },
+            {
+              "resource_type": "definition",
+              "ref": {
+                "id": "fixture.definition.cycle-b",
+                "version": "1.0.0"
+              },
+              "content_hash": "sha256:61c1217b548133cd969145116d15ea728c8f8877e812ffee5de17d62d7104a74"
+            },
+            {
+              "resource_type": "executor_implementation",
+              "ref": {
+                "id": "fixture.executor",
+                "version": "1.0.0"
+              },
+              "content_hash": "sha256:225bd1a64042ad7052f8ef57b8e09dc25fe30cadec131e146917028456464247"
+            },
+            {
+              "resource_type": "root_finalization_policy",
+              "ref": {
+                "id": "fixture.finalization",
+                "version": "1.0.0"
+              },
+              "content_hash": "sha256:924a730977eed2eab60309c612b37002c7fdd0f9907e9f212e5fbb474bab7f57"
+            },
+            {
+              "resource_type": "recipe",
+              "ref": {
+                "id": "fixture.recipe.cycle-a",
+                "version": "1.0.0"
+              },
+              "content_hash": "sha256:afa4b5296486191e483f732c7481426af362663f50965bb2c497363f51adfaf3"
+            },
+            {
+              "resource_type": "routing_scope",
+              "ref": {
+                "id": "fixture.routing.child",
+                "version": "1.0.0"
+              },
+              "content_hash": "sha256:99434613325a816947de2f2d2a65c02c05acde2e489ab0606fc2b4d6edd47036"
+            },
+            {
+              "resource_type": "schema",
+              "ref": {
+                "id": "fixture.schema.route-result",
+                "version": "1.0.0"
+              },
+              "content_hash": "sha256:bdfd3abce4597fb35b3c75344c42369997dc5888bd9043652de796d9b60f5ab9"
+            }
+          ],
+          "member_count": 9,
+          "closure_hash": "sha256:3a4c9056d1b3e54016221784f9165cfe6e0586f292f2e3ed93f27fdaef3b8d3e"
         }
       ]
     },
@@ -420,6 +883,6 @@
         }
       }
     },
-    "snapshot_hash": "sha256:081333acd3992d6eaf247d6720136fddc545f9fc89a704e398648bd009ac38b4"
+    "snapshot_hash": "sha256:99ed6fb5f3ef039dbe4f251e5603d27ff3a4baf33c789dbaafd551863549ba25"
   }
 }
