@@ -6,7 +6,7 @@
   },
   "version": 4,
   "domain_separator": "icarus:workflow-compiler-semantic-correction-golden-draft-manifest:4\n",
-  "hash": "sha256:25b561d28a2dc4515378d2879ae588751d73397f13e72e6791cf3506453fe288",
+  "hash": "sha256:d14d2e8693acd6293bb838c8997e4f203dcf706ed097189e1f4f5da87865e179",
   "payload": {
     "format": "icarus.workflow-compiler-golden-draft-manifest/4",
     "bundle_version": "working-g2",
@@ -17,13 +17,13 @@
     "production_reachable": false,
     "draft_status": "working_not_review_candidate",
     "cases_ref": "conformance/draft/resolved-g2-semantic-correction-v4/golden-draft-cases@4.json",
-    "cases_hash": "sha256:c0e5555919c2d723b4f3c2595582f087a47299bd5a87686ec813114531a2a709",
+    "cases_hash": "sha256:e2d4000eeeb77908460b2ca7a726d9bcb3a3194ddb16f47b756932aa15d44ee4",
     "semantic_review_handoff_ref": "conformance/draft/resolved-g2-semantic-correction-v4/semantic-review-handoff@2.json",
-    "semantic_review_handoff_hash": "sha256:13263f69278bb38c7016b9a34998bb597db1cbc0643f0d0bcff073ad71f384d5",
+    "semantic_review_handoff_hash": "sha256:cdd9fecf9b3eee772fbf9ebebfc55123945e99f6878643d74a8fc1f97ab70c93",
     "artifact_inventory_ref": "conformance/draft/resolved-g2-semantic-correction-v4/artifact-inventory@2.json",
-    "artifact_inventory_hash": "sha256:bae338a1447451089b39c1087718adcfead0f3ab5a59c7c6c88a3bf8541fb9a1",
+    "artifact_inventory_hash": "sha256:c2f39d4b437040f1d1ec069d1bd9bd400095dad4957fdd1d42b353c78b499f6a",
     "semantic_correction_contract_ref": "conformance/compiler-semantic-correction/contract-pack-compiler-semantic-correction.json",
-    "semantic_correction_contract_hash": "sha256:3bfaff4acd658a826e2b51f7fd53e1f938a6b0b1e78a2b6b696597d7b4a05124",
+    "semantic_correction_contract_hash": "sha256:61f476db1b55cbea2368fa54817c72c7c3069835c184e66e17cf0926b4fad47e",
     "semantic_correction_input_manifest_ref": "conformance/draft/semantic-correction-v4/semantic-correction-input-manifest@1.json",
     "semantic_correction_input_manifest_hash": "sha256:83080db01627d5b42046ce0a2e229ee3f4099208a8bfa2b028fc9b6241272dc8",
     "candidate_root_ref": "conformance/candidate/g2-semantic-correction-v2/contract-pack-g2-semantic-correction-candidate.json",
@@ -69,6 +69,6 @@
     "negative_case_count": 29,
     "generated_artifact_count": 4,
     "generator_source_raw_hash": "sha256:ab739b8fa4e0ebb24047d19d426f6385d1dd34e16e9cc140995241b5fecac572",
-    "manifest_hash": "sha256:bff9fd11897475e075cb34cdcb72123f0873bb6f4f85c07b338c6c8b2efe411c"
+    "manifest_hash": "sha256:0edd25aa5efca13b2a406881e863f1be6d497ff71e48968c5db8026ae8ba4dd6"
   }
 }

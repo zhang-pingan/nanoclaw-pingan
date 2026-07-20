@@ -179,7 +179,7 @@ function buildDecision(): ContractArtifactEnvelope {
         mutable_current_artifacts: true,
         publishable: false,
         production_reachable: false,
-        history_owner: 'git_and_review_worksheet',
+        history_owner: 'git_history_only',
         corrected_case_count: 40,
         per_case_isolated_snapshot_required: true,
         actual_candidate_role: 'actual_compiler_output_not_golden_oracle',
@@ -207,8 +207,6 @@ function buildDecision(): ContractArtifactEnvelope {
           'sha256:c78a12ffdec353d3d3ec40350aeb6676e991e92cd5d6645946d5e21fcb013a77',
         g2_candidate_manifest:
           'sha256:c471bcf03ea23ce2d84d5a785b026ae222ec47f7d5fd5948bb8e19c89904b1d2',
-        resolved_draft_v3:
-          'sha256:659caf9b4add7027116bf780c83b2b85dc95ca0baae9cb8b9840d760a785132b',
       },
     },
   );
@@ -298,8 +296,6 @@ function expectedFiles(): Map<string, string> {
         'sha256:776d516ba6c8c73a7da33895a4f4f3680054a1e93fbf056acdfc3ec36550b324',
       construction_seed_g2_root:
         'sha256:c78a12ffdec353d3d3ec40350aeb6676e991e92cd5d6645946d5e21fcb013a77',
-      review_history_draft_v3_root:
-        'sha256:659caf9b4add7027116bf780c83b2b85dc95ca0baae9cb8b9840d760a785132b',
       artifact_inventory: [...files.entries()].map(([file, contents]) => ({
         path: file,
         raw_sha256: rawHash(Buffer.from(contents, 'utf8')),

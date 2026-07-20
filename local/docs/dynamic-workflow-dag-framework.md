@@ -2990,7 +2990,7 @@ G0.3 Compiled IR v1与G0.8 Golden Draft v1的manifest、schemas、cases、raw by
 
 ### R-017：G2 Working Semantic Correction 决议
 
-本节关闭Draft v3/v4独立human review暴露的Compiler/case合同歧义，并由当前`icarus.workflow-compiler-semantic-correction-contract/1`机器合同绑定。该合同、逐case输入、actual candidate和review bundle在G2 Seal前属于施工期`WORKING`集合：它们计算精确identity并接受byte-for-byte current check，但可以在同一路径重新生成，不形成additive发布链，不是Published Registry resource，也不能被Production Run引用。Draft v1-v4的历史判断由Git提交和worksheet保留；它们不是当前Working Contract的依赖根。R-016、G0.8和任何sealed artifact不由本节静默改写；若Working修正需要改变仍被当前实现消费的上游合同，必须显式reopen对应Gate并重建全部下游current证据。
+本节关闭Draft v3/v4独立human review暴露的Compiler/case合同歧义，并由当前`icarus.workflow-compiler-semantic-correction-contract/1`机器合同绑定。该合同、逐case输入、actual candidate和review bundle在G2 Seal前属于施工期`WORKING`集合：它们计算精确identity并接受byte-for-byte current check，但可以在同一路径重新生成，不形成additive发布链，不是Published Registry resource，也不能被Production Run引用。Draft v1-v4的历史判断只由Git commit history保留（Draft v3 decision=`604b178`，Draft v4 findings=`d80dc47`）；它们不是当前Working Contract的依赖根。R-016、G0.8和任何sealed artifact不由本节静默改写；若Working修正需要改变仍被当前实现消费的上游合同，必须显式reopen对应Gate并重建全部下游current证据。
 
 Closed Source IR `/1`的control/data endpoint只包含普通scope-local `NodeId`和`PortName`字段，不存在child path、qualified Node ID或`::`分隔语法。任意字符串（包括`child::child_done`）都先按完整普通Node ID查找；不存在时唯一诊断为`graph_endpoint_not_found`。Parent/Child只能通过Owner Node的typed input/output port通信，因此合法closed Source IR没有可表达的cross-scope edge。`graph_cross_scope_edge`在Error Catalog v2中保留为historical/reserved code，但其`source_reachability=unreachable_in_closed_source_ir_v1`，不得由Production Compiler对Source `/1`产生；未来若新增可表达scope-qualified endpoint的Source revision，必须先发布新Source schema/format和Error Catalog version。
 
@@ -3027,7 +3027,7 @@ Runtime v1重构期间使用临时施工生命周期：
 WORKING -> RC_REVIEW -> BASELINE_ACCEPTED -> CONSTRUCTION_ARCHIVED
 ```
 
-- `WORKING`：current Contract、Schema、Compiler、Fixture与生成物可在原路径修改和重建；identity用于确定性、依赖一致性和影响检测，不承诺历史兼容。失败或被拒的中间候选只由Git/worksheet保留，不进入active Contract graph、默认current check、Registry retention或Production启动。
+- `WORKING`：current Contract、Schema、Compiler、Fixture与生成物可在原路径修改和重建；identity用于确定性、依赖一致性和影响检测，不承诺历史兼容。失败或被拒的中间候选只由Git commit history保留，不进入active Contract graph、默认current check、Registry retention或Production启动。
 - `RC_REVIEW`：只能由显式`prepare-rc`从测试通过且边界干净的Working集合生成。RC绑定完整source/toolchain/compiler/input/candidate hash；任一绑定值变化立即使RC失效并回到`WORKING`。独立review只审当前RC，Production Compiler actual不得成为expected oracle。
 - `BASELINE_ACCEPTED`：完整fresh independent review通过后才能写`GoldenSemanticReview`并运行`golden-seal`。G3-G9若发现基础语义缺口，必须显式reopen受影响Gate、使当前未投产baseline失效并重建下游证据，不能伪装成兼容修补。
 - `CONSTRUCTION_ARCHIVED`：G0-G9、同一release完整验收和G9 activation完成后执行S39归档。施工状态、Draft历史、Markdown coverage和Gate provenance退出默认开发/CI；Git tag与可选archive audit保存历史。

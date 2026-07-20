@@ -60,8 +60,12 @@ describe('G2 working semantic correction Contract', () => {
       mutable_current_artifacts: true,
       publishable: false,
       production_reachable: false,
+      history_owner: 'git_history_only',
       human_review_status: 'not_requested_until_prepare_rc',
     });
+    expect(decision.construction_seed_inputs).not.toHaveProperty(
+      'resolved_draft_v3',
+    );
     expect(
       artifact(COMPILER_SEMANTIC_CORRECTION_MANIFEST_PATH).payload,
     ).toMatchObject({
@@ -70,6 +74,9 @@ describe('G2 working semantic correction Contract', () => {
       publishable: false,
       production_reachable: false,
     });
+    expect(
+      artifact(COMPILER_SEMANTIC_CORRECTION_MANIFEST_PATH).payload,
+    ).not.toHaveProperty('review_history_draft_v3_root');
   });
 
   it('records the unique reachability and identity conclusions', () => {

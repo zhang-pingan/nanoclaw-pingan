@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-compiler-semantic-correction-contract-artifact:1\n",
-  "hash": "sha256:53e24e8649aca872da87862e084925073d906c89a6c6d280152f50532331acb1",
+  "hash": "sha256:68e0a48bd1570b8b8989b79024bd6bf82604c9500475a0d1f170f9b1e5dc1979",
   "payload": {
     "gate": "G2",
     "correction_kind": "working_semantic_correction",
@@ -95,7 +95,7 @@
       "mutable_current_artifacts": true,
       "publishable": false,
       "production_reachable": false,
-      "history_owner": "git_and_review_worksheet",
+      "history_owner": "git_history_only",
       "corrected_case_count": 40,
       "per_case_isolated_snapshot_required": true,
       "actual_candidate_role": "actual_compiler_output_not_golden_oracle",
@@ -110,13 +110,12 @@
       "g3_through_g9": "not_started"
     },
     "spec_section_heading": "### R-017：G2 Working Semantic Correction 决议",
-    "spec_section_raw_sha256": "sha256:1e712fa40bdce855c867349ff0ba3da1889deeae726390d7897a3d17a93aeac0",
-    "spec_section_semantic_hash": "sha256:aa8f9d6d08e97c7cd1c3aa2c3a7cdab2d62fa500527eaa35cc7567829e66719e",
+    "spec_section_raw_sha256": "sha256:1b9de043b73e7be273fc1c861d2548ec66114b5511f17d0d0c41751bef5c2fc6",
+    "spec_section_semantic_hash": "sha256:6eed98a3f2599795c43985d25c48823080d952f6a0971f7feb43a10e6b67684e",
     "construction_seed_inputs": {
       "r016_root": "sha256:776d516ba6c8c73a7da33895a4f4f3680054a1e93fbf056acdfc3ec36550b324",
       "g2_compiler_root": "sha256:c78a12ffdec353d3d3ec40350aeb6676e991e92cd5d6645946d5e21fcb013a77",
-      "g2_candidate_manifest": "sha256:c471bcf03ea23ce2d84d5a785b026ae222ec47f7d5fd5948bb8e19c89904b1d2",
-      "resolved_draft_v3": "sha256:659caf9b4add7027116bf780c83b2b85dc95ca0baae9cb8b9840d760a785132b"
+      "g2_candidate_manifest": "sha256:c471bcf03ea23ce2d84d5a785b026ae222ec47f7d5fd5948bb8e19c89904b1d2"
     }
   }
 }
