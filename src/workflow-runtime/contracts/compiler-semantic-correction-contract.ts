@@ -3,7 +3,7 @@ import fs from 'fs';
 import path from 'path';
 
 import { parseContractArtifactEnvelope } from './artifact.js';
-import { calculateArtifactHash } from './hash.js';
+import { calculateArtifactHash, domainSeparatedSha256 } from './hash.js';
 import { assertJsonObject, strictParseJsonBytes } from './strict-json.js';
 import type {
   ContractArtifactEnvelope,
@@ -13,6 +13,7 @@ import type {
 } from './types.js';
 
 const contractsRoot = import.meta.dirname;
+const projectRoot = path.resolve(contractsRoot, '../../..');
 
 export const COMPILER_SEMANTIC_CORRECTION_ROOT =
   'conformance/compiler-semantic-correction';
@@ -48,12 +49,8 @@ const DECISION_DOMAIN =
 const ERROR_CATALOG_DOMAIN = 'icarus:workflow-compiler-error-catalog:2\n';
 const ROOT_DOMAIN =
   'icarus:workflow-contract-pack-compiler-semantic-correction:1\n';
-// These opaque creation identities stay frozen; current semantics are the
-// closed payload below, not mutable Markdown or repository history.
-const CONTRACT_SPEC_SECTION_RAW_SHA256 =
-  'sha256:1b9de043b73e7be273fc1c861d2548ec66114b5511f17d0d0c41751bef5c2fc6';
-const CONTRACT_SPEC_SECTION_SEMANTIC_HASH =
-  'sha256:6eed98a3f2599795c43985d25c48823080d952f6a0971f7feb43a10e6b67684e';
+const SPEC_SECTION_DOMAIN =
+  'icarus:workflow-compiler-semantic-correction-spec-section:1\n';
 
 function absoluteContractPath(relativePath: string): string {
   const absolute = path.resolve(contractsRoot, relativePath);
@@ -97,7 +94,21 @@ function artifact(
   return value;
 }
 
-function buildDecision(): ContractArtifactEnvelope {
+function specSection(document?: string): string {
+  const source =
+    document ??
+    fs.readFileSync(
+      path.join(projectRoot, 'local/docs/dynamic-workflow-dag-framework.md'),
+      'utf8',
+    );
+  const start = source.indexOf(COMPILER_SEMANTIC_CORRECTION_SPEC_HEADING);
+  if (start < 0) throw new Error('R-017 spec section is missing');
+  const end = source.indexOf('\n### ', start + 1);
+  if (end < 0) throw new Error('R-017 spec section is not closed');
+  return source.slice(start, end).trimEnd();
+}
+
+function buildDecision(section: string): ContractArtifactEnvelope {
   return artifact(
     'icarus.workflow-compiler-semantic-correction-contract/1',
     'icarus.workflow-compiler-semantic-correction-contract',
@@ -185,8 +196,11 @@ function buildDecision(): ContractArtifactEnvelope {
         g3_through_g9: 'not_started',
       },
       spec_section_heading: COMPILER_SEMANTIC_CORRECTION_SPEC_HEADING,
-      spec_section_raw_sha256: CONTRACT_SPEC_SECTION_RAW_SHA256,
-      spec_section_semantic_hash: CONTRACT_SPEC_SECTION_SEMANTIC_HASH,
+      spec_section_raw_sha256: rawHash(Buffer.from(section, 'utf8')),
+      spec_section_semantic_hash: domainSeparatedSha256(
+        SPEC_SECTION_DOMAIN,
+        section,
+      ),
       construction_seed_inputs: {
         r016_root:
           'sha256:776d516ba6c8c73a7da33895a4f4f3680054a1e93fbf056acdfc3ec36550b324',
@@ -257,8 +271,8 @@ function buildErrorCatalogV2(): ContractArtifactEnvelope {
   );
 }
 
-function expectedFiles(): Map<string, string> {
-  const decision = buildDecision();
+function expectedFiles(section = specSection()): Map<string, string> {
+  const decision = buildDecision(section);
   const errorCatalog = buildErrorCatalogV2();
   const files = new Map<string, string>([
     [COMPILER_SEMANTIC_CORRECTION_DECISION_PATH, render(decision)],
@@ -330,6 +344,12 @@ export function buildCompilerSemanticCorrectionContractArtifactsForTest(): Map<
   return expectedFiles();
 }
 
+export function checkCompilerSemanticCorrectionContractAgainstSpecDocumentForTest(
+  document: string,
+): ContractArtifactEnvelope {
+  return checkExpectedFiles(expectedFiles(specSection(document)));
+}
+
 export function generateCompilerSemanticCorrectionContract(): ContractArtifactEnvelope {
   validateBoundary();
   const files = expectedFiles();
@@ -348,7 +368,13 @@ export function generateCompilerSemanticCorrectionContract(): ContractArtifactEn
 
 export function checkCompilerSemanticCorrectionContract(): ContractArtifactEnvelope {
   validateBoundary();
-  const files = expectedFiles();
+  return checkExpectedFiles(expectedFiles());
+}
+
+function checkExpectedFiles(
+  files: Map<string, string>,
+): ContractArtifactEnvelope {
+  validateBoundary();
   if (
     JSON.stringify(listFiles()) !== JSON.stringify([...files.keys()].sort())
   ) {

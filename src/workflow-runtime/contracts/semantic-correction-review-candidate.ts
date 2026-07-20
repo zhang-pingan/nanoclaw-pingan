@@ -44,13 +44,13 @@ export const SEMANTIC_CORRECTION_REVIEW_CANDIDATE_MANIFEST_PATH = `${SEMANTIC_CO
 
 export const EXPECTED_G2_WORKING_ROOTS = {
   contract:
-    'sha256:61f476db1b55cbea2368fa54817c72c7c3069835c184e66e17cf0926b4fad47e',
+    'sha256:a2d8bcab971d1db75aad17d152c7c616371a4ceeb8d52f408674d744cf7866b8',
   input:
     'sha256:83080db01627d5b42046ce0a2e229ee3f4099208a8bfa2b028fc9b6241272dc8',
   candidate:
     'sha256:54ba5b80b92a9c053e4439964fbea03326c9c8b7fc3cc3fe244dffa2144d341a',
   working_review:
-    'sha256:d14d2e8693acd6293bb838c8997e4f203dcf706ed097189e1f4f5da87865e179',
+    'sha256:a254eec500006f1c7210835607cf0c20c9c6cc0647ae06a43ef2943d169d5c92',
 } as const;
 
 const CASES_DOMAIN = 'icarus:workflow-compiler-g2-review-candidate-cases:1\n';

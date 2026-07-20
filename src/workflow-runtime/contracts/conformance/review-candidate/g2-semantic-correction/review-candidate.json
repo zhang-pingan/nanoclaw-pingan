@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-compiler-g2-review-candidate:1\n",
-  "hash": "sha256:bd144c45c9600d2a62efe9d70ed664f70d92095ce7c782af2474ff96d560818f",
+  "hash": "sha256:beb8669a054c95e0796ddf998c87c0ddc2e90556f95192a8baad6dd247f3e577",
   "payload": {
     "candidate_id": "g2-semantic-correction",
     "gate": "G2",
@@ -25,8 +25,8 @@
           "version": "1.0.0"
         },
         "version": 1,
-        "semantic_hash": "sha256:61f476db1b55cbea2368fa54817c72c7c3069835c184e66e17cf0926b4fad47e",
-        "raw_bytes_hash": "sha256:9bda3b155456ba2449cd5f1dc7c4229f359c02371777325c73729cdf17d51454",
+        "semantic_hash": "sha256:a2d8bcab971d1db75aad17d152c7c616371a4ceeb8d52f408674d744cf7866b8",
+        "raw_bytes_hash": "sha256:c13247fc99cc4a2a45fde35ad35e3138d88fda1e86beb4c898a055b4509c7e82",
         "construction_phase": "WORKING",
         "publishable": false,
         "production_reachable": false
@@ -67,8 +67,8 @@
           "version": "4.0.0-working"
         },
         "version": 4,
-        "semantic_hash": "sha256:d14d2e8693acd6293bb838c8997e4f203dcf706ed097189e1f4f5da87865e179",
-        "raw_bytes_hash": "sha256:c82fc73c10e7368033ebf192b3502021ce42ccebf20614cf5cfdddcf81158e2a",
+        "semantic_hash": "sha256:a254eec500006f1c7210835607cf0c20c9c6cc0647ae06a43ef2943d169d5c92",
+        "raw_bytes_hash": "sha256:91f7dca600f0ddf19a3381ac34061fca1ce8508ce4ca50012910ddf551a83172",
         "construction_phase": "WORKING",
         "publishable": false,
         "production_reachable": false
@@ -291,8 +291,8 @@
     },
     "generator_source": {
       "path": "src/workflow-runtime/contracts/semantic-correction-review-candidate.ts",
-      "raw_bytes_hash": "sha256:19f6bc2348dbcc8be13de56fbc039789ba975f11ee1d8fceceb4f30def8ec5be"
+      "raw_bytes_hash": "sha256:de40a4caacf3c8326ebd5a64f856a4d57367c1c9b3e2f383ef6ef8a8696d7446"
     },
-    "review_candidate_hash": "sha256:06ab2fc9edad1e7d526bc4162ae68ce262b4b0a6c817438e7a0786212cb24b09"
+    "review_candidate_hash": "sha256:3327e09160e16126f0c26cf5960f0da0127b6fc6c8609ff4a8ef5e7323c47ebf"
   }
 }

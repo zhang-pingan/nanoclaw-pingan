@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { parseContractArtifactEnvelope } from './artifact.js';
 import {
   buildCompilerSemanticCorrectionContractArtifactsForTest,
+  checkCompilerSemanticCorrectionContractAgainstSpecDocumentForTest,
   checkCompilerSemanticCorrectionContract,
   COMPILER_ERROR_CATALOG_V2_PATH,
   COMPILER_SEMANTIC_CORRECTION_DECISION_PATH,
@@ -16,6 +17,28 @@ import {
 import { strictParseJsonBytes } from './strict-json.js';
 
 const contractsRoot = import.meta.dirname;
+const projectRoot = path.resolve(contractsRoot, '../../..');
+const architecturePath = path.join(
+  projectRoot,
+  'local/docs/dynamic-workflow-dag-framework.md',
+);
+const specHeading = '### R-017：G2 Working Semantic Correction 决议';
+const specDomain =
+  'icarus:workflow-compiler-semantic-correction-spec-section:1\n';
+
+function currentR017Section(document: string): string {
+  const start = document.indexOf(specHeading);
+  if (start < 0) throw new Error('Test could not find R-017');
+  const end = document.indexOf('\n### ', start + 1);
+  if (end < 0) throw new Error('Test could not find the end of R-017');
+  return document.slice(start, end).trimEnd();
+}
+
+function sha256(parts: Array<[string, BufferEncoding]>): string {
+  const hash = crypto.createHash('sha256');
+  for (const [part, encoding] of parts) hash.update(part, encoding);
+  return `sha256:${hash.digest('hex')}`;
+}
 
 function treeDigest(): string {
   const root = path.join(contractsRoot, COMPILER_SEMANTIC_CORRECTION_ROOT);
@@ -79,12 +102,48 @@ describe('G2 working semantic correction Contract', () => {
     ).not.toHaveProperty('review_history_draft_v3_root');
   });
 
-  it('does not make mutable Markdown or Git history a current dependency', () => {
+  it('binds the generated Contract to the independently hashed current R-017 section', () => {
+    const document = fs.readFileSync(architecturePath, 'utf8');
+    const section = currentR017Section(document);
+    const generated = new Map(
+      buildCompilerSemanticCorrectionContractArtifactsForTest(),
+    );
+    const decision = parseContractArtifactEnvelope(
+      strictParseJsonBytes(
+        Buffer.from(
+          generated.get(COMPILER_SEMANTIC_CORRECTION_DECISION_PATH) ?? '',
+          'utf8',
+        ),
+      ),
+    ).payload;
+
+    expect(decision.spec_section_heading).toBe(specHeading);
+    expect(decision.spec_section_raw_sha256).toBe(sha256([[section, 'utf8']]));
+    expect(decision.spec_section_semantic_hash).toBe(
+      sha256([
+        [specDomain, 'ascii'],
+        [JSON.stringify(section), 'utf8'],
+      ]),
+    );
+  });
+
+  it('detects current R-017 spec drift and has no Git metadata dependency', () => {
+    const document = fs.readFileSync(architecturePath, 'utf8');
+    const section = currentR017Section(document);
+    const changedDocument = document.replace(
+      section,
+      `${section}\n\nContract drift regression sentinel.`,
+    );
+    expect(() =>
+      checkCompilerSemanticCorrectionContractAgainstSpecDocumentForTest(
+        changedDocument,
+      ),
+    ).toThrow(/Semantic correction Contract drift/);
+
     const source = fs.readFileSync(
       path.join(contractsRoot, 'compiler-semantic-correction-contract.ts'),
       'utf8',
     );
-    expect(source).not.toContain('dynamic-workflow-dag-framework.md');
     expect(source).not.toContain('git log');
     expect(source).not.toContain('git show');
     expect(source).not.toContain('/.git/');

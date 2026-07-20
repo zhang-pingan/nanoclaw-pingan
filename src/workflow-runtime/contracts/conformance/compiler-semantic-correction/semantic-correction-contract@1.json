@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-compiler-semantic-correction-contract-artifact:1\n",
-  "hash": "sha256:68e0a48bd1570b8b8989b79024bd6bf82604c9500475a0d1f170f9b1e5dc1979",
+  "hash": "sha256:03625b93f29fc04b5cd2f12c5d3e3f5c06b728ef4ba338c0aca818d5e25d4631",
   "payload": {
     "gate": "G2",
     "correction_kind": "working_semantic_correction",
@@ -110,8 +110,8 @@
       "g3_through_g9": "not_started"
     },
     "spec_section_heading": "### R-017：G2 Working Semantic Correction 决议",
-    "spec_section_raw_sha256": "sha256:1b9de043b73e7be273fc1c861d2548ec66114b5511f17d0d0c41751bef5c2fc6",
-    "spec_section_semantic_hash": "sha256:6eed98a3f2599795c43985d25c48823080d952f6a0971f7feb43a10e6b67684e",
+    "spec_section_raw_sha256": "sha256:b7988bea9205120fc071d900d48e4f76fd2805b45d6669661a6b6e8e09acf527",
+    "spec_section_semantic_hash": "sha256:7b198f61df2bb321837937c44bbb442dd99215a6dd68fa20f4b0f3c6a9df8f38",
     "construction_seed_inputs": {
       "r016_root": "sha256:776d516ba6c8c73a7da33895a4f4f3680054a1e93fbf056acdfc3ec36550b324",
       "g2_compiler_root": "sha256:c78a12ffdec353d3d3ec40350aeb6676e991e92cd5d6645946d5e21fcb013a77",

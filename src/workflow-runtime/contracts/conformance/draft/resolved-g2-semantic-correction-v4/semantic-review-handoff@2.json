@@ -6,14 +6,14 @@
   },
   "version": 2,
   "domain_separator": "icarus:workflow-compiler-semantic-correction-review-handoff:2\n",
-  "hash": "sha256:cdd9fecf9b3eee772fbf9ebebfc55123945e99f6878643d74a8fc1f97ab70c93",
+  "hash": "sha256:7f404c56d064a3b4fb699c3dda208f66e37f4c4f8132fe1ead1aca5e0ca1852d",
   "payload": {
     "format": "icarus.workflow-compiler-semantic-review-handoff/2",
     "handoff_version": "working-g2",
     "construction_phase": "WORKING",
     "publishable": false,
     "cases_ref": "conformance/draft/resolved-g2-semantic-correction-v4/golden-draft-cases@4.json",
-    "cases_hash": "sha256:e2d4000eeeb77908460b2ca7a726d9bcb3a3194ddb16f47b756932aa15d44ee4",
+    "cases_hash": "sha256:fb9080d3e0396a24bfcfa9d83d945ca6c3fbc2bc47c556eac2357d57f07f0b4e",
     "review_owner": "human:local-owner",
     "review_scope": "not_requested_until_prepare_rc",
     "review_decision_status": "not_requested_working",
@@ -426,6 +426,6 @@
         "human_judgment": null
       }
     ],
-    "handoff_hash": "sha256:24b4febd2c4599649e309465e0c2b5805a72bb8454bb1f2030070a241a083b32"
+    "handoff_hash": "sha256:bd84ec92199944b554ebd3d3695267bc77c82901d0201178c38be3a94e377aac"
   }
 }

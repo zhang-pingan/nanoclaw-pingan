@@ -6,7 +6,7 @@
   },
   "version": 4,
   "domain_separator": "icarus:workflow-compiler-semantic-correction-golden-draft-cases:4\n",
-  "hash": "sha256:e2d4000eeeb77908460b2ca7a726d9bcb3a3194ddb16f47b756932aa15d44ee4",
+  "hash": "sha256:fb9080d3e0396a24bfcfa9d83d945ca6c3fbc2bc47c556eac2357d57f07f0b4e",
   "payload": {
     "format": "icarus.workflow-compiler-golden-draft-cases/4",
     "bundle_version": "working-g2",
@@ -15,7 +15,7 @@
     "production_reachable": false,
     "draft_status": "working_not_review_candidate",
     "semantic_correction_contract_ref": "conformance/compiler-semantic-correction/contract-pack-compiler-semantic-correction.json",
-    "semantic_correction_contract_hash": "sha256:61f476db1b55cbea2368fa54817c72c7c3069835c184e66e17cf0926b4fad47e",
+    "semantic_correction_contract_hash": "sha256:a2d8bcab971d1db75aad17d152c7c616371a4ceeb8d52f408674d744cf7866b8",
     "semantic_correction_input_manifest_ref": "conformance/draft/semantic-correction-v4/semantic-correction-input-manifest@1.json",
     "semantic_correction_input_manifest_hash": "sha256:83080db01627d5b42046ce0a2e229ee3f4099208a8bfa2b028fc9b6241272dc8",
     "candidate_root_ref": "conformance/candidate/g2-semantic-correction-v2/contract-pack-g2-semantic-correction-candidate.json",
@@ -2571,6 +2571,6 @@
         "human_judgment": null
       }
     ],
-    "catalog_hash": "sha256:7fa8c03823669186da3b5831218eb51db245928ad4b8d10f42057f34a9c0b2ed"
+    "catalog_hash": "sha256:a8ac280dfa8a2912a12af5caf5453b16ad93aaa1ab9f10e0027963c6a293e910"
   }
 }
