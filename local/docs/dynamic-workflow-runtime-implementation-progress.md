@@ -1,9 +1,9 @@
 # Dynamic Workflow Runtime 实施进度
 
 > **状态**: IN_PROGRESS
-> **当前 Gate**: G2 Compiler / Sealed Golden（IN_PROGRESS；additive semantic correction与Draft v4已发布，fresh independent human review/seal pending）
-> **下一施工切片**: 仅执行Draft v4 fresh independent human semantic review并逐case记录worksheet judgment；不得复用Draft v3 decision，不得approval/seal，不得开始G3+
-> **最后更新**: 2026-07-17
+> **当前 Gate**: G2 Compiler / Sealed Golden（IN_PROGRESS；Draft v4 fresh review已完成并为CHANGES_REQUESTED，approval/seal未开始）
+> **下一施工切片**: 仅修正Draft v4的D4-SR-001至D4-SR-007并additive发布Draft v5；不得approval/seal，不得开始G3+
+> **最后更新**: 2026-07-19
 > **规范权威**: `local/docs/dynamic-workflow-dag-framework.md`
 
 ## 文档职责
@@ -106,7 +106,7 @@ Agent Container 运行于独立 VM，Node identity 由 VM image gate 保证；�
 | --- | --- | --- | --- | --- |
 | G0 Contract Pack / Static Baseline | `DONE` | 无 | G0.1-G0.9 historical root + G0.10 additive Capacity Admin/publication/CAP/Logical Schema/coverage root | 本原子提交 |
 | G1 DDL / Store | `DONE` | G0.10 | closed Schema Dependency Manifest + frozen executable migration/Schema Manifest + unified Connection Factory + Store lifecycle/transaction host + real-file SQLite/identity gates | 本原子提交（dependency identity repair） |
-| G2 Compiler / Golden | `IN_PROGRESS` | G0.1-G0.9；R-016 spec/Contract repair；G0.10 不改变 Compiler/Plan 语义 | Draft v3 40/40 `CHANGES_REQUESTED`历史保留；additive Contract/candidate/Draft v4已发布且0/40 pending fresh review；sealed Golden仍pending | 本原子提交（additive semantic correction） |
+| G2 Compiler / Golden | `IN_PROGRESS` | G0.1-G0.9；R-016 spec/Contract repair；G0.10 不改变 Compiler/Plan 语义 | Draft v3历史保留；Draft v4 fresh review为14 `PASS` / 26 `CHANGES_REQUESTED`；expected bytes 0/40，sealed Golden仍pending | 本原子提交（Draft v4 fresh review） |
 | G3 Registry / Authoring / Publish | `NOT_READY` | G1 + G2 | manifest/authoring/publish/retention/ABI fixtures | - |
 | G4 Test Bootstrap | `NOT_READY` | G1 + G2 + G3 | isolated bootstrap profile | - |
 | G5 Basic Runtime | `NOT_READY` | G4 | T0-T6e model/fault fixtures | - |
@@ -121,8 +121,8 @@ Agent Container 运行于独立 VM，Node identity 由 VM image gate 保证；�
 | --- | --- | --- | --- |
 | I0 | Publish、Registry、Recipe 与执行版本固定 | `NOT_READY` | G3 起 |
 | I1 | Intake、Routing、幂等创建、Child provenance、Claim | `NOT_READY` | G5 起 |
-| I2 | Definition、State lowering、Context、transition | `IN_PROGRESS` | static lowering/case input additive correction已发布；Draft v4 fresh review/seal pending，Runtime transition仍从G5起 |
-| I3 | Source/Compiled IR、Port、Compiler | `IN_PROGRESS` | R-017 Contract、Compiler v3、40-case candidate与Draft v4已发布；fresh review/seal pending |
+| I2 | Definition、State lowering、Context、transition | `IN_PROGRESS` | Draft v4 review发现static lowering terminal topology缺口；additive Draft v5 correction pending，Runtime transition仍从G5起 |
+| I3 | Source/Compiled IR、Port、Compiler | `IN_PROGRESS` | Draft v4 fresh review完成但26 case需修正；typed child output与dependency closure等Draft v5 correction pending |
 | I4 | Runtime Store、SQLite relation、Value/Blob、migration | `IN_PROGRESS` | G1 migration/Schema Manifest/Store Base/Connection Factory DONE；Value/Blob 从 G3 起 |
 | I5 | Graph 状态机、reconcile、Scheduler、Ledger | `NOT_READY` | G5 起 |
 | I6 | Delegation/System、Capability Effect、Outbox | `NOT_READY` | G5 起 |
@@ -163,11 +163,41 @@ G0.1-G0.9 已按当时规范完成并保留历史 identity。后续确认的 Cap
 | --- | --- | --- | --- | --- |
 | G2.1 | R-016 Spec/Contract Repair | `DONE` | lowering outcome、Compiled IR v2、完整 case result target、exact input binding requirement与 blocked Draft v2冻结 | 本原子提交（历史） |
 | G2.2 | Production Compiler / Exact Case-Input Identity | `DONE` | locked strict parser、closed validation、snapshot binding、static lowering、Plan normalization、program/proof/hash/diagnostic、真实 toolchain与40个actual candidate results | 本原子提交 |
-| G2.3 | Resolved Draft / Semantic Review / Seal | `IN_PROGRESS` | Draft v3 40/40 `CHANGES_REQUESTED`历史保留；additive Draft v4与fresh-review handoff已发布，0/40 pending；approval/seal仍未开始 | 本原子提交（additive semantic correction） |
+| G2.3 | Resolved Draft / Semantic Review / Seal | `IN_PROGRESS` | Draft v3历史保留；Draft v4 fresh review完成为14 `PASS` / 26 `CHANGES_REQUESTED`，expected bytes仍0/40；approval/seal未开始 | 本原子提交（Draft v4 fresh review） |
+
+## G2 Draft v4 Fresh Independent Human Semantic Review
+
+**状态**：Draft v4 fresh independent human semantic review为`DONE / CHANGES_REQUESTED`。G2.3与G2总Gate保持`IN_PROGRESS`，R-017保持`OPEN_BLOCKING_G2`，G3-G9保持`NOT_READY`。
+
+**工作包**：I2/I3，合同验证联动I11。本切片仅由`human:local-owner`独立复核新的40份raw source、逐case snapshot、hand-authored review input与actual comparison result，并在worksheet逐case记录新判断。没有复用Draft v3 decision，没有把actual Compiler result视为expected oracle，没有修改Draft v1/v2/v3/v4、旧candidate、Contract、Compiler、snapshot或任何冻结identity。
+
+Fresh review结论：
+
+- 40/40 raw source、40/40 isolated snapshot、40/40 hand-authored review input与40/40 actual comparison result均独立逐项检查；actual为11 compiled / 29 rejected。
+- 29/29 negative diagnostic与11/11 positive sparse assertion机械匹配，但只作为comparison evidence，不构成semantic approval。
+- 新worksheet-level human judgment为40/40：14 `PASS` / 26 `CHANGES_REQUESTED`，pending=0；这些判断没有从Draft v3复制。
+- 独立发现D4-SR-001至D4-SR-007：static lowering Plan缺少`success/failure` terminal nodes；structural child owner没有generated typed completion/result output ports；Map items不能赋值给child `item`；20个capability-bearing snapshot缺少可枚举dependency closure及`fixture.executor`等reachable execution dependencies；Wait snapshot缺少authorization dependency；policy-escalation包含多项invalidity；三个Recipe case仍有缺失Definition binding或secondary set mismatch。
+- Independently authored expected full case-result bytes保持0/40。`GoldenSemanticReview`、approval、签名、`golden-seal`、sealed write与CI sealed replay均为0/not run。
+
+逐case finding、judgment basis及14/26完整映射记录在`local/docs/dynamic-workflow-g2-independent-semantic-review-worksheet.md`的“Draft v4 Fresh Independent Human Semantic Review”段。本切片不向Draft manifest或其他frozen artifact回写worksheet decision。
+
+验证与边界证据：
+
+| 命令/证据 | 结果 |
+| --- | --- |
+| Draft v4 review coverage scan | PASS；raw/snapshot/review input/actual comparison均40/40；human judgment 40/40，14 `PASS` / 26 `CHANGES_REQUESTED` |
+| managed `npm run test:g2` | PASS；5 files / 26 tests；40-case replay、review targets与只读tree checks通过；这是机械合同验证，不消解D4-SR findings |
+| managed `npm run test:g2:contract` | PASS；2 files / 10 tests；R-016 historical与R-017 additive Contract保持通过 |
+| managed `npm run test:g2:draft` | PASS；2 files / 10 tests；Draft v3/v4 checker保持只读 |
+| managed `npm run contracts:check` | PASS；Draft v4 root=`6155b5...b07f4b`，R-017/candidate/Draft v3/G0/G1 identity逐项保持；仅既有R-010 `DEP0205` warning |
+| targeted worksheet Prettier / `git diff --check` | PASS；进度账本全文件仍有既有formatting baseline，未做范围外历史重排 |
+| frozen boundary | PASS；只有worksheet与本账本改变；Draft v1/v2/v3/v4、旧candidate、Contract/Compiler/snapshot均无diff；`conformance/sealed/`仍只有`.gitkeep` |
+
+下一边界：仍留在G2，只处理D4-SR-001至D4-SR-007并additive发布不覆盖既有artifact的新Contract/input/candidate/Draft v5。Draft v5 human judgment必须重置为0/40并在后续独立会话fresh review；independently authored expected full case-result bytes保持0/40。不得创建`GoldenSemanticReview`、approval、签名、seal或sealed artifact，不得运行`golden-seal`，不得开始G3+、certification、Core Release、G8/G9或activation。
 
 ## G2 Additive Semantic Correction / Draft v4 Publication
 
-**状态**：additive correction publication为`DONE`；Draft v4 fresh independent human review为`PENDING 40/40`。G2.3与G2总Gate保持`IN_PROGRESS`，R-017保持`OPEN_BLOCKING_G2`，G3-G9保持`NOT_READY`。
+**当时状态**：additive correction publication为`DONE`；Draft v4 fresh independent human review为`PENDING 40/40`。本段保留publication-time状态；当前fresh review结果见上一节。
 
 **工作包**：I2/I3，合同验证联动I11。本切片只修正Draft v3 human review暴露的Compiler/case语义并发布新Contract、case input、candidate和Draft版本；没有覆盖Draft v1/v2/v3、既有candidate、G0/G1/R-016、migration或任何sealed artifact，没有创建`GoldenSemanticReview`、approval、签名或seal，没有开始G3+、certification、Core Release、G8/G9或activation。
 
@@ -216,7 +246,7 @@ Coverage与边界：
 | targeted Prettier | 本切片TypeScript与`package.json`全部PASS；worksheet局部write后PASS；主规范/进度账本全文件既有baseline分别会产生1064/1186行历史churn，未做范围外重排 |
 | `git diff --check` | PASS |
 
-下一边界：仍留在G2，只执行Draft v4 fresh independent human semantic review。必须逐项检查40份新raw source、隔离snapshot、hand-authored review input与actual comparison result，并由`human:local-owner`明确记录新的worksheet-level case judgment；不得复用Draft v3 decision，不得把actual candidate转成oracle。下一切片不得创建immutable`GoldenSemanticReview`、approval、签名、seal或sealed artifact，不得运行`golden-seal`，不得开始G3+。
+当时下一边界：仍留在G2，只执行Draft v4 fresh independent human semantic review。必须逐项检查40份新raw source、隔离snapshot、hand-authored review input与actual comparison result，并由`human:local-owner`明确记录新的worksheet-level case judgment；不得复用Draft v3 decision，不得把actual candidate转成oracle。该边界已由上一节的fresh review完成，且结果为14 `PASS` / 26 `CHANGES_REQUESTED`；Golden/seal/G3+仍未开始。
 
 ## G2.3 Independent Human Semantic-Review Decision
 
@@ -1235,7 +1265,7 @@ G0.1 的实现、测试和本进度账本由同一个原子提交交付。Agent 
 | R-014 | Capacity governance | CLOSED | G0.10 已机器化 closed publication/command、权限/Actor/entrypoint/delegation、revision/hash CAS、reason/denial、immutable audit tables、唯一 Publisher/Watcher protocol、Admission lineage、crash recovery 与 additive Gate evidence；G1 DDL 可开始 | G0.10 |
 | R-015 | Toolchain test timing | OPEN_OUT_OF_SCOPE | G1.1 曾复现 runtime-toolchain 5s timing；G1.2 串行 `test:g0` 和两次完整 suite 均未复现，toolchain tests 通过。G1.2 不调整 timeout 或 managed toolchain 既有实现 | 独立测试稳定性维护 |
 | R-016 | Compiler/Golden contract | CLOSED | S38与additive repair root已冻结唯一Case Result target/hash、lowering outcome、IR v2与exact binding；G2 Production Compiler已消费该Contract并发布真实identity/actual candidates，repair Draft v2仍冻结blocked且未越过Golden review/seal边界 | G2 spec/Contract repair + Compiler slice |
-| R-017 | G2 semantic correction | OPEN_BLOCKING_G2 | 唯一合同、隔离输入、Compiler v3、40-case candidate与Draft v4已additive发布；Draft v3 40/40 `CHANGES_REQUESTED`历史保留，新Draft human judgment为0/40且必须fresh review。Approval/seal仍禁止，G3+仍未就绪 | Draft v4 fresh independent semantic review |
+| R-017 | G2 semantic correction | OPEN_BLOCKING_G2 | Draft v4 fresh review已完成为14 `PASS` / 26 `CHANGES_REQUESTED`；D4-SR-001至D4-SR-007要求修复terminal topology、typed child outputs、Map assignability、dependency closure、Wait authorization及policy/Recipe isolation。Expected bytes仍0/40，approval/seal禁止，G3+未就绪 | Additive Draft v5 semantic correction |
 
 ## v1完成后的归档计划：PLANNED
 
@@ -1245,10 +1275,10 @@ G0.1 的实现、测试和本进度账本由同一个原子提交交付。Agent 
 
 ## 下一步
 
-G0.1-G0.9 historical identity、G0.10 additive current root、G1.1/G1.2 executable schema/Store Base、G1.3 dependency identity repair、R-016 spec/Contract repair与G2 Production Compiler/exact case-input identity/actual candidates均已完成；current G0/I11与G1为`DONE`，G2/I2/I3为`IN_PROGRESS`且只剩Golden流程，G3-G9继续`NOT_READY`。
+G0.1-G0.9 historical identity、G0.10 additive current root、G1.1/G1.2 executable schema/Store Base、G1.3 dependency identity repair、R-016 spec/Contract repair与G2 Production Compiler/exact case-input identity/actual candidates均已完成；current G0/I11与G1为`DONE`，G2/I2/I3为`IN_PROGRESS`且仍限于semantic correction/Golden流程，G3-G9继续`NOT_READY`。
 
-Draft v3的独立human semantic review已经完成：`human:local-owner`对SR-001至SR-011全部选择`CHANGES_REQUESTED`，并明确判断40/40 case全部`CHANGES_REQUESTED`。Additive Contract/candidate/Draft v4现已发布，新Draft judgment重置为0/40 pending fresh review。Expected full case-result bytes仍为0/40，approval、immutable`GoldenSemanticReview`、`golden-seal`和sealed write仍未运行。
+Draft v3的40/40 `CHANGES_REQUESTED`作为历史保留。Draft v4 fresh independent human semantic review已经完成：40/40 case获得新worksheet judgment，14 `PASS` / 26 `CHANGES_REQUESTED`；D4-SR-001至D4-SR-007仍阻塞G2。Expected full case-result bytes仍为0/40，approval、immutable`GoldenSemanticReview`、`golden-seal`和sealed write仍未运行。
 
-下一施工切片继续留在G2 additive correction。开始修改前必须先为三项暴露出的合同问题形成唯一决议：`graph_cross_scope_edge`在不引入未定义`::`语法时的合法可达输入、`early_completion_cancellation_unsafe`在独立有效Capability合同下的可达条件，以及Compiler根据具体exact identity字段自行产生`compiler_integrity_mismatch`而不是信任预计算boolean。随后才能使用隔离且其余内容有效的snapshot、真实hash和单一目标invalidity修复40个case，修复必要的Compiler行为，并发布不覆盖Draft v1/v2/v3的新candidate/Draft版本供fresh independent review。
+下一施工切片继续留在G2 additive correction，只处理D4-SR-001至D4-SR-007：修复static lowering terminal topology、structural child owner typed output、Map item assignability、Capability/Wait真实dependency closure，以及policy/Recipe negative fixture isolation；补齐相应Contract、Compiler、fixture与测试后发布不覆盖Draft v1/v2/v3/v4和旧candidate的新candidate/Draft v5。Draft v5 judgment必须重置为0/40，并由后续独立会话fresh review；不得复用Draft v4的14/26 decision。
 
 该后续切片仍不得执行Golden approval、创建immutable`GoldenSemanticReview`、运行`golden-seal`、写入`conformance/sealed/`，不得开始G3+、SQLite certification、Core Release、G8/G9 identity或production activation。R-012/R-013/R-015继续作为范围外timing baseline，不放宽测试。
