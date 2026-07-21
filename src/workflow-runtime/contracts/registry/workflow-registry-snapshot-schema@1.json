@@ -1,0 +1,83 @@
+{
+  "format": "icarus.icarus.workflow-registry-snapshot-schema/1",
+  "ref": {
+    "id": "icarus.workflow-registry-snapshot-schema",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-registry-snapshot-schema:1\n",
+  "payload": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://icarus.local/schemas/workflow-registry-snapshot/1",
+    "title": "WorkflowRegistrySnapshotV1",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "format",
+      "ref",
+      "closure_ref",
+      "closure_hash",
+      "compiler_version",
+      "core_build_hash",
+      "database_schema_hash",
+      "snapshot_hash"
+    ],
+    "properties": {
+      "format": {
+        "const": "icarus.workflow-registry-snapshot/1"
+      },
+      "ref": {
+        "$ref": "#/$defs/versioned_ref"
+      },
+      "closure_ref": {
+        "$ref": "#/$defs/versioned_ref"
+      },
+      "closure_hash": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      },
+      "compiler_version": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 255
+      },
+      "core_build_hash": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      },
+      "database_schema_hash": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      },
+      "snapshot_hash": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      }
+    },
+    "$defs": {
+      "versioned_ref": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "version"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._:/-]{0,253}[A-Za-z0-9])?$"
+          },
+          "version": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,62}[A-Za-z0-9])?$"
+          }
+        }
+      }
+    }
+  },
+  "hash": "sha256:a1108bb80d73224db50d5f1af6ac382e990b2f008f9a1b463ffe9cf38f6627b3"
+}

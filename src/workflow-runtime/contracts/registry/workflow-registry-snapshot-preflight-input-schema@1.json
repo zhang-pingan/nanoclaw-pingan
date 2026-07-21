@@ -1,0 +1,70 @@
+{
+  "format": "icarus.icarus.workflow-registry-snapshot-preflight-input-schema/1",
+  "ref": {
+    "id": "icarus.workflow-registry-snapshot-preflight-input-schema",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-registry-snapshot-preflight-input-schema:1\n",
+  "payload": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://icarus.local/schemas/workflow-registry-snapshot-preflight-input/1",
+    "title": "WorkflowRegistrySnapshotPreflightInputV1",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "snapshot_ref",
+      "snapshot_hash",
+      "expected_compiler_version",
+      "expected_core_build_hash",
+      "expected_database_schema_hash"
+    ],
+    "properties": {
+      "snapshot_ref": {
+        "$ref": "#/$defs/versioned_ref"
+      },
+      "snapshot_hash": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      },
+      "expected_compiler_version": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 255
+      },
+      "expected_core_build_hash": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      },
+      "expected_database_schema_hash": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      }
+    },
+    "$defs": {
+      "versioned_ref": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "version"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._:/-]{0,253}[A-Za-z0-9])?$"
+          },
+          "version": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,62}[A-Za-z0-9])?$"
+          }
+        }
+      }
+    }
+  },
+  "hash": "sha256:f071c8153da168c8c5d7dd856c36db4ac012b92259d5398d5f138f6a144bccb7"
+}

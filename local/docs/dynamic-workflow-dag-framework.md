@@ -4033,6 +4033,14 @@ UNIQUE(snapshot_hash)
 CHECK (exactly one of owner_core_ref/owner_feature_id is non-null)
 ```
 
+G3 Registry persistence uses only the executable G1 Store boundary and the tables above. The write boundary accepts a closed, test-only `G3RegistryPersistenceBatch` and performs one synchronous `BEGIN IMMEDIATE` transaction; it inserts canonical inline `workflow_values`, staged Registry resources, exact dependency edges, one closure manifest/member set, and one immutable snapshot. It does not publish, activate, read authoring/legacy source, or change any publication pointer. Existing deferred foreign keys are the only way the resource/value and schema/value cycles are resolved; no side table or implicit column is permitted.
+
+The resource contract binds `content_hash` to the domain-separated JCS value `{format, resource_type, ref, content}`. The exact `(resource_type, ref)` tuple is the Registry identity; the canonical Value keeps the same hash and its exact schema resource ref/hash. Dependency edges use the single persistence-slice kind `registry_exact` and carry the target resource hash. Resource and dependency arrays are ordered by unsigned ASCII `(resource_type, ref.id, ref.version)` tuples and reject duplicates, missing targets, hash drift, and cycles.
+
+Each closure manifest has its own immutable VersionedRef and schema ref/hash. Its `closure_hash` uses the frozen G2 `icarus:workflow-registry-dependency-closure:1\n` payload `{format, root_resource_type, root_ref, members, member_count}`; `members` are the exact transitive dependencies of the root (the root itself is not repeated), sorted by the same unsigned ASCII tuple and carrying exact content hashes. The persisted Value has a separate `manifest_hash` over the manifest ref/schema/root/member/count/closure hash, so the table's `(id, closure_hash)` and `(manifest_value_id, manifest_hash)` pairs are both checked.
+
+Each snapshot binds an immutable snapshot ref/hash to the closure ref/hash plus exact compiler version, Core build hash, and G1 database schema hash. Read-only snapshot preflight first verifies the stored snapshot and binding, then reads and canonicalizes the closure Value, verifies every indexed member and canonical resource Value hash, reconstructs the root's transitive dependency set, and compares member order/count/hash and both closure hashes. It returns a closed, `read_only=true` result and performs no write or source read. Publisher, Publish, Feature/Core Release, Retention/GC, Production loader, and Activation remain outside this slice.
+
 Feature Release 与新创建入口的激活指针必须独立持久化，不能用安装目录或当前文件内容代替：
 
 ```text

@@ -1,0 +1,200 @@
+{
+  "format": "icarus.icarus.workflow-registry-resource-schema/1",
+  "ref": {
+    "id": "icarus.workflow-registry-resource-schema",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-registry-resource-schema:1\n",
+  "payload": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://icarus.local/schemas/workflow-registry-resource/1",
+    "title": "WorkflowRegistryResourceV1",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "format",
+      "resource_type",
+      "ref",
+      "owner",
+      "schema_ref",
+      "schema_hash",
+      "content",
+      "content_hash",
+      "dependencies"
+    ],
+    "properties": {
+      "format": {
+        "const": "icarus.workflow-registry-resource/1"
+      },
+      "resource_type": {
+        "enum": [
+          "artifact_contract",
+          "capability",
+          "card_presentation",
+          "clarification_contract",
+          "command_policy",
+          "context_contract",
+          "definition",
+          "evaluator",
+          "execution_policy",
+          "executor_implementation",
+          "feature_execution_artifact",
+          "graph_policy",
+          "graph_template",
+          "notification_contract",
+          "operational_remediation_policy",
+          "outbox_policy",
+          "prompt",
+          "recipe",
+          "root_finalization_policy",
+          "routing_capability",
+          "routing_scope",
+          "schema",
+          "scope_interface",
+          "tool_binding",
+          "wait_contract"
+        ]
+      },
+      "ref": {
+        "$ref": "#/$defs/versioned_ref"
+      },
+      "owner": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "ref"
+            ],
+            "properties": {
+              "kind": {
+                "const": "core"
+              },
+              "ref": {
+                "$ref": "#/$defs/versioned_ref"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "feature_id"
+            ],
+            "properties": {
+              "kind": {
+                "const": "feature"
+              },
+              "feature_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 255,
+                "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._:/-]{0,253}[A-Za-z0-9])?$"
+              }
+            }
+          }
+        ]
+      },
+      "schema_ref": {
+        "$ref": "#/$defs/versioned_ref"
+      },
+      "schema_hash": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      },
+      "content": {
+        "type": "object"
+      },
+      "content_hash": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      },
+      "dependencies": {
+        "type": "array",
+        "maxItems": 4096,
+        "items": {
+          "$ref": "#/$defs/dependency"
+        }
+      }
+    },
+    "$defs": {
+      "versioned_ref": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "version"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._:/-]{0,253}[A-Za-z0-9])?$"
+          },
+          "version": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,62}[A-Za-z0-9])?$"
+          }
+        }
+      },
+      "dependency": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "resource_type",
+          "ref",
+          "content_hash",
+          "dependency_kind"
+        ],
+        "properties": {
+          "resource_type": {
+            "enum": [
+              "artifact_contract",
+              "capability",
+              "card_presentation",
+              "clarification_contract",
+              "command_policy",
+              "context_contract",
+              "definition",
+              "evaluator",
+              "execution_policy",
+              "executor_implementation",
+              "feature_execution_artifact",
+              "graph_policy",
+              "graph_template",
+              "notification_contract",
+              "operational_remediation_policy",
+              "outbox_policy",
+              "prompt",
+              "recipe",
+              "root_finalization_policy",
+              "routing_capability",
+              "routing_scope",
+              "schema",
+              "scope_interface",
+              "tool_binding",
+              "wait_contract"
+            ]
+          },
+          "ref": {
+            "$ref": "#/$defs/versioned_ref"
+          },
+          "content_hash": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "dependency_kind": {
+            "const": "registry_exact"
+          }
+        }
+      }
+    }
+  },
+  "hash": "sha256:bbc52a0d8c694ed1632fca6c8a11c5a7c0cec8528e8fccff547cefecd5bb6b16"
+}

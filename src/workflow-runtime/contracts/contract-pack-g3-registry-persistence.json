@@ -1,0 +1,120 @@
+{
+  "format": "icarus.workflow-contract-pack-g3-registry-persistence/1",
+  "ref": {
+    "id": "icarus.workflow-contract-pack-g3-registry-persistence",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-contract-pack-g3-registry-persistence:1\n",
+  "payload": {
+    "gate": "G3",
+    "slice": "G3.3",
+    "status": "DONE",
+    "g3_status": "IN_PROGRESS",
+    "upstream_g3_2a_pack_hash": "sha256:c9c273b6d294d512a3578203d91d4bdce7863a3ccb561fdd7da08d072b3d8cd9",
+    "upstream_g3_1_pack_hash": "sha256:fad831fb9c5142422635c18b8e1b7207aec6ac92a5f42f6bd99739aff85eafa4",
+    "upstream_g3_2_pack_hash": "sha256:1eb0b81f488f4a37fa4503ddfef0dfa8a56d40fdeb535c9758d9d21fd39bb92b",
+    "upstream_g2_sealed_bundle_hash": "sha256:d99647d8ca6aabc737a793019335e6770aa111a79be7545c4dec00c6e7af2145",
+    "upstream_g1_schema_root_hash": "sha256:769800fbca754586f1eda90c28e876255a6af3fbe452c397a4dabfd4aec5b756",
+    "upstream_g1_schema_hash": "sha256:4d8c373387ad515c36fd292b705665e6c197c73021c1b7e55da5317bc140efbd",
+    "upstream_g1_migration_sha256": "sha256:d89829995e164355ad485fc117db88dd67a72409f00ec3c3c54253f30a589f61",
+    "production_registry_write_performed": false,
+    "production_activation_performed": false,
+    "publisher_implemented": false,
+    "production_loader_implemented": false,
+    "artifacts": [
+      {
+        "path": "registry/workflow-registry-resource-schema@1.json",
+        "format": "icarus.icarus.workflow-registry-resource-schema/1",
+        "ref": {
+          "id": "icarus.workflow-registry-resource-schema",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-registry-resource-schema:1\n",
+        "hash": "sha256:bbc52a0d8c694ed1632fca6c8a11c5a7c0cec8528e8fccff547cefecd5bb6b16"
+      },
+      {
+        "path": "registry/workflow-registry-dependency-closure-manifest-schema@1.json",
+        "format": "icarus.icarus.workflow-registry-dependency-closure-manifest-schema/1",
+        "ref": {
+          "id": "icarus.workflow-registry-dependency-closure-manifest-schema",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-registry-dependency-closure-manifest-schema:1\n",
+        "hash": "sha256:ebe0391d186e84a2adcc0310186c3dd89d2946f91e17684c57b2764fccf43cdd"
+      },
+      {
+        "path": "registry/workflow-registry-snapshot-schema@1.json",
+        "format": "icarus.icarus.workflow-registry-snapshot-schema/1",
+        "ref": {
+          "id": "icarus.workflow-registry-snapshot-schema",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-registry-snapshot-schema:1\n",
+        "hash": "sha256:a1108bb80d73224db50d5f1af6ac382e990b2f008f9a1b463ffe9cf38f6627b3"
+      },
+      {
+        "path": "registry/workflow-registry-snapshot-preflight-input-schema@1.json",
+        "format": "icarus.icarus.workflow-registry-snapshot-preflight-input-schema/1",
+        "ref": {
+          "id": "icarus.workflow-registry-snapshot-preflight-input-schema",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-registry-snapshot-preflight-input-schema:1\n",
+        "hash": "sha256:f071c8153da168c8c5d7dd856c36db4ac012b92259d5398d5f138f6a144bccb7"
+      },
+      {
+        "path": "registry/workflow-registry-snapshot-preflight-result-schema@1.json",
+        "format": "icarus.icarus.workflow-registry-snapshot-preflight-result-schema/1",
+        "ref": {
+          "id": "icarus.workflow-registry-snapshot-preflight-result-schema",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-registry-snapshot-preflight-result-schema:1\n",
+        "hash": "sha256:27de0eb21b849c7616f714b01936204337fa59ba3056322bd2b85f326f5ecd78"
+      },
+      {
+        "path": "conformance/g3-registry-persistence/positive-cases.json",
+        "format": "icarus.workflow-g3-registry-persistence-positive-cases/1",
+        "ref": {
+          "id": "icarus.workflow-g3-registry-persistence-positive-cases",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-g3-registry-persistence-positive-cases:1\n",
+        "hash": "sha256:1e16d3d458f8225f7b0346ffb036e7c8e975ffffe8005a893b8f8c4acb262ee3"
+      },
+      {
+        "path": "conformance/g3-registry-persistence/negative-cases.json",
+        "format": "icarus.workflow-g3-registry-persistence-negative-cases/1",
+        "ref": {
+          "id": "icarus.workflow-g3-registry-persistence-negative-cases",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-g3-registry-persistence-negative-cases:1\n",
+        "hash": "sha256:9ad1369da11836fd023e3956f01221ff47b67827e121c9b0d562004d6ff61334"
+      },
+      {
+        "path": "registry/workflow-registry-persistence-domain-separators@1.json",
+        "format": "icarus.workflow-g3-registry-persistence-domain-separators/1",
+        "ref": {
+          "id": "icarus.workflow-g3-registry-persistence-domain-separators",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-g3-registry-persistence-domain-separators:1\n",
+        "hash": "sha256:3ead0400c4d909822b41c05339582ab251163f6f5b6a70fe43f544052ab1eeb3"
+      }
+    ],
+    "positive_case_count": 1,
+    "negative_case_count": 4,
+    "g4_through_g9_status": "NOT_READY"
+  },
+  "hash": "sha256:adcaa77339512650d8aa8af1c027d6e145419ada47e44733c424db2b0cb923da"
+}
