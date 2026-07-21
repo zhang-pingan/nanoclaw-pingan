@@ -16,6 +16,7 @@
 - [执行适配器与回放](#执行适配器与回放)
 - [实验与对比](#实验与对比)
 - [Evaluator 与指标体系](#evaluator-与指标体系)
+- [领域扩展合同](#领域扩展合同)
 - [自进化闭环](#自进化闭环)
 - [触发与单能力调用](#触发与单能力调用)
 - [持久化与模块边界](#持久化与模块边界)
@@ -46,6 +47,7 @@ Icarus 需要建立一套统一的评估与自进化框架，使 Core 和 Featur
 - 支持独立 Agent 与 Workflow 两类正式执行入口。
 - 支持 Core、Feature、Workflow、Prompt、Skill、Executor、Policy、Model 和 Tool 配置的精确版本比较。
 - 支持确定性检查、业务规则、LLM Judge、人工评价和真实结果信号的组合评估。
+- 允许 Feature 通过受约束、版本化的通用合同接入领域信号、候选约束、发布依赖闭包和推荐触发配置，而不创建 Feature-specific 评估引擎。
 - 建立从问题发现、归因、候选生成、评估、审批、发布、观察到回滚的完整自进化闭环。
 - 所有阶段既可被完整闭环编排，也可通过 API/CLI/UI 单独调用。
 - 在本地、小样本、模型非确定性的条件下提供可靠的成对比较和退化门禁。
@@ -58,6 +60,7 @@ Icarus 需要建立一套统一的评估与自进化框架，使 Core 和 Featur
 - 不允许自进化直接修改 active Registry pointer、运行中 Workflow Snapshot 或 Feature 安装目录。
 - 不用单个加权总分替代安全、正确性和关键场景门禁。
 - 不让 Feature 自己实现另一套回放、实验调度或指标存储系统。
+- 不让 Feature 直接写 Evaluation Store、执行 active pointer 切换、注册任意发布脚本或以领域扩展绕过 Candidate/Promotion hard gate。
 - 不让 LLM Judge 成为安全、权限、Schema、幂等或副作用正确性的唯一判断者。
 - 不复用或兼容现有个人助手 Self Evolution 的状态、表、Prompt 或分支采纳协议。
 
@@ -103,6 +106,18 @@ Dataset 构建、Replay、Evaluator、Metric、Comparison、Candidate Builder �
 ### 7. 发布与评估解耦
 
 Candidate 可以是 staged、不可生产执行的 Evaluation Variant。通过评估只表示满足 Promotion Policy，不等于已经 Published 或 Activated。最终发布必须继续走 Dynamic Workflow Runtime 已定义的 review/publish/activate、Local Prompt Promotion、Feature Release 或 Core Release 流程。
+
+### 8. 领域差异通过通用闭合合同接入
+
+Feature-specific 的真实结果信号、文件或数据库事实源、候选不可修改区域、依赖闭包发布顺序和默认触发建议，不得散落为 Feature-owned scheduler、Candidate Builder、Promotion Gateway 或 Evaluation Store writer。Core 提供统一的 `DomainSignalSource`、`CandidateConstraint`、`PromotionBinding` 和 `EvaluationTriggerTemplate` 合同；Feature 只能发布 exact ref/hash 的声明和受限实现资源。
+
+这些扩展资源只定义“领域语义和约束”，不取得以下控制权：
+
+- 不创建 Experiment、Campaign 或 Trigger runtime state。
+- 不直接接受或写入 Evaluation Store 内部对象。
+- 不决定 Promotion Eligibility，也不降低 Core hard gate。
+- 不直接 Publish/Activate；发布仍由 Core Promotion Gateway 调用正式 Publisher。
+- 不读取其他 owner 的信号、Dataset、Candidate 或发布目标。
 
 ## 评估对象模型
 
@@ -179,6 +194,9 @@ interface EvaluationSubjectV1 {
   supported_observation_schema_ref: VersionedRef;
   default_metric_suite_ref: VersionedRef;
   default_evaluator_suite_ref: VersionedRef;
+  default_candidate_constraint_refs: VersionedRef[];
+  default_promotion_binding_ref: VersionedRef | null;
+  default_trigger_template_refs: VersionedRef[];
   subject_hash: string;
 }
 ```
@@ -189,9 +207,10 @@ interface EvaluationSubjectV1 {
 
 ```text
 Real Trace / Human Case / Incident / Synthetic Generator
+Domain Signal Source / Feature-supplied Seed
                          |
                          v
-             Dataset Builder + Redaction
+       Signal Ingestion + Dataset Builder + Redaction
                          |
                          v
                 Immutable Dataset Version
@@ -232,6 +251,7 @@ Real Trace / Human Case / Incident / Synthetic Generator
 | --- | --- |
 | Subject Registry | 定义可评估对象及其 case/observation/evaluator 合同 |
 | Dataset Registry | Dataset、Case、Slice、Partition、来源、脱敏和版本治理 |
+| Domain Signal Ingestion | 通过受限只读 source、cursor、dedupe、redaction 和 provenance 合同导入领域 Evidence、Case seed 和 observed outcome |
 | Variant Resolver | 解析 baseline/candidate 的 exact refs、hash、Core Bundle 和环境闭包 |
 | Experiment Planner | 生成 case x variant x repetition 的固定 Run Matrix |
 | Replay Coordinator | lease、预算、并发、顺序随机化、失败恢复和清理 |
@@ -242,8 +262,9 @@ Real Trace / Human Case / Incident / Synthetic Generator
 | Evaluator Registry | 版本化外部评估器和组合 Suite |
 | Metric Engine | 从 Observation/Evaluation 计算可比较指标 |
 | Comparison Engine | 成对差值、切片结果、退化检测、不确定性和决策 |
-| Candidate Builder | 生成 staged Candidate，不切换 active pointer |
-| Promotion Gateway | 根据风险和目标类型调用既有发布/激活协议 |
+| Candidate Builder | 生成 staged Candidate，并执行 Core 与 owner-scoped Candidate Constraint，不切换 active pointer |
+| Promotion Bundle Planner | 根据 Promotion Binding 解析待发布依赖闭包、authoring commit、inactive publish 和 activation intents |
+| Promotion Gateway | 消费 sealed Report、Constraint Result 和 Promotion Bundle，通过正式 Publisher 完成发布/激活 |
 | Evaluation Center | Dataset、Experiment、Report、Evolution 和审计产品入口 |
 
 ## 核心对象与不变量
@@ -252,6 +273,9 @@ Real Trace / Human Case / Incident / Synthetic Generator
 
 ```text
 Evaluation Subject
+  -> Domain Signal Source
+      -> Signal Import Batch
+          -> Evidence / Case Seed / Observed Outcome
   -> Dataset
       -> Dataset Version
           -> Evaluation Case Snapshot
@@ -286,12 +310,15 @@ Evolution Campaign
 7. 安全、权限、Schema、幂等和副作用合同由确定性 Evaluator 判定，不能被 LLM 分数覆盖。
 8. In-workflow Quality Evaluator 属于被评估 Subject Snapshot；Experiment Evaluator 位于 Subject 外部，不能改变被评估 Run 的控制流。
 9. Candidate Builder 无权直接 Publish/Activate；Promotion Gateway 只消费 sealed Comparison Report 和 Human Review/Policy decision。
-10. Feature 不能注册自己的实验调度器或 Evaluation Store writer，只能发布受约束的 Dataset seed、Evaluator、Metric 和 Workflow subject descriptor。
+10. Feature 不能注册自己的实验调度器、Candidate Builder、Promotion Gateway 或 Evaluation Store writer，只能发布受约束的 Subject、Dataset seed、Domain Signal Source、Evaluator、Metric、Candidate Constraint、Promotion Binding 和 Trigger Template。
 11. 回放默认禁止真实外部副作用；任何允许的 live read 或 approved effect 都必须在 Experiment Spec 中显式声明并进入报告。
 12. Evaluation raw data、Prompt、Trace 和 Artifact 遵守 sensitivity、redaction、retention 和容量合同；Credential 原文永不进入 Evaluation Store。
 13. 自进化使用的优化集与最终 holdout 分离；Candidate Generator 不获得 locked holdout 的 case 内容或逐 case反馈。
 14. Promotion 后继续固定 baseline/candidate refs；历史 Report 不因新版本发布而重新计算或改变结论。
 15. 评估 Core candidate 时，控制面运行在稳定 active Core；candidate runner 无法写控制面 Evaluation Store，只能通过受限结果协议返回 Observation。
+16. Domain Signal Source 只能通过声明的只读 capability 和 file/data scope 读取 owner 自己的数据；只有 Evaluation control service 可以把规范化结果写入 Evaluation Store。
+17. Candidate Constraint 必须在 Candidate seal、Experiment seal 和 Promotion preflight 三个边界使用相同 exact ref/hash 重放；任何失败都不能被总分或人工普通批准覆盖。
+18. Promotion Bundle 允许产生 inactive immutable publication，但在全部成员、依赖闭包和 receipt 验证完成前不得改变任何 production ingress 可见的 active catalog root；发布崩溃恢复必须复用相同 bundle id 和 operation key。
 
 ## 版本与快照
 
@@ -325,11 +352,14 @@ interface EvaluationVariantV1 {
   environment_manifest_hash: string;
   dependency_closure_ref: string;
   dependency_closure_hash: string;
+  candidate_constraint_closure_ref: string | null;
+  candidate_constraint_closure_hash: string | null;
+  candidate_constraint_result_refs: string[];
   variant_hash: string;
 }
 ```
 
-`published_snapshot_*` 与 `staged_overlay_*` exactly one。Candidate 可以使用 staged overlay，但 overlay 只能装载到隔离 evaluation root，production Registry 和普通 ingress 必须拒绝。
+`published_snapshot_*` 与 `staged_overlay_*` exactly one。`role='candidate'` 时必须固定 Candidate Constraint closure 和 build-phase result；baseline 对应字段为空。Candidate 可以使用 staged overlay，但 overlay 只能装载到隔离 evaluation root，production Registry 和普通 ingress 必须拒绝。
 
 ### StagedVariantOverlay
 
@@ -856,6 +886,169 @@ type EvaluationFailureAttribution =
 
 归因是带证据的诊断结论，不是 Promotion hard fact。必须保存支持/反对证据、置信区间和未能排除的候选原因。
 
+## 领域扩展合同
+
+领域扩展的目标是让 Core 不理解每个 Feature 的文件、表、业务事件和发布拓扑，同时仍由 Core 统一掌握导入、评估、候选、审批、发布和审计控制面。所有扩展对象均使用 closed schema、exact `VersionedRef`、内容 hash、owner namespace 和 dependency closure 校验。
+
+### Domain Signal Source
+
+`DomainSignalSource` 把 Feature-owned 的追加日志、领域表、结构化文件、业务事件或只读 Projection 映射为 Evaluation 能消费的 Evidence、Case seed 或 observed outcome。它不是新的 Dataset Builder，也无权写 Evaluation Store。
+
+```ts
+interface DomainSignalSourceV1 {
+  format: 'icarus.domain-signal-source/1';
+  ref: VersionedRef;
+  owner: EvaluationOwner;
+
+  reader_capability_ref: VersionedRef;
+  source_locator_policy_ref: VersionedRef;
+  source_schema_ref: VersionedRef;
+  normalized_signal_schema_ref: VersionedRef;
+  mapping_ref: VersionedRef;
+  redaction_policy_ref: VersionedRef;
+
+  cursor_strategy: 'append_offset' | 'event_key' | 'snapshot_diff';
+  dedupe_key_json_pointers: string[];
+  emits: Array<'evidence' | 'case_seed' | 'observed_outcome'>;
+  max_batch_records: number;
+  max_batch_bytes: number;
+  source_hash: string;
+}
+```
+
+导入协议固定为：
+
+```text
+resolve exact source + reader capability
+  -> read owner-scoped data with previous committed cursor
+  -> snapshot source revision/hash
+  -> strict parse + dedupe + redact
+  -> run versioned mapping
+  -> validate normalized signal schema
+  -> Evaluation control service commits import batch and next cursor
+  -> Dataset Builder / Evidence service consumes normalized refs
+```
+
+每次导入保存 immutable `SignalImportBatch`，至少包含 source ref/hash、before/after cursor、source revision、record keys、accepted/rejected counts、redaction result、normalized value refs 和 import operation key。同一 source revision、cursor window 和 mapping hash 重放必须返回相同 batch；同一 dedupe key 不得生成两个 accepted logical signal。
+
+`reader_capability_ref` 必须是无 mutation、无任意路径、无任意 SQL 的 typed read capability。Feature 不能把 source locator、查询字符串或脚本路径作为未校验自由文本交给 runner，也不能通过 mapping 返回 Credential、active pointer mutation 或跨 owner 引用。
+
+### Candidate Constraint
+
+`CandidateConstraint` 表达某类 Candidate 的领域不变量，例如受保护区域、必需段落、Schema、命名约束、dependency allowlist、base hash 前置条件或确定性 lint。它补充 Core hard gate，不能替换或放宽 Core hard gate。
+
+```ts
+interface CandidateConstraintV1 {
+  format: 'icarus.candidate-constraint/1';
+  ref: VersionedRef;
+  owner: EvaluationOwner;
+  applies_to: EvaluationChangeLayer[];
+  validator_capability_ref: VersionedRef;
+  input_schema_ref: VersionedRef;
+  result_schema_ref: VersionedRef;
+  protected_region_policy_ref: VersionedRef | null;
+  require_expected_base_hash: boolean;
+  constraint_hash: string;
+}
+```
+
+Validator 只能读取 baseline snapshot、staged Candidate、normalized diff 和声明的 dependency metadata，默认禁止 network、production data read 和所有 mutation。结果必须是结构化 `pass | fail`、稳定 reason code、定位信息和 input/output hash。
+
+同一 Candidate 在以下三个边界必须执行并固定同一 Constraint closure：
+
+1. Candidate Builder 生成 staged Candidate 后、seal 前。
+2. Experiment seal 前，确认实际 Variant 与已验证 Candidate hash 一致。
+3. Promotion preflight 时，基于待发布 bytes 和 expected active/base version 再验证。
+
+任何 hard Constraint 失败都会使 Candidate 不可实验或不可发布；普通 Human Review 不能把失败覆盖为通过。若需要改变约束，必须先独立发布新的 Constraint version，并在新的 Experiment/Campaign 中使用。
+
+### Promotion Binding 与 Promotion Bundle
+
+`PromotionBinding` 声明某类 Evaluation Candidate 如何绑定到正式 Publisher、如何解析依赖闭包、是否需要受控 authoring commit，以及最终通过哪个原子 catalog root 暴露给 production ingress。它不包含任意 shell、路径或动态 Publisher 名称。
+
+```ts
+interface PromotionBindingV1 {
+  format: 'icarus.promotion-binding/1';
+  ref: VersionedRef;
+  owner: EvaluationOwner;
+  supported_change_layers: EvaluationChangeLayer[];
+  closure_resolver_ref: VersionedRef;
+  publisher_protocol_ref: VersionedRef;
+  authoring_commit_capability_ref: VersionedRef | null;
+  activation_catalog_ref: VersionedRef;
+  required_constraint_refs: VersionedRef[];
+  binding_hash: string;
+}
+```
+
+Promotion Gateway 根据 sealed Candidate、Comparison Report、Review、Binding 和当前 active row version 生成 immutable `PromotionBundle`：
+
+```ts
+interface PromotionBundleV1 {
+  format: 'icarus.promotion-bundle/1';
+  bundle_id: string;
+  candidate_ref: string;
+  comparison_report_ref: string;
+  promotion_binding_ref: VersionedRef;
+  member_manifest_ref: string;
+  member_manifest_hash: string;
+  dependency_closure_ref: string;
+  dependency_closure_hash: string;
+  authoring_commit_intent_ref: string | null;
+  activation_catalog_ref: VersionedRef;
+  expected_catalog_row_version: number;
+  activation_value_ref: string;
+  activation_value_hash: string;
+  constraint_result_refs: string[];
+  permission_effect_diff_ref: string;
+  bundle_hash: string;
+}
+```
+
+发布顺序固定为：
+
+```text
+validate sealed Report/Review/Candidate/Constraint results
+  -> resolve and freeze complete dependency closure
+  -> optional authoring commit through effect/outbox/receipt
+  -> publish every immutable member as inactive
+  -> verify published member hashes and exact internal refs
+  -> atomically CAS one production activation catalog root
+  -> record activation receipt
+  -> start post-promotion observation window
+```
+
+成员可以在失败前已经 immutable published，但不得被 production ingress 解析为 active。若一个目标需要同时切换多个内部 pointer，正式 Publisher 必须提供单一原子 catalog root；不能原子暴露完整闭包的 Binding 不得发布。任一步骤 crash 后必须用相同 `bundle_id`、operation key 和 expected row version 对账；无法证明外部结果时进入 `action_required`，不得猜测成功或创建新 Bundle 重做。
+
+### Evaluation Trigger Template
+
+Feature 可以发布 owner-scoped `EvaluationTriggerTemplate`，声明推荐的 schedule、threshold、Dataset/evidence selection、cooldown、dedupe、budget 和是否允许创建 Campaign。Template 本身不是启用中的 Trigger，不创建 scheduler state；安装 Feature 后必须由授权主体或显式 policy materialize 为 Core-owned Trigger instance。
+
+```ts
+interface EvaluationTriggerTemplateV1 {
+  format: 'icarus.evaluation-trigger-template/1';
+  ref: VersionedRef;
+  owner: EvaluationOwner;
+  subject_ref: VersionedRef;
+  trigger_kind: 'schedule' | 'metric_threshold' | 'incident' | 'post_promotion_monitor';
+  schedule_ref: VersionedRef | null;
+  threshold_policy_ref: VersionedRef | null;
+  dataset_selection_policy_ref: VersionedRef | null;
+  evidence_selection_policy_ref: VersionedRef | null;
+  evaluator_suite_ref: VersionedRef;
+  metric_suite_ref: VersionedRef;
+  budget_ref: VersionedRef;
+  cooldown_ms: number;
+  dedupe_key_template_ref: VersionedRef;
+  allow_campaign_creation: boolean;
+  template_hash: string;
+}
+```
+
+`trigger_kind` 对应的 schedule/threshold 字段使用 closed discriminated validation：schedule 必须有 `schedule_ref` 且无 threshold；metric threshold 反之；incident 和 post-promotion 使用各自 policy schema，不能通过 nullable 字段组合产生未定义模式。
+
+Template 不能请求自动 sealed 未审查的真实信号，不能降低高风险 Candidate 的 Human Review 要求，也不能指定 Feature-owned scheduler 或 Store writer。
+
 ## 自进化闭环
 
 ### 定位
@@ -958,6 +1151,8 @@ interface OptimizationHypothesisV1 {
 
 Candidate Builder 只能写 authoring/staging/evaluation root，不能改 active Feature files、Registry pointer 或 production data。
 
+Candidate Builder 必须解析 Subject 默认和本次 Policy 追加的 Candidate Constraint closure。Candidate 只有在 build-phase Constraint 全部通过并保存 immutable result 后才能 seal；Candidate bytes、base hash 或 constraint closure 发生变化都必须创建新 Candidate。
+
 ### 多轮优化
 
 - optimization Dataset 可用于多轮候选迭代。
@@ -986,7 +1181,7 @@ Candidate Builder 只能写 authoring/staging/evaluation root，不能改 active
 - Feature Executor 通过新的 Feature Release/Execution Artifact 发布。
 - Core 使用 Core Release、Compatibility、certification 和 Production Activation。
 
-Promotion Gateway 必须把 Comparison Report、Human Review、source/staged hash、dependency/permission/effect diff 和 idempotency key 一并提交。发布失败不改变当前 active pointer。
+Promotion Gateway 必须把 Comparison Report、Human Review、source/staged hash、Candidate Constraint results、Promotion Binding、Promotion Bundle、dependency/permission/effect diff 和 idempotency key 一并提交。发布失败不改变当前 active catalog root。Promotion Gateway 不接受页面或 Feature 直接提交任意 member list、Publisher 名称、active pointer 或发布顺序。
 
 ### 上线观察与回滚
 
@@ -1015,6 +1210,8 @@ type EvaluationTriggerKind =
 
 每个 Trigger 固定 subject、dataset/evidence selection policy、cooldown、dedupe key、budget、最大并发和是否允许生成 Candidate。
 
+Feature 安装包可以提供 `EvaluationTriggerTemplate`，但 Template 只有在授权主体显式启用或安装 policy 明确允许时，才由 Evaluation Service 物化为 Core-owned Trigger。后续 schedule state、lease、history、cooldown 和 disable/delete 全部归 Evaluation Store，不归 Feature Projection。
+
 ### 定时触发
 
 定时任务可以：
@@ -1035,10 +1232,11 @@ select subject
   -> select baseline exact ref
   -> upload/resolve candidate content
   -> build staged overlay
+  -> run candidate constraints and seal candidate
   -> select Dataset + Metric/Evaluator Suite
   -> run paired experiment
   -> inspect report
-  -> optional promote
+  -> optional build promotion bundle and request review/promotion
 ```
 
 不要求创建完整 Evolution Campaign。
@@ -1047,6 +1245,7 @@ select subject
 
 必须支持：
 
+- `signals.import`：按 exact Domain Signal Source 和已提交 cursor 导入一个 immutable batch。
 - `dataset.build`：从 case/trace 生成 draft。
 - `dataset.seal`：校验、审查并发布 immutable Dataset Version。
 - `variant.stage`：生成 candidate overlay。
@@ -1057,7 +1256,10 @@ select subject
 - `comparison.run`：比较已有兼容结果。
 - `diagnosis.run`：只做问题归因。
 - `candidate.build`：只生成 staged Candidate。
+- `candidate.validate`：按 frozen Constraint closure 校验已有 staged Candidate。
+- `promotion.plan`：根据 Binding 生成并校验 immutable Promotion Bundle，不执行发布。
 - `promotion.request`：提交已完成 Report 进入 review/publish。
+- `trigger.materialize`：从 exact Trigger Template 创建 Core-owned Trigger instance，不启动 Feature scheduler。
 
 重新运行 Evaluator/Metric/Comparison 必须创建新的 immutable derivation，不能覆盖旧结果。只有 Evaluator 输入合同兼容且原始 Observation retention 未过期时才能重算。
 
@@ -1084,6 +1286,9 @@ WorkflowAdapter 通过正式 export/query API 获取隔离 Runtime 的结果，�
 
 ```text
 evaluation_subjects
+evaluation_domain_signal_sources
+evaluation_signal_import_batches
+evaluation_signal_import_records
 evaluation_datasets
 evaluation_dataset_versions
 evaluation_cases
@@ -1103,6 +1308,12 @@ evaluation_triggers
 evaluation_campaigns
 evaluation_hypotheses
 evaluation_candidates
+evaluation_candidate_constraints
+evaluation_candidate_constraint_results
+evaluation_promotion_bindings
+evaluation_promotion_bundles
+evaluation_promotion_bundle_members
+evaluation_trigger_templates
 evaluation_promotion_audits
 evaluation_retention_handles
 evaluation_value_records
@@ -1114,12 +1325,16 @@ evaluation_blob_records
 ### 幂等键
 
 - Dataset seal：`dataset_id + source_revision_hash`。
+- Signal import：`domain_signal_source_ref/hash + before_cursor + source_revision_hash + mapping_hash`。
 - Variant stage：`subject_ref + base_hash + overlay_hash`。
 - Experiment create：调用方 domain + idempotency key + canonical spec hash。
 - Planned Run：`experiment_id + case_id + variant_id + repetition_no`。
 - Evaluator Result：`observation_id + evaluator_ref/hash`。
 - Metric Value：`observation/evaluator_result + metric_ref/hash`。
-- Promotion：`candidate_id + comparison_report_hash + target_active_row_version`。
+- Candidate constraint：`candidate_hash + constraint_ref/hash + phase`。
+- Promotion Bundle：`candidate_id + comparison_report_hash + binding_ref/hash + target_active_row_version`。
+- Promotion execute：`promotion_bundle_id + bundle_hash + target_active_row_version`。
+- Trigger materialize：`trigger_template_ref/hash + owner + subject_ref + actor intent key`。
 
 相同 key、不同 intent hash 必须 conflict。
 
@@ -1133,6 +1348,9 @@ src/evaluation/
     dataset-registry.ts
     evaluator-registry.ts
     metric-registry.ts
+    candidate-constraint-registry.ts
+    promotion-binding-registry.ts
+    trigger-template-registry.ts
   store/
     evaluation-store.ts
     value-store.ts
@@ -1142,10 +1360,16 @@ src/evaluation/
     redaction.ts
     partitioning.ts
     contamination.ts
+  signals/
+    source-registry.ts
+    importer.ts
+    cursor-store.ts
+    normalizer.ts
   variants/
     resolver.ts
     overlay.ts
     candidate-builder.ts
+    constraint-runner.ts
   execution/
     coordinator.ts
     standalone-agent-adapter.ts
@@ -1163,6 +1387,7 @@ src/evaluation/
   evolution/
     diagnosis.ts
     campaign-service.ts
+    promotion-bundle-planner.ts
     promotion-gateway.ts
     monitoring.ts
   api/
@@ -1193,13 +1418,17 @@ Feature Manifest vNext 建议新增独立 closed evaluation resource union，或
 type FeatureEvaluationResourceKind =
   | 'evaluation_subject'
   | 'dataset_seed'
+  | 'domain_signal_source'
   | 'experiment_evaluator'
   | 'metric_definition'
   | 'metric_suite'
-  | 'promotion_policy';
+  | 'candidate_constraint'
+  | 'promotion_policy'
+  | 'promotion_binding'
+  | 'trigger_template';
 ```
 
-Feature 只能声明 owner namespace 内的资源。`dataset_seed` 进入 Dataset Builder 后才能形成 sealed Dataset，不能让 Feature 安装包直接写 Evaluation DB。
+Feature 只能声明 owner namespace 内的资源。`dataset_seed` 进入 Dataset Builder 后才能形成 sealed Dataset；`domain_signal_source` 只能产生待校验的 normalized signal；`trigger_template` 必须经过显式 materialize；`promotion_binding` 只能引用 allowlisted 正式 Publisher。任何 Feature resource 都不能让 Feature 安装包直接写 Evaluation DB、注册 scheduler 或切换 active pointer。
 
 普通 Feature 结构：
 
@@ -1210,8 +1439,12 @@ Feature Package
   - Workflow/Recipe C
   - evaluation subject descriptors
   - dataset seeds
+  - domain signal sources
   - domain evaluators
-  - metric/promotion policy
+  - metric suites
+  - candidate constraints
+  - promotion policy/bindings
+  - trigger templates
 ```
 
 ## 权限、安全与副作用隔离
@@ -1222,10 +1455,11 @@ Feature Package
 
 - `human:local-owner`：创建/审批实验、查看敏感结果、批准发布。
 - `service:evaluation-control`：写 Evaluation Store 和调度 Run。
+- `service:signal-ingestor`：按 exact Domain Signal Source 调用 owner-scoped readonly capability，只能向 Evaluation control 提交规范化批次。
 - `service:evaluation-runner`：读取单次 sealed input，返回 Observation，无 Registry/production DB 写权限。
 - `service:candidate-builder`：写 staging root，无 active pointer 权限。
 - `service:promotion-gateway`：在有效 Human/Policy 授权下调用正式 Publisher。
-- `feature:<id>:evaluation-provider`：发布 Feature-owned evaluation resources，无调度和 Store 直写权限。
+- `feature:<id>:evaluation-provider`：发布 Feature-owned evaluation resources，无调度、任意 source read、Store 直写、Publisher 调用和 active pointer 权限。
 
 ### Effect Policy
 
@@ -1243,6 +1477,8 @@ type EvaluationEffectMode =
 - `readonly_live` 只允许显式 read capability，并把响应复制到 Observation。
 
 第一版不存在 `live_mutation`。涉及真实 mutation 的 Candidate 只能验证 intent、permission、claim、operation key、Fake Adapter receipt 和 shadow after-snapshot。
+
+Domain Signal import 的 `readonly_live` 只能读取声明的 owner scope，并在进入 Evaluation Store 前执行 snapshot、redaction 和 schema 校验。Promotion 阶段的 authoring commit、inactive publish 和 activation 不属于 Experiment Effect Policy；它们只能在 Experiment 已结束后，由 Promotion Gateway 按正式 Publisher/effect 协议执行，evaluation runner 永远不能获得这些权限。
 
 ### 数据保护
 
@@ -1272,12 +1508,16 @@ Experiment Budget 至少限制：
 建议使用 closed command/query API：
 
 ```text
+POST /api/evaluation/signals/import
+GET  /api/evaluation/signals/imports
+
 POST /api/evaluation/datasets/build
 POST /api/evaluation/datasets/{id}/seal
 GET  /api/evaluation/datasets
 GET  /api/evaluation/datasets/{id}
 
 POST /api/evaluation/variants/stage
+POST /api/evaluation/candidates/{id}/validate
 POST /api/evaluation/replays
 POST /api/evaluation/experiments
 GET  /api/evaluation/experiments
@@ -1290,6 +1530,9 @@ POST /api/evaluation/comparisons
 
 POST /api/evaluation/campaigns
 GET  /api/evaluation/campaigns/{id}
+POST /api/evaluation/triggers/materialize
+GET  /api/evaluation/triggers
+POST /api/evaluation/promotions/plan
 POST /api/evaluation/promotions
 POST /api/evaluation/rollbacks
 ```
@@ -1299,15 +1542,17 @@ POST /api/evaluation/rollbacks
 ### CLI
 
 ```text
+icarus eval signals import|history
 icarus eval dataset build|seal|list|show
-icarus eval variant stage|show
+icarus eval variant stage|show|validate
 icarus eval replay run
 icarus eval experiment run|status|cancel
 icarus eval report show|export
 icarus eval evaluator run
 icarus eval compare
 icarus eval evolve start|status|cancel
-icarus eval promote
+icarus eval trigger materialize|list|disable
+icarus eval promote plan|apply
 icarus eval rollback
 ```
 
@@ -1317,10 +1562,10 @@ CLI 是 API client，不直接写 Evaluation DB、Registry 或 filesystem active
 
 建议作为 Runtime Center 同级的 Core 页面，提供：
 
-1. **Datasets**：版本、partition、Slice、来源、脱敏、污染和覆盖。
+1. **Signals & Datasets**：领域信号导入批次、cursor、版本、partition、Slice、来源、脱敏、污染和覆盖。
 2. **Experiments**：baseline/candidate、Run Matrix、进度、预算和失败。
 3. **Reports**：hard gate、win/tie/loss、Metric delta、Slice、Trace/Artifact 对比。
-4. **Evolution**：证据、归因、假设、Candidate diff、评估和发布状态。
+4. **Evolution**：证据、归因、假设、Candidate diff、Constraint、Promotion Bundle、评估和发布状态。
 5. **Triggers**：定时、阈值、cooldown、预算和最近触发。
 6. **Audit**：Dataset seal、Experiment、Human Review、Promotion、Rollback。
 
@@ -1336,13 +1581,15 @@ Workflow/Standalone Agent 详情通过 typed deep link 跳转到 Runtime Center/
 - Experiment cancel fencing 未开始的 planned runs；active runner 收敛后保留 partial evidence，Report 标记 cancelled，不产生 Promotion Decision。
 - Comparison 发现 dataset/variant/evaluator hash 不匹配时为 `invalid`，不能 fallback 到 current version。
 - Promotion crash 使用既有 Publisher idempotency/activation CAS；Evaluation Store 根据 receipt 对账，不猜测是否已激活。
+- Signal import crash 通过 source revision、before cursor、mapping hash 和 record dedupe key 重放；只有 batch commit 成功后才能推进 cursor。
+- Promotion Bundle 在 inactive member publish 后 crash 时保留不可变成员并按 bundle receipt 对账；activation catalog CAS 未成功时旧 active root 保持不变。
 - isolation root 在 Report 和审计所需 bytes 复制完成后清理；清理失败形成 operational alert，不改变已提交结果。
 
 ## 测试策略
 
 ### Contract Fixture
 
-- Subject、Dataset、Case、Variant、Overlay、Experiment、Observation、Evaluator、Metric、Report schema 的正负例。
+- Subject、Domain Signal Source、Signal Import Batch、Dataset、Case、Variant、Overlay、Candidate Constraint、Promotion Binding/Bundle、Experiment、Observation、Evaluator、Metric、Report schema 的正负例。
 - strict parse、canonicalization、hash、duplicate key、unsafe integer 和 unknown field。
 - same ref/different hash、latest/range ref、跨 Feature namespace 和不完整 closure 拒绝。
 
@@ -1359,6 +1606,8 @@ Workflow/Standalone Agent 详情通过 typed deep link 跳转到 Runtime Center/
 
 ### Dataset Test
 
+- signal source cursor、dedupe、snapshot、mapping、redaction 和 crash replay。
+- source reader 不能执行 mutation、任意路径/SQL 或跨 owner 读取。
 - redaction 不泄漏 Secret/Credential。
 - partition 去重和 contamination 检测。
 - sealed Dataset 不可修改。
@@ -1378,10 +1627,12 @@ Workflow/Standalone Agent 详情通过 typed deep link 跳转到 Runtime Center/
 
 - Campaign 不越过 max candidates/rounds/budget/deadline。
 - Candidate 不能写 active pointer。
+- Candidate Constraint 在 build/seal/promotion 三个边界固定 exact ref/hash，hard failure 不可被普通批准覆盖。
 - rejected/inconclusive 不触发 Promotion。
 - Prompt/Workflow/Feature/Core 使用正确发布协议。
 - permission/effect 扩大总是进入 Human Review。
 - Promotion/rollback crash 能按 receipt 和 exact ref 收敛。
+- Promotion Bundle 只有全部 inactive member 和 closure 校验完成后才能切换单一 activation catalog root。
 
 ### Fault Injection
 
@@ -1391,12 +1642,13 @@ Workflow/Standalone Agent 详情通过 typed deep link 跳转到 Runtime Center/
 - runner process crash、lost result、duplicate callback 和 lease expiry。
 - Workflow dry-run crash/recovery、Model timeout、Tool fixture miss。
 - Evaluator invalid output、Judge disagreement 和 Human Review timeout。
-- publish 前后、active pointer CAS 前后、monitor/rollback 前后。
+- signal batch commit/cursor advance 前后、authoring commit 前后、inactive member publish 前后、active catalog CAS 前后、monitor/rollback 前后。
 
 ### 安全测试
 
 - 真实 channel send、生产 DB write、host path、credential 和 network mutation 全部被拒绝。
 - Feature evaluator 不能读取其他 Feature Dataset 或降低 Core hard gate。
+- Domain Signal Source、Candidate Constraint 和 Promotion Binding 不能跨 owner、申请任意 capability 或旁路 Evaluation control/Promotion Gateway。
 - staged overlay 不能被 production ingress 解析。
 - candidate Core Bundle 不能访问 Evaluation control DB。
 
@@ -1414,7 +1666,7 @@ Dynamic Workflow Runtime Production Activation 是所有阶段的前置。本节
 
 ### E0：合同与边界
 
-- 冻结 Subject、Dataset、Case、Variant、Experiment、Observation、Evaluator、Metric 和 Report closed schema。
+- 冻结 Subject、Domain Signal Source、Signal Import Batch、Dataset、Case、Variant、Candidate Constraint、Promotion Binding/Bundle、Trigger Template、Experiment、Observation、Evaluator、Metric 和 Report closed schema。
 - 冻结 Error/Reason/Status Catalog。
 - 冻结 Evaluation Store Logical Schema、retention、budget 和 effect policy。
 - 定义 Workflow Runtime public dry-run/export/query 扩展，禁止 DB 直连。
@@ -1425,7 +1677,8 @@ Dynamic Workflow Runtime Production Activation 是所有阶段的前置。本节
 
 - 实现 `evaluation.db`、Value/Blob、migration、Schema Manifest 和 GC。
 - 实现 Dataset Builder、redaction、partition、Slice、contamination 和 seal。
-- 支持人工 Case 和 Trace-derived Case。
+- 实现 Domain Signal Source registry、readonly ingestion、cursor、dedupe、mapping、snapshot 和 import audit。
+- 支持人工 Case、Trace-derived Case 和 Feature-supplied normalized signal。
 
 退出条件：Dataset 可版本化、可审计、可独立导入导出且不依赖 source retention。
 
@@ -1451,6 +1704,8 @@ Dynamic Workflow Runtime Production Activation 是所有阶段的前置。本节
 
 - 实现 API、CLI、Evaluation Center。
 - 支持手动 stage candidate、选 Dataset、运行、查看 diff 和提交 Promotion Review。
+- 实现 Candidate Constraint build/seal/preflight 三阶段校验。
+- 实现 Promotion Binding 解析、Promotion Bundle planning、inactive publish 和单一 activation catalog CAS。
 - 支持各单能力独立调用。
 
 退出条件：开发者手动修改 Prompt 后可端到端完成 A/B 对比，不进入自进化 Campaign。
@@ -1466,6 +1721,7 @@ Dynamic Workflow Runtime Production Activation 是所有阶段的前置。本节
 ### E6：定时、漂移与运营门禁
 
 - 实现 schedule、threshold、incident 和 post-promotion trigger。
+- 实现 Trigger Template 的校验、授权 materialize 和 owner-scoped 默认配置。
 - 实现 cooldown、dedupe、budget、并发和 drift report。
 - 建立定期 regression、holdout 治理和 Dataset freshness 流程。
 
@@ -1492,6 +1748,9 @@ Dynamic Workflow Runtime Production Activation 是所有阶段的前置。本节
 - 一个 Feature 可以注册多个 Workflow Subject，不创建 Feature-specific runner。
 - Workflow topology、Prompt、Skill、Policy、Evaluator、Executor/Artifact 变体可以被精确隔离。
 - 回放使用正式 Dynamic Runtime 语义和独立 root，不写 production Runtime DB/Projection。
+- Feature 可以通过通用 Domain Signal Source 导入领域 Evidence/Case seed/observed outcome，但不能直接写 Evaluation Store。
+- Feature-specific Candidate Constraint 和 Promotion Binding 在 Core control plane 中执行，不产生 Feature-owned Candidate Builder、Publisher 或 activation state。
+- Feature Trigger Template 只有显式 materialize 后才产生 Core-owned Trigger；Feature disable/draining 不留下不可审计的 scheduler state。
 
 ### Core Runtime
 
@@ -1501,6 +1760,7 @@ Dynamic Workflow Runtime Production Activation 是所有阶段的前置。本节
 
 ### 数据集
 
+- 每个领域信号导入批次都可追溯到 exact source/mapping/redaction ref、source revision、cursor window、record key 和 immutable normalized value。
 - Trace-derived Case 全部经过 redaction 和 snapshot。
 - sealed Dataset 不受 source Trace/Workflow retention 影响。
 - optimization、validation 和 holdout 隔离可验证。
@@ -1520,6 +1780,7 @@ Dynamic Workflow Runtime Production Activation 是所有阶段的前置。本节
 - Prompt、Skill、Workflow、Feature Executor 和 Core 使用各自正式发布门禁。
 - 高风险或权限/effect 扩大必须 Human Review。
 - budget、round、candidate 和 deadline 耗尽后有限终止。
+- 多资源 Candidate 通过 immutable Promotion Bundle 发布；任意中间失败都不改变旧 active catalog root，并可按 bundle receipt 恢复。
 
 ### 安全
 
@@ -1538,3 +1799,5 @@ Dynamic Workflow Runtime Production Activation 是所有阶段的前置。本节
 4. LLM Judge 默认模型和 calibration 阈值：应在实现期用人工标注集实测后冻结，不在方案阶段指定厂商或型号。
 5. Feature evaluation resources 是加入 `icarus.feature-manifest/2` 的兼容扩展，还是发布新的 manifest major：建议根据 v2 closed schema 的兼容规则决定；不得以 unknown field 或目录扫描旁路接入。
 6. Promotion 后自动观察窗口的默认大小：建议同时支持固定运行数和最长 duration，以先到者为准。
+7. Domain Signal Source 第一版允许的 locator/cursor 组合：建议先支持受控文件 append/event-key 与只读 Projection event-key，任意 SQL 和动态脚本永久不开放。
+8. 单一 activation catalog root 的最小 Publisher ABI：需要与 Runtime authoring/prompt/feature publisher 合同一起冻结，避免各资源类型实现不同的半发布恢复语义。
