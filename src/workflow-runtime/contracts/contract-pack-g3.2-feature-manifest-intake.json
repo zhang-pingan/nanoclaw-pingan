@@ -1,0 +1,30 @@
+{
+  "format": "icarus.workflow-contract-pack-g3-2-feature-manifest-intake/1",
+  "ref": {
+    "id": "icarus.workflow-contract-pack-g3-2-feature-manifest-intake",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-contract-pack-g3-2-feature-manifest-intake:1\n",
+  "hash": "sha256:1eb0b81f488f4a37fa4503ddfef0dfa8a56d40fdeb535c9758d9d21fd39bb92b",
+  "payload": {
+    "gate": "G3.2",
+    "slice": "strict_intake_preflight",
+    "status": "DONE",
+    "g3_status": "IN_PROGRESS",
+    "profile_hash": "sha256:abadb6a36d45c3871df1f925cb3a71eb18fd4d4930ed5b1af2b43da194aade19",
+    "profile_schema_hash": "sha256:dedea0ace5b9aaf6788de15196b3c6db09cff42b2bc33aeca5eed62b14c6ea5f",
+    "result_schema_hash": "sha256:5f23aaa79e9efa3f4624b590e9d85140939a966435c6d4fd8ba94a40f62ffa16",
+    "positive_cases_hash": "sha256:9ff18cfb69c148f39cfc43ae3c3b6f20631fc68b89c21c4be00e9a4012bea843",
+    "negative_cases_hash": "sha256:d8e9c4bcb2d4c74591843b182ecf5ce16b8ab86632863e9dfcc0d8dea4e43464",
+    "domain_catalog_hash": "sha256:be33c5e8de5d1ec2e1f48327ee0112e8bd1e4608cac91c56260aae4e0a14a8a3",
+    "positive_case_count": 1,
+    "negative_case_count": 2,
+    "reader_invoked": true,
+    "resolver_invoked": true,
+    "registry_write_performed": false,
+    "publisher_executed": false,
+    "activation_performed": false,
+    "g4_through_g9_status": "NOT_READY"
+  }
+}

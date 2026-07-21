@@ -1,8 +1,8 @@
 # Dynamic Workflow Runtime 实施进度
 
 > **状态**: IN_PROGRESS
-> **当前 Gate**: G3 Registry / Authoring / Publish（`IN_PROGRESS`；G3.1 read-only Registry publish-preflight foundation `DONE`；G3.2A Feature Manifest vNext strict intake semantics freeze `DONE`；G3.2 strict intake implementation `READY`；G2保持`DONE / BASELINE_ACCEPTED`与40/40 exact replay）
-> **下一施工切片**: 实施G3.2 Feature Manifest vNext strict intake preflight；Registry persistence、Feature/Core Release、Authoring全链路、Publisher执行、Publish/Activation均尚未实现，G4-G9保持`NOT_READY`
+> **当前 Gate**: G3 Registry / Authoring / Publish（`IN_PROGRESS`；G3.1 read-only Registry publish-preflight foundation `DONE`；G3.2A Feature Manifest vNext strict intake semantics freeze `DONE`；G3.2 Strict Intake Preflight `DONE`；G2保持`DONE / BASELINE_ACCEPTED`与40/40 exact replay）
+> **下一施工切片**: Registry persistence / closure / snapshot 仍未实现；Feature/Core Release、Authoring全链路、Publisher执行、Publish/Activation均尚未实现，G4-G9保持`NOT_READY`
 > **最后更新**: 2026-07-21
 > **规范权威**: `local/docs/dynamic-workflow-dag-framework.md`
 
@@ -111,7 +111,7 @@ Agent Container 运行于独立 VM，Node identity 由 VM image gate 保证；�
 | G0 Contract Pack / Static Baseline | `DONE` | 无 | G0.1-G0.9 historical root + G0.10 additive Capacity Admin/publication/CAP/Logical Schema/coverage root | 本原子提交 |
 | G1 DDL / Store | `DONE` | G0.10 | closed Schema Dependency Manifest + frozen executable migration/Schema Manifest + unified Connection Factory + Store lifecycle/transaction host + real-file SQLite/identity gates | 本原子提交（dependency identity repair） |
 | G2 Compiler / Golden | `DONE` | G0.1-G0.9；R-016 spec/Contract repair；G0.10 不改变 Compiler/Plan 语义 | phase=`BASELINE_ACCEPTED`；前序immutable lineage未变；owner-approved successor GoldenSemanticReview/seal完整，current replay 40/40 exact、0 differences | 本原子提交（replay-repair successor seal） |
-| G3 Registry / Authoring / Publish | `IN_PROGRESS` | G1 + G2 | G3.1 read-only publish-preflight foundation DONE；G3.2A strict intake semantics freeze DONE；G3.2 strict intake implementation READY；其余manifest/authoring/publish/retention/ABI exit evidence待后续切片 | 本原子提交（G3.1）；G3.2A见下文 |
+| G3 Registry / Authoring / Publish | `IN_PROGRESS` | G1 + G2 | G3.1 read-only publish-preflight foundation DONE；G3.2A semantics freeze DONE；G3.2 Strict Intake Preflight DONE；其余Registry/closure/authoring/publish/retention/ABI exit evidence待后续切片 | 本原子提交（G3.2）；G3.1/G3.2A见下文 |
 | G4 Test Bootstrap | `NOT_READY` | G1 + G2 + G3 | isolated bootstrap profile | - |
 | G5 Basic Runtime | `NOT_READY` | G4 | T0-T6e model/fault fixtures | - |
 | G6 Dynamic / Close | `NOT_READY` | G5 | T7/T8/child/compensation fixtures | - |
@@ -123,7 +123,7 @@ Agent Container 运行于独立 VM，Node identity 由 VM image gate 保证；�
 
 | 工作包 | 范围 | 状态 | 当前 Gate/切片 |
 | --- | --- | --- | --- |
-| I0 | Publish、Registry、Recipe 与执行版本固定 | `IN_PROGRESS` | G3.1 closed read-only publish-preflight、exact identity/pinning与test-only isolation DONE；持久化与发布链路待后续切片 |
+| I0 | Publish、Registry、Recipe 与执行版本固定 | `IN_PROGRESS` | G3.1/G3.2 read-only preflight与exact identity/pinning DONE；Registry persistence与发布链路待后续切片 |
 | I1 | Intake、Routing、幂等创建、Child provenance、Claim | `NOT_READY` | G5 起 |
 | I2 | Definition、State lowering、Context、transition | `IN_PROGRESS` | approved static lowering语义已由Compiler 3.0.1实现、批准并seal；G2 lowering部分完成，Runtime transition仍从G5起 |
 | I3 | Source/Compiled IR、Port、Compiler | `DONE` | Production Compiler 3.0.1 successor已批准并seal；current replay 40/40 exact、0 differences |
@@ -1364,12 +1364,38 @@ G3.1 lineage exact绑定G1 root `sha256:769800fbca754586f1eda90c28e876255a6af3fb
 | managed `npm run test:g3` | PASS；G3.1 6 tests + G3.2A 4 tests / 10 total；18 negative fixtures |
 | source/Registry/Publisher/Activation absence assertion | PASS；pack records all false，未创建 production surface |
 
+## G3.2 Feature Manifest vNext Strict Intake Preflight
+
+**状态**：`DONE`；G3保持`IN_PROGRESS`，G2保持`DONE / BASELINE_ACCEPTED`，G4-G9保持`NOT_READY`。本切片只执行 G3.2A 已冻结的 strict intake contract：bytes parse、removed/unknown structural intake、closed schema、manifest hash、ownership/order/path lexical validation、canonical root/path preflight、source bytes hash verification 和 exact dependency resolution preflight。它不实现 Registry persistence、Publisher、Publish、Production loader、Feature/Core Release 或 Activation，也不读取 legacy resource source。
+
+实现入口为 `g3-2-feature-manifest-intake.ts`，G3.2A 的 `g3-2a-*` 文件未改动。Preflight 在进入文件系统前完整复用 G3.2A 的 phase/error precedence；root 阶段使用 `lstat`，拒绝 root/path symlink，使用 `O_NOFOLLOW` 打开 declared source，`fstat` 与 open 前后 identity 比较，拒绝 hard-link device/inode 重用，并在每次读取前后比较 root identity。Source hash 对实际读取的原始 UTF-8/bytes 做 SHA-256，并以 expected hash 精确比较。Dependency resolver 是显式注入的 read-only function，只接受 exact `feature_release_ref` + `feature_release_hash`，并验证每个 required resource ref 属于该 exact release closure；没有 resolver 或出现任何 ref/hash/member drift 都稳定返回 `feature_manifest_dependency_unresolved`。
+
+| Artifact | Version / exact hash |
+| --- | --- |
+| G3.2 Contract Pack | `icarus.workflow-contract-pack-g3-2-feature-manifest-intake@1.0.0`; `sha256:1eb0b81f488f4a37fa4503ddfef0dfa8a56d40fdeb535c9758d9d21fd39bb92b` |
+| Preflight profile | `sha256:abadb6a36d45c3871df1f925cb3a71eb18fd4d4930ed5b1af2b43da194aade19` |
+| Preflight profile schema | `sha256:dedea0ace5b9aaf6788de15196b3c6db09cff42b2bc33aeca5eed62b14c6ea5f` |
+| Preflight result schema | `sha256:5f23aaa79e9efa3f4624b590e9d85140939a966435c6d4fd8ba94a40f62ffa16` |
+| Positive fixtures | `sha256:9ff18cfb69c148f39cfc43ae3c3b6f20631fc68b89c21c4be00e9a4012bea843`; `1` case |
+| Negative fixtures | `sha256:d8e9c4bcb2d4c74591843b182ecf5ce16b8ab86632863e9dfcc0d8dea4e43464`; `2` cases |
+| Domain catalog | `sha256:be33c5e8de5d1ec2e1f48327ee0112e8bd1e4608cac91c56260aae4e0a14a8a3` |
+
+| Verification | Result |
+| --- | --- |
+| managed `npm run typecheck` | PASS |
+| managed `npm run contracts:g3.2:generate` | PASS；pack=`sha256:1eb0b81f488f4a37fa4503ddfef0dfa8a56d40fdeb535c9758d9d21fd39bb92b` |
+| managed `npm run contracts:g3.2:check` | PASS；byte-exact deterministic artifacts |
+| managed `npm run test:g3` | PASS；3 files / 15 tests；含 G3.2A 18 negatives 与 G3.2 filesystem/dependency cases |
+| G3.2A pack identity | PASS；`sha256:c9c273b6d294d512a3578203d91d4bdce7863a3ccb561fdd7da08d072b3d8cd9` |
+| G3.1 pack identity | PASS；`sha256:fad831fb9c5142422635c18b8e1b7207aec6ac92a5f42f6bd99739aff85eafa4` |
+| G2 sealed bundle identity | PASS；`sha256:d99647d8ca6aabc737a793019335e6770aa111a79be7545c4dec00c6e7af2145` |
+
 ## 下一步
 
-G0.1-G0.9 historical identity、G0.10 current root、G1 executable schema/Store Base、R-016 spec/Contract repair与G2 Production Compiler/Golden均已完成。Current G2保持`DONE / BASELINE_ACCEPTED`，I3为`DONE`；G3.1完成read-only publish-preflight foundation，G3.2A已冻结Feature Manifest source-intake的ownership/path/hash/order/error-precedence机器语义，G3.2 strict intake implementation为`READY`，G3/I0为`IN_PROGRESS`。下一切片可以在不触碰G3.2A identity的前提下实现strict intake preflight。G4-G9继续`NOT_READY`。
+G0.1-G0.9 historical identity、G0.10 current root、G1 executable schema/Store Base、R-016 spec/Contract repair与G2 Production Compiler/Golden均已完成。Current G2保持`DONE / BASELINE_ACCEPTED`，I3为`DONE`；G3.1、G3.2A和G3.2 Strict Intake Preflight均完成，G3/I0仍为`IN_PROGRESS`。下一切片应在不触碰 G3.2A immutable identity 的前提下实现 Registry persistence/closure/snapshot，继续禁止 Publisher、Publish/Activation 和 G4-G9。
 
 历史fresh review evidence只存在于Git commits，不是current dependency；current immutable semantic approval只绑定exact Draft/report identities。显式`prepare-rc`冻结的四个Working roots与唯一Review Candidate未变；current expected full case-result/Plan/proof/program bytes/hash已独立冻结、审计、owner批准并seal。local single-user签名策略为`not_required_local_single_user`，没有伪造GPG或远程签名。
 
 G2终点继续满足`Draft -> human semantic decision -> GoldenSemanticReview -> seal -> CI replay`：current successor replay为40/40，R-017保持关闭。G3.1只消费其exact sealed/compiler identities并执行纯preflight；没有创建Published Recipe、Registry row、Release或Production launchability，也没有执行production activation。
 
-作为历史prepare-rc切片记录，该切片只修复当时的R-017 spec identity实时绑定、级联重建Working artifacts并执行`prepare-rc`及其确定性check。后续owner approval、immutable review、successor seal与40/40 replay现已完成；G3仅G3.1 foundation完成，SQLite certification、Core Release、G4-G9和production activation仍未开始。R-010 Node loader deprecation与R-012/R-013/R-015 timing继续作为既有范围外baseline，不升级工具链、不放宽测试。
+作为历史prepare-rc切片记录，该切片只修复当时的R-017 spec identity实时绑定、级联重建Working artifacts并执行`prepare-rc`及其确定性check。后续owner approval、immutable review、successor seal与40/40 replay现已完成；当前 G3.1 foundation、G3.2A semantics freeze 与 G3.2 strict preflight 已完成，SQLite certification、Registry persistence、Core Release、G4-G9和production activation仍未开始。R-010 Node loader deprecation与R-012/R-013/R-015 timing继续作为既有范围外baseline，不升级工具链、不放宽测试。

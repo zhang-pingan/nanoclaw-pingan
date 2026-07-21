@@ -1,0 +1,28 @@
+{
+  "format": "icarus.workflow-feature-manifest-vnext-strict-intake-preflight-profile/1",
+  "ref": {
+    "id": "icarus.workflow-feature-manifest-vnext-strict-intake-preflight-profile",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-feature-manifest-vnext-strict-intake-preflight-profile:1\n",
+  "hash": "sha256:abadb6a36d45c3871df1f925cb3a71eb18fd4d4930ed5b1af2b43da194aade19",
+  "payload": {
+    "format": "icarus.workflow-feature-manifest-vnext-strict-intake-preflight-profile/1",
+    "source_profile_format": "icarus.workflow-feature-manifest-vnext-strict-intake-profile/1",
+    "source_manifest_hash_domain": "icarus:feature-manifest-source:2\n",
+    "reader_contract": "After the G3.2A phases pass, resolve the canonical feature source root, lstat root and every declared source path, open files with O_NOFOLLOW, fstat-compare before reading, hash raw bytes with SHA-256, compare root identity before and after every read, and reject symlink, hard-link, missing or moving paths.",
+    "dependency_contract": "Resolve every dependency only through an explicit resolver against the exact feature_release_ref and feature_release_hash; every required_resource_ref must be present in that exact release closure.",
+    "side_effect_boundary": "The preflight is read-only. It does not read legacy resource keys, write Registry state, publish, activate, or load Production resources.",
+    "error_precedence": [
+      "strict_bytes_parse",
+      "removed_unknown_structural_intake",
+      "full_closed_schema",
+      "manifest_hash",
+      "ownership_order_path_lexical_validation",
+      "root_snapshot_path_read",
+      "source_hash",
+      "dependency_resolution"
+    ]
+  }
+}

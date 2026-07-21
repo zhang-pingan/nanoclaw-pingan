@@ -1,0 +1,20 @@
+{
+  "format": "icarus.workflow-g3-2-feature-manifest-intake-positive-cases/1",
+  "ref": {
+    "id": "icarus.workflow-g3-2-feature-manifest-intake-positive-cases",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-g3-2-feature-manifest-intake-positive-cases:1\n",
+  "hash": "sha256:9ff18cfb69c148f39cfc43ae3c3b6f20631fc68b89c21c4be00e9a4012bea843",
+  "payload": {
+    "cases": [
+      {
+        "case_id": "valid-empty-resource-set-with-read-only-root",
+        "input_text": "{\"format\":\"icarus.feature-manifest/2\",\"feature_ref\":{\"id\":\"example.feature\",\"version\":\"1.0.0\"},\"namespace\":\"example\",\"owner_principal_ref\":\"human:local-owner\",\"dependencies\":[],\"package_resources\":{\"skills\":[],\"agents\":[],\"mcp\":[],\"scripts\":[],\"templates\":[]},\"extension_surfaces\":{\"api_entry\":null,\"nav_entry\":null,\"renderer_entry\":null},\"dynamic_workflow_resources\":[],\"ownership\":{\"feature_source_root\":\"features/example\",\"workflow_source_root\":\"features/example/workflow-src\",\"execution_bundle_owner\":\"feature_release\",\"registry_namespace\":\"example\"},\"lifecycle\":{\"draining_policy_ref\":{\"id\":\"example.draining\",\"version\":\"1.0.0\"},\"retention_policy_ref\":{\"id\":\"example.retention\",\"version\":\"1.0.0\"},\"deletion_policy_ref\":{\"id\":\"example.deletion\",\"version\":\"1.0.0\"}},\"manifest_hash\":\"sha256:0e4c3c980eada446402a9c0059a8388bde97d9cce5e865a37ebbf4a2d5005dcd\"}",
+        "expected_code": "feature_manifest_intake_ok",
+        "expected_phase": "dependency_resolution"
+      }
+    ]
+  }
+}

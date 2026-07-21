@@ -2887,6 +2887,16 @@ Source tree 是 read-only snapshot，禁止 symlink、hard-link 和 moving root�
 
 **Error precedence.** 结果是单一 primary diagnostic（result schema 同时保留 one-element ordered diagnostics），固定 phase 顺序为：`strict_bytes_parse` -> `removed_unknown_structural_intake` -> `full_closed_schema` -> `manifest_hash` -> `ownership_order_path_lexical_validation`（ownership、duplicate identity、order、path） -> `root_snapshot_path_read` -> `source_hash` -> `dependency_resolution`。strict bytes parse 先拒绝 invalid UTF-8、duplicate key、comments、trailing comma、unsafe integer、non-finite number、invalid Unicode；removed legacy key 再早于任何其他 unknown field，稳定返回 `feature_manifest_removed_resource_key`，其他 unknown field 稳定返回 `feature_manifest_unknown_field`，两者都早于 resolver、reader、directory scan 和 Registry 操作。moving root/path drift 早于 source hash，source hash drift 早于 dependency resolution；同一 phase 的诊断按 pointer 的 ASCII bytes 排序。所有阶段均无 default、coercion、fallback 或 compatibility alias。
 
+#### G3.2 Strict Intake Preflight
+
+G3.2 只把上述 G3.2A source-intake 语义接到真实的 read-only source preflight；它不重新定义任何 identity、ordering、path、snapshot、hash domain 或 error precedence。`g3-2-feature-manifest-intake.ts` 必须先运行 G3.2A bytes/structural/schema/hash/ownership/order/path phases；只有这些 phases accepted 后才允许进入 `root_snapshot_path_read`。
+
+Root preflight 以配置的 workspace root 解析 canonical `features/<featureId>`，但不得改变 manifest 中的相对 POSIX 语义。它用 `lstat` 验证 root 和每个 path component，拒绝 symlink、缺失、非目录/非 regular file 与 lexical containment 漂移；每个 declared source file 只能用 `O_NOFOLLOW` 打开，open 前后的 `fstat` device/inode 必须相同。读取前、每次读取后和全部读取完成后都比较 root device/inode；任何变化返回 `feature_manifest_source_root_moved` 或 `feature_manifest_source_path_drift`，不得重试 moving root、使用 `realpath` 改写路径、复制文件或 fallback。Manifest paths 共享 device/inode 时返回 `feature_manifest_source_hard_link`。Source hash 是读取到的原始 bytes 的 SHA-256，与 `expected_source_hash` 逐字比较；hash mismatch 必须晚于所有 root/path snapshot failure。
+
+Dependency preflight 只调用显式注入的 read-only resolver。Resolver 必须按 dependency 的 exact `feature_release_ref` 与 `feature_release_hash` 查找 immutable release，并证明每个 `required_resource_ref` 位于该 exact release closure；ref、version、hash 或 closure member 任一漂移统一返回 `feature_manifest_dependency_unresolved`。没有 dependencies 时不需要外部 resolver；有 dependencies 但没有 resolver 时 fail-closed。Preflight 不读取 legacy resource source，不写 Registry、Release、Retention 或 Activation 状态，不执行 Publisher、Production loader、Feature/Core Release 或 G4-G9 surface。
+
+G3.2 的独立 result/profile/schema/fixture/pack 只能记录 `reader_invoked=true`（以及有 dependency 时的 `resolver_invoked=true`），不得修改 G3.2A result schema 中固定的 `reader_invoked=false` / `resolver_invoked=false`，也不得把 G3.2A fixture root 当作 Production source。
+
 ### Authoring、Review 与 Publish 工作流
 
 v1 不提供通用可视化 Workflow/Card 编辑器。Codex/Agent 与开发者通过同一 developer toolchain 把 Feature-owned source 转成可执行版本：
