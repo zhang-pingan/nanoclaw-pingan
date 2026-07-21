@@ -99,6 +99,8 @@ Dataset 构建、Replay、Evaluator、Metric、Comparison、Candidate Builder �
 
 评估 Core Runtime candidate 时，自进化 Workflow 运行在稳定 active Core 上，通过隔离 runner 启动 baseline/candidate Core Bundle。被评估的 candidate 不能承载自己的评估控制面。
 
+`Evaluation Experiment` 是独立的一等能力，`Evolution Campaign` 只是它的可选自动编排消费者。任何 Candidate 都必须能够脱离 Campaign，直接通过 `stage -> validate -> experiment -> report` 完成一次可重放的 baseline/candidate 对比；Promotion 仍是评估完成后的可选后续动作，不能隐含在 Experiment 中。
+
 ### 6. A/B Test 固定为 Paired Replay Experiment
 
 本项目的 A/B Test 指同一组 case 在尽可能相同的输入、环境、工具响应和预算下分别运行 baseline 与 candidate，然后按 case 做成对比较。它不依赖真实用户流量分桶。
@@ -525,6 +527,7 @@ interface EvaluationObservationV1 {
   case_id: string;
   variant_ref: VersionedRef;
   repetition_no: number;
+  sampling_seed: string;
 
   subject_outcome:
     | 'succeeded'
@@ -665,6 +668,7 @@ type ReplayMode =
 
 - 固定 Model exact id、参数、tool schema、system fingerprint 和超时策略。
 - 同一 case/variant 支持 `repetitions > 1`。
+- 当 Metric Suite 包含 `pass@k` 时，必须满足 `repetitions >= k`；每个 repetition 是独立采样，Workflow/Adapter 内部的 `attempts`、retry 或 quality revision 不计为外部采样。
 - baseline/candidate 执行顺序由 sealed seed 随机化，可使用 AB/BA 或 ABBA 顺序降低时间漂移。
 - live dependency case 必须尽可能在同一 captured snapshot 上运行；不能共享 snapshot 时标记 `incomparable_live_drift`。
 - 报告同时展示中心趋势和运行间波动，不把单次幸运结果作为提升证据。
@@ -769,6 +773,7 @@ interface CandidateComparisonV1 {
 5. 二值结果可补充 exact McNemar/sign test，但仍需满足 practical threshold。
 6. 最小实际改善阈值、最大允许退化和 critical Slice 零退化门禁。
 7. 模型非确定性场景报告 case 内重复波动。
+8. `pass@k` 使用 case-level 聚合和 paired bootstrap；不能把 repetition 当成独立 case，也不能用更高的 `k` 掩盖 `pass@1` 退化。
 
 Candidate 只有同时满足全部 hard gates、覆盖要求和 Promotion Policy 才为 `promotable`。总体均分提高不能抵消安全失败或 critical Slice 退化。
 
@@ -829,7 +834,14 @@ interface MetricDefinitionV1 {
     | 'workflow_structure';
   value_type: 'boolean' | 'integer' | 'micros' | 'duration_ms' | 'bytes';
   direction: 'higher_is_better' | 'lower_is_better' | 'target_range';
-  aggregation: 'rate' | 'sum' | 'mean' | 'median' | 'p90' | 'p95' | 'paired_win_rate';
+  aggregation: 'rate' | 'sum' | 'mean' | 'median' | 'p90' | 'p95' | 'paired_win_rate' | 'pass_at_k';
+  pass_at_k: {
+    k: number;
+    success_evaluator_ref: VersionedRef;
+    sampling_unit: 'repetition';
+    sampling_scope: 'case_variant';
+    estimator: 'empirical' | 'unbiased';
+  } | null;
   missing_policy: 'fail' | 'exclude_and_report' | 'inconclusive';
   hard_gate: boolean;
   practical_improvement_micros: number | null;
@@ -840,11 +852,23 @@ interface MetricDefinitionV1 {
 
 浮点分数持久化为整数 micros；金额使用最小货币单位或 versioned cost unit，避免不可重放的 float canonicalization。
 
+当 `aggregation='pass_at_k'` 时，`pass_at_k` 必须非空；其他聚合方式必须为 `null`。`pass@1` 使用同一聚合逻辑且 `k=1`，不实现单独的计算路径。对每个 `(case_id, variant_id)`，设实际独立采样数为 `n`、通过严格成功 Evaluator 的采样数为 `c`：
+
+```text
+pass@k = 1 - C(n-c, k) / C(n, k)
+```
+
+当恰好运行 `k` 次时，等价于“至少一次成功”的经验值；当 `n < k` 时，指标按 `missing_policy` 记为缺失或 `inconclusive`，不得静默降低 `k`。`pass@k` 的值是 `[0, 1]` 概率，使用整数 micros 持久化。成功判定必须来自 deterministic、reference 或 domain evaluator；LLM Judge 不能单独定义 hard pass。
+
+`pass@k` 的比较在 case 层完成：先为每个 case 计算 baseline/candidate 的 pass@k，再做 paired delta、critical Slice 检查和 case-level bootstrap。报告必须同时展示 `n`、`c`、有效采样 seed、成本和延迟，避免把更多采样带来的成功率提升误解为单次执行质量提升。
+
+上述字段必须在 Contract Pack seal 前纳入 `icarus.metric-definition/1`；如果该 major 已经发布，则必须发布新的 Metric Definition major，不能通过 closed schema 的 unknown field 旁路兼容。
+
 ### 通用指标
 
 | 类别 | 指标示例 |
 | --- | --- |
-| 质量 | task success、correctness、completeness、rubric score、artifact contract pass |
+| 质量 | task success、`pass@1`、`pass@k`、correctness、completeness、rubric score、artifact contract pass |
 | 可靠性 | timeout、crash、retry、failed tool、unresolved wait、duplicate effect、recovery success |
 | 效率 | end-to-end latency、time-to-first-output、tokens、model calls、tool calls、attempts、cost |
 | 交互 | clarification turns、unnecessary question、human intervention、user correction、abandonment |
@@ -1239,7 +1263,7 @@ select subject
   -> optional build promotion bundle and request review/promotion
 ```
 
-不要求创建完整 Evolution Campaign。
+不要求创建完整 Evolution Campaign。该路径体现 `Evaluation Experiment` 的独立一等能力；Candidate 必须先变成带 exact ref/hash 的 staged overlay，不能直接读取未提交的工作区或 active Prompt。
 
 ### 单能力调用
 
@@ -1770,6 +1794,7 @@ Dynamic Workflow Runtime Production Activation 是所有阶段的前置。本节
 
 - safety/reliability hard gate 不能被总分抵消。
 - paired win/tie/loss、Metric delta、Slice 和不确定性完整展示。
+- `pass@1` 和声明的 `pass@k` 能按 case/variant/repetition 重放和比较；`n < k`、采样不足和 case 内波动都有明确结论，不能静默降级。
 - missing/timeout/evaluator failure 不被静默排除。
 - LLM Judge 盲化、顺序随机化、版本固定并通过 calibration。
 
@@ -1801,3 +1826,4 @@ Dynamic Workflow Runtime Production Activation 是所有阶段的前置。本节
 6. Promotion 后自动观察窗口的默认大小：建议同时支持固定运行数和最长 duration，以先到者为准。
 7. Domain Signal Source 第一版允许的 locator/cursor 组合：建议先支持受控文件 append/event-key 与只读 Projection event-key，任意 SQL 和动态脚本永久不开放。
 8. 单一 activation catalog root 的最小 Publisher ABI：需要与 Runtime authoring/prompt/feature publisher 合同一起冻结，避免各资源类型实现不同的半发布恢复语义。
+9. `pass@k` 的默认 k 集合：建议第一版固定支持 `k in {1, 3}`；若 Dataset Policy 将 repetition 收紧为 1，则只输出 `pass@1`，`pass@3` 标记为 `inconclusive`。
