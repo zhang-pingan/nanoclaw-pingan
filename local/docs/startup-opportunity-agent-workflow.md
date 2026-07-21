@@ -7,7 +7,9 @@
 
 ## 概述
 
-该设计方案描述 `startup-opportunity` Feature 提供的一组创业机会调研 Recipe。首版明确包含两种不同任务：面向宽泛行业方向发现并排名多个机会的 `industry_opportunity_discovery`，以及面向一个已有 App/功能概念验证市场假设的 `concept_market_validation`。两者共享 Research Kernel、证据模型和受限 capability catalog，但使用不同 Workflow Definition、输入输出合同、Policy、完成条件与报告结构。
+该设计方案描述 `startup-opportunity` Feature 提供的一组创业机会调研 Recipe。首版明确包含两种不同任务：面向宽泛方向发现并排名多个机会的 `opportunity_discovery`，以及面向一个已有产品/功能概念验证市场假设的 `concept_market_validation`。两者共享 Research Kernel、证据模型和受限 capability catalog，但使用不同 Workflow Definition、输入输出合同、Policy、完成条件与报告结构。
+
+`opportunity_discovery` 不再只等同于“行业发现”。它通过 `discovery_profile` 和 `research_axes` 支持一般机会发现、行业优先、AI 能力优先和行业需求 × AI 能力混合发现。行业需求与 AI 能力变化是同一机会发现 Recipe 内可并行执行、可在 fan-in 后交叉收敛的调研维度，不是互斥 Recipe。
 
 本文不再承载 Icarus core workflow runtime 的框架改造设计；fan-in、外层 State、运行时动态 DAG、graph compiler、graph execution、checkpoint、Task Intake/Macro Router、Recipe Catalog、Feature lifecycle 和 Workbench/Trace 展示等通用能力统一由以下框架方案定义：
 
@@ -30,11 +32,11 @@ local/docs/dynamic-workflow-dag-framework.md
 - Icarus 仓库：`/Users/chelaile/IdeaProjects/icarus`
 - GPT Researcher 仓库：`/Users/chelaile/IdeaProjects/gpt-researcher`
 
-创业机会 Agent 不是通用 deep research。行业发现 Recipe 也不是直接让模型基于一个行业方向生成候选创业点，而是通过 Micro Planner 生成本次调研所需的动态 DAG，对多条调研维度、补充验证、反证和复核节点进行并行或条件执行。概念验证 Recipe 则从用户已给出的 product thesis 出发验证需求、替代方案、竞品饱和度、付费、获客、可行性与反证，不再执行“发现 TopN 机会”的候选生成主线。
+创业机会 Agent 不是通用 deep research。机会发现 Recipe 也不是直接让模型基于一个行业或技术方向生成候选创业点，而是通过 Micro Planner 生成本次调研所需的动态 DAG，对需求侧、AI 能力侧、市场侧、补充验证、反证和复核节点进行并行或条件执行。概念验证 Recipe 则从用户已给出的 product thesis 出发验证需求、替代方案、竞品饱和度、付费、获客、可行性与反证，不再执行“发现 TopN 机会”的候选生成主线。
 
 本方案不按 MVP 分期设计，而是描述一版完整架构。实现时可以按工程风险拆任务，但文档目标是定义完整形态。
 
-行业发现输入示例：
+机会发现输入示例：
 
 ```text
 宠物行业 App
@@ -42,6 +44,9 @@ local/docs/dynamic-workflow-dag-framework.md
 跨境电商工具 App
 AI 教育 App
 本地生活服务 App
+目前 AI 创业有哪些机会
+多模态和 Agent 能力最近创造了哪些新创业窗口
+AI 在跨境电商行业有哪些值得小团队验证的方向
 ```
 
 概念验证输入示例：
@@ -52,7 +57,7 @@ AI 教育 App
 把会议纪要自动转成项目任务的 App 是否有付费空间
 ```
 
-行业发现输出示例：
+机会发现输出示例：
 
 ```text
 1. 宠物慢病管理与家庭协同 App
@@ -69,6 +74,9 @@ AI 教育 App
 - 市场和商业化判断
 - 切入版本建议
 - 风险和不确定性
+- discovery profile 和机会来源 research axes
+- AI 能力变化、通用模型 baseline、评测可靠性和单位经济（适用时）
+- 数据/反馈闭环、供应商依赖和平台内置风险（适用时）
 ```
 
 概念验证输出为单一 thesis 的 `go | conditional_go | no_go | insufficient_evidence` verdict、置信度、支持/反对判断链、关键缺口、kill criteria 和下一步验证计划，不输出人为凑数的 TopN 排名。
@@ -85,8 +93,8 @@ Icarus 项目（`/Users/chelaile/IdeaProjects/icarus`）已有 workflow、delega
 
 | 需求 | 通用 deep research | 创业机会 Agent |
 |------|--------------------|----------------|
-| 输入 | 一个研究问题 | 宽泛行业方向，或一个已有 App/功能 thesis |
-| 候选机会 | 可能由模型直接总结 | 行业发现从判断层挖掘；概念验证不重新生成候选池 |
+| 输入 | 一个研究问题 | 宽泛行业/技术方向，或一个已有产品/功能 thesis |
+| 候选机会 | 可能由模型直接总结 | 机会发现从需求、能力与市场判断层挖掘；概念验证不重新生成候选池 |
 | 调研维度 | 动态扩展为主 | 预设维度 + 动态补充 |
 | 评估方式 | 自然语言综合 | 结构化评分、筛选、排序 |
 | 输出 | 一篇报告 | TopN 机会排名，或单 thesis verdict + 可审计判断链 |
@@ -97,20 +105,22 @@ Icarus 项目（`/Users/chelaile/IdeaProjects/icarus`）已有 workflow、delega
 ## 目标
 
 - 作为 `features/startup-opportunity` Feature 发布多个 versioned Recipe，而不是新增业务专用 workflow engine 或把领域代码静态写入 core。
-- 通过 Feature routing scope 把 Macro Router 限制在 `industry_opportunity_discovery` 与 `concept_market_validation` 等本领域 Recipe；产品设计、PM Pipeline 等无关 Definition 天然不进入候选集。
+- 通过 Feature routing scope 把 Macro Router 限制在 `opportunity_discovery` 与 `concept_market_validation` 等本领域 Recipe；产品设计、PM Pipeline 等无关 Definition 天然不进入候选集。
 - 让各 Recipe 的 Micro Planner 只为指定 graph state 生成本次 Scope Spec；实际启用哪些 lane、节点依赖、并行关系、补充验证和 follow-up 由 Planner 决定，但不能修改外层 State、Capability 合同、Policy 或 output schema。
 - 明确 workflow action 只负责确定性系统操作；调研、检索控制、抽取、综合等非确定性任务由 agent delegation 节点完成。
 - 参考 GPT Researcher deep 的流程设计，抽象为可被 Icarus lane 复用的 Research Kernel。
-- 从行业 App 方向中发现多个候选创业机会。
+- 从行业方向、技术能力变化或两者交叉中发现多个候选创业机会。
+- 允许同一个机会发现 Workflow 并行执行行业需求子图与 AI 能力变化子图，并在 fan-in 后执行 capability-demand convergence。
+- 对“目前 AI 创业有哪些机会”这类宽泛问题，输出若干可执行方向及需求、技术、商业、评测、成本、依赖和风险指标，而不是输出模型能力清单或趋势综述。
 - 对用户已经给出的 App/功能概念执行 hypothesis-led market validation，输出单一 verdict、置信度、关键反证和验证计划，而不是强行回到 TopN 发现流程。
 - 在正式调研前明确市场、平台、商业模式、团队能力、风险偏好和验证周期等 scope assumptions。
 - 从真实用户语言中识别尚未被现有产品占稳的 mental positioning，而不是只生成产品功能或品类名称。
-- 候选机会必须来自明确调研维度提炼出的 claim、finding 和 insight，而不是先验生成。
+- 候选机会必须来自明确调研维度提炼出的 claim、finding、insight，以及适用时的 Demand Thesis、Capability Affordance 和 convergence match，而不是先验生成。
 - 候选机会必须建模为可被验证或推翻的 opportunity thesis，而不是只有方向标题和摘要。
-- 每条调研维度独立、可并行地完成证据留痕、判断提炼、机会提取和维度内筛选。
+- 每条调研维度独立、可并行地完成证据留痕、判断提炼、结构化中间对象/机会提取和维度内筛选。
 - 每条调研维度都必须输出支持判断、反对判断、不确定性和 kill conditions，避免只做正向论证。
 - 每个候选机会必须说明用户会在什么入口场景、带着哪句自然语言触发使用，以及现有解法为什么在该场景失效。
-- 如果机会依赖 AI/LLM 能力，必须先与通用 LLM + prompt-only baseline 比较，判断真实差距和模型升级风险。
+- 如果机会依赖 AI 能力，必须先与通用模型 + prompt/tool baseline、现有平台原生能力和开源替代比较，判断真实差距、评测可靠性、单位经济和模型升级风险。
 - 每个候选机会必须判断核心价值位于 output、workflow 还是 outcome 层，避免把一次性输出误判为创业机会。
 - 每个候选机会必须区分用户触发语言和买单方购买语言，验证使用动机能否转化为预算、ROI 或风险降低。
 - 对依赖持续指导、协作、个性化或自动化的机会，必须建模用户状态、上下文连续性和可沉淀的数据闭环。
@@ -130,6 +140,8 @@ Icarus 项目（`/Users/chelaile/IdeaProjects/icarus`）已有 workflow、delega
 - 不在本方案中重新定义 core workflow runtime；并行/fan-in、Task Intake、Recipe routing 和动态 DAG 是 `local/docs/dynamic-workflow-dag-framework.md` 的通用能力。
 - 不让一个全局 Planner 同时选择 Recipe、Workflow Definition 和图内能力；Macro Router 只选本 routing scope 内 exact Recipe，Micro Planner 只规划已选 Recipe 的 graph state。
 - 不默认“做 App”一定是正确答案；如果非 App 替代方案、线下服务、人工流程或现有工作流更优，需要在报告中说明。
+- 不把 AI 作为独立业务 Recipe；AI 是机会发现 Recipe 内的 research axis/discovery profile，也是概念验证 Recipe 内可强制启用的 validation profile。
+- 不把模型发布、Benchmark 提升、融资热度、Demo 或 Prompt 技巧直接当作创业机会；AI 机会必须回连真实任务、买单方、可部署工作流和可验证结果。
 - 不把 `AI Tutor`、`智能助手`、`错题本`、`社区`、`SaaS` 这类功能词或品类词直接当作机会定位；它们必须回到用户自然语言和入口场景中验证。
 - 不把基础 LLM 能力、prompt 技巧或单次生成结果直接当作护城河；必须证明产品价值超出通用模型可快速复制的范围。
 - 不把“用户会试用”直接等同于“买单方会购买”；购买语言、预算来源和决策标准需要单独验证。
@@ -143,19 +155,22 @@ Icarus 项目（`/Users/chelaile/IdeaProjects/icarus`）已有 workflow、delega
 错误流程：
 
 ```text
-行业方向 -> LLM 直接生成 10 个创业机会 -> 再调研
+宽泛行业/技术方向 -> LLM 直接生成 10 个创业机会 -> 再调研
 ```
 
 目标流程：
 
 ```text
-行业方向 -> 多维度调研 -> 原始证据留痕 -> 提炼判断层 -> 从判断层提取机会 -> 筛选排序
+宽泛方向 -> 需求/能力/市场多维度调研 -> 原始证据留痕 -> 提炼判断层 -> 从判断层提取机会 -> 筛选排序
 ```
 
 原始证据只作为留痕、审计和置信度校验的底层材料，不直接作为后续调研结果生成或最终报告写作的语料。后续 workflow 只消费从证据中提炼出的结构化判断层：
 
 ```text
-Evidence Store -> Claims -> Findings -> Insights -> Opportunities -> Scores -> Report
+Evidence Store -> Claims -> Findings -> Insights
+  -> Opportunities
+  -> or Demand Theses + Capability Affordances -> Matches
+  -> Scores -> Report
 ```
 
 其中：
@@ -185,7 +200,7 @@ Evidence Store -> Claims -> Findings -> Insights -> Opportunities -> Scores -> R
 第一个切入版本和 beachhead segment 是什么？
 核心价值在 output、workflow 还是 outcome 层？
 产品是否需要持续用户状态、上下文记忆或协作闭环？
-如果依赖 AI/LLM，通用 LLM + prompt-only 是否已经足够解决？
+如果依赖 AI，通用模型 + prompt/tool、平台原生能力或开源方案是否已经足够解决？
 能力本身是否会被模型升级、平台内置或竞品功能更新快速商品化？
 什么证据会推翻这个机会？
 ```
@@ -195,11 +210,11 @@ Evidence Store -> Claims -> Findings -> Insights -> Opportunities -> Scores -> R
 ```text
 Opportunity = user/job/pain + current alternative + gap + buyer/payer
   + buyer language + value layer + state/context + entry wedge
-  + distribution path + why now + LLM baseline/commoditization risk
+  + distribution path + why now + AI baseline/evaluation/economics/commoditization risk
   + risks + validation plan
 ```
 
-没有明确买单方、买单语言、切入楔子、替代方案对比、价值层判断、AI/LLM baseline 或可验证假设的候选方向，应降级为 `watchlist` 或 `insufficient_evidence`，不能直接进入强推荐。
+没有明确买单方、买单语言、切入楔子、替代方案对比、价值层判断、AI baseline 或可验证假设的候选方向，应降级为 `watchlist` 或 `insufficient_evidence`，不能直接进入强推荐。AI 方向还必须具备评测、单位经济、数据/反馈和依赖风险判断。
 
 ### 3. 心智定位不是功能，而是用户会想起你的那句话
 
@@ -285,22 +300,50 @@ workflow 应先挖用户原话，再做需求抽象。不要一开始就问“�
 
 如果现有解法失效后用户没有明显 next action，或者用户只是轻微抱怨但不迁移，机会优先级应降低。
 
-### 6. 先做 LLM 能力基线，而不是假设 AI 就是机会
+### 6. 先做 AI 能力基线，而不是假设 AI 就是机会
 
-如果候选机会依赖 AI/LLM 能力，workflow 必须先回答：通用 LLM 加上高质量 prompt、现成插件或现有平台功能，是否已经能完成用户任务。
+如果候选机会依赖 AI 能力，workflow 必须先回答：通用模型加上高质量 prompt、tool use、现成插件、开源组件或现有平台功能，是否已经能完成用户任务。这里的 AI 不只包括文本 LLM，也包括多模态、语音、视觉、Agent、传统 ML 和端侧模型。
 
 基线测试不是为了否定 AI 机会，而是避免把已经商品化的生成能力包装成创业方向。每个 AI 相关机会至少要产出：
 
 ```text
 baseline_task
-prompt_only_baseline_result
-mainstream_llm_solved_level
+baseline_models_and_tools
+prompt_tool_baseline_result
+mainstream_ai_solved_level
+evaluation_dataset_and_metric
+quality_latency_cost_result
 product_required_capability
 remaining_gap_after_baseline
+human_review_requirement
 model_upgrade_risk
 ```
 
-如果通用 LLM + prompt-only 已经能以足够低成本完成核心任务，且产品没有工作流嵌入、专有数据、分发渠道、执行闭环或结果责任，机会应降级为 `watchlist` 或 `reject`。
+如果通用模型 + prompt/tool baseline 或平台原生功能已经能以足够低成本完成核心任务，且产品没有工作流嵌入、专有数据、分发渠道、执行闭环或结果责任，机会应降级为 `watchlist` 或 `reject`。
+
+### 6.1 AI 机会需要能力侧与需求侧双向收敛
+
+AI 机会不能只从用户痛点出发后强行添加 AI，也不能只从模型能力变化出发生成技术找场景的清单。机会发现 Recipe 在启用 `ai_capability` research axis 时必须并行产出：
+
+```text
+需求发现子图 -> solution-neutral Demand Thesis
+AI 能力子图 -> Capability Affordance
+fan-in -> Capability-Demand Match -> AI Opportunity Thesis
+```
+
+只有以下条件同时成立，候选方向才能进入 AI 强推荐：
+
+- 存在可验证的用户任务、当前成本、失败损失或未消费需求。
+- 新能力相对通用 baseline 带来可测量的质量、成本、速度或覆盖范围变化。
+- 能力可以进入真实工作流，并有明确的人机边界、异常处理和 outcome metric。
+- 买单方愿意为结果、效率或风险降低付费，而不只是对 AI 功能感兴趣。
+- 数据、评测、单位经济、供应商依赖和平台替代风险在可接受范围内。
+
+### 6.2 需求发现保持方案中立
+
+AI/hybrid profile 下，需求发现子图不直接生成“AI 产品方案”，而是描述用户任务本身及其运行条件。它需要记录任务频率、输入输出形态、上下文依赖、变化程度、异常比例、错误成本、延迟容忍度、人工审核容忍度、数据痕迹和 ground truth 来源，由后续 convergence 判断是否适合 AI。
+
+用户表示“想要 AI”不构成需求证据；用户已经用 ChatGPT、Claude、Copilot、RPA、模板或人工外包解决问题，则必须作为 current alternative/workaround 记录。
 
 ### 7. 能力会商品化，机会要落在不可轻易复制的系统价值上
 
@@ -363,7 +406,7 @@ ToC、B2B、B2B2C、家庭决策、企业采购和平台生态的买单语言差
 
 ### 11. 输入方向必须先被约束和假设化
 
-“宠物行业 App”这类输入过宽，不同市场、团队能力、平台约束和风险偏好会得到不同结论。正式调研前必须先做 `scope_framing`：
+“宠物行业 App”或“目前 AI 创业有哪些机会”这类输入过宽，不同市场、团队能力、产品层、部署方式、平台约束和风险偏好会得到不同结论。正式调研前必须先做 `scope_framing`：
 
 - 目标地区和语言，例如中国、美国、跨境市场。
 - 平台形态，例如 Mobile、Web、小程序、插件、B2B SaaS。
@@ -372,15 +415,28 @@ ToC、B2B、B2B2C、家庭决策、企业采购和平台生态的买单语言差
 - 验证周期和预算，例如 7 天、30 天或 90 天验证。
 - 风险偏好，例如是否接受医疗、金融、未成年人、隐私或平台依赖风险。
 - 是否必须是纯 App；如果非 App 方案更合理，应允许报告给出“不建议做独立 App”的结论。
+- discovery profile，例如 `general`、`industry_first`、`ai_first` 或 `hybrid`。
+- research axes，例如 `industry_demand`、`cross_industry_demand`、`ai_capability`、`buyer_market`。
+- AI 产品层和部署偏好，例如应用、工作流 Agent、API/基础设施、数据/评测、云端、端侧或开源优先。
 
 如果用户没有显式提供这些约束，workflow 应生成默认假设，并在最终报告和 JSON artifact 中明确记录。
 
 ### 12. 调研维度既是发现通道，也是筛选通道
 
-每个调研维度不是只负责收集材料，而是完整产出：
+每个调研维度不是只负责收集材料，而是完整产出结构化判断。一般/行业优先模式的需求 lane 可以继续产出候选机会；AI/hybrid 模式下，需求侧和能力侧先分别产出可连接的中间对象：
 
 ```text
-Evidence refs -> Claims -> Findings -> Insights -> Opportunities -> Lane Scores -> Kill Gate -> TopN
+一般/行业需求 lane:
+  Evidence refs -> Claims -> Findings -> Insights -> Opportunities -> Lane Scores -> Kill Gate -> TopN
+
+AI/hybrid 需求子图:
+  Evidence refs -> Claims -> Findings -> Demand Theses -> Demand Scores -> TopN
+
+AI 能力子图:
+  Evidence refs -> Capability Claims -> Capability Affordances -> Capability Scores -> TopN
+
+fan-in:
+  Demand Theses + Capability Affordances -> Capability-Demand Matches -> AI Opportunities
 ```
 
 例如“已有产品 Top 排名挖掘”维度需要：
@@ -487,11 +543,11 @@ Task Intake 先冻结 raw query、显式 `analysis_mode`、结构化约束、附
 ```text
 startup-opportunity.market-research@1.0.0
   allowed recipes:
-    startup-opportunity.industry-discovery@1.0.0
+    startup-opportunity.opportunity-discovery@1.0.0
     startup-opportunity.concept-validation@1.0.0
 ```
 
-`product-design`、`pm_new_feature` 等无关 Recipe 不在候选集，即使 Router 模型输出也由 deterministic resolver 拒绝。`analysis_mode=industry_discovery|concept_validation` 是显式用户选择，直接产生 deterministic routing decision；`analysis_mode=auto` 才调用 Macro Router。输入既包含宽泛行业又包含明确产品 thesis、或缺少足以改变方法的关键信息时返回 `needs_clarification`，不能静默选择高成本流程。
+`product-design`、`pm_new_feature` 等无关 Recipe 不在候选集，即使 Router 模型输出也由 deterministic resolver 拒绝。`analysis_mode=opportunity_discovery|concept_validation` 是显式用户选择，直接产生 deterministic routing decision；`analysis_mode=auto` 才调用 Macro Router。`discovery_profile` 和 `research_axes` 是机会发现 Recipe 的 typed input，不参与 Recipe 竞争。输入既包含宽泛方向又包含明确产品 thesis、或缺少足以改变宏观目标的关键信息时返回 `needs_clarification`，不能静默选择高成本流程。
 
 Macro Router 只输出 exact RecipeRef。Recipe Descriptor 不可变绑定 Definition、entrypoint、Workflow execution policy、input/output schema、launch policy 和 resource claim；Router 不允许自由混配。Workflow 创建后，Definition 固定外层 State/transition，Micro Planner 只为 `discovery_graph_execute`、`validation_graph_execute`、`followup_graph_execute` 或 `enrichment_graph_execute` 等指定 graph state 生成 Scope Spec。
 
@@ -513,17 +569,19 @@ local/docs/dynamic-workflow-dag-framework.md
 
 本文只假设该框架已经提供外层 Workflow State、统一 Graph lowering、static/dynamic Graph、原生 ready-node 并发、graph compiler、node-level artifact/evaluator、fan-in、Task Intake/Recipe routing、checkpoint 和 Workbench/Trace 可观测性。
 
-### 行业机会发现 Workflow
+### 机会发现 Workflow
 
 ```text
-Macro Router 已选择 industry_opportunity_discovery
-  -> 行业 App 方向输入
+Macro Router 已选择 opportunity_discovery
+  -> 行业、技术能力或宽泛创业方向输入
   -> Scope Framing
       -> 市场/地区/语言
       -> 平台和交付形态
       -> 商业模式偏好
       -> 团队能力和验证周期约束
       -> 风险偏好和默认假设
+      -> discovery_profile 和 research_axes
+      -> AI 产品层、能力范围和部署约束（适用时）
   -> 研究策略规划
   -> 调研种子探测
       -> 用户/场景 seed
@@ -531,26 +589,39 @@ Macro Router 已选择 industry_opportunity_discovery
       -> 关键词 seed
       -> 产品 seed
       -> 数据源 seed
+      -> capability/model/ecosystem seed（启用 AI axis 时）
   -> 机会空间和任务流地图
       -> 用户角色
       -> 高频任务
       -> 当前替代方案
       -> 工作流摩擦点
       -> 可软件化节点
+      -> task operating profile
+  -> AI capability space map（启用 AI axis 时）
+      -> capability frontier 和 newly feasible tasks
+      -> quality/latency/cost boundary
+      -> model/open-source/platform landscape
+      -> data/evaluation/deployment constraints
   -> 生成 discovery graph spec
   -> 执行动态 discovery graph
-      -> 原始证据留痕
-      -> 用户自然语言和 trigger phrase 挖掘
-      -> 现有解法失效场景和 next action 挖掘
-      -> claim/finding/insight 提炼
-      -> 候选机会生成
-      -> mental positioning 和 entry scene 识别
-      -> 支持/反对 claims 和 kill conditions
-      -> 维度内评分
-      -> pre-kill gate
-      -> 维度内 topN 筛选
+      -> 需求发现子图
+          -> 用户自然语言、JTBD、trigger phrase 和现有解法失效
+          -> non-consumption、当前 AI workaround 和 task operating profile
+          -> solution-neutral demand thesis
+          -> 支持/反对 claims、kill conditions 和需求侧 topN
+      -> AI 能力变化子图（启用 AI axis 时，与需求子图并行）
+          -> capability frontier / cost curve / access
+          -> workflow automation / human-in-the-loop 边界
+          -> model/platform/open-source ecosystem
+          -> data/evaluation/feedback conditions
+          -> capability affordance 和能力侧 topN
   -> graph node artifact/evaluator 校验
   -> gap analysis 和 follow-up graph 规划
+  -> capability-demand convergence（启用 AI axis 时）
+      -> matched opportunities
+      -> demand-only gaps
+      -> capability-only signals
+      -> rejected matches
   -> 机会 thesis 与 mental positioning 合成
   -> 机会去重与聚类
   -> 生成 enrichment / validation graph spec
@@ -562,6 +633,7 @@ Macro Router 已选择 industry_opportunity_discovery
       -> 合规和平台风险
       -> 反证与替代方案
       -> 可行性和早期单位经济
+      -> AI baseline、评测可靠性、推理单位经济、数据/反馈闭环和供应商依赖（适用时）
   -> 跨维度综合评分
   -> 敏感性分析和排名稳定性判断
   -> 排名与推荐
@@ -569,6 +641,7 @@ Macro Router 已选择 industry_opportunity_discovery
   -> 验证计划生成
       -> 自然复述测试
       -> 付费/试用/迁移动作测试
+      -> 7 天技术 spike 和 30 天市场验证（AI 机会适用）
   -> JSON + Markdown 最终报告生成
 ```
 
@@ -590,7 +663,7 @@ Macro Router 已选择 concept_market_validation
       -> willingness to pay / buyer language
       -> acquisition / distribution feasibility
       -> delivery feasibility / compliance / unit economics
-      -> LLM baseline / capability commoditization（适用时）
+      -> AI baseline / evaluation reliability / unit economics / capability commoditization（适用时）
       -> counter evidence
   -> hypothesis evidence reduce
   -> evidence gap / bounded follow-up planning
@@ -604,7 +677,7 @@ Macro Router 已选择 concept_market_validation
   -> JSON + Markdown concept validation report
 ```
 
-该 Recipe 不执行 lane 内候选机会生成、跨 lane opportunity clustering 或 TopN global ranking。它可以复用行业发现的 Research Kernel、user-language、solution-failure、competitor、monetization、acquisition、compliance、LLM baseline 和 counter-evidence capabilities，但使用 `concept_hypothesis` 作为中心对象，所有 branch output 必须回连同一 hypothesis id。
+该 Recipe 不执行 lane 内候选机会生成、跨 lane opportunity clustering 或 TopN global ranking。它可以复用机会发现的 Research Kernel、user-language、solution-failure、competitor、monetization、acquisition、compliance、AI baseline 和 counter-evidence capabilities，但使用 `concept_hypothesis` 作为中心对象，所有 branch output 必须回连同一 hypothesis id。AI 相关 concept 由 `validation_profile=ai|regulated_ai` 强制启用 AI 验证 bundle，不新增 Recipe。
 
 两套 Recipe 的 Definition/entrypoint、Workflow execution policy、Graph interface、named exit 和最终 report schema 分开版本化。不能用一个“超级 Planner”根据输入临时改变宏观目标；Macro Router 在 Workflow 创建前完成 Recipe selection，Micro Planner 只改变各自 graph state 内的节点拓扑。
 
@@ -838,7 +911,7 @@ Macro Router 已选择 concept_market_validation
 
 ### 7. 趋势变化 Lane
 
-目标：识别政策、技术、平台、消费习惯变化带来的新窗口。
+目标：识别政策、行业结构、平台规则、预算和消费/组织行为变化带来的需求窗口。启用 AI axis 时，模型能力、推理成本和开源生态变化由 AI 能力子图负责，本 lane 只记录它们对用户行为、采购、监管和工作流采用的需求侧影响，避免重复研究。
 
 典型数据源：
 
@@ -881,12 +954,13 @@ Macro Router 已选择 concept_market_validation
 - 线下服务商、代理、中介、咨询和人工代办
 - 企业内部流程、岗位职责和外包服务页面
 - 竞品评论中提到的替代产品和流失原因
+- ChatGPT、Claude、Copilot、通用 Agent、RPA、Prompt 模板和内部 AI 工具
 
 处理流程：
 
 ```text
 行业方向或候选机会
-  -> 当前替代方案枚举
+  -> 当前替代方案枚举，包括通用 AI workaround
   -> 替代方案成本、体验和可获得性分析
   -> 用户切换阻力判断
   -> 非 App 交付形态比较
@@ -907,7 +981,7 @@ Macro Router 已选择 concept_market_validation
 
 ### 9. 现有解法失效场景 Lane
 
-目标：识别用户已经尝试现有解决方案但仍然失败的具体场景，以及失败后的 next action。它关注迁移动机，不只是竞品缺口。
+目标：识别用户已经尝试现有解决方案但仍然失败的具体场景，以及失败后的 next action。它关注迁移动机，不只是竞品缺口。AI/hybrid profile 下还需要记录现有 AI workaround 为什么失败，以及过去因成本、技能或不可行而直接放弃的 non-consumption。
 
 典型数据源：
 
@@ -926,6 +1000,8 @@ Macro Router 已选择 concept_market_validation
   -> 用户原话和 trigger phrase 记录
   -> 失效原因聚类
   -> 失败后的 next action 识别
+  -> abandoned task / non-consumption 识别
+  -> 当前 AI workaround 及其失败模式识别
   -> 判断 next action 是否代表迁移动机
   -> 映射到候选 mental positioning 和 opportunity thesis
 ```
@@ -941,6 +1017,135 @@ Macro Router 已选择 concept_market_validation
 | 新产品入口清晰度 | 失效瞬间是否能自然转化为新产品打开场景 |
 | 心智空白 | 该失效对应的用户语言是否尚未被明确产品占领 |
 
+如果用户没有 next action，一般应降低机会优先级；但如果证据表明任务过去因为人工成本过高、专业技能不足、处理规模过大或技术不可行而被放弃，则可作为 `non_consumption` 进入 capability-demand convergence。此类方向必须额外证明 outcome 价值和买单意愿，不能仅凭“AI 现在能做”进入强推荐。
+
+### 9.1 AI/hybrid Profile 下需求发现子图的适配
+
+原有需求发现能力继续复用，但 prompt、typed output 和 evaluator 需要切换到 AI-aware demand profile。目标不是寻找“用户想要什么 AI”，而是让 Demand Thesis 携带足够的 task/workflow join keys：
+
+| 原有 Lane | AI/hybrid 下的补充要求 |
+|-----------|------------------------|
+| `user_language_mining` | 挖掘“处理不过来、信息太散、每次情况不同、需要反复判断”等任务语言；用户主动提到 AI 只能作为 workaround/expectation，不能直接证明需求 |
+| `audience_pain` | 量化频率、工作量、周期、人工成本、等待时间、错误损失和当前放弃率 |
+| `job_to_be_done` | 拆到具体 task step，记录输入输出模态、上下文依赖、变化程度、异常分支、审核节点和 outcome metric |
+| `top_products` | 覆盖 App、SaaS、通用模型、Copilot、Agent、API、内部工具和人工服务，不以 App 榜单为唯一产品空间 |
+| `review_mining` | 增加准确性、幻觉、延迟、上下文丢失、不可控、无法集成、审核负担等现有 AI 功能失败反馈 |
+| `search_demand` | 同时研究问题型搜索和用户如何使用通用 AI 自助解决；区分一次性答案需求与持续工作流需求 |
+| `trend_change` | 只研究行为、预算、数字化、采购和监管变化；模型能力与成本变化交给 AI 能力子图 |
+| `substitutes_workarounds` | 强制加入通用模型、Prompt、RPA、模板、外包、内部运营和平台原生功能 |
+| `solution_failure` | 区分传统解法失败、现有 AI 解法失败和 non-consumption，定位失败发生的具体 task step |
+
+需求侧 lane 只评价需求强度、当前成本、失败损失、迁移/付费意愿和任务条件，不对 `AI fit` 打分。`ai_fit_score`、`capability_delta`、`automation_or_augmentation_fit`、`data_readiness` 和 `evaluation_feasibility` 只能由 capability-demand convergence 或后续 AI enrichment 生成。
+
+### 10. AI 能力变化子图
+
+AI 能力变化不是一个单独 Recipe，而是 `opportunity_discovery` 在 `research_axes` 包含 `ai_capability` 时启用的并行子图。它与需求发现子图同时执行，输出 Capability Affordance，不直接生成最终创业机会。
+
+默认 AI capability lane catalog：
+
+| Lane | 核心问题 | 典型来源 |
+|------|----------|----------|
+| `ai_capability_frontier` | 哪些任务最近从不可行变为可行，真实边界和失败模式是什么 | 模型文档、release note、独立 benchmark、论文、复现实验 |
+| `ai_cost_curve_access` | 质量、延迟、上下文、推理成本、端侧/云端部署和开源可用性是否支持产品化 | API 定价、模型卡、部署文档、硬件成本、服务限制 |
+| `ai_workflow_automation` | 哪些 task step 可自动化或增强，哪些必须 human-in-the-loop | 工作流材料、操作手册、现有 Copilot/Agent 使用反馈 |
+| `ai_ecosystem_platform` | 分发入口、集成生态、协议、平台内置和 incumbent bundling 风险如何 | 平台 changelog、应用市场、集成目录、开发者生态 |
+| `ai_data_eval_flywheel` | 数据来源、权利、ground truth、评测集和反馈闭环能否成立 | 数据政策、隐私条款、行业数据规范、评测实践 |
+| `ai_adoption_trust` | 安全、审计、采购、组织采用和结果责任是否阻碍落地 | 安全/合规文档、企业采购要求、用户和管理员反馈 |
+
+AI 能力证据具有较短时效性。Evidence Record 除通用字段外还应记录：
+
+```text
+valid_as_of
+provider / model_id / model_version
+pricing_snapshot
+license
+benchmark_setup
+deployment_region
+vendor_claim_or_independent_test
+reproducibility
+freshness_policy
+```
+
+模型发布或融资新闻只能作为 seed，不能直接成为 Capability Affordance。每个 affordance 至少需要说明适用任务、能力边界、失败模式、质量/延迟/成本范围、可部署条件、预期能力半衰期和审计引用。
+
+### 11. Capability-Demand Convergence
+
+`capability_demand_convergence` 是 AI/hybrid profile 的必经 fan-in，不是可选报告润色节点。它接收需求侧 Demand Thesis 和能力侧 Capability Affordance，输出：
+
+```text
+matched_opportunities
+demand_only_gaps
+capability_only_signals
+rejected_matches
+match_rationale
+critical_unknowns
+```
+
+匹配至少检查：任务是否真实、能力增量是否可测量、工作流是否可部署、错误是否可检测和补救、数据和 ground truth 是否可获得、推理加人工审核后的单位经济是否成立、买单方是否为 outcome 付费，以及平台/模型是否会快速覆盖该能力。
+
+## Demand Thesis / Capability Affordance 数据模型
+
+AI/hybrid profile 下，需求子图先输出 solution-neutral `DemandThesis`：
+
+```json
+{
+  "demand_id": "demand_001",
+  "user": "目标使用者",
+  "buyer": "目标买单方",
+  "job_to_be_done": "用户需要完成的任务",
+  "workflow_step": "任务发生的具体步骤",
+  "trigger_phrase": "用户自然语言",
+  "current_alternatives": ["人工", "SaaS", "通用 AI"],
+  "current_ai_workarounds": ["复制上下文到通用模型"],
+  "task_operating_profile": {
+    "frequency": "daily",
+    "volume": "high",
+    "input_modality": ["text", "image"],
+    "output_modality": ["structured_decision"],
+    "task_variability": "medium",
+    "exception_rate": "unknown",
+    "context_fragmentation": "high",
+    "judgment_intensity": "high"
+  },
+  "execution_constraints": {
+    "latency_tolerance": "minutes",
+    "quality_threshold": "待验证",
+    "error_cost": "medium",
+    "auditability_requirement": "high",
+    "human_review_tolerance": "medium",
+    "privacy_security_constraints": ["敏感业务数据"]
+  },
+  "data_conditions": {
+    "existing_digital_trace": true,
+    "context_sources": ["业务系统", "历史文档"],
+    "possible_ground_truth": ["人工审核结果"],
+    "feedback_frequency": "weekly"
+  },
+  "outcome_metrics": ["处理时间", "错误率", "人工成本"],
+  "audit_refs": ["claim_001"],
+  "limitations": []
+}
+```
+
+AI 能力子图输出 `CapabilityAffordance`：
+
+```text
+capability_id
+capability_name
+newly_feasible_tasks
+supported_modalities
+quality_latency_cost_boundary
+failure_modes
+deployment_constraints
+human_in_the_loop_boundary
+data_and_evaluation_requirements
+provider_and_open_source_landscape
+platform_bundle_risk
+capability_half_life
+audit_refs
+limitations
+```
+
 ## 候选机会数据模型
 
 候选机会必须是结构化对象，避免只保存自然语言摘要。
@@ -948,6 +1153,8 @@ Macro Router 已选择 concept_market_validation
 ```json
 {
   "id": "opp_001",
+  "discovery_profile": "industry_first",
+  "research_axes": ["industry_demand", "buyer_market"],
   "title": "面向独居老人的用药提醒与家庭协同 App",
   "description": "帮助独居老人管理用药、复诊和家庭成员远程确认。",
   "opportunity_thesis": "异地子女需要低成本确认独居老人慢病用药和复诊执行情况；现有个人提醒工具缺少家庭协同和长期健康记录，因此可以从家庭协同用药提醒切入。",
@@ -1014,10 +1221,10 @@ Macro Router 已选择 concept_market_validation
   "initial_distribution_channel": ["慢病社区内容", "子女照护人群社群", "药店/基层诊所合作"],
   "expansion_path": ["复诊档案", "检查报告归档", "家庭健康日历", "护理服务和保险导流"],
   "defensibility_hypothesis": "通过家庭协同记录、长期健康数据和照护工作流沉淀提高迁移成本。",
-  "llm_capability_baseline": {
+  "ai_capability_baseline": {
     "applies": false,
     "baseline_task": "生成用药提醒建议或照护清单",
-    "prompt_only_baseline_result": "通用 LLM 可以生成提醒建议，但不能持续追踪执行、同步家庭状态或形成漏服补救闭环。",
+    "prompt_tool_baseline_result": "通用模型可以生成提醒建议，但不能持续追踪执行、同步家庭状态或形成漏服补救闭环。",
     "remaining_gap_after_baseline": "真实价值来自状态追踪、多人确认、异常闭环和长期记录，而不是单次生成建议。",
     "model_upgrade_risk": "low"
   },
@@ -1069,7 +1276,7 @@ Macro Router 已选择 concept_market_validation
     "7_day_test": "访谈 10 个异地照护家庭，验证漏服确认和复诊记录是否是高频痛点。",
     "30_day_mvp": "用微信小程序或轻量 Web 原型测试提醒、确认和家庭共享流程。",
     "natural_restatement_test": "用户能否自然复述为：不在身边时，用它确认老人有没有按时吃药。",
-    "prompt_only_baseline_test": "让用户用通用 LLM 生成照护清单，比较其是否能替代持续提醒、多人确认和漏服补救闭环。",
+    "prompt_tool_baseline_test": "让用户用通用模型和可用工具生成照护清单，比较其是否能替代持续提醒、多人确认和漏服补救闭环。",
     "buyer_purchase_language_test": "验证异地子女是否会用“降低漏服风险、减少反复沟通、照护记录可追踪”解释付费理由。",
     "state_context_value_test": "验证用户是否愿意持续记录用药确认、复诊和家庭备注，以及这些状态是否降低重复沟通。",
     "workflow_outcome_metric_test": "跟踪 2 周内漏服确认闭环率、家庭重复沟通次数和复诊记录完整度。",
@@ -1078,6 +1285,30 @@ Macro Router 已选择 concept_market_validation
   }
 }
 ```
+
+当 `research_axes` 包含 `ai_capability`，机会对象还必须包含 `ai_system_profile`：
+
+```text
+capability_enablers
+matched_demand_refs
+newly_feasible_job
+required_ai_capabilities
+baseline_run_manifest
+evaluation_dataset_and_metrics
+quality_reliability_threshold
+latency_and_cost_budget
+human_in_the_loop_boundary
+failure_cost_and_recovery
+data_access_and_rights
+evaluation_and_feedback_loop
+provider_dependency_and_portability
+platform_bundle_risk
+inference_unit_economics
+capability_half_life
+defensibility_beyond_model_access
+```
+
+AI 字段不能只由模型进行文字判断。`baseline_run_manifest` 至少应记录模型/provider/version、prompt/tool setup、评测样本、指标、重复次数、失败案例、延迟、单次成本、人工审核成本和测试时间；无法实测时必须标记 `desk_research_only` 并降低置信度。
 
 ## Evidence / Claim / Finding / Insight 分层模型
 
@@ -1115,6 +1346,8 @@ Evidence record 记录来源和原始材料，不作为最终报告的写作语�
 ```
 
 证据置信度不能只按 evidence 数量累加。多个转载、互相引用或来自同一评论样本的来源，应按低独立性处理；目标地区、发布时间、样本规模和样本偏差都应进入 confidence 计算。
+
+AI capability evidence 还必须使用同一 Evidence Record 的可选扩展字段：`valid_as_of`、`provider`、`model_id`、`model_version`、`pricing_snapshot`、`license`、`benchmark_setup`、`deployment_region`、`vendor_claim_or_independent_test`、`reproducibility` 和 `freshness_policy`。source manifest evaluator 应按 evidence type 检查 freshness；模型价格、API 限制、平台政策或 capability benchmark 过期时触发 follow-up 或 limitation，不能继续支撑强推荐。
 
 ### Claim
 
@@ -1244,7 +1477,7 @@ lane 内筛选前必须执行 pre-kill gate。每个机会至少有一个明确�
 
 ## 综合评分与排序
 
-综合评分不应简单平均所有 lane 分数，而应基于创业判断维度重新评估。最终排序也不应只输出一个 `global_score`，还应输出置信度、排名稳定性、敏感性分析和推荐档位。
+综合评分不应简单平均所有 lane 分数，而应基于创业判断维度重新评估。最终排序也不应只输出一个 `global_score`，还应输出置信度、排名稳定性、敏感性分析和推荐档位。评分使用 versioned profile；`general`/`industry_first` 使用通用创业评分，`ai_first`/`hybrid` 在通用需求与商业评分之外强制加入 AI 专属指标和 hard gate。
 
 建议全局评分维度：
 
@@ -1266,7 +1499,7 @@ lane 内筛选前必须执行 pre-kill gate。每个机会至少有一个明确�
 | 切入版本可行性 | 6% | 小团队是否能在合理时间内验证 |
 | 验证可行性 | 6% | 7-30 天内是否能用访谈、落地页、原型或人工服务验证 |
 | 自然复述可验证性 | 5% | 是否能通过用户复述确认 mental positioning 成立 |
-| LLM 基线差距 | 6% | 若依赖 AI/LLM，是否明显优于通用 LLM + prompt-only baseline；不依赖时按中性或低权重处理 |
+| AI 基线差距 | 6% | 若依赖 AI，是否明显优于通用模型 + prompt/tool baseline 和平台原生能力；不依赖时标记 `not_applicable` 并按 profile 重新归一化权重 |
 | 差异化空间 | 6% | 是否能建立清晰定位或壁垒 |
 | 时机窗口 | 4% | 为什么现在是较好的进入时点 |
 | 替代方案风险 | -6% | 用户当前替代方案是否已经足够好 |
@@ -1276,6 +1509,8 @@ lane 内筛选前必须执行 pre-kill gate。每个机会至少有一个明确�
 | 判断置信度 | 10% | claim/finding/insight 的来源质量、一致性和覆盖度 |
 
 权重应按行业和 scope assumptions 做归一化配置；上表用于表达相对重要性，不要求各项在文档中手工合计为 100%。
+
+示例公式只表达通用维度集合。实际 system capability 必须根据 scoring profile 移除 `not_applicable` 维度并重新归一化，不能给非 AI 机会一个默认 AI 中性高分；AI profile 还要加入后文的 AI score inputs 和 hard gate。
 
 示例公式：
 
@@ -1297,7 +1532,7 @@ global_score =
   + entry_version_feasibility * 0.06
   + validation_feasibility * 0.06
   + natural_restatement_testability * 0.05
-  + llm_baseline_gap * 0.06
+  + ai_baseline_gap * 0.06
   + differentiation * 0.06
   + timing_window * 0.04
   + judgment_confidence * 0.10
@@ -1334,7 +1569,7 @@ global_score =
     "entry_version_feasibility": 8.6,
     "validation_feasibility": 8.2,
     "natural_restatement_testability": 7.8,
-    "llm_baseline_gap": 7.0,
+    "ai_baseline_gap": null,
     "differentiation": 7.9,
     "timing_window": 7.2,
     "substitute_risk": 5.8,
@@ -1355,6 +1590,32 @@ global_score =
 }
 ```
 
+AI profile 还必须输出以下详细指标；它们由独立 score input 生成，不能藏在 `differentiation` 或自然语言 rationale 中：
+
+| AI 指标 | 说明 |
+|---------|------|
+| `capability_delta` | 相比通用模型、现有平台和开源方案，质量、成本、速度或覆盖范围的真实增量 |
+| `technical_reliability` | 在目标任务分布上的成功率、稳定性、异常率和可恢复性 |
+| `evaluation_feasibility` | 是否有代表性评测集、ground truth、可重复指标和上线监控 |
+| `data_readiness` | 数据是否存在、可授权、可持续更新并能形成反馈闭环 |
+| `human_review_dependency` | 人工复核比例、专业要求、处理时延和成本负担 |
+| `inference_unit_economics` | 推理、检索、存储、工具调用、人工审核和支持成本后的毛利空间 |
+| `provider_portability` | 是否可跨模型/provider/开源方案迁移，关键接口和数据是否被锁定 |
+| `platform_bundle_risk` | 模型厂商、操作系统、SaaS incumbent 或平台原生内置的替代风险 |
+| `open_source_substitution_risk` | 开源模型和组件达到可接受水平后，能力差异是否快速消失 |
+| `data_feedback_moat` | 使用数据、纠错、评测和工作流状态是否形成可授权的持续改进闭环 |
+| `capability_half_life` | 当前能力窗口预计能维持多久，模型升级对机会是增强还是替代 |
+| `ai_adoption_trust` | 安全、隐私、审计、采购和结果责任是否允许进入目标工作流 |
+
+AI hard gate 在加权排序前执行：
+
+- 通用模型、平台原生能力或低成本开源方案已达到目标质量，且没有工作流、数据、分发或结果责任差异时，判为 `reject` 或 `watchlist`。
+- 高错误成本任务缺少可重复评测、审计、异常检测、人工兜底或责任边界时，不能进入 `strong_candidate`。
+- 关键数据无法合法、持续获取，或没有可用 ground truth/反馈机制时，不能把“数据壁垒”计入正向得分。
+- 推理、工具调用和人工审核后的单位经济不成立时，触发 kill condition。
+- 单一 provider/platform 可在短窗口内内置核心能力，且缺少可迁移性、渠道或系统壁垒时，限制最高推荐档位。
+- AI 只改变 output 样式，没有改善 workflow/outcome 指标时，不能进入强推荐。
+
 推荐档位建议：
 
 | 档位 | 含义 |
@@ -1369,19 +1630,21 @@ global_score =
 这一节是领域模型说明，不代表在 Icarus 项目中新增第二套 workflow engine。落地到 Icarus 仓库（`/Users/chelaile/IdeaProjects/icarus`）时，下面这些模块应映射为 workflow delegation、skill、host 侧 MCP 工具和少量 deterministic action。
 
 ```python
-class IndustryOpportunityDiscoveryWorkflow:
+class OpportunityDiscoveryWorkflow:
     async def run(self, direction: str):
         scope = await self.frame_scope(direction)
         plan = await self.plan_research(direction, scope)
         seeds = await self.probe_research_seeds(direction, scope, plan)
         opportunity_space = await self.map_opportunity_space(direction, scope, seeds)
-        discovery_graph = await self.plan_discovery_graph(plan, seeds, opportunity_space)
+        capability_space = await self.map_ai_capability_space_if_enabled(scope, seeds)
+        discovery_graph = await self.plan_discovery_graph(plan, seeds, opportunity_space, capability_space)
         discovery = await self.execute_workflow_graph(discovery_graph)
         followup_graph = await self.plan_followup_graph(discovery)
         followup = await self.execute_workflow_graph(followup_graph)
         discovery = await self.merge_graph_results(discovery, followup)
         validated = await self.validate_discovery_fan_in(discovery)
-        thesis = await self.synthesize_opportunity_theses(validated)
+        candidates = await self.converge_capability_and_demand_if_enabled(validated)
+        thesis = await self.synthesize_opportunity_theses(candidates)
         merged = await self.merge_and_cluster(thesis)
         enrichment_graph = await self.plan_enrichment_graph(merged)
         enrichment = await self.execute_workflow_graph(enrichment_graph)
@@ -1429,6 +1692,7 @@ class ScopeFramer:
 - 商业模式偏好和是否必须是 App。
 - 团队能力、预算和验证周期。
 - 风险偏好和行业限制。
+- `discovery_profile`、`research_axes`、AI 产品层、能力范围和部署偏好。
 - 默认 assumptions 和 open questions。
 
 ### Planner
@@ -1448,6 +1712,7 @@ class ResearchPlanner:
 - 每条 lane 的数据源优先级。
 - 每条 lane 的 topN 数量。
 - 是否需要行业特定维度。
+- 是否启用 AI capability 子图，以及需求子图和能力子图的 join/completion policy。
 - 好机会判定标准、mental positioning 规则、kill gate 规则、评分权重和敏感性分析参数。
 
 ### Seed Probe
@@ -1463,7 +1728,9 @@ class ResearchPlanner:
   "problem_seeds": ["用药提醒不可靠", "夜间急诊信息不足", "家庭成员协同困难"],
   "keyword_seeds": ["宠物用药提醒", "猫咪应激", "宠物走失怎么办"],
   "product_seeds": ["宠物健康 App", "宠物社区 App", "宠物电商 App"],
-  "source_seeds": ["App Store", "Google Play", "小红书", "知乎", "Reddit", "宠物论坛"]
+  "source_seeds": ["App Store", "Google Play", "小红书", "知乎", "Reddit", "宠物论坛"],
+  "capability_seeds": [],
+  "model_ecosystem_seeds": []
 }
 ```
 
@@ -1487,10 +1754,28 @@ class OpportunitySpaceMapper:
 - 用户角色和买单角色。
 - 高频任务和 JTBD。
 - 当前替代方案、workaround 和非 App 竞争。
-- 工作流摩擦点和可软件化节点。
+- 工作流摩擦点、task step、task operating profile 和可软件化节点。
+- 任务频率、规模、输入输出模态、变化程度、异常率、上下文碎片、错误成本、延迟和人工审核容忍度。
 - 用户状态、上下文连续性、协作对象和数据沉淀机会。
 - 用户触发语言、买单方购买语言和 purchase trigger 假设。
 - 初始机会 thesis 假设和待推翻问题。
+
+### AI Capability Space Mapper
+
+仅当 `research_axes` 包含 `ai_capability` 时执行，负责把近期能力、成本、部署和生态变化整理为可与 Demand Thesis 匹配的 Capability Affordance：
+
+```python
+class AICapabilitySpaceMapper:
+    async def map(
+        self,
+        direction: str,
+        scope: ScopeFrame,
+        seed_context: SeedProbe,
+    ) -> AICapabilitySpaceMap:
+        ...
+```
+
+输出包括 capability frontier、newly feasible tasks、supported modalities、质量/延迟/成本边界、失败模式、部署条件、human-in-the-loop 边界、数据和评测要求、provider/open-source/platform landscape、capability half-life 和待推翻问题。它不得直接输出“创业机会”，避免技术找场景。
 
 ### User Language Miner
 
@@ -1583,7 +1868,23 @@ class DiscoveryLane:
         ...
 ```
 
-每个 Discovery Lane 必须输出支持 claims、反对 claims、uncertainties、kill conditions、trigger phrase refs 和 solution failure refs。反证强或关键字段缺失的机会应被降级，不应进入 topN。
+每个 Discovery Lane 必须输出支持 claims、反对 claims、uncertainties、kill conditions、trigger phrase refs 和 solution failure refs。一般/行业优先 profile 可以输出候选 Opportunity；AI/hybrid profile 的需求 lane 优先输出 Demand Thesis，能力 lane 输出 Capability Affordance。反证强或关键字段缺失的对象应被降级，不应进入各自 topN。
+
+### Capability-Demand Convergence
+
+负责在 AI/hybrid profile 下对需求和能力进行显式匹配，避免由 Opportunity Thesis Synthesizer 隐式把 AI 套到所有痛点上：
+
+```python
+class CapabilityDemandConvergence:
+    async def match(
+        self,
+        demands: list[DemandThesis],
+        capabilities: list[CapabilityAffordance],
+    ) -> CapabilityDemandConvergenceResult:
+        ...
+```
+
+输出 `matched_opportunities`、`demand_only_gaps`、`capability_only_signals`、`rejected_matches`、`match_rationale`、`critical_unknowns` 和审计引用。匹配结果必须说明具体 capability delta、可自动化/增强的 task step、剩余人工边界、预期 outcome、失败成本和需要在 enrichment 阶段验证的指标。
 
 ### Opportunity Thesis Synthesizer
 
@@ -1598,7 +1899,7 @@ class OpportunityThesisSynthesizer:
         ...
 ```
 
-每个 thesis 必须包含 `user`、`job_to_be_done`、`pain`、`current_alternatives`、`gap`、`buyer`、`payer`、`buyer_purchase_language`、`marketing_bridge`、`mental_positioning`、`trigger_phrase`、`entry_scene`、`solution_failure_scene`、`next_action_after_failure`、`mental_position_occupation`、`value_layer`、`user_state_context_model`、`entry_wedge`、`why_now`、`distribution_path`、`llm_capability_baseline`、`capability_commoditization_risk`、`kill_criteria` 和 `validation_hypotheses`。
+每个 thesis 必须包含 `user`、`job_to_be_done`、`pain`、`current_alternatives`、`gap`、`buyer`、`payer`、`buyer_purchase_language`、`marketing_bridge`、`mental_positioning`、`trigger_phrase`、`entry_scene`、`solution_failure_scene`、`next_action_after_failure`、`mental_position_occupation`、`value_layer`、`user_state_context_model`、`entry_wedge`、`why_now`、`distribution_path`、`ai_capability_baseline`、`capability_commoditization_risk`、`kill_criteria` 和 `validation_hypotheses`。AI/hybrid profile 还必须包含 matched demand/capability refs 和 `ai_system_profile`。
 
 ### OpportunityClusterer
 
@@ -1630,29 +1931,35 @@ class JudgmentEnricher:
 - 替代方案
 - 反证信息
 - 可行性和早期单位经济
-- LLM capability benchmark 和 prompt-only baseline
+- AI capability benchmark 和 prompt/tool baseline
+- 评测可靠性、错误检测、人工审核边界和失败恢复
+- 推理、检索、工具调用、存储和人工审核后的单位经济
+- 数据权利、ground truth、反馈闭环、provider 可迁移性和平台依赖
 - 能力商品化风险，包括模型升级、平台内置、API 降价和开源替代
 - output/workflow/outcome 价值层判断
 - 用户状态、上下文连续性、数据闭环和隐私边界
 - 买单语言、预算来源、决策标准和用户语言到购买语言的映射
 
-### LLM Capability Benchmarker
+### AI Capability Benchmarker
 
-作为 `llm_capability_benchmark` enrichment node 的实现，负责验证 AI/LLM 相关机会是否真的超出通用模型和 prompt-only 的能力范围：
+作为 `ai_capability_benchmark` enrichment node 的实现，负责验证 AI 相关机会是否真的超出通用模型、prompt/tool baseline、平台原生能力和开源替代的能力范围：
 
 ```python
-class LLMCapabilityBenchmarker:
-    async def benchmark(self, opportunities: list[MergedOpportunity]) -> list[LLMBaselineResult]:
+class AICapabilityBenchmarker:
+    async def benchmark(self, opportunities: list[MergedOpportunity]) -> list[AIBaselineResult]:
         ...
 ```
 
 输出包括：
 
-- 每个机会的 AI/LLM 依赖点。
-- baseline task 和 prompt-only baseline result。
-- 通用 LLM 是否已经足够解决核心任务。
+- 每个机会的 AI 依赖点和目标 task step。
+- baseline models/tools、prompt/tool setup 和代表性 evaluation dataset。
+- 质量、成功率、失败类型、方差、延迟、单次成本和人工审核成本。
+- 通用模型、现有平台或开源方案是否已经足够解决核心任务。
 - 产品需要补足的工作流、数据、执行、合规或分发能力。
-- model upgrade risk 和剩余差距。
+- model upgrade risk、capability half-life 和剩余差距。
+
+无法进行可复现实测时必须设置 `desk_research_only=true`，不能用厂商自报 benchmark 直接替代目标任务评测。
 
 ### Value, Context and Buyer Language Enricher
 
@@ -1703,7 +2010,7 @@ class ValidationPlanner:
         ...
 ```
 
-每个机会至少包含 7 天验证动作、30 天 MVP、访谈对象、落地页或原型测试方式、自然复述测试、prompt-only baseline 测试、买单语言测试、状态上下文价值测试、成功阈值、失败阈值和最关键待验证假设。
+每个机会至少包含 7 天验证动作、30 天 MVP、访谈对象、落地页或原型测试方式、自然复述测试、prompt/tool baseline 测试、买单语言测试、状态上下文价值测试、成功阈值、失败阈值和最关键待验证假设。AI 方向还需要 7 天技术 spike、评测可靠性和单位经济测试。
 
 ### Reporter
 
@@ -1718,10 +2025,11 @@ class OpportunityReporter:
 报告结构建议：
 
 ```text
-# 行业 App 创业机会调研报告
+# 创业机会调研报告
 
 ## 结论摘要
 ## Scope Assumptions
+## Discovery Profile 与 Research Axes
 ## 排名总览
 ## 研究方法
 ## Top 机会详解
@@ -1743,10 +2051,16 @@ class OpportunityReporter:
   - 风险和反证
   - kill criteria
   - 自然复述测试、7 天验证动作和 30 天 MVP 建议
+  - AI capability-demand match（适用时）
+  - 通用模型/平台/开源 baseline 实测（适用时）
+  - 质量、可靠性、延迟、推理与人工审核单位经济（适用时）
+  - 数据权利、评测反馈闭环、provider 可迁移性和平台内置风险（适用时）
+  - 7 天技术 spike 和 30 天客户/商业验证（适用时）
 ## 被筛掉的机会
 ## 观察池机会
 ## 用户自然语言和心智定位摘要
 ## 现有解法失效场景地图
+## AI 能力变化与 Capability-Demand Convergence 摘要（适用时）
 ## 不确定性、关键假设和后续验证建议
 ## 审计追踪和参考来源
 ```
@@ -1877,7 +2191,7 @@ features/startup-opportunity/
   renderer/
   container/
     workflow-definitions/
-      startup_opportunity_industry_discovery.json
+      startup_opportunity_opportunity_discovery.json
       startup_opportunity_concept_validation.json
     workflow-recipes/
     workflow-routing-scopes/
@@ -1896,7 +2210,7 @@ features/startup-opportunity/
     mcp/
 ```
 
-两个 Definition 分别固定行业发现和概念验证的外层 State、named exit、error/cancel route 和 report contract。它们可以共享 exact capability refs，但不能让 Planner 在运行时把一种宏观流程改成另一种。Feature manifest 必须声明上述 Graph resource 目录；这依赖 Dynamic Framework 对 `FeatureResources` parser/registry 的同步扩展。
+两个 Definition 分别固定机会发现和概念验证的外层 State、named exit、error/cancel route 和 report contract。机会发现 Definition 内允许通过 typed `discovery_profile` / `research_axes` 选择需求、AI 能力和市场子图，但不能改变 TopN discovery 的宏观目标；概念验证始终输出单 thesis verdict。它们可以共享 exact capability refs，但不能让 Planner 在运行时把一种宏观流程改成另一种。Feature manifest 必须声明上述 Graph resource 目录；这依赖 Dynamic Framework 对 `FeatureResources` parser/registry 的同步扩展。
 
 ```json
 {
@@ -1930,6 +2244,8 @@ opportunity_scope_framer
 opportunity_planner
 opportunity_seed_researcher
 opportunity_space_mapper
+ai_capability_space_mapper
+capability_demand_convergence_researcher
 user_language_researcher
 audience_pain_researcher
 job_to_be_done_researcher
@@ -1945,6 +2261,10 @@ monetization_researcher
 acquisition_researcher
 compliance_risk_researcher
 counter_evidence_researcher
+ai_capability_benchmark_researcher
+ai_evaluation_reliability_researcher
+ai_unit_economics_researcher
+ai_data_dependency_researcher
 opportunity_thesis_synthesizer
 opportunity_synthesizer
 opportunity_validation_planner
@@ -1959,8 +2279,12 @@ scope-frame.json
 research-plan.json
 seed-probe.json
 opportunity-space-map.json
+ai-capability-space-map.json
 discovery-graph-spec.json
 discovery-graph-fan-in.json
+demand-theses.json
+capability-affordances.json
+capability-demand-convergence.json
 user-language-mining.json
 audience-pain-lane.json
 job-to-be-done-lane.json
@@ -1981,7 +2305,10 @@ acquisition-enrichment.json
 compliance-risk-enrichment.json
 counter-evidence-enrichment.json
 feasibility-unit-economics-enrichment.json
-llm-capability-benchmark.json
+ai-capability-benchmark.json
+ai-evaluation-reliability.json
+ai-inference-unit-economics.json
+ai-data-dependency.json
 capability-commoditization-risk.json
 workflow-outcome-value-enrichment.json
 state-context-continuity-enrichment.json
@@ -2004,29 +2331,31 @@ concept-validation-experiments.json
 concept-validation-report.md
 ```
 
-行业发现 Definition 的建议 workflow states：
+机会发现 Definition 的建议 workflow states：
 
 ```text
-scope_framing               delegation  明确市场、平台、商业模式、团队能力、验证周期、风险偏好和默认假设
-research_plan               delegation  LLM 规划调研策略、lane catalog 选择、关键词、数据源、topN、评分权重、kill gate、Research Kernel 参数
-seed_probe                  delegation  轻量探测用户、场景、问题、关键词、产品和数据源 seed
-opportunity_space_map       delegation  建立用户角色、JTBD、工作流、替代方案、可软件化节点和初始 thesis 假设
-discovery_graph_plan        delegation  基于 scope、seed 和 opportunity space 生成本次 discovery DAG spec；capability evaluator 做 compiler dry-run
+scope_framing               delegation  明确市场、平台、商业模式、团队能力、验证周期、风险偏好、discovery profile、research axes 和默认假设
+research_plan               delegation  规划需求/AI/市场子图、lane catalog、query、数据源、topN、join、评分 profile、kill gate 和 Research Kernel 参数
+seed_probe                  delegation  轻量探测用户、场景、问题、关键词、产品、数据源和 capability/model/ecosystem seed
+opportunity_space_map       delegation  建立用户角色、JTBD、工作流、替代方案、task operating profile、可软件化节点和初始需求假设
+ai_capability_space_map     delegation  启用 AI axis 时建立能力、成本、部署、生态、数据和评测边界；否则返回 not_applicable
+discovery_graph_plan        delegation  基于 scope、seed、opportunity space 和 capability space 生成 discovery DAG spec；capability evaluator 做 compiler dry-run
 discovery_graph_execute     graph       执行本次 discovery DAG，可能包含并行、依赖、条件、join 和局部 retry
 discovery_gap_analysis      delegation  基于 fan-in context 识别证据缺口、冲突、弱判断和需要补充的机会
 followup_graph_plan         delegation  按缺口生成可选 follow-up DAG spec；capability evaluator 做 compiler dry-run
 followup_graph_execute      graph       执行补充调研、反证或复核节点；无补充需求时可跳过
-lane_result_validate        system      对 graph fan-in 后的 lane result 做 schema、evidence ref、trigger phrase、solution failure、support/opposition、kill conditions、topN 数量校验
-opportunity_thesis          delegation  将 lane topN 机会转成可验证 thesis，补齐买单方、mental positioning、entry scene、solution failure、entry wedge、why now、kill criteria
+lane_result_validate        system      校验 Opportunity/Demand Thesis/Capability Affordance、evidence ref、support/opposition、kill conditions 和各侧 topN
+capability_demand_convergence delegation AI/hybrid profile 下匹配 Demand Thesis 与 Capability Affordance；其他 profile 返回 not_applicable/pass-through
+opportunity_thesis          delegation  将通用候选或 convergence match 转成可验证 thesis，补齐买单方、定位、解法失效、entry wedge、why now、kill criteria 和 AI system profile
 opportunity_merge           delegation  语义合并、拆分判断、判断依据聚合
 enrichment_graph_plan       delegation  基于合并机会生成 enrichment / validation DAG spec；capability evaluator 做 compiler dry-run
-enrichment_graph_execute    graph       执行竞品、市场、商业化、获客、合规、反证、替代方案、可行性、LLM 基线、能力商品化、价值层、状态上下文和买单语言等节点
+enrichment_graph_execute    graph       执行竞品、市场、商业化、获客、合规、反证、替代方案、可行性、AI baseline/可靠性/单位经济/依赖、能力商品化、价值层、状态上下文和买单语言等节点
 judgment_context_normalize  system      URL/source/product/evidence ref/claim/finding/insight 归一化和 deterministic dedupe
-global_score                system      确定性评分公式、排序、阈值过滤和推荐档位
+global_score                system      按 versioned general/industry_first/ai_first/hybrid scoring profile 执行 hard gate、评分、排序、阈值过滤和推荐档位
 sensitivity_analysis        system      权重扰动、关键假设扰动、置信度扰动、rank stability 和 rank range 计算
 ranking_rationale           delegation  基于结构化分数、反证和敏感性分析生成排名解释
 quality_review              delegation  审核判断链、反证、评分解释、limitations 和报告一致性
-validation_plan             delegation  生成自然复述、prompt-only baseline、买单语言、状态上下文、7 天验证动作、30 天 MVP、成功阈值和失败阈值
+validation_plan             delegation  生成自然复述、prompt/tool baseline、买单语言、状态上下文、7 天技术/需求验证、30 天 MVP、成功阈值和失败阈值
 final_report                delegation  输出 Markdown 报告、JSON 报告和 traceability
 done                        terminal
 ```
@@ -2037,7 +2366,7 @@ done                        terminal
 concept_framing             delegation  把已有产品想法规范为单一 hypothesis、assumptions、unknowns 和 kill criteria
 validation_plan             delegation  选择验证维度、证据标准、预算和 follow-up bound
 validation_graph_plan       delegation  生成 hypothesis-led validation Scope Spec；evaluator 做 compiler dry-run
-validation_graph_execute    graph       并发执行需求、替代、竞品、付费、获客、可行性、合规和反证节点
+validation_graph_execute    graph       并发执行需求、替代、竞品、付费、获客、可行性、合规和反证节点；AI profile 强制执行 AI validation bundle
 validation_gap_analysis     delegation  识别会改变 verdict 的证据缺口
 followup_graph_plan         delegation  只为关键缺口生成 bounded follow-up Scope Spec
 followup_graph_execute      graph       可选补充验证；无需求时由 Definition route 跳过
@@ -2052,6 +2381,7 @@ done                        terminal
 Discovery graph 的默认 lane catalog：
 
 ```text
+# 需求与市场侧
 audience_pain              受众需求痛点
 user_language_mining       用户真实语言与心智定位
 job_to_be_done             JTBD 与任务流拆解
@@ -2061,9 +2391,17 @@ search_demand              搜索需求与内容缺口
 trend_change               趋势变化
 substitutes_workarounds    替代方案与非 App 竞争
 solution_failure           现有解法失效场景
+
+# AI 能力侧，仅 research_axes 包含 ai_capability 时可选/必选
+ai_capability_frontier     新能力、能力边界、失败模式和 newly feasible tasks
+ai_cost_curve_access       质量、延迟、上下文、成本、端侧/云端和开源可用性
+ai_workflow_automation     task step 自动化/增强与 human-in-the-loop 边界
+ai_ecosystem_platform      provider、平台、集成生态、分发和 bundling 风险
+ai_data_eval_flywheel      数据权利、ground truth、评测和反馈闭环
+ai_adoption_trust          安全、审计、采购、责任和组织采用障碍
 ```
 
-这些 lane 是 Recipe allowlist 内的可选 capabilities，不是每次固定全量执行。`discovery_graph_plan` 必须根据 scope、seed、机会空间、数据可得性和预算生成本次 Scope Spec，决定启用哪些 lane、是否实例化 bounded industry-specific lane、节点之间的依赖、并发关系、join policy 和 follow-up 条件；不能声明新 role/skill/tool 或 node-local artifact/evaluator。
+这些 lane 是 Recipe allowlist 内的 capabilities，不是每次固定全量执行。`industry_first` 主要启用需求/市场侧；`ai_first` 和 `hybrid` 必须同时执行最低需求验证集合与 AI 能力集合，不能只运行能力子图。`discovery_graph_plan` 必须根据 scope、profile、research axes、seed、机会空间、数据可得性和预算生成本次 Scope Spec，决定启用哪些 lane、是否实例化 bounded domain-specific lane、节点之间的依赖、并发关系、join policy 和 follow-up 条件；不能声明新 role/skill/tool 或 node-local artifact/evaluator。
 
 `seed_probe` 不应把业务流程变成产品中心调研。`product_seed` 只作为产品相关 node 的输入；非产品 node 仍可独立从用户心智、搜索需求、社区讨论、任务流、替代方案和趋势变化中发现尚未被现有产品覆盖的强需求。后续的产品覆盖分析用于验证 coverage gap，而不是要求所有机会都来自已有产品缺口。
 
@@ -2077,14 +2415,17 @@ acquisition                 SEO、社区、渠道、平台获客
 compliance_risk             政策、医疗、金融、隐私、平台风险
 counter_evidence            反证、替代方案、失败案例
 feasibility_unit_economics  小团队可行性、交付复杂度和早期单位经济
-llm_capability_benchmark    通用 LLM + prompt-only baseline、模型升级风险
+ai_capability_benchmark     通用模型/平台/开源 + prompt/tool baseline、目标任务实测和模型升级风险
+ai_evaluation_reliability   评测集、ground truth、成功率、异常、审计、人工兜底和恢复
+ai_inference_unit_economics 推理、检索、工具、存储、人工审核和支持成本后的单位经济
+ai_data_dependency          数据权利、反馈闭环、provider portability 和平台依赖
 capability_commoditization  模型、平台、API、开源和竞品更新导致的能力商品化风险
 workflow_outcome_value      output/workflow/outcome 价值层和 outcome metric
 state_context_continuity    用户状态、上下文连续性、数据闭环和隐私边界
 buyer_purchase_language     买单语言、预算来源、决策标准和 marketing bridge
 ```
 
-Enrichment graph 同样不是固定 12 个 node。planner 应按机会类型、证据缺口和风险选择节点；例如非 AI 机会可以跳过或降权 LLM baseline，强监管行业必须增加合规和反证深挖，买单方不清晰时必须增加 buyer purchase language 节点。
+Enrichment graph 同样不是固定全量 node。planner 应按机会类型、证据缺口和风险选择节点；非 AI 机会可以跳过 AI bundle，AI/hybrid profile 的 AI 候选必须执行 `ai_capability_benchmark`、`ai_evaluation_reliability`、`ai_inference_unit_economics` 和 `ai_data_dependency`，强监管 AI 还必须执行合规和对抗式反证。买单方不清晰时必须增加 buyer purchase language 节点。
 
 所有实际执行的 lane、enrichment、review 和 follow-up 节点都必须落在通用 Dynamic Workflow DAG 框架的 graph run 中，而不是藏在单个 agent 节点内部。内部子任务可以作为 agent 自己的执行优化，但不能替代 workflow 层对 node 状态、产物、评测、retry 和 limitations 的可观测性。
 
@@ -2093,11 +2434,11 @@ Enrichment graph 同样不是固定 12 个 node。planner 应按机会类型、�
 动态结构不等于动态合同。每类 graph state 必须引用固定 versioned interface：
 
 ```text
-startup-opportunity.industry-discovery-graph@1
-  inputs: scope_frame, research_plan, seed_probe, opportunity_space_map
+startup-opportunity.opportunity-discovery-graph@1
+  inputs: scope_frame, research_plan, seed_probe, opportunity_space_map, ai_capability_space_map?
   exits:
-    completed(branch_results, judgment_context, source_manifest)
-    partial(branch_results, failed_branches, evidence_gaps)
+    completed(branch_results, candidate_opportunities, demand_theses, capability_affordances, judgment_context, source_manifest)
+    partial(branch_results, candidate_opportunities, demand_theses, capability_affordances, failed_branches, evidence_gaps)
     insufficient_evidence(limitations, attempted_sources)
 
 startup-opportunity.concept-validation-graph@1
@@ -2112,7 +2453,7 @@ startup-opportunity.followup-graph@1
   exits: completed | partial | no_followup_needed | insufficient_evidence
 ```
 
-Definition 必须完整覆盖 named exits：行业 discovery `completed -> opportunity_thesis`、`partial -> discovery_gap_analysis`、`insufficient_evidence -> manual_review/report limitation`；概念 validation `completed -> hypothesis_reduce`、`partial -> validation_gap_analysis`、`insufficient_evidence -> concept_verdict`。Engine error、local cancel 和 global cancel 使用框架独立可信路径，不能伪装成业务 `insufficient_evidence`。
+Definition 必须完整覆盖 named exits：opportunity discovery `completed -> lane_result_validate -> capability_demand_convergence/opportunity_thesis`、`partial -> discovery_gap_analysis`、`insufficient_evidence -> manual_review/report limitation`；概念 validation `completed -> hypothesis_reduce`、`partial -> validation_gap_analysis`、`insufficient_evidence -> concept_verdict`。Engine error、local cancel 和 global cancel 使用框架独立可信路径，不能伪装成业务 `insufficient_evidence`。
 
 Feature 发布的每个 capability 固定 exact executor/role/skills/prompt skeleton、typed ports、artifact/evaluator/quality gate、tool/MCP/file scope、retry/timeout、effect/cancellation contract。Research capability 原则上 `pure` 或只通过幂等 evidence MCP 写入 session；evidence record operation key 由 `session_id + canonical source/query/content hash` 生成。Graph source 示例只能写 `capability_ref`、typed bindings 和更严格 retry/timeout。
 
@@ -2128,6 +2469,8 @@ features/startup-opportunity/container/skills/
   opportunity-concept-validation-plan/SKILL.md
   opportunity-seed-probe/SKILL.md
   opportunity-space-map/SKILL.md
+  opportunity-ai-capability-space-map/SKILL.md
+  opportunity-capability-demand-convergence/SKILL.md
   opportunity-user-language-mining/SKILL.md
   opportunity-audience-pain-recon/SKILL.md
   opportunity-job-to-be-done-recon/SKILL.md
@@ -2137,6 +2480,12 @@ features/startup-opportunity/container/skills/
   opportunity-trend-recon/SKILL.md
   opportunity-substitutes-recon/SKILL.md
   opportunity-solution-failure-recon/SKILL.md
+  opportunity-ai-capability-frontier/SKILL.md
+  opportunity-ai-cost-curve-access/SKILL.md
+  opportunity-ai-workflow-automation/SKILL.md
+  opportunity-ai-ecosystem-platform/SKILL.md
+  opportunity-ai-data-eval-flywheel/SKILL.md
+  opportunity-ai-adoption-trust/SKILL.md
   opportunity-thesis-synthesis/SKILL.md
   opportunity-merge-synthesis/SKILL.md
   opportunity-competitor-gap-recon/SKILL.md
@@ -2146,7 +2495,10 @@ features/startup-opportunity/container/skills/
   opportunity-compliance-risk-recon/SKILL.md
   opportunity-counter-evidence/SKILL.md
   opportunity-feasibility-unit-economics/SKILL.md
-  opportunity-llm-capability-benchmark/SKILL.md
+  opportunity-ai-capability-benchmark/SKILL.md
+  opportunity-ai-evaluation-reliability/SKILL.md
+  opportunity-ai-inference-unit-economics/SKILL.md
+  opportunity-ai-data-dependency/SKILL.md
   opportunity-capability-commoditization/SKILL.md
   opportunity-workflow-outcome-value/SKILL.md
   opportunity-state-context-continuity/SKILL.md
@@ -2166,7 +2518,8 @@ features/startup-opportunity/container/skills/
     "opportunity-scope-framing",
     "opportunity-research-plan",
     "opportunity-seed-probe",
-    "opportunity-space-map"
+    "opportunity-space-map",
+    "opportunity-ai-capability-space-map"
   ],
   "web_opportunity_research": [
     "opportunity-user-language-mining",
@@ -2177,7 +2530,13 @@ features/startup-opportunity/container/skills/
     "opportunity-search-demand-recon",
     "opportunity-trend-recon",
     "opportunity-substitutes-recon",
-    "opportunity-solution-failure-recon"
+    "opportunity-solution-failure-recon",
+    "opportunity-ai-capability-frontier",
+    "opportunity-ai-cost-curve-access",
+    "opportunity-ai-workflow-automation",
+    "opportunity-ai-ecosystem-platform",
+    "opportunity-ai-data-eval-flywheel",
+    "opportunity-ai-adoption-trust"
   ],
   "web_opportunity_enrichment": [
     "opportunity-competitor-gap-recon",
@@ -2187,13 +2546,17 @@ features/startup-opportunity/container/skills/
     "opportunity-compliance-risk-recon",
     "opportunity-counter-evidence",
     "opportunity-feasibility-unit-economics",
-    "opportunity-llm-capability-benchmark",
+    "opportunity-ai-capability-benchmark",
+    "opportunity-ai-evaluation-reliability",
+    "opportunity-ai-inference-unit-economics",
+    "opportunity-ai-data-dependency",
     "opportunity-capability-commoditization",
     "opportunity-workflow-outcome-value",
     "opportunity-state-context-continuity",
     "opportunity-buyer-purchase-language"
   ],
   "web_opportunity_synthesis": [
+    "opportunity-capability-demand-convergence",
     "opportunity-thesis-synthesis",
     "opportunity-merge-synthesis",
     "opportunity-ranking-rationale",
@@ -2208,10 +2571,11 @@ Graph node skill 的职责划分：
 
 | Node | Skill | 核心职责 |
 |--------|-------|----------|
-| `scope_framing` | `opportunity-scope-framing` | 明确市场、平台、商业模式、团队能力、验证周期、风险偏好和默认假设 |
-| `research_plan` | `opportunity-research-plan` | 生成 lane 计划、query goals、数据源优先级、Research Kernel 参数、评分权重和 kill gate 规则 |
-| `seed_probe` | `opportunity-seed-probe` | 轻量探测用户、场景、问题、关键词、产品和数据源 seed；不把所有 lane 绑定到已有产品 |
-| `opportunity_space_map` | `opportunity-space-map` | 建立用户角色、JTBD、当前替代方案、工作流摩擦点、可软件化节点、状态上下文和买单语言假设 |
+| `scope_framing` | `opportunity-scope-framing` | 明确市场、平台、商业模式、团队能力、验证周期、风险偏好、discovery profile、research axes 和默认假设 |
+| `research_plan` | `opportunity-research-plan` | 生成需求/AI/市场子图、query goals、数据源、join policy、Research Kernel 参数、评分 profile 和 kill gate |
+| `seed_probe` | `opportunity-seed-probe` | 轻量探测用户、场景、问题、关键词、产品、数据源和 capability/model/ecosystem seed |
+| `opportunity_space_map` | `opportunity-space-map` | 建立用户角色、JTBD、替代方案、task operating profile、工作流摩擦点、状态上下文和买单语言假设 |
+| `ai_capability_space_map` | `opportunity-ai-capability-space-map` | 建立能力 frontier、质量/延迟/成本边界、部署、生态、数据和评测约束 |
 | `user_language_mining` | `opportunity-user-language-mining` | 从真实 UGC 中挖掘用户自然语言、trigger phrase、mental positioning 和入口场景 |
 | `audience_pain` | `opportunity-audience-pain-recon` | 从人群、场景、社区讨论和评论中挖掘痛点与候选机会 |
 | `job_to_be_done` | `opportunity-job-to-be-done-recon` | 从任务流、流程断点、协作摩擦和工作流价值中挖掘机会 |
@@ -2220,8 +2584,9 @@ Graph node skill 的职责划分：
 | `search_demand` | `opportunity-search-demand-recon` | 从搜索需求、问答和内容缺口中识别工具化机会 |
 | `trend_change` | `opportunity-trend-recon` | 从政策、技术、平台和消费变化中识别新窗口 |
 | `substitutes_workarounds` | `opportunity-substitutes-recon` | 验证当前替代方案、非 App 竞争、切换阻力和 App 必要性 |
-| `solution_failure` | `opportunity-solution-failure-recon` | 识别现有解法失效场景、失败原因、next action 和迁移动机 |
-| `opportunity_thesis` | `opportunity-thesis-synthesis` | 将候选机会转为可验证 thesis，补齐买单语言、mental positioning、entry scene、solution failure、价值层、状态上下文、LLM baseline、能力商品化风险、entry wedge、why now、kill criteria |
+| `solution_failure` | `opportunity-solution-failure-recon` | 识别传统/AI 解法失效、non-consumption、失败原因、next action 和迁移动机 |
+| `capability_demand_convergence` | `opportunity-capability-demand-convergence` | 匹配 Demand Thesis 与 Capability Affordance，输出 matched/demand-only/capability-only/rejected |
+| `opportunity_thesis` | `opportunity-thesis-synthesis` | 将通用候选或 convergence match 转为可验证 thesis，补齐 AI system profile、买单语言、定位、价值层、entry wedge、why now 和 kill criteria |
 | `competitor_gap` | `opportunity-competitor-gap-recon` | 对合并机会验证竞品覆盖、满意度、迁移阻力和差异化空间 |
 | `market_size` | `opportunity-market-size-recon` | 补充市场规模、增长、目标用户规模和消费能力相关判断 |
 | `monetization` | `opportunity-monetization-recon` | 验证付费意愿、定价、订阅、交易抽佣或 B2B 变现路径 |
@@ -2229,12 +2594,15 @@ Graph node skill 的职责划分：
 | `compliance_risk` | `opportunity-compliance-risk-recon` | 识别政策、医疗、金融、隐私、平台规则等风险 |
 | `counter_evidence` | `opportunity-counter-evidence` | 查找替代方案、失败案例、需求被高估证据和反方观点 |
 | `feasibility_unit_economics` | `opportunity-feasibility-unit-economics` | 判断小团队交付复杂度、运营依赖、毛利结构和早期单位经济 |
-| `llm_capability_benchmark` | `opportunity-llm-capability-benchmark` | 验证 AI/LLM 相关机会相对通用 LLM + prompt-only baseline 的真实差距 |
+| `ai_capability_benchmark` | `opportunity-ai-capability-benchmark` | 对目标任务执行通用模型/平台/开源 + prompt/tool baseline，验证能力增量、失败和成本 |
+| `ai_evaluation_reliability` | `opportunity-ai-evaluation-reliability` | 验证评测集、ground truth、成功率、异常检测、审计、人工兜底和恢复 |
+| `ai_inference_unit_economics` | `opportunity-ai-inference-unit-economics` | 计算推理、检索、工具、存储、人工审核和支持成本后的单位经济 |
+| `ai_data_dependency` | `opportunity-ai-data-dependency` | 验证数据权利、反馈闭环、provider portability、平台依赖和 capability half-life |
 | `capability_commoditization` | `opportunity-capability-commoditization` | 判断核心能力被模型升级、平台内置、API 降价、开源或竞品更新抹平的风险 |
 | `workflow_outcome_value` | `opportunity-workflow-outcome-value` | 区分 output、workflow 和 outcome 价值，定义 outcome metric |
 | `state_context_continuity` | `opportunity-state-context-continuity` | 建模用户状态、上下文来源、状态更新触发器、数据闭环和隐私边界 |
 | `buyer_purchase_language` | `opportunity-buyer-purchase-language` | 验证买单语言、预算来源、决策标准和用户语言到购买语言的映射 |
-| `validation_plan` | `opportunity-validation-plan` | 为推荐机会生成自然复述、prompt-only baseline、买单语言、状态上下文、7 天验证、30 天 MVP、成功阈值和失败阈值 |
+| `validation_plan` | `opportunity-validation-plan` | 为推荐机会生成自然复述、prompt/tool baseline、买单语言、状态上下文、7 天技术/需求验证、30 天 MVP、成功阈值和失败阈值 |
 
 每个 skill 必须要求：
 
@@ -2261,7 +2629,8 @@ agent delegation 负责：
 - 对语义相近机会做合并/拆分判断。
 - 判断买单方、替代方案、entry wedge、why now 和 kill criteria 是否成立。
 - 判断 trigger phrase、entry scene、solution failure scene 和 mental position occupation 是否成立。
-- 判断 AI/LLM baseline、prompt-only baseline、model upgrade risk 和能力商品化风险是否成立。
+- 判断 AI baseline、prompt/tool baseline、评测可靠性、单位经济、model upgrade risk 和能力商品化风险是否成立。
+- 判断 Demand Thesis 与 Capability Affordance 是否真实匹配，而不是技术找场景。
 - 判断机会价值主要位于 output、workflow 还是 outcome 层，以及 outcome metric 是否可验证。
 - 判断用户状态、上下文连续性、买单语言和 marketing bridge 是否能支撑留存与购买。
 - 在 evidence 不足时显式降置信度或返回 `insufficient_evidence`。
@@ -2285,10 +2654,13 @@ host MCP tool 负责：
 - `opportunity_validate_traceability`
 - `opportunity_validate_user_language_refs`
 - `opportunity_validate_solution_failure_refs`
-- `opportunity_validate_llm_baseline`
+- `opportunity_validate_ai_baseline`
+- `opportunity_validate_ai_benchmark_manifest`
+- `opportunity_validate_capability_demand_refs`
+- `opportunity_calculate_ai_unit_economics`
 - `opportunity_validate_buyer_language_refs`
 
-host MCP tool 可以执行联网 search/fetch/API 调用，但它的职责是按 agent 给出的 query、URL、source type 和 research goal 执行可审计数据获取，并把结果写成 evidence record。它不负责决定行业机会、筛选候选方向或生成最终结论。
+host MCP tool 可以执行联网 search/fetch/API 调用，但它的职责是按 agent 给出的 query、URL、source type 和 research goal 执行可审计数据获取，并把结果写成 evidence record。它不负责决定创业机会、匹配需求与能力、筛选候选方向或生成最终结论。
 
 这些工具由 Feature 的 MCP resource/host adapter 注册，经 core IPC/MCP extension point 分发到 `features/startup-opportunity/host/opportunity-recon/request-dispatcher.ts`，不能在 `src/ipc.ts` 静态增加 Startup Opportunity 业务分支。通用 `WebSearch`/`WebFetch` 仍可用于探索性补充，但原始来源进入正式判断前必须经 host MCP tool 记录到 evidence store。正式 artifact 中只保留 evidence refs、source manifest、provenance、limitations 和判断层产物，不携带原始证据正文作为下游生成语料。
 
@@ -2298,7 +2670,7 @@ host MCP tool 可以执行联网 search/fetch/API 调用，但它的职责是按
 - graph node artifact schema validation。
 - evidence ref validation 和 source manifest 校验。
 - user language refs、trigger phrase refs 和 solution failure refs 校验。
-- llm baseline、buyer language、value layer 和 state context 字段完整性校验。
+- AI baseline/benchmark、capability-demand refs、buyer language、value layer 和 state context 字段完整性校验。
 - deterministic dedupe，例如 URL canonicalization、product id 归一化。
 - deterministic global scoring。
 - deterministic sensitivity analysis 和 rank stability 计算。
@@ -2326,6 +2698,10 @@ startup_opportunity.scope_frame.v1
 startup_opportunity.plan.v1
 startup_opportunity.seed_probe.v1
 startup_opportunity.opportunity_space_map.v1
+startup_opportunity.ai_capability_space_map.v1
+startup_opportunity.demand_thesis.v1
+startup_opportunity.capability_affordance.v1
+startup_opportunity.capability_demand_convergence.v1
 startup_opportunity.user_language_map.v1
 startup_opportunity.solution_failure_map.v1
 startup_opportunity.discovery_lane_result.v1
@@ -2334,7 +2710,10 @@ startup_opportunity.opportunity_thesis.v1
 startup_opportunity.merge.v1
 startup_opportunity.enrichment_branch_result.v1
 startup_opportunity.enrichment_fan_in.v1
-startup_opportunity.llm_capability_benchmark.v1
+startup_opportunity.ai_capability_benchmark.v1
+startup_opportunity.ai_evaluation_reliability.v1
+startup_opportunity.ai_inference_unit_economics.v1
+startup_opportunity.ai_data_dependency.v1
 startup_opportunity.capability_commoditization_risk.v1
 startup_opportunity.value_layer_analysis.v1
 startup_opportunity.user_state_context_model.v1
@@ -2372,9 +2751,13 @@ branch-level contract 用于约束单个并行分支的输出；fan-in contract 
 ```text
 startup_opportunity.scope_frame.v1
   - direction
+  - discovery_profile                 general | industry_first | ai_first | hybrid
+  - research_axes
+  - ai_scope
   - market
   - language
   - platform
+  - delivery_form_preferences
   - business_model_preferences
   - team_capability_constraints
   - validation_budget
@@ -2395,6 +2778,8 @@ startup_opportunity.seed_probe.v1
   - keyword_seeds
   - product_seeds
   - source_seeds
+  - capability_seeds
+  - model_ecosystem_seeds
   - seed_evidence_refs
   - limitations
 ```
@@ -2409,6 +2794,7 @@ startup_opportunity.opportunity_space_map.v1
   - decision_makers
   - jobs_to_be_done
   - workflow_maps
+  - task_operating_profiles
   - current_alternatives
   - workaround_patterns
   - workflow_friction_points
@@ -2419,6 +2805,51 @@ startup_opportunity.opportunity_space_map.v1
   - disconfirming_questions
   - audit_refs
   - limitations
+```
+
+`ai_capability_space_map.v1` 必须产出：
+
+```text
+startup_opportunity.ai_capability_space_map.v1
+  - applies
+  - capability_frontier
+  - capability_affordances
+  - newly_feasible_tasks
+  - quality_latency_cost_boundaries
+  - failure_modes
+  - deployment_constraints
+  - human_in_the_loop_boundaries
+  - data_and_evaluation_requirements
+  - provider_open_source_platform_landscape
+  - capability_half_life
+  - disconfirming_questions
+  - source_manifest
+  - audit_refs
+  - limitations
+```
+
+`demand_thesis.v1` 必须产出 solution-neutral 需求对象，包括 `demand_id`、user/buyer/payer、JTBD、workflow step、trigger phrase、当前传统/AI alternatives、task operating profile、execution constraints、data conditions、outcome metrics、付费/迁移判断、supporting/opposing refs、kill conditions 和 limitations。
+
+`capability_affordance.v1` 必须产出 capability id/name、newly feasible tasks、supported modalities、质量/延迟/成本边界、失败模式、部署约束、人机边界、数据/评测要求、provider/open-source/platform landscape、bundle risk、capability half-life、审计引用和 limitations。
+
+`capability_demand_convergence.v1` 必须包含：
+
+```text
+matched_opportunities
+  - demand_refs
+  - capability_refs
+  - target_task_steps
+  - capability_delta
+  - automation_or_augmentation_boundary
+  - expected_outcomes
+  - failure_cost_and_recovery
+  - match_rationale
+  - critical_unknowns
+demand_only_gaps
+capability_only_signals
+rejected_matches
+audit_refs
+limitations
 ```
 
 `user_language_map.v1` 必须产出：
@@ -2444,8 +2875,12 @@ startup_opportunity.user_language_map.v1
 ```text
 startup_opportunity.solution_failure_map.v1
   - current_solutions
+  - current_ai_workarounds
   - solution_failure_scenes
   - failure_modes
+  - current_ai_failure_modes
+  - non_consumption_cases
+  - abandonment_reasons
   - user_language_refs
   - next_actions_after_failure
   - migration_intent
@@ -2470,7 +2905,10 @@ startup_opportunity.discovery_lane_result.v1
   - opposing_claims
   - findings
   - insights
+  - task_operating_profiles
   - candidate_opportunities
+  - demand_theses
+  - capability_affordances
   - user_language_refs
   - trigger_phrase_refs
   - solution_failure_refs
@@ -2492,12 +2930,15 @@ branch_results
 branch_evaluation_summary
 failed_or_partial_branches
 all_top_opportunities
+all_top_demand_theses
+all_top_capability_affordances
 judgment_context
 source_manifest
 user_language_summary
 solution_failure_summary
 opposing_claims_summary
 pre_kill_summary
+capability_demand_convergence_required
 audit_refs
 limitations
 ```
@@ -2507,6 +2948,8 @@ limitations
 ```text
 opportunity_theses
   - id
+  - discovery_profile
+  - research_axes
   - title
   - opportunity_thesis
   - user
@@ -2532,7 +2975,10 @@ opportunity_theses
   - initial_distribution_channel
   - expansion_path
   - defensibility_hypothesis
-  - llm_capability_baseline
+  - ai_capability_baseline
+  - matched_demand_refs
+  - matched_capability_refs
+  - ai_system_profile
   - capability_commoditization_risk
   - supporting_claim_refs
   - opposing_claim_refs
@@ -2557,7 +3003,10 @@ startup_opportunity.enrichment_branch_result.v1
   - insights
   - counter_claims
   - score_inputs
-  - llm_capability_baseline
+  - ai_capability_baseline
+  - ai_evaluation_reliability
+  - ai_inference_unit_economics
+  - ai_data_dependency
   - capability_commoditization_risk
   - value_layer
   - user_state_context_model
@@ -2577,7 +3026,10 @@ source_manifest
 counter_evidence_summary
 score_inputs_by_opportunity
 sensitivity_inputs_by_opportunity
-llm_capability_baselines_by_opportunity
+ai_capability_baselines_by_opportunity
+ai_evaluation_reliability_by_opportunity
+ai_inference_unit_economics_by_opportunity
+ai_data_dependency_by_opportunity
 commoditization_risk_by_opportunity
 value_layer_by_opportunity
 state_context_models_by_opportunity
@@ -2587,20 +3039,46 @@ audit_refs
 limitations
 ```
 
-`llm_capability_benchmark.v1` 必须包含：
+`ai_capability_benchmark.v1` 必须包含：
 
 ```text
 opportunity_id
 ai_dependency_points
 baseline_task
-prompt_only_baseline_result
-mainstream_llm_solved_level
+baseline_models_and_tools
+prompt_tool_setup
+evaluation_dataset
+evaluation_metrics
+repeated_run_summary
+quality_result
+failure_cases
+latency_result
+cost_per_task
+human_review_cost
+desk_research_only
+mainstream_ai_solved_level
 remaining_gap_after_baseline
 model_upgrade_risk
+capability_half_life
 score_input
 audit_refs
 limitations
 ```
+
+`ai_evaluation_reliability.v1` 必须包含评测集代表性、ground truth、success/failure metrics、异常检测、审计、human-in-the-loop、失败恢复、上线监控、score input、审计引用和 limitations。
+
+`ai_inference_unit_economics.v1` 必须包含目标价格、推理/检索/工具/存储/人工审核/支持成本、使用量假设、毛利区间、成本敏感性、break-even 条件、score input、审计引用和 limitations。
+
+`ai_data_dependency.v1` 必须包含数据来源和权利、更新频率、ground truth、反馈闭环、provider dependency、portability、platform bundle risk、open-source substitution risk、capability half-life、mitigation、score input、审计引用和 limitations。
+
+AI profile evaluator/quality gate 还必须执行以下确定性检查：
+
+- `ai_first`/`hybrid` Scope Spec 至少包含一个需求侧根节点、一个 AI 能力侧根节点，以及 fan-in 后的 exact `capability_demand_convergence` capability。
+- `matched_opportunities` 的 demand/capability refs 必须存在于同一 immutable discovery snapshot；能力侧单独产物不能直接进入 `opportunity_thesis`。
+- `ai_first`/`hybrid` 的正式 TopN 只能来自 `matched_opportunities`；`demand_only`、`capability_only` 和 `rejected_matches` 只能进入附录、观察池或 limitations。
+- 每个 AI opportunity 必须存在 baseline、evaluation reliability、unit economics 和 data dependency artifact；缺一项不能进入 AI scoring。
+- `desk_research_only=true`、评测集无代表性或 freshness 过期时，confidence 和最高 score band 必须按 versioned rule 限制。
+- hard gate 的 rule version、input snapshot hash、触发原因和最终 band cap 必须进入 ranking/traceability artifact。
 
 `capability_commoditization_risk.v1` 必须包含：
 
@@ -2666,6 +3144,42 @@ audit_refs
 limitations
 ```
 
+`ranking.v1` 必须包含：
+
+```text
+scoring_profile
+rule_version
+ranked_opportunities
+  - opportunity_id
+  - rank
+  - score_band
+  - global_score
+  - confidence_score
+  - common_score_breakdown
+  - ai_score_breakdown
+      - capability_delta
+      - technical_reliability
+      - evaluation_feasibility
+      - data_readiness
+      - human_review_dependency
+      - inference_unit_economics
+      - provider_portability
+      - platform_bundle_risk
+      - open_source_substitution_risk
+      - data_feedback_moat
+      - capability_half_life
+      - ai_adoption_trust
+  - hard_gate_results
+  - triggered_kill_criteria
+  - band_caps
+  - rationale_inputs
+input_snapshot_hash
+audit_refs
+limitations
+```
+
+非 AI 机会的 `ai_score_breakdown` 为 `not_applicable`，不能用中性高分抬高总分；AI 候选缺少任一强制 score input 时不得进入最终排序。
+
 `sensitivity.v1` 必须包含：
 
 ```text
@@ -2690,7 +3204,11 @@ validation_plans
   - natural_restatement_test
   - trigger_phrase_test
   - mental_position_test
-  - prompt_only_baseline_test
+  - prompt_tool_baseline_test
+  - 7_day_technical_spike
+  - evaluation_reliability_test
+  - inference_unit_economics_test
+  - provider_portability_test
   - model_upgrade_sensitivity_test
   - buyer_purchase_language_test
   - state_context_value_test
@@ -2715,9 +3233,12 @@ current_alternative_hypotheses
 business_model_hypothesis / acquisition_hypothesis
 market / platform / team / budget / timeline constraints
 assumptions / unknowns / kill_criteria
+validation_profile          general | ai | regulated_ai
 ```
 
 `concept_validation_branch_result.v1` 的每条记录必须带同一个 `hypothesis_id`、validation dimension、supporting/opposing claims、evidence refs、confidence、limitations 和 kill-condition impact，禁止在 branch 内生成无关机会池。
+
+当 `validation_profile=ai|regulated_ai` 时，fan-in 必须包含 `ai_capability_benchmark`、`ai_evaluation_reliability`、`ai_inference_unit_economics` 和 `ai_data_dependency`。`regulated_ai` 还必须包含合规、隐私、安全、审计、人工责任边界和高错误成本 kill gate。缺少强制 bundle 时，deterministic verdict 只能输出 `insufficient_evidence`，不能由 reviewer 绕过。
 
 `concept_verdict.v1` 必须包含：
 
@@ -2736,6 +3257,8 @@ rule_version / input_snapshot_hash / audit_refs
 ```
 
 Verdict 由 versioned deterministic system capability 根据已验证字段和阈值计算；delegation reviewer 可以提出结构化 disagreement，但不能直接覆盖 rule result。需要改变规则时发布新 rule/capability/Recipe version。
+
+AI profile 的 `dimension_decisions` 至少包含 demand、generic baseline gap、technical reliability、evaluation feasibility、data rights/feedback、inference unit economics、human review burden、provider/platform dependency、commoditization、workflow outcome value、buyer/monetization、acquisition、security/compliance。每项都必须给出 decision、confidence、supporting/opposing refs、kill-condition impact 和 what-would-change-it。
 
 Artifact/evaluator/quality gate 属于 versioned capability，不属于 Planner 生成的 node。Capability resource 示例：
 
@@ -2767,22 +3290,35 @@ Planner 生成的 Graph Node 只允许：
 }
 ```
 
-### Task Intake 与两类输入合同
+### Task Intake、Discovery Profile 与两类输入合同
 
-Feature create form 提供 `analysis_mode = auto | industry_discovery | concept_validation`。显式模式直接选择对应 Recipe；`auto` 才在 Feature routing scope 内调用 Macro Router。行业发现输入使用方向字段：
+Feature create form 提供 `analysis_mode = auto | opportunity_discovery | concept_validation`。显式模式直接选择对应 Recipe；`auto` 才在 Feature routing scope 内调用 Macro Router。机会发现输入使用方向字段，并通过 `discovery_profile` / `research_axes` 选择调研维度，而不是新增 Recipe：
 
 三层标识使用以下固定映射，不能靠字符串变形隐式推导：
 
 | Task kind | Exact Recipe resource id | `analysis_mode` |
 | --- | --- | --- |
-| `industry_opportunity_discovery` | `startup-opportunity.industry-discovery@1.0.0` | `industry_discovery` |
+| `opportunity_discovery` | `startup-opportunity.opportunity-discovery@1.0.0` | `opportunity_discovery` |
 | `concept_market_validation` | `startup-opportunity.concept-validation@1.0.0` | `concept_validation` |
 
 `Task kind` 是 Macro Router 的分类输出，RecipeRef 是 deterministic resolver 唯一接受的创建目标，`analysis_mode` 只是 Feature 表单/API 的稳定判别字段。版本升级由 routing scope 发布新的 exact RecipeRef，不修改上述 task kind 或表单枚举的业务语义。
 
+`discovery_profile` 的固定语义：
+
+| Profile | 必需 research axes | 输出约束 |
+|---------|--------------------|----------|
+| `general` | 由 Scope Framer 根据方向选择需求/市场 axes | 输出一般 TopN，AI 候选按适用性启用 AI bundle |
+| `industry_first` | `industry_demand` + `buyer_market` | 从指定行业需求出发；AI 只是候选的条件性解法和验证维度 |
+| `ai_first` | `ai_capability` + `cross_industry_demand` + `buyer_market` | 从能力变化出发跨行业匹配需求；最终正式排名只接受 matched AI opportunities |
+| `hybrid` | `industry_demand` + `ai_capability` + `buyer_market` | 在指定行业内双向收敛；matched AI opportunities 进入正式排名，demand-only/capability-only 进入附录或观察池 |
+
+`discovery_profile=auto` 由 `scope_framing` 解析为上述固定 profile 并写入 immutable scope artifact；Micro Planner 不能自定义第五种 profile 或改变其输出约束。
+
 ```json
 {
-  "analysis_mode": "industry_discovery",
+  "analysis_mode": "opportunity_discovery",
+  "discovery_profile": "industry_first",
+  "research_axes": ["industry_demand", "buyer_market"],
   "direction": "宠物行业 App",
   "market": "中国",
   "platform": ["Mobile", "Web"],
@@ -2799,11 +3335,52 @@ Feature create form 提供 `analysis_mode = auto | industry_discovery | concept_
 }
 ```
 
+“目前 AI 创业有哪些机会”使用同一个机会发现 Recipe：
+
+```json
+{
+  "analysis_mode": "opportunity_discovery",
+  "discovery_profile": "ai_first",
+  "research_axes": ["ai_capability", "cross_industry_demand", "buyer_market"],
+  "direction": "目前 AI 创业有哪些机会",
+  "ai_scope": {
+    "capability_focus": ["multimodal", "agentic_workflow", "voice", "vision"],
+    "product_layers": ["application", "workflow", "infrastructure", "data_evaluation"],
+    "deployment_preferences": ["cloud", "open_source_optional"]
+  },
+  "market": "中国和可服务的跨境市场",
+  "language": "zh-CN",
+  "team_capability_constraints": ["小团队", "可快速做软件原型", "无自研基础模型预算"],
+  "validation_timeline": "30 days",
+  "validation_budget": "medium",
+  "target_rank_count": 8,
+  "constraints": ["不把模型 API wrapper 直接视为壁垒"]
+}
+```
+
+“AI 在教育行业有哪些机会”使用 `hybrid`，需求子图和 AI 能力子图并行：
+
+```json
+{
+  "analysis_mode": "opportunity_discovery",
+  "discovery_profile": "hybrid",
+  "research_axes": ["industry_demand", "ai_capability", "buyer_market"],
+  "direction": "AI 在教育行业有哪些创业机会",
+  "industry_scope": ["K12", "职业教育", "教师工作流"],
+  "ai_scope": {
+    "capability_focus": ["multimodal", "agentic_workflow"]
+  },
+  "market": "中国",
+  "risk_preferences": ["未成年人数据谨慎", "不替代高风险教育决策"]
+}
+```
+
 概念验证输入使用明确 thesis，而不是把它塞进 `direction`：
 
 ```json
 {
   "analysis_mode": "concept_validation",
+  "validation_profile": "general",
   "concept": {
     "name": "宠物用药家庭协同 App",
     "claimed_user": "慢病宠物家庭",
@@ -2821,7 +3398,9 @@ Feature create form 提供 `analysis_mode = auto | industry_discovery | concept_
 }
 ```
 
-`auto` 输入同时保留 `raw_request` 与可选结构字段。Router 只输出 exact RecipeRef；deterministic resolver 校验 routing scope、Feature status、Recipe input schema、launch policy 和 creation key。模糊输入返回 `needs_clarification`。Workflow 创建后冻结 validated input snapshot，后续 State 通过 typed bindings 读取；不再依赖任意 `WorkflowContext` merge 或 live template context 作为 contract。
+AI 具体方向仍进入同一个概念验证 Recipe，但设置 `validation_profile=ai|regulated_ai`。例如“面向跨境卖家的 AI 商品合规检查是否可行”应使用 `ai`；医疗诊断、金融决策等高错误成本方向使用 `regulated_ai`。
+
+`auto` 输入同时保留 `raw_request` 与可选结构字段。Router 只输出 exact RecipeRef；deterministic resolver 校验 routing scope、Feature status、Recipe input schema、launch policy 和 creation key。Workflow 创建后由 `scope_framing` 在 Recipe 内解析/确认 profile 和 axes。`AI 教育 App` 这类既可能表示“教育行业、AI 优先”，也可能表示“从 AI 能力变化反推教育场景”的输入，如果 profile 会显著改变成本和方法，应返回 `needs_clarification`。Workflow 创建后冻结 validated input snapshot，后续 State 通过 typed bindings 读取；不再依赖任意 `WorkflowContext` merge 或 live template context 作为 contract。
 
 ### 最终推荐结构
 
@@ -2837,19 +3416,20 @@ workflow action -> 调 GPTResearcher deep -> 产出报告
 Opportunity service -> 自己规划/执行/评分/报告 -> Icarus 只展示结果
 ```
 
-行业发现 Recipe 应做成：
+机会发现 Recipe 应做成：
 
 ```text
-Task Intake + selected industry-discovery Recipe
+Task Intake + selected opportunity-discovery Recipe
   -> scope_framing capability state
-  -> research_plan / seed_probe / opportunity_space_map capability states
+  -> research_plan / seed_probe / opportunity_space_map / optional ai_capability_space_map
   -> discovery_graph_plan capability + compiler dry-run evaluator
-  -> discovery graph state（T1/T2 正式 compile）
+  -> discovery graph state（需求子图 + optional AI 能力子图；T1/T2 正式 compile）
   -> discovery_gap_analysis + optional follow-up graph
+  -> optional capability_demand_convergence
   -> opportunity_thesis / merge
   -> enrichment_graph_plan capability + compiler dry-run evaluator
-  -> enrichment graph state
-  -> deterministic normalize / score / sensitivity capabilities
+  -> enrichment graph state（AI profile 强制 AI validation bundle）
+  -> deterministic normalize / profile-specific hard gate / score / sensitivity capabilities
   -> rationale / quality review / validation plan / report capabilities
   -> Definition terminal
 ```
@@ -2902,48 +3482,50 @@ Research Kernel
 - 所有来源必须进入 Icarus evidence store。
 - 所有 graph node 输出必须通过 Icarus artifact contract 和 evaluator。
 
-Startup Opportunity Recipe Family 自己控制领域判断：行业发现负责候选生成、合并、反证、评分和排序；概念验证负责单 hypothesis 的证据矩阵、反证、verdict 和实验计划。GPT Researcher 不决定 Recipe、schema、score 或最终业务结论。
+Startup Opportunity Recipe Family 自己控制领域判断：机会发现负责需求/能力/市场子图、候选生成、convergence、合并、反证、评分和排序；概念验证负责单 hypothesis 的证据矩阵、反证、verdict 和实验计划。GPT Researcher 不决定 Recipe、schema、score 或最终业务结论。
 
 ## 完整方案范围
 
-本方案描述完整目标形态，不按 MVP 或先后顺序拆范围。完整方案包含架构层、行业发现 Recipe 和概念验证 Recipe 三层范围。
+本方案描述完整目标形态，不按 MVP 或先后顺序拆范围。完整方案包含架构层、机会发现 Recipe 和概念验证 Recipe 三层范围。
 
 架构层范围：
 
 - 通用 Task Intake/Recipe routing、State-to-Graph lowering、ready-node concurrency、graph compiler/execution、join/fan-in、checkpoint、lifetime budget、Feature lifecycle 和 Workbench/Trace 由 `local/docs/dynamic-workflow-dag-framework.md` 定义。
 - 本方案只声明创业机会调研对该框架的使用方式和业务契约。
 
-行业发现 workflow 范围：
+机会发现 workflow 范围：
 
-- `scope_framing` 明确市场、平台、商业模式、团队能力、验证周期、风险偏好和默认假设。
-- `research_plan` 规划完整 discovery/enrichment strategy、lane catalog 选择、kill gate、评分权重和敏感性参数。
-- `seed_probe` 探测多类调研 seed，包括用户、场景、问题、关键词、产品和数据源；其中 `product_seed` 只作为产品相关 node 的输入。
-- `opportunity_space_map` 建立用户角色、JTBD、当前替代方案、工作流摩擦点和可软件化节点。
-- `discovery_graph_plan` 生成本次 discovery DAG spec，按任务选择默认 lane catalog、行业特定 lane、节点依赖、并发组、join policy 和 follow-up 条件。
-- `discovery_graph_execute` 基于通用 graph state 执行发现节点；默认 lane catalog 包括用户语言、受众痛点、JTBD、Top 产品、评论挖掘、搜索需求、趋势、替代方案和现有解法失效。
+- `scope_framing` 明确市场、平台、商业模式、团队能力、验证周期、风险偏好、discovery profile、research axes、AI scope 和默认假设。
+- `research_plan` 规划需求/AI/市场子图、lane catalog、join policy、kill gate、评分 profile 和敏感性参数。
+- `seed_probe` 探测用户、场景、问题、关键词、产品、数据源和可选 capability/model/ecosystem seed；其中 `product_seed` 只作为产品相关 node 的输入。
+- `opportunity_space_map` 建立用户角色、JTBD、当前替代方案、task operating profile、工作流摩擦点和可软件化节点。
+- `ai_capability_space_map` 在启用 AI axis 时建立能力 frontier、质量/延迟/成本边界、部署、生态、数据、评测和能力半衰期。
+- `discovery_graph_plan` 生成本次 discovery DAG spec，按 profile 选择需求/市场 lane、AI capability lane、行业特定 lane、节点依赖、并发组、join policy 和 follow-up 条件。
+- `discovery_graph_execute` 基于通用 graph state 并行执行需求发现子图与可选 AI 能力子图；需求侧输出 Opportunity 或 Demand Thesis，能力侧输出 Capability Affordance。
 - `discovery_gap_analysis` 对 fan-in context 识别证据缺口、冲突、弱判断和补充调研需求。
 - `followup_graph_plan` / `followup_graph_execute` 按缺口执行补充调研、反证或复核；无补充需求时可跳过。
-- `lane_result_validate` 校验 schema、evidence ref、trigger phrase、solution failure refs、support/opposition、kill conditions 和 topN。
-- `opportunity_thesis` 对 discovery topN 补齐买单方、mental positioning、entry scene、solution failure、entry wedge、why now、kill criteria 和验证假设。
+- `lane_result_validate` 校验 Opportunity/Demand Thesis/Capability Affordance、evidence ref、trigger phrase、solution failure refs、support/opposition、kill conditions 和各侧 topN。
+- `capability_demand_convergence` 在 AI/hybrid profile 下显式匹配需求与能力，并保留 demand-only、capability-only 和 rejected match。
+- `opportunity_thesis` 对通用候选或 convergence match 补齐买单方、mental positioning、entry scene、solution failure、entry wedge、why now、AI system profile、kill criteria 和验证假设。
 - `opportunity_merge` 对 opportunity thesis 做语义聚类、拆分和判断依据合并。
 - `enrichment_graph_plan` 生成本次 enrichment / validation DAG spec。
-- `enrichment_graph_execute` 执行补充验证节点；默认 lane catalog 包括竞品缺口、市场空间、商业化、获客、合规、反证、可行性和早期单位经济、LLM baseline、能力商品化风险、output/workflow/outcome 价值层、状态上下文和买单语言。
-- `global_score` 使用确定性公式计算综合评分、排序和推荐档位。
+- `enrichment_graph_execute` 执行补充验证节点；通用集合包括竞品、市场、商业化、获客、合规、反证、可行性、能力商品化、价值层、状态上下文和买单语言；AI 候选强制增加 AI benchmark、评测可靠性、推理单位经济、数据/反馈和依赖风险。
+- `global_score` 使用 versioned general/industry_first/ai_first/hybrid profile 执行 hard gate、综合评分、排序和推荐档位。
 - `sensitivity_analysis` 计算 downside/expected/upside score、rank range、rank stability 和最敏感假设。
 - `quality_review` 审核判断链、反证、评分解释、limitations 和报告一致性。
-- `validation_plan` 输出自然复述测试、prompt-only baseline 测试、买单语言测试、状态上下文价值测试、7 天验证动作、30 天 MVP、访谈对象、成功阈值和失败阈值。
+- `validation_plan` 输出自然复述测试、prompt/tool baseline 测试、买单语言测试、状态上下文价值测试、7 天技术/需求验证、30 天 MVP、访谈对象、成功阈值和失败阈值。
 - `final_report` 输出 JSON、Markdown 和 traceability artifact。
 
 概念验证 workflow 范围：
 
 - `concept_framing` 将用户已有想法规范为单一 hypothesis、目标用户、问题、方案、价值主张、商业模式、假设和 kill criteria。
-- `validation_graph_plan/execute` 围绕同一 hypothesis id 选择需求、替代、竞品、付费、渠道、可行性、合规、LLM baseline 和 counter-evidence capabilities。
+- `validation_graph_plan/execute` 围绕同一 hypothesis id 选择需求、替代、竞品、付费、渠道、可行性、合规、AI baseline 和 counter-evidence capabilities；AI/regulated AI profile 强制执行 AI validation bundle。
 - `validation_gap_analysis/followup` 只补充会改变 verdict 的关键证据，受 Workflow lifetime budget 和 bounded follow-up interface 约束。
 - `hypothesis_reduce/adversarial_review` 归一判断链并检查确认偏误、证据独立性、样本偏差和免费替代。
 - `concept_verdict` 使用 versioned deterministic rule 生成 `go | conditional_go | no_go | insufficient_evidence`。
 - `validation_experiments/concept_report` 输出下一步实验、成功/失败阈值、JSON/Markdown 和 traceability。
 
-行业发现最终输出 top 10 创业机会，每个机会包含：
+机会发现最终输出可配置 TopN 创业机会，每个机会包含：
 
 - 标题、一句话定义和 opportunity thesis
 - mental positioning、trigger phrase、entry scene 和用户原话样本
@@ -2952,7 +3534,8 @@ Startup Opportunity Recipe Family 自己控制领域判断：行业发现负责�
 - JTBD、当前工作流和当前替代方案
 - output/workflow/outcome 价值层、outcome metric、用户状态和上下文模型
 - 现有解法失效场景、失效原因和 next action
-- LLM capability baseline、prompt-only baseline、model upgrade risk 和能力商品化风险
+- discovery profile、research axes 和来源子图
+- AI capability-demand match、baseline、评测、单位经济、数据/反馈、provider/platform 风险（适用时）
 - 关键痛点
 - 机会来源 lane
 - 关键判断依据
@@ -2963,41 +3546,46 @@ Startup Opportunity Recipe Family 自己控制领域判断：行业发现负责�
 - 主要风险、反证和 kill criteria
 - 自然复述测试、7 天验证动作、30 天 MVP、成功阈值和失败阈值
 
-概念验证最终只输出一个 hypothesis verdict，不复用上述 Top10 结构。
+概念验证最终只输出一个 hypothesis verdict，不复用上述 TopN 结构。
 
 ### 完整 Workflow
 
 ```text
-Task Intake -> industry-discovery Recipe
+Task Intake -> opportunity-discovery Recipe
   -> direction
   -> scope_framing
+      -> discovery_profile / research_axes / ai_scope
   -> research_plan
   -> seed_probe
   -> opportunity_space_map
+  -> optional ai_capability_space_map
   -> discovery_graph_plan
       -> planner selects allowlisted capability nodes
-      -> planner may instantiate bounded-domain-research-lane
+      -> planner may instantiate bounded-domain-research-lane and allowlisted AI capability lanes
       -> planner defines dependencies, ready-node concurrency and join policy
       -> capability evaluator runs compiler dry-run
   -> discovery_graph_execute
-      -> dynamic graph nodes such as user_language_mining / audience_pain / job_to_be_done / review_mining
+      -> demand subgraph: user_language / audience_pain / JTBD / solution_failure / substitutes
+      -> optional AI subgraph: capability_frontier / cost_curve / workflow_automation / ecosystem / data_eval
       -> node-level artifact contract and evaluator
       -> fan-in context
   -> discovery_gap_analysis
   -> optional followup_graph_plan
   -> optional followup_graph_execute
   -> lane_result_validate
+  -> optional capability_demand_convergence
   -> opportunity_thesis
   -> opportunity_merge
   -> enrichment_graph_plan
       -> planner selects validation/enrichment nodes by opportunity type and evidence gaps
       -> capability evaluator runs compiler dry-run
   -> enrichment_graph_execute
-      -> dynamic graph nodes such as competitor_gap / market_size / counter_evidence / buyer_purchase_language
+      -> common nodes such as competitor_gap / market_size / counter_evidence / buyer_purchase_language
+      -> mandatory AI bundle for AI candidates
       -> node-level artifact contract and evaluator
       -> fan-in context
   -> judgment_context_normalize
-  -> global_score
+  -> profile-specific hard gate / global_score
   -> sensitivity_analysis
   -> ranking_rationale
   -> quality_review
@@ -3009,9 +3597,10 @@ Task Intake -> industry-discovery Recipe
 ```text
 Task Intake -> concept-validation Recipe
   -> concept_framing
+      -> validation_profile = general | ai | regulated_ai
   -> validation_plan
   -> validation_graph_plan + compiler dry-run evaluator
-  -> validation_graph_execute
+  -> validation_graph_execute（AI profile 强制 AI validation bundle）
   -> validation_gap_analysis
   -> optional followup_graph_plan / followup_graph_execute
   -> hypothesis_reduce
@@ -3027,6 +3616,7 @@ Task Intake -> concept-validation Recipe
 - 引入人工可调权重。
 - 支持多国家/地区市场比较。
 - 支持 scope assumptions 模板，例如“小团队低预算”“ToB 高客单”“只做小程序/插件”。
+- 支持 `general`、`industry_first`、`ai_first`、`hybrid` discovery profile，以及 `general`、`ai`、`regulated_ai` validation profile。
 - 支持输出结构化 JSON + Markdown 双格式。
 - 支持用户在报告后追问某个机会，进入二次深挖。
 - 支持用户选择某个机会进入真实验证 child Workflow，例如访谈脚本、落地页、MVP 任务拆解；只能由 Definition trusted transition effect 通过 allowlisted RecipeRef 和 stable creation key 创建，不能由 Planner 任意启动 Workflow。
@@ -3076,9 +3666,59 @@ Task Intake -> concept-validation Recipe
 - kill criteria：用户认为微信/备忘录足够，或宠物医院闭环服务已经覆盖该需求，或用户只愿免费使用提醒功能。
 - 风险：宠物医疗数据标准化、与线下宠物医院合作难度。
 
+## 示例：目前 AI 创业有哪些机会
+
+输入：
+
+```text
+目前 AI 创业有哪些机会？请给出几个方向和详细指标，适合无自研基础模型预算的小团队。
+```
+
+Scope Framing：
+
+```text
+analysis_mode = opportunity_discovery
+discovery_profile = ai_first
+research_axes = ai_capability + cross_industry_demand + buyer_market
+product_layers = application + workflow + infrastructure + data/evaluation
+```
+
+执行时，AI 能力子图研究近期 capability frontier、成本和生态变化；跨行业需求子图研究高频任务、现有人工/软件/通用 AI workaround、错误损失、买单语言和工作流接入条件。两者在 `capability_demand_convergence` 合并，不能由能力子图单独生成创业方向。
+
+最终报告输出可配置的 5-10 个方向。每个方向除通用创业指标外，必须包含：
+
+```text
+capability_delta
+generic_model_platform_open_source_baseline_gap
+technical_reliability
+evaluation_feasibility
+data_readiness
+human_review_dependency
+inference_unit_economics
+provider_portability
+platform_bundle_risk
+open_source_substitution_risk
+data_feedback_moat
+capability_half_life
+ai_adoption_trust
+global_score / confidence / rank_stability
+```
+
+报告必须允许出现三类非推荐结果：只有能力变化但没有真实需求的 `capability_only`、需求真实但当前 AI 仍不可部署的 `demand_only`，以及通用模型/平台已经充分解决或单位经济不成立的 `reject`。
+
+## 示例：具体 AI 方向可行性
+
+输入：
+
+```text
+面向跨境卖家的 AI 商品合规检查产品是否可行？
+```
+
+路由到 `concept_market_validation`，设置 `validation_profile=ai`。除需求、替代、竞品、付费、获客、合规和反证外，强制执行目标任务 benchmark、评测可靠性、推理与人工审核单位经济、数据权利/反馈闭环、provider/platform 依赖。最终只输出一个 `go | conditional_go | no_go | insufficient_evidence` verdict、dimension decisions、decisive evidence/gaps、kill criteria 和下一步实验，不生成无关 TopN。
+
 ## Feature 生命周期、预算与恢复
 
-- `industry-discovery` 使用较大的但 finite Workflow execution policy；`concept-validation` 使用更小的 nodes/scopes/attempts/tool/token/cost ceiling。两者都与部署级 RuntimeSafetyCeilings 取最小值，Planner 不能因动态 follow-up 获得无界递归。
+- `opportunity-discovery` 使用较大的但 finite Workflow execution policy；`ai_first`/`hybrid` profile 可在同一 Recipe policy 的受限 resource claim 内申请额外能力检索、benchmark 和 follow-up 预算，但不能改变部署级 ceiling。`concept-validation` 使用更小的 nodes/scopes/attempts/tool/token/cost ceiling，AI validation bundle 也必须受其 lifetime budget 约束。
 - Workflow 级 budget 跨 discovery/follow-up/enrichment 多个 State Activation 累计；进入新 graph state 不重置 token、cost、transition 或 child-workflow 数量。
 - API/UI 对同一提交生成稳定 `creation_key`；重复点击、网络重试和 Router outbox 重投返回同一个 Workflow。
 - Feature `draining` 时禁止新 intake/Workflow，但已创建 run 继续使用 pinned Recipe/Definition/capability/executor 收敛。Prompt/skill/Research Kernel 更新发布新 capability/Recipe version，旧 run 不读取 live/latest 文件。
@@ -3087,12 +3727,14 @@ Task Intake -> concept-validation Recipe
 
 ## 验收标准
 
-- 显式 `analysis_mode` 不被 Router 改写；`auto` 对行业方向、具体概念、歧义输入和不支持输入分别稳定产生正确 Recipe、clarification 或 unsupported decision。
+- 显式 `analysis_mode` 不被 Router 改写；`auto` 对宽泛机会发现、具体概念、歧义输入和不支持输入分别稳定产生正确 Recipe、clarification 或 unsupported decision。
 - Startup Opportunity routing scope 不能选择产品设计、PM Pipeline 或其他 Feature Recipe；伪造 RecipeRef 由 deterministic resolver 拒绝。
-- 两个 Recipe 的 Definition/entrypoint/policy/input-output schema/named exits 独立固定；概念验证不会进入 TopN candidate generation，行业发现不会输出单 thesis verdict。
+- 两个 Recipe 的 Definition/entrypoint/policy/input-output schema/named exits 独立固定；概念验证不会进入 TopN candidate generation，机会发现不会输出单 thesis verdict。`discovery_profile` 只能改变 Recipe 内调研子图、必填 artifact、score profile 和 quality gate，不能改变宏观输出合同。
 - Planner 只能引用 allowlisted exact capability；node-local role/skill/tool/artifact/evaluator、任意行业 Agent 和超预算 Scope Spec 均编译失败。
 - Planner dry-run 与 graph state 正式 compile 使用同一 source bytes/hash；不存在独立 compile state 或 plan 漂移。
-- 行业 fixture 覆盖不同 lane DAG、partial/insufficient、follow-up 和 enrichment；概念 fixture 覆盖 go/conditional/no-go/insufficient、强替代方案和反证翻转。
+- opportunity discovery fixture 覆盖 `general`、`industry_first`、`ai_first`、`hybrid`、不同 lane DAG、partial/insufficient、follow-up 和 enrichment。
+- AI fixture 必须证明需求子图与能力子图可并行、convergence 保留 matched/demand-only/capability-only/rejected、能力子图不能单独生成强推荐、AI hard gate 能因 baseline 已解决、缺少可靠评测、单位经济失败或平台依赖翻转结论。
+- concept fixture 覆盖 go/conditional/no-go/insufficient、强替代方案、反证翻转，以及 `ai`/`regulated_ai` 缺少强制 validation bundle 时只能输出 `insufficient_evidence`。
 - Evidence MCP duplicate delivery、Agent retry、process crash 和 report snapshot recovery 不会重复 evidence、丢失引用或改写已发布 node output。
 - Feature upgrade/draining fixture 证明旧 active run 使用旧 executable snapshot，新 Workflow 使用新 Recipe version，disable 不制造不可恢复的只读 run。
 
@@ -3106,7 +3748,11 @@ Task Intake -> concept-validation Recipe
 - 用户触发语言不等于买单语言；家庭、企业、平台和个人购买的决策标准不同，必须分别验证。
 - 用户原话不等于 mental positioning 已成立；必须验证用户是否能自然复述“遇到 X 时会用它”。
 - `AI`、`助手`、`管理 App`、`平台` 这类供给侧词汇不能直接作为机会定位，必须落回 trigger phrase 和 entry scene。
-- 通用 LLM + prompt-only 如果已经能完成核心任务，且产品没有工作流嵌入、专有数据、状态连续性或结果责任，该方向应降级。
+- 通用模型、平台原生能力或开源方案 + prompt/tool 如果已经能完成核心任务，且产品没有工作流嵌入、专有数据、状态连续性或结果责任，该方向应降级。
+- AI 能力、价格、License 和平台政策变化快，必须使用 `valid_as_of`、版本化 benchmark 和 freshness policy；过期证据不能继续支撑强推荐。
+- AI 需求子图如果直接生成带方案倾向的“AI 产品”，会污染 convergence；需求侧必须保持 solution-neutral，AI fit 只能在 fan-in 后判断。
+- 厂商自报 benchmark 不等于目标任务可靠性；无法进行代表性实测时必须降低置信度并标记 `desk_research_only`。
+- 推理成本低不代表单位经济成立，还必须计入检索、工具、存储、人工审核、异常处理和客户支持成本。
 - 核心能力若高度依赖可商品化 API、平台功能或模型升级，需要单独提高 commodity risk，不能只用“现在体验更好”支撑推荐。
 - 一次性 output 容易被替代；缺少 workflow 或 outcome 指标的方向不应被评为强机会。
 - 状态和上下文连续性如果无法通过用户授权、数据来源和隐私边界落地，就不能被空泛地当作壁垒。
@@ -3121,12 +3767,17 @@ Task Intake -> concept-validation Recipe
 Startup Opportunity Feature 应定位为受限 Macro Routing 下的 Recipe Family：
 
 ```text
-industry_opportunity_discovery
+opportunity_discovery
   = multi-lane opportunity mining
+  + general / industry-first / AI-first / hybrid discovery profiles
+  + parallel demand and AI capability subgraphs
+  + solution-neutral Demand Thesis
+  + Capability Affordance
+  + capability-demand convergence
   + user-language mental positioning
   + buyer-language purchase validation
   + solution-failure mapping
-  + LLM capability baseline and commoditization risk check
+  + AI capability benchmark / reliability / unit economics / dependency gates
   + workflow/outcome value analysis
   + user-state and context-continuity modeling
   + structured evaluation
@@ -3141,8 +3792,9 @@ concept_market_validation
   = single hypothesis framing
   + demand / alternative / competition / willingness-to-pay validation
   + feasibility / acquisition / compliance / counter-evidence
+  + optional mandatory AI / regulated-AI validation bundle
   + deterministic verdict
   + validation experiments
 ```
 
-Feature 应借鉴 GPT Researcher 的初始探测、query goal、并发子研究、递归追问、上下文压缩、来源筛选和证据不足时 abstain，并在 Feature 内沉淀为共享 Research Kernel。Macro Router 只选择 exact Recipe，Micro Planner 只规划已选 graph state；执行统一落在 Icarus Graph Runtime、versioned capability、MCP、artifact/evaluator 和 immutable trace 体系内。行业发现从多 lane 判断层生成并排名机会，概念验证始终围绕用户给定 hypothesis 形成可推翻 verdict，两者不得在运行时互相变形。
+Feature 应借鉴 GPT Researcher 的初始探测、query goal、并发子研究、递归追问、上下文压缩、来源筛选和证据不足时 abstain，并在 Feature 内沉淀为共享 Research Kernel。Macro Router 只在 `opportunity_discovery` 与 `concept_market_validation` 两个宏观目标之间选择 exact Recipe；`discovery_profile` 和 `research_axes` 只控制机会发现 Recipe 内的并行子图、合同和质量门。执行统一落在 Icarus Graph Runtime、versioned capability、MCP、artifact/evaluator 和 immutable trace 体系内。机会发现从需求、能力和市场判断层生成并排名机会，概念验证始终围绕用户给定 hypothesis 形成可推翻 verdict，两者不得在运行时互相变形。
