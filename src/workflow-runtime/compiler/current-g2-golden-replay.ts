@@ -6,14 +6,28 @@ import {
   checkCurrentG2GoldenSeal,
   CURRENT_G2_GOLDEN_SEALED_BUNDLE_REF,
 } from '../contracts/current-g2-golden-seal.js';
+import {
+  checkG2ReplayRepairSeal,
+  G2_REPLAY_REPAIR_SEALED_BUNDLE_REF,
+} from '../contracts/g2-replay-repair-successor-seal.js';
 import type { CurrentG2GoldenReplayResult } from '../contracts/current-g2-golden-seal-types.js';
 import { canonicalJson } from '../contracts/hash.js';
 import {
   assertJsonObject,
   strictParseJsonBytes,
 } from '../contracts/strict-json.js';
-import type { JsonObject, JsonValue, Sha256Hash } from '../contracts/types.js';
+import type {
+  ContractArtifactEnvelope,
+  JsonObject,
+  JsonValue,
+  Sha256Hash,
+} from '../contracts/types.js';
 import { buildSemanticCorrectionCandidate } from './semantic-correction.js';
+import {
+  compileG2ReplayRepairCase,
+  G2_REPLAY_REPAIR_CANDIDATE_ROOT_PATH,
+} from './g2-replay-repair-successor.js';
+import { workflowCompilerIdentity } from './identity.js';
 
 const contractsRoot = path.resolve(import.meta.dirname, '../contracts');
 
@@ -54,12 +68,14 @@ function objects(value: JsonValue, label: string): JsonObject[] {
   return value.map((entry, index) => object(entry, `${label}[${index}]`));
 }
 
-export function evaluateCurrentG2GoldenReplay(): CurrentG2GoldenReplayResult {
-  const checkedBundle = checkCurrentG2GoldenSeal();
+function evaluateReplay(
+  bundleRef: string,
+  checkedBundle: ContractArtifactEnvelope,
+  actualResults: JsonObject[],
+  actualCandidateRootHash: Sha256Hash,
+): CurrentG2GoldenReplayResult {
   const bundle = parseContractArtifactEnvelope(
-    strictParseJsonBytes(
-      fs.readFileSync(absolute(CURRENT_G2_GOLDEN_SEALED_BUNDLE_REF)),
-    ),
+    strictParseJsonBytes(fs.readFileSync(absolute(bundleRef))),
   );
   if (bundle.hash !== checkedBundle.hash) {
     throw new Error('Checked sealed bundle identity drift');
@@ -70,12 +86,12 @@ export function evaluateCurrentG2GoldenReplay(): CurrentG2GoldenReplayResult {
       entry,
     ]),
   );
-  const actual = buildSemanticCorrectionCandidate();
   const details: JsonValue[] = [];
   const mismatched: string[] = [];
-  for (const result of actual.results) {
-    const sealedCase = expectedByCase.get(result.case_id);
-    if (!sealedCase) throw new Error(`Sealed case missing: ${result.case_id}`);
+  for (const result of actualResults) {
+    const caseId = String(result.case_id);
+    const sealedCase = expectedByCase.get(caseId);
+    if (!sealedCase) throw new Error(`Sealed case missing: ${caseId}`);
     const expectedIdentity = object(
       sealedCase.expected_result,
       'sealed expected result identity',
@@ -84,9 +100,9 @@ export function evaluateCurrentG2GoldenReplay(): CurrentG2GoldenReplayResult {
       fs.readFileSync(absolute(String(expectedIdentity.path))),
     );
     const equal = canonicalJson(expected) === canonicalJson(result);
-    if (!equal) mismatched.push(result.case_id);
+    if (!equal) mismatched.push(caseId);
     details.push({
-      case_id: result.case_id,
+      case_id: caseId,
       exact_equal: equal,
       expected_result_hash: expectedIdentity.semantic_hash,
       actual_result_hash: result.result_hash,
@@ -95,6 +111,9 @@ export function evaluateCurrentG2GoldenReplay(): CurrentG2GoldenReplayResult {
     });
   }
   mismatched.sort();
+  if (actualResults.length !== 40 || expectedByCase.size !== 40) {
+    throw new Error('Golden replay coverage is incomplete');
+  }
   return {
     case_count: 40,
     exact_equal_count: 40 - mismatched.length,
@@ -102,9 +121,70 @@ export function evaluateCurrentG2GoldenReplay(): CurrentG2GoldenReplayResult {
     mismatched_case_ids: mismatched,
     passed: mismatched.length === 0,
     expected_bundle_hash: String(bundle.payload.bundle_hash) as Sha256Hash,
-    actual_candidate_root_hash: actual.root.hash,
+    actual_candidate_root_hash: actualCandidateRootHash,
     details,
   };
+}
+
+export function evaluatePredecessorG2GoldenReplay(): CurrentG2GoldenReplayResult {
+  const checkedBundle = checkCurrentG2GoldenSeal();
+  const actual = buildSemanticCorrectionCandidate();
+  return evaluateReplay(
+    CURRENT_G2_GOLDEN_SEALED_BUNDLE_REF,
+    checkedBundle,
+    actual.results as unknown as JsonObject[],
+    actual.root.hash,
+  );
+}
+
+export function evaluateCurrentG2GoldenReplay(): CurrentG2GoldenReplayResult {
+  const checkedBundle = checkG2ReplayRepairSeal();
+  const bundle = parseContractArtifactEnvelope(
+    strictParseJsonBytes(
+      fs.readFileSync(absolute(G2_REPLAY_REPAIR_SEALED_BUNDLE_REF)),
+    ),
+  );
+  const identity = workflowCompilerIdentity();
+  if (
+    canonicalJson(bundle.payload.exact_compiler_identity) !==
+    canonicalJson(identity as unknown as JsonObject)
+  ) {
+    throw new Error('Current Production Compiler identity does not match seal');
+  }
+  const actualResults = objects(bundle.payload.cases, 'sealed cases').map(
+    (sealedCase) => {
+      const sourceBytes = fs.readFileSync(
+        absolute(String(sealedCase.raw_source_bytes_ref)),
+      );
+      const snapshot = parseContractArtifactEnvelope(
+        strictParseJsonBytes(
+          fs.readFileSync(absolute(String(sealedCase.registry_snapshot_ref))),
+        ),
+      );
+      return compileG2ReplayRepairCase(
+        String(sealedCase.case_id),
+        String(sealedCase.source_kind) as
+          | 'graph_scope'
+          | 'workflow_definition'
+          | 'workflow_schema',
+        sourceBytes,
+        snapshot,
+        identity,
+      ) as unknown as JsonObject;
+    },
+  );
+  const candidateRootBytes = fs.readFileSync(
+    absolute(G2_REPLAY_REPAIR_CANDIDATE_ROOT_PATH),
+  );
+  const candidateRoot = parseContractArtifactEnvelope(
+    strictParseJsonBytes(candidateRootBytes),
+  );
+  return evaluateReplay(
+    G2_REPLAY_REPAIR_SEALED_BUNDLE_REF,
+    checkedBundle,
+    actualResults,
+    candidateRoot.hash,
+  );
 }
 
 export function checkCurrentG2GoldenReplay(): CurrentG2GoldenReplayResult {

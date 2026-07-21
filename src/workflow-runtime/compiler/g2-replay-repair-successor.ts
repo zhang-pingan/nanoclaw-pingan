@@ -374,7 +374,7 @@ function resultHash(
   return domainSeparatedSha256(RESULT_DOMAIN, result as JsonValue);
 }
 
-function compileCase(
+export function compileG2ReplayRepairCase(
   caseId: string,
   sourceKind: 'graph_scope' | 'workflow_definition' | 'workflow_schema',
   sourceBytes: Buffer,
@@ -559,7 +559,7 @@ export function buildG2ReplayRepairSuccessor(): G2ReplayRepairSuccessorBuild {
     const snapshotPath = `${G2_REPLAY_REPAIR_RC_ROOT}/inputs/${input.case_id}.snapshot@2.json`;
     const snapshotBytes = render(snapshot);
     files.set(snapshotPath, snapshotBytes);
-    const actual = compileCase(
+    const actual = compileG2ReplayRepairCase(
       input.case_id,
       input.source_kind,
       sourceBytes,

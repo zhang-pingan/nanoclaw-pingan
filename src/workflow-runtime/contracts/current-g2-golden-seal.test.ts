@@ -7,6 +7,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { parseContractArtifactEnvelope } from './artifact.js';
 import {
+  evaluatePredecessorG2GoldenReplay,
   evaluateCurrentG2GoldenReplay,
   checkCurrentG2GoldenReplay,
 } from '../compiler/current-g2-golden-replay.js';
@@ -220,7 +221,7 @@ describe('current G2 immutable semantic review and golden-seal', () => {
     );
   });
 
-  it('keeps seal generation isolated and reports the independent Production replay gate failure', () => {
+  it('keeps predecessor seal generation isolated and moves current replay to the approved successor', () => {
     for (const file of [
       'current-g2-golden-seal.ts',
       'current-g2-golden-seal-cli.ts',
@@ -231,14 +232,21 @@ describe('current G2 immutable semantic review and golden-seal', () => {
         /from ['"][^'"]*(?:normalizer|lowerer|assignability|proofs?)(?:\.[jt]s)?['"]|--accept/,
       );
     }
-    const replay = evaluateCurrentG2GoldenReplay();
-    expect(replay).toMatchObject({
+    const predecessorReplay = evaluatePredecessorG2GoldenReplay();
+    expect(predecessorReplay).toMatchObject({
       case_count: 40,
       exact_equal_count: 29,
       mismatch_count: 11,
       passed: false,
     });
-    expect(() => checkCurrentG2GoldenReplay()).toThrow(/matched 29\/40/);
+    const currentReplay = evaluateCurrentG2GoldenReplay();
+    expect(currentReplay).toMatchObject({
+      case_count: 40,
+      exact_equal_count: 40,
+      mismatch_count: 0,
+      passed: true,
+    });
+    expect(checkCurrentG2GoldenReplay()).toEqual(currentReplay);
   }, 30_000);
 
   it('keeps the checked immutable artifact refs present and distinct from Draft refs', () => {

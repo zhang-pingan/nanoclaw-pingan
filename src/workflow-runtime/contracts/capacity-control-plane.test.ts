@@ -470,7 +470,11 @@ describe('G0.10 Capacity Control-Plane Addendum', () => {
     );
     expect(
       fs.readdirSync(path.join(contractsRoot, 'conformance/sealed')),
-    ).toEqual(['.gitkeep', 'g2-semantic-correction']);
+    ).toEqual([
+      '.gitkeep',
+      'g2-production-compiler-replay-repair-v2',
+      'g2-semantic-correction',
+    ]);
     const forbidden = [
       ['store', 'runtime-store.ts'],
       ['store', 'schema', 'workflow-runtime-schema-v1.sql'],

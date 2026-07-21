@@ -1,8 +1,8 @@
 # Dynamic Workflow Runtime 实施进度
 
 > **状态**: IN_PROGRESS
-> **当前 Gate**: G2 Compiler / Sealed Golden（IN_PROGRESS；施工phase=`RC_REVIEW`；前序immutable Draft/Review/GoldenSemanticReview/157-artifact seal保持原字节；Production Compiler 3.0.1修复在前序3.0.0 exact identity下只读复验40/40，新additive replay-repair successor Draft/report亦为40/40、0 pointer differences，但exact Draft尚待`human:local-owner`批准，故`OPEN_BLOCKING_G2`保持）
-> **下一施工切片**: 只能由`human:local-owner`对exact successor Draft `sha256:29fdd70ea872f9d4e52d49fbd988fff306d95820989920f5f1ecf2bc87019d2b`作语义决定；批准前不得生成新的`GoldenSemanticReview`或seal，不得开始Publisher或G3+
+> **当前 Gate**: G2 Compiler / Sealed Golden（`DONE / BASELINE_ACCEPTED`；owner已批准exact replay-repair successor Draft/report，versioned GoldenSemanticReview与157-artifact seal已生成，current Production Compiler replay为40/40 exact；前序immutable lineage保持原字节，R-017已关闭）
+> **下一施工切片**: 本切片停止在G2边界；G3仅为`READY / not_started`，尚无Registry、Authoring、Publisher或其他G3-G9 artifact，必须由后续独立授权才能开始
 > **最后更新**: 2026-07-21
 > **规范权威**: `local/docs/dynamic-workflow-dag-framework.md`
 
@@ -110,8 +110,8 @@ Agent Container 运行于独立 VM，Node identity 由 VM image gate 保证；�
 | --- | --- | --- | --- | --- |
 | G0 Contract Pack / Static Baseline | `DONE` | 无 | G0.1-G0.9 historical root + G0.10 additive Capacity Admin/publication/CAP/Logical Schema/coverage root | 本原子提交 |
 | G1 DDL / Store | `DONE` | G0.10 | closed Schema Dependency Manifest + frozen executable migration/Schema Manifest + unified Connection Factory + Store lifecycle/transaction host + real-file SQLite/identity gates | 本原子提交（dependency identity repair） |
-| G2 Compiler / Golden | `IN_PROGRESS` | G0.1-G0.9；R-016 spec/Contract repair；G0.10 不改变 Compiler/Plan 语义 | phase=`RC_REVIEW`；前序Working/RC/Draft/review/seal immutable lineage未变；Compiler 3.0.1已修复622个pointer differences的根因，additive successor Draft/report 40/40且0 differences，等待owner批准exact Draft，尚未达到G2 exit | 本原子提交（replay-repair successor pending approval） |
-| G3 Registry / Authoring / Publish | `NOT_READY` | G1 + G2 | manifest/authoring/publish/retention/ABI fixtures | - |
+| G2 Compiler / Golden | `DONE` | G0.1-G0.9；R-016 spec/Contract repair；G0.10 不改变 Compiler/Plan 语义 | phase=`BASELINE_ACCEPTED`；前序immutable lineage未变；owner-approved successor GoldenSemanticReview/seal完整，current replay 40/40 exact、0 differences | 本原子提交（replay-repair successor seal） |
+| G3 Registry / Authoring / Publish | `READY` | G1 + G2 | manifest/authoring/publish/retention/ABI fixtures；本切片未开始 | - |
 | G4 Test Bootstrap | `NOT_READY` | G1 + G2 + G3 | isolated bootstrap profile | - |
 | G5 Basic Runtime | `NOT_READY` | G4 | T0-T6e model/fault fixtures | - |
 | G6 Dynamic / Close | `NOT_READY` | G5 | T7/T8/child/compensation fixtures | - |
@@ -123,10 +123,10 @@ Agent Container 运行于独立 VM，Node identity 由 VM image gate 保证；�
 
 | 工作包 | 范围 | 状态 | 当前 Gate/切片 |
 | --- | --- | --- | --- |
-| I0 | Publish、Registry、Recipe 与执行版本固定 | `NOT_READY` | G3 起 |
+| I0 | Publish、Registry、Recipe 与执行版本固定 | `READY` | G3依赖已满足，但本切片未开始且无artifact |
 | I1 | Intake、Routing、幂等创建、Child provenance、Claim | `NOT_READY` | G5 起 |
-| I2 | Definition、State lowering、Context、transition | `IN_PROGRESS` | approved static lowering语义已由Compiler 3.0.1实现并进入additive successor Draft；等待exact Draft human approval；Runtime transition仍从G5起 |
-| I3 | Source/Compiled IR、Port、Compiler | `IN_PROGRESS` | Production Compiler replay-repair successor为40/40 exact、0 differences；Compiler/toolchain identity已版本化，等待exact Draft human approval |
+| I2 | Definition、State lowering、Context、transition | `IN_PROGRESS` | approved static lowering语义已由Compiler 3.0.1实现、批准并seal；G2 lowering部分完成，Runtime transition仍从G5起 |
+| I3 | Source/Compiled IR、Port、Compiler | `DONE` | Production Compiler 3.0.1 successor已批准并seal；current replay 40/40 exact、0 differences |
 | I4 | Runtime Store、SQLite relation、Value/Blob、migration | `IN_PROGRESS` | G1 migration/Schema Manifest/Store Base/Connection Factory DONE；Value/Blob 从 G3 起 |
 | I5 | Graph 状态机、reconcile、Scheduler、Ledger | `NOT_READY` | G5 起 |
 | I6 | Delegation/System、Capability Effect、Outbox | `NOT_READY` | G5 起 |
@@ -167,7 +167,7 @@ G0.1-G0.9 已按当时规范完成并保留历史 identity。后续确认的 Cap
 | --- | --- | --- | --- | --- |
 | G2.1 | R-016 Spec/Contract Repair | `DONE` | lowering outcome、Compiled IR v2、完整 case result target、exact input binding requirement与 blocked Draft v2冻结 | 本原子提交（历史） |
 | G2.2 | Production Compiler / Exact Case-Input Identity | `DONE` | locked strict parser、closed validation、snapshot binding、static lowering、Plan normalization、program/proof/hash/diagnostic、真实 toolchain与40个actual candidate results | 本原子提交 |
-| G2.3 | Working Correction / RC Review / Seal | `IN_PROGRESS` | phase=`RC_REVIEW`；前序四个Working root、RC、Draft、review、GoldenSemanticReview和157-artifact seal未变；additive replay-repair successor Draft/report 40/40、0 differences，approval/GoldenSemanticReview/seal absent，G2不得退出 | 本原子提交（successor Draft pending owner approval） |
+| G2.3 | Working Correction / RC Review / Seal | `DONE` | phase=`BASELINE_ACCEPTED`；前序四个Working root、RC、Draft、review、GoldenSemanticReview和157-artifact seal未变；additive successor Draft/report已批准，versioned GoldenSemanticReview与157-artifact seal完整，current replay 40/40 | 本原子提交（successor approval/seal） |
 
 ## Runtime v1施工治理调整
 
@@ -179,10 +179,10 @@ G0.1-G0.9 已按当时规范完成并保留历史 identity。后续确认的 Cap
 WORKING -> RC_REVIEW -> BASELINE_ACCEPTED -> CONSTRUCTION_ARCHIVED
 ```
 
-- 当前G2处于`RC_REVIEW`。R-017 Contract、40份隔离input、actual candidate和working review bundle已按`git_history_only`治理连续两轮重生成；旧RC已失效且未保留为current结果，唯一新RC绑定下列exact roots。
+- 当前G2处于`BASELINE_ACCEPTED`。前序R-017 Working/RC/Draft/review/seal作为immutable lineage保留；additive replay-repair successor以独立versioned Working/RC/Draft/report/GoldenSemanticReview/seal完成3.0.1 identity级联，current replay 40/40后关闭R-017。G3仍未开始。
 - 历史review evidence只存在于Git commits，不是current dependency；旧施工artifact的独立复验属于archive入口，不进入默认current链。
 - Current Working Contract重新实时读取完整R-017段落并计算raw/domain-separated hash；Contract及全部受影响下游Working artifact已由现有generator级联重建，定向/完整G2机械测试通过。
-- 新四个Working root连续两轮一致后，显式独立`prepare-rc`已冻结单一新RC；任一绑定source/toolchain/compiler/Contract/input/candidate/working-review identity变化都使RC check fail-closed并退回Working。该RC的唯一完整fresh independent review已PASS。current expected Golden Draft已只依据current规范、machine Contract、raw source与snapshot独立冻结，并在冻结exact hash后才读取actual candidate执行隔离comparison；owner现已批准该exact hash并生成immutable review/seal，但Production replay仍为29/40，故RC_REVIEW与R-017 blocking状态保持不变。
+- 新四个Working root连续两轮一致后，显式独立`prepare-rc`已冻结单一前序RC；任一绑定source/toolchain/compiler/Contract/input/candidate/working-review identity变化都使其check fail-closed。前序owner-approved seal因3.0.0 identity与3.0.1实现不一致保留29/40历史复验；修复未伪造旧identity，而是建立additive successor。successor exact Draft/report经owner批准后生成immutable GoldenSemanticReview与seal，current 3.0.1 replay为40/40，因此G2进入`BASELINE_ACCEPTED`。
 - G0-G9与同一release验收完成后归档本施工生命周期；长期保留的是生产资源版本控制和旧Run exact artifact pinning，而不是G0-G9施工Draft链。
 
 Current Working identity：
@@ -1172,7 +1172,7 @@ G0.1 的实现、测试和本进度账本由同一个原子提交交付。Agent 
 | R-014 | Capacity governance | CLOSED | G0.10 已机器化 closed publication/command、权限/Actor/entrypoint/delegation、revision/hash CAS、reason/denial、immutable audit tables、唯一 Publisher/Watcher protocol、Admission lineage、crash recovery 与 additive Gate evidence；G1 DDL 可开始 | G0.10 |
 | R-015 | Toolchain test timing | OPEN_OUT_OF_SCOPE | G1.1 曾复现 runtime-toolchain 5s timing；G1.2 串行 `test:g0` 和两次完整 suite 均未复现，toolchain tests 通过。G1.2 不调整 timeout 或 managed toolchain 既有实现 | 独立测试稳定性维护 |
 | R-016 | Compiler/Golden contract | CLOSED | S38与additive repair root已冻结唯一Case Result target/hash、lowering outcome、IR v2与exact binding；G2 Production Compiler已消费该Contract并发布真实identity/actual candidates，repair Draft v2仍冻结blocked且未越过Golden review/seal边界 | G2 spec/Contract repair + Compiler slice |
-| R-017 | G2 semantic correction | OPEN_BLOCKING_G2 | phase=`RC_REVIEW`；前序RC/Working/Draft/review/GoldenSemanticReview/sealed bundle identities未变；Compiler 3.0.1修复完成，前序identity只读行为复验与successor Draft comparison均40/40；successor exact Draft=`sha256:29fdd70ea872f9d4e52d49fbd988fff306d95820989920f5f1ecf2bc87019d2b`等待owner批准，G3+未就绪 | 只能由owner对该exact Draft作语义决定；不得原地修改sealed oracle、伪造旧identity、自行生成新GoldenSemanticReview/seal或开始G3+ |
+| R-017 | G2 semantic correction | CLOSED | phase=`BASELINE_ACCEPTED`；前序RC/Working/Draft/review/GoldenSemanticReview/sealed bundle identities未变；Compiler 3.0.1修复、owner-approved successor GoldenSemanticReview/seal与current 40/40 replay已完成 | successor bundle=`sha256:d99647d8ca6aabc737a793019335e6770aa111a79be7545c4dec00c6e7af2145`；G3+仍未开始 |
 
 ## v1完成后的归档计划：PLANNED
 
@@ -1208,13 +1208,13 @@ The Draft manifest binds RC root `sha256:beb8669a054c95e0796ddf998c87c0ddc2e9055
 | managed `npm run test:g0` | PASS; 15 files / 109 tests; historical artifact identities remain frozen while current boundary recognizes the exact G2 sealed root |
 | managed `npm run prepare-rc:check` | PASS; RC root unchanged |
 | managed `npm run contracts:check` | PASS; includes exact Draft/report/immutable review/seal read-only checks plus unchanged Contract/Compiler/Schema/Store roots |
-| managed `npm run golden:current:replay:check` | EXPECTED FAIL；29/40 exact equal，11个compiled case mismatch；G2保持阻塞，不触发Publisher或G3+ |
+| predecessor 3.0.0 seal replay diagnostic | 29/40 exact equal，11个compiled case identity mismatch；该结果保留为immutable predecessor历史证据，不再是current gate |
 | Draft/review generate round 1 and round 2 | PASS; both Draft rounds returned `sha256:fb94f5e65425b482eee369bb115e46e884b249978e0f408832574d5be41dccbd`; both report rounds returned `sha256:d8b2164b0d8e8b6ab7a3fe50559327e7f944312194251bc72a4330845969ad91` with identical artifact hashes |
 | `git diff --check` | PASS |
 
 ## G2 Production Compiler Replay Repair Successor v2
 
-**状态**：`RC_REVIEW / OPEN_BLOCKING_G2`。本切片没有修改任何approved expected、sealed input、前序Draft/review/GoldenSemanticReview/seal或历史Working/RC identity。Production Compiler在前序sealed 3.0.0 exact identity下对11个compiled case的只读复验从622个pointer differences收敛为11/11 exact、0 differences；由于真实Compiler source identity发生变化，Compiler/Toolchain升级到3.0.1、Canonical Normalizer与Proof Algorithm升级到2.0.1，并新增additive `g2-production-compiler-replay-repair-v2` Working/RC/Draft/report lineage。新Draft与actual comparison为40/40 exact、85/85 semantic assertions、0 pointer differences；approval、signature、GoldenSemanticReview与seal全部absent，等待owner批准exact Draft后停止。
+**状态**：`BASELINE_ACCEPTED / R-017 CLOSED`。本切片没有修改任何approved expected、sealed input、前序Draft/review/GoldenSemanticReview/seal或历史Working/RC identity。Production Compiler在前序sealed 3.0.0 exact identity下对11个compiled case的只读行为复验从622个pointer differences收敛为11/11 exact、0 differences；由于真实Compiler source identity发生变化，Compiler/Toolchain升级到3.0.1、Canonical Normalizer与Proof Algorithm升级到2.0.1，并新增additive `g2-production-compiler-replay-repair-v2` Working/RC/Draft/report lineage。owner已批准exact Draft/report，versioned GoldenSemanticReview与157-artifact seal已生成；current replay为40/40 exact、85/85 semantic assertions、0 pointer differences。Publisher与G3-G9均未开始。
 
 原始622个pointer differences的case分布与根因分类：
 
@@ -1247,31 +1247,35 @@ successor构建时额外发现`negative.schema-not-assignable`曾因producer sch
 | Successor RC | artifact/root=`sha256:85572b113f80e9552aa7f129def39f03ae8d94bc1dab9bbcc2bb78067dddda94`; source set=`sha256:fbd497e001e5210acdd8bdd0229ebc4c12cba5035d746337fc50f99019d34534`; binding=`sha256:42ca9bbb0fda0180e2299fb260bd232e29d1a507f066bb45f5f11b93f5be490b` |
 | Successor Draft | artifact=`sha256:164f6f0962e2005f8e4c3573aa9f9f14d3eba62322ae464eca927ac2eae98fc9`; exact manifest=`sha256:29fdd70ea872f9d4e52d49fbd988fff306d95820989920f5f1ecf2bc87019d2b` |
 | Successor review report | artifact=`sha256:781d33faefa4d77d210d293ffea97cc9c712f2a3c23690abf4f2ead135f43435`; report=`sha256:2f9edba7af3715f4d5d64328a9fd1a601505bafd1129cee603e87aacf80d92d7` |
+| Successor GoldenSemanticReview | artifact=`sha256:4f12999eabdb2a65f8782aa1010430b0cf1140ef3cc945d4a30d31894aeb03e5`; review=`sha256:88c5412d1bd97d52a7f9bf41e17bd1db1e19b4a2e5466b3b25384fbdeb7cac0c`; decision=`approved`; reviewed_at_ms=`1784617297000` |
+| Successor sealed inventory | artifact=`sha256:85eb44b6216891107ca359e3b6a2b00600c55c1509b036febf388127054b1fcb`; payload=`sha256:671a4c0c8cbc00703cee4abbb22587bf49ee5467f44f02069bc892114c2b3ee4`; 155 leaf entries |
+| Successor sealed bundle | artifact=`sha256:037009dcd6c5d6bd2888c484fe1adacded68da5c55e17ba12eb722092e4faced`; bundle=`sha256:d99647d8ca6aabc737a793019335e6770aa111a79be7545c4dec00c6e7af2145`; 157 artifacts |
 
 前序immutable lineage继续精确绑定Working roots `sha256:a2d8bcab971d1db75aad17d152c7c616371a4ceeb8d52f408674d744cf7866b8` / `sha256:83080db01627d5b42046ce0a2e229ee3f4099208a8bfa2b028fc9b6241272dc8` / `sha256:54ba5b80b92a9c053e4439964fbea03326c9c8b7fc3cc3fe244dffa2144d341a` / `sha256:a254eec500006f1c7210835607cf0c20c9c6cc0647ae06a43ef2943d169d5c92`、RC `sha256:beb8669a054c95e0796ddf998c87c0ddc2e90556f95192a8baad6dd247f3e577`、Draft `sha256:fb94f5e65425b482eee369bb115e46e884b249978e0f408832574d5be41dccbd`、report `sha256:d8b2164b0d8e8b6ab7a3fe50559327e7f944312194251bc72a4330845969ad91`、GoldenSemanticReview `sha256:b12442ce6bdefba73a6b7377006f2aa841d30d78a3060416bbe21048d07abea4`与sealed bundle `sha256:d00dc96d90ccfadd6081a77d7c4a16024e188b9a77a123743bc601f971219555`。默认check在sealed era按这些冻结inventory只读验证，不用3.0.1重算或覆盖3.0.0 artifact。
 
-前序sealed replay命令仍以当前3.0.1 identity对3.0.0 sealed snapshot执行，按exact identity contract合法报告29/40；伪造3.0.0 identity会违反版本化规则。因此G2保持阻塞，Publisher、Registry/Authoring、G3-G9、SQLite certification、Core Release与production activation均未开始。
+显式前序replay仍以当前3.0.1 identity对3.0.0 sealed snapshot执行，按exact identity contract合法报告29/40；伪造3.0.0 identity会违反版本化规则。`golden:current:replay:check`现绑定owner-approved 3.0.1 successor seal并通过40/40，因此G2进入`BASELINE_ACCEPTED`。Publisher、Registry/Authoring、G3-G9、SQLite certification、Core Release与production activation均未开始。
 
 | Verification | Result |
 | --- | --- |
 | managed `npm run typecheck` | PASS |
-| managed `npm run test:g2` | PASS；6 files / 42 tests；含Production Compiler回归、sealed-era predecessor inventory与successor determinism/authorization/lineage/absence |
-| managed `npm run test:g2:golden-current` | PASS；4 files / 21 tests；前序Draft/review/seal immutable checks与successor 40/40 comparison同时通过 |
+| managed `npm run test:g2` | PASS；7 files / 47 tests；含Production Compiler回归、sealed-era predecessor inventory、successor approval/seal determinism、lineage与absence |
+| managed `npm run test:g2:golden-current` | PASS；5 files / 26 tests；前序Draft/review/seal immutable checks与successor approval/seal/current 40/40 replay同时通过 |
 | managed `npm run test:g0` | PASS；15 files / 109 tests；Contract Pack import boundary、historical identities、absence、toolchain与legacy boundary均通过 |
 | managed `npm run contracts:check` | PASS；旧Working/RC/Draft/review/GoldenSemanticReview/seal只读identity与新successor strict rebuild全部通过 |
 | managed `npm run contracts:archive:check` | PASS；历史G0/R-016/resolved Draft roots未变 |
 | managed `npm run prepare-rc:check` | PASS；前序RC仍为`sha256:beb8669a054c95e0796ddf998c87c0ddc2e90556f95192a8baad6dd247f3e577` |
 | managed `npm run g2:replay-repair:check` | PASS；40/40 exact、85/85 assertions、0 differences |
+| managed successor semantic-review/seal checks | PASS；exact owner approval、GoldenSemanticReview、155-leaf inventory与157-artifact bundle均byte-idempotent |
 | 前序3.0.0 exact identity只读行为复验 | PASS；11/11原mismatch cases exact、0 pointer differences |
-| managed `npm run golden:current:replay:check` | EXPECTED FAIL；29/40；current 3.0.1与immutable sealed 3.0.0 exact identity不同，未伪造旧identity |
+| managed `npm run golden:current:replay:check` | PASS；owner-approved successor bundle `sha256:d99647d8ca6aabc737a793019335e6770aa111a79be7545c4dec00c6e7af2145`，40/40 exact |
 | predecessor path diff / `git diff --check` | PASS；所有前序immutable artifact路径相对golden-seal commit零diff；无whitespace error |
 
 ## 下一步
 
-G0.1-G0.9 historical identity、G0.10 current root、G1.1/G1.2 executable schema/Store Base、G1.3 dependency identity repair、R-016 spec/Contract repair与G2 Production Compiler基础均已完成；既有hash是construction provenance，不把未Seal的后续G2修正变成additive发布义务。Current G0/I11与G1为`DONE`，G2/I2/I3为`IN_PROGRESS/RC_REVIEW`且仍限于semantic correction/Golden流程，G3-G9继续`NOT_READY`。
+G0.1-G0.9 historical identity、G0.10 current root、G1 executable schema/Store Base、R-016 spec/Contract repair与G2 Production Compiler/Golden均已完成。Current G2为`DONE / BASELINE_ACCEPTED`，I3为`DONE`；I2的Compiler lowering部分完成，Runtime transition仍从G5起。G3依赖已满足但仅为`READY / not_started`，G4-G9继续`NOT_READY`。
 
 历史fresh review evidence只存在于Git commits，不是current dependency；current immutable semantic approval只绑定exact Draft/report identities。显式`prepare-rc`冻结的四个Working roots与唯一Review Candidate未变；current expected full case-result/Plan/proof/program bytes/hash已独立冻结、审计、owner批准并seal。local single-user签名策略为`not_required_local_single_user`，没有伪造GPG或远程签名。
 
-Current终点仍是G2 `RC_REVIEW / OPEN_BLOCKING_G2`：Production Compiler语义修复与additive successor Draft/report已达到40/40 exact，但新exact Draft尚未由owner批准，未满足`Draft -> human semantic decision -> GoldenSemanticReview -> seal -> CI replay -> Publish`门禁。下一允许动作只能是owner对`sha256:29fdd70ea872f9d4e52d49fbd988fff306d95820989920f5f1ecf2bc87019d2b`作语义决定；不得原地修改前序sealed oracle、把actual candidate当expected oracle、自行生成新GoldenSemanticReview/seal或自动开始G3+。
+G2终点已满足`Draft -> human semantic decision -> GoldenSemanticReview -> seal -> CI replay`：current successor replay为40/40，R-017关闭。`Publish`属于后续G3，不是本切片的一部分；本次没有创建Registry、Authoring、Publisher、Recipe、Release或其他G3-G9 artifact，也没有执行production activation。开始G3必须取得新的明确范围授权。
 
-作为历史prepare-rc切片记录，该切片只修复current R-017 spec identity实时绑定、级联重建Working artifacts并执行`prepare-rc`及其确定性check，当时未执行fresh independent review或Golden approval。后续唯一RC fresh review、owner approval、immutable review与seal hash-chain现已完成，但Production replay仍为29/40；因此仍未开始G3+、SQLite certification、Core Release、G8/G9 identity或production activation。R-010 Node loader deprecation与R-012/R-013/R-015 timing继续作为既有范围外baseline，不升级工具链、不放宽测试。
+作为历史prepare-rc切片记录，该切片只修复当时的R-017 spec identity实时绑定、级联重建Working artifacts并执行`prepare-rc`及其确定性check。后续owner approval、immutable review、successor seal与40/40 replay现已完成；G3+、SQLite certification、Core Release、G8/G9 identity和production activation仍未开始。R-010 Node loader deprecation与R-012/R-013/R-015 timing继续作为既有范围外baseline，不升级工具链、不放宽测试。

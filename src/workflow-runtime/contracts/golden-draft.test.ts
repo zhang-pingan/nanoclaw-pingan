@@ -274,7 +274,11 @@ describe('G0.8 Golden Draft and Review Input', () => {
   it('keeps sealing, Compiler, Store, Registry, Runtime Center and certification absent', () => {
     expect(
       fs.readdirSync(path.join(contractsRoot, 'conformance/sealed')),
-    ).toEqual(['.gitkeep', 'g2-semantic-correction']);
+    ).toEqual([
+      '.gitkeep',
+      'g2-production-compiler-replay-repair-v2',
+      'g2-semantic-correction',
+    ]);
     const manifest = readArtifact('contract-pack-golden-draft.json');
     expect(manifest.payload).toMatchObject({
       gate: 'G0.8',
