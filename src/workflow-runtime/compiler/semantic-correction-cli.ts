@@ -1,7 +1,11 @@
+import path from 'node:path';
+
 import {
   checkSemanticCorrectionCandidate,
   generateSemanticCorrectionCandidate,
 } from './semantic-correction.js';
+import { assertCurrentG2SealedBoundary } from '../contracts/current-g2-sealed-boundary.js';
+import { checkCurrentSealedEraWorkingCompilerCandidate } from '../contracts/current-sealed-era-historical-checks.js';
 
 const command = process.argv[2];
 if (
@@ -13,10 +17,15 @@ if (
 }
 
 try {
+  const sealedState = assertCurrentG2SealedBoundary(
+    path.join(import.meta.dirname, '../contracts/conformance/sealed'),
+  );
   const root =
-    command === 'generate'
-      ? generateSemanticCorrectionCandidate()
-      : checkSemanticCorrectionCandidate();
+    sealedState === 'current_g2'
+      ? checkCurrentSealedEraWorkingCompilerCandidate()
+      : command === 'generate'
+        ? generateSemanticCorrectionCandidate()
+        : checkSemanticCorrectionCandidate();
   console.log(`g2_working_candidate=${command}:ok`);
   console.log(`g2_working_candidate_root=${root.hash}`);
 } catch (error) {

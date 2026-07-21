@@ -21,6 +21,15 @@ const WORKING_GOLDEN_ROOT =
 const WORKING_GOLDEN_MANIFEST = `${WORKING_GOLDEN_ROOT}/golden-draft-manifest@4.json`;
 const WORKING_GOLDEN_ROOT_HASH =
   'sha256:a254eec500006f1c7210835607cf0c20c9c6cc0647ae06a43ef2943d169d5c92';
+const WORKING_INPUT_ROOT = 'conformance/draft/semantic-correction-v4';
+const WORKING_INPUT_MANIFEST = `${WORKING_INPUT_ROOT}/semantic-correction-input-manifest@1.json`;
+const WORKING_INPUT_ROOT_HASH =
+  'sha256:83080db01627d5b42046ce0a2e229ee3f4099208a8bfa2b028fc9b6241272dc8';
+const WORKING_COMPILER_CANDIDATE_ROOT =
+  'conformance/candidate/g2-semantic-correction-v2';
+const WORKING_COMPILER_CANDIDATE_MANIFEST = `${WORKING_COMPILER_CANDIDATE_ROOT}/contract-pack-g2-semantic-correction-candidate.json`;
+const WORKING_COMPILER_CANDIDATE_ROOT_HASH =
+  'sha256:54ba5b80b92a9c053e4439964fbea03326c9c8b7fc3cc3fe244dffa2144d341a';
 const REVIEW_CANDIDATE_ROOT =
   'conformance/review-candidate/g2-semantic-correction';
 const REVIEW_CANDIDATE_MANIFEST = `${REVIEW_CANDIDATE_ROOT}/review-candidate.json`;
@@ -83,6 +92,35 @@ function listTree(root: string): string[] {
   };
   visit(root);
   return output.sort();
+}
+
+function checkRawInventoryTree(
+  root: string,
+  manifestPath: string,
+  manifest: ContractArtifactEnvelope,
+  label: string,
+): void {
+  const expected = [manifestPath];
+  for (const identity of objects(
+    manifest.payload.artifact_inventory,
+    `${label} inventory`,
+  )) {
+    const relativePath = String(identity.path);
+    if (!relativePath.startsWith(`${root}/`)) {
+      throw new Error(`${label} inventory path escapes its root`);
+    }
+    if (
+      rawHash(fs.readFileSync(absolute(relativePath))) !== identity.raw_sha256
+    ) {
+      throw new Error(`${label} artifact bytes drift: ${relativePath}`);
+    }
+    expected.push(relativePath);
+  }
+  if (
+    JSON.stringify(listTree(absolute(root))) !== JSON.stringify(expected.sort())
+  ) {
+    throw new Error(`${label} artifact inventory drift`);
+  }
 }
 
 export function checkCurrentSealedEraCapacityControlPlane(): ContractArtifactEnvelope {
@@ -243,6 +281,58 @@ export function checkCurrentSealedEraReviewCandidate(): ContractArtifactEnvelope
     throw new Error('Current G2 RC singleton inventory drift');
   }
   return root;
+}
+
+export function checkCurrentSealedEraWorkingCompilerCandidate(): ContractArtifactEnvelope {
+  const reviewCandidate = checkCurrentSealedEraReviewCandidate();
+  const input = parseContractArtifactEnvelope(
+    strictParseJsonBytes(fs.readFileSync(absolute(WORKING_INPUT_MANIFEST))),
+  );
+  const candidate = parseContractArtifactEnvelope(
+    strictParseJsonBytes(
+      fs.readFileSync(absolute(WORKING_COMPILER_CANDIDATE_MANIFEST)),
+    ),
+  );
+  if (
+    input.hash !== WORKING_INPUT_ROOT_HASH ||
+    input.payload.construction_phase !== 'WORKING' ||
+    input.payload.publishable !== false ||
+    input.payload.production_reachable !== false
+  ) {
+    throw new Error('Current G2 historical Working input root identity drift');
+  }
+  if (
+    candidate.hash !== WORKING_COMPILER_CANDIDATE_ROOT_HASH ||
+    candidate.payload.construction_phase !== 'WORKING' ||
+    candidate.payload.publishable !== false ||
+    candidate.payload.production_reachable !== false
+  ) {
+    throw new Error(
+      'Current G2 historical Working Compiler candidate root identity drift',
+    );
+  }
+  const boundRoots = reviewCandidate.payload.bound_working_roots as JsonObject;
+  const inputBinding = boundRoots.input as JsonObject;
+  const candidateBinding = boundRoots.candidate as JsonObject;
+  if (
+    inputBinding.semantic_hash !== input.hash ||
+    candidateBinding.semantic_hash !== candidate.hash
+  ) {
+    throw new Error('Current G2 historical Working lineage drift');
+  }
+  checkRawInventoryTree(
+    WORKING_INPUT_ROOT,
+    WORKING_INPUT_MANIFEST,
+    input,
+    'Current G2 historical Working input',
+  );
+  checkRawInventoryTree(
+    WORKING_COMPILER_CANDIDATE_ROOT,
+    WORKING_COMPILER_CANDIDATE_MANIFEST,
+    candidate,
+    'Current G2 historical Working Compiler candidate',
+  );
+  return candidate;
 }
 
 export function checkCurrentSealedEraResolvedGoldenDraft(): ContractArtifactEnvelope {

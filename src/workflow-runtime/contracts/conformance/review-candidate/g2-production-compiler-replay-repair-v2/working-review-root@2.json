@@ -1,0 +1,1679 @@
+{
+  "format": "icarus.workflow-compiler-g2-replay-repair-working-review/1",
+  "ref": {
+    "id": "icarus.workflow-compiler-g2-replay-repair-working-review",
+    "version": "2.0.0-working"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-compiler-g2-replay-repair-working-review-artifact:1\n",
+  "hash": "sha256:ee58f9f58059020db070a20772b370c8cf121ae3b012cdf98e535e92c82892f5",
+  "payload": {
+    "gate": "G2",
+    "construction_phase": "WORKING",
+    "status": "WORKING_REVIEW_SUCCESSOR",
+    "publishable": false,
+    "production_reachable": false,
+    "expected_oracle_role": "independent_authoring_required",
+    "actual_comparison_role": "actual_compiler_output_not_golden_oracle",
+    "case_count": 40,
+    "cases": [
+      {
+        "case_id": "positive.static-lowering",
+        "polarity": "positive",
+        "source_kind": "workflow_definition",
+        "coverage_tags": [
+          "static_lowering"
+        ],
+        "review_input": {
+          "role": "hand_authored_review_input_not_expected_oracle",
+          "expected_diagnostics": [],
+          "semantic_assertions": [
+            {
+              "assertion_id": "lowered-root-node",
+              "subject_pointer": "/normalized_plan/nodes/0/type",
+              "operator": "equals",
+              "expected": "delegation",
+              "rationale": "Canonical node ordering places the single lowered capability node first."
+            },
+            {
+              "assertion_id": "lowered-normal-named-exits",
+              "subject_pointer": "/normalized_plan/interface_snapshot/exits",
+              "operator": "set_equals",
+              "expected": [
+                "success",
+                "failure"
+              ],
+              "rationale": "Only capability success and failure are normal named exits."
+            },
+            {
+              "assertion_id": "lowered-outcome-contract-ref",
+              "subject_pointer": "/static_lowering_contract_ref",
+              "operator": "equals",
+              "expected": {
+                "id": "icarus.workflow-definition-static-lowering-contract",
+                "version": "1.0.0"
+              },
+              "rationale": "Engine error and cancellation semantics are bound by the versioned lowering contract."
+            },
+            {
+              "assertion_id": "lowered-outcome-contract-hash",
+              "subject_pointer": "/static_lowering_contract_hash",
+              "operator": "equals",
+              "expected": "sha256:905b433c6909d6e61663a65d532850f60b0e62a9c6c5f039a1280e3dad44b430",
+              "rationale": "The exact lowering contract identity is part of the conformance result."
+            },
+            {
+              "assertion_id": "lowered-capability-node-type",
+              "subject_pointer": "/normalized_plan/nodes/0/capability_binding/node_type",
+              "operator": "equals",
+              "expected": "delegation",
+              "rationale": "Definition state, lowered node, and bound Capability use one execution kind."
+            },
+            {
+              "assertion_id": "lowered-failure-terminal-node",
+              "subject_pointer": "/normalized_plan/nodes/1/exit",
+              "operator": "equals",
+              "expected": "failure",
+              "rationale": "The lowered failure route terminates through a first-class Terminal Node."
+            },
+            {
+              "assertion_id": "lowered-success-terminal-node",
+              "subject_pointer": "/normalized_plan/nodes/2/exit",
+              "operator": "equals",
+              "expected": "success",
+              "rationale": "The lowered success route terminates through a first-class Terminal Node."
+            },
+            {
+              "assertion_id": "lowered-outcome-control-edge-count",
+              "subject_pointer": "/normalized_plan/complexity_summary/control_edge_count",
+              "operator": "equals",
+              "expected": 2,
+              "rationale": "Succeeded and failed capability facts have distinct terminal routes."
+            }
+          ]
+        },
+        "actual_compiler_candidate": {
+          "result_ref": "conformance/review-candidate/g2-production-compiler-replay-repair-v2/actual/positive.static-lowering.result.json",
+          "result_hash": "sha256:969ca067f5c488515aacd7e0bc22dfb1748b61f3160ecfbc96f88ab9736a1e25",
+          "result_raw_bytes_hash": "sha256:1b149c45f858395a645a1a5e51c0e3aef72b93cd1604ddafe6d545155ef7e78f"
+        }
+      },
+      {
+        "case_id": "positive.condition-route",
+        "polarity": "positive",
+        "source_kind": "graph_scope",
+        "coverage_tags": [
+          "condition_route"
+        ],
+        "review_input": {
+          "role": "hand_authored_review_input_not_expected_oracle",
+          "expected_diagnostics": [],
+          "semantic_assertions": [
+            {
+              "assertion_id": "route-order",
+              "subject_pointer": "/normalized_plan/route_groups/0/ordered_edge_ids",
+              "operator": "ordered_equals",
+              "expected": [
+                "edge.accepted",
+                "edge.rejected"
+              ],
+              "rationale": "Priority edge precedes the default edge."
+            },
+            {
+              "assertion_id": "condition-typed",
+              "subject_pointer": "/normalized_plan/control_edges/0/condition_program/operand_types",
+              "operator": "ordered_equals",
+              "expected": [
+                "boolean",
+                "boolean"
+              ],
+              "rationale": "Operand categories follow normalized evaluation order and enter the Plan hash."
+            }
+          ]
+        },
+        "actual_compiler_candidate": {
+          "result_ref": "conformance/review-candidate/g2-production-compiler-replay-repair-v2/actual/positive.condition-route.result.json",
+          "result_hash": "sha256:ca42215b75690b1417834fb6fff3125ba8f0c4a418aa3df85c0413afb64ca9f9",
+          "result_raw_bytes_hash": "sha256:d6c19b843dd6ee81232e37deb609697089c636ba0ca8482d4b1e3eab30b15e17"
+        }
+      },
+      {
+        "case_id": "positive.wait",
+        "polarity": "positive",
+        "source_kind": "graph_scope",
+        "coverage_tags": [
+          "wait"
+        ],
+        "review_input": {
+          "role": "hand_authored_review_input_not_expected_oracle",
+          "expected_diagnostics": [],
+          "semantic_assertions": [
+            {
+              "assertion_id": "wait-binding",
+              "subject_pointer": "/normalized_plan/nodes/0/wait_binding/contract_ref",
+              "operator": "equals",
+              "expected": {
+                "id": "fixture.wait.approval",
+                "version": "1.0.0"
+              },
+              "rationale": "Canonical node ordering and the exact wait contract are explicit Plan facts."
+            },
+            {
+              "assertion_id": "wait-correlation-data-binding",
+              "subject_pointer": "/normalized_plan/data_edges/0/to/port",
+              "operator": "equals",
+              "expected": "correlation_key",
+              "rationale": "The required Wait correlation port has a typed data binding."
+            }
+          ]
+        },
+        "actual_compiler_candidate": {
+          "result_ref": "conformance/review-candidate/g2-production-compiler-replay-repair-v2/actual/positive.wait.result.json",
+          "result_hash": "sha256:786ac9558dc744a1fecff3f32f75cf27b1753bd4c00369bedd4ead8ceba38311",
+          "result_raw_bytes_hash": "sha256:a8946978b114edc2c6daf19a198d6275f5961f21ade88996695f7cf8fdb7ce64"
+        }
+      },
+      {
+        "case_id": "positive.subgraph",
+        "polarity": "positive",
+        "source_kind": "graph_scope",
+        "coverage_tags": [
+          "subgraph"
+        ],
+        "review_input": {
+          "role": "hand_authored_review_input_not_expected_oracle",
+          "expected_diagnostics": [],
+          "semantic_assertions": [
+            {
+              "assertion_id": "subgraph-precompiled",
+              "subject_pointer": "/normalized_plan/nodes/0/factory_binding/precompiled_plan_hash",
+              "operator": "present",
+              "expected": true,
+              "rationale": "Static subgraph binding requires an exact precompiled child Plan hash."
+            },
+            {
+              "assertion_id": "positive.subgraph-typed-owner-output",
+              "subject_pointer": "/normalized_plan/nodes/0/output_ports/completion/schema/generator",
+              "operator": "equals",
+              "expected": "child_completion",
+              "rationale": "The structural owner freezes its declared completion/result port as a generated typed output."
+            }
+          ]
+        },
+        "actual_compiler_candidate": {
+          "result_ref": "conformance/review-candidate/g2-production-compiler-replay-repair-v2/actual/positive.subgraph.result.json",
+          "result_hash": "sha256:641d81d680f41f1fb32c693c5e85af079fe4a66e4c67e75a576528c62ec6e678",
+          "result_raw_bytes_hash": "sha256:a769bd3253c4da7d6407764f0ba0d58d09b9340ca8dd80b7ba2896f53c11c6ae"
+        }
+      },
+      {
+        "case_id": "positive.expand",
+        "polarity": "positive",
+        "source_kind": "graph_scope",
+        "coverage_tags": [
+          "expand"
+        ],
+        "review_input": {
+          "role": "hand_authored_review_input_not_expected_oracle",
+          "expected_diagnostics": [],
+          "semantic_assertions": [
+            {
+              "assertion_id": "expand-graph-spec-port",
+              "subject_pointer": "/normalized_plan/nodes/1/graph_spec_input_port",
+              "operator": "equals",
+              "expected": "graph_spec",
+              "rationale": "Nodes are sorted by id and Expand consumes the required GraphScopeSpec port."
+            },
+            {
+              "assertion_id": "expand-child-interface-match",
+              "subject_pointer": "/normalized_plan/nodes/1/child_interface_snapshot/ref/id",
+              "operator": "equals",
+              "expected": "fixture.interface.child",
+              "rationale": "The literal candidate implements the pinned child interface and is child-compiled."
+            },
+            {
+              "assertion_id": "positive.expand-typed-owner-output",
+              "subject_pointer": "/normalized_plan/nodes/1/output_ports/completion/schema/generator",
+              "operator": "equals",
+              "expected": "child_completion",
+              "rationale": "The structural owner freezes its declared completion/result port as a generated typed output."
+            }
+          ]
+        },
+        "actual_compiler_candidate": {
+          "result_ref": "conformance/review-candidate/g2-production-compiler-replay-repair-v2/actual/positive.expand.result.json",
+          "result_hash": "sha256:e0a4957436e6fbcc7d466aa3c9092889269393e383d26613dc2ab85af392a625",
+          "result_raw_bytes_hash": "sha256:696270d56acc974f7ccf6559c30f81861746151f3dedc8f02fd2fe4b58a97228"
+        }
+      },
+      {
+        "case_id": "positive.map",
+        "polarity": "positive",
+        "source_kind": "graph_scope",
+        "coverage_tags": [
+          "map"
+        ],
+        "review_input": {
+          "role": "hand_authored_review_input_not_expected_oracle",
+          "expected_diagnostics": [],
+          "semantic_assertions": [
+            {
+              "assertion_id": "map-result-order",
+              "subject_pointer": "/normalized_plan/nodes/1/result_order",
+              "operator": "equals",
+              "expected": "item_index",
+              "rationale": "Map result order is an explicit execution field in Compiled IR v2."
+            },
+            {
+              "assertion_id": "positive.map-typed-owner-output",
+              "subject_pointer": "/normalized_plan/nodes/1/output_ports/results/schema/generator",
+              "operator": "equals",
+              "expected": "map_result",
+              "rationale": "The structural owner freezes its declared completion/result port as a generated typed output."
+            }
+          ]
+        },
+        "actual_compiler_candidate": {
+          "result_ref": "conformance/review-candidate/g2-production-compiler-replay-repair-v2/actual/positive.map.result.json",
+          "result_hash": "sha256:7b781df903155c8d0441975e0029fff8dbed35838831a7d905fe8827496f1ce2",
+          "result_raw_bytes_hash": "sha256:9846d17459ea62cfca667bf1fa545ecff6b2531be5908e1fae6c2885f469e1e2"
+        }
+      },
+      {
+        "case_id": "positive.policy-intersection",
+        "polarity": "positive",
+        "source_kind": "graph_scope",
+        "coverage_tags": [
+          "policy_intersection"
+        ],
+        "review_input": {
+          "role": "hand_authored_review_input_not_expected_oracle",
+          "expected_diagnostics": [],
+          "semantic_assertions": [
+            {
+              "assertion_id": "policy-minimum",
+              "subject_pointer": "/normalized_plan/effective_limits/max_nodes",
+              "operator": "equals",
+              "expected": 8,
+              "rationale": "Requested limit tightens the parent and Safety ceilings."
+            }
+          ]
+        },
+        "actual_compiler_candidate": {
+          "result_ref": "conformance/review-candidate/g2-production-compiler-replay-repair-v2/actual/positive.policy-intersection.result.json",
+          "result_hash": "sha256:16b5d3ef133f34c2d7265f7e242aa1e2673d1066e16c736a022b54ece42fc7f5",
+          "result_raw_bytes_hash": "sha256:5f3bc387d18a0f6a9361e5ad39a9e9126bcc997a1b23b6486d9eeb84a8075e1a"
+        }
+      },
+      {
+        "case_id": "positive.quality-revision-binding",
+        "polarity": "positive",
+        "source_kind": "graph_scope",
+        "coverage_tags": [
+          "quality_revision_capability_binding"
+        ],
+        "review_input": {
+          "role": "hand_authored_review_input_not_expected_oracle",
+          "expected_diagnostics": [],
+          "semantic_assertions": [
+            {
+              "assertion_id": "quality-feedback-schema",
+              "subject_pointer": "/normalized_plan/nodes/1/effective_retry_policy/quality_revision/feedback_schema_ref",
+              "operator": "equals",
+              "expected": {
+                "id": "fixture.schema.feedback",
+                "version": "1.0.0"
+              },
+              "rationale": "Canonical node ordering preserves the exact feedback schema binding."
+            }
+          ]
+        },
+        "actual_compiler_candidate": {
+          "result_ref": "conformance/review-candidate/g2-production-compiler-replay-repair-v2/actual/positive.quality-revision-binding.result.json",
+          "result_hash": "sha256:0843fe905014b24425a84eec844a07523d366c1e042553e3d34473e9af399303",
+          "result_raw_bytes_hash": "sha256:17f578817f7ce0a3d5398232a1e8f8bf3f54e76638094085d5000ab6006e2c8a"
+        }
+      },
+      {
+        "case_id": "positive.sound-subtype-different-hash",
+        "polarity": "positive",
+        "source_kind": "graph_scope",
+        "coverage_tags": [
+          "sound_subtype_different_hash"
+        ],
+        "review_input": {
+          "role": "hand_authored_review_input_not_expected_oracle",
+          "expected_diagnostics": [],
+          "semantic_assertions": [
+            {
+              "assertion_id": "subtype-rule",
+              "subject_pointer": "/normalized_plan/data_edges/0/compatibility_proof/proof_rule",
+              "operator": "equals",
+              "expected": "enum_subset",
+              "rationale": "The Plan stores the sound proof rule for different schema hashes."
+            }
+          ]
+        },
+        "actual_compiler_candidate": {
+          "result_ref": "conformance/review-candidate/g2-production-compiler-replay-repair-v2/actual/positive.sound-subtype-different-hash.result.json",
+          "result_hash": "sha256:6cb8b5f000acaa52e6dfb1bf6a562e9a015b138a6b2f03191e1bab94aa9312d5",
+          "result_raw_bytes_hash": "sha256:87501f942d50a1744a524fe6fc2d3a0ff48a3e28450e5c6c2899265aa44fad3d"
+        }
+      },
+      {
+        "case_id": "positive.static-child-closure",
+        "polarity": "positive",
+        "source_kind": "graph_scope",
+        "coverage_tags": [
+          "static_child_closure"
+        ],
+        "review_input": {
+          "role": "hand_authored_review_input_not_expected_oracle",
+          "expected_diagnostics": [],
+          "semantic_assertions": [
+            {
+              "assertion_id": "nested-static-closure-parent",
+              "subject_pointer": "/normalized_plan/static_child_plan_closure/members/0/scope_key",
+              "operator": "equals",
+              "expected": "nested_child",
+              "rationale": "Parent-before-child canonical closure ordering lists the nested child first."
+            },
+            {
+              "assertion_id": "nested-static-closure-leaf",
+              "subject_pointer": "/normalized_plan/static_child_plan_closure/members/1/scope_key",
+              "operator": "equals",
+              "expected": "leaf_child",
+              "rationale": "The transitive inline leaf is a hashed closure member in Compiled IR v2."
+            },
+            {
+              "assertion_id": "positive.static-child-closure-typed-owner-output",
+              "subject_pointer": "/normalized_plan/nodes/1/output_ports/completion/schema/generator",
+              "operator": "equals",
+              "expected": "child_completion",
+              "rationale": "The structural owner freezes its declared completion/result port as a generated typed output."
+            }
+          ]
+        },
+        "actual_compiler_candidate": {
+          "result_ref": "conformance/review-candidate/g2-production-compiler-replay-repair-v2/actual/positive.static-child-closure.result.json",
+          "result_hash": "sha256:73c354af1eadcf6827dfe834f3b7f67a804a5cbd086e04b04f5c1f33ff8b2c48",
+          "result_raw_bytes_hash": "sha256:8b83d31bc2afe08feaa930af6d9dfa2c203965ab79c7c7be954bd177da6de6e8"
+        }
+      },
+      {
+        "case_id": "negative.json-syntax-invalid",
+        "polarity": "negative",
+        "source_kind": "graph_scope",
+        "coverage_tags": [
+          "json_syntax_invalid"
+        ],
+        "review_input": {
+          "role": "hand_authored_review_input_not_expected_oracle",
+          "expected_diagnostics": [
+            {
+              "code": "json_syntax_invalid",
+              "phase": "parse",
+              "instance_pointer": "",
+              "schema_pointer": null,
+              "stable_object_id": null,
+              "detail_ref": null
+            }
+          ],
+          "semantic_assertions": [
+            {
+              "assertion_id": "negative.json-syntax-invalid.diagnostic",
+              "subject_pointer": "/diagnostics/0/code",
+              "operator": "equals",
+              "expected": "json_syntax_invalid",
+              "rationale": "The rejected conformance result preserves the hand-authored stable diagnostic."
+            },
+            {
+              "assertion_id": "negative.json-syntax-invalid.no-plan",
+              "subject_pointer": "/normalized_plan",
+              "operator": "equals",
+              "expected": null,
+              "rationale": "A rejected case result cannot contain a normalized Compiled Plan."
+            }
+          ]
+        },
+        "actual_compiler_candidate": {
+          "result_ref": "conformance/review-candidate/g2-production-compiler-replay-repair-v2/actual/negative.json-syntax-invalid.result.json",
+          "result_hash": "sha256:59102ca6bccb67130e63a38ff0b483be4d31a049330e7badeae6385da044b991",
+          "result_raw_bytes_hash": "sha256:44b34da8d2b67ff5965f26c30f4e09da9f37352981222477923f6d1051b1e7ec"
+        }
+      },
+      {
+        "case_id": "negative.json-duplicate-key",
+        "polarity": "negative",
+        "source_kind": "graph_scope",
+        "coverage_tags": [
+          "json_duplicate_key"
+        ],
+        "review_input": {
+          "role": "hand_authored_review_input_not_expected_oracle",
+          "expected_diagnostics": [
+            {
+              "code": "json_duplicate_key",
+              "phase": "parse",
+              "instance_pointer": "/scope_key",
+              "schema_pointer": null,
+              "stable_object_id": null,
+              "detail_ref": null
+            }
+          ],
+          "semantic_assertions": [
+            {
+              "assertion_id": "negative.json-duplicate-key.diagnostic",
+              "subject_pointer": "/diagnostics/0/code",
+              "operator": "equals",
+              "expected": "json_duplicate_key",
+              "rationale": "The rejected conformance result preserves the hand-authored stable diagnostic."
+            },
+            {
+              "assertion_id": "negative.json-duplicate-key.no-plan",
+              "subject_pointer": "/normalized_plan",
+              "operator": "equals",
+              "expected": null,
+              "rationale": "A rejected case result cannot contain a normalized Compiled Plan."
+            }
+          ]
+        },
+        "actual_compiler_candidate": {
+          "result_ref": "conformance/review-candidate/g2-production-compiler-replay-repair-v2/actual/negative.json-duplicate-key.result.json",
+          "result_hash": "sha256:3098554e01b7a9b6ac8ef2ef43c476f0b3405117ef1a0c1203eededf1bd7a887",
+          "result_raw_bytes_hash": "sha256:c775a5b73d278e0666e70b30231994248658789b7ddf7a101515a0c0e1b56b30"
+        }
+      },
+      {
+        "case_id": "negative.schema-unknown-field",
+        "polarity": "negative",
+        "source_kind": "graph_scope",
+        "coverage_tags": [
+          "schema_unknown_field"
+        ],
+        "review_input": {
+          "role": "hand_authored_review_input_not_expected_oracle",
+          "expected_diagnostics": [
+            {
+              "code": "schema_unknown_field",
+              "phase": "schema",
+              "instance_pointer": "/compiler_hint",
+              "schema_pointer": "#/additionalProperties",
+              "stable_object_id": null,
+              "detail_ref": null
+            }
+          ],
+          "semantic_assertions": [
+            {
+              "assertion_id": "negative.schema-unknown-field.diagnostic",
+              "subject_pointer": "/diagnostics/0/code",
+              "operator": "equals",
+              "expected": "schema_unknown_field",
+              "rationale": "The rejected conformance result preserves the hand-authored stable diagnostic."
+            },
+            {
+              "assertion_id": "negative.schema-unknown-field.no-plan",
+              "subject_pointer": "/normalized_plan",
+              "operator": "equals",
+              "expected": null,
+              "rationale": "A rejected case result cannot contain a normalized Compiled Plan."
+            }
+          ]
+        },
+        "actual_compiler_candidate": {
+          "result_ref": "conformance/review-candidate/g2-production-compiler-replay-repair-v2/actual/negative.schema-unknown-field.result.json",
+          "result_hash": "sha256:dbf93cd9a3c096dfb0fec133f21a87815a92e7a52bc1c5950b8cca17c22b9e58",
+          "result_raw_bytes_hash": "sha256:77578314e70a0eb3cacb7fd1b8a662641e3e7fa14bd2389b37cb5da942c82e69"
+        }
+      },
+      {
+        "case_id": "negative.schema-profile-keyword-unsupported",
+        "polarity": "negative",
+        "source_kind": "workflow_schema",
+        "coverage_tags": [
+          "schema_profile_keyword_unsupported"
+        ],
+        "review_input": {
+          "role": "hand_authored_review_input_not_expected_oracle",
+          "expected_diagnostics": [
+            {
+              "code": "schema_profile_keyword_unsupported",
+              "phase": "schema",
+              "instance_pointer": "/anyOf",
+              "schema_pointer": "#/profile/forbiddenKeywords",
+              "stable_object_id": null,
+              "detail_ref": null
+            }
+          ],
+          "semantic_assertions": [
+            {
+              "assertion_id": "negative.schema-profile-keyword-unsupported.diagnostic",
+              "subject_pointer": "/diagnostics/0/code",
+              "operator": "equals",
+              "expected": "schema_profile_keyword_unsupported",
+              "rationale": "The rejected conformance result preserves the hand-authored stable diagnostic."
+            },
+            {
+              "assertion_id": "negative.schema-profile-keyword-unsupported.no-plan",
+              "subject_pointer": "/normalized_plan",
+              "operator": "equals",
+              "expected": null,
+              "rationale": "A rejected case result cannot contain a normalized Compiled Plan."
+            }
+          ]
+        },
+        "actual_compiler_candidate": {
+          "result_ref": "conformance/review-candidate/g2-production-compiler-replay-repair-v2/actual/negative.schema-profile-keyword-unsupported.result.json",
+          "result_hash": "sha256:34e9a56946f9deaa283ffdd768d755512147d13a9d9a38d8b92d70296d15749d",
+          "result_raw_bytes_hash": "sha256:272e8506a5819e69274184a87b8d82c86e83376dde3be84d478f458b4bf6ffe0"
+        }
+      },
+      {
+        "case_id": "negative.registry-ref-unpinned",
+        "polarity": "negative",
+        "source_kind": "graph_scope",
+        "coverage_tags": [
+          "registry_ref_unpinned"
+        ],
+        "review_input": {
+          "role": "hand_authored_review_input_not_expected_oracle",
+          "expected_diagnostics": [
+            {
+              "code": "registry_ref_unpinned",
+              "phase": "bind",
+              "instance_pointer": "/interface_ref/version",
+              "schema_pointer": null,
+              "stable_object_id": "fixture.interface.root",
+              "detail_ref": null
+            }
+          ],
+          "semantic_assertions": [
+            {
+              "assertion_id": "negative.registry-ref-unpinned.diagnostic",
+              "subject_pointer": "/diagnostics/0/code",
+              "operator": "equals",
+              "expected": "registry_ref_unpinned",
+              "rationale": "The rejected conformance result preserves the hand-authored stable diagnostic."
+            },
+            {
+              "assertion_id": "negative.registry-ref-unpinned.no-plan",
+              "subject_pointer": "/normalized_plan",
+              "operator": "equals",
+              "expected": null,
+              "rationale": "A rejected case result cannot contain a normalized Compiled Plan."
+            }
+          ]
+        },
+        "actual_compiler_candidate": {
+          "result_ref": "conformance/review-candidate/g2-production-compiler-replay-repair-v2/actual/negative.registry-ref-unpinned.result.json",
+          "result_hash": "sha256:ac8b9a484b2ddf98c557394eade4a155b8d8c85b623d0bf2f587875d5e48434e",
+          "result_raw_bytes_hash": "sha256:7b39ee15c6e3c66f5dd19b79b6f3c27314c83c742d1e789e184f99d80a069674"
+        }
+      },
+      {
+        "case_id": "negative.registry-ref-not-found",
+        "polarity": "negative",
+        "source_kind": "graph_scope",
+        "coverage_tags": [
+          "registry_ref_not_found"
+        ],
+        "review_input": {
+          "role": "hand_authored_review_input_not_expected_oracle",
+          "expected_diagnostics": [
+            {
+              "code": "registry_ref_not_found",
+              "phase": "bind",
+              "instance_pointer": "/interface_ref",
+              "schema_pointer": null,
+              "stable_object_id": "fixture.interface.missing",
+              "detail_ref": null
+            }
+          ],
+          "semantic_assertions": [
+            {
+              "assertion_id": "negative.registry-ref-not-found.diagnostic",
+              "subject_pointer": "/diagnostics/0/code",
+              "operator": "equals",
+              "expected": "registry_ref_not_found",
+              "rationale": "The rejected conformance result preserves the hand-authored stable diagnostic."
+            },
+            {
+              "assertion_id": "negative.registry-ref-not-found.no-plan",
+              "subject_pointer": "/normalized_plan",
+              "operator": "equals",
+              "expected": null,
+              "rationale": "A rejected case result cannot contain a normalized Compiled Plan."
+            }
+          ]
+        },
+        "actual_compiler_candidate": {
+          "result_ref": "conformance/review-candidate/g2-production-compiler-replay-repair-v2/actual/negative.registry-ref-not-found.result.json",
+          "result_hash": "sha256:d63589474da6b4eeddc69ef8286b846dddea6548a7a70c531a7b0daedfcf9cd2",
+          "result_raw_bytes_hash": "sha256:b308b10e80a2299ea84669a6bf669343f7fdbf1b922c6e5bc103e4d3528fc189"
+        }
+      },
+      {
+        "case_id": "negative.graph-id-duplicate",
+        "polarity": "negative",
+        "source_kind": "graph_scope",
+        "coverage_tags": [
+          "graph_id_duplicate"
+        ],
+        "review_input": {
+          "role": "hand_authored_review_input_not_expected_oracle",
+          "expected_diagnostics": [
+            {
+              "code": "graph_id_duplicate",
+              "phase": "bind",
+              "instance_pointer": "/nodes/1/id",
+              "schema_pointer": null,
+              "stable_object_id": "same",
+              "detail_ref": null
+            }
+          ],
+          "semantic_assertions": [
+            {
+              "assertion_id": "negative.graph-id-duplicate.diagnostic",
+              "subject_pointer": "/diagnostics/0/code",
+              "operator": "equals",
+              "expected": "graph_id_duplicate",
+              "rationale": "The rejected conformance result preserves the hand-authored stable diagnostic."
+            },
+            {
+              "assertion_id": "negative.graph-id-duplicate.no-plan",
+              "subject_pointer": "/normalized_plan",
+              "operator": "equals",
+              "expected": null,
+              "rationale": "A rejected case result cannot contain a normalized Compiled Plan."
+            }
+          ]
+        },
+        "actual_compiler_candidate": {
+          "result_ref": "conformance/review-candidate/g2-production-compiler-replay-repair-v2/actual/negative.graph-id-duplicate.result.json",
+          "result_hash": "sha256:4a960d8b76374c193e9502d0131ef7b0372e4bf0a9f0e16030129ddb7f01e9af",
+          "result_raw_bytes_hash": "sha256:9ca2ad9816ef58d00509c534a56de0782358d2e77d51dc24e49ccaf55bd33dc5"
+        }
+      },
+      {
+        "case_id": "negative.graph-endpoint-not-found",
+        "polarity": "negative",
+        "source_kind": "graph_scope",
+        "coverage_tags": [
+          "graph_endpoint_not_found"
+        ],
+        "review_input": {
+          "role": "hand_authored_review_input_not_expected_oracle",
+          "expected_diagnostics": [
+            {
+              "code": "graph_endpoint_not_found",
+              "phase": "bind",
+              "instance_pointer": "/control_edges/0/to_node_id",
+              "schema_pointer": null,
+              "stable_object_id": "edge.missing",
+              "detail_ref": null
+            }
+          ],
+          "semantic_assertions": [
+            {
+              "assertion_id": "negative.graph-endpoint-not-found.diagnostic",
+              "subject_pointer": "/diagnostics/0/code",
+              "operator": "equals",
+              "expected": "graph_endpoint_not_found",
+              "rationale": "The rejected conformance result preserves the hand-authored stable diagnostic."
+            },
+            {
+              "assertion_id": "negative.graph-endpoint-not-found.no-plan",
+              "subject_pointer": "/normalized_plan",
+              "operator": "equals",
+              "expected": null,
+              "rationale": "A rejected case result cannot contain a normalized Compiled Plan."
+            }
+          ]
+        },
+        "actual_compiler_candidate": {
+          "result_ref": "conformance/review-candidate/g2-production-compiler-replay-repair-v2/actual/negative.graph-endpoint-not-found.result.json",
+          "result_hash": "sha256:42459b590dcb5c69345f4e9be89c38fb3c246f5af58a13182fb26c5d6306c766",
+          "result_raw_bytes_hash": "sha256:a41a0dcea7837d48a7fc61e6f3be4281d112aac2890c47c031874f300466188d"
+        }
+      },
+      {
+        "case_id": "negative.graph-cross-scope-edge",
+        "polarity": "negative",
+        "source_kind": "graph_scope",
+        "coverage_tags": [
+          "ordinary_unknown_node_id",
+          "cross_scope_syntax_absent"
+        ],
+        "review_input": {
+          "role": "hand_authored_review_input_not_expected_oracle",
+          "expected_diagnostics": [
+            {
+              "code": "graph_endpoint_not_found",
+              "phase": "bind",
+              "instance_pointer": "/control_edges/0/from_node_id",
+              "schema_pointer": null,
+              "stable_object_id": "edge.cross",
+              "detail_ref": null
+            }
+          ],
+          "semantic_assertions": [
+            {
+              "assertion_id": "negative.graph-cross-scope-edge.diagnostic",
+              "subject_pointer": "/diagnostics/0/code",
+              "operator": "equals",
+              "expected": "graph_endpoint_not_found",
+              "rationale": "The undocumented double-colon token is an ordinary unknown Node ID."
+            },
+            {
+              "assertion_id": "negative.graph-cross-scope-edge.no-plan",
+              "subject_pointer": "/normalized_plan",
+              "operator": "equals",
+              "expected": null,
+              "rationale": "A rejected case result cannot contain a normalized Compiled Plan."
+            }
+          ]
+        },
+        "actual_compiler_candidate": {
+          "result_ref": "conformance/review-candidate/g2-production-compiler-replay-repair-v2/actual/negative.graph-cross-scope-edge.result.json",
+          "result_hash": "sha256:6da01274dce29f28a4b488bf7389e6e617d064e0b378ac1d6c569dfeb244b6f5",
+          "result_raw_bytes_hash": "sha256:358e9d43f3ae3eaafc9ebf579d9f7c6f1c785f389dd380835d2e4d30d296280d"
+        }
+      },
+      {
+        "case_id": "negative.graph-dependency-cycle",
+        "polarity": "negative",
+        "source_kind": "graph_scope",
+        "coverage_tags": [
+          "graph_dependency_cycle"
+        ],
+        "review_input": {
+          "role": "hand_authored_review_input_not_expected_oracle",
+          "expected_diagnostics": [
+            {
+              "code": "graph_dependency_cycle",
+              "phase": "prove",
+              "instance_pointer": "/control_edges",
+              "schema_pointer": null,
+              "stable_object_id": "edge.ab",
+              "detail_ref": null
+            }
+          ],
+          "semantic_assertions": [
+            {
+              "assertion_id": "negative.graph-dependency-cycle.diagnostic",
+              "subject_pointer": "/diagnostics/0/code",
+              "operator": "equals",
+              "expected": "graph_dependency_cycle",
+              "rationale": "The rejected conformance result preserves the hand-authored stable diagnostic."
+            },
+            {
+              "assertion_id": "negative.graph-dependency-cycle.no-plan",
+              "subject_pointer": "/normalized_plan",
+              "operator": "equals",
+              "expected": null,
+              "rationale": "A rejected case result cannot contain a normalized Compiled Plan."
+            }
+          ]
+        },
+        "actual_compiler_candidate": {
+          "result_ref": "conformance/review-candidate/g2-production-compiler-replay-repair-v2/actual/negative.graph-dependency-cycle.result.json",
+          "result_hash": "sha256:b21dc62a6c39e6e8d2f93fd882aab67c74146465d04386bdb5600484fcd44571",
+          "result_raw_bytes_hash": "sha256:281c9348e73b53e49c8cca498703278aea50eae835aeb899dc202c40898c5653"
+        }
+      },
+      {
+        "case_id": "negative.condition-type-mismatch",
+        "polarity": "negative",
+        "source_kind": "graph_scope",
+        "coverage_tags": [
+          "condition_type_mismatch"
+        ],
+        "review_input": {
+          "role": "hand_authored_review_input_not_expected_oracle",
+          "expected_diagnostics": [
+            {
+              "code": "condition_type_mismatch",
+              "phase": "prove",
+              "instance_pointer": "/control_edges/0/when",
+              "schema_pointer": null,
+              "stable_object_id": "edge.condition",
+              "detail_ref": null
+            }
+          ],
+          "semantic_assertions": [
+            {
+              "assertion_id": "negative.condition-type-mismatch.diagnostic",
+              "subject_pointer": "/diagnostics/0/code",
+              "operator": "equals",
+              "expected": "condition_type_mismatch",
+              "rationale": "The rejected conformance result preserves the hand-authored stable diagnostic."
+            },
+            {
+              "assertion_id": "negative.condition-type-mismatch.no-plan",
+              "subject_pointer": "/normalized_plan",
+              "operator": "equals",
+              "expected": null,
+              "rationale": "A rejected case result cannot contain a normalized Compiled Plan."
+            }
+          ]
+        },
+        "actual_compiler_candidate": {
+          "result_ref": "conformance/review-candidate/g2-production-compiler-replay-repair-v2/actual/negative.condition-type-mismatch.result.json",
+          "result_hash": "sha256:2a1b649b4f06eec42a905b2fac2273ae2013e0a22aa2de04aae64b770e594909",
+          "result_raw_bytes_hash": "sha256:3dade061fbc412ad165b33f9e40156f7a83c04271db38212240b7ab001f6bfbd"
+        }
+      },
+      {
+        "case_id": "negative.condition-complexity-exceeded",
+        "polarity": "negative",
+        "source_kind": "graph_scope",
+        "coverage_tags": [
+          "condition_complexity_exceeded"
+        ],
+        "review_input": {
+          "role": "hand_authored_review_input_not_expected_oracle",
+          "expected_diagnostics": [
+            {
+              "code": "condition_complexity_exceeded",
+              "phase": "prove",
+              "instance_pointer": "/control_edges/0/when",
+              "schema_pointer": null,
+              "stable_object_id": "edge.condition",
+              "detail_ref": null
+            }
+          ],
+          "semantic_assertions": [
+            {
+              "assertion_id": "negative.condition-complexity-exceeded.diagnostic",
+              "subject_pointer": "/diagnostics/0/code",
+              "operator": "equals",
+              "expected": "condition_complexity_exceeded",
+              "rationale": "The rejected conformance result preserves the hand-authored stable diagnostic."
+            },
+            {
+              "assertion_id": "negative.condition-complexity-exceeded.no-plan",
+              "subject_pointer": "/normalized_plan",
+              "operator": "equals",
+              "expected": null,
+              "rationale": "A rejected case result cannot contain a normalized Compiled Plan."
+            }
+          ]
+        },
+        "actual_compiler_candidate": {
+          "result_ref": "conformance/review-candidate/g2-production-compiler-replay-repair-v2/actual/negative.condition-complexity-exceeded.result.json",
+          "result_hash": "sha256:b66d4eb73f64c21d0c0d2724e2d4704c9192a47f1874e0e12870f76019972673",
+          "result_raw_bytes_hash": "sha256:4a78e14eeb5c56a66c0eca2c9bb407071a14d7d84ecd893ab9f2c86608a989d0"
+        }
+      },
+      {
+        "case_id": "negative.json-pointer-non-total",
+        "polarity": "negative",
+        "source_kind": "graph_scope",
+        "coverage_tags": [
+          "json_pointer_non_total"
+        ],
+        "review_input": {
+          "role": "hand_authored_review_input_not_expected_oracle",
+          "expected_diagnostics": [
+            {
+              "code": "json_pointer_non_total",
+              "phase": "prove",
+              "instance_pointer": "/data_edges/0/from/pointer",
+              "schema_pointer": null,
+              "stable_object_id": "data.pointer",
+              "detail_ref": null
+            }
+          ],
+          "semantic_assertions": [
+            {
+              "assertion_id": "negative.json-pointer-non-total.diagnostic",
+              "subject_pointer": "/diagnostics/0/code",
+              "operator": "equals",
+              "expected": "json_pointer_non_total",
+              "rationale": "The rejected conformance result preserves the hand-authored stable diagnostic."
+            },
+            {
+              "assertion_id": "negative.json-pointer-non-total.no-plan",
+              "subject_pointer": "/normalized_plan",
+              "operator": "equals",
+              "expected": null,
+              "rationale": "A rejected case result cannot contain a normalized Compiled Plan."
+            }
+          ]
+        },
+        "actual_compiler_candidate": {
+          "result_ref": "conformance/review-candidate/g2-production-compiler-replay-repair-v2/actual/negative.json-pointer-non-total.result.json",
+          "result_hash": "sha256:91cbde1f43db77e57686dabc77dc199db822d551feac18a838732fa4f2f21b2e",
+          "result_raw_bytes_hash": "sha256:61fa2cf63bc914df7756fb3361eaa12df8ec159aa61633fdc118fa9969d10562"
+        }
+      },
+      {
+        "case_id": "negative.schema-not-assignable",
+        "polarity": "negative",
+        "source_kind": "graph_scope",
+        "coverage_tags": [
+          "schema_not_assignable"
+        ],
+        "review_input": {
+          "role": "hand_authored_review_input_not_expected_oracle",
+          "expected_diagnostics": [
+            {
+              "code": "schema_not_assignable",
+              "phase": "prove",
+              "instance_pointer": "/data_edges/0",
+              "schema_pointer": null,
+              "stable_object_id": "data.value",
+              "detail_ref": null
+            }
+          ],
+          "semantic_assertions": [
+            {
+              "assertion_id": "negative.schema-not-assignable.diagnostic",
+              "subject_pointer": "/diagnostics/0/code",
+              "operator": "equals",
+              "expected": "schema_not_assignable",
+              "rationale": "The rejected conformance result preserves the hand-authored stable diagnostic."
+            },
+            {
+              "assertion_id": "negative.schema-not-assignable.no-plan",
+              "subject_pointer": "/normalized_plan",
+              "operator": "equals",
+              "expected": null,
+              "rationale": "A rejected case result cannot contain a normalized Compiled Plan."
+            }
+          ]
+        },
+        "actual_compiler_candidate": {
+          "result_ref": "conformance/review-candidate/g2-production-compiler-replay-repair-v2/actual/negative.schema-not-assignable.result.json",
+          "result_hash": "sha256:a2834ebef0a1e400139fc587be5162a07b5b186fa7679ffa51e0812fe533ff6e",
+          "result_raw_bytes_hash": "sha256:210d30db886ef60e254bda2aeb3970ea309555d2e4c1ee2d752f6cf771095dd9"
+        }
+      },
+      {
+        "case_id": "negative.route-group-ambiguous",
+        "polarity": "negative",
+        "source_kind": "graph_scope",
+        "coverage_tags": [
+          "route_group_ambiguous"
+        ],
+        "review_input": {
+          "role": "hand_authored_review_input_not_expected_oracle",
+          "expected_diagnostics": [
+            {
+              "code": "route_group_ambiguous",
+              "phase": "prove",
+              "instance_pointer": "/route_groups/0",
+              "schema_pointer": null,
+              "stable_object_id": "route.source",
+              "detail_ref": null
+            }
+          ],
+          "semantic_assertions": [
+            {
+              "assertion_id": "negative.route-group-ambiguous.diagnostic",
+              "subject_pointer": "/diagnostics/0/code",
+              "operator": "equals",
+              "expected": "route_group_ambiguous",
+              "rationale": "The rejected conformance result preserves the hand-authored stable diagnostic."
+            },
+            {
+              "assertion_id": "negative.route-group-ambiguous.no-plan",
+              "subject_pointer": "/normalized_plan",
+              "operator": "equals",
+              "expected": null,
+              "rationale": "A rejected case result cannot contain a normalized Compiled Plan."
+            }
+          ]
+        },
+        "actual_compiler_candidate": {
+          "result_ref": "conformance/review-candidate/g2-production-compiler-replay-repair-v2/actual/negative.route-group-ambiguous.result.json",
+          "result_hash": "sha256:4b4cb7f9f520cb511be0ce728074664401c35e25816e345010bde264722d0b13",
+          "result_raw_bytes_hash": "sha256:1cc0d50f4a40dc49fbb316147fb8ca7e5bb039c9ed8de6443936a05161bca98b"
+        }
+      },
+      {
+        "case_id": "negative.trigger-contract-invalid",
+        "polarity": "negative",
+        "source_kind": "graph_scope",
+        "coverage_tags": [
+          "trigger_contract_invalid"
+        ],
+        "review_input": {
+          "role": "hand_authored_review_input_not_expected_oracle",
+          "expected_diagnostics": [
+            {
+              "code": "trigger_contract_invalid",
+              "phase": "prove",
+              "instance_pointer": "/nodes/1/trigger",
+              "schema_pointer": null,
+              "stable_object_id": "done",
+              "detail_ref": null
+            }
+          ],
+          "semantic_assertions": [
+            {
+              "assertion_id": "negative.trigger-contract-invalid.diagnostic",
+              "subject_pointer": "/diagnostics/0/code",
+              "operator": "equals",
+              "expected": "trigger_contract_invalid",
+              "rationale": "The rejected conformance result preserves the hand-authored stable diagnostic."
+            },
+            {
+              "assertion_id": "negative.trigger-contract-invalid.no-plan",
+              "subject_pointer": "/normalized_plan",
+              "operator": "equals",
+              "expected": null,
+              "rationale": "A rejected case result cannot contain a normalized Compiled Plan."
+            }
+          ]
+        },
+        "actual_compiler_candidate": {
+          "result_ref": "conformance/review-candidate/g2-production-compiler-replay-repair-v2/actual/negative.trigger-contract-invalid.result.json",
+          "result_hash": "sha256:47a8dc3c9a139a66e8a82d80fff482e3c4805b168fa56cc760c47e027a35c30b",
+          "result_raw_bytes_hash": "sha256:186a0c482d24069447467e2798529a302dcfcb3dd85a40a5a7760d243a6e2e1e"
+        }
+      },
+      {
+        "case_id": "negative.completion-contract-invalid",
+        "polarity": "negative",
+        "source_kind": "graph_scope",
+        "coverage_tags": [
+          "completion_contract_invalid"
+        ],
+        "review_input": {
+          "role": "hand_authored_review_input_not_expected_oracle",
+          "expected_diagnostics": [
+            {
+              "code": "completion_contract_invalid",
+              "phase": "prove",
+              "instance_pointer": "/completion/settled_rules/0/select/exits/0",
+              "schema_pointer": null,
+              "stable_object_id": "select_missing_exit",
+              "detail_ref": null
+            }
+          ],
+          "semantic_assertions": [
+            {
+              "assertion_id": "negative.completion-contract-invalid.diagnostic",
+              "subject_pointer": "/diagnostics/0/code",
+              "operator": "equals",
+              "expected": "completion_contract_invalid",
+              "rationale": "The rejected conformance result preserves the hand-authored stable diagnostic."
+            },
+            {
+              "assertion_id": "negative.completion-contract-invalid.no-plan",
+              "subject_pointer": "/normalized_plan",
+              "operator": "equals",
+              "expected": null,
+              "rationale": "A rejected case result cannot contain a normalized Compiled Plan."
+            }
+          ]
+        },
+        "actual_compiler_candidate": {
+          "result_ref": "conformance/review-candidate/g2-production-compiler-replay-repair-v2/actual/negative.completion-contract-invalid.result.json",
+          "result_hash": "sha256:ab16948d4f4658bab290a3201ebcd0aa4ea753df445289a21231d3d8a756c149",
+          "result_raw_bytes_hash": "sha256:7016727fb2617427e9e85b087bcc7dcd8af37dd0bfddf6d2703a390c70fbddb3"
+        }
+      },
+      {
+        "case_id": "negative.early-completion-non-monotone",
+        "polarity": "negative",
+        "source_kind": "graph_scope",
+        "coverage_tags": [
+          "early_completion_non_monotone"
+        ],
+        "review_input": {
+          "role": "hand_authored_review_input_not_expected_oracle",
+          "expected_diagnostics": [
+            {
+              "code": "early_completion_non_monotone",
+              "phase": "prove",
+              "instance_pointer": "/completion/early_rules/0/when",
+              "schema_pointer": null,
+              "stable_object_id": "early_eq",
+              "detail_ref": null
+            }
+          ],
+          "semantic_assertions": [
+            {
+              "assertion_id": "negative.early-completion-non-monotone.diagnostic",
+              "subject_pointer": "/diagnostics/0/code",
+              "operator": "equals",
+              "expected": "early_completion_non_monotone",
+              "rationale": "The rejected conformance result preserves the hand-authored stable diagnostic."
+            },
+            {
+              "assertion_id": "negative.early-completion-non-monotone.no-plan",
+              "subject_pointer": "/normalized_plan",
+              "operator": "equals",
+              "expected": null,
+              "rationale": "A rejected case result cannot contain a normalized Compiled Plan."
+            }
+          ]
+        },
+        "actual_compiler_candidate": {
+          "result_ref": "conformance/review-candidate/g2-production-compiler-replay-repair-v2/actual/negative.early-completion-non-monotone.result.json",
+          "result_hash": "sha256:f962a08b0d0294a7e219e423a2e738468403f90fbd3b6ffaf7b9b506479f1895",
+          "result_raw_bytes_hash": "sha256:b3290584bd265f989e02542021d5784e5a166b7283ffa35cfe5ef12a6deb1500"
+        }
+      },
+      {
+        "case_id": "positive.compiler-integrity-match-control",
+        "polarity": "positive",
+        "source_kind": "graph_scope",
+        "coverage_tags": [
+          "compiler_integrity_matching_control"
+        ],
+        "review_input": {
+          "role": "hand_authored_review_input_not_expected_oracle",
+          "expected_diagnostics": [],
+          "semantic_assertions": [
+            {
+              "assertion_id": "matching-exact-identity-compiles",
+              "subject_pointer": "/outcome",
+              "operator": "equals",
+              "expected": "compiled",
+              "rationale": "The same valid source compiles when every exact identity field matches."
+            }
+          ]
+        },
+        "actual_compiler_candidate": {
+          "result_ref": "conformance/review-candidate/g2-production-compiler-replay-repair-v2/actual/positive.compiler-integrity-match-control.result.json",
+          "result_hash": "sha256:5b6ccc4ae3e03fb31e8444b2e9249aaa5cad7677530ecebb54ff61d4f2bbfb62",
+          "result_raw_bytes_hash": "sha256:31eb03b39c091b19c3e419a76aba21c0ed0c44bba7a1d9660fd1dc6a6b2844ea"
+        }
+      },
+      {
+        "case_id": "negative.capability-not-allowed",
+        "polarity": "negative",
+        "source_kind": "graph_scope",
+        "coverage_tags": [
+          "capability_not_allowed"
+        ],
+        "review_input": {
+          "role": "hand_authored_review_input_not_expected_oracle",
+          "expected_diagnostics": [
+            {
+              "code": "capability_not_allowed",
+              "phase": "bind",
+              "instance_pointer": "/nodes/0/capability_ref",
+              "schema_pointer": null,
+              "stable_object_id": "forbidden",
+              "detail_ref": null
+            }
+          ],
+          "semantic_assertions": [
+            {
+              "assertion_id": "negative.capability-not-allowed.diagnostic",
+              "subject_pointer": "/diagnostics/0/code",
+              "operator": "equals",
+              "expected": "capability_not_allowed",
+              "rationale": "The rejected conformance result preserves the hand-authored stable diagnostic."
+            },
+            {
+              "assertion_id": "negative.capability-not-allowed.no-plan",
+              "subject_pointer": "/normalized_plan",
+              "operator": "equals",
+              "expected": null,
+              "rationale": "A rejected case result cannot contain a normalized Compiled Plan."
+            }
+          ]
+        },
+        "actual_compiler_candidate": {
+          "result_ref": "conformance/review-candidate/g2-production-compiler-replay-repair-v2/actual/negative.capability-not-allowed.result.json",
+          "result_hash": "sha256:d65447a304cdb84de22c5ad9a822d596c3d078f447d42a7b7e2871dc9391b23a",
+          "result_raw_bytes_hash": "sha256:3fa7379547cd01b7780b0e7ed33bdddb3cef4881f343603b057d9f3c274dd107"
+        }
+      },
+      {
+        "case_id": "negative.policy-escalation",
+        "polarity": "negative",
+        "source_kind": "graph_scope",
+        "coverage_tags": [
+          "policy_escalation"
+        ],
+        "review_input": {
+          "role": "hand_authored_review_input_not_expected_oracle",
+          "expected_diagnostics": [
+            {
+              "code": "policy_escalation",
+              "phase": "bind",
+              "instance_pointer": "/nodes/0/child_policy_ref",
+              "schema_pointer": null,
+              "stable_object_id": "child",
+              "detail_ref": null
+            }
+          ],
+          "semantic_assertions": [
+            {
+              "assertion_id": "negative.policy-escalation.diagnostic",
+              "subject_pointer": "/diagnostics/0/code",
+              "operator": "equals",
+              "expected": "policy_escalation",
+              "rationale": "The rejected conformance result preserves the hand-authored stable diagnostic."
+            },
+            {
+              "assertion_id": "negative.policy-escalation.no-plan",
+              "subject_pointer": "/normalized_plan",
+              "operator": "equals",
+              "expected": null,
+              "rationale": "A rejected case result cannot contain a normalized Compiled Plan."
+            }
+          ]
+        },
+        "actual_compiler_candidate": {
+          "result_ref": "conformance/review-candidate/g2-production-compiler-replay-repair-v2/actual/negative.policy-escalation.result.json",
+          "result_hash": "sha256:a1b3969df17bd81263bac35bdffe740c310fca7f3a617545bdfb57e0c68c9034",
+          "result_raw_bytes_hash": "sha256:dae9c40c66031c29f2c261036fabe3dfb538454f85d72dfb43f4b45a2205be89"
+        }
+      },
+      {
+        "case_id": "negative.quality-revision-missing-feedback-schema",
+        "polarity": "negative",
+        "source_kind": "graph_scope",
+        "coverage_tags": [
+          "quality_revision_contract_invalid",
+          "quality_revision_missing_feedback_schema"
+        ],
+        "review_input": {
+          "role": "hand_authored_review_input_not_expected_oracle",
+          "expected_diagnostics": [
+            {
+              "code": "quality_revision_contract_invalid",
+              "phase": "bind",
+              "instance_pointer": "/nodes/0/capability_ref",
+              "schema_pointer": null,
+              "stable_object_id": "quality",
+              "detail_ref": null
+            }
+          ],
+          "semantic_assertions": [
+            {
+              "assertion_id": "negative.quality-revision-missing-feedback-schema.diagnostic",
+              "subject_pointer": "/diagnostics/0/code",
+              "operator": "equals",
+              "expected": "quality_revision_contract_invalid",
+              "rationale": "The rejected conformance result preserves the hand-authored stable diagnostic."
+            },
+            {
+              "assertion_id": "negative.quality-revision-missing-feedback-schema.no-plan",
+              "subject_pointer": "/normalized_plan",
+              "operator": "equals",
+              "expected": null,
+              "rationale": "A rejected case result cannot contain a normalized Compiled Plan."
+            }
+          ]
+        },
+        "actual_compiler_candidate": {
+          "result_ref": "conformance/review-candidate/g2-production-compiler-replay-repair-v2/actual/negative.quality-revision-missing-feedback-schema.result.json",
+          "result_hash": "sha256:2ddd3993c64c6bf26ed44696d78de6d361ca4a563c7ce2c7d86ad04e4d6eea8d",
+          "result_raw_bytes_hash": "sha256:c73728dfbbfbbdaf55526121329ff2f5d8ea2e446f788695f0c4aecf152a2c70"
+        }
+      },
+      {
+        "case_id": "negative.quality-revision-effect-key-incompatible",
+        "polarity": "negative",
+        "source_kind": "graph_scope",
+        "coverage_tags": [
+          "quality_revision_effect_key_incompatible"
+        ],
+        "review_input": {
+          "role": "hand_authored_review_input_not_expected_oracle",
+          "expected_diagnostics": [
+            {
+              "code": "quality_revision_effect_key_incompatible",
+              "phase": "bind",
+              "instance_pointer": "/nodes/0/capability_ref",
+              "schema_pointer": null,
+              "stable_object_id": "quality",
+              "detail_ref": null
+            }
+          ],
+          "semantic_assertions": [
+            {
+              "assertion_id": "negative.quality-revision-effect-key-incompatible.diagnostic",
+              "subject_pointer": "/diagnostics/0/code",
+              "operator": "equals",
+              "expected": "quality_revision_effect_key_incompatible",
+              "rationale": "The rejected conformance result preserves the hand-authored stable diagnostic."
+            },
+            {
+              "assertion_id": "negative.quality-revision-effect-key-incompatible.no-plan",
+              "subject_pointer": "/normalized_plan",
+              "operator": "equals",
+              "expected": null,
+              "rationale": "A rejected case result cannot contain a normalized Compiled Plan."
+            }
+          ]
+        },
+        "actual_compiler_candidate": {
+          "result_ref": "conformance/review-candidate/g2-production-compiler-replay-repair-v2/actual/negative.quality-revision-effect-key-incompatible.result.json",
+          "result_hash": "sha256:e1b6b334fbc81988a7e0bfdda392f7bd11738cba7528be74e93aaf59991388dd",
+          "result_raw_bytes_hash": "sha256:ee605125fb405652222e871550f6f905fce4e708946bff7df20655568e54c45b"
+        }
+      },
+      {
+        "case_id": "negative.child-recipe-set-mismatch",
+        "polarity": "negative",
+        "source_kind": "workflow_definition",
+        "coverage_tags": [
+          "child_recipe_set_mismatch"
+        ],
+        "review_input": {
+          "role": "hand_authored_review_input_not_expected_oracle",
+          "expected_diagnostics": [
+            {
+              "code": "child_recipe_set_mismatch",
+              "phase": "bind",
+              "instance_pointer": "/states/start/on_complete/success/effects/operations/0/recipe_ref",
+              "schema_pointer": null,
+              "stable_object_id": "fixture.recipe.parent",
+              "detail_ref": null
+            }
+          ],
+          "semantic_assertions": [
+            {
+              "assertion_id": "negative.child-recipe-set-mismatch.diagnostic",
+              "subject_pointer": "/diagnostics/0/code",
+              "operator": "equals",
+              "expected": "child_recipe_set_mismatch",
+              "rationale": "The rejected conformance result preserves the hand-authored stable diagnostic."
+            },
+            {
+              "assertion_id": "negative.child-recipe-set-mismatch.no-plan",
+              "subject_pointer": "/normalized_plan",
+              "operator": "equals",
+              "expected": null,
+              "rationale": "A rejected case result cannot contain a normalized Compiled Plan."
+            }
+          ]
+        },
+        "actual_compiler_candidate": {
+          "result_ref": "conformance/review-candidate/g2-production-compiler-replay-repair-v2/actual/negative.child-recipe-set-mismatch.result.json",
+          "result_hash": "sha256:93336a0e4a063e813ec863c88155a0da81302c5141aa6374a993e910dee3ec4b",
+          "result_raw_bytes_hash": "sha256:c1fd2138a21e58b723bb85ee661c306e8b729398ff0a6cece7acbca77a591b91"
+        }
+      },
+      {
+        "case_id": "negative.child-recipe-dependency-cycle",
+        "polarity": "negative",
+        "source_kind": "workflow_definition",
+        "coverage_tags": [
+          "child_recipe_dependency_cycle"
+        ],
+        "review_input": {
+          "role": "hand_authored_review_input_not_expected_oracle",
+          "expected_diagnostics": [
+            {
+              "code": "child_recipe_dependency_cycle",
+              "phase": "prove",
+              "instance_pointer": "/ref",
+              "schema_pointer": null,
+              "stable_object_id": "fixture.recipe.cycle-a",
+              "detail_ref": null
+            }
+          ],
+          "semantic_assertions": [
+            {
+              "assertion_id": "negative.child-recipe-dependency-cycle.diagnostic",
+              "subject_pointer": "/diagnostics/0/code",
+              "operator": "equals",
+              "expected": "child_recipe_dependency_cycle",
+              "rationale": "The rejected conformance result preserves the hand-authored stable diagnostic."
+            },
+            {
+              "assertion_id": "negative.child-recipe-dependency-cycle.no-plan",
+              "subject_pointer": "/normalized_plan",
+              "operator": "equals",
+              "expected": null,
+              "rationale": "A rejected case result cannot contain a normalized Compiled Plan."
+            }
+          ]
+        },
+        "actual_compiler_candidate": {
+          "result_ref": "conformance/review-candidate/g2-production-compiler-replay-repair-v2/actual/negative.child-recipe-dependency-cycle.result.json",
+          "result_hash": "sha256:259ef5633067429e0421034b807e5fe6810d0cbb2650326ffef21f150e2e9569",
+          "result_raw_bytes_hash": "sha256:6d6f35bc37bb3bb228358067df13d177b85b30e084e84406f61ba50268ddaa28"
+        }
+      },
+      {
+        "case_id": "negative.runtime-safety-limit-exceeded",
+        "polarity": "negative",
+        "source_kind": "graph_scope",
+        "coverage_tags": [
+          "runtime_safety_limit_exceeded"
+        ],
+        "review_input": {
+          "role": "hand_authored_review_input_not_expected_oracle",
+          "expected_diagnostics": [
+            {
+              "code": "runtime_safety_limit_exceeded",
+              "phase": "prove",
+              "instance_pointer": "/nodes",
+              "schema_pointer": null,
+              "stable_object_id": "safety_nodes",
+              "detail_ref": null
+            }
+          ],
+          "semantic_assertions": [
+            {
+              "assertion_id": "negative.runtime-safety-limit-exceeded.diagnostic",
+              "subject_pointer": "/diagnostics/0/code",
+              "operator": "equals",
+              "expected": "runtime_safety_limit_exceeded",
+              "rationale": "The rejected conformance result preserves the hand-authored stable diagnostic."
+            },
+            {
+              "assertion_id": "negative.runtime-safety-limit-exceeded.no-plan",
+              "subject_pointer": "/normalized_plan",
+              "operator": "equals",
+              "expected": null,
+              "rationale": "A rejected case result cannot contain a normalized Compiled Plan."
+            }
+          ]
+        },
+        "actual_compiler_candidate": {
+          "result_ref": "conformance/review-candidate/g2-production-compiler-replay-repair-v2/actual/negative.runtime-safety-limit-exceeded.result.json",
+          "result_hash": "sha256:6788ad318eddb05584e4e136d727faad747781d0cd3bb4cf81786875c3610b63",
+          "result_raw_bytes_hash": "sha256:4ff4cc3b8df16c277c8e9cf3f616fd58f6affa1fa21dce8a1ad8c61cd85c1d24"
+        }
+      },
+      {
+        "case_id": "negative.compiler-integrity-mismatch",
+        "polarity": "negative",
+        "source_kind": "graph_scope",
+        "coverage_tags": [
+          "compiler_integrity_mismatch"
+        ],
+        "review_input": {
+          "role": "hand_authored_review_input_not_expected_oracle",
+          "expected_diagnostics": [
+            {
+              "code": "compiler_integrity_mismatch",
+              "phase": "hash",
+              "instance_pointer": "/compiler_identity/proof_algorithm_hash",
+              "schema_pointer": null,
+              "stable_object_id": null,
+              "detail_ref": null
+            }
+          ],
+          "semantic_assertions": [
+            {
+              "assertion_id": "negative.compiler-integrity-mismatch.diagnostic",
+              "subject_pointer": "/diagnostics/0/code",
+              "operator": "equals",
+              "expected": "compiler_integrity_mismatch",
+              "rationale": "The rejected conformance result preserves the hand-authored stable diagnostic."
+            },
+            {
+              "assertion_id": "negative.compiler-integrity-mismatch.no-plan",
+              "subject_pointer": "/normalized_plan",
+              "operator": "equals",
+              "expected": null,
+              "rationale": "A rejected case result cannot contain a normalized Compiled Plan."
+            },
+            {
+              "assertion_id": "compiler-integrity-exact-field-pointer",
+              "subject_pointer": "/diagnostics/0/instance_pointer",
+              "operator": "equals",
+              "expected": "/compiler_identity/proof_algorithm_hash",
+              "rationale": "The Compiler derives the diagnostic from the first mismatching exact identity field."
+            }
+          ]
+        },
+        "actual_compiler_candidate": {
+          "result_ref": "conformance/review-candidate/g2-production-compiler-replay-repair-v2/actual/negative.compiler-integrity-mismatch.result.json",
+          "result_hash": "sha256:aff3242c3060304e64b69fb259b1e428634201cd56ed35848b7c9b63afc2f484",
+          "result_raw_bytes_hash": "sha256:cc0c0c19afdeecb9c663ca8b61677076292af17258d16e4738e2b09ef2016ecf"
+        }
+      },
+      {
+        "case_id": "negative.quality-revision-missing-quality-gate",
+        "polarity": "negative",
+        "source_kind": "graph_scope",
+        "coverage_tags": [
+          "quality_revision_contract_invalid",
+          "quality_revision_missing_quality_gate"
+        ],
+        "review_input": {
+          "role": "hand_authored_review_input_not_expected_oracle",
+          "expected_diagnostics": [
+            {
+              "code": "quality_revision_contract_invalid",
+              "phase": "bind",
+              "instance_pointer": "/nodes/0/capability_ref",
+              "schema_pointer": null,
+              "stable_object_id": "quality",
+              "detail_ref": null
+            }
+          ],
+          "semantic_assertions": [
+            {
+              "assertion_id": "negative.quality-revision-missing-quality-gate.diagnostic",
+              "subject_pointer": "/diagnostics/0/code",
+              "operator": "equals",
+              "expected": "quality_revision_contract_invalid",
+              "rationale": "The rejected conformance result preserves the hand-authored stable diagnostic."
+            },
+            {
+              "assertion_id": "negative.quality-revision-missing-quality-gate.no-plan",
+              "subject_pointer": "/normalized_plan",
+              "operator": "equals",
+              "expected": null,
+              "rationale": "A rejected case result cannot contain a normalized Compiled Plan."
+            }
+          ]
+        },
+        "actual_compiler_candidate": {
+          "result_ref": "conformance/review-candidate/g2-production-compiler-replay-repair-v2/actual/negative.quality-revision-missing-quality-gate.result.json",
+          "result_hash": "sha256:8cf152272eabaed77e47a59126590f39803143600252b1aa9b44198029d1cb20",
+          "result_raw_bytes_hash": "sha256:21082baa138ec345524757f3442c13bb1ddb1a1e08926b19903c461d2bc2d5e8"
+        }
+      },
+      {
+        "case_id": "negative.definition-notification-delivery-requirement",
+        "polarity": "negative",
+        "source_kind": "workflow_definition",
+        "coverage_tags": [
+          "definition_notification_delivery_requirement_removed",
+          "schema_unknown_field"
+        ],
+        "review_input": {
+          "role": "hand_authored_review_input_not_expected_oracle",
+          "expected_diagnostics": [
+            {
+              "code": "schema_unknown_field",
+              "phase": "schema",
+              "instance_pointer": "/states/start/on_complete/success/notify/delivery_requirement",
+              "schema_pointer": "#/$defs/transition/properties/notify/additionalProperties",
+              "stable_object_id": null,
+              "detail_ref": null
+            }
+          ],
+          "semantic_assertions": [
+            {
+              "assertion_id": "negative.definition-notification-delivery-requirement.diagnostic",
+              "subject_pointer": "/diagnostics/0/code",
+              "operator": "equals",
+              "expected": "schema_unknown_field",
+              "rationale": "The rejected conformance result preserves the hand-authored stable diagnostic."
+            },
+            {
+              "assertion_id": "negative.definition-notification-delivery-requirement.no-plan",
+              "subject_pointer": "/normalized_plan",
+              "operator": "equals",
+              "expected": null,
+              "rationale": "A rejected case result cannot contain a normalized Compiled Plan."
+            }
+          ]
+        },
+        "actual_compiler_candidate": {
+          "result_ref": "conformance/review-candidate/g2-production-compiler-replay-repair-v2/actual/negative.definition-notification-delivery-requirement.result.json",
+          "result_hash": "sha256:4e0817ef9945a8b136d0b5f7c28674ebbbbae0e40dd00bc2d17465b12eb565eb",
+          "result_raw_bytes_hash": "sha256:4f1ff85e3f78284ea22173b31843bd534d63643d2549ba0bd0811f1db1e9cd32"
+        }
+      },
+      {
+        "case_id": "negative.definition-child-creation-key-template",
+        "polarity": "negative",
+        "source_kind": "workflow_definition",
+        "coverage_tags": [
+          "definition_child_creation_key_template_removed",
+          "schema_unknown_field"
+        ],
+        "review_input": {
+          "role": "hand_authored_review_input_not_expected_oracle",
+          "expected_diagnostics": [
+            {
+              "code": "schema_unknown_field",
+              "phase": "schema",
+              "instance_pointer": "/states/start/on_complete/success/effects/operations/0/creation_key_template",
+              "schema_pointer": "#/$defs/transition_effect/additionalProperties",
+              "stable_object_id": "child.follow-up",
+              "detail_ref": null
+            }
+          ],
+          "semantic_assertions": [
+            {
+              "assertion_id": "negative.definition-child-creation-key-template.diagnostic",
+              "subject_pointer": "/diagnostics/0/code",
+              "operator": "equals",
+              "expected": "schema_unknown_field",
+              "rationale": "The rejected conformance result preserves the hand-authored stable diagnostic."
+            },
+            {
+              "assertion_id": "negative.definition-child-creation-key-template.no-plan",
+              "subject_pointer": "/normalized_plan",
+              "operator": "equals",
+              "expected": null,
+              "rationale": "A rejected case result cannot contain a normalized Compiled Plan."
+            }
+          ]
+        },
+        "actual_compiler_candidate": {
+          "result_ref": "conformance/review-candidate/g2-production-compiler-replay-repair-v2/actual/negative.definition-child-creation-key-template.result.json",
+          "result_hash": "sha256:ce36802ebc2b6a0792840498841e4fb2363dd52871c55517e0b83ddcc599f7fb",
+          "result_raw_bytes_hash": "sha256:262e774f9d8ceaf1beabcb78b0e821b047b02600ac5ad4ffb73104d5330cf2b5"
+        }
+      }
+    ],
+    "predecessor_lineage": {
+      "predecessor_working_roots": {
+        "contract": "sha256:a2d8bcab971d1db75aad17d152c7c616371a4ceeb8d52f408674d744cf7866b8",
+        "input": "sha256:83080db01627d5b42046ce0a2e229ee3f4099208a8bfa2b028fc9b6241272dc8",
+        "candidate": "sha256:54ba5b80b92a9c053e4439964fbea03326c9c8b7fc3cc3fe244dffa2144d341a",
+        "working_review": "sha256:a254eec500006f1c7210835607cf0c20c9c6cc0647ae06a43ef2943d169d5c92"
+      },
+      "predecessor_review_candidate_root": "sha256:beb8669a054c95e0796ddf998c87c0ddc2e90556f95192a8baad6dd247f3e577",
+      "predecessor_draft_manifest_hash": "sha256:fb94f5e65425b482eee369bb115e46e884b249978e0f408832574d5be41dccbd",
+      "predecessor_golden_review_report_hash": "sha256:d8b2164b0d8e8b6ab7a3fe50559327e7f944312194251bc72a4330845969ad91",
+      "predecessor_golden_semantic_review_hash": "sha256:b12442ce6bdefba73a6b7377006f2aa841d30d78a3060416bbe21048d07abea4",
+      "predecessor_sealed_bundle_hash": "sha256:d00dc96d90ccfadd6081a77d7c4a16024e188b9a77a123743bc601f971219555",
+      "predecessor_sealed_status": "sealed_pending_ci_replay",
+      "successor_reason": "production_compiler_replay_contract_repair",
+      "approved_expected_semantics": "unchanged"
+    },
+    "human_review_status": "not_requested_until_frozen_draft",
+    "g3_through_g9_status": "not_started"
+  }
+}

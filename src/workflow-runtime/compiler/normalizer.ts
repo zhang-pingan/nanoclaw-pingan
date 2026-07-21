@@ -68,16 +68,6 @@ export function expressionSteps(value: JsonValue): number {
   if (value.arg && typeof value.arg === 'object') {
     return 1 + expressionSteps(value.arg);
   }
-  if (value.left !== undefined || value.right !== undefined) {
-    return (
-      1 +
-      (value.left === undefined ? 0 : expressionSteps(value.left)) +
-      (value.right === undefined ? 0 : expressionSteps(value.right))
-    );
-  }
-  if (value.value && typeof value.value === 'object') {
-    return 1 + expressionSteps(value.value);
-  }
   return 1;
 }
 

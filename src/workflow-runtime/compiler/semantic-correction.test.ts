@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { parseContractArtifactEnvelope } from '../contracts/artifact.js';
 import { domainSeparatedSha256 } from '../contracts/hash.js';
 import { COMPILER_SNAPSHOT_DEPENDENCY_CLOSURE_DOMAIN_V1 } from '../contracts/compiler-semantic-correction-contract.js';
+import { checkCurrentSealedEraWorkingCompilerCandidate } from '../contracts/current-sealed-era-historical-checks.js';
 import {
   assertJsonObject,
   strictParseJsonBytes,
@@ -22,7 +23,6 @@ import {
   type BuiltSemanticCorrectionCandidate,
   G2_SEMANTIC_CORRECTION_CANDIDATE_ROOT,
   buildSemanticCorrectionCandidate,
-  checkSemanticCorrectionCandidate,
 } from './semantic-correction.js';
 
 const compilerRoot = import.meta.dirname;
@@ -214,7 +214,7 @@ function rehashDefinition(source: JsonObject): void {
 }
 
 describe('G2 working semantic correction candidate', () => {
-  it('replays all 40 cases deterministically and checks both trees read-only', () => {
+  it('replays all 40 cases deterministically and checks predecessor trees read-only', () => {
     const roots = [INPUT_ROOT, G2_SEMANTIC_CORRECTION_CANDIDATE_ROOT];
     const before = treeDigest(roots);
     const first = buildSemanticCorrectionCandidate();
@@ -243,7 +243,9 @@ describe('G2 working semantic correction candidate', () => {
     expect(
       first.results.filter((entry) => entry.outcome === 'rejected'),
     ).toHaveLength(29);
-    checkSemanticCorrectionCandidate();
+    expect(checkCurrentSealedEraWorkingCompilerCandidate().hash).toBe(
+      'sha256:54ba5b80b92a9c053e4439964fbea03326c9c8b7fc3cc3fe244dffa2144d341a',
+    );
     expect(treeDigest(roots)).toBe(before);
   }, 15_000);
 
@@ -359,7 +361,9 @@ describe('G2 working semantic correction candidate', () => {
         snapshot.registry_snapshot.dependency_closure_count,
         input.case_id,
       ).toBe(closures.length);
-      if (resources.some((resource) => resource.resource_type === 'capability')) {
+      if (
+        resources.some((resource) => resource.resource_type === 'capability')
+      ) {
         capabilityBearingSnapshots += 1;
       }
       for (const closure of closures) {
@@ -509,9 +513,9 @@ describe('G2 working semantic correction candidate', () => {
           exit: node.exit,
         })),
       ).toEqual([
-        { id: 'start', type: 'delegation', exit: undefined },
-        { id: 'start_failure', type: 'terminal', exit: 'failure' },
-        { id: 'start_success', type: 'terminal', exit: 'success' },
+        { id: 'capability', type: 'delegation', exit: undefined },
+        { id: 'failure', type: 'terminal', exit: 'failure' },
+        { id: 'success', type: 'terminal', exit: 'success' },
       ]);
       expect(lowered.normalized_plan.control_edges).toHaveLength(2);
     }

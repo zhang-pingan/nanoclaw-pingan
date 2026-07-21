@@ -22,12 +22,12 @@ import type {
 } from './types.js';
 import { compareAscii } from './normalizer.js';
 
-export const WORKFLOW_COMPILER_VERSION = '3.0.0';
-export const CANONICAL_NORMALIZER_VERSION = '2.0.0';
-export const PROOF_ALGORITHM_VERSION = '2.0.0';
+export const WORKFLOW_COMPILER_VERSION = '3.0.1';
+export const CANONICAL_NORMALIZER_VERSION = '2.0.1';
+export const PROOF_ALGORITHM_VERSION = '2.0.1';
 export const WORKFLOW_COMPILER_TOOLCHAIN_REF = {
   id: 'icarus.workflow-compiler-toolchain',
-  version: '3.0.0',
+  version: '3.0.1',
 } as const;
 
 const compilerRoot = import.meta.dirname;

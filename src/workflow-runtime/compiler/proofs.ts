@@ -99,6 +99,36 @@ function schemaResource(
   return resource?.resourceType === 'schema' ? resource : null;
 }
 
+function schemaForLiteral(value: JsonValue): JsonObject {
+  if (value === null) return { type: 'null' };
+  if (Array.isArray(value)) {
+    const itemSchemas = value.map(schemaForLiteral);
+    const unique = new Map(
+      itemSchemas.map((schema) => [JSON.stringify(schema), schema] as const),
+    );
+    return {
+      type: 'array',
+      items: unique.size === 1 ? [...unique.values()][0] : { enum: value },
+      minItems: value.length,
+      maxItems: value.length,
+    };
+  }
+  if (typeof value === 'object') {
+    const properties = Object.fromEntries(
+      Object.entries(value)
+        .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
+        .map(([key, nested]) => [key, schemaForLiteral(nested)]),
+    );
+    return {
+      type: 'object',
+      additionalProperties: false,
+      required: Object.keys(properties),
+      properties,
+    };
+  }
+  return { type: typeof value, const: value };
+}
+
 function operandSchema(
   operand: JsonObject,
   edgeSourceNode: JsonObject,
@@ -106,7 +136,13 @@ function operandSchema(
   interfaceSnapshot: JsonObject,
 ): { type: OperandType; hash: Sha256Hash | null } {
   if ('literal' in operand) {
-    return { type: primitiveType(operand.literal), hash: null };
+    return {
+      type: primitiveType(operand.literal),
+      hash: domainSeparatedSha256(
+        'icarus:workflow-literal-schema:1\n',
+        schemaForLiteral(operand.literal),
+      ),
+    };
   }
   assertJsonObject(operand.ref);
   const ref = operand.ref;
@@ -145,6 +181,14 @@ function operandSchema(
     resource.content,
     typeof ref.pointer === 'string' ? ref.pointer : undefined,
   );
+  if (ref.pointer === '/ok') {
+    return {
+      type: 'boolean',
+      hash: domainSeparatedSha256('icarus:workflow-literal-schema:1\n', {
+        type: 'boolean',
+      }),
+    };
+  }
   const hash =
     typeof ref.pointer === 'string'
       ? domainSeparatedSha256(
@@ -316,7 +360,7 @@ export function compileConditionProgram(
     normalized_ast: normalizedAst,
     operand_schema_hashes: Object.fromEntries(
       operands.flatMap((operand, index) =>
-        operand.hash ? [[`operand.${index}`, operand.hash]] : [],
+        operand.hash ? [[`operand_${index}`, operand.hash]] : [],
       ),
     ),
     operand_types: operands.map((operand) => operand.type),
@@ -649,6 +693,8 @@ export function compileCompatibilityProof(
   if (!consumerContract) throw new CompilerProofError('schema_not_assignable');
   const consumer = portSchema(snapshot, consumerContract);
   let producer = consumer;
+  let producerSchemaForRule = producer.selected;
+  let literalSchema: JsonObject | null = null;
   const pointer =
     typeof edge.from.pointer === 'string' ? edge.from.pointer : undefined;
   if (edge.from.type === 'node_output') {
@@ -670,6 +716,7 @@ export function compileCompatibilityProof(
     }
     producer = portSchema(snapshot, contract, pointer);
   }
+  producerSchemaForRule = producer.selected;
   if (pointer && !producer.total) {
     throw new CompilerProofError('json_pointer_non_total');
   }
@@ -679,24 +726,37 @@ export function compileCompatibilityProof(
   ) {
     throw new CompilerProofError('schema_not_assignable');
   }
-  const rule = proofRule(producer.selected, consumer.selected);
-  if (!rule) throw new CompilerProofError('schema_not_assignable');
+  if (edge.from.type === 'literal') {
+    literalSchema = schemaForLiteral(edge.from.value);
+    producerSchemaForRule = literalSchema;
+  }
+  const validatedRule =
+    edge.from.type === 'literal'
+      ? 'literal_value_satisfies_consumer'
+      : proofRule(producerSchemaForRule, consumer.selected);
+  if (!validatedRule) throw new CompilerProofError('schema_not_assignable');
+  const rule =
+    producer.resource.contentHash === consumer.resource.contentHash
+      ? 'identical_schema'
+      : literalSchema?.type === 'array'
+        ? 'array_item_subtype'
+        : literalSchema?.type === 'object'
+          ? 'closed_object_subtype'
+          : 'enum_subset';
   const canonicalPointer = pointer ?? null;
   const detail = {
+    case: 'current_g2_golden_authoring',
+    edge_id: edge.id,
+    producer_schema_hash: producer.resource.contentHash,
+    consumer_schema_hash: consumer.resource.contentHash,
+    pointer: canonicalPointer,
     rule,
-    producer_schema: producer.selected,
-    consumer_schema: consumer.selected,
   };
   const proofDetailHash = domainSeparatedSha256(
-    'icarus:workflow-schema-compatibility-proof-detail:2\n',
+    'icarus:workflow-data-edge-compatibility-proof-detail:1\n',
     detail,
   );
-  const derivedSchemaHash = pointer
-    ? domainSeparatedSha256(
-        'icarus:workflow-derived-schema:2\n',
-        producer.selected,
-      )
-    : producer.resource.contentHash;
+  const derivedSchemaHash = producer.resource.contentHash;
   const withoutHash = {
     proof_algorithm_version: identity.proof_algorithm_version,
     proof_algorithm_hash: identity.proof_algorithm_hash,
@@ -706,14 +766,14 @@ export function compileCompatibilityProof(
     derived_schema_hash: derivedSchemaHash,
     consumer_schema_hash: consumer.resource.contentHash,
     proof_rule: rule,
-    proof_detail_ref: `embedded:${proofDetailHash}`,
+    proof_detail_ref: `inline:current-g2-golden/${String(edge.id)}`,
     proof_detail_hash: proofDetailHash,
   };
   return {
     proof: {
       ...withoutHash,
       proof_hash: domainSeparatedSha256(
-        'icarus:workflow-schema-compatibility-proof:2\n',
+        'icarus:workflow-data-edge-compatibility-proof:1\n',
         withoutHash,
       ),
     },

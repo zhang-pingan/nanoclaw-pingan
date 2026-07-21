@@ -1,0 +1,37 @@
+{
+  "format": "icarus.workflow-compiler-g2-replay-repair-working-contract/1",
+  "ref": {
+    "id": "icarus.workflow-compiler-g2-replay-repair-working-contract",
+    "version": "2.0.0-working"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-compiler-g2-replay-repair-working-contract-artifact:1\n",
+  "hash": "sha256:c5ca1c15b3e0d525b1ed75200c18f63195cb13e442431730ca1a828e84a7fe67",
+  "payload": {
+    "gate": "G2",
+    "construction_phase": "WORKING",
+    "status": "WORKING_CONTRACT_SUCCESSOR",
+    "publishable": false,
+    "production_reachable": false,
+    "semantic_correction_contract_ref": "conformance/compiler-semantic-correction/contract-pack-compiler-semantic-correction.json",
+    "semantic_correction_contract_hash": "sha256:a2d8bcab971d1db75aad17d152c7c616371a4ceeb8d52f408674d744cf7866b8",
+    "predecessor_lineage": {
+      "predecessor_working_roots": {
+        "contract": "sha256:a2d8bcab971d1db75aad17d152c7c616371a4ceeb8d52f408674d744cf7866b8",
+        "input": "sha256:83080db01627d5b42046ce0a2e229ee3f4099208a8bfa2b028fc9b6241272dc8",
+        "candidate": "sha256:54ba5b80b92a9c053e4439964fbea03326c9c8b7fc3cc3fe244dffa2144d341a",
+        "working_review": "sha256:a254eec500006f1c7210835607cf0c20c9c6cc0647ae06a43ef2943d169d5c92"
+      },
+      "predecessor_review_candidate_root": "sha256:beb8669a054c95e0796ddf998c87c0ddc2e90556f95192a8baad6dd247f3e577",
+      "predecessor_draft_manifest_hash": "sha256:fb94f5e65425b482eee369bb115e46e884b249978e0f408832574d5be41dccbd",
+      "predecessor_golden_review_report_hash": "sha256:d8b2164b0d8e8b6ab7a3fe50559327e7f944312194251bc72a4330845969ad91",
+      "predecessor_golden_semantic_review_hash": "sha256:b12442ce6bdefba73a6b7377006f2aa841d30d78a3060416bbe21048d07abea4",
+      "predecessor_sealed_bundle_hash": "sha256:d00dc96d90ccfadd6081a77d7c4a16024e188b9a77a123743bc601f971219555",
+      "predecessor_sealed_status": "sealed_pending_ci_replay",
+      "successor_reason": "production_compiler_replay_contract_repair",
+      "approved_expected_semantics": "unchanged"
+    },
+    "approved_expected_semantics": "unchanged",
+    "g3_through_g9_status": "not_started"
+  }
+}

@@ -37,10 +37,8 @@ import {
 import { assertSourceObject, validateClosedSource } from './schema-profile.js';
 import {
   bindCompilerSnapshot,
-  catalogHash,
   childPolicy,
   type BoundCompilerSnapshot,
-  interfaceIdentity,
   interfacePlanSnapshot,
   refKey,
   resourceDependencyRefs,
@@ -188,6 +186,140 @@ function refAllowed(ref: JsonObject, list: JsonValue): boolean {
         !Array.isArray(entry) &&
         versionedRefsEqual(ref, entry),
     )
+  );
+}
+
+function normalizePolicy(policy: JsonObject): JsonObject {
+  const normalized = sortObjectKeys(policy);
+  for (const key of [
+    'allowed_capabilities',
+    'allowed_templates',
+    'allowed_interface_refs',
+    'allowed_wait_contracts',
+    'allowed_child_policy_refs',
+  ]) {
+    if (Array.isArray(normalized[key])) {
+      normalized[key] = [...normalized[key]].sort((left, right) =>
+        compareAscii(
+          refKey(objectRef(left) ?? {}),
+          refKey(objectRef(right) ?? {}),
+        ),
+      );
+    }
+  }
+  for (const key of ['allowed_node_types', 'allowed_claim_ids']) {
+    if (Array.isArray(normalized[key])) {
+      normalized[key] = [...normalized[key]].sort((left, right) =>
+        compareAscii(String(left), String(right)),
+      );
+    }
+  }
+  const effectPolicy = objectRef(normalized.effect_policy);
+  if (effectPolicy && Array.isArray(effectPolicy.allowed_recovery_kinds)) {
+    effectPolicy.allowed_recovery_kinds = [
+      ...effectPolicy.allowed_recovery_kinds,
+    ].sort((left, right) => compareAscii(String(left), String(right)));
+  }
+  return normalized;
+}
+
+function intersectLimits(
+  inherited: JsonObject,
+  requested: JsonObject,
+): JsonObject {
+  return Object.fromEntries(
+    Object.keys(inherited)
+      .sort(compareAscii)
+      .map((key) => {
+        const parent =
+          typeof inherited[key] === 'number' ? inherited[key] : null;
+        const child =
+          typeof requested[key] === 'number' ? requested[key] : null;
+        return [
+          key,
+          parent === null
+            ? child
+            : child === null
+              ? parent
+              : Math.min(parent, child),
+        ];
+      }),
+  );
+}
+
+function effectivePolicy(
+  inherited: JsonObject,
+  requestedLimits: JsonObject,
+): JsonObject {
+  const policy = normalizePolicy(inherited);
+  assertJsonObject(policy.limits);
+  policy.limits = intersectLimits(policy.limits, requestedLimits);
+  return policy;
+}
+
+function effectiveChildPolicy(
+  parent: JsonObject,
+  request: JsonObject,
+): JsonObject {
+  const normalizedParent = normalizePolicy(parent);
+  const normalizedRequest = normalizePolicy(request);
+  const intersected = { ...normalizedRequest };
+  const parentNodeTypes = new Set(
+    (normalizedParent.allowed_node_types as JsonValue[]).map(String),
+  );
+  intersected.allowed_node_types = (
+    normalizedRequest.allowed_node_types as JsonValue[]
+  ).filter((entry) => parentNodeTypes.has(String(entry)));
+  for (const key of [
+    'allowed_capabilities',
+    'allowed_templates',
+    'allowed_interface_refs',
+    'allowed_wait_contracts',
+    'allowed_child_policy_refs',
+  ]) {
+    const parentKeys = new Set(
+      (Array.isArray(normalizedParent[key]) ? normalizedParent[key] : []).map(
+        (entry) => refKey(objectRef(entry) ?? {}),
+      ),
+    );
+    intersected[key] = (
+      Array.isArray(normalizedRequest[key]) ? normalizedRequest[key] : []
+    ).filter((entry) => parentKeys.has(refKey(objectRef(entry) ?? {})));
+  }
+  const parentClaims = new Set(
+    (normalizedParent.allowed_claim_ids as JsonValue[]).map(String),
+  );
+  intersected.allowed_claim_ids = (
+    normalizedRequest.allowed_claim_ids as JsonValue[]
+  ).filter((entry) => parentClaims.has(String(entry)));
+  intersected.allow_early_close =
+    normalizedParent.allow_early_close === true &&
+    normalizedRequest.allow_early_close === true;
+  intersected.allow_indefinite_waits =
+    normalizedParent.allow_indefinite_waits === true &&
+    normalizedRequest.allow_indefinite_waits === true;
+  intersected.limits = intersectLimits(
+    normalizedParent.limits as JsonObject,
+    normalizedRequest.limits as JsonObject,
+  );
+  return intersected;
+}
+
+function scopedInterfaceHash(interfaceSnapshot: JsonObject): Sha256Hash {
+  return semanticHash('icarus:workflow-scope-interface:1\n', interfaceSnapshot);
+}
+
+function scopedCatalogHash(
+  snapshot: BoundCompilerSnapshot,
+  resourceType: string,
+  domain: string,
+): Sha256Hash {
+  return semanticHash(
+    domain,
+    snapshot.resources
+      .filter((resource) => resource.resourceType === resourceType)
+      .map((resource) => ({ ref: resource.ref, hash: resource.contentHash }))
+      .sort((left, right) => compareAscii(refKey(left.ref), refKey(right.ref))),
   );
 }
 
@@ -1046,47 +1178,9 @@ function findRecipeCycle(
 function effectiveLimits(
   requested: JsonObject,
   policy: JsonObject,
-  safety: JsonObject,
 ): JsonObject {
   assertJsonObject(policy.limits);
-  const policyLimits = policy.limits;
-  assertJsonObject(safety.run);
-  assertJsonObject(safety.scope);
-  assertJsonObject(safety.map);
-  assertJsonObject(safety.wait);
-  assertJsonObject(safety.reconciliation);
-  const safetyByLimit: Record<string, number> = {
-    max_scopes: Number(safety.run.max_scopes_total),
-    max_nodes: Number(safety.run.max_nodes_total),
-    max_nodes_per_scope: Number(safety.scope.max_nodes_per_scope),
-    max_edges_per_scope: Number(safety.scope.max_edges_per_scope),
-    max_nesting_depth: Number(safety.scope.max_nesting_depth),
-    max_map_items: Number(safety.map.max_items_per_map),
-    max_concurrency: Number(safety.map.max_child_concurrency_per_map),
-    max_total_attempts: Number(safety.run.max_attempts_total),
-    max_total_waits: Number(safety.run.max_waits_total),
-    max_total_output_bytes: Number(safety.run.max_logical_output_bytes_total),
-    max_scope_spec_bytes: Number(safety.scope.max_scope_spec_bytes),
-    max_condition_steps: Number(
-      safety.reconciliation.max_condition_steps_per_evaluation,
-    ),
-    max_wait_duration_ms: Number(safety.wait.max_finite_wait_duration_ms),
-    max_pending_signals: Number(safety.wait.max_pending_signals_per_run),
-    max_fixed_point_facts: Number(
-      safety.reconciliation.max_facts_per_transaction,
-    ),
-    max_frontier_bytes: Number(safety.scope.max_frontier_bytes),
-  };
-  return Object.fromEntries(
-    Object.keys(safetyByLimit).map((key) => [
-      key,
-      minimumLimit(
-        typeof requested[key] === 'number' ? requested[key] : null,
-        typeof policyLimits[key] === 'number' ? policyLimits[key] : null,
-        safetyByLimit[key],
-      ),
-    ]),
-  );
+  return intersectLimits(policy.limits, requested);
 }
 
 function compiledSchema(
@@ -1117,15 +1211,8 @@ function compileInputPorts(
           name,
           {
             schema: compiledSchema(snapshot, contract.schema_ref),
-            max_bytes:
-              typeof contract.max_bytes === 'number'
-                ? contract.max_bytes
-                : null,
-            aggregation: contract.aggregation ?? {
-              type: 'single',
-              required: false,
-              select: 'only',
-            },
+            max_bytes: contract.max_bytes,
+            aggregation: contract.aggregation,
           },
         ];
       }),
@@ -1147,11 +1234,8 @@ function compileOutputPorts(
           name,
           {
             schema: compiledSchema(snapshot, contract.schema_ref),
-            max_bytes:
-              typeof contract.max_bytes === 'number'
-                ? contract.max_bytes
-                : null,
-            required: contract.required === true,
+            max_bytes: contract.max_bytes,
+            required: contract.required,
           },
         ];
       }),
@@ -1160,53 +1244,53 @@ function compileOutputPorts(
 
 function generatedCompiledSchema(
   generator: 'child_completion' | 'map_result',
-  parameters: JsonObject,
-  schemaJson: JsonObject,
+  childInterface: JsonObject,
 ): JsonObject {
-  const domainGenerator = generator.replaceAll('_', '-');
+  assertJsonObject(childInterface.exits);
+  const exits = Object.keys(childInterface.exits).sort(compareAscii);
+  const parameters = {
+    generator,
+    child_interface_ref: childInterface.ref,
+    exits,
+  } as JsonObject;
+  const schemaJson: JsonObject =
+    generator === 'child_completion'
+      ? {
+          type: 'object',
+          additionalProperties: false,
+          required: ['exit', 'output_ports'],
+          properties: {
+            exit: { type: 'string', enum: exits },
+            output_ports: { type: 'object' },
+          },
+        }
+      : {
+          type: 'array',
+          items: {
+            type: 'object',
+            additionalProperties: false,
+            required: ['item_index', 'outcome'],
+            properties: {
+              item_index: { type: 'integer', minimum: 0 },
+              outcome: {
+                type: 'string',
+                enum: ['completed', 'errored', 'cancelled'],
+              },
+            },
+          },
+        };
   return {
     type: 'generated',
     generator,
     parameter_hash: semanticHash(
-      `icarus:workflow-${domainGenerator}-schema-parameters:1\n`,
+      'icarus:workflow-generated-schema-parameter:1\n',
       parameters,
     ),
     schema_json: schemaJson,
     schema_hash: semanticHash(
-      `icarus:workflow-${domainGenerator}-schema:1\n`,
+      'icarus:workflow-generated-schema:1\n',
       schemaJson,
     ),
-  };
-}
-
-function childCompletionSchema(childInterface: JsonObject): JsonObject {
-  assertJsonObject(childInterface.exits);
-  return {
-    type: 'object',
-    additionalProperties: false,
-    required: [
-      'scope_id',
-      'exit',
-      'output_envelope_ref',
-      'output_envelope_hash',
-      'plan_hash',
-      'cut_event_seq',
-    ],
-    properties: {
-      scope_id: { type: 'string', minLength: 1 },
-      exit: { type: 'string', enum: Object.keys(childInterface.exits).sort() },
-      output_envelope_ref: { type: 'string', minLength: 1 },
-      output_envelope_hash: {
-        type: 'string',
-        pattern: '^sha256:[0-9a-f]{64}$',
-      },
-      plan_hash: { type: 'string', pattern: '^sha256:[0-9a-f]{64}$' },
-      cut_event_seq: {
-        type: 'integer',
-        minimum: 1,
-        maximum: Number.MAX_SAFE_INTEGER,
-      },
-    },
   };
 }
 
@@ -1215,16 +1299,12 @@ function childOwnerOutputPorts(
   childInterface: JsonObject,
   state: CompilationState,
 ): JsonObject {
+  assertJsonObject(state.snapshot.safety.value);
   const completionPort = String(node.completion_output_port);
-  const schemaJson = childCompletionSchema(childInterface);
   const output: JsonObject = {
     [completionPort]: {
-      schema: generatedCompiledSchema(
-        'child_completion',
-        { child_interface: childInterface },
-        schemaJson,
-      ),
-      max_bytes: null,
+      schema: generatedCompiledSchema('child_completion', childInterface),
+      max_bytes: Number(state.snapshot.safety.value.max_single_value_bytes),
       required: true,
     },
   };
@@ -1290,21 +1370,17 @@ function mapResultSchema(): JsonObject {
   };
 }
 
-function mapOwnerOutputPorts(node: JsonObject): JsonObject {
+function mapOwnerOutputPorts(
+  node: JsonObject,
+  childInterface: JsonObject,
+  state: CompilationState,
+): JsonObject {
+  assertJsonObject(state.snapshot.safety.value);
   const resultPort = String(node.result_output_port);
-  const schemaJson = mapResultSchema();
   return {
     [resultPort]: {
-      schema: generatedCompiledSchema(
-        'map_result',
-        {
-          body: node.body,
-          completion: node.completion,
-          result_order: 'item_index',
-        },
-        schemaJson,
-      ),
-      max_bytes: null,
+      schema: generatedCompiledSchema('map_result', childInterface),
+      max_bytes: Number(state.snapshot.safety.value.max_single_value_bytes),
       required: true,
     },
   };
@@ -1347,7 +1423,7 @@ function nodeBase(node: JsonObject, state: CompilationState): JsonObject {
     id: node.id,
     type: node.type,
     source_config_hash: semanticHash(
-      'icarus:workflow-node-source-config:1\n',
+      'icarus:workflow-graph-node-source:1\n',
       node,
     ),
     trigger_program: triggerProgram,
@@ -1358,10 +1434,13 @@ function nodeBase(node: JsonObject, state: CompilationState): JsonObject {
 }
 
 function effectiveRetryPolicy(
+  node: JsonObject,
   capability: SnapshotResource,
   state: CompilationState,
 ): JsonObject {
   assertJsonObject(capability.content.retry_policy);
+  assertJsonObject(state.snapshot.safety.value);
+  assertJsonObject(state.snapshot.safety.execution);
   const revision = objectRef(capability.content.quality_revision_policy);
   let qualityRevision: JsonObject | null = null;
   if (revision) {
@@ -1375,22 +1454,31 @@ function effectiveRetryPolicy(
     qualityRevision = {
       feedback_schema_ref: schema.ref,
       feedback_schema_hash: schema.contentHash,
-      effective_max_feedback_bytes: Number(revision.max_feedback_bytes),
-      context_mode: 'base_input_plus_latest_revision',
+      effective_max_feedback_bytes: minimumLimit(
+        Number(revision.max_feedback_bytes),
+        Number(state.snapshot.safety.value.max_single_value_bytes),
+      ),
+      context_mode: revision.context_mode,
     };
   }
+  const requested = objectRef(node.retry_request);
   const withoutHash = {
-    effective_node_max_attempts: Number(
-      capability.content.retry_policy.max_attempts,
+    effective_node_max_attempts: minimumLimit(
+      Number(capability.content.retry_policy.max_attempts),
+      requested && typeof requested.max_attempts === 'number'
+        ? requested.max_attempts
+        : null,
+      Number(state.snapshot.safety.execution.max_attempts_per_node),
     ),
-    effective_retry_on: capability.content.retry_policy.retry_on,
+    effective_retry_on:
+      requested?.retry_on ?? capability.content.retry_policy.retry_on,
     backoff: capability.content.retry_policy.backoff,
     quality_revision: qualityRevision,
   };
   return {
     ...withoutHash,
     policy_hash: semanticHash(
-      'icarus:workflow-effective-retry-policy:1\n',
+      'icarus:workflow-capability-retry-policy:1\n',
       withoutHash,
     ),
   };
@@ -1408,10 +1496,30 @@ function compileCapabilityNode(
     'capability',
   );
   if (!capability) throw new Error('Capability binding disappeared');
+  assertJsonObject(capability.content.retry_policy);
+  assertJsonObject(state.snapshot.safety.execution);
+  const requested = objectRef(node.retry_request);
+  const maxAttempts = minimumLimit(
+    Number(capability.content.retry_policy.max_attempts),
+    requested && typeof requested.max_attempts === 'number'
+      ? requested.max_attempts
+      : null,
+    Number(state.snapshot.safety.execution.max_attempts_per_node),
+  );
+  const timeoutMs = Math.min(
+    typeof node.timeout_ms === 'number'
+      ? node.timeout_ms
+      : Number(capability.content.timeout_ceiling_ms),
+    Number(state.snapshot.safety.execution.max_attempt_duration_ms),
+  );
   return {
     ...base,
+    effective_limits: {
+      max_attempts: maxAttempts,
+      timeout_ms: timeoutMs,
+    },
     capability_binding: capability.content,
-    effective_retry_policy: effectiveRetryPolicy(capability, state),
+    effective_retry_policy: effectiveRetryPolicy(node, capability, state),
   };
 }
 
@@ -1447,19 +1555,29 @@ function compileFactory(
   } else {
     assertJsonObject(factory.scope);
     childSource = factory.scope;
-    sourceSnapshotRef = `inline:${ownerPath.join('/')}`;
+    sourceSnapshotRef = 'inline:pending';
   }
   const policyBinding = childPolicy(state.snapshot, childPolicyRef);
   if (!policyBinding) throw new Error('Child policy binding disappeared');
+  const childEffectivePolicy = effectiveChildPolicy(
+    state.policy,
+    policyBinding.request,
+  );
   const childState: CompilationState = {
     ...state,
-    policy: policyBinding.request,
-    policyHash: policyBinding.hash,
+    policy: childEffectivePolicy,
+    policyHash: semanticHash(
+      'icarus:workflow-effective-child-policy:1\n',
+      childEffectivePolicy,
+    ),
+    proofHashes: new Set(),
+    programHashes: new Set(),
   };
   validateGraphBindings(childSource, childState);
   validateGraphStructure(childSource, childState);
-  const childPlan = compileGraphPlan(childSource, childState);
+  const childPlan = compileGraphPlan(childSource, childState, ownerPath);
   const hash = sourceHash('graph_scope', childSource);
+  if (factory.type === 'inline') sourceSnapshotRef = `inline:${hash}`;
   return {
     binding: {
       kind: factory.type,
@@ -1483,10 +1601,14 @@ function compiledChildPolicy(
 ): JsonObject {
   const binding = childPolicy(state.snapshot, ref);
   if (!binding) throw new Error('Child policy binding disappeared');
+  const effective = effectiveChildPolicy(state.policy, binding.request);
   return {
     profile_ref: binding.profile,
-    effective_policy_snapshot: binding.request,
-    effective_policy_hash: binding.hash,
+    effective_policy_snapshot: effective,
+    effective_policy_hash: semanticHash(
+      'icarus:workflow-child-policy-binding:1\n',
+      effective,
+    ),
   };
 }
 
@@ -1511,27 +1633,28 @@ function compileGraphNode(
     );
     if (!contract) throw new Error('Wait binding disappeared');
     assertJsonObject(state.snapshot.safety.wait);
+    const maxDuration = minimumLimit(
+      typeof node.wait.timeout_ms === 'number' ? node.wait.timeout_ms : null,
+      Number(state.snapshot.safety.wait.max_finite_wait_duration_ms),
+    );
     return {
       ...base,
+      effective_limits: { max_wait_duration_ms: maxDuration },
       wait_binding: {
         ...node.wait,
         contract_snapshot: contract.content,
-        effective_max_duration_ms: minimumLimit(
-          typeof node.wait.timeout_ms === 'number'
-            ? node.wait.timeout_ms
-            : null,
-          Number(state.snapshot.safety.wait.max_finite_wait_duration_ms),
-        ),
+        effective_max_duration_ms: maxDuration,
       },
     };
   }
   if (node.type === 'join') return { ...base, expose: node.expose };
   if (node.type === 'subgraph') {
+    assertJsonObject(state.snapshot.safety.scope);
     assertJsonObject(node.scope);
     assertJsonObject(node.child_policy_ref);
     const factory = compileFactory(
       node.scope,
-      ownerPath,
+      [...ownerPath, String(node.id)],
       state,
       node.child_policy_ref,
     );
@@ -1549,9 +1672,15 @@ function compileGraphNode(
       completion_output_port: node.completion_output_port,
       expose: node.expose,
       child_policy: compiledChildPolicy(node.child_policy_ref, state),
+      effective_limits: {
+        max_nesting_depth: Number(
+          state.snapshot.safety.scope.max_nesting_depth,
+        ),
+      },
     };
   }
   if (node.type === 'expand') {
+    assertJsonObject(state.snapshot.safety.scope);
     assertJsonObject(node.child_interface_ref);
     assertJsonObject(node.child_policy_ref);
     const childInterface = state.snapshot.interfaceByKey.get(
@@ -1575,6 +1704,14 @@ function compileGraphNode(
       completion_output_port: node.completion_output_port,
       expose: node.expose,
       child_policy: compiledChildPolicy(node.child_policy_ref, state),
+      effective_limits: {
+        max_nesting_depth: Number(
+          state.snapshot.safety.scope.max_nesting_depth,
+        ),
+        max_scope_spec_bytes: Number(
+          state.snapshot.safety.scope.max_scope_spec_bytes,
+        ),
+      },
     };
   }
   if (node.type === 'map') {
@@ -1582,16 +1719,21 @@ function compileGraphNode(
     assertJsonObject(node.child_policy_ref);
     const factory = compileFactory(
       node.body,
-      ownerPath,
+      [...ownerPath, String(node.id)],
       state,
       node.child_policy_ref,
     );
     validateMapChildBinding(node, factory.childPlan.interface_snapshot, state);
     factoryByNode.set(String(node.id), factory);
     assertJsonObject(state.snapshot.safety.map);
+    assertJsonObject(state.snapshot.safety.scope);
     return {
       ...base,
-      output_ports: mapOwnerOutputPorts(node),
+      output_ports: mapOwnerOutputPorts(
+        node,
+        factory.childPlan.interface_snapshot,
+        state,
+      ),
       body_binding: factory.binding,
       items_input_port: node.items_input_port,
       item_child_input_port: node.item_child_input_port,
@@ -1615,6 +1757,23 @@ function compileGraphNode(
       completion: node.completion,
       child_policy: compiledChildPolicy(node.child_policy_ref, state),
       result_order: 'item_index',
+      effective_limits: {
+        max_items: minimumLimit(
+          typeof node.requested_max_items === 'number'
+            ? node.requested_max_items
+            : null,
+          Number(state.snapshot.safety.map.max_items_per_map),
+        ),
+        child_concurrency: minimumLimit(
+          typeof node.requested_child_concurrency === 'number'
+            ? node.requested_child_concurrency
+            : null,
+          Number(state.snapshot.safety.map.max_child_concurrency_per_map),
+        ),
+        max_nesting_depth: Number(
+          state.snapshot.safety.scope.max_nesting_depth,
+        ),
+      },
     };
   }
   throw new Error(`Unsupported compiled node type: ${String(node.type)}`);
@@ -1676,9 +1835,7 @@ function validateMapChildBinding(
     childItemContract.schema_ref,
     'schema',
   );
-  const itemSchema = itemsSchema
-    ? objectRef(itemsSchema.content.items)
-    : null;
+  const itemSchema = itemsSchema ? objectRef(itemsSchema.content.items) : null;
   if (
     !itemsSchema ||
     itemsSchema.content.type !== 'array' ||
@@ -1717,8 +1874,15 @@ function compileControlEdges(
   const limits = effectiveLimits(
     source.requested_limits as JsonObject,
     state.policy,
-    state.snapshot.safety,
   );
+  assertJsonObject(state.snapshot.safety.reconciliation);
+  const maxConditionSteps =
+    typeof limits.max_condition_steps === 'number'
+      ? limits.max_condition_steps
+      : Number(
+          state.snapshot.safety.reconciliation
+            .max_condition_steps_per_evaluation,
+        );
   return controlEdges(source)
     .map((edge, index) => {
       let conditionProgram: JsonObject | null = null;
@@ -1735,7 +1899,7 @@ function compileControlEdges(
             fromNode,
             state.snapshot,
             interfaceSnapshot,
-            Number(limits.max_condition_steps),
+            maxConditionSteps,
           );
         } catch (error) {
           if (error instanceof CompilerProofError) {
@@ -1769,7 +1933,7 @@ function compileControlEdges(
       return {
         ...withoutHash,
         compiled_edge_hash: semanticHash(
-          'icarus:workflow-control-edge-compiled:1\n',
+          'icarus:workflow-compiled-control-edge:1\n',
           withoutHash,
         ),
       };
@@ -1832,7 +1996,7 @@ function compileDataEdges(
       return {
         ...withoutHash,
         compiled_edge_hash: semanticHash(
-          'icarus:workflow-data-edge-compiled:1\n',
+          'icarus:workflow-compiled-data-edge:1\n',
           withoutHash,
         ),
       };
@@ -1888,19 +2052,25 @@ function compileCompletion(
         assertJsonObject(value);
         assertJsonObject(value.when);
         assertJsonObject(value.select);
+        const fact = sortObjectKeys(value.when);
+        const selector = sortObjectKeys(value.select);
+        const factProgramWithoutHash = {
+          normalized_fact_expression: fact,
+          max_steps: expressionSteps(fact),
+        };
         const factProgramHash = semanticHash(
           'icarus:workflow-completion-fact-program:1\n',
-          value.when,
+          factProgramWithoutHash,
         );
         state.programHashes.add(factProgramHash);
         const selectorHash = semanticHash(
           'icarus:workflow-completion-selector:1\n',
-          value.select,
+          selector,
         );
         const early = value.phase === 'early';
         const monotonicityDetail = {
           rule_id: value.id,
-          normalized_fact_expression: sortObjectKeys(value.when),
+          normalized_fact_expression: fact,
         };
         const monotonicityProof = early
           ? {
@@ -1957,10 +2127,10 @@ function compileCompletion(
         const withoutHash = {
           id: value.id,
           phase: value.phase,
-          normalized_fact_expression: sortObjectKeys(value.when),
+          normalized_fact_expression: fact,
           fact_program_hash: factProgramHash,
-          max_steps: expressionSteps(value.when),
-          selector: sortObjectKeys(value.select),
+          max_steps: expressionSteps(fact),
+          selector,
           selector_contract_hash: selectorHash,
           priority:
             typeof value.priority === 'number'
@@ -2015,7 +2185,7 @@ function closureMember(
     factory_kind: factory.kind,
     source_ref: factory.sourceRef,
     source_hash: factory.sourceHash,
-    plan_ref: `candidate:plan:${factory.childPlan.plan_hash}`,
+    plan_ref: `content-addressed:workflow-plan/${String(factory.childPlan.plan_hash).slice(7)}`,
     plan_hash: factory.childPlan.plan_hash as Sha256Hash,
     interface_snapshot_hash: factory.childPlan
       .interface_snapshot_hash as Sha256Hash,
@@ -2032,6 +2202,7 @@ function closureMember(
 function staticClosure(
   source: JsonObject,
   factoryByNode: Map<string, FactoryCompilation>,
+  ownerPath: string[],
 ): JsonObject {
   const members: CompiledStaticChildPlanClosureMemberV1[] = [];
   const append = (
@@ -2043,30 +2214,20 @@ function staticClosure(
     const direct = closureMember(factory, nodeId, parentClosureKey, ownerPath);
     members.push(direct);
     for (const child of factory.childPlan.static_child_plan_closure.members) {
-      const rebasedWithoutHash = {
-        ...child,
-        closure_key: `${direct.closure_key}/${child.closure_key}`,
-        parent_closure_key:
-          child.parent_closure_key === null
-            ? direct.closure_key
-            : `${direct.closure_key}/${child.parent_closure_key}`,
-        owner_node_path: [...ownerPath, ...child.owner_node_path],
-      };
-      delete (
-        rebasedWithoutHash as Partial<CompiledStaticChildPlanClosureMemberV1>
-      ).member_hash;
-      members.push({
-        ...rebasedWithoutHash,
-        member_hash: semanticHash(
-          STATIC_CLOSURE_MEMBER_DOMAIN_SEPARATOR,
-          rebasedWithoutHash as JsonObject,
-        ),
-      } as CompiledStaticChildPlanClosureMemberV1);
+      members.push(child);
     }
   };
   for (const node of graphNodes(source).sort(compareStableId)) {
     const factory = factoryByNode.get(String(node.id));
-    if (factory) append(String(node.id), factory, null, [String(node.id)]);
+    if (factory) {
+      const path = [...ownerPath, String(node.id)];
+      append(
+        String(node.id),
+        factory,
+        ownerPath.length > 0 ? ownerPath.join('/') : null,
+        path,
+      );
+    }
   }
   const withoutHash = { members, member_count: members.length };
   return {
@@ -2080,10 +2241,14 @@ function complexitySummary(
   controls: JsonObject[],
   data: JsonObject[],
   completion: JsonObject,
+  frontierBytes: number,
 ): JsonObject {
   const fanOut = new Map<string, number>();
-  for (const edge of controls) {
-    const source = String(edge.from_node_id);
+  for (const edge of [...controls, ...data]) {
+    const source = String(
+      edge.from_node_id ?? objectRef(edge.from)?.node_id ?? '',
+    );
+    if (!source) continue;
     fanOut.set(source, (fanOut.get(source) ?? 0) + 1);
   }
   const conditionSteps = controls.map(
@@ -2110,16 +2275,14 @@ function complexitySummary(
     max_condition_steps: Math.max(0, ...conditionSteps.map(Number)),
     max_trigger_steps: Math.max(1, ...triggerSteps.map(Number)),
     max_completion_steps: Math.max(1, ...completionSteps),
-    max_reconcile_facts_per_ingress: Math.max(
-      1,
-      nodes.length + controls.length,
-    ),
-    max_frontier_bytes: Math.max(1, nodes.length * 64),
+    max_reconcile_facts_per_ingress:
+      nodes.length + controls.length + data.length,
+    max_frontier_bytes: frontierBytes,
   };
   return {
     ...withoutHash,
     summary_hash: semanticHash(
-      'icarus:workflow-complexity-summary:1\n',
+      'icarus:workflow-compiled-complexity-summary:1\n',
       withoutHash,
     ),
   };
@@ -2159,10 +2322,19 @@ function compileLiteralExpandCandidates(
     }
     const policyBinding = childPolicy(state.snapshot, node.child_policy_ref);
     if (!policyBinding) throw new Error('Expand child policy disappeared');
+    const childEffectivePolicy = effectiveChildPolicy(
+      state.policy,
+      policyBinding.request,
+    );
     const childState: CompilationState = {
       ...state,
-      policy: policyBinding.request,
-      policyHash: policyBinding.hash,
+      policy: childEffectivePolicy,
+      policyHash: semanticHash(
+        'icarus:workflow-effective-child-policy:1\n',
+        childEffectivePolicy,
+      ),
+      proofHashes: new Set(),
+      programHashes: new Set(),
     };
     validateGraphBindings(candidate, childState);
     validateGraphStructure(candidate, childState);
@@ -2173,26 +2345,35 @@ function compileLiteralExpandCandidates(
 function compileGraphPlan(
   source: JsonObject,
   state: CompilationState,
+  ownerPath: string[] = [],
 ): CompiledScopePlanV2Document {
   assertJsonObject(source.interface_ref);
   assertJsonObject(source.requested_limits);
+  const planPolicy = effectivePolicy(state.policy, source.requested_limits);
+  const planState: CompilationState = {
+    ...state,
+    policy: planPolicy,
+    policyHash: semanticHash(
+      'icarus:workflow-effective-policy:1\n',
+      planPolicy,
+    ),
+  };
   const interfaceEntry = state.snapshot.interfaceByKey.get(
     refKey(source.interface_ref),
   );
   if (!interfaceEntry) throw new Error('Graph interface binding disappeared');
   const interfaceSnapshot = interfacePlanSnapshot(interfaceEntry);
-  compileLiteralExpandCandidates(source, state);
+  compileLiteralExpandCandidates(source, planState);
   const factoryByNode = new Map<string, FactoryCompilation>();
   const nodes = graphNodes(source)
-    .map((node) =>
-      compileGraphNode(node, state, [String(node.id)], factoryByNode),
-    )
+    .map((node) => compileGraphNode(node, planState, ownerPath, factoryByNode))
     .sort(compareStableId);
   const routeGroups = compileRouteGroups(source);
-  const controls = compileControlEdges(source, state, interfaceSnapshot);
-  const data = compileDataEdges(source, state, interfaceSnapshot);
-  const completion = compileCompletion(source, state);
-  const closure = staticClosure(source, factoryByNode);
+  const controls = compileControlEdges(source, planState, interfaceSnapshot);
+  const data = compileDataEdges(source, planState, interfaceSnapshot);
+  const completion = compileCompletion(source, planState);
+  const closure = staticClosure(source, factoryByNode, ownerPath);
+  assertJsonObject(planState.snapshot.safety.scope);
   const withoutHash = {
     format: 'icarus.workflow-graph-scope-plan/2' as const,
     compiler_version: state.identity.compiler_version,
@@ -2205,27 +2386,37 @@ function compileGraphPlan(
     proof_algorithm_version: state.identity.proof_algorithm_version,
     proof_algorithm_hash: state.identity.proof_algorithm_hash,
     source_hash: sourceHash('graph_scope', source),
-    interface_snapshot_hash: interfaceIdentity(interfaceEntry),
-    policy_snapshot_hash: state.policyHash,
-    effective_policy_snapshot: state.policy,
-    capability_catalog_hash: catalogHash(state.snapshot, 'capability'),
-    wait_contract_catalog_hash: catalogHash(state.snapshot, 'wait_contract'),
+    interface_snapshot_hash: scopedInterfaceHash(interfaceSnapshot),
+    policy_snapshot_hash: planState.policyHash,
+    effective_policy_snapshot: planPolicy,
+    capability_catalog_hash: scopedCatalogHash(
+      state.snapshot,
+      'capability',
+      'icarus:workflow-capability-catalog-snapshot:1\n',
+    ),
+    wait_contract_catalog_hash: scopedCatalogHash(
+      state.snapshot,
+      'wait_contract',
+      'icarus:workflow-wait-catalog-snapshot:1\n',
+    ),
     interface_snapshot: interfaceSnapshot,
     nodes,
     route_groups: routeGroups,
     control_edges: controls,
     data_edges: data,
     completion,
-    complexity_summary: complexitySummary(nodes, controls, data, completion),
-    static_child_plan_closure: closure,
-    effective_limits: effectiveLimits(
-      source.requested_limits,
-      state.policy,
-      state.snapshot.safety,
+    complexity_summary: complexitySummary(
+      nodes,
+      controls,
+      data,
+      completion,
+      Number(planState.snapshot.safety.scope.max_frontier_bytes),
     ),
-    effective_usage_budget: state.policy.usage_budget,
-    runtime_safety_snapshot: state.snapshot.safety,
-    runtime_safety_hash: state.snapshot.safetyHash,
+    static_child_plan_closure: closure,
+    effective_limits: planPolicy.limits,
+    effective_usage_budget: planPolicy.usage_budget,
+    runtime_safety_snapshot: planState.snapshot.safety,
+    runtime_safety_hash: planState.snapshot.safetyHash,
   };
   return {
     ...withoutHash,
@@ -2248,7 +2439,7 @@ function compileDefinitionPlan(
   assertJsonObject(definitionState.policy);
   const generatedInterface = {
     ref: {
-      id: `generated.${String(source.ref.id)}.${stateKey}`,
+      id: `${String(source.ref.id)}.lowered.${stateKey}`,
       version: String(source.ref.version),
     },
     inputs: {},
@@ -2257,47 +2448,50 @@ function compileDefinitionPlan(
       failure: { output_ports: {} },
     },
   };
-  const generatedInterfaceHash = semanticHash(
-    'icarus:workflow-generated-definition-interface:1\n',
-    generatedInterface,
-  );
-  const successNodeId = `${stateKey}_success`;
-  const failureNodeId = `${stateKey}_failure`;
   const loweredSource = {
+    format: 'icarus.workflow-graph-scope/1',
+    scope_key: `definition.${stateKey}`,
+    interface_ref: generatedInterface.ref,
     nodes: [
       {
-        id: stateKey,
+        id: 'capability',
         type: definitionState.type,
         trigger: { type: 'root' },
         capability_ref: definitionState.capability_ref,
+        ...(definitionState.retry_request
+          ? { retry_request: definitionState.retry_request }
+          : {}),
+        ...(definitionState.timeout_ms
+          ? { timeout_ms: definitionState.timeout_ms }
+          : {}),
       },
       {
-        id: successNodeId,
+        id: 'failure',
         type: 'terminal',
-        trigger: { type: 'all', edge_ids: ['capability.succeeded'] },
-        exit: 'success',
-      },
-      {
-        id: failureNodeId,
-        type: 'terminal',
-        trigger: { type: 'all', edge_ids: ['capability.failed'] },
+        trigger: { type: 'all', edge_ids: ['failed_to_failure'] },
         exit: 'failure',
+      },
+      {
+        id: 'success',
+        type: 'terminal',
+        trigger: { type: 'all', edge_ids: ['succeeded_to_success'] },
+        exit: 'success',
       },
     ],
     control_edges: [
       {
-        id: 'capability.succeeded',
+        id: 'failed_to_failure',
         kind: 'control',
-        from_node_id: stateKey,
-        to_node_id: successNodeId,
-        on: { statuses: ['succeeded'] },
+        from_node_id: 'capability',
+        to_node_id: 'failure',
+        on: { statuses: ['failed'] },
       },
       {
-        id: 'capability.failed',
+        id: 'succeeded_to_success',
         kind: 'control',
-        from_node_id: stateKey,
-        to_node_id: failureNodeId,
-        on: { statuses: ['failed'] },
+        from_node_id: 'capability',
+        to_node_id: 'success',
+        on: { statuses: ['succeeded'] },
       },
     ],
     data_edges: [],
@@ -2305,13 +2499,13 @@ function compileDefinitionPlan(
     completion: {
       settled_rules: [
         {
-          id: 'select_capability_outcome',
+          id: 'select_named_exit',
           phase: 'settled',
           priority: 100,
           when: { fact: 'all_nodes_terminal' },
           select: {
-            exits: ['success', 'failure'],
-            pick: { type: 'first_reached' },
+            exits: ['failure', 'success'],
+            pick: { type: 'lowest_terminal_node_id' },
           },
         },
       ],
@@ -2339,8 +2533,7 @@ function compileDefinitionPlan(
       closureWithoutHash,
     ),
   };
-  const requestedLimits = definitionState.policy.limits;
-  assertJsonObject(requestedLimits);
+  assertJsonObject(state.snapshot.safety.scope);
   const withoutHash = {
     format: 'icarus.workflow-graph-scope-plan/2' as const,
     compiler_version: state.identity.compiler_version,
@@ -2353,28 +2546,35 @@ function compileDefinitionPlan(
     proof_algorithm_version: state.identity.proof_algorithm_version,
     proof_algorithm_hash: state.identity.proof_algorithm_hash,
     source_hash: sourceHash('workflow_definition', source),
-    interface_snapshot_hash: generatedInterfaceHash,
-    policy_snapshot_hash: semanticHash(
-      'icarus:workflow-definition-effective-policy:1\n',
-      definitionState.policy,
+    interface_snapshot_hash: scopedInterfaceHash(generatedInterface),
+    policy_snapshot_hash: state.policyHash,
+    effective_policy_snapshot: state.policy,
+    capability_catalog_hash: scopedCatalogHash(
+      state.snapshot,
+      'capability',
+      'icarus:workflow-capability-catalog-snapshot:1\n',
     ),
-    effective_policy_snapshot: definitionState.policy,
-    capability_catalog_hash: catalogHash(state.snapshot, 'capability'),
-    wait_contract_catalog_hash: catalogHash(state.snapshot, 'wait_contract'),
+    wait_contract_catalog_hash: scopedCatalogHash(
+      state.snapshot,
+      'wait_contract',
+      'icarus:workflow-wait-catalog-snapshot:1\n',
+    ),
     interface_snapshot: generatedInterface,
     nodes,
     route_groups: [],
     control_edges: controls,
     data_edges: [],
     completion,
-    complexity_summary: complexitySummary(nodes, controls, [], completion),
-    static_child_plan_closure: closure,
-    effective_limits: effectiveLimits(
-      requestedLimits,
-      definitionState.policy,
-      state.snapshot.safety,
+    complexity_summary: complexitySummary(
+      nodes,
+      controls,
+      [],
+      completion,
+      Number(state.snapshot.safety.scope.max_frontier_bytes),
     ),
-    effective_usage_budget: definitionState.policy.usage_budget,
+    static_child_plan_closure: closure,
+    effective_limits: state.policy.limits,
+    effective_usage_budget: state.policy.usage_budget,
     runtime_safety_snapshot: state.snapshot.safety,
     runtime_safety_hash: state.snapshot.safetyHash,
   };
@@ -2407,10 +2607,10 @@ function compileSuccess(
     const definitionState = source.states[String(entry.state_key)];
     assertJsonObject(definitionState);
     assertJsonObject(definitionState.policy);
-    state.policy = definitionState.policy;
+    state.policy = normalizePolicy(definitionState.policy);
     state.policyHash = semanticHash(
-      'icarus:workflow-definition-effective-policy:1\n',
-      definitionState.policy,
+      'icarus:workflow-effective-policy:1\n',
+      state.policy,
     );
     validateDefinitionBindings(source, state);
     plan = compileDefinitionPlan(source, state);
