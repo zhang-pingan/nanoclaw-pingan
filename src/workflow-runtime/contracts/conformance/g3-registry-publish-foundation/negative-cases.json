@@ -1,0 +1,351 @@
+{
+  "format": "icarus.workflow-g3-registry-publish-negative-cases/1",
+  "ref": {
+    "id": "icarus.workflow-g3-registry-publish-negative-cases",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-g3-registry-publish-negative-cases:1\n",
+  "hash": "sha256:e35fd220d0182346a733928dd84aa49a1af8734d84d1031e084aa2e651acdd7b",
+  "payload": {
+    "fixture_scope": "test_only",
+    "cases": [
+      {
+        "case_id": "negative.unknown-field",
+        "fixture_scope": "test_only",
+        "base_case_id": "positive.production-empty-registry",
+        "mutations": [
+          {
+            "operation": "set",
+            "pointer": "/unknown_field",
+            "value": true
+          }
+        ],
+        "rehash_resource_hashes": false,
+        "rehash_preflight_hash": false,
+        "expected_code": "schema_invalid"
+      },
+      {
+        "case_id": "negative.moving-ref",
+        "fixture_scope": "test_only",
+        "base_case_id": "positive.test-only-definition-and-executor",
+        "mutations": [
+          {
+            "operation": "set",
+            "pointer": "/resources/0/ref/version",
+            "value": "latest"
+          }
+        ],
+        "rehash_resource_hashes": false,
+        "rehash_preflight_hash": false,
+        "expected_code": "schema_invalid"
+      },
+      {
+        "case_id": "negative.preflight-hash",
+        "fixture_scope": "test_only",
+        "base_case_id": "positive.production-empty-registry",
+        "mutations": [
+          {
+            "operation": "set",
+            "pointer": "/preflight_hash",
+            "value": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          }
+        ],
+        "rehash_resource_hashes": false,
+        "rehash_preflight_hash": false,
+        "expected_code": "preflight_hash_mismatch"
+      },
+      {
+        "case_id": "negative.g2-sealed-identity",
+        "fixture_scope": "test_only",
+        "base_case_id": "positive.production-empty-registry",
+        "mutations": [
+          {
+            "operation": "set",
+            "pointer": "/upstream_identity/g2_sealed_bundle_hash",
+            "value": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          }
+        ],
+        "rehash_resource_hashes": false,
+        "rehash_preflight_hash": true,
+        "expected_code": "g2_identity_mismatch"
+      },
+      {
+        "case_id": "negative.production-compiler-actual-as-oracle",
+        "fixture_scope": "test_only",
+        "base_case_id": "positive.production-empty-registry",
+        "mutations": [
+          {
+            "operation": "set",
+            "pointer": "/production_compiler_actual_role",
+            "value": "expected_oracle"
+          }
+        ],
+        "rehash_resource_hashes": false,
+        "rehash_preflight_hash": true,
+        "expected_code": "production_compiler_actual_oracle_forbidden"
+      },
+      {
+        "case_id": "negative.registry-write-requested",
+        "fixture_scope": "test_only",
+        "base_case_id": "positive.production-empty-registry",
+        "mutations": [
+          {
+            "operation": "set",
+            "pointer": "/requested_registry_write",
+            "value": true
+          }
+        ],
+        "rehash_resource_hashes": false,
+        "rehash_preflight_hash": true,
+        "expected_code": "publisher_side_effect_requested"
+      },
+      {
+        "case_id": "negative.activation-requested",
+        "fixture_scope": "test_only",
+        "base_case_id": "positive.production-empty-registry",
+        "mutations": [
+          {
+            "operation": "set",
+            "pointer": "/requested_activation",
+            "value": true
+          }
+        ],
+        "rehash_resource_hashes": false,
+        "rehash_preflight_hash": true,
+        "expected_code": "publisher_side_effect_requested"
+      },
+      {
+        "case_id": "negative.test-only-production-promotion",
+        "fixture_scope": "test_only",
+        "base_case_id": "positive.test-only-definition-and-executor",
+        "mutations": [
+          {
+            "operation": "set",
+            "pointer": "/target_registry",
+            "value": "production"
+          }
+        ],
+        "rehash_resource_hashes": false,
+        "rehash_preflight_hash": true,
+        "expected_code": "test_only_promotion_forbidden"
+      },
+      {
+        "case_id": "negative.test-only-scope-on-production-baseline",
+        "fixture_scope": "test_only",
+        "base_case_id": "positive.production-empty-registry",
+        "mutations": [
+          {
+            "operation": "set",
+            "pointer": "/fixture_scope",
+            "value": "test_only"
+          }
+        ],
+        "rehash_resource_hashes": false,
+        "rehash_preflight_hash": true,
+        "expected_code": "test_only_scope_mismatch"
+      },
+      {
+        "case_id": "negative.feature-manifest-ref-without-hash",
+        "fixture_scope": "test_only",
+        "base_case_id": "positive.test-only-definition-and-executor",
+        "mutations": [
+          {
+            "operation": "set",
+            "pointer": "/feature_manifest_hash",
+            "value": null
+          }
+        ],
+        "rehash_resource_hashes": false,
+        "rehash_preflight_hash": true,
+        "expected_code": "feature_identity_pair_mismatch"
+      },
+      {
+        "case_id": "negative.compiled-plan-pin-missing",
+        "fixture_scope": "test_only",
+        "base_case_id": "positive.test-only-definition-and-executor",
+        "mutations": [
+          {
+            "operation": "set",
+            "pointer": "/resources/0/compiled_plan_pin",
+            "value": null
+          }
+        ],
+        "rehash_resource_hashes": true,
+        "rehash_preflight_hash": true,
+        "expected_code": "compiled_plan_pin_required"
+      },
+      {
+        "case_id": "negative.execution-artifact-abi",
+        "fixture_scope": "test_only",
+        "base_case_id": "positive.test-only-definition-and-executor",
+        "mutations": [
+          {
+            "operation": "set",
+            "pointer": "/resources/1/execution_artifact_pin/runtime_abi_major",
+            "value": 2
+          }
+        ],
+        "rehash_resource_hashes": true,
+        "rehash_preflight_hash": true,
+        "expected_code": "execution_artifact_abi_mismatch"
+      },
+      {
+        "case_id": "negative.execution-artifact-pin-missing",
+        "fixture_scope": "test_only",
+        "base_case_id": "positive.test-only-definition-and-executor",
+        "mutations": [
+          {
+            "operation": "set",
+            "pointer": "/resources/1/execution_artifact_pin",
+            "value": null
+          }
+        ],
+        "rehash_resource_hashes": true,
+        "rehash_preflight_hash": true,
+        "expected_code": "execution_artifact_pin_required"
+      },
+      {
+        "case_id": "negative.retention-identity",
+        "fixture_scope": "test_only",
+        "base_case_id": "positive.production-empty-registry",
+        "mutations": [
+          {
+            "operation": "set",
+            "pointer": "/retention_policy_hash",
+            "value": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          }
+        ],
+        "rehash_resource_hashes": false,
+        "rehash_preflight_hash": true,
+        "expected_code": "retention_identity_mismatch"
+      },
+      {
+        "case_id": "negative.resource-hash",
+        "fixture_scope": "test_only",
+        "base_case_id": "positive.test-only-definition-and-executor",
+        "mutations": [
+          {
+            "operation": "set",
+            "pointer": "/resources/0/resource_hash",
+            "value": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          }
+        ],
+        "rehash_resource_hashes": false,
+        "rehash_preflight_hash": true,
+        "expected_code": "registry_resource_hash_mismatch"
+      },
+      {
+        "case_id": "negative.resource-duplicate",
+        "fixture_scope": "test_only",
+        "base_case_id": "positive.test-only-definition-and-executor",
+        "mutations": [
+          {
+            "operation": "append_resource",
+            "pointer": "/resources",
+            "value": {
+              "resource_type": "definition",
+              "ref": {
+                "id": "test-only.fixture.definition",
+                "version": "1.0.0"
+              },
+              "launchability": "test_only",
+              "content_hash": "sha256:ede8625861f47dcd9eebd48b232c36dd04f72bc8c702928070ea186643863937",
+              "dependencies": [],
+              "compiled_plan_pin": {
+                "plan_ref": "conformance/sealed/g2-production-compiler-replay-repair-v2/expected/positive.static-lowering.plan.json",
+                "plan_hash": "sha256:df3ee04469bc72c3a6e16f65774ea1a9a0e9d7c0b54861f51c57b323f8391881",
+                "plan_format": "icarus.workflow-graph-scope-plan/2",
+                "compiler_toolchain_hash": "sha256:4e16227bf723a41207d94a8619f8b6bb50731c412cb5b298869e265097dcaccf",
+                "compiler_build_hash": "sha256:4cb84d57dee323723ed60dc22394100b37cc76a3bfde793ef95ba707cd21a976",
+                "provenance": "sealed_g2_expected"
+              },
+              "execution_artifact_pin": null,
+              "resource_hash": "sha256:754c2a0d6034f285462b079f14bdcda092bf10a1150f8f0d9613e02b4dc302bf"
+            }
+          }
+        ],
+        "rehash_resource_hashes": false,
+        "rehash_preflight_hash": true,
+        "expected_code": "registry_resource_identity_duplicate"
+      },
+      {
+        "case_id": "negative.resource-order",
+        "fixture_scope": "test_only",
+        "base_case_id": "positive.test-only-definition-and-executor",
+        "mutations": [
+          {
+            "operation": "reverse_resources",
+            "pointer": "/resources",
+            "value": null
+          }
+        ],
+        "rehash_resource_hashes": false,
+        "rehash_preflight_hash": true,
+        "expected_code": "registry_resource_order_invalid"
+      },
+      {
+        "case_id": "negative.dependency-missing",
+        "fixture_scope": "test_only",
+        "base_case_id": "positive.test-only-definition-and-executor",
+        "mutations": [
+          {
+            "operation": "set",
+            "pointer": "/resources/0/dependencies",
+            "value": [
+              {
+                "resource_type": "schema",
+                "ref": {
+                  "id": "test-only.fixture.missing",
+                  "version": "1.0.0"
+                },
+                "content_hash": "sha256:de7d3b4af901f43bfa1e767f30b5b9bb008ab0c079b665068613361afe994a95"
+              }
+            ]
+          }
+        ],
+        "rehash_resource_hashes": true,
+        "rehash_preflight_hash": true,
+        "expected_code": "registry_resource_dependency_missing"
+      },
+      {
+        "case_id": "negative.dependency-cycle",
+        "fixture_scope": "test_only",
+        "base_case_id": "positive.test-only-definition-and-executor",
+        "mutations": [
+          {
+            "operation": "set",
+            "pointer": "/resources/0/dependencies",
+            "value": [
+              {
+                "resource_type": "executor_implementation",
+                "ref": {
+                  "id": "test-only.fixture.executor",
+                  "version": "1.0.0"
+                },
+                "content_hash": "sha256:548f92e87081021be5eb1009b0c7d224f06a70f5789f77d81a84999a64bca4fa"
+              }
+            ]
+          },
+          {
+            "operation": "set",
+            "pointer": "/resources/1/dependencies",
+            "value": [
+              {
+                "resource_type": "definition",
+                "ref": {
+                  "id": "test-only.fixture.definition",
+                  "version": "1.0.0"
+                },
+                "content_hash": "sha256:ede8625861f47dcd9eebd48b232c36dd04f72bc8c702928070ea186643863937"
+              }
+            ]
+          }
+        ],
+        "rehash_resource_hashes": true,
+        "rehash_preflight_hash": true,
+        "expected_code": "registry_resource_dependency_cycle"
+      }
+    ]
+  }
+}

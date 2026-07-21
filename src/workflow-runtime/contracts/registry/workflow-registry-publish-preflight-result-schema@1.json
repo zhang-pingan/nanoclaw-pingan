@@ -1,0 +1,137 @@
+{
+  "format": "icarus.workflow-registry-publish-preflight-result-schema/1",
+  "ref": {
+    "id": "icarus.workflow-registry-publish-preflight-result-schema",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-registry-publish-preflight-result-schema:1\n",
+  "hash": "sha256:a1cd8235c981ad23fe723673bb13673dfc8d8ac850c5ef1e3cae5065631553ec",
+  "payload": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://icarus.local/schemas/workflow-registry-publish-preflight-result/1",
+    "title": "WorkflowRegistryPublishPreflightResultV1",
+    "oneOf": [
+      {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "format",
+          "outcome",
+          "code",
+          "target_registry",
+          "resource_count",
+          "recipe_count",
+          "dependency_closure_hash",
+          "side_effects"
+        ],
+        "properties": {
+          "format": {
+            "const": "icarus.workflow-registry-publish-preflight-result/1"
+          },
+          "outcome": {
+            "const": "accepted"
+          },
+          "code": {
+            "const": "preflight_ok"
+          },
+          "target_registry": {
+            "enum": [
+              "production",
+              "test_only"
+            ]
+          },
+          "resource_count": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 4096
+          },
+          "recipe_count": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 4096
+          },
+          "dependency_closure_hash": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "side_effects": {
+            "const": "none_by_contract"
+          }
+        }
+      },
+      {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "format",
+          "outcome",
+          "code",
+          "target_registry",
+          "resource_count",
+          "recipe_count",
+          "dependency_closure_hash",
+          "side_effects"
+        ],
+        "properties": {
+          "format": {
+            "const": "icarus.workflow-registry-publish-preflight-result/1"
+          },
+          "outcome": {
+            "const": "rejected"
+          },
+          "code": {
+            "enum": [
+              "compiled_plan_pin_required",
+              "execution_artifact_abi_mismatch",
+              "execution_artifact_pin_required",
+              "feature_identity_pair_mismatch",
+              "g2_identity_mismatch",
+              "preflight_hash_mismatch",
+              "production_compiler_actual_oracle_forbidden",
+              "publisher_side_effect_requested",
+              "registry_resource_dependency_cycle",
+              "registry_resource_dependency_missing",
+              "registry_resource_hash_mismatch",
+              "registry_resource_identity_duplicate",
+              "registry_resource_order_invalid",
+              "retention_identity_mismatch",
+              "schema_invalid",
+              "test_only_scope_mismatch",
+              "test_only_promotion_forbidden"
+            ]
+          },
+          "target_registry": {
+            "anyOf": [
+              {
+                "enum": [
+                  "production",
+                  "test_only"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "resource_count": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 4096
+          },
+          "recipe_count": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 4096
+          },
+          "dependency_closure_hash": {
+            "type": "null"
+          },
+          "side_effects": {
+            "const": "none_by_contract"
+          }
+        }
+      }
+    ]
+  }
+}

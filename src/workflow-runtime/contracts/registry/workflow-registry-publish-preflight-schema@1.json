@@ -1,0 +1,490 @@
+{
+  "format": "icarus.workflow-registry-publish-preflight-schema/1",
+  "ref": {
+    "id": "icarus.workflow-registry-publish-preflight-schema",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-registry-publish-preflight-schema:1\n",
+  "hash": "sha256:08c516629f1470f25bfa14e162091c670d7b94c5dea7a1a3fb91476b5e321023",
+  "payload": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://icarus.local/schemas/workflow-registry-publish-preflight/1",
+    "title": "WorkflowRegistryPublishPreflightV1",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "format",
+      "operation",
+      "target_registry",
+      "fixture_scope",
+      "feature_manifest_ref",
+      "feature_manifest_hash",
+      "feature_release_ref",
+      "feature_release_hash",
+      "resources",
+      "upstream_identity",
+      "expected_oracle",
+      "production_compiler_actual_role",
+      "retention_policy_ref",
+      "retention_policy_hash",
+      "compatibility",
+      "requested_registry_write",
+      "requested_activation",
+      "preflight_hash"
+    ],
+    "properties": {
+      "format": {
+        "const": "icarus.workflow-registry-publish-preflight/1"
+      },
+      "operation": {
+        "const": "validate_only"
+      },
+      "target_registry": {
+        "enum": [
+          "production",
+          "test_only"
+        ]
+      },
+      "fixture_scope": {
+        "enum": [
+          "none",
+          "test_only"
+        ]
+      },
+      "feature_manifest_ref": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/versioned_ref"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "feature_manifest_hash": {
+        "anyOf": [
+          {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "feature_release_ref": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/versioned_ref"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "feature_release_hash": {
+        "anyOf": [
+          {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "resources": {
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/resource_candidate"
+        },
+        "maxItems": 4096
+      },
+      "upstream_identity": {
+        "$ref": "#/$defs/upstream_identity"
+      },
+      "expected_oracle": {
+        "const": "sealed_g2_independent_expected"
+      },
+      "production_compiler_actual_role": {
+        "enum": [
+          "comparison_only",
+          "expected_oracle"
+        ]
+      },
+      "retention_policy_ref": {
+        "$ref": "#/$defs/versioned_ref"
+      },
+      "retention_policy_hash": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      },
+      "compatibility": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "run_protocol_major",
+          "executor_abi_major",
+          "registry_schema_version"
+        ],
+        "properties": {
+          "run_protocol_major": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "executor_abi_major": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "registry_schema_version": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      },
+      "requested_registry_write": {
+        "type": "boolean"
+      },
+      "requested_activation": {
+        "type": "boolean"
+      },
+      "preflight_hash": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      }
+    },
+    "$defs": {
+      "versioned_ref": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "version"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._:/-]{0,253}[A-Za-z0-9])?$"
+          },
+          "version": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,62}[A-Za-z0-9])?$",
+            "not": {
+              "anyOf": [
+                {
+                  "pattern": "^(?:[Cc][Uu][Rr][Rr][Ee][Nn][Tt]|[Hh][Ee][Aa][Dd]|[Ll][Aa][Tt][Ee][Ss][Tt]|[Mm][Aa][Ii][Nn]|[Mm][Aa][Ss][Tt][Ee][Rr]|[Nn][Ee][Xx][Tt]|[Ss][Nn][Aa][Pp][Ss][Hh][Oo][Tt])$"
+                },
+                {
+                  "pattern": "(?:^|[._-])[xX](?:$|[._-])"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "dependency": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "resource_type",
+          "ref",
+          "content_hash"
+        ],
+        "properties": {
+          "resource_type": {
+            "enum": [
+              "artifact_contract",
+              "capability",
+              "card_presentation",
+              "clarification_contract",
+              "command_policy",
+              "context_contract",
+              "definition",
+              "evaluator",
+              "execution_policy",
+              "executor_implementation",
+              "feature_execution_artifact",
+              "graph_policy",
+              "graph_template",
+              "notification_contract",
+              "operational_remediation_policy",
+              "outbox_policy",
+              "prompt",
+              "recipe",
+              "root_finalization_policy",
+              "routing_capability",
+              "routing_scope",
+              "schema",
+              "scope_interface",
+              "tool_binding",
+              "wait_contract"
+            ]
+          },
+          "ref": {
+            "$ref": "#/$defs/versioned_ref"
+          },
+          "content_hash": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          }
+        }
+      },
+      "compiled_plan_pin": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "plan_ref",
+          "plan_hash",
+          "plan_format",
+          "compiler_toolchain_hash",
+          "compiler_build_hash",
+          "provenance"
+        ],
+        "properties": {
+          "plan_ref": {
+            "type": "string",
+            "minLength": 1
+          },
+          "plan_hash": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "plan_format": {
+            "const": "icarus.workflow-graph-scope-plan/2"
+          },
+          "compiler_toolchain_hash": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "compiler_build_hash": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "provenance": {
+            "const": "sealed_g2_expected"
+          }
+        }
+      },
+      "execution_artifact_pin": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "ref",
+          "artifact_hash",
+          "runtime_kind",
+          "runtime_abi_major"
+        ],
+        "properties": {
+          "ref": {
+            "$ref": "#/$defs/versioned_ref"
+          },
+          "artifact_hash": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "runtime_kind": {
+            "const": "node_bundle"
+          },
+          "runtime_abi_major": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      },
+      "resource_candidate": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "resource_type",
+          "ref",
+          "launchability",
+          "content_hash",
+          "dependencies",
+          "compiled_plan_pin",
+          "execution_artifact_pin",
+          "resource_hash"
+        ],
+        "properties": {
+          "resource_type": {
+            "enum": [
+              "artifact_contract",
+              "capability",
+              "card_presentation",
+              "clarification_contract",
+              "command_policy",
+              "context_contract",
+              "definition",
+              "evaluator",
+              "execution_policy",
+              "executor_implementation",
+              "feature_execution_artifact",
+              "graph_policy",
+              "graph_template",
+              "notification_contract",
+              "operational_remediation_policy",
+              "outbox_policy",
+              "prompt",
+              "recipe",
+              "root_finalization_policy",
+              "routing_capability",
+              "routing_scope",
+              "schema",
+              "scope_interface",
+              "tool_binding",
+              "wait_contract"
+            ]
+          },
+          "ref": {
+            "$ref": "#/$defs/versioned_ref"
+          },
+          "launchability": {
+            "enum": [
+              "production",
+              "test_only"
+            ]
+          },
+          "content_hash": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "dependencies": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/dependency"
+            },
+            "uniqueItems": true,
+            "maxItems": 4096
+          },
+          "compiled_plan_pin": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/compiled_plan_pin"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "execution_artifact_pin": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/execution_artifact_pin"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "resource_hash": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          }
+        }
+      },
+      "compiler_identity": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "compiler_toolchain_manifest_ref",
+          "compiler_toolchain_hash",
+          "compiler_version",
+          "compiler_build_hash",
+          "compiled_ir_schema_ref",
+          "compiled_ir_schema_hash",
+          "conformance_result_schema_ref",
+          "conformance_result_schema_hash"
+        ],
+        "properties": {
+          "compiler_toolchain_manifest_ref": {
+            "$ref": "#/$defs/versioned_ref"
+          },
+          "compiler_toolchain_hash": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "compiler_version": {
+            "type": "string",
+            "minLength": 1
+          },
+          "compiler_build_hash": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "compiled_ir_schema_ref": {
+            "type": "string",
+            "minLength": 1
+          },
+          "compiled_ir_schema_hash": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "conformance_result_schema_ref": {
+            "type": "string",
+            "minLength": 1
+          },
+          "conformance_result_schema_hash": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          }
+        }
+      },
+      "upstream_identity": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "g1_schema_root_hash",
+          "g1_schema_dependency_manifest_hash",
+          "g1_physical_schema_identity",
+          "g1_schema_hash",
+          "g1_migration_sha256",
+          "g2_sealed_bundle_ref",
+          "g2_sealed_bundle_artifact_hash",
+          "g2_sealed_bundle_hash",
+          "compiler"
+        ],
+        "properties": {
+          "g1_schema_root_hash": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "g1_schema_dependency_manifest_hash": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "g1_physical_schema_identity": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "g1_schema_hash": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "g1_migration_sha256": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "g2_sealed_bundle_ref": {
+            "type": "string",
+            "minLength": 1
+          },
+          "g2_sealed_bundle_artifact_hash": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "g2_sealed_bundle_hash": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "compiler": {
+            "$ref": "#/$defs/compiler_identity"
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,54 @@
+{
+  "format": "icarus.workflow-g3-registry-publish-domain-separators/1",
+  "ref": {
+    "id": "icarus.workflow-g3-registry-publish-domain-separators",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-g3-registry-publish-domain-separators:1\n",
+  "hash": "sha256:a59b0cc19c21f8eb9e5fb25b4dbc1127b15f17b167a31b852dc6ba21cb878e23",
+  "payload": {
+    "entries": [
+      {
+        "format": "icarus.workflow-contract-pack-g3-registry-publish-foundation/1",
+        "domain_separator": "icarus:workflow-contract-pack-g3-registry-publish-foundation:1\n"
+      },
+      {
+        "format": "icarus.workflow-g3-registry-publish-negative-cases/1",
+        "domain_separator": "icarus:workflow-g3-registry-publish-negative-cases:1\n"
+      },
+      {
+        "format": "icarus.workflow-g3-registry-publish-positive-cases/1",
+        "domain_separator": "icarus:workflow-g3-registry-publish-positive-cases:1\n"
+      },
+      {
+        "format": "icarus.workflow-registry-dependency-closure/1",
+        "domain_separator": "icarus:workflow-registry-dependency-closure:1\n"
+      },
+      {
+        "format": "icarus.workflow-registry-publish-foundation-schema/1",
+        "domain_separator": "icarus:workflow-registry-publish-foundation-schema:1\n"
+      },
+      {
+        "format": "icarus.workflow-registry-publish-foundation/1",
+        "domain_separator": "icarus:workflow-registry-publish-foundation:1\n"
+      },
+      {
+        "format": "icarus.workflow-registry-publish-preflight-input/1",
+        "domain_separator": "icarus:workflow-registry-publish-preflight:1\n"
+      },
+      {
+        "format": "icarus.workflow-registry-publish-preflight-result-schema/1",
+        "domain_separator": "icarus:workflow-registry-publish-preflight-result-schema:1\n"
+      },
+      {
+        "format": "icarus.workflow-registry-publish-preflight-schema/1",
+        "domain_separator": "icarus:workflow-registry-publish-preflight-schema:1\n"
+      },
+      {
+        "format": "icarus.workflow-registry-resource-candidate/1",
+        "domain_separator": "icarus:workflow-registry-resource-candidate:1\n"
+      }
+    ]
+  }
+}

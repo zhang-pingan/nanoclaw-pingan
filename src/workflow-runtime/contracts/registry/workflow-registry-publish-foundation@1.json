@@ -1,0 +1,128 @@
+{
+  "format": "icarus.workflow-registry-publish-foundation/1",
+  "ref": {
+    "id": "icarus.workflow-registry-publish-foundation",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-registry-publish-foundation:1\n",
+  "hash": "sha256:0ef908d142640b3e12fa1abb51087419405949eea505f9612e6cd882c021970e",
+  "payload": {
+    "format": "icarus.workflow-registry-publish-foundation/1",
+    "gate": "G3",
+    "slice": "G3.1",
+    "slice_status": "DONE",
+    "g3_status": "IN_PROGRESS",
+    "implemented_surface": "read_only_registry_publish_preflight_contract",
+    "upstream_identity": {
+      "g1_schema_root_hash": "sha256:769800fbca754586f1eda90c28e876255a6af3fbe452c397a4dabfd4aec5b756",
+      "g1_schema_dependency_manifest_hash": "sha256:ea039f582f0ebff2fb9bc7e512825612cf8f0f93ccdd4c5e43345f56ca2b7b89",
+      "g1_physical_schema_identity": "sha256:8c667d62f69a8c67ba1edde467562e370377342a058b6dc4673ab9a383fe05a1",
+      "g1_schema_hash": "sha256:4d8c373387ad515c36fd292b705665e6c197c73021c1b7e55da5317bc140efbd",
+      "g1_migration_sha256": "sha256:d89829995e164355ad485fc117db88dd67a72409f00ec3c3c54253f30a589f61",
+      "g2_sealed_bundle_ref": "conformance/sealed/g2-production-compiler-replay-repair-v2/golden-conformance-bundle@2.json",
+      "g2_sealed_bundle_artifact_hash": "sha256:037009dcd6c5d6bd2888c484fe1adacded68da5c55e17ba12eb722092e4faced",
+      "g2_sealed_bundle_hash": "sha256:d99647d8ca6aabc737a793019335e6770aa111a79be7545c4dec00c6e7af2145",
+      "compiler": {
+        "compiler_toolchain_manifest_ref": {
+          "id": "icarus.workflow-compiler-toolchain",
+          "version": "3.0.1"
+        },
+        "compiler_toolchain_hash": "sha256:4e16227bf723a41207d94a8619f8b6bb50731c412cb5b298869e265097dcaccf",
+        "compiler_version": "3.0.1",
+        "compiler_build_hash": "sha256:4cb84d57dee323723ed60dc22394100b37cc76a3bfde793ef95ba707cd21a976",
+        "compiled_ir_schema_ref": "conformance/compiler-contract-repair/schemas/compiled-scope-plan-v2-schema.json",
+        "compiled_ir_schema_hash": "sha256:4d4e325f94b55a6767f3e8596e1e9b880df2b402d3c89f587a10a23f0eadbd46",
+        "conformance_result_schema_ref": "conformance/compiler-contract-repair/schemas/compiler-conformance-case-result-schema.json",
+        "conformance_result_schema_hash": "sha256:019a4ba80ed8ae57b6c862d9fda62d9edcb8aca9c4910fde6bbb580c09af8706"
+      }
+    },
+    "feature_manifest_schema": {
+      "path": "schemas/feature-manifest-v2-schema.json",
+      "ref": {
+        "id": "icarus.workflow-feature-manifest-v2-schema",
+        "version": "1.0.0"
+      },
+      "hash": "sha256:e47344ea2f4bebde3688f76b3450d5143adfd99ab4cc30eb6fc48a9d5a398e2d"
+    },
+    "recipe_schema": {
+      "path": "schemas/workflow-recipe-schema.json",
+      "ref": {
+        "id": "icarus.workflow-recipe-schema",
+        "version": "1.0.0"
+      },
+      "hash": "sha256:c2768894c7fe6aab492f11d2948a4c92ccefbadc44cb094e103df4a8cdca9bb2"
+    },
+    "retention_policy": {
+      "path": "safety/local_single_user_retention@1.json",
+      "ref": {
+        "id": "icarus.local-single-user-retention",
+        "version": "1.0.0"
+      },
+      "hash": "sha256:3adc19f9a8ee92421faa349ec12e706f2d9862e90c0c74e53eb041794e2b805d"
+    },
+    "compatibility": {
+      "run_protocol_major": 1,
+      "executor_abi_major": 1,
+      "registry_schema_version": 1,
+      "core_release_preflight_status": "not_implemented_in_g3_1"
+    },
+    "production_registry_baseline": {
+      "published_recipe_count": 0,
+      "checked_in_published_resource_count": 0,
+      "active_feature_release_count": 0,
+      "synthetic_resource_count": 0,
+      "zero_recipe_allowed": true,
+      "production_database_observation": "not_performed",
+      "registry_write_performed": false,
+      "activation_performed": false
+    },
+    "test_only_boundary": {
+      "fixture_root": "conformance/g3-registry-publish-foundation",
+      "required_launchability": "test_only",
+      "production_promotion": "forbidden",
+      "production_loader_policy": "fail_closed"
+    },
+    "authoring_publish_stages": {
+      "scaffold": "not_implemented",
+      "validate": "not_implemented",
+      "compile": "not_implemented",
+      "dry_run": "not_implemented",
+      "review": "not_implemented",
+      "publish": "not_implemented",
+      "activate": "not_implemented"
+    },
+    "publisher_oracle_policy": {
+      "expected_source": "current_g2_sealed_bundle_only",
+      "production_compiler_actual_role": "comparison_only"
+    },
+    "preflight_error_codes": [
+      "compiled_plan_pin_required",
+      "execution_artifact_abi_mismatch",
+      "execution_artifact_pin_required",
+      "feature_identity_pair_mismatch",
+      "g2_identity_mismatch",
+      "preflight_hash_mismatch",
+      "production_compiler_actual_oracle_forbidden",
+      "publisher_side_effect_requested",
+      "registry_resource_dependency_cycle",
+      "registry_resource_dependency_missing",
+      "registry_resource_hash_mismatch",
+      "registry_resource_identity_duplicate",
+      "registry_resource_order_invalid",
+      "retention_identity_mismatch",
+      "schema_invalid",
+      "test_only_scope_mismatch",
+      "test_only_promotion_forbidden"
+    ],
+    "g4_through_g9_status": {
+      "G4": "NOT_READY",
+      "G5": "NOT_READY",
+      "G6": "NOT_READY",
+      "G7": "NOT_READY",
+      "G8": "NOT_READY",
+      "G9": "NOT_READY"
+    },
+    "foundation_hash": "sha256:da5af1b3c6e8b31b80cea5aa4084f7331f8779ca8b05628568713296397ee1a4"
+  }
+}

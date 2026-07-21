@@ -1,0 +1,189 @@
+{
+  "format": "icarus.workflow-g3-registry-publish-positive-cases/1",
+  "ref": {
+    "id": "icarus.workflow-g3-registry-publish-positive-cases",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-g3-registry-publish-positive-cases:1\n",
+  "hash": "sha256:5e2001d5a6c9c4d5bf75081dc7e8d474927c421da882271e537074e1e93598a6",
+  "payload": {
+    "fixture_scope": "test_only",
+    "cases": [
+      {
+        "case_id": "positive.production-empty-registry",
+        "fixture_scope": "test_only",
+        "input": {
+          "format": "icarus.workflow-registry-publish-preflight/1",
+          "operation": "validate_only",
+          "target_registry": "production",
+          "fixture_scope": "none",
+          "feature_manifest_ref": null,
+          "feature_manifest_hash": null,
+          "feature_release_ref": null,
+          "feature_release_hash": null,
+          "resources": [],
+          "upstream_identity": {
+            "g1_schema_root_hash": "sha256:769800fbca754586f1eda90c28e876255a6af3fbe452c397a4dabfd4aec5b756",
+            "g1_schema_dependency_manifest_hash": "sha256:ea039f582f0ebff2fb9bc7e512825612cf8f0f93ccdd4c5e43345f56ca2b7b89",
+            "g1_physical_schema_identity": "sha256:8c667d62f69a8c67ba1edde467562e370377342a058b6dc4673ab9a383fe05a1",
+            "g1_schema_hash": "sha256:4d8c373387ad515c36fd292b705665e6c197c73021c1b7e55da5317bc140efbd",
+            "g1_migration_sha256": "sha256:d89829995e164355ad485fc117db88dd67a72409f00ec3c3c54253f30a589f61",
+            "g2_sealed_bundle_ref": "conformance/sealed/g2-production-compiler-replay-repair-v2/golden-conformance-bundle@2.json",
+            "g2_sealed_bundle_artifact_hash": "sha256:037009dcd6c5d6bd2888c484fe1adacded68da5c55e17ba12eb722092e4faced",
+            "g2_sealed_bundle_hash": "sha256:d99647d8ca6aabc737a793019335e6770aa111a79be7545c4dec00c6e7af2145",
+            "compiler": {
+              "compiler_toolchain_manifest_ref": {
+                "id": "icarus.workflow-compiler-toolchain",
+                "version": "3.0.1"
+              },
+              "compiler_toolchain_hash": "sha256:4e16227bf723a41207d94a8619f8b6bb50731c412cb5b298869e265097dcaccf",
+              "compiler_version": "3.0.1",
+              "compiler_build_hash": "sha256:4cb84d57dee323723ed60dc22394100b37cc76a3bfde793ef95ba707cd21a976",
+              "compiled_ir_schema_ref": "conformance/compiler-contract-repair/schemas/compiled-scope-plan-v2-schema.json",
+              "compiled_ir_schema_hash": "sha256:4d4e325f94b55a6767f3e8596e1e9b880df2b402d3c89f587a10a23f0eadbd46",
+              "conformance_result_schema_ref": "conformance/compiler-contract-repair/schemas/compiler-conformance-case-result-schema.json",
+              "conformance_result_schema_hash": "sha256:019a4ba80ed8ae57b6c862d9fda62d9edcb8aca9c4910fde6bbb580c09af8706"
+            }
+          },
+          "expected_oracle": "sealed_g2_independent_expected",
+          "production_compiler_actual_role": "comparison_only",
+          "retention_policy_ref": {
+            "id": "icarus.local-single-user-retention",
+            "version": "1.0.0"
+          },
+          "retention_policy_hash": "sha256:3adc19f9a8ee92421faa349ec12e706f2d9862e90c0c74e53eb041794e2b805d",
+          "compatibility": {
+            "run_protocol_major": 1,
+            "executor_abi_major": 1,
+            "registry_schema_version": 1
+          },
+          "requested_registry_write": false,
+          "requested_activation": false,
+          "preflight_hash": "sha256:e230e028420e57f00fd81e41aaedccf7ee455e5712f0c62e7ff5ae74ef7f550c"
+        },
+        "expected_result": {
+          "format": "icarus.workflow-registry-publish-preflight-result/1",
+          "outcome": "accepted",
+          "code": "preflight_ok",
+          "target_registry": "production",
+          "resource_count": 0,
+          "recipe_count": 0,
+          "dependency_closure_hash": "sha256:1744bdfabe45dc6143f2ee2f3142d0241194253b0ec430da06c8eb737a06999b",
+          "side_effects": "none_by_contract"
+        }
+      },
+      {
+        "case_id": "positive.test-only-definition-and-executor",
+        "fixture_scope": "test_only",
+        "input": {
+          "format": "icarus.workflow-registry-publish-preflight/1",
+          "operation": "validate_only",
+          "target_registry": "test_only",
+          "fixture_scope": "test_only",
+          "feature_manifest_ref": {
+            "id": "test-only.fixture.feature-manifest",
+            "version": "2.0.0"
+          },
+          "feature_manifest_hash": "sha256:39f2af1a1ce0d9c02a07da3dbcc286406211d1f1f29c54ac01d457dd71b93f06",
+          "feature_release_ref": {
+            "id": "test-only.fixture.feature-release",
+            "version": "1.0.0"
+          },
+          "feature_release_hash": "sha256:053c39cbd9ee956b0235e858047aac0154d92ace618cb18aa20b619e70609e2f",
+          "resources": [
+            {
+              "resource_type": "definition",
+              "ref": {
+                "id": "test-only.fixture.definition",
+                "version": "1.0.0"
+              },
+              "launchability": "test_only",
+              "content_hash": "sha256:ede8625861f47dcd9eebd48b232c36dd04f72bc8c702928070ea186643863937",
+              "dependencies": [],
+              "compiled_plan_pin": {
+                "plan_ref": "conformance/sealed/g2-production-compiler-replay-repair-v2/expected/positive.static-lowering.plan.json",
+                "plan_hash": "sha256:df3ee04469bc72c3a6e16f65774ea1a9a0e9d7c0b54861f51c57b323f8391881",
+                "plan_format": "icarus.workflow-graph-scope-plan/2",
+                "compiler_toolchain_hash": "sha256:4e16227bf723a41207d94a8619f8b6bb50731c412cb5b298869e265097dcaccf",
+                "compiler_build_hash": "sha256:4cb84d57dee323723ed60dc22394100b37cc76a3bfde793ef95ba707cd21a976",
+                "provenance": "sealed_g2_expected"
+              },
+              "execution_artifact_pin": null,
+              "resource_hash": "sha256:754c2a0d6034f285462b079f14bdcda092bf10a1150f8f0d9613e02b4dc302bf"
+            },
+            {
+              "resource_type": "executor_implementation",
+              "ref": {
+                "id": "test-only.fixture.executor",
+                "version": "1.0.0"
+              },
+              "launchability": "test_only",
+              "content_hash": "sha256:548f92e87081021be5eb1009b0c7d224f06a70f5789f77d81a84999a64bca4fa",
+              "dependencies": [],
+              "compiled_plan_pin": null,
+              "execution_artifact_pin": {
+                "ref": {
+                  "id": "test-only.fixture.node-bundle",
+                  "version": "1.0.0"
+                },
+                "artifact_hash": "sha256:22ba4459e49921fc825061c930dff3926a77200b50267461937731a3d24b74cf",
+                "runtime_kind": "node_bundle",
+                "runtime_abi_major": 1
+              },
+              "resource_hash": "sha256:0cb36d1945005d0ac13fffb2d2c1786a5e99d6ceeb5a94a9ac51e09dff2e10d7"
+            }
+          ],
+          "upstream_identity": {
+            "g1_schema_root_hash": "sha256:769800fbca754586f1eda90c28e876255a6af3fbe452c397a4dabfd4aec5b756",
+            "g1_schema_dependency_manifest_hash": "sha256:ea039f582f0ebff2fb9bc7e512825612cf8f0f93ccdd4c5e43345f56ca2b7b89",
+            "g1_physical_schema_identity": "sha256:8c667d62f69a8c67ba1edde467562e370377342a058b6dc4673ab9a383fe05a1",
+            "g1_schema_hash": "sha256:4d8c373387ad515c36fd292b705665e6c197c73021c1b7e55da5317bc140efbd",
+            "g1_migration_sha256": "sha256:d89829995e164355ad485fc117db88dd67a72409f00ec3c3c54253f30a589f61",
+            "g2_sealed_bundle_ref": "conformance/sealed/g2-production-compiler-replay-repair-v2/golden-conformance-bundle@2.json",
+            "g2_sealed_bundle_artifact_hash": "sha256:037009dcd6c5d6bd2888c484fe1adacded68da5c55e17ba12eb722092e4faced",
+            "g2_sealed_bundle_hash": "sha256:d99647d8ca6aabc737a793019335e6770aa111a79be7545c4dec00c6e7af2145",
+            "compiler": {
+              "compiler_toolchain_manifest_ref": {
+                "id": "icarus.workflow-compiler-toolchain",
+                "version": "3.0.1"
+              },
+              "compiler_toolchain_hash": "sha256:4e16227bf723a41207d94a8619f8b6bb50731c412cb5b298869e265097dcaccf",
+              "compiler_version": "3.0.1",
+              "compiler_build_hash": "sha256:4cb84d57dee323723ed60dc22394100b37cc76a3bfde793ef95ba707cd21a976",
+              "compiled_ir_schema_ref": "conformance/compiler-contract-repair/schemas/compiled-scope-plan-v2-schema.json",
+              "compiled_ir_schema_hash": "sha256:4d4e325f94b55a6767f3e8596e1e9b880df2b402d3c89f587a10a23f0eadbd46",
+              "conformance_result_schema_ref": "conformance/compiler-contract-repair/schemas/compiler-conformance-case-result-schema.json",
+              "conformance_result_schema_hash": "sha256:019a4ba80ed8ae57b6c862d9fda62d9edcb8aca9c4910fde6bbb580c09af8706"
+            }
+          },
+          "expected_oracle": "sealed_g2_independent_expected",
+          "production_compiler_actual_role": "comparison_only",
+          "retention_policy_ref": {
+            "id": "icarus.local-single-user-retention",
+            "version": "1.0.0"
+          },
+          "retention_policy_hash": "sha256:3adc19f9a8ee92421faa349ec12e706f2d9862e90c0c74e53eb041794e2b805d",
+          "compatibility": {
+            "run_protocol_major": 1,
+            "executor_abi_major": 1,
+            "registry_schema_version": 1
+          },
+          "requested_registry_write": false,
+          "requested_activation": false,
+          "preflight_hash": "sha256:a4474b55a8fd9022514578a383ff5eab1bf447ebac31ae7b67481b876e01d84d"
+        },
+        "expected_result": {
+          "format": "icarus.workflow-registry-publish-preflight-result/1",
+          "outcome": "accepted",
+          "code": "preflight_ok",
+          "target_registry": "test_only",
+          "resource_count": 2,
+          "recipe_count": 0,
+          "dependency_closure_hash": "sha256:4bc41a744d249302fd0d6db0c6d297e8f7b200332f6b7fbe3f9a1ed7ba6cfd5e",
+          "side_effects": "none_by_contract"
+        }
+      }
+    ]
+  }
+}
