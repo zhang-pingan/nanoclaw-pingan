@@ -1,8 +1,8 @@
 # Dynamic Workflow Runtime 实施进度
 
 > **状态**: IN_PROGRESS
-> **当前 Gate**: G2 Compiler / Sealed Golden（IN_PROGRESS；施工phase=`RC_REVIEW`，唯一RC的完整fresh independent review已PASS；该结论尚未持久化为machine judgment，expected bytes、approval、signature与seal仍pending）
-> **下一施工切片**: 仅在获得明确授权后，先依据current规范、machine Contract、source与snapshot独立编写并冻结40/40完整expected Golden Draft，运行隔离`golden-review`并取得exact `draft_manifest_hash`；随后必须停止并等待`human:local-owner`对该exact hash的明确批准，批准前不得生成immutable `GoldenSemanticReview`、approval/signature/seal、修改Working/RC identity或开始G3+
+> **当前 Gate**: G2 Compiler / Sealed Golden（IN_PROGRESS；施工phase=`RC_REVIEW`；current expected Golden Draft已冻结40/40完整bytes，隔离`golden-review`已生成；human judgment仍0/40/not requested，approval、signature、`GoldenSemanticReview`与seal absent）
+> **下一施工切片**: 只能等待`human:local-owner`审阅隔离report并对exact `draft_manifest_hash=sha256:fb94f5e65425b482eee369bb115e46e884b249978e0f408832574d5be41dccbd`作明确批准或changes-requested决定；明确批准前不得生成immutable `GoldenSemanticReview`、approval/signature/seal、修改Working/RC/Draft identity或开始G3+
 > **最后更新**: 2026-07-20
 > **规范权威**: `local/docs/dynamic-workflow-dag-framework.md`
 
@@ -110,7 +110,7 @@ Agent Container 运行于独立 VM，Node identity 由 VM image gate 保证；�
 | --- | --- | --- | --- | --- |
 | G0 Contract Pack / Static Baseline | `DONE` | 无 | G0.1-G0.9 historical root + G0.10 additive Capacity Admin/publication/CAP/Logical Schema/coverage root | 本原子提交 |
 | G1 DDL / Store | `DONE` | G0.10 | closed Schema Dependency Manifest + frozen executable migration/Schema Manifest + unified Connection Factory + Store lifecycle/transaction host + real-file SQLite/identity gates | 本原子提交（dependency identity repair） |
-| G2 Compiler / Golden | `IN_PROGRESS` | G0.1-G0.9；R-016 spec/Contract repair；G0.10 不改变 Compiler/Plan 语义 | phase=`RC_REVIEW`；git-history-only exact Working集合已冻结唯一RC；fresh review已PASS，machine judgment、expected bytes与Sealed Golden仍pending | 本原子提交（fresh review状态同步） |
+| G2 Compiler / Golden | `IN_PROGRESS` | G0.1-G0.9；R-016 spec/Contract repair；G0.10 不改变 Compiler/Plan 语义 | phase=`RC_REVIEW`；exact Working集合与唯一RC未变；40/40 expected Draft及隔离review report已冻结，等待human对exact Draft hash作语义决定；GoldenSemanticReview/seal仍absent | 本原子提交（current Golden Draft） |
 | G3 Registry / Authoring / Publish | `NOT_READY` | G1 + G2 | manifest/authoring/publish/retention/ABI fixtures | - |
 | G4 Test Bootstrap | `NOT_READY` | G1 + G2 + G3 | isolated bootstrap profile | - |
 | G5 Basic Runtime | `NOT_READY` | G4 | T0-T6e model/fault fixtures | - |
@@ -167,7 +167,7 @@ G0.1-G0.9 已按当时规范完成并保留历史 identity。后续确认的 Cap
 | --- | --- | --- | --- | --- |
 | G2.1 | R-016 Spec/Contract Repair | `DONE` | lowering outcome、Compiled IR v2、完整 case result target、exact input binding requirement与 blocked Draft v2冻结 | 本原子提交（历史） |
 | G2.2 | Production Compiler / Exact Case-Input Identity | `DONE` | locked strict parser、closed validation、snapshot binding、static lowering、Plan normalization、program/proof/hash/diagnostic、真实 toolchain与40个actual candidate results | 本原子提交 |
-| G2.3 | Working Correction / RC Review / Seal | `IN_PROGRESS` | phase=`RC_REVIEW`；current mechanical checks通过；四个git-history-only Working root及唯一RC通过双轮确定性验证；fresh review已以40/40完整覆盖PASS，machine judgment仍0/40/not requested，expected bytes仍0/40，approval/signature/seal未开始 | 本原子提交（fresh review状态同步） |
+| G2.3 | Working Correction / RC Review / Seal | `IN_PROGRESS` | phase=`RC_REVIEW`；四个Working root及唯一RC未变；fresh review已PASS；40/40 expected result、11/11 Plan/proof/program bytes已冻结并生成隔离report；human judgment仍0/40/not requested，approval/signature/GoldenSemanticReview/seal未开始 | 本原子提交（current Golden Draft） |
 
 ## Runtime v1施工治理调整
 
@@ -182,7 +182,7 @@ WORKING -> RC_REVIEW -> BASELINE_ACCEPTED -> CONSTRUCTION_ARCHIVED
 - 当前G2处于`RC_REVIEW`。R-017 Contract、40份隔离input、actual candidate和working review bundle已按`git_history_only`治理连续两轮重生成；旧RC已失效且未保留为current结果，唯一新RC绑定下列exact roots。
 - 历史review evidence只存在于Git commits，不是current dependency；旧施工artifact的独立复验属于archive入口，不进入默认current链。
 - Current Working Contract重新实时读取完整R-017段落并计算raw/domain-separated hash；Contract及全部受影响下游Working artifact已由现有generator级联重建，定向/完整G2机械测试通过。
-- 新四个Working root连续两轮一致后，显式独立`prepare-rc`已冻结单一新RC；任一绑定source/toolchain/compiler/Contract/input/candidate/working-review identity变化都使RC check fail-closed并退回Working。该RC的唯一完整fresh independent review已PASS；下一边界是在明确授权下先独立编写并冻结40/40完整expected Golden Draft、运行隔离`golden-review`并取得exact `draft_manifest_hash`，随后停止等待`human:local-owner`明确批准该hash；只有批准后才可持久化immutable `GoldenSemanticReview`并通过相应门禁执行seal。
+- 新四个Working root连续两轮一致后，显式独立`prepare-rc`已冻结单一新RC；任一绑定source/toolchain/compiler/Contract/input/candidate/working-review identity变化都使RC check fail-closed并退回Working。该RC的唯一完整fresh independent review已PASS。current expected Golden Draft已只依据current规范、machine Contract、raw source与snapshot独立冻结，并在冻结exact hash后才读取actual candidate执行隔离comparison；下一边界只能等待`human:local-owner`对该exact hash作明确语义决定，批准后才可在新会话持久化immutable `GoldenSemanticReview`并执行seal门禁。
 - G0-G9与同一release验收完成后归档本施工生命周期；长期保留的是生产资源版本控制和旧Run exact artifact pinning，而不是G0-G9施工Draft链。
 
 Current Working identity：
@@ -1172,7 +1172,7 @@ G0.1 的实现、测试和本进度账本由同一个原子提交交付。Agent 
 | R-014 | Capacity governance | CLOSED | G0.10 已机器化 closed publication/command、权限/Actor/entrypoint/delegation、revision/hash CAS、reason/denial、immutable audit tables、唯一 Publisher/Watcher protocol、Admission lineage、crash recovery 与 additive Gate evidence；G1 DDL 可开始 | G0.10 |
 | R-015 | Toolchain test timing | OPEN_OUT_OF_SCOPE | G1.1 曾复现 runtime-toolchain 5s timing；G1.2 串行 `test:g0` 和两次完整 suite 均未复现，toolchain tests 通过。G1.2 不调整 timeout 或 managed toolchain 既有实现 | 独立测试稳定性维护 |
 | R-016 | Compiler/Golden contract | CLOSED | S38与additive repair root已冻结唯一Case Result target/hash、lowering outcome、IR v2与exact binding；G2 Production Compiler已消费该Contract并发布真实identity/actual candidates，repair Draft v2仍冻结blocked且未越过Golden review/seal边界 | G2 spec/Contract repair + Compiler slice |
-| R-017 | G2 semantic correction | OPEN_BLOCKING_G2 | phase=`RC_REVIEW`；current spec identity实时绑定与mechanical checks通过；唯一RC root=`sha256:beb8669a054c95e0796ddf998c87c0ddc2e90556f95192a8baad6dd247f3e577`。Fresh independent review已以40/40完整覆盖PASS，但该结论尚未持久化为machine judgment；expected bytes仍0/40，human judgment 0/40/not requested，approval/signature/seal absent，G3+未就绪 | 获明确授权后先独立编写并冻结40/40 expected Golden Draft、运行隔离`golden-review`并取得exact `draft_manifest_hash`；等待`human:local-owner`明确批准该hash后才可创建`GoldenSemanticReview`并seal，不得重复fresh review或开始G3+ |
+| R-017 | G2 semantic correction | OPEN_BLOCKING_G2 | phase=`RC_REVIEW`；唯一RC root=`sha256:beb8669a054c95e0796ddf998c87c0ddc2e90556f95192a8baad6dd247f3e577`与四个Working root未变；40/40 expected Draft及隔离report已冻结，exact Draft hash=`sha256:fb94f5e65425b482eee369bb115e46e884b249978e0f408832574d5be41dccbd`；human judgment 0/40/not requested，approval/signature/GoldenSemanticReview/seal absent，G3+未就绪 | 等待`human:local-owner`审阅report后对exact Draft hash作approved或changes-requested决定；明确批准后才可在后续会话创建`GoldenSemanticReview`并seal，不得自动批准、重复fresh review或开始G3+ |
 
 ## v1完成后的归档计划：PLANNED
 
@@ -1180,12 +1180,39 @@ G0.1 的实现、测试和本进度账本由同一个原子提交交付。Agent 
 
 归档切片必须完成：将主规范移出默认CI/identity与agent必读；退役G0.9/G0.10 Markdown coverage、R-016章节hash、阶段状态/absence断言的活动验证；保留其历史artifact并提供可选archive audit；保留Contract/Schema/DDL/Store/Compiler/Golden/Runtime/Release/startup长期验证。G1.3已用closed exact-member dependency manifest完成施工期修复，旧目录快照只保留在Git历史和未来可选archive audit背景，不进入普通CI或Runtime startup；Production Store identity最终仍由Core Release Manifest绑定schema/migration/profile，不永久依赖施工阶段`FROZEN_G1_1_IDENTITIES`。
 
+## G2 Current Golden Draft 与隔离 Review
+
+**状态**：Draft/review artifacts 已完成并冻结；生命周期仍为 `RC_REVIEW`，本切片没有产生 machine judgment、human approval、`GoldenSemanticReview`、signature、seal 或 sealed write。
+
+| Artifact | Ref | Hash / evidence |
+| --- | --- | --- |
+| Golden Draft manifest | `conformance/golden-draft/g2-semantic-correction/golden-draft-manifest@1.json` | artifact `sha256:1be05809900b1cab2af1382cef861c190abdc425654fd8b4c71289fb42c4324c`; exact `draft_manifest_hash=sha256:fb94f5e65425b482eee369bb115e46e884b249978e0f408832574d5be41dccbd` |
+| Golden Draft cases | `conformance/golden-draft/g2-semantic-correction/golden-draft-cases@1.json` | artifact `sha256:be4872007f7083adf052b78b9cc07c93b78ff1dbdc87b7b7ae6494ad8158b23d`; payload `cases_hash=sha256:4b2f07f4a78abb8ba0f880793b4538a2a1c0d9edf4f2fef8bee601509ce6bf5f` |
+| Golden Draft inventory | `conformance/golden-draft/g2-semantic-correction/artifact-inventory@1.json` | artifact `sha256:3bfecf95ed57cf840388a03028ac05105064f2280032f530a3ed8ffa003072d9`; payload `inventory_hash=sha256:715dc9e7984a2066522669046a1f43c0650a5064841323445df35a2d483babfd`; 77 entries |
+| Golden Draft schemas | `conformance/golden-draft/g2-semantic-correction/schemas/` | cases `sha256:7e380ee316dd85703dace132bfa8619b7e883fae27578a239de9012b373f9b20`; inventory `sha256:163a3c0258e5c43c5195eacac070a38187c405ccc949be23bd7c40c176184bc8`; manifest `sha256:7574dd701f3515a5117d29cf357a95774b6324a42ab7dc945ea61c57dbc93222` |
+| Golden review report | `conformance/golden-review/g2-semantic-correction/golden-review-report@1.json` | artifact `sha256:b4970615096e056e75d08fbde18a122bb48aeb0fbed35ecda8c478d5d0e0d999`; report `sha256:d8b2164b0d8e8b6ab7a3fe50559327e7f944312194251bc72a4330845969ad91` |
+| Golden review schema | `conformance/golden-review/g2-semantic-correction/schemas/golden-review-report-schema@1.json` | artifact `sha256:d88cad966d4b96ec982502817fa3c8100f61d9c621b853c41498be0fdc03e3d2` |
+
+Draft coverage is 40/40 expected results, 11/11 compiled Plan/proof/program byte sets, and 29/29 rejected diagnostics with stable pointer/object identity. Isolated review coverage is 40/40, semantic assertions 85/85 with zero assertion failures; actual comparison is read-only: 29/40 results are byte/semantic equal (all 29 rejected cases), while 11 compiled cases remain in the report with 622 pointer-level differences. No difference was used to mutate, overwrite, or accept expected bytes.
+
+The Draft manifest binds RC root `sha256:beb8669a054c95e0796ddf998c87c0ddc2e90556f95192a8baad6dd247f3e577`, Working roots `sha256:a2d8bcab971d1db75aad17d152c7c616371a4ceeb8d52f408674d744cf7866b8` / `sha256:83080db01627d5b42046ce0a2e229ee3f4099208a8bfa2b028fc9b6241272dc8` / `sha256:54ba5b80b92a9c053e4439964fbea03326c9c8b7fc3cc3fe244dffa2144d341a` / `sha256:a254eec500006f1c7210835607cf0c20c9c6cc0647ae06a43ef2943d169d5c92`, source set `sha256:76d0c59584c33fc47e22f3f81dea3b6da7048549c1cb136e4750f0f05cd5b6bd`, exact G2 toolchain/compiler/normalizer/proof/schema identity and case-input binding `sha256:f59893f564de430caf7375c47ff82888e20339886aec06efa5abb9625c259329`. `conformance/sealed/` remains `.gitkeep` only; G3-G9 remain `not_started`.
+
+| Verification | Result |
+| --- | --- |
+| managed `npm run typecheck` | PASS |
+| managed `npm run test:g2` | PASS; 5 files / 42 tests; Production replay remains 11 compiled / 29 rejected |
+| managed `npm run test:g2:golden-current` | PASS; 2 files / 10 tests; determinism, missing/duplicate/partial/unknown/tamper/unauthorized/import boundaries covered |
+| managed `npm run prepare-rc:check` | PASS; RC root unchanged |
+| managed `npm run contracts:check` | PASS; includes current Draft and review read-only checks plus unchanged Contract/Compiler/Schema/Store roots |
+| Draft/review generate round 1 and round 2 | PASS; both Draft rounds returned `sha256:fb94f5e65425b482eee369bb115e46e884b249978e0f408832574d5be41dccbd`; both report rounds returned `sha256:d8b2164b0d8e8b6ab7a3fe50559327e7f944312194251bc72a4330845969ad91` with identical artifact hashes |
+| `git diff --check` | PASS |
+
 ## 下一步
 
 G0.1-G0.9 historical identity、G0.10 current root、G1.1/G1.2 executable schema/Store Base、G1.3 dependency identity repair、R-016 spec/Contract repair与G2 Production Compiler基础均已完成；既有hash是construction provenance，不把未Seal的后续G2修正变成additive发布义务。Current G0/I11与G1为`DONE`，G2/I2/I3为`IN_PROGRESS/RC_REVIEW`且仍限于semantic correction/Golden流程，G3-G9继续`NOT_READY`。
 
-历史review evidence只存在于Git commits，不是current dependency；current checkout与active dependency graph不包含历史review judgment、逐case结果、finding来源或独立review工作表。本账本新增的唯一current RC aggregate PASS也不进入active dependency graph。Current Working代码、isolated inputs、actual comparison与working review bundle满足当前正式语义要求；fresh review PASS不是human judgment或semantic approval。显式`prepare-rc`已从重生成后的exact四个Working root冻结唯一Review Candidate；Expected full case-result/Plan/proof/program bytes/hash仍全部为null，human judgment仍0/40/not requested，approval、signature、immutable`GoldenSemanticReview`、`golden-seal`和sealed write均未运行。
+历史review evidence只存在于Git commits，不是current dependency；current checkout与active dependency graph不包含历史review judgment、finding来源或approval。Current Working代码、isolated inputs、actual comparison与working review bundle满足当前正式语义要求；fresh review PASS不是human judgment或semantic approval。显式`prepare-rc`已从重生成后的exact四个Working root冻结唯一Review Candidate；current expected full case-result/Plan/proof/program bytes/hash现已独立冻结并由隔离report审计，human judgment仍0/40/not requested，approval、signature、immutable`GoldenSemanticReview`、`golden-seal`和sealed write均未运行。
 
-Current终点仍是G2 `RC_REVIEW`：四个git-history-only Working root经双轮确定性重生成后冻结，唯一RC不可发布且Production不可达，40-case actual comparison保持11 compiled / 29 rejected，fresh independent review已PASS。下一允许边界只能是在明确授权下先依据current规范、machine Contract、source与snapshot独立编写并冻结40/40完整expected Golden Draft，运行不调用Production Compiler/normalizer/lowerer/proof的隔离`golden-review`并取得exact `draft_manifest_hash`；随后必须停止，等待`human:local-owner`明确批准该hash，批准后才可持久化immutable `GoldenSemanticReview`并按规范运行`golden-seal`。不得把actual candidate当expected oracle、重复fresh review、创建Draft v5/v6或additive RC、修改Working/RC identity、自动批准或开始G3+。
+Current终点仍是G2 `RC_REVIEW`：四个git-history-only Working root与唯一RC identity未变，40-case expected Draft已冻结，隔离review report已生成，fresh independent review仍只是施工证据。下一允许边界只能等待`human:local-owner`明确批准或要求修订exact `draft_manifest_hash=sha256:fb94f5e65425b482eee369bb115e46e884b249978e0f408832574d5be41dccbd`；批准前不得持久化immutable `GoldenSemanticReview`、approval/signature、运行`golden-seal`或写`conformance/sealed/`。不得把actual candidate当expected oracle、重复fresh review、创建Draft v5/v6或additive RC、修改Working/RC identity、自动批准或开始G3+。
 
 作为历史prepare-rc切片记录，该切片只修复current R-017 spec identity实时绑定、级联重建Working artifacts并执行`prepare-rc`及其确定性check，当时未执行fresh independent review或Golden approval。后续唯一RC fresh review已PASS，但仍未创建immutable`GoldenSemanticReview`、approval/signature、运行`golden-seal`或写入`conformance/sealed/`，也未开始G3+、SQLite certification、Core Release、G8/G9 identity或production activation。R-010 Node loader deprecation与R-012/R-013/R-015 timing继续作为既有范围外baseline，不升级工具链、不放宽测试。
