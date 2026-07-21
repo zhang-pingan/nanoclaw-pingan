@@ -1,8 +1,8 @@
 # Dynamic Workflow Runtime 实施进度
 
 > **状态**: IN_PROGRESS
-> **当前 Gate**: G3 Registry / Authoring / Publish（`IN_PROGRESS`；G3.1 read-only Registry publish-preflight foundation `DONE`；G3.2 Feature Manifest vNext strict intake preflight `BLOCKED_BY_SPEC`；G2保持`DONE / BASELINE_ACCEPTED`与40/40 exact replay）
-> **下一施工切片**: 先关闭G3.2 ownership/path/hash/order与error-precedence的最小规范缺口，再重新实施Feature Manifest vNext strict intake preflight；Registry persistence、Feature/Core Release、Authoring全链路、Publisher执行、Publish/Activation均尚未实现，G4-G9保持`NOT_READY`
+> **当前 Gate**: G3 Registry / Authoring / Publish（`IN_PROGRESS`；G3.1 read-only Registry publish-preflight foundation `DONE`；G3.2A Feature Manifest vNext strict intake semantics freeze `DONE`；G3.2 strict intake implementation `READY`；G2保持`DONE / BASELINE_ACCEPTED`与40/40 exact replay）
+> **下一施工切片**: 实施G3.2 Feature Manifest vNext strict intake preflight；Registry persistence、Feature/Core Release、Authoring全链路、Publisher执行、Publish/Activation均尚未实现，G4-G9保持`NOT_READY`
 > **最后更新**: 2026-07-21
 > **规范权威**: `local/docs/dynamic-workflow-dag-framework.md`
 
@@ -111,7 +111,7 @@ Agent Container 运行于独立 VM，Node identity 由 VM image gate 保证；�
 | G0 Contract Pack / Static Baseline | `DONE` | 无 | G0.1-G0.9 historical root + G0.10 additive Capacity Admin/publication/CAP/Logical Schema/coverage root | 本原子提交 |
 | G1 DDL / Store | `DONE` | G0.10 | closed Schema Dependency Manifest + frozen executable migration/Schema Manifest + unified Connection Factory + Store lifecycle/transaction host + real-file SQLite/identity gates | 本原子提交（dependency identity repair） |
 | G2 Compiler / Golden | `DONE` | G0.1-G0.9；R-016 spec/Contract repair；G0.10 不改变 Compiler/Plan 语义 | phase=`BASELINE_ACCEPTED`；前序immutable lineage未变；owner-approved successor GoldenSemanticReview/seal完整，current replay 40/40 exact、0 differences | 本原子提交（replay-repair successor seal） |
-| G3 Registry / Authoring / Publish | `IN_PROGRESS` | G1 + G2 | G3.1 read-only publish-preflight foundation DONE；G3.2 strict intake preflight因ownership/path/hash/order/error-precedence缺少唯一机器语义而`BLOCKED_BY_SPEC`；其余manifest/authoring/publish/retention/ABI exit evidence待后续切片 | 本原子提交（G3.1）；G3.2阻塞记录见下文 |
+| G3 Registry / Authoring / Publish | `IN_PROGRESS` | G1 + G2 | G3.1 read-only publish-preflight foundation DONE；G3.2A strict intake semantics freeze DONE；G3.2 strict intake implementation READY；其余manifest/authoring/publish/retention/ABI exit evidence待后续切片 | 本原子提交（G3.1）；G3.2A见下文 |
 | G4 Test Bootstrap | `NOT_READY` | G1 + G2 + G3 | isolated bootstrap profile | - |
 | G5 Basic Runtime | `NOT_READY` | G4 | T0-T6e model/fault fixtures | - |
 | G6 Dynamic / Close | `NOT_READY` | G5 | T7/T8/child/compensation fixtures | - |
@@ -1307,9 +1307,9 @@ G3.1 lineage exact绑定G1 root `sha256:769800fbca754586f1eda90c28e876255a6af3fb
 | G3+/legacy absence scan | PASS；无executable Registry/Authoring/Runtime/Projection新增，无legacy resource key alias或compatibility fallback |
 | `git diff --check` | PASS |
 
-## G3.2 Feature Manifest vNext Strict Intake Preflight
+## G3.2 Feature Manifest vNext Strict Intake Preflight（历史阻塞记录）
 
-**状态**：`BLOCKED_BY_SPEC`；G3整体保持`IN_PROGRESS`，G2保持`DONE / BASELINE_ACCEPTED`，G4-G9保持`NOT_READY`。本次没有新增或修改intake实现、Schema、fixture、artifact、CLI或package script，没有读取resource `source_path`，没有执行Registry操作、Publisher、Publish或Activation。
+**历史状态**：`BLOCKED_BY_SPEC`。该阻塞已由下方 G3.2A 原子切片关闭；当前 G3.2 strict intake implementation 为 `READY`。历史阻塞时没有新增或修改intake实现、Schema、fixture、artifact、CLI或package script，没有读取resource `source_path`，没有执行Registry操作、Publisher、Publish或Activation。
 
 最小阻塞证据：
 
@@ -1339,9 +1339,34 @@ G3.1 lineage exact绑定G1 root `sha256:769800fbca754586f1eda90c28e876255a6af3fb
 | G3+/legacy/Production surface absence scan | PASS；没有新增`src/workflow-runtime/`文件或Production Registry/Authoring/Publisher/loader/Activation surface |
 | `git diff --check` | PASS |
 
+## G3.2A Feature Manifest vNext Strict Intake Semantics Freeze
+
+**状态**：`DONE`；G3保持`IN_PROGRESS`，G3.2 strict intake implementation提升为`READY`，G2保持`DONE / BASELINE_ACCEPTED`，G4-G9保持`NOT_READY`。本切片只冻结 G3.2 source-intake 的 ownership、source-root/path snapshot、manifest hash、deterministic ordering 和 error precedence；没有实现实际 source reader、Registry persistence、Publisher、Publish、Production loader、Feature/Core Release 或 Activation。
+
+交付的独立 closed Draft 2020-12 Contract Pack 位于 G3.2A 隔离 root：`conformance/g3.2a-feature-manifest-intake/` 仅保存 2 个 positive 与 18 个 negative test-only fixtures。Profile、结果 schema 和 pack 均通过 G0.2 artifact envelope、JCS、domain-separated SHA-256 与 byte-exact generator/check；所有 schema object 使用 `additionalProperties=false`，没有 default/coercion/fallback。G3.2A 评估器只接受 bytes 和可选的 supplied snapshot observation，`reader_invoked=false`、`resolver_invoked=false`，不读取 manifest `source_path`。
+
+| Artifact | Version / exact hash |
+| --- | --- |
+| G3.2A Contract Pack | `icarus.workflow-contract-pack-g3-2a-feature-manifest-intake@1.0.0`; `sha256:c9c273b6d294d512a3578203d91d4bdce7863a3ccb561fdd7da08d072b3d8cd9` |
+| Strict Intake Profile | `sha256:643f6907c7723b8c77aa2a1b1dc51fcf5dac2e16404d2cd862909f43f7c75de4` |
+| Profile Schema | `sha256:ead0a25980c695ecc4564044f98359cdefb76780b959f2a98361a0b5d0c0b614` |
+| Result Schema | `sha256:95e444fbaf0c64c4a89c2b1ee6aa348a11ace85fbd57e8a3d1b63a16416ef8f3` |
+| Domain catalog | `sha256:2e3865d2a2aa70148b2615ab643b86c38f161e801bd314b3a203c24f29c30e13` |
+| Positive fixtures | `sha256:b8280197763f6741e69540748a943d5975f0c0999ecbca04b2ceee484b7cf39f`; `2` cases |
+| Negative fixtures | `sha256:77ced4c1ba39632c2e662aa247593c68fac96e6068832abb4081fbf8e9030be1`; `18` cases |
+
+冻结语义的规范落点为架构规范 `Feature Manifest vNext -> G3.2A Feature Manifest vNext Strict Intake Semantics Freeze`，machine source 为 `g3-2a-feature-manifest-intake.ts` 与其 profile/result schema。Feature id 固定为 `feature_ref.id` 去掉最终 `.feature` suffix；namespace/registry_namespace 必须等于该 id；Feature-owned ref 必须为 `<featureId>.<localId>`；dependency release 允许跨 owner 但必须 exact immutable ref+hash。Roots 固定为 `features/<featureId>` 与 `features/<featureId>/workflow-src`，`source_path` 相对前者且必须在后者下；absolute、空段、`.`、`..`、平台分隔符和 root escape 拒绝；symlink、hard-link、moving-root 拒绝，并冻结 root/file device+inode snapshot、no-follow open、前后 identity TOCTOU 检查。Manifest hash 使用 ASCII `icarus:feature-manifest-source:2\n`、删除 `manifest_hash` 后的完整 object、RFC 8785 JCS 与 UTF-8 SHA-256，业务 array 原序保留。Dependencies、required refs 和 dynamic resources 的 tuple/comparator 与 unique identity 分别固定为 `(release.id, release.version, release.hash)`、`(id, version)`、`(kind, id, version)` 的 unsigned ASCII byte order。错误顺序固定为 strict bytes parse -> removed/unknown structural intake -> full closed schema -> manifest hash -> ownership/duplicate/order/path -> root snapshot/path read -> source hash -> dependency resolution；removed key 稳定为 `feature_manifest_removed_resource_key`，其他 unknown field 稳定为 `feature_manifest_unknown_field`。
+
+| Verification | Result |
+| --- | --- |
+| managed `npm run contracts:g3.2a:generate` | PASS；deterministic artifact generation |
+| managed `npm run contracts:g3.2a:check` | PASS；read-only byte/identity check |
+| managed `npm run test:g3` | PASS；G3.1 6 tests + G3.2A 4 tests / 10 total；18 negative fixtures |
+| source/Registry/Publisher/Activation absence assertion | PASS；pack records all false，未创建 production surface |
+
 ## 下一步
 
-G0.1-G0.9 historical identity、G0.10 current root、G1 executable schema/Store Base、R-016 spec/Contract repair与G2 Production Compiler/Golden均已完成。Current G2保持`DONE / BASELINE_ACCEPTED`，I3为`DONE`；G3.1完成read-only publish-preflight foundation，G3/I0为`IN_PROGRESS`。G3.2因上述最小规范缺口标记为`BLOCKED_BY_SPEC`；下一切片必须先冻结Feature Manifest source-intake的ownership/path/hash/order/error-precedence机器语义，再重新开始实现。G4-G9继续`NOT_READY`。
+G0.1-G0.9 historical identity、G0.10 current root、G1 executable schema/Store Base、R-016 spec/Contract repair与G2 Production Compiler/Golden均已完成。Current G2保持`DONE / BASELINE_ACCEPTED`，I3为`DONE`；G3.1完成read-only publish-preflight foundation，G3.2A已冻结Feature Manifest source-intake的ownership/path/hash/order/error-precedence机器语义，G3.2 strict intake implementation为`READY`，G3/I0为`IN_PROGRESS`。下一切片可以在不触碰G3.2A identity的前提下实现strict intake preflight。G4-G9继续`NOT_READY`。
 
 历史fresh review evidence只存在于Git commits，不是current dependency；current immutable semantic approval只绑定exact Draft/report identities。显式`prepare-rc`冻结的四个Working roots与唯一Review Candidate未变；current expected full case-result/Plan/proof/program bytes/hash已独立冻结、审计、owner批准并seal。local single-user签名策略为`not_required_local_single_user`，没有伪造GPG或远程签名。
 

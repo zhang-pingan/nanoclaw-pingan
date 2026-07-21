@@ -2869,6 +2869,24 @@ Source/Release Schema 对顶层、嵌套对象和每个 discriminated resource e
 
 旧 `workflowDefinitions`、`cards`、`artifactContracts`、`workflowEvaluators` 字段在任何 manifest version 中都返回稳定 `feature_manifest_removed_resource_key`，不映射到 vNext resource kind，不提供 alias、fallback、自动转换或 compatibility reader。其他 unknown field 返回 `feature_manifest_unknown_field`。拒绝发生在资源扫描、路径读取和 Registry 写入之前。
 
+#### G3.2A Feature Manifest vNext Strict Intake Semantics Freeze
+
+本节是 `icarus.feature-manifest/2` source-intake 的唯一机器语义。它只定义 strict intake 的纯验证合同；本阶段不实现 source reader、Registry persistence、Publisher、Publish、Production loader、Feature/Core Release 或 Activation。对应 closed profile、result schema、fixtures 和 deterministic check 位于 `src/workflow-runtime/contracts/` 的 G3.2A pack，fixtures 仅位于 `conformance/g3.2a-feature-manifest-intake/`。
+
+**Ownership。** `feature_ref.id` 必须是 `<featureId>.feature`；`<featureId>` 是去掉最后一个 ASCII `.feature` suffix 后的精确字符串，不能为空，且不做大小写折叠、Unicode 归一化或目录名猜测。`namespace` 与 `ownership.registry_namespace` 必须逐字等于 `<featureId>`。Canonical roots 由它派生为 `features/<featureId>` 与 `features/<featureId>/workflow-src`。`dynamic_workflow_resources[*].ref.id` 必须是 `<featureId>.<localId>`，其中 `localId` 非空；因此既有 G0.3 正例 `example.feature`、`example`、`example.workflow` 的 owner 是同一个 `example` Feature，而不是三者字符串相等。Feature-owned resource ref 不允许没有该精确前缀、空 local id 或使用另一个 Feature 的前缀。
+
+`dependencies[*].feature_release_ref` 表示 release owner，而不是本 Feature-owned resource。依赖可以跨 owner；跨 owner 不改变本 Feature 的 ownership predicate，且只允许使用 exact immutable `VersionedRef` 与同一 release 的 `feature_release_hash`。不接受 range、`latest`、mutable version、目录名推断或按当前指针解析。`required_resource_refs` 是该 exact release closure 的 exact immutable refs，不能从本 Feature 的 resource prefix 规则推导 owner。
+
+**Source root/path。** `feature_source_root` 和 `workflow_source_root` 必须分别等于上述两个 canonical POSIX roots；`source_path` 相对于 `feature_source_root` 解析，并且第一段必须是 `workflow-src`，所以现有 G0.3 的 `workflow-src/ab/example.workflow.json` 保持有效。解析前拒绝空段、`.`、`..`、`/` 开头、Windows drive/UNC absolute path、反斜杠、NUL 和任何 lexical root escape；不得使用平台分隔符或 `realpath` 结果改变 manifest 语义。Resolver/reader 第一次允许被调用的阶段是 `root_snapshot_path_read`，严格发生在 bytes parse、structural intake、closed schema、manifest hash、ownership/order/path lexical validation 之后。
+
+Source tree 是 read-only snapshot，禁止 symlink、hard-link 和 moving root。Snapshot 必须保存 canonical root path 以及每个 root/file 的 `lstat` `device`+`inode` identity；root identity 在读取前后比较，file 使用 no-follow open 后再以 `fstat` 比较，两个 manifest paths 不得共享同一 device/inode。任一 root/path identity 变化、symlink、hard-link 或 path set drift 都拒绝；不会通过 `realpath`、复制文件、moving-root 重试或 fallback 规避。G3.2A 只接受由后续 reader 提供的 snapshot observation，不执行实际 resource `source_path` 读取。
+
+**Manifest hash。** Source manifest 的 domain separator 固定为 ASCII `icarus:feature-manifest-source:2\n`。`manifest_hash` 计算输入是删除顶层 `manifest_hash` 后的完整 manifest object，使用 RFC 8785 JCS，输入为 UTF-8 bytes，再做 SHA-256；不排序或重写任何业务 array，数组原序进入 hash。Schema artifact 的 `icarus:workflow-feature-manifest-v2-schema:1\n` 仅用于 Schema identity，不能复用为 source manifest hash domain；hash 规则也不能从 actual、Publisher、Production Compiler 或 fixture expected 反向生成。
+
+**Deterministic ordering and identity。** 三个集合都使用原始 ASCII unsigned-byte comparator，不能使用 `localeCompare`、object insertion order、filesystem/directory order 或 canonical JSON bytes：`dependencies` 的 tuple 是 `(feature_release_ref.id, feature_release_ref.version, feature_release_hash)`；每个 dependency 的 `required_resource_refs` tuple 是 `(id, version)`；`dynamic_workflow_resources` tuple 是 `(kind, ref.id, ref.version)`。唯一 identity 分别是 release `(id, version)`、required ref `(id, version)` 和 dynamic resource `(kind, id, version)`；duplicate identity 先于对应 order drift 报错。比较使用 VersionedRef 的 ASCII id/version 原值，hash 只作为 dependency tuple 的第三项。
+
+**Error precedence.** 结果是单一 primary diagnostic（result schema 同时保留 one-element ordered diagnostics），固定 phase 顺序为：`strict_bytes_parse` -> `removed_unknown_structural_intake` -> `full_closed_schema` -> `manifest_hash` -> `ownership_order_path_lexical_validation`（ownership、duplicate identity、order、path） -> `root_snapshot_path_read` -> `source_hash` -> `dependency_resolution`。strict bytes parse 先拒绝 invalid UTF-8、duplicate key、comments、trailing comma、unsafe integer、non-finite number、invalid Unicode；removed legacy key 再早于任何其他 unknown field，稳定返回 `feature_manifest_removed_resource_key`，其他 unknown field 稳定返回 `feature_manifest_unknown_field`，两者都早于 resolver、reader、directory scan 和 Registry 操作。moving root/path drift 早于 source hash，source hash drift 早于 dependency resolution；同一 phase 的诊断按 pointer 的 ASCII bytes 排序。所有阶段均无 default、coercion、fallback 或 compatibility alias。
+
 ### Authoring、Review 与 Publish 工作流
 
 v1 不提供通用可视化 Workflow/Card 编辑器。Codex/Agent 与开发者通过同一 developer toolchain 把 Feature-owned source 转成可执行版本：

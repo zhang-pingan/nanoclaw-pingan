@@ -6,6 +6,8 @@ This directory is the machine-readable authority for Dynamic Workflow Runtime co
 
 G3.1 adds only the read-only Registry publish-preflight foundation. `registry/` contains closed Draft 2020-12 input, result, and foundation schemas plus the exact G3.1 foundation artifact. `conformance/g3-registry-publish-foundation/` contains two explicitly test-only positive cases and 19 negative cases. The pack root is `icarus.workflow-contract-pack-g3-registry-publish-foundation@1.0.0` with artifact hash `sha256:fad831fb9c5142422635c18b8e1b7207aec6ac92a5f42f6bd99739aff85eafa4`. It accepts a zero-Recipe Production Registry, rejects test-only promotion, moving refs, identity/hash/ABI/closure drift and side-effect requests, and pins the exact current G1/G2/compiler/schema/retention identities. It does not implement Registry persistence, a Production loader, Feature/Core Release, Authoring stages, review approval, Publisher execution, Publish, Activation, or G4-G9.
 
+G3.2A freezes the missing Feature Manifest vNext strict-intake semantics without implementing the reader. `registry/` contains the closed Draft 2020-12 strict-intake profile and result schemas plus the profile, domain catalog, fixture artifacts, and pack. `conformance/g3.2a-feature-manifest-intake/` is the isolated test-only fixture root with 2 positive and 18 negative cases. The pack is `icarus.workflow-contract-pack-g3-2a-feature-manifest-intake@1.0.0`, currently `sha256:c9c273b6d294d512a3578203d91d4bdce7863a3ccb561fdd7da08d072b3d8cd9`; profile `sha256:643f6907c7723b8c77aa2a1b1dc51fcf5dac2e16404d2cd862909f43f7c75de4`, profile schema `sha256:ead0a25980c695ecc4564044f98359cdefb76780b959f2a98361a0b5d0c0b614`, result schema `sha256:95e444fbaf0c64c4a89c2b1ee6aa348a11ace85fbd57e8a3d1b63a16416ef8f3`, positive fixtures `sha256:b8280197763f6741e69540748a943d5975f0c0999ecbca04b2ceee484b7cf39f`, negative fixtures `sha256:77ced4c1ba39632c2e662aa247593c68fac96e6068832abb4081fbf8e9030be1`. It freezes `<featureId>.feature` derivation, `namespace`/`registry_namespace` equality, `<featureId>.<localId>` resource ownership, exact cross-owner dependency pins, canonical source roots, `source_path` relative to `feature_source_root` and below `workflow-src`, symlink/hard-link/moving-root rejection with device/inode snapshot and TOCTOU checks, the ASCII `icarus:feature-manifest-source:2\n` hash domain, JCS/UTF-8 input and manifest-hash exclusion, all three ASCII tuple orderings and unique identities, and the single-diagnostic phase precedence. The evaluator never reads resource `source_path`, writes Registry state, executes Publisher/Publish, or activates a release; `reader_invoked` and `resolver_invoked` are always false. G3.2 strict intake implementation is `READY`, while G3 remains `IN_PROGRESS` and G4-G9 remain `NOT_READY`.
+
 Use the managed toolchain for both commands:
 
 ```bash
@@ -24,6 +26,7 @@ Use the managed toolchain for both commands:
 ./scripts/runtime-toolchain.sh exec -- npm run g2:replay-repair:seal:check
 ./scripts/runtime-toolchain.sh exec -- npm run golden:current:replay:check
 ./scripts/runtime-toolchain.sh exec -- npm run contracts:g3:check
+./scripts/runtime-toolchain.sh exec -- npm run contracts:g3.2a:check
 ./scripts/runtime-toolchain.sh exec -- npm run test:g3
 ```
 
