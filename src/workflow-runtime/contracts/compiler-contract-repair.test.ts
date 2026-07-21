@@ -592,7 +592,7 @@ describe('R-016 Compiler spec and Contract repair', () => {
     });
     expect(
       fs.readdirSync(path.join(contractsRoot, 'conformance/sealed')),
-    ).toEqual(['.gitkeep']);
+    ).toEqual(['.gitkeep', 'g2-semantic-correction']);
     expect(fs.existsSync(path.join(workflowRuntimeRoot, 'compiler'))).toBe(
       true,
     );

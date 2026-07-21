@@ -1,8 +1,12 @@
+import path from 'node:path';
+
 import {
   checkSemanticCorrectionCurrentLifecycle,
   checkSemanticCorrectionReviewCandidate,
   prepareSemanticCorrectionReviewCandidate,
 } from './semantic-correction-review-candidate.js';
+import { assertCurrentG2SealedBoundary } from './current-g2-sealed-boundary.js';
+import { checkCurrentSealedEraReviewCandidate } from './current-sealed-era-historical-checks.js';
 
 const command = process.argv[2];
 if (
@@ -16,6 +20,21 @@ if (
 }
 
 try {
+  const sealedState = assertCurrentG2SealedBoundary(
+    path.join(import.meta.dirname, 'conformance/sealed'),
+  );
+  if (sealedState === 'current_g2') {
+    const root = checkCurrentSealedEraReviewCandidate();
+    if (command === 'check-current') {
+      console.log('g2_review_candidate=check-current:ok');
+      console.log('g2_construction_phase=RC_REVIEW');
+      console.log(`g2_review_candidate_root=${root.hash}`);
+    } else {
+      console.log(`g2_review_candidate=${command}:ok`);
+      console.log(`g2_review_candidate_root=${root.hash}`);
+    }
+    process.exit(0);
+  }
   if (command === 'check-current') {
     const result = checkSemanticCorrectionCurrentLifecycle();
     console.log('g2_review_candidate=check-current:ok');

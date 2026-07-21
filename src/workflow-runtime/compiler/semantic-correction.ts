@@ -37,6 +37,7 @@ import {
   workflowCompilerIdentity,
 } from './identity.js';
 import type { WorkflowCompilerConformanceCaseResultV1 } from '../contracts/compiler-contract-repair-types.js';
+import { assertCurrentG2SealedBoundary } from '../contracts/current-g2-sealed-boundary.js';
 
 const compilerRoot = import.meta.dirname;
 const contractsRoot = path.resolve(compilerRoot, '../contracts');
@@ -372,8 +373,9 @@ function validateFileSets(files: Map<string, string>): void {
 }
 
 function validateBoundaries(): void {
-  const sealed = fs.readdirSync(absolutePath('conformance/sealed'));
-  if (sealed.length !== 1 || sealed[0] !== '.gitkeep') {
+  try {
+    assertCurrentG2SealedBoundary(absolutePath('conformance/sealed'));
+  } catch {
     throw new Error('G2 semantic correction crossed sealed boundary');
   }
 }

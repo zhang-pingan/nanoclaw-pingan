@@ -11,6 +11,7 @@ import type {
   JsonValue,
   Sha256Hash,
 } from './types.js';
+import { assertCurrentG2SealedBoundary } from './current-g2-sealed-boundary.js';
 
 const contractsRoot = import.meta.dirname;
 const projectRoot = path.resolve(contractsRoot, '../../..');
@@ -331,8 +332,11 @@ function writeAtomic(relativePath: string, contents: string): void {
 }
 
 function validateBoundary(): void {
-  const sealed = fs.readdirSync(absoluteContractPath('conformance/sealed'));
-  if (sealed.length !== 1 || sealed[0] !== '.gitkeep') {
+  try {
+    assertCurrentG2SealedBoundary(
+      absoluteContractPath('conformance/sealed'),
+    );
+  } catch {
     throw new Error('Semantic correction crossed sealed boundary');
   }
 }

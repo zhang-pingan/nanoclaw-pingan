@@ -47,6 +47,7 @@ import {
   VersionedRefError,
   parseVersionedRef,
 } from './versioned-ref.js';
+import { assertCurrentG2SealedBoundary } from './current-g2-sealed-boundary.js';
 
 const contractsRoot = import.meta.dirname;
 const projectRoot = path.resolve(contractsRoot, '..', '..', '..');
@@ -834,12 +835,9 @@ function validateReservedDirectories(): void {
     if (!fs.lstatSync(absoluteDirectory).isDirectory()) {
       throw new Error(`Reserved Contract Pack directory missing: ${directory}`);
     }
-    const entries = fs.readdirSync(absoluteDirectory).sort(asciiCompare);
-    if (
-      entries.length !== 1 ||
-      entries[0] !== '.gitkeep' ||
-      !fs.lstatSync(path.join(absoluteDirectory, '.gitkeep')).isFile()
-    ) {
+    try {
+      assertCurrentG2SealedBoundary(absoluteDirectory);
+    } catch {
       throw new Error(
         `Reserved Contract Pack directory contains out-of-slice artifacts: ${directory}`,
       );

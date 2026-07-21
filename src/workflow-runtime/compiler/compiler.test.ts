@@ -9,6 +9,7 @@ import {
   G2_PRODUCTION_COMPILER_ROOT_DOMAIN,
 } from './artifacts.js';
 import { G2_CANDIDATE_ROOT } from './conformance.js';
+import { assertCurrentG2SealedBoundary } from '../contracts/current-g2-sealed-boundary.js';
 
 const compilerRoot = import.meta.dirname;
 const contractsRoot = path.resolve(compilerRoot, '../contracts');
@@ -68,10 +69,12 @@ describe('frozen G2 Production Compiler publication', () => {
     expect(manifest.rejected_count).toBe(30);
   });
 
-  it('does not cross Golden seal or G3+ runtime boundaries', () => {
+  it('recognizes the exact Golden seal while keeping G3+ boundaries absent', () => {
     expect(
-      fs.readdirSync(path.join(contractsRoot, 'conformance/sealed')),
-    ).toEqual(['.gitkeep']);
+      assertCurrentG2SealedBoundary(
+        path.join(contractsRoot, 'conformance/sealed'),
+      ),
+    ).toBe('current_g2');
     for (const forbidden of [
       'registry',
       'authoring',

@@ -10,10 +10,9 @@ import {
   CAPACITY_CONTROL_PLANE_ARTIFACT_COUNT,
   CAPACITY_CONTROL_PLANE_MANIFEST_PATH,
   buildCapacityControlPlaneExpectedArtifactsForTest,
-  checkContractPackCapacityControlPlane,
   checkHistoricalG0_9Conformance,
-  generateContractPackCapacityControlPlane,
 } from './capacity-control-plane-pack.js';
+import { checkCurrentSealedEraCapacityControlPlane } from './current-sealed-era-historical-checks.js';
 import {
   CAPACITY_CONTROL_PLANE_FAULT_CASES,
   CAPACITY_CONTROL_PLANE_NEGATIVE_CASES,
@@ -115,8 +114,8 @@ function withoutDocumentMetadata(schema: JsonObject): JsonObject {
 }
 
 describe('G0.10 Capacity Control-Plane Addendum', () => {
-  it('generates deterministically, checks read-only, and owns exactly 26 isolated JSON artifacts', () => {
-    const first = generateContractPackCapacityControlPlane();
+  it('checks the frozen sealed-era root read-only and owns exactly 26 isolated JSON artifacts', () => {
+    const first = checkCurrentSealedEraCapacityControlPlane();
     const firstFiles = listFiles(addendumRoot);
     const firstBytes = new Map(
       firstFiles.map((relativePath) => [
@@ -124,9 +123,8 @@ describe('G0.10 Capacity Control-Plane Addendum', () => {
         fs.readFileSync(path.join(contractsRoot, relativePath)),
       ]),
     );
-    const second = generateContractPackCapacityControlPlane();
+    const second = checkCurrentSealedEraCapacityControlPlane();
     expect(second.hash).toBe(first.hash);
-    expect(checkContractPackCapacityControlPlane().hash).toBe(first.hash);
     expect(firstFiles).toHaveLength(CAPACITY_CONTROL_PLANE_ARTIFACT_COUNT);
     expect(firstFiles).toContain(CAPACITY_CONTROL_PLANE_MANIFEST_PATH);
     expect(
@@ -466,13 +464,13 @@ describe('G0.10 Capacity Control-Plane Addendum', () => {
       ).toBe(candidate.expected_result);
   });
 
-  it('keeps the generated closure free of DDL, Store, Runtime, UI, and sealed output', () => {
+  it('keeps the generated closure free of DDL, Store, Runtime, and UI output', () => {
     expect(buildCapacityControlPlaneExpectedArtifactsForTest()).toHaveLength(
       25,
     );
     expect(
       fs.readdirSync(path.join(contractsRoot, 'conformance/sealed')),
-    ).toEqual(['.gitkeep']);
+    ).toEqual(['.gitkeep', 'g2-semantic-correction']);
     const forbidden = [
       ['store', 'runtime-store.ts'],
       ['store', 'schema', 'workflow-runtime-schema-v1.sql'],

@@ -1,3 +1,5 @@
+import path from 'node:path';
+
 import {
   checkContractPackFoundation,
   generateContractPackFoundation,
@@ -29,6 +31,8 @@ import {
   generateContractPackCapacityControlPlane,
 } from './capacity-control-plane-pack.js';
 import { checkHistoricalCompilerContractRepair } from './compiler-contract-repair-historical.js';
+import { assertCurrentG2SealedBoundary } from './current-g2-sealed-boundary.js';
+import { checkCurrentSealedEraCapacityControlPlane } from './current-sealed-era-historical-checks.js';
 
 function usage(): never {
   console.error('Usage: contract-pack <generate|check|archive-check>');
@@ -127,10 +131,15 @@ try {
   }
 
   currentPack = 'capacity_control_plane';
+  const sealedState = assertCurrentG2SealedBoundary(
+    path.join(import.meta.dirname, 'conformance/sealed'),
+  );
   const capacityControlPlaneManifest =
-    command === 'generate'
-      ? generateContractPackCapacityControlPlane()
-      : checkContractPackCapacityControlPlane();
+    sealedState === 'current_g2'
+      ? checkCurrentSealedEraCapacityControlPlane()
+      : command === 'generate'
+        ? generateContractPackCapacityControlPlane()
+        : checkContractPackCapacityControlPlane();
   console.log(`contract_pack_capacity_control_plane=${command}:ok`);
   console.log(
     `contract_pack_capacity_control_plane_hash=${capacityControlPlaneManifest.hash}`,

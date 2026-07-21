@@ -52,6 +52,7 @@ import type {
   JsonObject,
   JsonValue,
 } from './types.js';
+import { assertCurrentG2SealedBoundary } from './current-g2-sealed-boundary.js';
 
 const contractsRoot = import.meta.dirname;
 const repositoryRoot = path.resolve(contractsRoot, '../../..');
@@ -940,10 +941,9 @@ function validateDirectoryBoundaries(): void {
     throw new Error('G0.5 fixture directory boundary drift');
   }
   for (const directory of currentlyReservedDirectories) {
-    const entries = fs
-      .readdirSync(absoluteContractPath(directory))
-      .sort(asciiCompare);
-    if (entries.length !== 1 || entries[0] !== '.gitkeep') {
+    try {
+      assertCurrentG2SealedBoundary(absoluteContractPath(directory));
+    } catch {
       throw new Error(`Future Gate directory contains artifacts: ${directory}`);
     }
   }

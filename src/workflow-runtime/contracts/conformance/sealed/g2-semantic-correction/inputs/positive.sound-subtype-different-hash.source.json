@@ -1,0 +1,128 @@
+{
+  "format": "icarus.workflow-graph-scope/1",
+  "scope_key": "subtype",
+  "interface_ref": {
+    "id": "fixture.interface.root",
+    "version": "1.0.0"
+  },
+  "nodes": [
+    {
+      "id": "producer",
+      "type": "system",
+      "trigger": {
+        "type": "root"
+      },
+      "capability_ref": {
+        "id": "fixture.capability.producer-string",
+        "version": "1.0.0"
+      }
+    },
+    {
+      "id": "consumer",
+      "type": "system",
+      "trigger": {
+        "type": "all",
+        "edge_ids": [
+          "edge.producer"
+        ]
+      },
+      "capability_ref": {
+        "id": "fixture.capability.consumer-string",
+        "version": "1.0.0"
+      }
+    },
+    {
+      "id": "done",
+      "type": "terminal",
+      "trigger": {
+        "type": "all",
+        "edge_ids": [
+          "edge.consumer"
+        ]
+      },
+      "exit": "done"
+    }
+  ],
+  "control_edges": [
+    {
+      "id": "edge.producer",
+      "kind": "control",
+      "from_node_id": "producer",
+      "to_node_id": "consumer",
+      "on": {
+        "statuses": [
+          "succeeded"
+        ]
+      }
+    },
+    {
+      "id": "edge.consumer",
+      "kind": "control",
+      "from_node_id": "consumer",
+      "to_node_id": "done",
+      "on": {
+        "statuses": [
+          "succeeded"
+        ]
+      }
+    }
+  ],
+  "data_edges": [
+    {
+      "id": "data.value",
+      "kind": "data",
+      "from": {
+        "type": "node_output",
+        "node_id": "producer",
+        "port": "value"
+      },
+      "to": {
+        "node_id": "consumer",
+        "port": "value"
+      }
+    }
+  ],
+  "completion": {
+    "settled_rules": [
+      {
+        "id": "select_done",
+        "phase": "settled",
+        "priority": 100,
+        "when": {
+          "fact": "all_nodes_terminal"
+        },
+        "select": {
+          "exits": [
+            "done"
+          ],
+          "pick": {
+            "type": "lowest_terminal_node_id"
+          }
+        }
+      }
+    ],
+    "no_match": "error",
+    "early_close": "cancel_and_fence_remaining"
+  },
+  "requested_limits": {
+    "max_scopes": null,
+    "max_nodes": null,
+    "max_nodes_per_scope": null,
+    "max_edges_per_scope": null,
+    "max_nesting_depth": null,
+    "max_map_items": null,
+    "max_concurrency": null,
+    "max_total_attempts": null,
+    "max_total_waits": null,
+    "max_total_output_bytes": null,
+    "max_scope_spec_bytes": null,
+    "max_condition_steps": null,
+    "max_wait_duration_ms": null,
+    "max_pending_signals": null,
+    "max_fixed_point_facts": null,
+    "max_frontier_bytes": null
+  },
+  "metadata": {
+    "semantic_correction_version": "working-g2"
+  }
+}

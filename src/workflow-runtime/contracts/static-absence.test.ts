@@ -233,6 +233,7 @@ describe('G0.7 Static Absence and Surface Gates', () => {
     for (const directory of ['conformance/sealed']) {
       expect(fs.readdirSync(path.join(contractsRoot, directory))).toEqual([
         '.gitkeep',
+        'g2-semantic-correction',
       ]);
     }
     expect(

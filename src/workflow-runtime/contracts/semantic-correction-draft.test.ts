@@ -12,6 +12,7 @@ import {
   SEMANTIC_CORRECTION_DRAFT_MANIFEST_PATH,
   SEMANTIC_CORRECTION_DRAFT_ROOT,
 } from './semantic-correction-draft.js';
+import { checkCurrentSealedEraWorkingGolden } from './current-sealed-era-historical-checks.js';
 import { strictParseJsonBytes } from './strict-json.js';
 import type { JsonObject } from './types.js';
 
@@ -57,13 +58,16 @@ describe('G2 semantic correction working review bundle', () => {
 
   it('checks the current working bundle without changing any byte', () => {
     const before = treeDigest();
-    const first = checkSemanticCorrectionDraft();
+    const first = checkCurrentSealedEraWorkingGolden();
     const middle = treeDigest();
-    const second = checkSemanticCorrectionDraft();
+    const second = checkCurrentSealedEraWorkingGolden();
     expect(first.hash).toMatch(/^sha256:[0-9a-f]{64}$/);
     expect(second.hash).toBe(first.hash);
     expect(middle).toBe(before);
     expect(treeDigest()).toBe(before);
+    expect(() => checkSemanticCorrectionDraft()).toThrow(
+      /crossed sealed boundary/,
+    );
   });
 
   it('keeps actual comparison input separate from the unrequested oracle', () => {

@@ -265,6 +265,9 @@ describe('G0.2 Contract Pack conformance', () => {
       'json-canonicalize',
       'jsonc-parser',
       'node:util',
+      'node:crypto',
+      'node:fs',
+      'node:path',
       'os',
       'path',
       'typescript',
@@ -293,7 +296,14 @@ describe('G0.2 Contract Pack conformance', () => {
       for (const specifier of specifiers) {
         if (specifier.startsWith('.')) {
           const resolved = path.resolve(path.dirname(file), specifier);
-          expect(resolved.startsWith(`${contractsRoot}${path.sep}`)).toBe(true);
+          const historicalConstructionImport =
+            path.basename(file) === 'semantic-correction-review-candidate.ts' &&
+            resolved ===
+              path.resolve(contractsRoot, '../compiler/semantic-correction.js');
+          expect(
+            resolved.startsWith(`${contractsRoot}${path.sep}`) ||
+              historicalConstructionImport,
+          ).toBe(true);
         } else {
           expect(allowedPackages.has(specifier)).toBe(true);
         }

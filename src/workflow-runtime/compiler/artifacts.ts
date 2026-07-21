@@ -6,6 +6,7 @@ import { Ajv2020, type AnySchema } from 'ajv/dist/2020.js';
 
 import { parseContractArtifactEnvelope } from '../contracts/artifact.js';
 import { checkHistoricalCompilerContractRepair } from '../contracts/compiler-contract-repair-historical.js';
+import { assertCurrentG2SealedBoundary } from '../contracts/current-g2-sealed-boundary.js';
 import { calculateArtifactHash } from '../contracts/hash.js';
 import {
   assertJsonObject,
@@ -216,8 +217,11 @@ function validateCandidateSchemas(files: Map<string, string>): void {
 
 function validateBoundaries(): void {
   checkHistoricalCompilerContractRepair();
-  const sealed = fs.readdirSync(absoluteContractPath('conformance/sealed'));
-  if (sealed.length !== 1 || sealed[0] !== '.gitkeep') {
+  try {
+    assertCurrentG2SealedBoundary(
+      absoluteContractPath('conformance/sealed'),
+    );
+  } catch {
     throw new Error('Golden/conformance sealed boundary crossed');
   }
   for (const forbidden of [

@@ -1,0 +1,503 @@
+{
+  "format": "icarus.workflow-compiler-input-snapshot/2",
+  "ref": {
+    "id": "icarus.workflow-compiler-input-snapshot.semantic-correction.negative.schema-not-assignable",
+    "version": "2.0.0"
+  },
+  "version": 2,
+  "domain_separator": "icarus:workflow-compiler-input-snapshot-artifact:2\n",
+  "hash": "sha256:c4b3436479de0e257ebf51107886e0a87fa44b04c96cde8471713665af247e2e",
+  "payload": {
+    "format": "icarus.workflow-compiler-input-snapshot/2",
+    "snapshot_id": "semantic-correction:negative.schema-not-assignable",
+    "launchability": "test_only",
+    "compiler_identity": {
+      "compiler_toolchain_manifest_ref": {
+        "id": "icarus.workflow-compiler-toolchain",
+        "version": "3.0.0"
+      },
+      "compiler_toolchain_hash": "sha256:d8bd2ce6cffeebb9de442c22c35749e21276c590c751c257a57514e6cfaca597",
+      "compiler_version": "3.0.0",
+      "compiler_build_hash": "sha256:3f605b87ec0f2b8e4413b9c4eb9a42d49c1022cee2d45c48c002aee7b18b7ead",
+      "canonical_normalizer_version": "2.0.0",
+      "canonical_normalizer_hash": "sha256:7d08408f780ca4350e153d99fd60810554daefe3826b39fe5e2fa5abee340b60",
+      "proof_algorithm_version": "2.0.0",
+      "proof_algorithm_hash": "sha256:9bea73c915187b6d6af5ddca7e55c59accd86df0fa02d003385b5dfdf3e5184f",
+      "error_catalog_ref": {
+        "id": "icarus.workflow-compiler-error-catalog",
+        "version": "2.0.0"
+      },
+      "error_catalog_hash": "sha256:8fc7139b29cdddf3c1e13e0f9d8bc6b19a1d32c02c1e7f4b7e33023fcece91ef",
+      "compiled_ir_schema_ref": "conformance/compiler-contract-repair/schemas/compiled-scope-plan-v2-schema.json",
+      "compiled_ir_schema_hash": "sha256:4d4e325f94b55a6767f3e8596e1e9b880df2b402d3c89f587a10a23f0eadbd46",
+      "conformance_result_schema_ref": "conformance/compiler-contract-repair/schemas/compiler-conformance-case-result-schema.json",
+      "conformance_result_schema_hash": "sha256:019a4ba80ed8ae57b6c862d9fda62d9edcb8aca9c4910fde6bbb580c09af8706"
+    },
+    "registry_snapshot": {
+      "snapshot_ref": "test-only:registry:semantic-correction:negative.schema-not-assignable@1",
+      "snapshot_hash": "sha256:da300e7de86b124e575caa75cdd3c68ac12c99125050ecdb05798ba05b159d6c",
+      "resource_count": 6,
+      "resources": [
+        {
+          "resource_type": "capability",
+          "ref": {
+            "id": "fixture.capability.consumer-number",
+            "version": "1.0.0"
+          },
+          "content": {
+            "ref": {
+              "id": "fixture.capability.consumer-number",
+              "version": "1.0.0"
+            },
+            "node_type": "system",
+            "executor_ref": {
+              "id": "fixture.executor",
+              "version": "1.0.0"
+            },
+            "skill_refs": [],
+            "input_ports": {
+              "value": {
+                "schema_ref": {
+                  "id": "fixture.schema.number",
+                  "version": "1.0.0"
+                },
+                "max_bytes": 4096,
+                "aggregation": {
+                  "type": "single",
+                  "required": true,
+                  "select": "only"
+                }
+              }
+            },
+            "output_ports": {
+              "result": {
+                "schema_ref": {
+                  "id": "fixture.schema.route-result",
+                  "version": "1.0.0"
+                },
+                "max_bytes": 4096,
+                "required": true
+              }
+            },
+            "no_artifact_expected": true,
+            "no_evaluation_expected": true,
+            "quality_revision_policy": null,
+            "required_tools": [],
+            "required_mcp_methods": [],
+            "required_file_scopes": [],
+            "required_claims": [],
+            "allowed_groups": [],
+            "retry_policy": {
+              "max_attempts": 1,
+              "retry_on": [],
+              "backoff": "fixed"
+            },
+            "timeout_ceiling_ms": 60000,
+            "effect_impact": "read_only",
+            "effect": {
+              "type": "pure"
+            },
+            "cancellation": {
+              "type": "fence_only",
+              "safe_to_abandon": true
+            },
+            "dependency_closure_hash": "sha256:3719e8768a542ac92e465760d7fdbe80f7fedc840ff2927a4517b47c77b719d0"
+          },
+          "content_hash": "sha256:f091e8cc8d6752d3919e84b517ac1ff155bfe9e63f21baca63637e10fdbac39d"
+        },
+        {
+          "resource_type": "capability",
+          "ref": {
+            "id": "fixture.capability.producer-string",
+            "version": "1.0.0"
+          },
+          "content": {
+            "ref": {
+              "id": "fixture.capability.producer-string",
+              "version": "1.0.0"
+            },
+            "node_type": "system",
+            "executor_ref": {
+              "id": "fixture.executor",
+              "version": "1.0.0"
+            },
+            "skill_refs": [],
+            "input_ports": {},
+            "output_ports": {
+              "value": {
+                "schema_ref": {
+                  "id": "fixture.schema.string-narrow",
+                  "version": "1.0.0"
+                },
+                "max_bytes": 4096,
+                "required": true
+              }
+            },
+            "no_artifact_expected": true,
+            "no_evaluation_expected": true,
+            "quality_revision_policy": null,
+            "required_tools": [],
+            "required_mcp_methods": [],
+            "required_file_scopes": [],
+            "required_claims": [],
+            "allowed_groups": [],
+            "retry_policy": {
+              "max_attempts": 1,
+              "retry_on": [],
+              "backoff": "fixed"
+            },
+            "timeout_ceiling_ms": 60000,
+            "effect_impact": "read_only",
+            "effect": {
+              "type": "pure"
+            },
+            "cancellation": {
+              "type": "fence_only",
+              "safe_to_abandon": true
+            },
+            "dependency_closure_hash": "sha256:88469880c47b9209966372c87872087a8c9922c08b601efe719db1574e455b75"
+          },
+          "content_hash": "sha256:fcc4e1af46446cec17569f26aaa91985cf3ca09b9647990fa35018ea21dd2b2a"
+        },
+        {
+          "resource_type": "executor_implementation",
+          "ref": {
+            "id": "fixture.executor",
+            "version": "1.0.0"
+          },
+          "content": {
+            "ref": {
+              "id": "fixture.executor",
+              "version": "1.0.0"
+            },
+            "contract_kind": "executor",
+            "contract_hash": "sha256:650b326e42e15500da443e0d30d85774ae80709d8da5990c6314481e74985be3"
+          },
+          "content_hash": "sha256:225bd1a64042ad7052f8ef57b8e09dc25fe30cadec131e146917028456464247"
+        },
+        {
+          "resource_type": "schema",
+          "ref": {
+            "id": "fixture.schema.number",
+            "version": "1.0.0"
+          },
+          "content": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "$id": "https://icarus.local/fixture.schema.number/1",
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "content_hash": "sha256:8bb216525fe91e9eba45c3d5123445e978fe4d573323737d85940324f02fd0fb"
+        },
+        {
+          "resource_type": "schema",
+          "ref": {
+            "id": "fixture.schema.route-result",
+            "version": "1.0.0"
+          },
+          "content": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "$id": "https://icarus.local/fixture.schema.route-result/1",
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "ok"
+            ],
+            "properties": {
+              "ok": {
+                "type": "boolean"
+              }
+            }
+          },
+          "content_hash": "sha256:bdfd3abce4597fb35b3c75344c42369997dc5888bd9043652de796d9b60f5ab9"
+        },
+        {
+          "resource_type": "schema",
+          "ref": {
+            "id": "fixture.schema.string-narrow",
+            "version": "1.0.0"
+          },
+          "content": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "$id": "https://icarus.local/fixture.schema.string-narrow/1",
+            "type": "string",
+            "enum": [
+              "accepted"
+            ]
+          },
+          "content_hash": "sha256:091a94ec465c3a019cd6472426e6f567520166a409267f097de79a4aa3bf4023"
+        }
+      ],
+      "dependency_closure_count": 2,
+      "dependency_closures": [
+        {
+          "format": "icarus.workflow-registry-dependency-closure/1",
+          "root_resource_type": "capability",
+          "root_ref": {
+            "id": "fixture.capability.consumer-number",
+            "version": "1.0.0"
+          },
+          "members": [
+            {
+              "resource_type": "executor_implementation",
+              "ref": {
+                "id": "fixture.executor",
+                "version": "1.0.0"
+              },
+              "content_hash": "sha256:225bd1a64042ad7052f8ef57b8e09dc25fe30cadec131e146917028456464247"
+            },
+            {
+              "resource_type": "schema",
+              "ref": {
+                "id": "fixture.schema.number",
+                "version": "1.0.0"
+              },
+              "content_hash": "sha256:8bb216525fe91e9eba45c3d5123445e978fe4d573323737d85940324f02fd0fb"
+            },
+            {
+              "resource_type": "schema",
+              "ref": {
+                "id": "fixture.schema.route-result",
+                "version": "1.0.0"
+              },
+              "content_hash": "sha256:bdfd3abce4597fb35b3c75344c42369997dc5888bd9043652de796d9b60f5ab9"
+            }
+          ],
+          "member_count": 3,
+          "closure_hash": "sha256:3719e8768a542ac92e465760d7fdbe80f7fedc840ff2927a4517b47c77b719d0"
+        },
+        {
+          "format": "icarus.workflow-registry-dependency-closure/1",
+          "root_resource_type": "capability",
+          "root_ref": {
+            "id": "fixture.capability.producer-string",
+            "version": "1.0.0"
+          },
+          "members": [
+            {
+              "resource_type": "executor_implementation",
+              "ref": {
+                "id": "fixture.executor",
+                "version": "1.0.0"
+              },
+              "content_hash": "sha256:225bd1a64042ad7052f8ef57b8e09dc25fe30cadec131e146917028456464247"
+            },
+            {
+              "resource_type": "schema",
+              "ref": {
+                "id": "fixture.schema.string-narrow",
+                "version": "1.0.0"
+              },
+              "content_hash": "sha256:091a94ec465c3a019cd6472426e6f567520166a409267f097de79a4aa3bf4023"
+            }
+          ],
+          "member_count": 2,
+          "closure_hash": "sha256:88469880c47b9209966372c87872087a8c9922c08b601efe719db1574e455b75"
+        }
+      ]
+    },
+    "interface_snapshot": {
+      "snapshot_ref": "test-only:interfaces:semantic-correction:negative.schema-not-assignable@1",
+      "snapshot_hash": "sha256:c33bef7b44c2d790b8ba94526f69a62df17ed7e2f75be28e603a67460960ea67",
+      "interface_count": 1,
+      "interfaces": [
+        {
+          "ref": {
+            "id": "fixture.interface.root",
+            "version": "1.0.0"
+          },
+          "inputs": {},
+          "exits": {
+            "done": {
+              "output_ports": {}
+            }
+          },
+          "interface_hash": "sha256:227da6ec31bdc9889a198e9b902823b247add8ecae5752630ab6218b01de6131"
+        }
+      ]
+    },
+    "policy_snapshot": {
+      "snapshot_ref": "test-only:policy:semantic-correction:negative.schema-not-assignable@1",
+      "complete_policy": {
+        "root_policy_ref": {
+          "id": "fixture.policy.root.negative.schema-not-assignable",
+          "version": "1.0.0"
+        },
+        "root_policy": {
+          "allowed_node_types": [
+            "system",
+            "terminal",
+            "delegation",
+            "wait",
+            "join",
+            "subgraph",
+            "expand",
+            "map"
+          ],
+          "allowed_capabilities": [
+            {
+              "id": "fixture.capability.consumer-number",
+              "version": "1.0.0"
+            },
+            {
+              "id": "fixture.capability.producer-string",
+              "version": "1.0.0"
+            }
+          ],
+          "allowed_templates": [],
+          "allowed_interface_refs": [
+            {
+              "id": "fixture.interface.root",
+              "version": "1.0.0"
+            }
+          ],
+          "allowed_wait_contracts": [],
+          "allowed_child_policy_refs": [],
+          "allowed_claim_ids": [],
+          "allow_early_close": true,
+          "allow_indefinite_waits": false,
+          "effect_policy": {
+            "allowed_recovery_kinds": [
+              "pure",
+              "idempotent",
+              "compensatable"
+            ],
+            "max_impact": "mutable_effects"
+          },
+          "build_retry": null,
+          "limits": {
+            "max_scopes": null,
+            "max_nodes": null,
+            "max_nodes_per_scope": null,
+            "max_edges_per_scope": null,
+            "max_nesting_depth": null,
+            "max_map_items": null,
+            "max_concurrency": null,
+            "max_total_attempts": null,
+            "max_total_waits": null,
+            "max_total_output_bytes": null,
+            "max_scope_spec_bytes": null,
+            "max_condition_steps": null,
+            "max_wait_duration_ms": null,
+            "max_pending_signals": null,
+            "max_fixed_point_facts": null,
+            "max_frontier_bytes": null
+          },
+          "usage_budget": {
+            "max_total_tool_calls": null,
+            "max_total_input_tokens": null,
+            "max_total_output_tokens": null,
+            "max_total_cost_micros": null
+          }
+        },
+        "child_profiles": [],
+        "intersection_order": [
+          "global",
+          "workflow",
+          "state",
+          "parent",
+          "child_request",
+          "runtime_safety"
+        ],
+        "policy_hash": "sha256:f1404b6617b3af5106e7bd86cf6414e4a8d94d81dd86eb37a75841df4e328251"
+      }
+    },
+    "safety_snapshot": {
+      "snapshot_ref": "test-only:safety:semantic-correction:negative.schema-not-assignable@1",
+      "source_artifact_hash": "sha256:7f8c0b1babf451cb03ab5f99b436d3ae187b587783875850686188d893059259",
+      "ceilings": {
+        "routing": {
+          "max_task_input_bytes": 1048576,
+          "max_route_hops": 8,
+          "max_schema_bytes": 262144,
+          "max_schema_nodes": 4096,
+          "max_schema_ref_depth": 32,
+          "max_schema_union_variants": 64,
+          "max_schema_validation_steps": 100000
+        },
+        "workflow": {
+          "max_duration_ms": 2592000000,
+          "max_state_activations": 128,
+          "max_graph_runs": 127,
+          "max_state_transitions": 127,
+          "max_child_workflows_per_workflow": 32,
+          "max_child_workflow_depth": 4,
+          "max_descendant_workflows_total": 128,
+          "max_required_child_creations_per_transition": 8
+        },
+        "run": {
+          "max_scopes_total": 128,
+          "max_nodes_total": 1024,
+          "max_edges_total": 4096,
+          "max_map_items_total": 256,
+          "max_attempts_total": 4096,
+          "max_waits_total": 512,
+          "max_builds_total": 512,
+          "max_build_attempts_total": 1536,
+          "max_evaluator_attempts_total": 8192,
+          "max_effect_operations_total": 2048,
+          "max_logical_output_bytes_total": 1073741824,
+          "max_stored_bytes_total": 2147483648,
+          "max_facts_total": 262144
+        },
+        "scope": {
+          "max_nodes_per_scope": 128,
+          "max_edges_per_scope": 512,
+          "max_scope_spec_bytes": 2097152,
+          "max_nesting_depth": 8,
+          "max_frontier_bytes": 16777216
+        },
+        "map": {
+          "max_items_per_map": 128,
+          "max_child_concurrency_per_map": 16
+        },
+        "registry": {
+          "max_snapshot_entries": 4096,
+          "max_dependency_depth": 32,
+          "max_execution_artifact_bytes": 268435456,
+          "max_total_pinned_execution_bytes_per_run": 1073741824
+        },
+        "execution": {
+          "max_attempts_per_node": 4,
+          "max_attempt_duration_ms": 1800000,
+          "max_dispatch_duration_ms": 120000,
+          "max_retry_backoff_ms": 3600000,
+          "max_build_attempts_per_build": 3,
+          "max_build_duration_ms": 600000,
+          "max_evaluator_attempts_per_evaluation": 3,
+          "max_evaluator_duration_ms": 600000,
+          "max_outbox_attempts_per_message": 32,
+          "max_outbox_reconcile_attempts_per_message": 16,
+          "max_outbox_attempt_duration_ms": 300000,
+          "max_outbox_delivery_duration_ms": 259200000,
+          "max_root_finalization_attempts_per_schedule": 8,
+          "max_root_finalization_duration_ms": 900000,
+          "max_operational_remediation_attempts_per_blocker": 16,
+          "max_operational_remediation_duration_ms": 259200000
+        },
+        "wait": {
+          "max_finite_wait_duration_ms": 2592000000,
+          "max_pending_signals_per_workflow": 256,
+          "max_pending_signals_per_run": 128,
+          "max_pending_signals_per_principal": 1024,
+          "max_pending_signal_age_ms": 604800000,
+          "max_signal_payload_bytes": 1048576,
+          "max_correlation_key_bytes": 512
+        },
+        "reconciliation": {
+          "max_condition_ast_nodes": 256,
+          "max_condition_steps_per_evaluation": 4096,
+          "max_facts_per_transaction": 16384
+        },
+        "value": {
+          "max_single_value_bytes": 16777216,
+          "max_single_artifact_bytes": 268435456,
+          "max_artifact_files": 4096,
+          "max_artifact_manifest_bytes": 4194304
+        }
+      }
+    },
+    "snapshot_hash": "sha256:44f7dde26127ebcfc5e8c65c1ff2dae1d1bfc9a6e91f3194849bb4f5e3dc4a0d"
+  }
+}

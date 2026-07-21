@@ -37,6 +37,7 @@ import type {
   JsonValue,
   Sha256Hash,
 } from './types.js';
+import { assertCurrentG2SealedBoundary } from './current-g2-sealed-boundary.js';
 
 const contractsRoot = import.meta.dirname;
 
@@ -211,8 +212,9 @@ function validateRcBoundary(): ContractArtifactEnvelope {
   ) {
     throw new CurrentG2GoldenDraftError('Review Candidate boundary is not eligible for Draft authoring');
   }
-  const sealed = fs.readdirSync(absolute('conformance/sealed')).sort();
-  if (sealed.length !== 1 || sealed[0] !== '.gitkeep') {
+  try {
+    assertCurrentG2SealedBoundary(absolute('conformance/sealed'));
+  } catch {
     throw new CurrentG2GoldenDraftError('Draft authoring crossed the sealed boundary');
   }
   return root;
