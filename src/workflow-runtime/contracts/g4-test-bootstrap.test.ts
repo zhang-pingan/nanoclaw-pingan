@@ -139,13 +139,13 @@ describe('G4 Test Bootstrap Contract Pack', () => {
         g2_sealed_bundle_hash:
           'sha256:d99647d8ca6aabc737a793019335e6770aa111a79be7545c4dec00c6e7af2145',
         g3_6_pack_hash:
-          'sha256:730daac9db4bcfb645374b12e10e3962ddacbebc2828875cb00133c8ada195a8',
+          'sha256:8cfd7b030e5a1953578410caa349b62f3c38131859e9be5a3ada1bfe4e249e2c',
         g3_7_pack_hash:
-          'sha256:2fae2da648d6da5969e6c5c57b2342f6f15b3084b39e7acfc43b010b48517e74',
+          'sha256:4fc65c77265c226b7abcb6f17aeaab3af3e7f7e13d5117705cb3872f3dce6933',
         g3_8a_pack_hash:
           'sha256:d8412111a0f3dcabb4ce416b99086701ea3e3911ff431b5457eb957b2f69722f',
         g3_9_pack_hash:
-          'sha256:2ef0997982483a6da4c6c6cfd3e26b7934f7fcffce4fdae160f94f4e9d600b38',
+          'sha256:f5ddf7eb07b4f54431e612f5f6bbaf9df87d7ed6672f4a400b05fc53c7067f4e',
       },
     });
   });

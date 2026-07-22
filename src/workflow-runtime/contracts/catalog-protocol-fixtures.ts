@@ -247,6 +247,33 @@ export const CATALOG_PROTOCOL_NEGATIVE_CASES = [
     expected_code: 'catalog_protocol_contract_drift',
   },
   {
+    case_id: 'command_table_rejects_deadline_key_template_removal',
+    artifact_format: 'icarus.workflow-runtime-command-protocol-table/1',
+    mutation: {
+      operation: 'remove',
+      pointer: '/entries/3/system_grant/idempotency_key_template',
+    },
+    expected_code: 'catalog_protocol_contract_drift',
+  },
+  {
+    case_id: 'command_table_rejects_deadline_invocation_audit_removal',
+    artifact_format: 'icarus.workflow-runtime-command-protocol-table/1',
+    mutation: {
+      operation: 'remove',
+      pointer: '/entries/3/system_grant/invocation_audit',
+    },
+    expected_code: 'catalog_protocol_contract_drift',
+  },
+  {
+    case_id: 'command_table_rejects_manual_retry_handoff_removal',
+    artifact_format: 'icarus.workflow-runtime-command-protocol-table/1',
+    mutation: {
+      operation: 'remove',
+      pointer: '/entries/5/primitive_handoff',
+    },
+    expected_code: 'catalog_protocol_contract_drift',
+  },
+  {
     case_id: 'transaction_table_rejects_missing_t6e',
     artifact_format: 'icarus.workflow-run-transaction-protocol-table/1',
     mutation: {
@@ -271,6 +298,25 @@ export const CATALOG_PROTOCOL_NEGATIVE_CASES = [
     mutation: {
       operation: 'remove',
       pointer: '/entries/17/forbidden/0',
+    },
+    expected_code: 'catalog_protocol_contract_drift',
+  },
+  {
+    case_id: 'transaction_table_rejects_t6d_deadline_command_reintroduction',
+    artifact_format: 'icarus.workflow-run-transaction-protocol-table/1',
+    mutation: {
+      operation: 'append',
+      pointer: '/entries/12/atomic_writes',
+      value: 'stable_workflow_deadline_t7c_command',
+    },
+    expected_code: 'catalog_protocol_contract_drift',
+  },
+  {
+    case_id: 'transaction_table_rejects_t7c_deadline_key_removal',
+    artifact_format: 'icarus.workflow-run-transaction-protocol-table/1',
+    mutation: {
+      operation: 'remove',
+      pointer: '/entries/16/idempotency_constraints/2',
     },
     expected_code: 'catalog_protocol_contract_drift',
   },

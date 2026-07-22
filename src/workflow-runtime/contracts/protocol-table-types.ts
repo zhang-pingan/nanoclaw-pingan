@@ -934,6 +934,17 @@ export interface RuntimeCommandProtocolEntry {
     reason_codes: readonly ('deadline_enforced' | 'safety_enforced')[];
     predicate: 'due_target';
     authority_scope: 'cancel_workflow_only';
+    idempotency_domain: 'system:deadline-watchdog';
+    idempotency_key_template: 'workflow-deadline:<workflow_id>:<deadline_at_ms>';
+    invocation_audit: 'required';
+  };
+  primitive_handoff?: {
+    authorization_owner: 'G7_runtime_command_gateway';
+    audit_owner: 'G7_runtime_command_gateway';
+    primitive_owner: 'G5';
+    primitive_transaction_protocol: 'T6d';
+    invocation_mode: 'authorized_manual_retry';
+    unauthorized_direct_invocation: 'forbidden';
   };
   minimum_evidence_refs: number;
   confirmation_ref_required: boolean;
@@ -1035,6 +1046,10 @@ export const RUNTIME_COMMAND_PROTOCOL_ENTRIES = [
       reason_codes: ['deadline_enforced', 'safety_enforced'],
       predicate: 'due_target',
       authority_scope: 'cancel_workflow_only',
+      idempotency_domain: 'system:deadline-watchdog',
+      idempotency_key_template:
+        'workflow-deadline:<workflow_id>:<deadline_at_ms>',
+      invocation_audit: 'required',
     },
     minimum_evidence_refs: 0,
     confirmation_ref_required: false,
@@ -1078,6 +1093,14 @@ export const RUNTIME_COMMAND_PROTOCOL_ENTRIES = [
     policy_guard: 'command_policy_allow_retry_wait_advance',
     state_guard: 'run_paused_schedule_scheduled_node_retry_wait_healthy',
     transaction_protocol: 'T6d',
+    primitive_handoff: {
+      authorization_owner: 'G7_runtime_command_gateway',
+      audit_owner: 'G7_runtime_command_gateway',
+      primitive_owner: 'G5',
+      primitive_transaction_protocol: 'T6d',
+      invocation_mode: 'authorized_manual_retry',
+      unauthorized_direct_invocation: 'forbidden',
+    },
     denial_codes: commonDenials,
   },
   {
@@ -1229,6 +1252,20 @@ export interface RunTransactionProtocolEntry {
   idempotency_constraints: readonly string[];
   failure_or_late_outcomes: readonly string[];
   forbidden: readonly string[];
+  invocation_contract?: {
+    automatic_timer: {
+      owner_gate: 'G5';
+      ingress: 'due_attempt_watchdog_or_retry_schedule_timer';
+      gateway_authorization: 'not_applicable';
+    };
+    authorized_manual_retry: {
+      owner_gate: 'G7';
+      ingress: 'advance_retry_schedule';
+      authorization_boundary: 'runtime_command_gateway_before_t6d';
+      command_invocation_audit: 'required_before_primitive';
+      g5_primitive: 'consume_existing_retry_schedule';
+    };
+  };
 }
 
 export const RUN_TRANSACTION_PROTOCOL_ENTRIES = [
@@ -1652,33 +1689,50 @@ export const RUN_TRANSACTION_PROTOCOL_ENTRIES = [
   },
   {
     transaction_id: 'T6d',
-    name: 'durable_deadline_and_retry_timers',
+    name: 'attempt_watchdog_and_retry_timers',
     transaction_mode: 'begin_immediate',
     external_work_boundary: 'after_transaction',
-    preconditions: ['due_frozen_deadline_or_eligible_time'],
+    preconditions: [
+      'automatic_due_frozen_attempt_deadline_or_retry_eligible_time',
+      'manual_retry_only_after_gateway_authorization',
+    ],
     cas_guards: [
       'attempt_acceptance_open_for_watchdog',
       'retry_schedule_scheduled_row_version',
-      'workflow_deadline_current_run',
     ],
     atomic_writes: [
       'attempt_timeout_fence_and_fact',
       'cancel_reconcile_or_compensation_effects',
       'schedule_consumed_and_exact_next_attempt',
       'node_retry_wait_to_active',
-      'stable_workflow_deadline_t7c_command',
     ],
     idempotency_constraints: [
       'unique_attempt_timeout_event',
       'unique_schedule_source_and_next_attempt',
-      'stable_workflow_deadline_command_key',
     ],
-    failure_or_late_outcomes: ['duplicate_timer', 'late_deadline_command'],
+    failure_or_late_outcomes: ['duplicate_timer'],
     forbidden: [
       'recompute_backoff_or_deadline',
       'reseal_node_input',
       'external_cancel_or_reconcile_inside_transaction',
+      'workflow_deadline_command_creation',
+      'runtime_command_or_invocation_audit_write',
+      'manual_retry_without_gateway_authorization',
     ],
+    invocation_contract: {
+      automatic_timer: {
+        owner_gate: 'G5',
+        ingress: 'due_attempt_watchdog_or_retry_schedule_timer',
+        gateway_authorization: 'not_applicable',
+      },
+      authorized_manual_retry: {
+        owner_gate: 'G7',
+        ingress: 'advance_retry_schedule',
+        authorization_boundary: 'runtime_command_gateway_before_t6d',
+        command_invocation_audit: 'required_before_primitive',
+        g5_primitive: 'consume_existing_retry_schedule',
+      },
+    },
   },
   {
     transaction_id: 'T6e',
@@ -1820,8 +1874,12 @@ export const RUN_TRANSACTION_PROTOCOL_ENTRIES = [
     idempotency_constraints: [
       'unique_root_scope_close_request',
       'canonical_command_header_result',
+      'stable_system_deadline_key_workflow-deadline:<workflow_id>:<deadline_at_ms>',
     ],
-    failure_or_late_outcomes: ['loser_records_late_command_only'],
+    failure_or_late_outcomes: [
+      'loser_records_late_command_only',
+      'duplicate_returns_canonical_result_with_invocation_audit',
+    ],
     forbidden: [
       'overwrite_winning_route_or_cancel_scope',
       'require_pause_before_cancel',

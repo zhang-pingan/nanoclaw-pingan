@@ -17,7 +17,7 @@
       "g3_1_pack_hash": "sha256:152fc9bd4ecbc4fb5a395d06698c81142befa294466ffbd665cfb2a9b874c71d",
       "g3_3_pack_hash": "sha256:839338a8d2bccfbacd8fd395640f4c79ce31a35d1ec5421bc752a98961514fc2",
       "g3_5_pack_hash": "sha256:74cb66b4e2c3d244a45de70c9f236df112c83fabf1f8230afbd046394c8d0b49",
-      "g3_6_pack_hash": "sha256:730daac9db4bcfb645374b12e10e3962ddacbebc2828875cb00133c8ada195a8"
+      "g3_6_pack_hash": "sha256:8cfd7b030e5a1953578410caa349b62f3c38131859e9be5a3ada1bfe4e249e2c"
     },
     "request_schema_resource_hash": "sha256:9aec8a311f11d6b7a46de125ffac54840cdb31630e32f5abb11149d7df3f0939",
     "receipt_schema_resource_hash": "sha256:2dc6be728d9ff9353f0ec30949191f34526138472a309cd82be952dd2dcaedde",
@@ -86,7 +86,7 @@
         },
         "version": 1,
         "domain_separator": "icarus:workflow-g3-staged-publish-positive-cases:1\n",
-        "hash": "sha256:6bed4dcdd42f3096db46e787a0109f62529fd473d52481914f220cd961098ef8"
+        "hash": "sha256:622197fb3ec7f448d6ba7f7a629fc7a00db2271aff676f2cf246b1b6544649b4"
       },
       {
         "path": "conformance/g3-workflow-publisher/negative-cases.json",
@@ -97,7 +97,7 @@
         },
         "version": 1,
         "domain_separator": "icarus:workflow-g3-staged-publish-negative-cases:1\n",
-        "hash": "sha256:956f0864fb965be87d2e2ee0d6cd08a41da01a6fcb53f9cb16482cb19d9ea9d7"
+        "hash": "sha256:f2fe4b097c4919193be7902dad4e9a20fe0b2996bb56a2660fd985d239e95b0c"
       },
       {
         "path": "registry/workflow-staged-publish-domain-separators@1.json",
@@ -114,5 +114,5 @@
     "positive_case_count": 1,
     "negative_case_count": 3
   },
-  "hash": "sha256:2fae2da648d6da5969e6c5c57b2342f6f15b3084b39e7acfc43b010b48517e74"
+  "hash": "sha256:4fc65c77265c226b7abcb6f17aeaab3af3e7f7e13d5117705cb3872f3dce6933"
 }

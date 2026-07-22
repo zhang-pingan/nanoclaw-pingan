@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-contract-pack-catalog-protocols:1\n",
-  "hash": "sha256:e4947c515a28b3baf6782a980db9c26d32612b3c6acd3cd04348e73bd54ff607",
+  "hash": "sha256:a648dc9326255b109690cb47d58032775825ae065caf8f7cbb0ef73efcf984f7",
   "payload": {
     "gate": "G0.4",
     "status": "catalogs_and_protocol_tables",
@@ -23,7 +23,7 @@
     "state_machine_count": 22,
     "transaction_protocol_count": 18,
     "positive_case_count": 9,
-    "negative_case_count": 20,
+    "negative_case_count": 25,
     "artifacts": [
       {
         "path": "catalogs/catalog-protocol-domain-separators.json",
@@ -111,7 +111,7 @@
         },
         "version": 1,
         "domain_separator": "icarus:workflow-catalog-protocol-negative-cases:1\n",
-        "hash": "sha256:89f9fecd0b462459292bfa9fab6ec74393ce0f81ee5d25f9378c81a51d918169"
+        "hash": "sha256:b09a47d8c680d4d49a22e768afb3b984b357e1f258b41ab81f8e5bb8e670ffcc"
       },
       {
         "path": "conformance/catalog-protocols/positive-cases.json",
@@ -122,7 +122,7 @@
         },
         "version": 1,
         "domain_separator": "icarus:workflow-catalog-protocol-positive-cases:1\n",
-        "hash": "sha256:5256999eab702bba4f545abf4e6af7561edc5b73cb1df074a88048395530fd46"
+        "hash": "sha256:d1922e329b10676630d867bbbd407e70769d57e5327f492d46ff576e05deb854"
       },
       {
         "path": "protocols/workflow-run-transaction-protocol-table.json",
@@ -133,7 +133,7 @@
         },
         "version": 1,
         "domain_separator": "icarus:workflow-run-transaction-protocol-table:1\n",
-        "hash": "sha256:7c55b3eff2f29e5dfcbb057d5ff014697ba2e9a421287afa19ec850540cce5f0"
+        "hash": "sha256:3d5474096d89fbd723e34e0d2f9d1dadd1b955b5fc36ff447d026257852cac79"
       },
       {
         "path": "protocols/workflow-runtime-command-protocol-table.json",
@@ -144,7 +144,7 @@
         },
         "version": 1,
         "domain_separator": "icarus:workflow-runtime-command-protocol-table:1\n",
-        "hash": "sha256:b12b07b29e9335593c969033c133d221b244798fc079db5fb398b23fbae10789"
+        "hash": "sha256:43cc8ef247fcba4bac5e9fccdd654fd393928120755a6405bad232043f0c94ba"
       },
       {
         "path": "protocols/workflow-runtime-state-transition-tables.json",

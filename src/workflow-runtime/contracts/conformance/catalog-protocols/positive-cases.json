@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-catalog-protocol-positive-cases:1\n",
-  "hash": "sha256:5256999eab702bba4f545abf4e6af7561edc5b73cb1df074a88048395530fd46",
+  "hash": "sha256:d1922e329b10676630d867bbbd407e70769d57e5327f492d46ff576e05deb854",
   "payload": {
     "cases": [
       {
@@ -55,13 +55,13 @@
         "case_id": "runtime_command_protocol_table_exact",
         "artifact_format": "icarus.workflow-runtime-command-protocol-table/1",
         "assertion": "valid_exact_artifact",
-        "expected_artifact_hash": "sha256:b12b07b29e9335593c969033c133d221b244798fc079db5fb398b23fbae10789"
+        "expected_artifact_hash": "sha256:43cc8ef247fcba4bac5e9fccdd654fd393928120755a6405bad232043f0c94ba"
       },
       {
         "case_id": "run_transaction_protocol_table_exact",
         "artifact_format": "icarus.workflow-run-transaction-protocol-table/1",
         "assertion": "valid_exact_artifact",
-        "expected_artifact_hash": "sha256:7c55b3eff2f29e5dfcbb057d5ff014697ba2e9a421287afa19ec850540cce5f0"
+        "expected_artifact_hash": "sha256:3d5474096d89fbd723e34e0d2f9d1dadd1b955b5fc36ff447d026257852cac79"
       }
     ]
   }

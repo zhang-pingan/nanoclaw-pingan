@@ -1,6 +1,6 @@
 import {
-  checkGateOwnershipContracts,
-  generateGateOwnershipContracts,
+  checkGateOwnershipRepairContracts,
+  generateGateOwnershipRepairContracts,
 } from './gate-ownership-contract.js';
 
 const command = process.argv[2];
@@ -15,8 +15,8 @@ if (
 try {
   const authority =
     command === 'generate'
-      ? generateGateOwnershipContracts()
-      : checkGateOwnershipContracts();
+      ? generateGateOwnershipRepairContracts()
+      : checkGateOwnershipRepairContracts();
   console.log(`gate_ownership=${command}:ok`);
   console.log(`authority_hash=${authority.hash}`);
   console.log(`status=${String(authority.payload.status)}`);

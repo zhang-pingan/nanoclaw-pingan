@@ -9,7 +9,7 @@
   "payload": {
     "format": "icarus.product-surface-coverage/1",
     "source_core_build_hash": "sha256:e30c683e8c9c444738bca81892ff12a4048e396dd5cba01c9b374b4562b22bf6",
-    "generated_by_tool_hash": "sha256:665ed737637c65ba80a0ff6255338a22c81c07f9a3f833d323071e1c94315ef1",
+    "generated_by_tool_hash": "sha256:054f40382f553ae522b9515d7b8e92fc3db8fce8795a52603a680092bc806664",
     "entries": [
       {
         "surface_id": "protected.agent_container",
@@ -234,7 +234,7 @@
     ],
     "active_surface_count": 12,
     "removed_surface_count": 10,
-    "manifest_hash": "sha256:156d76d01e3fa2bfd99c689b1440436f2f149c441704c8e7552e39511e95b6c8"
+    "manifest_hash": "sha256:ed0001df698c26bd69dace1234519911246fc4305b85e81e99a424de3126e023"
   },
-  "hash": "sha256:27f7f3f99d0485732953972e35181f48491aa058ba7e468c06352330bc64cd19"
+  "hash": "sha256:8dce4c9422fa6f53e63231fc8a19191f02f2919fac2d2c46c73b128b8c142e34"
 }

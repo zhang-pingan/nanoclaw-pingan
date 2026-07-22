@@ -15,9 +15,9 @@
     "safety_sqlite_manifest_hash": "sha256:76b8e1196ac422500be9c79a767e673e9c30fa3d9bbb1dc12fc54613cd40b428",
     "logical_schema_manifest_hash": "sha256:32de639cc0ee6c6f33aa4291ea03ffa55b0a22752190fb88862e72a3f6857520",
     "source_core_build_hash": "sha256:e30c683e8c9c444738bca81892ff12a4048e396dd5cba01c9b374b4562b22bf6",
-    "generated_by_tool_hash": "sha256:665ed737637c65ba80a0ff6255338a22c81c07f9a3f833d323071e1c94315ef1",
-    "absence_baseline_hash": "sha256:16d5919ffab06dbdf4f6f3e962175883ba2cd785ef4f33f4cd19e2eb9ba576b7",
-    "product_surface_manifest_hash": "sha256:156d76d01e3fa2bfd99c689b1440436f2f149c441704c8e7552e39511e95b6c8",
+    "generated_by_tool_hash": "sha256:054f40382f553ae522b9515d7b8e92fc3db8fce8795a52603a680092bc806664",
+    "absence_baseline_hash": "sha256:585f09b8f222bf5470ab85e215af9ac7508f72e743dfffe7cf2f32f8fb7c0166",
+    "product_surface_manifest_hash": "sha256:ed0001df698c26bd69dace1234519911246fc4305b85e81e99a424de3126e023",
     "migration_candidate_boundary_hash": "sha256:3c191ffb10f9c8c11564f88dd0b36f6305526c70076648f7df3a1c7c8f7b101f",
     "schema_count": 3,
     "active_surface_count": 12,
@@ -115,7 +115,7 @@
         },
         "version": 1,
         "domain_separator": "icarus:product-surface-coverage-artifact:1\n",
-        "hash": "sha256:27f7f3f99d0485732953972e35181f48491aa058ba7e468c06352330bc64cd19"
+        "hash": "sha256:8dce4c9422fa6f53e63231fc8a19191f02f2919fac2d2c46c73b128b8c142e34"
       },
       {
         "path": "static/workflow-runtime-absence-baseline-schema.json",
@@ -137,7 +137,7 @@
         },
         "version": 1,
         "domain_separator": "icarus:workflow-runtime-absence-baseline-artifact:1\n",
-        "hash": "sha256:8331ba82daaa2e4950e9e02cf4c637e3d6ecf2c78dbbcb2038ea154d8d01e697"
+        "hash": "sha256:ce4513026d519d394a42cad405d779253d7ba6435328a0d8f5a336bc3941b696"
       }
     ],
     "next_reserved_directories": [
@@ -154,5 +154,5 @@
       "certified_sqlite_profile_or_supported_limits"
     ]
   },
-  "hash": "sha256:a75736bf253ab67b22ba6abb0edf8e943c5d643f0b2ff36d63defbdf6336f7d2"
+  "hash": "sha256:dc7b987416c3c1baed5a5a666960bfd2411a3e3bf76d173bd8ab0a550e51b21a"
 }

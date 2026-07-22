@@ -65,6 +65,10 @@ const catalogProtocolManifestHash =
   'sha256:e4947c515a28b3baf6782a980db9c26d32612b3c6acd3cd04348e73bd54ff607';
 const safetySqliteManifestHash =
   'sha256:76b8e1196ac422500be9c79a767e673e9c30fa3d9bbb1dc12fc54613cd40b428';
+const currentReopenedCatalogProtocolManifestHash =
+  'sha256:a648dc9326255b109690cb47d58032775825ae065caf8f7cbb0ef73efcf984f7';
+const currentReopenedSafetySqliteManifestHash =
+  'sha256:4f756c9427a9e5fd8f034c2abdab3c614b675af8b8bbb350fc4219917159cd8d';
 const manifestPath = 'contract-pack-logical-schema.json';
 const positiveCasesPath = 'conformance/logical-schema/positive-cases.json';
 const negativeCasesPath = 'conformance/logical-schema/negative-cases.json';
@@ -1010,8 +1014,14 @@ function validatePriorPackIdentity(): void {
   const expected = [
     ['contract-pack-foundation.json', foundationManifestHash],
     ['contract-pack-closed-schemas.json', closedSchemaManifestHash],
-    ['contract-pack-catalog-protocols.json', catalogProtocolManifestHash],
-    ['contract-pack-safety-sqlite.json', safetySqliteManifestHash],
+    [
+      'contract-pack-catalog-protocols.json',
+      currentReopenedCatalogProtocolManifestHash,
+    ],
+    [
+      'contract-pack-safety-sqlite.json',
+      currentReopenedSafetySqliteManifestHash,
+    ],
   ] as const;
   for (const [relativePath, expectedHash] of expected) {
     if (readArtifact(relativePath).hash !== expectedHash) {

@@ -59,10 +59,10 @@ describe('G0.6 Logical Schema Metadata Contract Pack', () => {
       'sha256:c5ea281d64480787322e8b6ef619b2f90784084d87ba4373c94288ed5e7aa3a8',
     );
     expect(readArtifact('contract-pack-catalog-protocols.json').hash).toBe(
-      'sha256:e4947c515a28b3baf6782a980db9c26d32612b3c6acd3cd04348e73bd54ff607',
+      'sha256:a648dc9326255b109690cb47d58032775825ae065caf8f7cbb0ef73efcf984f7',
     );
     expect(readArtifact('contract-pack-safety-sqlite.json').hash).toBe(
-      'sha256:76b8e1196ac422500be9c79a767e673e9c30fa3d9bbb1dc12fc54613cd40b428',
+      'sha256:4f756c9427a9e5fd8f034c2abdab3c614b675af8b8bbb350fc4219917159cd8d',
     );
     for (const [relativePath, bytes] of firstBytes) {
       expect(fs.readFileSync(path.join(contractsRoot, relativePath))).toEqual(

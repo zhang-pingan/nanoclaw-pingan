@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-run-transaction-protocol-table:1\n",
-  "hash": "sha256:7c55b3eff2f29e5dfcbb057d5ff014697ba2e9a421287afa19ec850540cce5f0",
+  "hash": "sha256:3d5474096d89fbd723e34e0d2f9d1dadd1b955b5fc36ff447d026257852cac79",
   "payload": {
     "run_protocol_major": 1,
     "transaction_host": "workflow_runtime_store_single_writer",
@@ -481,38 +481,52 @@
       },
       {
         "transaction_id": "T6d",
-        "name": "durable_deadline_and_retry_timers",
+        "name": "attempt_watchdog_and_retry_timers",
         "transaction_mode": "begin_immediate",
         "external_work_boundary": "after_transaction",
         "preconditions": [
-          "due_frozen_deadline_or_eligible_time"
+          "automatic_due_frozen_attempt_deadline_or_retry_eligible_time",
+          "manual_retry_only_after_gateway_authorization"
         ],
         "cas_guards": [
           "attempt_acceptance_open_for_watchdog",
-          "retry_schedule_scheduled_row_version",
-          "workflow_deadline_current_run"
+          "retry_schedule_scheduled_row_version"
         ],
         "atomic_writes": [
           "attempt_timeout_fence_and_fact",
           "cancel_reconcile_or_compensation_effects",
           "schedule_consumed_and_exact_next_attempt",
-          "node_retry_wait_to_active",
-          "stable_workflow_deadline_t7c_command"
+          "node_retry_wait_to_active"
         ],
         "idempotency_constraints": [
           "unique_attempt_timeout_event",
-          "unique_schedule_source_and_next_attempt",
-          "stable_workflow_deadline_command_key"
+          "unique_schedule_source_and_next_attempt"
         ],
         "failure_or_late_outcomes": [
-          "duplicate_timer",
-          "late_deadline_command"
+          "duplicate_timer"
         ],
         "forbidden": [
           "recompute_backoff_or_deadline",
           "reseal_node_input",
-          "external_cancel_or_reconcile_inside_transaction"
-        ]
+          "external_cancel_or_reconcile_inside_transaction",
+          "workflow_deadline_command_creation",
+          "runtime_command_or_invocation_audit_write",
+          "manual_retry_without_gateway_authorization"
+        ],
+        "invocation_contract": {
+          "automatic_timer": {
+            "owner_gate": "G5",
+            "ingress": "due_attempt_watchdog_or_retry_schedule_timer",
+            "gateway_authorization": "not_applicable"
+          },
+          "authorized_manual_retry": {
+            "owner_gate": "G7",
+            "ingress": "advance_retry_schedule",
+            "authorization_boundary": "runtime_command_gateway_before_t6d",
+            "command_invocation_audit": "required_before_primitive",
+            "g5_primitive": "consume_existing_retry_schedule"
+          }
+        }
       },
       {
         "transaction_id": "T6e",
@@ -655,10 +669,12 @@
         ],
         "idempotency_constraints": [
           "unique_root_scope_close_request",
-          "canonical_command_header_result"
+          "canonical_command_header_result",
+          "stable_system_deadline_key_workflow-deadline:<workflow_id>:<deadline_at_ms>"
         ],
         "failure_or_late_outcomes": [
-          "loser_records_late_command_only"
+          "loser_records_late_command_only",
+          "duplicate_returns_canonical_result_with_invocation_audit"
         ],
         "forbidden": [
           "overwrite_winning_route_or_cancel_scope",

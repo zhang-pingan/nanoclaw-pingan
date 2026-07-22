@@ -1,8 +1,17 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
 
 import { parseContractArtifactEnvelope } from './artifact.js';
-import { calculateArtifactHash, canonicalJson } from './hash.js';
+import {
+  checkContractPackCatalogProtocols,
+  generateContractPackCatalogProtocols,
+} from './catalog-protocol-pack.js';
+import {
+  calculateArtifactHash,
+  canonicalJson,
+  domainSeparatedSha256,
+} from './hash.js';
 import {
   RUNTIME_COMMAND_PROTOCOL_ENTRIES,
   RUN_TRANSACTION_PROTOCOL_ENTRIES,
@@ -10,6 +19,10 @@ import {
   type RunTransactionProtocolId,
 } from './protocol-table-types.js';
 import { strictParseJsonBytes } from './strict-json.js';
+import {
+  checkContractPackSafetySqlite,
+  generateContractPackSafetySqlite,
+} from './safety-sqlite-pack.js';
 import type {
   ContractArtifactEnvelope,
   JsonObject,
@@ -54,6 +67,10 @@ const G7_TRANSACTION_PROTOCOLS = [
 ] as const satisfies readonly RunTransactionProtocolId[];
 
 const G5_SEMANTIC_OWNERSHIP = [
+  't6d_automatic_attempt_dispatch_execution_watchdog',
+  't6d_automatic_execution_retry_timer',
+  't6d_automatic_quality_revision_timer',
+  't6d_retry_schedule_consumption_primitive',
   'operational_blocker_create',
   'open_blocker_set_authority',
   'run_operational_state_cache_on_blocker_create',
@@ -62,6 +79,12 @@ const G5_SEMANTIC_OWNERSHIP = [
 ] as const;
 
 const G7_SEMANTIC_OWNERSHIP = [
+  'workflow_deadline_watchdog',
+  'workflow_deadline_system_grant',
+  'workflow_deadline_gateway_submission',
+  'workflow_deadline_t7c_cancel_ingress',
+  'workflow_deadline_command_invocation_audit',
+  'advance_retry_schedule_authorization_and_audit',
   't6e_authorized_operational_remediation',
   't6e_source_specific_verification',
   'runtime_command_gateway',
@@ -83,9 +106,9 @@ const T6E_COMMAND_TYPES = [
 
 const EXPECTED_BINDINGS = {
   transactionProtocol:
-    'sha256:7c55b3eff2f29e5dfcbb057d5ff014697ba2e9a421287afa19ec850540cce5f0',
+    'sha256:3d5474096d89fbd723e34e0d2f9d1dadd1b955b5fc36ff447d026257852cac79',
   commandProtocol:
-    'sha256:b12b07b29e9335593c969033c133d221b244798fc079db5fb398b23fbae10789',
+    'sha256:43cc8ef247fcba4bac5e9fccdd654fd393928120755a6405bad232043f0c94ba',
   logicalSchema:
     'sha256:ef5221d3465f1214c3c0aad3660f57b119d03eb4b5127428d6a1f881a6260214',
   g1Root:
@@ -95,6 +118,49 @@ const EXPECTED_BINDINGS = {
   schemaHash:
     'sha256:f517a5e7bb8b3ea91bb37cd6a68b32898ceb62b9044687a8103808be6852106a',
 } as const satisfies Record<string, Sha256Hash>;
+
+const AFFECTED_CURRENT_ROOTS = [
+  [
+    'protocols/workflow-run-transaction-protocol-table.json',
+    'sha256:3d5474096d89fbd723e34e0d2f9d1dadd1b955b5fc36ff447d026257852cac79',
+  ],
+  [
+    'protocols/workflow-runtime-command-protocol-table.json',
+    'sha256:43cc8ef247fcba4bac5e9fccdd654fd393928120755a6405bad232043f0c94ba',
+  ],
+  [
+    'safety/local_single_user_safety_enforcement_matrix@1.json',
+    'sha256:9143ae6f043c6bc9389af848604070e4cfad6dcea8d293256cb802b01439bc3a',
+  ],
+  [
+    'contract-pack-catalog-protocols.json',
+    'sha256:a648dc9326255b109690cb47d58032775825ae065caf8f7cbb0ef73efcf984f7',
+  ],
+  [
+    'contract-pack-safety-sqlite.json',
+    'sha256:4f756c9427a9e5fd8f034c2abdab3c614b675af8b8bbb350fc4219917159cd8d',
+  ],
+  [
+    'contract-pack-static-absence.json',
+    'sha256:dc7b987416c3c1baed5a5a666960bfd2411a3e3bf76d173bd8ab0a550e51b21a',
+  ],
+  [
+    'contract-pack-g3-retention-executor-abi-preflight.json',
+    'sha256:8cfd7b030e5a1953578410caa349b62f3c38131859e9be5a3ada1bfe4e249e2c',
+  ],
+  [
+    'contract-pack-g3-workflow-publisher.json',
+    'sha256:4fc65c77265c226b7abcb6f17aeaab3af3e7f7e13d5117705cb3872f3dce6933',
+  ],
+  [
+    'contract-pack-g3.9-feature-release-activation.json',
+    'sha256:f5ddf7eb07b4f54431e612f5f6bbaf9df87d7ed6672f4a400b05fc53c7067f4e',
+  ],
+  [
+    'contract-pack-g3.8a-activation-contract-repair.json',
+    'sha256:d8412111a0f3dcabb4ce416b99086701ea3e3911ff431b5457eb957b2f69722f',
+  ],
+] as const satisfies readonly (readonly [string, Sha256Hash])[];
 
 type GateId = 'G5' | 'G7';
 type OwnershipErrorCode =
@@ -110,6 +176,16 @@ type OwnershipErrorCode =
   | 'semantic_unknown'
   | 'semantic_cross_gate'
   | 'g5_forbidden_semantic'
+  | 't6d_automatic_semantics_drift'
+  | 't6d_deadline_command_reintroduced'
+  | 'manual_retry_authorization_drift'
+  | 'deadline_gateway_protocol_drift'
+  | 'deadline_system_grant_drift'
+  | 'deadline_stable_key_drift'
+  | 'deadline_invocation_audit_drift'
+  | 'deadline_query_ownership_drift'
+  | 'safety_deadline_ownership_drift'
+  | 'schema_deadline_handoff_drift'
   | 't6e_protocol_drift'
   | 't6e_command_mapping_drift'
   | 'schema4_identity_drift'
@@ -131,6 +207,24 @@ interface GateOwnershipModel extends JsonObject {
 }
 
 interface FrozenEvidence {
+  t6dName: string;
+  t6dPreconditions: string[];
+  t6dCasGuards: string[];
+  t6dAtomicWrites: string[];
+  t6dIdempotencyConstraints: string[];
+  t6dFailureOrLateOutcomes: string[];
+  t6dForbidden: string[];
+  t6dInvocationContract: JsonObject;
+  t7cPreconditions: string[];
+  t7cAtomicWrites: string[];
+  t7cIdempotencyConstraints: string[];
+  t7cFailureOrLateOutcomes: string[];
+  deadlineCommand: JsonObject;
+  manualRetryCommand: JsonObject;
+  deadlineQueryOwner: string;
+  commandQueryOwner: string;
+  safetyDeadlineEnforcementComponent: string;
+  safetyDeadlineReservationPoint: string;
   t6ePreconditions: string[];
   t6eAtomicWrites: string[];
   t6eCommandTypes: string[];
@@ -144,6 +238,7 @@ interface FrozenEvidence {
   }>;
   schemaChecks: Array<{ check_id: string; expression_sql: string }>;
   schemaTriggers: Array<{ name: string; table: string; sql: string }>;
+  schemaTableNames: string[];
 }
 
 export type GateOwnershipFixtureMutation =
@@ -158,7 +253,29 @@ export type GateOwnershipFixtureMutation =
   | 'add_unknown_semantic'
   | 'move_g5_semantic_to_g7'
   | 'give_g5_resolution_semantic'
+  | 'give_g5_deadline_watchdog'
+  | 'give_g5_runtime_command_gateway'
+  | 'give_g5_command_audit'
   | 'remove_g7_semantic'
+  | 'remove_t6d_attempt_timeout_write'
+  | 'remove_t6d_retry_schedule_write'
+  | 'reintroduce_t6d_deadline_command'
+  | 'reintroduce_t6d_deadline_key'
+  | 'reintroduce_t6d_late_deadline_outcome'
+  | 'remove_t6d_manual_authorization_precondition'
+  | 'remove_manual_retry_handoff'
+  | 'manual_retry_bypass_gateway'
+  | 'remove_deadline_system_grant'
+  | 'change_deadline_due_target'
+  | 'remove_deadline_stable_key'
+  | 'remove_deadline_invocation_audit'
+  | 'remove_t7c_authorization'
+  | 'remove_t7c_command_invocation_audit'
+  | 'remove_t7c_stable_deadline_key'
+  | 'change_deadline_query_owner'
+  | 'change_command_query_owner'
+  | 'move_safety_deadline_back_to_t6d'
+  | 'add_schema_deadline_handoff_relation'
   | 'remove_t6e_authorization'
   | 'remove_t6e_command_invocation'
   | 'remove_t6e_command_mapping'
@@ -186,6 +303,18 @@ export interface GateOwnershipFixture extends JsonObject {
   case_id: string;
   mutation: GateOwnershipFixtureMutation;
   expected_code: OwnershipErrorCode;
+}
+
+export type GateOwnershipPositiveScenario =
+  | 'automatic_attempt_timeout'
+  | 'automatic_execution_or_quality_retry_timer'
+  | 'future_g7_authorized_manual_retry_uses_g5_primitive'
+  | 'g7_system_deadline_to_t7c_stable_key';
+
+export interface GateOwnershipPositiveFixture extends JsonObject {
+  case_id: string;
+  scenario: GateOwnershipPositiveScenario;
+  expected_code: 'accepted';
 }
 
 export class GateOwnershipContractError extends Error {
@@ -237,6 +366,38 @@ function readArtifact(absolutePath: string): ContractArtifactEnvelope {
   );
 }
 
+function rawSha256(bytes: Uint8Array): Sha256Hash {
+  return `sha256:${crypto.createHash('sha256').update(bytes).digest('hex')}`;
+}
+
+function affectedCurrentRootInventory(): JsonObject {
+  const members = AFFECTED_CURRENT_ROOTS.map(([relativePath, expectedHash]) => {
+    const absolutePath = absoluteContractPath(relativePath);
+    const bytes = fs.readFileSync(absolutePath);
+    const current = readArtifact(absolutePath);
+    if (current.hash !== expectedHash) {
+      fail(
+        'gate_missing_or_unknown',
+        `Affected current root identity drift: ${relativePath}`,
+      );
+    }
+    return {
+      path: relativePath,
+      format: current.format,
+      semantic_hash: current.hash,
+      raw_sha256: rawSha256(bytes),
+    };
+  });
+  return {
+    members,
+    member_count: members.length,
+    tree_digest: domainSeparatedSha256(
+      'icarus:workflow-runtime-t6d-ownership-affected-roots:1\n',
+      members,
+    ),
+  };
+}
+
 function writeAtomic(relativePath: string, value: JsonValue): void {
   const target = absoluteContractPath(relativePath);
   fs.mkdirSync(path.dirname(target), { recursive: true });
@@ -247,7 +408,7 @@ function writeAtomic(relativePath: string, value: JsonValue): void {
 
 function gateOwnershipModel(): GateOwnershipModel {
   return {
-    scope: 'current_construction_g5_g7_t6e_boundary',
+    scope: 'current_construction_g5_g7_t6d_t7c_boundary',
     gates: [
       {
         gate: 'G5',
@@ -255,10 +416,12 @@ function gateOwnershipModel(): GateOwnershipModel {
         owned_semantics: [...G5_SEMANTIC_OWNERSHIP],
         explicitly_excluded_semantics: [...G7_SEMANTIC_OWNERSHIP],
         exit_evidence: [
-          'T0-T6d_model_and_fault_fixtures',
+          'T0-T6d_automatic_timer_model_and_fault_fixtures',
+          'automatic_attempt_watchdog_and_retry_timer_semantics',
+          'manual_retry_requires_future_G7_authorization_negative_evidence',
           'operational_blocker_creation_fixtures',
           'open_blocker_set_and_run_workflow_cache_consistency',
-          'future_G7_authority_present_but_not_consumed',
+          'no_runtime_command_gateway_or_command_audit_writes',
         ],
       },
       {
@@ -267,6 +430,9 @@ function gateOwnershipModel(): GateOwnershipModel {
         owned_semantics: [...G7_SEMANTIC_OWNERSHIP],
         explicitly_excluded_semantics: [...G5_SEMANTIC_OWNERSHIP],
         exit_evidence: [
+          'workflow_deadline_watchdog_system_grant_gateway_T7c_fixtures',
+          'workflow_deadline_stable_key_and_invocation_audit_fixtures',
+          'advance_retry_schedule_authorization_before_T6d_primitive',
           'T6e_model_and_fault_fixtures',
           'runtime_command_authorization_and_audit_fixtures',
           'source_specific_blocker_resolution_and_abandon_fixtures',
@@ -287,13 +453,57 @@ function schemaManifest(): ContractArtifactEnvelope {
 }
 
 function frozenEvidence(): FrozenEvidence {
+  const t6d = RUN_TRANSACTION_PROTOCOL_ENTRIES.find(
+    (entry) => entry.transaction_id === 'T6d',
+  );
   const t6e = RUN_TRANSACTION_PROTOCOL_ENTRIES.find(
     (entry) => entry.transaction_id === 'T6e',
   );
-  if (!t6e) {
+  const t7c = RUN_TRANSACTION_PROTOCOL_ENTRIES.find(
+    (entry) => entry.transaction_id === 'T7c',
+  );
+  const deadlineCommand = RUNTIME_COMMAND_PROTOCOL_ENTRIES.find(
+    (entry) => entry.command_type === 'cancel_workflow',
+  );
+  const manualRetryCommand = RUNTIME_COMMAND_PROTOCOL_ENTRIES.find(
+    (entry) => entry.command_type === 'advance_retry_schedule',
+  );
+  if (!t6d || !t6e || !t7c || !deadlineCommand || !manualRetryCommand) {
     throw new GateOwnershipContractError(
       't6e_protocol_drift',
-      'Frozen transaction protocol is missing T6e',
+      'Current transaction or command protocol is incomplete',
+    );
+  }
+  const queryCatalog = readArtifact(
+    absoluteContractPath('sqlite/workflow-runtime-query-catalog@1.json'),
+  );
+  const queries = queryCatalog.payload.queries as unknown as Array<{
+    query_id: string;
+    owner: string;
+  }>;
+  const deadlineQuery = queries.find(
+    (entry) => entry.query_id === 'query:workflow_deadline_due',
+  );
+  const commandQuery = queries.find(
+    (entry) => entry.query_id === 'query:command_idempotency_lookup',
+  );
+  const safetyMatrix = readArtifact(
+    absoluteContractPath(
+      'safety/local_single_user_safety_enforcement_matrix@1.json',
+    ),
+  );
+  const safetyRecords = safetyMatrix.payload.records as unknown as Array<{
+    limit_path: string;
+    enforcement_component: string;
+    reservation_point: string;
+  }>;
+  const safetyDeadline = safetyRecords.find(
+    (entry) => entry.limit_path === 'workflow.max_duration_ms',
+  );
+  if (!deadlineQuery || !commandQuery || !safetyDeadline) {
+    throw new GateOwnershipContractError(
+      'deadline_gateway_protocol_drift',
+      'Deadline query or safety enforcement evidence is incomplete',
     );
   }
   const manifest = schemaManifest();
@@ -312,6 +522,28 @@ function frozenEvidence(): FrozenEvidence {
     );
   }
   return {
+    t6dName: t6d.name,
+    t6dPreconditions: [...t6d.preconditions],
+    t6dCasGuards: [...t6d.cas_guards],
+    t6dAtomicWrites: [...t6d.atomic_writes],
+    t6dIdempotencyConstraints: [...t6d.idempotency_constraints],
+    t6dFailureOrLateOutcomes: [...t6d.failure_or_late_outcomes],
+    t6dForbidden: [...t6d.forbidden],
+    t6dInvocationContract: structuredClone(
+      'invocation_contract' in t6d ? t6d.invocation_contract : {},
+    ) as unknown as JsonObject,
+    t7cPreconditions: [...t7c.preconditions],
+    t7cAtomicWrites: [...t7c.atomic_writes],
+    t7cIdempotencyConstraints: [...t7c.idempotency_constraints],
+    t7cFailureOrLateOutcomes: [...t7c.failure_or_late_outcomes],
+    deadlineCommand: structuredClone(deadlineCommand) as unknown as JsonObject,
+    manualRetryCommand: structuredClone(
+      manualRetryCommand,
+    ) as unknown as JsonObject,
+    deadlineQueryOwner: deadlineQuery.owner,
+    commandQueryOwner: commandQuery.owner,
+    safetyDeadlineEnforcementComponent: safetyDeadline.enforcement_component,
+    safetyDeadlineReservationPoint: safetyDeadline.reservation_point,
     t6ePreconditions: [...t6e.preconditions],
     t6eAtomicWrites: [...t6e.atomic_writes],
     t6eCommandTypes: RUNTIME_COMMAND_PROTOCOL_ENTRIES.filter(
@@ -324,6 +556,7 @@ function frozenEvidence(): FrozenEvidence {
     schemaTriggers: structuredClone(
       manifest.payload.triggers as unknown as FrozenEvidence['schemaTriggers'],
     ),
+    schemaTableNames: tables.map((table) => table.name),
   };
 }
 
@@ -348,8 +581,21 @@ function exactSet(
   }
 }
 
+function exactKeys(
+  value: JsonObject,
+  expected: readonly string[],
+  code: Exclude<OwnershipErrorCode, 'accepted'>,
+  label: string,
+): void {
+  if (
+    Object.keys(value).sort().join('\n') !== [...expected].sort().join('\n')
+  ) {
+    fail(code, `${label} field set is not closed and exact`);
+  }
+}
+
 function validateOwnershipModel(model: GateOwnershipModel): void {
-  if (model.scope !== 'current_construction_g5_g7_t6e_boundary') {
+  if (model.scope !== 'current_construction_g5_g7_t6d_t7c_boundary') {
     fail('gate_missing_or_unknown', 'Gate ownership scope is unknown');
   }
   if (
@@ -477,6 +723,326 @@ function validateOwnershipModel(model: GateOwnershipModel): void {
 }
 
 function validateFrozenEvidence(evidence: FrozenEvidence): void {
+  exactSet(
+    [evidence.t6dName],
+    ['attempt_watchdog_and_retry_timers'],
+    't6d_automatic_semantics_drift',
+    'T6d name',
+  );
+  exactSet(
+    evidence.t6dPreconditions,
+    [
+      'automatic_due_frozen_attempt_deadline_or_retry_eligible_time',
+      'manual_retry_only_after_gateway_authorization',
+    ],
+    't6d_automatic_semantics_drift',
+    'T6d preconditions',
+  );
+  exactSet(
+    evidence.t6dCasGuards,
+    [
+      'attempt_acceptance_open_for_watchdog',
+      'retry_schedule_scheduled_row_version',
+    ],
+    't6d_automatic_semantics_drift',
+    'T6d CAS guards',
+  );
+  exactSet(
+    evidence.t6dAtomicWrites,
+    [
+      'attempt_timeout_fence_and_fact',
+      'cancel_reconcile_or_compensation_effects',
+      'schedule_consumed_and_exact_next_attempt',
+      'node_retry_wait_to_active',
+    ],
+    't6d_automatic_semantics_drift',
+    'T6d atomic writes',
+  );
+  exactSet(
+    evidence.t6dIdempotencyConstraints,
+    ['unique_attempt_timeout_event', 'unique_schedule_source_and_next_attempt'],
+    't6d_automatic_semantics_drift',
+    'T6d idempotency constraints',
+  );
+  exactSet(
+    evidence.t6dFailureOrLateOutcomes,
+    ['duplicate_timer'],
+    't6d_automatic_semantics_drift',
+    'T6d failure outcomes',
+  );
+  exactSet(
+    evidence.t6dForbidden,
+    [
+      'recompute_backoff_or_deadline',
+      'reseal_node_input',
+      'external_cancel_or_reconcile_inside_transaction',
+      'workflow_deadline_command_creation',
+      'runtime_command_or_invocation_audit_write',
+      'manual_retry_without_gateway_authorization',
+    ],
+    't6d_automatic_semantics_drift',
+    'T6d forbidden set',
+  );
+  exactKeys(
+    evidence.t6dInvocationContract,
+    ['automatic_timer', 'authorized_manual_retry'],
+    'manual_retry_authorization_drift',
+    'T6d invocation contract',
+  );
+  const automaticTimer = evidence.t6dInvocationContract
+    .automatic_timer as JsonObject;
+  const authorizedManual = evidence.t6dInvocationContract
+    .authorized_manual_retry as JsonObject;
+  exactKeys(
+    automaticTimer,
+    ['owner_gate', 'ingress', 'gateway_authorization'],
+    't6d_automatic_semantics_drift',
+    'T6d automatic invocation',
+  );
+  if (
+    automaticTimer.owner_gate !== 'G5' ||
+    automaticTimer.ingress !== 'due_attempt_watchdog_or_retry_schedule_timer' ||
+    automaticTimer.gateway_authorization !== 'not_applicable'
+  ) {
+    fail(
+      't6d_automatic_semantics_drift',
+      'T6d automatic timer invocation boundary drifted',
+    );
+  }
+  exactKeys(
+    authorizedManual,
+    [
+      'owner_gate',
+      'ingress',
+      'authorization_boundary',
+      'command_invocation_audit',
+      'g5_primitive',
+    ],
+    'manual_retry_authorization_drift',
+    'T6d authorized manual invocation',
+  );
+  if (
+    authorizedManual.owner_gate !== 'G7' ||
+    authorizedManual.ingress !== 'advance_retry_schedule' ||
+    authorizedManual.authorization_boundary !==
+      'runtime_command_gateway_before_t6d' ||
+    authorizedManual.command_invocation_audit !== 'required_before_primitive' ||
+    authorizedManual.g5_primitive !== 'consume_existing_retry_schedule'
+  ) {
+    fail(
+      'manual_retry_authorization_drift',
+      'Manual retry no longer requires G7 authorization before T6d',
+    );
+  }
+  const removedDeadlineTokens = [
+    ...evidence.t6dCasGuards,
+    ...evidence.t6dAtomicWrites,
+    ...evidence.t6dIdempotencyConstraints,
+    ...evidence.t6dFailureOrLateOutcomes,
+  ];
+  if (
+    removedDeadlineTokens.some((value) =>
+      [
+        'workflow_deadline_current_run',
+        'stable_workflow_deadline_t7c_command',
+        'stable_workflow_deadline_command_key',
+        'late_deadline_command',
+      ].includes(value),
+    )
+  ) {
+    fail(
+      't6d_deadline_command_reintroduced',
+      'T6d cannot contain workflow deadline command semantics',
+    );
+  }
+
+  exactKeys(
+    evidence.deadlineCommand,
+    [
+      'command_type',
+      'target_kind',
+      'permission_rule',
+      'allowed_reason_codes',
+      'allowed_actor_kinds',
+      'system_grant',
+      'minimum_evidence_refs',
+      'confirmation_ref_required',
+      'policy_guard',
+      'state_guard',
+      'transaction_protocol',
+      'denial_codes',
+    ],
+    'deadline_gateway_protocol_drift',
+    'cancel_workflow command protocol',
+  );
+  if (
+    evidence.deadlineCommand.command_type !== 'cancel_workflow' ||
+    evidence.deadlineCommand.target_kind !== 'workflow' ||
+    evidence.deadlineCommand.transaction_protocol !== 'T7c'
+  ) {
+    fail(
+      'deadline_gateway_protocol_drift',
+      'Workflow deadline must use cancel_workflow -> T7c',
+    );
+  }
+  const systemGrant = evidence.deadlineCommand.system_grant as JsonObject;
+  exactKeys(
+    systemGrant,
+    [
+      'actor_kind',
+      'reason_codes',
+      'predicate',
+      'authority_scope',
+      'idempotency_domain',
+      'idempotency_key_template',
+      'invocation_audit',
+    ],
+    'deadline_system_grant_drift',
+    'Deadline System Grant',
+  );
+  if (
+    systemGrant.actor_kind !== 'system' ||
+    canonicalJson(systemGrant.reason_codes as JsonValue) !==
+      canonicalJson(['deadline_enforced', 'safety_enforced']) ||
+    systemGrant.predicate !== 'due_target' ||
+    systemGrant.authority_scope !== 'cancel_workflow_only'
+  ) {
+    fail(
+      'deadline_system_grant_drift',
+      'Deadline System Grant authority drifted',
+    );
+  }
+  if (
+    systemGrant.idempotency_domain !== 'system:deadline-watchdog' ||
+    systemGrant.idempotency_key_template !==
+      'workflow-deadline:<workflow_id>:<deadline_at_ms>'
+  ) {
+    fail('deadline_stable_key_drift', 'Deadline command key drifted');
+  }
+  if (systemGrant.invocation_audit !== 'required') {
+    fail(
+      'deadline_invocation_audit_drift',
+      'Deadline command lost Invocation audit',
+    );
+  }
+  if (!evidence.t7cPreconditions.includes('authorized_cancel_command')) {
+    fail(
+      'deadline_gateway_protocol_drift',
+      'T7c no longer requires authorized_cancel_command',
+    );
+  }
+  if (!evidence.t7cAtomicWrites.includes('command_invocation_audit')) {
+    fail(
+      'deadline_invocation_audit_drift',
+      'T7c no longer writes command Invocation audit',
+    );
+  }
+  if (
+    !evidence.t7cIdempotencyConstraints.includes(
+      'stable_system_deadline_key_workflow-deadline:<workflow_id>:<deadline_at_ms>',
+    )
+  ) {
+    fail('deadline_stable_key_drift', 'T7c lost the stable deadline key');
+  }
+  if (
+    !evidence.t7cFailureOrLateOutcomes.includes(
+      'loser_records_late_command_only',
+    ) ||
+    !evidence.t7cFailureOrLateOutcomes.includes(
+      'duplicate_returns_canonical_result_with_invocation_audit',
+    )
+  ) {
+    fail(
+      'deadline_gateway_protocol_drift',
+      'T7c late or duplicate command semantics drifted',
+    );
+  }
+
+  exactKeys(
+    evidence.manualRetryCommand,
+    [
+      'command_type',
+      'target_kind',
+      'permission_rule',
+      'allowed_reason_codes',
+      'allowed_actor_kinds',
+      'minimum_evidence_refs',
+      'confirmation_ref_required',
+      'policy_guard',
+      'state_guard',
+      'transaction_protocol',
+      'primitive_handoff',
+      'denial_codes',
+    ],
+    'manual_retry_authorization_drift',
+    'advance_retry_schedule command protocol',
+  );
+  const handoff = evidence.manualRetryCommand.primitive_handoff as JsonObject;
+  exactKeys(
+    handoff,
+    [
+      'authorization_owner',
+      'audit_owner',
+      'primitive_owner',
+      'primitive_transaction_protocol',
+      'invocation_mode',
+      'unauthorized_direct_invocation',
+    ],
+    'manual_retry_authorization_drift',
+    'advance_retry_schedule primitive handoff',
+  );
+  if (
+    evidence.manualRetryCommand.command_type !== 'advance_retry_schedule' ||
+    evidence.manualRetryCommand.transaction_protocol !== 'T6d' ||
+    handoff.authorization_owner !== 'G7_runtime_command_gateway' ||
+    handoff.audit_owner !== 'G7_runtime_command_gateway' ||
+    handoff.primitive_owner !== 'G5' ||
+    handoff.primitive_transaction_protocol !== 'T6d' ||
+    handoff.invocation_mode !== 'authorized_manual_retry' ||
+    handoff.unauthorized_direct_invocation !== 'forbidden'
+  ) {
+    fail(
+      'manual_retry_authorization_drift',
+      'advance_retry_schedule authorization handoff drifted',
+    );
+  }
+  if (
+    evidence.deadlineQueryOwner !== 'workflow_watchdog' ||
+    evidence.commandQueryOwner !== 'command_gateway'
+  ) {
+    fail(
+      'deadline_query_ownership_drift',
+      'Deadline or Command query ownership drifted',
+    );
+  }
+  if (
+    evidence.safetyDeadlineEnforcementComponent !==
+      'g7_workflow_deadline_watchdog' ||
+    evidence.safetyDeadlineReservationPoint !==
+      'T0_deadline_freeze_and_G7_gateway_T7c_enforcement'
+  ) {
+    fail(
+      'safety_deadline_ownership_drift',
+      'Safety matrix no longer assigns deadline enforcement to G7',
+    );
+  }
+  if (
+    !evidence.schemaTableNames.includes('workflow_runtime_commands') ||
+    !evidence.schemaTableNames.includes(
+      'workflow_runtime_command_invocations',
+    ) ||
+    evidence.schemaTableNames.some((name) =>
+      /deadline.*(?:handoff|intent|command)|(?:handoff|intent|command).*deadline|watchdog/.test(
+        name,
+      ),
+    )
+  ) {
+    fail(
+      'schema_deadline_handoff_drift',
+      'Schema 4 deadline/Command relation boundary drifted',
+    );
+  }
+
   if (!evidence.t6ePreconditions.includes('authorized_runtime_command')) {
     fail(
       't6e_protocol_drift',
@@ -619,6 +1185,7 @@ function validateDependencyArtifacts(): void {
     transaction.payload.entries as unknown as JsonValue,
     command.payload.entries as unknown as JsonValue,
   );
+  affectedCurrentRootInventory();
 }
 
 function applyMutation(
@@ -676,6 +1243,15 @@ function applyMutation(
     case 'give_g5_resolution_semantic':
       g5.owned_semantics.push('blocker_open_to_resolved');
       return;
+    case 'give_g5_deadline_watchdog':
+      g5.owned_semantics.push('workflow_deadline_watchdog');
+      return;
+    case 'give_g5_runtime_command_gateway':
+      g5.owned_semantics.push('runtime_command_gateway');
+      return;
+    case 'give_g5_command_audit':
+      g5.owned_semantics.push('workflow_deadline_command_invocation_audit');
+      return;
     case 'remove_g7_semantic':
       g7.owned_semantics.pop();
       return;
@@ -684,6 +1260,92 @@ function applyMutation(
       return;
     case 'remove_g7_excluded_semantic':
       g7.explicitly_excluded_semantics.pop();
+      return;
+    case 'remove_t6d_attempt_timeout_write':
+      evidence.t6dAtomicWrites = evidence.t6dAtomicWrites.filter(
+        (value) => value !== 'attempt_timeout_fence_and_fact',
+      );
+      return;
+    case 'remove_t6d_retry_schedule_write':
+      evidence.t6dAtomicWrites = evidence.t6dAtomicWrites.filter(
+        (value) => value !== 'schedule_consumed_and_exact_next_attempt',
+      );
+      return;
+    case 'reintroduce_t6d_deadline_command':
+      evidence.t6dAtomicWrites.push('stable_workflow_deadline_t7c_command');
+      return;
+    case 'reintroduce_t6d_deadline_key':
+      evidence.t6dIdempotencyConstraints.push(
+        'stable_workflow_deadline_command_key',
+      );
+      return;
+    case 'reintroduce_t6d_late_deadline_outcome':
+      evidence.t6dFailureOrLateOutcomes.push('late_deadline_command');
+      return;
+    case 'remove_t6d_manual_authorization_precondition':
+      evidence.t6dPreconditions = evidence.t6dPreconditions.filter(
+        (value) => value !== 'manual_retry_only_after_gateway_authorization',
+      );
+      return;
+    case 'remove_manual_retry_handoff':
+      evidence.manualRetryCommand.primitive_handoff = {};
+      return;
+    case 'manual_retry_bypass_gateway': {
+      const manual = evidence.t6dInvocationContract
+        .authorized_manual_retry as JsonObject;
+      manual.authorization_boundary = 'direct_t6d';
+      return;
+    }
+    case 'remove_deadline_system_grant':
+      evidence.deadlineCommand.system_grant = {};
+      return;
+    case 'change_deadline_due_target': {
+      const grant = evidence.deadlineCommand.system_grant as JsonObject;
+      grant.predicate = 'any_active_target';
+      return;
+    }
+    case 'remove_deadline_stable_key': {
+      const grant = evidence.deadlineCommand.system_grant as JsonObject;
+      delete grant.idempotency_key_template;
+      return;
+    }
+    case 'remove_deadline_invocation_audit': {
+      const grant = evidence.deadlineCommand.system_grant as JsonObject;
+      delete grant.invocation_audit;
+      return;
+    }
+    case 'remove_t7c_authorization':
+      evidence.t7cPreconditions = evidence.t7cPreconditions.filter(
+        (value) => value !== 'authorized_cancel_command',
+      );
+      return;
+    case 'remove_t7c_command_invocation_audit':
+      evidence.t7cAtomicWrites = evidence.t7cAtomicWrites.filter(
+        (value) => value !== 'command_invocation_audit',
+      );
+      return;
+    case 'remove_t7c_stable_deadline_key':
+      evidence.t7cIdempotencyConstraints =
+        evidence.t7cIdempotencyConstraints.filter(
+          (value) =>
+            value !==
+            'stable_system_deadline_key_workflow-deadline:<workflow_id>:<deadline_at_ms>',
+        );
+      return;
+    case 'change_deadline_query_owner':
+      evidence.deadlineQueryOwner = 'attempt_watchdog';
+      return;
+    case 'change_command_query_owner':
+      evidence.commandQueryOwner = 'g5_timer_worker';
+      return;
+    case 'move_safety_deadline_back_to_t6d':
+      evidence.safetyDeadlineEnforcementComponent =
+        'workflow_deadline_watchdog';
+      evidence.safetyDeadlineReservationPoint =
+        'T0_deadline_freeze_and_T6d_watchdog';
+      return;
+    case 'add_schema_deadline_handoff_relation':
+      evidence.schemaTableNames.push('workflow_deadline_command_handoffs');
       return;
     case 'remove_t6e_authorization':
       evidence.t6ePreconditions = evidence.t6ePreconditions.filter(
@@ -756,6 +1418,74 @@ export function evaluateGateOwnershipFixtureForTest(
   return evaluateGateOwnershipAuditProbeForTest(mutation);
 }
 
+function validatePositiveScenario(
+  evidence: FrozenEvidence,
+  scenario: GateOwnershipPositiveScenario,
+): void {
+  switch (scenario) {
+    case 'automatic_attempt_timeout':
+      if (
+        !evidence.t6dAtomicWrites.includes('attempt_timeout_fence_and_fact') ||
+        !evidence.t6dCasGuards.includes('attempt_acceptance_open_for_watchdog')
+      )
+        fail(
+          't6d_automatic_semantics_drift',
+          'Automatic attempt timeout fixture is incomplete',
+        );
+      return;
+    case 'automatic_execution_or_quality_retry_timer':
+      if (
+        !evidence.t6dAtomicWrites.includes(
+          'schedule_consumed_and_exact_next_attempt',
+        ) ||
+        !evidence.t6dAtomicWrites.includes('node_retry_wait_to_active')
+      )
+        fail(
+          't6d_automatic_semantics_drift',
+          'Automatic retry timer fixture is incomplete',
+        );
+      return;
+    case 'future_g7_authorized_manual_retry_uses_g5_primitive':
+      if (
+        evidence.manualRetryCommand.transaction_protocol !== 'T6d' ||
+        (evidence.manualRetryCommand.primitive_handoff as JsonObject)
+          .authorization_owner !== 'G7_runtime_command_gateway'
+      )
+        fail(
+          'manual_retry_authorization_drift',
+          'Authorized manual retry fixture is incomplete',
+        );
+      return;
+    case 'g7_system_deadline_to_t7c_stable_key':
+      if (
+        evidence.deadlineCommand.transaction_protocol !== 'T7c' ||
+        (evidence.deadlineCommand.system_grant as JsonObject)
+          .idempotency_key_template !==
+          'workflow-deadline:<workflow_id>:<deadline_at_ms>'
+      )
+        fail(
+          'deadline_stable_key_drift',
+          'System deadline fixture is incomplete',
+        );
+  }
+}
+
+export function evaluateGateOwnershipPositiveFixtureForTest(
+  scenario: GateOwnershipPositiveScenario,
+): OwnershipErrorCode {
+  const model = gateOwnershipModel();
+  const evidence = frozenEvidence();
+  try {
+    validateOwnershipModel(model);
+    validateFrozenEvidence(evidence);
+    validatePositiveScenario(evidence, scenario);
+    return 'accepted';
+  } catch (error) {
+    if (error instanceof GateOwnershipContractError) return error.code;
+    throw error;
+  }
+}
+
 export function evaluateGateOwnershipAuditProbeForTest(
   mutation: GateOwnershipAuditProbeMutation,
 ): OwnershipErrorCode {
@@ -816,10 +1546,25 @@ export function evaluateGateOwnershipDependencyProbeForTest(
   }
 }
 
-const POSITIVE_FIXTURES: GateOwnershipFixture[] = [
+const POSITIVE_FIXTURES: GateOwnershipPositiveFixture[] = [
   {
-    case_id: 'exact-g5-g7-t6e-ownership',
-    mutation: 'none',
+    case_id: 'automatic-attempt-timeout',
+    scenario: 'automatic_attempt_timeout',
+    expected_code: 'accepted',
+  },
+  {
+    case_id: 'automatic-execution-or-quality-retry-timer',
+    scenario: 'automatic_execution_or_quality_retry_timer',
+    expected_code: 'accepted',
+  },
+  {
+    case_id: 'future-g7-authorized-manual-retry-uses-g5-primitive',
+    scenario: 'future_g7_authorized_manual_retry_uses_g5_primitive',
+    expected_code: 'accepted',
+  },
+  {
+    case_id: 'g7-system-deadline-to-t7c-stable-key',
+    scenario: 'g7_system_deadline_to_t7c_stable_key',
     expected_code: 'accepted',
   },
 ];
@@ -847,7 +1592,113 @@ const NEGATIVE_FIXTURES: GateOwnershipFixture[] = [
     'give_g5_resolution_semantic',
     'g5_forbidden_semantic',
   ],
+  [
+    'g5-claims-deadline-watchdog',
+    'give_g5_deadline_watchdog',
+    'g5_forbidden_semantic',
+  ],
+  [
+    'g5-claims-runtime-command-gateway',
+    'give_g5_runtime_command_gateway',
+    'g5_forbidden_semantic',
+  ],
+  ['g5-claims-command-audit', 'give_g5_command_audit', 'g5_forbidden_semantic'],
   ['missing-g7-semantic', 'remove_g7_semantic', 'semantic_missing'],
+  [
+    't6d-attempt-timeout-write-removed',
+    'remove_t6d_attempt_timeout_write',
+    't6d_automatic_semantics_drift',
+  ],
+  [
+    't6d-retry-schedule-write-removed',
+    'remove_t6d_retry_schedule_write',
+    't6d_automatic_semantics_drift',
+  ],
+  [
+    't6d-deadline-command-reintroduced',
+    'reintroduce_t6d_deadline_command',
+    't6d_automatic_semantics_drift',
+  ],
+  [
+    't6d-deadline-key-reintroduced',
+    'reintroduce_t6d_deadline_key',
+    't6d_automatic_semantics_drift',
+  ],
+  [
+    't6d-late-deadline-outcome-reintroduced',
+    'reintroduce_t6d_late_deadline_outcome',
+    't6d_automatic_semantics_drift',
+  ],
+  [
+    't6d-manual-authorization-precondition-removed',
+    'remove_t6d_manual_authorization_precondition',
+    't6d_automatic_semantics_drift',
+  ],
+  [
+    'manual-retry-handoff-removed',
+    'remove_manual_retry_handoff',
+    'manual_retry_authorization_drift',
+  ],
+  [
+    'manual-retry-bypasses-gateway',
+    'manual_retry_bypass_gateway',
+    'manual_retry_authorization_drift',
+  ],
+  [
+    'deadline-system-grant-removed',
+    'remove_deadline_system_grant',
+    'deadline_system_grant_drift',
+  ],
+  [
+    'deadline-due-target-drifted',
+    'change_deadline_due_target',
+    'deadline_system_grant_drift',
+  ],
+  [
+    'deadline-stable-key-removed',
+    'remove_deadline_stable_key',
+    'deadline_system_grant_drift',
+  ],
+  [
+    'deadline-invocation-audit-removed',
+    'remove_deadline_invocation_audit',
+    'deadline_system_grant_drift',
+  ],
+  [
+    't7c-authorization-removed',
+    'remove_t7c_authorization',
+    'deadline_gateway_protocol_drift',
+  ],
+  [
+    't7c-invocation-audit-removed',
+    'remove_t7c_command_invocation_audit',
+    'deadline_invocation_audit_drift',
+  ],
+  [
+    't7c-stable-deadline-key-removed',
+    'remove_t7c_stable_deadline_key',
+    'deadline_stable_key_drift',
+  ],
+  [
+    'deadline-query-owner-drifted',
+    'change_deadline_query_owner',
+    'deadline_query_ownership_drift',
+  ],
+  [
+    'command-query-owner-drifted',
+    'change_command_query_owner',
+    'deadline_query_ownership_drift',
+  ],
+  [
+    'safety-deadline-returned-to-t6d',
+    'move_safety_deadline_back_to_t6d',
+    'safety_deadline_ownership_drift',
+  ],
+  [
+    'schema-temporary-deadline-handoff-added',
+    'add_schema_deadline_handoff_relation',
+    'schema_deadline_handoff_drift',
+  ],
   [
     't6e-authorization-removed',
     'remove_t6e_authorization',
@@ -891,8 +1742,21 @@ function authorityPayload(): JsonObject {
   validateDependencyArtifacts();
   const evidence = frozenEvidence();
   validateFrozenEvidence(evidence);
-  for (const fixture of [...POSITIVE_FIXTURES, ...NEGATIVE_FIXTURES]) {
-    const actual = evaluateGateOwnershipFixtureForTest(fixture.mutation);
+  for (const fixture of POSITIVE_FIXTURES) {
+    validatePositiveScenario(evidence, fixture.scenario);
+  }
+  for (const fixture of NEGATIVE_FIXTURES) {
+    const candidateModel = structuredClone(model);
+    const candidateEvidence = structuredClone(evidence);
+    applyMutation(candidateModel, candidateEvidence, fixture.mutation);
+    let actual: OwnershipErrorCode = 'accepted';
+    try {
+      validateOwnershipModel(candidateModel);
+      validateFrozenEvidence(candidateEvidence);
+    } catch (error) {
+      if (!(error instanceof GateOwnershipContractError)) throw error;
+      actual = error.code;
+    }
     if (actual !== fixture.expected_code) {
       fail(
         'gate_missing_or_unknown',
@@ -902,10 +1766,20 @@ function authorityPayload(): JsonObject {
   }
   return {
     governance_scope: model.scope,
-    status: 'G5_OWNERSHIP_EXIT_CANDIDATE_PENDING_INDEPENDENT_REGRESSION',
+    status: 'T6D_OWNERSHIP_EXIT_CANDIDATE_PENDING_INDEPENDENT_REGRESSION',
     authority_kind: 'current_construction_gate_ownership',
-    historical_g0_g1_identity_effect: 'none',
-    g4_pack_identity_effect: 'none',
+    reopened_from: {
+      source_commit: '627d0bc483a971f0d5bdbd59c7fb40c994f90097',
+      workflow_run_transaction_protocol_table_hash:
+        'sha256:7c55b3eff2f29e5dfcbb057d5ff014697ba2e9a421287afa19ec850540cce5f0',
+      workflow_runtime_command_protocol_table_hash:
+        'sha256:b12b07b29e9335593c969033c133d221b244798fc079db5fb398b23fbae10789',
+      gate_ownership_authority_hash:
+        'sha256:36289416db3c8898d9b50c04c5ad43fc6b74ef53bbd3a3c99f9d5f5b72786fa8',
+    },
+    historical_g0_g1_identity_effect:
+      'G0.4_and_G0.5_current_reopened_G1_Schema_4_unchanged',
+    g4_pack_identity_effect: 'direct_G3_run_protocol_dependency_rebuilt',
     matrix: model.gates,
     frozen_authority_bindings: {
       workflow_run_transaction_protocol_table_hash:
@@ -919,7 +1793,26 @@ function authorityPayload(): JsonObject {
       workflow_runtime_schema_manifest_hash: EXPECTED_BINDINGS.schemaManifest,
       workflow_runtime_schema_hash: EXPECTED_BINDINGS.schemaHash,
     },
+    affected_current_root_inventory: affectedCurrentRootInventory(),
     frozen_invariants: {
+      t6d_name: 'attempt_watchdog_and_retry_timers',
+      t6d_automatic_atomic_writes: [
+        'attempt_timeout_fence_and_fact',
+        'cancel_reconcile_or_compensation_effects',
+        'schedule_consumed_and_exact_next_attempt',
+        'node_retry_wait_to_active',
+      ],
+      t6d_gateway_writes: 'forbidden',
+      manual_retry_boundary:
+        'G7_runtime_command_gateway_authorization_and_audit_before_G5_T6d_primitive',
+      workflow_deadline_boundary:
+        'G7_deadline_watchdog_to_runtime_command_gateway_to_T7c',
+      workflow_deadline_command_key:
+        'workflow-deadline:<workflow_id>:<deadline_at_ms>',
+      workflow_deadline_system_grant:
+        'deadline_enforced|safety_enforced+due_target+cancel_workflow_only',
+      t7c_authorization_precondition: 'authorized_cancel_command',
+      t7c_atomic_command_audit: 'command_invocation_audit',
       t6e_authorization_precondition: 'authorized_runtime_command',
       t6e_atomic_resolution_audit: 'command_invocation_and_runtime_event',
       t6e_command_types: [...T6E_COMMAND_TYPES],
@@ -936,7 +1829,8 @@ function authorityPayload(): JsonObject {
       negative: NEGATIVE_FIXTURES.length,
     },
     implementation_authorized: false,
-    next_required_gate: 'independent_ownership_and_affected_chain_regression',
+    next_required_gate:
+      'independent_t6d_ownership_and_affected_chain_regression',
   };
 }
 
@@ -1000,8 +1894,20 @@ export function checkGateOwnershipContracts(): ContractArtifactEnvelope {
   return artifacts[0][1];
 }
 
+export function generateGateOwnershipRepairContracts(): ContractArtifactEnvelope {
+  generateContractPackCatalogProtocols();
+  generateContractPackSafetySqlite();
+  return generateGateOwnershipContracts();
+}
+
+export function checkGateOwnershipRepairContracts(): ContractArtifactEnvelope {
+  checkContractPackCatalogProtocols();
+  checkContractPackSafetySqlite();
+  return checkGateOwnershipContracts();
+}
+
 export function gateOwnershipFixturesForTest(): {
-  positive: GateOwnershipFixture[];
+  positive: GateOwnershipPositiveFixture[];
   negative: GateOwnershipFixture[];
 } {
   return {

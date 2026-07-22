@@ -918,5 +918,5 @@ export const G37_UPSTREAM_IDENTITIES = {
   g3_5_pack_hash:
     'sha256:74cb66b4e2c3d244a45de70c9f236df112c83fabf1f8230afbd046394c8d0b49',
   g3_6_pack_hash:
-    'sha256:730daac9db4bcfb645374b12e10e3962ddacbebc2828875cb00133c8ada195a8',
+    'sha256:8cfd7b030e5a1953578410caa349b62f3c38131859e9be5a3ada1bfe4e249e2c',
 } as const;

@@ -1256,7 +1256,7 @@
                 "id": "icarus.workflow-contract-pack-catalog-protocols",
                 "version": "1.0.0"
               },
-              "hash": "sha256:e4947c515a28b3baf6782a980db9c26d32612b3c6acd3cd04348e73bd54ff607",
+              "hash": "sha256:a648dc9326255b109690cb47d58032775825ae065caf8f7cbb0ef73efcf984f7",
               "major": 1
             },
             "executor_abi": {
@@ -1407,8 +1407,8 @@
               }
             ]
           },
-          "domain_request_hash": "sha256:4834a6af8e1556b79e9f2426b0da5f1b8cf23d1e7974c4da797a81d89c3e1b5e",
-          "request_hash": "sha256:15e627cc4627a36c037558a8f7649f9ace13325dabdf2a317c33759058689da6",
+          "domain_request_hash": "sha256:ab73562cd5237a23052797f612dbc686e81be79b02fddeeeaf746b9371696e91",
+          "request_hash": "sha256:440fef2766829321673bd33773a4e68fcff114fcf606aaa9710183aec2bfa6ec",
           "active_pointer": "forbidden"
         },
         "expected_code": "publish_request_invalid"
@@ -2660,7 +2660,7 @@
                 "id": "icarus.workflow-contract-pack-catalog-protocols",
                 "version": "1.0.0"
               },
-              "hash": "sha256:e4947c515a28b3baf6782a980db9c26d32612b3c6acd3cd04348e73bd54ff607",
+              "hash": "sha256:a648dc9326255b109690cb47d58032775825ae065caf8f7cbb0ef73efcf984f7",
               "major": 1
             },
             "executor_abi": {
@@ -2811,7 +2811,7 @@
               }
             ]
           },
-          "domain_request_hash": "sha256:4834a6af8e1556b79e9f2426b0da5f1b8cf23d1e7974c4da797a81d89c3e1b5e",
+          "domain_request_hash": "sha256:ab73562cd5237a23052797f612dbc686e81be79b02fddeeeaf746b9371696e91",
           "request_hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
         },
         "expected_code": "publish_request_hash_mismatch"
@@ -4063,7 +4063,7 @@
                 "id": "icarus.workflow-contract-pack-catalog-protocols",
                 "version": "1.0.0"
               },
-              "hash": "sha256:e4947c515a28b3baf6782a980db9c26d32612b3c6acd3cd04348e73bd54ff607",
+              "hash": "sha256:a648dc9326255b109690cb47d58032775825ae065caf8f7cbb0ef73efcf984f7",
               "major": 1
             },
             "executor_abi": {
@@ -4214,12 +4214,12 @@
               }
             ]
           },
-          "domain_request_hash": "sha256:4834a6af8e1556b79e9f2426b0da5f1b8cf23d1e7974c4da797a81d89c3e1b5e",
-          "request_hash": "sha256:15e627cc4627a36c037558a8f7649f9ace13325dabdf2a317c33759058689da6"
+          "domain_request_hash": "sha256:ab73562cd5237a23052797f612dbc686e81be79b02fddeeeaf746b9371696e91",
+          "request_hash": "sha256:440fef2766829321673bd33773a4e68fcff114fcf606aaa9710183aec2bfa6ec"
         },
         "expected_code": "approved_review_identity_mismatch"
       }
     ]
   },
-  "hash": "sha256:956f0864fb965be87d2e2ee0d6cd08a41da01a6fcb53f9cb16482cb19d9ea9d7"
+  "hash": "sha256:f2fe4b097c4919193be7902dad4e9a20fe0b2996bb56a2660fd985d239e95b0c"
 }

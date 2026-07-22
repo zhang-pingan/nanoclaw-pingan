@@ -85,7 +85,7 @@ export const G3_RUN_PROTOCOL_REF = {
   version: '1.0.0',
 } as const;
 export const G3_RUN_PROTOCOL_HASH =
-  'sha256:e4947c515a28b3baf6782a980db9c26d32612b3c6acd3cd04348e73bd54ff607' as const;
+  'sha256:a648dc9326255b109690cb47d58032775825ae065caf8f7cbb0ef73efcf984f7' as const;
 export const G3_EXECUTOR_ABI_REF = {
   id: 'icarus.workflow-executor-abi',
   version: '1.0.0',

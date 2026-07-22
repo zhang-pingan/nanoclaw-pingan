@@ -168,6 +168,10 @@ describe('G0.4 catalog and protocol Contract Pack', () => {
         reason_codes: ['deadline_enforced', 'safety_enforced'],
         predicate: 'due_target',
         authority_scope: 'cancel_workflow_only',
+        idempotency_domain: 'system:deadline-watchdog',
+        idempotency_key_template:
+          'workflow-deadline:<workflow_id>:<deadline_at_ms>',
+        invocation_audit: 'required',
       },
     });
     expect(
@@ -189,6 +193,19 @@ describe('G0.4 catalog and protocol Contract Pack', () => {
     ).toBe(true);
     expect(
       RUN_TRANSACTION_PROTOCOL_ENTRIES.find(
+        (entry) => entry.transaction_id === 'T6d',
+      ),
+    ).toMatchObject({
+      name: 'attempt_watchdog_and_retry_timers',
+      atomic_writes: [
+        'attempt_timeout_fence_and_fact',
+        'cancel_reconcile_or_compensation_effects',
+        'schedule_consumed_and_exact_next_attempt',
+        'node_retry_wait_to_active',
+      ],
+    });
+    expect(
+      RUN_TRANSACTION_PROTOCOL_ENTRIES.find(
         (entry) => entry.transaction_id === 'T6e',
       ),
     ).toMatchObject({
@@ -204,7 +221,7 @@ describe('G0.4 catalog and protocol Contract Pack', () => {
 
   it('executes all positive and negative catalog/protocol fixtures', () => {
     expect(CATALOG_PROTOCOL_POSITIVE_CASES).toHaveLength(9);
-    expect(CATALOG_PROTOCOL_NEGATIVE_CASES).toHaveLength(20);
+    expect(CATALOG_PROTOCOL_NEGATIVE_CASES).toHaveLength(25);
     expect(() => checkContractPackCatalogProtocols()).not.toThrow();
   });
 

@@ -6,13 +6,13 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-contract-pack-safety-sqlite:1\n",
-  "hash": "sha256:76b8e1196ac422500be9c79a767e673e9c30fa3d9bbb1dc12fc54613cd40b428",
+  "hash": "sha256:4f756c9427a9e5fd8f034c2abdab3c614b675af8b8bbb350fc4219917159cd8d",
   "payload": {
     "gate": "G0.5",
     "status": "safety_retention_sqlite_contracts",
     "foundation_manifest_hash": "sha256:e85b654581c036f8129677d7443a0704ebc8b8fbe87907b842aaefe1501e637d",
     "closed_schema_manifest_hash": "sha256:c5ea281d64480787322e8b6ef619b2f90784084d87ba4373c94288ed5e7aa3a8",
-    "catalog_protocol_manifest_hash": "sha256:e4947c515a28b3baf6782a980db9c26d32612b3c6acd3cd04348e73bd54ff607",
+    "catalog_protocol_manifest_hash": "sha256:a648dc9326255b109690cb47d58032775825ae065caf8f7cbb0ef73efcf984f7",
     "schema_count": 6,
     "safety_limit_count": 69,
     "capacity_limit_count": 7,
@@ -108,7 +108,7 @@
         },
         "version": 1,
         "domain_separator": "icarus:workflow-safety-enforcement-matrix:1\n",
-        "hash": "sha256:fcd51e0f36865f34dcd03641754116db872d791c4d9362110a7a1548e76a545d"
+        "hash": "sha256:9143ae6f043c6bc9389af848604070e4cfad6dcea8d293256cb802b01439bc3a"
       },
       {
         "path": "safety/workflow-runtime-product-floor-schema.json",

@@ -9,7 +9,9 @@ import {
   evaluateGateOwnershipAuditProbeForTest,
   evaluateGateOwnershipDependencyProbeForTest,
   evaluateGateOwnershipFixtureForTest,
+  evaluateGateOwnershipPositiveFixtureForTest,
   type GateOwnershipFixture,
+  type GateOwnershipPositiveFixture,
   gateOwnershipFixturesForTest,
   generateGateOwnershipContracts,
 } from './gate-ownership-contract.js';
@@ -40,8 +42,8 @@ function withRestoredFile(
   }
 }
 
-describe('G5/G7 T6e gate ownership authority', () => {
-  it('generates deterministically and keeps frozen G0/G1/G4 identities external', () => {
+describe('G5/G7 T6d, T7c, and T6e gate ownership authority', () => {
+  it('generates deterministically and records the explicit current reopen', () => {
     const paths = [
       'governance/workflow-runtime-gate-ownership@1.json',
       'conformance/gate-ownership/positive-cases.json',
@@ -61,8 +63,10 @@ describe('G5/G7 T6e gate ownership authority', () => {
     ).toEqual(firstBytes);
     expect(first.payload).toMatchObject({
       authority_kind: 'current_construction_gate_ownership',
-      historical_g0_g1_identity_effect: 'none',
-      g4_pack_identity_effect: 'none',
+      status: 'T6D_OWNERSHIP_EXIT_CANDIDATE_PENDING_INDEPENDENT_REGRESSION',
+      historical_g0_g1_identity_effect:
+        'G0.4_and_G0.5_current_reopened_G1_Schema_4_unchanged',
+      g4_pack_identity_effect: 'direct_G3_run_protocol_dependency_rebuilt',
       implementation_authorized: false,
     });
   });
@@ -95,6 +99,10 @@ describe('G5/G7 T6e gate ownership authority', () => {
       ],
     });
     expect(matrix[0].owned_semantics).toEqual([
+      't6d_automatic_attempt_dispatch_execution_watchdog',
+      't6d_automatic_execution_retry_timer',
+      't6d_automatic_quality_revision_timer',
+      't6d_retry_schedule_consumption_primitive',
       'operational_blocker_create',
       'open_blocker_set_authority',
       'run_operational_state_cache_on_blocker_create',
@@ -107,6 +115,12 @@ describe('G5/G7 T6e gate ownership authority', () => {
     });
     expect(matrix[1].owned_semantics).toEqual(
       expect.arrayContaining([
+        'workflow_deadline_watchdog',
+        'workflow_deadline_system_grant',
+        'workflow_deadline_gateway_submission',
+        'workflow_deadline_t7c_cancel_ingress',
+        'workflow_deadline_command_invocation_audit',
+        'advance_retry_schedule_authorization_and_audit',
         'runtime_command_gateway',
         'resolution_command_invocation_event_audit',
         'last_blocker_operational_state_restoration',
@@ -120,17 +134,19 @@ describe('G5/G7 T6e gate ownership authority', () => {
     const generatedFixtures = gateOwnershipFixturesForTest();
     const artifactFixtures = {
       positive: readArtifact('conformance/gate-ownership/positive-cases.json')
-        .payload.cases as unknown as GateOwnershipFixture[],
+        .payload.cases as unknown as GateOwnershipPositiveFixture[],
       negative: readArtifact('conformance/gate-ownership/negative-cases.json')
         .payload.cases as unknown as GateOwnershipFixture[],
     };
     expect(artifactFixtures).toEqual(generatedFixtures);
-    expect(artifactFixtures.positive).toHaveLength(1);
-    expect(artifactFixtures.negative).toHaveLength(18);
-    for (const fixture of [
-      ...artifactFixtures.positive,
-      ...artifactFixtures.negative,
-    ]) {
+    expect(artifactFixtures.positive).toHaveLength(4);
+    expect(artifactFixtures.negative).toHaveLength(40);
+    for (const fixture of artifactFixtures.positive) {
+      expect(
+        evaluateGateOwnershipPositiveFixtureForTest(fixture.scenario),
+      ).toBe(fixture.expected_code);
+    }
+    for (const fixture of artifactFixtures.negative) {
       expect(evaluateGateOwnershipFixtureForTest(fixture.mutation)).toBe(
         fixture.expected_code,
       );
@@ -142,6 +158,24 @@ describe('G5/G7 T6e gate ownership authority', () => {
       'governance/workflow-runtime-gate-ownership@1.json',
     );
     expect(authority.payload.frozen_invariants).toEqual({
+      t6d_name: 'attempt_watchdog_and_retry_timers',
+      t6d_automatic_atomic_writes: [
+        'attempt_timeout_fence_and_fact',
+        'cancel_reconcile_or_compensation_effects',
+        'schedule_consumed_and_exact_next_attempt',
+        'node_retry_wait_to_active',
+      ],
+      t6d_gateway_writes: 'forbidden',
+      manual_retry_boundary:
+        'G7_runtime_command_gateway_authorization_and_audit_before_G5_T6d_primitive',
+      workflow_deadline_boundary:
+        'G7_deadline_watchdog_to_runtime_command_gateway_to_T7c',
+      workflow_deadline_command_key:
+        'workflow-deadline:<workflow_id>:<deadline_at_ms>',
+      workflow_deadline_system_grant:
+        'deadline_enforced|safety_enforced+due_target+cancel_workflow_only',
+      t7c_authorization_precondition: 'authorized_cancel_command',
+      t7c_atomic_command_audit: 'command_invocation_audit',
       t6e_authorization_precondition: 'authorized_runtime_command',
       t6e_atomic_resolution_audit: 'command_invocation_and_runtime_event',
       t6e_command_types: [

@@ -75,7 +75,7 @@ describe('G0.5 Safety, Retention, and SQLite Contract Pack', () => {
       'sha256:c5ea281d64480787322e8b6ef619b2f90784084d87ba4373c94288ed5e7aa3a8',
     );
     expect(manifest.payload.catalog_protocol_manifest_hash).toBe(
-      'sha256:e4947c515a28b3baf6782a980db9c26d32612b3c6acd3cd04348e73bd54ff607',
+      'sha256:a648dc9326255b109690cb47d58032775825ae065caf8f7cbb0ef73efcf984f7',
     );
     for (const [relativePath, bytes] of before) {
       expect(fs.readFileSync(path.join(contractsRoot, relativePath))).toEqual(

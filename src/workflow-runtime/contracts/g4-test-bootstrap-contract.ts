@@ -404,7 +404,7 @@ function upstreamIdentity(): JsonObject {
     checkG38AActivationContractRepair().hash !==
       G39_UPSTREAM_IDENTITIES.g3_8a_pack_hash ||
     checkG39FeatureReleaseActivationContracts().hash !==
-      'sha256:2ef0997982483a6da4c6c6cfd3e26b7934f7fcffce4fdae160f94f4e9d600b38'
+      'sha256:f5ddf7eb07b4f54431e612f5f6bbaf9df87d7ed6672f4a400b05fc53c7067f4e'
   ) {
     throw new Error('G4 G3 upstream Contract identity drifted');
   }
@@ -440,7 +440,7 @@ function upstreamIdentity(): JsonObject {
     g3_7_pack_hash: G39_UPSTREAM_IDENTITIES.g3_7_pack_hash,
     g3_8a_pack_hash: G39_UPSTREAM_IDENTITIES.g3_8a_pack_hash,
     g3_9_pack_hash:
-      'sha256:2ef0997982483a6da4c6c6cfd3e26b7934f7fcffce4fdae160f94f4e9d600b38',
+      'sha256:f5ddf7eb07b4f54431e612f5f6bbaf9df87d7ed6672f4a400b05fc53c7067f4e',
   };
 }
 

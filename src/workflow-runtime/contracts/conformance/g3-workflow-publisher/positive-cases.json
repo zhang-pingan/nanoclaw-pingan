@@ -1256,7 +1256,7 @@
                 "id": "icarus.workflow-contract-pack-catalog-protocols",
                 "version": "1.0.0"
               },
-              "hash": "sha256:e4947c515a28b3baf6782a980db9c26d32612b3c6acd3cd04348e73bd54ff607",
+              "hash": "sha256:a648dc9326255b109690cb47d58032775825ae065caf8f7cbb0ef73efcf984f7",
               "major": 1
             },
             "executor_abi": {
@@ -1407,8 +1407,8 @@
               }
             ]
           },
-          "domain_request_hash": "sha256:4834a6af8e1556b79e9f2426b0da5f1b8cf23d1e7974c4da797a81d89c3e1b5e",
-          "request_hash": "sha256:15e627cc4627a36c037558a8f7649f9ace13325dabdf2a317c33759058689da6"
+          "domain_request_hash": "sha256:ab73562cd5237a23052797f612dbc686e81be79b02fddeeeaf746b9371696e91",
+          "request_hash": "sha256:440fef2766829321673bd33773a4e68fcff114fcf606aaa9710183aec2bfa6ec"
         },
         "invocation": {
           "invocation_kind": "submit",
@@ -1421,5 +1421,5 @@
       }
     ]
   },
-  "hash": "sha256:6bed4dcdd42f3096db46e787a0109f62529fd473d52481914f220cd961098ef8"
+  "hash": "sha256:622197fb3ec7f448d6ba7f7a629fc7a00db2271aff676f2cf246b1b6544649b4"
 }

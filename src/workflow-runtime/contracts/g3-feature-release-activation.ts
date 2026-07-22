@@ -876,9 +876,9 @@ export const G39_UPSTREAM_IDENTITIES = {
   g3_8a_internal_contract_hash:
     'sha256:70d4b9ef47c83711415636737292450538acaf5cc4547d3130b04b101e6707ae',
   g3_6_pack_hash:
-    'sha256:730daac9db4bcfb645374b12e10e3962ddacbebc2828875cb00133c8ada195a8',
+    'sha256:8cfd7b030e5a1953578410caa349b62f3c38131859e9be5a3ada1bfe4e249e2c',
   g3_7_pack_hash:
-    'sha256:2fae2da648d6da5969e6c5c57b2342f6f15b3084b39e7acfc43b010b48517e74',
+    'sha256:4fc65c77265c226b7abcb6f17aeaab3af3e7f7e13d5117705cb3872f3dce6933',
   g2_sealed_bundle_hash:
     'sha256:d99647d8ca6aabc737a793019335e6770aa111a79be7545c4dec00c6e7af2145',
 } as const;

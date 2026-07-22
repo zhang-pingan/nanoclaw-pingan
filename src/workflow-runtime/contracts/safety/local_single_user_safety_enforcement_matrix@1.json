@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-safety-enforcement-matrix:1\n",
-  "hash": "sha256:fcd51e0f36865f34dcd03641754116db872d791c4d9362110a7a1548e76a545d",
+  "hash": "sha256:9143ae6f043c6bc9389af848604070e4cfad6dcea8d293256cb802b01439bc3a",
   "payload": {
     "matrix_id": "local_single_user_safety_enforcement_matrix@1",
     "safety_profile_ref": {
@@ -1160,15 +1160,15 @@
         "resource_type": null,
         "account_scope": null,
         "consumer_kind": null,
-        "enforcement_component": "workflow_deadline_watchdog",
-        "reservation_point": "T0_deadline_freeze_and_T6d_watchdog",
+        "enforcement_component": "g7_workflow_deadline_watchdog",
+        "reservation_point": "T0_deadline_freeze_and_G7_gateway_T7c_enforcement",
         "settlement_mode": null,
         "failure_code": "workflow_duration_limit_exceeded",
         "failure_outcome": "global_workflow_cancel",
         "included_in_plan_hash": true,
         "supported_limit_path": null,
         "t7_fence_dimension": null,
-        "record_hash": "sha256:3d2cb1f07edeaff93d97b1a4a07952cab5e551bc7b0eaf70cfe56d17c47c012b"
+        "record_hash": "sha256:5e903ae74f4b2b7647ab92a56aa839bbf7af67af94665cdc21e9bc9bd730dfbd"
       },
       {
         "limit_path": "workflow.max_graph_runs",

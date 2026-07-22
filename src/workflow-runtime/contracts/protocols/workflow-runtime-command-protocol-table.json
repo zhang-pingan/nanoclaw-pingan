@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-runtime-command-protocol-table:1\n",
-  "hash": "sha256:b12b07b29e9335593c969033c133d221b244798fc079db5fb398b23fbae10789",
+  "hash": "sha256:43cc8ef247fcba4bac5e9fccdd654fd393928120755a6405bad232043f0c94ba",
   "payload": {
     "run_protocol_major": 1,
     "target_kinds": [
@@ -164,7 +164,10 @@
             "safety_enforced"
           ],
           "predicate": "due_target",
-          "authority_scope": "cancel_workflow_only"
+          "authority_scope": "cancel_workflow_only",
+          "idempotency_domain": "system:deadline-watchdog",
+          "idempotency_key_template": "workflow-deadline:<workflow_id>:<deadline_at_ms>",
+          "invocation_audit": "required"
         },
         "minimum_evidence_refs": 0,
         "confirmation_ref_required": false,
@@ -239,6 +242,14 @@
         "policy_guard": "command_policy_allow_retry_wait_advance",
         "state_guard": "run_paused_schedule_scheduled_node_retry_wait_healthy",
         "transaction_protocol": "T6d",
+        "primitive_handoff": {
+          "authorization_owner": "G7_runtime_command_gateway",
+          "audit_owner": "G7_runtime_command_gateway",
+          "primitive_owner": "G5",
+          "primitive_transaction_protocol": "T6d",
+          "invocation_mode": "authorized_manual_retry",
+          "unauthorized_direct_invocation": "forbidden"
+        },
         "denial_codes": [
           "permission_denied",
           "feature_ceiling_denied",

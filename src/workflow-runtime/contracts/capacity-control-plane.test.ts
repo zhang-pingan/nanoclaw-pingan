@@ -138,12 +138,12 @@ describe('G0.10 Capacity Control-Plane Addendum', () => {
       );
   });
 
-  it('treats G0.9 as immutable history while retaining its expected Markdown drift proof', () => {
+  it('treats G0.9 as immutable history while the current G0.4 reopen fails its aggregate checker closed', () => {
     expect(checkHistoricalG0_9Conformance().hash).toBe(
       G0_9_HISTORICAL_ROOT_HASH,
     );
     expect(() => checkContractPackG0Conformance()).toThrow(
-      /markdown_values_without_contract/,
+      /Prior manifest identity drift: contract-pack-catalog-protocols\.json/,
     );
     expect(
       readArtifact('safety/deployment-runtime-capacity-schema.json').hash,
