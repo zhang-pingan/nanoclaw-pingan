@@ -6334,6 +6334,14 @@ Current construction governance由`src/workflow-runtime/contracts/governance/wor
 
 独立回归直接读取并执行落盘的1 positive / 18 negative fixtures，并补充不进入冻结artifact的audit probes，覆盖ordered transaction set、missing/extra Gate、两侧excluded semantics、T6e protocol source/generated divergence、Schema resolution FK/CHECK、insert/update两条cache trigger、真实dependency/fixture artifact drift及aggregate package chain。修复仅增强checker的可测试验证入口与回归；三份ownership artifact raw bytes、authority identity、冻结transaction/command/Schema 4绑定和G0-G4 identities均保持不变。完整`contracts:generate/check`、G4两轮14-member continuity与0-violation isolation、G3.9/G3、Schema/Store/G1、G2/replay、G0.6/G0.10、typecheck/build均通过，且无G5-G9 Runtime模块、业务DML、Production入口、真实Adapter/network/user-data surface。
 
+### G5 T6d / Runtime Command ownership blocker
+
+后续G5 implementation readiness审计发现current construction authority只关闭了T6e归属冲突，尚未让G5 exact transaction set可执行。G5精确拥有T6d并明确排除`runtime_command_gateway`，但冻结T6d `durable_deadline_and_retry_timers`要求原子写`stable_workflow_deadline_t7c_command`、使用`stable_workflow_deadline_command_key`并处理`late_deadline_command`。该command只能是command protocol中的`cancel_workflow`：它映射T7c，由Deadline Watchdog通过`deadline_enforced/safety_enforced + due_target + cancel_workflow_only`专用System Grant提交；T7c要求`authorized_cancel_command`并原子写`command_invocation_audit`。同一command protocol还把`advance_retry_schedule`映射回T6d。由此，T6d不是与Gateway完全分离的timer transaction。
+
+Query catalog只给`workflow_watchdog`提供`query:workflow_deadline_due`，command header idempotency仍由`command_gateway`的`query:command_idempotency_lookup`拥有。Database Schema 4只有`workflow_runtime_commands`和`workflow_runtime_command_invocations`可承载该handoff，没有独立的deadline handoff、intent或watchdog relation。G5直接创建或预授权command会实现/模拟明确禁止且归G7的Gateway/audit authority；省略command或workflow deadline则违反T6d atomic writes与G5 exact exit。该冲突由`g5-runtime-readiness-audit.test.ts`直接读取冻结ownership/transaction/command/query/Schema artifacts验证，不依赖开放文本解释，也不执行任何Gateway或T6e成功路径。
+
+因此current G5 Basic Runtime施工状态是`BLOCKED_BY_SPEC`，不得创建partial Runtime skeleton或以test-only bypass声称完成。独立前置repair必须选择并机器化一种设计：增加G5-owned durable deadline-handoff relation/protocol并显式reopen G1 Schema；把仅限System deadline submission/audit的最小command slice正式转移给G5；或拆分T6d/G5 exit，让Gateway-bound deadline行为留到拥有Gateway的后续Gate。任何选择都必须同步实现索引、开发顺序、Gate exit、ownership authority、transaction/command/query/Schema contracts与fixture/model/fault分期，并重新完成affected-chain regression；修复前G6-G9继续`NOT_READY`。
+
 ```ts
 interface WorkflowRuntimeAbsenceBaseline {
   format: 'icarus.workflow-runtime-absence-baseline/1';
