@@ -272,6 +272,8 @@ export const G4_ISOLATION_RECEIPT_SCHEMA: JsonObject = {
     owner_marker_hash: hashSchema,
     root_device: { type: 'string', minLength: 1 },
     root_inode: { type: 'string', minLength: 1 },
+    database_device: { type: 'string', minLength: 1 },
+    database_inode: { type: 'string', minLength: 1 },
     database_schema_version: { const: 4 },
     database_schema_hash: hashSchema,
     sqlite_profile_hash: hashSchema,

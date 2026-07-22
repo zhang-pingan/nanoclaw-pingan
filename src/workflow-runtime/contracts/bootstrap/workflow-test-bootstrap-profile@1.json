@@ -110,7 +110,7 @@
       "production_data_root_access": "forbidden",
       "user_data_access": "forbidden"
     },
-    "bootstrap_implementation_hash": "sha256:24161276558b6953d1414982ae193b6ab8ddad16ed2522e10c0732c4e01df456"
+    "bootstrap_implementation_hash": "sha256:a8bea5690d9e0e66ba93cec4ebb5e8a5d471ed160ecb6371effd6cbe18bf56ad"
   },
-  "hash": "sha256:568c5ba1c61c7d8659031ff57d97bd821d02b1e086b31b39ef8121c396cd1ce7"
+  "hash": "sha256:7f88ff930cb4b9d9d348d7d6803a54831b146be069dd77318014f13a47390e6e"
 }

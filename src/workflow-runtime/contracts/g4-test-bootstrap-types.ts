@@ -101,6 +101,8 @@ export interface G4IsolationReceipt extends JsonObject {
   owner_marker_hash: Sha256Hash;
   root_device: string;
   root_inode: string;
+  database_device: string;
+  database_inode: string;
   database_schema_version: 4;
   database_schema_hash: Sha256Hash;
   sqlite_profile_hash: Sha256Hash;

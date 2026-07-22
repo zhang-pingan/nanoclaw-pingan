@@ -26,6 +26,8 @@
       "owner_marker_hash",
       "root_device",
       "root_inode",
+      "database_device",
+      "database_inode",
       "database_schema_version",
       "database_schema_hash",
       "sqlite_profile_hash",
@@ -126,6 +128,14 @@
         "type": "string",
         "minLength": 1
       },
+      "database_device": {
+        "type": "string",
+        "minLength": 1
+      },
+      "database_inode": {
+        "type": "string",
+        "minLength": 1
+      },
       "database_schema_version": {
         "const": 4
       },
@@ -177,5 +187,5 @@
       }
     }
   },
-  "hash": "sha256:80db91304a878be14a2002b07ce7ca532643f06a811f3a31ce1ffc14e1d8ab9f"
+  "hash": "sha256:14de3af0e2c40ac549418ad067c71b749b0ea076adb5c3733c26737b484333e9"
 }

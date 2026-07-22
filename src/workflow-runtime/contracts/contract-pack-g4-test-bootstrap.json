@@ -13,7 +13,7 @@
       "id": "icarus.workflow-test-bootstrap-profile",
       "version": "1.0.0"
     },
-    "profile_hash": "sha256:568c5ba1c61c7d8659031ff57d97bd821d02b1e086b31b39ef8121c396cd1ce7",
+    "profile_hash": "sha256:7f88ff930cb4b9d9d348d7d6803a54831b146be069dd77318014f13a47390e6e",
     "fixture_set_ref": {
       "id": "icarus.workflow-test-bootstrap-fixture-set",
       "version": "1.0.0"
@@ -29,7 +29,7 @@
       "version": "1.0.0"
     },
     "virtual_clock_profile_hash": "sha256:1f37b9d07a7c3b667d60eb489a3ed78017cb7d42072f065d551a5839a29ce73c",
-    "bootstrap_implementation_hash": "sha256:24161276558b6953d1414982ae193b6ab8ddad16ed2522e10c0732c4e01df456",
+    "bootstrap_implementation_hash": "sha256:a8bea5690d9e0e66ba93cec4ebb5e8a5d471ed160ecb6371effd6cbe18bf56ad",
     "isolation_boundary_hash": "sha256:648dab69be05f5bd9c15637d895ea45433fd7f876bb47ff621e8c4c079e618ad",
     "positive_case_count": 7,
     "negative_case_count": 21,
@@ -101,7 +101,7 @@
         },
         "version": 1,
         "domain_separator": "icarus:workflow-test-bootstrap-isolation-receipt-schema:1\n",
-        "hash": "sha256:80db91304a878be14a2002b07ce7ca532643f06a811f3a31ce1ffc14e1d8ab9f"
+        "hash": "sha256:14de3af0e2c40ac549418ad067c71b749b0ea076adb5c3733c26737b484333e9"
       },
       {
         "path": "bootstrap/workflow-test-bootstrap-fixture-set@1.json",
@@ -145,7 +145,7 @@
         },
         "version": 1,
         "domain_separator": "icarus:workflow-test-bootstrap-implementation-artifact:1\n",
-        "hash": "sha256:73ec7f37cffcd22ccce9e75afc7b8393a0c23bcb687b1fbd0c59d60622fed95c"
+        "hash": "sha256:d0d04a99202f4d7ec86bd9893901db5dd2139aaad731d334408e627be4acb928"
       },
       {
         "path": "bootstrap/workflow-test-bootstrap-isolation-boundary@1.json",
@@ -167,7 +167,7 @@
         },
         "version": 1,
         "domain_separator": "icarus:workflow-test-bootstrap-profile:1\n",
-        "hash": "sha256:568c5ba1c61c7d8659031ff57d97bd821d02b1e086b31b39ef8121c396cd1ce7"
+        "hash": "sha256:7f88ff930cb4b9d9d348d7d6803a54831b146be069dd77318014f13a47390e6e"
       },
       {
         "path": "conformance/g4-test-bootstrap/positive-cases.json",
@@ -215,5 +215,5 @@
       }
     ]
   },
-  "hash": "sha256:ac95824616a0a8e1fa9b8a1f6d90a6fee298b4e37581609f9fa01bad780c9d93"
+  "hash": "sha256:4aff06c8170ffa533320e4180a76a169e6815217d3d86dacfa5f7f5448e18e9e"
 }

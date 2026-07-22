@@ -166,6 +166,48 @@ function pathsOverlap(left: string, right: string): boolean {
   return pathContains(left, right) || pathContains(right, left);
 }
 
+function existingRootError(root: string): G4TestBootstrapError {
+  try {
+    const stat = fs.lstatSync(root);
+    if (stat.isSymbolicLink()) {
+      return new G4TestBootstrapError(
+        'data_root_symlink_or_alias',
+        'G4 data root must not be a symbolic link',
+      );
+    }
+    const entries = stat.isDirectory() ? fs.readdirSync(root) : ['not-dir'];
+    return new G4TestBootstrapError(
+      entries.length === 0
+        ? 'data_root_preexisting'
+        : 'data_root_preexisting_nonempty',
+      `G4 refuses a pre-existing data root: ${root}`,
+    );
+  } catch (error) {
+    return new G4TestBootstrapError(
+      'data_root_create_failed',
+      `G4 data root appeared concurrently but could not be inspected: ${root}`,
+      { cause: error },
+    );
+  }
+}
+
+function rootCreateError(root: string, error: unknown): G4TestBootstrapError {
+  const code = (error as NodeJS.ErrnoException).code;
+  if (code === 'EEXIST') return existingRootError(root);
+  if (code === 'EACCES' || code === 'EPERM') {
+    return new G4TestBootstrapError(
+      'data_root_permission_denied',
+      `G4 data root creation was denied: ${root}`,
+      { cause: error },
+    );
+  }
+  return new G4TestBootstrapError(
+    'data_root_create_failed',
+    `G4 data root creation failed: ${root}`,
+    { cause: error },
+  );
+}
+
 function productionRoots(): string[] {
   return [
     path.resolve(repoRoot, 'data/workflow-runtime'),
@@ -226,22 +268,7 @@ function validateRequestedRoot(options: CreateG4TestBootstrapOptions): string {
     );
   }
   if (fs.existsSync(requested)) {
-    const stat = fs.lstatSync(requested);
-    if (stat.isSymbolicLink()) {
-      throw new G4TestBootstrapError(
-        'data_root_symlink_or_alias',
-        'G4 data root must not be a symbolic link',
-      );
-    }
-    const entries = stat.isDirectory()
-      ? fs.readdirSync(requested)
-      : ['not-dir'];
-    throw new G4TestBootstrapError(
-      entries.length === 0
-        ? 'data_root_preexisting'
-        : 'data_root_preexisting_nonempty',
-      `G4 refuses a pre-existing data root: ${requested}`,
-    );
+    throw existingRootError(requested);
   }
   if ((fs.statSync(parent).mode & 0o222) === 0) {
     throw new G4TestBootstrapError(
@@ -351,6 +378,31 @@ function assertOwnedRoot(
   }
 }
 
+function assertOwnedDatabase(
+  databasePath: string,
+  expectedIdentity: { readonly device: string; readonly inode: string },
+): void {
+  try {
+    const linkStat = fs.lstatSync(databasePath);
+    const databaseStat = fs.statSync(databasePath);
+    if (
+      linkStat.isSymbolicLink() ||
+      !databaseStat.isFile() ||
+      fs.realpathSync(databasePath) !== databasePath ||
+      String(databaseStat.dev) !== expectedIdentity.device ||
+      String(databaseStat.ino) !== expectedIdentity.inode
+    ) {
+      throw new Error('database file identity changed');
+    }
+  } catch (error) {
+    throw new G4TestBootstrapError(
+      'isolation_proof_failed',
+      'G4 owned database device/inode identity changed',
+      { cause: error },
+    );
+  }
+}
+
 function buildReceipt(
   contracts: G4TestBootstrapContractSet,
   instanceId: string,
@@ -360,6 +412,7 @@ function buildReceipt(
   store: WorkflowRuntimeStore,
 ): G4IsolationReceipt {
   const rootStat = fs.statSync(root);
+  const databaseStat = fs.statSync(databasePath);
   const activeRegistry = store.queryOne<{ count: number }>(
     "SELECT count(*) AS count FROM workflow_registry_resources WHERE publication_state = 'published'",
     [],
@@ -391,6 +444,8 @@ function buildReceipt(
     owner_marker_hash: ownerMarkerHash,
     root_device: String(rootStat.dev),
     root_inode: String(rootStat.ino),
+    database_device: String(databaseStat.dev),
+    database_inode: String(databaseStat.ino),
     database_schema_version: 4 as const,
     database_schema_hash: storeBinding.database_schema_hash as Sha256Hash,
     sqlite_profile_hash: storeBinding.sqlite_profile_hash as Sha256Hash,
@@ -479,6 +534,10 @@ export class G4TestBootstrapInstance {
         'G4 isolation receipt drifted before reopen',
       );
     }
+    assertOwnedDatabase(this.databasePath, {
+      device: this.receipt.database_device,
+      inode: this.receipt.database_inode,
+    });
     this.#store = WorkflowRuntimeConnectionFactory.openStore({
       databasePath: this.databasePath,
       databaseMode: 'open_existing',
@@ -532,8 +591,14 @@ export function createG4TestBootstrap(
   });
   let store: WorkflowRuntimeStore | undefined;
   let ownerMarkerHash: Sha256Hash | undefined;
+  let rootCreated = false;
   try {
-    fs.mkdirSync(root, { recursive: false, mode: 0o700 });
+    try {
+      fs.mkdirSync(root, { recursive: false, mode: 0o700 });
+      rootCreated = true;
+    } catch (error) {
+      throw rootCreateError(root, error);
+    }
     if (fs.realpathSync(root) !== root || fs.lstatSync(root).isSymbolicLink()) {
       throw new G4TestBootstrapError(
         'data_root_symlink_or_alias',
@@ -620,7 +685,7 @@ export function createG4TestBootstrap(
     );
   } catch (error) {
     store?.close();
-    if (fs.existsSync(root)) {
+    if (rootCreated && fs.existsSync(root)) {
       if (options.faultInjection === 'cleanup_failure') {
         writeResidual(root, instanceId, error);
         throw new G4TestBootstrapError(

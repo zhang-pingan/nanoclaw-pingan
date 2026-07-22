@@ -111,7 +111,7 @@ describe('G4 Test Bootstrap', () => {
       "SELECT name FROM sqlite_schema WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
       [],
     );
-    expect(tables.length).toBeGreaterThan(0);
+    expect(tables).toHaveLength(84);
     for (const { name } of tables) {
       expect(
         instance.store.queryOne<{ count: number }>(
@@ -160,6 +160,43 @@ describe('G4 Test Bootstrap', () => {
       () => createG4TestBootstrap(firstOptions),
       'data_root_preexisting_nonempty',
     );
+  });
+
+  it('never deletes a concurrently created root after losing exclusive mkdir', () => {
+    const candidate = options('concurrent-mkdir-race');
+    const originalMkdirSync = fs.mkdirSync;
+    vi.spyOn(fs, 'mkdirSync').mockImplementation(((
+      target: fs.PathLike,
+      mkdirOptions?: unknown,
+    ) => {
+      if (target === candidate.dataRoot) {
+        originalMkdirSync(candidate.dataRoot, { mode: 0o700 });
+        fs.writeFileSync(
+          path.join(candidate.dataRoot, 'foreign-winner-data'),
+          'winner',
+        );
+        const error = new Error(
+          'exclusive mkdir lost',
+        ) as NodeJS.ErrnoException;
+        error.code = 'EEXIST';
+        throw error;
+      }
+      return (originalMkdirSync as unknown as (...args: unknown[]) => unknown)(
+        target,
+        mkdirOptions,
+      );
+    }) as typeof fs.mkdirSync);
+
+    expectBootstrapCode(
+      () => createG4TestBootstrap(candidate),
+      'data_root_preexisting_nonempty',
+    );
+    expect(
+      fs.readFileSync(
+        path.join(candidate.dataRoot, 'foreign-winner-data'),
+        'utf8',
+      ),
+    ).toBe('winner');
   });
 
   it('rejects missing/default, unknown, and drifted selectors', () => {
@@ -331,6 +368,21 @@ describe('G4 Test Bootstrap', () => {
       path.join(instance.dataRoot, '.g4-test-bootstrap-owner.json'),
       marker,
     );
+    expectBootstrapCode(() => instance.reopenStore(), 'isolation_proof_failed');
+  });
+
+  it('rejects replacement of the exact Schema 4 database file', () => {
+    const instance = track(
+      createG4TestBootstrap(options('database-replacement')),
+    );
+    instance.closeStore();
+    const replacement = path.join(instance.dataRoot, 'replacement.db');
+    fs.copyFileSync(instance.databasePath, replacement);
+    for (const suffix of ['', '-wal', '-shm']) {
+      fs.rmSync(`${instance.databasePath}${suffix}`, { force: true });
+    }
+    fs.renameSync(replacement, instance.databasePath);
+
     expectBootstrapCode(() => instance.reopenStore(), 'isolation_proof_failed');
   });
 });
