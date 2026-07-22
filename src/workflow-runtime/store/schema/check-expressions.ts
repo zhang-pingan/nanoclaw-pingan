@@ -178,6 +178,20 @@ const CUSTOM_CHECKS: Readonly<Record<string, string>> = {
     '(("authorization_result" = \'denied\' AND "execution_result" = \'denied\' AND "denial_code" IS NOT NULL AND "applied_at_ms" IS NULL) OR ("authorization_result" = \'allowed\' AND (("execution_result" = \'applied\' AND "denial_code" IS NULL AND "applied_at_ms" IS NOT NULL) OR ("execution_result" IN (\'conflict\', \'duplicate\', \'failed\') AND "applied_at_ms" IS NULL))))',
   'ck:capacity_events:hash_chain':
     '(("event_seq" = 1 AND "previous_event_hash" IS NULL) OR ("event_seq" > 1 AND "previous_event_hash" IS NOT NULL))',
+  'ck:publisher_commands:idempotency_non_empty':
+    '(length("idempotency_domain") BETWEEN 1 AND 255 AND length("idempotency_key") BETWEEN 1 AND 512)',
+  'ck:publisher_commands:review_window':
+    '("approved_at_ms" <= "created_at_ms" AND "created_at_ms" < "expires_at_ms")',
+  'ck:publisher_commands:lifecycle':
+    '(("lifecycle" = \'pending\' AND "applied_feature_release_id" IS NULL AND "applied_feature_release_hash" IS NULL AND "canonical_receipt_value_id" IS NULL AND "finalized_at_ms" IS NULL) OR ("lifecycle" = \'applied\' AND "applied_feature_release_id" = "target_feature_release_id" AND "applied_feature_release_hash" = "target_feature_release_hash" AND "canonical_receipt_value_id" IS NOT NULL AND "finalized_at_ms" IS NOT NULL) OR ("lifecycle" = \'failed\' AND "applied_feature_release_id" IS NULL AND "applied_feature_release_hash" IS NULL AND "canonical_receipt_value_id" IS NOT NULL AND "finalized_at_ms" IS NOT NULL))',
+  'ck:publisher_invocations:result_consistency':
+    '"decided_at_ms" >= "requested_at_ms" AND (("disposition" = \'applied\' AND "submitted_request_hash" = "command_domain_request_hash" AND "applied_at_ms" IS NOT NULL) OR ("disposition" IN (\'duplicate\', \'failed\') AND "submitted_request_hash" = "command_domain_request_hash" AND "applied_at_ms" IS NULL) OR ("disposition" = \'conflict\' AND "submitted_request_hash" <> "command_domain_request_hash" AND "applied_at_ms" IS NULL))',
+  'ck:publisher_invocations:hash_chain':
+    '(("invocation_no" = 1 AND "previous_invocation_hash" IS NULL) OR ("invocation_no" > 1 AND "previous_invocation_hash" IS NOT NULL))',
+  'ck:publisher_events:hash_chain':
+    '(("event_no" = 1 AND "previous_event_hash" IS NULL) OR ("event_no" > 1 AND "previous_event_hash" IS NOT NULL))',
+  'ck:publisher_events:event_mapping':
+    '(("event_type" = \'attempt_started\' AND "phase" = \'authenticate\' AND "failure_code" IS NULL AND "related_feature_release_id" IS NULL) OR ("event_type" = \'phase_succeeded\' AND "phase" IN (\'validate\', \'review\', \'preflight\', \'finalize\') AND "failure_code" IS NULL AND "related_feature_release_id" IS NULL) OR ("event_type" = \'pre_transaction_failed\' AND "phase" IN (\'authenticate\', \'validate\', \'review\', \'preflight\') AND "failure_code" IS NOT NULL AND "related_feature_release_id" IS NULL) OR ("event_type" = \'publish_transaction_started\' AND "phase" = \'publish_transaction\' AND "failure_code" IS NULL AND "related_feature_release_id" IS NULL) OR ("event_type" = \'publish_committed\' AND "phase" = \'publish_transaction\' AND "failure_code" IS NULL AND "related_feature_release_id" IS NOT NULL) OR ("event_type" = \'recovery_started\' AND "phase" = \'recovery\' AND "failure_code" IS NULL AND "related_feature_release_id" IS NULL) OR ("event_type" = \'recovery_succeeded\' AND "phase" = \'recovery\' AND "failure_code" IS NULL AND "related_feature_release_id" IS NOT NULL) OR ("event_type" = \'recovery_failed\' AND "phase" = \'recovery\' AND "failure_code" IS NOT NULL AND "related_feature_release_id" IS NULL) OR ("event_type" = \'terminal_failed\' AND "phase" = \'finalize\' AND "failure_code" IS NOT NULL AND "related_feature_release_id" IS NULL))',
 };
 
 export function renderCheckExpression(

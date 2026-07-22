@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-g3-registry-publish-positive-cases:1\n",
-  "hash": "sha256:5e2001d5a6c9c4d5bf75081dc7e8d474927c421da882271e537074e1e93598a6",
+  "hash": "sha256:ba43cb8844705956eb036cfa85c653e42a50bc30ed73edd494997fb30681e8c8",
   "payload": {
     "fixture_scope": "test_only",
     "cases": [
@@ -24,11 +24,11 @@
           "feature_release_hash": null,
           "resources": [],
           "upstream_identity": {
-            "g1_schema_root_hash": "sha256:769800fbca754586f1eda90c28e876255a6af3fbe452c397a4dabfd4aec5b756",
-            "g1_schema_dependency_manifest_hash": "sha256:ea039f582f0ebff2fb9bc7e512825612cf8f0f93ccdd4c5e43345f56ca2b7b89",
-            "g1_physical_schema_identity": "sha256:8c667d62f69a8c67ba1edde467562e370377342a058b6dc4673ab9a383fe05a1",
-            "g1_schema_hash": "sha256:4d8c373387ad515c36fd292b705665e6c197c73021c1b7e55da5317bc140efbd",
-            "g1_migration_sha256": "sha256:d89829995e164355ad485fc117db88dd67a72409f00ec3c3c54253f30a589f61",
+            "g1_schema_root_hash": "sha256:d4796f1fbae16e05a2d19ce1be0a65d9c00439814dec97940aea20effaa6d244",
+            "g1_schema_dependency_manifest_hash": "sha256:00bbf7a38a294e9d7f867df70b9db3c7ca0fc7cfe777902fb531e363b678c4e0",
+            "g1_physical_schema_identity": "sha256:e6150805b5c26dfc6ba0886da88b79345cfd5838d8da05d1ca011e371f390616",
+            "g1_schema_hash": "sha256:0c00cd859c3ab6a8cd36c9ea8f81c80de000b845eb5758d442cb1830cea877f9",
+            "g1_migration_sha256": "sha256:fb6c820a0f646148cbd9f54476917802bc208c84070f005fc24871be46ecae89",
             "g2_sealed_bundle_ref": "conformance/sealed/g2-production-compiler-replay-repair-v2/golden-conformance-bundle@2.json",
             "g2_sealed_bundle_artifact_hash": "sha256:037009dcd6c5d6bd2888c484fe1adacded68da5c55e17ba12eb722092e4faced",
             "g2_sealed_bundle_hash": "sha256:d99647d8ca6aabc737a793019335e6770aa111a79be7545c4dec00c6e7af2145",
@@ -60,7 +60,7 @@
           },
           "requested_registry_write": false,
           "requested_activation": false,
-          "preflight_hash": "sha256:e230e028420e57f00fd81e41aaedccf7ee455e5712f0c62e7ff5ae74ef7f550c"
+          "preflight_hash": "sha256:134271e26bb5c2449f751b2079622f71f927390ce2e1e0b8620d75091762ce3f"
         },
         "expected_result": {
           "format": "icarus.workflow-registry-publish-preflight-result/1",
@@ -135,11 +135,11 @@
             }
           ],
           "upstream_identity": {
-            "g1_schema_root_hash": "sha256:769800fbca754586f1eda90c28e876255a6af3fbe452c397a4dabfd4aec5b756",
-            "g1_schema_dependency_manifest_hash": "sha256:ea039f582f0ebff2fb9bc7e512825612cf8f0f93ccdd4c5e43345f56ca2b7b89",
-            "g1_physical_schema_identity": "sha256:8c667d62f69a8c67ba1edde467562e370377342a058b6dc4673ab9a383fe05a1",
-            "g1_schema_hash": "sha256:4d8c373387ad515c36fd292b705665e6c197c73021c1b7e55da5317bc140efbd",
-            "g1_migration_sha256": "sha256:d89829995e164355ad485fc117db88dd67a72409f00ec3c3c54253f30a589f61",
+            "g1_schema_root_hash": "sha256:d4796f1fbae16e05a2d19ce1be0a65d9c00439814dec97940aea20effaa6d244",
+            "g1_schema_dependency_manifest_hash": "sha256:00bbf7a38a294e9d7f867df70b9db3c7ca0fc7cfe777902fb531e363b678c4e0",
+            "g1_physical_schema_identity": "sha256:e6150805b5c26dfc6ba0886da88b79345cfd5838d8da05d1ca011e371f390616",
+            "g1_schema_hash": "sha256:0c00cd859c3ab6a8cd36c9ea8f81c80de000b845eb5758d442cb1830cea877f9",
+            "g1_migration_sha256": "sha256:fb6c820a0f646148cbd9f54476917802bc208c84070f005fc24871be46ecae89",
             "g2_sealed_bundle_ref": "conformance/sealed/g2-production-compiler-replay-repair-v2/golden-conformance-bundle@2.json",
             "g2_sealed_bundle_artifact_hash": "sha256:037009dcd6c5d6bd2888c484fe1adacded68da5c55e17ba12eb722092e4faced",
             "g2_sealed_bundle_hash": "sha256:d99647d8ca6aabc737a793019335e6770aa111a79be7545c4dec00c6e7af2145",
@@ -171,7 +171,7 @@
           },
           "requested_registry_write": false,
           "requested_activation": false,
-          "preflight_hash": "sha256:a4474b55a8fd9022514578a383ff5eab1bf447ebac31ae7b67481b876e01d84d"
+          "preflight_hash": "sha256:2c082f1646463855cdafbd75989a543b0ea9b4593667458aca3e58a510186b5c"
         },
         "expected_result": {
           "format": "icarus.workflow-registry-publish-preflight-result/1",

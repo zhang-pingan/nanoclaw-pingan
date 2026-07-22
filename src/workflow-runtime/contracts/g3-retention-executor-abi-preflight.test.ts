@@ -21,7 +21,7 @@ describe('G3.6 Retention / Executor ABI compatibility contract', () => {
         run_protocol_major: 1,
         executor_abi_major: 1,
         registry_schema_version: 1,
-        database_schema_version: 1,
+        database_schema_version: 2,
       },
       result_schema: 'closed',
       deterministic: true,
@@ -70,7 +70,7 @@ describe('G3.6 Retention / Executor ABI compatibility contract', () => {
     const manifest = checkG3RetentionExecutorAbiPreflight();
     expect(manifest.payload).toMatchObject({
       slice: 'G3.6',
-      publisher_persistence_readiness: 'PUBLISHER_BLOCKED_BY_SCHEMA',
+      publisher_persistence_readiness: 'PUBLISHER_SCHEMA_PREREQUISITE_READY',
       resolution_mode: 'immutable_exact_only',
       snapshot_verifier_reused: 'G3.3',
       exact_resource_query_reused: 'G3.5',

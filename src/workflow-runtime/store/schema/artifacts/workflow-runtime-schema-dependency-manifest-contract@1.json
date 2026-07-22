@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-runtime-schema-dependency-manifest-contract:1\n",
-  "hash": "sha256:3fb342da788bf07ecacc7a28516b9f046efe20f2e48fd1d08247760de1588c00",
+  "hash": "sha256:06b880cddcbe3985a9121af44c8fc099bbb0efda9362b0113fd0360c39e48ccf",
   "payload": {
     "contract_kind": "closed_required_members",
     "unknown_fields": "rejected",
@@ -42,6 +42,7 @@
       "typed_relation_catalog",
       "query_catalog",
       "g0_10_capacity_logical_schema_delta",
+      "publisher_schema_prerequisite",
       "sqlite_execution_profile",
       "schema_manifest",
       "canonical_migration"

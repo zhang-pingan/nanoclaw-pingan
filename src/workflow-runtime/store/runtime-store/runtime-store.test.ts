@@ -224,7 +224,7 @@ describe.sequential('G1.2 Workflow Runtime Store base', () => {
         'SELECT count(*) AS count FROM sqlite_schema WHERE type = ? AND name NOT LIKE ?',
         ['table', 'sqlite_%'],
       )?.count,
-    ).toBe(78);
+    ).toBe(81);
     expect(store.identityEvidence).toMatchObject({
       certification_status: 'candidate_not_certified',
       platform: 'darwin',

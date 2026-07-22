@@ -2759,6 +2759,156 @@ CREATE TABLE "runtime_capacity_change_events" (
   CONSTRAINT "ck:capacity_events:hash_chain" CHECK ((("event_seq" = 1 AND "previous_event_hash" IS NULL) OR ("event_seq" > 1 AND "previous_event_hash" IS NOT NULL))) /* check_kind=state_field_consistency logical_columns=event_seq,previous_event_hash,event_hash */
 );
 
+CREATE TABLE "workflow_publisher_commands" (
+  "command_id" TEXT NOT NULL /* logical_type=identifier */,
+  "command_type" TEXT NOT NULL /* logical_type=text */,
+  "idempotency_domain" TEXT NOT NULL /* logical_type=text */,
+  "idempotency_key" TEXT NOT NULL /* logical_type=text */,
+  "request_value_id" TEXT NOT NULL /* logical_type=identifier */,
+  "request_hash" TEXT NOT NULL /* logical_type=hash */,
+  "request_schema_resource_id" TEXT NOT NULL /* logical_type=identifier */,
+  "request_schema_hash" TEXT NOT NULL /* logical_type=hash */,
+  "domain_request_hash" TEXT NOT NULL /* logical_type=hash */,
+  "approved_review_ref" TEXT NOT NULL /* logical_type=external_reference external_ref=1 validator_owner=workflow_authoring_review_registry reference_domain=approved_workflow_review immutable=1 */,
+  "approved_review_hash" TEXT NOT NULL /* logical_type=hash */,
+  "reviewer_actor_ref" TEXT NOT NULL /* logical_type=external_reference external_ref=1 validator_owner=publisher_authentication_gateway reference_domain=authenticated_principal immutable=1 */,
+  "reviewer_auth_session_ref" TEXT NOT NULL /* logical_type=external_reference external_ref=1 validator_owner=authentication_service reference_domain=auth_session immutable=1 */,
+  "approved_at_ms" INTEGER NOT NULL /* logical_type=integer */,
+  "expires_at_ms" INTEGER NOT NULL /* logical_type=integer */,
+  "source_manifest_value_id" TEXT NOT NULL /* logical_type=identifier */,
+  "source_manifest_hash" TEXT NOT NULL /* logical_type=hash */,
+  "source_manifest_schema_resource_id" TEXT NOT NULL /* logical_type=identifier */,
+  "source_manifest_schema_hash" TEXT NOT NULL /* logical_type=hash */,
+  "compiled_plan_value_id" TEXT NOT NULL /* logical_type=identifier */,
+  "compiled_plan_hash" TEXT NOT NULL /* logical_type=hash */,
+  "compiled_plan_schema_resource_id" TEXT NOT NULL /* logical_type=identifier */,
+  "compiled_plan_schema_hash" TEXT NOT NULL /* logical_type=hash */,
+  "execution_artifact_resource_id" TEXT NOT NULL /* logical_type=identifier */,
+  "execution_artifact_hash" TEXT NOT NULL /* logical_type=hash */,
+  "closure_manifest_id" TEXT NOT NULL /* logical_type=identifier */,
+  "closure_hash" TEXT NOT NULL /* logical_type=hash */,
+  "target_feature_release_id" TEXT NOT NULL /* logical_type=identifier */,
+  "target_feature_release_hash" TEXT NOT NULL /* logical_type=hash */,
+  "applied_feature_release_id" TEXT /* logical_type=identifier */,
+  "applied_feature_release_hash" TEXT /* logical_type=hash */,
+  "canonical_receipt_value_id" TEXT /* logical_type=identifier */,
+  "canonical_receipt_hash" TEXT /* logical_type=hash */,
+  "canonical_receipt_schema_resource_id" TEXT /* logical_type=identifier */,
+  "canonical_receipt_schema_hash" TEXT /* logical_type=hash */,
+  "lifecycle" TEXT NOT NULL /* logical_type=text */,
+  "created_at_ms" INTEGER NOT NULL /* logical_type=integer */,
+  "finalized_at_ms" INTEGER /* logical_type=integer */,
+  "row_version" INTEGER NOT NULL /* logical_type=integer */,
+  CONSTRAINT "pk:workflow_publisher_commands" PRIMARY KEY ("command_id"),
+  CONSTRAINT "fk:publisher_commands:request_value" FOREIGN KEY ("request_value_id", "request_hash", "request_schema_resource_id", "request_schema_hash") REFERENCES "workflow_values" ("id", "content_hash", "schema_resource_id", "schema_resource_hash") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED,
+  CONSTRAINT "fk:publisher_commands:source_manifest_value" FOREIGN KEY ("source_manifest_value_id", "source_manifest_hash", "source_manifest_schema_resource_id", "source_manifest_schema_hash") REFERENCES "workflow_values" ("id", "content_hash", "schema_resource_id", "schema_resource_hash") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED,
+  CONSTRAINT "fk:publisher_commands:compiled_plan_value" FOREIGN KEY ("compiled_plan_value_id", "compiled_plan_hash", "compiled_plan_schema_resource_id", "compiled_plan_schema_hash") REFERENCES "workflow_values" ("id", "content_hash", "schema_resource_id", "schema_resource_hash") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED,
+  CONSTRAINT "fk:publisher_commands:execution_artifact" FOREIGN KEY ("execution_artifact_resource_id", "execution_artifact_hash") REFERENCES "workflow_registry_resources" ("id", "content_hash") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED,
+  CONSTRAINT "fk:publisher_commands:closure" FOREIGN KEY ("closure_manifest_id", "closure_hash") REFERENCES "workflow_registry_closure_manifests" ("id", "closure_hash") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED,
+  CONSTRAINT "fk:publisher_commands:target_feature_release" FOREIGN KEY ("target_feature_release_id", "target_feature_release_hash") REFERENCES "workflow_feature_releases" ("id", "release_hash") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED,
+  CONSTRAINT "fk:publisher_commands:applied_feature_release" FOREIGN KEY ("applied_feature_release_id", "applied_feature_release_hash") REFERENCES "workflow_feature_releases" ("id", "release_hash") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED,
+  CONSTRAINT "fk:publisher_commands:canonical_receipt_value" FOREIGN KEY ("canonical_receipt_value_id", "canonical_receipt_hash", "canonical_receipt_schema_resource_id", "canonical_receipt_schema_hash") REFERENCES "workflow_values" ("id", "content_hash", "schema_resource_id", "schema_resource_hash") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED,
+  CONSTRAINT "ck:workflow_publisher_commands:command_type:enum" CHECK ("command_type" IN ('staged_publish')) /* check_kind=enum_membership logical_columns=command_type */,
+  CONSTRAINT "ck:workflow_publisher_commands:request_hash:hash" CHECK (("request_hash" IS NULL OR (length("request_hash") = 71 AND substr("request_hash", 1, 7) = 'sha256:' AND substr("request_hash", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=request_hash */,
+  CONSTRAINT "ck:workflow_publisher_commands:request_schema_hash:hash" CHECK (("request_schema_hash" IS NULL OR (length("request_schema_hash") = 71 AND substr("request_schema_hash", 1, 7) = 'sha256:' AND substr("request_schema_hash", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=request_schema_hash */,
+  CONSTRAINT "ck:workflow_publisher_commands:domain_request_hash:hash" CHECK (("domain_request_hash" IS NULL OR (length("domain_request_hash") = 71 AND substr("domain_request_hash", 1, 7) = 'sha256:' AND substr("domain_request_hash", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=domain_request_hash */,
+  CONSTRAINT "ck:workflow_publisher_commands:approved_review_hash:hash" CHECK (("approved_review_hash" IS NULL OR (length("approved_review_hash") = 71 AND substr("approved_review_hash", 1, 7) = 'sha256:' AND substr("approved_review_hash", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=approved_review_hash */,
+  CONSTRAINT "ck:workflow_publisher_commands:approved_at_ms:safe_integer" CHECK (("approved_at_ms" IS NULL OR "approved_at_ms" BETWEEN 0 AND 9007199254740991)) /* check_kind=safe_integer logical_columns=approved_at_ms */,
+  CONSTRAINT "ck:workflow_publisher_commands:expires_at_ms:safe_integer" CHECK (("expires_at_ms" IS NULL OR "expires_at_ms" BETWEEN 0 AND 9007199254740991)) /* check_kind=safe_integer logical_columns=expires_at_ms */,
+  CONSTRAINT "ck:workflow_publisher_commands:source_manifest_hash:hash" CHECK (("source_manifest_hash" IS NULL OR (length("source_manifest_hash") = 71 AND substr("source_manifest_hash", 1, 7) = 'sha256:' AND substr("source_manifest_hash", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=source_manifest_hash */,
+  CONSTRAINT "ck:workflow_publisher_commands:source_manifest_schema_hash:hash" CHECK (("source_manifest_schema_hash" IS NULL OR (length("source_manifest_schema_hash") = 71 AND substr("source_manifest_schema_hash", 1, 7) = 'sha256:' AND substr("source_manifest_schema_hash", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=source_manifest_schema_hash */,
+  CONSTRAINT "ck:workflow_publisher_commands:compiled_plan_hash:hash" CHECK (("compiled_plan_hash" IS NULL OR (length("compiled_plan_hash") = 71 AND substr("compiled_plan_hash", 1, 7) = 'sha256:' AND substr("compiled_plan_hash", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=compiled_plan_hash */,
+  CONSTRAINT "ck:workflow_publisher_commands:compiled_plan_schema_hash:hash" CHECK (("compiled_plan_schema_hash" IS NULL OR (length("compiled_plan_schema_hash") = 71 AND substr("compiled_plan_schema_hash", 1, 7) = 'sha256:' AND substr("compiled_plan_schema_hash", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=compiled_plan_schema_hash */,
+  CONSTRAINT "ck:workflow_publisher_commands:execution_artifact_hash:hash" CHECK (("execution_artifact_hash" IS NULL OR (length("execution_artifact_hash") = 71 AND substr("execution_artifact_hash", 1, 7) = 'sha256:' AND substr("execution_artifact_hash", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=execution_artifact_hash */,
+  CONSTRAINT "ck:workflow_publisher_commands:closure_hash:hash" CHECK (("closure_hash" IS NULL OR (length("closure_hash") = 71 AND substr("closure_hash", 1, 7) = 'sha256:' AND substr("closure_hash", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=closure_hash */,
+  CONSTRAINT "ck:workflow_publisher_commands:target_feature_release_hash:hash" CHECK (("target_feature_release_hash" IS NULL OR (length("target_feature_release_hash") = 71 AND substr("target_feature_release_hash", 1, 7) = 'sha256:' AND substr("target_feature_release_hash", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=target_feature_release_hash */,
+  CONSTRAINT "ck:workflow_publisher_commands:applied_feature_release_hash:hash" CHECK (("applied_feature_release_hash" IS NULL OR (length("applied_feature_release_hash") = 71 AND substr("applied_feature_release_hash", 1, 7) = 'sha256:' AND substr("applied_feature_release_hash", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=applied_feature_release_hash */,
+  CONSTRAINT "ck:workflow_publisher_commands:canonical_receipt_hash:hash" CHECK (("canonical_receipt_hash" IS NULL OR (length("canonical_receipt_hash") = 71 AND substr("canonical_receipt_hash", 1, 7) = 'sha256:' AND substr("canonical_receipt_hash", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=canonical_receipt_hash */,
+  CONSTRAINT "ck:workflow_publisher_commands:canonical_receipt_schema_hash:hash" CHECK (("canonical_receipt_schema_hash" IS NULL OR (length("canonical_receipt_schema_hash") = 71 AND substr("canonical_receipt_schema_hash", 1, 7) = 'sha256:' AND substr("canonical_receipt_schema_hash", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=canonical_receipt_schema_hash */,
+  CONSTRAINT "ck:workflow_publisher_commands:lifecycle:enum" CHECK ("lifecycle" IN ('pending', 'applied', 'failed')) /* check_kind=enum_membership logical_columns=lifecycle */,
+  CONSTRAINT "ck:workflow_publisher_commands:created_at_ms:safe_integer" CHECK (("created_at_ms" IS NULL OR "created_at_ms" BETWEEN 0 AND 9007199254740991)) /* check_kind=safe_integer logical_columns=created_at_ms */,
+  CONSTRAINT "ck:workflow_publisher_commands:finalized_at_ms:safe_integer" CHECK (("finalized_at_ms" IS NULL OR "finalized_at_ms" BETWEEN 0 AND 9007199254740991)) /* check_kind=safe_integer logical_columns=finalized_at_ms */,
+  CONSTRAINT "ck:workflow_publisher_commands:row_version:safe_integer" CHECK (("row_version" IS NULL OR "row_version" BETWEEN 0 AND 9007199254740991)) /* check_kind=safe_integer logical_columns=row_version */,
+  CONSTRAINT "ck:publisher_commands:idempotency_non_empty" CHECK ((length("idempotency_domain") BETWEEN 1 AND 255 AND length("idempotency_key") BETWEEN 1 AND 512)) /* check_kind=state_field_consistency logical_columns=idempotency_domain,idempotency_key */,
+  CONSTRAINT "ck:publisher_commands:review_window" CHECK (("approved_at_ms" <= "created_at_ms" AND "created_at_ms" < "expires_at_ms")) /* check_kind=ordered_values logical_columns=approved_at_ms,created_at_ms,expires_at_ms */,
+  CONSTRAINT "ck:publisher_commands:applied_release_pair" CHECK ((("applied_feature_release_id" IS NULL AND "applied_feature_release_hash" IS NULL) OR ("applied_feature_release_id" IS NOT NULL AND "applied_feature_release_hash" IS NOT NULL))) /* check_kind=all_or_none logical_columns=applied_feature_release_id,applied_feature_release_hash */,
+  CONSTRAINT "ck:publisher_commands:receipt_binding" CHECK ((("canonical_receipt_value_id" IS NULL AND "canonical_receipt_hash" IS NULL AND "canonical_receipt_schema_resource_id" IS NULL AND "canonical_receipt_schema_hash" IS NULL) OR ("canonical_receipt_value_id" IS NOT NULL AND "canonical_receipt_hash" IS NOT NULL AND "canonical_receipt_schema_resource_id" IS NOT NULL AND "canonical_receipt_schema_hash" IS NOT NULL))) /* check_kind=all_or_none logical_columns=canonical_receipt_value_id,canonical_receipt_hash,canonical_receipt_schema_resource_id,canonical_receipt_schema_hash */,
+  CONSTRAINT "ck:publisher_commands:lifecycle" CHECK ((("lifecycle" = 'pending' AND "applied_feature_release_id" IS NULL AND "applied_feature_release_hash" IS NULL AND "canonical_receipt_value_id" IS NULL AND "finalized_at_ms" IS NULL) OR ("lifecycle" = 'applied' AND "applied_feature_release_id" = "target_feature_release_id" AND "applied_feature_release_hash" = "target_feature_release_hash" AND "canonical_receipt_value_id" IS NOT NULL AND "finalized_at_ms" IS NOT NULL) OR ("lifecycle" = 'failed' AND "applied_feature_release_id" IS NULL AND "applied_feature_release_hash" IS NULL AND "canonical_receipt_value_id" IS NOT NULL AND "finalized_at_ms" IS NOT NULL))) /* check_kind=state_field_consistency logical_columns=lifecycle,target_feature_release_id,target_feature_release_hash,applied_feature_release_id,applied_feature_release_hash,canonical_receipt_value_id,finalized_at_ms */
+);
+
+CREATE TABLE "workflow_publisher_command_invocations" (
+  "id" TEXT NOT NULL /* logical_type=identifier */,
+  "command_id" TEXT NOT NULL /* logical_type=identifier */,
+  "invocation_no" INTEGER NOT NULL /* logical_type=integer */,
+  "command_domain_request_hash" TEXT NOT NULL /* logical_type=hash */,
+  "submitted_request_hash" TEXT NOT NULL /* logical_type=hash */,
+  "actor_ref" TEXT NOT NULL /* logical_type=external_reference external_ref=1 validator_owner=publisher_authentication_gateway reference_domain=authenticated_principal immutable=1 */,
+  "auth_session_ref" TEXT NOT NULL /* logical_type=external_reference external_ref=1 validator_owner=authentication_service reference_domain=auth_session immutable=1 */,
+  "requested_at_ms" INTEGER NOT NULL /* logical_type=integer */,
+  "disposition" TEXT NOT NULL /* logical_type=text */,
+  "result_value_id" TEXT NOT NULL /* logical_type=identifier */,
+  "result_hash" TEXT NOT NULL /* logical_type=hash */,
+  "result_schema_resource_id" TEXT NOT NULL /* logical_type=identifier */,
+  "result_schema_hash" TEXT NOT NULL /* logical_type=hash */,
+  "decided_at_ms" INTEGER NOT NULL /* logical_type=integer */,
+  "applied_at_ms" INTEGER /* logical_type=integer */,
+  "previous_invocation_hash" TEXT /* logical_type=hash */,
+  "invocation_hash" TEXT NOT NULL /* logical_type=hash */,
+  CONSTRAINT "pk:workflow_publisher_command_invocations" PRIMARY KEY ("id"),
+  CONSTRAINT "fk:publisher_invocations:command_request" FOREIGN KEY ("command_id", "command_domain_request_hash") REFERENCES "workflow_publisher_commands" ("command_id", "domain_request_hash") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED,
+  CONSTRAINT "fk:publisher_invocations:result_value" FOREIGN KEY ("result_value_id", "result_hash", "result_schema_resource_id", "result_schema_hash") REFERENCES "workflow_values" ("id", "content_hash", "schema_resource_id", "schema_resource_hash") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED,
+  CONSTRAINT "ck:workflow_publisher_command_invocations:invocation_no:safe_integer" CHECK (("invocation_no" IS NULL OR "invocation_no" BETWEEN 1 AND 9007199254740991)) /* check_kind=safe_integer logical_columns=invocation_no */,
+  CONSTRAINT "ck:workflow_publisher_command_invocations:command_domain_request_hash:hash" CHECK (("command_domain_request_hash" IS NULL OR (length("command_domain_request_hash") = 71 AND substr("command_domain_request_hash", 1, 7) = 'sha256:' AND substr("command_domain_request_hash", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=command_domain_request_hash */,
+  CONSTRAINT "ck:workflow_publisher_command_invocations:submitted_request_hash:hash" CHECK (("submitted_request_hash" IS NULL OR (length("submitted_request_hash") = 71 AND substr("submitted_request_hash", 1, 7) = 'sha256:' AND substr("submitted_request_hash", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=submitted_request_hash */,
+  CONSTRAINT "ck:workflow_publisher_command_invocations:requested_at_ms:safe_integer" CHECK (("requested_at_ms" IS NULL OR "requested_at_ms" BETWEEN 0 AND 9007199254740991)) /* check_kind=safe_integer logical_columns=requested_at_ms */,
+  CONSTRAINT "ck:workflow_publisher_command_invocations:disposition:enum" CHECK ("disposition" IN ('applied', 'duplicate', 'conflict', 'failed')) /* check_kind=enum_membership logical_columns=disposition */,
+  CONSTRAINT "ck:workflow_publisher_command_invocations:result_hash:hash" CHECK (("result_hash" IS NULL OR (length("result_hash") = 71 AND substr("result_hash", 1, 7) = 'sha256:' AND substr("result_hash", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=result_hash */,
+  CONSTRAINT "ck:workflow_publisher_command_invocations:result_schema_hash:hash" CHECK (("result_schema_hash" IS NULL OR (length("result_schema_hash") = 71 AND substr("result_schema_hash", 1, 7) = 'sha256:' AND substr("result_schema_hash", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=result_schema_hash */,
+  CONSTRAINT "ck:workflow_publisher_command_invocations:decided_at_ms:safe_integer" CHECK (("decided_at_ms" IS NULL OR "decided_at_ms" BETWEEN 0 AND 9007199254740991)) /* check_kind=safe_integer logical_columns=decided_at_ms */,
+  CONSTRAINT "ck:workflow_publisher_command_invocations:applied_at_ms:safe_integer" CHECK (("applied_at_ms" IS NULL OR "applied_at_ms" BETWEEN 0 AND 9007199254740991)) /* check_kind=safe_integer logical_columns=applied_at_ms */,
+  CONSTRAINT "ck:workflow_publisher_command_invocations:previous_invocation_hash:hash" CHECK (("previous_invocation_hash" IS NULL OR (length("previous_invocation_hash") = 71 AND substr("previous_invocation_hash", 1, 7) = 'sha256:' AND substr("previous_invocation_hash", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=previous_invocation_hash */,
+  CONSTRAINT "ck:workflow_publisher_command_invocations:invocation_hash:hash" CHECK (("invocation_hash" IS NULL OR (length("invocation_hash") = 71 AND substr("invocation_hash", 1, 7) = 'sha256:' AND substr("invocation_hash", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=invocation_hash */,
+  CONSTRAINT "ck:publisher_invocations:result_consistency" CHECK ("decided_at_ms" >= "requested_at_ms" AND (("disposition" = 'applied' AND "submitted_request_hash" = "command_domain_request_hash" AND "applied_at_ms" IS NOT NULL) OR ("disposition" IN ('duplicate', 'failed') AND "submitted_request_hash" = "command_domain_request_hash" AND "applied_at_ms" IS NULL) OR ("disposition" = 'conflict' AND "submitted_request_hash" <> "command_domain_request_hash" AND "applied_at_ms" IS NULL))) /* check_kind=state_field_consistency logical_columns=disposition,command_domain_request_hash,submitted_request_hash,requested_at_ms,decided_at_ms,applied_at_ms */,
+  CONSTRAINT "ck:publisher_invocations:hash_chain" CHECK ((("invocation_no" = 1 AND "previous_invocation_hash" IS NULL) OR ("invocation_no" > 1 AND "previous_invocation_hash" IS NOT NULL))) /* check_kind=state_field_consistency logical_columns=invocation_no,previous_invocation_hash,invocation_hash */
+);
+
+CREATE TABLE "workflow_publisher_events" (
+  "command_id" TEXT NOT NULL /* logical_type=identifier */,
+  "event_no" INTEGER NOT NULL /* logical_type=integer */,
+  "attempt_no" INTEGER NOT NULL /* logical_type=integer */,
+  "phase" TEXT NOT NULL /* logical_type=text */,
+  "event_type" TEXT NOT NULL /* logical_type=text */,
+  "failure_code" TEXT /* logical_type=text */,
+  "related_feature_release_id" TEXT /* logical_type=identifier */,
+  "related_feature_release_hash" TEXT /* logical_type=hash */,
+  "detail_value_id" TEXT /* logical_type=identifier */,
+  "detail_hash" TEXT /* logical_type=hash */,
+  "detail_schema_resource_id" TEXT /* logical_type=identifier */,
+  "detail_schema_hash" TEXT /* logical_type=hash */,
+  "previous_event_hash" TEXT /* logical_type=hash */,
+  "event_hash" TEXT NOT NULL /* logical_type=hash */,
+  "occurred_at_ms" INTEGER NOT NULL /* logical_type=integer */,
+  CONSTRAINT "pk:workflow_publisher_events" PRIMARY KEY ("command_id", "event_no"),
+  CONSTRAINT "fk:publisher_events:command" FOREIGN KEY ("command_id") REFERENCES "workflow_publisher_commands" ("command_id") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED,
+  CONSTRAINT "fk:publisher_events:attempt_invocation" FOREIGN KEY ("command_id", "attempt_no") REFERENCES "workflow_publisher_command_invocations" ("command_id", "invocation_no") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED,
+  CONSTRAINT "fk:publisher_events:related_feature_release" FOREIGN KEY ("related_feature_release_id", "related_feature_release_hash") REFERENCES "workflow_feature_releases" ("id", "release_hash") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED,
+  CONSTRAINT "fk:publisher_events:detail_value" FOREIGN KEY ("detail_value_id", "detail_hash", "detail_schema_resource_id", "detail_schema_hash") REFERENCES "workflow_values" ("id", "content_hash", "schema_resource_id", "schema_resource_hash") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED,
+  CONSTRAINT "ck:workflow_publisher_events:event_no:safe_integer" CHECK (("event_no" IS NULL OR "event_no" BETWEEN 1 AND 9007199254740991)) /* check_kind=safe_integer logical_columns=event_no */,
+  CONSTRAINT "ck:workflow_publisher_events:attempt_no:safe_integer" CHECK (("attempt_no" IS NULL OR "attempt_no" BETWEEN 1 AND 9007199254740991)) /* check_kind=safe_integer logical_columns=attempt_no */,
+  CONSTRAINT "ck:workflow_publisher_events:phase:enum" CHECK ("phase" IN ('authenticate', 'validate', 'review', 'preflight', 'publish_transaction', 'recovery', 'finalize')) /* check_kind=enum_membership logical_columns=phase */,
+  CONSTRAINT "ck:workflow_publisher_events:event_type:enum" CHECK ("event_type" IN ('attempt_started', 'phase_succeeded', 'pre_transaction_failed', 'publish_transaction_started', 'publish_committed', 'recovery_started', 'recovery_succeeded', 'recovery_failed', 'terminal_failed')) /* check_kind=enum_membership logical_columns=event_type */,
+  CONSTRAINT "ck:workflow_publisher_events:related_feature_release_hash:hash" CHECK (("related_feature_release_hash" IS NULL OR (length("related_feature_release_hash") = 71 AND substr("related_feature_release_hash", 1, 7) = 'sha256:' AND substr("related_feature_release_hash", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=related_feature_release_hash */,
+  CONSTRAINT "ck:workflow_publisher_events:detail_hash:hash" CHECK (("detail_hash" IS NULL OR (length("detail_hash") = 71 AND substr("detail_hash", 1, 7) = 'sha256:' AND substr("detail_hash", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=detail_hash */,
+  CONSTRAINT "ck:workflow_publisher_events:detail_schema_hash:hash" CHECK (("detail_schema_hash" IS NULL OR (length("detail_schema_hash") = 71 AND substr("detail_schema_hash", 1, 7) = 'sha256:' AND substr("detail_schema_hash", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=detail_schema_hash */,
+  CONSTRAINT "ck:workflow_publisher_events:previous_event_hash:hash" CHECK (("previous_event_hash" IS NULL OR (length("previous_event_hash") = 71 AND substr("previous_event_hash", 1, 7) = 'sha256:' AND substr("previous_event_hash", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=previous_event_hash */,
+  CONSTRAINT "ck:workflow_publisher_events:event_hash:hash" CHECK (("event_hash" IS NULL OR (length("event_hash") = 71 AND substr("event_hash", 1, 7) = 'sha256:' AND substr("event_hash", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=event_hash */,
+  CONSTRAINT "ck:workflow_publisher_events:occurred_at_ms:safe_integer" CHECK (("occurred_at_ms" IS NULL OR "occurred_at_ms" BETWEEN 0 AND 9007199254740991)) /* check_kind=safe_integer logical_columns=occurred_at_ms */,
+  CONSTRAINT "ck:publisher_events:related_release_pair" CHECK ((("related_feature_release_id" IS NULL AND "related_feature_release_hash" IS NULL) OR ("related_feature_release_id" IS NOT NULL AND "related_feature_release_hash" IS NOT NULL))) /* check_kind=all_or_none logical_columns=related_feature_release_id,related_feature_release_hash */,
+  CONSTRAINT "ck:publisher_events:detail_binding" CHECK ((("detail_value_id" IS NULL AND "detail_hash" IS NULL AND "detail_schema_resource_id" IS NULL AND "detail_schema_hash" IS NULL) OR ("detail_value_id" IS NOT NULL AND "detail_hash" IS NOT NULL AND "detail_schema_resource_id" IS NOT NULL AND "detail_schema_hash" IS NOT NULL))) /* check_kind=all_or_none logical_columns=detail_value_id,detail_hash,detail_schema_resource_id,detail_schema_hash */,
+  CONSTRAINT "ck:publisher_events:hash_chain" CHECK ((("event_no" = 1 AND "previous_event_hash" IS NULL) OR ("event_no" > 1 AND "previous_event_hash" IS NOT NULL))) /* check_kind=state_field_consistency logical_columns=event_no,previous_event_hash,event_hash */,
+  CONSTRAINT "ck:publisher_events:event_mapping" CHECK ((("event_type" = 'attempt_started' AND "phase" = 'authenticate' AND "failure_code" IS NULL AND "related_feature_release_id" IS NULL) OR ("event_type" = 'phase_succeeded' AND "phase" IN ('validate', 'review', 'preflight', 'finalize') AND "failure_code" IS NULL AND "related_feature_release_id" IS NULL) OR ("event_type" = 'pre_transaction_failed' AND "phase" IN ('authenticate', 'validate', 'review', 'preflight') AND "failure_code" IS NOT NULL AND "related_feature_release_id" IS NULL) OR ("event_type" = 'publish_transaction_started' AND "phase" = 'publish_transaction' AND "failure_code" IS NULL AND "related_feature_release_id" IS NULL) OR ("event_type" = 'publish_committed' AND "phase" = 'publish_transaction' AND "failure_code" IS NULL AND "related_feature_release_id" IS NOT NULL) OR ("event_type" = 'recovery_started' AND "phase" = 'recovery' AND "failure_code" IS NULL AND "related_feature_release_id" IS NULL) OR ("event_type" = 'recovery_succeeded' AND "phase" = 'recovery' AND "failure_code" IS NULL AND "related_feature_release_id" IS NOT NULL) OR ("event_type" = 'recovery_failed' AND "phase" = 'recovery' AND "failure_code" IS NOT NULL AND "related_feature_release_id" IS NULL) OR ("event_type" = 'terminal_failed' AND "phase" = 'finalize' AND "failure_code" IS NOT NULL AND "related_feature_release_id" IS NULL))) /* check_kind=closed_target_mapping logical_columns=phase,event_type,failure_code,related_feature_release_id */
+);
+
 CREATE UNIQUE INDEX "uk:resource_accounts:deployment" ON "workflow_graph_resource_accounts" ("deployment_scope_ref", "resource_type") WHERE "deployment_scope_ref" IS NOT NULL;
 
 CREATE UNIQUE INDEX "uk:resource_accounts:workflow" ON "workflow_graph_resource_accounts" ("workflow_id", "resource_type") WHERE "workflow_id" IS NOT NULL;
@@ -2796,6 +2946,8 @@ CREATE UNIQUE INDEX "uk:domain_claims:owner_resource" ON "workflow_domain_resour
 CREATE UNIQUE INDEX "uk:domain_claims:resource" ON "workflow_domain_resource_claims" ("namespace", "key_hash");
 
 CREATE UNIQUE INDEX "uk:values:id_hash" ON "workflow_values" ("id", "content_hash");
+
+CREATE UNIQUE INDEX "uk:values:id_hash_schema" ON "workflow_values" ("id", "content_hash", "schema_resource_id", "schema_resource_hash");
 
 CREATE UNIQUE INDEX "uk:value_edges:member_key" ON "workflow_value_edges" ("parent_value_id", "relation_kind", "member_key") WHERE "member_key" IS NOT NULL;
 
@@ -3031,6 +3183,18 @@ CREATE UNIQUE INDEX "uk:capacity_events:single_commit_milestone" ON "runtime_cap
 
 CREATE UNIQUE INDEX "uk:capacity_events:event_hash" ON "runtime_capacity_change_events" ("event_hash");
 
+CREATE UNIQUE INDEX "uk:publisher_commands:idempotency" ON "workflow_publisher_commands" ("idempotency_domain", "idempotency_key");
+
+CREATE UNIQUE INDEX "uk:publisher_commands:id_domain_request" ON "workflow_publisher_commands" ("command_id", "domain_request_hash");
+
+CREATE UNIQUE INDEX "uk:publisher_invocations:command_no" ON "workflow_publisher_command_invocations" ("command_id", "invocation_no");
+
+CREATE UNIQUE INDEX "uk:publisher_invocations:invocation_hash" ON "workflow_publisher_command_invocations" ("invocation_hash");
+
+CREATE UNIQUE INDEX "uk:publisher_events:attempt_phase_type" ON "workflow_publisher_events" ("command_id", "attempt_no", "phase", "event_type");
+
+CREATE UNIQUE INDEX "uk:publisher_events:event_hash" ON "workflow_publisher_events" ("event_hash");
+
 CREATE INDEX "idx:domain_claims:resource_status" ON "workflow_domain_resource_claims" ("namespace", "key_hash", "status", "mode");
 
 CREATE INDEX "idx:value_edges:parent" ON "workflow_value_edges" ("parent_value_id", "relation_kind", "member_index", "member_key");
@@ -3095,6 +3259,14 @@ CREATE INDEX "idx:capacity_events:change_history" ON "runtime_capacity_change_ev
 
 CREATE INDEX "idx:capacity_events:global_chain" ON "runtime_capacity_change_events" ("event_seq");
 
+CREATE INDEX "idx:publisher_commands:idempotency" ON "workflow_publisher_commands" ("idempotency_domain", "idempotency_key");
+
+CREATE INDEX "idx:publisher_commands:pending_recovery" ON "workflow_publisher_commands" ("created_at_ms", "command_id") WHERE "lifecycle" = 'pending';
+
+CREATE INDEX "idx:publisher_invocations:command_history" ON "workflow_publisher_command_invocations" ("command_id", "invocation_no");
+
+CREATE INDEX "idx:publisher_events:command_history" ON "workflow_publisher_events" ("command_id", "event_no");
+
 CREATE TRIGGER "trg:operational_blockers:insert_cache" AFTER INSERT ON "workflow_operational_blockers" BEGIN
   UPDATE "workflow_graph_runs"
      SET "operational_state" = CASE WHEN EXISTS (SELECT 1 FROM "workflow_operational_blockers" AS b WHERE b."graph_run_id" = NEW."graph_run_id" AND b."status" = 'open' AND b."severity" = 'quarantine') THEN 'quarantined' WHEN EXISTS (SELECT 1 FROM "workflow_operational_blockers" AS b WHERE b."graph_run_id" = NEW."graph_run_id" AND b."status" = 'open' AND b."severity" = 'action_required') THEN 'action_required' ELSE 'healthy' END,
@@ -3155,4 +3327,40 @@ CREATE TRIGGER "trg:capacity_head:commit_transition" BEFORE UPDATE OF "current_c
   SELECT CASE WHEN OLD."pending_change_id" IS NOT NEW."current_change_id" OR NEW."pending_change_id" IS NOT NULL OR NEW."current_capacity_revision" <> COALESCE(OLD."current_capacity_revision", 0) + 1 THEN RAISE(ABORT, 'capacity_head_commit_transition_invalid') END;
 END;
 
-PRAGMA user_version = 1;
+CREATE TRIGGER "trg:publisher_commands:immutable_identity" BEFORE UPDATE OF "command_type", "idempotency_domain", "idempotency_key", "request_value_id", "request_hash", "request_schema_resource_id", "request_schema_hash", "domain_request_hash", "approved_review_ref", "approved_review_hash", "reviewer_actor_ref", "reviewer_auth_session_ref", "approved_at_ms", "expires_at_ms", "source_manifest_value_id", "source_manifest_hash", "source_manifest_schema_resource_id", "source_manifest_schema_hash", "compiled_plan_value_id", "compiled_plan_hash", "compiled_plan_schema_resource_id", "compiled_plan_schema_hash", "execution_artifact_resource_id", "execution_artifact_hash", "closure_manifest_id", "closure_hash", "target_feature_release_id", "target_feature_release_hash", "created_at_ms" ON "workflow_publisher_commands" BEGIN
+  SELECT RAISE(ABORT, 'publisher_command_identity_is_immutable');
+END;
+
+CREATE TRIGGER "trg:publisher_commands:lifecycle_transition" BEFORE UPDATE ON "workflow_publisher_commands" BEGIN
+  SELECT CASE WHEN NEW."row_version" <> OLD."row_version" + 1 OR (NEW."lifecycle" IS NOT OLD."lifecycle" AND OLD."lifecycle" <> 'pending') THEN RAISE(ABORT, 'publisher_command_lifecycle_transition_invalid') END;
+END;
+
+CREATE TRIGGER "trg:publisher_commands:immutable_delete" BEFORE DELETE ON "workflow_publisher_commands" BEGIN
+  SELECT RAISE(ABORT, 'publisher_command_is_immutable');
+END;
+
+CREATE TRIGGER "trg:publisher_invocations:hash_chain" AFTER INSERT ON "workflow_publisher_command_invocations" BEGIN
+  SELECT CASE WHEN (NEW."invocation_no" = 1 AND NEW."previous_invocation_hash" IS NOT NULL) OR (NEW."invocation_no" > 1 AND (SELECT previous."invocation_hash" FROM "workflow_publisher_command_invocations" AS previous WHERE previous."command_id" = NEW."command_id" AND previous."invocation_no" = NEW."invocation_no" - 1) IS NOT NEW."previous_invocation_hash") THEN RAISE(ABORT, 'publisher_invocation_hash_chain_invalid') END;
+END;
+
+CREATE TRIGGER "trg:publisher_invocations:immutable_update" BEFORE UPDATE ON "workflow_publisher_command_invocations" BEGIN
+  SELECT RAISE(ABORT, 'publisher_invocation_is_immutable');
+END;
+
+CREATE TRIGGER "trg:publisher_invocations:immutable_delete" BEFORE DELETE ON "workflow_publisher_command_invocations" BEGIN
+  SELECT RAISE(ABORT, 'publisher_invocation_is_immutable');
+END;
+
+CREATE TRIGGER "trg:publisher_events:hash_chain" AFTER INSERT ON "workflow_publisher_events" BEGIN
+  SELECT CASE WHEN (NEW."event_no" = 1 AND NEW."previous_event_hash" IS NOT NULL) OR (NEW."event_no" > 1 AND (SELECT previous."event_hash" FROM "workflow_publisher_events" AS previous WHERE previous."command_id" = NEW."command_id" AND previous."event_no" = NEW."event_no" - 1) IS NOT NEW."previous_event_hash") THEN RAISE(ABORT, 'publisher_event_hash_chain_invalid') END;
+END;
+
+CREATE TRIGGER "trg:publisher_events:immutable_update" BEFORE UPDATE ON "workflow_publisher_events" BEGIN
+  SELECT RAISE(ABORT, 'publisher_event_is_immutable');
+END;
+
+CREATE TRIGGER "trg:publisher_events:immutable_delete" BEFORE DELETE ON "workflow_publisher_events" BEGIN
+  SELECT RAISE(ABORT, 'publisher_event_is_immutable');
+END;
+
+PRAGMA user_version = 2;

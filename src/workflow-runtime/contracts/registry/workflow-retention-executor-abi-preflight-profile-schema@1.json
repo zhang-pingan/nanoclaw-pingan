@@ -68,7 +68,7 @@
             "const": 1
           },
           "database_schema_version": {
-            "const": 1
+            "const": 2
           }
         }
       },
@@ -202,5 +202,5 @@
       }
     }
   },
-  "hash": "sha256:00213f6594d5ad3f4177d67c5699ab87d1d1b54b0bb9d3ce5ceb29be7bb13466"
+  "hash": "sha256:3ae384650d2034d36c12dd280e3b03335aa55888afe2086e52b6248b0be09b2a"
 }

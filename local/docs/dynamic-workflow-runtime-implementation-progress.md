@@ -1,8 +1,8 @@
 # Dynamic Workflow Runtime 实施进度
 
 > **状态**: IN_PROGRESS
-> **当前 Gate**: G3 Registry / Authoring / Publish（`IN_PROGRESS`；G3.1-G3.6 均 `DONE`，Publisher persistence audit=`PUBLISHER_BLOCKED_BY_SCHEMA`；G2保持`DONE / BASELINE_ACCEPTED`与40/40 exact replay）
-> **下一施工切片**: 最小 G1 Publisher idempotency/audit Schema prerequisite；完成 schema blocker 前不得进入 WorkflowPublisher staged publish vertical slice，Feature/Core Release、Publisher执行、Publish/Activation均尚未实现，G4-G9保持`NOT_READY`
+> **当前 Gate**: G3 Registry / Authoring / Publish（`IN_PROGRESS`；G3.1-G3.6 均 `DONE`，最小G1 Publisher idempotency/audit Schema prerequisite=`DONE`，readiness=`PUBLISHER_SCHEMA_PREREQUISITE_READY`；G2保持`DONE / BASELINE_ACCEPTED`与40/40 exact replay）
+> **下一施工切片**: G3.7 WorkflowPublisher staged publish vertical slice；只允许实现基于现有generic synchronous Store boundary的Publisher write transaction和staged结果，不得实现Activation/active pointer、Production loader、GC/delete或G4-G9 Runtime
 > **最后更新**: 2026-07-21
 > **规范权威**: `local/docs/dynamic-workflow-dag-framework.md`
 
@@ -109,9 +109,9 @@ Agent Container 运行于独立 VM，Node identity 由 VM image gate 保证；�
 | Gate | 状态 | 依赖 | 退出证据 | 完成提交 |
 | --- | --- | --- | --- | --- |
 | G0 Contract Pack / Static Baseline | `DONE` | 无 | G0.1-G0.9 historical root + G0.10 additive Capacity Admin/publication/CAP/Logical Schema/coverage root | 本原子提交 |
-| G1 DDL / Store | `DONE` | G0.10 | closed Schema Dependency Manifest + frozen executable migration/Schema Manifest + unified Connection Factory + Store lifecycle/transaction host + real-file SQLite/identity gates | 本原子提交（dependency identity repair） |
+| G1 DDL / Store | `DONE` | G0.10 | closed Schema Dependency Manifest + frozen executable migration/Schema Manifest + unified Connection Factory + Store lifecycle/transaction host + minimum Publisher idempotency/audit additive prerequisite + real-file SQLite/identity gates | 本原子提交（Publisher schema prerequisite） |
 | G2 Compiler / Golden | `DONE` | G0.1-G0.9；R-016 spec/Contract repair；G0.10 不改变 Compiler/Plan 语义 | phase=`BASELINE_ACCEPTED`；前序immutable lineage未变；owner-approved successor GoldenSemanticReview/seal完整，current replay 40/40 exact、0 differences | 本原子提交（replay-repair successor seal） |
-| G3 Registry / Authoring / Publish | `IN_PROGRESS` | G1 + G2 | G3.1-G3.5既有切片 DONE；G3.6 Retention/Executor ABI compatibility preflight DONE；Publisher audit=`PUBLISHER_BLOCKED_BY_SCHEMA`；Publisher write/Publish/Activation待最小G1 prerequisite后继续 | 本原子提交（G3.6）；G3.1-G3.5见下文 |
+| G3 Registry / Authoring / Publish | `IN_PROGRESS` | G1 + G2 | G3.1-G3.6 DONE；Publisher schema prerequisite DONE且readiness=`PUBLISHER_SCHEMA_PREREQUISITE_READY`；G3.7 staged Publisher write待实现，Activation仍禁止 | 本原子提交（Publisher schema prerequisite）；G3.1-G3.6见下文 |
 | G4 Test Bootstrap | `NOT_READY` | G1 + G2 + G3 | isolated bootstrap profile | - |
 | G5 Basic Runtime | `NOT_READY` | G4 | T0-T6e model/fault fixtures | - |
 | G6 Dynamic / Close | `NOT_READY` | G5 | T7/T8/child/compensation fixtures | - |
@@ -123,11 +123,11 @@ Agent Container 运行于独立 VM，Node identity 由 VM image gate 保证；�
 
 | 工作包 | 范围 | 状态 | 当前 Gate/切片 |
 | --- | --- | --- | --- |
-| I0 | Publish、Registry、Recipe 与执行版本固定 | `IN_PROGRESS` | G3.1-G3.6 read-only/persistence preflight均DONE；Publisher persistence audit发现G1 command/idempotency/audit schema blocker，发布链路待最小G1 prerequisite |
+| I0 | Publish、Registry、Recipe 与执行版本固定 | `IN_PROGRESS` | G3.1-G3.6 read-only/persistence preflight均DONE；Publisher command/idempotency/audit schema blocker已关闭，下一切片为G3.7 staged Publisher write transaction |
 | I1 | Intake、Routing、幂等创建、Child provenance、Claim | `NOT_READY` | G5 起 |
 | I2 | Definition、State lowering、Context、transition | `IN_PROGRESS` | approved static lowering语义已由Compiler 3.0.1实现、批准并seal；G2 lowering部分完成，Runtime transition仍从G5起 |
 | I3 | Source/Compiled IR、Port、Compiler | `DONE` | Production Compiler 3.0.1 successor已批准并seal；current replay 40/40 exact、0 differences |
-| I4 | Runtime Store、SQLite relation、Value/Blob、migration | `IN_PROGRESS` | G1 migration/Schema Manifest/Store Base/Connection Factory DONE；G3.3 使用 existing inline Value/Registry FK 边界；G3.6 audit确认缺少Publisher专属command/invocation/recovery audit对象，下一切片补最小G1 prerequisite；Blob/GC仍未实现 |
+| I4 | Runtime Store、SQLite relation、Value/Blob、migration | `IN_PROGRESS` | G1 migration/Schema Manifest/Store Base/Connection Factory与Publisher command/invocation/event prerequisite DONE；Store generic synchronous transaction boundary未扩展为Publisher业务API；Blob/GC仍未实现 |
 | I5 | Graph 状态机、reconcile、Scheduler、Ledger | `NOT_READY` | G5 起 |
 | I6 | Delegation/System、Capability Effect、Outbox | `NOT_READY` | G5 起 |
 | I7 | Durable Wait、Signal/Timer/Approval、Inbox | `NOT_READY` | G5 起 |
@@ -160,6 +160,7 @@ G0.1-G0.9 已按当时规范完成并保留历史 identity。后续确认的 Cap
 | G1.1 | Executable DDL / Schema Manifest | `DONE` | G0.6 + G0.10 全量 canonical SQLite migration、closed introspected Manifest、schema lint、constraint/trigger/query-plan fixtures、真实文件与 managed identity gate | 本原子提交 |
 | G1.2 | Store Base / Connection Factory | `DONE` | production-target Store 基础、连接生命周期/完整 PRAGMA/read-only policy、identity gate、参数化 query API 与短写事务 host 的 candidate 开发验证 | 本原子提交 |
 | G1.3 | Dependency Identity Repair | `DONE` | closed exact-member dependency manifest；physical identity与Gate provenance分离；Store不扫描Contract目录；migration bytes/78 tables/行为不变 | 本原子提交 |
+| G1.4 | Publisher Idempotency / Audit Schema Prerequisite | `DONE` | additive physical input；3张first-class Publisher表；schema-bound Value、typed FK、caller UK、invocation/event hash chain；Database Schema 2；G1/G3 identity cascade；无Publisher业务事务 | 本原子提交 |
 
 ## G2 施工切片
 
@@ -1518,7 +1519,7 @@ G3.6 closed input exact绑定Feature Release、可空primary Execution Artifact�
 
 ### Publisher Persistence Readiness Audit
 
-审计结论唯一为`PUBLISHER_BLOCKED_BY_SCHEMA`，不是`BLOCKED_BY_SPEC`。现有G1可精确承载下列Publisher最终事实：
+G3.6完成当时的审计结论唯一为`PUBLISHER_BLOCKED_BY_SCHEMA`，不是`BLOCKED_BY_SPEC`。现有G1可精确承载下列Publisher最终事实：
 
 | Required fact | Existing exact G1 mapping |
 | --- | --- |
@@ -1531,16 +1532,49 @@ G3.6 closed input exact绑定Feature Release、可空primary Execution Artifact�
 
 最小blocker为G1没有Publisher专属command boundary。`workflow_runtime_commands`的13种command和六种typed target、`runtime_capacity_admin_commands`的两种Capacity command均为closed union，不能合法复用。当前没有任何表能同时约束和持久化caller `(idempotency_domain,idempotency_key)`、canonical Publish request hash、approved review ref/hash与reviewer actor/session/expiry、source/plan/artifact/closure/target release identities、deterministic receipt、每次authenticated invocation的`applied | duplicate | conflict | failed`结果，以及crash/retry后可恢复的append-only Publisher phase facts。内存map、自由JSON、无约束side table、derived guess或忽略caller key均被规范禁止。
 
-下一任务的最小schema delta固定为三个first-class对象：`workflow_publisher_commands` header、`workflow_publisher_command_invocations`和`workflow_publisher_events`。Header必须拥有caller idempotency UK、schema-bound canonical request/result Value+hash、domain request hash、approved review/actor/session/expiry、source/plan/Execution Artifact/Closure/target release exact列与typed FK、final applied release FK和lifecycle/finalization CHECK；Invocation必须保存monotonic invocation、submitted request hash、authenticated actor/session、closed disposition与exact result；Event必须保存append-only attempt/phase/failure/recovery事实与稳定ordering/uniqueness/hash chain。现有Feature Release resource set和Retention member表继续作为authoritative typed graph，不新增副本。
+后继任务的最小schema delta固定为三个first-class对象：`workflow_publisher_commands` header、`workflow_publisher_command_invocations`和`workflow_publisher_events`。Header必须拥有caller idempotency UK、schema-bound canonical request/result Value+hash、domain request hash、approved review/actor/session/expiry、source/plan/Execution Artifact/Closure/target release exact列与typed FK、final applied release FK和lifecycle/finalization CHECK；Invocation必须保存monotonic invocation、submitted request hash、authenticated actor/session、closed disposition与exact result；Event必须保存append-only attempt/phase/failure/recovery事实与稳定ordering/uniqueness/hash chain。现有Feature Release resource set和Retention member表继续作为authoritative typed graph，不新增副本。
 
-该prerequisite必须以additive physical-schema input保留G0.6/G0.10历史identity，并同步Normative Logical Schema coverage、typed relation/CHECK/UK/index/query intent、canonical migration与`database_schema_version`、Schema Manifest/dependency manifest/lint/constraint/query-plan fixtures。G1 root/physical/schema/migration identity将改变；G3.1、G3.3、G3.5、G3.6中pin旧G1 identity的pack必须确定性重建或显式successor，G2 sealed artifacts不变。所以下一切片只能是“最小G1 Publisher idempotency/audit Schema prerequisite”，不能直接进入G3.7 staged Publisher vertical slice。
+该prerequisite必须以additive physical-schema input保留G0.6/G0.10历史identity，并同步Normative Logical Schema coverage、typed relation/CHECK/UK/index/query intent、canonical migration与`database_schema_version`、Schema Manifest/dependency manifest/lint/constraint/query-plan fixtures。G1 root/physical/schema/migration identity将改变；G3.1、G3.3、G3.5、G3.6中pin旧G1 identity的pack必须确定性重建或显式successor，G2 sealed artifacts不变。下方G1.4已完成这一前置切片。
+
+## 已完成切片：G1.4 Publisher Idempotency / Audit Schema Prerequisite
+
+**状态**：`DONE`；Publisher readiness由历史`PUBLISHER_BLOCKED_BY_SCHEMA`推进为`PUBLISHER_SCHEMA_PREREQUISITE_READY`。G3保持`IN_PROGRESS`，G2保持`DONE / BASELINE_ACCEPTED`，G4-G9保持`NOT_READY`。本切片只补足G3.7 staged Publisher transaction所需的持久化Schema，不实现`WorkflowPublisher.publish`、Publisher业务DML/transaction、Registry staged-to-published mutation、Feature Release创建、Retention Handle写入、Execution Artifact build/install、receipt执行、Activation/active pointer、Production loader、GC/delete或G4-G9 Runtime。
+
+新增G1-owned additive physical input `icarus.workflow-publisher-schema-prerequisite/1`，artifact=`sha256:93ca47fc61812061c77400b78c2285790a86ea852e1358d5369f95db55ba4330`，delta=`sha256:b30a8991d8a2563b07f3ade59d212488c791274c96b7c636835df7a86fafae84`。它精确绑定并保留G0.6 Logical Source `sha256:ef5221d3465f1214c3c0aad3660f57b119d03eb4b5127428d6a1f881a6260214`与G0.10 Capacity delta `sha256:5d9e79b5f9330a5111e6f61b8d04164c87839a60d55ea350c0aa87b8b1559e66`，没有修改两者的source或generated artifact。
+
+Normative Logical Schema从78表additive扩展到81表并把`database_schema_version`推进到`2`：
+
+- `workflow_publisher_commands`以`UNIQUE(idempotency_domain,idempotency_key)`固定caller key；request/source manifest/compiled plan/canonical receipt全部使用`Value id + content hash + schema resource id + schema hash`四列复合FK；approved review ref/hash、reviewer actor/auth session、`approved_at_ms <= created_at_ms < expires_at_ms`、Execution Artifact、Closure、target/applied Feature Release exact identities均为显式列和typed FK。`pending | applied | failed` CHECK固定receipt/finalized/applied-release组合，applied release必须等于target；identity字段不可更新，terminal lifecycle不可重开，Header不可删除。
+- `workflow_publisher_command_invocations`按`UNIQUE(command_id,invocation_no)`保存每次authenticated actor/session、submitted request hash、schema-bound exact result与`applied | duplicate | conflict | failed` disposition。Invocation保存command-bound domain request hash；CHECK证明applied/duplicate/failed请求相等、conflict请求不等，只有applied具有`applied_at_ms`。相邻`previous_invocation_hash/invocation_hash`由trigger验证，hash全局唯一，UPDATE/DELETE被拒绝。
+- `workflow_publisher_events`以`PRIMARY KEY(command_id,event_no)`和`UNIQUE(command_id,attempt_no,phase,event_type)`保存authenticate/validate/review/preflight/publish transaction/recovery/finalize事实。typed related Feature Release和schema-bound detail Value不使用kind/id或自由JSON；phase/type/failure CHECK区分pre-transaction failure、committed Publish、recovery success/failure与terminal failure。相邻Event hash chain由trigger验证，UPDATE/DELETE被拒绝。
+- `workflow_values`新增`UNIQUE(id,content_hash,schema_resource_id,schema_resource_hash)`作为所有Publisher canonical Value的复合FK parent。现有Registry resource/dependency、Closure/Snapshot、Feature Release/resource set、Retention Handle/member与Value表仍是唯一权威，没有复制member graph或创建无约束side table。
+- 四个query intent与固定EXPLAIN fixture覆盖caller idempotency lookup、Invocation history、Event replay和pending recovery partial scan；Schema Manifest/lint/constraint-trigger/query-plan artifact同步覆盖caller UK、review expiry、typed FK、terminal lifecycle、两个append-only hash chain和immutability。
+
+Current G1 identities：
+
+| Artifact | Identity |
+| --- | --- |
+| Schema Dependency Manifest | `sha256:00bbf7a38a294e9d7f867df70b9db3c7ca0fc7cfe777902fb531e363b678c4e0` |
+| Physical schema identity | `sha256:e6150805b5c26dfc6ba0886da88b79345cfd5838d8da05d1ca011e371f390616` |
+| G1 executable schema root | `sha256:d4796f1fbae16e05a2d19ce1be0a65d9c00439814dec97940aea20effaa6d244` |
+| Domain-separated Schema Manifest hash | `sha256:0c00cd859c3ab6a8cd36c9ea8f81c80de000b845eb5758d442cb1830cea877f9` |
+| Schema Manifest artifact | `sha256:fe97803fe8d91c5e6beb59892fdf612d4bf1963def75028dece50f3393edbd89` |
+| Executable DDL artifact | `sha256:df1f9bf333e2e247c20331bb5058af365d5fe04d5e59f4cde1e55ea51c0cc90c` |
+| Canonical migration raw SHA-256 | `sha256:fb6c820a0f646148cbd9f54476917802bc208c84070f005fc24871be46ecae89` |
+| Deterministic digest | `sha256:d2e025b72f7da307406a9a9194f32d53021f8c92b4f92c6e8df422208da7e132` |
+
+Physical manifest现为81 tables / 1,354 columns / 143 UK / 369 FK / 867 CHECK / 36 logical indexes / 19 triggers / 35 query fixtures。Store仍只有既有generic synchronous `withImmediateTransaction` boundary；只更新其frozen G1 pins和81-table bootstrap/check，不增加Publisher方法或业务事务。
+
+受G1 identity影响的current construction packs按现有可重建治理依序更新，G2 sealed trees零diff：G3.1=`sha256:264ec0b6c7b3431acb3a556de5ad666248f320835f7d7ba4b7c255a041eac01a`，G3.3=`sha256:8abadf0f85d8d88e3559e84834badaaa36b224f9f115cd5dd4e2bec45690a8bb`，G3.5=`sha256:73493f9919891fd7164ec7e77a31282a7e386f8447134ec266085bcb7a0e01f4`，G3.6=`sha256:8150113af596f59ec08dd612f1092d9c7a5d72f61958367a825f7574b9727f76`。G3.6 Core Compatibility/current profile同步固定Database Schema `2`，read-only preflight语义不变。
+
+验证全部通过managed runtime：targeted Publisher Schema tests 2/2，`test:g1.1` 14/14，deterministic `schema:generate/check`、`store:check`、四个受影响G3 direct checks、`test:g3` 45/45、`typecheck`与`build`。G2 sealed immutable diff、G0.6/G0.10 exact identity、changed-path/forbidden-surface、targeted Prettier和`git diff --check`均PASS；按切片约束没有机械运行`test:g0`、`test:g2`或Golden replay。
 
 ## 下一步
 
-G0.1-G0.9 historical identity、G0.10 current root、现有G1 executable schema/Store Base、R-016 spec/Contract repair与G2 Production Compiler/Golden均已完成。Current G2保持`DONE / BASELINE_ACCEPTED`，I3为`DONE`；G3.1-G3.6均完成，G3/I0仍为`IN_PROGRESS`。G3.6 Publisher audit明确为`PUBLISHER_BLOCKED_BY_SCHEMA`，因此下一切片必须实现最小G1 Publisher idempotency/audit Schema prerequisite；完成并重建受影响G1/G3 identity前不得进入G3.7 WorkflowPublisher staged publish vertical slice，继续禁止Publish/Activation和G4-G9 runtime surface。
+G0.1-G0.9 historical identity、G0.10 current root、G1 executable schema/Store Base/Publisher prerequisite、R-016 spec/Contract repair与G2 Production Compiler/Golden均已完成。Current G2保持`DONE / BASELINE_ACCEPTED`，I3为`DONE`；G3.1-G3.6均完成，G3/I0仍为`IN_PROGRESS`。Publisher readiness现为`PUBLISHER_SCHEMA_PREREQUISITE_READY`，下一切片是G3.7 `WorkflowPublisher` staged publish vertical slice；只实现Publisher write transaction、exact replay/conflict/recovery和staged结果，不得实现Activation/active pointer、Production loader、GC/delete或G4-G9 runtime surface。
 
 历史fresh review evidence只存在于Git commits，不是current dependency；current immutable semantic approval只绑定exact Draft/report identities。显式`prepare-rc`冻结的四个Working roots与唯一Review Candidate未变；current expected full case-result/Plan/proof/program bytes/hash已独立冻结、审计、owner批准并seal。local single-user签名策略为`not_required_local_single_user`，没有伪造GPG或远程签名。
 
 G2终点继续满足`Draft -> human semantic decision -> GoldenSemanticReview -> seal -> CI replay`：current successor replay为40/40，R-017保持关闭。G3.1只消费其exact sealed/compiler identities并执行纯preflight；没有创建Published Recipe、Registry row、Release或Production launchability，也没有执行production activation。
 
-作为历史prepare-rc切片记录，该切片只修复当时的R-017 spec identity实时绑定、级联重建Working artifacts并执行`prepare-rc`及其确定性check。后续owner approval、immutable review、successor seal与40/40 replay现已完成；当前 G3.1-G3.6 均已完成，Publisher因最小G1 schema prerequisite尚未开始，SQLite certification、Core Release、G4-G9和production activation仍未开始。R-010 Node loader deprecation与R-012/R-013/R-015 timing继续作为既有范围外baseline，不升级工具链、不放宽测试。
+作为历史prepare-rc切片记录，该切片只修复当时的R-017 spec identity实时绑定、级联重建Working artifacts并执行`prepare-rc`及其确定性check。后续owner approval、immutable review、successor seal与40/40 replay现已完成；当前 G3.1-G3.6 与最小Publisher Schema prerequisite均已完成，Publisher业务事务、SQLite certification、Core Release、G4-G9和production activation仍未开始。R-010 Node loader deprecation与R-012/R-013/R-015 timing继续作为既有范围外baseline，不升级工具链、不放宽测试。

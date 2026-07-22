@@ -384,7 +384,7 @@ const bindingsSchema: JsonObject = {
     core_release_ref: { $ref: '#/$defs/versioned_ref' },
     core_release_hash: hashSchema,
     core_build_hash: hashSchema,
-    database_schema_version: { const: 1 },
+    database_schema_version: { const: 2 },
     database_schema_hash: hashSchema,
     run_protocol_ref: { $ref: '#/$defs/versioned_ref' },
     run_protocol_hash: hashSchema,
@@ -486,7 +486,7 @@ export const G3_RETENTION_EXECUTOR_ABI_PROFILE_SCHEMA: JsonObject = {
         run_protocol_major: { const: 1 },
         executor_abi_major: { const: 1 },
         registry_schema_version: { const: 1 },
-        database_schema_version: { const: 1 },
+        database_schema_version: { const: 2 },
       },
     },
     retention_policy_ref: { $ref: '#/$defs/versioned_ref' },
@@ -686,7 +686,7 @@ export function verifyCoreProtocolFacts(
     calculateCoreCompatibilityHash(withoutHash) !==
       input.core_compatibility.compatibility_hash ||
     input.core_compatibility.registry_schema_version !== 1 ||
-    input.core_compatibility.database_schema_version !== 1 ||
+    input.core_compatibility.database_schema_version !== 2 ||
     input.core_compatibility.database_schema_hash !==
       G3_CURRENT_UPSTREAM_IDENTITY.g1_schema_hash ||
     input.snapshot.expected_core_build_hash !==
@@ -762,7 +762,7 @@ export function buildAcceptedRetentionExecutorAbiResult(
       core_release_ref: input.core_compatibility.core_release_ref,
       core_release_hash: input.core_compatibility.core_release_hash,
       core_build_hash: input.core_compatibility.core_build_hash,
-      database_schema_version: 1,
+      database_schema_version: 2,
       database_schema_hash: input.core_compatibility.database_schema_hash,
       run_protocol_ref: input.run_protocol.ref,
       run_protocol_hash: input.run_protocol.hash,
@@ -804,7 +804,7 @@ export function buildG3RetentionExecutorAbiProfile(): G3RetentionExecutorAbiPref
       run_protocol_major: 1,
       executor_abi_major: 1,
       registry_schema_version: 1,
-      database_schema_version: 1,
+      database_schema_version: 2,
     },
     retention_policy_ref: G3_RETENTION_POLICY_REF,
     retention_policy_hash: G3_RETENTION_POLICY_HASH,
@@ -981,7 +981,7 @@ export function g3RetentionExecutorAbiStoreFixtureForTest(): {
     supported_run_protocol_majors: [1],
     supported_executor_abi_majors: [1],
     registry_schema_version: 1 as const,
-    database_schema_version: 1 as const,
+    database_schema_version: 2 as const,
     database_schema_hash: G3_CURRENT_UPSTREAM_IDENTITY.g1_schema_hash,
   };
   const coreCompatibility: G3CoreCompatibilitySnapshot = {
@@ -1172,13 +1172,13 @@ function validateUpstreamIdentity(): void {
   );
   if (
     registry.hash !==
-    'sha256:adcaa77339512650d8aa8af1c027d6e145419ada47e44733c424db2b0cb923da'
+    'sha256:8abadf0f85d8d88e3559e84834badaaa36b224f9f115cd5dd4e2bec45690a8bb'
   ) {
     throw new Error('G3.3 Registry persistence identity drift');
   }
   if (
     queryPack.hash !==
-    'sha256:516f0fffdab8e05438649e8936a78e0fedac5eb9300abcb0ff232f5204e793dd'
+    'sha256:73493f9919891fd7164ec7e77a31282a7e386f8447134ec266085bcb7a0e01f4'
   ) {
     throw new Error('G3.5 exact resource query identity drift');
   }
@@ -1285,14 +1285,13 @@ function buildManifest(
       status: 'DONE',
       g3_status: 'IN_PROGRESS',
       upstream_g3_3_pack_hash:
-        'sha256:adcaa77339512650d8aa8af1c027d6e145419ada47e44733c424db2b0cb923da',
+        'sha256:8abadf0f85d8d88e3559e84834badaaa36b224f9f115cd5dd4e2bec45690a8bb',
       upstream_g3_5_pack_hash:
-        'sha256:516f0fffdab8e05438649e8936a78e0fedac5eb9300abcb0ff232f5204e793dd',
+        'sha256:73493f9919891fd7164ec7e77a31282a7e386f8447134ec266085bcb7a0e01f4',
       upstream_g1_schema_root_hash:
         G3_CURRENT_UPSTREAM_IDENTITY.g1_schema_root_hash,
-      publisher_persistence_readiness: 'PUBLISHER_BLOCKED_BY_SCHEMA',
-      publisher_schema_gap:
-        'publisher_command_invocation_review_approval_and_recovery_audit',
+      publisher_persistence_readiness: 'PUBLISHER_SCHEMA_PREREQUISITE_READY',
+      publisher_schema_gap: null,
       resolution_mode: 'immutable_exact_only',
       snapshot_verifier_reused: 'G3.3',
       exact_resource_query_reused: 'G3.5',

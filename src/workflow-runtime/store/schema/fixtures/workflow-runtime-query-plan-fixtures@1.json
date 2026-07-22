@@ -6,11 +6,11 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-runtime-query-plan-fixtures:1\n",
-  "hash": "sha256:d39af23f018bbfdc9a09ade6d9a4e9571bbaabc89547f0fc3bf0df49b334e366",
+  "hash": "sha256:c76d022fd9c638a796f94554f27f32f50ea3373123dcd95a3d5a1a8b311fb247",
   "payload": {
-    "schema_hash": "sha256:4d8c373387ad515c36fd292b705665e6c197c73021c1b7e55da5317bc140efbd",
+    "schema_hash": "sha256:0c00cd859c3ab6a8cd36c9ea8f81c80de000b845eb5758d442cb1830cea877f9",
     "execution_target": "real_file_sqlite",
-    "query_count": 31,
+    "query_count": 35,
     "fixtures": [
       {
         "query_id": "query:scheduler_ready_nodes",
@@ -259,6 +259,38 @@
         "sql": "SELECT * FROM \"runtime_capacity_head\" INDEXED BY \"idx:capacity_head:singleton\" WHERE \"singleton_key\" = ? AND \"current_capacity_revision\" = ? AND \"current_change_id\" = ? AND \"current_config_hash\" = ? AND \"current_publication_hash\" = ? LIMIT 50",
         "parameter_count": 5,
         "required_index_id": "idx:capacity_head:singleton"
+      },
+      {
+        "query_id": "publisher_find_idempotency",
+        "owner": "command_gateway",
+        "coverage_area": "command",
+        "sql": "SELECT * FROM \"workflow_publisher_commands\" INDEXED BY \"idx:publisher_commands:idempotency\" WHERE \"idempotency_domain\" = ? AND \"idempotency_key\" = ? LIMIT 50",
+        "parameter_count": 2,
+        "required_index_id": "idx:publisher_commands:idempotency"
+      },
+      {
+        "query_id": "publisher_load_invocations",
+        "owner": "command_gateway",
+        "coverage_area": "command",
+        "sql": "SELECT * FROM \"workflow_publisher_command_invocations\" INDEXED BY \"idx:publisher_invocations:command_history\" WHERE \"command_id\" = ? ORDER BY \"invocation_no\" ASC LIMIT 50",
+        "parameter_count": 1,
+        "required_index_id": "idx:publisher_invocations:command_history"
+      },
+      {
+        "query_id": "publisher_load_events",
+        "owner": "recovery",
+        "coverage_area": "recovery",
+        "sql": "SELECT * FROM \"workflow_publisher_events\" INDEXED BY \"idx:publisher_events:command_history\" WHERE \"command_id\" = ? ORDER BY \"event_no\" ASC LIMIT 50",
+        "parameter_count": 1,
+        "required_index_id": "idx:publisher_events:command_history"
+      },
+      {
+        "query_id": "publisher_recovery_scan_pending",
+        "owner": "recovery",
+        "coverage_area": "recovery",
+        "sql": "SELECT * FROM \"workflow_publisher_commands\" INDEXED BY \"idx:publisher_commands:pending_recovery\" WHERE \"lifecycle\" = 'pending' ORDER BY \"created_at_ms\" ASC, \"command_id\" ASC LIMIT 50",
+        "parameter_count": 0,
+        "required_index_id": "idx:publisher_commands:pending_recovery"
       }
     ],
     "required_coverage": [
@@ -270,7 +302,10 @@
       "t7",
       "root_finalization",
       "gc",
-      "outbox"
+      "outbox",
+      "command",
+      "capacity",
+      "checkpoint"
     ]
   }
 }

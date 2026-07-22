@@ -39,6 +39,7 @@
     "test:g0.9": "vitest run src/workflow-runtime/contracts/g0-conformance.test.ts",
     "test:g0.10": "vitest run src/workflow-runtime/contracts/capacity-control-plane.test.ts",
     "test:g1.1": "vitest run src/workflow-runtime/store/schema/schema.test.ts",
+    "test:g1.publisher": "vitest run src/workflow-runtime/store/schema/schema.test.ts -t Publisher",
     "test:g1.2": "vitest run src/workflow-runtime/store/runtime-store/runtime-store.test.ts",
     "test:g2:contract": "vitest run src/workflow-runtime/contracts/compiler-semantic-correction-contract.test.ts",
     "compiler:g2:generate": "tsx src/workflow-runtime/compiler/cli.ts generate",

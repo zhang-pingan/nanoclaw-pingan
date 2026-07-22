@@ -4083,7 +4083,7 @@ G3.6 Retention / Executor ABI compatibility preflight is the final standalone re
 
 The Store implementation must call the existing G3.3 `preflightRegistrySnapshot` for Snapshot/Closure/transitive-member verification and G3.5 `queryExactRegistryResource` for the Closure root and every Artifact/Executor. It must not reproduce their SQL lookup, canonical Value, schema, owner, publication-state, dependency, Closure traversal, or error semantics. G3.6 additionally checks that the caller Closure hash is derived from the supplied exact root/member set, its ref/hash reproduces the Snapshot hash, the queried Artifact/Executor identities are exactly the corresponding typed Closure members, every Executor binds an existing Artifact hash and declared entry symbol, provider Feature Release matches that Artifact, and the optional primary Artifact matches the target Feature Release.
 
-Production v1 compatibility is closed to Registry Schema `1`, Database Schema `1`, Run Protocol major `1`, and Executor ABI major `1`. Run Protocol identity is `icarus.workflow-contract-pack-catalog-protocols@1.0.0` / `sha256:e4947c515a28b3baf6782a980db9c26d32612b3c6acd3cd04348e73bd54ff607`. Executor ABI v1 identity is `icarus.workflow-executor-abi@1.0.0` / `sha256:a111ddc602dfce1894eeb09951fb250dff41984ad2e67c9eb316beb698946902`, calculated over the frozen length-prefixed canonical JSON framing, invocation field set, and accepted/heartbeat/succeeded/failed/cancelled result union. The Core Compatibility hash binds its exact Core release/build, supported major arrays, Registry Schema and Database Schema facts; Snapshot Core/DB hashes must equal that same snapshot. The only accepted supported-major arrays are `[1]` and all Artifact/Executor `runtime_abi_major` values must equal `1`.
+Production v1 compatibility is closed to Registry Schema `1`, Database Schema `2`, Run Protocol major `1`, and Executor ABI major `1`. Database Schema `2` is the additive Publisher idempotency/audit prerequisite over the original full-bootstrap v1 migration lineage; it does not imply Publisher execution. Run Protocol identity is `icarus.workflow-contract-pack-catalog-protocols@1.0.0` / `sha256:e4947c515a28b3baf6782a980db9c26d32612b3c6acd3cd04348e73bd54ff607`. Executor ABI v1 identity is `icarus.workflow-executor-abi@1.0.0` / `sha256:a111ddc602dfce1894eeb09951fb250dff41984ad2e67c9eb316beb698946902`, calculated over the frozen length-prefixed canonical JSON framing, invocation field set, and accepted/heartbeat/succeeded/failed/cancelled result union. The Core Compatibility hash binds its exact Core release/build, supported major arrays, Registry Schema and Database Schema facts; Snapshot Core/DB hashes must equal that same snapshot. The only accepted supported-major arrays are `[1]` and all Artifact/Executor `runtime_abi_major` values must equal `1`.
 
 Retention eligibility in this preflight is limited to the already-defined typed root rule: `handle_kind=published`, `root_kind=feature_release`, exact target release ref/hash, exact current Retention Policy `icarus.local-single-user-retention@1.0.0` / `sha256:3adc19f9a8ee92421faa349ec12e706f2d9862e90c0c74e53eb041794e2b805d`, and members equal to the Closure root plus every Closure member in unsigned ASCII identity order. Accepted output returns all verified bindings, `retention_root_eligible=true`, and `read_only=true`. Rejected output has `bindings=null` and `read_only=true`. G3.6 does not create a Retention Handle, run GC/delete, change publication state, create a Release, or implement Publisher/Activation.
 
@@ -4114,17 +4114,75 @@ retention_eligibility_mismatch
 
 #### Publisher Persistence Readiness Audit
 
-The bounded G3.6 audit result is `PUBLISHER_BLOCKED_BY_SCHEMA`. Existing G1 schema is sufficient for immutable Registry content and the final typed graph: `workflow_values` holds schema-bound canonical values; `workflow_registry_resources`, dependencies, Closure manifests/members, and Snapshots preserve exact resource/closure identities; `workflow_feature_releases` preserves release, Execution Artifact, compatibility snapshot and staged lifecycle identity; `workflow_feature_release_resources` preserves the exact release resource set; and `workflow_registry_retention_handles` plus members provide typed Feature Release/Closure/Resource FKs and the `published` root mapping.
+The bounded G3.6 audit originally recorded `PUBLISHER_BLOCKED_BY_SCHEMA`. Database Schema `2` resolves that blocker with the additive, G1-owned `icarus.workflow-publisher-schema-prerequisite/1` physical input while preserving the exact historical G0.6 and G0.10 artifacts. The current readiness value is `PUBLISHER_SCHEMA_PREREQUISITE_READY`; this means only that G3.7 may implement the staged Publisher transaction against the existing generic synchronous Store boundary. It does not implement `WorkflowPublisher.publish`, Registry publication-state mutation, Feature Release creation, Retention Handle writes, Artifact build/install, receipt execution, Activation, loader, GC, or G4-G9 Runtime.
 
-G1 has no Publisher command boundary. `workflow_runtime_commands` is closed to the 13 Workflow control commands and exactly one Workflow/Run/Node/Retry/Effect/Blocker target. `runtime_capacity_admin_commands` is closed to the two deployment Capacity commands. Neither can legally store a Publisher request. No current table durably binds caller `(idempotency_domain,idempotency_key)` to a canonical Publish request hash; approved review ref/hash plus reviewer actor/session/expiry; source manifest, compiled plan, Execution Artifact, Closure and target Feature Release exact identities; a canonical deterministic receipt; every authenticated invocation's `applied | duplicate | conflict | failed` disposition; or append-only Publish crash/retry/recovery facts. A generic Value, untyped JSON, memory map, side table, derived guess, or caller-key omission cannot supply those missing constraints.
+The Publisher boundary is separate from both closed command domains. `workflow_runtime_commands` remains limited to the 13 Workflow control commands and its typed Workflow/Run/Node/Retry/Effect/Blocker targets; `runtime_capacity_admin_commands` remains limited to the two Capacity commands. Neither may store, alias, or project a Publisher request.
 
-The minimum prerequisite is an additive Publisher persistence schema package with three first-class objects:
+Database Schema `2` adds exactly three first-class Normative Logical Schema objects:
 
-1. `workflow_publisher_commands`: unique caller idempotency domain/key, canonical schema-bound request Value/hash and domain request hash, approved review ref/hash, reviewer actor/session/approval-expiry, exact source/plan/Execution Artifact/Closure/target release identities, nullable applied Feature Release typed FK, canonical result Value/hash, lifecycle/finalization state, and timestamps.
-2. `workflow_publisher_command_invocations`: FK to the command, monotonic invocation number, submitted request hash, authenticated actor/session, durable `applied | duplicate | conflict | failed` disposition, exact result Value/hash, and decided/applied timestamps. Duplicate and conflict are invocation facts and must never be inferred from the eventual release row.
-3. `workflow_publisher_events`: append-only command/attempt/phase facts sufficient to distinguish pre-transaction failure, committed Publish, retry recovery, and terminal failure after a crash, with constrained event kind, exact related identities/result detail Value, timestamps, ordering, and hash-chain or equivalent immutable uniqueness.
+```text
+workflow_publisher_commands
+  - command_id PRIMARY KEY
+  - command_type                    staged_publish
+  - idempotency_domain/idempotency_key
+  - request_value_id/request_hash/request_schema_resource_id/request_schema_hash
+  - domain_request_hash
+  - approved_review_ref/approved_review_hash
+  - reviewer_actor_ref/reviewer_auth_session_ref
+  - approved_at_ms/expires_at_ms
+  - source_manifest_value_id/source_manifest_hash/
+    source_manifest_schema_resource_id/source_manifest_schema_hash
+  - compiled_plan_value_id/compiled_plan_hash/
+    compiled_plan_schema_resource_id/compiled_plan_schema_hash
+  - execution_artifact_resource_id/execution_artifact_hash
+  - closure_manifest_id/closure_hash
+  - target_feature_release_id/target_feature_release_hash
+  - applied_feature_release_id/applied_feature_release_hash
+  - canonical_receipt_value_id/canonical_receipt_hash/
+    canonical_receipt_schema_resource_id/canonical_receipt_schema_hash
+  - lifecycle                       pending | applied | failed
+  - created_at_ms/finalized_at_ms/row_version
 
-The existing Feature Release resource and Retention member tables remain authoritative and must not be duplicated. The prerequisite must add the three objects as an explicit physical-schema input while preserving historical G0.6/G0.10 artifacts, update the Normative Logical Schema coverage, typed FKs/CHECK/UK/index/query intents, canonical migration and `database_schema_version`, executable Schema Manifest/dependency manifest/lint/constraint/query-plan fixtures, and G1 root/physical/migration hashes. That identity change invalidates G3.1 and every later pack that pins the old G1 root/hash, including G3.3, G3.5 and G3.6; they must be deterministically regenerated or explicitly superseded without changing G2 sealed artifacts. The next implementation slice is therefore the minimum G1 Publisher idempotency/audit Schema prerequisite, not `WorkflowPublisher.publish`.
+UNIQUE(idempotency_domain, idempotency_key)
+UNIQUE(command_id, domain_request_hash)
+
+workflow_publisher_command_invocations
+  - id PRIMARY KEY
+  - command_id/invocation_no/command_domain_request_hash
+  - submitted_request_hash
+  - actor_ref/auth_session_ref/requested_at_ms
+  - disposition                     applied | duplicate | conflict | failed
+  - result_value_id/result_hash/result_schema_resource_id/result_schema_hash
+  - decided_at_ms/applied_at_ms
+  - previous_invocation_hash/invocation_hash
+
+UNIQUE(command_id, invocation_no)
+UNIQUE(invocation_hash)
+
+workflow_publisher_events
+  - command_id/event_no/attempt_no
+  - phase                           authenticate | validate | review | preflight |
+                                    publish_transaction | recovery | finalize
+  - event_type                      attempt_started | phase_succeeded |
+                                    pre_transaction_failed |
+                                    publish_transaction_started | publish_committed |
+                                    recovery_started | recovery_succeeded |
+                                    recovery_failed | terminal_failed
+  - failure_code
+  - related_feature_release_id/related_feature_release_hash
+  - detail_value_id/detail_hash/detail_schema_resource_id/detail_schema_hash
+  - previous_event_hash/event_hash/occurred_at_ms
+
+PRIMARY KEY(command_id, event_no)
+UNIQUE(command_id, attempt_no, phase, event_type)
+UNIQUE(event_hash)
+```
+
+`workflow_values` additionally exposes `UNIQUE(id,content_hash,schema_resource_id,schema_resource_hash)`. Request, source manifest, compiled plan, receipt, invocation result, and event detail use four-column deferred FKs to that exact Value/hash/schema identity; no free JSON payload is accepted. Execution Artifact uses the existing Registry Resource `(id,content_hash)` typed FK, Closure uses `(id,closure_hash)`, and target/applied/related Feature Releases use `(id,release_hash)`. Applied lifecycle requires the applied release to equal the exact target release. Review ordering requires `approved_at_ms <= created_at_ms < expires_at_ms`.
+
+Invocation numbers and Event numbers are adjacent within a command. Both streams reject UPDATE/DELETE, have unique hashes, and verify `previous_*_hash` against the immediately preceding row. Invocation disposition proves duplicate/conflict from the submitted versus bound domain request hash rather than guessing from a Feature Release row. Event phase/type CHECKs distinguish pre-transaction failure, committed Publish, recovery success/failure, and terminal failure. The pending-command partial index and exact idempotency/invocation/event indexes back four fixed Publisher query intents for command lookup, history replay, and recovery scan.
+
+The existing `workflow_registry_resources` and dependencies, Closure manifests/members, Snapshots, Feature Releases/resource sets, Retention Handles/members, and `workflow_values` remain the only authorities for their domains. The Publisher tables bind those facts and never duplicate their member graphs. G1 Schema Manifest, dependency manifest, lint, constraint/trigger fixtures, query-plan fixtures, canonical migration, physical identity, schema hash, and `database_schema_version=2` cover the additive input. G3.1, G3.3, G3.5, and G3.6 current construction packs are deterministically rebuilt against the new G1 identities; G2 sealed artifacts remain unchanged.
 
 Feature Release 与新创建入口的激活指针必须独立持久化，不能用安装目录或当前文件内容代替：
 

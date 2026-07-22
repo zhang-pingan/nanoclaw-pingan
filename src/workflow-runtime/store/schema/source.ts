@@ -9,11 +9,27 @@ import type {
   CapacityLogicalSchemaDelta,
 } from '../../contracts/capacity-control-plane-types.js';
 import { readPinnedSchemaInputArtifacts } from './dependencies.js';
+import {
+  parsePublisherSchemaPrerequisiteArtifact,
+  type PublisherSchemaTableExtension,
+} from './publisher-source.js';
 import type { ExecutableSchemaSource } from './types.js';
+
+interface AdditiveTableExtension {
+  name: string;
+  added_columns: LogicalTableMetadata['columns'];
+  added_foreign_keys: LogicalTableMetadata['foreign_keys'];
+  added_unique_keys: LogicalTableMetadata['unique_keys'];
+  added_checks: LogicalTableMetadata['checks'];
+  added_indexes: LogicalTableMetadata['indexes'];
+}
 
 function mergeExtension(
   table: LogicalTableMetadata,
-  extension: CapacityLogicalExtendedTableDelta,
+  extension:
+    | CapacityLogicalExtendedTableDelta
+    | PublisherSchemaTableExtension
+    | AdditiveTableExtension,
 ): LogicalTableMetadata {
   if (table.name !== extension.name) {
     throw new Error(`Capacity extension target mismatch: ${extension.name}`);
@@ -42,12 +58,12 @@ function assertUnique(values: string[], label: string): void {
 }
 
 function assertExecutableSource(source: ExecutableSchemaSource): void {
-  if (source.tables.length !== 78) {
-    throw new Error(`Expected 78 v1 tables, received ${source.tables.length}`);
+  if (source.tables.length !== 81) {
+    throw new Error(`Expected 81 v1 tables, received ${source.tables.length}`);
   }
-  if (source.queries.length !== 31) {
+  if (source.queries.length !== 35) {
     throw new Error(
-      `Expected 31 query intents, received ${source.queries.length}`,
+      `Expected 35 query intents, received ${source.queries.length}`,
     );
   }
   assertUnique(
@@ -119,12 +135,13 @@ function assertBaseRelations(
 export function loadExecutableSchemaSource(
   contractsRoot?: string,
 ): ExecutableSchemaSource {
-  const inputs = readPinnedSchemaInputArtifacts(contractsRoot);
+  const inputs = readPinnedSchemaInputArtifacts({ contractsRoot });
   const g0_6Manifest = inputs.g0_6_logical_schema_manifest.artifact;
   const logicalSource = inputs.logical_schema_source.artifact;
   const typedRelations = inputs.typed_relation_catalog.artifact;
   const queryCatalog = inputs.query_catalog.artifact;
   const capacityDelta = inputs.g0_10_capacity_logical_schema_delta.artifact;
+  const publisherInput = inputs.publisher_schema_prerequisite.artifact;
   const sqliteProfile = inputs.sqlite_execution_profile.artifact;
 
   const base = logicalSource.payload as unknown as LogicalSchemaSourcePayload;
@@ -133,6 +150,7 @@ export function loadExecutableSchemaSource(
   const baseQueries =
     queryCatalog.payload as unknown as LogicalQueryCatalogPayload;
   const delta = capacityDelta.payload as unknown as CapacityLogicalSchemaDelta;
+  const publisher = parsePublisherSchemaPrerequisiteArtifact(publisherInput);
   if (
     base.schema_id !== 'workflow-runtime-schema-v1' ||
     base.table_count !== 74 ||
@@ -151,6 +169,19 @@ export function loadExecutableSchemaSource(
   ) {
     throw new Error('G0.10 capacity delta is not the expected additive input');
   }
+  if (
+    publisher.schema_id !== base.schema_id ||
+    publisher.database_schema_version !== 2 ||
+    publisher.delta_mode !== 'additive_only' ||
+    publisher.added_tables.length !== 3 ||
+    publisher.extended_tables.length !== 1 ||
+    publisher.normative_logical_schema_coverage.prior_table_count !== 78 ||
+    publisher.normative_logical_schema_coverage.resulting_table_count !== 81
+  ) {
+    throw new Error(
+      'Publisher Schema Prerequisite is not the expected additive input',
+    );
+  }
   assertBaseRelations(base, relations);
 
   const extension = delta.extended_tables[0];
@@ -167,16 +198,41 @@ export function loadExecutableSchemaSource(
     })),
   );
 
+  const publisherExtension = publisher.extended_tables[0];
+  const publisherExtensionIndex = tables.findIndex(
+    (table) => table.name === publisherExtension.name,
+  );
+  if (publisherExtensionIndex < 0) {
+    throw new Error(
+      `Publisher extension target is absent: ${publisherExtension.name}`,
+    );
+  }
+  tables[publisherExtensionIndex] = mergeExtension(
+    tables[publisherExtensionIndex],
+    publisherExtension,
+  );
+  tables.push(
+    ...publisher.added_tables.map((table, index) => ({
+      ...table,
+      ordinal: tables.length + index + 1,
+    })),
+  );
+
   const result: ExecutableSchemaSource = {
     schema_id: 'workflow-runtime-schema-v1',
-    database_schema_version: 1,
+    database_schema_version: 2,
     tables,
-    queries: [...baseQueries.queries, ...delta.query_intents],
+    queries: [
+      ...baseQueries.queries,
+      ...delta.query_intents,
+      ...publisher.query_intents,
+    ],
     logical_inputs: {
       logical_schema_source_hash: logicalSource.hash,
       typed_relation_catalog_hash: typedRelations.hash,
       query_catalog_hash: queryCatalog.hash,
       capacity_delta_hash: capacityDelta.hash,
+      publisher_schema_prerequisite_hash: publisherInput.hash,
       sqlite_profile_hash: sqliteProfile.hash,
     },
   };

@@ -6,12 +6,12 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-runtime-schema-dependency-manifest:1\n",
-  "hash": "sha256:ea039f582f0ebff2fb9bc7e512825612cf8f0f93ccdd4c5e43345f56ca2b7b89",
+  "hash": "sha256:00bbf7a38a294e9d7f867df70b9db3c7ca0fc7cfe777902fb531e363b678c4e0",
   "payload": {
     "dependency_set_id": "workflow-runtime-schema-v1",
     "identity_scope": "physical_schema_and_migration",
-    "member_count": 8,
-    "physical_member_count": 7,
+    "member_count": 9,
+    "physical_member_count": 8,
     "construction_provenance_count": 1,
     "members": [
       {
@@ -80,6 +80,19 @@
         "raw_sha256": "sha256:91ba963f3983a525983ab3b0cd17f194f3d50738d0b8399ce43e9d51212c5616"
       },
       {
+        "role": "publisher_schema_prerequisite",
+        "identity_effect": "physical_schema_input",
+        "path": "store/schema/inputs/workflow-publisher-schema-prerequisite@1.json",
+        "format": "icarus.workflow-publisher-schema-prerequisite/1",
+        "ref": {
+          "id": "icarus.workflow-publisher-schema-prerequisite",
+          "version": "1"
+        },
+        "version": 1,
+        "semantic_hash": "sha256:93ca47fc61812061c77400b78c2285790a86ea852e1358d5369f95db55ba4330",
+        "raw_sha256": "sha256:15407b979732abc677ac9e85c9f2af512aaf24121abed841276450d2af9282ea"
+      },
+      {
         "role": "sqlite_execution_profile",
         "identity_effect": "physical_schema_input",
         "path": "contracts/sqlite/local_single_user_sqlite@1.json",
@@ -102,8 +115,8 @@
           "version": "1"
         },
         "version": 1,
-        "semantic_hash": "sha256:02e8d7511386c82458120d65ea6eb97f3ed26941abd757d2314e58ccc91fcb3b",
-        "raw_sha256": "sha256:473132f99f616dae253ac7b82c3791f8a063329bec1cee8b6931e986f3d26817"
+        "semantic_hash": "sha256:fe97803fe8d91c5e6beb59892fdf612d4bf1963def75028dece50f3393edbd89",
+        "raw_sha256": "sha256:2f4c2f0f38f2276313621d345cafeaedd6545969f2d987b914ab4b89c4b00b4b"
       },
       {
         "role": "canonical_migration",
@@ -115,10 +128,10 @@
           "version": "1"
         },
         "version": 1,
-        "semantic_hash": "sha256:d89829995e164355ad485fc117db88dd67a72409f00ec3c3c54253f30a589f61",
-        "raw_sha256": "sha256:d89829995e164355ad485fc117db88dd67a72409f00ec3c3c54253f30a589f61"
+        "semantic_hash": "sha256:fb6c820a0f646148cbd9f54476917802bc208c84070f005fc24871be46ecae89",
+        "raw_sha256": "sha256:fb6c820a0f646148cbd9f54476917802bc208c84070f005fc24871be46ecae89"
       }
     ],
-    "physical_schema_identity": "sha256:8c667d62f69a8c67ba1edde467562e370377342a058b6dc4673ab9a383fe05a1"
+    "physical_schema_identity": "sha256:e6150805b5c26dfc6ba0886da88b79345cfd5838d8da05d1ca011e371f390616"
   }
 }

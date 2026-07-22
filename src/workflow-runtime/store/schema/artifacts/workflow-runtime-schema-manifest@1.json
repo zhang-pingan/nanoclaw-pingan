@@ -6,30 +6,31 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-runtime-schema-manifest:1\n",
-  "hash": "sha256:02e8d7511386c82458120d65ea6eb97f3ed26941abd757d2314e58ccc91fcb3b",
+  "hash": "sha256:fe97803fe8d91c5e6beb59892fdf612d4bf1963def75028dece50f3393edbd89",
   "payload": {
     "schema_id": "workflow-runtime-schema-v1",
     "database_name": "workflow-runtime.db",
-    "database_schema_version": 1,
+    "database_schema_version": 2,
     "logical_inputs": {
       "logical_schema_source_hash": "sha256:ef5221d3465f1214c3c0aad3660f57b119d03eb4b5127428d6a1f881a6260214",
       "typed_relation_catalog_hash": "sha256:20babbfc787ac8a6006243180ef6e867bef8b454c41a527f4b8f20c8f6dd0d99",
       "query_catalog_hash": "sha256:6a6368f1300a5d732a6a63b73f593b9dd930880beafdd14958517bc92463ed2d",
       "capacity_delta_hash": "sha256:5d9e79b5f9330a5111e6f61b8d04164c87839a60d55ea350c0aa87b8b1559e66",
+      "publisher_schema_prerequisite_hash": "sha256:93ca47fc61812061c77400b78c2285790a86ea852e1358d5369f95db55ba4330",
       "sqlite_profile_hash": "sha256:3d69742dad2fefa8bef4ba47e375defd705e3b32920a92b105a43726436fb7af"
     },
     "migration_path": "migration/workflow-runtime-schema-v1.sql",
-    "migration_sha256": "sha256:d89829995e164355ad485fc117db88dd67a72409f00ec3c3c54253f30a589f61",
-    "migration_statement_count": 257,
-    "table_count": 78,
-    "column_count": 1283,
-    "primary_key_count": 78,
-    "unique_key_count": 136,
-    "foreign_key_count": 355,
-    "check_count": 814,
-    "index_count": 32,
-    "trigger_count": 10,
-    "external_reference_count": 46,
+    "migration_sha256": "sha256:fb6c820a0f646148cbd9f54476917802bc208c84070f005fc24871be46ecae89",
+    "migration_statement_count": 280,
+    "table_count": 81,
+    "column_count": 1354,
+    "primary_key_count": 81,
+    "unique_key_count": 143,
+    "foreign_key_count": 369,
+    "check_count": 867,
+    "index_count": 36,
+    "trigger_count": 19,
+    "external_reference_count": 51,
     "tables": [
       {
         "ordinal": 1,
@@ -2231,6 +2232,18 @@
             "predicate_intent": null,
             "origin": "c",
             "sql": "CREATE UNIQUE INDEX \"uk:values:id_hash\" ON \"workflow_values\" (\"id\", \"content_hash\")"
+          },
+          {
+            "key_id": "uk:values:id_hash_schema",
+            "columns": [
+              "id",
+              "content_hash",
+              "schema_resource_id",
+              "schema_resource_hash"
+            ],
+            "predicate_intent": null,
+            "origin": "c",
+            "sql": "CREATE UNIQUE INDEX \"uk:values:id_hash_schema\" ON \"workflow_values\" (\"id\", \"content_hash\", \"schema_resource_id\", \"schema_resource_hash\")"
           }
         ],
         "foreign_keys": [
@@ -29261,6 +29274,1654 @@
             "sql": "CREATE INDEX \"idx:capacity_events:global_chain\" ON \"runtime_capacity_change_events\" (\"event_seq\")"
           }
         ]
+      },
+      {
+        "ordinal": 79,
+        "name": "workflow_publisher_commands",
+        "sql": "CREATE TABLE \"workflow_publisher_commands\" (\n  \"command_id\" TEXT NOT NULL /* logical_type=identifier */,\n  \"command_type\" TEXT NOT NULL /* logical_type=text */,\n  \"idempotency_domain\" TEXT NOT NULL /* logical_type=text */,\n  \"idempotency_key\" TEXT NOT NULL /* logical_type=text */,\n  \"request_value_id\" TEXT NOT NULL /* logical_type=identifier */,\n  \"request_hash\" TEXT NOT NULL /* logical_type=hash */,\n  \"request_schema_resource_id\" TEXT NOT NULL /* logical_type=identifier */,\n  \"request_schema_hash\" TEXT NOT NULL /* logical_type=hash */,\n  \"domain_request_hash\" TEXT NOT NULL /* logical_type=hash */,\n  \"approved_review_ref\" TEXT NOT NULL /* logical_type=external_reference external_ref=1 validator_owner=workflow_authoring_review_registry reference_domain=approved_workflow_review immutable=1 */,\n  \"approved_review_hash\" TEXT NOT NULL /* logical_type=hash */,\n  \"reviewer_actor_ref\" TEXT NOT NULL /* logical_type=external_reference external_ref=1 validator_owner=publisher_authentication_gateway reference_domain=authenticated_principal immutable=1 */,\n  \"reviewer_auth_session_ref\" TEXT NOT NULL /* logical_type=external_reference external_ref=1 validator_owner=authentication_service reference_domain=auth_session immutable=1 */,\n  \"approved_at_ms\" INTEGER NOT NULL /* logical_type=integer */,\n  \"expires_at_ms\" INTEGER NOT NULL /* logical_type=integer */,\n  \"source_manifest_value_id\" TEXT NOT NULL /* logical_type=identifier */,\n  \"source_manifest_hash\" TEXT NOT NULL /* logical_type=hash */,\n  \"source_manifest_schema_resource_id\" TEXT NOT NULL /* logical_type=identifier */,\n  \"source_manifest_schema_hash\" TEXT NOT NULL /* logical_type=hash */,\n  \"compiled_plan_value_id\" TEXT NOT NULL /* logical_type=identifier */,\n  \"compiled_plan_hash\" TEXT NOT NULL /* logical_type=hash */,\n  \"compiled_plan_schema_resource_id\" TEXT NOT NULL /* logical_type=identifier */,\n  \"compiled_plan_schema_hash\" TEXT NOT NULL /* logical_type=hash */,\n  \"execution_artifact_resource_id\" TEXT NOT NULL /* logical_type=identifier */,\n  \"execution_artifact_hash\" TEXT NOT NULL /* logical_type=hash */,\n  \"closure_manifest_id\" TEXT NOT NULL /* logical_type=identifier */,\n  \"closure_hash\" TEXT NOT NULL /* logical_type=hash */,\n  \"target_feature_release_id\" TEXT NOT NULL /* logical_type=identifier */,\n  \"target_feature_release_hash\" TEXT NOT NULL /* logical_type=hash */,\n  \"applied_feature_release_id\" TEXT /* logical_type=identifier */,\n  \"applied_feature_release_hash\" TEXT /* logical_type=hash */,\n  \"canonical_receipt_value_id\" TEXT /* logical_type=identifier */,\n  \"canonical_receipt_hash\" TEXT /* logical_type=hash */,\n  \"canonical_receipt_schema_resource_id\" TEXT /* logical_type=identifier */,\n  \"canonical_receipt_schema_hash\" TEXT /* logical_type=hash */,\n  \"lifecycle\" TEXT NOT NULL /* logical_type=text */,\n  \"created_at_ms\" INTEGER NOT NULL /* logical_type=integer */,\n  \"finalized_at_ms\" INTEGER /* logical_type=integer */,\n  \"row_version\" INTEGER NOT NULL /* logical_type=integer */,\n  CONSTRAINT \"pk:workflow_publisher_commands\" PRIMARY KEY (\"command_id\"),\n  CONSTRAINT \"fk:publisher_commands:request_value\" FOREIGN KEY (\"request_value_id\", \"request_hash\", \"request_schema_resource_id\", \"request_schema_hash\") REFERENCES \"workflow_values\" (\"id\", \"content_hash\", \"schema_resource_id\", \"schema_resource_hash\") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED,\n  CONSTRAINT \"fk:publisher_commands:source_manifest_value\" FOREIGN KEY (\"source_manifest_value_id\", \"source_manifest_hash\", \"source_manifest_schema_resource_id\", \"source_manifest_schema_hash\") REFERENCES \"workflow_values\" (\"id\", \"content_hash\", \"schema_resource_id\", \"schema_resource_hash\") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED,\n  CONSTRAINT \"fk:publisher_commands:compiled_plan_value\" FOREIGN KEY (\"compiled_plan_value_id\", \"compiled_plan_hash\", \"compiled_plan_schema_resource_id\", \"compiled_plan_schema_hash\") REFERENCES \"workflow_values\" (\"id\", \"content_hash\", \"schema_resource_id\", \"schema_resource_hash\") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED,\n  CONSTRAINT \"fk:publisher_commands:execution_artifact\" FOREIGN KEY (\"execution_artifact_resource_id\", \"execution_artifact_hash\") REFERENCES \"workflow_registry_resources\" (\"id\", \"content_hash\") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED,\n  CONSTRAINT \"fk:publisher_commands:closure\" FOREIGN KEY (\"closure_manifest_id\", \"closure_hash\") REFERENCES \"workflow_registry_closure_manifests\" (\"id\", \"closure_hash\") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED,\n  CONSTRAINT \"fk:publisher_commands:target_feature_release\" FOREIGN KEY (\"target_feature_release_id\", \"target_feature_release_hash\") REFERENCES \"workflow_feature_releases\" (\"id\", \"release_hash\") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED,\n  CONSTRAINT \"fk:publisher_commands:applied_feature_release\" FOREIGN KEY (\"applied_feature_release_id\", \"applied_feature_release_hash\") REFERENCES \"workflow_feature_releases\" (\"id\", \"release_hash\") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED,\n  CONSTRAINT \"fk:publisher_commands:canonical_receipt_value\" FOREIGN KEY (\"canonical_receipt_value_id\", \"canonical_receipt_hash\", \"canonical_receipt_schema_resource_id\", \"canonical_receipt_schema_hash\") REFERENCES \"workflow_values\" (\"id\", \"content_hash\", \"schema_resource_id\", \"schema_resource_hash\") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED,\n  CONSTRAINT \"ck:workflow_publisher_commands:command_type:enum\" CHECK (\"command_type\" IN ('staged_publish')) /* check_kind=enum_membership logical_columns=command_type */,\n  CONSTRAINT \"ck:workflow_publisher_commands:request_hash:hash\" CHECK ((\"request_hash\" IS NULL OR (length(\"request_hash\") = 71 AND substr(\"request_hash\", 1, 7) = 'sha256:' AND substr(\"request_hash\", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=request_hash */,\n  CONSTRAINT \"ck:workflow_publisher_commands:request_schema_hash:hash\" CHECK ((\"request_schema_hash\" IS NULL OR (length(\"request_schema_hash\") = 71 AND substr(\"request_schema_hash\", 1, 7) = 'sha256:' AND substr(\"request_schema_hash\", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=request_schema_hash */,\n  CONSTRAINT \"ck:workflow_publisher_commands:domain_request_hash:hash\" CHECK ((\"domain_request_hash\" IS NULL OR (length(\"domain_request_hash\") = 71 AND substr(\"domain_request_hash\", 1, 7) = 'sha256:' AND substr(\"domain_request_hash\", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=domain_request_hash */,\n  CONSTRAINT \"ck:workflow_publisher_commands:approved_review_hash:hash\" CHECK ((\"approved_review_hash\" IS NULL OR (length(\"approved_review_hash\") = 71 AND substr(\"approved_review_hash\", 1, 7) = 'sha256:' AND substr(\"approved_review_hash\", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=approved_review_hash */,\n  CONSTRAINT \"ck:workflow_publisher_commands:approved_at_ms:safe_integer\" CHECK ((\"approved_at_ms\" IS NULL OR \"approved_at_ms\" BETWEEN 0 AND 9007199254740991)) /* check_kind=safe_integer logical_columns=approved_at_ms */,\n  CONSTRAINT \"ck:workflow_publisher_commands:expires_at_ms:safe_integer\" CHECK ((\"expires_at_ms\" IS NULL OR \"expires_at_ms\" BETWEEN 0 AND 9007199254740991)) /* check_kind=safe_integer logical_columns=expires_at_ms */,\n  CONSTRAINT \"ck:workflow_publisher_commands:source_manifest_hash:hash\" CHECK ((\"source_manifest_hash\" IS NULL OR (length(\"source_manifest_hash\") = 71 AND substr(\"source_manifest_hash\", 1, 7) = 'sha256:' AND substr(\"source_manifest_hash\", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=source_manifest_hash */,\n  CONSTRAINT \"ck:workflow_publisher_commands:source_manifest_schema_hash:hash\" CHECK ((\"source_manifest_schema_hash\" IS NULL OR (length(\"source_manifest_schema_hash\") = 71 AND substr(\"source_manifest_schema_hash\", 1, 7) = 'sha256:' AND substr(\"source_manifest_schema_hash\", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=source_manifest_schema_hash */,\n  CONSTRAINT \"ck:workflow_publisher_commands:compiled_plan_hash:hash\" CHECK ((\"compiled_plan_hash\" IS NULL OR (length(\"compiled_plan_hash\") = 71 AND substr(\"compiled_plan_hash\", 1, 7) = 'sha256:' AND substr(\"compiled_plan_hash\", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=compiled_plan_hash */,\n  CONSTRAINT \"ck:workflow_publisher_commands:compiled_plan_schema_hash:hash\" CHECK ((\"compiled_plan_schema_hash\" IS NULL OR (length(\"compiled_plan_schema_hash\") = 71 AND substr(\"compiled_plan_schema_hash\", 1, 7) = 'sha256:' AND substr(\"compiled_plan_schema_hash\", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=compiled_plan_schema_hash */,\n  CONSTRAINT \"ck:workflow_publisher_commands:execution_artifact_hash:hash\" CHECK ((\"execution_artifact_hash\" IS NULL OR (length(\"execution_artifact_hash\") = 71 AND substr(\"execution_artifact_hash\", 1, 7) = 'sha256:' AND substr(\"execution_artifact_hash\", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=execution_artifact_hash */,\n  CONSTRAINT \"ck:workflow_publisher_commands:closure_hash:hash\" CHECK ((\"closure_hash\" IS NULL OR (length(\"closure_hash\") = 71 AND substr(\"closure_hash\", 1, 7) = 'sha256:' AND substr(\"closure_hash\", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=closure_hash */,\n  CONSTRAINT \"ck:workflow_publisher_commands:target_feature_release_hash:hash\" CHECK ((\"target_feature_release_hash\" IS NULL OR (length(\"target_feature_release_hash\") = 71 AND substr(\"target_feature_release_hash\", 1, 7) = 'sha256:' AND substr(\"target_feature_release_hash\", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=target_feature_release_hash */,\n  CONSTRAINT \"ck:workflow_publisher_commands:applied_feature_release_hash:hash\" CHECK ((\"applied_feature_release_hash\" IS NULL OR (length(\"applied_feature_release_hash\") = 71 AND substr(\"applied_feature_release_hash\", 1, 7) = 'sha256:' AND substr(\"applied_feature_release_hash\", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=applied_feature_release_hash */,\n  CONSTRAINT \"ck:workflow_publisher_commands:canonical_receipt_hash:hash\" CHECK ((\"canonical_receipt_hash\" IS NULL OR (length(\"canonical_receipt_hash\") = 71 AND substr(\"canonical_receipt_hash\", 1, 7) = 'sha256:' AND substr(\"canonical_receipt_hash\", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=canonical_receipt_hash */,\n  CONSTRAINT \"ck:workflow_publisher_commands:canonical_receipt_schema_hash:hash\" CHECK ((\"canonical_receipt_schema_hash\" IS NULL OR (length(\"canonical_receipt_schema_hash\") = 71 AND substr(\"canonical_receipt_schema_hash\", 1, 7) = 'sha256:' AND substr(\"canonical_receipt_schema_hash\", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=canonical_receipt_schema_hash */,\n  CONSTRAINT \"ck:workflow_publisher_commands:lifecycle:enum\" CHECK (\"lifecycle\" IN ('pending', 'applied', 'failed')) /* check_kind=enum_membership logical_columns=lifecycle */,\n  CONSTRAINT \"ck:workflow_publisher_commands:created_at_ms:safe_integer\" CHECK ((\"created_at_ms\" IS NULL OR \"created_at_ms\" BETWEEN 0 AND 9007199254740991)) /* check_kind=safe_integer logical_columns=created_at_ms */,\n  CONSTRAINT \"ck:workflow_publisher_commands:finalized_at_ms:safe_integer\" CHECK ((\"finalized_at_ms\" IS NULL OR \"finalized_at_ms\" BETWEEN 0 AND 9007199254740991)) /* check_kind=safe_integer logical_columns=finalized_at_ms */,\n  CONSTRAINT \"ck:workflow_publisher_commands:row_version:safe_integer\" CHECK ((\"row_version\" IS NULL OR \"row_version\" BETWEEN 0 AND 9007199254740991)) /* check_kind=safe_integer logical_columns=row_version */,\n  CONSTRAINT \"ck:publisher_commands:idempotency_non_empty\" CHECK ((length(\"idempotency_domain\") BETWEEN 1 AND 255 AND length(\"idempotency_key\") BETWEEN 1 AND 512)) /* check_kind=state_field_consistency logical_columns=idempotency_domain,idempotency_key */,\n  CONSTRAINT \"ck:publisher_commands:review_window\" CHECK ((\"approved_at_ms\" <= \"created_at_ms\" AND \"created_at_ms\" < \"expires_at_ms\")) /* check_kind=ordered_values logical_columns=approved_at_ms,created_at_ms,expires_at_ms */,\n  CONSTRAINT \"ck:publisher_commands:applied_release_pair\" CHECK (((\"applied_feature_release_id\" IS NULL AND \"applied_feature_release_hash\" IS NULL) OR (\"applied_feature_release_id\" IS NOT NULL AND \"applied_feature_release_hash\" IS NOT NULL))) /* check_kind=all_or_none logical_columns=applied_feature_release_id,applied_feature_release_hash */,\n  CONSTRAINT \"ck:publisher_commands:receipt_binding\" CHECK (((\"canonical_receipt_value_id\" IS NULL AND \"canonical_receipt_hash\" IS NULL AND \"canonical_receipt_schema_resource_id\" IS NULL AND \"canonical_receipt_schema_hash\" IS NULL) OR (\"canonical_receipt_value_id\" IS NOT NULL AND \"canonical_receipt_hash\" IS NOT NULL AND \"canonical_receipt_schema_resource_id\" IS NOT NULL AND \"canonical_receipt_schema_hash\" IS NOT NULL))) /* check_kind=all_or_none logical_columns=canonical_receipt_value_id,canonical_receipt_hash,canonical_receipt_schema_resource_id,canonical_receipt_schema_hash */,\n  CONSTRAINT \"ck:publisher_commands:lifecycle\" CHECK (((\"lifecycle\" = 'pending' AND \"applied_feature_release_id\" IS NULL AND \"applied_feature_release_hash\" IS NULL AND \"canonical_receipt_value_id\" IS NULL AND \"finalized_at_ms\" IS NULL) OR (\"lifecycle\" = 'applied' AND \"applied_feature_release_id\" = \"target_feature_release_id\" AND \"applied_feature_release_hash\" = \"target_feature_release_hash\" AND \"canonical_receipt_value_id\" IS NOT NULL AND \"finalized_at_ms\" IS NOT NULL) OR (\"lifecycle\" = 'failed' AND \"applied_feature_release_id\" IS NULL AND \"applied_feature_release_hash\" IS NULL AND \"canonical_receipt_value_id\" IS NOT NULL AND \"finalized_at_ms\" IS NOT NULL))) /* check_kind=state_field_consistency logical_columns=lifecycle,target_feature_release_id,target_feature_release_hash,applied_feature_release_id,applied_feature_release_hash,canonical_receipt_value_id,finalized_at_ms */\n)",
+        "columns": [
+          {
+            "cid": 0,
+            "name": "command_id",
+            "sqlite_type": "TEXT",
+            "nullable": false,
+            "default_sql": null,
+            "primary_key_ordinal": 1,
+            "logical_type": "identifier",
+            "external_reference": null
+          },
+          {
+            "cid": 1,
+            "name": "command_type",
+            "sqlite_type": "TEXT",
+            "nullable": false,
+            "default_sql": null,
+            "primary_key_ordinal": 0,
+            "logical_type": "text",
+            "external_reference": null
+          },
+          {
+            "cid": 2,
+            "name": "idempotency_domain",
+            "sqlite_type": "TEXT",
+            "nullable": false,
+            "default_sql": null,
+            "primary_key_ordinal": 0,
+            "logical_type": "text",
+            "external_reference": null
+          },
+          {
+            "cid": 3,
+            "name": "idempotency_key",
+            "sqlite_type": "TEXT",
+            "nullable": false,
+            "default_sql": null,
+            "primary_key_ordinal": 0,
+            "logical_type": "text",
+            "external_reference": null
+          },
+          {
+            "cid": 4,
+            "name": "request_value_id",
+            "sqlite_type": "TEXT",
+            "nullable": false,
+            "default_sql": null,
+            "primary_key_ordinal": 0,
+            "logical_type": "identifier",
+            "external_reference": null
+          },
+          {
+            "cid": 5,
+            "name": "request_hash",
+            "sqlite_type": "TEXT",
+            "nullable": false,
+            "default_sql": null,
+            "primary_key_ordinal": 0,
+            "logical_type": "hash",
+            "external_reference": null
+          },
+          {
+            "cid": 6,
+            "name": "request_schema_resource_id",
+            "sqlite_type": "TEXT",
+            "nullable": false,
+            "default_sql": null,
+            "primary_key_ordinal": 0,
+            "logical_type": "identifier",
+            "external_reference": null
+          },
+          {
+            "cid": 7,
+            "name": "request_schema_hash",
+            "sqlite_type": "TEXT",
+            "nullable": false,
+            "default_sql": null,
+            "primary_key_ordinal": 0,
+            "logical_type": "hash",
+            "external_reference": null
+          },
+          {
+            "cid": 8,
+            "name": "domain_request_hash",
+            "sqlite_type": "TEXT",
+            "nullable": false,
+            "default_sql": null,
+            "primary_key_ordinal": 0,
+            "logical_type": "hash",
+            "external_reference": null
+          },
+          {
+            "cid": 9,
+            "name": "approved_review_ref",
+            "sqlite_type": "TEXT",
+            "nullable": false,
+            "default_sql": null,
+            "primary_key_ordinal": 0,
+            "logical_type": "external_reference",
+            "external_reference": {
+              "validator_owner": "workflow_authoring_review_registry",
+              "reference_domain": "approved_workflow_review",
+              "immutable": true
+            }
+          },
+          {
+            "cid": 10,
+            "name": "approved_review_hash",
+            "sqlite_type": "TEXT",
+            "nullable": false,
+            "default_sql": null,
+            "primary_key_ordinal": 0,
+            "logical_type": "hash",
+            "external_reference": null
+          },
+          {
+            "cid": 11,
+            "name": "reviewer_actor_ref",
+            "sqlite_type": "TEXT",
+            "nullable": false,
+            "default_sql": null,
+            "primary_key_ordinal": 0,
+            "logical_type": "external_reference",
+            "external_reference": {
+              "validator_owner": "publisher_authentication_gateway",
+              "reference_domain": "authenticated_principal",
+              "immutable": true
+            }
+          },
+          {
+            "cid": 12,
+            "name": "reviewer_auth_session_ref",
+            "sqlite_type": "TEXT",
+            "nullable": false,
+            "default_sql": null,
+            "primary_key_ordinal": 0,
+            "logical_type": "external_reference",
+            "external_reference": {
+              "validator_owner": "authentication_service",
+              "reference_domain": "auth_session",
+              "immutable": true
+            }
+          },
+          {
+            "cid": 13,
+            "name": "approved_at_ms",
+            "sqlite_type": "INTEGER",
+            "nullable": false,
+            "default_sql": null,
+            "primary_key_ordinal": 0,
+            "logical_type": "integer",
+            "external_reference": null
+          },
+          {
+            "cid": 14,
+            "name": "expires_at_ms",
+            "sqlite_type": "INTEGER",
+            "nullable": false,
+            "default_sql": null,
+            "primary_key_ordinal": 0,
+            "logical_type": "integer",
+            "external_reference": null
+          },
+          {
+            "cid": 15,
+            "name": "source_manifest_value_id",
+            "sqlite_type": "TEXT",
+            "nullable": false,
+            "default_sql": null,
+            "primary_key_ordinal": 0,
+            "logical_type": "identifier",
+            "external_reference": null
+          },
+          {
+            "cid": 16,
+            "name": "source_manifest_hash",
+            "sqlite_type": "TEXT",
+            "nullable": false,
+            "default_sql": null,
+            "primary_key_ordinal": 0,
+            "logical_type": "hash",
+            "external_reference": null
+          },
+          {
+            "cid": 17,
+            "name": "source_manifest_schema_resource_id",
+            "sqlite_type": "TEXT",
+            "nullable": false,
+            "default_sql": null,
+            "primary_key_ordinal": 0,
+            "logical_type": "identifier",
+            "external_reference": null
+          },
+          {
+            "cid": 18,
+            "name": "source_manifest_schema_hash",
+            "sqlite_type": "TEXT",
+            "nullable": false,
+            "default_sql": null,
+            "primary_key_ordinal": 0,
+            "logical_type": "hash",
+            "external_reference": null
+          },
+          {
+            "cid": 19,
+            "name": "compiled_plan_value_id",
+            "sqlite_type": "TEXT",
+            "nullable": false,
+            "default_sql": null,
+            "primary_key_ordinal": 0,
+            "logical_type": "identifier",
+            "external_reference": null
+          },
+          {
+            "cid": 20,
+            "name": "compiled_plan_hash",
+            "sqlite_type": "TEXT",
+            "nullable": false,
+            "default_sql": null,
+            "primary_key_ordinal": 0,
+            "logical_type": "hash",
+            "external_reference": null
+          },
+          {
+            "cid": 21,
+            "name": "compiled_plan_schema_resource_id",
+            "sqlite_type": "TEXT",
+            "nullable": false,
+            "default_sql": null,
+            "primary_key_ordinal": 0,
+            "logical_type": "identifier",
+            "external_reference": null
+          },
+          {
+            "cid": 22,
+            "name": "compiled_plan_schema_hash",
+            "sqlite_type": "TEXT",
+            "nullable": false,
+            "default_sql": null,
+            "primary_key_ordinal": 0,
+            "logical_type": "hash",
+            "external_reference": null
+          },
+          {
+            "cid": 23,
+            "name": "execution_artifact_resource_id",
+            "sqlite_type": "TEXT",
+            "nullable": false,
+            "default_sql": null,
+            "primary_key_ordinal": 0,
+            "logical_type": "identifier",
+            "external_reference": null
+          },
+          {
+            "cid": 24,
+            "name": "execution_artifact_hash",
+            "sqlite_type": "TEXT",
+            "nullable": false,
+            "default_sql": null,
+            "primary_key_ordinal": 0,
+            "logical_type": "hash",
+            "external_reference": null
+          },
+          {
+            "cid": 25,
+            "name": "closure_manifest_id",
+            "sqlite_type": "TEXT",
+            "nullable": false,
+            "default_sql": null,
+            "primary_key_ordinal": 0,
+            "logical_type": "identifier",
+            "external_reference": null
+          },
+          {
+            "cid": 26,
+            "name": "closure_hash",
+            "sqlite_type": "TEXT",
+            "nullable": false,
+            "default_sql": null,
+            "primary_key_ordinal": 0,
+            "logical_type": "hash",
+            "external_reference": null
+          },
+          {
+            "cid": 27,
+            "name": "target_feature_release_id",
+            "sqlite_type": "TEXT",
+            "nullable": false,
+            "default_sql": null,
+            "primary_key_ordinal": 0,
+            "logical_type": "identifier",
+            "external_reference": null
+          },
+          {
+            "cid": 28,
+            "name": "target_feature_release_hash",
+            "sqlite_type": "TEXT",
+            "nullable": false,
+            "default_sql": null,
+            "primary_key_ordinal": 0,
+            "logical_type": "hash",
+            "external_reference": null
+          },
+          {
+            "cid": 29,
+            "name": "applied_feature_release_id",
+            "sqlite_type": "TEXT",
+            "nullable": true,
+            "default_sql": null,
+            "primary_key_ordinal": 0,
+            "logical_type": "identifier",
+            "external_reference": null
+          },
+          {
+            "cid": 30,
+            "name": "applied_feature_release_hash",
+            "sqlite_type": "TEXT",
+            "nullable": true,
+            "default_sql": null,
+            "primary_key_ordinal": 0,
+            "logical_type": "hash",
+            "external_reference": null
+          },
+          {
+            "cid": 31,
+            "name": "canonical_receipt_value_id",
+            "sqlite_type": "TEXT",
+            "nullable": true,
+            "default_sql": null,
+            "primary_key_ordinal": 0,
+            "logical_type": "identifier",
+            "external_reference": null
+          },
+          {
+            "cid": 32,
+            "name": "canonical_receipt_hash",
+            "sqlite_type": "TEXT",
+            "nullable": true,
+            "default_sql": null,
+            "primary_key_ordinal": 0,
+            "logical_type": "hash",
+            "external_reference": null
+          },
+          {
+            "cid": 33,
+            "name": "canonical_receipt_schema_resource_id",
+            "sqlite_type": "TEXT",
+            "nullable": true,
+            "default_sql": null,
+            "primary_key_ordinal": 0,
+            "logical_type": "identifier",
+            "external_reference": null
+          },
+          {
+            "cid": 34,
+            "name": "canonical_receipt_schema_hash",
+            "sqlite_type": "TEXT",
+            "nullable": true,
+            "default_sql": null,
+            "primary_key_ordinal": 0,
+            "logical_type": "hash",
+            "external_reference": null
+          },
+          {
+            "cid": 35,
+            "name": "lifecycle",
+            "sqlite_type": "TEXT",
+            "nullable": false,
+            "default_sql": null,
+            "primary_key_ordinal": 0,
+            "logical_type": "text",
+            "external_reference": null
+          },
+          {
+            "cid": 36,
+            "name": "created_at_ms",
+            "sqlite_type": "INTEGER",
+            "nullable": false,
+            "default_sql": null,
+            "primary_key_ordinal": 0,
+            "logical_type": "integer",
+            "external_reference": null
+          },
+          {
+            "cid": 37,
+            "name": "finalized_at_ms",
+            "sqlite_type": "INTEGER",
+            "nullable": true,
+            "default_sql": null,
+            "primary_key_ordinal": 0,
+            "logical_type": "integer",
+            "external_reference": null
+          },
+          {
+            "cid": 38,
+            "name": "row_version",
+            "sqlite_type": "INTEGER",
+            "nullable": false,
+            "default_sql": null,
+            "primary_key_ordinal": 0,
+            "logical_type": "integer",
+            "external_reference": null
+          }
+        ],
+        "primary_key": {
+          "columns": [
+            "command_id"
+          ],
+          "auto_increment": false
+        },
+        "unique_keys": [
+          {
+            "key_id": "uk:publisher_commands:idempotency",
+            "columns": [
+              "idempotency_domain",
+              "idempotency_key"
+            ],
+            "predicate_intent": null,
+            "origin": "c",
+            "sql": "CREATE UNIQUE INDEX \"uk:publisher_commands:idempotency\" ON \"workflow_publisher_commands\" (\"idempotency_domain\", \"idempotency_key\")"
+          },
+          {
+            "key_id": "uk:publisher_commands:id_domain_request",
+            "columns": [
+              "command_id",
+              "domain_request_hash"
+            ],
+            "predicate_intent": null,
+            "origin": "c",
+            "sql": "CREATE UNIQUE INDEX \"uk:publisher_commands:id_domain_request\" ON \"workflow_publisher_commands\" (\"command_id\", \"domain_request_hash\")"
+          }
+        ],
+        "foreign_keys": [
+          {
+            "relation_id": "fk:publisher_commands:request_value",
+            "source_columns": [
+              "request_value_id",
+              "request_hash",
+              "request_schema_resource_id",
+              "request_schema_hash"
+            ],
+            "target_table": "workflow_values",
+            "target_columns": [
+              "id",
+              "content_hash",
+              "schema_resource_id",
+              "schema_resource_hash"
+            ],
+            "on_delete": "restrict",
+            "deferrability": "deferred",
+            "pragma_id": 7
+          },
+          {
+            "relation_id": "fk:publisher_commands:source_manifest_value",
+            "source_columns": [
+              "source_manifest_value_id",
+              "source_manifest_hash",
+              "source_manifest_schema_resource_id",
+              "source_manifest_schema_hash"
+            ],
+            "target_table": "workflow_values",
+            "target_columns": [
+              "id",
+              "content_hash",
+              "schema_resource_id",
+              "schema_resource_hash"
+            ],
+            "on_delete": "restrict",
+            "deferrability": "deferred",
+            "pragma_id": 6
+          },
+          {
+            "relation_id": "fk:publisher_commands:compiled_plan_value",
+            "source_columns": [
+              "compiled_plan_value_id",
+              "compiled_plan_hash",
+              "compiled_plan_schema_resource_id",
+              "compiled_plan_schema_hash"
+            ],
+            "target_table": "workflow_values",
+            "target_columns": [
+              "id",
+              "content_hash",
+              "schema_resource_id",
+              "schema_resource_hash"
+            ],
+            "on_delete": "restrict",
+            "deferrability": "deferred",
+            "pragma_id": 5
+          },
+          {
+            "relation_id": "fk:publisher_commands:execution_artifact",
+            "source_columns": [
+              "execution_artifact_resource_id",
+              "execution_artifact_hash"
+            ],
+            "target_table": "workflow_registry_resources",
+            "target_columns": [
+              "id",
+              "content_hash"
+            ],
+            "on_delete": "restrict",
+            "deferrability": "deferred",
+            "pragma_id": 4
+          },
+          {
+            "relation_id": "fk:publisher_commands:closure",
+            "source_columns": [
+              "closure_manifest_id",
+              "closure_hash"
+            ],
+            "target_table": "workflow_registry_closure_manifests",
+            "target_columns": [
+              "id",
+              "closure_hash"
+            ],
+            "on_delete": "restrict",
+            "deferrability": "deferred",
+            "pragma_id": 3
+          },
+          {
+            "relation_id": "fk:publisher_commands:target_feature_release",
+            "source_columns": [
+              "target_feature_release_id",
+              "target_feature_release_hash"
+            ],
+            "target_table": "workflow_feature_releases",
+            "target_columns": [
+              "id",
+              "release_hash"
+            ],
+            "on_delete": "restrict",
+            "deferrability": "deferred",
+            "pragma_id": 2
+          },
+          {
+            "relation_id": "fk:publisher_commands:applied_feature_release",
+            "source_columns": [
+              "applied_feature_release_id",
+              "applied_feature_release_hash"
+            ],
+            "target_table": "workflow_feature_releases",
+            "target_columns": [
+              "id",
+              "release_hash"
+            ],
+            "on_delete": "restrict",
+            "deferrability": "deferred",
+            "pragma_id": 1
+          },
+          {
+            "relation_id": "fk:publisher_commands:canonical_receipt_value",
+            "source_columns": [
+              "canonical_receipt_value_id",
+              "canonical_receipt_hash",
+              "canonical_receipt_schema_resource_id",
+              "canonical_receipt_schema_hash"
+            ],
+            "target_table": "workflow_values",
+            "target_columns": [
+              "id",
+              "content_hash",
+              "schema_resource_id",
+              "schema_resource_hash"
+            ],
+            "on_delete": "restrict",
+            "deferrability": "deferred",
+            "pragma_id": 0
+          }
+        ],
+        "checks": [
+          {
+            "check_id": "ck:workflow_publisher_commands:command_type:enum",
+            "kind": "enum_membership",
+            "columns": [
+              "command_type"
+            ],
+            "expression_intent": "value is one of staged_publish",
+            "expression_sql": "\"command_type\" IN ('staged_publish')"
+          },
+          {
+            "check_id": "ck:workflow_publisher_commands:request_hash:hash",
+            "kind": "hash_format",
+            "columns": [
+              "request_hash"
+            ],
+            "expression_intent": "nullable or sha256:<64 lowercase hexadecimal characters>",
+            "expression_sql": "(\"request_hash\" IS NULL OR (length(\"request_hash\") = 71 AND substr(\"request_hash\", 1, 7) = 'sha256:' AND substr(\"request_hash\", 8) NOT GLOB '*[^0-9a-f]*'))"
+          },
+          {
+            "check_id": "ck:workflow_publisher_commands:request_schema_hash:hash",
+            "kind": "hash_format",
+            "columns": [
+              "request_schema_hash"
+            ],
+            "expression_intent": "nullable or sha256:<64 lowercase hexadecimal characters>",
+            "expression_sql": "(\"request_schema_hash\" IS NULL OR (length(\"request_schema_hash\") = 71 AND substr(\"request_schema_hash\", 1, 7) = 'sha256:' AND substr(\"request_schema_hash\", 8) NOT GLOB '*[^0-9a-f]*'))"
+          },
+          {
+            "check_id": "ck:workflow_publisher_commands:domain_request_hash:hash",
+            "kind": "hash_format",
+            "columns": [
+              "domain_request_hash"
+            ],
+            "expression_intent": "nullable or sha256:<64 lowercase hexadecimal characters>",
+            "expression_sql": "(\"domain_request_hash\" IS NULL OR (length(\"domain_request_hash\") = 71 AND substr(\"domain_request_hash\", 1, 7) = 'sha256:' AND substr(\"domain_request_hash\", 8) NOT GLOB '*[^0-9a-f]*'))"
+          },
+          {
+            "check_id": "ck:workflow_publisher_commands:approved_review_hash:hash",
+            "kind": "hash_format",
+            "columns": [
+              "approved_review_hash"
+            ],
+            "expression_intent": "nullable or sha256:<64 lowercase hexadecimal characters>",
+            "expression_sql": "(\"approved_review_hash\" IS NULL OR (length(\"approved_review_hash\") = 71 AND substr(\"approved_review_hash\", 1, 7) = 'sha256:' AND substr(\"approved_review_hash\", 8) NOT GLOB '*[^0-9a-f]*'))"
+          },
+          {
+            "check_id": "ck:workflow_publisher_commands:approved_at_ms:safe_integer",
+            "kind": "safe_integer",
+            "columns": [
+              "approved_at_ms"
+            ],
+            "expression_intent": "non_negative JavaScript safe integer",
+            "expression_sql": "(\"approved_at_ms\" IS NULL OR \"approved_at_ms\" BETWEEN 0 AND 9007199254740991)"
+          },
+          {
+            "check_id": "ck:workflow_publisher_commands:expires_at_ms:safe_integer",
+            "kind": "safe_integer",
+            "columns": [
+              "expires_at_ms"
+            ],
+            "expression_intent": "non_negative JavaScript safe integer",
+            "expression_sql": "(\"expires_at_ms\" IS NULL OR \"expires_at_ms\" BETWEEN 0 AND 9007199254740991)"
+          },
+          {
+            "check_id": "ck:workflow_publisher_commands:source_manifest_hash:hash",
+            "kind": "hash_format",
+            "columns": [
+              "source_manifest_hash"
+            ],
+            "expression_intent": "nullable or sha256:<64 lowercase hexadecimal characters>",
+            "expression_sql": "(\"source_manifest_hash\" IS NULL OR (length(\"source_manifest_hash\") = 71 AND substr(\"source_manifest_hash\", 1, 7) = 'sha256:' AND substr(\"source_manifest_hash\", 8) NOT GLOB '*[^0-9a-f]*'))"
+          },
+          {
+            "check_id": "ck:workflow_publisher_commands:source_manifest_schema_hash:hash",
+            "kind": "hash_format",
+            "columns": [
+              "source_manifest_schema_hash"
+            ],
+            "expression_intent": "nullable or sha256:<64 lowercase hexadecimal characters>",
+            "expression_sql": "(\"source_manifest_schema_hash\" IS NULL OR (length(\"source_manifest_schema_hash\") = 71 AND substr(\"source_manifest_schema_hash\", 1, 7) = 'sha256:' AND substr(\"source_manifest_schema_hash\", 8) NOT GLOB '*[^0-9a-f]*'))"
+          },
+          {
+            "check_id": "ck:workflow_publisher_commands:compiled_plan_hash:hash",
+            "kind": "hash_format",
+            "columns": [
+              "compiled_plan_hash"
+            ],
+            "expression_intent": "nullable or sha256:<64 lowercase hexadecimal characters>",
+            "expression_sql": "(\"compiled_plan_hash\" IS NULL OR (length(\"compiled_plan_hash\") = 71 AND substr(\"compiled_plan_hash\", 1, 7) = 'sha256:' AND substr(\"compiled_plan_hash\", 8) NOT GLOB '*[^0-9a-f]*'))"
+          },
+          {
+            "check_id": "ck:workflow_publisher_commands:compiled_plan_schema_hash:hash",
+            "kind": "hash_format",
+            "columns": [
+              "compiled_plan_schema_hash"
+            ],
+            "expression_intent": "nullable or sha256:<64 lowercase hexadecimal characters>",
+            "expression_sql": "(\"compiled_plan_schema_hash\" IS NULL OR (length(\"compiled_plan_schema_hash\") = 71 AND substr(\"compiled_plan_schema_hash\", 1, 7) = 'sha256:' AND substr(\"compiled_plan_schema_hash\", 8) NOT GLOB '*[^0-9a-f]*'))"
+          },
+          {
+            "check_id": "ck:workflow_publisher_commands:execution_artifact_hash:hash",
+            "kind": "hash_format",
+            "columns": [
+              "execution_artifact_hash"
+            ],
+            "expression_intent": "nullable or sha256:<64 lowercase hexadecimal characters>",
+            "expression_sql": "(\"execution_artifact_hash\" IS NULL OR (length(\"execution_artifact_hash\") = 71 AND substr(\"execution_artifact_hash\", 1, 7) = 'sha256:' AND substr(\"execution_artifact_hash\", 8) NOT GLOB '*[^0-9a-f]*'))"
+          },
+          {
+            "check_id": "ck:workflow_publisher_commands:closure_hash:hash",
+            "kind": "hash_format",
+            "columns": [
+              "closure_hash"
+            ],
+            "expression_intent": "nullable or sha256:<64 lowercase hexadecimal characters>",
+            "expression_sql": "(\"closure_hash\" IS NULL OR (length(\"closure_hash\") = 71 AND substr(\"closure_hash\", 1, 7) = 'sha256:' AND substr(\"closure_hash\", 8) NOT GLOB '*[^0-9a-f]*'))"
+          },
+          {
+            "check_id": "ck:workflow_publisher_commands:target_feature_release_hash:hash",
+            "kind": "hash_format",
+            "columns": [
+              "target_feature_release_hash"
+            ],
+            "expression_intent": "nullable or sha256:<64 lowercase hexadecimal characters>",
+            "expression_sql": "(\"target_feature_release_hash\" IS NULL OR (length(\"target_feature_release_hash\") = 71 AND substr(\"target_feature_release_hash\", 1, 7) = 'sha256:' AND substr(\"target_feature_release_hash\", 8) NOT GLOB '*[^0-9a-f]*'))"
+          },
+          {
+            "check_id": "ck:workflow_publisher_commands:applied_feature_release_hash:hash",
+            "kind": "hash_format",
+            "columns": [
+              "applied_feature_release_hash"
+            ],
+            "expression_intent": "nullable or sha256:<64 lowercase hexadecimal characters>",
+            "expression_sql": "(\"applied_feature_release_hash\" IS NULL OR (length(\"applied_feature_release_hash\") = 71 AND substr(\"applied_feature_release_hash\", 1, 7) = 'sha256:' AND substr(\"applied_feature_release_hash\", 8) NOT GLOB '*[^0-9a-f]*'))"
+          },
+          {
+            "check_id": "ck:workflow_publisher_commands:canonical_receipt_hash:hash",
+            "kind": "hash_format",
+            "columns": [
+              "canonical_receipt_hash"
+            ],
+            "expression_intent": "nullable or sha256:<64 lowercase hexadecimal characters>",
+            "expression_sql": "(\"canonical_receipt_hash\" IS NULL OR (length(\"canonical_receipt_hash\") = 71 AND substr(\"canonical_receipt_hash\", 1, 7) = 'sha256:' AND substr(\"canonical_receipt_hash\", 8) NOT GLOB '*[^0-9a-f]*'))"
+          },
+          {
+            "check_id": "ck:workflow_publisher_commands:canonical_receipt_schema_hash:hash",
+            "kind": "hash_format",
+            "columns": [
+              "canonical_receipt_schema_hash"
+            ],
+            "expression_intent": "nullable or sha256:<64 lowercase hexadecimal characters>",
+            "expression_sql": "(\"canonical_receipt_schema_hash\" IS NULL OR (length(\"canonical_receipt_schema_hash\") = 71 AND substr(\"canonical_receipt_schema_hash\", 1, 7) = 'sha256:' AND substr(\"canonical_receipt_schema_hash\", 8) NOT GLOB '*[^0-9a-f]*'))"
+          },
+          {
+            "check_id": "ck:workflow_publisher_commands:lifecycle:enum",
+            "kind": "enum_membership",
+            "columns": [
+              "lifecycle"
+            ],
+            "expression_intent": "value is one of pending | applied | failed",
+            "expression_sql": "\"lifecycle\" IN ('pending', 'applied', 'failed')"
+          },
+          {
+            "check_id": "ck:workflow_publisher_commands:created_at_ms:safe_integer",
+            "kind": "safe_integer",
+            "columns": [
+              "created_at_ms"
+            ],
+            "expression_intent": "non_negative JavaScript safe integer",
+            "expression_sql": "(\"created_at_ms\" IS NULL OR \"created_at_ms\" BETWEEN 0 AND 9007199254740991)"
+          },
+          {
+            "check_id": "ck:workflow_publisher_commands:finalized_at_ms:safe_integer",
+            "kind": "safe_integer",
+            "columns": [
+              "finalized_at_ms"
+            ],
+            "expression_intent": "non_negative JavaScript safe integer",
+            "expression_sql": "(\"finalized_at_ms\" IS NULL OR \"finalized_at_ms\" BETWEEN 0 AND 9007199254740991)"
+          },
+          {
+            "check_id": "ck:workflow_publisher_commands:row_version:safe_integer",
+            "kind": "safe_integer",
+            "columns": [
+              "row_version"
+            ],
+            "expression_intent": "non_negative JavaScript safe integer",
+            "expression_sql": "(\"row_version\" IS NULL OR \"row_version\" BETWEEN 0 AND 9007199254740991)"
+          },
+          {
+            "check_id": "ck:publisher_commands:idempotency_non_empty",
+            "kind": "state_field_consistency",
+            "columns": [
+              "idempotency_domain",
+              "idempotency_key"
+            ],
+            "expression_intent": "caller idempotency domain and key are non-empty bounded tokens",
+            "expression_sql": "(length(\"idempotency_domain\") BETWEEN 1 AND 255 AND length(\"idempotency_key\") BETWEEN 1 AND 512)"
+          },
+          {
+            "check_id": "ck:publisher_commands:review_window",
+            "kind": "ordered_values",
+            "columns": [
+              "approved_at_ms",
+              "created_at_ms",
+              "expires_at_ms"
+            ],
+            "expression_intent": "approval precedes command creation and command creation precedes expiry",
+            "expression_sql": "(\"approved_at_ms\" <= \"created_at_ms\" AND \"created_at_ms\" < \"expires_at_ms\")"
+          },
+          {
+            "check_id": "ck:publisher_commands:applied_release_pair",
+            "kind": "all_or_none",
+            "columns": [
+              "applied_feature_release_id",
+              "applied_feature_release_hash"
+            ],
+            "expression_intent": "applied Feature Release id and hash are both null or both non-null",
+            "expression_sql": "((\"applied_feature_release_id\" IS NULL AND \"applied_feature_release_hash\" IS NULL) OR (\"applied_feature_release_id\" IS NOT NULL AND \"applied_feature_release_hash\" IS NOT NULL))"
+          },
+          {
+            "check_id": "ck:publisher_commands:receipt_binding",
+            "kind": "all_or_none",
+            "columns": [
+              "canonical_receipt_value_id",
+              "canonical_receipt_hash",
+              "canonical_receipt_schema_resource_id",
+              "canonical_receipt_schema_hash"
+            ],
+            "expression_intent": "canonical receipt Value hash and schema identity are all null or all non-null",
+            "expression_sql": "((\"canonical_receipt_value_id\" IS NULL AND \"canonical_receipt_hash\" IS NULL AND \"canonical_receipt_schema_resource_id\" IS NULL AND \"canonical_receipt_schema_hash\" IS NULL) OR (\"canonical_receipt_value_id\" IS NOT NULL AND \"canonical_receipt_hash\" IS NOT NULL AND \"canonical_receipt_schema_resource_id\" IS NOT NULL AND \"canonical_receipt_schema_hash\" IS NOT NULL))"
+          },
+          {
+            "check_id": "ck:publisher_commands:lifecycle",
+            "kind": "state_field_consistency",
+            "columns": [
+              "lifecycle",
+              "target_feature_release_id",
+              "target_feature_release_hash",
+              "applied_feature_release_id",
+              "applied_feature_release_hash",
+              "canonical_receipt_value_id",
+              "finalized_at_ms"
+            ],
+            "expression_intent": "pending has no result; applied binds the exact target release and receipt; failed binds only a receipt; terminal states have finalized time",
+            "expression_sql": "((\"lifecycle\" = 'pending' AND \"applied_feature_release_id\" IS NULL AND \"applied_feature_release_hash\" IS NULL AND \"canonical_receipt_value_id\" IS NULL AND \"finalized_at_ms\" IS NULL) OR (\"lifecycle\" = 'applied' AND \"applied_feature_release_id\" = \"target_feature_release_id\" AND \"applied_feature_release_hash\" = \"target_feature_release_hash\" AND \"canonical_receipt_value_id\" IS NOT NULL AND \"finalized_at_ms\" IS NOT NULL) OR (\"lifecycle\" = 'failed' AND \"applied_feature_release_id\" IS NULL AND \"applied_feature_release_hash\" IS NULL AND \"canonical_receipt_value_id\" IS NOT NULL AND \"finalized_at_ms\" IS NOT NULL))"
+          }
+        ],
+        "indexes": [
+          {
+            "index_id": "idx:publisher_commands:idempotency",
+            "kind": "lookup",
+            "columns": [
+              "idempotency_domain",
+              "idempotency_key"
+            ],
+            "predicate_intent": null,
+            "supports_query_ids": [
+              "publisher_find_idempotency"
+            ],
+            "unique": false,
+            "sql": "CREATE INDEX \"idx:publisher_commands:idempotency\" ON \"workflow_publisher_commands\" (\"idempotency_domain\", \"idempotency_key\")"
+          },
+          {
+            "index_id": "idx:publisher_commands:pending_recovery",
+            "kind": "recovery",
+            "columns": [
+              "created_at_ms",
+              "command_id"
+            ],
+            "predicate_intent": "lifecycle = 'pending'",
+            "supports_query_ids": [
+              "publisher_recovery_scan_pending"
+            ],
+            "unique": false,
+            "sql": "CREATE INDEX \"idx:publisher_commands:pending_recovery\" ON \"workflow_publisher_commands\" (\"created_at_ms\", \"command_id\") WHERE \"lifecycle\" = 'pending'"
+          }
+        ]
+      },
+      {
+        "ordinal": 80,
+        "name": "workflow_publisher_command_invocations",
+        "sql": "CREATE TABLE \"workflow_publisher_command_invocations\" (\n  \"id\" TEXT NOT NULL /* logical_type=identifier */,\n  \"command_id\" TEXT NOT NULL /* logical_type=identifier */,\n  \"invocation_no\" INTEGER NOT NULL /* logical_type=integer */,\n  \"command_domain_request_hash\" TEXT NOT NULL /* logical_type=hash */,\n  \"submitted_request_hash\" TEXT NOT NULL /* logical_type=hash */,\n  \"actor_ref\" TEXT NOT NULL /* logical_type=external_reference external_ref=1 validator_owner=publisher_authentication_gateway reference_domain=authenticated_principal immutable=1 */,\n  \"auth_session_ref\" TEXT NOT NULL /* logical_type=external_reference external_ref=1 validator_owner=authentication_service reference_domain=auth_session immutable=1 */,\n  \"requested_at_ms\" INTEGER NOT NULL /* logical_type=integer */,\n  \"disposition\" TEXT NOT NULL /* logical_type=text */,\n  \"result_value_id\" TEXT NOT NULL /* logical_type=identifier */,\n  \"result_hash\" TEXT NOT NULL /* logical_type=hash */,\n  \"result_schema_resource_id\" TEXT NOT NULL /* logical_type=identifier */,\n  \"result_schema_hash\" TEXT NOT NULL /* logical_type=hash */,\n  \"decided_at_ms\" INTEGER NOT NULL /* logical_type=integer */,\n  \"applied_at_ms\" INTEGER /* logical_type=integer */,\n  \"previous_invocation_hash\" TEXT /* logical_type=hash */,\n  \"invocation_hash\" TEXT NOT NULL /* logical_type=hash */,\n  CONSTRAINT \"pk:workflow_publisher_command_invocations\" PRIMARY KEY (\"id\"),\n  CONSTRAINT \"fk:publisher_invocations:command_request\" FOREIGN KEY (\"command_id\", \"command_domain_request_hash\") REFERENCES \"workflow_publisher_commands\" (\"command_id\", \"domain_request_hash\") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED,\n  CONSTRAINT \"fk:publisher_invocations:result_value\" FOREIGN KEY (\"result_value_id\", \"result_hash\", \"result_schema_resource_id\", \"result_schema_hash\") REFERENCES \"workflow_values\" (\"id\", \"content_hash\", \"schema_resource_id\", \"schema_resource_hash\") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED,\n  CONSTRAINT \"ck:workflow_publisher_command_invocations:invocation_no:safe_integer\" CHECK ((\"invocation_no\" IS NULL OR \"invocation_no\" BETWEEN 1 AND 9007199254740991)) /* check_kind=safe_integer logical_columns=invocation_no */,\n  CONSTRAINT \"ck:workflow_publisher_command_invocations:command_domain_request_hash:hash\" CHECK ((\"command_domain_request_hash\" IS NULL OR (length(\"command_domain_request_hash\") = 71 AND substr(\"command_domain_request_hash\", 1, 7) = 'sha256:' AND substr(\"command_domain_request_hash\", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=command_domain_request_hash */,\n  CONSTRAINT \"ck:workflow_publisher_command_invocations:submitted_request_hash:hash\" CHECK ((\"submitted_request_hash\" IS NULL OR (length(\"submitted_request_hash\") = 71 AND substr(\"submitted_request_hash\", 1, 7) = 'sha256:' AND substr(\"submitted_request_hash\", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=submitted_request_hash */,\n  CONSTRAINT \"ck:workflow_publisher_command_invocations:requested_at_ms:safe_integer\" CHECK ((\"requested_at_ms\" IS NULL OR \"requested_at_ms\" BETWEEN 0 AND 9007199254740991)) /* check_kind=safe_integer logical_columns=requested_at_ms */,\n  CONSTRAINT \"ck:workflow_publisher_command_invocations:disposition:enum\" CHECK (\"disposition\" IN ('applied', 'duplicate', 'conflict', 'failed')) /* check_kind=enum_membership logical_columns=disposition */,\n  CONSTRAINT \"ck:workflow_publisher_command_invocations:result_hash:hash\" CHECK ((\"result_hash\" IS NULL OR (length(\"result_hash\") = 71 AND substr(\"result_hash\", 1, 7) = 'sha256:' AND substr(\"result_hash\", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=result_hash */,\n  CONSTRAINT \"ck:workflow_publisher_command_invocations:result_schema_hash:hash\" CHECK ((\"result_schema_hash\" IS NULL OR (length(\"result_schema_hash\") = 71 AND substr(\"result_schema_hash\", 1, 7) = 'sha256:' AND substr(\"result_schema_hash\", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=result_schema_hash */,\n  CONSTRAINT \"ck:workflow_publisher_command_invocations:decided_at_ms:safe_integer\" CHECK ((\"decided_at_ms\" IS NULL OR \"decided_at_ms\" BETWEEN 0 AND 9007199254740991)) /* check_kind=safe_integer logical_columns=decided_at_ms */,\n  CONSTRAINT \"ck:workflow_publisher_command_invocations:applied_at_ms:safe_integer\" CHECK ((\"applied_at_ms\" IS NULL OR \"applied_at_ms\" BETWEEN 0 AND 9007199254740991)) /* check_kind=safe_integer logical_columns=applied_at_ms */,\n  CONSTRAINT \"ck:workflow_publisher_command_invocations:previous_invocation_hash:hash\" CHECK ((\"previous_invocation_hash\" IS NULL OR (length(\"previous_invocation_hash\") = 71 AND substr(\"previous_invocation_hash\", 1, 7) = 'sha256:' AND substr(\"previous_invocation_hash\", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=previous_invocation_hash */,\n  CONSTRAINT \"ck:workflow_publisher_command_invocations:invocation_hash:hash\" CHECK ((\"invocation_hash\" IS NULL OR (length(\"invocation_hash\") = 71 AND substr(\"invocation_hash\", 1, 7) = 'sha256:' AND substr(\"invocation_hash\", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=invocation_hash */,\n  CONSTRAINT \"ck:publisher_invocations:result_consistency\" CHECK (\"decided_at_ms\" >= \"requested_at_ms\" AND ((\"disposition\" = 'applied' AND \"submitted_request_hash\" = \"command_domain_request_hash\" AND \"applied_at_ms\" IS NOT NULL) OR (\"disposition\" IN ('duplicate', 'failed') AND \"submitted_request_hash\" = \"command_domain_request_hash\" AND \"applied_at_ms\" IS NULL) OR (\"disposition\" = 'conflict' AND \"submitted_request_hash\" <> \"command_domain_request_hash\" AND \"applied_at_ms\" IS NULL))) /* check_kind=state_field_consistency logical_columns=disposition,command_domain_request_hash,submitted_request_hash,requested_at_ms,decided_at_ms,applied_at_ms */,\n  CONSTRAINT \"ck:publisher_invocations:hash_chain\" CHECK (((\"invocation_no\" = 1 AND \"previous_invocation_hash\" IS NULL) OR (\"invocation_no\" > 1 AND \"previous_invocation_hash\" IS NOT NULL))) /* check_kind=state_field_consistency logical_columns=invocation_no,previous_invocation_hash,invocation_hash */\n)",
+        "columns": [
+          {
+            "cid": 0,
+            "name": "id",
+            "sqlite_type": "TEXT",
+            "nullable": false,
+            "default_sql": null,
+            "primary_key_ordinal": 1,
+            "logical_type": "identifier",
+            "external_reference": null
+          },
+          {
+            "cid": 1,
+            "name": "command_id",
+            "sqlite_type": "TEXT",
+            "nullable": false,
+            "default_sql": null,
+            "primary_key_ordinal": 0,
+            "logical_type": "identifier",
+            "external_reference": null
+          },
+          {
+            "cid": 2,
+            "name": "invocation_no",
+            "sqlite_type": "INTEGER",
+            "nullable": false,
+            "default_sql": null,
+            "primary_key_ordinal": 0,
+            "logical_type": "integer",
+            "external_reference": null
+          },
+          {
+            "cid": 3,
+            "name": "command_domain_request_hash",
+            "sqlite_type": "TEXT",
+            "nullable": false,
+            "default_sql": null,
+            "primary_key_ordinal": 0,
+            "logical_type": "hash",
+            "external_reference": null
+          },
+          {
+            "cid": 4,
+            "name": "submitted_request_hash",
+            "sqlite_type": "TEXT",
+            "nullable": false,
+            "default_sql": null,
+            "primary_key_ordinal": 0,
+            "logical_type": "hash",
+            "external_reference": null
+          },
+          {
+            "cid": 5,
+            "name": "actor_ref",
+            "sqlite_type": "TEXT",
+            "nullable": false,
+            "default_sql": null,
+            "primary_key_ordinal": 0,
+            "logical_type": "external_reference",
+            "external_reference": {
+              "validator_owner": "publisher_authentication_gateway",
+              "reference_domain": "authenticated_principal",
+              "immutable": true
+            }
+          },
+          {
+            "cid": 6,
+            "name": "auth_session_ref",
+            "sqlite_type": "TEXT",
+            "nullable": false,
+            "default_sql": null,
+            "primary_key_ordinal": 0,
+            "logical_type": "external_reference",
+            "external_reference": {
+              "validator_owner": "authentication_service",
+              "reference_domain": "auth_session",
+              "immutable": true
+            }
+          },
+          {
+            "cid": 7,
+            "name": "requested_at_ms",
+            "sqlite_type": "INTEGER",
+            "nullable": false,
+            "default_sql": null,
+            "primary_key_ordinal": 0,
+            "logical_type": "integer",
+            "external_reference": null
+          },
+          {
+            "cid": 8,
+            "name": "disposition",
+            "sqlite_type": "TEXT",
+            "nullable": false,
+            "default_sql": null,
+            "primary_key_ordinal": 0,
+            "logical_type": "text",
+            "external_reference": null
+          },
+          {
+            "cid": 9,
+            "name": "result_value_id",
+            "sqlite_type": "TEXT",
+            "nullable": false,
+            "default_sql": null,
+            "primary_key_ordinal": 0,
+            "logical_type": "identifier",
+            "external_reference": null
+          },
+          {
+            "cid": 10,
+            "name": "result_hash",
+            "sqlite_type": "TEXT",
+            "nullable": false,
+            "default_sql": null,
+            "primary_key_ordinal": 0,
+            "logical_type": "hash",
+            "external_reference": null
+          },
+          {
+            "cid": 11,
+            "name": "result_schema_resource_id",
+            "sqlite_type": "TEXT",
+            "nullable": false,
+            "default_sql": null,
+            "primary_key_ordinal": 0,
+            "logical_type": "identifier",
+            "external_reference": null
+          },
+          {
+            "cid": 12,
+            "name": "result_schema_hash",
+            "sqlite_type": "TEXT",
+            "nullable": false,
+            "default_sql": null,
+            "primary_key_ordinal": 0,
+            "logical_type": "hash",
+            "external_reference": null
+          },
+          {
+            "cid": 13,
+            "name": "decided_at_ms",
+            "sqlite_type": "INTEGER",
+            "nullable": false,
+            "default_sql": null,
+            "primary_key_ordinal": 0,
+            "logical_type": "integer",
+            "external_reference": null
+          },
+          {
+            "cid": 14,
+            "name": "applied_at_ms",
+            "sqlite_type": "INTEGER",
+            "nullable": true,
+            "default_sql": null,
+            "primary_key_ordinal": 0,
+            "logical_type": "integer",
+            "external_reference": null
+          },
+          {
+            "cid": 15,
+            "name": "previous_invocation_hash",
+            "sqlite_type": "TEXT",
+            "nullable": true,
+            "default_sql": null,
+            "primary_key_ordinal": 0,
+            "logical_type": "hash",
+            "external_reference": null
+          },
+          {
+            "cid": 16,
+            "name": "invocation_hash",
+            "sqlite_type": "TEXT",
+            "nullable": false,
+            "default_sql": null,
+            "primary_key_ordinal": 0,
+            "logical_type": "hash",
+            "external_reference": null
+          }
+        ],
+        "primary_key": {
+          "columns": [
+            "id"
+          ],
+          "auto_increment": false
+        },
+        "unique_keys": [
+          {
+            "key_id": "uk:publisher_invocations:command_no",
+            "columns": [
+              "command_id",
+              "invocation_no"
+            ],
+            "predicate_intent": null,
+            "origin": "c",
+            "sql": "CREATE UNIQUE INDEX \"uk:publisher_invocations:command_no\" ON \"workflow_publisher_command_invocations\" (\"command_id\", \"invocation_no\")"
+          },
+          {
+            "key_id": "uk:publisher_invocations:invocation_hash",
+            "columns": [
+              "invocation_hash"
+            ],
+            "predicate_intent": null,
+            "origin": "c",
+            "sql": "CREATE UNIQUE INDEX \"uk:publisher_invocations:invocation_hash\" ON \"workflow_publisher_command_invocations\" (\"invocation_hash\")"
+          }
+        ],
+        "foreign_keys": [
+          {
+            "relation_id": "fk:publisher_invocations:command_request",
+            "source_columns": [
+              "command_id",
+              "command_domain_request_hash"
+            ],
+            "target_table": "workflow_publisher_commands",
+            "target_columns": [
+              "command_id",
+              "domain_request_hash"
+            ],
+            "on_delete": "restrict",
+            "deferrability": "deferred",
+            "pragma_id": 1
+          },
+          {
+            "relation_id": "fk:publisher_invocations:result_value",
+            "source_columns": [
+              "result_value_id",
+              "result_hash",
+              "result_schema_resource_id",
+              "result_schema_hash"
+            ],
+            "target_table": "workflow_values",
+            "target_columns": [
+              "id",
+              "content_hash",
+              "schema_resource_id",
+              "schema_resource_hash"
+            ],
+            "on_delete": "restrict",
+            "deferrability": "deferred",
+            "pragma_id": 0
+          }
+        ],
+        "checks": [
+          {
+            "check_id": "ck:workflow_publisher_command_invocations:invocation_no:safe_integer",
+            "kind": "safe_integer",
+            "columns": [
+              "invocation_no"
+            ],
+            "expression_intent": "positive JavaScript safe integer",
+            "expression_sql": "(\"invocation_no\" IS NULL OR \"invocation_no\" BETWEEN 1 AND 9007199254740991)"
+          },
+          {
+            "check_id": "ck:workflow_publisher_command_invocations:command_domain_request_hash:hash",
+            "kind": "hash_format",
+            "columns": [
+              "command_domain_request_hash"
+            ],
+            "expression_intent": "nullable or sha256:<64 lowercase hexadecimal characters>",
+            "expression_sql": "(\"command_domain_request_hash\" IS NULL OR (length(\"command_domain_request_hash\") = 71 AND substr(\"command_domain_request_hash\", 1, 7) = 'sha256:' AND substr(\"command_domain_request_hash\", 8) NOT GLOB '*[^0-9a-f]*'))"
+          },
+          {
+            "check_id": "ck:workflow_publisher_command_invocations:submitted_request_hash:hash",
+            "kind": "hash_format",
+            "columns": [
+              "submitted_request_hash"
+            ],
+            "expression_intent": "nullable or sha256:<64 lowercase hexadecimal characters>",
+            "expression_sql": "(\"submitted_request_hash\" IS NULL OR (length(\"submitted_request_hash\") = 71 AND substr(\"submitted_request_hash\", 1, 7) = 'sha256:' AND substr(\"submitted_request_hash\", 8) NOT GLOB '*[^0-9a-f]*'))"
+          },
+          {
+            "check_id": "ck:workflow_publisher_command_invocations:requested_at_ms:safe_integer",
+            "kind": "safe_integer",
+            "columns": [
+              "requested_at_ms"
+            ],
+            "expression_intent": "non_negative JavaScript safe integer",
+            "expression_sql": "(\"requested_at_ms\" IS NULL OR \"requested_at_ms\" BETWEEN 0 AND 9007199254740991)"
+          },
+          {
+            "check_id": "ck:workflow_publisher_command_invocations:disposition:enum",
+            "kind": "enum_membership",
+            "columns": [
+              "disposition"
+            ],
+            "expression_intent": "value is one of applied | duplicate | conflict | failed",
+            "expression_sql": "\"disposition\" IN ('applied', 'duplicate', 'conflict', 'failed')"
+          },
+          {
+            "check_id": "ck:workflow_publisher_command_invocations:result_hash:hash",
+            "kind": "hash_format",
+            "columns": [
+              "result_hash"
+            ],
+            "expression_intent": "nullable or sha256:<64 lowercase hexadecimal characters>",
+            "expression_sql": "(\"result_hash\" IS NULL OR (length(\"result_hash\") = 71 AND substr(\"result_hash\", 1, 7) = 'sha256:' AND substr(\"result_hash\", 8) NOT GLOB '*[^0-9a-f]*'))"
+          },
+          {
+            "check_id": "ck:workflow_publisher_command_invocations:result_schema_hash:hash",
+            "kind": "hash_format",
+            "columns": [
+              "result_schema_hash"
+            ],
+            "expression_intent": "nullable or sha256:<64 lowercase hexadecimal characters>",
+            "expression_sql": "(\"result_schema_hash\" IS NULL OR (length(\"result_schema_hash\") = 71 AND substr(\"result_schema_hash\", 1, 7) = 'sha256:' AND substr(\"result_schema_hash\", 8) NOT GLOB '*[^0-9a-f]*'))"
+          },
+          {
+            "check_id": "ck:workflow_publisher_command_invocations:decided_at_ms:safe_integer",
+            "kind": "safe_integer",
+            "columns": [
+              "decided_at_ms"
+            ],
+            "expression_intent": "non_negative JavaScript safe integer",
+            "expression_sql": "(\"decided_at_ms\" IS NULL OR \"decided_at_ms\" BETWEEN 0 AND 9007199254740991)"
+          },
+          {
+            "check_id": "ck:workflow_publisher_command_invocations:applied_at_ms:safe_integer",
+            "kind": "safe_integer",
+            "columns": [
+              "applied_at_ms"
+            ],
+            "expression_intent": "non_negative JavaScript safe integer",
+            "expression_sql": "(\"applied_at_ms\" IS NULL OR \"applied_at_ms\" BETWEEN 0 AND 9007199254740991)"
+          },
+          {
+            "check_id": "ck:workflow_publisher_command_invocations:previous_invocation_hash:hash",
+            "kind": "hash_format",
+            "columns": [
+              "previous_invocation_hash"
+            ],
+            "expression_intent": "nullable or sha256:<64 lowercase hexadecimal characters>",
+            "expression_sql": "(\"previous_invocation_hash\" IS NULL OR (length(\"previous_invocation_hash\") = 71 AND substr(\"previous_invocation_hash\", 1, 7) = 'sha256:' AND substr(\"previous_invocation_hash\", 8) NOT GLOB '*[^0-9a-f]*'))"
+          },
+          {
+            "check_id": "ck:workflow_publisher_command_invocations:invocation_hash:hash",
+            "kind": "hash_format",
+            "columns": [
+              "invocation_hash"
+            ],
+            "expression_intent": "nullable or sha256:<64 lowercase hexadecimal characters>",
+            "expression_sql": "(\"invocation_hash\" IS NULL OR (length(\"invocation_hash\") = 71 AND substr(\"invocation_hash\", 1, 7) = 'sha256:' AND substr(\"invocation_hash\", 8) NOT GLOB '*[^0-9a-f]*'))"
+          },
+          {
+            "check_id": "ck:publisher_invocations:result_consistency",
+            "kind": "state_field_consistency",
+            "columns": [
+              "disposition",
+              "command_domain_request_hash",
+              "submitted_request_hash",
+              "requested_at_ms",
+              "decided_at_ms",
+              "applied_at_ms"
+            ],
+            "expression_intent": "applied duplicate and failed match the bound request; conflict differs; only applied has applied time; decision does not precede request",
+            "expression_sql": "\"decided_at_ms\" >= \"requested_at_ms\" AND ((\"disposition\" = 'applied' AND \"submitted_request_hash\" = \"command_domain_request_hash\" AND \"applied_at_ms\" IS NOT NULL) OR (\"disposition\" IN ('duplicate', 'failed') AND \"submitted_request_hash\" = \"command_domain_request_hash\" AND \"applied_at_ms\" IS NULL) OR (\"disposition\" = 'conflict' AND \"submitted_request_hash\" <> \"command_domain_request_hash\" AND \"applied_at_ms\" IS NULL))"
+          },
+          {
+            "check_id": "ck:publisher_invocations:hash_chain",
+            "kind": "state_field_consistency",
+            "columns": [
+              "invocation_no",
+              "previous_invocation_hash",
+              "invocation_hash"
+            ],
+            "expression_intent": "invocation 1 has no previous hash and later invocations name the adjacent prior hash",
+            "expression_sql": "((\"invocation_no\" = 1 AND \"previous_invocation_hash\" IS NULL) OR (\"invocation_no\" > 1 AND \"previous_invocation_hash\" IS NOT NULL))"
+          }
+        ],
+        "indexes": [
+          {
+            "index_id": "idx:publisher_invocations:command_history",
+            "kind": "ordering",
+            "columns": [
+              "command_id",
+              "invocation_no"
+            ],
+            "predicate_intent": null,
+            "supports_query_ids": [
+              "publisher_load_invocations"
+            ],
+            "unique": false,
+            "sql": "CREATE INDEX \"idx:publisher_invocations:command_history\" ON \"workflow_publisher_command_invocations\" (\"command_id\", \"invocation_no\")"
+          }
+        ]
+      },
+      {
+        "ordinal": 81,
+        "name": "workflow_publisher_events",
+        "sql": "CREATE TABLE \"workflow_publisher_events\" (\n  \"command_id\" TEXT NOT NULL /* logical_type=identifier */,\n  \"event_no\" INTEGER NOT NULL /* logical_type=integer */,\n  \"attempt_no\" INTEGER NOT NULL /* logical_type=integer */,\n  \"phase\" TEXT NOT NULL /* logical_type=text */,\n  \"event_type\" TEXT NOT NULL /* logical_type=text */,\n  \"failure_code\" TEXT /* logical_type=text */,\n  \"related_feature_release_id\" TEXT /* logical_type=identifier */,\n  \"related_feature_release_hash\" TEXT /* logical_type=hash */,\n  \"detail_value_id\" TEXT /* logical_type=identifier */,\n  \"detail_hash\" TEXT /* logical_type=hash */,\n  \"detail_schema_resource_id\" TEXT /* logical_type=identifier */,\n  \"detail_schema_hash\" TEXT /* logical_type=hash */,\n  \"previous_event_hash\" TEXT /* logical_type=hash */,\n  \"event_hash\" TEXT NOT NULL /* logical_type=hash */,\n  \"occurred_at_ms\" INTEGER NOT NULL /* logical_type=integer */,\n  CONSTRAINT \"pk:workflow_publisher_events\" PRIMARY KEY (\"command_id\", \"event_no\"),\n  CONSTRAINT \"fk:publisher_events:command\" FOREIGN KEY (\"command_id\") REFERENCES \"workflow_publisher_commands\" (\"command_id\") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED,\n  CONSTRAINT \"fk:publisher_events:attempt_invocation\" FOREIGN KEY (\"command_id\", \"attempt_no\") REFERENCES \"workflow_publisher_command_invocations\" (\"command_id\", \"invocation_no\") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED,\n  CONSTRAINT \"fk:publisher_events:related_feature_release\" FOREIGN KEY (\"related_feature_release_id\", \"related_feature_release_hash\") REFERENCES \"workflow_feature_releases\" (\"id\", \"release_hash\") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED,\n  CONSTRAINT \"fk:publisher_events:detail_value\" FOREIGN KEY (\"detail_value_id\", \"detail_hash\", \"detail_schema_resource_id\", \"detail_schema_hash\") REFERENCES \"workflow_values\" (\"id\", \"content_hash\", \"schema_resource_id\", \"schema_resource_hash\") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED,\n  CONSTRAINT \"ck:workflow_publisher_events:event_no:safe_integer\" CHECK ((\"event_no\" IS NULL OR \"event_no\" BETWEEN 1 AND 9007199254740991)) /* check_kind=safe_integer logical_columns=event_no */,\n  CONSTRAINT \"ck:workflow_publisher_events:attempt_no:safe_integer\" CHECK ((\"attempt_no\" IS NULL OR \"attempt_no\" BETWEEN 1 AND 9007199254740991)) /* check_kind=safe_integer logical_columns=attempt_no */,\n  CONSTRAINT \"ck:workflow_publisher_events:phase:enum\" CHECK (\"phase\" IN ('authenticate', 'validate', 'review', 'preflight', 'publish_transaction', 'recovery', 'finalize')) /* check_kind=enum_membership logical_columns=phase */,\n  CONSTRAINT \"ck:workflow_publisher_events:event_type:enum\" CHECK (\"event_type\" IN ('attempt_started', 'phase_succeeded', 'pre_transaction_failed', 'publish_transaction_started', 'publish_committed', 'recovery_started', 'recovery_succeeded', 'recovery_failed', 'terminal_failed')) /* check_kind=enum_membership logical_columns=event_type */,\n  CONSTRAINT \"ck:workflow_publisher_events:related_feature_release_hash:hash\" CHECK ((\"related_feature_release_hash\" IS NULL OR (length(\"related_feature_release_hash\") = 71 AND substr(\"related_feature_release_hash\", 1, 7) = 'sha256:' AND substr(\"related_feature_release_hash\", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=related_feature_release_hash */,\n  CONSTRAINT \"ck:workflow_publisher_events:detail_hash:hash\" CHECK ((\"detail_hash\" IS NULL OR (length(\"detail_hash\") = 71 AND substr(\"detail_hash\", 1, 7) = 'sha256:' AND substr(\"detail_hash\", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=detail_hash */,\n  CONSTRAINT \"ck:workflow_publisher_events:detail_schema_hash:hash\" CHECK ((\"detail_schema_hash\" IS NULL OR (length(\"detail_schema_hash\") = 71 AND substr(\"detail_schema_hash\", 1, 7) = 'sha256:' AND substr(\"detail_schema_hash\", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=detail_schema_hash */,\n  CONSTRAINT \"ck:workflow_publisher_events:previous_event_hash:hash\" CHECK ((\"previous_event_hash\" IS NULL OR (length(\"previous_event_hash\") = 71 AND substr(\"previous_event_hash\", 1, 7) = 'sha256:' AND substr(\"previous_event_hash\", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=previous_event_hash */,\n  CONSTRAINT \"ck:workflow_publisher_events:event_hash:hash\" CHECK ((\"event_hash\" IS NULL OR (length(\"event_hash\") = 71 AND substr(\"event_hash\", 1, 7) = 'sha256:' AND substr(\"event_hash\", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=event_hash */,\n  CONSTRAINT \"ck:workflow_publisher_events:occurred_at_ms:safe_integer\" CHECK ((\"occurred_at_ms\" IS NULL OR \"occurred_at_ms\" BETWEEN 0 AND 9007199254740991)) /* check_kind=safe_integer logical_columns=occurred_at_ms */,\n  CONSTRAINT \"ck:publisher_events:related_release_pair\" CHECK (((\"related_feature_release_id\" IS NULL AND \"related_feature_release_hash\" IS NULL) OR (\"related_feature_release_id\" IS NOT NULL AND \"related_feature_release_hash\" IS NOT NULL))) /* check_kind=all_or_none logical_columns=related_feature_release_id,related_feature_release_hash */,\n  CONSTRAINT \"ck:publisher_events:detail_binding\" CHECK (((\"detail_value_id\" IS NULL AND \"detail_hash\" IS NULL AND \"detail_schema_resource_id\" IS NULL AND \"detail_schema_hash\" IS NULL) OR (\"detail_value_id\" IS NOT NULL AND \"detail_hash\" IS NOT NULL AND \"detail_schema_resource_id\" IS NOT NULL AND \"detail_schema_hash\" IS NOT NULL))) /* check_kind=all_or_none logical_columns=detail_value_id,detail_hash,detail_schema_resource_id,detail_schema_hash */,\n  CONSTRAINT \"ck:publisher_events:hash_chain\" CHECK (((\"event_no\" = 1 AND \"previous_event_hash\" IS NULL) OR (\"event_no\" > 1 AND \"previous_event_hash\" IS NOT NULL))) /* check_kind=state_field_consistency logical_columns=event_no,previous_event_hash,event_hash */,\n  CONSTRAINT \"ck:publisher_events:event_mapping\" CHECK (((\"event_type\" = 'attempt_started' AND \"phase\" = 'authenticate' AND \"failure_code\" IS NULL AND \"related_feature_release_id\" IS NULL) OR (\"event_type\" = 'phase_succeeded' AND \"phase\" IN ('validate', 'review', 'preflight', 'finalize') AND \"failure_code\" IS NULL AND \"related_feature_release_id\" IS NULL) OR (\"event_type\" = 'pre_transaction_failed' AND \"phase\" IN ('authenticate', 'validate', 'review', 'preflight') AND \"failure_code\" IS NOT NULL AND \"related_feature_release_id\" IS NULL) OR (\"event_type\" = 'publish_transaction_started' AND \"phase\" = 'publish_transaction' AND \"failure_code\" IS NULL AND \"related_feature_release_id\" IS NULL) OR (\"event_type\" = 'publish_committed' AND \"phase\" = 'publish_transaction' AND \"failure_code\" IS NULL AND \"related_feature_release_id\" IS NOT NULL) OR (\"event_type\" = 'recovery_started' AND \"phase\" = 'recovery' AND \"failure_code\" IS NULL AND \"related_feature_release_id\" IS NULL) OR (\"event_type\" = 'recovery_succeeded' AND \"phase\" = 'recovery' AND \"failure_code\" IS NULL AND \"related_feature_release_id\" IS NOT NULL) OR (\"event_type\" = 'recovery_failed' AND \"phase\" = 'recovery' AND \"failure_code\" IS NOT NULL AND \"related_feature_release_id\" IS NULL) OR (\"event_type\" = 'terminal_failed' AND \"phase\" = 'finalize' AND \"failure_code\" IS NOT NULL AND \"related_feature_release_id\" IS NULL))) /* check_kind=closed_target_mapping logical_columns=phase,event_type,failure_code,related_feature_release_id */\n)",
+        "columns": [
+          {
+            "cid": 0,
+            "name": "command_id",
+            "sqlite_type": "TEXT",
+            "nullable": false,
+            "default_sql": null,
+            "primary_key_ordinal": 1,
+            "logical_type": "identifier",
+            "external_reference": null
+          },
+          {
+            "cid": 1,
+            "name": "event_no",
+            "sqlite_type": "INTEGER",
+            "nullable": false,
+            "default_sql": null,
+            "primary_key_ordinal": 2,
+            "logical_type": "integer",
+            "external_reference": null
+          },
+          {
+            "cid": 2,
+            "name": "attempt_no",
+            "sqlite_type": "INTEGER",
+            "nullable": false,
+            "default_sql": null,
+            "primary_key_ordinal": 0,
+            "logical_type": "integer",
+            "external_reference": null
+          },
+          {
+            "cid": 3,
+            "name": "phase",
+            "sqlite_type": "TEXT",
+            "nullable": false,
+            "default_sql": null,
+            "primary_key_ordinal": 0,
+            "logical_type": "text",
+            "external_reference": null
+          },
+          {
+            "cid": 4,
+            "name": "event_type",
+            "sqlite_type": "TEXT",
+            "nullable": false,
+            "default_sql": null,
+            "primary_key_ordinal": 0,
+            "logical_type": "text",
+            "external_reference": null
+          },
+          {
+            "cid": 5,
+            "name": "failure_code",
+            "sqlite_type": "TEXT",
+            "nullable": true,
+            "default_sql": null,
+            "primary_key_ordinal": 0,
+            "logical_type": "text",
+            "external_reference": null
+          },
+          {
+            "cid": 6,
+            "name": "related_feature_release_id",
+            "sqlite_type": "TEXT",
+            "nullable": true,
+            "default_sql": null,
+            "primary_key_ordinal": 0,
+            "logical_type": "identifier",
+            "external_reference": null
+          },
+          {
+            "cid": 7,
+            "name": "related_feature_release_hash",
+            "sqlite_type": "TEXT",
+            "nullable": true,
+            "default_sql": null,
+            "primary_key_ordinal": 0,
+            "logical_type": "hash",
+            "external_reference": null
+          },
+          {
+            "cid": 8,
+            "name": "detail_value_id",
+            "sqlite_type": "TEXT",
+            "nullable": true,
+            "default_sql": null,
+            "primary_key_ordinal": 0,
+            "logical_type": "identifier",
+            "external_reference": null
+          },
+          {
+            "cid": 9,
+            "name": "detail_hash",
+            "sqlite_type": "TEXT",
+            "nullable": true,
+            "default_sql": null,
+            "primary_key_ordinal": 0,
+            "logical_type": "hash",
+            "external_reference": null
+          },
+          {
+            "cid": 10,
+            "name": "detail_schema_resource_id",
+            "sqlite_type": "TEXT",
+            "nullable": true,
+            "default_sql": null,
+            "primary_key_ordinal": 0,
+            "logical_type": "identifier",
+            "external_reference": null
+          },
+          {
+            "cid": 11,
+            "name": "detail_schema_hash",
+            "sqlite_type": "TEXT",
+            "nullable": true,
+            "default_sql": null,
+            "primary_key_ordinal": 0,
+            "logical_type": "hash",
+            "external_reference": null
+          },
+          {
+            "cid": 12,
+            "name": "previous_event_hash",
+            "sqlite_type": "TEXT",
+            "nullable": true,
+            "default_sql": null,
+            "primary_key_ordinal": 0,
+            "logical_type": "hash",
+            "external_reference": null
+          },
+          {
+            "cid": 13,
+            "name": "event_hash",
+            "sqlite_type": "TEXT",
+            "nullable": false,
+            "default_sql": null,
+            "primary_key_ordinal": 0,
+            "logical_type": "hash",
+            "external_reference": null
+          },
+          {
+            "cid": 14,
+            "name": "occurred_at_ms",
+            "sqlite_type": "INTEGER",
+            "nullable": false,
+            "default_sql": null,
+            "primary_key_ordinal": 0,
+            "logical_type": "integer",
+            "external_reference": null
+          }
+        ],
+        "primary_key": {
+          "columns": [
+            "command_id",
+            "event_no"
+          ],
+          "auto_increment": false
+        },
+        "unique_keys": [
+          {
+            "key_id": "uk:publisher_events:attempt_phase_type",
+            "columns": [
+              "command_id",
+              "attempt_no",
+              "phase",
+              "event_type"
+            ],
+            "predicate_intent": null,
+            "origin": "c",
+            "sql": "CREATE UNIQUE INDEX \"uk:publisher_events:attempt_phase_type\" ON \"workflow_publisher_events\" (\"command_id\", \"attempt_no\", \"phase\", \"event_type\")"
+          },
+          {
+            "key_id": "uk:publisher_events:event_hash",
+            "columns": [
+              "event_hash"
+            ],
+            "predicate_intent": null,
+            "origin": "c",
+            "sql": "CREATE UNIQUE INDEX \"uk:publisher_events:event_hash\" ON \"workflow_publisher_events\" (\"event_hash\")"
+          }
+        ],
+        "foreign_keys": [
+          {
+            "relation_id": "fk:publisher_events:command",
+            "source_columns": [
+              "command_id"
+            ],
+            "target_table": "workflow_publisher_commands",
+            "target_columns": [
+              "command_id"
+            ],
+            "on_delete": "restrict",
+            "deferrability": "deferred",
+            "pragma_id": 3
+          },
+          {
+            "relation_id": "fk:publisher_events:attempt_invocation",
+            "source_columns": [
+              "command_id",
+              "attempt_no"
+            ],
+            "target_table": "workflow_publisher_command_invocations",
+            "target_columns": [
+              "command_id",
+              "invocation_no"
+            ],
+            "on_delete": "restrict",
+            "deferrability": "deferred",
+            "pragma_id": 2
+          },
+          {
+            "relation_id": "fk:publisher_events:related_feature_release",
+            "source_columns": [
+              "related_feature_release_id",
+              "related_feature_release_hash"
+            ],
+            "target_table": "workflow_feature_releases",
+            "target_columns": [
+              "id",
+              "release_hash"
+            ],
+            "on_delete": "restrict",
+            "deferrability": "deferred",
+            "pragma_id": 1
+          },
+          {
+            "relation_id": "fk:publisher_events:detail_value",
+            "source_columns": [
+              "detail_value_id",
+              "detail_hash",
+              "detail_schema_resource_id",
+              "detail_schema_hash"
+            ],
+            "target_table": "workflow_values",
+            "target_columns": [
+              "id",
+              "content_hash",
+              "schema_resource_id",
+              "schema_resource_hash"
+            ],
+            "on_delete": "restrict",
+            "deferrability": "deferred",
+            "pragma_id": 0
+          }
+        ],
+        "checks": [
+          {
+            "check_id": "ck:workflow_publisher_events:event_no:safe_integer",
+            "kind": "safe_integer",
+            "columns": [
+              "event_no"
+            ],
+            "expression_intent": "positive JavaScript safe integer",
+            "expression_sql": "(\"event_no\" IS NULL OR \"event_no\" BETWEEN 1 AND 9007199254740991)"
+          },
+          {
+            "check_id": "ck:workflow_publisher_events:attempt_no:safe_integer",
+            "kind": "safe_integer",
+            "columns": [
+              "attempt_no"
+            ],
+            "expression_intent": "positive JavaScript safe integer",
+            "expression_sql": "(\"attempt_no\" IS NULL OR \"attempt_no\" BETWEEN 1 AND 9007199254740991)"
+          },
+          {
+            "check_id": "ck:workflow_publisher_events:phase:enum",
+            "kind": "enum_membership",
+            "columns": [
+              "phase"
+            ],
+            "expression_intent": "value is one of authenticate | validate | review | preflight | publish_transaction | recovery | finalize",
+            "expression_sql": "\"phase\" IN ('authenticate', 'validate', 'review', 'preflight', 'publish_transaction', 'recovery', 'finalize')"
+          },
+          {
+            "check_id": "ck:workflow_publisher_events:event_type:enum",
+            "kind": "enum_membership",
+            "columns": [
+              "event_type"
+            ],
+            "expression_intent": "value is one of attempt_started | phase_succeeded | pre_transaction_failed | publish_transaction_started | publish_committed | recovery_started | recovery_succeeded | recovery_failed | terminal_failed",
+            "expression_sql": "\"event_type\" IN ('attempt_started', 'phase_succeeded', 'pre_transaction_failed', 'publish_transaction_started', 'publish_committed', 'recovery_started', 'recovery_succeeded', 'recovery_failed', 'terminal_failed')"
+          },
+          {
+            "check_id": "ck:workflow_publisher_events:related_feature_release_hash:hash",
+            "kind": "hash_format",
+            "columns": [
+              "related_feature_release_hash"
+            ],
+            "expression_intent": "nullable or sha256:<64 lowercase hexadecimal characters>",
+            "expression_sql": "(\"related_feature_release_hash\" IS NULL OR (length(\"related_feature_release_hash\") = 71 AND substr(\"related_feature_release_hash\", 1, 7) = 'sha256:' AND substr(\"related_feature_release_hash\", 8) NOT GLOB '*[^0-9a-f]*'))"
+          },
+          {
+            "check_id": "ck:workflow_publisher_events:detail_hash:hash",
+            "kind": "hash_format",
+            "columns": [
+              "detail_hash"
+            ],
+            "expression_intent": "nullable or sha256:<64 lowercase hexadecimal characters>",
+            "expression_sql": "(\"detail_hash\" IS NULL OR (length(\"detail_hash\") = 71 AND substr(\"detail_hash\", 1, 7) = 'sha256:' AND substr(\"detail_hash\", 8) NOT GLOB '*[^0-9a-f]*'))"
+          },
+          {
+            "check_id": "ck:workflow_publisher_events:detail_schema_hash:hash",
+            "kind": "hash_format",
+            "columns": [
+              "detail_schema_hash"
+            ],
+            "expression_intent": "nullable or sha256:<64 lowercase hexadecimal characters>",
+            "expression_sql": "(\"detail_schema_hash\" IS NULL OR (length(\"detail_schema_hash\") = 71 AND substr(\"detail_schema_hash\", 1, 7) = 'sha256:' AND substr(\"detail_schema_hash\", 8) NOT GLOB '*[^0-9a-f]*'))"
+          },
+          {
+            "check_id": "ck:workflow_publisher_events:previous_event_hash:hash",
+            "kind": "hash_format",
+            "columns": [
+              "previous_event_hash"
+            ],
+            "expression_intent": "nullable or sha256:<64 lowercase hexadecimal characters>",
+            "expression_sql": "(\"previous_event_hash\" IS NULL OR (length(\"previous_event_hash\") = 71 AND substr(\"previous_event_hash\", 1, 7) = 'sha256:' AND substr(\"previous_event_hash\", 8) NOT GLOB '*[^0-9a-f]*'))"
+          },
+          {
+            "check_id": "ck:workflow_publisher_events:event_hash:hash",
+            "kind": "hash_format",
+            "columns": [
+              "event_hash"
+            ],
+            "expression_intent": "nullable or sha256:<64 lowercase hexadecimal characters>",
+            "expression_sql": "(\"event_hash\" IS NULL OR (length(\"event_hash\") = 71 AND substr(\"event_hash\", 1, 7) = 'sha256:' AND substr(\"event_hash\", 8) NOT GLOB '*[^0-9a-f]*'))"
+          },
+          {
+            "check_id": "ck:workflow_publisher_events:occurred_at_ms:safe_integer",
+            "kind": "safe_integer",
+            "columns": [
+              "occurred_at_ms"
+            ],
+            "expression_intent": "non_negative JavaScript safe integer",
+            "expression_sql": "(\"occurred_at_ms\" IS NULL OR \"occurred_at_ms\" BETWEEN 0 AND 9007199254740991)"
+          },
+          {
+            "check_id": "ck:publisher_events:related_release_pair",
+            "kind": "all_or_none",
+            "columns": [
+              "related_feature_release_id",
+              "related_feature_release_hash"
+            ],
+            "expression_intent": "related Feature Release id and hash are both null or both non-null",
+            "expression_sql": "((\"related_feature_release_id\" IS NULL AND \"related_feature_release_hash\" IS NULL) OR (\"related_feature_release_id\" IS NOT NULL AND \"related_feature_release_hash\" IS NOT NULL))"
+          },
+          {
+            "check_id": "ck:publisher_events:detail_binding",
+            "kind": "all_or_none",
+            "columns": [
+              "detail_value_id",
+              "detail_hash",
+              "detail_schema_resource_id",
+              "detail_schema_hash"
+            ],
+            "expression_intent": "detail Value hash and schema identity are all null or all non-null",
+            "expression_sql": "((\"detail_value_id\" IS NULL AND \"detail_hash\" IS NULL AND \"detail_schema_resource_id\" IS NULL AND \"detail_schema_hash\" IS NULL) OR (\"detail_value_id\" IS NOT NULL AND \"detail_hash\" IS NOT NULL AND \"detail_schema_resource_id\" IS NOT NULL AND \"detail_schema_hash\" IS NOT NULL))"
+          },
+          {
+            "check_id": "ck:publisher_events:hash_chain",
+            "kind": "state_field_consistency",
+            "columns": [
+              "event_no",
+              "previous_event_hash",
+              "event_hash"
+            ],
+            "expression_intent": "event 1 has no previous hash and later events name the adjacent prior hash",
+            "expression_sql": "((\"event_no\" = 1 AND \"previous_event_hash\" IS NULL) OR (\"event_no\" > 1 AND \"previous_event_hash\" IS NOT NULL))"
+          },
+          {
+            "check_id": "ck:publisher_events:event_mapping",
+            "kind": "closed_target_mapping",
+            "columns": [
+              "phase",
+              "event_type",
+              "failure_code",
+              "related_feature_release_id"
+            ],
+            "expression_intent": "pre-transaction failures precede publish; commit and recovery success bind a release; recovery events use recovery phase; terminal failure uses finalize phase",
+            "expression_sql": "((\"event_type\" = 'attempt_started' AND \"phase\" = 'authenticate' AND \"failure_code\" IS NULL AND \"related_feature_release_id\" IS NULL) OR (\"event_type\" = 'phase_succeeded' AND \"phase\" IN ('validate', 'review', 'preflight', 'finalize') AND \"failure_code\" IS NULL AND \"related_feature_release_id\" IS NULL) OR (\"event_type\" = 'pre_transaction_failed' AND \"phase\" IN ('authenticate', 'validate', 'review', 'preflight') AND \"failure_code\" IS NOT NULL AND \"related_feature_release_id\" IS NULL) OR (\"event_type\" = 'publish_transaction_started' AND \"phase\" = 'publish_transaction' AND \"failure_code\" IS NULL AND \"related_feature_release_id\" IS NULL) OR (\"event_type\" = 'publish_committed' AND \"phase\" = 'publish_transaction' AND \"failure_code\" IS NULL AND \"related_feature_release_id\" IS NOT NULL) OR (\"event_type\" = 'recovery_started' AND \"phase\" = 'recovery' AND \"failure_code\" IS NULL AND \"related_feature_release_id\" IS NULL) OR (\"event_type\" = 'recovery_succeeded' AND \"phase\" = 'recovery' AND \"failure_code\" IS NULL AND \"related_feature_release_id\" IS NOT NULL) OR (\"event_type\" = 'recovery_failed' AND \"phase\" = 'recovery' AND \"failure_code\" IS NOT NULL AND \"related_feature_release_id\" IS NULL) OR (\"event_type\" = 'terminal_failed' AND \"phase\" = 'finalize' AND \"failure_code\" IS NOT NULL AND \"related_feature_release_id\" IS NULL))"
+          }
+        ],
+        "indexes": [
+          {
+            "index_id": "idx:publisher_events:command_history",
+            "kind": "ordering",
+            "columns": [
+              "command_id",
+              "event_no"
+            ],
+            "predicate_intent": null,
+            "supports_query_ids": [
+              "publisher_load_events"
+            ],
+            "unique": false,
+            "sql": "CREATE INDEX \"idx:publisher_events:command_history\" ON \"workflow_publisher_events\" (\"command_id\", \"event_no\")"
+          }
+        ]
       }
     ],
     "triggers": [
@@ -29343,6 +31004,78 @@
         "event": "update",
         "owner_intent": "CAP3 strict revision and pending-change commit",
         "sql": "CREATE TRIGGER \"trg:capacity_head:commit_transition\" BEFORE UPDATE OF \"current_capacity_revision\", \"current_change_id\", \"current_config_hash\", \"current_publication_hash\" ON \"runtime_capacity_head\" WHEN NEW.\"current_change_id\" IS NOT OLD.\"current_change_id\" BEGIN\n  SELECT CASE WHEN OLD.\"pending_change_id\" IS NOT NEW.\"current_change_id\" OR NEW.\"pending_change_id\" IS NOT NULL OR NEW.\"current_capacity_revision\" <> COALESCE(OLD.\"current_capacity_revision\", 0) + 1 THEN RAISE(ABORT, 'capacity_head_commit_transition_invalid') END;\nEND"
+      },
+      {
+        "name": "trg:publisher_commands:immutable_identity",
+        "table": "workflow_publisher_commands",
+        "timing": "before",
+        "event": "update",
+        "owner_intent": "immutable Publisher caller request review and target identity",
+        "sql": "CREATE TRIGGER \"trg:publisher_commands:immutable_identity\" BEFORE UPDATE OF \"command_type\", \"idempotency_domain\", \"idempotency_key\", \"request_value_id\", \"request_hash\", \"request_schema_resource_id\", \"request_schema_hash\", \"domain_request_hash\", \"approved_review_ref\", \"approved_review_hash\", \"reviewer_actor_ref\", \"reviewer_auth_session_ref\", \"approved_at_ms\", \"expires_at_ms\", \"source_manifest_value_id\", \"source_manifest_hash\", \"source_manifest_schema_resource_id\", \"source_manifest_schema_hash\", \"compiled_plan_value_id\", \"compiled_plan_hash\", \"compiled_plan_schema_resource_id\", \"compiled_plan_schema_hash\", \"execution_artifact_resource_id\", \"execution_artifact_hash\", \"closure_manifest_id\", \"closure_hash\", \"target_feature_release_id\", \"target_feature_release_hash\", \"created_at_ms\" ON \"workflow_publisher_commands\" BEGIN\n  SELECT RAISE(ABORT, 'publisher_command_identity_is_immutable');\nEND"
+      },
+      {
+        "name": "trg:publisher_commands:lifecycle_transition",
+        "table": "workflow_publisher_commands",
+        "timing": "before",
+        "event": "update",
+        "owner_intent": "single pending to terminal Publisher command finalization",
+        "sql": "CREATE TRIGGER \"trg:publisher_commands:lifecycle_transition\" BEFORE UPDATE ON \"workflow_publisher_commands\" BEGIN\n  SELECT CASE WHEN NEW.\"row_version\" <> OLD.\"row_version\" + 1 OR (NEW.\"lifecycle\" IS NOT OLD.\"lifecycle\" AND OLD.\"lifecycle\" <> 'pending') THEN RAISE(ABORT, 'publisher_command_lifecycle_transition_invalid') END;\nEND"
+      },
+      {
+        "name": "trg:publisher_commands:immutable_delete",
+        "table": "workflow_publisher_commands",
+        "timing": "before",
+        "event": "delete",
+        "owner_intent": "durable Publisher command audit header",
+        "sql": "CREATE TRIGGER \"trg:publisher_commands:immutable_delete\" BEFORE DELETE ON \"workflow_publisher_commands\" BEGIN\n  SELECT RAISE(ABORT, 'publisher_command_is_immutable');\nEND"
+      },
+      {
+        "name": "trg:publisher_invocations:hash_chain",
+        "table": "workflow_publisher_command_invocations",
+        "timing": "after",
+        "event": "insert",
+        "owner_intent": "adjacent per-command authenticated Publisher invocation hash chain",
+        "sql": "CREATE TRIGGER \"trg:publisher_invocations:hash_chain\" AFTER INSERT ON \"workflow_publisher_command_invocations\" BEGIN\n  SELECT CASE WHEN (NEW.\"invocation_no\" = 1 AND NEW.\"previous_invocation_hash\" IS NOT NULL) OR (NEW.\"invocation_no\" > 1 AND (SELECT previous.\"invocation_hash\" FROM \"workflow_publisher_command_invocations\" AS previous WHERE previous.\"command_id\" = NEW.\"command_id\" AND previous.\"invocation_no\" = NEW.\"invocation_no\" - 1) IS NOT NEW.\"previous_invocation_hash\") THEN RAISE(ABORT, 'publisher_invocation_hash_chain_invalid') END;\nEND"
+      },
+      {
+        "name": "trg:publisher_invocations:immutable_update",
+        "table": "workflow_publisher_command_invocations",
+        "timing": "before",
+        "event": "update",
+        "owner_intent": "append-only authenticated Publisher invocation audit",
+        "sql": "CREATE TRIGGER \"trg:publisher_invocations:immutable_update\" BEFORE UPDATE ON \"workflow_publisher_command_invocations\" BEGIN\n  SELECT RAISE(ABORT, 'publisher_invocation_is_immutable');\nEND"
+      },
+      {
+        "name": "trg:publisher_invocations:immutable_delete",
+        "table": "workflow_publisher_command_invocations",
+        "timing": "before",
+        "event": "delete",
+        "owner_intent": "append-only authenticated Publisher invocation audit",
+        "sql": "CREATE TRIGGER \"trg:publisher_invocations:immutable_delete\" BEFORE DELETE ON \"workflow_publisher_command_invocations\" BEGIN\n  SELECT RAISE(ABORT, 'publisher_invocation_is_immutable');\nEND"
+      },
+      {
+        "name": "trg:publisher_events:hash_chain",
+        "table": "workflow_publisher_events",
+        "timing": "after",
+        "event": "insert",
+        "owner_intent": "adjacent per-command Publisher phase and recovery event hash chain",
+        "sql": "CREATE TRIGGER \"trg:publisher_events:hash_chain\" AFTER INSERT ON \"workflow_publisher_events\" BEGIN\n  SELECT CASE WHEN (NEW.\"event_no\" = 1 AND NEW.\"previous_event_hash\" IS NOT NULL) OR (NEW.\"event_no\" > 1 AND (SELECT previous.\"event_hash\" FROM \"workflow_publisher_events\" AS previous WHERE previous.\"command_id\" = NEW.\"command_id\" AND previous.\"event_no\" = NEW.\"event_no\" - 1) IS NOT NEW.\"previous_event_hash\") THEN RAISE(ABORT, 'publisher_event_hash_chain_invalid') END;\nEND"
+      },
+      {
+        "name": "trg:publisher_events:immutable_update",
+        "table": "workflow_publisher_events",
+        "timing": "before",
+        "event": "update",
+        "owner_intent": "append-only Publisher phase and recovery audit",
+        "sql": "CREATE TRIGGER \"trg:publisher_events:immutable_update\" BEFORE UPDATE ON \"workflow_publisher_events\" BEGIN\n  SELECT RAISE(ABORT, 'publisher_event_is_immutable');\nEND"
+      },
+      {
+        "name": "trg:publisher_events:immutable_delete",
+        "table": "workflow_publisher_events",
+        "timing": "before",
+        "event": "delete",
+        "owner_intent": "append-only Publisher phase and recovery audit",
+        "sql": "CREATE TRIGGER \"trg:publisher_events:immutable_delete\" BEFORE DELETE ON \"workflow_publisher_events\" BEGIN\n  SELECT RAISE(ABORT, 'publisher_event_is_immutable');\nEND"
       }
     ],
     "query_fixtures": [
@@ -29593,8 +31326,40 @@
         "sql": "SELECT * FROM \"runtime_capacity_head\" INDEXED BY \"idx:capacity_head:singleton\" WHERE \"singleton_key\" = ? AND \"current_capacity_revision\" = ? AND \"current_change_id\" = ? AND \"current_config_hash\" = ? AND \"current_publication_hash\" = ? LIMIT 50",
         "parameter_count": 5,
         "required_index_id": "idx:capacity_head:singleton"
+      },
+      {
+        "query_id": "publisher_find_idempotency",
+        "owner": "command_gateway",
+        "coverage_area": "command",
+        "sql": "SELECT * FROM \"workflow_publisher_commands\" INDEXED BY \"idx:publisher_commands:idempotency\" WHERE \"idempotency_domain\" = ? AND \"idempotency_key\" = ? LIMIT 50",
+        "parameter_count": 2,
+        "required_index_id": "idx:publisher_commands:idempotency"
+      },
+      {
+        "query_id": "publisher_load_invocations",
+        "owner": "command_gateway",
+        "coverage_area": "command",
+        "sql": "SELECT * FROM \"workflow_publisher_command_invocations\" INDEXED BY \"idx:publisher_invocations:command_history\" WHERE \"command_id\" = ? ORDER BY \"invocation_no\" ASC LIMIT 50",
+        "parameter_count": 1,
+        "required_index_id": "idx:publisher_invocations:command_history"
+      },
+      {
+        "query_id": "publisher_load_events",
+        "owner": "recovery",
+        "coverage_area": "recovery",
+        "sql": "SELECT * FROM \"workflow_publisher_events\" INDEXED BY \"idx:publisher_events:command_history\" WHERE \"command_id\" = ? ORDER BY \"event_no\" ASC LIMIT 50",
+        "parameter_count": 1,
+        "required_index_id": "idx:publisher_events:command_history"
+      },
+      {
+        "query_id": "publisher_recovery_scan_pending",
+        "owner": "recovery",
+        "coverage_area": "recovery",
+        "sql": "SELECT * FROM \"workflow_publisher_commands\" INDEXED BY \"idx:publisher_commands:pending_recovery\" WHERE \"lifecycle\" = 'pending' ORDER BY \"created_at_ms\" ASC, \"command_id\" ASC LIMIT 50",
+        "parameter_count": 0,
+        "required_index_id": "idx:publisher_commands:pending_recovery"
       }
     ],
-    "schema_hash": "sha256:4d8c373387ad515c36fd292b705665e6c197c73021c1b7e55da5317bc140efbd"
+    "schema_hash": "sha256:0c00cd859c3ab6a8cd36c9ea8f81c80de000b845eb5758d442cb1830cea877f9"
   }
 }

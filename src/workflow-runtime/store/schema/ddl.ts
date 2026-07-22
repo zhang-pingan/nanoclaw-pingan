@@ -264,6 +264,81 @@ export function buildSchemaTriggers(): SchemaTriggerDefinition[] {
       owner_intent: 'CAP3 strict revision and pending-change commit',
       sql: `CREATE TRIGGER ${q('trg:capacity_head:commit_transition')} BEFORE UPDATE OF "current_capacity_revision", "current_change_id", "current_config_hash", "current_publication_hash" ON ${q('runtime_capacity_head')} WHEN NEW."current_change_id" IS NOT OLD."current_change_id" BEGIN\n  SELECT CASE WHEN OLD."pending_change_id" IS NOT NEW."current_change_id" OR NEW."pending_change_id" IS NOT NULL OR NEW."current_capacity_revision" <> COALESCE(OLD."current_capacity_revision", 0) + 1 THEN RAISE(ABORT, 'capacity_head_commit_transition_invalid') END;\nEND`,
     },
+    {
+      name: 'trg:publisher_commands:immutable_identity',
+      table: 'workflow_publisher_commands',
+      timing: 'before',
+      event: 'update',
+      owner_intent:
+        'immutable Publisher caller request review and target identity',
+      sql: `CREATE TRIGGER ${q('trg:publisher_commands:immutable_identity')} BEFORE UPDATE OF "command_type", "idempotency_domain", "idempotency_key", "request_value_id", "request_hash", "request_schema_resource_id", "request_schema_hash", "domain_request_hash", "approved_review_ref", "approved_review_hash", "reviewer_actor_ref", "reviewer_auth_session_ref", "approved_at_ms", "expires_at_ms", "source_manifest_value_id", "source_manifest_hash", "source_manifest_schema_resource_id", "source_manifest_schema_hash", "compiled_plan_value_id", "compiled_plan_hash", "compiled_plan_schema_resource_id", "compiled_plan_schema_hash", "execution_artifact_resource_id", "execution_artifact_hash", "closure_manifest_id", "closure_hash", "target_feature_release_id", "target_feature_release_hash", "created_at_ms" ON ${q('workflow_publisher_commands')} BEGIN\n  SELECT RAISE(ABORT, 'publisher_command_identity_is_immutable');\nEND`,
+    },
+    {
+      name: 'trg:publisher_commands:lifecycle_transition',
+      table: 'workflow_publisher_commands',
+      timing: 'before',
+      event: 'update',
+      owner_intent: 'single pending to terminal Publisher command finalization',
+      sql: `CREATE TRIGGER ${q('trg:publisher_commands:lifecycle_transition')} BEFORE UPDATE ON ${q('workflow_publisher_commands')} BEGIN\n  SELECT CASE WHEN NEW."row_version" <> OLD."row_version" + 1 OR (NEW."lifecycle" IS NOT OLD."lifecycle" AND OLD."lifecycle" <> 'pending') THEN RAISE(ABORT, 'publisher_command_lifecycle_transition_invalid') END;\nEND`,
+    },
+    {
+      name: 'trg:publisher_commands:immutable_delete',
+      table: 'workflow_publisher_commands',
+      timing: 'before',
+      event: 'delete',
+      owner_intent: 'durable Publisher command audit header',
+      sql: `CREATE TRIGGER ${q('trg:publisher_commands:immutable_delete')} BEFORE DELETE ON ${q('workflow_publisher_commands')} BEGIN\n  SELECT RAISE(ABORT, 'publisher_command_is_immutable');\nEND`,
+    },
+    {
+      name: 'trg:publisher_invocations:hash_chain',
+      table: 'workflow_publisher_command_invocations',
+      timing: 'after',
+      event: 'insert',
+      owner_intent:
+        'adjacent per-command authenticated Publisher invocation hash chain',
+      sql: `CREATE TRIGGER ${q('trg:publisher_invocations:hash_chain')} AFTER INSERT ON ${q('workflow_publisher_command_invocations')} BEGIN\n  SELECT CASE WHEN (NEW."invocation_no" = 1 AND NEW."previous_invocation_hash" IS NOT NULL) OR (NEW."invocation_no" > 1 AND (SELECT previous."invocation_hash" FROM "workflow_publisher_command_invocations" AS previous WHERE previous."command_id" = NEW."command_id" AND previous."invocation_no" = NEW."invocation_no" - 1) IS NOT NEW."previous_invocation_hash") THEN RAISE(ABORT, 'publisher_invocation_hash_chain_invalid') END;\nEND`,
+    },
+    {
+      name: 'trg:publisher_invocations:immutable_update',
+      table: 'workflow_publisher_command_invocations',
+      timing: 'before',
+      event: 'update',
+      owner_intent: 'append-only authenticated Publisher invocation audit',
+      sql: `CREATE TRIGGER ${q('trg:publisher_invocations:immutable_update')} BEFORE UPDATE ON ${q('workflow_publisher_command_invocations')} BEGIN\n  SELECT RAISE(ABORT, 'publisher_invocation_is_immutable');\nEND`,
+    },
+    {
+      name: 'trg:publisher_invocations:immutable_delete',
+      table: 'workflow_publisher_command_invocations',
+      timing: 'before',
+      event: 'delete',
+      owner_intent: 'append-only authenticated Publisher invocation audit',
+      sql: `CREATE TRIGGER ${q('trg:publisher_invocations:immutable_delete')} BEFORE DELETE ON ${q('workflow_publisher_command_invocations')} BEGIN\n  SELECT RAISE(ABORT, 'publisher_invocation_is_immutable');\nEND`,
+    },
+    {
+      name: 'trg:publisher_events:hash_chain',
+      table: 'workflow_publisher_events',
+      timing: 'after',
+      event: 'insert',
+      owner_intent:
+        'adjacent per-command Publisher phase and recovery event hash chain',
+      sql: `CREATE TRIGGER ${q('trg:publisher_events:hash_chain')} AFTER INSERT ON ${q('workflow_publisher_events')} BEGIN\n  SELECT CASE WHEN (NEW."event_no" = 1 AND NEW."previous_event_hash" IS NOT NULL) OR (NEW."event_no" > 1 AND (SELECT previous."event_hash" FROM "workflow_publisher_events" AS previous WHERE previous."command_id" = NEW."command_id" AND previous."event_no" = NEW."event_no" - 1) IS NOT NEW."previous_event_hash") THEN RAISE(ABORT, 'publisher_event_hash_chain_invalid') END;\nEND`,
+    },
+    {
+      name: 'trg:publisher_events:immutable_update',
+      table: 'workflow_publisher_events',
+      timing: 'before',
+      event: 'update',
+      owner_intent: 'append-only Publisher phase and recovery audit',
+      sql: `CREATE TRIGGER ${q('trg:publisher_events:immutable_update')} BEFORE UPDATE ON ${q('workflow_publisher_events')} BEGIN\n  SELECT RAISE(ABORT, 'publisher_event_is_immutable');\nEND`,
+    },
+    {
+      name: 'trg:publisher_events:immutable_delete',
+      table: 'workflow_publisher_events',
+      timing: 'before',
+      event: 'delete',
+      owner_intent: 'append-only Publisher phase and recovery audit',
+      sql: `CREATE TRIGGER ${q('trg:publisher_events:immutable_delete')} BEFORE DELETE ON ${q('workflow_publisher_events')} BEGIN\n  SELECT RAISE(ABORT, 'publisher_event_is_immutable');\nEND`,
+    },
   ];
 }
 
@@ -286,7 +361,7 @@ export function renderMigration(
       table.indexes.map((index) => renderIndex(table, index)),
     ),
     ...triggers.map((trigger) => trigger.sql),
-    'PRAGMA user_version = 1',
+    `PRAGMA user_version = ${source.database_schema_version}`,
   ];
   return {
     sql: `${statements.map((statement) => `${statement};`).join('\n\n')}\n`,

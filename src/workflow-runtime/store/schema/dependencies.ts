@@ -21,6 +21,10 @@ import {
   type G1SchemaDependencyMember,
   type G1SchemaDependencyRole,
 } from './types.js';
+import {
+  PUBLISHER_SCHEMA_INPUT_ARTIFACT_HASH,
+  PUBLISHER_SCHEMA_INPUT_RELATIVE_PATH,
+} from './publisher-source.js';
 
 export const G1_SCHEMA_DEPENDENCY_MANIFEST_DOMAIN_SEPARATOR =
   'icarus:workflow-runtime-schema-dependency-manifest:1\n';
@@ -99,6 +103,18 @@ const INPUT_MEMBER_SPECS = [
     version: 1,
     expected_semantic_hash:
       'sha256:5d9e79b5f9330a5111e6f61b8d04164c87839a60d55ea350c0aa87b8b1559e66',
+  },
+  {
+    role: 'publisher_schema_prerequisite',
+    identity_effect: 'physical_schema_input',
+    path: `store/schema/${PUBLISHER_SCHEMA_INPUT_RELATIVE_PATH}`,
+    format: 'icarus.workflow-publisher-schema-prerequisite/1',
+    ref: {
+      id: 'icarus.workflow-publisher-schema-prerequisite',
+      version: '1',
+    },
+    version: 1,
+    expected_semantic_hash: PUBLISHER_SCHEMA_INPUT_ARTIFACT_HASH,
   },
   {
     role: 'sqlite_execution_profile',
@@ -222,12 +238,12 @@ function readArtifactMember(
 }
 
 export function readPinnedSchemaInputArtifacts(
-  contractsRoot: string = defaultContractsRoot,
+  roots: SchemaDependencyRoots = {},
 ): LoadedSchemaInputArtifacts {
   return Object.fromEntries(
     INPUT_MEMBER_SPECS.map((spec) => [
       spec.role,
-      readArtifactMember(spec, { contractsRoot }),
+      readArtifactMember(spec, roots),
     ]),
   ) as LoadedSchemaInputArtifacts;
 }
@@ -281,7 +297,7 @@ export function assertClosedSchemaDependencyManifest(
     payload.dependency_set_id !== 'workflow-runtime-schema-v1' ||
     payload.identity_scope !== 'physical_schema_and_migration' ||
     payload.member_count !== G1_SCHEMA_DEPENDENCY_ROLES.length ||
-    payload.physical_member_count !== 7 ||
+    payload.physical_member_count !== 8 ||
     payload.construction_provenance_count !== 1 ||
     !Array.isArray(payload.members) ||
     payload.members.length !== G1_SCHEMA_DEPENDENCY_ROLES.length
@@ -383,8 +399,8 @@ export function buildSchemaDependencyManifestArtifact(
   const payload: G1SchemaDependencyManifestPayload = {
     dependency_set_id: 'workflow-runtime-schema-v1',
     identity_scope: 'physical_schema_and_migration',
-    member_count: 8,
-    physical_member_count: 7,
+    member_count: 9,
+    physical_member_count: 8,
     construction_provenance_count: 1,
     members,
     physical_schema_identity: calculatePhysicalSchemaIdentity(members),

@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-runtime-schema-lint:1\n",
-  "hash": "sha256:fd6c4381d3c3012325bfbd2a780ce6514289360dd86f4038337b9d74e3981905",
+  "hash": "sha256:31bfdf613ea915c29b7b0b27c073dc9db84183ec61c183a7d9699c1eab431772",
   "payload": {
     "status": "closed_fail_on_violation",
     "rules": [
@@ -19,10 +19,13 @@
       "no_generic_error_json_error_text_or_error_fields",
       "no_ref_or_hash_abbreviation",
       "all_logical_checks_have_executable_named_sql",
-      "all_query_intents_have_fixed_explain_fixture"
+      "all_query_intents_have_fixed_explain_fixture",
+      "publisher_commands_invocations_and_events_are_first_class_tables",
+      "publisher_values_bind_exact_value_hash_and_schema_identity",
+      "publisher_invocations_and_events_are_append_only_hash_chains"
     ],
-    "table_count": 78,
-    "query_count": 31,
+    "table_count": 81,
+    "query_count": 35,
     "result": "pass"
   }
 }

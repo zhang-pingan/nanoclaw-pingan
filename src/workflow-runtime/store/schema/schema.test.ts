@@ -167,8 +167,8 @@ describe('G1.1 executable workflow runtime schema', () => {
       .payload as unknown as G1SchemaDependencyManifestPayload;
     expect(() => assertClosedSchemaDependencyManifest(payload)).not.toThrow();
     expect(payload).toMatchObject({
-      member_count: 8,
-      physical_member_count: 7,
+      member_count: 9,
+      physical_member_count: 8,
       construction_provenance_count: 1,
     });
     expect(payload.members.map((member) => member.role)).toEqual([
@@ -177,6 +177,7 @@ describe('G1.1 executable workflow runtime schema', () => {
       'typed_relation_catalog',
       'query_catalog',
       'g0_10_capacity_logical_schema_delta',
+      'publisher_schema_prerequisite',
       'sqlite_execution_profile',
       'schema_manifest',
       'canonical_migration',
@@ -186,9 +187,9 @@ describe('G1.1 executable workflow runtime schema', () => {
         expect.objectContaining({
           role: 'canonical_migration',
           semantic_hash:
-            'sha256:d89829995e164355ad485fc117db88dd67a72409f00ec3c3c54253f30a589f61',
+            'sha256:fb6c820a0f646148cbd9f54476917802bc208c84070f005fc24871be46ecae89',
           raw_sha256:
-            'sha256:d89829995e164355ad485fc117db88dd67a72409f00ec3c3c54253f30a589f61',
+            'sha256:fb6c820a0f646148cbd9f54476917802bc208c84070f005fc24871be46ecae89',
         }),
       ]),
     );
@@ -774,6 +775,357 @@ describe('G1.1 executable workflow runtime schema', () => {
           )
           .run(),
       ).toThrow('planless_root_close_without_setup_error_or_cancel');
+    });
+  });
+
+  it('enforces Publisher caller idempotency, lifecycle, invocation, and event audit chains', () => {
+    withDatabase((database) => {
+      database.pragma('foreign_keys = OFF');
+      const commandId = 'publisher:command:1';
+      const domainRequestHash = hash('publisher:request:domain');
+      insertRow(database, 'workflow_publisher_commands', {
+        command_id: commandId,
+        idempotency_domain: 'feature:publisher',
+        idempotency_key: 'release:1',
+        domain_request_hash: domainRequestHash,
+        approved_at_ms: 10,
+        created_at_ms: 20,
+        expires_at_ms: 30,
+      });
+      expect(() =>
+        insertRow(database, 'workflow_publisher_commands', {
+          command_id: 'publisher:command:duplicate',
+          idempotency_domain: 'feature:publisher',
+          idempotency_key: 'release:1',
+          approved_at_ms: 10,
+          created_at_ms: 20,
+          expires_at_ms: 30,
+        }),
+      ).toThrow('UNIQUE constraint failed');
+      expect(() =>
+        insertRow(database, 'workflow_publisher_commands', {
+          command_id: 'publisher:command:expired',
+          idempotency_key: 'release:expired',
+          approved_at_ms: 10,
+          created_at_ms: 30,
+          expires_at_ms: 30,
+        }),
+      ).toThrow('ck:publisher_commands:review_window');
+
+      const target = database
+        .prepare(
+          'SELECT target_feature_release_id AS id, target_feature_release_hash AS hash FROM workflow_publisher_commands WHERE command_id = ?',
+        )
+        .get(commandId) as { id: string; hash: string };
+      expect(() =>
+        database
+          .prepare(
+            `UPDATE workflow_publisher_commands SET lifecycle='applied', applied_feature_release_id=?, applied_feature_release_hash=?, canonical_receipt_value_id='receipt:partial', finalized_at_ms=40, row_version=1 WHERE command_id=?`,
+          )
+          .run(target.id, target.hash, commandId),
+      ).toThrow('ck:publisher_commands:receipt_binding');
+      database
+        .prepare(
+          `UPDATE workflow_publisher_commands SET lifecycle='applied', applied_feature_release_id=?, applied_feature_release_hash=?, canonical_receipt_value_id='receipt:1', canonical_receipt_hash=?, canonical_receipt_schema_resource_id='schema:receipt', canonical_receipt_schema_hash=?, finalized_at_ms=40, row_version=1 WHERE command_id=?`,
+        )
+        .run(
+          target.id,
+          target.hash,
+          hash('publisher:receipt'),
+          hash('publisher:receipt:schema'),
+          commandId,
+        );
+      expect(() =>
+        database
+          .prepare(
+            `UPDATE workflow_publisher_commands SET lifecycle='failed', applied_feature_release_id=NULL, applied_feature_release_hash=NULL, row_version=2 WHERE command_id=?`,
+          )
+          .run(commandId),
+      ).toThrow('publisher_command_lifecycle_transition_invalid');
+      expect(() =>
+        database
+          .prepare(
+            `UPDATE workflow_publisher_commands SET idempotency_key='rewritten', row_version=2 WHERE command_id=?`,
+          )
+          .run(commandId),
+      ).toThrow('publisher_command_identity_is_immutable');
+
+      const invocationHash1 = hash('publisher:invocation:1');
+      insertRow(database, 'workflow_publisher_command_invocations', {
+        id: 'publisher:invocation:1',
+        command_id: commandId,
+        invocation_no: 1,
+        command_domain_request_hash: domainRequestHash,
+        submitted_request_hash: domainRequestHash,
+        disposition: 'duplicate',
+        previous_invocation_hash: null,
+        invocation_hash: invocationHash1,
+      });
+      expect(() =>
+        insertRow(database, 'workflow_publisher_command_invocations', {
+          id: 'publisher:invocation:2:wrong-chain',
+          command_id: commandId,
+          invocation_no: 2,
+          command_domain_request_hash: domainRequestHash,
+          submitted_request_hash: hash('publisher:conflicting-request'),
+          disposition: 'conflict',
+          previous_invocation_hash: hash('publisher:wrong-previous'),
+          invocation_hash: hash('publisher:invocation:2:wrong-chain'),
+        }),
+      ).toThrow('publisher_invocation_hash_chain_invalid');
+      expect(() =>
+        insertRow(database, 'workflow_publisher_command_invocations', {
+          id: 'publisher:invocation:2:not-conflict',
+          command_id: commandId,
+          invocation_no: 2,
+          command_domain_request_hash: domainRequestHash,
+          submitted_request_hash: domainRequestHash,
+          disposition: 'conflict',
+          previous_invocation_hash: invocationHash1,
+          invocation_hash: hash('publisher:invocation:2:not-conflict'),
+        }),
+      ).toThrow('ck:publisher_invocations:result_consistency');
+      const invocationHash2 = hash('publisher:invocation:2');
+      insertRow(database, 'workflow_publisher_command_invocations', {
+        id: 'publisher:invocation:2',
+        command_id: commandId,
+        invocation_no: 2,
+        command_domain_request_hash: domainRequestHash,
+        submitted_request_hash: hash('publisher:conflicting-request'),
+        disposition: 'conflict',
+        previous_invocation_hash: invocationHash1,
+        invocation_hash: invocationHash2,
+      });
+      expect(() =>
+        insertRow(database, 'workflow_publisher_command_invocations', {
+          id: 'publisher:invocation:4',
+          command_id: commandId,
+          invocation_no: 4,
+          command_domain_request_hash: domainRequestHash,
+          submitted_request_hash: domainRequestHash,
+          disposition: 'duplicate',
+          previous_invocation_hash: invocationHash2,
+          invocation_hash: hash('publisher:invocation:4'),
+        }),
+      ).toThrow('publisher_invocation_hash_chain_invalid');
+      expect(() =>
+        database
+          .prepare(
+            'UPDATE workflow_publisher_command_invocations SET decided_at_ms=decided_at_ms WHERE id=?',
+          )
+          .run('publisher:invocation:2'),
+      ).toThrow('publisher_invocation_is_immutable');
+      expect(() =>
+        database
+          .prepare(
+            'DELETE FROM workflow_publisher_command_invocations WHERE id=?',
+          )
+          .run('publisher:invocation:2'),
+      ).toThrow('publisher_invocation_is_immutable');
+
+      const eventHash1 = hash('publisher:event:1');
+      insertRow(database, 'workflow_publisher_events', {
+        command_id: commandId,
+        event_no: 1,
+        attempt_no: 1,
+        phase: 'authenticate',
+        event_type: 'attempt_started',
+        previous_event_hash: null,
+        event_hash: eventHash1,
+      });
+      expect(() =>
+        insertRow(database, 'workflow_publisher_events', {
+          command_id: commandId,
+          event_no: 2,
+          attempt_no: 1,
+          phase: 'validate',
+          event_type: 'phase_succeeded',
+          previous_event_hash: hash('publisher:event:wrong'),
+          event_hash: hash('publisher:event:2:wrong'),
+        }),
+      ).toThrow('publisher_event_hash_chain_invalid');
+      const eventHash2 = hash('publisher:event:2');
+      insertRow(database, 'workflow_publisher_events', {
+        command_id: commandId,
+        event_no: 2,
+        attempt_no: 1,
+        phase: 'validate',
+        event_type: 'phase_succeeded',
+        previous_event_hash: eventHash1,
+        event_hash: eventHash2,
+      });
+      expect(() =>
+        insertRow(database, 'workflow_publisher_events', {
+          command_id: commandId,
+          event_no: 3,
+          attempt_no: 1,
+          phase: 'publish_transaction',
+          event_type: 'publish_committed',
+          previous_event_hash: eventHash2,
+          event_hash: hash('publisher:event:3:missing-release'),
+        }),
+      ).toThrow('ck:publisher_events:event_mapping');
+      insertRow(database, 'workflow_publisher_events', {
+        command_id: commandId,
+        event_no: 3,
+        attempt_no: 1,
+        phase: 'publish_transaction',
+        event_type: 'publish_committed',
+        related_feature_release_id: target.id,
+        related_feature_release_hash: target.hash,
+        previous_event_hash: eventHash2,
+        event_hash: hash('publisher:event:3'),
+      });
+      expect(() =>
+        database
+          .prepare(
+            'UPDATE workflow_publisher_events SET occurred_at_ms=occurred_at_ms WHERE command_id=? AND event_no=3',
+          )
+          .run(commandId),
+      ).toThrow('publisher_event_is_immutable');
+      expect(() =>
+        database
+          .prepare(
+            'DELETE FROM workflow_publisher_events WHERE command_id=? AND event_no=3',
+          )
+          .run(commandId),
+      ).toThrow('publisher_event_is_immutable');
+    });
+  });
+
+  it('publishes schema-bound Publisher Value relations and typed Registry/Release foreign keys', () => {
+    const command = table('workflow_publisher_commands');
+    expect(command.foreign_keys).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          relation_id: 'fk:publisher_commands:request_value',
+          source_columns: [
+            'request_value_id',
+            'request_hash',
+            'request_schema_resource_id',
+            'request_schema_hash',
+          ],
+          target_table: 'workflow_values',
+          target_columns: [
+            'id',
+            'content_hash',
+            'schema_resource_id',
+            'schema_resource_hash',
+          ],
+        }),
+        expect.objectContaining({
+          relation_id: 'fk:publisher_commands:execution_artifact',
+          target_table: 'workflow_registry_resources',
+        }),
+        expect.objectContaining({
+          relation_id: 'fk:publisher_commands:closure',
+          target_table: 'workflow_registry_closure_manifests',
+        }),
+        expect.objectContaining({
+          relation_id: 'fk:publisher_commands:applied_feature_release',
+          target_table: 'workflow_feature_releases',
+        }),
+      ]),
+    );
+    expect(
+      table('workflow_values').unique_keys.find(
+        (key) => key.key_id === 'uk:values:id_hash_schema',
+      )?.columns,
+    ).toEqual([
+      'id',
+      'content_hash',
+      'schema_resource_id',
+      'schema_resource_hash',
+    ]);
+    expect(
+      buildQueryFixtures(source)
+        .filter((fixture) => fixture.query_id.startsWith('publisher_'))
+        .map((fixture) => fixture.required_index_id),
+    ).toEqual([
+      'idx:publisher_commands:idempotency',
+      'idx:publisher_invocations:command_history',
+      'idx:publisher_events:command_history',
+      'idx:publisher_commands:pending_recovery',
+    ]);
+
+    withDatabase((database) => {
+      database.pragma('foreign_keys = OFF');
+      const schemaId = 'publisher:schema';
+      const schemaHash = hash('publisher:schema');
+      const values = [
+        ['publisher:value:request', hash('publisher:value:request')],
+        ['publisher:value:source', hash('publisher:value:source')],
+        ['publisher:value:plan', hash('publisher:value:plan')],
+      ] as const;
+      for (const [valueId, valueHash] of values) {
+        seedRow(database, 'workflow_values', {
+          id: valueId,
+          content_hash: valueHash,
+          schema_resource_id: schemaId,
+          schema_resource_hash: schemaHash,
+        });
+      }
+      const artifactHash = hash('publisher:artifact');
+      seedRow(database, 'workflow_registry_resources', {
+        id: 'publisher:artifact',
+        content_hash: artifactHash,
+      });
+      const closureHash = hash('publisher:closure');
+      seedRow(database, 'workflow_registry_closure_manifests', {
+        id: 'publisher:closure',
+        closure_hash: closureHash,
+      });
+      const releaseHash = hash('publisher:release');
+      seedRow(database, 'workflow_feature_releases', {
+        id: 'publisher:release',
+        release_hash: releaseHash,
+      });
+      database.pragma('foreign_keys = ON');
+
+      const exactBindings = {
+        request_value_id: values[0][0],
+        request_hash: values[0][1],
+        request_schema_resource_id: schemaId,
+        request_schema_hash: schemaHash,
+        source_manifest_value_id: values[1][0],
+        source_manifest_hash: values[1][1],
+        source_manifest_schema_resource_id: schemaId,
+        source_manifest_schema_hash: schemaHash,
+        compiled_plan_value_id: values[2][0],
+        compiled_plan_hash: values[2][1],
+        compiled_plan_schema_resource_id: schemaId,
+        compiled_plan_schema_hash: schemaHash,
+        execution_artifact_resource_id: 'publisher:artifact',
+        execution_artifact_hash: artifactHash,
+        closure_manifest_id: 'publisher:closure',
+        closure_hash: closureHash,
+        target_feature_release_id: 'publisher:release',
+        target_feature_release_hash: releaseHash,
+        approved_at_ms: 10,
+        created_at_ms: 20,
+        expires_at_ms: 30,
+      };
+      insertRow(database, 'workflow_publisher_commands', {
+        ...exactBindings,
+        command_id: 'publisher:typed:valid',
+        idempotency_key: 'publisher:typed:valid',
+      });
+      expect(() =>
+        insertRow(database, 'workflow_publisher_commands', {
+          ...exactBindings,
+          command_id: 'publisher:typed:bad-schema',
+          idempotency_key: 'publisher:typed:bad-schema',
+          request_schema_hash: hash('publisher:schema:wrong'),
+        }),
+      ).toThrow('FOREIGN KEY constraint failed');
+      expect(() =>
+        insertRow(database, 'workflow_publisher_commands', {
+          ...exactBindings,
+          command_id: 'publisher:typed:bad-release',
+          idempotency_key: 'publisher:typed:bad-release',
+          target_feature_release_hash: hash('publisher:release:wrong'),
+        }),
+      ).toThrow('FOREIGN KEY constraint failed');
     });
   });
 

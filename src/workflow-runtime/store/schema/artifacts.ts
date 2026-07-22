@@ -25,6 +25,10 @@ import {
 } from './manifest.js';
 import { loadExecutableSchemaSource } from './source.js';
 import {
+  buildPublisherSchemaPrerequisiteArtifact,
+  PUBLISHER_SCHEMA_INPUT_RELATIVE_PATH,
+} from './publisher-source.js';
+import {
   collectSqliteEnvironmentEvidence,
   createMigratedDatabase,
   verifyQueryPlans,
@@ -39,6 +43,7 @@ import type {
 const schemaRoot = import.meta.dirname;
 
 export const G1_ARTIFACT_PATHS = {
+  publisherInput: PUBLISHER_SCHEMA_INPUT_RELATIVE_PATH,
   migration: 'migration/workflow-runtime-schema-v1.sql',
   dependencyManifest:
     'artifacts/workflow-runtime-schema-dependency-manifest@1.json',
@@ -119,6 +124,7 @@ function buildDependencyManifestContractArtifact(): ContractArtifactEnvelope {
         'typed_relation_catalog',
         'query_catalog',
         'g0_10_capacity_logical_schema_delta',
+        'publisher_schema_prerequisite',
         'sqlite_execution_profile',
         'schema_manifest',
         'canonical_migration',
@@ -268,6 +274,12 @@ function buildConstraintFixtureArtifact(
         'capacity_event_hash_chain_and_immutability',
         'capacity_milestone_partial_unique_repetition',
         'capacity_head_revision_commit_trigger',
+        'publisher_caller_idempotency_unique',
+        'publisher_schema_bound_values_and_typed_identity_foreign_keys',
+        'publisher_review_approval_expiry_ordering',
+        'publisher_command_lifecycle_and_finalization',
+        'publisher_invocation_disposition_hash_chain_and_immutability',
+        'publisher_event_phase_hash_chain_and_immutability',
       ],
       trigger_names: renderMigration(source).triggers.map(
         (trigger) => trigger.name,
@@ -296,6 +308,9 @@ function buildSchemaLintArtifact(
         'no_ref_or_hash_abbreviation',
         'all_logical_checks_have_executable_named_sql',
         'all_query_intents_have_fixed_explain_fixture',
+        'publisher_commands_invocations_and_events_are_first_class_tables',
+        'publisher_values_bind_exact_value_hash_and_schema_identity',
+        'publisher_invocations_and_events_are_append_only_hash_chains',
       ],
       table_count: source.tables.length,
       query_count: source.queries.length,
@@ -444,6 +459,9 @@ export function buildG1Artifacts(
         'root_finalization',
         'gc',
         'outbox',
+        'command',
+        'capacity',
+        'checkpoint',
       ],
     },
   );
@@ -472,6 +490,10 @@ export function buildG1Artifacts(
     },
   );
   const members: Array<[string, ContractArtifactEnvelope]> = [
+    [
+      G1_ARTIFACT_PATHS.publisherInput,
+      buildPublisherSchemaPrerequisiteArtifact(),
+    ],
     [G1_ARTIFACT_PATHS.dependencyManifestContract, dependencyManifestContract],
     [G1_ARTIFACT_PATHS.dependencyManifest, dependencyManifest],
     [G1_ARTIFACT_PATHS.manifestContract, manifestContract],
@@ -563,6 +585,10 @@ function writeAtomic(relativePath: string, bytes: string): void {
 }
 
 export function generateG1Artifacts(): BuiltG1Artifacts {
+  writeAtomic(
+    G1_ARTIFACT_PATHS.publisherInput,
+    renderJson(buildPublisherSchemaPrerequisiteArtifact()),
+  );
   const built = buildG1Artifacts();
   writeAtomic(G1_ARTIFACT_PATHS.migration, built.migrationSql);
   for (const [artifactPath, artifact] of built.artifacts) {
@@ -572,6 +598,18 @@ export function generateG1Artifacts(): BuiltG1Artifacts {
 }
 
 export function checkG1Artifacts(): BuiltG1Artifacts {
+  const expectedPublisherInput = renderJson(
+    buildPublisherSchemaPrerequisiteArtifact(),
+  );
+  const actualPublisherInput = fs.readFileSync(
+    absoluteSchemaPath(G1_ARTIFACT_PATHS.publisherInput),
+    'utf8',
+  );
+  if (actualPublisherInput !== expectedPublisherInput) {
+    throw new Error(
+      `${G1_ARTIFACT_PATHS.publisherInput} drifted; run npm run schema:generate`,
+    );
+  }
   const built = buildG1Artifacts();
   const migrationBytes = fs.readFileSync(
     absoluteSchemaPath(G1_ARTIFACT_PATHS.migration),

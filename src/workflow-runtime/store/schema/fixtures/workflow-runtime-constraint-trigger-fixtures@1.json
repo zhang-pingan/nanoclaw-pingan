@@ -6,10 +6,10 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-runtime-constraint-trigger-fixtures:1\n",
-  "hash": "sha256:71b738b6bd63dfadd5e960665767c5f191c60de12f81a46380604f6a900cce61",
+  "hash": "sha256:4c74c07d21a238e0dad6038e8ed93910b7828172c322f2d7030ca9d3e32386f3",
   "payload": {
     "execution_target": "real_file_sqlite",
-    "enum_check_count": 103,
+    "enum_check_count": 108,
     "enum_checks": [
       "workflow_graph_resource_accounts:ck:workflow_graph_resource_accounts:resource_type:enum",
       "workflow_graph_resource_reservations:ck:workflow_graph_resource_reservations:settlement_mode:enum",
@@ -113,7 +113,12 @@
       "runtime_capacity_admin_invocations:ck:runtime_capacity_admin_invocations:authorization_result:enum",
       "runtime_capacity_admin_invocations:ck:runtime_capacity_admin_invocations:execution_result:enum",
       "runtime_capacity_admin_invocations:ck:runtime_capacity_admin_invocations:denial_code:enum",
-      "runtime_capacity_change_events:ck:runtime_capacity_change_events:event_type:enum"
+      "runtime_capacity_change_events:ck:runtime_capacity_change_events:event_type:enum",
+      "workflow_publisher_commands:ck:workflow_publisher_commands:command_type:enum",
+      "workflow_publisher_commands:ck:workflow_publisher_commands:lifecycle:enum",
+      "workflow_publisher_command_invocations:ck:workflow_publisher_command_invocations:disposition:enum",
+      "workflow_publisher_events:ck:workflow_publisher_events:phase:enum",
+      "workflow_publisher_events:ck:workflow_publisher_events:event_type:enum"
     ],
     "required_cases": [
       "invalid_enum_values",
@@ -132,7 +137,13 @@
       "operational_blocker_cache_triggers",
       "capacity_event_hash_chain_and_immutability",
       "capacity_milestone_partial_unique_repetition",
-      "capacity_head_revision_commit_trigger"
+      "capacity_head_revision_commit_trigger",
+      "publisher_caller_idempotency_unique",
+      "publisher_schema_bound_values_and_typed_identity_foreign_keys",
+      "publisher_review_approval_expiry_ordering",
+      "publisher_command_lifecycle_and_finalization",
+      "publisher_invocation_disposition_hash_chain_and_immutability",
+      "publisher_event_phase_hash_chain_and_immutability"
     ],
     "trigger_names": [
       "trg:operational_blockers:insert_cache",
@@ -144,7 +155,16 @@
       "trg:capacity_events:hash_chain",
       "trg:capacity_events:immutable_update",
       "trg:capacity_events:immutable_delete",
-      "trg:capacity_head:commit_transition"
+      "trg:capacity_head:commit_transition",
+      "trg:publisher_commands:immutable_identity",
+      "trg:publisher_commands:lifecycle_transition",
+      "trg:publisher_commands:immutable_delete",
+      "trg:publisher_invocations:hash_chain",
+      "trg:publisher_invocations:immutable_update",
+      "trg:publisher_invocations:immutable_delete",
+      "trg:publisher_events:hash_chain",
+      "trg:publisher_events:immutable_update",
+      "trg:publisher_events:immutable_delete"
     ]
   }
 }
