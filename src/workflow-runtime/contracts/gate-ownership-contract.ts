@@ -167,6 +167,21 @@ export type GateOwnershipFixtureMutation =
   | 'allow_resolved_without_command'
   | 'remove_schema_cache_trigger';
 
+export type GateOwnershipAuditProbeMutation =
+  | GateOwnershipFixtureMutation
+  | 'reorder_g5_transactions'
+  | 'remove_g5_gate'
+  | 'add_extra_gate'
+  | 'remove_g5_excluded_semantic'
+  | 'remove_g7_excluded_semantic'
+  | 'remove_schema_resolution_check'
+  | 'remove_schema_insert_cache_trigger'
+  | 'mutate_schema_update_cache_trigger';
+
+export type GateOwnershipDependencyProbeMutation =
+  | 'transaction_source_generated_divergence'
+  | 'command_source_generated_divergence';
+
 export interface GateOwnershipFixture extends JsonObject {
   case_id: string;
   mutation: GateOwnershipFixtureMutation;
@@ -541,6 +556,29 @@ function validateFrozenEvidence(evidence: FrozenEvidence): void {
   }
 }
 
+function validateProtocolSourceAgreement(
+  transactionEntries: JsonValue,
+  commandEntries: JsonValue,
+  transactionSourceEntries: JsonValue = RUN_TRANSACTION_PROTOCOL_ENTRIES as unknown as JsonValue,
+  commandSourceEntries: JsonValue = RUNTIME_COMMAND_PROTOCOL_ENTRIES as unknown as JsonValue,
+): void {
+  if (
+    canonicalJson(transactionEntries) !==
+    canonicalJson(transactionSourceEntries)
+  ) {
+    fail(
+      't6e_protocol_drift',
+      'Generated transaction protocol differs from source',
+    );
+  }
+  if (canonicalJson(commandEntries) !== canonicalJson(commandSourceEntries)) {
+    fail(
+      't6e_command_mapping_drift',
+      'Generated command protocol differs from source',
+    );
+  }
+}
+
 function validateDependencyArtifacts(): void {
   const transaction = readArtifact(
     absoluteContractPath(
@@ -577,37 +615,37 @@ function validateDependencyArtifacts(): void {
       'Frozen protocol or Schema 4 binding drifted',
     );
   }
-  if (
-    canonicalJson(transaction.payload.entries as unknown as JsonValue) !==
-    canonicalJson(RUN_TRANSACTION_PROTOCOL_ENTRIES as unknown as JsonValue)
-  ) {
-    fail(
-      't6e_protocol_drift',
-      'Generated transaction protocol differs from source',
-    );
-  }
-  if (
-    canonicalJson(command.payload.entries as unknown as JsonValue) !==
-    canonicalJson(RUNTIME_COMMAND_PROTOCOL_ENTRIES as unknown as JsonValue)
-  ) {
-    fail(
-      't6e_command_mapping_drift',
-      'Generated command protocol differs from source',
-    );
-  }
+  validateProtocolSourceAgreement(
+    transaction.payload.entries as unknown as JsonValue,
+    command.payload.entries as unknown as JsonValue,
+  );
 }
 
 function applyMutation(
   model: GateOwnershipModel,
   evidence: FrozenEvidence,
-  mutation: GateOwnershipFixtureMutation,
+  mutation: GateOwnershipAuditProbeMutation,
 ): void {
+  if (mutation === 'remove_g5_gate') {
+    model.gates.shift();
+    return;
+  }
+  if (mutation === 'add_extra_gate') {
+    model.gates.push(structuredClone(model.gates[1]));
+    return;
+  }
   const [g5, g7] = model.gates;
   switch (mutation) {
     case 'none':
       return;
     case 'remove_g5_transaction':
       g5.owned_transaction_protocols.pop();
+      return;
+    case 'reorder_g5_transactions':
+      [g5.owned_transaction_protocols[0], g5.owned_transaction_protocols[1]] = [
+        g5.owned_transaction_protocols[1],
+        g5.owned_transaction_protocols[0],
+      ];
       return;
     case 'duplicate_g5_transaction':
       g5.owned_transaction_protocols.push('T0');
@@ -640,6 +678,12 @@ function applyMutation(
       return;
     case 'remove_g7_semantic':
       g7.owned_semantics.pop();
+      return;
+    case 'remove_g5_excluded_semantic':
+      g5.explicitly_excluded_semantics.pop();
+      return;
+    case 'remove_g7_excluded_semantic':
+      g7.explicitly_excluded_semantics.pop();
       return;
     case 'remove_t6e_authorization':
       evidence.t6ePreconditions = evidence.t6ePreconditions.filter(
@@ -676,6 +720,28 @@ function applyMutation(
       }
       return;
     }
+    case 'remove_schema_resolution_check':
+      evidence.schemaChecks = evidence.schemaChecks.filter(
+        (candidate) =>
+          candidate.check_id !== 'ck:operational_blockers:resolution_shape',
+      );
+      return;
+    case 'remove_schema_insert_cache_trigger':
+      evidence.schemaTriggers = evidence.schemaTriggers.filter(
+        (candidate) =>
+          candidate.name !== 'trg:operational_blockers:insert_cache',
+      );
+      return;
+    case 'mutate_schema_update_cache_trigger': {
+      const trigger = evidence.schemaTriggers.find(
+        (candidate) =>
+          candidate.name === 'trg:operational_blockers:update_cache',
+      );
+      if (trigger) {
+        trigger.sql = trigger.sql.replace('"workflows"', '"workflows_drifted"');
+      }
+      return;
+    }
     case 'remove_schema_cache_trigger':
       evidence.schemaTriggers = evidence.schemaTriggers.filter(
         (candidate) =>
@@ -687,12 +753,62 @@ function applyMutation(
 export function evaluateGateOwnershipFixtureForTest(
   mutation: GateOwnershipFixtureMutation,
 ): OwnershipErrorCode {
+  return evaluateGateOwnershipAuditProbeForTest(mutation);
+}
+
+export function evaluateGateOwnershipAuditProbeForTest(
+  mutation: GateOwnershipAuditProbeMutation,
+): OwnershipErrorCode {
   const model = gateOwnershipModel();
   const evidence = frozenEvidence();
   applyMutation(model, evidence, mutation);
   try {
     validateOwnershipModel(model);
     validateFrozenEvidence(evidence);
+    return 'accepted';
+  } catch (error) {
+    if (error instanceof GateOwnershipContractError) return error.code;
+    throw error;
+  }
+}
+
+export function evaluateGateOwnershipDependencyProbeForTest(
+  mutation: GateOwnershipDependencyProbeMutation,
+): OwnershipErrorCode {
+  const transaction = readArtifact(
+    absoluteContractPath(
+      'protocols/workflow-run-transaction-protocol-table.json',
+    ),
+  );
+  const command = readArtifact(
+    absoluteContractPath(
+      'protocols/workflow-runtime-command-protocol-table.json',
+    ),
+  );
+  const transactionSource = structuredClone(
+    RUN_TRANSACTION_PROTOCOL_ENTRIES,
+  ) as unknown as JsonValue;
+  const commandSource = structuredClone(
+    RUNTIME_COMMAND_PROTOCOL_ENTRIES,
+  ) as unknown as JsonValue;
+  if (mutation === 'transaction_source_generated_divergence') {
+    const entries = transactionSource as JsonObject[];
+    const t6e = entries.find((entry) => entry.transaction_id === 'T6e');
+    if (!t6e) throw new Error('T6e source probe entry is missing');
+    t6e.name = `${String(t6e.name)}_drifted`;
+  } else {
+    const entries = commandSource as JsonObject[];
+    const t6e = entries.find((entry) => entry.transaction_protocol === 'T6e');
+    if (!t6e) throw new Error('T6e command source probe entry is missing');
+    t6e.state_guard = `${String(t6e.state_guard)}_drifted`;
+  }
+  try {
+    validateProtocolSourceAgreement(
+      transaction.payload.entries as unknown as JsonValue,
+      command.payload.entries as unknown as JsonValue,
+      transactionSource,
+      commandSource,
+    );
     return 'accepted';
   } catch (error) {
     if (error instanceof GateOwnershipContractError) return error.code;
