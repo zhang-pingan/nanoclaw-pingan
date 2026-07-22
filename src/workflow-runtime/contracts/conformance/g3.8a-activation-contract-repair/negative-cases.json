@@ -1,0 +1,959 @@
+{
+  "format": "icarus.workflow-g3-8a-activation-contract-repair-negative-cases/1",
+  "ref": {
+    "id": "icarus.workflow-g3-8a-activation-contract-repair-negative-cases",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-g3-8a-activation-contract-repair-negative-cases:1\n",
+  "hash": "sha256:e98b1e4482579fe10fba5e961a347d5f54929e348383580c0aed0983cc8ddf96",
+  "payload": {
+    "format": "icarus.workflow-g3-8a-activation-contract-repair-negative-cases/1",
+    "mutation_case_count": 12,
+    "rejection_case_count": 47,
+    "case_count": 59,
+    "mutation_cases": [
+      {
+        "case_id": "removed-field-receipt-required-for-all-duplicates",
+        "target": "repair",
+        "operation": "add",
+        "pointer": "/receipt_required_for_all_duplicates",
+        "value": true,
+        "expected_code": "repair_removed_field"
+      },
+      {
+        "case_id": "unknown-top-level-field",
+        "target": "repair",
+        "operation": "add",
+        "pointer": "/unexpected",
+        "value": true,
+        "expected_code": "repair_unknown_field"
+      },
+      {
+        "case_id": "extra-nested-receipt-field",
+        "target": "repair",
+        "operation": "add",
+        "pointer": "/receipt_policy/extra",
+        "value": "forbidden",
+        "expected_code": "repair_unknown_field"
+      },
+      {
+        "case_id": "missing-status",
+        "target": "repair",
+        "operation": "remove",
+        "pointer": "/status",
+        "value": null,
+        "expected_code": "repair_schema_invalid"
+      },
+      {
+        "case_id": "production-reachable-forbidden",
+        "target": "repair",
+        "operation": "replace",
+        "pointer": "/production_reachable",
+        "value": true,
+        "expected_code": "repair_schema_invalid"
+      },
+      {
+        "case_id": "current-schema-version-drift",
+        "target": "repair",
+        "operation": "replace",
+        "pointer": "/current_database_schema_version",
+        "value": 4,
+        "expected_code": "repair_schema_invalid"
+      },
+      {
+        "case_id": "contract-hash-drift",
+        "target": "repair",
+        "operation": "replace",
+        "pointer": "/contract_hash",
+        "value": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "expected_code": "repair_hash_mismatch"
+      },
+      {
+        "case_id": "rehash-failed-receipt-semantic-drift",
+        "target": "repair",
+        "operation": "rehash_replace",
+        "pointer": "/receipt_policy/first_failed",
+        "value": "required",
+        "expected_code": "repair_schema_invalid"
+      },
+      {
+        "case_id": "rehash-terminal-rule-order-drift",
+        "target": "repair",
+        "operation": "rehash_replace",
+        "pointer": "/terminal_semantics/0/case_kind",
+        "value": "first_applied_drifted",
+        "expected_code": "repair_semantic_mismatch"
+      },
+      {
+        "case_id": "scenario-unknown-field",
+        "target": "scenario",
+        "operation": "add",
+        "pointer": "/unexpected",
+        "value": true,
+        "expected_code": "scenario_schema_invalid"
+      },
+      {
+        "case_id": "scenario-removed-field",
+        "target": "scenario",
+        "operation": "add",
+        "pointer": "/free_json_detail",
+        "value": {},
+        "expected_code": "scenario_schema_invalid"
+      },
+      {
+        "case_id": "scenario-invalid-command-state",
+        "target": "scenario",
+        "operation": "replace",
+        "pointer": "/existing_command_state",
+        "value": "failed",
+        "expected_code": "scenario_schema_invalid"
+      }
+    ],
+    "rejection_cases": [
+      {
+        "case_id": "negative.activation_request_strict_parse_invalid",
+        "precedence_rank": 1,
+        "outer_code": "activation_request_strict_parse_invalid",
+        "nested_g3_6_code": null,
+        "phase": "admission",
+        "classification": "pre_admission",
+        "command_effect": "absent",
+        "receipt": null,
+        "pointer_transition_count": 0,
+        "invocation_append_count": 0,
+        "verified_fact_prefix": []
+      },
+      {
+        "case_id": "negative.activation_request_removed_field",
+        "precedence_rank": 2,
+        "outer_code": "activation_request_removed_field",
+        "nested_g3_6_code": null,
+        "phase": "admission",
+        "classification": "pre_admission",
+        "command_effect": "absent",
+        "receipt": null,
+        "pointer_transition_count": 0,
+        "invocation_append_count": 0,
+        "verified_fact_prefix": []
+      },
+      {
+        "case_id": "negative.activation_request_unknown_field",
+        "precedence_rank": 3,
+        "outer_code": "activation_request_unknown_field",
+        "nested_g3_6_code": null,
+        "phase": "admission",
+        "classification": "pre_admission",
+        "command_effect": "absent",
+        "receipt": null,
+        "pointer_transition_count": 0,
+        "invocation_append_count": 0,
+        "verified_fact_prefix": []
+      },
+      {
+        "case_id": "negative.activation_request_schema_invalid",
+        "precedence_rank": 4,
+        "outer_code": "activation_request_schema_invalid",
+        "nested_g3_6_code": null,
+        "phase": "admission",
+        "classification": "pre_admission",
+        "command_effect": "absent",
+        "receipt": null,
+        "pointer_transition_count": 0,
+        "invocation_append_count": 0,
+        "verified_fact_prefix": []
+      },
+      {
+        "case_id": "negative.activation_request_hash_mismatch",
+        "precedence_rank": 5,
+        "outer_code": "activation_request_hash_mismatch",
+        "nested_g3_6_code": null,
+        "phase": "admission",
+        "classification": "pre_admission",
+        "command_effect": "absent",
+        "receipt": null,
+        "pointer_transition_count": 0,
+        "invocation_append_count": 0,
+        "verified_fact_prefix": []
+      },
+      {
+        "case_id": "negative.activation_authentication_mismatch",
+        "precedence_rank": 6,
+        "outer_code": "activation_authentication_mismatch",
+        "nested_g3_6_code": null,
+        "phase": "admission",
+        "classification": "pre_admission",
+        "command_effect": "absent",
+        "receipt": null,
+        "pointer_transition_count": 0,
+        "invocation_append_count": 0,
+        "verified_fact_prefix": []
+      },
+      {
+        "case_id": "negative.idempotency_conflict",
+        "precedence_rank": 7,
+        "outer_code": "idempotency_conflict",
+        "nested_g3_6_code": null,
+        "phase": "idempotency",
+        "classification": "conflict",
+        "command_effect": "header_unchanged",
+        "receipt": null,
+        "pointer_transition_count": 0,
+        "invocation_append_count": 1,
+        "verified_fact_prefix": []
+      },
+      {
+        "case_id": "negative.terminal_integrity_mismatch",
+        "precedence_rank": 8,
+        "outer_code": "terminal_integrity_mismatch",
+        "nested_g3_6_code": null,
+        "phase": "integrity",
+        "classification": "fail_closed",
+        "command_effect": "header_unchanged",
+        "receipt": null,
+        "pointer_transition_count": 0,
+        "invocation_append_count": 0,
+        "verified_fact_prefix": []
+      },
+      {
+        "case_id": "negative.target_release_missing",
+        "precedence_rank": 9,
+        "outer_code": "target_release_missing",
+        "nested_g3_6_code": null,
+        "phase": "preflight",
+        "classification": "failed",
+        "command_effect": "terminal_failed",
+        "receipt": null,
+        "pointer_transition_count": 0,
+        "invocation_append_count": 1,
+        "verified_fact_prefix": []
+      },
+      {
+        "case_id": "negative.target_release_identity_mismatch",
+        "precedence_rank": 10,
+        "outer_code": "target_release_identity_mismatch",
+        "nested_g3_6_code": null,
+        "phase": "preflight",
+        "classification": "failed",
+        "command_effect": "terminal_failed",
+        "receipt": null,
+        "pointer_transition_count": 0,
+        "invocation_append_count": 1,
+        "verified_fact_prefix": []
+      },
+      {
+        "case_id": "negative.target_release_owner_mismatch",
+        "precedence_rank": 11,
+        "outer_code": "target_release_owner_mismatch",
+        "nested_g3_6_code": null,
+        "phase": "preflight",
+        "classification": "failed",
+        "command_effect": "terminal_failed",
+        "receipt": null,
+        "pointer_transition_count": 0,
+        "invocation_append_count": 1,
+        "verified_fact_prefix": []
+      },
+      {
+        "case_id": "negative.target_release_resource_set_mismatch",
+        "precedence_rank": 12,
+        "outer_code": "target_release_resource_set_mismatch",
+        "nested_g3_6_code": null,
+        "phase": "preflight",
+        "classification": "failed",
+        "command_effect": "terminal_failed",
+        "receipt": null,
+        "pointer_transition_count": 0,
+        "invocation_append_count": 1,
+        "verified_fact_prefix": [
+          "verified_target_release_identity"
+        ]
+      },
+      {
+        "case_id": "negative.g3_6.preflight_input_invalid",
+        "precedence_rank": 13,
+        "outer_code": "g3_6_preflight_rejected",
+        "nested_g3_6_code": "preflight_input_invalid",
+        "phase": "preflight",
+        "classification": "failed",
+        "command_effect": "terminal_failed",
+        "receipt": null,
+        "pointer_transition_count": 0,
+        "invocation_append_count": 1,
+        "verified_fact_prefix": [
+          "verified_target_release_identity",
+          "verified_target_release_resource_set",
+          "verified_g3_6_compatibility_input",
+          "verified_g3_6_compatibility_result"
+        ]
+      },
+      {
+        "case_id": "negative.g3_6.preflight_side_effect_requested",
+        "precedence_rank": 13,
+        "outer_code": "g3_6_preflight_rejected",
+        "nested_g3_6_code": "preflight_side_effect_requested",
+        "phase": "preflight",
+        "classification": "failed",
+        "command_effect": "terminal_failed",
+        "receipt": null,
+        "pointer_transition_count": 0,
+        "invocation_append_count": 1,
+        "verified_fact_prefix": [
+          "verified_target_release_identity",
+          "verified_target_release_resource_set",
+          "verified_g3_6_compatibility_input",
+          "verified_g3_6_compatibility_result"
+        ]
+      },
+      {
+        "case_id": "negative.g3_6.snapshot_missing",
+        "precedence_rank": 13,
+        "outer_code": "g3_6_preflight_rejected",
+        "nested_g3_6_code": "snapshot_missing",
+        "phase": "preflight",
+        "classification": "failed",
+        "command_effect": "terminal_failed",
+        "receipt": null,
+        "pointer_transition_count": 0,
+        "invocation_append_count": 1,
+        "verified_fact_prefix": [
+          "verified_target_release_identity",
+          "verified_target_release_resource_set",
+          "verified_g3_6_compatibility_input",
+          "verified_g3_6_compatibility_result"
+        ]
+      },
+      {
+        "case_id": "negative.g3_6.snapshot_hash_mismatch",
+        "precedence_rank": 13,
+        "outer_code": "g3_6_preflight_rejected",
+        "nested_g3_6_code": "snapshot_hash_mismatch",
+        "phase": "preflight",
+        "classification": "failed",
+        "command_effect": "terminal_failed",
+        "receipt": null,
+        "pointer_transition_count": 0,
+        "invocation_append_count": 1,
+        "verified_fact_prefix": [
+          "verified_target_release_identity",
+          "verified_target_release_resource_set",
+          "verified_g3_6_compatibility_input",
+          "verified_g3_6_compatibility_result"
+        ]
+      },
+      {
+        "case_id": "negative.g3_6.snapshot_binding_mismatch",
+        "precedence_rank": 13,
+        "outer_code": "g3_6_preflight_rejected",
+        "nested_g3_6_code": "snapshot_binding_mismatch",
+        "phase": "preflight",
+        "classification": "failed",
+        "command_effect": "terminal_failed",
+        "receipt": null,
+        "pointer_transition_count": 0,
+        "invocation_append_count": 1,
+        "verified_fact_prefix": [
+          "verified_target_release_identity",
+          "verified_target_release_resource_set",
+          "verified_g3_6_compatibility_input",
+          "verified_g3_6_compatibility_result"
+        ]
+      },
+      {
+        "case_id": "negative.g3_6.closure_root_missing",
+        "precedence_rank": 13,
+        "outer_code": "g3_6_preflight_rejected",
+        "nested_g3_6_code": "closure_root_missing",
+        "phase": "preflight",
+        "classification": "failed",
+        "command_effect": "terminal_failed",
+        "receipt": null,
+        "pointer_transition_count": 0,
+        "invocation_append_count": 1,
+        "verified_fact_prefix": [
+          "verified_target_release_identity",
+          "verified_target_release_resource_set",
+          "verified_g3_6_compatibility_input",
+          "verified_g3_6_compatibility_result"
+        ]
+      },
+      {
+        "case_id": "negative.g3_6.closure_root_hash_mismatch",
+        "precedence_rank": 13,
+        "outer_code": "g3_6_preflight_rejected",
+        "nested_g3_6_code": "closure_root_hash_mismatch",
+        "phase": "preflight",
+        "classification": "failed",
+        "command_effect": "terminal_failed",
+        "receipt": null,
+        "pointer_transition_count": 0,
+        "invocation_append_count": 1,
+        "verified_fact_prefix": [
+          "verified_target_release_identity",
+          "verified_target_release_resource_set",
+          "verified_g3_6_compatibility_input",
+          "verified_g3_6_compatibility_result"
+        ]
+      },
+      {
+        "case_id": "negative.g3_6.closure_mismatch",
+        "precedence_rank": 13,
+        "outer_code": "g3_6_preflight_rejected",
+        "nested_g3_6_code": "closure_mismatch",
+        "phase": "preflight",
+        "classification": "failed",
+        "command_effect": "terminal_failed",
+        "receipt": null,
+        "pointer_transition_count": 0,
+        "invocation_append_count": 1,
+        "verified_fact_prefix": [
+          "verified_target_release_identity",
+          "verified_target_release_resource_set",
+          "verified_g3_6_compatibility_input",
+          "verified_g3_6_compatibility_result"
+        ]
+      },
+      {
+        "case_id": "negative.g3_6.execution_artifact_missing",
+        "precedence_rank": 13,
+        "outer_code": "g3_6_preflight_rejected",
+        "nested_g3_6_code": "execution_artifact_missing",
+        "phase": "preflight",
+        "classification": "failed",
+        "command_effect": "terminal_failed",
+        "receipt": null,
+        "pointer_transition_count": 0,
+        "invocation_append_count": 1,
+        "verified_fact_prefix": [
+          "verified_target_release_identity",
+          "verified_target_release_resource_set",
+          "verified_g3_6_compatibility_input",
+          "verified_g3_6_compatibility_result"
+        ]
+      },
+      {
+        "case_id": "negative.g3_6.execution_artifact_hash_mismatch",
+        "precedence_rank": 13,
+        "outer_code": "g3_6_preflight_rejected",
+        "nested_g3_6_code": "execution_artifact_hash_mismatch",
+        "phase": "preflight",
+        "classification": "failed",
+        "command_effect": "terminal_failed",
+        "receipt": null,
+        "pointer_transition_count": 0,
+        "invocation_append_count": 1,
+        "verified_fact_prefix": [
+          "verified_target_release_identity",
+          "verified_target_release_resource_set",
+          "verified_g3_6_compatibility_input",
+          "verified_g3_6_compatibility_result"
+        ]
+      },
+      {
+        "case_id": "negative.g3_6.execution_artifact_mismatch",
+        "precedence_rank": 13,
+        "outer_code": "g3_6_preflight_rejected",
+        "nested_g3_6_code": "execution_artifact_mismatch",
+        "phase": "preflight",
+        "classification": "failed",
+        "command_effect": "terminal_failed",
+        "receipt": null,
+        "pointer_transition_count": 0,
+        "invocation_append_count": 1,
+        "verified_fact_prefix": [
+          "verified_target_release_identity",
+          "verified_target_release_resource_set",
+          "verified_g3_6_compatibility_input",
+          "verified_g3_6_compatibility_result"
+        ]
+      },
+      {
+        "case_id": "negative.g3_6.executor_implementation_missing",
+        "precedence_rank": 13,
+        "outer_code": "g3_6_preflight_rejected",
+        "nested_g3_6_code": "executor_implementation_missing",
+        "phase": "preflight",
+        "classification": "failed",
+        "command_effect": "terminal_failed",
+        "receipt": null,
+        "pointer_transition_count": 0,
+        "invocation_append_count": 1,
+        "verified_fact_prefix": [
+          "verified_target_release_identity",
+          "verified_target_release_resource_set",
+          "verified_g3_6_compatibility_input",
+          "verified_g3_6_compatibility_result"
+        ]
+      },
+      {
+        "case_id": "negative.g3_6.executor_implementation_hash_mismatch",
+        "precedence_rank": 13,
+        "outer_code": "g3_6_preflight_rejected",
+        "nested_g3_6_code": "executor_implementation_hash_mismatch",
+        "phase": "preflight",
+        "classification": "failed",
+        "command_effect": "terminal_failed",
+        "receipt": null,
+        "pointer_transition_count": 0,
+        "invocation_append_count": 1,
+        "verified_fact_prefix": [
+          "verified_target_release_identity",
+          "verified_target_release_resource_set",
+          "verified_g3_6_compatibility_input",
+          "verified_g3_6_compatibility_result"
+        ]
+      },
+      {
+        "case_id": "negative.g3_6.executor_implementation_mismatch",
+        "precedence_rank": 13,
+        "outer_code": "g3_6_preflight_rejected",
+        "nested_g3_6_code": "executor_implementation_mismatch",
+        "phase": "preflight",
+        "classification": "failed",
+        "command_effect": "terminal_failed",
+        "receipt": null,
+        "pointer_transition_count": 0,
+        "invocation_append_count": 1,
+        "verified_fact_prefix": [
+          "verified_target_release_identity",
+          "verified_target_release_resource_set",
+          "verified_g3_6_compatibility_input",
+          "verified_g3_6_compatibility_result"
+        ]
+      },
+      {
+        "case_id": "negative.g3_6.artifact_binding_mismatch",
+        "precedence_rank": 13,
+        "outer_code": "g3_6_preflight_rejected",
+        "nested_g3_6_code": "artifact_binding_mismatch",
+        "phase": "preflight",
+        "classification": "failed",
+        "command_effect": "terminal_failed",
+        "receipt": null,
+        "pointer_transition_count": 0,
+        "invocation_append_count": 1,
+        "verified_fact_prefix": [
+          "verified_target_release_identity",
+          "verified_target_release_resource_set",
+          "verified_g3_6_compatibility_input",
+          "verified_g3_6_compatibility_result"
+        ]
+      },
+      {
+        "case_id": "negative.g3_6.core_compatibility_mismatch",
+        "precedence_rank": 13,
+        "outer_code": "g3_6_preflight_rejected",
+        "nested_g3_6_code": "core_compatibility_mismatch",
+        "phase": "preflight",
+        "classification": "failed",
+        "command_effect": "terminal_failed",
+        "receipt": null,
+        "pointer_transition_count": 0,
+        "invocation_append_count": 1,
+        "verified_fact_prefix": [
+          "verified_target_release_identity",
+          "verified_target_release_resource_set",
+          "verified_g3_6_compatibility_input",
+          "verified_g3_6_compatibility_result"
+        ]
+      },
+      {
+        "case_id": "negative.g3_6.run_protocol_mismatch",
+        "precedence_rank": 13,
+        "outer_code": "g3_6_preflight_rejected",
+        "nested_g3_6_code": "run_protocol_mismatch",
+        "phase": "preflight",
+        "classification": "failed",
+        "command_effect": "terminal_failed",
+        "receipt": null,
+        "pointer_transition_count": 0,
+        "invocation_append_count": 1,
+        "verified_fact_prefix": [
+          "verified_target_release_identity",
+          "verified_target_release_resource_set",
+          "verified_g3_6_compatibility_input",
+          "verified_g3_6_compatibility_result"
+        ]
+      },
+      {
+        "case_id": "negative.g3_6.executor_abi_mismatch",
+        "precedence_rank": 13,
+        "outer_code": "g3_6_preflight_rejected",
+        "nested_g3_6_code": "executor_abi_mismatch",
+        "phase": "preflight",
+        "classification": "failed",
+        "command_effect": "terminal_failed",
+        "receipt": null,
+        "pointer_transition_count": 0,
+        "invocation_append_count": 1,
+        "verified_fact_prefix": [
+          "verified_target_release_identity",
+          "verified_target_release_resource_set",
+          "verified_g3_6_compatibility_input",
+          "verified_g3_6_compatibility_result"
+        ]
+      },
+      {
+        "case_id": "negative.g3_6.retention_policy_mismatch",
+        "precedence_rank": 13,
+        "outer_code": "g3_6_preflight_rejected",
+        "nested_g3_6_code": "retention_policy_mismatch",
+        "phase": "preflight",
+        "classification": "failed",
+        "command_effect": "terminal_failed",
+        "receipt": null,
+        "pointer_transition_count": 0,
+        "invocation_append_count": 1,
+        "verified_fact_prefix": [
+          "verified_target_release_identity",
+          "verified_target_release_resource_set",
+          "verified_g3_6_compatibility_input",
+          "verified_g3_6_compatibility_result"
+        ]
+      },
+      {
+        "case_id": "negative.g3_6.retention_eligibility_mismatch",
+        "precedence_rank": 13,
+        "outer_code": "g3_6_preflight_rejected",
+        "nested_g3_6_code": "retention_eligibility_mismatch",
+        "phase": "preflight",
+        "classification": "failed",
+        "command_effect": "terminal_failed",
+        "receipt": null,
+        "pointer_transition_count": 0,
+        "invocation_append_count": 1,
+        "verified_fact_prefix": [
+          "verified_target_release_identity",
+          "verified_target_release_resource_set",
+          "verified_g3_6_compatibility_input",
+          "verified_g3_6_compatibility_result"
+        ]
+      },
+      {
+        "case_id": "negative.target_release_lifecycle_invalid",
+        "precedence_rank": 14,
+        "outer_code": "target_release_lifecycle_invalid",
+        "nested_g3_6_code": null,
+        "phase": "preflight",
+        "classification": "failed",
+        "command_effect": "terminal_failed",
+        "receipt": null,
+        "pointer_transition_count": 0,
+        "invocation_append_count": 1,
+        "verified_fact_prefix": [
+          "verified_target_release_identity",
+          "verified_target_release_resource_set",
+          "verified_g3_6_compatibility_input",
+          "verified_g3_6_compatibility_result"
+        ]
+      },
+      {
+        "case_id": "negative.previous_release_missing",
+        "precedence_rank": 15,
+        "outer_code": "previous_release_missing",
+        "nested_g3_6_code": null,
+        "phase": "preflight",
+        "classification": "failed",
+        "command_effect": "terminal_failed",
+        "receipt": null,
+        "pointer_transition_count": 0,
+        "invocation_append_count": 1,
+        "verified_fact_prefix": [
+          "verified_target_release_identity",
+          "verified_target_release_resource_set",
+          "verified_g3_6_compatibility_input",
+          "verified_g3_6_compatibility_result",
+          "verified_target_staged_lifecycle"
+        ]
+      },
+      {
+        "case_id": "negative.previous_release_identity_mismatch",
+        "precedence_rank": 16,
+        "outer_code": "previous_release_identity_mismatch",
+        "nested_g3_6_code": null,
+        "phase": "preflight",
+        "classification": "failed",
+        "command_effect": "terminal_failed",
+        "receipt": null,
+        "pointer_transition_count": 0,
+        "invocation_append_count": 1,
+        "verified_fact_prefix": [
+          "verified_target_release_identity",
+          "verified_target_release_resource_set",
+          "verified_g3_6_compatibility_input",
+          "verified_g3_6_compatibility_result",
+          "verified_target_staged_lifecycle"
+        ]
+      },
+      {
+        "case_id": "negative.previous_release_owner_mismatch",
+        "precedence_rank": 17,
+        "outer_code": "previous_release_owner_mismatch",
+        "nested_g3_6_code": null,
+        "phase": "preflight",
+        "classification": "failed",
+        "command_effect": "terminal_failed",
+        "receipt": null,
+        "pointer_transition_count": 0,
+        "invocation_append_count": 1,
+        "verified_fact_prefix": [
+          "verified_target_release_identity",
+          "verified_target_release_resource_set",
+          "verified_g3_6_compatibility_input",
+          "verified_g3_6_compatibility_result",
+          "verified_target_staged_lifecycle"
+        ]
+      },
+      {
+        "case_id": "negative.previous_release_lifecycle_invalid",
+        "precedence_rank": 18,
+        "outer_code": "previous_release_lifecycle_invalid",
+        "nested_g3_6_code": null,
+        "phase": "preflight",
+        "classification": "failed",
+        "command_effect": "terminal_failed",
+        "receipt": null,
+        "pointer_transition_count": 0,
+        "invocation_append_count": 1,
+        "verified_fact_prefix": [
+          "verified_target_release_identity",
+          "verified_target_release_resource_set",
+          "verified_g3_6_compatibility_input",
+          "verified_g3_6_compatibility_result",
+          "verified_target_staged_lifecycle",
+          "verified_previous_release_identity"
+        ]
+      },
+      {
+        "case_id": "negative.target_retention_missing",
+        "precedence_rank": 19,
+        "outer_code": "target_retention_missing",
+        "nested_g3_6_code": null,
+        "phase": "preflight",
+        "classification": "failed",
+        "command_effect": "terminal_failed",
+        "receipt": null,
+        "pointer_transition_count": 0,
+        "invocation_append_count": 1,
+        "verified_fact_prefix": [
+          "verified_target_release_identity",
+          "verified_target_release_resource_set",
+          "verified_g3_6_compatibility_input",
+          "verified_g3_6_compatibility_result",
+          "verified_target_staged_lifecycle",
+          "verified_previous_release_identity",
+          "verified_previous_active_lifecycle"
+        ]
+      },
+      {
+        "case_id": "negative.target_retention_identity_mismatch",
+        "precedence_rank": 20,
+        "outer_code": "target_retention_identity_mismatch",
+        "nested_g3_6_code": null,
+        "phase": "preflight",
+        "classification": "failed",
+        "command_effect": "terminal_failed",
+        "receipt": null,
+        "pointer_transition_count": 0,
+        "invocation_append_count": 1,
+        "verified_fact_prefix": [
+          "verified_target_release_identity",
+          "verified_target_release_resource_set",
+          "verified_g3_6_compatibility_input",
+          "verified_g3_6_compatibility_result",
+          "verified_target_staged_lifecycle",
+          "verified_previous_release_identity",
+          "verified_previous_active_lifecycle"
+        ]
+      },
+      {
+        "case_id": "negative.target_retention_status_mismatch",
+        "precedence_rank": 21,
+        "outer_code": "target_retention_status_mismatch",
+        "nested_g3_6_code": null,
+        "phase": "preflight",
+        "classification": "failed",
+        "command_effect": "terminal_failed",
+        "receipt": null,
+        "pointer_transition_count": 0,
+        "invocation_append_count": 1,
+        "verified_fact_prefix": [
+          "verified_target_release_identity",
+          "verified_target_release_resource_set",
+          "verified_g3_6_compatibility_input",
+          "verified_g3_6_compatibility_result",
+          "verified_target_staged_lifecycle",
+          "verified_previous_release_identity",
+          "verified_previous_active_lifecycle",
+          "verified_target_retention_identity"
+        ]
+      },
+      {
+        "case_id": "negative.target_retention_row_version_mismatch",
+        "precedence_rank": 22,
+        "outer_code": "target_retention_row_version_mismatch",
+        "nested_g3_6_code": null,
+        "phase": "preflight",
+        "classification": "failed",
+        "command_effect": "terminal_failed",
+        "receipt": null,
+        "pointer_transition_count": 0,
+        "invocation_append_count": 1,
+        "verified_fact_prefix": [
+          "verified_target_release_identity",
+          "verified_target_release_resource_set",
+          "verified_g3_6_compatibility_input",
+          "verified_g3_6_compatibility_result",
+          "verified_target_staged_lifecycle",
+          "verified_previous_release_identity",
+          "verified_previous_active_lifecycle",
+          "verified_target_retention_identity"
+        ]
+      },
+      {
+        "case_id": "negative.previous_retention_missing",
+        "precedence_rank": 23,
+        "outer_code": "previous_retention_missing",
+        "nested_g3_6_code": null,
+        "phase": "preflight",
+        "classification": "failed",
+        "command_effect": "terminal_failed",
+        "receipt": null,
+        "pointer_transition_count": 0,
+        "invocation_append_count": 1,
+        "verified_fact_prefix": [
+          "verified_target_release_identity",
+          "verified_target_release_resource_set",
+          "verified_g3_6_compatibility_input",
+          "verified_g3_6_compatibility_result",
+          "verified_target_staged_lifecycle",
+          "verified_previous_release_identity",
+          "verified_previous_active_lifecycle",
+          "verified_target_retention_identity",
+          "verified_target_retention_held_observation"
+        ]
+      },
+      {
+        "case_id": "negative.previous_retention_identity_mismatch",
+        "precedence_rank": 24,
+        "outer_code": "previous_retention_identity_mismatch",
+        "nested_g3_6_code": null,
+        "phase": "preflight",
+        "classification": "failed",
+        "command_effect": "terminal_failed",
+        "receipt": null,
+        "pointer_transition_count": 0,
+        "invocation_append_count": 1,
+        "verified_fact_prefix": [
+          "verified_target_release_identity",
+          "verified_target_release_resource_set",
+          "verified_g3_6_compatibility_input",
+          "verified_g3_6_compatibility_result",
+          "verified_target_staged_lifecycle",
+          "verified_previous_release_identity",
+          "verified_previous_active_lifecycle",
+          "verified_target_retention_identity",
+          "verified_target_retention_held_observation"
+        ]
+      },
+      {
+        "case_id": "negative.previous_retention_status_mismatch",
+        "precedence_rank": 25,
+        "outer_code": "previous_retention_status_mismatch",
+        "nested_g3_6_code": null,
+        "phase": "preflight",
+        "classification": "failed",
+        "command_effect": "terminal_failed",
+        "receipt": null,
+        "pointer_transition_count": 0,
+        "invocation_append_count": 1,
+        "verified_fact_prefix": [
+          "verified_target_release_identity",
+          "verified_target_release_resource_set",
+          "verified_g3_6_compatibility_input",
+          "verified_g3_6_compatibility_result",
+          "verified_target_staged_lifecycle",
+          "verified_previous_release_identity",
+          "verified_previous_active_lifecycle",
+          "verified_target_retention_identity",
+          "verified_target_retention_held_observation",
+          "verified_previous_retention_identity"
+        ]
+      },
+      {
+        "case_id": "negative.previous_retention_row_version_mismatch",
+        "precedence_rank": 26,
+        "outer_code": "previous_retention_row_version_mismatch",
+        "nested_g3_6_code": null,
+        "phase": "preflight",
+        "classification": "failed",
+        "command_effect": "terminal_failed",
+        "receipt": null,
+        "pointer_transition_count": 0,
+        "invocation_append_count": 1,
+        "verified_fact_prefix": [
+          "verified_target_release_identity",
+          "verified_target_release_resource_set",
+          "verified_g3_6_compatibility_input",
+          "verified_g3_6_compatibility_result",
+          "verified_target_staged_lifecycle",
+          "verified_previous_release_identity",
+          "verified_previous_active_lifecycle",
+          "verified_target_retention_identity",
+          "verified_target_retention_held_observation",
+          "verified_previous_retention_identity"
+        ]
+      },
+      {
+        "case_id": "negative.pointer_cas_conflict",
+        "precedence_rank": 27,
+        "outer_code": "pointer_cas_conflict",
+        "nested_g3_6_code": null,
+        "phase": "activation_transaction",
+        "classification": "conflict",
+        "command_effect": "terminal_conflict",
+        "receipt": null,
+        "pointer_transition_count": 0,
+        "invocation_append_count": 1,
+        "verified_fact_prefix": [
+          "verified_target_release_identity",
+          "verified_target_release_resource_set",
+          "verified_g3_6_compatibility_input",
+          "verified_g3_6_compatibility_result",
+          "verified_target_staged_lifecycle",
+          "verified_previous_release_identity",
+          "verified_previous_active_lifecycle",
+          "verified_target_retention_identity",
+          "verified_target_retention_held_observation",
+          "verified_previous_retention_identity",
+          "verified_previous_retention_held_observation"
+        ]
+      },
+      {
+        "case_id": "negative.activation_persistence_identity_collision",
+        "precedence_rank": 28,
+        "outer_code": "activation_persistence_identity_collision",
+        "nested_g3_6_code": null,
+        "phase": "persistence",
+        "classification": "fail_closed",
+        "command_effect": "transaction_rolled_back",
+        "receipt": null,
+        "pointer_transition_count": 0,
+        "invocation_append_count": 0,
+        "verified_fact_prefix": [
+          "verified_target_release_identity",
+          "verified_target_release_resource_set",
+          "verified_g3_6_compatibility_input",
+          "verified_g3_6_compatibility_result",
+          "verified_target_staged_lifecycle",
+          "verified_previous_release_identity",
+          "verified_previous_active_lifecycle",
+          "verified_target_retention_identity",
+          "verified_target_retention_held_observation",
+          "verified_previous_retention_identity",
+          "verified_previous_retention_held_observation"
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,106 @@
+{
+  "format": "icarus.workflow-contract-pack-g3-8a-activation-contract-repair/1",
+  "ref": {
+    "id": "icarus.workflow-contract-pack-g3-8a-activation-contract-repair",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-contract-pack-g3-8a-activation-contract-repair:1\n",
+  "hash": "sha256:d8412111a0f3dcabb4ce416b99086701ea3e3911ff431b5457eb957b2f69722f",
+  "payload": {
+    "format": "icarus.workflow-contract-pack-g3-8a-activation-contract-repair/1",
+    "g3_8a_status": "SCHEMA_REPAIR_REQUIRED",
+    "production_reachable": false,
+    "current_database_schema_version": 3,
+    "required_database_schema_version": 4,
+    "g3_9_status": "BLOCKED_BY_G1_6",
+    "positive_case_count": 9,
+    "negative_case_count": 59,
+    "fault_case_count": 17,
+    "current_schema_identity": {
+      "database_schema_version": 3,
+      "activation_schema_prerequisite_hash": "sha256:2e2e98cd8276d3b42b796afb34508be44800619d3781ddd88f10022c55a7a46e",
+      "g1_root_hash": "sha256:39f7aef4e28d3466f49832edda8ed3fd193eb4abb73b39287119ecb8247948b7",
+      "schema_manifest_hash": "sha256:9761bf8df83ace49b61c7dfce3f3523ecf7a69dacdccdd09837aa110ac021be6",
+      "migration_sha256": "sha256:eea3547a0f5208d08bfbe771de3895bba020ca3cf34ddf2fb4e3b7945765d345",
+      "g3_6_pack_hash": "sha256:4bea9b044c5dabe78d0d2b23353216f9a11b9265fea2a0004c9b811336cffadc",
+      "g3_7_pack_hash": "sha256:a1c6807f10d832876c63516687ce1965cff32ddcedd58d51ee8d24e18c4c21a3"
+    },
+    "members": [
+      {
+        "path": "registry/workflow-feature-release-activation-contract-repair-schema@1.json",
+        "ref": {
+          "id": "icarus.workflow-feature-release-activation-contract-repair-schema",
+          "version": "1.0.0"
+        },
+        "hash": "sha256:19d633d8f7c9b0086b644edcb3c4c499c9307c005da381fbff987dc00a927178"
+      },
+      {
+        "path": "registry/workflow-feature-release-activation-repair-scenario-schema@1.json",
+        "ref": {
+          "id": "icarus.workflow-feature-release-activation-repair-scenario-schema",
+          "version": "1.0.0"
+        },
+        "hash": "sha256:1d3ab9b50d2c5576cf903075b53daeac74577491f677d2bdcc569b34a1450ee6"
+      },
+      {
+        "path": "registry/workflow-feature-release-activation-repair-negative-cases-schema@1.json",
+        "ref": {
+          "id": "icarus.workflow-feature-release-activation-repair-negative-cases-schema",
+          "version": "1.0.0"
+        },
+        "hash": "sha256:bddef326e2d1baa4fdd521a629e506635236d1b4ed0a838b8974cfbe1a592170"
+      },
+      {
+        "path": "registry/workflow-feature-release-activation-contract-repair@1.json",
+        "ref": {
+          "id": "icarus.workflow-feature-release-activation-contract-repair",
+          "version": "1.0.0"
+        },
+        "hash": "sha256:94cb2c390bb44298238b1ffac4184b04f59efbbeae6f268fbce7618104ec406b"
+      },
+      {
+        "path": "conformance/g3.8a-activation-contract-repair/positive-cases.json",
+        "ref": {
+          "id": "icarus.workflow-g3-8a-activation-contract-repair-positive-cases",
+          "version": "1.0.0"
+        },
+        "hash": "sha256:78b8dcfee6e8a03bf094f26148f8a7f6e98880495f346a4fbabd18509b8077d2"
+      },
+      {
+        "path": "conformance/g3.8a-activation-contract-repair/negative-cases.json",
+        "ref": {
+          "id": "icarus.workflow-g3-8a-activation-contract-repair-negative-cases",
+          "version": "1.0.0"
+        },
+        "hash": "sha256:e98b1e4482579fe10fba5e961a347d5f54929e348383580c0aed0983cc8ddf96"
+      },
+      {
+        "path": "conformance/g3.8a-activation-contract-repair/fault-cases.json",
+        "ref": {
+          "id": "icarus.workflow-g3-8a-activation-contract-repair-fault-cases",
+          "version": "1.0.0"
+        },
+        "hash": "sha256:3e1fa27c098701fa3efe870fe1044a067656cc2f0785d23ee593843383751c78"
+      },
+      {
+        "path": "registry/workflow-feature-release-activation-contract-repair-domain-separators@1.json",
+        "ref": {
+          "id": "icarus.workflow-feature-release-activation-contract-repair-domain-separators",
+          "version": "1.0.0"
+        },
+        "hash": "sha256:10fccabcb94e92dccce221164f9b72907d292e740c669206149796ca92dd1007"
+      }
+    ],
+    "forbidden_outputs": [
+      "executable_ddl",
+      "schema_manifest",
+      "store_api",
+      "activation_service",
+      "active_pointer_dml",
+      "g3_9_contract_pack",
+      "production_loader",
+      "g4_through_g9_runtime"
+    ]
+  }
+}

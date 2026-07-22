@@ -1,0 +1,339 @@
+{
+  "format": "icarus.workflow-g3-8a-activation-contract-repair-positive-cases/1",
+  "ref": {
+    "id": "icarus.workflow-g3-8a-activation-contract-repair-positive-cases",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-g3-8a-activation-contract-repair-positive-cases:1\n",
+  "hash": "sha256:78b8dcfee6e8a03bf094f26148f8a7f6e98880495f346a4fbabd18509b8077d2",
+  "payload": {
+    "format": "icarus.workflow-g3-8a-activation-contract-repair-positive-cases/1",
+    "case_count": 9,
+    "cases": [
+      {
+        "case_id": "first-applied-absent-pointer",
+        "scenario": {
+          "format": "icarus.workflow-feature-release-activation-repair-scenario/1",
+          "case_id": "first-applied-absent-pointer",
+          "invocation_kind": "submit",
+          "existing_command_state": "absent",
+          "submitted_domain_request": "exact",
+          "requested_pointer_state": "absent",
+          "preflight_outcome": "accepted",
+          "pointer_cas_outcome": "matched",
+          "integrity_state": "trusted",
+          "fault_point": "none"
+        },
+        "expected": {
+          "format": "icarus.workflow-feature-release-activation-repair-scenario-result/1",
+          "outcome": "committed",
+          "code": "activation_applied",
+          "invocation_disposition": "applied",
+          "canonical_terminal_disposition": "applied",
+          "canonical_result_action": "written",
+          "receipt": "original_transition_receipt",
+          "command_state_after": "terminal_applied",
+          "pointer_transition_count": 1,
+          "invocation_append_count": 1,
+          "events": [
+            "authenticate:attempt_started",
+            "authenticate:phase_succeeded",
+            "validate:phase_succeeded",
+            "preflight:phase_succeeded",
+            "activation_transaction:activation_transaction_started",
+            "activation_transaction:activation_committed",
+            "finalize:terminal_result_committed"
+          ],
+          "preflight_reexecuted": true,
+          "terminal_fact_trusted": true
+        }
+      },
+      {
+        "case_id": "first-applied-present-pointer",
+        "scenario": {
+          "format": "icarus.workflow-feature-release-activation-repair-scenario/1",
+          "case_id": "first-applied-present-pointer",
+          "invocation_kind": "submit",
+          "existing_command_state": "absent",
+          "submitted_domain_request": "exact",
+          "requested_pointer_state": "present",
+          "preflight_outcome": "accepted",
+          "pointer_cas_outcome": "matched",
+          "integrity_state": "trusted",
+          "fault_point": "none"
+        },
+        "expected": {
+          "format": "icarus.workflow-feature-release-activation-repair-scenario-result/1",
+          "outcome": "committed",
+          "code": "activation_applied",
+          "invocation_disposition": "applied",
+          "canonical_terminal_disposition": "applied",
+          "canonical_result_action": "written",
+          "receipt": "original_transition_receipt",
+          "command_state_after": "terminal_applied",
+          "pointer_transition_count": 1,
+          "invocation_append_count": 1,
+          "events": [
+            "authenticate:attempt_started",
+            "authenticate:phase_succeeded",
+            "validate:phase_succeeded",
+            "preflight:phase_succeeded",
+            "activation_transaction:activation_transaction_started",
+            "activation_transaction:activation_committed",
+            "finalize:terminal_result_committed"
+          ],
+          "preflight_reexecuted": true,
+          "terminal_fact_trusted": true
+        }
+      },
+      {
+        "case_id": "exact-replay-applied",
+        "scenario": {
+          "format": "icarus.workflow-feature-release-activation-repair-scenario/1",
+          "case_id": "exact-replay-applied",
+          "invocation_kind": "submit",
+          "existing_command_state": "terminal_applied",
+          "submitted_domain_request": "exact",
+          "requested_pointer_state": "absent",
+          "preflight_outcome": "not_run",
+          "pointer_cas_outcome": "not_run",
+          "integrity_state": "trusted",
+          "fault_point": "none"
+        },
+        "expected": {
+          "format": "icarus.workflow-feature-release-activation-repair-scenario-result/1",
+          "outcome": "committed",
+          "code": "activation_duplicate",
+          "invocation_disposition": "duplicate",
+          "canonical_terminal_disposition": "applied",
+          "canonical_result_action": "referenced",
+          "receipt": "original_transition_receipt",
+          "command_state_after": "terminal_applied",
+          "pointer_transition_count": 0,
+          "invocation_append_count": 1,
+          "events": [
+            "authenticate:attempt_started",
+            "authenticate:phase_succeeded",
+            "validate:phase_succeeded",
+            "finalize:terminal_replayed"
+          ],
+          "preflight_reexecuted": false,
+          "terminal_fact_trusted": true
+        }
+      },
+      {
+        "case_id": "first-failed",
+        "scenario": {
+          "format": "icarus.workflow-feature-release-activation-repair-scenario/1",
+          "case_id": "first-failed",
+          "invocation_kind": "submit",
+          "existing_command_state": "absent",
+          "submitted_domain_request": "exact",
+          "requested_pointer_state": "absent",
+          "preflight_outcome": "failed",
+          "pointer_cas_outcome": "not_run",
+          "integrity_state": "trusted",
+          "fault_point": "none"
+        },
+        "expected": {
+          "format": "icarus.workflow-feature-release-activation-repair-scenario-result/1",
+          "outcome": "committed",
+          "code": "activation_failed",
+          "invocation_disposition": "failed",
+          "canonical_terminal_disposition": "failed",
+          "canonical_result_action": "written",
+          "receipt": null,
+          "command_state_after": "terminal_failed",
+          "pointer_transition_count": 0,
+          "invocation_append_count": 1,
+          "events": [
+            "authenticate:attempt_started",
+            "authenticate:phase_succeeded",
+            "validate:phase_succeeded",
+            "preflight:pre_transaction_failed",
+            "finalize:terminal_result_committed"
+          ],
+          "preflight_reexecuted": true,
+          "terminal_fact_trusted": true
+        }
+      },
+      {
+        "case_id": "exact-replay-failed",
+        "scenario": {
+          "format": "icarus.workflow-feature-release-activation-repair-scenario/1",
+          "case_id": "exact-replay-failed",
+          "invocation_kind": "submit",
+          "existing_command_state": "terminal_failed",
+          "submitted_domain_request": "exact",
+          "requested_pointer_state": "absent",
+          "preflight_outcome": "not_run",
+          "pointer_cas_outcome": "not_run",
+          "integrity_state": "trusted",
+          "fault_point": "none"
+        },
+        "expected": {
+          "format": "icarus.workflow-feature-release-activation-repair-scenario-result/1",
+          "outcome": "committed",
+          "code": "activation_duplicate",
+          "invocation_disposition": "duplicate",
+          "canonical_terminal_disposition": "failed",
+          "canonical_result_action": "referenced",
+          "receipt": null,
+          "command_state_after": "terminal_failed",
+          "pointer_transition_count": 0,
+          "invocation_append_count": 1,
+          "events": [
+            "authenticate:attempt_started",
+            "authenticate:phase_succeeded",
+            "validate:phase_succeeded",
+            "finalize:terminal_replayed"
+          ],
+          "preflight_reexecuted": false,
+          "terminal_fact_trusted": true
+        }
+      },
+      {
+        "case_id": "same-key-domain-drift-conflict",
+        "scenario": {
+          "format": "icarus.workflow-feature-release-activation-repair-scenario/1",
+          "case_id": "same-key-domain-drift-conflict",
+          "invocation_kind": "submit",
+          "existing_command_state": "pending_clean",
+          "submitted_domain_request": "drift",
+          "requested_pointer_state": "absent",
+          "preflight_outcome": "not_run",
+          "pointer_cas_outcome": "not_run",
+          "integrity_state": "trusted",
+          "fault_point": "none"
+        },
+        "expected": {
+          "format": "icarus.workflow-feature-release-activation-repair-scenario-result/1",
+          "outcome": "committed",
+          "code": "idempotency_conflict",
+          "invocation_disposition": "conflict",
+          "canonical_terminal_disposition": null,
+          "canonical_result_action": "none",
+          "receipt": null,
+          "command_state_after": "pending_clean",
+          "pointer_transition_count": 0,
+          "invocation_append_count": 1,
+          "events": [
+            "authenticate:attempt_started",
+            "authenticate:phase_succeeded",
+            "validate:domain_request_conflicted"
+          ],
+          "preflight_reexecuted": false,
+          "terminal_fact_trusted": false
+        }
+      },
+      {
+        "case_id": "repeated-same-key-domain-drift-conflict",
+        "scenario": {
+          "format": "icarus.workflow-feature-release-activation-repair-scenario/1",
+          "case_id": "repeated-same-key-domain-drift-conflict",
+          "invocation_kind": "submit",
+          "existing_command_state": "terminal_applied",
+          "submitted_domain_request": "drift",
+          "requested_pointer_state": "absent",
+          "preflight_outcome": "not_run",
+          "pointer_cas_outcome": "not_run",
+          "integrity_state": "trusted",
+          "fault_point": "none"
+        },
+        "expected": {
+          "format": "icarus.workflow-feature-release-activation-repair-scenario-result/1",
+          "outcome": "committed",
+          "code": "idempotency_conflict",
+          "invocation_disposition": "conflict",
+          "canonical_terminal_disposition": "applied",
+          "canonical_result_action": "referenced",
+          "receipt": null,
+          "command_state_after": "terminal_applied",
+          "pointer_transition_count": 0,
+          "invocation_append_count": 1,
+          "events": [
+            "authenticate:attempt_started",
+            "authenticate:phase_succeeded",
+            "validate:domain_request_conflicted"
+          ],
+          "preflight_reexecuted": false,
+          "terminal_fact_trusted": true
+        }
+      },
+      {
+        "case_id": "pointer-cas-conflict",
+        "scenario": {
+          "format": "icarus.workflow-feature-release-activation-repair-scenario/1",
+          "case_id": "pointer-cas-conflict",
+          "invocation_kind": "submit",
+          "existing_command_state": "absent",
+          "submitted_domain_request": "exact",
+          "requested_pointer_state": "absent",
+          "preflight_outcome": "accepted",
+          "pointer_cas_outcome": "conflict",
+          "integrity_state": "trusted",
+          "fault_point": "none"
+        },
+        "expected": {
+          "format": "icarus.workflow-feature-release-activation-repair-scenario-result/1",
+          "outcome": "committed",
+          "code": "pointer_cas_conflict",
+          "invocation_disposition": "conflict",
+          "canonical_terminal_disposition": "conflict",
+          "canonical_result_action": "written",
+          "receipt": null,
+          "command_state_after": "terminal_pointer_conflict",
+          "pointer_transition_count": 0,
+          "invocation_append_count": 1,
+          "events": [
+            "authenticate:attempt_started",
+            "authenticate:phase_succeeded",
+            "validate:phase_succeeded",
+            "preflight:phase_succeeded",
+            "activation_transaction:activation_transaction_started",
+            "activation_transaction:pointer_cas_conflicted",
+            "finalize:terminal_result_committed"
+          ],
+          "preflight_reexecuted": true,
+          "terminal_fact_trusted": true
+        }
+      },
+      {
+        "case_id": "exact-replay-pointer-cas-conflict",
+        "scenario": {
+          "format": "icarus.workflow-feature-release-activation-repair-scenario/1",
+          "case_id": "exact-replay-pointer-cas-conflict",
+          "invocation_kind": "submit",
+          "existing_command_state": "terminal_pointer_conflict",
+          "submitted_domain_request": "exact",
+          "requested_pointer_state": "absent",
+          "preflight_outcome": "not_run",
+          "pointer_cas_outcome": "not_run",
+          "integrity_state": "trusted",
+          "fault_point": "none"
+        },
+        "expected": {
+          "format": "icarus.workflow-feature-release-activation-repair-scenario-result/1",
+          "outcome": "committed",
+          "code": "activation_duplicate",
+          "invocation_disposition": "duplicate",
+          "canonical_terminal_disposition": "conflict",
+          "canonical_result_action": "referenced",
+          "receipt": null,
+          "command_state_after": "terminal_pointer_conflict",
+          "pointer_transition_count": 0,
+          "invocation_append_count": 1,
+          "events": [
+            "authenticate:attempt_started",
+            "authenticate:phase_succeeded",
+            "validate:phase_succeeded",
+            "finalize:terminal_replayed"
+          ],
+          "preflight_reexecuted": false,
+          "terminal_fact_trusted": true
+        }
+      }
+    ]
+  }
+}

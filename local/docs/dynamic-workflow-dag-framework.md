@@ -4256,6 +4256,45 @@ After that prerequisite is ready, one `BEGIN IMMEDIATE` defines the Activation a
 
 A crash before commit rolls back pointer, lifecycle, audit, and result together, so the same caller key can retry against unchanged facts. A crash after commit recovers from the canonical receipt and appends a duplicate or recovery Invocation/Event without reapplying the pointer transition. Invocation and Event streams are append-only, adjacent, domain-separated hash chains; recovery validates them before trusting a terminal result. The Schema prerequisite is generated, constrained, migrated, and verified. Activation remains prohibited until G3.9 implements and verifies the closed Activation vertical slice; Schema `3` alone authorizes no Activation DML or active-pointer mutation.
 
+#### G3.8A Activation Failure / Replay Contract Repair
+
+G3.9 对真实 Database Schema `3` 做实施映射时确认 G3.8/G1.5 仍有四个持久化矛盾：`failed` command 强制 receipt 为 null，但旧文字把所有 exact replay 概括为 duplicate + canonical receipt；command header 没有 schema-bound canonical terminal result/Invocation identity；Retention observation insert trigger 在 rejection 前直接 abort；caller claim 的 owner-consistent Release FK 同样会阻止 owner rejection audit。G3.8A 是这些语义的唯一修复合同，在 failure/replay、caller claim/verified fact 和恢复范围内取代上方 G3.8 的概括性句子。它不修改 G3.3/G3.5/G3.6 composition、G1.5 Release/pointer/Retention保护原则、G2 sealed identity或任何Production实现。
+
+机器权威位于 `icarus.workflow-contract-pack-g3-8a-activation-contract-repair@1.0.0`。状态固定为 `SCHEMA_REPAIR_REQUIRED`、`production_reachable=false`、current Database Schema `3`、required Database Schema `4`；它不是 G1.6 Schema实现，也不是 G3.9 Activation Contract Pack。G3.9在G1.6完成前固定为`BLOCKED_BY_G1_6`。
+
+Receipt 只证明已经提交的 active-pointer transition，不是所有 terminal result 的通用回执。Disposition、canonical terminal result、receipt 与追加规则固定如下：
+
+| 请求 | Invocation disposition | command terminal disposition | canonical terminal result | receipt | pointer/Release | Invocation/Event |
+| --- | --- | --- | --- | --- | --- | --- |
+| first applied | `applied` | `applied` | 新建并由header绑定 | 必须存在 | exactly once transition | 追加一个Invocation；authenticate/validate/preflight/transaction commit/finalize Events |
+| exact replay of applied | `duplicate` | 保持`applied` | typed引用原terminal result | 原transition receipt逐字节/逐hash返回 | 不重放 | 每次追加一个Invocation与terminal replay Events |
+| first failed | `failed` | `failed` | 新建并由header绑定 | null | 不修改 | 追加一个Invocation、真实pre-transaction failure与terminal result Events |
+| exact replay of failed | `duplicate` | 保持`failed` | typed引用原failed terminal result | null | 不修改 | 每次追加一个Invocation与terminal replay Events |
+| same-key domain drift | `conflict` | header不变 | 不创建/覆盖canonical result；header已terminal时只可typed引用其identity | null | 不修改 | 每次仍追加一个conflict Invocation与domain-conflict Event |
+| repeated same-key domain drift | `conflict`，不是`duplicate` | header不变 | 同上 | null | 不修改 | 每次追加；因为submitted domain从未等于command-bound domain |
+| first pointer CAS conflict | `conflict` | `conflict` | 新建canonical pointer-conflict terminal result | null | 不修改 | 追加一个Invocation、observed pointer fact、CAS conflict与terminal Events |
+| exact replay of pointer CAS conflict | `duplicate` | 保持`conflict` | typed引用原pointer-conflict terminal result | null | 不重验/不修改 | 每次追加一个Invocation与terminal replay Events |
+
+`duplicate`只表示submitted domain request逐字等于command-bound request且command已有可信terminal result。Applied duplicate可以返回原receipt，因为该receipt仍描述原已提交transition；failed、same-key drift conflict、pointer conflict及其replay永远不能伪造receipt。Same-key drift不因请求内容重复而变成duplicate。
+
+Canonical request Value是caller claims的唯一精确权威，保存Feature、target/previous Release、expected pointer、G3.6 input和Retention observation claims。Command insert只约束caller key、schema-bound request Value、domain hash、pending shape与时间/row-version；不得把caller claim直接作为non-null typed Release/Retention FK。`verified_*` Release、Retention、compatibility与observed-pointer group只能在对应authoritative preflight成功后按nullable all-or-none typed FK出现，且只能pending期间null-to-exact单调填充。Owner/lifecycle/resource/G3.6/Retention rejection使用已验证到的事实前缀terminalize真实failed audit；未验证事实保持null。Event target/previous Release binding也改为nullable verified group，不能为早期失败伪造typed identity。
+
+Database Schema `4` / G1.6必须完成以下最小物理变化；exact column/FK/UK/check/trigger/query清单以G3.8A machine artifact为权威：
+
+1. 重建`workflow_feature_release_activation_commands`，将caller target/previous/Retention与必填compatibility列替换为canonical request + nullable `verified_*` groups；增加`observed_pointer_*`、`terminal_disposition=applied|failed|conflict`、schema-bound `canonical_terminal_result_*`和`canonical_terminal_invocation_id/no/hash`；lifecycle扩展为`pending|applied|failed|conflict`。
+2. command header通过deferred composite FK绑定一个immutable Invocation terminal-binding UK，覆盖command/domain/submitted hash、terminal disposition、Invocation id/no/hash及result Value id/hash/schema id/hash。Pending无任何terminal/receipt字段；terminal只允许一次相邻row-version跃迁并在此后全部不可变。
+3. 重建Activation Invocations，增加`invocation_kind=submit|recovery`和nullable schema-bound `referenced_terminal_result_*`。Original terminal Invocation的reference等于自己的result；duplicate必须等于header canonical result；domain drift conflict不得terminalize header；pointer conflict submitted hash等于bound hash并可成为canonical terminal result。
+4. 重建Activation Events，使typed target/previous identity成为nullable verified group，并增加`domain_request_conflicted`、`pointer_cas_conflicted`、`terminal_result_committed`、`terminal_replayed`与`integrity_failed` closed event types；phase/type/failure/detail/typed-fact mapping、相邻hash chain和UPDATE/DELETE prohibition继续由SQLite执行。
+5. 删除`trg:activation_commands:retention_observation_insert`的caller-claim insert rejection；改为pending verified-fact单调约束，并只在`pending -> applied` terminalization验证target/previous exact owner Release、resource/lifecycle、held Retention observation、expected/observed pointer和最终pointer事实。`pending -> failed|conflict`要求canonical terminal result但receipt/applied pointer必须null，不要求未通过的verified facts。
+6. `workflow_feature_releases`的owner parent、single-active、lifecycle/identity保护，`workflow_feature_active_releases`的owner FK/target-active/adjacent CAS/delete保护，以及Retention active/draining release/delete保护保持不变。Retention command FK只绑定immutable published Release/Closure identity，不把mutable status/row-version放入FK。
+7. 固定query intents为caller idempotency + terminal result lookup、Invocation history、Event replay、pending scan、pointer CAS、Release/resource/lifecycle preflight和Retention identity/status/row-version preflight。Migration、Manifest、dependency manifest、schema lint、constraint-trigger与query-plan fixtures必须覆盖全部变化。
+
+Schema `3 -> 4`是Production不可达施工期rebuild：upgrade只允许四个Activation/active-pointer relation均为空，否则fail closed并丢弃隔离test DB，禁止猜测或转换既有Schema 3 audit。Registry/Release/resource/Retention/Publisher等非Activation关系保持；不得宣称对construction-only Schema 3 Activation数据提供生产兼容。G1 identities及current G3.1/G3.3/G3.5/G3.6/G3.7/G3.8A pins按既有Working治理确定性级联，G0.6/G0.10 historical source与G2 sealed artifacts保持byte-unchanged。Current G3.6仍绑定Schema `3`且保持read-only；G1.6完成后才把current compatibility identity重建到Schema `4`。
+
+Activation error precedence固定为strict bytes -> removed field -> unknown field -> closed schema -> request hash -> authenticated actor/session -> caller-key domain drift -> terminal integrity -> target Release presence/identity/owner/resource set -> G3.6 -> target lifecycle -> previous Release presence/identity/owner/lifecycle -> target Retention presence/identity/status/row-version -> previous Retention同序 -> pointer CAS -> persistence collision。G3.6内部继续逐字使用其20项既有precedence，不由Activation重排或复制。
+
+Recovery先bounded scan pending，再load header-bound terminal Invocation/result/receipt，strict-parse并复算canonical Value/hash/schema，依次验证Invocation和Event完整hash chain后才信任terminal fact。Clean pending且无transition evidence时可在一个`BEGIN IMMEDIATE`重跑exact preflight并产生首次canonical result；pending却已有transition/terminal evidence属于tamper并fail closed。Commit前任一fault使request/verified facts、Release/pointer、receipt/result、Invocation/Event与terminalization全rollback。Commit后response/receipt丢失时reopen真实DB、完成上述验证、追加一个recovery duplicate及`recovery_started/recovery_succeeded/terminal_replayed`，不得重复pointer DML。任何command/result/receipt/Invocation/Event hash或binding tamper均fail closed且不追加伪造audit。
+
 Feature Release 与新创建入口的激活指针必须独立持久化，不能用安装目录或当前文件内容代替：
 
 ```text

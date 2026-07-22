@@ -1,0 +1,226 @@
+{
+  "format": "icarus.workflow-feature-release-activation-repair-scenario-schema/1",
+  "ref": {
+    "id": "icarus.workflow-feature-release-activation-repair-scenario-schema",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-feature-release-activation-repair-scenario-schema:1\n",
+  "hash": "sha256:1d3ab9b50d2c5576cf903075b53daeac74577491f677d2bdcc569b34a1450ee6",
+  "payload": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://icarus.local/schemas/workflow-feature-release-activation-repair-scenario/1",
+    "title": "G3.8A Activation Repair Scenario and Result v1",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "case_id",
+      "scenario",
+      "expected"
+    ],
+    "properties": {
+      "case_id": {
+        "type": "string",
+        "minLength": 1
+      },
+      "scenario": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "format",
+          "case_id",
+          "invocation_kind",
+          "existing_command_state",
+          "submitted_domain_request",
+          "requested_pointer_state",
+          "preflight_outcome",
+          "pointer_cas_outcome",
+          "integrity_state",
+          "fault_point"
+        ],
+        "properties": {
+          "format": {
+            "const": "icarus.workflow-feature-release-activation-repair-scenario/1"
+          },
+          "case_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "invocation_kind": {
+            "enum": [
+              "submit",
+              "recovery"
+            ]
+          },
+          "existing_command_state": {
+            "enum": [
+              "absent",
+              "pending_clean",
+              "terminal_applied",
+              "terminal_failed",
+              "terminal_pointer_conflict"
+            ]
+          },
+          "submitted_domain_request": {
+            "enum": [
+              "exact",
+              "drift"
+            ]
+          },
+          "requested_pointer_state": {
+            "enum": [
+              "absent",
+              "present"
+            ]
+          },
+          "preflight_outcome": {
+            "enum": [
+              "accepted",
+              "failed",
+              "not_run"
+            ]
+          },
+          "pointer_cas_outcome": {
+            "enum": [
+              "matched",
+              "conflict",
+              "not_run"
+            ]
+          },
+          "integrity_state": {
+            "enum": [
+              "trusted",
+              "tampered_command_result_binding",
+              "tampered_receipt",
+              "tampered_invocation_chain",
+              "tampered_event_chain",
+              "pending_with_transition_evidence"
+            ]
+          },
+          "fault_point": {
+            "enum": [
+              "none",
+              "before_commit",
+              "after_commit_before_response"
+            ]
+          }
+        }
+      },
+      "expected": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "format",
+          "outcome",
+          "code",
+          "invocation_disposition",
+          "canonical_terminal_disposition",
+          "canonical_result_action",
+          "receipt",
+          "command_state_after",
+          "pointer_transition_count",
+          "invocation_append_count",
+          "events",
+          "preflight_reexecuted",
+          "terminal_fact_trusted"
+        ],
+        "properties": {
+          "format": {
+            "const": "icarus.workflow-feature-release-activation-repair-scenario-result/1"
+          },
+          "outcome": {
+            "enum": [
+              "committed",
+              "rolled_back",
+              "fail_closed"
+            ]
+          },
+          "code": {
+            "type": "string",
+            "minLength": 1
+          },
+          "invocation_disposition": {
+            "anyOf": [
+              {
+                "enum": [
+                  "applied",
+                  "duplicate",
+                  "failed",
+                  "conflict"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "canonical_terminal_disposition": {
+            "anyOf": [
+              {
+                "enum": [
+                  "applied",
+                  "failed",
+                  "conflict"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "canonical_result_action": {
+            "enum": [
+              "written",
+              "referenced",
+              "none"
+            ]
+          },
+          "receipt": {
+            "anyOf": [
+              {
+                "const": "original_transition_receipt"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "command_state_after": {
+            "enum": [
+              "absent",
+              "pending_clean",
+              "terminal_applied",
+              "terminal_failed",
+              "terminal_pointer_conflict"
+            ]
+          },
+          "pointer_transition_count": {
+            "enum": [
+              0,
+              1
+            ]
+          },
+          "invocation_append_count": {
+            "enum": [
+              0,
+              1
+            ]
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "preflight_reexecuted": {
+            "type": "boolean"
+          },
+          "terminal_fact_trusted": {
+            "type": "boolean"
+          }
+        }
+      }
+    }
+  }
+}

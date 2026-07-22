@@ -1,0 +1,51 @@
+{
+  "format": "icarus.workflow-feature-release-activation-contract-repair-domain-separators/1",
+  "ref": {
+    "id": "icarus.workflow-feature-release-activation-contract-repair-domain-separators",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-feature-release-activation-contract-repair-domain-separators:1\n",
+  "hash": "sha256:10fccabcb94e92dccce221164f9b72907d292e740c669206149796ca92dd1007",
+  "payload": {
+    "format": "icarus.workflow-feature-release-activation-contract-repair-domain-separators/1",
+    "domains": [
+      {
+        "object": "repair_contract",
+        "domain_separator": "icarus:workflow-feature-release-activation-contract-repair:1\n"
+      },
+      {
+        "object": "repair_schema",
+        "domain_separator": "icarus:workflow-feature-release-activation-contract-repair-schema:1\n"
+      },
+      {
+        "object": "scenario_schema",
+        "domain_separator": "icarus:workflow-feature-release-activation-repair-scenario-schema:1\n"
+      },
+      {
+        "object": "negative_cases_schema",
+        "domain_separator": "icarus:workflow-feature-release-activation-repair-negative-cases-schema:1\n"
+      },
+      {
+        "object": "scenario_result",
+        "domain_separator": "icarus:workflow-feature-release-activation-repair-scenario-result:1\n"
+      },
+      {
+        "object": "positive_cases",
+        "domain_separator": "icarus:workflow-g3-8a-activation-contract-repair-positive-cases:1\n"
+      },
+      {
+        "object": "negative_cases",
+        "domain_separator": "icarus:workflow-g3-8a-activation-contract-repair-negative-cases:1\n"
+      },
+      {
+        "object": "fault_cases",
+        "domain_separator": "icarus:workflow-g3-8a-activation-contract-repair-fault-cases:1\n"
+      },
+      {
+        "object": "contract_pack",
+        "domain_separator": "icarus:workflow-contract-pack-g3-8a-activation-contract-repair:1\n"
+      }
+    ]
+  }
+}
