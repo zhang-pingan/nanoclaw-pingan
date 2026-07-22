@@ -1,0 +1,206 @@
+{
+  "format": "icarus.workflow-retention-executor-abi-preflight-profile-schema/1",
+  "ref": {
+    "id": "icarus.workflow-retention-executor-abi-preflight-profile-schema",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-retention-executor-abi-preflight-profile-schema:1\n",
+  "payload": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://icarus.local/schemas/workflow-retention-executor-abi-preflight-profile/1",
+    "title": "WorkflowRetentionExecutorAbiPreflightProfileV1",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "format",
+      "ref",
+      "resolution_mode",
+      "registry_snapshot_verifier",
+      "registry_resource_verifier",
+      "compatibility_rules",
+      "retention_policy_ref",
+      "retention_policy_hash",
+      "run_protocol_ref",
+      "run_protocol_hash",
+      "executor_abi_ref",
+      "executor_abi_hash",
+      "retention_handle_kind",
+      "retention_root_kind",
+      "error_precedence",
+      "result_schema",
+      "deterministic",
+      "read_only"
+    ],
+    "properties": {
+      "format": {
+        "const": "icarus.workflow-retention-executor-abi-preflight-profile/1"
+      },
+      "ref": {
+        "$ref": "#/$defs/versioned_ref"
+      },
+      "resolution_mode": {
+        "const": "immutable_exact_only"
+      },
+      "registry_snapshot_verifier": {
+        "const": "g3_3_snapshot_closure_preflight"
+      },
+      "registry_resource_verifier": {
+        "const": "g3_5_exact_resource_query"
+      },
+      "compatibility_rules": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "run_protocol_major",
+          "executor_abi_major",
+          "registry_schema_version",
+          "database_schema_version"
+        ],
+        "properties": {
+          "run_protocol_major": {
+            "const": 1
+          },
+          "executor_abi_major": {
+            "const": 1
+          },
+          "registry_schema_version": {
+            "const": 1
+          },
+          "database_schema_version": {
+            "const": 1
+          }
+        }
+      },
+      "retention_policy_ref": {
+        "$ref": "#/$defs/versioned_ref"
+      },
+      "retention_policy_hash": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      },
+      "run_protocol_ref": {
+        "$ref": "#/$defs/versioned_ref"
+      },
+      "run_protocol_hash": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      },
+      "executor_abi_ref": {
+        "$ref": "#/$defs/versioned_ref"
+      },
+      "executor_abi_hash": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      },
+      "retention_handle_kind": {
+        "const": "published"
+      },
+      "retention_root_kind": {
+        "const": "feature_release"
+      },
+      "error_precedence": {
+        "type": "array",
+        "minItems": 20,
+        "maxItems": 20,
+        "prefixItems": [
+          {
+            "const": "preflight_input_invalid"
+          },
+          {
+            "const": "preflight_side_effect_requested"
+          },
+          {
+            "const": "snapshot_missing"
+          },
+          {
+            "const": "snapshot_hash_mismatch"
+          },
+          {
+            "const": "snapshot_binding_mismatch"
+          },
+          {
+            "const": "closure_root_missing"
+          },
+          {
+            "const": "closure_root_hash_mismatch"
+          },
+          {
+            "const": "closure_mismatch"
+          },
+          {
+            "const": "execution_artifact_missing"
+          },
+          {
+            "const": "execution_artifact_hash_mismatch"
+          },
+          {
+            "const": "execution_artifact_mismatch"
+          },
+          {
+            "const": "executor_implementation_missing"
+          },
+          {
+            "const": "executor_implementation_hash_mismatch"
+          },
+          {
+            "const": "executor_implementation_mismatch"
+          },
+          {
+            "const": "artifact_binding_mismatch"
+          },
+          {
+            "const": "core_compatibility_mismatch"
+          },
+          {
+            "const": "run_protocol_mismatch"
+          },
+          {
+            "const": "executor_abi_mismatch"
+          },
+          {
+            "const": "retention_policy_mismatch"
+          },
+          {
+            "const": "retention_eligibility_mismatch"
+          }
+        ],
+        "items": false
+      },
+      "result_schema": {
+        "const": "closed"
+      },
+      "deterministic": {
+        "const": true
+      },
+      "read_only": {
+        "const": true
+      }
+    },
+    "$defs": {
+      "versioned_ref": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "version"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._:/-]{0,253}[A-Za-z0-9])?$"
+          },
+          "version": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,62}[A-Za-z0-9])?$"
+          }
+        }
+      }
+    }
+  },
+  "hash": "sha256:00213f6594d5ad3f4177d67c5699ab87d1d1b54b0bb9d3ce5ceb29be7bb13466"
+}

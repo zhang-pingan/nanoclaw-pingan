@@ -1,0 +1,113 @@
+{
+  "format": "icarus.workflow-contract-pack-g3-retention-executor-abi-preflight/1",
+  "ref": {
+    "id": "icarus.workflow-contract-pack-g3-retention-executor-abi-preflight",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-contract-pack-g3-retention-executor-abi-preflight:1\n",
+  "payload": {
+    "gate": "G3",
+    "slice": "G3.6",
+    "status": "DONE",
+    "g3_status": "IN_PROGRESS",
+    "upstream_g3_3_pack_hash": "sha256:adcaa77339512650d8aa8af1c027d6e145419ada47e44733c424db2b0cb923da",
+    "upstream_g3_5_pack_hash": "sha256:516f0fffdab8e05438649e8936a78e0fedac5eb9300abcb0ff232f5204e793dd",
+    "upstream_g1_schema_root_hash": "sha256:769800fbca754586f1eda90c28e876255a6af3fbe452c397a4dabfd4aec5b756",
+    "publisher_persistence_readiness": "PUBLISHER_BLOCKED_BY_SCHEMA",
+    "publisher_schema_gap": "publisher_command_invocation_review_approval_and_recovery_audit",
+    "resolution_mode": "immutable_exact_only",
+    "snapshot_verifier_reused": "G3.3",
+    "exact_resource_query_reused": "G3.5",
+    "result_schema": "closed",
+    "deterministic": true,
+    "read_only": true,
+    "retention_handle_created": false,
+    "gc_or_delete_performed": false,
+    "publication_state_updated": false,
+    "publisher_write_transaction_implemented": false,
+    "artifacts": [
+      {
+        "path": "registry/workflow-retention-executor-abi-preflight-profile-schema@1.json",
+        "format": "icarus.workflow-retention-executor-abi-preflight-profile-schema/1",
+        "ref": {
+          "id": "icarus.workflow-retention-executor-abi-preflight-profile-schema",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-retention-executor-abi-preflight-profile-schema:1\n",
+        "hash": "sha256:00213f6594d5ad3f4177d67c5699ab87d1d1b54b0bb9d3ce5ceb29be7bb13466"
+      },
+      {
+        "path": "registry/workflow-retention-executor-abi-preflight-profile@1.json",
+        "format": "icarus.workflow-retention-executor-abi-preflight-profile/1",
+        "ref": {
+          "id": "icarus.workflow-retention-executor-abi-preflight-profile",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-retention-executor-abi-preflight-profile:1\n",
+        "hash": "sha256:257eb47d398159d83b3dc43d554fc9838e4a6023a1e41e9b7b178db128648a81"
+      },
+      {
+        "path": "registry/workflow-retention-executor-abi-preflight-input-schema@1.json",
+        "format": "icarus.workflow-retention-executor-abi-preflight-input-schema/1",
+        "ref": {
+          "id": "icarus.workflow-retention-executor-abi-preflight-input-schema",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-retention-executor-abi-preflight-input-schema:1\n",
+        "hash": "sha256:0815fda4db829f569e65b89fca97aa4850bac2935e0d579deb86a9cea48c3920"
+      },
+      {
+        "path": "registry/workflow-retention-executor-abi-preflight-result-schema@1.json",
+        "format": "icarus.workflow-retention-executor-abi-preflight-result-schema/1",
+        "ref": {
+          "id": "icarus.workflow-retention-executor-abi-preflight-result-schema",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-retention-executor-abi-preflight-result-schema:1\n",
+        "hash": "sha256:12078f40c83a7c8086bb064631d298f334587571f091c87dd57336e67b0ec320"
+      },
+      {
+        "path": "conformance/g3-retention-executor-abi-preflight/positive-cases.json",
+        "format": "icarus.workflow-g3-retention-executor-abi-positive-cases/1",
+        "ref": {
+          "id": "icarus.workflow-g3-retention-executor-abi-positive-cases",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-g3-retention-executor-abi-positive-cases:1\n",
+        "hash": "sha256:1d96578aac593f8720e8578617a2766adb3e8f6498fd4b8e07e60550a2ee197a"
+      },
+      {
+        "path": "conformance/g3-retention-executor-abi-preflight/negative-cases.json",
+        "format": "icarus.workflow-g3-retention-executor-abi-negative-cases/1",
+        "ref": {
+          "id": "icarus.workflow-g3-retention-executor-abi-negative-cases",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-g3-retention-executor-abi-negative-cases:1\n",
+        "hash": "sha256:79f9c9cafef80ed7650370c3d8bf5950d66ebdb81b56aa9e718bd7a1043158b6"
+      },
+      {
+        "path": "registry/workflow-retention-executor-abi-preflight-domain-separators@1.json",
+        "format": "icarus.workflow-retention-executor-abi-preflight-domain-separators/1",
+        "ref": {
+          "id": "icarus.workflow-retention-executor-abi-preflight-domain-separators",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-retention-executor-abi-preflight-domain-separators:1\n",
+        "hash": "sha256:0010bcf5ffda3be3a99f7ddfa0596d5dd692815a6c2ba8fb2d18f526fa3e1377"
+      }
+    ],
+    "positive_case_count": 1,
+    "negative_case_count": 5,
+    "g4_through_g9_status": "NOT_READY"
+  },
+  "hash": "sha256:4331a1941a2e53d4c214b947bcc004d55502ed2decee94fac53d227e0d989508"
+}

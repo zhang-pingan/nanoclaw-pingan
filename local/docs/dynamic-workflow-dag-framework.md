@@ -4079,6 +4079,53 @@ resource_dependency_mismatch
 
 The result uses closed `icarus.workflow-registry-exact-resource-query-result/1`. Accepted results return only the verified semantic resource identity, owner, schema binding, publication state, exact dependencies, and parsed canonical content; rejected results return `resource=null`. Both branches set `read_only=true`. Installation timestamps, row versions, active pointers, launchability, and inferred compatibility are excluded, so identical Store facts and input produce byte-equivalent JSON. The query uses only the Store read/query surface and performs no transaction, DML, source read, snapshot mutation, Publish, Release, Retention, loader, or Activation work.
 
+G3.6 Retention / Executor ABI compatibility preflight is the final standalone read-only Publish preflight slice. Its closed input binds an exact Feature Release ref/hash and optional primary Execution Artifact, an exact Registry Snapshot ref/hash, the exact Closure ref/hash/root/member set, every `feature_execution_artifact` and `executor_implementation` in that Closure, one immutable Core Compatibility snapshot ref/hash, the Run Protocol ref/hash/major, Executor ABI ref/hash/major, and the exact Retention Policy plus proposed `published -> feature_release` root/member set. Every ref is an immutable `VersionedRef`; every hash is lowercase SHA-256. The input has no latest/range/alias/fallback, active pointer, launchability inference, Retention Handle id, GC selector, or publication selector.
+
+The Store implementation must call the existing G3.3 `preflightRegistrySnapshot` for Snapshot/Closure/transitive-member verification and G3.5 `queryExactRegistryResource` for the Closure root and every Artifact/Executor. It must not reproduce their SQL lookup, canonical Value, schema, owner, publication-state, dependency, Closure traversal, or error semantics. G3.6 additionally checks that the caller Closure hash is derived from the supplied exact root/member set, its ref/hash reproduces the Snapshot hash, the queried Artifact/Executor identities are exactly the corresponding typed Closure members, every Executor binds an existing Artifact hash and declared entry symbol, provider Feature Release matches that Artifact, and the optional primary Artifact matches the target Feature Release.
+
+Production v1 compatibility is closed to Registry Schema `1`, Database Schema `1`, Run Protocol major `1`, and Executor ABI major `1`. Run Protocol identity is `icarus.workflow-contract-pack-catalog-protocols@1.0.0` / `sha256:e4947c515a28b3baf6782a980db9c26d32612b3c6acd3cd04348e73bd54ff607`. Executor ABI v1 identity is `icarus.workflow-executor-abi@1.0.0` / `sha256:a111ddc602dfce1894eeb09951fb250dff41984ad2e67c9eb316beb698946902`, calculated over the frozen length-prefixed canonical JSON framing, invocation field set, and accepted/heartbeat/succeeded/failed/cancelled result union. The Core Compatibility hash binds its exact Core release/build, supported major arrays, Registry Schema and Database Schema facts; Snapshot Core/DB hashes must equal that same snapshot. The only accepted supported-major arrays are `[1]` and all Artifact/Executor `runtime_abi_major` values must equal `1`.
+
+Retention eligibility in this preflight is limited to the already-defined typed root rule: `handle_kind=published`, `root_kind=feature_release`, exact target release ref/hash, exact current Retention Policy `icarus.local-single-user-retention@1.0.0` / `sha256:3adc19f9a8ee92421faa349ec12e706f2d9862e90c0c74e53eb041794e2b805d`, and members equal to the Closure root plus every Closure member in unsigned ASCII identity order. Accepted output returns all verified bindings, `retention_root_eligible=true`, and `read_only=true`. Rejected output has `bindings=null` and `read_only=true`. G3.6 does not create a Retention Handle, run GC/delete, change publication state, create a Release, or implement Publisher/Activation.
+
+The first failing phase is deterministic and returns one code in this order:
+
+```text
+preflight_input_invalid
+preflight_side_effect_requested
+snapshot_missing
+snapshot_hash_mismatch
+snapshot_binding_mismatch
+closure_root_missing
+closure_root_hash_mismatch
+closure_mismatch
+execution_artifact_missing
+execution_artifact_hash_mismatch
+execution_artifact_mismatch
+executor_implementation_missing
+executor_implementation_hash_mismatch
+executor_implementation_mismatch
+artifact_binding_mismatch
+core_compatibility_mismatch
+run_protocol_mismatch
+executor_abi_mismatch
+retention_policy_mismatch
+retention_eligibility_mismatch
+```
+
+#### Publisher Persistence Readiness Audit
+
+The bounded G3.6 audit result is `PUBLISHER_BLOCKED_BY_SCHEMA`. Existing G1 schema is sufficient for immutable Registry content and the final typed graph: `workflow_values` holds schema-bound canonical values; `workflow_registry_resources`, dependencies, Closure manifests/members, and Snapshots preserve exact resource/closure identities; `workflow_feature_releases` preserves release, Execution Artifact, compatibility snapshot and staged lifecycle identity; `workflow_feature_release_resources` preserves the exact release resource set; and `workflow_registry_retention_handles` plus members provide typed Feature Release/Closure/Resource FKs and the `published` root mapping.
+
+G1 has no Publisher command boundary. `workflow_runtime_commands` is closed to the 13 Workflow control commands and exactly one Workflow/Run/Node/Retry/Effect/Blocker target. `runtime_capacity_admin_commands` is closed to the two deployment Capacity commands. Neither can legally store a Publisher request. No current table durably binds caller `(idempotency_domain,idempotency_key)` to a canonical Publish request hash; approved review ref/hash plus reviewer actor/session/expiry; source manifest, compiled plan, Execution Artifact, Closure and target Feature Release exact identities; a canonical deterministic receipt; every authenticated invocation's `applied | duplicate | conflict | failed` disposition; or append-only Publish crash/retry/recovery facts. A generic Value, untyped JSON, memory map, side table, derived guess, or caller-key omission cannot supply those missing constraints.
+
+The minimum prerequisite is an additive Publisher persistence schema package with three first-class objects:
+
+1. `workflow_publisher_commands`: unique caller idempotency domain/key, canonical schema-bound request Value/hash and domain request hash, approved review ref/hash, reviewer actor/session/approval-expiry, exact source/plan/Execution Artifact/Closure/target release identities, nullable applied Feature Release typed FK, canonical result Value/hash, lifecycle/finalization state, and timestamps.
+2. `workflow_publisher_command_invocations`: FK to the command, monotonic invocation number, submitted request hash, authenticated actor/session, durable `applied | duplicate | conflict | failed` disposition, exact result Value/hash, and decided/applied timestamps. Duplicate and conflict are invocation facts and must never be inferred from the eventual release row.
+3. `workflow_publisher_events`: append-only command/attempt/phase facts sufficient to distinguish pre-transaction failure, committed Publish, retry recovery, and terminal failure after a crash, with constrained event kind, exact related identities/result detail Value, timestamps, ordering, and hash-chain or equivalent immutable uniqueness.
+
+The existing Feature Release resource and Retention member tables remain authoritative and must not be duplicated. The prerequisite must add the three objects as an explicit physical-schema input while preserving historical G0.6/G0.10 artifacts, update the Normative Logical Schema coverage, typed FKs/CHECK/UK/index/query intents, canonical migration and `database_schema_version`, executable Schema Manifest/dependency manifest/lint/constraint/query-plan fixtures, and G1 root/physical/migration hashes. That identity change invalidates G3.1 and every later pack that pins the old G1 root/hash, including G3.3, G3.5 and G3.6; they must be deterministically regenerated or explicitly superseded without changing G2 sealed artifacts. The next implementation slice is therefore the minimum G1 Publisher idempotency/audit Schema prerequisite, not `WorkflowPublisher.publish`.
+
 Feature Release 与新创建入口的激活指针必须独立持久化，不能用安装目录或当前文件内容代替：
 
 ```text
