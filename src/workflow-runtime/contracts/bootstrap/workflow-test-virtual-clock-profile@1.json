@@ -1,0 +1,25 @@
+{
+  "format": "icarus.workflow-test-virtual-clock-profile/1",
+  "ref": {
+    "id": "icarus.workflow-test-virtual-clock-profile",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-test-virtual-clock-profile:1\n",
+  "payload": {
+    "format": "icarus.workflow-test-virtual-clock-profile/1",
+    "ref": {
+      "id": "icarus.workflow-test-virtual-clock-profile",
+      "version": "1.0.0"
+    },
+    "seed": "g4-virtual-clock-seed-0001",
+    "initial_time_ms": 1784764800000,
+    "tick_quantum_ms": 1,
+    "authority": "virtual_only",
+    "implicit_date_now_allowed": false,
+    "wall_clock_fallback_allowed": false,
+    "real_sleep_allowed": false,
+    "rollback_allowed": false
+  },
+  "hash": "sha256:1f37b9d07a7c3b667d60eb489a3ed78017cb7d42072f065d551a5839a29ce73c"
+}

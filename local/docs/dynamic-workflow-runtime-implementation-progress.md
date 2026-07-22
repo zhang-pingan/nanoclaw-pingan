@@ -1,8 +1,8 @@
 # Dynamic Workflow Runtime 实施进度
 
 > **状态**: IN_PROGRESS
-> **当前 Gate**: G3 Registry / Authoring / Publish（`DONE`；G3.1-G3.9与独立whole-gate regression全部通过；G2保持`DONE / BASELINE_ACCEPTED`与40/40 exact replay）
-> **下一独立会话**: G4 Test Bootstrap；本次G3关闭任务未实施任何G4 surface
+> **当前 Gate**: G4 Test Bootstrap（`EXIT_CANDIDATE_PENDING_INDEPENDENT_G4_REGRESSION`；实现切片完成，尚未执行独立whole-G4 regression）
+> **下一独立会话**: G4 whole-gate independent regression；通过前不得开始G5
 > **最后更新**: 2026-07-22
 > **规范权威**: `local/docs/dynamic-workflow-dag-framework.md`
 
@@ -112,7 +112,7 @@ Agent Container 运行于独立 VM，Node identity 由 VM image gate 保证；�
 | G1 DDL / Store | `DONE` | G0.10 | current Database Schema `4`；Schema 3只允许四个Activation/active-pointer关系全空时原子升级，否则fail closed | G1.1-G1.6与独立Schema 4回归已完成 |
 | G2 Compiler / Golden | `DONE` | G0.1-G0.9；R-016 spec/Contract repair；G0.10 不改变 Compiler/Plan 语义 | phase=`BASELINE_ACCEPTED`；前序immutable lineage未变；owner-approved successor GoldenSemanticReview/seal完整，current replay 40/40 exact、0 differences | 本原子提交（replay-repair successor seal） |
 | G3 Registry / Authoring / Publish | `DONE` | G1 + G2 | G3.1-G3.9 DONE；独立whole-gate regression覆盖machine authority、transaction、replay/recovery/fault、Schema 4与冻结边界 | 本原子提交 |
-| G4 Test Bootstrap | `READY` | G1 + G2 + G3 | isolated bootstrap profile | 下一独立任务；本提交未实施 |
+| G4 Test Bootstrap | `EXIT_CANDIDATE_PENDING_INDEPENDENT_G4_REGRESSION` | G1 + G2 + G3 | isolated bootstrap profile；closed Contract/fixture/fault Gate；真实文件SQLite隔离证明 | 本原子提交 |
 | G5 Basic Runtime | `NOT_READY` | G4 | T0-T6e model/fault fixtures | - |
 | G6 Dynamic / Close | `NOT_READY` | G5 | T7/T8/child/compensation fixtures | - |
 | G7 Control / Card / Projection / Recovery | `NOT_READY` | G6 | command/card/projection/recovery/blocker fixtures | - |
@@ -134,7 +134,7 @@ Agent Container 运行于独立 VM，Node identity 由 VM image gate 保证；�
 | I8 | Subgraph、Expand、Map、child scope | `NOT_READY` | G6 起 |
 | I9 | Completion、Cancel、Compensation、Finalization、Recovery | `NOT_READY` | G6/G7 |
 | I10 | Runtime Command、Capacity Admin、Runtime Center、Trace | `NOT_READY` | G5 实现 Capacity Gateway/Publisher/Watcher，G7 实现管理 UI；当前只做 G0.10 合同 |
-| I11 | Contract Pack、managed runtime toolchain/launcher、测试模型、发布门禁、absence baseline | `DONE` | G0.1-G0.10 DONE |
+| I11 | Contract Pack、managed runtime toolchain/launcher、测试模型、发布门禁、absence baseline | `IN_PROGRESS` | G0.1-G0.10 DONE；G4实现为exit candidate，等待独立whole-G4 regression |
 
 ## G0 施工切片
 
@@ -1893,9 +1893,41 @@ Gate结果：
 
 G3.1-G3.9各pack中的`g3_status=IN_PROGRESS`或`EXIT_CANDIDATE_PENDING_INDEPENDENT_G3_REGRESSION`是各切片生成时的冻结事实，不为Gate关闭而重写；本进度账本、架构规范和Contract README共同记录whole-gate结论。G3现为`DONE`。G4只提升为下一独立任务`READY`，本回归没有创建G4 bootstrap profile、Runtime implementation或任何G4-G9 surface。
 
+## G4 Test Bootstrap
+
+**状态**：`EXIT_CANDIDATE_PENDING_INDEPENDENT_G4_REGRESSION`。本切片从clean `main`基线`c9bfc3ddaa6893962f054e59ce05749b978c7ccc`开始，parent=`0bd9a2c25f778ec4442346c8897fe95ac5cbabad`；运行环境为local checkout、`permission_profile=disabled/unrestricted`、filesystem unrestricted、sandbox `danger-full-access`、approval policy `never`。没有申请approval/escalation、Handoff、切换或创建worktree、push、amend或重写历史；全部Node/npm命令均通过`./scripts/runtime-toolchain.sh exec -- <command>`。
+
+**工作包与边界**：I11为主、I4仅消费既有Connection Factory/Schema 4 Store。新增`src/workflow-runtime/bootstrap/`中的唯一显式test factory、Fake Adapter和Virtual Clock，以及`src/workflow-runtime/contracts/bootstrap/`、`conformance/g4-test-bootstrap/`、generator/checker/types/tests。没有修改G1 Schema/DDL/Store identity、G2 sealed、G3.8A/G3.9 Contract或G0.6/G0.10 historical source；没有实现G5-G9 Runtime、T0-T8、Workflow/Run/Activation创建或业务表写入、Reconciler/Scheduler/Ledger/Wait/Inbox/Outbox、Runtime Command/Projection、Production loader/current/latest resolver/launchability、Execution Artifact build/install、Retention/Blob GC/delete、Feature/API/Automation ingress、真实Adapter或legacy fallback/compatibility reader。
+
+**Machine authority**：
+
+- Contract Pack `icarus.workflow-contract-pack-g4-test-bootstrap@1.0.0`=`sha256:ac95824616a0a8e1fa9b8a1f6d90a6fee298b4e37581609f9fa01bad780c9d93`。
+- Profile `icarus.workflow-test-bootstrap-profile@1.0.0`=`sha256:568c5ba1c61c7d8659031ff57d97bd821d02b1e086b31b39ef8121c396cd1ce7`；fixture set=`sha256:f0578f90adfa6d5def7a3acfcec03edfd91e4d32279a6dde1e6de36088179e80`；Fake Adapter profile=`sha256:dd7de6ad9d3388d7aab310e719e3df8348ee86328d134c2480ce652cf2e406a8`；Virtual Clock profile=`sha256:1f37b9d07a7c3b667d60eb489a3ed78017cb7d42072f065d551a5839a29ce73c`。
+- Bootstrap implementation hash=`sha256:24161276558b6953d1414982ae193b6ab8ddad16ed2522e10c0732c4e01df456`；implementation artifact=`sha256:73ec7f37cffcd22ccce9e75afc7b8393a0c23bcb687b1fbd0c59d60622fed95c`；isolation boundary=`sha256:648dab69be05f5bd9c15637d895ea45433fd7f876bb47ff621e8c4c079e618ad`。
+- Profile schema / Fake invocation schema / Fake result schema / isolation receipt schema=`sha256:df0af39cd0b8fd12b0ae53bbea4447021d5d46e8caa54bb0c6e25f0a562f4787` / `sha256:d32f0197077f0cb423246b83a211893cdb07eb560c31443c3570e66e4c0d053a` / `sha256:6c84dacc63281cb9be56c3eb0cf92a778be208b2c1bc821c42539683e66db74c` / `sha256:80db91304a878be14a2002b07ce7ca532643f06a811f3a31ce1ffc14e1d8ab9f`。
+- Fixtures为7 positive / 21 negative / 13 fault，artifact identities=`sha256:6223b5e3e45f4e4889b8ae14dc656425dbfde4b1cf55d1f27040ff247d9d77a1` / `sha256:1fb3c5fc811e6869ba5e52972d4bfbb07771b9d668529343bc58e4ab6678147b` / `sha256:a4b0e195036be92de071447a086ba2bf8149ef5ba40f3fec1920a49c984d8b00`。
+
+Factory没有缺省入口，必须显式传入exact profile/fixture ref+hash、instance key与canonical data root。Root必须是canonical `os.tmpdir()`下按instance key派生的exclusive新目录，并由owner marker、device/inode、receipt共同绑定；relative/alias/path escape/symlink、pre-existing empty/nonempty、concurrent reuse、permission/create失败、Production collision及删除后同路径替换全部fail closed。每个实例只通过`WorkflowRuntimeConnectionFactory`以`candidate_development`打开独立`workflow-runtime.db`，fresh/reopen均执行current G1 Schema 4/Profile/PRAGMA/identity gate。测试逐表证明全部84个Runtime业务/Registry/audit关系保持0 rows；receipt另证明Published Registry与active Release pointer为0，Production/Feature/API/Automation ingress、真实Adapter/network、Production/user data均不可达或未触碰。
+
+Fake Adapter只接受七条exact invocation hash，固定逐字节replay `not_applied/applied_with_receipt/applied_but_receipt_lost/still_running/unknown/cancelled/compensated`；任一input、operation key、attempt、outcome或response drift拒绝。Virtual Clock固定seed=`g4-virtual-clock-seed-0001`、initial time=`1784764800000`，只允许显式单调advance，rollback/drift/invalid advance拒绝；源码静态Gate与抛错的`Date.now` spy证明没有wall-clock、real sleep或fallback。初始化在root-create/Store-open后中断均关闭Store并清理root，cleanup failure留下可识别residual marker；Store open与Schema/Profile拒绝不留下可消费数据库。Profile固定`not_certified/default_enabled=false/production_acceptance=reject`；由于Production loader/startup尚不存在，只以closed build/startup/loader negative Contract和263-file static surface inventory证明`test_bootstrap_profile_forbidden`，没有越界新增Production入口。
+
+Gate结果：
+
+| 命令/证据 | 结果 |
+| --- | --- |
+| 两轮`contracts:g4:generate` + `contracts:g4:check` | PASS；pack/profile/implementation三项hash连续一致，全部14个member artifacts byte-stable |
+| `test:g4` | PASS；2 files / 17 tests；closed Contract/profile、真实文件Schema 4 bootstrap/reopen/isolation/cleanup、所有root/fault/tamper、七种Fake outcomes/replay及Virtual Clock完整覆盖 |
+| `test:g3.9` / `test:g3` | PASS；2 files / 34 tests；14 files / 97 tests |
+| `schema:check` / `store:check` / `test:g1.activation` / `test:g1.2` | PASS；G1 root/Schema 4/Profile identities不变；Activation 5/5；Store 20/20 |
+| `contracts:check` | PASS；完整current G0/G1/G2/G3/Schema/Store链及G4 direct check通过 |
+| `test:g2` / `golden:current:replay:check` | PASS；7 files / 47 tests；successor 40/40 exact，sealed bundle不变 |
+| `test:g0.6` / `test:g0.10` | PASS；1 file / 8 tests；1 file / 10 tests |
+| `typecheck` / `build` / changed TypeScript targeted Prettier / `git diff --check` | PASS |
+| isolation/fault/forbidden/protected-tree | PASS；临时roots全部清理或留下指定residual后由test teardown移除；production imports/ingress/startup/loader为0/absent；G0.6/G0.10、G2 sealed、G3.8A/G3.9和G1 Schema tree相对baseline零diff；无G5-G9 forbidden surface |
+
 ## 下一步
 
-下一独立会话固定为**G4 Test Bootstrap**：只实现规范定义的isolated test bootstrap profile、test-only Store/root/Fake Adapter装配及其closed Contract/fixture/fault边界。不得实施G5-G9 Runtime、Production loader/current/latest resolver、Execution Artifact build/install、Retention GC/delete、Production activation、legacy alias/fallback/compatibility reader或额外authoring stage；不得改写G3、G2 sealed、G0.6/G0.10和G1 Schema 4冻结identity。
+下一独立会话固定为**G4 whole-gate independent regression**：从本原子提交的clean `main`重新完整审阅G4 machine pack、closed schemas、fixture/fault、bootstrap/Fake Adapter/Virtual Clock实现、真实文件SQLite/root隔离、Production拒绝与static absence，并独立运行全部G4及上游退出Gate。该任务只允许修复回归发现的G4缺口并重新生成其current identity；不得实施G5-G9 Runtime、Production loader/current/latest resolver、Execution Artifact build/install、Retention/Blob GC/delete、Production activation、legacy alias/fallback/compatibility reader或额外authoring stage，不得改写G3、G2 sealed、G0.6/G0.10和G1 Schema 4冻结identity。独立G4整体回归通过前G5必须保持`NOT_READY`。
 
 历史fresh review evidence只存在于Git commits，不是current dependency；current immutable semantic approval只绑定exact Draft/report identities。显式`prepare-rc`冻结的四个Working roots与唯一Review Candidate未变；current expected full case-result/Plan/proof/program bytes/hash已独立冻结、审计、owner批准并seal。local single-user签名策略为`not_required_local_single_user`，没有伪造GPG或远程签名。
 

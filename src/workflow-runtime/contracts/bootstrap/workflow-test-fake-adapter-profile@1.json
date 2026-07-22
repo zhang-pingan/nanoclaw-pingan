@@ -1,0 +1,252 @@
+{
+  "format": "icarus.workflow-test-fake-adapter-profile/1",
+  "ref": {
+    "id": "icarus.workflow-test-fake-adapter-profile",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-test-fake-adapter-profile:1\n",
+  "payload": {
+    "format": "icarus.workflow-test-fake-adapter-profile/1",
+    "ref": {
+      "id": "icarus.workflow-test-fake-adapter-profile",
+      "version": "1.0.0"
+    },
+    "selection": "exact_invocation_hash_only",
+    "allowed_outcomes": [
+      "not_applied",
+      "applied_with_receipt",
+      "applied_but_receipt_lost",
+      "still_running",
+      "unknown",
+      "cancelled",
+      "compensated"
+    ],
+    "behavior_count": 7,
+    "behaviors": [
+      {
+        "behavior_id": "fake-adapter.not_applied",
+        "invocation": {
+          "format": "icarus.workflow-test-fake-adapter-invocation/1",
+          "fixture_id": "fake-adapter.not_applied",
+          "operation_key": "g4:operation:not_applied",
+          "attempt_no": 1,
+          "input": {
+            "fixture": "fake-adapter.not_applied",
+            "payload": {
+              "sequence": 1,
+              "value": "not_applied"
+            }
+          },
+          "invocation_hash": "sha256:bd1d12ff70210bf9ea05b7d6c3bbecbe6defe29120d7cf6da0029438031dfcbf"
+        },
+        "response": {
+          "format": "icarus.workflow-test-fake-adapter-result/1",
+          "fixture_id": "fake-adapter.not_applied",
+          "operation_key": "g4:operation:not_applied",
+          "attempt_no": 1,
+          "outcome": "not_applied",
+          "receipt": null,
+          "result": {
+            "state": "not_applied",
+            "external_revision": null
+          },
+          "replay_hash": "sha256:c8bb9164f0696dffe504ed42f856930dd894635609f19a320e6df17ae0ffb39a"
+        }
+      },
+      {
+        "behavior_id": "fake-adapter.applied_with_receipt",
+        "invocation": {
+          "format": "icarus.workflow-test-fake-adapter-invocation/1",
+          "fixture_id": "fake-adapter.applied_with_receipt",
+          "operation_key": "g4:operation:applied_with_receipt",
+          "attempt_no": 1,
+          "input": {
+            "fixture": "fake-adapter.applied_with_receipt",
+            "payload": {
+              "sequence": 2,
+              "value": "applied_with_receipt"
+            }
+          },
+          "invocation_hash": "sha256:954d364d65d44cb23333df058fee8cf00ca57e8fab923dd4c8e911c09804e2db"
+        },
+        "response": {
+          "format": "icarus.workflow-test-fake-adapter-result/1",
+          "fixture_id": "fake-adapter.applied_with_receipt",
+          "operation_key": "g4:operation:applied_with_receipt",
+          "attempt_no": 1,
+          "outcome": "applied_with_receipt",
+          "receipt": {
+            "receipt_id": "receipt:g4:applied-with-receipt",
+            "before_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "after_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          },
+          "result": {
+            "state": "applied",
+            "external_revision": "revision:g4:1"
+          },
+          "replay_hash": "sha256:5160a97e32246e8bdc232f515d04a9127d17748b4ee56763496d54b2da782f44"
+        }
+      },
+      {
+        "behavior_id": "fake-adapter.applied_but_receipt_lost",
+        "invocation": {
+          "format": "icarus.workflow-test-fake-adapter-invocation/1",
+          "fixture_id": "fake-adapter.applied_but_receipt_lost",
+          "operation_key": "g4:operation:applied_but_receipt_lost",
+          "attempt_no": 1,
+          "input": {
+            "fixture": "fake-adapter.applied_but_receipt_lost",
+            "payload": {
+              "sequence": 3,
+              "value": "applied_but_receipt_lost"
+            }
+          },
+          "invocation_hash": "sha256:019789d4a569e05111ae60ab432f97721ecd8af322969ed5337802480611c400"
+        },
+        "response": {
+          "format": "icarus.workflow-test-fake-adapter-result/1",
+          "fixture_id": "fake-adapter.applied_but_receipt_lost",
+          "operation_key": "g4:operation:applied_but_receipt_lost",
+          "attempt_no": 1,
+          "outcome": "applied_but_receipt_lost",
+          "receipt": null,
+          "result": {
+            "state": "applied_but_receipt_lost",
+            "external_revision": "revision:g4:lost"
+          },
+          "replay_hash": "sha256:bfb3334eaf44326fe8dd48be220ce83a85ab746a1561a9e000092a0968996947"
+        }
+      },
+      {
+        "behavior_id": "fake-adapter.still_running",
+        "invocation": {
+          "format": "icarus.workflow-test-fake-adapter-invocation/1",
+          "fixture_id": "fake-adapter.still_running",
+          "operation_key": "g4:operation:still_running",
+          "attempt_no": 1,
+          "input": {
+            "fixture": "fake-adapter.still_running",
+            "payload": {
+              "sequence": 4,
+              "value": "still_running"
+            }
+          },
+          "invocation_hash": "sha256:7a2cee4a776840044004d60643f93a4a2f2d61ff6f7915e954155f241b0ed1b6"
+        },
+        "response": {
+          "format": "icarus.workflow-test-fake-adapter-result/1",
+          "fixture_id": "fake-adapter.still_running",
+          "operation_key": "g4:operation:still_running",
+          "attempt_no": 1,
+          "outcome": "still_running",
+          "receipt": null,
+          "result": {
+            "state": "still_running",
+            "external_execution_id": "exec:g4:1"
+          },
+          "replay_hash": "sha256:c66f504b224da56452b9edbaa35536625aeb46af7c678656afca55ca756cb686"
+        }
+      },
+      {
+        "behavior_id": "fake-adapter.unknown",
+        "invocation": {
+          "format": "icarus.workflow-test-fake-adapter-invocation/1",
+          "fixture_id": "fake-adapter.unknown",
+          "operation_key": "g4:operation:unknown",
+          "attempt_no": 1,
+          "input": {
+            "fixture": "fake-adapter.unknown",
+            "payload": {
+              "sequence": 5,
+              "value": "unknown"
+            }
+          },
+          "invocation_hash": "sha256:c952bad05f1769889f24b1a07eb9a21dd09469fc7f189d87e3537d896fa4e1a9"
+        },
+        "response": {
+          "format": "icarus.workflow-test-fake-adapter-result/1",
+          "fixture_id": "fake-adapter.unknown",
+          "operation_key": "g4:operation:unknown",
+          "attempt_no": 1,
+          "outcome": "unknown",
+          "receipt": null,
+          "result": {
+            "state": "unknown",
+            "external_execution_id": "exec:g4:unknown"
+          },
+          "replay_hash": "sha256:5a7bf60082447f593dfdb339e2b43443384a96a76bf996221b5058939ac56bda"
+        }
+      },
+      {
+        "behavior_id": "fake-adapter.cancelled",
+        "invocation": {
+          "format": "icarus.workflow-test-fake-adapter-invocation/1",
+          "fixture_id": "fake-adapter.cancelled",
+          "operation_key": "g4:operation:cancelled",
+          "attempt_no": 1,
+          "input": {
+            "fixture": "fake-adapter.cancelled",
+            "payload": {
+              "sequence": 6,
+              "value": "cancelled"
+            }
+          },
+          "invocation_hash": "sha256:f95776b1cc55b0293630415a926211877ac51d8cef06be3b01d9b82bf0913586"
+        },
+        "response": {
+          "format": "icarus.workflow-test-fake-adapter-result/1",
+          "fixture_id": "fake-adapter.cancelled",
+          "operation_key": "g4:operation:cancelled",
+          "attempt_no": 1,
+          "outcome": "cancelled",
+          "receipt": null,
+          "result": {
+            "state": "cancelled",
+            "cancellation_code": "fixture_cancelled"
+          },
+          "replay_hash": "sha256:3eb235de76a2841105dcf607e29efe4ff00bd4498a23c6f66d4bbc0bb4329742"
+        }
+      },
+      {
+        "behavior_id": "fake-adapter.compensated",
+        "invocation": {
+          "format": "icarus.workflow-test-fake-adapter-invocation/1",
+          "fixture_id": "fake-adapter.compensated",
+          "operation_key": "g4:operation:compensated",
+          "attempt_no": 1,
+          "input": {
+            "fixture": "fake-adapter.compensated",
+            "payload": {
+              "sequence": 7,
+              "value": "compensated"
+            }
+          },
+          "invocation_hash": "sha256:3ec836c03eadabb30d654b24b68c09aa95ceaf8c7905e1bc2e49d33bf0a3c68b"
+        },
+        "response": {
+          "format": "icarus.workflow-test-fake-adapter-result/1",
+          "fixture_id": "fake-adapter.compensated",
+          "operation_key": "g4:operation:compensated",
+          "attempt_no": 1,
+          "outcome": "compensated",
+          "receipt": {
+            "receipt_id": "receipt:g4:compensated",
+            "compensation_operation_key": "g4:operation:compensated"
+          },
+          "result": {
+            "state": "compensated",
+            "external_revision": "revision:g4:undo"
+          },
+          "replay_hash": "sha256:c2188ba30693d18b9bba4ce3907d9beacf0d68396e908ffc4ac0aa261869480e"
+        }
+      }
+    ],
+    "replay": "same_invocation_same_result_bytes",
+    "undeclared_invocation": "reject",
+    "undeclared_outcome": "reject",
+    "real_adapter_allowed": false,
+    "network_allowed": false
+  },
+  "hash": "sha256:dd7de6ad9d3388d7aab310e719e3df8348ee86328d134c2480ce652cf2e406a8"
+}

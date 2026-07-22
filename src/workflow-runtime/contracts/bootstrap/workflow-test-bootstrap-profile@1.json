@@ -1,0 +1,116 @@
+{
+  "format": "icarus.workflow-test-bootstrap-profile/1",
+  "ref": {
+    "id": "icarus.workflow-test-bootstrap-profile",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-test-bootstrap-profile:1\n",
+  "payload": {
+    "format": "icarus.workflow-test-bootstrap-profile/1",
+    "ref": {
+      "id": "icarus.workflow-test-bootstrap-profile",
+      "version": "1.0.0"
+    },
+    "gate": "G4",
+    "profile_kind": "test_only",
+    "selection": "explicit_exact_ref_and_hash",
+    "default_enabled": false,
+    "certification_status": "not_certified",
+    "production_acceptance": "reject",
+    "production_rejection_code": "test_bootstrap_profile_forbidden",
+    "managed_toolchain": {
+      "node_runtime_version": "26.5.0",
+      "npm_version": "11.17.0",
+      "package_lock_hash": "sha256:2b8c87e5549915e2d53c1eecdabef3ebb149bc8f03054d40f1924d93bf2bd085",
+      "managed_distribution_ref": {
+        "id": "nodejs.node-v26.5.0-darwin-arm64",
+        "version": "1.0.0"
+      },
+      "managed_distribution_hash": "sha256:0824f5044057d6ff26dc45022b842342f148b2dda2f0dd0feb17dd0b045f6cad",
+      "node_executable_hash": "sha256:cbee2298aee5cc476bf8d5441e7348b627254a39d869743a5b04489028c729d4",
+      "compiler_toolchain_ref": {
+        "id": "icarus.workflow-compiler-toolchain",
+        "version": "3.0.1"
+      },
+      "compiler_toolchain_hash": "sha256:4e16227bf723a41207d94a8619f8b6bb50731c412cb5b298869e265097dcaccf",
+      "compiler_build_hash": "sha256:4cb84d57dee323723ed60dc22394100b37cc76a3bfde793ef95ba707cd21a976"
+    },
+    "store_binding": {
+      "connection_factory": "WorkflowRuntimeConnectionFactory",
+      "identity_mode": "candidate_development",
+      "database_name": "workflow-runtime.db",
+      "database_schema_version": 4,
+      "g1_root_hash": "sha256:6f49451868b7a5cab359d1c21f14f79afbc11b12aa1938039daf5914d9c4d591",
+      "schema_dependency_manifest_hash": "sha256:8ed4d092c0822fe06b154117d3fc2d6d74c9041644b0883ab2e978c4a2abe35d",
+      "physical_schema_identity": "sha256:61ca572ff0f8551ff67f5529753610012fd6027a484e77cc8e63716f4814e04f",
+      "database_schema_hash": "sha256:f517a5e7bb8b3ea91bb37cd6a68b32898ceb62b9044687a8103808be6852106a",
+      "migration_hash": "sha256:4a8ddeb1f9715399ad96c3bc32efa5e8032a3bd484eaed0159c6a24620c1be43",
+      "schema3_to_4_upgrade_hash": "sha256:5ac263fe3279c61f74ba6314f5df98fff59a8f8b32acfa784d2040421ebaa3cf",
+      "sqlite_profile_ref": {
+        "id": "icarus.local-single-user-sqlite",
+        "version": "1.0.0"
+      },
+      "sqlite_profile_hash": "sha256:3d69742dad2fefa8bef4ba47e375defd705e3b32920a92b105a43726436fb7af",
+      "sqlite_profile_status": "candidate",
+      "certification_status": "not_certified"
+    },
+    "upstream_contracts": {
+      "g2_sealed_bundle_hash": "sha256:d99647d8ca6aabc737a793019335e6770aa111a79be7545c4dec00c6e7af2145",
+      "g3_6_pack_hash": "sha256:730daac9db4bcfb645374b12e10e3962ddacbebc2828875cb00133c8ada195a8",
+      "g3_7_pack_hash": "sha256:2fae2da648d6da5969e6c5c57b2342f6f15b3084b39e7acfc43b010b48517e74",
+      "g3_8a_pack_hash": "sha256:d8412111a0f3dcabb4ce416b99086701ea3e3911ff431b5457eb957b2f69722f",
+      "g3_9_pack_hash": "sha256:2ef0997982483a6da4c6c6cfd3e26b7934f7fcffce4fdae160f94f4e9d600b38"
+    },
+    "fixture_set": {
+      "ref": {
+        "id": "icarus.workflow-test-bootstrap-fixture-set",
+        "version": "1.0.0"
+      },
+      "hash": "sha256:f0578f90adfa6d5def7a3acfcec03edfd91e4d32279a6dde1e6de36088179e80"
+    },
+    "fake_adapter": {
+      "ref": {
+        "id": "icarus.workflow-test-fake-adapter-profile",
+        "version": "1.0.0"
+      },
+      "hash": "sha256:dd7de6ad9d3388d7aab310e719e3df8348ee86328d134c2480ce652cf2e406a8",
+      "outcome_count": 7,
+      "real_adapter_allowed": false,
+      "network_allowed": false
+    },
+    "virtual_clock": {
+      "ref": {
+        "id": "icarus.workflow-test-virtual-clock-profile",
+        "version": "1.0.0"
+      },
+      "hash": "sha256:1f37b9d07a7c3b667d60eb489a3ed78017cb7d42072f065d551a5839a29ce73c",
+      "seed": "g4-virtual-clock-seed-0001",
+      "initial_time_ms": 1784764800000,
+      "authority": "virtual_only"
+    },
+    "root_policy": {
+      "root_kind": "unique_canonical_os_temp_child",
+      "create_mode": "exclusive_new_directory",
+      "preexisting_root": "reject",
+      "nonempty_root": "reject",
+      "symlink_or_alias": "reject",
+      "cross_instance_reuse": "reject",
+      "production_root_collision": "reject",
+      "cleanup": "close_store_then_remove_owned_root",
+      "cleanup_failure": "write_identifiable_residual_marker"
+    },
+    "isolation_boundary": {
+      "hash": "sha256:648dab69be05f5bd9c15637d895ea45433fd7f876bb47ff621e8c4c079e618ad",
+      "feature_ingress": "absent",
+      "api_ingress": "absent",
+      "automation_ingress": "absent",
+      "active_registry_mutation": "forbidden",
+      "active_release_pointer_mutation": "forbidden",
+      "production_data_root_access": "forbidden",
+      "user_data_access": "forbidden"
+    },
+    "bootstrap_implementation_hash": "sha256:24161276558b6953d1414982ae193b6ab8ddad16ed2522e10c0732c4e01df456"
+  },
+  "hash": "sha256:568c5ba1c61c7d8659031ff57d97bd821d02b1e086b31b39ef8121c396cd1ce7"
+}

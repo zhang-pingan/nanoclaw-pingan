@@ -1,0 +1,29 @@
+{
+  "format": "icarus.workflow-test-bootstrap-fixture-set/1",
+  "ref": {
+    "id": "icarus.workflow-test-bootstrap-fixture-set",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-test-bootstrap-fixture-set:1\n",
+  "payload": {
+    "format": "icarus.workflow-test-bootstrap-fixture-set/1",
+    "ref": {
+      "id": "icarus.workflow-test-bootstrap-fixture-set",
+      "version": "1.0.0"
+    },
+    "selection": "explicit_exact_ref_and_hash",
+    "fixture_ids": [
+      "fake-adapter.not_applied",
+      "fake-adapter.applied_with_receipt",
+      "fake-adapter.applied_but_receipt_lost",
+      "fake-adapter.still_running",
+      "fake-adapter.unknown",
+      "fake-adapter.cancelled",
+      "fake-adapter.compensated"
+    ],
+    "synthetic_registry_only": true,
+    "production_publishable": false
+  },
+  "hash": "sha256:f0578f90adfa6d5def7a3acfcec03edfd91e4d32279a6dde1e6de36088179e80"
+}

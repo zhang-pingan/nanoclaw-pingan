@@ -1,0 +1,219 @@
+{
+  "format": "icarus.workflow-contract-pack-g4-test-bootstrap/1",
+  "ref": {
+    "id": "icarus.workflow-contract-pack-g4-test-bootstrap",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-contract-pack-g4-test-bootstrap:1\n",
+  "payload": {
+    "gate": "G4",
+    "status": "EXIT_CANDIDATE_PENDING_INDEPENDENT_G4_REGRESSION",
+    "profile_ref": {
+      "id": "icarus.workflow-test-bootstrap-profile",
+      "version": "1.0.0"
+    },
+    "profile_hash": "sha256:568c5ba1c61c7d8659031ff57d97bd821d02b1e086b31b39ef8121c396cd1ce7",
+    "fixture_set_ref": {
+      "id": "icarus.workflow-test-bootstrap-fixture-set",
+      "version": "1.0.0"
+    },
+    "fixture_set_hash": "sha256:f0578f90adfa6d5def7a3acfcec03edfd91e4d32279a6dde1e6de36088179e80",
+    "fake_adapter_profile_ref": {
+      "id": "icarus.workflow-test-fake-adapter-profile",
+      "version": "1.0.0"
+    },
+    "fake_adapter_profile_hash": "sha256:dd7de6ad9d3388d7aab310e719e3df8348ee86328d134c2480ce652cf2e406a8",
+    "virtual_clock_profile_ref": {
+      "id": "icarus.workflow-test-virtual-clock-profile",
+      "version": "1.0.0"
+    },
+    "virtual_clock_profile_hash": "sha256:1f37b9d07a7c3b667d60eb489a3ed78017cb7d42072f065d551a5839a29ce73c",
+    "bootstrap_implementation_hash": "sha256:24161276558b6953d1414982ae193b6ab8ddad16ed2522e10c0732c4e01df456",
+    "isolation_boundary_hash": "sha256:648dab69be05f5bd9c15637d895ea45433fd7f876bb47ff621e8c4c079e618ad",
+    "positive_case_count": 7,
+    "negative_case_count": 21,
+    "fault_case_count": 13,
+    "fake_adapter_outcome_count": 7,
+    "fake_adapter_outcomes": [
+      "not_applied",
+      "applied_with_receipt",
+      "applied_but_receipt_lost",
+      "still_running",
+      "unknown",
+      "cancelled",
+      "compensated"
+    ],
+    "database_schema_version": 4,
+    "database_schema_hash": "sha256:f517a5e7bb8b3ea91bb37cd6a68b32898ceb62b9044687a8103808be6852106a",
+    "sqlite_profile_status": "candidate",
+    "certification_status": "not_certified",
+    "explicit_selection_required": true,
+    "production_build_acceptance": "reject",
+    "production_startup_acceptance": "reject",
+    "production_loader_implemented": false,
+    "production_fail_closed_evidence": "closed_negative_contract_and_static_surface_absence",
+    "feature_ingress_implemented": false,
+    "api_ingress_implemented": false,
+    "automation_ingress_implemented": false,
+    "runtime_business_tables_written": false,
+    "g5_through_g9_status": "NOT_READY",
+    "artifacts": [
+      {
+        "path": "bootstrap/workflow-test-bootstrap-profile-schema@1.json",
+        "format": "icarus.workflow-test-bootstrap-profile-schema/1",
+        "ref": {
+          "id": "icarus.workflow-test-bootstrap-profile-schema",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-test-bootstrap-profile-schema:1\n",
+        "hash": "sha256:df0af39cd0b8fd12b0ae53bbea4447021d5d46e8caa54bb0c6e25f0a562f4787"
+      },
+      {
+        "path": "bootstrap/workflow-test-fake-adapter-invocation-schema@1.json",
+        "format": "icarus.workflow-test-fake-adapter-invocation-schema/1",
+        "ref": {
+          "id": "icarus.workflow-test-fake-adapter-invocation-schema",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-test-fake-adapter-invocation-schema:1\n",
+        "hash": "sha256:d32f0197077f0cb423246b83a211893cdb07eb560c31443c3570e66e4c0d053a"
+      },
+      {
+        "path": "bootstrap/workflow-test-fake-adapter-result-schema@1.json",
+        "format": "icarus.workflow-test-fake-adapter-result-schema/1",
+        "ref": {
+          "id": "icarus.workflow-test-fake-adapter-result-schema",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-test-fake-adapter-result-schema:1\n",
+        "hash": "sha256:6c84dacc63281cb9be56c3eb0cf92a778be208b2c1bc821c42539683e66db74c"
+      },
+      {
+        "path": "bootstrap/workflow-test-bootstrap-isolation-receipt-schema@1.json",
+        "format": "icarus.workflow-test-bootstrap-isolation-receipt-schema/1",
+        "ref": {
+          "id": "icarus.workflow-test-bootstrap-isolation-receipt-schema",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-test-bootstrap-isolation-receipt-schema:1\n",
+        "hash": "sha256:80db91304a878be14a2002b07ce7ca532643f06a811f3a31ce1ffc14e1d8ab9f"
+      },
+      {
+        "path": "bootstrap/workflow-test-bootstrap-fixture-set@1.json",
+        "format": "icarus.workflow-test-bootstrap-fixture-set/1",
+        "ref": {
+          "id": "icarus.workflow-test-bootstrap-fixture-set",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-test-bootstrap-fixture-set:1\n",
+        "hash": "sha256:f0578f90adfa6d5def7a3acfcec03edfd91e4d32279a6dde1e6de36088179e80"
+      },
+      {
+        "path": "bootstrap/workflow-test-fake-adapter-profile@1.json",
+        "format": "icarus.workflow-test-fake-adapter-profile/1",
+        "ref": {
+          "id": "icarus.workflow-test-fake-adapter-profile",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-test-fake-adapter-profile:1\n",
+        "hash": "sha256:dd7de6ad9d3388d7aab310e719e3df8348ee86328d134c2480ce652cf2e406a8"
+      },
+      {
+        "path": "bootstrap/workflow-test-virtual-clock-profile@1.json",
+        "format": "icarus.workflow-test-virtual-clock-profile/1",
+        "ref": {
+          "id": "icarus.workflow-test-virtual-clock-profile",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-test-virtual-clock-profile:1\n",
+        "hash": "sha256:1f37b9d07a7c3b667d60eb489a3ed78017cb7d42072f065d551a5839a29ce73c"
+      },
+      {
+        "path": "bootstrap/workflow-test-bootstrap-implementation@1.json",
+        "format": "icarus.workflow-test-bootstrap-implementation-artifact/1",
+        "ref": {
+          "id": "icarus.workflow-test-bootstrap-implementation",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-test-bootstrap-implementation-artifact:1\n",
+        "hash": "sha256:73ec7f37cffcd22ccce9e75afc7b8393a0c23bcb687b1fbd0c59d60622fed95c"
+      },
+      {
+        "path": "bootstrap/workflow-test-bootstrap-isolation-boundary@1.json",
+        "format": "icarus.workflow-test-bootstrap-isolation-boundary/1",
+        "ref": {
+          "id": "icarus.workflow-test-bootstrap-isolation-boundary",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-test-bootstrap-isolation-boundary:1\n",
+        "hash": "sha256:648dab69be05f5bd9c15637d895ea45433fd7f876bb47ff621e8c4c079e618ad"
+      },
+      {
+        "path": "bootstrap/workflow-test-bootstrap-profile@1.json",
+        "format": "icarus.workflow-test-bootstrap-profile/1",
+        "ref": {
+          "id": "icarus.workflow-test-bootstrap-profile",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-test-bootstrap-profile:1\n",
+        "hash": "sha256:568c5ba1c61c7d8659031ff57d97bd821d02b1e086b31b39ef8121c396cd1ce7"
+      },
+      {
+        "path": "conformance/g4-test-bootstrap/positive-cases.json",
+        "format": "icarus.workflow-test-bootstrap-positive-cases/1",
+        "ref": {
+          "id": "icarus.workflow-test-bootstrap-positive-cases",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-test-bootstrap-positive-cases:1\n",
+        "hash": "sha256:6223b5e3e45f4e4889b8ae14dc656425dbfde4b1cf55d1f27040ff247d9d77a1"
+      },
+      {
+        "path": "conformance/g4-test-bootstrap/negative-cases.json",
+        "format": "icarus.workflow-test-bootstrap-negative-cases/1",
+        "ref": {
+          "id": "icarus.workflow-test-bootstrap-negative-cases",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-test-bootstrap-negative-cases:1\n",
+        "hash": "sha256:1fb3c5fc811e6869ba5e52972d4bfbb07771b9d668529343bc58e4ab6678147b"
+      },
+      {
+        "path": "conformance/g4-test-bootstrap/fault-cases.json",
+        "format": "icarus.workflow-test-bootstrap-fault-cases/1",
+        "ref": {
+          "id": "icarus.workflow-test-bootstrap-fault-cases",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-test-bootstrap-fault-cases:1\n",
+        "hash": "sha256:a4b0e195036be92de071447a086ba2bf8149ef5ba40f3fec1920a49c984d8b00"
+      },
+      {
+        "path": "bootstrap/workflow-test-bootstrap-domain-separators@1.json",
+        "format": "icarus.workflow-test-bootstrap-domain-separators/1",
+        "ref": {
+          "id": "icarus.workflow-test-bootstrap-domain-separators",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-test-bootstrap-domain-separators:1\n",
+        "hash": "sha256:daf88ac8217361693a5ae15b6b2dba73b55b38afb2a6a32a34b7b4eafba24dd3"
+      }
+    ]
+  },
+  "hash": "sha256:ac95824616a0a8e1fa9b8a1f6d90a6fee298b4e37581609f9fa01bad780c9d93"
+}

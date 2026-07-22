@@ -1,0 +1,43 @@
+{
+  "format": "icarus.workflow-test-bootstrap-positive-cases/1",
+  "ref": {
+    "id": "icarus.workflow-test-bootstrap-positive-cases",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-test-bootstrap-positive-cases:1\n",
+  "payload": {
+    "fixture_scope": "test_only",
+    "cases": [
+      {
+        "case_id": "positive.explicit-profile-selection",
+        "expected": "accepted"
+      },
+      {
+        "case_id": "positive.fresh-schema4-bootstrap",
+        "expected": "accepted"
+      },
+      {
+        "case_id": "positive.reopen-same-instance",
+        "expected": "accepted"
+      },
+      {
+        "case_id": "positive.cross-instance-isolation",
+        "expected": "accepted"
+      },
+      {
+        "case_id": "positive.fake-adapter-closed-outcomes",
+        "expected": "accepted"
+      },
+      {
+        "case_id": "positive.virtual-clock-explicit-advance",
+        "expected": "accepted"
+      },
+      {
+        "case_id": "positive.production-surface-absence",
+        "expected": "accepted"
+      }
+    ]
+  },
+  "hash": "sha256:6223b5e3e45f4e4889b8ae14dc656425dbfde4b1cf55d1f27040ff247d9d77a1"
+}

@@ -1,0 +1,262 @@
+{
+  "format": "icarus.workflow-test-fake-adapter-invocation-schema/1",
+  "ref": {
+    "id": "icarus.workflow-test-fake-adapter-invocation-schema",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-test-fake-adapter-invocation-schema:1\n",
+  "payload": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:icarus:workflow-test-fake-adapter-invocation:1",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "format",
+      "fixture_id",
+      "operation_key",
+      "attempt_no",
+      "input",
+      "invocation_hash"
+    ],
+    "properties": {
+      "format": {
+        "const": "icarus.workflow-test-fake-adapter-invocation/1"
+      },
+      "fixture_id": {
+        "type": "string",
+        "minLength": 1
+      },
+      "operation_key": {
+        "type": "string",
+        "minLength": 1
+      },
+      "attempt_no": {
+        "type": "integer",
+        "minimum": 1
+      },
+      "input": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "fixture",
+          "payload"
+        ],
+        "properties": {
+          "fixture": {
+            "type": "string",
+            "minLength": 1
+          },
+          "payload": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "sequence",
+              "value"
+            ],
+            "properties": {
+              "sequence": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 7
+              },
+              "value": {
+                "enum": [
+                  "not_applied",
+                  "applied_with_receipt",
+                  "applied_but_receipt_lost",
+                  "still_running",
+                  "unknown",
+                  "cancelled",
+                  "compensated"
+                ]
+              }
+            }
+          }
+        }
+      },
+      "invocation_hash": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      }
+    },
+    "oneOf": [
+      {
+        "properties": {
+          "fixture_id": {
+            "const": "fake-adapter.not_applied"
+          },
+          "operation_key": {
+            "const": "g4:operation:not_applied"
+          },
+          "attempt_no": {
+            "const": 1
+          },
+          "input": {
+            "const": {
+              "fixture": "fake-adapter.not_applied",
+              "payload": {
+                "sequence": 1,
+                "value": "not_applied"
+              }
+            }
+          },
+          "invocation_hash": {
+            "const": "sha256:bd1d12ff70210bf9ea05b7d6c3bbecbe6defe29120d7cf6da0029438031dfcbf"
+          }
+        }
+      },
+      {
+        "properties": {
+          "fixture_id": {
+            "const": "fake-adapter.applied_with_receipt"
+          },
+          "operation_key": {
+            "const": "g4:operation:applied_with_receipt"
+          },
+          "attempt_no": {
+            "const": 1
+          },
+          "input": {
+            "const": {
+              "fixture": "fake-adapter.applied_with_receipt",
+              "payload": {
+                "sequence": 2,
+                "value": "applied_with_receipt"
+              }
+            }
+          },
+          "invocation_hash": {
+            "const": "sha256:954d364d65d44cb23333df058fee8cf00ca57e8fab923dd4c8e911c09804e2db"
+          }
+        }
+      },
+      {
+        "properties": {
+          "fixture_id": {
+            "const": "fake-adapter.applied_but_receipt_lost"
+          },
+          "operation_key": {
+            "const": "g4:operation:applied_but_receipt_lost"
+          },
+          "attempt_no": {
+            "const": 1
+          },
+          "input": {
+            "const": {
+              "fixture": "fake-adapter.applied_but_receipt_lost",
+              "payload": {
+                "sequence": 3,
+                "value": "applied_but_receipt_lost"
+              }
+            }
+          },
+          "invocation_hash": {
+            "const": "sha256:019789d4a569e05111ae60ab432f97721ecd8af322969ed5337802480611c400"
+          }
+        }
+      },
+      {
+        "properties": {
+          "fixture_id": {
+            "const": "fake-adapter.still_running"
+          },
+          "operation_key": {
+            "const": "g4:operation:still_running"
+          },
+          "attempt_no": {
+            "const": 1
+          },
+          "input": {
+            "const": {
+              "fixture": "fake-adapter.still_running",
+              "payload": {
+                "sequence": 4,
+                "value": "still_running"
+              }
+            }
+          },
+          "invocation_hash": {
+            "const": "sha256:7a2cee4a776840044004d60643f93a4a2f2d61ff6f7915e954155f241b0ed1b6"
+          }
+        }
+      },
+      {
+        "properties": {
+          "fixture_id": {
+            "const": "fake-adapter.unknown"
+          },
+          "operation_key": {
+            "const": "g4:operation:unknown"
+          },
+          "attempt_no": {
+            "const": 1
+          },
+          "input": {
+            "const": {
+              "fixture": "fake-adapter.unknown",
+              "payload": {
+                "sequence": 5,
+                "value": "unknown"
+              }
+            }
+          },
+          "invocation_hash": {
+            "const": "sha256:c952bad05f1769889f24b1a07eb9a21dd09469fc7f189d87e3537d896fa4e1a9"
+          }
+        }
+      },
+      {
+        "properties": {
+          "fixture_id": {
+            "const": "fake-adapter.cancelled"
+          },
+          "operation_key": {
+            "const": "g4:operation:cancelled"
+          },
+          "attempt_no": {
+            "const": 1
+          },
+          "input": {
+            "const": {
+              "fixture": "fake-adapter.cancelled",
+              "payload": {
+                "sequence": 6,
+                "value": "cancelled"
+              }
+            }
+          },
+          "invocation_hash": {
+            "const": "sha256:f95776b1cc55b0293630415a926211877ac51d8cef06be3b01d9b82bf0913586"
+          }
+        }
+      },
+      {
+        "properties": {
+          "fixture_id": {
+            "const": "fake-adapter.compensated"
+          },
+          "operation_key": {
+            "const": "g4:operation:compensated"
+          },
+          "attempt_no": {
+            "const": 1
+          },
+          "input": {
+            "const": {
+              "fixture": "fake-adapter.compensated",
+              "payload": {
+                "sequence": 7,
+                "value": "compensated"
+              }
+            }
+          },
+          "invocation_hash": {
+            "const": "sha256:3ec836c03eadabb30d654b24b68c09aa95ceaf8c7905e1bc2e49d33bf0a3c68b"
+          }
+        }
+      }
+    ]
+  },
+  "hash": "sha256:d32f0197077f0cb423246b83a211893cdb07eb560c31443c3570e66e4c0d053a"
+}

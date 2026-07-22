@@ -1,0 +1,99 @@
+{
+  "format": "icarus.workflow-test-bootstrap-negative-cases/1",
+  "ref": {
+    "id": "icarus.workflow-test-bootstrap-negative-cases",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-test-bootstrap-negative-cases:1\n",
+  "payload": {
+    "fixture_scope": "test_only",
+    "cases": [
+      {
+        "case_id": "profile-ref-drift",
+        "expected_code": "profile_identity_mismatch"
+      },
+      {
+        "case_id": "profile-hash-drift",
+        "expected_code": "profile_identity_mismatch"
+      },
+      {
+        "case_id": "fixture-ref-drift",
+        "expected_code": "fixture_identity_mismatch"
+      },
+      {
+        "case_id": "fixture-hash-drift",
+        "expected_code": "fixture_identity_mismatch"
+      },
+      {
+        "case_id": "g1-hash-drift",
+        "expected_code": "upstream_identity_mismatch"
+      },
+      {
+        "case_id": "g2-hash-drift",
+        "expected_code": "upstream_identity_mismatch"
+      },
+      {
+        "case_id": "g3-hash-drift",
+        "expected_code": "upstream_identity_mismatch"
+      },
+      {
+        "case_id": "certified-status",
+        "expected_code": "test_profile_certification_forbidden"
+      },
+      {
+        "case_id": "production-build",
+        "expected_code": "test_bootstrap_profile_forbidden"
+      },
+      {
+        "case_id": "production-startup",
+        "expected_code": "test_bootstrap_profile_forbidden"
+      },
+      {
+        "case_id": "unknown-fixture",
+        "expected_code": "fake_adapter_invocation_undeclared"
+      },
+      {
+        "case_id": "unknown-fake-outcome",
+        "expected_code": "fake_adapter_outcome_undeclared"
+      },
+      {
+        "case_id": "clock-seed-drift",
+        "expected_code": "virtual_clock_profile_mismatch"
+      },
+      {
+        "case_id": "clock-wall-fallback",
+        "expected_code": "virtual_clock_profile_mismatch"
+      },
+      {
+        "case_id": "root-relative-path",
+        "expected_code": "data_root_invalid"
+      },
+      {
+        "case_id": "root-path-escape",
+        "expected_code": "data_root_not_temporary"
+      },
+      {
+        "case_id": "root-symlink",
+        "expected_code": "data_root_symlink_or_alias"
+      },
+      {
+        "case_id": "root-preexisting-empty",
+        "expected_code": "data_root_preexisting"
+      },
+      {
+        "case_id": "root-preexisting-nonempty",
+        "expected_code": "data_root_preexisting_nonempty"
+      },
+      {
+        "case_id": "root-cross-instance-reuse",
+        "expected_code": "data_root_preexisting_nonempty"
+      },
+      {
+        "case_id": "production-root-collision",
+        "expected_code": "production_root_collision"
+      }
+    ]
+  },
+  "hash": "sha256:1fb3c5fc811e6869ba5e52972d4bfbb07771b9d668529343bc58e4ab6678147b"
+}
