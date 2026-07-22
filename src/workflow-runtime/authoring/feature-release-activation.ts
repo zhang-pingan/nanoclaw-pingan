@@ -1127,6 +1127,7 @@ function verifyInvocationAndEventChains(
   let previousInvocationHash: string | null = null;
   const resultSchemaResourceId = g39SchemaResourceId(request, 'result');
   const resultSchemaHash = request.contract_schemas.result.content_hash;
+  const invocationResults: G39FeatureReleaseActivationResult[] = [];
   for (const [index, row] of invocations.entries()) {
     if (
       row.invocation_no !== index + 1 ||
@@ -1219,6 +1220,7 @@ function verifyInvocationAndEventChains(
         'Activation Invocation/result binding mismatch',
       );
     }
+    invocationResults.push(result);
     previousInvocationHash = row.invocation_hash;
   }
 
@@ -1298,27 +1300,104 @@ function verifyInvocationAndEventChains(
     }
     previousEventHash = row.event_hash;
   }
-  for (const invocation of invocations) {
-    const attemptEvents = events.filter(
-      (row) => row.attempt_no === invocation.invocation_no,
+  let eventOffset = 0;
+  for (const [index, invocation] of invocations.entries()) {
+    const result = invocationResults[index]!;
+    const sameDomain =
+      invocation.submitted_request_hash ===
+      invocation.command_domain_request_hash;
+    const isCanonicalTerminal =
+      sameDomain &&
+      (invocation.disposition === 'applied' ||
+        invocation.disposition === 'failed' ||
+        invocation.disposition === 'conflict');
+    const eventInputs = isCanonicalTerminal
+      ? eventInputsForTerminal(
+          {
+            invocation_kind: invocation.invocation_kind,
+            actor_ref: invocation.actor_ref,
+            auth_session_ref: invocation.auth_session_ref,
+            requested_at_ms: invocation.requested_at_ms,
+          },
+          result,
+        )
+      : eventInputsForReplayOrDrift(
+          invocation.invocation_kind,
+          result,
+          !sameDomain,
+        );
+    const attemptEvents = events.slice(
+      eventOffset,
+      eventOffset + eventInputs.length,
     );
-    const terminalEvent =
-      invocation.disposition === 'duplicate'
-        ? 'terminal_replayed'
-        : invocation.disposition === 'conflict' &&
-            invocation.submitted_request_hash !==
-              invocation.command_domain_request_hash
-          ? 'domain_request_conflicted'
-          : 'terminal_result_committed';
     if (
-      !attemptEvents.some((row) => row.event_type === 'attempt_started') ||
-      !attemptEvents.some((row) => row.event_type === terminalEvent)
+      attemptEvents.length !== eventInputs.length ||
+      attemptEvents.some((row, eventIndex) => {
+        const input = eventInputs[eventIndex]!;
+        const withVerifiedFacts = input.includeVerifiedReleaseFacts;
+        const withDetail = input.detail !== null;
+        return (
+          row.attempt_no !== invocation.invocation_no ||
+          row.phase !== input.phase ||
+          row.event_type !== input.event_type ||
+          row.failure_code !== input.failure_code ||
+          row.occurred_at_ms !== invocation.requested_at_ms ||
+          row.verified_feature_id !==
+            (withVerifiedFacts ? command.verified_feature_id : null) ||
+          row.verified_target_feature_release_id !==
+            (withVerifiedFacts
+              ? command.verified_target_feature_release_id
+              : null) ||
+          row.verified_target_feature_release_ref !==
+            (withVerifiedFacts
+              ? command.verified_target_feature_release_ref
+              : null) ||
+          row.verified_target_feature_release_version !==
+            (withVerifiedFacts
+              ? command.verified_target_feature_release_version
+              : null) ||
+          row.verified_target_feature_release_hash !==
+            (withVerifiedFacts
+              ? command.verified_target_feature_release_hash
+              : null) ||
+          row.verified_previous_feature_release_id !==
+            (withVerifiedFacts
+              ? command.verified_previous_feature_release_id
+              : null) ||
+          row.verified_previous_feature_release_ref !==
+            (withVerifiedFacts
+              ? command.verified_previous_feature_release_ref
+              : null) ||
+          row.verified_previous_feature_release_version !==
+            (withVerifiedFacts
+              ? command.verified_previous_feature_release_version
+              : null) ||
+          row.verified_previous_feature_release_hash !==
+            (withVerifiedFacts
+              ? command.verified_previous_feature_release_hash
+              : null) ||
+          row.detail_value_id !==
+            (withDetail ? invocation.result_value_id : null) ||
+          row.detail_hash !== (withDetail ? invocation.result_hash : null) ||
+          row.detail_schema_resource_id !==
+            (withDetail ? invocation.result_schema_resource_id : null) ||
+          row.detail_schema_hash !==
+            (withDetail ? invocation.result_schema_hash : null)
+        );
+      })
     ) {
       throw new FeatureReleaseActivationError(
         'terminal_integrity_mismatch',
-        'Activation Invocation is missing its adjacent audit event profile',
+        'Activation Invocation/Event profile mismatch',
       );
     }
+    eventOffset += eventInputs.length;
+  }
+  if (eventOffset !== events.length) {
+    throw new FeatureReleaseActivationError(
+      'terminal_integrity_mismatch',
+      'Activation Event history contains an unbound suffix',
+    );
   }
   if (command.lifecycle !== 'pending') {
     const canonical = invocations.find(
@@ -1758,6 +1837,89 @@ function eventInputsForTerminal(
   return events;
 }
 
+function eventInputsForReplayOrDrift(
+  invocationKind: G39ActivationInvocation['invocation_kind'],
+  result: G39FeatureReleaseActivationResult,
+  drift: boolean,
+): ActivationEventInput[] {
+  const events: ActivationEventInput[] = [
+    {
+      phase: 'authenticate',
+      event_type: 'attempt_started',
+      failure_code: null,
+      detail: null,
+      includeVerifiedReleaseFacts: false,
+    },
+  ];
+  if (drift) {
+    events.push(
+      {
+        phase: 'authenticate',
+        event_type: 'phase_succeeded',
+        failure_code: null,
+        detail: null,
+        includeVerifiedReleaseFacts: false,
+      },
+      {
+        phase: 'validate',
+        event_type: 'domain_request_conflicted',
+        failure_code: 'idempotency_conflict',
+        detail: result,
+        includeVerifiedReleaseFacts: false,
+      },
+    );
+  } else if (invocationKind === 'recovery') {
+    events.push(
+      {
+        phase: 'recovery',
+        event_type: 'recovery_started',
+        failure_code: null,
+        detail: null,
+        includeVerifiedReleaseFacts: false,
+      },
+      {
+        phase: 'recovery',
+        event_type: 'recovery_succeeded',
+        failure_code: null,
+        detail: null,
+        includeVerifiedReleaseFacts: false,
+      },
+      {
+        phase: 'finalize',
+        event_type: 'terminal_replayed',
+        failure_code: null,
+        detail: result,
+        includeVerifiedReleaseFacts: false,
+      },
+    );
+  } else {
+    events.push(
+      {
+        phase: 'authenticate',
+        event_type: 'phase_succeeded',
+        failure_code: null,
+        detail: null,
+        includeVerifiedReleaseFacts: false,
+      },
+      {
+        phase: 'validate',
+        event_type: 'phase_succeeded',
+        failure_code: null,
+        detail: null,
+        includeVerifiedReleaseFacts: false,
+      },
+      {
+        phase: 'finalize',
+        event_type: 'terminal_replayed',
+        failure_code: null,
+        detail: result,
+        includeVerifiedReleaseFacts: false,
+      },
+    );
+  }
+  return events;
+}
+
 function finalizeCommand(
   transaction: WorkflowRuntimeWriteTransaction,
   command: CommandRow,
@@ -1953,88 +2115,13 @@ function appendReplayOrDrift(
     terminal,
     next.previousHash,
   );
-  const events: ActivationEventInput[] = [
-    {
-      phase: 'authenticate',
-      event_type: 'attempt_started',
-      failure_code: null,
-      detail: null,
-      includeVerifiedReleaseFacts: false,
-    },
-  ];
-  if (drift) {
-    events.push(
-      {
-        phase: 'authenticate',
-        event_type: 'phase_succeeded',
-        failure_code: null,
-        detail: null,
-        includeVerifiedReleaseFacts: false,
-      },
-      {
-        phase: 'validate',
-        event_type: 'domain_request_conflicted',
-        failure_code: 'idempotency_conflict',
-        detail: result,
-        includeVerifiedReleaseFacts: false,
-      },
-    );
-  } else if (invocation.invocation_kind === 'recovery') {
-    events.push(
-      {
-        phase: 'recovery',
-        event_type: 'recovery_started',
-        failure_code: null,
-        detail: null,
-        includeVerifiedReleaseFacts: false,
-      },
-      {
-        phase: 'recovery',
-        event_type: 'recovery_succeeded',
-        failure_code: null,
-        detail: null,
-        includeVerifiedReleaseFacts: false,
-      },
-      {
-        phase: 'finalize',
-        event_type: 'terminal_replayed',
-        failure_code: null,
-        detail: result,
-        includeVerifiedReleaseFacts: false,
-      },
-    );
-  } else {
-    events.push(
-      {
-        phase: 'authenticate',
-        event_type: 'phase_succeeded',
-        failure_code: null,
-        detail: null,
-        includeVerifiedReleaseFacts: false,
-      },
-      {
-        phase: 'validate',
-        event_type: 'phase_succeeded',
-        failure_code: null,
-        detail: null,
-        includeVerifiedReleaseFacts: false,
-      },
-      {
-        phase: 'finalize',
-        event_type: 'terminal_replayed',
-        failure_code: null,
-        detail: result,
-        includeVerifiedReleaseFacts: false,
-      },
-    );
-  }
   insertEvents(
     transaction,
     command,
     boundRequest,
     result.invocation_no,
     invocation.requested_at_ms,
-    events,
+    eventInputsForReplayOrDrift(invocation.invocation_kind, result, drift),
   );
   return result;
 }

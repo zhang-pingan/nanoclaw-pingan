@@ -4313,6 +4313,14 @@ First terminal result JSON的`referenced_terminal_result`为null；Schema 4 Invo
 
 真实文件SQLite Gate覆盖absent/present pointer applied、previous draining与adjacent CAS、resource/G3.6/lifecycle/Retention failed、pointer conflict、applied/failed/conflict exact replay、pending/terminal repeated domain drift、9个pre-commit rollback点、clean pending bounded recovery、post-commit reopen recovery、7类tamper、Release/Retention protections和双独立数据库semantic row determinism。G3.9完成后G3进入`EXIT_CANDIDATE_PENDING_INDEPENDENT_G3_REGRESSION`；下一独立任务固定为G3整体回归，完成前不得开始G4。
 
+#### G3 whole-gate independent regression closure
+
+G3.1-G3.9的独立整体回归已经完成，G3状态为`DONE`。回归保持G1 root、Schema 4 Manifest/migration/upgrade、G3.6/G3.7、frozen G3.8A、G3.9 closed schemas/pack和G2 sealed successor全部identity不变；G3.9连续两轮generate/check的全部member bytes稳定。Schema 4 fresh/reopen、Schema 3 empty-only upgrade与nonempty/identity/fault rollback，G2 40/40 exact replay，G0.6/G0.10及protected tree均重新通过。
+
+独立回归补充闭合一个实现缺口：合法Event hash chain本身不足以证明每个Invocation的Event语义完整，攻击者可追加schema-valid Event并重算后缀hash。Activation recovery现在必须按Invocation disposition、submit/recovery kind及same-domain/drift语义，精确重建并匹配整条Event profile；Event数量、全局相邻顺序、phase/type/failure、occurred time、detail Value quartet和nullable verified Release facts任一漂移都以`terminal_integrity_mismatch` fail closed，且不得追加`integrity_failed`或其他伪造audit。写入和恢复消费同一个profile builder，正常事务、replay与recovery bytes不变。该实现修复不改变G3.8A/G3.9 machine Contract或Schema 4 physical identity。
+
+G3退出证据固定包含全部direct Contract checks、G3.7/G3.8A/G3.9及whole-G3 tests、Schema/Store和G1 Activation/upgrade tests、完整Contract链、G2与40/40 replay、G0.6/G0.10、typecheck/build/format/diff以及protected/forbidden scan。Production loader/current/latest resolver、Execution Artifact build/install、Retention GC/delete、新authoring stage、legacy alias/fallback/compatibility reader和G4-G9 implementation仍不存在。G4 Test Bootstrap现在仅作为下一独立任务`READY`；本G3关闭任务没有实施G4。
+
 Feature Release 与新创建入口的激活指针必须独立持久化，不能用安装目录或当前文件内容代替：
 
 ```text

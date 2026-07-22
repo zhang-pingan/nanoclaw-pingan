@@ -1,8 +1,8 @@
 # Dynamic Workflow Runtime 实施进度
 
 > **状态**: IN_PROGRESS
-> **当前 Gate**: G3 Registry / Authoring / Publish（`EXIT_CANDIDATE_PENDING_INDEPENDENT_G3_REGRESSION`；G3.1-G3.9均`DONE`；G2保持`DONE / BASELINE_ACCEPTED`与40/40 exact replay）
-> **下一独立会话**: G3整体独立回归；通过前不得开始G4
+> **当前 Gate**: G3 Registry / Authoring / Publish（`DONE`；G3.1-G3.9与独立whole-gate regression全部通过；G2保持`DONE / BASELINE_ACCEPTED`与40/40 exact replay）
+> **下一独立会话**: G4 Test Bootstrap；本次G3关闭任务未实施任何G4 surface
 > **最后更新**: 2026-07-22
 > **规范权威**: `local/docs/dynamic-workflow-dag-framework.md`
 
@@ -109,10 +109,10 @@ Agent Container 运行于独立 VM，Node identity 由 VM image gate 保证；�
 | Gate | 状态 | 依赖 | 退出证据 | 完成提交 |
 | --- | --- | --- | --- | --- |
 | G0 Contract Pack / Static Baseline | `DONE` | 无 | G0.1-G0.9 historical root + G0.10 additive Capacity Admin/publication/CAP/Logical Schema/coverage root | 本原子提交 |
-| G1 DDL / Store | `DONE` | G0.10 | current Database Schema `4`；Schema 3只允许四个Activation/active-pointer关系全空时原子升级，否则fail closed | G1.1-G1.6已完成；下一会话做Schema 4整体回归 |
+| G1 DDL / Store | `DONE` | G0.10 | current Database Schema `4`；Schema 3只允许四个Activation/active-pointer关系全空时原子升级，否则fail closed | G1.1-G1.6与独立Schema 4回归已完成 |
 | G2 Compiler / Golden | `DONE` | G0.1-G0.9；R-016 spec/Contract repair；G0.10 不改变 Compiler/Plan 语义 | phase=`BASELINE_ACCEPTED`；前序immutable lineage未变；owner-approved successor GoldenSemanticReview/seal完整，current replay 40/40 exact、0 differences | 本原子提交（replay-repair successor seal） |
-| G3 Registry / Authoring / Publish | `EXIT_CANDIDATE` | G1 + G2 | G3.1-G3.9 DONE；G3.9 closed Contract、Activation transaction、replay/recovery/fault Gate完成 | 下一独立任务做G3整体回归；通过前不得开始G4 |
-| G4 Test Bootstrap | `NOT_READY` | G1 + G2 + G3 | isolated bootstrap profile | - |
+| G3 Registry / Authoring / Publish | `DONE` | G1 + G2 | G3.1-G3.9 DONE；独立whole-gate regression覆盖machine authority、transaction、replay/recovery/fault、Schema 4与冻结边界 | 本原子提交 |
+| G4 Test Bootstrap | `READY` | G1 + G2 + G3 | isolated bootstrap profile | 下一独立任务；本提交未实施 |
 | G5 Basic Runtime | `NOT_READY` | G4 | T0-T6e model/fault fixtures | - |
 | G6 Dynamic / Close | `NOT_READY` | G5 | T7/T8/child/compensation fixtures | - |
 | G7 Control / Card / Projection / Recovery | `NOT_READY` | G6 | command/card/projection/recovery/blocker fixtures | - |
@@ -123,7 +123,7 @@ Agent Container 运行于独立 VM，Node identity 由 VM image gate 保证；�
 
 | 工作包 | 范围 | 状态 | 当前 Gate/切片 |
 | --- | --- | --- | --- |
-| I0 | Publish、Registry、Recipe 与执行版本固定 | `DONE_PENDING_G3_REGRESSION` | G3.1-G3.9 DONE；staged Publisher与Feature Release Activation均完成 |
+| I0 | Publish、Registry、Recipe 与执行版本固定 | `DONE` | G3.1-G3.9与独立G3回归完成；staged Publisher与Feature Release Activation均闭合 |
 | I1 | Intake、Routing、幂等创建、Child provenance、Claim | `NOT_READY` | G5 起 |
 | I2 | Definition、State lowering、Context、transition | `IN_PROGRESS` | approved static lowering语义已由Compiler 3.0.1实现、批准并seal；G2 lowering部分完成，Runtime transition仍从G5起 |
 | I3 | Source/Compiled IR、Port、Compiler | `DONE` | Production Compiler 3.0.1 successor已批准并seal；current replay 40/40 exact、0 differences |
@@ -1864,9 +1864,38 @@ Gate结果：
 | `typecheck` / `build` / targeted Prettier / `git diff --check` | PASS |
 | protected-tree / forbidden-surface | PASS；只扩展current G2精确authoring allowlist以容纳G3.9 service/test；G2 sealed、G0.6/G0.10、G3.8A和G1 Schema/Store production identities零修改；无loader/resolver、Artifact build/install、GC/delete、新authoring stage或G4-G9 surface |
 
+## G3 Whole-Gate Independent Regression
+
+**结论**：`PASS / G3 DONE`。独立回归从clean `main`基线`0bd9a2c25f778ec4442346c8897fe95ac5cbabad`开始，parent=`0f7b73301aeccc0e688ae2f6994b5c8ec4aced8e`；运行环境为local checkout、`permission_profile=disabled/unrestricted`、filesystem unrestricted、sandbox `danger-full-access`、approval policy `never`。没有申请approval/escalation、切换或创建worktree、push、amend或重写历史。交接前曾有一次只读`node -e`包脚本查看未经过managed wrapper；该偏差没有写入或生成输出，之后全部Node/npm生成、检查、测试、typecheck、build和Prettier命令均严格通过`./scripts/runtime-toolchain.sh exec -- <command>`。
+
+回归完整复读G3.1-G3.9 machine packs、closed schemas、fixtures、generator/checker、Store/authoring实现和测试，并审阅baseline完整diff及Schema 4 DDL/Manifest/upgrade/Store边界。全仓检索确认Activation继续只使用第三command boundary `workflow_feature_release_activation_commands/invocations/events`；G3.6仍是G3.3/G3.5唯一组合边界并保持20项内部precedence；G3.7仍为单个`BEGIN IMMEDIATE` staged Publisher；frozen G3.8A保持9 positive / 59 negative / 17 fault与62 column / 12 composite FK / 7 UK；G3.9保持9 positive / 53 negative / 17 fault和closed request/receipt/result authority。
+
+独立审阅发现并修复一个真实恢复完整性回归：原verifier验证Event hash adjacency、detail binding及每个Invocation至少具有started/terminal Event，但会接受攻击者追加的schema-valid `integrity_failed` Event，只要为该后缀重新计算正确hash。新增真实文件SQLite测试先复现恢复调用错误接受该tamper并追加audit；实现随后改为让写入与恢复共享同一frozen Event profile，并精确验证每个Invocation对应Event的数量、全局相邻顺序、phase/type/failure、occurred time、detail Value quartet及verified Release facts。修复后该tamper以`terminal_integrity_mismatch` fail closed，Invocation/Event counts不增加；正常applied/failed/pointer-conflict、submit/recovery replay与same-key drift profile不变。没有修改G3.9 Contract或Schema identity。
+
+关键identity全部保持：G1 root=`sha256:6f49451868b7a5cab359d1c21f14f79afbc11b12aa1938039daf5914d9c4d591`；Schema 4 manifest=`sha256:f517a5e7bb8b3ea91bb37cd6a68b32898ceb62b9044687a8103808be6852106a`；migration=`sha256:4a8ddeb1f9715399ad96c3bc32efa5e8032a3bd484eaed0159c6a24620c1be43`；Schema 3->4 upgrade=`sha256:5ac263fe3279c61f74ba6314f5df98fff59a8f8b32acfa784d2040421ebaa3cf`；G3.6=`sha256:730daac9db4bcfb645374b12e10e3962ddacbebc2828875cb00133c8ada195a8`；G3.7=`sha256:2fae2da648d6da5969e6c5c57b2342f6f15b3084b39e7acfc43b010b48517e74`；G3.8A=`sha256:d8412111a0f3dcabb4ce416b99086701ea3e3911ff431b5457eb957b2f69722f`；G3.9=`sha256:2ef0997982483a6da4c6c6cfd3e26b7934f7fcffce4fdae160f94f4e9d600b38`；G3.9 request/receipt/result schema resources=`sha256:18b6b621ed172999a2d9a677e1adfd66790079089751562c4317c08747704921` / `sha256:68049e60a9febc4c65a162c930f93757386503ee054ce64046e562b134c85ffe` / `sha256:c99c78fb1a7701264e20ae1d29824bafac183787ba79ab22398d4d5045f80f1a`；G2 sealed successor=`sha256:d99647d8ca6aabc737a793019335e6770aa111a79be7545c4dec00c6e7af2145`。G3.9连续两轮generate/check及前置快照的8-member tree digest均为`5ba064d318ef36dbda1d3eb2fae527b5d388352518531b1b5d7095f0ca80ba30`。
+
+Gate结果：
+
+| 命令/证据 | 结果 |
+| --- | --- |
+| G3.1-G3.9全部direct Contract checks | PASS；current G3.1/G3.2A/G3.2/G3.3/G3.5/G3.6/G3.7/G3.8A/G3.9 identities逐项匹配；G3.9两轮generate/check member bytes稳定 |
+| `test:g3.7` / `test:g3.8a` / `test:g3.9` | PASS；2 files / 14 tests；1 file / 4 tests；2 files / 34 tests |
+| `test:g3` | PASS；14 files / 97 tests；包含新增semantic Event tamper fail-closed用例 |
+| `schema:check` / `store:check` | PASS；current G1 root、Schema 4 Manifest、migration、upgrade与managed SQLite/Profile identities不变 |
+| `test:g1.activation` / `test:g1.2` | PASS；5/5 targeted Activation/Release/Retention tests；20/20 Store tests覆盖fresh/reopen、empty-only upgrade、四类nonempty、source identity drift与fault rollback |
+| `contracts:check` | PASS；完整current G0/G1/G2/G3/Schema/Store chain通过 |
+| `test:g2` / `golden:current:replay:check` | PASS；7 files / 47 tests；successor 40/40 exact且sealed bundle不变 |
+| `test:g0.6` / `test:g0.10` | PASS；1 file / 8 tests；1 file / 10 tests |
+| `typecheck` / `build` / changed TypeScript targeted Prettier / `git diff --check` | PASS |
+| transaction/recovery/fault | PASS；absent/present pointer adjacent CAS、previous draining、target active、applied-only receipt、failed/conflict null receipt、strict verified-fact prefix、9个pre-commit全rollback、post-commit real-file reopen只追加recovery duplicate、clean pending恢复与inconsistent evidence拒绝全部闭合 |
+| tamper/determinism/protection | PASS；command/result/receipt/Invocation/Event hash/schema/binding及重算hash的schema-valid Event suffix均fail closed且不追加伪造audit；双real-file semantic rows一致；active/draining Release删除和held Retention release保护保持 |
+| protected-tree / forbidden-surface | PASS；G0.6/G0.10 historical source、G2 sealed/current、frozen G3.8A与G1 Schema/Store相对baseline零diff；无Production loader/current/latest resolver、Artifact build/install、GC/delete、新authoring stage、legacy alias/fallback/compatibility reader或G4-G9实现 |
+
+G3.1-G3.9各pack中的`g3_status=IN_PROGRESS`或`EXIT_CANDIDATE_PENDING_INDEPENDENT_G3_REGRESSION`是各切片生成时的冻结事实，不为Gate关闭而重写；本进度账本、架构规范和Contract README共同记录whole-gate结论。G3现为`DONE`。G4只提升为下一独立任务`READY`，本回归没有创建G4 bootstrap profile、Runtime implementation或任何G4-G9 surface。
+
 ## 下一步
 
-下一独立会话固定为**G3整体回归**：从G3.9 clean提交开始，重新审阅G3.1-G3.9 machine authority、Schema 4与G2/G0冻结边界，独立运行完整Contract/Store/transaction/recovery/forbidden-surface Gate并确认G3 exit criteria。回归通过前不得开始G4；该任务不得实现G4-G9、Production loader/current resolver、Execution Artifact build/install、GC/delete或新的authoring功能。
+下一独立会话固定为**G4 Test Bootstrap**：只实现规范定义的isolated test bootstrap profile、test-only Store/root/Fake Adapter装配及其closed Contract/fixture/fault边界。不得实施G5-G9 Runtime、Production loader/current/latest resolver、Execution Artifact build/install、Retention GC/delete、Production activation、legacy alias/fallback/compatibility reader或额外authoring stage；不得改写G3、G2 sealed、G0.6/G0.10和G1 Schema 4冻结identity。
 
 历史fresh review evidence只存在于Git commits，不是current dependency；current immutable semantic approval只绑定exact Draft/report identities。显式`prepare-rc`冻结的四个Working roots与唯一Review Candidate未变；current expected full case-result/Plan/proof/program bytes/hash已独立冻结、审计、owner批准并seal。local single-user签名策略为`not_required_local_single_user`，没有伪造GPG或远程签名。
 

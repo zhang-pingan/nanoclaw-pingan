@@ -11,6 +11,7 @@ import {
   withG39PreviousRelease,
 } from '../contracts/g3-feature-release-activation-fixtures.js';
 import {
+  G39_EVENT_DOMAIN,
   g39ActivationCommandId,
   g39SchemaResourceId,
 } from '../contracts/g3-feature-release-activation.js';
@@ -19,7 +20,7 @@ import type {
   G39RetentionClaim,
 } from '../contracts/g3-feature-release-activation-types.js';
 import { registryClosureId } from '../contracts/g3-registry-persistence.js';
-import { canonicalJson } from '../contracts/hash.js';
+import { canonicalJson, domainSeparatedSha256 } from '../contracts/hash.js';
 import { persistRegistryPersistenceBatch } from '../store/registry-persistence.js';
 import {
   WorkflowRuntimeConnectionFactory,
@@ -963,6 +964,105 @@ describe('G3.9 Feature Release Activation', () => {
         ...fixture.activation_invocation,
         invocation_kind: 'recovery',
         auth_session_ref: 'auth-session:tamper-recovery',
+        requested_at_ms: fixture.activation_invocation.requested_at_ms + 20,
+      }),
+    ).toThrowError(
+      expect.objectContaining({ code: 'terminal_integrity_mismatch' }),
+    );
+    expect(activationCounts(store)).toEqual(before);
+  });
+
+  it('fails closed when a schema-valid Event is appended with a recomputed hash', () => {
+    const store = openFresh();
+    const fixture = seedPublishedTarget(store);
+    activateFeatureRelease(
+      store,
+      fixture.activation_request_bytes,
+      fixture.activation_invocation,
+    );
+    const head = store.queryOne<
+      Record<string, string | number | null> & {
+        event_hash: string;
+        event_no: number;
+      }
+    >(
+      `SELECT command_id, event_no, attempt_no, phase, event_type, failure_code,
+              verified_feature_id, verified_target_feature_release_id,
+              verified_target_feature_release_ref,
+              verified_target_feature_release_version,
+              verified_target_feature_release_hash,
+              verified_previous_feature_release_id,
+              verified_previous_feature_release_ref,
+              verified_previous_feature_release_version,
+              verified_previous_feature_release_hash, detail_value_id,
+              detail_hash, detail_schema_resource_id, detail_schema_hash,
+              previous_event_hash, event_hash, occurred_at_ms
+         FROM workflow_feature_release_activation_events
+        ORDER BY event_no DESC LIMIT 1`,
+      [],
+    )!;
+    const { event_hash: previousEventHash, ...headWithoutHash } = head;
+    const appended: Record<string, string | number | null> & {
+      event_no: number;
+      phase: string;
+      event_type: string;
+      failure_code: string;
+      previous_event_hash: string;
+    } = {
+      ...headWithoutHash,
+      event_no: head.event_no + 1,
+      phase: 'recovery',
+      event_type: 'integrity_failed',
+      failure_code: 'terminal_integrity_mismatch',
+      previous_event_hash: previousEventHash,
+    };
+    const appendedHash = domainSeparatedSha256(G39_EVENT_DOMAIN, appended);
+    rawTamper(
+      store,
+      `INSERT INTO workflow_feature_release_activation_events (
+        command_id, event_no, attempt_no, phase, event_type, failure_code,
+        verified_feature_id, verified_target_feature_release_id,
+        verified_target_feature_release_ref,
+        verified_target_feature_release_version,
+        verified_target_feature_release_hash,
+        verified_previous_feature_release_id,
+        verified_previous_feature_release_ref,
+        verified_previous_feature_release_version,
+        verified_previous_feature_release_hash, detail_value_id, detail_hash,
+        detail_schema_resource_id, detail_schema_hash, previous_event_hash,
+        event_hash, occurred_at_ms
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        appended.command_id,
+        appended.event_no,
+        appended.attempt_no,
+        appended.phase,
+        appended.event_type,
+        appended.failure_code,
+        appended.verified_feature_id,
+        appended.verified_target_feature_release_id,
+        appended.verified_target_feature_release_ref,
+        appended.verified_target_feature_release_version,
+        appended.verified_target_feature_release_hash,
+        appended.verified_previous_feature_release_id,
+        appended.verified_previous_feature_release_ref,
+        appended.verified_previous_feature_release_version,
+        appended.verified_previous_feature_release_hash,
+        appended.detail_value_id,
+        appended.detail_hash,
+        appended.detail_schema_resource_id,
+        appended.detail_schema_hash,
+        appended.previous_event_hash,
+        appendedHash,
+        appended.occurred_at_ms,
+      ],
+    );
+    const before = activationCounts(store);
+    expect(() =>
+      activateFeatureRelease(store, fixture.activation_request_bytes, {
+        ...fixture.activation_invocation,
+        invocation_kind: 'recovery',
+        auth_session_ref: 'auth-session:semantic-event-tamper',
         requested_at_ms: fixture.activation_invocation.requested_at_ms + 20,
       }),
     ).toThrowError(
