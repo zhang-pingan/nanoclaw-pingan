@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-runtime-constraint-trigger-fixtures:1\n",
-  "hash": "sha256:df41cdf073b798b412dbb28798c20ac4a54ada39667e68067ed2c06d3072e217",
+  "hash": "sha256:46b7b90e99bff809dfeeab0f52d007a0120e7216446ad6a3d3e64adf1419fdc5",
   "payload": {
     "execution_target": "real_file_sqlite",
     "enum_check_count": 120,
@@ -148,6 +148,7 @@
       "stale_composite_lineage",
       "operational_blocker_cache_triggers",
       "capacity_event_hash_chain_and_immutability",
+      "capacity_prepared_invocation_shape_and_immutability",
       "capacity_milestone_partial_unique_repetition",
       "capacity_head_revision_commit_trigger",
       "publisher_caller_idempotency_unique",
@@ -166,6 +167,8 @@
       "activation_invocation_event_adjacency_immutability_and_tamper_rejection",
       "schema3_empty_activation_pointer_upgrade_to_schema4",
       "schema3_nonempty_activation_or_pointer_upgrade_fail_closed",
+      "schema4_nonempty_capacity_upgrade_to_schema5_preserves_all_rows",
+      "schema4_identity_or_copy_constraint_upgrade_fail_closed",
       "feature_release_owner_identity_single_active_and_legal_lifecycle",
       "active_pointer_owner_cas_immutability_delete_and_target_active",
       "retention_published_identity_held_observation_and_active_draining_protection"
@@ -211,7 +214,12 @@
       "trg:activation_events:command_binding",
       "trg:activation_events:hash_chain",
       "trg:activation_events:immutable_update",
-      "trg:activation_events:immutable_delete"
+      "trg:activation_events:immutable_delete",
+      "trg:capacity_invocations:prepared_insert",
+      "trg:capacity_invocations:applied_insert",
+      "trg:capacity_invocations:duplicate_insert",
+      "trg:capacity_invocations:immutable_update",
+      "trg:capacity_invocations:immutable_delete"
     ]
   }
 }

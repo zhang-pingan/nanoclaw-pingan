@@ -20,7 +20,12 @@ import {
   calculatePhysicalSchemaIdentity,
   verifySchemaDependencyManifestArtifact,
 } from './dependencies.js';
-import { buildQueryFixtures, renderMigration } from './ddl.js';
+import {
+  buildQueryFixtures,
+  renderMigration,
+  renderSchema4To5Upgrade,
+} from './ddl.js';
+import { calculateDatabaseSqliteSchemaIdentity } from './database-identity.js';
 import {
   assertClosedSchemaManifest,
   reconstructSchemaManifest,
@@ -28,6 +33,7 @@ import {
 import {
   loadExecutableSchemaSource,
   loadSchema3ExecutableSchemaSource,
+  loadSchema4ExecutableSchemaSource,
 } from './source.js';
 import {
   createMigratedDatabase,
@@ -41,6 +47,9 @@ import type {
 
 const source = loadExecutableSchemaSource();
 const migration = renderMigration(source);
+const schema4Source = loadSchema4ExecutableSchemaSource();
+const schema4Migration = renderMigration(schema4Source);
+const schema4To5Upgrade = renderSchema4To5Upgrade(schema4Source, source);
 
 function q(identifier: string): string {
   return `"${identifier.replaceAll('"', '""')}"`;
@@ -173,14 +182,15 @@ describe('G1.1 executable workflow runtime schema', () => {
         built.migrationSql,
         {},
         '',
+        built.schema4To5UpgradeSql,
       ),
     ).toThrow('Schema 3 to 4 upgrade SQL must not be empty');
     const payload = built.dependencyManifest
       .payload as unknown as G1SchemaDependencyManifestPayload;
     expect(() => assertClosedSchemaDependencyManifest(payload)).not.toThrow();
     expect(payload).toMatchObject({
-      member_count: 12,
-      physical_member_count: 11,
+      member_count: 13,
+      physical_member_count: 12,
       construction_provenance_count: 1,
     });
     expect(payload.members.map((member) => member.role)).toEqual([
@@ -196,20 +206,26 @@ describe('G1.1 executable workflow runtime schema', () => {
       'schema_manifest',
       'canonical_migration',
       'schema3_to_schema4_upgrade',
+      'schema4_to_schema5_upgrade',
     ]);
     expect(payload.members).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           role: 'canonical_migration',
           semantic_hash:
-            'sha256:4a8ddeb1f9715399ad96c3bc32efa5e8032a3bd484eaed0159c6a24620c1be43',
+            'sha256:11e69e3d82c3963c3eac7d75be67ac16575e43685fdd8e5b392e97152f734e9b',
           raw_sha256:
-            'sha256:4a8ddeb1f9715399ad96c3bc32efa5e8032a3bd484eaed0159c6a24620c1be43',
+            'sha256:11e69e3d82c3963c3eac7d75be67ac16575e43685fdd8e5b392e97152f734e9b',
         }),
         expect.objectContaining({
           role: 'schema3_to_schema4_upgrade',
           semantic_hash:
             'sha256:5ac263fe3279c61f74ba6314f5df98fff59a8f8b32acfa784d2040421ebaa3cf',
+        }),
+        expect.objectContaining({
+          role: 'schema4_to_schema5_upgrade',
+          semantic_hash:
+            'sha256:b443b201131cc1a26bd2401b784f7b4672c5f80828e6df31c23fb518c93e59e1',
         }),
       ]),
     );
@@ -267,6 +283,7 @@ describe('G1.1 executable workflow runtime schema', () => {
         built.migrationSql,
         { contractsRoot: copiedContracts },
         built.schema3To4UpgradeSql,
+        built.schema4To5UpgradeSql,
       );
       for (const relativePath of [
         'unrelated/new-contract.json',
@@ -282,6 +299,7 @@ describe('G1.1 executable workflow runtime schema', () => {
         built.migrationSql,
         { contractsRoot: copiedContracts },
         built.schema3To4UpgradeSql,
+        built.schema4To5UpgradeSql,
       );
       expect(after).toEqual(before);
       expect(after).toEqual(built.dependencyManifest);
@@ -320,6 +338,7 @@ describe('G1.1 executable workflow runtime schema', () => {
         built.migrationSql,
         { contractsRoot: copiedContracts },
         built.schema3To4UpgradeSql,
+        built.schema4To5UpgradeSql,
       );
       const originalPayload = built.dependencyManifest
         .payload as unknown as G1SchemaDependencyManifestPayload;
@@ -363,6 +382,7 @@ describe('G1.1 executable workflow runtime schema', () => {
           built.migrationSql,
           { contractsRoot: copiedContracts },
           built.schema3To4UpgradeSql,
+          built.schema4To5UpgradeSql,
         ),
       ).toThrow('query_catalog published semantic identity drifted');
 
@@ -378,6 +398,7 @@ describe('G1.1 executable workflow runtime schema', () => {
           built.migrationSql,
           { contractsRoot: copiedContracts },
           built.schema3To4UpgradeSql,
+          built.schema4To5UpgradeSql,
         ),
       ).toThrow();
     } finally {
@@ -488,8 +509,21 @@ describe('G1.1 executable workflow runtime schema', () => {
           (candidate) => candidate.enum_values.length > 0,
         )) {
           const checkId = `ck:${metadata.name}:${column.name}:enum`;
+          const validCapacityInvocation: Record<
+            string,
+            string | number | null
+          > =
+            metadata.name === 'runtime_capacity_admin_invocations'
+              ? {
+                  authorization_result: 'allowed',
+                  execution_result: 'conflict',
+                  denial_code: null,
+                  applied_at_ms: null,
+                }
+              : {};
           expect(() =>
             insertRow(database, metadata.name, {
+              ...validCapacityInvocation,
               [column.name]: '__invalid_closed_enum__',
             }),
           ).toThrow(checkId);
@@ -1480,5 +1514,263 @@ describe('G1.1 executable workflow runtime schema', () => {
         }),
       ).toThrow('capacity_event_hash_chain_invalid');
     });
+  });
+
+  it('enforces the closed prepared Capacity Invocation shape and append-only audit', () => {
+    withDatabase((database) => {
+      database.pragma('foreign_keys = OFF');
+      const requestHash = hash('capacity:prepared:request');
+      insertRow(database, 'runtime_capacity_admin_commands', {
+        command_id: 'capacity:prepared:command',
+        command_type: 'initialize_deployment_capacity',
+        assigned_capacity_revision: 1,
+        assigned_change_id: 'capacity:prepared:change',
+        genesis_core_release_hash: hash('capacity:prepared:core'),
+        proposed_config_hash: hash('capacity:prepared:config'),
+        request_hash: requestHash,
+        reason_code: 'initial_provisioning',
+      });
+      const valid = {
+        command_id: 'capacity:prepared:command',
+        invocation_no: 1,
+        submitted_request_hash: requestHash,
+        authorization_result: 'allowed',
+        execution_result: 'prepared',
+        denial_code: null,
+        required_permission: 'runtime.capacity.manage',
+        requested_at_ms: 100,
+        decided_at_ms: 100,
+        applied_at_ms: null,
+      };
+      insertRow(database, 'runtime_capacity_admin_invocations', valid);
+      for (const invalid of [
+        { authorization_result: 'denied', denial_code: 'permission_denied' },
+        { denial_code: 'permission_denied' },
+        { applied_at_ms: 101 },
+        { decided_at_ms: 99 },
+      ]) {
+        expect(() =>
+          insertRow(database, 'runtime_capacity_admin_invocations', {
+            ...valid,
+            ...invalid,
+          }),
+        ).toThrow('CHECK constraint failed');
+      }
+      expect(() =>
+        insertRow(database, 'runtime_capacity_admin_invocations', {
+          ...valid,
+          invocation_no: 2,
+        }),
+      ).toThrow('capacity_prepared_invocation_invalid');
+      expect(() =>
+        insertRow(database, 'runtime_capacity_admin_invocations', {
+          ...valid,
+          invocation_no: 2,
+          execution_result: 'applied',
+          applied_at_ms: 101,
+        }),
+      ).toThrow('capacity_applied_invocation_is_historical');
+      const duplicate = {
+        ...valid,
+        invocation_no: 2,
+        execution_result: 'duplicate',
+      };
+      expect(() =>
+        insertRow(database, 'runtime_capacity_admin_invocations', duplicate),
+      ).toThrow('capacity_duplicate_invocation_invalid');
+      database
+        .prepare(
+          `UPDATE runtime_capacity_admin_commands SET canonical_result_value_id=?, canonical_result_hash=?, finalized_at_ms=? WHERE command_id=?`,
+        )
+        .run(
+          'capacity:prepared:canonical-result',
+          hash('capacity:prepared:canonical-result'),
+          101,
+          valid.command_id,
+        );
+      expect(() =>
+        insertRow(database, 'runtime_capacity_admin_invocations', {
+          ...duplicate,
+          submitted_request_hash: hash('capacity:prepared:other-request'),
+        }),
+      ).toThrow('capacity_duplicate_invocation_invalid');
+      expect(() =>
+        insertRow(database, 'runtime_capacity_admin_invocations', duplicate),
+      ).not.toThrow();
+      expect(() =>
+        database
+          .prepare(
+            `UPDATE runtime_capacity_admin_invocations SET execution_result='applied', applied_at_ms=101 WHERE command_id=?`,
+          )
+          .run(valid.command_id),
+      ).toThrow('capacity_invocation_is_immutable');
+      expect(() =>
+        database
+          .prepare(
+            'DELETE FROM runtime_capacity_admin_invocations WHERE command_id=?',
+          )
+          .run(valid.command_id),
+      ).toThrow('capacity_invocation_is_immutable');
+    });
+  });
+
+  it('upgrades nonempty Schema 4 Capacity Invocation data to Schema 5 without loss', () => {
+    const root = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'icarus-schema4-capacity-upgrade-'),
+    );
+    const databasePath = path.join(root, 'workflow-runtime.db');
+    const database = createMigratedDatabase(databasePath, schema4Migration.sql);
+    try {
+      database.pragma('foreign_keys = OFF');
+      insertRow(database, 'runtime_capacity_admin_commands', {
+        command_id: 'capacity:upgrade:command',
+        command_type: 'initialize_deployment_capacity',
+        assigned_capacity_revision: 1,
+        assigned_change_id: 'capacity:upgrade:change',
+        genesis_core_release_hash: hash('capacity:upgrade:core'),
+        proposed_config_hash: hash('capacity:upgrade:config'),
+        reason_code: 'initial_provisioning',
+      });
+      const results = [
+        ['applied', 'allowed', null, 110],
+        ['denied', 'denied', 'permission_denied', null],
+        ['conflict', 'allowed', null, null],
+        ['duplicate', 'allowed', null, null],
+        ['failed', 'allowed', null, null],
+      ] as const;
+      for (const [
+        index,
+        [executionResult, authorizationResult, denialCode, appliedAt],
+      ] of results.entries()) {
+        insertRow(database, 'runtime_capacity_admin_invocations', {
+          id: `capacity:upgrade:invocation:${index + 1}`,
+          command_id: 'capacity:upgrade:command',
+          invocation_no: index + 1,
+          authorization_result: authorizationResult,
+          execution_result: executionResult,
+          denial_code: denialCode,
+          required_permission: 'runtime.capacity.manage',
+          requested_at_ms: 100,
+          decided_at_ms: 105,
+          applied_at_ms: appliedAt,
+        });
+      }
+      const before = database
+        .prepare(
+          'SELECT * FROM runtime_capacity_admin_invocations ORDER BY invocation_no',
+        )
+        .all();
+      database.pragma('foreign_keys = ON');
+      database.exec('BEGIN IMMEDIATE');
+      database.exec(schema4To5Upgrade.sql);
+      const fresh = createMigratedDatabase(
+        path.join(root, 'fresh-schema5.db'),
+        migration.sql,
+      );
+      const expectedIdentity = calculateDatabaseSqliteSchemaIdentity(fresh);
+      fresh.close();
+      expect(calculateDatabaseSqliteSchemaIdentity(database)).toBe(
+        expectedIdentity,
+      );
+      database.exec('COMMIT');
+      expect(database.pragma('user_version', { simple: true })).toBe(5);
+      expect(
+        database
+          .prepare(
+            'SELECT * FROM runtime_capacity_admin_invocations ORDER BY invocation_no',
+          )
+          .all(),
+      ).toEqual(before);
+      expect(
+        database.pragma(
+          "foreign_key_check('runtime_capacity_admin_invocations')",
+        ),
+      ).toEqual([]);
+      expect(
+        database
+          .prepare(
+            "SELECT name FROM sqlite_schema WHERE type='index' AND tbl_name='runtime_capacity_admin_invocations' ORDER BY name",
+          )
+          .pluck()
+          .all(),
+      ).toEqual([
+        'idx:capacity_invocations:command_history',
+        'sqlite_autoindex_runtime_capacity_admin_invocations_1',
+        'uk:capacity_invocations:command_no',
+      ]);
+      expect(
+        database
+          .prepare(
+            "SELECT name FROM sqlite_schema WHERE type='trigger' AND tbl_name='runtime_capacity_admin_invocations' ORDER BY name",
+          )
+          .pluck()
+          .all(),
+      ).toEqual([
+        'trg:capacity_invocations:applied_insert',
+        'trg:capacity_invocations:duplicate_insert',
+        'trg:capacity_invocations:immutable_delete',
+        'trg:capacity_invocations:immutable_update',
+        'trg:capacity_invocations:prepared_insert',
+      ]);
+    } finally {
+      if (database.open) database.close();
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('rolls back the Schema 4 to 5 rebuild when legacy data violates the new closed shape', () => {
+    const root = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'icarus-schema4-capacity-fault-'),
+    );
+    const databasePath = path.join(root, 'workflow-runtime.db');
+    const database = createMigratedDatabase(databasePath, schema4Migration.sql);
+    try {
+      database.pragma('foreign_keys = OFF');
+      insertRow(database, 'runtime_capacity_admin_commands', {
+        command_id: 'capacity:fault:command',
+        command_type: 'initialize_deployment_capacity',
+        assigned_capacity_revision: 1,
+        assigned_change_id: 'capacity:fault:change',
+        genesis_core_release_hash: hash('capacity:fault:core'),
+        proposed_config_hash: hash('capacity:fault:config'),
+        reason_code: 'initial_provisioning',
+      });
+      database.pragma('ignore_check_constraints = ON');
+      insertRow(database, 'runtime_capacity_admin_invocations', {
+        command_id: 'capacity:fault:command',
+        invocation_no: 1,
+        authorization_result: 'denied',
+        execution_result: 'failed',
+        denial_code: null,
+        requested_at_ms: 100,
+        decided_at_ms: 100,
+        applied_at_ms: null,
+      });
+      database.pragma('ignore_check_constraints = OFF');
+      database.exec('BEGIN IMMEDIATE');
+      expect(() => database.exec(schema4To5Upgrade.sql)).toThrow(
+        'CHECK constraint failed',
+      );
+      database.exec('ROLLBACK');
+      expect(database.pragma('user_version', { simple: true })).toBe(4);
+      expect(
+        database
+          .prepare('SELECT count(*) FROM runtime_capacity_admin_invocations')
+          .pluck()
+          .get(),
+      ).toBe(1);
+      expect(
+        database
+          .prepare(
+            "SELECT count(*) FROM sqlite_schema WHERE name='runtime_capacity_admin_invocations_schema4'",
+          )
+          .pluck()
+          .get(),
+      ).toBe(0);
+    } finally {
+      if (database.inTransaction) database.exec('ROLLBACK');
+      if (database.open) database.close();
+      fs.rmSync(root, { recursive: true, force: true });
+    }
   });
 });

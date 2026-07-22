@@ -13,9 +13,10 @@ import type {
   SafeIntegerIntent,
   SqliteTypeIntent,
 } from './logical-schema-types.js';
-import type {
-  CapacityLogicalSchemaDelta,
-  CapacityLogicalTableDelta,
+import {
+  CAPACITY_ADMIN_EXECUTION_RESULTS,
+  type CapacityLogicalSchemaDelta,
+  type CapacityLogicalTableDelta,
 } from './capacity-control-plane-types.js';
 import type { JsonValue, Sha256Hash } from './types.js';
 
@@ -468,13 +469,7 @@ const TABLE_SEEDS: readonly TableSeed[] = [
       ),
       text('required_permission', true, ['runtime.capacity.manage']),
       text('authorization_result', false, ['allowed', 'denied']),
-      text('execution_result', false, [
-        'applied',
-        'denied',
-        'conflict',
-        'duplicate',
-        'failed',
-      ]),
+      text('execution_result', false, [...CAPACITY_ADMIN_EXECUTION_RESULTS]),
       text('denial_code', true, [
         'permission_denied',
         'actor_kind_denied',
@@ -517,12 +512,14 @@ const TABLE_SEEDS: readonly TableSeed[] = [
         'ck:capacity_invocations:result_consistency',
         'state_field_consistency',
         [
+          'invocation_no',
           'authorization_result',
           'execution_result',
           'denial_code',
+          'decided_at_ms',
           'applied_at_ms',
         ],
-        'denied authorization has denied result and denial code; applied result has applied timestamp and no denial code',
+        'denied authorization has denied result and denial code; initial allowed CAP1 invocation number 1 is prepared with a decision timestamp and no applied timestamp; applied result has applied timestamp and no denial code',
       ),
     ],
     indexes: [

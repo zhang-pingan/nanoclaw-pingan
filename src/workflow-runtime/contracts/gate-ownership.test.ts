@@ -65,7 +65,7 @@ describe('G5/G7 T6d, T7c, and T6e gate ownership authority', () => {
       authority_kind: 'current_construction_gate_ownership',
       status: 'T6D_OWNERSHIP_EXIT_CANDIDATE_PENDING_INDEPENDENT_REGRESSION',
       historical_g0_g1_identity_effect:
-        'G0.4_and_G0.5_current_reopened_G1_Schema_4_unchanged',
+        'Capacity_G0.10_repaired_and_G1_advanced_from_Schema_4_to_Schema_5',
       g4_pack_identity_effect: 'direct_G3_run_protocol_dependency_rebuilt',
       implementation_authorized: false,
     });
@@ -153,7 +153,7 @@ describe('G5/G7 T6d, T7c, and T6e gate ownership authority', () => {
     }
   });
 
-  it('preserves T6e authorization/audit and Schema 4 resolution integrity', () => {
+  it('preserves T6e authorization/audit and Schema 5 resolution integrity', () => {
     const authority = readArtifact(
       'governance/workflow-runtime-gate-ownership@1.json',
     );
@@ -194,11 +194,11 @@ describe('G5/G7 T6d, T7c, and T6e gate ownership authority', () => {
       ],
     });
     expect(authority.payload.frozen_authority_bindings).toMatchObject({
-      database_schema_version: 4,
+      database_schema_version: 5,
       g1_executable_schema_root_hash:
-        'sha256:6f49451868b7a5cab359d1c21f14f79afbc11b12aa1938039daf5914d9c4d591',
+        'sha256:f49781e161e00815e08841b2bc3b2b09ee83d60476220c398c9c0824ee4bcfa9',
       workflow_runtime_schema_hash:
-        'sha256:f517a5e7bb8b3ea91bb37cd6a68b32898ceb62b9044687a8103808be6852106a',
+        'sha256:adfcd0462b50991cceb9497412f8af4e0271f6769a9d810ff9e4d58011952cf1',
     });
   });
 
@@ -233,7 +233,7 @@ describe('G5/G7 T6d, T7c, and T6e gate ownership authority', () => {
     ).toBe('t6e_command_mapping_drift');
   });
 
-  it('fails closed for the Schema 4 FK, CHECK, and both cache triggers', () => {
+  it('fails closed for the Schema 5 FK, CHECK, and both cache triggers', () => {
     expect(
       evaluateGateOwnershipFixtureForTest('remove_schema_resolution_fk'),
     ).toBe('schema_resolution_fk_drift');

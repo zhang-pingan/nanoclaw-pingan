@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-capacity-control-plane-protocol-artifact:1\n",
-  "hash": "sha256:c54c9d6d444749516acd41671419934236e68876ac74dbe9ab01a4be50ec1575",
+  "hash": "sha256:0e06b38b98bfd2193dbad24297e75b1422fdcc8f11e297835c87d4baf03aea9b",
   "payload": {
     "format": "icarus.workflow-capacity-control-plane-protocol/1",
     "protocol_ids": [
@@ -68,7 +68,7 @@
           "audit store available"
         ],
         "atomic_writes": [
-          "Command Header and allowed Invocation",
+          "Command Header and immutable allowed prepared Invocation with decided_at_ms and null applied_at_ms",
           "strictly increasing assigned revision and unique change id",
           "canonical complete snapshot and request hash",
           "pending head and prepared hash-chain event"
@@ -87,7 +87,8 @@
         "forbidden_actions": [
           "partial head mutation",
           "multiple pending changes",
-          "revision reuse"
+          "revision reuse",
+          "update or finalize the prepared Invocation after CAP1"
         ]
       },
       {
@@ -175,7 +176,8 @@
         "forbidden_actions": [
           "promote disk file to authority",
           "mix fields across pointer revisions",
-          "derive admission lineage after the fact"
+          "derive admission lineage after the fact",
+          "update the immutable CAP1 prepared Invocation"
         ]
       }
     ],
@@ -261,6 +263,6 @@
         "recovery_action": "idempotently finalize canonical command result"
       }
     ],
-    "protocol_hash": "sha256:ce4276b4a5902ffb646d22b834ff8cf07cddd619afa51096c510305e0b27e3a0"
+    "protocol_hash": "sha256:d14cff09b4b34606830f76824bf6fc2dc197f54049ca3171d9244b5f884b0b1b"
   }
 }

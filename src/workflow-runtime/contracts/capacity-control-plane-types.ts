@@ -44,6 +44,29 @@ export const CAPACITY_ADMIN_COMMAND_TYPES = [
 export type CapacityAdminCommandType =
   (typeof CAPACITY_ADMIN_COMMAND_TYPES)[number];
 
+export const CAPACITY_ADMIN_EXECUTION_RESULTS = [
+  'prepared',
+  'applied',
+  'denied',
+  'conflict',
+  'duplicate',
+  'failed',
+] as const;
+export type CapacityAdminExecutionResult =
+  (typeof CAPACITY_ADMIN_EXECUTION_RESULTS)[number];
+
+export interface CapacityAdminInvocationLifecycleCandidate {
+  invocation_no: number;
+  submitted_request_matches_command: boolean;
+  command_result_state: 'pending' | 'finalized';
+  authorization_result: 'allowed' | 'denied';
+  execution_result: CapacityAdminExecutionResult;
+  denial_code: CapacityAdminDenialCode | null;
+  requested_at_ms: number;
+  decided_at_ms: number;
+  applied_at_ms: number | null;
+}
+
 export const CAPACITY_ADMIN_ACTOR_KINDS = [
   'human',
   'feature_service',

@@ -157,7 +157,7 @@ describe('G5 Basic Runtime readiness audit', () => {
     });
   });
 
-  it('proves Schema 4 needs no handoff relation and still denies G5 Command ownership', () => {
+  it('proves Schema 5 needs no deadline handoff relation and still denies G5 Command ownership', () => {
     const queries = readArtifact(
       'sqlite/workflow-runtime-query-catalog@1.json',
     );
@@ -189,9 +189,9 @@ describe('G5 Basic Runtime readiness audit', () => {
       '../store/schema/artifacts/workflow-runtime-schema-manifest@1.json',
     );
     expect(manifest.hash).toBe(
-      'sha256:87f6787dd5c6382df97120c2e10dc6624143c67efc35e57cb92ea22f16fa666b',
+      'sha256:6ce20c518c13a47bb50f9f884f5faec506b2e50100a92ec3d3eb84f2649147e4',
     );
-    expect(manifest.payload.database_schema_version).toBe(4);
+    expect(manifest.payload.database_schema_version).toBe(5);
     const schemaTables = objects(manifest.payload.tables);
     const tableNames = schemaTables.map((table) => String(table.name));
     const handoffPattern =

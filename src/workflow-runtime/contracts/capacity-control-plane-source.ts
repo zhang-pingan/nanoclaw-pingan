@@ -31,6 +31,7 @@ import {
   type CapacityAdminModelHead,
   type CapacityAdminModelInvocation,
   type CapacityAdminModelResult,
+  type CapacityAdminInvocationLifecycleCandidate,
   type CapacityArtifactInventory,
   type CapacityArtifactInventoryEntry,
   type CapacityDenialCatalogEntry,
@@ -353,7 +354,7 @@ const CAPACITY_PROTOCOL_STEPS = [
       'audit store available',
     ],
     atomic_writes: [
-      'Command Header and allowed Invocation',
+      'Command Header and immutable allowed prepared Invocation with decided_at_ms and null applied_at_ms',
       'strictly increasing assigned revision and unique change id',
       'canonical complete snapshot and request hash',
       'pending head and prepared hash-chain event',
@@ -371,6 +372,7 @@ const CAPACITY_PROTOCOL_STEPS = [
       'partial head mutation',
       'multiple pending changes',
       'revision reuse',
+      'update or finalize the prepared Invocation after CAP1',
     ],
   },
   {
@@ -453,6 +455,7 @@ const CAPACITY_PROTOCOL_STEPS = [
       'promote disk file to authority',
       'mix fields across pointer revisions',
       'derive admission lineage after the fact',
+      'update the immutable CAP1 prepared Invocation',
     ],
   },
 ] as const satisfies readonly CapacityProtocolStep[];
@@ -969,6 +972,67 @@ export function evaluateCapacityAdminModel(
   )
     return 'capacity_transition_invalid';
   return 'prepared';
+}
+
+export function validateCapacityAdminInvocationLifecycle(
+  candidate: CapacityAdminInvocationLifecycleCandidate,
+): string {
+  if (
+    !Number.isSafeInteger(candidate.invocation_no) ||
+    candidate.invocation_no < 1 ||
+    !Number.isSafeInteger(candidate.requested_at_ms) ||
+    candidate.requested_at_ms < 0 ||
+    !Number.isSafeInteger(candidate.decided_at_ms) ||
+    candidate.decided_at_ms < candidate.requested_at_ms ||
+    (candidate.applied_at_ms !== null &&
+      (!Number.isSafeInteger(candidate.applied_at_ms) ||
+        candidate.applied_at_ms < candidate.decided_at_ms))
+  ) {
+    return 'capacity_invocation_time_invalid';
+  }
+  if (candidate.authorization_result === 'denied') {
+    return candidate.execution_result === 'denied' &&
+      candidate.denial_code !== null &&
+      candidate.applied_at_ms === null
+      ? 'valid_denied_invocation'
+      : 'capacity_invocation_denied_shape_invalid';
+  }
+  if (candidate.denial_code !== null) {
+    return 'capacity_invocation_allowed_denial_code_invalid';
+  }
+  if (candidate.execution_result === 'prepared') {
+    if (
+      candidate.invocation_no !== 1 ||
+      !candidate.submitted_request_matches_command ||
+      candidate.command_result_state !== 'pending'
+    ) {
+      return 'capacity_invocation_prepared_lifecycle_invalid';
+    }
+    return candidate.applied_at_ms === null
+      ? 'valid_prepared_invocation'
+      : 'capacity_invocation_prepared_applied_time_invalid';
+  }
+  if (candidate.execution_result === 'applied') {
+    return 'capacity_invocation_applied_is_historical';
+  }
+  if (candidate.execution_result === 'duplicate') {
+    if (
+      candidate.invocation_no <= 1 ||
+      !candidate.submitted_request_matches_command ||
+      candidate.command_result_state !== 'finalized'
+    ) {
+      return 'capacity_invocation_duplicate_lifecycle_invalid';
+    }
+    return candidate.applied_at_ms === null
+      ? 'valid_duplicate_invocation'
+      : 'capacity_invocation_terminal_non_applied_time_invalid';
+  }
+  if (['conflict', 'failed'].includes(candidate.execution_result)) {
+    return candidate.applied_at_ms === null
+      ? `valid_${candidate.execution_result}_invocation`
+      : 'capacity_invocation_terminal_non_applied_time_invalid';
+  }
+  return 'capacity_invocation_allowed_result_invalid';
 }
 
 export function assertHistoricalG0_9Conformance(): ContractArtifactEnvelope {

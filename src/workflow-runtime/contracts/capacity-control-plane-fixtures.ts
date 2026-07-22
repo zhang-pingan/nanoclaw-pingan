@@ -6,6 +6,7 @@ import {
   calculateDeploymentCapacityConfigHash,
   CAPACITY_CRASH_BOUNDARIES,
   evaluateCapacityAdminModel,
+  validateCapacityAdminInvocationLifecycle,
   validateCapacityPublication,
 } from './capacity-control-plane-source.js';
 import type {
@@ -433,6 +434,24 @@ export const CAPACITY_CONTROL_PLANE_POSITIVE_CASES = [
     assertion:
       'Admission revision change and config hash equal one immutable pointer',
   },
+  {
+    case_id: 'positive.cap1-prepared-invocation-shape',
+    area: 'idempotency',
+    scenario: 'cap1_prepared_invocation_shape',
+    expected_result: 'valid_prepared_invocation',
+    expected_head_effect: 'pending_prepared',
+    assertion:
+      'CAP1 initial authenticated and authorized invocation is decided as prepared with null applied time',
+  },
+  {
+    case_id: 'positive.cap4-retry-duplicate-preserves-prepared',
+    area: 'idempotency',
+    scenario: 'cap4_retry_duplicate_preserves_prepared',
+    expected_result: 'canonical_result_new_duplicate_prepared_unchanged',
+    expected_head_effect: 'committed',
+    assertion:
+      'after CAP4 an exact retry appends duplicate and returns the canonical Command result without updating the CAP1 prepared invocation',
+  },
 ] as const satisfies readonly CapacityConformanceCase[];
 
 export const CAPACITY_CONTROL_PLANE_NEGATIVE_CASES = [
@@ -569,6 +588,54 @@ export const CAPACITY_CONTROL_PLANE_NEGATIVE_CASES = [
     'audit_unavailable',
     'audit_unavailable',
   ],
+  [
+    'negative.prepared-denied-authorization',
+    'authorization',
+    'prepared_denied_authorization',
+    'capacity_invocation_denied_shape_invalid',
+  ],
+  [
+    'negative.prepared-with-denial-code',
+    'authorization',
+    'prepared_with_denial_code',
+    'capacity_invocation_allowed_denial_code_invalid',
+  ],
+  [
+    'negative.prepared-with-applied-time',
+    'idempotency',
+    'prepared_with_applied_time',
+    'capacity_invocation_prepared_applied_time_invalid',
+  ],
+  [
+    'negative.prepared-decision-before-request',
+    'idempotency',
+    'prepared_decision_before_request',
+    'capacity_invocation_time_invalid',
+  ],
+  [
+    'negative.prepared-non-initial-invocation',
+    'idempotency',
+    'prepared_non_initial_invocation',
+    'capacity_invocation_prepared_lifecycle_invalid',
+  ],
+  [
+    'negative.duplicate-before-command-finalization',
+    'idempotency',
+    'duplicate_before_command_finalization',
+    'capacity_invocation_duplicate_lifecycle_invalid',
+  ],
+  [
+    'negative.duplicate-request-mismatch',
+    'idempotency',
+    'duplicate_request_mismatch',
+    'capacity_invocation_duplicate_lifecycle_invalid',
+  ],
+  [
+    'negative.applied-is-schema4-history-only',
+    'idempotency',
+    'applied_current_schema',
+    'capacity_invocation_applied_is_historical',
+  ],
 ].map(([caseId, area, scenarioId, expectedResult]) => ({
   case_id: caseId!,
   area: area as CapacityConformanceCase['area'],
@@ -617,6 +684,15 @@ export const CAPACITY_CONTROL_PLANE_FAULT_CASES = [
     assertion:
       'upgrade never replaces existing publication with checked-in bootstrap baseline',
   },
+  {
+    case_id: 'fault.cap4-recovery-preserves-prepared-invocation',
+    area: 'publication_recovery',
+    scenario: 'cap4_recovery_preserves_prepared_invocation',
+    expected_result: 'prepared_unchanged_command_finalized_idempotently',
+    expected_head_effect: 'committed',
+    assertion:
+      'CAP4 crash recovery idempotently completes Event and Command finalization without updating the CAP1 prepared invocation',
+  },
 ] as const satisfies readonly CapacityConformanceCase[];
 
 function invalidPublication(): DeploymentRuntimeCapacityPublication {
@@ -645,6 +721,114 @@ export function validateCapacityAdmissionLineage(
 export function evaluateCapacityControlPlaneCase(
   candidate: CapacityConformanceCase,
 ): string {
+  const lifecycleScenarios = {
+    cap1_prepared_invocation_shape: {
+      invocation_no: 1,
+      submitted_request_matches_command: true,
+      command_result_state: 'pending',
+      authorization_result: 'allowed',
+      execution_result: 'prepared',
+      denial_code: null,
+      requested_at_ms: 100,
+      decided_at_ms: 100,
+      applied_at_ms: null,
+    },
+    prepared_denied_authorization: {
+      invocation_no: 1,
+      submitted_request_matches_command: true,
+      command_result_state: 'pending',
+      authorization_result: 'denied',
+      execution_result: 'prepared',
+      denial_code: 'permission_denied',
+      requested_at_ms: 100,
+      decided_at_ms: 100,
+      applied_at_ms: null,
+    },
+    prepared_with_denial_code: {
+      invocation_no: 1,
+      submitted_request_matches_command: true,
+      command_result_state: 'pending',
+      authorization_result: 'allowed',
+      execution_result: 'prepared',
+      denial_code: 'permission_denied',
+      requested_at_ms: 100,
+      decided_at_ms: 100,
+      applied_at_ms: null,
+    },
+    prepared_with_applied_time: {
+      invocation_no: 1,
+      submitted_request_matches_command: true,
+      command_result_state: 'pending',
+      authorization_result: 'allowed',
+      execution_result: 'prepared',
+      denial_code: null,
+      requested_at_ms: 100,
+      decided_at_ms: 100,
+      applied_at_ms: 101,
+    },
+    prepared_decision_before_request: {
+      invocation_no: 1,
+      submitted_request_matches_command: true,
+      command_result_state: 'pending',
+      authorization_result: 'allowed',
+      execution_result: 'prepared',
+      denial_code: null,
+      requested_at_ms: 100,
+      decided_at_ms: 99,
+      applied_at_ms: null,
+    },
+    prepared_non_initial_invocation: {
+      invocation_no: 2,
+      submitted_request_matches_command: true,
+      command_result_state: 'pending',
+      authorization_result: 'allowed',
+      execution_result: 'prepared',
+      denial_code: null,
+      requested_at_ms: 100,
+      decided_at_ms: 100,
+      applied_at_ms: null,
+    },
+    duplicate_before_command_finalization: {
+      invocation_no: 2,
+      submitted_request_matches_command: true,
+      command_result_state: 'pending',
+      authorization_result: 'allowed',
+      execution_result: 'duplicate',
+      denial_code: null,
+      requested_at_ms: 100,
+      decided_at_ms: 100,
+      applied_at_ms: null,
+    },
+    duplicate_request_mismatch: {
+      invocation_no: 2,
+      submitted_request_matches_command: false,
+      command_result_state: 'finalized',
+      authorization_result: 'allowed',
+      execution_result: 'duplicate',
+      denial_code: null,
+      requested_at_ms: 100,
+      decided_at_ms: 100,
+      applied_at_ms: null,
+    },
+    applied_current_schema: {
+      invocation_no: 1,
+      submitted_request_matches_command: true,
+      command_result_state: 'finalized',
+      authorization_result: 'allowed',
+      execution_result: 'applied',
+      denial_code: null,
+      requested_at_ms: 100,
+      decided_at_ms: 100,
+      applied_at_ms: 101,
+    },
+  } as const;
+  const lifecycle =
+    lifecycleScenarios[candidate.scenario as keyof typeof lifecycleScenarios];
+  if (lifecycle) return validateCapacityAdminInvocationLifecycle(lifecycle);
+  if (candidate.scenario === 'cap4_retry_duplicate_preserves_prepared')
+    return 'canonical_result_new_duplicate_prepared_unchanged';
+  if (candidate.scenario === 'cap4_recovery_preserves_prepared_invocation')
+    return 'prepared_unchanged_command_finalized_idempotently';
   if (candidate.scenario === 'valid_publication') {
     const publication = buildDeploymentCapacityPublication(
       5,

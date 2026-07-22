@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-registry-publish-foundation:1\n",
-  "hash": "sha256:d5dd2b8cab7027a7acf60622b41d2c0baa8db0a9fba8d395ec31bc0cad2852b3",
+  "hash": "sha256:8bd39dd948a0dd244e3cf03dc6b27a76e39fed3fd021250d0c97f10bfbbe993f",
   "payload": {
     "format": "icarus.workflow-registry-publish-foundation/1",
     "gate": "G3",
@@ -15,11 +15,11 @@
     "g3_status": "IN_PROGRESS",
     "implemented_surface": "read_only_registry_publish_preflight_contract",
     "upstream_identity": {
-      "g1_schema_root_hash": "sha256:6f49451868b7a5cab359d1c21f14f79afbc11b12aa1938039daf5914d9c4d591",
-      "g1_schema_dependency_manifest_hash": "sha256:8ed4d092c0822fe06b154117d3fc2d6d74c9041644b0883ab2e978c4a2abe35d",
-      "g1_physical_schema_identity": "sha256:61ca572ff0f8551ff67f5529753610012fd6027a484e77cc8e63716f4814e04f",
-      "g1_schema_hash": "sha256:f517a5e7bb8b3ea91bb37cd6a68b32898ceb62b9044687a8103808be6852106a",
-      "g1_migration_sha256": "sha256:4a8ddeb1f9715399ad96c3bc32efa5e8032a3bd484eaed0159c6a24620c1be43",
+      "g1_schema_root_hash": "sha256:f49781e161e00815e08841b2bc3b2b09ee83d60476220c398c9c0824ee4bcfa9",
+      "g1_schema_dependency_manifest_hash": "sha256:8acbfe7b71e43ccb6b093d1c72f973ed27c54a8f04b03e8a8dc4fdc858de5d6e",
+      "g1_physical_schema_identity": "sha256:20006150a0be02a34a636a238fe706e96d3da3b9808911f4475224e93fae7933",
+      "g1_schema_hash": "sha256:adfcd0462b50991cceb9497412f8af4e0271f6769a9d810ff9e4d58011952cf1",
+      "g1_migration_sha256": "sha256:11e69e3d82c3963c3eac7d75be67ac16575e43685fdd8e5b392e97152f734e9b",
       "g2_sealed_bundle_ref": "conformance/sealed/g2-production-compiler-replay-repair-v2/golden-conformance-bundle@2.json",
       "g2_sealed_bundle_artifact_hash": "sha256:037009dcd6c5d6bd2888c484fe1adacded68da5c55e17ba12eb722092e4faced",
       "g2_sealed_bundle_hash": "sha256:d99647d8ca6aabc737a793019335e6770aa111a79be7545c4dec00c6e7af2145",
@@ -123,6 +123,6 @@
       "G8": "NOT_READY",
       "G9": "NOT_READY"
     },
-    "foundation_hash": "sha256:d4cf78e4c65212bb37894137bfc7587362be12817c328d30ce388aed40a6859f"
+    "foundation_hash": "sha256:8dd68bb129a7b7841710338e6d489cef9935948735b643970cf93ac8f6fef6cb"
   }
 }

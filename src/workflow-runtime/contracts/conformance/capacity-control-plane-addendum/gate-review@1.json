@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-capacity-control-plane-gate-review-artifact:1\n",
-  "hash": "sha256:77939ab7de850e9f95fa50f4ba4a38a15e32a74d29e5f15a863d660734835a19",
+  "hash": "sha256:bb9fefe0ced98b5d91c07020c89737f789f8e7b72f2014bdaf7d201540ff7362",
   "payload": {
     "format": "icarus.workflow-capacity-control-plane-gate-review/1",
     "gate_id": "G0.10",
@@ -52,7 +52,7 @@
         "criterion_id": "permission_reason_and_denial_catalogs_closed",
         "status": "pass",
         "evidence_hashes": [
-          "sha256:5e28911e61181fdcb9c84114b9de1e4f94747d618b2091e8cdfda81d7f90f68c"
+          "sha256:81cab871c72a89aea20b8209acd076f27750967625e9c3f27e7b8049688de7f2"
         ]
       },
       {
@@ -66,7 +66,7 @@
         "criterion_id": "logical_schema_and_admission_lineage_additive_delta",
         "status": "pass",
         "evidence_hashes": [
-          "sha256:5c1c3dce4b28c1670fd38c540f8e3861b342f2bc30e69c4705e994a222619a53"
+          "sha256:7b48497a837ffc7b985226dda44a1d61132484bc926b90ad6265a5999a34be61"
         ]
       },
       {
@@ -74,14 +74,14 @@
         "status": "pass",
         "evidence_hashes": [
           "sha256:f450a6cf49d9a4859253098f49b736f10ae2bb50a8741f0b052156c5319d8bcc",
-          "sha256:7af9bce89ea771d18a7365f2d1551c9c4ba03866bc788d9a5f2752893429a6a3"
+          "sha256:b4dd0f47f782888746dce027cfbf618aa93e776b3bcdfe7864b60029d75886e0"
         ]
       },
       {
         "criterion_id": "positive_negative_fault_and_typescript_conformance",
         "status": "pass",
         "evidence_hashes": [
-          "sha256:c54c9d6d444749516acd41671419934236e68876ac74dbe9ab01a4be50ec1575"
+          "sha256:0e06b38b98bfd2193dbad24297e75b1422fdcc8f11e297835c87d4baf03aea9b"
         ]
       },
       {
@@ -100,7 +100,7 @@
       }
     ],
     "markdown_delta_coverage_hash": "sha256:f450a6cf49d9a4859253098f49b736f10ae2bb50a8741f0b052156c5319d8bcc",
-    "artifact_inventory_hash": "sha256:7af9bce89ea771d18a7365f2d1551c9c4ba03866bc788d9a5f2752893429a6a3",
+    "artifact_inventory_hash": "sha256:b4dd0f47f782888746dce027cfbf618aa93e776b3bcdfe7864b60029d75886e0",
     "status_proof": {
       "g0_status": "DONE",
       "i11_status": "DONE",
@@ -119,6 +119,6 @@
       "golden_seal_status": "not_run",
       "sealed_directory_entry": ".gitkeep"
     },
-    "review_hash": "sha256:771bc7b6b4a23c5d4523bfb1cce0c56085b62c4f444b9ae41fcbc7a8651c3a75"
+    "review_hash": "sha256:9a0c89f43dd9206d21b8d3430dd607a5555e2c9d057cc1db2ba0a2928ddac604"
   }
 }

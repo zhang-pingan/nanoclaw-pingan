@@ -36,9 +36,11 @@ import {
 } from './database-identity.js';
 import {
   SCHEMA3_TO_SCHEMA4_UPGRADE_RELATIVE_PATH,
+  SCHEMA4_TO_SCHEMA5_UPGRADE_RELATIVE_PATH,
   buildQueryFixtures,
   renderMigration,
   renderSchema3To4Upgrade,
+  renderSchema4To5Upgrade,
 } from './ddl.js';
 import {
   assertClosedSchemaManifest,
@@ -48,6 +50,7 @@ import {
 import {
   loadExecutableSchemaSource,
   loadSchema3ExecutableSchemaSource,
+  loadSchema4ExecutableSchemaSource,
 } from './source.js';
 import {
   buildPublisherSchemaPrerequisiteArtifact,
@@ -73,6 +76,7 @@ export const G1_ARTIFACT_PATHS = {
   activationRepairInput: ACTIVATION_REPAIR_SCHEMA_INPUT_RELATIVE_PATH,
   migration: 'migration/workflow-runtime-schema-v1.sql',
   schema3To4Upgrade: SCHEMA3_TO_SCHEMA4_UPGRADE_RELATIVE_PATH,
+  schema4To5Upgrade: SCHEMA4_TO_SCHEMA5_UPGRADE_RELATIVE_PATH,
   dependencyManifest:
     'artifacts/workflow-runtime-schema-dependency-manifest@1.json',
   dependencyManifestContract:
@@ -159,6 +163,7 @@ function buildDependencyManifestContractArtifact(): ContractArtifactEnvelope {
         'schema_manifest',
         'canonical_migration',
         'schema3_to_schema4_upgrade',
+        'schema4_to_schema5_upgrade',
       ],
       member_order: 'required_roles_order',
       physical_identity_domain_separator:
@@ -303,6 +308,7 @@ function buildConstraintFixtureArtifact(
         'stale_composite_lineage',
         'operational_blocker_cache_triggers',
         'capacity_event_hash_chain_and_immutability',
+        'capacity_prepared_invocation_shape_and_immutability',
         'capacity_milestone_partial_unique_repetition',
         'capacity_head_revision_commit_trigger',
         'publisher_caller_idempotency_unique',
@@ -321,6 +327,8 @@ function buildConstraintFixtureArtifact(
         'activation_invocation_event_adjacency_immutability_and_tamper_rejection',
         'schema3_empty_activation_pointer_upgrade_to_schema4',
         'schema3_nonempty_activation_or_pointer_upgrade_fail_closed',
+        'schema4_nonempty_capacity_upgrade_to_schema5_preserves_all_rows',
+        'schema4_identity_or_copy_constraint_upgrade_fail_closed',
         'feature_release_owner_identity_single_active_and_legal_lifecycle',
         'active_pointer_owner_cas_immutability_delete_and_target_active',
         'retention_published_identity_held_observation_and_active_draining_protection',
@@ -361,6 +369,7 @@ function buildSchemaLintArtifact(
         'activation_terminal_result_binds_immutable_invocation_composite',
         'activation_release_pointer_and_retention_relations_are_typed',
         'activation_invocations_and_events_are_append_only_hash_chains',
+        'capacity_prepared_invocation_is_closed_and_append_only',
         'feature_release_lifecycle_and_active_pointer_cas_are_trigger_constrained',
       ],
       table_count: source.tables.length,
@@ -425,6 +434,7 @@ function runSchemaLint(
 export interface BuiltG1Artifacts {
   migrationSql: string;
   schema3To4UpgradeSql: string;
+  schema4To5UpgradeSql: string;
   manifest: ContractArtifactEnvelope;
   dependencyManifest: ContractArtifactEnvelope;
   artifacts: Array<[string, ContractArtifactEnvelope]>;
@@ -439,15 +449,31 @@ export function buildG1Artifacts(
   const schema3Source = loadSchema3ExecutableSchemaSource(
     options.contractsRoot,
   );
+  const schema4Source = loadSchema4ExecutableSchemaSource(
+    options.contractsRoot,
+  );
   const migration = renderMigration(source);
   const schema3Migration = renderMigration(schema3Source);
+  const schema4Migration = renderMigration(schema4Source);
   if (
     rawSha256(schema3Migration.sql) !==
     'sha256:eea3547a0f5208d08bfbe771de3895bba020ca3cf34ddf2fb4e3b7945765d345'
   ) {
     throw new Error('Reproducible Schema 3 migration identity drifted');
   }
-  const schema3To4Upgrade = renderSchema3To4Upgrade(schema3Source, source);
+  if (
+    rawSha256(schema4Migration.sql) !==
+    'sha256:4a8ddeb1f9715399ad96c3bc32efa5e8032a3bd484eaed0159c6a24620c1be43'
+  ) {
+    throw new Error(
+      'Reproducible historical Schema 4 migration identity drifted',
+    );
+  }
+  const schema3To4Upgrade = renderSchema3To4Upgrade(
+    schema3Source,
+    schema4Source,
+  );
+  const schema4To5Upgrade = renderSchema4To5Upgrade(schema4Source, source);
   const temporaryRoot = fs.mkdtempSync(
     path.join(os.tmpdir(), 'icarus-g1-schema-'),
   );
@@ -455,6 +481,10 @@ export function buildG1Artifacts(
   const schema3DatabasePath = path.join(
     temporaryRoot,
     'workflow-runtime-schema3.db',
+  );
+  const schema4DatabasePath = path.join(
+    temporaryRoot,
+    'workflow-runtime-schema4.db',
   );
   const schema3Database = createMigratedDatabase(
     schema3DatabasePath,
@@ -466,6 +496,17 @@ export function buildG1Artifacts(
       calculateDatabaseSqliteSchemaIdentity(schema3Database);
   } finally {
     schema3Database.close();
+  }
+  const schema4Database = createMigratedDatabase(
+    schema4DatabasePath,
+    schema4Migration.sql,
+  );
+  let schema4SqliteSchemaIdentity: string;
+  try {
+    schema4SqliteSchemaIdentity =
+      calculateDatabaseSqliteSchemaIdentity(schema4Database);
+  } finally {
+    schema4Database.close();
   }
   const database = createMigratedDatabase(databasePath, migration.sql);
   let manifestPayload: WorkflowRuntimeSchemaManifestPayload;
@@ -483,7 +524,7 @@ export function buildG1Artifacts(
       calculateDatabaseSqliteSchemaIdentity(database) !==
       calculateManifestSqliteSchemaIdentity(manifestPayload)
     ) {
-      throw new Error('Schema 4 SQLite identity differs from its Manifest');
+      throw new Error('Schema 5 SQLite identity differs from its Manifest');
     }
     runSchemaLint(source, manifestPayload, migration.sql);
     verifyQueryPlans(database, buildQueryFixtures(source));
@@ -507,6 +548,7 @@ export function buildG1Artifacts(
     migration.sql,
     { contractsRoot: options.contractsRoot },
     schema3To4Upgrade.sql,
+    schema4To5Upgrade.sql,
   );
   const executableDdl = buildArtifact(
     'icarus.workflow-runtime-executable-ddl/1',
@@ -520,11 +562,17 @@ export function buildG1Artifacts(
       migration_sha256: rawSha256(migration.sql),
       schema3_to_schema4_upgrade_path: G1_ARTIFACT_PATHS.schema3To4Upgrade,
       schema3_to_schema4_upgrade_sha256: rawSha256(schema3To4Upgrade.sql),
+      schema4_to_schema5_upgrade_path: G1_ARTIFACT_PATHS.schema4To5Upgrade,
+      schema4_to_schema5_upgrade_sha256: rawSha256(schema4To5Upgrade.sql),
       schema3_source_migration_sha256: rawSha256(schema3Migration.sql),
       schema3_source_sqlite_schema_identity: schema3SqliteSchemaIdentity,
+      schema4_source_migration_sha256: rawSha256(schema4Migration.sql),
+      schema4_source_sqlite_schema_identity: schema4SqliteSchemaIdentity,
       sqlite_schema_identity:
         calculateManifestSqliteSchemaIdentity(manifestPayload),
       schema3_upgrade_mode: 'empty_activation_state_only_or_fail_closed',
+      schema4_upgrade_mode:
+        'rebuild_capacity_invocations_preserve_all_rows_or_fail_closed',
       schema3_required_empty_relations: [
         'workflow_feature_release_activation_commands',
         'workflow_feature_release_activation_invocations',
@@ -629,8 +677,11 @@ export function buildG1Artifacts(
       schema_hash: manifestPayload.schema_hash,
       migration_sha256: rawSha256(migration.sql),
       schema3_to_schema4_upgrade_sha256: rawSha256(schema3To4Upgrade.sql),
+      schema4_to_schema5_upgrade_sha256: rawSha256(schema4To5Upgrade.sql),
       schema3_source_migration_sha256: rawSha256(schema3Migration.sql),
       schema3_source_sqlite_schema_identity: schema3SqliteSchemaIdentity,
+      schema4_source_migration_sha256: rawSha256(schema4Migration.sql),
+      schema4_source_sqlite_schema_identity: schema4SqliteSchemaIdentity,
       sqlite_schema_identity:
         calculateManifestSqliteSchemaIdentity(manifestPayload),
       deterministic_digest: domainSeparatedSha256(
@@ -638,6 +689,7 @@ export function buildG1Artifacts(
         asJson({
           migration_sha256: rawSha256(migration.sql),
           schema3_to_schema4_upgrade_sha256: rawSha256(schema3To4Upgrade.sql),
+          schema4_to_schema5_upgrade_sha256: rawSha256(schema4To5Upgrade.sql),
           schema_hash: manifestPayload.schema_hash,
           member_hashes: members.map(([, artifact]) => artifact.hash),
         }),
@@ -674,6 +726,7 @@ export function buildG1Artifacts(
   return {
     migrationSql: migration.sql,
     schema3To4UpgradeSql: schema3To4Upgrade.sql,
+    schema4To5UpgradeSql: schema4To5Upgrade.sql,
     manifest,
     dependencyManifest,
     artifacts: members,
@@ -718,6 +771,7 @@ export function generateG1Artifacts(): BuiltG1Artifacts {
   const built = buildG1Artifacts();
   writeAtomic(G1_ARTIFACT_PATHS.migration, built.migrationSql);
   writeAtomic(G1_ARTIFACT_PATHS.schema3To4Upgrade, built.schema3To4UpgradeSql);
+  writeAtomic(G1_ARTIFACT_PATHS.schema4To5Upgrade, built.schema4To5UpgradeSql);
   for (const [artifactPath, artifact] of built.artifacts) {
     writeAtomic(artifactPath, renderJson(artifact));
   }
@@ -776,6 +830,15 @@ export function checkG1Artifacts(): BuiltG1Artifacts {
   if (upgradeBytes !== built.schema3To4UpgradeSql) {
     throw new Error(
       'Schema 3 to 4 upgrade drifted; run npm run schema:generate',
+    );
+  }
+  const schema4To5UpgradeBytes = fs.readFileSync(
+    absoluteSchemaPath(G1_ARTIFACT_PATHS.schema4To5Upgrade),
+    'utf8',
+  );
+  if (schema4To5UpgradeBytes !== built.schema4To5UpgradeSql) {
+    throw new Error(
+      'Schema 4 to 5 upgrade drifted; run npm run schema:generate',
     );
   }
   for (const [artifactPath, artifact] of built.artifacts) {

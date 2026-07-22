@@ -12,7 +12,6 @@ import {
   buildCapacityControlPlaneExpectedArtifactsForTest,
   checkHistoricalG0_9Conformance,
 } from './capacity-control-plane-pack.js';
-import { checkCurrentSealedEraCapacityControlPlane } from './current-sealed-era-historical-checks.js';
 import {
   CAPACITY_CONTROL_PLANE_FAULT_CASES,
   CAPACITY_CONTROL_PLANE_NEGATIVE_CASES,
@@ -114,8 +113,8 @@ function withoutDocumentMetadata(schema: JsonObject): JsonObject {
 }
 
 describe('G0.10 Capacity Control-Plane Addendum', () => {
-  it('checks the frozen sealed-era root read-only and owns exactly 26 isolated JSON artifacts', () => {
-    const first = checkCurrentSealedEraCapacityControlPlane();
+  it('checks the repaired current root read-only and owns exactly 26 isolated JSON artifacts', () => {
+    const first = buildCapacityControlPlaneExpectedArtifactsForTest();
     const firstFiles = listFiles(addendumRoot);
     const firstBytes = new Map(
       firstFiles.map((relativePath) => [
@@ -123,8 +122,8 @@ describe('G0.10 Capacity Control-Plane Addendum', () => {
         fs.readFileSync(path.join(contractsRoot, relativePath)),
       ]),
     );
-    const second = checkCurrentSealedEraCapacityControlPlane();
-    expect(second.hash).toBe(first.hash);
+    const second = buildCapacityControlPlaneExpectedArtifactsForTest();
+    expect(second).toEqual(first);
     expect(firstFiles).toHaveLength(CAPACITY_CONTROL_PLANE_ARTIFACT_COUNT);
     expect(firstFiles).toContain(CAPACITY_CONTROL_PLANE_MANIFEST_PATH);
     expect(
@@ -455,8 +454,10 @@ describe('G0.10 Capacity Control-Plane Addendum', () => {
       ...CAPACITY_CONTROL_PLANE_NEGATIVE_CASES,
       ...CAPACITY_CONTROL_PLANE_FAULT_CASES,
     ];
-    expect(CAPACITY_CONTROL_PLANE_NEGATIVE_CASES).toHaveLength(23);
-    expect(cases).toHaveLength(43);
+    expect(CAPACITY_CONTROL_PLANE_POSITIVE_CASES).toHaveLength(9);
+    expect(CAPACITY_CONTROL_PLANE_NEGATIVE_CASES).toHaveLength(31);
+    expect(CAPACITY_CONTROL_PLANE_FAULT_CASES).toHaveLength(14);
+    expect(cases).toHaveLength(54);
     for (const candidate of cases)
       expect(
         evaluateCapacityControlPlaneCase(candidate),

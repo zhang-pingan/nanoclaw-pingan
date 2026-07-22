@@ -58,7 +58,13 @@ function renderColumn(
   return parts.join(' ');
 }
 
-export function renderTable(table: LogicalTableMetadata): string {
+const SCHEMA4_CAPACITY_INVOCATION_RESULT_CHECK =
+  '(("authorization_result" = \'denied\' AND "execution_result" = \'denied\' AND "denial_code" IS NOT NULL AND "applied_at_ms" IS NULL) OR ("authorization_result" = \'allowed\' AND (("execution_result" = \'applied\' AND "denial_code" IS NULL AND "applied_at_ms" IS NOT NULL) OR ("execution_result" IN (\'conflict\', \'duplicate\', \'failed\') AND "applied_at_ms" IS NULL))))';
+
+export function renderTable(
+  table: LogicalTableMetadata,
+  databaseSchemaVersion?: ExecutableSchemaSource['database_schema_version'],
+): string {
   const definitions: string[] = table.columns.map((column) =>
     renderColumn(table, column),
   );
@@ -86,7 +92,12 @@ export function renderTable(table: LogicalTableMetadata): string {
     );
   }
   for (const check of table.checks) {
-    const expression = renderCheckExpression(check, table.columns);
+    const expression =
+      databaseSchemaVersion !== undefined &&
+      databaseSchemaVersion <= 4 &&
+      check.check_id === 'ck:capacity_invocations:result_consistency'
+        ? SCHEMA4_CAPACITY_INVOCATION_RESULT_CHECK
+        : renderCheckExpression(check, table.columns);
     definitions.push(
       `CONSTRAINT ${q(check.check_id)} CHECK (${expression}) /* check_kind=${check.kind} logical_columns=${check.columns.join(',')} */`,
     );
@@ -169,7 +180,7 @@ function operationalStateSql(runExpression: string): string {
 }
 
 export function buildSchemaTriggers(
-  databaseSchemaVersion: 3 | 4 = 4,
+  databaseSchemaVersion: 3 | 4 | 5 = 5,
 ): SchemaTriggerDefinition[] {
   const refreshBody = (row: 'NEW' | 'OLD') => `
   UPDATE "workflow_graph_runs"
@@ -532,7 +543,56 @@ export function buildSchemaTriggers(
       sql: `CREATE TRIGGER ${q('trg:activation_events:immutable_delete')} BEFORE DELETE ON ${q('workflow_feature_release_activation_events')} BEGIN\n  SELECT RAISE(ABORT, 'activation_event_is_immutable');\nEND`,
     },
   ];
-  if (databaseSchemaVersion === 4) return triggers;
+  if (databaseSchemaVersion === 5) {
+    triggers.push(
+      {
+        name: 'trg:capacity_invocations:prepared_insert',
+        table: 'runtime_capacity_admin_invocations',
+        timing: 'before',
+        event: 'insert',
+        owner_intent:
+          'prepared is the initial exact-request CAP1 decision for an assigned unfinished Command',
+        sql: `CREATE TRIGGER ${q('trg:capacity_invocations:prepared_insert')} BEFORE INSERT ON ${q('runtime_capacity_admin_invocations')} WHEN NEW."execution_result" = 'prepared' BEGIN\n  SELECT CASE WHEN NEW."invocation_no" <> 1 OR NOT EXISTS (SELECT 1 FROM "runtime_capacity_admin_commands" AS command WHERE command."command_id" = NEW."command_id" AND command."request_hash" = NEW."submitted_request_hash" AND command."assigned_capacity_revision" IS NOT NULL AND command."assigned_change_id" IS NOT NULL AND command."canonical_result_value_id" IS NULL AND command."canonical_result_hash" IS NULL AND command."finalized_at_ms" IS NULL) THEN RAISE(ABORT, 'capacity_prepared_invocation_invalid') END;\nEND`,
+      },
+      {
+        name: 'trg:capacity_invocations:applied_insert',
+        table: 'runtime_capacity_admin_invocations',
+        timing: 'before',
+        event: 'insert',
+        owner_intent:
+          'applied Invocation is Schema 4 provenance only and cannot be appended under Schema 5',
+        sql: `CREATE TRIGGER ${q('trg:capacity_invocations:applied_insert')} BEFORE INSERT ON ${q('runtime_capacity_admin_invocations')} WHEN NEW."execution_result" = 'applied' BEGIN\n  SELECT RAISE(ABORT, 'capacity_applied_invocation_is_historical');\nEND`,
+      },
+      {
+        name: 'trg:capacity_invocations:duplicate_insert',
+        table: 'runtime_capacity_admin_invocations',
+        timing: 'before',
+        event: 'insert',
+        owner_intent:
+          'duplicate is an exact-request replay of an already finalized canonical Command result',
+        sql: `CREATE TRIGGER ${q('trg:capacity_invocations:duplicate_insert')} BEFORE INSERT ON ${q('runtime_capacity_admin_invocations')} WHEN NEW."execution_result" = 'duplicate' BEGIN\n  SELECT CASE WHEN NEW."invocation_no" <= 1 OR NOT EXISTS (SELECT 1 FROM "runtime_capacity_admin_commands" AS command WHERE command."command_id" = NEW."command_id" AND command."request_hash" = NEW."submitted_request_hash" AND command."canonical_result_value_id" IS NOT NULL AND command."canonical_result_hash" IS NOT NULL AND command."finalized_at_ms" IS NOT NULL) THEN RAISE(ABORT, 'capacity_duplicate_invocation_invalid') END;\nEND`,
+      },
+      {
+        name: 'trg:capacity_invocations:immutable_update',
+        table: 'runtime_capacity_admin_invocations',
+        timing: 'before',
+        event: 'update',
+        owner_intent:
+          'append-only authenticated Capacity Admin invocation audit',
+        sql: `CREATE TRIGGER ${q('trg:capacity_invocations:immutable_update')} BEFORE UPDATE ON ${q('runtime_capacity_admin_invocations')} BEGIN\n  SELECT RAISE(ABORT, 'capacity_invocation_is_immutable');\nEND`,
+      },
+      {
+        name: 'trg:capacity_invocations:immutable_delete',
+        table: 'runtime_capacity_admin_invocations',
+        timing: 'before',
+        event: 'delete',
+        owner_intent:
+          'append-only authenticated Capacity Admin invocation audit',
+        sql: `CREATE TRIGGER ${q('trg:capacity_invocations:immutable_delete')} BEFORE DELETE ON ${q('runtime_capacity_admin_invocations')} BEGIN\n  SELECT RAISE(ABORT, 'capacity_invocation_is_immutable');\nEND`,
+      },
+    );
+  }
+  if (databaseSchemaVersion >= 4) return triggers;
 
   const current = new Map(triggers.map((trigger) => [trigger.name, trigger]));
   const retained = (name: string): SchemaTriggerDefinition => {
@@ -602,7 +662,9 @@ export function renderMigration(
 ): RenderedMigration {
   const triggers = buildSchemaTriggers(source.database_schema_version);
   const statements = [
-    ...source.tables.map(renderTable),
+    ...source.tables.map((table) =>
+      renderTable(table, source.database_schema_version),
+    ),
     ...source.tables.flatMap((table) =>
       table.unique_keys.map((key) => renderUniqueIndex(table, key)),
     ),
@@ -621,6 +683,8 @@ export function renderMigration(
 
 export const SCHEMA3_TO_SCHEMA4_UPGRADE_RELATIVE_PATH =
   'migration/workflow-runtime-schema-v3-to-v4.sql';
+export const SCHEMA4_TO_SCHEMA5_UPGRADE_RELATIVE_PATH =
+  'migration/workflow-runtime-schema-v4-to-v5.sql';
 
 const ACTIVATION_REBUILT_TABLES = [
   'workflow_feature_release_activation_commands',
@@ -657,7 +721,7 @@ export function renderSchema3To4Upgrade(
     `DROP TABLE ${q('workflow_feature_release_activation_events')}`,
     `DROP TABLE ${q('workflow_feature_release_activation_invocations')}`,
     `DROP TABLE ${q('workflow_feature_release_activation_commands')}`,
-    ...tables.map(renderTable),
+    ...tables.map((table) => renderTable(table, 4)),
     ...tables.flatMap((table) =>
       table.unique_keys.map((key) => renderUniqueIndex(table, key)),
     ),
@@ -666,6 +730,58 @@ export function renderSchema3To4Upgrade(
     ),
     ...triggers.map((trigger) => trigger.sql),
     'PRAGMA user_version = 4',
+  ];
+  return {
+    sql: `${statements.map((statement) => `${statement};`).join('\n\n')}\n`,
+    statement_count: statements.length,
+    triggers,
+  };
+}
+
+export function renderSchema4To5Upgrade(
+  schema4: ExecutableSchemaSource,
+  schema5: ExecutableSchemaSource,
+): RenderedMigration {
+  if (
+    schema4.database_schema_version !== 4 ||
+    schema5.database_schema_version !== 5
+  ) {
+    throw new Error('Schema 4 to 5 upgrade source versions are invalid');
+  }
+  const tableName = 'runtime_capacity_admin_invocations';
+  const oldTableName = `${tableName}_schema4`;
+  const schema4Table = schema4.tables.find(
+    (candidate) => candidate.name === tableName,
+  );
+  const schema5Table = schema5.tables.find(
+    (candidate) => candidate.name === tableName,
+  );
+  if (!schema4Table || !schema5Table) {
+    throw new Error('Capacity Invocation upgrade table is missing');
+  }
+  const schema4Columns = schema4Table.columns.map((column) => column.name);
+  const schema5Columns = schema5Table.columns.map((column) => column.name);
+  if (
+    schema4Columns.length !== schema5Columns.length ||
+    schema4Columns.some((column, index) => column !== schema5Columns[index])
+  ) {
+    throw new Error('Capacity Invocation upgrade cannot change columns');
+  }
+  const triggers = buildSchemaTriggers(5).filter(
+    (trigger) => trigger.table === tableName,
+  );
+  const columnList = schema5Columns.map(q).join(', ');
+  const statements = [
+    `ALTER TABLE ${q(tableName)} RENAME TO ${q(oldTableName)}`,
+    renderTable(schema5Table, 5),
+    `INSERT INTO ${q(tableName)} (${columnList}) SELECT ${columnList} FROM ${q(oldTableName)}`,
+    `DROP TABLE ${q(oldTableName)}`,
+    ...schema5Table.unique_keys.map((key) =>
+      renderUniqueIndex(schema5Table, key),
+    ),
+    ...schema5Table.indexes.map((index) => renderIndex(schema5Table, index)),
+    ...triggers.map((trigger) => trigger.sql),
+    'PRAGMA user_version = 5',
   ];
   return {
     sql: `${statements.map((statement) => `${statement};`).join('\n\n')}\n`,

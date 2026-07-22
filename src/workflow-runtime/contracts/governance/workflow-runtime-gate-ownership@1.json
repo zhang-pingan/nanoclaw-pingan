@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-runtime-gate-ownership:1\n",
-  "hash": "sha256:0d1e0ffda6f17c637616192e3ddcbf51af55207cd011672317b3a7eb231c5e8e",
+  "hash": "sha256:4e973c234ddd2c37079b32f33df7780da0b8cbdda3f5eba091d314c7947ef2a8",
   "payload": {
     "governance_scope": "current_construction_g5_g7_t6d_t7c_boundary",
     "status": "T6D_OWNERSHIP_EXIT_CANDIDATE_PENDING_INDEPENDENT_REGRESSION",
@@ -17,7 +17,7 @@
       "workflow_runtime_command_protocol_table_hash": "sha256:b12b07b29e9335593c969033c133d221b244798fc079db5fb398b23fbae10789",
       "gate_ownership_authority_hash": "sha256:36289416db3c8898d9b50c04c5ad43fc6b74ef53bbd3a3c99f9d5f5b72786fa8"
     },
-    "historical_g0_g1_identity_effect": "G0.4_and_G0.5_current_reopened_G1_Schema_4_unchanged",
+    "historical_g0_g1_identity_effect": "Capacity_G0.10_repaired_and_G1_advanced_from_Schema_4_to_Schema_5",
     "g4_pack_identity_effect": "direct_G3_run_protocol_dependency_rebuilt",
     "matrix": [
       {
@@ -122,10 +122,10 @@
       "workflow_run_transaction_protocol_table_hash": "sha256:3d5474096d89fbd723e34e0d2f9d1dadd1b955b5fc36ff447d026257852cac79",
       "workflow_runtime_command_protocol_table_hash": "sha256:43cc8ef247fcba4bac5e9fccdd654fd393928120755a6405bad232043f0c94ba",
       "workflow_runtime_logical_schema_source_hash": "sha256:ef5221d3465f1214c3c0aad3660f57b119d03eb4b5127428d6a1f881a6260214",
-      "g1_executable_schema_root_hash": "sha256:6f49451868b7a5cab359d1c21f14f79afbc11b12aa1938039daf5914d9c4d591",
-      "database_schema_version": 4,
-      "workflow_runtime_schema_manifest_hash": "sha256:87f6787dd5c6382df97120c2e10dc6624143c67efc35e57cb92ea22f16fa666b",
-      "workflow_runtime_schema_hash": "sha256:f517a5e7bb8b3ea91bb37cd6a68b32898ceb62b9044687a8103808be6852106a"
+      "g1_executable_schema_root_hash": "sha256:f49781e161e00815e08841b2bc3b2b09ee83d60476220c398c9c0824ee4bcfa9",
+      "database_schema_version": 5,
+      "workflow_runtime_schema_manifest_hash": "sha256:6ce20c518c13a47bb50f9f884f5faec506b2e50100a92ec3d3eb84f2649147e4",
+      "workflow_runtime_schema_hash": "sha256:adfcd0462b50991cceb9497412f8af4e0271f6769a9d810ff9e4d58011952cf1"
     },
     "affected_current_root_inventory": {
       "members": [
@@ -168,30 +168,36 @@
         {
           "path": "contract-pack-g3-retention-executor-abi-preflight.json",
           "format": "icarus.workflow-contract-pack-g3-retention-executor-abi-preflight/1",
-          "semantic_hash": "sha256:8cfd7b030e5a1953578410caa349b62f3c38131859e9be5a3ada1bfe4e249e2c",
-          "raw_sha256": "sha256:5727eafd7947390871d73ec5a8986b91be53537de68beb4fe8dc010f79d7c5ae"
+          "semantic_hash": "sha256:03131d78800718ac1bd326f932e33ca677d9ac617ff00fc090fc7aaefedd85a9",
+          "raw_sha256": "sha256:d97cda3935c3261399a659efbc567331ede80c1d2249d75f4c257bcca98e3d87"
         },
         {
           "path": "contract-pack-g3-workflow-publisher.json",
           "format": "icarus.workflow-contract-pack-g3-workflow-publisher/1",
-          "semantic_hash": "sha256:4fc65c77265c226b7abcb6f17aeaab3af3e7f7e13d5117705cb3872f3dce6933",
-          "raw_sha256": "sha256:938bcb5dbe66ab5b873618f4551a01e67ff33a77cbc1136851d534a86dd497e6"
+          "semantic_hash": "sha256:8a67b2516d46da89524045297b261e32305d0803546089048b19d70384e23282",
+          "raw_sha256": "sha256:ee57b2f1ecfc01fd502e3f72877e80f572c54fbdb284fdf758b868a2ff45bd6e"
         },
         {
           "path": "contract-pack-g3.9-feature-release-activation.json",
           "format": "icarus.workflow-contract-pack-g3-feature-release-activation/1",
-          "semantic_hash": "sha256:f5ddf7eb07b4f54431e612f5f6bbaf9df87d7ed6672f4a400b05fc53c7067f4e",
-          "raw_sha256": "sha256:3ca1eb0ab17a5df3d02f11a958dca0b01a33d323b693e6ed675a12416f9a961a"
+          "semantic_hash": "sha256:7c192a3a4dd10004c2a7bf6da2cf81a38d5745e145717796f86acfc2025fdf91",
+          "raw_sha256": "sha256:2994a92738dbf5b865d673a2e685534a821e109d714d988513e5f9f94578d93c"
         },
         {
           "path": "contract-pack-g3.8a-activation-contract-repair.json",
           "format": "icarus.workflow-contract-pack-g3-8a-activation-contract-repair/1",
           "semantic_hash": "sha256:d8412111a0f3dcabb4ce416b99086701ea3e3911ff431b5457eb957b2f69722f",
           "raw_sha256": "sha256:b4545d4aacaf2a18f83926d64e91ccc3cf12551697f4275381fe62592417b597"
+        },
+        {
+          "path": "conformance/capacity-control-plane-addendum/contract-pack-capacity-control-plane-addendum.json",
+          "format": "icarus.workflow-contract-pack-capacity-control-plane-addendum/1",
+          "semantic_hash": "sha256:12f9fdfe9739b767440b56b0e55fedb431b27c546326da90285e96e1fc2ea15c",
+          "raw_sha256": "sha256:ec0b646f1a54c3b0028f74a15c2378b8156b07e4d28966fe9632630469098072"
         }
       ],
-      "member_count": 10,
-      "tree_digest": "sha256:2efe85fb51757cfa9d4cbe59ec4dfcc02b6c0c95ed1b56638935e11657950b28"
+      "member_count": 11,
+      "tree_digest": "sha256:c1e1ff5d27410c497cf614458b7bb273e3aedaa9af879d7dd75423674219ccb5"
     },
     "frozen_invariants": {
       "t6d_name": "attempt_watchdog_and_retry_timers",

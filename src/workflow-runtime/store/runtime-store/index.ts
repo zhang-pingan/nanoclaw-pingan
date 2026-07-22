@@ -224,7 +224,7 @@ function verifyFrozenSchema(
   }
 }
 
-function upgradeSchema3IfEligible(
+function upgradeSchemaIfEligible(
   databasePath: string,
   inputs: Readonly<FrozenWorkflowRuntimeStoreInputs>,
 ): void {
@@ -236,33 +236,52 @@ function upgradeSchema3IfEligible(
     verifyDatabaseLevelProfile(database, inputs);
     const version = Number(scalarPragma(database, 'user_version'));
     if (version === inputs.schemaManifest.database_schema_version) return;
-    if (version !== 3) {
+    if (version !== 3 && version !== 4) {
       throw new WorkflowRuntimeStoreError(
         'database_schema_mismatch',
-        `Schema upgrade requires user_version 3 or ${inputs.schemaManifest.database_schema_version}, received ${version}`,
+        `Schema upgrade requires user_version 3, 4, or ${inputs.schemaManifest.database_schema_version}, received ${version}`,
       );
     }
     database.pragma('foreign_keys = ON');
     database.exec('BEGIN IMMEDIATE');
     try {
-      const sourceIdentity = calculateDatabaseSqliteSchemaIdentity(database);
-      if (sourceIdentity !== inputs.schema3SourceSqliteSchemaIdentity) {
-        throw new Error(
-          `Schema 3 sqlite_schema identity mismatch: expected ${inputs.schema3SourceSqliteSchemaIdentity}, received ${sourceIdentity}`,
-        );
-      }
-      for (const relation of inputs.schema3RequiredEmptyRelations) {
-        const count = database
-          .prepare(`SELECT count(*) AS count FROM "${relation}"`)
-          .pluck()
-          .get() as number;
-        if (count !== 0) {
+      if (version === 3) {
+        const sourceIdentity = calculateDatabaseSqliteSchemaIdentity(database);
+        if (sourceIdentity !== inputs.schema3SourceSqliteSchemaIdentity) {
           throw new Error(
-            `Schema 3 upgrade requires empty relation ${relation}, received ${count} row(s)`,
+            `Schema 3 sqlite_schema identity mismatch: expected ${inputs.schema3SourceSqliteSchemaIdentity}, received ${sourceIdentity}`,
+          );
+        }
+        for (const relation of inputs.schema3RequiredEmptyRelations) {
+          const count = database
+            .prepare(`SELECT count(*) AS count FROM "${relation}"`)
+            .pluck()
+            .get() as number;
+          if (count !== 0) {
+            throw new Error(
+              `Schema 3 upgrade requires empty relation ${relation}, received ${count} row(s)`,
+            );
+          }
+        }
+        database.exec(inputs.schema3To4UpgradeSql);
+        if (
+          Number(scalarPragma(database, 'user_version')) !== 4 ||
+          calculateDatabaseSqliteSchemaIdentity(database) !==
+            inputs.schema4SourceSqliteSchemaIdentity
+        ) {
+          throw new Error(
+            'Schema 3 to 4 upgrade did not produce frozen historical Schema 4',
+          );
+        }
+      } else {
+        const sourceIdentity = calculateDatabaseSqliteSchemaIdentity(database);
+        if (sourceIdentity !== inputs.schema4SourceSqliteSchemaIdentity) {
+          throw new Error(
+            `Schema 4 sqlite_schema identity mismatch: expected ${inputs.schema4SourceSqliteSchemaIdentity}, received ${sourceIdentity}`,
           );
         }
       }
-      database.exec(inputs.schema3To4UpgradeSql);
+      database.exec(inputs.schema4To5UpgradeSql);
       if (
         Number(scalarPragma(database, 'user_version')) !==
           inputs.schemaManifest.database_schema_version ||
@@ -270,7 +289,7 @@ function upgradeSchema3IfEligible(
           inputs.sqliteSchemaIdentity
       ) {
         throw new Error(
-          'Schema 3 to 4 upgrade did not produce frozen Schema 4',
+          `Schema ${version} to 5 upgrade did not produce frozen Schema 5`,
         );
       }
       verifyIntegrity(database);
@@ -283,7 +302,7 @@ function upgradeSchema3IfEligible(
     if (error instanceof WorkflowRuntimeStoreError) throw error;
     throw new WorkflowRuntimeStoreError(
       'database_schema_mismatch',
-      `Schema 3 to 4 upgrade failed closed: ${error instanceof Error ? error.message : String(error)}`,
+      `Schema ${String(Number(scalarPragma(database, 'user_version')))} upgrade failed closed: ${error instanceof Error ? error.message : String(error)}`,
       { cause: error },
     );
   } finally {
@@ -681,7 +700,7 @@ export class WorkflowRuntimeConnectionFactory {
         fresh = true;
         bootstrapFreshDatabase(databasePath, inputs);
       } else {
-        upgradeSchema3IfEligible(databasePath, inputs);
+        upgradeSchemaIfEligible(databasePath, inputs);
       }
       writer = openConfiguredDatabase(databasePath, inputs, false);
       const identityEvidence = collectWorkflowRuntimeIdentityEvidence(

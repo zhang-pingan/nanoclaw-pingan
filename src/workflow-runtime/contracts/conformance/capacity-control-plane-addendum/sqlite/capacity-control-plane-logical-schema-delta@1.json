@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-capacity-control-plane-logical-schema-delta-artifact:1\n",
-  "hash": "sha256:5d9e79b5f9330a5111e6f61b8d04164c87839a60d55ea350c0aa87b8b1559e66",
+  "hash": "sha256:8160dea544586e02b3429dcc1bb044a40a330cb69920c4d1d2231fbed28866c5",
   "payload": {
     "format": "icarus.workflow-capacity-control-plane-logical-schema-delta/1",
     "schema_id": "workflow-runtime-schema-v1",
@@ -1012,6 +1012,7 @@
             "default_intent": null,
             "safe_integer_intent": "not_applicable",
             "enum_values": [
+              "prepared",
               "applied",
               "denied",
               "conflict",
@@ -1183,7 +1184,7 @@
             "columns": [
               "execution_result"
             ],
-            "expression_intent": "value is one of applied | denied | conflict | duplicate | failed"
+            "expression_intent": "value is one of prepared | applied | denied | conflict | duplicate | failed"
           },
           {
             "check_id": "ck:runtime_capacity_admin_invocations:denial_code:enum",
@@ -1246,12 +1247,14 @@
             "check_id": "ck:capacity_invocations:result_consistency",
             "kind": "state_field_consistency",
             "columns": [
+              "invocation_no",
               "authorization_result",
               "execution_result",
               "denial_code",
+              "decided_at_ms",
               "applied_at_ms"
             ],
-            "expression_intent": "denied authorization has denied result and denial code; applied result has applied timestamp and no denial code"
+            "expression_intent": "denied authorization has denied result and denial code; initial allowed CAP1 invocation number 1 is prepared with a decision timestamp and no applied timestamp; applied result has applied timestamp and no denial code"
           }
         ],
         "indexes": [
@@ -1831,6 +1834,6 @@
       "Scheduler Admission stores revision change id and config hash from one watcher-published immutable pointer",
       "G0.10 metadata is additive and does not mutate the G0.6 historical logical schema artifact"
     ],
-    "delta_hash": "sha256:e8917c737b1eae0f62abfa2de2dec6dc71875122a763882a46aee34c5c84cae6"
+    "delta_hash": "sha256:749bdfe16195a1762427aed9d98ff8e7d9c2633d22b6d8e3d31bf9aeaf9d589c"
   }
 }

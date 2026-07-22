@@ -846,9 +846,9 @@ function validateInventory(
 
 function validateFixtures(): void {
   if (
-    CAPACITY_CONTROL_PLANE_POSITIVE_CASES.length !== 7 ||
-    CAPACITY_CONTROL_PLANE_NEGATIVE_CASES.length !== 23 ||
-    CAPACITY_CONTROL_PLANE_FAULT_CASES.length !== 13
+    CAPACITY_CONTROL_PLANE_POSITIVE_CASES.length !== 9 ||
+    CAPACITY_CONTROL_PLANE_NEGATIVE_CASES.length !== 31 ||
+    CAPACITY_CONTROL_PLANE_FAULT_CASES.length !== 14
   )
     throw new CapacityControlPlaneContractError(
       'Capacity fixture coverage count drift',
@@ -1036,8 +1036,12 @@ function validateBoundaries(
     'projection/runtime-center-renderer',
   ];
   if (
-    sealed.length !== 1 ||
-    sealed[0] !== '.gitkeep' ||
+    canonicalJson(sealed.sort()) !==
+      canonicalJson([
+        '.gitkeep',
+        'g2-production-compiler-replay-repair-v2',
+        'g2-semantic-correction',
+      ]) ||
     forbiddenPaths.some((relativePath) =>
       fs.existsSync(path.join(workflowRuntimeRoot, relativePath)),
     ) ||

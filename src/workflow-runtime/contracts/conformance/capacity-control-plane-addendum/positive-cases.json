@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-capacity-control-plane-positive-cases:1\n",
-  "hash": "sha256:78184e7d5a80c47d59b5a853b3e2ac3480dcfe9989997bcdd2ccd777e31e48b9",
+  "hash": "sha256:d5b8ef8a2a63a85d7495e054a2352825c77f4998264f0196bf3a9a27a011e3fb",
   "payload": {
     "format": "icarus.workflow-capacity-control-plane-positive-cases/1",
     "cases": [
@@ -65,8 +65,24 @@
         "expected_result": "valid",
         "expected_head_effect": "unchanged",
         "assertion": "Admission revision change and config hash equal one immutable pointer"
+      },
+      {
+        "case_id": "positive.cap1-prepared-invocation-shape",
+        "area": "idempotency",
+        "scenario": "cap1_prepared_invocation_shape",
+        "expected_result": "valid_prepared_invocation",
+        "expected_head_effect": "pending_prepared",
+        "assertion": "CAP1 initial authenticated and authorized invocation is decided as prepared with null applied time"
+      },
+      {
+        "case_id": "positive.cap4-retry-duplicate-preserves-prepared",
+        "area": "idempotency",
+        "scenario": "cap4_retry_duplicate_preserves_prepared",
+        "expected_result": "canonical_result_new_duplicate_prepared_unchanged",
+        "expected_head_effect": "committed",
+        "assertion": "after CAP4 an exact retry appends duplicate and returns the canonical Command result without updating the CAP1 prepared invocation"
       }
     ],
-    "case_count": 7
+    "case_count": 9
   }
 }

@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-runtime-schema-dependency-manifest-contract:1\n",
-  "hash": "sha256:c51308fa73c2c388aefe7cd004333532fd4f5a7548df12e24452062e7dfade00",
+  "hash": "sha256:c109275de7ea33818187c23abe7b0f401fd88926c3a8230b892065fef56d7538",
   "payload": {
     "contract_kind": "closed_required_members",
     "unknown_fields": "rejected",
@@ -48,7 +48,8 @@
       "sqlite_execution_profile",
       "schema_manifest",
       "canonical_migration",
-      "schema3_to_schema4_upgrade"
+      "schema3_to_schema4_upgrade",
+      "schema4_to_schema5_upgrade"
     ],
     "member_order": "required_roles_order",
     "physical_identity_domain_separator": "icarus:workflow-runtime-physical-schema-identity:1\n"

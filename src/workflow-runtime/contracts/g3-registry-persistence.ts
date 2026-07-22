@@ -1005,7 +1005,7 @@ function validateUpstreamIdentities(): void {
   const exactArtifacts: Array<[string, Sha256Hash]> = [
     [
       'contract-pack-g3-registry-publish-foundation.json',
-      'sha256:152fc9bd4ecbc4fb5a395d06698c81142befa294466ffbd665cfb2a9b874c71d',
+      'sha256:de020bca9ffb54ac8cf7e8fd9166d1a26eef5d2b7fa79427c4fe47755f22caa3',
     ],
     [
       'contract-pack-g3.2a-feature-manifest-intake.json',
@@ -1148,15 +1148,15 @@ function buildManifest(
       upstream_g3_2a_pack_hash:
         'sha256:c9c273b6d294d512a3578203d91d4bdce7863a3ccb561fdd7da08d072b3d8cd9',
       upstream_g3_1_pack_hash:
-        'sha256:152fc9bd4ecbc4fb5a395d06698c81142befa294466ffbd665cfb2a9b874c71d',
+        'sha256:de020bca9ffb54ac8cf7e8fd9166d1a26eef5d2b7fa79427c4fe47755f22caa3',
       upstream_g3_2_pack_hash:
         'sha256:1eb0b81f488f4a37fa4503ddfef0dfa8a56d40fdeb535c9758d9d21fd39bb92b',
       upstream_g2_sealed_bundle_hash:
         'sha256:d99647d8ca6aabc737a793019335e6770aa111a79be7545c4dec00c6e7af2145',
       upstream_g1_schema_root_hash:
-        'sha256:6f49451868b7a5cab359d1c21f14f79afbc11b12aa1938039daf5914d9c4d591',
+        'sha256:f49781e161e00815e08841b2bc3b2b09ee83d60476220c398c9c0824ee4bcfa9',
       upstream_g1_schema_hash:
-        'sha256:f517a5e7bb8b3ea91bb37cd6a68b32898ceb62b9044687a8103808be6852106a',
+        'sha256:adfcd0462b50991cceb9497412f8af4e0271f6769a9d810ff9e4d58011952cf1',
       upstream_g1_migration_sha256:
         'sha256:4a8ddeb1f9715399ad96c3bc32efa5e8032a3bd484eaed0159c6a24620c1be43',
       production_registry_write_performed: false,

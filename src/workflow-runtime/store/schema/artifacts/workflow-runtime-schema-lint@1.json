@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-runtime-schema-lint:1\n",
-  "hash": "sha256:2a0fb8c5f15ac3290771caf51c9db67da2734c0b5b3224161cc20cac3063b2d1",
+  "hash": "sha256:1284ee1f980c93ffaf34766fe4cb22112f8c2c5bb23058cd606e1723ec085970",
   "payload": {
     "status": "closed_fail_on_violation",
     "rules": [
@@ -29,6 +29,7 @@
       "activation_terminal_result_binds_immutable_invocation_composite",
       "activation_release_pointer_and_retention_relations_are_typed",
       "activation_invocations_and_events_are_append_only_hash_chains",
+      "capacity_prepared_invocation_is_closed_and_append_only",
       "feature_release_lifecycle_and_active_pointer_cas_are_trigger_constrained"
     ],
     "table_count": 84,

@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-capacity-control-plane-negative-cases:1\n",
-  "hash": "sha256:5c1c3dce4b28c1670fd38c540f8e3861b342f2bc30e69c4705e994a222619a53",
+  "hash": "sha256:7b48497a837ffc7b985226dda44a1d61132484bc926b90ad6265a5999a34be61",
   "payload": {
     "format": "icarus.workflow-capacity-control-plane-negative-cases/1",
     "cases": [
@@ -193,8 +193,72 @@
         "expected_result": "audit_unavailable",
         "expected_head_effect": "unchanged",
         "assertion": "Scenario audit_unavailable must fail closed without changing committed head"
+      },
+      {
+        "case_id": "negative.prepared-denied-authorization",
+        "area": "authorization",
+        "scenario": "prepared_denied_authorization",
+        "expected_result": "capacity_invocation_denied_shape_invalid",
+        "expected_head_effect": "unchanged",
+        "assertion": "Scenario prepared_denied_authorization must fail closed without changing committed head"
+      },
+      {
+        "case_id": "negative.prepared-with-denial-code",
+        "area": "authorization",
+        "scenario": "prepared_with_denial_code",
+        "expected_result": "capacity_invocation_allowed_denial_code_invalid",
+        "expected_head_effect": "unchanged",
+        "assertion": "Scenario prepared_with_denial_code must fail closed without changing committed head"
+      },
+      {
+        "case_id": "negative.prepared-with-applied-time",
+        "area": "idempotency",
+        "scenario": "prepared_with_applied_time",
+        "expected_result": "capacity_invocation_prepared_applied_time_invalid",
+        "expected_head_effect": "unchanged",
+        "assertion": "Scenario prepared_with_applied_time must fail closed without changing committed head"
+      },
+      {
+        "case_id": "negative.prepared-decision-before-request",
+        "area": "idempotency",
+        "scenario": "prepared_decision_before_request",
+        "expected_result": "capacity_invocation_time_invalid",
+        "expected_head_effect": "unchanged",
+        "assertion": "Scenario prepared_decision_before_request must fail closed without changing committed head"
+      },
+      {
+        "case_id": "negative.prepared-non-initial-invocation",
+        "area": "idempotency",
+        "scenario": "prepared_non_initial_invocation",
+        "expected_result": "capacity_invocation_prepared_lifecycle_invalid",
+        "expected_head_effect": "unchanged",
+        "assertion": "Scenario prepared_non_initial_invocation must fail closed without changing committed head"
+      },
+      {
+        "case_id": "negative.duplicate-before-command-finalization",
+        "area": "idempotency",
+        "scenario": "duplicate_before_command_finalization",
+        "expected_result": "capacity_invocation_duplicate_lifecycle_invalid",
+        "expected_head_effect": "unchanged",
+        "assertion": "Scenario duplicate_before_command_finalization must fail closed without changing committed head"
+      },
+      {
+        "case_id": "negative.duplicate-request-mismatch",
+        "area": "idempotency",
+        "scenario": "duplicate_request_mismatch",
+        "expected_result": "capacity_invocation_duplicate_lifecycle_invalid",
+        "expected_head_effect": "unchanged",
+        "assertion": "Scenario duplicate_request_mismatch must fail closed without changing committed head"
+      },
+      {
+        "case_id": "negative.applied-is-schema4-history-only",
+        "area": "idempotency",
+        "scenario": "applied_current_schema",
+        "expected_result": "capacity_invocation_applied_is_historical",
+        "expected_head_effect": "unchanged",
+        "assertion": "Scenario applied_current_schema must fail closed without changing committed head"
       }
     ],
-    "case_count": 23
+    "case_count": 31
   }
 }

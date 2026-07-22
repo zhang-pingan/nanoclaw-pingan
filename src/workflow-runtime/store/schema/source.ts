@@ -108,8 +108,8 @@ function assertSchema3ExecutableSource(source: ExecutableSchemaSource): void {
 }
 
 function assertExecutableSource(source: ExecutableSchemaSource): void {
-  if (source.database_schema_version !== 4) {
-    throw new Error('Current executable Database Schema must be version 4');
+  if (source.database_schema_version !== 5) {
+    throw new Error('Current executable Database Schema must be version 5');
   }
   if (source.tables.length !== 84) {
     throw new Error(`Expected 84 v1 tables, received ${source.tables.length}`);
@@ -205,7 +205,36 @@ function buildSchema3ExecutableSource(
     typedRelations.payload as unknown as TypedRelationCatalogPayload;
   const baseQueries =
     queryCatalog.payload as unknown as LogicalQueryCatalogPayload;
-  const delta = capacityDelta.payload as unknown as CapacityLogicalSchemaDelta;
+  const currentDelta =
+    capacityDelta.payload as unknown as CapacityLogicalSchemaDelta;
+  const delta = structuredClone(currentDelta);
+  const historicalInvocation = delta.added_tables.find(
+    (table) => table.name === 'runtime_capacity_admin_invocations',
+  );
+  if (!historicalInvocation) {
+    throw new Error('G0.10 Capacity Invocation table is absent');
+  }
+  const historicalExecutionResult = historicalInvocation.columns.find(
+    (column) => column.name === 'execution_result',
+  );
+  if (!historicalExecutionResult?.enum_values?.includes('prepared')) {
+    throw new Error('Current G0.10 Capacity prepared result is absent');
+  }
+  historicalExecutionResult.enum_values =
+    historicalExecutionResult.enum_values.filter(
+      (value) => value !== 'prepared',
+    );
+  const historicalResultCheck = historicalInvocation.checks.find(
+    (check) => check.check_id === 'ck:capacity_invocations:result_consistency',
+  );
+  if (!historicalResultCheck) {
+    throw new Error('G0.10 Capacity Invocation result CHECK is absent');
+  }
+  historicalResultCheck.columns = historicalResultCheck.columns.filter(
+    (column) => column !== 'invocation_no' && column !== 'decided_at_ms',
+  );
+  historicalResultCheck.expression_intent =
+    'denied authorization has denied result and denial code; applied result has applied timestamp and no denial code';
   const publisher = parsePublisherSchemaPrerequisiteArtifact(publisherInput);
   const activation = parseActivationSchemaPrerequisiteArtifact(activationInput);
   if (
@@ -236,8 +265,8 @@ function buildSchema3ExecutableSource(
     delta.base_logical_schema_manifest_hash !== g0_6Manifest.hash ||
     delta.added_tables.length !== 4 ||
     delta.extended_tables.length !== 1 ||
-    delta.delta_hash !==
-      'sha256:e8917c737b1eae0f62abfa2de2dec6dc71875122a763882a46aee34c5c84cae6'
+    currentDelta.delta_hash !==
+      'sha256:749bdfe16195a1762427aed9d98ff8e7d9c2633d22b6d8e3d31bf9aeaf9d589c'
   ) {
     throw new Error('G0.10 capacity delta is not the expected additive input');
   }
@@ -349,6 +378,37 @@ export function loadExecutableSchemaSource(
   contractsRoot?: string,
 ): ExecutableSchemaSource {
   const inputs = readPinnedSchemaInputArtifacts({ contractsRoot });
+  const schema4 = buildSchema4ExecutableSource(inputs);
+  const currentDelta = inputs.g0_10_capacity_logical_schema_delta.artifact
+    .payload as unknown as CapacityLogicalSchemaDelta;
+  const currentInvocation = currentDelta.added_tables.find(
+    (table) => table.name === 'runtime_capacity_admin_invocations',
+  );
+  if (!currentInvocation) {
+    throw new Error('Current Capacity Invocation table is absent');
+  }
+  const tables = schema4.tables.map((table) =>
+    table.name === currentInvocation.name
+      ? { ...structuredClone(currentInvocation), ordinal: table.ordinal }
+      : table,
+  );
+  const result: ExecutableSchemaSource = {
+    ...schema4,
+    database_schema_version: 5,
+    tables,
+    logical_inputs: {
+      ...schema4.logical_inputs,
+      capacity_delta_hash:
+        inputs.g0_10_capacity_logical_schema_delta.artifact.hash,
+    },
+  };
+  assertExecutableSource(result);
+  return result;
+}
+
+function buildSchema4ExecutableSource(
+  inputs: LoadedSchemaInputArtifacts,
+): ExecutableSchemaSource {
   const schema3 = buildSchema3ExecutableSource(inputs);
   const repair = parseActivationRepairSchemaPrerequisiteArtifact(
     inputs.activation_failure_replay_schema_prerequisite.artifact,
@@ -397,6 +457,13 @@ export function loadExecutableSchemaSource(
         inputs.activation_failure_replay_schema_prerequisite.artifact.hash,
     },
   };
-  assertExecutableSource(result);
   return result;
+}
+
+export function loadSchema4ExecutableSchemaSource(
+  contractsRoot?: string,
+): ExecutableSchemaSource {
+  return buildSchema4ExecutableSource(
+    readPinnedSchemaInputArtifacts({ contractsRoot }),
+  );
 }

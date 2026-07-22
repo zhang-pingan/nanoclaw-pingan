@@ -10,7 +10,10 @@ import Database from 'better-sqlite3';
 
 import { calculateDatabaseSqliteSchemaIdentity } from '../schema/database-identity.js';
 import { buildSchemaTriggers, renderMigration } from '../schema/ddl.js';
-import { loadSchema3ExecutableSchemaSource } from '../schema/source.js';
+import {
+  loadSchema3ExecutableSchemaSource,
+  loadSchema4ExecutableSchemaSource,
+} from '../schema/source.js';
 import {
   WorkflowRuntimeConnectionFactory,
   WorkflowRuntimeStore,
@@ -118,6 +121,20 @@ function createSchema3Database(databasePath: string): void {
     database.pragma('auto_vacuum = INCREMENTAL');
     database.pragma('foreign_keys = ON');
     database.exec(renderMigration(loadSchema3ExecutableSchemaSource()).sql);
+    database.pragma('journal_mode = WAL');
+  } finally {
+    database.close();
+  }
+}
+
+function createSchema4Database(databasePath: string): void {
+  const profile = loadFrozenWorkflowRuntimeStoreInputs().profile;
+  const database = new Database(databasePath);
+  try {
+    database.pragma(`page_size = ${profile.page_size}`);
+    database.pragma('auto_vacuum = INCREMENTAL');
+    database.pragma('foreign_keys = ON');
+    database.exec(renderMigration(loadSchema4ExecutableSchemaSource()).sql);
     database.pragma('journal_mode = WAL');
   } finally {
     database.close();
@@ -365,6 +382,25 @@ describe.sequential('G1.2 Workflow Runtime Store base', () => {
     expectDatabaseGateUnchanged(databasePath, before);
   });
 
+  it('fails closed on frozen Schema 4 to 5 upgrade SQL drift before opening the database', () => {
+    const { root, databasePath } = temporaryDatabase();
+    createSchema4Database(databasePath);
+    const before = databaseGateSnapshot(databasePath);
+    const copiedSchema = path.join(root, 'schema');
+    fs.cpSync(path.resolve(import.meta.dirname, '../schema'), copiedSchema, {
+      recursive: true,
+    });
+    fs.appendFileSync(
+      path.join(copiedSchema, 'migration/workflow-runtime-schema-v4-to-v5.sql'),
+      '\n-- drift\n',
+    );
+
+    expect(() =>
+      loadFrozenWorkflowRuntimeStoreInputs({ schemaRoot: copiedSchema }),
+    ).toThrow(/schema4_to_schema5_upgrade raw hash mismatch|upgrade drifted/);
+    expectDatabaseGateUnchanged(databasePath, before);
+  });
+
   it('loads exact Store dependencies regardless of unrelated Contract JSON', () => {
     const expected = loadFrozenWorkflowRuntimeStoreInputs();
     const { root } = temporaryDatabase();
@@ -439,7 +475,7 @@ describe.sequential('G1.2 Workflow Runtime Store base', () => {
     expect(
       store.queryOne<{ user_version: number }>('PRAGMA user_version', [])
         ?.user_version,
-    ).toBe(4);
+    ).toBe(5);
     expect(store.identityEvidence).toMatchObject({
       certification_status: 'candidate_not_certified',
       platform: 'darwin',
@@ -467,7 +503,7 @@ describe.sequential('G1.2 Workflow Runtime Store base', () => {
     );
   });
 
-  it('upgrades an empty frozen Schema 3 real file to Schema 4', () => {
+  it('upgrades an empty frozen Schema 3 real file through historical Schema 4 to Schema 5', () => {
     const { databasePath } = temporaryDatabase();
     createSchema3Database(databasePath);
     const before = new Database(databasePath, { readonly: true });
@@ -489,13 +525,82 @@ describe.sequential('G1.2 Workflow Runtime Store base', () => {
     expect(
       upgraded.queryOne<{ user_version: number }>('PRAGMA user_version', [])
         ?.user_version,
-    ).toBe(4);
+    ).toBe(5);
     expect(
       upgraded.queryOne<{ count: number }>(
         'SELECT count(*) AS count FROM pragma_foreign_key_check',
         [],
       )?.count,
     ).toBe(0);
+  });
+
+  it('upgrades a nonempty frozen Schema 4 real file to Schema 5 and preserves rows', () => {
+    const { databasePath } = temporaryDatabase();
+    createSchema4Database(databasePath);
+    const seed = new Database(databasePath);
+    try {
+      seed
+        .prepare(
+          'INSERT INTO workflow_domain_resource_heads (namespace, key_hash, current_fencing_token, row_version) VALUES (?, ?, ?, ?)',
+        )
+        .run(
+          'capacity-upgrade-preserved',
+          hash('capacity-upgrade-preserved'),
+          7,
+          3,
+        );
+    } finally {
+      seed.close();
+    }
+    const before = databaseGateSnapshot(databasePath);
+    expect(before.userVersion).toBe(4);
+    expect(before.sqliteSchemaIdentity).toBe(
+      FROZEN_G1_1_IDENTITIES.schema4SourceSqliteSchema,
+    );
+
+    const upgraded = WorkflowRuntimeConnectionFactory.openStore({
+      databasePath,
+      databaseMode: 'open_existing',
+      identityMode: 'candidate_development',
+    });
+    openStores.push(upgraded);
+    expect(
+      upgraded.queryOne<{ user_version: number }>('PRAGMA user_version', [])
+        ?.user_version,
+    ).toBe(5);
+    expect(
+      upgraded.queryOne<{ current_fencing_token: number; row_version: number }>(
+        'SELECT current_fencing_token, row_version FROM workflow_domain_resource_heads WHERE namespace = ?',
+        ['capacity-upgrade-preserved'],
+      ),
+    ).toEqual({ current_fencing_token: 7, row_version: 3 });
+  });
+
+  it('rejects Schema 4 sqlite_schema identity drift before the first upgrade DDL', () => {
+    const { databasePath } = temporaryDatabase();
+    createSchema4Database(databasePath);
+    const database = new Database(databasePath);
+    try {
+      database.exec(
+        'CREATE INDEX "idx:test:schema4_identity_drift" ON "workflow_domain_resource_heads" ("namespace")',
+      );
+    } finally {
+      database.close();
+    }
+    const before = databaseGateSnapshot(databasePath);
+    expect(before.userVersion).toBe(4);
+    expect(before.sqliteSchemaIdentity).not.toBe(
+      FROZEN_G1_1_IDENTITIES.schema4SourceSqliteSchema,
+    );
+
+    expect(() =>
+      WorkflowRuntimeConnectionFactory.openStore({
+        databasePath,
+        databaseMode: 'open_existing',
+        identityMode: 'candidate_development',
+      }),
+    ).toThrow('Schema 4 sqlite_schema identity mismatch');
+    expectDatabaseGateUnchanged(databasePath, before);
   });
 
   it('rejects Schema 3 sqlite_schema identity drift before the first upgrade DDL', () => {
@@ -518,7 +623,7 @@ describe.sequential('G1.2 Workflow Runtime Store base', () => {
     expectDatabaseGateUnchanged(databasePath, before);
   });
 
-  it('rolls back the complete Schema 3 to 4 DDL when target verification fails', () => {
+  it('rolls back the complete Schema 3 to 5 DDL when target verification fails', () => {
     const { databasePath } = temporaryDatabase();
     createSchema3Database(databasePath);
     insertPreservedForeignKeyViolation(databasePath);

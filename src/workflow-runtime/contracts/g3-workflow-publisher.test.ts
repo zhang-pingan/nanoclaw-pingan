@@ -33,7 +33,7 @@ describe('G3.7 WorkflowPublisher contracts', () => {
     ).toHaveLength(1);
     expect(G37_SCHEMA_RESOURCE_HASHES.request).toMatch(/^sha256:[0-9a-f]{64}$/);
     expect(checkG37WorkflowPublisherContracts().hash).toBe(
-      'sha256:4fc65c77265c226b7abcb6f17aeaab3af3e7f7e13d5117705cb3872f3dce6933',
+      'sha256:8a67b2516d46da89524045297b261e32305d0803546089048b19d70384e23282',
     );
   });
 

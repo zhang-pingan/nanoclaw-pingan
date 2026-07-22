@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-capacity-control-plane-fault-cases:1\n",
-  "hash": "sha256:5e28911e61181fdcb9c84114b9de1e4f94747d618b2091e8cdfda81d7f90f68c",
+  "hash": "sha256:81cab871c72a89aea20b8209acd076f27750967625e9c3f27e7b8049688de7f2",
   "payload": {
     "format": "icarus.workflow-capacity-control-plane-fault-cases/1",
     "cases": [
@@ -113,8 +113,16 @@
         "expected_result": "existing_head_file_and_audit_preserved",
         "expected_head_effect": "unchanged",
         "assertion": "upgrade never replaces existing publication with checked-in bootstrap baseline"
+      },
+      {
+        "case_id": "fault.cap4-recovery-preserves-prepared-invocation",
+        "area": "publication_recovery",
+        "scenario": "cap4_recovery_preserves_prepared_invocation",
+        "expected_result": "prepared_unchanged_command_finalized_idempotently",
+        "expected_head_effect": "committed",
+        "assertion": "CAP4 crash recovery idempotently completes Event and Command finalization without updating the CAP1 prepared invocation"
       }
     ],
-    "case_count": 13
+    "case_count": 14
   }
 }

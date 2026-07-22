@@ -14,7 +14,7 @@
         "expected": "accepted"
       },
       {
-        "case_id": "positive.fresh-schema4-bootstrap",
+        "case_id": "positive.fresh-schema5-bootstrap",
         "expected": "accepted"
       },
       {
@@ -47,5 +47,5 @@
       }
     ]
   },
-  "hash": "sha256:02a6ec89c5de7eb42e2564b0862a1c620a162ff3652323634e4a2dc77e56abbf"
+  "hash": "sha256:814db792f640d64d26269ed73870164aeb0c636f17f1d0bfcb3c9a4a27710d79"
 }

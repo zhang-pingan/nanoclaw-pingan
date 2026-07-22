@@ -146,13 +146,14 @@ export const G4_TEST_BOOTSTRAP_PROFILE_SCHEMA: JsonObject = {
       connection_factory: { const: 'WorkflowRuntimeConnectionFactory' },
       identity_mode: { const: 'candidate_development' },
       database_name: { const: 'workflow-runtime.db' },
-      database_schema_version: { const: 4 },
+      database_schema_version: { const: 5 },
       g1_root_hash: hashSchema,
       schema_dependency_manifest_hash: hashSchema,
       physical_schema_identity: hashSchema,
       database_schema_hash: hashSchema,
       migration_hash: hashSchema,
       schema3_to_4_upgrade_hash: hashSchema,
+      schema4_to_5_upgrade_hash: hashSchema,
       sqlite_profile_ref: versionedRefSchema,
       sqlite_profile_hash: hashSchema,
       sqlite_profile_status: { const: 'candidate' },
@@ -279,7 +280,7 @@ export const G4_ISOLATION_RECEIPT_SCHEMA: JsonObject = {
     root_inode: { type: 'string', minLength: 1 },
     database_device: { type: 'string', minLength: 1 },
     database_inode: { type: 'string', minLength: 1 },
-    database_schema_version: { const: 4 },
+    database_schema_version: { const: 5 },
     database_schema_hash: hashSchema,
     sqlite_profile_hash: hashSchema,
     production_surface_absence_hash: hashSchema,
@@ -390,9 +391,11 @@ function upstreamIdentity(): JsonObject {
   if (
     inputs.g1RootHash !== G39_UPSTREAM_IDENTITIES.g1_root_hash ||
     inputs.schemaHash !== G39_UPSTREAM_IDENTITIES.database_schema_hash ||
-    inputs.migrationSha256 !== G39_UPSTREAM_IDENTITIES.schema4_migration_hash ||
+    inputs.migrationSha256 !== G39_UPSTREAM_IDENTITIES.schema5_migration_hash ||
     inputs.schema3To4UpgradeSha256 !==
-      G39_UPSTREAM_IDENTITIES.schema3_to_4_upgrade_hash
+      G39_UPSTREAM_IDENTITIES.schema3_to_4_upgrade_hash ||
+    inputs.schema4To5UpgradeSha256 !==
+      G39_UPSTREAM_IDENTITIES.schema4_to_5_upgrade_hash
   ) {
     throw new Error('G4 G1 Store identity drifted');
   }
@@ -404,7 +407,7 @@ function upstreamIdentity(): JsonObject {
     checkG38AActivationContractRepair().hash !==
       G39_UPSTREAM_IDENTITIES.g3_8a_pack_hash ||
     checkG39FeatureReleaseActivationContracts().hash !==
-      'sha256:f5ddf7eb07b4f54431e612f5f6bbaf9df87d7ed6672f4a400b05fc53c7067f4e'
+      'sha256:7c192a3a4dd10004c2a7bf6da2cf81a38d5745e145717796f86acfc2025fdf91'
   ) {
     throw new Error('G4 G3 upstream Contract identity drifted');
   }
@@ -430,6 +433,7 @@ function upstreamIdentity(): JsonObject {
     database_schema_hash: inputs.schemaHash,
     migration_hash: inputs.migrationSha256,
     schema3_to_4_upgrade_hash: inputs.schema3To4UpgradeSha256,
+    schema4_to_5_upgrade_hash: inputs.schema4To5UpgradeSha256,
     sqlite_profile_ref: {
       id: 'icarus.local-single-user-sqlite',
       version: '1.0.0',
@@ -440,7 +444,7 @@ function upstreamIdentity(): JsonObject {
     g3_7_pack_hash: G39_UPSTREAM_IDENTITIES.g3_7_pack_hash,
     g3_8a_pack_hash: G39_UPSTREAM_IDENTITIES.g3_8a_pack_hash,
     g3_9_pack_hash:
-      'sha256:f5ddf7eb07b4f54431e612f5f6bbaf9df87d7ed6672f4a400b05fc53c7067f4e',
+      'sha256:7c192a3a4dd10004c2a7bf6da2cf81a38d5745e145717796f86acfc2025fdf91',
   };
 }
 
@@ -565,7 +569,7 @@ function buildLeafArtifacts(): BuiltLeafArtifacts {
       connection_factory: 'WorkflowRuntimeConnectionFactory',
       identity_mode: 'candidate_development',
       database_name: 'workflow-runtime.db',
-      database_schema_version: 4,
+      database_schema_version: 5,
       g1_root_hash: upstream.g1_root_hash!,
       schema_dependency_manifest_hash:
         upstream.schema_dependency_manifest_hash!,
@@ -573,6 +577,7 @@ function buildLeafArtifacts(): BuiltLeafArtifacts {
       database_schema_hash: upstream.database_schema_hash!,
       migration_hash: upstream.migration_hash!,
       schema3_to_4_upgrade_hash: upstream.schema3_to_4_upgrade_hash!,
+      schema4_to_5_upgrade_hash: upstream.schema4_to_5_upgrade_hash!,
       sqlite_profile_ref: upstream.sqlite_profile_ref!,
       sqlite_profile_hash: upstream.sqlite_profile_hash!,
       sqlite_profile_status: 'candidate',
@@ -751,7 +756,7 @@ function buildManifest(built: BuiltLeafArtifacts): ContractArtifactEnvelope {
       fault_case_count: g4FaultCases().length,
       fake_adapter_outcome_count: G4_FAKE_ADAPTER_OUTCOMES.length,
       fake_adapter_outcomes: [...G4_FAKE_ADAPTER_OUTCOMES],
-      database_schema_version: 4,
+      database_schema_version: 5,
       database_schema_hash: G39_UPSTREAM_IDENTITIES.database_schema_hash,
       sqlite_profile_status: 'candidate',
       certification_status: 'not_certified',
@@ -841,9 +846,11 @@ function validateBuilt(
     store.g1_root_hash !== G39_UPSTREAM_IDENTITIES.g1_root_hash ||
     store.database_schema_hash !==
       G39_UPSTREAM_IDENTITIES.database_schema_hash ||
-    store.migration_hash !== G39_UPSTREAM_IDENTITIES.schema4_migration_hash ||
+    store.migration_hash !== G39_UPSTREAM_IDENTITIES.schema5_migration_hash ||
     store.schema3_to_4_upgrade_hash !==
       G39_UPSTREAM_IDENTITIES.schema3_to_4_upgrade_hash ||
+    store.schema4_to_5_upgrade_hash !==
+      G39_UPSTREAM_IDENTITIES.schema4_to_5_upgrade_hash ||
     upstream.g2_sealed_bundle_hash !==
       G39_UPSTREAM_IDENTITIES.g2_sealed_bundle_hash ||
     upstream.g3_6_pack_hash !== G39_UPSTREAM_IDENTITIES.g3_6_pack_hash ||
