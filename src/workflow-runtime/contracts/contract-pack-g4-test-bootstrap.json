@@ -13,7 +13,7 @@
       "id": "icarus.workflow-test-bootstrap-profile",
       "version": "1.0.0"
     },
-    "profile_hash": "sha256:1c7249c5a53f658db130447117116919f0f7258abbcddd77e092b528860f7798",
+    "profile_hash": "sha256:15cbda14e581cbfb499dc8c0f20a297d695da9bd59af4051e9e3b72de97a5fcf",
     "fixture_set_ref": {
       "id": "icarus.workflow-test-bootstrap-fixture-set",
       "version": "1.0.0"
@@ -30,9 +30,9 @@
     },
     "virtual_clock_profile_hash": "sha256:1f37b9d07a7c3b667d60eb489a3ed78017cb7d42072f065d551a5839a29ce73c",
     "bootstrap_implementation_hash": "sha256:a8bea5690d9e0e66ba93cec4ebb5e8a5d471ed160ecb6371effd6cbe18bf56ad",
-    "isolation_boundary_hash": "sha256:2802b9cc93f91531d45c6ae53da554e077455f1b67271edea3e4fe7357ee0073",
+    "isolation_boundary_hash": "sha256:883f8f2d4040fd03ea5a49bd38826ce6c37d5556175219b66f335793087f9188",
     "positive_case_count": 9,
-    "negative_case_count": 31,
+    "negative_case_count": 32,
     "fault_case_count": 13,
     "fake_adapter_outcome_count": 7,
     "fake_adapter_outcomes": [
@@ -158,7 +158,7 @@
         },
         "version": 2,
         "domain_separator": "icarus:workflow-test-bootstrap-isolation-boundary:2\n",
-        "hash": "sha256:2802b9cc93f91531d45c6ae53da554e077455f1b67271edea3e4fe7357ee0073"
+        "hash": "sha256:883f8f2d4040fd03ea5a49bd38826ce6c37d5556175219b66f335793087f9188"
       },
       {
         "path": "bootstrap/workflow-test-bootstrap-profile@1.json",
@@ -169,7 +169,7 @@
         },
         "version": 1,
         "domain_separator": "icarus:workflow-test-bootstrap-profile:1\n",
-        "hash": "sha256:1c7249c5a53f658db130447117116919f0f7258abbcddd77e092b528860f7798"
+        "hash": "sha256:15cbda14e581cbfb499dc8c0f20a297d695da9bd59af4051e9e3b72de97a5fcf"
       },
       {
         "path": "conformance/g4-test-bootstrap/positive-cases.json",
@@ -191,7 +191,7 @@
         },
         "version": 1,
         "domain_separator": "icarus:workflow-test-bootstrap-negative-cases:1\n",
-        "hash": "sha256:74a22da85281face58db87b01b08c8648517ef9bdd93311692a10eb8d6d1e9dc"
+        "hash": "sha256:b14aa89a773bf4c674eed3121d79834a46b648ab840bab47549f5c62167d2bca"
       },
       {
         "path": "conformance/g4-test-bootstrap/fault-cases.json",
@@ -217,5 +217,5 @@
       }
     ]
   },
-  "hash": "sha256:41fa8a427ee935669283fe119e04e1384df6d305eddff7396c4efb816ba3eaa8"
+  "hash": "sha256:1136d6d379b6d821175046449ec58cd7ba72e6ef72441be45d522e2a6a56e3ba"
 }

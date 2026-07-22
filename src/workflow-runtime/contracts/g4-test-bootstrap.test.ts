@@ -86,7 +86,7 @@ describe('G4 Test Bootstrap Contract Pack', () => {
       gate: 'G4',
       status: 'EXIT_CANDIDATE_PENDING_INDEPENDENT_G4_REGRESSION',
       positive_case_count: 9,
-      negative_case_count: 31,
+      negative_case_count: 32,
       fault_case_count: 13,
       fake_adapter_outcome_count: 7,
       database_schema_version: 4,
@@ -105,11 +105,11 @@ describe('G4 Test Bootstrap Contract Pack', () => {
     });
     expect(g4ContractCountsForTest()).toEqual({
       positive: 9,
-      negative: 31,
+      negative: 32,
       fault: 13,
     });
     expect(g4PositiveCases()).toHaveLength(9);
-    expect(g4NegativeCases()).toHaveLength(31);
+    expect(g4NegativeCases()).toHaveLength(32);
     expect(g4FaultCases()).toHaveLength(13);
 
     expect(first.profile.payload).toMatchObject({
@@ -234,6 +234,14 @@ describe('G4 Test Bootstrap Contract Pack', () => {
           'allowed_when_no_test_bootstrap_authority_reachability',
       },
       production_surfaces: {
+        host_configuration_roots: [
+          'src',
+          'electron',
+          'assistant',
+          'features',
+          'setup',
+          'scripts',
+        ],
         package_default_reference: 'absent',
         feature_ingress_reachability: 'unreachable',
         api_ingress_reachability: 'unreachable',
@@ -394,6 +402,40 @@ describe('G4 Test Bootstrap Contract Pack', () => {
     const fixture = createIsolationFixture();
     try {
       writeFixtureFile(fixture.root, file, source);
+      expect(() => g4IsolationBoundaryPayload(fixture.root)).toThrow(
+        /authority_reference_selected/,
+      );
+    } finally {
+      fixture.cleanup();
+    }
+  });
+
+  it('rejects G4 selection from a Production-imported src JSON host config', () => {
+    const fixture = createIsolationFixture();
+    try {
+      writeFixtureFile(
+        fixture.root,
+        'tsconfig.json',
+        '{"compilerOptions":{"module":"NodeNext","moduleResolution":"NodeNext","resolveJsonModule":true}}\n',
+      );
+      writeFixtureFile(
+        fixture.root,
+        'src/index.ts',
+        'import config from "./runtime-config.json" with { type: "json" };\nexport default config;\n',
+      );
+      writeFixtureFile(
+        fixture.root,
+        'src/runtime-config.json',
+        '{"profile":"icarus.workflow-test-bootstrap-profile"}\n',
+      );
+      expect(
+        analyzeG4TestBootstrapIsolation(fixture.root).violations,
+      ).toContainEqual(
+        expect.objectContaining({
+          kind: 'authority_reference_selected',
+          source: 'src/runtime-config.json',
+        }),
+      );
       expect(() => g4IsolationBoundaryPayload(fixture.root)).toThrow(
         /authority_reference_selected/,
       );

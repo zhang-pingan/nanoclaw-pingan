@@ -49,6 +49,23 @@
         "src/workflow-runtime/bootstrap/",
         "src/workflow-runtime/contracts/g4-test-bootstrap-"
       ],
+      "authority_configuration_paths": [
+        "src/workflow-runtime/contracts/bootstrap/workflow-test-bootstrap-profile-schema@1.json",
+        "src/workflow-runtime/contracts/bootstrap/workflow-test-fake-adapter-invocation-schema@1.json",
+        "src/workflow-runtime/contracts/bootstrap/workflow-test-fake-adapter-result-schema@1.json",
+        "src/workflow-runtime/contracts/bootstrap/workflow-test-bootstrap-isolation-receipt-schema@1.json",
+        "src/workflow-runtime/contracts/bootstrap/workflow-test-bootstrap-fixture-set@1.json",
+        "src/workflow-runtime/contracts/bootstrap/workflow-test-fake-adapter-profile@1.json",
+        "src/workflow-runtime/contracts/bootstrap/workflow-test-virtual-clock-profile@1.json",
+        "src/workflow-runtime/contracts/bootstrap/workflow-test-bootstrap-implementation@1.json",
+        "src/workflow-runtime/contracts/bootstrap/workflow-test-bootstrap-isolation-boundary@2.json",
+        "src/workflow-runtime/contracts/bootstrap/workflow-test-bootstrap-profile@1.json",
+        "src/workflow-runtime/contracts/conformance/g4-test-bootstrap/positive-cases.json",
+        "src/workflow-runtime/contracts/conformance/g4-test-bootstrap/negative-cases.json",
+        "src/workflow-runtime/contracts/conformance/g4-test-bootstrap/fault-cases.json",
+        "src/workflow-runtime/contracts/bootstrap/workflow-test-bootstrap-domain-separators@1.json",
+        "src/workflow-runtime/contracts/contract-pack-g4-test-bootstrap.json"
+      ],
       "all_non_test_source_reachability": "unreachable",
       "production_root_reachability": "unreachable",
       "future_gate_source_policy": "allowed_when_no_test_bootstrap_authority_reachability"
@@ -105,6 +122,14 @@
         "g4-test-bootstrap",
         "workflow-test-bootstrap-profile"
       ],
+      "host_configuration_roots": [
+        "src",
+        "electron",
+        "assistant",
+        "features",
+        "setup",
+        "scripts"
+      ],
       "host_configuration_extensions": [
         ".html",
         ".json",
@@ -126,5 +151,5 @@
     "network_access": "forbidden",
     "user_data_access": "forbidden"
   },
-  "hash": "sha256:2802b9cc93f91531d45c6ae53da554e077455f1b67271edea3e4fe7357ee0073"
+  "hash": "sha256:883f8f2d4040fd03ea5a49bd38826ce6c37d5556175219b66f335793087f9188"
 }

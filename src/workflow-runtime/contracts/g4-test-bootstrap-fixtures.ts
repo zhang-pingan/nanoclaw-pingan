@@ -191,6 +191,7 @@ export function g4NegativeCases(): JsonObject[] {
     ['g5-runtime-import', 'test_bootstrap_reachable'],
     ['package-start-reference', 'test_bootstrap_profile_forbidden'],
     ['package-default-reference', 'test_bootstrap_profile_forbidden'],
+    ['production-imported-host-config', 'test_bootstrap_reachable'],
     ['unknown-fixture', 'fake_adapter_invocation_undeclared'],
     ['unknown-fake-outcome', 'fake_adapter_outcome_undeclared'],
     ['clock-seed-drift', 'virtual_clock_profile_mismatch'],

@@ -55,6 +55,24 @@ const G4_AUTHORITY_SOURCE_PREFIXES = [
   'src/workflow-runtime/contracts/g4-test-bootstrap-',
 ] as const;
 
+const G4_AUTHORITY_CONFIGURATION_PATHS = [
+  'src/workflow-runtime/contracts/bootstrap/workflow-test-bootstrap-profile-schema@1.json',
+  'src/workflow-runtime/contracts/bootstrap/workflow-test-fake-adapter-invocation-schema@1.json',
+  'src/workflow-runtime/contracts/bootstrap/workflow-test-fake-adapter-result-schema@1.json',
+  'src/workflow-runtime/contracts/bootstrap/workflow-test-bootstrap-isolation-receipt-schema@1.json',
+  'src/workflow-runtime/contracts/bootstrap/workflow-test-bootstrap-fixture-set@1.json',
+  'src/workflow-runtime/contracts/bootstrap/workflow-test-fake-adapter-profile@1.json',
+  'src/workflow-runtime/contracts/bootstrap/workflow-test-virtual-clock-profile@1.json',
+  'src/workflow-runtime/contracts/bootstrap/workflow-test-bootstrap-implementation@1.json',
+  'src/workflow-runtime/contracts/bootstrap/workflow-test-bootstrap-isolation-boundary@2.json',
+  'src/workflow-runtime/contracts/bootstrap/workflow-test-bootstrap-profile@1.json',
+  'src/workflow-runtime/contracts/conformance/g4-test-bootstrap/positive-cases.json',
+  'src/workflow-runtime/contracts/conformance/g4-test-bootstrap/negative-cases.json',
+  'src/workflow-runtime/contracts/conformance/g4-test-bootstrap/fault-cases.json',
+  'src/workflow-runtime/contracts/bootstrap/workflow-test-bootstrap-domain-separators@1.json',
+  'src/workflow-runtime/contracts/contract-pack-g4-test-bootstrap.json',
+] as const;
+
 const FORBIDDEN_REFERENCE_MARKERS = [
   'workflow-runtime/bootstrap',
   'g4-test-bootstrap',
@@ -211,13 +229,7 @@ function collectHostConfigurationFiles(repoRoot: string): string[] {
       }
     }
   };
-  for (const root of [
-    'electron',
-    'assistant',
-    'features',
-    'setup',
-    'scripts',
-  ]) {
+  for (const root of SOURCE_ROOTS) {
     visit(path.join(repoRoot, root));
   }
   if (fs.existsSync(path.join(repoRoot, 'tsconfig.json'))) {
@@ -321,6 +333,12 @@ function resolveInternalImport(
 function isG4AuthoritySource(relativePath: string): boolean {
   return G4_AUTHORITY_SOURCE_PREFIXES.some((prefix) =>
     relativePath.startsWith(prefix),
+  );
+}
+
+function isG4AuthorityConfiguration(relativePath: string): boolean {
+  return G4_AUTHORITY_CONFIGURATION_PATHS.includes(
+    relativePath as (typeof G4_AUTHORITY_CONFIGURATION_PATHS)[number],
   );
 }
 
@@ -462,6 +480,7 @@ function hostConfigurationViolations(
   files: readonly string[],
 ): G4IsolationViolation[] {
   return files.flatMap((relativePath) => {
+    if (isG4AuthorityConfiguration(relativePath)) return [];
     const source = fs.readFileSync(path.join(repoRoot, relativePath), 'utf8');
     const marker = forbiddenReference(source);
     return marker
@@ -556,9 +575,14 @@ export function analyzeG4TestBootstrapIsolation(
   const state = stateHash.digest('hex');
   const cached = analysisCache.get(repoRoot);
   if (cached?.state === state) return cached.analysis;
-  const knownFiles = new Set(sourceFiles);
+  const knownSourceFiles = new Set(sourceFiles);
+  const knownModuleFiles = new Set([...sourceFiles, ...hostConfigurationFiles]);
   const compilerOptions = loadCompilerOptions(repoRoot);
-  const authorityFiles = new Set(sourceFiles.filter(isG4AuthoritySource));
+  const authoritySourceFiles = sourceFiles.filter(isG4AuthoritySource);
+  const authorityFiles = new Set([
+    ...authoritySourceFiles,
+    ...hostConfigurationFiles.filter(isG4AuthorityConfiguration),
+  ]);
   const bootstrapFiles = sourceFiles.filter((file) =>
     file.startsWith(`${G4_BOOTSTRAP_SOURCE_ROOT}/`),
   );
@@ -586,7 +610,7 @@ export function analyzeG4TestBootstrapIsolation(
               repoRoot,
               relativePath,
               specifier,
-              knownFiles,
+              knownModuleFiles,
               compilerOptions,
             ),
           )
@@ -649,8 +673,11 @@ export function analyzeG4TestBootstrapIsolation(
 
   const analysis: G4IsolationAnalysis = {
     source_files: sourceFiles,
-    production_entrypoints: deriveProductionEntrypoints(repoRoot, knownFiles),
-    authority_source_files: uniqueSorted(authorityFiles),
+    production_entrypoints: deriveProductionEntrypoints(
+      repoRoot,
+      knownSourceFiles,
+    ),
+    authority_source_files: uniqueSorted(authoritySourceFiles),
     bootstrap_source_files: bootstrapFiles,
     violations: violations.sort((left, right) =>
       asciiCompare(
@@ -695,6 +722,7 @@ export function g4IsolationBoundaryPayload(repoRoot: string): JsonObject {
       parsed_import_forms: [...IMPORT_FORMS],
       module_resolution: 'relative_root_and_typescript_resolver',
       authority_source_prefixes: [...G4_AUTHORITY_SOURCE_PREFIXES],
+      authority_configuration_paths: [...G4_AUTHORITY_CONFIGURATION_PATHS],
       all_non_test_source_reachability: 'unreachable',
       production_root_reachability: 'unreachable',
       future_gate_source_policy:
@@ -709,6 +737,7 @@ export function g4IsolationBoundaryPayload(repoRoot: string): JsonObject {
       automation_ingress_rules: [...INGRESS_RULES.automation],
       host_bootstrap_rules: [...INGRESS_RULES.host],
       forbidden_reference_markers: [...FORBIDDEN_REFERENCE_MARKERS],
+      host_configuration_roots: [...SOURCE_ROOTS],
       host_configuration_extensions: [...HOST_CONFIGURATION_EXTENSIONS],
       package_default_reference: 'absent',
       host_configuration_reference: 'absent',

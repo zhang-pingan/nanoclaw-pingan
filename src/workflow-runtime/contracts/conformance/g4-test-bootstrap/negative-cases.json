@@ -90,6 +90,10 @@
         "expected_code": "test_bootstrap_profile_forbidden"
       },
       {
+        "case_id": "production-imported-host-config",
+        "expected_code": "test_bootstrap_reachable"
+      },
+      {
         "case_id": "unknown-fixture",
         "expected_code": "fake_adapter_invocation_undeclared"
       },
@@ -135,5 +139,5 @@
       }
     ]
   },
-  "hash": "sha256:74a22da85281face58db87b01b08c8648517ef9bdd93311692a10eb8d6d1e9dc"
+  "hash": "sha256:b14aa89a773bf4c674eed3121d79834a46b648ab840bab47549f5c62167d2bca"
 }

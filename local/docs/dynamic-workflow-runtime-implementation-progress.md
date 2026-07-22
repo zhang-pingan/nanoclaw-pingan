@@ -1978,9 +1978,45 @@ G4 whole-gate结论为`DONE`，只将G5提升为`READY`。本回归没有实现G
 
 本任务完成专项与上游回归后只把G4恢复到退出候选，不恢复G5施工。下一独立任务必须从本提交clean tree重新执行G4 whole-gate independent regression，复核两轮14-member bytes/tree digest、全部G4功能与mutation、完整上游链和protected trees；通过并另行记录`DONE`前，G5固定为`NOT_READY/BLOCKED_BY_G4_REGRESSION`。
 
+### G4 downstream-safe whole-gate independent regression closure
+
+**结论**：`PASS / G4 DONE`，G5 Basic Runtime=`READY`。本轮从clean local checkout `main@945e21283a46accfd175356cd4640805e420199c`开始，parent=`005241262568135f02ace4de97c3fa3eacb49131`；启动环境为`permission_profile=disabled/unrestricted`、filesystem unrestricted、sandbox `danger-full-access`、approval policy `never`。没有申请approval/escalation、创建或切换worktree、Handoff、push、amend或重写历史；所有Node/npm生成、检查、测试、typecheck、build和Prettier均通过`./scripts/runtime-toolchain.sh exec -- <command>`。
+
+独立回归首先完整复核`945e212` candidate：两轮14-member raw bytes逐项相等，digest都为冻结值`09c06981b03b40c543303f2b0f93e8b86ebe7cc4a422f84119c4604a789e3df5`；pack/profile/bootstrap implementation/implementation artifact/isolation分别为`sha256:41fa8a427ee935669283fe119e04e1384df6d305eddff7396c4efb816ba3eaa8` / `sha256:1c7249c5a53f658db130447117116919f0f7258abbcddd77e092b528860f7798` / `sha256:a8bea5690d9e0e66ba93cec4ebb5e8a5d471ed160ecb6371effd6cbe18bf56ad` / `sha256:d0d04a99202f4d7ec86bd9893901db5dd2139aaad731d334408e627be4acb928` / `sha256:2802b9cc93f91531d45c6ae53da554e077455f1b67271edea3e4fe7357ee0073`。
+
+独立host-config probe发现一个真实G4回归：fixture中的Production `src/index.ts`以真实JSON module import加载`src/runtime-config.json`，该配置选择`icarus.workflow-test-bootstrap-profile`，但candidate analyzer返回`violations=[]`。原因是source graph枚举包含`src`，host JSON/YAML/shell/plist/HTML扫描却只覆盖`electron/assistant/features/setup/scripts`。最小修复让host configuration实时扫描全部六个既有source roots，不新增目录白名单；同时以15个exact current G4 artifact paths声明合法machine authority config，并把它们加入module-resolution authority targets，防止Production通过导入G4 artifact绕过。新增`production-imported-host-config` negative fixture与直接复现测试；fixture现为9 positive / 32 negative / 13 fault，G4 tests为2 files / 33 tests。没有修改四个owned bootstrap source、Store、Schema、Fake Adapter或Virtual Clock实现。
+
+**Final current machine authority**：
+
+| Authority | Identity |
+| --- | --- |
+| G4 Contract Pack | `sha256:1136d6d379b6d821175046449ec58cd7ba72e6ef72441be45d522e2a6a56e3ba` |
+| test-only profile artifact | `sha256:15cbda14e581cbfb499dc8c0f20a297d695da9bd59af4051e9e3b72de97a5fcf` |
+| bootstrap implementation | `sha256:a8bea5690d9e0e66ba93cec4ebb5e8a5d471ed160ecb6371effd6cbe18bf56ad` |
+| implementation artifact | `sha256:d0d04a99202f4d7ec86bd9893901db5dd2139aaad731d334408e627be4acb928` |
+| isolation boundary v2 | `sha256:883f8f2d4040fd03ea5a49bd38826ce6c37d5556175219b66f335793087f9188` |
+| final 14-member raw-byte digest | `8266a7a963d7f3a5b59cd0e12cfcb150992bf821e8498359bd60a8b8b07a0e47`，修复后连续两轮一致 |
+
+最终验证证据：
+
+| 命令/证据 | 结果 |
+| --- | --- |
+| 修复前后各两轮managed `contracts:g4:generate`、14-member逐项raw hash、digest、`contracts:g4:check` | PASS；修复前两轮=`09c06981...e3df5`并匹配冻结基线；修复后两轮=`8266a7a9...0e47`，final pack/profile/implementation/isolation连续一致 |
+| focused imported-`src`-JSON reproduction / managed `test:g4` | PASS；复现测试1 passed / 17 skipped；完整2 files / 33 tests，84表零行、fresh/reopen、mkdir race ownership、root/database replacement、cleanup/residual、Fake七结果、Virtual Clock及Production/user/network/real-adapter isolation全部保持 |
+| 独立post-fix mutation matrix | PASS；53 assertions；24项六surface x static import/export-from/literal require/literal dynamic import，加上indirect re-export、真实tsconfig alias、cache write/restore invalidation、4 package fields、11 Production scripts、6 host config extensions与Production-imported source-root JSON |
+| managed `contracts:check` | PASS；current G0/G1/G2/G3/Schema/Store与final G4 direct check完整通过 |
+| managed `test:g3.9` / `test:g3` | PASS；2 files / 34 tests；14 files / 97 tests |
+| managed `schema:check` / `store:check` / `test:g1.activation` / `test:g1.2` | PASS；G1 root/Schema 4/Profile identities不变；Activation 5 passed / 15 skipped；Store 20/20 |
+| managed `test:g2` / `golden:current:replay:check` | PASS；7 files / 47 tests；successor exact replay 40/40，bundle=`sha256:d99647d8ca6aabc737a793019335e6770aa111a79be7545c4dec00c6e7af2145` |
+| managed `test:g0.6` / `test:g0.10` | PASS；8/8与10/10 |
+| managed `typecheck` / `build` / targeted Prettier / `git diff --check` | PASS |
+| live graph / protected-tree / forbidden-surface / changed-path | PASS；275 source / 38 roots / 9 G4 source authority / 4 owned bootstrap / 0 violation；G0.10=`2bf94fb4ec0142bcb5348168525f67b348cedda4`、G2 successor sealed=`cf9270f9ec71fa2134de0987b5fe55b5425e399b`、G3.8A=`a358e690e90294f0ad08ec47992ff9f645df7e6f`、G1 Schema=`161d6041bc56368bc3fd821a37f5a6a58a8eea1b`相对baseline零diff；changed paths仅G4 checker/test/fixture/generated artifacts与三份治理文档；无G5-G9 module或Production入口 |
+
+Machine pack中的`EXIT_CANDIDATE_PENDING_INDEPENDENT_G4_REGRESSION`与`NOT_READY_BLOCKED_BY_G4_REGRESSION`是artifact生成时冻结事实，本轮没有为关闭Gate伪造改写。治理层G4现为`DONE`，只把G5提升为`READY`；本任务没有实现G5-G9、T0-T8、Workflow/Run/Activation业务DML、Capacity gateway、Reconciler、Scheduler、Ledger、Wait/Inbox/Outbox、Runtime Command/Projection、Production loader/current/latest resolver/startup/activation、Execution Artifact build/install、Retention/Blob GC/delete、真实Adapter、Feature/API/Automation ingress或legacy alias/fallback/compatibility reader。
+
 ## 下一步
 
-下一独立任务固定为**G4 whole-gate independent regression**。该任务只复核本节current G4 authority、downstream-safe isolation语义、原有bootstrap功能隔离与全部上游/protected evidence，不实施G5。只有该独立回归通过并提交关闭证据后，才可重新创建G5 Basic Runtime任务。
+下一独立任务固定为**G5 Basic Runtime implementation**。该任务只消费本节final G4 test-bootstrap authority与已冻结G0-G3/G1/G2 identities，按G5边界实现Basic Runtime；不得越界实施G6-G9、Production loader/activation、Capacity gateway、Scheduler/Reconciler或其他后续Gate。G5任务必须从本轮单一关闭提交后的clean `main`启动，并重新核对最终G4 pack/profile/isolation与14-member digest。
 
 历史fresh review evidence只存在于Git commits，不是current dependency；current immutable semantic approval只绑定exact Draft/report identities。显式`prepare-rc`冻结的四个Working roots与唯一Review Candidate未变；current expected full case-result/Plan/proof/program bytes/hash已独立冻结、审计、owner批准并seal。local single-user签名策略为`not_required_local_single_user`，没有伪造GPG或远程签名。
 
