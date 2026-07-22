@@ -77,7 +77,12 @@ describe('frozen G2 Production Compiler publication', () => {
     ).toBe('current_g2');
     expect(
       fs.readdirSync(path.join(compilerRoot, '../authoring')).sort(),
-    ).toEqual(['workflow-publisher.test.ts', 'workflow-publisher.ts']);
+    ).toEqual([
+      'feature-release-activation.test.ts',
+      'feature-release-activation.ts',
+      'workflow-publisher.test.ts',
+      'workflow-publisher.ts',
+    ]);
     for (const forbidden of [
       'registry',
       'runtime/graph-runtime.ts',

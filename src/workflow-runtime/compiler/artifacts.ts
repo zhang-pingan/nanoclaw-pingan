@@ -227,6 +227,8 @@ function validateBoundaries(): void {
   const authoringRoot = path.join(workflowRuntimeRoot, 'authoring');
   if (fs.existsSync(authoringRoot)) {
     const allowedAuthoringFiles = new Set([
+      'feature-release-activation.test.ts',
+      'feature-release-activation.ts',
       'workflow-publisher.test.ts',
       'workflow-publisher.ts',
     ]);

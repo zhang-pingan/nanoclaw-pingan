@@ -4301,6 +4301,18 @@ G1.6已经按上述machine handoff完成并重新闭合G1。Current G1 root为`s
 
 G1.6只交付schema/source/migration/Manifest/fixtures/Store identity prerequisite，没有Activation service、业务DML或active-pointer mutation。Project gate层的G3.9现为`READY`，但下一独立会话必须先完成G1 Schema 4整体回归；回归闭合前不得直接实施G3.9。G3.8A artifact自身记录的`BLOCKED_BY_G1_6`是冻结handoff事实，不因消费完成而改写。
 
+#### G3.9 Feature Release Activation implementation status
+
+G3.9已经消费frozen G3.8A和current Database Schema `4`，状态为`DONE`。独立machine authority为`icarus.workflow-contract-pack-g3-feature-release-activation@1.0.0`，pack hash=`sha256:2ef0997982483a6da4c6c6cfd3e26b7934f7fcffce4fdae160f94f4e9d600b38`，由closed request/receipt/result schemas、domain separator catalog和隔离的9 positive / 53 negative / 17 fault fixtures组成；G3.8A repair artifact继续保持独立冻结身份，不能充当G3.9 Contract。Canonical request Value是caller claims唯一exact权威，完整绑定caller key、actor/session/time、Feature、target/previous Release、expected pointer、exact G3.6 input、target/previous Retention和schema identities。
+
+实现只使用第三条独立边界`workflow_feature_release_activation_commands/invocations/events`，不复用或扩展`workflow_runtime_commands`、`runtime_capacity_admin_commands`、`workflow_publisher_commands`。Admission固定为strict canonical bytes、removed、unknown、closed schema、request hash、actor/session、caller-key drift、terminal integrity，再进入Release/G3.6/lifecycle/Retention/pointer/persistence precedence。G3.3/G3.5只能由既有G3.6 composition调用；Activation不复制其SQL、canonical Value、dependency traversal或20项内部错误语义。
+
+唯一写事务使用既有同步Store的短`BEGIN IMMEDIATE`。Verified compatibility/Release/Retention/pointer facts按Schema 4 nullable all-or-none group和null-to-exact规则填充；未通过的事实保持null。全部preflight通过时，previous Release（如有）`active -> draining`、target `staged -> active`、pointer `absent -> 1`或`N -> N+1`，target/previous published Retention保持held且不复制member graph；canonical request/G3.6 input+result/receipt/result Values、command、Invocation、Events和terminal header同事务提交。Compatibility/lifecycle/resource/Retention rejection形成canonical `failed`，pointer mismatch形成canonical terminal `conflict`；两者receipt均为null且不修改Release/pointer。Applied及exact duplicate返回原receipt，failed/conflict及其replay永远为null。
+
+First terminal result JSON的`referenced_terminal_result`为null；Schema 4 Invocation typed-reference quartet按物理Contract自指本次result Value。Exact terminal replay的duplicate和terminal same-key drift引用header canonical terminal result；pending same-key drift保持header pending并用null reference，且无论重复多少次都为conflict。每次调用只追加一个Invocation和与其相邻的domain-separated Event chain，canonical terminal header完整绑定terminal Invocation/result。Recovery先bounded pending scan，再strict-parse并复算stored request/result/receipt与完整Invocation/Event链；clean pending可重跑preflight，已有不一致transition/terminal evidence则fail closed。Commit后响应丢失时reopen真实文件数据库，追加`recovery_started/recovery_succeeded/terminal_replayed` duplicate，不重复pointer DML。任一command/result/receipt/Invocation/Event hash、schema或binding tamper均拒绝且不追加伪造audit。
+
+真实文件SQLite Gate覆盖absent/present pointer applied、previous draining与adjacent CAS、resource/G3.6/lifecycle/Retention failed、pointer conflict、applied/failed/conflict exact replay、pending/terminal repeated domain drift、9个pre-commit rollback点、clean pending bounded recovery、post-commit reopen recovery、7类tamper、Release/Retention protections和双独立数据库semantic row determinism。G3.9完成后G3进入`EXIT_CANDIDATE_PENDING_INDEPENDENT_G3_REGRESSION`；下一独立任务固定为G3整体回归，完成前不得开始G4。
+
 Feature Release 与新创建入口的激活指针必须独立持久化，不能用安装目录或当前文件内容代替：
 
 ```text

@@ -1,0 +1,82 @@
+{
+  "format": "icarus.workflow-feature-release-activation-domain-separators/1",
+  "ref": {
+    "id": "icarus.workflow-feature-release-activation-domain-separators",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-feature-release-activation-domain-separators:1\n",
+  "payload": {
+    "entries": [
+      {
+        "format": "icarus.workflow-contract-pack-g3-feature-release-activation/1",
+        "domain_separator": "icarus:workflow-contract-pack-g3-feature-release-activation:1\n"
+      },
+      {
+        "format": "icarus.workflow-feature-release-activation-command-id/1",
+        "domain_separator": "icarus:workflow-feature-release-activation-command-id:1\n"
+      },
+      {
+        "format": "icarus.workflow-feature-release-activation-domain-request/1",
+        "domain_separator": "icarus:workflow-feature-release-activation-domain-request:1\n"
+      },
+      {
+        "format": "icarus.workflow-feature-release-activation-domain-separators/1",
+        "domain_separator": "icarus:workflow-feature-release-activation-domain-separators:1\n"
+      },
+      {
+        "format": "icarus.workflow-feature-release-activation-event/1",
+        "domain_separator": "icarus:workflow-feature-release-activation-event:1\n"
+      },
+      {
+        "format": "icarus.workflow-feature-release-activation-g3-6-input-value/1",
+        "domain_separator": "icarus:workflow-feature-release-activation-g3-6-input-value:1\n"
+      },
+      {
+        "format": "icarus.workflow-feature-release-activation-g3-6-result-value/1",
+        "domain_separator": "icarus:workflow-feature-release-activation-g3-6-result-value:1\n"
+      },
+      {
+        "format": "icarus.workflow-feature-release-activation-invocation/1",
+        "domain_separator": "icarus:workflow-feature-release-activation-invocation:1\n"
+      },
+      {
+        "format": "icarus.workflow-feature-release-activation-receipt-schema/1",
+        "domain_separator": "icarus:workflow-feature-release-activation-receipt-schema:1\n"
+      },
+      {
+        "format": "icarus.workflow-feature-release-activation-receipt/1",
+        "domain_separator": "icarus:workflow-feature-release-activation-receipt:1\n"
+      },
+      {
+        "format": "icarus.workflow-feature-release-activation-request-schema/1",
+        "domain_separator": "icarus:workflow-feature-release-activation-request-schema:1\n"
+      },
+      {
+        "format": "icarus.workflow-feature-release-activation-request/1",
+        "domain_separator": "icarus:workflow-feature-release-activation-request:1\n"
+      },
+      {
+        "format": "icarus.workflow-feature-release-activation-result-schema/1",
+        "domain_separator": "icarus:workflow-feature-release-activation-result-schema:1\n"
+      },
+      {
+        "format": "icarus.workflow-feature-release-activation-result/1",
+        "domain_separator": "icarus:workflow-feature-release-activation-result:1\n"
+      },
+      {
+        "format": "icarus.workflow-g3-feature-release-activation-fault-cases/1",
+        "domain_separator": "icarus:workflow-g3-feature-release-activation-fault-cases:1\n"
+      },
+      {
+        "format": "icarus.workflow-g3-feature-release-activation-negative-cases/1",
+        "domain_separator": "icarus:workflow-g3-feature-release-activation-negative-cases:1\n"
+      },
+      {
+        "format": "icarus.workflow-g3-feature-release-activation-positive-cases/1",
+        "domain_separator": "icarus:workflow-g3-feature-release-activation-positive-cases:1\n"
+      }
+    ]
+  },
+  "hash": "sha256:8396fc5ffefd0751c3ebbd4f35cde443eae940b68098f35fd30e89c4fa69dc87"
+}

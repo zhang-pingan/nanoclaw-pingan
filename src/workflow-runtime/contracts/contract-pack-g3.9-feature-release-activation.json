@@ -1,0 +1,187 @@
+{
+  "format": "icarus.workflow-contract-pack-g3-feature-release-activation/1",
+  "ref": {
+    "id": "icarus.workflow-contract-pack-g3-feature-release-activation",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-contract-pack-g3-feature-release-activation:1\n",
+  "payload": {
+    "gate": "G3",
+    "slice": "G3.9",
+    "status": "DONE",
+    "g3_status": "EXIT_CANDIDATE_PENDING_INDEPENDENT_G3_REGRESSION",
+    "upstream": {
+      "database_schema_version": 4,
+      "g1_root_hash": "sha256:6f49451868b7a5cab359d1c21f14f79afbc11b12aa1938039daf5914d9c4d591",
+      "database_schema_hash": "sha256:f517a5e7bb8b3ea91bb37cd6a68b32898ceb62b9044687a8103808be6852106a",
+      "schema4_migration_hash": "sha256:4a8ddeb1f9715399ad96c3bc32efa5e8032a3bd484eaed0159c6a24620c1be43",
+      "schema3_to_4_upgrade_hash": "sha256:5ac263fe3279c61f74ba6314f5df98fff59a8f8b32acfa784d2040421ebaa3cf",
+      "g3_8a_pack_hash": "sha256:d8412111a0f3dcabb4ce416b99086701ea3e3911ff431b5457eb957b2f69722f",
+      "g3_8a_repair_artifact_hash": "sha256:94cb2c390bb44298238b1ffac4184b04f59efbbeae6f268fbce7618104ec406b",
+      "g3_8a_internal_contract_hash": "sha256:70d4b9ef47c83711415636737292450538acaf5cc4547d3130b04b101e6707ae",
+      "g3_6_pack_hash": "sha256:730daac9db4bcfb645374b12e10e3962ddacbebc2828875cb00133c8ada195a8",
+      "g3_7_pack_hash": "sha256:2fae2da648d6da5969e6c5c57b2342f6f15b3084b39e7acfc43b010b48517e74",
+      "g2_sealed_bundle_hash": "sha256:d99647d8ca6aabc737a793019335e6770aa111a79be7545c4dec00c6e7af2145"
+    },
+    "schema_resource_hashes": {
+      "request": "sha256:18b6b621ed172999a2d9a677e1adfd66790079089751562c4317c08747704921",
+      "receipt": "sha256:68049e60a9febc4c65a162c930f93757386503ee054ce64046e562b134c85ffe",
+      "result": "sha256:c99c78fb1a7701264e20ae1d29824bafac183787ba79ab22398d4d5045f80f1a",
+      "compatibility_input": "sha256:547403ae41a7eeca5ca10b0c2d58bd6e3a13640949c20ef85eb0d86548900150",
+      "compatibility_result": "sha256:8488f2903938a2f46d85efe7ccb9312093d8a3629f0beb7f8d616725e80c73e6"
+    },
+    "fixture_digest": "sha256:13bcfd0730c3b08af1d7345bf8fa04d6e4fb90cfea5d3d8eb2e5d7b41d5d61e3",
+    "error_precedence": [
+      "activation_request_strict_parse_invalid",
+      "activation_request_removed_field",
+      "activation_request_unknown_field",
+      "activation_request_schema_invalid",
+      "activation_request_hash_mismatch",
+      "activation_authentication_mismatch",
+      "idempotency_conflict",
+      "terminal_integrity_mismatch",
+      "target_release_missing",
+      "target_release_identity_mismatch",
+      "target_release_owner_mismatch",
+      "target_release_resource_set_mismatch",
+      "g3_6_preflight_rejected",
+      "target_release_lifecycle_invalid",
+      "previous_release_missing",
+      "previous_release_identity_mismatch",
+      "previous_release_owner_mismatch",
+      "previous_release_lifecycle_invalid",
+      "target_retention_missing",
+      "target_retention_identity_mismatch",
+      "target_retention_status_mismatch",
+      "target_retention_row_version_mismatch",
+      "previous_retention_missing",
+      "previous_retention_identity_mismatch",
+      "previous_retention_status_mismatch",
+      "previous_retention_row_version_mismatch",
+      "pointer_cas_conflict",
+      "activation_persistence_identity_collision"
+    ],
+    "g3_6_nested_error_precedence": [
+      "preflight_input_invalid",
+      "preflight_side_effect_requested",
+      "snapshot_missing",
+      "snapshot_hash_mismatch",
+      "snapshot_binding_mismatch",
+      "closure_root_missing",
+      "closure_root_hash_mismatch",
+      "closure_mismatch",
+      "execution_artifact_missing",
+      "execution_artifact_hash_mismatch",
+      "execution_artifact_mismatch",
+      "executor_implementation_missing",
+      "executor_implementation_hash_mismatch",
+      "executor_implementation_mismatch",
+      "artifact_binding_mismatch",
+      "core_compatibility_mismatch",
+      "run_protocol_mismatch",
+      "executor_abi_mismatch",
+      "retention_policy_mismatch",
+      "retention_eligibility_mismatch"
+    ],
+    "command_boundary": "workflow_feature_release_activation_commands/invocations/events",
+    "forbidden_command_unions": [
+      "workflow_runtime_commands",
+      "runtime_capacity_admin_commands",
+      "workflow_publisher_commands"
+    ],
+    "store_transaction": "single_begin_immediate",
+    "preflight_composition": "G3.6_only_for_G3.3_and_G3.5",
+    "active_pointer_dml": "adjacent_cas_only",
+    "receipt_owner": "committed_pointer_transition_only",
+    "recovery": "bounded_pending_scan_then_strict_terminal_and_chain_verification",
+    "positive_case_count": 9,
+    "negative_case_count": 53,
+    "fault_case_count": 17,
+    "artifacts": [
+      {
+        "path": "registry/workflow-feature-release-activation-request-schema@1.json",
+        "format": "icarus.workflow-feature-release-activation-request-schema/1",
+        "ref": {
+          "id": "icarus.workflow-feature-release-activation-request-schema",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-feature-release-activation-request-schema:1\n",
+        "hash": "sha256:c33aa61b251e13635c91842f862fd324589136268dae6d05764634a2fde92a8f"
+      },
+      {
+        "path": "registry/workflow-feature-release-activation-receipt-schema@1.json",
+        "format": "icarus.workflow-feature-release-activation-receipt-schema/1",
+        "ref": {
+          "id": "icarus.workflow-feature-release-activation-receipt-schema",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-feature-release-activation-receipt-schema:1\n",
+        "hash": "sha256:2e9f36e1c7e289eb82791d1ae3751120424c24b2873ce0cb47cc8c392eb2b50e"
+      },
+      {
+        "path": "registry/workflow-feature-release-activation-result-schema@1.json",
+        "format": "icarus.workflow-feature-release-activation-result-schema/1",
+        "ref": {
+          "id": "icarus.workflow-feature-release-activation-result-schema",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-feature-release-activation-result-schema:1\n",
+        "hash": "sha256:a7898c73983b49a45399a0d28a992c9587821c595995234fdb671a91b5400753"
+      },
+      {
+        "path": "conformance/g3.9-feature-release-activation/positive-cases.json",
+        "format": "icarus.workflow-g3-feature-release-activation-positive-cases/1",
+        "ref": {
+          "id": "icarus.workflow-g3-feature-release-activation-positive-cases",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-g3-feature-release-activation-positive-cases:1\n",
+        "hash": "sha256:121b57b9d458132628aff434d5d30e8e2a4b0fea6f87f5b3743acfa513052ee4"
+      },
+      {
+        "path": "conformance/g3.9-feature-release-activation/negative-cases.json",
+        "format": "icarus.workflow-g3-feature-release-activation-negative-cases/1",
+        "ref": {
+          "id": "icarus.workflow-g3-feature-release-activation-negative-cases",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-g3-feature-release-activation-negative-cases:1\n",
+        "hash": "sha256:4b16f516e695ba3cbb1703f4f2e9a4b569b0f7307b1de3b8a0938bd7f50d6dee"
+      },
+      {
+        "path": "conformance/g3.9-feature-release-activation/fault-cases.json",
+        "format": "icarus.workflow-g3-feature-release-activation-fault-cases/1",
+        "ref": {
+          "id": "icarus.workflow-g3-feature-release-activation-fault-cases",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-g3-feature-release-activation-fault-cases:1\n",
+        "hash": "sha256:f16cabcd541e8d9f202e8ea246aeca0502139b06bfcf2d1378aa4df3071daebc"
+      },
+      {
+        "path": "registry/workflow-feature-release-activation-domain-separators@1.json",
+        "format": "icarus.workflow-feature-release-activation-domain-separators/1",
+        "ref": {
+          "id": "icarus.workflow-feature-release-activation-domain-separators",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-feature-release-activation-domain-separators:1\n",
+        "hash": "sha256:8396fc5ffefd0751c3ebbd4f35cde443eae940b68098f35fd30e89c4fa69dc87"
+      }
+    ],
+    "production_loader_implemented": false,
+    "execution_artifact_build_or_install": false,
+    "gc_or_delete_implemented": false,
+    "authoring_stages_implemented": false,
+    "g4_through_g9_status": "NOT_READY"
+  },
+  "hash": "sha256:2ef0997982483a6da4c6c6cfd3e26b7934f7fcffce4fdae160f94f4e9d600b38"
+}
