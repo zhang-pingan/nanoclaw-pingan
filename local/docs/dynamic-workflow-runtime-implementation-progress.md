@@ -3,7 +3,7 @@
 > **状态**: IN_PROGRESS
 > **当前 Gate**: G3 Registry / Authoring / Publish（`IN_PROGRESS`；G3.1-G3.8 与 G1.5 Schema prerequisite 均 `DONE`；G2保持`DONE / BASELINE_ACCEPTED`与40/40 exact replay）
 > **下一施工切片**: G3.9 Feature Release Activation Vertical Slice；消费Database Schema 3，实现closed Activation与单一原子Activation事务
-> **最后更新**: 2026-07-21
+> **最后更新**: 2026-07-22
 > **规范权威**: `local/docs/dynamic-workflow-dag-framework.md`
 
 ## 文档职责
@@ -1687,6 +1687,37 @@ Physical Manifest为84 tables / 1,442 columns / 152 UK / 385 FK / 929 CHECK / 43
 | `typecheck` / `build` | PASS |
 | G0.6/G0.10 historical source、G2 sealed、forbidden surface、targeted Prettier、`git diff --check` | PASS；历史/sealed bytes零diff；无Activation Contract/DML、pointer mutation、loader、GC/delete、Artifact install或G4-G9实现 |
 | 未运行项 | 按切片约束未机械运行`test:g0`、`test:g2`或Golden全量回归 |
+
+## 2026-07-22：G1 DDL / Store独立整体回归
+
+**结论**：`PASS`；G1.1-G1.5作为Database Schema `3`完整阶段继续维持`DONE`，G3维持`IN_PROGRESS`，G4-G9维持`NOT_READY`。回归基线为`main` / `8c6da3dc393d7d222f4060999eb85eb9273140c0`，parent=`10a390f2446ebb64372e1b406f2bcd843f8c3fb7`，初始工作树clean。没有实现G3.9、Activation业务DML、Production loader、GC/delete、Execution Artifact或G4-G9 Runtime。
+
+阶段闭合证据：
+
+- G1.1：`schema:generate`后Git零漂移，随后`schema:check`通过；schema input、10-member dependency manifest、root、physical identity、canonical migration、Manifest、executable DDL与Profile pins逐项一致。真实文件SQLite migration/reopen/introspection固定84 tables / 1,442 columns / 152 UK / 385 FK / 929 CHECK / 43 logical indexes / 39 triggers / 42 query-plan fixtures / 319 statements，118个enum CHECK逐个动态执行，全部constraint/trigger/query-plan fixture通过。
+- G1.2：11项Store测试覆盖closed Profile校验、G1 identity与migration drift fail-closed、无Contract目录扫描、真实文件bootstrap/reopen与完整PRAGMA、单writer ownership/close、existing schema/profile mismatch、强制read-only `query_only`与write rejection、同步`BEGIN IMMEDIATE` commit/rollback、async/DDL callback rejection、跨进程writer lock及host/certification identity fail-closed。
+- G1.3：closed exact-member dependency manifest固定10 members（9 physical + 1 construction provenance）；unrelated Contract JSON不影响identity，raw-byte、semantic、missing member、duplicate role/path、unknown field与hash drift均有正反测试；Store只消费frozen pins。
+- G1.4：Publisher定向2项通过，覆盖caller idempotency、schema-bound Value与typed Registry/Release FK、command lifecycle、Invocation/Event相邻hash chain、immutability及query-plan；没有新增Publisher Store API。
+- G1.5：Activation定向3项通过，覆盖独立caller idempotency、typed request/compatibility/receipt/Release/Retention binding、command terminalization、Invocation/Event chain、single-active Release lifecycle、active-pointer owner/CAS、held Retention与后续合法release；仍无Activation业务DML。
+
+Current identity保持：G1 root=`sha256:39f7aef4e28d3466f49832edda8ed3fd193eb4abb73b39287119ecb8247948b7`，Schema Manifest hash=`sha256:9761bf8df83ace49b61c7dfce3f3523ecf7a69dacdccdd09837aa110ac021be6`，dependency manifest=`sha256:2cd580b39b88c425e2bd1ff58a058756806daed1a790cff8accce0e6aa8e7508`，physical identity=`sha256:b6b034224202d9673e177d4fb10144c5568f5d848a1dd6f75837d0eb1d52cf9b`，migration=`sha256:eea3547a0f5208d08bfbe771de3895bba020ca3cf34ddf2fb4e3b7945765d345`，Profile=`sha256:3d69742dad2fefa8bef4ba47e375defd705e3b32920a92b105a43726436fb7af`，SQLite=`3.53.2`。
+
+受影响边界回归：G0 SQLite/logical tree=`0da80769666843708e54563a1651160478a7daff`、G0.6 conformance tree=`8f8b856d2c91ecddef5c70b10144df86c9eebcd3`、G0.10 tree=`2bf94fb4ec0142bcb5348168525f67b348cedda4`、G2 sealed tree=`26155e8850f4abaaa04bac7a2ee35fd75b2ff21e`在parent与基线HEAD间完全相同。G3.1/G3.3/G3.5/G3.6/G3.7 current packs保持`8ee8268a…b11f7e` / `9dc2aacc…5369e` / `1634fec5…3eb824` / `4bea9b04…cffadc` / `a1c6807f…c21a3`；G3.7 staged Publish的5个transaction fault point、rollback、reopen recovery、collision、duplicate/conflict/failed和双real-file database determinism通过，active pointer始终未写。
+
+| 命令/证据 | 结果 |
+| --- | --- |
+| `git diff --check`；`schema:generate`后Git drift check；`schema:check`；`store:check` | PASS；generate/check幂等，Schema 3与Store identity一致 |
+| `test:g1.1` / `test:g1.2` | PASS；1 file / 17 tests；1 file / 11 tests |
+| `test:g1.publisher` / `test:g1.activation` | PASS；2 passed / 15 skipped；3 passed / 14 skipped |
+| `test:g0.6` / `test:g0.10` | PASS；1 file / 8 tests；1 file / 10 tests |
+| `contracts:g3:check` / `contracts:g3.registry:check` / `contracts:g3.query:check` / `contracts:g3.6:check` / `contracts:g3.7:check` | PASS；2 positive + 19 negative；1 + 4；1 + 5；1 + 5；G3.7 exact pack check |
+| `test:g3` | PASS；11 files / 59 tests |
+| `golden:current:replay:check` / current `test:g2` | PASS；40/40 exact；7 files / 47 tests |
+| `contracts:check` | 初次发现并修复过期G2 boundary assertion后PASS；完整current G0/G1/G2/G3 chain、Schema与Store均通过 |
+| `typecheck` / `build` | PASS |
+| historical tree diff / forbidden surface scan | PASS；G0.6/G0.10与G2 sealed零diff；schema目录外无Activation/active-pointer DML，无Production loader、GC/delete、Artifact install或G4-G9实现 |
+
+额外全链检查发现一个真实回归：G2 Production Compiler的current boundary仍把整个`authoring/`目录视为G3+越界，因此G3.7合法`authoring/workflow-publisher.ts`会使`contracts:check`失败。修复将该construction-era断言收窄为精确authoring allowlist，只允许G3.7的`workflow-publisher.ts`与测试文件，任何G3.9/Activation或其他authoring entry继续fail-closed；`registry`、`runtime/graph-runtime.ts`和`projection/runtime-center-api.ts`也继续禁止。current compiler与R-016重复断言同步验证该exact tree。定向2 files / 10 tests、`compiler:g2:check`、完整`test:g2`与`contracts:check`均通过，G2 Production Compiler root和sealed artifacts未改变。历史`test:g2:archive`中的resolved Draft重建仍按其旧G1 frozen identity拒绝current Schema 3；seal后current gate已明确改用frozen inventory checks，本回归不改写construction-era Draft或sealed bytes。
 
 ## 下一步
 

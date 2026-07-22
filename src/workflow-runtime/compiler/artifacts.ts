@@ -224,9 +224,20 @@ function validateBoundaries(): void {
   } catch {
     throw new Error('Golden/conformance sealed boundary crossed');
   }
+  const authoringRoot = path.join(workflowRuntimeRoot, 'authoring');
+  if (fs.existsSync(authoringRoot)) {
+    const allowedAuthoringFiles = new Set([
+      'workflow-publisher.test.ts',
+      'workflow-publisher.ts',
+    ]);
+    for (const entry of fs.readdirSync(authoringRoot)) {
+      if (!allowedAuthoringFiles.has(entry)) {
+        throw new Error(`G3+ boundary crossed: authoring/${entry}`);
+      }
+    }
+  }
   for (const forbidden of [
     'registry',
-    'authoring',
     'runtime/graph-runtime.ts',
     'projection/runtime-center-api.ts',
   ]) {

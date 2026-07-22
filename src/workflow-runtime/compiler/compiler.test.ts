@@ -69,15 +69,17 @@ describe('frozen G2 Production Compiler publication', () => {
     expect(manifest.rejected_count).toBe(30);
   });
 
-  it('recognizes the exact Golden seal while keeping G3+ boundaries absent', () => {
+  it('recognizes the exact Golden seal and current post-G2 boundaries', () => {
     expect(
       assertCurrentG2SealedBoundary(
         path.join(contractsRoot, 'conformance/sealed'),
       ),
     ).toBe('current_g2');
+    expect(
+      fs.readdirSync(path.join(compilerRoot, '../authoring')).sort(),
+    ).toEqual(['workflow-publisher.test.ts', 'workflow-publisher.ts']);
     for (const forbidden of [
       'registry',
-      'authoring',
       'runtime/graph-runtime.ts',
       'projection/runtime-center-api.ts',
     ]) {
