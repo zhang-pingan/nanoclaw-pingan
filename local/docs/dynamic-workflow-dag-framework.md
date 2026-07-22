@@ -6323,6 +6323,12 @@ Gate 依赖与可并行关系固定如下：
 | G8 Certification | G7 | optional Domain Recipe release | certified profile meeting Product Floor |
 | G9 Production Activation | G8 + fresh current G0/G0.10 manifests | 无 | activation + Capacity genesis/preservation audit + startup/empty-state or launchable-Recipe smoke |
 
+### G5 T6e Gate ownership implementation blocker
+
+截至`2904f81592b9bd83f5d837f521f2eb026ce2d439`后的G5启动审计，以上Gate分期存在不可执行冲突，G5标记`BLOCKED_BY_SPEC`，不得由实现自行选择语义：第6步要求G5实现`T6a-e`，Gate表要求G5以`T0-T6e model/fault fixtures`退出；第8步又把T6e和Runtime Command Gateway归G7。正文同时规定T6e只能通过Runtime Command Gateway执行，T6e machine protocol要求`authorized_runtime_command`并原子写Command Invocation，Schema 4要求resolved Operational Blocker的`resolution_command_id`绑定真实`workflow_runtime_commands`行。
+
+因此G5既不能在不实现Gateway时合法闭合T6e，也不能在实现Gateway时保持G7边界。禁止以test-only直写、伪造command row、预授权boolean、nullable resolution command或不写Invocation的方式绕过。独立前置修复必须明确选择并同步实现索引、开发期顺序、Gate exit、machine protocol/fixture ownership与验收分期：要么将G5收敛为`T0-T6d + Operational Blocker open/cache creation semantics`并把完整T6e留给G7，要么正式把所需最小Runtime Command Gateway/authorization/audit下沉G5。前置修复闭合并回归前，不授权任何G5部分implementation，也不改变G0-G4 frozen machine bytes。
+
 ```ts
 interface WorkflowRuntimeAbsenceBaseline {
   format: 'icarus.workflow-runtime-absence-baseline/1';
