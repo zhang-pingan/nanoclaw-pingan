@@ -6,11 +6,11 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-runtime-query-plan-fixtures:1\n",
-  "hash": "sha256:32af2e73e8814f9d6a36f601753cf4c9c3d5bb080450e3a72fca0650a3af5a7f",
+  "hash": "sha256:dd2c43bd00be85fab4c0250e8862c916f12116260eaa786ba770552b1c188204",
   "payload": {
-    "schema_hash": "sha256:9761bf8df83ace49b61c7dfce3f3523ecf7a69dacdccdd09837aa110ac021be6",
+    "schema_hash": "sha256:f517a5e7bb8b3ea91bb37cd6a68b32898ceb62b9044687a8103808be6852106a",
     "execution_target": "real_file_sqlite",
-    "query_count": 42,
+    "query_count": 43,
     "fixtures": [
       {
         "query_id": "query:scheduler_ready_nodes",
@@ -299,6 +299,14 @@
         "sql": "SELECT * FROM \"workflow_feature_release_activation_commands\" INDEXED BY \"idx:activation_commands:idempotency\" WHERE \"idempotency_domain\" = ? AND \"idempotency_key\" = ? LIMIT 50",
         "parameter_count": 2,
         "required_index_id": "idx:activation_commands:idempotency"
+      },
+      {
+        "query_id": "activation_lookup_terminal_result",
+        "owner": "recovery",
+        "coverage_area": "recovery",
+        "sql": "SELECT * FROM \"workflow_feature_release_activation_commands\" INDEXED BY \"idx:activation_commands:terminal_result\" WHERE \"command_id\" = ? AND \"lifecycle\" IN ('applied', 'failed', 'conflict') LIMIT 50",
+        "parameter_count": 1,
+        "required_index_id": "idx:activation_commands:terminal_result"
       },
       {
         "query_id": "activation_load_invocations",

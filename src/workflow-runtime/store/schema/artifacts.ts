@@ -19,17 +19,36 @@ import {
   buildActivationSchemaPrerequisiteArtifact,
 } from './activation-source.js';
 import {
+  ACTIVATION_REPAIR_SCHEMA_DELTA_DOMAIN,
+  ACTIVATION_REPAIR_SCHEMA_INPUT_DOMAIN,
+  ACTIVATION_REPAIR_SCHEMA_INPUT_RELATIVE_PATH,
+  buildActivationRepairSchemaPrerequisiteArtifact,
+} from './activation-repair-source.js';
+import {
   G1_PHYSICAL_SCHEMA_IDENTITY_DOMAIN_SEPARATOR,
   G1_SCHEMA_DEPENDENCY_MANIFEST_DOMAIN_SEPARATOR,
   buildSchemaDependencyManifestArtifact,
 } from './dependencies.js';
-import { buildQueryFixtures, renderMigration } from './ddl.js';
+import {
+  SQLITE_SCHEMA_IDENTITY_DOMAIN_SEPARATOR,
+  calculateDatabaseSqliteSchemaIdentity,
+  calculateManifestSqliteSchemaIdentity,
+} from './database-identity.js';
+import {
+  SCHEMA3_TO_SCHEMA4_UPGRADE_RELATIVE_PATH,
+  buildQueryFixtures,
+  renderMigration,
+  renderSchema3To4Upgrade,
+} from './ddl.js';
 import {
   assertClosedSchemaManifest,
   payloadAsJsonObject,
   reconstructSchemaManifest,
 } from './manifest.js';
-import { loadExecutableSchemaSource } from './source.js';
+import {
+  loadExecutableSchemaSource,
+  loadSchema3ExecutableSchemaSource,
+} from './source.js';
 import {
   buildPublisherSchemaPrerequisiteArtifact,
   PUBLISHER_SCHEMA_INPUT_RELATIVE_PATH,
@@ -51,7 +70,9 @@ const schemaRoot = import.meta.dirname;
 export const G1_ARTIFACT_PATHS = {
   publisherInput: PUBLISHER_SCHEMA_INPUT_RELATIVE_PATH,
   activationInput: ACTIVATION_SCHEMA_INPUT_RELATIVE_PATH,
+  activationRepairInput: ACTIVATION_REPAIR_SCHEMA_INPUT_RELATIVE_PATH,
   migration: 'migration/workflow-runtime-schema-v1.sql',
+  schema3To4Upgrade: SCHEMA3_TO_SCHEMA4_UPGRADE_RELATIVE_PATH,
   dependencyManifest:
     'artifacts/workflow-runtime-schema-dependency-manifest@1.json',
   dependencyManifestContract:
@@ -133,9 +154,11 @@ function buildDependencyManifestContractArtifact(): ContractArtifactEnvelope {
         'g0_10_capacity_logical_schema_delta',
         'publisher_schema_prerequisite',
         'feature_release_activation_schema_prerequisite',
+        'activation_failure_replay_schema_prerequisite',
         'sqlite_execution_profile',
         'schema_manifest',
         'canonical_migration',
+        'schema3_to_schema4_upgrade',
       ],
       member_order: 'required_roles_order',
       physical_identity_domain_separator:
@@ -289,11 +312,15 @@ function buildConstraintFixtureArtifact(
         'publisher_invocation_disposition_hash_chain_and_immutability',
         'publisher_event_phase_hash_chain_and_immutability',
         'activation_caller_idempotency_unique',
-        'activation_schema_bound_values_and_typed_release_retention_foreign_keys',
-        'activation_expected_pointer_absent_present_shape',
-        'activation_command_lifecycle_and_finalization',
-        'activation_invocation_disposition_hash_chain_and_immutability',
-        'activation_event_phase_hash_chain_and_immutability',
+        'activation_request_only_pending_insert',
+        'activation_verified_fact_prefix_without_holes_or_fabrication',
+        'activation_owner_lifecycle_resource_g3_6_retention_failure_facts',
+        'activation_applied_only_receipt_and_terminal_invocation_result_binding',
+        'activation_failed_conflict_null_receipt_and_no_pointer_mutation',
+        'activation_exact_replay_terminal_result_reference',
+        'activation_invocation_event_adjacency_immutability_and_tamper_rejection',
+        'schema3_empty_activation_pointer_upgrade_to_schema4',
+        'schema3_nonempty_activation_or_pointer_upgrade_fail_closed',
         'feature_release_owner_identity_single_active_and_legal_lifecycle',
         'active_pointer_owner_cas_immutability_delete_and_target_active',
         'retention_published_identity_held_observation_and_active_draining_protection',
@@ -330,6 +357,8 @@ function buildSchemaLintArtifact(
         'publisher_invocations_and_events_are_append_only_hash_chains',
         'activation_commands_invocations_and_events_are_first_class_tables',
         'activation_values_bind_exact_value_hash_and_schema_identity',
+        'activation_verified_groups_are_nullable_prefix_ordered',
+        'activation_terminal_result_binds_immutable_invocation_composite',
         'activation_release_pointer_and_retention_relations_are_typed',
         'activation_invocations_and_events_are_append_only_hash_chains',
         'feature_release_lifecycle_and_active_pointer_cas_are_trigger_constrained',
@@ -395,6 +424,7 @@ function runSchemaLint(
 
 export interface BuiltG1Artifacts {
   migrationSql: string;
+  schema3To4UpgradeSql: string;
   manifest: ContractArtifactEnvelope;
   dependencyManifest: ContractArtifactEnvelope;
   artifacts: Array<[string, ContractArtifactEnvelope]>;
@@ -406,11 +436,37 @@ export function buildG1Artifacts(
   options: { contractsRoot?: string } = {},
 ): BuiltG1Artifacts {
   const source = loadExecutableSchemaSource(options.contractsRoot);
+  const schema3Source = loadSchema3ExecutableSchemaSource(
+    options.contractsRoot,
+  );
   const migration = renderMigration(source);
+  const schema3Migration = renderMigration(schema3Source);
+  if (
+    rawSha256(schema3Migration.sql) !==
+    'sha256:eea3547a0f5208d08bfbe771de3895bba020ca3cf34ddf2fb4e3b7945765d345'
+  ) {
+    throw new Error('Reproducible Schema 3 migration identity drifted');
+  }
+  const schema3To4Upgrade = renderSchema3To4Upgrade(schema3Source, source);
   const temporaryRoot = fs.mkdtempSync(
     path.join(os.tmpdir(), 'icarus-g1-schema-'),
   );
   const databasePath = path.join(temporaryRoot, 'workflow-runtime.db');
+  const schema3DatabasePath = path.join(
+    temporaryRoot,
+    'workflow-runtime-schema3.db',
+  );
+  const schema3Database = createMigratedDatabase(
+    schema3DatabasePath,
+    schema3Migration.sql,
+  );
+  let schema3SqliteSchemaIdentity: string;
+  try {
+    schema3SqliteSchemaIdentity =
+      calculateDatabaseSqliteSchemaIdentity(schema3Database);
+  } finally {
+    schema3Database.close();
+  }
   const database = createMigratedDatabase(databasePath, migration.sql);
   let manifestPayload: WorkflowRuntimeSchemaManifestPayload;
   let environmentSummary: ReturnType<typeof collectSqliteEnvironmentEvidence>;
@@ -423,6 +479,12 @@ export function buildG1Artifacts(
       migration.triggers,
     );
     assertClosedSchemaManifest(manifestPayload);
+    if (
+      calculateDatabaseSqliteSchemaIdentity(database) !==
+      calculateManifestSqliteSchemaIdentity(manifestPayload)
+    ) {
+      throw new Error('Schema 4 SQLite identity differs from its Manifest');
+    }
     runSchemaLint(source, manifestPayload, migration.sql);
     verifyQueryPlans(database, buildQueryFixtures(source));
     environmentSummary = collectSqliteEnvironmentEvidence(database);
@@ -444,6 +506,7 @@ export function buildG1Artifacts(
     manifest,
     migration.sql,
     { contractsRoot: options.contractsRoot },
+    schema3To4Upgrade.sql,
   );
   const executableDdl = buildArtifact(
     'icarus.workflow-runtime-executable-ddl/1',
@@ -455,6 +518,19 @@ export function buildG1Artifacts(
       logical_inputs: source.logical_inputs,
       migration_path: G1_ARTIFACT_PATHS.migration,
       migration_sha256: rawSha256(migration.sql),
+      schema3_to_schema4_upgrade_path: G1_ARTIFACT_PATHS.schema3To4Upgrade,
+      schema3_to_schema4_upgrade_sha256: rawSha256(schema3To4Upgrade.sql),
+      schema3_source_migration_sha256: rawSha256(schema3Migration.sql),
+      schema3_source_sqlite_schema_identity: schema3SqliteSchemaIdentity,
+      sqlite_schema_identity:
+        calculateManifestSqliteSchemaIdentity(manifestPayload),
+      schema3_upgrade_mode: 'empty_activation_state_only_or_fail_closed',
+      schema3_required_empty_relations: [
+        'workflow_feature_release_activation_commands',
+        'workflow_feature_release_activation_invocations',
+        'workflow_feature_release_activation_events',
+        'workflow_feature_active_releases',
+      ],
       statement_count: migration.statement_count,
       table_count: source.tables.length,
       trigger_count: migration.triggers.length,
@@ -498,6 +574,9 @@ export function buildG1Artifacts(
         'icarus:workflow-runtime-schema:1\n',
         ACTIVATION_SCHEMA_INPUT_DOMAIN,
         ACTIVATION_SCHEMA_DELTA_DOMAIN,
+        ACTIVATION_REPAIR_SCHEMA_INPUT_DOMAIN,
+        ACTIVATION_REPAIR_SCHEMA_DELTA_DOMAIN,
+        SQLITE_SCHEMA_IDENTITY_DOMAIN_SEPARATOR,
         G1_SCHEMA_DEPENDENCY_MANIFEST_DOMAIN_SEPARATOR,
         G1_PHYSICAL_SCHEMA_IDENTITY_DOMAIN_SEPARATOR,
         dependencyManifestContract.domain_separator,
@@ -522,6 +601,10 @@ export function buildG1Artifacts(
       G1_ARTIFACT_PATHS.activationInput,
       buildActivationSchemaPrerequisiteArtifact(),
     ],
+    [
+      G1_ARTIFACT_PATHS.activationRepairInput,
+      buildActivationRepairSchemaPrerequisiteArtifact(),
+    ],
     [G1_ARTIFACT_PATHS.dependencyManifestContract, dependencyManifestContract],
     [G1_ARTIFACT_PATHS.dependencyManifest, dependencyManifest],
     [G1_ARTIFACT_PATHS.manifestContract, manifestContract],
@@ -545,10 +628,16 @@ export function buildG1Artifacts(
       ).physical_schema_identity,
       schema_hash: manifestPayload.schema_hash,
       migration_sha256: rawSha256(migration.sql),
+      schema3_to_schema4_upgrade_sha256: rawSha256(schema3To4Upgrade.sql),
+      schema3_source_migration_sha256: rawSha256(schema3Migration.sql),
+      schema3_source_sqlite_schema_identity: schema3SqliteSchemaIdentity,
+      sqlite_schema_identity:
+        calculateManifestSqliteSchemaIdentity(manifestPayload),
       deterministic_digest: domainSeparatedSha256(
         'icarus:workflow-runtime-schema-determinism:1\n',
         asJson({
           migration_sha256: rawSha256(migration.sql),
+          schema3_to_schema4_upgrade_sha256: rawSha256(schema3To4Upgrade.sql),
           schema_hash: manifestPayload.schema_hash,
           member_hashes: members.map(([, artifact]) => artifact.hash),
         }),
@@ -584,6 +673,7 @@ export function buildG1Artifacts(
   members.push([G1_ARTIFACT_PATHS.root, root]);
   return {
     migrationSql: migration.sql,
+    schema3To4UpgradeSql: schema3To4Upgrade.sql,
     manifest,
     dependencyManifest,
     artifacts: members,
@@ -621,8 +711,13 @@ export function generateG1Artifacts(): BuiltG1Artifacts {
     G1_ARTIFACT_PATHS.activationInput,
     renderJson(buildActivationSchemaPrerequisiteArtifact()),
   );
+  writeAtomic(
+    G1_ARTIFACT_PATHS.activationRepairInput,
+    renderJson(buildActivationRepairSchemaPrerequisiteArtifact()),
+  );
   const built = buildG1Artifacts();
   writeAtomic(G1_ARTIFACT_PATHS.migration, built.migrationSql);
+  writeAtomic(G1_ARTIFACT_PATHS.schema3To4Upgrade, built.schema3To4UpgradeSql);
   for (const [artifactPath, artifact] of built.artifacts) {
     writeAtomic(artifactPath, renderJson(artifact));
   }
@@ -654,6 +749,18 @@ export function checkG1Artifacts(): BuiltG1Artifacts {
       `${G1_ARTIFACT_PATHS.activationInput} drifted; run npm run schema:generate`,
     );
   }
+  const expectedActivationRepairInput = renderJson(
+    buildActivationRepairSchemaPrerequisiteArtifact(),
+  );
+  const actualActivationRepairInput = fs.readFileSync(
+    absoluteSchemaPath(G1_ARTIFACT_PATHS.activationRepairInput),
+    'utf8',
+  );
+  if (actualActivationRepairInput !== expectedActivationRepairInput) {
+    throw new Error(
+      `${G1_ARTIFACT_PATHS.activationRepairInput} drifted; run npm run schema:generate`,
+    );
+  }
   const built = buildG1Artifacts();
   const migrationBytes = fs.readFileSync(
     absoluteSchemaPath(G1_ARTIFACT_PATHS.migration),
@@ -661,6 +768,15 @@ export function checkG1Artifacts(): BuiltG1Artifacts {
   );
   if (migrationBytes !== built.migrationSql) {
     throw new Error('Canonical migration drifted; run npm run schema:generate');
+  }
+  const upgradeBytes = fs.readFileSync(
+    absoluteSchemaPath(G1_ARTIFACT_PATHS.schema3To4Upgrade),
+    'utf8',
+  );
+  if (upgradeBytes !== built.schema3To4UpgradeSql) {
+    throw new Error(
+      'Schema 3 to 4 upgrade drifted; run npm run schema:generate',
+    );
   }
   for (const [artifactPath, artifact] of built.artifacts) {
     const actual = fs.readFileSync(absoluteSchemaPath(artifactPath), 'utf8');

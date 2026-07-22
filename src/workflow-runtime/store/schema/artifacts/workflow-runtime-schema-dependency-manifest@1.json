@@ -6,12 +6,12 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-runtime-schema-dependency-manifest:1\n",
-  "hash": "sha256:2cd580b39b88c425e2bd1ff58a058756806daed1a790cff8accce0e6aa8e7508",
+  "hash": "sha256:8ed4d092c0822fe06b154117d3fc2d6d74c9041644b0883ab2e978c4a2abe35d",
   "payload": {
     "dependency_set_id": "workflow-runtime-schema-v1",
     "identity_scope": "physical_schema_and_migration",
-    "member_count": 10,
-    "physical_member_count": 9,
+    "member_count": 12,
+    "physical_member_count": 11,
     "construction_provenance_count": 1,
     "members": [
       {
@@ -106,6 +106,19 @@
         "raw_sha256": "sha256:f59bced2ef511d676e8e58537e80db3f124116001e736d347eeadef3d0f9ab1b"
       },
       {
+        "role": "activation_failure_replay_schema_prerequisite",
+        "identity_effect": "physical_schema_input",
+        "path": "store/schema/inputs/workflow-feature-release-activation-failure-replay-schema-prerequisite@1.json",
+        "format": "icarus.workflow-feature-release-activation-failure-replay-schema-prerequisite/1",
+        "ref": {
+          "id": "icarus.workflow-feature-release-activation-failure-replay-schema-prerequisite",
+          "version": "1"
+        },
+        "version": 1,
+        "semantic_hash": "sha256:d1fd091aedae1d8d6d51e3442c074050ab57ab5330e18bf37adef628b8dcba9d",
+        "raw_sha256": "sha256:c85aa8337cf9ccad8c6ec0fa450f740f99fbdf2adf34387425aa49387912ae74"
+      },
+      {
         "role": "sqlite_execution_profile",
         "identity_effect": "physical_schema_input",
         "path": "contracts/sqlite/local_single_user_sqlite@1.json",
@@ -128,8 +141,8 @@
           "version": "1"
         },
         "version": 1,
-        "semantic_hash": "sha256:6e2fb3d19a9f0368b4dc330761addeda9e33f8f20437cdf204f58833390ff86e",
-        "raw_sha256": "sha256:5ff7c2329f2dfb84c4f3b67f25353417b4f229d3b11291ffb916b80610b4e099"
+        "semantic_hash": "sha256:87f6787dd5c6382df97120c2e10dc6624143c67efc35e57cb92ea22f16fa666b",
+        "raw_sha256": "sha256:d38e182a33e93e12f4cacf72b18eddcf38e0762e9b71f407a84443108b24e2c7"
       },
       {
         "role": "canonical_migration",
@@ -141,10 +154,23 @@
           "version": "1"
         },
         "version": 1,
-        "semantic_hash": "sha256:eea3547a0f5208d08bfbe771de3895bba020ca3cf34ddf2fb4e3b7945765d345",
-        "raw_sha256": "sha256:eea3547a0f5208d08bfbe771de3895bba020ca3cf34ddf2fb4e3b7945765d345"
+        "semantic_hash": "sha256:4a8ddeb1f9715399ad96c3bc32efa5e8032a3bd484eaed0159c6a24620c1be43",
+        "raw_sha256": "sha256:4a8ddeb1f9715399ad96c3bc32efa5e8032a3bd484eaed0159c6a24620c1be43"
+      },
+      {
+        "role": "schema3_to_schema4_upgrade",
+        "identity_effect": "physical_schema_output",
+        "path": "store/schema/migration/workflow-runtime-schema-v3-to-v4.sql",
+        "format": "icarus.workflow-runtime-sqlite-schema-upgrade/1",
+        "ref": {
+          "id": "icarus.workflow-runtime-schema-v3-to-v4-upgrade",
+          "version": "1"
+        },
+        "version": 1,
+        "semantic_hash": "sha256:5ac263fe3279c61f74ba6314f5df98fff59a8f8b32acfa784d2040421ebaa3cf",
+        "raw_sha256": "sha256:5ac263fe3279c61f74ba6314f5df98fff59a8f8b32acfa784d2040421ebaa3cf"
       }
     ],
-    "physical_schema_identity": "sha256:b6b034224202d9673e177d4fb10144c5568f5d848a1dd6f75837d0eb1d52cf9b"
+    "physical_schema_identity": "sha256:61ca572ff0f8551ff67f5529753610012fd6027a484e77cc8e63716f4814e04f"
   }
 }

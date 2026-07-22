@@ -6,7 +6,11 @@ import { spawn, type ChildProcessWithoutNullStreams } from 'child_process';
 import { pathToFileURL } from 'url';
 
 import { afterEach, describe, expect, it } from 'vitest';
+import Database from 'better-sqlite3';
 
+import { calculateDatabaseSqliteSchemaIdentity } from '../schema/database-identity.js';
+import { buildSchemaTriggers, renderMigration } from '../schema/ddl.js';
+import { loadSchema3ExecutableSchemaSource } from '../schema/source.js';
 import {
   WorkflowRuntimeConnectionFactory,
   WorkflowRuntimeStore,
@@ -44,6 +48,85 @@ function openFresh(databasePath: string): WorkflowRuntimeStore {
 
 function hash(label: string): string {
   return `sha256:${crypto.createHash('sha256').update(label).digest('hex')}`;
+}
+
+function fileHash(filePath: string): string {
+  return `sha256:${crypto.createHash('sha256').update(fs.readFileSync(filePath)).digest('hex')}`;
+}
+
+function createSchema3Database(databasePath: string): void {
+  const profile = loadFrozenWorkflowRuntimeStoreInputs().profile;
+  const database = new Database(databasePath);
+  try {
+    database.pragma(`page_size = ${profile.page_size}`);
+    database.pragma('auto_vacuum = INCREMENTAL');
+    database.pragma('foreign_keys = ON');
+    database.exec(renderMigration(loadSchema3ExecutableSchemaSource()).sql);
+    database.pragma('journal_mode = WAL');
+  } finally {
+    database.close();
+  }
+}
+
+function insertConstructionOnlyRow(
+  databasePath: string,
+  relation: string,
+): void {
+  const database = new Database(databasePath);
+  try {
+    database.pragma('foreign_keys = OFF');
+    database.pragma('ignore_check_constraints = ON');
+    const insertTriggerNames: Record<string, string[]> = {
+      workflow_feature_release_activation_commands: [
+        'trg:activation_commands:retention_observation_insert',
+      ],
+      workflow_feature_release_activation_invocations: [],
+      workflow_feature_release_activation_events: [
+        'trg:activation_events:command_binding',
+      ],
+      workflow_feature_active_releases: [
+        'trg:feature_active_releases:target_active_insert',
+      ],
+    };
+    const triggerNames = insertTriggerNames[relation];
+    if (!triggerNames)
+      throw new Error(`Unknown upgrade gate relation: ${relation}`);
+    const schema3Triggers = new Map(
+      buildSchemaTriggers(3).map((trigger) => [trigger.name, trigger.sql]),
+    );
+    for (const triggerName of triggerNames) {
+      database.exec(`DROP TRIGGER "${triggerName}"`);
+    }
+    const columns = database
+      .prepare(`PRAGMA table_info("${relation}")`)
+      .all() as Array<{
+      name: string;
+      type: string;
+      notnull: number;
+      pk: number;
+    }>;
+    const required = columns.filter(
+      (column) => column.notnull === 1 || column.pk > 0,
+    );
+    database
+      .prepare(
+        `INSERT INTO "${relation}" (${required.map((column) => `"${column.name}"`).join(', ')}) VALUES (${required.map(() => '?').join(', ')})`,
+      )
+      .run(
+        ...required.map((column) =>
+          column.type === 'INTEGER' ? 1 : `construction-${column.name}`,
+        ),
+      );
+    for (const triggerName of triggerNames) {
+      const sql = schema3Triggers.get(triggerName);
+      if (!sql) throw new Error(`Missing Schema 3 trigger ${triggerName}`);
+      database.exec(sql);
+    }
+    database.pragma('ignore_check_constraints = OFF');
+    database.pragma('wal_checkpoint(TRUNCATE)');
+  } finally {
+    database.close();
+  }
 }
 
 function closeTracked(store: WorkflowRuntimeStore): void {
@@ -200,6 +283,23 @@ describe.sequential('G1.2 Workflow Runtime Store base', () => {
     });
   });
 
+  it('loads frozen schema artifacts without construction Contract sources', () => {
+    const { root } = temporaryDatabase();
+    const contractsRoot = path.join(root, 'contracts');
+    const profileDirectory = path.join(contractsRoot, 'sqlite');
+    fs.mkdirSync(profileDirectory, { recursive: true });
+    fs.copyFileSync(
+      path.resolve(
+        import.meta.dirname,
+        '../../contracts/sqlite/local_single_user_sqlite@1.json',
+      ),
+      path.join(profileDirectory, 'local_single_user_sqlite@1.json'),
+    );
+    expect(() =>
+      loadFrozenWorkflowRuntimeStoreInputs({ contractsRoot }),
+    ).not.toThrow();
+  });
+
   it('bootstraps a fresh real-file database, reopens it, and reports candidate identity evidence', () => {
     const { databasePath } = temporaryDatabase();
     const store = openFresh(databasePath);
@@ -225,6 +325,10 @@ describe.sequential('G1.2 Workflow Runtime Store base', () => {
         ['table', 'sqlite_%'],
       )?.count,
     ).toBe(84);
+    expect(
+      store.queryOne<{ user_version: number }>('PRAGMA user_version', [])
+        ?.user_version,
+    ).toBe(4);
     expect(store.identityEvidence).toMatchObject({
       certification_status: 'candidate_not_certified',
       platform: 'darwin',
@@ -251,6 +355,73 @@ describe.sequential('G1.2 Workflow Runtime Store base', () => {
       FROZEN_G1_1_IDENTITIES.schema,
     );
   });
+
+  it('upgrades an empty frozen Schema 3 real file to Schema 4', () => {
+    const { databasePath } = temporaryDatabase();
+    createSchema3Database(databasePath);
+    const before = new Database(databasePath, { readonly: true });
+    try {
+      expect(before.pragma('user_version', { simple: true })).toBe(3);
+      expect(calculateDatabaseSqliteSchemaIdentity(before)).toBe(
+        FROZEN_G1_1_IDENTITIES.schema3SourceSqliteSchema,
+      );
+    } finally {
+      before.close();
+    }
+
+    const upgraded = WorkflowRuntimeConnectionFactory.openStore({
+      databasePath,
+      databaseMode: 'open_existing',
+      identityMode: 'candidate_development',
+    });
+    openStores.push(upgraded);
+    expect(
+      upgraded.queryOne<{ user_version: number }>('PRAGMA user_version', [])
+        ?.user_version,
+    ).toBe(4);
+    expect(
+      upgraded.queryOne<{ count: number }>(
+        'SELECT count(*) AS count FROM pragma_foreign_key_check',
+        [],
+      )?.count,
+    ).toBe(0);
+  });
+
+  it.each([
+    'workflow_feature_release_activation_commands',
+    'workflow_feature_release_activation_invocations',
+    'workflow_feature_release_activation_events',
+    'workflow_feature_active_releases',
+  ])(
+    'fails closed before DDL when Schema 3 relation %s is non-empty',
+    (relation) => {
+      const { databasePath } = temporaryDatabase();
+      createSchema3Database(databasePath);
+      insertConstructionOnlyRow(databasePath, relation);
+      const beforeHash = fileHash(databasePath);
+      expect(() =>
+        WorkflowRuntimeConnectionFactory.openStore({
+          databasePath,
+          databaseMode: 'open_existing',
+          identityMode: 'candidate_development',
+        }),
+      ).toThrow(`Schema 3 upgrade requires empty relation ${relation}`);
+      expect(fileHash(databasePath)).toBe(beforeHash);
+
+      const after = new Database(databasePath, { readonly: true });
+      try {
+        expect(after.pragma('user_version', { simple: true })).toBe(3);
+        expect(calculateDatabaseSqliteSchemaIdentity(after)).toBe(
+          FROZEN_G1_1_IDENTITIES.schema3SourceSqliteSchema,
+        );
+        expect(
+          after.prepare(`SELECT count(*) FROM "${relation}"`).pluck().get(),
+        ).toBe(1);
+      } finally {
+        after.close();
+      }
+    },
+  );
 
   it('enforces one in-process writer owner and releases ownership on close', () => {
     const { databasePath } = temporaryDatabase();

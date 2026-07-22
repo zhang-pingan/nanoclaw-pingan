@@ -6,10 +6,12 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-runtime-schema-domain-separators:1\n",
-  "hash": "sha256:1078ab2f792346ec9ad3a324ffec779cc2cb597ee960e7700fdb0d460f4fda54",
+  "hash": "sha256:e794a19a48df011b21c934a45ae1d4a74bec93d89ddf14ce3944f925ed15c7ac",
   "payload": {
     "entries": [
       "icarus:workflow-contract-pack-g1-executable-schema:1\n",
+      "icarus:workflow-feature-release-activation-failure-replay-logical-schema-delta:1\n",
+      "icarus:workflow-feature-release-activation-failure-replay-schema-prerequisite:1\n",
       "icarus:workflow-feature-release-activation-logical-schema-delta:1\n",
       "icarus:workflow-feature-release-activation-schema-prerequisite:1\n",
       "icarus:workflow-runtime-constraint-trigger-fixtures:1\n",
@@ -23,7 +25,8 @@
       "icarus:workflow-runtime-schema-lint:1\n",
       "icarus:workflow-runtime-schema-manifest-contract:1\n",
       "icarus:workflow-runtime-schema-manifest:1\n",
-      "icarus:workflow-runtime-schema:1\n"
+      "icarus:workflow-runtime-schema:1\n",
+      "icarus:workflow-runtime-sqlite-schema-identity:1\n"
     ]
   }
 }

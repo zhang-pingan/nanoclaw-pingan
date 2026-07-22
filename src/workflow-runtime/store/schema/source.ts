@@ -12,7 +12,11 @@ import {
   parseActivationSchemaPrerequisiteArtifact,
   type ActivationSchemaTableExtension,
 } from './activation-source.js';
-import { readPinnedSchemaInputArtifacts } from './dependencies.js';
+import { parseActivationRepairSchemaPrerequisiteArtifact } from './activation-repair-source.js';
+import {
+  readPinnedSchemaInputArtifacts,
+  type LoadedSchemaInputArtifacts,
+} from './dependencies.js';
 import {
   parsePublisherSchemaPrerequisiteArtifact,
   type PublisherSchemaTableExtension,
@@ -62,7 +66,7 @@ function assertUnique(values: string[], label: string): void {
   if (duplicate) throw new Error(`Duplicate ${label}: ${duplicate}`);
 }
 
-function assertExecutableSource(source: ExecutableSchemaSource): void {
+function assertSchema3ExecutableSource(source: ExecutableSchemaSource): void {
   if (source.tables.length !== 84) {
     throw new Error(`Expected 84 v1 tables, received ${source.tables.length}`);
   }
@@ -103,6 +107,50 @@ function assertExecutableSource(source: ExecutableSchemaSource): void {
   }
 }
 
+function assertExecutableSource(source: ExecutableSchemaSource): void {
+  if (source.database_schema_version !== 4) {
+    throw new Error('Current executable Database Schema must be version 4');
+  }
+  if (source.tables.length !== 84) {
+    throw new Error(`Expected 84 v1 tables, received ${source.tables.length}`);
+  }
+  if (source.queries.length !== 43) {
+    throw new Error(
+      `Expected 43 query intents, received ${source.queries.length}`,
+    );
+  }
+  assertUnique(
+    source.tables.map((table) => table.name),
+    'table',
+  );
+  assertUnique(
+    source.queries.map((query) => query.query_id),
+    'query',
+  );
+  for (const table of source.tables) {
+    assertUnique(
+      table.columns.map((column) => column.name),
+      `${table.name} column`,
+    );
+    assertUnique(
+      table.checks.map((entry) => entry.check_id),
+      `${table.name} check`,
+    );
+    assertUnique(
+      table.foreign_keys.map((entry) => entry.relation_id),
+      `${table.name} foreign key`,
+    );
+    assertUnique(
+      table.unique_keys.map((entry) => entry.key_id),
+      `${table.name} unique key`,
+    );
+    assertUnique(
+      table.indexes.map((entry) => entry.index_id),
+      `${table.name} index`,
+    );
+  }
+}
+
 function assertBaseRelations(
   source: LogicalSchemaSourcePayload,
   catalog: TypedRelationCatalogPayload,
@@ -137,10 +185,9 @@ function assertBaseRelations(
   }
 }
 
-export function loadExecutableSchemaSource(
-  contractsRoot?: string,
+function buildSchema3ExecutableSource(
+  inputs: LoadedSchemaInputArtifacts,
 ): ExecutableSchemaSource {
-  const inputs = readPinnedSchemaInputArtifacts({ contractsRoot });
   const g0_6Manifest = inputs.g0_6_logical_schema_manifest.artifact;
   const logicalSource = inputs.logical_schema_source.artifact;
   const typedRelations = inputs.typed_relation_catalog.artifact;
@@ -150,6 +197,8 @@ export function loadExecutableSchemaSource(
   const activationInput =
     inputs.feature_release_activation_schema_prerequisite.artifact;
   const sqliteProfile = inputs.sqlite_execution_profile.artifact;
+  const activationRepairInput =
+    inputs.activation_failure_replay_schema_prerequisite.artifact;
 
   const base = logicalSource.payload as unknown as LogicalSchemaSourcePayload;
   const relations =
@@ -279,7 +328,73 @@ export function loadExecutableSchemaSource(
       capacity_delta_hash: capacityDelta.hash,
       publisher_schema_prerequisite_hash: publisherInput.hash,
       feature_release_activation_schema_prerequisite_hash: activationInput.hash,
+      activation_failure_replay_schema_prerequisite_hash:
+        activationRepairInput.hash,
       sqlite_profile_hash: sqliteProfile.hash,
+    },
+  };
+  assertSchema3ExecutableSource(result);
+  return result;
+}
+
+export function loadSchema3ExecutableSchemaSource(
+  contractsRoot?: string,
+): ExecutableSchemaSource {
+  return buildSchema3ExecutableSource(
+    readPinnedSchemaInputArtifacts({ contractsRoot }),
+  );
+}
+
+export function loadExecutableSchemaSource(
+  contractsRoot?: string,
+): ExecutableSchemaSource {
+  const inputs = readPinnedSchemaInputArtifacts({ contractsRoot });
+  const schema3 = buildSchema3ExecutableSource(inputs);
+  const repair = parseActivationRepairSchemaPrerequisiteArtifact(
+    inputs.activation_failure_replay_schema_prerequisite.artifact,
+  );
+  if (
+    repair.database_schema_version !== 4 ||
+    repair.delta_mode !== 'rebuild_activation_relations' ||
+    repair.rebuilt_tables.length !== 3 ||
+    repair.column_requirements.length !== 62 ||
+    repair.foreign_key_requirements.length !== 12 ||
+    repair.unique_key_requirements.length !== 7 ||
+    repair.query_intents.length !== 8
+  ) {
+    throw new Error('Activation Failure / Replay Schema Prerequisite drifted');
+  }
+
+  const replacements = new Map(
+    repair.rebuilt_tables.map((table) => [table.name, table]),
+  );
+  const tables = schema3.tables.map((table) =>
+    replacements.has(table.name)
+      ? structuredClone(replacements.get(table.name)!)
+      : table,
+  );
+  if (
+    [...replacements.keys()].some(
+      (name) => !tables.some((table) => table.name === name),
+    )
+  ) {
+    throw new Error('Activation repair replacement table is absent');
+  }
+  const replacedQueries = new Set(repair.replaced_query_ids);
+  const result: ExecutableSchemaSource = {
+    ...schema3,
+    database_schema_version: 4,
+    tables,
+    queries: [
+      ...schema3.queries.filter(
+        (query) => !replacedQueries.has(query.query_id),
+      ),
+      ...repair.query_intents,
+    ],
+    logical_inputs: {
+      ...schema3.logical_inputs,
+      activation_failure_replay_schema_prerequisite_hash:
+        inputs.activation_failure_replay_schema_prerequisite.artifact.hash,
     },
   };
   assertExecutableSource(result);

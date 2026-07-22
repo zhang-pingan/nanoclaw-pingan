@@ -21,7 +21,7 @@ describe('G3.6 Retention / Executor ABI compatibility contract', () => {
         run_protocol_major: 1,
         executor_abi_major: 1,
         registry_schema_version: 1,
-        database_schema_version: 3,
+        database_schema_version: 4,
       },
       result_schema: 'closed',
       deterministic: true,

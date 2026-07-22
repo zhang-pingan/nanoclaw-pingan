@@ -4,11 +4,7 @@ import { types as utilTypes } from 'node:util';
 
 import Database from 'better-sqlite3';
 
-import { canonicalJson } from '../../contracts/hash.js';
-import type { JsonValue } from '../../contracts/types.js';
-import { renderMigration } from '../schema/ddl.js';
-import { reconstructSchemaManifest } from '../schema/manifest.js';
-import { loadExecutableSchemaSource } from '../schema/source.js';
+import { calculateDatabaseSqliteSchemaIdentity } from '../schema/database-identity.js';
 import {
   assertRuntimeHostIdentity,
   collectWorkflowRuntimeIdentityEvidence,
@@ -208,25 +204,16 @@ function verifyFrozenSchema(
   inputs: Readonly<FrozenWorkflowRuntimeStoreInputs>,
 ): void {
   try {
-    const source = loadExecutableSchemaSource();
-    const rendered = renderMigration(source);
-    if (rendered.sql !== inputs.migrationSql) {
-      throw new Error(
-        'Executable schema source no longer renders the frozen migration',
-      );
-    }
-    const actual = reconstructSchemaManifest(
-      database,
-      source,
-      inputs.migrationSql,
-      rendered.statement_count,
-      rendered.triggers,
+    assertEqual(
+      Number(scalarPragma(database, 'user_version')),
+      inputs.schemaManifest.database_schema_version,
+      'user_version',
     );
-    if (
-      canonicalJson(actual as unknown as JsonValue) !==
-      canonicalJson(inputs.schemaManifest as unknown as JsonValue)
-    ) {
-      throw new Error('Introspected Schema Manifest differs from G1.1');
+    const observed = calculateDatabaseSqliteSchemaIdentity(database);
+    if (observed !== inputs.sqliteSchemaIdentity) {
+      throw new Error(
+        `sqlite_schema identity mismatch: expected ${inputs.sqliteSchemaIdentity}, received ${observed}`,
+      );
     }
   } catch (error) {
     throw new WorkflowRuntimeStoreError(
@@ -234,6 +221,73 @@ function verifyFrozenSchema(
       `workflow-runtime.db schema does not match frozen G1.1: ${error instanceof Error ? error.message : String(error)}`,
       { cause: error },
     );
+  }
+}
+
+function upgradeSchema3IfEligible(
+  databasePath: string,
+  inputs: Readonly<FrozenWorkflowRuntimeStoreInputs>,
+): void {
+  const database = new Database(databasePath, {
+    fileMustExist: true,
+    timeout: inputs.profile.busy_timeout_ms,
+  });
+  try {
+    verifyDatabaseLevelProfile(database, inputs);
+    const version = Number(scalarPragma(database, 'user_version'));
+    if (version === inputs.schemaManifest.database_schema_version) return;
+    if (version !== 3) {
+      throw new WorkflowRuntimeStoreError(
+        'database_schema_mismatch',
+        `Schema upgrade requires user_version 3 or ${inputs.schemaManifest.database_schema_version}, received ${version}`,
+      );
+    }
+    database.pragma('foreign_keys = ON');
+    database.exec('BEGIN IMMEDIATE');
+    try {
+      const sourceIdentity = calculateDatabaseSqliteSchemaIdentity(database);
+      if (sourceIdentity !== inputs.schema3SourceSqliteSchemaIdentity) {
+        throw new Error(
+          `Schema 3 sqlite_schema identity mismatch: expected ${inputs.schema3SourceSqliteSchemaIdentity}, received ${sourceIdentity}`,
+        );
+      }
+      for (const relation of inputs.schema3RequiredEmptyRelations) {
+        const count = database
+          .prepare(`SELECT count(*) AS count FROM "${relation}"`)
+          .pluck()
+          .get() as number;
+        if (count !== 0) {
+          throw new Error(
+            `Schema 3 upgrade requires empty relation ${relation}, received ${count} row(s)`,
+          );
+        }
+      }
+      database.exec(inputs.schema3To4UpgradeSql);
+      if (
+        Number(scalarPragma(database, 'user_version')) !==
+          inputs.schemaManifest.database_schema_version ||
+        calculateDatabaseSqliteSchemaIdentity(database) !==
+          inputs.sqliteSchemaIdentity
+      ) {
+        throw new Error(
+          'Schema 3 to 4 upgrade did not produce frozen Schema 4',
+        );
+      }
+      verifyIntegrity(database);
+      database.exec('COMMIT');
+    } catch (error) {
+      if (database.inTransaction) database.exec('ROLLBACK');
+      throw error;
+    }
+  } catch (error) {
+    if (error instanceof WorkflowRuntimeStoreError) throw error;
+    throw new WorkflowRuntimeStoreError(
+      'database_schema_mismatch',
+      `Schema 3 to 4 upgrade failed closed: ${error instanceof Error ? error.message : String(error)}`,
+      { cause: error },
+    );
+  } finally {
+    database.close();
   }
 }
 
@@ -626,6 +680,8 @@ export class WorkflowRuntimeConnectionFactory {
       if (options.databaseMode === 'create') {
         fresh = true;
         bootstrapFreshDatabase(databasePath, inputs);
+      } else {
+        upgradeSchema3IfEligible(databasePath, inputs);
       }
       writer = openConfiguredDatabase(databasePath, inputs, false);
       const identityEvidence = collectWorkflowRuntimeIdentityEvidence(

@@ -7,6 +7,7 @@ import type Database from 'better-sqlite3';
 import { describe, expect, it } from 'vitest';
 
 import { calculateArtifactHash } from '../../contracts/hash.js';
+import { buildActivationRepairSchemaPrerequisitePayload } from './activation-repair-source.js';
 import type { LogicalTableMetadata } from '../../contracts/logical-schema-types.js';
 import type {
   ContractArtifactEnvelope,
@@ -24,7 +25,10 @@ import {
   assertClosedSchemaManifest,
   reconstructSchemaManifest,
 } from './manifest.js';
-import { loadExecutableSchemaSource } from './source.js';
+import {
+  loadExecutableSchemaSource,
+  loadSchema3ExecutableSchemaSource,
+} from './source.js';
 import {
   createMigratedDatabase,
   verifyQueryPlans,
@@ -163,12 +167,20 @@ describe('G1.1 executable workflow runtime schema', () => {
 
   it('publishes a closed exact-member dependency manifest without directory exclusions', () => {
     const built = checkG1Artifacts();
+    expect(() =>
+      buildSchemaDependencyManifestArtifact(
+        built.manifest,
+        built.migrationSql,
+        {},
+        '',
+      ),
+    ).toThrow('Schema 3 to 4 upgrade SQL must not be empty');
     const payload = built.dependencyManifest
       .payload as unknown as G1SchemaDependencyManifestPayload;
     expect(() => assertClosedSchemaDependencyManifest(payload)).not.toThrow();
     expect(payload).toMatchObject({
-      member_count: 10,
-      physical_member_count: 9,
+      member_count: 12,
+      physical_member_count: 11,
       construction_provenance_count: 1,
     });
     expect(payload.members.map((member) => member.role)).toEqual([
@@ -179,18 +191,25 @@ describe('G1.1 executable workflow runtime schema', () => {
       'g0_10_capacity_logical_schema_delta',
       'publisher_schema_prerequisite',
       'feature_release_activation_schema_prerequisite',
+      'activation_failure_replay_schema_prerequisite',
       'sqlite_execution_profile',
       'schema_manifest',
       'canonical_migration',
+      'schema3_to_schema4_upgrade',
     ]);
     expect(payload.members).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           role: 'canonical_migration',
           semantic_hash:
-            'sha256:eea3547a0f5208d08bfbe771de3895bba020ca3cf34ddf2fb4e3b7945765d345',
+            'sha256:4a8ddeb1f9715399ad96c3bc32efa5e8032a3bd484eaed0159c6a24620c1be43',
           raw_sha256:
-            'sha256:eea3547a0f5208d08bfbe771de3895bba020ca3cf34ddf2fb4e3b7945765d345',
+            'sha256:4a8ddeb1f9715399ad96c3bc32efa5e8032a3bd484eaed0159c6a24620c1be43',
+        }),
+        expect.objectContaining({
+          role: 'schema3_to_schema4_upgrade',
+          semantic_hash:
+            'sha256:5ac263fe3279c61f74ba6314f5df98fff59a8f8b32acfa784d2040421ebaa3cf',
         }),
       ]),
     );
@@ -247,6 +266,7 @@ describe('G1.1 executable workflow runtime schema', () => {
         built.manifest,
         built.migrationSql,
         { contractsRoot: copiedContracts },
+        built.schema3To4UpgradeSql,
       );
       for (const relativePath of [
         'unrelated/new-contract.json',
@@ -261,6 +281,7 @@ describe('G1.1 executable workflow runtime schema', () => {
         built.manifest,
         built.migrationSql,
         { contractsRoot: copiedContracts },
+        built.schema3To4UpgradeSql,
       );
       expect(after).toEqual(before);
       expect(after).toEqual(built.dependencyManifest);
@@ -298,6 +319,7 @@ describe('G1.1 executable workflow runtime schema', () => {
         built.manifest,
         built.migrationSql,
         { contractsRoot: copiedContracts },
+        built.schema3To4UpgradeSql,
       );
       const originalPayload = built.dependencyManifest
         .payload as unknown as G1SchemaDependencyManifestPayload;
@@ -340,6 +362,7 @@ describe('G1.1 executable workflow runtime schema', () => {
           built.manifest,
           built.migrationSql,
           { contractsRoot: copiedContracts },
+          built.schema3To4UpgradeSql,
         ),
       ).toThrow('query_catalog published semantic identity drifted');
 
@@ -354,6 +377,7 @@ describe('G1.1 executable workflow runtime schema', () => {
           built.manifest,
           built.migrationSql,
           { contractsRoot: copiedContracts },
+          built.schema3To4UpgradeSql,
         ),
       ).toThrow();
     } finally {
@@ -1130,270 +1154,10 @@ describe('G1.1 executable workflow runtime schema', () => {
     });
   });
 
-  it('G1.5 constrains Activation idempotency, typed bindings, terminalization, and audit chains', () => {
-    const commandMetadata = table(
-      'workflow_feature_release_activation_commands',
+  it('G1.5 preserves the reproducible Schema 3 Activation construction input', () => {
+    expect(hash(renderMigration(loadSchema3ExecutableSchemaSource()).sql)).toBe(
+      'sha256:eea3547a0f5208d08bfbe771de3895bba020ca3cf34ddf2fb4e3b7945765d345',
     );
-    expect(commandMetadata.foreign_keys).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          relation_id: 'fk:activation_commands:request_value',
-          target_table: 'workflow_values',
-          target_columns: [
-            'id',
-            'content_hash',
-            'schema_resource_id',
-            'schema_resource_hash',
-          ],
-        }),
-        expect.objectContaining({
-          relation_id: 'fk:activation_commands:target_release_owner',
-          source_columns: [
-            'feature_id',
-            'target_feature_release_id',
-            'target_feature_release_hash',
-          ],
-          target_columns: ['feature_id', 'id', 'release_hash'],
-        }),
-        expect.objectContaining({
-          relation_id: 'fk:activation_commands:target_retention',
-          target_table: 'workflow_registry_retention_handles',
-          target_columns: [
-            'id',
-            'handle_kind',
-            'feature_release_id',
-            'closure_manifest_id',
-            'closure_hash',
-          ],
-        }),
-      ]),
-    );
-    expect(
-      buildQueryFixtures(source)
-        .filter((fixture) => fixture.query_id.startsWith('activation_'))
-        .map((fixture) => fixture.required_index_id),
-    ).toEqual([
-      'idx:activation_commands:idempotency',
-      'idx:activation_invocations:command_history',
-      'idx:activation_events:command_history',
-      'idx:activation_commands:pending_recovery',
-      'idx:feature_active_releases:activation_cas',
-      'idx:feature_releases:activation_preflight',
-      'idx:retention_handles:activation_preflight',
-    ]);
-
-    withDatabase((database) => {
-      database.pragma('foreign_keys = OFF');
-      const featureId = 'feature:activation';
-      const targetId = 'release:activation:target';
-      const targetRef = 'feature.activation.release';
-      const targetVersion = '1.0.0';
-      const targetHash = hash(targetId);
-      const closureId = 'closure:activation:target';
-      const closureHash = hash(closureId);
-      const retentionId = 'retention:activation:target';
-      seedRow(database, 'workflow_feature_releases', {
-        id: targetId,
-        feature_id: featureId,
-        release_ref: targetRef,
-        release_version: targetVersion,
-        release_hash: targetHash,
-        status: 'staged',
-        staged_at_ms: 10,
-        activated_at_ms: null,
-        disabled_at_ms: null,
-        row_version: 0,
-      });
-      seedRow(database, 'workflow_registry_retention_handles', {
-        id: retentionId,
-        handle_kind: 'published',
-        feature_release_id: targetId,
-        graph_run_id: null,
-        backup_id: null,
-        external_actor_ref: null,
-        closure_manifest_id: closureId,
-        closure_hash: closureHash,
-        status: 'held',
-        released_at_ms: null,
-        row_version: 0,
-      });
-      const domainRequestHash = hash('activation:domain-request');
-      const commandBindings = {
-        command_type: 'activate_feature_release',
-        idempotency_domain: 'feature-release-activation',
-        domain_request_hash: domainRequestHash,
-        feature_id: featureId,
-        target_feature_release_id: targetId,
-        target_feature_release_ref: targetRef,
-        target_feature_release_version: targetVersion,
-        target_feature_release_hash: targetHash,
-        expected_pointer_state: 'absent',
-        expected_pointer_row_version: null,
-        previous_feature_release_id: null,
-        previous_feature_release_ref: null,
-        previous_feature_release_version: null,
-        previous_feature_release_hash: null,
-        target_retention_handle_id: retentionId,
-        target_retention_handle_kind: 'published',
-        target_retention_closure_manifest_id: closureId,
-        target_retention_closure_hash: closureHash,
-        target_retention_observed_status: 'held',
-        target_retention_observed_row_version: 0,
-        previous_retention_handle_id: null,
-        previous_retention_handle_kind: null,
-        previous_retention_closure_manifest_id: null,
-        previous_retention_closure_hash: null,
-        previous_retention_observed_status: null,
-        previous_retention_observed_row_version: null,
-        created_at_ms: 20,
-        row_version: 0,
-      };
-      insertRow(database, 'workflow_feature_release_activation_commands', {
-        ...commandBindings,
-        command_id: 'activation:command:failed',
-        idempotency_key: 'activation:key:failed',
-      });
-      expect(() =>
-        insertRow(database, 'workflow_feature_release_activation_commands', {
-          ...commandBindings,
-          command_id: 'activation:command:duplicate-key',
-          idempotency_key: 'activation:key:failed',
-        }),
-      ).toThrow('UNIQUE constraint failed');
-      expect(() =>
-        insertRow(database, 'workflow_feature_release_activation_commands', {
-          ...commandBindings,
-          command_id: 'activation:command:bad-present',
-          idempotency_key: 'activation:key:bad-present',
-          expected_pointer_state: 'present',
-        }),
-      ).toThrow('ck:activation_commands:expected_pointer_shape');
-      database
-        .prepare(
-          `UPDATE workflow_feature_release_activation_commands SET lifecycle='failed', finalized_at_ms=30, row_version=1 WHERE command_id='activation:command:failed'`,
-        )
-        .run();
-      expect(() =>
-        database
-          .prepare(
-            `UPDATE workflow_feature_release_activation_commands SET lifecycle='applied', row_version=2 WHERE command_id='activation:command:failed'`,
-          )
-          .run(),
-      ).toThrow('activation_command_lifecycle_transition_invalid');
-
-      const invocationHash1 = hash('activation:invocation:1');
-      insertRow(database, 'workflow_feature_release_activation_invocations', {
-        id: 'activation:invocation:1',
-        command_id: 'activation:command:failed',
-        invocation_no: 1,
-        command_domain_request_hash: domainRequestHash,
-        submitted_request_hash: domainRequestHash,
-        disposition: 'failed',
-        previous_invocation_hash: null,
-        invocation_hash: invocationHash1,
-      });
-      expect(() =>
-        insertRow(database, 'workflow_feature_release_activation_invocations', {
-          id: 'activation:invocation:2:bad-chain',
-          command_id: 'activation:command:failed',
-          invocation_no: 2,
-          command_domain_request_hash: domainRequestHash,
-          submitted_request_hash: domainRequestHash,
-          disposition: 'duplicate',
-          previous_invocation_hash: hash('activation:wrong-previous'),
-          invocation_hash: hash('activation:invocation:2:bad-chain'),
-        }),
-      ).toThrow('activation_invocation_hash_chain_invalid');
-      expect(() =>
-        database
-          .prepare(
-            `UPDATE workflow_feature_release_activation_invocations SET decided_at_ms=decided_at_ms WHERE id='activation:invocation:1'`,
-          )
-          .run(),
-      ).toThrow('activation_invocation_is_immutable');
-
-      const eventIdentity = {
-        command_id: 'activation:command:failed',
-        attempt_no: 1,
-        feature_id: featureId,
-        target_feature_release_id: targetId,
-        target_feature_release_ref: targetRef,
-        target_feature_release_version: targetVersion,
-        target_feature_release_hash: targetHash,
-        previous_feature_release_id: null,
-        previous_feature_release_ref: null,
-        previous_feature_release_version: null,
-        previous_feature_release_hash: null,
-      };
-      const eventHash1 = hash('activation:event:1');
-      insertRow(database, 'workflow_feature_release_activation_events', {
-        ...eventIdentity,
-        event_no: 1,
-        phase: 'authenticate',
-        event_type: 'attempt_started',
-        previous_event_hash: null,
-        event_hash: eventHash1,
-      });
-      expect(() =>
-        insertRow(database, 'workflow_feature_release_activation_events', {
-          ...eventIdentity,
-          event_no: 2,
-          phase: 'validate',
-          event_type: 'phase_succeeded',
-          previous_event_hash: hash('activation:event:wrong'),
-          event_hash: hash('activation:event:2:wrong'),
-        }),
-      ).toThrow('activation_event_hash_chain_invalid');
-      insertRow(database, 'workflow_feature_release_activation_events', {
-        ...eventIdentity,
-        event_no: 2,
-        phase: 'validate',
-        event_type: 'phase_succeeded',
-        previous_event_hash: eventHash1,
-        event_hash: hash('activation:event:2'),
-      });
-      expect(() =>
-        database
-          .prepare(
-            `DELETE FROM workflow_feature_release_activation_events WHERE command_id='activation:command:failed' AND event_no=2`,
-          )
-          .run(),
-      ).toThrow('activation_event_is_immutable');
-
-      insertRow(database, 'workflow_feature_release_activation_commands', {
-        ...commandBindings,
-        command_id: 'activation:command:applied',
-        idempotency_key: 'activation:key:applied',
-      });
-      database
-        .prepare(
-          `UPDATE workflow_feature_releases SET status='active', activated_at_ms=40, row_version=1 WHERE id=?`,
-        )
-        .run(targetId);
-      insertRow(database, 'workflow_feature_active_releases', {
-        feature_id: featureId,
-        release_id: targetId,
-        release_hash: targetHash,
-        row_version: 1,
-        activated_at_ms: 40,
-      });
-      database
-        .prepare(
-          `UPDATE workflow_feature_release_activation_commands SET applied_pointer_row_version=1, canonical_receipt_value_id='activation:receipt', canonical_receipt_hash=?, canonical_receipt_schema_resource_id='activation:receipt:schema', canonical_receipt_schema_hash=?, lifecycle='applied', finalized_at_ms=50, row_version=1 WHERE command_id='activation:command:applied'`,
-        )
-        .run(hash('activation:receipt'), hash('activation:receipt:schema'));
-      expect(
-        database
-          .prepare(
-            `SELECT lifecycle, applied_pointer_row_version, row_version FROM workflow_feature_release_activation_commands WHERE command_id='activation:command:applied'`,
-          )
-          .get(),
-      ).toEqual({
-        lifecycle: 'applied',
-        applied_pointer_row_version: 1,
-        row_version: 1,
-      });
-    });
   });
 
   it('G1.5 enforces Release single-active lifecycle and active-pointer owner CAS protection', () => {

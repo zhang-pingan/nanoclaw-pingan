@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-runtime-schema-dependency-manifest-contract:1\n",
-  "hash": "sha256:1f4b6a5ff9722a1f1b223b181c29882cc2545e1985208c72860bc1bd54f443fe",
+  "hash": "sha256:c51308fa73c2c388aefe7cd004333532fd4f5a7548df12e24452062e7dfade00",
   "payload": {
     "contract_kind": "closed_required_members",
     "unknown_fields": "rejected",
@@ -44,9 +44,11 @@
       "g0_10_capacity_logical_schema_delta",
       "publisher_schema_prerequisite",
       "feature_release_activation_schema_prerequisite",
+      "activation_failure_replay_schema_prerequisite",
       "sqlite_execution_profile",
       "schema_manifest",
-      "canonical_migration"
+      "canonical_migration",
+      "schema3_to_schema4_upgrade"
     ],
     "member_order": "required_roles_order",
     "physical_identity_domain_separator": "icarus:workflow-runtime-physical-schema-identity:1\n"

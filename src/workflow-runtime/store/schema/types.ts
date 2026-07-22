@@ -17,9 +17,11 @@ export const G1_SCHEMA_DEPENDENCY_ROLES = [
   'g0_10_capacity_logical_schema_delta',
   'publisher_schema_prerequisite',
   'feature_release_activation_schema_prerequisite',
+  'activation_failure_replay_schema_prerequisite',
   'sqlite_execution_profile',
   'schema_manifest',
   'canonical_migration',
+  'schema3_to_schema4_upgrade',
 ] as const;
 
 export type G1SchemaDependencyRole =
@@ -42,8 +44,8 @@ export interface G1SchemaDependencyMember extends JsonObject {
 export interface G1SchemaDependencyManifestPayload extends JsonObject {
   dependency_set_id: 'workflow-runtime-schema-v1';
   identity_scope: 'physical_schema_and_migration';
-  member_count: 10;
-  physical_member_count: 9;
+  member_count: 12;
+  physical_member_count: 11;
   construction_provenance_count: 1;
   members: G1SchemaDependencyMember[] & JsonObject[];
   physical_schema_identity: Sha256Hash;
@@ -51,7 +53,7 @@ export interface G1SchemaDependencyManifestPayload extends JsonObject {
 
 export interface ExecutableSchemaSource {
   schema_id: 'workflow-runtime-schema-v1';
-  database_schema_version: 3;
+  database_schema_version: 3 | 4;
   tables: LogicalTableMetadata[];
   queries: LogicalQueryIntent[];
   logical_inputs: SchemaLogicalInputs;
@@ -64,6 +66,7 @@ export interface SchemaLogicalInputs {
   capacity_delta_hash: Sha256Hash;
   publisher_schema_prerequisite_hash: Sha256Hash;
   feature_release_activation_schema_prerequisite_hash: Sha256Hash;
+  activation_failure_replay_schema_prerequisite_hash: Sha256Hash;
   sqlite_profile_hash: Sha256Hash;
 }
 
@@ -148,7 +151,7 @@ export interface SchemaManifestTrigger extends SchemaTriggerDefinition {}
 export interface WorkflowRuntimeSchemaManifestPayload extends JsonObject {
   schema_id: 'workflow-runtime-schema-v1';
   database_name: 'workflow-runtime.db';
-  database_schema_version: 3;
+  database_schema_version: 4;
   logical_inputs: SchemaLogicalInputs & JsonObject;
   migration_path: string;
   migration_sha256: Sha256Hash;

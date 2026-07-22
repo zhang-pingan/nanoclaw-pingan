@@ -50,7 +50,7 @@ export interface G3CoreCompatibilitySnapshot extends JsonObject {
   supported_run_protocol_majors: number[];
   supported_executor_abi_majors: number[];
   registry_schema_version: 1;
-  database_schema_version: 3;
+  database_schema_version: 4;
   database_schema_hash: Sha256Hash;
   compatibility_hash: Sha256Hash;
 }
@@ -117,7 +117,7 @@ export interface G3RetentionExecutorAbiVerifiedBindings extends JsonObject {
   core_release_ref: VersionedRef;
   core_release_hash: Sha256Hash;
   core_build_hash: Sha256Hash;
-  database_schema_version: 3;
+  database_schema_version: 4;
   database_schema_hash: Sha256Hash;
   run_protocol_ref: VersionedRef;
   run_protocol_hash: Sha256Hash;
@@ -156,7 +156,7 @@ export interface G3RetentionExecutorAbiPreflightProfile extends JsonObject {
     run_protocol_major: 1;
     executor_abi_major: 1;
     registry_schema_version: 1;
-    database_schema_version: 3;
+    database_schema_version: 4;
   };
   retention_policy_ref: VersionedRef;
   retention_policy_hash: Sha256Hash;

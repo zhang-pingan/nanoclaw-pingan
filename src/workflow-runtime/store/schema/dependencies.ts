@@ -26,6 +26,10 @@ import {
   ACTIVATION_SCHEMA_INPUT_RELATIVE_PATH,
 } from './activation-source.js';
 import {
+  ACTIVATION_REPAIR_SCHEMA_INPUT_ARTIFACT_HASH,
+  ACTIVATION_REPAIR_SCHEMA_INPUT_RELATIVE_PATH,
+} from './activation-repair-source.js';
+import {
   PUBLISHER_SCHEMA_INPUT_ARTIFACT_HASH,
   PUBLISHER_SCHEMA_INPUT_RELATIVE_PATH,
 } from './publisher-source.js';
@@ -133,6 +137,19 @@ const INPUT_MEMBER_SPECS = [
     expected_semantic_hash: ACTIVATION_SCHEMA_INPUT_ARTIFACT_HASH,
   },
   {
+    role: 'activation_failure_replay_schema_prerequisite',
+    identity_effect: 'physical_schema_input',
+    path: `store/schema/${ACTIVATION_REPAIR_SCHEMA_INPUT_RELATIVE_PATH}`,
+    format:
+      'icarus.workflow-feature-release-activation-failure-replay-schema-prerequisite/1',
+    ref: {
+      id: 'icarus.workflow-feature-release-activation-failure-replay-schema-prerequisite',
+      version: '1',
+    },
+    version: 1,
+    expected_semantic_hash: ACTIVATION_REPAIR_SCHEMA_INPUT_ARTIFACT_HASH,
+  },
+  {
     role: 'sqlite_execution_profile',
     identity_effect: 'physical_schema_input',
     path: 'contracts/sqlite/local_single_user_sqlite@1.json',
@@ -159,6 +176,17 @@ const OUTPUT_MEMBER_SPECS = [
     path: 'store/schema/migration/workflow-runtime-schema-v1.sql',
     format: 'icarus.workflow-runtime-sqlite-migration/1',
     ref: { id: 'icarus.workflow-runtime-schema-v1-migration', version: '1' },
+    version: 1,
+  },
+  {
+    role: 'schema3_to_schema4_upgrade',
+    identity_effect: 'physical_schema_output',
+    path: 'store/schema/migration/workflow-runtime-schema-v3-to-v4.sql',
+    format: 'icarus.workflow-runtime-sqlite-schema-upgrade/1',
+    ref: {
+      id: 'icarus.workflow-runtime-schema-v3-to-v4-upgrade',
+      version: '1',
+    },
     version: 1,
   },
 ] as const satisfies readonly DependencyMemberSpec[];
@@ -313,7 +341,7 @@ export function assertClosedSchemaDependencyManifest(
     payload.dependency_set_id !== 'workflow-runtime-schema-v1' ||
     payload.identity_scope !== 'physical_schema_and_migration' ||
     payload.member_count !== G1_SCHEMA_DEPENDENCY_ROLES.length ||
-    payload.physical_member_count !== 9 ||
+    payload.physical_member_count !== 11 ||
     payload.construction_provenance_count !== 1 ||
     !Array.isArray(payload.members) ||
     payload.members.length !== G1_SCHEMA_DEPENDENCY_ROLES.length
@@ -377,8 +405,12 @@ export function assertClosedSchemaDependencyManifest(
 export function buildSchemaDependencyManifestArtifact(
   schemaManifest: ContractArtifactEnvelope,
   migrationSql: string,
-  roots: SchemaDependencyRoots = {},
+  roots: SchemaDependencyRoots,
+  schema3To4UpgradeSql: string,
 ): ContractArtifactEnvelope {
+  if (schema3To4UpgradeSql.trim().length === 0) {
+    throw new Error('Schema 3 to 4 upgrade SQL must not be empty');
+  }
   const inputs = Object.fromEntries(
     INPUT_MEMBER_SPECS.map((spec) => [
       spec.role,
@@ -411,12 +443,23 @@ export function buildSchemaDependencyManifestArtifact(
     semantic_hash: migrationSha256,
     raw_sha256: migrationSha256,
   });
+  const upgradeSha256 = rawSha256(schema3To4UpgradeSql);
+  members.push({
+    role: 'schema3_to_schema4_upgrade',
+    identity_effect: 'physical_schema_output',
+    path: OUTPUT_MEMBER_SPECS[2].path,
+    format: OUTPUT_MEMBER_SPECS[2].format,
+    ref: { ...OUTPUT_MEMBER_SPECS[2].ref },
+    version: OUTPUT_MEMBER_SPECS[2].version,
+    semantic_hash: upgradeSha256,
+    raw_sha256: upgradeSha256,
+  });
 
   const payload: G1SchemaDependencyManifestPayload = {
     dependency_set_id: 'workflow-runtime-schema-v1',
     identity_scope: 'physical_schema_and_migration',
-    member_count: 10,
-    physical_member_count: 9,
+    member_count: 12,
+    physical_member_count: 11,
     construction_provenance_count: 1,
     members,
     physical_schema_identity: calculatePhysicalSchemaIdentity(members),
@@ -465,7 +508,10 @@ export function verifySchemaDependencyManifestArtifact(
         `${member.role} raw hash mismatch: expected ${member.raw_sha256}, received ${observedRaw}`,
       );
     }
-    if (member.role === 'canonical_migration') {
+    if (
+      member.role === 'canonical_migration' ||
+      member.role === 'schema3_to_schema4_upgrade'
+    ) {
       if (member.semantic_hash !== observedRaw) {
         throw new Error('canonical_migration semantic hash mismatch');
       }

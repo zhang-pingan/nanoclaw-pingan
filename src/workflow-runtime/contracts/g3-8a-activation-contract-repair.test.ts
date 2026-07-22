@@ -18,10 +18,10 @@ import {
 } from './g3-8a-activation-contract-repair.js';
 import type { LogicalTableMetadata } from './logical-schema-types.js';
 import { renderMigration } from '../store/schema/ddl.js';
-import { loadExecutableSchemaSource } from '../store/schema/source.js';
+import { loadSchema3ExecutableSchemaSource } from '../store/schema/source.js';
 import { createMigratedDatabase } from '../store/schema/sqlite-gate.js';
 
-const source = loadExecutableSchemaSource();
+const source = loadSchema3ExecutableSchemaSource();
 const migration = renderMigration(source);
 
 function hash(label: string): `sha256:${string}` {
