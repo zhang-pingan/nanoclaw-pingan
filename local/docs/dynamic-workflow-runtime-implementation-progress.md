@@ -1,8 +1,8 @@
 # Dynamic Workflow Runtime 实施进度
 
-> **状态**: BLOCKED_BY_SPEC
-> **当前 Gate**: G5 Basic Runtime（启动审计发现T6e ownership与G7 Runtime Command Gateway边界形成不可执行依赖环）
-> **下一独立会话**: G5 T6e Gate ownership spec/Contract repair；修复并独立回归前不得恢复G5 implementation
+> **状态**: G5_OWNERSHIP_EXIT_CANDIDATE_PENDING_INDEPENDENT_REGRESSION
+> **当前 Gate**: G5/G7 T6e ownership spec/Contract repair已形成退出候选；G5 Basic Runtime保持NOT_READY
+> **下一独立会话**: G5 ownership与affected-chain独立回归；通过前不得恢复G5 implementation
 > **最后更新**: 2026-07-22
 > **规范权威**: `local/docs/dynamic-workflow-dag-framework.md`
 
@@ -113,9 +113,9 @@ Agent Container 运行于独立 VM，Node identity 由 VM image gate 保证；�
 | G2 Compiler / Golden | `DONE` | G0.1-G0.9；R-016 spec/Contract repair；G0.10 不改变 Compiler/Plan 语义 | phase=`BASELINE_ACCEPTED`；前序immutable lineage未变；owner-approved successor GoldenSemanticReview/seal完整，current replay 40/40 exact、0 differences | 本原子提交（replay-repair successor seal） |
 | G3 Registry / Authoring / Publish | `DONE` | G1 + G2 | G3.1-G3.9 DONE；独立whole-gate regression覆盖machine authority、transaction、replay/recovery/fault、Schema 4与冻结边界 | 本原子提交 |
 | G4 Test Bootstrap | `DONE` | G1 + G2 + G3 | downstream-safe isolation v2与独立whole-gate regression均已完成 | `2904f81592b9bd83f5d837f521f2eb026ce2d439` |
-| G5 Basic Runtime | `BLOCKED_BY_SPEC` | G4 | current规范同时要求G5闭合T6e、把T6e/Gateway归G7，并禁止G5实现Gateway；需独立spec/Contract repair | - |
+| G5 Basic Runtime | `NOT_READY` (`BLOCKED_BY_OWNERSHIP_REGRESSION`) | G4 + current ownership authority independent regression | 未来exit exact为T0-T6d model/fault + Operational Blocker create/open/cache；当前只完成ownership修复候选，未实现Runtime | - |
 | G6 Dynamic / Close | `NOT_READY` | G5 | T7/T8/child/compensation fixtures | - |
-| G7 Control / Card / Projection / Recovery | `NOT_READY` | G6 | command/card/projection/recovery/blocker fixtures | - |
+| G7 Control / Card / Projection / Recovery | `NOT_READY` | G6 | T6e/Gateway/resolution audit/recovery/last-blocker restoration/abandon + card/projection fixtures | - |
 | G8 Certification | `NOT_READY` | G7 | certified profile meeting Product Floor | - |
 | G9 Production Activation | `NOT_READY` | G8 + fresh current G0/G0.10 manifests | activation + Capacity genesis/preservation audit + startup/empty-state or Recipe smoke | - |
 
@@ -124,17 +124,17 @@ Agent Container 运行于独立 VM，Node identity 由 VM image gate 保证；�
 | 工作包 | 范围 | 状态 | 当前 Gate/切片 |
 | --- | --- | --- | --- |
 | I0 | Publish、Registry、Recipe 与执行版本固定 | `DONE` | G3.1-G3.9与独立G3回归完成；staged Publisher与Feature Release Activation均闭合 |
-| I1 | Intake、Routing、幂等创建、Child provenance、Claim | `BLOCKED_BY_SPEC` | G5整体在T6e ownership修复前不得部分施工 |
+| I1 | Intake、Routing、幂等创建、Child provenance、Claim | `NOT_READY` | ownership修复已形成候选；独立affected-chain回归前不得开始G5 |
 | I2 | Definition、State lowering、Context、transition | `IN_PROGRESS` | approved static lowering语义已由Compiler 3.0.1实现、批准并seal；G2 lowering部分完成，Runtime transition仍从G5起 |
 | I3 | Source/Compiled IR、Port、Compiler | `DONE` | Production Compiler 3.0.1 successor已批准并seal；current replay 40/40 exact、0 differences |
 | I4 | Runtime Store、SQLite relation、Value/Blob、migration | `IN_PROGRESS` | current G1 Schema 4/G1.6与G3.9 Activation DML DONE；Blob/GC仍未实现 |
-| I5 | Graph 状态机、reconcile、Scheduler、Ledger | `BLOCKED_BY_SPEC` | G5整体在T6e ownership修复前不得部分施工 |
-| I6 | Delegation/System、Capability Effect、Outbox | `BLOCKED_BY_SPEC` | G5整体在T6e ownership修复前不得部分施工 |
-| I7 | Durable Wait、Signal/Timer/Approval、Inbox | `BLOCKED_BY_SPEC` | G5整体在T6e ownership修复前不得部分施工 |
+| I5 | Graph 状态机、reconcile、Scheduler、Ledger | `NOT_READY` | G5未来拥有T0-T6d与blocker create/open/cache；等待独立ownership回归 |
+| I6 | Delegation/System、Capability Effect、Outbox | `NOT_READY` | G5未来拥有T4/T5/T6a/T6b/T6d失败路径与open blocker创建；等待独立ownership回归 |
+| I7 | Durable Wait、Signal/Timer/Approval、Inbox | `NOT_READY` | G5未来拥有T4/T6c/T6d与open blocker创建；等待独立ownership回归 |
 | I8 | Subgraph、Expand、Map、child scope | `NOT_READY` | G6 起 |
-| I9 | Completion、Cancel、Compensation、Finalization、Recovery | `NOT_READY` | G6/G7 |
-| I10 | Runtime Command、Capacity Admin、Runtime Center、Trace | `BLOCKED_BY_SPEC` | Capacity Gateway仍归G5；Workflow Runtime Command Gateway归G7，但current G5 exit错误要求其授权的T6e |
-| I11 | Contract Pack、managed runtime toolchain/launcher、测试模型、发布门禁、absence baseline | `IN_PROGRESS` | G0.1-G0.10与G4 DONE；等待G5 T6e Gate ownership独立修复 |
+| I9 | Completion、Cancel、Compensation、Finalization、Recovery | `NOT_READY` | G5只拥有blocker create/open/cache；G6 close/T7/T8；G7 T6e resolution/abandon/Recovery |
+| I10 | Runtime Command、Capacity Admin、Runtime Center、Trace | `NOT_READY` | G5仅独立Capacity Admin；Workflow Runtime Command Gateway/T6e audit exact归G7 |
+| I11 | Contract Pack、managed runtime toolchain/launcher、测试模型、发布门禁、absence baseline | `IN_PROGRESS` | current ownership authority已生成，等待下一独立ownership/affected-chain regression |
 
 ## G0 施工切片
 
@@ -2039,9 +2039,35 @@ nl -ba src/workflow-runtime/contracts/logical-schema-source.ts | sed -n '2326,23
 
 受影响上游回归全部通过：`test:g4` 2 files / 33 tests；`test:g3.9` 2 files / 34 tests；`test:g3` 14 files / 97 tests；`test:g2` 7 files / 47 tests；`golden:current:replay:check` 40/40 exact；`test:g1.activation` 5 passed / 15 skipped；`test:g1.2` 20/20；`test:g0.6` 8/8；`test:g0.10` 10/10；`typecheck`、`build`、`git diff --check`均PASS。Targeted Prettier对`src/workflow-runtime/contracts/README.md` PASS；两份历史中文长文以未修改`HEAD` bytes通过stdin检查时同样返回非零，完整`--write`会重排约1300行既有表格，因此本轮不保留该无关格式churn。G5 generate/check、positive/negative/fault fixtures、T0-T6e targeted/model/property/crash tests不存在且未运行，这是本`BLOCKED_BY_SPEC`结论的直接结果，不能报告为PASS或用skeleton伪造。
 
+### G5/G7 T6e Gate ownership spec/Contract repair
+
+**状态**：`G5_OWNERSHIP_EXIT_CANDIDATE_PENDING_INDEPENDENT_REGRESSION`；G5 Basic Runtime=`NOT_READY/BLOCKED_BY_OWNERSHIP_REGRESSION`。本轮从clean local checkout `main@88a61ce07f05f4eeabed9c1aaf1719555c1faa18`开始，parent=`2904f81592b9bd83f5d837f521f2eb026ce2d439`；启动环境与最终记录均为`permission_profile=disabled/unrestricted`、filesystem unrestricted、sandbox `danger-full-access`、approval policy `never`。没有申请approval/escalation、创建或切换worktree、Handoff、push、amend或重写历史；全部Node/npm命令经`./scripts/runtime-toolchain.sh exec -- <command>`执行。
+
+唯一ownership决策已经同步到实现索引、模块ownership、测试分期、开发顺序第6/8步、Gate exit和完整验收：G5 transaction set exact为`T0/T0p/T1/T2a/T2b/T3a/T3b/T4/T5/T6a/T6b/T6c/T6d`，只拥有Operational Blocker create/open集合与Run/Workflow cache一致性；G7 exact拥有T6e、Runtime Command Gateway、source-specific remediation/integrity restoration、resolution Command/Invocation/Event、last-blocker state restoration、administrative abandon和Recovery。G5不得消费`open -> resolved/abandoned`，不得生成T6e identity、预授权boolean、test-only直写或伪造command audit。
+
+新增current construction authority为`src/workflow-runtime/contracts/governance/workflow-runtime-gate-ownership@1.json`，identity=`sha256:36289416db3c8898d9b50c04c5ad43fc6b74ef53bbd3a3c99f9d5f5b72786fa8`。它绑定transaction protocol=`sha256:7c55b3eff2f29e5dfcbb057d5ff014697ba2e9a421287afa19ec850540cce5f0`、command protocol=`sha256:b12b07b29e9335593c969033c133d221b244798fc079db5fb398b23fbae10789`、logical schema source=`sha256:ef5221d3465f1214c3c0aad3660f57b119d03eb4b5127428d6a1f881a6260214`、G1 root/schema=`sha256:6f49451868b7a5cab359d1c21f14f79afbc11b12aa1938039daf5914d9c4d591` / `sha256:f517a5e7bb8b3ea91bb37cd6a68b32898ceb62b9044687a8103808be6852106a`与Schema Manifest=`sha256:87f6787dd5c6382df97120c2e10dc6624143c67efc35e57cb92ea22f16fa666b`。Checker强制T6e继续要求`authorized_runtime_command`并原子写`command_invocation_and_runtime_event`、五类remediation command继续绑定T6e、resolved blocker继续具有真实`resolution_command_id -> workflow_runtime_commands.command_id` FK与non-null CHECK、两条cache trigger继续存在。该authority不进入G0.4/G1/G4 pack，不改变冻结Runtime/Schema语义，也不授权G5 implementation。
+
+机器fixture为1 positive / 18 negative，覆盖transaction与semantic ownership的missing/duplicate/unknown/cross-Gate、T6e回流G5、G5越权resolution、T6e authorization/audit/command mapping漂移、Schema 4 version/FK/non-null resolution/trigger漂移。Generator连续两轮authority/positive/negative raw bytes分别稳定为`f5fc6daa9049ba81222aadce64323fe6fd6a2a8e409c6e2e6aa79d100a89de8a` / `b17371327de5e740f0a52dd5ed6a138dc4e98edcead2a165c0b319087f36ec49` / `4197e54c118828cbf3a1086e49c2b7068f52d776b545c637d741f4a92d009422`。
+
+最终验证证据：
+
+| 命令/证据 | 结果 |
+| --- | --- |
+| 两轮managed `contracts:gate-ownership:generate` / `contracts:gate-ownership:check` / `test:gate-ownership` | PASS；authority identity与3个raw bytes连续一致；1 positive + 18 negative全部执行；4/4 tests |
+| 两轮managed `contracts:g4:generate` / `contracts:g4:check` / `test:g4` | PASS；pack/profile/isolation继续为`sha256:1136d6d...e3ba` / `sha256:15cbda14...fcf` / `sha256:883f8f2d...9188`，14-member identities连续一致且既有raw-byte digest仍为`8266a7a9...0e47`；2 files / 33 tests；live graph 0 violation |
+| managed `contracts:check` | PASS；完整current G0/G1/G2/G3/Schema/Store/G4链及新增ownership checker通过 |
+| managed `test:g3.9` / `test:g3` | PASS；2 files / 34 tests；14 files / 97 tests |
+| managed `schema:check` / `store:check` / `test:g1.activation` / `test:g1.2` | PASS；G1 root/Schema 4保持冻结；Activation 5 passed / 15 skipped；Store 20/20 |
+| managed `test:g2` / `golden:current:replay:check` | PASS；7 files / 47 tests；successor 40/40 exact，bundle=`sha256:d99647d8ca6aabc737a793019335e6770aa111a79be7545c4dec00c6e7af2145` |
+| managed `test:g0.6` / `test:g0.10` | PASS；8/8与10/10 |
+| managed `typecheck` / `build` / targeted Prettier / `git diff --check` | PASS |
+| protected-tree / changed-path / forbidden-surface / dependency-direction | PASS；G0.10=`2bf94fb4ec0142bcb5348168525f67b348cedda4`、G2 sealed=`cf9270f9ec71fa2134de0987b5fe55b5425e399b`、G3.8A=`a358e690e90294f0ad08ec47992ff9f645df7e6f`、G1 Schema=`161d6041bc56368bc3fd821a37f5a6a58a8eea1b`均零diff；changed paths仅两份规范/进度文档、Contracts README、package scripts、新governance checker/test/fixtures/artifact；无G5-G9 Runtime module、业务DML、Production入口、Adapter/network/user data或逆向Runtime import |
+
+本修复只闭合ownership spec/Contract，不创建G5 pack、Runtime skeleton、Task Intake/Creation/Graph/Scheduler/Ledger/Claim/Wait/Inbox/Outbox/Capacity业务实现或DML，也不实现G6-G9、Runtime Center、Projection、Production loader/activation、真实Adapter/network/user data。冻结`protocol-table-types`、transaction/command artifacts、Logical Schema source、Schema 4 DDL/artifacts/tests和G0-G4 identities均未修改。
+
 ## 下一步
 
-下一独立任务固定为**G5 T6e Gate ownership spec/Contract repair**。该任务必须从本阻塞记录提交后的clean `main`启动，选择并机器化唯一可执行的G5/G7 ownership，级联检查Catalog/transaction protocol/Logical Schema/Gate fixture与进度状态，并执行全部受影响G0-G4回归。修复独立闭合前不得恢复G5 Basic Runtime implementation，更不得开始G6-G9。
+下一独立任务固定为**G5 ownership与affected-chain独立回归**。该任务必须从本ownership修复单一提交后的clean `main`启动，独立复核`sha256:36289416db3c8898d9b50c04c5ad43fc6b74ef53bbd3a3c99f9d5f5b72786fa8`的closed matrix、正反fixture、冻结T6e/Command/Schema 4绑定、完整G0-G4 affected chain、protected trees与forbidden surface。通过并另行记录前，G5 Basic Runtime固定为`NOT_READY/BLOCKED_BY_OWNERSHIP_REGRESSION`，不得开始G5-G9 implementation。
 
 历史fresh review evidence只存在于Git commits，不是current dependency；current immutable semantic approval只绑定exact Draft/report identities。显式`prepare-rc`冻结的四个Working roots与唯一Review Candidate未变；current expected full case-result/Plan/proof/program bytes/hash已独立冻结、审计、owner批准并seal。local single-user签名策略为`not_required_local_single_user`，没有伪造GPG或远程签名。
 

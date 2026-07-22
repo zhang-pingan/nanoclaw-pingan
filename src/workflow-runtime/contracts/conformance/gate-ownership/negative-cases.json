@@ -1,0 +1,104 @@
+{
+  "format": "icarus.workflow-runtime-gate-ownership-negative-cases/1",
+  "ref": {
+    "id": "icarus.workflow-runtime-gate-ownership-negative-cases",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-runtime-gate-ownership-negative-cases:1\n",
+  "hash": "sha256:beda94c1a6aabec42d250fe262262dc03a369a7873e48cdcc5d2ec781ff10c50",
+  "payload": {
+    "cases": [
+      {
+        "case_id": "missing-g5-transaction",
+        "mutation": "remove_g5_transaction",
+        "expected_code": "transaction_missing"
+      },
+      {
+        "case_id": "duplicate-g5-transaction",
+        "mutation": "duplicate_g5_transaction",
+        "expected_code": "transaction_duplicate"
+      },
+      {
+        "case_id": "unknown-transaction",
+        "mutation": "add_unknown_transaction",
+        "expected_code": "transaction_unknown"
+      },
+      {
+        "case_id": "cross-gate-transaction",
+        "mutation": "move_g5_transaction_to_g7",
+        "expected_code": "transaction_cross_gate"
+      },
+      {
+        "case_id": "t6e-returned-to-g5",
+        "mutation": "put_t6e_in_g5",
+        "expected_code": "t6e_owned_by_g5"
+      },
+      {
+        "case_id": "missing-g5-semantic",
+        "mutation": "remove_g5_semantic",
+        "expected_code": "semantic_missing"
+      },
+      {
+        "case_id": "duplicate-g5-semantic",
+        "mutation": "duplicate_g5_semantic",
+        "expected_code": "semantic_duplicate"
+      },
+      {
+        "case_id": "unknown-semantic",
+        "mutation": "add_unknown_semantic",
+        "expected_code": "semantic_unknown"
+      },
+      {
+        "case_id": "cross-gate-semantic",
+        "mutation": "move_g5_semantic_to_g7",
+        "expected_code": "semantic_cross_gate"
+      },
+      {
+        "case_id": "g5-claims-resolution",
+        "mutation": "give_g5_resolution_semantic",
+        "expected_code": "g5_forbidden_semantic"
+      },
+      {
+        "case_id": "missing-g7-semantic",
+        "mutation": "remove_g7_semantic",
+        "expected_code": "semantic_missing"
+      },
+      {
+        "case_id": "t6e-authorization-removed",
+        "mutation": "remove_t6e_authorization",
+        "expected_code": "t6e_protocol_drift"
+      },
+      {
+        "case_id": "t6e-command-audit-removed",
+        "mutation": "remove_t6e_command_invocation",
+        "expected_code": "t6e_protocol_drift"
+      },
+      {
+        "case_id": "t6e-command-mapping-removed",
+        "mutation": "remove_t6e_command_mapping",
+        "expected_code": "t6e_command_mapping_drift"
+      },
+      {
+        "case_id": "schema4-version-drift",
+        "mutation": "change_schema_version",
+        "expected_code": "schema4_identity_drift"
+      },
+      {
+        "case_id": "resolution-command-fk-removed",
+        "mutation": "remove_schema_resolution_fk",
+        "expected_code": "schema_resolution_fk_drift"
+      },
+      {
+        "case_id": "resolved-command-made-nullable",
+        "mutation": "allow_resolved_without_command",
+        "expected_code": "schema_resolution_shape_drift"
+      },
+      {
+        "case_id": "blocker-cache-trigger-removed",
+        "mutation": "remove_schema_cache_trigger",
+        "expected_code": "schema_cache_trigger_drift"
+      }
+    ]
+  }
+}

@@ -1,0 +1,125 @@
+{
+  "format": "icarus.workflow-runtime-gate-ownership/1",
+  "ref": {
+    "id": "icarus.workflow-runtime-gate-ownership",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-runtime-gate-ownership:1\n",
+  "hash": "sha256:36289416db3c8898d9b50c04c5ad43fc6b74ef53bbd3a3c99f9d5f5b72786fa8",
+  "payload": {
+    "governance_scope": "current_construction_g5_g7_t6e_boundary",
+    "status": "G5_OWNERSHIP_EXIT_CANDIDATE_PENDING_INDEPENDENT_REGRESSION",
+    "authority_kind": "current_construction_gate_ownership",
+    "historical_g0_g1_identity_effect": "none",
+    "g4_pack_identity_effect": "none",
+    "matrix": [
+      {
+        "gate": "G5",
+        "owned_transaction_protocols": [
+          "T0",
+          "T0p",
+          "T1",
+          "T2a",
+          "T2b",
+          "T3a",
+          "T3b",
+          "T4",
+          "T5",
+          "T6a",
+          "T6b",
+          "T6c",
+          "T6d"
+        ],
+        "owned_semantics": [
+          "operational_blocker_create",
+          "open_blocker_set_authority",
+          "run_operational_state_cache_on_blocker_create",
+          "workflow_operational_state_cache_on_blocker_create",
+          "open_blocker_cache_bidirectional_consistency"
+        ],
+        "explicitly_excluded_semantics": [
+          "t6e_authorized_operational_remediation",
+          "t6e_source_specific_verification",
+          "runtime_command_gateway",
+          "resolution_command_invocation_event_audit",
+          "blocker_open_to_resolved",
+          "blocker_open_to_abandoned",
+          "last_blocker_operational_state_restoration",
+          "administrative_abandon",
+          "recovery_and_integrity_restoration"
+        ],
+        "exit_evidence": [
+          "T0-T6d_model_and_fault_fixtures",
+          "operational_blocker_creation_fixtures",
+          "open_blocker_set_and_run_workflow_cache_consistency",
+          "future_G7_authority_present_but_not_consumed"
+        ]
+      },
+      {
+        "gate": "G7",
+        "owned_transaction_protocols": [
+          "T6e"
+        ],
+        "owned_semantics": [
+          "t6e_authorized_operational_remediation",
+          "t6e_source_specific_verification",
+          "runtime_command_gateway",
+          "resolution_command_invocation_event_audit",
+          "blocker_open_to_resolved",
+          "blocker_open_to_abandoned",
+          "last_blocker_operational_state_restoration",
+          "administrative_abandon",
+          "recovery_and_integrity_restoration"
+        ],
+        "explicitly_excluded_semantics": [
+          "operational_blocker_create",
+          "open_blocker_set_authority",
+          "run_operational_state_cache_on_blocker_create",
+          "workflow_operational_state_cache_on_blocker_create",
+          "open_blocker_cache_bidirectional_consistency"
+        ],
+        "exit_evidence": [
+          "T6e_model_and_fault_fixtures",
+          "runtime_command_authorization_and_audit_fixtures",
+          "source_specific_blocker_resolution_and_abandon_fixtures",
+          "recovery_and_last_blocker_operational_restoration_fixtures"
+        ]
+      }
+    ],
+    "frozen_authority_bindings": {
+      "workflow_run_transaction_protocol_table_hash": "sha256:7c55b3eff2f29e5dfcbb057d5ff014697ba2e9a421287afa19ec850540cce5f0",
+      "workflow_runtime_command_protocol_table_hash": "sha256:b12b07b29e9335593c969033c133d221b244798fc079db5fb398b23fbae10789",
+      "workflow_runtime_logical_schema_source_hash": "sha256:ef5221d3465f1214c3c0aad3660f57b119d03eb4b5127428d6a1f881a6260214",
+      "g1_executable_schema_root_hash": "sha256:6f49451868b7a5cab359d1c21f14f79afbc11b12aa1938039daf5914d9c4d591",
+      "database_schema_version": 4,
+      "workflow_runtime_schema_manifest_hash": "sha256:87f6787dd5c6382df97120c2e10dc6624143c67efc35e57cb92ea22f16fa666b",
+      "workflow_runtime_schema_hash": "sha256:f517a5e7bb8b3ea91bb37cd6a68b32898ceb62b9044687a8103808be6852106a"
+    },
+    "frozen_invariants": {
+      "t6e_authorization_precondition": "authorized_runtime_command",
+      "t6e_atomic_resolution_audit": "command_invocation_and_runtime_event",
+      "t6e_command_types": [
+        "reconcile_effect",
+        "submit_effect_receipt",
+        "verify_effect_not_applied",
+        "remediate_operational_blocker",
+        "restore_integrity"
+      ],
+      "resolution_command_fk": "workflow_operational_blockers.resolution_command_id -> workflow_runtime_commands.command_id",
+      "resolved_blocker_requires_resolution_command": true,
+      "blocker_cache_triggers": [
+        "trg:operational_blockers:insert_cache",
+        "trg:operational_blockers:update_cache"
+      ]
+    },
+    "fixture_counts": {
+      "positive": 1,
+      "negative": 18
+    },
+    "implementation_authorized": false,
+    "next_required_gate": "independent_ownership_and_affected_chain_regression",
+    "positive_cases_hash": "sha256:c621c8f168f1595cef82c87ab7ae7223e7ea6a04508b0d617b57b763d91b397b",
+    "negative_cases_hash": "sha256:beda94c1a6aabec42d250fe262262dc03a369a7873e48cdcc5d2ec781ff10c50"
+  }
+}

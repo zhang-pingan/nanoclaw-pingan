@@ -1,0 +1,19 @@
+{
+  "format": "icarus.workflow-runtime-gate-ownership-positive-cases/1",
+  "ref": {
+    "id": "icarus.workflow-runtime-gate-ownership-positive-cases",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-runtime-gate-ownership-positive-cases:1\n",
+  "hash": "sha256:c621c8f168f1595cef82c87ab7ae7223e7ea6a04508b0d617b57b763d91b397b",
+  "payload": {
+    "cases": [
+      {
+        "case_id": "exact-g5-g7-t6e-ownership",
+        "mutation": "none",
+        "expected_code": "accepted"
+      }
+    ]
+  }
+}
