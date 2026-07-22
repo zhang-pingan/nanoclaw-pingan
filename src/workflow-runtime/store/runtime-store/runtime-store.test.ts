@@ -54,6 +54,62 @@ function fileHash(filePath: string): string {
   return `sha256:${crypto.createHash('sha256').update(fs.readFileSync(filePath)).digest('hex')}`;
 }
 
+interface DatabaseGateSnapshot {
+  readonly mainBytes: Buffer;
+  readonly mainHash: string;
+  readonly userVersion: number;
+  readonly sqliteSchemaIdentity: string;
+  readonly rowCounts: Readonly<Record<string, number>>;
+}
+
+function databaseGateSnapshot(databasePath: string): DatabaseGateSnapshot {
+  const database = new Database(databasePath, {
+    readonly: true,
+    fileMustExist: true,
+  });
+  let userVersion: number;
+  let sqliteSchemaIdentity: string;
+  let rowCounts: Record<string, number>;
+  try {
+    userVersion = Number(database.pragma('user_version', { simple: true }));
+    sqliteSchemaIdentity = calculateDatabaseSqliteSchemaIdentity(database);
+    const tables = database
+      .prepare(
+        "SELECT name FROM sqlite_schema WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
+      )
+      .pluck()
+      .all() as string[];
+    rowCounts = Object.fromEntries(
+      tables.map((table) => [
+        table,
+        database.prepare(`SELECT count(*) FROM "${table}"`).pluck().get(),
+      ]),
+    ) as Record<string, number>;
+  } finally {
+    database.close();
+  }
+  const mainBytes = fs.readFileSync(databasePath);
+  return {
+    mainBytes,
+    mainHash: fileHash(databasePath),
+    userVersion,
+    sqliteSchemaIdentity,
+    rowCounts,
+  };
+}
+
+function expectDatabaseGateUnchanged(
+  databasePath: string,
+  before: DatabaseGateSnapshot,
+): void {
+  const after = databaseGateSnapshot(databasePath);
+  expect(after.mainBytes.equals(before.mainBytes)).toBe(true);
+  expect(after.mainHash).toBe(before.mainHash);
+  expect(after.userVersion).toBe(before.userVersion);
+  expect(after.sqliteSchemaIdentity).toBe(before.sqliteSchemaIdentity);
+  expect(after.rowCounts).toEqual(before.rowCounts);
+}
+
 function createSchema3Database(databasePath: string): void {
   const profile = loadFrozenWorkflowRuntimeStoreInputs().profile;
   const database = new Database(databasePath);
@@ -123,6 +179,42 @@ function insertConstructionOnlyRow(
       database.exec(sql);
     }
     database.pragma('ignore_check_constraints = OFF');
+    database.pragma('wal_checkpoint(TRUNCATE)');
+  } finally {
+    database.close();
+  }
+}
+
+function driftSchema3SqliteIdentity(databasePath: string): void {
+  const database = new Database(databasePath);
+  try {
+    database.exec(
+      'CREATE INDEX "idx:test:schema3_identity_drift" ON "workflow_domain_resource_heads" ("namespace")',
+    );
+    database.pragma('wal_checkpoint(TRUNCATE)');
+  } finally {
+    database.close();
+  }
+}
+
+function insertPreservedForeignKeyViolation(databasePath: string): void {
+  const database = new Database(databasePath);
+  try {
+    database.pragma('foreign_keys = OFF');
+    database
+      .prepare(
+        `INSERT INTO workflow_registry_resource_dependencies
+          (resource_id, dependency_resource_id, dependency_kind, expected_content_hash, created_at_ms)
+         VALUES (?, ?, ?, ?, ?)`,
+      )
+      .run(
+        'missing:resource',
+        'missing:dependency',
+        'registry_exact',
+        hash('missing:dependency'),
+        1,
+      );
+    expect(database.pragma('foreign_key_check')).toHaveLength(2);
     database.pragma('wal_checkpoint(TRUNCATE)');
   } finally {
     database.close();
@@ -252,6 +344,25 @@ describe.sequential('G1.2 Workflow Runtime Store base', () => {
     expect(() =>
       loadFrozenWorkflowRuntimeStoreInputs({ schemaRoot: copiedSchema }),
     ).toThrow(/canonical_migration raw hash mismatch|migration drifted/);
+  });
+
+  it('fails closed on frozen Schema 3 to 4 upgrade SQL drift before opening the database', () => {
+    const { root, databasePath } = temporaryDatabase();
+    createSchema3Database(databasePath);
+    const before = databaseGateSnapshot(databasePath);
+    const copiedSchema = path.join(root, 'schema');
+    fs.cpSync(path.resolve(import.meta.dirname, '../schema'), copiedSchema, {
+      recursive: true,
+    });
+    fs.appendFileSync(
+      path.join(copiedSchema, 'migration/workflow-runtime-schema-v3-to-v4.sql'),
+      '\n-- drift\n',
+    );
+
+    expect(() =>
+      loadFrozenWorkflowRuntimeStoreInputs({ schemaRoot: copiedSchema }),
+    ).toThrow(/schema3_to_schema4_upgrade raw hash mismatch|upgrade drifted/);
+    expectDatabaseGateUnchanged(databasePath, before);
   });
 
   it('loads exact Store dependencies regardless of unrelated Contract JSON', () => {
@@ -387,6 +498,47 @@ describe.sequential('G1.2 Workflow Runtime Store base', () => {
     ).toBe(0);
   });
 
+  it('rejects Schema 3 sqlite_schema identity drift before the first upgrade DDL', () => {
+    const { databasePath } = temporaryDatabase();
+    createSchema3Database(databasePath);
+    driftSchema3SqliteIdentity(databasePath);
+    const before = databaseGateSnapshot(databasePath);
+    expect(before.userVersion).toBe(3);
+    expect(before.sqliteSchemaIdentity).not.toBe(
+      FROZEN_G1_1_IDENTITIES.schema3SourceSqliteSchema,
+    );
+
+    expect(() =>
+      WorkflowRuntimeConnectionFactory.openStore({
+        databasePath,
+        databaseMode: 'open_existing',
+        identityMode: 'candidate_development',
+      }),
+    ).toThrow('Schema 3 sqlite_schema identity mismatch');
+    expectDatabaseGateUnchanged(databasePath, before);
+  });
+
+  it('rolls back the complete Schema 3 to 4 DDL when target verification fails', () => {
+    const { databasePath } = temporaryDatabase();
+    createSchema3Database(databasePath);
+    insertPreservedForeignKeyViolation(databasePath);
+    const before = databaseGateSnapshot(databasePath);
+    expect(before.userVersion).toBe(3);
+    expect(before.sqliteSchemaIdentity).toBe(
+      FROZEN_G1_1_IDENTITIES.schema3SourceSqliteSchema,
+    );
+    expect(before.rowCounts.workflow_registry_resource_dependencies).toBe(1);
+
+    expect(() =>
+      WorkflowRuntimeConnectionFactory.openStore({
+        databasePath,
+        databaseMode: 'open_existing',
+        identityMode: 'candidate_development',
+      }),
+    ).toThrow('foreign_key_check returned violations');
+    expectDatabaseGateUnchanged(databasePath, before);
+  });
+
   it.each([
     'workflow_feature_release_activation_commands',
     'workflow_feature_release_activation_invocations',
@@ -398,7 +550,12 @@ describe.sequential('G1.2 Workflow Runtime Store base', () => {
       const { databasePath } = temporaryDatabase();
       createSchema3Database(databasePath);
       insertConstructionOnlyRow(databasePath, relation);
-      const beforeHash = fileHash(databasePath);
+      const before = databaseGateSnapshot(databasePath);
+      expect(before.userVersion).toBe(3);
+      expect(before.sqliteSchemaIdentity).toBe(
+        FROZEN_G1_1_IDENTITIES.schema3SourceSqliteSchema,
+      );
+      expect(before.rowCounts[relation]).toBe(1);
       expect(() =>
         WorkflowRuntimeConnectionFactory.openStore({
           databasePath,
@@ -406,20 +563,7 @@ describe.sequential('G1.2 Workflow Runtime Store base', () => {
           identityMode: 'candidate_development',
         }),
       ).toThrow(`Schema 3 upgrade requires empty relation ${relation}`);
-      expect(fileHash(databasePath)).toBe(beforeHash);
-
-      const after = new Database(databasePath, { readonly: true });
-      try {
-        expect(after.pragma('user_version', { simple: true })).toBe(3);
-        expect(calculateDatabaseSqliteSchemaIdentity(after)).toBe(
-          FROZEN_G1_1_IDENTITIES.schema3SourceSqliteSchema,
-        );
-        expect(
-          after.prepare(`SELECT count(*) FROM "${relation}"`).pluck().get(),
-        ).toBe(1);
-      } finally {
-        after.close();
-      }
+      expectDatabaseGateUnchanged(databasePath, before);
     },
   );
 

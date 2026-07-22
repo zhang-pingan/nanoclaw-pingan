@@ -1789,9 +1789,56 @@ Physical Manifest固定84 tables / 1,462 columns / 153 UK / 389 FK / 951 CHECK /
 | `typecheck` / `build` / `git diff --check` | PASS |
 | protected-tree / forbidden-surface | PASS；G0 SQLite=`0da80769…47a8`、G0.10=`2bf94fb4…9fb1`、G2 sealed=`26155e88…5fd7`、G3.8A repair/fixtures/pack Git identities=`5b63164e…f157` / `a358e690…e6f` / `e6ccc030…7ebd`；无Production Activation DML/service/loader/GC/Artifact build-install surface |
 
+## 2026-07-22：G1 Database Schema 4独立整体回归
+
+**结论**：`PASS`。独立回归从clean `main`基线`dfa25e7fba8b19757101af7c658be8eb2ed88e17`开始，parent=`04aaa70e7ef55db7192e920ace6d19b5f51e8888`；运行环境为local checkout、filesystem `disabled/unrestricted`、sandbox `danger-full-access`、approval policy `never`，全部Node/npm命令均通过`./scripts/runtime-toolchain.sh exec -- <command>`。G1/G1.1-G1.6继续`DONE`，current Database Schema继续为`4`；G3继续`IN_PROGRESS`，G3.9继续`READY`且本回归没有实施；G2继续`DONE / BASELINE_ACCEPTED`与40/40 exact replay，G4-G9继续`NOT_READY`。
+
+独立审阅完整覆盖规范/进度/Contract README、`dfa25e7`相对parent的提交diff、G1.1-G1.6 source/DDL/Manifest/dependency/database identity/migration/fixtures/Store/Profile/tests、frozen G3.8A handoff、受G1 identity影响的G3 current packs，以及G0.6/G0.10/G2 sealed/current边界。Production Store只读取frozen SQLite Profile、G1 root、dependency Manifest、executable DDL、Schema Manifest、canonical migration和Schema 3-to-4 upgrade；其生产open路径不加载`loadExecutableSchemaSource`、不重建Manifest/DDL、不扫描construction Contract目录。
+
+确定性与物理闭合证据：
+
+- 连续两轮`schema:generate` + `schema:check`均PASS；第一轮后clean worktree零漂移，补充Gate测试后的最终两轮只保留预先存在的测试diff，整个`store/schema`树零diff。两轮root/dependency Manifest/Schema Manifest/executable DDL raw SHA-256分别保持`04a89cc9e06c17d71c6ab71aa35d106105728f5d40488ededcad1e849f4dc7cc` / `2b9bedde9e14ce2ee1a5d648590c2a1ee3f878221333a5694be12f5adbd7552c` / `d38e182a33e93e12f4cacf72b18eddcf38e0762e9b71f407a84443108b24e2c7` / `a0dc2a9a210d315d637d04d50632cce116fdfd6623a2060254943b96978e6c32`；migration/upgrade raw SHA-256保持`4a8ddeb1…be43` / `5ac263fe…a3cf`。因此全部generated member bytes、root、Manifest、migration、upgrade与SQLite identities均byte-stable。
+- Fresh real-file Schema 4 bootstrap/reopen、database/connection Profile、`integrity_check`、`foreign_key_check`、introspection和fixed EXPLAIN plans全部通过；Physical Manifest固定84 tables / 1,462 columns / 153 UK / 389 FK / 951 CHECK / 44 logical indexes / 41 triggers / 43 query fixtures / 323 statements。
+- Empty frozen Schema 3 Activation/active-pointer数据库原子升级到Schema 4。Store在同一`BEGIN IMMEDIATE`内、首条DDL前验证Schema 3 `sqlite_schema` identity和四张required-empty relation；升级后验证`user_version=4`、Schema 4 identity、integrity与FK后才commit。
+- 四张required-empty relation逐一注入单行均fail closed。回归将断言增强为失败前后主数据库原始bytes和SHA-256、`user_version`、`sqlite_schema` identity、全部84张表row counts逐项完全相同，而不是只核对触发relation。
+- 新增三个严格属于G1 Store upgrade Gate的独立故障测试：合法额外index造成Schema 3 identity drift时在首条upgrade DDL前拒绝；复制frozen schema root并篡改upgrade SQL时artifact loader在打开数据库前拒绝；在Schema 3 preserved relation注入FK violation后，upgrade DDL执行至target verification并因`foreign_key_check`失败，完整rollback到原Schema 3。三者均证明main DB bytes/hash、`user_version`、source schema identity与全表row counts零修改；没有修改生产实现或任何frozen artifact。
+- G3.8A机器映射固定62 column / 12 composite FK / 7 UK / 6 relation requirements / 9 trigger intents / 8 Activation query intents / 12 constraint fixture cases。真实Schema 4测试覆盖request-only pending、nullable verified合法前缀与孔洞拒绝、owner/Retention rejection audit、applied-only receipt、failed/conflict null receipt、terminal Invocation/result binding、exact replay/domain drift、Invocation/Event adjacency/immutability/tamper；G1.5 Release lifecycle/single-active、active-pointer owner/CAS/immutability/delete/target-active及active/draining Retention保护继续通过。
+
+Current identities逐项保持：
+
+| Artifact | Identity |
+| --- | --- |
+| G1 executable schema root | `sha256:6f49451868b7a5cab359d1c21f14f79afbc11b12aa1938039daf5914d9c4d591` |
+| Schema Dependency Manifest | `sha256:8ed4d092c0822fe06b154117d3fc2d6d74c9041644b0883ab2e978c4a2abe35d` |
+| Physical schema identity | `sha256:61ca572ff0f8551ff67f5529753610012fd6027a484e77cc8e63716f4814e04f` |
+| Domain-separated Schema Manifest hash | `sha256:f517a5e7bb8b3ea91bb37cd6a68b32898ceb62b9044687a8103808be6852106a` |
+| Canonical Schema 4 migration | `sha256:4a8ddeb1f9715399ad96c3bc32efa5e8032a3bd484eaed0159c6a24620c1be43` |
+| Schema 3 -> 4 upgrade | `sha256:5ac263fe3279c61f74ba6314f5df98fff59a8f8b32acfa784d2040421ebaa3cf` |
+| Schema 3 / Schema 4 SQLite identities | `sha256:a4bc69f3bbf8f6cf00c32c835596eed4a73036941276a3175d550faba2d2f5ee` / `sha256:e46f58e49b42ad53e3d744de86b6d8fb6299236258459c35d9ca3affa440932c` |
+| SQLite Profile | `sha256:3d69742dad2fefa8bef4ba47e375defd705e3b32920a92b105a43726436fb7af` |
+| G3.1 / G3.3 / G3.5 / G3.6 / G3.7 current packs | `sha256:152fc9bd4ecbc4fb5a395d06698c81142befa294466ffbd665cfb2a9b874c71d` / `sha256:839338a8d2bccfbacd8fd395640f4c79ce31a35d1ec5421bc752a98961514fc2` / `sha256:74cb66b4e2c3d244a45de70c9f236df112c83fabf1f8230afbd046394c8d0b49` / `sha256:730daac9db4bcfb645374b12e10e3962ddacbebc2828875cb00133c8ada195a8` / `sha256:2fae2da648d6da5969e6c5c57b2342f6f15b3084b39e7acfc43b010b48517e74` |
+| Frozen G3.8A Contract Pack | `sha256:d8412111a0f3dcabb4ce416b99086701ea3e3911ff431b5457eb957b2f69722f`；9 positive / 59 negative / 17 fault |
+
+Managed Gate结果：
+
+| 命令/证据 | 结果 |
+| --- | --- |
+| 两轮`schema:generate` + `schema:check` / `store:check` | PASS；生成树零漂移，root/schema/profile identities逐项匹配 |
+| `test:g1.1` / `test:g1.2` | PASS；2 files / 20 tests；1 file / 20 tests（新增3项upgrade fault Gate，四类nonempty全量零修改断言） |
+| `test:g1.publisher` / `test:g1.activation` | PASS；2/2；5/5 |
+| `contracts:g3.8a:check` / `test:g3.8a` | PASS；frozen pack=`d8412111…722f`；1 file / 4 tests；9/59/17 fixtures不变 |
+| G3.1/G3.3/G3.5/G3.6/G3.7 direct checks / `test:g3` | PASS；五个current pins逐项匹配；12 files / 63 tests |
+| `contracts:check` | PASS；完整current G0/G1/G2/G3、Schema与Store chain通过 |
+| `test:g2` / `golden:current:replay:check` | PASS；7 files / 47 tests；successor exact replay 40/40，sealed bundle=`sha256:d99647d8…2145` |
+| `test:g0.6` / `test:g0.10` | PASS；1 file / 8 tests；1 file / 10 tests |
+| `typecheck` / `build` / changed TypeScript targeted Prettier / `git diff --check` | PASS |
+| protected-tree / forbidden-surface | PASS；G0 SQLite=`0da80769666843708e54563a1651160478a7daff`、G0.10=`2bf94fb4ec0142bcb5348168525f67b348cedda4`、G2 sealed=`26155e8850f4abaaa04bac7a2ee35fd75b2ff21e`、G3.8A repair/fixtures/pack=`5b63164e5f4bcf40b81af0fdd564107150baf157` / `a358e690e90294f0ad08ec47992ff9f645df7e6f` / `e6ccc030633464ae712cadd85d295a2c37bd98a4`；parent到baseline及当前worktree均零diff |
+
+Changed paths仅为本回归记录与G1 Store Gate测试。没有新增G3.9 Activation Contract/service/业务DML、active-pointer业务mutation、Production loader、GC/delete、Execution Artifact build/install或G4-G9 Runtime，也没有改写frozen G3.8A semantics/identity、G2 sealed bytes或G0.6/G0.10 historical source。下一独立施工任务固定为G3.9。
+
 ## 下一步
 
-下一独立会话固定为**G1 Database Schema 4整体回归**：从本提交clean基线重新执行两轮schema generate/check、Store bootstrap/upgrade/profile、G1.1-G1.6全部constraint/trigger/query-plan与G1.5保护回归，并复核G3 current pins和G3.8A frozen identity。该回归闭合前不得直接开始G3.9；回归通过后，G3.9才可在独立会话实施Activation Contract/service与业务DML。
+下一独立会话固定为**G3.9 Feature Release Activation**：从本独立Schema 4 Gate回归的clean提交开始，消费frozen G3.8A语义和current Database Schema 4，不改写G1/G3.8A/G2/G0历史边界；实施前仍须独立审阅G3.9规范、closed request/receipt/result、G3.6组合边界、Release/Retention/pointer CAS与recovery语义。G3.9之外的Production loader、GC/delete、Execution Artifact build/install及G4-G9 Runtime继续禁止。
 
 历史fresh review evidence只存在于Git commits，不是current dependency；current immutable semantic approval只绑定exact Draft/report identities。显式`prepare-rc`冻结的四个Working roots与唯一Review Candidate未变；current expected full case-result/Plan/proof/program bytes/hash已独立冻结、审计、owner批准并seal。local single-user签名策略为`not_required_local_single_user`，没有伪造GPG或远程签名。
 
