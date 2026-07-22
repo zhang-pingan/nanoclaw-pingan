@@ -1,0 +1,46 @@
+{
+  "format": "icarus.workflow-registry-exact-resource-query-domain-separators/1",
+  "ref": {
+    "id": "icarus.workflow-registry-exact-resource-query-domain-separators",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-registry-exact-resource-query-domain-separators:1\n",
+  "payload": {
+    "entries": [
+      {
+        "format": "icarus.workflow-contract-pack-g3-registry-exact-resource-query/1",
+        "domain_separator": "icarus:workflow-contract-pack-g3-registry-exact-resource-query:1\n"
+      },
+      {
+        "format": "icarus.workflow-g3-registry-exact-resource-query-negative-cases/1",
+        "domain_separator": "icarus:workflow-g3-registry-exact-resource-query-negative-cases:1\n"
+      },
+      {
+        "format": "icarus.workflow-g3-registry-exact-resource-query-positive-cases/1",
+        "domain_separator": "icarus:workflow-g3-registry-exact-resource-query-positive-cases:1\n"
+      },
+      {
+        "format": "icarus.workflow-registry-exact-resource-query-domain-separators/1",
+        "domain_separator": "icarus:workflow-registry-exact-resource-query-domain-separators:1\n"
+      },
+      {
+        "format": "icarus.workflow-registry-exact-resource-query-input-schema/1",
+        "domain_separator": "icarus:workflow-registry-exact-resource-query-input-schema:1\n"
+      },
+      {
+        "format": "icarus.workflow-registry-exact-resource-query-profile-schema/1",
+        "domain_separator": "icarus:workflow-registry-exact-resource-query-profile-schema:1\n"
+      },
+      {
+        "format": "icarus.workflow-registry-exact-resource-query-profile/1",
+        "domain_separator": "icarus:workflow-registry-exact-resource-query-profile:1\n"
+      },
+      {
+        "format": "icarus.workflow-registry-exact-resource-query-result-schema/1",
+        "domain_separator": "icarus:workflow-registry-exact-resource-query-result-schema:1\n"
+      }
+    ]
+  },
+  "hash": "sha256:dad2612bccfadf799592a4aec798d31f458a2109a6837c6b9b5c66a80f50a247"
+}

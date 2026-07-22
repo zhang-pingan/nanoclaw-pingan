@@ -1,0 +1,129 @@
+{
+  "format": "icarus.workflow-registry-exact-resource-query-profile-schema/1",
+  "ref": {
+    "id": "icarus.workflow-registry-exact-resource-query-profile-schema",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-registry-exact-resource-query-profile-schema:1\n",
+  "payload": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://icarus.local/schemas/workflow-registry-exact-resource-query-profile/1",
+    "title": "WorkflowRegistryExactResourceQueryProfileV1",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "format",
+      "ref",
+      "query_identity",
+      "resolution_mode",
+      "value_validation",
+      "schema_validation",
+      "owner_validation",
+      "publication_validation",
+      "dependency_validation",
+      "error_precedence",
+      "result_schema",
+      "read_only",
+      "launchability_inference"
+    ],
+    "properties": {
+      "format": {
+        "const": "icarus.workflow-registry-exact-resource-query-profile/1"
+      },
+      "ref": {
+        "$ref": "#/$defs/versioned_ref"
+      },
+      "query_identity": {
+        "const": "resource_type_ref_content_hash"
+      },
+      "resolution_mode": {
+        "const": "exact_only"
+      },
+      "value_validation": {
+        "const": "canonical_inline_value_and_content_hash"
+      },
+      "schema_validation": {
+        "const": "exact_resource_and_value_binding"
+      },
+      "owner_validation": {
+        "const": "exact_owner"
+      },
+      "publication_validation": {
+        "const": "exact_state"
+      },
+      "dependency_validation": {
+        "const": "exact_ordered_rows_and_target_hashes"
+      },
+      "error_precedence": {
+        "type": "array",
+        "minItems": 9,
+        "maxItems": 9,
+        "prefixItems": [
+          {
+            "const": "query_input_invalid"
+          },
+          {
+            "const": "resource_missing"
+          },
+          {
+            "const": "resource_hash_mismatch"
+          },
+          {
+            "const": "resource_value_missing"
+          },
+          {
+            "const": "resource_value_mismatch"
+          },
+          {
+            "const": "resource_schema_binding_mismatch"
+          },
+          {
+            "const": "resource_owner_mismatch"
+          },
+          {
+            "const": "resource_publication_state_mismatch"
+          },
+          {
+            "const": "resource_dependency_mismatch"
+          }
+        ],
+        "items": false
+      },
+      "result_schema": {
+        "const": "closed"
+      },
+      "read_only": {
+        "const": true
+      },
+      "launchability_inference": {
+        "const": false
+      }
+    },
+    "$defs": {
+      "versioned_ref": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "version"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._:/-]{0,253}[A-Za-z0-9])?$"
+          },
+          "version": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,62}[A-Za-z0-9])?$"
+          }
+        }
+      }
+    }
+  },
+  "hash": "sha256:e163de5bf6c1cd6e523e47f616fbf556a699ecd5bc58e5838166f6c853bde247"
+}

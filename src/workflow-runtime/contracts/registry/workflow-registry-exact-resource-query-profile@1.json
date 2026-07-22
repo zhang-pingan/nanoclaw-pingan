@@ -1,0 +1,38 @@
+{
+  "format": "icarus.workflow-registry-exact-resource-query-profile/1",
+  "ref": {
+    "id": "icarus.workflow-registry-exact-resource-query-profile",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-registry-exact-resource-query-profile:1\n",
+  "payload": {
+    "format": "icarus.workflow-registry-exact-resource-query-profile/1",
+    "ref": {
+      "id": "icarus.workflow-registry-exact-resource-query-profile",
+      "version": "1.0.0"
+    },
+    "query_identity": "resource_type_ref_content_hash",
+    "resolution_mode": "exact_only",
+    "value_validation": "canonical_inline_value_and_content_hash",
+    "schema_validation": "exact_resource_and_value_binding",
+    "owner_validation": "exact_owner",
+    "publication_validation": "exact_state",
+    "dependency_validation": "exact_ordered_rows_and_target_hashes",
+    "error_precedence": [
+      "query_input_invalid",
+      "resource_missing",
+      "resource_hash_mismatch",
+      "resource_value_missing",
+      "resource_value_mismatch",
+      "resource_schema_binding_mismatch",
+      "resource_owner_mismatch",
+      "resource_publication_state_mismatch",
+      "resource_dependency_mismatch"
+    ],
+    "result_schema": "closed",
+    "read_only": true,
+    "launchability_inference": false
+  },
+  "hash": "sha256:958069493061be7fd7bfb2ea84d1e604e2f57738d2316d0b8c30412b8dd97aa7"
+}

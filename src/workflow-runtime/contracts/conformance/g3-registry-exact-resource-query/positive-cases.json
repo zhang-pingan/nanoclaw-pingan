@@ -1,0 +1,92 @@
+{
+  "format": "icarus.workflow-g3-registry-exact-resource-query-positive-cases/1",
+  "ref": {
+    "id": "icarus.workflow-g3-registry-exact-resource-query-positive-cases",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-g3-registry-exact-resource-query-positive-cases:1\n",
+  "payload": {
+    "fixture_scope": "test_only",
+    "cases": [
+      {
+        "case_id": "positive.exact-staged-feature-resource",
+        "input": {
+          "format": "icarus.workflow-registry-exact-resource-query/1",
+          "resource_type": "recipe",
+          "ref": {
+            "id": "fixture.recipe",
+            "version": "1.0.0"
+          },
+          "content_hash": "sha256:20018ce3b29cb2669c7cc57a5bcd1ca23f34c37469ec35ae9338da0ec5dd9734",
+          "schema_ref": {
+            "id": "fixture.registry.schema",
+            "version": "1.0.0"
+          },
+          "schema_hash": "sha256:b0fac291df4e8f9635dd823e1121475d210ba675a8bb8633649b0fb88eb7f820",
+          "owner": {
+            "kind": "feature",
+            "feature_id": "fixture.feature"
+          },
+          "publication_state": "staged",
+          "dependencies": [
+            {
+              "resource_type": "schema",
+              "ref": {
+                "id": "fixture.registry.schema",
+                "version": "1.0.0"
+              },
+              "content_hash": "sha256:b0fac291df4e8f9635dd823e1121475d210ba675a8bb8633649b0fb88eb7f820",
+              "dependency_kind": "registry_exact"
+            }
+          ]
+        },
+        "expected_result": {
+          "format": "icarus.workflow-registry-exact-resource-query-result/1",
+          "outcome": "accepted",
+          "code": "exact_resource_query_ok",
+          "resource_type": "recipe",
+          "ref": {
+            "id": "fixture.recipe",
+            "version": "1.0.0"
+          },
+          "content_hash": "sha256:20018ce3b29cb2669c7cc57a5bcd1ca23f34c37469ec35ae9338da0ec5dd9734",
+          "resource": {
+            "resource_type": "recipe",
+            "ref": {
+              "id": "fixture.recipe",
+              "version": "1.0.0"
+            },
+            "content_hash": "sha256:20018ce3b29cb2669c7cc57a5bcd1ca23f34c37469ec35ae9338da0ec5dd9734",
+            "schema_ref": {
+              "id": "fixture.registry.schema",
+              "version": "1.0.0"
+            },
+            "schema_hash": "sha256:b0fac291df4e8f9635dd823e1121475d210ba675a8bb8633649b0fb88eb7f820",
+            "owner": {
+              "kind": "feature",
+              "feature_id": "fixture.feature"
+            },
+            "publication_state": "staged",
+            "dependencies": [
+              {
+                "resource_type": "schema",
+                "ref": {
+                  "id": "fixture.registry.schema",
+                  "version": "1.0.0"
+                },
+                "content_hash": "sha256:b0fac291df4e8f9635dd823e1121475d210ba675a8bb8633649b0fb88eb7f820",
+                "dependency_kind": "registry_exact"
+              }
+            ],
+            "content": {
+              "name": "fixture"
+            }
+          },
+          "read_only": true
+        }
+      }
+    ]
+  },
+  "hash": "sha256:1f05ca7fd6824307bc5ae134f9df7ef9b2bc2822fd84c4dd41b9847b454c0be2"
+}

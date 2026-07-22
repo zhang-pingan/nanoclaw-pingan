@@ -4045,6 +4045,40 @@ G3 Registry immutable replay handling stays inside the same G1 Store and G3 pers
 
 Collision precedence follows the already ASCII-ordered batch resources, then closure, then snapshot. Value metadata/payload, resource identity/content/owner/state, dependency set, closure identity/member set, and snapshot identity/binding drift return the stable codes `registry_value_identity_collision`, `registry_resource_identity_collision`, `registry_dependency_set_collision`, `registry_closure_identity_collision`, `registry_closure_member_set_collision`, and `registry_snapshot_identity_collision`. Any collision throws inside the same transaction and leaves all tables unchanged. This preflight does not turn `staged` into `published`, create a Release or retention handle, read source paths, resolve current/latest, activate a pointer, or expose a Production loader.
 
+G3 exact resource read/query preflight is a separate read-only boundary over the same persisted rows. It accepts only this closed input:
+
+```ts
+interface G3RegistryExactResourceQueryInput {
+  format: 'icarus.workflow-registry-exact-resource-query/1';
+  resource_type: G3RegistryResourceType;
+  ref: VersionedRef;
+  content_hash: string;
+  schema_ref: VersionedRef;
+  schema_hash: string;
+  owner: G3RegistryResourceOwner;
+  publication_state: 'staged' | 'published' | 'retired';
+  dependencies: G3RegistryResourceDependency[];
+}
+```
+
+The lookup key is exactly `(resource_type, ref.id, ref.version)` and the requested `content_hash` is an independent mandatory equality check. Every VersionedRef, including the schema, Core owner, and dependency refs, must be an immutable exact token. The input has no current/latest selector, range, alias, fallback, release pointer, launchability, or inferred owner/state field. Dependencies use only `registry_exact`, are unique and unsigned-ASCII ordered by `(resource_type, ref.id, ref.version)`, and describe the complete expected direct row set.
+
+After closed input validation, the preflight checks in this fixed order: exact resource presence; requested content hash; canonical inline Value presence and immutable Value metadata/JCS/content hash; exact Value-to-schema binding plus the exact schema resource and its canonical Value; exact owner columns; exact publication state; and the complete dependency rows plus each target identity/hash. The first failing phase returns exactly one stable code in this precedence:
+
+```text
+query_input_invalid
+resource_missing
+resource_hash_mismatch
+resource_value_missing
+resource_value_mismatch
+resource_schema_binding_mismatch
+resource_owner_mismatch
+resource_publication_state_mismatch
+resource_dependency_mismatch
+```
+
+The result uses closed `icarus.workflow-registry-exact-resource-query-result/1`. Accepted results return only the verified semantic resource identity, owner, schema binding, publication state, exact dependencies, and parsed canonical content; rejected results return `resource=null`. Both branches set `read_only=true`. Installation timestamps, row versions, active pointers, launchability, and inferred compatibility are excluded, so identical Store facts and input produce byte-equivalent JSON. The query uses only the Store read/query surface and performs no transaction, DML, source read, snapshot mutation, Publish, Release, Retention, loader, or Activation work.
+
 Feature Release 与新创建入口的激活指针必须独立持久化，不能用安装目录或当前文件内容代替：
 
 ```text

@@ -1,8 +1,8 @@
 # Dynamic Workflow Runtime 实施进度
 
 > **状态**: IN_PROGRESS
-> **当前 Gate**: G3 Registry / Authoring / Publish（`IN_PROGRESS`；G3.1、G3.2A、G3.2、G3.3 与 G3.4 Registry immutable replay/collision 均 `DONE`；G2保持`DONE / BASELINE_ACCEPTED`与40/40 exact replay）
-> **下一施工切片**: 从 Registry exact read/query、Retention/ABI preflight 或 Authoring/Publisher contract 中选择一个原子切片；Feature/Core Release、Publisher执行、Publish/Activation均尚未实现，G4-G9保持`NOT_READY`
+> **当前 Gate**: G3 Registry / Authoring / Publish（`IN_PROGRESS`；G3.1、G3.2A、G3.2、G3.3、G3.4 Registry immutable replay/collision 与 G3.5 exact resource query preflight 均 `DONE`；G2保持`DONE / BASELINE_ACCEPTED`与40/40 exact replay）
+> **下一施工切片**: 从 Retention/ABI preflight 或 Authoring/Publisher contract 中选择一个原子切片；Feature/Core Release、Publisher执行、Publish/Activation均尚未实现，G4-G9保持`NOT_READY`
 > **最后更新**: 2026-07-21
 > **规范权威**: `local/docs/dynamic-workflow-dag-framework.md`
 
@@ -111,7 +111,7 @@ Agent Container 运行于独立 VM，Node identity 由 VM image gate 保证；�
 | G0 Contract Pack / Static Baseline | `DONE` | 无 | G0.1-G0.9 historical root + G0.10 additive Capacity Admin/publication/CAP/Logical Schema/coverage root | 本原子提交 |
 | G1 DDL / Store | `DONE` | G0.10 | closed Schema Dependency Manifest + frozen executable migration/Schema Manifest + unified Connection Factory + Store lifecycle/transaction host + real-file SQLite/identity gates | 本原子提交（dependency identity repair） |
 | G2 Compiler / Golden | `DONE` | G0.1-G0.9；R-016 spec/Contract repair；G0.10 不改变 Compiler/Plan 语义 | phase=`BASELINE_ACCEPTED`；前序immutable lineage未变；owner-approved successor GoldenSemanticReview/seal完整，current replay 40/40 exact、0 differences | 本原子提交（replay-repair successor seal） |
-| G3 Registry / Authoring / Publish | `IN_PROGRESS` | G1 + G2 | G3.1 read-only publish-preflight foundation DONE；G3.2A semantics freeze DONE；G3.2 Strict Intake Preflight DONE；G3.3 Registry persistence/closure/snapshot preflight DONE；其余authoring/publish/retention/ABI exit evidence待后续切片 | 本原子提交（G3.3）；G3.1/G3.2A/G3.2见下文 |
+| G3 Registry / Authoring / Publish | `IN_PROGRESS` | G1 + G2 | G3.1 read-only publish-preflight foundation DONE；G3.2A semantics freeze DONE；G3.2 Strict Intake Preflight DONE；G3.3 Registry persistence/closure/snapshot preflight DONE；G3.4 immutable replay/collision DONE；G3.5 exact resource query preflight DONE；其余authoring/publish/retention/ABI exit evidence待后续切片 | 本原子提交（G3.5）；G3.1-G3.4见下文 |
 | G4 Test Bootstrap | `NOT_READY` | G1 + G2 + G3 | isolated bootstrap profile | - |
 | G5 Basic Runtime | `NOT_READY` | G4 | T0-T6e model/fault fixtures | - |
 | G6 Dynamic / Close | `NOT_READY` | G5 | T7/T8/child/compensation fixtures | - |
@@ -123,7 +123,7 @@ Agent Container 运行于独立 VM，Node identity 由 VM image gate 保证；�
 
 | 工作包 | 范围 | 状态 | 当前 Gate/切片 |
 | --- | --- | --- | --- |
-| I0 | Publish、Registry、Recipe 与执行版本固定 | `IN_PROGRESS` | G3.1/G3.2 read-only preflight与exact identity/pinning DONE；G3.3 Registry persistence/closure/snapshot read-only preflight DONE；发布链路待后续切片 |
+| I0 | Publish、Registry、Recipe 与执行版本固定 | `IN_PROGRESS` | G3.1/G3.2 read-only preflight与exact identity/pinning DONE；G3.3 Registry persistence/closure/snapshot与G3.5 exact resource query read-only preflight DONE；发布链路待后续切片 |
 | I1 | Intake、Routing、幂等创建、Child provenance、Claim | `NOT_READY` | G5 起 |
 | I2 | Definition、State lowering、Context、transition | `IN_PROGRESS` | approved static lowering语义已由Compiler 3.0.1实现、批准并seal；G2 lowering部分完成，Runtime transition仍从G5起 |
 | I3 | Source/Compiled IR、Port、Compiler | `DONE` | Production Compiler 3.0.1 successor已批准并seal；current replay 40/40 exact、0 differences |
@@ -1448,16 +1448,48 @@ G3.3 pack exact lineage固定G3.2A `sha256:c9c273b6d294d512a3578203d91d4bdce7863
 | managed `npm run test:g0` | 14/15 files、108/109 tests PASS；唯一失败为既有 `setup/runtime-toolchain.test.ts` 5s timing case（5.107s），未修改 timeout/toolchain；随后该文件定向复跑 5/5 PASS（目标 case 4.442s） |
 | managed `npm run test:g2` / `test:g2:golden-current` | PASS；7 files / 47 tests 与 5 files / 26 tests |
 | managed `npm run golden:current:replay:check` / `prepare-rc:check` | PASS；40/40 exact，sealed bundle=`sha256:d99647d8ca6aabc737a793019335e6770aa111a79be7545c4dec00c6e7af2145`，RC=`sha256:beb8669a054c95e0796ddf998c87c0ddc2e90556f95192a8baad6dd247f3e577` |
-| managed `npm run build` / targeted Prettier check | PASS |
+| managed `npm run build` / authored TS/config/README targeted Prettier check | PASS |
 | G1 DDL / immutable Contract artifacts | 相对`18ea03e`零diff；G1 root/schema保持`sha256:769800fbca754586f1eda90c28e876255a6af3fbe452c397a4dabfd4aec5b756` / `sha256:4d8c373387ad515c36fd292b705665e6c197c73021c1b7e55da5317bc140efbd` |
 | changed-path / forbidden-surface / `git diff --check` | PASS；仅5个计划内文件，无 Publisher/Release/Retention/Activation/Production loader implementation |
 
+## G3.5 Registry Exact Resource Read / Query Preflight
+
+**状态**：`DONE`；G3继续为`IN_PROGRESS`，G2保持`DONE / BASELINE_ACCEPTED`，G4-G9保持`NOT_READY`。本切片只冻结并实现单个 Registry resource 的 exact read/query preflight；没有修改 G3.1/G3.2A/G3.2/G3.3 Contract Pack 或 G3.4 replay/collision 语义，没有修改 G1 DDL/Schema/Store boundary，也没有实现 Publisher、Publish、Feature/Core Release、Retention/GC、Activation、Production loader 或 G4-G9。
+
+规范新增的唯一 query identity 是显式 `(resource_type, ref.id, ref.version, content_hash)`。Closed input 同时携带 exact schema ref/hash、owner、publication state 和完整 direct `registry_exact` dependency rows；全部 VersionedRef 使用 immutable exact token。`current/latest`、range、alias、fallback、active pointer、launchability 和 owner/state inference 均不属于合同。依赖 expectation 按 unsigned ASCII `(resource_type, ref.id, ref.version)` 唯一排序。
+
+错误优先级固定为 `query_input_invalid -> resource_missing -> resource_hash_mismatch -> resource_value_missing -> resource_value_mismatch -> resource_schema_binding_mismatch -> resource_owner_mismatch -> resource_publication_state_mismatch -> resource_dependency_mismatch`。实现入口 `src/workflow-runtime/store/registry-resource-query.ts` 只接受 Store `queryOne/queryAll` surface，验证 G3.3 canonical inline Value 的 JCS/hash/length/metadata、exact schema resource 与 schema Value、owner columns、state、完整 dependency row set 及每个 target identity/hash。Accepted result 返回 verified canonical content；accepted/rejected 都由 closed schema约束并固定 `read_only=true`，不返回安装时间、row version、活动指针或 launchability。
+
+| Artifact | Version / exact hash |
+| --- | --- |
+| G3.5 Contract Pack | `icarus.workflow-contract-pack-g3-registry-exact-resource-query@1.0.0`; `sha256:516f0fffdab8e05438649e8936a78e0fedac5eb9300abcb0ff232f5204e793dd` |
+| Exact query profile | `sha256:958069493061be7fd7bfb2ea84d1e604e2f57738d2316d0b8c30412b8dd97aa7` |
+| Profile schema | `sha256:e163de5bf6c1cd6e523e47f616fbf556a699ecd5bc58e5838166f6c853bde247` |
+| Input / result schemas | `sha256:e3937b6f03f624f80d883abef0458ec56321787aa15692d4a2aa9e6355fba2cd` / `sha256:a8f3bb4befbdd4e22c4d5ce27c36fa10b2be3b012f211e977fcbf4f052a5196b` |
+| Positive / negative fixtures | `sha256:1f05ca7fd6824307bc5ae134f9df7ef9b2bc2822fd84c4dd41b9847b454c0be2` / `sha256:3a06af87c002ebcf3063ac289e5556cc78e4482ba3bbec98013436b16ff12643`; `1` / `5` cases |
+| Domain catalog | `sha256:dad2612bccfadf799592a4aec798d31f458a2109a6837c6b9b5c66a80f50a247` |
+
+Store tests use real temporary `workflow-runtime.db` files and the existing G3.3 persistence path. They prove byte-equivalent repeated results and unchanged row counts, reject input before any query call, and cover missing exact ref, requested resource hash drift, missing/non-canonical Value, schema/owner/publication drift, and missing/extra/hash-drifted dependency expectations/rows. A multi-drift case proves Value precedes owner, and schema precedes owner/state. The existing composite dependency FK correctly prevents constructing a stored row whose target hash does not exist; expected-hash drift is therefore exercised through a valid query expectation, while missing/extra persisted row drift is injected through legal Store transactions.
+
+| Verification | Result |
+| --- | --- |
+| managed `npm run contracts:g3.query:generate` / `contracts:g3.query:check` | PASS；pack=`sha256:516f0fffdab8e05438649e8936a78e0fedac5eb9300abcb0ff232f5204e793dd`；1 positive / 5 negative；generate 后 read-only check byte-exact |
+| managed `npm run typecheck` | PASS |
+| managed `npm run test:g3` | PASS；7 files / 36 tests；含 G3.5 Contract/Store 11 tests 与 G3.1/G3.2A/G3.2/G3.3/G3.4 回归 |
+| managed `npm run contracts:check` / `contracts:archive:check` | PASS；current G0/G1/G2/G3 chain、historical G0/R-016/Draft roots 与 new G3.5 pack均通过 |
+| managed `npm run test:g0` | PASS；15 files / 109 tests；内部再次执行完整 `contracts:check` |
+| managed `npm run test:g2` / `test:g2:golden-current` | PASS；7 files / 47 tests 与 5 files / 26 tests |
+| managed `npm run golden:current:replay:check` | PASS；40/40 exact，bundle=`sha256:d99647d8ca6aabc737a793019335e6770aa111a79be7545c4dec00c6e7af2145` |
+| managed `npm run build` / targeted Prettier check | PASS |
+| G1/G2/G3.1/G3.2A/G3.2/G3.3/G3.4 immutable path diff | 相对基线 `c36a6e3` empty；G1 root/schema与G3.3 pack保持原 identity |
+| changed-path / forbidden-surface / `git diff --check` | PASS；无 Registry/Authoring/Runtime/Projection forbidden directory、无 query implementation moving selector/launchability/write transaction/DML/Publisher/Release/Retention/Activation surface |
+
 ## 下一步
 
-G0.1-G0.9 historical identity、G0.10 current root、G1 executable schema/Store Base、R-016 spec/Contract repair与G2 Production Compiler/Golden均已完成。Current G2保持`DONE / BASELINE_ACCEPTED`，I3为`DONE`；G3.1、G3.2A、G3.2 Strict Intake Preflight、G3.3 Registry persistence/closure/snapshot preflight 和 G3.4 immutable replay/collision 均完成，G3/I0仍为`IN_PROGRESS`。下一切片应在不触碰既有 immutable identity 与 G1 DDL/Schema/Store boundary 的前提下，从 Registry exact read/query、Retention/ABI preflight 或 Authoring/Publisher contract 中选择一个原子切片，并继续禁止 Publisher执行、Publish/Activation 和 G4-G9 runtime surface。
+G0.1-G0.9 historical identity、G0.10 current root、G1 executable schema/Store Base、R-016 spec/Contract repair与G2 Production Compiler/Golden均已完成。Current G2保持`DONE / BASELINE_ACCEPTED`，I3为`DONE`；G3.1、G3.2A、G3.2 Strict Intake Preflight、G3.3 Registry persistence/closure/snapshot preflight、G3.4 immutable replay/collision 和 G3.5 exact resource query preflight 均完成，G3/I0仍为`IN_PROGRESS`。下一切片应在不触碰既有 immutable identity 与 G1 DDL/Schema/Store boundary 的前提下，从 Retention/ABI preflight 或 Authoring/Publisher contract 中选择一个原子切片，并继续禁止 Publisher执行、Publish/Activation 和 G4-G9 runtime surface。
 
 历史fresh review evidence只存在于Git commits，不是current dependency；current immutable semantic approval只绑定exact Draft/report identities。显式`prepare-rc`冻结的四个Working roots与唯一Review Candidate未变；current expected full case-result/Plan/proof/program bytes/hash已独立冻结、审计、owner批准并seal。local single-user签名策略为`not_required_local_single_user`，没有伪造GPG或远程签名。
 
 G2终点继续满足`Draft -> human semantic decision -> GoldenSemanticReview -> seal -> CI replay`：current successor replay为40/40，R-017保持关闭。G3.1只消费其exact sealed/compiler identities并执行纯preflight；没有创建Published Recipe、Registry row、Release或Production launchability，也没有执行production activation。
 
-作为历史prepare-rc切片记录，该切片只修复当时的R-017 spec identity实时绑定、级联重建Working artifacts并执行`prepare-rc`及其确定性check。后续owner approval、immutable review、successor seal与40/40 replay现已完成；当前 G3.1、G3.2A、G3.2、G3.3 与 G3.4 均已完成，SQLite certification、Core Release、G4-G9和production activation仍未开始。R-010 Node loader deprecation与R-012/R-013/R-015 timing继续作为既有范围外baseline，不升级工具链、不放宽测试。
+作为历史prepare-rc切片记录，该切片只修复当时的R-017 spec identity实时绑定、级联重建Working artifacts并执行`prepare-rc`及其确定性check。后续owner approval、immutable review、successor seal与40/40 replay现已完成；当前 G3.1、G3.2A、G3.2、G3.3、G3.4 与 G3.5 均已完成，SQLite certification、Core Release、G4-G9和production activation仍未开始。R-010 Node loader deprecation与R-012/R-013/R-015 timing继续作为既有范围外baseline，不升级工具链、不放宽测试。

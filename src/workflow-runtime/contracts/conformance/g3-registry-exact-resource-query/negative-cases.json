@@ -1,0 +1,196 @@
+{
+  "format": "icarus.workflow-g3-registry-exact-resource-query-negative-cases/1",
+  "ref": {
+    "id": "icarus.workflow-g3-registry-exact-resource-query-negative-cases",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-g3-registry-exact-resource-query-negative-cases:1\n",
+  "payload": {
+    "fixture_scope": "test_only",
+    "cases": [
+      {
+        "case_id": "negative.latest",
+        "input": {
+          "format": "icarus.workflow-registry-exact-resource-query/1",
+          "resource_type": "recipe",
+          "ref": {
+            "id": "fixture.recipe",
+            "version": "latest"
+          },
+          "content_hash": "sha256:20018ce3b29cb2669c7cc57a5bcd1ca23f34c37469ec35ae9338da0ec5dd9734",
+          "schema_ref": {
+            "id": "fixture.registry.schema",
+            "version": "1.0.0"
+          },
+          "schema_hash": "sha256:b0fac291df4e8f9635dd823e1121475d210ba675a8bb8633649b0fb88eb7f820",
+          "owner": {
+            "kind": "feature",
+            "feature_id": "fixture.feature"
+          },
+          "publication_state": "staged",
+          "dependencies": [
+            {
+              "resource_type": "schema",
+              "ref": {
+                "id": "fixture.registry.schema",
+                "version": "1.0.0"
+              },
+              "content_hash": "sha256:b0fac291df4e8f9635dd823e1121475d210ba675a8bb8633649b0fb88eb7f820",
+              "dependency_kind": "registry_exact"
+            }
+          ]
+        },
+        "expected_code": "query_input_invalid"
+      },
+      {
+        "case_id": "negative.range",
+        "input": {
+          "format": "icarus.workflow-registry-exact-resource-query/1",
+          "resource_type": "recipe",
+          "ref": {
+            "id": "fixture.recipe",
+            "version": "^1.0.0"
+          },
+          "content_hash": "sha256:20018ce3b29cb2669c7cc57a5bcd1ca23f34c37469ec35ae9338da0ec5dd9734",
+          "schema_ref": {
+            "id": "fixture.registry.schema",
+            "version": "1.0.0"
+          },
+          "schema_hash": "sha256:b0fac291df4e8f9635dd823e1121475d210ba675a8bb8633649b0fb88eb7f820",
+          "owner": {
+            "kind": "feature",
+            "feature_id": "fixture.feature"
+          },
+          "publication_state": "staged",
+          "dependencies": [
+            {
+              "resource_type": "schema",
+              "ref": {
+                "id": "fixture.registry.schema",
+                "version": "1.0.0"
+              },
+              "content_hash": "sha256:b0fac291df4e8f9635dd823e1121475d210ba675a8bb8633649b0fb88eb7f820",
+              "dependency_kind": "registry_exact"
+            }
+          ]
+        },
+        "expected_code": "query_input_invalid"
+      },
+      {
+        "case_id": "negative.alias",
+        "input": {
+          "format": "icarus.workflow-registry-exact-resource-query/1",
+          "resource_type": "recipe",
+          "ref": {
+            "id": "fixture.recipe",
+            "version": "1.0.0"
+          },
+          "content_hash": "sha256:20018ce3b29cb2669c7cc57a5bcd1ca23f34c37469ec35ae9338da0ec5dd9734",
+          "schema_ref": {
+            "id": "fixture.registry.schema",
+            "version": "1.0.0"
+          },
+          "schema_hash": "sha256:b0fac291df4e8f9635dd823e1121475d210ba675a8bb8633649b0fb88eb7f820",
+          "owner": {
+            "kind": "feature",
+            "feature_id": "fixture.feature"
+          },
+          "publication_state": "staged",
+          "dependencies": [
+            {
+              "resource_type": "schema",
+              "ref": {
+                "id": "fixture.registry.schema",
+                "version": "1.0.0"
+              },
+              "content_hash": "sha256:b0fac291df4e8f9635dd823e1121475d210ba675a8bb8633649b0fb88eb7f820",
+              "dependency_kind": "registry_exact"
+            }
+          ],
+          "alias": "fixture.recipe"
+        },
+        "expected_code": "query_input_invalid"
+      },
+      {
+        "case_id": "negative.fallback",
+        "input": {
+          "format": "icarus.workflow-registry-exact-resource-query/1",
+          "resource_type": "recipe",
+          "ref": {
+            "id": "fixture.recipe",
+            "version": "1.0.0"
+          },
+          "content_hash": "sha256:20018ce3b29cb2669c7cc57a5bcd1ca23f34c37469ec35ae9338da0ec5dd9734",
+          "schema_ref": {
+            "id": "fixture.registry.schema",
+            "version": "1.0.0"
+          },
+          "schema_hash": "sha256:b0fac291df4e8f9635dd823e1121475d210ba675a8bb8633649b0fb88eb7f820",
+          "owner": {
+            "kind": "feature",
+            "feature_id": "fixture.feature"
+          },
+          "publication_state": "staged",
+          "dependencies": [
+            {
+              "resource_type": "schema",
+              "ref": {
+                "id": "fixture.registry.schema",
+                "version": "1.0.0"
+              },
+              "content_hash": "sha256:b0fac291df4e8f9635dd823e1121475d210ba675a8bb8633649b0fb88eb7f820",
+              "dependency_kind": "registry_exact"
+            }
+          ],
+          "fallback": "latest"
+        },
+        "expected_code": "query_input_invalid"
+      },
+      {
+        "case_id": "negative.dependency-duplicate",
+        "input": {
+          "format": "icarus.workflow-registry-exact-resource-query/1",
+          "resource_type": "recipe",
+          "ref": {
+            "id": "fixture.recipe",
+            "version": "1.0.0"
+          },
+          "content_hash": "sha256:20018ce3b29cb2669c7cc57a5bcd1ca23f34c37469ec35ae9338da0ec5dd9734",
+          "schema_ref": {
+            "id": "fixture.registry.schema",
+            "version": "1.0.0"
+          },
+          "schema_hash": "sha256:b0fac291df4e8f9635dd823e1121475d210ba675a8bb8633649b0fb88eb7f820",
+          "owner": {
+            "kind": "feature",
+            "feature_id": "fixture.feature"
+          },
+          "publication_state": "staged",
+          "dependencies": [
+            {
+              "resource_type": "schema",
+              "ref": {
+                "id": "fixture.registry.schema",
+                "version": "1.0.0"
+              },
+              "content_hash": "sha256:b0fac291df4e8f9635dd823e1121475d210ba675a8bb8633649b0fb88eb7f820",
+              "dependency_kind": "registry_exact"
+            },
+            {
+              "resource_type": "schema",
+              "ref": {
+                "id": "fixture.registry.schema",
+                "version": "1.0.0"
+              },
+              "content_hash": "sha256:b0fac291df4e8f9635dd823e1121475d210ba675a8bb8633649b0fb88eb7f820",
+              "dependency_kind": "registry_exact"
+            }
+          ]
+        },
+        "expected_code": "query_input_invalid"
+      }
+    ]
+  },
+  "hash": "sha256:3a06af87c002ebcf3063ac289e5556cc78e4482ba3bbec98013436b16ff12643"
+}
