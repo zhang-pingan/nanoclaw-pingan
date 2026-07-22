@@ -6,12 +6,12 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-runtime-schema-dependency-manifest:1\n",
-  "hash": "sha256:00bbf7a38a294e9d7f867df70b9db3c7ca0fc7cfe777902fb531e363b678c4e0",
+  "hash": "sha256:2cd580b39b88c425e2bd1ff58a058756806daed1a790cff8accce0e6aa8e7508",
   "payload": {
     "dependency_set_id": "workflow-runtime-schema-v1",
     "identity_scope": "physical_schema_and_migration",
-    "member_count": 9,
-    "physical_member_count": 8,
+    "member_count": 10,
+    "physical_member_count": 9,
     "construction_provenance_count": 1,
     "members": [
       {
@@ -93,6 +93,19 @@
         "raw_sha256": "sha256:15407b979732abc677ac9e85c9f2af512aaf24121abed841276450d2af9282ea"
       },
       {
+        "role": "feature_release_activation_schema_prerequisite",
+        "identity_effect": "physical_schema_input",
+        "path": "store/schema/inputs/workflow-feature-release-activation-schema-prerequisite@1.json",
+        "format": "icarus.workflow-feature-release-activation-schema-prerequisite/1",
+        "ref": {
+          "id": "icarus.workflow-feature-release-activation-schema-prerequisite",
+          "version": "1"
+        },
+        "version": 1,
+        "semantic_hash": "sha256:2e2e98cd8276d3b42b796afb34508be44800619d3781ddd88f10022c55a7a46e",
+        "raw_sha256": "sha256:f59bced2ef511d676e8e58537e80db3f124116001e736d347eeadef3d0f9ab1b"
+      },
+      {
         "role": "sqlite_execution_profile",
         "identity_effect": "physical_schema_input",
         "path": "contracts/sqlite/local_single_user_sqlite@1.json",
@@ -115,8 +128,8 @@
           "version": "1"
         },
         "version": 1,
-        "semantic_hash": "sha256:fe97803fe8d91c5e6beb59892fdf612d4bf1963def75028dece50f3393edbd89",
-        "raw_sha256": "sha256:2f4c2f0f38f2276313621d345cafeaedd6545969f2d987b914ab4b89c4b00b4b"
+        "semantic_hash": "sha256:6e2fb3d19a9f0368b4dc330761addeda9e33f8f20437cdf204f58833390ff86e",
+        "raw_sha256": "sha256:5ff7c2329f2dfb84c4f3b67f25353417b4f229d3b11291ffb916b80610b4e099"
       },
       {
         "role": "canonical_migration",
@@ -128,10 +141,10 @@
           "version": "1"
         },
         "version": 1,
-        "semantic_hash": "sha256:fb6c820a0f646148cbd9f54476917802bc208c84070f005fc24871be46ecae89",
-        "raw_sha256": "sha256:fb6c820a0f646148cbd9f54476917802bc208c84070f005fc24871be46ecae89"
+        "semantic_hash": "sha256:eea3547a0f5208d08bfbe771de3895bba020ca3cf34ddf2fb4e3b7945765d345",
+        "raw_sha256": "sha256:eea3547a0f5208d08bfbe771de3895bba020ca3cf34ddf2fb4e3b7945765d345"
       }
     ],
-    "physical_schema_identity": "sha256:e6150805b5c26dfc6ba0886da88b79345cfd5838d8da05d1ca011e371f390616"
+    "physical_schema_identity": "sha256:b6b034224202d9673e177d4fb10144c5568f5d848a1dd6f75837d0eb1d52cf9b"
   }
 }

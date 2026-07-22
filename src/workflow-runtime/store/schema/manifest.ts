@@ -456,6 +456,7 @@ export function assertClosedSchemaManifest(
       'query_catalog_hash',
       'capacity_delta_hash',
       'publisher_schema_prerequisite_hash',
+      'feature_release_activation_schema_prerequisite_hash',
       'sqlite_profile_hash',
     ],
     'Schema Manifest logical_inputs',

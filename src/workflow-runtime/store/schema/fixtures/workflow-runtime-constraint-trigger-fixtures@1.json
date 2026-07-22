@@ -6,10 +6,10 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-runtime-constraint-trigger-fixtures:1\n",
-  "hash": "sha256:4c74c07d21a238e0dad6038e8ed93910b7828172c322f2d7030ca9d3e32386f3",
+  "hash": "sha256:9cd781157eba5a0fb8d1b440c37d1f0fd13bb154f19c6f2b7d2ca0c65544e9f3",
   "payload": {
     "execution_target": "real_file_sqlite",
-    "enum_check_count": 108,
+    "enum_check_count": 118,
     "enum_checks": [
       "workflow_graph_resource_accounts:ck:workflow_graph_resource_accounts:resource_type:enum",
       "workflow_graph_resource_reservations:ck:workflow_graph_resource_reservations:settlement_mode:enum",
@@ -118,7 +118,17 @@
       "workflow_publisher_commands:ck:workflow_publisher_commands:lifecycle:enum",
       "workflow_publisher_command_invocations:ck:workflow_publisher_command_invocations:disposition:enum",
       "workflow_publisher_events:ck:workflow_publisher_events:phase:enum",
-      "workflow_publisher_events:ck:workflow_publisher_events:event_type:enum"
+      "workflow_publisher_events:ck:workflow_publisher_events:event_type:enum",
+      "workflow_feature_release_activation_commands:ck:workflow_feature_release_activation_commands:command_type:enum",
+      "workflow_feature_release_activation_commands:ck:workflow_feature_release_activation_commands:expected_pointer_state:enum",
+      "workflow_feature_release_activation_commands:ck:workflow_feature_release_activation_commands:target_retention_handle_kind:enum",
+      "workflow_feature_release_activation_commands:ck:workflow_feature_release_activation_commands:target_retention_observed_status:enum",
+      "workflow_feature_release_activation_commands:ck:workflow_feature_release_activation_commands:previous_retention_handle_kind:enum",
+      "workflow_feature_release_activation_commands:ck:workflow_feature_release_activation_commands:previous_retention_observed_status:enum",
+      "workflow_feature_release_activation_commands:ck:workflow_feature_release_activation_commands:lifecycle:enum",
+      "workflow_feature_release_activation_invocations:ck:workflow_feature_release_activation_invocations:disposition:enum",
+      "workflow_feature_release_activation_events:ck:workflow_feature_release_activation_events:phase:enum",
+      "workflow_feature_release_activation_events:ck:workflow_feature_release_activation_events:event_type:enum"
     ],
     "required_cases": [
       "invalid_enum_values",
@@ -143,7 +153,16 @@
       "publisher_review_approval_expiry_ordering",
       "publisher_command_lifecycle_and_finalization",
       "publisher_invocation_disposition_hash_chain_and_immutability",
-      "publisher_event_phase_hash_chain_and_immutability"
+      "publisher_event_phase_hash_chain_and_immutability",
+      "activation_caller_idempotency_unique",
+      "activation_schema_bound_values_and_typed_release_retention_foreign_keys",
+      "activation_expected_pointer_absent_present_shape",
+      "activation_command_lifecycle_and_finalization",
+      "activation_invocation_disposition_hash_chain_and_immutability",
+      "activation_event_phase_hash_chain_and_immutability",
+      "feature_release_owner_identity_single_active_and_legal_lifecycle",
+      "active_pointer_owner_cas_immutability_delete_and_target_active",
+      "retention_published_identity_held_observation_and_active_draining_protection"
     ],
     "trigger_names": [
       "trg:operational_blockers:insert_cache",
@@ -164,7 +183,27 @@
       "trg:publisher_invocations:immutable_delete",
       "trg:publisher_events:hash_chain",
       "trg:publisher_events:immutable_update",
-      "trg:publisher_events:immutable_delete"
+      "trg:publisher_events:immutable_delete",
+      "trg:feature_releases:immutable_identity",
+      "trg:feature_releases:lifecycle_transition",
+      "trg:feature_releases:protected_delete",
+      "trg:feature_active_releases:target_active_insert",
+      "trg:feature_active_releases:cas_update",
+      "trg:feature_active_releases:immutable_delete",
+      "trg:retention_handles:immutable_published_identity",
+      "trg:retention_handles:release_transition",
+      "trg:retention_handles:protected_delete",
+      "trg:activation_commands:retention_observation_insert",
+      "trg:activation_commands:immutable_identity",
+      "trg:activation_commands:lifecycle_transition",
+      "trg:activation_commands:immutable_delete",
+      "trg:activation_invocations:hash_chain",
+      "trg:activation_invocations:immutable_update",
+      "trg:activation_invocations:immutable_delete",
+      "trg:activation_events:command_binding",
+      "trg:activation_events:hash_chain",
+      "trg:activation_events:immutable_update",
+      "trg:activation_events:immutable_delete"
     ]
   }
 }

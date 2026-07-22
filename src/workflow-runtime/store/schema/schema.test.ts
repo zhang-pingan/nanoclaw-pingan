@@ -167,8 +167,8 @@ describe('G1.1 executable workflow runtime schema', () => {
       .payload as unknown as G1SchemaDependencyManifestPayload;
     expect(() => assertClosedSchemaDependencyManifest(payload)).not.toThrow();
     expect(payload).toMatchObject({
-      member_count: 9,
-      physical_member_count: 8,
+      member_count: 10,
+      physical_member_count: 9,
       construction_provenance_count: 1,
     });
     expect(payload.members.map((member) => member.role)).toEqual([
@@ -178,6 +178,7 @@ describe('G1.1 executable workflow runtime schema', () => {
       'query_catalog',
       'g0_10_capacity_logical_schema_delta',
       'publisher_schema_prerequisite',
+      'feature_release_activation_schema_prerequisite',
       'sqlite_execution_profile',
       'schema_manifest',
       'canonical_migration',
@@ -187,9 +188,9 @@ describe('G1.1 executable workflow runtime schema', () => {
         expect.objectContaining({
           role: 'canonical_migration',
           semantic_hash:
-            'sha256:fb6c820a0f646148cbd9f54476917802bc208c84070f005fc24871be46ecae89',
+            'sha256:eea3547a0f5208d08bfbe771de3895bba020ca3cf34ddf2fb4e3b7945765d345',
           raw_sha256:
-            'sha256:fb6c820a0f646148cbd9f54476917802bc208c84070f005fc24871be46ecae89',
+            'sha256:eea3547a0f5208d08bfbe771de3895bba020ca3cf34ddf2fb4e3b7945765d345',
         }),
       ]),
     );
@@ -1126,6 +1127,494 @@ describe('G1.1 executable workflow runtime schema', () => {
           target_feature_release_hash: hash('publisher:release:wrong'),
         }),
       ).toThrow('FOREIGN KEY constraint failed');
+    });
+  });
+
+  it('G1.5 constrains Activation idempotency, typed bindings, terminalization, and audit chains', () => {
+    const commandMetadata = table(
+      'workflow_feature_release_activation_commands',
+    );
+    expect(commandMetadata.foreign_keys).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          relation_id: 'fk:activation_commands:request_value',
+          target_table: 'workflow_values',
+          target_columns: [
+            'id',
+            'content_hash',
+            'schema_resource_id',
+            'schema_resource_hash',
+          ],
+        }),
+        expect.objectContaining({
+          relation_id: 'fk:activation_commands:target_release_owner',
+          source_columns: [
+            'feature_id',
+            'target_feature_release_id',
+            'target_feature_release_hash',
+          ],
+          target_columns: ['feature_id', 'id', 'release_hash'],
+        }),
+        expect.objectContaining({
+          relation_id: 'fk:activation_commands:target_retention',
+          target_table: 'workflow_registry_retention_handles',
+          target_columns: [
+            'id',
+            'handle_kind',
+            'feature_release_id',
+            'closure_manifest_id',
+            'closure_hash',
+          ],
+        }),
+      ]),
+    );
+    expect(
+      buildQueryFixtures(source)
+        .filter((fixture) => fixture.query_id.startsWith('activation_'))
+        .map((fixture) => fixture.required_index_id),
+    ).toEqual([
+      'idx:activation_commands:idempotency',
+      'idx:activation_invocations:command_history',
+      'idx:activation_events:command_history',
+      'idx:activation_commands:pending_recovery',
+      'idx:feature_active_releases:activation_cas',
+      'idx:feature_releases:activation_preflight',
+      'idx:retention_handles:activation_preflight',
+    ]);
+
+    withDatabase((database) => {
+      database.pragma('foreign_keys = OFF');
+      const featureId = 'feature:activation';
+      const targetId = 'release:activation:target';
+      const targetRef = 'feature.activation.release';
+      const targetVersion = '1.0.0';
+      const targetHash = hash(targetId);
+      const closureId = 'closure:activation:target';
+      const closureHash = hash(closureId);
+      const retentionId = 'retention:activation:target';
+      seedRow(database, 'workflow_feature_releases', {
+        id: targetId,
+        feature_id: featureId,
+        release_ref: targetRef,
+        release_version: targetVersion,
+        release_hash: targetHash,
+        status: 'staged',
+        staged_at_ms: 10,
+        activated_at_ms: null,
+        disabled_at_ms: null,
+        row_version: 0,
+      });
+      seedRow(database, 'workflow_registry_retention_handles', {
+        id: retentionId,
+        handle_kind: 'published',
+        feature_release_id: targetId,
+        graph_run_id: null,
+        backup_id: null,
+        external_actor_ref: null,
+        closure_manifest_id: closureId,
+        closure_hash: closureHash,
+        status: 'held',
+        released_at_ms: null,
+        row_version: 0,
+      });
+      const domainRequestHash = hash('activation:domain-request');
+      const commandBindings = {
+        command_type: 'activate_feature_release',
+        idempotency_domain: 'feature-release-activation',
+        domain_request_hash: domainRequestHash,
+        feature_id: featureId,
+        target_feature_release_id: targetId,
+        target_feature_release_ref: targetRef,
+        target_feature_release_version: targetVersion,
+        target_feature_release_hash: targetHash,
+        expected_pointer_state: 'absent',
+        expected_pointer_row_version: null,
+        previous_feature_release_id: null,
+        previous_feature_release_ref: null,
+        previous_feature_release_version: null,
+        previous_feature_release_hash: null,
+        target_retention_handle_id: retentionId,
+        target_retention_handle_kind: 'published',
+        target_retention_closure_manifest_id: closureId,
+        target_retention_closure_hash: closureHash,
+        target_retention_observed_status: 'held',
+        target_retention_observed_row_version: 0,
+        previous_retention_handle_id: null,
+        previous_retention_handle_kind: null,
+        previous_retention_closure_manifest_id: null,
+        previous_retention_closure_hash: null,
+        previous_retention_observed_status: null,
+        previous_retention_observed_row_version: null,
+        created_at_ms: 20,
+        row_version: 0,
+      };
+      insertRow(database, 'workflow_feature_release_activation_commands', {
+        ...commandBindings,
+        command_id: 'activation:command:failed',
+        idempotency_key: 'activation:key:failed',
+      });
+      expect(() =>
+        insertRow(database, 'workflow_feature_release_activation_commands', {
+          ...commandBindings,
+          command_id: 'activation:command:duplicate-key',
+          idempotency_key: 'activation:key:failed',
+        }),
+      ).toThrow('UNIQUE constraint failed');
+      expect(() =>
+        insertRow(database, 'workflow_feature_release_activation_commands', {
+          ...commandBindings,
+          command_id: 'activation:command:bad-present',
+          idempotency_key: 'activation:key:bad-present',
+          expected_pointer_state: 'present',
+        }),
+      ).toThrow('ck:activation_commands:expected_pointer_shape');
+      database
+        .prepare(
+          `UPDATE workflow_feature_release_activation_commands SET lifecycle='failed', finalized_at_ms=30, row_version=1 WHERE command_id='activation:command:failed'`,
+        )
+        .run();
+      expect(() =>
+        database
+          .prepare(
+            `UPDATE workflow_feature_release_activation_commands SET lifecycle='applied', row_version=2 WHERE command_id='activation:command:failed'`,
+          )
+          .run(),
+      ).toThrow('activation_command_lifecycle_transition_invalid');
+
+      const invocationHash1 = hash('activation:invocation:1');
+      insertRow(database, 'workflow_feature_release_activation_invocations', {
+        id: 'activation:invocation:1',
+        command_id: 'activation:command:failed',
+        invocation_no: 1,
+        command_domain_request_hash: domainRequestHash,
+        submitted_request_hash: domainRequestHash,
+        disposition: 'failed',
+        previous_invocation_hash: null,
+        invocation_hash: invocationHash1,
+      });
+      expect(() =>
+        insertRow(database, 'workflow_feature_release_activation_invocations', {
+          id: 'activation:invocation:2:bad-chain',
+          command_id: 'activation:command:failed',
+          invocation_no: 2,
+          command_domain_request_hash: domainRequestHash,
+          submitted_request_hash: domainRequestHash,
+          disposition: 'duplicate',
+          previous_invocation_hash: hash('activation:wrong-previous'),
+          invocation_hash: hash('activation:invocation:2:bad-chain'),
+        }),
+      ).toThrow('activation_invocation_hash_chain_invalid');
+      expect(() =>
+        database
+          .prepare(
+            `UPDATE workflow_feature_release_activation_invocations SET decided_at_ms=decided_at_ms WHERE id='activation:invocation:1'`,
+          )
+          .run(),
+      ).toThrow('activation_invocation_is_immutable');
+
+      const eventIdentity = {
+        command_id: 'activation:command:failed',
+        attempt_no: 1,
+        feature_id: featureId,
+        target_feature_release_id: targetId,
+        target_feature_release_ref: targetRef,
+        target_feature_release_version: targetVersion,
+        target_feature_release_hash: targetHash,
+        previous_feature_release_id: null,
+        previous_feature_release_ref: null,
+        previous_feature_release_version: null,
+        previous_feature_release_hash: null,
+      };
+      const eventHash1 = hash('activation:event:1');
+      insertRow(database, 'workflow_feature_release_activation_events', {
+        ...eventIdentity,
+        event_no: 1,
+        phase: 'authenticate',
+        event_type: 'attempt_started',
+        previous_event_hash: null,
+        event_hash: eventHash1,
+      });
+      expect(() =>
+        insertRow(database, 'workflow_feature_release_activation_events', {
+          ...eventIdentity,
+          event_no: 2,
+          phase: 'validate',
+          event_type: 'phase_succeeded',
+          previous_event_hash: hash('activation:event:wrong'),
+          event_hash: hash('activation:event:2:wrong'),
+        }),
+      ).toThrow('activation_event_hash_chain_invalid');
+      insertRow(database, 'workflow_feature_release_activation_events', {
+        ...eventIdentity,
+        event_no: 2,
+        phase: 'validate',
+        event_type: 'phase_succeeded',
+        previous_event_hash: eventHash1,
+        event_hash: hash('activation:event:2'),
+      });
+      expect(() =>
+        database
+          .prepare(
+            `DELETE FROM workflow_feature_release_activation_events WHERE command_id='activation:command:failed' AND event_no=2`,
+          )
+          .run(),
+      ).toThrow('activation_event_is_immutable');
+
+      insertRow(database, 'workflow_feature_release_activation_commands', {
+        ...commandBindings,
+        command_id: 'activation:command:applied',
+        idempotency_key: 'activation:key:applied',
+      });
+      database
+        .prepare(
+          `UPDATE workflow_feature_releases SET status='active', activated_at_ms=40, row_version=1 WHERE id=?`,
+        )
+        .run(targetId);
+      insertRow(database, 'workflow_feature_active_releases', {
+        feature_id: featureId,
+        release_id: targetId,
+        release_hash: targetHash,
+        row_version: 1,
+        activated_at_ms: 40,
+      });
+      database
+        .prepare(
+          `UPDATE workflow_feature_release_activation_commands SET applied_pointer_row_version=1, canonical_receipt_value_id='activation:receipt', canonical_receipt_hash=?, canonical_receipt_schema_resource_id='activation:receipt:schema', canonical_receipt_schema_hash=?, lifecycle='applied', finalized_at_ms=50, row_version=1 WHERE command_id='activation:command:applied'`,
+        )
+        .run(hash('activation:receipt'), hash('activation:receipt:schema'));
+      expect(
+        database
+          .prepare(
+            `SELECT lifecycle, applied_pointer_row_version, row_version FROM workflow_feature_release_activation_commands WHERE command_id='activation:command:applied'`,
+          )
+          .get(),
+      ).toEqual({
+        lifecycle: 'applied',
+        applied_pointer_row_version: 1,
+        row_version: 1,
+      });
+    });
+  });
+
+  it('G1.5 enforces Release single-active lifecycle and active-pointer owner CAS protection', () => {
+    withDatabase((database) => {
+      database.pragma('foreign_keys = OFF');
+      const featureId = 'feature:pointer';
+      const previousHash = hash('release:pointer:previous');
+      const targetHash = hash('release:pointer:target');
+      const nextHash = hash('release:pointer:next');
+      insertRow(database, 'workflow_feature_releases', {
+        id: 'release:pointer:previous',
+        feature_id: featureId,
+        release_ref: 'feature.pointer.release',
+        release_version: '1.0.0',
+        release_hash: previousHash,
+        status: 'active',
+        staged_at_ms: 10,
+        activated_at_ms: 20,
+        disabled_at_ms: null,
+        row_version: 1,
+      });
+      insertRow(database, 'workflow_feature_releases', {
+        id: 'release:pointer:target',
+        feature_id: featureId,
+        release_ref: 'feature.pointer.release',
+        release_version: '2.0.0',
+        release_hash: targetHash,
+        status: 'staged',
+        staged_at_ms: 30,
+        activated_at_ms: null,
+        disabled_at_ms: null,
+        row_version: 0,
+      });
+      expect(() =>
+        database
+          .prepare(
+            `UPDATE workflow_feature_releases SET status='draining', activated_at_ms=40, row_version=1 WHERE id='release:pointer:target'`,
+          )
+          .run(),
+      ).toThrow('feature_release_lifecycle_transition_invalid');
+      expect(() =>
+        database
+          .prepare(
+            `UPDATE workflow_feature_releases SET status='active', activated_at_ms=40, row_version=1 WHERE id='release:pointer:target'`,
+          )
+          .run(),
+      ).toThrow('UNIQUE constraint failed');
+      database
+        .prepare(
+          `UPDATE workflow_feature_releases SET status='draining', row_version=2 WHERE id='release:pointer:previous'`,
+        )
+        .run();
+      database
+        .prepare(
+          `UPDATE workflow_feature_releases SET status='active', activated_at_ms=40, row_version=1 WHERE id='release:pointer:target'`,
+        )
+        .run();
+      expect(() =>
+        database
+          .prepare(
+            `UPDATE workflow_feature_releases SET release_version='rewritten' WHERE id='release:pointer:target'`,
+          )
+          .run(),
+      ).toThrow('feature_release_identity_is_immutable');
+
+      seedRow(database, 'workflow_feature_releases', {
+        id: 'release:pointer:other-owner',
+        feature_id: 'feature:other',
+        release_hash: hash('release:pointer:other-owner'),
+        status: 'active',
+      });
+      expect(() =>
+        insertRow(database, 'workflow_feature_active_releases', {
+          feature_id: featureId,
+          release_id: 'release:pointer:other-owner',
+          release_hash: hash('release:pointer:other-owner'),
+          row_version: 1,
+        }),
+      ).toThrow('feature_active_release_insert_invalid');
+      expect(() =>
+        insertRow(database, 'workflow_feature_active_releases', {
+          feature_id: featureId,
+          release_id: 'release:pointer:target',
+          release_hash: targetHash,
+          row_version: 0,
+        }),
+      ).toThrow('ck:feature_active_releases:positive_row_version');
+      insertRow(database, 'workflow_feature_active_releases', {
+        feature_id: featureId,
+        release_id: 'release:pointer:target',
+        release_hash: targetHash,
+        row_version: 1,
+        activated_at_ms: 40,
+      });
+      expect(() =>
+        database
+          .prepare(
+            `UPDATE workflow_feature_active_releases SET row_version=2 WHERE feature_id=?`,
+          )
+          .run(featureId),
+      ).toThrow('feature_active_release_cas_invalid');
+      expect(() =>
+        database
+          .prepare(
+            `DELETE FROM workflow_feature_active_releases WHERE feature_id=?`,
+          )
+          .run(featureId),
+      ).toThrow('feature_active_release_delete_forbidden');
+
+      insertRow(database, 'workflow_feature_releases', {
+        id: 'release:pointer:next',
+        feature_id: featureId,
+        release_ref: 'feature.pointer.release',
+        release_version: '3.0.0',
+        release_hash: nextHash,
+        status: 'staged',
+        staged_at_ms: 50,
+        activated_at_ms: null,
+        disabled_at_ms: null,
+        row_version: 0,
+      });
+      expect(() =>
+        database
+          .prepare(
+            `UPDATE workflow_feature_active_releases SET release_id='release:pointer:next', release_hash=?, activated_at_ms=60, row_version=2 WHERE feature_id=?`,
+          )
+          .run(nextHash, featureId),
+      ).toThrow('feature_active_release_cas_invalid');
+      database
+        .prepare(
+          `UPDATE workflow_feature_releases SET status='draining', row_version=2 WHERE id='release:pointer:target'`,
+        )
+        .run();
+      database
+        .prepare(
+          `UPDATE workflow_feature_releases SET status='active', activated_at_ms=60, row_version=1 WHERE id='release:pointer:next'`,
+        )
+        .run();
+      database
+        .prepare(
+          `UPDATE workflow_feature_active_releases SET release_id='release:pointer:next', release_hash=?, activated_at_ms=60, row_version=2 WHERE feature_id=?`,
+        )
+        .run(nextHash, featureId);
+      expect(
+        database
+          .prepare(
+            `SELECT release_id, row_version FROM workflow_feature_active_releases WHERE feature_id=?`,
+          )
+          .get(featureId),
+      ).toEqual({ release_id: 'release:pointer:next', row_version: 2 });
+    });
+  });
+
+  it('G1.5 preserves held Retention roots for active and draining Releases without freezing later release', () => {
+    withDatabase((database) => {
+      database.pragma('foreign_keys = OFF');
+      const featureId = 'feature:retention';
+      const releaseId = 'release:retention';
+      insertRow(database, 'workflow_feature_releases', {
+        id: releaseId,
+        feature_id: featureId,
+        release_ref: 'feature.retention.release',
+        release_version: '1.0.0',
+        release_hash: hash(releaseId),
+        status: 'active',
+        staged_at_ms: 10,
+        activated_at_ms: 20,
+        disabled_at_ms: null,
+        row_version: 1,
+      });
+      insertRow(database, 'workflow_registry_retention_handles', {
+        id: 'retention:published',
+        handle_kind: 'published',
+        feature_release_id: releaseId,
+        graph_run_id: null,
+        backup_id: null,
+        external_actor_ref: null,
+        closure_manifest_id: 'closure:retention',
+        closure_hash: hash('closure:retention'),
+        status: 'held',
+        created_at_ms: 20,
+        released_at_ms: null,
+        row_version: 0,
+      });
+      const releaseHandle = () =>
+        database
+          .prepare(
+            `UPDATE workflow_registry_retention_handles SET status='released', released_at_ms=50, row_version=1 WHERE id='retention:published'`,
+          )
+          .run();
+      expect(releaseHandle).toThrow(
+        'retention_handle_release_transition_invalid',
+      );
+      database
+        .prepare(
+          `UPDATE workflow_feature_releases SET status='draining', row_version=2 WHERE id=?`,
+        )
+        .run(releaseId);
+      expect(releaseHandle).toThrow(
+        'retention_handle_release_transition_invalid',
+      );
+      expect(() =>
+        database
+          .prepare(
+            `DELETE FROM workflow_registry_retention_handles WHERE id='retention:published'`,
+          )
+          .run(),
+      ).toThrow('active_or_draining_release_retention_delete_forbidden');
+      database
+        .prepare(
+          `UPDATE workflow_feature_releases SET status='disabled', disabled_at_ms=60, row_version=3 WHERE id=?`,
+        )
+        .run(releaseId);
+      expect(releaseHandle).not.toThrow();
+      expect(
+        database
+          .prepare(
+            `SELECT status, row_version FROM workflow_registry_retention_handles WHERE id='retention:published'`,
+          )
+          .get(),
+      ).toEqual({ status: 'released', row_version: 1 });
     });
   });
 

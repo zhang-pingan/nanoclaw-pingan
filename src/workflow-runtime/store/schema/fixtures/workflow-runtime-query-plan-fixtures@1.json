@@ -6,11 +6,11 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-runtime-query-plan-fixtures:1\n",
-  "hash": "sha256:c76d022fd9c638a796f94554f27f32f50ea3373123dcd95a3d5a1a8b311fb247",
+  "hash": "sha256:32af2e73e8814f9d6a36f601753cf4c9c3d5bb080450e3a72fca0650a3af5a7f",
   "payload": {
-    "schema_hash": "sha256:0c00cd859c3ab6a8cd36c9ea8f81c80de000b845eb5758d442cb1830cea877f9",
+    "schema_hash": "sha256:9761bf8df83ace49b61c7dfce3f3523ecf7a69dacdccdd09837aa110ac021be6",
     "execution_target": "real_file_sqlite",
-    "query_count": 35,
+    "query_count": 42,
     "fixtures": [
       {
         "query_id": "query:scheduler_ready_nodes",
@@ -291,6 +291,62 @@
         "sql": "SELECT * FROM \"workflow_publisher_commands\" INDEXED BY \"idx:publisher_commands:pending_recovery\" WHERE \"lifecycle\" = 'pending' ORDER BY \"created_at_ms\" ASC, \"command_id\" ASC LIMIT 50",
         "parameter_count": 0,
         "required_index_id": "idx:publisher_commands:pending_recovery"
+      },
+      {
+        "query_id": "activation_find_idempotency",
+        "owner": "command_gateway",
+        "coverage_area": "command",
+        "sql": "SELECT * FROM \"workflow_feature_release_activation_commands\" INDEXED BY \"idx:activation_commands:idempotency\" WHERE \"idempotency_domain\" = ? AND \"idempotency_key\" = ? LIMIT 50",
+        "parameter_count": 2,
+        "required_index_id": "idx:activation_commands:idempotency"
+      },
+      {
+        "query_id": "activation_load_invocations",
+        "owner": "command_gateway",
+        "coverage_area": "command",
+        "sql": "SELECT * FROM \"workflow_feature_release_activation_invocations\" INDEXED BY \"idx:activation_invocations:command_history\" WHERE \"command_id\" = ? ORDER BY \"invocation_no\" ASC LIMIT 50",
+        "parameter_count": 1,
+        "required_index_id": "idx:activation_invocations:command_history"
+      },
+      {
+        "query_id": "activation_load_events",
+        "owner": "recovery",
+        "coverage_area": "recovery",
+        "sql": "SELECT * FROM \"workflow_feature_release_activation_events\" INDEXED BY \"idx:activation_events:command_history\" WHERE \"command_id\" = ? ORDER BY \"event_no\" ASC LIMIT 50",
+        "parameter_count": 1,
+        "required_index_id": "idx:activation_events:command_history"
+      },
+      {
+        "query_id": "activation_recovery_scan_pending",
+        "owner": "recovery",
+        "coverage_area": "recovery",
+        "sql": "SELECT * FROM \"workflow_feature_release_activation_commands\" INDEXED BY \"idx:activation_commands:pending_recovery\" WHERE \"lifecycle\" = 'pending' ORDER BY \"created_at_ms\" ASC, \"command_id\" ASC LIMIT 50",
+        "parameter_count": 0,
+        "required_index_id": "idx:activation_commands:pending_recovery"
+      },
+      {
+        "query_id": "activation_expected_pointer_cas",
+        "owner": "command_gateway",
+        "coverage_area": "command",
+        "sql": "SELECT * FROM \"workflow_feature_active_releases\" INDEXED BY \"idx:feature_active_releases:activation_cas\" WHERE \"feature_id\" = ? LIMIT 50",
+        "parameter_count": 1,
+        "required_index_id": "idx:feature_active_releases:activation_cas"
+      },
+      {
+        "query_id": "activation_release_preflight",
+        "owner": "command_gateway",
+        "coverage_area": "command",
+        "sql": "SELECT * FROM \"workflow_feature_releases\" INDEXED BY \"idx:feature_releases:activation_preflight\" WHERE \"feature_id\" = ? AND \"id\" = ? AND \"release_hash\" = ? AND \"status\" = ? LIMIT 50",
+        "parameter_count": 4,
+        "required_index_id": "idx:feature_releases:activation_preflight"
+      },
+      {
+        "query_id": "activation_retention_preflight",
+        "owner": "command_gateway",
+        "coverage_area": "command",
+        "sql": "SELECT * FROM \"workflow_registry_retention_handles\" INDEXED BY \"idx:retention_handles:activation_preflight\" WHERE \"feature_release_id\" = ? AND \"handle_kind\" = ? AND \"status\" = ? AND \"closure_manifest_id\" = ? AND \"closure_hash\" = ? LIMIT 50",
+        "parameter_count": 5,
+        "required_index_id": "idx:retention_handles:activation_preflight"
       }
     ],
     "required_coverage": [

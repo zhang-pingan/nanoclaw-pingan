@@ -405,7 +405,8 @@ CREATE TABLE "workflow_feature_releases" (
   CONSTRAINT "ck:workflow_feature_releases:activated_at_ms:safe_integer" CHECK (("activated_at_ms" IS NULL OR "activated_at_ms" BETWEEN 0 AND 9007199254740991)) /* check_kind=safe_integer logical_columns=activated_at_ms */,
   CONSTRAINT "ck:workflow_feature_releases:disabled_at_ms:safe_integer" CHECK (("disabled_at_ms" IS NULL OR "disabled_at_ms" BETWEEN 0 AND 9007199254740991)) /* check_kind=safe_integer logical_columns=disabled_at_ms */,
   CONSTRAINT "ck:workflow_feature_releases:row_version:safe_integer" CHECK (("row_version" IS NULL OR "row_version" BETWEEN 0 AND 9007199254740991)) /* check_kind=safe_integer logical_columns=row_version */,
-  CONSTRAINT "ck:workflow_feature_releases:execution_artifact_resource_id:execution_artifact_hash:pair" CHECK ((("execution_artifact_resource_id" IS NULL AND "execution_artifact_hash" IS NULL) OR ("execution_artifact_resource_id" IS NOT NULL AND "execution_artifact_hash" IS NOT NULL))) /* check_kind=all_or_none logical_columns=execution_artifact_resource_id,execution_artifact_hash */
+  CONSTRAINT "ck:workflow_feature_releases:execution_artifact_resource_id:execution_artifact_hash:pair" CHECK ((("execution_artifact_resource_id" IS NULL AND "execution_artifact_hash" IS NULL) OR ("execution_artifact_resource_id" IS NOT NULL AND "execution_artifact_hash" IS NOT NULL))) /* check_kind=all_or_none logical_columns=execution_artifact_resource_id,execution_artifact_hash */,
+  CONSTRAINT "ck:feature_releases:lifecycle_timestamps" CHECK ((("status" = 'staged' AND "activated_at_ms" IS NULL AND "disabled_at_ms" IS NULL) OR ("status" IN ('active', 'draining') AND "activated_at_ms" IS NOT NULL AND "disabled_at_ms" IS NULL AND "staged_at_ms" <= "activated_at_ms") OR ("status" IN ('disabled', 'deleting') AND "activated_at_ms" IS NOT NULL AND "disabled_at_ms" IS NOT NULL AND "staged_at_ms" <= "activated_at_ms" AND "activated_at_ms" <= "disabled_at_ms"))) /* check_kind=state_field_consistency logical_columns=status,staged_at_ms,activated_at_ms,disabled_at_ms */
 );
 
 CREATE TABLE "workflow_feature_release_resources" (
@@ -427,9 +428,11 @@ CREATE TABLE "workflow_feature_active_releases" (
   "activated_at_ms" INTEGER NOT NULL /* logical_type=integer */,
   CONSTRAINT "pk:workflow_feature_active_releases" PRIMARY KEY ("feature_id"),
   CONSTRAINT "fk:feature_active_releases:release" FOREIGN KEY ("release_id", "release_hash") REFERENCES "workflow_feature_releases" ("id", "release_hash") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED,
+  CONSTRAINT "fk:feature_active_releases:owner_release" FOREIGN KEY ("feature_id", "release_id", "release_hash") REFERENCES "workflow_feature_releases" ("feature_id", "id", "release_hash") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED,
   CONSTRAINT "ck:workflow_feature_active_releases:release_hash:hash" CHECK (("release_hash" IS NULL OR (length("release_hash") = 71 AND substr("release_hash", 1, 7) = 'sha256:' AND substr("release_hash", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=release_hash */,
   CONSTRAINT "ck:workflow_feature_active_releases:row_version:safe_integer" CHECK (("row_version" IS NULL OR "row_version" BETWEEN 0 AND 9007199254740991)) /* check_kind=safe_integer logical_columns=row_version */,
-  CONSTRAINT "ck:workflow_feature_active_releases:activated_at_ms:safe_integer" CHECK (("activated_at_ms" IS NULL OR "activated_at_ms" BETWEEN 0 AND 9007199254740991)) /* check_kind=safe_integer logical_columns=activated_at_ms */
+  CONSTRAINT "ck:workflow_feature_active_releases:activated_at_ms:safe_integer" CHECK (("activated_at_ms" IS NULL OR "activated_at_ms" BETWEEN 0 AND 9007199254740991)) /* check_kind=safe_integer logical_columns=activated_at_ms */,
+  CONSTRAINT "ck:feature_active_releases:positive_row_version" CHECK ("row_version" >= 1) /* check_kind=state_field_consistency logical_columns=row_version */
 );
 
 CREATE TABLE "workflow_registry_retention_handles" (
@@ -2909,6 +2912,181 @@ CREATE TABLE "workflow_publisher_events" (
   CONSTRAINT "ck:publisher_events:event_mapping" CHECK ((("event_type" = 'attempt_started' AND "phase" = 'authenticate' AND "failure_code" IS NULL AND "related_feature_release_id" IS NULL) OR ("event_type" = 'phase_succeeded' AND "phase" IN ('validate', 'review', 'preflight', 'finalize') AND "failure_code" IS NULL AND "related_feature_release_id" IS NULL) OR ("event_type" = 'pre_transaction_failed' AND "phase" IN ('authenticate', 'validate', 'review', 'preflight') AND "failure_code" IS NOT NULL AND "related_feature_release_id" IS NULL) OR ("event_type" = 'publish_transaction_started' AND "phase" = 'publish_transaction' AND "failure_code" IS NULL AND "related_feature_release_id" IS NULL) OR ("event_type" = 'publish_committed' AND "phase" = 'publish_transaction' AND "failure_code" IS NULL AND "related_feature_release_id" IS NOT NULL) OR ("event_type" = 'recovery_started' AND "phase" = 'recovery' AND "failure_code" IS NULL AND "related_feature_release_id" IS NULL) OR ("event_type" = 'recovery_succeeded' AND "phase" = 'recovery' AND "failure_code" IS NULL AND "related_feature_release_id" IS NOT NULL) OR ("event_type" = 'recovery_failed' AND "phase" = 'recovery' AND "failure_code" IS NOT NULL AND "related_feature_release_id" IS NULL) OR ("event_type" = 'terminal_failed' AND "phase" = 'finalize' AND "failure_code" IS NOT NULL AND "related_feature_release_id" IS NULL))) /* check_kind=closed_target_mapping logical_columns=phase,event_type,failure_code,related_feature_release_id */
 );
 
+CREATE TABLE "workflow_feature_release_activation_commands" (
+  "command_id" TEXT NOT NULL /* logical_type=identifier */,
+  "command_type" TEXT NOT NULL /* logical_type=text */,
+  "idempotency_domain" TEXT NOT NULL /* logical_type=text */,
+  "idempotency_key" TEXT NOT NULL /* logical_type=text */,
+  "request_value_id" TEXT NOT NULL /* logical_type=identifier */,
+  "request_hash" TEXT NOT NULL /* logical_type=hash */,
+  "request_schema_resource_id" TEXT NOT NULL /* logical_type=identifier */,
+  "request_schema_hash" TEXT NOT NULL /* logical_type=hash */,
+  "domain_request_hash" TEXT NOT NULL /* logical_type=hash */,
+  "compatibility_input_value_id" TEXT NOT NULL /* logical_type=identifier */,
+  "compatibility_input_hash" TEXT NOT NULL /* logical_type=hash */,
+  "compatibility_input_schema_resource_id" TEXT NOT NULL /* logical_type=identifier */,
+  "compatibility_input_schema_hash" TEXT NOT NULL /* logical_type=hash */,
+  "compatibility_result_value_id" TEXT NOT NULL /* logical_type=identifier */,
+  "compatibility_result_hash" TEXT NOT NULL /* logical_type=hash */,
+  "compatibility_result_schema_resource_id" TEXT NOT NULL /* logical_type=identifier */,
+  "compatibility_result_schema_hash" TEXT NOT NULL /* logical_type=hash */,
+  "feature_id" TEXT NOT NULL /* logical_type=external_reference external_ref=1 validator_owner=feature_registry reference_domain=feature immutable=1 */,
+  "target_feature_release_id" TEXT NOT NULL /* logical_type=identifier */,
+  "target_feature_release_ref" TEXT NOT NULL /* logical_type=external_reference external_ref=1 validator_owner=feature_release_ref_validator reference_domain=feature_release immutable=1 */,
+  "target_feature_release_version" TEXT NOT NULL /* logical_type=text */,
+  "target_feature_release_hash" TEXT NOT NULL /* logical_type=hash */,
+  "expected_pointer_state" TEXT NOT NULL /* logical_type=text */,
+  "expected_pointer_row_version" INTEGER /* logical_type=integer */,
+  "previous_feature_release_id" TEXT /* logical_type=identifier */,
+  "previous_feature_release_ref" TEXT /* logical_type=external_reference external_ref=1 validator_owner=feature_release_ref_validator reference_domain=feature_release immutable=1 */,
+  "previous_feature_release_version" TEXT /* logical_type=text */,
+  "previous_feature_release_hash" TEXT /* logical_type=hash */,
+  "target_retention_handle_id" TEXT NOT NULL /* logical_type=identifier */,
+  "target_retention_handle_kind" TEXT NOT NULL /* logical_type=text */,
+  "target_retention_closure_manifest_id" TEXT NOT NULL /* logical_type=identifier */,
+  "target_retention_closure_hash" TEXT NOT NULL /* logical_type=hash */,
+  "target_retention_observed_status" TEXT NOT NULL /* logical_type=text */,
+  "target_retention_observed_row_version" INTEGER NOT NULL /* logical_type=integer */,
+  "previous_retention_handle_id" TEXT /* logical_type=identifier */,
+  "previous_retention_handle_kind" TEXT /* logical_type=text */,
+  "previous_retention_closure_manifest_id" TEXT /* logical_type=identifier */,
+  "previous_retention_closure_hash" TEXT /* logical_type=hash */,
+  "previous_retention_observed_status" TEXT /* logical_type=text */,
+  "previous_retention_observed_row_version" INTEGER /* logical_type=integer */,
+  "applied_pointer_row_version" INTEGER /* logical_type=integer */,
+  "canonical_receipt_value_id" TEXT /* logical_type=identifier */,
+  "canonical_receipt_hash" TEXT /* logical_type=hash */,
+  "canonical_receipt_schema_resource_id" TEXT /* logical_type=identifier */,
+  "canonical_receipt_schema_hash" TEXT /* logical_type=hash */,
+  "lifecycle" TEXT NOT NULL /* logical_type=text */,
+  "created_at_ms" INTEGER NOT NULL /* logical_type=integer */,
+  "finalized_at_ms" INTEGER /* logical_type=integer */,
+  "row_version" INTEGER NOT NULL /* logical_type=integer */,
+  CONSTRAINT "pk:workflow_feature_release_activation_commands" PRIMARY KEY ("command_id"),
+  CONSTRAINT "fk:activation_commands:request_value" FOREIGN KEY ("request_value_id", "request_hash", "request_schema_resource_id", "request_schema_hash") REFERENCES "workflow_values" ("id", "content_hash", "schema_resource_id", "schema_resource_hash") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED,
+  CONSTRAINT "fk:activation_commands:compatibility_input_value" FOREIGN KEY ("compatibility_input_value_id", "compatibility_input_hash", "compatibility_input_schema_resource_id", "compatibility_input_schema_hash") REFERENCES "workflow_values" ("id", "content_hash", "schema_resource_id", "schema_resource_hash") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED,
+  CONSTRAINT "fk:activation_commands:compatibility_result_value" FOREIGN KEY ("compatibility_result_value_id", "compatibility_result_hash", "compatibility_result_schema_resource_id", "compatibility_result_schema_hash") REFERENCES "workflow_values" ("id", "content_hash", "schema_resource_id", "schema_resource_hash") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED,
+  CONSTRAINT "fk:activation_commands:target_release_owner" FOREIGN KEY ("feature_id", "target_feature_release_id", "target_feature_release_hash") REFERENCES "workflow_feature_releases" ("feature_id", "id", "release_hash") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED,
+  CONSTRAINT "fk:activation_commands:previous_release_owner" FOREIGN KEY ("feature_id", "previous_feature_release_id", "previous_feature_release_hash") REFERENCES "workflow_feature_releases" ("feature_id", "id", "release_hash") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED,
+  CONSTRAINT "fk:activation_commands:target_retention" FOREIGN KEY ("target_retention_handle_id", "target_retention_handle_kind", "target_feature_release_id", "target_retention_closure_manifest_id", "target_retention_closure_hash") REFERENCES "workflow_registry_retention_handles" ("id", "handle_kind", "feature_release_id", "closure_manifest_id", "closure_hash") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED,
+  CONSTRAINT "fk:activation_commands:previous_retention" FOREIGN KEY ("previous_retention_handle_id", "previous_retention_handle_kind", "previous_feature_release_id", "previous_retention_closure_manifest_id", "previous_retention_closure_hash") REFERENCES "workflow_registry_retention_handles" ("id", "handle_kind", "feature_release_id", "closure_manifest_id", "closure_hash") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED,
+  CONSTRAINT "fk:activation_commands:canonical_receipt_value" FOREIGN KEY ("canonical_receipt_value_id", "canonical_receipt_hash", "canonical_receipt_schema_resource_id", "canonical_receipt_schema_hash") REFERENCES "workflow_values" ("id", "content_hash", "schema_resource_id", "schema_resource_hash") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED,
+  CONSTRAINT "ck:workflow_feature_release_activation_commands:command_type:enum" CHECK ("command_type" IN ('activate_feature_release')) /* check_kind=enum_membership logical_columns=command_type */,
+  CONSTRAINT "ck:workflow_feature_release_activation_commands:request_hash:hash" CHECK (("request_hash" IS NULL OR (length("request_hash") = 71 AND substr("request_hash", 1, 7) = 'sha256:' AND substr("request_hash", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=request_hash */,
+  CONSTRAINT "ck:workflow_feature_release_activation_commands:request_schema_hash:hash" CHECK (("request_schema_hash" IS NULL OR (length("request_schema_hash") = 71 AND substr("request_schema_hash", 1, 7) = 'sha256:' AND substr("request_schema_hash", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=request_schema_hash */,
+  CONSTRAINT "ck:workflow_feature_release_activation_commands:domain_request_hash:hash" CHECK (("domain_request_hash" IS NULL OR (length("domain_request_hash") = 71 AND substr("domain_request_hash", 1, 7) = 'sha256:' AND substr("domain_request_hash", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=domain_request_hash */,
+  CONSTRAINT "ck:workflow_feature_release_activation_commands:compatibility_input_hash:hash" CHECK (("compatibility_input_hash" IS NULL OR (length("compatibility_input_hash") = 71 AND substr("compatibility_input_hash", 1, 7) = 'sha256:' AND substr("compatibility_input_hash", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=compatibility_input_hash */,
+  CONSTRAINT "ck:workflow_feature_release_activation_commands:compatibility_input_schema_hash:hash" CHECK (("compatibility_input_schema_hash" IS NULL OR (length("compatibility_input_schema_hash") = 71 AND substr("compatibility_input_schema_hash", 1, 7) = 'sha256:' AND substr("compatibility_input_schema_hash", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=compatibility_input_schema_hash */,
+  CONSTRAINT "ck:workflow_feature_release_activation_commands:compatibility_result_hash:hash" CHECK (("compatibility_result_hash" IS NULL OR (length("compatibility_result_hash") = 71 AND substr("compatibility_result_hash", 1, 7) = 'sha256:' AND substr("compatibility_result_hash", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=compatibility_result_hash */,
+  CONSTRAINT "ck:workflow_feature_release_activation_commands:compatibility_result_schema_hash:hash" CHECK (("compatibility_result_schema_hash" IS NULL OR (length("compatibility_result_schema_hash") = 71 AND substr("compatibility_result_schema_hash", 1, 7) = 'sha256:' AND substr("compatibility_result_schema_hash", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=compatibility_result_schema_hash */,
+  CONSTRAINT "ck:workflow_feature_release_activation_commands:target_feature_release_hash:hash" CHECK (("target_feature_release_hash" IS NULL OR (length("target_feature_release_hash") = 71 AND substr("target_feature_release_hash", 1, 7) = 'sha256:' AND substr("target_feature_release_hash", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=target_feature_release_hash */,
+  CONSTRAINT "ck:workflow_feature_release_activation_commands:expected_pointer_state:enum" CHECK ("expected_pointer_state" IN ('absent', 'present')) /* check_kind=enum_membership logical_columns=expected_pointer_state */,
+  CONSTRAINT "ck:workflow_feature_release_activation_commands:expected_pointer_row_version:safe_integer" CHECK (("expected_pointer_row_version" IS NULL OR "expected_pointer_row_version" BETWEEN 0 AND 9007199254740991)) /* check_kind=safe_integer logical_columns=expected_pointer_row_version */,
+  CONSTRAINT "ck:workflow_feature_release_activation_commands:previous_feature_release_hash:hash" CHECK (("previous_feature_release_hash" IS NULL OR (length("previous_feature_release_hash") = 71 AND substr("previous_feature_release_hash", 1, 7) = 'sha256:' AND substr("previous_feature_release_hash", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=previous_feature_release_hash */,
+  CONSTRAINT "ck:workflow_feature_release_activation_commands:target_retention_handle_kind:enum" CHECK ("target_retention_handle_kind" IN ('published')) /* check_kind=enum_membership logical_columns=target_retention_handle_kind */,
+  CONSTRAINT "ck:workflow_feature_release_activation_commands:target_retention_closure_hash:hash" CHECK (("target_retention_closure_hash" IS NULL OR (length("target_retention_closure_hash") = 71 AND substr("target_retention_closure_hash", 1, 7) = 'sha256:' AND substr("target_retention_closure_hash", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=target_retention_closure_hash */,
+  CONSTRAINT "ck:workflow_feature_release_activation_commands:target_retention_observed_status:enum" CHECK ("target_retention_observed_status" IN ('held')) /* check_kind=enum_membership logical_columns=target_retention_observed_status */,
+  CONSTRAINT "ck:workflow_feature_release_activation_commands:target_retention_observed_row_version:safe_integer" CHECK (("target_retention_observed_row_version" IS NULL OR "target_retention_observed_row_version" BETWEEN 0 AND 9007199254740991)) /* check_kind=safe_integer logical_columns=target_retention_observed_row_version */,
+  CONSTRAINT "ck:workflow_feature_release_activation_commands:previous_retention_handle_kind:enum" CHECK ("previous_retention_handle_kind" IN ('published')) /* check_kind=enum_membership logical_columns=previous_retention_handle_kind */,
+  CONSTRAINT "ck:workflow_feature_release_activation_commands:previous_retention_closure_hash:hash" CHECK (("previous_retention_closure_hash" IS NULL OR (length("previous_retention_closure_hash") = 71 AND substr("previous_retention_closure_hash", 1, 7) = 'sha256:' AND substr("previous_retention_closure_hash", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=previous_retention_closure_hash */,
+  CONSTRAINT "ck:workflow_feature_release_activation_commands:previous_retention_observed_status:enum" CHECK ("previous_retention_observed_status" IN ('held')) /* check_kind=enum_membership logical_columns=previous_retention_observed_status */,
+  CONSTRAINT "ck:workflow_feature_release_activation_commands:previous_retention_observed_row_version:safe_integer" CHECK (("previous_retention_observed_row_version" IS NULL OR "previous_retention_observed_row_version" BETWEEN 0 AND 9007199254740991)) /* check_kind=safe_integer logical_columns=previous_retention_observed_row_version */,
+  CONSTRAINT "ck:workflow_feature_release_activation_commands:applied_pointer_row_version:safe_integer" CHECK (("applied_pointer_row_version" IS NULL OR "applied_pointer_row_version" BETWEEN 0 AND 9007199254740991)) /* check_kind=safe_integer logical_columns=applied_pointer_row_version */,
+  CONSTRAINT "ck:workflow_feature_release_activation_commands:canonical_receipt_hash:hash" CHECK (("canonical_receipt_hash" IS NULL OR (length("canonical_receipt_hash") = 71 AND substr("canonical_receipt_hash", 1, 7) = 'sha256:' AND substr("canonical_receipt_hash", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=canonical_receipt_hash */,
+  CONSTRAINT "ck:workflow_feature_release_activation_commands:canonical_receipt_schema_hash:hash" CHECK (("canonical_receipt_schema_hash" IS NULL OR (length("canonical_receipt_schema_hash") = 71 AND substr("canonical_receipt_schema_hash", 1, 7) = 'sha256:' AND substr("canonical_receipt_schema_hash", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=canonical_receipt_schema_hash */,
+  CONSTRAINT "ck:workflow_feature_release_activation_commands:lifecycle:enum" CHECK ("lifecycle" IN ('pending', 'applied', 'failed')) /* check_kind=enum_membership logical_columns=lifecycle */,
+  CONSTRAINT "ck:workflow_feature_release_activation_commands:created_at_ms:safe_integer" CHECK (("created_at_ms" IS NULL OR "created_at_ms" BETWEEN 0 AND 9007199254740991)) /* check_kind=safe_integer logical_columns=created_at_ms */,
+  CONSTRAINT "ck:workflow_feature_release_activation_commands:finalized_at_ms:safe_integer" CHECK (("finalized_at_ms" IS NULL OR "finalized_at_ms" BETWEEN 0 AND 9007199254740991)) /* check_kind=safe_integer logical_columns=finalized_at_ms */,
+  CONSTRAINT "ck:workflow_feature_release_activation_commands:row_version:safe_integer" CHECK (("row_version" IS NULL OR "row_version" BETWEEN 0 AND 9007199254740991)) /* check_kind=safe_integer logical_columns=row_version */,
+  CONSTRAINT "ck:activation_commands:idempotency_non_empty" CHECK ((length("idempotency_domain") BETWEEN 1 AND 255 AND length("idempotency_key") BETWEEN 1 AND 512)) /* check_kind=state_field_consistency logical_columns=idempotency_domain,idempotency_key */,
+  CONSTRAINT "ck:activation_commands:expected_pointer_shape" CHECK ((("expected_pointer_state" = 'absent' AND "expected_pointer_row_version" IS NULL AND "previous_feature_release_id" IS NULL AND "previous_feature_release_ref" IS NULL AND "previous_feature_release_version" IS NULL AND "previous_feature_release_hash" IS NULL AND "previous_retention_handle_id" IS NULL AND "previous_retention_handle_kind" IS NULL AND "previous_retention_closure_manifest_id" IS NULL AND "previous_retention_closure_hash" IS NULL AND "previous_retention_observed_status" IS NULL AND "previous_retention_observed_row_version" IS NULL) OR ("expected_pointer_state" = 'present' AND "expected_pointer_row_version" IS NOT NULL AND "previous_feature_release_id" IS NOT NULL AND "previous_feature_release_ref" IS NOT NULL AND "previous_feature_release_version" IS NOT NULL AND "previous_feature_release_hash" IS NOT NULL AND "previous_retention_handle_id" IS NOT NULL AND "previous_retention_handle_kind" = 'published' AND "previous_retention_closure_manifest_id" IS NOT NULL AND "previous_retention_closure_hash" IS NOT NULL AND "previous_retention_observed_status" = 'held' AND "previous_retention_observed_row_version" IS NOT NULL))) /* check_kind=closed_target_mapping logical_columns=expected_pointer_state,expected_pointer_row_version,previous_feature_release_id,previous_feature_release_ref,previous_feature_release_version,previous_feature_release_hash,previous_retention_handle_id,previous_retention_handle_kind,previous_retention_closure_manifest_id,previous_retention_closure_hash,previous_retention_observed_status,previous_retention_observed_row_version */,
+  CONSTRAINT "ck:activation_commands:target_previous_distinct" CHECK (("previous_feature_release_id" IS NULL OR "target_feature_release_id" <> "previous_feature_release_id")) /* check_kind=cross_column_equality logical_columns=target_feature_release_id,previous_feature_release_id */,
+  CONSTRAINT "ck:activation_commands:receipt_binding" CHECK ((("canonical_receipt_value_id" IS NULL AND "canonical_receipt_hash" IS NULL AND "canonical_receipt_schema_resource_id" IS NULL AND "canonical_receipt_schema_hash" IS NULL) OR ("canonical_receipt_value_id" IS NOT NULL AND "canonical_receipt_hash" IS NOT NULL AND "canonical_receipt_schema_resource_id" IS NOT NULL AND "canonical_receipt_schema_hash" IS NOT NULL))) /* check_kind=all_or_none logical_columns=canonical_receipt_value_id,canonical_receipt_hash,canonical_receipt_schema_resource_id,canonical_receipt_schema_hash */,
+  CONSTRAINT "ck:activation_commands:lifecycle" CHECK ((("lifecycle" = 'pending' AND "applied_pointer_row_version" IS NULL AND "canonical_receipt_value_id" IS NULL AND "finalized_at_ms" IS NULL) OR ("lifecycle" = 'applied' AND "applied_pointer_row_version" IS NOT NULL AND "canonical_receipt_value_id" IS NOT NULL AND "finalized_at_ms" IS NOT NULL) OR ("lifecycle" = 'failed' AND "applied_pointer_row_version" IS NULL AND "canonical_receipt_value_id" IS NULL AND "finalized_at_ms" IS NOT NULL))) /* check_kind=state_field_consistency logical_columns=lifecycle,applied_pointer_row_version,canonical_receipt_value_id,finalized_at_ms */
+);
+
+CREATE TABLE "workflow_feature_release_activation_invocations" (
+  "id" TEXT NOT NULL /* logical_type=identifier */,
+  "command_id" TEXT NOT NULL /* logical_type=identifier */,
+  "invocation_no" INTEGER NOT NULL /* logical_type=integer */,
+  "command_domain_request_hash" TEXT NOT NULL /* logical_type=hash */,
+  "submitted_request_hash" TEXT NOT NULL /* logical_type=hash */,
+  "actor_ref" TEXT NOT NULL /* logical_type=external_reference external_ref=1 validator_owner=feature_release_activation_authentication_gateway reference_domain=authenticated_principal immutable=1 */,
+  "auth_session_ref" TEXT NOT NULL /* logical_type=external_reference external_ref=1 validator_owner=authentication_service reference_domain=auth_session immutable=1 */,
+  "requested_at_ms" INTEGER NOT NULL /* logical_type=integer */,
+  "disposition" TEXT NOT NULL /* logical_type=text */,
+  "result_value_id" TEXT NOT NULL /* logical_type=identifier */,
+  "result_hash" TEXT NOT NULL /* logical_type=hash */,
+  "result_schema_resource_id" TEXT NOT NULL /* logical_type=identifier */,
+  "result_schema_hash" TEXT NOT NULL /* logical_type=hash */,
+  "decided_at_ms" INTEGER NOT NULL /* logical_type=integer */,
+  "applied_at_ms" INTEGER /* logical_type=integer */,
+  "previous_invocation_hash" TEXT /* logical_type=hash */,
+  "invocation_hash" TEXT NOT NULL /* logical_type=hash */,
+  CONSTRAINT "pk:workflow_feature_release_activation_invocations" PRIMARY KEY ("id"),
+  CONSTRAINT "fk:activation_invocations:command_request" FOREIGN KEY ("command_id", "command_domain_request_hash") REFERENCES "workflow_feature_release_activation_commands" ("command_id", "domain_request_hash") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED,
+  CONSTRAINT "fk:activation_invocations:result_value" FOREIGN KEY ("result_value_id", "result_hash", "result_schema_resource_id", "result_schema_hash") REFERENCES "workflow_values" ("id", "content_hash", "schema_resource_id", "schema_resource_hash") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED,
+  CONSTRAINT "ck:workflow_feature_release_activation_invocations:invocation_no:safe_integer" CHECK (("invocation_no" IS NULL OR "invocation_no" BETWEEN 1 AND 9007199254740991)) /* check_kind=safe_integer logical_columns=invocation_no */,
+  CONSTRAINT "ck:workflow_feature_release_activation_invocations:command_domain_request_hash:hash" CHECK (("command_domain_request_hash" IS NULL OR (length("command_domain_request_hash") = 71 AND substr("command_domain_request_hash", 1, 7) = 'sha256:' AND substr("command_domain_request_hash", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=command_domain_request_hash */,
+  CONSTRAINT "ck:workflow_feature_release_activation_invocations:submitted_request_hash:hash" CHECK (("submitted_request_hash" IS NULL OR (length("submitted_request_hash") = 71 AND substr("submitted_request_hash", 1, 7) = 'sha256:' AND substr("submitted_request_hash", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=submitted_request_hash */,
+  CONSTRAINT "ck:workflow_feature_release_activation_invocations:requested_at_ms:safe_integer" CHECK (("requested_at_ms" IS NULL OR "requested_at_ms" BETWEEN 0 AND 9007199254740991)) /* check_kind=safe_integer logical_columns=requested_at_ms */,
+  CONSTRAINT "ck:workflow_feature_release_activation_invocations:disposition:enum" CHECK ("disposition" IN ('applied', 'duplicate', 'conflict', 'failed')) /* check_kind=enum_membership logical_columns=disposition */,
+  CONSTRAINT "ck:workflow_feature_release_activation_invocations:result_hash:hash" CHECK (("result_hash" IS NULL OR (length("result_hash") = 71 AND substr("result_hash", 1, 7) = 'sha256:' AND substr("result_hash", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=result_hash */,
+  CONSTRAINT "ck:workflow_feature_release_activation_invocations:result_schema_hash:hash" CHECK (("result_schema_hash" IS NULL OR (length("result_schema_hash") = 71 AND substr("result_schema_hash", 1, 7) = 'sha256:' AND substr("result_schema_hash", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=result_schema_hash */,
+  CONSTRAINT "ck:workflow_feature_release_activation_invocations:decided_at_ms:safe_integer" CHECK (("decided_at_ms" IS NULL OR "decided_at_ms" BETWEEN 0 AND 9007199254740991)) /* check_kind=safe_integer logical_columns=decided_at_ms */,
+  CONSTRAINT "ck:workflow_feature_release_activation_invocations:applied_at_ms:safe_integer" CHECK (("applied_at_ms" IS NULL OR "applied_at_ms" BETWEEN 0 AND 9007199254740991)) /* check_kind=safe_integer logical_columns=applied_at_ms */,
+  CONSTRAINT "ck:workflow_feature_release_activation_invocations:previous_invocation_hash:hash" CHECK (("previous_invocation_hash" IS NULL OR (length("previous_invocation_hash") = 71 AND substr("previous_invocation_hash", 1, 7) = 'sha256:' AND substr("previous_invocation_hash", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=previous_invocation_hash */,
+  CONSTRAINT "ck:workflow_feature_release_activation_invocations:invocation_hash:hash" CHECK (("invocation_hash" IS NULL OR (length("invocation_hash") = 71 AND substr("invocation_hash", 1, 7) = 'sha256:' AND substr("invocation_hash", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=invocation_hash */,
+  CONSTRAINT "ck:activation_invocations:result_consistency" CHECK ("decided_at_ms" >= "requested_at_ms" AND (("disposition" = 'applied' AND "submitted_request_hash" = "command_domain_request_hash" AND "applied_at_ms" IS NOT NULL) OR ("disposition" IN ('duplicate', 'failed') AND "submitted_request_hash" = "command_domain_request_hash" AND "applied_at_ms" IS NULL) OR ("disposition" = 'conflict' AND "applied_at_ms" IS NULL))) /* check_kind=state_field_consistency logical_columns=disposition,command_domain_request_hash,submitted_request_hash,requested_at_ms,decided_at_ms,applied_at_ms */,
+  CONSTRAINT "ck:activation_invocations:hash_chain" CHECK ((("invocation_no" = 1 AND "previous_invocation_hash" IS NULL) OR ("invocation_no" > 1 AND "previous_invocation_hash" IS NOT NULL))) /* check_kind=state_field_consistency logical_columns=invocation_no,previous_invocation_hash,invocation_hash */
+);
+
+CREATE TABLE "workflow_feature_release_activation_events" (
+  "command_id" TEXT NOT NULL /* logical_type=identifier */,
+  "event_no" INTEGER NOT NULL /* logical_type=integer */,
+  "attempt_no" INTEGER NOT NULL /* logical_type=integer */,
+  "phase" TEXT NOT NULL /* logical_type=text */,
+  "event_type" TEXT NOT NULL /* logical_type=text */,
+  "failure_code" TEXT /* logical_type=text */,
+  "feature_id" TEXT NOT NULL /* logical_type=external_reference external_ref=1 validator_owner=feature_registry reference_domain=feature immutable=1 */,
+  "target_feature_release_id" TEXT NOT NULL /* logical_type=identifier */,
+  "target_feature_release_ref" TEXT NOT NULL /* logical_type=external_reference external_ref=1 validator_owner=feature_release_ref_validator reference_domain=feature_release immutable=1 */,
+  "target_feature_release_version" TEXT NOT NULL /* logical_type=text */,
+  "target_feature_release_hash" TEXT NOT NULL /* logical_type=hash */,
+  "previous_feature_release_id" TEXT /* logical_type=identifier */,
+  "previous_feature_release_ref" TEXT /* logical_type=external_reference external_ref=1 validator_owner=feature_release_ref_validator reference_domain=feature_release immutable=1 */,
+  "previous_feature_release_version" TEXT /* logical_type=text */,
+  "previous_feature_release_hash" TEXT /* logical_type=hash */,
+  "detail_value_id" TEXT /* logical_type=identifier */,
+  "detail_hash" TEXT /* logical_type=hash */,
+  "detail_schema_resource_id" TEXT /* logical_type=identifier */,
+  "detail_schema_hash" TEXT /* logical_type=hash */,
+  "previous_event_hash" TEXT /* logical_type=hash */,
+  "event_hash" TEXT NOT NULL /* logical_type=hash */,
+  "occurred_at_ms" INTEGER NOT NULL /* logical_type=integer */,
+  CONSTRAINT "pk:workflow_feature_release_activation_events" PRIMARY KEY ("command_id", "event_no"),
+  CONSTRAINT "fk:activation_events:command" FOREIGN KEY ("command_id") REFERENCES "workflow_feature_release_activation_commands" ("command_id") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED,
+  CONSTRAINT "fk:activation_events:attempt_invocation" FOREIGN KEY ("command_id", "attempt_no") REFERENCES "workflow_feature_release_activation_invocations" ("command_id", "invocation_no") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED,
+  CONSTRAINT "fk:activation_events:target_release_owner" FOREIGN KEY ("feature_id", "target_feature_release_id", "target_feature_release_hash") REFERENCES "workflow_feature_releases" ("feature_id", "id", "release_hash") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED,
+  CONSTRAINT "fk:activation_events:previous_release_owner" FOREIGN KEY ("feature_id", "previous_feature_release_id", "previous_feature_release_hash") REFERENCES "workflow_feature_releases" ("feature_id", "id", "release_hash") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED,
+  CONSTRAINT "fk:activation_events:detail_value" FOREIGN KEY ("detail_value_id", "detail_hash", "detail_schema_resource_id", "detail_schema_hash") REFERENCES "workflow_values" ("id", "content_hash", "schema_resource_id", "schema_resource_hash") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED,
+  CONSTRAINT "ck:workflow_feature_release_activation_events:event_no:safe_integer" CHECK (("event_no" IS NULL OR "event_no" BETWEEN 1 AND 9007199254740991)) /* check_kind=safe_integer logical_columns=event_no */,
+  CONSTRAINT "ck:workflow_feature_release_activation_events:attempt_no:safe_integer" CHECK (("attempt_no" IS NULL OR "attempt_no" BETWEEN 1 AND 9007199254740991)) /* check_kind=safe_integer logical_columns=attempt_no */,
+  CONSTRAINT "ck:workflow_feature_release_activation_events:phase:enum" CHECK ("phase" IN ('authenticate', 'validate', 'preflight', 'activation_transaction', 'recovery', 'finalize')) /* check_kind=enum_membership logical_columns=phase */,
+  CONSTRAINT "ck:workflow_feature_release_activation_events:event_type:enum" CHECK ("event_type" IN ('attempt_started', 'phase_succeeded', 'pre_transaction_failed', 'activation_transaction_started', 'activation_committed', 'recovery_started', 'recovery_succeeded', 'recovery_failed', 'terminal_failed')) /* check_kind=enum_membership logical_columns=event_type */,
+  CONSTRAINT "ck:workflow_feature_release_activation_events:target_feature_release_hash:hash" CHECK (("target_feature_release_hash" IS NULL OR (length("target_feature_release_hash") = 71 AND substr("target_feature_release_hash", 1, 7) = 'sha256:' AND substr("target_feature_release_hash", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=target_feature_release_hash */,
+  CONSTRAINT "ck:workflow_feature_release_activation_events:previous_feature_release_hash:hash" CHECK (("previous_feature_release_hash" IS NULL OR (length("previous_feature_release_hash") = 71 AND substr("previous_feature_release_hash", 1, 7) = 'sha256:' AND substr("previous_feature_release_hash", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=previous_feature_release_hash */,
+  CONSTRAINT "ck:workflow_feature_release_activation_events:detail_hash:hash" CHECK (("detail_hash" IS NULL OR (length("detail_hash") = 71 AND substr("detail_hash", 1, 7) = 'sha256:' AND substr("detail_hash", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=detail_hash */,
+  CONSTRAINT "ck:workflow_feature_release_activation_events:detail_schema_hash:hash" CHECK (("detail_schema_hash" IS NULL OR (length("detail_schema_hash") = 71 AND substr("detail_schema_hash", 1, 7) = 'sha256:' AND substr("detail_schema_hash", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=detail_schema_hash */,
+  CONSTRAINT "ck:workflow_feature_release_activation_events:previous_event_hash:hash" CHECK (("previous_event_hash" IS NULL OR (length("previous_event_hash") = 71 AND substr("previous_event_hash", 1, 7) = 'sha256:' AND substr("previous_event_hash", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=previous_event_hash */,
+  CONSTRAINT "ck:workflow_feature_release_activation_events:event_hash:hash" CHECK (("event_hash" IS NULL OR (length("event_hash") = 71 AND substr("event_hash", 1, 7) = 'sha256:' AND substr("event_hash", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=event_hash */,
+  CONSTRAINT "ck:workflow_feature_release_activation_events:occurred_at_ms:safe_integer" CHECK (("occurred_at_ms" IS NULL OR "occurred_at_ms" BETWEEN 0 AND 9007199254740991)) /* check_kind=safe_integer logical_columns=occurred_at_ms */,
+  CONSTRAINT "ck:activation_events:previous_release_binding" CHECK ((("previous_feature_release_id" IS NULL AND "previous_feature_release_ref" IS NULL AND "previous_feature_release_version" IS NULL AND "previous_feature_release_hash" IS NULL) OR ("previous_feature_release_id" IS NOT NULL AND "previous_feature_release_ref" IS NOT NULL AND "previous_feature_release_version" IS NOT NULL AND "previous_feature_release_hash" IS NOT NULL))) /* check_kind=all_or_none logical_columns=previous_feature_release_id,previous_feature_release_ref,previous_feature_release_version,previous_feature_release_hash */,
+  CONSTRAINT "ck:activation_events:detail_binding" CHECK ((("detail_value_id" IS NULL AND "detail_hash" IS NULL AND "detail_schema_resource_id" IS NULL AND "detail_schema_hash" IS NULL) OR ("detail_value_id" IS NOT NULL AND "detail_hash" IS NOT NULL AND "detail_schema_resource_id" IS NOT NULL AND "detail_schema_hash" IS NOT NULL))) /* check_kind=all_or_none logical_columns=detail_value_id,detail_hash,detail_schema_resource_id,detail_schema_hash */,
+  CONSTRAINT "ck:activation_events:hash_chain" CHECK ((("event_no" = 1 AND "previous_event_hash" IS NULL) OR ("event_no" > 1 AND "previous_event_hash" IS NOT NULL))) /* check_kind=state_field_consistency logical_columns=event_no,previous_event_hash,event_hash */,
+  CONSTRAINT "ck:activation_events:event_mapping" CHECK ((("event_type" = 'attempt_started' AND "phase" = 'authenticate' AND "failure_code" IS NULL) OR ("event_type" = 'phase_succeeded' AND "phase" IN ('validate', 'preflight', 'finalize') AND "failure_code" IS NULL) OR ("event_type" = 'pre_transaction_failed' AND "phase" IN ('authenticate', 'validate', 'preflight') AND "failure_code" IS NOT NULL) OR ("event_type" = 'activation_transaction_started' AND "phase" = 'activation_transaction' AND "failure_code" IS NULL) OR ("event_type" = 'activation_committed' AND "phase" = 'activation_transaction' AND "failure_code" IS NULL) OR ("event_type" = 'recovery_started' AND "phase" = 'recovery' AND "failure_code" IS NULL) OR ("event_type" = 'recovery_succeeded' AND "phase" = 'recovery' AND "failure_code" IS NULL) OR ("event_type" = 'recovery_failed' AND "phase" = 'recovery' AND "failure_code" IS NOT NULL) OR ("event_type" = 'terminal_failed' AND "phase" = 'finalize' AND "failure_code" IS NOT NULL))) /* check_kind=closed_target_mapping logical_columns=phase,event_type,failure_code */
+);
+
 CREATE UNIQUE INDEX "uk:resource_accounts:deployment" ON "workflow_graph_resource_accounts" ("deployment_scope_ref", "resource_type") WHERE "deployment_scope_ref" IS NOT NULL;
 
 CREATE UNIQUE INDEX "uk:resource_accounts:workflow" ON "workflow_graph_resource_accounts" ("workflow_id", "resource_type") WHERE "workflow_id" IS NOT NULL;
@@ -2971,6 +3149,10 @@ CREATE UNIQUE INDEX "uk:feature_releases:feature_ref" ON "workflow_feature_relea
 
 CREATE UNIQUE INDEX "uk:feature_releases:id_hash" ON "workflow_feature_releases" ("id", "release_hash");
 
+CREATE UNIQUE INDEX "uk:feature_releases:owner_identity" ON "workflow_feature_releases" ("feature_id", "id", "release_hash");
+
+CREATE UNIQUE INDEX "uk:feature_releases:single_active" ON "workflow_feature_releases" ("feature_id") WHERE "status" = 'active';
+
 CREATE UNIQUE INDEX "uk:retention_handles:feature" ON "workflow_registry_retention_handles" ("handle_kind", "feature_release_id", "closure_manifest_id") WHERE "feature_release_id" IS NOT NULL;
 
 CREATE UNIQUE INDEX "uk:retention_handles:run" ON "workflow_registry_retention_handles" ("handle_kind", "graph_run_id", "closure_manifest_id") WHERE "graph_run_id" IS NOT NULL;
@@ -2978,6 +3160,8 @@ CREATE UNIQUE INDEX "uk:retention_handles:run" ON "workflow_registry_retention_h
 CREATE UNIQUE INDEX "uk:retention_handles:backup" ON "workflow_registry_retention_handles" ("handle_kind", "backup_id", "closure_manifest_id") WHERE "backup_id" IS NOT NULL;
 
 CREATE UNIQUE INDEX "uk:retention_handles:actor" ON "workflow_registry_retention_handles" ("handle_kind", "external_actor_ref", "closure_manifest_id") WHERE "external_actor_ref" IS NOT NULL;
+
+CREATE UNIQUE INDEX "uk:retention_handles:published_identity" ON "workflow_registry_retention_handles" ("id", "handle_kind", "feature_release_id", "closure_manifest_id", "closure_hash");
 
 CREATE UNIQUE INDEX "uk:task_intakes:request_id" ON "workflow_task_intakes" ("request_id");
 
@@ -3195,6 +3379,18 @@ CREATE UNIQUE INDEX "uk:publisher_events:attempt_phase_type" ON "workflow_publis
 
 CREATE UNIQUE INDEX "uk:publisher_events:event_hash" ON "workflow_publisher_events" ("event_hash");
 
+CREATE UNIQUE INDEX "uk:activation_commands:idempotency" ON "workflow_feature_release_activation_commands" ("idempotency_domain", "idempotency_key");
+
+CREATE UNIQUE INDEX "uk:activation_commands:id_domain_request" ON "workflow_feature_release_activation_commands" ("command_id", "domain_request_hash");
+
+CREATE UNIQUE INDEX "uk:activation_invocations:command_no" ON "workflow_feature_release_activation_invocations" ("command_id", "invocation_no");
+
+CREATE UNIQUE INDEX "uk:activation_invocations:invocation_hash" ON "workflow_feature_release_activation_invocations" ("invocation_hash");
+
+CREATE UNIQUE INDEX "uk:activation_events:attempt_phase_type" ON "workflow_feature_release_activation_events" ("command_id", "attempt_no", "phase", "event_type");
+
+CREATE UNIQUE INDEX "uk:activation_events:event_hash" ON "workflow_feature_release_activation_events" ("event_hash");
+
 CREATE INDEX "idx:domain_claims:resource_status" ON "workflow_domain_resource_claims" ("namespace", "key_hash", "status", "mode");
 
 CREATE INDEX "idx:value_edges:parent" ON "workflow_value_edges" ("parent_value_id", "relation_kind", "member_index", "member_key");
@@ -3202,6 +3398,12 @@ CREATE INDEX "idx:value_edges:parent" ON "workflow_value_edges" ("parent_value_i
 CREATE INDEX "idx:blob_write_intents:expiry" ON "workflow_blob_write_intents" ("lease_expires_at_ms", "id") WHERE "status" IN ('preparing','installed');
 
 CREATE INDEX "idx:blob_objects:gc_state" ON "workflow_blob_objects" ("state", "gc_epoch", "blob_hash") WHERE "state" IN ('live','gc_candidate','deleting');
+
+CREATE INDEX "idx:feature_releases:activation_preflight" ON "workflow_feature_releases" ("feature_id", "id", "release_hash", "status");
+
+CREATE INDEX "idx:feature_active_releases:activation_cas" ON "workflow_feature_active_releases" ("feature_id", "row_version", "release_id", "release_hash");
+
+CREATE INDEX "idx:retention_handles:activation_preflight" ON "workflow_registry_retention_handles" ("feature_release_id", "handle_kind", "status", "closure_manifest_id", "closure_hash", "row_version", "id");
 
 CREATE INDEX "idx:workflows:deadline" ON "workflows" ("deadline_at_ms", "id") WHERE "finished_at_ms" IS NULL AND "deadline_at_ms" IS NOT NULL;
 
@@ -3266,6 +3468,14 @@ CREATE INDEX "idx:publisher_commands:pending_recovery" ON "workflow_publisher_co
 CREATE INDEX "idx:publisher_invocations:command_history" ON "workflow_publisher_command_invocations" ("command_id", "invocation_no");
 
 CREATE INDEX "idx:publisher_events:command_history" ON "workflow_publisher_events" ("command_id", "event_no");
+
+CREATE INDEX "idx:activation_commands:idempotency" ON "workflow_feature_release_activation_commands" ("idempotency_domain", "idempotency_key");
+
+CREATE INDEX "idx:activation_commands:pending_recovery" ON "workflow_feature_release_activation_commands" ("created_at_ms", "command_id") WHERE "lifecycle" = 'pending';
+
+CREATE INDEX "idx:activation_invocations:command_history" ON "workflow_feature_release_activation_invocations" ("command_id", "invocation_no");
+
+CREATE INDEX "idx:activation_events:command_history" ON "workflow_feature_release_activation_events" ("command_id", "event_no");
 
 CREATE TRIGGER "trg:operational_blockers:insert_cache" AFTER INSERT ON "workflow_operational_blockers" BEGIN
   UPDATE "workflow_graph_runs"
@@ -3363,4 +3573,84 @@ CREATE TRIGGER "trg:publisher_events:immutable_delete" BEFORE DELETE ON "workflo
   SELECT RAISE(ABORT, 'publisher_event_is_immutable');
 END;
 
-PRAGMA user_version = 2;
+CREATE TRIGGER "trg:feature_releases:immutable_identity" BEFORE UPDATE OF "id", "feature_id", "release_ref", "release_version", "release_hash", "execution_artifact_resource_id", "execution_artifact_hash", "compatibility_snapshot_ref", "compatibility_snapshot_hash", "staged_at_ms" ON "workflow_feature_releases" BEGIN
+  SELECT RAISE(ABORT, 'feature_release_identity_is_immutable');
+END;
+
+CREATE TRIGGER "trg:feature_releases:lifecycle_transition" BEFORE UPDATE OF "status", "activated_at_ms", "disabled_at_ms", "row_version" ON "workflow_feature_releases" BEGIN
+  SELECT CASE WHEN NEW."row_version" <> OLD."row_version" + 1 OR NOT ((OLD."status" = 'staged' AND NEW."status" = 'active' AND NEW."activated_at_ms" IS NOT NULL AND NEW."disabled_at_ms" IS NULL) OR (OLD."status" = 'active' AND NEW."status" = 'draining' AND NEW."activated_at_ms" IS OLD."activated_at_ms" AND NEW."disabled_at_ms" IS NULL) OR (OLD."status" = 'draining' AND NEW."status" = 'disabled' AND NEW."activated_at_ms" IS OLD."activated_at_ms" AND NEW."disabled_at_ms" IS NOT NULL) OR (OLD."status" = 'disabled' AND NEW."status" = 'deleting' AND NEW."activated_at_ms" IS OLD."activated_at_ms" AND NEW."disabled_at_ms" IS OLD."disabled_at_ms")) THEN RAISE(ABORT, 'feature_release_lifecycle_transition_invalid') END;
+END;
+
+CREATE TRIGGER "trg:feature_releases:protected_delete" BEFORE DELETE ON "workflow_feature_releases" WHEN OLD."status" IN ('active', 'draining') BEGIN
+  SELECT RAISE(ABORT, 'active_or_draining_feature_release_delete_forbidden');
+END;
+
+CREATE TRIGGER "trg:feature_active_releases:target_active_insert" AFTER INSERT ON "workflow_feature_active_releases" BEGIN
+  SELECT CASE WHEN NEW."row_version" <> 1 OR NOT EXISTS (SELECT 1 FROM "workflow_feature_releases" AS release WHERE release."feature_id" = NEW."feature_id" AND release."id" = NEW."release_id" AND release."release_hash" = NEW."release_hash" AND release."status" = 'active') THEN RAISE(ABORT, 'feature_active_release_insert_invalid') END;
+END;
+
+CREATE TRIGGER "trg:feature_active_releases:cas_update" BEFORE UPDATE ON "workflow_feature_active_releases" BEGIN
+  SELECT CASE WHEN NEW."feature_id" IS NOT OLD."feature_id" OR NEW."row_version" <> OLD."row_version" + 1 OR (NEW."release_id" IS OLD."release_id" AND NEW."release_hash" IS OLD."release_hash") OR NEW."activated_at_ms" < OLD."activated_at_ms" OR NOT EXISTS (SELECT 1 FROM "workflow_feature_releases" AS release WHERE release."feature_id" = NEW."feature_id" AND release."id" = NEW."release_id" AND release."release_hash" = NEW."release_hash" AND release."status" = 'active') THEN RAISE(ABORT, 'feature_active_release_cas_invalid') END;
+END;
+
+CREATE TRIGGER "trg:feature_active_releases:immutable_delete" BEFORE DELETE ON "workflow_feature_active_releases" BEGIN
+  SELECT RAISE(ABORT, 'feature_active_release_delete_forbidden');
+END;
+
+CREATE TRIGGER "trg:retention_handles:immutable_published_identity" BEFORE UPDATE OF "id", "handle_kind", "feature_release_id", "graph_run_id", "backup_id", "external_actor_ref", "closure_manifest_id", "closure_hash", "created_at_ms" ON "workflow_registry_retention_handles" BEGIN
+  SELECT RAISE(ABORT, 'retention_handle_identity_is_immutable');
+END;
+
+CREATE TRIGGER "trg:retention_handles:release_transition" BEFORE UPDATE OF "status", "released_at_ms", "row_version" ON "workflow_registry_retention_handles" BEGIN
+  SELECT CASE WHEN NEW."row_version" <> OLD."row_version" + 1 OR OLD."status" <> 'held' OR NEW."status" <> 'released' OR (OLD."handle_kind" = 'published' AND EXISTS (SELECT 1 FROM "workflow_feature_releases" AS release WHERE release."id" = OLD."feature_release_id" AND release."status" IN ('active', 'draining'))) THEN RAISE(ABORT, 'retention_handle_release_transition_invalid') END;
+END;
+
+CREATE TRIGGER "trg:retention_handles:protected_delete" BEFORE DELETE ON "workflow_registry_retention_handles" WHEN OLD."handle_kind" = 'published' AND EXISTS (SELECT 1 FROM "workflow_feature_releases" AS release WHERE release."id" = OLD."feature_release_id" AND release."status" IN ('active', 'draining')) BEGIN
+  SELECT RAISE(ABORT, 'active_or_draining_release_retention_delete_forbidden');
+END;
+
+CREATE TRIGGER "trg:activation_commands:retention_observation_insert" AFTER INSERT ON "workflow_feature_release_activation_commands" BEGIN
+  SELECT CASE WHEN NOT EXISTS (SELECT 1 FROM "workflow_feature_releases" AS release WHERE release."feature_id" = NEW."feature_id" AND release."id" = NEW."target_feature_release_id" AND release."release_ref" = NEW."target_feature_release_ref" AND release."release_version" = NEW."target_feature_release_version" AND release."release_hash" = NEW."target_feature_release_hash") OR NOT EXISTS (SELECT 1 FROM "workflow_registry_retention_handles" AS handle WHERE handle."id" = NEW."target_retention_handle_id" AND handle."handle_kind" = 'published' AND handle."feature_release_id" = NEW."target_feature_release_id" AND handle."closure_manifest_id" = NEW."target_retention_closure_manifest_id" AND handle."closure_hash" = NEW."target_retention_closure_hash" AND handle."status" = NEW."target_retention_observed_status" AND handle."row_version" = NEW."target_retention_observed_row_version") OR (NEW."expected_pointer_state" = 'present' AND (NOT EXISTS (SELECT 1 FROM "workflow_feature_releases" AS release WHERE release."feature_id" = NEW."feature_id" AND release."id" = NEW."previous_feature_release_id" AND release."release_ref" = NEW."previous_feature_release_ref" AND release."release_version" = NEW."previous_feature_release_version" AND release."release_hash" = NEW."previous_feature_release_hash") OR NOT EXISTS (SELECT 1 FROM "workflow_registry_retention_handles" AS handle WHERE handle."id" = NEW."previous_retention_handle_id" AND handle."handle_kind" = 'published' AND handle."feature_release_id" = NEW."previous_feature_release_id" AND handle."closure_manifest_id" = NEW."previous_retention_closure_manifest_id" AND handle."closure_hash" = NEW."previous_retention_closure_hash" AND handle."status" = NEW."previous_retention_observed_status" AND handle."row_version" = NEW."previous_retention_observed_row_version"))) THEN RAISE(ABORT, 'activation_retention_observation_invalid') END;
+END;
+
+CREATE TRIGGER "trg:activation_commands:immutable_identity" BEFORE UPDATE OF "command_type", "idempotency_domain", "idempotency_key", "request_value_id", "request_hash", "request_schema_resource_id", "request_schema_hash", "domain_request_hash", "compatibility_input_value_id", "compatibility_input_hash", "compatibility_input_schema_resource_id", "compatibility_input_schema_hash", "compatibility_result_value_id", "compatibility_result_hash", "compatibility_result_schema_resource_id", "compatibility_result_schema_hash", "feature_id", "target_feature_release_id", "target_feature_release_ref", "target_feature_release_version", "target_feature_release_hash", "expected_pointer_state", "expected_pointer_row_version", "previous_feature_release_id", "previous_feature_release_ref", "previous_feature_release_version", "previous_feature_release_hash", "target_retention_handle_id", "target_retention_handle_kind", "target_retention_closure_manifest_id", "target_retention_closure_hash", "target_retention_observed_status", "target_retention_observed_row_version", "previous_retention_handle_id", "previous_retention_handle_kind", "previous_retention_closure_manifest_id", "previous_retention_closure_hash", "previous_retention_observed_status", "previous_retention_observed_row_version", "created_at_ms" ON "workflow_feature_release_activation_commands" BEGIN
+  SELECT RAISE(ABORT, 'activation_command_identity_is_immutable');
+END;
+
+CREATE TRIGGER "trg:activation_commands:lifecycle_transition" BEFORE UPDATE OF "applied_pointer_row_version", "canonical_receipt_value_id", "canonical_receipt_hash", "canonical_receipt_schema_resource_id", "canonical_receipt_schema_hash", "lifecycle", "finalized_at_ms", "row_version" ON "workflow_feature_release_activation_commands" BEGIN
+  SELECT CASE WHEN NEW."row_version" <> OLD."row_version" + 1 OR OLD."lifecycle" <> 'pending' OR NEW."lifecycle" NOT IN ('applied', 'failed') OR (NEW."lifecycle" = 'applied' AND (NOT EXISTS (SELECT 1 FROM "workflow_feature_releases" AS release WHERE release."feature_id" = NEW."feature_id" AND release."id" = NEW."target_feature_release_id" AND release."release_hash" = NEW."target_feature_release_hash" AND release."status" = 'active') OR NOT EXISTS (SELECT 1 FROM "workflow_feature_active_releases" AS pointer WHERE pointer."feature_id" = NEW."feature_id" AND pointer."release_id" = NEW."target_feature_release_id" AND pointer."release_hash" = NEW."target_feature_release_hash" AND pointer."row_version" = NEW."applied_pointer_row_version") OR (NEW."expected_pointer_state" = 'absent' AND NEW."applied_pointer_row_version" <> 1) OR (NEW."expected_pointer_state" = 'present' AND (NEW."applied_pointer_row_version" <> NEW."expected_pointer_row_version" + 1 OR NOT EXISTS (SELECT 1 FROM "workflow_feature_releases" AS previous_release WHERE previous_release."feature_id" = NEW."feature_id" AND previous_release."id" = NEW."previous_feature_release_id" AND previous_release."release_hash" = NEW."previous_feature_release_hash" AND previous_release."status" = 'draining'))) OR NOT EXISTS (SELECT 1 FROM "workflow_registry_retention_handles" AS handle WHERE handle."id" = NEW."target_retention_handle_id" AND handle."status" = 'held' AND handle."row_version" = NEW."target_retention_observed_row_version") OR (NEW."expected_pointer_state" = 'present' AND NOT EXISTS (SELECT 1 FROM "workflow_registry_retention_handles" AS handle WHERE handle."id" = NEW."previous_retention_handle_id" AND handle."status" = 'held' AND handle."row_version" = NEW."previous_retention_observed_row_version")))) THEN RAISE(ABORT, 'activation_command_lifecycle_transition_invalid') END;
+END;
+
+CREATE TRIGGER "trg:activation_commands:immutable_delete" BEFORE DELETE ON "workflow_feature_release_activation_commands" BEGIN
+  SELECT RAISE(ABORT, 'activation_command_is_immutable');
+END;
+
+CREATE TRIGGER "trg:activation_invocations:hash_chain" AFTER INSERT ON "workflow_feature_release_activation_invocations" BEGIN
+  SELECT CASE WHEN (NEW."invocation_no" = 1 AND NEW."previous_invocation_hash" IS NOT NULL) OR (NEW."invocation_no" > 1 AND (SELECT previous."invocation_hash" FROM "workflow_feature_release_activation_invocations" AS previous WHERE previous."command_id" = NEW."command_id" AND previous."invocation_no" = NEW."invocation_no" - 1) IS NOT NEW."previous_invocation_hash") THEN RAISE(ABORT, 'activation_invocation_hash_chain_invalid') END;
+END;
+
+CREATE TRIGGER "trg:activation_invocations:immutable_update" BEFORE UPDATE ON "workflow_feature_release_activation_invocations" BEGIN
+  SELECT RAISE(ABORT, 'activation_invocation_is_immutable');
+END;
+
+CREATE TRIGGER "trg:activation_invocations:immutable_delete" BEFORE DELETE ON "workflow_feature_release_activation_invocations" BEGIN
+  SELECT RAISE(ABORT, 'activation_invocation_is_immutable');
+END;
+
+CREATE TRIGGER "trg:activation_events:command_binding" AFTER INSERT ON "workflow_feature_release_activation_events" BEGIN
+  SELECT CASE WHEN NOT EXISTS (SELECT 1 FROM "workflow_feature_release_activation_commands" AS command WHERE command."command_id" = NEW."command_id" AND command."feature_id" = NEW."feature_id" AND command."target_feature_release_id" = NEW."target_feature_release_id" AND command."target_feature_release_ref" = NEW."target_feature_release_ref" AND command."target_feature_release_version" = NEW."target_feature_release_version" AND command."target_feature_release_hash" = NEW."target_feature_release_hash" AND command."previous_feature_release_id" IS NEW."previous_feature_release_id" AND command."previous_feature_release_ref" IS NEW."previous_feature_release_ref" AND command."previous_feature_release_version" IS NEW."previous_feature_release_version" AND command."previous_feature_release_hash" IS NEW."previous_feature_release_hash") THEN RAISE(ABORT, 'activation_event_command_binding_invalid') END;
+END;
+
+CREATE TRIGGER "trg:activation_events:hash_chain" AFTER INSERT ON "workflow_feature_release_activation_events" BEGIN
+  SELECT CASE WHEN (NEW."event_no" = 1 AND NEW."previous_event_hash" IS NOT NULL) OR (NEW."event_no" > 1 AND (SELECT previous."event_hash" FROM "workflow_feature_release_activation_events" AS previous WHERE previous."command_id" = NEW."command_id" AND previous."event_no" = NEW."event_no" - 1) IS NOT NEW."previous_event_hash") THEN RAISE(ABORT, 'activation_event_hash_chain_invalid') END;
+END;
+
+CREATE TRIGGER "trg:activation_events:immutable_update" BEFORE UPDATE ON "workflow_feature_release_activation_events" BEGIN
+  SELECT RAISE(ABORT, 'activation_event_is_immutable');
+END;
+
+CREATE TRIGGER "trg:activation_events:immutable_delete" BEFORE DELETE ON "workflow_feature_release_activation_events" BEGIN
+  SELECT RAISE(ABORT, 'activation_event_is_immutable');
+END;
+
+PRAGMA user_version = 3;

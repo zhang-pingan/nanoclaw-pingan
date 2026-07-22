@@ -8,6 +8,10 @@ import type {
   CapacityLogicalExtendedTableDelta,
   CapacityLogicalSchemaDelta,
 } from '../../contracts/capacity-control-plane-types.js';
+import {
+  parseActivationSchemaPrerequisiteArtifact,
+  type ActivationSchemaTableExtension,
+} from './activation-source.js';
 import { readPinnedSchemaInputArtifacts } from './dependencies.js';
 import {
   parsePublisherSchemaPrerequisiteArtifact,
@@ -29,6 +33,7 @@ function mergeExtension(
   extension:
     | CapacityLogicalExtendedTableDelta
     | PublisherSchemaTableExtension
+    | ActivationSchemaTableExtension
     | AdditiveTableExtension,
 ): LogicalTableMetadata {
   if (table.name !== extension.name) {
@@ -58,12 +63,12 @@ function assertUnique(values: string[], label: string): void {
 }
 
 function assertExecutableSource(source: ExecutableSchemaSource): void {
-  if (source.tables.length !== 81) {
-    throw new Error(`Expected 81 v1 tables, received ${source.tables.length}`);
+  if (source.tables.length !== 84) {
+    throw new Error(`Expected 84 v1 tables, received ${source.tables.length}`);
   }
-  if (source.queries.length !== 35) {
+  if (source.queries.length !== 42) {
     throw new Error(
-      `Expected 35 query intents, received ${source.queries.length}`,
+      `Expected 42 query intents, received ${source.queries.length}`,
     );
   }
   assertUnique(
@@ -142,6 +147,8 @@ export function loadExecutableSchemaSource(
   const queryCatalog = inputs.query_catalog.artifact;
   const capacityDelta = inputs.g0_10_capacity_logical_schema_delta.artifact;
   const publisherInput = inputs.publisher_schema_prerequisite.artifact;
+  const activationInput =
+    inputs.feature_release_activation_schema_prerequisite.artifact;
   const sqliteProfile = inputs.sqlite_execution_profile.artifact;
 
   const base = logicalSource.payload as unknown as LogicalSchemaSourcePayload;
@@ -151,12 +158,28 @@ export function loadExecutableSchemaSource(
     queryCatalog.payload as unknown as LogicalQueryCatalogPayload;
   const delta = capacityDelta.payload as unknown as CapacityLogicalSchemaDelta;
   const publisher = parsePublisherSchemaPrerequisiteArtifact(publisherInput);
+  const activation = parseActivationSchemaPrerequisiteArtifact(activationInput);
   if (
     base.schema_id !== 'workflow-runtime-schema-v1' ||
     base.table_count !== 74 ||
     base.column_count !== 1221
   ) {
     throw new Error('G0.6 logical schema source shape drifted');
+  }
+  if (
+    activation.schema_id !== base.schema_id ||
+    activation.database_schema_version !== 3 ||
+    activation.delta_mode !== 'additive_only' ||
+    activation.added_tables.length !== 3 ||
+    activation.extended_tables.length !== 3 ||
+    activation.historical_inputs.publisher_schema_prerequisite_hash !==
+      publisherInput.hash ||
+    activation.normative_logical_schema_coverage.prior_table_count !== 81 ||
+    activation.normative_logical_schema_coverage.resulting_table_count !== 84
+  ) {
+    throw new Error(
+      'Feature Release Activation Schema Prerequisite is not the expected additive input',
+    );
   }
   if (
     delta.schema_id !== base.schema_id ||
@@ -218,14 +241,36 @@ export function loadExecutableSchemaSource(
     })),
   );
 
+  for (const activationExtension of activation.extended_tables) {
+    const activationExtensionIndex = tables.findIndex(
+      (table) => table.name === activationExtension.name,
+    );
+    if (activationExtensionIndex < 0) {
+      throw new Error(
+        `Feature Release Activation extension target is absent: ${activationExtension.name}`,
+      );
+    }
+    tables[activationExtensionIndex] = mergeExtension(
+      tables[activationExtensionIndex],
+      activationExtension,
+    );
+  }
+  tables.push(
+    ...activation.added_tables.map((table, index) => ({
+      ...table,
+      ordinal: tables.length + index + 1,
+    })),
+  );
+
   const result: ExecutableSchemaSource = {
     schema_id: 'workflow-runtime-schema-v1',
-    database_schema_version: 2,
+    database_schema_version: 3,
     tables,
     queries: [
       ...baseQueries.queries,
       ...delta.query_intents,
       ...publisher.query_intents,
+      ...activation.query_intents,
     ],
     logical_inputs: {
       logical_schema_source_hash: logicalSource.hash,
@@ -233,6 +278,7 @@ export function loadExecutableSchemaSource(
       query_catalog_hash: queryCatalog.hash,
       capacity_delta_hash: capacityDelta.hash,
       publisher_schema_prerequisite_hash: publisherInput.hash,
+      feature_release_activation_schema_prerequisite_hash: activationInput.hash,
       sqlite_profile_hash: sqliteProfile.hash,
     },
   };

@@ -26,21 +26,21 @@ import type {
 } from '../schema/types.js';
 
 export const FROZEN_G1_1_IDENTITIES = {
-  root: 'sha256:d4796f1fbae16e05a2d19ce1be0a65d9c00439814dec97940aea20effaa6d244',
+  root: 'sha256:39f7aef4e28d3466f49832edda8ed3fd193eb4abb73b39287119ecb8247948b7',
   dependencyManifest:
-    'sha256:00bbf7a38a294e9d7f867df70b9db3c7ca0fc7cfe777902fb531e363b678c4e0',
+    'sha256:2cd580b39b88c425e2bd1ff58a058756806daed1a790cff8accce0e6aa8e7508',
   physicalSchema:
-    'sha256:e6150805b5c26dfc6ba0886da88b79345cfd5838d8da05d1ca011e371f390616',
+    'sha256:b6b034224202d9673e177d4fb10144c5568f5d848a1dd6f75837d0eb1d52cf9b',
   schema:
-    'sha256:0c00cd859c3ab6a8cd36c9ea8f81c80de000b845eb5758d442cb1830cea877f9',
+    'sha256:9761bf8df83ace49b61c7dfce3f3523ecf7a69dacdccdd09837aa110ac021be6',
   migration:
-    'sha256:fb6c820a0f646148cbd9f54476917802bc208c84070f005fc24871be46ecae89',
+    'sha256:eea3547a0f5208d08bfbe771de3895bba020ca3cf34ddf2fb4e3b7945765d345',
   deterministic:
-    'sha256:d2e025b72f7da307406a9a9194f32d53021f8c92b4f92c6e8df422208da7e132',
+    'sha256:81f4ba0bb7b2deb8bffaf04fcbc2c0901d3ae2577a1084de98bb5c1d03133e3f',
   manifest:
-    'sha256:fe97803fe8d91c5e6beb59892fdf612d4bf1963def75028dece50f3393edbd89',
+    'sha256:6e2fb3d19a9f0368b4dc330761addeda9e33f8f20437cdf204f58833390ff86e',
   executableDdl:
-    'sha256:df1f9bf333e2e247c20331bb5058af365d5fe04d5e59f4cde1e55ea51c0cc90c',
+    'sha256:dd6b5b5db5fbe556fdf76cd693c382e5503931bd5b3b1cc5ef6c13bf5faeb34a',
   profile:
     'sha256:3d69742dad2fefa8bef4ba47e375defd705e3b32920a92b105a43726436fb7af',
 } as const;

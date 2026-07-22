@@ -13,6 +13,12 @@ import type {
   JsonValue,
 } from '../../contracts/types.js';
 import {
+  ACTIVATION_SCHEMA_DELTA_DOMAIN,
+  ACTIVATION_SCHEMA_INPUT_DOMAIN,
+  ACTIVATION_SCHEMA_INPUT_RELATIVE_PATH,
+  buildActivationSchemaPrerequisiteArtifact,
+} from './activation-source.js';
+import {
   G1_PHYSICAL_SCHEMA_IDENTITY_DOMAIN_SEPARATOR,
   G1_SCHEMA_DEPENDENCY_MANIFEST_DOMAIN_SEPARATOR,
   buildSchemaDependencyManifestArtifact,
@@ -44,6 +50,7 @@ const schemaRoot = import.meta.dirname;
 
 export const G1_ARTIFACT_PATHS = {
   publisherInput: PUBLISHER_SCHEMA_INPUT_RELATIVE_PATH,
+  activationInput: ACTIVATION_SCHEMA_INPUT_RELATIVE_PATH,
   migration: 'migration/workflow-runtime-schema-v1.sql',
   dependencyManifest:
     'artifacts/workflow-runtime-schema-dependency-manifest@1.json',
@@ -125,6 +132,7 @@ function buildDependencyManifestContractArtifact(): ContractArtifactEnvelope {
         'query_catalog',
         'g0_10_capacity_logical_schema_delta',
         'publisher_schema_prerequisite',
+        'feature_release_activation_schema_prerequisite',
         'sqlite_execution_profile',
         'schema_manifest',
         'canonical_migration',
@@ -280,6 +288,15 @@ function buildConstraintFixtureArtifact(
         'publisher_command_lifecycle_and_finalization',
         'publisher_invocation_disposition_hash_chain_and_immutability',
         'publisher_event_phase_hash_chain_and_immutability',
+        'activation_caller_idempotency_unique',
+        'activation_schema_bound_values_and_typed_release_retention_foreign_keys',
+        'activation_expected_pointer_absent_present_shape',
+        'activation_command_lifecycle_and_finalization',
+        'activation_invocation_disposition_hash_chain_and_immutability',
+        'activation_event_phase_hash_chain_and_immutability',
+        'feature_release_owner_identity_single_active_and_legal_lifecycle',
+        'active_pointer_owner_cas_immutability_delete_and_target_active',
+        'retention_published_identity_held_observation_and_active_draining_protection',
       ],
       trigger_names: renderMigration(source).triggers.map(
         (trigger) => trigger.name,
@@ -311,6 +328,11 @@ function buildSchemaLintArtifact(
         'publisher_commands_invocations_and_events_are_first_class_tables',
         'publisher_values_bind_exact_value_hash_and_schema_identity',
         'publisher_invocations_and_events_are_append_only_hash_chains',
+        'activation_commands_invocations_and_events_are_first_class_tables',
+        'activation_values_bind_exact_value_hash_and_schema_identity',
+        'activation_release_pointer_and_retention_relations_are_typed',
+        'activation_invocations_and_events_are_append_only_hash_chains',
+        'feature_release_lifecycle_and_active_pointer_cas_are_trigger_constrained',
       ],
       table_count: source.tables.length,
       query_count: source.queries.length,
@@ -474,6 +496,8 @@ export function buildG1Artifacts(
     {
       entries: [
         'icarus:workflow-runtime-schema:1\n',
+        ACTIVATION_SCHEMA_INPUT_DOMAIN,
+        ACTIVATION_SCHEMA_DELTA_DOMAIN,
         G1_SCHEMA_DEPENDENCY_MANIFEST_DOMAIN_SEPARATOR,
         G1_PHYSICAL_SCHEMA_IDENTITY_DOMAIN_SEPARATOR,
         dependencyManifestContract.domain_separator,
@@ -493,6 +517,10 @@ export function buildG1Artifacts(
     [
       G1_ARTIFACT_PATHS.publisherInput,
       buildPublisherSchemaPrerequisiteArtifact(),
+    ],
+    [
+      G1_ARTIFACT_PATHS.activationInput,
+      buildActivationSchemaPrerequisiteArtifact(),
     ],
     [G1_ARTIFACT_PATHS.dependencyManifestContract, dependencyManifestContract],
     [G1_ARTIFACT_PATHS.dependencyManifest, dependencyManifest],
@@ -589,6 +617,10 @@ export function generateG1Artifacts(): BuiltG1Artifacts {
     G1_ARTIFACT_PATHS.publisherInput,
     renderJson(buildPublisherSchemaPrerequisiteArtifact()),
   );
+  writeAtomic(
+    G1_ARTIFACT_PATHS.activationInput,
+    renderJson(buildActivationSchemaPrerequisiteArtifact()),
+  );
   const built = buildG1Artifacts();
   writeAtomic(G1_ARTIFACT_PATHS.migration, built.migrationSql);
   for (const [artifactPath, artifact] of built.artifacts) {
@@ -608,6 +640,18 @@ export function checkG1Artifacts(): BuiltG1Artifacts {
   if (actualPublisherInput !== expectedPublisherInput) {
     throw new Error(
       `${G1_ARTIFACT_PATHS.publisherInput} drifted; run npm run schema:generate`,
+    );
+  }
+  const expectedActivationInput = renderJson(
+    buildActivationSchemaPrerequisiteArtifact(),
+  );
+  const actualActivationInput = fs.readFileSync(
+    absoluteSchemaPath(G1_ARTIFACT_PATHS.activationInput),
+    'utf8',
+  );
+  if (actualActivationInput !== expectedActivationInput) {
+    throw new Error(
+      `${G1_ARTIFACT_PATHS.activationInput} drifted; run npm run schema:generate`,
     );
   }
   const built = buildG1Artifacts();

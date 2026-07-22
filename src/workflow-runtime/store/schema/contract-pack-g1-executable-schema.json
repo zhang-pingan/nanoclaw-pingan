@@ -6,16 +6,16 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-contract-pack-g1-executable-schema:1\n",
-  "hash": "sha256:d4796f1fbae16e05a2d19ce1be0a65d9c00439814dec97940aea20effaa6d244",
+  "hash": "sha256:39f7aef4e28d3466f49832edda8ed3fd193eb4abb73b39287119ecb8247948b7",
   "payload": {
     "gate": "G1.1",
     "status": "executable_ddl_schema_manifest",
-    "schema_dependency_manifest_hash": "sha256:00bbf7a38a294e9d7f867df70b9db3c7ca0fc7cfe777902fb531e363b678c4e0",
-    "physical_schema_identity": "sha256:e6150805b5c26dfc6ba0886da88b79345cfd5838d8da05d1ca011e371f390616",
-    "schema_hash": "sha256:0c00cd859c3ab6a8cd36c9ea8f81c80de000b845eb5758d442cb1830cea877f9",
-    "migration_sha256": "sha256:fb6c820a0f646148cbd9f54476917802bc208c84070f005fc24871be46ecae89",
-    "deterministic_digest": "sha256:d2e025b72f7da307406a9a9194f32d53021f8c92b4f92c6e8df422208da7e132",
-    "member_count": 10,
+    "schema_dependency_manifest_hash": "sha256:2cd580b39b88c425e2bd1ff58a058756806daed1a790cff8accce0e6aa8e7508",
+    "physical_schema_identity": "sha256:b6b034224202d9673e177d4fb10144c5568f5d848a1dd6f75837d0eb1d52cf9b",
+    "schema_hash": "sha256:9761bf8df83ace49b61c7dfce3f3523ecf7a69dacdccdd09837aa110ac021be6",
+    "migration_sha256": "sha256:eea3547a0f5208d08bfbe771de3895bba020ca3cf34ddf2fb4e3b7945765d345",
+    "deterministic_digest": "sha256:81f4ba0bb7b2deb8bffaf04fcbc2c0901d3ae2577a1084de98bb5c1d03133e3f",
+    "member_count": 11,
     "members": [
       {
         "path": "inputs/workflow-publisher-schema-prerequisite@1.json",
@@ -23,14 +23,19 @@
         "hash": "sha256:93ca47fc61812061c77400b78c2285790a86ea852e1358d5369f95db55ba4330"
       },
       {
+        "path": "inputs/workflow-feature-release-activation-schema-prerequisite@1.json",
+        "format": "icarus.workflow-feature-release-activation-schema-prerequisite/1",
+        "hash": "sha256:2e2e98cd8276d3b42b796afb34508be44800619d3781ddd88f10022c55a7a46e"
+      },
+      {
         "path": "artifacts/workflow-runtime-schema-dependency-manifest-contract@1.json",
         "format": "icarus.workflow-runtime-schema-dependency-manifest-contract/1",
-        "hash": "sha256:06b880cddcbe3985a9121af44c8fc099bbb0efda9362b0113fd0360c39e48ccf"
+        "hash": "sha256:1f4b6a5ff9722a1f1b223b181c29882cc2545e1985208c72860bc1bd54f443fe"
       },
       {
         "path": "artifacts/workflow-runtime-schema-dependency-manifest@1.json",
         "format": "icarus.workflow-runtime-schema-dependency-manifest/1",
-        "hash": "sha256:00bbf7a38a294e9d7f867df70b9db3c7ca0fc7cfe777902fb531e363b678c4e0"
+        "hash": "sha256:2cd580b39b88c425e2bd1ff58a058756806daed1a790cff8accce0e6aa8e7508"
       },
       {
         "path": "artifacts/workflow-runtime-schema-manifest-contract@1.json",
@@ -40,32 +45,32 @@
       {
         "path": "artifacts/workflow-runtime-schema-manifest@1.json",
         "format": "icarus.workflow-runtime-schema-manifest/1",
-        "hash": "sha256:fe97803fe8d91c5e6beb59892fdf612d4bf1963def75028dece50f3393edbd89"
+        "hash": "sha256:6e2fb3d19a9f0368b4dc330761addeda9e33f8f20437cdf204f58833390ff86e"
       },
       {
         "path": "artifacts/workflow-runtime-executable-ddl@1.json",
         "format": "icarus.workflow-runtime-executable-ddl/1",
-        "hash": "sha256:df1f9bf333e2e247c20331bb5058af365d5fe04d5e59f4cde1e55ea51c0cc90c"
+        "hash": "sha256:dd6b5b5db5fbe556fdf76cd693c382e5503931bd5b3b1cc5ef6c13bf5faeb34a"
       },
       {
         "path": "fixtures/workflow-runtime-query-plan-fixtures@1.json",
         "format": "icarus.workflow-runtime-query-plan-fixtures/1",
-        "hash": "sha256:c76d022fd9c638a796f94554f27f32f50ea3373123dcd95a3d5a1a8b311fb247"
+        "hash": "sha256:32af2e73e8814f9d6a36f601753cf4c9c3d5bb080450e3a72fca0650a3af5a7f"
       },
       {
         "path": "fixtures/workflow-runtime-constraint-trigger-fixtures@1.json",
         "format": "icarus.workflow-runtime-constraint-trigger-fixtures/1",
-        "hash": "sha256:4c74c07d21a238e0dad6038e8ed93910b7828172c322f2d7030ca9d3e32386f3"
+        "hash": "sha256:9cd781157eba5a0fb8d1b440c37d1f0fd13bb154f19c6f2b7d2ca0c65544e9f3"
       },
       {
         "path": "artifacts/workflow-runtime-schema-lint@1.json",
         "format": "icarus.workflow-runtime-schema-lint/1",
-        "hash": "sha256:31bfdf613ea915c29b7b0b27c073dc9db84183ec61c183a7d9699c1eab431772"
+        "hash": "sha256:62e80e48f87b61c77fb4ce13022c603d13c94f5b4798230180077a3dea7af28c"
       },
       {
         "path": "catalogs/workflow-runtime-schema-domain-separators@1.json",
         "format": "icarus.workflow-runtime-schema-domain-separators/1",
-        "hash": "sha256:aff1edfd130d86112ade608a75a4769804292dc4e51af725a59aa80784335f14"
+        "hash": "sha256:1078ab2f792346ec9ad3a324ffec779cc2cb597ee960e7700fdb0d460f4fda54"
       }
     ],
     "sqlite_profile_status": "candidate",

@@ -339,6 +339,178 @@ export function buildSchemaTriggers(): SchemaTriggerDefinition[] {
       owner_intent: 'append-only Publisher phase and recovery audit',
       sql: `CREATE TRIGGER ${q('trg:publisher_events:immutable_delete')} BEFORE DELETE ON ${q('workflow_publisher_events')} BEGIN\n  SELECT RAISE(ABORT, 'publisher_event_is_immutable');\nEND`,
     },
+    {
+      name: 'trg:feature_releases:immutable_identity',
+      table: 'workflow_feature_releases',
+      timing: 'before',
+      event: 'update',
+      owner_intent: 'immutable Feature Release owner and exact identity',
+      sql: `CREATE TRIGGER ${q('trg:feature_releases:immutable_identity')} BEFORE UPDATE OF "id", "feature_id", "release_ref", "release_version", "release_hash", "execution_artifact_resource_id", "execution_artifact_hash", "compatibility_snapshot_ref", "compatibility_snapshot_hash", "staged_at_ms" ON ${q('workflow_feature_releases')} BEGIN\n  SELECT RAISE(ABORT, 'feature_release_identity_is_immutable');\nEND`,
+    },
+    {
+      name: 'trg:feature_releases:lifecycle_transition',
+      table: 'workflow_feature_releases',
+      timing: 'before',
+      event: 'update',
+      owner_intent:
+        'adjacent Feature Release lifecycle timestamps and row-version CAS',
+      sql: `CREATE TRIGGER ${q('trg:feature_releases:lifecycle_transition')} BEFORE UPDATE OF "status", "activated_at_ms", "disabled_at_ms", "row_version" ON ${q('workflow_feature_releases')} BEGIN\n  SELECT CASE WHEN NEW."row_version" <> OLD."row_version" + 1 OR NOT ((OLD."status" = 'staged' AND NEW."status" = 'active' AND NEW."activated_at_ms" IS NOT NULL AND NEW."disabled_at_ms" IS NULL) OR (OLD."status" = 'active' AND NEW."status" = 'draining' AND NEW."activated_at_ms" IS OLD."activated_at_ms" AND NEW."disabled_at_ms" IS NULL) OR (OLD."status" = 'draining' AND NEW."status" = 'disabled' AND NEW."activated_at_ms" IS OLD."activated_at_ms" AND NEW."disabled_at_ms" IS NOT NULL) OR (OLD."status" = 'disabled' AND NEW."status" = 'deleting' AND NEW."activated_at_ms" IS OLD."activated_at_ms" AND NEW."disabled_at_ms" IS OLD."disabled_at_ms")) THEN RAISE(ABORT, 'feature_release_lifecycle_transition_invalid') END;\nEND`,
+    },
+    {
+      name: 'trg:feature_releases:protected_delete',
+      table: 'workflow_feature_releases',
+      timing: 'before',
+      event: 'delete',
+      owner_intent: 'active and draining Feature Release delete protection',
+      sql: `CREATE TRIGGER ${q('trg:feature_releases:protected_delete')} BEFORE DELETE ON ${q('workflow_feature_releases')} WHEN OLD."status" IN ('active', 'draining') BEGIN\n  SELECT RAISE(ABORT, 'active_or_draining_feature_release_delete_forbidden');\nEND`,
+    },
+    {
+      name: 'trg:feature_active_releases:target_active_insert',
+      table: 'workflow_feature_active_releases',
+      timing: 'after',
+      event: 'insert',
+      owner_intent:
+        'first owner-consistent active pointer targets an active Release at row version one',
+      sql: `CREATE TRIGGER ${q('trg:feature_active_releases:target_active_insert')} AFTER INSERT ON ${q('workflow_feature_active_releases')} BEGIN\n  SELECT CASE WHEN NEW."row_version" <> 1 OR NOT EXISTS (SELECT 1 FROM "workflow_feature_releases" AS release WHERE release."feature_id" = NEW."feature_id" AND release."id" = NEW."release_id" AND release."release_hash" = NEW."release_hash" AND release."status" = 'active') THEN RAISE(ABORT, 'feature_active_release_insert_invalid') END;\nEND`,
+    },
+    {
+      name: 'trg:feature_active_releases:cas_update',
+      table: 'workflow_feature_active_releases',
+      timing: 'before',
+      event: 'update',
+      owner_intent:
+        'owner-consistent active pointer adjacent CAS and target-active transition',
+      sql: `CREATE TRIGGER ${q('trg:feature_active_releases:cas_update')} BEFORE UPDATE ON ${q('workflow_feature_active_releases')} BEGIN\n  SELECT CASE WHEN NEW."feature_id" IS NOT OLD."feature_id" OR NEW."row_version" <> OLD."row_version" + 1 OR (NEW."release_id" IS OLD."release_id" AND NEW."release_hash" IS OLD."release_hash") OR NEW."activated_at_ms" < OLD."activated_at_ms" OR NOT EXISTS (SELECT 1 FROM "workflow_feature_releases" AS release WHERE release."feature_id" = NEW."feature_id" AND release."id" = NEW."release_id" AND release."release_hash" = NEW."release_hash" AND release."status" = 'active') THEN RAISE(ABORT, 'feature_active_release_cas_invalid') END;\nEND`,
+    },
+    {
+      name: 'trg:feature_active_releases:immutable_delete',
+      table: 'workflow_feature_active_releases',
+      timing: 'before',
+      event: 'delete',
+      owner_intent: 'active pointer delete protection',
+      sql: `CREATE TRIGGER ${q('trg:feature_active_releases:immutable_delete')} BEFORE DELETE ON ${q('workflow_feature_active_releases')} BEGIN\n  SELECT RAISE(ABORT, 'feature_active_release_delete_forbidden');\nEND`,
+    },
+    {
+      name: 'trg:retention_handles:immutable_published_identity',
+      table: 'workflow_registry_retention_handles',
+      timing: 'before',
+      event: 'update',
+      owner_intent:
+        'immutable published Retention root Release and Closure identity',
+      sql: `CREATE TRIGGER ${q('trg:retention_handles:immutable_published_identity')} BEFORE UPDATE OF "id", "handle_kind", "feature_release_id", "graph_run_id", "backup_id", "external_actor_ref", "closure_manifest_id", "closure_hash", "created_at_ms" ON ${q('workflow_registry_retention_handles')} BEGIN\n  SELECT RAISE(ABORT, 'retention_handle_identity_is_immutable');\nEND`,
+    },
+    {
+      name: 'trg:retention_handles:release_transition',
+      table: 'workflow_registry_retention_handles',
+      timing: 'before',
+      event: 'update',
+      owner_intent:
+        'adjacent held-to-released Retention transition with active Release protection',
+      sql: `CREATE TRIGGER ${q('trg:retention_handles:release_transition')} BEFORE UPDATE OF "status", "released_at_ms", "row_version" ON ${q('workflow_registry_retention_handles')} BEGIN\n  SELECT CASE WHEN NEW."row_version" <> OLD."row_version" + 1 OR OLD."status" <> 'held' OR NEW."status" <> 'released' OR (OLD."handle_kind" = 'published' AND EXISTS (SELECT 1 FROM "workflow_feature_releases" AS release WHERE release."id" = OLD."feature_release_id" AND release."status" IN ('active', 'draining'))) THEN RAISE(ABORT, 'retention_handle_release_transition_invalid') END;\nEND`,
+    },
+    {
+      name: 'trg:retention_handles:protected_delete',
+      table: 'workflow_registry_retention_handles',
+      timing: 'before',
+      event: 'delete',
+      owner_intent:
+        'published Retention delete protection for active and draining Releases',
+      sql: `CREATE TRIGGER ${q('trg:retention_handles:protected_delete')} BEFORE DELETE ON ${q('workflow_registry_retention_handles')} WHEN OLD."handle_kind" = 'published' AND EXISTS (SELECT 1 FROM "workflow_feature_releases" AS release WHERE release."id" = OLD."feature_release_id" AND release."status" IN ('active', 'draining')) BEGIN\n  SELECT RAISE(ABORT, 'active_or_draining_release_retention_delete_forbidden');\nEND`,
+    },
+    {
+      name: 'trg:activation_commands:retention_observation_insert',
+      table: 'workflow_feature_release_activation_commands',
+      timing: 'after',
+      event: 'insert',
+      owner_intent:
+        'exact Release refs and held target/previous Retention observations',
+      sql: `CREATE TRIGGER ${q('trg:activation_commands:retention_observation_insert')} AFTER INSERT ON ${q('workflow_feature_release_activation_commands')} BEGIN\n  SELECT CASE WHEN NOT EXISTS (SELECT 1 FROM "workflow_feature_releases" AS release WHERE release."feature_id" = NEW."feature_id" AND release."id" = NEW."target_feature_release_id" AND release."release_ref" = NEW."target_feature_release_ref" AND release."release_version" = NEW."target_feature_release_version" AND release."release_hash" = NEW."target_feature_release_hash") OR NOT EXISTS (SELECT 1 FROM "workflow_registry_retention_handles" AS handle WHERE handle."id" = NEW."target_retention_handle_id" AND handle."handle_kind" = 'published' AND handle."feature_release_id" = NEW."target_feature_release_id" AND handle."closure_manifest_id" = NEW."target_retention_closure_manifest_id" AND handle."closure_hash" = NEW."target_retention_closure_hash" AND handle."status" = NEW."target_retention_observed_status" AND handle."row_version" = NEW."target_retention_observed_row_version") OR (NEW."expected_pointer_state" = 'present' AND (NOT EXISTS (SELECT 1 FROM "workflow_feature_releases" AS release WHERE release."feature_id" = NEW."feature_id" AND release."id" = NEW."previous_feature_release_id" AND release."release_ref" = NEW."previous_feature_release_ref" AND release."release_version" = NEW."previous_feature_release_version" AND release."release_hash" = NEW."previous_feature_release_hash") OR NOT EXISTS (SELECT 1 FROM "workflow_registry_retention_handles" AS handle WHERE handle."id" = NEW."previous_retention_handle_id" AND handle."handle_kind" = 'published' AND handle."feature_release_id" = NEW."previous_feature_release_id" AND handle."closure_manifest_id" = NEW."previous_retention_closure_manifest_id" AND handle."closure_hash" = NEW."previous_retention_closure_hash" AND handle."status" = NEW."previous_retention_observed_status" AND handle."row_version" = NEW."previous_retention_observed_row_version"))) THEN RAISE(ABORT, 'activation_retention_observation_invalid') END;\nEND`,
+    },
+    {
+      name: 'trg:activation_commands:immutable_identity',
+      table: 'workflow_feature_release_activation_commands',
+      timing: 'before',
+      event: 'update',
+      owner_intent:
+        'immutable Activation caller request compatibility Release pointer and Retention identity',
+      sql: `CREATE TRIGGER ${q('trg:activation_commands:immutable_identity')} BEFORE UPDATE OF "command_type", "idempotency_domain", "idempotency_key", "request_value_id", "request_hash", "request_schema_resource_id", "request_schema_hash", "domain_request_hash", "compatibility_input_value_id", "compatibility_input_hash", "compatibility_input_schema_resource_id", "compatibility_input_schema_hash", "compatibility_result_value_id", "compatibility_result_hash", "compatibility_result_schema_resource_id", "compatibility_result_schema_hash", "feature_id", "target_feature_release_id", "target_feature_release_ref", "target_feature_release_version", "target_feature_release_hash", "expected_pointer_state", "expected_pointer_row_version", "previous_feature_release_id", "previous_feature_release_ref", "previous_feature_release_version", "previous_feature_release_hash", "target_retention_handle_id", "target_retention_handle_kind", "target_retention_closure_manifest_id", "target_retention_closure_hash", "target_retention_observed_status", "target_retention_observed_row_version", "previous_retention_handle_id", "previous_retention_handle_kind", "previous_retention_closure_manifest_id", "previous_retention_closure_hash", "previous_retention_observed_status", "previous_retention_observed_row_version", "created_at_ms" ON ${q('workflow_feature_release_activation_commands')} BEGIN\n  SELECT RAISE(ABORT, 'activation_command_identity_is_immutable');\nEND`,
+    },
+    {
+      name: 'trg:activation_commands:lifecycle_transition',
+      table: 'workflow_feature_release_activation_commands',
+      timing: 'before',
+      event: 'update',
+      owner_intent:
+        'single pending-to-terminal Activation finalization with pointer and Retention verification',
+      sql: `CREATE TRIGGER ${q('trg:activation_commands:lifecycle_transition')} BEFORE UPDATE OF "applied_pointer_row_version", "canonical_receipt_value_id", "canonical_receipt_hash", "canonical_receipt_schema_resource_id", "canonical_receipt_schema_hash", "lifecycle", "finalized_at_ms", "row_version" ON ${q('workflow_feature_release_activation_commands')} BEGIN\n  SELECT CASE WHEN NEW."row_version" <> OLD."row_version" + 1 OR OLD."lifecycle" <> 'pending' OR NEW."lifecycle" NOT IN ('applied', 'failed') OR (NEW."lifecycle" = 'applied' AND (NOT EXISTS (SELECT 1 FROM "workflow_feature_releases" AS release WHERE release."feature_id" = NEW."feature_id" AND release."id" = NEW."target_feature_release_id" AND release."release_hash" = NEW."target_feature_release_hash" AND release."status" = 'active') OR NOT EXISTS (SELECT 1 FROM "workflow_feature_active_releases" AS pointer WHERE pointer."feature_id" = NEW."feature_id" AND pointer."release_id" = NEW."target_feature_release_id" AND pointer."release_hash" = NEW."target_feature_release_hash" AND pointer."row_version" = NEW."applied_pointer_row_version") OR (NEW."expected_pointer_state" = 'absent' AND NEW."applied_pointer_row_version" <> 1) OR (NEW."expected_pointer_state" = 'present' AND (NEW."applied_pointer_row_version" <> NEW."expected_pointer_row_version" + 1 OR NOT EXISTS (SELECT 1 FROM "workflow_feature_releases" AS previous_release WHERE previous_release."feature_id" = NEW."feature_id" AND previous_release."id" = NEW."previous_feature_release_id" AND previous_release."release_hash" = NEW."previous_feature_release_hash" AND previous_release."status" = 'draining'))) OR NOT EXISTS (SELECT 1 FROM "workflow_registry_retention_handles" AS handle WHERE handle."id" = NEW."target_retention_handle_id" AND handle."status" = 'held' AND handle."row_version" = NEW."target_retention_observed_row_version") OR (NEW."expected_pointer_state" = 'present' AND NOT EXISTS (SELECT 1 FROM "workflow_registry_retention_handles" AS handle WHERE handle."id" = NEW."previous_retention_handle_id" AND handle."status" = 'held' AND handle."row_version" = NEW."previous_retention_observed_row_version")))) THEN RAISE(ABORT, 'activation_command_lifecycle_transition_invalid') END;\nEND`,
+    },
+    {
+      name: 'trg:activation_commands:immutable_delete',
+      table: 'workflow_feature_release_activation_commands',
+      timing: 'before',
+      event: 'delete',
+      owner_intent: 'durable Activation command audit header',
+      sql: `CREATE TRIGGER ${q('trg:activation_commands:immutable_delete')} BEFORE DELETE ON ${q('workflow_feature_release_activation_commands')} BEGIN\n  SELECT RAISE(ABORT, 'activation_command_is_immutable');\nEND`,
+    },
+    {
+      name: 'trg:activation_invocations:hash_chain',
+      table: 'workflow_feature_release_activation_invocations',
+      timing: 'after',
+      event: 'insert',
+      owner_intent:
+        'adjacent per-command authenticated Activation invocation hash chain',
+      sql: `CREATE TRIGGER ${q('trg:activation_invocations:hash_chain')} AFTER INSERT ON ${q('workflow_feature_release_activation_invocations')} BEGIN\n  SELECT CASE WHEN (NEW."invocation_no" = 1 AND NEW."previous_invocation_hash" IS NOT NULL) OR (NEW."invocation_no" > 1 AND (SELECT previous."invocation_hash" FROM "workflow_feature_release_activation_invocations" AS previous WHERE previous."command_id" = NEW."command_id" AND previous."invocation_no" = NEW."invocation_no" - 1) IS NOT NEW."previous_invocation_hash") THEN RAISE(ABORT, 'activation_invocation_hash_chain_invalid') END;\nEND`,
+    },
+    {
+      name: 'trg:activation_invocations:immutable_update',
+      table: 'workflow_feature_release_activation_invocations',
+      timing: 'before',
+      event: 'update',
+      owner_intent: 'append-only authenticated Activation invocation audit',
+      sql: `CREATE TRIGGER ${q('trg:activation_invocations:immutable_update')} BEFORE UPDATE ON ${q('workflow_feature_release_activation_invocations')} BEGIN\n  SELECT RAISE(ABORT, 'activation_invocation_is_immutable');\nEND`,
+    },
+    {
+      name: 'trg:activation_invocations:immutable_delete',
+      table: 'workflow_feature_release_activation_invocations',
+      timing: 'before',
+      event: 'delete',
+      owner_intent: 'append-only authenticated Activation invocation audit',
+      sql: `CREATE TRIGGER ${q('trg:activation_invocations:immutable_delete')} BEFORE DELETE ON ${q('workflow_feature_release_activation_invocations')} BEGIN\n  SELECT RAISE(ABORT, 'activation_invocation_is_immutable');\nEND`,
+    },
+    {
+      name: 'trg:activation_events:command_binding',
+      table: 'workflow_feature_release_activation_events',
+      timing: 'after',
+      event: 'insert',
+      owner_intent:
+        'Activation Event typed target and previous Release identity equals command',
+      sql: `CREATE TRIGGER ${q('trg:activation_events:command_binding')} AFTER INSERT ON ${q('workflow_feature_release_activation_events')} BEGIN\n  SELECT CASE WHEN NOT EXISTS (SELECT 1 FROM "workflow_feature_release_activation_commands" AS command WHERE command."command_id" = NEW."command_id" AND command."feature_id" = NEW."feature_id" AND command."target_feature_release_id" = NEW."target_feature_release_id" AND command."target_feature_release_ref" = NEW."target_feature_release_ref" AND command."target_feature_release_version" = NEW."target_feature_release_version" AND command."target_feature_release_hash" = NEW."target_feature_release_hash" AND command."previous_feature_release_id" IS NEW."previous_feature_release_id" AND command."previous_feature_release_ref" IS NEW."previous_feature_release_ref" AND command."previous_feature_release_version" IS NEW."previous_feature_release_version" AND command."previous_feature_release_hash" IS NEW."previous_feature_release_hash") THEN RAISE(ABORT, 'activation_event_command_binding_invalid') END;\nEND`,
+    },
+    {
+      name: 'trg:activation_events:hash_chain',
+      table: 'workflow_feature_release_activation_events',
+      timing: 'after',
+      event: 'insert',
+      owner_intent:
+        'adjacent per-command Activation phase and recovery event hash chain',
+      sql: `CREATE TRIGGER ${q('trg:activation_events:hash_chain')} AFTER INSERT ON ${q('workflow_feature_release_activation_events')} BEGIN\n  SELECT CASE WHEN (NEW."event_no" = 1 AND NEW."previous_event_hash" IS NOT NULL) OR (NEW."event_no" > 1 AND (SELECT previous."event_hash" FROM "workflow_feature_release_activation_events" AS previous WHERE previous."command_id" = NEW."command_id" AND previous."event_no" = NEW."event_no" - 1) IS NOT NEW."previous_event_hash") THEN RAISE(ABORT, 'activation_event_hash_chain_invalid') END;\nEND`,
+    },
+    {
+      name: 'trg:activation_events:immutable_update',
+      table: 'workflow_feature_release_activation_events',
+      timing: 'before',
+      event: 'update',
+      owner_intent: 'append-only Activation phase and recovery audit',
+      sql: `CREATE TRIGGER ${q('trg:activation_events:immutable_update')} BEFORE UPDATE ON ${q('workflow_feature_release_activation_events')} BEGIN\n  SELECT RAISE(ABORT, 'activation_event_is_immutable');\nEND`,
+    },
+    {
+      name: 'trg:activation_events:immutable_delete',
+      table: 'workflow_feature_release_activation_events',
+      timing: 'before',
+      event: 'delete',
+      owner_intent: 'append-only Activation phase and recovery audit',
+      sql: `CREATE TRIGGER ${q('trg:activation_events:immutable_delete')} BEFORE DELETE ON ${q('workflow_feature_release_activation_events')} BEGIN\n  SELECT RAISE(ABORT, 'activation_event_is_immutable');\nEND`,
+    },
   ];
 }
 

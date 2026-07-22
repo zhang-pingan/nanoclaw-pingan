@@ -22,6 +22,10 @@ import {
   type G1SchemaDependencyRole,
 } from './types.js';
 import {
+  ACTIVATION_SCHEMA_INPUT_ARTIFACT_HASH,
+  ACTIVATION_SCHEMA_INPUT_RELATIVE_PATH,
+} from './activation-source.js';
+import {
   PUBLISHER_SCHEMA_INPUT_ARTIFACT_HASH,
   PUBLISHER_SCHEMA_INPUT_RELATIVE_PATH,
 } from './publisher-source.js';
@@ -115,6 +119,18 @@ const INPUT_MEMBER_SPECS = [
     },
     version: 1,
     expected_semantic_hash: PUBLISHER_SCHEMA_INPUT_ARTIFACT_HASH,
+  },
+  {
+    role: 'feature_release_activation_schema_prerequisite',
+    identity_effect: 'physical_schema_input',
+    path: `store/schema/${ACTIVATION_SCHEMA_INPUT_RELATIVE_PATH}`,
+    format: 'icarus.workflow-feature-release-activation-schema-prerequisite/1',
+    ref: {
+      id: 'icarus.workflow-feature-release-activation-schema-prerequisite',
+      version: '1',
+    },
+    version: 1,
+    expected_semantic_hash: ACTIVATION_SCHEMA_INPUT_ARTIFACT_HASH,
   },
   {
     role: 'sqlite_execution_profile',
@@ -297,7 +313,7 @@ export function assertClosedSchemaDependencyManifest(
     payload.dependency_set_id !== 'workflow-runtime-schema-v1' ||
     payload.identity_scope !== 'physical_schema_and_migration' ||
     payload.member_count !== G1_SCHEMA_DEPENDENCY_ROLES.length ||
-    payload.physical_member_count !== 8 ||
+    payload.physical_member_count !== 9 ||
     payload.construction_provenance_count !== 1 ||
     !Array.isArray(payload.members) ||
     payload.members.length !== G1_SCHEMA_DEPENDENCY_ROLES.length
@@ -399,8 +415,8 @@ export function buildSchemaDependencyManifestArtifact(
   const payload: G1SchemaDependencyManifestPayload = {
     dependency_set_id: 'workflow-runtime-schema-v1',
     identity_scope: 'physical_schema_and_migration',
-    member_count: 9,
-    physical_member_count: 8,
+    member_count: 10,
+    physical_member_count: 9,
     construction_provenance_count: 1,
     members,
     physical_schema_identity: calculatePhysicalSchemaIdentity(members),

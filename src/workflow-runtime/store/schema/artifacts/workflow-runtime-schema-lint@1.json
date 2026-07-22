@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-runtime-schema-lint:1\n",
-  "hash": "sha256:31bfdf613ea915c29b7b0b27c073dc9db84183ec61c183a7d9699c1eab431772",
+  "hash": "sha256:62e80e48f87b61c77fb4ce13022c603d13c94f5b4798230180077a3dea7af28c",
   "payload": {
     "status": "closed_fail_on_violation",
     "rules": [
@@ -22,10 +22,15 @@
       "all_query_intents_have_fixed_explain_fixture",
       "publisher_commands_invocations_and_events_are_first_class_tables",
       "publisher_values_bind_exact_value_hash_and_schema_identity",
-      "publisher_invocations_and_events_are_append_only_hash_chains"
+      "publisher_invocations_and_events_are_append_only_hash_chains",
+      "activation_commands_invocations_and_events_are_first_class_tables",
+      "activation_values_bind_exact_value_hash_and_schema_identity",
+      "activation_release_pointer_and_retention_relations_are_typed",
+      "activation_invocations_and_events_are_append_only_hash_chains",
+      "feature_release_lifecycle_and_active_pointer_cas_are_trigger_constrained"
     ],
-    "table_count": 81,
-    "query_count": 35,
+    "table_count": 84,
+    "query_count": 42,
     "result": "pass"
   }
 }
