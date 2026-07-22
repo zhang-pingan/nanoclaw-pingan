@@ -4196,6 +4196,66 @@ The caller key binds one `domain_request_hash`. The first successful invocation 
 
 The G3.7 Contract Pack is `icarus.workflow-contract-pack-g3-workflow-publisher@1.0.0`, artifact `sha256:5deba1546ce7754eecb4b553c7ce357b9702b44b763a45b2324923a5337a06d3`. It publishes closed request/receipt/result schemas, deterministic positive/negative fixtures, and all request/review/release/receipt/result/invocation/event domains. G3 remains `IN_PROGRESS`: Feature Release Activation, active pointer, Production loader, Execution Artifact build/install, GC/delete, Authoring stages other than Publish, and G4-G9 remain outside this slice.
 
+#### G3.8 Feature Release Activation persistence readiness audit
+
+G3.8 is a bounded persistence-readiness audit, not an Activation implementation. Its conclusion is `ACTIVATION_BLOCKED_BY_SCHEMA`, not `BLOCKED_BY_SPEC`: the Activation transaction semantics are sufficiently closed to define the next prerequisite, but Database Schema `2` cannot durably represent them. No Activation request/receipt/result Contract, active-pointer DML, release lifecycle mutation, loader, GC/delete, Artifact build/install, or G4-G9 Runtime surface is authorized by this audit.
+
+The existing G1 authorities are necessary but incomplete. A staged `workflow_feature_releases` row can bind the exact Feature Release ref/hash, Execution Artifact, compatibility snapshot, and exact release-resource set. Its resources are already `publication_state=published` after G3.7, and one held `published -> feature_release` Retention Handle and member set protect that release Closure. `workflow_feature_active_releases` can store a basic `feature_id/release_id/release_hash/row_version/activated_at_ms` pointer. Those rows do not constitute a closed Activation command or prove that pointer, lifecycle, Retention, audit, and recovery facts changed atomically.
+
+Activation owns a third closed command boundary. It must not reuse or extend `workflow_runtime_commands`, `runtime_capacity_admin_commands`, or the staged-only `workflow_publisher_commands` union. A canonical Activation request must bind caller `idempotency_domain + idempotency_key`, authenticated actor/session and request time, target Feature id plus exact staged release ref/id/hash, expected active-pointer state `absent | present`, nullable expected pointer row version, and, for `present`, the exact previous active release id/ref/hash. It must also bind the exact G3.6 compatibility preflight input/result plus the target and previous published Retention Handle/Closure identities.
+
+The closed receipt binds command/domain request identity, Feature id, exact target and nullable previous Release identities, expected and applied pointer row versions, target `active` and previous `draining` lifecycle facts, compatibility result identity, exact target/previous held Retention bindings, activation time, `active_pointer_changed=true`, and its own domain-separated receipt hash. The closed invocation result binds command and submitted/domain request hashes, one `applied | duplicate | conflict | failed` disposition, the canonical receipt only for applied/duplicate, nullable expected/observed pointer state and row version for conflict, a closed failure phase/code for failed, and its own result hash. Request, compatibility input/result, receipt, invocation result, and Event detail are schema-bound canonical Values. Free JSON, an in-memory idempotency map, a polymorphic kind/id target, an unconstrained side table, latest/current resolution, or a derived previous release is not a persistence substitute.
+
+G3.6 remains the composition boundary for Snapshot/Closure, exact resources, Execution Artifact/Executor, Core Protocol/ABI, and Retention eligibility. Activation must call that composition rather than copy G3.3/G3.5/G3.6 SQL, canonical Value validation, dependency traversal, error precedence, or result semantics. Its G3.5 resource queries require `publication_state=published`; it cannot reuse G3.7's literal staged Publisher request/query inputs. G3.6 proves that a proposed `published -> feature_release` Retention root/member set is eligible, not that the already-published target or previous release currently owns an exact held Retention Handle. Activation therefore adds read-only checks for exact Release/resource/lifecycle ownership and both applicable held handles, while leaving the authoritative member graphs in the existing Release and Retention tables.
+
+Database Schema `2` has the following minimum blockers:
+
+1. There is no first-class Activation command, Invocation, or Event relation and no schema-bound request, compatibility result, receipt, invocation result, or event detail Value.
+2. There is no Activation caller-key UK or durable binding from one domain request hash to the target staged release and expected pointer absent/present row-version CAS.
+3. There is no per-invocation `applied | duplicate | conflict | failed` audit, pending recovery scan, adjacent Invocation/Event numbering, or immutable adjacent hash chain.
+4. `workflow_feature_active_releases` references only `(release_id,release_hash)`. It does not prove that pointer `feature_id` equals the target Release owner, does not require the target status to be `active`, and has no adjacent row-version CAS, identity immutability, or delete protection.
+5. `workflow_feature_releases` has no composite `(feature_id,id,release_hash)` parent key, no partial unique constraint allowing at most one `status=active` release per Feature, and no closed lifecycle/timestamp/row-version transition or immutable-identity triggers.
+6. No typed command binding proves that both target and previous published Retention Handles are exact, held, and Closure-compatible when the pointer changes. Existing Retention authority prevents deletion only after the correct row is located; it cannot make an untyped Activation request recoverable.
+7. Current constraint/query-plan fixtures cover the release status enum and existing generic lookups, but not owner-consistent pointers, lifecycle/CAS transitions, held target/previous Retention roots, Activation idempotency/history, or recovery replay.
+
+The next minimum G1 prerequisite is the additive physical input `icarus.workflow-feature-release-activation-schema-prerequisite/1`. It advances the current executable Database Schema from `2` to `3` and adds exactly three first-class Activation audit objects:
+
+```text
+workflow_feature_release_activation_commands
+  - command/idempotency/domain request identity
+  - schema-bound request and compatibility input/result Values
+  - feature id, exact target staged release ref/id/hash
+  - expected pointer absent/present, expected row version,
+    exact previous release ref/id/hash
+  - exact target/previous published Retention Handle and Closure identities,
+    observed held state and row version
+  - applied pointer row version and schema-bound canonical receipt
+  - lifecycle pending | applied | failed, timestamps, row version
+
+workflow_feature_release_activation_invocations
+  - adjacent invocation number and command-bound/submitted request hashes
+  - authenticated actor/session/request time
+  - disposition applied | duplicate | conflict | failed
+  - schema-bound result Value and adjacent immutable hash chain
+
+workflow_feature_release_activation_events
+  - adjacent event/attempt number
+  - phase authenticate | validate | preflight | activation_transaction |
+          recovery | finalize
+  - event type attempt_started | phase_succeeded | pre_transaction_failed |
+          activation_transaction_started | activation_committed |
+          recovery_started | recovery_succeeded | recovery_failed |
+          terminal_failed
+  - typed target/previous release identities
+  - schema-bound detail Value and adjacent immutable hash chain
+```
+
+The same prerequisite must add the composite Release owner parent and active-pointer FK, the per-Feature active partial UK, legal Release lifecycle/timestamp/row-version and identity triggers, and active-pointer CAS/immutability/delete/target-active triggers. Activation commands bind each Retention Handle's immutable published root/Release/Closure identity and record its observed held state and row version; insert/transition triggers verify that observation in the Activation transaction and prohibit release while the bound Feature Release remains `active` or `draining`, without making historical audit rows permanently prevent a later legal Handle release. Its fixed query intents cover caller idempotency lookup, Invocation history, Event replay, pending recovery, expected-pointer CAS lookup, and target/previous Release plus Retention preflight. Schema Manifest, dependency manifest, migration, lint, constraint/trigger fixtures, and query-plan fixtures must cover every addition. The G1 physical/schema/migration identities and the current G3.1/G3.3/G3.5/G3.6/G3.7 construction packs will consequently be rebuilt; G2 sealed artifacts remain byte-unchanged.
+
+After that prerequisite is ready, one `BEGIN IMMEDIATE` defines the Activation atomic fact. It re-runs the G3.6 composition and Activation-specific Release/resource/Retention/pointer checks; verifies expected pointer absence or exact row version; transitions the previous `active -> draining` when present and target `staged -> active`; inserts the first pointer at row version `1` or updates `N -> N+1`; keeps both target and previous published Retention Handles held without copying either member graph; and writes canonical receipt/result plus terminal Invocation/Event/command facts. A pointer CAS mismatch is `conflict`; compatibility, lifecycle, resource, or Retention rejection is `failed`; neither changes lifecycle or pointer. The first commit is `applied`, an exact terminal replay returns the canonical result and appends `duplicate`, and same-key domain drift appends `conflict`.
+
+A crash before commit rolls back pointer, lifecycle, audit, and result together, so the same caller key can retry against unchanged facts. A crash after commit recovers from the canonical receipt and appends a duplicate or recovery Invocation/Event without reapplying the pointer transition. Invocation and Event streams are append-only, adjacent, domain-separated hash chains; recovery validates them before trusting a terminal result. Activation remains prohibited until this entire Schema prerequisite is generated, constrained, migrated, and verified.
+
 Feature Release 与新创建入口的激活指针必须独立持久化，不能用安装目录或当前文件内容代替：
 
 ```text

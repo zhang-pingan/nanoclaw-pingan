@@ -1,8 +1,8 @@
 # Dynamic Workflow Runtime 实施进度
 
 > **状态**: IN_PROGRESS
-> **当前 Gate**: G3 Registry / Authoring / Publish（`IN_PROGRESS`；G3.1-G3.7 均 `DONE`，G3.7已实现单一事务的WorkflowPublisher staged publish；G2保持`DONE / BASELINE_ACCEPTED`与40/40 exact replay）
-> **下一施工切片**: G3.8 Feature Release Activation persistence readiness audit；先审计active-pointer CAS、caller idempotency、Invocation/Event audit和crash recovery是否有closed G1 schema承载面，未确认前不得实现Activation、Production loader、GC/delete或G4-G9 Runtime
+> **当前 Gate**: G3 Registry / Authoring / Publish（`IN_PROGRESS`；G3.1-G3.8 均 `DONE`；G3.8 audit=`ACTIVATION_BLOCKED_BY_SCHEMA`；G2保持`DONE / BASELINE_ACCEPTED`与40/40 exact replay）
+> **下一施工切片**: G1.5 Feature Release Activation Schema Prerequisite；只补足closed Activation command/invocation/event、active-pointer CAS、Release lifecycle与Retention binding，仍不得实现Activation、Production loader、GC/delete或G4-G9 Runtime
 > **最后更新**: 2026-07-21
 > **规范权威**: `local/docs/dynamic-workflow-dag-framework.md`
 
@@ -111,7 +111,7 @@ Agent Container 运行于独立 VM，Node identity 由 VM image gate 保证；�
 | G0 Contract Pack / Static Baseline | `DONE` | 无 | G0.1-G0.9 historical root + G0.10 additive Capacity Admin/publication/CAP/Logical Schema/coverage root | 本原子提交 |
 | G1 DDL / Store | `DONE` | G0.10 | closed Schema Dependency Manifest + frozen executable migration/Schema Manifest + unified Connection Factory + Store lifecycle/transaction host + minimum Publisher idempotency/audit additive prerequisite + real-file SQLite/identity gates | 本原子提交（Publisher schema prerequisite） |
 | G2 Compiler / Golden | `DONE` | G0.1-G0.9；R-016 spec/Contract repair；G0.10 不改变 Compiler/Plan 语义 | phase=`BASELINE_ACCEPTED`；前序immutable lineage未变；owner-approved successor GoldenSemanticReview/seal完整，current replay 40/40 exact、0 differences | 本原子提交（replay-repair successor seal） |
-| G3 Registry / Authoring / Publish | `IN_PROGRESS` | G1 + G2 | G3.1-G3.7 DONE；closed WorkflowPublisher request/receipt/result + single staged Publish transaction + replay/conflict/failure/recovery DONE；Activation仍禁止，G3.8先做持久化readiness audit | 本原子提交（G3.7）；G3.1-G3.6见下文 |
+| G3 Registry / Authoring / Publish | `IN_PROGRESS` | G1 + G2 | G3.1-G3.8 DONE；G3.8=`ACTIVATION_BLOCKED_BY_SCHEMA`，已冻结最小G1.5 prerequisite；Activation仍禁止 | 本原子提交（G3.8 audit）；G3.1-G3.7见下文 |
 | G4 Test Bootstrap | `NOT_READY` | G1 + G2 + G3 | isolated bootstrap profile | - |
 | G5 Basic Runtime | `NOT_READY` | G4 | T0-T6e model/fault fixtures | - |
 | G6 Dynamic / Close | `NOT_READY` | G5 | T7/T8/child/compensation fixtures | - |
@@ -123,11 +123,11 @@ Agent Container 运行于独立 VM，Node identity 由 VM image gate 保证；�
 
 | 工作包 | 范围 | 状态 | 当前 Gate/切片 |
 | --- | --- | --- | --- |
-| I0 | Publish、Registry、Recipe 与执行版本固定 | `IN_PROGRESS` | G3.1-G3.7 DONE；staged Publisher已原子写Registry/Release/Retention/audit且不切active pointer；下一切片为G3.8 Activation persistence readiness audit |
+| I0 | Publish、Registry、Recipe 与执行版本固定 | `IN_PROGRESS` | G3.1-G3.8 DONE；staged Publisher已完成，Activation因Schema 2缺少closed command/CAS/lifecycle/audit承载面而禁止；下一切片为G1.5 prerequisite |
 | I1 | Intake、Routing、幂等创建、Child provenance、Claim | `NOT_READY` | G5 起 |
 | I2 | Definition、State lowering、Context、transition | `IN_PROGRESS` | approved static lowering语义已由Compiler 3.0.1实现、批准并seal；G2 lowering部分完成，Runtime transition仍从G5起 |
 | I3 | Source/Compiled IR、Port、Compiler | `DONE` | Production Compiler 3.0.1 successor已批准并seal；current replay 40/40 exact、0 differences |
-| I4 | Runtime Store、SQLite relation、Value/Blob、migration | `IN_PROGRESS` | G1 migration/Schema Manifest/Store Base/Connection Factory与Publisher prerequisite DONE；G3.7通过既有generic synchronous transaction host实现Publisher业务事务但未改变Store API；Blob/GC仍未实现 |
+| I4 | Runtime Store、SQLite relation、Value/Blob、migration | `IN_PROGRESS` | G1 Database Schema 2/Store Base/Publisher prerequisite DONE；G3.8确认Activation需要最小Schema 3 prerequisite；Activation DML、Blob/GC仍未实现 |
 | I5 | Graph 状态机、reconcile、Scheduler、Ledger | `NOT_READY` | G5 起 |
 | I6 | Delegation/System、Capability Effect、Outbox | `NOT_READY` | G5 起 |
 | I7 | Durable Wait、Signal/Timer/Approval、Inbox | `NOT_READY` | G5 起 |
@@ -161,6 +161,7 @@ G0.1-G0.9 已按当时规范完成并保留历史 identity。后续确认的 Cap
 | G1.2 | Store Base / Connection Factory | `DONE` | production-target Store 基础、连接生命周期/完整 PRAGMA/read-only policy、identity gate、参数化 query API 与短写事务 host 的 candidate 开发验证 | 本原子提交 |
 | G1.3 | Dependency Identity Repair | `DONE` | closed exact-member dependency manifest；physical identity与Gate provenance分离；Store不扫描Contract目录；migration bytes/78 tables/行为不变 | 本原子提交 |
 | G1.4 | Publisher Idempotency / Audit Schema Prerequisite | `DONE` | additive physical input；3张first-class Publisher表；schema-bound Value、typed FK、caller UK、invocation/event hash chain；Database Schema 2；G1/G3 identity cascade；无Publisher业务事务 | 本原子提交 |
+| G1.5 | Feature Release Activation Schema Prerequisite | `READY` | additive physical input；3张Activation表；pointer owner/CAS、Release lifecycle、held Retention binding、recovery queries；Database Schema 3；无Activation DML | - |
 
 ## G2 施工切片
 
@@ -1174,6 +1175,7 @@ G0.1 的实现、测试和本进度账本由同一个原子提交交付。Agent 
 | R-015 | Toolchain test timing | OPEN_OUT_OF_SCOPE | G1.1 曾复现 runtime-toolchain 5s timing；G1.2 串行 `test:g0` 和两次完整 suite 均未复现，toolchain tests 通过。G1.2 不调整 timeout 或 managed toolchain 既有实现 | 独立测试稳定性维护 |
 | R-016 | Compiler/Golden contract | CLOSED | S38与additive repair root已冻结唯一Case Result target/hash、lowering outcome、IR v2与exact binding；G2 Production Compiler已消费该Contract并发布真实identity/actual candidates，repair Draft v2仍冻结blocked且未越过Golden review/seal边界 | G2 spec/Contract repair + Compiler slice |
 | R-017 | G2 semantic correction | CLOSED | phase=`BASELINE_ACCEPTED`；前序RC/Working/Draft/review/GoldenSemanticReview/sealed bundle identities未变；Compiler 3.0.1修复、owner-approved successor GoldenSemanticReview/seal与current 40/40 replay已完成 | successor bundle=`sha256:d99647d8ca6aabc737a793019335e6770aa111a79be7545c4dec00c6e7af2145`；G3+仍未开始 |
+| R-018 | Feature Release Activation persistence | OPEN / `ACTIVATION_BLOCKED_BY_SCHEMA` | Database Schema 2缺少Activation专属closed command/invocation/event、caller-key/CAS binding、owner-consistent active pointer、Release lifecycle、held target/previous Retention约束及append-only recovery audit；Activation实现保持禁止 | G1.5 Feature Release Activation Schema Prerequisite |
 
 ## v1完成后的归档计划：PLANNED
 
@@ -1597,12 +1599,59 @@ Physical manifest现为81 tables / 1,354 columns / 143 UK / 369 FK / 867 CHECK /
 | `typecheck` / `build` | PASS；按切片约束未运行`test:g0`、`test:g2`或Golden全量回归 |
 | G2 sealed artifact diff / forbidden surface / targeted Prettier / `git diff --check` | PASS；只读sealed positive plan fixture，G2 sealed trees零diff；无active-pointer/Production loader/Runtime/Capacity command DML或越界实现 |
 
+## G3.8 Feature Release Activation Persistence Readiness Audit
+
+**状态**：`DONE`；审计结论唯一为`ACTIVATION_BLOCKED_BY_SCHEMA`，不是`BLOCKED_BY_SPEC`。G3继续为`IN_PROGRESS`，G2保持`DONE / BASELINE_ACCEPTED`与40/40 exact replay，G4-G9保持`NOT_READY`。本切片只审计并冻结下一项最小G1 prerequisite；没有新增Activation Contract/Schema、active-pointer DML、Release lifecycle mutation、Production loader、Execution Artifact build/install、GC/delete或G4-G9 Runtime，也没有修改G2 sealed artifacts。
+
+现有Database Schema `2`的承载能力与最小缺口：
+
+| Activation required fact | Existing exact authority | Blocking field / constraint / query gap |
+| --- | --- | --- |
+| closed request/receipt/result | `workflow_values`可保存schema-bound canonical Value | 没有Activation command header或request/compatibility result/receipt/result schema identity FK，不能用自由JSON或Publisher Value列代替 |
+| caller idempotency | Publisher有自己的`(idempotency_domain,idempotency_key)`UK | Activation没有独立caller UK/domain request hash；Publisher、Runtime、Capacity三个closed command union都不可复用 |
+| target staged release | `workflow_feature_releases`可保存exact ref/id/hash、Artifact、compatibility snapshot；resource set已由G3.7发布 | 没有Activation request到target的typed binding，也没有`feature_id,id,release_hash`复合owner parent |
+| expected active pointer CAS | `workflow_feature_active_releases`有feature/release/hash/row-version基础列 | 没有expected `absent | present`、expected row version/previous release command binding、adjacent row-version trigger或固定CAS lookup intent |
+| pointer/Release owner与lifecycle | Release status closed为`staged | active | draining | disabled | deleting` | pointer FK仅绑定`release_id,release_hash`，允许跨Feature；无每Feature单active partial UK、target-active/pointer immutability/delete约束或合法lifecycle/timestamp/row-version transition trigger |
+| G3.6 compatibility | G3.6组合G3.3 Snapshot/Closure与G3.5 exact resource query，并验证Artifact/Executor/Core Protocol/ABI/Retention eligibility | 没有Activation compatibility input/result durable binding；Activation必须查询`publication_state=published`，不能逐字复用G3.7 staged input |
+| target/previous Retention | held `published -> feature_release` Handle/member graph已是GC权威 | G3.6只证明eligibility；没有typed command FK证明target与previous exact Handle均为held且Closure一致，也没有对应preflight query intent |
+| Invocation/Event audit | Publisher拥有自己的applied/duplicate/conflict/failed Invocation与Event streams | Activation没有每次authenticated Invocation、phase Event、adjacent numbering、append-only immutability/hash chain或schema-bound result/detail |
+| crash/retry/recovery | generic `BEGIN IMMEDIATE` host与Publisher recovery pattern可用 | 没有Activation pending scan、canonical terminal receipt lookup、Invocation history或Event replay query，因此不能durable恢复pointer/lifecycle结果 |
+
+closed request必须绑定caller key、actor/session/time、Feature与target staged Release exact ref/id/hash、expected pointer absent/present + nullable row version/previous Release、G3.6 input/result及target/previous held Retention/Closure。closed receipt必须绑定command/domain request、Feature、target/previous Release、expected/applied pointer versions、active/draining lifecycle、compatibility result、held Retention、activation time、`active_pointer_changed=true`和receipt hash。closed invocation result必须绑定command/submitted/domain request hash、四种disposition、applied/duplicate的canonical receipt、conflict的expected/observed pointer state/version、failed的closed phase/code及result hash。以上Value和Event detail均需schema-bound canonical Value，不能落入自由JSON。
+
+G3.6复用边界保持不变：Activation继续调用G3.6，G3.6继续组合G3.3与G3.5；不得复制Snapshot/Closure/resource SQL、canonical Value验证、dependency traversal、error precedence或result semantics。Activation另行验证target/previous Release owner、exact published resource set、current lifecycle、held Retention Handle与expected pointer CAS。G3.6的Retention eligibility result不冒充held Handle事实，既有Release resource和Retention member表继续是唯一权威，不复制member graph。
+
+下一最小前置切片固定为G1.5 `icarus.workflow-feature-release-activation-schema-prerequisite/1`，将current executable Database Schema从`2`推进到`3`。它只增加三个first-class对象并加固既有Release/pointer/Retention relation：
+
+- `workflow_feature_release_activation_commands`：caller key/domain request hash；schema-bound request、compatibility input/result、canonical receipt；Feature id与target staged release ref/id/hash；expected pointer `absent | present`、nullable expected row version和previous release ref/id/hash的closed组合；target/previous published Retention Handle与Closure immutable identity、observed held state/row version；applied pointer row version；`pending | applied | failed` lifecycle、timestamps和row version。
+- `workflow_feature_release_activation_invocations`：per-command adjacent invocation number、command-bound/submitted request hash、authenticated actor/session/time、`applied | duplicate | conflict | failed`、schema-bound result Value、previous/current invocation hash与UPDATE/DELETE prohibition。
+- `workflow_feature_release_activation_events`：adjacent event/attempt number；closed authenticate/validate/preflight/activation-transaction/recovery/finalize phase；`attempt_started | phase_succeeded | pre_transaction_failed | activation_transaction_started | activation_committed | recovery_started | recovery_succeeded | recovery_failed | terminal_failed` event type；typed target/previous release identity、schema-bound detail Value、previous/current event hash与UPDATE/DELETE prohibition。
+- 既有relation加固：Release增加`(feature_id,id,release_hash)`复合parent、每Feature至多一个active的partial UK、identity immutability和合法lifecycle/timestamp/adjacent row-version trigger；active pointer改用owner-consistent复合FK并增加target-active、CAS adjacency、immutability/delete保护；Retention提供不可变published root/Release/Closure identity复合parent，Activation insert/transition trigger验证observed held/row-version，并禁止Release处于`active | draining`时释放Handle，但历史audit row不永久阻止未来合法release。
+- 固定query intents：caller idempotency lookup、Invocation history、Event replay、pending recovery、expected-pointer CAS lookup、target/previous Release+held Retention preflight。Schema Manifest/dependency manifest/migration/lint/constraint-trigger/query-plan fixtures必须覆盖全部新增字段与约束。
+
+G1 physical/schema/migration/root identities和pin它们的G3.1/G3.3/G3.5/G3.6/G3.7 current construction packs需要确定性级联重建；G0.6/G0.10 historical source和G2 sealed artifacts保持byte-unchanged。G1.5只交付持久化prerequisite，仍不实现Activation或active-pointer DML。
+
+prerequisite就绪后，Activation事务模型固定为一个`BEGIN IMMEDIATE`：重跑G3.6组合和Activation-specific Release/resource/Retention/pointer preflight；验证expected pointer absent或exact row version；有旧active时执行`active -> draining`，target执行`staged -> active`；pointer首次insert为row version `1`，后续只允许`N -> N+1`；target和旧Release的published Retention Handle保持held；canonical receipt/result、Invocation/Event和command terminalization与上述事实全成或全不变。CAS mismatch为`conflict`，compatibility/lifecycle/resource/Retention拒绝为`failed`，两者都不修改pointer/lifecycle。首次成功为`applied`；terminal exact replay返回canonical result并追加`duplicate`；same-key domain drift追加`conflict`。
+
+commit前crash使pointer、lifecycle、receipt与audit全部rollback，同key可在不变事实上重试；commit后crash从canonical receipt恢复，只追加duplicate或recovery Invocation/Event，不重复切换pointer。Invocation/Event必须为adjacent、append-only、domain-separated hash chain，Recovery验证链后才能信任terminal result。
+
+定向验证证据（全部通过`./scripts/runtime-toolchain.sh exec -- <command>`）：
+
+| 命令/证据 | 结果 |
+| --- | --- |
+| `npm run schema:check` / `store:check` | PASS；current Database Schema 2 root/hash保持`sha256:d4796f…d244` / `sha256:0c00cd…77f9`，Store candidate identity未漂移 |
+| `npm run test:g1.publisher` | PASS；1 file，2/2 targeted Publisher prerequisite tests（12 skipped） |
+| `npm run contracts:g3.6:check` / `contracts:g3.7:check` | PASS；pack保持`sha256:8150113…7f76`（1 positive / 5 negative）与`sha256:5deba154…a06d3` |
+| `npm run test:g3.7` | PASS；2 files / 14 tests；closed contract、applied/duplicate/conflict/failed、5个rollback boundary、reopen recovery和real-file determinism |
+| `npm run typecheck` / `npm run build` | PASS；按切片约束未运行`test:g0`、`test:g2`或Golden全量回归 |
+| changed-path / G2 sealed / `git diff --check` | PASS；仅三份规范/进度/README文档变化；G2 sealed artifact diff为空；无Activation Contract、Schema、migration、DML或实现文件 |
+
 ## 下一步
 
-G0.1-G0.9 historical identity、G0.10 current root、G1 executable schema/Store Base/Publisher prerequisite、R-016 spec/Contract repair与G2 Production Compiler/Golden均已完成。Current G2保持`DONE / BASELINE_ACCEPTED`，I3为`DONE`；G3.1-G3.7均完成，G3/I0仍为`IN_PROGRESS`。下一切片是G3.8 Feature Release Activation persistence readiness audit：先完整审计现有G1是否能closed、typed、durable地承载caller idempotency、expected active-release row version、compatibility result、activation receipt、每次Invocation/Event与crash recovery；若缺失则只形成最小G1 prerequisite提案/切片，不得复用Publisher/Runtime/Capacity closed command表，不得直接实现Activation、Production loader、GC/delete或G4-G9 Runtime。
+G0.1-G0.9 historical identity、G0.10 current root、G1 Database Schema 2/Store Base/Publisher prerequisite、R-016 spec/Contract repair与G2 Production Compiler/Golden均已完成。Current G2保持`DONE / BASELINE_ACCEPTED`，I3为`DONE`；G3.1-G3.8均完成，G3/I0仍为`IN_PROGRESS`，G3.8=`ACTIVATION_BLOCKED_BY_SCHEMA`。下一切片是G1.5 Feature Release Activation Schema Prerequisite：只实现`icarus.workflow-feature-release-activation-schema-prerequisite/1`及其Schema 3 migration/Manifest/fixtures/identity cascade，不得实现Activation或active-pointer DML，不得复用Publisher/Runtime/Capacity closed command表，不得开始Production loader、GC/delete或G4-G9 Runtime。
 
 历史fresh review evidence只存在于Git commits，不是current dependency；current immutable semantic approval只绑定exact Draft/report identities。显式`prepare-rc`冻结的四个Working roots与唯一Review Candidate未变；current expected full case-result/Plan/proof/program bytes/hash已独立冻结、审计、owner批准并seal。local single-user签名策略为`not_required_local_single_user`，没有伪造GPG或远程签名。
 
 G2终点继续满足`Draft -> human semantic decision -> GoldenSemanticReview -> seal -> CI replay`：current successor replay为40/40，R-017保持关闭。G3.1只消费其exact sealed/compiler identities并执行纯preflight；没有创建Published Recipe、Registry row、Release或Production launchability，也没有执行production activation。
 
-作为历史prepare-rc切片记录，该切片只修复当时的R-017 spec identity实时绑定、级联重建Working artifacts并执行`prepare-rc`及其确定性check。后续owner approval、immutable review、successor seal与40/40 replay现已完成；当前 G3.1-G3.7 与最小Publisher Schema prerequisite均已完成，Activation、SQLite certification、Core Release、G4-G9和production activation仍未开始。R-010 Node loader deprecation与R-012/R-013/R-015 timing继续作为既有范围外baseline，不升级工具链、不放宽测试。
+作为历史prepare-rc切片记录，该切片只修复当时的R-017 spec identity实时绑定、级联重建Working artifacts并执行`prepare-rc`及其确定性check。后续owner approval、immutable review、successor seal与40/40 replay现已完成；当前G3.1-G3.8与Publisher Schema prerequisite均已完成，Activation等待G1.5 Schema prerequisite，SQLite certification、Core Release、G4-G9和production activation仍未开始。R-010 Node loader deprecation与R-012/R-013/R-015 timing继续作为既有范围外baseline，不升级工具链、不放宽测试。
