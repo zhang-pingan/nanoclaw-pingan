@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-runtime-constraint-trigger-fixtures:1\n",
-  "hash": "sha256:46b7b90e99bff809dfeeab0f52d007a0120e7216446ad6a3d3e64adf1419fdc5",
+  "hash": "sha256:b62eee4cc248835017005ec78a6282a8ad886279c9e21b4c13a16acc2399062a",
   "payload": {
     "execution_target": "real_file_sqlite",
     "enum_check_count": 120,
@@ -217,6 +217,7 @@
       "trg:activation_events:immutable_delete",
       "trg:capacity_invocations:prepared_insert",
       "trg:capacity_invocations:applied_insert",
+      "trg:capacity_invocations:terminal_insert",
       "trg:capacity_invocations:duplicate_insert",
       "trg:capacity_invocations:immutable_update",
       "trg:capacity_invocations:immutable_delete"

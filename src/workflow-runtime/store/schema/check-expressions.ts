@@ -175,7 +175,7 @@ const CUSTOM_CHECKS: Readonly<Record<string, string>> = {
   'ck:capacity_commands:finalization':
     '(("canonical_result_value_id" IS NULL AND "finalized_at_ms" IS NULL) OR ("canonical_result_value_id" IS NOT NULL AND "finalized_at_ms" IS NOT NULL))',
   'ck:capacity_invocations:result_consistency':
-    '"decided_at_ms" >= "requested_at_ms" AND (("authorization_result" = \'denied\' AND "execution_result" = \'denied\' AND "denial_code" IS NOT NULL AND "applied_at_ms" IS NULL) OR ("authorization_result" = \'allowed\' AND "denial_code" IS NULL AND (("execution_result" = \'prepared\' AND "invocation_no" = 1 AND "applied_at_ms" IS NULL) OR ("execution_result" = \'applied\' AND "applied_at_ms" IS NOT NULL AND "applied_at_ms" >= "decided_at_ms") OR ("execution_result" IN (\'conflict\', \'duplicate\', \'failed\') AND "applied_at_ms" IS NULL))))',
+    '(("authorization_result" = \'denied\' AND "execution_result" = \'denied\' AND "denial_code" IS NOT NULL AND "applied_at_ms" IS NULL) OR ("authorization_result" = \'allowed\' AND (("execution_result" = \'prepared\' AND "invocation_no" = 1 AND "denial_code" IS NULL AND "decided_at_ms" >= "requested_at_ms" AND "applied_at_ms" IS NULL) OR ("execution_result" = \'applied\' AND "denial_code" IS NULL AND "applied_at_ms" IS NOT NULL) OR ("execution_result" IN (\'conflict\', \'duplicate\', \'failed\') AND "applied_at_ms" IS NULL))))',
   'ck:capacity_events:hash_chain':
     '(("event_seq" = 1 AND "previous_event_hash" IS NULL) OR ("event_seq" > 1 AND "previous_event_hash" IS NOT NULL))',
   'ck:publisher_commands:idempotency_non_empty':

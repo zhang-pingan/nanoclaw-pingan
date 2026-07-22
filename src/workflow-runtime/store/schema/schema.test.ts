@@ -213,9 +213,9 @@ describe('G1.1 executable workflow runtime schema', () => {
         expect.objectContaining({
           role: 'canonical_migration',
           semantic_hash:
-            'sha256:11e69e3d82c3963c3eac7d75be67ac16575e43685fdd8e5b392e97152f734e9b',
+            'sha256:2ead40dc2f1618f87247e9d3bb476266797c38560e1ad0537a6afa6f71a3fbf6',
           raw_sha256:
-            'sha256:11e69e3d82c3963c3eac7d75be67ac16575e43685fdd8e5b392e97152f734e9b',
+            'sha256:2ead40dc2f1618f87247e9d3bb476266797c38560e1ad0537a6afa6f71a3fbf6',
         }),
         expect.objectContaining({
           role: 'schema3_to_schema4_upgrade',
@@ -225,7 +225,7 @@ describe('G1.1 executable workflow runtime schema', () => {
         expect.objectContaining({
           role: 'schema4_to_schema5_upgrade',
           semantic_hash:
-            'sha256:b443b201131cc1a26bd2401b784f7b4672c5f80828e6df31c23fb518c93e59e1',
+            'sha256:97479810c2c079d71270d5a714faa4b8fa8ebd6af629ef2f7d772af270c2bb0a',
         }),
       ]),
     );
@@ -514,12 +514,19 @@ describe('G1.1 executable workflow runtime schema', () => {
             string | number | null
           > =
             metadata.name === 'runtime_capacity_admin_invocations'
-              ? {
-                  authorization_result: 'allowed',
-                  execution_result: 'conflict',
-                  denial_code: null,
-                  applied_at_ms: null,
-                }
+              ? column.name === 'denial_code'
+                ? {
+                    authorization_result: 'denied',
+                    execution_result: 'denied',
+                    denial_code: 'permission_denied',
+                    applied_at_ms: null,
+                  }
+                : {
+                    authorization_result: 'allowed',
+                    execution_result: 'conflict',
+                    denial_code: null,
+                    applied_at_ms: null,
+                  }
               : {};
           expect(() =>
             insertRow(database, metadata.name, {
@@ -1570,6 +1577,32 @@ describe('G1.1 executable workflow runtime schema', () => {
           applied_at_ms: 101,
         }),
       ).toThrow('capacity_applied_invocation_is_historical');
+      for (const invalid of [
+        {
+          invocation_no: 2,
+          execution_result: 'denied',
+          authorization_result: 'denied',
+          denial_code: 'permission_denied',
+          decided_at_ms: 99,
+        },
+        {
+          invocation_no: 2,
+          execution_result: 'conflict',
+          denial_code: 'publication_failed',
+        },
+        {
+          invocation_no: 2,
+          execution_result: 'failed',
+          denial_code: 'publication_failed',
+        },
+      ]) {
+        expect(() =>
+          insertRow(database, 'runtime_capacity_admin_invocations', {
+            ...valid,
+            ...invalid,
+          }),
+        ).toThrow('capacity_terminal_invocation_invalid');
+      }
       const duplicate = {
         ...valid,
         invocation_no: 2,
@@ -1632,15 +1665,22 @@ describe('G1.1 executable workflow runtime schema', () => {
         reason_code: 'initial_provisioning',
       });
       const results = [
-        ['applied', 'allowed', null, 110],
-        ['denied', 'denied', 'permission_denied', null],
-        ['conflict', 'allowed', null, null],
-        ['duplicate', 'allowed', null, null],
-        ['failed', 'allowed', null, null],
+        ['applied', 'allowed', null, 100, 90, 80],
+        ['denied', 'denied', 'permission_denied', 100, 90, null],
+        ['conflict', 'allowed', 'publication_failed', 100, 90, null],
+        ['duplicate', 'allowed', 'publication_failed', 100, 90, null],
+        ['failed', 'allowed', 'publication_failed', 100, 90, null],
       ] as const;
       for (const [
         index,
-        [executionResult, authorizationResult, denialCode, appliedAt],
+        [
+          executionResult,
+          authorizationResult,
+          denialCode,
+          requestedAt,
+          decidedAt,
+          appliedAt,
+        ],
       ] of results.entries()) {
         insertRow(database, 'runtime_capacity_admin_invocations', {
           id: `capacity:upgrade:invocation:${index + 1}`,
@@ -1650,8 +1690,8 @@ describe('G1.1 executable workflow runtime schema', () => {
           execution_result: executionResult,
           denial_code: denialCode,
           required_permission: 'runtime.capacity.manage',
-          requested_at_ms: 100,
-          decided_at_ms: 105,
+          requested_at_ms: requestedAt,
+          decided_at_ms: decidedAt,
           applied_at_ms: appliedAt,
         });
       }
@@ -1711,6 +1751,7 @@ describe('G1.1 executable workflow runtime schema', () => {
         'trg:capacity_invocations:immutable_delete',
         'trg:capacity_invocations:immutable_update',
         'trg:capacity_invocations:prepared_insert',
+        'trg:capacity_invocations:terminal_insert',
       ]);
     } finally {
       if (database.open) database.close();

@@ -11,9 +11,9 @@
     "slice": "G3.6",
     "status": "DONE",
     "g3_status": "IN_PROGRESS",
-    "upstream_g3_3_pack_hash": "sha256:f14adf777d92cbaf00275e5ad77b04746c1c9a42848d29cad0786d33a54cf52c",
-    "upstream_g3_5_pack_hash": "sha256:d38bdd8578efa8d1e4e8b7c6c9e4384d3b764b0cee18fe7f1d951752fad63cac",
-    "upstream_g1_schema_root_hash": "sha256:f49781e161e00815e08841b2bc3b2b09ee83d60476220c398c9c0824ee4bcfa9",
+    "upstream_g3_3_pack_hash": "sha256:65f675da51c030424c0f56ccb28a2490759e438d40624ded3af1e4ad23bde92a",
+    "upstream_g3_5_pack_hash": "sha256:bbc4e2cb402c8058a6412da0ebd5a284c2c7af831453cafaa84738a391c15718",
+    "upstream_g1_schema_root_hash": "sha256:baa39d55cac34133a29b461466aa450fec59bd2fd6df72334e8b33d1d1619869",
     "publisher_persistence_readiness": "PUBLISHER_SCHEMA_PREREQUISITE_READY",
     "publisher_schema_gap": null,
     "resolution_mode": "immutable_exact_only",
@@ -80,7 +80,7 @@
         },
         "version": 1,
         "domain_separator": "icarus:workflow-g3-retention-executor-abi-positive-cases:1\n",
-        "hash": "sha256:c7a979d11f1c4738143b7b953c2096207a22b0eff883fb12ee28776531408aeb"
+        "hash": "sha256:34450ee5f35bff59121998a951ff3c0e945f72f478e5f5daaf3998d087b0d601"
       },
       {
         "path": "conformance/g3-retention-executor-abi-preflight/negative-cases.json",
@@ -91,7 +91,7 @@
         },
         "version": 1,
         "domain_separator": "icarus:workflow-g3-retention-executor-abi-negative-cases:1\n",
-        "hash": "sha256:5e28b5e00304befe5f4b4d6f960f73cec101d6d6763ad3478fce81690ba1be4b"
+        "hash": "sha256:7c657f8ef78e2646354820b538ed1835d710b2fb629fec3f3644966500298f07"
       },
       {
         "path": "registry/workflow-retention-executor-abi-preflight-domain-separators@1.json",
@@ -109,5 +109,5 @@
     "negative_case_count": 5,
     "g4_through_g9_status": "NOT_READY"
   },
-  "hash": "sha256:03131d78800718ac1bd326f932e33ca677d9ac617ff00fc090fc7aaefedd85a9"
+  "hash": "sha256:c43416c9ca085553bea5ebf2294f594ce434ee275cb14d4954e11374521278a2"
 }

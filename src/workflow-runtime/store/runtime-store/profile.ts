@@ -27,19 +27,19 @@ import type {
 } from '../schema/types.js';
 
 export const FROZEN_G1_1_IDENTITIES = {
-  root: 'sha256:f49781e161e00815e08841b2bc3b2b09ee83d60476220c398c9c0824ee4bcfa9',
+  root: 'sha256:baa39d55cac34133a29b461466aa450fec59bd2fd6df72334e8b33d1d1619869',
   dependencyManifest:
-    'sha256:8acbfe7b71e43ccb6b093d1c72f973ed27c54a8f04b03e8a8dc4fdc858de5d6e',
+    'sha256:d08cfaae72c003b11a05cb1fbfa546f7cce7fad9ecb56d0746f33de294b8088c',
   physicalSchema:
-    'sha256:20006150a0be02a34a636a238fe706e96d3da3b9808911f4475224e93fae7933',
+    'sha256:ba025b32bb028f2ffe5df45d9440cd0a897e0a06c076b10b6f641c265ae02090',
   schema:
-    'sha256:adfcd0462b50991cceb9497412f8af4e0271f6769a9d810ff9e4d58011952cf1',
+    'sha256:49aaee7c8f046cd9a15b3bc5b77fbcf1713be2a1872078941043f5ccdca29024',
   migration:
-    'sha256:11e69e3d82c3963c3eac7d75be67ac16575e43685fdd8e5b392e97152f734e9b',
+    'sha256:2ead40dc2f1618f87247e9d3bb476266797c38560e1ad0537a6afa6f71a3fbf6',
   schema3To4Upgrade:
     'sha256:5ac263fe3279c61f74ba6314f5df98fff59a8f8b32acfa784d2040421ebaa3cf',
   schema4To5Upgrade:
-    'sha256:b443b201131cc1a26bd2401b784f7b4672c5f80828e6df31c23fb518c93e59e1',
+    'sha256:97479810c2c079d71270d5a714faa4b8fa8ebd6af629ef2f7d772af270c2bb0a',
   schema3SourceMigration:
     'sha256:eea3547a0f5208d08bfbe771de3895bba020ca3cf34ddf2fb4e3b7945765d345',
   schema3SourceSqliteSchema:
@@ -49,13 +49,13 @@ export const FROZEN_G1_1_IDENTITIES = {
   schema4SourceSqliteSchema:
     'sha256:e46f58e49b42ad53e3d744de86b6d8fb6299236258459c35d9ca3affa440932c',
   sqliteSchema:
-    'sha256:c771e311172974b6b1c43e5fce8db35bca84ef4c3af9392d37efff2c4aa0dd47',
+    'sha256:5ee3c119cc6a0e0552e2a6fe45b51c8ffd08ec7acdbac66748978ed0d21fdb0a',
   deterministic:
-    'sha256:2f12541b8e7a51d12733b3c2de10188374933626e1740255a2ae3b743b0192e8',
+    'sha256:971466fbade30d4a7f15df694b5a5a18cc8fe033270a1966a90d4e8d17da8202',
   manifest:
-    'sha256:6ce20c518c13a47bb50f9f884f5faec506b2e50100a92ec3d3eb84f2649147e4',
+    'sha256:c9bce166112023cf5e09d41901938f74efbc69cff36da9428a3c21c3064d8439',
   executableDdl:
-    'sha256:88ca1c4875ae017c38215a9508f6c176319114cde3c1f432c292ce98d6344532',
+    'sha256:8e5f64dd00d99ddf6cfece939ce162190bdd05402aca6b3c369b85ed18642f62',
   profile:
     'sha256:3d69742dad2fefa8bef4ba47e375defd705e3b32920a92b105a43726436fb7af',
 } as const;

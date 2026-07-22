@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-runtime-executable-ddl:1\n",
-  "hash": "sha256:88ca1c4875ae017c38215a9508f6c176319114cde3c1f432c292ce98d6344532",
+  "hash": "sha256:8e5f64dd00d99ddf6cfece939ce162190bdd05402aca6b3c369b85ed18642f62",
   "payload": {
     "schema_id": "workflow-runtime-schema-v1",
     "database_schema_version": 5,
@@ -14,23 +14,23 @@
       "logical_schema_source_hash": "sha256:ef5221d3465f1214c3c0aad3660f57b119d03eb4b5127428d6a1f881a6260214",
       "typed_relation_catalog_hash": "sha256:20babbfc787ac8a6006243180ef6e867bef8b454c41a527f4b8f20c8f6dd0d99",
       "query_catalog_hash": "sha256:6a6368f1300a5d732a6a63b73f593b9dd930880beafdd14958517bc92463ed2d",
-      "capacity_delta_hash": "sha256:8160dea544586e02b3429dcc1bb044a40a330cb69920c4d1d2231fbed28866c5",
+      "capacity_delta_hash": "sha256:b15daf99f68f8447aff1da5a9411460497ae29e7067a3802ac588d790066fe30",
       "publisher_schema_prerequisite_hash": "sha256:93ca47fc61812061c77400b78c2285790a86ea852e1358d5369f95db55ba4330",
       "feature_release_activation_schema_prerequisite_hash": "sha256:2e2e98cd8276d3b42b796afb34508be44800619d3781ddd88f10022c55a7a46e",
       "activation_failure_replay_schema_prerequisite_hash": "sha256:d1fd091aedae1d8d6d51e3442c074050ab57ab5330e18bf37adef628b8dcba9d",
       "sqlite_profile_hash": "sha256:3d69742dad2fefa8bef4ba47e375defd705e3b32920a92b105a43726436fb7af"
     },
     "migration_path": "migration/workflow-runtime-schema-v1.sql",
-    "migration_sha256": "sha256:11e69e3d82c3963c3eac7d75be67ac16575e43685fdd8e5b392e97152f734e9b",
+    "migration_sha256": "sha256:2ead40dc2f1618f87247e9d3bb476266797c38560e1ad0537a6afa6f71a3fbf6",
     "schema3_to_schema4_upgrade_path": "migration/workflow-runtime-schema-v3-to-v4.sql",
     "schema3_to_schema4_upgrade_sha256": "sha256:5ac263fe3279c61f74ba6314f5df98fff59a8f8b32acfa784d2040421ebaa3cf",
     "schema4_to_schema5_upgrade_path": "migration/workflow-runtime-schema-v4-to-v5.sql",
-    "schema4_to_schema5_upgrade_sha256": "sha256:b443b201131cc1a26bd2401b784f7b4672c5f80828e6df31c23fb518c93e59e1",
+    "schema4_to_schema5_upgrade_sha256": "sha256:97479810c2c079d71270d5a714faa4b8fa8ebd6af629ef2f7d772af270c2bb0a",
     "schema3_source_migration_sha256": "sha256:eea3547a0f5208d08bfbe771de3895bba020ca3cf34ddf2fb4e3b7945765d345",
     "schema3_source_sqlite_schema_identity": "sha256:a4bc69f3bbf8f6cf00c32c835596eed4a73036941276a3175d550faba2d2f5ee",
     "schema4_source_migration_sha256": "sha256:4a8ddeb1f9715399ad96c3bc32efa5e8032a3bd484eaed0159c6a24620c1be43",
     "schema4_source_sqlite_schema_identity": "sha256:e46f58e49b42ad53e3d744de86b6d8fb6299236258459c35d9ca3affa440932c",
-    "sqlite_schema_identity": "sha256:c771e311172974b6b1c43e5fce8db35bca84ef4c3af9392d37efff2c4aa0dd47",
+    "sqlite_schema_identity": "sha256:5ee3c119cc6a0e0552e2a6fe45b51c8ffd08ec7acdbac66748978ed0d21fdb0a",
     "schema3_upgrade_mode": "empty_activation_state_only_or_fail_closed",
     "schema4_upgrade_mode": "rebuild_capacity_invocations_preserve_all_rows_or_fail_closed",
     "schema3_required_empty_relations": [
@@ -39,10 +39,10 @@
       "workflow_feature_release_activation_events",
       "workflow_feature_active_releases"
     ],
-    "statement_count": 328,
+    "statement_count": 329,
     "table_count": 84,
-    "trigger_count": 46,
-    "schema_hash": "sha256:adfcd0462b50991cceb9497412f8af4e0271f6769a9d810ff9e4d58011952cf1",
+    "trigger_count": 47,
+    "schema_hash": "sha256:49aaee7c8f046cd9a15b3bc5b77fbcf1713be2a1872078941043f5ccdca29024",
     "executable_status": "canonical_migration"
   }
 }

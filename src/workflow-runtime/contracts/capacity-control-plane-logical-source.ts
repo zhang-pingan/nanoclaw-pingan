@@ -519,7 +519,7 @@ const TABLE_SEEDS: readonly TableSeed[] = [
           'decided_at_ms',
           'applied_at_ms',
         ],
-        'denied authorization has denied result and denial code; initial allowed CAP1 invocation number 1 is prepared with a decision timestamp and no applied timestamp; applied result has applied timestamp and no denial code',
+        'denied authorization has denied result and denial code; initial allowed CAP1 invocation number 1 is prepared with a decision timestamp not before request and no denial or applied timestamp; Schema 4 terminal invocation shapes remain valid provenance while Schema 5 insert guards reject new applied rows and constrain duplicate replay',
       ),
     ],
     indexes: [

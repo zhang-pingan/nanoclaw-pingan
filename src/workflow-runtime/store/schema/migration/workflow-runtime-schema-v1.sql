@@ -2730,7 +2730,7 @@ CREATE TABLE "runtime_capacity_admin_invocations" (
   CONSTRAINT "ck:runtime_capacity_admin_invocations:decided_at_ms:safe_integer" CHECK (("decided_at_ms" IS NULL OR "decided_at_ms" BETWEEN 0 AND 9007199254740991)) /* check_kind=safe_integer logical_columns=decided_at_ms */,
   CONSTRAINT "ck:runtime_capacity_admin_invocations:applied_at_ms:safe_integer" CHECK (("applied_at_ms" IS NULL OR "applied_at_ms" BETWEEN 0 AND 9007199254740991)) /* check_kind=safe_integer logical_columns=applied_at_ms */,
   CONSTRAINT "ck:capacity_invocations:observed_pair" CHECK ((("observed_capacity_revision" IS NULL AND "observed_config_hash" IS NULL) OR ("observed_capacity_revision" IS NOT NULL AND "observed_config_hash" IS NOT NULL))) /* check_kind=all_or_none logical_columns=observed_capacity_revision,observed_config_hash */,
-  CONSTRAINT "ck:capacity_invocations:result_consistency" CHECK ("decided_at_ms" >= "requested_at_ms" AND (("authorization_result" = 'denied' AND "execution_result" = 'denied' AND "denial_code" IS NOT NULL AND "applied_at_ms" IS NULL) OR ("authorization_result" = 'allowed' AND "denial_code" IS NULL AND (("execution_result" = 'prepared' AND "invocation_no" = 1 AND "applied_at_ms" IS NULL) OR ("execution_result" = 'applied' AND "applied_at_ms" IS NOT NULL AND "applied_at_ms" >= "decided_at_ms") OR ("execution_result" IN ('conflict', 'duplicate', 'failed') AND "applied_at_ms" IS NULL))))) /* check_kind=state_field_consistency logical_columns=invocation_no,authorization_result,execution_result,denial_code,decided_at_ms,applied_at_ms */
+  CONSTRAINT "ck:capacity_invocations:result_consistency" CHECK ((("authorization_result" = 'denied' AND "execution_result" = 'denied' AND "denial_code" IS NOT NULL AND "applied_at_ms" IS NULL) OR ("authorization_result" = 'allowed' AND (("execution_result" = 'prepared' AND "invocation_no" = 1 AND "denial_code" IS NULL AND "decided_at_ms" >= "requested_at_ms" AND "applied_at_ms" IS NULL) OR ("execution_result" = 'applied' AND "denial_code" IS NULL AND "applied_at_ms" IS NOT NULL) OR ("execution_result" IN ('conflict', 'duplicate', 'failed') AND "applied_at_ms" IS NULL))))) /* check_kind=state_field_consistency logical_columns=invocation_no,authorization_result,execution_result,denial_code,decided_at_ms,applied_at_ms */
 );
 
 CREATE TABLE "runtime_capacity_change_events" (
@@ -3719,8 +3719,12 @@ CREATE TRIGGER "trg:capacity_invocations:applied_insert" BEFORE INSERT ON "runti
   SELECT RAISE(ABORT, 'capacity_applied_invocation_is_historical');
 END;
 
+CREATE TRIGGER "trg:capacity_invocations:terminal_insert" BEFORE INSERT ON "runtime_capacity_admin_invocations" WHEN NEW."execution_result" IN ('denied', 'conflict', 'failed') BEGIN
+  SELECT CASE WHEN NEW."decided_at_ms" < NEW."requested_at_ms" OR (NEW."authorization_result" = 'allowed' AND NEW."denial_code" IS NOT NULL) THEN RAISE(ABORT, 'capacity_terminal_invocation_invalid') END;
+END;
+
 CREATE TRIGGER "trg:capacity_invocations:duplicate_insert" BEFORE INSERT ON "runtime_capacity_admin_invocations" WHEN NEW."execution_result" = 'duplicate' BEGIN
-  SELECT CASE WHEN NEW."invocation_no" <= 1 OR NOT EXISTS (SELECT 1 FROM "runtime_capacity_admin_commands" AS command WHERE command."command_id" = NEW."command_id" AND command."request_hash" = NEW."submitted_request_hash" AND command."canonical_result_value_id" IS NOT NULL AND command."canonical_result_hash" IS NOT NULL AND command."finalized_at_ms" IS NOT NULL) THEN RAISE(ABORT, 'capacity_duplicate_invocation_invalid') END;
+  SELECT CASE WHEN NEW."invocation_no" <= 1 OR NEW."denial_code" IS NOT NULL OR NEW."decided_at_ms" < NEW."requested_at_ms" OR NOT EXISTS (SELECT 1 FROM "runtime_capacity_admin_commands" AS command WHERE command."command_id" = NEW."command_id" AND command."request_hash" = NEW."submitted_request_hash" AND command."canonical_result_value_id" IS NOT NULL AND command."canonical_result_hash" IS NOT NULL AND command."finalized_at_ms" IS NOT NULL) THEN RAISE(ABORT, 'capacity_duplicate_invocation_invalid') END;
 END;
 
 CREATE TRIGGER "trg:capacity_invocations:immutable_update" BEFORE UPDATE ON "runtime_capacity_admin_invocations" BEGIN

@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-capacity-control-plane-gate-review-artifact:1\n",
-  "hash": "sha256:bb9fefe0ced98b5d91c07020c89737f789f8e7b72f2014bdaf7d201540ff7362",
+  "hash": "sha256:7a6c068d2e48b05f60f197d59aea7156d7b4dd56e08d01340c1148edb39e7a24",
   "payload": {
     "format": "icarus.workflow-capacity-control-plane-gate-review/1",
     "gate_id": "G0.10",
@@ -74,7 +74,7 @@
         "status": "pass",
         "evidence_hashes": [
           "sha256:f450a6cf49d9a4859253098f49b736f10ae2bb50a8741f0b052156c5319d8bcc",
-          "sha256:b4dd0f47f782888746dce027cfbf618aa93e776b3bcdfe7864b60029d75886e0"
+          "sha256:644dd652b26a8cee8e5787cdae39d41b3b991dafc55e10a6b61137866b08a553"
         ]
       },
       {
@@ -100,7 +100,7 @@
       }
     ],
     "markdown_delta_coverage_hash": "sha256:f450a6cf49d9a4859253098f49b736f10ae2bb50a8741f0b052156c5319d8bcc",
-    "artifact_inventory_hash": "sha256:b4dd0f47f782888746dce027cfbf618aa93e776b3bcdfe7864b60029d75886e0",
+    "artifact_inventory_hash": "sha256:644dd652b26a8cee8e5787cdae39d41b3b991dafc55e10a6b61137866b08a553",
     "status_proof": {
       "g0_status": "DONE",
       "i11_status": "DONE",
@@ -119,6 +119,6 @@
       "golden_seal_status": "not_run",
       "sealed_directory_entry": ".gitkeep"
     },
-    "review_hash": "sha256:9a0c89f43dd9206d21b8d3430dd607a5555e2c9d057cc1db2ba0a2928ddac604"
+    "review_hash": "sha256:f28dc1ad6d6fa83e091f9b42077184c2df49006f6bc27fd3191cf98437633282"
   }
 }

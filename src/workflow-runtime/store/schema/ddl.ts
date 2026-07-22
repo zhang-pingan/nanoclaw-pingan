@@ -564,13 +564,22 @@ export function buildSchemaTriggers(
         sql: `CREATE TRIGGER ${q('trg:capacity_invocations:applied_insert')} BEFORE INSERT ON ${q('runtime_capacity_admin_invocations')} WHEN NEW."execution_result" = 'applied' BEGIN\n  SELECT RAISE(ABORT, 'capacity_applied_invocation_is_historical');\nEND`,
       },
       {
+        name: 'trg:capacity_invocations:terminal_insert',
+        table: 'runtime_capacity_admin_invocations',
+        timing: 'before',
+        event: 'insert',
+        owner_intent:
+          'new terminal audit rows preserve decision chronology and allowed invocations carry no denial code',
+        sql: `CREATE TRIGGER ${q('trg:capacity_invocations:terminal_insert')} BEFORE INSERT ON ${q('runtime_capacity_admin_invocations')} WHEN NEW."execution_result" IN ('denied', 'conflict', 'failed') BEGIN\n  SELECT CASE WHEN NEW."decided_at_ms" < NEW."requested_at_ms" OR (NEW."authorization_result" = 'allowed' AND NEW."denial_code" IS NOT NULL) THEN RAISE(ABORT, 'capacity_terminal_invocation_invalid') END;\nEND`,
+      },
+      {
         name: 'trg:capacity_invocations:duplicate_insert',
         table: 'runtime_capacity_admin_invocations',
         timing: 'before',
         event: 'insert',
         owner_intent:
           'duplicate is an exact-request replay of an already finalized canonical Command result',
-        sql: `CREATE TRIGGER ${q('trg:capacity_invocations:duplicate_insert')} BEFORE INSERT ON ${q('runtime_capacity_admin_invocations')} WHEN NEW."execution_result" = 'duplicate' BEGIN\n  SELECT CASE WHEN NEW."invocation_no" <= 1 OR NOT EXISTS (SELECT 1 FROM "runtime_capacity_admin_commands" AS command WHERE command."command_id" = NEW."command_id" AND command."request_hash" = NEW."submitted_request_hash" AND command."canonical_result_value_id" IS NOT NULL AND command."canonical_result_hash" IS NOT NULL AND command."finalized_at_ms" IS NOT NULL) THEN RAISE(ABORT, 'capacity_duplicate_invocation_invalid') END;\nEND`,
+        sql: `CREATE TRIGGER ${q('trg:capacity_invocations:duplicate_insert')} BEFORE INSERT ON ${q('runtime_capacity_admin_invocations')} WHEN NEW."execution_result" = 'duplicate' BEGIN\n  SELECT CASE WHEN NEW."invocation_no" <= 1 OR NEW."denial_code" IS NOT NULL OR NEW."decided_at_ms" < NEW."requested_at_ms" OR NOT EXISTS (SELECT 1 FROM "runtime_capacity_admin_commands" AS command WHERE command."command_id" = NEW."command_id" AND command."request_hash" = NEW."submitted_request_hash" AND command."canonical_result_value_id" IS NOT NULL AND command."canonical_result_hash" IS NOT NULL AND command."finalized_at_ms" IS NOT NULL) THEN RAISE(ABORT, 'capacity_duplicate_invocation_invalid') END;\nEND`,
       },
       {
         name: 'trg:capacity_invocations:immutable_update',

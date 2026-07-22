@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-capacity-control-plane-logical-schema-delta-artifact:1\n",
-  "hash": "sha256:8160dea544586e02b3429dcc1bb044a40a330cb69920c4d1d2231fbed28866c5",
+  "hash": "sha256:b15daf99f68f8447aff1da5a9411460497ae29e7067a3802ac588d790066fe30",
   "payload": {
     "format": "icarus.workflow-capacity-control-plane-logical-schema-delta/1",
     "schema_id": "workflow-runtime-schema-v1",
@@ -1254,7 +1254,7 @@
               "decided_at_ms",
               "applied_at_ms"
             ],
-            "expression_intent": "denied authorization has denied result and denial code; initial allowed CAP1 invocation number 1 is prepared with a decision timestamp and no applied timestamp; applied result has applied timestamp and no denial code"
+            "expression_intent": "denied authorization has denied result and denial code; initial allowed CAP1 invocation number 1 is prepared with a decision timestamp not before request and no denial or applied timestamp; Schema 4 terminal invocation shapes remain valid provenance while Schema 5 insert guards reject new applied rows and constrain duplicate replay"
           }
         ],
         "indexes": [
@@ -1834,6 +1834,6 @@
       "Scheduler Admission stores revision change id and config hash from one watcher-published immutable pointer",
       "G0.10 metadata is additive and does not mutate the G0.6 historical logical schema artifact"
     ],
-    "delta_hash": "sha256:749bdfe16195a1762427aed9d98ff8e7d9c2633d22b6d8e3d31bf9aeaf9d589c"
+    "delta_hash": "sha256:ca81abe11e332890bde7420fdf8f040856e8076bba9bbc4a03d15ffedb439e3a"
   }
 }

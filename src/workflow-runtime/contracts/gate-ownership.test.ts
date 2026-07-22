@@ -196,9 +196,9 @@ describe('G5/G7 T6d, T7c, and T6e gate ownership authority', () => {
     expect(authority.payload.frozen_authority_bindings).toMatchObject({
       database_schema_version: 5,
       g1_executable_schema_root_hash:
-        'sha256:f49781e161e00815e08841b2bc3b2b09ee83d60476220c398c9c0824ee4bcfa9',
+        'sha256:baa39d55cac34133a29b461466aa450fec59bd2fd6df72334e8b33d1d1619869',
       workflow_runtime_schema_hash:
-        'sha256:adfcd0462b50991cceb9497412f8af4e0271f6769a9d810ff9e4d58011952cf1',
+        'sha256:49aaee7c8f046cd9a15b3bc5b77fbcf1713be2a1872078941043f5ccdca29024',
     });
   });
 

@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-runtime-gate-ownership:1\n",
-  "hash": "sha256:4e973c234ddd2c37079b32f33df7780da0b8cbdda3f5eba091d314c7947ef2a8",
+  "hash": "sha256:7627be1b36c04cc785e05fa8585a33eb933cb95a8ca98b824b4ae931d0ee343a",
   "payload": {
     "governance_scope": "current_construction_g5_g7_t6d_t7c_boundary",
     "status": "T6D_OWNERSHIP_EXIT_CANDIDATE_PENDING_INDEPENDENT_REGRESSION",
@@ -122,10 +122,10 @@
       "workflow_run_transaction_protocol_table_hash": "sha256:3d5474096d89fbd723e34e0d2f9d1dadd1b955b5fc36ff447d026257852cac79",
       "workflow_runtime_command_protocol_table_hash": "sha256:43cc8ef247fcba4bac5e9fccdd654fd393928120755a6405bad232043f0c94ba",
       "workflow_runtime_logical_schema_source_hash": "sha256:ef5221d3465f1214c3c0aad3660f57b119d03eb4b5127428d6a1f881a6260214",
-      "g1_executable_schema_root_hash": "sha256:f49781e161e00815e08841b2bc3b2b09ee83d60476220c398c9c0824ee4bcfa9",
+      "g1_executable_schema_root_hash": "sha256:baa39d55cac34133a29b461466aa450fec59bd2fd6df72334e8b33d1d1619869",
       "database_schema_version": 5,
-      "workflow_runtime_schema_manifest_hash": "sha256:6ce20c518c13a47bb50f9f884f5faec506b2e50100a92ec3d3eb84f2649147e4",
-      "workflow_runtime_schema_hash": "sha256:adfcd0462b50991cceb9497412f8af4e0271f6769a9d810ff9e4d58011952cf1"
+      "workflow_runtime_schema_manifest_hash": "sha256:c9bce166112023cf5e09d41901938f74efbc69cff36da9428a3c21c3064d8439",
+      "workflow_runtime_schema_hash": "sha256:49aaee7c8f046cd9a15b3bc5b77fbcf1713be2a1872078941043f5ccdca29024"
     },
     "affected_current_root_inventory": {
       "members": [
@@ -168,20 +168,20 @@
         {
           "path": "contract-pack-g3-retention-executor-abi-preflight.json",
           "format": "icarus.workflow-contract-pack-g3-retention-executor-abi-preflight/1",
-          "semantic_hash": "sha256:03131d78800718ac1bd326f932e33ca677d9ac617ff00fc090fc7aaefedd85a9",
-          "raw_sha256": "sha256:d97cda3935c3261399a659efbc567331ede80c1d2249d75f4c257bcca98e3d87"
+          "semantic_hash": "sha256:c43416c9ca085553bea5ebf2294f594ce434ee275cb14d4954e11374521278a2",
+          "raw_sha256": "sha256:e56cf9b153a2fa58d25923c4c691f3a442160aec7ecf023893d3f872cd3d2a2c"
         },
         {
           "path": "contract-pack-g3-workflow-publisher.json",
           "format": "icarus.workflow-contract-pack-g3-workflow-publisher/1",
-          "semantic_hash": "sha256:8a67b2516d46da89524045297b261e32305d0803546089048b19d70384e23282",
-          "raw_sha256": "sha256:ee57b2f1ecfc01fd502e3f72877e80f572c54fbdb284fdf758b868a2ff45bd6e"
+          "semantic_hash": "sha256:9865cf0aafa37b4f44dc293aea6c59221d0f445c2e67fa87dfe53e6be71c9fbb",
+          "raw_sha256": "sha256:c6c8a0f7132d9415deb44107016a51a292c6683a5ad0c828ce3a034abdd8d90e"
         },
         {
           "path": "contract-pack-g3.9-feature-release-activation.json",
           "format": "icarus.workflow-contract-pack-g3-feature-release-activation/1",
-          "semantic_hash": "sha256:7c192a3a4dd10004c2a7bf6da2cf81a38d5745e145717796f86acfc2025fdf91",
-          "raw_sha256": "sha256:2994a92738dbf5b865d673a2e685534a821e109d714d988513e5f9f94578d93c"
+          "semantic_hash": "sha256:871ded236e5e8fead95d28b365f9802792213c16d1f8517caf030ab9cc9865f8",
+          "raw_sha256": "sha256:a8032187e64e49163e4e6d00f7a0cfc623d281b91ab8addb01f37e2b1b18dc92"
         },
         {
           "path": "contract-pack-g3.8a-activation-contract-repair.json",
@@ -192,12 +192,12 @@
         {
           "path": "conformance/capacity-control-plane-addendum/contract-pack-capacity-control-plane-addendum.json",
           "format": "icarus.workflow-contract-pack-capacity-control-plane-addendum/1",
-          "semantic_hash": "sha256:12f9fdfe9739b767440b56b0e55fedb431b27c546326da90285e96e1fc2ea15c",
-          "raw_sha256": "sha256:ec0b646f1a54c3b0028f74a15c2378b8156b07e4d28966fe9632630469098072"
+          "semantic_hash": "sha256:d436710893239f01e53d668c23d5ddcfe1a7e4dbee3c00074bc4cd43871c98a6",
+          "raw_sha256": "sha256:c6a24147105f1b5f91a34b35810245387cfa2a6fa243c4d0ee98811faff43b70"
         }
       ],
       "member_count": 11,
-      "tree_digest": "sha256:c1e1ff5d27410c497cf614458b7bb273e3aedaa9af879d7dd75423674219ccb5"
+      "tree_digest": "sha256:59c2079ca1d9bfe033d858bd169600e76eee35d93d01bbce1402f2e83a04f965"
     },
     "frozen_invariants": {
       "t6d_name": "attempt_watchdog_and_retry_timers",

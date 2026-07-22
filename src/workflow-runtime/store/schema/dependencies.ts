@@ -110,7 +110,7 @@ const INPUT_MEMBER_SPECS = [
     },
     version: 1,
     expected_semantic_hash:
-      'sha256:8160dea544586e02b3429dcc1bb044a40a330cb69920c4d1d2231fbed28866c5',
+      'sha256:b15daf99f68f8447aff1da5a9411460497ae29e7067a3802ac588d790066fe30',
   },
   {
     role: 'publisher_schema_prerequisite',

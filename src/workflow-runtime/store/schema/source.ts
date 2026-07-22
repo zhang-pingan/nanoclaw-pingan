@@ -266,7 +266,7 @@ function buildSchema3ExecutableSource(
     delta.added_tables.length !== 4 ||
     delta.extended_tables.length !== 1 ||
     currentDelta.delta_hash !==
-      'sha256:749bdfe16195a1762427aed9d98ff8e7d9c2633d22b6d8e3d31bf9aeaf9d589c'
+      'sha256:ca81abe11e332890bde7420fdf8f040856e8076bba9bbc4a03d15ffedb439e3a'
   ) {
     throw new Error('G0.10 capacity delta is not the expected additive input');
   }

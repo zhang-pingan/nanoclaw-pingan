@@ -94,13 +94,7 @@ describe('G5 Basic Runtime Capacity Admin readiness audit', () => {
       "\"execution_result\" IN ('prepared', 'applied', 'denied', 'conflict', 'duplicate', 'failed')",
     );
     expect(resultConsistency.expression_sql).toContain(
-      '"authorization_result" = \'allowed\' AND "denial_code" IS NULL',
-    );
-    expect(resultConsistency.expression_sql).toContain(
-      '"execution_result" = \'prepared\' AND "invocation_no" = 1 AND "applied_at_ms" IS NULL',
-    );
-    expect(resultConsistency.expression_sql).toContain(
-      '"decided_at_ms" >= "requested_at_ms"',
+      '"execution_result" = \'prepared\' AND "invocation_no" = 1 AND "denial_code" IS NULL AND "decided_at_ms" >= "requested_at_ms" AND "applied_at_ms" IS NULL',
     );
 
     const triggers = objects(manifest.payload.triggers);
@@ -113,6 +107,7 @@ describe('G5 Basic Runtime Capacity Admin readiness audit', () => {
     ).toEqual([
       'trg:capacity_invocations:prepared_insert',
       'trg:capacity_invocations:applied_insert',
+      'trg:capacity_invocations:terminal_insert',
       'trg:capacity_invocations:duplicate_insert',
       'trg:capacity_invocations:immutable_update',
       'trg:capacity_invocations:immutable_delete',

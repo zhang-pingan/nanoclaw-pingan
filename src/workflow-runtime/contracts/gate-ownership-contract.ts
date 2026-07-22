@@ -112,11 +112,11 @@ const EXPECTED_BINDINGS = {
   logicalSchema:
     'sha256:ef5221d3465f1214c3c0aad3660f57b119d03eb4b5127428d6a1f881a6260214',
   g1Root:
-    'sha256:f49781e161e00815e08841b2bc3b2b09ee83d60476220c398c9c0824ee4bcfa9',
+    'sha256:baa39d55cac34133a29b461466aa450fec59bd2fd6df72334e8b33d1d1619869',
   schemaManifest:
-    'sha256:6ce20c518c13a47bb50f9f884f5faec506b2e50100a92ec3d3eb84f2649147e4',
+    'sha256:c9bce166112023cf5e09d41901938f74efbc69cff36da9428a3c21c3064d8439',
   schemaHash:
-    'sha256:adfcd0462b50991cceb9497412f8af4e0271f6769a9d810ff9e4d58011952cf1',
+    'sha256:49aaee7c8f046cd9a15b3bc5b77fbcf1713be2a1872078941043f5ccdca29024',
 } as const satisfies Record<string, Sha256Hash>;
 
 const AFFECTED_CURRENT_ROOTS = [
@@ -146,15 +146,15 @@ const AFFECTED_CURRENT_ROOTS = [
   ],
   [
     'contract-pack-g3-retention-executor-abi-preflight.json',
-    'sha256:03131d78800718ac1bd326f932e33ca677d9ac617ff00fc090fc7aaefedd85a9',
+    'sha256:c43416c9ca085553bea5ebf2294f594ce434ee275cb14d4954e11374521278a2',
   ],
   [
     'contract-pack-g3-workflow-publisher.json',
-    'sha256:8a67b2516d46da89524045297b261e32305d0803546089048b19d70384e23282',
+    'sha256:9865cf0aafa37b4f44dc293aea6c59221d0f445c2e67fa87dfe53e6be71c9fbb',
   ],
   [
     'contract-pack-g3.9-feature-release-activation.json',
-    'sha256:7c192a3a4dd10004c2a7bf6da2cf81a38d5745e145717796f86acfc2025fdf91',
+    'sha256:871ded236e5e8fead95d28b365f9802792213c16d1f8517caf030ab9cc9865f8',
   ],
   [
     'contract-pack-g3.8a-activation-contract-repair.json',
@@ -162,7 +162,7 @@ const AFFECTED_CURRENT_ROOTS = [
   ],
   [
     'conformance/capacity-control-plane-addendum/contract-pack-capacity-control-plane-addendum.json',
-    'sha256:12f9fdfe9739b767440b56b0e55fedb431b27c546326da90285e96e1fc2ea15c',
+    'sha256:d436710893239f01e53d668c23d5ddcfe1a7e4dbee3c00074bc4cd43871c98a6',
   ],
 ] as const satisfies readonly (readonly [string, Sha256Hash])[];
 

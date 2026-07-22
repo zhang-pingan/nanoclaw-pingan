@@ -6,9 +6,9 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-runtime-query-plan-fixtures:1\n",
-  "hash": "sha256:79d002353e00ed0f184c44cb527043cdd9c647c61e7352b6f0fa875e30e1b00a",
+  "hash": "sha256:65c28f3fd4b3933713d4ac959f9f20a5adf270cd132fb0e0cc85c502b739ff7a",
   "payload": {
-    "schema_hash": "sha256:adfcd0462b50991cceb9497412f8af4e0271f6769a9d810ff9e4d58011952cf1",
+    "schema_hash": "sha256:49aaee7c8f046cd9a15b3bc5b77fbcf1713be2a1872078941043f5ccdca29024",
     "execution_target": "real_file_sqlite",
     "query_count": 43,
     "fixtures": [
