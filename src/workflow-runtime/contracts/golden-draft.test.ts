@@ -81,16 +81,16 @@ describe('G0.8 Golden Draft and Review Input', () => {
       'sha256:c5ea281d64480787322e8b6ef619b2f90784084d87ba4373c94288ed5e7aa3a8',
     );
     expect(readArtifact('contract-pack-catalog-protocols.json').hash).toBe(
-      'sha256:e4947c515a28b3baf6782a980db9c26d32612b3c6acd3cd04348e73bd54ff607',
+      'sha256:a648dc9326255b109690cb47d58032775825ae065caf8f7cbb0ef73efcf984f7',
     );
     expect(readArtifact('contract-pack-safety-sqlite.json').hash).toBe(
-      'sha256:76b8e1196ac422500be9c79a767e673e9c30fa3d9bbb1dc12fc54613cd40b428',
+      'sha256:4f756c9427a9e5fd8f034c2abdab3c614b675af8b8bbb350fc4219917159cd8d',
     );
     expect(readArtifact('contract-pack-logical-schema.json').hash).toBe(
       'sha256:32de639cc0ee6c6f33aa4291ea03ffa55b0a22752190fb88862e72a3f6857520',
     );
     expect(readArtifact('contract-pack-static-absence.json').hash).toBe(
-      'sha256:a75736bf253ab67b22ba6abb0edf8e943c5d643f0b2ff36d63defbdf6336f7d2',
+      'sha256:dc7b987416c3c1baed5a5a666960bfd2411a3e3bf76d173bd8ab0a550e51b21a',
     );
   });
 

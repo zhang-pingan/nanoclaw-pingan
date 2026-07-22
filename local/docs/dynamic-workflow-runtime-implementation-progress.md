@@ -1,8 +1,8 @@
 # Dynamic Workflow Runtime 实施进度
 
-> **状态**: T6D_OWNERSHIP_EXIT_CANDIDATE_PENDING_INDEPENDENT_REGRESSION
-> **当前 Gate**: G5 Basic Runtime=`NOT_READY`；T6d ownership repair candidate已生成，等待独立ownership/affected-chain regression
-> **下一独立会话**: T6d ownership / affected-chain independent regression；通过前不得恢复G5或开始G6
+> **状态**: T6D_OWNERSHIP_INDEPENDENT_REGRESSION_PASS
+> **当前 Gate**: G5 Basic Runtime=`READY`；T6d ownership/affected-chain独立回归已通过，G5尚未实现且不是`DONE`
+> **下一独立会话**: G5 Basic Runtime implementation；严格限于T0-T6d automatic timer primitive与Operational Blocker create/open/cache，不得下沉G7 Gateway/T6e
 > **最后更新**: 2026-07-22
 > **规范权威**: `local/docs/dynamic-workflow-dag-framework.md`
 
@@ -113,7 +113,7 @@ Agent Container 运行于独立 VM，Node identity 由 VM image gate 保证；�
 | G2 Compiler / Golden | `DONE` | G0.1-G0.9；R-016 spec/Contract repair；G0.10 不改变 Compiler/Plan 语义 | phase=`BASELINE_ACCEPTED`；前序immutable lineage未变；owner-approved successor GoldenSemanticReview/seal完整，current replay 40/40 exact、0 differences | 本原子提交（replay-repair successor seal） |
 | G3 Registry / Authoring / Publish | `DONE` | G1 + G2 | G3.1-G3.9 DONE；独立whole-gate regression覆盖machine authority、transaction、replay/recovery/fault、Schema 4与冻结边界 | 本原子提交 |
 | G4 Test Bootstrap | `DONE` | G1 + G2 + G3 | downstream-safe isolation v2与独立whole-gate regression均已完成 | `2904f81592b9bd83f5d837f521f2eb026ce2d439` |
-| G5 Basic Runtime | `NOT_READY` | G4 + current T6d ownership authority independent regression | repair candidate已把G5 T6d收敛为automatic attempt/retry timers并把deadline留在G7；独立回归未完成，Runtime未实现 | - |
+| G5 Basic Runtime | `READY` | G4 + current T6d ownership authority independent regression | repair已把G5 T6d收敛为automatic attempt/retry timers并把deadline留在G7；独立回归通过，Runtime仍未实现且Gate不是`DONE` | 本原子提交（仅恢复施工就绪） |
 | G6 Dynamic / Close | `NOT_READY` | G5 | T7/T8/child/compensation fixtures | - |
 | G7 Control / Card / Projection / Recovery | `NOT_READY` | G6 | Deadline Watchdog -> Gateway -> T7c stable-key/System Grant/audit + authorized manual retry handoff + T6e/resolution/recovery/card/projection fixtures | - |
 | G8 Certification | `NOT_READY` | G7 | certified profile meeting Product Floor | - |
@@ -124,13 +124,13 @@ Agent Container 运行于独立 VM，Node identity 由 VM image gate 保证；�
 | 工作包 | 范围 | 状态 | 当前 Gate/切片 |
 | --- | --- | --- | --- |
 | I0 | Publish、Registry、Recipe 与执行版本固定 | `DONE` | G3.1-G3.9与独立G3回归完成；staged Publisher与Feature Release Activation均闭合 |
-| I1 | Intake、Routing、幂等创建、Child provenance、Claim | `NOT_READY` | T6d blocker已修复为candidate，但G5仍等待独立affected-chain regression，不得先交付partial Runtime |
+| I1 | Intake、Routing、幂等创建、Child provenance、Claim | `READY` | T6d ownership独立回归已通过；下一G5任务须一次性交付受限Runtime边界，不得先交付partial Runtime |
 | I2 | Definition、State lowering、Context、transition | `IN_PROGRESS` | approved static lowering语义已由Compiler 3.0.1实现、批准并seal；G2 lowering部分完成，Runtime transition仍从G5起 |
 | I3 | Source/Compiled IR、Port、Compiler | `DONE` | Production Compiler 3.0.1 successor已批准并seal；current replay 40/40 exact、0 differences |
 | I4 | Runtime Store、SQLite relation、Value/Blob、migration | `IN_PROGRESS` | current G1 Schema 4/G1.6与G3.9 Activation DML DONE；Blob/GC仍未实现 |
-| I5 | Graph 状态机、reconcile、Scheduler、Ledger | `NOT_READY` | G5 T6d automatic primitive已机器化，等待独立ownership regression |
-| I6 | Delegation/System、Capability Effect、Outbox | `NOT_READY` | G5不得在独立回归前开始partial实现或创建Command/Gateway |
-| I7 | Durable Wait、Signal/Timer/Approval、Inbox | `NOT_READY` | T6d只含attempt/retry timers；workflow deadline归G7，等待独立回归 |
+| I5 | Graph 状态机、reconcile、Scheduler、Ledger | `READY` | G5 T6d automatic primitive ownership已独立验证；Runtime实现尚未开始 |
+| I6 | Delegation/System、Capability Effect、Outbox | `READY` | 可进入受限G5施工，但不得创建Command/Gateway或实现G7/T6e |
+| I7 | Durable Wait、Signal/Timer/Approval、Inbox | `READY` | G5仅实现attempt/retry timers；workflow deadline仍归未来G7 |
 | I8 | Subgraph、Expand、Map、child scope | `NOT_READY` | G6 起 |
 | I9 | Completion、Cancel、Compensation、Finalization、Recovery | `NOT_READY` | G5只拥有blocker create/open/cache；G6 close/T7/T8；G7 T6e resolution/abandon/Recovery |
 | I10 | Runtime Command、Capacity Admin、Runtime Center、Trace | `NOT_READY` | Deadline Watchdog/Gateway/T7c与manual retry authorization归G7；G7仍依赖G6 |
@@ -2174,9 +2174,29 @@ Current authority `src/workflow-runtime/contracts/governance/workflow-runtime-ga
 
 Authority payload保留`implementation_authorized=false`与`next_required_gate=independent_t6d_ownership_and_affected_chain_regression`。本轮只形成Contract repair candidate，不创建G5 pack、Runtime module、partial skeleton或Command row，不把候选误记为G5 Gate PASS。
 
+### T6d ownership / affected-chain independent regression
+
+**结论**：`PASS / T6D_OWNERSHIP_REPAIR_DONE`，G5 Basic Runtime=`READY`但不是`DONE`，G6-G9继续`NOT_READY`。本轮从clean local `main@fde5c2f82f5153195614007d66cb42984385d768`开始，并完整复核parent `627d0bc483a971f0d5bdbd59c7fb40c994f90097`与candidate提交；环境为`permission_profile=disabled/unrestricted`、filesystem unrestricted、sandbox `danger-full-access`、approval policy `never`。没有创建或切换worktree、Handoff、sub-agent、approval/escalation、push、amend或重写历史；全部Node/npm命令均经`./scripts/runtime-toolchain.sh exec -- <command>`执行。
+
+独立复核确认T6d exact只拥有automatic attempt dispatch/execution watchdog、execution retry/quality revision timer及retry-schedule consumption primitive，且四项automatic atomic writes不变。T6d不创建Runtime Command、不写Command/Invocation audit；workflow deadline exact归`G7 Deadline Watchdog -> Runtime Command Gateway -> cancel_workflow -> T7c`，domain=`system:deadline-watchdog`，stable key=`workflow-deadline:<workflow_id>:<deadline_at_ms>`。`advance_retry_schedule -> T6d`仍是G5 primitive，但未来G7必须先授权并审计。Schema 4未增加deadline handoff relation，G1 root/schema/manifest与既有Command/Invocation relations逐字节不变。
+
+完整G0首次运行暴露并修复两个affected-chain测试缺口：G0.8仍冻结旧G0.4/G0.5/static identities，以及foundation import boundary遗漏既有exact G4 construction checker到G1 frozen Store profile的依赖。修复只更新测试pin与该exact construction allowlist，不改任何Contract artifact、G1 Schema、G2 seal、G3.8A、G0.10、Runtime业务代码或Production surface；修复后全部affected chain从readiness起完整重跑。
+
+| 独立证据 | 结果 |
+| --- | --- |
+| 两轮managed ownership generate/check、独立JCS/raw/tree复算、`test:gate-ownership`、`test:g5:readiness` | PASS；authority=`sha256:0d1e0ffda6f17c637616192e3ddcbf51af55207cd011672317b3a7eb231c5e8e`；3份ownership artifact、10 affected members、tree=`sha256:2efe85fb51757cfa9d4cbe59ec4dfcc02b6c0c95ed1b56638935e11657950b28`稳定；4 positive / 40 negative，9/9与3/3 |
+| affected catalog/safety/logical-schema/static + aggregate `contracts:generate/check` | PASS；7/7、9/9、8/8、18/18；G0.4/G0.5/static=`sha256:a648dc93...5915` / `sha256:4f756c94...cd8d` / `sha256:dc7b9874...1b21`，完整current aggregate通过且生成零artifact drift |
+| 两轮G4 generate/check、独立14-member digest、完整G4/live isolation | PASS；pack/profile/isolation=`sha256:fec4f3fa...e6ed3` / `sha256:1797a52c...9d80` / `sha256:883f8f2d...9188`；两轮digest=`abb4117ddea6fe8f13f012e4f4c578891b929ec5b215a92ef85e2b684c9aa4b5`；33/33；277 source / 38 production roots / 9 authority / 4 bootstrap / 0 violation |
+| G3.7 / G3.9 / whole G3 | PASS；14/14、34/34、97/97；G3.6/G3.7/G3.9=`sha256:8cfd7b03...49e2c` / `sha256:4fc65c77...e6933` / `sha256:f5ddf7eb...067f4e` |
+| G1 Schema/Store、G2/replay、G0.10/whole G0 | PASS；G1 Schema 20/20、Activation 5 passed / 15 skipped、Store 20/20；G2 47/47、replay 40/40；G0.10 10/10、whole G0 15 files / 109 tests |
+| protected trees / Schema 4 / forbidden surface | PASS；G0.10=`2bf94fb4ec0142bcb5348168525f67b348cedda4`、G2 sealed=`cf9270f9ec71fa2134de0987b5fe55b5425e399b`、G3.8A=`a358e690e90294f0ad08ec47992ff9f645df7e6f`、G1 Schema=`161d6041bc56368bc3fd821a37f5a6a58a8eea1b`零diff；无deadline handoff table、G5/G6/G7业务实现、Gateway/T6e或Production入口 |
+| typecheck / build / formatting / diff | managed `typecheck`与`build` PASS；本任务TypeScript文件targeted Prettier与`git diff --check` PASS。仓库级`format:check`仍报告起点已有的48个无关文件，不包含本任务改动，未批量改写范围外源码 |
+
+Candidate authority继续原样保存生成时`T6D_OWNERSHIP_EXIT_CANDIDATE_PENDING_INDEPENDENT_REGRESSION`、`implementation_authorized=false`与`next_required_gate=independent_t6d_ownership_and_affected_chain_regression`，不能为了关闭治理步骤伪造重写。治理层T6d ownership repair现为`DONE`，只把G5施工状态恢复为`READY`；本轮没有创建G5 Contract Pack、Runtime module、Command row、业务DML、Gateway/T6e、G6-G9或Production surface。
+
 ## 下一步
 
-下一独立任务固定为**T6d ownership / affected-chain independent regression**。从本candidate提交后的clean `main`启动，不修改candidate artifacts，先核对authority=`sha256:0d1e0ffda6f17c637616192e3ddcbf51af55207cd011672317b3a7eb231c5e8e`、transaction=`sha256:3d5474096d89fbd723e34e0d2f9d1dadd1b955b5fc36ff447d026257852cac79`、command=`sha256:43cc8ef247fcba4bac5e9fccdd654fd393928120755a6405bad232043f0c94ba`与clean/protected baselines；连续两轮执行ownership generate/check并独立复算3份ownership artifacts、10 affected members和tree digest，执行全部4 positive / 40 negative oracle、`test:g5:readiness`、targeted protocol/safety/query/static tests与mutation probes；独立复核G0.4/G0.5/static -> G3.6/G3.7/G3.9 -> G4真实级联、G4两轮14-member bytes/digest与live 0-violation isolation，以及G1/G2/G3.8A/G0.10 protected trees、Schema 4零漂移、aggregate contracts、G0-G4 tests、typecheck/build/format/diff/forbidden surface。不得实现G5 Runtime、Gateway/T6e、G6-G9或Production surface；全部通过并形成独立原子提交前，G5保持`NOT_READY`，不得开始G5 implementation。
+下一独立任务固定为**G5 Basic Runtime implementation**。必须从本回归提交后的clean `main`启动，消费current ownership authority但不得改写其candidate事实；施工范围exact为T0-T6d automatic timer/model/fault与Operational Blocker create/open/cache，manual retry只允许验证“无G7 authorization不可调用”的negative path。不得在G5实现Deadline Watchdog、Runtime Command Gateway、Command/Invocation audit、T6e、blocker resolve/abandon/recovery、G6-G9或Production activation；G5通过自己的独立实现回归前保持`READY`，不得标记`DONE`。
 
 历史fresh review evidence只存在于Git commits，不是current dependency；current immutable semantic approval只绑定exact Draft/report identities。显式`prepare-rc`冻结的四个Working roots与唯一Review Candidate未变；current expected full case-result/Plan/proof/program bytes/hash已独立冻结、审计、owner批准并seal。local single-user签名策略为`not_required_local_single_user`，没有伪造GPG或远程签名。
 

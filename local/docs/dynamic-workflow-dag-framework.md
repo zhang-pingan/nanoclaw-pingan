@@ -6349,7 +6349,11 @@ Workflow deadline enforcement完整归G7：Deadline Watchdog消费既有`query:w
 
 Current command protocol=`sha256:43cc8ef247fcba4bac5e9fccdd654fd393928120755a6405bad232043f0c94ba`，ownership authority=`sha256:0d1e0ffda6f17c637616192e3ddcbf51af55207cd011672317b3a7eb231c5e8e`，状态=`T6D_OWNERSHIP_EXIT_CANDIDATE_PENDING_INDEPENDENT_REGRESSION`。Authority执行4 positive / 40 negative fixture oracle，绑定source/generated一致、closed field set、artifact raw bytes/tree digest、G5/G7 exact ownership、T6d/T7c/System Grant/manual handoff、query owner、安全矩阵以及不变Schema 4/T6e边界。Database Schema 4只有既有Command/Invocation relations，不新增deadline handoff relation，也不允许G5写Command；G1 root/schema/manifest保持`sha256:6f49451868b7a5cab359d1c21f14f79afbc11b12aa1938039daf5914d9c4d591` / `sha256:f517a5e7bb8b3ea91bb37cd6a68b32898ceb62b9044687a8103808be6852106a` / `sha256:87f6787dd5c6382df97120c2e10dc6624143c67efc35e57cb92ea22f16fa666b`。
 
-本次只形成ownership exit candidate，不授权任何Runtime实现。G5 Basic Runtime保持`NOT_READY`，直到下一独立T6d ownership/affected-chain regression复核current G0.4/G0.5/G3/G4级联、G1/G2/G3.8A/protected trees、generator continuity和全部fixture；G6-G9继续`NOT_READY`。
+Candidate authority只形成ownership exit candidate，不授权任何Runtime实现；其中的pending status、`implementation_authorized=false`与next-required-gate保持生成时原始事实，不为治理关闭而改写。基于clean `main@fde5c2f82f5153195614007d66cb42984385d768`的独立T6d ownership/affected-chain regression现已`PASS/DONE`，G5 Basic Runtime治理状态恢复为`READY`但不是`DONE`，G6-G9继续`NOT_READY`。
+
+独立回归连续两轮复算ownership 3 artifacts、10 affected members/tree digest与4 positive / 40 negative oracle；current transaction/command/ownership exact为`sha256:3d5474096d89fbd723e34e0d2f9d1dadd1b955b5fc36ff447d026257852cac79` / `sha256:43cc8ef247fcba4bac5e9fccdd654fd393928120755a6405bad232043f0c94ba` / `sha256:0d1e0ffda6f17c637616192e3ddcbf51af55207cd011672317b3a7eb231c5e8e`，affected tree=`sha256:2efe85fb51757cfa9d4cbe59ec4dfcc02b6c0c95ed1b56638935e11657950b28`。G0.4/G0.5/static、G3.6/G3.7/G3.9与G4真实级联全部通过；G4两轮14-member digest均为`abb4117ddea6fe8f13f012e4f4c578891b929ec5b215a92ef85e2b684c9aa4b5`，33/33且live import graph 0 violation。
+
+完整G0首次执行发现并修复两个测试治理缺口：G0.8旧current identity pins，以及foundation boundary遗漏既有G4 construction checker到G1 frozen Store profile的exact依赖。修复后从readiness起重跑完整affected chain，whole G0 109/109、G1 Schema/Store、G2 47/47与40/40 replay、G3 97/97、typecheck/build均通过；G0.10/G2 sealed/G3.8A/G1 Schema protected trees为零diff，Schema 4没有deadline handoff relation，也没有G5/G6/G7业务实现、Gateway/T6e或Production surface。
 
 ```ts
 interface WorkflowRuntimeAbsenceBaseline {

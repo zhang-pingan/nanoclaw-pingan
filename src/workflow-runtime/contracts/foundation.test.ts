@@ -296,13 +296,23 @@ describe('G0.2 Contract Pack conformance', () => {
       for (const specifier of specifiers) {
         if (specifier.startsWith('.')) {
           const resolved = path.resolve(path.dirname(file), specifier);
-          const historicalConstructionImport =
-            path.basename(file) === 'semantic-correction-review-candidate.ts' &&
-            resolved ===
-              path.resolve(contractsRoot, '../compiler/semantic-correction.js');
+          const allowedConstructionImport =
+            (path.basename(file) ===
+              'semantic-correction-review-candidate.ts' &&
+              resolved ===
+                path.resolve(
+                  contractsRoot,
+                  '../compiler/semantic-correction.js',
+                )) ||
+            (path.basename(file) === 'g4-test-bootstrap-contract.ts' &&
+              resolved ===
+                path.resolve(
+                  contractsRoot,
+                  '../store/runtime-store/profile.js',
+                ));
           expect(
             resolved.startsWith(`${contractsRoot}${path.sep}`) ||
-              historicalConstructionImport,
+              allowedConstructionImport,
           ).toBe(true);
         } else {
           expect(allowedPackages.has(specifier)).toBe(true);
