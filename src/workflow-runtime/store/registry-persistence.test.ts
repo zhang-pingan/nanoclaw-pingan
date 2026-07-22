@@ -4,7 +4,11 @@ import path from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { g3RegistryPersistenceFixturesForTest } from '../contracts/g3-registry-persistence.js';
+import {
+  calculateRegistryResourceContentHash,
+  calculateRegistrySnapshotHash,
+  g3RegistryPersistenceFixturesForTest,
+} from '../contracts/g3-registry-persistence.js';
 import {
   WorkflowRuntimeConnectionFactory,
   type WorkflowRuntimeStore,
@@ -37,11 +41,12 @@ afterEach(() => {
     fs.rmSync(root, { recursive: true, force: true });
 });
 
-describe('G3.3 Registry persistence', () => {
+describe('G3.3/G3.4 Registry persistence', () => {
   it('writes exact staged resources, closure members, and snapshot in one Store transaction', () => {
     const store = openFresh();
     const batch = g3RegistryPersistenceFixturesForTest().positive[0].batch;
     const receipt = persistRegistryPersistenceBatch(store, batch);
+    expect(receipt.disposition).toBe('inserted');
     expect(receipt.resource_count).toBe(2);
     expect(receipt.member_count).toBe(1);
     expect(
@@ -56,6 +61,112 @@ describe('G3.3 Registry persistence', () => {
         [],
       )?.count,
     ).toBe(1);
+  });
+
+  it('returns the original receipt for an exact replay without adding rows', () => {
+    const store = openFresh();
+    const batch = g3RegistryPersistenceFixturesForTest().positive[0].batch;
+    const first = persistRegistryPersistenceBatch(store, batch);
+    const countsBefore = store.queryOne<{
+      resources: number;
+      value_count: number;
+      dependencies: number;
+      closures: number;
+      members: number;
+      snapshots: number;
+    }>(
+      `SELECT
+        (SELECT COUNT(*) FROM workflow_registry_resources) AS resources,
+        (SELECT COUNT(*) FROM workflow_values) AS value_count,
+        (SELECT COUNT(*) FROM workflow_registry_resource_dependencies) AS dependencies,
+        (SELECT COUNT(*) FROM workflow_registry_closure_manifests) AS closures,
+        (SELECT COUNT(*) FROM workflow_registry_closure_members) AS members,
+        (SELECT COUNT(*) FROM workflow_registry_snapshots) AS snapshots`,
+      [],
+    );
+    const replay = persistRegistryPersistenceBatch(
+      store,
+      structuredClone(batch),
+    );
+    expect(replay).toEqual({ ...first, disposition: 'exact_replay' });
+    expect(
+      store.queryOne(
+        `SELECT
+          (SELECT COUNT(*) FROM workflow_registry_resources) AS resources,
+          (SELECT COUNT(*) FROM workflow_values) AS value_count,
+          (SELECT COUNT(*) FROM workflow_registry_resource_dependencies) AS dependencies,
+          (SELECT COUNT(*) FROM workflow_registry_closure_manifests) AS closures,
+          (SELECT COUNT(*) FROM workflow_registry_closure_members) AS members,
+          (SELECT COUNT(*) FROM workflow_registry_snapshots) AS snapshots`,
+        [],
+      ),
+    ).toEqual(countsBefore);
+  });
+
+  it('reuses exact resources and closure while inserting a new exact snapshot', () => {
+    const store = openFresh();
+    const original = g3RegistryPersistenceFixturesForTest().positive[0].batch;
+    persistRegistryPersistenceBatch(store, original);
+    const next = structuredClone(original);
+    next.snapshot.ref = { ...next.snapshot.ref, version: '1.0.1' };
+    const { snapshot_hash: ignored, ...snapshotWithoutHash } = next.snapshot;
+    next.snapshot.snapshot_hash =
+      calculateRegistrySnapshotHash(snapshotWithoutHash);
+
+    expect(persistRegistryPersistenceBatch(store, next).disposition).toBe(
+      'inserted',
+    );
+    expect(
+      store.queryOne<{ count: number }>(
+        'SELECT COUNT(*) AS count FROM workflow_registry_resources',
+        [],
+      )?.count,
+    ).toBe(original.resources.length);
+    expect(
+      store.queryOne<{ count: number }>(
+        'SELECT COUNT(*) AS count FROM workflow_registry_closure_manifests',
+        [],
+      )?.count,
+    ).toBe(1);
+    expect(
+      store.queryOne<{ count: number }>(
+        'SELECT COUNT(*) AS count FROM workflow_registry_snapshots',
+        [],
+      )?.count,
+    ).toBe(2);
+  });
+
+  it('rejects a valid same-ref different-hash batch without changing Registry rows', () => {
+    const store = openFresh();
+    const original = g3RegistryPersistenceFixturesForTest().positive[0].batch;
+    persistRegistryPersistenceBatch(store, original);
+    const collision = structuredClone(original);
+    const root = collision.resources.find(
+      (resource) =>
+        resource.resource_type === collision.closure.root_resource_type,
+    );
+    expect(root).toBeDefined();
+    root!.content = { name: 'different immutable content' };
+    root!.content_hash = calculateRegistryResourceContentHash(root!);
+
+    expect(() =>
+      persistRegistryPersistenceBatch(store, collision),
+    ).toThrowError(
+      expect.objectContaining({ code: 'registry_resource_identity_collision' }),
+    );
+    expect(
+      store.queryOne<{ count: number }>(
+        'SELECT COUNT(*) AS count FROM workflow_registry_resources',
+        [],
+      )?.count,
+    ).toBe(original.resources.length);
+    expect(
+      store.queryOne<{ content_hash: string }>(
+        `SELECT content_hash FROM workflow_registry_resources
+          WHERE resource_type = ? AND resource_id = ? AND resource_version = ?`,
+        [root!.resource_type, root!.ref.id, root!.ref.version],
+      )?.content_hash,
+    ).not.toBe(root!.content_hash);
   });
 
   it('accepts an exact read-only snapshot preflight and rejects changed bindings', () => {

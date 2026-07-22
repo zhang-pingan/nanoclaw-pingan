@@ -1,8 +1,8 @@
 # Dynamic Workflow Runtime 实施进度
 
 > **状态**: IN_PROGRESS
-> **当前 Gate**: G3 Registry / Authoring / Publish（`IN_PROGRESS`；G3.1 read-only Registry publish-preflight foundation `DONE`；G3.2A Feature Manifest vNext strict intake semantics freeze `DONE`；G3.2 Strict Intake Preflight `DONE`；G2保持`DONE / BASELINE_ACCEPTED`与40/40 exact replay）
-> **下一施工切片**: Registry persistence / closure / snapshot 仍未实现；Feature/Core Release、Authoring全链路、Publisher执行、Publish/Activation均尚未实现，G4-G9保持`NOT_READY`
+> **当前 Gate**: G3 Registry / Authoring / Publish（`IN_PROGRESS`；G3.1、G3.2A、G3.2、G3.3 与 G3.4 Registry immutable replay/collision 均 `DONE`；G2保持`DONE / BASELINE_ACCEPTED`与40/40 exact replay）
+> **下一施工切片**: 从 Registry exact read/query、Retention/ABI preflight 或 Authoring/Publisher contract 中选择一个原子切片；Feature/Core Release、Publisher执行、Publish/Activation均尚未实现，G4-G9保持`NOT_READY`
 > **最后更新**: 2026-07-21
 > **规范权威**: `local/docs/dynamic-workflow-dag-framework.md`
 
@@ -1431,12 +1431,33 @@ G3.3 pack exact lineage固定G3.2A `sha256:c9c273b6d294d512a3578203d91d4bdce7863
 | G3+/legacy/Production absence scan | PASS；forbidden paths absent; `conformance/sealed/` unchanged with only existing bundles |
 | `git diff --check` | PASS |
 
+## G3.4 Registry Immutable Replay / Collision Preflight
+
+**状态**：`DONE`；G3继续为`IN_PROGRESS`，G2保持`DONE / BASELINE_ACCEPTED`，G4-G9保持`NOT_READY`。本切片只补齐 G3.3 staged persistence 的 immutable collision 与 idempotent replay 行为；没有修改 G3.1/G3.2A/G3.2/G3.3 Contract Pack、schema、fixture 或 hash，没有修改 G1 DDL/Schema/Store boundary，也没有实现 Publisher、Publish、Feature/Core Release、Retention/GC、Activation、Production loader 或 G4-G9。
+
+`persistRegistryPersistenceBatch()` 在 closed batch 验证通过后进入原有同步 `BEGIN IMMEDIATE` transaction，并在任何 DML 前按已冻结的 resource ASCII 顺序、closure、snapshot 顺序查询派生 identity。Value canonical payload/metadata、resource exact ref/hash/owner/staged state、dependency set、closure ref/hash/manifest/member index、snapshot ref/hash/compiler/Core/DB binding 必须逐项相等；不存在的 exact identity 才进入 insert plan。已有 exact resource/closure 可以被新 snapshot 复用；完整 exact batch 返回相同派生 receipt 和 `disposition=exact_replay`，执行零 DML。`created_at_ms` 只是首次安装 metadata，replay 保留首次值且不覆盖。
+
+稳定 collision code 为 `registry_value_identity_collision`、`registry_resource_identity_collision`、`registry_dependency_set_collision`、`registry_closure_identity_collision`、`registry_closure_member_set_collision`、`registry_snapshot_identity_collision`。任一 collision 在同一 transaction 内抛出并整体回滚；同 `(resource_type, ref)` 的合法 different-hash batch 定向测试证明原 Registry 行与计数保持不变。Receipt 对首次或含新 identity 的写入返回 `disposition=inserted`。
+
+| Verification | Result |
+| --- | --- |
+| managed `npm run typecheck` | PASS |
+| managed `npm run test:g3` | PASS；5 files / 25 tests；新增 exact replay zero-row-growth、shared exact closure reuse 与 same-ref/different-hash atomic collision cases |
+| managed `npm run contracts:g3.registry:check` | PASS；G3.3 pack仍为`sha256:adcaa77339512650d8aa8af1c027d6e145419ada47e44733c424db2b0cb923da` |
+| managed `npm run contracts:check` / `contracts:archive:check` | PASS；G0/G1/G2 与 G3.1/G3.2A/G3.2/G3.3 exact checks 全部通过 |
+| managed `npm run test:g0` | 14/15 files、108/109 tests PASS；唯一失败为既有 `setup/runtime-toolchain.test.ts` 5s timing case（5.107s），未修改 timeout/toolchain；随后该文件定向复跑 5/5 PASS（目标 case 4.442s） |
+| managed `npm run test:g2` / `test:g2:golden-current` | PASS；7 files / 47 tests 与 5 files / 26 tests |
+| managed `npm run golden:current:replay:check` / `prepare-rc:check` | PASS；40/40 exact，sealed bundle=`sha256:d99647d8ca6aabc737a793019335e6770aa111a79be7545c4dec00c6e7af2145`，RC=`sha256:beb8669a054c95e0796ddf998c87c0ddc2e90556f95192a8baad6dd247f3e577` |
+| managed `npm run build` / targeted Prettier check | PASS |
+| G1 DDL / immutable Contract artifacts | 相对`18ea03e`零diff；G1 root/schema保持`sha256:769800fbca754586f1eda90c28e876255a6af3fbe452c397a4dabfd4aec5b756` / `sha256:4d8c373387ad515c36fd292b705665e6c197c73021c1b7e55da5317bc140efbd` |
+| changed-path / forbidden-surface / `git diff --check` | PASS；仅5个计划内文件，无 Publisher/Release/Retention/Activation/Production loader implementation |
+
 ## 下一步
 
-G0.1-G0.9 historical identity、G0.10 current root、G1 executable schema/Store Base、R-016 spec/Contract repair与G2 Production Compiler/Golden均已完成。Current G2保持`DONE / BASELINE_ACCEPTED`，I3为`DONE`；G3.1、G3.2A、G3.2 Strict Intake Preflight和G3.3 Registry persistence/closure/snapshot preflight均完成，G3/I0仍为`IN_PROGRESS`。下一切片应在不触碰 G3.2A/G3.2/G3.3 immutable identity 的前提下处理 G3 剩余的 Publisher/Authoring/Release/Retention/ABI 合同，并继续禁止 Publish/Activation 和 G4-G9 runtime surface。
+G0.1-G0.9 historical identity、G0.10 current root、G1 executable schema/Store Base、R-016 spec/Contract repair与G2 Production Compiler/Golden均已完成。Current G2保持`DONE / BASELINE_ACCEPTED`，I3为`DONE`；G3.1、G3.2A、G3.2 Strict Intake Preflight、G3.3 Registry persistence/closure/snapshot preflight 和 G3.4 immutable replay/collision 均完成，G3/I0仍为`IN_PROGRESS`。下一切片应在不触碰既有 immutable identity 与 G1 DDL/Schema/Store boundary 的前提下，从 Registry exact read/query、Retention/ABI preflight 或 Authoring/Publisher contract 中选择一个原子切片，并继续禁止 Publisher执行、Publish/Activation 和 G4-G9 runtime surface。
 
 历史fresh review evidence只存在于Git commits，不是current dependency；current immutable semantic approval只绑定exact Draft/report identities。显式`prepare-rc`冻结的四个Working roots与唯一Review Candidate未变；current expected full case-result/Plan/proof/program bytes/hash已独立冻结、审计、owner批准并seal。local single-user签名策略为`not_required_local_single_user`，没有伪造GPG或远程签名。
 
 G2终点继续满足`Draft -> human semantic decision -> GoldenSemanticReview -> seal -> CI replay`：current successor replay为40/40，R-017保持关闭。G3.1只消费其exact sealed/compiler identities并执行纯preflight；没有创建Published Recipe、Registry row、Release或Production launchability，也没有执行production activation。
 
-作为历史prepare-rc切片记录，该切片只修复当时的R-017 spec identity实时绑定、级联重建Working artifacts并执行`prepare-rc`及其确定性check。后续owner approval、immutable review、successor seal与40/40 replay现已完成；当前 G3.1 foundation、G3.2A semantics freeze 与 G3.2 strict preflight 已完成，SQLite certification、Registry persistence、Core Release、G4-G9和production activation仍未开始。R-010 Node loader deprecation与R-012/R-013/R-015 timing继续作为既有范围外baseline，不升级工具链、不放宽测试。
+作为历史prepare-rc切片记录，该切片只修复当时的R-017 spec identity实时绑定、级联重建Working artifacts并执行`prepare-rc`及其确定性check。后续owner approval、immutable review、successor seal与40/40 replay现已完成；当前 G3.1、G3.2A、G3.2、G3.3 与 G3.4 均已完成，SQLite certification、Core Release、G4-G9和production activation仍未开始。R-010 Node loader deprecation与R-012/R-013/R-015 timing继续作为既有范围外baseline，不升级工具链、不放宽测试。
