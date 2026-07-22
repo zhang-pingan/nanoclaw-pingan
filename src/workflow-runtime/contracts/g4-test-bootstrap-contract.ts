@@ -23,6 +23,11 @@ import {
   g4VirtualClockProfile,
 } from './g4-test-bootstrap-fixtures.js';
 import {
+  assertG4TestBootstrapIsolation,
+  G4_BOOTSTRAP_SOURCE_PATHS,
+  g4IsolationBoundaryPayload,
+} from './g4-test-bootstrap-isolation.js';
+import {
   G4_FAKE_ADAPTER_OUTCOMES,
   G4_FAKE_ADAPTER_PROFILE_REF,
   G4_TEST_BOOTSTRAP_FIXTURE_SET_REF,
@@ -60,7 +65,7 @@ const paths = {
   virtualClockProfile: 'bootstrap/workflow-test-virtual-clock-profile@1.json',
   implementation: 'bootstrap/workflow-test-bootstrap-implementation@1.json',
   isolationBoundary:
-    'bootstrap/workflow-test-bootstrap-isolation-boundary@1.json',
+    'bootstrap/workflow-test-bootstrap-isolation-boundary@2.json',
   profile: 'bootstrap/workflow-test-bootstrap-profile@1.json',
   domains: 'bootstrap/workflow-test-bootstrap-domain-separators@1.json',
   positive: `${fixtureRoot}/positive-cases.json`,
@@ -81,7 +86,7 @@ const domains = {
   implementationArtifact:
     'icarus:workflow-test-bootstrap-implementation-artifact:1\n',
   implementation: 'icarus:workflow-test-bootstrap-implementation:1\n',
-  isolationBoundary: 'icarus:workflow-test-bootstrap-isolation-boundary:1\n',
+  isolationBoundary: 'icarus:workflow-test-bootstrap-isolation-boundary:2\n',
   profile: 'icarus:workflow-test-bootstrap-profile:1\n',
   domains: 'icarus:workflow-test-bootstrap-domain-separators:1\n',
   positive: 'icarus:workflow-test-bootstrap-positive-cases:1\n',
@@ -297,11 +302,12 @@ function artifact<T extends JsonObject>(
   ref: string,
   domainSeparator: string,
   payload: T,
+  version = 1,
 ): ContractArtifactEnvelope<T> {
   const withoutHash = {
     format,
-    ref: { id: ref, version: '1.0.0' },
-    version: 1,
+    ref: { id: ref, version: `${version}.0.0` },
+    version,
     domain_separator: domainSeparator,
     payload,
   };
@@ -342,17 +348,15 @@ function writeAtomic(relativePath: string, value: JsonValue): void {
   fs.renameSync(temporary, target);
 }
 
-const bootstrapSourcePaths = [
-  'src/workflow-runtime/bootstrap/fake-adapter.ts',
-  'src/workflow-runtime/bootstrap/index.ts',
-  'src/workflow-runtime/bootstrap/test-bootstrap.ts',
-  'src/workflow-runtime/bootstrap/virtual-clock.ts',
-] as const;
-
-function implementationPayload(): JsonObject {
-  const files = bootstrapSourcePaths.map((relativePath) => ({
+export function buildG4BootstrapImplementationPayload(
+  sourceRepoRoot: string,
+): JsonObject {
+  assertG4TestBootstrapIsolation(sourceRepoRoot);
+  const files = G4_BOOTSTRAP_SOURCE_PATHS.map((relativePath) => ({
     path: relativePath,
-    raw_sha256: rawSha256(fs.readFileSync(path.join(repoRoot, relativePath))),
+    raw_sha256: rawSha256(
+      fs.readFileSync(path.join(sourceRepoRoot, relativePath)),
+    ),
   }));
   return {
     format: 'icarus.workflow-test-bootstrap-implementation/1',
@@ -362,97 +366,6 @@ function implementationPayload(): JsonObject {
       source_files: files,
       source_file_count: files.length,
     }),
-  };
-}
-
-function collectFiles(root: string): string[] {
-  if (!fs.existsSync(root)) return [];
-  const result: string[] = [];
-  for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
-    const target = path.join(root, entry.name);
-    if (entry.isDirectory()) result.push(...collectFiles(target));
-    else if (/\.(?:ts|js|mjs|cjs)$/.test(entry.name)) result.push(target);
-  }
-  return result;
-}
-
-function isolationBoundaryPayload(): JsonObject {
-  const excludedG4Sources = new Set(
-    [
-      ...bootstrapSourcePaths,
-      'src/workflow-runtime/contracts/g4-test-bootstrap-cli.ts',
-      'src/workflow-runtime/contracts/g4-test-bootstrap-contract.ts',
-      'src/workflow-runtime/contracts/g4-test-bootstrap-fixtures.ts',
-      'src/workflow-runtime/contracts/g4-test-bootstrap-types.ts',
-    ].map((entry) => path.resolve(repoRoot, entry)),
-  );
-  const productionFiles = [
-    ...collectFiles(path.join(repoRoot, 'src')),
-    ...collectFiles(path.join(repoRoot, 'electron')),
-    ...collectFiles(path.join(repoRoot, 'features')),
-    ...collectFiles(path.join(repoRoot, 'setup')),
-    ...collectFiles(path.join(repoRoot, 'scripts')),
-  ]
-    .filter(
-      (file) =>
-        !excludedG4Sources.has(file) &&
-        !/\.(?:test|spec)\.[cm]?[jt]s$/.test(file),
-    )
-    .sort();
-  const forbiddenTokens = [
-    'workflow-runtime/bootstrap',
-    'g4-test-bootstrap',
-    'workflow-test-bootstrap-profile',
-  ];
-  const hits = productionFiles.flatMap((file) => {
-    const source = fs.readFileSync(file, 'utf8');
-    return forbiddenTokens
-      .filter((token) => source.includes(token))
-      .map((token) => ({ path: path.relative(repoRoot, file), token }));
-  });
-  const packageValue = strictParseJsonBytes(
-    fs.readFileSync(path.join(repoRoot, 'package.json')),
-  ) as JsonObject;
-  const scripts = packageValue.scripts as JsonObject;
-  const startScript = String(scripts.start);
-  const absentProductionPaths = [
-    'src/workflow-runtime/registry/production-activation.ts',
-    'src/workflow-runtime/runtime/graph-runtime.ts',
-    'src/workflow-runtime/projection/runtime-center-api.ts',
-  ];
-  const unexpectedPaths = absentProductionPaths.filter((candidate) =>
-    fs.existsSync(path.join(repoRoot, candidate)),
-  );
-  if (hits.length !== 0 || unexpectedPaths.length !== 0)
-    throw new Error('G4 test bootstrap is reachable from a production surface');
-  if (forbiddenTokens.some((token) => startScript.includes(token)))
-    throw new Error('Production start script references the G4 test bootstrap');
-  const inventory = productionFiles.map((file) => ({
-    path: path.relative(repoRoot, file),
-    raw_sha256: rawSha256(fs.readFileSync(file)),
-  }));
-  return {
-    format: 'icarus.workflow-test-bootstrap-isolation-boundary/1',
-    production_source_file_count: inventory.length,
-    production_source_inventory_hash: domainSeparatedSha256(
-      'icarus:workflow-test-bootstrap-production-source-inventory:1\n',
-      inventory,
-    ),
-    forbidden_tokens: forbiddenTokens,
-    forbidden_import_hits: hits,
-    feature_ingress_import_count: 0,
-    api_ingress_import_count: 0,
-    automation_ingress_import_count: 0,
-    production_start_script_hash: rawSha256(Buffer.from(startScript, 'utf8')),
-    absent_production_paths: absentProductionPaths,
-    production_loader_present: false,
-    production_startup_present: false,
-    production_fail_closed_evidence:
-      'closed_negative_contract_and_static_surface_absence',
-    active_registry_or_release_pointer_access: 'forbidden',
-    real_adapter_access: 'forbidden',
-    network_access: 'forbidden',
-    user_data_access: 'forbidden',
   };
 }
 
@@ -615,13 +528,14 @@ function buildLeafArtifacts(): BuiltLeafArtifacts {
     'icarus.workflow-test-bootstrap-implementation-artifact/1',
     'icarus.workflow-test-bootstrap-implementation',
     domains.implementationArtifact,
-    implementationPayload(),
+    buildG4BootstrapImplementationPayload(repoRoot),
   );
   const isolationBoundary = artifact(
-    'icarus.workflow-test-bootstrap-isolation-boundary/1',
+    'icarus.workflow-test-bootstrap-isolation-boundary/2',
     'icarus.workflow-test-bootstrap-isolation-boundary',
     domains.isolationBoundary,
-    isolationBoundaryPayload(),
+    g4IsolationBoundaryPayload(repoRoot),
+    2,
   );
   const implementationHash = parseSha256Hash(
     implementation.payload.implementation_hash,
@@ -844,14 +758,16 @@ function buildManifest(built: BuiltLeafArtifacts): ContractArtifactEnvelope {
       explicit_selection_required: true,
       production_build_acceptance: 'reject',
       production_startup_acceptance: 'reject',
-      production_loader_implemented: false,
+      production_loader_g4_consumption: 'rejected',
+      production_startup_g4_consumption: 'rejected',
       production_fail_closed_evidence:
-        'closed_negative_contract_and_static_surface_absence',
-      feature_ingress_implemented: false,
-      api_ingress_implemented: false,
-      automation_ingress_implemented: false,
+        'structured_source_ownership_and_live_ast_import_graph',
+      feature_ingress_g4_reachability: 'unreachable',
+      api_ingress_g4_reachability: 'unreachable',
+      automation_ingress_g4_reachability: 'unreachable',
       runtime_business_tables_written: false,
-      g5_through_g9_status: 'NOT_READY',
+      g5_status: 'NOT_READY_BLOCKED_BY_G4_REGRESSION',
+      g6_through_g9_status: 'NOT_READY',
       artifacts: built.artifacts.map(([artifactPath, entry]) => ({
         path: artifactPath,
         format: entry.format,

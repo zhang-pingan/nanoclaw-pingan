@@ -1,10 +1,12 @@
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
 import {
   assertG4ProfileRejectedForProduction,
+  buildG4BootstrapImplementationPayload,
   checkG4TestBootstrapContracts,
   G4_FAKE_ADAPTER_INVOCATION_SCHEMA,
   G4_FAKE_ADAPTER_RESULT_SCHEMA,
@@ -20,11 +22,60 @@ import {
   g4PositiveCases,
   g4VirtualClockProfile,
 } from './g4-test-bootstrap-fixtures.js';
+import {
+  analyzeG4TestBootstrapIsolation,
+  G4_BOOTSTRAP_SOURCE_PATHS,
+  g4IsolationBoundaryPayload,
+} from './g4-test-bootstrap-isolation.js';
 import { G4_FAKE_ADAPTER_OUTCOMES } from './g4-test-bootstrap-types.js';
 import { canonicalJson } from './hash.js';
 import type { JsonObject } from './types.js';
 
 const repoRoot = path.resolve(import.meta.dirname, '../../..');
+
+function writeFixtureFile(root: string, relativePath: string, source: string) {
+  const target = path.join(root, relativePath);
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  fs.writeFileSync(target, source, 'utf8');
+}
+
+function createIsolationFixture(): { root: string; cleanup: () => void } {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'icarus-g4-isolation-'));
+  writeFixtureFile(
+    root,
+    'package.json',
+    `${JSON.stringify(
+      {
+        name: 'g4-isolation-fixture',
+        type: 'module',
+        main: 'dist/index.js',
+        scripts: { start: 'node dist/index.js', test: 'vitest run' },
+      },
+      null,
+      2,
+    )}\n`,
+  );
+  for (const sourcePath of G4_BOOTSTRAP_SOURCE_PATHS) {
+    writeFixtureFile(
+      root,
+      sourcePath,
+      `export const fixture = '${sourcePath}';\n`,
+    );
+  }
+  writeFixtureFile(root, 'src/index.ts', "import './service.js';\n");
+  writeFixtureFile(root, 'src/service.ts', 'export const service = true;\n');
+  return {
+    root,
+    cleanup: () => fs.rmSync(root, { recursive: true, force: true }),
+  };
+}
+
+function bootstrapImport(from: string): string {
+  const target = 'src/workflow-runtime/bootstrap/index.ts';
+  let relative = path.posix.relative(path.posix.dirname(from), target);
+  if (!relative.startsWith('.')) relative = `./${relative}`;
+  return relative.replace(/\.ts$/, '.js');
+}
 
 describe('G4 Test Bootstrap Contract Pack', () => {
   it('checks the closed pack, exact upstream bindings, and case counts', () => {
@@ -34,8 +85,8 @@ describe('G4 Test Bootstrap Contract Pack', () => {
     expect(first.pack.payload).toMatchObject({
       gate: 'G4',
       status: 'EXIT_CANDIDATE_PENDING_INDEPENDENT_G4_REGRESSION',
-      positive_case_count: 7,
-      negative_case_count: 21,
+      positive_case_count: 9,
+      negative_case_count: 31,
       fault_case_count: 13,
       fake_adapter_outcome_count: 7,
       database_schema_version: 4,
@@ -46,17 +97,19 @@ describe('G4 Test Bootstrap Contract Pack', () => {
       explicit_selection_required: true,
       production_build_acceptance: 'reject',
       production_startup_acceptance: 'reject',
-      production_loader_implemented: false,
+      production_loader_g4_consumption: 'rejected',
+      production_startup_g4_consumption: 'rejected',
       runtime_business_tables_written: false,
-      g5_through_g9_status: 'NOT_READY',
+      g5_status: 'NOT_READY_BLOCKED_BY_G4_REGRESSION',
+      g6_through_g9_status: 'NOT_READY',
     });
     expect(g4ContractCountsForTest()).toEqual({
-      positive: 7,
-      negative: 21,
+      positive: 9,
+      negative: 31,
       fault: 13,
     });
-    expect(g4PositiveCases()).toHaveLength(7);
-    expect(g4NegativeCases()).toHaveLength(21);
+    expect(g4PositiveCases()).toHaveLength(9);
+    expect(g4NegativeCases()).toHaveLength(31);
     expect(g4FaultCases()).toHaveLength(13);
 
     expect(first.profile.payload).toMatchObject({
@@ -164,24 +217,188 @@ describe('G4 Test Bootstrap Contract Pack', () => {
     }
   });
 
-  it('proves Production and Feature/API/Automation ingress are absent', () => {
+  it('proves Production and Feature/API/Automation ingress cannot reach G4 authority', () => {
     const isolation = checkG4TestBootstrapContracts().isolationBoundary.payload;
     expect(isolation).toMatchObject({
-      forbidden_import_hits: [],
-      feature_ingress_import_count: 0,
-      api_ingress_import_count: 0,
-      automation_ingress_import_count: 0,
-      production_loader_present: false,
-      production_startup_present: false,
+      format: 'icarus.workflow-test-bootstrap-isolation-boundary/2',
+      policy: 'downstream_safe_test_only_bootstrap_isolation',
+      source_ownership: {
+        root: 'src/workflow-runtime/bootstrap',
+        declared_source_paths: [...G4_BOOTSTRAP_SOURCE_PATHS],
+        inventory_match: 'exact',
+      },
+      import_graph: {
+        all_non_test_source_reachability: 'unreachable',
+        production_root_reachability: 'unreachable',
+        future_gate_source_policy:
+          'allowed_when_no_test_bootstrap_authority_reachability',
+      },
+      production_surfaces: {
+        package_default_reference: 'absent',
+        feature_ingress_reachability: 'unreachable',
+        api_ingress_reachability: 'unreachable',
+        automation_ingress_reachability: 'unreachable',
+        host_bootstrap_reachability: 'unreachable',
+      },
       production_fail_closed_evidence:
-        'closed_negative_contract_and_static_surface_absence',
+        'structured_source_ownership_and_live_ast_import_graph',
       active_registry_or_release_pointer_access: 'forbidden',
       real_adapter_access: 'forbidden',
       network_access: 'forbidden',
       user_data_access: 'forbidden',
     });
-    for (const relativePath of isolation.absent_production_paths as string[]) {
-      expect(fs.existsSync(path.join(repoRoot, relativePath))).toBe(false);
+    expect(analyzeG4TestBootstrapIsolation(repoRoot).violations).toEqual([]);
+  });
+
+  it('keeps the isolation identity stable for downstream-safe G5 source growth', () => {
+    const fixture = createIsolationFixture();
+    try {
+      const before = g4IsolationBoundaryPayload(fixture.root);
+      const beforeCount = analyzeG4TestBootstrapIsolation(fixture.root)
+        .source_files.length;
+      writeFixtureFile(
+        fixture.root,
+        'src/workflow-runtime/runtime/graph-runtime.ts',
+        'export const graphRuntimePrerequisite = true;\n',
+      );
+      const after = g4IsolationBoundaryPayload(fixture.root);
+      const afterAnalysis = analyzeG4TestBootstrapIsolation(fixture.root);
+      expect(afterAnalysis.source_files.length).toBe(beforeCount + 1);
+      expect(afterAnalysis.violations).toEqual([]);
+      expect(canonicalJson(after)).toBe(canonicalJson(before));
+    } finally {
+      fixture.cleanup();
+    }
+  });
+
+  it('binds exact G4-owned source bytes and rejects undeclared bootstrap siblings', () => {
+    const fixture = createIsolationFixture();
+    try {
+      const before = buildG4BootstrapImplementationPayload(fixture.root);
+      writeFixtureFile(
+        fixture.root,
+        G4_BOOTSTRAP_SOURCE_PATHS[0],
+        'export const fixture = "mutated";\n',
+      );
+      const after = buildG4BootstrapImplementationPayload(fixture.root);
+      expect(after.implementation_hash).not.toBe(before.implementation_hash);
+      writeFixtureFile(
+        fixture.root,
+        'src/workflow-runtime/bootstrap/undeclared.ts',
+        'export const undeclared = true;\n',
+      );
+      expect(() => buildG4BootstrapImplementationPayload(fixture.root)).toThrow(
+        /bootstrap_source_inventory_drift/,
+      );
+    } finally {
+      fixture.cleanup();
+    }
+  });
+
+  it.each([
+    ['src/index.ts', 'host'],
+    ['src/features/workflow.ts', 'feature'],
+    ['src/runtime-center-api.ts', 'api'],
+    ['src/workflow-automation.ts', 'automation'],
+    ['electron/main.ts', 'host'],
+    ['src/workflow-runtime/runtime/graph-runtime.ts', 'production'],
+  ] as const)(
+    'rejects G4 authority imports from %s',
+    (sourcePath, expectedSurface) => {
+      const fixture = createIsolationFixture();
+      try {
+        writeFixtureFile(
+          fixture.root,
+          sourcePath,
+          `import '${bootstrapImport(sourcePath)}';\n`,
+        );
+        const analysis = analyzeG4TestBootstrapIsolation(fixture.root);
+        expect(analysis.violations).toContainEqual(
+          expect.objectContaining({
+            kind: 'authority_import_reachable',
+            surface: expectedSurface,
+            source: sourcePath,
+          }),
+        );
+        expect(() => g4IsolationBoundaryPayload(fixture.root)).toThrow(
+          /authority_import_reachable/,
+        );
+      } finally {
+        fixture.cleanup();
+      }
+    },
+  );
+
+  it('rejects indirect Production entrypoint reachability', () => {
+    const fixture = createIsolationFixture();
+    try {
+      writeFixtureFile(
+        fixture.root,
+        'src/service.ts',
+        `import '${bootstrapImport('src/service.ts')}';\n`,
+      );
+      const entrypointViolation = analyzeG4TestBootstrapIsolation(
+        fixture.root,
+      ).violations.find((violation) => violation.source === 'src/index.ts');
+      expect(entrypointViolation?.path).toEqual([
+        'src/index.ts',
+        'src/service.ts',
+        'src/workflow-runtime/bootstrap/index.ts',
+      ]);
+    } finally {
+      fixture.cleanup();
+    }
+  });
+
+  it.each([
+    [
+      'start script',
+      { scripts: { start: 'tsx src/workflow-runtime/bootstrap' } },
+    ],
+    [
+      'default config',
+      {
+        scripts: { start: 'node dist/index.js' },
+        config: { profile: 'icarus.workflow-test-bootstrap-profile' },
+      },
+    ],
+  ] as const)('rejects G4 references from package %s', (_label, mutation) => {
+    const fixture = createIsolationFixture();
+    try {
+      const packageValue = JSON.parse(
+        fs.readFileSync(path.join(fixture.root, 'package.json'), 'utf8'),
+      ) as Record<string, unknown>;
+      writeFixtureFile(
+        fixture.root,
+        'package.json',
+        `${JSON.stringify({ ...packageValue, ...mutation }, null, 2)}\n`,
+      );
+      expect(() => g4IsolationBoundaryPayload(fixture.root)).toThrow(
+        /production_package_reference/,
+      );
+    } finally {
+      fixture.cleanup();
+    }
+  });
+
+  it.each([
+    [
+      'scripts/runtime-launcher.sh',
+      '#!/bin/sh\nexec node src/workflow-runtime/bootstrap/index.js\n',
+    ],
+    [
+      'tsconfig.json',
+      '{"compilerOptions":{"baseUrl":".","paths":{"@g4/*":["src/workflow-runtime/bootstrap/*"]}}}\n',
+    ],
+  ] as const)('rejects G4 selection from host config %s', (file, source) => {
+    const fixture = createIsolationFixture();
+    try {
+      writeFixtureFile(fixture.root, file, source);
+      expect(() => g4IsolationBoundaryPayload(fixture.root)).toThrow(
+        /authority_reference_selected/,
+      );
+    } finally {
+      fixture.cleanup();
     }
   });
 });

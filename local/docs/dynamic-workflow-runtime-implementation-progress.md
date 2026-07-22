@@ -1,8 +1,8 @@
 # Dynamic Workflow Runtime 实施进度
 
 > **状态**: IN_PROGRESS
-> **当前 Gate**: G4 Test Bootstrap（`DONE`；独立whole-G4 regression已通过）
-> **下一独立会话**: G5 Basic Runtime（`READY`；仅实施G5，不得越过G6-G9）
+> **当前 Gate**: G4 Test Bootstrap（`EXIT_CANDIDATE_PENDING_INDEPENDENT_G4_REGRESSION`；downstream-extensibility prerequisite已修复）
+> **下一独立会话**: G4 whole-gate independent regression（通过前G5保持`NOT_READY/BLOCKED_BY_G4_REGRESSION`）
 > **最后更新**: 2026-07-22
 > **规范权威**: `local/docs/dynamic-workflow-dag-framework.md`
 
@@ -112,8 +112,8 @@ Agent Container 运行于独立 VM，Node identity 由 VM image gate 保证；�
 | G1 DDL / Store | `DONE` | G0.10 | current Database Schema `4`；Schema 3只允许四个Activation/active-pointer关系全空时原子升级，否则fail closed | G1.1-G1.6与独立Schema 4回归已完成 |
 | G2 Compiler / Golden | `DONE` | G0.1-G0.9；R-016 spec/Contract repair；G0.10 不改变 Compiler/Plan 语义 | phase=`BASELINE_ACCEPTED`；前序immutable lineage未变；owner-approved successor GoldenSemanticReview/seal完整，current replay 40/40 exact、0 differences | 本原子提交（replay-repair successor seal） |
 | G3 Registry / Authoring / Publish | `DONE` | G1 + G2 | G3.1-G3.9 DONE；独立whole-gate regression覆盖machine authority、transaction、replay/recovery/fault、Schema 4与冻结边界 | 本原子提交 |
-| G4 Test Bootstrap | `DONE` | G1 + G2 + G3 | 独立whole-gate regression；isolated bootstrap profile；closed Contract/fixture/fault Gate；真实文件SQLite/root/database隔离证明 | 本原子提交 |
-| G5 Basic Runtime | `READY` | G4 | T0-T6e model/fault fixtures | - |
+| G4 Test Bootstrap | `EXIT_CANDIDATE_PENDING_INDEPENDENT_G4_REGRESSION` | G1 + G2 + G3 | downstream-safe isolation v2已生成并通过本任务专项/上游回归；仍需下一独立whole-gate regression | 本原子提交 |
+| G5 Basic Runtime | `NOT_READY` (`BLOCKED_BY_G4_REGRESSION`) | G4 | T0-T6e model/fault fixtures | - |
 | G6 Dynamic / Close | `NOT_READY` | G5 | T7/T8/child/compensation fixtures | - |
 | G7 Control / Card / Projection / Recovery | `NOT_READY` | G6 | command/card/projection/recovery/blocker fixtures | - |
 | G8 Certification | `NOT_READY` | G7 | certified profile meeting Product Floor | - |
@@ -134,7 +134,7 @@ Agent Container 运行于独立 VM，Node identity 由 VM image gate 保证；�
 | I8 | Subgraph、Expand、Map、child scope | `NOT_READY` | G6 起 |
 | I9 | Completion、Cancel、Compensation、Finalization、Recovery | `NOT_READY` | G6/G7 |
 | I10 | Runtime Command、Capacity Admin、Runtime Center、Trace | `NOT_READY` | G5 实现 Capacity Gateway/Publisher/Watcher，G7 实现管理 UI；当前只做 G0.10 合同 |
-| I11 | Contract Pack、managed runtime toolchain/launcher、测试模型、发布门禁、absence baseline | `IN_PROGRESS` | G0.1-G0.10与G4 whole-gate regression DONE；后续Gate继续消费该测试边界 |
+| I11 | Contract Pack、managed runtime toolchain/launcher、测试模型、发布门禁、absence baseline | `IN_PROGRESS` | G0.1-G0.10 DONE；G4 downstream-safe isolation已修复，等待独立whole-gate regression |
 
 ## G0 施工切片
 
@@ -1946,9 +1946,41 @@ Fake Adapter只接受七条exact invocation hash，固定逐字节replay `not_ap
 
 G4 whole-gate结论为`DONE`，只将G5提升为`READY`。本回归没有实现G5-G9、T0-T8、Workflow/Run/Activation创建或业务DML、Reconciler/Scheduler/Ledger/Wait/Inbox/Outbox、Runtime Command/Projection、Production loader/current/latest resolver/startup/activation、Execution Artifact build/install、Retention/Blob GC/delete、真实Adapter、Feature/API/Automation ingress或legacy alias/fallback/compatibility reader。
 
+### G4 downstream-extensibility prerequisite reopen
+
+**当前状态**：`EXIT_CANDIDATE_PENDING_INDEPENDENT_G4_REGRESSION`。本任务从clean local `main`基线`005241262568135f02ace4de97c3fa3eacb49131`开始，parent=`ab411b970898cb18fa3e88fc0cd62eed66ae714b`；环境为`permission_profile=disabled/unrestricted`、filesystem unrestricted、sandbox `danger-full-access`、approval policy `never`。没有申请approval/escalation、Handoff、创建/切换worktree、push、amend或重写历史；全部Node/npm命令均通过`./scripts/runtime-toolchain.sh exec -- <command>`。在准备G5时发现真实上游finding：`0052412`中的G4 isolation boundary把`src/electron/features/setup/scripts`全部非测试JS/TS的file count与逐文件hash纳入G4 identity，并显式要求规范预留的`registry/production-activation.ts`、`runtime/graph-runtime.ts`和`projection/runtime-center-api.ts`不存在。因此即使合法下游模块完全不引用G4，新增文件本身也会使G4 artifact漂移或直接失败；这把“test-only bootstrap不可被Production消费”错误实现成了“冻结未来Production source tree”。按Gate治理显式重开G4；`0052412`中的旧identity仍是历史construction evidence，不作为current proof，也没有被冒充为新语义。
+
+**选定设计**：current isolation authority升级为`icarus.workflow-test-bootstrap-isolation-boundary/2`。`src/workflow-runtime/bootstrap/`的递归非测试JS/TS集合必须与四个声明owned source exact相等，implementation artifact继续逐文件绑定bytes；除此之外，isolation artifact只保存稳定policy，不保存整个Production tree的count/hash。Checker每个独立进程实时枚举当前`src/electron/assistant/features/setup/scripts`，使用TypeScript AST解析static import/export、literal `require`与literal dynamic import，以relative/root和TypeScript resolver构造graph，并拒绝任意非测试非G4-authority source到bootstrap/profile authority的直接或间接可达路径。Feature、API、Automation、host/entrypoint按结构化规则单独分类；`package.json`的Production entry/default字段与start/dev/build/package/setup/auth scripts，以及host JSON/YAML/shell/plist/HTML和`tsconfig.json`不得引用或选择G4 authority。Contract/test scripts仍可显式运行G4 checker，但不会成为Production默认。未来G5-G9 source存在或数量变化不影响G4 identity；只有非法reachability、selection或ownership drift失败。
+
+**Current machine authority与历史映射**：
+
+| Authority | `0052412` historical | Current after reopen | 影响 |
+| --- | --- | --- | --- |
+| G4 pack | `sha256:4aff06c8170ffa533320e4180a76a169e6815217d3d86dacfa5f7f5448e18e9e` | `sha256:41fa8a427ee935669283fe119e04e1384df6d305eddff7396c4efb816ba3eaa8` | 重建current 14-member pack |
+| test-only profile | `sha256:7f88ff930cb4b9d9d348d7d6803a54831b146be069dd77318014f13a47390e6e` | `sha256:1c7249c5a53f658db130447117116919f0f7258abbcddd77e092b528860f7798` | 只因isolation binding更新 |
+| bootstrap implementation | `sha256:a8bea5690d9e0e66ba93cec4ebb5e8a5d471ed160ecb6371effd6cbe18bf56ad` | `sha256:a8bea5690d9e0e66ba93cec4ebb5e8a5d471ed160ecb6371effd6cbe18bf56ad` | 功能实现与四文件bytes未变 |
+| implementation artifact | `sha256:d0d04a99202f4d7ec86bd9893901db5dd2139aaad731d334408e627be4acb928` | `sha256:d0d04a99202f4d7ec86bd9893901db5dd2139aaad731d334408e627be4acb928` | exact ownership/bytes继续有效 |
+| isolation boundary | v1 `sha256:648dab69be05f5bd9c15637d895ea45433fd7f876bb47ff621e8c4c079e618ad` | v2 `sha256:2802b9cc93f91531d45c6ae53da554e077455f1b67271edea3e4fe7357ee0073` | 删除未来路径absence与全树identity，改为live graph/policy proof |
+
+专项mutation fixture使用隔离临时repo并调用Production checker同一analyzer：新增无关downstream source及空`runtime/graph-runtime.ts`后source count增加而boundary bytes/identity稳定；修改G4-owned source使implementation hash变化；新增未声明bootstrap sibling失败；Production entrypoint的间接路径、Feature/API/Automation/host/G5 runtime直接import均失败；package start/default、launcher shell与tsconfig alias选择均失败。Fixtures现为9 positive / 31 negative / 13 fault，G4测试为2 files / 32 tests。本任务没有创建任何G5业务模块、事务、T0-T8、Capacity gateway、Scheduler、Reconciler或Production入口；root/database replacement、race ownership、84表零行、Fake Adapter、Virtual Clock与Production数据隔离语义保持不变。
+
+| 本次退出证据 | 结果 |
+| --- | --- |
+| 两轮`contracts:g4:generate` / 14-member raw-byte digest / `contracts:g4:check` | PASS；两轮pack/profile/implementation一致；member digest均为`09c06981b03b40c543303f2b0f93e8b86ebe7cc4a422f84119c4604a789e3df5` |
+| `test:g4` | PASS；2 files / 32 tests；原有bootstrap功能、84表零行、root/database replacement、race ownership、Fake/clock和新增10类isolation mutation全部通过 |
+| `contracts:check` | PASS；完整current G0/G1/G2/G3/Schema/Store链及G4 v2 direct check通过 |
+| `test:g3.9` / `test:g3` | PASS；2 files / 34 tests；14 files / 97 tests |
+| `schema:check` / `store:check` / `test:g1.activation` / `test:g1.2` | PASS；Schema 4/root/profile identities不变；5 passed + 15 skipped；20/20 Store tests |
+| `test:g2` / `golden:current:replay:check` | PASS；7 files / 47 tests；successor exact replay 40/40 |
+| `test:g0.6` / `test:g0.10` | PASS；8/8与10/10 |
+| `typecheck` / `build` / targeted Prettier / `git diff --check` | PASS |
+| protected-tree / forbidden-surface / live import graph | PASS；G0.10=`2bf94fb4ec0142bcb5348168525f67b348cedda4`、G2 sealed=`cf9270f9ec71fa2134de0987b5fe55b5425e399b`、G3.8A=`a358e690e90294f0ad08ec47992ff9f645df7e6f`、G1 Schema=`161d6041bc56368bc3fd821a37f5a6a58a8eea1b`均零diff；275 source / 38 roots / 9 G4 authority / 4 owned bootstrap / 0 violation；真实checkout无G5 production module |
+
+本任务完成专项与上游回归后只把G4恢复到退出候选，不恢复G5施工。下一独立任务必须从本提交clean tree重新执行G4 whole-gate independent regression，复核两轮14-member bytes/tree digest、全部G4功能与mutation、完整上游链和protected trees；通过并另行记录`DONE`前，G5固定为`NOT_READY/BLOCKED_BY_G4_REGRESSION`。
+
 ## 下一步
 
-下一独立施工任务固定为**G5 Basic Runtime**，状态`READY`。它只能消费本节exact current G4 selector/profile/fixture/Fake Adapter/Virtual Clock和isolated Schema 4 Store，在架构“Durable Creation与基础Runtime”边界内实现Task Intake、durable T0/T0p、claim/ledger、State Activation、T1/T2、delegation/system/wait/join/terminal、T3/T4/T5/T6a-e、Operational Blocker、effect key/mutable receipt、versioned Outbox Policy、typed adapter与Inbox/Outbox，并交付T0-T6e model/fault fixtures；Scheduler/Wait/Signal/Outbox/Blob开始消费Live Capacity前必须先实现该阶段要求的Capacity Admin Gateway、唯一Publisher、Watcher immutable pointer、CAP recovery与Admission lineage。不得实施G6的T7/T8/child/compensation/dynamic close，G7 control/card/projection/recovery，G8 certification，G9 Production activation，Production loader/current/latest resolver或真实Feature/API/Automation ingress；不得改写G0-G4冻结语义和protected trees。
+下一独立任务固定为**G4 whole-gate independent regression**。该任务只复核本节current G4 authority、downstream-safe isolation语义、原有bootstrap功能隔离与全部上游/protected evidence，不实施G5。只有该独立回归通过并提交关闭证据后，才可重新创建G5 Basic Runtime任务。
 
 历史fresh review evidence只存在于Git commits，不是current dependency；current immutable semantic approval只绑定exact Draft/report identities。显式`prepare-rc`冻结的四个Working roots与唯一Review Candidate未变；current expected full case-result/Plan/proof/program bytes/hash已独立冻结、审计、owner批准并seal。local single-user签名策略为`not_required_local_single_user`，没有伪造GPG或远程签名。
 

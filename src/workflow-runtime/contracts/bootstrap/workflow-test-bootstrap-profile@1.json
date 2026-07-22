@@ -101,7 +101,7 @@
       "cleanup_failure": "write_identifiable_residual_marker"
     },
     "isolation_boundary": {
-      "hash": "sha256:648dab69be05f5bd9c15637d895ea45433fd7f876bb47ff621e8c4c079e618ad",
+      "hash": "sha256:2802b9cc93f91531d45c6ae53da554e077455f1b67271edea3e4fe7357ee0073",
       "feature_ingress": "absent",
       "api_ingress": "absent",
       "automation_ingress": "absent",
@@ -112,5 +112,5 @@
     },
     "bootstrap_implementation_hash": "sha256:a8bea5690d9e0e66ba93cec4ebb5e8a5d471ed160ecb6371effd6cbe18bf56ad"
   },
-  "hash": "sha256:7f88ff930cb4b9d9d348d7d6803a54831b146be069dd77318014f13a47390e6e"
+  "hash": "sha256:1c7249c5a53f658db130447117116919f0f7258abbcddd77e092b528860f7798"
 }

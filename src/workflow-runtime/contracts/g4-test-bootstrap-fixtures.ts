@@ -158,6 +158,14 @@ export function g4PositiveCases(): JsonObject[] {
       expected: 'accepted',
     },
     { case_id: 'positive.production-surface-absence', expected: 'accepted' },
+    {
+      case_id: 'positive.downstream-source-without-g4-reachability',
+      expected: 'accepted',
+    },
+    {
+      case_id: 'positive.future-graph-runtime-path-without-g4-reachability',
+      expected: 'accepted',
+    },
   ];
 }
 
@@ -173,6 +181,16 @@ export function g4NegativeCases(): JsonObject[] {
     ['certified-status', 'test_profile_certification_forbidden'],
     ['production-build', 'test_bootstrap_profile_forbidden'],
     ['production-startup', 'test_bootstrap_profile_forbidden'],
+    ['bootstrap-source-drift', 'bootstrap_source_identity_mismatch'],
+    ['bootstrap-undeclared-sibling', 'bootstrap_source_inventory_drift'],
+    ['production-entrypoint-import', 'test_bootstrap_reachable'],
+    ['feature-ingress-import', 'test_bootstrap_reachable'],
+    ['api-ingress-import', 'test_bootstrap_reachable'],
+    ['automation-ingress-import', 'test_bootstrap_reachable'],
+    ['host-bootstrap-import', 'test_bootstrap_reachable'],
+    ['g5-runtime-import', 'test_bootstrap_reachable'],
+    ['package-start-reference', 'test_bootstrap_profile_forbidden'],
+    ['package-default-reference', 'test_bootstrap_profile_forbidden'],
     ['unknown-fixture', 'fake_adapter_invocation_undeclared'],
     ['unknown-fake-outcome', 'fake_adapter_outcome_undeclared'],
     ['clock-seed-drift', 'virtual_clock_profile_mismatch'],

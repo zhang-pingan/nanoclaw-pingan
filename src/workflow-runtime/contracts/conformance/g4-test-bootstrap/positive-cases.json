@@ -36,8 +36,16 @@
       {
         "case_id": "positive.production-surface-absence",
         "expected": "accepted"
+      },
+      {
+        "case_id": "positive.downstream-source-without-g4-reachability",
+        "expected": "accepted"
+      },
+      {
+        "case_id": "positive.future-graph-runtime-path-without-g4-reachability",
+        "expected": "accepted"
       }
     ]
   },
-  "hash": "sha256:6223b5e3e45f4e4889b8ae14dc656425dbfde4b1cf55d1f27040ff247d9d77a1"
+  "hash": "sha256:02a6ec89c5de7eb42e2564b0862a1c620a162ff3652323634e4a2dc77e56abbf"
 }

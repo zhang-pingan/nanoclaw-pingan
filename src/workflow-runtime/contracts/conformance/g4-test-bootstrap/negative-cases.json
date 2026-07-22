@@ -50,6 +50,46 @@
         "expected_code": "test_bootstrap_profile_forbidden"
       },
       {
+        "case_id": "bootstrap-source-drift",
+        "expected_code": "bootstrap_source_identity_mismatch"
+      },
+      {
+        "case_id": "bootstrap-undeclared-sibling",
+        "expected_code": "bootstrap_source_inventory_drift"
+      },
+      {
+        "case_id": "production-entrypoint-import",
+        "expected_code": "test_bootstrap_reachable"
+      },
+      {
+        "case_id": "feature-ingress-import",
+        "expected_code": "test_bootstrap_reachable"
+      },
+      {
+        "case_id": "api-ingress-import",
+        "expected_code": "test_bootstrap_reachable"
+      },
+      {
+        "case_id": "automation-ingress-import",
+        "expected_code": "test_bootstrap_reachable"
+      },
+      {
+        "case_id": "host-bootstrap-import",
+        "expected_code": "test_bootstrap_reachable"
+      },
+      {
+        "case_id": "g5-runtime-import",
+        "expected_code": "test_bootstrap_reachable"
+      },
+      {
+        "case_id": "package-start-reference",
+        "expected_code": "test_bootstrap_profile_forbidden"
+      },
+      {
+        "case_id": "package-default-reference",
+        "expected_code": "test_bootstrap_profile_forbidden"
+      },
+      {
         "case_id": "unknown-fixture",
         "expected_code": "fake_adapter_invocation_undeclared"
       },
@@ -95,5 +135,5 @@
       }
     ]
   },
-  "hash": "sha256:1fb3c5fc811e6869ba5e52972d4bfbb07771b9d668529343bc58e4ab6678147b"
+  "hash": "sha256:74a22da85281face58db87b01b08c8648517ef9bdd93311692a10eb8d6d1e9dc"
 }
