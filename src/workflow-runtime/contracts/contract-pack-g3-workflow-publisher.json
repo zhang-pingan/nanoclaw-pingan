@@ -1,0 +1,118 @@
+{
+  "format": "icarus.workflow-contract-pack-g3-workflow-publisher/1",
+  "ref": {
+    "id": "icarus.workflow-contract-pack-g3-workflow-publisher",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-contract-pack-g3-workflow-publisher:1\n",
+  "payload": {
+    "gate": "G3",
+    "slice": "G3.7",
+    "status": "DONE",
+    "g3_status": "IN_PROGRESS",
+    "publisher_schema_readiness": "PUBLISHER_SCHEMA_PREREQUISITE_READY",
+    "upstream": {
+      "g1_schema_root_hash": "sha256:d4796f1fbae16e05a2d19ce1be0a65d9c00439814dec97940aea20effaa6d244",
+      "g3_1_pack_hash": "sha256:264ec0b6c7b3431acb3a556de5ad666248f320835f7d7ba4b7c255a041eac01a",
+      "g3_3_pack_hash": "sha256:8abadf0f85d8d88e3559e84834badaaa36b224f9f115cd5dd4e2bec45690a8bb",
+      "g3_5_pack_hash": "sha256:73493f9919891fd7164ec7e77a31282a7e386f8447134ec266085bcb7a0e01f4",
+      "g3_6_pack_hash": "sha256:8150113af596f59ec08dd612f1092d9c7a5d72f61958367a825f7574b9727f76"
+    },
+    "request_schema_resource_hash": "sha256:9aec8a311f11d6b7a46de125ffac54840cdb31630e32f5abb11149d7df3f0939",
+    "receipt_schema_resource_hash": "sha256:2dc6be728d9ff9353f0ec30949191f34526138472a309cd82be952dd2dcaedde",
+    "result_schema_resource_hash": "sha256:6d43220a2c169ba59b1db4f205d7c82dfba0d7e9db3d85cbc6065c5ece584644",
+    "preflights_composed": [
+      "G3.1",
+      "G3.3",
+      "G3.5",
+      "G3.6"
+    ],
+    "store_transaction": "single_begin_immediate",
+    "durable_dispositions": [
+      "applied",
+      "duplicate",
+      "conflict",
+      "failed"
+    ],
+    "registry_publication_written": true,
+    "staged_feature_release_written": true,
+    "published_retention_root_written": true,
+    "activation_or_active_pointer_written": false,
+    "production_loader_implemented": false,
+    "execution_artifact_build_or_install": false,
+    "gc_or_delete_implemented": false,
+    "g4_through_g9_status": "NOT_READY",
+    "artifacts": [
+      {
+        "path": "registry/workflow-staged-publish-request-schema@1.json",
+        "format": "icarus.workflow-staged-publish-request-schema/1",
+        "ref": {
+          "id": "icarus.workflow-staged-publish-request-schema",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-staged-publish-request-schema:1\n",
+        "hash": "sha256:195a40f9359ba41d61c76b6eb14ddde6d871f27582ec155142284686ef6dd315"
+      },
+      {
+        "path": "registry/workflow-staged-publish-receipt-schema@1.json",
+        "format": "icarus.workflow-staged-publish-receipt-schema/1",
+        "ref": {
+          "id": "icarus.workflow-staged-publish-receipt-schema",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-staged-publish-receipt-schema:1\n",
+        "hash": "sha256:421ce1a6c740a188183e48502d6ef714f6dafb5c0b5c29ec486d51d897f46d55"
+      },
+      {
+        "path": "registry/workflow-staged-publish-result-schema@1.json",
+        "format": "icarus.workflow-staged-publish-result-schema/1",
+        "ref": {
+          "id": "icarus.workflow-staged-publish-result-schema",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-staged-publish-result-schema:1\n",
+        "hash": "sha256:9833c53a1f7586e0e37f8502f7d4cdebb31e5b6e802f8c2b72ffea79364434f7"
+      },
+      {
+        "path": "conformance/g3-workflow-publisher/positive-cases.json",
+        "format": "icarus.workflow-g3-staged-publish-positive-cases/1",
+        "ref": {
+          "id": "icarus.workflow-g3-staged-publish-positive-cases",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-g3-staged-publish-positive-cases:1\n",
+        "hash": "sha256:c309013a6f9b804f85fc2a0623c9bb296977af60094942e4d6b8d7f8f1e89dd7"
+      },
+      {
+        "path": "conformance/g3-workflow-publisher/negative-cases.json",
+        "format": "icarus.workflow-g3-staged-publish-negative-cases/1",
+        "ref": {
+          "id": "icarus.workflow-g3-staged-publish-negative-cases",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-g3-staged-publish-negative-cases:1\n",
+        "hash": "sha256:4e6f6b46412aff666beb680a03e912cfe5948e9ad4a7d31e9850c12ea3cb2d83"
+      },
+      {
+        "path": "registry/workflow-staged-publish-domain-separators@1.json",
+        "format": "icarus.workflow-staged-publish-domain-separators/1",
+        "ref": {
+          "id": "icarus.workflow-staged-publish-domain-separators",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-staged-publish-domain-separators:1\n",
+        "hash": "sha256:06b60d50c0e6aaddca763b24e24d23f20a3474869d8cb2d8e0c1b9843251b3ea"
+      }
+    ],
+    "positive_case_count": 1,
+    "negative_case_count": 3
+  },
+  "hash": "sha256:5deba1546ce7754eecb4b553c7ce357b9702b44b763a45b2324923a5337a06d3"
+}

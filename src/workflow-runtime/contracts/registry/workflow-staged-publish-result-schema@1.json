@@ -1,0 +1,258 @@
+{
+  "format": "icarus.workflow-staged-publish-result-schema/1",
+  "ref": {
+    "id": "icarus.workflow-staged-publish-result-schema",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-staged-publish-result-schema:1\n",
+  "payload": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://icarus.local/schemas/workflow-staged-publish-result/1",
+    "title": "WorkflowStagedPublishResultV1",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "format",
+      "disposition",
+      "code",
+      "command_id",
+      "invocation_no",
+      "submitted_domain_request_hash",
+      "bound_domain_request_hash",
+      "receipt",
+      "result_hash"
+    ],
+    "properties": {
+      "format": {
+        "const": "icarus.workflow-staged-publish-result/1"
+      },
+      "disposition": {
+        "enum": [
+          "applied",
+          "duplicate",
+          "conflict",
+          "failed"
+        ]
+      },
+      "code": {
+        "type": "string",
+        "minLength": 1
+      },
+      "command_id": {
+        "type": "string",
+        "minLength": 1
+      },
+      "invocation_no": {
+        "type": "integer",
+        "minimum": 1
+      },
+      "submitted_domain_request_hash": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      },
+      "bound_domain_request_hash": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      },
+      "receipt": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/receipt"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "result_hash": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      }
+    },
+    "$defs": {
+      "ref": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "version"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._:/-]{0,253}[A-Za-z0-9])?$"
+          },
+          "version": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,62}[A-Za-z0-9])?$"
+          }
+        }
+      },
+      "identity": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "resource_type",
+          "ref",
+          "content_hash"
+        ],
+        "properties": {
+          "resource_type": {
+            "type": "string",
+            "minLength": 1
+          },
+          "ref": {
+            "$ref": "#/$defs/ref"
+          },
+          "content_hash": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          }
+        }
+      },
+      "release_resource": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "resource",
+          "role"
+        ],
+        "properties": {
+          "resource": {
+            "$ref": "#/$defs/identity"
+          },
+          "role": {
+            "enum": [
+              "closure_root",
+              "closure_member"
+            ]
+          }
+        }
+      },
+      "receipt": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "format",
+          "command_id",
+          "outcome",
+          "domain_request_hash",
+          "feature_release_ref",
+          "feature_release_hash",
+          "closure_ref",
+          "closure_hash",
+          "execution_artifact_ref",
+          "execution_artifact_hash",
+          "release_resources",
+          "registry_publication_count",
+          "retention_handle_id",
+          "failure_code",
+          "active_pointer_changed",
+          "receipt_hash"
+        ],
+        "properties": {
+          "format": {
+            "const": "icarus.workflow-staged-publish-receipt/1"
+          },
+          "command_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "outcome": {
+            "enum": [
+              "applied",
+              "failed"
+            ]
+          },
+          "domain_request_hash": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "feature_release_ref": {
+            "$ref": "#/$defs/ref"
+          },
+          "feature_release_hash": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "closure_ref": {
+            "$ref": "#/$defs/ref"
+          },
+          "closure_hash": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "execution_artifact_ref": {
+            "$ref": "#/$defs/ref"
+          },
+          "execution_artifact_hash": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "release_resources": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 4097,
+            "items": {
+              "$ref": "#/$defs/release_resource"
+            }
+          },
+          "registry_publication_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "retention_handle_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "failure_code": {
+            "anyOf": [
+              {
+                "enum": [
+                  "approved_review_invalid",
+                  "approved_review_expired",
+                  "approved_review_identity_mismatch",
+                  "caller_review_session_mismatch",
+                  "publish_request_invalid",
+                  "publish_request_hash_mismatch",
+                  "publish_identity_mismatch",
+                  "publish_foundation_preflight_failed",
+                  "registry_resource_preflight_failed",
+                  "retention_executor_abi_preflight_failed",
+                  "feature_release_identity_collision",
+                  "registry_publication_collision",
+                  "retention_root_identity_collision",
+                  "idempotency_conflict",
+                  "publisher_transaction_failed"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "active_pointer_changed": {
+            "const": false
+          },
+          "receipt_hash": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          }
+        }
+      }
+    }
+  },
+  "hash": "sha256:9833c53a1f7586e0e37f8502f7d4cdebb31e5b6e802f8c2b72ffea79364434f7"
+}

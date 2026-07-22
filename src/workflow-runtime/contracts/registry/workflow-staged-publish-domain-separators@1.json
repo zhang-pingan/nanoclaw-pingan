@@ -1,0 +1,78 @@
+{
+  "format": "icarus.workflow-staged-publish-domain-separators/1",
+  "ref": {
+    "id": "icarus.workflow-staged-publish-domain-separators",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-staged-publish-domain-separators:1\n",
+  "payload": {
+    "entries": [
+      {
+        "format": "icarus.workflow-approved-publish-review/1",
+        "domain_separator": "icarus:workflow-approved-publish-review:1\n"
+      },
+      {
+        "format": "icarus.workflow-contract-pack-g3-workflow-publisher/1",
+        "domain_separator": "icarus:workflow-contract-pack-g3-workflow-publisher:1\n"
+      },
+      {
+        "format": "icarus.workflow-g3-staged-publish-negative-cases/1",
+        "domain_separator": "icarus:workflow-g3-staged-publish-negative-cases:1\n"
+      },
+      {
+        "format": "icarus.workflow-g3-staged-publish-positive-cases/1",
+        "domain_separator": "icarus:workflow-g3-staged-publish-positive-cases:1\n"
+      },
+      {
+        "format": "icarus.workflow-publisher-command-id/1",
+        "domain_separator": "icarus:workflow-publisher-command-id:1\n"
+      },
+      {
+        "format": "icarus.workflow-publisher-event/1",
+        "domain_separator": "icarus:workflow-publisher-event:1\n"
+      },
+      {
+        "format": "icarus.workflow-publisher-invocation/1",
+        "domain_separator": "icarus:workflow-publisher-invocation:1\n"
+      },
+      {
+        "format": "icarus.workflow-staged-feature-release/1",
+        "domain_separator": "icarus:workflow-staged-feature-release:1\n"
+      },
+      {
+        "format": "icarus.workflow-staged-publish-domain-separators/1",
+        "domain_separator": "icarus:workflow-staged-publish-domain-separators:1\n"
+      },
+      {
+        "format": "icarus.workflow-staged-publish-receipt-schema/1",
+        "domain_separator": "icarus:workflow-staged-publish-receipt-schema:1\n"
+      },
+      {
+        "format": "icarus.workflow-staged-publish-receipt/1",
+        "domain_separator": "icarus:workflow-staged-publish-receipt:1\n"
+      },
+      {
+        "format": "icarus.workflow-staged-publish-request-domain/1",
+        "domain_separator": "icarus:workflow-staged-publish-domain-request:1\n"
+      },
+      {
+        "format": "icarus.workflow-staged-publish-request-schema/1",
+        "domain_separator": "icarus:workflow-staged-publish-request-schema:1\n"
+      },
+      {
+        "format": "icarus.workflow-staged-publish-request/1",
+        "domain_separator": "icarus:workflow-staged-publish-request:1\n"
+      },
+      {
+        "format": "icarus.workflow-staged-publish-result-schema/1",
+        "domain_separator": "icarus:workflow-staged-publish-result-schema:1\n"
+      },
+      {
+        "format": "icarus.workflow-staged-publish-result/1",
+        "domain_separator": "icarus:workflow-staged-publish-result:1\n"
+      }
+    ]
+  },
+  "hash": "sha256:06b60d50c0e6aaddca763b24e24d23f20a3474869d8cb2d8e0c1b9843251b3ea"
+}
