@@ -200,9 +200,8 @@ describe('FeishuChannel form cards', () => {
           id: 'approve',
           label: '确认',
           value: {
-            action: 'assistant_evolution_action',
-            item_id: 'evolution-1',
-            evolution_action: 'adopt',
+            action: 'assistant_inbox_broadcast_execute',
+            item_id: 'agent-inbox-1',
           },
         },
       ],
@@ -284,7 +283,7 @@ describe('FeishuChannel card action callbacks', () => {
     );
   });
 
-  it('forwards typed Assistant evolution actions', async () => {
+  it('forwards typed Assistant inbox actions', async () => {
     const channel = createChannel();
     const onCardAction = vi.fn(async () => ({
       toast: { type: 'success' as const, content: 'adopted' },
@@ -299,9 +298,8 @@ describe('FeishuChannel card action callbacks', () => {
           context: { open_message_id: 'msg-2' },
           action: {
             value: {
-              action: 'assistant_evolution_action',
-              item_id: 'evolution-1',
-              evolution_action: 'adopt',
+              action: 'assistant_inbox_broadcast_dismiss',
+              item_id: 'agent-inbox-1',
             },
           },
         },
@@ -310,16 +308,15 @@ describe('FeishuChannel card action callbacks', () => {
     );
 
     expect(onCardAction).toHaveBeenCalledWith({
-      action: 'assistant_evolution_action',
+      action: 'assistant_inbox_broadcast_dismiss',
       user_id: 'user-2',
       message_id: 'msg-2',
       actor_channel: 'feishu',
       group_jid: undefined,
       group_folder: undefined,
       form_value: {
-        action: 'assistant_evolution_action',
-        item_id: 'evolution-1',
-        evolution_action: 'adopt',
+        action: 'assistant_inbox_broadcast_dismiss',
+        item_id: 'agent-inbox-1',
       },
     });
   });

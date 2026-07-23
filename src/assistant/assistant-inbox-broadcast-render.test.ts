@@ -68,7 +68,7 @@ describe('buildAssistantInboxBroadcastCard', () => {
     const card = buildAssistantInboxBroadcastCard(
       item({
         kind: 'approval',
-        action_kind: 'assistant_evolution_adopt',
+        action_kind: 'unsupported_action',
         extra: {},
       }),
     );

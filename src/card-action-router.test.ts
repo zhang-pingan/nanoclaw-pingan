@@ -14,18 +14,6 @@ vi.mock('./ask-user-question.js', () => ({
   })),
 }));
 
-const handleAssistantEvolutionCardActionMock = vi.hoisted(() =>
-  vi.fn(async () => ({
-    ok: true,
-    toast: { type: 'success', content: 'evolution ok' },
-  })),
-);
-
-vi.mock('./assistant/evolution-card-actions.js', () => ({
-  ASSISTANT_EVOLUTION_CARD_ACTION: 'assistant_evolution_action',
-  handleAssistantEvolutionCardAction: handleAssistantEvolutionCardActionMock,
-}));
-
 const handleAssistantInboxBroadcastCardActionMock = vi.hoisted(() =>
   vi.fn(async () => ({
     ok: true,
@@ -118,32 +106,6 @@ describe('card-action-router ask dedupe', () => {
     await new Promise((r) => setTimeout(r, 0));
 
     expect(handleAskQuestionResponse).toHaveBeenCalledTimes(2);
-  });
-
-  it('routes assistant evolution card actions', async () => {
-    const handler = createCardActionHandler({
-      registeredGroups: () => ({}),
-      sendMessage: async () => {},
-    });
-
-    const result = await handler({
-      action: 'assistant_evolution_action',
-      user_id: 'u1',
-      message_id: 'msg-evo',
-      form_value: {
-        item_id: 'evo-1',
-        evolution_action: 'adopt',
-      },
-    });
-
-    expect(handleAssistantEvolutionCardActionMock).toHaveBeenCalledWith({
-      itemId: 'evo-1',
-      evolutionAction: 'adopt',
-    });
-    expect(result).toEqual({
-      ok: true,
-      toast: { type: 'success', content: 'evolution ok' },
-    });
   });
 
   it('routes assistant inbox broadcast card actions with source group', async () => {

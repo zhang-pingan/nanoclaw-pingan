@@ -691,13 +691,6 @@ function createSchema(database: Database.Database): void {
       updated_at TEXT NOT NULL
     );
 
-    CREATE TABLE IF NOT EXISTS assistant_runtime_locks (
-      key TEXT PRIMARY KEY,
-      locked_by TEXT NOT NULL,
-      lease_until TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    );
-
     CREATE TABLE IF NOT EXISTS assistant_action_logs (
       id TEXT PRIMARY KEY,
       item_id TEXT,
@@ -742,75 +735,10 @@ function createSchema(database: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_assistant_snoozes_scope
       ON assistant_snoozes(scope, scope_ref, until);
 
-    CREATE TABLE IF NOT EXISTS assistant_evolution_items (
-      id TEXT PRIMARY KEY,
-      status TEXT NOT NULL,
-      module_scope TEXT NOT NULL,
-      direction TEXT NOT NULL,
-      proposal TEXT,
-      proposal_evaluation TEXT,
-      implementation_summary TEXT,
-      check_summary TEXT,
-      review_summary TEXT,
-      bug_report TEXT,
-      risk_level TEXT NOT NULL DEFAULT 'unknown',
-      auto_implement INTEGER NOT NULL DEFAULT 0,
-      auto_adopt INTEGER NOT NULL DEFAULT 0,
-      review_round INTEGER NOT NULL DEFAULT 0,
-      max_review_rounds INTEGER NOT NULL DEFAULT 2,
-      base_branch TEXT NOT NULL DEFAULT 'main',
-      work_branch TEXT,
-      base_commit TEXT,
-      head_commit TEXT,
-      merge_commit TEXT,
-      adoption_status TEXT,
-      adoption_error TEXT,
-      resume_status TEXT,
-      locked_by TEXT,
-      lease_until TEXT,
-      blocked_reason TEXT,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL,
-      completed_at TEXT
-    );
-    CREATE INDEX IF NOT EXISTS idx_assistant_evolution_items_status
-      ON assistant_evolution_items(status, created_at ASC);
-    CREATE INDEX IF NOT EXISTS idx_assistant_evolution_items_lease
-      ON assistant_evolution_items(locked_by, lease_until);
-
-    CREATE TABLE IF NOT EXISTS assistant_evolution_events (
-      id TEXT PRIMARY KEY,
-      item_id TEXT NOT NULL,
-      event_type TEXT NOT NULL,
-      payload_json TEXT,
-      created_at TEXT NOT NULL
-    );
-    CREATE INDEX IF NOT EXISTS idx_assistant_evolution_events_item
-      ON assistant_evolution_events(item_id, created_at ASC);
-
-    CREATE TABLE IF NOT EXISTS assistant_evolution_artifacts (
-      id TEXT PRIMARY KEY,
-      item_id TEXT NOT NULL,
-      artifact_type TEXT NOT NULL,
-      title TEXT NOT NULL,
-      path TEXT,
-      content TEXT,
-      payload_json TEXT,
-      created_at TEXT NOT NULL
-    );
-    CREATE INDEX IF NOT EXISTS idx_assistant_evolution_artifacts_item
-      ON assistant_evolution_artifacts(item_id, created_at ASC);
   `);
   try {
     database.exec(
       `ALTER TABLE assistant_chat_messages ADD COLUMN file_path TEXT`,
-    );
-  } catch {
-    /* column already exists */
-  }
-  try {
-    database.exec(
-      `ALTER TABLE assistant_evolution_items ADD COLUMN resume_status TEXT`,
     );
   } catch {
     /* column already exists */
@@ -1535,9 +1463,6 @@ export function clearAssistantData(): {
   agent_inbox_items: number;
   assistant_action_logs: number;
   assistant_snoozes: number;
-  assistant_evolution_items: number;
-  assistant_evolution_events: number;
-  assistant_evolution_artifacts: number;
   total: number;
 } {
   const tx = db.transaction(() => {
@@ -1554,37 +1479,14 @@ export function clearAssistantData(): {
     const inboxItems = db
       .prepare(`DELETE FROM agent_inbox_items`)
       .run().changes;
-    const evolutionArtifacts = db
-      .prepare(`DELETE FROM assistant_evolution_artifacts`)
-      .run().changes;
-    const evolutionEvents = db
-      .prepare(`DELETE FROM assistant_evolution_events`)
-      .run().changes;
-    const evolutionItems = db
-      .prepare(`DELETE FROM assistant_evolution_items`)
-      .run().changes;
-    db.prepare(
-      `DELETE FROM assistant_runtime_locks WHERE key = 'assistant_evolution'`,
-    ).run();
-
     return {
       assistant_chat_messages: assistantChatMessages,
       messages,
       agent_inbox_items: inboxItems,
       assistant_action_logs: actionLogs,
       assistant_snoozes: snoozes,
-      assistant_evolution_items: evolutionItems,
-      assistant_evolution_events: evolutionEvents,
-      assistant_evolution_artifacts: evolutionArtifacts,
       total:
-        assistantChatMessages +
-        messages +
-        inboxItems +
-        actionLogs +
-        snoozes +
-        evolutionItems +
-        evolutionEvents +
-        evolutionArtifacts,
+        assistantChatMessages + messages + inboxItems + actionLogs + snoozes,
     };
   });
 

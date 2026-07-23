@@ -15,7 +15,7 @@
 - 上下文治理：显式记录 context pack 的来源、新鲜度、缺失项、冲突项和 diff。
 - Agent UI 标准化：用 schema/action declaration 统一 Web、移动端、桌面助手的交互表单。
 
-Icarus 已经有较强的底座：宿主机可信编排、容器隔离、MCP stdio、workflow checkpoint/interrupt/outbox、agent query trace、quality gate、LLM judge、context pack、assistant proactive/evolution。优化重点应是把这些能力标准化和闭环化，而不是整体迁移到 ADK、LangGraph 或 OpenAI Agents SDK。
+Icarus 已经有较强的底座：宿主机可信编排、容器隔离、MCP stdio、workflow checkpoint/interrupt/outbox、agent query trace、quality gate、LLM judge、context pack、assistant proactive。优化重点应是把这些能力标准化和闭环化，而不是整体迁移到 ADK、LangGraph 或 OpenAI Agents SDK。
 
 ## 外部热点
 
@@ -191,7 +191,7 @@ Claude Code、Gemini CLI、OpenAI Agents 等生态都在强化 subagents、hando
 
 - 把失败转成资产。
 - 模型路由、prompt、skill、workflow 改动可以用历史样本回归。
-- 自我进化不再只靠一次性主观判断。
+- 优化决策不再只靠一次性主观判断。
 
 ### P0：Workflow 恢复 worker
 
@@ -315,7 +315,7 @@ Assistant proactive 可以基于这些指标生成异常提醒，例如：
 收益：
 
 - 能知道 agent 系统是在变好还是变差。
-- 自我进化可以基于真实指标选择优化方向。
+- 系统优化可以基于真实指标选择方向。
 
 ### P1：Schema-driven Action UI
 
@@ -384,7 +384,6 @@ Assistant proactive 可以基于这些指标生成异常提醒，例如：
 - 不建议整体迁移到 Google ADK、LangGraph 或 OpenAI Agents SDK。Icarus 当前的宿主机状态机、容器隔离、channel 边界和本地数据模型都比较贴合产品定位，整体迁移成本高且收益不确定。
 - 不建议把 A2A 作为近期主线。内部 delegation 先标准化即可，等有真实外部 agent 接入需求时再实现协议边界。
 - 不建议把所有 MCP server 直接暴露给容器 agent。应先完成 host-side policy engine，否则工具扩展会放大风险。
-- 不建议让 self-evolution 自动合并主分支。可以让它自动发现、自动提案、受控实现，但 adoption 仍应由用户确认。
 
 ## 建议实施顺序
 

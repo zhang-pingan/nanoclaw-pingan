@@ -3,7 +3,6 @@
 > **状态**：方案讨论稿
 > **实施前置**：[Dynamic Workflow Graph Runtime](./dynamic-workflow-dag-framework.md) 已完整实现并通过 Production Activation Gate
 > **范围**：Icarus Core、独立 Agent 执行链路、Core-owned Workflow，以及由一个或多个 Workflow 组成的 Feature Package
-> **不复用**：现有个人助手 Self Evolution 的状态机、分支模型、数据表和采纳流程不作为本方案约束或实现基础
 
 ## 导航
 
@@ -62,7 +61,6 @@ Icarus 需要建立一套统一的评估与自进化框架，使 Core 和 Featur
 - 不让 Feature 自己实现另一套回放、实验调度或指标存储系统。
 - 不让 Feature 直接写 Evaluation Store、执行 active pointer 切换、注册任意发布脚本或以领域扩展绕过 Candidate/Promotion hard gate。
 - 不让 LLM Judge 成为安全、权限、Schema、幂等或副作用正确性的唯一判断者。
-- 不复用或兼容现有个人助手 Self Evolution 的状态、表、Prompt 或分支采纳协议。
 
 ## 已确认架构决策
 

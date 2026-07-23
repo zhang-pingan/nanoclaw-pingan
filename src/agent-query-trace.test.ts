@@ -12,8 +12,8 @@ describe('agent query trace manager', () => {
   it('adds an error event when a query finishes with error without one', () => {
     agentQueryTraceManager.startQuery({
       queryId: 'trace-error-without-event',
-      sourceType: 'assistant_evolution',
-      sourceRefId: 'evo-test',
+      sourceType: 'assistant_action',
+      sourceRefId: 'assistant-test',
     });
 
     agentQueryTraceManager.finishQuery('trace-error-without-event', 'error', {
@@ -39,8 +39,8 @@ describe('agent query trace manager', () => {
   it('does not duplicate an existing error event on failure finish', () => {
     agentQueryTraceManager.startQuery({
       queryId: 'trace-error-with-event',
-      sourceType: 'assistant_evolution',
-      sourceRefId: 'evo-test',
+      sourceType: 'assistant_action',
+      sourceRefId: 'assistant-test',
     });
     agentQueryTraceManager.appendEvent({
       queryId: 'trace-error-with-event',

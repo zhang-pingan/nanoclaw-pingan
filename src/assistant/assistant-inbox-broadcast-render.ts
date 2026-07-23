@@ -6,12 +6,7 @@ import type { AgentInboxItemView } from './types.js';
 import type { CardButton, CardHeaderColor, InteractiveCard } from '../types.js';
 
 const ACTIVE_STATUSES = new Set(['unread', 'read', 'snoozed']);
-const MOBILE_EXECUTE_ACTION_KINDS = new Set([
-  'continue_today_plan',
-  'assistant_evolution_pause',
-  'assistant_evolution_resume',
-  'assistant_evolution_cancel',
-]);
+const MOBILE_EXECUTE_ACTION_KINDS = new Set(['continue_today_plan']);
 
 function compactText(value: string | null | undefined, max = 420): string {
   const text = (value || '').replace(/\s+/g, ' ').trim();

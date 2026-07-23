@@ -160,52 +160,6 @@ function normalizeTriggerRules(
   ) as AssistantSettings['triggerRules'];
 }
 
-function normalizeEvolutionSettings(
-  raw: unknown,
-): AssistantSettings['evolution'] {
-  const input = isObject(raw) ? raw : {};
-  const allowedRiskLevel =
-    input.allowedRiskLevel === 'low' ||
-    input.allowedRiskLevel === 'medium' ||
-    input.allowedRiskLevel === 'high'
-      ? input.allowedRiskLevel
-      : DEFAULT_ASSISTANT_SETTINGS.evolution.allowedRiskLevel;
-
-  return {
-    enabled:
-      typeof input.enabled === 'boolean'
-        ? input.enabled
-        : DEFAULT_ASSISTANT_SETTINGS.evolution.enabled,
-    autoImplementEnabled:
-      typeof input.autoImplementEnabled === 'boolean'
-        ? input.autoImplementEnabled
-        : DEFAULT_ASSISTANT_SETTINGS.evolution.autoImplementEnabled,
-    autoAdoptEnabled:
-      typeof input.autoAdoptEnabled === 'boolean'
-        ? input.autoAdoptEnabled
-        : DEFAULT_ASSISTANT_SETTINGS.evolution.autoAdoptEnabled,
-    scanIntervalMinutes: clampNumber(
-      input.scanIntervalMinutes,
-      DEFAULT_ASSISTANT_SETTINGS.evolution.scanIntervalMinutes,
-      5,
-      1440,
-    ),
-    maxConcurrentItems: clampNumber(
-      input.maxConcurrentItems,
-      DEFAULT_ASSISTANT_SETTINGS.evolution.maxConcurrentItems,
-      1,
-      1,
-    ),
-    maxReviewRounds: clampNumber(
-      input.maxReviewRounds,
-      DEFAULT_ASSISTANT_SETTINGS.evolution.maxReviewRounds,
-      0,
-      5,
-    ),
-    allowedRiskLevel,
-  };
-}
-
 function normalizeSettings(raw: unknown): AssistantSettings {
   const input = isObject(raw) ? raw : {};
   const quietHours = isObject(input.quietHours) ? input.quietHours : {};
@@ -232,7 +186,6 @@ function normalizeSettings(raw: unknown): AssistantSettings {
       1,
       120,
     ),
-    evolution: normalizeEvolutionSettings(input.evolution),
     quietHours: {
       enabled:
         typeof quietHours.enabled === 'boolean'
@@ -285,10 +238,6 @@ function mergeSettingsPatch(
     triggerRules: {
       ...current.triggerRules,
       ...(isObject(patch.triggerRules) ? patch.triggerRules : {}),
-    },
-    evolution: {
-      ...current.evolution,
-      ...(isObject(patch.evolution) ? patch.evolution : {}),
     },
     desktopAssistant: {
       ...current.desktopAssistant,

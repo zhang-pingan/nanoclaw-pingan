@@ -4,21 +4,12 @@ import fs from 'fs';
 import { WebSocketServer, WebSocket } from 'ws';
 
 import {
-  adoptAssistantEvolutionItemForApi,
-  approveAssistantEvolutionImplementationForApi,
-  cancelAssistantEvolutionItemForApi,
   clearAssistantDataForApi,
-  getAssistantEvolutionItemForApi,
-  getAssistantEvolutionStateForApi,
   getAssistantState,
-  listAssistantEvolutionItemsForApi,
   listAssistantChatForApi,
   listAgentInboxForApi,
-  pauseAssistantEvolutionItemForApi,
   runAgentInboxActionForApi,
-  runAssistantEvolutionTickForApi,
   runAssistantScanForApi,
-  resumeAssistantEvolutionItemForApi,
   sendAssistantChatMessageForApi,
   updateAssistantSettingsForApi,
 } from '../assistant/assistant-api.js';
@@ -956,49 +947,6 @@ class WebChannel {
       if (pathname === '/api/assistant/scan' && req.method === 'POST') {
         return void this.apiRunAssistantScan(res);
       }
-      if (
-        pathname === '/api/assistant/evolution/state' &&
-        req.method === 'GET'
-      ) {
-        return this.apiGetAssistantEvolutionState(res);
-      }
-      if (
-        pathname === '/api/assistant/evolution/items' &&
-        req.method === 'GET'
-      ) {
-        return this.apiListAssistantEvolutionItems(reqUrl, res);
-      }
-      if (
-        pathname === '/api/assistant/evolution/settings' &&
-        req.method === 'POST'
-      ) {
-        return this.apiUpdateAssistantSettings(req, res);
-      }
-      if (
-        pathname === '/api/assistant/evolution/tick' &&
-        req.method === 'POST'
-      ) {
-        return this.apiRunAssistantEvolutionTick(res);
-      }
-      const evolutionItemActionMatch = pathname.match(
-        /^\/api\/assistant\/evolution\/items\/([^/]+)\/(approve-implementation|pause|resume|adopt|cancel)$/,
-      );
-      if (evolutionItemActionMatch && req.method === 'POST') {
-        return this.apiAssistantEvolutionItemAction(
-          decodeURIComponent(evolutionItemActionMatch[1]),
-          evolutionItemActionMatch[2],
-          res,
-        );
-      }
-      const evolutionItemMatch = pathname.match(
-        /^\/api\/assistant\/evolution\/items\/([^/]+)$/,
-      );
-      if (evolutionItemMatch && req.method === 'GET') {
-        return this.apiGetAssistantEvolutionItem(
-          decodeURIComponent(evolutionItemMatch[1]),
-          res,
-        );
-      }
       if (pathname === '/api/assistant/data' && req.method === 'DELETE') {
         return this.apiClearAssistantData(res);
       }
@@ -1584,95 +1532,6 @@ class WebChannel {
       res.end(
         JSON.stringify({
           error: err instanceof Error ? err.message : 'Assistant scan failed',
-        }),
-      );
-    }
-  }
-
-  private apiGetAssistantEvolutionState(res: http.ServerResponse): void {
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify(getAssistantEvolutionStateForApi()));
-  }
-
-  private apiListAssistantEvolutionItems(
-    reqUrl: URL,
-    res: http.ServerResponse,
-  ): void {
-    const result = listAssistantEvolutionItemsForApi({
-      limit: reqUrl.searchParams.get('limit'),
-    });
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify(result));
-  }
-
-  private apiGetAssistantEvolutionItem(
-    id: string,
-    res: http.ServerResponse,
-  ): void {
-    try {
-      const result = getAssistantEvolutionItemForApi(id);
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify(result));
-    } catch (err) {
-      res.writeHead(404, { 'Content-Type': 'application/json' });
-      res.end(
-        JSON.stringify({
-          error:
-            err instanceof Error ? err.message : 'Evolution item not found',
-        }),
-      );
-    }
-  }
-
-  private async apiRunAssistantEvolutionTick(
-    res: http.ServerResponse,
-  ): Promise<void> {
-    try {
-      const result = await runAssistantEvolutionTickForApi();
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify(result));
-    } catch (err) {
-      res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(
-        JSON.stringify({
-          error: err instanceof Error ? err.message : 'Evolution tick failed',
-        }),
-      );
-    }
-  }
-
-  private async apiAssistantEvolutionItemAction(
-    id: string,
-    action: string,
-    res: http.ServerResponse,
-  ): Promise<void> {
-    try {
-      const result =
-        action === 'approve-implementation'
-          ? approveAssistantEvolutionImplementationForApi(id)
-          : action === 'pause'
-            ? pauseAssistantEvolutionItemForApi(id)
-            : action === 'resume'
-              ? resumeAssistantEvolutionItemForApi(id)
-              : action === 'cancel'
-                ? cancelAssistantEvolutionItemForApi(id)
-                : action === 'adopt'
-                  ? await adoptAssistantEvolutionItemForApi(id)
-                  : null;
-      if (!result) {
-        res.writeHead(404, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'Unknown evolution action' }));
-        return;
-      }
-      res.writeHead(result.ok ? 200 : 409, {
-        'Content-Type': 'application/json',
-      });
-      res.end(JSON.stringify(result));
-    } catch (err) {
-      res.writeHead(409, { 'Content-Type': 'application/json' });
-      res.end(
-        JSON.stringify({
-          error: err instanceof Error ? err.message : 'Evolution action failed',
         }),
       );
     }
@@ -2470,7 +2329,6 @@ class WebChannel {
         | 'scheduled_task'
         | 'delegation'
         | 'web_action'
-        | 'assistant_evolution'
         | 'assistant_action'
         | 'internal_run_once'
         | undefined,

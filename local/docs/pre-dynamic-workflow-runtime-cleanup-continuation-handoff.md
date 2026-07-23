@@ -150,7 +150,7 @@ P7 完成后已重新验证 Electron build 通过。
 
 已完成的共享模块解耦：
 
-- `src/card-action-router.ts` 只保留 Ask User Question、Assistant Evolution 和 Assistant Inbox Card action。
+- `src/card-action-router.ts` 只保留 Ask User Question 和 Assistant Inbox Card action。
 - `src/ask-user-question.ts` 不再写 Workbench projection，也不再通过旧 Runtime 完成 delegation。
 - `src/container-runner.ts` 删除 Workflow runtime root 和 Feature data root 的 Workflow 专属挂载。
 - `src/group-queue.ts` 停止 Agent 时不再 cancel Workflow，也不再显示 active Workflow count。
@@ -247,9 +247,9 @@ Feature Runtime 测试已按新合同更新，验证通用 resources activation 
 - Agent Run failure investigation。
 - Online error log scan/investigation。
 - Today Plan coding anomaly scan/repair。
-- Assistant Inbox/Evolution 非 Workbench 能力。
+- Assistant Inbox 非 Workbench 能力。
 
-相关 legacy 测试已删除或改写，非 Workbench investigation/repair/evolution 场景继续覆盖。
+相关 legacy 测试已删除或改写，非 Workbench investigation/repair 场景继续覆盖。
 
 ### 8. Today Plan 已收敛为 Chat + Service Branch
 
@@ -314,7 +314,7 @@ Feature Runtime 测试已按新合同更新，验证通用 resources activation 
 - Feature Package Runtime。
 - InteractiveCard、Feishu adapter、Ask User Question 和 Assistant Card。
 - Today Plan chat/service/mail/coding anomaly。
-- Assistant Inbox/Evolution/online log/Agent Run/Scheduled Task investigation。
+- Assistant Inbox/online log/Agent Run/Scheduled Task investigation。
 - Memory、Wiki、Chat。
 
 新增/完善的 gate：
@@ -411,7 +411,7 @@ P0-P7 与 D0-D8 已全部完成；本前置清理任务没有剩余执行断点�
 - Feature Package Runtime 启停、API/nav/renderer、skills/agents/mcp/scripts/templates。
 - `InteractiveCard`、渠道 `sendCard`、Ask User Question Card、Assistant Card。
 - Today Plan 的 manual/chat/service branch。
-- Assistant 的非 Workbench Inbox、Evolution、online log、coding anomaly、Agent Run/Scheduled Task investigation。
+- Assistant 的非 Workbench Inbox、online log、coding anomaly、Agent Run/Scheduled Task investigation。
 - Memory、Wiki、Chat。
 - migration candidate 原始资料。
 - `better-sqlite3`。

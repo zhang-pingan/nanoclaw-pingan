@@ -124,11 +124,6 @@ import { AssistantInboxBroadcastService } from './assistant/assistant-inbox-broa
 import { initAssistantAutoFlow } from './assistant/assistant-auto-flow.js';
 import { startProactiveEngine } from './assistant/proactive-engine.js';
 import {
-  configureEvolutionEngine,
-  startEvolutionEngine,
-} from './assistant/evolution-engine.js';
-import type { EvolutionAgentRunner } from './assistant/evolution-runner.js';
-import {
   AgentQueryRecord,
   Channel,
   InteractiveCard,
@@ -2367,97 +2362,6 @@ async function runAssistantActionAgent(
   return { ok: true, text: result.text };
 }
 
-const runEvolutionActionAgent: EvolutionAgentRunner = async (input) => {
-  const chatJid = resolveAssistantActionJid();
-  if (!chatJid) {
-    return {
-      ok: false,
-      text: '',
-      error: 'Assistant evolution group not found',
-    };
-  }
-  const group = registeredGroups[chatJid];
-  const runId = createExecutionId();
-  const queryId = createExecutionId();
-  const selectedModel = await selectModel({
-    prompt: input.prompt,
-    isMain: group?.isMain === true,
-  });
-  agentQueryTraceManager.startQuery({
-    queryId,
-    runId,
-    sourceType: 'assistant_evolution',
-    sourceRefId: input.item.id,
-    chatJid,
-    groupFolder: group?.folder || null,
-    selectedModel: selectedModel.selectedModel,
-    selectedModelReason: selectedModel.reason,
-    promptSummary: `自我进化 ${input.phase}：${input.item.direction}`,
-    promptHash: crypto.createHash('sha256').update(input.prompt).digest('hex'),
-  });
-  const inputStepId = agentQueryTraceManager.startStep({
-    queryId,
-    stepType: 'input',
-    stepName: 'assistant_evolution_phase',
-    summary: input.phase,
-    payload: {
-      itemId: input.item.id,
-      status: input.item.status,
-      direction: input.item.direction,
-    },
-  });
-  agentQueryTraceManager.completeStep(queryId, inputStepId, 'success');
-  addOneShotTraceContext(chatJid, {
-    queryId,
-    stepId: inputStepId,
-    runId,
-    traceKey: queryId,
-  });
-  let result: OneShotAgentResult;
-  try {
-    result = await runOneShotAgent({
-      chatJid,
-      prompt: input.prompt,
-      selectedModel: selectedModel.selectedModel,
-      runId,
-      initialQueryId: queryId,
-      closeOnFirstResult: true,
-      collect: 'first_result',
-      requireResult: true,
-      isolatedSession: true,
-      status: {
-        groupName: '自我进化',
-        promptSummary: `自我进化 ${input.phase}：${input.item.direction}`,
-        lastSender: 'assistant evolution',
-        lastContent: input.item.status,
-        lastTime: Date.now().toString(),
-        isTask: true,
-        dedupeKey: `assistant-evolution:${input.phase}:${input.item.id}`,
-      },
-    });
-  } finally {
-    removeOneShotTraceContext(chatJid, queryId);
-  }
-  if (!result.ok) {
-    const error = result.error || 'Assistant evolution agent execution failed';
-    agentQueryTraceManager.finishQuery(queryId, 'error', {
-      ...(result.failure
-        ? toAgentQueryFailurePatch(result.failure, error)
-        : { error_message: error }),
-      output_preview: result.text.slice(0, 500),
-    });
-    return {
-      ok: false,
-      text: result.text,
-      error,
-    };
-  }
-  agentQueryTraceManager.finishQuery(queryId, 'success', {
-    output_preview: result.text.slice(0, 500),
-  });
-  return { ok: true, text: result.text };
-};
-
 async function startMessageLoop(): Promise<void> {
   if (messageLoopRunning) {
     logger.debug('Message loop already running, skipping duplicate start');
@@ -3176,11 +3080,7 @@ async function main(): Promise<void> {
         item,
       }),
   });
-  configureEvolutionEngine({
-    agentRunner: runEvolutionActionAgent,
-  });
   startProactiveEngine();
-  startEvolutionEngine();
   queue.setProcessMessagesFn(processGroupMessages);
   recoverPendingMessages();
   startMessageLoop().catch((err) => {

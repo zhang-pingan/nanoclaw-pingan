@@ -897,75 +897,6 @@
                 </div>
 
                 <div class="assistant-source-heading">
-                  <div class="assistant-section-title">自我进化</div>
-                  <div class="assistant-section-subtitle">
-                    配置自我进化运行策略。
-                  </div>
-                </div>
-                <div
-                  class="assistant-settings-grid assistant-evolution-settings"
-                >
-                  <label class="assistant-switch-row">
-                    <input
-                      id="assistant-evolution-enabled-toggle"
-                      type="checkbox"
-                    />
-                    <span>
-                      <strong>启用自我进化</strong>
-                      <small
-                        >自动发现优化方向并写方案，默认不会合并主分支。</small
-                      >
-                    </span>
-                  </label>
-                  <div
-                    id="assistant-evolution-schedule"
-                    class="assistant-evolution-schedule"
-                  >
-                    加载中
-                  </div>
-                  <button
-                    id="assistant-evolution-trigger-btn"
-                    type="button"
-                    class="assistant-evolution-trigger-btn"
-                  >
-                    手动触发
-                  </button>
-
-                  <label class="assistant-switch-row">
-                    <input
-                      id="assistant-evolution-auto-implement-toggle"
-                      type="checkbox"
-                    />
-                    <span>
-                      <strong>自动实现到工作分支</strong>
-                      <small>检查和复核通过后进入待采纳状态。</small>
-                    </span>
-                  </label>
-
-                  <label class="assistant-switch-row">
-                    <input
-                      id="assistant-evolution-auto-adopt-toggle"
-                      type="checkbox"
-                    />
-                    <span>
-                      <strong>自动采纳低风险方案</strong>
-                      <small>仅保留开关；第一版建议关闭。</small>
-                    </span>
-                  </label>
-
-                  <label class="assistant-field">
-                    <span>进化扫描间隔</span>
-                    <input
-                      id="assistant-evolution-scan-interval-input"
-                      type="number"
-                      min="5"
-                      max="1440"
-                      step="5"
-                    />
-                  </label>
-                </div>
-
-                <div class="assistant-source-heading">
                   <div class="assistant-section-title">主动触发源</div>
                   <div class="assistant-section-subtitle">
                     选择助手用于发现待处理事项的数据范围。
@@ -1006,24 +937,6 @@
                     </div>
                   </div>
                   <div id="assistant-log-list" class="assistant-log-list"></div>
-                </section>
-
-                <section class="assistant-panel assistant-evolution-list-panel">
-                  <div class="assistant-panel-head">
-                    <div>
-                      <div class="assistant-section-title">自我进化事项</div>
-                      <div
-                        id="assistant-evolution-summary"
-                        class="assistant-section-subtitle"
-                      >
-                        加载中
-                      </div>
-                    </div>
-                  </div>
-                  <div
-                    id="assistant-evolution-panel"
-                    class="assistant-evolution-list"
-                  ></div>
                 </section>
               </div>
             </section>
@@ -2239,7 +2152,6 @@
                 <option value="delegation">delegation</option>
                 <option value="scheduled_task">scheduled</option>
                 <option value="web_action">web action</option>
-                <option value="assistant_evolution">evolution</option>
                 <option value="assistant_action">assistant</option>
               </select>
               <input

@@ -8,7 +8,6 @@ Icarus 已经有多条人类介入链路：
 - Ask question：容器 agent 通过 IPC 向用户提出结构化问题，并等待回答。
 - Feishu/Web 交互卡片：用户在移动端或工作台处理 approve、revise、skip、retry、continue 等动作。
 - Assistant Inbox：个人助理主动发现问题后，提醒用户查看、忽略、稍后、排查或修复。
-- Self evolution：自我进化流程中有方案批准、实现批准、采纳分支等高风险决策。
 
 这些能力的方向是对的，但协议语义分散在多个模块中。每条链路都需要处理相似问题：谁能确认、在哪个渠道确认、确认什么动作、payload 怎么校验、重复提交怎么处理、状态变化后怎么办、风险如何展示、审计怎么记录。
 
@@ -38,13 +37,10 @@ Icarus 已经有多条人类介入链路：
   - Workflow card action
   - Ask question card action
   - Assistant inbox broadcast card action
-  - Evolution card action
 - `src/workbench-store.ts`
   - Workbench action item 和 timeline 同步
 - `src/assistant/assistant-actions.ts`
   - Assistant inbox item action handling
-- `src/assistant/evolution-card-actions.ts`
-  - Self evolution 卡片动作
 
 当前 `resumeWorkflowInterrupt()` 已经具备很多关键能力：
 
@@ -65,7 +61,7 @@ Icarus 已经有多条人类介入链路：
 
 ### 1. 语义分散
 
-`workflow_interrupts`、`ask_questions`、Assistant Inbox、Evolution card action 都在表达“需要用户决策”，但每个模块都有自己的 action、payload、校验和状态记录方式。
+`workflow_interrupts`、`ask_questions`、Assistant Inbox 都在表达“需要用户决策”，但每个模块都有自己的 action、payload、校验和状态记录方式。
 
 结果是新增一个高风险能力时，容易重新写一套卡片按钮、handler、schema 校验和审计逻辑。
 
@@ -80,7 +76,7 @@ Icarus 已经有多条人类介入链路：
 - 是否需要显式输入确认文本。
 - 超时后默认行为。
 
-这会影响主动助理和自我进化的安全边界。
+这会影响主动助理的安全边界。
 
 ### 3. 跨渠道一致性成本高
 
@@ -101,12 +97,12 @@ Ask question 更像“结构化输入”，workflow interrupt 更像“流程状
 
 ### 5. 高风险能力缺少统一闸门
 
-自动修复、部署、数据库变更、重启服务、自我进化采纳分支等动作都应该走同一种高风险确认协议，而不是各模块自行判断。
+自动修复、部署、数据库变更、重启服务等动作都应该走同一种高风险确认协议，而不是各模块自行判断。
 
 ## 目标
 
 - 建立统一的 `HumanReviewRequest` 数据模型。
-- 用同一套协议表达审批、输入、凭证确认、风险接受、外部等待和自我进化采纳。
+- 用同一套协议表达审批、输入、凭证确认、风险接受和外部等待。
 - 保留当前 workflow interrupt 的幂等、冲突、schema 校验能力。
 - 让 Web、Feishu、Assistant 使用同一份 request 渲染确认 UI。
 - 让所有用户提交进入同一个 submit handler。
@@ -126,7 +122,7 @@ Ask question 更像“结构化输入”，workflow interrupt 更像“流程状
 ## 总体设计
 
 ```text
-Workflow / Assistant / IPC / Evolution
+Workflow / Assistant / IPC
   -> create HumanReviewRequest
   -> persist request
   -> render to Web / Feishu / Assistant
@@ -156,8 +152,7 @@ export type HumanReviewKind =
   | 'provide_input'
   | 'credential_confirm'
   | 'risk_acceptance'
-  | 'external_wait'
-  | 'adoption_decision';
+  | 'external_wait';
 ```
 
 含义：
@@ -168,7 +163,6 @@ export type HumanReviewKind =
 - `credential_confirm`：确认凭证、登录态、权限或外部系统访问。
 - `risk_acceptance`：用户明确接受风险。
 - `external_wait`：等待外部条件，用户可标记已完成或继续等待。
-- `adoption_decision`：采纳或拒绝自我进化分支、方案或产物。
 
 ### RiskLevel
 
@@ -187,7 +181,7 @@ export type HumanReviewRiskLevel =
 | low | 标记已读、继续只读调查、生成草稿 | Web, Feishu, Assistant |
 | medium | 重试 agent、跳过非关键阶段、写入 Wiki 草稿 | Web, Feishu, Assistant |
 | high | 修改代码、执行修复、触发 Jenkins、访问敏感日志 | Web 优先，Feishu 可跳转 |
-| critical | 生产发布、删除数据、数据库写入、权限变更、采纳自我进化分支 | Web only，强确认 |
+| critical | 生产发布、删除数据、数据库写入、权限变更 | Web only，强确认 |
 
 ### HumanReviewRequest
 
@@ -250,7 +244,6 @@ export type HumanReviewSourceType =
   | 'workflow_interrupt'
   | 'ask_question'
   | 'assistant_inbox'
-  | 'assistant_evolution'
   | 'ipc'
   | 'scheduled_task';
 
@@ -473,7 +466,6 @@ src/human-review/
     workflow-interrupt.ts
     ask-question.ts
     assistant-inbox.ts
-    evolution.ts
   renderers/
     web.ts
     feishu-card.ts
@@ -631,21 +623,6 @@ source_ref_id = ask_questions.id
 - 中高风险 action 先创建 human review request。
 - accepted 后再调用 `assistant-actions` 里的业务处理。
 
-### Evolution Adapter
-
-适用场景：
-
-- 批准生成方案。
-- 批准进入实现。
-- 批准运行检查。
-- 批准采纳工作分支。
-
-风险建议：
-
-- 生成方案：low。
-- 创建工作分支实现：medium/high，取决于写入范围。
-- 自动采纳分支：critical。
-
 ## 渠道渲染
 
 ### Web 工作台
@@ -736,7 +713,6 @@ WeCom 员工私聊仅用于一对一信息收集。
 
 - `approve_action`
 - `risk_acceptance`
-- `adoption_decision`
 - high/critical 风险提交。
 
 ## Card Action Router 改造
@@ -757,7 +733,6 @@ if (action.action === 'human_review_submit') {
 - `ask_question_answer`
 - `ask_question_skip`
 - `assistant_inbox_*`
-- `assistant_evolution_*`
 
 迁移期中，旧 action 可以在 handler 内创建或查找对应 human review request，再走 `submitHumanReview()`。
 
@@ -841,8 +816,6 @@ if (action.action === 'human_review_submit') {
 - external notification。
 
 如果 action 不可逆，风险至少为 high。
-
-如果涉及自我修改主流程或采纳自我进化分支，风险为 critical。
 
 ## 审计和 Trace
 
@@ -1032,17 +1005,15 @@ POST /api/human-reviews/:id/submit
 - schema 错误能返回字段错误。
 - 过期问题能同步关闭 request。
 
-### Phase 4：Assistant 和 Evolution 适配
+### Phase 4：Assistant 适配
 
 新增：
 
 - `src/human-review/adapters/assistant-inbox.ts`
-- `src/human-review/adapters/evolution.ts`
 
 修改：
 
 - `src/assistant/assistant-actions.ts` 高风险 action 创建 request。
-- `src/assistant/evolution-card-actions.ts` 采纳分支等 critical 动作走 request。
 - Assistant Inbox item 支持打开 human review。
 
 验收：
@@ -1058,7 +1029,7 @@ POST /api/human-reviews/:id/submit
 - Web 工作台增加 Human Review 面板。
 - Workbench action item 引用 human review request。
 - Feishu/Assistant 卡片统一 renderer。
-- 逐步减少 workflow/ask/evolution 各自的卡片 action 分支。
+- 逐步减少 workflow/ask 各自的卡片 action 分支。
 
 验收：
 
@@ -1098,7 +1069,6 @@ POST /api/human-reviews/:id/submit
 - `src/workflow.test.ts`
 - `src/card-action-router.test.ts`
 - `src/assistant/assistant-inbox-broadcast-actions.test.ts`
-- `src/assistant/evolution-card-actions.test.ts`
 
 覆盖：
 
@@ -1107,7 +1077,6 @@ POST /api/human-reviews/:id/submit
 - Feishu card submit 到 human review。
 - Web submit 到 human review。
 - Assistant 高风险 action 转工作台确认。
-- Evolution adopt branch critical 确认。
 
 ### 回归测试
 

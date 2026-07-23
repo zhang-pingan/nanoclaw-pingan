@@ -22,7 +22,7 @@ Icarus 的首要设计原则是“高权限能力必须运行在隔离环境内�
 
 ## 2. Agent 蜂窝架构：主调度与子 Agent 能力边界
 
-Icarus 的 Agent 架构更接近蜂窝系统，而不是一个无限权限的单体 Agent。宿主机服务和主调度 Agent 负责统一编排，多个角色子 Agent 分别承担方案、开发、复核、部署、测试、知识库、自我进化等职责。
+Icarus 的 Agent 架构更接近蜂窝系统，而不是一个无限权限的单体 Agent。宿主机服务和主调度 Agent 负责统一编排，多个角色子 Agent 分别承担方案、开发、复核、部署、测试、知识库等职责。
 
 蜂窝架构的关键点是：
 
@@ -109,7 +109,7 @@ Web 工作台是用户主动控制台，负责创建任务、查看阶段进度�
 
 ### 个人助理客户端
 
-个人助理是 Agent 主动入口，常驻桌面，扫描今日计划、工作台任务、定时任务、Agent Runs 和线上日志。它不会替代工作台，而是负责发现“应该被注意”的问题，并在策略允许时发起调查、准备修复或进入受控自我进化流程。它把 Agent 从被动工具推进到主动协作者。
+个人助理是 Agent 主动入口，常驻桌面，扫描今日计划、工作台任务、定时任务、Agent Runs 和线上日志。它不会替代工作台，而是负责发现“应该被注意”的问题，并在策略允许时发起调查或准备修复。它把 Agent 从被动工具推进到主动协作者。
 
 ### 移动端渠道
 
@@ -130,10 +130,10 @@ Web 工作台是用户主动控制台，负责创建任务、查看阶段进度�
 - **多端一致状态**：Web、Assistant、飞书都不是孤立入口，最终状态统一写入 SQLite、workflow、workbench 和 Trace。
 - **人机协作边界清晰**：interrupt/resume 把审批、修改意见、凭证、人类输入建模为正式状态，而不是临时聊天消息。
 - **可扩展但不失控**：新增频道走 Channel Registry，新增流程走 workflow definition，新增角色方法论走 Skill，新增知识走 Wiki，避免把扩展全部塞进主流程代码。
-- **主动性可控**：个人助理支持 quiet、balanced、active 等策略，自我进化默认关闭自动实现和自动采纳，避免 Agent 主动性越权。
+- **主动性可控**：个人助理支持 quiet、balanced、active 等策略，调查和修复能力按触发规则独立控制，避免 Agent 主动性越权。
 - **交付可审计**：每次 Agent 执行都有 runId/queryId、模型解析、工具事件、产物、评估结果和失败分类。
 - **工程上下文稳定**：结构化 handoff、产物契约、Wiki 和 memory pack 共同减少“靠聊天历史猜上下文”的不稳定性。
-- **支持持续改进**：自我进化模块把问题发现、方案生成、分支实现、检查、复核和等待采纳纳入状态机，形成受控的系统自优化路径。
+- **支持持续改进**：阶段评估、失败分类、Trace、记忆和 Wiki 为人工分析与迭代提供可追溯证据。
 
 ## 8. 与已有 Agent 架构相比的核心优点
 
@@ -168,7 +168,7 @@ Hermes Agent 的公开定位是自改进、常驻、跨平台个人 Agent：它�
 Icarus 与 Hermes 的取舍不同：Icarus 不把“越用越会自己长技能”放在唯一中心，而是把“工程任务可控交付”放在中心。
 
 - **知识沉淀更偏证据化**：Hermes 的 built-in memory 是 bounded、agent-curated 的 `MEMORY.md`/`USER.md` 加 session search，也支持外部 memory provider；Icarus 同时维护结构化 memory 和 LLM Wiki，把 materials、claims、evidence、relations、pages 分开，让项目知识可以被检索、引用和追溯证据。
-- **自我进化受状态机约束**：Hermes 强调 agent 从经验中自动创建和改进技能；Icarus 的自我进化更保守，问题发现、方案、分支实现、检查、复核和采纳都走 workflow、Trace 和人工确认，适合对稳定性要求更高的工程系统。
+- **不开放自主改写系统**：Hermes 强调 agent 从经验中自动创建和改进技能；Icarus 把系统能力变更留给显式工程工作流和人工审查，更适合对稳定性要求较高的工程系统。
 - **执行权限更集中在可信宿主机控制面**：Hermes 支持多种运行后端和安全机制；Icarus 的设计重点是“控制面不进容器，执行面不越过控制面”，容器通过 IPC 向宿主机申请受控能力，宿主机按 group/main、workflow、stage 和 allowlist 判定。
 - **研发协作对象更明确**：Hermes 是一个泛化常驻个人 Agent；Icarus 把 planner/dev/reviewer/ops/test/wiki/assistant 等角色、产物契约和工作台操作面组合成研发团队语义，更适合需求开发、Bug 修复、预发部署、测试验证和线上故障处理这类多人/多阶段工程任务。
 
@@ -181,8 +181,8 @@ Icarus 并不是逐字复刻某篇论文，而是把多个前沿 Agent 思路工
 - **Anthropic Multi-Agent Research / Orchestrator-Workers**：Anthropic 没有以 arXiv 论文形式发布这套架构，但在官方 Engineering 文章 `How we built our multi-agent research system` 中系统介绍过 multi-agent research system：由 lead agent 分析任务、制定策略，并创建 specialized subagents 并行探索不同方向；在 `Building effective agents` 中也把 orchestrator-workers 总结为中心 LLM 动态拆解任务、委派 worker LLM、再综合结果的模式。Icarus 的“蜂窝架构”与这个方向高度一致，但更偏工程交付：主调度在宿主机工作流中完成，子 Agent 以角色、Skill、容器、IPC、会话和工具边界隔离，最终通过 handoff envelope、产物契约和阶段评估回收结果。
 - **Claude Code Subagents / Agent Teams**：Anthropic 的 Claude Code 文档强调 subagent 拥有独立上下文窗口、可配置工具权限和专门系统提示，并适合隔离高输出操作、并行研究和链式协作。Icarus 把这一思想进一步运行时化：每个角色 Agent 不只是提示隔离，还拥有独立容器、独立 `.claude` 会话、独立 IPC 命名空间和按角色分配的 Skill。
 - **ReAct**：ReAct 强调推理与行动交替进行。Icarus 中 Agent 通过工具调用、MCP、Bash、Web、浏览器和结构化 handoff 在“思考-行动-观察-再行动”的循环里推进任务，同时 Trace 记录过程，提升可解释性。
-- **Reflexion**：Reflexion 的核心是利用语言反馈和 episodic memory 改善后续决策。Icarus 的阶段评估、失败分类、记忆提取、memory pack 和自我进化日志提供了类似的反馈沉淀机制。
-- **Voyager**：Voyager 强调自动课程、Skill Library 和可组合技能。Icarus 通过工作流入口、角色 Skill、项目知识库和自我进化，把技能沉淀为可复用的执行方法论。
+- **Reflexion**：Reflexion 的核心是利用语言反馈和 episodic memory 改善后续决策。Icarus 的阶段评估、失败分类、记忆提取和 memory pack 提供了类似的反馈沉淀机制。
+- **Voyager**：Voyager 强调自动课程、Skill Library 和可组合技能。Icarus 通过工作流入口、角色 Skill 和项目知识库，把方法论沉淀为可复用的执行能力。
 - **SWE-agent / ACI**：SWE-agent 证明 Agent-Computer Interface 会显著影响软件工程 Agent 表现。Icarus 的 harness、工作区挂载、工具白名单、产物契约、测试/部署工具、Trace 和工作台视图，本质上是在为工程 Agent 构建专用 ACI。
 - **多 Agent 协作框架**：AutoGen、MetaGPT 等工作强调角色化协作和对话式编排。Icarus 采用更工程化的方式：角色 Agent 不靠自由聊天协作，而是通过状态机、handoff envelope、产物契约和评估器协作。
 

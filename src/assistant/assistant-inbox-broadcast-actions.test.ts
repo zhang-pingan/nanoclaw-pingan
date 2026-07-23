@@ -96,10 +96,10 @@ describe('handleAssistantInboxBroadcastCardAction', () => {
     const item = createOrUpdateAgentInboxItem({
       dedupeKey: 'blocked-execute',
       kind: 'approval',
-      title: '采纳方案',
-      sourceType: 'assistant_evolution',
-      sourceRefId: 'evo-1',
-      actionKind: 'assistant_evolution_adopt',
+      title: '不支持的操作',
+      sourceType: 'test',
+      sourceRefId: 'unsupported-1',
+      actionKind: 'unsupported_action',
     });
 
     const result = await handleAssistantInboxBroadcastCardAction(

@@ -75,7 +75,7 @@ Web 工作台由 `src/channels/web.ts` 启动本地 HTTP/WebSocket 服务，默�
 - **工作台任务**：创建任务、查看阶段进度、待处理项、产出物、上下文资产、评论和执行时间线。
 - **流程定义**：维护流程状态机、角色映射、卡片和阶段配置。
 - **今日计划**：聚合工作台任务、群聊会话、服务分支变更，生成并发送计划邮件。
-- **个人助手控制面板**：配置主动扫描、触发源、自我进化策略，查看 Agent Inbox 和动作日志。
+- **个人助手控制面板**：配置主动扫描和触发源，查看 Agent Inbox 和动作日志。
 - **记忆管理**：管理长期记忆、冲突处理、指标和清理。
 - **知识库管理**：导入材料、生成草稿、发布 Wiki 页面。
 - **Trace 监控**：查看 Agent Query、步骤、事件、失败类型和执行输出。
@@ -93,10 +93,9 @@ Web 工作台由 `src/channels/web.ts` 启动本地 HTTP/WebSocket 服务，默�
 - **Agent Inbox**：把发现的问题转换为待处理事项，支持标记已读、忽略、稍后、完成。
 - **排查与修复入口**：对任务失败、执行异常、日志错误等事项发起调查、准备修复或自动流程。
 - **策略控制**：支持 `quiet`、`balanced`、`active` 主动等级、扫描间隔、触发源、静默时段和服务范围。
-- **自我进化**：可在受控策略下发现优化方向、生成方案、创建工作分支、实现、检查、复核，并等待用户采纳。
 - **桌面体验**：支持开机启动、置顶、移动、隐藏、打开工作台等桌面行为。
 
-主动性受 `src/assistant/types.ts` 中的 `AssistantSettings` 控制。默认自我进化关闭，自动实现和自动采纳也默认关闭，避免把“发现问题”直接升级成“自动修改主分支”。
+主动性受 `src/assistant/types.ts` 中的 `AssistantSettings` 控制。调查和修复能力按触发规则显式开启，避免把“发现问题”直接升级成高风险操作。
 
 ### 移动端渠道
 
@@ -134,7 +133,7 @@ Web 工作台由 `src/channels/web.ts` 启动本地 HTTP/WebSocket 服务，默�
 - **消息路由**：接收频道消息，按注册群组、触发词和权限规则进入队列。
 - **工作流引擎**：读取 `container/workflow-definitions/*.json` 和卡片配置，驱动流程状态、委派、审批、中断恢复和产物索引。
 - **工作台同步**：把 workflow、delegation、interrupt、artifact、evaluation 等运行态同步为工作台任务视图。
-- **主动助手运行时**：运行 proactive scan、Agent Inbox、动作日志、自我进化状态机。
+- **主动助手运行时**：运行 proactive scan、Agent Inbox 和动作日志。
 - **任务调度**：支持 cron、interval、once 类型定时任务，并复用容器执行链路。
 - **容器队列**：限制并发容器数，复用活跃会话，通过 IPC 推送后续消息。
 - **凭证代理**：真实 API Key 只存在宿主机，容器通过本地代理访问模型服务。
@@ -208,28 +207,13 @@ Feishu/WeCom/Web/Assistant 消息进入频道
 
 其中企微承担员工私人客服渠道：普通私聊适合向特定员工收集 Icarus 运行问题所需的信息、接收员工反馈和处理员工请求。企微员工私聊必须保持一对一隔离，并通过宿主机消息、Trace、动作日志或工作台任务保留可追溯上下文。
 
-### 4. 自我进化
-
-```text
-Evolution Engine 定时或手动触发
-  -> 检查 assistant.evolution 设置和运行锁
-  -> 选择一个优化方向
-  -> 生成方案和风险判断
-  -> 等待用户批准或按策略进入实现
-  -> 在工作分支实现、检查、复核
-  -> 进入 ready_for_adoption
-  -> 用户点击采纳后由宿主机合并
-```
-
-自我进化的边界是：程序控制状态机和权限，Skill 控制方法论，Agent 负责方案和实现。默认不自动合并主分支。
-
 ## 目录结构
 
 ```text
 .
 ├── src/                         # 宿主机服务核心代码
 │   ├── channels/                # Web、Feishu、WeCom、Assistant 等频道
-│   ├── assistant/               # 主动助手、Inbox、自我进化、动作执行
+│   ├── assistant/               # 主动助手、Inbox、动作执行
 │   ├── index.ts                 # 主进程入口
 │   ├── workflow.ts              # 工作流引擎
 │   ├── workbench.ts             # 工作台 API/视图模型
@@ -267,7 +251,6 @@ Evolution Engine 定时或手动触发
 - `workbench_tasks`、`workbench_subtasks`、`workbench_action_items`、`workbench_artifacts`：工作台视图数据。
 - `today_plans`、`today_plan_items`、`today_plan_mail_drafts`：今日计划。
 - `agent_inbox_items`、`assistant_settings`、`assistant_action_logs`：个人助理。
-- `assistant_evolution_items`、`assistant_evolution_events`、`assistant_evolution_artifacts`：自我进化。
 - `memories`、`wiki_*`：记忆和知识库。
 
 ## 安装与运行
@@ -403,7 +386,7 @@ Icarus 的核心安全边界是容器隔离，而不是让 Agent 在宿主机上
 
 ### 新增容器技能
 
-容器技能位于 `container/skills/`。它们用于约束 Agent 的方法论，例如需求分析、问题修复、测试修复、运维部署、自我进化等。技能不是宿主机权限系统，权限仍由宿主机服务和容器挂载控制。
+容器技能位于 `container/skills/`。它们用于约束 Agent 的方法论，例如需求分析、问题修复、测试修复和运维部署等。技能不是宿主机权限系统，权限仍由宿主机服务和容器挂载控制。
 
 ## 相关文档
 
@@ -413,7 +396,6 @@ Icarus 的核心安全边界是容器隔离，而不是让 Agent 在宿主机上
 - `docs/DEBUG_CHECKLIST.md`：调试检查清单。
 - `docs/docker-sandboxes.md`：容器沙箱说明。
 - `local/docs/personal-assistant-runtime-refactor.md`：个人助手主动运行时设计。
-- `local/docs/assistant-self-evolution-plan.md`：个人助手自我进化方案。
 
 ## 设计原则
 
@@ -423,4 +405,4 @@ Icarus 的核心安全边界是容器隔离，而不是让 Agent 在宿主机上
 - **宿主机可信，容器高权限但隔离**：控制面留在宿主机，执行面放进容器。
 - **工作流可审计**：每次 Agent 执行都有 Query、Step、Event、产物和动作记录。
 - **配置服务于流程，不制造配置泥潭**：复杂行为优先用代码、工作流定义和技能表达。
-- **小步自动化**：自动排查、自动修复、自我进化都应有策略、审批和回滚边界。
+- **小步自动化**：自动排查和自动修复都应有策略、审批和回滚边界。

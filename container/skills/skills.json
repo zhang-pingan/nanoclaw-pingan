@@ -9,5 +9,5 @@
   "web_ops": ["devops"],
   "web_test": ["devops"],
   "web_main": ["macos"],
-  "assistant_main": ["macos", "devops", "self-evolution"]
+  "assistant_main": ["macos", "devops"]
 }

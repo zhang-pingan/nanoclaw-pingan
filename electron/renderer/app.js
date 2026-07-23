@@ -470,30 +470,6 @@ var assistantAlwaysOnTopToggle = document.getElementById(
 var assistantMovementToggle = document.getElementById(
   'assistant-movement-toggle',
 );
-var assistantEvolutionSummary = document.getElementById(
-  'assistant-evolution-summary',
-);
-var assistantEvolutionEnabledToggle = document.getElementById(
-  'assistant-evolution-enabled-toggle',
-);
-var assistantEvolutionAutoImplementToggle = document.getElementById(
-  'assistant-evolution-auto-implement-toggle',
-);
-var assistantEvolutionAutoAdoptToggle = document.getElementById(
-  'assistant-evolution-auto-adopt-toggle',
-);
-var assistantEvolutionScanIntervalInput = document.getElementById(
-  'assistant-evolution-scan-interval-input',
-);
-var assistantEvolutionSchedule = document.getElementById(
-  'assistant-evolution-schedule',
-);
-var assistantEvolutionTriggerBtn = document.getElementById(
-  'assistant-evolution-trigger-btn',
-);
-var assistantEvolutionPanel = document.getElementById(
-  'assistant-evolution-panel',
-);
 var assistantSourceGrid = document.getElementById('assistant-source-grid');
 var assistantSourceInputs = [];
 var assistantServiceInputs = [];
@@ -508,10 +484,7 @@ var assistantFlowDetailExpandedItems = {};
 var assistantFlowGroupExpandedItems = {};
 var assistantLogDetailExpandedItems = {};
 var assistantLogDetailExpandedLogs = {};
-var assistantEvolutionDetailExpandedItems = {};
-var assistantEvolutionDetailLoadingItems = {};
 var assistantScanIntervalSaveTimer = null;
-var assistantEvolutionScanIntervalSaveTimer = null;
 var mentionSearchInput = null;
 var mentionOptionsEl = null;
 var mentionPickerVisible = false;
@@ -2222,7 +2195,6 @@ function showFileContextMenu(e, filePath) {
   };
   requestAnimationFrame(() => document.addEventListener('click', closeHandler));
 }
-
 
 function scheduleModelSync() {
   if (!currentGroupJid) return;
@@ -5800,7 +5772,6 @@ function escapeAttribute(value) {
   return escapeHtml(String(value ?? '')).replace(/"/g, '&quot;');
 }
 
-
 function renderMessages() {
   clearSkeleton();
   if (messages.length === 0) {
@@ -7860,7 +7831,6 @@ function clearCurrentGroupUnreadIfForeground() {
   clearUnreadForGroup(currentGroupJid);
 }
 
-
 function handleWsMessage(msg) {
   switch (msg.type) {
     case 'connected':
@@ -8341,7 +8311,6 @@ function hideCommandPalette(restoreFocus = true) {
   commandInsertPos = null;
   if (restoreFocus) messageInput.focus();
 }
-
 
 function navigateCommandPalette(direction) {
   if (!commandOptionsEl || commandCandidates.length === 0) return;
@@ -9279,7 +9248,6 @@ function renderTodayPlanReplyQuote(message) {
   return `<div class="msg-reply-quote" data-reply-id="${escapeAttribute(message.reply_to_id)}">${escapeHtml(preview)}</div>`;
 }
 
-
 function renderTodayPlanItemActionIcon(kind) {
   if (kind === 'associations') {
     return `
@@ -9536,7 +9504,6 @@ function bindEditableTodayPlanItemInteractions() {
       await openTodayPlanAssociationDialog(itemId);
     });
   });
-
 }
 
 function bindTodayPlanCommitInteractions() {
@@ -10692,19 +10659,6 @@ function getAssistantOnlineLogServiceOptions() {
     : [];
 }
 
-function getAssistantEvolutionSettings() {
-  const settings = getAssistantSettings();
-  return settings && settings.evolution ? settings.evolution : null;
-}
-
-function getAssistantEvolutionState() {
-  return assistantState &&
-    assistantState.evolution &&
-    typeof assistantState.evolution === 'object'
-    ? assistantState.evolution
-    : null;
-}
-
 function getAssistantSourceGroupKey(rule) {
   return rule && rule.sourceLabel ? String(rule.sourceLabel) : '其他';
 }
@@ -11418,10 +11372,7 @@ function renderAssistantInboxActions(item) {
           : '';
   const disabledAttr =
     pending || isFlowPending ? 'disabled aria-disabled="true"' : '';
-  const isExecutable =
-    item.action_kind === 'continue_today_plan' ||
-    (typeof item.action_kind === 'string' &&
-      item.action_kind.startsWith('assistant_evolution_'));
+  const isExecutable = item.action_kind === 'continue_today_plan';
   return `
     ${hasFlowDetail ? `<button type="button" class="assistant-action-btn" data-assistant-flow-detail="${escapeAttribute(item.id)}">${assistantFlowDetailExpandedItems[item.id] ? '收起结果' : '排查结果'}</button>` : ''}
     ${isAssistantOnlineErrorLogItem(item) ? `<button type="button" class="assistant-action-btn" data-assistant-log-detail="${escapeAttribute(item.id)}">${assistantLogDetailExpandedItems[item.id] ? '收起日志' : '日志详情'}</button>` : ''}
@@ -11438,8 +11389,6 @@ function renderAssistantSettings() {
     if (assistantSettingsSummary)
       assistantSettingsSummary.textContent = '加载中';
     if (assistantScanSchedule) assistantScanSchedule.textContent = '加载中';
-    if (assistantEvolutionSummary)
-      assistantEvolutionSummary.textContent = '加载中';
     renderAssistantHeroMetrics();
     return;
   }
@@ -11471,33 +11420,8 @@ function renderAssistantSettings() {
     assistantMovementToggle.checked = Boolean(
       settings.desktopAssistant && settings.desktopAssistant.allowMovement,
     );
-  renderAssistantEvolution();
   renderAssistantSourceRules();
   renderAssistantHeroMetrics();
-}
-
-function assistantEvolutionStatusLabel(status) {
-  const labels = {
-    discovering: '发现方向',
-    proposal_drafting: '写方案',
-    proposal_evaluating: '评估方案',
-    proposal_refining: '完善方案',
-    waiting_user_approval: '待确认实现',
-    branch_preparing: '准备分支',
-    implementing: '实现中',
-    checking: '检查中',
-    reviewing: '复核中',
-    fixing: '修复中',
-    ready_for_adoption: '待采纳',
-    adopting: '采纳中',
-    paused: '已暂停',
-    blocked_by_policy: '策略阻断',
-    adoption_failed: '采纳失败',
-    completed: '已完成',
-    failed: '失败',
-    cancelled: '已取消',
-  };
-  return labels[status] || status || '无';
 }
 
 function renderAssistantScanSchedule(settings) {
@@ -11512,365 +11436,6 @@ function renderAssistantScanSchedule(settings) {
     schedule.scanRunning ? '正在扫描' : '',
   ].filter(Boolean);
   assistantScanSchedule.textContent = parts.join(' · ');
-}
-
-function formatAssistantEvolutionTime(value) {
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric) || numeric <= 0) return '';
-  try {
-    return new Date(numeric).toLocaleString();
-  } catch {
-    return String(value || '');
-  }
-}
-
-function renderAssistantEvolutionSchedule(evolution, state) {
-  if (!assistantEvolutionSchedule) return;
-  const schedule =
-    state && state.schedule && typeof state.schedule === 'object'
-      ? state.schedule
-      : {};
-  const enabled = Boolean(evolution && evolution.enabled);
-  const lastTick = formatAssistantEvolutionTime(schedule.lastTickStartedAt);
-  const nextTick = enabled
-    ? formatAssistantEvolutionTime(schedule.nextTickAt)
-    : '';
-  const interval =
-    evolution && evolution.scanIntervalMinutes
-      ? `${evolution.scanIntervalMinutes} 分钟`
-      : '';
-  const parts = [
-    `上次触发：${lastTick || '尚未触发'}`,
-    `下次触发：${enabled ? nextTick || '等待调度' : '已关闭'}`,
-    interval ? `间隔：${interval}` : '',
-    schedule.tickRunning ? '正在推进' : '',
-  ].filter(Boolean);
-  assistantEvolutionSchedule.textContent = parts.join(' · ');
-}
-
-function renderAssistantEvolutionField(label, value) {
-  if (value === null || value === undefined || value === '') return '';
-  return `
-    <div class="assistant-evolution-field">
-      <strong>${escapeHtml(label)}</strong>
-      <span>${escapeHtml(String(value))}</span>
-    </div>
-  `;
-}
-
-function renderAssistantEvolutionPre(title, content) {
-  if (!content) return '';
-  return `
-    <details class="assistant-evolution-detail">
-      <summary>${escapeHtml(title)}</summary>
-      <pre>${escapeHtml(String(content))}</pre>
-    </details>
-  `;
-}
-
-function renderAssistantEvolutionArtifacts(active) {
-  const artifacts = Array.isArray(active.artifacts) ? active.artifacts : [];
-  if (!artifacts.length) return '';
-  const diffArtifacts = artifacts
-    .filter(
-      (artifact) =>
-        artifact.artifact_type === 'diff' ||
-        artifact.artifact_type === 'diff_summary',
-    )
-    .slice(-4);
-  const otherArtifacts = artifacts
-    .filter(
-      (artifact) =>
-        artifact.artifact_type !== 'diff' &&
-        artifact.artifact_type !== 'diff_summary',
-    )
-    .slice(-6);
-  const visibleArtifacts = [...diffArtifacts, ...otherArtifacts].slice(-10);
-  return `
-    <div class="assistant-evolution-details">
-      <div class="assistant-inbox-meta">产物</div>
-      ${visibleArtifacts
-        .map((artifact) =>
-          renderAssistantEvolutionPre(
-            artifact.title || artifact.artifact_type || 'artifact',
-            artifact.content || artifact.path || '',
-          ),
-        )
-        .join('')}
-    </div>
-  `;
-}
-
-function renderAssistantEvolutionTimeline(active) {
-  const events = Array.isArray(active.events) ? active.events : [];
-  if (!events.length) return '';
-  return `
-    <details class="assistant-evolution-detail assistant-evolution-timeline">
-      <summary>时间线</summary>
-      ${events
-        .slice(-8)
-        .map(
-          (event) => `
-        <div class="assistant-evolution-timeline-item">
-          <strong>${escapeHtml(event.event_type || 'event')}</strong>
-          <span>${escapeHtml(formatAssistantEvolutionTime(event.created_at))}</span>
-          ${event.payload && Object.keys(event.payload).length ? `<pre>${escapeHtml(JSON.stringify(event.payload, null, 2))}</pre>` : ''}
-        </div>
-      `,
-        )
-        .join('')}
-    </details>
-  `;
-}
-
-function getAssistantEvolutionFailureReason(item) {
-  if (!item || typeof item !== 'object') return '';
-  const directReason =
-    item.adoption_error ||
-    item.blocked_reason ||
-    (item.status === 'failed'
-      ? item.bug_report || item.review_summary || item.check_summary
-      : '');
-  if (directReason) return String(directReason);
-  const events = Array.isArray(item.events) ? item.events : [];
-  for (const event of events.slice().reverse()) {
-    const eventType = String((event && event.event_type) || '');
-    const payload =
-      event && event.payload && typeof event.payload === 'object'
-        ? event.payload
-        : {};
-    const error = payload.error || payload.reason || payload.message;
-    if (
-      (eventType.includes('failed') || eventType.includes('error')) &&
-      error
-    ) {
-      return String(error);
-    }
-  }
-  return '';
-}
-
-function getAssistantEvolutionItemBody(item) {
-  const failureReason = getAssistantEvolutionFailureReason(item);
-  if (failureReason) return `失败原因：${failureReason}`;
-  return item.proposal || '等待下一次推进';
-}
-
-function getAssistantEvolutionItems(state, active) {
-  const latestItems =
-    state && Array.isArray(state.latestItems) ? state.latestItems : [];
-  if (!active) return latestItems;
-  return [
-    active,
-    ...latestItems.filter((item) => item && item.id !== active.id),
-  ];
-}
-
-function patchAssistantEvolutionItem(itemId, patch) {
-  if (!assistantState || !assistantState.evolution || !itemId || !patch) return;
-  const evolution = assistantState.evolution;
-  const latestItems = Array.isArray(evolution.latestItems)
-    ? evolution.latestItems
-    : [];
-  assistantState = {
-    ...assistantState,
-    evolution: {
-      ...evolution,
-      activeItem:
-        evolution.activeItem && evolution.activeItem.id === itemId
-          ? { ...evolution.activeItem, ...patch }
-          : evolution.activeItem,
-      latestItems: latestItems.map((item) =>
-        item && item.id === itemId ? { ...item, ...patch } : item,
-      ),
-    },
-  };
-}
-
-function formatAssistantEvolutionItemMeta(item) {
-  return [
-    assistantEvolutionStatusLabel(item.status),
-    item.risk_level || 'unknown',
-    item.updated_at ? `更新 ${formatDateTime(item.updated_at)}` : '',
-  ]
-    .filter(Boolean)
-    .join(' · ');
-}
-
-function renderAssistantEvolutionDetails(item) {
-  if (!assistantEvolutionDetailExpandedItems[item.id]) return '';
-  if (assistantEvolutionDetailLoadingItems[item.id]) {
-    return '<div class="assistant-evolution-expanded"><div class="assistant-empty">详情加载中</div></div>';
-  }
-  return `
-    <div class="assistant-evolution-expanded">
-      <div class="assistant-evolution-fields">
-        ${renderAssistantEvolutionField('模块', item.module_scope || 'unknown')}
-        ${renderAssistantEvolutionField('base', item.base_commit)}
-        ${renderAssistantEvolutionField('head', item.head_commit)}
-        ${renderAssistantEvolutionField('merge', item.merge_commit)}
-        ${renderAssistantEvolutionField('失败原因', getAssistantEvolutionFailureReason(item))}
-        ${renderAssistantEvolutionField('阻断', item.blocked_reason)}
-        ${renderAssistantEvolutionField('采纳错误', item.adoption_error)}
-      </div>
-      ${renderAssistantEvolutionPre('方案', item.proposal)}
-      ${renderAssistantEvolutionPre('方案评估', item.proposal_evaluation)}
-      ${renderAssistantEvolutionPre('实现摘要', item.implementation_summary)}
-      ${renderAssistantEvolutionPre('检查输出', item.check_summary)}
-      ${renderAssistantEvolutionPre('复核结论', item.review_summary)}
-      ${renderAssistantEvolutionPre('Bug 报告', item.bug_report)}
-      ${renderAssistantEvolutionArtifacts(item)}
-      ${renderAssistantEvolutionTimeline(item)}
-    </div>
-  `;
-}
-
-function renderAssistantEvolutionActions(item, isActive) {
-  const canApprove = item.status === 'waiting_user_approval';
-  const canAdopt = item.status === 'ready_for_adoption';
-  const canPause = !['completed', 'failed', 'cancelled', 'paused'].includes(
-    item.status,
-  );
-  const canResume =
-    item.status === 'paused' || item.status === 'adoption_failed';
-  const canCancel = !['completed', 'failed', 'cancelled'].includes(item.status);
-  return `
-    <button type="button" class="assistant-action-btn" data-assistant-evolution-detail="${escapeAttribute(item.id)}">${assistantEvolutionDetailExpandedItems[item.id] ? '收起详情' : '详情'}</button>
-    ${canApprove ? `<button type="button" class="assistant-action-btn" data-assistant-evolution-action="approve-implementation" data-assistant-evolution-item="${escapeAttribute(item.id)}">确认实现</button>` : ''}
-    ${canAdopt ? `<button type="button" class="assistant-action-btn" data-assistant-evolution-action="adopt" data-assistant-evolution-item="${escapeAttribute(item.id)}">采纳方案</button>` : ''}
-    ${canPause ? `<button type="button" class="assistant-action-btn" data-assistant-evolution-action="pause" data-assistant-evolution-item="${escapeAttribute(item.id)}">暂停</button>` : ''}
-    ${canResume ? `<button type="button" class="assistant-action-btn" data-assistant-evolution-action="resume" data-assistant-evolution-item="${escapeAttribute(item.id)}">继续</button>` : ''}
-    ${canCancel ? `<button type="button" class="assistant-action-btn" data-assistant-evolution-action="cancel" data-assistant-evolution-item="${escapeAttribute(item.id)}">取消</button>` : ''}
-  `;
-}
-
-async function ensureAssistantEvolutionItemDetails(itemId) {
-  if (!itemId || assistantEvolutionDetailLoadingItems[itemId]) return;
-  const state = getAssistantEvolutionState();
-  const active =
-    state && state.activeItem && state.activeItem.id === itemId
-      ? state.activeItem
-      : null;
-  const existingItem =
-    active ||
-    (state && Array.isArray(state.latestItems)
-      ? state.latestItems.find((item) => item && item.id === itemId)
-      : null);
-  if (
-    existingItem &&
-    (Array.isArray(existingItem.events) ||
-      Array.isArray(existingItem.artifacts))
-  )
-    return;
-  assistantEvolutionDetailLoadingItems[itemId] = true;
-  renderAssistantEvolution();
-  try {
-    const res = await apiFetch(
-      `/api/assistant/evolution/items/${encodeURIComponent(itemId)}`,
-    );
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-    if (data.item) {
-      patchAssistantEvolutionItem(itemId, data.item);
-    }
-  } catch (err) {
-    console.error('Failed to load assistant evolution item:', err);
-    showToast(
-      err instanceof Error ? err.message : '自我进化详情加载失败',
-      2200,
-    );
-  } finally {
-    delete assistantEvolutionDetailLoadingItems[itemId];
-    renderAssistantEvolution();
-  }
-}
-
-function renderAssistantEvolution() {
-  const evolution = getAssistantEvolutionSettings();
-  const state = getAssistantEvolutionState();
-  const active = state && state.activeItem ? state.activeItem : null;
-  const items = getAssistantEvolutionItems(state, active);
-  if (assistantEvolutionSummary) {
-    const enabledLabel = evolution && evolution.enabled ? '已启用' : '已关闭';
-    const statusLabel = active
-      ? assistantEvolutionStatusLabel(active.status)
-      : '无进行中事项';
-    assistantEvolutionSummary.textContent = `${enabledLabel} · ${statusLabel} · ${items.length} 条`;
-  }
-  renderAssistantEvolutionSchedule(evolution, state);
-  if (assistantEvolutionEnabledToggle)
-    assistantEvolutionEnabledToggle.checked = Boolean(
-      evolution && evolution.enabled,
-    );
-  if (assistantEvolutionAutoImplementToggle)
-    assistantEvolutionAutoImplementToggle.checked = Boolean(
-      evolution && evolution.autoImplementEnabled,
-    );
-  if (assistantEvolutionAutoAdoptToggle)
-    assistantEvolutionAutoAdoptToggle.checked = Boolean(
-      evolution && evolution.autoAdoptEnabled,
-    );
-  if (
-    assistantEvolutionScanIntervalInput &&
-    document.activeElement !== assistantEvolutionScanIntervalInput
-  ) {
-    assistantEvolutionScanIntervalInput.value = String(
-      (evolution && evolution.scanIntervalMinutes) || 60,
-    );
-  }
-  if (!assistantEvolutionPanel) return;
-  if (items.length === 0) {
-    assistantEvolutionPanel.innerHTML =
-      '<div class="assistant-empty assistant-panel-empty">暂无自我进化事项</div>';
-    return;
-  }
-  assistantEvolutionPanel.innerHTML = items
-    .map(
-      (item) => `
-    <article class="assistant-evolution-item${active && item.id === active.id ? ' is-active' : ''}">
-      <div class="assistant-inbox-main">
-        <div class="assistant-inbox-meta">${escapeHtml(formatAssistantEvolutionItemMeta(item))}</div>
-        <div class="assistant-inbox-title">${escapeHtml(item.direction || '待发现')}</div>
-        <div class="assistant-inbox-body">${escapeHtml(getAssistantEvolutionItemBody(item))}</div>
-        <div class="assistant-inbox-meta">${escapeHtml(item.work_branch || item.base_branch || '')}</div>
-      </div>
-      <div class="assistant-inbox-actions">
-        ${renderAssistantEvolutionActions(item, Boolean(active && item.id === active.id))}
-      </div>
-      ${renderAssistantEvolutionDetails(item)}
-    </article>
-  `,
-    )
-    .join('');
-  Array.from(
-    assistantEvolutionPanel.querySelectorAll(
-      '[data-assistant-evolution-detail]',
-    ),
-  ).forEach((button) => {
-    button.addEventListener('click', () => {
-      const itemId =
-        button.getAttribute('data-assistant-evolution-detail') || '';
-      if (!itemId) return;
-      assistantEvolutionDetailExpandedItems[itemId] =
-        !assistantEvolutionDetailExpandedItems[itemId];
-      renderAssistantEvolution();
-      if (assistantEvolutionDetailExpandedItems[itemId]) {
-        ensureAssistantEvolutionItemDetails(itemId);
-      }
-    });
-  });
-  Array.from(
-    assistantEvolutionPanel.querySelectorAll(
-      '[data-assistant-evolution-action]',
-    ),
-  ).forEach((button) => {
-    button.addEventListener('click', async () => {
-      const action =
-        button.getAttribute('data-assistant-evolution-action') || '';
-      const itemId = button.getAttribute('data-assistant-evolution-item') || '';
-      await runAssistantEvolutionAction(action, itemId, button);
-    });
-  });
 }
 
 function renderAssistantInbox() {
@@ -12130,62 +11695,6 @@ function scheduleAssistantScanIntervalSave() {
   }, 350);
 }
 
-function scheduleAssistantEvolutionScanIntervalSave() {
-  if (!assistantEvolutionScanIntervalInput) return;
-  if (assistantEvolutionScanIntervalSaveTimer)
-    clearTimeout(assistantEvolutionScanIntervalSaveTimer);
-  assistantEvolutionScanIntervalSaveTimer = setTimeout(() => {
-    assistantEvolutionScanIntervalSaveTimer = null;
-    updateAssistantSettingsPatch({
-      evolution: {
-        scanIntervalMinutes:
-          Number(assistantEvolutionScanIntervalInput.value) || 60,
-      },
-    });
-  }, 350);
-}
-
-async function runAssistantEvolutionAction(action, itemId, triggerButton) {
-  if (!action) return;
-  if (triggerButton) triggerButton.disabled = true;
-  try {
-    const url = `/api/assistant/evolution/items/${encodeURIComponent(itemId || '')}/${action}`;
-    const res = await apiFetch(url, { method: 'POST' });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-    showToast('自我进化动作已执行', 1800);
-    await loadAssistantState();
-  } catch (err) {
-    console.error('Failed to run assistant evolution action:', err);
-    showToast(err instanceof Error ? err.message : '自我进化动作失败', 2600);
-  } finally {
-    if (triggerButton) triggerButton.disabled = false;
-  }
-}
-
-async function triggerAssistantEvolutionTick(triggerButton) {
-  if (triggerButton) triggerButton.disabled = true;
-  try {
-    const res = await apiFetch('/api/assistant/evolution/tick', {
-      method: 'POST',
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-    showToast(
-      data.action === 'item_created'
-        ? '已创建自我进化事项'
-        : '自我进化轮询已触发',
-      1800,
-    );
-    await loadAssistantState();
-  } catch (err) {
-    console.error('Failed to trigger assistant evolution tick:', err);
-    showToast(err instanceof Error ? err.message : '自我进化触发失败', 2600);
-  } finally {
-    if (triggerButton) triggerButton.disabled = false;
-  }
-}
-
 async function runAssistantScan() {
   if (assistantScanBtn) assistantScanBtn.disabled = true;
   try {
@@ -12205,7 +11714,7 @@ async function runAssistantScan() {
 async function clearAssistantData() {
   if (
     !confirm(
-      '确定清除个人助手的聊天记录、Inbox、动作日志、稍后提醒和自我进化事项/记录？运行设置会保留。',
+      '确定清除个人助手的聊天记录、Inbox、动作日志和稍后提醒？运行设置会保留。',
     )
   ) {
     return;
@@ -13407,53 +12916,6 @@ if (assistantMovementToggle) {
     updateAssistantSettingsPatch({
       desktopAssistant: { allowMovement: assistantMovementToggle.checked },
     });
-  });
-}
-if (assistantEvolutionEnabledToggle) {
-  assistantEvolutionEnabledToggle.addEventListener('change', () => {
-    updateAssistantSettingsPatch({
-      evolution: { enabled: assistantEvolutionEnabledToggle.checked },
-    });
-  });
-}
-if (assistantEvolutionAutoImplementToggle) {
-  assistantEvolutionAutoImplementToggle.addEventListener('change', () => {
-    updateAssistantSettingsPatch({
-      evolution: {
-        autoImplementEnabled: assistantEvolutionAutoImplementToggle.checked,
-      },
-    });
-  });
-}
-if (assistantEvolutionAutoAdoptToggle) {
-  assistantEvolutionAutoAdoptToggle.addEventListener('change', () => {
-    updateAssistantSettingsPatch({
-      evolution: {
-        autoAdoptEnabled: assistantEvolutionAutoAdoptToggle.checked,
-      },
-    });
-  });
-}
-if (assistantEvolutionScanIntervalInput) {
-  assistantEvolutionScanIntervalInput.addEventListener('input', () => {
-    scheduleAssistantEvolutionScanIntervalSave();
-  });
-  assistantEvolutionScanIntervalInput.addEventListener('change', () => {
-    if (assistantEvolutionScanIntervalSaveTimer) {
-      clearTimeout(assistantEvolutionScanIntervalSaveTimer);
-      assistantEvolutionScanIntervalSaveTimer = null;
-    }
-    updateAssistantSettingsPatch({
-      evolution: {
-        scanIntervalMinutes:
-          Number(assistantEvolutionScanIntervalInput.value) || 60,
-      },
-    });
-  });
-}
-if (assistantEvolutionTriggerBtn) {
-  assistantEvolutionTriggerBtn.addEventListener('click', async () => {
-    await triggerAssistantEvolutionTick(assistantEvolutionTriggerBtn);
   });
 }
 if (todayPlanRefreshBtn) {

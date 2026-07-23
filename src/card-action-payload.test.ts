@@ -9,7 +9,7 @@ describe('card-action-payload', () => {
   it('prefers nested payload JSON over flat form values', () => {
     expect(
       buildCardActionPayload({
-        action: 'assistant_evolution_action',
+        action: 'custom_action',
         resume_action: 'submit',
         payload: JSON.stringify({ answer: 'nested', count: 2 }),
         answer: 'flat',

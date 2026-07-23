@@ -39,9 +39,6 @@ export type AssistantRealtimeEvent =
         agent_inbox_items: number;
         assistant_action_logs: number;
         assistant_snoozes: number;
-        assistant_evolution_items: number;
-        assistant_evolution_events: number;
-        assistant_evolution_artifacts: number;
         total: number;
       };
       clearedAt: string;

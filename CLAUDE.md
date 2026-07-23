@@ -21,7 +21,7 @@ Web Workbench / Electron     Personal Assistant / tray     Mobile / Feishu     W
         Host Node.js process: src/index.ts
         - channel registry and message loop
         - workflow engine and workbench store
-        - proactive assistant and evolution engine
+        - proactive assistant runtime
         - scheduler, queue, IPC watcher
         - SQLite, trace manager, credential proxy
               |
@@ -49,8 +49,7 @@ Web Workbench / Electron     Personal Assistant / tray     Mobile / Feishu     W
 | `src/workflow.ts` | Configuration-driven workflow engine |
 | `src/workflow-config.ts` | Loads workflow definitions and card config |
 | `src/assistant/proactive-engine.ts` | Proactive assistant scan loop |
-| `src/assistant/assistant-api.ts` | API facade for assistant state, inbox, chat, evolution |
-| `src/assistant/evolution-engine.ts` | Self-evolution state machine and adoption flow |
+| `src/assistant/assistant-api.ts` | API facade for assistant state, inbox, and chat |
 | `src/assistant/types.ts` | Assistant settings, inbox, trigger rules |
 | `src/container-runner.ts` | Host-side container launch, mount config, output parsing |
 | `container/agent-runner/src/index.ts` | Container-side Agent SDK runner |
@@ -181,9 +180,6 @@ Important defaults:
 - `enabled: true`
 - `proactiveLevel: balanced`
 - `scanIntervalMinutes: 10`
-- `evolution.enabled: false`
-- `evolution.autoImplementEnabled: false`
-- `evolution.autoAdoptEnabled: false`
 
 When updating assistant behavior:
 
@@ -191,7 +187,6 @@ When updating assistant behavior:
 - Respect quiet hours, selected services, trigger rule settings, and max inbox item limits.
 - Investigation and repair actions must be explicit in action logs.
 - Risky operations such as code changes, deploys, restarts, data deletion, permission changes, or branch adoption should require approval unless a narrow policy says otherwise.
-- Self-evolution should create proposals and working branches before adoption; do not let the agent freely merge main.
 
 ## Container Agent Guidance
 

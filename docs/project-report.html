@@ -1339,7 +1339,8 @@
               <span class="tag green">容器 Agent</span>
               <h3>隔离执行面</h3>
               <p>
-                运行 Agent Loop:工具调用、浏览器、文件和命令执行，并把结果回传宿主机。
+                运行 Agent
+                Loop:工具调用、浏览器、文件和命令执行，并把结果回传宿主机。
               </p>
             </article>
             <article class="card">
@@ -1389,21 +1390,19 @@
                 <article class="band-card">
                   <strong>Tool Use</strong>
                   <p>
-                    Bash、浏览器、文件操作、MCP 和 Skill 把模型推理接到真实动作。
+                    Bash、浏览器、文件操作、MCP 和 Skill
+                    把模型推理接到真实动作。
                   </p>
                 </article>
                 <article class="band-card">
                   <strong>ReAct</strong>
                   <p>
-                    Agent
-                    在“思考-行动-观察-再行动”的闭环里推进直到完成任务。
+                    Agent 在“思考-行动-观察-再行动”的闭环里推进直到完成任务。
                   </p>
                 </article>
                 <article class="band-card">
                   <strong>Agent Teams</strong>
-                  <p>
-                    内核的Agent Teams 由agent 根据任务复杂度自主创建执行。
-                  </p>
+                  <p>内核的Agent Teams 由agent 根据任务复杂度自主创建执行。</p>
                 </article>
               </div>
             </section>
@@ -1423,24 +1422,26 @@
               <div class="band-grid">
                 <article class="band-card">
                   <strong>Workflow</strong>
-                  <p>状态机驱动节点迁移，checkpoint 负责恢复链路状态，interupt统一审批，
-                    handoff 校验agent输入/输出，steps 动态嵌入节点，把复杂工程任务转化
+                  <p>
+                    状态机驱动节点迁移，checkpoint
+                    负责恢复链路状态，interupt统一审批， handoff
+                    校验agent输入/输出，steps 动态嵌入节点，把复杂工程任务转化
                     为安全可控的自动化链路。
                   </p>
                 </article>
                 <article class="band-card">
                   <strong>Harness Engine</strong>
                   <p>
-                    通过标准化输入/输出、标准化执行环境、约束的tool use、artifact-contracts、
-                    stage-evaluation、failure-taxonomy、Trace 等构建agent 标准运行时环境，
-                    把 Agent 变成可运行、可观测、可评估的执行单元。
+                    通过标准化输入/输出、标准化执行环境、约束的tool
+                    use、artifact-contracts、
+                    stage-evaluation、failure-taxonomy、Trace 等构建agent
+                    标准运行时环境， 把 Agent
+                    变成可运行、可观测、可评估的执行单元。
                   </p>
                 </article>
                 <article class="band-card">
                   <strong>Trace</strong>
-                  <p>
-                    通过全链路追踪提升可观测性并为Replay model提供基础。
-                  </p>
+                  <p>通过全链路追踪提升可观测性并为Replay model提供基础。</p>
                 </article>
                 <article class="band-card">
                   <strong>Safety</strong>
@@ -1533,7 +1534,8 @@
               <span class="tag coral">为什么不直接用 LangGraph</span>
               <h3>Claude 已承担内层 Agent Loop</h3>
               <p>
-                当前系统已有状态机、checkpoint等langGraph核心机制；内层 Agent Loop 又由 claude 执行。直接引入 LangGraph
+                当前系统已有状态机、checkpoint等langGraph核心机制；内层 Agent
+                Loop 又由 claude 执行。直接引入 LangGraph
                 会带来额外适配成本，而收益不如保持现有 TypeScript runtime 统一。
               </p>
             </article>
@@ -1710,7 +1712,6 @@
 
           <div style="height: 22px"></div>
 
-
           <div class="grid-2">
             <article class="card">
               <span class="tag teal">开发测试流程</span>
@@ -1762,26 +1763,26 @@
             <div class="flow-step">
               <b>Typed Handoff</b>
               <span
-              >每次委派附带输入/输出 schema、成功标准和 artifact
+                >每次委派附带输入/输出 schema、成功标准和 artifact
                 contract。</span
               >
             </div>
             <div class="flow-step">
               <b>Artifact Contract</b>
               <span
-              >约束交付字段、文件路径、front matter、大小和允许目录。</span
+                >约束交付字段、文件路径、front matter、大小和允许目录。</span
               >
             </div>
             <div class="flow-step">
               <b>Stage Evaluation</b>
               <span
-              >阶段评估输出 passed、needs_revision、failed 或 pending。</span
+                >阶段评估输出 passed、needs_revision、failed 或 pending。</span
               >
             </div>
             <div class="flow-step">
               <b>Failure Taxonomy</b>
               <span
-              >区分模型、工具、沙箱、配置、权限、超时、测试或部署失败。</span
+                >区分模型、工具、沙箱、配置、权限、超时、测试或部署失败。</span
               >
             </div>
             <div class="flow-step">
@@ -1791,7 +1792,6 @@
           </div>
 
           <div style="height: 22px"></div>
-
         </div>
       </section>
 
@@ -1813,7 +1813,8 @@
             <div class="assistant-flow-step">
               <b>上下文来源</b>
               <span>
-                消息归档、人工新增记忆、Agent 写入、上传资料和文本导入共同成为长期上下文入口。
+                消息归档、人工新增记忆、Agent
+                写入、上传资料和文本导入共同成为长期上下文入口。
               </span>
             </div>
             <div class="assistant-flow-step">
@@ -1826,13 +1827,15 @@
             <div class="assistant-flow-step">
               <b>检索与筛选</b>
               <span>
-                记忆按 group 检索并组装 Memory Pack；Wiki 按页面、标题、摘要和正文做全文检索。
+                记忆按 group 检索并组装 Memory Pack；Wiki
+                按页面、标题、摘要和正文做全文检索。
               </span>
             </div>
             <div class="assistant-flow-step">
               <b>编纂与治理</b>
               <span>
-                记忆做冲突、重复和过期治理；Wiki 通过后台任务生成草稿、校验证据并预览发布差异。
+                记忆做冲突、重复和过期治理；Wiki
+                通过后台任务生成草稿、校验证据并预览发布差异。
               </span>
             </div>
             <div class="assistant-flow-step">
@@ -1845,7 +1848,8 @@
             <div class="assistant-flow-step">
               <b>工作台管理</b>
               <span>
-                Web/Electron 提供记忆管理、Doctor、指标统计、知识库资料、草稿、页面和后台任务管理。
+                Web/Electron
+                提供记忆管理、Doctor、指标统计、知识库资料、草稿、页面和后台任务管理。
               </span>
             </div>
           </div>
@@ -1867,8 +1871,8 @@
               <h3>事件与结果记忆</h3>
               <p>
                 存已经明确完成的事件摘要和结果，例如某次修复的原因、分支、产物、
-                blocker 或交付结论。它比 working 更稳定，但仍偏近期，适合让 Agent
-                理解“刚发生过什么”。
+                blocker 或交付结论。它比 working 更稳定，但仍偏近期，适合让
+                Agent 理解“刚发生过什么”。
               </p>
             </article>
             <article class="card">
@@ -1896,7 +1900,8 @@
                     <span>
                       <code>createMemory()</code> 写入 group 作用域、layer、
                       memory_type、status、source 和 metadata。来源可以是 Web
-                      手工维护、容器内 <code>memory_write</code>，也可以是会话归档抽取。
+                      手工维护、容器内
+                      <code>memory_write</code>，也可以是会话归档抽取。
                     </span>
                   </div>
                 </div>
@@ -1916,9 +1921,9 @@
                   <div class="timeline-body">
                     <b>相关性检索</b>
                     <span>
-                      <code>retrieveStructuredMemories()</code> 使用 SQLite FTS5、
-                      同义词扩展和中文 n-gram 兜底检索 active 记忆，并记录匹配词、
-                      直接命中数和来源分数。
+                      <code>retrieveStructuredMemories()</code> 使用 SQLite
+                      FTS5、 同义词扩展和中文 n-gram 兜底检索 active
+                      记忆，并记录匹配词、 直接命中数和来源分数。
                     </span>
                   </div>
                 </div>
@@ -1927,8 +1932,9 @@
                   <div class="timeline-body">
                     <b>上下文打包</b>
                     <span>
-                      <code>buildMemoryPackForGroup()</code> 拉取最多 24 条相关记忆，
-                      追加 canonical 兜底候选，再按层级、类型、相关性、直接命中和新鲜度排序。
+                      <code>buildMemoryPackForGroup()</code> 拉取最多 24
+                      条相关记忆， 追加 canonical
+                      兜底候选，再按层级、类型、相关性、直接命中和新鲜度排序。
                     </span>
                   </div>
                 </div>
@@ -1945,8 +1951,9 @@
                     <b>导入资料</b>
                     <span>
                       <code>importWikiMaterialFromUpload()</code> 和
-                      <code>importWikiMaterialFromText()</code> 保存原始资料、抽取文本、
-                      计算 sha256，并形成 <code>wiki_materials</code> 记录。
+                      <code>importWikiMaterialFromText()</code>
+                      保存原始资料、抽取文本、 计算 sha256，并形成
+                      <code>wiki_materials</code> 记录。
                     </span>
                   </div>
                 </div>
@@ -1956,8 +1963,9 @@
                     <b>后台编纂草稿</b>
                     <span>
                       <code>queueWikiDraftGenerationJob()</code> 创建
-                      <code>draft_generate</code> 任务。模型只允许使用所选资料和既有页面上下文，
-                      输出 page、claims 和 relations 的 JSON。
+                      <code>draft_generate</code>
+                      任务。模型只允许使用所选资料和既有页面上下文， 输出
+                      page、claims 和 relations 的 JSON。
                     </span>
                   </div>
                 </div>
@@ -1967,8 +1975,8 @@
                     <b>证据校验</b>
                     <span>
                       每条重要事实都要落成原子 Claim，并至少绑定一条
-                      <code>wiki_claim_evidence</code>。证据的 material_id 必须来自所选资料，
-                      excerpt 要能回到原文。
+                      <code>wiki_claim_evidence</code>。证据的 material_id
+                      必须来自所选资料， excerpt 要能回到原文。
                     </span>
                   </div>
                 </div>
@@ -1977,8 +1985,9 @@
                   <div class="timeline-body">
                     <b>发布与检索</b>
                     <span>
-                      发布时 upsert 页面、替换资料引用和关系，旧 Claim 未再出现则标记
-                      deprecated；页面写成 Markdown，并通过 <code>wiki_pages_fts</code>
+                      发布时 upsert 页面、替换资料引用和关系，旧 Claim
+                      未再出现则标记 deprecated；页面写成 Markdown，并通过
+                      <code>wiki_pages_fts</code>
                       支持搜索。
                     </span>
                   </div>
@@ -2002,17 +2011,21 @@
                 <tr>
                   <td>作用范围</td>
                   <td>
-                    以 <code>group_folder</code> 隔离，每个群组、角色或服务有自己的短期和长期行为上下文。
+                    以
+                    <code>group_folder</code>
+                    隔离，每个群组、角色或服务有自己的短期和长期行为上下文。
                   </td>
                   <td>
-                    宿主机管理的全局 LLM Wiki，面向跨任务复用的项目、流程、概念、决策和资料知识。
+                    宿主机管理的全局 LLM
+                    Wiki，面向跨任务复用的项目、流程、概念、决策和资料知识。
                   </td>
                 </tr>
                 <tr>
                   <td>数据形态</td>
                   <td>
-                    单条短文本，带 layer、memory_type、status、source、metadata。
-                    类型包括 preference、rule、fact、summary。
+                    单条短文本，带
+                    layer、memory_type、status、source、metadata。 类型包括
+                    preference、rule、fact、summary。
                   </td>
                   <td>
                     资料、草稿、页面、Claim、证据、页面关系和后台任务共同组成知识图谱与证据层。
@@ -2021,7 +2034,9 @@
                 <tr>
                   <td>进入上下文方式</td>
                   <td>
-                    普通消息进入 Agent 前自动拼接 <code>[MEMORY PACK]</code>，并明确提示新用户指令优先于旧记忆。
+                    普通消息进入 Agent 前自动拼接
+                    <code>[MEMORY PACK]</code
+                    >，并明确提示新用户指令优先于旧记忆。
                   </td>
                   <td>
                     不默认塞入全部上下文，Agent 通过 <code>wiki_search</code> 和
@@ -2031,16 +2046,19 @@
                 <tr>
                   <td>可信度控制</td>
                   <td>
-                    通过 active/conflicted/deprecated 管理状态；Doctor 发现重复、极性冲突和过期 working 记忆。
+                    通过 active/conflicted/deprecated 管理状态；Doctor
+                    发现重复、极性冲突和过期 working 记忆。
                   </td>
                   <td>
-                    通过 Claim 和 Evidence 建证据链；编纂提示明确禁止凭通识补全，发布前校验资料来源。
+                    通过 Claim 和 Evidence
+                    建证据链；编纂提示明确禁止凭通识补全，发布前校验资料来源。
                   </td>
                 </tr>
                 <tr>
                   <td>本项目中的价值</td>
                   <td>
-                    让工程 Agent 记住用户偏好、当前服务、近期异常、团队规则和沟通约束，
+                    让工程 Agent
+                    记住用户偏好、当前服务、近期异常、团队规则和沟通约束，
                     减少每次重新解释背景。
                   </td>
                   <td>
@@ -2059,15 +2077,18 @@
               <span class="tag blue">检索排序</span>
               <h3>相关性和稳定性一起算</h3>
               <p>
-                记忆打包不是简单取最新。排序同时考虑 FTS 分数、直接命中数量、层级权重、
-                类型权重和时间加成；canonical/rule 权重最高，working 更依赖近期性。
+                记忆打包不是简单取最新。排序同时考虑 FTS
+                分数、直接命中数量、层级权重、
+                类型权重和时间加成；canonical/rule 权重最高，working
+                更依赖近期性。
               </p>
             </article>
             <article class="card">
               <span class="tag coral">容量控制</span>
               <h3>每层有独立预算</h3>
               <p>
-                Memory Pack 对 canonical、episodic、working 分别设置字符预算和条数上限，
+                Memory Pack 对 canonical、episodic、working
+                分别设置字符预算和条数上限，
                 避免短期噪声挤掉长期规则，也避免长期规则占满当前任务上下文。
               </p>
             </article>
@@ -2075,8 +2096,9 @@
               <span class="tag amber">后台任务</span>
               <h3>Wiki 编纂可停止可恢复</h3>
               <p>
-                Wiki 草稿生成进入 <code>wiki_jobs</code> 队列，支持 running、completed、
-                failed 状态、手动停止、进程重启后的 pending 恢复和失败原始响应留存。
+                Wiki 草稿生成进入 <code>wiki_jobs</code> 队列，支持
+                running、completed、 failed 状态、手动停止、进程重启后的 pending
+                恢复和失败原始响应留存。
               </p>
             </article>
           </div>
@@ -2098,9 +2120,10 @@
             <div>
               <h2>个人助手详解</h2>
               <p>
-                个人助手是 Irarus 的 Agent 主动层。它会根据配置的关注点主动的扫描今日计划、工作台、定时任务、Agent Runs 和线上日志等信息，
-                把需要关注的事汇总到 Agent Inbox，并在策略允许时自动排查、
-                自动处理低风险待办、准备修复或进入受控自我进化。
+                个人助手是 Irarus 的 Agent
+                主动层。它会根据配置的关注点主动的扫描今日计划、工作台、定时任务、Agent
+                Runs 和线上日志等信息， 把需要关注的事汇总到 Agent
+                Inbox，并在策略允许时自动排查、 自动处理低风险待办或准备修复。
               </p>
             </div>
           </div>
@@ -2158,8 +2181,8 @@
               <b>发现当天计划缺失和往日未完成</b>
               <p>
                 助手会把“今天还没有计划”“历史计划还有未完成项”转成待办，
-                提醒用户继续计划或补充安排；针对服务 coding 异常，还可以结合代码、
-                工作台任务和执行记录生成异常候选。
+                提醒用户继续计划或补充安排；针对服务 coding
+                异常，还可以结合代码、 工作台任务和执行记录生成异常候选。
               </p>
             </article>
             <article class="assistant-capability-card">
@@ -2185,25 +2208,17 @@
               <b>扫描服务 error 日志并归因</b>
               <p>
                 助手按服务配置读取线上 error 日志，使用日志分组规则聚合错误，
-                将异常映射到服务、主机、日志路径和时间窗口，再生成可调查或可修复的 Inbox。
+                将异常映射到服务、主机、日志路径和时间窗口，再生成可调查或可修复的
+                Inbox。
               </p>
             </article>
             <article class="assistant-capability-card">
               <span class="tag green">修复自动化</span>
               <b>从调查结论推进到受控修复</b>
               <p>
-                调查结果标记 repairable 后，助手可按分组运行修复 Agent，
-                让 Agent 基于证据修改代码、执行检查并输出修复结果；失败时保留 next action，
-                成功时把待办推进到完成状态。
-              </p>
-            </article>
-            <article class="assistant-capability-card">
-              <span class="tag blue">自我进化自动化</span>
-              <b>持续发现自身优化方向</b>
-              <p>
-                Evolution Engine 可定时选择优化方向、生成方案、评估风险、
-                创建工作分支、实现、检查、复核并等待采纳。默认不自动实现、不自动合并主分支，
-                适合把助手自身能力小步提升。
+                调查结果标记 repairable 后，助手可按分组运行修复 Agent， 让
+                Agent 基于证据修改代码、执行检查并输出修复结果；失败时保留 next
+                action， 成功时把待办推进到完成状态。
               </p>
             </article>
           </div>
@@ -2217,8 +2232,8 @@
               <p>
                 <code>AssistantSettings</code> 控制 enabled、quiet / balanced /
                 active 主动等级、扫描间隔、静默时段、触发规则、服务范围、
-                investigationEnabled 和 autoEnabled。默认值保持保守：
-                自我进化关闭，自动实现和自动采纳关闭，触发规则的自动处理也默认关闭。
+                investigationEnabled 和 autoEnabled。默认值保持保守，
+                触发规则的自动处理默认关闭。
               </p>
             </article>
             <article class="card">
@@ -2238,7 +2253,7 @@
             <strong>个人助手的产品价值：</strong>
             它把“用户想起来才处理”变成“系统发现后主动推到用户面前”，再把
             “提醒用户”升级为“在可控范围内先取证、先准备、先处理”。因此它既是提醒中心，
-            也是工作台自动化入口、故障排查入口和自我改进入口。
+            也是工作台自动化入口和故障排查入口。
           </div>
         </div>
       </section>
@@ -2270,7 +2285,8 @@
               <h3>主调度与角色 Agent 分离</h3>
               <p>
                 主控agent负责调度所有角色agent，并且所有agent 有单独的工作区、
-                记忆、 上下文、工具、skill，避免了互相影响和最专注的工作环境上下文
+                记忆、
+                上下文、工具、skill，避免了互相影响和最专注的工作环境上下文
               </p>
             </article>
             <article class="card">
@@ -2407,7 +2423,10 @@
                   </td>
                 </tr>
                 <tr>
-                  <td><code>src/memory-pack.ts</code> / <code>src/memory-retrieval.ts</code></td>
+                  <td>
+                    <code>src/memory-pack.ts</code> /
+                    <code>src/memory-retrieval.ts</code>
+                  </td>
                   <td>
                     结构化记忆检索、同义词扩展、中文兜底、排序和 Memory Pack
                     注入逻辑。
@@ -2416,7 +2435,8 @@
                 <tr>
                   <td><code>src/wiki.ts</code></td>
                   <td>
-                    LLM Wiki 的资料导入、草稿生成、证据校验、发布、页面详情和后台任务队列。
+                    LLM Wiki
+                    的资料导入、草稿生成、证据校验、发布、页面详情和后台任务队列。
                   </td>
                 </tr>
               </tbody>
@@ -2535,9 +2555,7 @@
                       >Voyager</a
                     >
                   </td>
-                  <td>
-                    用于解释记忆、阶段评估、自我进化和 Skill 沉淀的相关思路。
-                  </td>
+                  <td>用于解释记忆、阶段评估和 Skill 沉淀的相关思路。</td>
                 </tr>
               </tbody>
             </table>

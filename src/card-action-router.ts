@@ -15,10 +15,6 @@ import {
   parseNestedCardStringPayload,
 } from './card-action-payload.js';
 import {
-  ASSISTANT_EVOLUTION_CARD_ACTION,
-  handleAssistantEvolutionCardAction,
-} from './assistant/evolution-card-actions.js';
-import {
   ASSISTANT_INBOX_BROADCAST_ACTION_PREFIX,
   handleAssistantInboxBroadcastCardAction,
   logAssistantInboxBroadcastActionFailure,
@@ -73,14 +69,6 @@ export function createCardActionHandler(deps: {
   sendMessage: (jid: string, text: string) => Promise<void>;
 }): CardActionHandler {
   return async (action) => {
-    if (action.action === ASSISTANT_EVOLUTION_CARD_ACTION) {
-      return handleAssistantEvolutionCardAction({
-        itemId:
-          action.form_value?.item_id || action.form_value?.source_ref_id || '',
-        evolutionAction: action.form_value?.evolution_action || '',
-      });
-    }
-
     if (action.action.startsWith(ASSISTANT_INBOX_BROADCAST_ACTION_PREFIX)) {
       try {
         return await handleAssistantInboxBroadcastCardAction({

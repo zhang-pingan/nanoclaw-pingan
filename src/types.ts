@@ -165,7 +165,6 @@ export type AgentQuerySourceType =
   | 'scheduled_task'
   | 'delegation'
   | 'web_action'
-  | 'assistant_evolution'
   | 'assistant_action'
   | 'internal_run_once'
   | 'internal_agent_chat';
