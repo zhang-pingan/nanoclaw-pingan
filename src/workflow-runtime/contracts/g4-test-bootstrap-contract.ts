@@ -95,6 +95,9 @@ const domains = {
   manifest: 'icarus:workflow-contract-pack-g4-test-bootstrap:1\n',
 } as const;
 
+const CURRENT_G3_9_PACK_HASH =
+  'sha256:eb3d316be520e68fe53b6be826046d3f8fa1cf97db298d5703886d1dcb97b70f';
+
 const hashSchema: JsonObject = {
   type: 'string',
   pattern: '^sha256:[0-9a-f]{64}$',
@@ -406,8 +409,7 @@ function upstreamIdentity(): JsonObject {
       G39_UPSTREAM_IDENTITIES.g3_7_pack_hash ||
     checkG38AActivationContractRepair().hash !==
       G39_UPSTREAM_IDENTITIES.g3_8a_pack_hash ||
-    checkG39FeatureReleaseActivationContracts().hash !==
-      'sha256:eb3d316be520e68fe53b6be826046d3f8fa1cf97db298d5703886d1dcb97b70f'
+    checkG39FeatureReleaseActivationContracts().hash !== CURRENT_G3_9_PACK_HASH
   ) {
     throw new Error('G4 G3 upstream Contract identity drifted');
   }
@@ -443,8 +445,7 @@ function upstreamIdentity(): JsonObject {
     g3_6_pack_hash: G39_UPSTREAM_IDENTITIES.g3_6_pack_hash,
     g3_7_pack_hash: G39_UPSTREAM_IDENTITIES.g3_7_pack_hash,
     g3_8a_pack_hash: G39_UPSTREAM_IDENTITIES.g3_8a_pack_hash,
-    g3_9_pack_hash:
-      'sha256:871ded236e5e8fead95d28b365f9802792213c16d1f8517caf030ab9cc9865f8',
+    g3_9_pack_hash: CURRENT_G3_9_PACK_HASH,
   };
 }
 
@@ -855,7 +856,8 @@ function validateBuilt(
       G39_UPSTREAM_IDENTITIES.g2_sealed_bundle_hash ||
     upstream.g3_6_pack_hash !== G39_UPSTREAM_IDENTITIES.g3_6_pack_hash ||
     upstream.g3_7_pack_hash !== G39_UPSTREAM_IDENTITIES.g3_7_pack_hash ||
-    upstream.g3_8a_pack_hash !== G39_UPSTREAM_IDENTITIES.g3_8a_pack_hash
+    upstream.g3_8a_pack_hash !== G39_UPSTREAM_IDENTITIES.g3_8a_pack_hash ||
+    upstream.g3_9_pack_hash !== CURRENT_G3_9_PACK_HASH
   ) {
     throw new Error('G4 profile upstream identity drifted');
   }

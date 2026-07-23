@@ -1,8 +1,8 @@
 # Dynamic Workflow Runtime 实施进度
 
-> **状态**: G5_EXECUTION_BINDING_EXIT_CANDIDATE_PENDING_INDEPENDENT_AFFECTED_CHAIN_REGRESSION
-> **当前 Gate**: G2/G3/G4 affected chain=`IN_PROGRESS`；G5 Basic Runtime=`NOT_READY`；G6-G9=`NOT_READY`
-> **下一独立会话**: 只执行Capability -> exact Adapter/finite Outbox Delivery Policy affected-chain regression；通过并独立提交前不得开始G5 Runtime
+> **状态**: PASS / G5_EXECUTION_BINDING_AFFECTED_CHAIN_DONE
+> **当前 Gate**: G2/G3/G4 affected chain=`DONE`；G5 Basic Runtime=`READY`而不是`DONE`；G6-G9=`NOT_READY`
+> **下一独立会话**: 只执行完整G5 Basic Runtime Gate实现；不得在本回归任务内提前施工G5
 > **最后更新**: 2026-07-23
 > **规范权威**: `local/docs/dynamic-workflow-dag-framework.md`
 
@@ -110,10 +110,10 @@ Agent Container 运行于独立 VM，Node identity 由 VM image gate 保证；�
 | --- | --- | --- | --- | --- |
 | G0 Contract Pack / Static Baseline | `DONE` | 无 | G0.1-G0.9 historical root + G0.10 additive Capacity Admin/publication/CAP/Logical Schema/coverage root | 本原子提交 |
 | G1 DDL / Store | `DONE` | G0.10 | current Database Schema `5`；保留全部Schema 4合法历史行，严格约束Schema 5新写并提供原子、fail-closed的4到5 upgrade | G1.1-G1.7；Capacity repair独立affected-chain regression PASS |
-| G2 Compiler / Golden | `IN_PROGRESS` | G0.1-G0.9；R-016 spec/Contract repair；G0.10 不改变 Compiler/Plan 语义 | Compiler 3.0.2 execution-binding successor已owner review/seal，current replay 40/40 exact；等待独立affected-chain regression | 本原子退出候选 |
-| G3 Registry / Authoring / Publish | `IN_PROGRESS` | G1 + G2 | G3.1/G3.3/G3.6/G3.7/G3.9已按new G2 exact identity重建；G3.5与G3.8A保持；等待独立affected-chain regression | 本原子退出候选 |
-| G4 Test Bootstrap | `IN_PROGRESS` | G1 + G2 + G3 | downstream-safe isolation v2语义不变，exact upstream identity已重建；等待独立affected-chain regression | 本原子退出候选 |
-| G5 Basic Runtime | `NOT_READY` | G4 + current T6d ownership authority independent regression + executable Capacity Admin CAP1-CAP4 repair regression + execution-binding affected-chain regression | Capability/Outbox spec与machine Contract已形成退出候选；独立回归通过前不得施工Runtime | - |
+| G2 Compiler / Golden | `DONE` | G0.1-G0.9；R-016 spec/Contract repair；G0.10 不改变 Compiler/Plan 语义 | Compiler 3.0.2 execution-binding successor已owner review/seal，current replay 40/40 exact，affected-chain独立回归通过 | 本原子独立回归提交 |
+| G3 Registry / Authoring / Publish | `DONE` | G1 + G2 | G3.1-G3.9 exact Publish closure、negative fixtures与真实Store链在affected-chain独立回归中通过 | 本原子独立回归提交 |
+| G4 Test Bootstrap | `DONE` | G1 + G2 + G3 | downstream-safe isolation v2保持0 violation；profile现exact绑定current G3.9 identity，affected-chain独立回归通过 | 本原子独立回归提交 |
+| G5 Basic Runtime | `READY` | G4 + current T6d ownership authority independent regression + executable Capacity Admin CAP1-CAP4 repair regression + execution-binding affected-chain regression | 全部前置已满足；尚无G5 Runtime交付物，绝非`DONE` | - |
 | G6 Dynamic / Close | `NOT_READY` | G5 | T7/T8/child/compensation fixtures | - |
 | G7 Control / Card / Projection / Recovery | `NOT_READY` | G6 | Deadline Watchdog -> Gateway -> T7c stable-key/System Grant/audit + authorized manual retry handoff + T6e/resolution/recovery/card/projection fixtures | - |
 | G8 Certification | `NOT_READY` | G7 | certified profile meeting Product Floor | - |
@@ -123,14 +123,14 @@ Agent Container 运行于独立 VM，Node identity 由 VM image gate 保证；�
 
 | 工作包 | 范围 | 状态 | 当前 Gate/切片 |
 | --- | --- | --- | --- |
-| I0 | Publish、Registry、Recipe 与执行版本固定 | `IN_PROGRESS` | G3 current exact closure已重建；等待独立affected-chain regression |
-| I1 | Intake、Routing、幂等创建、Child provenance、Claim | `NOT_READY` | Capacity repair已回归；execution-binding affected chain仍待独立验证 |
+| I0 | Publish、Registry、Recipe 与执行版本固定 | `DONE` | G3 current exact closure与execution-binding affected-chain独立回归已闭合 |
+| I1 | Intake、Routing、幂等创建、Child provenance、Claim | `READY` | G5前置已全部回归；业务实现尚未开始 |
 | I2 | Definition、State lowering、Context、transition | `IN_PROGRESS` | Compiler 3.0.2 static lowering与Capability Outbox binding已批准并seal；Runtime transition未开始 |
-| I3 | Source/Compiled IR、Port、Compiler | `IN_PROGRESS` | Compiler 3.0.2/current result schema/G2 v3 seal已形成40/40 exit candidate；等待独立回归 |
+| I3 | Source/Compiled IR、Port、Compiler | `DONE` | Compiler 3.0.2/current result schema/G2 v3 seal与40/40 replay已通过独立回归 |
 | I4 | Runtime Store、SQLite relation、Value/Blob、migration | `IN_PROGRESS` | current G1 Schema 5/G1.7与G3.9 Activation DML DONE；Blob/GC仍未实现 |
-| I5 | Graph 状态机、reconcile、Scheduler、Ledger | `NOT_READY` | execution-binding affected chain通过前不开始G5 Runtime |
-| I6 | Delegation/System、Capability Effect、Outbox | `IN_PROGRESS` | Spec/Contract/Compiler/Publish/Schema 5 handoff exit candidate已完成；独立回归前不实现T5 Runtime |
-| I7 | Durable Wait、Signal/Timer/Approval、Inbox | `NOT_READY` | G5仍未开放；Workflow deadline继续归未来G7 |
+| I5 | Graph 状态机、reconcile、Scheduler、Ledger | `READY` | G5 Gate已开放；本任务未实现任何Runtime行为 |
+| I6 | Delegation/System、Capability Effect、Outbox | `READY` | Spec/Contract/Compiler/Publish/Schema 5 handoff已独立回归；T5 Runtime尚未开始 |
+| I7 | Durable Wait、Signal/Timer/Approval、Inbox | `READY` | G5已开放；业务实现尚未开始，Workflow deadline继续归未来G7 |
 | I8 | Subgraph、Expand、Map、child scope | `NOT_READY` | G6 起 |
 | I9 | Completion、Cancel、Compensation、Finalization、Recovery | `NOT_READY` | G5只拥有blocker create/open/cache；G6 close/T7/T8；G7 T6e resolution/abandon/Recovery |
 | I10 | Runtime Command、Capacity Admin、Runtime Center、Trace | `READY` | G5独立Capacity Admin前置已回归；Workflow Deadline/Gateway/T7c/manual authorization仍归G7且未开始 |
@@ -2359,12 +2359,41 @@ Current修复把pointer replace改为macOS明确的`mv -f -h` symlink语义，�
 
 修复后回归：targeted runtime-toolchain 5/5、G0 109/109、post-build G3 97/97、G4 33/33、ownership 9/9、G5 blocker 8/8、readiness 6/6、`contracts:check`、typecheck、build、targeted Prettier与`git diff --check`全部PASS。`contracts:check`证明execution-binding root、G2 v3 seal、G3.1/G3.3/G3.5/G3.6/G3.7/G3.9、G4 pack/profile、static absence与ownership identities均相对`2dbf707`零漂移；Development Core binding不进入这些semantic pack hashes，因此没有伪造Workflow identity cascade。没有修改Schema 5、G2 sealed artifacts、G3.8A、G4 isolation/implementation、T6d/G7 ownership，也没有新增G5 Runtime/T0-T6d DML、Gateway、T6e、deadline、G6+或Production activation。
 
+### Capability / Outbox execution-binding affected-chain independent regression closure
+
+**结论**：`PASS / G5_EXECUTION_BINDING_AFFECTED_CHAIN_DONE`。本轮从clean local `main@28dfc27026d2c9aedd38038d2ba949d234a3f81b`开始，本原子提交parent固定为`28dfc27026d2c9aedd38038d2ba949d234a3f81b`，candidate predecessor为`2dbf70714405bff5d5b389df6f1563e2b2a34ad6`。环境为`permission_profile=disabled/unrestricted`、filesystem unrestricted、sandbox `danger-full-access`、approval policy `never`；没有worktree、Handoff、sub-agent、approval/escalation、amend、rebase、reset、回退或历史改写，全部Node/npm/npx命令均经`./scripts/runtime-toolchain.sh exec -- <command>`执行。
+
+独立审查确认Compiler与Golden authoring只从同一pinned Published snapshot解析exact Adapter/finite Delivery Policy，并lower相同Plan v2 `outbox_execution_binding`；G3 Publish closure拒绝missing/mismatch/latest/test-only promotion；Schema 5真实SQLite通过六个Registry/Value deferred FK保存exact handoff。回归发现并修复两个affected-chain证据缺口：G4 checker虽验证current G3.9 pack=`sha256:eb3d316be520e68fe53b6be826046d3f8fa1cf97db298d5703886d1dcb97b70f`，但profile仍写旧`871ded...`，现改为current exact pin并在built-profile validation中显式比较；execution-binding negative pack的部分case只声明未执行，现新增mismatched Adapter/Policy、latest/unpublished Policy、non-finite Policy、unknown binding field与Policy snapshot hash deferred-FK drift的直接测试。没有改变业务语义、Schema 5、G2 seal、G3.8A、G4 implementation/isolation、ownership authority或Runtime surface。
+
+Current independent-regression identities：
+
+| Authority | Identity |
+| --- | --- |
+| execution-binding root / Compiler toolchain / build | `sha256:48f63ae7be30c61f056f78f713591f34431336cc722d6928fbc6e2783a062088` / `sha256:90bc7c99cacaf58217dd6d07781788c844385d3c70644c4086d6c997312f60a1` / `sha256:698af607955463f01a404d626586420f3dd8f7a208da87c1e138075b1518ba05` |
+| G2 v3 Draft / report / review / seal / sealed artifact | `sha256:b8ca7c91839b88b5591daf19f17a30e70b85e441d9dd4905807ef57bc37f7591` / `sha256:5b3b5c721e6cda298da468566eb97da3423fcb86595de4f46dc66f79ebb55e99` / `sha256:ceddcefcab8ff41a5e9b5d2ceb89dabcd3f9199639bb247d132a7c79c33dc15b` / `sha256:b3ed9e43bd0fadaf40520257926dcf690ee8495bb417220245f248385bde9efb` / `sha256:967437bb9f91e32e5014b2af90a23f5646e491eb427bdf55accb345ead70db8f` |
+| G3.1 / G3.3 / G3.5 / G3.6 / G3.7 / G3.9 | `sha256:aae22ae7f5ea1fa06a5c9b6c63eeadbb61b32d3510f503754ef5d8617cab0227` / `sha256:ff5d40589df9bc78e2e7f4f0e2fdcd5f0a7b7f34e0d0592e5308c1230425f1b3` / `sha256:04506acde71f4c03e081f310265df521515327caee37cc820c56fa2162ad4ffb` / `sha256:4dd52b4f38da315ba0194fd23a9c681ffdba6aac37291100dd6d6b944178acd9` / `sha256:e80038f09ad841de630d961f137f15a2de14a487a74afb6b1d8b36edea689ba0` / `sha256:eb3d316be520e68fe53b6be826046d3f8fa1cf97db298d5703886d1dcb97b70f` |
+| G4 pack / profile / implementation artifact / implementation / isolation | `sha256:4d2ca7bc3095ae5ac208da8918eabc6d3b7c62e9fab029439f6b01c275f7b8cd` / `sha256:71e0aba29c1ec34cd4d9fa0515409576bdc8fd7f90b9c258bbe0a614b3f0fa3d` / protected `sha256:74803b081571df002b900dc6ed23b9c7fc83f86bcb8f096a331cf2011805825e` / protected `sha256:28a920856d26325ec14c976a9e1da668c1302e06fd3e2e05abb890dff830f018` / protected `sha256:883f8f2d4040fd03ea5a49bd38826ce6c37d5556175219b66f335793087f9188` |
+| ownership authority / affected tree | protected `sha256:6ba952bf7761f249fa16c0c44a37d48a67c9f5f21c3667a5c966ac59e8affb38` / protected `sha256:9e290b8a9fe583942b6389f294366a698b606cf8e3ddd827cd27588b83b98323` |
+
+验证证据：
+
+| Command / evidence | Result |
+| --- | --- |
+| 两轮完整`contracts:generate` + `contracts:check` | PASS；两轮Workflow Runtime JSON/SQL byte-tree digest均为`c99769568a3fed62995d97d954b32a8818f59ca029b6ddbeaa5cb622a0a0d76b`，无额外artifact drift |
+| `test:g0` / `test:g2` / `golden:current:replay:check` | PASS；109/109；57/57；40/40 exact，历史三代sealed lineage read-only |
+| `test:g3` / `test:g4` | PASS；97/97；33/33；G4 14-member digest=`sha256:d101cc1e105cb89049548a2d38377d8647697256aa8e548af0c0d737b465754c`；live isolation=`275 source / 38 production roots / 9 authority / 4 bootstrap / 0 violation` |
+| `test:g1.1` / `test:g1.2` / Schema 5 handoff | PASS；23/23 + 23/23；Adapter与Policy snapshot hash drift均在deferred commit失败 |
+| `test:gate-ownership` / `test:g5:blocker` / `test:g5:readiness` | PASS；9/9；9/9（Capability 6 + Capacity 3）；6/6 |
+| final `typecheck` / `build` / `bind-core` / post-build G0/G3 | PASS；Development Core entry/binding=`sha256:626b57523d0c96d8c3e1d2608b36a5c144037ef2639b5bfafcb3d2932899eef3` / `sha256:ec5666f6004fa52f51e8b47aca6fbd074fc2659ac3de18501d3b256be5a67fab`；post-build 109/109 + 97/97 |
+
+Protected boundaries相对`28dfc270`：G2三代sealed trees、G3.8A source/artifacts、G1 Schema 5 source/migration/Manifest、Capacity authority、transaction/command protocols与ownership authority均0 changed file；Canonical Normalizer/Proof Algorithm、G1 root/Schema、Capacity root、G2 v2 predecessor seal、Schema 5 migration/4-to-5 upgrade/SQLite identity保持既有exact值。Changed paths只含G4 current upstream pin、execution-binding负向测试、Contract README与本账本。没有G5 Runtime、T0-T6d业务DML、Capacity runtime、Operational Blocker create/open/cache、Runtime Command Gateway、T6e、deadline、G6+、Production activation或无关产品模块。
+
 ## 下一步
 
-下一独立任务固定为**Capability / Outbox execution-binding affected-chain regression**，不是G5 Runtime施工。它必须从本退出候选clean commit开始，重新审阅规范与machine Contract，执行两轮deterministic generate/check，验证G0、G2 current exact replay与历史immutable lineage、G3 Publish negatives/closure、G4 isolation、Schema 5 FK handoff、ownership、G5 blocker/readiness、typecheck/build和protected identities。只有该任务PASS并独立提交后才能把G2/G3/G4恢复`DONE`、把G5提升为`READY`；不得实现T0-T6d、Capacity runtime、Gateway、T6e、deadline、G6+或Production activation。
+下一独立任务只能是**完整G5 Basic Runtime Gate实现**。必须从本回归clean提交开始，按G5 exact ownership实现并验证T0/T0p/T1/T2a/T2b/T3a/T3b/T4/T5/T6a/T6b/T6c/T6d automatic timer、Operational Blocker create/open/cache与完整reference/model/property/fault证据；不得下沉Runtime Command Gateway、T6e、workflow deadline、G6+或Production activation。
 
 历史fresh review evidence只存在于Git commits，不是current dependency；current immutable semantic approval只绑定exact Draft/report identities。显式`prepare-rc`冻结的四个Working roots与唯一Review Candidate未变；current expected full case-result/Plan/proof/program bytes/hash已独立冻结、审计、owner批准并seal。local single-user签名策略为`not_required_local_single_user`，没有伪造GPG或远程签名。
 
 G2终点继续满足`Draft -> human semantic decision -> GoldenSemanticReview -> seal -> CI replay`：current successor replay为40/40，R-017保持关闭。G3.1只消费其exact sealed/compiler identities并执行纯preflight；没有创建Published Recipe、Registry row、Release或Production launchability，也没有执行production activation。
 
-作为历史prepare-rc切片记录，该切片只修复当时的R-017 spec identity实时绑定、级联重建Working artifacts并执行`prepare-rc`及其确定性check。后续owner approval、immutable review、successor seal与40/40 replay现已完成；G3.1-G3.9和G4均已在后续历史切片完成，current exact bindings已由本Capacity Schema 5独立回归闭合。G5因Capability/Outbox execution binding缺口为`BLOCKED_BY_SPEC`；SQLite certification、Core Release、G5-G9 Runtime和production activation仍未开始。R-010 Node loader deprecation与R-012/R-013/R-015 timing继续作为既有范围外baseline，不升级工具链、不放宽测试。
+作为历史prepare-rc切片记录，该切片只修复当时的R-017 spec identity实时绑定、级联重建Working artifacts并执行`prepare-rc`及其确定性check。后续owner approval、immutable review、successor seal与40/40 replay现已完成；G3.1-G3.9和G4均已完成，Capability/Outbox execution-binding affected chain也已独立回归闭合。G5现为`READY`但Runtime尚未开始；SQLite certification、Core Release、G5-G9 Runtime和production activation仍未开始。R-010 Node loader deprecation与R-012/R-013/R-015 timing继续作为既有范围外baseline，不升级工具链、不放宽测试。

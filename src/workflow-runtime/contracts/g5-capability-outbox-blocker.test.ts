@@ -118,7 +118,11 @@ function schema5Database(): Database.Database {
   return database;
 }
 
-function insertOutbox(database: Database.Database, adapterHash: string): void {
+function insertOutbox(
+  database: Database.Database,
+  adapterHash: string,
+  policySnapshotHash = HASH_D,
+): void {
   database
     .prepare(
       `INSERT INTO workflow_outbox (
@@ -140,7 +144,7 @@ function insertOutbox(database: Database.Database, adapterHash: string): void {
         1, 900001, NULL, NULL, NULL, NULL, NULL, 1, NULL, 1
       )`,
     )
-    .run(adapterHash, HASH_C, HASH_D, HASH_E);
+    .run(adapterHash, HASH_C, policySnapshotHash, HASH_E);
 }
 
 describe('G5 Capability to Outbox execution-binding Contract repair', () => {
@@ -195,6 +199,14 @@ describe('G5 Capability to Outbox execution-binding Contract repair', () => {
     );
     expect(validatePlan({ ...plan, implicit_latest: true })).toBe(false);
     expect(validateResult({ ...result, implicit_binding: true })).toBe(false);
+    const planWithUnknownBindingField = structuredClone(plan);
+    const boundNode = (planWithUnknownBindingField.nodes as JsonObject[]).find(
+      (candidate) => candidate.outbox_execution_binding !== undefined,
+    );
+    expect(boundNode).toBeDefined();
+    const binding = boundNode?.outbox_execution_binding as JsonObject;
+    binding.implicit_adapter = true;
+    expect(validatePlan(planWithUnknownBindingField)).toBe(false);
   });
 
   it('binds exact Adapter, finite Policy, lane, reconciliation, idempotency, and delivery requirement in the sealed Plan', () => {
@@ -259,6 +271,18 @@ describe('G5 Capability to Outbox execution-binding Contract repair', () => {
     try {
       database.exec('BEGIN');
       insertOutbox(database, HASH_E);
+      expect(() => database.exec('COMMIT')).toThrow(/FOREIGN KEY/u);
+      database.exec('ROLLBACK');
+    } finally {
+      database.close();
+    }
+  });
+
+  it('rejects a Policy snapshot hash drift at the deferred Schema 5 FK handoff', () => {
+    const database = schema5Database();
+    try {
+      database.exec('BEGIN');
+      insertOutbox(database, HASH_B, HASH_E);
       expect(() => database.exec('COMMIT')).toThrow(/FOREIGN KEY/u);
       database.exec('ROLLBACK');
     } finally {

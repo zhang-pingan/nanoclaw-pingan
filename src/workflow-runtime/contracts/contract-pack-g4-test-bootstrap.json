@@ -13,7 +13,7 @@
       "id": "icarus.workflow-test-bootstrap-profile",
       "version": "1.0.0"
     },
-    "profile_hash": "sha256:e005c384396b48e7c96f64ee74e185c8230cb65d09f655a3909d16f3d3b91eed",
+    "profile_hash": "sha256:71e0aba29c1ec34cd4d9fa0515409576bdc8fd7f90b9c258bbe0a614b3f0fa3d",
     "fixture_set_ref": {
       "id": "icarus.workflow-test-bootstrap-fixture-set",
       "version": "1.0.0"
@@ -169,7 +169,7 @@
         },
         "version": 1,
         "domain_separator": "icarus:workflow-test-bootstrap-profile:1\n",
-        "hash": "sha256:e005c384396b48e7c96f64ee74e185c8230cb65d09f655a3909d16f3d3b91eed"
+        "hash": "sha256:71e0aba29c1ec34cd4d9fa0515409576bdc8fd7f90b9c258bbe0a614b3f0fa3d"
       },
       {
         "path": "conformance/g4-test-bootstrap/positive-cases.json",
@@ -217,5 +217,5 @@
       }
     ]
   },
-  "hash": "sha256:b79b15801b11535b0b8d9c310a9680ef10754d73e0563a867a7c204a97248298"
+  "hash": "sha256:4d2ca7bc3095ae5ac208da8918eabc6d3b7c62e9fab029439f6b01c275f7b8cd"
 }

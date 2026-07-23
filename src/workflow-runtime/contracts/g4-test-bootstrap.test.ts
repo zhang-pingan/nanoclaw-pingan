@@ -147,7 +147,7 @@ describe('G4 Test Bootstrap Contract Pack', () => {
         g3_8a_pack_hash:
           'sha256:d8412111a0f3dcabb4ce416b99086701ea3e3911ff431b5457eb957b2f69722f',
         g3_9_pack_hash:
-          'sha256:871ded236e5e8fead95d28b365f9802792213c16d1f8517caf030ab9cc9865f8',
+          'sha256:eb3d316be520e68fe53b6be826046d3f8fa1cf97db298d5703886d1dcb97b70f',
       },
     });
   });

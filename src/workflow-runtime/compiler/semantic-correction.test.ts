@@ -1034,6 +1034,69 @@ describe('G2 working semantic correction candidate', () => {
       },
     ],
     [
+      'mismatched Adapter identity',
+      'compiler_integrity_mismatch',
+      (snapshot: JsonObject) => {
+        const adapter = registryResources(snapshot).find(
+          (entry) => entry.resource_type === 'outbox_adapter',
+        );
+        assertJsonObject(adapter);
+        assertJsonObject(adapter.content);
+        assertJsonObject(adapter.content.ref);
+        adapter.content.ref.id = 'fixture.adapter.mismatched';
+      },
+    ],
+    [
+      'latest Policy ref',
+      'registry_ref_unpinned',
+      (snapshot: JsonObject) => {
+        const capability = registryResources(snapshot).find(
+          (entry) => entry.resource_type === 'capability',
+        );
+        assertJsonObject(capability);
+        assertJsonObject(capability.content);
+        assertJsonObject(capability.content.outbox_effect);
+        assertJsonObject(capability.content.outbox_effect.delivery_policy_ref);
+        capability.content.outbox_effect.delivery_policy_ref.version = 'latest';
+      },
+    ],
+    [
+      'unpublished Policy',
+      'capability_not_allowed',
+      (snapshot: JsonObject) => {
+        const policy = registryResources(snapshot).find(
+          (entry) => entry.resource_type === 'outbox_policy',
+        );
+        assertJsonObject(policy);
+        policy.publication_state = 'staged';
+      },
+    ],
+    [
+      'mismatched Policy identity',
+      'compiler_integrity_mismatch',
+      (snapshot: JsonObject) => {
+        const policy = registryResources(snapshot).find(
+          (entry) => entry.resource_type === 'outbox_policy',
+        );
+        assertJsonObject(policy);
+        assertJsonObject(policy.content);
+        assertJsonObject(policy.content.ref);
+        policy.content.ref.id = 'fixture.outbox-policy.mismatched';
+      },
+    ],
+    [
+      'non-finite Policy',
+      'compiler_integrity_mismatch',
+      (snapshot: JsonObject) => {
+        const policy = registryResources(snapshot).find(
+          (entry) => entry.resource_type === 'outbox_policy',
+        );
+        assertJsonObject(policy);
+        assertJsonObject(policy.content);
+        policy.content.max_delivery_attempts = 0;
+      },
+    ],
+    [
       'Policy drift',
       'compiler_integrity_mismatch',
       (snapshot: JsonObject) => {
