@@ -1,0 +1,78 @@
+{
+  "format": "icarus.workflow-g5-basic-runtime-implementation/1",
+  "ref": {
+    "id": "icarus.workflow-g5-basic-runtime-implementation",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-g5-basic-runtime-implementation:1\n",
+  "payload": {
+    "production_target": true,
+    "production_ingress_enabled": false,
+    "source_count": 15,
+    "sources": [
+      {
+        "path": "src/workflow-runtime/capacity/admin-gateway.ts",
+        "raw_sha256": "sha256:801f1341088e4dc381b396e499fcf39b93df1b0583f7abc8b7420683d02e0913"
+      },
+      {
+        "path": "src/workflow-runtime/capacity/publication.ts",
+        "raw_sha256": "sha256:cdde13ca99631293c03a9a177f1d8349297ac3d5753f689087b57b736c0bc05e"
+      },
+      {
+        "path": "src/workflow-runtime/creation/domain-claims.ts",
+        "raw_sha256": "sha256:0102b862650cecdf9bc44688e6a6618ace7eee12680a22562d70a38920023411"
+      },
+      {
+        "path": "src/workflow-runtime/creation/recipe-registry.ts",
+        "raw_sha256": "sha256:2a0459b18fce2dff65fb3a42f3c44c237be63f07f183c8f76c55ea0f615286aa"
+      },
+      {
+        "path": "src/workflow-runtime/creation/routing-resolver.ts",
+        "raw_sha256": "sha256:52d235ab71f29a119edc1d7fc973d67a8d15633046d3625a6b9911f293c64201"
+      },
+      {
+        "path": "src/workflow-runtime/creation/task-intake.ts",
+        "raw_sha256": "sha256:af5d949ccd68ac36b27ebe95221281006a5420bea1fd1ea2fe953b0a7a52e102"
+      },
+      {
+        "path": "src/workflow-runtime/runtime/graph-store.ts",
+        "raw_sha256": "sha256:ba46f6c3796edd81536ed3c05b692bab124bfbdad3c668bd73844efefc24f845"
+      },
+      {
+        "path": "src/workflow-runtime/runtime/ledger.ts",
+        "raw_sha256": "sha256:fe33a9669fcf35117f58e85804ca73dbbcd20c7bbf5e9efef8595f19fe656693"
+      },
+      {
+        "path": "src/workflow-runtime/runtime/lifecycle.ts",
+        "raw_sha256": "sha256:5188933dc5d0413f5416983e5fceec79f7a4b987506327e92e6e6d16e0a06c1e"
+      },
+      {
+        "path": "src/workflow-runtime/runtime/node-execution.ts",
+        "raw_sha256": "sha256:cda0bafc958a2f5e95a26cd987dc2509eaa9ae42e11087afa714a59ceaf7487d"
+      },
+      {
+        "path": "src/workflow-runtime/runtime/operational-blockers.ts",
+        "raw_sha256": "sha256:dcbd34aaa1d08fdef73c156c1508a86341586c80366a50d3bfe63bfe0178e513"
+      },
+      {
+        "path": "src/workflow-runtime/runtime/outbox.ts",
+        "raw_sha256": "sha256:a286ab72bd3d1a9e9f0d45895050473f262cd9a2c89647a3a7ba8979d5a044d3"
+      },
+      {
+        "path": "src/workflow-runtime/runtime/reconciler.ts",
+        "raw_sha256": "sha256:52c5a9c8e8f0d512c0553cc9eb91bac45b45d93ce1e0ab238e0192e4b29c9da1"
+      },
+      {
+        "path": "src/workflow-runtime/runtime/basic-scheduler.ts",
+        "raw_sha256": "sha256:6a5ad05d845324753026f291dce0dde513313f68e35f5f8083ffdc3325504ddf"
+      },
+      {
+        "path": "src/workflow-runtime/runtime/waits.ts",
+        "raw_sha256": "sha256:f65da63101d8154ea4315ca7da4747fc2fbf77b80d81c269f6213ec3d039c314"
+      }
+    ],
+    "source_tree_hash": "sha256:f347a97de96a4e7975db4a3d970ad8425ee8f9e92884c3da00f0b01351a0f08d"
+  },
+  "hash": "sha256:ad5284c68443477bc8ef8ef407c3996c638f65ef5940c32a5dda996484c34a3b"
+}

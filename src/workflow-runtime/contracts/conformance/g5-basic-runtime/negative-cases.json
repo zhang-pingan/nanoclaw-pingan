@@ -1,0 +1,98 @@
+{
+  "format": "icarus.workflow-g5-basic-runtime-negative-cases/1",
+  "ref": {
+    "id": "icarus.workflow-g5-basic-runtime-negative-cases",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-g5-basic-runtime-negative-cases:1\n",
+  "payload": {
+    "cases": [
+      {
+        "case_id": "creation_intent_conflict",
+        "transaction_id": "T0",
+        "assertion": "same creation key with a different intent conflicts",
+        "expected": "rejected"
+      },
+      {
+        "case_id": "stale_activation_row",
+        "transaction_id": "T1",
+        "assertion": "stale workflow row version cannot partially activate",
+        "expected": "rejected"
+      },
+      {
+        "case_id": "stale_compile_lease",
+        "transaction_id": "T2a",
+        "assertion": "stale compile lease, epoch, source, or snapshot is rejected",
+        "expected": "rejected"
+      },
+      {
+        "case_id": "paused_materialization",
+        "transaction_id": "T2b",
+        "assertion": "paused or unhealthy runs cannot materialize",
+        "expected": "rejected"
+      },
+      {
+        "case_id": "fact_payload_drift",
+        "transaction_id": "T3a",
+        "assertion": "same fact key with different bytes is an integrity violation",
+        "expected": "rejected"
+      },
+      {
+        "case_id": "stale_node_activation",
+        "transaction_id": "T4",
+        "assertion": "node activation requires current work epochs and row version",
+        "expected": "rejected"
+      },
+      {
+        "case_id": "latest_policy_forbidden",
+        "transaction_id": "T5",
+        "assertion": "moving or latest Adapter and Delivery Policy lookup is forbidden",
+        "expected": "rejected"
+      },
+      {
+        "case_id": "test_authority_promotion",
+        "transaction_id": "T5",
+        "assertion": "G4 test-only resource cannot authorize production outbox dispatch",
+        "expected": "rejected"
+      },
+      {
+        "case_id": "late_worker_result",
+        "transaction_id": "T6a",
+        "assertion": "fenced acceptance cannot publish output",
+        "expected": "rejected"
+      },
+      {
+        "case_id": "callback_identity_drift",
+        "transaction_id": "T6b",
+        "assertion": "delegation callback identity drift is conflict or late audit",
+        "expected": "rejected"
+      },
+      {
+        "case_id": "second_wait_winner",
+        "transaction_id": "T6c",
+        "assertion": "a terminal wait cannot accept a second winner",
+        "expected": "rejected"
+      },
+      {
+        "case_id": "manual_retry_without_gateway",
+        "transaction_id": "T6d",
+        "assertion": "manual retry requires future G7 authorization and audit",
+        "expected": "rejected"
+      },
+      {
+        "case_id": "capacity_file_tamper",
+        "transaction_id": "CAP0-CAP4",
+        "assertion": "a valid but unaudited file never becomes authorization",
+        "expected": "rejected"
+      },
+      {
+        "case_id": "capacity_idempotency_conflict",
+        "transaction_id": "CAP0-CAP4",
+        "assertion": "same key with different request bytes conflicts",
+        "expected": "rejected"
+      }
+    ]
+  },
+  "hash": "sha256:6e8e8b1ff67f498a772a11367ed66d048719b1d373adcf3bf636e6543a3f02ad"
+}

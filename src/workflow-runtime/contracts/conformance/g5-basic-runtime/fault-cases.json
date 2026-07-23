@@ -1,0 +1,110 @@
+{
+  "format": "icarus.workflow-g5-basic-runtime-fault-cases/1",
+  "ref": {
+    "id": "icarus.workflow-g5-basic-runtime-fault-cases",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-g5-basic-runtime-fault-cases:1\n",
+  "payload": {
+    "cases": [
+      {
+        "case_id": "fault_before_commit_t0",
+        "transaction_id": "T0",
+        "assertion": "T0 rolls back every write when failure is injected before commit",
+        "expected": "rolled_back"
+      },
+      {
+        "case_id": "fault_before_commit_t0p",
+        "transaction_id": "T0p",
+        "assertion": "T0p rolls back every write when failure is injected before commit",
+        "expected": "rolled_back"
+      },
+      {
+        "case_id": "fault_before_commit_t1",
+        "transaction_id": "T1",
+        "assertion": "T1 rolls back every write when failure is injected before commit",
+        "expected": "rolled_back"
+      },
+      {
+        "case_id": "fault_before_commit_t2a",
+        "transaction_id": "T2a",
+        "assertion": "T2a rolls back every write when failure is injected before commit",
+        "expected": "rolled_back"
+      },
+      {
+        "case_id": "fault_before_commit_t2b",
+        "transaction_id": "T2b",
+        "assertion": "T2b rolls back every write when failure is injected before commit",
+        "expected": "rolled_back"
+      },
+      {
+        "case_id": "fault_before_commit_t3a",
+        "transaction_id": "T3a",
+        "assertion": "T3a rolls back every write when failure is injected before commit",
+        "expected": "rolled_back"
+      },
+      {
+        "case_id": "fault_before_commit_t3b",
+        "transaction_id": "T3b",
+        "assertion": "T3b rolls back every write when failure is injected before commit",
+        "expected": "rolled_back"
+      },
+      {
+        "case_id": "fault_before_commit_t4",
+        "transaction_id": "T4",
+        "assertion": "T4 rolls back every write when failure is injected before commit",
+        "expected": "rolled_back"
+      },
+      {
+        "case_id": "fault_before_commit_t5",
+        "transaction_id": "T5",
+        "assertion": "T5 rolls back every write when failure is injected before commit",
+        "expected": "rolled_back"
+      },
+      {
+        "case_id": "fault_before_commit_t6a",
+        "transaction_id": "T6a",
+        "assertion": "T6a rolls back every write when failure is injected before commit",
+        "expected": "rolled_back"
+      },
+      {
+        "case_id": "fault_before_commit_t6b",
+        "transaction_id": "T6b",
+        "assertion": "T6b rolls back every write when failure is injected before commit",
+        "expected": "rolled_back"
+      },
+      {
+        "case_id": "fault_before_commit_t6c",
+        "transaction_id": "T6c",
+        "assertion": "T6c rolls back every write when failure is injected before commit",
+        "expected": "rolled_back"
+      },
+      {
+        "case_id": "fault_before_commit_t6d",
+        "transaction_id": "T6d",
+        "assertion": "T6d rolls back every write when failure is injected before commit",
+        "expected": "rolled_back"
+      },
+      {
+        "case_id": "fault_capacity_after_prepare",
+        "transaction_id": "CAP0-CAP4",
+        "assertion": "CAP1 survives crash and resumes the same publication",
+        "expected": "replayed"
+      },
+      {
+        "case_id": "fault_capacity_after_rename",
+        "transaction_id": "CAP0-CAP4",
+        "assertion": "Watcher rejects a renamed file before CAP3 head commit",
+        "expected": "replayed"
+      },
+      {
+        "case_id": "fault_capacity_after_head",
+        "transaction_id": "CAP0-CAP4",
+        "assertion": "CAP4 reopens committed head and publishes exactly once",
+        "expected": "replayed"
+      }
+    ]
+  },
+  "hash": "sha256:5e90bf35f5cc799a11cb64b504fc1f665768a84ddf7da061b272dc50df406c03"
+}

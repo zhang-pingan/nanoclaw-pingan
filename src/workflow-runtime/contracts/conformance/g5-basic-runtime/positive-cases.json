@@ -1,0 +1,68 @@
+{
+  "format": "icarus.workflow-g5-basic-runtime-positive-cases/1",
+  "ref": {
+    "id": "icarus.workflow-g5-basic-runtime-positive-cases",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-g5-basic-runtime-positive-cases:1\n",
+  "payload": {
+    "cases": [
+      {
+        "case_id": "static_graph_success",
+        "transaction_id": "T3a",
+        "assertion": "static nodes reach a deterministic terminal fixed point",
+        "expected": "accepted"
+      },
+      {
+        "case_id": "delegation_receipt_lost",
+        "transaction_id": "T6b",
+        "assertion": "unknown external outcome is reconciled without a second operation key",
+        "expected": "accepted"
+      },
+      {
+        "case_id": "system_execution",
+        "transaction_id": "T6a",
+        "assertion": "pinned worker result publishes one logical output",
+        "expected": "accepted"
+      },
+      {
+        "case_id": "wait_signal_wins",
+        "transaction_id": "T6c",
+        "assertion": "one armed wait winner records inbox, fact, event, and reservation release",
+        "expected": "accepted"
+      },
+      {
+        "case_id": "join_fixed_point",
+        "transaction_id": "T3a",
+        "assertion": "route and data facts settle before node readiness",
+        "expected": "accepted"
+      },
+      {
+        "case_id": "terminal_settled",
+        "transaction_id": "T3b",
+        "assertion": "quiescent terminal selection writes one close request",
+        "expected": "accepted"
+      },
+      {
+        "case_id": "quality_revision",
+        "transaction_id": "T6a",
+        "assertion": "validated feedback reserves exactly one quality successor",
+        "expected": "accepted"
+      },
+      {
+        "case_id": "capacity_recovery",
+        "transaction_id": "CAP0-CAP4",
+        "assertion": "committed head is replayed after crash without changing the prepared invocation",
+        "expected": "replayed"
+      },
+      {
+        "case_id": "operational_blocker_open",
+        "transaction_id": "T6d",
+        "assertion": "blocker creation and run/workflow caches commit together",
+        "expected": "accepted"
+      }
+    ]
+  },
+  "hash": "sha256:bbfae185ea0f30a5e170c5e3860cab4a6c764460b3546dacd56fcbbfc7d1ddd1"
+}

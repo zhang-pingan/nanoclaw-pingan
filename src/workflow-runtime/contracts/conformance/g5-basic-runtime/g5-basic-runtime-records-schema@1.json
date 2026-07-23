@@ -1,0 +1,35 @@
+{
+  "format": "icarus.workflow-g5-basic-runtime-record-schema/1",
+  "ref": {
+    "id": "icarus.workflow-g5-basic-runtime-record-schema",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-g5-basic-runtime-record-schema:1\n",
+  "payload": {
+    "dialect": "typescript_closed_record_surface",
+    "source": "src/workflow-runtime/contracts/g5-basic-runtime-types.ts",
+    "records": [
+      "Task",
+      "Creation",
+      "Launch",
+      "Activation",
+      "Manifest",
+      "Fact",
+      "Event",
+      "Attempt",
+      "Wait",
+      "Effect",
+      "Inbox",
+      "Outbox",
+      "Claim",
+      "Ledger",
+      "Capacity",
+      "CapacityPublication",
+      "Blocker"
+    ],
+    "unknown_fields": "rejected_at_public_ingress",
+    "database_schema_version": 5
+  },
+  "hash": "sha256:a3f356b74a7db2f9b6d01fa6df259be08d3206e167b697eb669911940b8bf3d1"
+}

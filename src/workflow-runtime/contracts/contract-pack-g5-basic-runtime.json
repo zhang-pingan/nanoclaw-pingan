@@ -1,0 +1,69 @@
+{
+  "format": "icarus.workflow-contract-pack-g5-basic-runtime/1",
+  "ref": {
+    "id": "icarus.workflow-contract-pack-g5-basic-runtime",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-contract-pack-g5-basic-runtime:1\n",
+  "payload": {
+    "gate": "G5",
+    "status": "EXIT_CANDIDATE_PENDING_INDEPENDENT_G5_WHOLE_GATE_REGRESSION",
+    "positive_case_count": 9,
+    "negative_case_count": 14,
+    "fault_case_count": 16,
+    "member_count": 6,
+    "members": [
+      {
+        "format": "icarus.workflow-g5-basic-runtime-protocol/1",
+        "ref": {
+          "id": "icarus.workflow-g5-basic-runtime-protocol",
+          "version": "1.0.0"
+        },
+        "hash": "sha256:bb5753ea10dcf164b588cd2b9a0d0c1da760d3268bc3843a28ceedf7a2d8c9f4"
+      },
+      {
+        "format": "icarus.workflow-g5-basic-runtime-record-schema/1",
+        "ref": {
+          "id": "icarus.workflow-g5-basic-runtime-record-schema",
+          "version": "1.0.0"
+        },
+        "hash": "sha256:a3f356b74a7db2f9b6d01fa6df259be08d3206e167b697eb669911940b8bf3d1"
+      },
+      {
+        "format": "icarus.workflow-g5-basic-runtime-positive-cases/1",
+        "ref": {
+          "id": "icarus.workflow-g5-basic-runtime-positive-cases",
+          "version": "1.0.0"
+        },
+        "hash": "sha256:bbfae185ea0f30a5e170c5e3860cab4a6c764460b3546dacd56fcbbfc7d1ddd1"
+      },
+      {
+        "format": "icarus.workflow-g5-basic-runtime-negative-cases/1",
+        "ref": {
+          "id": "icarus.workflow-g5-basic-runtime-negative-cases",
+          "version": "1.0.0"
+        },
+        "hash": "sha256:6e8e8b1ff67f498a772a11367ed66d048719b1d373adcf3bf636e6543a3f02ad"
+      },
+      {
+        "format": "icarus.workflow-g5-basic-runtime-fault-cases/1",
+        "ref": {
+          "id": "icarus.workflow-g5-basic-runtime-fault-cases",
+          "version": "1.0.0"
+        },
+        "hash": "sha256:5e90bf35f5cc799a11cb64b504fc1f665768a84ddf7da061b272dc50df406c03"
+      },
+      {
+        "format": "icarus.workflow-g5-basic-runtime-implementation/1",
+        "ref": {
+          "id": "icarus.workflow-g5-basic-runtime-implementation",
+          "version": "1.0.0"
+        },
+        "hash": "sha256:ad5284c68443477bc8ef8ef407c3996c638f65ef5940c32a5dda996484c34a3b"
+      }
+    ],
+    "member_tree_hash": "sha256:e50efbce0b898422cc63da4d6ab0bbebccfc23b8311c9a019aac7fadeb8000ec"
+  },
+  "hash": "sha256:2cda6c4b920cb682f016a9cabdcb46d9482774894e6aefada229b88cc973d970"
+}
