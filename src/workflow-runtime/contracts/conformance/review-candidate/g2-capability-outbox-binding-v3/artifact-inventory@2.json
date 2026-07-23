@@ -1,0 +1,367 @@
+{
+  "format": "icarus.workflow-compiler-g2-replay-repair-inventory/1",
+  "ref": {
+    "id": "icarus.workflow-compiler-g2-replay-repair-inventory",
+    "version": "2.0.0-rc"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-compiler-g2-replay-repair-rc-inventory-artifact:1\n",
+  "hash": "sha256:b45142a01fecd1f0f0f9d77db5e555086eccf3d4c39706892fcb1fbd0d925cca",
+  "payload": {
+    "format": "icarus.workflow-compiler-g2-replay-repair-inventory/1",
+    "construction_phase": "RC_REVIEW",
+    "inventory_scope": "successor_rc_leaf_artifacts_excluding_inventory_and_root",
+    "entry_count": 87,
+    "entries": [
+      {
+        "path": "conformance/review-candidate/g2-capability-outbox-binding-v3/actual/negative.capability-not-allowed.result.json",
+        "raw_bytes_hash": "sha256:3fa7379547cd01b7780b0e7ed33bdddb3cef4881f343603b057d9f3c274dd107"
+      },
+      {
+        "path": "conformance/review-candidate/g2-capability-outbox-binding-v3/actual/negative.child-recipe-dependency-cycle.result.json",
+        "raw_bytes_hash": "sha256:6d6f35bc37bb3bb228358067df13d177b85b30e084e84406f61ba50268ddaa28"
+      },
+      {
+        "path": "conformance/review-candidate/g2-capability-outbox-binding-v3/actual/negative.child-recipe-set-mismatch.result.json",
+        "raw_bytes_hash": "sha256:c1fd2138a21e58b723bb85ee661c306e8b729398ff0a6cece7acbca77a591b91"
+      },
+      {
+        "path": "conformance/review-candidate/g2-capability-outbox-binding-v3/actual/negative.compiler-integrity-mismatch.result.json",
+        "raw_bytes_hash": "sha256:cc0c0c19afdeecb9c663ca8b61677076292af17258d16e4738e2b09ef2016ecf"
+      },
+      {
+        "path": "conformance/review-candidate/g2-capability-outbox-binding-v3/actual/negative.completion-contract-invalid.result.json",
+        "raw_bytes_hash": "sha256:7016727fb2617427e9e85b087bcc7dcd8af37dd0bfddf6d2703a390c70fbddb3"
+      },
+      {
+        "path": "conformance/review-candidate/g2-capability-outbox-binding-v3/actual/negative.condition-complexity-exceeded.result.json",
+        "raw_bytes_hash": "sha256:4a78e14eeb5c56a66c0eca2c9bb407071a14d7d84ecd893ab9f2c86608a989d0"
+      },
+      {
+        "path": "conformance/review-candidate/g2-capability-outbox-binding-v3/actual/negative.condition-type-mismatch.result.json",
+        "raw_bytes_hash": "sha256:3dade061fbc412ad165b33f9e40156f7a83c04271db38212240b7ab001f6bfbd"
+      },
+      {
+        "path": "conformance/review-candidate/g2-capability-outbox-binding-v3/actual/negative.definition-child-creation-key-template.result.json",
+        "raw_bytes_hash": "sha256:262e774f9d8ceaf1beabcb78b0e821b047b02600ac5ad4ffb73104d5330cf2b5"
+      },
+      {
+        "path": "conformance/review-candidate/g2-capability-outbox-binding-v3/actual/negative.definition-notification-delivery-requirement.result.json",
+        "raw_bytes_hash": "sha256:4f1ff85e3f78284ea22173b31843bd534d63643d2549ba0bd0811f1db1e9cd32"
+      },
+      {
+        "path": "conformance/review-candidate/g2-capability-outbox-binding-v3/actual/negative.early-completion-non-monotone.result.json",
+        "raw_bytes_hash": "sha256:b3290584bd265f989e02542021d5784e5a166b7283ffa35cfe5ef12a6deb1500"
+      },
+      {
+        "path": "conformance/review-candidate/g2-capability-outbox-binding-v3/actual/negative.graph-cross-scope-edge.result.json",
+        "raw_bytes_hash": "sha256:358e9d43f3ae3eaafc9ebf579d9f7c6f1c785f389dd380835d2e4d30d296280d"
+      },
+      {
+        "path": "conformance/review-candidate/g2-capability-outbox-binding-v3/actual/negative.graph-dependency-cycle.result.json",
+        "raw_bytes_hash": "sha256:281c9348e73b53e49c8cca498703278aea50eae835aeb899dc202c40898c5653"
+      },
+      {
+        "path": "conformance/review-candidate/g2-capability-outbox-binding-v3/actual/negative.graph-endpoint-not-found.result.json",
+        "raw_bytes_hash": "sha256:a41a0dcea7837d48a7fc61e6f3be4281d112aac2890c47c031874f300466188d"
+      },
+      {
+        "path": "conformance/review-candidate/g2-capability-outbox-binding-v3/actual/negative.graph-id-duplicate.result.json",
+        "raw_bytes_hash": "sha256:9ca2ad9816ef58d00509c534a56de0782358d2e77d51dc24e49ccaf55bd33dc5"
+      },
+      {
+        "path": "conformance/review-candidate/g2-capability-outbox-binding-v3/actual/negative.json-duplicate-key.result.json",
+        "raw_bytes_hash": "sha256:c775a5b73d278e0666e70b30231994248658789b7ddf7a101515a0c0e1b56b30"
+      },
+      {
+        "path": "conformance/review-candidate/g2-capability-outbox-binding-v3/actual/negative.json-pointer-non-total.result.json",
+        "raw_bytes_hash": "sha256:61fa2cf63bc914df7756fb3361eaa12df8ec159aa61633fdc118fa9969d10562"
+      },
+      {
+        "path": "conformance/review-candidate/g2-capability-outbox-binding-v3/actual/negative.json-syntax-invalid.result.json",
+        "raw_bytes_hash": "sha256:44b34da8d2b67ff5965f26c30f4e09da9f37352981222477923f6d1051b1e7ec"
+      },
+      {
+        "path": "conformance/review-candidate/g2-capability-outbox-binding-v3/actual/negative.policy-escalation.result.json",
+        "raw_bytes_hash": "sha256:dae9c40c66031c29f2c261036fabe3dfb538454f85d72dfb43f4b45a2205be89"
+      },
+      {
+        "path": "conformance/review-candidate/g2-capability-outbox-binding-v3/actual/negative.quality-revision-effect-key-incompatible.result.json",
+        "raw_bytes_hash": "sha256:ee605125fb405652222e871550f6f905fce4e708946bff7df20655568e54c45b"
+      },
+      {
+        "path": "conformance/review-candidate/g2-capability-outbox-binding-v3/actual/negative.quality-revision-missing-feedback-schema.result.json",
+        "raw_bytes_hash": "sha256:c73728dfbbfbbdaf55526121329ff2f5d8ea2e446f788695f0c4aecf152a2c70"
+      },
+      {
+        "path": "conformance/review-candidate/g2-capability-outbox-binding-v3/actual/negative.quality-revision-missing-quality-gate.result.json",
+        "raw_bytes_hash": "sha256:21082baa138ec345524757f3442c13bb1ddb1a1e08926b19903c461d2bc2d5e8"
+      },
+      {
+        "path": "conformance/review-candidate/g2-capability-outbox-binding-v3/actual/negative.registry-ref-not-found.result.json",
+        "raw_bytes_hash": "sha256:b308b10e80a2299ea84669a6bf669343f7fdbf1b922c6e5bc103e4d3528fc189"
+      },
+      {
+        "path": "conformance/review-candidate/g2-capability-outbox-binding-v3/actual/negative.registry-ref-unpinned.result.json",
+        "raw_bytes_hash": "sha256:7b39ee15c6e3c66f5dd19b79b6f3c27314c83c742d1e789e184f99d80a069674"
+      },
+      {
+        "path": "conformance/review-candidate/g2-capability-outbox-binding-v3/actual/negative.route-group-ambiguous.result.json",
+        "raw_bytes_hash": "sha256:1cc0d50f4a40dc49fbb316147fb8ca7e5bb039c9ed8de6443936a05161bca98b"
+      },
+      {
+        "path": "conformance/review-candidate/g2-capability-outbox-binding-v3/actual/negative.runtime-safety-limit-exceeded.result.json",
+        "raw_bytes_hash": "sha256:4ff4cc3b8df16c277c8e9cf3f616fd58f6affa1fa21dce8a1ad8c61cd85c1d24"
+      },
+      {
+        "path": "conformance/review-candidate/g2-capability-outbox-binding-v3/actual/negative.schema-not-assignable.result.json",
+        "raw_bytes_hash": "sha256:210d30db886ef60e254bda2aeb3970ea309555d2e4c1ee2d752f6cf771095dd9"
+      },
+      {
+        "path": "conformance/review-candidate/g2-capability-outbox-binding-v3/actual/negative.schema-profile-keyword-unsupported.result.json",
+        "raw_bytes_hash": "sha256:272e8506a5819e69274184a87b8d82c86e83376dde3be84d478f458b4bf6ffe0"
+      },
+      {
+        "path": "conformance/review-candidate/g2-capability-outbox-binding-v3/actual/negative.schema-unknown-field.result.json",
+        "raw_bytes_hash": "sha256:77578314e70a0eb3cacb7fd1b8a662641e3e7fa14bd2389b37cb5da942c82e69"
+      },
+      {
+        "path": "conformance/review-candidate/g2-capability-outbox-binding-v3/actual/negative.trigger-contract-invalid.result.json",
+        "raw_bytes_hash": "sha256:186a0c482d24069447467e2798529a302dcfcb3dd85a40a5a7760d243a6e2e1e"
+      },
+      {
+        "path": "conformance/review-candidate/g2-capability-outbox-binding-v3/actual/positive.compiler-integrity-match-control.result.json",
+        "raw_bytes_hash": "sha256:16c13c1758d5923a45abc52ea7b559577e8a572dbb57d789d89141cbd9b63445"
+      },
+      {
+        "path": "conformance/review-candidate/g2-capability-outbox-binding-v3/actual/positive.condition-route.result.json",
+        "raw_bytes_hash": "sha256:eab0b13b725830882709f5a19b6db50972e516eb311384ca8797417947ada0a9"
+      },
+      {
+        "path": "conformance/review-candidate/g2-capability-outbox-binding-v3/actual/positive.expand.result.json",
+        "raw_bytes_hash": "sha256:67d6283a1445dac6f62d1fde64cc950cc2b7c6fcc28a24ae7f98dd9bc60a80cc"
+      },
+      {
+        "path": "conformance/review-candidate/g2-capability-outbox-binding-v3/actual/positive.map.result.json",
+        "raw_bytes_hash": "sha256:858b6d1a2ce9d6d2c2bf7419eba4ceaee1d3e7994bc591fcac3548b20797801a"
+      },
+      {
+        "path": "conformance/review-candidate/g2-capability-outbox-binding-v3/actual/positive.policy-intersection.result.json",
+        "raw_bytes_hash": "sha256:8622335eb43a4175a1d159367441720d860796386d43459c73817482bb509718"
+      },
+      {
+        "path": "conformance/review-candidate/g2-capability-outbox-binding-v3/actual/positive.quality-revision-binding.result.json",
+        "raw_bytes_hash": "sha256:402b8dc6d43796a1993fca81d5e7cb203b6f68c4d99b67a26ee758e3797325ff"
+      },
+      {
+        "path": "conformance/review-candidate/g2-capability-outbox-binding-v3/actual/positive.sound-subtype-different-hash.result.json",
+        "raw_bytes_hash": "sha256:61627e6aef8b5751a0e25c965f828a7b11859d87097e3cbb9aa405df0bb7cd4e"
+      },
+      {
+        "path": "conformance/review-candidate/g2-capability-outbox-binding-v3/actual/positive.static-child-closure.result.json",
+        "raw_bytes_hash": "sha256:47dc7dda0b8d7115daf626ce31bf8eb7931922c1a2f2698e615fb5e08fee18c2"
+      },
+      {
+        "path": "conformance/review-candidate/g2-capability-outbox-binding-v3/actual/positive.static-lowering.result.json",
+        "raw_bytes_hash": "sha256:3236811006db1d9dd6508f57937f1ea7f5136e7a8604fc75f9a26bf219e656e1"
+      },
+      {
+        "path": "conformance/review-candidate/g2-capability-outbox-binding-v3/actual/positive.subgraph.result.json",
+        "raw_bytes_hash": "sha256:ec784c38c61fbfbbbd63fc8aae760a98ed24a7409ac712aaf5c7364da6282b81"
+      },
+      {
+        "path": "conformance/review-candidate/g2-capability-outbox-binding-v3/actual/positive.wait.result.json",
+        "raw_bytes_hash": "sha256:35537e127a86b148987142ac6627a09f951025cf5b1d04070969a54731cc8ac8"
+      },
+      {
+        "path": "conformance/review-candidate/g2-capability-outbox-binding-v3/g2-case-input-binding@3.json",
+        "raw_bytes_hash": "sha256:453b4b790b47bba12662528dac04f810122b63f30c3f0f3e2a984b59a986085b"
+      },
+      {
+        "path": "conformance/review-candidate/g2-capability-outbox-binding-v3/inputs/negative.capability-not-allowed.snapshot@2.json",
+        "raw_bytes_hash": "sha256:657a0432aac00b63554e3d6d54f141eef06d9b736086361a95c328e4b761d6cf"
+      },
+      {
+        "path": "conformance/review-candidate/g2-capability-outbox-binding-v3/inputs/negative.child-recipe-dependency-cycle.snapshot@2.json",
+        "raw_bytes_hash": "sha256:1404f3bef88b00700ac981dfdb8051930dc928b5c50204d106a4e093e516ecf2"
+      },
+      {
+        "path": "conformance/review-candidate/g2-capability-outbox-binding-v3/inputs/negative.child-recipe-set-mismatch.snapshot@2.json",
+        "raw_bytes_hash": "sha256:20a6392e102e13add4b1f144abf2e241e86d70630333326e4e5e0c4a9cea81ac"
+      },
+      {
+        "path": "conformance/review-candidate/g2-capability-outbox-binding-v3/inputs/negative.compiler-integrity-mismatch.snapshot@2.json",
+        "raw_bytes_hash": "sha256:d9d7cb4d78436d8d70fb1de7d18f66be3117e03b2bb15396a5270388a067277d"
+      },
+      {
+        "path": "conformance/review-candidate/g2-capability-outbox-binding-v3/inputs/negative.completion-contract-invalid.snapshot@2.json",
+        "raw_bytes_hash": "sha256:119f62f5e6ab244e7b7c3203c6b455ae463372ef0b860998a4bc904e94923df5"
+      },
+      {
+        "path": "conformance/review-candidate/g2-capability-outbox-binding-v3/inputs/negative.condition-complexity-exceeded.snapshot@2.json",
+        "raw_bytes_hash": "sha256:628f6d66fb6fa4f2eadf50ff4b3d6e67b87a4fa8b7e19e67b4ab72bccd8112a8"
+      },
+      {
+        "path": "conformance/review-candidate/g2-capability-outbox-binding-v3/inputs/negative.condition-type-mismatch.snapshot@2.json",
+        "raw_bytes_hash": "sha256:523ab0112fd1b7e34be4b7f3e104b5a5a309bd9cfdd42f598e9ba81d9af249b2"
+      },
+      {
+        "path": "conformance/review-candidate/g2-capability-outbox-binding-v3/inputs/negative.definition-child-creation-key-template.snapshot@2.json",
+        "raw_bytes_hash": "sha256:97d7de95c4cbf8669f53fb5d5b2f4ca2007a490635f9f0f633b5616613180dec"
+      },
+      {
+        "path": "conformance/review-candidate/g2-capability-outbox-binding-v3/inputs/negative.definition-notification-delivery-requirement.snapshot@2.json",
+        "raw_bytes_hash": "sha256:92bbce18c3e716799bb89cebec71af62fec58cd5914c436dac38f51c20e1be3a"
+      },
+      {
+        "path": "conformance/review-candidate/g2-capability-outbox-binding-v3/inputs/negative.early-completion-non-monotone.snapshot@2.json",
+        "raw_bytes_hash": "sha256:1815e27204d1ca716b2e7b050aea6511d2783c8df53247e135d680360b6a2fe7"
+      },
+      {
+        "path": "conformance/review-candidate/g2-capability-outbox-binding-v3/inputs/negative.graph-cross-scope-edge.snapshot@2.json",
+        "raw_bytes_hash": "sha256:8fa9882992e3a18deed8a7efdf9dd8c4f84c3257fbb64e273bc81becc38e1380"
+      },
+      {
+        "path": "conformance/review-candidate/g2-capability-outbox-binding-v3/inputs/negative.graph-dependency-cycle.snapshot@2.json",
+        "raw_bytes_hash": "sha256:03eda122ef8b2f4cb978a5108a31d08d009d407f2dce49f2f93bf0282dc37e4b"
+      },
+      {
+        "path": "conformance/review-candidate/g2-capability-outbox-binding-v3/inputs/negative.graph-endpoint-not-found.snapshot@2.json",
+        "raw_bytes_hash": "sha256:b4fed00f8942752d916dba093c1bfe8edfb6376034e78dc9f211f6259159be27"
+      },
+      {
+        "path": "conformance/review-candidate/g2-capability-outbox-binding-v3/inputs/negative.graph-id-duplicate.snapshot@2.json",
+        "raw_bytes_hash": "sha256:c1aad575aa5e194c9ea613ff8b04de916b4607ed6a96fbd7cce01dc927ddbe7b"
+      },
+      {
+        "path": "conformance/review-candidate/g2-capability-outbox-binding-v3/inputs/negative.json-duplicate-key.snapshot@2.json",
+        "raw_bytes_hash": "sha256:5c798ee4fc02bb890821bac9184acf94083ee0df62f781dbce82c9e55a86e29a"
+      },
+      {
+        "path": "conformance/review-candidate/g2-capability-outbox-binding-v3/inputs/negative.json-pointer-non-total.snapshot@2.json",
+        "raw_bytes_hash": "sha256:6ac3b2d60849edc7ec68e76ba820eaf9c6c375f51b9285378304a3f95ef28709"
+      },
+      {
+        "path": "conformance/review-candidate/g2-capability-outbox-binding-v3/inputs/negative.json-syntax-invalid.snapshot@2.json",
+        "raw_bytes_hash": "sha256:4a5085138333eebab5e3c049f6ce504aaacc3abfa5cf3a056acbc26dfe0a2d4f"
+      },
+      {
+        "path": "conformance/review-candidate/g2-capability-outbox-binding-v3/inputs/negative.policy-escalation.snapshot@2.json",
+        "raw_bytes_hash": "sha256:2a1c81bb7b67b79216c52f90effd92e19d18aecc3f2c44b151cb7551a95da0c8"
+      },
+      {
+        "path": "conformance/review-candidate/g2-capability-outbox-binding-v3/inputs/negative.quality-revision-effect-key-incompatible.snapshot@2.json",
+        "raw_bytes_hash": "sha256:c59cce97fefadc4e716eaf2d679d94e631360c7e03b07c299865701465e3a3a2"
+      },
+      {
+        "path": "conformance/review-candidate/g2-capability-outbox-binding-v3/inputs/negative.quality-revision-missing-feedback-schema.snapshot@2.json",
+        "raw_bytes_hash": "sha256:0aaa2e4ecc50c84844aeeee760c2be41fe6b67d29a37ffa4a3a03967a6fbae26"
+      },
+      {
+        "path": "conformance/review-candidate/g2-capability-outbox-binding-v3/inputs/negative.quality-revision-missing-quality-gate.snapshot@2.json",
+        "raw_bytes_hash": "sha256:6b7fe147aee8ab2fc06ef84629ef95cf5d15ce396918029aa0321fec1dfc7d96"
+      },
+      {
+        "path": "conformance/review-candidate/g2-capability-outbox-binding-v3/inputs/negative.registry-ref-not-found.snapshot@2.json",
+        "raw_bytes_hash": "sha256:dfb11d6a6243b62ff978ba9e9d43de31942d7e2a1da386c799de317d35085c22"
+      },
+      {
+        "path": "conformance/review-candidate/g2-capability-outbox-binding-v3/inputs/negative.registry-ref-unpinned.snapshot@2.json",
+        "raw_bytes_hash": "sha256:bc98ff356f97b755bb6a6474ded3c8e751d507c84155ba5c534d7e5a1532b771"
+      },
+      {
+        "path": "conformance/review-candidate/g2-capability-outbox-binding-v3/inputs/negative.route-group-ambiguous.snapshot@2.json",
+        "raw_bytes_hash": "sha256:0ee35a24c7f1da7b510666ea7f21d6679d824636576e5646b9109b85d0dd509b"
+      },
+      {
+        "path": "conformance/review-candidate/g2-capability-outbox-binding-v3/inputs/negative.runtime-safety-limit-exceeded.snapshot@2.json",
+        "raw_bytes_hash": "sha256:32d29861757287cc5358aa88a0fa19d487514edbb0643d2d96d164df218f67be"
+      },
+      {
+        "path": "conformance/review-candidate/g2-capability-outbox-binding-v3/inputs/negative.schema-not-assignable.snapshot@2.json",
+        "raw_bytes_hash": "sha256:4cbfa75b5567b3ad37daf8773a67ed1a30ce522ec3783380bdb9911529545175"
+      },
+      {
+        "path": "conformance/review-candidate/g2-capability-outbox-binding-v3/inputs/negative.schema-profile-keyword-unsupported.snapshot@2.json",
+        "raw_bytes_hash": "sha256:987685f7764a73f32b112b6bbfd076d1c9005f0d5181230f7eff65e42e66755d"
+      },
+      {
+        "path": "conformance/review-candidate/g2-capability-outbox-binding-v3/inputs/negative.schema-unknown-field.snapshot@2.json",
+        "raw_bytes_hash": "sha256:53f74483e2f4a16e308278ee13468b3754e1c535ec5e137a91408a916be37d13"
+      },
+      {
+        "path": "conformance/review-candidate/g2-capability-outbox-binding-v3/inputs/negative.trigger-contract-invalid.snapshot@2.json",
+        "raw_bytes_hash": "sha256:3f650ce146e763be06ce4c996db72aa650471bbdf55d9a4b29877e24884289d0"
+      },
+      {
+        "path": "conformance/review-candidate/g2-capability-outbox-binding-v3/inputs/positive.compiler-integrity-match-control.snapshot@2.json",
+        "raw_bytes_hash": "sha256:672f98e48ffe05816f9c9a7995c1db2a092dda6c7ee0c35678772b9aa9d04ff8"
+      },
+      {
+        "path": "conformance/review-candidate/g2-capability-outbox-binding-v3/inputs/positive.condition-route.snapshot@2.json",
+        "raw_bytes_hash": "sha256:e91aa7964d7248f061321b14050aa497ff74f6991b324f2ece0b850a07a2e64c"
+      },
+      {
+        "path": "conformance/review-candidate/g2-capability-outbox-binding-v3/inputs/positive.expand.snapshot@2.json",
+        "raw_bytes_hash": "sha256:558f93910f6fffa8a9de161dc8a20fb3be44a1115619b61ab27528ba2a5e5f1d"
+      },
+      {
+        "path": "conformance/review-candidate/g2-capability-outbox-binding-v3/inputs/positive.map.snapshot@2.json",
+        "raw_bytes_hash": "sha256:3a1084d24484ba48889ec3e10fbb35075d01008c9fac48c9298630e3a7b507b7"
+      },
+      {
+        "path": "conformance/review-candidate/g2-capability-outbox-binding-v3/inputs/positive.policy-intersection.snapshot@2.json",
+        "raw_bytes_hash": "sha256:814fa7fe561262150e5e1784e0bb12f1742b575d60b5b76ccae5b67d5f4fc932"
+      },
+      {
+        "path": "conformance/review-candidate/g2-capability-outbox-binding-v3/inputs/positive.quality-revision-binding.snapshot@2.json",
+        "raw_bytes_hash": "sha256:95658c1349cefd383241438795b2b89dc14d1db1c0b15124b6068d526132a5dd"
+      },
+      {
+        "path": "conformance/review-candidate/g2-capability-outbox-binding-v3/inputs/positive.sound-subtype-different-hash.snapshot@2.json",
+        "raw_bytes_hash": "sha256:17f5de8411f143130a06e1a561095f662dbf4ac6f0db1e2b7e3de44685890086"
+      },
+      {
+        "path": "conformance/review-candidate/g2-capability-outbox-binding-v3/inputs/positive.static-child-closure.snapshot@2.json",
+        "raw_bytes_hash": "sha256:ffef8f5b6377b3f64d9a3479cfd394b384ebbcb28cd39e3ffbe4bd8a84b1d7f9"
+      },
+      {
+        "path": "conformance/review-candidate/g2-capability-outbox-binding-v3/inputs/positive.static-lowering.snapshot@2.json",
+        "raw_bytes_hash": "sha256:dc028d9212c4dd763aac89875841eebf1d46a063810ce1cbaec0f1846545ab01"
+      },
+      {
+        "path": "conformance/review-candidate/g2-capability-outbox-binding-v3/inputs/positive.subgraph.snapshot@2.json",
+        "raw_bytes_hash": "sha256:1ac730eac05d034e38ac7d976129db764d6b546137417507499033c5baceac16"
+      },
+      {
+        "path": "conformance/review-candidate/g2-capability-outbox-binding-v3/inputs/positive.wait.snapshot@2.json",
+        "raw_bytes_hash": "sha256:43f36c98698902ecbb6445da1e632bbf6132faac027c4315774ac08120380f93"
+      },
+      {
+        "path": "conformance/review-candidate/g2-capability-outbox-binding-v3/review-candidate-cases@2.json",
+        "raw_bytes_hash": "sha256:b73f730f8b09368d72889a9a6b61b7d406f5ca1f7406d833f54d6b8263657626"
+      },
+      {
+        "path": "conformance/review-candidate/g2-capability-outbox-binding-v3/workflow-compiler-toolchain@3.0.2.json",
+        "raw_bytes_hash": "sha256:75863c47e3a5a2653ef96043ed240ffd26bf55875f6fb1ec7615aa41a170c53b"
+      },
+      {
+        "path": "conformance/review-candidate/g2-capability-outbox-binding-v3/working-candidate-root@2.json",
+        "raw_bytes_hash": "sha256:f5be19e10217035e0b20bc989dfb468eae84c9372b3f3819403a6de2311a9099"
+      },
+      {
+        "path": "conformance/review-candidate/g2-capability-outbox-binding-v3/working-contract-root@2.json",
+        "raw_bytes_hash": "sha256:bbe3d42e404224207baa8c4790249f24275479ad2a92450a683f0f78d80e75eb"
+      },
+      {
+        "path": "conformance/review-candidate/g2-capability-outbox-binding-v3/working-input-root@2.json",
+        "raw_bytes_hash": "sha256:40a139d9bbba380d22d139e86ca58a16975aacf6964dece427a69c686c53c2a5"
+      },
+      {
+        "path": "conformance/review-candidate/g2-capability-outbox-binding-v3/working-review-root@2.json",
+        "raw_bytes_hash": "sha256:0b6f773d3cf3e6929b5b9b4f24e79629a35a8161a2de2b47ecc795d4674366ff"
+      }
+    ],
+    "inventory_hash": "sha256:4ed63eb159eaa57c74e22181232cc19275ce2778e47523989e50f315782b7ad1"
+  }
+}

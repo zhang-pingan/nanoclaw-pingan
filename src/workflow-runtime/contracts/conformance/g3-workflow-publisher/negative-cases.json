@@ -19,14 +19,14 @@
           "approved_review": {
             "format": "icarus.workflow-approved-publish-review/1",
             "review_ref": "workflow-review:fixture-release-1",
-            "review_hash": "sha256:dac967e1fe98f996045861e5e4941d00740d9e1dd37d32409b57ee173b81df12",
+            "review_hash": "sha256:ae6dc18ea381678a8f5d591e10ee53d3c549819bfcdbe7c457f76b6b70245fbe",
             "decision": "approved",
             "reviewer_actor_ref": "human:local-owner",
             "reviewer_auth_session_ref": "auth-session:fixture-review",
             "approved_at_ms": 1784604172000,
             "expires_at_ms": 1784607772000,
-            "source_manifest_hash": "sha256:9f8d3a6e1e9b5d129c15afcfc0de338d6d07374a758041254f3968058b576ec4",
-            "compiled_plan_hash": "sha256:df3ee04469bc72c3a6e16f65774ea1a9a0e9d7c0b54861f51c57b323f8391881",
+            "source_manifest_hash": "sha256:5f6e18da4e47084670ba54b864253d40a49eafe66eebb86bfdb0433f5deba0b4",
+            "compiled_plan_hash": "sha256:49414db63947d1f61d4a95b0afabc78eb9e06a508cbd9185114c7e6ccf905c60",
             "execution_artifact_ref": {
               "id": "fixture.execution-artifact",
               "version": "1.0.0"
@@ -36,12 +36,12 @@
               "id": "fixture.retention-abi-closure",
               "version": "1.0.0"
             },
-            "closure_hash": "sha256:7326faeecb2e184c41e837d65b4eed1ced7c199e98d9007ac62ac27c7ea2d482",
+            "closure_hash": "sha256:9ca322653231666ab74987cbecde3c481b179dd87ac7a927833f6485b0302583",
             "feature_release_ref": {
               "id": "fixture.feature-release",
               "version": "1.0.0"
             },
-            "feature_release_hash": "sha256:1dc43d990979a2cda7b8077e4422f48d6db6fe1cb95a1eff5615b96af55062cf"
+            "feature_release_hash": "sha256:3cd992af6a09e129475ba2c424801e95948a2f5e7fcd50f5863fbf42f60ffae8"
           },
           "source_manifest": {
             "value_id": "publisher-source-manifest:fixture@1.0.0",
@@ -75,7 +75,7 @@
                     "version": "1.0.0"
                   },
                   "source_path": "workflow-src/definition/fixture.definition.json",
-                  "expected_source_hash": "sha256:d03d960a4f91dd5385725d8a78709891ec9fd185c6fa7c1a8278a74360c562f2"
+                  "expected_source_hash": "sha256:a1b4502a45040a2468af4920417937b73deac4f620bac73122ba3a1dfed4e98b"
                 },
                 {
                   "kind": "executor_implementation",
@@ -125,9 +125,9 @@
                   "version": "1.0.0"
                 }
               },
-              "manifest_hash": "sha256:9f8d3a6e1e9b5d129c15afcfc0de338d6d07374a758041254f3968058b576ec4"
+              "manifest_hash": "sha256:5f6e18da4e47084670ba54b864253d40a49eafe66eebb86bfdb0433f5deba0b4"
             },
-            "content_hash": "sha256:9f8d3a6e1e9b5d129c15afcfc0de338d6d07374a758041254f3968058b576ec4",
+            "content_hash": "sha256:5f6e18da4e47084670ba54b864253d40a49eafe66eebb86bfdb0433f5deba0b4",
             "schema": {
               "format": "icarus.workflow-registry-exact-resource-query/1",
               "resource_type": "schema",
@@ -154,19 +154,19 @@
           },
           "compiled_plan": {
             "value_id": "publisher-compiled-plan:fixture@1.0.0",
-            "semantic_ref": "conformance/sealed/g2-production-compiler-replay-repair-v2/expected/positive.static-lowering.plan.json",
+            "semantic_ref": "conformance/sealed/g2-capability-outbox-binding-v3/expected/positive.static-lowering.plan.json",
             "content": {
               "canonical_normalizer_hash": "sha256:e32946d0d20cc92344a72d04e488951cc4a64be82d36384db26dfbf420e469ff",
               "canonical_normalizer_version": "2.0.1",
-              "capability_catalog_hash": "sha256:29b0a46227d427f2d8f7fc6a84323dc48a70f4f2562b36bd110041358e9435fd",
-              "compiler_build_hash": "sha256:4cb84d57dee323723ed60dc22394100b37cc76a3bfde793ef95ba707cd21a976",
+              "capability_catalog_hash": "sha256:8ea01c47ac01f295a8163990dc6ad9986fb03c7329825a09839c50ce54d7f977",
+              "compiler_build_hash": "sha256:698af607955463f01a404d626586420f3dd8f7a208da87c1e138075b1518ba05",
               "compiler_error_catalog_hash": "sha256:8fc7139b29cdddf3c1e13e0f9d8bc6b19a1d32c02c1e7f4b7e33023fcece91ef",
-              "compiler_toolchain_hash": "sha256:4e16227bf723a41207d94a8619f8b6bb50731c412cb5b298869e265097dcaccf",
+              "compiler_toolchain_hash": "sha256:90bc7c99cacaf58217dd6d07781788c844385d3c70644c4086d6c997312f60a1",
               "compiler_toolchain_ref": {
                 "id": "icarus.workflow-compiler-toolchain",
-                "version": "3.0.1"
+                "version": "3.0.2"
               },
-              "compiler_version": "3.0.1",
+              "compiler_version": "3.0.2",
               "completion": {
                 "early_close": "cancel_and_fence_remaining",
                 "early_rules": [],
@@ -344,7 +344,7 @@
                       "safe_to_abandon": true,
                       "type": "fence_only"
                     },
-                    "dependency_closure_hash": "sha256:37fdfe84aa17bebbbdde1ea703c3a670ebe4429d0240b49d0a4cb5f9f083a8d5",
+                    "dependency_closure_hash": "sha256:f5e4cbbaa954aeca32e75e5070c731ccd4186c3690cf3ba8e7e4af473ad1dc7e",
                     "effect": {
                       "type": "pure"
                     },
@@ -357,6 +357,23 @@
                     "no_artifact_expected": true,
                     "no_evaluation_expected": true,
                     "node_type": "delegation",
+                    "outbox_effect": {
+                      "adapter_ref": {
+                        "id": "fixture.adapter.capability-dispatch",
+                        "version": "1.0.0"
+                      },
+                      "delivery_lane": "normal_execution",
+                      "delivery_policy_ref": {
+                        "id": "fixture.outbox-policy.normal-delivery",
+                        "version": "1.0.0"
+                      },
+                      "delivery_requirement": "required",
+                      "effect_type": "capability_dispatch",
+                      "idempotency": "provider_key",
+                      "reconciliation": {
+                        "type": "not_required"
+                      }
+                    },
                     "output_ports": {
                       "result": {
                         "max_bytes": 4096,
@@ -397,6 +414,72 @@
                   },
                   "id": "capability",
                   "input_ports": {},
+                  "outbox_execution_binding": {
+                    "adapter_identity": {
+                      "content_hash": "sha256:bb855d9b31768f47f5337cb5e145d16fa601575bed9bf2f4113e66d09df001a4",
+                      "ref": {
+                        "id": "fixture.adapter.capability-dispatch",
+                        "version": "1.0.0"
+                      },
+                      "resource_type": "outbox_adapter"
+                    },
+                    "binding_hash": "sha256:ef2d026a1146479f6c434b5788921ae9155d39eb95d452da4f81af4bc83a326d",
+                    "delivery_policy_identity": {
+                      "content_hash": "sha256:969511908773cba1843c9fa29e8494c1d46f7c49b000179ae44bb51bbea8d137",
+                      "ref": {
+                        "id": "fixture.outbox-policy.normal-delivery",
+                        "version": "1.0.0"
+                      },
+                      "resource_type": "outbox_policy"
+                    },
+                    "effect_contract": {
+                      "adapter_ref": {
+                        "id": "fixture.adapter.capability-dispatch",
+                        "version": "1.0.0"
+                      },
+                      "delivery_lane": "normal_execution",
+                      "delivery_policy_ref": {
+                        "id": "fixture.outbox-policy.normal-delivery",
+                        "version": "1.0.0"
+                      },
+                      "delivery_requirement": "required",
+                      "effect_type": "capability_dispatch",
+                      "idempotency": "provider_key",
+                      "reconciliation": {
+                        "type": "not_required"
+                      }
+                    },
+                    "effective_policy_snapshot": {
+                      "effective_policy": {
+                        "attempt_timeout_ms": 60000,
+                        "backoff": "exponential",
+                        "delivery_duration_ms": 900000,
+                        "deterministic_jitter_micros": 200000,
+                        "honor_retry_after": true,
+                        "initial_backoff_ms": 1000,
+                        "max_backoff_ms": 60000,
+                        "max_delivery_attempts": 8,
+                        "max_reconcile_attempts": 4,
+                        "permanent_error_codes": [
+                          "contract_rejected",
+                          "permission_denied"
+                        ],
+                        "retryable_error_codes": [
+                          "provider_unavailable",
+                          "rate_limited"
+                        ]
+                      },
+                      "format": "icarus.workflow-outbox-effective-policy-snapshot/1",
+                      "runtime_safety_hash": "sha256:7f8c0b1babf451cb03ab5f99b436d3ae187b587783875850686188d893059259",
+                      "snapshot_hash": "sha256:889cb74144936b94044f1d85238fdaa149d55153cc9b24367b63439903b923b4",
+                      "source_policy_content_hash": "sha256:969511908773cba1843c9fa29e8494c1d46f7c49b000179ae44bb51bbea8d137",
+                      "source_policy_hash": "sha256:c13dfb035d3b12b2750b22e488c5dc423aedfdc651d7ab9fd4cf0b047e447f15",
+                      "source_policy_ref": {
+                        "id": "fixture.outbox-policy.normal-delivery",
+                        "version": "1.0.0"
+                      }
+                    }
+                  },
                   "output_ports": {
                     "result": {
                       "max_bytes": 4096,
@@ -467,7 +550,7 @@
                   "type": "terminal"
                 }
               ],
-              "plan_hash": "sha256:df3ee04469bc72c3a6e16f65774ea1a9a0e9d7c0b54861f51c57b323f8391881",
+              "plan_hash": "sha256:49414db63947d1f61d4a95b0afabc78eb9e06a508cbd9185114c7e6ccf905c60",
               "policy_snapshot_hash": "sha256:3043a34924b521e0204c12423a6dd580cb90d069fcd561a2f88f014f3a55dc9c",
               "proof_algorithm_hash": "sha256:6a49827e2c039b95c42c94a607acbf6ae7c088d0510fe7fd93cc0eb87f302308",
               "proof_algorithm_version": "2.0.1",
@@ -572,20 +655,20 @@
               },
               "wait_contract_catalog_hash": "sha256:4b412c391110c835029ec8c8256d1c7cc0caa52146136423cf9215e03bb53f42"
             },
-            "content_hash": "sha256:df3ee04469bc72c3a6e16f65774ea1a9a0e9d7c0b54861f51c57b323f8391881",
+            "content_hash": "sha256:49414db63947d1f61d4a95b0afabc78eb9e06a508cbd9185114c7e6ccf905c60",
             "schema": {
               "format": "icarus.workflow-registry-exact-resource-query/1",
               "resource_type": "schema",
               "ref": {
-                "id": "icarus.workflow-compiled-scope-plan-schema",
-                "version": "2.0.0"
+                "id": "icarus.workflow-compiled-scope-plan-v2-execution-binding-schema",
+                "version": "1.0.0"
               },
-              "content_hash": "sha256:23fad8f4a3b51da3fea4777bf07f862247ff3db7946c6283d4644f953be198e6",
+              "content_hash": "sha256:02b369e85bf131ea263a8a719c1ddca4f0015f066a5703d2adc1c6e939e195ad",
               "schema_ref": {
-                "id": "icarus.workflow-compiled-scope-plan-schema",
-                "version": "2.0.0"
+                "id": "icarus.workflow-compiled-scope-plan-v2-execution-binding-schema",
+                "version": "1.0.0"
               },
-              "schema_hash": "sha256:23fad8f4a3b51da3fea4777bf07f862247ff3db7946c6283d4644f953be198e6",
+              "schema_hash": "sha256:02b369e85bf131ea263a8a719c1ddca4f0015f066a5703d2adc1c6e939e195ad",
               "owner": {
                 "kind": "core",
                 "ref": {
@@ -677,12 +760,12 @@
               "id": "fixture.feature-manifest",
               "version": "2.0.0"
             },
-            "feature_manifest_hash": "sha256:9f8d3a6e1e9b5d129c15afcfc0de338d6d07374a758041254f3968058b576ec4",
+            "feature_manifest_hash": "sha256:5f6e18da4e47084670ba54b864253d40a49eafe66eebb86bfdb0433f5deba0b4",
             "feature_release_ref": {
               "id": "fixture.feature-release",
               "version": "1.0.0"
             },
-            "feature_release_hash": "sha256:1dc43d990979a2cda7b8077e4422f48d6db6fe1cb95a1eff5615b96af55062cf",
+            "feature_release_hash": "sha256:3cd992af6a09e129475ba2c424801e95948a2f5e7fcd50f5863fbf42f60ffae8",
             "resources": [
               {
                 "resource_type": "definition",
@@ -691,7 +774,7 @@
                   "version": "1.0.0"
                 },
                 "launchability": "test_only",
-                "content_hash": "sha256:d03d960a4f91dd5385725d8a78709891ec9fd185c6fa7c1a8278a74360c562f2",
+                "content_hash": "sha256:a1b4502a45040a2468af4920417937b73deac4f620bac73122ba3a1dfed4e98b",
                 "dependencies": [
                   {
                     "resource_type": "schema",
@@ -703,15 +786,16 @@
                   }
                 ],
                 "compiled_plan_pin": {
-                  "plan_ref": "conformance/sealed/g2-production-compiler-replay-repair-v2/expected/positive.static-lowering.plan.json",
-                  "plan_hash": "sha256:df3ee04469bc72c3a6e16f65774ea1a9a0e9d7c0b54861f51c57b323f8391881",
+                  "plan_ref": "conformance/sealed/g2-capability-outbox-binding-v3/expected/positive.static-lowering.plan.json",
+                  "plan_hash": "sha256:49414db63947d1f61d4a95b0afabc78eb9e06a508cbd9185114c7e6ccf905c60",
                   "plan_format": "icarus.workflow-graph-scope-plan/2",
-                  "compiler_toolchain_hash": "sha256:4e16227bf723a41207d94a8619f8b6bb50731c412cb5b298869e265097dcaccf",
-                  "compiler_build_hash": "sha256:4cb84d57dee323723ed60dc22394100b37cc76a3bfde793ef95ba707cd21a976",
+                  "compiler_toolchain_hash": "sha256:90bc7c99cacaf58217dd6d07781788c844385d3c70644c4086d6c997312f60a1",
+                  "compiler_build_hash": "sha256:698af607955463f01a404d626586420f3dd8f7a208da87c1e138075b1518ba05",
                   "provenance": "sealed_g2_expected"
                 },
                 "execution_artifact_pin": null,
-                "resource_hash": "sha256:cfd91b0162aebf62f1aa8f614b52c8cc78624b50197ebfce0bc8144cf6998a3f"
+                "capability_outbox_binding": null,
+                "resource_hash": "sha256:9df2882d13d019c9137b4bcb91c754306f5ebcbed6f533b8a6bd1d062b03cd29"
               },
               {
                 "resource_type": "executor_implementation",
@@ -749,7 +833,8 @@
                   "runtime_kind": "node_bundle",
                   "runtime_abi_major": 1
                 },
-                "resource_hash": "sha256:cb8cf23d1da01cbeab97e9d8114adf8ff72227ead1fc3e4c5a10a4f01036695a"
+                "capability_outbox_binding": null,
+                "resource_hash": "sha256:00a552c2b0665c35a671fc0ceee2b973548ddce128e1351e7434df767f10ef8c"
               },
               {
                 "resource_type": "feature_execution_artifact",
@@ -779,7 +864,8 @@
                   "runtime_kind": "node_bundle",
                   "runtime_abi_major": 1
                 },
-                "resource_hash": "sha256:3ceb160a1d22909ab38cc3e787ccea6d2a55d0ee5380e0dc31f13e6a7c943823"
+                "capability_outbox_binding": null,
+                "resource_hash": "sha256:26f654d0dff5c876392107bf9bb31328c5416c7a5af3c140a4475070dc590413"
               },
               {
                 "resource_type": "recipe",
@@ -796,7 +882,7 @@
                       "id": "fixture.definition",
                       "version": "1.0.0"
                     },
-                    "content_hash": "sha256:d03d960a4f91dd5385725d8a78709891ec9fd185c6fa7c1a8278a74360c562f2"
+                    "content_hash": "sha256:a1b4502a45040a2468af4920417937b73deac4f620bac73122ba3a1dfed4e98b"
                   },
                   {
                     "resource_type": "executor_implementation",
@@ -817,7 +903,8 @@
                 ],
                 "compiled_plan_pin": null,
                 "execution_artifact_pin": null,
-                "resource_hash": "sha256:eaf64f6d849c73c9ff66cdd1f736543a034969bed2c1a51bf7caab9c96b7f02b"
+                "capability_outbox_binding": null,
+                "resource_hash": "sha256:e193f4725b96cd8ba0114d2f2ad23929d63ac5d4207c8799ef9777484fd783bc"
               },
               {
                 "resource_type": "schema",
@@ -830,7 +917,8 @@
                 "dependencies": [],
                 "compiled_plan_pin": null,
                 "execution_artifact_pin": null,
-                "resource_hash": "sha256:ddd58f7e70f7981eff5bcdb7b79eb4fa09cd001c6fb9d1e95e103e3b56d8ea85"
+                "capability_outbox_binding": null,
+                "resource_hash": "sha256:867b962d8bd9cf39c81a88053c6172c7dda30f7771359b9d47931895c14567e2"
               }
             ],
             "upstream_identity": {
@@ -839,21 +927,21 @@
               "g1_physical_schema_identity": "sha256:ba025b32bb028f2ffe5df45d9440cd0a897e0a06c076b10b6f641c265ae02090",
               "g1_schema_hash": "sha256:49aaee7c8f046cd9a15b3bc5b77fbcf1713be2a1872078941043f5ccdca29024",
               "g1_migration_sha256": "sha256:2ead40dc2f1618f87247e9d3bb476266797c38560e1ad0537a6afa6f71a3fbf6",
-              "g2_sealed_bundle_ref": "conformance/sealed/g2-production-compiler-replay-repair-v2/golden-conformance-bundle@2.json",
-              "g2_sealed_bundle_artifact_hash": "sha256:037009dcd6c5d6bd2888c484fe1adacded68da5c55e17ba12eb722092e4faced",
-              "g2_sealed_bundle_hash": "sha256:d99647d8ca6aabc737a793019335e6770aa111a79be7545c4dec00c6e7af2145",
+              "g2_sealed_bundle_ref": "conformance/sealed/g2-capability-outbox-binding-v3/golden-conformance-bundle@2.json",
+              "g2_sealed_bundle_artifact_hash": "sha256:967437bb9f91e32e5014b2af90a23f5646e491eb427bdf55accb345ead70db8f",
+              "g2_sealed_bundle_hash": "sha256:b3ed9e43bd0fadaf40520257926dcf690ee8495bb417220245f248385bde9efb",
               "compiler": {
                 "compiler_toolchain_manifest_ref": {
                   "id": "icarus.workflow-compiler-toolchain",
-                  "version": "3.0.1"
+                  "version": "3.0.2"
                 },
-                "compiler_toolchain_hash": "sha256:4e16227bf723a41207d94a8619f8b6bb50731c412cb5b298869e265097dcaccf",
-                "compiler_version": "3.0.1",
-                "compiler_build_hash": "sha256:4cb84d57dee323723ed60dc22394100b37cc76a3bfde793ef95ba707cd21a976",
-                "compiled_ir_schema_ref": "conformance/compiler-contract-repair/schemas/compiled-scope-plan-v2-schema.json",
-                "compiled_ir_schema_hash": "sha256:4d4e325f94b55a6767f3e8596e1e9b880df2b402d3c89f587a10a23f0eadbd46",
-                "conformance_result_schema_ref": "conformance/compiler-contract-repair/schemas/compiler-conformance-case-result-schema.json",
-                "conformance_result_schema_hash": "sha256:019a4ba80ed8ae57b6c862d9fda62d9edcb8aca9c4910fde6bbb580c09af8706"
+                "compiler_toolchain_hash": "sha256:90bc7c99cacaf58217dd6d07781788c844385d3c70644c4086d6c997312f60a1",
+                "compiler_version": "3.0.2",
+                "compiler_build_hash": "sha256:698af607955463f01a404d626586420f3dd8f7a208da87c1e138075b1518ba05",
+                "compiled_ir_schema_ref": "conformance/capability-outbox-execution-binding/schemas/compiled-scope-plan-v2-execution-binding-schema@1.json",
+                "compiled_ir_schema_hash": "sha256:f5bc0a43d5723096295b9a6fcd5a0965c3b98ca810ae8b6dc1a7072996608e06",
+                "conformance_result_schema_ref": "conformance/capability-outbox-execution-binding/schemas/compiler-conformance-case-result-execution-binding-schema@1.json",
+                "conformance_result_schema_hash": "sha256:021da33556e677984b767f99b12800be8454c7516221ec63bb16e1cb26f867f7"
               }
             },
             "expected_oracle": "sealed_g2_independent_expected",
@@ -870,7 +958,7 @@
             },
             "requested_registry_write": false,
             "requested_activation": false,
-            "preflight_hash": "sha256:32019d2be992d1bfd88427ea909dc2f5a5e0e08b1a838661acf2e18f4b60f23e"
+            "preflight_hash": "sha256:3fc6be6a4babbeafe079123233cc39defd2a23296a0aa3e222cb0068102d3740"
           },
           "release_resources": [
             {
@@ -880,7 +968,7 @@
                 "id": "fixture.definition",
                 "version": "1.0.0"
               },
-              "content_hash": "sha256:d03d960a4f91dd5385725d8a78709891ec9fd185c6fa7c1a8278a74360c562f2",
+              "content_hash": "sha256:a1b4502a45040a2468af4920417937b73deac4f620bac73122ba3a1dfed4e98b",
               "schema_ref": {
                 "id": "fixture.registry.schema",
                 "version": "1.0.0"
@@ -997,7 +1085,7 @@
                     "id": "fixture.definition",
                     "version": "1.0.0"
                   },
-                  "content_hash": "sha256:d03d960a4f91dd5385725d8a78709891ec9fd185c6fa7c1a8278a74360c562f2",
+                  "content_hash": "sha256:a1b4502a45040a2468af4920417937b73deac4f620bac73122ba3a1dfed4e98b",
                   "dependency_kind": "registry_exact"
                 },
                 {
@@ -1048,7 +1136,7 @@
               "id": "fixture.feature-release",
               "version": "1.0.0"
             },
-            "feature_release_hash": "sha256:1dc43d990979a2cda7b8077e4422f48d6db6fe1cb95a1eff5615b96af55062cf",
+            "feature_release_hash": "sha256:3cd992af6a09e129475ba2c424801e95948a2f5e7fcd50f5863fbf42f60ffae8",
             "feature_release_execution_artifact": {
               "ref": {
                 "id": "fixture.execution-artifact",
@@ -1061,8 +1149,8 @@
                 "id": "fixture.retention-abi-snapshot",
                 "version": "1.0.0"
               },
-              "snapshot_hash": "sha256:f2e8d818727d976d351fa502929b07ecfa415b384754393fc7943367adc0d5aa",
-              "expected_compiler_version": "3.0.1",
+              "snapshot_hash": "sha256:a34551c69817b6025cc562b80e4d194356c17a8c44862051b7d62e4566f4d6d9",
+              "expected_compiler_version": "3.0.2",
               "expected_core_build_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
               "expected_database_schema_hash": "sha256:49aaee7c8f046cd9a15b3bc5b77fbcf1713be2a1872078941043f5ccdca29024"
             },
@@ -1071,7 +1159,7 @@
                 "id": "fixture.retention-abi-closure",
                 "version": "1.0.0"
               },
-              "closure_hash": "sha256:7326faeecb2e184c41e837d65b4eed1ced7c199e98d9007ac62ac27c7ea2d482",
+              "closure_hash": "sha256:9ca322653231666ab74987cbecde3c481b179dd87ac7a927833f6485b0302583",
               "root": {
                 "format": "icarus.workflow-registry-exact-resource-query/1",
                 "resource_type": "recipe",
@@ -1097,7 +1185,7 @@
                       "id": "fixture.definition",
                       "version": "1.0.0"
                     },
-                    "content_hash": "sha256:d03d960a4f91dd5385725d8a78709891ec9fd185c6fa7c1a8278a74360c562f2",
+                    "content_hash": "sha256:a1b4502a45040a2468af4920417937b73deac4f620bac73122ba3a1dfed4e98b",
                     "dependency_kind": "registry_exact"
                   },
                   {
@@ -1127,7 +1215,7 @@
                     "id": "fixture.definition",
                     "version": "1.0.0"
                   },
-                  "content_hash": "sha256:d03d960a4f91dd5385725d8a78709891ec9fd185c6fa7c1a8278a74360c562f2"
+                  "content_hash": "sha256:a1b4502a45040a2468af4920417937b73deac4f620bac73122ba3a1dfed4e98b"
                 },
                 {
                   "resource_type": "executor_implementation",
@@ -1279,7 +1367,7 @@
                 "id": "fixture.feature-release",
                 "version": "1.0.0"
               },
-              "feature_release_hash": "sha256:1dc43d990979a2cda7b8077e4422f48d6db6fe1cb95a1eff5615b96af55062cf",
+              "feature_release_hash": "sha256:3cd992af6a09e129475ba2c424801e95948a2f5e7fcd50f5863fbf42f60ffae8",
               "members": [
                 {
                   "resource_type": "definition",
@@ -1287,7 +1375,7 @@
                     "id": "fixture.definition",
                     "version": "1.0.0"
                   },
-                  "content_hash": "sha256:d03d960a4f91dd5385725d8a78709891ec9fd185c6fa7c1a8278a74360c562f2"
+                  "content_hash": "sha256:a1b4502a45040a2468af4920417937b73deac4f620bac73122ba3a1dfed4e98b"
                 },
                 {
                   "resource_type": "executor_implementation",
@@ -1334,7 +1422,7 @@
               "id": "fixture.feature-release",
               "version": "1.0.0"
             },
-            "release_hash": "sha256:1dc43d990979a2cda7b8077e4422f48d6db6fe1cb95a1eff5615b96af55062cf",
+            "release_hash": "sha256:3cd992af6a09e129475ba2c424801e95948a2f5e7fcd50f5863fbf42f60ffae8",
             "execution_artifact": {
               "ref": {
                 "id": "fixture.execution-artifact",
@@ -1357,7 +1445,7 @@
                     "id": "fixture.definition",
                     "version": "1.0.0"
                   },
-                  "content_hash": "sha256:d03d960a4f91dd5385725d8a78709891ec9fd185c6fa7c1a8278a74360c562f2"
+                  "content_hash": "sha256:a1b4502a45040a2468af4920417937b73deac4f620bac73122ba3a1dfed4e98b"
                 },
                 "role": "closure_member"
               },
@@ -1407,8 +1495,8 @@
               }
             ]
           },
-          "domain_request_hash": "sha256:24fecedfb62c0462f7c71913f37c166420fc2e5f1752cd924b8e500c2cb8948b",
-          "request_hash": "sha256:57d563f8c92288497ff9fd2876493bb368fbdac4bec183ec88e2b35af50d5693",
+          "domain_request_hash": "sha256:4e716681bda3ed08960da27256943a9c3923fdfed97ec145aabb25407ca53b01",
+          "request_hash": "sha256:23dea8b54645946da4011a119432eeb3995e2845c221b7312c7aecc051b8e987",
           "active_pointer": "forbidden"
         },
         "expected_code": "publish_request_invalid"
@@ -1423,14 +1511,14 @@
           "approved_review": {
             "format": "icarus.workflow-approved-publish-review/1",
             "review_ref": "workflow-review:fixture-release-1",
-            "review_hash": "sha256:dac967e1fe98f996045861e5e4941d00740d9e1dd37d32409b57ee173b81df12",
+            "review_hash": "sha256:ae6dc18ea381678a8f5d591e10ee53d3c549819bfcdbe7c457f76b6b70245fbe",
             "decision": "approved",
             "reviewer_actor_ref": "human:local-owner",
             "reviewer_auth_session_ref": "auth-session:fixture-review",
             "approved_at_ms": 1784604172000,
             "expires_at_ms": 1784607772000,
-            "source_manifest_hash": "sha256:9f8d3a6e1e9b5d129c15afcfc0de338d6d07374a758041254f3968058b576ec4",
-            "compiled_plan_hash": "sha256:df3ee04469bc72c3a6e16f65774ea1a9a0e9d7c0b54861f51c57b323f8391881",
+            "source_manifest_hash": "sha256:5f6e18da4e47084670ba54b864253d40a49eafe66eebb86bfdb0433f5deba0b4",
+            "compiled_plan_hash": "sha256:49414db63947d1f61d4a95b0afabc78eb9e06a508cbd9185114c7e6ccf905c60",
             "execution_artifact_ref": {
               "id": "fixture.execution-artifact",
               "version": "1.0.0"
@@ -1440,12 +1528,12 @@
               "id": "fixture.retention-abi-closure",
               "version": "1.0.0"
             },
-            "closure_hash": "sha256:7326faeecb2e184c41e837d65b4eed1ced7c199e98d9007ac62ac27c7ea2d482",
+            "closure_hash": "sha256:9ca322653231666ab74987cbecde3c481b179dd87ac7a927833f6485b0302583",
             "feature_release_ref": {
               "id": "fixture.feature-release",
               "version": "1.0.0"
             },
-            "feature_release_hash": "sha256:1dc43d990979a2cda7b8077e4422f48d6db6fe1cb95a1eff5615b96af55062cf"
+            "feature_release_hash": "sha256:3cd992af6a09e129475ba2c424801e95948a2f5e7fcd50f5863fbf42f60ffae8"
           },
           "source_manifest": {
             "value_id": "publisher-source-manifest:fixture@1.0.0",
@@ -1479,7 +1567,7 @@
                     "version": "1.0.0"
                   },
                   "source_path": "workflow-src/definition/fixture.definition.json",
-                  "expected_source_hash": "sha256:d03d960a4f91dd5385725d8a78709891ec9fd185c6fa7c1a8278a74360c562f2"
+                  "expected_source_hash": "sha256:a1b4502a45040a2468af4920417937b73deac4f620bac73122ba3a1dfed4e98b"
                 },
                 {
                   "kind": "executor_implementation",
@@ -1529,9 +1617,9 @@
                   "version": "1.0.0"
                 }
               },
-              "manifest_hash": "sha256:9f8d3a6e1e9b5d129c15afcfc0de338d6d07374a758041254f3968058b576ec4"
+              "manifest_hash": "sha256:5f6e18da4e47084670ba54b864253d40a49eafe66eebb86bfdb0433f5deba0b4"
             },
-            "content_hash": "sha256:9f8d3a6e1e9b5d129c15afcfc0de338d6d07374a758041254f3968058b576ec4",
+            "content_hash": "sha256:5f6e18da4e47084670ba54b864253d40a49eafe66eebb86bfdb0433f5deba0b4",
             "schema": {
               "format": "icarus.workflow-registry-exact-resource-query/1",
               "resource_type": "schema",
@@ -1558,19 +1646,19 @@
           },
           "compiled_plan": {
             "value_id": "publisher-compiled-plan:fixture@1.0.0",
-            "semantic_ref": "conformance/sealed/g2-production-compiler-replay-repair-v2/expected/positive.static-lowering.plan.json",
+            "semantic_ref": "conformance/sealed/g2-capability-outbox-binding-v3/expected/positive.static-lowering.plan.json",
             "content": {
               "canonical_normalizer_hash": "sha256:e32946d0d20cc92344a72d04e488951cc4a64be82d36384db26dfbf420e469ff",
               "canonical_normalizer_version": "2.0.1",
-              "capability_catalog_hash": "sha256:29b0a46227d427f2d8f7fc6a84323dc48a70f4f2562b36bd110041358e9435fd",
-              "compiler_build_hash": "sha256:4cb84d57dee323723ed60dc22394100b37cc76a3bfde793ef95ba707cd21a976",
+              "capability_catalog_hash": "sha256:8ea01c47ac01f295a8163990dc6ad9986fb03c7329825a09839c50ce54d7f977",
+              "compiler_build_hash": "sha256:698af607955463f01a404d626586420f3dd8f7a208da87c1e138075b1518ba05",
               "compiler_error_catalog_hash": "sha256:8fc7139b29cdddf3c1e13e0f9d8bc6b19a1d32c02c1e7f4b7e33023fcece91ef",
-              "compiler_toolchain_hash": "sha256:4e16227bf723a41207d94a8619f8b6bb50731c412cb5b298869e265097dcaccf",
+              "compiler_toolchain_hash": "sha256:90bc7c99cacaf58217dd6d07781788c844385d3c70644c4086d6c997312f60a1",
               "compiler_toolchain_ref": {
                 "id": "icarus.workflow-compiler-toolchain",
-                "version": "3.0.1"
+                "version": "3.0.2"
               },
-              "compiler_version": "3.0.1",
+              "compiler_version": "3.0.2",
               "completion": {
                 "early_close": "cancel_and_fence_remaining",
                 "early_rules": [],
@@ -1748,7 +1836,7 @@
                       "safe_to_abandon": true,
                       "type": "fence_only"
                     },
-                    "dependency_closure_hash": "sha256:37fdfe84aa17bebbbdde1ea703c3a670ebe4429d0240b49d0a4cb5f9f083a8d5",
+                    "dependency_closure_hash": "sha256:f5e4cbbaa954aeca32e75e5070c731ccd4186c3690cf3ba8e7e4af473ad1dc7e",
                     "effect": {
                       "type": "pure"
                     },
@@ -1761,6 +1849,23 @@
                     "no_artifact_expected": true,
                     "no_evaluation_expected": true,
                     "node_type": "delegation",
+                    "outbox_effect": {
+                      "adapter_ref": {
+                        "id": "fixture.adapter.capability-dispatch",
+                        "version": "1.0.0"
+                      },
+                      "delivery_lane": "normal_execution",
+                      "delivery_policy_ref": {
+                        "id": "fixture.outbox-policy.normal-delivery",
+                        "version": "1.0.0"
+                      },
+                      "delivery_requirement": "required",
+                      "effect_type": "capability_dispatch",
+                      "idempotency": "provider_key",
+                      "reconciliation": {
+                        "type": "not_required"
+                      }
+                    },
                     "output_ports": {
                       "result": {
                         "max_bytes": 4096,
@@ -1801,6 +1906,72 @@
                   },
                   "id": "capability",
                   "input_ports": {},
+                  "outbox_execution_binding": {
+                    "adapter_identity": {
+                      "content_hash": "sha256:bb855d9b31768f47f5337cb5e145d16fa601575bed9bf2f4113e66d09df001a4",
+                      "ref": {
+                        "id": "fixture.adapter.capability-dispatch",
+                        "version": "1.0.0"
+                      },
+                      "resource_type": "outbox_adapter"
+                    },
+                    "binding_hash": "sha256:ef2d026a1146479f6c434b5788921ae9155d39eb95d452da4f81af4bc83a326d",
+                    "delivery_policy_identity": {
+                      "content_hash": "sha256:969511908773cba1843c9fa29e8494c1d46f7c49b000179ae44bb51bbea8d137",
+                      "ref": {
+                        "id": "fixture.outbox-policy.normal-delivery",
+                        "version": "1.0.0"
+                      },
+                      "resource_type": "outbox_policy"
+                    },
+                    "effect_contract": {
+                      "adapter_ref": {
+                        "id": "fixture.adapter.capability-dispatch",
+                        "version": "1.0.0"
+                      },
+                      "delivery_lane": "normal_execution",
+                      "delivery_policy_ref": {
+                        "id": "fixture.outbox-policy.normal-delivery",
+                        "version": "1.0.0"
+                      },
+                      "delivery_requirement": "required",
+                      "effect_type": "capability_dispatch",
+                      "idempotency": "provider_key",
+                      "reconciliation": {
+                        "type": "not_required"
+                      }
+                    },
+                    "effective_policy_snapshot": {
+                      "effective_policy": {
+                        "attempt_timeout_ms": 60000,
+                        "backoff": "exponential",
+                        "delivery_duration_ms": 900000,
+                        "deterministic_jitter_micros": 200000,
+                        "honor_retry_after": true,
+                        "initial_backoff_ms": 1000,
+                        "max_backoff_ms": 60000,
+                        "max_delivery_attempts": 8,
+                        "max_reconcile_attempts": 4,
+                        "permanent_error_codes": [
+                          "contract_rejected",
+                          "permission_denied"
+                        ],
+                        "retryable_error_codes": [
+                          "provider_unavailable",
+                          "rate_limited"
+                        ]
+                      },
+                      "format": "icarus.workflow-outbox-effective-policy-snapshot/1",
+                      "runtime_safety_hash": "sha256:7f8c0b1babf451cb03ab5f99b436d3ae187b587783875850686188d893059259",
+                      "snapshot_hash": "sha256:889cb74144936b94044f1d85238fdaa149d55153cc9b24367b63439903b923b4",
+                      "source_policy_content_hash": "sha256:969511908773cba1843c9fa29e8494c1d46f7c49b000179ae44bb51bbea8d137",
+                      "source_policy_hash": "sha256:c13dfb035d3b12b2750b22e488c5dc423aedfdc651d7ab9fd4cf0b047e447f15",
+                      "source_policy_ref": {
+                        "id": "fixture.outbox-policy.normal-delivery",
+                        "version": "1.0.0"
+                      }
+                    }
+                  },
                   "output_ports": {
                     "result": {
                       "max_bytes": 4096,
@@ -1871,7 +2042,7 @@
                   "type": "terminal"
                 }
               ],
-              "plan_hash": "sha256:df3ee04469bc72c3a6e16f65774ea1a9a0e9d7c0b54861f51c57b323f8391881",
+              "plan_hash": "sha256:49414db63947d1f61d4a95b0afabc78eb9e06a508cbd9185114c7e6ccf905c60",
               "policy_snapshot_hash": "sha256:3043a34924b521e0204c12423a6dd580cb90d069fcd561a2f88f014f3a55dc9c",
               "proof_algorithm_hash": "sha256:6a49827e2c039b95c42c94a607acbf6ae7c088d0510fe7fd93cc0eb87f302308",
               "proof_algorithm_version": "2.0.1",
@@ -1976,20 +2147,20 @@
               },
               "wait_contract_catalog_hash": "sha256:4b412c391110c835029ec8c8256d1c7cc0caa52146136423cf9215e03bb53f42"
             },
-            "content_hash": "sha256:df3ee04469bc72c3a6e16f65774ea1a9a0e9d7c0b54861f51c57b323f8391881",
+            "content_hash": "sha256:49414db63947d1f61d4a95b0afabc78eb9e06a508cbd9185114c7e6ccf905c60",
             "schema": {
               "format": "icarus.workflow-registry-exact-resource-query/1",
               "resource_type": "schema",
               "ref": {
-                "id": "icarus.workflow-compiled-scope-plan-schema",
-                "version": "2.0.0"
+                "id": "icarus.workflow-compiled-scope-plan-v2-execution-binding-schema",
+                "version": "1.0.0"
               },
-              "content_hash": "sha256:23fad8f4a3b51da3fea4777bf07f862247ff3db7946c6283d4644f953be198e6",
+              "content_hash": "sha256:02b369e85bf131ea263a8a719c1ddca4f0015f066a5703d2adc1c6e939e195ad",
               "schema_ref": {
-                "id": "icarus.workflow-compiled-scope-plan-schema",
-                "version": "2.0.0"
+                "id": "icarus.workflow-compiled-scope-plan-v2-execution-binding-schema",
+                "version": "1.0.0"
               },
-              "schema_hash": "sha256:23fad8f4a3b51da3fea4777bf07f862247ff3db7946c6283d4644f953be198e6",
+              "schema_hash": "sha256:02b369e85bf131ea263a8a719c1ddca4f0015f066a5703d2adc1c6e939e195ad",
               "owner": {
                 "kind": "core",
                 "ref": {
@@ -2081,12 +2252,12 @@
               "id": "fixture.feature-manifest",
               "version": "2.0.0"
             },
-            "feature_manifest_hash": "sha256:9f8d3a6e1e9b5d129c15afcfc0de338d6d07374a758041254f3968058b576ec4",
+            "feature_manifest_hash": "sha256:5f6e18da4e47084670ba54b864253d40a49eafe66eebb86bfdb0433f5deba0b4",
             "feature_release_ref": {
               "id": "fixture.feature-release",
               "version": "1.0.0"
             },
-            "feature_release_hash": "sha256:1dc43d990979a2cda7b8077e4422f48d6db6fe1cb95a1eff5615b96af55062cf",
+            "feature_release_hash": "sha256:3cd992af6a09e129475ba2c424801e95948a2f5e7fcd50f5863fbf42f60ffae8",
             "resources": [
               {
                 "resource_type": "definition",
@@ -2095,7 +2266,7 @@
                   "version": "1.0.0"
                 },
                 "launchability": "test_only",
-                "content_hash": "sha256:d03d960a4f91dd5385725d8a78709891ec9fd185c6fa7c1a8278a74360c562f2",
+                "content_hash": "sha256:a1b4502a45040a2468af4920417937b73deac4f620bac73122ba3a1dfed4e98b",
                 "dependencies": [
                   {
                     "resource_type": "schema",
@@ -2107,15 +2278,16 @@
                   }
                 ],
                 "compiled_plan_pin": {
-                  "plan_ref": "conformance/sealed/g2-production-compiler-replay-repair-v2/expected/positive.static-lowering.plan.json",
-                  "plan_hash": "sha256:df3ee04469bc72c3a6e16f65774ea1a9a0e9d7c0b54861f51c57b323f8391881",
+                  "plan_ref": "conformance/sealed/g2-capability-outbox-binding-v3/expected/positive.static-lowering.plan.json",
+                  "plan_hash": "sha256:49414db63947d1f61d4a95b0afabc78eb9e06a508cbd9185114c7e6ccf905c60",
                   "plan_format": "icarus.workflow-graph-scope-plan/2",
-                  "compiler_toolchain_hash": "sha256:4e16227bf723a41207d94a8619f8b6bb50731c412cb5b298869e265097dcaccf",
-                  "compiler_build_hash": "sha256:4cb84d57dee323723ed60dc22394100b37cc76a3bfde793ef95ba707cd21a976",
+                  "compiler_toolchain_hash": "sha256:90bc7c99cacaf58217dd6d07781788c844385d3c70644c4086d6c997312f60a1",
+                  "compiler_build_hash": "sha256:698af607955463f01a404d626586420f3dd8f7a208da87c1e138075b1518ba05",
                   "provenance": "sealed_g2_expected"
                 },
                 "execution_artifact_pin": null,
-                "resource_hash": "sha256:cfd91b0162aebf62f1aa8f614b52c8cc78624b50197ebfce0bc8144cf6998a3f"
+                "capability_outbox_binding": null,
+                "resource_hash": "sha256:9df2882d13d019c9137b4bcb91c754306f5ebcbed6f533b8a6bd1d062b03cd29"
               },
               {
                 "resource_type": "executor_implementation",
@@ -2153,7 +2325,8 @@
                   "runtime_kind": "node_bundle",
                   "runtime_abi_major": 1
                 },
-                "resource_hash": "sha256:cb8cf23d1da01cbeab97e9d8114adf8ff72227ead1fc3e4c5a10a4f01036695a"
+                "capability_outbox_binding": null,
+                "resource_hash": "sha256:00a552c2b0665c35a671fc0ceee2b973548ddce128e1351e7434df767f10ef8c"
               },
               {
                 "resource_type": "feature_execution_artifact",
@@ -2183,7 +2356,8 @@
                   "runtime_kind": "node_bundle",
                   "runtime_abi_major": 1
                 },
-                "resource_hash": "sha256:3ceb160a1d22909ab38cc3e787ccea6d2a55d0ee5380e0dc31f13e6a7c943823"
+                "capability_outbox_binding": null,
+                "resource_hash": "sha256:26f654d0dff5c876392107bf9bb31328c5416c7a5af3c140a4475070dc590413"
               },
               {
                 "resource_type": "recipe",
@@ -2200,7 +2374,7 @@
                       "id": "fixture.definition",
                       "version": "1.0.0"
                     },
-                    "content_hash": "sha256:d03d960a4f91dd5385725d8a78709891ec9fd185c6fa7c1a8278a74360c562f2"
+                    "content_hash": "sha256:a1b4502a45040a2468af4920417937b73deac4f620bac73122ba3a1dfed4e98b"
                   },
                   {
                     "resource_type": "executor_implementation",
@@ -2221,7 +2395,8 @@
                 ],
                 "compiled_plan_pin": null,
                 "execution_artifact_pin": null,
-                "resource_hash": "sha256:eaf64f6d849c73c9ff66cdd1f736543a034969bed2c1a51bf7caab9c96b7f02b"
+                "capability_outbox_binding": null,
+                "resource_hash": "sha256:e193f4725b96cd8ba0114d2f2ad23929d63ac5d4207c8799ef9777484fd783bc"
               },
               {
                 "resource_type": "schema",
@@ -2234,7 +2409,8 @@
                 "dependencies": [],
                 "compiled_plan_pin": null,
                 "execution_artifact_pin": null,
-                "resource_hash": "sha256:ddd58f7e70f7981eff5bcdb7b79eb4fa09cd001c6fb9d1e95e103e3b56d8ea85"
+                "capability_outbox_binding": null,
+                "resource_hash": "sha256:867b962d8bd9cf39c81a88053c6172c7dda30f7771359b9d47931895c14567e2"
               }
             ],
             "upstream_identity": {
@@ -2243,21 +2419,21 @@
               "g1_physical_schema_identity": "sha256:ba025b32bb028f2ffe5df45d9440cd0a897e0a06c076b10b6f641c265ae02090",
               "g1_schema_hash": "sha256:49aaee7c8f046cd9a15b3bc5b77fbcf1713be2a1872078941043f5ccdca29024",
               "g1_migration_sha256": "sha256:2ead40dc2f1618f87247e9d3bb476266797c38560e1ad0537a6afa6f71a3fbf6",
-              "g2_sealed_bundle_ref": "conformance/sealed/g2-production-compiler-replay-repair-v2/golden-conformance-bundle@2.json",
-              "g2_sealed_bundle_artifact_hash": "sha256:037009dcd6c5d6bd2888c484fe1adacded68da5c55e17ba12eb722092e4faced",
-              "g2_sealed_bundle_hash": "sha256:d99647d8ca6aabc737a793019335e6770aa111a79be7545c4dec00c6e7af2145",
+              "g2_sealed_bundle_ref": "conformance/sealed/g2-capability-outbox-binding-v3/golden-conformance-bundle@2.json",
+              "g2_sealed_bundle_artifact_hash": "sha256:967437bb9f91e32e5014b2af90a23f5646e491eb427bdf55accb345ead70db8f",
+              "g2_sealed_bundle_hash": "sha256:b3ed9e43bd0fadaf40520257926dcf690ee8495bb417220245f248385bde9efb",
               "compiler": {
                 "compiler_toolchain_manifest_ref": {
                   "id": "icarus.workflow-compiler-toolchain",
-                  "version": "3.0.1"
+                  "version": "3.0.2"
                 },
-                "compiler_toolchain_hash": "sha256:4e16227bf723a41207d94a8619f8b6bb50731c412cb5b298869e265097dcaccf",
-                "compiler_version": "3.0.1",
-                "compiler_build_hash": "sha256:4cb84d57dee323723ed60dc22394100b37cc76a3bfde793ef95ba707cd21a976",
-                "compiled_ir_schema_ref": "conformance/compiler-contract-repair/schemas/compiled-scope-plan-v2-schema.json",
-                "compiled_ir_schema_hash": "sha256:4d4e325f94b55a6767f3e8596e1e9b880df2b402d3c89f587a10a23f0eadbd46",
-                "conformance_result_schema_ref": "conformance/compiler-contract-repair/schemas/compiler-conformance-case-result-schema.json",
-                "conformance_result_schema_hash": "sha256:019a4ba80ed8ae57b6c862d9fda62d9edcb8aca9c4910fde6bbb580c09af8706"
+                "compiler_toolchain_hash": "sha256:90bc7c99cacaf58217dd6d07781788c844385d3c70644c4086d6c997312f60a1",
+                "compiler_version": "3.0.2",
+                "compiler_build_hash": "sha256:698af607955463f01a404d626586420f3dd8f7a208da87c1e138075b1518ba05",
+                "compiled_ir_schema_ref": "conformance/capability-outbox-execution-binding/schemas/compiled-scope-plan-v2-execution-binding-schema@1.json",
+                "compiled_ir_schema_hash": "sha256:f5bc0a43d5723096295b9a6fcd5a0965c3b98ca810ae8b6dc1a7072996608e06",
+                "conformance_result_schema_ref": "conformance/capability-outbox-execution-binding/schemas/compiler-conformance-case-result-execution-binding-schema@1.json",
+                "conformance_result_schema_hash": "sha256:021da33556e677984b767f99b12800be8454c7516221ec63bb16e1cb26f867f7"
               }
             },
             "expected_oracle": "sealed_g2_independent_expected",
@@ -2274,7 +2450,7 @@
             },
             "requested_registry_write": false,
             "requested_activation": false,
-            "preflight_hash": "sha256:32019d2be992d1bfd88427ea909dc2f5a5e0e08b1a838661acf2e18f4b60f23e"
+            "preflight_hash": "sha256:3fc6be6a4babbeafe079123233cc39defd2a23296a0aa3e222cb0068102d3740"
           },
           "release_resources": [
             {
@@ -2284,7 +2460,7 @@
                 "id": "fixture.definition",
                 "version": "1.0.0"
               },
-              "content_hash": "sha256:d03d960a4f91dd5385725d8a78709891ec9fd185c6fa7c1a8278a74360c562f2",
+              "content_hash": "sha256:a1b4502a45040a2468af4920417937b73deac4f620bac73122ba3a1dfed4e98b",
               "schema_ref": {
                 "id": "fixture.registry.schema",
                 "version": "1.0.0"
@@ -2401,7 +2577,7 @@
                     "id": "fixture.definition",
                     "version": "1.0.0"
                   },
-                  "content_hash": "sha256:d03d960a4f91dd5385725d8a78709891ec9fd185c6fa7c1a8278a74360c562f2",
+                  "content_hash": "sha256:a1b4502a45040a2468af4920417937b73deac4f620bac73122ba3a1dfed4e98b",
                   "dependency_kind": "registry_exact"
                 },
                 {
@@ -2452,7 +2628,7 @@
               "id": "fixture.feature-release",
               "version": "1.0.0"
             },
-            "feature_release_hash": "sha256:1dc43d990979a2cda7b8077e4422f48d6db6fe1cb95a1eff5615b96af55062cf",
+            "feature_release_hash": "sha256:3cd992af6a09e129475ba2c424801e95948a2f5e7fcd50f5863fbf42f60ffae8",
             "feature_release_execution_artifact": {
               "ref": {
                 "id": "fixture.execution-artifact",
@@ -2465,8 +2641,8 @@
                 "id": "fixture.retention-abi-snapshot",
                 "version": "1.0.0"
               },
-              "snapshot_hash": "sha256:f2e8d818727d976d351fa502929b07ecfa415b384754393fc7943367adc0d5aa",
-              "expected_compiler_version": "3.0.1",
+              "snapshot_hash": "sha256:a34551c69817b6025cc562b80e4d194356c17a8c44862051b7d62e4566f4d6d9",
+              "expected_compiler_version": "3.0.2",
               "expected_core_build_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
               "expected_database_schema_hash": "sha256:49aaee7c8f046cd9a15b3bc5b77fbcf1713be2a1872078941043f5ccdca29024"
             },
@@ -2475,7 +2651,7 @@
                 "id": "fixture.retention-abi-closure",
                 "version": "1.0.0"
               },
-              "closure_hash": "sha256:7326faeecb2e184c41e837d65b4eed1ced7c199e98d9007ac62ac27c7ea2d482",
+              "closure_hash": "sha256:9ca322653231666ab74987cbecde3c481b179dd87ac7a927833f6485b0302583",
               "root": {
                 "format": "icarus.workflow-registry-exact-resource-query/1",
                 "resource_type": "recipe",
@@ -2501,7 +2677,7 @@
                       "id": "fixture.definition",
                       "version": "1.0.0"
                     },
-                    "content_hash": "sha256:d03d960a4f91dd5385725d8a78709891ec9fd185c6fa7c1a8278a74360c562f2",
+                    "content_hash": "sha256:a1b4502a45040a2468af4920417937b73deac4f620bac73122ba3a1dfed4e98b",
                     "dependency_kind": "registry_exact"
                   },
                   {
@@ -2531,7 +2707,7 @@
                     "id": "fixture.definition",
                     "version": "1.0.0"
                   },
-                  "content_hash": "sha256:d03d960a4f91dd5385725d8a78709891ec9fd185c6fa7c1a8278a74360c562f2"
+                  "content_hash": "sha256:a1b4502a45040a2468af4920417937b73deac4f620bac73122ba3a1dfed4e98b"
                 },
                 {
                   "resource_type": "executor_implementation",
@@ -2683,7 +2859,7 @@
                 "id": "fixture.feature-release",
                 "version": "1.0.0"
               },
-              "feature_release_hash": "sha256:1dc43d990979a2cda7b8077e4422f48d6db6fe1cb95a1eff5615b96af55062cf",
+              "feature_release_hash": "sha256:3cd992af6a09e129475ba2c424801e95948a2f5e7fcd50f5863fbf42f60ffae8",
               "members": [
                 {
                   "resource_type": "definition",
@@ -2691,7 +2867,7 @@
                     "id": "fixture.definition",
                     "version": "1.0.0"
                   },
-                  "content_hash": "sha256:d03d960a4f91dd5385725d8a78709891ec9fd185c6fa7c1a8278a74360c562f2"
+                  "content_hash": "sha256:a1b4502a45040a2468af4920417937b73deac4f620bac73122ba3a1dfed4e98b"
                 },
                 {
                   "resource_type": "executor_implementation",
@@ -2738,7 +2914,7 @@
               "id": "fixture.feature-release",
               "version": "1.0.0"
             },
-            "release_hash": "sha256:1dc43d990979a2cda7b8077e4422f48d6db6fe1cb95a1eff5615b96af55062cf",
+            "release_hash": "sha256:3cd992af6a09e129475ba2c424801e95948a2f5e7fcd50f5863fbf42f60ffae8",
             "execution_artifact": {
               "ref": {
                 "id": "fixture.execution-artifact",
@@ -2761,7 +2937,7 @@
                     "id": "fixture.definition",
                     "version": "1.0.0"
                   },
-                  "content_hash": "sha256:d03d960a4f91dd5385725d8a78709891ec9fd185c6fa7c1a8278a74360c562f2"
+                  "content_hash": "sha256:a1b4502a45040a2468af4920417937b73deac4f620bac73122ba3a1dfed4e98b"
                 },
                 "role": "closure_member"
               },
@@ -2811,7 +2987,7 @@
               }
             ]
           },
-          "domain_request_hash": "sha256:24fecedfb62c0462f7c71913f37c166420fc2e5f1752cd924b8e500c2cb8948b",
+          "domain_request_hash": "sha256:4e716681bda3ed08960da27256943a9c3923fdfed97ec145aabb25407ca53b01",
           "request_hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
         },
         "expected_code": "publish_request_hash_mismatch"
@@ -2832,8 +3008,8 @@
             "reviewer_auth_session_ref": "auth-session:fixture-review",
             "approved_at_ms": 1784604172000,
             "expires_at_ms": 1784607772000,
-            "source_manifest_hash": "sha256:9f8d3a6e1e9b5d129c15afcfc0de338d6d07374a758041254f3968058b576ec4",
-            "compiled_plan_hash": "sha256:df3ee04469bc72c3a6e16f65774ea1a9a0e9d7c0b54861f51c57b323f8391881",
+            "source_manifest_hash": "sha256:5f6e18da4e47084670ba54b864253d40a49eafe66eebb86bfdb0433f5deba0b4",
+            "compiled_plan_hash": "sha256:49414db63947d1f61d4a95b0afabc78eb9e06a508cbd9185114c7e6ccf905c60",
             "execution_artifact_ref": {
               "id": "fixture.execution-artifact",
               "version": "1.0.0"
@@ -2843,12 +3019,12 @@
               "id": "fixture.retention-abi-closure",
               "version": "1.0.0"
             },
-            "closure_hash": "sha256:7326faeecb2e184c41e837d65b4eed1ced7c199e98d9007ac62ac27c7ea2d482",
+            "closure_hash": "sha256:9ca322653231666ab74987cbecde3c481b179dd87ac7a927833f6485b0302583",
             "feature_release_ref": {
               "id": "fixture.feature-release",
               "version": "1.0.0"
             },
-            "feature_release_hash": "sha256:1dc43d990979a2cda7b8077e4422f48d6db6fe1cb95a1eff5615b96af55062cf"
+            "feature_release_hash": "sha256:3cd992af6a09e129475ba2c424801e95948a2f5e7fcd50f5863fbf42f60ffae8"
           },
           "source_manifest": {
             "value_id": "publisher-source-manifest:fixture@1.0.0",
@@ -2882,7 +3058,7 @@
                     "version": "1.0.0"
                   },
                   "source_path": "workflow-src/definition/fixture.definition.json",
-                  "expected_source_hash": "sha256:d03d960a4f91dd5385725d8a78709891ec9fd185c6fa7c1a8278a74360c562f2"
+                  "expected_source_hash": "sha256:a1b4502a45040a2468af4920417937b73deac4f620bac73122ba3a1dfed4e98b"
                 },
                 {
                   "kind": "executor_implementation",
@@ -2932,9 +3108,9 @@
                   "version": "1.0.0"
                 }
               },
-              "manifest_hash": "sha256:9f8d3a6e1e9b5d129c15afcfc0de338d6d07374a758041254f3968058b576ec4"
+              "manifest_hash": "sha256:5f6e18da4e47084670ba54b864253d40a49eafe66eebb86bfdb0433f5deba0b4"
             },
-            "content_hash": "sha256:9f8d3a6e1e9b5d129c15afcfc0de338d6d07374a758041254f3968058b576ec4",
+            "content_hash": "sha256:5f6e18da4e47084670ba54b864253d40a49eafe66eebb86bfdb0433f5deba0b4",
             "schema": {
               "format": "icarus.workflow-registry-exact-resource-query/1",
               "resource_type": "schema",
@@ -2961,19 +3137,19 @@
           },
           "compiled_plan": {
             "value_id": "publisher-compiled-plan:fixture@1.0.0",
-            "semantic_ref": "conformance/sealed/g2-production-compiler-replay-repair-v2/expected/positive.static-lowering.plan.json",
+            "semantic_ref": "conformance/sealed/g2-capability-outbox-binding-v3/expected/positive.static-lowering.plan.json",
             "content": {
               "canonical_normalizer_hash": "sha256:e32946d0d20cc92344a72d04e488951cc4a64be82d36384db26dfbf420e469ff",
               "canonical_normalizer_version": "2.0.1",
-              "capability_catalog_hash": "sha256:29b0a46227d427f2d8f7fc6a84323dc48a70f4f2562b36bd110041358e9435fd",
-              "compiler_build_hash": "sha256:4cb84d57dee323723ed60dc22394100b37cc76a3bfde793ef95ba707cd21a976",
+              "capability_catalog_hash": "sha256:8ea01c47ac01f295a8163990dc6ad9986fb03c7329825a09839c50ce54d7f977",
+              "compiler_build_hash": "sha256:698af607955463f01a404d626586420f3dd8f7a208da87c1e138075b1518ba05",
               "compiler_error_catalog_hash": "sha256:8fc7139b29cdddf3c1e13e0f9d8bc6b19a1d32c02c1e7f4b7e33023fcece91ef",
-              "compiler_toolchain_hash": "sha256:4e16227bf723a41207d94a8619f8b6bb50731c412cb5b298869e265097dcaccf",
+              "compiler_toolchain_hash": "sha256:90bc7c99cacaf58217dd6d07781788c844385d3c70644c4086d6c997312f60a1",
               "compiler_toolchain_ref": {
                 "id": "icarus.workflow-compiler-toolchain",
-                "version": "3.0.1"
+                "version": "3.0.2"
               },
-              "compiler_version": "3.0.1",
+              "compiler_version": "3.0.2",
               "completion": {
                 "early_close": "cancel_and_fence_remaining",
                 "early_rules": [],
@@ -3151,7 +3327,7 @@
                       "safe_to_abandon": true,
                       "type": "fence_only"
                     },
-                    "dependency_closure_hash": "sha256:37fdfe84aa17bebbbdde1ea703c3a670ebe4429d0240b49d0a4cb5f9f083a8d5",
+                    "dependency_closure_hash": "sha256:f5e4cbbaa954aeca32e75e5070c731ccd4186c3690cf3ba8e7e4af473ad1dc7e",
                     "effect": {
                       "type": "pure"
                     },
@@ -3164,6 +3340,23 @@
                     "no_artifact_expected": true,
                     "no_evaluation_expected": true,
                     "node_type": "delegation",
+                    "outbox_effect": {
+                      "adapter_ref": {
+                        "id": "fixture.adapter.capability-dispatch",
+                        "version": "1.0.0"
+                      },
+                      "delivery_lane": "normal_execution",
+                      "delivery_policy_ref": {
+                        "id": "fixture.outbox-policy.normal-delivery",
+                        "version": "1.0.0"
+                      },
+                      "delivery_requirement": "required",
+                      "effect_type": "capability_dispatch",
+                      "idempotency": "provider_key",
+                      "reconciliation": {
+                        "type": "not_required"
+                      }
+                    },
                     "output_ports": {
                       "result": {
                         "max_bytes": 4096,
@@ -3204,6 +3397,72 @@
                   },
                   "id": "capability",
                   "input_ports": {},
+                  "outbox_execution_binding": {
+                    "adapter_identity": {
+                      "content_hash": "sha256:bb855d9b31768f47f5337cb5e145d16fa601575bed9bf2f4113e66d09df001a4",
+                      "ref": {
+                        "id": "fixture.adapter.capability-dispatch",
+                        "version": "1.0.0"
+                      },
+                      "resource_type": "outbox_adapter"
+                    },
+                    "binding_hash": "sha256:ef2d026a1146479f6c434b5788921ae9155d39eb95d452da4f81af4bc83a326d",
+                    "delivery_policy_identity": {
+                      "content_hash": "sha256:969511908773cba1843c9fa29e8494c1d46f7c49b000179ae44bb51bbea8d137",
+                      "ref": {
+                        "id": "fixture.outbox-policy.normal-delivery",
+                        "version": "1.0.0"
+                      },
+                      "resource_type": "outbox_policy"
+                    },
+                    "effect_contract": {
+                      "adapter_ref": {
+                        "id": "fixture.adapter.capability-dispatch",
+                        "version": "1.0.0"
+                      },
+                      "delivery_lane": "normal_execution",
+                      "delivery_policy_ref": {
+                        "id": "fixture.outbox-policy.normal-delivery",
+                        "version": "1.0.0"
+                      },
+                      "delivery_requirement": "required",
+                      "effect_type": "capability_dispatch",
+                      "idempotency": "provider_key",
+                      "reconciliation": {
+                        "type": "not_required"
+                      }
+                    },
+                    "effective_policy_snapshot": {
+                      "effective_policy": {
+                        "attempt_timeout_ms": 60000,
+                        "backoff": "exponential",
+                        "delivery_duration_ms": 900000,
+                        "deterministic_jitter_micros": 200000,
+                        "honor_retry_after": true,
+                        "initial_backoff_ms": 1000,
+                        "max_backoff_ms": 60000,
+                        "max_delivery_attempts": 8,
+                        "max_reconcile_attempts": 4,
+                        "permanent_error_codes": [
+                          "contract_rejected",
+                          "permission_denied"
+                        ],
+                        "retryable_error_codes": [
+                          "provider_unavailable",
+                          "rate_limited"
+                        ]
+                      },
+                      "format": "icarus.workflow-outbox-effective-policy-snapshot/1",
+                      "runtime_safety_hash": "sha256:7f8c0b1babf451cb03ab5f99b436d3ae187b587783875850686188d893059259",
+                      "snapshot_hash": "sha256:889cb74144936b94044f1d85238fdaa149d55153cc9b24367b63439903b923b4",
+                      "source_policy_content_hash": "sha256:969511908773cba1843c9fa29e8494c1d46f7c49b000179ae44bb51bbea8d137",
+                      "source_policy_hash": "sha256:c13dfb035d3b12b2750b22e488c5dc423aedfdc651d7ab9fd4cf0b047e447f15",
+                      "source_policy_ref": {
+                        "id": "fixture.outbox-policy.normal-delivery",
+                        "version": "1.0.0"
+                      }
+                    }
+                  },
                   "output_ports": {
                     "result": {
                       "max_bytes": 4096,
@@ -3274,7 +3533,7 @@
                   "type": "terminal"
                 }
               ],
-              "plan_hash": "sha256:df3ee04469bc72c3a6e16f65774ea1a9a0e9d7c0b54861f51c57b323f8391881",
+              "plan_hash": "sha256:49414db63947d1f61d4a95b0afabc78eb9e06a508cbd9185114c7e6ccf905c60",
               "policy_snapshot_hash": "sha256:3043a34924b521e0204c12423a6dd580cb90d069fcd561a2f88f014f3a55dc9c",
               "proof_algorithm_hash": "sha256:6a49827e2c039b95c42c94a607acbf6ae7c088d0510fe7fd93cc0eb87f302308",
               "proof_algorithm_version": "2.0.1",
@@ -3379,20 +3638,20 @@
               },
               "wait_contract_catalog_hash": "sha256:4b412c391110c835029ec8c8256d1c7cc0caa52146136423cf9215e03bb53f42"
             },
-            "content_hash": "sha256:df3ee04469bc72c3a6e16f65774ea1a9a0e9d7c0b54861f51c57b323f8391881",
+            "content_hash": "sha256:49414db63947d1f61d4a95b0afabc78eb9e06a508cbd9185114c7e6ccf905c60",
             "schema": {
               "format": "icarus.workflow-registry-exact-resource-query/1",
               "resource_type": "schema",
               "ref": {
-                "id": "icarus.workflow-compiled-scope-plan-schema",
-                "version": "2.0.0"
+                "id": "icarus.workflow-compiled-scope-plan-v2-execution-binding-schema",
+                "version": "1.0.0"
               },
-              "content_hash": "sha256:23fad8f4a3b51da3fea4777bf07f862247ff3db7946c6283d4644f953be198e6",
+              "content_hash": "sha256:02b369e85bf131ea263a8a719c1ddca4f0015f066a5703d2adc1c6e939e195ad",
               "schema_ref": {
-                "id": "icarus.workflow-compiled-scope-plan-schema",
-                "version": "2.0.0"
+                "id": "icarus.workflow-compiled-scope-plan-v2-execution-binding-schema",
+                "version": "1.0.0"
               },
-              "schema_hash": "sha256:23fad8f4a3b51da3fea4777bf07f862247ff3db7946c6283d4644f953be198e6",
+              "schema_hash": "sha256:02b369e85bf131ea263a8a719c1ddca4f0015f066a5703d2adc1c6e939e195ad",
               "owner": {
                 "kind": "core",
                 "ref": {
@@ -3484,12 +3743,12 @@
               "id": "fixture.feature-manifest",
               "version": "2.0.0"
             },
-            "feature_manifest_hash": "sha256:9f8d3a6e1e9b5d129c15afcfc0de338d6d07374a758041254f3968058b576ec4",
+            "feature_manifest_hash": "sha256:5f6e18da4e47084670ba54b864253d40a49eafe66eebb86bfdb0433f5deba0b4",
             "feature_release_ref": {
               "id": "fixture.feature-release",
               "version": "1.0.0"
             },
-            "feature_release_hash": "sha256:1dc43d990979a2cda7b8077e4422f48d6db6fe1cb95a1eff5615b96af55062cf",
+            "feature_release_hash": "sha256:3cd992af6a09e129475ba2c424801e95948a2f5e7fcd50f5863fbf42f60ffae8",
             "resources": [
               {
                 "resource_type": "definition",
@@ -3498,7 +3757,7 @@
                   "version": "1.0.0"
                 },
                 "launchability": "test_only",
-                "content_hash": "sha256:d03d960a4f91dd5385725d8a78709891ec9fd185c6fa7c1a8278a74360c562f2",
+                "content_hash": "sha256:a1b4502a45040a2468af4920417937b73deac4f620bac73122ba3a1dfed4e98b",
                 "dependencies": [
                   {
                     "resource_type": "schema",
@@ -3510,15 +3769,16 @@
                   }
                 ],
                 "compiled_plan_pin": {
-                  "plan_ref": "conformance/sealed/g2-production-compiler-replay-repair-v2/expected/positive.static-lowering.plan.json",
-                  "plan_hash": "sha256:df3ee04469bc72c3a6e16f65774ea1a9a0e9d7c0b54861f51c57b323f8391881",
+                  "plan_ref": "conformance/sealed/g2-capability-outbox-binding-v3/expected/positive.static-lowering.plan.json",
+                  "plan_hash": "sha256:49414db63947d1f61d4a95b0afabc78eb9e06a508cbd9185114c7e6ccf905c60",
                   "plan_format": "icarus.workflow-graph-scope-plan/2",
-                  "compiler_toolchain_hash": "sha256:4e16227bf723a41207d94a8619f8b6bb50731c412cb5b298869e265097dcaccf",
-                  "compiler_build_hash": "sha256:4cb84d57dee323723ed60dc22394100b37cc76a3bfde793ef95ba707cd21a976",
+                  "compiler_toolchain_hash": "sha256:90bc7c99cacaf58217dd6d07781788c844385d3c70644c4086d6c997312f60a1",
+                  "compiler_build_hash": "sha256:698af607955463f01a404d626586420f3dd8f7a208da87c1e138075b1518ba05",
                   "provenance": "sealed_g2_expected"
                 },
                 "execution_artifact_pin": null,
-                "resource_hash": "sha256:cfd91b0162aebf62f1aa8f614b52c8cc78624b50197ebfce0bc8144cf6998a3f"
+                "capability_outbox_binding": null,
+                "resource_hash": "sha256:9df2882d13d019c9137b4bcb91c754306f5ebcbed6f533b8a6bd1d062b03cd29"
               },
               {
                 "resource_type": "executor_implementation",
@@ -3556,7 +3816,8 @@
                   "runtime_kind": "node_bundle",
                   "runtime_abi_major": 1
                 },
-                "resource_hash": "sha256:cb8cf23d1da01cbeab97e9d8114adf8ff72227ead1fc3e4c5a10a4f01036695a"
+                "capability_outbox_binding": null,
+                "resource_hash": "sha256:00a552c2b0665c35a671fc0ceee2b973548ddce128e1351e7434df767f10ef8c"
               },
               {
                 "resource_type": "feature_execution_artifact",
@@ -3586,7 +3847,8 @@
                   "runtime_kind": "node_bundle",
                   "runtime_abi_major": 1
                 },
-                "resource_hash": "sha256:3ceb160a1d22909ab38cc3e787ccea6d2a55d0ee5380e0dc31f13e6a7c943823"
+                "capability_outbox_binding": null,
+                "resource_hash": "sha256:26f654d0dff5c876392107bf9bb31328c5416c7a5af3c140a4475070dc590413"
               },
               {
                 "resource_type": "recipe",
@@ -3603,7 +3865,7 @@
                       "id": "fixture.definition",
                       "version": "1.0.0"
                     },
-                    "content_hash": "sha256:d03d960a4f91dd5385725d8a78709891ec9fd185c6fa7c1a8278a74360c562f2"
+                    "content_hash": "sha256:a1b4502a45040a2468af4920417937b73deac4f620bac73122ba3a1dfed4e98b"
                   },
                   {
                     "resource_type": "executor_implementation",
@@ -3624,7 +3886,8 @@
                 ],
                 "compiled_plan_pin": null,
                 "execution_artifact_pin": null,
-                "resource_hash": "sha256:eaf64f6d849c73c9ff66cdd1f736543a034969bed2c1a51bf7caab9c96b7f02b"
+                "capability_outbox_binding": null,
+                "resource_hash": "sha256:e193f4725b96cd8ba0114d2f2ad23929d63ac5d4207c8799ef9777484fd783bc"
               },
               {
                 "resource_type": "schema",
@@ -3637,7 +3900,8 @@
                 "dependencies": [],
                 "compiled_plan_pin": null,
                 "execution_artifact_pin": null,
-                "resource_hash": "sha256:ddd58f7e70f7981eff5bcdb7b79eb4fa09cd001c6fb9d1e95e103e3b56d8ea85"
+                "capability_outbox_binding": null,
+                "resource_hash": "sha256:867b962d8bd9cf39c81a88053c6172c7dda30f7771359b9d47931895c14567e2"
               }
             ],
             "upstream_identity": {
@@ -3646,21 +3910,21 @@
               "g1_physical_schema_identity": "sha256:ba025b32bb028f2ffe5df45d9440cd0a897e0a06c076b10b6f641c265ae02090",
               "g1_schema_hash": "sha256:49aaee7c8f046cd9a15b3bc5b77fbcf1713be2a1872078941043f5ccdca29024",
               "g1_migration_sha256": "sha256:2ead40dc2f1618f87247e9d3bb476266797c38560e1ad0537a6afa6f71a3fbf6",
-              "g2_sealed_bundle_ref": "conformance/sealed/g2-production-compiler-replay-repair-v2/golden-conformance-bundle@2.json",
-              "g2_sealed_bundle_artifact_hash": "sha256:037009dcd6c5d6bd2888c484fe1adacded68da5c55e17ba12eb722092e4faced",
-              "g2_sealed_bundle_hash": "sha256:d99647d8ca6aabc737a793019335e6770aa111a79be7545c4dec00c6e7af2145",
+              "g2_sealed_bundle_ref": "conformance/sealed/g2-capability-outbox-binding-v3/golden-conformance-bundle@2.json",
+              "g2_sealed_bundle_artifact_hash": "sha256:967437bb9f91e32e5014b2af90a23f5646e491eb427bdf55accb345ead70db8f",
+              "g2_sealed_bundle_hash": "sha256:b3ed9e43bd0fadaf40520257926dcf690ee8495bb417220245f248385bde9efb",
               "compiler": {
                 "compiler_toolchain_manifest_ref": {
                   "id": "icarus.workflow-compiler-toolchain",
-                  "version": "3.0.1"
+                  "version": "3.0.2"
                 },
-                "compiler_toolchain_hash": "sha256:4e16227bf723a41207d94a8619f8b6bb50731c412cb5b298869e265097dcaccf",
-                "compiler_version": "3.0.1",
-                "compiler_build_hash": "sha256:4cb84d57dee323723ed60dc22394100b37cc76a3bfde793ef95ba707cd21a976",
-                "compiled_ir_schema_ref": "conformance/compiler-contract-repair/schemas/compiled-scope-plan-v2-schema.json",
-                "compiled_ir_schema_hash": "sha256:4d4e325f94b55a6767f3e8596e1e9b880df2b402d3c89f587a10a23f0eadbd46",
-                "conformance_result_schema_ref": "conformance/compiler-contract-repair/schemas/compiler-conformance-case-result-schema.json",
-                "conformance_result_schema_hash": "sha256:019a4ba80ed8ae57b6c862d9fda62d9edcb8aca9c4910fde6bbb580c09af8706"
+                "compiler_toolchain_hash": "sha256:90bc7c99cacaf58217dd6d07781788c844385d3c70644c4086d6c997312f60a1",
+                "compiler_version": "3.0.2",
+                "compiler_build_hash": "sha256:698af607955463f01a404d626586420f3dd8f7a208da87c1e138075b1518ba05",
+                "compiled_ir_schema_ref": "conformance/capability-outbox-execution-binding/schemas/compiled-scope-plan-v2-execution-binding-schema@1.json",
+                "compiled_ir_schema_hash": "sha256:f5bc0a43d5723096295b9a6fcd5a0965c3b98ca810ae8b6dc1a7072996608e06",
+                "conformance_result_schema_ref": "conformance/capability-outbox-execution-binding/schemas/compiler-conformance-case-result-execution-binding-schema@1.json",
+                "conformance_result_schema_hash": "sha256:021da33556e677984b767f99b12800be8454c7516221ec63bb16e1cb26f867f7"
               }
             },
             "expected_oracle": "sealed_g2_independent_expected",
@@ -3677,7 +3941,7 @@
             },
             "requested_registry_write": false,
             "requested_activation": false,
-            "preflight_hash": "sha256:32019d2be992d1bfd88427ea909dc2f5a5e0e08b1a838661acf2e18f4b60f23e"
+            "preflight_hash": "sha256:3fc6be6a4babbeafe079123233cc39defd2a23296a0aa3e222cb0068102d3740"
           },
           "release_resources": [
             {
@@ -3687,7 +3951,7 @@
                 "id": "fixture.definition",
                 "version": "1.0.0"
               },
-              "content_hash": "sha256:d03d960a4f91dd5385725d8a78709891ec9fd185c6fa7c1a8278a74360c562f2",
+              "content_hash": "sha256:a1b4502a45040a2468af4920417937b73deac4f620bac73122ba3a1dfed4e98b",
               "schema_ref": {
                 "id": "fixture.registry.schema",
                 "version": "1.0.0"
@@ -3804,7 +4068,7 @@
                     "id": "fixture.definition",
                     "version": "1.0.0"
                   },
-                  "content_hash": "sha256:d03d960a4f91dd5385725d8a78709891ec9fd185c6fa7c1a8278a74360c562f2",
+                  "content_hash": "sha256:a1b4502a45040a2468af4920417937b73deac4f620bac73122ba3a1dfed4e98b",
                   "dependency_kind": "registry_exact"
                 },
                 {
@@ -3855,7 +4119,7 @@
               "id": "fixture.feature-release",
               "version": "1.0.0"
             },
-            "feature_release_hash": "sha256:1dc43d990979a2cda7b8077e4422f48d6db6fe1cb95a1eff5615b96af55062cf",
+            "feature_release_hash": "sha256:3cd992af6a09e129475ba2c424801e95948a2f5e7fcd50f5863fbf42f60ffae8",
             "feature_release_execution_artifact": {
               "ref": {
                 "id": "fixture.execution-artifact",
@@ -3868,8 +4132,8 @@
                 "id": "fixture.retention-abi-snapshot",
                 "version": "1.0.0"
               },
-              "snapshot_hash": "sha256:f2e8d818727d976d351fa502929b07ecfa415b384754393fc7943367adc0d5aa",
-              "expected_compiler_version": "3.0.1",
+              "snapshot_hash": "sha256:a34551c69817b6025cc562b80e4d194356c17a8c44862051b7d62e4566f4d6d9",
+              "expected_compiler_version": "3.0.2",
               "expected_core_build_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
               "expected_database_schema_hash": "sha256:49aaee7c8f046cd9a15b3bc5b77fbcf1713be2a1872078941043f5ccdca29024"
             },
@@ -3878,7 +4142,7 @@
                 "id": "fixture.retention-abi-closure",
                 "version": "1.0.0"
               },
-              "closure_hash": "sha256:7326faeecb2e184c41e837d65b4eed1ced7c199e98d9007ac62ac27c7ea2d482",
+              "closure_hash": "sha256:9ca322653231666ab74987cbecde3c481b179dd87ac7a927833f6485b0302583",
               "root": {
                 "format": "icarus.workflow-registry-exact-resource-query/1",
                 "resource_type": "recipe",
@@ -3904,7 +4168,7 @@
                       "id": "fixture.definition",
                       "version": "1.0.0"
                     },
-                    "content_hash": "sha256:d03d960a4f91dd5385725d8a78709891ec9fd185c6fa7c1a8278a74360c562f2",
+                    "content_hash": "sha256:a1b4502a45040a2468af4920417937b73deac4f620bac73122ba3a1dfed4e98b",
                     "dependency_kind": "registry_exact"
                   },
                   {
@@ -3934,7 +4198,7 @@
                     "id": "fixture.definition",
                     "version": "1.0.0"
                   },
-                  "content_hash": "sha256:d03d960a4f91dd5385725d8a78709891ec9fd185c6fa7c1a8278a74360c562f2"
+                  "content_hash": "sha256:a1b4502a45040a2468af4920417937b73deac4f620bac73122ba3a1dfed4e98b"
                 },
                 {
                   "resource_type": "executor_implementation",
@@ -4086,7 +4350,7 @@
                 "id": "fixture.feature-release",
                 "version": "1.0.0"
               },
-              "feature_release_hash": "sha256:1dc43d990979a2cda7b8077e4422f48d6db6fe1cb95a1eff5615b96af55062cf",
+              "feature_release_hash": "sha256:3cd992af6a09e129475ba2c424801e95948a2f5e7fcd50f5863fbf42f60ffae8",
               "members": [
                 {
                   "resource_type": "definition",
@@ -4094,7 +4358,7 @@
                     "id": "fixture.definition",
                     "version": "1.0.0"
                   },
-                  "content_hash": "sha256:d03d960a4f91dd5385725d8a78709891ec9fd185c6fa7c1a8278a74360c562f2"
+                  "content_hash": "sha256:a1b4502a45040a2468af4920417937b73deac4f620bac73122ba3a1dfed4e98b"
                 },
                 {
                   "resource_type": "executor_implementation",
@@ -4141,7 +4405,7 @@
               "id": "fixture.feature-release",
               "version": "1.0.0"
             },
-            "release_hash": "sha256:1dc43d990979a2cda7b8077e4422f48d6db6fe1cb95a1eff5615b96af55062cf",
+            "release_hash": "sha256:3cd992af6a09e129475ba2c424801e95948a2f5e7fcd50f5863fbf42f60ffae8",
             "execution_artifact": {
               "ref": {
                 "id": "fixture.execution-artifact",
@@ -4164,7 +4428,7 @@
                     "id": "fixture.definition",
                     "version": "1.0.0"
                   },
-                  "content_hash": "sha256:d03d960a4f91dd5385725d8a78709891ec9fd185c6fa7c1a8278a74360c562f2"
+                  "content_hash": "sha256:a1b4502a45040a2468af4920417937b73deac4f620bac73122ba3a1dfed4e98b"
                 },
                 "role": "closure_member"
               },
@@ -4214,12 +4478,12 @@
               }
             ]
           },
-          "domain_request_hash": "sha256:24fecedfb62c0462f7c71913f37c166420fc2e5f1752cd924b8e500c2cb8948b",
-          "request_hash": "sha256:57d563f8c92288497ff9fd2876493bb368fbdac4bec183ec88e2b35af50d5693"
+          "domain_request_hash": "sha256:4e716681bda3ed08960da27256943a9c3923fdfed97ec145aabb25407ca53b01",
+          "request_hash": "sha256:23dea8b54645946da4011a119432eeb3995e2845c221b7312c7aecc051b8e987"
         },
         "expected_code": "approved_review_identity_mismatch"
       }
     ]
   },
-  "hash": "sha256:93b1214f6277081a721e225812298afb381d6e43b3f21fe804f5fe66b84a7d27"
+  "hash": "sha256:c80cfe3b3388282687aab3c2fcce6cf30d06e8ac5d8951677b399ff8f728cb0c"
 }

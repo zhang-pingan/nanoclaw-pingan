@@ -1,0 +1,59 @@
+{
+  "format": "icarus.workflow-capability-outbox-negative-cases/1",
+  "ref": {
+    "id": "icarus.workflow-capability-outbox-negative-cases",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-capability-outbox-negative-cases:1\n",
+  "hash": "sha256:a257d6f80feaf2d48f22dbe3440961ca29ab963e2d7cd0b6df96ce5df1d98398",
+  "payload": {
+    "format": "icarus.workflow-capability-outbox-negative-cases/1",
+    "cases": [
+      {
+        "case_id": "missing_binding",
+        "expected": "rejected"
+      },
+      {
+        "case_id": "mismatched_adapter_identity",
+        "expected": "rejected"
+      },
+      {
+        "case_id": "mismatched_policy_identity",
+        "expected": "rejected"
+      },
+      {
+        "case_id": "unpublished_adapter",
+        "expected": "rejected"
+      },
+      {
+        "case_id": "unpublished_policy",
+        "expected": "rejected"
+      },
+      {
+        "case_id": "latest_adapter_ref",
+        "expected": "rejected"
+      },
+      {
+        "case_id": "latest_policy_ref",
+        "expected": "rejected"
+      },
+      {
+        "case_id": "test_only_binding_for_production",
+        "expected": "rejected"
+      },
+      {
+        "case_id": "non_finite_delivery_policy",
+        "expected": "rejected"
+      },
+      {
+        "case_id": "policy_snapshot_hash_drift",
+        "expected": "rejected"
+      },
+      {
+        "case_id": "unknown_binding_field",
+        "expected": "rejected"
+      }
+    ]
+  }
+}

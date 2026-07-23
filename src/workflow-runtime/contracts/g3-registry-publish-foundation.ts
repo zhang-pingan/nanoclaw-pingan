@@ -189,6 +189,48 @@ export const G3_REGISTRY_PUBLISH_PREFLIGHT_SCHEMA: JsonObject = {
         content_hash: hashSchema,
       },
     },
+    capability_outbox_binding: {
+      type: 'object',
+      additionalProperties: false,
+      required: [
+        'effect_type',
+        'adapter',
+        'delivery_policy',
+        'policy_snapshot_source_hash',
+        'delivery_lane',
+        'reconciliation',
+        'idempotency',
+        'delivery_requirement',
+      ],
+      properties: {
+        effect_type: { const: 'capability_dispatch' },
+        adapter: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['resource_type', 'ref', 'content_hash'],
+          properties: {
+            resource_type: { const: 'outbox_adapter' },
+            ref: { $ref: '#/$defs/versioned_ref' },
+            content_hash: hashSchema,
+          },
+        },
+        delivery_policy: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['resource_type', 'ref', 'content_hash'],
+          properties: {
+            resource_type: { const: 'outbox_policy' },
+            ref: { $ref: '#/$defs/versioned_ref' },
+            content_hash: hashSchema,
+          },
+        },
+        policy_snapshot_source_hash: hashSchema,
+        delivery_lane: { const: 'normal_execution' },
+        reconciliation: { enum: ['not_required', 'by_effect_key'] },
+        idempotency: { enum: ['provider_key', 'external_lookup'] },
+        delivery_requirement: { const: 'required' },
+      },
+    },
     compiled_plan_pin: {
       type: 'object',
       additionalProperties: false,
@@ -231,6 +273,7 @@ export const G3_REGISTRY_PUBLISH_PREFLIGHT_SCHEMA: JsonObject = {
         'dependencies',
         'compiled_plan_pin',
         'execution_artifact_pin',
+        'capability_outbox_binding',
         'resource_hash',
       ],
       properties: {
@@ -249,6 +292,12 @@ export const G3_REGISTRY_PUBLISH_PREFLIGHT_SCHEMA: JsonObject = {
         },
         execution_artifact_pin: {
           anyOf: [{ $ref: '#/$defs/execution_artifact_pin' }, { type: 'null' }],
+        },
+        capability_outbox_binding: {
+          anyOf: [
+            { $ref: '#/$defs/capability_outbox_binding' },
+            { type: 'null' },
+          ],
         },
         resource_hash: hashSchema,
       },
@@ -755,6 +804,37 @@ export function evaluateG3RegistryPublishPreflight(
       return rejected('g2_identity_mismatch', value);
     }
   }
+  for (const resource of resources) {
+    const binding = resource.capability_outbox_binding;
+    if (resource.resource_type === 'capability' && binding === null) {
+      return rejected('capability_outbox_binding_required', value);
+    }
+    if (resource.resource_type !== 'capability' && binding !== null) {
+      return rejected('capability_outbox_binding_mismatch', value);
+    }
+    if (binding === null) continue;
+    const dependencyKeys = new Set(resource.dependencies.map(dependencyKey));
+    const adapterKey = dependencyKey(binding.adapter);
+    const policyKey = dependencyKey(binding.delivery_policy);
+    const adapter = resources.find(
+      (candidate) => resourceKey(candidate) === adapterKey,
+    );
+    const policy = resources.find(
+      (candidate) => resourceKey(candidate) === policyKey,
+    );
+    if (
+      !dependencyKeys.has(adapterKey) ||
+      !dependencyKeys.has(policyKey) ||
+      adapter?.content_hash !== binding.adapter.content_hash ||
+      policy?.content_hash !== binding.delivery_policy.content_hash ||
+      binding.policy_snapshot_source_hash !==
+        binding.delivery_policy.content_hash ||
+      adapter?.launchability !== resource.launchability ||
+      policy?.launchability !== resource.launchability
+    ) {
+      return rejected('capability_outbox_binding_mismatch', value);
+    }
+  }
   if (
     input.target_registry === 'production' &&
     resources.some((resource) => resource.launchability === 'test_only')
@@ -840,7 +920,12 @@ type G3RegistryResourceCandidateWithoutHash = Pick<
   | 'dependencies'
   | 'compiled_plan_pin'
   | 'execution_artifact_pin'
->;
+> & {
+  capability_outbox_binding?: Exclude<
+    G3RegistryResourceCandidate['capability_outbox_binding'],
+    null
+  >;
+};
 
 type G3RegistryPublishPreflightWithoutHash = Pick<
   G3RegistryPublishPreflightInput,
@@ -874,6 +959,7 @@ function withResourceHash(
     dependencies: resource.dependencies,
     compiled_plan_pin: resource.compiled_plan_pin,
     execution_artifact_pin: resource.execution_artifact_pin,
+    capability_outbox_binding: resource.capability_outbox_binding ?? null,
     resource_hash: `sha256:${'0'.repeat(64)}` as Sha256Hash,
   };
   complete.resource_hash = calculateG3RegistryResourceHash(complete);
@@ -945,9 +1031,9 @@ const testOnlyDefinition = withResourceHash({
   dependencies: [],
   compiled_plan_pin: {
     plan_ref:
-      'conformance/sealed/g2-production-compiler-replay-repair-v2/expected/positive.static-lowering.plan.json',
+      'conformance/sealed/g2-capability-outbox-binding-v3/expected/positive.static-lowering.plan.json',
     plan_hash:
-      'sha256:df3ee04469bc72c3a6e16f65774ea1a9a0e9d7c0b54861f51c57b323f8391881',
+      'sha256:e208dddbd363f68f35236b5333234d63338b19a91e38bb5144bd8d7fbc09ee01',
     plan_format: 'icarus.workflow-graph-scope-plan/2',
     compiler_toolchain_hash:
       G3_CURRENT_UPSTREAM_IDENTITY.compiler.compiler_toolchain_hash,
@@ -994,6 +1080,83 @@ const TEST_ONLY_PREFLIGHT = basePreflight({
   resources: [testOnlyDefinition, testOnlyExecutor],
 });
 
+const testOnlyAdapter = withResourceHash({
+  resource_type: 'outbox_adapter',
+  ref: { id: 'test-only.fixture.adapter', version: '1.0.0' },
+  launchability: 'test_only',
+  content_hash:
+    'sha256:1111111111111111111111111111111111111111111111111111111111111111',
+  dependencies: [],
+  compiled_plan_pin: null,
+  execution_artifact_pin: null,
+});
+const testOnlyPolicy = withResourceHash({
+  resource_type: 'outbox_policy',
+  ref: { id: 'test-only.fixture.outbox-policy', version: '1.0.0' },
+  launchability: 'test_only',
+  content_hash:
+    'sha256:2222222222222222222222222222222222222222222222222222222222222222',
+  dependencies: [],
+  compiled_plan_pin: null,
+  execution_artifact_pin: null,
+});
+const testOnlyCapability = withResourceHash({
+  resource_type: 'capability',
+  ref: { id: 'test-only.fixture.capability', version: '1.0.0' },
+  launchability: 'test_only',
+  content_hash:
+    'sha256:3333333333333333333333333333333333333333333333333333333333333333',
+  dependencies: [
+    {
+      resource_type: 'outbox_adapter',
+      ref: testOnlyAdapter.ref,
+      content_hash: testOnlyAdapter.content_hash,
+    },
+    {
+      resource_type: 'outbox_policy',
+      ref: testOnlyPolicy.ref,
+      content_hash: testOnlyPolicy.content_hash,
+    },
+  ],
+  compiled_plan_pin: null,
+  execution_artifact_pin: null,
+  capability_outbox_binding: {
+    effect_type: 'capability_dispatch',
+    adapter: {
+      resource_type: 'outbox_adapter',
+      ref: testOnlyAdapter.ref,
+      content_hash: testOnlyAdapter.content_hash,
+    },
+    delivery_policy: {
+      resource_type: 'outbox_policy',
+      ref: testOnlyPolicy.ref,
+      content_hash: testOnlyPolicy.content_hash,
+    },
+    policy_snapshot_source_hash: testOnlyPolicy.content_hash,
+    delivery_lane: 'normal_execution',
+    reconciliation: 'not_required',
+    idempotency: 'provider_key',
+    delivery_requirement: 'required',
+  },
+});
+const TEST_ONLY_CAPABILITY_PREFLIGHT = basePreflight({
+  target_registry: 'test_only',
+  fixture_scope: 'test_only',
+  feature_manifest_ref: {
+    id: 'test-only.fixture.feature-manifest',
+    version: '2.0.0',
+  },
+  feature_manifest_hash:
+    'sha256:4444444444444444444444444444444444444444444444444444444444444444',
+  feature_release_ref: {
+    id: 'test-only.fixture.feature-release',
+    version: '1.0.0',
+  },
+  feature_release_hash:
+    'sha256:5555555555555555555555555555555555555555555555555555555555555555',
+  resources: [testOnlyCapability, testOnlyAdapter, testOnlyPolicy],
+});
+
 interface PositiveCase extends JsonObject {
   case_id: string;
   fixture_scope: 'test_only';
@@ -1032,9 +1195,75 @@ const POSITIVE_CASES: PositiveCase[] = [
     input: TEST_ONLY_PREFLIGHT,
     expected_result: evaluateG3RegistryPublishPreflight(TEST_ONLY_PREFLIGHT),
   },
+  {
+    case_id: 'positive.test-only-capability-outbox-binding',
+    fixture_scope: 'test_only',
+    input: TEST_ONLY_CAPABILITY_PREFLIGHT,
+    expected_result: evaluateG3RegistryPublishPreflight(
+      TEST_ONLY_CAPABILITY_PREFLIGHT,
+    ),
+  },
 ];
 
 const NEGATIVE_CASES: NegativeCase[] = [
+  {
+    case_id: 'negative.capability-outbox-binding-missing',
+    fixture_scope: 'test_only',
+    base_case_id: 'positive.test-only-capability-outbox-binding',
+    mutations: [
+      {
+        operation: 'set',
+        pointer: '/resources/0/capability_outbox_binding',
+        value: null,
+      },
+    ],
+    rehash_resource_hashes: true,
+    rehash_preflight_hash: true,
+    expected_code: 'capability_outbox_binding_required',
+  },
+  {
+    case_id: 'negative.capability-outbox-policy-hash-mismatch',
+    fixture_scope: 'test_only',
+    base_case_id: 'positive.test-only-capability-outbox-binding',
+    mutations: [
+      {
+        operation: 'set',
+        pointer:
+          '/resources/0/capability_outbox_binding/policy_snapshot_source_hash',
+        value:
+          'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      },
+    ],
+    rehash_resource_hashes: true,
+    rehash_preflight_hash: true,
+    expected_code: 'capability_outbox_binding_mismatch',
+  },
+  {
+    case_id: 'negative.capability-outbox-latest-adapter',
+    fixture_scope: 'test_only',
+    base_case_id: 'positive.test-only-capability-outbox-binding',
+    mutations: [
+      {
+        operation: 'set',
+        pointer: '/resources/0/capability_outbox_binding/adapter/ref/version',
+        value: 'latest',
+      },
+    ],
+    rehash_resource_hashes: true,
+    rehash_preflight_hash: true,
+    expected_code: 'schema_invalid',
+  },
+  {
+    case_id: 'negative.capability-outbox-test-only-production',
+    fixture_scope: 'test_only',
+    base_case_id: 'positive.test-only-capability-outbox-binding',
+    mutations: [
+      { operation: 'set', pointer: '/target_registry', value: 'production' },
+    ],
+    rehash_resource_hashes: false,
+    rehash_preflight_hash: true,
+    expected_code: 'test_only_promotion_forbidden',
+  },
   {
     case_id: 'negative.unknown-field',
     fixture_scope: 'test_only',
@@ -1613,7 +1842,7 @@ function assertExactArtifact(
 
 function validateCurrentUpstream(): void {
   assertExactArtifact(
-    'conformance/sealed/g2-production-compiler-replay-repair-v2/golden-conformance-bundle@2.json',
+    G3_CURRENT_UPSTREAM_IDENTITY.g2_sealed_bundle_ref,
     G3_CURRENT_UPSTREAM_IDENTITY.g2_sealed_bundle_artifact_hash,
   );
   const sealed = readArtifact(

@@ -12,6 +12,8 @@ export interface SnapshotResource {
   ref: VersionedRef;
   resourceType: string;
   contentHash: Sha256Hash;
+  publicationState: string | null;
+  launchability: string | null;
   content: JsonObject;
 }
 
@@ -114,6 +116,12 @@ export function bindCompilerSnapshot(
       ref: entry.ref as VersionedRef,
       resourceType: String(entry.resource_type),
       contentHash: asHash(entry.content_hash, 'resource content_hash'),
+      publicationState:
+        typeof entry.publication_state === 'string'
+          ? entry.publication_state
+          : null,
+      launchability:
+        typeof entry.launchability === 'string' ? entry.launchability : null,
       content: entry.content,
     };
   });

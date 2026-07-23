@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-registry-publish-preflight-schema:1\n",
-  "hash": "sha256:08c516629f1470f25bfa14e162091c670d7b94c5dea7a1a3fb91476b5e321023",
+  "hash": "sha256:fd92c43f6e82503054cd6199bd1342ee4a53ea1eabd07aaef9ece000e839d5ed",
   "payload": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "$id": "https://icarus.local/schemas/workflow-registry-publish-preflight/1",
@@ -213,6 +213,7 @@
               "graph_template",
               "notification_contract",
               "operational_remediation_policy",
+              "outbox_adapter",
               "outbox_policy",
               "prompt",
               "recipe",
@@ -231,6 +232,89 @@
           "content_hash": {
             "type": "string",
             "pattern": "^sha256:[0-9a-f]{64}$"
+          }
+        }
+      },
+      "capability_outbox_binding": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "effect_type",
+          "adapter",
+          "delivery_policy",
+          "policy_snapshot_source_hash",
+          "delivery_lane",
+          "reconciliation",
+          "idempotency",
+          "delivery_requirement"
+        ],
+        "properties": {
+          "effect_type": {
+            "const": "capability_dispatch"
+          },
+          "adapter": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "resource_type",
+              "ref",
+              "content_hash"
+            ],
+            "properties": {
+              "resource_type": {
+                "const": "outbox_adapter"
+              },
+              "ref": {
+                "$ref": "#/$defs/versioned_ref"
+              },
+              "content_hash": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              }
+            }
+          },
+          "delivery_policy": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "resource_type",
+              "ref",
+              "content_hash"
+            ],
+            "properties": {
+              "resource_type": {
+                "const": "outbox_policy"
+              },
+              "ref": {
+                "$ref": "#/$defs/versioned_ref"
+              },
+              "content_hash": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              }
+            }
+          },
+          "policy_snapshot_source_hash": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "delivery_lane": {
+            "const": "normal_execution"
+          },
+          "reconciliation": {
+            "enum": [
+              "not_required",
+              "by_effect_key"
+            ]
+          },
+          "idempotency": {
+            "enum": [
+              "provider_key",
+              "external_lookup"
+            ]
+          },
+          "delivery_requirement": {
+            "const": "required"
           }
         }
       },
@@ -307,6 +391,7 @@
           "dependencies",
           "compiled_plan_pin",
           "execution_artifact_pin",
+          "capability_outbox_binding",
           "resource_hash"
         ],
         "properties": {
@@ -327,6 +412,7 @@
               "graph_template",
               "notification_contract",
               "operational_remediation_policy",
+              "outbox_adapter",
               "outbox_policy",
               "prompt",
               "recipe",
@@ -374,6 +460,16 @@
             "anyOf": [
               {
                 "$ref": "#/$defs/execution_artifact_pin"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "capability_outbox_binding": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/capability_outbox_binding"
               },
               {
                 "type": "null"

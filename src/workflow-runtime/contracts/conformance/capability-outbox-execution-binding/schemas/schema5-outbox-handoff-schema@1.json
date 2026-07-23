@@ -1,0 +1,146 @@
+{
+  "format": "icarus.workflow-schema5-outbox-handoff-schema/1",
+  "ref": {
+    "id": "icarus.workflow-schema5-outbox-handoff-schema",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-schema5-outbox-handoff-schema:1\n",
+  "hash": "sha256:01543dcb84990b0407668ec52c83ae2c883208c07ae76b7a141f331f1a8b8080",
+  "payload": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://icarus.local/schemas/schema5-outbox-handoff/1",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "format",
+      "binding_hash",
+      "adapter_registry_identity",
+      "delivery_policy_registry_identity",
+      "policy_snapshot_value_identity",
+      "outbox_columns"
+    ],
+    "properties": {
+      "format": {
+        "const": "icarus.workflow-schema5-outbox-handoff/1"
+      },
+      "binding_hash": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      },
+      "adapter_registry_identity": {
+        "$ref": "#/$defs/registry_identity"
+      },
+      "delivery_policy_registry_identity": {
+        "$ref": "#/$defs/registry_identity"
+      },
+      "policy_snapshot_value_identity": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "value_id",
+          "content_hash"
+        ],
+        "properties": {
+          "value_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "content_hash": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          }
+        }
+      },
+      "outbox_columns": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "adapter_resource_id",
+          "adapter_resource_hash",
+          "delivery_policy_resource_id",
+          "delivery_policy_resource_hash",
+          "policy_snapshot_value_id",
+          "policy_snapshot_hash"
+        ],
+        "properties": {
+          "adapter_resource_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "adapter_resource_hash": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "delivery_policy_resource_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "delivery_policy_resource_hash": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "policy_snapshot_value_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "policy_snapshot_hash": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          }
+        }
+      }
+    },
+    "$defs": {
+      "registry_identity": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "resource_type",
+          "ref",
+          "content_hash",
+          "registry_row_id"
+        ],
+        "properties": {
+          "resource_type": {
+            "enum": [
+              "outbox_adapter",
+              "outbox_policy"
+            ]
+          },
+          "ref": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "version"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 255
+              },
+              "version": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64,
+                "not": {
+                  "pattern": "^(?:current|head|latest|main|master|next|snapshot)$"
+                }
+              }
+            }
+          },
+          "content_hash": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "registry_row_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    }
+  }
+}

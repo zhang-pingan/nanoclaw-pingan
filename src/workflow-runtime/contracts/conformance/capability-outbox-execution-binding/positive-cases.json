@@ -1,0 +1,23 @@
+{
+  "format": "icarus.workflow-capability-outbox-positive-cases/1",
+  "ref": {
+    "id": "icarus.workflow-capability-outbox-positive-cases",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-capability-outbox-positive-cases:1\n",
+  "hash": "sha256:104727591b7612a3e2bb8908497a3e701bfb4ffbea3fdf9a6c9329d5ddcab26d",
+  "payload": {
+    "format": "icarus.workflow-capability-outbox-positive-cases/1",
+    "cases": [
+      {
+        "case_id": "published_exact_binding_lowers_to_finite_snapshot",
+        "expected": "accepted"
+      },
+      {
+        "case_id": "schema5_exact_fk_handoff",
+        "expected": "accepted"
+      }
+    ]
+  }
+}

@@ -1,0 +1,113 @@
+{
+  "format": "icarus.workflow-definition/1",
+  "ref": {
+    "id": "fixture.definition.main",
+    "version": "1.0.0"
+  },
+  "owner_feature_id": "fixture-feature",
+  "name": "G2 semantic correction fixture",
+  "context_contract_ref": {
+    "id": "fixture.context",
+    "version": "1.0.0"
+  },
+  "entry_points": {
+    "default": {
+      "state_key": "start"
+    }
+  },
+  "states": {
+    "start": {
+      "type": "delegation",
+      "capability_ref": {
+        "id": "fixture.capability.static",
+        "version": "1.0.0"
+      },
+      "policy": {
+        "allowed_node_types": [
+          "delegation",
+          "terminal"
+        ],
+        "allowed_capabilities": [
+          {
+            "id": "fixture.capability.static",
+            "version": "1.0.0"
+          }
+        ],
+        "allowed_templates": [],
+        "allowed_interface_refs": [],
+        "allowed_wait_contracts": [],
+        "allowed_child_policy_refs": [],
+        "allowed_claim_ids": [],
+        "allow_early_close": false,
+        "allow_indefinite_waits": false,
+        "effect_policy": {
+          "allowed_recovery_kinds": [
+            "pure"
+          ],
+          "max_impact": "read_only"
+        },
+        "build_retry": null,
+        "limits": {
+          "max_scopes": null,
+          "max_nodes": null,
+          "max_nodes_per_scope": null,
+          "max_edges_per_scope": null,
+          "max_nesting_depth": null,
+          "max_map_items": null,
+          "max_concurrency": null,
+          "max_total_attempts": null,
+          "max_total_waits": null,
+          "max_total_output_bytes": null,
+          "max_scope_spec_bytes": null,
+          "max_condition_steps": null,
+          "max_wait_duration_ms": null,
+          "max_pending_signals": null,
+          "max_fixed_point_facts": null,
+          "max_frontier_bytes": null
+        },
+        "usage_budget": {
+          "max_total_tool_calls": null,
+          "max_total_input_tokens": null,
+          "max_total_output_tokens": null,
+          "max_total_cost_micros": null
+        }
+      },
+      "input_bindings": {},
+      "retry_request": null,
+      "timeout_ms": null,
+      "on_complete": {
+        "success": {
+          "target": "done",
+          "notify": {
+            "contract_ref": {
+              "id": "fixture.notification",
+              "version": "1.0.0"
+            },
+            "input_bindings": {},
+            "delivery_requirement": "required"
+          }
+        },
+        "failure": {
+          "target": "done"
+        }
+      },
+      "on_error": {
+        "target": "done"
+      },
+      "on_local_cancel": {
+        "target": "done"
+      }
+    },
+    "done": {
+      "type": "terminal",
+      "terminal_kind": "normal",
+      "output_binding": {
+        "source": "constant",
+        "value": {
+          "status": "done"
+        }
+      }
+    }
+  },
+  "definition_hash": "sha256:b837eba9ff912563e198b8f2d1be483a2f3271c9f907ff4155dd98b3ce3b1f7f"
+}

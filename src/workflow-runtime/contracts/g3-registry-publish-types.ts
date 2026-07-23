@@ -16,6 +16,7 @@ export const G3_REGISTRY_RESOURCE_TYPES = [
   'graph_template',
   'notification_contract',
   'operational_remediation_policy',
+  'outbox_adapter',
   'outbox_policy',
   'prompt',
   'recipe',
@@ -32,6 +33,8 @@ export type G3RegistryResourceType =
   (typeof G3_REGISTRY_RESOURCE_TYPES)[number];
 
 export const G3_PUBLISH_PREFLIGHT_ERROR_CODES = [
+  'capability_outbox_binding_mismatch',
+  'capability_outbox_binding_required',
   'compiled_plan_pin_required',
   'execution_artifact_abi_mismatch',
   'execution_artifact_pin_required',
@@ -57,7 +60,7 @@ export type G3PublishPreflightErrorCode =
 export interface G3ExactCompilerIdentity extends JsonObject {
   compiler_toolchain_manifest_ref: VersionedRef;
   compiler_toolchain_hash: Sha256Hash;
-  compiler_version: '3.0.1';
+  compiler_version: '3.0.2';
   compiler_build_hash: Sha256Hash;
   compiled_ir_schema_ref: string;
   compiled_ir_schema_hash: Sha256Hash;
@@ -99,6 +102,19 @@ export interface G3ExecutionArtifactPin extends JsonObject {
   runtime_abi_major: 1;
 }
 
+export interface G3CapabilityOutboxBindingPin extends JsonObject {
+  effect_type: 'capability_dispatch';
+  adapter: G3RegistryResourceDependency & { resource_type: 'outbox_adapter' };
+  delivery_policy: G3RegistryResourceDependency & {
+    resource_type: 'outbox_policy';
+  };
+  policy_snapshot_source_hash: Sha256Hash;
+  delivery_lane: 'normal_execution';
+  reconciliation: 'not_required' | 'by_effect_key';
+  idempotency: 'provider_key' | 'external_lookup';
+  delivery_requirement: 'required';
+}
+
 export interface G3RegistryResourceCandidate extends JsonObject {
   resource_type: G3RegistryResourceType;
   ref: VersionedRef;
@@ -107,6 +123,7 @@ export interface G3RegistryResourceCandidate extends JsonObject {
   dependencies: G3RegistryResourceDependency[];
   compiled_plan_pin: G3CompiledPlanPin | null;
   execution_artifact_pin: G3ExecutionArtifactPin | null;
+  capability_outbox_binding: G3CapabilityOutboxBindingPin | null;
   resource_hash: Sha256Hash;
 }
 
@@ -169,29 +186,29 @@ export const G3_CURRENT_UPSTREAM_IDENTITY: G3UpstreamIdentity = {
   g1_migration_sha256:
     'sha256:2ead40dc2f1618f87247e9d3bb476266797c38560e1ad0537a6afa6f71a3fbf6',
   g2_sealed_bundle_ref:
-    'conformance/sealed/g2-production-compiler-replay-repair-v2/golden-conformance-bundle@2.json',
+    'conformance/sealed/g2-capability-outbox-binding-v3/golden-conformance-bundle@2.json',
   g2_sealed_bundle_artifact_hash:
-    'sha256:037009dcd6c5d6bd2888c484fe1adacded68da5c55e17ba12eb722092e4faced',
+    'sha256:967437bb9f91e32e5014b2af90a23f5646e491eb427bdf55accb345ead70db8f',
   g2_sealed_bundle_hash:
-    'sha256:d99647d8ca6aabc737a793019335e6770aa111a79be7545c4dec00c6e7af2145',
+    'sha256:b3ed9e43bd0fadaf40520257926dcf690ee8495bb417220245f248385bde9efb',
   compiler: {
     compiler_toolchain_manifest_ref: {
       id: 'icarus.workflow-compiler-toolchain',
-      version: '3.0.1',
+      version: '3.0.2',
     },
     compiler_toolchain_hash:
-      'sha256:4e16227bf723a41207d94a8619f8b6bb50731c412cb5b298869e265097dcaccf',
-    compiler_version: '3.0.1',
+      'sha256:90bc7c99cacaf58217dd6d07781788c844385d3c70644c4086d6c997312f60a1',
+    compiler_version: '3.0.2',
     compiler_build_hash:
-      'sha256:4cb84d57dee323723ed60dc22394100b37cc76a3bfde793ef95ba707cd21a976',
+      'sha256:698af607955463f01a404d626586420f3dd8f7a208da87c1e138075b1518ba05',
     compiled_ir_schema_ref:
-      'conformance/compiler-contract-repair/schemas/compiled-scope-plan-v2-schema.json',
+      'conformance/capability-outbox-execution-binding/schemas/compiled-scope-plan-v2-execution-binding-schema@1.json',
     compiled_ir_schema_hash:
-      'sha256:4d4e325f94b55a6767f3e8596e1e9b880df2b402d3c89f587a10a23f0eadbd46',
+      'sha256:f5bc0a43d5723096295b9a6fcd5a0965c3b98ca810ae8b6dc1a7072996608e06',
     conformance_result_schema_ref:
-      'conformance/compiler-contract-repair/schemas/compiler-conformance-case-result-schema.json',
+      'conformance/capability-outbox-execution-binding/schemas/compiler-conformance-case-result-execution-binding-schema@1.json',
     conformance_result_schema_hash:
-      'sha256:019a4ba80ed8ae57b6c862d9fda62d9edcb8aca9c4910fde6bbb580c09af8706',
+      'sha256:021da33556e677984b767f99b12800be8454c7516221ec63bb16e1cb26f867f7',
   },
 };
 

@@ -871,7 +871,7 @@ export function g3RegistryPersistenceFixturesForTest(): {
     ref: FIXTURE_SNAPSHOT_REF,
     closure_ref: closure.ref,
     closure_hash: closure.closure_hash,
-    compiler_version: '3.0.1',
+    compiler_version: '3.0.2',
     core_build_hash:
       'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' as Sha256Hash,
     database_schema_hash:
@@ -1005,7 +1005,7 @@ function validateUpstreamIdentities(): void {
   const exactArtifacts: Array<[string, Sha256Hash]> = [
     [
       'contract-pack-g3-registry-publish-foundation.json',
-      'sha256:3f385f1f91353a19fedfd347c93dbea190c97de0f267697bc6dd7536ebfb6024',
+      'sha256:aae22ae7f5ea1fa06a5c9b6c63eeadbb61b32d3510f503754ef5d8617cab0227',
     ],
     [
       'contract-pack-g3.2a-feature-manifest-intake.json',
@@ -1021,13 +1021,13 @@ function validateUpstreamIdentities(): void {
       throw new Error(`G3 Registry upstream identity drift: ${file}`);
   }
   const sealed = readArtifact(
-    'conformance/sealed/g2-production-compiler-replay-repair-v2/golden-conformance-bundle@2.json',
+    'conformance/sealed/g2-capability-outbox-binding-v3/golden-conformance-bundle@2.json',
   );
   if (
     sealed.hash !==
-      'sha256:037009dcd6c5d6bd2888c484fe1adacded68da5c55e17ba12eb722092e4faced' ||
+      'sha256:967437bb9f91e32e5014b2af90a23f5646e491eb427bdf55accb345ead70db8f' ||
     sealed.payload.bundle_hash !==
-      'sha256:d99647d8ca6aabc737a793019335e6770aa111a79be7545c4dec00c6e7af2145'
+      'sha256:b3ed9e43bd0fadaf40520257926dcf690ee8495bb417220245f248385bde9efb'
   ) {
     throw new Error('G3 Registry upstream G2 sealed identity drift');
   }
@@ -1148,11 +1148,11 @@ function buildManifest(
       upstream_g3_2a_pack_hash:
         'sha256:c9c273b6d294d512a3578203d91d4bdce7863a3ccb561fdd7da08d072b3d8cd9',
       upstream_g3_1_pack_hash:
-        'sha256:3f385f1f91353a19fedfd347c93dbea190c97de0f267697bc6dd7536ebfb6024',
+        'sha256:aae22ae7f5ea1fa06a5c9b6c63eeadbb61b32d3510f503754ef5d8617cab0227',
       upstream_g3_2_pack_hash:
         'sha256:1eb0b81f488f4a37fa4503ddfef0dfa8a56d40fdeb535c9758d9d21fd39bb92b',
       upstream_g2_sealed_bundle_hash:
-        'sha256:d99647d8ca6aabc737a793019335e6770aa111a79be7545c4dec00c6e7af2145',
+        'sha256:b3ed9e43bd0fadaf40520257926dcf690ee8495bb417220245f248385bde9efb',
       upstream_g1_schema_root_hash:
         'sha256:baa39d55cac34133a29b461466aa450fec59bd2fd6df72334e8b33d1d1619869',
       upstream_g1_schema_hash:

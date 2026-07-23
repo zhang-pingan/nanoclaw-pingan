@@ -2,6 +2,9 @@ import {
   checkCurrentG2GoldenDraft,
   generateCurrentG2GoldenDraft,
 } from './current-g2-golden-draft.js';
+import { checkCurrentSealedEraLegacyGoldenDraft } from './current-sealed-era-historical-checks.js';
+import { assertCurrentG2SealedBoundary } from './current-g2-sealed-boundary.js';
+import path from 'node:path';
 
 const command = process.argv[2];
 const generate = command === 'generate';
@@ -23,7 +26,11 @@ if (
 try {
   const manifest = generate
     ? generateCurrentG2GoldenDraft(authorizedBy!)
-    : checkCurrentG2GoldenDraft();
+    : assertCurrentG2SealedBoundary(
+          path.join(import.meta.dirname, 'conformance/sealed'),
+        ) === 'current_g2'
+      ? checkCurrentSealedEraLegacyGoldenDraft()
+      : checkCurrentG2GoldenDraft();
   console.log(`current_g2_golden_draft=${command}:ok`);
   console.log(
     `draft_manifest_hash=${String(manifest.payload.draft_manifest_hash)}`,

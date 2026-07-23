@@ -540,7 +540,7 @@ function validateUpstreamIdentity(): void {
   const upstream = readArtifact('contract-pack-g3-registry-persistence.json');
   if (
     upstream.hash !==
-    'sha256:65f675da51c030424c0f56ccb28a2490759e438d40624ded3af1e4ad23bde92a'
+    'sha256:ff5d40589df9bc78e2e7f4f0e2fdcd5f0a7b7f34e0d0592e5308c1230425f1b3'
   ) {
     throw new Error('G3.3 Registry persistence identity drift');
   }

@@ -142,19 +142,19 @@ const AFFECTED_CURRENT_ROOTS = [
   ],
   [
     'contract-pack-static-absence.json',
-    'sha256:dc7b987416c3c1baed5a5a666960bfd2411a3e3bf76d173bd8ab0a550e51b21a',
+    'sha256:2624801752b3641e624a925c67a2ea28d2c157208b3e4c54699fb6b189259978',
   ],
   [
     'contract-pack-g3-retention-executor-abi-preflight.json',
-    'sha256:c43416c9ca085553bea5ebf2294f594ce434ee275cb14d4954e11374521278a2',
+    'sha256:4dd52b4f38da315ba0194fd23a9c681ffdba6aac37291100dd6d6b944178acd9',
   ],
   [
     'contract-pack-g3-workflow-publisher.json',
-    'sha256:9865cf0aafa37b4f44dc293aea6c59221d0f445c2e67fa87dfe53e6be71c9fbb',
+    'sha256:e80038f09ad841de630d961f137f15a2de14a487a74afb6b1d8b36edea689ba0',
   ],
   [
     'contract-pack-g3.9-feature-release-activation.json',
-    'sha256:871ded236e5e8fead95d28b365f9802792213c16d1f8517caf030ab9cc9865f8',
+    'sha256:eb3d316be520e68fe53b6be826046d3f8fa1cf97db298d5703886d1dcb97b70f',
   ],
   [
     'contract-pack-g3.8a-activation-contract-repair.json',

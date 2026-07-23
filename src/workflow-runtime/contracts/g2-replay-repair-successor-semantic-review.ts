@@ -17,42 +17,42 @@ import type {
 const contractsRoot = import.meta.dirname;
 
 export const G2_REPLAY_REPAIR_APPROVED_DRAFT_MANIFEST_HASH =
-  'sha256:29fdd70ea872f9d4e52d49fbd988fff306d95820989920f5f1ecf2bc87019d2b';
+  'sha256:b8ca7c91839b88b5591daf19f17a30e70b85e441d9dd4905807ef57bc37f7591';
 export const G2_REPLAY_REPAIR_APPROVED_REVIEW_REPORT_HASH =
-  'sha256:2f9edba7af3715f4d5d64328a9fd1a601505bafd1129cee603e87aacf80d92d7';
-export const G2_REPLAY_REPAIR_OWNER_APPROVAL_REVIEWED_AT_MS = 1_784_617_297_000;
+  'sha256:5b3b5c721e6cda298da468566eb97da3423fcb86595de4f46dc66f79ebb55e99';
+export const G2_REPLAY_REPAIR_OWNER_APPROVAL_REVIEWED_AT_MS = 1_784_707_200_000;
 
 export const G2_REPLAY_REPAIR_DRAFT_MANIFEST_REF =
-  'conformance/golden-draft/g2-production-compiler-replay-repair-v2/golden-draft-manifest@2.json';
+  'conformance/golden-draft/g2-capability-outbox-binding-v3/golden-draft-manifest@2.json';
 export const G2_REPLAY_REPAIR_DRAFT_CASES_REF =
-  'conformance/golden-draft/g2-production-compiler-replay-repair-v2/golden-draft-cases@2.json';
+  'conformance/golden-draft/g2-capability-outbox-binding-v3/golden-draft-cases@2.json';
 export const G2_REPLAY_REPAIR_DRAFT_INVENTORY_REF =
-  'conformance/golden-draft/g2-production-compiler-replay-repair-v2/artifact-inventory@2.json';
+  'conformance/golden-draft/g2-capability-outbox-binding-v3/artifact-inventory@2.json';
 export const G2_REPLAY_REPAIR_REVIEW_REPORT_REF =
-  'conformance/golden-review/g2-production-compiler-replay-repair-v2/golden-review-report@2.json';
+  'conformance/golden-review/g2-capability-outbox-binding-v3/golden-review-report@2.json';
 export const G2_REPLAY_REPAIR_RC_REF =
-  'conformance/review-candidate/g2-production-compiler-replay-repair-v2/review-candidate@2.json';
+  'conformance/review-candidate/g2-capability-outbox-binding-v3/review-candidate@2.json';
 export const G2_REPLAY_REPAIR_SEMANTIC_REVIEW_ROOT =
-  'conformance/golden-semantic-review/g2-production-compiler-replay-repair-v2';
+  'conformance/golden-semantic-review/g2-capability-outbox-binding-v3';
 export const G2_REPLAY_REPAIR_SEMANTIC_REVIEW_REF = `${G2_REPLAY_REPAIR_SEMANTIC_REVIEW_ROOT}/golden-semantic-review@2.json`;
 export const G2_REPLAY_REPAIR_SEMANTIC_REVIEW_SCHEMA_REF = `${G2_REPLAY_REPAIR_SEMANTIC_REVIEW_ROOT}/schemas/golden-semantic-review-schema@2.json`;
 export const G2_REPLAY_REPAIR_SEALED_ROOT =
-  'conformance/sealed/g2-production-compiler-replay-repair-v2';
+  'conformance/sealed/g2-capability-outbox-binding-v3';
 
 const DRAFT_ARTIFACT_HASH =
-  'sha256:164f6f0962e2005f8e4c3573aa9f9f14d3eba62322ae464eca927ac2eae98fc9';
+  'sha256:f844a063c08612e2eafad6a117482a83d48b81291a849ffca094c120bb504ecd';
 const REVIEW_REPORT_ARTIFACT_HASH =
-  'sha256:781d33faefa4d77d210d293ffea97cc9c712f2a3c23690abf4f2ead135f43435';
+  'sha256:c5a52ece88f2dae6c6b640020a1b03cb24a5c96ae3cf038e0139d90de86b0226';
 const RC_ARTIFACT_HASH =
-  'sha256:85572b113f80e9552aa7f129def39f03ae8d94bc1dab9bbcc2bb78067dddda94';
+  'sha256:3401cc0230f7a4b81fe859a25832816b8db60cae6d29c5676d141f2151a186e6';
 const PREDECESSOR_DRAFT_HASH =
-  'sha256:fb94f5e65425b482eee369bb115e46e884b249978e0f408832574d5be41dccbd';
+  'sha256:29fdd70ea872f9d4e52d49fbd988fff306d95820989920f5f1ecf2bc87019d2b';
 const PREDECESSOR_REVIEW_HASH =
-  'sha256:d8b2164b0d8e8b6ab7a3fe50559327e7f944312194251bc72a4330845969ad91';
+  'sha256:2f9edba7af3715f4d5d64328a9fd1a601505bafd1129cee603e87aacf80d92d7';
 const PREDECESSOR_SEMANTIC_REVIEW_HASH =
-  'sha256:b12442ce6bdefba73a6b7377006f2aa841d30d78a3060416bbe21048d07abea4';
+  'sha256:88c5412d1bd97d52a7f9bf41e17bd1db1e19b4a2e5466b3b25384fbdeb7cac0c';
 const PREDECESSOR_BUNDLE_HASH =
-  'sha256:d00dc96d90ccfadd6081a77d7c4a16024e188b9a77a123743bc601f971219555';
+  'sha256:d99647d8ca6aabc737a793019335e6770aa111a79be7545c4dec00c6e7af2145';
 const DRAFT_DOMAIN = 'icarus:workflow-current-g2-golden-draft-manifest:1\n';
 const CASES_DOMAIN = 'icarus:workflow-current-g2-golden-draft-cases:1\n';
 const REPORT_DOMAIN = 'icarus:workflow-current-g2-golden-review-report:1\n';
@@ -207,7 +207,7 @@ function validatePredecessorLineage(rc: ContractArtifactEnvelope): void {
     lineage.predecessor_golden_semantic_review_hash !==
       PREDECESSOR_SEMANTIC_REVIEW_HASH ||
     lineage.predecessor_sealed_bundle_hash !== PREDECESSOR_BUNDLE_HASH ||
-    lineage.approved_expected_semantics !== 'unchanged'
+    lineage.approved_expected_semantics !== 'changed_by_current_review'
   ) {
     throw new G2ReplayRepairSemanticReviewError(
       'Successor predecessor lineage drift',
@@ -261,7 +261,7 @@ export function buildG2ReplayRepairSemanticReview(
     report.payload.byte_equal_count !== 40 ||
     report.payload.semantic_equal_count !== 40 ||
     report.payload.difference_count !== 0 ||
-    report.payload.semantic_assertion_count !== 85 ||
+    report.payload.semantic_assertion_count !== 93 ||
     report.payload.semantic_assertion_failure_count !== 0
   ) {
     throw new G2ReplayRepairSemanticReviewError(
@@ -297,7 +297,7 @@ export function buildG2ReplayRepairSemanticReview(
     format: 'icarus.workflow-compiler-golden-semantic-review/1',
     gate: 'G2',
     construction_phase: 'RC_REVIEW',
-    review_id: 'g2-production-compiler-replay-repair-v2-29fdd70ea872f9d4',
+    review_id: 'g2-capability-outbox-binding-v3-b8ca7c91839b88b5',
     bundle_version: '2.0.0',
     case_ids: caseIds,
     case_count: 40,
@@ -321,7 +321,7 @@ export function buildG2ReplayRepairSemanticReview(
       'actual_comparison_40_of_40_acknowledged',
       'compiled_pointer_differences_0_verified',
       'predecessor_immutable_lineage_verified',
-      'expected_semantics_unchanged_and_authoritative',
+      'capability_outbox_execution_binding_semantics_reviewed',
       'draft_working_rc_identity_mutation_not_authorized',
       'g3_through_g9_not_authorized',
     ],
@@ -333,7 +333,7 @@ export function buildG2ReplayRepairSemanticReview(
       semantic_equal_count: 40,
       compiled_difference_case_count: 0,
       pointer_difference_count: 0,
-      semantic_assertion_count: 85,
+      semantic_assertion_count: 93,
       semantic_assertion_failure_count: 0,
     },
     authorization_scope: {
@@ -362,13 +362,13 @@ export function buildG2ReplayRepairSemanticReview(
   }
   const review = artifact(
     'icarus.workflow-compiler-golden-semantic-review/1',
-    'icarus.workflow-compiler-golden-semantic-review.g2-production-compiler-replay-repair-v2',
+    'icarus.workflow-compiler-golden-semantic-review.g2-capability-outbox-binding-v3',
     REVIEW_ARTIFACT_DOMAIN,
     payload,
   );
   const schema = artifact(
     'icarus.workflow-compiler-golden-semantic-review-schema/1',
-    'icarus.workflow-compiler-golden-semantic-review-schema.g2-production-compiler-replay-repair-v2',
+    'icarus.workflow-compiler-golden-semantic-review-schema.g2-capability-outbox-binding-v3',
     REVIEW_SCHEMA_DOMAIN,
     G2_REPLAY_REPAIR_SEMANTIC_REVIEW_SCHEMA,
   );

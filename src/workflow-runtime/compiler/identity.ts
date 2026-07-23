@@ -22,12 +22,12 @@ import type {
 } from './types.js';
 import { compareAscii } from './normalizer.js';
 
-export const WORKFLOW_COMPILER_VERSION = '3.0.1';
+export const WORKFLOW_COMPILER_VERSION = '3.0.2';
 export const CANONICAL_NORMALIZER_VERSION = '2.0.1';
 export const PROOF_ALGORITHM_VERSION = '2.0.1';
 export const WORKFLOW_COMPILER_TOOLCHAIN_REF = {
   id: 'icarus.workflow-compiler-toolchain',
-  version: '3.0.1',
+  version: '3.0.2',
 } as const;
 
 const compilerRoot = import.meta.dirname;
@@ -47,9 +47,9 @@ const COMPILER_REFS = [
 ] as const;
 
 const COMPILED_IR_SCHEMA_REF =
-  'conformance/compiler-contract-repair/schemas/compiled-scope-plan-v2-schema.json';
+  'conformance/capability-outbox-execution-binding/schemas/compiled-scope-plan-v2-execution-binding-schema@1.json';
 const RESULT_SCHEMA_REF =
-  'conformance/compiler-contract-repair/schemas/compiler-conformance-case-result-schema.json';
+  'conformance/capability-outbox-execution-binding/schemas/compiler-conformance-case-result-execution-binding-schema@1.json';
 const ERROR_CATALOG_REF = {
   id: 'icarus.workflow-compiler-error-catalog',
   version: '2.0.0',

@@ -1,0 +1,349 @@
+{
+  "format": "icarus.workflow-compiler-g2-case-input-binding/3",
+  "binding_version": "g2-capability-outbox-binding-v3",
+  "compiler_identity": {
+    "compiler_toolchain_manifest_ref": {
+      "id": "icarus.workflow-compiler-toolchain",
+      "version": "3.0.2"
+    },
+    "compiler_toolchain_hash": "sha256:90bc7c99cacaf58217dd6d07781788c844385d3c70644c4086d6c997312f60a1",
+    "compiler_version": "3.0.2",
+    "compiler_build_hash": "sha256:698af607955463f01a404d626586420f3dd8f7a208da87c1e138075b1518ba05",
+    "canonical_normalizer_version": "2.0.1",
+    "canonical_normalizer_hash": "sha256:e32946d0d20cc92344a72d04e488951cc4a64be82d36384db26dfbf420e469ff",
+    "proof_algorithm_version": "2.0.1",
+    "proof_algorithm_hash": "sha256:6a49827e2c039b95c42c94a607acbf6ae7c088d0510fe7fd93cc0eb87f302308",
+    "error_catalog_ref": {
+      "id": "icarus.workflow-compiler-error-catalog",
+      "version": "2.0.0"
+    },
+    "error_catalog_hash": "sha256:8fc7139b29cdddf3c1e13e0f9d8bc6b19a1d32c02c1e7f4b7e33023fcece91ef",
+    "compiled_ir_schema_ref": "conformance/capability-outbox-execution-binding/schemas/compiled-scope-plan-v2-execution-binding-schema@1.json",
+    "compiled_ir_schema_hash": "sha256:f5bc0a43d5723096295b9a6fcd5a0965c3b98ca810ae8b6dc1a7072996608e06",
+    "conformance_result_schema_ref": "conformance/capability-outbox-execution-binding/schemas/compiler-conformance-case-result-execution-binding-schema@1.json",
+    "conformance_result_schema_hash": "sha256:021da33556e677984b767f99b12800be8454c7516221ec63bb16e1cb26f867f7"
+  },
+  "case_inputs": [
+    {
+      "case_id": "positive.static-lowering",
+      "raw_source_bytes_ref": "conformance/sealed/g2-semantic-correction/inputs/positive.static-lowering.source.json",
+      "raw_source_bytes_hash": "sha256:2ff581e6599426c801e40d832941da392fb46042360e8552bfca4e6b6c0f6375",
+      "input_snapshot_ref": "conformance/review-candidate/g2-capability-outbox-binding-v3/inputs/positive.static-lowering.snapshot@2.json",
+      "input_snapshot_hash": "sha256:ce56cd95472fa9211d466f51694a5899173aec1bbe1054a99ab90e658d5bfa18",
+      "effective_case_input_hash": "sha256:87030835cde47359f947ce772f9516d6f7e6c94197b58793edd05e69bb4257c6"
+    },
+    {
+      "case_id": "positive.condition-route",
+      "raw_source_bytes_ref": "conformance/sealed/g2-semantic-correction/inputs/positive.condition-route.source.json",
+      "raw_source_bytes_hash": "sha256:e5afdbfaf15bcd51248dd690f8d24d2c9fbe0e10462303836f0579ffd79161aa",
+      "input_snapshot_ref": "conformance/review-candidate/g2-capability-outbox-binding-v3/inputs/positive.condition-route.snapshot@2.json",
+      "input_snapshot_hash": "sha256:ce176040e637ed60dc84c8daa6aeae947a2d5ef671b4e4454f6759bc908eab81",
+      "effective_case_input_hash": "sha256:89fc4b2676aa499a71a5437637aa2b23feb924e4e5cff2e6f03d7897ae41a140"
+    },
+    {
+      "case_id": "positive.wait",
+      "raw_source_bytes_ref": "conformance/sealed/g2-semantic-correction/inputs/positive.wait.source.json",
+      "raw_source_bytes_hash": "sha256:cb98184e425d0cea2c45945204c2c17c9f5416f2a6870940f435a2f4c99b4be1",
+      "input_snapshot_ref": "conformance/review-candidate/g2-capability-outbox-binding-v3/inputs/positive.wait.snapshot@2.json",
+      "input_snapshot_hash": "sha256:5cf1b27eaf334a67f9f8c73ebc08dbc21a37a2bc767ab1711bd5a72a223661e4",
+      "effective_case_input_hash": "sha256:df4ef99109f9d6c6fa14dd24d74d52d60ce0029fc98cbd31a0d42f186db04e70"
+    },
+    {
+      "case_id": "positive.subgraph",
+      "raw_source_bytes_ref": "conformance/sealed/g2-semantic-correction/inputs/positive.subgraph.source.json",
+      "raw_source_bytes_hash": "sha256:1514c5978cfd1dc479a326a3efda6dbe2145914b4fba6728f57dff7048e57583",
+      "input_snapshot_ref": "conformance/review-candidate/g2-capability-outbox-binding-v3/inputs/positive.subgraph.snapshot@2.json",
+      "input_snapshot_hash": "sha256:807f0d2fa057d6fe4501ff346fc2e98c19ee011a14452a656b862b7da6ebd6e1",
+      "effective_case_input_hash": "sha256:24216f4fed7ccca93e05c374ddacde9b7f2f9212c15cc447bc5a3e49a6519715"
+    },
+    {
+      "case_id": "positive.expand",
+      "raw_source_bytes_ref": "conformance/sealed/g2-semantic-correction/inputs/positive.expand.source.json",
+      "raw_source_bytes_hash": "sha256:ae55106db6354cf2be27e559a6e60d394b79c933a6474dcf022d9e53d0d320b5",
+      "input_snapshot_ref": "conformance/review-candidate/g2-capability-outbox-binding-v3/inputs/positive.expand.snapshot@2.json",
+      "input_snapshot_hash": "sha256:0d690d581c0d924dd734b67ac54a955207d005cda55fd04e2034cb656fb7b308",
+      "effective_case_input_hash": "sha256:36635dd9e1d3103300b2d4e7eb6ab48040f2d6abc13de6a0438a999dc4f52aa3"
+    },
+    {
+      "case_id": "positive.map",
+      "raw_source_bytes_ref": "conformance/sealed/g2-semantic-correction/inputs/positive.map.source.json",
+      "raw_source_bytes_hash": "sha256:433e319a42c2d7201152100f536bd85fda009f88a4b7a4935f45ed52303ae959",
+      "input_snapshot_ref": "conformance/review-candidate/g2-capability-outbox-binding-v3/inputs/positive.map.snapshot@2.json",
+      "input_snapshot_hash": "sha256:49720e3c8bac939da412982f0716529c23e10c4ecfbb8589f647d216d8017b62",
+      "effective_case_input_hash": "sha256:3a960815a7d7c29e80aa3ef3da6a5328583026b0ba8f5535b3e37e2068fbaee1"
+    },
+    {
+      "case_id": "positive.policy-intersection",
+      "raw_source_bytes_ref": "conformance/sealed/g2-semantic-correction/inputs/positive.policy-intersection.source.json",
+      "raw_source_bytes_hash": "sha256:675fd0232dd501fa8dfcd3eab3d4841fba62d78a7ed592bf1a2b268f3f99cdf4",
+      "input_snapshot_ref": "conformance/review-candidate/g2-capability-outbox-binding-v3/inputs/positive.policy-intersection.snapshot@2.json",
+      "input_snapshot_hash": "sha256:8e245c2503dd90220d8345a7ab254ee1305232ad67e2bc48911946ccf0e6a79a",
+      "effective_case_input_hash": "sha256:cc569f09592ef40360ce999137869a552388d3eb6e5d169e99f804139a96931f"
+    },
+    {
+      "case_id": "positive.quality-revision-binding",
+      "raw_source_bytes_ref": "conformance/sealed/g2-semantic-correction/inputs/positive.quality-revision-binding.source.json",
+      "raw_source_bytes_hash": "sha256:9ebf77d5a67cc3c01faf7346ec1ad77d75874d8078ed586ce98839c77c287f98",
+      "input_snapshot_ref": "conformance/review-candidate/g2-capability-outbox-binding-v3/inputs/positive.quality-revision-binding.snapshot@2.json",
+      "input_snapshot_hash": "sha256:b0f03ff9ac1e4c0c20756394c222f9402038562264a39125ee39ac5488402a9e",
+      "effective_case_input_hash": "sha256:e410e587add1a2a729e22fb1331a744cc92b0d1da424d92de3c17e76131bb6a7"
+    },
+    {
+      "case_id": "positive.sound-subtype-different-hash",
+      "raw_source_bytes_ref": "conformance/sealed/g2-semantic-correction/inputs/positive.sound-subtype-different-hash.source.json",
+      "raw_source_bytes_hash": "sha256:7494cf363261d784f64194c6e3ae183ab0aec81530bca88034a6eb8bc540b223",
+      "input_snapshot_ref": "conformance/review-candidate/g2-capability-outbox-binding-v3/inputs/positive.sound-subtype-different-hash.snapshot@2.json",
+      "input_snapshot_hash": "sha256:281d551563a02fd5c390e7dcae5fc9b64ea189609cbc5610083a66f10ea669d3",
+      "effective_case_input_hash": "sha256:c465e19c0f587f1c42838df113e6adbf6f8de35c061a9254d549c8b346ee8828"
+    },
+    {
+      "case_id": "positive.static-child-closure",
+      "raw_source_bytes_ref": "conformance/sealed/g2-semantic-correction/inputs/positive.static-child-closure.source.json",
+      "raw_source_bytes_hash": "sha256:95003607a882135dacd0840e64848b38d812db92a1fdf1703b161b029d6605f6",
+      "input_snapshot_ref": "conformance/review-candidate/g2-capability-outbox-binding-v3/inputs/positive.static-child-closure.snapshot@2.json",
+      "input_snapshot_hash": "sha256:933752a359bf325b461e89c8a66a63ec746b1d384eb598011c5f8832a3dfbcea",
+      "effective_case_input_hash": "sha256:80ec04cfdf978c7005dff70e287f6be1aa059c90a1ada340e8c8214e2a6d10a2"
+    },
+    {
+      "case_id": "negative.json-syntax-invalid",
+      "raw_source_bytes_ref": "conformance/sealed/g2-semantic-correction/inputs/negative.json-syntax-invalid.source.json",
+      "raw_source_bytes_hash": "sha256:1de314242c7f8dfde49d4c5f2c3f7b51f299fd2120fa25ed1f6f155399480cf4",
+      "input_snapshot_ref": "conformance/review-candidate/g2-capability-outbox-binding-v3/inputs/negative.json-syntax-invalid.snapshot@2.json",
+      "input_snapshot_hash": "sha256:09d82d25a317fedfc6d750cfafcffacdbd972511f9c732032a7469745998909e",
+      "effective_case_input_hash": "sha256:0ae6c66185e43792833945bf8a136ec510013ee1ad563e4a77666cc2e3f32d57"
+    },
+    {
+      "case_id": "negative.json-duplicate-key",
+      "raw_source_bytes_ref": "conformance/sealed/g2-semantic-correction/inputs/negative.json-duplicate-key.source.json",
+      "raw_source_bytes_hash": "sha256:befdfa568fb31e78b9c83a1beb294aea8d216bc84f47bdbda5af0508ae03612b",
+      "input_snapshot_ref": "conformance/review-candidate/g2-capability-outbox-binding-v3/inputs/negative.json-duplicate-key.snapshot@2.json",
+      "input_snapshot_hash": "sha256:184fe65d486549e0266a345a8b7e6916f65c37bc4b861d13a8437fa6c06e52f7",
+      "effective_case_input_hash": "sha256:0502a7ec5ae4c2ab02b9bb7fa93e21b03db31e40d00db5b5d48f2648e1c37432"
+    },
+    {
+      "case_id": "negative.schema-unknown-field",
+      "raw_source_bytes_ref": "conformance/sealed/g2-semantic-correction/inputs/negative.schema-unknown-field.source.json",
+      "raw_source_bytes_hash": "sha256:876a758b55e4be95b74b9a4d50544fd3aab8a76e7ef79328e45134e0079c7fcc",
+      "input_snapshot_ref": "conformance/review-candidate/g2-capability-outbox-binding-v3/inputs/negative.schema-unknown-field.snapshot@2.json",
+      "input_snapshot_hash": "sha256:2fe9c0d42e1e78599b831fc8c0b4ae1429f11f0e6dba5009284cc620f865a034",
+      "effective_case_input_hash": "sha256:c721600bad3bb0e1493ade7887594757421ba274eebc563017186e8a098b3089"
+    },
+    {
+      "case_id": "negative.schema-profile-keyword-unsupported",
+      "raw_source_bytes_ref": "conformance/sealed/g2-semantic-correction/inputs/negative.schema-profile-keyword-unsupported.source.json",
+      "raw_source_bytes_hash": "sha256:a817204105e364a76b1ec511670e37f39bdc5002873548763bdba20348a8a85d",
+      "input_snapshot_ref": "conformance/review-candidate/g2-capability-outbox-binding-v3/inputs/negative.schema-profile-keyword-unsupported.snapshot@2.json",
+      "input_snapshot_hash": "sha256:57beb9049c080a9ca52d788f6d8b34d697647d08508ecd94919f73dca7c4d3ac",
+      "effective_case_input_hash": "sha256:ed072aa2843b063c0aaacc681b2fdc42522a717620a1bed07f5b468d26b37cb5"
+    },
+    {
+      "case_id": "negative.registry-ref-unpinned",
+      "raw_source_bytes_ref": "conformance/sealed/g2-semantic-correction/inputs/negative.registry-ref-unpinned.source.json",
+      "raw_source_bytes_hash": "sha256:d59b468f1955e1dc7c99909a0c6cb5a03f5d1df48cce52006a0d4c41afc591ce",
+      "input_snapshot_ref": "conformance/review-candidate/g2-capability-outbox-binding-v3/inputs/negative.registry-ref-unpinned.snapshot@2.json",
+      "input_snapshot_hash": "sha256:d4bd669e8a7972c28ef28bcb59503530cf2eded8fcd7d0920877c276642790f8",
+      "effective_case_input_hash": "sha256:56790d4cca403358677d54d19afb8f1aae5a9805047fac8dbb5a8a7a085ee070"
+    },
+    {
+      "case_id": "negative.registry-ref-not-found",
+      "raw_source_bytes_ref": "conformance/sealed/g2-semantic-correction/inputs/negative.registry-ref-not-found.source.json",
+      "raw_source_bytes_hash": "sha256:523d10fe2da3f9b2578731fb624aad1b3c993eb2c2c915e2e8016634aba48b27",
+      "input_snapshot_ref": "conformance/review-candidate/g2-capability-outbox-binding-v3/inputs/negative.registry-ref-not-found.snapshot@2.json",
+      "input_snapshot_hash": "sha256:45ecbc9a9aa2d6a0a38249c82184088bade329111346d06ad8d6f6189f18bd19",
+      "effective_case_input_hash": "sha256:3ab705cc6ffb7f740d3a7a35d393587fd9c9c902b510cdb2db936da98f9b37e5"
+    },
+    {
+      "case_id": "negative.graph-id-duplicate",
+      "raw_source_bytes_ref": "conformance/sealed/g2-semantic-correction/inputs/negative.graph-id-duplicate.source.json",
+      "raw_source_bytes_hash": "sha256:1c8ab4d75c1a34c6ddacb0bc0d25b804185e0faec3b3f68e46796656605236f7",
+      "input_snapshot_ref": "conformance/review-candidate/g2-capability-outbox-binding-v3/inputs/negative.graph-id-duplicate.snapshot@2.json",
+      "input_snapshot_hash": "sha256:1b2e7c87c99821b85afdd7aea27b543ebd79a5c815f875275840eea4aa0266c0",
+      "effective_case_input_hash": "sha256:990600f7c3112e59a2b3d9e0d63abdfa4f0237174208e14b208c079a9e29afd9"
+    },
+    {
+      "case_id": "negative.graph-endpoint-not-found",
+      "raw_source_bytes_ref": "conformance/sealed/g2-semantic-correction/inputs/negative.graph-endpoint-not-found.source.json",
+      "raw_source_bytes_hash": "sha256:356a7bd04dae89a3752f81a3497102baf4f0db096a45ffada33e58a757fba0bc",
+      "input_snapshot_ref": "conformance/review-candidate/g2-capability-outbox-binding-v3/inputs/negative.graph-endpoint-not-found.snapshot@2.json",
+      "input_snapshot_hash": "sha256:75f70f585cc2c3da76f2d65bb025f11e6d13569f178c50271218ffdeaa210296",
+      "effective_case_input_hash": "sha256:fd2a9dc2053167fcae8100c67b3aa1013e2139e54d882a0ec394e6b1f4d02637"
+    },
+    {
+      "case_id": "negative.graph-cross-scope-edge",
+      "raw_source_bytes_ref": "conformance/sealed/g2-semantic-correction/inputs/negative.graph-cross-scope-edge.source.json",
+      "raw_source_bytes_hash": "sha256:bccb8606f5322e3c54ee95f160bfd78b99f3d3019c04a04eac64954cb35d236c",
+      "input_snapshot_ref": "conformance/review-candidate/g2-capability-outbox-binding-v3/inputs/negative.graph-cross-scope-edge.snapshot@2.json",
+      "input_snapshot_hash": "sha256:d8d70d00de2fdee2ab678535ed6909ddaffff1e894cde480d0585c10f9b5d08f",
+      "effective_case_input_hash": "sha256:fcf6dd8b26866383d82fb8a51e145295e0c2731cc5de20a95956e1aa56b7ee10"
+    },
+    {
+      "case_id": "negative.graph-dependency-cycle",
+      "raw_source_bytes_ref": "conformance/sealed/g2-semantic-correction/inputs/negative.graph-dependency-cycle.source.json",
+      "raw_source_bytes_hash": "sha256:d6eacdfa648a421231d3836a6618f789da839625e773b33fc27895a50ee44aa5",
+      "input_snapshot_ref": "conformance/review-candidate/g2-capability-outbox-binding-v3/inputs/negative.graph-dependency-cycle.snapshot@2.json",
+      "input_snapshot_hash": "sha256:c10ef49b3454fef6db705f56680cf48c0b15a90b5a836cdd2b622aad08e5958f",
+      "effective_case_input_hash": "sha256:6e39b42ea54a63808c1cd093391945b1497032fd3a59a21f03ce8c56198fc7b5"
+    },
+    {
+      "case_id": "negative.condition-type-mismatch",
+      "raw_source_bytes_ref": "conformance/sealed/g2-semantic-correction/inputs/negative.condition-type-mismatch.source.json",
+      "raw_source_bytes_hash": "sha256:c4514dd6ba73b7f25fb677d89a75d5d296e1a6067797b003981ffeae862f0e81",
+      "input_snapshot_ref": "conformance/review-candidate/g2-capability-outbox-binding-v3/inputs/negative.condition-type-mismatch.snapshot@2.json",
+      "input_snapshot_hash": "sha256:c27c1b6d76597e954a55d3a3b02efbd3e5df45dac68be57408a69251eff9678a",
+      "effective_case_input_hash": "sha256:0ed26328aba35c3ab19b2248eb6e067d2f29887e173dd5e16ca7ec14d9344c60"
+    },
+    {
+      "case_id": "negative.condition-complexity-exceeded",
+      "raw_source_bytes_ref": "conformance/sealed/g2-semantic-correction/inputs/negative.condition-complexity-exceeded.source.json",
+      "raw_source_bytes_hash": "sha256:3f826dc323d04beafe2457894460b0485c7fff1b276a11f40bbff7376259066f",
+      "input_snapshot_ref": "conformance/review-candidate/g2-capability-outbox-binding-v3/inputs/negative.condition-complexity-exceeded.snapshot@2.json",
+      "input_snapshot_hash": "sha256:ec5e73327beca845c628cd9f7cdd268beadd73f8e982c2395b7817b58f7e1e8f",
+      "effective_case_input_hash": "sha256:cf3488e040dff9f893785f99cbb19e62c9938d3f4a07fd0508dc3c6079210da8"
+    },
+    {
+      "case_id": "negative.json-pointer-non-total",
+      "raw_source_bytes_ref": "conformance/sealed/g2-semantic-correction/inputs/negative.json-pointer-non-total.source.json",
+      "raw_source_bytes_hash": "sha256:38117236d671e9145a2b79d85bb7853d6e574ffc51fb48f7aa8fc1e6b49595ec",
+      "input_snapshot_ref": "conformance/review-candidate/g2-capability-outbox-binding-v3/inputs/negative.json-pointer-non-total.snapshot@2.json",
+      "input_snapshot_hash": "sha256:b2eea8b185f5c7dbc3f937adcb6ec2f737e3016450e80c6109eaf3dae007f2c3",
+      "effective_case_input_hash": "sha256:e18c371db1e5a982dcb323836941c7a0a5a66ca35b8e49ce5d674f3d0bf587c6"
+    },
+    {
+      "case_id": "negative.schema-not-assignable",
+      "raw_source_bytes_ref": "conformance/sealed/g2-semantic-correction/inputs/negative.schema-not-assignable.source.json",
+      "raw_source_bytes_hash": "sha256:dc3e83f1a4bf7f3ef60fff7a9565541c91523df02ad49c303f1c03f63d207cca",
+      "input_snapshot_ref": "conformance/review-candidate/g2-capability-outbox-binding-v3/inputs/negative.schema-not-assignable.snapshot@2.json",
+      "input_snapshot_hash": "sha256:3e292f871d3c50a2ffecee69d361d367d8561a2086980388d2dd524dcb9b930c",
+      "effective_case_input_hash": "sha256:adfad927ee9479eb9d3c328d70b1dfcecdcb18b668dc772aa83c46408e90180e"
+    },
+    {
+      "case_id": "negative.route-group-ambiguous",
+      "raw_source_bytes_ref": "conformance/sealed/g2-semantic-correction/inputs/negative.route-group-ambiguous.source.json",
+      "raw_source_bytes_hash": "sha256:ead93010823d1a2a091066d8af0b3bf3b301669f37b64975b8ff62fff9991ccc",
+      "input_snapshot_ref": "conformance/review-candidate/g2-capability-outbox-binding-v3/inputs/negative.route-group-ambiguous.snapshot@2.json",
+      "input_snapshot_hash": "sha256:c73814831a126183d07f53810fe2519915b3f06375b5307335fc17b7a3f5b735",
+      "effective_case_input_hash": "sha256:56fed9af402bfdbb8eeeee8ad1c09444e55fe767eef6bf2234ed022147de6153"
+    },
+    {
+      "case_id": "negative.trigger-contract-invalid",
+      "raw_source_bytes_ref": "conformance/sealed/g2-semantic-correction/inputs/negative.trigger-contract-invalid.source.json",
+      "raw_source_bytes_hash": "sha256:9ff3ff71fd019c9ed98644aa09f194341d91e08dca0a3bb2ad3ee634d18ecb06",
+      "input_snapshot_ref": "conformance/review-candidate/g2-capability-outbox-binding-v3/inputs/negative.trigger-contract-invalid.snapshot@2.json",
+      "input_snapshot_hash": "sha256:5d2e618ae8881c69cca79b9591575634b4ad9ab141252f8d678dc9721e00c4a5",
+      "effective_case_input_hash": "sha256:e4ca101f375b75a08c07e2284ea7ee56ff167c62ed64c3242ddf6fadaa6ef736"
+    },
+    {
+      "case_id": "negative.completion-contract-invalid",
+      "raw_source_bytes_ref": "conformance/sealed/g2-semantic-correction/inputs/negative.completion-contract-invalid.source.json",
+      "raw_source_bytes_hash": "sha256:3cb7bb9aa5ef9286eb642935a948150d25f2a1a16231712137153f2b8beb05a0",
+      "input_snapshot_ref": "conformance/review-candidate/g2-capability-outbox-binding-v3/inputs/negative.completion-contract-invalid.snapshot@2.json",
+      "input_snapshot_hash": "sha256:0447191ebf323858e4fb3d8eefa548d493fb3b030a5a90a9e57d9ae7bb5ad529",
+      "effective_case_input_hash": "sha256:0f52357f4fbebbf5c317ee51b135547d70b5b2deefdc89e9eb8d988560a3330a"
+    },
+    {
+      "case_id": "negative.early-completion-non-monotone",
+      "raw_source_bytes_ref": "conformance/sealed/g2-semantic-correction/inputs/negative.early-completion-non-monotone.source.json",
+      "raw_source_bytes_hash": "sha256:6f20c172d4dcbf7e72c7b088a7b1b8bfa745f9713fcc522fc7ef15e95f35c989",
+      "input_snapshot_ref": "conformance/review-candidate/g2-capability-outbox-binding-v3/inputs/negative.early-completion-non-monotone.snapshot@2.json",
+      "input_snapshot_hash": "sha256:19eeff44e8868d75b62986facb4a568f9a7aa08fe2ae0f7985061e0b1ef8395f",
+      "effective_case_input_hash": "sha256:fcaf5ce5b3f0ce0191cf48e7141cb079e7e383e4b77b021bad35d198a96b929c"
+    },
+    {
+      "case_id": "positive.compiler-integrity-match-control",
+      "raw_source_bytes_ref": "conformance/sealed/g2-semantic-correction/inputs/positive.compiler-integrity-match-control.source.json",
+      "raw_source_bytes_hash": "sha256:481cdf19686ef9646d45c111b2a8710be5c2cb3be964b535abf895e2ca227436",
+      "input_snapshot_ref": "conformance/review-candidate/g2-capability-outbox-binding-v3/inputs/positive.compiler-integrity-match-control.snapshot@2.json",
+      "input_snapshot_hash": "sha256:af72762b30be200a7560fa288e9efd8534b18112eb1077c1b717d0b3ff0899af",
+      "effective_case_input_hash": "sha256:85b8cec87f8bb560d97a123b3309cf9d31ee3d30f6304bae8874306efbfbe7f2"
+    },
+    {
+      "case_id": "negative.capability-not-allowed",
+      "raw_source_bytes_ref": "conformance/sealed/g2-semantic-correction/inputs/negative.capability-not-allowed.source.json",
+      "raw_source_bytes_hash": "sha256:c44ab22e8485ac45bd115450ccba0a2eb4c3883cb9bb36f34320e95559babaa2",
+      "input_snapshot_ref": "conformance/review-candidate/g2-capability-outbox-binding-v3/inputs/negative.capability-not-allowed.snapshot@2.json",
+      "input_snapshot_hash": "sha256:2d11ed6c18f647a7585d7f590efe20a7dc848bc7c4f610cd4fae9b9e9ad269a6",
+      "effective_case_input_hash": "sha256:89a8fab19029bfe8527d6a75d27a5ef2f2bc3704aa38b3681b46a232126a1921"
+    },
+    {
+      "case_id": "negative.policy-escalation",
+      "raw_source_bytes_ref": "conformance/sealed/g2-semantic-correction/inputs/negative.policy-escalation.source.json",
+      "raw_source_bytes_hash": "sha256:988002925d36493afa191bffffee9fbb5c2b184722dc390a43af8a24c18e7edc",
+      "input_snapshot_ref": "conformance/review-candidate/g2-capability-outbox-binding-v3/inputs/negative.policy-escalation.snapshot@2.json",
+      "input_snapshot_hash": "sha256:31ace76496bf0b817f0fe5c14dc0abaf2f5ed38e8ad58f1f945955278c0880a5",
+      "effective_case_input_hash": "sha256:fda7a1a4a8c2eb9d53899eae8c9ea514c08723ad71d1d0531156ea6623c075da"
+    },
+    {
+      "case_id": "negative.quality-revision-missing-feedback-schema",
+      "raw_source_bytes_ref": "conformance/sealed/g2-semantic-correction/inputs/negative.quality-revision-missing-feedback-schema.source.json",
+      "raw_source_bytes_hash": "sha256:b01039c59ef3023a97bb277bfa04df4004774e7a1bc2044936d349d44bcaa41e",
+      "input_snapshot_ref": "conformance/review-candidate/g2-capability-outbox-binding-v3/inputs/negative.quality-revision-missing-feedback-schema.snapshot@2.json",
+      "input_snapshot_hash": "sha256:4fec7da16b231d8663762cf701d8c39fc6767086b346d89777b6c5ac07c526ea",
+      "effective_case_input_hash": "sha256:f5a877e6cfe8a74a9885dbeb9fa383b0a1ae1fcd820e91f9d18cf5be93b0d645"
+    },
+    {
+      "case_id": "negative.quality-revision-effect-key-incompatible",
+      "raw_source_bytes_ref": "conformance/sealed/g2-semantic-correction/inputs/negative.quality-revision-effect-key-incompatible.source.json",
+      "raw_source_bytes_hash": "sha256:4618a8ce3038ff55575e68af108edf3e6d1eaf8b0827652726820f295a33bcf2",
+      "input_snapshot_ref": "conformance/review-candidate/g2-capability-outbox-binding-v3/inputs/negative.quality-revision-effect-key-incompatible.snapshot@2.json",
+      "input_snapshot_hash": "sha256:f52898041a27bd27a3b43cdefdc55f5af94fb5c7c6e3bc7bdb828ad05fa96076",
+      "effective_case_input_hash": "sha256:e70a59bc3b0f0ec5e3587d8498a9785ed9912f4863382273be80523ea4f10732"
+    },
+    {
+      "case_id": "negative.child-recipe-set-mismatch",
+      "raw_source_bytes_ref": "conformance/sealed/g2-semantic-correction/inputs/negative.child-recipe-set-mismatch.source.json",
+      "raw_source_bytes_hash": "sha256:3a641426b7fc7e475ae48f879c23b33af77607bde8e69d8e80702758ca3ed9bb",
+      "input_snapshot_ref": "conformance/review-candidate/g2-capability-outbox-binding-v3/inputs/negative.child-recipe-set-mismatch.snapshot@2.json",
+      "input_snapshot_hash": "sha256:fd8967446af114330010efd15fd9cb383af49bc9b1aa758aabdf59f5a9b54352",
+      "effective_case_input_hash": "sha256:a6fb762f85727c1881c21a0645add6394e131f84e2e9416cdd2153db69ac629e"
+    },
+    {
+      "case_id": "negative.child-recipe-dependency-cycle",
+      "raw_source_bytes_ref": "conformance/sealed/g2-semantic-correction/inputs/negative.child-recipe-dependency-cycle.source.json",
+      "raw_source_bytes_hash": "sha256:6958494e8112059188207529a7bf651633d993743ee553ade70771ed02b4587e",
+      "input_snapshot_ref": "conformance/review-candidate/g2-capability-outbox-binding-v3/inputs/negative.child-recipe-dependency-cycle.snapshot@2.json",
+      "input_snapshot_hash": "sha256:1968e0d7e9f7283d461f96d0c14c85e263123067f584231fb7c293f0ff740b7e",
+      "effective_case_input_hash": "sha256:9db2fa8ce4db5f2ed9f8aa9b0f6e9c258cb999325d64f706e698099fb27fc97a"
+    },
+    {
+      "case_id": "negative.runtime-safety-limit-exceeded",
+      "raw_source_bytes_ref": "conformance/sealed/g2-semantic-correction/inputs/negative.runtime-safety-limit-exceeded.source.json",
+      "raw_source_bytes_hash": "sha256:5dfe6cf019131213a304f30b19e1933ca2670327bdab4e720c5feb91acc9dcaf",
+      "input_snapshot_ref": "conformance/review-candidate/g2-capability-outbox-binding-v3/inputs/negative.runtime-safety-limit-exceeded.snapshot@2.json",
+      "input_snapshot_hash": "sha256:c563b40a8eb0d74d512b809064a7c4e54faf167ea485044132d81ce2706bad8c",
+      "effective_case_input_hash": "sha256:8bc3d2a91eaba0e9137e871604057920288fbf585eb26560e63629c288bb9b76"
+    },
+    {
+      "case_id": "negative.compiler-integrity-mismatch",
+      "raw_source_bytes_ref": "conformance/sealed/g2-semantic-correction/inputs/negative.compiler-integrity-mismatch.source.json",
+      "raw_source_bytes_hash": "sha256:481cdf19686ef9646d45c111b2a8710be5c2cb3be964b535abf895e2ca227436",
+      "input_snapshot_ref": "conformance/review-candidate/g2-capability-outbox-binding-v3/inputs/negative.compiler-integrity-mismatch.snapshot@2.json",
+      "input_snapshot_hash": "sha256:ce1a71c6748d1de06888abb8c97a19db967025108dd59642e9023aa0cc26014c",
+      "effective_case_input_hash": "sha256:9a21a06c7deb6b123506f66b32d8522c8b65a20b3e688c49796fdd881b4e0b94"
+    },
+    {
+      "case_id": "negative.quality-revision-missing-quality-gate",
+      "raw_source_bytes_ref": "conformance/sealed/g2-semantic-correction/inputs/negative.quality-revision-missing-quality-gate.source.json",
+      "raw_source_bytes_hash": "sha256:beb23549193eda9f4d71d532202b0549c2176edc7258ad431b1317165f65bc69",
+      "input_snapshot_ref": "conformance/review-candidate/g2-capability-outbox-binding-v3/inputs/negative.quality-revision-missing-quality-gate.snapshot@2.json",
+      "input_snapshot_hash": "sha256:00a23474bc1e7dc604ae1ab6a4e789cdefb364b14b5c3389fd58cb3ebac974fb",
+      "effective_case_input_hash": "sha256:c05ea1a1ac1a433fdf519d7e8ae50166e5d00ca432a2169b8e8783e5e229afee"
+    },
+    {
+      "case_id": "negative.definition-notification-delivery-requirement",
+      "raw_source_bytes_ref": "conformance/sealed/g2-semantic-correction/inputs/negative.definition-notification-delivery-requirement.source.json",
+      "raw_source_bytes_hash": "sha256:1cbcad7aabc4f9a6787040c64f523f6a2afb72b426a617d2b4b6f6752441cdb1",
+      "input_snapshot_ref": "conformance/review-candidate/g2-capability-outbox-binding-v3/inputs/negative.definition-notification-delivery-requirement.snapshot@2.json",
+      "input_snapshot_hash": "sha256:b0118775d026756d0d9a58f6bc20ef5ff9408e6a47adfe21bc44ad441e245dd9",
+      "effective_case_input_hash": "sha256:389175bcccb215ddbd5da23e28b54d3db2fc2739ac3ea120ecc4ea9aefdc5367"
+    },
+    {
+      "case_id": "negative.definition-child-creation-key-template",
+      "raw_source_bytes_ref": "conformance/sealed/g2-semantic-correction/inputs/negative.definition-child-creation-key-template.source.json",
+      "raw_source_bytes_hash": "sha256:647fa51666aa27e7f95a3078b1096b6266959da3e7a48cd8850b927c8eb010b8",
+      "input_snapshot_ref": "conformance/review-candidate/g2-capability-outbox-binding-v3/inputs/negative.definition-child-creation-key-template.snapshot@2.json",
+      "input_snapshot_hash": "sha256:d7a38125d00b29e5b4b5bc681469a56241beec0f666f6c04c337994145f3d4fe",
+      "effective_case_input_hash": "sha256:4ffbd874749ee2905d3f4ae7822cb5e5efcfc3c08ea5108593c5137aa3fd9642"
+    }
+  ],
+  "binding_hash": "sha256:626645666ec144eed5e1b2573b34d63306b2651caff9fa2de7b7a0c84d62f154"
+}

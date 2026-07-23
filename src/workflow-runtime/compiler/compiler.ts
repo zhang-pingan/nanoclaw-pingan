@@ -70,6 +70,12 @@ const SOURCE_DOMAINS: Record<WorkflowCompilerSourceKind, string> = {
   workflow_definition: 'icarus:workflow-definition-source:1\n',
   workflow_schema: 'icarus:workflow-schema-source:1\n',
 };
+const OUTBOX_ADAPTER_DOMAIN = 'icarus:workflow-outbox-adapter:1\n';
+const OUTBOX_POLICY_DOMAIN = 'icarus:workflow-outbox-delivery-policy:1\n';
+const OUTBOX_EFFECTIVE_POLICY_SNAPSHOT_DOMAIN =
+  'icarus:workflow-outbox-effective-policy-snapshot:1\n';
+const CAPABILITY_OUTBOX_BINDING_DOMAIN =
+  'icarus:workflow-capability-outbox-execution-binding:1\n';
 
 interface CompilationState {
   snapshot: BoundCompilerSnapshot;
@@ -521,6 +527,7 @@ function validateGraphBindings(
         capability,
         `/nodes/${index}/capability_ref`,
         String(node.id),
+        state,
       );
       validateResourceDependencyClosure(
         capability,
@@ -581,6 +588,7 @@ function validateCapabilityContract(
   capability: SnapshotResource,
   sourcePointer: string,
   nodeId: string,
+  state: CompilationState,
 ): void {
   const effect = objectRef(capability.content.effect);
   const cancellation = objectRef(capability.content.cancellation);
@@ -595,6 +603,166 @@ function validateCapabilityContract(
   if (!valid) {
     throw new CompilerDiagnosticError(
       diagnostic('capability_not_allowed', 'bind', sourcePointer, nodeId),
+    );
+  }
+  validateCapabilityOutboxContract(capability, sourcePointer, nodeId, state);
+}
+
+function keysEqual(value: JsonObject, expected: readonly string[]): boolean {
+  return (
+    JSON.stringify(Object.keys(value).sort(compareAscii)) ===
+    JSON.stringify([...expected].sort(compareAscii))
+  );
+}
+
+function positiveInteger(value: JsonValue): value is number {
+  return Number.isSafeInteger(value) && typeof value === 'number' && value > 0;
+}
+
+function nonnegativeInteger(value: JsonValue): value is number {
+  return Number.isSafeInteger(value) && typeof value === 'number' && value >= 0;
+}
+
+function capabilityOutboxResources(
+  capability: SnapshotResource,
+  sourcePointer: string,
+  nodeId: string,
+  state: CompilationState,
+): {
+  effect: JsonObject;
+  adapter: SnapshotResource;
+  policy: SnapshotResource;
+} {
+  const effect = objectRef(capability.content.outbox_effect);
+  if (
+    !effect ||
+    !keysEqual(effect, [
+      'effect_type',
+      'adapter_ref',
+      'delivery_policy_ref',
+      'delivery_lane',
+      'reconciliation',
+      'idempotency',
+      'delivery_requirement',
+    ]) ||
+    effect.effect_type !== 'capability_dispatch' ||
+    effect.delivery_lane !== 'normal_execution' ||
+    effect.delivery_requirement !== 'required' ||
+    !['provider_key', 'external_lookup'].includes(String(effect.idempotency))
+  ) {
+    throw new CompilerDiagnosticError(
+      diagnostic('capability_not_allowed', 'bind', sourcePointer, nodeId),
+    );
+  }
+  const reconciliation = objectRef(effect.reconciliation);
+  const reconciliationValid =
+    (reconciliation?.type === 'not_required' &&
+      keysEqual(reconciliation, ['type'])) ||
+    (reconciliation?.type === 'by_effect_key' &&
+      keysEqual(reconciliation, ['type', 'reconcile_action_ref']) &&
+      objectRef(reconciliation.reconcile_action_ref) !== null);
+  if (!reconciliationValid) {
+    throw new CompilerDiagnosticError(
+      diagnostic('capability_not_allowed', 'bind', sourcePointer, nodeId),
+    );
+  }
+  const adapterRef = objectRef(effect.adapter_ref);
+  const policyRef = objectRef(effect.delivery_policy_ref);
+  if (!adapterRef || !policyRef) {
+    throw new CompilerDiagnosticError(
+      diagnostic('capability_not_allowed', 'bind', sourcePointer, nodeId),
+    );
+  }
+  assertPinnedRef(
+    adapterRef,
+    `${sourcePointer}/outbox_effect/adapter_ref`,
+    nodeId,
+  );
+  assertPinnedRef(
+    policyRef,
+    `${sourcePointer}/outbox_effect/delivery_policy_ref`,
+    nodeId,
+  );
+  const adapter = resourceForRef(state.snapshot, adapterRef, 'outbox_adapter');
+  const policy = resourceForRef(state.snapshot, policyRef, 'outbox_policy');
+  if (!adapter || !policy) {
+    throw new CompilerDiagnosticError(
+      diagnostic('registry_ref_not_found', 'bind', sourcePointer, nodeId),
+    );
+  }
+  if (
+    adapter.publicationState !== 'published' ||
+    policy.publicationState !== 'published'
+  ) {
+    throw new CompilerDiagnosticError(
+      diagnostic('capability_not_allowed', 'bind', sourcePointer, nodeId),
+    );
+  }
+  return { effect, adapter, policy };
+}
+
+function validateCapabilityOutboxContract(
+  capability: SnapshotResource,
+  sourcePointer: string,
+  nodeId: string,
+  state: CompilationState,
+): void {
+  const { effect, adapter, policy } = capabilityOutboxResources(
+    capability,
+    sourcePointer,
+    nodeId,
+    state,
+  );
+  const adapterContent = adapter.content;
+  const { adapter_hash: adapterHash, ...adapterWithoutHash } = adapterContent;
+  const adapterValid =
+    adapterContent.format === 'icarus.workflow-outbox-adapter/1' &&
+    objectRef(adapterContent.ref) !== null &&
+    versionedRefsEqual(adapterContent.ref as JsonObject, adapter.ref) &&
+    adapterHash ===
+      semanticHash(OUTBOX_ADAPTER_DOMAIN, adapterWithoutHash as JsonObject) &&
+    Array.isArray(adapterContent.supported_effect_types) &&
+    adapterContent.supported_effect_types.includes(effect.effect_type) &&
+    Array.isArray(adapterContent.supported_delivery_lanes) &&
+    adapterContent.supported_delivery_lanes.includes(effect.delivery_lane) &&
+    Array.isArray(adapterContent.supported_reconciliation) &&
+    adapterContent.supported_reconciliation.includes(
+      (effect.reconciliation as JsonObject).type,
+    ) &&
+    Array.isArray(adapterContent.supported_idempotency) &&
+    adapterContent.supported_idempotency.includes(effect.idempotency);
+  const policyContent = policy.content;
+  const { policy_hash: policyHash, ...policyWithoutHash } = policyContent;
+  const retryable = policyContent.retryable_error_codes;
+  const permanent = policyContent.permanent_error_codes;
+  const policyValid =
+    policyContent.format === 'icarus.workflow-outbox-delivery-policy/1' &&
+    objectRef(policyContent.ref) !== null &&
+    versionedRefsEqual(policyContent.ref as JsonObject, policy.ref) &&
+    policyHash ===
+      semanticHash(OUTBOX_POLICY_DOMAIN, policyWithoutHash as JsonObject) &&
+    positiveInteger(policyContent.max_delivery_attempts) &&
+    nonnegativeInteger(policyContent.max_reconcile_attempts) &&
+    positiveInteger(policyContent.delivery_duration_ms) &&
+    positiveInteger(policyContent.attempt_timeout_ms) &&
+    policyContent.attempt_timeout_ms <= policyContent.delivery_duration_ms &&
+    nonnegativeInteger(policyContent.initial_backoff_ms) &&
+    nonnegativeInteger(policyContent.max_backoff_ms) &&
+    policyContent.initial_backoff_ms <= policyContent.max_backoff_ms &&
+    ['fixed', 'exponential'].includes(String(policyContent.backoff)) &&
+    nonnegativeInteger(policyContent.deterministic_jitter_micros) &&
+    policyContent.deterministic_jitter_micros <= 1_000_000 &&
+    typeof policyContent.honor_retry_after === 'boolean' &&
+    Array.isArray(retryable) &&
+    Array.isArray(permanent) &&
+    retryable.every((code) => typeof code === 'string') &&
+    permanent.every((code) => typeof code === 'string') &&
+    new Set(retryable).size === retryable.length &&
+    new Set(permanent).size === permanent.length &&
+    retryable.every((code) => !permanent.includes(code));
+  if (!adapterValid || !policyValid) {
+    throw new CompilerDiagnosticError(
+      diagnostic('compiler_integrity_mismatch', 'hash', sourcePointer, nodeId),
     );
   }
 }
@@ -1024,6 +1192,7 @@ function validateDefinitionBindings(
         capability,
         `/states/${stateKey}/capability_ref`,
         stateKey,
+        state,
       );
       validateResourceDependencyClosure(
         capability,
@@ -1484,6 +1653,88 @@ function effectiveRetryPolicy(
   };
 }
 
+function compileCapabilityOutboxBinding(
+  capability: SnapshotResource,
+  state: CompilationState,
+): JsonObject {
+  const { effect, adapter, policy } = capabilityOutboxResources(
+    capability,
+    '/capability_ref',
+    String(capability.ref.id),
+    state,
+  );
+  assertJsonObject(state.snapshot.safety.execution);
+  const executionSafety = state.snapshot.safety.execution;
+  const policyContent = policy.content;
+  const effectiveDeliveryDurationMs = Math.min(
+    Number(policyContent.delivery_duration_ms),
+    Number(executionSafety.max_outbox_delivery_duration_ms),
+  );
+  const effectiveMaxBackoffMs = Math.min(
+    Number(policyContent.max_backoff_ms),
+    Number(executionSafety.max_retry_backoff_ms),
+  );
+  const effectivePolicy: JsonObject = {
+    max_delivery_attempts: Math.min(
+      Number(policyContent.max_delivery_attempts),
+      Number(executionSafety.max_outbox_attempts_per_message),
+    ),
+    max_reconcile_attempts: Math.min(
+      Number(policyContent.max_reconcile_attempts),
+      Number(executionSafety.max_outbox_reconcile_attempts_per_message),
+    ),
+    delivery_duration_ms: effectiveDeliveryDurationMs,
+    attempt_timeout_ms: Math.min(
+      Number(policyContent.attempt_timeout_ms),
+      Number(executionSafety.max_outbox_attempt_duration_ms),
+      effectiveDeliveryDurationMs,
+    ),
+    initial_backoff_ms: Math.min(
+      Number(policyContent.initial_backoff_ms),
+      effectiveMaxBackoffMs,
+    ),
+    max_backoff_ms: effectiveMaxBackoffMs,
+    backoff: policyContent.backoff,
+    deterministic_jitter_micros: policyContent.deterministic_jitter_micros,
+    honor_retry_after: policyContent.honor_retry_after,
+    retryable_error_codes: policyContent.retryable_error_codes,
+    permanent_error_codes: policyContent.permanent_error_codes,
+  };
+  const snapshotWithoutHash: JsonObject = {
+    format: 'icarus.workflow-outbox-effective-policy-snapshot/1',
+    source_policy_ref: policy.ref,
+    source_policy_content_hash: policy.contentHash,
+    source_policy_hash: policyContent.policy_hash,
+    effective_policy: effectivePolicy,
+    runtime_safety_hash: state.snapshot.safetyHash,
+  };
+  const effectivePolicySnapshot: JsonObject = {
+    ...snapshotWithoutHash,
+    snapshot_hash: semanticHash(
+      OUTBOX_EFFECTIVE_POLICY_SNAPSHOT_DOMAIN,
+      snapshotWithoutHash,
+    ),
+  };
+  const withoutHash: JsonObject = {
+    effect_contract: effect,
+    adapter_identity: {
+      resource_type: 'outbox_adapter',
+      ref: adapter.ref,
+      content_hash: adapter.contentHash,
+    },
+    delivery_policy_identity: {
+      resource_type: 'outbox_policy',
+      ref: policy.ref,
+      content_hash: policy.contentHash,
+    },
+    effective_policy_snapshot: effectivePolicySnapshot,
+  };
+  return {
+    ...withoutHash,
+    binding_hash: semanticHash(CAPABILITY_OUTBOX_BINDING_DOMAIN, withoutHash),
+  };
+}
+
 function compileCapabilityNode(
   node: JsonObject,
   state: CompilationState,
@@ -1519,6 +1770,7 @@ function compileCapabilityNode(
       timeout_ms: timeoutMs,
     },
     capability_binding: capability.content,
+    outbox_execution_binding: compileCapabilityOutboxBinding(capability, state),
     effective_retry_policy: effectiveRetryPolicy(node, capability, state),
   };
 }

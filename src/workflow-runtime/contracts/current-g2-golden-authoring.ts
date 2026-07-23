@@ -27,8 +27,7 @@ const GENERATED_SCHEMA_PARAMETER_DOMAIN =
   'icarus:workflow-generated-schema-parameter:1\n';
 const GENERATED_SCHEMA_DOMAIN = 'icarus:workflow-generated-schema:1\n';
 const ROUTE_GROUP_DOMAIN = 'icarus:workflow-route-group:1\n';
-const CONTROL_EDGE_SOURCE_DOMAIN =
-  'icarus:workflow-control-edge-source:1\n';
+const CONTROL_EDGE_SOURCE_DOMAIN = 'icarus:workflow-control-edge-source:1\n';
 const CONTROL_EDGE_DOMAIN = 'icarus:workflow-compiled-control-edge:1\n';
 const DATA_EDGE_SOURCE_DOMAIN = 'icarus:workflow-data-edge-source:1\n';
 const DATA_EDGE_DOMAIN = 'icarus:workflow-compiled-data-edge:1\n';
@@ -38,8 +37,7 @@ const PROOF_DETAIL_DOMAIN =
 const PROOF_DOMAIN = 'icarus:workflow-data-edge-compatibility-proof:1\n';
 const COMPLETION_FACT_PROGRAM_DOMAIN =
   'icarus:workflow-completion-fact-program:1\n';
-const COMPLETION_SELECTOR_DOMAIN =
-  'icarus:workflow-completion-selector:1\n';
+const COMPLETION_SELECTOR_DOMAIN = 'icarus:workflow-completion-selector:1\n';
 const COMPLETION_RULE_DOMAIN = 'icarus:workflow-completion-rule:1\n';
 const COMPLETION_POLICY_DOMAIN = 'icarus:workflow-completion-policy:1\n';
 const COMPLEXITY_SUMMARY_DOMAIN =
@@ -48,6 +46,10 @@ const CAPABILITY_CATALOG_DOMAIN =
   'icarus:workflow-capability-catalog-snapshot:1\n';
 const WAIT_CATALOG_DOMAIN = 'icarus:workflow-wait-catalog-snapshot:1\n';
 const CHILD_POLICY_DOMAIN = 'icarus:workflow-child-policy-binding:1\n';
+const OUTBOX_POLICY_SNAPSHOT_DOMAIN =
+  'icarus:workflow-outbox-effective-policy-snapshot:1\n';
+const CAPABILITY_OUTBOX_BINDING_DOMAIN =
+  'icarus:workflow-capability-outbox-execution-binding:1\n';
 
 export interface CurrentG2AuthoringCase {
   caseId: string;
@@ -195,10 +197,7 @@ function normalizePolicy(policy: JsonObject): JsonObject {
   ]) {
     normalized[key] = sortRefs(normalized[key]);
   }
-  for (const key of [
-    'allowed_node_types',
-    'allowed_claim_ids',
-  ]) {
+  for (const key of ['allowed_node_types', 'allowed_claim_ids']) {
     if (Array.isArray(normalized[key])) {
       normalized[key] = [...normalized[key]].sort((left, right) =>
         ascii(String(left), String(right)),
@@ -230,7 +229,11 @@ function intersectLimits(
         const child = nullableNumber(requested[key], `requested limit ${key}`);
         return [
           key,
-          parent === null ? child : child === null ? parent : Math.min(parent, child),
+          parent === null
+            ? child
+            : child === null
+              ? parent
+              : Math.min(parent, child),
         ];
       }),
   );
@@ -258,13 +261,19 @@ function childPolicy(context: CompileContext, refValue: JsonValue): JsonObject {
   }
   const ref = object(refValue, 'child policy ref');
   const profile = context.childProfiles.find(
-    (candidate) => refKey(object(candidate.ref, 'child profile ref')) === refKey(ref),
+    (candidate) =>
+      refKey(object(candidate.ref, 'child profile ref')) === refKey(ref),
   );
-  if (!profile) throw new Error(`Golden authoring child policy missing: ${refKey(ref)}`);
-  const request = normalizePolicy(object(profile.request, 'child policy request'));
+  if (!profile)
+    throw new Error(`Golden authoring child policy missing: ${refKey(ref)}`);
+  const request = normalizePolicy(
+    object(profile.request, 'child policy request'),
+  );
   const intersected = clone(request);
-  intersected.allowed_node_types = (request.allowed_node_types as JsonValue[]).filter(
-    (entry) => (parent.allowed_node_types as JsonValue[]).includes(entry),
+  intersected.allowed_node_types = (
+    request.allowed_node_types as JsonValue[]
+  ).filter((entry) =>
+    (parent.allowed_node_types as JsonValue[]).includes(entry),
   );
   for (const key of [
     'allowed_capabilities',
@@ -274,19 +283,24 @@ function childPolicy(context: CompileContext, refValue: JsonValue): JsonObject {
     'allowed_child_policy_refs',
   ]) {
     const parentKeys = new Set(
-      sortRefs(parent[key]).map((entry) => refKey(object(entry, `parent ${key}`))),
+      sortRefs(parent[key]).map((entry) =>
+        refKey(object(entry, `parent ${key}`)),
+      ),
     );
     intersected[key] = sortRefs(request[key]).filter((entry) =>
       parentKeys.has(refKey(object(entry, `child ${key}`))),
     );
   }
-  intersected.allowed_claim_ids = (request.allowed_claim_ids as JsonValue[]).filter(
-    (entry) => (parent.allowed_claim_ids as JsonValue[]).includes(entry),
+  intersected.allowed_claim_ids = (
+    request.allowed_claim_ids as JsonValue[]
+  ).filter((entry) =>
+    (parent.allowed_claim_ids as JsonValue[]).includes(entry),
   );
   intersected.allow_early_close =
     parent.allow_early_close === true && request.allow_early_close === true;
   intersected.allow_indefinite_waits =
-    parent.allow_indefinite_waits === true && request.allow_indefinite_waits === true;
+    parent.allow_indefinite_waits === true &&
+    request.allow_indefinite_waits === true;
   intersected.limits = intersectLimits(
     object(parent.limits, 'parent limits'),
     object(request.limits, 'child limits'),
@@ -336,10 +350,14 @@ function generatedSchema(
   generator: 'child_completion' | 'map_result',
   childInterface: JsonObject,
 ): JsonObject {
-  const exits = Object.keys(object(childInterface.exits, 'child exits')).sort(ascii);
+  const exits = Object.keys(object(childInterface.exits, 'child exits')).sort(
+    ascii,
+  );
   const parameter: JsonObject = {
     generator,
-    child_interface_ref: clone(object(childInterface.ref, 'child interface ref')),
+    child_interface_ref: clone(
+      object(childInterface.ref, 'child interface ref'),
+    ),
     exits,
   };
   const schemaJson: JsonObject =
@@ -389,11 +407,17 @@ function compileInputPorts(
       .map(([name, value]) => {
         const port = object(value, `input port ${name}`);
         const compiled: JsonObject = {
-          schema: schemaBinding(context, object(port.schema_ref, 'input schema ref')),
+          schema: schemaBinding(
+            context,
+            object(port.schema_ref, 'input schema ref'),
+          ),
           max_bytes: port.max_bytes,
           aggregation: clone(object(port.aggregation, 'input aggregation')),
         };
-        if (compiled.aggregation && object(compiled.aggregation, 'aggregation').type === 'list') {
+        if (
+          compiled.aggregation &&
+          object(compiled.aggregation, 'aggregation').type === 'list'
+        ) {
           const item = object(port.item_contract, 'input item contract');
           compiled.item_schema = schemaBinding(
             context,
@@ -433,7 +457,8 @@ function compileOutputPorts(
 }
 
 function triggerSteps(trigger: JsonObject): number {
-  if (trigger.type === 'expression') return expressionSteps(object(trigger.expression, 'trigger expression'));
+  if (trigger.type === 'expression')
+    return expressionSteps(object(trigger.expression, 'trigger expression'));
   return 1;
 }
 
@@ -447,11 +472,15 @@ function expressionSteps(value: JsonObject): number {
       )
     );
   }
-  if (value.arg) return 1 + expressionSteps(object(value.arg, 'expression arg'));
+  if (value.arg)
+    return 1 + expressionSteps(object(value.arg, 'expression arg'));
   return 1;
 }
 
-function triggerProgram(context: CompileContext, triggerValue: JsonValue): JsonObject {
+function triggerProgram(
+  context: CompileContext,
+  triggerValue: JsonValue,
+): JsonObject {
   const trigger = clone(object(triggerValue, 'node trigger'));
   const referenced = Array.isArray(trigger.edge_ids)
     ? [...trigger.edge_ids].map(String).sort(ascii)
@@ -466,10 +495,7 @@ function triggerProgram(context: CompileContext, triggerValue: JsonValue): JsonO
   return { ...programWithoutHash, truth_program_hash: truthProgramHash };
 }
 
-function capabilityNode(
-  context: CompileContext,
-  node: JsonObject,
-): JsonObject {
+function capabilityNode(context: CompileContext, node: JsonObject): JsonObject {
   const capability = findResource(
     context,
     'capability',
@@ -483,22 +509,32 @@ function capabilityNode(
   const maximum = Math.min(
     Number(retry.max_attempts),
     requested ? Number(requested.max_attempts) : Number(retry.max_attempts),
-    Number(object(context.safety.execution, 'execution safety').max_attempts_per_node),
+    Number(
+      object(context.safety.execution, 'execution safety')
+        .max_attempts_per_node,
+    ),
   );
   let qualityRevision: JsonValue = null;
   if (binding.quality_revision_policy !== null) {
-    const policy = object(binding.quality_revision_policy, 'quality revision policy');
+    const policy = object(
+      binding.quality_revision_policy,
+      'quality revision policy',
+    );
     const schema = findResource(
       context,
       'schema',
       object(policy.feedback_schema_ref, 'feedback schema ref'),
     );
     qualityRevision = {
-      feedback_schema_ref: clone(object(policy.feedback_schema_ref, 'feedback schema ref')),
+      feedback_schema_ref: clone(
+        object(policy.feedback_schema_ref, 'feedback schema ref'),
+      ),
       feedback_schema_hash: schema.content_hash,
       effective_max_feedback_bytes: Math.min(
         Number(policy.max_feedback_bytes),
-        Number(object(context.safety.value, 'value safety').max_single_value_bytes),
+        Number(
+          object(context.safety.value, 'value safety').max_single_value_bytes,
+        ),
       ),
       context_mode: policy.context_mode,
     };
@@ -513,6 +549,101 @@ function capabilityNode(
   };
   const inputPorts = compileInputPorts(context, binding.input_ports);
   const outputPorts = compileOutputPorts(context, binding.output_ports);
+  let outboxExecutionBinding: JsonObject | null = null;
+  if (binding.outbox_effect !== undefined) {
+    const effectContract = object(
+      binding.outbox_effect,
+      'capability outbox effect',
+    );
+    const adapter = findResource(
+      context,
+      'outbox_adapter',
+      object(effectContract.adapter_ref, 'capability adapter ref'),
+    );
+    const deliveryPolicy = findResource(
+      context,
+      'outbox_policy',
+      object(
+        effectContract.delivery_policy_ref,
+        'capability delivery policy ref',
+      ),
+    );
+    const policy = object(deliveryPolicy.content, 'outbox delivery policy');
+    const executionSafety = object(
+      context.safety.execution,
+      'execution safety',
+    );
+    const effectiveDeliveryDurationMs = Math.min(
+      Number(policy.delivery_duration_ms),
+      Number(executionSafety.max_outbox_delivery_duration_ms),
+    );
+    const effectiveMaxBackoffMs = Math.min(
+      Number(policy.max_backoff_ms),
+      Number(executionSafety.max_retry_backoff_ms),
+    );
+    const effectivePolicy: JsonObject = {
+      max_delivery_attempts: Math.min(
+        Number(policy.max_delivery_attempts),
+        Number(executionSafety.max_outbox_attempts_per_message),
+      ),
+      max_reconcile_attempts: Math.min(
+        Number(policy.max_reconcile_attempts),
+        Number(executionSafety.max_outbox_reconcile_attempts_per_message),
+      ),
+      delivery_duration_ms: effectiveDeliveryDurationMs,
+      attempt_timeout_ms: Math.min(
+        Number(policy.attempt_timeout_ms),
+        Number(executionSafety.max_outbox_attempt_duration_ms),
+        effectiveDeliveryDurationMs,
+      ),
+      initial_backoff_ms: Math.min(
+        Number(policy.initial_backoff_ms),
+        effectiveMaxBackoffMs,
+      ),
+      max_backoff_ms: effectiveMaxBackoffMs,
+      backoff: policy.backoff,
+      deterministic_jitter_micros: policy.deterministic_jitter_micros,
+      honor_retry_after: policy.honor_retry_after,
+      retryable_error_codes: clone(policy.retryable_error_codes),
+      permanent_error_codes: clone(policy.permanent_error_codes),
+    };
+    const snapshotWithoutHash: JsonObject = {
+      format: 'icarus.workflow-outbox-effective-policy-snapshot/1',
+      source_policy_ref: clone(deliveryPolicy.ref),
+      source_policy_content_hash: deliveryPolicy.content_hash,
+      source_policy_hash: policy.policy_hash,
+      effective_policy: effectivePolicy,
+      runtime_safety_hash: object(
+        context.snapshot.safety_snapshot,
+        'safety snapshot',
+      ).source_artifact_hash,
+    };
+    const effectivePolicySnapshot: JsonObject = {
+      ...snapshotWithoutHash,
+      snapshot_hash: hash(OUTBOX_POLICY_SNAPSHOT_DOMAIN, snapshotWithoutHash),
+    };
+    const outboxBindingWithoutHash: JsonObject = {
+      effect_contract: clone(effectContract),
+      adapter_identity: {
+        resource_type: 'outbox_adapter',
+        ref: clone(adapter.ref),
+        content_hash: adapter.content_hash,
+      },
+      delivery_policy_identity: {
+        resource_type: 'outbox_policy',
+        ref: clone(deliveryPolicy.ref),
+        content_hash: deliveryPolicy.content_hash,
+      },
+      effective_policy_snapshot: effectivePolicySnapshot,
+    };
+    outboxExecutionBinding = {
+      ...outboxBindingWithoutHash,
+      binding_hash: hash(
+        CAPABILITY_OUTBOX_BINDING_DOMAIN,
+        outboxBindingWithoutHash,
+      ),
+    };
+  }
   return {
     id: node.id,
     type: node.type,
@@ -523,11 +654,19 @@ function capabilityNode(
     effective_limits: {
       max_attempts: maximum,
       timeout_ms: Math.min(
-        node.timeout_ms ? Number(node.timeout_ms) : Number(binding.timeout_ceiling_ms),
-        Number(object(context.safety.execution, 'execution safety').max_attempt_duration_ms),
+        node.timeout_ms
+          ? Number(node.timeout_ms)
+          : Number(binding.timeout_ceiling_ms),
+        Number(
+          object(context.safety.execution, 'execution safety')
+            .max_attempt_duration_ms,
+        ),
       ),
     },
     capability_binding: binding,
+    ...(outboxExecutionBinding
+      ? { outbox_execution_binding: outboxExecutionBinding }
+      : {}),
     effective_retry_policy: {
       ...retryWithoutHash,
       policy_hash: hash(RETRY_POLICY_DOMAIN, retryWithoutHash),
@@ -562,9 +701,14 @@ function waitNode(context: CompileContext, node: JsonObject): JsonObject {
   const contract = clone(object(resource.content, 'wait contract'));
   const maxDuration = Math.min(
     wait.timeout_ms === undefined
-      ? Number(object(context.safety.wait, 'wait safety').max_finite_wait_duration_ms)
+      ? Number(
+          object(context.safety.wait, 'wait safety')
+            .max_finite_wait_duration_ms,
+        )
       : Number(wait.timeout_ms),
-    Number(object(context.safety.wait, 'wait safety').max_finite_wait_duration_ms),
+    Number(
+      object(context.safety.wait, 'wait safety').max_finite_wait_duration_ms,
+    ),
   );
   const binding: JsonObject = {
     ...clone(wait),
@@ -604,7 +748,9 @@ function compileStaticFactory(
 ): { binding: JsonObject; childPlan: JsonObject } {
   const factory = object(factoryValue, 'static factory');
   if (factory.type !== 'inline') {
-    throw new Error('Current G2 Golden authoring supports only frozen inline factories');
+    throw new Error(
+      'Current G2 Golden authoring supports only frozen inline factories',
+    );
   }
   const childSource = object(factory.scope, 'inline child scope');
   const child = compileGraph(
@@ -616,7 +762,10 @@ function compileStaticFactory(
     ownerNodePath,
   );
   const childInterface = cleanInterface(
-    findInterface(context, object(childSource.interface_ref, 'child interface ref')),
+    findInterface(
+      context,
+      object(childSource.interface_ref, 'child interface ref'),
+    ),
   );
   const sourceHash = hash(GRAPH_SOURCE_DOMAIN, childSource);
   const closureKey = ownerNodePath.join('/');
@@ -661,10 +810,16 @@ function loweringGraph(
   definition: JsonObject,
   context: CompileContext,
 ): { graph: JsonObject; interfaceValue: JsonObject; policy: JsonObject } {
-  const entryPoints = object(definition.entry_points, 'definition entry points');
+  const entryPoints = object(
+    definition.entry_points,
+    'definition entry points',
+  );
   const entry = object(entryPoints.default, 'definition default entry');
   const states = object(definition.states, 'definition states');
-  const state = object(states[string(entry.state_key, 'entry state')], 'entry state');
+  const state = object(
+    states[string(entry.state_key, 'entry state')],
+    'entry state',
+  );
   const definitionRef = object(definition.ref, 'definition ref');
   const interfaceValue: JsonObject = {
     ref: {
@@ -687,8 +842,12 @@ function loweringGraph(
         id: 'capability',
         type: state.type,
         trigger: { type: 'root' },
-        capability_ref: clone(object(state.capability_ref, 'state capability ref')),
-        ...(state.retry_request ? { retry_request: clone(state.retry_request) } : {}),
+        capability_ref: clone(
+          object(state.capability_ref, 'state capability ref'),
+        ),
+        ...(state.retry_request
+          ? { retry_request: clone(state.retry_request) }
+          : {}),
         ...(state.timeout_ms ? { timeout_ms: state.timeout_ms } : {}),
       },
       {
@@ -756,7 +915,9 @@ function buildContext(snapshot: JsonObject): CompileContext {
     identity: object(snapshot.compiler_identity, 'compiler identity'),
     snapshot,
     resources: objects(registry.resources, 'registry resources'),
-    interfaces: objects(interfaces.interfaces, 'interfaces').map(cleanInterface),
+    interfaces: objects(interfaces.interfaces, 'interfaces').map(
+      cleanInterface,
+    ),
     rootPolicy: object(completePolicy.root_policy, 'root policy'),
     childProfiles: objects(completePolicy.child_profiles, 'child profiles'),
     safety: object(safety.ceilings, 'safety ceilings'),
@@ -776,20 +937,25 @@ function collectObjectsByHashField(
     return output;
   }
   if (!value || typeof value !== 'object') return output;
-  if (Object.keys(value).some((key) => fields.has(key))) output.push(clone(value));
+  if (Object.keys(value).some((key) => fields.has(key)))
+    output.push(clone(value));
   for (const nested of Object.values(value)) {
     collectObjectsByHashField(nested, fields, output);
   }
   return output;
 }
 
-export function extractCurrentG2GoldenProofBytes(plan: JsonObject): JsonObject[] {
-  return collectObjectsByHashField(plan, new Set(['proof_hash'])).sort((left, right) =>
-    ascii(String(left.proof_hash), String(right.proof_hash)),
+export function extractCurrentG2GoldenProofBytes(
+  plan: JsonObject,
+): JsonObject[] {
+  return collectObjectsByHashField(plan, new Set(['proof_hash'])).sort(
+    (left, right) => ascii(String(left.proof_hash), String(right.proof_hash)),
   );
 }
 
-export function extractCurrentG2GoldenProgramBytes(plan: JsonObject): JsonObject[] {
+export function extractCurrentG2GoldenProgramBytes(
+  plan: JsonObject,
+): JsonObject[] {
   return collectObjectsByHashField(
     plan,
     new Set(['program_hash', 'truth_program_hash', 'fact_program_hash']),
@@ -807,7 +973,10 @@ export function extractCurrentG2GoldenProgramBytes(plan: JsonObject): JsonObject
 function resultHash(
   value: Omit<WorkflowCompilerConformanceCaseResultV1, 'result_hash'>,
 ): Sha256Hash {
-  return hash(COMPILER_CASE_RESULT_DOMAIN_SEPARATOR, value as unknown as JsonValue);
+  return hash(
+    COMPILER_CASE_RESULT_DOMAIN_SEPARATOR,
+    value as unknown as JsonValue,
+  );
 }
 
 function diagnosticOrder(
@@ -859,20 +1028,28 @@ export function authorCurrentG2GoldenExpectedResult(
     context.rootPolicy = lowered.policy;
     compiled = compileGraph(context, lowered.graph);
     const expectedSourceHash =
-      input.expectedSourceHash ?? hash(DEFINITION_SOURCE_DOMAIN, without(source, 'definition_hash'));
+      input.expectedSourceHash ??
+      hash(DEFINITION_SOURCE_DOMAIN, without(source, 'definition_hash'));
     compiled.plan.source_hash = expectedSourceHash;
     const planWithoutHash = without(compiled.plan, 'plan_hash');
-    compiled.plan.plan_hash = hash(COMPILED_PLAN_V2_DOMAIN_SEPARATOR, planWithoutHash);
+    compiled.plan.plan_hash = hash(
+      COMPILED_PLAN_V2_DOMAIN_SEPARATOR,
+      planWithoutHash,
+    );
     compiled.sourceHash = expectedSourceHash;
   } else {
     compiled = compileGraph(context, source);
   }
   const proofs = extractCurrentG2GoldenProofBytes(compiled.plan);
   const programs = extractCurrentG2GoldenProgramBytes(compiled.plan);
-  const proofHashes = proofs.map((proof) => string(proof.proof_hash, 'proof hash')) as Sha256Hash[];
+  const proofHashes = proofs.map((proof) =>
+    string(proof.proof_hash, 'proof hash'),
+  ) as Sha256Hash[];
   const programHashes = programs.map((program) =>
     string(
-      program.program_hash ?? program.truth_program_hash ?? program.fact_program_hash,
+      program.program_hash ??
+        program.truth_program_hash ??
+        program.fact_program_hash,
       'program hash',
     ),
   ) as Sha256Hash[];
@@ -917,7 +1094,6 @@ export function currentG2GoldenRawBytesHashForTest(text: string): Sha256Hash {
   return rawHash(text);
 }
 
-
 function structuralNode(
   context: CompileContext,
   node: JsonObject,
@@ -947,13 +1123,19 @@ function structuralNode(
     base.output_ports = {
       [completionPort]: {
         schema: generatedSchema('child_completion', childInterface),
-        max_bytes: Number(object(context.safety.value, 'value safety').max_single_value_bytes),
+        max_bytes: Number(
+          object(context.safety.value, 'value safety').max_single_value_bytes,
+        ),
         required: true,
       },
     };
     base.effective_limits = {
-      max_nesting_depth: Number(object(context.safety.scope, 'scope safety').max_nesting_depth),
-      max_scope_spec_bytes: Number(object(context.safety.scope, 'scope safety').max_scope_spec_bytes),
+      max_nesting_depth: Number(
+        object(context.safety.scope, 'scope safety').max_nesting_depth,
+      ),
+      max_scope_spec_bytes: Number(
+        object(context.safety.scope, 'scope safety').max_scope_spec_bytes,
+      ),
     };
     base.graph_spec_input_port = node.graph_spec_input_port;
     base.child_interface_snapshot = childInterface;
@@ -983,12 +1165,16 @@ function structuralNode(
     base.output_ports = {
       [completionPort]: {
         schema: generatedSchema('child_completion', childInterface),
-        max_bytes: Number(object(context.safety.value, 'value safety').max_single_value_bytes),
+        max_bytes: Number(
+          object(context.safety.value, 'value safety').max_single_value_bytes,
+        ),
         required: true,
       },
     };
     base.effective_limits = {
-      max_nesting_depth: Number(object(context.safety.scope, 'scope safety').max_nesting_depth),
+      max_nesting_depth: Number(
+        object(context.safety.scope, 'scope safety').max_nesting_depth,
+      ),
     };
     base.factory_binding = factory.binding;
     base.child_input_bindings = sortedObject(
@@ -1000,7 +1186,10 @@ function structuralNode(
     return base;
   }
   const resultsPort = string(node.result_output_port, 'map result output port');
-  const requestedItems = nullableNumber(node.requested_max_items, 'map max items');
+  const requestedItems = nullableNumber(
+    node.requested_max_items,
+    'map max items',
+  );
   const requestedConcurrency = nullableNumber(
     node.requested_child_concurrency,
     'map concurrency',
@@ -1020,14 +1209,18 @@ function structuralNode(
   base.output_ports = {
     [resultsPort]: {
       schema: generatedSchema('map_result', childInterface),
-      max_bytes: Number(object(context.safety.value, 'value safety').max_single_value_bytes),
+      max_bytes: Number(
+        object(context.safety.value, 'value safety').max_single_value_bytes,
+      ),
       required: true,
     },
   };
   base.effective_limits = {
     max_items: maxItems,
     child_concurrency: concurrency,
-    max_nesting_depth: Number(object(context.safety.scope, 'scope safety').max_nesting_depth),
+    max_nesting_depth: Number(
+      object(context.safety.scope, 'scope safety').max_nesting_depth,
+    ),
   };
   base.body_binding = factory.binding;
   base.items_input_port = node.items_input_port;
@@ -1036,7 +1229,8 @@ function structuralNode(
     object(node.shared_child_input_bindings, 'map shared bindings'),
   );
   base.result_output_port = resultsPort;
-  if (node.item_key_pointer !== undefined) base.item_key_pointer = node.item_key_pointer;
+  if (node.item_key_pointer !== undefined)
+    base.item_key_pointer = node.item_key_pointer;
   base.effective_max_items = maxItems;
   base.effective_child_concurrency = concurrency;
   base.completion = clone(object(node.completion, 'map completion'));
@@ -1045,13 +1239,17 @@ function structuralNode(
   return base;
 }
 
-function conditionOperands(value: JsonObject, output: JsonObject[] = []): JsonObject[] {
+function conditionOperands(
+  value: JsonObject,
+  output: JsonObject[] = [],
+): JsonObject[] {
   if (value.left) output.push(object(value.left, 'condition left'));
   if (value.right) output.push(object(value.right, 'condition right'));
   if (value.value) output.push(object(value.value, 'condition value'));
   if (value.set) output.push(object(value.set, 'condition set'));
   if (Array.isArray(value.args)) {
-    for (const entry of value.args) conditionOperands(object(entry, 'condition arg'), output);
+    for (const entry of value.args)
+      conditionOperands(object(entry, 'condition arg'), output);
   }
   if (value.arg) conditionOperands(object(value.arg, 'condition arg'), output);
   return output;
@@ -1075,7 +1273,10 @@ function conditionProgram(
   operands.forEach((operand, index) => {
     if (operand.literal !== undefined) {
       const schema = schemaForLiteral(operand.literal);
-      operandSchemaHashes[`operand_${index}`] = hash(LITERAL_SCHEMA_DOMAIN, schema);
+      operandSchemaHashes[`operand_${index}`] = hash(
+        LITERAL_SCHEMA_DOMAIN,
+        schema,
+      );
       operandTypes.push(jsonType(operand.literal));
       return;
     }
@@ -1084,7 +1285,10 @@ function conditionProgram(
     const outputPorts = object(sourceNode.output_ports, 'source output ports');
     const outputPort = object(outputPorts[port], `source output port ${port}`);
     const schema = object(outputPort.schema, 'source output schema');
-    let schemaHash = string(schema.schema_hash, 'condition operand schema hash');
+    let schemaHash = string(
+      schema.schema_hash,
+      'condition operand schema hash',
+    );
     let type = 'object';
     if (reference.pointer === '/ok') {
       const booleanSchema: JsonObject = { type: 'boolean' };
@@ -1100,7 +1304,10 @@ function conditionProgram(
     operand_types: operandTypes,
     max_steps: expressionSteps(condition),
   };
-  const programHash = hash(CONDITION_PROGRAM_V2_DOMAIN_SEPARATOR, withoutHashValue);
+  const programHash = hash(
+    CONDITION_PROGRAM_V2_DOMAIN_SEPARATOR,
+    withoutHashValue,
+  );
   context.programHashes.push(programHash);
   return { ...withoutHashValue, program_hash: programHash };
 }
@@ -1113,8 +1320,11 @@ function compileControlEdges(
   return [...sourceEdges]
     .sort((left, right) => ascii(String(left.id), String(right.id)))
     .map((edge) => {
-      const sourceNode = nodesById.get(string(edge.from_node_id, 'edge source id'));
-      if (!sourceNode) throw new Error(`Missing compiled edge source: ${String(edge.id)}`);
+      const sourceNode = nodesById.get(
+        string(edge.from_node_id, 'edge source id'),
+      );
+      if (!sourceNode)
+        throw new Error(`Missing compiled edge source: ${String(edge.id)}`);
       const withoutHashValue: JsonObject = {
         id: edge.id,
         from_node_id: edge.from_node_id,
@@ -1148,7 +1358,8 @@ function compileRouteGroups(
           const leftDefault = left.is_default === true;
           const rightDefault = right.is_default === true;
           if (leftDefault !== rightDefault) return leftDefault ? 1 : -1;
-          const priority = Number(right.priority ?? 0) - Number(left.priority ?? 0);
+          const priority =
+            Number(right.priority ?? 0) - Number(left.priority ?? 0);
           return priority || ascii(String(left.id), String(right.id));
         });
       const withoutHashValue: JsonObject = {
@@ -1186,13 +1397,22 @@ function sourceSchema(
 ): { binding: JsonObject; schemaJson: JsonObject | null } {
   const from = object(edge.from, 'data source');
   if (from.type === 'literal') {
-    return { binding: clone(consumerSchema), schemaJson: schemaForLiteral(from.value) };
+    return {
+      binding: clone(consumerSchema),
+      schemaJson: schemaForLiteral(from.value),
+    };
   }
   if (from.type === 'scope_input') {
     const inputs = object(rootInterface.inputs, 'scope interface inputs');
-    const input = object(inputs[string(from.port, 'scope input port')], 'scope input');
+    const input = object(
+      inputs[string(from.port, 'scope input port')],
+      'scope input',
+    );
     return {
-      binding: schemaBinding(context, object(input.schema_ref, 'scope input schema ref')),
+      binding: schemaBinding(
+        context,
+        object(input.schema_ref, 'scope input schema ref'),
+      ),
       schemaJson: null,
     };
   }
@@ -1202,7 +1422,10 @@ function sourceSchema(
     string(from.port, 'data source port'),
     'output_ports',
   );
-  return { binding: clone(object(output.schema, 'producer schema')), schemaJson: null };
+  return {
+    binding: clone(object(output.schema, 'producer schema')),
+    schemaJson: null,
+  };
 }
 
 function proofRule(
@@ -1249,8 +1472,7 @@ function compileDataEdges(
         'consumer schema hash',
       );
       const from = object(edge.from, 'data source');
-      const pointer =
-        typeof from.pointer === 'string' ? from.pointer : null;
+      const pointer = typeof from.pointer === 'string' ? from.pointer : null;
       const pointerTokens =
         pointer === null || pointer === ''
           ? []
@@ -1374,7 +1596,8 @@ function complexitySummary(
 ): JsonObject {
   const fanOut = new Map<string, number>();
   for (const edge of [...controlEdges, ...dataEdges]) {
-    const from = edge.from_node_id ?? object(edge.from ?? {}, 'data source').node_id;
+    const from =
+      edge.from_node_id ?? object(edge.from ?? {}, 'data source').node_id;
     if (typeof from === 'string') fanOut.set(from, (fanOut.get(from) ?? 0) + 1);
   }
   const maxCondition = Math.max(
@@ -1395,7 +1618,10 @@ function complexitySummary(
     ...objects(completion.early_rules, 'compiled early rules'),
     ...objects(completion.settled_rules, 'compiled settled rules'),
   ];
-  const maxCompletion = Math.max(0, ...rules.map((rule) => Number(rule.max_steps)));
+  const maxCompletion = Math.max(
+    0,
+    ...rules.map((rule) => Number(rule.max_steps)),
+  );
   const withoutHashValue: JsonObject = {
     node_count: nodes.length,
     control_edge_count: controlEdges.length,
@@ -1416,11 +1642,23 @@ function complexitySummary(
   };
 }
 
-function catalogHash(context: CompileContext, type: string, domain: string): Sha256Hash {
+function catalogHash(
+  context: CompileContext,
+  type: string,
+  domain: string,
+): Sha256Hash {
   const entries = context.resources
     .filter((entry) => entry.resource_type === type)
-    .map((entry) => ({ ref: clone(object(entry.ref, 'catalog ref')), hash: entry.content_hash }))
-    .sort((left, right) => ascii(refKey(object(left.ref, 'left catalog ref')), refKey(object(right.ref, 'right catalog ref'))));
+    .map((entry) => ({
+      ref: clone(object(entry.ref, 'catalog ref')),
+      hash: entry.content_hash,
+    }))
+    .sort((left, right) =>
+      ascii(
+        refKey(object(left.ref, 'left catalog ref')),
+        refKey(object(right.ref, 'right catalog ref')),
+      ),
+    );
   return hash(domain, entries);
 }
 
@@ -1450,12 +1688,18 @@ function compileGraph(
       }
       if (node.type === 'wait') return waitNode(context, node);
       if (node.type === 'terminal') return terminalNode(context, node);
-      if (node.type === 'subgraph' || node.type === 'expand' || node.type === 'map') {
+      if (
+        node.type === 'subgraph' ||
+        node.type === 'expand' ||
+        node.type === 'map'
+      ) {
         return structuralNode(context, node, ownerPath);
       }
       throw new Error(`Unsupported current G2 node type: ${String(node.type)}`);
     });
-  const nodesById = new Map(nodes.map((node) => [string(node.id, 'compiled node id'), node]));
+  const nodesById = new Map(
+    nodes.map((node) => [string(node.id, 'compiled node id'), node]),
+  );
   const controlEdges = compileControlEdges(
     context,
     objects(source.control_edges, 'source control edges'),
@@ -1482,7 +1726,10 @@ function compileGraph(
     compiler_version: identity.compiler_version,
     compiler_build_hash: identity.compiler_build_hash,
     compiler_toolchain_ref: clone(
-      object(identity.compiler_toolchain_manifest_ref, 'compiler toolchain ref'),
+      object(
+        identity.compiler_toolchain_manifest_ref,
+        'compiler toolchain ref',
+      ),
     ),
     compiler_toolchain_hash: identity.compiler_toolchain_hash,
     compiler_error_catalog_hash: identity.error_catalog_hash,
@@ -1491,11 +1738,25 @@ function compileGraph(
     proof_algorithm_version: identity.proof_algorithm_version,
     proof_algorithm_hash: identity.proof_algorithm_hash,
     source_hash: sourceHash,
-    interface_snapshot_hash: hash('icarus:workflow-scope-interface:1\n', rootInterface),
-    policy_snapshot_hash: hash('icarus:workflow-effective-policy:1\n', rootPolicy),
+    interface_snapshot_hash: hash(
+      'icarus:workflow-scope-interface:1\n',
+      rootInterface,
+    ),
+    policy_snapshot_hash: hash(
+      'icarus:workflow-effective-policy:1\n',
+      rootPolicy,
+    ),
     effective_policy_snapshot: rootPolicy,
-    capability_catalog_hash: catalogHash(context, 'capability', CAPABILITY_CATALOG_DOMAIN),
-    wait_contract_catalog_hash: catalogHash(context, 'wait_contract', WAIT_CATALOG_DOMAIN),
+    capability_catalog_hash: catalogHash(
+      context,
+      'capability',
+      CAPABILITY_CATALOG_DOMAIN,
+    ),
+    wait_contract_catalog_hash: catalogHash(
+      context,
+      'wait_contract',
+      WAIT_CATALOG_DOMAIN,
+    ),
     interface_snapshot: rootInterface,
     nodes,
     route_groups: routeGroups,
@@ -1511,7 +1772,10 @@ function compileGraph(
     ),
     static_child_plan_closure: {
       ...closureWithoutHash,
-      closure_hash: hash(STATIC_CHILD_CLOSURE_DOMAIN_SEPARATOR, closureWithoutHash),
+      closure_hash: hash(
+        STATIC_CHILD_CLOSURE_DOMAIN_SEPARATOR,
+        closureWithoutHash,
+      ),
     },
     effective_limits: clone(object(rootPolicy.limits, 'effective limits')),
     effective_usage_budget: clone(
@@ -1519,7 +1783,8 @@ function compileGraph(
     ),
     runtime_safety_snapshot: clone(context.safety),
     runtime_safety_hash: string(
-      object(context.snapshot.safety_snapshot, 'safety snapshot').source_artifact_hash,
+      object(context.snapshot.safety_snapshot, 'safety snapshot')
+        .source_artifact_hash,
       'runtime safety hash',
     ),
   };

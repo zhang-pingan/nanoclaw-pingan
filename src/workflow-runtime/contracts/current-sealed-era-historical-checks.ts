@@ -15,7 +15,7 @@ const contractsRoot = import.meta.dirname;
 const CAPACITY_ROOT = 'conformance/capacity-control-plane-addendum';
 const CAPACITY_MANIFEST = `${CAPACITY_ROOT}/contract-pack-capacity-control-plane-addendum.json`;
 const CAPACITY_ROOT_HASH =
-  'sha256:21d06c2d9d45a47f6ebc68c24b9d0acec29c8ae1726d5387bd38c460a7a0a7ec';
+  'sha256:d436710893239f01e53d668c23d5ddcfe1a7e4dbee3c00074bc4cd43871c98a6';
 const WORKING_GOLDEN_ROOT =
   'conformance/draft/resolved-g2-semantic-correction-v4';
 const WORKING_GOLDEN_MANIFEST = `${WORKING_GOLDEN_ROOT}/golden-draft-manifest@4.json`;
@@ -52,6 +52,33 @@ const RESOLVED_GOLDEN_FILES = [
   `${RESOLVED_GOLDEN_ROOT}/schemas/resolved-golden-draft-inventory-schema.json`,
   `${RESOLVED_GOLDEN_ROOT}/schemas/resolved-golden-draft-manifest-schema.json`,
 ] as const;
+const LEGACY_GOLDEN_DRAFT_ROOT =
+  'conformance/golden-draft/g2-semantic-correction';
+const LEGACY_GOLDEN_DRAFT_REF = `${LEGACY_GOLDEN_DRAFT_ROOT}/golden-draft-manifest@1.json`;
+const LEGACY_GOLDEN_DRAFT_ARTIFACT_HASH =
+  'sha256:1be05809900b1cab2af1382cef861c190abdc425654fd8b4c71289fb42c4324c';
+const LEGACY_GOLDEN_DRAFT_HASH =
+  'sha256:fb94f5e65425b482eee369bb115e46e884b249978e0f408832574d5be41dccbd';
+const LEGACY_GOLDEN_REVIEW_ROOT =
+  'conformance/golden-review/g2-semantic-correction';
+const LEGACY_GOLDEN_REVIEW_REF = `${LEGACY_GOLDEN_REVIEW_ROOT}/golden-review-report@1.json`;
+const LEGACY_GOLDEN_REVIEW_ARTIFACT_HASH =
+  'sha256:b4970615096e056e75d08fbde18a122bb48aeb0fbed35ecda8c478d5d0e0d999';
+const LEGACY_GOLDEN_REVIEW_HASH =
+  'sha256:d8b2164b0d8e8b6ab7a3fe50559327e7f944312194251bc72a4330845969ad91';
+const LEGACY_SEMANTIC_REVIEW_ROOT =
+  'conformance/golden-semantic-review/g2-semantic-correction';
+const LEGACY_SEMANTIC_REVIEW_REF = `${LEGACY_SEMANTIC_REVIEW_ROOT}/golden-semantic-review@1.json`;
+const LEGACY_SEMANTIC_REVIEW_ARTIFACT_HASH =
+  'sha256:f50faa521d676397b04ad1dfaf9c5560be56714e38d7e33ba2a2e0eb39edd47b';
+const LEGACY_SEMANTIC_REVIEW_HASH =
+  'sha256:b12442ce6bdefba73a6b7377006f2aa841d30d78a3060416bbe21048d07abea4';
+const LEGACY_SEALED_ROOT = 'conformance/sealed/g2-semantic-correction';
+const LEGACY_SEALED_REF = `${LEGACY_SEALED_ROOT}/golden-conformance-bundle@1.json`;
+const LEGACY_SEALED_ARTIFACT_HASH =
+  'sha256:4d874857ba4c91505c57979d3954ba4bf5e18c806a77f389b37c9ca9162b8c5c';
+const LEGACY_SEALED_BUNDLE_HASH =
+  'sha256:d00dc96d90ccfadd6081a77d7c4a16024e188b9a77a123743bc601f971219555';
 
 function absolute(relativePath: string): string {
   const resolved = path.resolve(contractsRoot, relativePath);
@@ -121,6 +148,152 @@ function checkRawInventoryTree(
   ) {
     throw new Error(`${label} artifact inventory drift`);
   }
+}
+
+function readExactArtifact(
+  relativePath: string,
+  expectedHash: string,
+  label: string,
+): ContractArtifactEnvelope {
+  const artifact = parseContractArtifactEnvelope(
+    strictParseJsonBytes(fs.readFileSync(absolute(relativePath))),
+  );
+  if (artifact.hash !== expectedHash) {
+    throw new Error(`${label} artifact identity drift`);
+  }
+  return artifact;
+}
+
+function checkFrozenInventory(
+  root: string,
+  rootRef: string,
+  rootArtifact: ContractArtifactEnvelope,
+  label: string,
+): void {
+  const inventoryRef = String(rootArtifact.payload.inventory_ref);
+  const inventory = readExactArtifact(
+    inventoryRef,
+    String(rootArtifact.payload.inventory_hash),
+    `${label} inventory`,
+  );
+  const expected = [rootRef, inventoryRef];
+  const entries = objects(inventory.payload.entries, `${label} entries`);
+  if (entries.length !== inventory.payload.entry_count) {
+    throw new Error(`${label} inventory count drift`);
+  }
+  for (const entry of entries) {
+    const relativePath = String(entry.path);
+    if (!relativePath.startsWith(`${root}/`)) {
+      throw new Error(`${label} inventory path escapes its root`);
+    }
+    if (
+      rawHash(fs.readFileSync(absolute(relativePath))) !== entry.raw_bytes_hash
+    ) {
+      throw new Error(`${label} artifact bytes drift: ${relativePath}`);
+    }
+    expected.push(relativePath);
+  }
+  if (
+    JSON.stringify(listTree(absolute(root))) !== JSON.stringify(expected.sort())
+  ) {
+    throw new Error(`${label} artifact inventory drift`);
+  }
+}
+
+function assertLegacyGoldenBoundary(): void {
+  if (
+    assertCurrentG2SealedBoundary(absolute('conformance/sealed')) !==
+    'current_g2'
+  ) {
+    throw new Error('Legacy Golden check requires current G2 seal');
+  }
+}
+
+export function checkCurrentSealedEraLegacyGoldenDraft(): ContractArtifactEnvelope {
+  assertLegacyGoldenBoundary();
+  const draft = readExactArtifact(
+    LEGACY_GOLDEN_DRAFT_REF,
+    LEGACY_GOLDEN_DRAFT_ARTIFACT_HASH,
+    'Legacy G2 Golden Draft',
+  );
+  if (draft.payload.draft_manifest_hash !== LEGACY_GOLDEN_DRAFT_HASH) {
+    throw new Error('Legacy G2 Golden Draft semantic identity drift');
+  }
+  checkFrozenInventory(
+    LEGACY_GOLDEN_DRAFT_ROOT,
+    LEGACY_GOLDEN_DRAFT_REF,
+    draft,
+    'Legacy G2 Golden Draft',
+  );
+  return draft;
+}
+
+export function checkCurrentSealedEraLegacyGoldenReview(): ContractArtifactEnvelope {
+  const draft = checkCurrentSealedEraLegacyGoldenDraft();
+  const review = readExactArtifact(
+    LEGACY_GOLDEN_REVIEW_REF,
+    LEGACY_GOLDEN_REVIEW_ARTIFACT_HASH,
+    'Legacy G2 Golden Review',
+  );
+  if (
+    review.payload.report_hash !== LEGACY_GOLDEN_REVIEW_HASH ||
+    review.payload.draft_manifest_hash !== draft.payload.draft_manifest_hash
+  ) {
+    throw new Error('Legacy G2 Golden Review lineage drift');
+  }
+  if (listTree(absolute(LEGACY_GOLDEN_REVIEW_ROOT)).length !== 2) {
+    throw new Error('Legacy G2 Golden Review inventory drift');
+  }
+  return review;
+}
+
+export function checkCurrentSealedEraLegacySemanticReview(): ContractArtifactEnvelope {
+  const draft = checkCurrentSealedEraLegacyGoldenDraft();
+  const report = checkCurrentSealedEraLegacyGoldenReview();
+  const review = readExactArtifact(
+    LEGACY_SEMANTIC_REVIEW_REF,
+    LEGACY_SEMANTIC_REVIEW_ARTIFACT_HASH,
+    'Legacy G2 Semantic Review',
+  );
+  if (
+    review.payload.review_hash !== LEGACY_SEMANTIC_REVIEW_HASH ||
+    review.payload.draft_manifest_hash !== draft.payload.draft_manifest_hash ||
+    review.payload.draft_artifact_hash !== draft.hash ||
+    review.payload.golden_review_report_hash !== report.payload.report_hash ||
+    review.payload.golden_review_report_artifact_hash !== report.hash
+  ) {
+    throw new Error('Legacy G2 Semantic Review lineage drift');
+  }
+  if (listTree(absolute(LEGACY_SEMANTIC_REVIEW_ROOT)).length !== 2) {
+    throw new Error('Legacy G2 Semantic Review inventory drift');
+  }
+  return review;
+}
+
+export function checkCurrentSealedEraLegacyGoldenSeal(): ContractArtifactEnvelope {
+  const draft = checkCurrentSealedEraLegacyGoldenDraft();
+  const report = checkCurrentSealedEraLegacyGoldenReview();
+  const review = checkCurrentSealedEraLegacySemanticReview();
+  const bundle = readExactArtifact(
+    LEGACY_SEALED_REF,
+    LEGACY_SEALED_ARTIFACT_HASH,
+    'Legacy G2 Golden Seal',
+  );
+  if (
+    bundle.payload.bundle_hash !== LEGACY_SEALED_BUNDLE_HASH ||
+    bundle.payload.draft_artifact_hash !== draft.hash ||
+    bundle.payload.golden_review_report_artifact_hash !== report.hash ||
+    bundle.payload.golden_semantic_review_artifact_hash !== review.hash
+  ) {
+    throw new Error('Legacy G2 Golden Seal lineage drift');
+  }
+  checkFrozenInventory(
+    LEGACY_SEALED_ROOT,
+    LEGACY_SEALED_REF,
+    bundle,
+    'Legacy G2 Golden Seal',
+  );
+  return bundle;
 }
 
 export function checkCurrentSealedEraCapacityControlPlane(): ContractArtifactEnvelope {

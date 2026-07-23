@@ -115,10 +115,10 @@
               "version": "1.0.0"
             },
             "closure_hash": "sha256:2dfeefaa28c69896833c471756b1bc4038136dfd692263ad74d2231b7771d5ec",
-            "compiler_version": "3.0.1",
+            "compiler_version": "3.0.2",
             "core_build_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
             "database_schema_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-            "snapshot_hash": "sha256:4b542d3dd257e2d390b08f2be9e09b5b354654d95302591448a8c08f613eeb99"
+            "snapshot_hash": "sha256:cddfc182c70ed983bc202361ab94326862aad450186d776612b6a5429ee28104"
           },
           "created_at_ms": 1784604172000
         },
@@ -127,8 +127,8 @@
             "id": "fixture.registry.snapshot",
             "version": "1.0.0"
           },
-          "snapshot_hash": "sha256:4b542d3dd257e2d390b08f2be9e09b5b354654d95302591448a8c08f613eeb99",
-          "expected_compiler_version": "3.0.1",
+          "snapshot_hash": "sha256:cddfc182c70ed983bc202361ab94326862aad450186d776612b6a5429ee28104",
+          "expected_compiler_version": "3.0.2",
           "expected_core_build_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "expected_database_schema_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
         },
@@ -140,7 +140,7 @@
             "id": "fixture.registry.snapshot",
             "version": "1.0.0"
           },
-          "snapshot_hash": "sha256:4b542d3dd257e2d390b08f2be9e09b5b354654d95302591448a8c08f613eeb99",
+          "snapshot_hash": "sha256:cddfc182c70ed983bc202361ab94326862aad450186d776612b6a5429ee28104",
           "closure_hash": "sha256:2dfeefaa28c69896833c471756b1bc4038136dfd692263ad74d2231b7771d5ec",
           "member_count": 1,
           "read_only": true
@@ -148,5 +148,5 @@
       }
     ]
   },
-  "hash": "sha256:1e16d3d458f8225f7b0346ffb036e7c8e975ffffe8005a893b8f8c4acb262ee3"
+  "hash": "sha256:119d6342cbaa637fdaf5fb0c62b72a3c4d1a2f90e3a62a7f5bdf6266ec167952"
 }

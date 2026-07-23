@@ -473,6 +473,7 @@ describe('G0.10 Capacity Control-Plane Addendum', () => {
       fs.readdirSync(path.join(contractsRoot, 'conformance/sealed')),
     ).toEqual([
       '.gitkeep',
+      'g2-capability-outbox-binding-v3',
       'g2-production-compiler-replay-repair-v2',
       'g2-semantic-correction',
     ]);

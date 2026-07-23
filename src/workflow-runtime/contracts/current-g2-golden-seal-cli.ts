@@ -2,6 +2,10 @@ import {
   checkCurrentG2GoldenSeal,
   generateCurrentG2GoldenSeal,
 } from './current-g2-golden-seal.js';
+import path from 'node:path';
+
+import { checkCurrentSealedEraLegacyGoldenSeal } from './current-sealed-era-historical-checks.js';
+import { assertCurrentG2SealedBoundary } from './current-g2-sealed-boundary.js';
 
 const command = process.argv[2];
 if (
@@ -16,7 +20,11 @@ try {
   const bundle =
     command === 'generate'
       ? generateCurrentG2GoldenSeal()
-      : checkCurrentG2GoldenSeal();
+      : assertCurrentG2SealedBoundary(
+            path.join(import.meta.dirname, 'conformance/sealed'),
+          ) === 'current_g2'
+        ? checkCurrentSealedEraLegacyGoldenSeal()
+        : checkCurrentG2GoldenSeal();
   console.log(`current_g2_golden_seal=${command}:ok`);
   console.log(`bundle_hash=${String(bundle.payload.bundle_hash)}`);
   console.log(`bundle_artifact_hash=${bundle.hash}`);

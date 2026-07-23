@@ -1,0 +1,51 @@
+{
+  "format": "icarus.workflow-capability-outbox-contract-pack/1",
+  "ref": {
+    "id": "icarus.workflow-capability-outbox-contract-pack",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-capability-outbox-contract-pack:1\n",
+  "hash": "sha256:48f63ae7be30c61f056f78f713591f34431336cc722d6928fbc6e2783a062088",
+  "payload": {
+    "gate": "G2_G3_G5_EXECUTION_BINDING_REPAIR",
+    "status": "EXIT_CANDIDATE_PENDING_INDEPENDENT_AFFECTED_CHAIN_REGRESSION",
+    "normative_spec_ref": "local/docs/dynamic-workflow-dag-framework.md",
+    "plan_format": "icarus.workflow-graph-scope-plan/2",
+    "latest_lookup": "forbidden",
+    "g4_fixture_authority": "forbidden",
+    "runtime_implementation": "absent",
+    "artifacts": [
+      {
+        "path": "conformance/capability-outbox-execution-binding/schemas/compiled-scope-plan-v2-execution-binding-schema@1.json",
+        "format": "icarus.workflow-compiled-scope-plan-v2-execution-binding-schema/1",
+        "hash": "sha256:f5bc0a43d5723096295b9a6fcd5a0965c3b98ca810ae8b6dc1a7072996608e06"
+      },
+      {
+        "path": "conformance/capability-outbox-execution-binding/schemas/capability-outbox-snapshot-schema@1.json",
+        "format": "icarus.workflow-capability-outbox-snapshot-schema/1",
+        "hash": "sha256:2c5c5a0ef606ad954bb873543f8a7e5062d1d2d44e924e6210b6453a742f6ec3"
+      },
+      {
+        "path": "conformance/capability-outbox-execution-binding/schemas/compiler-conformance-case-result-execution-binding-schema@1.json",
+        "format": "icarus.workflow-compiler-conformance-case-result-execution-binding-schema/1",
+        "hash": "sha256:021da33556e677984b767f99b12800be8454c7516221ec63bb16e1cb26f867f7"
+      },
+      {
+        "path": "conformance/capability-outbox-execution-binding/schemas/schema5-outbox-handoff-schema@1.json",
+        "format": "icarus.workflow-schema5-outbox-handoff-schema/1",
+        "hash": "sha256:01543dcb84990b0407668ec52c83ae2c883208c07ae76b7a141f331f1a8b8080"
+      },
+      {
+        "path": "conformance/capability-outbox-execution-binding/positive-cases.json",
+        "format": "icarus.workflow-capability-outbox-positive-cases/1",
+        "hash": "sha256:104727591b7612a3e2bb8908497a3e701bfb4ffbea3fdf9a6c9329d5ddcab26d"
+      },
+      {
+        "path": "conformance/capability-outbox-execution-binding/negative-cases.json",
+        "format": "icarus.workflow-capability-outbox-negative-cases/1",
+        "hash": "sha256:a257d6f80feaf2d48f22dbe3440961ca29ab963e2d7cd0b6df96ce5df1d98398"
+      }
+    ]
+  }
+}

@@ -44,6 +44,7 @@
           "graph_template",
           "notification_contract",
           "operational_remediation_policy",
+          "outbox_adapter",
           "outbox_policy",
           "prompt",
           "recipe",
@@ -177,6 +178,7 @@
               "graph_template",
               "notification_contract",
               "operational_remediation_policy",
+              "outbox_adapter",
               "outbox_policy",
               "prompt",
               "recipe",
@@ -203,5 +205,5 @@
       }
     }
   },
-  "hash": "sha256:e3937b6f03f624f80d883abef0458ec56321787aa15692d4a2aa9e6355fba2cd"
+  "hash": "sha256:9d0f7928bf55fee1183d04e3bee7538d461f18cf35fc23affafecef0dbfebb2a"
 }

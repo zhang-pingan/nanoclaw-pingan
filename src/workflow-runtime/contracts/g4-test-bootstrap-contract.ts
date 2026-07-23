@@ -373,7 +373,7 @@ export function buildG4BootstrapImplementationPayload(
 function upstreamIdentity(): JsonObject {
   const inputs = loadFrozenWorkflowRuntimeStoreInputs();
   const sealed = readArtifact(
-    'conformance/sealed/g2-production-compiler-replay-repair-v2/golden-conformance-bundle@2.json',
+    G3_CURRENT_UPSTREAM_IDENTITY.g2_sealed_bundle_ref,
   );
   const distribution = strictParseJsonBytes(
     fs.readFileSync(
@@ -407,7 +407,7 @@ function upstreamIdentity(): JsonObject {
     checkG38AActivationContractRepair().hash !==
       G39_UPSTREAM_IDENTITIES.g3_8a_pack_hash ||
     checkG39FeatureReleaseActivationContracts().hash !==
-      'sha256:871ded236e5e8fead95d28b365f9802792213c16d1f8517caf030ab9cc9865f8'
+      'sha256:eb3d316be520e68fe53b6be826046d3f8fa1cf97db298d5703886d1dcb97b70f'
   ) {
     throw new Error('G4 G3 upstream Contract identity drifted');
   }

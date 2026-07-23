@@ -65,7 +65,7 @@ describe('G3.1 Registry publish preflight foundation', () => {
 
   it('accepts an empty Production Registry and an isolated test-only closure', () => {
     const fixtures = g3RegistryPublishFixturesForTest();
-    expect(fixtures.positive).toHaveLength(2);
+    expect(fixtures.positive).toHaveLength(3);
     for (const testCase of fixtures.positive) {
       expect(evaluateG3RegistryPublishPreflight(testCase.input)).toEqual(
         testCase.expected_result,
@@ -91,6 +91,13 @@ describe('G3.1 Registry publish preflight foundation', () => {
         (resource) => resource.launchability === 'test_only',
       ),
     ).toBe(true);
+    expect(fixtures.positive[2].expected_result).toMatchObject({
+      outcome: 'accepted',
+      target_registry: 'test_only',
+      resource_count: 3,
+      recipe_count: 0,
+      side_effects: 'none_by_contract',
+    });
   });
 
   it('rejects every closed-world, identity, pinning, and side-effect negative fixture', () => {
@@ -104,6 +111,23 @@ describe('G3.1 Registry publish preflight foundation', () => {
         side_effects: 'none_by_contract',
       });
     }
+    expect(
+      Object.fromEntries(
+        fixtures.negative
+          .filter((testCase) =>
+            testCase.case_id.startsWith('negative.capability-outbox-'),
+          )
+          .map((testCase) => [testCase.case_id, testCase.expected_code]),
+      ),
+    ).toEqual({
+      'negative.capability-outbox-binding-missing':
+        'capability_outbox_binding_required',
+      'negative.capability-outbox-policy-hash-mismatch':
+        'capability_outbox_binding_mismatch',
+      'negative.capability-outbox-latest-adapter': 'schema_invalid',
+      'negative.capability-outbox-test-only-production':
+        'test_only_promotion_forbidden',
+    });
   });
 
   it('publishes closed Draft 2020-12 input and result schemas', () => {
@@ -135,6 +159,7 @@ describe('G3.1 Registry publish preflight foundation', () => {
       new Set([
         ...FEATURE_WORKFLOW_RESOURCE_KINDS,
         'feature_execution_artifact',
+        'outbox_adapter',
       ]),
     );
   });

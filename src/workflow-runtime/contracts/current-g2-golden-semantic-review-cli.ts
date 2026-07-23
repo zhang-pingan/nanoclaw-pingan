@@ -2,6 +2,10 @@ import {
   checkCurrentG2GoldenSemanticReview,
   generateCurrentG2GoldenSemanticReview,
 } from './current-g2-golden-semantic-review.js';
+import path from 'node:path';
+
+import { checkCurrentSealedEraLegacySemanticReview } from './current-sealed-era-historical-checks.js';
+import { assertCurrentG2SealedBoundary } from './current-g2-sealed-boundary.js';
 import type { CurrentG2GoldenDecision } from './current-g2-golden-seal-types.js';
 
 const command = process.argv[2];
@@ -28,7 +32,11 @@ try {
           approvedReviewReportHash: option('--review-report-hash') ?? '',
           reviewedAtMs: Number(option('--reviewed-at-ms')),
         })
-      : checkCurrentG2GoldenSemanticReview();
+      : assertCurrentG2SealedBoundary(
+            path.join(import.meta.dirname, 'conformance/sealed'),
+          ) === 'current_g2'
+        ? checkCurrentSealedEraLegacySemanticReview()
+        : checkCurrentG2GoldenSemanticReview();
   console.log(`current_g2_golden_semantic_review=${command}:ok`);
   console.log(`decision=${String(review.payload.decision)}`);
   console.log(`review_hash=${String(review.payload.review_hash)}`);

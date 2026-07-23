@@ -6,10 +6,70 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-g3-registry-publish-negative-cases:1\n",
-  "hash": "sha256:e35fd220d0182346a733928dd84aa49a1af8734d84d1031e084aa2e651acdd7b",
+  "hash": "sha256:b543ebf574ea01f3f7f88978e70ba85c8f8c52250a07beb2f89e7c2d99af4aa9",
   "payload": {
     "fixture_scope": "test_only",
     "cases": [
+      {
+        "case_id": "negative.capability-outbox-binding-missing",
+        "fixture_scope": "test_only",
+        "base_case_id": "positive.test-only-capability-outbox-binding",
+        "mutations": [
+          {
+            "operation": "set",
+            "pointer": "/resources/0/capability_outbox_binding",
+            "value": null
+          }
+        ],
+        "rehash_resource_hashes": true,
+        "rehash_preflight_hash": true,
+        "expected_code": "capability_outbox_binding_required"
+      },
+      {
+        "case_id": "negative.capability-outbox-policy-hash-mismatch",
+        "fixture_scope": "test_only",
+        "base_case_id": "positive.test-only-capability-outbox-binding",
+        "mutations": [
+          {
+            "operation": "set",
+            "pointer": "/resources/0/capability_outbox_binding/policy_snapshot_source_hash",
+            "value": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          }
+        ],
+        "rehash_resource_hashes": true,
+        "rehash_preflight_hash": true,
+        "expected_code": "capability_outbox_binding_mismatch"
+      },
+      {
+        "case_id": "negative.capability-outbox-latest-adapter",
+        "fixture_scope": "test_only",
+        "base_case_id": "positive.test-only-capability-outbox-binding",
+        "mutations": [
+          {
+            "operation": "set",
+            "pointer": "/resources/0/capability_outbox_binding/adapter/ref/version",
+            "value": "latest"
+          }
+        ],
+        "rehash_resource_hashes": true,
+        "rehash_preflight_hash": true,
+        "expected_code": "schema_invalid"
+      },
+      {
+        "case_id": "negative.capability-outbox-test-only-production",
+        "fixture_scope": "test_only",
+        "base_case_id": "positive.test-only-capability-outbox-binding",
+        "mutations": [
+          {
+            "operation": "set",
+            "pointer": "/target_registry",
+            "value": "production"
+          }
+        ],
+        "rehash_resource_hashes": false,
+        "rehash_preflight_hash": true,
+        "expected_code": "test_only_promotion_forbidden"
+      },
       {
         "case_id": "negative.unknown-field",
         "fixture_scope": "test_only",
@@ -253,15 +313,16 @@
               "content_hash": "sha256:ede8625861f47dcd9eebd48b232c36dd04f72bc8c702928070ea186643863937",
               "dependencies": [],
               "compiled_plan_pin": {
-                "plan_ref": "conformance/sealed/g2-production-compiler-replay-repair-v2/expected/positive.static-lowering.plan.json",
-                "plan_hash": "sha256:df3ee04469bc72c3a6e16f65774ea1a9a0e9d7c0b54861f51c57b323f8391881",
+                "plan_ref": "conformance/sealed/g2-capability-outbox-binding-v3/expected/positive.static-lowering.plan.json",
+                "plan_hash": "sha256:e208dddbd363f68f35236b5333234d63338b19a91e38bb5144bd8d7fbc09ee01",
                 "plan_format": "icarus.workflow-graph-scope-plan/2",
-                "compiler_toolchain_hash": "sha256:4e16227bf723a41207d94a8619f8b6bb50731c412cb5b298869e265097dcaccf",
-                "compiler_build_hash": "sha256:4cb84d57dee323723ed60dc22394100b37cc76a3bfde793ef95ba707cd21a976",
+                "compiler_toolchain_hash": "sha256:90bc7c99cacaf58217dd6d07781788c844385d3c70644c4086d6c997312f60a1",
+                "compiler_build_hash": "sha256:698af607955463f01a404d626586420f3dd8f7a208da87c1e138075b1518ba05",
                 "provenance": "sealed_g2_expected"
               },
               "execution_artifact_pin": null,
-              "resource_hash": "sha256:754c2a0d6034f285462b079f14bdcda092bf10a1150f8f0d9613e02b4dc302bf"
+              "capability_outbox_binding": null,
+              "resource_hash": "sha256:48e26e2bb540072f8375636e9c98448810847e2984799496ea7b0fcaaf14ddb1"
             }
           }
         ],

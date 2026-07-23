@@ -950,4 +950,109 @@ describe('G2 working semantic correction candidate', () => {
       stable_object_id: 'edge.cross',
     });
   });
+
+  it('lowers the exact Capability Outbox binding and finite Policy snapshot', () => {
+    const result = buildSemanticCorrectionCandidate().results.find(
+      (entry) => entry.case_id === 'positive.static-lowering',
+    );
+    expect(result?.outcome).toBe('compiled');
+    if (!result || result.outcome !== 'compiled') return;
+    const nodes = result.normalized_plan.nodes as JsonObject[];
+    const capability = nodes.find(
+      (node) => node.type === 'delegation',
+    ) as JsonObject;
+    assertJsonObject(capability.outbox_execution_binding);
+    const binding = capability.outbox_execution_binding;
+    expect(binding).toMatchObject({
+      adapter_identity: {
+        resource_type: 'outbox_adapter',
+        ref: {
+          id: 'fixture.adapter.capability-dispatch',
+          version: '1.0.0',
+        },
+      },
+      delivery_policy_identity: {
+        resource_type: 'outbox_policy',
+        ref: {
+          id: 'fixture.outbox-policy.normal-delivery',
+          version: '1.0.0',
+        },
+      },
+      effect_contract: {
+        delivery_lane: 'normal_execution',
+        reconciliation: { type: 'not_required' },
+        idempotency: 'provider_key',
+        delivery_requirement: 'required',
+      },
+    });
+    assertJsonObject(binding.effective_policy_snapshot);
+    expect(binding.effective_policy_snapshot.snapshot_hash).toMatch(
+      /^sha256:[0-9a-f]{64}$/,
+    );
+    assertJsonObject(binding.effective_policy_snapshot.effective_policy);
+    expect(
+      binding.effective_policy_snapshot.effective_policy.max_delivery_attempts,
+    ).toBe(8);
+  });
+
+  it.each([
+    [
+      'missing binding',
+      'capability_not_allowed',
+      (snapshot: JsonObject) => {
+        const capability = registryResources(snapshot).find(
+          (entry) => entry.resource_type === 'capability',
+        );
+        assertJsonObject(capability);
+        assertJsonObject(capability.content);
+        delete capability.content.outbox_effect;
+      },
+    ],
+    [
+      'latest Adapter ref',
+      'registry_ref_unpinned',
+      (snapshot: JsonObject) => {
+        const capability = registryResources(snapshot).find(
+          (entry) => entry.resource_type === 'capability',
+        );
+        assertJsonObject(capability);
+        assertJsonObject(capability.content);
+        assertJsonObject(capability.content.outbox_effect);
+        assertJsonObject(capability.content.outbox_effect.adapter_ref);
+        capability.content.outbox_effect.adapter_ref.version = 'latest';
+      },
+    ],
+    [
+      'unpublished Adapter',
+      'capability_not_allowed',
+      (snapshot: JsonObject) => {
+        const adapter = registryResources(snapshot).find(
+          (entry) => entry.resource_type === 'outbox_adapter',
+        );
+        assertJsonObject(adapter);
+        adapter.publication_state = 'staged';
+      },
+    ],
+    [
+      'Policy drift',
+      'compiler_integrity_mismatch',
+      (snapshot: JsonObject) => {
+        const policy = registryResources(snapshot).find(
+          (entry) => entry.resource_type === 'outbox_policy',
+        );
+        assertJsonObject(policy);
+        assertJsonObject(policy.content);
+        policy.content.max_delivery_attempts = 9;
+      },
+    ],
+  ] as const)('rejects %s before Plan execution', (_label, code, mutate) => {
+    const result = compileMutation(
+      buildSemanticCorrectionCandidate(),
+      'positive.static-lowering',
+      undefined,
+      mutate,
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.value.diagnostics[0].code).toBe(code);
+  });
 });

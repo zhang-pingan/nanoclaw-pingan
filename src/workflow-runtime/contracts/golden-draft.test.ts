@@ -90,7 +90,7 @@ describe('G0.8 Golden Draft and Review Input', () => {
       'sha256:32de639cc0ee6c6f33aa4291ea03ffa55b0a22752190fb88862e72a3f6857520',
     );
     expect(readArtifact('contract-pack-static-absence.json').hash).toBe(
-      'sha256:dc7b987416c3c1baed5a5a666960bfd2411a3e3bf76d173bd8ab0a550e51b21a',
+      'sha256:2624801752b3641e624a925c67a2ea28d2c157208b3e4c54699fb6b189259978',
     );
   });
 
@@ -276,6 +276,7 @@ describe('G0.8 Golden Draft and Review Input', () => {
       fs.readdirSync(path.join(contractsRoot, 'conformance/sealed')),
     ).toEqual([
       '.gitkeep',
+      'g2-capability-outbox-binding-v3',
       'g2-production-compiler-replay-repair-v2',
       'g2-semantic-correction',
     ]);

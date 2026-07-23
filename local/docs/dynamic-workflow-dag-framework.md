@@ -2061,10 +2061,38 @@ interface CompiledCapabilityRetryPolicy {
   policy_hash: string;
 }
 
+interface CompiledCapabilityOutboxExecutionBinding {
+  effect_contract: CapabilityOutboxEffectContract;
+  adapter_identity: {
+    resource_type: 'outbox_adapter';
+    ref: VersionedRef;
+    content_hash: string;
+  };
+  delivery_policy_identity: {
+    resource_type: 'outbox_policy';
+    ref: VersionedRef;
+    content_hash: string;
+  };
+  effective_policy_snapshot: {
+    format: 'icarus.workflow-outbox-effective-policy-snapshot/1';
+    source_policy_ref: VersionedRef;
+    source_policy_content_hash: string;
+    source_policy_hash: string;
+    effective_policy: Omit<
+      WorkflowOutboxDeliveryPolicy,
+      'ref' | 'policy_hash'
+    >;
+    runtime_safety_hash: string;
+    snapshot_hash: string;
+  };
+  binding_hash: string;
+}
+
 interface CompiledCapabilityNode extends CompiledGraphNodeBase {
   type: 'delegation' | 'system';
   capability_binding: WorkflowGraphCapability;
   effective_retry_policy: CompiledCapabilityRetryPolicy;
+  outbox_execution_binding: CompiledCapabilityOutboxExecutionBinding;
 }
 
 interface CompiledWaitNode extends CompiledGraphNodeBase {
@@ -2146,7 +2174,7 @@ type CompiledGraphNode =
 
 Port 的权威来源固定：capability node 从精确 `capability_ref` 对应的 catalog snapshot 派生；wait 从 versioned signal/timer/approval contract 派生；terminal input 从 scope named-exit contract 派生；join 和 child-owner 才允许 source 显式声明 input ports。Join output 由 `expose` 对应 input contract 派生，subgraph/expand result output 由 child interface 的 discriminated exit envelope 派生，map result output 由下述固定 envelope 派生。Compiler 把 factory、bindings、child policy、map controller 和所有 ports 解析为 typed `CompiledGraphNode`，runtime 不重新解释 opaque controller JSON，source 也不能用重复声明覆盖 registry contract。
 
-Capability node compile 还必须把 Capability/State request、Graph Policy 与 Runtime Safety 求交为 typed `CompiledCapabilityRetryPolicy`。`effective_node_max_attempts` 和 `effective_max_feedback_bytes` 因 safety ceiling 始终为 finite 正整数；quality revision non-null 时 feedback schema ref/hash 必须进入 Registry closure、compiled binding 和 plan hash。Runtime 不重新解析 Capability latest 或按当前 Safety 重算这些值。
+Capability node compile 还必须把 Capability/State request、Graph Policy 与 Runtime Safety 求交为 typed `CompiledCapabilityRetryPolicy`。`effective_node_max_attempts` 和 `effective_max_feedback_bytes` 因 safety ceiling 始终为 finite 正整数；quality revision non-null 时 feedback schema ref/hash 必须进入 Registry closure、compiled binding 和 plan hash。Compiler 同时必须从同一 pinned、Published Registry snapshot 解析 Capability 的 `outbox_effect`、exact Adapter 与 exact finite Delivery Policy，验证 publication state、content/internal hash、launchability与能力兼容性，并产出 typed `CompiledCapabilityOutboxExecutionBinding`。Policy attempts、duration、attempt timeout与backoff分别受 pinned Runtime Safety收紧；`attempt_timeout_ms <= delivery_duration_ms`、`initial_backoff_ms <= max_backoff_ms`在effective snapshot中继续成立。Runtime 不重新解析 Capability/Adapter/Policy latest，也不按当前 Safety 重算这些值。
 
 ### Delegation 与 System
 
@@ -2540,8 +2568,21 @@ interface WorkflowGraphCapability {
   effect_impact: EffectImpact;
   effect: CapabilityEffectContract;
   cancellation: CapabilityCancellationContract;
+  outbox_effect: CapabilityOutboxEffectContract;
   dependency_closure_hash: string;
 }
+
+type CapabilityOutboxEffectContract = {
+  effect_type: 'capability_dispatch';
+  adapter_ref: VersionedRef;
+  delivery_policy_ref: VersionedRef;
+  delivery_lane: 'normal_execution';
+  reconciliation:
+    | { type: 'not_required' }
+    | { type: 'by_effect_key'; reconcile_action_ref: VersionedRef };
+  idempotency: 'provider_key' | 'external_lookup';
+  delivery_requirement: 'required';
+};
 
 type CapabilityEffectContract =
   | { type: 'pure' }
@@ -2574,6 +2615,7 @@ type CapabilityCancellationContract =
 ```
 
 - Planner 只能引用 catalog 中已授权 capability，不能声明 executor 或权限。
+- Published Capability 必须携带完整 `outbox_effect`；Adapter、Delivery Policy以及可选 reconcile action 都只能是 exact immutable `VersionedRef`。Publisher 必须把这些资源纳入同一 exact dependency closure，要求它们已经Published且launchability一致，并拒绝missing、mismatched、moving/latest、unpublished或test-only-to-Production binding。Capability dispatch固定为`normal_execution + required`；general Outbox Contract中的`best_effort`不能用于Capability T5。
 - Capability 是不可变、版本化的完整执行合同；node 不得覆盖其 executor、role/skill、prompt family/contract、port、permission、artifact/evaluator/quality、effect 或 cancellation。Feature 发布的 Base Prompt 与通过进化门禁的 Local Prompt Variant 都是独立 immutable registry resource；Capability 固定 Prompt Family、Contract 与可信选择策略，Run 创建面解析当前有效 Prompt 后立即固化 exact ref/hash，Planner 和 Executor 均不能改写。
 - Capability 可以声明 `task`、`instructions` 等 typed input 供 planner 提供本次业务内容，但这些值始终按 data 处理，不能替换 trusted prompt 骨架、选择额外 tool 或扩大权限。禁止注册允许任意 role/skill/tool/prompt 的 `run-any-agent` 类 capability。
 - Capability 必须在 `artifact_contract_ref/no_artifact_expected` 中恰选一个，并在 `evaluator_ref/no_evaluation_expected` 中恰选一个；blocking quality gate 必须与对应 evaluator/artifact contract compatible。Closed Capability schema 要求 `quality_revision_policy` 字段始终存在；non-null 时必须同时具有 `evaluator_ref + quality_gate_ref`，Publisher 必须解析并固定 feedback schema/hash，且 `max_feedback_bytes` 只能是 null 或正 safe integer；null policy 时 Evaluator 返回 `needs_revision` 属于 `evaluation_contract_violation`。`max_feedback_bytes=null` 不注入业务上限，但 Value/Run safety ceiling 始终执行。
@@ -5778,7 +5820,9 @@ CHECK (Confirmation status/time fields are consistent and expires_at_ms is reque
 
 ## Outbox、Lease 与恢复
 
-Outbox 是 at-least-once，但 Delivery Policy 必须是可信、版本化、所有次数与时长均有限的 Registry Resource；Graph/Planner 不能选择 Adapter、Policy、Lane 或 Dead-letter 后果。Capability、Wait Contract、Notification Contract、best-effort Child Transition Effect 与 Core System Effect 等所有 Outbox producer 在 Publish 时固定 exact Policy Ref；Effect 创建时把有效 Policy Snapshot/Hash 写入 Outbox，恢复不读取 latest。Required Child Transition Effect 只绑定 Root Finalization Policy，不属于 Outbox producer。
+Outbox 是 at-least-once，但 Delivery Policy 必须是可信、版本化、所有次数与时长均有限的 Registry Resource；Graph/Planner 不能选择 Adapter、Policy、Lane 或 Dead-letter 后果。Capability、Wait Contract、Notification Contract、best-effort Child Transition Effect 与 Core System Effect 等所有 Outbox producer 在 Publish 时固定 exact Adapter/Policy Ref与Published Registry content hash；Effect 创建时把有效 Policy Snapshot作为schema-bound immutable Value并把其Value identity/hash写入Outbox，恢复不读取 latest。Required Child Transition Effect 只绑定 Root Finalization Policy，不属于 Outbox producer。
+
+Capability T5只能消费Compiled Plan中的`outbox_execution_binding`。创建Outbox row前必须以`resource_type + exact ref + content_hash + publication_state=published`查询Adapter与Delivery Policy Registry rows，验证结果仍与Plan identity一致，把Plan内的effective Policy snapshot canonical bytes保存为`workflow_values`并验证`snapshot_hash`，再将Registry row IDs/hashes与Policy Value ID/hash原子写入Schema 5 `workflow_outbox`的六个exact-FK字段。任何missing/hash drift/unpublished/latest/test-only identity都在T5事务前fail closed。G4 Fake Adapter/profile既不是这些identity的authority，也不能注入Production binding；Runtime不得创建旁路Plan格式或从active/latest pointer补全字段。
 
 ```ts
 interface WorkflowOutboxDeliveryPolicy {

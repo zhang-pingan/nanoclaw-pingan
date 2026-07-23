@@ -22,18 +22,18 @@
       "g3_8a_pack_hash": "sha256:d8412111a0f3dcabb4ce416b99086701ea3e3911ff431b5457eb957b2f69722f",
       "g3_8a_repair_artifact_hash": "sha256:94cb2c390bb44298238b1ffac4184b04f59efbbeae6f268fbce7618104ec406b",
       "g3_8a_internal_contract_hash": "sha256:70d4b9ef47c83711415636737292450538acaf5cc4547d3130b04b101e6707ae",
-      "g3_6_pack_hash": "sha256:c43416c9ca085553bea5ebf2294f594ce434ee275cb14d4954e11374521278a2",
-      "g3_7_pack_hash": "sha256:9865cf0aafa37b4f44dc293aea6c59221d0f445c2e67fa87dfe53e6be71c9fbb",
-      "g2_sealed_bundle_hash": "sha256:d99647d8ca6aabc737a793019335e6770aa111a79be7545c4dec00c6e7af2145"
+      "g3_6_pack_hash": "sha256:4dd52b4f38da315ba0194fd23a9c681ffdba6aac37291100dd6d6b944178acd9",
+      "g3_7_pack_hash": "sha256:e80038f09ad841de630d961f137f15a2de14a487a74afb6b1d8b36edea689ba0",
+      "g2_sealed_bundle_hash": "sha256:b3ed9e43bd0fadaf40520257926dcf690ee8495bb417220245f248385bde9efb"
     },
     "schema_resource_hashes": {
-      "request": "sha256:18b6b621ed172999a2d9a677e1adfd66790079089751562c4317c08747704921",
+      "request": "sha256:b1eb5681861d4537eb9dc5bf77844c00176d9445eb76b5eb82494504f2f62116",
       "receipt": "sha256:68049e60a9febc4c65a162c930f93757386503ee054ce64046e562b134c85ffe",
       "result": "sha256:c99c78fb1a7701264e20ae1d29824bafac183787ba79ab22398d4d5045f80f1a",
-      "compatibility_input": "sha256:547403ae41a7eeca5ca10b0c2d58bd6e3a13640949c20ef85eb0d86548900150",
+      "compatibility_input": "sha256:512107167b9951f331eef329aac6620d8a460ad578ff3296be87b0540b8fc462",
       "compatibility_result": "sha256:27fe8652cf5cda55e4c9e655b33c3ec292fd8dc74adea8d0c55d0a9c1ed8b0f3"
     },
-    "fixture_digest": "sha256:8e143a2c24122ea16eaa7006086401d5d35417c47d04ffc040f479896bae6c9c",
+    "fixture_digest": "sha256:f1608dd287099fb0bbf8420f548da66757a5e040d532047e23cdf1fabf963d00",
     "error_precedence": [
       "activation_request_strict_parse_invalid",
       "activation_request_removed_field",
@@ -110,7 +110,7 @@
         },
         "version": 1,
         "domain_separator": "icarus:workflow-feature-release-activation-request-schema:1\n",
-        "hash": "sha256:c33aa61b251e13635c91842f862fd324589136268dae6d05764634a2fde92a8f"
+        "hash": "sha256:f423f570ff05ba207fb3d3ae36115e6259fd97df075b6f7913940832363b360d"
       },
       {
         "path": "registry/workflow-feature-release-activation-receipt-schema@1.json",
@@ -185,5 +185,5 @@
     "authoring_stages_implemented": false,
     "g4_through_g9_status": "NOT_READY"
   },
-  "hash": "sha256:871ded236e5e8fead95d28b365f9802792213c16d1f8517caf030ab9cc9865f8"
+  "hash": "sha256:eb3d316be520e68fe53b6be826046d3f8fa1cf97db298d5703886d1dcb97b70f"
 }

@@ -131,6 +131,99 @@ function staticClosureMemberSchema(): Schema {
   });
 }
 
+function outboxReconciliationSchema(): Schema {
+  return {
+    oneOf: [
+      object({ type: { const: 'not_required' } }),
+      object({
+        type: { const: 'by_effect_key' },
+        reconcile_action_ref: versionedRefSchema,
+      }),
+    ],
+  };
+}
+
+function outboxEffectContractSchema(): Schema {
+  return object({
+    effect_type: { const: 'capability_dispatch' },
+    adapter_ref: versionedRefSchema,
+    delivery_policy_ref: versionedRefSchema,
+    delivery_lane: { const: 'normal_execution' },
+    reconciliation: ref('outbox_reconciliation'),
+    idempotency: enumString(['provider_key', 'external_lookup']),
+    delivery_requirement: { const: 'required' },
+  });
+}
+
+function outboxDeliveryPolicySchema(): Schema {
+  return object({
+    format: { const: 'icarus.workflow-outbox-delivery-policy/1' },
+    ref: versionedRefSchema,
+    max_delivery_attempts: integer(1),
+    max_reconcile_attempts: integer(0),
+    delivery_duration_ms: integer(1),
+    attempt_timeout_ms: integer(1),
+    initial_backoff_ms: integer(0),
+    max_backoff_ms: integer(0),
+    backoff: enumString(['fixed', 'exponential']),
+    deterministic_jitter_micros: {
+      type: 'integer',
+      minimum: 0,
+      maximum: 1_000_000,
+    },
+    honor_retry_after: { type: 'boolean' },
+    retryable_error_codes: array(stableIdSchema, { uniqueItems: true }),
+    permanent_error_codes: array(stableIdSchema, { uniqueItems: true }),
+    policy_hash: hashSchema,
+  });
+}
+
+function effectiveOutboxDeliveryPolicySchema(): Schema {
+  return object({
+    max_delivery_attempts: integer(1),
+    max_reconcile_attempts: integer(0),
+    delivery_duration_ms: integer(1),
+    attempt_timeout_ms: integer(1),
+    initial_backoff_ms: integer(0),
+    max_backoff_ms: integer(0),
+    backoff: enumString(['fixed', 'exponential']),
+    deterministic_jitter_micros: {
+      type: 'integer',
+      minimum: 0,
+      maximum: 1_000_000,
+    },
+    honor_retry_after: { type: 'boolean' },
+    retryable_error_codes: array(stableIdSchema, { uniqueItems: true }),
+    permanent_error_codes: array(stableIdSchema, { uniqueItems: true }),
+  });
+}
+
+function compiledOutboxExecutionBindingSchema(): Schema {
+  return object({
+    effect_contract: ref('outbox_effect_contract'),
+    adapter_identity: object({
+      resource_type: { const: 'outbox_adapter' },
+      ref: versionedRefSchema,
+      content_hash: hashSchema,
+    }),
+    delivery_policy_identity: object({
+      resource_type: { const: 'outbox_policy' },
+      ref: versionedRefSchema,
+      content_hash: hashSchema,
+    }),
+    effective_policy_snapshot: object({
+      format: { const: 'icarus.workflow-outbox-effective-policy-snapshot/1' },
+      source_policy_ref: versionedRefSchema,
+      source_policy_content_hash: hashSchema,
+      source_policy_hash: hashSchema,
+      effective_policy: ref('effective_outbox_delivery_policy'),
+      runtime_safety_hash: hashSchema,
+      snapshot_hash: hashSchema,
+    }),
+    binding_hash: hashSchema,
+  });
+}
+
 export function buildCompiledScopePlanV2Schema(): Schema {
   const schema = readHistoricalCompiledPlanSchema();
   schema.$id = 'https://icarus.local/schemas/compiled-scope-plan-v2';
@@ -200,6 +293,55 @@ export function buildCompiledScopePlanV2Schema(): Schema {
   return schema;
 }
 
+export function buildCompiledScopePlanV2ExecutionBindingSchema(): Schema {
+  const schema = buildCompiledScopePlanV2Schema();
+  schema.$id =
+    'https://icarus.local/schemas/compiled-scope-plan-v2-execution-binding';
+  schema.title = 'icarus.workflow-graph-scope-plan/2 execution binding';
+  assertJsonObject(schema.$defs);
+  const definitions = schema.$defs;
+  definitions.outbox_reconciliation = outboxReconciliationSchema();
+  definitions.outbox_effect_contract = outboxEffectContractSchema();
+  definitions.outbox_delivery_policy = outboxDeliveryPolicySchema();
+  definitions.effective_outbox_delivery_policy =
+    effectiveOutboxDeliveryPolicySchema();
+  definitions.compiled_outbox_execution_binding =
+    compiledOutboxExecutionBindingSchema();
+
+  assertJsonObject(definitions.workflow_capability);
+  const capability = definitions.workflow_capability;
+  assertJsonObject(capability.properties);
+  if (!Array.isArray(capability.required)) {
+    throw new Error('WorkflowGraphCapability required list is missing');
+  }
+  capability.required = [...capability.required, 'outbox_effect'];
+  capability.properties.outbox_effect = ref('outbox_effect_contract');
+
+  assertJsonObject(definitions.compiled_node);
+  if (!Array.isArray(definitions.compiled_node.oneOf)) {
+    throw new Error('Compiled node union is missing');
+  }
+  for (const candidate of definitions.compiled_node.oneOf) {
+    assertJsonObject(candidate);
+    assertJsonObject(candidate.properties);
+    assertJsonObject(candidate.properties.type);
+    if (
+      candidate.properties.type.const !== 'delegation' &&
+      candidate.properties.type.const !== 'system'
+    ) {
+      continue;
+    }
+    if (!Array.isArray(candidate.required)) {
+      throw new Error('CompiledCapabilityNode required list is missing');
+    }
+    candidate.required = [...candidate.required, 'outbox_execution_binding'];
+    candidate.properties.outbox_execution_binding = ref(
+      'compiled_outbox_execution_binding',
+    );
+  }
+  return schema;
+}
+
 const diagnosticSchema = object({
   code: enumString(WORKFLOW_COMPILER_ERROR_CODES),
   phase: enumString(COMPILER_DIAGNOSTIC_PHASES),
@@ -209,8 +351,10 @@ const diagnosticSchema = object({
   detail_ref: nullable(string({ minLength: 1 })),
 });
 
-export function buildCompilerConformanceCaseResultSchema(): Schema {
-  const planSchema = buildCompiledScopePlanV2Schema();
+function buildCompilerConformanceCaseResultSchemaForPlan(
+  planSchema: Schema,
+  schemaId: string,
+): Schema {
   assertJsonObject(planSchema.$defs);
   const {
     $schema: _planDialect,
@@ -258,7 +402,7 @@ export function buildCompilerConformanceCaseResultSchema(): Schema {
   });
   return {
     $schema: DRAFT_2020_12,
-    $id: 'https://icarus.local/schemas/compiler-conformance-case-result-v1',
+    $id: schemaId,
     title: 'icarus.workflow-compiler-conformance-case-result/1',
     oneOf: [compiled(true), compiled(false), rejected],
     $defs: {
@@ -268,6 +412,20 @@ export function buildCompilerConformanceCaseResultSchema(): Schema {
       versioned_ref: versionedRefSchema,
     },
   };
+}
+
+export function buildCompilerConformanceCaseResultSchema(): Schema {
+  return buildCompilerConformanceCaseResultSchemaForPlan(
+    buildCompiledScopePlanV2Schema(),
+    'https://icarus.local/schemas/compiler-conformance-case-result-v1',
+  );
+}
+
+export function buildCompilerConformanceCaseResultExecutionBindingSchema(): Schema {
+  return buildCompilerConformanceCaseResultSchemaForPlan(
+    buildCompiledScopePlanV2ExecutionBindingSchema(),
+    'https://icarus.local/schemas/compiler-conformance-case-result-execution-binding-v1',
+  );
 }
 
 export function buildStaticLoweringContractSchema(): Schema {

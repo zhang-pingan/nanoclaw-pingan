@@ -188,7 +188,7 @@ describe('G3.3/G3.4 Registry persistence', () => {
     expect(
       preflightRegistrySnapshot(store, {
         ...input,
-        expected_compiler_version: '3.0.2',
+        expected_compiler_version: '3.0.3',
       }),
     ).toMatchObject({
       outcome: 'rejected',

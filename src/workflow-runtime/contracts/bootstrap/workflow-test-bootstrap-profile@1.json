@@ -31,10 +31,10 @@
       "node_executable_hash": "sha256:cbee2298aee5cc476bf8d5441e7348b627254a39d869743a5b04489028c729d4",
       "compiler_toolchain_ref": {
         "id": "icarus.workflow-compiler-toolchain",
-        "version": "3.0.1"
+        "version": "3.0.2"
       },
-      "compiler_toolchain_hash": "sha256:4e16227bf723a41207d94a8619f8b6bb50731c412cb5b298869e265097dcaccf",
-      "compiler_build_hash": "sha256:4cb84d57dee323723ed60dc22394100b37cc76a3bfde793ef95ba707cd21a976"
+      "compiler_toolchain_hash": "sha256:90bc7c99cacaf58217dd6d07781788c844385d3c70644c4086d6c997312f60a1",
+      "compiler_build_hash": "sha256:698af607955463f01a404d626586420f3dd8f7a208da87c1e138075b1518ba05"
     },
     "store_binding": {
       "connection_factory": "WorkflowRuntimeConnectionFactory",
@@ -57,9 +57,9 @@
       "certification_status": "not_certified"
     },
     "upstream_contracts": {
-      "g2_sealed_bundle_hash": "sha256:d99647d8ca6aabc737a793019335e6770aa111a79be7545c4dec00c6e7af2145",
-      "g3_6_pack_hash": "sha256:c43416c9ca085553bea5ebf2294f594ce434ee275cb14d4954e11374521278a2",
-      "g3_7_pack_hash": "sha256:9865cf0aafa37b4f44dc293aea6c59221d0f445c2e67fa87dfe53e6be71c9fbb",
+      "g2_sealed_bundle_hash": "sha256:b3ed9e43bd0fadaf40520257926dcf690ee8495bb417220245f248385bde9efb",
+      "g3_6_pack_hash": "sha256:4dd52b4f38da315ba0194fd23a9c681ffdba6aac37291100dd6d6b944178acd9",
+      "g3_7_pack_hash": "sha256:e80038f09ad841de630d961f137f15a2de14a487a74afb6b1d8b36edea689ba0",
       "g3_8a_pack_hash": "sha256:d8412111a0f3dcabb4ce416b99086701ea3e3911ff431b5457eb957b2f69722f",
       "g3_9_pack_hash": "sha256:871ded236e5e8fead95d28b365f9802792213c16d1f8517caf030ab9cc9865f8"
     },
@@ -113,5 +113,5 @@
     },
     "bootstrap_implementation_hash": "sha256:28a920856d26325ec14c976a9e1da668c1302e06fd3e2e05abb890dff830f018"
   },
-  "hash": "sha256:81dd4ed2e116c46b2c4a7b0057242409c4478ca55f2df34676a9e07eb942baaf"
+  "hash": "sha256:e005c384396b48e7c96f64ee74e185c8230cb65d09f655a3909d16f3d3b91eed"
 }

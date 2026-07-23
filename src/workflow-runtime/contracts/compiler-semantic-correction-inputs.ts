@@ -43,6 +43,12 @@ const CASE_CATALOG_DOMAIN =
   'icarus:workflow-semantic-review-input-cases-artifact:4\n';
 const INPUT_MANIFEST_DOMAIN =
   'icarus:workflow-semantic-correction-input-manifest-artifact:1\n';
+const OUTBOX_ADAPTER_DOMAIN = 'icarus:workflow-outbox-adapter:1\n';
+const OUTBOX_POLICY_DOMAIN = 'icarus:workflow-outbox-delivery-policy:1\n';
+const CAPABILITY_ADAPTER_REF = ref('fixture.adapter.capability-dispatch');
+const CAPABILITY_DELIVERY_POLICY_REF = ref(
+  'fixture.outbox-policy.normal-delivery',
+);
 
 export interface SemanticCorrectionCompilerIdentity extends JsonObject {
   compiler_toolchain_manifest_ref: VersionedRef;
@@ -468,6 +474,77 @@ function correctedReviewInput(
     });
     assertions.push(
       {
+        assertion_id: 'lowered-outbox-adapter-exact-ref',
+        subject_pointer:
+          '/normalized_plan/nodes/0/outbox_execution_binding/adapter_identity/ref/id',
+        operator: 'equals',
+        expected: 'fixture.adapter.capability-dispatch',
+        rationale:
+          'Capability dispatch binds one exact Published Adapter identity.',
+      },
+      {
+        assertion_id: 'lowered-outbox-adapter-content-hash',
+        subject_pointer:
+          '/normalized_plan/nodes/0/outbox_execution_binding/adapter_identity/content_hash',
+        operator: 'present',
+        expected: true,
+        rationale:
+          'The Adapter Registry content hash is part of the immutable Plan binding.',
+      },
+      {
+        assertion_id: 'lowered-outbox-policy-exact-ref',
+        subject_pointer:
+          '/normalized_plan/nodes/0/outbox_execution_binding/delivery_policy_identity/ref/id',
+        operator: 'equals',
+        expected: 'fixture.outbox-policy.normal-delivery',
+        rationale:
+          'Capability dispatch binds one exact finite Delivery Policy identity.',
+      },
+      {
+        assertion_id: 'lowered-outbox-policy-snapshot-hash',
+        subject_pointer:
+          '/normalized_plan/nodes/0/outbox_execution_binding/effective_policy_snapshot/snapshot_hash',
+        operator: 'present',
+        expected: true,
+        rationale:
+          'T5 persists this exact effective Policy snapshot as an immutable Value.',
+      },
+      {
+        assertion_id: 'lowered-outbox-delivery-lane',
+        subject_pointer:
+          '/normalized_plan/nodes/0/outbox_execution_binding/effect_contract/delivery_lane',
+        operator: 'equals',
+        expected: 'normal_execution',
+        rationale: 'Planner cannot choose the Capability dispatch lane.',
+      },
+      {
+        assertion_id: 'lowered-outbox-reconciliation',
+        subject_pointer:
+          '/normalized_plan/nodes/0/outbox_execution_binding/effect_contract/reconciliation/type',
+        operator: 'equals',
+        expected: 'not_required',
+        rationale:
+          'The reconciliation mode is fixed by the Published Capability.',
+      },
+      {
+        assertion_id: 'lowered-outbox-idempotency',
+        subject_pointer:
+          '/normalized_plan/nodes/0/outbox_execution_binding/effect_contract/idempotency',
+        operator: 'equals',
+        expected: 'provider_key',
+        rationale:
+          'The Adapter idempotency contract is immutable execution input.',
+      },
+      {
+        assertion_id: 'lowered-outbox-delivery-required',
+        subject_pointer:
+          '/normalized_plan/nodes/0/outbox_execution_binding/effect_contract/delivery_requirement',
+        operator: 'equals',
+        expected: 'required',
+        rationale:
+          'Capability dispatch failure remains coupled to Attempt outcome.',
+      },
+      {
         assertion_id: 'lowered-failure-terminal-node',
         subject_pointer: '/normalized_plan/nodes/1/exit',
         operator: 'equals',
@@ -485,7 +562,8 @@ function correctedReviewInput(
       },
       {
         assertion_id: 'lowered-outcome-control-edge-count',
-        subject_pointer: '/normalized_plan/complexity_summary/control_edge_count',
+        subject_pointer:
+          '/normalized_plan/complexity_summary/control_edge_count',
         operator: 'equals',
         expected: 2,
         rationale:
@@ -570,6 +648,65 @@ function contractResource(id: string): JsonObject {
   };
 }
 
+function outboxAdapterResource(): JsonObject {
+  const withoutHash: JsonObject = {
+    format: 'icarus.workflow-outbox-adapter/1',
+    ref: CAPABILITY_ADAPTER_REF,
+    supported_effect_types: ['capability_dispatch'],
+    supported_delivery_lanes: ['normal_execution'],
+    supported_reconciliation: ['not_required'],
+    supported_idempotency: ['provider_key'],
+  };
+  return {
+    resource_type: 'outbox_adapter',
+    ref: CAPABILITY_ADAPTER_REF,
+    content: {
+      ...withoutHash,
+      adapter_hash: domainSeparatedSha256(OUTBOX_ADAPTER_DOMAIN, withoutHash),
+    },
+  };
+}
+
+function outboxDeliveryPolicyResource(): JsonObject {
+  const withoutHash: JsonObject = {
+    format: 'icarus.workflow-outbox-delivery-policy/1',
+    ref: CAPABILITY_DELIVERY_POLICY_REF,
+    max_delivery_attempts: 8,
+    max_reconcile_attempts: 4,
+    delivery_duration_ms: 900_000,
+    attempt_timeout_ms: 60_000,
+    initial_backoff_ms: 1_000,
+    max_backoff_ms: 60_000,
+    backoff: 'exponential',
+    deterministic_jitter_micros: 200_000,
+    honor_retry_after: true,
+    retryable_error_codes: ['provider_unavailable', 'rate_limited'],
+    permanent_error_codes: ['contract_rejected', 'permission_denied'],
+  };
+  return {
+    resource_type: 'outbox_policy',
+    ref: CAPABILITY_DELIVERY_POLICY_REF,
+    content: {
+      ...withoutHash,
+      policy_hash: domainSeparatedSha256(OUTBOX_POLICY_DOMAIN, withoutHash),
+    },
+  };
+}
+
+function addCapabilityOutboxContract(resource: JsonObject): void {
+  if (resource.resource_type !== 'capability') return;
+  assertJsonObject(resource.content);
+  resource.content.outbox_effect = {
+    effect_type: 'capability_dispatch',
+    adapter_ref: CAPABILITY_ADAPTER_REF,
+    delivery_policy_ref: CAPABILITY_DELIVERY_POLICY_REF,
+    delivery_lane: 'normal_execution',
+    reconciliation: { type: 'not_required' },
+    idempotency: 'provider_key',
+    delivery_requirement: 'required',
+  };
+}
+
 function childCreationEffect(recipeId: string): JsonObject {
   return {
     operations: [
@@ -589,7 +726,10 @@ function childCreationEffect(recipeId: string): JsonObject {
   };
 }
 
-function definitionFixture(id: string, childRecipeId: string | null): JsonObject {
+function definitionFixture(
+  id: string,
+  childRecipeId: string | null,
+): JsonObject {
   const source: JsonObject = {
     format: 'icarus.workflow-definition/1',
     ref: ref(id),
@@ -671,10 +811,7 @@ function recipeResourceForCase(id: string, caseId: string): JsonObject | null {
   return null;
 }
 
-function definitionResource(
-  id: string,
-  source: JsonObject | null,
-): JsonObject {
+function definitionResource(id: string, source: JsonObject | null): JsonObject {
   const sourceRef = source ? (source.ref as JsonObject | undefined) : undefined;
   const content =
     source?.format === 'icarus.workflow-definition/1' &&
@@ -683,9 +820,7 @@ function definitionResource(
       ? clone(source)
       : definitionFixture(
           id,
-          id === 'fixture.definition.cycle-b'
-            ? 'fixture.recipe.cycle-a'
-            : null,
+          id === 'fixture.definition.cycle-b' ? 'fixture.recipe.cycle-a' : null,
         );
   const sanitize = (value: JsonValue): void => {
     if (!value || typeof value !== 'object') return;
@@ -709,6 +844,12 @@ function syntheticResource(
   source: JsonObject | null,
   caseId: string,
 ): JsonObject {
+  if (dependency.id === CAPABILITY_ADAPTER_REF.id) {
+    return outboxAdapterResource();
+  }
+  if (dependency.id === CAPABILITY_DELIVERY_POLICY_REF.id) {
+    return outboxDeliveryPolicyResource();
+  }
   const recipe = recipeResourceForCase(dependency.id, caseId);
   if (recipe) return recipe;
   if (dependency.id.startsWith('fixture.definition.')) {
@@ -771,6 +912,8 @@ function fixResource(
   delete resource.content_hash;
   return {
     ...resource,
+    publication_state: 'published',
+    launchability: 'test_only',
     content_hash: domainSeparatedSha256(RESOURCE_DOMAIN, content),
   };
 }
@@ -792,9 +935,7 @@ function dependencyMembers(
     visited.add(key);
     const dependency = resourcesByKey.get(key);
     if (!dependency) {
-      throw new Error(
-        `Dependency closure for ${rootKey} is missing ${key}`,
-      );
+      throw new Error(`Dependency closure for ${rootKey} is missing ${key}`);
     }
     selected.set(key, dependency);
     assertJsonObject(dependency.content);
@@ -1020,9 +1161,9 @@ function buildSnapshot(
     const resource =
       recipeResourceForCase(current.id, caseId) ??
       clone(
-        oldResourceByKey.get(key) ??
-          syntheticResource(current, source, caseId),
+        oldResourceByKey.get(key) ?? syntheticResource(current, source, caseId),
       );
+    addCapabilityOutboxContract(resource);
     selected.set(key, resource);
     assertJsonObject(resource.content);
     for (const dependency of allRefs(resource.content).values()) {
@@ -1064,9 +1205,7 @@ function buildSnapshot(
     );
   }
   if (sourceRefs.has('fixture.policy.child-escalating@1.0.0')) {
-    const escalating = profile('fixture.policy.child-escalating', [
-      'terminal',
-    ]);
+    const escalating = profile('fixture.policy.child-escalating', ['terminal']);
     assertJsonObject(escalating.request);
     assertJsonObject(escalating.request.effect_policy);
     escalating.request.effect_policy.max_impact = 'irreversible';

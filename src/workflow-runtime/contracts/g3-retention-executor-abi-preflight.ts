@@ -958,7 +958,7 @@ export function g3RetentionExecutorAbiStoreFixtureForTest(): {
     ref: { id: 'fixture.retention-abi-snapshot', version: '1.0.0' },
     closure_ref: closure.ref,
     closure_hash: closure.closure_hash,
-    compiler_version: '3.0.1',
+    compiler_version: '3.0.2',
     core_build_hash: coreBuildHash as Sha256Hash,
     database_schema_hash: G3_CURRENT_UPSTREAM_IDENTITY.g1_schema_hash,
   };
@@ -1172,13 +1172,13 @@ function validateUpstreamIdentity(): void {
   );
   if (
     registry.hash !==
-    'sha256:65f675da51c030424c0f56ccb28a2490759e438d40624ded3af1e4ad23bde92a'
+    'sha256:ff5d40589df9bc78e2e7f4f0e2fdcd5f0a7b7f34e0d0592e5308c1230425f1b3'
   ) {
     throw new Error('G3.3 Registry persistence identity drift');
   }
   if (
     queryPack.hash !==
-    'sha256:bbc4e2cb402c8058a6412da0ebd5a284c2c7af831453cafaa84738a391c15718'
+    'sha256:04506acde71f4c03e081f310265df521515327caee37cc820c56fa2162ad4ffb'
   ) {
     throw new Error('G3.5 exact resource query identity drift');
   }
@@ -1285,7 +1285,7 @@ function buildManifest(
       status: 'DONE',
       g3_status: 'IN_PROGRESS',
       upstream_g3_3_pack_hash:
-        'sha256:65f675da51c030424c0f56ccb28a2490759e438d40624ded3af1e4ad23bde92a',
+        'sha256:ff5d40589df9bc78e2e7f4f0e2fdcd5f0a7b7f34e0d0592e5308c1230425f1b3',
       upstream_g3_5_pack_hash:
         'sha256:bbc4e2cb402c8058a6412da0ebd5a284c2c7af831453cafaa84738a391c15718',
       upstream_g1_schema_root_hash:

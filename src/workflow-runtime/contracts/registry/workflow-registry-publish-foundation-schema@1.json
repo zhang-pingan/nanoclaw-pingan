@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-registry-publish-foundation-schema:1\n",
-  "hash": "sha256:1e29a2ccf758303b3135c5c4973ad867704d0a3c2aa25ef9ae4a0423cab7485d",
+  "hash": "sha256:d0a2f83105a482d97ba9d18a817403233617a8120356ddf98144709d8152b3a6",
   "payload": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "$id": "https://icarus.local/schemas/workflow-registry-publish-foundation/1",
@@ -257,6 +257,12 @@
         "type": "array",
         "prefixItems": [
           {
+            "const": "capability_outbox_binding_mismatch"
+          },
+          {
+            "const": "capability_outbox_binding_required"
+          },
+          {
             "const": "compiled_plan_pin_required"
           },
           {
@@ -309,8 +315,8 @@
           }
         ],
         "items": false,
-        "minItems": 17,
-        "maxItems": 17
+        "minItems": 19,
+        "maxItems": 19
       },
       "g4_through_g9_status": {
         "type": "object",

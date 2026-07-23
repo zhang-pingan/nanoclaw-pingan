@@ -262,6 +262,7 @@ describe('G0.5 Safety, Retention, and SQLite Contract Pack', () => {
     for (const directory of ['conformance/sealed']) {
       expect(fs.readdirSync(path.join(contractsRoot, directory))).toEqual([
         '.gitkeep',
+        'g2-capability-outbox-binding-v3',
         'g2-production-compiler-replay-repair-v2',
         'g2-semantic-correction',
       ]);

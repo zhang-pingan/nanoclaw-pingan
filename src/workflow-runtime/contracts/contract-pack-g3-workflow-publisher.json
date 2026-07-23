@@ -14,10 +14,10 @@
     "publisher_schema_readiness": "PUBLISHER_SCHEMA_PREREQUISITE_READY",
     "upstream": {
       "g1_schema_root_hash": "sha256:baa39d55cac34133a29b461466aa450fec59bd2fd6df72334e8b33d1d1619869",
-      "g3_1_pack_hash": "sha256:3f385f1f91353a19fedfd347c93dbea190c97de0f267697bc6dd7536ebfb6024",
-      "g3_3_pack_hash": "sha256:65f675da51c030424c0f56ccb28a2490759e438d40624ded3af1e4ad23bde92a",
-      "g3_5_pack_hash": "sha256:bbc4e2cb402c8058a6412da0ebd5a284c2c7af831453cafaa84738a391c15718",
-      "g3_6_pack_hash": "sha256:c43416c9ca085553bea5ebf2294f594ce434ee275cb14d4954e11374521278a2"
+      "g3_1_pack_hash": "sha256:aae22ae7f5ea1fa06a5c9b6c63eeadbb61b32d3510f503754ef5d8617cab0227",
+      "g3_3_pack_hash": "sha256:ff5d40589df9bc78e2e7f4f0e2fdcd5f0a7b7f34e0d0592e5308c1230425f1b3",
+      "g3_5_pack_hash": "sha256:04506acde71f4c03e081f310265df521515327caee37cc820c56fa2162ad4ffb",
+      "g3_6_pack_hash": "sha256:4dd52b4f38da315ba0194fd23a9c681ffdba6aac37291100dd6d6b944178acd9"
     },
     "request_schema_resource_hash": "sha256:9aec8a311f11d6b7a46de125ffac54840cdb31630e32f5abb11149d7df3f0939",
     "receipt_schema_resource_hash": "sha256:2dc6be728d9ff9353f0ec30949191f34526138472a309cd82be952dd2dcaedde",
@@ -86,7 +86,7 @@
         },
         "version": 1,
         "domain_separator": "icarus:workflow-g3-staged-publish-positive-cases:1\n",
-        "hash": "sha256:afd7124df04ad4b4ab3651c88bf79653f0a5c83e1e9e2763e3d3e7c041a428d1"
+        "hash": "sha256:dae2fe3df6830ebee72db6d76fdc7f71d7f9fc9463927375c7ce438d71ae9a50"
       },
       {
         "path": "conformance/g3-workflow-publisher/negative-cases.json",
@@ -97,7 +97,7 @@
         },
         "version": 1,
         "domain_separator": "icarus:workflow-g3-staged-publish-negative-cases:1\n",
-        "hash": "sha256:93b1214f6277081a721e225812298afb381d6e43b3f21fe804f5fe66b84a7d27"
+        "hash": "sha256:c80cfe3b3388282687aab3c2fcce6cf30d06e8ac5d8951677b399ff8f728cb0c"
       },
       {
         "path": "registry/workflow-staged-publish-domain-separators@1.json",
@@ -114,5 +114,5 @@
     "positive_case_count": 1,
     "negative_case_count": 3
   },
-  "hash": "sha256:9865cf0aafa37b4f44dc293aea6c59221d0f445c2e67fa87dfe53e6be71c9fbb"
+  "hash": "sha256:e80038f09ad841de630d961f137f15a2de14a487a74afb6b1d8b36edea689ba0"
 }

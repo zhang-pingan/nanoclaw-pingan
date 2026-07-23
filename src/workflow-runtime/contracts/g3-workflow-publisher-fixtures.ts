@@ -158,7 +158,7 @@ function planPin(
 ): NonNullable<G3RegistryResourceCandidate['compiled_plan_pin']> {
   return {
     plan_ref:
-      'conformance/sealed/g2-production-compiler-replay-repair-v2/expected/positive.static-lowering.plan.json',
+      'conformance/sealed/g2-capability-outbox-binding-v3/expected/positive.static-lowering.plan.json',
     plan_hash: plan.plan_hash as Sha256Hash,
     plan_format: 'icarus.workflow-graph-scope-plan/2',
     compiler_toolchain_hash:
@@ -205,6 +205,7 @@ function candidate(
     })),
     compiled_plan_pin: compiled,
     execution_artifact_pin: execution,
+    capability_outbox_binding: null,
     resource_hash:
       'sha256:0000000000000000000000000000000000000000000000000000000000000000',
   };
@@ -336,7 +337,7 @@ function updateCompatibilityInput(
 export function g37WorkflowPublisherStoreFixtureForTest(): G37WorkflowPublisherStoreFixture {
   const base = g3RetentionExecutorAbiStoreFixtureForTest();
   const plan = readJson(
-    'conformance/sealed/g2-production-compiler-replay-repair-v2/expected/positive.static-lowering.plan.json',
+    'conformance/sealed/g2-capability-outbox-binding-v3/expected/positive.static-lowering.plan.json',
   );
   const original = structuredClone(base.batch.resources);
   const genericSchema = original.find(
@@ -384,7 +385,7 @@ export function g37WorkflowPublisherStoreFixtureForTest(): G37WorkflowPublisherS
     manifestSchemaArtifact.payload as JsonObject,
   );
   const planSchemaArtifact = readJson(
-    'conformance/compiler-contract-repair/schemas/compiled-scope-plan-v2-schema.json',
+    'conformance/capability-outbox-execution-binding/schemas/compiled-scope-plan-v2-execution-binding-schema@1.json',
   );
   const planSchema = schemaResource(
     planSchemaArtifact.ref as VersionedRef,
