@@ -346,6 +346,33 @@ describe('stable runtime launcher', () => {
     ]);
     expect(bind.status, bind.stderr).toBe(0);
 
+    const activeCore = path.join(runtimeHome, 'active-core');
+    const firstBindingDirectory = fs.realpathSync(activeCore);
+    const firstBindingFile = path.join(firstBindingDirectory, 'binding.json');
+    const firstBindingBytes = fs.readFileSync(firstBindingFile);
+    fs.writeFileSync(coreEntry, 'console.log("core fixture v2");\n');
+    const rebind = runToolchain(fixture, runtimeHome, [
+      'bind-core',
+      '--project-root',
+      coreProject,
+      '--entry',
+      'dist/index.js',
+    ]);
+    expect(rebind.status, rebind.stderr).toBe(0);
+    const secondBindingDirectory = fs.realpathSync(activeCore);
+    expect(secondBindingDirectory).not.toBe(firstBindingDirectory);
+    expect(fs.readFileSync(firstBindingFile)).toEqual(firstBindingBytes);
+    expect(fs.readdirSync(firstBindingDirectory)).toEqual(['binding.json']);
+    const secondBinding = JSON.parse(
+      fs.readFileSync(
+        path.join(secondBindingDirectory, 'binding.json'),
+        'utf8',
+      ),
+    ) as { core_entry_sha256: string };
+    expect(secondBinding.core_entry_sha256).toBe(
+      `sha256:${hashBytes(fs.readFileSync(coreEntry))}`,
+    );
+
     const launcher = path.join(runtimeHome, 'bin', 'icarus-runtime');
     expect(fs.readFileSync(launcher)).toEqual(fs.readFileSync(launcherSource));
     const launcherLink = path.join(

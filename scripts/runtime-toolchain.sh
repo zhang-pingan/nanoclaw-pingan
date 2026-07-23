@@ -395,7 +395,7 @@ set_relative_pointer() {
   temporary="$parent/.active-pointer.$$.$RANDOM"
   rm -f "$temporary"
   ln -s "$relative_target" "$temporary"
-  mv -f "$temporary" "$pointer"
+  mv -f -h "$temporary" "$pointer"
   sync_filesystem
 }
 
