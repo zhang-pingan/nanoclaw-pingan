@@ -1,8 +1,8 @@
 # Dynamic Workflow Runtime 实施进度
 
-> **状态**: `GENERATED_SCHEMA_JOIN_AUTHORITY_REPAIR_EXIT_CANDIDATE_PENDING_INDEPENDENT_AFFECTED_CHAIN_REGRESSION`
-> **当前 Gate**: G5 Basic Runtime仍为`BLOCKED_BY_SPEC/NOT_READY`；G6-G9=`NOT_READY`
-> **下一独立会话**: 只执行新的independent affected-chain whole-gate regression；通过前不得恢复G5 Runtime或开始G6
+> **状态**: `GENERATED_SCHEMA_JOIN_AUTHORITY_REPAIR_DONE`
+> **当前 Gate**: G5 Basic Runtime=`READY_FOR_G5_REPAIR`；G6-G9=`NOT_READY`
+> **下一独立会话**: 只允许新的G5 repair任务；不得把历史G5 pack视为current candidate，不得开始G6
 > **最后更新**: 2026-07-24
 > **规范权威**: `local/docs/dynamic-workflow-dag-framework.md`
 
@@ -109,11 +109,11 @@ Agent Container 运行于独立 VM，Node identity 由 VM image gate 保证；�
 | Gate | 状态 | 依赖 | 退出证据 | 完成提交 |
 | --- | --- | --- | --- | --- |
 | G0 Contract Pack / Static Baseline | `DONE` | 无 | G0.1-G0.9 historical root + G0.10 additive Capacity Admin/publication/CAP/Logical Schema/coverage root | 本原子提交 |
-| G1 DDL / Store | `REPAIR_EXIT_CANDIDATE_PENDING_INDEPENDENT_AFFECTED_CHAIN_REGRESSION` | G0.10 | current Database Schema `6`；保留全部Schema 5合法历史与原bytes，新增Plan-generated schema content/binding和Value互斥authority，提供原子fail-closed 5到6 upgrade | R-019/Schema 6定向修复 |
-| G2 Compiler / Golden | `REPAIR_EXIT_CANDIDATE_PENDING_INDEPENDENT_AFFECTED_CHAIN_REGRESSION` | G1 + R-019 | Compiler 3.0.3/G2 v5已owner review/seal，current replay 40/40 exact；v1-v4 sealed lineage只读且v4历史重放40/40 | generated-schema/join-authority repair candidate |
-| G3 Registry / Authoring / Publish | `AFFECTED_CHAIN_REBUILT_PENDING_INDEPENDENT_REGRESSION` | G1 + G2 | G3.1/3.3/3.5/3.6/3.7/3.9 current Publish closure已重建；G3.8A frozen | generated-schema/join-authority repair candidate |
-| G4 Test Bootstrap | `AFFECTED_CHAIN_REBUILT_PENDING_INDEPENDENT_REGRESSION` | G1 + G2 + G3 | Schema 6 profile及downstream-safe isolation pack已重建 | generated-schema/join-authority repair candidate |
-| G5 Basic Runtime | `BLOCKED_BY_SPEC/NOT_READY` | independent generated-schema/join-authority affected-chain whole-gate regression | R-019/Schema 6/G2 v5修复已形成exit candidate，但独立affected-chain regression尚未完成；历史G5 Runtime pack退出active aggregate，不得恢复施工 | generated-schema/join-authority repair exit candidate |
+| G1 DDL / Store | `DONE` | G0.10 | current Database Schema `6`；保留全部Schema 5合法历史与原bytes，新增Plan-generated schema content/binding和Value互斥authority，提供原子fail-closed 5到6 upgrade | R-019 repair + independent affected-chain regression |
+| G2 Compiler / Golden | `DONE` | G1 + R-019 | Compiler 3.0.3/G2 v5已owner review/seal，current replay 40/40 exact；v1-v4 sealed lineage只读且v4历史重放40/40 | R-019 repair + independent affected-chain regression |
+| G3 Registry / Authoring / Publish | `DONE` | G1 + G2 | G3.1/3.3/G3.5/G3.6/G3.7/G3.9 current Publish closure已重建并独立回归；G3.8A frozen | R-019 repair + independent affected-chain regression |
+| G4 Test Bootstrap | `DONE` | G1 + G2 + G3 | Schema 6 profile、current dependency pins及downstream-safe isolation pack已重建并独立回归 | R-019 repair + independent affected-chain regression |
+| G5 Basic Runtime | `READY_FOR_G5_REPAIR` | G1-G4 current closure | 只允许新的G5 repair任务消费current Schema 6/G2 v5 authority；历史G5 Runtime pack已退出active aggregate且不是current repair candidate | R-019 independent affected-chain regression |
 | G6 Dynamic / Close | `NOT_READY` | G5 | T7/T8/child/compensation fixtures | - |
 | G7 Control / Card / Projection / Recovery | `NOT_READY` | G6 | Deadline Watchdog -> Gateway -> T7c stable-key/System Grant/audit + authorized manual retry handoff + T6e/resolution/recovery/card/projection fixtures | - |
 | G8 Certification | `NOT_READY` | G7 | certified profile meeting Product Floor | - |
@@ -1178,7 +1178,7 @@ G0.1 的实现、测试和本进度账本由同一个原子提交交付。Agent 
 | R-016 | Compiler/Golden contract | CLOSED | S38与additive repair root已冻结唯一Case Result target/hash、lowering outcome、IR v2与exact binding；G2 Production Compiler已消费该Contract并发布真实identity/actual candidates，repair Draft v2仍冻结blocked且未越过Golden review/seal边界 | G2 spec/Contract repair + Compiler slice |
 | R-017 | G2 semantic correction | CLOSED | phase=`BASELINE_ACCEPTED`；前序RC/Working/Draft/review/GoldenSemanticReview/sealed bundle identities未变；Compiler 3.0.1修复、owner-approved successor GoldenSemanticReview/seal与current 40/40 replay已完成 | successor bundle=`sha256:d99647d8ca6aabc737a793019335e6770aa111a79be7545c4dec00c6e7af2145`；G3+仍未开始 |
 | R-018 | Feature Release Activation persistence | `DONE` | G1.6按G3.8A重建Schema 4 failure/replay persistence；G3.9已实施closed Activation transaction/replay/recovery | G1.6与G3.9原子提交 |
-| R-019 | Generated Schema 与 Join Expose Authority | `REPAIR_EXIT_CANDIDATE_PENDING_INDEPENDENT_AFFECTED_CHAIN_REGRESSION` | content-addressed generated schema、Schema 6 first-class Stored Value identity与Compiler 3.0.3 join expose typed lowering已形成additive repair exit candidate | 独立affected-chain whole-gate regression |
+| R-019 | Generated Schema 与 Join Expose Authority | `CLOSED/DONE` | content-addressed generated schema、Schema 6 first-class Stored Value identity、Compiler 3.0.3 join expose typed lowering及其G1-G4 affected chain已通过独立whole-gate回归 | `GENERATED_SCHEMA_JOIN_AUTHORITY_REPAIR_DONE` |
 
 ## v1完成后的归档计划：PLANNED
 
@@ -2517,9 +2517,23 @@ Construction验证全部通过：R-019/generated authority 4/4；G1.1 26/26、G1
 
 未运行完整仓库`npm test`、历史`contracts:g5:generate/check`与`test:g5`：它们包含被本轮明确禁止继续施工或重新生成的历史G5 Runtime候选，不属于current active aggregate；未运行G6+、certification或Production测试。全部实际Node/npm/npx命令均经`./scripts/runtime-toolchain.sh exec --`执行。
 
+### Generated schema / join expose authority independent affected-chain regression
+
+**结论**：`PASS / GENERATED_SCHEMA_JOIN_AUTHORITY_REPAIR_DONE`。本轮从clean local `main@866232da5a8b07a8f137282e4b133d5935c8520a`开始，parent=`1a7cf69d3e01bc38e3f1e427e4d777bc5c4940ae`；独立审阅candidate与predecessor后确认R-019、Schema 6 lineage、Compiler 3.0.3和G2 v5 successor均闭合，未沿用construction结论。环境为`permission_profile=disabled/unrestricted`、filesystem unrestricted、sandbox `danger-full-access`、approval policy `never`；没有worktree、Handoff、sub-agent、approval/escalation或历史改写，也没有恢复G5 Runtime施工或开始G6。
+
+两轮完整managed `contracts:generate` + `contracts:check`均通过；生成前和每轮generate/check后的全Contract/Schema JSON/SQL tree digest始终为`4d241e95c63bedf121d960c2c674af632f594eb85111a178662f02222ca20481`。R-019/generated authority 16/16（其中repair Contract 4/4）、G1.1 26/26、G1.2 24/24、Capacity/G1 60/60、G2 62/62、G3 101/101、G4 33/33、ownership 9/9、readiness 7/7、blocker 9/9、whole G0 109/109、managed typecheck/build全部通过。final build后使用专用`bind-core --project-root "$PWD" --entry dist/index.js`刷新Development Core，entry/binding=`sha256:626b57523d0c96d8c3e1d2608b36a5c144037ef2639b5bfafcb3d2932899eef3` / `sha256:ec5666f6004fa52f51e8b47aca6fbd074fc2659ac3de18501d3b256be5a67fab`；随后whole G0 109/109、G3 101/101、Store、readiness 7/7与blocker 9/9再次通过。
+
+Schema 5 migration相对`0a48f60`逐字节零diff，raw=`sha256:2ead40dc2f1618f87247e9d3bb476266797c38560e1ad0537a6afa6f71a3fbf6`、`user_version=5`；fresh Schema 6独立migration raw=`sha256:16a46e84c77d734013e18b4b00b86564f6188ea73717763e9fb7a884d62faa41`、`user_version=6`，5到6 upgrade=`sha256:dc94fa0867ca572b7ec39ffb8df448e38be00ca4831f1d420885ee7cc097687d`。真实SQLite覆盖fresh/reopen、3/4/5到6、非空Schema 5 Value与全部inbound FK、Registry循环、generated content/Plan binding/Value互斥authority、所有missing/ref/hash/scheme/bytes/parameter/binding drift、before-commit rollback与exact replay，并比较fresh/upgraded identity。Current G1 root/schema保持`sha256:3cc206a6dfb1bbaed1bb0f4305323729db23d839652d8a0e020a9a6c4d3e3dd6` / `sha256:37f0102a9d6b0077f0d44f20182a7d5768ce32b1c0c2c3998937178b06c9b474`。
+
+G2 v4与current v5分别独立真实重放40/40 exact，semantic assertions 95项零失败；v5 bundle=`sha256:b37ddf415d12d759ddd4b72b754568e01715704d254da26e3355e0898cfeda05`。专用v4/v5 replay逐项核对RC、Draft、report、GoldenSemanticReview、seal与artifact bytes/hash；aggregate输出中旧`golden:current:*`对更早predecessor保留29/40是历史预期，不作为v4/v5 replay证据。
+
+Protected boundary：相对`0a48f60`，冻结G0.10 artifacts、G2 v1-v3完整历史Contract/review/sealed trees、G3.8A source/artifacts及Schema 5 migration均零diff；相对`1a7cf69`，G2 v4完整历史树零diff。两套`package-lock.json`及根/agent-runner dependency sections零漂移；无G5 Runtime/creation或历史G5 pack修改，无Gateway/audit/T6e/blocker resolve/abandon/deadline/manual bypass/G6+、certification或Production activation施工。`git diff/show --check`通过。历史G5 pack继续退出active aggregate，不构成current candidate。
+
+R-019现为`CLOSED/DONE`，G1-G4 current状态恢复`DONE`；G5只提升为`READY_FOR_G5_REPAIR`，不是repair candidate或`DONE`。G6-G9继续`NOT_READY`。
+
 ## 下一步
 
-下一独立任务只能是新的**generated-schema/join-authority affected-chain whole-gate regression**。它必须从本提交clean main独立复核managed Contract两轮byte-identical、Schema 5历史bytes与5到6 migration、G2 v1-v5 exact lineage及v4/v5 40/40 replay、G3/G4/Capacity/ownership/readiness和protected-tree边界。该回归通过前G5保持`BLOCKED_BY_SPEC/NOT_READY`，不得恢复G5 Runtime施工；通过后也只能另开任务重新评估是否形成G5 repair exit candidate，不得直接开始G6。
+下一唯一施工目标是新的**G5 Basic Runtime repair**任务：必须只消费current R-019/Schema 6/G2 v5/G3/G4 authority重新评估并构造G5 repair，不得恢复或把历史G5 pack直接提升为current candidate。该任务最多形成新的G5 repair exit candidate；不得在同一任务标记G5 `DONE`、开始G6、执行certification或启用Production activation。
 
 历史fresh review evidence只存在于Git commits，不是current dependency；current immutable semantic approval只绑定exact Draft/report identities。显式`prepare-rc`冻结的四个Working roots与唯一Review Candidate未变；current expected full case-result/Plan/proof/program bytes/hash已独立冻结、审计、owner批准并seal。local single-user签名策略为`not_required_local_single_user`，没有伪造GPG或远程签名。
 
