@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-runtime-executable-ddl:1\n",
-  "hash": "sha256:8445f3cb1b8b5af23a3859b47ce649f6c063e4f815d4f188682537de63834845",
+  "hash": "sha256:fa84a345f747d7b871ee64deea356b1577d192bc1c2a62cead5d317cea04d7b2",
   "payload": {
     "schema_id": "workflow-runtime-schema-v1",
     "database_schema_version": 6,
@@ -21,7 +21,7 @@
       "sqlite_profile_hash": "sha256:3d69742dad2fefa8bef4ba47e375defd705e3b32920a92b105a43726436fb7af",
       "generated_schema_authority_prerequisite_hash": "sha256:55bf95fa677ae2d2be30575fcbe68ed8b051913379ceb131b983dfe62658dc00"
     },
-    "migration_path": "migration/workflow-runtime-schema-v1.sql",
+    "migration_path": "migration/workflow-runtime-schema-v6.sql",
     "migration_sha256": "sha256:16a46e84c77d734013e18b4b00b86564f6188ea73717763e9fb7a884d62faa41",
     "schema3_to_schema4_upgrade_path": "migration/workflow-runtime-schema-v3-to-v4.sql",
     "schema3_to_schema4_upgrade_sha256": "sha256:5ac263fe3279c61f74ba6314f5df98fff59a8f8b32acfa784d2040421ebaa3cf",
@@ -48,7 +48,7 @@
     "statement_count": 334,
     "table_count": 86,
     "trigger_count": 47,
-    "schema_hash": "sha256:d35c2d6fe2aaaf87ad102561d1595d016f8ef2f04950e5e3ad30b91aa366d909",
+    "schema_hash": "sha256:37f0102a9d6b0077f0d44f20182a7d5768ce32b1c0c2c3998937178b06c9b474",
     "executable_status": "canonical_migration"
   }
 }

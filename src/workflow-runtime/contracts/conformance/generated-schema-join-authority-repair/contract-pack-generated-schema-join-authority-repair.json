@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-contract-pack-generated-schema-join-authority-repair:1\n",
-  "hash": "sha256:5292c0a2b11457f7ddc054b66601c020811b6b2c70d42976cb7190bd3ad0543d",
+  "hash": "sha256:0c9b1a04a013bf6284b36c550ead6d81cffecacbe4a9d6495d6153b2335a04fc",
   "payload": {
     "gate": "G2_SCHEMA_G3_GENERATED_SCHEMA_JOIN_AUTHORITY_REPAIR",
     "status": "GENERATED_SCHEMA_JOIN_AUTHORITY_REPAIR_EXIT_CANDIDATE_PENDING_INDEPENDENT_AFFECTED_CHAIN_REGRESSION",
@@ -14,11 +14,11 @@
     "members": [
       {
         "path": "conformance/generated-schema-join-authority-repair/generated-schema-join-authority-contract@1.json",
-        "artifact_hash": "sha256:baec0daa2a5bd15db4f87b6784f92327a6320ce4cc37710a46f864596553e37d",
-        "raw_bytes_hash": "sha256:3c63a052e439facc428db01fcfda0ff5e847c2cac43fa5fa1883bba0212c0573"
+        "artifact_hash": "sha256:b53f8a77e51adba5d1b8f41766336bae2a59a05e5ced1959996218d745d5ebd4",
+        "raw_bytes_hash": "sha256:8eb326ff97a9fa6e33a0855f0d259c3ec69cce95214fe90fe3c1dfa8f760f91e"
       }
     ],
-    "member_tree_hash": "sha256:bafd2ba70c4d60fee832b985c52de5e9829e07e711d605bc3f684ae08c99532b",
+    "member_tree_hash": "sha256:6caab0e9795b1e97a809c7312de6734b763a3506d538580ee6744621d919cdc7",
     "g5_status": "BLOCKED_BY_SPEC_NOT_READY",
     "g6_through_g9_status": "NOT_READY"
   }

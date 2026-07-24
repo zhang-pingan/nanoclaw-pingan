@@ -1172,13 +1172,13 @@ function validateUpstreamIdentity(): void {
   );
   if (
     registry.hash !==
-    'sha256:635fd7ac9c15212f50df1845a8267c5cad576aa34d475164e060946cb42987e5'
+    'sha256:590acdd52626838bf30ae14bb04b6f0ee59a95e1efadc4911ff850acc2970763'
   ) {
     throw new Error('G3.3 Registry persistence identity drift');
   }
   if (
     queryPack.hash !==
-    'sha256:f8b66d05bd59a0ca845f678078c72104d15ef9400e87196b505bb5bf46b91d8c'
+    'sha256:b6a4ec1dac738c6036869c763708f8aa144d0a864c8c392ee18cb3aba8c83417'
   ) {
     throw new Error('G3.5 exact resource query identity drift');
   }
@@ -1285,9 +1285,9 @@ function buildManifest(
       status: 'DONE',
       g3_status: 'IN_PROGRESS',
       upstream_g3_3_pack_hash:
-        'sha256:635fd7ac9c15212f50df1845a8267c5cad576aa34d475164e060946cb42987e5',
+        'sha256:590acdd52626838bf30ae14bb04b6f0ee59a95e1efadc4911ff850acc2970763',
       upstream_g3_5_pack_hash:
-        'sha256:bbc4e2cb402c8058a6412da0ebd5a284c2c7af831453cafaa84738a391c15718',
+        'sha256:b6a4ec1dac738c6036869c763708f8aa144d0a864c8c392ee18cb3aba8c83417',
       upstream_g1_schema_root_hash:
         G3_CURRENT_UPSTREAM_IDENTITY.g1_schema_root_hash,
       publisher_persistence_readiness: 'PUBLISHER_SCHEMA_PREREQUISITE_READY',

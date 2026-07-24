@@ -13,8 +13,8 @@
     "g3_status": "EXIT_CANDIDATE_PENDING_INDEPENDENT_G3_REGRESSION",
     "upstream": {
       "database_schema_version": 6,
-      "g1_root_hash": "sha256:ff588497b32eacc268c379d220fedbb3d29f69a0fdb9337c7a1e429ee7a868eb",
-      "database_schema_hash": "sha256:d35c2d6fe2aaaf87ad102561d1595d016f8ef2f04950e5e3ad30b91aa366d909",
+      "g1_root_hash": "sha256:3cc206a6dfb1bbaed1bb0f4305323729db23d839652d8a0e020a9a6c4d3e3dd6",
+      "database_schema_hash": "sha256:37f0102a9d6b0077f0d44f20182a7d5768ce32b1c0c2c3998937178b06c9b474",
       "schema6_migration_hash": "sha256:16a46e84c77d734013e18b4b00b86564f6188ea73717763e9fb7a884d62faa41",
       "schema5_migration_hash": "sha256:2ead40dc2f1618f87247e9d3bb476266797c38560e1ad0537a6afa6f71a3fbf6",
       "schema5_to_6_upgrade_hash": "sha256:dc94fa0867ca572b7ec39ffb8df448e38be00ca4831f1d420885ee7cc097687d",
@@ -24,9 +24,9 @@
       "g3_8a_pack_hash": "sha256:d8412111a0f3dcabb4ce416b99086701ea3e3911ff431b5457eb957b2f69722f",
       "g3_8a_repair_artifact_hash": "sha256:94cb2c390bb44298238b1ffac4184b04f59efbbeae6f268fbce7618104ec406b",
       "g3_8a_internal_contract_hash": "sha256:70d4b9ef47c83711415636737292450538acaf5cc4547d3130b04b101e6707ae",
-      "g3_6_pack_hash": "sha256:da15a3b9e7f3215f879d43b8f321c07f432f7d928d42314f22f6028b61f16aa9",
-      "g3_7_pack_hash": "sha256:1614e89ecac4713c6d991a6ae68e548f01268e25ba8b700a107e4cdcb1b64647",
-      "g2_sealed_bundle_hash": "sha256:b7d26b8622b1ceadff419430f443a9b0ceb377cbd47af20e9109ea878046abf9"
+      "g3_6_pack_hash": "sha256:7f807ae53e13bcec7712f77c1ebaba7aab5f72d2779ed5d99d33b0e6c54e98d3",
+      "g3_7_pack_hash": "sha256:5d023a5323aec482781b0e992197571db9a09481a394eaf955d4598c249e4ec1",
+      "g2_sealed_bundle_hash": "sha256:b37ddf415d12d759ddd4b72b754568e01715704d254da26e3355e0898cfeda05"
     },
     "schema_resource_hashes": {
       "request": "sha256:b1eb5681861d4537eb9dc5bf77844c00176d9445eb76b5eb82494504f2f62116",
@@ -35,7 +35,7 @@
       "compatibility_input": "sha256:512107167b9951f331eef329aac6620d8a460ad578ff3296be87b0540b8fc462",
       "compatibility_result": "sha256:c831744be71e3592e569c91dc0d7469a97364a59a6ba980c6d2c33bcf34298a5"
     },
-    "fixture_digest": "sha256:c5d87fa300fe839ae2d705de5c682a151db33321a072a9195e5d637f6fc8139c",
+    "fixture_digest": "sha256:5678c30d064563334b97ca1d9b252066e3e4972bab34f349de9a032bea875229",
     "error_precedence": [
       "activation_request_strict_parse_invalid",
       "activation_request_removed_field",
@@ -187,5 +187,5 @@
     "authoring_stages_implemented": false,
     "g4_through_g9_status": "NOT_READY"
   },
-  "hash": "sha256:c9aa03bf85e2b358f8b4b01b7dcfecf25ce76d2339688e88fe969d1babe10107"
+  "hash": "sha256:cbb6b355819b1eefefa7af5289b10b367c42bbe32b09f003151bc7f9ebf475d7"
 }

@@ -1,0 +1,99 @@
+{
+  "format": "icarus.workflow-compiler-g2-replay-repair-review-candidate/1",
+  "ref": {
+    "id": "icarus.workflow-compiler-g2-replay-repair-review-candidate",
+    "version": "2.0.0-rc"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-compiler-g2-replay-repair-rc-artifact:1\n",
+  "hash": "sha256:6fe9c6804237ea00dfb73c50dcd9a5dd658956b54e67db554817067433c584f6",
+  "payload": {
+    "gate": "G2",
+    "construction_phase": "RC_REVIEW",
+    "status": "REPLAY_REPAIR_SUCCESSOR_PENDING_HUMAN_REVIEW",
+    "publishable": false,
+    "production_reachable": false,
+    "bound_working_roots": {
+      "contract": {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v5/working-contract-root@2.json",
+        "semantic_hash": "sha256:8bcbef902859b406f99101b996e6c8ccc07785b05f1935d145a30f7f79f1ec19",
+        "raw_bytes_hash": "sha256:a9235d4d42203f03ad38fddabd228adf1e1565cff71439ab2f90baa6da11e980"
+      },
+      "input": {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v5/working-input-root@2.json",
+        "semantic_hash": "sha256:ecd9c3d889c6b0ce7d3ae7f1f59046b5950e24f1f17a38f2a55b25626d85e6aa",
+        "raw_bytes_hash": "sha256:dd8e232732629b546b13084dd6a5a06fc9734b73a3267f0ddaa8935449af4161"
+      },
+      "candidate": {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v5/working-candidate-root@2.json",
+        "semantic_hash": "sha256:9e217fad5593715ddadbf93a33e20d4caf8bf43386e86ceec22acf0fb654b0ce",
+        "raw_bytes_hash": "sha256:1525dbaadd19c2bd457e9442f105356e16ddd9096dd2400cfe10b2eabf079741"
+      },
+      "working_review": {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v5/working-review-root@2.json",
+        "semantic_hash": "sha256:a448daa01c55cb98804e6d29bd9db214f596a75818230dbe47481a7a640cb92a",
+        "raw_bytes_hash": "sha256:415ad6b672e906d37b29f7b6f5034bd48f1e0e4a13633637e2a5e5f8578ddd61"
+      }
+    },
+    "compiler_identity": {
+      "exact_identity": {
+        "compiler_toolchain_manifest_ref": {
+          "id": "icarus.workflow-compiler-toolchain",
+          "version": "3.0.3"
+        },
+        "compiler_toolchain_hash": "sha256:acc4bd6e6444f9903e3054bf637dee28ee8b25fbfc5eebd49b9aaf37582ff493",
+        "compiler_version": "3.0.3",
+        "compiler_build_hash": "sha256:eae5b2002226b9110dddba57dce528af91439ae760c5d30636631bcb464d86b2",
+        "canonical_normalizer_version": "2.0.1",
+        "canonical_normalizer_hash": "sha256:e32946d0d20cc92344a72d04e488951cc4a64be82d36384db26dfbf420e469ff",
+        "proof_algorithm_version": "2.0.2",
+        "proof_algorithm_hash": "sha256:b6fda13a0acddf052cae5ed6f1bc89f2b9cfa91affbfcbb80aa44365f78c35d9",
+        "error_catalog_ref": {
+          "id": "icarus.workflow-compiler-error-catalog",
+          "version": "2.0.0"
+        },
+        "error_catalog_hash": "sha256:8fc7139b29cdddf3c1e13e0f9d8bc6b19a1d32c02c1e7f4b7e33023fcece91ef",
+        "compiled_ir_schema_ref": "conformance/capability-outbox-execution-binding/schemas/compiled-scope-plan-v2-execution-binding-schema@1.json",
+        "compiled_ir_schema_hash": "sha256:e582abc7a221f4d1afd66d12c2a87816cb228f6139a77d9abfaa1a397844f947",
+        "conformance_result_schema_ref": "conformance/capability-outbox-execution-binding/schemas/compiler-conformance-case-result-execution-binding-schema@1.json",
+        "conformance_result_schema_hash": "sha256:ee41b9dff7eb2c97a75c81a7c15ec3bcf935ce233c29468a4ef7b7bfa047987e"
+      }
+    },
+    "source_identity": {
+      "source_set_hash": "sha256:59f05b4b96a0cb8d390125c3fd344539ffeddf97ceac9af106b4f14c26013e97"
+    },
+    "cases_ref": "conformance/review-candidate/g2-generated-schema-join-authority-v5/review-candidate-cases@2.json",
+    "cases_hash": "sha256:b7416717329646c4a39cb1859c58acb562fb742f5d33e5fe852b1d63f171197d",
+    "inventory_ref": "conformance/review-candidate/g2-generated-schema-join-authority-v5/artifact-inventory@2.json",
+    "inventory_hash": "sha256:d458abd415dbf7e375db6680ad33de708b2f36e3438b8864507d9fdf91c84f35",
+    "actual_comparison": {
+      "results_manifest_ref": "conformance/review-candidate/g2-generated-schema-join-authority-v5/working-candidate-root@2.json",
+      "results_manifest_hash": "sha256:9e217fad5593715ddadbf93a33e20d4caf8bf43386e86ceec22acf0fb654b0ce",
+      "role": "actual_compiler_output_not_golden_oracle"
+    },
+    "predecessor_lineage": {
+      "predecessor_working_roots": {
+        "contract": "sha256:f109aa0d719e220f96550a11b1693aa4dbd0de600a1b48293dc5b664419e5132",
+        "input": "sha256:bd28e63d41430d3e83e3a886086788c1caf1fff99bce6db8201d593c562ba29b",
+        "candidate": "sha256:6951b4e1fd0817423936671de92b090979d63f3d7db0042344cae5c286b0a5d3",
+        "working_review": "sha256:0fefaffcd66abdeafb634b7b1641f20a8e43a61e2116ac25a17c222217d289ed"
+      },
+      "predecessor_review_candidate_root": "sha256:b0a8d7599073b9f4ae222fac799a9923b14c0762aa70a88746adfc2953809996",
+      "predecessor_draft_manifest_hash": "sha256:5f8eb14f6566379bc0047b72b991f76030f12c116f3cb09d1d0649ef9e18ae3e",
+      "predecessor_golden_review_report_hash": "sha256:304e029a42f720d3994ff1f6147678c5c9fba0d96c71c4e645d19ea4386ea967",
+      "predecessor_golden_semantic_review_hash": "sha256:056151bf316cc526db1b77393524c79532cc6706c88efd3d29394d76a8d2f39b",
+      "predecessor_sealed_bundle_hash": "sha256:b7d26b8622b1ceadff419430f443a9b0ceb377cbd47af20e9109ea878046abf9",
+      "predecessor_sealed_status": "sealed_pending_ci_replay",
+      "successor_reason": "r019_identity_and_schema5_fresh_migration_path_repair",
+      "approved_expected_semantics": "changed_by_current_review"
+    },
+    "case_count": 40,
+    "compiled_count": 11,
+    "rejected_count": 29,
+    "lifecycle": "RC_REVIEW",
+    "blocker": "OPEN_BLOCKING_G2",
+    "golden_semantic_review_status": "not_run",
+    "seal_status": "not_run",
+    "g3_through_g9_status": "not_started"
+  }
+}

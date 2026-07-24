@@ -1,0 +1,238 @@
+{
+  "format": "icarus.workflow-compiler-input-snapshot/2",
+  "ref": {
+    "id": "icarus.workflow-compiler-input-snapshot.semantic-correction.negative.runtime-safety-limit-exceeded.generated-schema-join-authority-v5",
+    "version": "5.0.0"
+  },
+  "version": 2,
+  "domain_separator": "icarus:workflow-compiler-input-snapshot-artifact:2\n",
+  "hash": "sha256:63d2533391db193e5400be8470358e031db0344eeabd0f27c6e8f89eadceb75e",
+  "payload": {
+    "format": "icarus.workflow-compiler-input-snapshot/2",
+    "snapshot_id": "g2-generated-schema-join-authority-v5:negative.runtime-safety-limit-exceeded",
+    "launchability": "test_only",
+    "compiler_identity": {
+      "compiler_toolchain_manifest_ref": {
+        "id": "icarus.workflow-compiler-toolchain",
+        "version": "3.0.3"
+      },
+      "compiler_toolchain_hash": "sha256:acc4bd6e6444f9903e3054bf637dee28ee8b25fbfc5eebd49b9aaf37582ff493",
+      "compiler_version": "3.0.3",
+      "compiler_build_hash": "sha256:eae5b2002226b9110dddba57dce528af91439ae760c5d30636631bcb464d86b2",
+      "canonical_normalizer_version": "2.0.1",
+      "canonical_normalizer_hash": "sha256:e32946d0d20cc92344a72d04e488951cc4a64be82d36384db26dfbf420e469ff",
+      "proof_algorithm_version": "2.0.2",
+      "proof_algorithm_hash": "sha256:b6fda13a0acddf052cae5ed6f1bc89f2b9cfa91affbfcbb80aa44365f78c35d9",
+      "error_catalog_ref": {
+        "id": "icarus.workflow-compiler-error-catalog",
+        "version": "2.0.0"
+      },
+      "error_catalog_hash": "sha256:8fc7139b29cdddf3c1e13e0f9d8bc6b19a1d32c02c1e7f4b7e33023fcece91ef",
+      "compiled_ir_schema_ref": "conformance/capability-outbox-execution-binding/schemas/compiled-scope-plan-v2-execution-binding-schema@1.json",
+      "compiled_ir_schema_hash": "sha256:e582abc7a221f4d1afd66d12c2a87816cb228f6139a77d9abfaa1a397844f947",
+      "conformance_result_schema_ref": "conformance/capability-outbox-execution-binding/schemas/compiler-conformance-case-result-execution-binding-schema@1.json",
+      "conformance_result_schema_hash": "sha256:ee41b9dff7eb2c97a75c81a7c15ec3bcf935ce233c29468a4ef7b7bfa047987e"
+    },
+    "registry_snapshot": {
+      "snapshot_ref": "test-only:registry:semantic-correction:negative.runtime-safety-limit-exceeded@1",
+      "snapshot_hash": "sha256:cca479240bb22f685add81b73a6905a91e49cb6832de7655318b428954655796",
+      "resource_count": 0,
+      "resources": [],
+      "dependency_closure_count": 0,
+      "dependency_closures": []
+    },
+    "interface_snapshot": {
+      "snapshot_ref": "test-only:interfaces:semantic-correction:negative.runtime-safety-limit-exceeded@1",
+      "snapshot_hash": "sha256:c33bef7b44c2d790b8ba94526f69a62df17ed7e2f75be28e603a67460960ea67",
+      "interface_count": 1,
+      "interfaces": [
+        {
+          "ref": {
+            "id": "fixture.interface.root",
+            "version": "1.0.0"
+          },
+          "inputs": {},
+          "exits": {
+            "done": {
+              "output_ports": {}
+            }
+          },
+          "interface_hash": "sha256:227da6ec31bdc9889a198e9b902823b247add8ecae5752630ab6218b01de6131"
+        }
+      ]
+    },
+    "policy_snapshot": {
+      "snapshot_ref": "test-only:policy:semantic-correction:negative.runtime-safety-limit-exceeded@1",
+      "complete_policy": {
+        "root_policy_ref": {
+          "id": "fixture.policy.root.negative.runtime-safety-limit-exceeded",
+          "version": "1.0.0"
+        },
+        "root_policy": {
+          "allowed_node_types": [
+            "terminal",
+            "delegation",
+            "system",
+            "wait",
+            "join",
+            "subgraph",
+            "expand",
+            "map"
+          ],
+          "allowed_capabilities": [],
+          "allowed_templates": [],
+          "allowed_interface_refs": [
+            {
+              "id": "fixture.interface.root",
+              "version": "1.0.0"
+            }
+          ],
+          "allowed_wait_contracts": [],
+          "allowed_child_policy_refs": [],
+          "allowed_claim_ids": [],
+          "allow_early_close": true,
+          "allow_indefinite_waits": false,
+          "effect_policy": {
+            "allowed_recovery_kinds": [
+              "pure",
+              "idempotent",
+              "compensatable"
+            ],
+            "max_impact": "mutable_effects"
+          },
+          "build_retry": null,
+          "limits": {
+            "max_scopes": null,
+            "max_nodes": null,
+            "max_nodes_per_scope": null,
+            "max_edges_per_scope": null,
+            "max_nesting_depth": null,
+            "max_map_items": null,
+            "max_concurrency": null,
+            "max_total_attempts": null,
+            "max_total_waits": null,
+            "max_total_output_bytes": null,
+            "max_scope_spec_bytes": null,
+            "max_condition_steps": null,
+            "max_wait_duration_ms": null,
+            "max_pending_signals": null,
+            "max_fixed_point_facts": null,
+            "max_frontier_bytes": null
+          },
+          "usage_budget": {
+            "max_total_tool_calls": null,
+            "max_total_input_tokens": null,
+            "max_total_output_tokens": null,
+            "max_total_cost_micros": null
+          }
+        },
+        "child_profiles": [],
+        "intersection_order": [
+          "global",
+          "workflow",
+          "state",
+          "parent",
+          "child_request",
+          "runtime_safety"
+        ],
+        "policy_hash": "sha256:08d4a08a4df7e30c154d07da406dd2584cf6b6fdd380f3d62834d914b8e16f93"
+      }
+    },
+    "safety_snapshot": {
+      "snapshot_ref": "test-only:safety:semantic-correction:negative.runtime-safety-limit-exceeded@1",
+      "source_artifact_hash": "sha256:7f8c0b1babf451cb03ab5f99b436d3ae187b587783875850686188d893059259",
+      "ceilings": {
+        "routing": {
+          "max_task_input_bytes": 1048576,
+          "max_route_hops": 8,
+          "max_schema_bytes": 262144,
+          "max_schema_nodes": 4096,
+          "max_schema_ref_depth": 32,
+          "max_schema_union_variants": 64,
+          "max_schema_validation_steps": 100000
+        },
+        "workflow": {
+          "max_duration_ms": 2592000000,
+          "max_state_activations": 128,
+          "max_graph_runs": 127,
+          "max_state_transitions": 127,
+          "max_child_workflows_per_workflow": 32,
+          "max_child_workflow_depth": 4,
+          "max_descendant_workflows_total": 128,
+          "max_required_child_creations_per_transition": 8
+        },
+        "run": {
+          "max_scopes_total": 128,
+          "max_nodes_total": 1024,
+          "max_edges_total": 4096,
+          "max_map_items_total": 256,
+          "max_attempts_total": 4096,
+          "max_waits_total": 512,
+          "max_builds_total": 512,
+          "max_build_attempts_total": 1536,
+          "max_evaluator_attempts_total": 8192,
+          "max_effect_operations_total": 2048,
+          "max_logical_output_bytes_total": 1073741824,
+          "max_stored_bytes_total": 2147483648,
+          "max_facts_total": 262144
+        },
+        "scope": {
+          "max_nodes_per_scope": 128,
+          "max_edges_per_scope": 512,
+          "max_scope_spec_bytes": 2097152,
+          "max_nesting_depth": 8,
+          "max_frontier_bytes": 16777216
+        },
+        "map": {
+          "max_items_per_map": 128,
+          "max_child_concurrency_per_map": 16
+        },
+        "registry": {
+          "max_snapshot_entries": 4096,
+          "max_dependency_depth": 32,
+          "max_execution_artifact_bytes": 268435456,
+          "max_total_pinned_execution_bytes_per_run": 1073741824
+        },
+        "execution": {
+          "max_attempts_per_node": 4,
+          "max_attempt_duration_ms": 1800000,
+          "max_dispatch_duration_ms": 120000,
+          "max_retry_backoff_ms": 3600000,
+          "max_build_attempts_per_build": 3,
+          "max_build_duration_ms": 600000,
+          "max_evaluator_attempts_per_evaluation": 3,
+          "max_evaluator_duration_ms": 600000,
+          "max_outbox_attempts_per_message": 32,
+          "max_outbox_reconcile_attempts_per_message": 16,
+          "max_outbox_attempt_duration_ms": 300000,
+          "max_outbox_delivery_duration_ms": 259200000,
+          "max_root_finalization_attempts_per_schedule": 8,
+          "max_root_finalization_duration_ms": 900000,
+          "max_operational_remediation_attempts_per_blocker": 16,
+          "max_operational_remediation_duration_ms": 259200000
+        },
+        "wait": {
+          "max_finite_wait_duration_ms": 2592000000,
+          "max_pending_signals_per_workflow": 256,
+          "max_pending_signals_per_run": 128,
+          "max_pending_signals_per_principal": 1024,
+          "max_pending_signal_age_ms": 604800000,
+          "max_signal_payload_bytes": 1048576,
+          "max_correlation_key_bytes": 512
+        },
+        "reconciliation": {
+          "max_condition_ast_nodes": 256,
+          "max_condition_steps_per_evaluation": 4096,
+          "max_facts_per_transaction": 16384
+        },
+        "value": {
+          "max_single_value_bytes": 16777216,
+          "max_single_artifact_bytes": 268435456,
+          "max_artifact_files": 4096,
+          "max_artifact_manifest_bytes": 4194304
+        }
+      }
+    },
+    "snapshot_hash": "sha256:9f93917ea67c6fe2b1dc69c7ba9be4bbce5dee39136ab983db09e20bf150aa7a"
+  }
+}

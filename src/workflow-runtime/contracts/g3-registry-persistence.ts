@@ -1005,7 +1005,7 @@ function validateUpstreamIdentities(): void {
   const exactArtifacts: Array<[string, Sha256Hash]> = [
     [
       'contract-pack-g3-registry-publish-foundation.json',
-      'sha256:7a4d405b52cc4bdad32d252ea935a2e21c72981e82b7e5d2ac0234b7f108fdb7',
+      'sha256:c9364171a3d28a752d4510f59e5e45016cd86be14d7e151b483fc0c6c7a2807d',
     ],
     [
       'contract-pack-g3.2a-feature-manifest-intake.json',
@@ -1021,13 +1021,13 @@ function validateUpstreamIdentities(): void {
       throw new Error(`G3 Registry upstream identity drift: ${file}`);
   }
   const sealed = readArtifact(
-    'conformance/sealed/g2-generated-schema-join-authority-v4/golden-conformance-bundle@2.json',
+    'conformance/sealed/g2-generated-schema-join-authority-v5/golden-conformance-bundle@2.json',
   );
   if (
     sealed.hash !==
-      'sha256:591e2fdd083b2b3c4aea2e85edf9e052bad2e1c89908853d2eb6d912befaea76' ||
+      'sha256:f59040be6f71d8655afcb11ab4527a6683125a7a4e683f1e734b44448f7bb72e' ||
     sealed.payload.bundle_hash !==
-      'sha256:b7d26b8622b1ceadff419430f443a9b0ceb377cbd47af20e9109ea878046abf9'
+      'sha256:b37ddf415d12d759ddd4b72b754568e01715704d254da26e3355e0898cfeda05'
   ) {
     throw new Error('G3 Registry upstream G2 sealed identity drift');
   }
@@ -1148,15 +1148,15 @@ function buildManifest(
       upstream_g3_2a_pack_hash:
         'sha256:c9c273b6d294d512a3578203d91d4bdce7863a3ccb561fdd7da08d072b3d8cd9',
       upstream_g3_1_pack_hash:
-        'sha256:7a4d405b52cc4bdad32d252ea935a2e21c72981e82b7e5d2ac0234b7f108fdb7',
+        'sha256:c9364171a3d28a752d4510f59e5e45016cd86be14d7e151b483fc0c6c7a2807d',
       upstream_g3_2_pack_hash:
         'sha256:1eb0b81f488f4a37fa4503ddfef0dfa8a56d40fdeb535c9758d9d21fd39bb92b',
       upstream_g2_sealed_bundle_hash:
-        'sha256:b7d26b8622b1ceadff419430f443a9b0ceb377cbd47af20e9109ea878046abf9',
+        'sha256:b37ddf415d12d759ddd4b72b754568e01715704d254da26e3355e0898cfeda05',
       upstream_g1_schema_root_hash:
-        'sha256:ff588497b32eacc268c379d220fedbb3d29f69a0fdb9337c7a1e429ee7a868eb',
+        'sha256:3cc206a6dfb1bbaed1bb0f4305323729db23d839652d8a0e020a9a6c4d3e3dd6',
       upstream_g1_schema_hash:
-        'sha256:d35c2d6fe2aaaf87ad102561d1595d016f8ef2f04950e5e3ad30b91aa366d909',
+        'sha256:37f0102a9d6b0077f0d44f20182a7d5768ce32b1c0c2c3998937178b06c9b474',
       upstream_g1_migration_sha256:
         'sha256:16a46e84c77d734013e18b4b00b86564f6188ea73717763e9fb7a884d62faa41',
       production_registry_write_performed: false,

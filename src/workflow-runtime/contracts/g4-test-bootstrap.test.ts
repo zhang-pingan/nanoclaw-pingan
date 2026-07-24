@@ -91,7 +91,7 @@ describe('G4 Test Bootstrap Contract Pack', () => {
       fake_adapter_outcome_count: 7,
       database_schema_version: 6,
       database_schema_hash:
-        'sha256:d35c2d6fe2aaaf87ad102561d1595d016f8ef2f04950e5e3ad30b91aa366d909',
+        'sha256:37f0102a9d6b0077f0d44f20182a7d5768ce32b1c0c2c3998937178b06c9b474',
       sqlite_profile_status: 'candidate',
       certification_status: 'not_certified',
       explicit_selection_required: true,
@@ -130,7 +130,7 @@ describe('G4 Test Bootstrap Contract Pack', () => {
         database_name: 'workflow-runtime.db',
         database_schema_version: 6,
         g1_root_hash:
-          'sha256:ff588497b32eacc268c379d220fedbb3d29f69a0fdb9337c7a1e429ee7a868eb',
+          'sha256:3cc206a6dfb1bbaed1bb0f4305323729db23d839652d8a0e020a9a6c4d3e3dd6',
         migration_hash:
           'sha256:16a46e84c77d734013e18b4b00b86564f6188ea73717763e9fb7a884d62faa41',
         schema3_to_4_upgrade_hash:
@@ -142,15 +142,15 @@ describe('G4 Test Bootstrap Contract Pack', () => {
       },
       upstream_contracts: {
         g2_sealed_bundle_hash:
-          'sha256:b7d26b8622b1ceadff419430f443a9b0ceb377cbd47af20e9109ea878046abf9',
+          'sha256:b37ddf415d12d759ddd4b72b754568e01715704d254da26e3355e0898cfeda05',
         g3_6_pack_hash:
-          'sha256:da15a3b9e7f3215f879d43b8f321c07f432f7d928d42314f22f6028b61f16aa9',
+          'sha256:7f807ae53e13bcec7712f77c1ebaba7aab5f72d2779ed5d99d33b0e6c54e98d3',
         g3_7_pack_hash:
-          'sha256:1614e89ecac4713c6d991a6ae68e548f01268e25ba8b700a107e4cdcb1b64647',
+          'sha256:5d023a5323aec482781b0e992197571db9a09481a394eaf955d4598c249e4ec1',
         g3_8a_pack_hash:
           'sha256:d8412111a0f3dcabb4ce416b99086701ea3e3911ff431b5457eb957b2f69722f',
         g3_9_pack_hash:
-          'sha256:c9aa03bf85e2b358f8b4b01b7dcfecf25ce76d2339688e88fe969d1babe10107',
+          'sha256:cbb6b355819b1eefefa7af5289b10b367c42bbe32b09f003151bc7f9ebf475d7',
       },
     });
   });

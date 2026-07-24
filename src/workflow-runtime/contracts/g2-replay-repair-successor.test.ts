@@ -28,13 +28,13 @@ describe('G2 Production Compiler replay-repair successor', () => {
     expect(first.exactEqualCount).toBe(40);
     expect(first.pointerDifferenceCount).toBe(0);
     expect(first.rc.hash).toBe(
-      'sha256:b0a8d7599073b9f4ae222fac799a9923b14c0762aa70a88746adfc2953809996',
+      'sha256:6fe9c6804237ea00dfb73c50dcd9a5dd658956b54e67db554817067433c584f6',
     );
     expect(first.draft.payload.draft_manifest_hash).toBe(
-      'sha256:5f8eb14f6566379bc0047b72b991f76030f12c116f3cb09d1d0649ef9e18ae3e',
+      'sha256:965b1af2c4688c827a9d63f6b939a130271ab0e8b0fcf85a614cdd2620cb757e',
     );
     expect(first.review.payload.report_hash).toBe(
-      'sha256:304e029a42f720d3994ff1f6147678c5c9fba0d96c71c4e645d19ea4386ea967',
+      'sha256:96f6d0feee0e4a7d77349e0d8210875dc518a40ada167785c0859193a0246180',
     );
     expect(first.review.payload).toMatchObject({
       construction_phase: 'RC_REVIEW',
@@ -78,13 +78,13 @@ describe('G2 Production Compiler replay-repair successor', () => {
     const lineage = rc.predecessor_lineage as JsonObject;
     expect(lineage).toMatchObject({
       predecessor_review_candidate_root:
-        'sha256:3401cc0230f7a4b81fe859a25832816b8db60cae6d29c5676d141f2151a186e6',
+        'sha256:b0a8d7599073b9f4ae222fac799a9923b14c0762aa70a88746adfc2953809996',
       predecessor_draft_manifest_hash:
-        'sha256:b8ca7c91839b88b5591daf19f17a30e70b85e441d9dd4905807ef57bc37f7591',
+        'sha256:5f8eb14f6566379bc0047b72b991f76030f12c116f3cb09d1d0649ef9e18ae3e',
       predecessor_golden_semantic_review_hash:
-        'sha256:ceddcefcab8ff41a5e9b5d2ceb89dabcd3f9199639bb247d132a7c79c33dc15b',
+        'sha256:056151bf316cc526db1b77393524c79532cc6706c88efd3d29394d76a8d2f39b',
       predecessor_sealed_bundle_hash:
-        'sha256:b3ed9e43bd0fadaf40520257926dcf690ee8495bb417220245f248385bde9efb',
+        'sha256:b7d26b8622b1ceadff419430f443a9b0ceb377cbd47af20e9109ea878046abf9',
       approved_expected_semantics: 'changed_by_current_review',
     });
   }, 30_000);

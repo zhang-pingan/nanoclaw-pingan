@@ -6,15 +6,16 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-generated-schema-join-authority-contract:1\n",
-  "hash": "sha256:baec0daa2a5bd15db4f87b6784f92327a6320ce4cc37710a46f864596553e37d",
+  "hash": "sha256:b53f8a77e51adba5d1b8f41766336bae2a59a05e5ced1959996218d745d5ebd4",
   "payload": {
+    "decision_id": "R-019",
     "gate": "G2_SCHEMA_G3_GENERATED_SCHEMA_JOIN_AUTHORITY_REPAIR",
     "status": "GENERATED_SCHEMA_JOIN_AUTHORITY_REPAIR_EXIT_CANDIDATE_PENDING_INDEPENDENT_AFFECTED_CHAIN_REGRESSION",
     "normative_spec": {
       "path": "local/docs/dynamic-workflow-dag-framework.md",
-      "section_heading": "### R-018：Generated Schema 与 Join Expose Authority 决议",
-      "section_raw_sha256": "sha256:f0a73e95763e3c9f571e59bd8e44082c41a1f120640fb259a279bdf75e0600f8",
-      "section_semantic_hash": "sha256:065c68e4df4eeb997c87bd294be8c924f32313238d94f5f01cc469d8dc19744d"
+      "section_heading": "### R-019：Generated Schema 与 Join Expose Authority 决议",
+      "section_raw_sha256": "sha256:1f728c8e36be03ee6a4ff48da4640bef20cc63910c03579b446e60d1ce76861f",
+      "section_semantic_hash": "sha256:ca5d6e998c36ff9ead7f92f3d89e45a7f676ec27c2b1759f1c8968de4625fbef"
     },
     "generated_schema_authority": {
       "descriptor_fields": [
@@ -156,8 +157,8 @@
       },
       "schema6_pack": {
         "path": "src/workflow-runtime/store/schema/contract-pack-g1-executable-schema.json",
-        "artifact_hash": "sha256:ff588497b32eacc268c379d220fedbb3d29f69a0fdb9337c7a1e429ee7a868eb",
-        "raw_bytes_hash": "sha256:7ab3c03579ba74bbab58093b7ab4482c9a396d74c0f0ba71dd125aaed4105bfe"
+        "artifact_hash": "sha256:3cc206a6dfb1bbaed1bb0f4305323729db23d839652d8a0e020a9a6c4d3e3dd6",
+        "raw_bytes_hash": "sha256:483af9e1cff82f99ed9a42b44312936121ba689f103df29dc70a20c0653b5bae"
       },
       "predecessor_seal": {
         "path": "src/workflow-runtime/contracts/conformance/sealed/g2-capability-outbox-binding-v3/golden-conformance-bundle@2.json",
@@ -167,8 +168,17 @@
     },
     "schema6_delta_hash": "sha256:6705a3d4810f1fb040cd6753fcaccad40b704d76c628827472ee47add34d9804",
     "historical_schema5": {
+      "source_migration_path": "src/workflow-runtime/store/schema/migration/workflow-runtime-schema-v1.sql",
       "source_migration_sha256": "sha256:2ead40dc2f1618f87247e9d3bb476266797c38560e1ad0537a6afa6f71a3fbf6",
-      "sqlite_schema_identity": "sha256:5ee3c119cc6a0e0552e2a6fe45b51c8ffd08ec7acdbac66748978ed0d21fdb0a"
+      "sqlite_schema_identity": "sha256:5ee3c119cc6a0e0552e2a6fe45b51c8ffd08ec7acdbac66748978ed0d21fdb0a",
+      "user_version": 5
+    },
+    "fresh_schema6": {
+      "source_migration_path": "src/workflow-runtime/store/schema/migration/workflow-runtime-schema-v6.sql",
+      "source_migration_sha256": "sha256:16a46e84c77d734013e18b4b00b86564f6188ea73717763e9fb7a884d62faa41",
+      "dependency_manifest_role": "canonical_migration",
+      "store_bootstrap_source": "canonical_migration",
+      "user_version": 6
     },
     "schema5_to_schema6_upgrade_sha256": "sha256:dc94fa0867ca572b7ec39ffb8df448e38be00ca4831f1d420885ee7cc097687d",
     "predecessor_g2_v3_bundle_hash": "sha256:b3ed9e43bd0fadaf40520257926dcf690ee8495bb417220245f248385bde9efb"

@@ -96,7 +96,7 @@ const domains = {
 } as const;
 
 const CURRENT_G3_9_PACK_HASH =
-  'sha256:c9aa03bf85e2b358f8b4b01b7dcfecf25ce76d2339688e88fe969d1babe10107';
+  'sha256:cbb6b355819b1eefefa7af5289b10b367c42bbe32b09f003151bc7f9ebf475d7';
 
 const hashSchema: JsonObject = {
   type: 'string',

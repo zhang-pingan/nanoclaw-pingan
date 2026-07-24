@@ -235,6 +235,7 @@ describe('G0.7 Static Absence and Surface Gates', () => {
         '.gitkeep',
         'g2-capability-outbox-binding-v3',
         'g2-generated-schema-join-authority-v4',
+        'g2-generated-schema-join-authority-v5',
         'g2-production-compiler-replay-repair-v2',
         'g2-semantic-correction',
       ]);

@@ -17,7 +17,11 @@ import type {
   ContractArtifactEnvelope,
   JsonObject,
 } from '../../contracts/types.js';
-import { buildG1Artifacts, checkG1Artifacts } from './artifacts.js';
+import {
+  buildG1Artifacts,
+  checkG1Artifacts,
+  G1_ARTIFACT_PATHS,
+} from './artifacts.js';
 import {
   assertClosedSchemaDependencyManifest,
   buildSchemaDependencyManifestArtifact,
@@ -66,6 +70,10 @@ function q(identifier: string): string {
 
 function hash(label: string): `sha256:${string}` {
   return `sha256:${crypto.createHash('sha256').update(label).digest('hex')}`;
+}
+
+function rawHash(bytes: string | Buffer): `sha256:${string}` {
+  return `sha256:${crypto.createHash('sha256').update(bytes).digest('hex')}`;
 }
 
 function table(name: string): LogicalTableMetadata {
@@ -151,6 +159,50 @@ function withDatabase(
 }
 
 describe('G1.1 executable workflow runtime schema', () => {
+  it('keeps Schema 5 frozen at v1 and selects an additive fresh Schema 6 migration', () => {
+    const schema5Path = path.join(
+      import.meta.dirname,
+      'migration/workflow-runtime-schema-v1.sql',
+    );
+    const schema6Path = path.join(
+      import.meta.dirname,
+      'migration/workflow-runtime-schema-v6.sql',
+    );
+    const schema5Bytes = fs.readFileSync(schema5Path, 'utf8');
+    const schema6Bytes = fs.readFileSync(schema6Path, 'utf8');
+    expect(G1_ARTIFACT_PATHS.migration).toBe(
+      'migration/workflow-runtime-schema-v6.sql',
+    );
+    expect(schema5Bytes).toBe(schema5Migration.sql);
+    expect(rawHash(schema5Bytes)).toBe(
+      'sha256:2ead40dc2f1618f87247e9d3bb476266797c38560e1ad0537a6afa6f71a3fbf6',
+    );
+    expect(schema6Bytes).toBe(migration.sql);
+    expect(rawHash(schema6Bytes)).toBe(
+      'sha256:16a46e84c77d734013e18b4b00b86564f6188ea73717763e9fb7a884d62faa41',
+    );
+
+    const root = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'icarus-schema5-schema6-paths-'),
+    );
+    const schema5Database = createMigratedDatabase(
+      path.join(root, 'schema5.db'),
+      schema5Bytes,
+    );
+    const schema6Database = createMigratedDatabase(
+      path.join(root, 'schema6.db'),
+      schema6Bytes,
+    );
+    try {
+      expect(schema5Database.pragma('user_version', { simple: true })).toBe(5);
+      expect(schema6Database.pragma('user_version', { simple: true })).toBe(6);
+    } finally {
+      schema5Database.close();
+      schema6Database.close();
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it('regenerates byte-identical artifacts and a byte-identical introspected manifest', () => {
     const built = checkG1Artifacts();
     expect(built.schemaHash).toMatch(/^sha256:[0-9a-f]{64}$/);
@@ -224,6 +276,16 @@ describe('G1.1 executable workflow runtime schema', () => {
       expect.arrayContaining([
         expect.objectContaining({
           role: 'canonical_migration',
+          path: [
+            'store',
+            'schema',
+            'migration',
+            'workflow-runtime-schema-v6.sql',
+          ].join('/'),
+          ref: {
+            id: 'icarus.workflow-runtime-schema-v6-migration',
+            version: '1',
+          },
           semantic_hash:
             'sha256:16a46e84c77d734013e18b4b00b86564f6188ea73717763e9fb7a884d62faa41',
           raw_sha256:

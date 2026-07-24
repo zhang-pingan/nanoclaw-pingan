@@ -338,7 +338,7 @@ describe.sequential('G1.2 Workflow Runtime Store base', () => {
     );
   });
 
-  it('pins G1.1/Profile identities and fails closed on frozen migration drift', () => {
+  it('pins G1.1/Profile identities and fails closed on current Schema 6 migration drift', () => {
     const inputs = loadFrozenWorkflowRuntimeStoreInputs();
     expect(inputs).toMatchObject({
       g1RootHash: CURRENT_G1_SCHEMA_IDENTITIES.root,
@@ -356,12 +356,27 @@ describe.sequential('G1.2 Workflow Runtime Store base', () => {
       recursive: true,
     });
     fs.appendFileSync(
-      path.join(copiedSchema, 'migration/workflow-runtime-schema-v1.sql'),
+      path.join(copiedSchema, 'migration/workflow-runtime-schema-v6.sql'),
       '\n-- drift\n',
     );
     expect(() =>
       loadFrozenWorkflowRuntimeStoreInputs({ schemaRoot: copiedSchema }),
     ).toThrow(/canonical_migration raw hash mismatch|migration drifted/);
+  });
+
+  it('fails closed when the frozen Schema 5 source migration path or bytes drift', () => {
+    const { root } = temporaryDatabase();
+    const copiedSchema = path.join(root, 'schema');
+    fs.cpSync(path.resolve(import.meta.dirname, '../schema'), copiedSchema, {
+      recursive: true,
+    });
+    fs.appendFileSync(
+      path.join(copiedSchema, 'migration/workflow-runtime-schema-v1.sql'),
+      '\n-- forbidden historical drift\n',
+    );
+    expect(() =>
+      loadFrozenWorkflowRuntimeStoreInputs({ schemaRoot: copiedSchema }),
+    ).toThrow('Historical Schema 5 source migration drifted');
   });
 
   it('fails closed on frozen Schema 3 to 4 upgrade SQL drift before opening the database', () => {

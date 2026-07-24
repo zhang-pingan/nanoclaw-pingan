@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-runtime-gate-ownership:1\n",
-  "hash": "sha256:324419360fec246e30de88462e0c6d285680ff8e83caa3bf3318e53344dd3060",
+  "hash": "sha256:712a7440e83f087e4bbb1e465a1a677a16708429f46766029baa0f90734e5017",
   "payload": {
     "governance_scope": "current_construction_g5_g7_t6d_t7c_boundary",
     "status": "T6D_OWNERSHIP_EXIT_CANDIDATE_PENDING_INDEPENDENT_REGRESSION",
@@ -122,10 +122,10 @@
       "workflow_run_transaction_protocol_table_hash": "sha256:3d5474096d89fbd723e34e0d2f9d1dadd1b955b5fc36ff447d026257852cac79",
       "workflow_runtime_command_protocol_table_hash": "sha256:43cc8ef247fcba4bac5e9fccdd654fd393928120755a6405bad232043f0c94ba",
       "workflow_runtime_logical_schema_source_hash": "sha256:ef5221d3465f1214c3c0aad3660f57b119d03eb4b5127428d6a1f881a6260214",
-      "g1_executable_schema_root_hash": "sha256:ff588497b32eacc268c379d220fedbb3d29f69a0fdb9337c7a1e429ee7a868eb",
+      "g1_executable_schema_root_hash": "sha256:3cc206a6dfb1bbaed1bb0f4305323729db23d839652d8a0e020a9a6c4d3e3dd6",
       "database_schema_version": 6,
-      "workflow_runtime_schema_manifest_hash": "sha256:478033a87bfb1cf1e98cd56fc6c18aaebe8d970835cc46e00223de07c5ece184",
-      "workflow_runtime_schema_hash": "sha256:d35c2d6fe2aaaf87ad102561d1595d016f8ef2f04950e5e3ad30b91aa366d909"
+      "workflow_runtime_schema_manifest_hash": "sha256:30b88b9df7dc7f8318ce8fcb5c38ca94c585d8585deff83235b8a8b8f582e0e2",
+      "workflow_runtime_schema_hash": "sha256:37f0102a9d6b0077f0d44f20182a7d5768ce32b1c0c2c3998937178b06c9b474"
     },
     "affected_current_root_inventory": {
       "members": [
@@ -168,20 +168,20 @@
         {
           "path": "contract-pack-g3-retention-executor-abi-preflight.json",
           "format": "icarus.workflow-contract-pack-g3-retention-executor-abi-preflight/1",
-          "semantic_hash": "sha256:da15a3b9e7f3215f879d43b8f321c07f432f7d928d42314f22f6028b61f16aa9",
-          "raw_sha256": "sha256:e174a1de406402e78a46e4effbeff88eb3adf70694b2e09d6a917dd5fcf7fa62"
+          "semantic_hash": "sha256:7f807ae53e13bcec7712f77c1ebaba7aab5f72d2779ed5d99d33b0e6c54e98d3",
+          "raw_sha256": "sha256:29c1f8b384a5a4f21e60a94192bd222b62888b3e7dd0bcc7b1cc6671218c6e04"
         },
         {
           "path": "contract-pack-g3-workflow-publisher.json",
           "format": "icarus.workflow-contract-pack-g3-workflow-publisher/1",
-          "semantic_hash": "sha256:1614e89ecac4713c6d991a6ae68e548f01268e25ba8b700a107e4cdcb1b64647",
-          "raw_sha256": "sha256:e09fc72cfcee8885af122ac6d596f6c433b32e0f9d2039ed8ca34fde73779700"
+          "semantic_hash": "sha256:5d023a5323aec482781b0e992197571db9a09481a394eaf955d4598c249e4ec1",
+          "raw_sha256": "sha256:66df4ac566f1df34186b71726cfeff45bcabbf52eda8f9925d49d2350428712f"
         },
         {
           "path": "contract-pack-g3.9-feature-release-activation.json",
           "format": "icarus.workflow-contract-pack-g3-feature-release-activation/1",
-          "semantic_hash": "sha256:c9aa03bf85e2b358f8b4b01b7dcfecf25ce76d2339688e88fe969d1babe10107",
-          "raw_sha256": "sha256:be607ce70273d38f4416004821b86c906c9393cd89f0c10ab3802531e0327067"
+          "semantic_hash": "sha256:cbb6b355819b1eefefa7af5289b10b367c42bbe32b09f003151bc7f9ebf475d7",
+          "raw_sha256": "sha256:3508aa7419a01b98941ea4d50971cc398c58c9efbaa3052e9da81e262d80b588"
         },
         {
           "path": "contract-pack-g3.8a-activation-contract-repair.json",
@@ -197,7 +197,7 @@
         }
       ],
       "member_count": 11,
-      "tree_digest": "sha256:37e4aa76fd39f583de01d391798e7b7c7cc6f345c50dfbf7ba49062d054df319"
+      "tree_digest": "sha256:3d68cf3c084bee62077d5561545919a9abfc9d0ba6f3d649bb4b8ffd52cd827a"
     },
     "frozen_invariants": {
       "t6d_name": "attempt_watchdog_and_retry_timers",

@@ -30,6 +30,14 @@ import {
 import { workflowCompilerIdentity } from './identity.js';
 
 const contractsRoot = path.resolve(import.meta.dirname, '../contracts');
+const GENERATED_SCHEMA_JOIN_AUTHORITY_V4_BUNDLE_REF =
+  'conformance/sealed/g2-generated-schema-join-authority-v4/golden-conformance-bundle@2.json';
+const GENERATED_SCHEMA_JOIN_AUTHORITY_V4_CANDIDATE_ROOT_REF =
+  'conformance/review-candidate/g2-generated-schema-join-authority-v4/working-candidate-root@2.json';
+const GENERATED_SCHEMA_JOIN_AUTHORITY_V4_BUNDLE_ARTIFACT_HASH =
+  'sha256:591e2fdd083b2b3c4aea2e85edf9e052bad2e1c89908853d2eb6d912befaea76';
+const GENERATED_SCHEMA_JOIN_AUTHORITY_V4_BUNDLE_HASH =
+  'sha256:b7d26b8622b1ceadff419430f443a9b0ceb377cbd47af20e9109ea878046abf9';
 
 export class CurrentG2GoldenReplayError extends Error {
   readonly code = 'current_g2_golden_replay_mismatch';
@@ -182,6 +190,65 @@ export function evaluateCurrentG2GoldenReplay(): CurrentG2GoldenReplayResult {
   return evaluateReplay(
     G2_REPLAY_REPAIR_SEALED_BUNDLE_REF,
     checkedBundle,
+    actualResults,
+    candidateRoot.hash,
+  );
+}
+
+export function evaluateHistoricalGeneratedSchemaJoinAuthorityV4Replay(): CurrentG2GoldenReplayResult {
+  const bundle = parseContractArtifactEnvelope(
+    strictParseJsonBytes(
+      fs.readFileSync(absolute(GENERATED_SCHEMA_JOIN_AUTHORITY_V4_BUNDLE_REF)),
+    ),
+  );
+  if (
+    bundle.hash !== GENERATED_SCHEMA_JOIN_AUTHORITY_V4_BUNDLE_ARTIFACT_HASH ||
+    bundle.payload.bundle_hash !==
+      GENERATED_SCHEMA_JOIN_AUTHORITY_V4_BUNDLE_HASH
+  ) {
+    throw new Error('Historical G2 v4 sealed bundle identity drift');
+  }
+  const identity = workflowCompilerIdentity();
+  if (
+    canonicalJson(bundle.payload.exact_compiler_identity) !==
+    canonicalJson(identity as unknown as JsonObject)
+  ) {
+    throw new Error(
+      'Current Production Compiler identity does not match G2 v4',
+    );
+  }
+  const actualResults = objects(bundle.payload.cases, 'G2 v4 sealed cases').map(
+    (sealedCase) => {
+      const sourceBytes = fs.readFileSync(
+        absolute(String(sealedCase.raw_source_bytes_ref)),
+      );
+      const snapshot = parseContractArtifactEnvelope(
+        strictParseJsonBytes(
+          fs.readFileSync(absolute(String(sealedCase.registry_snapshot_ref))),
+        ),
+      );
+      return compileG2ReplayRepairCase(
+        String(sealedCase.case_id),
+        String(sealedCase.source_kind) as
+          | 'graph_scope'
+          | 'workflow_definition'
+          | 'workflow_schema',
+        sourceBytes,
+        snapshot,
+        identity,
+      ) as unknown as JsonObject;
+    },
+  );
+  const candidateRoot = parseContractArtifactEnvelope(
+    strictParseJsonBytes(
+      fs.readFileSync(
+        absolute(GENERATED_SCHEMA_JOIN_AUTHORITY_V4_CANDIDATE_ROOT_REF),
+      ),
+    ),
+  );
+  return evaluateReplay(
+    GENERATED_SCHEMA_JOIN_AUTHORITY_V4_BUNDLE_REF,
+    bundle,
     actualResults,
     candidateRoot.hash,
   );

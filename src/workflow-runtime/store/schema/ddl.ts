@@ -13,7 +13,7 @@ import type {
 } from './types.js';
 
 export const MIGRATION_RELATIVE_PATH =
-  'migration/workflow-runtime-schema-v1.sql';
+  'migration/workflow-runtime-schema-v6.sql';
 
 function q(identifier: string): string {
   return `"${identifier.replaceAll('"', '""')}"`;

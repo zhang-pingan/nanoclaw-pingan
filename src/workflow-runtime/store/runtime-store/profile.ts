@@ -61,13 +61,13 @@ export const FROZEN_G1_1_IDENTITIES = {
 } as const;
 
 export const CURRENT_G1_SCHEMA_IDENTITIES = {
-  root: 'sha256:ff588497b32eacc268c379d220fedbb3d29f69a0fdb9337c7a1e429ee7a868eb',
+  root: 'sha256:3cc206a6dfb1bbaed1bb0f4305323729db23d839652d8a0e020a9a6c4d3e3dd6',
   dependencyManifest:
-    'sha256:3c91eb2f469a2bd41c51fc86bb531ff642ff862d5543924cb7ff4ac73681dcf7',
+    'sha256:0e4e38f3e31e53bcc9687f1928c44c4c57dc1c443fff774a3107ba057193120e',
   physicalSchema:
-    'sha256:a9f75a7de17a7f82923868eebd1802fea8d56ebab19bb18f0f66404f1e171d76',
+    'sha256:e4f4f9095a586e6c5231c21d0b829e867e240f81d8a728f8a73d146015f1aba5',
   schema:
-    'sha256:d35c2d6fe2aaaf87ad102561d1595d016f8ef2f04950e5e3ad30b91aa366d909',
+    'sha256:37f0102a9d6b0077f0d44f20182a7d5768ce32b1c0c2c3998937178b06c9b474',
   migration:
     'sha256:16a46e84c77d734013e18b4b00b86564f6188ea73717763e9fb7a884d62faa41',
   schema3To4Upgrade: FROZEN_G1_1_IDENTITIES.schema3To4Upgrade,
@@ -83,11 +83,11 @@ export const CURRENT_G1_SCHEMA_IDENTITIES = {
   sqliteSchema:
     'sha256:a4936a9a71670cb30b1c974ee3cf9cd21375fb743e8c2278d8db08c685854486',
   deterministic:
-    'sha256:aab615eac7ec0a099bf84203c63e3d05a1d188ff9a89e4a4fc45554a0e41bab3',
+    'sha256:9c6a5a364ef90f8c20ed7631d63ca27ba96e6606f4ce50af81d61110afcf13e9',
   manifest:
-    'sha256:478033a87bfb1cf1e98cd56fc6c18aaebe8d970835cc46e00223de07c5ece184',
+    'sha256:30b88b9df7dc7f8318ce8fcb5c38ca94c585d8585deff83235b8a8b8f582e0e2',
   executableDdl:
-    'sha256:8445f3cb1b8b5af23a3859b47ce649f6c063e4f815d4f188682537de63834845',
+    'sha256:fa84a345f747d7b871ee64deea356b1577d192bc1c2a62cead5d317cea04d7b2',
   profile: FROZEN_G1_1_IDENTITIES.profile,
 } as const;
 
@@ -483,8 +483,17 @@ export function loadFrozenWorkflowRuntimeStoreInputs(
     throw new Error('G1.1 Schema Manifest SQLite identity drifted');
   }
 
-  const migrationBytes = fs.readFileSync(
+  const schema5MigrationBytes = fs.readFileSync(
     path.join(schemaRoot, 'migration/workflow-runtime-schema-v1.sql'),
+  );
+  const observedSchema5MigrationSha256 = rawSha256(schema5MigrationBytes);
+  if (observedSchema5MigrationSha256 !== schema5SourceMigrationSha256) {
+    throw new Error(
+      `Historical Schema 5 source migration drifted: expected ${schema5SourceMigrationSha256}, received ${observedSchema5MigrationSha256}`,
+    );
+  }
+  const migrationBytes = fs.readFileSync(
+    path.join(schemaRoot, 'migration/workflow-runtime-schema-v6.sql'),
   );
   const migrationSha256 = rawSha256(migrationBytes);
   if (migrationSha256 !== CURRENT_G1_SCHEMA_IDENTITIES.migration) {

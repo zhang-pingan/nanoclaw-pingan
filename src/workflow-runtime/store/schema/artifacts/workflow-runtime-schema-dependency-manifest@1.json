@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-runtime-schema-dependency-manifest:1\n",
-  "hash": "sha256:3c91eb2f469a2bd41c51fc86bb531ff642ff862d5543924cb7ff4ac73681dcf7",
+  "hash": "sha256:0e4e38f3e31e53bcc9687f1928c44c4c57dc1c443fff774a3107ba057193120e",
   "payload": {
     "dependency_set_id": "workflow-runtime-schema-v1",
     "identity_scope": "physical_schema_and_migration",
@@ -154,16 +154,16 @@
           "version": "1"
         },
         "version": 1,
-        "semantic_hash": "sha256:478033a87bfb1cf1e98cd56fc6c18aaebe8d970835cc46e00223de07c5ece184",
-        "raw_sha256": "sha256:33c09e0e9832d625765b0ef4eb2772e27fbc1a6272779300a24b0559cb66e5f0"
+        "semantic_hash": "sha256:30b88b9df7dc7f8318ce8fcb5c38ca94c585d8585deff83235b8a8b8f582e0e2",
+        "raw_sha256": "sha256:ca9af2f6823e902059ce46c5477be9a5f3adb24bf1adb3e4b7f6a657622a7c73"
       },
       {
         "role": "canonical_migration",
         "identity_effect": "physical_schema_output",
-        "path": "store/schema/migration/workflow-runtime-schema-v1.sql",
+        "path": "store/schema/migration/workflow-runtime-schema-v6.sql",
         "format": "icarus.workflow-runtime-sqlite-migration/1",
         "ref": {
-          "id": "icarus.workflow-runtime-schema-v1-migration",
+          "id": "icarus.workflow-runtime-schema-v6-migration",
           "version": "1"
         },
         "version": 1,
@@ -210,6 +210,6 @@
         "raw_sha256": "sha256:dc94fa0867ca572b7ec39ffb8df448e38be00ca4831f1d420885ee7cc097687d"
       }
     ],
-    "physical_schema_identity": "sha256:a9f75a7de17a7f82923868eebd1802fea8d56ebab19bb18f0f66404f1e171d76"
+    "physical_schema_identity": "sha256:e4f4f9095a586e6c5231c21d0b829e867e240f81d8a728f8a73d146015f1aba5"
   }
 }

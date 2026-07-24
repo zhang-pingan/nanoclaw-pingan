@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   evaluateCurrentG2GoldenReplay,
+  evaluateHistoricalGeneratedSchemaJoinAuthorityV4Replay,
   evaluatePredecessorG2GoldenReplay,
 } from '../compiler/current-g2-golden-replay.js';
 import { checkCurrentG2GoldenSeal } from './current-g2-golden-seal.js';
@@ -140,9 +141,18 @@ describe('G2 replay-repair successor immutable review and seal', () => {
       mismatch_count: 0,
       passed: true,
     });
+    expect(
+      evaluateHistoricalGeneratedSchemaJoinAuthorityV4Replay(),
+    ).toMatchObject({
+      expected_bundle_hash:
+        'sha256:b7d26b8622b1ceadff419430f443a9b0ceb377cbd47af20e9109ea878046abf9',
+      exact_equal_count: 40,
+      mismatch_count: 0,
+      passed: true,
+    });
   }, 30_000);
 
-  it('allows only the four exact G2 sealed lineages and keeps seal code isolated', () => {
+  it('allows only the five exact G2 sealed lineages and keeps seal code isolated', () => {
     expect(
       assertCurrentG2SealedBoundary(
         path.join(contractsRoot, 'conformance/sealed'),

@@ -201,7 +201,7 @@ describe('G5 Basic Runtime readiness audit', () => {
       '../store/schema/artifacts/workflow-runtime-schema-manifest@1.json',
     );
     expect(manifest.hash).toBe(
-      'sha256:478033a87bfb1cf1e98cd56fc6c18aaebe8d970835cc46e00223de07c5ece184',
+      'sha256:30b88b9df7dc7f8318ce8fcb5c38ca94c585d8585deff83235b8a8b8f582e0e2',
     );
     expect(manifest.payload.database_schema_version).toBe(6);
     const schemaTables = objects(manifest.payload.tables);

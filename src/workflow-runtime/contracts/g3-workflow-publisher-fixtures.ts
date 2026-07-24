@@ -158,7 +158,7 @@ function planPin(
 ): NonNullable<G3RegistryResourceCandidate['compiled_plan_pin']> {
   return {
     plan_ref:
-      'conformance/sealed/g2-generated-schema-join-authority-v4/expected/positive.static-lowering.plan.json',
+      'conformance/sealed/g2-generated-schema-join-authority-v5/expected/positive.static-lowering.plan.json',
     plan_hash: plan.plan_hash as Sha256Hash,
     plan_format: 'icarus.workflow-graph-scope-plan/2',
     compiler_toolchain_hash:
@@ -337,7 +337,7 @@ function updateCompatibilityInput(
 export function g37WorkflowPublisherStoreFixtureForTest(): G37WorkflowPublisherStoreFixture {
   const base = g3RetentionExecutorAbiStoreFixtureForTest();
   const plan = readJson(
-    'conformance/sealed/g2-generated-schema-join-authority-v4/expected/positive.static-lowering.plan.json',
+    'conformance/sealed/g2-generated-schema-join-authority-v5/expected/positive.static-lowering.plan.json',
   );
   const original = structuredClone(base.batch.resources);
   const genericSchema = original.find(

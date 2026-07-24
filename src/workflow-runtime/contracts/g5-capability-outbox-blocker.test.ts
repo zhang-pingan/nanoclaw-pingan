@@ -76,7 +76,7 @@ function schema6Database(): Database.Database {
   database.pragma('foreign_keys = ON');
   database.exec(
     read(
-      'src/workflow-runtime/store/schema/migration/workflow-runtime-schema-v1.sql',
+      'src/workflow-runtime/store/schema/migration/workflow-runtime-schema-v6.sql',
     ).toString('utf8'),
   );
   database.exec('BEGIN');

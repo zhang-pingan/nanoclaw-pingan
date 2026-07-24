@@ -1,0 +1,711 @@
+{
+  "format": "icarus.workflow-current-g2-golden-draft-cases-schema/1",
+  "ref": {
+    "id": "icarus.workflow-current-g2-golden-draft-cases-schema",
+    "version": "2.0.0-draft"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-current-g2-golden-draft-cases-schema:1\n",
+  "hash": "sha256:2f9ed009b190ff23667879039b60708e84da93c86b74c547fca9300085dd5469",
+  "payload": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://icarus.local/schemas/current-g2-golden-draft-cases-v1",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "format",
+      "construction_phase",
+      "draft_status",
+      "publishable",
+      "production_reachable",
+      "review_candidate_ref",
+      "review_candidate_hash",
+      "source_set_hash",
+      "bound_working_roots",
+      "case_count",
+      "compiled_count",
+      "rejected_count",
+      "expected_result_coverage",
+      "human_judgment_coverage",
+      "cases",
+      "cases_hash"
+    ],
+    "properties": {
+      "format": {
+        "const": "icarus.workflow-compiler-current-g2-golden-draft-cases/1"
+      },
+      "construction_phase": {
+        "const": "RC_REVIEW"
+      },
+      "draft_status": {
+        "const": "frozen_pending_human_approval"
+      },
+      "publishable": {
+        "const": false
+      },
+      "production_reachable": {
+        "const": false
+      },
+      "review_candidate_ref": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9.@_/-]*$"
+      },
+      "review_candidate_hash": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      },
+      "source_set_hash": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      },
+      "bound_working_roots": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "contract",
+          "input",
+          "candidate",
+          "working_review"
+        ],
+        "properties": {
+          "contract": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "path",
+              "semantic_hash",
+              "raw_bytes_hash"
+            ],
+            "properties": {
+              "path": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9.@_/-]*$"
+              },
+              "semantic_hash": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              },
+              "raw_bytes_hash": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              }
+            }
+          },
+          "input": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "path",
+              "semantic_hash",
+              "raw_bytes_hash"
+            ],
+            "properties": {
+              "path": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9.@_/-]*$"
+              },
+              "semantic_hash": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              },
+              "raw_bytes_hash": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              }
+            }
+          },
+          "candidate": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "path",
+              "semantic_hash",
+              "raw_bytes_hash"
+            ],
+            "properties": {
+              "path": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9.@_/-]*$"
+              },
+              "semantic_hash": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              },
+              "raw_bytes_hash": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              }
+            }
+          },
+          "working_review": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "path",
+              "semantic_hash",
+              "raw_bytes_hash"
+            ],
+            "properties": {
+              "path": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9.@_/-]*$"
+              },
+              "semantic_hash": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              },
+              "raw_bytes_hash": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              }
+            }
+          }
+        }
+      },
+      "case_count": {
+        "const": 40
+      },
+      "compiled_count": {
+        "const": 11
+      },
+      "rejected_count": {
+        "const": 29
+      },
+      "expected_result_coverage": {
+        "const": 40
+      },
+      "human_judgment_coverage": {
+        "const": 0
+      },
+      "cases": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "case_id",
+            "polarity",
+            "source_kind",
+            "coverage_tags",
+            "source_binding",
+            "outcome",
+            "expected_result",
+            "expected_plan",
+            "expected_proofs",
+            "expected_programs",
+            "expected_plan_hash",
+            "expected_proof_hashes",
+            "expected_program_hashes",
+            "expected_diagnostics",
+            "semantic_assertions",
+            "authored_from",
+            "human_judgment"
+          ],
+          "properties": {
+            "case_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "polarity": {
+              "enum": [
+                "positive",
+                "negative"
+              ]
+            },
+            "source_kind": {
+              "enum": [
+                "graph_scope",
+                "workflow_definition",
+                "workflow_schema"
+              ]
+            },
+            "coverage_tags": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "minItems": 1,
+              "uniqueItems": true
+            },
+            "source_binding": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "raw_source_bytes_ref",
+                "raw_source_bytes_hash",
+                "raw_source_file_hash",
+                "input_snapshot_ref",
+                "input_snapshot_hash",
+                "input_snapshot_file_hash",
+                "effective_case_input_hash"
+              ],
+              "properties": {
+                "raw_source_bytes_ref": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9.@_/-]*$"
+                },
+                "raw_source_bytes_hash": {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                },
+                "raw_source_file_hash": {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                },
+                "input_snapshot_ref": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9.@_/-]*$"
+                },
+                "input_snapshot_hash": {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                },
+                "input_snapshot_file_hash": {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                },
+                "effective_case_input_hash": {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                }
+              }
+            },
+            "outcome": {
+              "enum": [
+                "compiled",
+                "rejected"
+              ]
+            },
+            "expected_result": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "path",
+                "media_type",
+                "canonicalization",
+                "raw_bytes_hash",
+                "semantic_hash",
+                "domain_separator"
+              ],
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9.@_/-]*$"
+                },
+                "media_type": {
+                  "const": "application/json"
+                },
+                "canonicalization": {
+                  "const": "rfc8785_jcs"
+                },
+                "raw_bytes_hash": {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                },
+                "semantic_hash": {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                },
+                "domain_separator": {
+                  "type": "string",
+                  "pattern": "^icarus:[ -~]+\\n$"
+                }
+              }
+            },
+            "expected_plan": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "path",
+                "media_type",
+                "canonicalization",
+                "raw_bytes_hash",
+                "semantic_hash",
+                "domain_separator"
+              ],
+              "properties": {
+                "path": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9][A-Za-z0-9.@_/-]*$"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "media_type": {
+                  "enum": [
+                    "application/json",
+                    null
+                  ]
+                },
+                "canonicalization": {
+                  "enum": [
+                    "rfc8785_jcs",
+                    null
+                  ]
+                },
+                "raw_bytes_hash": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "pattern": "^sha256:[0-9a-f]{64}$"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "semantic_hash": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "pattern": "^sha256:[0-9a-f]{64}$"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "domain_separator": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "pattern": "^icarus:[ -~]+\\n$"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            },
+            "expected_proofs": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "path",
+                "media_type",
+                "canonicalization",
+                "raw_bytes_hash",
+                "semantic_hash",
+                "domain_separator"
+              ],
+              "properties": {
+                "path": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9][A-Za-z0-9.@_/-]*$"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "media_type": {
+                  "enum": [
+                    "application/json",
+                    null
+                  ]
+                },
+                "canonicalization": {
+                  "enum": [
+                    "rfc8785_jcs",
+                    null
+                  ]
+                },
+                "raw_bytes_hash": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "pattern": "^sha256:[0-9a-f]{64}$"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "semantic_hash": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "pattern": "^sha256:[0-9a-f]{64}$"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "domain_separator": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "pattern": "^icarus:[ -~]+\\n$"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            },
+            "expected_programs": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "path",
+                "media_type",
+                "canonicalization",
+                "raw_bytes_hash",
+                "semantic_hash",
+                "domain_separator"
+              ],
+              "properties": {
+                "path": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9][A-Za-z0-9.@_/-]*$"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "media_type": {
+                  "enum": [
+                    "application/json",
+                    null
+                  ]
+                },
+                "canonicalization": {
+                  "enum": [
+                    "rfc8785_jcs",
+                    null
+                  ]
+                },
+                "raw_bytes_hash": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "pattern": "^sha256:[0-9a-f]{64}$"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "semantic_hash": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "pattern": "^sha256:[0-9a-f]{64}$"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "domain_separator": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "pattern": "^icarus:[ -~]+\\n$"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            },
+            "expected_plan_hash": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "expected_proof_hashes": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              },
+              "uniqueItems": true
+            },
+            "expected_program_hashes": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              },
+              "uniqueItems": true
+            },
+            "expected_diagnostics": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "code",
+                  "phase",
+                  "instance_pointer",
+                  "schema_pointer",
+                  "stable_object_id",
+                  "detail_ref"
+                ],
+                "properties": {
+                  "code": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "phase": {
+                    "type": "string",
+                    "enum": [
+                      "parse",
+                      "schema",
+                      "bind",
+                      "prove",
+                      "normalize",
+                      "hash"
+                    ]
+                  },
+                  "instance_pointer": {
+                    "type": "string",
+                    "pattern": "^(?:/(?:[^~/]|~[01])*)*$"
+                  },
+                  "schema_pointer": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "stable_object_id": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "detail_ref": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                }
+              }
+            },
+            "semantic_assertions": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "assertion_id",
+                  "subject_pointer",
+                  "operator",
+                  "expected",
+                  "rationale"
+                ],
+                "properties": {
+                  "assertion_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "subject_pointer": {
+                    "type": "string",
+                    "pattern": "^(?:/(?:[^~/]|~[01])*)*$"
+                  },
+                  "operator": {
+                    "type": "string",
+                    "enum": [
+                      "equals",
+                      "set_equals",
+                      "ordered_equals",
+                      "contains",
+                      "present",
+                      "absent"
+                    ]
+                  },
+                  "expected": {
+                    "$ref": "#/$defs/json_value"
+                  },
+                  "rationale": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              }
+            },
+            "authored_from": {
+              "const": "current_spec_machine_contract_source_snapshot"
+            },
+            "human_judgment": {
+              "type": "null"
+            }
+          }
+        },
+        "minItems": 40,
+        "maxItems": 40
+      },
+      "cases_hash": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      }
+    },
+    "$defs": {
+      "json_value": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "string"
+          },
+          {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/json_value"
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/$defs/json_value"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

@@ -1031,7 +1031,7 @@ const testOnlyDefinition = withResourceHash({
   dependencies: [],
   compiled_plan_pin: {
     plan_ref:
-      'conformance/sealed/g2-generated-schema-join-authority-v4/expected/positive.static-lowering.plan.json',
+      'conformance/sealed/g2-generated-schema-join-authority-v5/expected/positive.static-lowering.plan.json',
     plan_hash:
       'sha256:266fd7bb686a454e8615c6147e963661a340e30e279e92e0d02f135f9e459bac',
     plan_format: 'icarus.workflow-graph-scope-plan/2',

@@ -938,11 +938,11 @@ export function g37SchemasForTest(): {
 export const G37_UPSTREAM_IDENTITIES = {
   g1_schema_root_hash: G3_CURRENT_UPSTREAM_IDENTITY.g1_schema_root_hash,
   g3_1_pack_hash:
-    'sha256:7a4d405b52cc4bdad32d252ea935a2e21c72981e82b7e5d2ac0234b7f108fdb7',
+    'sha256:c9364171a3d28a752d4510f59e5e45016cd86be14d7e151b483fc0c6c7a2807d',
   g3_3_pack_hash:
-    'sha256:ff5d40589df9bc78e2e7f4f0e2fdcd5f0a7b7f34e0d0592e5308c1230425f1b3',
+    'sha256:590acdd52626838bf30ae14bb04b6f0ee59a95e1efadc4911ff850acc2970763',
   g3_5_pack_hash:
-    'sha256:04506acde71f4c03e081f310265df521515327caee37cc820c56fa2162ad4ffb',
+    'sha256:b6a4ec1dac738c6036869c763708f8aa144d0a864c8c392ee18cb3aba8c83417',
   g3_6_pack_hash:
-    'sha256:4dd52b4f38da315ba0194fd23a9c681ffdba6aac37291100dd6d6b944178acd9',
+    'sha256:7f807ae53e13bcec7712f77c1ebaba7aab5f72d2779ed5d99d33b0e6c54e98d3',
 } as const;

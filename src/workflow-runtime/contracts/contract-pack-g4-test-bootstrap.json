@@ -13,7 +13,7 @@
       "id": "icarus.workflow-test-bootstrap-profile",
       "version": "1.0.0"
     },
-    "profile_hash": "sha256:4d0eb3c35740503b629ad2ad46aea5fc3c0b4c70292b0b9cbcea143e69edddef",
+    "profile_hash": "sha256:87956027bca69d9fcdb1891298dc2a083a9e413c4530d7aff71473b74a58c106",
     "fixture_set_ref": {
       "id": "icarus.workflow-test-bootstrap-fixture-set",
       "version": "1.0.0"
@@ -45,7 +45,7 @@
       "compensated"
     ],
     "database_schema_version": 6,
-    "database_schema_hash": "sha256:d35c2d6fe2aaaf87ad102561d1595d016f8ef2f04950e5e3ad30b91aa366d909",
+    "database_schema_hash": "sha256:37f0102a9d6b0077f0d44f20182a7d5768ce32b1c0c2c3998937178b06c9b474",
     "sqlite_profile_status": "candidate",
     "certification_status": "not_certified",
     "explicit_selection_required": true,
@@ -169,7 +169,7 @@
         },
         "version": 1,
         "domain_separator": "icarus:workflow-test-bootstrap-profile:1\n",
-        "hash": "sha256:4d0eb3c35740503b629ad2ad46aea5fc3c0b4c70292b0b9cbcea143e69edddef"
+        "hash": "sha256:87956027bca69d9fcdb1891298dc2a083a9e413c4530d7aff71473b74a58c106"
       },
       {
         "path": "conformance/g4-test-bootstrap/positive-cases.json",
@@ -217,5 +217,5 @@
       }
     ]
   },
-  "hash": "sha256:233040aa37bacc35e2e8d3fcf7c76b7022c325979794f2a12c6aef7040f4b635"
+  "hash": "sha256:bd7b944c66181e05add3618e6355a1acc64ff452dc4c027d4556c776a4402046"
 }

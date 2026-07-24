@@ -189,9 +189,9 @@ const OUTPUT_MEMBER_SPECS = [
   {
     role: 'canonical_migration',
     identity_effect: 'physical_schema_output',
-    path: 'store/schema/migration/workflow-runtime-schema-v1.sql',
+    path: 'store/schema/migration/workflow-runtime-schema-v6.sql',
     format: 'icarus.workflow-runtime-sqlite-migration/1',
-    ref: { id: 'icarus.workflow-runtime-schema-v1-migration', version: '1' },
+    ref: { id: 'icarus.workflow-runtime-schema-v6-migration', version: '1' },
     version: 1,
   },
   {

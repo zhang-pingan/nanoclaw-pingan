@@ -11,9 +11,9 @@
     "slice": "G3.6",
     "status": "DONE",
     "g3_status": "IN_PROGRESS",
-    "upstream_g3_3_pack_hash": "sha256:635fd7ac9c15212f50df1845a8267c5cad576aa34d475164e060946cb42987e5",
-    "upstream_g3_5_pack_hash": "sha256:bbc4e2cb402c8058a6412da0ebd5a284c2c7af831453cafaa84738a391c15718",
-    "upstream_g1_schema_root_hash": "sha256:ff588497b32eacc268c379d220fedbb3d29f69a0fdb9337c7a1e429ee7a868eb",
+    "upstream_g3_3_pack_hash": "sha256:590acdd52626838bf30ae14bb04b6f0ee59a95e1efadc4911ff850acc2970763",
+    "upstream_g3_5_pack_hash": "sha256:b6a4ec1dac738c6036869c763708f8aa144d0a864c8c392ee18cb3aba8c83417",
+    "upstream_g1_schema_root_hash": "sha256:3cc206a6dfb1bbaed1bb0f4305323729db23d839652d8a0e020a9a6c4d3e3dd6",
     "publisher_persistence_readiness": "PUBLISHER_SCHEMA_PREREQUISITE_READY",
     "publisher_schema_gap": null,
     "resolution_mode": "immutable_exact_only",
@@ -80,7 +80,7 @@
         },
         "version": 1,
         "domain_separator": "icarus:workflow-g3-retention-executor-abi-positive-cases:1\n",
-        "hash": "sha256:3f9127580925d03f7dc0cc17f1e8211f20e35e642134da11fd501cdd7ba0580e"
+        "hash": "sha256:c8fd966b08ce7adb2f3577f03bae3c36b7da1cf8874c07bdae2cccee4f4ba836"
       },
       {
         "path": "conformance/g3-retention-executor-abi-preflight/negative-cases.json",
@@ -91,7 +91,7 @@
         },
         "version": 1,
         "domain_separator": "icarus:workflow-g3-retention-executor-abi-negative-cases:1\n",
-        "hash": "sha256:7cce7f68941a75e548dd5efe3210d0f1d4f276c17b43d6804e74bf24b9de8580"
+        "hash": "sha256:ebf081765632ff9088c39a3dc1b6cc0dc0807231ae44f2ee9bb3e92962f838ed"
       },
       {
         "path": "registry/workflow-retention-executor-abi-preflight-domain-separators@1.json",
@@ -109,5 +109,5 @@
     "negative_case_count": 5,
     "g4_through_g9_status": "NOT_READY"
   },
-  "hash": "sha256:da15a3b9e7f3215f879d43b8f321c07f432f7d928d42314f22f6028b61f16aa9"
+  "hash": "sha256:7f807ae53e13bcec7712f77c1ebaba7aab5f72d2779ed5d99d33b0e6c54e98d3"
 }

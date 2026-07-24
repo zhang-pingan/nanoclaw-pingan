@@ -20,7 +20,7 @@ export const GENERATED_SCHEMA_JOIN_AUTHORITY_REPAIR_ROOT =
 export const GENERATED_SCHEMA_JOIN_AUTHORITY_REPAIR_DECISION_PATH = `${GENERATED_SCHEMA_JOIN_AUTHORITY_REPAIR_ROOT}/generated-schema-join-authority-contract@1.json`;
 export const GENERATED_SCHEMA_JOIN_AUTHORITY_REPAIR_PACK_PATH = `${GENERATED_SCHEMA_JOIN_AUTHORITY_REPAIR_ROOT}/contract-pack-generated-schema-join-authority-repair.json`;
 export const GENERATED_SCHEMA_JOIN_AUTHORITY_REPAIR_SPEC_HEADING =
-  '### R-018：Generated Schema 与 Join Expose Authority 决议';
+  '### R-019：Generated Schema 与 Join Expose Authority 决议';
 
 const DECISION_DOMAIN =
   'icarus:workflow-generated-schema-join-authority-contract:1\n';
@@ -54,7 +54,7 @@ const INPUTS = Object.freeze({
   },
   schema6_pack: {
     path: 'src/workflow-runtime/store/schema/contract-pack-g1-executable-schema.json',
-    hash: 'sha256:ff588497b32eacc268c379d220fedbb3d29f69a0fdb9337c7a1e429ee7a868eb',
+    hash: 'sha256:3cc206a6dfb1bbaed1bb0f4305323729db23d839652d8a0e020a9a6c4d3e3dd6',
   },
   predecessor_seal: {
     path: 'src/workflow-runtime/contracts/conformance/sealed/g2-capability-outbox-binding-v3/golden-conformance-bundle@2.json',
@@ -132,13 +132,13 @@ function specSection(document?: string): string {
   );
   if (start < 0) {
     throw new GeneratedSchemaJoinAuthorityRepairError(
-      'R-018 generated schema authority section is missing',
+      'R-019 generated schema authority section is missing',
     );
   }
   const end = source.indexOf('\n### ', start + 1);
   if (end < 0) {
     throw new GeneratedSchemaJoinAuthorityRepairError(
-      'R-018 generated schema authority section is not closed',
+      'R-019 generated schema authority section is not closed',
     );
   }
   return source.slice(start, end).trimEnd();
@@ -184,6 +184,7 @@ function buildDecision(section: string): ContractArtifactEnvelope {
     '1.0.0',
     DECISION_DOMAIN,
     {
+      decision_id: 'R-019',
       gate: 'G2_SCHEMA_G3_GENERATED_SCHEMA_JOIN_AUTHORITY_REPAIR',
       status:
         'GENERATED_SCHEMA_JOIN_AUTHORITY_REPAIR_EXIT_CANDIDATE_PENDING_INDEPENDENT_AFFECTED_CHAIN_REGRESSION',
@@ -301,10 +302,21 @@ function buildDecision(section: string): ContractArtifactEnvelope {
       exact_upstream_identities: upstream,
       schema6_delta_hash: prerequisite.payload.delta_hash,
       historical_schema5: {
+        source_migration_path:
+          'src/workflow-runtime/store/schema/migration/workflow-runtime-schema-v1.sql',
         source_migration_sha256:
           schema6Pack.payload.schema5_source_migration_sha256,
         sqlite_schema_identity:
           schema6Pack.payload.schema5_source_sqlite_schema_identity,
+        user_version: 5,
+      },
+      fresh_schema6: {
+        source_migration_path:
+          'src/workflow-runtime/store/schema/migration/workflow-runtime-schema-v6.sql',
+        source_migration_sha256: schema6Pack.payload.migration_sha256,
+        dependency_manifest_role: 'canonical_migration',
+        store_bootstrap_source: 'canonical_migration',
+        user_version: 6,
       },
       schema5_to_schema6_upgrade_sha256:
         schema6Pack.payload.schema5_to_schema6_upgrade_sha256,

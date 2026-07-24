@@ -112,11 +112,11 @@ const EXPECTED_BINDINGS = {
   logicalSchema:
     'sha256:ef5221d3465f1214c3c0aad3660f57b119d03eb4b5127428d6a1f881a6260214',
   g1Root:
-    'sha256:ff588497b32eacc268c379d220fedbb3d29f69a0fdb9337c7a1e429ee7a868eb',
+    'sha256:3cc206a6dfb1bbaed1bb0f4305323729db23d839652d8a0e020a9a6c4d3e3dd6',
   schemaManifest:
-    'sha256:478033a87bfb1cf1e98cd56fc6c18aaebe8d970835cc46e00223de07c5ece184',
+    'sha256:30b88b9df7dc7f8318ce8fcb5c38ca94c585d8585deff83235b8a8b8f582e0e2',
   schemaHash:
-    'sha256:d35c2d6fe2aaaf87ad102561d1595d016f8ef2f04950e5e3ad30b91aa366d909',
+    'sha256:37f0102a9d6b0077f0d44f20182a7d5768ce32b1c0c2c3998937178b06c9b474',
 } as const satisfies Record<string, Sha256Hash>;
 
 const AFFECTED_CURRENT_ROOTS = [
@@ -146,15 +146,15 @@ const AFFECTED_CURRENT_ROOTS = [
   ],
   [
     'contract-pack-g3-retention-executor-abi-preflight.json',
-    'sha256:da15a3b9e7f3215f879d43b8f321c07f432f7d928d42314f22f6028b61f16aa9',
+    'sha256:7f807ae53e13bcec7712f77c1ebaba7aab5f72d2779ed5d99d33b0e6c54e98d3',
   ],
   [
     'contract-pack-g3-workflow-publisher.json',
-    'sha256:1614e89ecac4713c6d991a6ae68e548f01268e25ba8b700a107e4cdcb1b64647',
+    'sha256:5d023a5323aec482781b0e992197571db9a09481a394eaf955d4598c249e4ec1',
   ],
   [
     'contract-pack-g3.9-feature-release-activation.json',
-    'sha256:c9aa03bf85e2b358f8b4b01b7dcfecf25ce76d2339688e88fe969d1babe10107',
+    'sha256:cbb6b355819b1eefefa7af5289b10b367c42bbe32b09f003151bc7f9ebf475d7',
   ],
   [
     'contract-pack-g3.8a-activation-contract-repair.json',

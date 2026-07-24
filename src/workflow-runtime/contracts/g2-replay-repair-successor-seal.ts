@@ -43,9 +43,9 @@ export const G2_REPLAY_REPAIR_SEALED_BUNDLE_SCHEMA_REF = `${G2_REPLAY_REPAIR_SEA
 export const G2_REPLAY_REPAIR_SEALED_INVENTORY_SCHEMA_REF = `${G2_REPLAY_REPAIR_SEALED_ROOT}/schemas/golden-conformance-inventory-schema@2.json`;
 
 const DRAFT_ARTIFACT_HASH =
-  'sha256:08ee5add3d9d23e7451853ef597422ffdebc97c05ccb01433a629c10ea0e0b36';
+  'sha256:7aec8593028391ea71f7bdfdbadef09c7f5f0e79a78f49b5f89368af315c7673';
 const REVIEW_REPORT_ARTIFACT_HASH =
-  'sha256:d5e1fdf7fcfa3d5528e524b60830406cb1c052ee72296ddaf5b4b101e59299fd';
+  'sha256:08f1192364f34498b2bcf0f2295949e3085fe5d2e4b141f982447ae8341d7204';
 const RAW_SOURCE_DOMAIN = 'icarus:workflow-semantic-correction-raw-source:1\n';
 const RESULT_DOMAIN = 'icarus:workflow-compiler-conformance-case-result:1\n';
 const PLAN_DOMAIN = 'icarus:workflow-graph-plan:2\n';
@@ -597,13 +597,13 @@ export function buildG2ReplayRepairSeal(): G2ReplayRepairSealBuild {
 
   const bundleSchema = artifact(
     'icarus.workflow-compiler-conformance-bundle-schema/1',
-    'icarus.workflow-compiler-conformance-bundle-schema.g2-generated-schema-join-authority-v4',
+    'icarus.workflow-compiler-conformance-bundle-schema.g2-generated-schema-join-authority-v5',
     BUNDLE_SCHEMA_DOMAIN,
     G2_REPLAY_REPAIR_CONFORMANCE_BUNDLE_SCHEMA,
   );
   const inventorySchema = artifact(
     'icarus.workflow-compiler-conformance-inventory-schema/1',
-    'icarus.workflow-compiler-conformance-inventory-schema.g2-generated-schema-join-authority-v4',
+    'icarus.workflow-compiler-conformance-inventory-schema.g2-generated-schema-join-authority-v5',
     INVENTORY_SCHEMA_DOMAIN,
     G2_REPLAY_REPAIR_SEALED_INVENTORY_SCHEMA,
   );
@@ -653,7 +653,7 @@ export function buildG2ReplayRepairSeal(): G2ReplayRepairSealBuild {
   }
   const inventory = artifact(
     'icarus.workflow-compiler-conformance-inventory/1',
-    'icarus.workflow-compiler-conformance-inventory.g2-generated-schema-join-authority-v4',
+    'icarus.workflow-compiler-conformance-inventory.g2-generated-schema-join-authority-v5',
     INVENTORY_ARTIFACT_DOMAIN,
     inventoryPayload,
   );
@@ -732,7 +732,7 @@ export function buildG2ReplayRepairSeal(): G2ReplayRepairSealBuild {
   }
   const bundle = artifact(
     'icarus.workflow-compiler-conformance/1',
-    'icarus.workflow-compiler-conformance.g2-generated-schema-join-authority-v4',
+    'icarus.workflow-compiler-conformance.g2-generated-schema-join-authority-v5',
     BUNDLE_ARTIFACT_DOMAIN,
     bundlePayload,
   );

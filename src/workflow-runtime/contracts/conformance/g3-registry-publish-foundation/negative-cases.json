@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-g3-registry-publish-negative-cases:1\n",
-  "hash": "sha256:4d0ded6782b7d4b6e66a65d344c1dbf966124a158533593f469ccb4e1cd43912",
+  "hash": "sha256:147e5638793126fbdc1fa9a6d221bc6991f6425b1b87c4f21584013a07164a38",
   "payload": {
     "fixture_scope": "test_only",
     "cases": [
@@ -313,7 +313,7 @@
               "content_hash": "sha256:ede8625861f47dcd9eebd48b232c36dd04f72bc8c702928070ea186643863937",
               "dependencies": [],
               "compiled_plan_pin": {
-                "plan_ref": "conformance/sealed/g2-generated-schema-join-authority-v4/expected/positive.static-lowering.plan.json",
+                "plan_ref": "conformance/sealed/g2-generated-schema-join-authority-v5/expected/positive.static-lowering.plan.json",
                 "plan_hash": "sha256:266fd7bb686a454e8615c6147e963661a340e30e279e92e0d02f135f9e459bac",
                 "plan_format": "icarus.workflow-graph-scope-plan/2",
                 "compiler_toolchain_hash": "sha256:acc4bd6e6444f9903e3054bf637dee28ee8b25fbfc5eebd49b9aaf37582ff493",
@@ -322,7 +322,7 @@
               },
               "execution_artifact_pin": null,
               "capability_outbox_binding": null,
-              "resource_hash": "sha256:7f80e6816da0201254415ede3688f6f4f59208226438ce2d498cdcc176c3c682"
+              "resource_hash": "sha256:fc79625c2aff984386a7bd9a9b579044f51df8d0cb9519a004fc03e42790eb48"
             }
           }
         ],

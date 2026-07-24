@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-runtime-schema-manifest:1\n",
-  "hash": "sha256:478033a87bfb1cf1e98cd56fc6c18aaebe8d970835cc46e00223de07c5ece184",
+  "hash": "sha256:30b88b9df7dc7f8318ce8fcb5c38ca94c585d8585deff83235b8a8b8f582e0e2",
   "payload": {
     "schema_id": "workflow-runtime-schema-v1",
     "database_name": "workflow-runtime.db",
@@ -22,7 +22,7 @@
       "sqlite_profile_hash": "sha256:3d69742dad2fefa8bef4ba47e375defd705e3b32920a92b105a43726436fb7af",
       "generated_schema_authority_prerequisite_hash": "sha256:55bf95fa677ae2d2be30575fcbe68ed8b051913379ceb131b983dfe62658dc00"
     },
-    "migration_path": "migration/workflow-runtime-schema-v1.sql",
+    "migration_path": "migration/workflow-runtime-schema-v6.sql",
     "migration_sha256": "sha256:16a46e84c77d734013e18b4b00b86564f6188ea73717763e9fb7a884d62faa41",
     "migration_statement_count": 334,
     "table_count": 86,
@@ -34956,6 +34956,6 @@
         "required_index_id": "idx:plan_generated_schemas:resolve"
       }
     ],
-    "schema_hash": "sha256:d35c2d6fe2aaaf87ad102561d1595d016f8ef2f04950e5e3ad30b91aa366d909"
+    "schema_hash": "sha256:37f0102a9d6b0077f0d44f20182a7d5768ce32b1c0c2c3998937178b06c9b474"
   }
 }

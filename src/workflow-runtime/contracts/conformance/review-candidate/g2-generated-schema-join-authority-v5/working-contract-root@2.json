@@ -1,0 +1,40 @@
+{
+  "format": "icarus.workflow-compiler-g2-replay-repair-working-contract/1",
+  "ref": {
+    "id": "icarus.workflow-compiler-g2-replay-repair-working-contract",
+    "version": "2.0.0-working"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-compiler-g2-replay-repair-working-contract-artifact:1\n",
+  "hash": "sha256:8bcbef902859b406f99101b996e6c8ccc07785b05f1935d145a30f7f79f1ec19",
+  "payload": {
+    "gate": "G2",
+    "construction_phase": "WORKING",
+    "status": "WORKING_CONTRACT_SUCCESSOR",
+    "publishable": false,
+    "production_reachable": false,
+    "semantic_correction_contract_ref": "conformance/compiler-semantic-correction/contract-pack-compiler-semantic-correction.json",
+    "semantic_correction_contract_hash": "sha256:a2d8bcab971d1db75aad17d152c7c616371a4ceeb8d52f408674d744cf7866b8",
+    "generated_schema_join_authority_contract_ref": "conformance/generated-schema-join-authority-repair/contract-pack-generated-schema-join-authority-repair.json",
+    "generated_schema_join_authority_contract_hash": "sha256:0c9b1a04a013bf6284b36c550ead6d81cffecacbe4a9d6495d6153b2335a04fc",
+    "generated_schema_join_authority_contract_status": "GENERATED_SCHEMA_JOIN_AUTHORITY_REPAIR_EXIT_CANDIDATE_PENDING_INDEPENDENT_AFFECTED_CHAIN_REGRESSION",
+    "predecessor_lineage": {
+      "predecessor_working_roots": {
+        "contract": "sha256:f109aa0d719e220f96550a11b1693aa4dbd0de600a1b48293dc5b664419e5132",
+        "input": "sha256:bd28e63d41430d3e83e3a886086788c1caf1fff99bce6db8201d593c562ba29b",
+        "candidate": "sha256:6951b4e1fd0817423936671de92b090979d63f3d7db0042344cae5c286b0a5d3",
+        "working_review": "sha256:0fefaffcd66abdeafb634b7b1641f20a8e43a61e2116ac25a17c222217d289ed"
+      },
+      "predecessor_review_candidate_root": "sha256:b0a8d7599073b9f4ae222fac799a9923b14c0762aa70a88746adfc2953809996",
+      "predecessor_draft_manifest_hash": "sha256:5f8eb14f6566379bc0047b72b991f76030f12c116f3cb09d1d0649ef9e18ae3e",
+      "predecessor_golden_review_report_hash": "sha256:304e029a42f720d3994ff1f6147678c5c9fba0d96c71c4e645d19ea4386ea967",
+      "predecessor_golden_semantic_review_hash": "sha256:056151bf316cc526db1b77393524c79532cc6706c88efd3d29394d76a8d2f39b",
+      "predecessor_sealed_bundle_hash": "sha256:b7d26b8622b1ceadff419430f443a9b0ceb377cbd47af20e9109ea878046abf9",
+      "predecessor_sealed_status": "sealed_pending_ci_replay",
+      "successor_reason": "r019_identity_and_schema5_fresh_migration_path_repair",
+      "approved_expected_semantics": "changed_by_current_review"
+    },
+    "approved_expected_semantics": "generated_schema_join_authority",
+    "g3_through_g9_status": "not_started"
+  }
+}

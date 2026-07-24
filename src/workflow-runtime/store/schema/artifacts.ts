@@ -89,7 +89,7 @@ export const G1_ARTIFACT_PATHS = {
   activationInput: ACTIVATION_SCHEMA_INPUT_RELATIVE_PATH,
   activationRepairInput: ACTIVATION_REPAIR_SCHEMA_INPUT_RELATIVE_PATH,
   generatedSchemaInput: GENERATED_SCHEMA_INPUT_RELATIVE_PATH,
-  migration: 'migration/workflow-runtime-schema-v1.sql',
+  migration: 'migration/workflow-runtime-schema-v6.sql',
   schema3To4Upgrade: SCHEMA3_TO_SCHEMA4_UPGRADE_RELATIVE_PATH,
   schema4To5Upgrade: SCHEMA4_TO_SCHEMA5_UPGRADE_RELATIVE_PATH,
   schema5To6Upgrade: SCHEMA5_TO_SCHEMA6_UPGRADE_RELATIVE_PATH,

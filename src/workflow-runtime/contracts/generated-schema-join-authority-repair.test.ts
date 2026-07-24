@@ -25,9 +25,9 @@ function currentSection(document: string): string {
   const start = document.indexOf(
     GENERATED_SCHEMA_JOIN_AUTHORITY_REPAIR_SPEC_HEADING,
   );
-  if (start < 0) throw new Error('R-018 section missing in test');
+  if (start < 0) throw new Error('R-019 section missing in test');
   const end = document.indexOf('\n### ', start + 1);
-  if (end < 0) throw new Error('R-018 section not closed in test');
+  if (end < 0) throw new Error('R-019 section not closed in test');
   return document.slice(start, end).trimEnd();
 }
 
@@ -43,11 +43,35 @@ describe('generated schema and join expose repair authority', () => {
     });
   });
 
-  it('independently binds the exact R-018 bytes and semantic hash', () => {
+  it('keeps R-018 unique to Activation and binds generated authority to R-019', () => {
+    const progress = fs.readFileSync(
+      path.join(
+        projectRoot,
+        'local/docs/dynamic-workflow-runtime-implementation-progress.md',
+      ),
+      'utf8',
+    );
+    expect(progress.match(/^\| R-018 \|/gm)).toEqual(['| R-018 |']);
+    expect(progress).toContain(
+      '| R-018 | Feature Release Activation persistence | `DONE` |',
+    );
+    expect(progress.match(/^\| R-019 \|/gm)).toEqual(['| R-019 |']);
+    expect(progress).toContain(
+      '| R-019 | Generated Schema 与 Join Expose Authority | `REPAIR_EXIT_CANDIDATE_PENDING_INDEPENDENT_AFFECTED_CHAIN_REGRESSION` |',
+    );
+
     const document = fs.readFileSync(
       path.join(projectRoot, 'local/docs/dynamic-workflow-dag-framework.md'),
       'utf8',
     );
+    expect(document).not.toContain(
+      '### R-018：Generated Schema 与 Join Expose Authority 决议',
+    );
+    expect(
+      document.match(
+        /^### R-019：Generated Schema 与 Join Expose Authority 决议$/gm,
+      ),
+    ).toHaveLength(1);
     const section = currentSection(document);
     const files =
       buildGeneratedSchemaJoinAuthorityRepairArtifactsForTest(document);
@@ -67,6 +91,7 @@ describe('generated schema and join expose repair authority', () => {
         section,
       ),
     });
+    expect(decision.payload.decision_id).toBe('R-019');
   });
 
   it('machine-closes content, Plan, Value, lowering, and G5 handoff semantics', () => {
@@ -94,6 +119,24 @@ describe('generated schema and join expose repair authority', () => {
       authority_kinds: ['registry', 'plan_generated'],
       published_registry_identity_for_generated_schema: 'forbidden',
       schema5_identity: 'immutable_historical_predecessor',
+    });
+    expect(decision.payload.historical_schema5).toEqual({
+      source_migration_path:
+        'src/workflow-runtime/store/schema/migration/workflow-runtime-schema-v1.sql',
+      source_migration_sha256:
+        'sha256:2ead40dc2f1618f87247e9d3bb476266797c38560e1ad0537a6afa6f71a3fbf6',
+      sqlite_schema_identity:
+        'sha256:5ee3c119cc6a0e0552e2a6fe45b51c8ffd08ec7acdbac66748978ed0d21fdb0a',
+      user_version: 5,
+    });
+    expect(decision.payload.fresh_schema6).toMatchObject({
+      source_migration_path:
+        'src/workflow-runtime/store/schema/migration/workflow-runtime-schema-v6.sql',
+      source_migration_sha256:
+        'sha256:16a46e84c77d734013e18b4b00b86564f6188ea73717763e9fb7a884d62faa41',
+      dependency_manifest_role: 'canonical_migration',
+      store_bootstrap_source: 'canonical_migration',
+      user_version: 6,
     });
     expect(decision.payload.publication_store_runtime_handoff).toMatchObject({
       runtime_fallback: 'forbidden',
