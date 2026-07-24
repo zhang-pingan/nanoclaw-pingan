@@ -1,3 +1,5 @@
+import { Ajv2020, type AnySchema } from 'ajv/dist/2020.js';
+
 import { canonicalJson, domainSeparatedSha256 } from '../contracts/hash.js';
 import type { JsonObject, JsonValue, Sha256Hash } from '../contracts/types.js';
 import { G5RuntimeError } from './graph-store.js';
@@ -35,12 +37,32 @@ export interface DataResolutionObservation {
   readonly valueHash: Sha256Hash | null;
   readonly schemaHash: Sha256Hash | null;
   readonly resolutionSequence: number | null;
+  readonly value: JsonValue | null;
+  readonly byteLength: number | null;
+}
+
+export interface SealedInputPortValue {
+  readonly port: string;
+  readonly aggregation: string;
+  readonly value: JsonValue;
+  readonly schema: JsonObject;
+  readonly existingValueId: string | null;
+  readonly existingValueHash: Sha256Hash | null;
+}
+
+export interface InputSchemaAuthority {
+  readonly resolveSchema: (
+    compiledSchema: JsonObject,
+    label: string,
+  ) => JsonObject;
+  readonly maxSingleValueBytes: number | null;
 }
 
 export interface InputSealEvaluation {
   readonly state: 'open' | 'sealed' | 'impossible' | 'error';
   readonly snapshot: JsonObject | null;
   readonly selectedEdgeIds: string[];
+  readonly portValues: SealedInputPortValue[];
 }
 
 export interface CompletionNodeObservation {
@@ -434,6 +456,62 @@ function selectedValue(edge: DataResolutionObservation): JsonObject {
   };
 }
 
+const inputSchemaAjv = new Ajv2020({
+  strict: true,
+  allErrors: true,
+  coerceTypes: false,
+  useDefaults: false,
+  removeAdditional: false,
+});
+const inputSchemaValidators = new Map<string, ReturnType<Ajv2020['compile']>>();
+
+function valueBytes(value: JsonValue): number {
+  return Buffer.byteLength(canonicalJson(value), 'utf8');
+}
+
+export function validateCompiledInputValue(
+  value: JsonValue,
+  compiledSchema: JsonObject,
+  maxBytes: unknown,
+  authority: InputSchemaAuthority,
+  label: string,
+): 'schema_invalid' | 'value_too_large' | null {
+  const byteLength = valueBytes(value);
+  const limits = [maxBytes, authority.maxSingleValueBytes].filter(
+    (limit): limit is number => limit !== null && limit !== undefined,
+  );
+  if (
+    limits.some(
+      (limit) =>
+        !Number.isSafeInteger(limit) || limit < 0 || byteLength > limit,
+    )
+  )
+    return 'value_too_large';
+  const schema = authority.resolveSchema(compiledSchema, label);
+  const key = canonicalJson(schema);
+  let validate = inputSchemaValidators.get(key);
+  if (!validate) {
+    try {
+      validate = inputSchemaAjv.compile(schema as AnySchema);
+    } catch {
+      return 'schema_invalid';
+    }
+    inputSchemaValidators.set(key, validate);
+  }
+  return validate(value) === true ? null : 'schema_invalid';
+}
+
+function observationValue(
+  edge: DataResolutionObservation,
+  label: string,
+): JsonValue {
+  if (edge.value === null || edge.byteLength === null)
+    fail(`${label} Value authority is incomplete`);
+  if (edge.byteLength !== valueBytes(edge.value))
+    fail(`${label} Value byte authority drifted`);
+  return edge.value;
+}
+
 function orderedAvailable(
   edges: readonly DataResolutionObservation[],
   order: 'edge_id' | 'resolution_seq',
@@ -451,10 +529,12 @@ function orderedAvailable(
 export function evaluateInputSeal(
   nodeValue: JsonObject,
   observations: readonly DataResolutionObservation[],
+  authority: InputSchemaAuthority,
 ): InputSealEvaluation {
   const ports = object(nodeValue.input_ports ?? {}, 'Plan node input_ports');
   const snapshots: Record<string, JsonValue> = {};
   const selectedEdgeIds: string[] = [];
+  const portValues: SealedInputPortValue[] = [];
   let open = false;
   let impossible = false;
   for (const portName of Object.keys(ports).sort(ascii)) {
@@ -465,7 +545,12 @@ export function evaluateInputSeal(
     );
     const edges = observations.filter((edge) => edge.port === portName);
     if (edges.some((edge) => edge.state === 'error'))
-      return { state: 'error', snapshot: null, selectedEdgeIds: [] };
+      return {
+        state: 'error',
+        snapshot: null,
+        selectedEdgeIds: [],
+        portValues: [],
+      };
     const allClosed = edges.every((edge) => edge.state !== 'unresolved');
     if (aggregation.type === 'single') {
       const select = String(aggregation.select);
@@ -479,21 +564,69 @@ export function evaluateInputSeal(
           : allClosed && available.length > 0;
       if (maySelect) {
         const edge = available[0]!;
+        const value = observationValue(edge, `Plan input port ${portName}`);
+        if (
+          validateCompiledInputValue(
+            value,
+            object(contract.schema, `Plan input port ${portName}.schema`),
+            contract.max_bytes,
+            authority,
+            `Plan input port ${portName}`,
+          ) !== null
+        )
+          return {
+            state: 'error',
+            snapshot: null,
+            selectedEdgeIds: [],
+            portValues: [],
+          };
         snapshots[portName] = {
           state: 'present',
           aggregation: select,
           value: selectedValue(edge),
         };
         selectedEdgeIds.push(edge.edgeId);
+        portValues.push({
+          port: portName,
+          aggregation: select,
+          value,
+          schema: object(contract.schema, `Plan input port ${portName}.schema`),
+          existingValueId: edge.valueId,
+          existingValueHash: edge.valueHash,
+        });
       } else if (!allClosed) open = true;
-      else if (Object.prototype.hasOwnProperty.call(aggregation, 'default'))
+      else if (Object.prototype.hasOwnProperty.call(aggregation, 'default')) {
+        const value = aggregation.default as JsonValue;
+        if (
+          validateCompiledInputValue(
+            value,
+            object(contract.schema, `Plan input port ${portName}.schema`),
+            contract.max_bytes,
+            authority,
+            `Plan input port ${portName} default`,
+          ) !== null
+        )
+          return {
+            state: 'error',
+            snapshot: null,
+            selectedEdgeIds: [],
+            portValues: [],
+          };
         snapshots[portName] = {
           state: 'present',
           aggregation: 'default',
-          default_value: aggregation.default as JsonValue,
+          default_value: value,
           selected_edges: [],
         };
-      else if (aggregation.required === false)
+        portValues.push({
+          port: portName,
+          aggregation: 'default',
+          value,
+          schema: object(contract.schema, `Plan input port ${portName}.schema`),
+          existingValueId: null,
+          existingValueHash: null,
+        });
+      } else if (aggregation.required === false)
         snapshots[portName] = { state: 'absent', selected_edges: [] };
       else impossible = true;
       continue;
@@ -522,21 +655,73 @@ export function evaluateInputSeal(
       else open = true;
     } else fail(`Unsupported list seal: ${String(seal.type)}`);
     if (chosen) {
+      const itemSchema = object(
+        contract.item_schema,
+        `Plan input port ${portName}.item_schema`,
+      );
+      const values = chosen.map((edge) =>
+        observationValue(edge, `Plan input port ${portName} item`),
+      );
+      if (
+        values.some(
+          (value) =>
+            validateCompiledInputValue(
+              value,
+              itemSchema,
+              contract.item_max_bytes,
+              authority,
+              `Plan input port ${portName} item`,
+            ) !== null,
+        ) ||
+        validateCompiledInputValue(
+          values,
+          object(contract.schema, `Plan input port ${portName}.schema`),
+          contract.max_bytes,
+          authority,
+          `Plan input port ${portName} aggregate`,
+        ) !== null
+      )
+        return {
+          state: 'error',
+          snapshot: null,
+          selectedEdgeIds: [],
+          portValues: [],
+        };
       snapshots[portName] = {
         state: 'present',
         aggregation: 'list',
         values: chosen.map(selectedValue),
       };
       selectedEdgeIds.push(...chosen.map((edge) => edge.edgeId));
+      portValues.push({
+        port: portName,
+        aggregation: 'list',
+        value: values,
+        schema: object(contract.schema, `Plan input port ${portName}.schema`),
+        existingValueId: null,
+        existingValueHash: null,
+      });
     }
   }
   if (impossible)
-    return { state: 'impossible', snapshot: null, selectedEdgeIds: [] };
-  if (open) return { state: 'open', snapshot: null, selectedEdgeIds: [] };
+    return {
+      state: 'impossible',
+      snapshot: null,
+      selectedEdgeIds: [],
+      portValues: [],
+    };
+  if (open)
+    return {
+      state: 'open',
+      snapshot: null,
+      selectedEdgeIds: [],
+      portValues: [],
+    };
   return {
     state: 'sealed',
     snapshot: { ports: snapshots },
     selectedEdgeIds: uniqueSorted(selectedEdgeIds),
+    portValues,
   };
 }
 

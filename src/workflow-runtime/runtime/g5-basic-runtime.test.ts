@@ -26,12 +26,13 @@ import { registryResourceId } from '../contracts/g3-registry-persistence.js';
 import type { G3RegistryResourceType } from '../contracts/g3-registry-persistence-types.js';
 import { G5_DATABASE_SCHEMA_HASH } from '../contracts/g5-basic-runtime-types.js';
 import {
+  evaluateReferenceInputContract,
   evaluateReferenceTrigger,
   G5BasicRuntimeReferenceModel,
   type ReferenceTrigger,
 } from '../contracts/g5-basic-runtime-reference-model.js';
 import { canonicalJson, domainSeparatedSha256 } from '../contracts/hash.js';
-import type { JsonObject, Sha256Hash } from '../contracts/types.js';
+import type { JsonObject, JsonValue, Sha256Hash } from '../contracts/types.js';
 import {
   compileTriggerProgram,
   expressionSteps,
@@ -219,11 +220,13 @@ function seedRuntime(store: WorkflowRuntimeStore): SeededRuntime {
                 provenance: 'sealed_g2_expected',
               },
             }
-          : name === 'adapter'
-            ? outboxAdapterContent(refs.adapter.ref)
-            : name === 'outboxPolicy'
-              ? outboxPolicyContent(refs.outboxPolicy.ref)
-              : { name },
+          : resource.resourceType === 'schema'
+            ? {}
+            : name === 'adapter'
+              ? outboxAdapterContent(refs.adapter.ref)
+              : name === 'outboxPolicy'
+                ? outboxPolicyContent(refs.outboxPolicy.ref)
+                : { name },
       );
       transaction.execute(
         `INSERT INTO workflow_values (
@@ -313,6 +316,182 @@ function seedRuntime(store: WorkflowRuntimeStore): SeededRuntime {
     );
   });
   return { refs, values, snapshotId, snapshotHash, closureId, closureHash };
+}
+
+interface TestSchemaAuthority {
+  readonly type: 'registry';
+  readonly ref: { readonly id: string; readonly version: string };
+  readonly schema_hash: Sha256Hash;
+  readonly rowId: string;
+}
+
+interface InputContractCase {
+  readonly id: string;
+  readonly list: boolean;
+  readonly value: JsonValue;
+  readonly second?: JsonValue;
+  readonly max: number | null;
+  readonly itemMax: number | null;
+  readonly schema: 'number' | 'string';
+  readonly arrayMaxItems?: number;
+}
+
+const inputContractCases: readonly InputContractCase[] = [
+  {
+    id: 'single-schema',
+    list: false,
+    value: 'wrong',
+    max: null,
+    itemMax: null,
+    schema: 'number',
+  },
+  {
+    id: 'single-max',
+    list: false,
+    value: 'too-long',
+    max: 3,
+    itemMax: null,
+    schema: 'string',
+  },
+  {
+    id: 'list-item-schema',
+    list: true,
+    value: 'wrong',
+    max: null,
+    itemMax: null,
+    schema: 'number',
+  },
+  {
+    id: 'list-item-max',
+    list: true,
+    value: 'too-long',
+    max: null,
+    itemMax: 3,
+    schema: 'string',
+  },
+  {
+    id: 'list-array-schema',
+    list: true,
+    value: 'ok',
+    second: 'two',
+    max: null,
+    itemMax: null,
+    schema: 'string',
+    arrayMaxItems: 1,
+  },
+  {
+    id: 'list-total-max',
+    list: true,
+    value: 'abc',
+    second: 'def',
+    max: 5,
+    itemMax: null,
+    schema: 'string',
+  },
+];
+
+function compiledTestSchema(schema: TestSchemaAuthority): JsonObject {
+  return {
+    type: schema.type,
+    ref: schema.ref,
+    schema_hash: schema.schema_hash,
+  };
+}
+
+function publishTestSchema(
+  store: WorkflowRuntimeStore,
+  seed: SeededRuntime,
+  label: string,
+  schema: JsonObject,
+): TestSchemaAuthority {
+  const ref = { id: `g5.test.schema.${label}`, version: '1.0.0' };
+  const schemaHash = hash(`test-schema:${label}`);
+  const rowId = registryResourceId({ resource_type: 'schema', ref });
+  const valueId = `value:test-schema:${label}`;
+  const content = canonicalJson(schema);
+  store.withImmediateTransaction((transaction) => {
+    transaction.execute(
+      `INSERT INTO workflow_values (
+         id, storage_kind, inline_canonical_json, blob_hash,
+         immutable_external_locator, expected_hash, content_hash, byte_length,
+         media_type, schema_resource_id, schema_resource_hash, provenance_ref,
+         retention_class, payload_state, payload_pruned_at_ms, created_at_ms,
+         row_version
+       ) VALUES (?, 'inline', ?, NULL, NULL, NULL, ?, ?, 'application/schema+json',
+         ?, ?, 'g5-test-schema', 'pinned', 'live', NULL, 2, 1)`,
+      [
+        valueId,
+        content,
+        schemaHash,
+        Buffer.byteLength(content),
+        seed.refs.schema.rowId,
+        seed.refs.schema.hash,
+      ],
+    );
+    transaction.execute(
+      `INSERT INTO workflow_registry_resources (
+         id, resource_type, resource_id, resource_version, owner_core_ref,
+         owner_feature_id, canonical_value_id, content_hash, publication_state,
+         created_at_ms, published_at_ms, retired_at_ms, row_version
+       ) VALUES (?, 'schema', ?, ?, 'icarus.core@1.0.0', NULL, ?, ?,
+         'published', 2, 2, NULL, 1)`,
+      [rowId, ref.id, ref.version, valueId, schemaHash],
+    );
+  });
+  return { type: 'registry', ref, schema_hash: schemaHash, rowId };
+}
+
+function insertTestValue(
+  store: WorkflowRuntimeStore,
+  schema: TestSchemaAuthority,
+  label: string,
+  value: JsonValue,
+): { id: string; hash: Sha256Hash; byteLength: number } {
+  const id = `value:test:${label}`;
+  const valueHash = hash(`test-value:${label}:${canonicalJson(value)}`);
+  const content = canonicalJson(value);
+  store.withImmediateTransaction((transaction) => {
+    transaction.execute(
+      `INSERT INTO workflow_values (
+         id, storage_kind, inline_canonical_json, blob_hash,
+         immutable_external_locator, expected_hash, content_hash, byte_length,
+         media_type, schema_resource_id, schema_resource_hash, provenance_ref,
+         retention_class, payload_state, payload_pruned_at_ms, created_at_ms,
+         row_version
+       ) VALUES (?, 'inline', ?, NULL, NULL, NULL, ?, ?, 'application/json',
+         ?, ?, 'g5-test-value', 'run_recovery', 'live', NULL, 3, 1)`,
+      [
+        id,
+        content,
+        valueHash,
+        Buffer.byteLength(content),
+        schema.rowId,
+        schema.schema_hash,
+      ],
+    );
+  });
+  return { id, hash: valueHash, byteLength: Buffer.byteLength(content) };
+}
+
+function replaceSeedInputContent(
+  store: WorkflowRuntimeStore,
+  seed: SeededRuntime,
+  value: JsonValue,
+): void {
+  const content = canonicalJson(value);
+  store.withImmediateTransaction((transaction) => {
+    expect(
+      transaction.execute(
+        'UPDATE workflow_values SET inline_canonical_json = ?, byte_length = ?, row_version = row_version + 1 WHERE id = ? AND content_hash = ?',
+        [
+          content,
+          Buffer.byteLength(content),
+          seed.values.input.id,
+          seed.values.input.hash,
+        ],
+      ).changes,
+    ).toBe(1);
+  });
 }
 
 const G5_TEST_SOURCE: JsonObject = { format: 'g5-test-source' };
@@ -498,6 +677,12 @@ function plan(seed: SeededRuntime): CompiledScopePlanV2Document {
         }),
         input_ports: {
           value: {
+            schema: {
+              type: 'registry',
+              ref: seed.refs.schema.ref,
+              schema_hash: seed.refs.schema.hash,
+            },
+            max_bytes: null,
             aggregation: { type: 'single', select: 'only', required: true },
           },
         },
@@ -903,17 +1088,22 @@ function initializePlanCase(
   instance: G4TestBootstrapInstance,
   run: MaterializedPlanCase,
   nowMs: number,
+  fault?: { point: 'before_first_write' | 'before_commit' },
 ) {
   const row = instance.store.queryOne<{ row_version: number }>(
     'SELECT row_version FROM workflow_graph_runs WHERE id = ?',
     [run.graphRunId],
   )!;
-  return initializeScopeFixedPointT3a(instance.store, {
-    graphRunId: run.graphRunId,
-    scopeId: run.scopeId,
-    expectedRunRowVersion: row.row_version,
-    nowMs,
-  });
+  return initializeScopeFixedPointT3a(
+    instance.store,
+    {
+      graphRunId: run.graphRunId,
+      scopeId: run.scopeId,
+      expectedRunRowVersion: row.row_version,
+      nowMs,
+    },
+    fault,
+  );
 }
 
 function scheduleStructuralNode(
@@ -2680,7 +2870,10 @@ describe('G5 Basic Runtime Schema 5 transaction integration', () => {
     expect(JSON.parse(byNode.get('optional')!.input_snapshot_json)).toEqual({
       ports: { value: { selected_edges: [], state: 'absent' } },
     });
-    expect(JSON.parse(byNode.get('defaulted')!.input_snapshot_json)).toEqual({
+    const defaultSnapshot = JSON.parse(
+      byNode.get('defaulted')!.input_snapshot_json,
+    ) as JsonObject;
+    expect(defaultSnapshot).toMatchObject({
       ports: {
         value: {
           aggregation: 'default',
@@ -2689,6 +2882,12 @@ describe('G5 Basic Runtime Schema 5 transaction integration', () => {
           state: 'present',
         },
       },
+    });
+    expect(
+      ((defaultSnapshot.ports as JsonObject).value as JsonObject).logical_value,
+    ).toMatchObject({
+      value_id: expect.stringMatching(/^g5:input-port-value:/),
+      value_hash: expect.stringMatching(/^sha256:/),
     });
     expect(byNode.get('required')!.input_snapshot_value_id).toBe(
       seed.values.input.id,
@@ -2710,9 +2909,757 @@ describe('G5 Basic Runtime Schema 5 transaction integration', () => {
     expect(JSON.parse(byNode.get('literal')!.selected_edges_json)).toEqual([
       'literal-value',
     ]);
-    expect(byNode.get('literal')!.input_snapshot_value_id).toMatch(
-      /^g5:literal-value:/,
+    const literalValueId = byNode.get('literal')!.input_snapshot_value_id!;
+    expect(literalValueId).toMatch(/^g5:selected-data-value:/);
+    expect(
+      instance.store.queryOne<{
+        inline_canonical_json: string;
+        schema_resource_hash: string;
+      }>(
+        'SELECT inline_canonical_json, schema_resource_hash FROM workflow_values WHERE id = ?',
+        [literalValueId],
+      ),
+    ).toEqual({
+      inline_canonical_json: '{"source":"sealed-plan-literal"}',
+      schema_resource_hash: seed.refs.schema.hash,
+    });
+  });
+
+  it('binds scope and node data edges to selected immutable Values and persists pointer Values', () => {
+    const instance = bootstrap('g5-selected-data-value-authority');
+    const seed = seedRuntime(instance.store);
+    const objectSchema = publishTestSchema(
+      instance.store,
+      seed,
+      'selected-object',
+      {
+        type: 'object',
+        additionalProperties: false,
+        required: ['nested'],
+        properties: {
+          nested: {
+            type: 'object',
+            additionalProperties: false,
+            required: ['answer'],
+            properties: { answer: { type: 'integer' } },
+          },
+        },
+      },
     );
+    const numberSchema = publishTestSchema(
+      instance.store,
+      seed,
+      'selected-number',
+      { type: 'integer' },
+    );
+    const selected = insertTestValue(
+      instance.store,
+      objectSchema,
+      'selected-port-value',
+      { nested: { answer: 7 } },
+    );
+    replaceSeedInputContent(instance.store, seed, {
+      port_contract_hash: hash('selected-port-contract'),
+      ports: {
+        result: {
+          state: 'present',
+          value_ref: selected.id,
+          value_hash: selected.hash,
+          schema_hash: objectSchema.schema_hash,
+          byte_length: selected.byteLength,
+        },
+        ignored: {
+          state: 'absent',
+          schema_hash: objectSchema.schema_hash,
+        },
+      },
+      envelope_hash: hash('selected-envelope'),
+    });
+    const inputPort = (schema: TestSchemaAuthority): JsonObject => ({
+      schema: compiledTestSchema(schema),
+      max_bytes: 1_024,
+      aggregation: { type: 'single', select: 'only', required: true },
+    });
+    const target = (id: string, schema: TestSchemaAuthority): JsonObject => ({
+      id,
+      type: 'join',
+      capability_binding: null,
+      trigger_program: compileTriggerProgram({ type: 'root' }),
+      input_ports: { value: inputPort(schema) },
+      output_ports: {},
+    });
+    const dataEdge = (
+      id: string,
+      nodeId: string,
+      from: JsonObject,
+      schema: TestSchemaAuthority,
+    ): JsonObject => ({
+      id,
+      from,
+      to: { node_id: nodeId, port: 'value' },
+      derived_schema: compiledTestSchema(schema),
+      producer_schema_hash: objectSchema.schema_hash,
+      consumer_schema_hash: schema.schema_hash,
+      on_missing: null,
+      guard_control_edge_id: null,
+      compiled_edge_hash: hash(`selected-edge:${id}`),
+    });
+    const candidate = planVariant(seed, {
+      nodes: [
+        {
+          id: 'source',
+          type: 'join',
+          capability_binding: null,
+          trigger_program: compileTriggerProgram({ type: 'root' }),
+          input_ports: {},
+          output_ports: {
+            result: {
+              schema: compiledTestSchema(objectSchema),
+              max_bytes: 1_024,
+              required: true,
+            },
+          },
+        },
+        target('scope-direct', objectSchema),
+        target('scope-pointer', numberSchema),
+        target('node-direct', objectSchema),
+        target('node-pointer', numberSchema),
+      ],
+      route_groups: [],
+      control_edges: [],
+      data_edges: [
+        dataEdge(
+          'scope-direct-edge',
+          'scope-direct',
+          { type: 'scope_input', port: 'result' },
+          objectSchema,
+        ),
+        dataEdge(
+          'scope-pointer-edge',
+          'scope-pointer',
+          {
+            type: 'scope_input',
+            port: 'result',
+            pointer: '/nested/answer',
+          },
+          numberSchema,
+        ),
+        dataEdge(
+          'node-direct-edge',
+          'node-direct',
+          { type: 'node_output', node_id: 'source', port: 'result' },
+          objectSchema,
+        ),
+        dataEdge(
+          'node-pointer-edge',
+          'node-pointer',
+          {
+            type: 'node_output',
+            node_id: 'source',
+            port: 'result',
+            pointer: '/nested/answer',
+          },
+          numberSchema,
+        ),
+      ],
+      completion: completionPolicy([
+        {
+          id: 'selected-value-no-close',
+          phase: 'settled',
+          priority: 1,
+          when: { fact: 'all_nodes_terminal' },
+          selector: {
+            exits: ['unused'],
+            pick: { type: 'lowest_terminal_node_id' },
+          },
+        },
+      ]),
+      runtime_safety_snapshot: {
+        value: { max_single_value_bytes: 4_096 },
+      },
+    });
+    const run = materializePlanCase(
+      instance,
+      seed,
+      candidate,
+      'selected-values',
+      100,
+    );
+    expect(() =>
+      initializePlanCase(instance, run, 110, { point: 'before_commit' }),
+    ).toThrow(/Injected (?:G5 )?fault/);
+    expect(
+      instance.store.queryOne<{ count: number }>(
+        "SELECT count(*) AS count FROM workflow_values WHERE provenance_ref LIKE 'plan-data:%'",
+        [],
+      )!.count,
+    ).toBe(0);
+    initializePlanCase(instance, run, 111);
+    const initializedSequence = initializePlanCase(
+      instance,
+      run,
+      112,
+    ).lastEventSequence;
+    expect(initializedSequence).toBeGreaterThan(0);
+    const source = scheduleStructuralNode(instance, run, 'source', 120);
+    expect(() =>
+      reconcileTerminalNode(
+        instance,
+        run,
+        source,
+        'terminal:selected-source',
+        121,
+        { point: 'before_commit' },
+      ),
+    ).toThrow(/Injected (?:G5 )?fault/);
+    expect(
+      instance.store.queryOne<{ state: string }>(
+        `SELECT r.state FROM workflow_graph_edges e
+           JOIN workflow_graph_data_edge_resolutions r ON r.edge_id = e.id
+          WHERE e.graph_run_id = ? AND e.edge_key = 'node-direct-edge'`,
+        [run.graphRunId],
+      )!.state,
+    ).toBe('unresolved');
+    expect(
+      reconcileTerminalNode(
+        instance,
+        run,
+        source,
+        'terminal:selected-source',
+        122,
+      ).disposition,
+    ).toBe('reconciled');
+    expect(
+      reconcileTerminalNode(
+        instance,
+        run,
+        source,
+        'terminal:selected-source',
+        123,
+      ).disposition,
+    ).toBe('exact_replay');
+    const resolutions = instance.store.queryAll<{
+      edge_key: string;
+      value_value_id: string;
+      value_hash: Sha256Hash;
+    }>(
+      `SELECT e.edge_key, r.value_value_id, r.value_hash
+         FROM workflow_graph_edges e
+         JOIN workflow_graph_data_edge_resolutions r ON r.edge_id = e.id
+        WHERE e.graph_run_id = ? ORDER BY e.edge_key COLLATE BINARY`,
+      [run.graphRunId],
+    );
+    const byEdge = new Map(resolutions.map((row) => [row.edge_key, row]));
+    expect(byEdge.get('scope-direct-edge')).toMatchObject({
+      value_value_id: selected.id,
+      value_hash: selected.hash,
+    });
+    expect(byEdge.get('node-direct-edge')).toMatchObject({
+      value_value_id: selected.id,
+      value_hash: selected.hash,
+    });
+    for (const edgeId of ['scope-pointer-edge', 'node-pointer-edge']) {
+      const resolution = byEdge.get(edgeId)!;
+      expect(resolution.value_value_id).toMatch(/^g5:selected-data-value:/);
+      expect(resolution.value_value_id).not.toBe(seed.values.input.id);
+      expect(
+        instance.store.queryOne<{
+          inline_canonical_json: string;
+          schema_resource_hash: string;
+        }>(
+          'SELECT inline_canonical_json, schema_resource_hash FROM workflow_values WHERE id = ? AND content_hash = ?',
+          [resolution.value_value_id, resolution.value_hash],
+        ),
+      ).toEqual({
+        inline_canonical_json: '7',
+        schema_resource_hash: numberSchema.schema_hash,
+      });
+    }
+  });
+
+  it.each(inputContractCases)(
+    'enforces single and list schema and byte contracts before readiness: $id',
+    (testCase) => {
+      const instance = bootstrap(`g5-input-contract-${testCase.id}`);
+      const seed = seedRuntime(instance.store);
+      const stringSchema = publishTestSchema(
+        instance.store,
+        seed,
+        `${testCase.id}-string`,
+        { type: 'string' },
+      );
+      const numberSchema = publishTestSchema(
+        instance.store,
+        seed,
+        `${testCase.id}-number`,
+        { type: 'integer' },
+      );
+      const itemSchema =
+        testCase.schema === 'number' ? numberSchema : stringSchema;
+      const arraySchema = publishTestSchema(
+        instance.store,
+        seed,
+        `${testCase.id}-array`,
+        {
+          type: 'array',
+          items: { type: testCase.schema === 'number' ? 'integer' : 'string' },
+          ...(testCase.arrayMaxItems === undefined
+            ? {}
+            : { maxItems: testCase.arrayMaxItems }),
+        },
+      );
+      const first = insertTestValue(
+        instance.store,
+        stringSchema,
+        `${testCase.id}-first`,
+        testCase.value,
+      );
+      const secondValue =
+        testCase.second === undefined
+          ? null
+          : insertTestValue(
+              instance.store,
+              stringSchema,
+              `${testCase.id}-second`,
+              testCase.second,
+            );
+      const ports: JsonObject = {
+        first: {
+          state: 'present',
+          value_ref: first.id,
+          value_hash: first.hash,
+          schema_hash: stringSchema.schema_hash,
+          byte_length: first.byteLength,
+        },
+      };
+      if (secondValue)
+        ports.second = {
+          state: 'present',
+          value_ref: secondValue.id,
+          value_hash: secondValue.hash,
+          schema_hash: stringSchema.schema_hash,
+          byte_length: secondValue.byteLength,
+        };
+      replaceSeedInputContent(instance.store, seed, {
+        port_contract_hash: hash(`contract:${testCase.id}`),
+        ports,
+        envelope_hash: hash(`envelope:${testCase.id}`),
+      });
+      const portContract: JsonObject = testCase.list
+        ? {
+            schema: compiledTestSchema(arraySchema),
+            max_bytes: testCase.max,
+            item_schema: compiledTestSchema(itemSchema),
+            item_max_bytes: testCase.itemMax,
+            aggregation: {
+              type: 'list',
+              min_items: secondValue ? 2 : 1,
+              seal: { type: 'all_sources_resolved' },
+              order: 'edge_id',
+            },
+          }
+        : {
+            schema: compiledTestSchema(itemSchema),
+            max_bytes: testCase.max,
+            aggregation: { type: 'single', select: 'only', required: true },
+          };
+      const edge = (port: string): JsonObject => ({
+        id: `${testCase.id}-${port}`,
+        from: { type: 'scope_input', port },
+        to: { node_id: 'target', port: 'value' },
+        derived_schema: compiledTestSchema(itemSchema),
+        producer_schema_hash: stringSchema.schema_hash,
+        consumer_schema_hash: itemSchema.schema_hash,
+        on_missing: null,
+        guard_control_edge_id: null,
+        compiled_edge_hash: hash(`edge:${testCase.id}:${port}`),
+      });
+      const candidate = planVariant(seed, {
+        nodes: [
+          {
+            id: 'target',
+            type: 'join',
+            capability_binding: null,
+            trigger_program: compileTriggerProgram({ type: 'root' }),
+            input_ports: { value: portContract },
+            output_ports: {},
+          },
+        ],
+        route_groups: [],
+        control_edges: [],
+        data_edges: [edge('first'), ...(secondValue ? [edge('second')] : [])],
+        completion: completionPolicy([
+          {
+            id: `no-close-${testCase.id}`,
+            phase: 'settled',
+            priority: 1,
+            when: { fact: 'all_nodes_terminal' },
+            selector: {
+              exits: ['unused'],
+              pick: { type: 'lowest_terminal_node_id' },
+            },
+          },
+        ]),
+        runtime_safety_snapshot: {
+          value: { max_single_value_bytes: 4_096 },
+        },
+      });
+      const run = materializePlanCase(
+        instance,
+        seed,
+        candidate,
+        `input-contract-${testCase.id}`,
+        200,
+      );
+      expect(() => initializePlanCase(instance, run, 210)).not.toThrow();
+      expect(
+        instance.store.queryOne<{ reason: string; error_code: string }>(
+          'SELECT reason, error_code FROM workflow_graph_scope_close_requests WHERE graph_run_id = ?',
+          [run.graphRunId],
+        ),
+      ).toEqual({
+        reason: 'engine_error',
+        error_code: 'fixed_point_resolution_error',
+      });
+      expect(
+        instance.store.queryOne<{ lifecycle: string }>(
+          'SELECT lifecycle FROM workflow_graph_runs WHERE id = ?',
+          [run.graphRunId],
+        )!.lifecycle,
+      ).toBe('closing');
+    },
+  );
+
+  it('property-compares production input authority with an independent contract model', () => {
+    const instance = bootstrap('g5-input-contract-property-model');
+    const seed = seedRuntime(instance.store);
+    const schemas = {
+      string: publishTestSchema(instance.store, seed, 'property-string', {
+        type: 'string',
+      }),
+      integer: publishTestSchema(instance.store, seed, 'property-integer', {
+        type: 'integer',
+      }),
+    };
+    const arrays = {
+      string: publishTestSchema(instance.store, seed, 'property-string-array', {
+        type: 'array',
+        items: { type: 'string' },
+      }),
+      integer: publishTestSchema(
+        instance.store,
+        seed,
+        'property-integer-array',
+        { type: 'array', items: { type: 'integer' } },
+      ),
+    };
+    let caseSequence = 0;
+    fc.assert(
+      fc.property(
+        fc.record({
+          aggregation: fc.constantFrom('single' as const, 'list' as const),
+          schema: fc.constantFrom('string' as const, 'integer' as const),
+          value: fc.oneof(
+            fc.string({ minLength: 0, maxLength: 8 }),
+            fc.integer({ min: -1_000, max: 1_000 }),
+          ),
+          maxBytes: fc.option(fc.integer({ min: 0, max: 16 }), {
+            nil: null,
+          }),
+          itemMaxBytes: fc.option(fc.integer({ min: 0, max: 12 }), {
+            nil: null,
+          }),
+        }),
+        ({ aggregation, schema, value, maxBytes, itemMaxBytes }) => {
+          const current = caseSequence++;
+          const actualSchema =
+            typeof value === 'string' ? schemas.string : schemas.integer;
+          const targetSchema = schemas[schema];
+          const stored = insertTestValue(
+            instance.store,
+            actualSchema,
+            `property-input-${current}`,
+            value,
+          );
+          replaceSeedInputContent(instance.store, seed, {
+            port_contract_hash: hash(`property-input-contract:${current}`),
+            ports: {
+              result: {
+                state: 'present',
+                value_ref: stored.id,
+                value_hash: stored.hash,
+                schema_hash: actualSchema.schema_hash,
+                byte_length: stored.byteLength,
+              },
+            },
+            envelope_hash: hash(`property-input-envelope:${current}`),
+          });
+          const inputPort: JsonObject =
+            aggregation === 'single'
+              ? {
+                  schema: compiledTestSchema(targetSchema),
+                  max_bytes: maxBytes,
+                  aggregation: {
+                    type: 'single',
+                    select: 'only',
+                    required: true,
+                  },
+                }
+              : {
+                  schema: compiledTestSchema(arrays[schema]),
+                  max_bytes: maxBytes,
+                  item_schema: compiledTestSchema(targetSchema),
+                  item_max_bytes: itemMaxBytes,
+                  aggregation: {
+                    type: 'list',
+                    min_items: 1,
+                    seal: { type: 'all_sources_resolved' },
+                    order: 'edge_id',
+                  },
+                };
+          const candidate = planVariant(seed, {
+            nodes: [
+              {
+                id: 'target',
+                type: 'join',
+                capability_binding: null,
+                trigger_program: compileTriggerProgram({ type: 'root' }),
+                input_ports: { value: inputPort },
+                output_ports: {},
+              },
+            ],
+            route_groups: [],
+            control_edges: [],
+            data_edges: [
+              {
+                id: `property-input-edge-${current}`,
+                from: { type: 'scope_input', port: 'result' },
+                to: { node_id: 'target', port: 'value' },
+                derived_schema: compiledTestSchema(targetSchema),
+                producer_schema_hash: actualSchema.schema_hash,
+                consumer_schema_hash: targetSchema.schema_hash,
+                on_missing: null,
+                guard_control_edge_id: null,
+                compiled_edge_hash: hash(`property-input-edge:${current}`),
+              },
+            ],
+            completion: completionPolicy([
+              {
+                id: `property-input-no-close-${current}`,
+                phase: 'settled',
+                priority: 1,
+                when: { fact: 'all_nodes_terminal' },
+                selector: {
+                  exits: ['unused'],
+                  pick: { type: 'lowest_terminal_node_id' },
+                },
+              },
+            ]),
+            runtime_safety_snapshot: {
+              value: { max_single_value_bytes: 4_096 },
+            },
+          });
+          const run = materializePlanCase(
+            instance,
+            seed,
+            candidate,
+            `property-input-${current}`,
+            10_000 + current * 10,
+          );
+          initializePlanCase(instance, run, 10_003 + current * 10);
+          const expected = evaluateReferenceInputContract(value, {
+            aggregation,
+            schema,
+            maxBytes,
+            itemMaxBytes,
+          });
+          const close = instance.store.queryOne<{
+            reason: string;
+            error_code: string;
+          }>(
+            'SELECT reason, error_code FROM workflow_graph_scope_close_requests WHERE graph_run_id = ?',
+            [run.graphRunId],
+          );
+          const node = instance.store.queryOne<{ phase: string }>(
+            "SELECT phase FROM workflow_graph_nodes WHERE graph_run_id = ? AND node_key = 'target'",
+            [run.graphRunId],
+          )!;
+          const actual = close
+            ? 'engine_error'
+            : node.phase === 'ready'
+              ? 'ready'
+              : 'unexpected';
+          expect(actual).toBe(expected);
+          if (expected === 'engine_error')
+            expect(close).toEqual({
+              reason: 'engine_error',
+              error_code: 'fixed_point_resolution_error',
+            });
+          else expect(close).toBeUndefined();
+          const factKeys = instance.store
+            .queryAll<{
+              fact_key: string;
+            }>(
+              'SELECT fact_key FROM workflow_graph_facts WHERE graph_run_id = ?',
+              [run.graphRunId],
+            )
+            .map((row) => row.fact_key);
+          const eventKeys = instance.store
+            .queryAll<{
+              idempotency_key: string;
+            }>(
+              'SELECT idempotency_key FROM workflow_graph_events WHERE graph_run_id = ?',
+              [run.graphRunId],
+            )
+            .map((row) => row.idempotency_key);
+          expect(factKeys.length).toBeGreaterThan(0);
+          for (const factKey of factKeys) expect(eventKeys).toContain(factKey);
+          expect(
+            instance.store.queryOne<{ consumed_amount: number }>(
+              "SELECT consumed_amount FROM workflow_graph_resource_accounts WHERE graph_run_id = ? AND resource_type = 'facts_total'",
+              [run.graphRunId],
+            )!.consumed_amount,
+          ).toBe(factKeys.length);
+          expect(
+            instance.store.queryOne<{ count: number }>(
+              'SELECT count(*) AS count FROM workflow_operational_blockers WHERE graph_run_id = ?',
+              [run.graphRunId],
+            )!.count,
+          ).toBe(0);
+        },
+      ),
+      { seed: 0x13a7, numRuns: 12 },
+    );
+  });
+
+  it('commits initialization data errors as engine-error facts and rolls back before commit', () => {
+    const instance = bootstrap('g5-initialization-engine-error');
+    const seed = seedRuntime(instance.store);
+    const schema = publishTestSchema(
+      instance.store,
+      seed,
+      'initialization-error',
+      {},
+    );
+    const candidate = planVariant(seed, {
+      nodes: [
+        {
+          id: 'target',
+          type: 'join',
+          capability_binding: null,
+          trigger_program: compileTriggerProgram({ type: 'root' }),
+          input_ports: {
+            value: {
+              schema: compiledTestSchema(schema),
+              max_bytes: null,
+              aggregation: { type: 'single', select: 'only', required: true },
+            },
+          },
+          output_ports: {},
+        },
+      ],
+      route_groups: [],
+      control_edges: [],
+      data_edges: [
+        {
+          id: 'missing-pointer',
+          from: {
+            type: 'scope_input',
+            port: 'result',
+            pointer: '/missing',
+          },
+          to: { node_id: 'target', port: 'value' },
+          derived_schema: compiledTestSchema(schema),
+          producer_schema_hash: seed.refs.schema.hash,
+          consumer_schema_hash: schema.schema_hash,
+          guard_control_edge_id: null,
+          compiled_edge_hash: hash('missing-pointer-edge'),
+        },
+      ],
+      completion: completionPolicy([
+        {
+          id: 'missing-pointer-no-close',
+          phase: 'settled',
+          priority: 1,
+          when: { fact: 'all_nodes_terminal' },
+          selector: {
+            exits: ['unused'],
+            pick: { type: 'lowest_terminal_node_id' },
+          },
+        },
+      ]),
+    });
+    const run = materializePlanCase(
+      instance,
+      seed,
+      candidate,
+      'initialization-engine-error',
+      300,
+    );
+    expect(() =>
+      initializePlanCase(instance, run, 310, { point: 'before_commit' }),
+    ).toThrow(/Injected (?:G5 )?fault/);
+    expect(
+      instance.store.queryOne<{ count: number }>(
+        'SELECT count(*) AS count FROM workflow_graph_scope_close_requests WHERE graph_run_id = ?',
+        [run.graphRunId],
+      )!.count,
+    ).toBe(0);
+    expect(
+      instance.store.queryOne<{ state: string }>(
+        `SELECT r.state FROM workflow_graph_edges e
+           JOIN workflow_graph_data_edge_resolutions r ON r.edge_id = e.id
+          WHERE e.graph_run_id = ? AND e.edge_key = 'missing-pointer'`,
+        [run.graphRunId],
+      )!.state,
+    ).toBe('unresolved');
+    expect(() => initializePlanCase(instance, run, 311)).not.toThrow();
+    expect(
+      instance.store.queryOne<{ state: string; error_code: string }>(
+        `SELECT r.state, r.error_code FROM workflow_graph_edges e
+           JOIN workflow_graph_data_edge_resolutions r ON r.edge_id = e.id
+          WHERE e.graph_run_id = ? AND e.edge_key = 'missing-pointer'`,
+        [run.graphRunId],
+      ),
+    ).toEqual({ state: 'error', error_code: 'data_pointer_missing' });
+    expect(
+      instance.store.queryOne<{
+        reason: string;
+        error_code: string;
+      }>(
+        'SELECT reason, error_code FROM workflow_graph_scope_close_requests WHERE graph_run_id = ?',
+        [run.graphRunId],
+      ),
+    ).toEqual({
+      reason: 'engine_error',
+      error_code: 'fixed_point_resolution_error',
+    });
+    expect(
+      instance.store.queryOne<{
+        run_lifecycle: string;
+        run_fence: number;
+        scope_lifecycle: string;
+        scope_fence: number;
+      }>(
+        `SELECT r.lifecycle AS run_lifecycle, r.work_fence_epoch AS run_fence,
+                s.lifecycle AS scope_lifecycle, s.work_fence_epoch AS scope_fence
+           FROM workflow_graph_runs r
+           JOIN workflow_graph_scopes s ON s.graph_run_id = r.id
+          WHERE r.id = ? AND s.id = ?`,
+        [run.graphRunId, run.scopeId],
+      ),
+    ).toEqual({
+      run_lifecycle: 'closing',
+      run_fence: 1,
+      scope_lifecycle: 'closing',
+      scope_fence: 1,
+    });
+    expect(
+      instance.store.queryOne<{ count: number }>(
+        "SELECT count(*) AS count FROM workflow_graph_events WHERE graph_run_id = ? AND event_type IN ('orchestration_error', 'scope_close_requested')",
+        [run.graphRunId],
+      )!.count,
+    ).toBe(2);
   });
 
   it('evaluates early and settled completion rules and all selector picks', () => {

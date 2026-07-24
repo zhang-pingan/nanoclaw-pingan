@@ -17,10 +17,13 @@ import {
   evaluateConditionProgram,
   evaluateInputSeal,
   evaluateTriggerProgram,
+  validateCompiledInputValue,
   verifyCompletionPolicyAuthority,
   type CompletionCandidateObservation,
   type CompletionNodeObservation,
   type DataResolutionObservation,
+  type InputSchemaAuthority,
+  type InputSealEvaluation,
   type TriggerEdgeObservation,
 } from './fixed-point-authority.js';
 import {
@@ -642,19 +645,38 @@ interface T3NodeRow extends Record<string, unknown> {
   readonly row_version: number;
 }
 
-function loadInlineValue(
+interface InlineValueAuthority {
+  readonly ref: RuntimeValueRef;
+  readonly content: JsonValue;
+  readonly byteLength: number;
+  readonly schemaResourceId: string;
+  readonly schemaResourceHash: Sha256Hash;
+}
+
+interface CompiledSchemaAuthority {
+  readonly schema: JsonObject;
+  readonly resourceId: string | null;
+  readonly hash: Sha256Hash;
+}
+
+function loadInlineValueAuthority(
   transaction: WorkflowRuntimeWriteTransaction,
   valueId: string,
   valueHash: string,
   label: string,
-): JsonValue {
+): InlineValueAuthority {
   const row = transaction.queryOne<{
     storage_kind: string;
     inline_canonical_json: string | null;
     content_hash: string;
+    byte_length: number;
+    schema_resource_id: string;
+    schema_resource_hash: string;
     payload_state: string;
   }>(
-    'SELECT storage_kind, inline_canonical_json, content_hash, payload_state FROM workflow_values WHERE id = ? AND content_hash = ?',
+    `SELECT storage_kind, inline_canonical_json, content_hash, byte_length,
+            schema_resource_id, schema_resource_hash, payload_state
+       FROM workflow_values WHERE id = ? AND content_hash = ?`,
     [valueId, valueHash],
   );
   if (
@@ -669,12 +691,146 @@ function loadInlineValue(
       `${label} Value is unavailable or not inline canonical JSON`,
     );
   const parsed = JSON.parse(row.inline_canonical_json) as JsonValue;
-  if (canonicalJson(parsed) !== row.inline_canonical_json)
+  if (
+    canonicalJson(parsed) !== row.inline_canonical_json ||
+    Buffer.byteLength(row.inline_canonical_json, 'utf8') !== row.byte_length
+  )
     throw new G5RuntimeError(
       'integrity_violation',
-      `${label} Value bytes are not canonical`,
+      `${label} Value byte authority drifted`,
     );
-  return parsed;
+  return {
+    ref: { id: valueId, hash: valueHash as Sha256Hash },
+    content: parsed,
+    byteLength: row.byte_length,
+    schemaResourceId: row.schema_resource_id,
+    schemaResourceHash: row.schema_resource_hash as Sha256Hash,
+  };
+}
+
+function loadInlineValue(
+  transaction: WorkflowRuntimeWriteTransaction,
+  valueId: string,
+  valueHash: string,
+  label: string,
+): JsonValue {
+  return loadInlineValueAuthority(transaction, valueId, valueHash, label)
+    .content;
+}
+
+function loadCompiledSchemaAuthority(
+  transaction: WorkflowRuntimeWriteTransaction,
+  compiledSchema: JsonObject,
+  label: string,
+): CompiledSchemaAuthority {
+  const claimedHash = compiledSchema.schema_hash;
+  if (typeof claimedHash !== 'string')
+    throw new G5RuntimeError(
+      'integrity_violation',
+      `${label} compiled schema hash is missing`,
+    );
+  if (compiledSchema.type === 'generated') {
+    const schema = requiredObjectField(
+      compiledSchema,
+      'schema_json',
+      `${label} generated schema`,
+    );
+    if (
+      domainSeparatedSha256('icarus:workflow-generated-schema:1\n', schema) !==
+      claimedHash
+    )
+      throw new G5RuntimeError(
+        'integrity_violation',
+        `${label} generated schema hash drifted`,
+      );
+    return {
+      schema,
+      resourceId: null,
+      hash: claimedHash as Sha256Hash,
+    };
+  }
+  if (compiledSchema.type !== 'registry')
+    throw new G5RuntimeError(
+      'integrity_violation',
+      `${label} compiled schema type is unsupported`,
+    );
+  const ref = requiredObjectField(compiledSchema, 'ref', `${label} schema`);
+  const resourceId = registryResourceId({
+    resource_type: 'schema',
+    ref: { id: String(ref.id), version: String(ref.version) },
+  });
+  const row = transaction.queryOne<{
+    resource_type: string;
+    resource_id: string;
+    resource_version: string;
+    content_hash: string;
+    publication_state: string;
+    canonical_value_id: string;
+  }>(
+    `SELECT resource_type, resource_id, resource_version, content_hash,
+            publication_state, canonical_value_id
+       FROM workflow_registry_resources WHERE id = ?`,
+    [resourceId],
+  );
+  if (
+    !row ||
+    row.resource_type !== 'schema' ||
+    row.resource_id !== ref.id ||
+    row.resource_version !== ref.version ||
+    row.content_hash !== claimedHash ||
+    row.publication_state !== 'published'
+  )
+    throw new G5RuntimeError(
+      'integrity_violation',
+      `${label} is not the exact Published Registry schema`,
+    );
+  const value = loadInlineValueAuthority(
+    transaction,
+    row.canonical_value_id,
+    claimedHash,
+    `${label} Registry schema`,
+  );
+  if (
+    !value.content ||
+    typeof value.content !== 'object' ||
+    Array.isArray(value.content)
+  )
+    throw new G5RuntimeError(
+      'integrity_violation',
+      `${label} Registry schema content is not an object`,
+    );
+  return {
+    schema: value.content as JsonObject,
+    resourceId,
+    hash: claimedHash as Sha256Hash,
+  };
+}
+
+function inputSchemaAuthority(
+  transaction: WorkflowRuntimeWriteTransaction,
+  plan: CompiledScopePlanV2Document,
+): InputSchemaAuthority {
+  const safety = objectField(
+    plan as unknown as JsonObject,
+    'runtime_safety_snapshot',
+  );
+  const valueSafety = safety ? objectField(safety, 'value') : undefined;
+  const maximum = valueSafety?.max_single_value_bytes;
+  return {
+    resolveSchema: (compiledSchema, label) =>
+      loadCompiledSchemaAuthority(transaction, compiledSchema, label).schema,
+    maxSingleValueBytes:
+      maximum === undefined || maximum === null
+        ? null
+        : Number.isSafeInteger(maximum) && Number(maximum) >= 0
+          ? Number(maximum)
+          : (() => {
+              throw new G5RuntimeError(
+                'integrity_violation',
+                'Plan Runtime Safety max_single_value_bytes is invalid',
+              );
+            })(),
+  };
 }
 
 function valueAtPointer(
@@ -733,6 +889,235 @@ function portValue(
     if (Object.prototype.hasOwnProperty.call(root, port)) return root[port];
   }
   return port === 'result' ? root : undefined;
+}
+
+interface SelectedPortValue {
+  readonly content: JsonValue;
+  readonly authority: InlineValueAuthority | null;
+}
+
+function selectedPortValue(
+  transaction: WorkflowRuntimeWriteTransaction,
+  root: InlineValueAuthority,
+  port: string,
+  label: string,
+): SelectedPortValue | undefined {
+  const value = root.content;
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    const ports = value.ports;
+    if (ports && typeof ports === 'object' && !Array.isArray(ports)) {
+      const entry = ports[port];
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry))
+        return undefined;
+      if (entry.state === 'absent') return undefined;
+      const valueId = entry.value_ref ?? entry.value_id;
+      const valueHash = entry.value_hash;
+      if (typeof valueId === 'string' && typeof valueHash === 'string') {
+        const authority = loadInlineValueAuthority(
+          transaction,
+          valueId,
+          valueHash,
+          `${label} port ${port}`,
+        );
+        if (
+          entry.schema_hash !== authority.schemaResourceHash ||
+          !Number.isSafeInteger(entry.byte_length) ||
+          entry.byte_length !== authority.byteLength
+        )
+          throw new G5RuntimeError(
+            'integrity_violation',
+            `${label} port ${port} Value metadata drifted`,
+          );
+        return { content: authority.content, authority };
+      }
+      if (Object.prototype.hasOwnProperty.call(entry, 'value'))
+        return { content: entry.value as JsonValue, authority: null };
+      return undefined;
+    }
+    if (Object.prototype.hasOwnProperty.call(value, port))
+      return { content: value[port]!, authority: null };
+  }
+  return port === 'result'
+    ? { content: root.content, authority: root }
+    : undefined;
+}
+
+function planDataTargetContract(
+  plan: CompiledScopePlanV2Document,
+  edge: JsonObject,
+): { schema: JsonObject; maxBytes: unknown } {
+  const target = requiredObjectField(edge, 'to', 'Plan data edge');
+  const node = (plan.nodes as JsonObject[]).find(
+    (candidate) => candidate.id === target.node_id,
+  );
+  if (!node)
+    throw new G5RuntimeError(
+      'integrity_violation',
+      `Plan data target node is missing: ${String(target.node_id)}`,
+    );
+  const ports = requiredObjectField(node, 'input_ports', 'Plan data target');
+  const contract = objectField(ports, String(target.port));
+  if (!contract)
+    throw new G5RuntimeError(
+      'integrity_violation',
+      `Plan data target port is missing: ${String(target.port)}`,
+    );
+  const aggregation = requiredObjectField(
+    contract,
+    'aggregation',
+    'Plan input port',
+  );
+  return aggregation.type === 'list'
+    ? {
+        schema: requiredObjectField(
+          contract,
+          'item_schema',
+          'Plan list input port',
+        ),
+        maxBytes: contract.item_max_bytes,
+      }
+    : {
+        schema: requiredObjectField(contract, 'schema', 'Plan input port'),
+        maxBytes: contract.max_bytes,
+      };
+}
+
+function persistPlanSelectedValue(
+  transaction: WorkflowRuntimeWriteTransaction,
+  input: {
+    readonly plan: CompiledScopePlanV2Document;
+    readonly edge: JsonObject;
+    readonly content: JsonValue;
+    readonly sourceIdentity: JsonValue;
+    readonly nowMs: number;
+  },
+): RuntimeValueRef {
+  const derivedSchema = requiredObjectField(
+    input.edge,
+    'derived_schema',
+    'Plan data edge',
+  );
+  const schema = loadCompiledSchemaAuthority(
+    transaction,
+    derivedSchema,
+    'Plan data edge derived schema',
+  );
+  if (schema.resourceId === null)
+    throw new G5RuntimeError(
+      'integrity_violation',
+      'G5 selected data Value requires a Published Registry schema',
+    );
+  const identity: JsonObject = {
+    plan_hash: input.plan.plan_hash,
+    edge_id: String(input.edge.id),
+    source: input.sourceIdentity,
+    value: input.content,
+  };
+  const value = {
+    id: stableRuntimeId('selected-data-value', identity),
+    hash: runtimeObjectHash('selected-data-value', identity),
+  };
+  insertInlineValue(transaction, {
+    id: value.id,
+    content: input.content,
+    contentHash: value.hash,
+    schemaResourceId: schema.resourceId,
+    schemaResourceHash: schema.hash,
+    provenanceRef: `plan-data:${input.plan.plan_hash}:${String(input.edge.id)}`,
+    retentionClass: 'run_recovery',
+    createdAtMs: input.nowMs,
+  });
+  return value;
+}
+
+function selectAndValidateDataValue(
+  transaction: WorkflowRuntimeWriteTransaction,
+  input: {
+    readonly plan: CompiledScopePlanV2Document;
+    readonly edge: JsonObject;
+    readonly root: InlineValueAuthority | null;
+    readonly literal: JsonValue | undefined;
+    readonly nowMs: number;
+    readonly label: string;
+  },
+):
+  | { readonly state: 'available'; readonly value: RuntimeValueRef }
+  | { readonly state: 'missing' }
+  | { readonly state: 'error'; readonly errorCode: string } {
+  try {
+    const from = requiredObjectField(input.edge, 'from', 'Plan data edge');
+    const selection =
+      input.literal !== undefined
+        ? { content: input.literal, authority: null }
+        : input.root
+          ? selectedPortValue(
+              transaction,
+              input.root,
+              String(from.port),
+              input.label,
+            )
+          : undefined;
+    if (!selection) return { state: 'missing' };
+    const hasPointer = typeof from.pointer === 'string' && from.pointer !== '';
+    const selected = hasPointer
+      ? valueAtPointer(selection.content, from.pointer)
+      : selection.content;
+    if (selected === undefined) return { state: 'missing' };
+    if (
+      selection.authority &&
+      typeof input.edge.producer_schema_hash === 'string' &&
+      selection.authority.schemaResourceHash !== input.edge.producer_schema_hash
+    )
+      return { state: 'error', errorCode: 'data_value_authority_invalid' };
+    const schemaAuthority = inputSchemaAuthority(transaction, input.plan);
+    const target = planDataTargetContract(input.plan, input.edge);
+    const targetFailure = validateCompiledInputValue(
+      selected,
+      target.schema,
+      target.maxBytes,
+      schemaAuthority,
+      `${input.label} target input`,
+    );
+    const derivedSchema = requiredObjectField(
+      input.edge,
+      'derived_schema',
+      'Plan data edge',
+    );
+    const derivedFailure = validateCompiledInputValue(
+      selected,
+      derivedSchema,
+      target.maxBytes,
+      schemaAuthority,
+      `${input.label} derived value`,
+    );
+    const failure = targetFailure ?? derivedFailure;
+    if (failure) return { state: 'error', errorCode: failure };
+    if (!hasPointer && selection.authority)
+      return { state: 'available', value: selection.authority.ref };
+    return {
+      state: 'available',
+      value: persistPlanSelectedValue(transaction, {
+        plan: input.plan,
+        edge: input.edge,
+        content: selected,
+        sourceIdentity:
+          input.literal !== undefined
+            ? { type: 'literal' }
+            : {
+                type: 'selected_port',
+                root_value_id: input.root!.ref.id,
+                root_value_hash: input.root!.ref.hash,
+                port: String(from.port),
+                pointer: hasPointer ? String(from.pointer) : null,
+              },
+        nowMs: input.nowMs,
+      }),
+    };
+  } catch (error) {
+    if (error instanceof G5RuntimeError)
+      return { state: 'error', errorCode: 'data_value_authority_invalid' };
+    throw error;
+  }
 }
 
 function scopePlanAuthority(
@@ -1132,16 +1517,24 @@ function resolveTerminalDataEdges(
     nowMs: number;
   },
 ): boolean {
-  const output =
+  let output: InlineValueAuthority | undefined;
+  let outputAuthorityError = false;
+  if (
     input.source.published_output_envelope_value_id &&
     input.source.published_output_envelope_hash
-      ? loadInlineValue(
-          transaction,
-          input.source.published_output_envelope_value_id,
-          input.source.published_output_envelope_hash,
-          `Node ${input.source.node_key} output`,
-        )
-      : undefined;
+  ) {
+    try {
+      output = loadInlineValueAuthority(
+        transaction,
+        input.source.published_output_envelope_value_id,
+        input.source.published_output_envelope_hash,
+        `Node ${input.source.node_key} output`,
+      );
+    } catch (error) {
+      if (!(error instanceof G5RuntimeError)) throw error;
+      outputAuthorityError = true;
+    }
+  }
   let orchestrationError = false;
   for (const edge of (input.plan.data_edges as JsonObject[])
     .filter(
@@ -1179,16 +1572,29 @@ function resolveTerminalDataEdges(
         continue;
       }
     }
+    if (outputAuthorityError) {
+      orchestrationError = true;
+      resolveDataEdge(transaction, {
+        ...input,
+        edge,
+        state: 'error',
+        errorCode: 'data_value_authority_invalid',
+      });
+      continue;
+    }
     if (input.source.terminal_status !== 'succeeded' || output === undefined) {
       resolveDataEdge(transaction, { ...input, edge, state: 'unavailable' });
       continue;
     }
-    const selectedPort = portValue(transaction, output, String(from.port));
-    const selected =
-      selectedPort === undefined
-        ? undefined
-        : valueAtPointer(selectedPort, from.pointer);
-    if (selected === undefined) {
+    const selected = selectAndValidateDataValue(transaction, {
+      plan: input.plan,
+      edge,
+      root: output,
+      literal: undefined,
+      nowMs: input.nowMs,
+      label: `Node ${input.source.node_key} output`,
+    });
+    if (selected.state === 'missing') {
       const unavailable = edge.on_missing === 'unavailable';
       orchestrationError ||= !unavailable;
       resolveDataEdge(transaction, {
@@ -1196,6 +1602,16 @@ function resolveTerminalDataEdges(
         edge,
         state: unavailable ? 'unavailable' : 'error',
         errorCode: unavailable ? undefined : 'data_pointer_missing',
+      });
+      continue;
+    }
+    if (selected.state === 'error') {
+      orchestrationError = true;
+      resolveDataEdge(transaction, {
+        ...input,
+        edge,
+        state: 'error',
+        errorCode: selected.errorCode,
       });
       continue;
     }
@@ -1208,10 +1624,7 @@ function resolveTerminalDataEdges(
       ...input,
       edge,
       state: 'available',
-      value: {
-        id: input.source.published_output_envelope_value_id!,
-        hash: input.source.published_output_envelope_hash!,
-      },
+      value: selected.value,
       schemaHash: String(derivedSchema.schema_hash) as Sha256Hash,
       sourceAttemptId: input.source.current_attempt_id,
     });
@@ -1245,19 +1658,37 @@ function dataObservations(
         ORDER BY e.edge_key COLLATE BINARY`,
       [graphRunId, scopeId, nodeKey],
     )
-    .map((row) => ({
-      edgeId: row.edge_key,
-      edgeKey: row.edge_key,
-      port: String(
-        objectField(JSON.parse(row.compiled_edge_json) as JsonObject, 'to')
-          ?.port,
-      ),
-      state: row.state,
-      valueId: row.value_value_id,
-      valueHash: row.value_hash,
-      schemaHash: row.schema_hash,
-      resolutionSequence: row.resolution_seq,
-    }));
+    .map((row) => {
+      const value =
+        row.state === 'available' && row.value_value_id && row.value_hash
+          ? loadInlineValueAuthority(
+              transaction,
+              row.value_value_id,
+              row.value_hash,
+              `Data edge ${row.edge_key}`,
+            )
+          : null;
+      if (row.state === 'available' && value === null)
+        throw new G5RuntimeError(
+          'integrity_violation',
+          `Available data edge ${row.edge_key} has no Value authority`,
+        );
+      return {
+        edgeId: row.edge_key,
+        edgeKey: row.edge_key,
+        port: String(
+          objectField(JSON.parse(row.compiled_edge_json) as JsonObject, 'to')
+            ?.port,
+        ),
+        state: row.state,
+        valueId: row.value_value_id,
+        valueHash: row.value_hash,
+        schemaHash: row.schema_hash,
+        resolutionSequence: row.resolution_seq,
+        value: value?.content ?? null,
+        byteLength: value?.byteLength ?? null,
+      };
+    });
 }
 
 function triggerObservations(
@@ -1285,6 +1716,97 @@ function triggerObservations(
       state: row.state,
       resolutionSequence: row.resolution_seq,
     }));
+}
+
+function materializeSealedInputValues(
+  transaction: WorkflowRuntimeWriteTransaction,
+  input: {
+    readonly plan: CompiledScopePlanV2Document;
+    readonly node: JsonObject;
+    readonly seal: InputSealEvaluation;
+    readonly nowMs: number;
+  },
+): { snapshot: JsonObject; primaryValue: RuntimeValueRef | null } {
+  if (input.seal.snapshot === null)
+    throw new G5RuntimeError(
+      'integrity_violation',
+      'Sealed input snapshot is missing',
+    );
+  const snapshot = JSON.parse(canonicalJson(input.seal.snapshot)) as JsonObject;
+  const snapshotPorts = requiredObjectField(
+    snapshot,
+    'ports',
+    'Sealed input snapshot',
+  );
+  const values: RuntimeValueRef[] = [];
+  for (const portValue of input.seal.portValues) {
+    const schema = loadCompiledSchemaAuthority(
+      transaction,
+      portValue.schema,
+      `Plan input port ${portValue.port}`,
+    );
+    let value: RuntimeValueRef;
+    let valueSchemaHash: Sha256Hash;
+    if (portValue.existingValueId && portValue.existingValueHash) {
+      const existing = loadInlineValueAuthority(
+        transaction,
+        portValue.existingValueId,
+        portValue.existingValueHash,
+        `Plan input port ${portValue.port}`,
+      );
+      if (canonicalJson(existing.content) !== canonicalJson(portValue.value))
+        throw new G5RuntimeError(
+          'integrity_violation',
+          `Plan input port ${portValue.port} Value content drifted`,
+        );
+      value = existing.ref;
+      valueSchemaHash = existing.schemaResourceHash;
+    } else {
+      if (schema.resourceId === null)
+        throw new G5RuntimeError(
+          'integrity_violation',
+          'G5 aggregated input Value requires a Published Registry schema',
+        );
+      const identity: JsonObject = {
+        plan_hash: input.plan.plan_hash,
+        node_id: String(input.node.id),
+        port: portValue.port,
+        aggregation: portValue.aggregation,
+        value: portValue.value,
+      };
+      value = {
+        id: stableRuntimeId('input-port-value', identity),
+        hash: runtimeObjectHash('input-port-value', identity),
+      };
+      insertInlineValue(transaction, {
+        id: value.id,
+        content: portValue.value,
+        contentHash: value.hash,
+        schemaResourceId: schema.resourceId,
+        schemaResourceHash: schema.hash,
+        provenanceRef: `plan-input:${input.plan.plan_hash}:${String(input.node.id)}:${portValue.port}`,
+        retentionClass: 'run_recovery',
+        createdAtMs: input.nowMs,
+      });
+      valueSchemaHash = schema.hash;
+    }
+    const portSnapshot = requiredObjectField(
+      snapshotPorts,
+      portValue.port,
+      'Sealed input port snapshot',
+    );
+    portSnapshot.logical_value = {
+      value_id: value.id,
+      value_hash: value.hash,
+      schema_hash: valueSchemaHash,
+      byte_length: Buffer.byteLength(canonicalJson(portValue.value), 'utf8'),
+    };
+    values.push(value);
+  }
+  return {
+    snapshot,
+    primaryValue: values.length === 1 ? values[0]! : null,
+  };
 }
 
 function advancePendingNodesT3(
@@ -1403,13 +1925,24 @@ function advancePendingNodesT3(
     }
     if (row.trigger_state !== 'true') continue;
     if (row.input_state === 'open') {
-      const data = dataObservations(
-        transaction,
-        input.graphRunId,
-        input.scopeId,
-        row.node_key,
-      );
-      const seal = evaluateInputSeal(planNode, data);
+      let seal: InputSealEvaluation;
+      try {
+        const data = dataObservations(
+          transaction,
+          input.graphRunId,
+          input.scopeId,
+          row.node_key,
+        );
+        seal = evaluateInputSeal(
+          planNode,
+          data,
+          inputSchemaAuthority(transaction, input.plan),
+        );
+      } catch (error) {
+        if (!(error instanceof G5RuntimeError)) throw error;
+        orchestrationError = true;
+        continue;
+      }
       if (seal.state === 'error') {
         orchestrationError = true;
         continue;
@@ -1438,6 +1971,19 @@ function advancePendingNodesT3(
         continue;
       }
       if (seal.state === 'sealed') {
+        let sealedSnapshot: JsonObject;
+        try {
+          sealedSnapshot = materializeSealedInputValues(transaction, {
+            plan: input.plan,
+            node: planNode,
+            seal,
+            nowMs: input.nowMs,
+          }).snapshot;
+        } catch (error) {
+          if (!(error instanceof G5RuntimeError)) throw error;
+          orchestrationError = true;
+          continue;
+        }
         input.append(
           'input_sealed',
           'node',
@@ -1450,7 +1996,7 @@ function advancePendingNodesT3(
           transaction.execute(
             "UPDATE workflow_graph_nodes SET input_state = 'sealed', input_snapshot_json = ?, selected_edges_json = ?, row_version = row_version + 1, updated_at_ms = ? WHERE id = ? AND row_version = ? AND phase = 'pending' AND input_state = 'open'",
             [
-              canonicalJson(seal.snapshot!),
+              canonicalJson(sealedSnapshot),
               canonicalJson(seal.selectedEdgeIds),
               input.nowMs,
               row.id,
@@ -1487,30 +2033,53 @@ function advancePendingNodesT3(
           'integrity_violation',
           'T3 trigger cut Event bytes drifted',
         );
-      const data = dataObservations(
-        transaction,
-        input.graphRunId,
-        input.scopeId,
-        row.node_key,
-      );
-      const seal = evaluateInputSeal(planNode, data);
-      if (seal.state !== 'sealed' || seal.snapshot === null)
-        throw new G5RuntimeError(
-          'integrity_violation',
-          'T3 sealed input no longer matches the persisted Plan',
+      let data: DataResolutionObservation[];
+      let seal: InputSealEvaluation;
+      let materialized: {
+        snapshot: JsonObject;
+        primaryValue: RuntimeValueRef | null;
+      };
+      try {
+        data = dataObservations(
+          transaction,
+          input.graphRunId,
+          input.scopeId,
+          row.node_key,
         );
+        seal = evaluateInputSeal(
+          planNode,
+          data,
+          inputSchemaAuthority(transaction, input.plan),
+        );
+        if (seal.state !== 'sealed' || seal.snapshot === null)
+          throw new G5RuntimeError(
+            'integrity_violation',
+            'T3 sealed input no longer matches the persisted Plan',
+          );
+        materialized = materializeSealedInputValues(transaction, {
+          plan: input.plan,
+          node: planNode,
+          seal,
+          nowMs: input.nowMs,
+        });
+      } catch (error) {
+        if (!(error instanceof G5RuntimeError)) throw error;
+        orchestrationError = true;
+        continue;
+      }
       const selected = data.filter((edge) =>
         seal.selectedEdgeIds.includes(edge.edgeId),
       );
       const passthrough =
-        selected.length === 1 && selected[0]!.valueId && selected[0]!.valueHash
+        materialized.primaryValue ??
+        (selected.length === 1 && selected[0]!.valueId && selected[0]!.valueHash
           ? { id: selected[0]!.valueId, hash: selected[0]!.valueHash }
           : data.length === 0 && control.length === 0
             ? input.scopeInput
-            : null;
+            : null);
       const inputSnapshotHash = runtimeObjectHash(
         'input-snapshot',
-        seal.snapshot,
+        materialized.snapshot,
       );
       const readySequence = input.append(
         'node_ready',
@@ -1526,7 +2095,7 @@ function advancePendingNodesT3(
           [
             canonicalJson(triggerCut),
             runtimeObjectHash('trigger-cut', triggerCut),
-            canonicalJson(seal.snapshot),
+            canonicalJson(materialized.snapshot),
             passthrough?.id ?? null,
             passthrough?.hash ?? inputSnapshotHash,
             canonicalJson(seal.selectedEdgeIds),
@@ -1845,8 +2414,9 @@ export function initializeScopeFixedPointT3a(
         input_snapshot_hash: Sha256Hash | null;
         work_fence_epoch: number;
         lifecycle: string;
+        row_version: number;
       }>(
-        'SELECT input_snapshot_value_id, input_snapshot_hash, work_fence_epoch, lifecycle FROM workflow_graph_scopes WHERE id = ? AND graph_run_id = ?',
+        'SELECT input_snapshot_value_id, input_snapshot_hash, work_fence_epoch, lifecycle, row_version FROM workflow_graph_scopes WHERE id = ? AND graph_run_id = ?',
         [input.scopeId, input.graphRunId],
       );
       if (
@@ -1919,12 +2489,13 @@ export function initializeScopeFixedPointT3a(
         input.graphRunId,
         input.scopeId,
       );
-      const scopeInputJson = loadInlineValue(
+      const scopeInputAuthority = loadInlineValueAuthority(
         transaction,
         scopeInput.id,
         scopeInput.hash,
         'Scope input',
       );
+      let orchestrationError = false;
       for (const edge of (plan.data_edges as JsonObject[])
         .filter((candidate) =>
           ['scope_input', 'literal'].includes(
@@ -1940,65 +2511,41 @@ export function initializeScopeFixedPointT3a(
           'derived_schema',
           'Plan data edge',
         );
-        let selected: JsonValue | undefined;
-        let value = scopeInput;
-        if (from.type === 'literal') {
-          selected = from.value as JsonValue;
-          const literalIdentity = {
-            plan_hash: plan.plan_hash,
-            edge_id: String(edge.id),
-            value: selected,
-          };
-          value = {
-            id: stableRuntimeId('literal-value', literalIdentity),
-            hash: runtimeObjectHash('literal-value', literalIdentity),
-          };
-          const schemaRef = requiredObjectField(
-            derivedSchema,
-            'ref',
-            'Plan literal data edge derived_schema',
-          );
-          insertInlineValue(transaction, {
-            id: value.id,
-            content: selected,
-            contentHash: value.hash,
-            schemaResourceId: registryResourceId({
-              resource_type: 'schema',
-              ref: {
-                id: String(schemaRef.id),
-                version: String(schemaRef.version),
-              },
-            }),
-            schemaResourceHash: String(derivedSchema.schema_hash) as Sha256Hash,
-            provenanceRef: `plan-literal:${plan.plan_hash}:${String(edge.id)}`,
-            retentionClass: 'run_recovery',
-            createdAtMs: input.nowMs,
-          });
-        } else {
-          const selectedPort = portValue(
-            transaction,
-            scopeInputJson,
-            String(from.port),
-          );
-          selected =
-            selectedPort === undefined
-              ? undefined
-              : valueAtPointer(selectedPort, from.pointer);
-        }
+        const selected = selectAndValidateDataValue(transaction, {
+          plan,
+          edge,
+          root: from.type === 'scope_input' ? scopeInputAuthority : null,
+          literal:
+            from.type === 'literal' ? (from.value as JsonValue) : undefined,
+          nowMs: input.nowMs,
+          label:
+            from.type === 'literal'
+              ? `Plan literal edge ${String(edge.id)}`
+              : `Scope input edge ${String(edge.id)}`,
+        });
+        const missingUnavailable =
+          selected.state === 'missing' && edge.on_missing === 'unavailable';
+        orchestrationError ||=
+          selected.state === 'error' ||
+          (selected.state === 'missing' && !missingUnavailable);
         resolveDataEdge(transaction, {
           graphRunId: input.graphRunId,
           scopeId: input.scopeId,
           edge,
           state:
-            selected !== undefined
+            selected.state === 'available'
               ? 'available'
-              : edge.on_missing === 'unavailable'
+              : missingUnavailable
                 ? 'unavailable'
                 : 'error',
-          value: selected === undefined ? undefined : value,
+          value: selected.state === 'available' ? selected.value : undefined,
           schemaHash: String(derivedSchema.schema_hash) as Sha256Hash,
           errorCode:
-            selected === undefined ? 'data_pointer_missing' : undefined,
+            selected.state === 'error'
+              ? selected.errorCode
+              : selected.state === 'missing' && !missingUnavailable
+                ? 'data_pointer_missing'
+                : undefined,
           payload: scopeInput,
           append,
           nowMs: input.nowMs,
@@ -2015,11 +2562,34 @@ export function initializeScopeFixedPointT3a(
         append,
         nowMs: input.nowMs,
       });
-      if (advanced.orchestrationError)
-        throw new G5RuntimeError(
-          'integrity_violation',
-          'T3a initialization reached an orchestration error',
+      orchestrationError ||= advanced.orchestrationError;
+      if (orchestrationError) {
+        const refreshed = transaction.queryOne<{ row_version: number }>(
+          'SELECT row_version FROM workflow_graph_runs WHERE id = ?',
+          [input.graphRunId],
         );
+        if (!refreshed)
+          throw new G5RuntimeError(
+            'integrity_violation',
+            'T3a initialization Run disappeared before engine close',
+          );
+        closeFixedPointEngineErrorT3(transaction, {
+          graphRunId: input.graphRunId,
+          scopeId: input.scopeId,
+          plan,
+          expectedRunRowVersion: refreshed.row_version,
+          expectedScopeRowVersion: scope.row_version,
+          runNextEventSequence: sequence,
+          runWorkFenceEpoch: run.work_fence_epoch,
+          scopeWorkFenceEpoch: scope.work_fence_epoch,
+          errorCode: 'fixed_point_resolution_error',
+          nowMs: input.nowMs,
+        });
+        return {
+          readyNodeIds: advanced.readyNodeIds,
+          lastEventSequence: sequence + 2,
+        };
+      }
       const refreshed = transaction.queryOne<{
         next_event_seq: number;
         row_version: number;
@@ -2280,47 +2850,22 @@ export function reconcileFactT3a(
           }
         }
         if (orchestrationError) {
-          const factRows = transaction.queryAll<JsonObject>(
-            'SELECT fact_key, payload_hash FROM workflow_graph_facts WHERE graph_run_id = ? AND scope_id = ? ORDER BY event_seq, fact_key COLLATE BINARY',
-            [input.graphRunId, input.scopeId],
-          );
-          const nodeRows = transaction.queryAll<JsonObject>(
-            'SELECT id, phase, terminal_status, row_version FROM workflow_graph_nodes WHERE graph_run_id = ? AND scope_id = ? ORDER BY node_key COLLATE BINARY',
-            [input.graphRunId, input.scopeId],
-          );
-          const edgeRows = transaction.queryAll<JsonObject>(
-            'SELECT id, edge_kind FROM workflow_graph_edges WHERE graph_run_id = ? AND scope_id = ? ORDER BY edge_key COLLATE BINARY',
-            [input.graphRunId, input.scopeId],
-          );
           const refreshed = transaction.queryOne<{ row_version: number }>(
             'SELECT row_version FROM workflow_graph_runs WHERE id = ?',
             [input.graphRunId],
           )!;
-          const closeRequestId = insertEngineErrorCloseRequestT3(transaction, {
+          closeFixedPointEngineErrorT3(transaction, {
             graphRunId: input.graphRunId,
             scopeId: input.scopeId,
+            plan,
             expectedRunRowVersion: refreshed.row_version,
             expectedScopeRowVersion: scope.row_version,
             runNextEventSequence: sequence,
             runWorkFenceEpoch: run.work_fence_epoch,
             scopeWorkFenceEpoch: scope.work_fence_epoch,
             errorCode: 'fixed_point_resolution_error',
-            completionPolicyHash: verifyCompletionPolicyAuthority(
-              requiredObjectField(
-                plan as unknown as JsonObject,
-                'completion',
-                'Compiled Plan v2',
-              ),
-            ).policy_hash as Sha256Hash,
-            factRows,
-            factSnapshotHash: runtimeObjectHash('fact-snapshot', factRows),
-            nodeRows,
-            nodeFrontierHash: runtimeObjectHash('node-frontier', nodeRows),
-            edgeRows,
-            edgeFrontierHash: runtimeObjectHash('edge-frontier', edgeRows),
             nowMs: input.nowMs,
           });
-          void closeRequestId;
           return { disposition: 'reconciled', eventSequence: sequence + 2 };
         }
       }
@@ -2364,6 +2909,59 @@ export function reconcileFactT3a(
     },
     fault,
   );
+}
+
+function closeFixedPointEngineErrorT3(
+  transaction: WorkflowRuntimeWriteTransaction,
+  input: {
+    readonly graphRunId: string;
+    readonly scopeId: string;
+    readonly plan: CompiledScopePlanV2Document;
+    readonly expectedRunRowVersion: number;
+    readonly expectedScopeRowVersion: number;
+    readonly runNextEventSequence: number;
+    readonly runWorkFenceEpoch: number;
+    readonly scopeWorkFenceEpoch: number;
+    readonly errorCode: string;
+    readonly nowMs: number;
+  },
+): string {
+  const factRows = transaction.queryAll<JsonObject>(
+    'SELECT fact_key, payload_hash FROM workflow_graph_facts WHERE graph_run_id = ? AND scope_id = ? ORDER BY event_seq, fact_key COLLATE BINARY',
+    [input.graphRunId, input.scopeId],
+  );
+  const nodeRows = transaction.queryAll<JsonObject>(
+    'SELECT id, phase, terminal_status, row_version FROM workflow_graph_nodes WHERE graph_run_id = ? AND scope_id = ? ORDER BY node_key COLLATE BINARY',
+    [input.graphRunId, input.scopeId],
+  );
+  const edgeRows = transaction.queryAll<JsonObject>(
+    'SELECT id, edge_kind FROM workflow_graph_edges WHERE graph_run_id = ? AND scope_id = ? ORDER BY edge_key COLLATE BINARY',
+    [input.graphRunId, input.scopeId],
+  );
+  return insertEngineErrorCloseRequestT3(transaction, {
+    graphRunId: input.graphRunId,
+    scopeId: input.scopeId,
+    expectedRunRowVersion: input.expectedRunRowVersion,
+    expectedScopeRowVersion: input.expectedScopeRowVersion,
+    runNextEventSequence: input.runNextEventSequence,
+    runWorkFenceEpoch: input.runWorkFenceEpoch,
+    scopeWorkFenceEpoch: input.scopeWorkFenceEpoch,
+    errorCode: input.errorCode,
+    completionPolicyHash: verifyCompletionPolicyAuthority(
+      requiredObjectField(
+        input.plan as unknown as JsonObject,
+        'completion',
+        'Compiled Plan v2',
+      ),
+    ).policy_hash as Sha256Hash,
+    factRows,
+    factSnapshotHash: runtimeObjectHash('fact-snapshot', factRows),
+    nodeRows,
+    nodeFrontierHash: runtimeObjectHash('node-frontier', nodeRows),
+    edgeRows,
+    edgeFrontierHash: runtimeObjectHash('edge-frontier', edgeRows),
+    nowMs: input.nowMs,
+  });
 }
 
 function insertEngineErrorCloseRequestT3(

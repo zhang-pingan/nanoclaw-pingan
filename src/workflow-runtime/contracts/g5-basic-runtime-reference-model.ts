@@ -128,6 +128,52 @@ export function evaluateReferenceTrigger(
       : 'unknown';
 }
 
+export interface ReferenceInputContract {
+  readonly aggregation: 'single' | 'list';
+  readonly schema: 'string' | 'integer';
+  readonly maxBytes: number | null;
+  readonly itemMaxBytes: number | null;
+}
+
+function referenceJsonBytes(value: unknown): number {
+  return Buffer.byteLength(JSON.stringify(value), 'utf8');
+}
+
+function referenceSchemaAccepts(
+  value: unknown,
+  schema: ReferenceInputContract['schema'],
+): boolean {
+  return schema === 'string'
+    ? typeof value === 'string'
+    : typeof value === 'number' && Number.isSafeInteger(value);
+}
+
+export function evaluateReferenceInputContract(
+  value: string | number,
+  contract: ReferenceInputContract,
+): 'ready' | 'engine_error' {
+  if (!referenceSchemaAccepts(value, contract.schema)) return 'engine_error';
+  if (
+    contract.aggregation === 'single' &&
+    contract.maxBytes !== null &&
+    referenceJsonBytes(value) > contract.maxBytes
+  )
+    return 'engine_error';
+  if (contract.aggregation === 'list') {
+    if (
+      contract.itemMaxBytes !== null &&
+      referenceJsonBytes(value) > contract.itemMaxBytes
+    )
+      return 'engine_error';
+    if (
+      contract.maxBytes !== null &&
+      referenceJsonBytes([value]) > contract.maxBytes
+    )
+      return 'engine_error';
+  }
+  return 'ready';
+}
+
 export class G5BasicRuntimeReferenceModel {
   readonly nodes: Map<string, ReferenceNode>;
   readonly edges: ReferenceEdge[];
