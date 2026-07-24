@@ -8,7 +8,7 @@
   "domain_separator": "icarus:workflow-contract-pack-g5-basic-runtime:1\n",
   "payload": {
     "gate": "G5",
-    "status": "EXIT_CANDIDATE_PENDING_INDEPENDENT_G5_WHOLE_GATE_REGRESSION",
+    "status": "G5_REPAIR_EXIT_CANDIDATE_PENDING_INDEPENDENT_G5_WHOLE_GATE_REGRESSION",
     "positive_case_count": 9,
     "negative_case_count": 14,
     "fault_case_count": 16,
@@ -20,7 +20,7 @@
           "id": "icarus.workflow-g5-basic-runtime-protocol",
           "version": "1.0.0"
         },
-        "hash": "sha256:bb5753ea10dcf164b588cd2b9a0d0c1da760d3268bc3843a28ceedf7a2d8c9f4"
+        "hash": "sha256:87543c7cd905d47fa493f9558ea39b5be54ff0aafc5927c9237423de9f6c6ee3"
       },
       {
         "format": "icarus.workflow-g5-basic-runtime-record-schema/1",
@@ -60,10 +60,10 @@
           "id": "icarus.workflow-g5-basic-runtime-implementation",
           "version": "1.0.0"
         },
-        "hash": "sha256:ad5284c68443477bc8ef8ef407c3996c638f65ef5940c32a5dda996484c34a3b"
+        "hash": "sha256:1ee9bf84017c2fa5675a798d224121448ef1d268527b6de75b80c3ff721b1b80"
       }
     ],
-    "member_tree_hash": "sha256:e50efbce0b898422cc63da4d6ab0bbebccfc23b8311c9a019aac7fadeb8000ec"
+    "member_tree_hash": "sha256:4093ef602b345e247e192f0ff76ee7e561a979fb123eaf21153eacb184beb6be"
   },
-  "hash": "sha256:2cda6c4b920cb682f016a9cabdcb46d9482774894e6aefada229b88cc973d970"
+  "hash": "sha256:90060da961df14dfb9970c9f08619b406c0cff36ea8bff5326f2d950391099bb"
 }

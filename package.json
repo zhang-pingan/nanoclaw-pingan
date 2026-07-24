@@ -21,7 +21,7 @@
     "contracts:execution-binding:check": "tsx src/workflow-runtime/contracts/capability-outbox-binding-cli.ts check",
     "contracts:archive:check": "tsx src/workflow-runtime/contracts/cli.ts archive-check && npm run golden:draft:check",
     "contracts:capacity-repair:generate": "tsx src/workflow-runtime/contracts/capacity-control-plane-cli.ts generate && npm run schema:generate",
-    "contracts:capacity-repair:check": "tsx src/workflow-runtime/contracts/capacity-control-plane-cli.ts check && npm run schema:check",
+    "contracts:capacity-repair:check": "tsx src/workflow-runtime/contracts/capacity-control-plane-current-cli.ts check && npm run schema:check",
     "schema:generate": "tsx src/workflow-runtime/store/schema/cli.ts generate",
     "schema:check": "tsx src/workflow-runtime/store/schema/cli.ts check",
     "store:check": "tsx src/workflow-runtime/store/runtime-store/check.ts",

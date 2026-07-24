@@ -1,4 +1,5 @@
 import { canonicalJson, domainSeparatedSha256 } from '../contracts/hash.js';
+import { registryResourceId } from '../contracts/g3-registry-persistence.js';
 import type { CompiledScopePlanV2Document } from '../contracts/compiler-contract-repair-types.js';
 import { COMPILED_PLAN_V2_DOMAIN_SEPARATOR } from '../contracts/compiler-contract-repair-source.js';
 import type { JsonObject, Sha256Hash } from '../contracts/types.js';
@@ -17,6 +18,11 @@ import {
   type G5TransactionFault,
 } from './graph-store.js';
 import { chargeAndInsertGraphFact, reserveLedgerResources } from './ledger.js';
+import {
+  loadMaterializedNodeAuthority,
+  requiredObjectField,
+  verifyCompiledPlanAuthority,
+} from './plan-authority.js';
 
 export interface T2CompileInput {
   readonly graphRunId: string;
@@ -36,11 +42,7 @@ export function persistCompileResultT2a(
   input: T2CompileInput,
   fault?: G5TransactionFault,
 ): { planId: string; disposition: 'compiled' | 'exact_replay' } {
-  const { plan_hash: claimedPlanHash, ...planWithoutHash } = input.plan;
-  const observedPlanHash = domainSeparatedSha256(
-    COMPILED_PLAN_V2_DOMAIN_SEPARATOR,
-    planWithoutHash as JsonObject,
-  );
+  const claimedPlanHash = verifyCompiledPlanAuthority(input.plan);
   const observedSourceHash = domainSeparatedSha256(
     'icarus:workflow-graph-source:1\n',
     input.sourceJson,
@@ -49,7 +51,7 @@ export function persistCompileResultT2a(
     input.plan.format !== 'icarus.workflow-graph-scope-plan/2' ||
     input.plan.source_hash !== input.sourceHash ||
     input.sourceHash !== observedSourceHash ||
-    claimedPlanHash !== observedPlanHash
+    claimedPlanHash !== input.plan.plan_hash
   ) {
     throw new G5RuntimeError(
       'contract_invalid',
@@ -82,18 +84,54 @@ export function persistCompileResultT2a(
       const run = transaction.queryOne<{
         runtime_safety_snapshot_hash: string;
         compiler_toolchain_resource_hash: string;
+        source_seed_hash: string;
         database_schema_version: number;
         database_schema_hash: string;
       }>(
         `SELECT runtime_safety_snapshot_hash, compiler_toolchain_resource_hash,
+                source_seed_hash,
                 database_schema_version, database_schema_hash
            FROM workflow_graph_runs WHERE id = ?`,
         [input.graphRunId],
       );
+      const definition = transaction.queryOne<{
+        publication_state: string;
+        payload_state: string;
+        inline_canonical_json: string | null;
+      }>(
+        `SELECT rr.publication_state, v.payload_state, v.inline_canonical_json
+           FROM workflow_graph_runs r
+           JOIN workflow_state_activations a ON a.id = r.state_instance_id
+           JOIN workflow_registry_resources rr
+             ON rr.id = a.workflow_definition_resource_id
+            AND rr.content_hash = a.workflow_definition_resource_hash
+           JOIN workflow_values v ON v.id = rr.canonical_value_id
+          WHERE r.id = ? AND rr.resource_type = 'definition'`,
+        [input.graphRunId],
+      );
+      const definitionContent =
+        definition?.inline_canonical_json === null ||
+        definition?.inline_canonical_json === undefined
+          ? null
+          : (JSON.parse(definition.inline_canonical_json) as JsonObject);
+      const planPin = definitionContent
+        ? objectField(definitionContent, 'compiled_plan_pin')
+        : null;
       if (!build || build.graph_run_id !== input.graphRunId)
         throw new G5RuntimeError('precondition_failed', 'T2a build is missing');
       if (
         !run ||
+        !definition ||
+        definition.publication_state !== 'published' ||
+        definition.payload_state !== 'live' ||
+        !planPin ||
+        planPin.plan_hash !== input.plan.plan_hash ||
+        planPin.plan_format !== input.plan.format ||
+        planPin.compiler_toolchain_hash !==
+          input.plan.compiler_toolchain_hash ||
+        planPin.compiler_build_hash !== input.plan.compiler_build_hash ||
+        planPin.provenance !== 'sealed_g2_expected' ||
+        run.source_seed_hash !== input.sourceHash ||
         input.plan.runtime_safety_hash !== run.runtime_safety_snapshot_hash ||
         input.plan.compiler_toolchain_hash !==
           run.compiler_toolchain_resource_hash ||
@@ -209,18 +247,7 @@ export function materializeRootScopeT2b(
   edgeCount: number;
   disposition: 'materialized' | 'exact_replay';
 } {
-  const { plan_hash: claimedPlanHash, ...planWithoutHash } = input.plan;
-  if (
-    claimedPlanHash !==
-    domainSeparatedSha256(
-      COMPILED_PLAN_V2_DOMAIN_SEPARATOR,
-      planWithoutHash as JsonObject,
-    )
-  )
-    throw new G5RuntimeError(
-      'integrity_violation',
-      'T2b Plan v2 bytes do not match plan_hash',
-    );
+  verifyCompiledPlanAuthority(input.plan);
   const nodes = input.plan.nodes as JsonObject[];
   const dynamicNode = nodes.find((node) =>
     ['subgraph', 'expand', 'map'].includes(String(node.type)),
@@ -351,6 +378,41 @@ export function materializeRootScopeT2b(
         const nodeType = String(node.type);
         const binding = objectField(node, 'capability_binding');
         const capabilityRef = binding ? objectField(binding, 'ref') : null;
+        const capabilityRowId = capabilityRef
+          ? registryResourceId({
+              resource_type: 'capability',
+              ref: {
+                id: String(capabilityRef.id),
+                version: String(capabilityRef.version),
+              },
+            })
+          : null;
+        const capabilityResource = capabilityRowId
+          ? transaction.queryOne<{
+              id: string;
+              content_hash: string;
+              publication_state: string;
+            }>(
+              `SELECT id, content_hash, publication_state
+                 FROM workflow_registry_resources
+                WHERE id = ? AND resource_type = 'capability'
+                  AND resource_id = ? AND resource_version = ?`,
+              [
+                capabilityRowId,
+                String(capabilityRef!.id),
+                String(capabilityRef!.version),
+              ],
+            )
+          : null;
+        if (
+          capabilityRowId &&
+          (!capabilityResource ||
+            capabilityResource.publication_state !== 'published')
+        )
+          throw new G5RuntimeError(
+            'precondition_failed',
+            `T2b exact Published capability is unavailable: ${nodeKey}`,
+          );
         transaction.execute(
           `INSERT INTO workflow_graph_nodes (
          id, graph_run_id, scope_id, node_key, node_type,
@@ -366,7 +428,7 @@ export function materializeRootScopeT2b(
          controller_decision_json, controller_decision_hash,
          controller_remaining_count, controller_reservation_group_id,
          row_version, ready_at_ms, terminal_at_ms, created_at_ms, updated_at_ms
-       ) VALUES (?, ?, ?, ?, ?, NULL, ?, NULL, ?, 'pending', 'unknown', 'open',
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 'unknown', 'open',
          NULL, NULL, NULL, NULL, NULL, '[]', NULL, NULL, NULL, NULL, NULL,
          NULL, NULL, NULL, ?, NULL, NULL, NULL, ?, NULL, NULL, ?, NULL,
          1, NULL, NULL, ?, ?)`,
@@ -380,7 +442,9 @@ export function materializeRootScopeT2b(
             input.rootScopeId,
             nodeKey,
             nodeType,
-            String(capabilityRef?.version ?? 'none'),
+            capabilityRowId,
+            capabilityRef ? String(capabilityRef.version) : null,
+            capabilityResource?.content_hash ?? null,
             canonicalJson(node),
             input.plan.interface_snapshot_hash,
             null,
@@ -584,6 +648,76 @@ export function initializeScopeFixedPointT3a(
           'cas_conflict',
           'T3a scope initialization precondition failed',
         );
+      let sequence = run.next_event_seq;
+      const scopeInputEdges = transaction.queryAll<{
+        id: string;
+        edge_key: string;
+        compiled_edge_json: string;
+      }>(
+        `SELECT e.id, e.edge_key, e.compiled_edge_json
+           FROM workflow_graph_edges e
+           JOIN workflow_graph_data_edge_resolutions r ON r.edge_id = e.id
+          WHERE e.graph_run_id = ? AND e.scope_id = ? AND e.edge_kind = 'data'
+            AND json_extract(e.compiled_edge_json, '$.from.type') = 'scope_input'
+            AND r.state = 'unresolved'
+          ORDER BY e.edge_key COLLATE BINARY`,
+        [input.graphRunId, input.scopeId],
+      );
+      for (const edge of scopeInputEdges) {
+        const compiled = JSON.parse(edge.compiled_edge_json) as JsonObject;
+        const derivedSchema = objectField(compiled, 'derived_schema');
+        sequence += 1;
+        if (
+          transaction.execute(
+            "UPDATE workflow_graph_data_edge_resolutions SET state = 'available', value_value_id = ?, value_hash = ?, schema_hash = ?, source_attempt_id = NULL, resolution_seq = ?, resolved_at_ms = ?, row_version = row_version + 1 WHERE edge_id = ? AND state = 'unresolved'",
+            [
+              scope.input_snapshot_value_id,
+              scope.input_snapshot_hash,
+              String(
+                derivedSchema?.schema_hash ?? compiled.producer_schema_hash,
+              ),
+              sequence,
+              input.nowMs,
+              edge.id,
+            ],
+          ).changes !== 1
+        )
+          throw new G5RuntimeError(
+            'cas_conflict',
+            `T3a scope-input edge CAS failed: ${edge.id}`,
+          );
+        insertGraphEvent(transaction, {
+          graphRunId: input.graphRunId,
+          sequence,
+          scopeId: input.scopeId,
+          nodeId: null,
+          attemptId: null,
+          eventType: 'data_edge_resolved',
+          idempotencyKey: `data-edge:${edge.id}`,
+          payloadValueId: scope.input_snapshot_value_id,
+          payloadHash: scope.input_snapshot_hash,
+          occurredAtMs: input.nowMs,
+          createdAtMs: input.nowMs,
+        });
+        chargeAndInsertGraphFact(transaction, {
+          id: stableRuntimeId('fact', {
+            graph_run_id: input.graphRunId,
+            fact_key: `data-edge:${edge.id}`,
+          }),
+          graphRunId: input.graphRunId,
+          scopeId: input.scopeId,
+          eventSeq: sequence,
+          causalEventSeq: sequence,
+          causalWave: 0,
+          factKind: 'data_edge_resolved',
+          stableObjectKind: 'edge',
+          stableObjectId: edge.id,
+          factKey: `data-edge:${edge.id}`,
+          payloadValueId: scope.input_snapshot_value_id,
+          payloadHash: scope.input_snapshot_hash,
+          createdAtMs: input.nowMs,
+        });
+      }
       const sources = transaction.queryAll<{ id: string; row_version: number }>(
         `SELECT n.id, n.row_version
          FROM workflow_graph_nodes n
@@ -591,12 +725,19 @@ export function initializeScopeFixedPointT3a(
           AND NOT EXISTS (
             SELECT 1 FROM workflow_graph_edges e
              WHERE e.graph_run_id = n.graph_run_id AND e.scope_id = n.scope_id
+               AND e.edge_kind = 'control'
                AND json_extract(e.compiled_edge_json, '$.to_node_id') = n.node_key
+          )
+          AND NOT EXISTS (
+            SELECT 1 FROM workflow_graph_edges e
+            JOIN workflow_graph_data_edge_resolutions r ON r.edge_id = e.id
+             WHERE e.graph_run_id = n.graph_run_id AND e.scope_id = n.scope_id
+               AND json_extract(e.compiled_edge_json, '$.to.node_id') = n.node_key
+               AND r.state <> 'available'
           )
         ORDER BY n.node_key COLLATE BINARY`,
         [input.graphRunId, input.scopeId],
       );
-      let sequence = run.next_event_seq;
       for (const source of sources) {
         const triggerHash = runtimeObjectHash('trigger-cut', {
           node_id: source.id,
@@ -722,16 +863,27 @@ export function reconcileFactT3a(
       const run = transaction.queryOne<{
         next_event_seq: number;
         row_version: number;
+        work_fence_epoch: number;
         control: string;
         operational_state: string;
       }>(
-        'SELECT next_event_seq, row_version, control, operational_state FROM workflow_graph_runs WHERE id = ?',
+        'SELECT next_event_seq, row_version, work_fence_epoch, control, operational_state FROM workflow_graph_runs WHERE id = ?',
         [input.graphRunId],
+      );
+      const scope = transaction.queryOne<{
+        lifecycle: string;
+        work_fence_epoch: number;
+      }>(
+        'SELECT lifecycle, work_fence_epoch FROM workflow_graph_scopes WHERE id = ? AND graph_run_id = ?',
+        [input.scopeId, input.graphRunId],
       );
       if (
         !run ||
+        !scope ||
         run.row_version !== input.expectedRunRowVersion ||
-        run.operational_state !== 'healthy'
+        run.control !== 'running' ||
+        run.operational_state !== 'healthy' ||
+        scope.lifecycle !== 'active'
       )
         throw new G5RuntimeError(
           'cas_conflict',
@@ -806,24 +958,27 @@ export function reconcileFactT3a(
             'precondition_failed',
             'T3a source node is missing',
           );
-        if (node.phase !== 'terminal') {
-          if (
-            transaction.execute(
-              "UPDATE workflow_graph_nodes SET phase = 'terminal', terminal_status = ?, terminal_at_ms = ?, row_version = row_version + 1, updated_at_ms = ? WHERE id = ? AND row_version = ?",
-              [
-                input.terminalStatus,
-                input.nowMs,
-                input.nowMs,
-                node.id,
-                node.row_version,
-              ],
-            ).changes !== 1
-          )
-            throw new G5RuntimeError(
-              'cas_conflict',
-              'T3a source node terminal CAS failed',
-            );
-        }
+        const persistedTerminal = transaction.queryOne<{
+          terminal_status: string | null;
+          published_output_envelope_value_id: string | null;
+          published_output_envelope_hash: string | null;
+        }>(
+          "SELECT terminal_status, published_output_envelope_value_id, published_output_envelope_hash FROM workflow_graph_nodes WHERE id = ? AND phase = 'terminal'",
+          [node.id],
+        );
+        if (
+          !persistedTerminal ||
+          persistedTerminal.terminal_status !== input.terminalStatus ||
+          (input.terminalStatus === 'succeeded' &&
+            (persistedTerminal.published_output_envelope_value_id !==
+              input.payload.id ||
+              persistedTerminal.published_output_envelope_hash !==
+                input.payload.hash))
+        )
+          throw new G5RuntimeError(
+            'precondition_failed',
+            'T3a terminal fact is not backed by persisted Node output',
+          );
         const outgoing = transaction.queryAll<{
           id: string;
           edge_key: string;
@@ -871,48 +1026,53 @@ export function reconcileFactT3a(
             1,
           );
         }
-        if (input.terminalStatus === 'succeeded')
-          for (const edge of outgoing.filter(
-            (candidate) => candidate.edge_kind === 'data',
-          )) {
-            const compiled = JSON.parse(edge.compiled_edge_json) as JsonObject;
-            const from = objectField(compiled, 'from');
-            if (from?.node_id !== node.node_key) continue;
-            const derivedSchema = objectField(compiled, 'derived_schema');
-            const schemaHash = String(
-              derivedSchema?.schema_hash ?? compiled.producer_schema_hash,
+        for (const edge of outgoing.filter(
+          (candidate) => candidate.edge_kind === 'data',
+        )) {
+          const compiled = JSON.parse(edge.compiled_edge_json) as JsonObject;
+          const from = objectField(compiled, 'from');
+          if (from?.node_id !== node.node_key) continue;
+          const available = input.terminalStatus === 'succeeded';
+          const derivedSchema = available
+            ? objectField(compiled, 'derived_schema')
+            : null;
+          const changed = transaction.execute(
+            available
+              ? "UPDATE workflow_graph_data_edge_resolutions SET state = 'available', value_value_id = ?, value_hash = ?, schema_hash = ?, source_attempt_id = ?, resolution_seq = ?, resolved_at_ms = ?, row_version = row_version + 1 WHERE edge_id = ? AND state = 'unresolved'"
+              : "UPDATE workflow_graph_data_edge_resolutions SET state = 'unavailable', value_value_id = NULL, value_hash = NULL, schema_hash = NULL, source_attempt_id = ?, resolution_seq = ?, resolved_at_ms = ?, row_version = row_version + 1 WHERE edge_id = ? AND state = 'unresolved'",
+            available
+              ? [
+                  input.payload.id,
+                  input.payload.hash,
+                  String(
+                    derivedSchema?.schema_hash ?? compiled.producer_schema_hash,
+                  ),
+                  node.current_attempt_id,
+                  sequence + 1,
+                  input.nowMs,
+                  edge.id,
+                ]
+              : [node.current_attempt_id, sequence + 1, input.nowMs, edge.id],
+          ).changes;
+          if (changed !== 1)
+            throw new G5RuntimeError(
+              'integrity_violation',
+              `T3a data edge was not unresolved: ${edge.id}`,
             );
-            const changed = transaction.execute(
-              "UPDATE workflow_graph_data_edge_resolutions SET state = 'available', value_value_id = ?, value_hash = ?, schema_hash = ?, source_attempt_id = ?, resolution_seq = ?, resolved_at_ms = ?, row_version = row_version + 1 WHERE edge_id = ? AND state = 'unresolved'",
-              [
-                input.payload.id,
-                input.payload.hash,
-                schemaHash,
-                node.current_attempt_id,
-                sequence + 1,
-                input.nowMs,
-                edge.id,
-              ],
-            ).changes;
-            if (changed !== 1)
-              throw new G5RuntimeError(
-                'integrity_violation',
-                `T3a data edge was not unresolved: ${edge.id}`,
-              );
-            append(
-              'data_edge_resolved',
-              'edge',
-              edge.id,
-              `data-edge:${edge.id}`,
-              input.payload,
-              1,
-            );
-          }
+          append(
+            'data_edge_resolved',
+            'edge',
+            edge.id,
+            `data-edge:${edge.id}`,
+            input.payload,
+            1,
+          );
+        }
         const targetKeys = outgoing
-          .map(
-            (row) =>
-              (JSON.parse(row.compiled_edge_json) as JsonObject).to_node_id,
-          )
+          .map((row) => {
+            const compiled = JSON.parse(row.compiled_edge_json) as JsonObject;
+            return compiled.to_node_id ?? objectField(compiled, 'to')?.node_id;
+          })
           .filter((value): value is string => typeof value === 'string');
         for (const targetKey of [...new Set(targetKeys)].sort()) {
           const target = transaction.queryOne<{
@@ -941,10 +1101,16 @@ export function reconcileFactT3a(
             `SELECT count(*) AS count FROM workflow_graph_edges e JOIN workflow_graph_data_edge_resolutions r ON r.edge_id = e.id WHERE e.graph_run_id = ? AND e.scope_id = ? AND json_extract(e.compiled_edge_json, '$.to.node_id') = ? AND r.state = 'unresolved'`,
             [input.graphRunId, input.scopeId, targetKey],
           )!;
+          const unavailableData = transaction.queryOne<{ count: number }>(
+            `SELECT count(*) AS count FROM workflow_graph_edges e JOIN workflow_graph_data_edge_resolutions r ON r.edge_id = e.id WHERE e.graph_run_id = ? AND e.scope_id = ? AND json_extract(e.compiled_edge_json, '$.to.node_id') = ? AND r.state IN ('unavailable', 'error')`,
+            [input.graphRunId, input.scopeId, targetKey],
+          )!;
           if (unresolved.count === 0) {
             if (
-              (controlTotal.count === 0 || taken.count > 0) &&
-              unresolvedData.count === 0
+              (controlTotal.count === 0 ||
+                taken.count === controlTotal.count) &&
+              unresolvedData.count === 0 &&
+              unavailableData.count === 0
             ) {
               const inputEdges = transaction.queryAll<{
                 edge_key: string;
@@ -969,12 +1135,14 @@ export function reconcileFactT3a(
               }));
               if (
                 transaction.execute(
-                  "UPDATE workflow_graph_nodes SET phase = 'ready', trigger_state = 'true', input_state = 'sealed', trigger_cut_json = '{}', trigger_cut_hash = ?, input_snapshot_json = ?, input_snapshot_value_id = NULL, input_snapshot_hash = ?, activation_event_seq = ?, run_work_fence_epoch_at_activation = 0, scope_work_fence_epoch_at_activation = 0, ready_at_ms = ?, row_version = row_version + 1, updated_at_ms = ? WHERE id = ? AND row_version = ?",
+                  "UPDATE workflow_graph_nodes SET phase = 'ready', trigger_state = 'true', input_state = 'sealed', trigger_cut_json = '{}', trigger_cut_hash = ?, input_snapshot_json = ?, input_snapshot_value_id = NULL, input_snapshot_hash = ?, activation_event_seq = ?, run_work_fence_epoch_at_activation = ?, scope_work_fence_epoch_at_activation = ?, ready_at_ms = ?, row_version = row_version + 1, updated_at_ms = ? WHERE id = ? AND row_version = ?",
                   [
                     runtimeObjectHash('trigger-cut', { node_id: target.id }),
                     canonicalJson(inputSnapshot),
                     runtimeObjectHash('input-snapshot', inputSnapshot),
                     sequence + 1,
+                    run.work_fence_epoch,
+                    scope.work_fence_epoch,
                     input.nowMs,
                     input.nowMs,
                     target.id,
@@ -994,7 +1162,10 @@ export function reconcileFactT3a(
                 input.payload,
                 2,
               );
-            } else if (controlTotal.count > 0 && taken.count === 0) {
+            } else if (
+              (controlTotal.count > 0 && taken.count !== controlTotal.count) ||
+              unavailableData.count > 0
+            ) {
               if (
                 transaction.execute(
                   "UPDATE workflow_graph_nodes SET phase = 'terminal', trigger_state = 'false', input_state = 'impossible', terminal_status = 'skipped', terminal_at_ms = ?, row_version = row_version + 1, updated_at_ms = ? WHERE id = ? AND row_version = ?",
@@ -1046,8 +1217,6 @@ export interface T3bSettledCloseInput {
   readonly scopeId: string;
   readonly expectedRunRowVersion: number;
   readonly expectedScopeRowVersion: number;
-  readonly selectedRuleId: string;
-  readonly completionPolicyHash: Sha256Hash;
   readonly nowMs: number;
 }
 
@@ -1059,6 +1228,42 @@ export function requestSettledCloseT3b(
   return runImmediateG5Transaction(
     store,
     (transaction) => {
+      const authorityNode = transaction.queryOne<{ id: string }>(
+        'SELECT id FROM workflow_graph_nodes WHERE graph_run_id = ? AND scope_id = ? ORDER BY node_key COLLATE BINARY LIMIT 1',
+        [input.graphRunId, input.scopeId],
+      );
+      if (!authorityNode)
+        throw new G5RuntimeError(
+          'precondition_failed',
+          'T3b materialized scope has no Plan nodes',
+        );
+      const authority = loadMaterializedNodeAuthority(
+        transaction,
+        input.graphRunId,
+        input.scopeId,
+        authorityNode.id,
+      );
+      const completion = requiredObjectField(
+        authority.plan as unknown as JsonObject,
+        'completion',
+        'Compiled Plan v2',
+      );
+      const settledRules = Array.isArray(completion.settled_rules)
+        ? (completion.settled_rules as JsonObject[])
+        : [];
+      const selectedRule = [...settledRules].sort((left, right) => {
+        const byPriority = Number(right.priority) - Number(left.priority);
+        return byPriority !== 0
+          ? byPriority
+          : String(left.id).localeCompare(String(right.id), 'en');
+      })[0];
+      if (!selectedRule || typeof selectedRule.id !== 'string')
+        throw new G5RuntimeError(
+          'precondition_failed',
+          'T3b Plan has no settled completion rule',
+        );
+      const selectedRuleId = selectedRule.id;
+      const completionPolicyHash = String(completion.policy_hash) as Sha256Hash;
       const prior = transaction.queryOne<{
         id: string;
         selected_rule_id: string | null;
@@ -1067,7 +1272,7 @@ export function requestSettledCloseT3b(
         [input.graphRunId, input.scopeId],
       );
       if (prior) {
-        if (prior.selected_rule_id !== input.selectedRuleId)
+        if (prior.selected_rule_id !== selectedRuleId)
           throw new G5RuntimeError(
             'integrity_violation',
             'T3b close arbitration drift',
@@ -1124,15 +1329,31 @@ export function requestSettledCloseT3b(
           'precondition_failed',
           'T3b fixed point is not quiescent',
         );
-      const candidate = transaction.queryOne<{
+      const candidates = transaction.queryAll<{
         id: string;
+        terminal_node_id: string;
+        node_key: string;
         candidate_seq: number;
         output_snapshot_value_id: string;
         output_snapshot_hash: Sha256Hash;
       }>(
-        'SELECT id, candidate_seq, output_snapshot_value_id, output_snapshot_hash FROM workflow_graph_terminal_candidates WHERE graph_run_id = ? AND scope_id = ? ORDER BY terminal_node_id COLLATE BINARY LIMIT 1',
+        `SELECT c.id, c.terminal_node_id, n.node_key, c.candidate_seq,
+                c.output_snapshot_value_id, c.output_snapshot_hash
+           FROM workflow_graph_terminal_candidates c
+           JOIN workflow_graph_nodes n ON n.id = c.terminal_node_id
+          WHERE c.graph_run_id = ? AND c.scope_id = ?
+          ORDER BY n.node_key COLLATE BINARY`,
         [input.graphRunId, input.scopeId],
       );
+      const selector = requiredObjectField(
+        selectedRule,
+        'selector',
+        'Plan settled completion rule',
+      );
+      const exits = Array.isArray(selector.exits)
+        ? selector.exits.map(String)
+        : [];
+      const candidate = candidates.find((row) => exits.includes(row.node_key));
       if (!candidate)
         throw new G5RuntimeError(
           'precondition_failed',
@@ -1175,7 +1396,7 @@ export function requestSettledCloseT3b(
       const eligibilityId = stableRuntimeId('eligibility', {
         graph_run_id: input.graphRunId,
         scope_id: input.scopeId,
-        rule_id: input.selectedRuleId,
+        rule_id: selectedRuleId,
         phase: 'settled',
       });
       transaction.execute(
@@ -1184,7 +1405,7 @@ export function requestSettledCloseT3b(
           eligibilityId,
           input.graphRunId,
           input.scopeId,
-          input.selectedRuleId,
+          selectedRuleId,
           eligibilitySequence,
           candidate.id,
           canonicalJson(factRows as unknown as JsonObject[]),
@@ -1195,12 +1416,12 @@ export function requestSettledCloseT3b(
       const requestPayload: JsonObject = {
         graph_run_id: input.graphRunId,
         scope_id: input.scopeId,
-        selected_rule_id: input.selectedRuleId,
+        selected_rule_id: selectedRuleId,
         candidate_id: candidate.id,
         fact_snapshot_hash: factSnapshotHash,
         node_frontier_hash: nodeFrontierHash,
         edge_frontier_hash: edgeFrontierHash,
-        completion_policy_hash: input.completionPolicyHash,
+        completion_policy_hash: completionPolicyHash,
         trigger_event_seq: closeSequence,
         fenced_work_epoch: scope.work_fence_epoch,
       };
@@ -1227,7 +1448,7 @@ export function requestSettledCloseT3b(
           closeRequestId,
           input.graphRunId,
           input.scopeId,
-          input.selectedRuleId,
+          selectedRuleId,
           candidate.id,
           eligibilitySequence,
           canonicalJson(factRows as unknown as JsonObject[]),

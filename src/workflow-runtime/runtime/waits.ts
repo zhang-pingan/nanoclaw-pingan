@@ -1,5 +1,9 @@
 import type { RuntimeValueRef } from '../contracts/g5-basic-runtime-types.js';
-import type { WorkflowRuntimeStore } from '../store/runtime-store/index.js';
+import type { JsonObject } from '../contracts/types.js';
+import type {
+  WorkflowRuntimeStore,
+  WorkflowRuntimeWriteTransaction,
+} from '../store/runtime-store/index.js';
 import {
   G5RuntimeError,
   insertGraphEvent,
@@ -11,6 +15,42 @@ import {
   chargeAndInsertGraphFact,
   releaseLedgerReservationGroup,
 } from './ledger.js';
+import {
+  loadMaterializedNodeAuthority,
+  requiredObjectField,
+} from './plan-authority.js';
+
+function assertAuthorizationValue(
+  transaction: WorkflowRuntimeWriteTransaction,
+  value: RuntimeValueRef,
+  format: string,
+  phase: string,
+): void {
+  const row = transaction.queryOne<{
+    inline_canonical_json: string | null;
+    content_hash: string;
+    payload_state: string;
+  }>(
+    'SELECT inline_canonical_json, content_hash, payload_state FROM workflow_values WHERE id = ?',
+    [value.id],
+  );
+  if (
+    !row ||
+    row.inline_canonical_json === null ||
+    row.content_hash !== value.hash ||
+    row.payload_state !== 'live'
+  )
+    throw new G5RuntimeError(
+      'precondition_failed',
+      `T6c ${phase} authorization Value is unavailable`,
+    );
+  const content = JSON.parse(row.inline_canonical_json) as JsonObject;
+  if (content.format !== format || content.phase !== phase)
+    throw new G5RuntimeError(
+      'contract_invalid',
+      `T6c ${phase} authorization Value has the wrong typed contract`,
+    );
+}
 
 export interface T6cWaitResolutionInput {
   readonly waitId: string;
@@ -67,13 +107,54 @@ export function resolveWaitT6c(
       if (priorInbox) {
         const priorWait = transaction.queryOne<{
           graph_run_id: string;
+          scope_id: string;
+          node_id: string;
           contract_resource_id: string;
           contract_resource_hash: string;
           correlation_key_hash: string;
           status: string;
+          run_work_fence_epoch: number;
+          scope_work_fence_epoch: number;
         }>(
-          'SELECT graph_run_id, contract_resource_id, contract_resource_hash, correlation_key_hash, status FROM workflow_graph_waits WHERE id = ?',
+          'SELECT graph_run_id, scope_id, node_id, contract_resource_id, contract_resource_hash, correlation_key_hash, status, run_work_fence_epoch, scope_work_fence_epoch FROM workflow_graph_waits WHERE id = ?',
           [input.waitId],
+        );
+        if (
+          input.ingressAuthorization.id === input.bindingAuthorization.id ||
+          !priorWait
+        )
+          return {
+            disposition: 'conflict',
+            inboxSequence: priorInbox.inbox_seq,
+            eventSequence: null,
+          };
+        assertAuthorizationValue(
+          transaction,
+          input.ingressAuthorization,
+          'icarus.workflow-wait-ingress-authorization/1',
+          'ingress',
+        );
+        assertAuthorizationValue(
+          transaction,
+          input.bindingAuthorization,
+          'icarus.workflow-wait-binding-authorization/1',
+          'binding',
+        );
+        const priorAuthority = loadMaterializedNodeAuthority(
+          transaction,
+          priorWait.graph_run_id,
+          priorWait.scope_id,
+          priorWait.node_id,
+        );
+        const priorWaitBinding = requiredObjectField(
+          priorAuthority.node,
+          'wait_binding',
+          'Plan node',
+        );
+        const priorContractSnapshot = requiredObjectField(
+          priorWaitBinding,
+          'contract_snapshot',
+          'Plan wait_binding',
         );
         const expectedWaitStatus =
           input.resolution === 'signal'
@@ -95,12 +176,20 @@ export function resolveWaitT6c(
             input.bindingAuthorization.id &&
           priorInbox.binding_authorization_hash ===
             input.bindingAuthorization.hash &&
-          priorWait !== undefined &&
           priorInbox.graph_run_id === priorWait.graph_run_id &&
           priorInbox.contract_resource_id === priorWait.contract_resource_id &&
           priorInbox.contract_resource_hash ===
             priorWait.contract_resource_hash &&
           priorInbox.correlation_key_hash === priorWait.correlation_key_hash &&
+          priorWait.contract_resource_hash ===
+            priorContractSnapshot.contract_hash &&
+          priorAuthority.runWorkFenceEpoch ===
+            input.expectedRunWorkFenceEpoch &&
+          priorAuthority.scopeWorkFenceEpoch ===
+            input.expectedScopeWorkFenceEpoch &&
+          priorWait.run_work_fence_epoch === input.expectedRunWorkFenceEpoch &&
+          priorWait.scope_work_fence_epoch ===
+            input.expectedScopeWorkFenceEpoch &&
           (priorInbox.disposition !== 'accepted' ||
             priorWait.status === expectedWaitStatus);
         return {
@@ -113,6 +202,7 @@ export function resolveWaitT6c(
         graph_run_id: string;
         scope_id: string;
         node_id: string;
+        wait_type: string;
         contract_resource_id: string;
         contract_resource_hash: string;
         correlation_key: string;
@@ -123,11 +213,76 @@ export function resolveWaitT6c(
         resource_reservation_group_id: string;
         row_version: number;
       }>(
-        'SELECT graph_run_id, scope_id, node_id, contract_resource_id, contract_resource_hash, correlation_key, correlation_key_hash, status, run_work_fence_epoch, scope_work_fence_epoch, resource_reservation_group_id, row_version FROM workflow_graph_waits WHERE id = ?',
+        'SELECT graph_run_id, scope_id, node_id, wait_type, contract_resource_id, contract_resource_hash, correlation_key, correlation_key_hash, status, run_work_fence_epoch, scope_work_fence_epoch, resource_reservation_group_id, row_version FROM workflow_graph_waits WHERE id = ?',
         [input.waitId],
       );
       if (!wait)
         throw new G5RuntimeError('precondition_failed', 'T6c wait is missing');
+      const authority = loadMaterializedNodeAuthority(
+        transaction,
+        wait.graph_run_id,
+        wait.scope_id,
+        wait.node_id,
+      );
+      const waitBinding = requiredObjectField(
+        authority.node,
+        'wait_binding',
+        'Plan node',
+      );
+      const contractSnapshot = requiredObjectField(
+        waitBinding,
+        'contract_snapshot',
+        'Plan wait_binding',
+      );
+      const run = transaction.queryOne<{
+        workflow_id: string;
+        control: string;
+        operational_state: string;
+        work_fence_epoch: number;
+        next_event_seq: number;
+        row_version: number;
+      }>(
+        'SELECT workflow_id, control, operational_state, work_fence_epoch, next_event_seq, row_version FROM workflow_graph_runs WHERE id = ?',
+        [wait.graph_run_id],
+      );
+      const scope = transaction.queryOne<{
+        lifecycle: string;
+        work_fence_epoch: number;
+      }>(
+        'SELECT lifecycle, work_fence_epoch FROM workflow_graph_scopes WHERE id = ? AND graph_run_id = ?',
+        [wait.scope_id, wait.graph_run_id],
+      );
+      if (
+        !run ||
+        !scope ||
+        run.workflow_id !== input.workflowId ||
+        run.control !== 'running' ||
+        run.operational_state !== 'healthy' ||
+        scope.lifecycle !== 'active' ||
+        wait.contract_resource_hash !== contractSnapshot.contract_hash ||
+        wait.wait_type !== waitBinding.type
+      )
+        throw new G5RuntimeError(
+          'integrity_violation',
+          'T6c current Run/Scope/wait Plan authority drifted',
+        );
+      if (input.ingressAuthorization.id === input.bindingAuthorization.id)
+        throw new G5RuntimeError(
+          'contract_invalid',
+          'T6c requires distinct ingress and binding authorizations',
+        );
+      assertAuthorizationValue(
+        transaction,
+        input.ingressAuthorization,
+        'icarus.workflow-wait-ingress-authorization/1',
+        'ingress',
+      );
+      assertAuthorizationValue(
+        transaction,
+        input.bindingAuthorization,
+        'icarus.workflow-wait-binding-authorization/1',
+        'binding',
+      );
       const inboxSequence = transaction.queryOne<{ value: number }>(
         'SELECT coalesce(max(inbox_seq), 0) + 1 AS value FROM workflow_graph_inbox_events',
         [],
@@ -135,6 +290,10 @@ export function resolveWaitT6c(
       const open =
         wait.status === 'armed' &&
         wait.row_version === input.expectedWaitRowVersion &&
+        run.work_fence_epoch === input.expectedRunWorkFenceEpoch &&
+        scope.work_fence_epoch === input.expectedScopeWorkFenceEpoch &&
+        authority.runWorkFenceEpoch === input.expectedRunWorkFenceEpoch &&
+        authority.scopeWorkFenceEpoch === input.expectedScopeWorkFenceEpoch &&
         wait.run_work_fence_epoch === input.expectedRunWorkFenceEpoch &&
         wait.scope_work_fence_epoch === input.expectedScopeWorkFenceEpoch;
       if (!open) {
@@ -249,59 +408,61 @@ export function resolveWaitT6c(
         ).changes !== 1
       )
         throw new G5RuntimeError('cas_conflict', 'T6c wait winner CAS failed');
-      transaction.execute(
-        "UPDATE workflow_graph_nodes SET phase = 'terminal', terminal_status = ?, terminal_code = ?, published_output_envelope_value_id = ?, published_output_envelope_hash = ?, terminal_at_ms = ?, row_version = row_version + 1, updated_at_ms = ? WHERE id = ? AND active_wait_id = ? AND phase = 'waiting'",
-        [
-          input.resolution === 'signal'
-            ? 'succeeded'
-            : input.resolution === 'timeout'
-              ? 'failed'
-              : 'cancelled',
-          input.resolution === 'timeout' ? 'wait_timeout' : null,
-          input.resolution === 'signal' ? input.payload.id : null,
-          input.resolution === 'signal' ? input.payload.hash : null,
-          input.receivedAtMs,
-          input.receivedAtMs,
-          wait.node_id,
-          input.waitId,
-        ],
-      );
-      transaction.execute(
-        `UPDATE workflow_graph_node_attempts
+      if (
+        transaction.execute(
+          "UPDATE workflow_graph_nodes SET phase = 'terminal', terminal_status = ?, terminal_code = ?, published_output_envelope_value_id = ?, published_output_envelope_hash = ?, terminal_at_ms = ?, row_version = row_version + 1, updated_at_ms = ? WHERE id = ? AND active_wait_id = ? AND phase = 'waiting'",
+          [
+            input.resolution === 'signal'
+              ? 'succeeded'
+              : input.resolution === 'timeout'
+                ? 'failed'
+                : 'cancelled',
+            input.resolution === 'timeout' ? 'wait_timeout' : null,
+            input.resolution === 'signal' ? input.payload.id : null,
+            input.resolution === 'signal' ? input.payload.hash : null,
+            input.receivedAtMs,
+            input.receivedAtMs,
+            wait.node_id,
+            input.waitId,
+          ],
+        ).changes !== 1
+      )
+        throw new G5RuntimeError('cas_conflict', 'T6c Node winner CAS failed');
+      if (
+        transaction.execute(
+          `UPDATE workflow_graph_node_attempts
           SET phase = 'terminal', execution_outcome = ?, quality_decision = ?,
               result_value_id = ?, result_hash = ?, acceptance_state = 'fenced',
               error_code = ?, row_version = row_version + 1,
               updated_at_ms = ?, finished_at_ms = ?
         WHERE id = (SELECT current_attempt_id FROM workflow_graph_nodes WHERE id = ?)
           AND acceptance_state = 'open'`,
-        [
-          input.resolution === 'signal'
-            ? 'succeeded'
-            : input.resolution === 'cancel'
-              ? 'cancelled'
-              : 'failed',
-          input.resolution === 'signal' ? 'pass' : null,
-          input.resolution === 'signal' ? input.payload.id : null,
-          input.resolution === 'signal' ? input.payload.hash : null,
-          input.resolution === 'timeout' ? 'wait_timeout' : null,
-          input.receivedAtMs,
-          input.receivedAtMs,
-          wait.node_id,
-        ],
-      );
+          [
+            input.resolution === 'signal'
+              ? 'succeeded'
+              : input.resolution === 'cancel'
+                ? 'cancelled'
+                : 'failed',
+            input.resolution === 'signal' ? 'pass' : null,
+            input.resolution === 'signal' ? input.payload.id : null,
+            input.resolution === 'signal' ? input.payload.hash : null,
+            input.resolution === 'timeout' ? 'wait_timeout' : null,
+            input.receivedAtMs,
+            input.receivedAtMs,
+            wait.node_id,
+          ],
+        ).changes !== 1
+      )
+        throw new G5RuntimeError(
+          'cas_conflict',
+          'T6c Attempt winner CAS failed',
+        );
       releaseLedgerReservationGroup(
         transaction,
         wait.graph_run_id,
         wait.resource_reservation_group_id,
         input.receivedAtMs,
       );
-      const run = transaction.queryOne<{
-        next_event_seq: number;
-        row_version: number;
-      }>(
-        'SELECT next_event_seq, row_version FROM workflow_graph_runs WHERE id = ?',
-        [wait.graph_run_id],
-      )!;
       const eventSequence = run.next_event_seq + 1;
       insertGraphEvent(transaction, {
         graphRunId: wait.graph_run_id,

@@ -1,5 +1,6 @@
+import type { CapacitySnapshotWatcher } from '../capacity/publication.js';
 import type { RuntimeValueRef } from '../contracts/g5-basic-runtime-types.js';
-import type { Sha256Hash } from '../contracts/types.js';
+import type { JsonObject, Sha256Hash } from '../contracts/types.js';
 import type { WorkflowRuntimeStore } from '../store/runtime-store/index.js';
 import {
   G5RuntimeError,
@@ -13,6 +14,10 @@ import {
   releaseLedgerReservationGroup,
   reserveLedgerResources,
 } from './ledger.js';
+import {
+  loadMaterializedNodeAuthority,
+  requiredObjectField,
+} from './plan-authority.js';
 
 export interface T6aResultInput {
   readonly graphRunId: string;
@@ -30,14 +35,6 @@ export interface T6aResultInput {
   readonly evaluation: RuntimeValueRef | null;
   readonly feedback: RuntimeValueRef | null;
   readonly errorCode: string | null;
-  readonly retry: {
-    readonly continuationKind: 'execution_retry' | 'quality_revision';
-    readonly reasonCode: string;
-    readonly retryPolicyHash: Sha256Hash;
-    readonly backoffMs: number;
-    readonly eligibleAtMs: number;
-    readonly maxAttempts: number;
-  } | null;
   readonly factPayload: RuntimeValueRef;
   readonly nowMs: number;
 }
@@ -56,6 +53,40 @@ export function acceptInternalResultT6a(
   return runImmediateG5Transaction(
     store,
     (transaction) => {
+      const authority = loadMaterializedNodeAuthority(
+        transaction,
+        input.graphRunId,
+        input.scopeId,
+        input.nodeId,
+      );
+      if (
+        authority.runWorkFenceEpoch !== input.expectedRunWorkFenceEpoch ||
+        authority.scopeWorkFenceEpoch !== input.expectedScopeWorkFenceEpoch
+      )
+        throw new G5RuntimeError(
+          'cas_conflict',
+          'T6a current Run/Scope work epoch drifted',
+        );
+      const retryPolicy = requiredObjectField(
+        authority.node,
+        'effective_retry_policy',
+        'Plan node',
+      );
+      const maxAttempts = Number(retryPolicy.effective_node_max_attempts);
+      const retryOn = Array.isArray(retryPolicy.effective_retry_on)
+        ? retryPolicy.effective_retry_on.map(String)
+        : [];
+      const qualityRevision =
+        retryPolicy.quality_revision &&
+        typeof retryPolicy.quality_revision === 'object' &&
+        !Array.isArray(retryPolicy.quality_revision)
+          ? (retryPolicy.quality_revision as JsonObject)
+          : null;
+      if (!Number.isSafeInteger(maxAttempts) || maxAttempts < 1)
+        throw new G5RuntimeError(
+          'integrity_violation',
+          'T6a Plan retry attempts are not finite',
+        );
       const attempt = transaction.queryOne<{
         attempt_no: number;
         continuation_kind: 'initial' | 'execution_retry' | 'quality_revision';
@@ -99,9 +130,17 @@ export function acceptInternalResultT6a(
                   hash: attempt.quality_revision_feedback_hash,
                 }
               : null;
+        const retryReason =
+          input.qualityDecision === 'needs_revision' && qualityRevision
+            ? 'quality_needs_revision'
+            : input.executionOutcome === 'failed' &&
+                input.errorCode !== null &&
+                retryOn.includes(input.errorCode)
+              ? input.errorCode
+              : null;
         const expectedErrorCode =
           input.qualityDecision === 'needs_revision' &&
-          (!input.retry || attempt.attempt_no >= input.retry.maxAttempts)
+          (retryReason === null || attempt.attempt_no >= maxAttempts)
             ? 'quality_revision_exhausted'
             : input.qualityDecision === 'fail'
               ? 'quality_rejected'
@@ -117,7 +156,7 @@ export function acceptInternalResultT6a(
             (expectedFeedback?.id ?? null) ||
           attempt.quality_revision_feedback_hash !==
             (expectedFeedback?.hash ?? null) ||
-          attempt.retry_reason_code !== (input.retry?.reasonCode ?? null) ||
+          attempt.retry_reason_code !== retryReason ||
           attempt.error_code !== expectedErrorCode
         )
           throw new G5RuntimeError(
@@ -195,26 +234,23 @@ export function acceptInternalResultT6a(
         throw new G5RuntimeError('precondition_failed', 'T6a Run is missing');
       let retryScheduleId: string | null = null;
       let disposition: T6aResultReceipt['disposition'] = 'terminal';
+      const continuationKind =
+        input.qualityDecision === 'needs_revision' && qualityRevision
+          ? 'quality_revision'
+          : input.executionOutcome === 'failed' &&
+              input.errorCode !== null &&
+              retryOn.includes(input.errorCode)
+            ? 'execution_retry'
+            : null;
+      const retryReasonCode =
+        continuationKind === 'quality_revision'
+          ? 'quality_needs_revision'
+          : continuationKind === 'execution_retry'
+            ? input.errorCode
+            : null;
       const shouldRetry =
-        input.retry !== null && attempt.attempt_no < input.retry.maxAttempts;
+        continuationKind !== null && attempt.attempt_no < maxAttempts;
       if (shouldRetry) {
-        const retry = input.retry!;
-        if (
-          retry.continuationKind === 'quality_revision' &&
-          input.qualityDecision !== 'needs_revision'
-        )
-          throw new G5RuntimeError(
-            'contract_invalid',
-            'Quality retry requires needs_revision',
-          );
-        if (
-          retry.continuationKind === 'execution_retry' &&
-          input.qualityDecision === 'needs_revision'
-        )
-          throw new G5RuntimeError(
-            'contract_invalid',
-            'Execution retry cannot carry quality revision',
-          );
         retryScheduleId = stableRuntimeId('retry-schedule', {
           source_attempt_id: input.attemptId,
           next_attempt_no: attempt.attempt_no + 1,
@@ -247,13 +283,13 @@ export function acceptInternalResultT6a(
             input.attemptId,
             attempt.attempt_no,
             attempt.attempt_no + 1,
-            retry.continuationKind,
+            continuationKind,
             input.feedback?.id ?? null,
             input.feedback?.hash ?? null,
-            retry.reasonCode,
-            retry.retryPolicyHash,
-            retry.backoffMs,
-            retry.eligibleAtMs,
+            retryReasonCode,
+            String(retryPolicy.policy_hash),
+            0,
+            input.nowMs,
             reservationId,
             input.nowMs,
             input.nowMs,
@@ -292,7 +328,7 @@ export function acceptInternalResultT6a(
           input.evaluation?.hash ?? null,
           persistedFeedback?.id ?? null,
           persistedFeedback?.hash ?? null,
-          input.retry?.reasonCode ?? null,
+          retryReasonCode,
           terminalErrorCode,
           input.nowMs,
           input.nowMs,
@@ -438,6 +474,17 @@ export function acceptDelegationCallbackT6b(
   return runImmediateG5Transaction(
     store,
     (transaction) => {
+      const authority = loadMaterializedNodeAuthority(
+        transaction,
+        input.graphRunId,
+        input.scopeId,
+        input.nodeId,
+      );
+      if (authority.node.type !== 'delegation')
+        throw new G5RuntimeError(
+          'contract_invalid',
+          'T6b callback requires a Plan-pinned delegation node',
+        );
       const attempt = transaction.queryOne<{
         delegation_id: string | null;
         external_execution_id: string | null;
@@ -448,22 +495,35 @@ export function acceptDelegationCallbackT6b(
         scope_work_fence_epoch: number;
         row_version: number;
       }>(
-        'SELECT delegation_id, external_execution_id, acceptance_state, result_value_id, result_hash, run_work_fence_epoch, scope_work_fence_epoch, row_version FROM workflow_graph_node_attempts WHERE id = ? AND graph_run_id = ?',
-        [input.attemptId, input.graphRunId],
+        'SELECT delegation_id, external_execution_id, acceptance_state, result_value_id, result_hash, run_work_fence_epoch, scope_work_fence_epoch, row_version FROM workflow_graph_node_attempts WHERE id = ? AND graph_run_id = ? AND scope_id = ? AND node_id = ?',
+        [input.attemptId, input.graphRunId, input.scopeId, input.nodeId],
       );
       if (!attempt)
         throw new G5RuntimeError(
           'precondition_failed',
           'T6b attempt is missing',
         );
+      const dispatched = transaction.queryOne<{ external_id: string }>(
+        `SELECT oa.external_id
+           FROM workflow_graph_effect_operations e
+           JOIN workflow_outbox o ON o.effect_operation_id = e.id
+           JOIN workflow_outbox_attempts oa ON oa.outbox_id = o.id
+          WHERE e.attempt_id = ? AND oa.external_id IS NOT NULL
+          ORDER BY oa.kind_attempt_no DESC LIMIT 1`,
+        [input.attemptId],
+      );
       const identityMatches =
-        (attempt.delegation_id === null ||
-          attempt.delegation_id === input.delegationId) &&
-        (attempt.external_execution_id === null ||
-          attempt.external_execution_id === input.externalExecutionId);
+        attempt.delegation_id === input.delegationId &&
+        dispatched?.external_id === input.externalExecutionId;
+      const currentFenceMatches =
+        authority.runWorkFenceEpoch === input.expectedRunWorkFenceEpoch &&
+        authority.scopeWorkFenceEpoch === input.expectedScopeWorkFenceEpoch &&
+        attempt.run_work_fence_epoch === input.expectedRunWorkFenceEpoch &&
+        attempt.scope_work_fence_epoch === input.expectedScopeWorkFenceEpoch;
       if (attempt.result_value_id !== null) {
         if (
           identityMatches &&
+          currentFenceMatches &&
           attempt.result_value_id === input.result.id &&
           attempt.result_hash === input.result.hash
         )
@@ -480,9 +540,11 @@ export function acceptDelegationCallbackT6b(
           'SELECT payload_value_id, payload_hash, fence_reason FROM workflow_graph_late_results WHERE id = ?',
           [lateId],
         );
-        const fenceReason = identityMatches
-          ? 'result_already_accepted'
-          : 'execution_identity_conflict';
+        const fenceReason = !identityMatches
+          ? 'execution_identity_conflict'
+          : currentFenceMatches
+            ? 'result_already_accepted'
+            : 'acceptance_fenced';
         if (priorLate) {
           if (
             priorLate.payload_value_id !== input.result.id ||
@@ -509,12 +571,9 @@ export function acceptDelegationCallbackT6b(
               input.nowMs,
             ],
           );
-        return 'conflict';
+        return identityMatches && !currentFenceMatches ? 'late' : 'conflict';
       }
-      const open =
-        attempt.acceptance_state === 'open' &&
-        attempt.run_work_fence_epoch === input.expectedRunWorkFenceEpoch &&
-        attempt.scope_work_fence_epoch === input.expectedScopeWorkFenceEpoch;
+      const open = attempt.acceptance_state === 'open' && currentFenceMatches;
       if (!identityMatches || !open) {
         transaction.execute(
           'INSERT INTO workflow_graph_late_results (id, graph_run_id, scope_id, node_id, attempt_id, wait_id, source_event_id, payload_value_id, payload_hash, fence_reason, received_at_ms) VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?)',
@@ -539,15 +598,17 @@ export function acceptDelegationCallbackT6b(
         return identityMatches ? 'late' : 'conflict';
       }
       const changed = transaction.execute(
-        "UPDATE workflow_graph_node_attempts SET delegation_id = ?, external_execution_id = ?, result_value_id = ?, result_hash = ?, phase = 'evaluating', row_version = row_version + 1, updated_at_ms = ? WHERE id = ? AND row_version = ? AND acceptance_state = 'open'",
+        "UPDATE workflow_graph_node_attempts SET external_execution_id = ?, result_value_id = ?, result_hash = ?, phase = 'evaluating', row_version = row_version + 1, updated_at_ms = ? WHERE id = ? AND row_version = ? AND acceptance_state = 'open' AND delegation_id = ? AND run_work_fence_epoch = ? AND scope_work_fence_epoch = ?",
         [
-          input.delegationId,
           input.externalExecutionId,
           input.result.id,
           input.result.hash,
           input.nowMs,
           input.attemptId,
           attempt.row_version,
+          input.delegationId,
+          input.expectedRunWorkFenceEpoch,
+          input.expectedScopeWorkFenceEpoch,
         ],
       ).changes;
       if (changed !== 1)
@@ -595,6 +656,7 @@ export interface T6dConsumeInput {
 
 export function consumeRetryScheduleT6d(
   store: WorkflowRuntimeStore,
+  watcher: Pick<CapacitySnapshotWatcher, 'current'>,
   input: T6dConsumeInput,
   fault?: G5TransactionFault,
 ): { disposition: 'consumed' | 'duplicate_timer'; attemptId: string } {
@@ -602,6 +664,12 @@ export function consumeRetryScheduleT6d(
     throw new G5RuntimeError(
       'forbidden_surface',
       'G5 does not authorize manual retry',
+    );
+  const capacity = watcher.current();
+  if (!capacity)
+    throw new G5RuntimeError(
+      'resource_unavailable',
+      'T6d live Capacity snapshot is unavailable',
     );
   return runImmediateG5Transaction(
     store,
@@ -616,12 +684,15 @@ export function consumeRetryScheduleT6d(
         continuation_kind: 'execution_retry' | 'quality_revision';
         quality_revision_feedback_value_id: string | null;
         quality_revision_feedback_hash: string | null;
+        retry_reason_code: string;
+        retry_policy_hash: string;
+        backoff_ms: number;
         eligible_at_ms: number;
         attempt_reservation_id: string;
         status: string;
         row_version: number;
       }>(
-        'SELECT graph_run_id, scope_id, node_id, source_attempt_id, source_attempt_no, next_attempt_no, continuation_kind, quality_revision_feedback_value_id, quality_revision_feedback_hash, eligible_at_ms, attempt_reservation_id, status, row_version FROM workflow_graph_retry_schedules WHERE id = ?',
+        'SELECT graph_run_id, scope_id, node_id, source_attempt_id, source_attempt_no, next_attempt_no, continuation_kind, quality_revision_feedback_value_id, quality_revision_feedback_hash, retry_reason_code, retry_policy_hash, backoff_ms, eligible_at_ms, attempt_reservation_id, status, row_version FROM workflow_graph_retry_schedules WHERE id = ?',
         [input.retryScheduleId],
       );
       if (!schedule)
@@ -654,8 +725,10 @@ export function consumeRetryScheduleT6d(
         context_pack_hash: string;
         action_name: string | null;
         query_id: string | null;
+        run_work_fence_epoch: number;
+        scope_work_fence_epoch: number;
       }>(
-        'SELECT input_snapshot_json, input_snapshot_value_id, input_snapshot_hash, selected_edges_json, context_pack_value_id, context_pack_hash, action_name, query_id FROM workflow_graph_node_attempts WHERE id = ?',
+        'SELECT input_snapshot_json, input_snapshot_value_id, input_snapshot_hash, selected_edges_json, context_pack_value_id, context_pack_hash, action_name, query_id, run_work_fence_epoch, scope_work_fence_epoch FROM workflow_graph_node_attempts WHERE id = ?',
         [schedule.source_attempt_id],
       );
       const reservation = transaction.queryOne<{
@@ -668,10 +741,11 @@ export function consumeRetryScheduleT6d(
         control: string;
         operational_state: string;
         work_fence_epoch: number;
+        runtime_supported_limits_resource_hash: string;
         next_event_seq: number;
         row_version: number;
       }>(
-        'SELECT control, operational_state, work_fence_epoch, next_event_seq, row_version FROM workflow_graph_runs WHERE id = ?',
+        'SELECT control, operational_state, work_fence_epoch, runtime_supported_limits_resource_hash, next_event_seq, row_version FROM workflow_graph_runs WHERE id = ?',
         [schedule.graph_run_id],
       );
       const scope = transaction.queryOne<{
@@ -681,6 +755,26 @@ export function consumeRetryScheduleT6d(
         'SELECT work_fence_epoch, lifecycle FROM workflow_graph_scopes WHERE id = ?',
         [schedule.scope_id],
       );
+      const capacityHead = transaction.queryOne<{
+        current_capacity_revision: number | null;
+        current_change_id: string | null;
+        current_config_hash: string | null;
+        pending_change_id: string | null;
+      }>(
+        'SELECT current_capacity_revision, current_change_id, current_config_hash, pending_change_id FROM runtime_capacity_head WHERE singleton_key = 1',
+        [],
+      );
+      const authority = loadMaterializedNodeAuthority(
+        transaction,
+        schedule.graph_run_id,
+        schedule.scope_id,
+        schedule.node_id,
+      );
+      const retryPolicy = requiredObjectField(
+        authority.node,
+        'effective_retry_policy',
+        'Plan node',
+      );
       if (
         !source ||
         !reservation ||
@@ -688,13 +782,40 @@ export function consumeRetryScheduleT6d(
         !scope ||
         run.control !== 'running' ||
         run.operational_state !== 'healthy' ||
-        scope.lifecycle !== 'active'
+        scope.lifecycle !== 'active' ||
+        source.run_work_fence_epoch !== authority.runWorkFenceEpoch ||
+        source.scope_work_fence_epoch !== authority.scopeWorkFenceEpoch ||
+        run.work_fence_epoch !== authority.runWorkFenceEpoch ||
+        scope.work_fence_epoch !== authority.scopeWorkFenceEpoch ||
+        schedule.retry_policy_hash !== String(retryPolicy.policy_hash) ||
+        schedule.backoff_ms !== 0 ||
+        (schedule.continuation_kind === 'quality_revision' &&
+          retryPolicy.quality_revision === null) ||
+        (schedule.continuation_kind === 'execution_retry' &&
+          (!Array.isArray(retryPolicy.effective_retry_on) ||
+            !retryPolicy.effective_retry_on
+              .map(String)
+              .includes(schedule.retry_reason_code))) ||
+        !capacityHead ||
+        capacityHead.pending_change_id !== null ||
+        capacityHead.current_capacity_revision !== capacity.capacity_revision ||
+        capacityHead.current_change_id !== capacity.capacity_change_id ||
+        capacityHead.current_config_hash !== capacity.capacity.config_hash
       )
         throw new G5RuntimeError(
           'precondition_failed',
           'T6d run/scope/source is not executable',
         );
-      reserveLedgerResources(transaction, {
+      const activeCount = transaction.queryOne<{ count: number }>(
+        "SELECT count(*) AS count FROM workflow_graph_node_attempts WHERE phase IN ('preparing', 'dispatch_pending', 'running', 'evaluating')",
+        [],
+      )!.count;
+      if (activeCount >= capacity.capacity.max_active_executions)
+        throw new G5RuntimeError(
+          'resource_unavailable',
+          'T6d live Capacity has no execution slot',
+        );
+      const [slotReservationId] = reserveLedgerResources(transaction, {
         graphRunId: schedule.graph_run_id,
         reservationGroupId: reservation.reservation_group_id,
         consumer: { attemptId },
@@ -753,6 +874,46 @@ export function consumeRetryScheduleT6d(
           input.nowMs,
         ],
       );
+      const retryEvent = transaction.queryOne<{ seq: number }>(
+        'SELECT seq FROM workflow_graph_events WHERE graph_run_id = ? AND idempotency_key = ?',
+        [schedule.graph_run_id, `retry-schedule:${input.retryScheduleId}`],
+      );
+      if (!retryEvent)
+        throw new G5RuntimeError(
+          'integrity_violation',
+          'T6d retry schedule has no causal event',
+        );
+      const admissionInsert = transaction.execute(
+        `INSERT INTO workflow_graph_scheduler_admissions (
+           graph_run_id, scope_id, node_id, attempt_id,
+           eligible_event_seq, execution_reservation_id, capacity_config_hash,
+           runtime_supported_limits_hash, created_at_ms, capacity_revision,
+           capacity_change_id
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          schedule.graph_run_id,
+          schedule.scope_id,
+          schedule.node_id,
+          attemptId,
+          retryEvent.seq,
+          slotReservationId,
+          capacity.capacity.config_hash,
+          run.runtime_supported_limits_resource_hash,
+          input.nowMs,
+          capacity.capacity_revision,
+          capacity.capacity_change_id,
+        ],
+      );
+      const admissionSequence = Number(admissionInsert.lastInsertRowid);
+      if (
+        admissionInsert.changes !== 1 ||
+        !Number.isSafeInteger(admissionSequence) ||
+        admissionSequence <= 0
+      )
+        throw new G5RuntimeError(
+          'integrity_violation',
+          'T6d failed to allocate retry admission sequence',
+        );
       if (
         transaction.execute(
           "UPDATE workflow_graph_retry_schedules SET status = 'consumed', row_version = row_version + 1, updated_at_ms = ? WHERE id = ? AND row_version = ? AND status = 'scheduled'",
@@ -787,8 +948,9 @@ export function consumeRetryScheduleT6d(
       const sequence = refreshedRun.next_event_seq + 1;
       if (
         transaction.execute(
-          'UPDATE workflow_graph_runs SET next_event_seq = ?, row_version = row_version + 1, updated_at_ms = ? WHERE id = ? AND row_version = ?',
+          'UPDATE workflow_graph_runs SET last_admission_seq = ?, next_event_seq = ?, row_version = row_version + 1, updated_at_ms = ? WHERE id = ? AND row_version = ?',
           [
+            admissionSequence,
             sequence,
             input.nowMs,
             schedule.graph_run_id,
@@ -818,10 +980,6 @@ export interface T6dWatchdogInput {
   readonly attemptId: string;
   readonly automaticTimer: true;
   readonly expectedAttemptRowVersion: number;
-  readonly retry: Omit<
-    NonNullable<T6aResultInput['retry']>,
-    'continuationKind'
-  > | null;
   readonly factPayload: RuntimeValueRef;
   readonly nowMs: number;
 }
@@ -852,9 +1010,11 @@ export function fireAttemptWatchdogT6d(
         dispatch_deadline_at_ms: number | null;
         execution_deadline_at_ms: number | null;
         resource_reservation_group_id: string;
+        run_work_fence_epoch: number;
+        scope_work_fence_epoch: number;
         row_version: number;
       }>(
-        'SELECT graph_run_id, scope_id, node_id, attempt_no, phase, acceptance_state, dispatch_deadline_at_ms, execution_deadline_at_ms, resource_reservation_group_id, row_version FROM workflow_graph_node_attempts WHERE id = ?',
+        'SELECT graph_run_id, scope_id, node_id, attempt_no, phase, acceptance_state, dispatch_deadline_at_ms, execution_deadline_at_ms, resource_reservation_group_id, run_work_fence_epoch, scope_work_fence_epoch, row_version FROM workflow_graph_node_attempts WHERE id = ?',
         [input.attemptId],
       );
       if (!attempt)
@@ -864,12 +1024,29 @@ export function fireAttemptWatchdogT6d(
         );
       if (attempt.acceptance_state === 'fenced' || attempt.phase === 'terminal')
         return { disposition: 'duplicate_timer', retryScheduleId: null };
+      const authority = loadMaterializedNodeAuthority(
+        transaction,
+        attempt.graph_run_id,
+        attempt.scope_id,
+        attempt.node_id,
+      );
+      const retryPolicy = requiredObjectField(
+        authority.node,
+        'effective_retry_policy',
+        'Plan node',
+      );
+      const maxAttempts = Number(retryPolicy.effective_node_max_attempts);
+      const retryOn = Array.isArray(retryPolicy.effective_retry_on)
+        ? retryPolicy.effective_retry_on.map(String)
+        : [];
       const deadline =
         attempt.phase === 'dispatch_pending'
           ? attempt.dispatch_deadline_at_ms
           : attempt.execution_deadline_at_ms;
       if (
         attempt.row_version !== input.expectedAttemptRowVersion ||
+        attempt.run_work_fence_epoch !== authority.runWorkFenceEpoch ||
+        attempt.scope_work_fence_epoch !== authority.scopeWorkFenceEpoch ||
         deadline === null ||
         deadline > input.nowMs
       )
@@ -902,7 +1079,10 @@ export function fireAttemptWatchdogT6d(
         input.nowMs,
       );
       let retryScheduleId: string | null = null;
-      if (input.retry && attempt.attempt_no < input.retry.maxAttempts) {
+      if (
+        retryOn.includes('attempt_timeout') &&
+        attempt.attempt_no < maxAttempts
+      ) {
         retryScheduleId = stableRuntimeId('retry-schedule', {
           source_attempt_id: input.attemptId,
           next_attempt_no: attempt.attempt_no + 1,
@@ -929,10 +1109,10 @@ export function fireAttemptWatchdogT6d(
             input.attemptId,
             attempt.attempt_no,
             attempt.attempt_no + 1,
-            input.retry.reasonCode,
-            input.retry.retryPolicyHash,
-            input.retry.backoffMs,
-            input.retry.eligibleAtMs,
+            'attempt_timeout',
+            String(retryPolicy.policy_hash),
+            0,
+            input.nowMs,
             reservationId,
             input.nowMs,
             input.nowMs,

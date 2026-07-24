@@ -228,7 +228,7 @@ export class G5BasicRuntimeReferenceModel {
         if (node.phase !== 'pending') continue;
         const incoming = this.edges.filter((edge) => edge.to === node.id);
         if (incoming.some((edge) => edge.resolution === 'unresolved')) continue;
-        if (incoming.some((edge) => edge.resolution === 'taken'))
+        if (incoming.every((edge) => edge.resolution === 'taken'))
           this.ready(node.id);
         else this.complete(node.id, 'skipped');
         changed = true;

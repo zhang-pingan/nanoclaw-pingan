@@ -16,7 +16,10 @@ import type {
   Sha256Hash,
   VersionedRef,
 } from '../contracts/types.js';
-import type { WorkflowRuntimeStore } from '../store/runtime-store/index.js';
+import type {
+  WorkflowRuntimeStore,
+  WorkflowRuntimeWriteTransaction,
+} from '../store/runtime-store/index.js';
 import {
   G5RuntimeError,
   assertExactPublishedRegistryResource,
@@ -26,6 +29,7 @@ import {
   type G5TransactionFault,
 } from './graph-store.js';
 import { reserveLedgerResources } from './ledger.js';
+import { loadMaterializedNodeAuthority } from './plan-authority.js';
 
 interface PlanExecutionBinding extends JsonObject {
   readonly adapter_identity: JsonObject & {
@@ -348,7 +352,7 @@ function validatePublishedBindingResources(
 }
 
 function exactPublishedRegistryRow(
-  store: WorkflowRuntimeStore,
+  store: WorkflowRuntimeWriteTransaction,
   identity:
     | PlanExecutionBinding['adapter_identity']
     | PlanExecutionBinding['delivery_policy_identity'],
@@ -402,10 +406,8 @@ export interface T5DispatchInput {
   readonly expectedAttemptRowVersion: number;
   readonly expectedRunWorkFenceEpoch: number;
   readonly expectedScopeWorkFenceEpoch: number;
-  readonly contextPack: RuntimeValueRef;
   readonly request: RuntimeValueRef;
   readonly policySnapshotSchema: RuntimeRegistryRef;
-  readonly outboxExecutionBinding: unknown;
   readonly operationKey: string;
   readonly requiredClaims: readonly {
     claimId: string;
@@ -430,45 +432,97 @@ export function prepareCapabilityDispatchT5(
   input: T5DispatchInput,
   fault?: G5TransactionFault,
 ): T5DispatchReceipt {
-  const binding = validateBinding(input.outboxExecutionBinding);
-  const adapter = exactPublishedRegistryRow(store, binding.adapter_identity);
-  const policy = exactPublishedRegistryRow(
-    store,
-    binding.delivery_policy_identity,
-  );
-  validatePublishedBindingResources(binding, adapter.content, policy.content);
-  if (
-    binding.effective_policy_snapshot.source_policy_content_hash !==
-    binding.delivery_policy_identity.content_hash
-  )
-    throw new G5RuntimeError(
-      'integrity_violation',
-      'T5 effective Policy source identity drift',
-    );
-  const effectOperationId = stableRuntimeId('effect', {
-    attempt_id: input.attemptId,
-    operation_key: input.operationKey,
-  });
-  const outboxId = stableRuntimeId('outbox', {
-    effect_operation_id: effectOperationId,
-    operation_key: input.operationKey,
-  });
-  const policySnapshotValueId = stableRuntimeId('policy-value', {
-    snapshot_hash: binding.effective_policy_snapshot.snapshot_hash,
-  });
-  const keyStrategy: JsonObject = {
-    type: binding.effect_contract.idempotency,
-    operation_key: input.operationKey,
-    execution_binding_hash: binding.binding_hash,
-  };
-  const keyStrategyJson = canonicalJson(keyStrategy);
-  const keyStrategyHash = domainSeparatedSha256(
-    'icarus:workflow-effect-key-strategy:1\n',
-    keyStrategy,
-  );
   return runImmediateG5Transaction(
     store,
     (transaction) => {
+      const authority = loadMaterializedNodeAuthority(
+        transaction,
+        input.graphRunId,
+        input.scopeId,
+        input.nodeId,
+      );
+      if (
+        authority.runWorkFenceEpoch !== input.expectedRunWorkFenceEpoch ||
+        authority.scopeWorkFenceEpoch !== input.expectedScopeWorkFenceEpoch
+      )
+        throw new G5RuntimeError(
+          'cas_conflict',
+          'T5 current Run/Scope work epoch drifted',
+        );
+      const binding = validateBinding(authority.node.outbox_execution_binding);
+      if (
+        binding.effective_policy_snapshot.runtime_safety_hash !==
+          authority.runtimeSafetyHash ||
+        binding.effective_policy_snapshot.source_policy_content_hash !==
+          binding.delivery_policy_identity.content_hash
+      )
+        throw new G5RuntimeError(
+          'integrity_violation',
+          'T5 Plan binding safety or Policy source identity drifted',
+        );
+      const adapter = exactPublishedRegistryRow(
+        transaction,
+        binding.adapter_identity,
+      );
+      const policy = exactPublishedRegistryRow(
+        transaction,
+        binding.delivery_policy_identity,
+      );
+      validatePublishedBindingResources(
+        binding,
+        adapter.content,
+        policy.content,
+      );
+      const effectOperationId = stableRuntimeId('effect', {
+        attempt_id: input.attemptId,
+        operation_key: input.operationKey,
+      });
+      const outboxId = stableRuntimeId('outbox', {
+        effect_operation_id: effectOperationId,
+        operation_key: input.operationKey,
+      });
+      const policySnapshotValueId = stableRuntimeId('policy-value', {
+        snapshot_hash: binding.effective_policy_snapshot.snapshot_hash,
+      });
+      const keyStrategy: JsonObject = {
+        type: binding.effect_contract.idempotency,
+        operation_key: input.operationKey,
+        execution_binding_hash: binding.binding_hash,
+      };
+      const keyStrategyJson = canonicalJson(keyStrategy);
+      const keyStrategyHash = domainSeparatedSha256(
+        'icarus:workflow-effect-key-strategy:1\n',
+        keyStrategy,
+      );
+      const attempt = transaction.queryOne<{
+        phase: string;
+        acceptance_state: string;
+        run_work_fence_epoch: number;
+        scope_work_fence_epoch: number;
+        context_pack_value_id: string | null;
+        context_pack_hash: string | null;
+        row_version: number;
+      }>(
+        `SELECT phase, acceptance_state, run_work_fence_epoch,
+                scope_work_fence_epoch, context_pack_value_id,
+                context_pack_hash, row_version
+           FROM workflow_graph_node_attempts
+          WHERE id = ? AND graph_run_id = ? AND scope_id = ? AND node_id = ?`,
+        [input.attemptId, input.graphRunId, input.scopeId, input.nodeId],
+      );
+      if (
+        !attempt ||
+        attempt.context_pack_value_id === null ||
+        attempt.context_pack_hash === null
+      )
+        throw new G5RuntimeError(
+          'integrity_violation',
+          'T5 attempt lacks its Plan-derived context pack',
+        );
+      const contextPack = {
+        id: attempt.context_pack_value_id,
+        hash: attempt.context_pack_hash,
+      };
       const existing = transaction.queryOne<{
         id: string;
         policy_snapshot_value_id: string;
@@ -528,8 +582,8 @@ export function prepareCapabilityDispatchT5(
           existing.key_strategy_hash !== keyStrategyHash ||
           existing.request_value_id !== input.request.id ||
           existing.request_hash !== input.request.hash ||
-          existing.context_pack_value_id !== input.contextPack.id ||
-          existing.context_pack_hash !== input.contextPack.hash
+          existing.context_pack_value_id !== contextPack.id ||
+          existing.context_pack_hash !== contextPack.hash
         )
           throw new G5RuntimeError(
             'integrity_violation',
@@ -542,16 +596,6 @@ export function prepareCapabilityDispatchT5(
           policySnapshotValueId,
         };
       }
-      const attempt = transaction.queryOne<{
-        phase: string;
-        acceptance_state: string;
-        run_work_fence_epoch: number;
-        scope_work_fence_epoch: number;
-        row_version: number;
-      }>(
-        'SELECT phase, acceptance_state, run_work_fence_epoch, scope_work_fence_epoch, row_version FROM workflow_graph_node_attempts WHERE id = ? AND graph_run_id = ? AND scope_id = ? AND node_id = ?',
-        [input.attemptId, input.graphRunId, input.scopeId, input.nodeId],
-      );
       const run = transaction.queryOne<{
         control: string;
         operational_state: string;
@@ -695,10 +739,13 @@ export function prepareCapabilityDispatchT5(
         ],
       );
       const changed = transaction.execute(
-        "UPDATE workflow_graph_node_attempts SET context_pack_value_id = ?, context_pack_hash = ?, phase = 'dispatch_pending', dispatch_started_at_ms = ?, dispatch_deadline_at_ms = ?, row_version = row_version + 1, updated_at_ms = ? WHERE id = ? AND row_version = ? AND phase IN ('preparing', 'dispatch_pending') AND acceptance_state = 'open' AND run_work_fence_epoch = ? AND scope_work_fence_epoch = ?",
+        "UPDATE workflow_graph_node_attempts SET context_pack_value_id = ?, context_pack_hash = ?, delegation_id = coalesce(delegation_id, ?), phase = 'dispatch_pending', dispatch_started_at_ms = ?, dispatch_deadline_at_ms = ?, row_version = row_version + 1, updated_at_ms = ? WHERE id = ? AND row_version = ? AND phase IN ('preparing', 'dispatch_pending') AND acceptance_state = 'open' AND run_work_fence_epoch = ? AND scope_work_fence_epoch = ?",
         [
-          input.contextPack.id,
-          input.contextPack.hash,
+          contextPack.id,
+          contextPack.hash,
+          authority.node.type === 'delegation'
+            ? stableRuntimeId('delegation', { attempt_id: input.attemptId })
+            : null,
           input.nowMs,
           input.dispatchDeadlineAtMs,
           input.nowMs,

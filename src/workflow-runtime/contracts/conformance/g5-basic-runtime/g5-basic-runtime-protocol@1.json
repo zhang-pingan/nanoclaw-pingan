@@ -8,7 +8,7 @@
   "domain_separator": "icarus:workflow-g5-basic-runtime-protocol:1\n",
   "payload": {
     "gate": "G5",
-    "status": "EXIT_CANDIDATE_PENDING_INDEPENDENT_G5_WHOLE_GATE_REGRESSION",
+    "status": "G5_REPAIR_EXIT_CANDIDATE_PENDING_INDEPENDENT_G5_WHOLE_GATE_REGRESSION",
     "transaction_host": "WorkflowRuntimeStore.withImmediateTransaction",
     "transaction_mode": "BEGIN IMMEDIATE",
     "database_schema_version": 5,
@@ -37,6 +37,9 @@
       "CAP4"
     ],
     "t5_binding": "sealed_plan_v2_outbox_execution_binding_exact_registry_and_immutable_policy_value",
+    "materialized_authority": "run_scope_plan_hash_plus_exact_normalized_node_plus_published_capability",
+    "t3_fixed_point": "persisted_terminal_facts_control_and_data_targets_all_join_and_plan_completion",
+    "t4_wait_authority": "sealed_wait_binding_exact_published_contract_and_two_phase_typed_authorization",
     "t6d_scope": [
       "automatic_attempt_dispatch_execution_watchdog",
       "automatic_execution_retry_timer",
@@ -99,5 +102,5 @@
       }
     ]
   },
-  "hash": "sha256:bb5753ea10dcf164b588cd2b9a0d0c1da760d3268bc3843a28ceedf7a2d8c9f4"
+  "hash": "sha256:87543c7cd905d47fa493f9558ea39b5be54ff0aafc5927c9237423de9f6c6ee3"
 }

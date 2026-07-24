@@ -9,7 +9,7 @@
   "payload": {
     "production_target": true,
     "production_ingress_enabled": false,
-    "source_count": 15,
+    "source_count": 16,
     "sources": [
       {
         "path": "src/workflow-runtime/capacity/admin-gateway.ts",
@@ -49,7 +49,7 @@
       },
       {
         "path": "src/workflow-runtime/runtime/node-execution.ts",
-        "raw_sha256": "sha256:cda0bafc958a2f5e95a26cd987dc2509eaa9ae42e11087afa714a59ceaf7487d"
+        "raw_sha256": "sha256:09fb74d272f0cf3dbc7a34f0285ed37dfa772e7434fcf3b63253c74fbff2199c"
       },
       {
         "path": "src/workflow-runtime/runtime/operational-blockers.ts",
@@ -57,22 +57,26 @@
       },
       {
         "path": "src/workflow-runtime/runtime/outbox.ts",
-        "raw_sha256": "sha256:a286ab72bd3d1a9e9f0d45895050473f262cd9a2c89647a3a7ba8979d5a044d3"
+        "raw_sha256": "sha256:26003b141090df4eb513ada27e0d3fbdd87ac2d5efe17d2f6d3f8d041b03581a"
+      },
+      {
+        "path": "src/workflow-runtime/runtime/plan-authority.ts",
+        "raw_sha256": "sha256:9d18f62615be365dc6e3867640fd791b3492f165fa3fd4a1e0ed630a6aafc417"
       },
       {
         "path": "src/workflow-runtime/runtime/reconciler.ts",
-        "raw_sha256": "sha256:52c5a9c8e8f0d512c0553cc9eb91bac45b45d93ce1e0ab238e0192e4b29c9da1"
+        "raw_sha256": "sha256:791cf798bfe046625d7273c660b578653797da077cd2602a4fb6430d1431130a"
       },
       {
         "path": "src/workflow-runtime/runtime/basic-scheduler.ts",
-        "raw_sha256": "sha256:6a5ad05d845324753026f291dce0dde513313f68e35f5f8083ffdc3325504ddf"
+        "raw_sha256": "sha256:93d6d02ebef6f2fdaad43722f3be5ad24cbeccdbd9d174195902261425f320cc"
       },
       {
         "path": "src/workflow-runtime/runtime/waits.ts",
-        "raw_sha256": "sha256:f65da63101d8154ea4315ca7da4747fc2fbf77b80d81c269f6213ec3d039c314"
+        "raw_sha256": "sha256:fff2b626d99b8708581328cbd7bbd612d6863375d43be4ca9e2a99344c7080a7"
       }
     ],
-    "source_tree_hash": "sha256:f347a97de96a4e7975db4a3d970ad8425ee8f9e92884c3da00f0b01351a0f08d"
+    "source_tree_hash": "sha256:c64f8941bef066e4cccd242cb1b1d830b0d25b2033e5defcde45185c55267c22"
   },
-  "hash": "sha256:ad5284c68443477bc8ef8ef407c3996c638f65ef5940c32a5dda996484c34a3b"
+  "hash": "sha256:1ee9bf84017c2fa5675a798d224121448ef1d268527b6de75b80c3ff721b1b80"
 }

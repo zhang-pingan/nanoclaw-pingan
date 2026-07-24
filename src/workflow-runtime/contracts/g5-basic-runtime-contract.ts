@@ -33,6 +33,7 @@ export const G5_IMPLEMENTATION_SOURCE_PATHS = [
   'src/workflow-runtime/runtime/node-execution.ts',
   'src/workflow-runtime/runtime/operational-blockers.ts',
   'src/workflow-runtime/runtime/outbox.ts',
+  'src/workflow-runtime/runtime/plan-authority.ts',
   'src/workflow-runtime/runtime/reconciler.ts',
   'src/workflow-runtime/runtime/basic-scheduler.ts',
   'src/workflow-runtime/runtime/waits.ts',
@@ -361,7 +362,8 @@ function buildArtifacts(): Array<[string, ContractArtifactEnvelope]> {
     'icarus:workflow-g5-basic-runtime-protocol:1\n',
     {
       gate: 'G5',
-      status: 'EXIT_CANDIDATE_PENDING_INDEPENDENT_G5_WHOLE_GATE_REGRESSION',
+      status:
+        'G5_REPAIR_EXIT_CANDIDATE_PENDING_INDEPENDENT_G5_WHOLE_GATE_REGRESSION',
       transaction_host: 'WorkflowRuntimeStore.withImmediateTransaction',
       transaction_mode: 'BEGIN IMMEDIATE',
       database_schema_version: G5_DATABASE_SCHEMA_VERSION,
@@ -371,6 +373,12 @@ function buildArtifacts(): Array<[string, ContractArtifactEnvelope]> {
       capacity_protocol: ['CAP0', 'CAP1', 'CAP2', 'CAP3', 'CAP4'],
       t5_binding:
         'sealed_plan_v2_outbox_execution_binding_exact_registry_and_immutable_policy_value',
+      materialized_authority:
+        'run_scope_plan_hash_plus_exact_normalized_node_plus_published_capability',
+      t3_fixed_point:
+        'persisted_terminal_facts_control_and_data_targets_all_join_and_plan_completion',
+      t4_wait_authority:
+        'sealed_wait_binding_exact_published_contract_and_two_phase_typed_authorization',
       t6d_scope: [
         'automatic_attempt_dispatch_execution_watchdog',
         'automatic_execution_retry_timer',
@@ -474,7 +482,8 @@ function buildArtifacts(): Array<[string, ContractArtifactEnvelope]> {
     'icarus:workflow-contract-pack-g5-basic-runtime:1\n',
     {
       gate: 'G5',
-      status: 'EXIT_CANDIDATE_PENDING_INDEPENDENT_G5_WHOLE_GATE_REGRESSION',
+      status:
+        'G5_REPAIR_EXIT_CANDIDATE_PENDING_INDEPENDENT_G5_WHOLE_GATE_REGRESSION',
       positive_case_count: positiveCases.length,
       negative_case_count: negativeCases.length,
       fault_case_count: faultCases.length,

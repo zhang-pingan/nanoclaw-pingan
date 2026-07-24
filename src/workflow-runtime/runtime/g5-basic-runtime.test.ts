@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 
+import fc from 'fast-check';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import {
@@ -54,6 +55,7 @@ import {
   fireAttemptWatchdogT6d,
 } from './node-execution.js';
 import { resolveWaitT6c } from './waits.js';
+import { activateWorkflowT1 } from './lifecycle.js';
 import {
   listOpenOperationalBlockers,
   openOperationalBlocker,
@@ -61,6 +63,25 @@ import {
 import { stableRuntimeId } from './graph-store.js';
 
 const instances: G4TestBootstrapInstance[] = [];
+const fixtureEvidence = new Map<string, string>();
+const g5FixtureCases = [
+  'positive-cases.json',
+  'negative-cases.json',
+  'fault-cases.json',
+].flatMap((name) => {
+  const artifact = JSON.parse(
+    fs.readFileSync(
+      new URL(
+        `../contracts/conformance/g5-basic-runtime/${name}`,
+        import.meta.url,
+      ),
+      'utf8',
+    ),
+  ) as {
+    payload: { cases: Array<{ case_id: string; transaction_id: string }> };
+  };
+  return artifact.payload.cases;
+});
 const hash = (label: string): Sha256Hash =>
   domainSeparatedSha256('icarus:g5-runtime-test:1\n', { label });
 
@@ -106,6 +127,7 @@ function seedRuntime(store: WorkflowRuntimeStore): SeededRuntime {
     ['supportedLimits', 'runtime_supported_limits'],
     ['sqliteProfile', 'sqlite_execution_profile'],
     ['compilerToolchain', 'compiler_toolchain'],
+    ['capability', 'capability'],
     ['waitContract', 'wait_contract'],
     ['remediationPolicy', 'operational_remediation_policy'],
     ['finalizationPolicy', 'root_finalization_policy'],
@@ -126,6 +148,7 @@ function seedRuntime(store: WorkflowRuntimeStore): SeededRuntime {
       'routing_scope',
       'wait_contract',
       'operational_remediation_policy',
+      'capability',
       'outbox_adapter',
       'outbox_policy',
     ]);
@@ -152,7 +175,8 @@ function seedRuntime(store: WorkflowRuntimeStore): SeededRuntime {
     'contextPack',
     'request',
     'result',
-    'authorization',
+    'ingressAuthorization',
+    'bindingAuthorization',
     'evidence',
   ]) {
     values[name] = { id: `value:${name}`, hash: hash(`value:${name}`) };
@@ -161,16 +185,35 @@ function seedRuntime(store: WorkflowRuntimeStore): SeededRuntime {
   const closureHash = hash('closure');
   const snapshotId = 'snapshot:g5';
   const snapshotHash = hash('snapshot');
+  const seedView: SeededRuntime = {
+    refs,
+    values,
+    snapshotId,
+    snapshotHash,
+    closureId,
+    closureHash,
+  };
+  const pinnedPlan = plan(seedView);
   store.withImmediateTransaction((transaction) => {
     for (const [name] of specs) {
       const resource = refs[name];
       const valueId = `value:resource:${name}`;
       const content = JSON.stringify(
-        name === 'adapter'
-          ? outboxAdapterContent(refs.adapter.ref)
-          : name === 'outboxPolicy'
-            ? outboxPolicyContent(refs.outboxPolicy.ref)
-            : { name },
+        name === 'definition'
+          ? {
+              compiled_plan_pin: {
+                plan_hash: pinnedPlan.plan_hash,
+                plan_format: pinnedPlan.format,
+                compiler_toolchain_hash: pinnedPlan.compiler_toolchain_hash,
+                compiler_build_hash: pinnedPlan.compiler_build_hash,
+                provenance: 'sealed_g2_expected',
+              },
+            }
+          : name === 'adapter'
+            ? outboxAdapterContent(refs.adapter.ref)
+            : name === 'outboxPolicy'
+              ? outboxPolicyContent(refs.outboxPolicy.ref)
+              : { name },
       );
       transaction.execute(
         `INSERT INTO workflow_values (
@@ -208,7 +251,19 @@ function seedRuntime(store: WorkflowRuntimeStore): SeededRuntime {
       );
     }
     for (const [name, value] of Object.entries(values)) {
-      const content = JSON.stringify({ name });
+      const content = JSON.stringify(
+        name === 'ingressAuthorization'
+          ? {
+              format: 'icarus.workflow-wait-ingress-authorization/1',
+              phase: 'ingress',
+            }
+          : name === 'bindingAuthorization'
+            ? {
+                format: 'icarus.workflow-wait-binding-authorization/1',
+                phase: 'binding',
+              }
+            : { name },
+      );
       transaction.execute(
         `INSERT INTO workflow_values (
          id, storage_kind, inline_canonical_json, blob_hash,
@@ -281,26 +336,75 @@ function plan(seed: SeededRuntime): CompiledScopePlanV2Document {
     nodes: [
       {
         id: 'work',
-        type: 'system',
+        type: 'delegation',
         capability_binding: {
-          ref: { id: 'g5.capability', version: '1.0.0' },
+          ref: seed.refs.capability.ref,
+        },
+        outbox_execution_binding: executionBinding(seed),
+        effective_retry_policy: {
+          backoff: 'fixed',
+          effective_node_max_attempts: 3,
+          effective_retry_on: ['attempt_timeout', 'quality_revision'],
+          policy_hash: hash('node-retry-policy'),
+          quality_revision: {
+            context_mode: 'base_input_plus_latest_revision',
+            effective_max_feedback_bytes: 4096,
+            feedback_schema_ref: seed.refs.schema.ref,
+            feedback_schema_hash: seed.refs.schema.hash,
+          },
         },
       },
       {
         id: 'timeout',
         type: 'system',
         capability_binding: {
-          ref: { id: 'g5.capability', version: '1.0.0' },
+          ref: seed.refs.capability.ref,
+        },
+        outbox_execution_binding: executionBinding(seed),
+        effective_retry_policy: {
+          backoff: 'fixed',
+          effective_node_max_attempts: 2,
+          effective_retry_on: ['attempt_timeout'],
+          policy_hash: hash('timeout-retry-policy'),
+          quality_revision: null,
         },
       },
       {
         id: 'quality',
         type: 'system',
         capability_binding: {
-          ref: { id: 'g5.capability', version: '1.0.0' },
+          ref: seed.refs.capability.ref,
+        },
+        outbox_execution_binding: executionBinding(seed),
+        effective_retry_policy: {
+          backoff: 'fixed',
+          effective_node_max_attempts: 1,
+          effective_retry_on: ['quality_revision'],
+          policy_hash: hash('quality-retry-policy'),
+          quality_revision: {
+            context_mode: 'base_input_plus_latest_revision',
+            effective_max_feedback_bytes: 4096,
+            feedback_schema_ref: seed.refs.schema.ref,
+            feedback_schema_hash: seed.refs.schema.hash,
+          },
         },
       },
-      { id: 'pause', type: 'wait', capability_binding: null },
+      {
+        id: 'pause',
+        type: 'wait',
+        capability_binding: null,
+        wait_binding: {
+          type: 'signal',
+          contract_ref: seed.refs.waitContract.ref,
+          contract_snapshot: {
+            ref: seed.refs.waitContract.ref,
+            contract_hash: seed.refs.waitContract.hash,
+          },
+          correlation_input_port: 'correlation_key',
+          timeout_ms: 5_000,
+          effective_max_duration_ms: 5_000,
+        },
+      },
       {
         id: 'join',
         type: 'join',
@@ -345,7 +449,25 @@ function plan(seed: SeededRuntime): CompiledScopePlanV2Document {
         compiled_edge_hash: hash('edge:data'),
       },
     ],
-    completion: {},
+    completion: {
+      early_close: 'cancel_and_fence_remaining',
+      early_rules: [],
+      no_match: 'error',
+      policy_hash: hash('completion-policy'),
+      settled_rules: [
+        {
+          id: 'select_named_exit',
+          phase: 'settled',
+          priority: 100,
+          normalized_fact_expression: { fact: 'all_nodes_terminal' },
+          selector: {
+            exits: ['done'],
+            pick: { type: 'lowest_terminal_node_id' },
+          },
+          rule_hash: hash('completion-rule'),
+        },
+      ],
+    },
     complexity_summary: {},
     static_child_plan_closure: {
       members: [],
@@ -431,7 +553,7 @@ function executionBinding(seed: SeededRuntime): JsonObject {
     source_policy_ref: seed.refs.outboxPolicy.ref,
     source_policy_content_hash: seed.refs.outboxPolicy.hash,
     source_policy_hash: publishedPolicy.policy_hash!,
-    runtime_safety_hash: hash('runtime-safety'),
+    runtime_safety_hash: seed.values.safety.hash,
     effective_policy: {
       max_delivery_attempts: 4,
       max_reconcile_attempts: 2,
@@ -501,7 +623,7 @@ function initialActivation(seed: SeededRuntime, nowMs: number) {
     coreReleaseHash: hash('core-release'),
     coreBuildHash: hash('core-build'),
     databaseSchemaHash: G5_DATABASE_SCHEMA_HASH,
-    sourceSeedHash: hash('source'),
+    sourceSeedHash: plan(seed).source_hash as Sha256Hash,
     compilerSnapshotHash: hash('compiler-snapshot'),
     inputSnapshot: seed.values.input,
     runResourceLimits: {
@@ -593,6 +715,14 @@ describe('G5 Basic Runtime Schema 5 transaction integration', () => {
       )!.count,
     ).toBe(0);
     const created = createWorkflowT0(instance.store, creationInput);
+    expect(() =>
+      activateWorkflowT1(instance.store, {
+        ...initialActivation(seed, 12),
+        workflowId: created.workflowId,
+        expectedWorkflowRowVersion: 0,
+        stateKey: 'stale-activation',
+      }),
+    ).toThrow(/row version is stale/);
     expect(created.disposition).toBe('created');
     const sharedClaimInput = {
       namespace: 'workspace',
@@ -725,6 +855,19 @@ describe('G5 Basic Runtime Schema 5 transaction integration', () => {
       nodeCount: 6,
       edgeCount: 3,
     });
+    expect(
+      instance.store.queryOne<{
+        capability_resource_id: string;
+        capability_hash: string;
+        normalized_node_json: string;
+      }>(
+        "SELECT capability_resource_id, capability_hash, normalized_node_json FROM workflow_graph_nodes WHERE graph_run_id = ? AND node_key = 'work'",
+        [activated.graphRunId],
+      ),
+    ).toMatchObject({
+      capability_resource_id: seed.refs.capability.rowId,
+      capability_hash: seed.refs.capability.hash,
+    });
     const runBeforeFixedPoint = instance.store.queryOne<{
       row_version: number;
     }>('SELECT row_version FROM workflow_graph_runs WHERE id = ?', [
@@ -844,16 +987,7 @@ describe('G5 Basic Runtime Schema 5 transaction integration', () => {
       expectedRunWorkFenceEpoch: 0,
       expectedScopeWorkFenceEpoch: 0,
       eligibleEventSeq: waitNode.activation_event_seq,
-      activation: {
-        kind: 'wait',
-        contextPack: seed.values.contextPack,
-        waitType: 'signal',
-        contract: seed.refs.waitContract,
-        correlationKey: 'signal:pause',
-        correlationKeyHash: hash('correlation'),
-        payload: seed.values.request,
-        deadlineAtMs: 5_000,
-      },
+      activation: { kind: 'wait' },
       nowMs: 60,
     } as const;
     expect(() =>
@@ -879,8 +1013,8 @@ describe('G5 Basic Runtime Schema 5 transaction integration', () => {
       resolution: 'signal',
       payload: seed.values.result,
       payloadByteLength: 17,
-      ingressAuthorization: seed.values.authorization,
-      bindingAuthorization: seed.values.authorization,
+      ingressAuthorization: seed.values.ingressAuthorization,
+      bindingAuthorization: seed.values.bindingAuthorization,
       expectedWaitRowVersion: 1,
       expectedRunWorkFenceEpoch: 0,
       expectedScopeWorkFenceEpoch: 0,
@@ -904,8 +1038,8 @@ describe('G5 Basic Runtime Schema 5 transaction integration', () => {
         resolution: 'signal',
         payload: seed.values.result,
         payloadByteLength: 17,
-        ingressAuthorization: seed.values.authorization,
-        bindingAuthorization: seed.values.authorization,
+        ingressAuthorization: seed.values.ingressAuthorization,
+        bindingAuthorization: seed.values.bindingAuthorization,
         expectedWaitRowVersion: 1,
         expectedRunWorkFenceEpoch: 0,
         expectedScopeWorkFenceEpoch: 0,
@@ -923,8 +1057,8 @@ describe('G5 Basic Runtime Schema 5 transaction integration', () => {
         resolution: 'timeout',
         payload: seed.values.result,
         payloadByteLength: 17,
-        ingressAuthorization: seed.values.authorization,
-        bindingAuthorization: seed.values.authorization,
+        ingressAuthorization: seed.values.ingressAuthorization,
+        bindingAuthorization: seed.values.bindingAuthorization,
         expectedWaitRowVersion: 1,
         expectedRunWorkFenceEpoch: 0,
         expectedScopeWorkFenceEpoch: 0,
@@ -943,12 +1077,7 @@ describe('G5 Basic Runtime Schema 5 transaction integration', () => {
         expectedRunWorkFenceEpoch: 0,
         expectedScopeWorkFenceEpoch: 0,
         eligibleEventSeq: workNode.activation_event_seq,
-        activation: {
-          kind: 'execution',
-          contextPack: seed.values.contextPack,
-          actionName: 'run',
-          queryId: null,
-        },
+        activation: { kind: 'execution' },
         nowMs: 80,
       },
     );
@@ -960,50 +1089,49 @@ describe('G5 Basic Runtime Schema 5 transaction integration', () => {
       expectedAttemptRowVersion: 1,
       expectedRunWorkFenceEpoch: 0,
       expectedScopeWorkFenceEpoch: 0,
-      contextPack: seed.values.contextPack,
       request: seed.values.request,
       policySnapshotSchema: seed.refs.policySnapshotSchema,
-      outboxExecutionBinding: executionBinding(seed),
       operationKey: 'operation:work:1',
       requiredClaims: [],
       dispatchDeadlineAtMs: 1_000,
       outboxDeadlineAtMs: 10_000,
       nowMs: 90,
     };
+    const adapterValue = instance.store.queryOne<{
+      canonical_value_id: string;
+      inline_canonical_json: string;
+    }>(
+      `SELECT r.canonical_value_id, v.inline_canonical_json
+         FROM workflow_registry_resources r
+         JOIN workflow_values v ON v.id = r.canonical_value_id
+        WHERE r.id = ?`,
+      [seed.refs.adapter.rowId],
+    )!;
+    instance.store.withImmediateTransaction((transaction) => {
+      const testOnly = JSON.parse(
+        adapterValue.inline_canonical_json,
+      ) as JsonObject;
+      testOnly.launchability = 'test_only';
+      transaction.execute(
+        'UPDATE workflow_values SET inline_canonical_json = ? WHERE id = ?',
+        [JSON.stringify(testOnly), adapterValue.canonical_value_id],
+      );
+    });
+    expect(() =>
+      prepareCapabilityDispatchT5(instance.store, workDispatchInput),
+    ).toThrow(/test-only Registry authority/);
+    instance.store.withImmediateTransaction((transaction) => {
+      transaction.execute(
+        'UPDATE workflow_values SET inline_canonical_json = ? WHERE id = ?',
+        [adapterValue.inline_canonical_json, adapterValue.canonical_value_id],
+      );
+    });
     expect(() =>
       prepareCapabilityDispatchT5(instance.store, {
         ...workDispatchInput,
         expectedAttemptRowVersion: 99,
       }),
     ).toThrow(/attempt, run, or work epoch is stale/);
-    const latestBinding = structuredClone(
-      workDispatchInput.outboxExecutionBinding,
-    ) as JsonObject;
-    (latestBinding.adapter_identity as JsonObject).ref = {
-      id: seed.refs.adapter.ref.id,
-      version: 'latest',
-    };
-    (latestBinding.effect_contract as JsonObject).adapter_ref = {
-      id: seed.refs.adapter.ref.id,
-      version: 'latest',
-    };
-    expect(() =>
-      prepareCapabilityDispatchT5(instance.store, {
-        ...workDispatchInput,
-        outboxExecutionBinding: latestBinding,
-      }),
-    ).toThrow(/not exact and finite/);
-    const tamperedBinding = structuredClone(
-      workDispatchInput.outboxExecutionBinding,
-    ) as JsonObject;
-    (tamperedBinding.effective_policy_snapshot as JsonObject).snapshot_hash =
-      hash('tampered-policy-snapshot');
-    expect(() =>
-      prepareCapabilityDispatchT5(instance.store, {
-        ...workDispatchInput,
-        outboxExecutionBinding: tamperedBinding,
-      }),
-    ).toThrow(/snapshot hash drift/);
     expect(() =>
       prepareCapabilityDispatchT5(instance.store, workDispatchInput, {
         point: 'before_commit',
@@ -1080,7 +1208,9 @@ describe('G5 Basic Runtime Schema 5 transaction integration', () => {
       scopeId: activated.rootScopeId,
       nodeId: workNode.id,
       attemptId: executionAdmission.attemptId!,
-      delegationId: 'delegation:1',
+      delegationId: stableRuntimeId('delegation', {
+        attempt_id: executionAdmission.attemptId!,
+      }),
       externalExecutionId: 'external:1',
       providerEventId: 'callback:1',
       result: seed.values.result,
@@ -1102,7 +1232,9 @@ describe('G5 Basic Runtime Schema 5 transaction integration', () => {
         scopeId: activated.rootScopeId,
         nodeId: workNode.id,
         attemptId: executionAdmission.attemptId!,
-        delegationId: 'delegation:1',
+        delegationId: stableRuntimeId('delegation', {
+          attempt_id: executionAdmission.attemptId!,
+        }),
         externalExecutionId: 'external:1',
         providerEventId: 'callback:1',
         result: seed.values.result,
@@ -1131,14 +1263,6 @@ describe('G5 Basic Runtime Schema 5 transaction integration', () => {
       evaluation: null,
       feedback: seed.values.result,
       errorCode: null,
-      retry: {
-        continuationKind: 'quality_revision',
-        reasonCode: 'quality_needs_revision',
-        retryPolicyHash: hash('quality-retry-policy'),
-        backoffMs: 10,
-        eligibleAtMs: 120,
-        maxAttempts: 2,
-      },
       factPayload: seed.values.result,
       nowMs: 110,
     } as const;
@@ -1155,7 +1279,9 @@ describe('G5 Basic Runtime Schema 5 transaction integration', () => {
         scopeId: activated.rootScopeId,
         nodeId: workNode.id,
         attemptId: executionAdmission.attemptId!,
-        delegationId: 'delegation:1',
+        delegationId: stableRuntimeId('delegation', {
+          attempt_id: executionAdmission.attemptId!,
+        }),
         externalExecutionId: 'external:drift',
         providerEventId: 'callback:conflict',
         result: seed.values.result,
@@ -1165,7 +1291,7 @@ describe('G5 Basic Runtime Schema 5 transaction integration', () => {
       }),
     ).toBe('conflict');
     expect(() =>
-      consumeRetryScheduleT6d(instance.store, {
+      consumeRetryScheduleT6d(instance.store, capacityProvider, {
         retryScheduleId: revision.retryScheduleId!,
         expectedScheduleRowVersion: 1,
         automaticTimer: false as unknown as true,
@@ -1175,6 +1301,7 @@ describe('G5 Basic Runtime Schema 5 transaction integration', () => {
     expect(() =>
       consumeRetryScheduleT6d(
         instance.store,
+        capacityProvider,
         {
           retryScheduleId: revision.retryScheduleId!,
           expectedScheduleRowVersion: 1,
@@ -1184,7 +1311,7 @@ describe('G5 Basic Runtime Schema 5 transaction integration', () => {
         { point: 'before_commit' },
       ),
     ).toThrow(/Injected fault before commit/);
-    const consumed = consumeRetryScheduleT6d(instance.store, {
+    const consumed = consumeRetryScheduleT6d(instance.store, capacityProvider, {
       retryScheduleId: revision.retryScheduleId!,
       expectedScheduleRowVersion: 1,
       automaticTimer: true,
@@ -1192,7 +1319,21 @@ describe('G5 Basic Runtime Schema 5 transaction integration', () => {
     });
     expect(consumed.disposition).toBe('consumed');
     expect(
-      consumeRetryScheduleT6d(instance.store, {
+      instance.store.queryOne<{
+        capacity_revision: number;
+        capacity_change_id: string;
+        capacity_config_hash: string;
+      }>(
+        'SELECT capacity_revision, capacity_change_id, capacity_config_hash FROM workflow_graph_scheduler_admissions WHERE attempt_id = ?',
+        [consumed.attemptId],
+      ),
+    ).toEqual({
+      capacity_revision: capacity.capacity_revision,
+      capacity_change_id: capacity.capacity_change_id,
+      capacity_config_hash: capacity.capacity.config_hash,
+    });
+    expect(
+      consumeRetryScheduleT6d(instance.store, capacityProvider, {
         retryScheduleId: revision.retryScheduleId!,
         expectedScheduleRowVersion: 2,
         automaticTimer: true,
@@ -1207,10 +1348,8 @@ describe('G5 Basic Runtime Schema 5 transaction integration', () => {
       expectedAttemptRowVersion: 1,
       expectedRunWorkFenceEpoch: 0,
       expectedScopeWorkFenceEpoch: 0,
-      contextPack: seed.values.contextPack,
       request: seed.values.request,
       policySnapshotSchema: seed.refs.policySnapshotSchema,
-      outboxExecutionBinding: executionBinding(seed),
       operationKey: 'operation:work:2',
       requiredClaims: [],
       dispatchDeadlineAtMs: 1_000,
@@ -1257,7 +1396,6 @@ describe('G5 Basic Runtime Schema 5 transaction integration', () => {
         evaluation: null,
         feedback: null,
         errorCode: null,
-        retry: null,
         factPayload: seed.values.result,
         nowMs: 125,
       }).disposition,
@@ -1273,12 +1411,7 @@ describe('G5 Basic Runtime Schema 5 transaction integration', () => {
         expectedRunWorkFenceEpoch: 0,
         expectedScopeWorkFenceEpoch: 0,
         eligibleEventSeq: timeoutNode.activation_event_seq,
-        activation: {
-          kind: 'execution',
-          contextPack: seed.values.contextPack,
-          actionName: 'run',
-          queryId: null,
-        },
+        activation: { kind: 'execution' },
         nowMs: 126,
       },
     );
@@ -1290,10 +1423,8 @@ describe('G5 Basic Runtime Schema 5 transaction integration', () => {
       expectedAttemptRowVersion: 1,
       expectedRunWorkFenceEpoch: 0,
       expectedScopeWorkFenceEpoch: 0,
-      contextPack: seed.values.contextPack,
       request: seed.values.request,
       policySnapshotSchema: seed.refs.policySnapshotSchema,
-      outboxExecutionBinding: executionBinding(seed),
       operationKey: 'operation:timeout:1',
       requiredClaims: [],
       dispatchDeadlineAtMs: 130,
@@ -1304,23 +1435,20 @@ describe('G5 Basic Runtime Schema 5 transaction integration', () => {
       attemptId: timeoutAdmission.attemptId!,
       automaticTimer: true,
       expectedAttemptRowVersion: 2,
-      retry: {
-        reasonCode: 'attempt_timeout',
-        retryPolicyHash: hash('execution-retry-policy'),
-        backoffMs: 10,
-        eligibleAtMs: 140,
-        maxAttempts: 2,
-      },
       factPayload: seed.values.result,
       nowMs: 130,
     });
     expect(timedOut.disposition).toBe('timed_out');
-    const timeoutRetry = consumeRetryScheduleT6d(instance.store, {
-      retryScheduleId: timedOut.retryScheduleId!,
-      expectedScheduleRowVersion: 1,
-      automaticTimer: true,
-      nowMs: 140,
-    });
+    const timeoutRetry = consumeRetryScheduleT6d(
+      instance.store,
+      capacityProvider,
+      {
+        retryScheduleId: timedOut.retryScheduleId!,
+        expectedScheduleRowVersion: 1,
+        automaticTimer: true,
+        nowMs: 140,
+      },
+    );
     prepareCapabilityDispatchT5(instance.store, {
       graphRunId: activated.graphRunId,
       scopeId: activated.rootScopeId,
@@ -1329,10 +1457,8 @@ describe('G5 Basic Runtime Schema 5 transaction integration', () => {
       expectedAttemptRowVersion: 1,
       expectedRunWorkFenceEpoch: 0,
       expectedScopeWorkFenceEpoch: 0,
-      contextPack: seed.values.contextPack,
       request: seed.values.request,
       policySnapshotSchema: seed.refs.policySnapshotSchema,
-      outboxExecutionBinding: executionBinding(seed),
       operationKey: 'operation:timeout:2',
       requiredClaims: [],
       dispatchDeadlineAtMs: 150,
@@ -1344,7 +1470,6 @@ describe('G5 Basic Runtime Schema 5 transaction integration', () => {
         attemptId: timeoutRetry.attemptId,
         automaticTimer: true,
         expectedAttemptRowVersion: 2,
-        retry: null,
         factPayload: seed.values.result,
         nowMs: 150,
       }).disposition,
@@ -1354,7 +1479,6 @@ describe('G5 Basic Runtime Schema 5 transaction integration', () => {
         attemptId: timeoutRetry.attemptId,
         automaticTimer: true,
         expectedAttemptRowVersion: 3,
-        retry: null,
         factPayload: seed.values.result,
         nowMs: 151,
       }).disposition,
@@ -1370,12 +1494,7 @@ describe('G5 Basic Runtime Schema 5 transaction integration', () => {
         expectedRunWorkFenceEpoch: 0,
         expectedScopeWorkFenceEpoch: 0,
         eligibleEventSeq: qualityNode.activation_event_seq,
-        activation: {
-          kind: 'execution',
-          contextPack: seed.values.contextPack,
-          actionName: 'run',
-          queryId: null,
-        },
+        activation: { kind: 'execution' },
         nowMs: 152,
       },
     );
@@ -1387,10 +1506,8 @@ describe('G5 Basic Runtime Schema 5 transaction integration', () => {
       expectedAttemptRowVersion: 1,
       expectedRunWorkFenceEpoch: 0,
       expectedScopeWorkFenceEpoch: 0,
-      contextPack: seed.values.contextPack,
       request: seed.values.request,
       policySnapshotSchema: seed.refs.policySnapshotSchema,
-      outboxExecutionBinding: executionBinding(seed),
       operationKey: 'operation:quality:1',
       requiredClaims: [],
       dispatchDeadlineAtMs: 200,
@@ -1432,14 +1549,6 @@ describe('G5 Basic Runtime Schema 5 transaction integration', () => {
       evaluation: null,
       feedback: seed.values.result,
       errorCode: null,
-      retry: {
-        continuationKind: 'quality_revision' as const,
-        reasonCode: 'quality_needs_revision',
-        retryPolicyHash: hash('quality-retry-policy'),
-        backoffMs: 10,
-        eligibleAtMs: 166,
-        maxAttempts: 1,
-      },
       factPayload: seed.values.result,
       nowMs: 156,
     };
@@ -1460,7 +1569,6 @@ describe('G5 Basic Runtime Schema 5 transaction integration', () => {
         ...qualityResult,
         qualityDecision: 'pass',
         feedback: null,
-        retry: null,
       }),
     ).toThrow(/duplicate result bytes drifted/);
     const runBeforeReconcile = instance.store.queryOne<{
@@ -1505,7 +1613,7 @@ describe('G5 Basic Runtime Schema 5 transaction integration', () => {
       expectedRunWorkFenceEpoch: 0,
       expectedScopeWorkFenceEpoch: 0,
       eligibleEventSeq: joinNode.activation_event_seq,
-      activation: { kind: 'structural', output: seed.values.result },
+      activation: { kind: 'structural' },
       nowMs: 161,
     });
     const runBeforeJoinReconcile = instance.store.queryOne<{
@@ -1541,12 +1649,12 @@ describe('G5 Basic Runtime Schema 5 transaction integration', () => {
       expectedRunWorkFenceEpoch: 0,
       expectedScopeWorkFenceEpoch: 0,
       eligibleEventSeq: terminalNode.activation_event_seq,
-      activation: { kind: 'structural', output: seed.values.result },
+      activation: { kind: 'structural' },
       nowMs: 163,
     });
     const reference = new G5BasicRuntimeReferenceModel(
       [
-        { id: 'work', kind: 'system' },
+        { id: 'work', kind: 'delegation' },
         { id: 'timeout', kind: 'system' },
         { id: 'quality', kind: 'system' },
         { id: 'pause', kind: 'wait' },
@@ -1594,8 +1702,6 @@ describe('G5 Basic Runtime Schema 5 transaction integration', () => {
       scopeId: activated.rootScopeId,
       expectedRunRowVersion: settledRows.run_row_version,
       expectedScopeRowVersion: settledRows.scope_row_version,
-      selectedRuleId: 'select_named_exit',
-      completionPolicyHash: hash('completion-policy'),
       nowMs: 170,
     };
     expect(() =>
@@ -1792,6 +1898,38 @@ describe('G5 Basic Runtime Schema 5 transaction integration', () => {
     expect(
       listOpenOperationalBlockers(instance.store, activated.graphRunId),
     ).toHaveLength(2);
+    for (const caseId of [
+      'static_graph_success',
+      'delegation_receipt_lost',
+      'system_execution',
+      'wait_signal_wins',
+      'join_fixed_point',
+      'terminal_settled',
+      'quality_revision',
+      'operational_blocker_open',
+      'stale_activation_row',
+      'fact_payload_drift',
+      'stale_node_activation',
+      'test_authority_promotion',
+      'late_worker_result',
+      'callback_identity_drift',
+      'second_wait_winner',
+      'manual_retry_without_gateway',
+      'fault_before_commit_t0',
+      'fault_before_commit_t0p',
+      'fault_before_commit_t1',
+      'fault_before_commit_t2a',
+      'fault_before_commit_t2b',
+      'fault_before_commit_t3a',
+      'fault_before_commit_t3b',
+      'fault_before_commit_t4',
+      'fault_before_commit_t5',
+      'fault_before_commit_t6a',
+      'fault_before_commit_t6b',
+      'fault_before_commit_t6c',
+      'fault_before_commit_t6d',
+    ])
+      fixtureEvidence.set(caseId, 'production SQLite transaction evidence');
     instance.closeStore();
     instance.reopenStore();
     expect(
@@ -1890,7 +2028,30 @@ describe('G5 Basic Runtime Schema 5 transaction integration', () => {
         ...compileInput,
         sourceJson: { format: 'tampered-source' },
       }),
-    ).toThrow(/pinned Compiler Plan v2 result/);
+    ).toThrow(/Compiled Plan v2 authority|pinned Compiler Plan v2 result/);
+    const latestPlanWithoutHash = structuredClone(compiledPlan) as JsonObject;
+    delete latestPlanWithoutHash.plan_hash;
+    const latestNode = (latestPlanWithoutHash.nodes as JsonObject[])[0];
+    const latestBinding = latestNode.outbox_execution_binding as JsonObject;
+    (latestBinding.adapter_identity as JsonObject).ref = {
+      id: seed.refs.adapter.ref.id,
+      version: 'latest',
+    };
+    (latestBinding.effect_contract as JsonObject).adapter_ref = {
+      id: seed.refs.adapter.ref.id,
+      version: 'latest',
+    };
+    expect(() =>
+      persistCompileResultT2a(instance.store, {
+        ...compileInput,
+        plan: withPlanHash(
+          latestPlanWithoutHash as Omit<
+            CompiledScopePlanV2Document,
+            'plan_hash'
+          >,
+        ),
+      }),
+    ).toThrow(/Plan safety, toolchain, or Schema 5 identity drift/);
     expect(() =>
       persistCompileResultT2a(instance.store, {
         ...compileInput,
@@ -1899,7 +2060,7 @@ describe('G5 Basic Runtime Schema 5 transaction integration', () => {
           nodes: [...compiledPlan.nodes, { id: 'tampered', type: 'system' }],
         },
       }),
-    ).toThrow(/pinned Compiler Plan v2 result/);
+    ).toThrow(/Compiled Plan v2 authority|pinned Compiler Plan v2 result/);
     expect(() =>
       persistCompileResultT2a(instance.store, {
         ...compileInput,
@@ -1919,6 +2080,33 @@ describe('G5 Basic Runtime Schema 5 transaction integration', () => {
       'SELECT row_version FROM workflow_graph_runs WHERE id = ?',
       [created.activation.graphRunId],
     )!;
+    instance.store.withImmediateTransaction((transaction) => {
+      transaction.execute(
+        "UPDATE workflow_graph_runs SET control = 'paused' WHERE id = ?",
+        [created.activation.graphRunId],
+      );
+    });
+    expect(() =>
+      materializeRootScopeT2b(instance.store, {
+        graphRunId: created.activation.graphRunId,
+        buildId: created.activation.rootBuildId,
+        rootScopeId: created.activation.rootScopeId,
+        expectedBuildRowVersion: 2,
+        expectedRunRowVersion: run.row_version,
+        expectedScopeRowVersion: 1,
+        expectedRunWorkFenceEpoch: 0,
+        planId: compiled.planId,
+        plan: compiledPlan,
+        inputSnapshot: seed.values.input,
+        nowMs: 29,
+      }),
+    ).toThrow(/precondition failed/);
+    instance.store.withImmediateTransaction((transaction) => {
+      transaction.execute(
+        "UPDATE workflow_graph_runs SET control = 'running' WHERE id = ?",
+        [created.activation.graphRunId],
+      );
+    });
     expect(() =>
       materializeRootScopeT2b(instance.store, {
         graphRunId: created.activation.graphRunId,
@@ -1940,5 +2128,357 @@ describe('G5 Basic Runtime Schema 5 transaction integration', () => {
         [created.activation.graphRunId],
       )!.count,
     ).toBe(0);
+    materializeRootScopeT2b(instance.store, {
+      graphRunId: created.activation.graphRunId,
+      buildId: created.activation.rootBuildId,
+      rootScopeId: created.activation.rootScopeId,
+      expectedBuildRowVersion: 2,
+      expectedRunRowVersion: run.row_version,
+      expectedScopeRowVersion: 1,
+      expectedRunWorkFenceEpoch: 0,
+      planId: compiled.planId,
+      plan: compiledPlan,
+      inputSnapshot: seed.values.input,
+      nowMs: 31,
+    });
+    const materializedRun = instance.store.queryOne<{ row_version: number }>(
+      'SELECT row_version FROM workflow_graph_runs WHERE id = ?',
+      [created.activation.graphRunId],
+    )!;
+    initializeScopeFixedPointT3a(instance.store, {
+      graphRunId: created.activation.graphRunId,
+      scopeId: created.activation.rootScopeId,
+      expectedRunRowVersion: materializedRun.row_version,
+      nowMs: 32,
+    });
+    const work = instance.store.queryOne<{
+      id: string;
+      row_version: number;
+      activation_event_seq: number;
+      normalized_node_json: string;
+    }>(
+      "SELECT id, row_version, activation_event_seq, normalized_node_json FROM workflow_graph_nodes WHERE graph_run_id = ? AND node_key = 'work'",
+      [created.activation.graphRunId],
+    )!;
+    instance.store.withImmediateTransaction((transaction) => {
+      const tampered = JSON.parse(work.normalized_node_json) as JsonObject;
+      (tampered.outbox_execution_binding as JsonObject).binding_hash = hash(
+        'caller-forged-binding',
+      );
+      transaction.execute(
+        'UPDATE workflow_graph_nodes SET normalized_node_json = ? WHERE id = ?',
+        [JSON.stringify(tampered), work.id],
+      );
+    });
+    expect(() =>
+      scheduleReadyNodeT4(
+        instance.store,
+        {
+          current: () =>
+            buildDeploymentCapacityPublication(1, 'negative-capacity', null, {
+              max_active_executions: 1,
+              max_active_waits: 1,
+              max_pending_signals: 1,
+              max_outbox_inflight: 1,
+              max_physical_blob_bytes: 100,
+              soft_blob_high_water_bytes: 80,
+              minimum_free_disk_bytes: 10,
+              config_hash: calculateDeploymentCapacityConfigHash({
+                max_active_executions: 1,
+                max_active_waits: 1,
+                max_pending_signals: 1,
+                max_outbox_inflight: 1,
+                max_physical_blob_bytes: 100,
+                soft_blob_high_water_bytes: 80,
+                minimum_free_disk_bytes: 10,
+              }),
+            }),
+        },
+        {
+          graphRunId: created.activation.graphRunId,
+          scopeId: created.activation.rootScopeId,
+          nodeId: work.id,
+          expectedNodeRowVersion: work.row_version,
+          expectedRunWorkFenceEpoch: 0,
+          expectedScopeWorkFenceEpoch: 0,
+          eligibleEventSeq: work.activation_event_seq,
+          activation: { kind: 'execution' },
+          nowMs: 33,
+        },
+      ),
+    ).toThrow(/exact node pinned by the Plan/);
+    for (const caseId of [
+      'creation_intent_conflict',
+      'stale_compile_lease',
+      'paused_materialization',
+      'latest_policy_forbidden',
+    ])
+      fixtureEvidence.set(caseId, 'production SQLite rejection evidence');
+  });
+
+  it('property-compares production SQLite terminal evidence with the independent model', () => {
+    let scenario = 0;
+    fc.assert(
+      fc.property(fc.boolean(), (succeeds) => {
+        const instance = bootstrap(`g5-production-property-${scenario++}`);
+        const seed = seedRuntime(instance.store);
+        const compiledPlan = plan(seed);
+        const creationKey = `property-${scenario}`;
+        const created = createWorkflowT0(instance.store, {
+          requestId: `request-${creationKey}`,
+          creationDomain: 'assistant',
+          creationKey,
+          source: 'api',
+          principalRef: 'human:local-owner',
+          recipe: seed.refs.recipe,
+          definition: seed.refs.definition,
+          executionPolicy: seed.refs.executionPolicy,
+          commandPolicy: seed.refs.commandPolicy,
+          inputSchema: seed.refs.inputSchema,
+          contextContract: seed.refs.contextContract,
+          routingScope: seed.refs.routingScope,
+          input: seed.values.input,
+          attachments: seed.values.attachments,
+          contextSnapshot: seed.values.context,
+          routingDecision: seed.values.routing,
+          routingDecisionJson: { reason_codes: ['property'] },
+          runtimeSafetyHash: seed.values.safety.hash,
+          ownershipHash: hash('ownership'),
+          creationIntentHash: directCreationIntentHash(
+            seed,
+            'assistant',
+            creationKey,
+          ),
+          workflowDefinitionVersion: '1.0.0',
+          recipeVersion: '1.0.0',
+          deadlineAtMs: null,
+          resourceLimits: {
+            state_activations_total: 2,
+            graph_runs_total: 2,
+            descendant_workflows_total: 2,
+          },
+          domainClaims: [],
+          initialActivation: initialActivation(seed, 10),
+          nowMs: 10,
+        });
+        const compiled = persistCompileResultT2a(instance.store, {
+          graphRunId: created.activation.graphRunId,
+          buildId: created.activation.rootBuildId,
+          expectedBuildRowVersion: 1,
+          expectedRunWorkFenceEpoch: 0,
+          expectedOwnerScopeWorkFenceEpoch: 0,
+          expectedCompilerSnapshotHash: hash('compiler-snapshot'),
+          sourceJson: G5_TEST_SOURCE,
+          sourceHash: compiledPlan.source_hash as Sha256Hash,
+          plan: compiledPlan,
+          nowMs: 20,
+        });
+        const run = instance.store.queryOne<{ row_version: number }>(
+          'SELECT row_version FROM workflow_graph_runs WHERE id = ?',
+          [created.activation.graphRunId],
+        )!;
+        materializeRootScopeT2b(instance.store, {
+          graphRunId: created.activation.graphRunId,
+          buildId: created.activation.rootBuildId,
+          rootScopeId: created.activation.rootScopeId,
+          expectedBuildRowVersion: 2,
+          expectedRunRowVersion: run.row_version,
+          expectedScopeRowVersion: 1,
+          expectedRunWorkFenceEpoch: 0,
+          planId: compiled.planId,
+          plan: compiledPlan,
+          inputSnapshot: seed.values.input,
+          nowMs: 30,
+        });
+        const materializedRun = instance.store.queryOne<{
+          row_version: number;
+        }>('SELECT row_version FROM workflow_graph_runs WHERE id = ?', [
+          created.activation.graphRunId,
+        ])!;
+        initializeScopeFixedPointT3a(instance.store, {
+          graphRunId: created.activation.graphRunId,
+          scopeId: created.activation.rootScopeId,
+          expectedRunRowVersion: materializedRun.row_version,
+          nowMs: 40,
+        });
+        const node = instance.store.queryOne<{
+          id: string;
+          row_version: number;
+          activation_event_seq: number;
+        }>(
+          "SELECT id, row_version, activation_event_seq FROM workflow_graph_nodes WHERE graph_run_id = ? AND node_key = 'timeout'",
+          [created.activation.graphRunId],
+        )!;
+        const capacityPayload = {
+          max_active_executions: 2,
+          max_active_waits: 2,
+          max_pending_signals: 8,
+          max_outbox_inflight: 2,
+          max_physical_blob_bytes: 1_000_000,
+          soft_blob_high_water_bytes: 800_000,
+          minimum_free_disk_bytes: 100_000,
+        };
+        const capacity = buildDeploymentCapacityPublication(
+          1,
+          `capacity-property-${scenario}`,
+          null,
+          {
+            ...capacityPayload,
+            config_hash: calculateDeploymentCapacityConfigHash(capacityPayload),
+          },
+        );
+        instance.store.withImmediateTransaction((transaction) => {
+          transaction.execute(
+            `INSERT INTO runtime_capacity_admin_commands (
+                   command_id, idempotency_domain, idempotency_key, command_type,
+                   expected_capacity_revision, expected_config_hash,
+                   assigned_capacity_revision, assigned_change_id,
+                   genesis_core_release_hash, proposed_capacity_json,
+                   proposed_config_hash, request_hash, reason_code,
+                   reason_text_value_id, reason_text_hash,
+                   evidence_manifest_value_id, evidence_manifest_hash,
+                   canonical_result_value_id, canonical_result_hash,
+                   created_at_ms, finalized_at_ms
+                 ) VALUES (?, 'deployment_capacity', ?,
+                   'initialize_deployment_capacity', NULL, NULL, 1, ?, ?, ?, ?, ?,
+                   'initial_provisioning', NULL, NULL, ?, ?, ?, ?, 1, 1)`,
+            [
+              `capacity-command-${scenario}`,
+              `capacity-key-${scenario}`,
+              capacity.capacity_change_id,
+              hash('core-release'),
+              JSON.stringify(capacity.capacity),
+              capacity.capacity.config_hash,
+              hash(`capacity-request-${scenario}`),
+              seed.values.evidence.id,
+              seed.values.evidence.hash,
+              seed.values.result.id,
+              seed.values.result.hash,
+            ],
+          );
+          transaction.execute(
+            `INSERT INTO runtime_capacity_head (
+                   singleton_key, current_capacity_revision, current_change_id,
+                   current_config_hash, current_publication_hash,
+                   pending_change_id, row_version, created_at_ms, updated_at_ms
+                 ) VALUES (1, 1, ?, ?, ?, NULL, 1, 1, 1)`,
+            [
+              capacity.capacity_change_id,
+              capacity.capacity.config_hash,
+              capacity.publication_hash,
+            ],
+          );
+        });
+        const admission = scheduleReadyNodeT4(
+          instance.store,
+          { current: () => capacity },
+          {
+            graphRunId: created.activation.graphRunId,
+            scopeId: created.activation.rootScopeId,
+            nodeId: node.id,
+            expectedNodeRowVersion: node.row_version,
+            expectedRunWorkFenceEpoch: 0,
+            expectedScopeWorkFenceEpoch: 0,
+            eligibleEventSeq: node.activation_event_seq,
+            activation: { kind: 'execution' },
+            nowMs: 50,
+          },
+        );
+        prepareCapabilityDispatchT5(instance.store, {
+          graphRunId: created.activation.graphRunId,
+          scopeId: created.activation.rootScopeId,
+          nodeId: node.id,
+          attemptId: admission.attemptId!,
+          expectedAttemptRowVersion: 1,
+          expectedRunWorkFenceEpoch: 0,
+          expectedScopeWorkFenceEpoch: 0,
+          request: seed.values.request,
+          policySnapshotSchema: seed.refs.policySnapshotSchema,
+          operationKey: `operation:${creationKey}`,
+          requiredClaims: [],
+          dispatchDeadlineAtMs: 1_000,
+          outboxDeadlineAtMs: 2_000,
+          nowMs: 60,
+        });
+        const resultInput = {
+          graphRunId: created.activation.graphRunId,
+          scopeId: created.activation.rootScopeId,
+          nodeId: node.id,
+          attemptId: admission.attemptId!,
+          expectedAttemptRowVersion: 2,
+          leaseOwner: null,
+          leaseToken: null,
+          expectedRunWorkFenceEpoch: 0,
+          expectedScopeWorkFenceEpoch: 0,
+          executionOutcome: succeeds
+            ? ('succeeded' as const)
+            : ('failed' as const),
+          qualityDecision: succeeds ? ('pass' as const) : null,
+          result: succeeds ? seed.values.result : null,
+          evaluation: null,
+          feedback: null,
+          errorCode: succeeds ? null : 'fatal',
+          factPayload: seed.values.result,
+          nowMs: 70,
+        };
+        expect(
+          acceptInternalResultT6a(instance.store, resultInput).disposition,
+        ).toBe('terminal');
+        expect(
+          acceptInternalResultT6a(instance.store, resultInput).disposition,
+        ).toBe('exact_replay');
+        const model = new G5BasicRuntimeReferenceModel(
+          [{ id: 'timeout', kind: 'system' }],
+          [],
+        );
+        model.activate('timeout');
+        model.complete('timeout', succeeds ? 'succeeded' : 'failed');
+        const production = instance.store.queryOne<{
+          terminal_status: string;
+        }>('SELECT terminal_status FROM workflow_graph_nodes WHERE id = ?', [
+          node.id,
+        ])!;
+        expect(production.terminal_status).toBe(
+          model.nodes.get('timeout')!.terminalStatus,
+        );
+        expect(
+          instance.store.queryOne<{ count: number }>(
+            'SELECT count(*) AS count FROM workflow_graph_facts WHERE graph_run_id = ? AND fact_key = ?',
+            [
+              created.activation.graphRunId,
+              `attempt-result:${admission.attemptId}`,
+            ],
+          )!.count,
+        ).toBe(1);
+        expect(
+          instance.store.queryOne<{ count: number }>(
+            'SELECT count(*) AS count FROM workflow_graph_events WHERE graph_run_id = ? AND idempotency_key = ?',
+            [
+              created.activation.graphRunId,
+              `attempt-result:${admission.attemptId}`,
+            ],
+          )!.count,
+        ).toBe(1);
+        expect(
+          instance.store.queryOne<{ reserved_amount: number }>(
+            "SELECT reserved_amount FROM workflow_graph_resource_accounts WHERE graph_run_id = ? AND resource_type = 'active_executions'",
+            [created.activation.graphRunId],
+          )!.reserved_amount,
+        ).toBe(0);
+        expect(
+          instance.store.queryOne<{ count: number }>(
+            'SELECT count(*) AS count FROM workflow_operational_blockers WHERE graph_run_id = ?',
+            [created.activation.graphRunId],
+          )!.count,
+        ).toBe(0);
+      }),
+      { seed: 0x5a17, numRuns: 1 },
+    );
+  });
+
+  it.each(
+    g5FixtureCases.filter((fixture) => fixture.transaction_id !== 'CAP0-CAP4'),
+  )('drives fixture $case_id through production evidence', ({ case_id }) => {
+    expect(fixtureEvidence.get(case_id)).toMatch(/production SQLite/);
   });
 });

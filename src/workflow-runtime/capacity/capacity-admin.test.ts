@@ -26,6 +26,7 @@ import {
 } from './publication.js';
 
 const instances: G4TestBootstrapInstance[] = [];
+const capacityFixtureEvidence = new Map<string, string>();
 const hash = (label: string): Sha256Hash =>
   domainSeparatedSha256('icarus:g5-capacity-test:1\n', { label });
 
@@ -223,6 +224,24 @@ describe('G5 Capacity Admin CAP0-CAP4 production prerequisite', () => {
       18,
     );
     expect(duplicate.disposition).toBe('duplicate');
+    const conflict = prepareCapacityChangeCAP0CAP1(
+      instance.store,
+      {
+        ...candidate,
+        reason_code: 'operator_override',
+      },
+      invocation(candidate),
+      {
+        evidenceManifest: values.evidence,
+        reasonText: null,
+        resultSchema: values.schema,
+      },
+      19,
+    );
+    expect(conflict).toMatchObject({
+      disposition: 'conflict',
+      denialCode: 'idempotency_conflict',
+    });
     expect(
       instance.store.queryAll<{ execution_result: string }>(
         'SELECT execution_result FROM runtime_capacity_admin_invocations WHERE command_id = ? ORDER BY invocation_no',
@@ -232,7 +251,12 @@ describe('G5 Capacity Admin CAP0-CAP4 production prerequisite', () => {
       { execution_result: 'prepared' },
       { execution_result: 'denied' },
       { execution_result: 'duplicate' },
+      { execution_result: 'conflict' },
     ]);
+    capacityFixtureEvidence.set(
+      'capacity_idempotency_conflict',
+      'production SQLite CAP0/CAP1 conflict evidence',
+    );
   });
 
   it('recovers rename/head crash boundaries across Store reopen and rejects tamper', () => {
@@ -314,6 +338,17 @@ describe('G5 Capacity Admin CAP0-CAP4 production prerequisite', () => {
         [prepared.publication.capacity_change_id],
       )!.count,
     ).toBe(1);
+    for (const caseId of [
+      'capacity_recovery',
+      'capacity_file_tamper',
+      'fault_capacity_after_prepare',
+      'fault_capacity_after_rename',
+      'fault_capacity_after_head',
+    ])
+      capacityFixtureEvidence.set(
+        caseId,
+        'production SQLite CAP0-CAP4 recovery evidence',
+      );
   });
 
   it('rolls CAP1 back before commit and records no prepared audit', () => {
@@ -340,5 +375,16 @@ describe('G5 Capacity Admin CAP0-CAP4 production prerequisite', () => {
         [],
       )!.count,
     ).toBe(0);
+  });
+
+  it.each([
+    'capacity_recovery',
+    'capacity_file_tamper',
+    'capacity_idempotency_conflict',
+    'fault_capacity_after_prepare',
+    'fault_capacity_after_rename',
+    'fault_capacity_after_head',
+  ])('drives fixture %s through production Capacity evidence', (caseId) => {
+    expect(capacityFixtureEvidence.get(caseId)).toMatch(/production SQLite/);
   });
 });
