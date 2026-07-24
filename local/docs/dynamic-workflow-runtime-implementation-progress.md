@@ -1,9 +1,9 @@
 # Dynamic Workflow Runtime 实施进度
 
-> **状态**: G5 Basic Runtime=`G5_REPAIR_EXIT_CANDIDATE_PENDING_INDEPENDENT_G5_WHOLE_GATE_REGRESSION`
-> **当前 Gate**: G2/G3/G4=`DONE`；G5 Basic Runtime=`G5_REPAIR_EXIT_CANDIDATE_PENDING_INDEPENDENT_G5_WHOLE_GATE_REGRESSION`而不是`DONE`；G6-G9=`NOT_READY`
-> **下一独立会话**: 只执行独立G5 whole-gate regression；回归通过前不得开始G6
-> **最后更新**: 2026-07-23
+> **状态**: G5 Basic Runtime=`BLOCKED_BY_SPEC`
+> **当前 Gate**: G2/G3/G4既有完成证据与冻结bytes不变；G5 Basic Runtime因generated schema与join expose authority未闭合而为`BLOCKED_BY_SPEC`；G6-G9=`NOT_READY`
+> **下一独立会话**: 只执行generated schema持久化authority与join expose的规范/G2/Schema定向修复；不得继续G5 Runtime或开始G6
+> **最后更新**: 2026-07-24
 > **规范权威**: `local/docs/dynamic-workflow-dag-framework.md`
 
 ## 文档职责
@@ -113,7 +113,7 @@ Agent Container 运行于独立 VM，Node identity 由 VM image gate 保证；�
 | G2 Compiler / Golden | `DONE` | G0.1-G0.9；R-016 spec/Contract repair；G0.10 不改变 Compiler/Plan 语义 | Compiler 3.0.2 execution-binding successor已owner review/seal，current replay 40/40 exact，affected-chain独立回归通过 | 本原子独立回归提交 |
 | G3 Registry / Authoring / Publish | `DONE` | G1 + G2 | G3.1-G3.9 exact Publish closure、negative fixtures与真实Store链在affected-chain独立回归中通过 | 本原子独立回归提交 |
 | G4 Test Bootstrap | `DONE` | G1 + G2 + G3 | downstream-safe isolation v2保持0 violation；profile现exact绑定current G3.9 identity，affected-chain独立回归通过 | 本原子独立回归提交 |
-| G5 Basic Runtime | `G5_REPAIR_EXIT_CANDIDATE_PENDING_INDEPENDENT_G5_WHOLE_GATE_REGRESSION` | G4 + current T6d ownership authority independent regression + executable Capacity Admin CAP1-CAP4 repair regression + execution-binding affected-chain regression | G5 sealed Plan materialization/T3 fixed point/T4-T6 authority/Capacity retry lineage与production differential evidence已定向修复；新的独立whole-gate回归前绝非`DONE` | 本原子repair exit candidate提交 |
+| G5 Basic Runtime | `BLOCKED_BY_SPEC` | G4 + current T6d ownership authority independent regression + executable Capacity Admin CAP1-CAP4 repair regression + execution-binding affected-chain regression + generated schema/join expose authority repair | 第四轮静态审查证明current Plan/Schema 5无法闭合generated schema Value authority，且冻结G2未lower join exposed typed output；修正规范并形成受治理G2/Schema successor前不得继续G5 | 本原子阻塞审计提交 |
 | G6 Dynamic / Close | `NOT_READY` | G5 | T7/T8/child/compensation fixtures | - |
 | G7 Control / Card / Projection / Recovery | `NOT_READY` | G6 | Deadline Watchdog -> Gateway -> T7c stable-key/System Grant/audit + authorized manual retry handoff + T6e/resolution/recovery/card/projection fixtures | - |
 | G8 Certification | `NOT_READY` | G7 | certified profile meeting Product Floor | - |
@@ -124,11 +124,11 @@ Agent Container 运行于独立 VM，Node identity 由 VM image gate 保证；�
 | 工作包 | 范围 | 状态 | 当前 Gate/切片 |
 | --- | --- | --- | --- |
 | I0 | Publish、Registry、Recipe 与执行版本固定 | `DONE` | G3 current exact closure与execution-binding affected-chain独立回归已闭合 |
-| I1 | Intake、Routing、幂等创建、Child provenance、Claim | `IN_PROGRESS` | G5 intake/routing/domain claim已实现，等待独立G5 whole-gate回归 |
+| I1 | Intake、Routing、幂等创建、Child provenance、Claim | `IN_PROGRESS` | G5 intake/routing/domain claim已实现；whole G5现被generated schema/join expose authority阻塞 |
 | I2 | Definition、State lowering、Context、transition | `IN_PROGRESS` | Compiler 3.0.2 static lowering与Capability Outbox binding已批准并seal；Runtime transition未开始 |
-| I3 | Source/Compiled IR、Port、Compiler | `DONE` | Compiler 3.0.2/current result schema/G2 v3 seal与40/40 replay已通过独立回归 |
+| I3 | Source/Compiled IR、Port、Compiler | `DONE` | Compiler 3.0.2/G2 v3既有seal与40/40 replay证据不改写；join expose缺口需要additive规范/G2 successor后才能恢复G5 |
 | I4 | Runtime Store、SQLite relation、Value/Blob、migration | `IN_PROGRESS` | current G1 Schema 5/G1.7与G3.9 Activation DML DONE；Blob/GC仍未实现 |
-| I5 | Graph 状态机、reconcile、Scheduler、Ledger | `IN_PROGRESS` | G5 static graph runtime slice已实现，等待独立G5 whole-gate回归 |
+| I5 | Graph 状态机、reconcile、Scheduler、Ledger | `IN_PROGRESS` | G5 static graph runtime slice已实现；current generated schema/structural join authority未闭合，G5为`BLOCKED_BY_SPEC` |
 | I6 | Delegation/System、Capability Effect、Outbox | `IN_PROGRESS` | G5 T5 exact execution binding与T6a/T6b已实现，等待独立G5 whole-gate回归 |
 | I7 | Durable Wait、Signal/Timer/Approval、Inbox | `IN_PROGRESS` | G5 wait/inbox与automatic retry timers已实现，Workflow deadline继续归未来G7 |
 | I8 | Subgraph、Expand、Map、child scope | `NOT_READY` | G6 起 |
@@ -2458,12 +2458,50 @@ T3 input seal现在从persisted compiled input-port authority加载exact Publish
 
 Boundary保持不变：相对parent仅8个预期文件有差异；冻结G0.10 generated artifacts、G2三代sealed trees、G3.8A、G1 Schema 5、ownership与G4 bootstrap均不修改；没有Workflow Runtime Command/Invocation/Event audit写、T6e、blocker resolve/abandon、workflow deadline、manual retry bypass、G6+、Production activation、runtime network/process import或依赖/lockfile漂移。`.tmp-wfcheck`是本轮前已存在且未修改的ignored用户目录，本轮测试未遗留temporary root。G5 scoped Prettier与`git diff --check`通过。G6-G9继续`NOT_READY`；下一任务仍只能是新的独立G5 whole-gate regression。
 
+### G5 Basic Runtime fourth targeted review: generated schema / join expose blocker
+
+**结论**：`BLOCKED_BY_SPEC`；第三轮`a17ae86e260daf0530fd93108ba2e2ad2740af1f`仍作为历史repair candidate保留，但不是可送独立whole-gate的current exit candidate。第四轮从clean local `main@a17ae86e260daf0530fd93108ba2e2ad2740af1f`开始；环境为`permission_profile=disabled/unrestricted`、filesystem unrestricted、sandbox `danger-full-access`、approval policy `never`。没有worktree、Handoff、sub-agent、approval/escalation、amend、rebase、reset、回退或历史改写，也没有开始G6。
+
+Applicability/authority审查证明current Spec、sealed Plan与Schema 5没有共同定义可执行的generated-schema Value authority：
+
+1. Spec 1822-1830、1886与current closed Compiled Plan schema允许`type=generated`在`schema_json`和`schema_ref`中恰选一个；`schema_ref`的machine约束只有non-empty string。Current Spec、G5 Contract、Compiler、Registry和Store均没有定义该字符串的命名空间、content lookup、canonical bytes、hash验证或到Published Registry Resource的映射。Current sealed G2只有4个generated `schema_json`实例，没有generated `schema_ref` oracle。
+2. `workflow_values.schema_resource_id/schema_resource_hash`在Schema 5均为non-null，并通过deferred composite FK绑定`workflow_registry_resources(id, content_hash)`；`StoredValueMetadata.schema_ref`同样是`VersionedRef`。Plan-local generated schema无合法槽位。`loadCompiledSchemaAuthority()`无条件读取`schema_json`，而`persistPlanSelectedValue()`与`materializeSealedInputValues()`又拒绝`resourceId=null`，因此schema-valid generated `schema_ref`会被误报authority invalid，generated `schema_json`也不能为新派生/聚合Value提供合法schema-bound FK。Runtime自行插入或声称一个Registry schema会伪造Published authority，明确禁止。
+3. Source join只声明`input_ports + expose`。Current Compiler `nodeBase()`从source `node.output_ports`编译输出，而join source schema不允许该字段；`compileGraphNode(join)`只透传`expose`。实际managed Compiler最小复现得到`join_input_ports.source_value`和`expose.renamed.input_port=source_value`，但`join_output_ports={}`。加入`join.renamed -> consumer.value` data edge后，Compiler在`/data_edges/1`以`schema_not_assignable`拒绝，stable object id为`data.from-join`。因此不存在可供G5消费的sealed typed join-output Plan。
+4. 即使Runtime从`input_ports + expose`能猜出一个近似contract，也会在sealed Plan的`output_ports={}`之外自行创造compiled output contract、required/max/schema和`port_contract_hash`，违反Spec 2037-2109的Plan authority与1887的canonical envelope要求。`basic-scheduler.ts`当前直接把input snapshot Value标成published envelope；snapshot port保存的是`logical_value`，而downstream reader只接受`value_ref/value_hash`。这不是可在G5内用fallback补齐的单点publication bug。
+
+最小复现输入的关键部分如下；去掉第二条data edge时Compiler成功但join `output_ports={}`，保留第二条时得到上述确定性拒绝：
+
+```json
+{
+  "join": {
+    "id": "join",
+    "type": "join",
+    "input_ports": {
+      "source_value": {
+        "schema_ref": { "id": "fixture.schema.string-narrow", "version": "1.0.0" },
+        "max_bytes": 4096,
+        "aggregation": { "type": "single", "required": true, "select": "only" }
+      }
+    },
+    "expose": { "renamed": { "input_port": "source_value" } }
+  },
+  "data_edges": [
+    { "id": "data.into-join", "from": { "type": "node_output", "node_id": "producer", "port": "value" }, "to": { "node_id": "join", "port": "source_value" } },
+    { "id": "data.from-join", "from": { "type": "node_output", "node_id": "join", "port": "renamed" }, "to": { "node_id": "consumer", "port": "value" } }
+  ]
+}
+```
+
+唯一可接受的解阻范围是先完成additive authority repair：规范必须定义generated `schema_ref`解析与hash规则，并明确Plan-local generated schema如何获得Schema 5可接受的Stored Value schema identity，或以受治理Schema successor提供等价first-class binding；Compiler必须为每个join expose从对应compiled input contract确定性lower完整typed `output_ports`、`join_expose` generator/parameter hash与data-edge proof；随后重建受影响Plan schema、Compiler/Golden review/G2 successor seal及G3/G5 identity/evidence。冻结G2三代sealed trees和current Schema 5不得原地修改或伪造。
+
+本轮按阻塞协议没有修改Runtime、Compiler、Schema、G5 Contract Pack、fixtures、reference model或package scripts，也没有增加mock-only test掩盖缺口。read-only managed Compiler复现执行两次并得到上述exact结果；current G5 pack/Capacity compatibility checks、文档diff与protected-tree审计在提交前复核。G6-G9继续`NOT_READY`；在authority repair及其独立affected-chain regression完成前，不得恢复G5施工、不得把G5标`DONE`或开始G6。
+
 ## 下一步
 
-下一独立任务只能是**G5 whole-gate regression**。它必须从本原子exit-candidate clean提交开始，独立复核完整G5 Contract/production source/transaction/fault/reopen/reference-model evidence；回归通过前G5不得标`DONE`，不得开始G6，也不得触碰G7-G9或Production activation。
+下一独立任务只能是**generated schema持久化authority与join expose的规范/G2/Schema定向修复**。它必须先选择并machine-close generated `schema_ref -> canonical schema bytes/hash -> Stored Value schema identity`，再以additive successor修复join typed output lowering、data-edge proof与受影响review/seal/Publish closure；不得在G5 Runtime猜测fallback，不得原地修改冻结G2/G1 Schema 5。该repair通过独立affected-chain regression后，下一步才可重新形成G5 repair exit candidate并执行独立G5 whole-gate regression。
 
 历史fresh review evidence只存在于Git commits，不是current dependency；current immutable semantic approval只绑定exact Draft/report identities。显式`prepare-rc`冻结的四个Working roots与唯一Review Candidate未变；current expected full case-result/Plan/proof/program bytes/hash已独立冻结、审计、owner批准并seal。local single-user签名策略为`not_required_local_single_user`，没有伪造GPG或远程签名。
 
 G2终点继续满足`Draft -> human semantic decision -> GoldenSemanticReview -> seal -> CI replay`：current successor replay为40/40，R-017保持关闭。G3.1只消费其exact sealed/compiler identities并执行纯preflight；没有创建Published Recipe、Registry row、Release或Production launchability，也没有执行production activation。
 
-作为历史prepare-rc切片记录，该切片只修复当时的R-017 spec identity实时绑定、级联重建Working artifacts并执行`prepare-rc`及其确定性check；在该历史切片结束时，G5为`READY`且Runtime尚未开始。后续owner approval、immutable review、successor seal与40/40 replay现已完成；G3.1-G3.9和G4均已完成，Capability/Outbox execution-binding affected chain也已独立回归闭合。G5当前为`G5_REPAIR_EXIT_CANDIDATE_PENDING_INDEPENDENT_G5_WHOLE_GATE_REGRESSION`而不是`DONE`；SQLite certification、Core Release、G6-G9 Runtime和production activation仍未开始。R-010 Node loader deprecation与R-012/R-013/R-015 timing继续作为既有范围外baseline，不升级工具链、不放宽测试。
+作为历史prepare-rc切片记录，该切片只修复当时的R-017 spec identity实时绑定、级联重建Working artifacts并执行`prepare-rc`及其确定性check；在该历史切片结束时，G5为`READY`且Runtime尚未开始。后续owner approval、immutable review、successor seal与40/40 replay现已完成；G3.1-G3.9和G4既有完成证据保留，Capability/Outbox execution-binding affected chain也已独立回归闭合。第四轮审查后G5当前为`BLOCKED_BY_SPEC`而不是`DONE`；SQLite certification、Core Release、G6-G9 Runtime和production activation仍未开始。R-010 Node loader deprecation与R-012/R-013/R-015 timing继续作为既有范围外baseline，不升级工具链、不放宽测试。
