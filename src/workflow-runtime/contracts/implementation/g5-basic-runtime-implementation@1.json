@@ -9,7 +9,7 @@
   "payload": {
     "production_target": true,
     "production_ingress_enabled": false,
-    "source_count": 16,
+    "source_count": 17,
     "sources": [
       {
         "path": "src/workflow-runtime/capacity/admin-gateway.ts",
@@ -34,6 +34,10 @@
       {
         "path": "src/workflow-runtime/creation/task-intake.ts",
         "raw_sha256": "sha256:af5d949ccd68ac36b27ebe95221281006a5420bea1fd1ea2fe953b0a7a52e102"
+      },
+      {
+        "path": "src/workflow-runtime/runtime/fixed-point-authority.ts",
+        "raw_sha256": "sha256:de1c3df0b3c387df098c8cbafedecdc5475cc17d1522a197d460a838bdc94f62"
       },
       {
         "path": "src/workflow-runtime/runtime/graph-store.ts",
@@ -65,18 +69,18 @@
       },
       {
         "path": "src/workflow-runtime/runtime/reconciler.ts",
-        "raw_sha256": "sha256:791cf798bfe046625d7273c660b578653797da077cd2602a4fb6430d1431130a"
+        "raw_sha256": "sha256:a35c2fa83d9a29c29e023d28d61fc00ebc36ba3bba27a19bdab5cd4cedb9b2c0"
       },
       {
         "path": "src/workflow-runtime/runtime/basic-scheduler.ts",
-        "raw_sha256": "sha256:93d6d02ebef6f2fdaad43722f3be5ad24cbeccdbd9d174195902261425f320cc"
+        "raw_sha256": "sha256:4525b576b8d20e3aba2721531181ca96806952409df2e1e2d6c2ba23f2d17d2e"
       },
       {
         "path": "src/workflow-runtime/runtime/waits.ts",
         "raw_sha256": "sha256:fff2b626d99b8708581328cbd7bbd612d6863375d43be4ca9e2a99344c7080a7"
       }
     ],
-    "source_tree_hash": "sha256:c64f8941bef066e4cccd242cb1b1d830b0d25b2033e5defcde45185c55267c22"
+    "source_tree_hash": "sha256:e832c84114c5481375523c92b4b9132164e3e101539b9942af26e792dc48a9bc"
   },
-  "hash": "sha256:1ee9bf84017c2fa5675a798d224121448ef1d268527b6de75b80c3ff721b1b80"
+  "hash": "sha256:5d14d68e983809c731f5483b013c455a306c7d1154e2f66e9861c6663bff537c"
 }

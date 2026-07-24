@@ -52,7 +52,7 @@ describe('G5 Basic Runtime closed Contract Pack', () => {
   });
 
   it('binds every production source and keeps G4 and forbidden surfaces unreachable', () => {
-    expect(G5_IMPLEMENTATION_SOURCE_PATHS).toHaveLength(16);
+    expect(G5_IMPLEMENTATION_SOURCE_PATHS).toHaveLength(17);
     for (const relativePath of G5_IMPLEMENTATION_SOURCE_PATHS) {
       const source = fs.readFileSync(path.join(repoRoot, relativePath), 'utf8');
       expect(source).not.toMatch(

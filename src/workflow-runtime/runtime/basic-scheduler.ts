@@ -305,7 +305,15 @@ export function scheduleReadyNodeT4(
             'cas_conflict',
             'T4 structural Node CAS failed',
           );
-        if (node.node_type === 'terminal')
+        if (node.node_type === 'terminal') {
+          if (
+            typeof authority.node.exit !== 'string' ||
+            authority.node.exit.length === 0
+          )
+            throw new G5RuntimeError(
+              'integrity_violation',
+              'T4 terminal candidate requires the Plan-pinned named exit',
+            );
           transaction.execute(
             'INSERT INTO workflow_graph_terminal_candidates (id, graph_run_id, scope_id, terminal_node_id, exit_name, output_snapshot_value_id, output_snapshot_hash, candidate_seq, created_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
             [
@@ -317,13 +325,14 @@ export function scheduleReadyNodeT4(
               input.graphRunId,
               input.scopeId,
               input.nodeId,
-              input.nodeId,
+              authority.node.exit,
               contextPack.id,
               contextPack.hash,
               candidateSequence,
               input.nowMs,
             ],
           );
+        }
         if (
           transaction.execute(
             'UPDATE workflow_graph_runs SET next_event_seq = ?, row_version = row_version + 1, updated_at_ms = ? WHERE id = ? AND row_version = ?',

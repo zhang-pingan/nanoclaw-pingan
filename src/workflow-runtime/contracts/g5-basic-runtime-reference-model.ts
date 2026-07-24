@@ -36,6 +36,98 @@ export interface ReferenceFactEvent {
   readonly kind: string;
 }
 
+export type ReferenceTruth = 'true' | 'false' | 'unknown';
+
+export type ReferenceTrigger =
+  | { readonly type: 'root' }
+  | {
+      readonly type: 'all';
+      readonly edgeIds: readonly string[];
+    }
+  | {
+      readonly type: 'any';
+      readonly edgeIds: readonly string[];
+    }
+  | {
+      readonly type: 'quorum';
+      readonly edgeIds: readonly string[];
+      readonly minimum: number;
+    }
+  | {
+      readonly type: 'expression';
+      readonly expression: ReferenceTriggerExpression;
+    };
+
+export type ReferenceTriggerExpression =
+  | {
+      readonly op: 'edge_is';
+      readonly edgeId: string;
+      readonly state: 'taken' | 'not_taken';
+    }
+  | {
+      readonly op: 'and' | 'or';
+      readonly args: readonly ReferenceTriggerExpression[];
+    }
+  | { readonly op: 'not'; readonly arg: ReferenceTriggerExpression };
+
+function referenceExpressionTruth(
+  expression: ReferenceTriggerExpression,
+  edges: ReadonlyMap<string, 'unresolved' | 'taken' | 'not_taken'>,
+): ReferenceTruth {
+  if (expression.op === 'edge_is') {
+    const state = edges.get(expression.edgeId);
+    if (state === undefined) throw new Error('reference_trigger_edge_missing');
+    return state === 'unresolved'
+      ? 'unknown'
+      : state === expression.state
+        ? 'true'
+        : 'false';
+  }
+  if (expression.op === 'not') {
+    const value = referenceExpressionTruth(expression.arg, edges);
+    return value === 'unknown' ? value : value === 'true' ? 'false' : 'true';
+  }
+  const values = expression.args.map((arg) =>
+    referenceExpressionTruth(arg, edges),
+  );
+  if (expression.op === 'and') {
+    if (values.includes('false')) return 'false';
+    return values.includes('unknown') ? 'unknown' : 'true';
+  }
+  if (values.includes('true')) return 'true';
+  return values.includes('unknown') ? 'unknown' : 'false';
+}
+
+export function evaluateReferenceTrigger(
+  trigger: ReferenceTrigger,
+  resolutions: Readonly<Record<string, 'unresolved' | 'taken' | 'not_taken'>>,
+): ReferenceTruth {
+  const edges = new Map(Object.entries(resolutions));
+  if (trigger.type === 'root') return edges.size === 0 ? 'true' : 'false';
+  if (trigger.type === 'expression')
+    return referenceExpressionTruth(trigger.expression, edges);
+  const states = trigger.edgeIds.map((edgeId) => {
+    const state = edges.get(edgeId);
+    if (state === undefined) throw new Error('reference_trigger_edge_missing');
+    return state;
+  });
+  const taken = states.filter((state) => state === 'taken').length;
+  const unresolved = states.filter((state) => state === 'unresolved').length;
+  if (trigger.type === 'all')
+    return states.includes('not_taken')
+      ? 'false'
+      : unresolved > 0
+        ? 'unknown'
+        : 'true';
+  if (trigger.type === 'any')
+    return taken > 0 ? 'true' : unresolved > 0 ? 'unknown' : 'false';
+  return taken >= trigger.minimum
+    ? 'true'
+    : taken + unresolved < trigger.minimum
+      ? 'false'
+      : 'unknown';
+}
+
 export class G5BasicRuntimeReferenceModel {
   readonly nodes: Map<string, ReferenceNode>;
   readonly edges: ReferenceEdge[];

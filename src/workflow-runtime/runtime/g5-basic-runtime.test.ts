@@ -25,9 +25,19 @@ import {
 import { registryResourceId } from '../contracts/g3-registry-persistence.js';
 import type { G3RegistryResourceType } from '../contracts/g3-registry-persistence-types.js';
 import { G5_DATABASE_SCHEMA_HASH } from '../contracts/g5-basic-runtime-types.js';
-import { G5BasicRuntimeReferenceModel } from '../contracts/g5-basic-runtime-reference-model.js';
-import { domainSeparatedSha256 } from '../contracts/hash.js';
+import {
+  evaluateReferenceTrigger,
+  G5BasicRuntimeReferenceModel,
+  type ReferenceTrigger,
+} from '../contracts/g5-basic-runtime-reference-model.js';
+import { canonicalJson, domainSeparatedSha256 } from '../contracts/hash.js';
 import type { JsonObject, Sha256Hash } from '../contracts/types.js';
+import {
+  compileTriggerProgram,
+  expressionSteps,
+  semanticHash,
+  sortObjectKeys,
+} from '../compiler/normalizer.js';
 import {
   calculateCreationIntentHash,
   createWorkflowT0,
@@ -307,6 +317,71 @@ function seedRuntime(store: WorkflowRuntimeStore): SeededRuntime {
 
 const G5_TEST_SOURCE: JsonObject = { format: 'g5-test-source' };
 
+function completionPolicy(
+  settledRules: Array<{
+    id: string;
+    phase: 'settled';
+    priority: number;
+    when: JsonObject;
+    selector: JsonObject;
+  }>,
+  earlyRules: Array<{
+    id: string;
+    phase: 'early';
+    priority: number;
+    when: JsonObject;
+    selector: JsonObject;
+  }> = [],
+): JsonObject {
+  const compileRule = (
+    rule: (typeof settledRules)[number] | (typeof earlyRules)[number],
+  ) => {
+    const expression = sortObjectKeys(rule.when);
+    const selector = sortObjectKeys(rule.selector);
+    const withoutHash: JsonObject = {
+      id: rule.id,
+      phase: rule.phase,
+      normalized_fact_expression: expression,
+      fact_program_hash: semanticHash(
+        'icarus:workflow-completion-fact-program:1\n',
+        {
+          normalized_fact_expression: expression,
+          max_steps: expressionSteps(expression),
+        },
+      ),
+      max_steps: expressionSteps(expression),
+      selector,
+      selector_contract_hash: semanticHash(
+        'icarus:workflow-completion-selector:1\n',
+        selector,
+      ),
+      priority: rule.priority,
+      monotonicity_proof: null,
+      cancellation_safety_proof: null,
+    };
+    return {
+      ...withoutHash,
+      rule_hash: semanticHash(
+        'icarus:workflow-completion-rule:1\n',
+        withoutHash,
+      ),
+    };
+  };
+  const withoutHash: JsonObject = {
+    early_rules: earlyRules.map(compileRule),
+    settled_rules: settledRules.map(compileRule),
+    no_match: 'error',
+    early_close: 'cancel_and_fence_remaining',
+  };
+  return {
+    ...withoutHash,
+    policy_hash: semanticHash(
+      'icarus:workflow-completion-policy:1\n',
+      withoutHash,
+    ),
+  };
+}
+
 function plan(seed: SeededRuntime): CompiledScopePlanV2Document {
   const sourceHash = domainSeparatedSha256(
     'icarus:workflow-graph-source:1\n',
@@ -337,6 +412,8 @@ function plan(seed: SeededRuntime): CompiledScopePlanV2Document {
       {
         id: 'work',
         type: 'delegation',
+        trigger_program: compileTriggerProgram({ type: 'root' }),
+        input_ports: {},
         capability_binding: {
           ref: seed.refs.capability.ref,
         },
@@ -357,6 +434,8 @@ function plan(seed: SeededRuntime): CompiledScopePlanV2Document {
       {
         id: 'timeout',
         type: 'system',
+        trigger_program: compileTriggerProgram({ type: 'root' }),
+        input_ports: {},
         capability_binding: {
           ref: seed.refs.capability.ref,
         },
@@ -372,6 +451,8 @@ function plan(seed: SeededRuntime): CompiledScopePlanV2Document {
       {
         id: 'quality',
         type: 'system',
+        trigger_program: compileTriggerProgram({ type: 'root' }),
+        input_ports: {},
         capability_binding: {
           ref: seed.refs.capability.ref,
         },
@@ -392,6 +473,8 @@ function plan(seed: SeededRuntime): CompiledScopePlanV2Document {
       {
         id: 'pause',
         type: 'wait',
+        trigger_program: compileTriggerProgram({ type: 'root' }),
+        input_ports: {},
         capability_binding: null,
         wait_binding: {
           type: 'signal',
@@ -409,13 +492,27 @@ function plan(seed: SeededRuntime): CompiledScopePlanV2Document {
         id: 'join',
         type: 'join',
         capability_binding: null,
+        trigger_program: compileTriggerProgram({
+          type: 'all',
+          edge_ids: ['work-to-done'],
+        }),
         input_ports: {
           value: {
             aggregation: { type: 'single', select: 'only', required: true },
           },
         },
       },
-      { id: 'done', type: 'terminal', capability_binding: null },
+      {
+        id: 'done',
+        type: 'terminal',
+        capability_binding: null,
+        exit: 'done',
+        trigger_program: compileTriggerProgram({
+          type: 'all',
+          edge_ids: ['join-to-done'],
+        }),
+        input_ports: {},
+      },
     ],
     route_groups: [],
     control_edges: [
@@ -449,25 +546,18 @@ function plan(seed: SeededRuntime): CompiledScopePlanV2Document {
         compiled_edge_hash: hash('edge:data'),
       },
     ],
-    completion: {
-      early_close: 'cancel_and_fence_remaining',
-      early_rules: [],
-      no_match: 'error',
-      policy_hash: hash('completion-policy'),
-      settled_rules: [
-        {
-          id: 'select_named_exit',
-          phase: 'settled',
-          priority: 100,
-          normalized_fact_expression: { fact: 'all_nodes_terminal' },
-          selector: {
-            exits: ['done'],
-            pick: { type: 'lowest_terminal_node_id' },
-          },
-          rule_hash: hash('completion-rule'),
+    completion: completionPolicy([
+      {
+        id: 'select_named_exit',
+        phase: 'settled',
+        priority: 100,
+        when: { fact: 'all_nodes_terminal' },
+        selector: {
+          exits: ['done'],
+          pick: { type: 'lowest_terminal_node_id' },
         },
-      ],
-    },
+      },
+    ]),
     complexity_summary: {},
     static_child_plan_closure: {
       members: [],
@@ -642,6 +732,263 @@ function initialActivation(seed: SeededRuntime, nowMs: number) {
     checkpoint: { status: 'initial' },
     nowMs,
   };
+}
+
+interface MaterializedPlanCase {
+  readonly graphRunId: string;
+  readonly scopeId: string;
+  readonly plan: CompiledScopePlanV2Document;
+}
+
+function pinTestDefinitionPlan(
+  store: WorkflowRuntimeStore,
+  seed: SeededRuntime,
+  candidate: CompiledScopePlanV2Document,
+): void {
+  const content = canonicalJson({
+    compiled_plan_pin: {
+      plan_hash: candidate.plan_hash,
+      plan_format: candidate.format,
+      compiler_toolchain_hash: candidate.compiler_toolchain_hash,
+      compiler_build_hash: candidate.compiler_build_hash,
+      provenance: 'sealed_g2_expected',
+    },
+  });
+  store.withImmediateTransaction((transaction) => {
+    const changed = transaction.execute(
+      `UPDATE workflow_values
+          SET inline_canonical_json = ?, byte_length = ?, row_version = row_version + 1
+        WHERE id = (
+          SELECT canonical_value_id FROM workflow_registry_resources WHERE id = ?
+        )`,
+      [content, Buffer.byteLength(content), seed.refs.definition.rowId],
+    ).changes;
+    expect(changed).toBe(1);
+  });
+}
+
+function materializePlanCase(
+  instance: G4TestBootstrapInstance,
+  seed: SeededRuntime,
+  candidate: CompiledScopePlanV2Document,
+  caseId: string,
+  nowMs: number,
+): MaterializedPlanCase {
+  pinTestDefinitionPlan(instance.store, seed, candidate);
+  const creationKey = `fixed-point-${caseId}`;
+  const created = createWorkflowT0(instance.store, {
+    requestId: `request-${caseId}`,
+    creationDomain: 'assistant',
+    creationKey,
+    source: 'api',
+    principalRef: 'human:local-owner',
+    recipe: seed.refs.recipe,
+    definition: seed.refs.definition,
+    executionPolicy: seed.refs.executionPolicy,
+    commandPolicy: seed.refs.commandPolicy,
+    inputSchema: seed.refs.inputSchema,
+    contextContract: seed.refs.contextContract,
+    routingScope: seed.refs.routingScope,
+    input: seed.values.input,
+    attachments: seed.values.attachments,
+    contextSnapshot: seed.values.context,
+    routingDecision: seed.values.routing,
+    routingDecisionJson: { reason_codes: ['explicit_recipe'] },
+    runtimeSafetyHash: seed.values.safety.hash,
+    ownershipHash: hash('ownership'),
+    creationIntentHash: directCreationIntentHash(
+      seed,
+      'assistant',
+      creationKey,
+    ),
+    workflowDefinitionVersion: '1.0.0',
+    recipeVersion: '1.0.0',
+    deadlineAtMs: null,
+    resourceLimits: {
+      state_activations_total: 8,
+      graph_runs_total: 8,
+      descendant_workflows_total: 8,
+    },
+    domainClaims: [],
+    initialActivation: initialActivation(seed, nowMs),
+    nowMs,
+  });
+  const compiled = persistCompileResultT2a(instance.store, {
+    graphRunId: created.activation.graphRunId,
+    buildId: created.activation.rootBuildId,
+    expectedBuildRowVersion: 1,
+    expectedRunWorkFenceEpoch: 0,
+    expectedOwnerScopeWorkFenceEpoch: 0,
+    expectedCompilerSnapshotHash: hash('compiler-snapshot'),
+    sourceJson: G5_TEST_SOURCE,
+    sourceHash: candidate.source_hash as Sha256Hash,
+    plan: candidate,
+    nowMs: nowMs + 1,
+  });
+  const run = instance.store.queryOne<{ row_version: number }>(
+    'SELECT row_version FROM workflow_graph_runs WHERE id = ?',
+    [created.activation.graphRunId],
+  )!;
+  materializeRootScopeT2b(instance.store, {
+    graphRunId: created.activation.graphRunId,
+    buildId: created.activation.rootBuildId,
+    rootScopeId: created.activation.rootScopeId,
+    expectedBuildRowVersion: 2,
+    expectedRunRowVersion: run.row_version,
+    expectedScopeRowVersion: 1,
+    expectedRunWorkFenceEpoch: 0,
+    planId: compiled.planId,
+    plan: candidate,
+    inputSnapshot: seed.values.input,
+    nowMs: nowMs + 2,
+  });
+  return {
+    graphRunId: created.activation.graphRunId,
+    scopeId: created.activation.rootScopeId,
+    plan: candidate,
+  };
+}
+
+function planVariant(
+  seed: SeededRuntime,
+  overrides: Partial<Omit<CompiledScopePlanV2Document, 'plan_hash'>>,
+): CompiledScopePlanV2Document {
+  const { plan_hash: _planHash, ...base } = plan(seed);
+  void _planHash;
+  return withPlanHash({
+    ...base,
+    ...overrides,
+  } as Omit<CompiledScopePlanV2Document, 'plan_hash'>);
+}
+
+function conditionProgram(expression: JsonObject): JsonObject {
+  const normalized = sortObjectKeys(expression);
+  const withoutHash: JsonObject = {
+    normalized_ast: normalized,
+    operand_schema_hashes: {},
+    operand_types: [],
+    max_steps: expressionSteps(normalized),
+  };
+  return {
+    ...withoutHash,
+    program_hash: semanticHash(
+      'icarus:workflow-condition-program:2\n',
+      withoutHash,
+    ),
+  };
+}
+
+function fixedCapacity() {
+  const values = {
+    max_active_executions: 32,
+    max_active_waits: 32,
+    max_pending_signals: 64,
+    max_outbox_inflight: 16,
+    max_physical_blob_bytes: 21_474_836_480,
+    soft_blob_high_water_bytes: 17_179_869_184,
+    minimum_free_disk_bytes: 5_368_709_120,
+  };
+  return buildDeploymentCapacityPublication(
+    1,
+    'g5-fixed-point-capacity',
+    null,
+    {
+      ...values,
+      config_hash: calculateDeploymentCapacityConfigHash(values),
+    },
+  );
+}
+
+function initializePlanCase(
+  instance: G4TestBootstrapInstance,
+  run: MaterializedPlanCase,
+  nowMs: number,
+) {
+  const row = instance.store.queryOne<{ row_version: number }>(
+    'SELECT row_version FROM workflow_graph_runs WHERE id = ?',
+    [run.graphRunId],
+  )!;
+  return initializeScopeFixedPointT3a(instance.store, {
+    graphRunId: run.graphRunId,
+    scopeId: run.scopeId,
+    expectedRunRowVersion: row.row_version,
+    nowMs,
+  });
+}
+
+function scheduleStructuralNode(
+  instance: G4TestBootstrapInstance,
+  run: MaterializedPlanCase,
+  nodeKey: string,
+  nowMs: number,
+): { id: string; output: { id: string; hash: Sha256Hash } } {
+  const node = instance.store.queryOne<{
+    id: string;
+    row_version: number;
+    activation_event_seq: number;
+  }>(
+    'SELECT id, row_version, activation_event_seq FROM workflow_graph_nodes WHERE graph_run_id = ? AND node_key = ?',
+    [run.graphRunId, nodeKey],
+  )!;
+  scheduleReadyNodeT4(
+    instance.store,
+    { current: () => fixedCapacity() },
+    {
+      graphRunId: run.graphRunId,
+      scopeId: run.scopeId,
+      nodeId: node.id,
+      expectedNodeRowVersion: node.row_version,
+      expectedRunWorkFenceEpoch: 0,
+      expectedScopeWorkFenceEpoch: 0,
+      eligibleEventSeq: node.activation_event_seq,
+      activation: { kind: 'structural' },
+      nowMs,
+    },
+  );
+  const terminal = instance.store.queryOne<{
+    published_output_envelope_value_id: string;
+    published_output_envelope_hash: Sha256Hash;
+  }>(
+    'SELECT published_output_envelope_value_id, published_output_envelope_hash FROM workflow_graph_nodes WHERE id = ?',
+    [node.id],
+  )!;
+  return {
+    id: node.id,
+    output: {
+      id: terminal.published_output_envelope_value_id,
+      hash: terminal.published_output_envelope_hash,
+    },
+  };
+}
+
+function reconcileTerminalNode(
+  instance: G4TestBootstrapInstance,
+  run: MaterializedPlanCase,
+  terminal: { id: string; output: { id: string; hash: Sha256Hash } },
+  factKey: string,
+  nowMs: number,
+  fault?: { point: 'before_first_write' | 'before_commit' },
+) {
+  const row = instance.store.queryOne<{ row_version: number }>(
+    'SELECT row_version FROM workflow_graph_runs WHERE id = ?',
+    [run.graphRunId],
+  )!;
+  return reconcileFactT3a(
+    instance.store,
+    {
+      graphRunId: run.graphRunId,
+      scopeId: run.scopeId,
+      expectedRunRowVersion: row.row_version,
+      factKind: 'node_terminal',
+      stableObjectKind: 'node',
+      stableObjectId: terminal.id,
+      factKey,
+      payload: terminal.output,
+      terminalStatus: 'succeeded',
+      nowMs,
+    },
+    fault,
+  );
 }
 
 function directCreationIntentHash(
@@ -1938,6 +2285,1163 @@ describe('G5 Basic Runtime Schema 5 transaction integration', () => {
         [activated.graphRunId],
       )!.lifecycle,
     ).toBe('closing');
+  });
+
+  it('derives route decisions and Strong Kleene trigger cuts from the sealed Plan', () => {
+    const instance = bootstrap('g5-fixed-point-route-trigger');
+    const seed = seedRuntime(instance.store);
+    const root = (id: string): JsonObject => ({
+      id,
+      type: 'join',
+      capability_binding: null,
+      trigger_program: compileTriggerProgram({ type: 'root' }),
+      input_ports: {},
+    });
+    const target = (id: string, trigger: JsonObject): JsonObject => ({
+      id,
+      type: 'join',
+      capability_binding: null,
+      trigger_program: trigger,
+      input_ports: {},
+    });
+    const edge = (
+      id: string,
+      from: string,
+      to: string,
+      statuses: string[],
+      extra: JsonObject = {},
+    ): JsonObject => ({
+      id,
+      from_node_id: from,
+      to_node_id: to,
+      outcome_match: { statuses },
+      condition_program: null,
+      is_default: false,
+      priority: null,
+      route_group_id: null,
+      compiled_edge_hash: hash(`fixed-point-edge:${id}`),
+      ...extra,
+    });
+    const controlEdges = [
+      edge('z-not-any', 'z-source', 'any-target', ['failed']),
+      edge('a-any', 'a-source', 'any-target', ['succeeded']),
+      edge('z-not-quorum', 'z-source', 'quorum-target', ['failed']),
+      edge('a-quorum', 'a-source', 'quorum-target', ['succeeded']),
+      edge('b-quorum', 'b-source', 'quorum-target', ['succeeded']),
+      edge('a-expression', 'a-source', 'expression-target', ['succeeded']),
+      edge('b-expression', 'b-source', 'expression-target', ['succeeded']),
+      edge('route-false', 'route-source', 'route-false-target', ['succeeded'], {
+        condition_program: conditionProgram({
+          op: 'eq',
+          left: { literal: false },
+          right: { literal: true },
+        }),
+        priority: 30,
+        route_group_id: 'first-route',
+      }),
+      edge('route-true', 'route-source', 'route-true-target', ['succeeded'], {
+        condition_program: conditionProgram({
+          op: 'eq',
+          left: { literal: 'match' },
+          right: { literal: 'match' },
+        }),
+        priority: 20,
+        route_group_id: 'first-route',
+      }),
+      {
+        id: 'route-default',
+        from_node_id: 'route-source',
+        to_node_id: 'route-default-target',
+        is_default: true,
+        route_group_id: 'first-route',
+        condition_program: null,
+        priority: null,
+        compiled_edge_hash: hash('fixed-point-edge:route-default'),
+      },
+    ];
+    const candidate = planVariant(seed, {
+      nodes: [
+        root('z-source'),
+        root('a-source'),
+        root('b-source'),
+        root('route-source'),
+        target(
+          'any-target',
+          compileTriggerProgram({
+            type: 'any',
+            edge_ids: ['z-not-any', 'a-any'],
+          }),
+        ),
+        target(
+          'quorum-target',
+          compileTriggerProgram({
+            type: 'quorum',
+            edge_ids: ['z-not-quorum', 'a-quorum', 'b-quorum'],
+            min_taken: 2,
+          }),
+        ),
+        target(
+          'expression-target',
+          compileTriggerProgram({
+            type: 'expression',
+            expression: {
+              op: 'or',
+              args: [
+                { op: 'edge_is', edge_id: 'a-expression', state: 'taken' },
+                { op: 'edge_is', edge_id: 'b-expression', state: 'taken' },
+              ],
+            },
+          }),
+        ),
+        target(
+          'route-false-target',
+          compileTriggerProgram({ type: 'all', edge_ids: ['route-false'] }),
+        ),
+        target(
+          'route-true-target',
+          compileTriggerProgram({ type: 'all', edge_ids: ['route-true'] }),
+        ),
+        target(
+          'route-default-target',
+          compileTriggerProgram({ type: 'all', edge_ids: ['route-default'] }),
+        ),
+      ],
+      route_groups: [
+        {
+          id: 'first-route',
+          from_node_id: 'route-source',
+          mode: 'first_matching',
+          no_match: 'allow',
+          ordered_edge_ids: ['route-false', 'route-true', 'route-default'],
+        },
+      ],
+      control_edges: controlEdges,
+      data_edges: [],
+      completion: completionPolicy([
+        {
+          id: 'never-close-during-fixed-point',
+          phase: 'settled',
+          priority: 1,
+          when: { fact: 'all_nodes_terminal' },
+          selector: {
+            exits: ['unused'],
+            pick: { type: 'lowest_terminal_node_id' },
+          },
+        },
+      ]),
+    });
+    const run = materializePlanCase(
+      instance,
+      seed,
+      candidate,
+      'route-trigger',
+      10,
+    );
+    initializePlanCase(instance, run, 20);
+
+    const first = scheduleStructuralNode(instance, run, 'z-source', 30);
+    reconcileTerminalNode(instance, run, first, 'terminal:z-source', 31);
+    expect(
+      instance.store.queryOne<{ trigger_state: string }>(
+        "SELECT trigger_state FROM workflow_graph_nodes WHERE graph_run_id = ? AND node_key = 'any-target'",
+        [run.graphRunId],
+      )!.trigger_state,
+    ).toBe('unknown');
+    instance.closeStore();
+    instance.reopenStore();
+
+    const second = scheduleStructuralNode(instance, run, 'a-source', 40);
+    expect(() =>
+      reconcileTerminalNode(instance, run, second, 'terminal:a-source', 41, {
+        point: 'before_commit',
+      }),
+    ).toThrow(/Injected fault before commit/);
+    expect(
+      instance.store.queryOne<{ state: string }>(
+        `SELECT r.state FROM workflow_graph_edges e
+           JOIN workflow_graph_control_edge_resolutions r ON r.edge_id = e.id
+          WHERE e.graph_run_id = ? AND e.edge_key = 'a-any'`,
+        [run.graphRunId],
+      )!.state,
+    ).toBe('unresolved');
+    reconcileTerminalNode(instance, run, second, 'terminal:a-source', 41);
+
+    const cutAfterAny = instance.store.queryOne<{
+      trigger_cut_json: string;
+      trigger_cut_hash: string;
+      phase: string;
+    }>(
+      "SELECT trigger_cut_json, trigger_cut_hash, phase FROM workflow_graph_nodes WHERE graph_run_id = ? AND node_key = 'any-target'",
+      [run.graphRunId],
+    )!;
+    expect(cutAfterAny.phase).toBe('ready');
+    expect(JSON.parse(cutAfterAny.trigger_cut_json)).toMatchObject({
+      truth: 'true',
+      witness: [{ edge_id: 'a-any', state: 'taken' }],
+    });
+    expect(
+      JSON.parse(
+        instance.store.queryOne<{ trigger_cut_json: string }>(
+          "SELECT trigger_cut_json FROM workflow_graph_nodes WHERE graph_run_id = ? AND node_key = 'expression-target'",
+          [run.graphRunId],
+        )!.trigger_cut_json,
+      ),
+    ).toMatchObject({
+      truth: 'true',
+      witness: [{ edge_id: 'a-expression', state: 'taken' }],
+    });
+
+    const third = scheduleStructuralNode(instance, run, 'b-source', 50);
+    reconcileTerminalNode(instance, run, third, 'terminal:b-source', 51);
+    const quorumCut = JSON.parse(
+      instance.store.queryOne<{ trigger_cut_json: string }>(
+        "SELECT trigger_cut_json FROM workflow_graph_nodes WHERE graph_run_id = ? AND node_key = 'quorum-target'",
+        [run.graphRunId],
+      )!.trigger_cut_json,
+    ) as { witness: Array<{ edge_id: string; resolution_seq: number }> };
+    expect(quorumCut.witness.map((item) => item.edge_id)).toEqual([
+      'a-quorum',
+      'b-quorum',
+    ]);
+    expect(quorumCut.witness[0]!.resolution_seq).toBeLessThan(
+      quorumCut.witness[1]!.resolution_seq,
+    );
+    expect(
+      instance.store.queryOne<{
+        trigger_cut_json: string;
+        trigger_cut_hash: string;
+      }>(
+        "SELECT trigger_cut_json, trigger_cut_hash FROM workflow_graph_nodes WHERE graph_run_id = ? AND node_key = 'any-target'",
+        [run.graphRunId],
+      ),
+    ).toEqual({
+      trigger_cut_json: cutAfterAny.trigger_cut_json,
+      trigger_cut_hash: cutAfterAny.trigger_cut_hash,
+    });
+
+    const route = scheduleStructuralNode(instance, run, 'route-source', 60);
+    reconcileTerminalNode(instance, run, route, 'terminal:route-source', 61);
+    const routeStates = instance.store.queryAll<{
+      edge_key: string;
+      state: string;
+    }>(
+      `SELECT e.edge_key, r.state FROM workflow_graph_edges e
+         JOIN workflow_graph_control_edge_resolutions r ON r.edge_id = e.id
+        WHERE e.graph_run_id = ? AND e.edge_key LIKE 'route-%'
+        ORDER BY e.edge_key COLLATE BINARY`,
+      [run.graphRunId],
+    );
+    expect(routeStates).toEqual([
+      { edge_key: 'route-default', state: 'not_taken' },
+      { edge_key: 'route-false', state: 'not_taken' },
+      { edge_key: 'route-true', state: 'taken' },
+    ]);
+    expect(
+      instance.store.queryOne<{ phase: string }>(
+        "SELECT phase FROM workflow_graph_nodes WHERE graph_run_id = ? AND node_key = 'route-true-target'",
+        [run.graphRunId],
+      )!.phase,
+    ).toBe('ready');
+  });
+
+  it('seals required, optional, default, list, and literal inputs from Plan contracts', () => {
+    const instance = bootstrap('g5-fixed-point-input-seal');
+    const seed = seedRuntime(instance.store);
+    const inputNode = (id: string, inputPorts: JsonObject): JsonObject => ({
+      id,
+      type: 'join',
+      capability_binding: null,
+      trigger_program: compileTriggerProgram({ type: 'root' }),
+      input_ports: inputPorts,
+    });
+    const schema = {
+      type: 'registry',
+      ref: seed.refs.schema.ref,
+      schema_hash: seed.refs.schema.hash,
+    };
+    const dataEdge = (
+      id: string,
+      toNode: string,
+      port: string,
+      from: JsonObject = { type: 'scope_input', port: 'result' },
+    ): JsonObject => ({
+      id,
+      from,
+      to: { node_id: toNode, port },
+      derived_schema: schema,
+      producer_schema_hash: seed.refs.schema.hash,
+      consumer_schema_hash: seed.refs.schema.hash,
+      on_missing: 'unavailable',
+      guard_control_edge_id: null,
+      compiled_edge_hash: hash(`input-edge:${id}`),
+    });
+    const single = (aggregation: JsonObject): JsonObject => ({
+      schema,
+      max_bytes: null,
+      aggregation,
+    });
+    const candidate = planVariant(seed, {
+      nodes: [
+        inputNode('required', {
+          value: single({ type: 'single', select: 'only', required: true }),
+        }),
+        inputNode('optional', {
+          value: single({ type: 'single', select: 'only', required: false }),
+        }),
+        inputNode('defaulted', {
+          value: single({
+            type: 'single',
+            select: 'only',
+            required: true,
+            default: { source: 'plan-default' },
+          }),
+        }),
+        inputNode('listed', {
+          values: {
+            schema,
+            max_bytes: null,
+            item_schema: schema,
+            item_max_bytes: null,
+            aggregation: {
+              type: 'list',
+              min_items: 2,
+              seal: { type: 'all_sources_resolved' },
+              order: 'edge_id',
+            },
+          },
+        }),
+        inputNode('first-n', {
+          values: {
+            schema,
+            max_bytes: null,
+            item_schema: schema,
+            item_max_bytes: null,
+            aggregation: {
+              type: 'list',
+              min_items: 1,
+              seal: { type: 'first_n_available', count: 1 },
+              order: 'resolution_seq',
+            },
+          },
+        }),
+        inputNode('literal', {
+          value: single({ type: 'single', select: 'only', required: true }),
+        }),
+      ],
+      route_groups: [],
+      control_edges: [],
+      data_edges: [
+        dataEdge('required-value', 'required', 'value'),
+        dataEdge('z-list-value', 'listed', 'values'),
+        dataEdge('a-list-value', 'listed', 'values'),
+        dataEdge('z-first-value', 'first-n', 'values'),
+        dataEdge('a-first-value', 'first-n', 'values'),
+        dataEdge('literal-value', 'literal', 'value', {
+          type: 'literal',
+          value: { source: 'sealed-plan-literal' },
+        }),
+      ],
+      completion: completionPolicy([
+        {
+          id: 'input-no-close',
+          phase: 'settled',
+          priority: 1,
+          when: { fact: 'all_nodes_terminal' },
+          selector: {
+            exits: ['unused'],
+            pick: { type: 'lowest_terminal_node_id' },
+          },
+        },
+      ]),
+    });
+    const run = materializePlanCase(
+      instance,
+      seed,
+      candidate,
+      'input-seal',
+      100,
+    );
+    expect(initializePlanCase(instance, run, 110).readyNodeIds).toHaveLength(6);
+    const rows = instance.store.queryAll<{
+      node_key: string;
+      phase: string;
+      input_snapshot_json: string;
+      input_snapshot_value_id: string | null;
+      selected_edges_json: string;
+    }>(
+      `SELECT node_key, phase, input_snapshot_json, input_snapshot_value_id,
+              selected_edges_json
+         FROM workflow_graph_nodes WHERE graph_run_id = ?
+        ORDER BY node_key COLLATE BINARY`,
+      [run.graphRunId],
+    );
+    expect(rows.every((row) => row.phase === 'ready')).toBe(true);
+    const byNode = new Map(rows.map((row) => [row.node_key, row]));
+    expect(JSON.parse(byNode.get('optional')!.input_snapshot_json)).toEqual({
+      ports: { value: { selected_edges: [], state: 'absent' } },
+    });
+    expect(JSON.parse(byNode.get('defaulted')!.input_snapshot_json)).toEqual({
+      ports: {
+        value: {
+          aggregation: 'default',
+          default_value: { source: 'plan-default' },
+          selected_edges: [],
+          state: 'present',
+        },
+      },
+    });
+    expect(byNode.get('required')!.input_snapshot_value_id).toBe(
+      seed.values.input.id,
+    );
+    expect(JSON.parse(byNode.get('listed')!.selected_edges_json)).toEqual([
+      'a-list-value',
+      'z-list-value',
+    ]);
+    const listed = JSON.parse(byNode.get('listed')!.input_snapshot_json) as {
+      ports: { values: { values: Array<{ edge_key: string }> } };
+    };
+    expect(listed.ports.values.values.map((value) => value.edge_key)).toEqual([
+      'a-list-value',
+      'z-list-value',
+    ]);
+    expect(JSON.parse(byNode.get('first-n')!.selected_edges_json)).toEqual([
+      'a-first-value',
+    ]);
+    expect(JSON.parse(byNode.get('literal')!.selected_edges_json)).toEqual([
+      'literal-value',
+    ]);
+    expect(byNode.get('literal')!.input_snapshot_value_id).toMatch(
+      /^g5:literal-value:/,
+    );
+  });
+
+  it('evaluates early and settled completion rules and all selector picks', () => {
+    const instance = bootstrap('g5-completion-authority');
+    const seed = seedRuntime(instance.store);
+    const terminal = (id: string, exit: string): JsonObject => ({
+      id,
+      type: 'terminal',
+      capability_binding: null,
+      exit,
+      trigger_program: compileTriggerProgram({ type: 'root' }),
+      input_ports: {},
+    });
+    const close = (
+      run: MaterializedPlanCase,
+      nowMs: number,
+      fault?: { point: 'before_first_write' | 'before_commit' },
+    ) => {
+      const runRow = instance.store.queryOne<{ row_version: number }>(
+        'SELECT row_version FROM workflow_graph_runs WHERE id = ?',
+        [run.graphRunId],
+      )!;
+      const scopeRow = instance.store.queryOne<{ row_version: number }>(
+        'SELECT row_version FROM workflow_graph_scopes WHERE id = ?',
+        [run.scopeId],
+      )!;
+      return requestSettledCloseT3b(
+        instance.store,
+        {
+          graphRunId: run.graphRunId,
+          scopeId: run.scopeId,
+          expectedRunRowVersion: runRow.row_version,
+          expectedScopeRowVersion: scopeRow.row_version,
+          nowMs,
+        },
+        fault,
+      );
+    };
+    const selected = (run: MaterializedPlanCase) =>
+      instance.store.queryOne<{
+        selected_rule_id: string | null;
+        error_code: string | null;
+        node_key: string | null;
+        exit_name: string | null;
+      }>(
+        `SELECT r.selected_rule_id, r.error_code, n.node_key, c.exit_name
+           FROM workflow_graph_scope_close_requests r
+           LEFT JOIN workflow_graph_terminal_candidates c ON c.id = r.candidate_id
+           LEFT JOIN workflow_graph_nodes n ON n.id = c.terminal_node_id
+          WHERE r.graph_run_id = ? AND r.scope_id = ?`,
+        [run.graphRunId, run.scopeId],
+      )!;
+    const settledRun = (
+      caseId: string,
+      rules: Parameters<typeof completionPolicy>[0],
+      nowMs: number,
+    ) => {
+      const candidate = planVariant(seed, {
+        nodes: [
+          terminal('a-terminal', 'alpha'),
+          terminal('z-terminal', 'omega'),
+        ],
+        route_groups: [],
+        control_edges: [],
+        data_edges: [],
+        completion: completionPolicy(rules),
+      });
+      const run = materializePlanCase(instance, seed, candidate, caseId, nowMs);
+      initializePlanCase(instance, run, nowMs + 3);
+      scheduleStructuralNode(instance, run, 'z-terminal', nowMs + 4);
+      scheduleStructuralNode(instance, run, 'a-terminal', nowMs + 5);
+      return run;
+    };
+
+    const firstReached = settledRun(
+      'selector-first',
+      [
+        {
+          id: 'pick-first',
+          phase: 'settled',
+          priority: 10,
+          when: { fact: 'all_nodes_terminal' },
+          selector: { pick: { type: 'first_reached' } },
+        },
+      ],
+      200,
+    );
+    expect(() => close(firstReached, 210, { point: 'before_commit' })).toThrow(
+      /Injected fault before commit/,
+    );
+    expect(
+      instance.store.queryOne<{ count: number }>(
+        'SELECT count(*) AS count FROM workflow_graph_scope_close_requests WHERE graph_run_id = ?',
+        [firstReached.graphRunId],
+      )!.count,
+    ).toBe(0);
+    instance.closeStore();
+    instance.reopenStore();
+    close(firstReached, 210);
+    expect(selected(firstReached)).toMatchObject({
+      selected_rule_id: 'pick-first',
+      node_key: 'z-terminal',
+      exit_name: 'omega',
+    });
+
+    const lowest = settledRun(
+      'selector-lowest',
+      [
+        {
+          id: 'pick-lowest',
+          phase: 'settled',
+          priority: 10,
+          when: { fact: 'all_nodes_terminal' },
+          selector: { pick: { type: 'lowest_terminal_node_id' } },
+        },
+      ],
+      300,
+    );
+    close(lowest, 310);
+    expect(selected(lowest)).toMatchObject({
+      selected_rule_id: 'pick-lowest',
+      node_key: 'a-terminal',
+      exit_name: 'alpha',
+    });
+
+    const exitPriority = settledRun(
+      'selector-exit-priority',
+      [
+        {
+          id: 'pick-exit-priority',
+          phase: 'settled',
+          priority: 10,
+          when: { fact: 'all_nodes_terminal' },
+          selector: {
+            pick: {
+              type: 'exit_priority_then_first',
+              exit_priority: ['alpha', 'omega'],
+            },
+          },
+        },
+      ],
+      400,
+    );
+    close(exitPriority, 410);
+    expect(selected(exitPriority)).toMatchObject({
+      selected_rule_id: 'pick-exit-priority',
+      node_key: 'a-terminal',
+      exit_name: 'alpha',
+    });
+
+    const fallback = settledRun(
+      'completion-fallback',
+      [
+        {
+          id: 'high-when-false',
+          phase: 'settled',
+          priority: 300,
+          when: {
+            fact: 'candidate_count',
+            exits: ['missing'],
+            cmp: 'gte',
+            value: 1,
+          },
+          selector: { pick: { type: 'first_reached' } },
+        },
+        {
+          id: 'middle-selector-empty',
+          phase: 'settled',
+          priority: 200,
+          when: { fact: 'all_nodes_terminal' },
+          selector: {
+            exits: ['missing'],
+            pick: { type: 'first_reached' },
+          },
+        },
+        {
+          id: 'low-applicable',
+          phase: 'settled',
+          priority: 100,
+          when: { fact: 'all_nodes_terminal' },
+          selector: {
+            terminal_node_ids: ['z-terminal'],
+            pick: { type: 'lowest_terminal_node_id' },
+          },
+        },
+      ],
+      500,
+    );
+    close(fallback, 510);
+    expect(selected(fallback)).toMatchObject({
+      selected_rule_id: 'low-applicable',
+      node_key: 'z-terminal',
+    });
+    expect(
+      instance.store.queryOne<{
+        run_fence: number;
+        scope_fence: number;
+      }>(
+        `SELECT r.work_fence_epoch AS run_fence,
+                s.work_fence_epoch AS scope_fence
+           FROM workflow_graph_runs r
+           JOIN workflow_graph_scopes s ON s.id = r.root_scope_id
+          WHERE r.id = ?`,
+        [fallback.graphRunId],
+      ),
+    ).toEqual({ run_fence: 1, scope_fence: 1 });
+
+    const noExit = settledRun(
+      'completion-no-exit',
+      [
+        {
+          id: 'never-applicable',
+          phase: 'settled',
+          priority: 10,
+          when: {
+            fact: 'candidate_count',
+            exits: ['missing'],
+            cmp: 'gte',
+            value: 1,
+          },
+          selector: { pick: { type: 'first_reached' } },
+        },
+      ],
+      600,
+    );
+    expect(() => close(noExit, 610, { point: 'before_commit' })).toThrow(
+      /Injected fault before commit/,
+    );
+    expect(
+      instance.store.queryOne<{ lifecycle: string; work_fence_epoch: number }>(
+        'SELECT lifecycle, work_fence_epoch FROM workflow_graph_runs WHERE id = ?',
+        [noExit.graphRunId],
+      ),
+    ).toEqual({ lifecycle: 'executing', work_fence_epoch: 0 });
+    close(noExit, 610);
+    expect(selected(noExit)).toMatchObject({
+      selected_rule_id: null,
+      error_code: 'no_exit_selected',
+      node_key: null,
+    });
+    expect(
+      instance.store.queryAll<{ event_type: string }>(
+        "SELECT event_type FROM workflow_graph_events WHERE graph_run_id = ? AND event_type IN ('orchestration_error', 'scope_close_requested') ORDER BY seq",
+        [noExit.graphRunId],
+      ),
+    ).toEqual([
+      { event_type: 'orchestration_error' },
+      { event_type: 'scope_close_requested' },
+    ]);
+
+    const earlyCandidate = planVariant(seed, {
+      nodes: [
+        terminal('early-terminal', 'early'),
+        {
+          id: 'remaining-node',
+          type: 'join',
+          capability_binding: null,
+          trigger_program: compileTriggerProgram({
+            type: 'all',
+            edge_ids: ['early-to-remaining'],
+          }),
+          input_ports: {},
+        },
+      ],
+      route_groups: [],
+      control_edges: [
+        {
+          id: 'early-to-remaining',
+          from_node_id: 'early-terminal',
+          to_node_id: 'remaining-node',
+          outcome_match: { statuses: ['succeeded'] },
+          condition_program: null,
+          is_default: false,
+          priority: null,
+          route_group_id: null,
+          compiled_edge_hash: hash('completion:early-to-remaining'),
+        },
+      ],
+      data_edges: [],
+      completion: completionPolicy(
+        [
+          {
+            id: 'settled-fallback',
+            phase: 'settled',
+            priority: 1,
+            when: { fact: 'all_nodes_terminal' },
+            selector: { pick: { type: 'first_reached' } },
+          },
+        ],
+        [
+          {
+            id: 'early-low',
+            phase: 'early',
+            priority: 10,
+            when: { fact: 'candidate_count', cmp: 'gte', value: 1 },
+            selector: { pick: { type: 'first_reached' } },
+          },
+          {
+            id: 'early-high',
+            phase: 'early',
+            priority: 20,
+            when: { fact: 'candidate_count', cmp: 'gte', value: 1 },
+            selector: { pick: { type: 'first_reached' } },
+          },
+        ],
+      ),
+    });
+    const early = materializePlanCase(
+      instance,
+      seed,
+      earlyCandidate,
+      'completion-early',
+      700,
+    );
+    initializePlanCase(instance, early, 703);
+    const earlyTerminal = scheduleStructuralNode(
+      instance,
+      early,
+      'early-terminal',
+      704,
+    );
+    reconcileTerminalNode(
+      instance,
+      early,
+      earlyTerminal,
+      'terminal:early-terminal',
+      705,
+    );
+    expect(selected(early)).toMatchObject({
+      selected_rule_id: 'early-high',
+      node_key: 'early-terminal',
+      exit_name: 'early',
+    });
+    const eligibilities = instance.store.queryAll<{
+      rule_id: string;
+      phase: string;
+      eligibility_event_seq: number;
+    }>(
+      'SELECT rule_id, phase, eligibility_event_seq FROM workflow_graph_completion_eligibilities WHERE graph_run_id = ? ORDER BY rule_id',
+      [early.graphRunId],
+    );
+    expect(eligibilities.map((row) => row.rule_id)).toEqual([
+      'early-high',
+      'early-low',
+    ]);
+    expect(
+      new Set(eligibilities.map((row) => row.eligibility_event_seq)).size,
+    ).toBe(1);
+    expect(eligibilities[0]!.eligibility_event_seq).toBe(
+      instance.store.queryOne<{ seq: number }>(
+        "SELECT seq FROM workflow_graph_events WHERE graph_run_id = ? AND idempotency_key = 'terminal:early-terminal'",
+        [early.graphRunId],
+      )!.seq,
+    );
+  });
+
+  it('applies default, all-matching, and no-match-error route groups atomically', () => {
+    const instance = bootstrap('g5-route-group-modes');
+    const seed = seedRuntime(instance.store);
+    const node = (id: string, edgeIds: string[] = []): JsonObject => ({
+      id,
+      type: 'join',
+      capability_binding: null,
+      trigger_program:
+        edgeIds.length === 0
+          ? compileTriggerProgram({ type: 'root' })
+          : compileTriggerProgram({ type: 'all', edge_ids: edgeIds }),
+      input_ports: {},
+    });
+    const conditional = (
+      id: string,
+      source: string,
+      target: string,
+      group: string,
+      value: boolean,
+    ): JsonObject => ({
+      id,
+      from_node_id: source,
+      to_node_id: target,
+      outcome_match: { statuses: ['succeeded'] },
+      condition_program: conditionProgram({
+        op: 'eq',
+        left: { literal: value },
+        right: { literal: true },
+      }),
+      is_default: false,
+      route_group_id: group,
+      priority: group === 'all-group' ? null : 10,
+      compiled_edge_hash: hash(`route-mode:${id}`),
+    });
+    const candidate = planVariant(seed, {
+      nodes: [
+        node('route-source'),
+        node('error-source'),
+        node('default-target', ['default-edge']),
+        node('false-target', ['false-edge']),
+        node('all-true-target', ['all-true']),
+        node('all-false-target', ['all-false']),
+        node('error-target', ['error-edge']),
+      ],
+      route_groups: [
+        {
+          id: 'default-group',
+          from_node_id: 'route-source',
+          mode: 'first_matching',
+          no_match: 'allow',
+          ordered_edge_ids: ['false-edge', 'default-edge'],
+        },
+        {
+          id: 'all-group',
+          from_node_id: 'route-source',
+          mode: 'all_matching',
+          no_match: 'allow',
+          ordered_edge_ids: ['all-false', 'all-true'],
+        },
+        {
+          id: 'error-group',
+          from_node_id: 'error-source',
+          mode: 'first_matching',
+          no_match: 'error',
+          ordered_edge_ids: ['error-edge'],
+        },
+      ],
+      control_edges: [
+        conditional(
+          'false-edge',
+          'route-source',
+          'false-target',
+          'default-group',
+          false,
+        ),
+        {
+          id: 'default-edge',
+          from_node_id: 'route-source',
+          to_node_id: 'default-target',
+          condition_program: null,
+          is_default: true,
+          route_group_id: 'default-group',
+          priority: null,
+          compiled_edge_hash: hash('route-mode:default-edge'),
+        },
+        conditional(
+          'all-true',
+          'route-source',
+          'all-true-target',
+          'all-group',
+          true,
+        ),
+        conditional(
+          'all-false',
+          'route-source',
+          'all-false-target',
+          'all-group',
+          false,
+        ),
+        conditional(
+          'error-edge',
+          'error-source',
+          'error-target',
+          'error-group',
+          false,
+        ),
+      ],
+      data_edges: [],
+      completion: completionPolicy([
+        {
+          id: 'route-mode-no-normal-close',
+          phase: 'settled',
+          priority: 1,
+          when: { fact: 'all_nodes_terminal' },
+          selector: {
+            exits: ['unused'],
+            pick: { type: 'lowest_terminal_node_id' },
+          },
+        },
+      ]),
+    });
+    const run = materializePlanCase(
+      instance,
+      seed,
+      candidate,
+      'route-modes',
+      800,
+    );
+    initializePlanCase(instance, run, 803);
+    const source = scheduleStructuralNode(instance, run, 'route-source', 804);
+    reconcileTerminalNode(instance, run, source, 'terminal:route-source', 805);
+    const states = instance.store.queryAll<{ edge_key: string; state: string }>(
+      `SELECT e.edge_key, r.state FROM workflow_graph_edges e
+         JOIN workflow_graph_control_edge_resolutions r ON r.edge_id = e.id
+        WHERE e.graph_run_id = ? AND e.edge_key <> 'error-edge'
+        ORDER BY e.edge_key COLLATE BINARY`,
+      [run.graphRunId],
+    );
+    expect(states).toEqual([
+      { edge_key: 'all-false', state: 'not_taken' },
+      { edge_key: 'all-true', state: 'taken' },
+      { edge_key: 'default-edge', state: 'taken' },
+      { edge_key: 'false-edge', state: 'not_taken' },
+    ]);
+    const errorSource = scheduleStructuralNode(
+      instance,
+      run,
+      'error-source',
+      806,
+    );
+    reconcileTerminalNode(
+      instance,
+      run,
+      errorSource,
+      'terminal:error-source',
+      807,
+    );
+    expect(
+      instance.store.queryOne<{ reason: string; error_code: string }>(
+        'SELECT reason, error_code FROM workflow_graph_scope_close_requests WHERE graph_run_id = ?',
+        [run.graphRunId],
+      ),
+    ).toEqual({
+      reason: 'engine_error',
+      error_code: 'fixed_point_resolution_error',
+    });
+  });
+
+  it('property-compares production fixed-point rows with an independent trigger model', () => {
+    const instance = bootstrap('g5-fixed-point-property-model');
+    const seed = seedRuntime(instance.store);
+    let caseSequence = 0;
+    fc.assert(
+      fc.property(
+        fc.record({
+          taken: fc.tuple(fc.boolean(), fc.boolean(), fc.boolean()),
+          kind: fc.constantFrom(
+            'all' as const,
+            'any' as const,
+            'quorum' as const,
+            'expression_and' as const,
+            'expression_or' as const,
+          ),
+          minimum: fc.integer({ min: 1, max: 3 }),
+        }),
+        ({ taken, kind, minimum }) => {
+          const current = caseSequence++;
+          const edgeIds = ['edge-0', 'edge-1', 'edge-2'];
+          const referenceTrigger: ReferenceTrigger =
+            kind === 'all' || kind === 'any'
+              ? { type: kind, edgeIds }
+              : kind === 'quorum'
+                ? { type: 'quorum', edgeIds, minimum }
+                : {
+                    type: 'expression',
+                    expression: {
+                      op: kind === 'expression_and' ? 'and' : 'or',
+                      args: edgeIds.map((edgeId) => ({
+                        op: 'edge_is' as const,
+                        edgeId,
+                        state: 'taken' as const,
+                      })),
+                    },
+                  };
+          const compiledTrigger =
+            kind === 'all' || kind === 'any'
+              ? compileTriggerProgram({
+                  type: kind,
+                  edge_ids: edgeIds,
+                })
+              : kind === 'quorum'
+                ? compileTriggerProgram({
+                    type: 'quorum',
+                    edge_ids: edgeIds,
+                    min_taken: minimum,
+                  })
+                : compileTriggerProgram({
+                    type: 'expression',
+                    expression: {
+                      op: kind === 'expression_and' ? 'and' : 'or',
+                      args: edgeIds.map((edgeId) => ({
+                        op: 'edge_is',
+                        edge_id: edgeId,
+                        state: 'taken',
+                      })),
+                    },
+                  });
+          const nodes: JsonObject[] = edgeIds.map((_, index) => ({
+            id: `source-${index}`,
+            type: 'join',
+            capability_binding: null,
+            trigger_program: compileTriggerProgram({ type: 'root' }),
+            input_ports: {},
+          }));
+          nodes.push({
+            id: 'target',
+            type: 'join',
+            capability_binding: null,
+            trigger_program: compiledTrigger,
+            input_ports: {},
+          });
+          const controlEdges = edgeIds.map((edgeId, index) => ({
+            id: edgeId,
+            from_node_id: `source-${index}`,
+            to_node_id: 'target',
+            outcome_match: {
+              statuses: [taken[index] ? 'succeeded' : 'failed'],
+            },
+            condition_program: null,
+            is_default: false,
+            priority: null,
+            route_group_id: null,
+            compiled_edge_hash: hash(`property:${current}:${edgeId}`),
+          }));
+          const candidate = planVariant(seed, {
+            nodes,
+            route_groups: [],
+            control_edges: controlEdges,
+            data_edges: [],
+            completion: completionPolicy([
+              {
+                id: 'property-no-close',
+                phase: 'settled',
+                priority: 1,
+                when: { fact: 'all_nodes_terminal' },
+                selector: {
+                  exits: ['unused'],
+                  pick: { type: 'lowest_terminal_node_id' },
+                },
+              },
+            ]),
+          });
+          const run = materializePlanCase(
+            instance,
+            seed,
+            candidate,
+            `property-${current}`,
+            1_000 + current * 20,
+          );
+          initializePlanCase(instance, run, 1_003 + current * 20);
+          edgeIds.forEach((_, index) => {
+            const terminalNode = scheduleStructuralNode(
+              instance,
+              run,
+              `source-${index}`,
+              1_004 + current * 20 + index * 2,
+            );
+            reconcileTerminalNode(
+              instance,
+              run,
+              terminalNode,
+              `property:${current}:terminal:source-${index}`,
+              1_005 + current * 20 + index * 2,
+            );
+          });
+          const resolutions = Object.fromEntries(
+            edgeIds.map((edgeId, index) => [
+              edgeId,
+              taken[index] ? ('taken' as const) : ('not_taken' as const),
+            ]),
+          );
+          const expectedTruth = evaluateReferenceTrigger(
+            referenceTrigger,
+            resolutions,
+          );
+          expect(expectedTruth).not.toBe('unknown');
+          const targetRow = instance.store.queryOne<{
+            id: string;
+            phase: string;
+            trigger_state: string;
+            terminal_status: string | null;
+          }>(
+            "SELECT id, phase, trigger_state, terminal_status FROM workflow_graph_nodes WHERE graph_run_id = ? AND node_key = 'target'",
+            [run.graphRunId],
+          )!;
+          const expectedKeys =
+            expectedTruth === 'true'
+              ? [
+                  `input-sealed:${targetRow.id}`,
+                  `node-ready:${targetRow.id}`,
+                  `trigger-decided:${targetRow.id}`,
+                ]
+              : [
+                  `node-skipped:${targetRow.id}`,
+                  `trigger-decided:${targetRow.id}`,
+                ];
+          expect(targetRow).toMatchObject(
+            expectedTruth === 'true'
+              ? { phase: 'ready', trigger_state: 'true', terminal_status: null }
+              : {
+                  phase: 'terminal',
+                  trigger_state: 'false',
+                  terminal_status: 'skipped',
+                },
+          );
+          const factKeys = instance.store
+            .queryAll<{
+              fact_key: string;
+            }>(
+              'SELECT fact_key FROM workflow_graph_facts WHERE graph_run_id = ? AND stable_object_id = ? ORDER BY fact_key COLLATE BINARY',
+              [run.graphRunId, targetRow.id],
+            )
+            .map((row) => row.fact_key);
+          const eventKeys = instance.store
+            .queryAll<{
+              idempotency_key: string;
+            }>(
+              'SELECT idempotency_key FROM workflow_graph_events WHERE graph_run_id = ? AND node_id = ? ORDER BY idempotency_key COLLATE BINARY',
+              [run.graphRunId, targetRow.id],
+            )
+            .map((row) => row.idempotency_key);
+          expect(factKeys).toEqual(expectedKeys);
+          expect(eventKeys).toEqual(expectedKeys);
+          const factCount = instance.store.queryOne<{ count: number }>(
+            'SELECT count(*) AS count FROM workflow_graph_facts WHERE graph_run_id = ?',
+            [run.graphRunId],
+          )!.count;
+          expect(
+            instance.store.queryOne<{ consumed_amount: number }>(
+              "SELECT consumed_amount FROM workflow_graph_resource_accounts WHERE graph_run_id = ? AND resource_type = 'facts_total'",
+              [run.graphRunId],
+            )!.consumed_amount,
+          ).toBe(factCount);
+          expect(
+            instance.store.queryOne<{ count: number }>(
+              'SELECT count(*) AS count FROM workflow_operational_blockers WHERE graph_run_id = ?',
+              [run.graphRunId],
+            )!.count,
+          ).toBe(0);
+        },
+      ),
+      { seed: 0x73a5, numRuns: 12 },
+    );
   });
 
   it('rejects creation, compile, Plan hash, Schema, and G6 materialization drift', () => {

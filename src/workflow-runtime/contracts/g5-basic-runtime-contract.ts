@@ -27,6 +27,7 @@ export const G5_IMPLEMENTATION_SOURCE_PATHS = [
   'src/workflow-runtime/creation/recipe-registry.ts',
   'src/workflow-runtime/creation/routing-resolver.ts',
   'src/workflow-runtime/creation/task-intake.ts',
+  'src/workflow-runtime/runtime/fixed-point-authority.ts',
   'src/workflow-runtime/runtime/graph-store.ts',
   'src/workflow-runtime/runtime/ledger.ts',
   'src/workflow-runtime/runtime/lifecycle.ts',

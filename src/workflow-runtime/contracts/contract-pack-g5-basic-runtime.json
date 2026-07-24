@@ -60,10 +60,10 @@
           "id": "icarus.workflow-g5-basic-runtime-implementation",
           "version": "1.0.0"
         },
-        "hash": "sha256:1ee9bf84017c2fa5675a798d224121448ef1d268527b6de75b80c3ff721b1b80"
+        "hash": "sha256:5d14d68e983809c731f5483b013c455a306c7d1154e2f66e9861c6663bff537c"
       }
     ],
-    "member_tree_hash": "sha256:4093ef602b345e247e192f0ff76ee7e561a979fb123eaf21153eacb184beb6be"
+    "member_tree_hash": "sha256:66e23693e10867d77c1f4edf98d03f658e5a52be11a40bf6d87af19cc8bc69e2"
   },
-  "hash": "sha256:90060da961df14dfb9970c9f08619b406c0cff36ea8bff5326f2d950391099bb"
+  "hash": "sha256:7e89802e0de82baf3149f85f448e749e6df96041089d5519b0217e43592e37b2"
 }
