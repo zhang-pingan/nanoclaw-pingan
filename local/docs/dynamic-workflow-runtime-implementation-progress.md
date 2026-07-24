@@ -1,8 +1,8 @@
 # Dynamic Workflow Runtime 实施进度
 
-> **状态**: PASS / G5_EXECUTION_BINDING_AFFECTED_CHAIN_DONE
-> **当前 Gate**: G2/G3/G4 affected chain=`DONE`；G5 Basic Runtime=`READY`而不是`DONE`；G6-G9=`NOT_READY`
-> **下一独立会话**: 只执行完整G5 Basic Runtime Gate实现；不得在本回归任务内提前施工G5
+> **状态**: G5 Basic Runtime=`EXIT_CANDIDATE_PENDING_INDEPENDENT_G5_WHOLE_GATE_REGRESSION`
+> **当前 Gate**: G2/G3/G4=`DONE`；G5 Basic Runtime=`EXIT_CANDIDATE_PENDING_INDEPENDENT_G5_WHOLE_GATE_REGRESSION`而不是`DONE`；G6-G9=`NOT_READY`
+> **下一独立会话**: 只执行独立G5 whole-gate regression；回归通过前不得开始G6
 > **最后更新**: 2026-07-23
 > **规范权威**: `local/docs/dynamic-workflow-dag-framework.md`
 
@@ -2410,4 +2410,4 @@ Construction/exit-candidate证据：`contracts:g5:generate/check`与`test:g5` PA
 
 G2终点继续满足`Draft -> human semantic decision -> GoldenSemanticReview -> seal -> CI replay`：current successor replay为40/40，R-017保持关闭。G3.1只消费其exact sealed/compiler identities并执行纯preflight；没有创建Published Recipe、Registry row、Release或Production launchability，也没有执行production activation。
 
-作为历史prepare-rc切片记录，该切片只修复当时的R-017 spec identity实时绑定、级联重建Working artifacts并执行`prepare-rc`及其确定性check。后续owner approval、immutable review、successor seal与40/40 replay现已完成；G3.1-G3.9和G4均已完成，Capability/Outbox execution-binding affected chain也已独立回归闭合。G5现为`READY`但Runtime尚未开始；SQLite certification、Core Release、G5-G9 Runtime和production activation仍未开始。R-010 Node loader deprecation与R-012/R-013/R-015 timing继续作为既有范围外baseline，不升级工具链、不放宽测试。
+作为历史prepare-rc切片记录，该切片只修复当时的R-017 spec identity实时绑定、级联重建Working artifacts并执行`prepare-rc`及其确定性check；在该历史切片结束时，G5为`READY`且Runtime尚未开始。后续owner approval、immutable review、successor seal与40/40 replay现已完成；G3.1-G3.9和G4均已完成，Capability/Outbox execution-binding affected chain也已独立回归闭合。G5当前为`EXIT_CANDIDATE_PENDING_INDEPENDENT_G5_WHOLE_GATE_REGRESSION`而不是`DONE`；SQLite certification、Core Release、G6-G9 Runtime和production activation仍未开始。R-010 Node loader deprecation与R-012/R-013/R-015 timing继续作为既有范围外baseline，不升级工具链、不放宽测试。
