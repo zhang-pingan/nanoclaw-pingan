@@ -1,0 +1,25 @@
+{
+  "format": "icarus.workflow-contract-pack-generated-schema-join-authority-repair/1",
+  "ref": {
+    "id": "icarus.workflow-contract-pack-generated-schema-join-authority-repair",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-contract-pack-generated-schema-join-authority-repair:1\n",
+  "hash": "sha256:5292c0a2b11457f7ddc054b66601c020811b6b2c70d42976cb7190bd3ad0543d",
+  "payload": {
+    "gate": "G2_SCHEMA_G3_GENERATED_SCHEMA_JOIN_AUTHORITY_REPAIR",
+    "status": "GENERATED_SCHEMA_JOIN_AUTHORITY_REPAIR_EXIT_CANDIDATE_PENDING_INDEPENDENT_AFFECTED_CHAIN_REGRESSION",
+    "member_count": 1,
+    "members": [
+      {
+        "path": "conformance/generated-schema-join-authority-repair/generated-schema-join-authority-contract@1.json",
+        "artifact_hash": "sha256:baec0daa2a5bd15db4f87b6784f92327a6320ce4cc37710a46f864596553e37d",
+        "raw_bytes_hash": "sha256:3c63a052e439facc428db01fcfda0ff5e847c2cac43fa5fa1883bba0212c0573"
+      }
+    ],
+    "member_tree_hash": "sha256:bafd2ba70c4d60fee832b985c52de5e9829e07e711d605bc3f684ae08c99532b",
+    "g5_status": "BLOCKED_BY_SPEC_NOT_READY",
+    "g6_through_g9_status": "NOT_READY"
+  }
+}

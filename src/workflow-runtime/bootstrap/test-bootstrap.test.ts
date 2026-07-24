@@ -93,7 +93,7 @@ function expectFakeCode(run: () => unknown, code: G4FakeAdapterError['code']) {
 }
 
 describe('G4 Test Bootstrap', () => {
-  it('opens only a fresh Schema 5 real-file Store and emits a verifiable isolation receipt', () => {
+  it('opens only a fresh Schema 6 real-file Store and emits a verifiable isolation receipt', () => {
     const instance = track(createG4TestBootstrap(options('fresh')));
     expect(fs.realpathSync(instance.dataRoot)).toBe(instance.dataRoot);
     expect(instance.databasePath).toBe(
@@ -105,13 +105,13 @@ describe('G4 Test Bootstrap', () => {
         'SELECT user_version AS version FROM pragma_user_version',
         [],
       ),
-    ).toEqual({ version: 5 });
+    ).toEqual({ version: 6 });
 
     const tables = instance.store.queryAll<{ name: string }>(
       "SELECT name FROM sqlite_schema WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
       [],
     );
-    expect(tables).toHaveLength(84);
+    expect(tables).toHaveLength(86);
     for (const { name } of tables) {
       expect(
         instance.store.queryOne<{ count: number }>(
@@ -371,7 +371,7 @@ describe('G4 Test Bootstrap', () => {
     expectBootstrapCode(() => instance.reopenStore(), 'isolation_proof_failed');
   });
 
-  it('rejects replacement of the exact Schema 5 database file', () => {
+  it('rejects replacement of the exact Schema 6 database file', () => {
     const instance = track(
       createG4TestBootstrap(options('database-replacement')),
     );

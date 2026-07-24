@@ -18,11 +18,13 @@ export const G1_SCHEMA_DEPENDENCY_ROLES = [
   'publisher_schema_prerequisite',
   'feature_release_activation_schema_prerequisite',
   'activation_failure_replay_schema_prerequisite',
+  'generated_schema_authority_prerequisite',
   'sqlite_execution_profile',
   'schema_manifest',
   'canonical_migration',
   'schema3_to_schema4_upgrade',
   'schema4_to_schema5_upgrade',
+  'schema5_to_schema6_upgrade',
 ] as const;
 
 export type G1SchemaDependencyRole =
@@ -45,8 +47,8 @@ export interface G1SchemaDependencyMember extends JsonObject {
 export interface G1SchemaDependencyManifestPayload extends JsonObject {
   dependency_set_id: 'workflow-runtime-schema-v1';
   identity_scope: 'physical_schema_and_migration';
-  member_count: 13;
-  physical_member_count: 12;
+  member_count: 15;
+  physical_member_count: 14;
   construction_provenance_count: 1;
   members: G1SchemaDependencyMember[] & JsonObject[];
   physical_schema_identity: Sha256Hash;
@@ -54,7 +56,7 @@ export interface G1SchemaDependencyManifestPayload extends JsonObject {
 
 export interface ExecutableSchemaSource {
   schema_id: 'workflow-runtime-schema-v1';
-  database_schema_version: 3 | 4 | 5;
+  database_schema_version: 3 | 4 | 5 | 6;
   tables: LogicalTableMetadata[];
   queries: LogicalQueryIntent[];
   logical_inputs: SchemaLogicalInputs;
@@ -68,6 +70,7 @@ export interface SchemaLogicalInputs {
   publisher_schema_prerequisite_hash: Sha256Hash;
   feature_release_activation_schema_prerequisite_hash: Sha256Hash;
   activation_failure_replay_schema_prerequisite_hash: Sha256Hash;
+  generated_schema_authority_prerequisite_hash?: Sha256Hash;
   sqlite_profile_hash: Sha256Hash;
 }
 
@@ -152,7 +155,7 @@ export interface SchemaManifestTrigger extends SchemaTriggerDefinition {}
 export interface WorkflowRuntimeSchemaManifestPayload extends JsonObject {
   schema_id: 'workflow-runtime-schema-v1';
   database_name: 'workflow-runtime.db';
-  database_schema_version: 5;
+  database_schema_version: 6;
   logical_inputs: SchemaLogicalInputs & JsonObject;
   migration_path: string;
   migration_sha256: Sha256Hash;

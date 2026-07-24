@@ -6,10 +6,10 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-runtime-constraint-trigger-fixtures:1\n",
-  "hash": "sha256:b62eee4cc248835017005ec78a6282a8ad886279c9e21b4c13a16acc2399062a",
+  "hash": "sha256:213d04036d8cec6a9fb2015b043b6c60b85a5305c12fe50b992026135245253c",
   "payload": {
     "execution_target": "real_file_sqlite",
-    "enum_check_count": 120,
+    "enum_check_count": 124,
     "enum_checks": [
       "workflow_graph_resource_accounts:ck:workflow_graph_resource_accounts:resource_type:enum",
       "workflow_graph_resource_reservations:ck:workflow_graph_resource_reservations:settlement_mode:enum",
@@ -21,6 +21,8 @@
       "workflow_values:ck:workflow_values:storage_kind:enum",
       "workflow_values:ck:workflow_values:retention_class:enum",
       "workflow_values:ck:workflow_values:payload_state:enum",
+      "workflow_values:ck:workflow_values:schema_authority_kind:enum",
+      "workflow_values:ck:workflow_values:generated_schema_generator:enum",
       "workflow_value_edges:ck:workflow_value_edges:relation_kind:enum",
       "workflow_blob_write_intents:ck:workflow_blob_write_intents:status:enum",
       "workflow_blob_objects:ck:workflow_blob_objects:state:enum",
@@ -130,7 +132,9 @@
       "workflow_feature_release_activation_invocations:ck:workflow_feature_release_activation_invocations:invocation_kind:enum",
       "workflow_feature_release_activation_invocations:ck:workflow_feature_release_activation_invocations:disposition:enum",
       "workflow_feature_release_activation_events:ck:workflow_feature_release_activation_events:phase:enum",
-      "workflow_feature_release_activation_events:ck:workflow_feature_release_activation_events:event_type:enum"
+      "workflow_feature_release_activation_events:ck:workflow_feature_release_activation_events:event_type:enum",
+      "workflow_generated_schema_contents:ck:generated_schema_contents:canonicalizer:enum",
+      "workflow_plan_generated_schemas:ck:plan_generated_schemas:generator:enum"
     ],
     "required_cases": [
       "invalid_enum_values",

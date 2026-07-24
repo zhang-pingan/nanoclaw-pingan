@@ -137,7 +137,7 @@
         "minLength": 1
       },
       "database_schema_version": {
-        "const": 5
+        "const": 6
       },
       "database_schema_hash": {
         "type": "string",
@@ -187,5 +187,5 @@
       }
     }
   },
-  "hash": "sha256:67746e852958ea8c633e4ac0b6ed720cc053e277c11e0a113508345c2a461b57"
+  "hash": "sha256:7e028d489de4aee9afb7f9b42463b33ed820a352fa10174ef20f8b683d6a0635"
 }

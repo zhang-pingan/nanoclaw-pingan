@@ -10,9 +10,9 @@
     "gate": "G0.6",
     "status": "logical_schema_metadata_contract",
     "foundation_manifest_hash": "sha256:e85b654581c036f8129677d7443a0704ebc8b8fbe87907b842aaefe1501e637d",
-    "closed_schema_manifest_hash": "sha256:c5ea281d64480787322e8b6ef619b2f90784084d87ba4373c94288ed5e7aa3a8",
-    "catalog_protocol_manifest_hash": "sha256:e4947c515a28b3baf6782a980db9c26d32612b3c6acd3cd04348e73bd54ff607",
-    "safety_sqlite_manifest_hash": "sha256:76b8e1196ac422500be9c79a767e673e9c30fa3d9bbb1dc12fc54613cd40b428",
+    "closed_schema_manifest_hash": "sha256:6f7aa5b997c5a496a4eb95776a09f18e3c25753e7324a6ef1f095a23b8413d81",
+    "catalog_protocol_manifest_hash": "sha256:078be3fed7e8d430b228c0aa526e15e6bd92665f863c6d0818eaebbcaf43b533",
+    "safety_sqlite_manifest_hash": "sha256:e289868eb489bb3c41731afe17f50cbc06f2b10c549769c1786fcd185a0b5775",
     "schema_count": 3,
     "table_count": 74,
     "column_count": 1221,
@@ -148,5 +148,5 @@
       "runtime_center_or_ui"
     ]
   },
-  "hash": "sha256:32de639cc0ee6c6f33aa4291ea03ffa55b0a22752190fb88862e72a3f6857520"
+  "hash": "sha256:e0b1bb30303e9bf0c45fdc5383ec7f61f90b2bb2e6ed8e422c5478a1dfd134cc"
 }

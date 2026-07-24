@@ -59,6 +59,7 @@ function checkCurrentCapacityCompatibility(): JsonObject {
   const allowed = [
     '.gitkeep',
     'g2-capability-outbox-binding-v3',
+    'g2-generated-schema-join-authority-v4',
     'g2-production-compiler-replay-repair-v2',
     'g2-semantic-correction',
   ].sort();
@@ -71,14 +72,33 @@ function checkCurrentCapacityCompatibility(): JsonObject {
   return manifest;
 }
 
-if (process.argv.length !== 3 || process.argv[2] !== 'check') {
-  console.error('Usage: capacity-control-plane-current check');
+function generateCurrentCapacityCompatibility(): JsonObject {
+  const artifacts = buildCapacityControlPlaneExpectedArtifactsForTest();
+  for (const [relativePath, expected] of artifacts) {
+    const target = absolute(relativePath);
+    const temporary = `${target}.tmp-${process.pid}`;
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.writeFileSync(temporary, bytes(expected), { encoding: 'utf8' });
+    fs.renameSync(temporary, target);
+  }
+  return checkCurrentCapacityCompatibility();
+}
+
+const command = process.argv[2];
+if (
+  process.argv.length !== 3 ||
+  (command !== 'generate' && command !== 'check')
+) {
+  console.error('Usage: capacity-control-plane-current <generate|check>');
   process.exit(64);
 }
 
 try {
-  const manifest = checkCurrentCapacityCompatibility();
-  console.log('capacity_control_plane_current=check:ok');
+  const manifest =
+    command === 'generate'
+      ? generateCurrentCapacityCompatibility()
+      : checkCurrentCapacityCompatibility();
+  console.log(`capacity_control_plane_current=${command}:ok`);
   console.log(`capacity_control_plane_hash=${String(manifest.hash)}`);
 } catch (error) {
   console.error(

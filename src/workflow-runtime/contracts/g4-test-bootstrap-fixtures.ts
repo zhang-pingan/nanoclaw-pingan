@@ -149,7 +149,7 @@ export function g4VirtualClockProfile(): G4VirtualClockProfile {
 export function g4PositiveCases(): JsonObject[] {
   return [
     { case_id: 'positive.explicit-profile-selection', expected: 'accepted' },
-    { case_id: 'positive.fresh-schema5-bootstrap', expected: 'accepted' },
+    { case_id: 'positive.fresh-schema6-bootstrap', expected: 'accepted' },
     { case_id: 'positive.reopen-same-instance', expected: 'accepted' },
     { case_id: 'positive.cross-instance-isolation', expected: 'accepted' },
     { case_id: 'positive.fake-adapter-closed-outcomes', expected: 'accepted' },

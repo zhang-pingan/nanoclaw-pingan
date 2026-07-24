@@ -42,7 +42,7 @@ const contractsRoot = import.meta.dirname;
 const foundationManifestHash =
   'sha256:e85b654581c036f8129677d7443a0704ebc8b8fbe87907b842aaefe1501e637d';
 const closedSchemaManifestHash =
-  'sha256:c5ea281d64480787322e8b6ef619b2f90784084d87ba4373c94288ed5e7aa3a8';
+  'sha256:6f7aa5b997c5a496a4eb95776a09f18e3c25753e7324a6ef1f095a23b8413d81';
 const manifestPath = 'contract-pack-catalog-protocols.json';
 const positiveCasesPath = 'conformance/catalog-protocols/positive-cases.json';
 const negativeCasesPath = 'conformance/catalog-protocols/negative-cases.json';

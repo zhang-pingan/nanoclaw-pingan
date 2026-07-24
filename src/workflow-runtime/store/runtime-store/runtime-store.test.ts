@@ -25,6 +25,7 @@ import {
   currentRuntimeHostObservation,
 } from './identity.js';
 import {
+  CURRENT_G1_SCHEMA_IDENTITIES,
   FROZEN_G1_1_IDENTITIES,
   loadFrozenWorkflowRuntimeStoreInputs,
   parseSQLiteExecutionProfilePayload,
@@ -340,14 +341,14 @@ describe.sequential('G1.2 Workflow Runtime Store base', () => {
   it('pins G1.1/Profile identities and fails closed on frozen migration drift', () => {
     const inputs = loadFrozenWorkflowRuntimeStoreInputs();
     expect(inputs).toMatchObject({
-      g1RootHash: FROZEN_G1_1_IDENTITIES.root,
+      g1RootHash: CURRENT_G1_SCHEMA_IDENTITIES.root,
       schemaDependencyManifestArtifactHash:
-        FROZEN_G1_1_IDENTITIES.dependencyManifest,
-      physicalSchemaIdentity: FROZEN_G1_1_IDENTITIES.physicalSchema,
-      schemaHash: FROZEN_G1_1_IDENTITIES.schema,
-      migrationSha256: FROZEN_G1_1_IDENTITIES.migration,
-      deterministicDigest: FROZEN_G1_1_IDENTITIES.deterministic,
-      profileArtifactHash: FROZEN_G1_1_IDENTITIES.profile,
+        CURRENT_G1_SCHEMA_IDENTITIES.dependencyManifest,
+      physicalSchemaIdentity: CURRENT_G1_SCHEMA_IDENTITIES.physicalSchema,
+      schemaHash: CURRENT_G1_SCHEMA_IDENTITIES.schema,
+      migrationSha256: CURRENT_G1_SCHEMA_IDENTITIES.migration,
+      deterministicDigest: CURRENT_G1_SCHEMA_IDENTITIES.deterministic,
+      profileArtifactHash: CURRENT_G1_SCHEMA_IDENTITIES.profile,
     });
     const { root } = temporaryDatabase();
     const copiedSchema = path.join(root, 'schema');
@@ -471,11 +472,11 @@ describe.sequential('G1.2 Workflow Runtime Store base', () => {
         'SELECT count(*) AS count FROM sqlite_schema WHERE type = ? AND name NOT LIKE ?',
         ['table', 'sqlite_%'],
       )?.count,
-    ).toBe(84);
+    ).toBe(86);
     expect(
       store.queryOne<{ user_version: number }>('PRAGMA user_version', [])
         ?.user_version,
-    ).toBe(5);
+    ).toBe(6);
     expect(store.identityEvidence).toMatchObject({
       certification_status: 'candidate_not_certified',
       platform: 'darwin',
@@ -499,11 +500,11 @@ describe.sequential('G1.2 Workflow Runtime Store base', () => {
     });
     openStores.push(reopened);
     expect(reopened.frozenInputs.schemaHash).toBe(
-      FROZEN_G1_1_IDENTITIES.schema,
+      CURRENT_G1_SCHEMA_IDENTITIES.schema,
     );
   });
 
-  it('upgrades an empty frozen Schema 3 real file through historical Schema 4 to Schema 5', () => {
+  it('upgrades an empty frozen Schema 3 real file through historical Schema 4 and 5 to Schema 6', () => {
     const { databasePath } = temporaryDatabase();
     createSchema3Database(databasePath);
     const before = new Database(databasePath, { readonly: true });
@@ -525,7 +526,7 @@ describe.sequential('G1.2 Workflow Runtime Store base', () => {
     expect(
       upgraded.queryOne<{ user_version: number }>('PRAGMA user_version', [])
         ?.user_version,
-    ).toBe(5);
+    ).toBe(6);
     expect(
       upgraded.queryOne<{ count: number }>(
         'SELECT count(*) AS count FROM pragma_foreign_key_check',
@@ -534,7 +535,7 @@ describe.sequential('G1.2 Workflow Runtime Store base', () => {
     ).toBe(0);
   });
 
-  it('upgrades a nonempty frozen Schema 4 real file to Schema 5 and preserves rows', () => {
+  it('upgrades a nonempty frozen Schema 4 real file through Schema 5 to Schema 6 and preserves rows', () => {
     const { databasePath } = temporaryDatabase();
     createSchema4Database(databasePath);
     const seed = new Database(databasePath);
@@ -567,7 +568,7 @@ describe.sequential('G1.2 Workflow Runtime Store base', () => {
     expect(
       upgraded.queryOne<{ user_version: number }>('PRAGMA user_version', [])
         ?.user_version,
-    ).toBe(5);
+    ).toBe(6);
     expect(
       upgraded.queryOne<{ current_fencing_token: number; row_version: number }>(
         'SELECT current_fencing_token, row_version FROM workflow_domain_resource_heads WHERE namespace = ?',
@@ -623,7 +624,7 @@ describe.sequential('G1.2 Workflow Runtime Store base', () => {
     expectDatabaseGateUnchanged(databasePath, before);
   });
 
-  it('rolls back the complete Schema 3 to 5 DDL when target verification fails', () => {
+  it('rolls back the complete Schema 3 to 6 DDL when target verification fails', () => {
     const { databasePath } = temporaryDatabase();
     createSchema3Database(databasePath);
     insertPreservedForeignKeyViolation(databasePath);

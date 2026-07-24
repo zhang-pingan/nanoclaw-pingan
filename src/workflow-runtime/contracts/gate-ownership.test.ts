@@ -65,8 +65,9 @@ describe('G5/G7 T6d, T7c, and T6e gate ownership authority', () => {
       authority_kind: 'current_construction_gate_ownership',
       status: 'T6D_OWNERSHIP_EXIT_CANDIDATE_PENDING_INDEPENDENT_REGRESSION',
       historical_g0_g1_identity_effect:
-        'Capacity_G0.10_repaired_and_G1_advanced_from_Schema_4_to_Schema_5',
-      g4_pack_identity_effect: 'direct_G3_run_protocol_dependency_rebuilt',
+        'Capacity_G0.10_preserved_and_G1_advanced_additively_from_Schema_5_to_Schema_6',
+      g4_pack_identity_effect:
+        'generated_schema_join_authority_affected_chain_rebuilt',
       implementation_authorized: false,
     });
   });
@@ -153,7 +154,7 @@ describe('G5/G7 T6d, T7c, and T6e gate ownership authority', () => {
     }
   });
 
-  it('preserves T6e authorization/audit and Schema 5 resolution integrity', () => {
+  it('preserves T6e authorization/audit and Schema 6 resolution integrity', () => {
     const authority = readArtifact(
       'governance/workflow-runtime-gate-ownership@1.json',
     );
@@ -194,11 +195,11 @@ describe('G5/G7 T6d, T7c, and T6e gate ownership authority', () => {
       ],
     });
     expect(authority.payload.frozen_authority_bindings).toMatchObject({
-      database_schema_version: 5,
+      database_schema_version: 6,
       g1_executable_schema_root_hash:
-        'sha256:baa39d55cac34133a29b461466aa450fec59bd2fd6df72334e8b33d1d1619869',
+        'sha256:ff588497b32eacc268c379d220fedbb3d29f69a0fdb9337c7a1e429ee7a868eb',
       workflow_runtime_schema_hash:
-        'sha256:49aaee7c8f046cd9a15b3bc5b77fbcf1713be2a1872078941043f5ccdca29024',
+        'sha256:d35c2d6fe2aaaf87ad102561d1595d016f8ef2f04950e5e3ad30b91aa366d909',
     });
   });
 
@@ -233,7 +234,7 @@ describe('G5/G7 T6d, T7c, and T6e gate ownership authority', () => {
     ).toBe('t6e_command_mapping_drift');
   });
 
-  it('fails closed for the Schema 5 FK, CHECK, and both cache triggers', () => {
+  it('fails closed for the Schema 6 FK, CHECK, and both cache triggers', () => {
     expect(
       evaluateGateOwnershipFixtureForTest('remove_schema_resolution_fk'),
     ).toBe('schema_resolution_fk_drift');

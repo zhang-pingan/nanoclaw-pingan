@@ -10,14 +10,14 @@
     "gate": "G0.7",
     "status": "static_absence_and_surface_contract",
     "foundation_manifest_hash": "sha256:e85b654581c036f8129677d7443a0704ebc8b8fbe87907b842aaefe1501e637d",
-    "closed_schema_manifest_hash": "sha256:c5ea281d64480787322e8b6ef619b2f90784084d87ba4373c94288ed5e7aa3a8",
-    "catalog_protocol_manifest_hash": "sha256:e4947c515a28b3baf6782a980db9c26d32612b3c6acd3cd04348e73bd54ff607",
-    "safety_sqlite_manifest_hash": "sha256:76b8e1196ac422500be9c79a767e673e9c30fa3d9bbb1dc12fc54613cd40b428",
-    "logical_schema_manifest_hash": "sha256:32de639cc0ee6c6f33aa4291ea03ffa55b0a22752190fb88862e72a3f6857520",
+    "closed_schema_manifest_hash": "sha256:6f7aa5b997c5a496a4eb95776a09f18e3c25753e7324a6ef1f095a23b8413d81",
+    "catalog_protocol_manifest_hash": "sha256:078be3fed7e8d430b228c0aa526e15e6bd92665f863c6d0818eaebbcaf43b533",
+    "safety_sqlite_manifest_hash": "sha256:e289868eb489bb3c41731afe17f50cbc06f2b10c549769c1786fcd185a0b5775",
+    "logical_schema_manifest_hash": "sha256:e0b1bb30303e9bf0c45fdc5383ec7f61f90b2bb2e6ed8e422c5478a1dfd134cc",
     "source_core_build_hash": "sha256:9e24def00d6e3da7a9bb98036038816d1b77b13352584823a9846f2c9db2d8eb",
-    "generated_by_tool_hash": "sha256:054f40382f553ae522b9515d7b8e92fc3db8fce8795a52603a680092bc806664",
-    "absence_baseline_hash": "sha256:924e567d371d79d134c03efd7389fb81e7b1f821dd125cb6625287354bba4cf5",
-    "product_surface_manifest_hash": "sha256:50f839c7bdfc3fdf0b5b5449c6f982fe579718bbc3d9ac2d69f36d60c7bcf7fe",
+    "generated_by_tool_hash": "sha256:4d3137e44c8d0903a90cbe5627e4c8e218c10bb8b156083a6ff821176407ac32",
+    "absence_baseline_hash": "sha256:f3899b9d328c3b03eeed3567978796fda5f7675873a5722a4092bf770fd748ab",
+    "product_surface_manifest_hash": "sha256:b0b75a8d558863043b2abb5af5b18dddaaaec9191faa73e6516e01be3d060708",
     "migration_candidate_boundary_hash": "sha256:afa8d43ad421bacdb397e481df731fc178424b530f4fb07cd0856ccc9c0bf403",
     "schema_count": 3,
     "active_surface_count": 12,
@@ -115,7 +115,7 @@
         },
         "version": 1,
         "domain_separator": "icarus:product-surface-coverage-artifact:1\n",
-        "hash": "sha256:78a955f5b2ee686a1ad7fde535ee0eaa8b2c114c401e35734e746a0a58226d6e"
+        "hash": "sha256:dc2042aedd6d2fad2dadd679bb338a667049a9f4be2d25412917370994daf6ee"
       },
       {
         "path": "static/workflow-runtime-absence-baseline-schema.json",
@@ -137,7 +137,7 @@
         },
         "version": 1,
         "domain_separator": "icarus:workflow-runtime-absence-baseline-artifact:1\n",
-        "hash": "sha256:cbf5d63b1a7819d9280be86cebb9a42f1c5c37acdf42b0b7611801c66820b859"
+        "hash": "sha256:3774c8de41aedaee8ce060c26754d8bd55d526c7e1aa1014fe8fa09807c8a8d1"
       }
     ],
     "next_reserved_directories": [
@@ -154,5 +154,5 @@
       "certified_sqlite_profile_or_supported_limits"
     ]
   },
-  "hash": "sha256:2624801752b3641e624a925c67a2ea28d2c157208b3e4c54699fb6b189259978"
+  "hash": "sha256:058519662cfdff17e7a11a40a6da3b3dfe9d2b27c5d7fc6a81b23a35fd9bd183"
 }

@@ -24,23 +24,23 @@ describe('G2 Production Compiler replay-repair successor', () => {
     const first = buildG2ReplayRepairSuccessor();
     const second = buildG2ReplayRepairSuccessor();
     expect([...second.files]).toEqual([...first.files]);
-    expect(first.files).toHaveLength(170);
+    expect(first.files).toHaveLength(172);
     expect(first.exactEqualCount).toBe(40);
     expect(first.pointerDifferenceCount).toBe(0);
     expect(first.rc.hash).toBe(
-      'sha256:3401cc0230f7a4b81fe859a25832816b8db60cae6d29c5676d141f2151a186e6',
+      'sha256:b0a8d7599073b9f4ae222fac799a9923b14c0762aa70a88746adfc2953809996',
     );
     expect(first.draft.payload.draft_manifest_hash).toBe(
-      'sha256:b8ca7c91839b88b5591daf19f17a30e70b85e441d9dd4905807ef57bc37f7591',
+      'sha256:5f8eb14f6566379bc0047b72b991f76030f12c116f3cb09d1d0649ef9e18ae3e',
     );
     expect(first.review.payload.report_hash).toBe(
-      'sha256:5b3b5c721e6cda298da468566eb97da3423fcb86595de4f46dc66f79ebb55e99',
+      'sha256:304e029a42f720d3994ff1f6147678c5c9fba0d96c71c4e645d19ea4386ea967',
     );
     expect(first.review.payload).toMatchObject({
       construction_phase: 'RC_REVIEW',
       byte_equal_count: 40,
       semantic_equal_count: 40,
-      semantic_assertion_count: 93,
+      semantic_assertion_count: 95,
       semantic_assertion_failure_count: 0,
       difference_count: 0,
       approval_status: 'absent',
@@ -78,13 +78,13 @@ describe('G2 Production Compiler replay-repair successor', () => {
     const lineage = rc.predecessor_lineage as JsonObject;
     expect(lineage).toMatchObject({
       predecessor_review_candidate_root:
-        'sha256:85572b113f80e9552aa7f129def39f03ae8d94bc1dab9bbcc2bb78067dddda94',
+        'sha256:3401cc0230f7a4b81fe859a25832816b8db60cae6d29c5676d141f2151a186e6',
       predecessor_draft_manifest_hash:
-        'sha256:29fdd70ea872f9d4e52d49fbd988fff306d95820989920f5f1ecf2bc87019d2b',
+        'sha256:b8ca7c91839b88b5591daf19f17a30e70b85e441d9dd4905807ef57bc37f7591',
       predecessor_golden_semantic_review_hash:
-        'sha256:88c5412d1bd97d52a7f9bf41e17bd1db1e19b4a2e5466b3b25384fbdeb7cac0c',
+        'sha256:ceddcefcab8ff41a5e9b5d2ceb89dabcd3f9199639bb247d132a7c79c33dc15b',
       predecessor_sealed_bundle_hash:
-        'sha256:d99647d8ca6aabc737a793019335e6770aa111a79be7545c4dec00c6e7af2145',
+        'sha256:b3ed9e43bd0fadaf40520257926dcf690ee8495bb417220245f248385bde9efb',
       approved_expected_semantics: 'changed_by_current_review',
     });
   }, 30_000);

@@ -6,7 +6,11 @@ import path from 'path';
 import type Database from 'better-sqlite3';
 import { describe, expect, it } from 'vitest';
 
-import { calculateArtifactHash } from '../../contracts/hash.js';
+import { calculateArtifactHash, canonicalJson } from '../../contracts/hash.js';
+import {
+  buildGeneratedSchema,
+  buildPlanGeneratedSchemaBinding,
+} from '../../contracts/generated-schema-authority.js';
 import { buildActivationRepairSchemaPrerequisitePayload } from './activation-repair-source.js';
 import type { LogicalTableMetadata } from '../../contracts/logical-schema-types.js';
 import type {
@@ -24,6 +28,7 @@ import {
   buildQueryFixtures,
   renderMigration,
   renderSchema4To5Upgrade,
+  renderSchema5To6Upgrade,
 } from './ddl.js';
 import { calculateDatabaseSqliteSchemaIdentity } from './database-identity.js';
 import {
@@ -34,6 +39,7 @@ import {
   loadExecutableSchemaSource,
   loadSchema3ExecutableSchemaSource,
   loadSchema4ExecutableSchemaSource,
+  loadSchema5ExecutableSchemaSource,
 } from './source.js';
 import {
   createMigratedDatabase,
@@ -49,7 +55,10 @@ const source = loadExecutableSchemaSource();
 const migration = renderMigration(source);
 const schema4Source = loadSchema4ExecutableSchemaSource();
 const schema4Migration = renderMigration(schema4Source);
-const schema4To5Upgrade = renderSchema4To5Upgrade(schema4Source, source);
+const schema5Source = loadSchema5ExecutableSchemaSource();
+const schema5Migration = renderMigration(schema5Source);
+const schema4To5Upgrade = renderSchema4To5Upgrade(schema4Source, schema5Source);
+const schema5To6Upgrade = renderSchema5To6Upgrade(schema5Source, source);
 
 function q(identifier: string): string {
   return `"${identifier.replaceAll('"', '""')}"`;
@@ -183,14 +192,15 @@ describe('G1.1 executable workflow runtime schema', () => {
         {},
         '',
         built.schema4To5UpgradeSql,
+        built.schema5To6UpgradeSql,
       ),
     ).toThrow('Schema 3 to 4 upgrade SQL must not be empty');
     const payload = built.dependencyManifest
       .payload as unknown as G1SchemaDependencyManifestPayload;
     expect(() => assertClosedSchemaDependencyManifest(payload)).not.toThrow();
     expect(payload).toMatchObject({
-      member_count: 13,
-      physical_member_count: 12,
+      member_count: 15,
+      physical_member_count: 14,
       construction_provenance_count: 1,
     });
     expect(payload.members.map((member) => member.role)).toEqual([
@@ -202,20 +212,22 @@ describe('G1.1 executable workflow runtime schema', () => {
       'publisher_schema_prerequisite',
       'feature_release_activation_schema_prerequisite',
       'activation_failure_replay_schema_prerequisite',
+      'generated_schema_authority_prerequisite',
       'sqlite_execution_profile',
       'schema_manifest',
       'canonical_migration',
       'schema3_to_schema4_upgrade',
       'schema4_to_schema5_upgrade',
+      'schema5_to_schema6_upgrade',
     ]);
     expect(payload.members).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           role: 'canonical_migration',
           semantic_hash:
-            'sha256:2ead40dc2f1618f87247e9d3bb476266797c38560e1ad0537a6afa6f71a3fbf6',
+            'sha256:16a46e84c77d734013e18b4b00b86564f6188ea73717763e9fb7a884d62faa41',
           raw_sha256:
-            'sha256:2ead40dc2f1618f87247e9d3bb476266797c38560e1ad0537a6afa6f71a3fbf6',
+            'sha256:16a46e84c77d734013e18b4b00b86564f6188ea73717763e9fb7a884d62faa41',
         }),
         expect.objectContaining({
           role: 'schema3_to_schema4_upgrade',
@@ -226,6 +238,11 @@ describe('G1.1 executable workflow runtime schema', () => {
           role: 'schema4_to_schema5_upgrade',
           semantic_hash:
             'sha256:97479810c2c079d71270d5a714faa4b8fa8ebd6af629ef2f7d772af270c2bb0a',
+        }),
+        expect.objectContaining({
+          role: 'schema5_to_schema6_upgrade',
+          semantic_hash:
+            'sha256:dc94fa0867ca572b7ec39ffb8df448e38be00ca4831f1d420885ee7cc097687d',
         }),
       ]),
     );
@@ -284,6 +301,7 @@ describe('G1.1 executable workflow runtime schema', () => {
         { contractsRoot: copiedContracts },
         built.schema3To4UpgradeSql,
         built.schema4To5UpgradeSql,
+        built.schema5To6UpgradeSql,
       );
       for (const relativePath of [
         'unrelated/new-contract.json',
@@ -300,6 +318,7 @@ describe('G1.1 executable workflow runtime schema', () => {
         { contractsRoot: copiedContracts },
         built.schema3To4UpgradeSql,
         built.schema4To5UpgradeSql,
+        built.schema5To6UpgradeSql,
       );
       expect(after).toEqual(before);
       expect(after).toEqual(built.dependencyManifest);
@@ -339,6 +358,7 @@ describe('G1.1 executable workflow runtime schema', () => {
         { contractsRoot: copiedContracts },
         built.schema3To4UpgradeSql,
         built.schema4To5UpgradeSql,
+        built.schema5To6UpgradeSql,
       );
       const originalPayload = built.dependencyManifest
         .payload as unknown as G1SchemaDependencyManifestPayload;
@@ -383,6 +403,7 @@ describe('G1.1 executable workflow runtime schema', () => {
           { contractsRoot: copiedContracts },
           built.schema3To4UpgradeSql,
           built.schema4To5UpgradeSql,
+          built.schema5To6UpgradeSql,
         ),
       ).toThrow('query_catalog published semantic identity drifted');
 
@@ -399,6 +420,7 @@ describe('G1.1 executable workflow runtime schema', () => {
           { contractsRoot: copiedContracts },
           built.schema3To4UpgradeSql,
           built.schema4To5UpgradeSql,
+          built.schema5To6UpgradeSql,
         ),
       ).toThrow();
     } finally {
@@ -508,7 +530,13 @@ describe('G1.1 executable workflow runtime schema', () => {
         for (const column of metadata.columns.filter(
           (candidate) => candidate.enum_values.length > 0,
         )) {
-          const checkId = `ck:${metadata.name}:${column.name}:enum`;
+          const checkId = metadata.checks.find(
+            (candidate) =>
+              candidate.kind === 'enum_membership' &&
+              candidate.columns.length === 1 &&
+              candidate.columns[0] === column.name,
+          )?.check_id;
+          expect(checkId).toBeDefined();
           const validCapacityInvocation: Record<
             string,
             string | number | null
@@ -528,12 +556,34 @@ describe('G1.1 executable workflow runtime schema', () => {
                     applied_at_ms: null,
                   }
               : {};
+          const validWorkflowValue: Record<string, string | number | null> =
+            metadata.name === 'workflow_values'
+              ? {
+                  storage_kind: 'inline',
+                  inline_canonical_json: '{}',
+                  schema_resource_id: 'registry:schema',
+                  schema_resource_hash: hash('registry:schema'),
+                }
+              : {};
+          const generatedSchemaRawHash = hash('generated-schema-content');
+          const validGeneratedSchemaContent: Record<
+            string,
+            string | number | null
+          > =
+            metadata.name === 'workflow_generated_schema_contents'
+              ? {
+                  schema_ref: `icarus-generated-schema:${generatedSchemaRawHash}`,
+                  schema_raw_hash: generatedSchemaRawHash,
+                }
+              : {};
           expect(() =>
             insertRow(database, metadata.name, {
               ...validCapacityInvocation,
+              ...validWorkflowValue,
+              ...validGeneratedSchemaContent,
               [column.name]: '__invalid_closed_enum__',
             }),
-          ).toThrow(checkId);
+          ).toThrow(checkId as string);
           checked += 1;
         }
       }
@@ -1705,7 +1755,7 @@ describe('G1.1 executable workflow runtime schema', () => {
       database.exec(schema4To5Upgrade.sql);
       const fresh = createMigratedDatabase(
         path.join(root, 'fresh-schema5.db'),
-        migration.sql,
+        schema5Migration.sql,
       );
       const expectedIdentity = calculateDatabaseSqliteSchemaIdentity(fresh);
       fresh.close();
@@ -1757,6 +1807,311 @@ describe('G1.1 executable workflow runtime schema', () => {
       if (database.open) database.close();
       fs.rmSync(root, { recursive: true, force: true });
     }
+  });
+
+  it('upgrades nonempty Schema 5 Values to Schema 6 and preserves every inbound FK target', () => {
+    const root = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'icarus-schema5-values-upgrade-'),
+    );
+    const databasePath = path.join(root, 'workflow-runtime.db');
+    const database = createMigratedDatabase(databasePath, schema5Migration.sql);
+    const insertValue = database.prepare(
+      'INSERT INTO workflow_values (id, storage_kind, inline_canonical_json, blob_hash, immutable_external_locator, expected_hash, content_hash, byte_length, media_type, schema_resource_id, schema_resource_hash, provenance_ref, retention_class, payload_state, payload_pruned_at_ms, created_at_ms, row_version) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    );
+    const insertRegistry = database.prepare(
+      'INSERT INTO workflow_registry_resources (id, resource_type, resource_id, resource_version, owner_core_ref, owner_feature_id, canonical_value_id, content_hash, publication_state, created_at_ms, published_at_ms, retired_at_ms, row_version) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    );
+    try {
+      const parentHash = hash('schema5:value:parent');
+      const childHash = hash('schema5:value:child');
+      database.exec('BEGIN IMMEDIATE');
+      insertValue.run(
+        'schema5:value:parent',
+        'inline',
+        '{}',
+        null,
+        null,
+        null,
+        parentHash,
+        2,
+        'application/json',
+        'schema5:registry:parent',
+        parentHash,
+        'test:schema5-upgrade',
+        'workflow_audit',
+        'live',
+        null,
+        1,
+        0,
+      );
+      insertValue.run(
+        'schema5:value:child',
+        'inline',
+        '{"child":true}',
+        null,
+        null,
+        null,
+        childHash,
+        14,
+        'application/json',
+        'schema5:registry:child',
+        childHash,
+        'test:schema5-upgrade',
+        'workflow_audit',
+        'live',
+        null,
+        2,
+        0,
+      );
+      insertRegistry.run(
+        'schema5:registry:parent',
+        'schema',
+        'schema5.parent',
+        '1.0.0',
+        'core:test',
+        null,
+        'schema5:value:parent',
+        parentHash,
+        'published',
+        1,
+        1,
+        null,
+        0,
+      );
+      insertRegistry.run(
+        'schema5:registry:child',
+        'schema',
+        'schema5.child',
+        '1.0.0',
+        'core:test',
+        null,
+        'schema5:value:child',
+        childHash,
+        'published',
+        2,
+        2,
+        null,
+        0,
+      );
+      database
+        .prepare(
+          'INSERT INTO workflow_value_edges (parent_value_id, child_value_id, relation_kind, member_key, member_index, child_expected_hash, created_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        )
+        .run(
+          'schema5:value:parent',
+          'schema5:value:child',
+          'manifest_member',
+          'child',
+          null,
+          childHash,
+          3,
+        );
+      database.exec('COMMIT');
+
+      const before = database
+        .prepare('SELECT * FROM workflow_values ORDER BY id')
+        .all();
+      const schema5Inbound = schema5Source.tables
+        .flatMap((tableValue) =>
+          tableValue.foreign_keys
+            .filter((relation) => relation.target_table === 'workflow_values')
+            .map((relation) => `${tableValue.name}:${relation.relation_id}`),
+        )
+        .sort();
+      const schema6Inbound = source.tables
+        .flatMap((tableValue) =>
+          tableValue.foreign_keys
+            .filter((relation) => relation.target_table === 'workflow_values')
+            .map((relation) => `${tableValue.name}:${relation.relation_id}`),
+        )
+        .sort();
+      expect(schema5Inbound.length).toBeGreaterThan(30);
+      expect(schema6Inbound).toEqual(schema5Inbound);
+
+      database.pragma('foreign_keys = OFF');
+      database.exec('BEGIN IMMEDIATE');
+      database.exec(schema5To6Upgrade.sql);
+      expect(database.pragma('user_version', { simple: true })).toBe(6);
+      expect(
+        database
+          .prepare(
+            'SELECT id, schema_authority_kind, schema_resource_id, schema_resource_hash, schema_plan_id, generated_schema_ref FROM workflow_values ORDER BY id',
+          )
+          .all(),
+      ).toEqual(
+        before.map((row) => {
+          const value = row as Record<string, unknown>;
+          return {
+            id: value.id,
+            schema_authority_kind: 'registry',
+            schema_resource_id: value.schema_resource_id,
+            schema_resource_hash: value.schema_resource_hash,
+            schema_plan_id: null,
+            generated_schema_ref: null,
+          };
+        }),
+      );
+      expect(
+        database.prepare('SELECT * FROM workflow_value_edges').all(),
+      ).toHaveLength(1);
+      expect(database.pragma('foreign_key_check')).toEqual([]);
+      const actualInbound = source.tables.flatMap((tableValue) => {
+        const rows = database.pragma(
+          `foreign_key_list(${q(tableValue.name)})`,
+        ) as Array<{ id: number; table: string }>;
+        return [
+          ...new Set(
+            rows
+              .filter((row) => row.table === 'workflow_values')
+              .map((row) => row.id),
+          ),
+        ].map((id) => `${tableValue.name}:${id}`);
+      });
+      expect(actualInbound).toHaveLength(schema5Inbound.length);
+      expect(
+        database
+          .prepare(
+            "SELECT count(*) FROM sqlite_schema WHERE sql LIKE '%workflow_values_schema6%'",
+          )
+          .pluck()
+          .get(),
+      ).toBe(0);
+      const fresh = createMigratedDatabase(
+        path.join(root, 'fresh-schema6.db'),
+        migration.sql,
+      );
+      const freshIdentity = calculateDatabaseSqliteSchemaIdentity(fresh);
+      fresh.close();
+      expect(calculateDatabaseSqliteSchemaIdentity(database)).toBe(
+        freshIdentity,
+      );
+      database.exec('COMMIT');
+      database.pragma('foreign_keys = ON');
+    } finally {
+      if (database.inTransaction) database.exec('ROLLBACK');
+      if (database.open) database.close();
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('enforces Registry or exact Plan-generated Value authority with real FKs and CHECKs', () => {
+    withDatabase((database) => {
+      const validValue = {
+        storage_kind: 'inline',
+        inline_canonical_json: '{}',
+      };
+      expect(() =>
+        insertRow(database, 'workflow_values', {
+          ...validValue,
+          schema_resource_id: 'missing:registry',
+          schema_resource_hash: hash('missing:registry'),
+        }),
+      ).toThrow('FOREIGN KEY constraint failed');
+
+      const parameters: JsonObject = {
+        node_id: 'join',
+        output_port: 'renamed',
+        input_port: 'source',
+        required: true,
+      };
+      const authority = buildGeneratedSchema('join_expose', parameters, {
+        type: 'string',
+      });
+      const binding = buildPlanGeneratedSchemaBinding(
+        {
+          plan_id: 'plan:generated',
+          graph_run_id: 'run:generated',
+          plan_hash: hash('plan:generated') as `sha256:${string}`,
+        },
+        authority,
+      );
+      database.pragma('foreign_keys = OFF');
+      expect(() =>
+        database
+          .prepare(
+            'INSERT INTO workflow_generated_schema_contents (schema_ref, schema_raw_hash, schema_hash, canonical_schema_json, canonicalizer, byte_length, created_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?)',
+          )
+          .run(
+            String(authority.schema_ref).replace(
+              'icarus-generated-schema:',
+              'unknown:',
+            ),
+            authority.schema_raw_hash,
+            authority.schema_hash,
+            canonicalJson(authority.schema_json),
+            authority.canonicalizer,
+            authority.schema_byte_length,
+            1,
+          ),
+      ).toThrow('ck:generated_schema_contents:ref');
+      database
+        .prepare(
+          'INSERT INTO workflow_generated_schema_contents (schema_ref, schema_raw_hash, schema_hash, canonical_schema_json, canonicalizer, byte_length, created_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        )
+        .run(
+          authority.schema_ref,
+          authority.schema_raw_hash,
+          authority.schema_hash,
+          canonicalJson(authority.schema_json),
+          authority.canonicalizer,
+          authority.schema_byte_length,
+          1,
+        );
+      database
+        .prepare(
+          'INSERT INTO workflow_plan_generated_schemas (plan_id, graph_run_id, plan_hash, schema_ref, schema_hash, generator, parameter_hash, binding_hash, created_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        )
+        .run(
+          binding.plan_id,
+          binding.graph_run_id,
+          binding.plan_hash,
+          binding.schema_ref,
+          binding.schema_hash,
+          binding.generator,
+          binding.parameter_hash,
+          binding.binding_hash,
+          1,
+        );
+      database.pragma('foreign_keys = ON');
+      const generatedValue = {
+        ...validValue,
+        schema_authority_kind: 'plan_generated',
+        schema_resource_id: null,
+        schema_resource_hash: null,
+        schema_plan_id: binding.plan_id as string,
+        schema_plan_hash: binding.plan_hash as string,
+        generated_schema_ref: binding.schema_ref as string,
+        generated_schema_hash: binding.schema_hash as string,
+        generated_schema_generator: binding.generator as string,
+        generated_schema_parameter_hash: binding.parameter_hash as string,
+      };
+      expect(() =>
+        insertRow(database, 'workflow_values', generatedValue),
+      ).not.toThrow();
+      expect(() =>
+        insertRow(database, 'workflow_values', {
+          ...generatedValue,
+          generated_schema_parameter_hash: hash('wrong:parameter'),
+        }),
+      ).toThrow('FOREIGN KEY constraint failed');
+
+      database.pragma('foreign_keys = OFF');
+      expect(() =>
+        insertRow(database, 'workflow_values', {
+          ...generatedValue,
+          schema_resource_id: 'registry:forbidden',
+          schema_resource_hash: hash('registry:forbidden'),
+        }),
+      ).toThrow('ck:values:schema_authority_shape');
+      expect(() =>
+        insertRow(database, 'workflow_values', {
+          ...validValue,
+          schema_authority_kind: 'registry',
+          schema_resource_id: null,
+          schema_resource_hash: null,
+        }),
+      ).toThrow('ck:values:schema_authority_shape');
+    });
   });
 
   it('rolls back the Schema 4 to 5 rebuild when legacy data violates the new closed shape', () => {

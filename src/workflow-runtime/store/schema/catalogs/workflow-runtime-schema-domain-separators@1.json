@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-runtime-schema-domain-separators:1\n",
-  "hash": "sha256:e794a19a48df011b21c934a45ae1d4a74bec93d89ddf14ce3944f925ed15c7ac",
+  "hash": "sha256:3ac26a44918202ebf1afa3905c339854d6dbf8c62e3de0409d33271c28ca9693",
   "payload": {
     "entries": [
       "icarus:workflow-contract-pack-g1-executable-schema:1\n",
@@ -14,6 +14,11 @@
       "icarus:workflow-feature-release-activation-failure-replay-schema-prerequisite:1\n",
       "icarus:workflow-feature-release-activation-logical-schema-delta:1\n",
       "icarus:workflow-feature-release-activation-schema-prerequisite:1\n",
+      "icarus:workflow-generated-schema-authority-logical-schema-delta:1\n",
+      "icarus:workflow-generated-schema-authority-prerequisite:1\n",
+      "icarus:workflow-generated-schema-parameter:2\n",
+      "icarus:workflow-generated-schema:2\n",
+      "icarus:workflow-plan-generated-schema-binding:1\n",
       "icarus:workflow-runtime-constraint-trigger-fixtures:1\n",
       "icarus:workflow-runtime-executable-ddl:1\n",
       "icarus:workflow-runtime-physical-schema-identity:1\n",

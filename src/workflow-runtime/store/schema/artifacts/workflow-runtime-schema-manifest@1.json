@@ -6,11 +6,11 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-runtime-schema-manifest:1\n",
-  "hash": "sha256:c9bce166112023cf5e09d41901938f74efbc69cff36da9428a3c21c3064d8439",
+  "hash": "sha256:478033a87bfb1cf1e98cd56fc6c18aaebe8d970835cc46e00223de07c5ece184",
   "payload": {
     "schema_id": "workflow-runtime-schema-v1",
     "database_name": "workflow-runtime.db",
-    "database_schema_version": 5,
+    "database_schema_version": 6,
     "logical_inputs": {
       "logical_schema_source_hash": "sha256:ef5221d3465f1214c3c0aad3660f57b119d03eb4b5127428d6a1f881a6260214",
       "typed_relation_catalog_hash": "sha256:20babbfc787ac8a6006243180ef6e867bef8b454c41a527f4b8f20c8f6dd0d99",
@@ -19,20 +19,21 @@
       "publisher_schema_prerequisite_hash": "sha256:93ca47fc61812061c77400b78c2285790a86ea852e1358d5369f95db55ba4330",
       "feature_release_activation_schema_prerequisite_hash": "sha256:2e2e98cd8276d3b42b796afb34508be44800619d3781ddd88f10022c55a7a46e",
       "activation_failure_replay_schema_prerequisite_hash": "sha256:d1fd091aedae1d8d6d51e3442c074050ab57ab5330e18bf37adef628b8dcba9d",
-      "sqlite_profile_hash": "sha256:3d69742dad2fefa8bef4ba47e375defd705e3b32920a92b105a43726436fb7af"
+      "sqlite_profile_hash": "sha256:3d69742dad2fefa8bef4ba47e375defd705e3b32920a92b105a43726436fb7af",
+      "generated_schema_authority_prerequisite_hash": "sha256:55bf95fa677ae2d2be30575fcbe68ed8b051913379ceb131b983dfe62658dc00"
     },
     "migration_path": "migration/workflow-runtime-schema-v1.sql",
-    "migration_sha256": "sha256:2ead40dc2f1618f87247e9d3bb476266797c38560e1ad0537a6afa6f71a3fbf6",
-    "migration_statement_count": 329,
-    "table_count": 84,
-    "column_count": 1462,
-    "primary_key_count": 84,
-    "unique_key_count": 153,
-    "foreign_key_count": 389,
-    "check_count": 951,
-    "index_count": 44,
+    "migration_sha256": "sha256:16a46e84c77d734013e18b4b00b86564f6188ea73717763e9fb7a884d62faa41",
+    "migration_statement_count": 334,
+    "table_count": 86,
+    "column_count": 1485,
+    "primary_key_count": 86,
+    "unique_key_count": 155,
+    "foreign_key_count": 392,
+    "check_count": 969,
+    "index_count": 45,
     "trigger_count": 47,
-    "external_reference_count": 60,
+    "external_reference_count": 61,
     "tables": [
       {
         "ordinal": 1,
@@ -2037,7 +2038,7 @@
       {
         "ordinal": 8,
         "name": "workflow_values",
-        "sql": "CREATE TABLE \"workflow_values\" (\n  \"id\" TEXT NOT NULL /* logical_type=identifier */,\n  \"storage_kind\" TEXT NOT NULL /* logical_type=text */,\n  \"inline_canonical_json\" TEXT /* logical_type=canonical_json */,\n  \"blob_hash\" TEXT /* logical_type=hash */,\n  \"immutable_external_locator\" TEXT /* logical_type=external_reference external_ref=1 validator_owner=storage_resolver reference_domain=immutable_external_locator immutable=1 */,\n  \"expected_hash\" TEXT /* logical_type=hash */,\n  \"content_hash\" TEXT NOT NULL /* logical_type=hash */,\n  \"byte_length\" INTEGER NOT NULL /* logical_type=integer */,\n  \"media_type\" TEXT NOT NULL /* logical_type=text */,\n  \"schema_resource_id\" TEXT NOT NULL /* logical_type=identifier */,\n  \"schema_resource_hash\" TEXT NOT NULL /* logical_type=hash */,\n  \"provenance_ref\" TEXT NOT NULL /* logical_type=external_reference external_ref=1 validator_owner=value_provenance_validator reference_domain=value_provenance immutable=1 */,\n  \"retention_class\" TEXT NOT NULL /* logical_type=text */,\n  \"payload_state\" TEXT NOT NULL /* logical_type=text */,\n  \"payload_pruned_at_ms\" INTEGER /* logical_type=integer */,\n  \"created_at_ms\" INTEGER NOT NULL /* logical_type=integer */,\n  \"row_version\" INTEGER NOT NULL /* logical_type=integer */,\n  CONSTRAINT \"pk:workflow_values\" PRIMARY KEY (\"id\"),\n  CONSTRAINT \"fk:values:blob\" FOREIGN KEY (\"blob_hash\") REFERENCES \"workflow_blob_objects\" (\"blob_hash\") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED,\n  CONSTRAINT \"fk:values:schema\" FOREIGN KEY (\"schema_resource_id\", \"schema_resource_hash\") REFERENCES \"workflow_registry_resources\" (\"id\", \"content_hash\") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED,\n  CONSTRAINT \"ck:workflow_values:storage_kind:enum\" CHECK (\"storage_kind\" IN ('inline', 'blob', 'immutable_external')) /* check_kind=enum_membership logical_columns=storage_kind */,\n  CONSTRAINT \"ck:workflow_values:blob_hash:hash\" CHECK ((\"blob_hash\" IS NULL OR (length(\"blob_hash\") = 71 AND substr(\"blob_hash\", 1, 7) = 'sha256:' AND substr(\"blob_hash\", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=blob_hash */,\n  CONSTRAINT \"ck:workflow_values:expected_hash:hash\" CHECK ((\"expected_hash\" IS NULL OR (length(\"expected_hash\") = 71 AND substr(\"expected_hash\", 1, 7) = 'sha256:' AND substr(\"expected_hash\", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=expected_hash */,\n  CONSTRAINT \"ck:workflow_values:content_hash:hash\" CHECK ((\"content_hash\" IS NULL OR (length(\"content_hash\") = 71 AND substr(\"content_hash\", 1, 7) = 'sha256:' AND substr(\"content_hash\", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=content_hash */,\n  CONSTRAINT \"ck:workflow_values:byte_length:safe_integer\" CHECK ((\"byte_length\" IS NULL OR \"byte_length\" BETWEEN 0 AND 9007199254740991)) /* check_kind=safe_integer logical_columns=byte_length */,\n  CONSTRAINT \"ck:workflow_values:schema_resource_hash:hash\" CHECK ((\"schema_resource_hash\" IS NULL OR (length(\"schema_resource_hash\") = 71 AND substr(\"schema_resource_hash\", 1, 7) = 'sha256:' AND substr(\"schema_resource_hash\", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=schema_resource_hash */,\n  CONSTRAINT \"ck:workflow_values:retention_class:enum\" CHECK (\"retention_class\" IN ('transient', 'run_recovery', 'workflow_audit', 'user_artifact', 'pinned')) /* check_kind=enum_membership logical_columns=retention_class */,\n  CONSTRAINT \"ck:workflow_values:payload_state:enum\" CHECK (\"payload_state\" IN ('live', 'pruned', 'corrupt')) /* check_kind=enum_membership logical_columns=payload_state */,\n  CONSTRAINT \"ck:workflow_values:payload_pruned_at_ms:safe_integer\" CHECK ((\"payload_pruned_at_ms\" IS NULL OR \"payload_pruned_at_ms\" BETWEEN 0 AND 9007199254740991)) /* check_kind=safe_integer logical_columns=payload_pruned_at_ms */,\n  CONSTRAINT \"ck:workflow_values:created_at_ms:safe_integer\" CHECK ((\"created_at_ms\" IS NULL OR \"created_at_ms\" BETWEEN 0 AND 9007199254740991)) /* check_kind=safe_integer logical_columns=created_at_ms */,\n  CONSTRAINT \"ck:workflow_values:row_version:safe_integer\" CHECK ((\"row_version\" IS NULL OR \"row_version\" BETWEEN 0 AND 9007199254740991)) /* check_kind=safe_integer logical_columns=row_version */,\n  CONSTRAINT \"ck:workflow_values:immutable_external_locator:expected_hash:pair\" CHECK (((\"immutable_external_locator\" IS NULL AND \"expected_hash\" IS NULL) OR (\"immutable_external_locator\" IS NOT NULL AND \"expected_hash\" IS NOT NULL))) /* check_kind=all_or_none logical_columns=immutable_external_locator,expected_hash */,\n  CONSTRAINT \"ck:workflow_values:inline_canonical_json:blob_hash:immutable_external_locator:exactly_one\" CHECK (((\"inline_canonical_json\" IS NOT NULL) + (\"blob_hash\" IS NOT NULL) + (\"immutable_external_locator\" IS NOT NULL)) = 1) /* check_kind=exactly_one logical_columns=inline_canonical_json,blob_hash,immutable_external_locator */,\n  CONSTRAINT \"ck:values:storage_shape\" CHECK (((\"storage_kind\" = 'inline' AND \"inline_canonical_json\" IS NOT NULL AND \"blob_hash\" IS NULL AND \"immutable_external_locator\" IS NULL AND \"expected_hash\" IS NULL) OR (\"storage_kind\" = 'blob' AND \"inline_canonical_json\" IS NULL AND \"blob_hash\" IS NOT NULL AND \"immutable_external_locator\" IS NULL AND \"expected_hash\" IS NULL) OR (\"storage_kind\" = 'immutable_external' AND \"inline_canonical_json\" IS NULL AND \"blob_hash\" IS NULL AND \"immutable_external_locator\" IS NOT NULL AND \"expected_hash\" IS NOT NULL))) /* check_kind=state_field_consistency logical_columns=storage_kind,inline_canonical_json,blob_hash,immutable_external_locator,expected_hash */,\n  CONSTRAINT \"ck:values:payload_state\" CHECK (((\"payload_state\" = 'pruned' AND \"payload_pruned_at_ms\" IS NOT NULL) OR (\"payload_state\" IN ('live', 'corrupt') AND \"payload_pruned_at_ms\" IS NULL))) /* check_kind=state_field_consistency logical_columns=payload_state,payload_pruned_at_ms */\n)",
+        "sql": "CREATE TABLE \"workflow_values\" (\n  \"id\" TEXT NOT NULL /* logical_type=identifier */,\n  \"storage_kind\" TEXT NOT NULL /* logical_type=text */,\n  \"inline_canonical_json\" TEXT /* logical_type=canonical_json */,\n  \"blob_hash\" TEXT /* logical_type=hash */,\n  \"immutable_external_locator\" TEXT /* logical_type=external_reference external_ref=1 validator_owner=storage_resolver reference_domain=immutable_external_locator immutable=1 */,\n  \"expected_hash\" TEXT /* logical_type=hash */,\n  \"content_hash\" TEXT NOT NULL /* logical_type=hash */,\n  \"byte_length\" INTEGER NOT NULL /* logical_type=integer */,\n  \"media_type\" TEXT NOT NULL /* logical_type=text */,\n  \"schema_resource_id\" TEXT /* logical_type=identifier */,\n  \"schema_resource_hash\" TEXT /* logical_type=hash */,\n  \"provenance_ref\" TEXT NOT NULL /* logical_type=external_reference external_ref=1 validator_owner=value_provenance_validator reference_domain=value_provenance immutable=1 */,\n  \"retention_class\" TEXT NOT NULL /* logical_type=text */,\n  \"payload_state\" TEXT NOT NULL /* logical_type=text */,\n  \"payload_pruned_at_ms\" INTEGER /* logical_type=integer */,\n  \"created_at_ms\" INTEGER NOT NULL /* logical_type=integer */,\n  \"row_version\" INTEGER NOT NULL /* logical_type=integer */,\n  \"schema_authority_kind\" TEXT NOT NULL DEFAULT 'registry' /* logical_type=text */,\n  \"schema_plan_id\" TEXT /* logical_type=identifier */,\n  \"schema_plan_hash\" TEXT /* logical_type=hash */,\n  \"generated_schema_ref\" TEXT /* logical_type=identifier */,\n  \"generated_schema_hash\" TEXT /* logical_type=hash */,\n  \"generated_schema_generator\" TEXT /* logical_type=text */,\n  \"generated_schema_parameter_hash\" TEXT /* logical_type=hash */,\n  CONSTRAINT \"pk:workflow_values\" PRIMARY KEY (\"id\"),\n  CONSTRAINT \"fk:values:blob\" FOREIGN KEY (\"blob_hash\") REFERENCES \"workflow_blob_objects\" (\"blob_hash\") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED,\n  CONSTRAINT \"fk:values:schema\" FOREIGN KEY (\"schema_resource_id\", \"schema_resource_hash\") REFERENCES \"workflow_registry_resources\" (\"id\", \"content_hash\") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED,\n  CONSTRAINT \"fk:values:plan_generated_schema\" FOREIGN KEY (\"schema_plan_id\", \"schema_plan_hash\", \"generated_schema_ref\", \"generated_schema_hash\", \"generated_schema_generator\", \"generated_schema_parameter_hash\") REFERENCES \"workflow_plan_generated_schemas\" (\"plan_id\", \"plan_hash\", \"schema_ref\", \"schema_hash\", \"generator\", \"parameter_hash\") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED,\n  CONSTRAINT \"ck:workflow_values:storage_kind:enum\" CHECK (\"storage_kind\" IN ('inline', 'blob', 'immutable_external')) /* check_kind=enum_membership logical_columns=storage_kind */,\n  CONSTRAINT \"ck:workflow_values:blob_hash:hash\" CHECK ((\"blob_hash\" IS NULL OR (length(\"blob_hash\") = 71 AND substr(\"blob_hash\", 1, 7) = 'sha256:' AND substr(\"blob_hash\", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=blob_hash */,\n  CONSTRAINT \"ck:workflow_values:expected_hash:hash\" CHECK ((\"expected_hash\" IS NULL OR (length(\"expected_hash\") = 71 AND substr(\"expected_hash\", 1, 7) = 'sha256:' AND substr(\"expected_hash\", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=expected_hash */,\n  CONSTRAINT \"ck:workflow_values:content_hash:hash\" CHECK ((\"content_hash\" IS NULL OR (length(\"content_hash\") = 71 AND substr(\"content_hash\", 1, 7) = 'sha256:' AND substr(\"content_hash\", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=content_hash */,\n  CONSTRAINT \"ck:workflow_values:byte_length:safe_integer\" CHECK ((\"byte_length\" IS NULL OR \"byte_length\" BETWEEN 0 AND 9007199254740991)) /* check_kind=safe_integer logical_columns=byte_length */,\n  CONSTRAINT \"ck:workflow_values:schema_resource_hash:hash\" CHECK ((\"schema_resource_hash\" IS NULL OR (length(\"schema_resource_hash\") = 71 AND substr(\"schema_resource_hash\", 1, 7) = 'sha256:' AND substr(\"schema_resource_hash\", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=schema_resource_hash */,\n  CONSTRAINT \"ck:workflow_values:retention_class:enum\" CHECK (\"retention_class\" IN ('transient', 'run_recovery', 'workflow_audit', 'user_artifact', 'pinned')) /* check_kind=enum_membership logical_columns=retention_class */,\n  CONSTRAINT \"ck:workflow_values:payload_state:enum\" CHECK (\"payload_state\" IN ('live', 'pruned', 'corrupt')) /* check_kind=enum_membership logical_columns=payload_state */,\n  CONSTRAINT \"ck:workflow_values:payload_pruned_at_ms:safe_integer\" CHECK ((\"payload_pruned_at_ms\" IS NULL OR \"payload_pruned_at_ms\" BETWEEN 0 AND 9007199254740991)) /* check_kind=safe_integer logical_columns=payload_pruned_at_ms */,\n  CONSTRAINT \"ck:workflow_values:created_at_ms:safe_integer\" CHECK ((\"created_at_ms\" IS NULL OR \"created_at_ms\" BETWEEN 0 AND 9007199254740991)) /* check_kind=safe_integer logical_columns=created_at_ms */,\n  CONSTRAINT \"ck:workflow_values:row_version:safe_integer\" CHECK ((\"row_version\" IS NULL OR \"row_version\" BETWEEN 0 AND 9007199254740991)) /* check_kind=safe_integer logical_columns=row_version */,\n  CONSTRAINT \"ck:workflow_values:immutable_external_locator:expected_hash:pair\" CHECK (((\"immutable_external_locator\" IS NULL AND \"expected_hash\" IS NULL) OR (\"immutable_external_locator\" IS NOT NULL AND \"expected_hash\" IS NOT NULL))) /* check_kind=all_or_none logical_columns=immutable_external_locator,expected_hash */,\n  CONSTRAINT \"ck:workflow_values:inline_canonical_json:blob_hash:immutable_external_locator:exactly_one\" CHECK (((\"inline_canonical_json\" IS NOT NULL) + (\"blob_hash\" IS NOT NULL) + (\"immutable_external_locator\" IS NOT NULL)) = 1) /* check_kind=exactly_one logical_columns=inline_canonical_json,blob_hash,immutable_external_locator */,\n  CONSTRAINT \"ck:values:storage_shape\" CHECK (((\"storage_kind\" = 'inline' AND \"inline_canonical_json\" IS NOT NULL AND \"blob_hash\" IS NULL AND \"immutable_external_locator\" IS NULL AND \"expected_hash\" IS NULL) OR (\"storage_kind\" = 'blob' AND \"inline_canonical_json\" IS NULL AND \"blob_hash\" IS NOT NULL AND \"immutable_external_locator\" IS NULL AND \"expected_hash\" IS NULL) OR (\"storage_kind\" = 'immutable_external' AND \"inline_canonical_json\" IS NULL AND \"blob_hash\" IS NULL AND \"immutable_external_locator\" IS NOT NULL AND \"expected_hash\" IS NOT NULL))) /* check_kind=state_field_consistency logical_columns=storage_kind,inline_canonical_json,blob_hash,immutable_external_locator,expected_hash */,\n  CONSTRAINT \"ck:values:payload_state\" CHECK (((\"payload_state\" = 'pruned' AND \"payload_pruned_at_ms\" IS NOT NULL) OR (\"payload_state\" IN ('live', 'corrupt') AND \"payload_pruned_at_ms\" IS NULL))) /* check_kind=state_field_consistency logical_columns=payload_state,payload_pruned_at_ms */,\n  CONSTRAINT \"ck:workflow_values:schema_authority_kind:enum\" CHECK (\"schema_authority_kind\" IN ('registry', 'plan_generated')) /* check_kind=enum_membership logical_columns=schema_authority_kind */,\n  CONSTRAINT \"ck:workflow_values:generated_schema_generator:enum\" CHECK (\"generated_schema_generator\" IN ('join_expose', 'child_completion', 'map_result')) /* check_kind=enum_membership logical_columns=generated_schema_generator */,\n  CONSTRAINT \"ck:values:schema_authority_shape\" CHECK (((\"schema_authority_kind\" = 'registry' AND \"schema_resource_id\" IS NOT NULL AND \"schema_resource_hash\" IS NOT NULL AND \"schema_plan_id\" IS NULL AND \"schema_plan_hash\" IS NULL AND \"generated_schema_ref\" IS NULL AND \"generated_schema_hash\" IS NULL AND \"generated_schema_generator\" IS NULL AND \"generated_schema_parameter_hash\" IS NULL) OR (\"schema_authority_kind\" = 'plan_generated' AND \"schema_resource_id\" IS NULL AND \"schema_resource_hash\" IS NULL AND \"schema_plan_id\" IS NOT NULL AND \"schema_plan_hash\" IS NOT NULL AND \"generated_schema_ref\" IS NOT NULL AND \"generated_schema_hash\" IS NOT NULL AND \"generated_schema_generator\" IS NOT NULL AND \"generated_schema_parameter_hash\" IS NOT NULL))) /* check_kind=state_field_consistency logical_columns=schema_authority_kind,schema_resource_id,schema_resource_hash,schema_plan_id,schema_plan_hash,generated_schema_ref,generated_schema_hash,generated_schema_generator,generated_schema_parameter_hash */,\n  CONSTRAINT \"ck:workflow_values:schema_plan_hash:hash\" CHECK ((\"schema_plan_hash\" IS NULL OR (length(\"schema_plan_hash\") = 71 AND substr(\"schema_plan_hash\", 1, 7) = 'sha256:' AND substr(\"schema_plan_hash\", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=schema_plan_hash */,\n  CONSTRAINT \"ck:workflow_values:generated_schema_hash:hash\" CHECK ((\"generated_schema_hash\" IS NULL OR (length(\"generated_schema_hash\") = 71 AND substr(\"generated_schema_hash\", 1, 7) = 'sha256:' AND substr(\"generated_schema_hash\", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=generated_schema_hash */,\n  CONSTRAINT \"ck:workflow_values:generated_schema_parameter_hash:hash\" CHECK ((\"generated_schema_parameter_hash\" IS NULL OR (length(\"generated_schema_parameter_hash\") = 71 AND substr(\"generated_schema_parameter_hash\", 1, 7) = 'sha256:' AND substr(\"generated_schema_parameter_hash\", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=generated_schema_parameter_hash */\n)",
         "columns": [
           {
             "cid": 0,
@@ -2137,7 +2138,7 @@
             "cid": 9,
             "name": "schema_resource_id",
             "sqlite_type": "TEXT",
-            "nullable": false,
+            "nullable": true,
             "default_sql": null,
             "primary_key_ordinal": 0,
             "logical_type": "identifier",
@@ -2147,7 +2148,7 @@
             "cid": 10,
             "name": "schema_resource_hash",
             "sqlite_type": "TEXT",
-            "nullable": false,
+            "nullable": true,
             "default_sql": null,
             "primary_key_ordinal": 0,
             "logical_type": "hash",
@@ -2216,6 +2217,76 @@
             "primary_key_ordinal": 0,
             "logical_type": "integer",
             "external_reference": null
+          },
+          {
+            "cid": 17,
+            "name": "schema_authority_kind",
+            "sqlite_type": "TEXT",
+            "nullable": false,
+            "default_sql": "'registry'",
+            "primary_key_ordinal": 0,
+            "logical_type": "text",
+            "external_reference": null
+          },
+          {
+            "cid": 18,
+            "name": "schema_plan_id",
+            "sqlite_type": "TEXT",
+            "nullable": true,
+            "default_sql": null,
+            "primary_key_ordinal": 0,
+            "logical_type": "identifier",
+            "external_reference": null
+          },
+          {
+            "cid": 19,
+            "name": "schema_plan_hash",
+            "sqlite_type": "TEXT",
+            "nullable": true,
+            "default_sql": null,
+            "primary_key_ordinal": 0,
+            "logical_type": "hash",
+            "external_reference": null
+          },
+          {
+            "cid": 20,
+            "name": "generated_schema_ref",
+            "sqlite_type": "TEXT",
+            "nullable": true,
+            "default_sql": null,
+            "primary_key_ordinal": 0,
+            "logical_type": "identifier",
+            "external_reference": null
+          },
+          {
+            "cid": 21,
+            "name": "generated_schema_hash",
+            "sqlite_type": "TEXT",
+            "nullable": true,
+            "default_sql": null,
+            "primary_key_ordinal": 0,
+            "logical_type": "hash",
+            "external_reference": null
+          },
+          {
+            "cid": 22,
+            "name": "generated_schema_generator",
+            "sqlite_type": "TEXT",
+            "nullable": true,
+            "default_sql": null,
+            "primary_key_ordinal": 0,
+            "logical_type": "text",
+            "external_reference": null
+          },
+          {
+            "cid": 23,
+            "name": "generated_schema_parameter_hash",
+            "sqlite_type": "TEXT",
+            "nullable": true,
+            "default_sql": null,
+            "primary_key_ordinal": 0,
+            "logical_type": "hash",
+            "external_reference": null
           }
         ],
         "primary_key": {
@@ -2260,7 +2331,7 @@
             ],
             "on_delete": "restrict",
             "deferrability": "deferred",
-            "pragma_id": 1
+            "pragma_id": 2
           },
           {
             "relation_id": "fk:values:schema",
@@ -2272,6 +2343,29 @@
             "target_columns": [
               "id",
               "content_hash"
+            ],
+            "on_delete": "restrict",
+            "deferrability": "deferred",
+            "pragma_id": 1
+          },
+          {
+            "relation_id": "fk:values:plan_generated_schema",
+            "source_columns": [
+              "schema_plan_id",
+              "schema_plan_hash",
+              "generated_schema_ref",
+              "generated_schema_hash",
+              "generated_schema_generator",
+              "generated_schema_parameter_hash"
+            ],
+            "target_table": "workflow_plan_generated_schemas",
+            "target_columns": [
+              "plan_id",
+              "plan_hash",
+              "schema_ref",
+              "schema_hash",
+              "generator",
+              "parameter_hash"
             ],
             "on_delete": "restrict",
             "deferrability": "deferred",
@@ -2421,6 +2515,68 @@
             ],
             "expression_intent": "pruned has payload_pruned_at_ms; live/corrupt do not claim pruning time",
             "expression_sql": "((\"payload_state\" = 'pruned' AND \"payload_pruned_at_ms\" IS NOT NULL) OR (\"payload_state\" IN ('live', 'corrupt') AND \"payload_pruned_at_ms\" IS NULL))"
+          },
+          {
+            "check_id": "ck:workflow_values:schema_authority_kind:enum",
+            "kind": "enum_membership",
+            "columns": [
+              "schema_authority_kind"
+            ],
+            "expression_intent": "value belongs to the closed schema_authority_kind catalog",
+            "expression_sql": "\"schema_authority_kind\" IN ('registry', 'plan_generated')"
+          },
+          {
+            "check_id": "ck:workflow_values:generated_schema_generator:enum",
+            "kind": "enum_membership",
+            "columns": [
+              "generated_schema_generator"
+            ],
+            "expression_intent": "null or value belongs to the closed generated schema generator catalog",
+            "expression_sql": "\"generated_schema_generator\" IN ('join_expose', 'child_completion', 'map_result')"
+          },
+          {
+            "check_id": "ck:values:schema_authority_shape",
+            "kind": "state_field_consistency",
+            "columns": [
+              "schema_authority_kind",
+              "schema_resource_id",
+              "schema_resource_hash",
+              "schema_plan_id",
+              "schema_plan_hash",
+              "generated_schema_ref",
+              "generated_schema_hash",
+              "generated_schema_generator",
+              "generated_schema_parameter_hash"
+            ],
+            "expression_intent": "registry and plan_generated authority tuples are mutually exclusive and complete",
+            "expression_sql": "((\"schema_authority_kind\" = 'registry' AND \"schema_resource_id\" IS NOT NULL AND \"schema_resource_hash\" IS NOT NULL AND \"schema_plan_id\" IS NULL AND \"schema_plan_hash\" IS NULL AND \"generated_schema_ref\" IS NULL AND \"generated_schema_hash\" IS NULL AND \"generated_schema_generator\" IS NULL AND \"generated_schema_parameter_hash\" IS NULL) OR (\"schema_authority_kind\" = 'plan_generated' AND \"schema_resource_id\" IS NULL AND \"schema_resource_hash\" IS NULL AND \"schema_plan_id\" IS NOT NULL AND \"schema_plan_hash\" IS NOT NULL AND \"generated_schema_ref\" IS NOT NULL AND \"generated_schema_hash\" IS NOT NULL AND \"generated_schema_generator\" IS NOT NULL AND \"generated_schema_parameter_hash\" IS NOT NULL))"
+          },
+          {
+            "check_id": "ck:workflow_values:schema_plan_hash:hash",
+            "kind": "hash_format",
+            "columns": [
+              "schema_plan_hash"
+            ],
+            "expression_intent": "sha256:<64 lowercase hexadecimal characters>",
+            "expression_sql": "(\"schema_plan_hash\" IS NULL OR (length(\"schema_plan_hash\") = 71 AND substr(\"schema_plan_hash\", 1, 7) = 'sha256:' AND substr(\"schema_plan_hash\", 8) NOT GLOB '*[^0-9a-f]*'))"
+          },
+          {
+            "check_id": "ck:workflow_values:generated_schema_hash:hash",
+            "kind": "hash_format",
+            "columns": [
+              "generated_schema_hash"
+            ],
+            "expression_intent": "sha256:<64 lowercase hexadecimal characters>",
+            "expression_sql": "(\"generated_schema_hash\" IS NULL OR (length(\"generated_schema_hash\") = 71 AND substr(\"generated_schema_hash\", 1, 7) = 'sha256:' AND substr(\"generated_schema_hash\", 8) NOT GLOB '*[^0-9a-f]*'))"
+          },
+          {
+            "check_id": "ck:workflow_values:generated_schema_parameter_hash:hash",
+            "kind": "hash_format",
+            "columns": [
+              "generated_schema_parameter_hash"
+            ],
+            "expression_intent": "sha256:<64 lowercase hexadecimal characters>",
+            "expression_sql": "(\"generated_schema_parameter_hash\" IS NULL OR (length(\"generated_schema_parameter_hash\") = 71 AND substr(\"generated_schema_parameter_hash\", 1, 7) = 'sha256:' AND substr(\"generated_schema_parameter_hash\", 8) NOT GLOB '*[^0-9a-f]*'))"
           }
         ],
         "indexes": []
@@ -33680,6 +33836,392 @@
             "sql": "CREATE INDEX \"idx:activation_events:command_history\" ON \"workflow_feature_release_activation_events\" (\"command_id\", \"event_no\")"
           }
         ]
+      },
+      {
+        "ordinal": 85,
+        "name": "workflow_generated_schema_contents",
+        "sql": "CREATE TABLE \"workflow_generated_schema_contents\" (\n  \"schema_ref\" TEXT NOT NULL /* logical_type=external_reference external_ref=1 validator_owner=generated_schema_ref_validator reference_domain=icarus_generated_schema_content_address immutable=1 */,\n  \"schema_raw_hash\" TEXT NOT NULL /* logical_type=hash */,\n  \"schema_hash\" TEXT NOT NULL /* logical_type=hash */,\n  \"canonical_schema_json\" TEXT NOT NULL /* logical_type=canonical_json */,\n  \"canonicalizer\" TEXT NOT NULL /* logical_type=text */,\n  \"byte_length\" INTEGER NOT NULL /* logical_type=integer */,\n  \"created_at_ms\" INTEGER NOT NULL /* logical_type=integer */,\n  CONSTRAINT \"pk:workflow_generated_schema_contents\" PRIMARY KEY (\"schema_ref\"),\n  CONSTRAINT \"ck:generated_schema_contents:ref\" CHECK (\"schema_ref\" = 'icarus-generated-schema:' || \"schema_raw_hash\") /* check_kind=state_field_consistency logical_columns=schema_ref,schema_raw_hash */,\n  CONSTRAINT \"ck:generated_schema_contents:raw_hash:hash\" CHECK ((\"schema_raw_hash\" IS NULL OR (length(\"schema_raw_hash\") = 71 AND substr(\"schema_raw_hash\", 1, 7) = 'sha256:' AND substr(\"schema_raw_hash\", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=schema_raw_hash */,\n  CONSTRAINT \"ck:generated_schema_contents:schema_hash:hash\" CHECK ((\"schema_hash\" IS NULL OR (length(\"schema_hash\") = 71 AND substr(\"schema_hash\", 1, 7) = 'sha256:' AND substr(\"schema_hash\", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=schema_hash */,\n  CONSTRAINT \"ck:generated_schema_contents:canonicalizer:enum\" CHECK (\"canonicalizer\" IN ('RFC8785-JCS')) /* check_kind=enum_membership logical_columns=canonicalizer */,\n  CONSTRAINT \"ck:generated_schema_contents:byte_length:safe_integer\" CHECK ((\"byte_length\" IS NULL OR \"byte_length\" BETWEEN 0 AND 9007199254740991)) /* check_kind=safe_integer logical_columns=byte_length */,\n  CONSTRAINT \"ck:generated_schema_contents:created_at_ms:safe_integer\" CHECK ((\"created_at_ms\" IS NULL OR \"created_at_ms\" BETWEEN 0 AND 9007199254740991)) /* check_kind=safe_integer logical_columns=created_at_ms */\n)",
+        "columns": [
+          {
+            "cid": 0,
+            "name": "schema_ref",
+            "sqlite_type": "TEXT",
+            "nullable": false,
+            "default_sql": null,
+            "primary_key_ordinal": 1,
+            "logical_type": "external_reference",
+            "external_reference": {
+              "validator_owner": "generated_schema_ref_validator",
+              "reference_domain": "icarus_generated_schema_content_address",
+              "immutable": true
+            }
+          },
+          {
+            "cid": 1,
+            "name": "schema_raw_hash",
+            "sqlite_type": "TEXT",
+            "nullable": false,
+            "default_sql": null,
+            "primary_key_ordinal": 0,
+            "logical_type": "hash",
+            "external_reference": null
+          },
+          {
+            "cid": 2,
+            "name": "schema_hash",
+            "sqlite_type": "TEXT",
+            "nullable": false,
+            "default_sql": null,
+            "primary_key_ordinal": 0,
+            "logical_type": "hash",
+            "external_reference": null
+          },
+          {
+            "cid": 3,
+            "name": "canonical_schema_json",
+            "sqlite_type": "TEXT",
+            "nullable": false,
+            "default_sql": null,
+            "primary_key_ordinal": 0,
+            "logical_type": "canonical_json",
+            "external_reference": null
+          },
+          {
+            "cid": 4,
+            "name": "canonicalizer",
+            "sqlite_type": "TEXT",
+            "nullable": false,
+            "default_sql": null,
+            "primary_key_ordinal": 0,
+            "logical_type": "text",
+            "external_reference": null
+          },
+          {
+            "cid": 5,
+            "name": "byte_length",
+            "sqlite_type": "INTEGER",
+            "nullable": false,
+            "default_sql": null,
+            "primary_key_ordinal": 0,
+            "logical_type": "integer",
+            "external_reference": null
+          },
+          {
+            "cid": 6,
+            "name": "created_at_ms",
+            "sqlite_type": "INTEGER",
+            "nullable": false,
+            "default_sql": null,
+            "primary_key_ordinal": 0,
+            "logical_type": "integer",
+            "external_reference": null
+          }
+        ],
+        "primary_key": {
+          "columns": [
+            "schema_ref"
+          ],
+          "auto_increment": false
+        },
+        "unique_keys": [
+          {
+            "key_id": "uk:generated_schema_contents:ref_hash",
+            "columns": [
+              "schema_ref",
+              "schema_hash"
+            ],
+            "predicate_intent": null,
+            "origin": "c",
+            "sql": "CREATE UNIQUE INDEX \"uk:generated_schema_contents:ref_hash\" ON \"workflow_generated_schema_contents\" (\"schema_ref\", \"schema_hash\")"
+          }
+        ],
+        "foreign_keys": [],
+        "checks": [
+          {
+            "check_id": "ck:generated_schema_contents:ref",
+            "kind": "state_field_consistency",
+            "columns": [
+              "schema_ref",
+              "schema_raw_hash"
+            ],
+            "expression_intent": "schema_ref is the exact icarus-generated-schema form of schema_raw_hash",
+            "expression_sql": "\"schema_ref\" = 'icarus-generated-schema:' || \"schema_raw_hash\""
+          },
+          {
+            "check_id": "ck:generated_schema_contents:raw_hash:hash",
+            "kind": "hash_format",
+            "columns": [
+              "schema_raw_hash"
+            ],
+            "expression_intent": "sha256:<64 lowercase hexadecimal characters>",
+            "expression_sql": "(\"schema_raw_hash\" IS NULL OR (length(\"schema_raw_hash\") = 71 AND substr(\"schema_raw_hash\", 1, 7) = 'sha256:' AND substr(\"schema_raw_hash\", 8) NOT GLOB '*[^0-9a-f]*'))"
+          },
+          {
+            "check_id": "ck:generated_schema_contents:schema_hash:hash",
+            "kind": "hash_format",
+            "columns": [
+              "schema_hash"
+            ],
+            "expression_intent": "sha256:<64 lowercase hexadecimal characters>",
+            "expression_sql": "(\"schema_hash\" IS NULL OR (length(\"schema_hash\") = 71 AND substr(\"schema_hash\", 1, 7) = 'sha256:' AND substr(\"schema_hash\", 8) NOT GLOB '*[^0-9a-f]*'))"
+          },
+          {
+            "check_id": "ck:generated_schema_contents:canonicalizer:enum",
+            "kind": "enum_membership",
+            "columns": [
+              "canonicalizer"
+            ],
+            "expression_intent": "value belongs to the closed canonicalizer catalog",
+            "expression_sql": "\"canonicalizer\" IN ('RFC8785-JCS')"
+          },
+          {
+            "check_id": "ck:generated_schema_contents:byte_length:safe_integer",
+            "kind": "safe_integer",
+            "columns": [
+              "byte_length"
+            ],
+            "expression_intent": "non-negative JavaScript safe integer",
+            "expression_sql": "(\"byte_length\" IS NULL OR \"byte_length\" BETWEEN 0 AND 9007199254740991)"
+          },
+          {
+            "check_id": "ck:generated_schema_contents:created_at_ms:safe_integer",
+            "kind": "safe_integer",
+            "columns": [
+              "created_at_ms"
+            ],
+            "expression_intent": "non-negative JavaScript safe integer",
+            "expression_sql": "(\"created_at_ms\" IS NULL OR \"created_at_ms\" BETWEEN 0 AND 9007199254740991)"
+          }
+        ],
+        "indexes": []
+      },
+      {
+        "ordinal": 86,
+        "name": "workflow_plan_generated_schemas",
+        "sql": "CREATE TABLE \"workflow_plan_generated_schemas\" (\n  \"plan_id\" TEXT NOT NULL /* logical_type=identifier */,\n  \"graph_run_id\" TEXT NOT NULL /* logical_type=identifier */,\n  \"plan_hash\" TEXT NOT NULL /* logical_type=hash */,\n  \"schema_ref\" TEXT NOT NULL /* logical_type=identifier */,\n  \"schema_hash\" TEXT NOT NULL /* logical_type=hash */,\n  \"generator\" TEXT NOT NULL /* logical_type=text */,\n  \"parameter_hash\" TEXT NOT NULL /* logical_type=hash */,\n  \"binding_hash\" TEXT NOT NULL /* logical_type=hash */,\n  \"created_at_ms\" INTEGER NOT NULL /* logical_type=integer */,\n  CONSTRAINT \"pk:workflow_plan_generated_schemas\" PRIMARY KEY (\"plan_id\", \"schema_ref\", \"generator\", \"parameter_hash\"),\n  CONSTRAINT \"fk:plan_generated_schemas:plan\" FOREIGN KEY (\"plan_id\", \"graph_run_id\", \"plan_hash\") REFERENCES \"workflow_graph_scope_plans\" (\"id\", \"graph_run_id\", \"plan_hash\") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED,\n  CONSTRAINT \"fk:plan_generated_schemas:content\" FOREIGN KEY (\"schema_ref\", \"schema_hash\") REFERENCES \"workflow_generated_schema_contents\" (\"schema_ref\", \"schema_hash\") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED,\n  CONSTRAINT \"ck:plan_generated_schemas:plan_hash:hash\" CHECK ((\"plan_hash\" IS NULL OR (length(\"plan_hash\") = 71 AND substr(\"plan_hash\", 1, 7) = 'sha256:' AND substr(\"plan_hash\", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=plan_hash */,\n  CONSTRAINT \"ck:plan_generated_schemas:schema_hash:hash\" CHECK ((\"schema_hash\" IS NULL OR (length(\"schema_hash\") = 71 AND substr(\"schema_hash\", 1, 7) = 'sha256:' AND substr(\"schema_hash\", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=schema_hash */,\n  CONSTRAINT \"ck:plan_generated_schemas:parameter_hash:hash\" CHECK ((\"parameter_hash\" IS NULL OR (length(\"parameter_hash\") = 71 AND substr(\"parameter_hash\", 1, 7) = 'sha256:' AND substr(\"parameter_hash\", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=parameter_hash */,\n  CONSTRAINT \"ck:plan_generated_schemas:binding_hash:hash\" CHECK ((\"binding_hash\" IS NULL OR (length(\"binding_hash\") = 71 AND substr(\"binding_hash\", 1, 7) = 'sha256:' AND substr(\"binding_hash\", 8) NOT GLOB '*[^0-9a-f]*'))) /* check_kind=hash_format logical_columns=binding_hash */,\n  CONSTRAINT \"ck:plan_generated_schemas:generator:enum\" CHECK (\"generator\" IN ('join_expose', 'child_completion', 'map_result')) /* check_kind=enum_membership logical_columns=generator */,\n  CONSTRAINT \"ck:plan_generated_schemas:created_at_ms:safe_integer\" CHECK ((\"created_at_ms\" IS NULL OR \"created_at_ms\" BETWEEN 0 AND 9007199254740991)) /* check_kind=safe_integer logical_columns=created_at_ms */\n)",
+        "columns": [
+          {
+            "cid": 0,
+            "name": "plan_id",
+            "sqlite_type": "TEXT",
+            "nullable": false,
+            "default_sql": null,
+            "primary_key_ordinal": 1,
+            "logical_type": "identifier",
+            "external_reference": null
+          },
+          {
+            "cid": 1,
+            "name": "graph_run_id",
+            "sqlite_type": "TEXT",
+            "nullable": false,
+            "default_sql": null,
+            "primary_key_ordinal": 0,
+            "logical_type": "identifier",
+            "external_reference": null
+          },
+          {
+            "cid": 2,
+            "name": "plan_hash",
+            "sqlite_type": "TEXT",
+            "nullable": false,
+            "default_sql": null,
+            "primary_key_ordinal": 0,
+            "logical_type": "hash",
+            "external_reference": null
+          },
+          {
+            "cid": 3,
+            "name": "schema_ref",
+            "sqlite_type": "TEXT",
+            "nullable": false,
+            "default_sql": null,
+            "primary_key_ordinal": 2,
+            "logical_type": "identifier",
+            "external_reference": null
+          },
+          {
+            "cid": 4,
+            "name": "schema_hash",
+            "sqlite_type": "TEXT",
+            "nullable": false,
+            "default_sql": null,
+            "primary_key_ordinal": 0,
+            "logical_type": "hash",
+            "external_reference": null
+          },
+          {
+            "cid": 5,
+            "name": "generator",
+            "sqlite_type": "TEXT",
+            "nullable": false,
+            "default_sql": null,
+            "primary_key_ordinal": 3,
+            "logical_type": "text",
+            "external_reference": null
+          },
+          {
+            "cid": 6,
+            "name": "parameter_hash",
+            "sqlite_type": "TEXT",
+            "nullable": false,
+            "default_sql": null,
+            "primary_key_ordinal": 4,
+            "logical_type": "hash",
+            "external_reference": null
+          },
+          {
+            "cid": 7,
+            "name": "binding_hash",
+            "sqlite_type": "TEXT",
+            "nullable": false,
+            "default_sql": null,
+            "primary_key_ordinal": 0,
+            "logical_type": "hash",
+            "external_reference": null
+          },
+          {
+            "cid": 8,
+            "name": "created_at_ms",
+            "sqlite_type": "INTEGER",
+            "nullable": false,
+            "default_sql": null,
+            "primary_key_ordinal": 0,
+            "logical_type": "integer",
+            "external_reference": null
+          }
+        ],
+        "primary_key": {
+          "columns": [
+            "plan_id",
+            "schema_ref",
+            "generator",
+            "parameter_hash"
+          ],
+          "auto_increment": false
+        },
+        "unique_keys": [
+          {
+            "key_id": "uk:plan_generated_schemas:value_authority",
+            "columns": [
+              "plan_id",
+              "plan_hash",
+              "schema_ref",
+              "schema_hash",
+              "generator",
+              "parameter_hash"
+            ],
+            "predicate_intent": null,
+            "origin": "c",
+            "sql": "CREATE UNIQUE INDEX \"uk:plan_generated_schemas:value_authority\" ON \"workflow_plan_generated_schemas\" (\"plan_id\", \"plan_hash\", \"schema_ref\", \"schema_hash\", \"generator\", \"parameter_hash\")"
+          }
+        ],
+        "foreign_keys": [
+          {
+            "relation_id": "fk:plan_generated_schemas:plan",
+            "source_columns": [
+              "plan_id",
+              "graph_run_id",
+              "plan_hash"
+            ],
+            "target_table": "workflow_graph_scope_plans",
+            "target_columns": [
+              "id",
+              "graph_run_id",
+              "plan_hash"
+            ],
+            "on_delete": "restrict",
+            "deferrability": "deferred",
+            "pragma_id": 1
+          },
+          {
+            "relation_id": "fk:plan_generated_schemas:content",
+            "source_columns": [
+              "schema_ref",
+              "schema_hash"
+            ],
+            "target_table": "workflow_generated_schema_contents",
+            "target_columns": [
+              "schema_ref",
+              "schema_hash"
+            ],
+            "on_delete": "restrict",
+            "deferrability": "deferred",
+            "pragma_id": 0
+          }
+        ],
+        "checks": [
+          {
+            "check_id": "ck:plan_generated_schemas:plan_hash:hash",
+            "kind": "hash_format",
+            "columns": [
+              "plan_hash"
+            ],
+            "expression_intent": "sha256:<64 lowercase hexadecimal characters>",
+            "expression_sql": "(\"plan_hash\" IS NULL OR (length(\"plan_hash\") = 71 AND substr(\"plan_hash\", 1, 7) = 'sha256:' AND substr(\"plan_hash\", 8) NOT GLOB '*[^0-9a-f]*'))"
+          },
+          {
+            "check_id": "ck:plan_generated_schemas:schema_hash:hash",
+            "kind": "hash_format",
+            "columns": [
+              "schema_hash"
+            ],
+            "expression_intent": "sha256:<64 lowercase hexadecimal characters>",
+            "expression_sql": "(\"schema_hash\" IS NULL OR (length(\"schema_hash\") = 71 AND substr(\"schema_hash\", 1, 7) = 'sha256:' AND substr(\"schema_hash\", 8) NOT GLOB '*[^0-9a-f]*'))"
+          },
+          {
+            "check_id": "ck:plan_generated_schemas:parameter_hash:hash",
+            "kind": "hash_format",
+            "columns": [
+              "parameter_hash"
+            ],
+            "expression_intent": "sha256:<64 lowercase hexadecimal characters>",
+            "expression_sql": "(\"parameter_hash\" IS NULL OR (length(\"parameter_hash\") = 71 AND substr(\"parameter_hash\", 1, 7) = 'sha256:' AND substr(\"parameter_hash\", 8) NOT GLOB '*[^0-9a-f]*'))"
+          },
+          {
+            "check_id": "ck:plan_generated_schemas:binding_hash:hash",
+            "kind": "hash_format",
+            "columns": [
+              "binding_hash"
+            ],
+            "expression_intent": "sha256:<64 lowercase hexadecimal characters>",
+            "expression_sql": "(\"binding_hash\" IS NULL OR (length(\"binding_hash\") = 71 AND substr(\"binding_hash\", 1, 7) = 'sha256:' AND substr(\"binding_hash\", 8) NOT GLOB '*[^0-9a-f]*'))"
+          },
+          {
+            "check_id": "ck:plan_generated_schemas:generator:enum",
+            "kind": "enum_membership",
+            "columns": [
+              "generator"
+            ],
+            "expression_intent": "value belongs to the closed generator catalog",
+            "expression_sql": "\"generator\" IN ('join_expose', 'child_completion', 'map_result')"
+          },
+          {
+            "check_id": "ck:plan_generated_schemas:created_at_ms:safe_integer",
+            "kind": "safe_integer",
+            "columns": [
+              "created_at_ms"
+            ],
+            "expression_intent": "non-negative JavaScript safe integer",
+            "expression_sql": "(\"created_at_ms\" IS NULL OR \"created_at_ms\" BETWEEN 0 AND 9007199254740991)"
+          }
+        ],
+        "indexes": [
+          {
+            "index_id": "idx:plan_generated_schemas:resolve",
+            "kind": "lookup",
+            "columns": [
+              "plan_id",
+              "schema_ref"
+            ],
+            "predicate_intent": null,
+            "supports_query_ids": [
+              "reconciler_resolve_plan_generated_schema"
+            ],
+            "unique": false,
+            "sql": "CREATE INDEX \"idx:plan_generated_schemas:resolve\" ON \"workflow_plan_generated_schemas\" (\"plan_id\", \"schema_ref\")"
+          }
+        ]
       }
     ],
     "triggers": [
@@ -34404,8 +34946,16 @@
         "sql": "SELECT * FROM \"workflow_registry_retention_handles\" INDEXED BY \"idx:retention_handles:activation_preflight\" WHERE \"feature_release_id\" = ? AND \"handle_kind\" = ? AND \"status\" = ? AND \"closure_manifest_id\" = ? AND \"closure_hash\" = ? LIMIT 50",
         "parameter_count": 5,
         "required_index_id": "idx:retention_handles:activation_preflight"
+      },
+      {
+        "query_id": "reconciler_resolve_plan_generated_schema",
+        "owner": "reconciler",
+        "coverage_area": "t3",
+        "sql": "SELECT * FROM \"workflow_plan_generated_schemas\" INDEXED BY \"idx:plan_generated_schemas:resolve\" WHERE \"plan_id\" = ? AND \"schema_ref\" = ? LIMIT 50",
+        "parameter_count": 2,
+        "required_index_id": "idx:plan_generated_schemas:resolve"
       }
     ],
-    "schema_hash": "sha256:49aaee7c8f046cd9a15b3bc5b77fbcf1713be2a1872078941043f5ccdca29024"
+    "schema_hash": "sha256:d35c2d6fe2aaaf87ad102561d1595d016f8ef2f04950e5e3ad30b91aa366d909"
   }
 }

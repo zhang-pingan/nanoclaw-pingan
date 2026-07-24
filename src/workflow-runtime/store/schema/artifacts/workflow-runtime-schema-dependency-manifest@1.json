@@ -6,12 +6,12 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-runtime-schema-dependency-manifest:1\n",
-  "hash": "sha256:d08cfaae72c003b11a05cb1fbfa546f7cce7fad9ecb56d0746f33de294b8088c",
+  "hash": "sha256:3c91eb2f469a2bd41c51fc86bb531ff642ff862d5543924cb7ff4ac73681dcf7",
   "payload": {
     "dependency_set_id": "workflow-runtime-schema-v1",
     "identity_scope": "physical_schema_and_migration",
-    "member_count": 13,
-    "physical_member_count": 12,
+    "member_count": 15,
+    "physical_member_count": 14,
     "construction_provenance_count": 1,
     "members": [
       {
@@ -24,8 +24,8 @@
           "version": "1"
         },
         "version": 1,
-        "semantic_hash": "sha256:32de639cc0ee6c6f33aa4291ea03ffa55b0a22752190fb88862e72a3f6857520",
-        "raw_sha256": "sha256:21a6555f421af4e97a69963d88e6d2383e3e13e638bbe00c0f082d76377993d1"
+        "semantic_hash": "sha256:e0b1bb30303e9bf0c45fdc5383ec7f61f90b2bb2e6ed8e422c5478a1dfd134cc",
+        "raw_sha256": "sha256:5c7281683ab7be1e61e8256930f5ad6e2bb4508adae7a73ec5eaafdee8f8bf27"
       },
       {
         "role": "logical_schema_source",
@@ -119,6 +119,19 @@
         "raw_sha256": "sha256:c85aa8337cf9ccad8c6ec0fa450f740f99fbdf2adf34387425aa49387912ae74"
       },
       {
+        "role": "generated_schema_authority_prerequisite",
+        "identity_effect": "physical_schema_input",
+        "path": "store/schema/inputs/workflow-generated-schema-authority-prerequisite@1.json",
+        "format": "icarus.workflow-generated-schema-authority-prerequisite/1",
+        "ref": {
+          "id": "icarus.workflow-generated-schema-authority-prerequisite",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "semantic_hash": "sha256:55bf95fa677ae2d2be30575fcbe68ed8b051913379ceb131b983dfe62658dc00",
+        "raw_sha256": "sha256:702a8c7b4ba2e2defcd6d275c885483b22e56e3ed3b94fc8590a32470bd40fd7"
+      },
+      {
         "role": "sqlite_execution_profile",
         "identity_effect": "physical_schema_input",
         "path": "contracts/sqlite/local_single_user_sqlite@1.json",
@@ -141,8 +154,8 @@
           "version": "1"
         },
         "version": 1,
-        "semantic_hash": "sha256:c9bce166112023cf5e09d41901938f74efbc69cff36da9428a3c21c3064d8439",
-        "raw_sha256": "sha256:74e9d8c0ab1689a76eb240b8f8fe3224918a3dfc548e3ab5ff47cffb9a9724da"
+        "semantic_hash": "sha256:478033a87bfb1cf1e98cd56fc6c18aaebe8d970835cc46e00223de07c5ece184",
+        "raw_sha256": "sha256:33c09e0e9832d625765b0ef4eb2772e27fbc1a6272779300a24b0559cb66e5f0"
       },
       {
         "role": "canonical_migration",
@@ -154,8 +167,8 @@
           "version": "1"
         },
         "version": 1,
-        "semantic_hash": "sha256:2ead40dc2f1618f87247e9d3bb476266797c38560e1ad0537a6afa6f71a3fbf6",
-        "raw_sha256": "sha256:2ead40dc2f1618f87247e9d3bb476266797c38560e1ad0537a6afa6f71a3fbf6"
+        "semantic_hash": "sha256:16a46e84c77d734013e18b4b00b86564f6188ea73717763e9fb7a884d62faa41",
+        "raw_sha256": "sha256:16a46e84c77d734013e18b4b00b86564f6188ea73717763e9fb7a884d62faa41"
       },
       {
         "role": "schema3_to_schema4_upgrade",
@@ -182,8 +195,21 @@
         "version": 1,
         "semantic_hash": "sha256:97479810c2c079d71270d5a714faa4b8fa8ebd6af629ef2f7d772af270c2bb0a",
         "raw_sha256": "sha256:97479810c2c079d71270d5a714faa4b8fa8ebd6af629ef2f7d772af270c2bb0a"
+      },
+      {
+        "role": "schema5_to_schema6_upgrade",
+        "identity_effect": "physical_schema_output",
+        "path": "store/schema/migration/workflow-runtime-schema-v5-to-v6.sql",
+        "format": "icarus.workflow-runtime-sqlite-schema-upgrade/1",
+        "ref": {
+          "id": "icarus.workflow-runtime-schema-v5-to-v6-upgrade",
+          "version": "1"
+        },
+        "version": 1,
+        "semantic_hash": "sha256:dc94fa0867ca572b7ec39ffb8df448e38be00ca4831f1d420885ee7cc097687d",
+        "raw_sha256": "sha256:dc94fa0867ca572b7ec39ffb8df448e38be00ca4831f1d420885ee7cc097687d"
       }
     ],
-    "physical_schema_identity": "sha256:ba025b32bb028f2ffe5df45d9440cd0a897e0a06c076b10b6f641c265ae02090"
+    "physical_schema_identity": "sha256:a9f75a7de17a7f82923868eebd1802fea8d56ebab19bb18f0f66404f1e171d76"
   }
 }

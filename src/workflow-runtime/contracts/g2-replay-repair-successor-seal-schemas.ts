@@ -35,7 +35,7 @@ property(comparison, 'byte_equal_count').const = 40;
 property(comparison, 'semantic_equal_count').const = 40;
 property(comparison, 'compiled_difference_case_count').const = 0;
 property(comparison, 'pointer_difference_count').const = 0;
-property(comparison, 'semantic_assertion_count').const = 93;
+property(comparison, 'semantic_assertion_count').const = 95;
 
 const inventory = clone(CURRENT_G2_GOLDEN_SEALED_INVENTORY_SCHEMA);
 inventory.$id =

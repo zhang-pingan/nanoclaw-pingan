@@ -43,9 +43,10 @@ function insertValue(
         immutable_external_locator, expected_hash, content_hash, byte_length,
         media_type, schema_resource_id, schema_resource_hash, provenance_ref,
         retention_class, payload_state, payload_pruned_at_ms, created_at_ms,
-        row_version
+        row_version, schema_authority_kind
       ) VALUES (?, 'inline', '{}', NULL, NULL, NULL, ?, 2,
-        'application/json', ?, ?, 'contract:test', 'pinned', 'live', NULL, 1, 0)`,
+        'application/json', ?, ?, 'contract:test', 'pinned', 'live', NULL, 1, 0,
+        'registry')`,
     )
     .run(id, contentHash, schemaResourceId, schemaHash);
 }
@@ -70,7 +71,7 @@ function insertRegistryResource(
     .run(id, resourceType, resourceId, valueId, contentHash);
 }
 
-function schema5Database(): Database.Database {
+function schema6Database(): Database.Database {
   const database = new Database(':memory:');
   database.pragma('foreign_keys = ON');
   database.exec(
@@ -243,8 +244,8 @@ describe('G5 Capability to Outbox execution-binding Contract repair', () => {
     expect(snapshot.snapshot_hash).toMatch(/^sha256:[0-9a-f]{64}$/);
   });
 
-  it('persists the exact binding through Schema 5 Registry and Value FKs', () => {
-    const database = schema5Database();
+  it('persists the exact binding through Schema 6 registry-authority Value FKs', () => {
+    const database = schema6Database();
     try {
       database.exec('BEGIN');
       insertOutbox(database, HASH_B);
@@ -266,8 +267,8 @@ describe('G5 Capability to Outbox execution-binding Contract repair', () => {
     }
   });
 
-  it('rejects an Adapter identity drift at the deferred Schema 5 FK handoff', () => {
-    const database = schema5Database();
+  it('rejects an Adapter identity drift at the deferred Schema 6 FK handoff', () => {
+    const database = schema6Database();
     try {
       database.exec('BEGIN');
       insertOutbox(database, HASH_E);
@@ -278,8 +279,8 @@ describe('G5 Capability to Outbox execution-binding Contract repair', () => {
     }
   });
 
-  it('rejects a Policy snapshot hash drift at the deferred Schema 5 FK handoff', () => {
-    const database = schema5Database();
+  it('rejects a Policy snapshot hash drift at the deferred Schema 6 FK handoff', () => {
+    const database = schema6Database();
     try {
       database.exec('BEGIN');
       insertOutbox(database, HASH_B, HASH_E);

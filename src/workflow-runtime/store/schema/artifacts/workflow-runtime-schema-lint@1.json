@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-runtime-schema-lint:1\n",
-  "hash": "sha256:1284ee1f980c93ffaf34766fe4cb22112f8c2c5bb23058cd606e1723ec085970",
+  "hash": "sha256:e94733ffa43bad6b14ffa25b9f072bcfdda9400aedfe54fe08a63c3dbe26e414",
   "payload": {
     "status": "closed_fail_on_violation",
     "rules": [
@@ -32,8 +32,8 @@
       "capacity_prepared_invocation_is_closed_and_append_only",
       "feature_release_lifecycle_and_active_pointer_cas_are_trigger_constrained"
     ],
-    "table_count": 84,
-    "query_count": 43,
+    "table_count": 86,
+    "query_count": 44,
     "result": "pass"
   }
 }

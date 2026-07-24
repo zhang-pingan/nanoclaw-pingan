@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-contract-pack-closed-schemas:1\n",
-  "hash": "sha256:c5ea281d64480787322e8b6ef619b2f90784084d87ba4373c94288ed5e7aa3a8",
+  "hash": "sha256:6f7aa5b997c5a496a4eb95776a09f18e3c25753e7324a6ef1f095a23b8413d81",
   "payload": {
     "gate": "G0.3",
     "status": "closed_schemas",
@@ -64,7 +64,7 @@
       }
     ],
     "positive_case_count": 8,
-    "negative_case_count": 22,
+    "negative_case_count": 23,
     "artifacts": [
       {
         "path": "catalogs/closed-schema-domain-separators.json",
@@ -86,7 +86,7 @@
         },
         "version": 1,
         "domain_separator": "icarus:workflow-closed-schema-negative-cases:1\n",
-        "hash": "sha256:83b0ce8c333e68281ed54b4ef49d38383375e22fa415a57a6a513236896fc3e2"
+        "hash": "sha256:93b2cd354e2253469a80ef8d7969103f2ce07a6e7524815169eb5e9bbcedf3d1"
       },
       {
         "path": "conformance/closed-schemas/positive-cases.json",
@@ -97,7 +97,7 @@
         },
         "version": 1,
         "domain_separator": "icarus:workflow-closed-schema-positive-cases:1\n",
-        "hash": "sha256:fe3b4894242ce502e73ca30febf02aad3867885b629919b083220d7418457f78"
+        "hash": "sha256:6c5c821e602cf48fa36359f43ffab8aabb9228fd244b302f23ff54c22e9b14ed"
       },
       {
         "path": "schemas/card-presentation-schema.json",
@@ -119,7 +119,7 @@
         },
         "version": 1,
         "domain_separator": "icarus:workflow-compiled-scope-plan-schema:1\n",
-        "hash": "sha256:7d2371a5df632220ba82ab0739b163134978885b8baaae6d7b247d53623be400"
+        "hash": "sha256:c2916f58f4d545ae155e15a92f50073dbd94307bcd2865f1089dcb51cbf39c62"
       },
       {
         "path": "schemas/feature-manifest-v2-schema.json",

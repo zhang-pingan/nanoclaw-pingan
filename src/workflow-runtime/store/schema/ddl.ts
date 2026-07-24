@@ -180,7 +180,7 @@ function operationalStateSql(runExpression: string): string {
 }
 
 export function buildSchemaTriggers(
-  databaseSchemaVersion: 3 | 4 | 5 = 5,
+  databaseSchemaVersion: 3 | 4 | 5 | 6 = 6,
 ): SchemaTriggerDefinition[] {
   const refreshBody = (row: 'NEW' | 'OLD') => `
   UPDATE "workflow_graph_runs"
@@ -543,7 +543,7 @@ export function buildSchemaTriggers(
       sql: `CREATE TRIGGER ${q('trg:activation_events:immutable_delete')} BEFORE DELETE ON ${q('workflow_feature_release_activation_events')} BEGIN\n  SELECT RAISE(ABORT, 'activation_event_is_immutable');\nEND`,
     },
   ];
-  if (databaseSchemaVersion === 5) {
+  if (databaseSchemaVersion >= 5) {
     triggers.push(
       {
         name: 'trg:capacity_invocations:prepared_insert',
@@ -694,6 +694,8 @@ export const SCHEMA3_TO_SCHEMA4_UPGRADE_RELATIVE_PATH =
   'migration/workflow-runtime-schema-v3-to-v4.sql';
 export const SCHEMA4_TO_SCHEMA5_UPGRADE_RELATIVE_PATH =
   'migration/workflow-runtime-schema-v4-to-v5.sql';
+export const SCHEMA5_TO_SCHEMA6_UPGRADE_RELATIVE_PATH =
+  'migration/workflow-runtime-schema-v5-to-v6.sql';
 
 const ACTIVATION_REBUILT_TABLES = [
   'workflow_feature_release_activation_commands',
@@ -796,6 +798,83 @@ export function renderSchema4To5Upgrade(
     sql: `${statements.map((statement) => `${statement};`).join('\n\n')}\n`,
     statement_count: statements.length,
     triggers,
+  };
+}
+
+export function renderSchema5To6Upgrade(
+  schema5: ExecutableSchemaSource,
+  schema6: ExecutableSchemaSource,
+): RenderedMigration {
+  if (
+    schema5.database_schema_version !== 5 ||
+    schema6.database_schema_version !== 6
+  ) {
+    throw new Error('Schema 5 to 6 upgrade source versions are invalid');
+  }
+  const tableName = 'workflow_values';
+  const oldTableName = `${tableName}_schema5`;
+  const schema5Table = schema5.tables.find(
+    (candidate) => candidate.name === tableName,
+  );
+  const schema6Table = schema6.tables.find(
+    (candidate) => candidate.name === tableName,
+  );
+  if (!schema5Table || !schema6Table) {
+    throw new Error('Schema 6 workflow_values rebuild table is missing');
+  }
+  const schema5Columns = schema5Table.columns.map((column) => column.name);
+  if (
+    schema6Table.columns.length <= schema5Columns.length ||
+    schema5Columns.some(
+      (column, index) => schema6Table.columns[index]?.name !== column,
+    )
+  ) {
+    throw new Error(
+      'Schema 6 workflow_values must preserve every Schema 5 column',
+    );
+  }
+  const addedTables = schema6.tables.filter(
+    (table) =>
+      !schema5.tables.some((candidate) => candidate.name === table.name),
+  );
+  if (
+    addedTables.length !== 2 ||
+    addedTables[0]?.name !== 'workflow_generated_schema_contents' ||
+    addedTables[1]?.name !== 'workflow_plan_generated_schemas'
+  ) {
+    throw new Error('Schema 6 generated schema authority tables drifted');
+  }
+  const oldColumnList = schema5Columns.map(q).join(', ');
+  const valueTriggers = buildSchemaTriggers(6).filter(
+    (trigger) => trigger.table === tableName,
+  );
+  const statements = [
+    'PRAGMA legacy_alter_table = ON',
+    `ALTER TABLE ${q(tableName)} RENAME TO ${q(oldTableName)}`,
+    ...addedTables.map((table) => renderTable(table, 6)),
+    ...addedTables.flatMap((table) =>
+      table.unique_keys.map((key) => renderUniqueIndex(table, key)),
+    ),
+    ...addedTables.flatMap((table) =>
+      table.indexes.map((indexValue) => renderIndex(table, indexValue)),
+    ),
+    renderTable(schema6Table, 6),
+    `INSERT INTO ${q(tableName)} (${oldColumnList}, ${q('schema_authority_kind')}) SELECT ${oldColumnList}, 'registry' FROM ${q(oldTableName)}`,
+    `DROP TABLE ${q(oldTableName)}`,
+    ...schema6Table.unique_keys.map((key) =>
+      renderUniqueIndex(schema6Table, key),
+    ),
+    ...schema6Table.indexes.map((indexValue) =>
+      renderIndex(schema6Table, indexValue),
+    ),
+    ...valueTriggers.map((trigger) => trigger.sql),
+    'PRAGMA legacy_alter_table = OFF',
+    'PRAGMA user_version = 6',
+  ];
+  return {
+    sql: `${statements.map((statement) => `${statement};`).join('\n\n')}\n`,
+    statement_count: statements.length,
+    triggers: valueTriggers,
   };
 }
 

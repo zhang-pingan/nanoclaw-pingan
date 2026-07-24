@@ -7,6 +7,10 @@ import { describe, expect, it } from 'vitest';
 import { parseContractArtifactEnvelope } from '../contracts/artifact.js';
 import { domainSeparatedSha256 } from '../contracts/hash.js';
 import { COMPILER_SNAPSHOT_DEPENDENCY_CLOSURE_DOMAIN_V1 } from '../contracts/compiler-semantic-correction-contract.js';
+import {
+  assertGeneratedSchemaAuthority,
+  generatedSchemaParameterHash,
+} from '../contracts/generated-schema-authority.js';
 import { checkCurrentSealedEraWorkingCompilerCandidate } from '../contracts/current-sealed-era-historical-checks.js';
 import {
   assertJsonObject,
@@ -211,6 +215,119 @@ function rehashDefinition(source: JsonObject): void {
     'icarus:workflow-definition:1\n',
     withoutHash,
   );
+}
+
+function installJoinGraph(
+  source: JsonObject,
+  aggregation: JsonObject,
+  options: { includeProducer: boolean; schemaId?: string } = {
+    includeProducer: true,
+  },
+): void {
+  const schemaRef: JsonObject = {
+    id: options.schemaId ?? 'fixture.schema.route-result',
+    version: '1.0.0',
+  };
+  const producer: JsonObject = {
+    id: 'producer',
+    type: 'system',
+    trigger: { type: 'root' },
+    capability_ref: {
+      id: 'fixture.capability.route',
+      version: '1.0.0',
+    },
+  };
+  const joinTrigger: JsonObject = options.includeProducer
+    ? { type: 'all', edge_ids: ['control.producer_join'] }
+    : { type: 'root' };
+  const nodes: JsonObject[] = [
+    ...(options.includeProducer ? [producer] : []),
+    {
+      id: 'join',
+      type: 'join',
+      trigger: joinTrigger,
+      input_ports: {
+        source: {
+          schema_ref: schemaRef,
+          max_bytes: 4096,
+          aggregation,
+        },
+      },
+      expose: { renamed: { input_port: 'source' } },
+    },
+    {
+      id: 'sink',
+      type: 'join',
+      trigger: { type: 'all', edge_ids: ['control.join_sink'] },
+      input_ports: {
+        value: {
+          schema_ref: schemaRef,
+          max_bytes: 4096,
+          aggregation: { type: 'single', required: true, select: 'only' },
+        },
+      },
+      expose: {},
+    },
+    {
+      id: 'done',
+      type: 'terminal',
+      trigger: { type: 'all', edge_ids: ['control.sink_done'] },
+      exit: 'done',
+    },
+  ];
+  source.nodes = nodes;
+  const controlEdges: JsonObject[] = [
+    ...(options.includeProducer
+      ? [
+          {
+            id: 'control.producer_join',
+            kind: 'control',
+            from_node_id: 'producer',
+            to_node_id: 'join',
+            on: { statuses: ['succeeded'] },
+          },
+        ]
+      : []),
+    {
+      id: 'control.join_sink',
+      kind: 'control',
+      from_node_id: 'join',
+      to_node_id: 'sink',
+      on: { statuses: ['succeeded'] },
+    },
+    {
+      id: 'control.sink_done',
+      kind: 'control',
+      from_node_id: 'sink',
+      to_node_id: 'done',
+      on: { statuses: ['succeeded'] },
+    },
+  ];
+  source.control_edges = controlEdges;
+  const dataEdges: JsonObject[] = [
+    ...(options.includeProducer
+      ? [
+          {
+            id: 'data.producer_join',
+            kind: 'data',
+            from: {
+              type: 'node_output',
+              node_id: 'producer',
+              port: 'result',
+            },
+            to: { node_id: 'join', port: 'source' },
+          },
+        ]
+      : []),
+    {
+      id: 'data.join_sink',
+      kind: 'data',
+      from: { type: 'node_output', node_id: 'join', port: 'renamed' },
+      to: { node_id: 'sink', port: 'value' },
+    },
+  ];
+  source.data_edges = dataEdges;
+  source.route_groups = [];
 }
 
 describe('G2 working semantic correction candidate', () => {
@@ -635,6 +752,220 @@ describe('G2 working semantic correction candidate', () => {
       expect(incompatible.value.diagnostics[0].code).toBe(
         'schema_not_assignable',
       );
+    }
+  });
+
+  it('lowers renamed join expose ports from compiled input authority and replays exact proofs', () => {
+    const built = buildSemanticCorrectionCandidate();
+    const compile = () =>
+      compileMutation(built, 'positive.condition-route', (source) => {
+        installJoinGraph(source, {
+          type: 'single',
+          required: true,
+          select: 'only',
+        });
+      });
+    const first = compile();
+    const second = compile();
+    expect(first).toEqual(second);
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+    const plan = first.value.plan;
+    const join = (plan.nodes as JsonObject[]).find(
+      (node) => node.id === 'join',
+    );
+    assertJsonObject(join);
+    assertJsonObject(join.input_ports);
+    assertJsonObject(join.input_ports.source);
+    const input = join.input_ports.source;
+    assertJsonObject(input.schema);
+    assertJsonObject(input.aggregation);
+    assertJsonObject(join.output_ports);
+    assertJsonObject(join.output_ports.renamed);
+    const output = join.output_ports.renamed;
+    assertJsonObject(output.schema);
+    const authority = output.schema;
+    expect(() => assertGeneratedSchemaAuthority(authority)).not.toThrow();
+    expect(output).toMatchObject({ max_bytes: 4096, required: true });
+    expect(join.expose).toEqual({ renamed: { input_port: 'source' } });
+    expect(authority).toMatchObject({
+      type: 'generated',
+      generator: 'join_expose',
+      canonicalizer: 'RFC8785-JCS',
+      schema_json: expect.objectContaining({ type: 'object' }),
+    });
+    expect(authority.parameter_hash).toBe(
+      generatedSchemaParameterHash('join_expose', {
+        node_id: 'join',
+        output_port: 'renamed',
+        input_port: 'source',
+        input_schema: input.schema,
+        aggregation: input.aggregation,
+        max_bytes: input.max_bytes,
+        required: true,
+      }),
+    );
+    const downstream = (plan.data_edges as JsonObject[]).find(
+      (edge) => edge.id === 'data.join_sink',
+    );
+    assertJsonObject(downstream);
+    assertJsonObject(downstream.compatibility_proof);
+    expect(downstream).toMatchObject({
+      producer_schema_hash: authority.schema_hash,
+      derived_schema: authority,
+      compatibility_proof: {
+        producer_schema_hash: authority.schema_hash,
+        pointer_totality: 'total',
+      },
+    });
+    expect(downstream.compatibility_proof.proof_hash).toMatch(
+      /^sha256:[0-9a-f]{64}$/,
+    );
+    assertJsonObject(join.trigger_program);
+    expect(join.trigger_program.truth_program_hash).toMatch(
+      /^sha256:[0-9a-f]{64}$/,
+    );
+    expect(plan.plan_hash).toMatch(/^sha256:[0-9a-f]{64}$/);
+  });
+
+  it.each([
+    [
+      'optional single',
+      { type: 'single', required: false, select: 'only' },
+      false,
+    ],
+    [
+      'single default',
+      {
+        type: 'single',
+        required: false,
+        select: 'only',
+        default: { ok: false },
+      },
+      true,
+    ],
+  ] as const)(
+    'derives %s join required semantics without caller output authority',
+    (_label, aggregation, required) => {
+      const built = buildSemanticCorrectionCandidate();
+      const result = compileMutation(
+        built,
+        'positive.condition-route',
+        (source) =>
+          installJoinGraph(source, clone(aggregation), {
+            includeProducer: false,
+          }),
+      );
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      const join = (result.value.plan.nodes as JsonObject[]).find(
+        (node) => node.id === 'join',
+      );
+      assertJsonObject(join);
+      assertJsonObject(join.output_ports);
+      assertJsonObject(join.output_ports.renamed);
+      expect(join.output_ports.renamed.required).toBe(required);
+    },
+  );
+
+  it('carries list item schema and max rules into join expose authority', () => {
+    const built = buildSemanticCorrectionCandidate();
+    const result = compileMutation(built, 'positive.map', (source) => {
+      installJoinGraph(
+        source,
+        {
+          type: 'list',
+          min_items: 0,
+          seal: { type: 'all_sources_resolved' },
+          order: 'edge_id',
+        },
+        { includeProducer: false, schemaId: 'fixture.schema.string-array' },
+      );
+      const join = (source.nodes as JsonObject[]).find(
+        (node) => node.id === 'join',
+      );
+      assertJsonObject(join);
+      assertJsonObject(join.input_ports);
+      assertJsonObject(join.input_ports.source);
+      join.input_ports.source.item_contract = {
+        schema_ref: {
+          id: 'fixture.schema.string-wide',
+          version: '1.0.0',
+        },
+        max_bytes: 1024,
+      };
+      (source.data_edges as JsonObject[]).unshift({
+        id: 'data.literal_join',
+        kind: 'data',
+        from: { type: 'literal', value: ['accepted'] },
+        to: { node_id: 'join', port: 'source' },
+      });
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const join = (result.value.plan.nodes as JsonObject[]).find(
+      (node) => node.id === 'join',
+    );
+    assertJsonObject(join);
+    assertJsonObject(join.input_ports);
+    assertJsonObject(join.input_ports.source);
+    const input = join.input_ports.source;
+    assertJsonObject(input.item_schema);
+    assertJsonObject(join.output_ports);
+    assertJsonObject(join.output_ports.renamed);
+    const output = join.output_ports.renamed;
+    assertJsonObject(output.schema);
+    expect(output.required).toBe(true);
+    expect(output.schema.parameter_hash).toBe(
+      generatedSchemaParameterHash('join_expose', {
+        node_id: 'join',
+        output_port: 'renamed',
+        input_port: 'source',
+        input_schema: input.schema,
+        aggregation: input.aggregation,
+        max_bytes: input.max_bytes,
+        required: true,
+        item_schema: input.item_schema,
+        item_max_bytes: 1024,
+      }),
+    );
+  });
+
+  it('rejects caller-supplied join output authority before lowering', () => {
+    const built = buildSemanticCorrectionCandidate();
+    const result = compileMutation(
+      built,
+      'positive.condition-route',
+      (source) => {
+        installJoinGraph(source, {
+          type: 'single',
+          required: true,
+          select: 'only',
+        });
+        const join = (source.nodes as JsonObject[]).find(
+          (node) => node.id === 'join',
+        );
+        assertJsonObject(join);
+        join.output_ports = {
+          renamed: {
+            schema_ref: {
+              id: 'fixture.schema.route-result',
+              version: '1.0.0',
+            },
+            max_bytes: 4096,
+            required: true,
+          },
+        };
+      },
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.value.diagnostics[0]).toMatchObject({
+        code: 'schema_unknown_field',
+        phase: 'schema',
+        instance_pointer: '/nodes/1/output_ports',
+        stable_object_id: 'join',
+      });
     }
   });
 

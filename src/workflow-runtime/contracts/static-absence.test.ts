@@ -91,16 +91,16 @@ describe('G0.7 Static Absence and Surface Gates', () => {
       'sha256:e85b654581c036f8129677d7443a0704ebc8b8fbe87907b842aaefe1501e637d',
     );
     expect(readArtifact('contract-pack-closed-schemas.json').hash).toBe(
-      'sha256:c5ea281d64480787322e8b6ef619b2f90784084d87ba4373c94288ed5e7aa3a8',
+      'sha256:6f7aa5b997c5a496a4eb95776a09f18e3c25753e7324a6ef1f095a23b8413d81',
     );
     expect(readArtifact('contract-pack-catalog-protocols.json').hash).toBe(
-      'sha256:a648dc9326255b109690cb47d58032775825ae065caf8f7cbb0ef73efcf984f7',
+      'sha256:078be3fed7e8d430b228c0aa526e15e6bd92665f863c6d0818eaebbcaf43b533',
     );
     expect(readArtifact('contract-pack-safety-sqlite.json').hash).toBe(
-      'sha256:4f756c9427a9e5fd8f034c2abdab3c614b675af8b8bbb350fc4219917159cd8d',
+      'sha256:e289868eb489bb3c41731afe17f50cbc06f2b10c549769c1786fcd185a0b5775',
     );
     expect(readArtifact('contract-pack-logical-schema.json').hash).toBe(
-      'sha256:32de639cc0ee6c6f33aa4291ea03ffa55b0a22752190fb88862e72a3f6857520',
+      'sha256:e0b1bb30303e9bf0c45fdc5383ec7f61f90b2bb2e6ed8e422c5478a1dfd134cc',
     );
     for (const [relativePath, bytes] of firstBytes) {
       expect(fs.readFileSync(path.join(contractsRoot, relativePath))).toEqual(
@@ -234,6 +234,7 @@ describe('G0.7 Static Absence and Surface Gates', () => {
       expect(fs.readdirSync(path.join(contractsRoot, directory))).toEqual([
         '.gitkeep',
         'g2-capability-outbox-binding-v3',
+        'g2-generated-schema-join-authority-v4',
         'g2-production-compiler-replay-repair-v2',
         'g2-semantic-correction',
       ]);

@@ -72,10 +72,10 @@ describe('G0.5 Safety, Retention, and SQLite Contract Pack', () => {
       'sha256:e85b654581c036f8129677d7443a0704ebc8b8fbe87907b842aaefe1501e637d',
     );
     expect(manifest.payload.closed_schema_manifest_hash).toBe(
-      'sha256:c5ea281d64480787322e8b6ef619b2f90784084d87ba4373c94288ed5e7aa3a8',
+      'sha256:6f7aa5b997c5a496a4eb95776a09f18e3c25753e7324a6ef1f095a23b8413d81',
     );
     expect(manifest.payload.catalog_protocol_manifest_hash).toBe(
-      'sha256:a648dc9326255b109690cb47d58032775825ae065caf8f7cbb0ef73efcf984f7',
+      'sha256:078be3fed7e8d430b228c0aa526e15e6bd92665f863c6d0818eaebbcaf43b533',
     );
     for (const [relativePath, bytes] of before) {
       expect(fs.readFileSync(path.join(contractsRoot, relativePath))).toEqual(
@@ -263,6 +263,7 @@ describe('G0.5 Safety, Retention, and SQLite Contract Pack', () => {
       expect(fs.readdirSync(path.join(contractsRoot, directory))).toEqual([
         '.gitkeep',
         'g2-capability-outbox-binding-v3',
+        'g2-generated-schema-join-authority-v4',
         'g2-production-compiler-replay-repair-v2',
         'g2-semantic-correction',
       ]);

@@ -23,6 +23,18 @@ function objects(value: unknown): JsonObject[] {
 }
 
 describe('G5 Basic Runtime readiness audit', () => {
+  it('keeps G5 blocked on the generated-schema repair independent regression', () => {
+    const repair = readArtifact(
+      'conformance/generated-schema-join-authority-repair/contract-pack-generated-schema-join-authority-repair.json',
+    );
+    expect(repair.payload).toMatchObject({
+      status:
+        'GENERATED_SCHEMA_JOIN_AUTHORITY_REPAIR_EXIT_CANDIDATE_PENDING_INDEPENDENT_AFFECTED_CHAIN_REGRESSION',
+      g5_status: 'BLOCKED_BY_SPEC_NOT_READY',
+      g6_through_g9_status: 'NOT_READY',
+    });
+  });
+
   it('proves G5-owned T6d is executable without Gateway or Command writes', () => {
     const authority = readArtifact(
       'governance/workflow-runtime-gate-ownership@1.json',
@@ -157,7 +169,7 @@ describe('G5 Basic Runtime readiness audit', () => {
     });
   });
 
-  it('proves Schema 5 needs no deadline handoff relation and still denies G5 Command ownership', () => {
+  it('proves Schema 6 needs no deadline handoff relation and still denies G5 Command ownership', () => {
     const queries = readArtifact(
       'sqlite/workflow-runtime-query-catalog@1.json',
     );
@@ -189,9 +201,9 @@ describe('G5 Basic Runtime readiness audit', () => {
       '../store/schema/artifacts/workflow-runtime-schema-manifest@1.json',
     );
     expect(manifest.hash).toBe(
-      'sha256:c9bce166112023cf5e09d41901938f74efbc69cff36da9428a3c21c3064d8439',
+      'sha256:478033a87bfb1cf1e98cd56fc6c18aaebe8d970835cc46e00223de07c5ece184',
     );
-    expect(manifest.payload.database_schema_version).toBe(5);
+    expect(manifest.payload.database_schema_version).toBe(6);
     const schemaTables = objects(manifest.payload.tables);
     const tableNames = schemaTables.map((table) => String(table.name));
     const handoffPattern =

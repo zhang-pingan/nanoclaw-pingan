@@ -6,6 +6,8 @@ export const G2_REPLAY_REPAIR_SUCCESSOR_SEALED_DIRECTORY =
   'g2-production-compiler-replay-repair-v2';
 export const G2_CAPABILITY_OUTBOX_BINDING_SEALED_DIRECTORY =
   'g2-capability-outbox-binding-v3';
+export const G2_GENERATED_SCHEMA_JOIN_AUTHORITY_SEALED_DIRECTORY =
+  'g2-generated-schema-join-authority-v4';
 
 export type CurrentG2SealedBoundaryState = 'empty' | 'current_g2';
 
@@ -23,6 +25,7 @@ export function assertCurrentG2SealedBoundary(
     CURRENT_G2_SEALED_DIRECTORY,
     G2_REPLAY_REPAIR_SUCCESSOR_SEALED_DIRECTORY,
     G2_CAPABILITY_OUTBOX_BINDING_SEALED_DIRECTORY,
+    G2_GENERATED_SCHEMA_JOIN_AUTHORITY_SEALED_DIRECTORY,
   ]);
   if (
     entries.some((entry) => !allowed.has(entry)) ||

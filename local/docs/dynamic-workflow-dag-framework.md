@@ -1824,10 +1824,13 @@ type CompiledPortSchema =
   | {
       type: 'generated';
       generator: 'join_expose' | 'child_completion' | 'map_result';
+      canonicalizer: 'RFC8785-JCS';
       parameter_hash: string;
-      schema_json?: JsonValue;
-      schema_ref?: string;
+      schema_ref: string;
+      schema_raw_hash: string;
       schema_hash: string;
+      schema_byte_length: number;
+      schema_json: JsonValue;
     };
 
 type CompiledNodeInputPortContract =
@@ -1883,7 +1886,7 @@ interface NodeOutputEnvelope {
 - List 的 `min_items` 就是 required 下限。`first_n_available` 达到 N 后立即 seal，并把未选的 late values fencing 于 snapshot 之外；若全部 sources 先封闭且 available count 已达到 `min_items` 但不足 N，则用全部 available values seal；少于 `min_items` 才变为 impossible。同一 resolution seq 按 edge id 排序。
 - Compiler 要求 `0 <= min_items <= source_count`；`first_n_available` 还要求 `min_items <= count <= source_count`。零 source 只允许 `min_items=0`，并在 materialize 时 seal 为空列表。
 - `NodeInputPortContract.schema_ref/max_bytes` 始终描述 sealed logical port value；list 时 schema 必须描述 array，`max_bytes` 字段必须存在但可以为 null。List aggregation 必须声明 `item_contract`，每条 available data value先按 item schema 和 non-null business item byte limit 校验，seal 后再按 array schema 和 non-null business total byte limit 校验；single aggregation 禁止 `item_contract`。Compiled contract 将这些解析为 `item_schema/item_max_bytes`；null 不注入默认业务值，但 `value.max_single_value_bytes` 与 `run.max_stored_bytes_total` safety ceiling 始终适用。
-- Generated compiled schema 必须在 `schema_json/schema_ref` 中恰选一个，并以 generator + parameter hash 形成稳定标识；schema snapshot/hash 和 derived max bytes 都进入 plan hash。
+- Generated compiled schema 必须同时携带等价的canonical `schema_json/schema_ref`以及raw/domain/parameter hash和byte length；唯一命名空间、解析、Plan binding与Stored Value identity由R-018定义，全部字段进入plan hash。
 - Logical output publication 使用 canonical `NodeOutputEnvelope`。Envelope 必须包含 compiled contract 的全部 output port；required port 只能是 `present`，optional port 可以是 `absent`。`envelope_hash` 对不含自身 hash 字段的 canonical contract/ports payload 计算。Data edge 按 port 读取 immutable value ref/hash/schema hash，不能把一组多端口 output 压成含义不明的单个 result blob。
 
 ## 完整 Node Union
@@ -3094,6 +3097,43 @@ Working input snapshot `/2`的Registry snapshot必须为每个Capability、Wait 
 Working negative input必须保持single-invalidity：`policy_escalation`只改变一个独立policy维度；Recipe set/cycle/removed-field case除目标invalidity外必须具有完整Definition binding、精确direct-child set和隔离closure。Compiler的fail-fast顺序不能用来掩盖第二项错误。
 
 Current修正直接更新单一Working集合中的raw source、逐case隔离snapshot、hand-authored review input、case-input binding、Compiler actual candidate与working review bundle；case count保持40，actual Compiler result只作为comparison input，expected full result/Plan/proof/program bytes/hash全部保持null。Working期间`human_judgment`为not requested，不为每次修正创建Draft v5/v6或重置case judgment。只有current生成连续两轮一致、定向/完整机械测试通过且工作树边界干净后，才允许显式`prepare-rc`冻结一个Review Candidate root并请求一次完整fresh independent review；RC任一绑定输入变化即失效并退回Working。不得在Working阶段创建`GoldenSemanticReview`、approval、signature、seal或`conformance/sealed/`内容。
+
+### R-018：Generated Schema 与 Join Expose Authority 决议
+
+本节是generated compiled schema、Plan-local Stored Value identity与Source join expose typed lowering的唯一current规范决议。对应machine Contract位于`src/workflow-runtime/contracts/conformance/generated-schema-join-authority-repair/`，并精确绑定本节、current G0.3 Plan schema、Plan v2 execution-binding schema、Database Schema 6 prerequisite、current G1 Schema 6 identity及冻结G2 v3 predecessor。冻结G0.10、G2 v1-v3 sealed bundles/reviews、G3.8A和Database Schema 5 bytes/identity均为只读历史；本决议只能通过additive current Contract、G2 v4 seal、Schema 6和受影响下游current证据生效。
+
+Generated compiled schema是Plan内嵌、content-addressed且closed的authority，不是Published Registry Resource。descriptor必须且只能包含`type/generator/canonicalizer/parameter_hash/schema_ref/schema_raw_hash/schema_hash/schema_byte_length/schema_json`；`type='generated'`，`generator`属于`join_expose | child_completion | map_result`，`canonicalizer='RFC8785-JCS'`。`schema_json`与`schema_ref`不再二选一，二者必须同时存在且等价；缺任一字段、额外字段、unknown scheme或任一hash/length不一致都在Compiler、Publisher或Store相应边界fail closed，不能网络解析、按latest查找或由Runtime补齐。
+
+```text
+canonical_schema_bytes = UTF8(RFC8785_JCS(schema_json))
+schema_raw_hash = SHA-256(canonical_schema_bytes)
+schema_ref = "icarus-generated-schema:" || schema_raw_hash
+schema_hash = SHA-256(
+  ASCII("icarus:workflow-generated-schema:2\n")
+  || UTF8(RFC8785_JCS(schema_json))
+)
+parameter_hash = SHA-256(
+  ASCII("icarus:workflow-generated-schema-parameter:2\n")
+  || UTF8(RFC8785_JCS({ generator, ...generator_parameters }))
+)
+```
+
+`schema_ref`的closed pattern是`^icarus-generated-schema:sha256:[0-9a-f]{64}$`，唯一resolver是persisted exact content row；ref中的raw hash、row中的canonical bytes/raw hash/domain hash/byte length必须全部相等。Plan canonical bytes内嵌完整descriptor，因此`plan_hash`绑定schema bytes、ref、generator和parameter hash；Store还必须使用`icarus:workflow-plan-generated-schema-binding:1\n`把exact`plan_id/graph_run_id/plan_hash/schema_ref/schema_hash/generator/parameter_hash`绑定为`binding_hash`。同一ref不得对应不同canonical bytes或domain hash，同一Plan binding不得被moving pointer替换。
+
+generator parameter shape固定如下，所有对象key按RFC8785参与hash，不允许调用方提供预计算verdict：
+
+- `join_expose`：`node_id/output_port/input_port/input_schema/aggregation/max_bytes/required`，list aggregation另必须有`item_schema/item_max_bytes`；`input_schema`、aggregation、default、single/list select/max/required都来自对应compiled input port contract。
+- `child_completion`与`map_result`：`generator/child_interface_ref/exits`，其中`exits`按ASCII升序；schema shape由Compiler的结构节点规则生成。
+
+Source join只允许`input_ports + expose`，禁止caller提供`output_ports`。Compiler对每个按ASCII排序的`expose[output_name].input_port`读取已解析的compiled input contract，生成一个同名typed output contract：schema为`generator=join_expose`的完整generated descriptor，`max_bytes`与input相同；single的`required`为input required或存在default，list始终required；list同时把item schema/max写入parameter hash。rename只改变output name与对应parameter，不能改变输入schema。随后所有downstream data edge必须使用该compiled output contract完成pointer totality和sound assignability proof；缺失input、caller output authority、schema/ref/hash漂移或不可赋值都拒绝，不能生成无proof Plan。独立Golden authoring必须按相同规则产生expected Plan/Proof/Program bytes，G2 replay要求exact equality。
+
+Database Schema 6是Schema 5的additive/versioned successor。它新增`workflow_generated_schema_contents`保存exact canonical content，新增`workflow_plan_generated_schemas`把content绑定到persisted sealed Plan，并以rebuild方式给`workflow_values`增加closed `schema_authority_kind='registry' | 'plan_generated'`。两种authority tuple必须严格互斥且各自完整：`registry`继续使用Schema 5的Published Registry composite FK；`plan_generated`必须把`schema_plan_id/schema_plan_hash/generated_schema_ref/generated_schema_hash/generated_schema_generator/generated_schema_parameter_hash`通过deferred composite FK绑定exact Plan-generated-schema row，同时Registry pair为null。Plan-generated row不是Registry publication，不能伪造resource id/hash或进入Published dependency closure。
+
+Schema 5到6 migration必须原样保留每个Schema 5合法Value及所有既有inbound FK target，把其authority标记为`registry`，再安装generated content/Plan binding tables、mutual-exclusion CHECK与deferred FK。Fresh、reopen与upgrade必须验证manifest、migration bytes、SQLite identity、FK/CHECK、query plan和before-commit rollback；失败时旧数据库与所有行保持不变。Schema 5 source migration、4到5 migration、SQLite identity与原bytes不修改，rollback继续由事务边界而非补偿写实现。
+
+Publication/Store handoff固定为：Publisher只接受完整且hash-valid的generated descriptors；持久化边界先验证sealed Plan bytes/hash，再按Plan内出现的exact generated tuple写或复核content row和Plan binding row。未来G5只能从这些persisted/hash-verified rows与sealed Plan typed output contract构造canonical`NodeOutputEnvelope`，并以`plan_generated` identity持久化derived/aggregated Value。G5不得从source join、调用方`output_ports`、latest Registry、network resolver或Runtime fallback重建schema authority。本决议不实现G5 DML、scheduler或publication行为。
+
+本修复的唯一完成状态是`GENERATED_SCHEMA_JOIN_AUTHORITY_REPAIR_EXIT_CANDIDATE_PENDING_INDEPENDENT_AFFECTED_CHAIN_REGRESSION`。在新的独立affected-chain whole-gate regression通过前，G5继续`BLOCKED_BY_SPEC/NOT_READY`，G6-G9继续`NOT_READY`；不得把本修复写成G5 repair candidate、G5 `DONE`或Production activation授权。
 
 ### Runtime v1施工生命周期与生产发布生命周期
 

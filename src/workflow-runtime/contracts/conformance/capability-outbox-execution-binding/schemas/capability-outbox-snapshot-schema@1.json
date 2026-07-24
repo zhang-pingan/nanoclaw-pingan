@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-capability-outbox-snapshot-schema:1\n",
-  "hash": "sha256:2c5c5a0ef606ad954bb873543f8a7e5062d1d2d44e924e6210b6453a742f6ec3",
+  "hash": "sha256:c0c26f1191557e346ce656bb869b292d0ac09b7ed109988b8ed10805233207e2",
   "payload": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "$id": "https://icarus.local/schemas/capability-outbox-snapshot/1",
@@ -3053,44 +3053,13 @@
             "required": [
               "type",
               "generator",
-              "parameter_hash",
-              "schema_json",
-              "schema_hash"
-            ],
-            "properties": {
-              "type": {
-                "const": "generated"
-              },
-              "generator": {
-                "type": "string",
-                "enum": [
-                  "join_expose",
-                  "child_completion",
-                  "map_result"
-                ]
-              },
-              "parameter_hash": {
-                "type": "string",
-                "pattern": "^sha256:[0-9a-f]{64}$"
-              },
-              "schema_json": {
-                "$ref": "#/$defs/json_value"
-              },
-              "schema_hash": {
-                "type": "string",
-                "pattern": "^sha256:[0-9a-f]{64}$"
-              }
-            }
-          },
-          {
-            "type": "object",
-            "additionalProperties": false,
-            "required": [
-              "type",
-              "generator",
+              "canonicalizer",
               "parameter_hash",
               "schema_ref",
-              "schema_hash"
+              "schema_raw_hash",
+              "schema_hash",
+              "schema_byte_length",
+              "schema_json"
             ],
             "properties": {
               "type": {
@@ -3103,6 +3072,9 @@
                   "child_completion",
                   "map_result"
                 ]
+              },
+              "canonicalizer": {
+                "const": "RFC8785-JCS"
               },
               "parameter_hash": {
                 "type": "string",
@@ -3110,11 +3082,23 @@
               },
               "schema_ref": {
                 "type": "string",
-                "minLength": 1
+                "pattern": "^icarus-generated-schema:sha256:[0-9a-f]{64}$"
+              },
+              "schema_raw_hash": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
               },
               "schema_hash": {
                 "type": "string",
                 "pattern": "^sha256:[0-9a-f]{64}$"
+              },
+              "schema_byte_length": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "schema_json": {
+                "$ref": "#/$defs/json_value"
               }
             }
           }

@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-closed-schema-positive-cases:1\n",
-  "hash": "sha256:fe3b4894242ce502e73ca30febf02aad3867885b629919b083220d7418457f78",
+  "hash": "sha256:6c5c821e602cf48fa36359f43ffab8aabb9228fd244b302f23ff54c22e9b14ed",
   "payload": {
     "cases": [
       {
@@ -506,9 +506,15 @@
                   "schema": {
                     "type": "generated",
                     "generator": "join_expose",
-                    "parameter_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
-                    "schema_ref": "schema:request",
-                    "schema_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+                    "canonicalizer": "RFC8785-JCS",
+                    "parameter_hash": "sha256:eaa30115087dc5e1ed3086758ea1eb3d3ab10eccd84c365791c3d5f7465c2382",
+                    "schema_ref": "icarus-generated-schema:sha256:00404e686415370f1711c4d7acfa2905444d3cf23cef2e10c47d445ebe690f96",
+                    "schema_raw_hash": "sha256:00404e686415370f1711c4d7acfa2905444d3cf23cef2e10c47d445ebe690f96",
+                    "schema_hash": "sha256:48586bd8001027b200a5486839b875ac5318235ff89b379f5f087905461b6569",
+                    "schema_byte_length": 17,
+                    "schema_json": {
+                      "type": "string"
+                    }
                   },
                   "max_bytes": 0,
                   "aggregation": {

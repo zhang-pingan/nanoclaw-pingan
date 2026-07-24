@@ -142,7 +142,7 @@ describe('G0.10 Capacity Control-Plane Addendum', () => {
       G0_9_HISTORICAL_ROOT_HASH,
     );
     expect(() => checkContractPackG0Conformance()).toThrow(
-      /Prior manifest identity drift: contract-pack-catalog-protocols\.json/,
+      /Prior manifest identity drift: contract-pack-closed-schemas\.json/,
     );
     expect(
       readArtifact('safety/deployment-runtime-capacity-schema.json').hash,
@@ -474,6 +474,7 @@ describe('G0.10 Capacity Control-Plane Addendum', () => {
     ).toEqual([
       '.gitkeep',
       'g2-capability-outbox-binding-v3',
+      'g2-generated-schema-join-authority-v4',
       'g2-production-compiler-replay-repair-v2',
       'g2-semantic-correction',
     ]);

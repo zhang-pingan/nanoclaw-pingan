@@ -112,11 +112,11 @@ const EXPECTED_BINDINGS = {
   logicalSchema:
     'sha256:ef5221d3465f1214c3c0aad3660f57b119d03eb4b5127428d6a1f881a6260214',
   g1Root:
-    'sha256:baa39d55cac34133a29b461466aa450fec59bd2fd6df72334e8b33d1d1619869',
+    'sha256:ff588497b32eacc268c379d220fedbb3d29f69a0fdb9337c7a1e429ee7a868eb',
   schemaManifest:
-    'sha256:c9bce166112023cf5e09d41901938f74efbc69cff36da9428a3c21c3064d8439',
+    'sha256:478033a87bfb1cf1e98cd56fc6c18aaebe8d970835cc46e00223de07c5ece184',
   schemaHash:
-    'sha256:49aaee7c8f046cd9a15b3bc5b77fbcf1713be2a1872078941043f5ccdca29024',
+    'sha256:d35c2d6fe2aaaf87ad102561d1595d016f8ef2f04950e5e3ad30b91aa366d909',
 } as const satisfies Record<string, Sha256Hash>;
 
 const AFFECTED_CURRENT_ROOTS = [
@@ -134,27 +134,27 @@ const AFFECTED_CURRENT_ROOTS = [
   ],
   [
     'contract-pack-catalog-protocols.json',
-    'sha256:a648dc9326255b109690cb47d58032775825ae065caf8f7cbb0ef73efcf984f7',
+    'sha256:078be3fed7e8d430b228c0aa526e15e6bd92665f863c6d0818eaebbcaf43b533',
   ],
   [
     'contract-pack-safety-sqlite.json',
-    'sha256:4f756c9427a9e5fd8f034c2abdab3c614b675af8b8bbb350fc4219917159cd8d',
+    'sha256:e289868eb489bb3c41731afe17f50cbc06f2b10c549769c1786fcd185a0b5775',
   ],
   [
     'contract-pack-static-absence.json',
-    'sha256:2624801752b3641e624a925c67a2ea28d2c157208b3e4c54699fb6b189259978',
+    'sha256:058519662cfdff17e7a11a40a6da3b3dfe9d2b27c5d7fc6a81b23a35fd9bd183',
   ],
   [
     'contract-pack-g3-retention-executor-abi-preflight.json',
-    'sha256:4dd52b4f38da315ba0194fd23a9c681ffdba6aac37291100dd6d6b944178acd9',
+    'sha256:da15a3b9e7f3215f879d43b8f321c07f432f7d928d42314f22f6028b61f16aa9',
   ],
   [
     'contract-pack-g3-workflow-publisher.json',
-    'sha256:e80038f09ad841de630d961f137f15a2de14a487a74afb6b1d8b36edea689ba0',
+    'sha256:1614e89ecac4713c6d991a6ae68e548f01268e25ba8b700a107e4cdcb1b64647',
   ],
   [
     'contract-pack-g3.9-feature-release-activation.json',
-    'sha256:eb3d316be520e68fe53b6be826046d3f8fa1cf97db298d5703886d1dcb97b70f',
+    'sha256:c9aa03bf85e2b358f8b4b01b7dcfecf25ce76d2339688e88fe969d1babe10107',
   ],
   [
     'contract-pack-g3.8a-activation-contract-repair.json',
@@ -1043,7 +1043,7 @@ function validateFrozenEvidence(evidence: FrozenEvidence): void {
   ) {
     fail(
       'schema_deadline_handoff_drift',
-      'Schema 5 deadline/Command relation boundary drifted',
+      'Schema 6 deadline/Command relation boundary drifted',
     );
   }
 
@@ -1068,10 +1068,10 @@ function validateFrozenEvidence(evidence: FrozenEvidence): void {
     'T6e command mapping',
   );
   if (
-    evidence.schemaVersion !== 5 ||
+    evidence.schemaVersion !== 6 ||
     evidence.schemaHash !== EXPECTED_BINDINGS.schemaHash
   ) {
-    fail('schema4_identity_drift', 'Database Schema 5 identity drifted');
+    fail('schema4_identity_drift', 'Database Schema 6 identity drifted');
   }
   const resolutionFk = evidence.schemaForeignKeys.find(
     (candidate) => candidate.relation_id === 'fk:operational_blockers:command',
@@ -1086,7 +1086,7 @@ function validateFrozenEvidence(evidence: FrozenEvidence): void {
   ) {
     fail(
       'schema_resolution_fk_drift',
-      'Schema 5 resolution_command_id FK drifted',
+      'Schema 6 resolution_command_id FK drifted',
     );
   }
   const resolutionShape = evidence.schemaChecks.find(
@@ -1182,7 +1182,7 @@ function validateDependencyArtifacts(): void {
   if (bindings.some(([actual, expected]) => actual !== expected)) {
     fail(
       'schema4_identity_drift',
-      'Frozen protocol or Schema 5 binding drifted',
+      'Frozen protocol or Schema 6 binding drifted',
     );
   }
   validateProtocolSourceAgreement(
@@ -1782,8 +1782,9 @@ function authorityPayload(): JsonObject {
         'sha256:36289416db3c8898d9b50c04c5ad43fc6b74ef53bbd3a3c99f9d5f5b72786fa8',
     },
     historical_g0_g1_identity_effect:
-      'Capacity_G0.10_repaired_and_G1_advanced_from_Schema_4_to_Schema_5',
-    g4_pack_identity_effect: 'direct_G3_run_protocol_dependency_rebuilt',
+      'Capacity_G0.10_preserved_and_G1_advanced_additively_from_Schema_5_to_Schema_6',
+    g4_pack_identity_effect:
+      'generated_schema_join_authority_affected_chain_rebuilt',
     matrix: model.gates,
     frozen_authority_bindings: {
       workflow_run_transaction_protocol_table_hash:
@@ -1793,7 +1794,7 @@ function authorityPayload(): JsonObject {
       workflow_runtime_logical_schema_source_hash:
         EXPECTED_BINDINGS.logicalSchema,
       g1_executable_schema_root_hash: EXPECTED_BINDINGS.g1Root,
-      database_schema_version: 5,
+      database_schema_version: 6,
       workflow_runtime_schema_manifest_hash: EXPECTED_BINDINGS.schemaManifest,
       workflow_runtime_schema_hash: EXPECTED_BINDINGS.schemaHash,
     },

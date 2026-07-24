@@ -71,11 +71,11 @@ describe('G5 Basic Runtime Capacity Admin readiness audit', () => {
     ).toBe(true);
   });
 
-  it('proves Schema 5 encodes only the closed prepared combination and makes Invocation immutable', () => {
+  it('proves Schema 6 preserves the closed prepared combination and makes Invocation immutable', () => {
     const manifest = readArtifact(
       '../store/schema/artifacts/workflow-runtime-schema-manifest@1.json',
     );
-    expect(manifest.payload.database_schema_version).toBe(5);
+    expect(manifest.payload.database_schema_version).toBe(6);
     const invocation = objects(manifest.payload.tables).find(
       (entry) => entry.name === 'runtime_capacity_admin_invocations',
     )!;

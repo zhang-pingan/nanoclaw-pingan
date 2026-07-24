@@ -1031,9 +1031,9 @@ const testOnlyDefinition = withResourceHash({
   dependencies: [],
   compiled_plan_pin: {
     plan_ref:
-      'conformance/sealed/g2-capability-outbox-binding-v3/expected/positive.static-lowering.plan.json',
+      'conformance/sealed/g2-generated-schema-join-authority-v4/expected/positive.static-lowering.plan.json',
     plan_hash:
-      'sha256:e208dddbd363f68f35236b5333234d63338b19a91e38bb5144bd8d7fbc09ee01',
+      'sha256:266fd7bb686a454e8615c6147e963661a340e30e279e92e0d02f135f9e459bac',
     plan_format: 'icarus.workflow-graph-scope-plan/2',
     compiler_toolchain_hash:
       G3_CURRENT_UPSTREAM_IDENTITY.compiler.compiler_toolchain_hash,
@@ -1857,9 +1857,9 @@ function validateCurrentUpstream(): void {
         canonical_normalizer_version: '2.0.1',
         canonical_normalizer_hash:
           'sha256:e32946d0d20cc92344a72d04e488951cc4a64be82d36384db26dfbf420e469ff',
-        proof_algorithm_version: '2.0.1',
+        proof_algorithm_version: '2.0.2',
         proof_algorithm_hash:
-          'sha256:6a49827e2c039b95c42c94a607acbf6ae7c088d0510fe7fd93cc0eb87f302308',
+          'sha256:b6fda13a0acddf052cae5ed6f1bc89f2b9cfa91affbfcbb80aa44365f78c35d9',
         error_catalog_ref: {
           id: 'icarus.workflow-compiler-error-catalog',
           version: '2.0.0',

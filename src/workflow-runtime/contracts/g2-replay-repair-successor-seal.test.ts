@@ -142,7 +142,7 @@ describe('G2 replay-repair successor immutable review and seal', () => {
     });
   }, 30_000);
 
-  it('allows only the two exact G2 sealed lineages and keeps seal code isolated', () => {
+  it('allows only the four exact G2 sealed lineages and keeps seal code isolated', () => {
     expect(
       assertCurrentG2SealedBoundary(
         path.join(contractsRoot, 'conformance/sealed'),

@@ -22,6 +22,7 @@ import {
   type PublisherSchemaTableExtension,
 } from './publisher-source.js';
 import type { ExecutableSchemaSource } from './types.js';
+import { applyGeneratedSchemaPrerequisite } from './generated-schema-source.js';
 
 interface AdditiveTableExtension {
   name: string;
@@ -108,15 +109,15 @@ function assertSchema3ExecutableSource(source: ExecutableSchemaSource): void {
 }
 
 function assertExecutableSource(source: ExecutableSchemaSource): void {
-  if (source.database_schema_version !== 5) {
-    throw new Error('Current executable Database Schema must be version 5');
+  if (source.database_schema_version !== 6) {
+    throw new Error('Current executable Database Schema must be version 6');
   }
-  if (source.tables.length !== 84) {
-    throw new Error(`Expected 84 v1 tables, received ${source.tables.length}`);
+  if (source.tables.length !== 86) {
+    throw new Error(`Expected 86 v1 tables, received ${source.tables.length}`);
   }
-  if (source.queries.length !== 43) {
+  if (source.queries.length !== 44) {
     throw new Error(
-      `Expected 43 query intents, received ${source.queries.length}`,
+      `Expected 44 query intents, received ${source.queries.length}`,
     );
   }
   assertUnique(
@@ -207,6 +208,17 @@ function buildSchema3ExecutableSource(
     queryCatalog.payload as unknown as LogicalQueryCatalogPayload;
   const currentDelta =
     capacityDelta.payload as unknown as CapacityLogicalSchemaDelta;
+  const generatedSchemaPrerequisite = inputs
+    .generated_schema_authority_prerequisite.artifact.payload as unknown as {
+    historical_capacity_rebind: {
+      current_logical_schema_manifest_hash: string;
+      logical_schema_source_hash: string;
+      historical_capacity_delta_artifact_hash: string;
+      historical_capacity_delta_hash: string;
+      historical_base_logical_schema_manifest_hash: string;
+      compatibility_rule: string;
+    };
+  };
   const delta = structuredClone(currentDelta);
   const historicalInvocation = delta.added_tables.find(
     (table) => table.name === 'runtime_capacity_admin_invocations',
@@ -262,11 +274,25 @@ function buildSchema3ExecutableSource(
   if (
     delta.schema_id !== base.schema_id ||
     delta.delta_mode !== 'additive_only' ||
-    delta.base_logical_schema_manifest_hash !== g0_6Manifest.hash ||
+    delta.base_logical_schema_manifest_hash !==
+      generatedSchemaPrerequisite.historical_capacity_rebind
+        .historical_base_logical_schema_manifest_hash ||
     delta.added_tables.length !== 4 ||
     delta.extended_tables.length !== 1 ||
     currentDelta.delta_hash !==
-      'sha256:ca81abe11e332890bde7420fdf8f040856e8076bba9bbc4a03d15ffedb439e3a'
+      generatedSchemaPrerequisite.historical_capacity_rebind
+        .historical_capacity_delta_hash ||
+    capacityDelta.hash !==
+      generatedSchemaPrerequisite.historical_capacity_rebind
+        .historical_capacity_delta_artifact_hash ||
+    g0_6Manifest.hash !==
+      generatedSchemaPrerequisite.historical_capacity_rebind
+        .current_logical_schema_manifest_hash ||
+    logicalSource.hash !==
+      generatedSchemaPrerequisite.historical_capacity_rebind
+        .logical_schema_source_hash ||
+    generatedSchemaPrerequisite.historical_capacity_rebind
+      .compatibility_rule !== 'identical_logical_source_semantics_only'
   ) {
     throw new Error('G0.10 capacity delta is not the expected additive input');
   }
@@ -378,6 +404,29 @@ export function loadExecutableSchemaSource(
   contractsRoot?: string,
 ): ExecutableSchemaSource {
   const inputs = readPinnedSchemaInputArtifacts({ contractsRoot });
+  const schema5 = buildSchema5ExecutableSource(inputs);
+  const applied = applyGeneratedSchemaPrerequisite(
+    schema5.tables,
+    inputs.generated_schema_authority_prerequisite.artifact,
+  );
+  const result: ExecutableSchemaSource = {
+    ...schema5,
+    database_schema_version: 6,
+    tables: applied.tables,
+    queries: [...schema5.queries, ...applied.queries],
+    logical_inputs: {
+      ...schema5.logical_inputs,
+      generated_schema_authority_prerequisite_hash:
+        inputs.generated_schema_authority_prerequisite.artifact.hash,
+    },
+  };
+  assertExecutableSource(result);
+  return result;
+}
+
+function buildSchema5ExecutableSource(
+  inputs: LoadedSchemaInputArtifacts,
+): ExecutableSchemaSource {
   const schema4 = buildSchema4ExecutableSource(inputs);
   const currentDelta = inputs.g0_10_capacity_logical_schema_delta.artifact
     .payload as unknown as CapacityLogicalSchemaDelta;
@@ -402,8 +451,15 @@ export function loadExecutableSchemaSource(
         inputs.g0_10_capacity_logical_schema_delta.artifact.hash,
     },
   };
-  assertExecutableSource(result);
   return result;
+}
+
+export function loadSchema5ExecutableSchemaSource(
+  contractsRoot?: string,
+): ExecutableSchemaSource {
+  return buildSchema5ExecutableSource(
+    readPinnedSchemaInputArtifacts({ contractsRoot }),
+  );
 }
 
 function buildSchema4ExecutableSource(

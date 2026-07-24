@@ -16,6 +16,10 @@ import {
   checkCompilerSemanticCorrectionContract,
   COMPILER_SEMANTIC_CORRECTION_MANIFEST_PATH,
 } from '../contracts/compiler-semantic-correction-contract.js';
+import {
+  checkGeneratedSchemaJoinAuthorityRepair,
+  GENERATED_SCHEMA_JOIN_AUTHORITY_REPAIR_PACK_PATH,
+} from '../contracts/generated-schema-join-authority-repair.js';
 import type {
   CompilerConformanceDiagnosticV1,
   WorkflowCompilerConformanceCaseResultV1,
@@ -24,7 +28,7 @@ import {
   authorCurrentG2GoldenExpectedResult,
   extractCurrentG2GoldenProgramBytes,
   extractCurrentG2GoldenProofBytes,
-} from '../contracts/current-g2-golden-authoring.js';
+} from '../contracts/generated-schema-join-authority-golden-authoring.js';
 import { CURRENT_G2_GOLDEN_DRAFT_MANIFEST_PATH } from '../contracts/current-g2-golden-draft.js';
 import {
   CURRENT_G2_GOLDEN_CASES_SCHEMA,
@@ -63,14 +67,14 @@ const contractsRoot = path.resolve(import.meta.dirname, '../contracts');
 const projectRoot = path.resolve(contractsRoot, '../../..');
 
 export const G2_REPLAY_REPAIR_RC_ROOT =
-  'conformance/review-candidate/g2-capability-outbox-binding-v3';
+  'conformance/review-candidate/g2-generated-schema-join-authority-v4';
 export const G2_REPLAY_REPAIR_DRAFT_ROOT =
-  'conformance/golden-draft/g2-capability-outbox-binding-v3';
+  'conformance/golden-draft/g2-generated-schema-join-authority-v4';
 export const G2_REPLAY_REPAIR_REVIEW_ROOT =
-  'conformance/golden-review/g2-capability-outbox-binding-v3';
+  'conformance/golden-review/g2-generated-schema-join-authority-v4';
 
-export const G2_REPLAY_REPAIR_TOOLCHAIN_PATH = `${G2_REPLAY_REPAIR_RC_ROOT}/workflow-compiler-toolchain@3.0.2.json`;
-export const G2_REPLAY_REPAIR_BINDING_PATH = `${G2_REPLAY_REPAIR_RC_ROOT}/g2-case-input-binding@3.json`;
+export const G2_REPLAY_REPAIR_TOOLCHAIN_PATH = `${G2_REPLAY_REPAIR_RC_ROOT}/workflow-compiler-toolchain@3.0.3.json`;
+export const G2_REPLAY_REPAIR_BINDING_PATH = `${G2_REPLAY_REPAIR_RC_ROOT}/g2-case-input-binding@4.json`;
 export const G2_REPLAY_REPAIR_CONTRACT_ROOT_PATH = `${G2_REPLAY_REPAIR_RC_ROOT}/working-contract-root@2.json`;
 export const G2_REPLAY_REPAIR_INPUT_ROOT_PATH = `${G2_REPLAY_REPAIR_RC_ROOT}/working-input-root@2.json`;
 export const G2_REPLAY_REPAIR_CANDIDATE_ROOT_PATH = `${G2_REPLAY_REPAIR_RC_ROOT}/working-candidate-root@2.json`;
@@ -91,30 +95,30 @@ const REVIEW_SCHEMA_PATH = `${G2_REPLAY_REPAIR_REVIEW_ROOT}/schemas/golden-revie
 
 const PREDECESSOR = Object.freeze({
   working_contract_root:
-    'sha256:c5ca1c15b3e0d525b1ed75200c18f63195cb13e442431730ca1a828e84a7fe67',
+    'sha256:505956819b8b060e80da814536bfa1d56e659ed0ddb91d344673a3bea3cb7737',
   working_input_root:
-    'sha256:5cb730ad620a3ba702891cdd2118e5828c5a799aed729ad5d0beefbe5f0ac061',
+    'sha256:da03109106c3a21898bd40cf31639084d04ce2cb1024564ca916c9f90b847583',
   working_candidate_root:
-    'sha256:a1693ea8a5c4a6987f447357407c55201a1790efafd285af5584564fade4f78f',
+    'sha256:9b2895c2e4b06b0cdc168666e54a61e38df6b520a36aa86e9ff6ecf4bd03e09f',
   working_review_root:
-    'sha256:ee58f9f58059020db070a20772b370c8cf121ae3b012cdf98e535e92c82892f5',
+    'sha256:168b490430730bf4b6d16e50dd35d967a9f6ce33bbe693fb460a3004b3799d99',
   review_candidate_root:
-    'sha256:85572b113f80e9552aa7f129def39f03ae8d94bc1dab9bbcc2bb78067dddda94',
+    'sha256:3401cc0230f7a4b81fe859a25832816b8db60cae6d29c5676d141f2151a186e6',
   draft_manifest_hash:
-    'sha256:29fdd70ea872f9d4e52d49fbd988fff306d95820989920f5f1ecf2bc87019d2b',
+    'sha256:b8ca7c91839b88b5591daf19f17a30e70b85e441d9dd4905807ef57bc37f7591',
   golden_review_report_hash:
-    'sha256:2f9edba7af3715f4d5d64328a9fd1a601505bafd1129cee603e87aacf80d92d7',
+    'sha256:5b3b5c721e6cda298da468566eb97da3423fcb86595de4f46dc66f79ebb55e99',
   golden_semantic_review_hash:
-    'sha256:88c5412d1bd97d52a7f9bf41e17bd1db1e19b4a2e5466b3b25384fbdeb7cac0c',
+    'sha256:ceddcefcab8ff41a5e9b5d2ceb89dabcd3f9199639bb247d132a7c79c33dc15b',
   sealed_bundle_hash:
-    'sha256:d99647d8ca6aabc737a793019335e6770aa111a79be7545c4dec00c6e7af2145',
+    'sha256:b3ed9e43bd0fadaf40520257926dcf690ee8495bb417220245f248385bde9efb',
 });
 
 const RAW_SOURCE_DOMAIN = 'icarus:workflow-semantic-correction-raw-source:1\n';
 const SNAPSHOT_DOMAIN = 'icarus:workflow-compiler-input-snapshot:2\n';
 const EFFECTIVE_INPUT_DOMAIN =
-  'icarus:workflow-compiler-effective-case-input:3\n';
-const BINDING_DOMAIN = 'icarus:workflow-compiler-g2-case-input-binding:3\n';
+  'icarus:workflow-compiler-effective-case-input:4\n';
+const BINDING_DOMAIN = 'icarus:workflow-compiler-g2-case-input-binding:4\n';
 const RESULT_DOMAIN = 'icarus:workflow-compiler-conformance-case-result:1\n';
 const PLAN_DOMAIN = 'icarus:workflow-graph-plan:2\n';
 const PROOF_BYTES_DOMAIN = 'icarus:workflow-current-g2-golden-proof-bytes:1\n';
@@ -298,13 +302,13 @@ function draftInventoryEntry(
 
 function validatePredecessor(): JsonObject {
   const draft = readArtifact(
-    'conformance/golden-draft/g2-production-compiler-replay-repair-v2/golden-draft-manifest@2.json',
+    'conformance/golden-draft/g2-capability-outbox-binding-v3/golden-draft-manifest@2.json',
   );
   const review = readArtifact(
-    'conformance/golden-review/g2-production-compiler-replay-repair-v2/golden-review-report@2.json',
+    'conformance/golden-review/g2-capability-outbox-binding-v3/golden-review-report@2.json',
   );
   const seal = readArtifact(
-    'conformance/sealed/g2-production-compiler-replay-repair-v2/golden-conformance-bundle@2.json',
+    'conformance/sealed/g2-capability-outbox-binding-v3/golden-conformance-bundle@2.json',
   );
   if (
     draft.payload.draft_manifest_hash !== PREDECESSOR.draft_manifest_hash ||
@@ -316,7 +320,7 @@ function validatePredecessor(): JsonObject {
     );
   }
   const semanticReview = readArtifact(
-    'conformance/golden-semantic-review/g2-production-compiler-replay-repair-v2/golden-semantic-review@2.json',
+    'conformance/golden-semantic-review/g2-capability-outbox-binding-v3/golden-semantic-review@2.json',
   );
   if (
     semanticReview.payload.review_hash !==
@@ -341,7 +345,7 @@ function validatePredecessor(): JsonObject {
       PREDECESSOR.golden_semantic_review_hash,
     predecessor_sealed_bundle_hash: PREDECESSOR.sealed_bundle_hash,
     predecessor_sealed_status: 'sealed_pending_ci_replay',
-    successor_reason: 'capability_outbox_execution_binding_contract_repair',
+    successor_reason: 'generated_schema_join_authority_contract_repair',
     approved_expected_semantics: 'changed_by_current_review',
   };
 }
@@ -355,15 +359,15 @@ function successorSnapshot(
   );
   const payloadWithoutHash = clone(predecessor.payload);
   delete payloadWithoutHash.snapshot_hash;
-  payloadWithoutHash.snapshot_id = `g2-capability-outbox-binding-v3:${caseId}`;
+  payloadWithoutHash.snapshot_id = `g2-generated-schema-join-authority-v4:${caseId}`;
   const payload = {
     ...payloadWithoutHash,
     snapshot_hash: domainSeparatedSha256(SNAPSHOT_DOMAIN, payloadWithoutHash),
   };
   return artifact(
     predecessor.format,
-    `${predecessor.ref.id}.capability-outbox-binding-v3`,
-    '3.0.0',
+    `${predecessor.ref.id}.generated-schema-join-authority-v4`,
+    '4.0.0',
     predecessor.domain_separator,
     payload,
   );
@@ -507,9 +511,126 @@ function assertionPass(result: JsonValue, assertion: JsonObject): boolean {
   }
 }
 
+function joinAuthoritySource(
+  sourceText: string,
+  callerSuppliesOutputPorts: boolean,
+): string {
+  const source = object(
+    strictParseJsonBytes(Buffer.from(sourceText, 'utf8')),
+    'join authority source',
+  );
+  source.scope_key = callerSuppliesOutputPorts
+    ? 'join_caller_authority_rejected'
+    : 'join_generated_authority';
+  source.nodes = [
+    {
+      id: 'producer',
+      type: 'system',
+      trigger: { type: 'root' },
+      capability_ref: {
+        id: 'fixture.capability.route',
+        version: '1.0.0',
+      },
+    },
+    {
+      id: 'join',
+      type: 'join',
+      trigger: { type: 'all', edge_ids: ['control.producer_join'] },
+      input_ports: {
+        source: {
+          schema_ref: {
+            id: 'fixture.schema.route-result',
+            version: '1.0.0',
+          },
+          max_bytes: 4096,
+          aggregation: { type: 'single', required: true, select: 'only' },
+        },
+      },
+      expose: { renamed: { input_port: 'source' } },
+      ...(callerSuppliesOutputPorts
+        ? {
+            output_ports: {
+              renamed: {
+                schema_ref: {
+                  id: 'fixture.schema.route-result',
+                  version: '1.0.0',
+                },
+                max_bytes: 4096,
+                required: true,
+              },
+            },
+          }
+        : {}),
+    },
+    {
+      id: 'sink',
+      type: 'join',
+      trigger: { type: 'all', edge_ids: ['control.join_sink'] },
+      input_ports: {
+        value: {
+          schema_ref: {
+            id: 'fixture.schema.route-result',
+            version: '1.0.0',
+          },
+          max_bytes: 4096,
+          aggregation: { type: 'single', required: true, select: 'only' },
+        },
+      },
+      expose: {},
+    },
+    {
+      id: 'done',
+      type: 'terminal',
+      trigger: { type: 'all', edge_ids: ['control.sink_done'] },
+      exit: 'done',
+    },
+  ];
+  source.control_edges = [
+    {
+      id: 'control.producer_join',
+      kind: 'control',
+      from_node_id: 'producer',
+      to_node_id: 'join',
+      on: { statuses: ['succeeded'] },
+    },
+    {
+      id: 'control.join_sink',
+      kind: 'control',
+      from_node_id: 'join',
+      to_node_id: 'sink',
+      on: { statuses: ['succeeded'] },
+    },
+    {
+      id: 'control.sink_done',
+      kind: 'control',
+      from_node_id: 'sink',
+      to_node_id: 'done',
+      on: { statuses: ['succeeded'] },
+    },
+  ];
+  source.data_edges = [
+    {
+      id: 'data.producer_join',
+      kind: 'data',
+      from: { type: 'node_output', node_id: 'producer', port: 'result' },
+      to: { node_id: 'join', port: 'source' },
+    },
+    {
+      id: 'data.join_sink',
+      kind: 'data',
+      from: { type: 'node_output', node_id: 'join', port: 'renamed' },
+      to: { node_id: 'sink', port: 'value' },
+    },
+  ];
+  source.route_groups = [];
+  return canonicalJson(source);
+}
+
 export function buildG2ReplayRepairSuccessor(): G2ReplayRepairSuccessorBuild {
   const predecessorLineage = validatePredecessor();
   const semanticContract = checkCompilerSemanticCorrectionContract();
+  const generatedSchemaJoinAuthorityContract =
+    checkGeneratedSchemaJoinAuthorityRepair();
   const built = buildSemanticCorrectionCandidate();
   const toolchain = buildWorkflowCompilerToolchainManifest();
   const compilerIdentity = workflowCompilerIdentity(toolchain);
@@ -537,25 +658,155 @@ export function buildG2ReplayRepairSuccessor(): G2ReplayRepairSuccessorBuild {
     effectiveInputHash: Sha256Hash;
   }> = [];
 
+  const joinBaseInput = built.inputs.cases.find(
+    (candidate) => candidate.case_id === 'positive.condition-route',
+  );
+  if (!joinBaseInput) {
+    throw new G2ReplayRepairSuccessorError(
+      'Join authority base case disappeared',
+    );
+  }
+  const joinBaseSourceText = built.files.get(
+    joinBaseInput.raw_source_bytes_ref,
+  );
+  const joinBaseSnapshotText = built.files.get(
+    joinBaseInput.input_snapshot_ref,
+  );
+  if (!joinBaseSourceText || !joinBaseSnapshotText) {
+    throw new G2ReplayRepairSuccessorError(
+      'Join authority base source or snapshot disappeared',
+    );
+  }
+
   for (const input of built.inputs.cases) {
-    const sourceText = built.files.get(input.raw_source_bytes_ref);
-    const snapshotText = built.files.get(input.input_snapshot_ref);
+    const isJoinPositive = input.case_id === 'positive.condition-route';
+    const isJoinNegative = input.case_id === 'negative.graph-cross-scope-edge';
+    const joinOverride = isJoinPositive || isJoinNegative;
+    const sourceText = joinOverride
+      ? joinAuthoritySource(joinBaseSourceText, isJoinNegative)
+      : built.files.get(input.raw_source_bytes_ref);
+    const snapshotText = joinOverride
+      ? joinBaseSnapshotText
+      : built.files.get(input.input_snapshot_ref);
     if (!sourceText || !snapshotText) {
       throw new G2ReplayRepairSuccessorError(
         `Missing successor source or snapshot: ${input.case_id}`,
       );
     }
-    const sourcePath = `conformance/sealed/g2-semantic-correction/inputs/${input.case_id}.source.json`;
-    const sourceBytes = fs.readFileSync(absolute(sourcePath));
+    const sourcePath = joinOverride
+      ? `${G2_REPLAY_REPAIR_RC_ROOT}/inputs/${input.case_id}.source.json`
+      : `conformance/sealed/g2-semantic-correction/inputs/${input.case_id}.source.json`;
+    const sourceBytes = joinOverride
+      ? Buffer.from(sourceText, 'utf8')
+      : fs.readFileSync(absolute(sourcePath));
+    const sourceSemanticHash = domainSeparatedSha256(
+      RAW_SOURCE_DOMAIN,
+      sourceBytes.toString('utf8'),
+    );
     if (
-      domainSeparatedSha256(RAW_SOURCE_DOMAIN, sourceBytes.toString('utf8')) !==
-        input.raw_source_bytes_hash ||
+      (!joinOverride && sourceSemanticHash !== input.raw_source_bytes_hash) ||
       sourceBytes.toString('utf8') !== sourceText
     ) {
       throw new G2ReplayRepairSuccessorError(
         `Sealed source lineage drift: ${input.case_id}`,
       );
     }
+    if (joinOverride) files.set(sourcePath, sourceText);
+    const effectiveInput = joinOverride
+      ? {
+          ...input,
+          coverage_tags: isJoinPositive
+            ? [
+                'generated_schema_authority',
+                'join_expose_rename',
+                'downstream_data_edge_proof',
+              ]
+            : ['join_expose_caller_authority_forbidden'],
+          raw_source_bytes_ref: sourcePath,
+          raw_source_bytes_hash: sourceSemanticHash,
+          expected_source_hash: domainSeparatedSha256(
+            'icarus:workflow-graph-source:1\n',
+            object(
+              strictParseJsonBytes(sourceBytes),
+              'join authority source hash',
+            ),
+          ),
+          review_input: isJoinPositive
+            ? {
+                role: 'hand_authored_review_input_not_expected_oracle',
+                expected_diagnostics: [],
+                semantic_assertions: [
+                  {
+                    assertion_id: 'join-expose-generator',
+                    subject_pointer:
+                      '/normalized_plan/nodes/1/output_ports/renamed/schema/generator',
+                    operator: 'equals',
+                    expected: 'join_expose',
+                    rationale:
+                      'Join expose is lowered from the compiled input contract.',
+                  },
+                  {
+                    assertion_id: 'join-expose-schema-ref',
+                    subject_pointer:
+                      '/normalized_plan/nodes/1/output_ports/renamed/schema/schema_ref',
+                    operator: 'present',
+                    expected: true,
+                    rationale:
+                      'The generated schema carries content-addressed identity.',
+                  },
+                  {
+                    assertion_id: 'join-expose-schema-json',
+                    subject_pointer:
+                      '/normalized_plan/nodes/1/output_ports/renamed/schema/schema_json',
+                    operator: 'present',
+                    expected: true,
+                    rationale:
+                      'The generated schema carries canonical resolvable content.',
+                  },
+                  {
+                    assertion_id: 'join-downstream-proof',
+                    subject_pointer:
+                      '/normalized_plan/data_edges/0/compatibility_proof/proof_hash',
+                    operator: 'present',
+                    expected: true,
+                    rationale:
+                      'The downstream edge is proven against the lowered join output.',
+                  },
+                ],
+              }
+            : {
+                role: 'hand_authored_review_input_not_expected_oracle',
+                expected_diagnostics: [
+                  {
+                    code: 'schema_unknown_field',
+                    phase: 'schema',
+                    instance_pointer: '/nodes/1/output_ports',
+                    schema_pointer: '#/oneOf/3/additionalProperties',
+                    stable_object_id: 'join',
+                    detail_ref: null,
+                  },
+                ],
+                semantic_assertions: [
+                  {
+                    assertion_id: 'join-caller-output-authority-rejected',
+                    subject_pointer: '/diagnostics/0/code',
+                    operator: 'equals',
+                    expected: 'schema_unknown_field',
+                    rationale:
+                      'Source join output authority is compiler-owned and closed.',
+                  },
+                  {
+                    assertion_id: 'join-caller-output-authority-no-plan',
+                    subject_pointer: '/normalized_plan',
+                    operator: 'equals',
+                    expected: null,
+                    rationale:
+                      'Rejected caller authority cannot produce a Compiled Plan.',
+                  },
+                ],
+              },
+        }
+      : input;
     const snapshot = successorSnapshot(input.case_id, snapshotText);
     const snapshotPath = `${G2_REPLAY_REPAIR_RC_ROOT}/inputs/${input.case_id}.snapshot@2.json`;
     const snapshotBytes = render(snapshot);
@@ -580,7 +831,7 @@ export function buildG2ReplayRepairSuccessor(): G2ReplayRepairSuccessorBuild {
       identity: compilerIdentity as unknown as JsonObject,
     });
     successorCases.push({
-      input,
+      input: effectiveInput,
       sourcePath,
       sourceBytes,
       snapshotPath,
@@ -594,8 +845,8 @@ export function buildG2ReplayRepairSuccessor(): G2ReplayRepairSuccessorBuild {
   }
 
   const bindingWithoutHash = {
-    format: 'icarus.workflow-compiler-g2-case-input-binding/3',
-    binding_version: 'g2-capability-outbox-binding-v3',
+    format: 'icarus.workflow-compiler-g2-case-input-binding/4',
+    binding_version: 'g2-generated-schema-join-authority-v4',
     compiler_identity: compilerIdentity as unknown as JsonObject,
     case_inputs: successorCases.map((entry) => ({
       case_id: entry.input.case_id,
@@ -634,8 +885,14 @@ export function buildG2ReplayRepairSuccessor(): G2ReplayRepairSuccessorBuild {
       semantic_correction_contract_ref:
         COMPILER_SEMANTIC_CORRECTION_MANIFEST_PATH,
       semantic_correction_contract_hash: semanticContract.hash,
+      generated_schema_join_authority_contract_ref:
+        GENERATED_SCHEMA_JOIN_AUTHORITY_REPAIR_PACK_PATH,
+      generated_schema_join_authority_contract_hash:
+        generatedSchemaJoinAuthorityContract.hash,
+      generated_schema_join_authority_contract_status:
+        generatedSchemaJoinAuthorityContract.payload.status,
       predecessor_lineage: predecessorLineage,
-      approved_expected_semantics: 'capability_outbox_execution_binding',
+      approved_expected_semantics: 'generated_schema_join_authority',
       g3_through_g9_status: 'not_started',
     },
   );
@@ -1099,7 +1356,7 @@ export function buildG2ReplayRepairSuccessor(): G2ReplayRepairSuccessorBuild {
   );
 
   const authoringGeneratorRef =
-    'src/workflow-runtime/contracts/current-g2-golden-authoring.ts';
+    'src/workflow-runtime/contracts/generated-schema-join-authority-golden-authoring.ts';
   const draftManifestWithoutHash = {
     format:
       'icarus.workflow-compiler-current-g2-golden-draft-manifest/1' as const,
@@ -1184,11 +1441,17 @@ export function buildG2ReplayRepairSuccessor(): G2ReplayRepairSuccessorBuild {
   let semanticAssertionCount = 0;
   let semanticAssertionFailureCount = 0;
   let exactEqualCount = 0;
+  const comparisonMismatches: string[] = [];
   for (const draftCase of draftCases) {
     const expected = expectedResults.get(draftCase.case_id)!;
     const actual = actualResults.get(draftCase.case_id)!;
     const exactEqual = canonicalJson(expected) === canonicalJson(actual);
     if (exactEqual) exactEqualCount += 1;
+    else {
+      comparisonMismatches.push(
+        `${draftCase.case_id}: expected=${canonicalJson(expected)} actual=${canonicalJson(actual)}`,
+      );
+    }
     const assertions = draftCase.semantic_assertions;
     const failures = assertions
       .filter((assertion) => !assertionPass(expected as never, assertion))
@@ -1231,11 +1494,11 @@ export function buildG2ReplayRepairSuccessor(): G2ReplayRepairSuccessorBuild {
   }
   if (
     exactEqualCount !== 40 ||
-    semanticAssertionCount !== 93 ||
+    semanticAssertionCount !== 95 ||
     semanticAssertionFailureCount !== 0
   ) {
     throw new G2ReplayRepairSuccessorError(
-      `Successor comparison is incomplete: exact=${exactEqualCount}/40 assertions=${semanticAssertionCount - semanticAssertionFailureCount}/${semanticAssertionCount}`,
+      `Successor comparison is incomplete: exact=${exactEqualCount}/40 assertions=${semanticAssertionCount - semanticAssertionFailureCount}/${semanticAssertionCount}; ${comparisonMismatches.join('; ')}`,
     );
   }
   const reviewPayloadWithoutHash = {

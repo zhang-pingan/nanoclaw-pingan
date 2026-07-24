@@ -34,7 +34,13 @@ import {
   type G3WorkflowPublisherTargetRelease,
 } from './g3-workflow-publisher-types.js';
 import { strictParseJsonBytes } from './strict-json.js';
-import type { JsonObject, Sha256Hash, VersionedRef } from './types.js';
+import { assertGeneratedSchemaAuthority } from './generated-schema-authority.js';
+import type {
+  JsonObject,
+  JsonValue,
+  Sha256Hash,
+  VersionedRef,
+} from './types.js';
 import {
   VERSIONED_REF_ID_PATTERN,
   VERSIONED_REF_VERSION_PATTERN,
@@ -411,6 +417,18 @@ export class G3WorkflowPublisherContractError extends Error {
   }
 }
 
+function assertPlanGeneratedSchemaAuthorities(value: JsonValue): void {
+  if (Array.isArray(value)) {
+    for (const entry of value) assertPlanGeneratedSchemaAuthorities(entry);
+    return;
+  }
+  if (!value || typeof value !== 'object') return;
+  if (value.type === 'generated') assertGeneratedSchemaAuthority(value);
+  for (const child of Object.values(value)) {
+    assertPlanGeneratedSchemaAuthorities(child);
+  }
+}
+
 function without<T extends JsonObject>(value: T, fields: string[]): JsonObject {
   const cloned = structuredClone(value) as JsonObject;
   for (const field of fields) delete cloned[field];
@@ -678,6 +696,14 @@ export function validateG37WorkflowPublisherRequest(
     );
   }
   const plan = request.compiled_plan.content;
+  try {
+    assertPlanGeneratedSchemaAuthorities(plan);
+  } catch (error) {
+    throw new G3WorkflowPublisherContractError(
+      'publish_identity_mismatch',
+      `Compiled plan generated schema authority is invalid: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
   const computedPlanHash = domainSeparatedSha256(
     'icarus:workflow-graph-plan:2\n',
     without(plan, ['plan_hash']),
@@ -912,7 +938,7 @@ export function g37SchemasForTest(): {
 export const G37_UPSTREAM_IDENTITIES = {
   g1_schema_root_hash: G3_CURRENT_UPSTREAM_IDENTITY.g1_schema_root_hash,
   g3_1_pack_hash:
-    'sha256:aae22ae7f5ea1fa06a5c9b6c63eeadbb61b32d3510f503754ef5d8617cab0227',
+    'sha256:7a4d405b52cc4bdad32d252ea935a2e21c72981e82b7e5d2ac0234b7f108fdb7',
   g3_3_pack_hash:
     'sha256:ff5d40589df9bc78e2e7f4f0e2fdcd5f0a7b7f34e0d0592e5308c1230425f1b3',
   g3_5_pack_hash:

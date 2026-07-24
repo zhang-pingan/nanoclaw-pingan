@@ -168,6 +168,7 @@
           "migration_hash",
           "schema3_to_4_upgrade_hash",
           "schema4_to_5_upgrade_hash",
+          "schema5_to_6_upgrade_hash",
           "sqlite_profile_ref",
           "sqlite_profile_hash",
           "sqlite_profile_status",
@@ -184,7 +185,7 @@
             "const": "workflow-runtime.db"
           },
           "database_schema_version": {
-            "const": 5
+            "const": 6
           },
           "g1_root_hash": {
             "type": "string",
@@ -211,6 +212,10 @@
             "pattern": "^sha256:[0-9a-f]{64}$"
           },
           "schema4_to_5_upgrade_hash": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "schema5_to_6_upgrade_hash": {
             "type": "string",
             "pattern": "^sha256:[0-9a-f]{64}$"
           },
@@ -490,5 +495,5 @@
       }
     }
   },
-  "hash": "sha256:06cd741ac90c0eb7b34294d2e779e765000d0a7461cccbe6d2043b7216cf0952"
+  "hash": "sha256:085dad6c07f170ceb9da14d0e35041acb404f5e56756a5b5377d6c64ccce82a9"
 }

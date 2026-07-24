@@ -60,15 +60,15 @@ const contractsRoot = import.meta.dirname;
 const foundationManifestHash =
   'sha256:e85b654581c036f8129677d7443a0704ebc8b8fbe87907b842aaefe1501e637d';
 const closedSchemaManifestHash =
-  'sha256:c5ea281d64480787322e8b6ef619b2f90784084d87ba4373c94288ed5e7aa3a8';
+  'sha256:6f7aa5b997c5a496a4eb95776a09f18e3c25753e7324a6ef1f095a23b8413d81';
 const catalogProtocolManifestHash =
-  'sha256:e4947c515a28b3baf6782a980db9c26d32612b3c6acd3cd04348e73bd54ff607';
+  'sha256:078be3fed7e8d430b228c0aa526e15e6bd92665f863c6d0818eaebbcaf43b533';
 const safetySqliteManifestHash =
-  'sha256:76b8e1196ac422500be9c79a767e673e9c30fa3d9bbb1dc12fc54613cd40b428';
+  'sha256:e289868eb489bb3c41731afe17f50cbc06f2b10c549769c1786fcd185a0b5775';
 const currentReopenedCatalogProtocolManifestHash =
-  'sha256:a648dc9326255b109690cb47d58032775825ae065caf8f7cbb0ef73efcf984f7';
+  'sha256:078be3fed7e8d430b228c0aa526e15e6bd92665f863c6d0818eaebbcaf43b533';
 const currentReopenedSafetySqliteManifestHash =
-  'sha256:4f756c9427a9e5fd8f034c2abdab3c614b675af8b8bbb350fc4219917159cd8d';
+  'sha256:e289868eb489bb3c41731afe17f50cbc06f2b10c549769c1786fcd185a0b5775';
 const manifestPath = 'contract-pack-logical-schema.json';
 const positiveCasesPath = 'conformance/logical-schema/positive-cases.json';
 const negativeCasesPath = 'conformance/logical-schema/negative-cases.json';

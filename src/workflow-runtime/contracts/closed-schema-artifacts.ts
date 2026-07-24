@@ -1231,26 +1231,18 @@ const compiledPortSchema: Schema = {
       ref: ref('versioned_ref'),
       schema_hash: hashSchema,
     }),
-    object(
-      {
-        type: { const: 'generated' },
-        generator: enumSchema([
-          'join_expose',
-          'child_completion',
-          'map_result',
-        ]),
-        parameter_hash: hashSchema,
-        schema_json: ref('json_value'),
-        schema_hash: hashSchema,
-      },
-      [],
-    ),
     object({
       type: { const: 'generated' },
       generator: enumSchema(['join_expose', 'child_completion', 'map_result']),
+      canonicalizer: { const: 'RFC8785-JCS' },
       parameter_hash: hashSchema,
-      schema_ref: stringSchema({ minLength: 1 }),
+      schema_ref: stringSchema({
+        pattern: '^icarus-generated-schema:sha256:[0-9a-f]{64}$',
+      }),
+      schema_raw_hash: hashSchema,
       schema_hash: hashSchema,
+      schema_byte_length: integerSchema(),
+      schema_json: ref('json_value'),
     }),
   ],
 };

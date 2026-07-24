@@ -12,6 +12,7 @@ import {
 import type { BoundCompilerSnapshot, SnapshotResource } from './snapshot.js';
 import { refKey } from './snapshot.js';
 import type { WorkflowCompilerIdentity } from './types.js';
+import { assertGeneratedSchemaAuthority } from '../contracts/generated-schema-authority.js';
 
 export class CompilerProofError extends Error {
   constructor(
@@ -376,7 +377,9 @@ export function compileConditionProgram(
 }
 
 interface PortSchema {
-  resource: SnapshotResource;
+  authority: JsonObject;
+  content: JsonObject;
+  contentHash: Sha256Hash;
   selected: JsonObject;
   total: boolean;
 }
@@ -390,7 +393,71 @@ function portSchema(
   const resource = schemaResource(snapshot, contract.schema_ref);
   if (!resource) throw new CompilerProofError('schema_not_assignable');
   const selected = schemaAtPointer(resource.content, pointer);
-  return { resource, selected: selected.schema, total: selected.total };
+  return {
+    authority: {
+      type: 'registry',
+      ref: resource.ref,
+      schema_hash: resource.contentHash,
+    },
+    content: resource.content,
+    contentHash: resource.contentHash,
+    selected: selected.schema,
+    total: selected.total,
+  };
+}
+
+function compiledPortSchema(
+  snapshot: BoundCompilerSnapshot,
+  contract: JsonObject,
+  pointer?: string,
+): PortSchema {
+  assertJsonObject(contract.schema);
+  const authority = contract.schema;
+  if (authority.type === 'registry') {
+    assertJsonObject(authority.ref);
+    const resource = schemaResource(snapshot, authority.ref);
+    if (!resource || authority.schema_hash !== resource.contentHash) {
+      throw new CompilerProofError('schema_not_assignable');
+    }
+    const selected = schemaAtPointer(resource.content, pointer);
+    return {
+      authority,
+      content: resource.content,
+      contentHash: resource.contentHash,
+      selected: selected.schema,
+      total: selected.total,
+    };
+  }
+  try {
+    assertGeneratedSchemaAuthority(authority);
+    assertJsonObject(authority.schema_json);
+    const selected = schemaAtPointer(authority.schema_json, pointer);
+    return {
+      authority,
+      content: authority.schema_json,
+      contentHash: authority.schema_hash as Sha256Hash,
+      selected: selected.schema,
+      total: selected.total,
+    };
+  } catch {
+    throw new CompilerProofError('schema_not_assignable');
+  }
+}
+
+function compiledNodePortContract(
+  nodes: Map<string, JsonObject>,
+  nodeId: string,
+  direction: 'input_ports' | 'output_ports',
+  port: string,
+): JsonObject | null {
+  const node = nodes.get(nodeId);
+  if (!node) return null;
+  const ports = node[direction];
+  if (!ports || typeof ports !== 'object' || Array.isArray(ports)) return null;
+  const value = ports[port];
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value
+    : null;
 }
 
 function nodePortContract(
@@ -683,23 +750,21 @@ export function compileCompatibilityProof(
 ): { proof: JsonObject; derivedSchema: JsonObject } {
   assertJsonObject(edge.from);
   assertJsonObject(edge.to);
-  const consumerContract = nodePortContract(
-    snapshot,
+  const consumerContract = compiledNodePortContract(
     nodes,
     String(edge.to.node_id),
     'input_ports',
     String(edge.to.port),
   );
   if (!consumerContract) throw new CompilerProofError('schema_not_assignable');
-  const consumer = portSchema(snapshot, consumerContract);
+  const consumer = compiledPortSchema(snapshot, consumerContract);
   let producer = consumer;
   let producerSchemaForRule = producer.selected;
   let literalSchema: JsonObject | null = null;
   const pointer =
     typeof edge.from.pointer === 'string' ? edge.from.pointer : undefined;
   if (edge.from.type === 'node_output') {
-    const producerContract = nodePortContract(
-      snapshot,
+    const producerContract = compiledNodePortContract(
       nodes,
       String(edge.from.node_id),
       'output_ports',
@@ -707,7 +772,7 @@ export function compileCompatibilityProof(
     );
     if (!producerContract)
       throw new CompilerProofError('schema_not_assignable');
-    producer = portSchema(snapshot, producerContract, pointer);
+    producer = compiledPortSchema(snapshot, producerContract, pointer);
   } else if (edge.from.type === 'scope_input') {
     assertJsonObject(interfaceSnapshot.inputs);
     const contract = interfaceSnapshot.inputs[String(edge.from.port)];
@@ -722,7 +787,7 @@ export function compileCompatibilityProof(
   }
   if (
     edge.from.type === 'literal' &&
-    !literalSatisfiesSchema(edge.from.value, consumer.resource.content)
+    !literalSatisfiesSchema(edge.from.value, consumer.content)
   ) {
     throw new CompilerProofError('schema_not_assignable');
   }
@@ -736,7 +801,7 @@ export function compileCompatibilityProof(
       : proofRule(producerSchemaForRule, consumer.selected);
   if (!validatedRule) throw new CompilerProofError('schema_not_assignable');
   const rule =
-    producer.resource.contentHash === consumer.resource.contentHash
+    producer.contentHash === consumer.contentHash
       ? 'identical_schema'
       : literalSchema?.type === 'array'
         ? 'array_item_subtype'
@@ -747,8 +812,8 @@ export function compileCompatibilityProof(
   const detail = {
     case: 'current_g2_golden_authoring',
     edge_id: edge.id,
-    producer_schema_hash: producer.resource.contentHash,
-    consumer_schema_hash: consumer.resource.contentHash,
+    producer_schema_hash: producer.contentHash,
+    consumer_schema_hash: consumer.contentHash,
     pointer: canonicalPointer,
     rule,
   };
@@ -756,15 +821,15 @@ export function compileCompatibilityProof(
     'icarus:workflow-data-edge-compatibility-proof-detail:1\n',
     detail,
   );
-  const derivedSchemaHash = producer.resource.contentHash;
+  const derivedSchemaHash = producer.contentHash;
   const withoutHash = {
     proof_algorithm_version: identity.proof_algorithm_version,
     proof_algorithm_hash: identity.proof_algorithm_hash,
-    producer_schema_hash: producer.resource.contentHash,
+    producer_schema_hash: producer.contentHash,
     canonical_pointer: canonicalPointer,
     pointer_totality: 'total',
     derived_schema_hash: derivedSchemaHash,
-    consumer_schema_hash: consumer.resource.contentHash,
+    consumer_schema_hash: consumer.contentHash,
     proof_rule: rule,
     proof_detail_ref: `inline:current-g2-golden/${String(edge.id)}`,
     proof_detail_hash: proofDetailHash,
@@ -777,10 +842,6 @@ export function compileCompatibilityProof(
         withoutHash,
       ),
     },
-    derivedSchema: {
-      type: 'registry',
-      ref: producer.resource.ref,
-      schema_hash: producer.resource.contentHash,
-    },
+    derivedSchema: producer.authority,
   };
 }

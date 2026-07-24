@@ -89,9 +89,9 @@ describe('G4 Test Bootstrap Contract Pack', () => {
       negative_case_count: 32,
       fault_case_count: 13,
       fake_adapter_outcome_count: 7,
-      database_schema_version: 5,
+      database_schema_version: 6,
       database_schema_hash:
-        'sha256:49aaee7c8f046cd9a15b3bc5b77fbcf1713be2a1872078941043f5ccdca29024',
+        'sha256:d35c2d6fe2aaaf87ad102561d1595d016f8ef2f04950e5e3ad30b91aa366d909',
       sqlite_profile_status: 'candidate',
       certification_status: 'not_certified',
       explicit_selection_required: true,
@@ -100,7 +100,8 @@ describe('G4 Test Bootstrap Contract Pack', () => {
       production_loader_g4_consumption: 'rejected',
       production_startup_g4_consumption: 'rejected',
       runtime_business_tables_written: false,
-      g5_status: 'NOT_READY_BLOCKED_BY_G4_REGRESSION',
+      g5_status:
+        'BLOCKED_BY_SPEC_NOT_READY_PENDING_GENERATED_SCHEMA_JOIN_AUTHORITY_AFFECTED_CHAIN_REGRESSION',
       g6_through_g9_status: 'NOT_READY',
     });
     expect(g4ContractCountsForTest()).toEqual({
@@ -127,27 +128,29 @@ describe('G4 Test Bootstrap Contract Pack', () => {
         connection_factory: 'WorkflowRuntimeConnectionFactory',
         identity_mode: 'candidate_development',
         database_name: 'workflow-runtime.db',
-        database_schema_version: 5,
+        database_schema_version: 6,
         g1_root_hash:
-          'sha256:baa39d55cac34133a29b461466aa450fec59bd2fd6df72334e8b33d1d1619869',
+          'sha256:ff588497b32eacc268c379d220fedbb3d29f69a0fdb9337c7a1e429ee7a868eb',
         migration_hash:
-          'sha256:2ead40dc2f1618f87247e9d3bb476266797c38560e1ad0537a6afa6f71a3fbf6',
+          'sha256:16a46e84c77d734013e18b4b00b86564f6188ea73717763e9fb7a884d62faa41',
         schema3_to_4_upgrade_hash:
           'sha256:5ac263fe3279c61f74ba6314f5df98fff59a8f8b32acfa784d2040421ebaa3cf',
         schema4_to_5_upgrade_hash:
           'sha256:97479810c2c079d71270d5a714faa4b8fa8ebd6af629ef2f7d772af270c2bb0a',
+        schema5_to_6_upgrade_hash:
+          'sha256:dc94fa0867ca572b7ec39ffb8df448e38be00ca4831f1d420885ee7cc097687d',
       },
       upstream_contracts: {
         g2_sealed_bundle_hash:
-          'sha256:b3ed9e43bd0fadaf40520257926dcf690ee8495bb417220245f248385bde9efb',
+          'sha256:b7d26b8622b1ceadff419430f443a9b0ceb377cbd47af20e9109ea878046abf9',
         g3_6_pack_hash:
-          'sha256:4dd52b4f38da315ba0194fd23a9c681ffdba6aac37291100dd6d6b944178acd9',
+          'sha256:da15a3b9e7f3215f879d43b8f321c07f432f7d928d42314f22f6028b61f16aa9',
         g3_7_pack_hash:
-          'sha256:e80038f09ad841de630d961f137f15a2de14a487a74afb6b1d8b36edea689ba0',
+          'sha256:1614e89ecac4713c6d991a6ae68e548f01268e25ba8b700a107e4cdcb1b64647',
         g3_8a_pack_hash:
           'sha256:d8412111a0f3dcabb4ce416b99086701ea3e3911ff431b5457eb957b2f69722f',
         g3_9_pack_hash:
-          'sha256:eb3d316be520e68fe53b6be826046d3f8fa1cf97db298d5703886d1dcb97b70f',
+          'sha256:c9aa03bf85e2b358f8b4b01b7dcfecf25ce76d2339688e88fe969d1babe10107',
       },
     });
   });

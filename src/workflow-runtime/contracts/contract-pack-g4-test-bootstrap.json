@@ -13,7 +13,7 @@
       "id": "icarus.workflow-test-bootstrap-profile",
       "version": "1.0.0"
     },
-    "profile_hash": "sha256:71e0aba29c1ec34cd4d9fa0515409576bdc8fd7f90b9c258bbe0a614b3f0fa3d",
+    "profile_hash": "sha256:4d0eb3c35740503b629ad2ad46aea5fc3c0b4c70292b0b9cbcea143e69edddef",
     "fixture_set_ref": {
       "id": "icarus.workflow-test-bootstrap-fixture-set",
       "version": "1.0.0"
@@ -29,7 +29,7 @@
       "version": "1.0.0"
     },
     "virtual_clock_profile_hash": "sha256:1f37b9d07a7c3b667d60eb489a3ed78017cb7d42072f065d551a5839a29ce73c",
-    "bootstrap_implementation_hash": "sha256:28a920856d26325ec14c976a9e1da668c1302e06fd3e2e05abb890dff830f018",
+    "bootstrap_implementation_hash": "sha256:1a04adf90718c7ad7f53caf93fd2a02ca00857e86ab96bfcf81ae137aef1a552",
     "isolation_boundary_hash": "sha256:883f8f2d4040fd03ea5a49bd38826ce6c37d5556175219b66f335793087f9188",
     "positive_case_count": 9,
     "negative_case_count": 32,
@@ -44,8 +44,8 @@
       "cancelled",
       "compensated"
     ],
-    "database_schema_version": 5,
-    "database_schema_hash": "sha256:49aaee7c8f046cd9a15b3bc5b77fbcf1713be2a1872078941043f5ccdca29024",
+    "database_schema_version": 6,
+    "database_schema_hash": "sha256:d35c2d6fe2aaaf87ad102561d1595d016f8ef2f04950e5e3ad30b91aa366d909",
     "sqlite_profile_status": "candidate",
     "certification_status": "not_certified",
     "explicit_selection_required": true,
@@ -58,7 +58,7 @@
     "api_ingress_g4_reachability": "unreachable",
     "automation_ingress_g4_reachability": "unreachable",
     "runtime_business_tables_written": false,
-    "g5_status": "NOT_READY_BLOCKED_BY_G4_REGRESSION",
+    "g5_status": "BLOCKED_BY_SPEC_NOT_READY_PENDING_GENERATED_SCHEMA_JOIN_AUTHORITY_AFFECTED_CHAIN_REGRESSION",
     "g6_through_g9_status": "NOT_READY",
     "artifacts": [
       {
@@ -70,7 +70,7 @@
         },
         "version": 1,
         "domain_separator": "icarus:workflow-test-bootstrap-profile-schema:1\n",
-        "hash": "sha256:06cd741ac90c0eb7b34294d2e779e765000d0a7461cccbe6d2043b7216cf0952"
+        "hash": "sha256:085dad6c07f170ceb9da14d0e35041acb404f5e56756a5b5377d6c64ccce82a9"
       },
       {
         "path": "bootstrap/workflow-test-fake-adapter-invocation-schema@1.json",
@@ -103,7 +103,7 @@
         },
         "version": 1,
         "domain_separator": "icarus:workflow-test-bootstrap-isolation-receipt-schema:1\n",
-        "hash": "sha256:67746e852958ea8c633e4ac0b6ed720cc053e277c11e0a113508345c2a461b57"
+        "hash": "sha256:7e028d489de4aee9afb7f9b42463b33ed820a352fa10174ef20f8b683d6a0635"
       },
       {
         "path": "bootstrap/workflow-test-bootstrap-fixture-set@1.json",
@@ -147,7 +147,7 @@
         },
         "version": 1,
         "domain_separator": "icarus:workflow-test-bootstrap-implementation-artifact:1\n",
-        "hash": "sha256:74803b081571df002b900dc6ed23b9c7fc83f86bcb8f096a331cf2011805825e"
+        "hash": "sha256:4ced1df4314038474b41c19b313531b25bc31671969529caa33876f18d448275"
       },
       {
         "path": "bootstrap/workflow-test-bootstrap-isolation-boundary@2.json",
@@ -169,7 +169,7 @@
         },
         "version": 1,
         "domain_separator": "icarus:workflow-test-bootstrap-profile:1\n",
-        "hash": "sha256:71e0aba29c1ec34cd4d9fa0515409576bdc8fd7f90b9c258bbe0a614b3f0fa3d"
+        "hash": "sha256:4d0eb3c35740503b629ad2ad46aea5fc3c0b4c70292b0b9cbcea143e69edddef"
       },
       {
         "path": "conformance/g4-test-bootstrap/positive-cases.json",
@@ -180,7 +180,7 @@
         },
         "version": 1,
         "domain_separator": "icarus:workflow-test-bootstrap-positive-cases:1\n",
-        "hash": "sha256:814db792f640d64d26269ed73870164aeb0c636f17f1d0bfcb3c9a4a27710d79"
+        "hash": "sha256:07277dc4cdf3ce5b4168137066d1329bb8da425f24867c71743cf4c3db41b51e"
       },
       {
         "path": "conformance/g4-test-bootstrap/negative-cases.json",
@@ -217,5 +217,5 @@
       }
     ]
   },
-  "hash": "sha256:4d2ca7bc3095ae5ac208da8918eabc6d3b7c62e9fab029439f6b01c275f7b8cd"
+  "hash": "sha256:233040aa37bacc35e2e8d3fcf7c76b7022c325979794f2a12c6aef7040f4b635"
 }

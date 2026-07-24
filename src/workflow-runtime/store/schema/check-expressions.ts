@@ -44,6 +44,10 @@ const CUSTOM_CHECKS: Readonly<Record<string, string>> = {
     '(("storage_kind" = \'inline\' AND "inline_canonical_json" IS NOT NULL AND "blob_hash" IS NULL AND "immutable_external_locator" IS NULL AND "expected_hash" IS NULL) OR ("storage_kind" = \'blob\' AND "inline_canonical_json" IS NULL AND "blob_hash" IS NOT NULL AND "immutable_external_locator" IS NULL AND "expected_hash" IS NULL) OR ("storage_kind" = \'immutable_external\' AND "inline_canonical_json" IS NULL AND "blob_hash" IS NULL AND "immutable_external_locator" IS NOT NULL AND "expected_hash" IS NOT NULL))',
   'ck:values:payload_state':
     '(("payload_state" = \'pruned\' AND "payload_pruned_at_ms" IS NOT NULL) OR ("payload_state" IN (\'live\', \'corrupt\') AND "payload_pruned_at_ms" IS NULL))',
+  'ck:values:schema_authority_shape':
+    '(("schema_authority_kind" = \'registry\' AND "schema_resource_id" IS NOT NULL AND "schema_resource_hash" IS NOT NULL AND "schema_plan_id" IS NULL AND "schema_plan_hash" IS NULL AND "generated_schema_ref" IS NULL AND "generated_schema_hash" IS NULL AND "generated_schema_generator" IS NULL AND "generated_schema_parameter_hash" IS NULL) OR ("schema_authority_kind" = \'plan_generated\' AND "schema_resource_id" IS NULL AND "schema_resource_hash" IS NULL AND "schema_plan_id" IS NOT NULL AND "schema_plan_hash" IS NOT NULL AND "generated_schema_ref" IS NOT NULL AND "generated_schema_hash" IS NOT NULL AND "generated_schema_generator" IS NOT NULL AND "generated_schema_parameter_hash" IS NOT NULL))',
+  'ck:generated_schema_contents:ref':
+    '"schema_ref" = \'icarus-generated-schema:\' || "schema_raw_hash"',
   'ck:blob_objects:deleted_time':
     '(("state" = \'deleted\' AND "deleted_at_ms" IS NOT NULL) OR ("state" <> \'deleted\' AND "deleted_at_ms" IS NULL))',
   'ck:registry_resources:publication_time':

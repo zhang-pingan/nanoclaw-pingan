@@ -34,6 +34,7 @@ import {
   CompilerProofError,
   schemaAssignable,
 } from './proofs.js';
+import { buildGeneratedSchema } from '../contracts/generated-schema-authority.js';
 import { assertSourceObject, validateClosedSource } from './schema-profile.js';
 import {
   bindCompilerSnapshot,
@@ -1376,14 +1377,22 @@ function compileInputPorts(
         const contract = ports[name];
         assertJsonObject(contract);
         assertJsonObject(contract.schema_ref);
-        return [
-          name,
-          {
-            schema: compiledSchema(snapshot, contract.schema_ref),
-            max_bytes: contract.max_bytes,
-            aggregation: contract.aggregation,
-          },
-        ];
+        const compiled: JsonObject = {
+          schema: compiledSchema(snapshot, contract.schema_ref),
+          max_bytes: contract.max_bytes,
+          aggregation: contract.aggregation,
+        };
+        assertJsonObject(contract.aggregation);
+        if (contract.aggregation.type === 'list') {
+          assertJsonObject(contract.item_contract);
+          assertJsonObject(contract.item_contract.schema_ref);
+          compiled.item_schema = compiledSchema(
+            snapshot,
+            contract.item_contract.schema_ref,
+          );
+          compiled.item_max_bytes = contract.item_contract.max_bytes;
+        }
+        return [name, compiled];
       }),
   );
 }
@@ -1448,19 +1457,86 @@ function generatedCompiledSchema(
             },
           },
         };
-  return {
-    type: 'generated',
-    generator,
-    parameter_hash: semanticHash(
-      'icarus:workflow-generated-schema-parameter:1\n',
-      parameters,
-    ),
-    schema_json: schemaJson,
-    schema_hash: semanticHash(
-      'icarus:workflow-generated-schema:1\n',
-      schemaJson,
-    ),
-  };
+  return buildGeneratedSchema(generator, parameters, schemaJson);
+}
+
+function registrySchemaJson(
+  schema: JsonObject,
+  snapshot: BoundCompilerSnapshot,
+): JsonObject {
+  if (schema.type !== 'registry') {
+    throw new Error(
+      'Join input schema must be compiled from Registry authority',
+    );
+  }
+  assertJsonObject(schema.ref);
+  const resource = resourceForRef(snapshot, schema.ref, 'schema');
+  if (!resource) throw new Error('Join input schema binding disappeared');
+  return resource.content;
+}
+
+function joinOutputPorts(
+  node: JsonObject,
+  state: CompilationState,
+): JsonObject {
+  const inputs = compileInputPorts(
+    objectRef(node.input_ports) ?? {},
+    state.snapshot,
+  );
+  const expose = objectRef(node.expose) ?? {};
+  return Object.fromEntries(
+    Object.keys(expose)
+      .sort(compareAscii)
+      .map((outputName) => {
+        const binding = expose[outputName];
+        assertJsonObject(binding);
+        const inputName = String(binding.input_port);
+        const input = inputs[inputName];
+        if (!input || Array.isArray(input) || typeof input !== 'object') {
+          throw new CompilerDiagnosticError(
+            diagnostic(
+              'schema_not_assignable',
+              'bind',
+              '/nodes',
+              String(node.id),
+            ),
+          );
+        }
+        assertJsonObject(input.schema);
+        assertJsonObject(input.aggregation);
+        const required =
+          input.aggregation.type === 'list' ||
+          input.aggregation.required === true ||
+          Object.hasOwn(input.aggregation, 'default');
+        const parameters: JsonObject = {
+          node_id: node.id,
+          output_port: outputName,
+          input_port: inputName,
+          input_schema: input.schema,
+          aggregation: input.aggregation,
+          max_bytes: input.max_bytes,
+          required,
+          ...(input.aggregation.type === 'list'
+            ? {
+                item_schema: input.item_schema,
+                item_max_bytes: input.item_max_bytes,
+              }
+            : {}),
+        };
+        return [
+          outputName,
+          {
+            schema: buildGeneratedSchema(
+              'join_expose',
+              parameters,
+              registrySchemaJson(input.schema, state.snapshot),
+            ),
+            max_bytes: input.max_bytes,
+            required,
+          },
+        ];
+      }),
+  );
 }
 
 function childOwnerOutputPorts(
@@ -1899,7 +1975,13 @@ function compileGraphNode(
       },
     };
   }
-  if (node.type === 'join') return { ...base, expose: node.expose };
+  if (node.type === 'join') {
+    return {
+      ...base,
+      output_ports: joinOutputPorts(node, state),
+      expose: node.expose,
+    };
+  }
   if (node.type === 'subgraph') {
     assertJsonObject(state.snapshot.safety.scope);
     assertJsonObject(node.scope);
@@ -2197,10 +2279,9 @@ function compileDataEdges(
   source: JsonObject,
   state: CompilationState,
   interfaceSnapshot: JsonObject,
+  compiledNodes: JsonObject[],
 ): JsonObject[] {
-  const nodes = new Map(
-    graphNodes(source).map((node) => [String(node.id), node]),
-  );
+  const nodes = new Map(compiledNodes.map((node) => [String(node.id), node]));
   return dataEdges(source)
     .map((edge, index) => {
       let compiled;
@@ -2622,7 +2703,7 @@ function compileGraphPlan(
     .sort(compareStableId);
   const routeGroups = compileRouteGroups(source);
   const controls = compileControlEdges(source, planState, interfaceSnapshot);
-  const data = compileDataEdges(source, planState, interfaceSnapshot);
+  const data = compileDataEdges(source, planState, interfaceSnapshot, nodes);
   const completion = compileCompletion(source, planState);
   const closure = staticClosure(source, factoryByNode, ownerPath);
   assertJsonObject(planState.snapshot.safety.scope);

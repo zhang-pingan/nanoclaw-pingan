@@ -65,7 +65,7 @@ describe('G0.4 catalog and protocol Contract Pack', () => {
       'sha256:e85b654581c036f8129677d7443a0704ebc8b8fbe87907b842aaefe1501e637d',
     );
     expect(manifest.payload.closed_schema_manifest_hash).toBe(
-      'sha256:c5ea281d64480787322e8b6ef619b2f90784084d87ba4373c94288ed5e7aa3a8',
+      'sha256:6f7aa5b997c5a496a4eb95776a09f18e3c25753e7324a6ef1f095a23b8413d81',
     );
     for (const [relativePath, bytes] of before) {
       expect(fs.readFileSync(path.join(contractsRoot, relativePath))).toEqual(
@@ -230,12 +230,13 @@ describe('G0.4 catalog and protocol Contract Pack', () => {
       'sha256:e85b654581c036f8129677d7443a0704ebc8b8fbe87907b842aaefe1501e637d',
     );
     expect(readArtifact('contract-pack-closed-schemas.json').hash).toBe(
-      'sha256:c5ea281d64480787322e8b6ef619b2f90784084d87ba4373c94288ed5e7aa3a8',
+      'sha256:6f7aa5b997c5a496a4eb95776a09f18e3c25753e7324a6ef1f095a23b8413d81',
     );
     for (const directory of ['conformance/sealed']) {
       expect(fs.readdirSync(path.join(contractsRoot, directory))).toEqual([
         '.gitkeep',
         'g2-capability-outbox-binding-v3',
+        'g2-generated-schema-join-authority-v4',
         'g2-production-compiler-replay-repair-v2',
         'g2-semantic-correction',
       ]);

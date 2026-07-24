@@ -33,6 +33,16 @@ const FORBIDDEN_SCHEMA_KEYWORDS = new Set([
   'unevaluatedItems',
   'unevaluatedProperties',
 ]);
+const GRAPH_NODE_BRANCH_BY_TYPE = new Map([
+  ['delegation', 0],
+  ['system', 1],
+  ['wait', 2],
+  ['join', 3],
+  ['subgraph', 4],
+  ['expand', 5],
+  ['map', 6],
+  ['terminal', 7],
+]);
 
 function schemaPayload(relativePath: string): AnySchema {
   return parseContractArtifactEnvelope(
@@ -153,9 +163,19 @@ export function validateClosedSource(
   }
   const validate = kind === 'graph_scope' ? validateGraph : validateDefinition;
   if (validate(source)) return null;
-  const additionalProperty = validate.errors?.find(
-    (error) => error.keyword === 'additionalProperties',
-  );
+  const typedNodeAdditionalProperty = validate.errors?.find((error) => {
+    if (error.keyword !== 'additionalProperties') return false;
+    const node = valueAtPointer(source, error.instancePath);
+    if (!node || typeof node !== 'object' || Array.isArray(node)) return false;
+    const branch = GRAPH_NODE_BRANCH_BY_TYPE.get(String(node.type));
+    return (
+      branch !== undefined &&
+      error.schemaPath.endsWith(`/oneOf/${branch}/additionalProperties`)
+    );
+  });
+  const additionalProperty =
+    typedNodeAdditionalProperty ??
+    validate.errors?.find((error) => error.keyword === 'additionalProperties');
   const error = additionalProperty ?? validate.errors?.[0];
   if (!error)
     throw new Error('Closed source validation failed without diagnostics');

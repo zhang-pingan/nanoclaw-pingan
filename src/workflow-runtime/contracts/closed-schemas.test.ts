@@ -142,7 +142,8 @@ describe('G0.3 closed schema Contract Pack', () => {
       'feature_manifest_rejects_parent_source_path',
       'source_rejects_loop_node',
       'compiled_plan_rejects_unknown_field',
-      'compiled_plan_rejects_both_generated_schema_sources',
+      'compiled_plan_rejects_unknown_generated_schema_scheme',
+      'compiled_plan_rejects_missing_generated_schema_json',
       'compiled_plan_rejects_both_artifact_contract_choices',
     ]) {
       expect(caseIds.has(expectedCaseId), expectedCaseId).toBe(true);
@@ -157,6 +158,7 @@ describe('G0.3 closed schema Contract Pack', () => {
       expect(fs.readdirSync(path.join(contractsRoot, directory))).toEqual([
         '.gitkeep',
         'g2-capability-outbox-binding-v3',
+        'g2-generated-schema-join-authority-v4',
         'g2-production-compiler-replay-repair-v2',
         'g2-semantic-correction',
       ]);

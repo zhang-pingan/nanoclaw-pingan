@@ -6,11 +6,11 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-runtime-query-plan-fixtures:1\n",
-  "hash": "sha256:65c28f3fd4b3933713d4ac959f9f20a5adf270cd132fb0e0cc85c502b739ff7a",
+  "hash": "sha256:1d5dab36eac75bf7db79b57af0b9d982a9dcea0a24bc2f4e057305594a0faa01",
   "payload": {
-    "schema_hash": "sha256:49aaee7c8f046cd9a15b3bc5b77fbcf1713be2a1872078941043f5ccdca29024",
+    "schema_hash": "sha256:d35c2d6fe2aaaf87ad102561d1595d016f8ef2f04950e5e3ad30b91aa366d909",
     "execution_target": "real_file_sqlite",
-    "query_count": 43,
+    "query_count": 44,
     "fixtures": [
       {
         "query_id": "query:scheduler_ready_nodes",
@@ -355,6 +355,14 @@
         "sql": "SELECT * FROM \"workflow_registry_retention_handles\" INDEXED BY \"idx:retention_handles:activation_preflight\" WHERE \"feature_release_id\" = ? AND \"handle_kind\" = ? AND \"status\" = ? AND \"closure_manifest_id\" = ? AND \"closure_hash\" = ? LIMIT 50",
         "parameter_count": 5,
         "required_index_id": "idx:retention_handles:activation_preflight"
+      },
+      {
+        "query_id": "reconciler_resolve_plan_generated_schema",
+        "owner": "reconciler",
+        "coverage_area": "t3",
+        "sql": "SELECT * FROM \"workflow_plan_generated_schemas\" INDEXED BY \"idx:plan_generated_schemas:resolve\" WHERE \"plan_id\" = ? AND \"schema_ref\" = ? LIMIT 50",
+        "parameter_count": 2,
+        "required_index_id": "idx:plan_generated_schemas:resolve"
       }
     ],
     "required_coverage": [

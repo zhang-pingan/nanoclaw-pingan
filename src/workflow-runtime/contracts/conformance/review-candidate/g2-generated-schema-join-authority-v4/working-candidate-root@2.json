@@ -1,0 +1,346 @@
+{
+  "format": "icarus.workflow-compiler-g2-replay-repair-working-candidate/1",
+  "ref": {
+    "id": "icarus.workflow-compiler-g2-replay-repair-working-candidate",
+    "version": "2.0.0-working"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-compiler-g2-replay-repair-working-candidate-artifact:1\n",
+  "hash": "sha256:6951b4e1fd0817423936671de92b090979d63f3d7db0042344cae5c286b0a5d3",
+  "payload": {
+    "gate": "G2",
+    "construction_phase": "WORKING",
+    "status": "WORKING_COMPILER_COMPARISON_SUCCESSOR",
+    "disposition": "actual_compiler_output_not_golden_oracle",
+    "publishable": false,
+    "production_reachable": false,
+    "compiler_toolchain_ref": "conformance/review-candidate/g2-generated-schema-join-authority-v4/workflow-compiler-toolchain@3.0.3.json",
+    "compiler_toolchain_hash": "sha256:acc4bd6e6444f9903e3054bf637dee28ee8b25fbfc5eebd49b9aaf37582ff493",
+    "compiler_identity": {
+      "compiler_toolchain_manifest_ref": {
+        "id": "icarus.workflow-compiler-toolchain",
+        "version": "3.0.3"
+      },
+      "compiler_toolchain_hash": "sha256:acc4bd6e6444f9903e3054bf637dee28ee8b25fbfc5eebd49b9aaf37582ff493",
+      "compiler_version": "3.0.3",
+      "compiler_build_hash": "sha256:eae5b2002226b9110dddba57dce528af91439ae760c5d30636631bcb464d86b2",
+      "canonical_normalizer_version": "2.0.1",
+      "canonical_normalizer_hash": "sha256:e32946d0d20cc92344a72d04e488951cc4a64be82d36384db26dfbf420e469ff",
+      "proof_algorithm_version": "2.0.2",
+      "proof_algorithm_hash": "sha256:b6fda13a0acddf052cae5ed6f1bc89f2b9cfa91affbfcbb80aa44365f78c35d9",
+      "error_catalog_ref": {
+        "id": "icarus.workflow-compiler-error-catalog",
+        "version": "2.0.0"
+      },
+      "error_catalog_hash": "sha256:8fc7139b29cdddf3c1e13e0f9d8bc6b19a1d32c02c1e7f4b7e33023fcece91ef",
+      "compiled_ir_schema_ref": "conformance/capability-outbox-execution-binding/schemas/compiled-scope-plan-v2-execution-binding-schema@1.json",
+      "compiled_ir_schema_hash": "sha256:e582abc7a221f4d1afd66d12c2a87816cb228f6139a77d9abfaa1a397844f947",
+      "conformance_result_schema_ref": "conformance/capability-outbox-execution-binding/schemas/compiler-conformance-case-result-execution-binding-schema@1.json",
+      "conformance_result_schema_hash": "sha256:ee41b9dff7eb2c97a75c81a7c15ec3bcf935ce233c29468a4ef7b7bfa047987e"
+    },
+    "case_input_binding_ref": "conformance/review-candidate/g2-generated-schema-join-authority-v4/g2-case-input-binding@4.json",
+    "case_input_binding_hash": "sha256:ad35cbd870ffc0af066ca56c1b44c1d9acccad5f2815dbb9e260a08f61a45fb7",
+    "case_count": 40,
+    "compiled_count": 11,
+    "rejected_count": 29,
+    "results": [
+      {
+        "case_id": "positive.static-lowering",
+        "outcome": "compiled",
+        "result_ref": "conformance/review-candidate/g2-generated-schema-join-authority-v4/actual/positive.static-lowering.result.json",
+        "result_hash": "sha256:0470f801db580dcb93deb55f4464dec4326e5a7822d45bfde13e2b47527ac796",
+        "result_raw_bytes_hash": "sha256:091ef1a4bf0cd82924fb6e40323172001d40c29fe3283e1e15d04b27d7e7c399"
+      },
+      {
+        "case_id": "positive.condition-route",
+        "outcome": "compiled",
+        "result_ref": "conformance/review-candidate/g2-generated-schema-join-authority-v4/actual/positive.condition-route.result.json",
+        "result_hash": "sha256:75c08b780250ad5ccfafbe69336c6c6ec9e7e6cf234fddbd4ff4373a87db3fff",
+        "result_raw_bytes_hash": "sha256:4b5418ce66c363c8255680f8fa777ca8a1e6d1ef2895d99429c2ef19e603c005"
+      },
+      {
+        "case_id": "positive.wait",
+        "outcome": "compiled",
+        "result_ref": "conformance/review-candidate/g2-generated-schema-join-authority-v4/actual/positive.wait.result.json",
+        "result_hash": "sha256:b85bc51009743e3f8877cf9a7ec3f45ac50cdefb9ace6986e4b15fe33e46e356",
+        "result_raw_bytes_hash": "sha256:2e7a5a708dbd2a30bcbb3af3a56531bf6821bf9e8a95718b81100cf8bb75b6b3"
+      },
+      {
+        "case_id": "positive.subgraph",
+        "outcome": "compiled",
+        "result_ref": "conformance/review-candidate/g2-generated-schema-join-authority-v4/actual/positive.subgraph.result.json",
+        "result_hash": "sha256:aa772259d5e3da358db41033a51243d4c6d29f898a13f0c9ff9b68efcbcf0f6a",
+        "result_raw_bytes_hash": "sha256:437f86cc8a4c6f26c29fc2d4578c5f16c9926a7a4d95554ce2694fc4971430be"
+      },
+      {
+        "case_id": "positive.expand",
+        "outcome": "compiled",
+        "result_ref": "conformance/review-candidate/g2-generated-schema-join-authority-v4/actual/positive.expand.result.json",
+        "result_hash": "sha256:670b76e35d3de4f12f82b5467ef338c3f6bd04b9cd179519a445052c43b586ac",
+        "result_raw_bytes_hash": "sha256:52c8731fe3c1725f59fabfc32599c0022d37063c0fd3077d116173a9099f7594"
+      },
+      {
+        "case_id": "positive.map",
+        "outcome": "compiled",
+        "result_ref": "conformance/review-candidate/g2-generated-schema-join-authority-v4/actual/positive.map.result.json",
+        "result_hash": "sha256:4a07b9610a0bf741a2a499d9e15dfc1100eadd6b8acc9a71af685e76759cbdba",
+        "result_raw_bytes_hash": "sha256:ec7840e67d1f7300153d55a74d11ebf690fef1dc1eff4426e375de3d58a7aaa4"
+      },
+      {
+        "case_id": "positive.policy-intersection",
+        "outcome": "compiled",
+        "result_ref": "conformance/review-candidate/g2-generated-schema-join-authority-v4/actual/positive.policy-intersection.result.json",
+        "result_hash": "sha256:a97724caa67758a89ec583de21c3c5dd9042974a9aea8b8fa7f901c4cd2fe9a9",
+        "result_raw_bytes_hash": "sha256:979d1925b66b5735c36ac038fd5f0aeedff9a74104f3ba34cee1f39144589a4b"
+      },
+      {
+        "case_id": "positive.quality-revision-binding",
+        "outcome": "compiled",
+        "result_ref": "conformance/review-candidate/g2-generated-schema-join-authority-v4/actual/positive.quality-revision-binding.result.json",
+        "result_hash": "sha256:e30348c10f2fc0ef694858b465e34e3e1fb200736fad0bc280957fd8ca53397e",
+        "result_raw_bytes_hash": "sha256:2bcdf011a7086c13d66882b52d8ed0ec042e471122d5d76633234663e4204734"
+      },
+      {
+        "case_id": "positive.sound-subtype-different-hash",
+        "outcome": "compiled",
+        "result_ref": "conformance/review-candidate/g2-generated-schema-join-authority-v4/actual/positive.sound-subtype-different-hash.result.json",
+        "result_hash": "sha256:0b08728f48f0f97c57721ba583d3505df7abc1db1fa54ea5da32a23fd41b321f",
+        "result_raw_bytes_hash": "sha256:ea01ace9095efa3ac4ccde0814d8758d012a894fb238f2de3c674af961176104"
+      },
+      {
+        "case_id": "positive.static-child-closure",
+        "outcome": "compiled",
+        "result_ref": "conformance/review-candidate/g2-generated-schema-join-authority-v4/actual/positive.static-child-closure.result.json",
+        "result_hash": "sha256:1f687217106b1ad8b68a653c93be16a655198c852160961f2428e06db0506d3b",
+        "result_raw_bytes_hash": "sha256:e186ff4fddef9f58b63a420af52ec462a1f32b2515cf21f926cd416a30780abf"
+      },
+      {
+        "case_id": "negative.json-syntax-invalid",
+        "outcome": "rejected",
+        "result_ref": "conformance/review-candidate/g2-generated-schema-join-authority-v4/actual/negative.json-syntax-invalid.result.json",
+        "result_hash": "sha256:59102ca6bccb67130e63a38ff0b483be4d31a049330e7badeae6385da044b991",
+        "result_raw_bytes_hash": "sha256:44b34da8d2b67ff5965f26c30f4e09da9f37352981222477923f6d1051b1e7ec"
+      },
+      {
+        "case_id": "negative.json-duplicate-key",
+        "outcome": "rejected",
+        "result_ref": "conformance/review-candidate/g2-generated-schema-join-authority-v4/actual/negative.json-duplicate-key.result.json",
+        "result_hash": "sha256:3098554e01b7a9b6ac8ef2ef43c476f0b3405117ef1a0c1203eededf1bd7a887",
+        "result_raw_bytes_hash": "sha256:c775a5b73d278e0666e70b30231994248658789b7ddf7a101515a0c0e1b56b30"
+      },
+      {
+        "case_id": "negative.schema-unknown-field",
+        "outcome": "rejected",
+        "result_ref": "conformance/review-candidate/g2-generated-schema-join-authority-v4/actual/negative.schema-unknown-field.result.json",
+        "result_hash": "sha256:dbf93cd9a3c096dfb0fec133f21a87815a92e7a52bc1c5950b8cca17c22b9e58",
+        "result_raw_bytes_hash": "sha256:77578314e70a0eb3cacb7fd1b8a662641e3e7fa14bd2389b37cb5da942c82e69"
+      },
+      {
+        "case_id": "negative.schema-profile-keyword-unsupported",
+        "outcome": "rejected",
+        "result_ref": "conformance/review-candidate/g2-generated-schema-join-authority-v4/actual/negative.schema-profile-keyword-unsupported.result.json",
+        "result_hash": "sha256:34e9a56946f9deaa283ffdd768d755512147d13a9d9a38d8b92d70296d15749d",
+        "result_raw_bytes_hash": "sha256:272e8506a5819e69274184a87b8d82c86e83376dde3be84d478f458b4bf6ffe0"
+      },
+      {
+        "case_id": "negative.registry-ref-unpinned",
+        "outcome": "rejected",
+        "result_ref": "conformance/review-candidate/g2-generated-schema-join-authority-v4/actual/negative.registry-ref-unpinned.result.json",
+        "result_hash": "sha256:ac8b9a484b2ddf98c557394eade4a155b8d8c85b623d0bf2f587875d5e48434e",
+        "result_raw_bytes_hash": "sha256:7b39ee15c6e3c66f5dd19b79b6f3c27314c83c742d1e789e184f99d80a069674"
+      },
+      {
+        "case_id": "negative.registry-ref-not-found",
+        "outcome": "rejected",
+        "result_ref": "conformance/review-candidate/g2-generated-schema-join-authority-v4/actual/negative.registry-ref-not-found.result.json",
+        "result_hash": "sha256:d63589474da6b4eeddc69ef8286b846dddea6548a7a70c531a7b0daedfcf9cd2",
+        "result_raw_bytes_hash": "sha256:b308b10e80a2299ea84669a6bf669343f7fdbf1b922c6e5bc103e4d3528fc189"
+      },
+      {
+        "case_id": "negative.graph-id-duplicate",
+        "outcome": "rejected",
+        "result_ref": "conformance/review-candidate/g2-generated-schema-join-authority-v4/actual/negative.graph-id-duplicate.result.json",
+        "result_hash": "sha256:4a960d8b76374c193e9502d0131ef7b0372e4bf0a9f0e16030129ddb7f01e9af",
+        "result_raw_bytes_hash": "sha256:9ca2ad9816ef58d00509c534a56de0782358d2e77d51dc24e49ccaf55bd33dc5"
+      },
+      {
+        "case_id": "negative.graph-endpoint-not-found",
+        "outcome": "rejected",
+        "result_ref": "conformance/review-candidate/g2-generated-schema-join-authority-v4/actual/negative.graph-endpoint-not-found.result.json",
+        "result_hash": "sha256:42459b590dcb5c69345f4e9be89c38fb3c246f5af58a13182fb26c5d6306c766",
+        "result_raw_bytes_hash": "sha256:a41a0dcea7837d48a7fc61e6f3be4281d112aac2890c47c031874f300466188d"
+      },
+      {
+        "case_id": "negative.graph-cross-scope-edge",
+        "outcome": "rejected",
+        "result_ref": "conformance/review-candidate/g2-generated-schema-join-authority-v4/actual/negative.graph-cross-scope-edge.result.json",
+        "result_hash": "sha256:ab58bd637a169b12a39003abcfce7162d11df18c3e95286a55e483440aaf673d",
+        "result_raw_bytes_hash": "sha256:5e85f1cbdfc42c5e95f1ca66b0248932f62f177c96d02f35d4537bb3606f49ee"
+      },
+      {
+        "case_id": "negative.graph-dependency-cycle",
+        "outcome": "rejected",
+        "result_ref": "conformance/review-candidate/g2-generated-schema-join-authority-v4/actual/negative.graph-dependency-cycle.result.json",
+        "result_hash": "sha256:b21dc62a6c39e6e8d2f93fd882aab67c74146465d04386bdb5600484fcd44571",
+        "result_raw_bytes_hash": "sha256:281c9348e73b53e49c8cca498703278aea50eae835aeb899dc202c40898c5653"
+      },
+      {
+        "case_id": "negative.condition-type-mismatch",
+        "outcome": "rejected",
+        "result_ref": "conformance/review-candidate/g2-generated-schema-join-authority-v4/actual/negative.condition-type-mismatch.result.json",
+        "result_hash": "sha256:2a1b649b4f06eec42a905b2fac2273ae2013e0a22aa2de04aae64b770e594909",
+        "result_raw_bytes_hash": "sha256:3dade061fbc412ad165b33f9e40156f7a83c04271db38212240b7ab001f6bfbd"
+      },
+      {
+        "case_id": "negative.condition-complexity-exceeded",
+        "outcome": "rejected",
+        "result_ref": "conformance/review-candidate/g2-generated-schema-join-authority-v4/actual/negative.condition-complexity-exceeded.result.json",
+        "result_hash": "sha256:b66d4eb73f64c21d0c0d2724e2d4704c9192a47f1874e0e12870f76019972673",
+        "result_raw_bytes_hash": "sha256:4a78e14eeb5c56a66c0eca2c9bb407071a14d7d84ecd893ab9f2c86608a989d0"
+      },
+      {
+        "case_id": "negative.json-pointer-non-total",
+        "outcome": "rejected",
+        "result_ref": "conformance/review-candidate/g2-generated-schema-join-authority-v4/actual/negative.json-pointer-non-total.result.json",
+        "result_hash": "sha256:91cbde1f43db77e57686dabc77dc199db822d551feac18a838732fa4f2f21b2e",
+        "result_raw_bytes_hash": "sha256:61fa2cf63bc914df7756fb3361eaa12df8ec159aa61633fdc118fa9969d10562"
+      },
+      {
+        "case_id": "negative.schema-not-assignable",
+        "outcome": "rejected",
+        "result_ref": "conformance/review-candidate/g2-generated-schema-join-authority-v4/actual/negative.schema-not-assignable.result.json",
+        "result_hash": "sha256:a2834ebef0a1e400139fc587be5162a07b5b186fa7679ffa51e0812fe533ff6e",
+        "result_raw_bytes_hash": "sha256:210d30db886ef60e254bda2aeb3970ea309555d2e4c1ee2d752f6cf771095dd9"
+      },
+      {
+        "case_id": "negative.route-group-ambiguous",
+        "outcome": "rejected",
+        "result_ref": "conformance/review-candidate/g2-generated-schema-join-authority-v4/actual/negative.route-group-ambiguous.result.json",
+        "result_hash": "sha256:4b4cb7f9f520cb511be0ce728074664401c35e25816e345010bde264722d0b13",
+        "result_raw_bytes_hash": "sha256:1cc0d50f4a40dc49fbb316147fb8ca7e5bb039c9ed8de6443936a05161bca98b"
+      },
+      {
+        "case_id": "negative.trigger-contract-invalid",
+        "outcome": "rejected",
+        "result_ref": "conformance/review-candidate/g2-generated-schema-join-authority-v4/actual/negative.trigger-contract-invalid.result.json",
+        "result_hash": "sha256:47a8dc3c9a139a66e8a82d80fff482e3c4805b168fa56cc760c47e027a35c30b",
+        "result_raw_bytes_hash": "sha256:186a0c482d24069447467e2798529a302dcfcb3dd85a40a5a7760d243a6e2e1e"
+      },
+      {
+        "case_id": "negative.completion-contract-invalid",
+        "outcome": "rejected",
+        "result_ref": "conformance/review-candidate/g2-generated-schema-join-authority-v4/actual/negative.completion-contract-invalid.result.json",
+        "result_hash": "sha256:ab16948d4f4658bab290a3201ebcd0aa4ea753df445289a21231d3d8a756c149",
+        "result_raw_bytes_hash": "sha256:7016727fb2617427e9e85b087bcc7dcd8af37dd0bfddf6d2703a390c70fbddb3"
+      },
+      {
+        "case_id": "negative.early-completion-non-monotone",
+        "outcome": "rejected",
+        "result_ref": "conformance/review-candidate/g2-generated-schema-join-authority-v4/actual/negative.early-completion-non-monotone.result.json",
+        "result_hash": "sha256:f962a08b0d0294a7e219e423a2e738468403f90fbd3b6ffaf7b9b506479f1895",
+        "result_raw_bytes_hash": "sha256:b3290584bd265f989e02542021d5784e5a166b7283ffa35cfe5ef12a6deb1500"
+      },
+      {
+        "case_id": "positive.compiler-integrity-match-control",
+        "outcome": "compiled",
+        "result_ref": "conformance/review-candidate/g2-generated-schema-join-authority-v4/actual/positive.compiler-integrity-match-control.result.json",
+        "result_hash": "sha256:40c1f07dea2db427be3833b60db0b646962ee45d1acb0423c96d0be8bd8e7b13",
+        "result_raw_bytes_hash": "sha256:70185f20060e6cfd62f7c86e5918aab4152a2e27180dad766c2b9abfcd75ded7"
+      },
+      {
+        "case_id": "negative.capability-not-allowed",
+        "outcome": "rejected",
+        "result_ref": "conformance/review-candidate/g2-generated-schema-join-authority-v4/actual/negative.capability-not-allowed.result.json",
+        "result_hash": "sha256:d65447a304cdb84de22c5ad9a822d596c3d078f447d42a7b7e2871dc9391b23a",
+        "result_raw_bytes_hash": "sha256:3fa7379547cd01b7780b0e7ed33bdddb3cef4881f343603b057d9f3c274dd107"
+      },
+      {
+        "case_id": "negative.policy-escalation",
+        "outcome": "rejected",
+        "result_ref": "conformance/review-candidate/g2-generated-schema-join-authority-v4/actual/negative.policy-escalation.result.json",
+        "result_hash": "sha256:a1b3969df17bd81263bac35bdffe740c310fca7f3a617545bdfb57e0c68c9034",
+        "result_raw_bytes_hash": "sha256:dae9c40c66031c29f2c261036fabe3dfb538454f85d72dfb43f4b45a2205be89"
+      },
+      {
+        "case_id": "negative.quality-revision-missing-feedback-schema",
+        "outcome": "rejected",
+        "result_ref": "conformance/review-candidate/g2-generated-schema-join-authority-v4/actual/negative.quality-revision-missing-feedback-schema.result.json",
+        "result_hash": "sha256:2ddd3993c64c6bf26ed44696d78de6d361ca4a563c7ce2c7d86ad04e4d6eea8d",
+        "result_raw_bytes_hash": "sha256:c73728dfbbfbbdaf55526121329ff2f5d8ea2e446f788695f0c4aecf152a2c70"
+      },
+      {
+        "case_id": "negative.quality-revision-effect-key-incompatible",
+        "outcome": "rejected",
+        "result_ref": "conformance/review-candidate/g2-generated-schema-join-authority-v4/actual/negative.quality-revision-effect-key-incompatible.result.json",
+        "result_hash": "sha256:e1b6b334fbc81988a7e0bfdda392f7bd11738cba7528be74e93aaf59991388dd",
+        "result_raw_bytes_hash": "sha256:ee605125fb405652222e871550f6f905fce4e708946bff7df20655568e54c45b"
+      },
+      {
+        "case_id": "negative.child-recipe-set-mismatch",
+        "outcome": "rejected",
+        "result_ref": "conformance/review-candidate/g2-generated-schema-join-authority-v4/actual/negative.child-recipe-set-mismatch.result.json",
+        "result_hash": "sha256:93336a0e4a063e813ec863c88155a0da81302c5141aa6374a993e910dee3ec4b",
+        "result_raw_bytes_hash": "sha256:c1fd2138a21e58b723bb85ee661c306e8b729398ff0a6cece7acbca77a591b91"
+      },
+      {
+        "case_id": "negative.child-recipe-dependency-cycle",
+        "outcome": "rejected",
+        "result_ref": "conformance/review-candidate/g2-generated-schema-join-authority-v4/actual/negative.child-recipe-dependency-cycle.result.json",
+        "result_hash": "sha256:259ef5633067429e0421034b807e5fe6810d0cbb2650326ffef21f150e2e9569",
+        "result_raw_bytes_hash": "sha256:6d6f35bc37bb3bb228358067df13d177b85b30e084e84406f61ba50268ddaa28"
+      },
+      {
+        "case_id": "negative.runtime-safety-limit-exceeded",
+        "outcome": "rejected",
+        "result_ref": "conformance/review-candidate/g2-generated-schema-join-authority-v4/actual/negative.runtime-safety-limit-exceeded.result.json",
+        "result_hash": "sha256:6788ad318eddb05584e4e136d727faad747781d0cd3bb4cf81786875c3610b63",
+        "result_raw_bytes_hash": "sha256:4ff4cc3b8df16c277c8e9cf3f616fd58f6affa1fa21dce8a1ad8c61cd85c1d24"
+      },
+      {
+        "case_id": "negative.compiler-integrity-mismatch",
+        "outcome": "rejected",
+        "result_ref": "conformance/review-candidate/g2-generated-schema-join-authority-v4/actual/negative.compiler-integrity-mismatch.result.json",
+        "result_hash": "sha256:aff3242c3060304e64b69fb259b1e428634201cd56ed35848b7c9b63afc2f484",
+        "result_raw_bytes_hash": "sha256:cc0c0c19afdeecb9c663ca8b61677076292af17258d16e4738e2b09ef2016ecf"
+      },
+      {
+        "case_id": "negative.quality-revision-missing-quality-gate",
+        "outcome": "rejected",
+        "result_ref": "conformance/review-candidate/g2-generated-schema-join-authority-v4/actual/negative.quality-revision-missing-quality-gate.result.json",
+        "result_hash": "sha256:8cf152272eabaed77e47a59126590f39803143600252b1aa9b44198029d1cb20",
+        "result_raw_bytes_hash": "sha256:21082baa138ec345524757f3442c13bb1ddb1a1e08926b19903c461d2bc2d5e8"
+      },
+      {
+        "case_id": "negative.definition-notification-delivery-requirement",
+        "outcome": "rejected",
+        "result_ref": "conformance/review-candidate/g2-generated-schema-join-authority-v4/actual/negative.definition-notification-delivery-requirement.result.json",
+        "result_hash": "sha256:4e0817ef9945a8b136d0b5f7c28674ebbbbae0e40dd00bc2d17465b12eb565eb",
+        "result_raw_bytes_hash": "sha256:4f1ff85e3f78284ea22173b31843bd534d63643d2549ba0bd0811f1db1e9cd32"
+      },
+      {
+        "case_id": "negative.definition-child-creation-key-template",
+        "outcome": "rejected",
+        "result_ref": "conformance/review-candidate/g2-generated-schema-join-authority-v4/actual/negative.definition-child-creation-key-template.result.json",
+        "result_hash": "sha256:ce36802ebc2b6a0792840498841e4fb2363dd52871c55517e0b83ddcc599f7fb",
+        "result_raw_bytes_hash": "sha256:262e774f9d8ceaf1beabcb78b0e821b047b02600ac5ad4ffb73104d5330cf2b5"
+      }
+    ],
+    "predecessor_lineage": {
+      "predecessor_working_roots": {
+        "contract": "sha256:505956819b8b060e80da814536bfa1d56e659ed0ddb91d344673a3bea3cb7737",
+        "input": "sha256:da03109106c3a21898bd40cf31639084d04ce2cb1024564ca916c9f90b847583",
+        "candidate": "sha256:9b2895c2e4b06b0cdc168666e54a61e38df6b520a36aa86e9ff6ecf4bd03e09f",
+        "working_review": "sha256:168b490430730bf4b6d16e50dd35d967a9f6ce33bbe693fb460a3004b3799d99"
+      },
+      "predecessor_review_candidate_root": "sha256:3401cc0230f7a4b81fe859a25832816b8db60cae6d29c5676d141f2151a186e6",
+      "predecessor_draft_manifest_hash": "sha256:b8ca7c91839b88b5591daf19f17a30e70b85e441d9dd4905807ef57bc37f7591",
+      "predecessor_golden_review_report_hash": "sha256:5b3b5c721e6cda298da468566eb97da3423fcb86595de4f46dc66f79ebb55e99",
+      "predecessor_golden_semantic_review_hash": "sha256:ceddcefcab8ff41a5e9b5d2ceb89dabcd3f9199639bb247d132a7c79c33dc15b",
+      "predecessor_sealed_bundle_hash": "sha256:b3ed9e43bd0fadaf40520257926dcf690ee8495bb417220245f248385bde9efb",
+      "predecessor_sealed_status": "sealed_pending_ci_replay",
+      "successor_reason": "generated_schema_join_authority_contract_repair",
+      "approved_expected_semantics": "changed_by_current_review"
+    },
+    "g3_through_g9_status": "not_started"
+  }
+}

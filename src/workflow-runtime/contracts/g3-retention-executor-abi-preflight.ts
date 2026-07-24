@@ -384,7 +384,7 @@ const bindingsSchema: JsonObject = {
     core_release_ref: { $ref: '#/$defs/versioned_ref' },
     core_release_hash: hashSchema,
     core_build_hash: hashSchema,
-    database_schema_version: { const: 5 },
+    database_schema_version: { const: 6 },
     database_schema_hash: hashSchema,
     run_protocol_ref: { $ref: '#/$defs/versioned_ref' },
     run_protocol_hash: hashSchema,
@@ -486,7 +486,7 @@ export const G3_RETENTION_EXECUTOR_ABI_PROFILE_SCHEMA: JsonObject = {
         run_protocol_major: { const: 1 },
         executor_abi_major: { const: 1 },
         registry_schema_version: { const: 1 },
-        database_schema_version: { const: 5 },
+        database_schema_version: { const: 6 },
       },
     },
     retention_policy_ref: { $ref: '#/$defs/versioned_ref' },
@@ -686,7 +686,7 @@ export function verifyCoreProtocolFacts(
     calculateCoreCompatibilityHash(withoutHash) !==
       input.core_compatibility.compatibility_hash ||
     input.core_compatibility.registry_schema_version !== 1 ||
-    input.core_compatibility.database_schema_version !== 5 ||
+    input.core_compatibility.database_schema_version !== 6 ||
     input.core_compatibility.database_schema_hash !==
       G3_CURRENT_UPSTREAM_IDENTITY.g1_schema_hash ||
     input.snapshot.expected_core_build_hash !==
@@ -762,7 +762,7 @@ export function buildAcceptedRetentionExecutorAbiResult(
       core_release_ref: input.core_compatibility.core_release_ref,
       core_release_hash: input.core_compatibility.core_release_hash,
       core_build_hash: input.core_compatibility.core_build_hash,
-      database_schema_version: 5,
+      database_schema_version: 6,
       database_schema_hash: input.core_compatibility.database_schema_hash,
       run_protocol_ref: input.run_protocol.ref,
       run_protocol_hash: input.run_protocol.hash,
@@ -804,7 +804,7 @@ export function buildG3RetentionExecutorAbiProfile(): G3RetentionExecutorAbiPref
       run_protocol_major: 1,
       executor_abi_major: 1,
       registry_schema_version: 1,
-      database_schema_version: 5,
+      database_schema_version: 6,
     },
     retention_policy_ref: G3_RETENTION_POLICY_REF,
     retention_policy_hash: G3_RETENTION_POLICY_HASH,
@@ -958,7 +958,7 @@ export function g3RetentionExecutorAbiStoreFixtureForTest(): {
     ref: { id: 'fixture.retention-abi-snapshot', version: '1.0.0' },
     closure_ref: closure.ref,
     closure_hash: closure.closure_hash,
-    compiler_version: '3.0.2',
+    compiler_version: '3.0.3',
     core_build_hash: coreBuildHash as Sha256Hash,
     database_schema_hash: G3_CURRENT_UPSTREAM_IDENTITY.g1_schema_hash,
   };
@@ -981,7 +981,7 @@ export function g3RetentionExecutorAbiStoreFixtureForTest(): {
     supported_run_protocol_majors: [1],
     supported_executor_abi_majors: [1],
     registry_schema_version: 1 as const,
-    database_schema_version: 5 as const,
+    database_schema_version: 6 as const,
     database_schema_hash: G3_CURRENT_UPSTREAM_IDENTITY.g1_schema_hash,
   };
   const coreCompatibility: G3CoreCompatibilitySnapshot = {
@@ -1172,13 +1172,13 @@ function validateUpstreamIdentity(): void {
   );
   if (
     registry.hash !==
-    'sha256:ff5d40589df9bc78e2e7f4f0e2fdcd5f0a7b7f34e0d0592e5308c1230425f1b3'
+    'sha256:635fd7ac9c15212f50df1845a8267c5cad576aa34d475164e060946cb42987e5'
   ) {
     throw new Error('G3.3 Registry persistence identity drift');
   }
   if (
     queryPack.hash !==
-    'sha256:04506acde71f4c03e081f310265df521515327caee37cc820c56fa2162ad4ffb'
+    'sha256:f8b66d05bd59a0ca845f678078c72104d15ef9400e87196b505bb5bf46b91d8c'
   ) {
     throw new Error('G3.5 exact resource query identity drift');
   }
@@ -1285,7 +1285,7 @@ function buildManifest(
       status: 'DONE',
       g3_status: 'IN_PROGRESS',
       upstream_g3_3_pack_hash:
-        'sha256:ff5d40589df9bc78e2e7f4f0e2fdcd5f0a7b7f34e0d0592e5308c1230425f1b3',
+        'sha256:635fd7ac9c15212f50df1845a8267c5cad576aa34d475164e060946cb42987e5',
       upstream_g3_5_pack_hash:
         'sha256:bbc4e2cb402c8058a6412da0ebd5a284c2c7af831453cafaa84738a391c15718',
       upstream_g1_schema_root_hash:

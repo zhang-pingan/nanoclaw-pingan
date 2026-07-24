@@ -6,23 +6,26 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-contract-pack-g1-executable-schema:1\n",
-  "hash": "sha256:baa39d55cac34133a29b461466aa450fec59bd2fd6df72334e8b33d1d1619869",
+  "hash": "sha256:ff588497b32eacc268c379d220fedbb3d29f69a0fdb9337c7a1e429ee7a868eb",
   "payload": {
     "gate": "G1.1",
     "status": "executable_ddl_schema_manifest",
-    "schema_dependency_manifest_hash": "sha256:d08cfaae72c003b11a05cb1fbfa546f7cce7fad9ecb56d0746f33de294b8088c",
-    "physical_schema_identity": "sha256:ba025b32bb028f2ffe5df45d9440cd0a897e0a06c076b10b6f641c265ae02090",
-    "schema_hash": "sha256:49aaee7c8f046cd9a15b3bc5b77fbcf1713be2a1872078941043f5ccdca29024",
-    "migration_sha256": "sha256:2ead40dc2f1618f87247e9d3bb476266797c38560e1ad0537a6afa6f71a3fbf6",
+    "schema_dependency_manifest_hash": "sha256:3c91eb2f469a2bd41c51fc86bb531ff642ff862d5543924cb7ff4ac73681dcf7",
+    "physical_schema_identity": "sha256:a9f75a7de17a7f82923868eebd1802fea8d56ebab19bb18f0f66404f1e171d76",
+    "schema_hash": "sha256:d35c2d6fe2aaaf87ad102561d1595d016f8ef2f04950e5e3ad30b91aa366d909",
+    "migration_sha256": "sha256:16a46e84c77d734013e18b4b00b86564f6188ea73717763e9fb7a884d62faa41",
     "schema3_to_schema4_upgrade_sha256": "sha256:5ac263fe3279c61f74ba6314f5df98fff59a8f8b32acfa784d2040421ebaa3cf",
     "schema4_to_schema5_upgrade_sha256": "sha256:97479810c2c079d71270d5a714faa4b8fa8ebd6af629ef2f7d772af270c2bb0a",
+    "schema5_to_schema6_upgrade_sha256": "sha256:dc94fa0867ca572b7ec39ffb8df448e38be00ca4831f1d420885ee7cc097687d",
     "schema3_source_migration_sha256": "sha256:eea3547a0f5208d08bfbe771de3895bba020ca3cf34ddf2fb4e3b7945765d345",
     "schema3_source_sqlite_schema_identity": "sha256:a4bc69f3bbf8f6cf00c32c835596eed4a73036941276a3175d550faba2d2f5ee",
     "schema4_source_migration_sha256": "sha256:4a8ddeb1f9715399ad96c3bc32efa5e8032a3bd484eaed0159c6a24620c1be43",
     "schema4_source_sqlite_schema_identity": "sha256:e46f58e49b42ad53e3d744de86b6d8fb6299236258459c35d9ca3affa440932c",
-    "sqlite_schema_identity": "sha256:5ee3c119cc6a0e0552e2a6fe45b51c8ffd08ec7acdbac66748978ed0d21fdb0a",
-    "deterministic_digest": "sha256:971466fbade30d4a7f15df694b5a5a18cc8fe033270a1966a90d4e8d17da8202",
-    "member_count": 12,
+    "schema5_source_migration_sha256": "sha256:2ead40dc2f1618f87247e9d3bb476266797c38560e1ad0537a6afa6f71a3fbf6",
+    "schema5_source_sqlite_schema_identity": "sha256:5ee3c119cc6a0e0552e2a6fe45b51c8ffd08ec7acdbac66748978ed0d21fdb0a",
+    "sqlite_schema_identity": "sha256:a4936a9a71670cb30b1c974ee3cf9cd21375fb743e8c2278d8db08c685854486",
+    "deterministic_digest": "sha256:aab615eac7ec0a099bf84203c63e3d05a1d188ff9a89e4a4fc45554a0e41bab3",
+    "member_count": 13,
     "members": [
       {
         "path": "inputs/workflow-publisher-schema-prerequisite@1.json",
@@ -40,14 +43,19 @@
         "hash": "sha256:d1fd091aedae1d8d6d51e3442c074050ab57ab5330e18bf37adef628b8dcba9d"
       },
       {
+        "path": "inputs/workflow-generated-schema-authority-prerequisite@1.json",
+        "format": "icarus.workflow-generated-schema-authority-prerequisite/1",
+        "hash": "sha256:55bf95fa677ae2d2be30575fcbe68ed8b051913379ceb131b983dfe62658dc00"
+      },
+      {
         "path": "artifacts/workflow-runtime-schema-dependency-manifest-contract@1.json",
         "format": "icarus.workflow-runtime-schema-dependency-manifest-contract/1",
-        "hash": "sha256:c109275de7ea33818187c23abe7b0f401fd88926c3a8230b892065fef56d7538"
+        "hash": "sha256:a85ab58439b6933d6c0ab05daa172f27cadb75cc35d3692025cee981e7d0d947"
       },
       {
         "path": "artifacts/workflow-runtime-schema-dependency-manifest@1.json",
         "format": "icarus.workflow-runtime-schema-dependency-manifest/1",
-        "hash": "sha256:d08cfaae72c003b11a05cb1fbfa546f7cce7fad9ecb56d0746f33de294b8088c"
+        "hash": "sha256:3c91eb2f469a2bd41c51fc86bb531ff642ff862d5543924cb7ff4ac73681dcf7"
       },
       {
         "path": "artifacts/workflow-runtime-schema-manifest-contract@1.json",
@@ -57,32 +65,32 @@
       {
         "path": "artifacts/workflow-runtime-schema-manifest@1.json",
         "format": "icarus.workflow-runtime-schema-manifest/1",
-        "hash": "sha256:c9bce166112023cf5e09d41901938f74efbc69cff36da9428a3c21c3064d8439"
+        "hash": "sha256:478033a87bfb1cf1e98cd56fc6c18aaebe8d970835cc46e00223de07c5ece184"
       },
       {
         "path": "artifacts/workflow-runtime-executable-ddl@1.json",
         "format": "icarus.workflow-runtime-executable-ddl/1",
-        "hash": "sha256:8e5f64dd00d99ddf6cfece939ce162190bdd05402aca6b3c369b85ed18642f62"
+        "hash": "sha256:8445f3cb1b8b5af23a3859b47ce649f6c063e4f815d4f188682537de63834845"
       },
       {
         "path": "fixtures/workflow-runtime-query-plan-fixtures@1.json",
         "format": "icarus.workflow-runtime-query-plan-fixtures/1",
-        "hash": "sha256:65c28f3fd4b3933713d4ac959f9f20a5adf270cd132fb0e0cc85c502b739ff7a"
+        "hash": "sha256:1d5dab36eac75bf7db79b57af0b9d982a9dcea0a24bc2f4e057305594a0faa01"
       },
       {
         "path": "fixtures/workflow-runtime-constraint-trigger-fixtures@1.json",
         "format": "icarus.workflow-runtime-constraint-trigger-fixtures/1",
-        "hash": "sha256:b62eee4cc248835017005ec78a6282a8ad886279c9e21b4c13a16acc2399062a"
+        "hash": "sha256:213d04036d8cec6a9fb2015b043b6c60b85a5305c12fe50b992026135245253c"
       },
       {
         "path": "artifacts/workflow-runtime-schema-lint@1.json",
         "format": "icarus.workflow-runtime-schema-lint/1",
-        "hash": "sha256:1284ee1f980c93ffaf34766fe4cb22112f8c2c5bb23058cd606e1723ec085970"
+        "hash": "sha256:e94733ffa43bad6b14ffa25b9f072bcfdda9400aedfe54fe08a63c3dbe26e414"
       },
       {
         "path": "catalogs/workflow-runtime-schema-domain-separators@1.json",
         "format": "icarus.workflow-runtime-schema-domain-separators/1",
-        "hash": "sha256:e794a19a48df011b21c934a45ae1d4a74bec93d89ddf14ce3944f925ed15c7ac"
+        "hash": "sha256:3ac26a44918202ebf1afa3905c339854d6dbf8c62e3de0409d33271c28ca9693"
       }
     ],
     "sqlite_profile_status": "candidate",

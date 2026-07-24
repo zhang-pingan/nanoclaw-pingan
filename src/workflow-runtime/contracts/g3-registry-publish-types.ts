@@ -60,7 +60,7 @@ export type G3PublishPreflightErrorCode =
 export interface G3ExactCompilerIdentity extends JsonObject {
   compiler_toolchain_manifest_ref: VersionedRef;
   compiler_toolchain_hash: Sha256Hash;
-  compiler_version: '3.0.2';
+  compiler_version: '3.0.3';
   compiler_build_hash: Sha256Hash;
   compiled_ir_schema_ref: string;
   compiled_ir_schema_hash: Sha256Hash;
@@ -176,39 +176,39 @@ export type G3RegistryPublishPreflightResult =
 
 export const G3_CURRENT_UPSTREAM_IDENTITY: G3UpstreamIdentity = {
   g1_schema_root_hash:
-    'sha256:baa39d55cac34133a29b461466aa450fec59bd2fd6df72334e8b33d1d1619869',
+    'sha256:ff588497b32eacc268c379d220fedbb3d29f69a0fdb9337c7a1e429ee7a868eb',
   g1_schema_dependency_manifest_hash:
-    'sha256:d08cfaae72c003b11a05cb1fbfa546f7cce7fad9ecb56d0746f33de294b8088c',
+    'sha256:3c91eb2f469a2bd41c51fc86bb531ff642ff862d5543924cb7ff4ac73681dcf7',
   g1_physical_schema_identity:
-    'sha256:ba025b32bb028f2ffe5df45d9440cd0a897e0a06c076b10b6f641c265ae02090',
+    'sha256:a9f75a7de17a7f82923868eebd1802fea8d56ebab19bb18f0f66404f1e171d76',
   g1_schema_hash:
-    'sha256:49aaee7c8f046cd9a15b3bc5b77fbcf1713be2a1872078941043f5ccdca29024',
+    'sha256:d35c2d6fe2aaaf87ad102561d1595d016f8ef2f04950e5e3ad30b91aa366d909',
   g1_migration_sha256:
-    'sha256:2ead40dc2f1618f87247e9d3bb476266797c38560e1ad0537a6afa6f71a3fbf6',
+    'sha256:16a46e84c77d734013e18b4b00b86564f6188ea73717763e9fb7a884d62faa41',
   g2_sealed_bundle_ref:
-    'conformance/sealed/g2-capability-outbox-binding-v3/golden-conformance-bundle@2.json',
+    'conformance/sealed/g2-generated-schema-join-authority-v4/golden-conformance-bundle@2.json',
   g2_sealed_bundle_artifact_hash:
-    'sha256:967437bb9f91e32e5014b2af90a23f5646e491eb427bdf55accb345ead70db8f',
+    'sha256:591e2fdd083b2b3c4aea2e85edf9e052bad2e1c89908853d2eb6d912befaea76',
   g2_sealed_bundle_hash:
-    'sha256:b3ed9e43bd0fadaf40520257926dcf690ee8495bb417220245f248385bde9efb',
+    'sha256:b7d26b8622b1ceadff419430f443a9b0ceb377cbd47af20e9109ea878046abf9',
   compiler: {
     compiler_toolchain_manifest_ref: {
       id: 'icarus.workflow-compiler-toolchain',
-      version: '3.0.2',
+      version: '3.0.3',
     },
     compiler_toolchain_hash:
-      'sha256:90bc7c99cacaf58217dd6d07781788c844385d3c70644c4086d6c997312f60a1',
-    compiler_version: '3.0.2',
+      'sha256:acc4bd6e6444f9903e3054bf637dee28ee8b25fbfc5eebd49b9aaf37582ff493',
+    compiler_version: '3.0.3',
     compiler_build_hash:
-      'sha256:698af607955463f01a404d626586420f3dd8f7a208da87c1e138075b1518ba05',
+      'sha256:eae5b2002226b9110dddba57dce528af91439ae760c5d30636631bcb464d86b2',
     compiled_ir_schema_ref:
       'conformance/capability-outbox-execution-binding/schemas/compiled-scope-plan-v2-execution-binding-schema@1.json',
     compiled_ir_schema_hash:
-      'sha256:f5bc0a43d5723096295b9a6fcd5a0965c3b98ca810ae8b6dc1a7072996608e06',
+      'sha256:e582abc7a221f4d1afd66d12c2a87816cb228f6139a77d9abfaa1a397844f947',
     conformance_result_schema_ref:
       'conformance/capability-outbox-execution-binding/schemas/compiler-conformance-case-result-execution-binding-schema@1.json',
     conformance_result_schema_hash:
-      'sha256:021da33556e677984b767f99b12800be8454c7516221ec63bb16e1cb26f867f7',
+      'sha256:ee41b9dff7eb2c97a75c81a7c15ec3bcf935ce233c29468a4ef7b7bfa047987e',
   },
 };
 

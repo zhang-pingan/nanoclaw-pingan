@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-runtime-gate-ownership:1\n",
-  "hash": "sha256:6ba952bf7761f249fa16c0c44a37d48a67c9f5f21c3667a5c966ac59e8affb38",
+  "hash": "sha256:324419360fec246e30de88462e0c6d285680ff8e83caa3bf3318e53344dd3060",
   "payload": {
     "governance_scope": "current_construction_g5_g7_t6d_t7c_boundary",
     "status": "T6D_OWNERSHIP_EXIT_CANDIDATE_PENDING_INDEPENDENT_REGRESSION",
@@ -17,8 +17,8 @@
       "workflow_runtime_command_protocol_table_hash": "sha256:b12b07b29e9335593c969033c133d221b244798fc079db5fb398b23fbae10789",
       "gate_ownership_authority_hash": "sha256:36289416db3c8898d9b50c04c5ad43fc6b74ef53bbd3a3c99f9d5f5b72786fa8"
     },
-    "historical_g0_g1_identity_effect": "Capacity_G0.10_repaired_and_G1_advanced_from_Schema_4_to_Schema_5",
-    "g4_pack_identity_effect": "direct_G3_run_protocol_dependency_rebuilt",
+    "historical_g0_g1_identity_effect": "Capacity_G0.10_preserved_and_G1_advanced_additively_from_Schema_5_to_Schema_6",
+    "g4_pack_identity_effect": "generated_schema_join_authority_affected_chain_rebuilt",
     "matrix": [
       {
         "gate": "G5",
@@ -122,10 +122,10 @@
       "workflow_run_transaction_protocol_table_hash": "sha256:3d5474096d89fbd723e34e0d2f9d1dadd1b955b5fc36ff447d026257852cac79",
       "workflow_runtime_command_protocol_table_hash": "sha256:43cc8ef247fcba4bac5e9fccdd654fd393928120755a6405bad232043f0c94ba",
       "workflow_runtime_logical_schema_source_hash": "sha256:ef5221d3465f1214c3c0aad3660f57b119d03eb4b5127428d6a1f881a6260214",
-      "g1_executable_schema_root_hash": "sha256:baa39d55cac34133a29b461466aa450fec59bd2fd6df72334e8b33d1d1619869",
-      "database_schema_version": 5,
-      "workflow_runtime_schema_manifest_hash": "sha256:c9bce166112023cf5e09d41901938f74efbc69cff36da9428a3c21c3064d8439",
-      "workflow_runtime_schema_hash": "sha256:49aaee7c8f046cd9a15b3bc5b77fbcf1713be2a1872078941043f5ccdca29024"
+      "g1_executable_schema_root_hash": "sha256:ff588497b32eacc268c379d220fedbb3d29f69a0fdb9337c7a1e429ee7a868eb",
+      "database_schema_version": 6,
+      "workflow_runtime_schema_manifest_hash": "sha256:478033a87bfb1cf1e98cd56fc6c18aaebe8d970835cc46e00223de07c5ece184",
+      "workflow_runtime_schema_hash": "sha256:d35c2d6fe2aaaf87ad102561d1595d016f8ef2f04950e5e3ad30b91aa366d909"
     },
     "affected_current_root_inventory": {
       "members": [
@@ -150,38 +150,38 @@
         {
           "path": "contract-pack-catalog-protocols.json",
           "format": "icarus.workflow-contract-pack-catalog-protocols/1",
-          "semantic_hash": "sha256:a648dc9326255b109690cb47d58032775825ae065caf8f7cbb0ef73efcf984f7",
-          "raw_sha256": "sha256:fcf4173f1510c6f13c8061a610bff84cfdebecc730f10d1cb71112b0b77be51c"
+          "semantic_hash": "sha256:078be3fed7e8d430b228c0aa526e15e6bd92665f863c6d0818eaebbcaf43b533",
+          "raw_sha256": "sha256:40b9ec87aef5af68494cd17bb27ec75b17d318ec4288b4eaa2739bcf575838cb"
         },
         {
           "path": "contract-pack-safety-sqlite.json",
           "format": "icarus.workflow-contract-pack-safety-sqlite/1",
-          "semantic_hash": "sha256:4f756c9427a9e5fd8f034c2abdab3c614b675af8b8bbb350fc4219917159cd8d",
-          "raw_sha256": "sha256:30f2decac2e7ada3537caf47ac1c863c57c2c6a1e1646ecef77b08313effd7af"
+          "semantic_hash": "sha256:e289868eb489bb3c41731afe17f50cbc06f2b10c549769c1786fcd185a0b5775",
+          "raw_sha256": "sha256:5881a79d8340d32f26e176b4d96b9b311a6afe849f98a9b327d93023b5d8f5b1"
         },
         {
           "path": "contract-pack-static-absence.json",
           "format": "icarus.workflow-contract-pack-static-absence/1",
-          "semantic_hash": "sha256:2624801752b3641e624a925c67a2ea28d2c157208b3e4c54699fb6b189259978",
-          "raw_sha256": "sha256:20f730e7d43ca33a6d85587e9a077ca7cb38519e725b20f21122bff7dc2ac573"
+          "semantic_hash": "sha256:058519662cfdff17e7a11a40a6da3b3dfe9d2b27c5d7fc6a81b23a35fd9bd183",
+          "raw_sha256": "sha256:129dbe486e53126b25d3250424e170698b7fdacf63d263149834f56d75394f4a"
         },
         {
           "path": "contract-pack-g3-retention-executor-abi-preflight.json",
           "format": "icarus.workflow-contract-pack-g3-retention-executor-abi-preflight/1",
-          "semantic_hash": "sha256:4dd52b4f38da315ba0194fd23a9c681ffdba6aac37291100dd6d6b944178acd9",
-          "raw_sha256": "sha256:d798fcd2a4957e6fdeaa7c5589f811734c82fb42dec2e85aa6bea913ddb113c7"
+          "semantic_hash": "sha256:da15a3b9e7f3215f879d43b8f321c07f432f7d928d42314f22f6028b61f16aa9",
+          "raw_sha256": "sha256:e174a1de406402e78a46e4effbeff88eb3adf70694b2e09d6a917dd5fcf7fa62"
         },
         {
           "path": "contract-pack-g3-workflow-publisher.json",
           "format": "icarus.workflow-contract-pack-g3-workflow-publisher/1",
-          "semantic_hash": "sha256:e80038f09ad841de630d961f137f15a2de14a487a74afb6b1d8b36edea689ba0",
-          "raw_sha256": "sha256:6cc7065d11b5e9549fb2b46d83413ec8bbf7f4d1f802677a7591a2f642dcf97a"
+          "semantic_hash": "sha256:1614e89ecac4713c6d991a6ae68e548f01268e25ba8b700a107e4cdcb1b64647",
+          "raw_sha256": "sha256:e09fc72cfcee8885af122ac6d596f6c433b32e0f9d2039ed8ca34fde73779700"
         },
         {
           "path": "contract-pack-g3.9-feature-release-activation.json",
           "format": "icarus.workflow-contract-pack-g3-feature-release-activation/1",
-          "semantic_hash": "sha256:eb3d316be520e68fe53b6be826046d3f8fa1cf97db298d5703886d1dcb97b70f",
-          "raw_sha256": "sha256:7973160d108005fdc8d0281c9e143f351cf813ec56879e4b6d4acd613bb24317"
+          "semantic_hash": "sha256:c9aa03bf85e2b358f8b4b01b7dcfecf25ce76d2339688e88fe969d1babe10107",
+          "raw_sha256": "sha256:be607ce70273d38f4416004821b86c906c9393cd89f0c10ab3802531e0327067"
         },
         {
           "path": "contract-pack-g3.8a-activation-contract-repair.json",
@@ -197,7 +197,7 @@
         }
       ],
       "member_count": 11,
-      "tree_digest": "sha256:9e290b8a9fe583942b6389f294366a698b606cf8e3ddd827cd27588b83b98323"
+      "tree_digest": "sha256:37e4aa76fd39f583de01d391798e7b7c7cc6f345c50dfbf7ba49062d054df319"
     },
     "frozen_invariants": {
       "t6d_name": "attempt_watchdog_and_retry_timers",

@@ -37,6 +37,7 @@ try {
         error instanceof Error ? error.message : String(error)
       }`,
     );
+    if (error instanceof Error && error.stack) console.error(error.stack);
   }
   process.exitCode = 1;
 }

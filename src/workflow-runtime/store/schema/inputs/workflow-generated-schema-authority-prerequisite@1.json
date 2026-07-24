@@ -1,0 +1,676 @@
+{
+  "format": "icarus.workflow-generated-schema-authority-prerequisite/1",
+  "ref": {
+    "id": "icarus.workflow-generated-schema-authority-prerequisite",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-generated-schema-authority-prerequisite:1\n",
+  "hash": "sha256:55bf95fa677ae2d2be30575fcbe68ed8b051913379ceb131b983dfe62658dc00",
+  "payload": {
+    "format": "icarus.workflow-generated-schema-authority-prerequisite/1",
+    "schema_id": "workflow-runtime-schema-v1",
+    "database_schema_version": 6,
+    "delta_mode": "additive_tables_plus_workflow_values_authority_rebuild",
+    "generated_schema_contract": {
+      "schema_ref_scheme": "icarus-generated-schema",
+      "schema_ref_pattern": "^icarus-generated-schema:sha256:[0-9a-f]{64}$",
+      "canonical_schema_bytes": "UTF-8(RFC8785-JCS(schema_json))",
+      "raw_hash": "SHA-256(canonical_schema_bytes)",
+      "schema_hash_domain": "icarus:workflow-generated-schema:2\n",
+      "parameter_hash_domain": "icarus:workflow-generated-schema-parameter:2\n",
+      "plan_binding_hash_domain": "icarus:workflow-plan-generated-schema-binding:1\n",
+      "plan_binding": "exact_plan_hash_and_generated_schema_tuple",
+      "resolver": "persisted_schema_content_exact_ref_only",
+      "latest_lookup": "forbidden",
+      "schema_json_schema_ref_rule": "both_required_and_equivalent"
+    },
+    "historical_capacity_rebind": {
+      "current_logical_schema_manifest_hash": "sha256:e0b1bb30303e9bf0c45fdc5383ec7f61f90b2bb2e6ed8e422c5478a1dfd134cc",
+      "logical_schema_source_hash": "sha256:ef5221d3465f1214c3c0aad3660f57b119d03eb4b5127428d6a1f881a6260214",
+      "historical_capacity_delta_artifact_hash": "sha256:b15daf99f68f8447aff1da5a9411460497ae29e7067a3802ac588d790066fe30",
+      "historical_capacity_delta_hash": "sha256:ca81abe11e332890bde7420fdf8f040856e8076bba9bbc4a03d15ffedb439e3a",
+      "historical_base_logical_schema_manifest_hash": "sha256:32de639cc0ee6c6f33aa4291ea03ffa55b0a22752190fb88862e72a3f6857520",
+      "compatibility_rule": "identical_logical_source_semantics_only"
+    },
+    "added_tables": [
+      {
+        "ordinal": 85,
+        "name": "workflow_generated_schema_contents",
+        "source_section": "Generated Schema Content and Plan Binding Authority",
+        "columns": [
+          {
+            "ordinal": 1,
+            "name": "schema_ref",
+            "logical_type": "external_reference",
+            "sqlite_type_intent": "TEXT",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "relation_ids": [],
+            "external_reference": {
+              "validator_owner": "generated_schema_ref_validator",
+              "reference_domain": "icarus_generated_schema_content_address",
+              "immutable": true
+            }
+          },
+          {
+            "ordinal": 2,
+            "name": "schema_raw_hash",
+            "logical_type": "hash",
+            "sqlite_type_intent": "TEXT",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "relation_ids": [],
+            "external_reference": null
+          },
+          {
+            "ordinal": 3,
+            "name": "schema_hash",
+            "logical_type": "hash",
+            "sqlite_type_intent": "TEXT",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "relation_ids": [],
+            "external_reference": null
+          },
+          {
+            "ordinal": 4,
+            "name": "canonical_schema_json",
+            "logical_type": "canonical_json",
+            "sqlite_type_intent": "TEXT",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "relation_ids": [],
+            "external_reference": null
+          },
+          {
+            "ordinal": 5,
+            "name": "canonicalizer",
+            "logical_type": "text",
+            "sqlite_type_intent": "TEXT",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [
+              "RFC8785-JCS"
+            ],
+            "relation_ids": [],
+            "external_reference": null
+          },
+          {
+            "ordinal": 6,
+            "name": "byte_length",
+            "logical_type": "integer",
+            "sqlite_type_intent": "INTEGER",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "non_negative",
+            "enum_values": [],
+            "relation_ids": [],
+            "external_reference": null
+          },
+          {
+            "ordinal": 7,
+            "name": "created_at_ms",
+            "logical_type": "integer",
+            "sqlite_type_intent": "INTEGER",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "non_negative",
+            "enum_values": [],
+            "relation_ids": [],
+            "external_reference": null
+          }
+        ],
+        "primary_key": {
+          "columns": [
+            "schema_ref"
+          ],
+          "auto_increment_intent": false
+        },
+        "foreign_keys": [],
+        "unique_keys": [
+          {
+            "key_id": "uk:generated_schema_contents:ref_hash",
+            "columns": [
+              "schema_ref",
+              "schema_hash"
+            ],
+            "predicate_intent": null
+          }
+        ],
+        "checks": [
+          {
+            "check_id": "ck:generated_schema_contents:ref",
+            "kind": "state_field_consistency",
+            "columns": [
+              "schema_ref",
+              "schema_raw_hash"
+            ],
+            "expression_intent": "schema_ref is the exact icarus-generated-schema form of schema_raw_hash"
+          },
+          {
+            "check_id": "ck:generated_schema_contents:raw_hash:hash",
+            "kind": "hash_format",
+            "columns": [
+              "schema_raw_hash"
+            ],
+            "expression_intent": "sha256:<64 lowercase hexadecimal characters>"
+          },
+          {
+            "check_id": "ck:generated_schema_contents:schema_hash:hash",
+            "kind": "hash_format",
+            "columns": [
+              "schema_hash"
+            ],
+            "expression_intent": "sha256:<64 lowercase hexadecimal characters>"
+          },
+          {
+            "check_id": "ck:generated_schema_contents:canonicalizer:enum",
+            "kind": "enum_membership",
+            "columns": [
+              "canonicalizer"
+            ],
+            "expression_intent": "value belongs to the closed canonicalizer catalog"
+          },
+          {
+            "check_id": "ck:generated_schema_contents:byte_length:safe_integer",
+            "kind": "safe_integer",
+            "columns": [
+              "byte_length"
+            ],
+            "expression_intent": "non-negative JavaScript safe integer"
+          },
+          {
+            "check_id": "ck:generated_schema_contents:created_at_ms:safe_integer",
+            "kind": "safe_integer",
+            "columns": [
+              "created_at_ms"
+            ],
+            "expression_intent": "non-negative JavaScript safe integer"
+          }
+        ],
+        "indexes": []
+      },
+      {
+        "ordinal": 86,
+        "name": "workflow_plan_generated_schemas",
+        "source_section": "Generated Schema Content and Plan Binding Authority",
+        "columns": [
+          {
+            "ordinal": 1,
+            "name": "plan_id",
+            "logical_type": "identifier",
+            "sqlite_type_intent": "TEXT",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "relation_ids": [
+              "fk:plan_generated_schemas:plan"
+            ],
+            "external_reference": null
+          },
+          {
+            "ordinal": 2,
+            "name": "graph_run_id",
+            "logical_type": "identifier",
+            "sqlite_type_intent": "TEXT",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "relation_ids": [
+              "fk:plan_generated_schemas:plan"
+            ],
+            "external_reference": null
+          },
+          {
+            "ordinal": 3,
+            "name": "plan_hash",
+            "logical_type": "hash",
+            "sqlite_type_intent": "TEXT",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "relation_ids": [
+              "fk:plan_generated_schemas:plan"
+            ],
+            "external_reference": null
+          },
+          {
+            "ordinal": 4,
+            "name": "schema_ref",
+            "logical_type": "identifier",
+            "sqlite_type_intent": "TEXT",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "relation_ids": [
+              "fk:plan_generated_schemas:content"
+            ],
+            "external_reference": null
+          },
+          {
+            "ordinal": 5,
+            "name": "schema_hash",
+            "logical_type": "hash",
+            "sqlite_type_intent": "TEXT",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "relation_ids": [
+              "fk:plan_generated_schemas:content"
+            ],
+            "external_reference": null
+          },
+          {
+            "ordinal": 6,
+            "name": "generator",
+            "logical_type": "text",
+            "sqlite_type_intent": "TEXT",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [
+              "join_expose",
+              "child_completion",
+              "map_result"
+            ],
+            "relation_ids": [],
+            "external_reference": null
+          },
+          {
+            "ordinal": 7,
+            "name": "parameter_hash",
+            "logical_type": "hash",
+            "sqlite_type_intent": "TEXT",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "relation_ids": [],
+            "external_reference": null
+          },
+          {
+            "ordinal": 8,
+            "name": "binding_hash",
+            "logical_type": "hash",
+            "sqlite_type_intent": "TEXT",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "relation_ids": [],
+            "external_reference": null
+          },
+          {
+            "ordinal": 9,
+            "name": "created_at_ms",
+            "logical_type": "integer",
+            "sqlite_type_intent": "INTEGER",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "non_negative",
+            "enum_values": [],
+            "relation_ids": [],
+            "external_reference": null
+          }
+        ],
+        "primary_key": {
+          "columns": [
+            "plan_id",
+            "schema_ref",
+            "generator",
+            "parameter_hash"
+          ],
+          "auto_increment_intent": false
+        },
+        "foreign_keys": [
+          {
+            "relation_id": "fk:plan_generated_schemas:plan",
+            "source_columns": [
+              "plan_id",
+              "graph_run_id",
+              "plan_hash"
+            ],
+            "target_table": "workflow_graph_scope_plans",
+            "target_columns": [
+              "id",
+              "graph_run_id",
+              "plan_hash"
+            ],
+            "on_delete": "restrict",
+            "deferrability": "deferred"
+          },
+          {
+            "relation_id": "fk:plan_generated_schemas:content",
+            "source_columns": [
+              "schema_ref",
+              "schema_hash"
+            ],
+            "target_table": "workflow_generated_schema_contents",
+            "target_columns": [
+              "schema_ref",
+              "schema_hash"
+            ],
+            "on_delete": "restrict",
+            "deferrability": "deferred"
+          }
+        ],
+        "unique_keys": [
+          {
+            "key_id": "uk:plan_generated_schemas:value_authority",
+            "columns": [
+              "plan_id",
+              "plan_hash",
+              "schema_ref",
+              "schema_hash",
+              "generator",
+              "parameter_hash"
+            ],
+            "predicate_intent": null
+          }
+        ],
+        "checks": [
+          {
+            "check_id": "ck:plan_generated_schemas:plan_hash:hash",
+            "kind": "hash_format",
+            "columns": [
+              "plan_hash"
+            ],
+            "expression_intent": "sha256:<64 lowercase hexadecimal characters>"
+          },
+          {
+            "check_id": "ck:plan_generated_schemas:schema_hash:hash",
+            "kind": "hash_format",
+            "columns": [
+              "schema_hash"
+            ],
+            "expression_intent": "sha256:<64 lowercase hexadecimal characters>"
+          },
+          {
+            "check_id": "ck:plan_generated_schemas:parameter_hash:hash",
+            "kind": "hash_format",
+            "columns": [
+              "parameter_hash"
+            ],
+            "expression_intent": "sha256:<64 lowercase hexadecimal characters>"
+          },
+          {
+            "check_id": "ck:plan_generated_schemas:binding_hash:hash",
+            "kind": "hash_format",
+            "columns": [
+              "binding_hash"
+            ],
+            "expression_intent": "sha256:<64 lowercase hexadecimal characters>"
+          },
+          {
+            "check_id": "ck:plan_generated_schemas:generator:enum",
+            "kind": "enum_membership",
+            "columns": [
+              "generator"
+            ],
+            "expression_intent": "value belongs to the closed generator catalog"
+          },
+          {
+            "check_id": "ck:plan_generated_schemas:created_at_ms:safe_integer",
+            "kind": "safe_integer",
+            "columns": [
+              "created_at_ms"
+            ],
+            "expression_intent": "non-negative JavaScript safe integer"
+          }
+        ],
+        "indexes": [
+          {
+            "index_id": "idx:plan_generated_schemas:resolve",
+            "kind": "lookup",
+            "columns": [
+              "plan_id",
+              "schema_ref"
+            ],
+            "predicate_intent": null,
+            "supports_query_ids": [
+              "reconciler_resolve_plan_generated_schema"
+            ]
+          }
+        ]
+      }
+    ],
+    "workflow_values_rebuild": {
+      "table_name": "workflow_values",
+      "base_table_hash": "sha256:d00980c5f273b58dc036c9da4744a1f79e61fa14f74cc17e1b1cf5b645281f0d",
+      "nullable_columns": [
+        "schema_resource_id",
+        "schema_resource_hash"
+      ],
+      "added_columns": [
+        {
+          "ordinal": 18,
+          "name": "schema_authority_kind",
+          "logical_type": "text",
+          "sqlite_type_intent": "TEXT",
+          "nullable": false,
+          "default_intent": "registry",
+          "safe_integer_intent": "not_applicable",
+          "enum_values": [
+            "registry",
+            "plan_generated"
+          ],
+          "relation_ids": [],
+          "external_reference": null
+        },
+        {
+          "ordinal": 19,
+          "name": "schema_plan_id",
+          "logical_type": "identifier",
+          "sqlite_type_intent": "TEXT",
+          "nullable": true,
+          "default_intent": null,
+          "safe_integer_intent": "not_applicable",
+          "enum_values": [],
+          "relation_ids": [
+            "fk:values:plan_generated_schema"
+          ],
+          "external_reference": null
+        },
+        {
+          "ordinal": 20,
+          "name": "schema_plan_hash",
+          "logical_type": "hash",
+          "sqlite_type_intent": "TEXT",
+          "nullable": true,
+          "default_intent": null,
+          "safe_integer_intent": "not_applicable",
+          "enum_values": [],
+          "relation_ids": [
+            "fk:values:plan_generated_schema"
+          ],
+          "external_reference": null
+        },
+        {
+          "ordinal": 21,
+          "name": "generated_schema_ref",
+          "logical_type": "identifier",
+          "sqlite_type_intent": "TEXT",
+          "nullable": true,
+          "default_intent": null,
+          "safe_integer_intent": "not_applicable",
+          "enum_values": [],
+          "relation_ids": [
+            "fk:values:plan_generated_schema"
+          ],
+          "external_reference": null
+        },
+        {
+          "ordinal": 22,
+          "name": "generated_schema_hash",
+          "logical_type": "hash",
+          "sqlite_type_intent": "TEXT",
+          "nullable": true,
+          "default_intent": null,
+          "safe_integer_intent": "not_applicable",
+          "enum_values": [],
+          "relation_ids": [
+            "fk:values:plan_generated_schema"
+          ],
+          "external_reference": null
+        },
+        {
+          "ordinal": 23,
+          "name": "generated_schema_generator",
+          "logical_type": "text",
+          "sqlite_type_intent": "TEXT",
+          "nullable": true,
+          "default_intent": null,
+          "safe_integer_intent": "not_applicable",
+          "enum_values": [
+            "join_expose",
+            "child_completion",
+            "map_result"
+          ],
+          "relation_ids": [],
+          "external_reference": null
+        },
+        {
+          "ordinal": 24,
+          "name": "generated_schema_parameter_hash",
+          "logical_type": "hash",
+          "sqlite_type_intent": "TEXT",
+          "nullable": true,
+          "default_intent": null,
+          "safe_integer_intent": "not_applicable",
+          "enum_values": [],
+          "relation_ids": [
+            "fk:values:plan_generated_schema"
+          ],
+          "external_reference": null
+        }
+      ],
+      "added_foreign_keys": [
+        {
+          "relation_id": "fk:values:plan_generated_schema",
+          "source_columns": [
+            "schema_plan_id",
+            "schema_plan_hash",
+            "generated_schema_ref",
+            "generated_schema_hash",
+            "generated_schema_generator",
+            "generated_schema_parameter_hash"
+          ],
+          "target_table": "workflow_plan_generated_schemas",
+          "target_columns": [
+            "plan_id",
+            "plan_hash",
+            "schema_ref",
+            "schema_hash",
+            "generator",
+            "parameter_hash"
+          ],
+          "on_delete": "restrict",
+          "deferrability": "deferred"
+        }
+      ],
+      "added_checks": [
+        {
+          "check_id": "ck:workflow_values:schema_authority_kind:enum",
+          "kind": "enum_membership",
+          "columns": [
+            "schema_authority_kind"
+          ],
+          "expression_intent": "value belongs to the closed schema_authority_kind catalog"
+        },
+        {
+          "check_id": "ck:workflow_values:generated_schema_generator:enum",
+          "kind": "enum_membership",
+          "columns": [
+            "generated_schema_generator"
+          ],
+          "expression_intent": "null or value belongs to the closed generated schema generator catalog"
+        },
+        {
+          "check_id": "ck:values:schema_authority_shape",
+          "kind": "state_field_consistency",
+          "columns": [
+            "schema_authority_kind",
+            "schema_resource_id",
+            "schema_resource_hash",
+            "schema_plan_id",
+            "schema_plan_hash",
+            "generated_schema_ref",
+            "generated_schema_hash",
+            "generated_schema_generator",
+            "generated_schema_parameter_hash"
+          ],
+          "expression_intent": "registry and plan_generated authority tuples are mutually exclusive and complete"
+        },
+        {
+          "check_id": "ck:workflow_values:schema_plan_hash:hash",
+          "kind": "hash_format",
+          "columns": [
+            "schema_plan_hash"
+          ],
+          "expression_intent": "sha256:<64 lowercase hexadecimal characters>"
+        },
+        {
+          "check_id": "ck:workflow_values:generated_schema_hash:hash",
+          "kind": "hash_format",
+          "columns": [
+            "generated_schema_hash"
+          ],
+          "expression_intent": "sha256:<64 lowercase hexadecimal characters>"
+        },
+        {
+          "check_id": "ck:workflow_values:generated_schema_parameter_hash:hash",
+          "kind": "hash_format",
+          "columns": [
+            "generated_schema_parameter_hash"
+          ],
+          "expression_intent": "sha256:<64 lowercase hexadecimal characters>"
+        }
+      ]
+    },
+    "query_intents": [
+      {
+        "query_id": "reconciler_resolve_plan_generated_schema",
+        "owner": "reconciler",
+        "purpose": "Resolve one Plan-local generated schema by exact persisted Plan and content-addressed ref",
+        "table": "workflow_plan_generated_schemas",
+        "join_tables": [
+          "workflow_generated_schema_contents"
+        ],
+        "equality_columns": [
+          "plan_id",
+          "schema_ref"
+        ],
+        "range_columns": [],
+        "state_predicate_intent": null,
+        "order_by": [],
+        "result_cardinality": "zero_or_one",
+        "required_index_id": "idx:plan_generated_schemas:resolve",
+        "execution_status": "intent_only"
+      }
+    ],
+    "constraint_fixture_cases": [
+      "generated_schema_ref_content_hash_equivalence",
+      "generated_schema_unknown_scheme_rejected",
+      "plan_generated_schema_exact_plan_fk",
+      "workflow_value_registry_authority",
+      "workflow_value_plan_generated_authority",
+      "workflow_value_mixed_or_incomplete_authority_rejected"
+    ],
+    "delta_hash": "sha256:6705a3d4810f1fb040cd6753fcaccad40b704d76c628827472ee47add34d9804"
+  }
+}

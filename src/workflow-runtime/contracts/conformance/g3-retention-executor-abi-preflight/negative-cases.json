@@ -31,10 +31,10 @@
               "id": "fixture.retention-abi-snapshot",
               "version": "latest"
             },
-            "snapshot_hash": "sha256:7a383dafced5b170f749042435d0da7aac45aea908b66bdf667a1198761f3f76",
-            "expected_compiler_version": "3.0.2",
+            "snapshot_hash": "sha256:0ade1da8bb4fcbf52bbb689d35372df00063ec71c9db637b635d55bd4960b131",
+            "expected_compiler_version": "3.0.3",
             "expected_core_build_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-            "expected_database_schema_hash": "sha256:49aaee7c8f046cd9a15b3bc5b77fbcf1713be2a1872078941043f5ccdca29024"
+            "expected_database_schema_hash": "sha256:d35c2d6fe2aaaf87ad102561d1595d016f8ef2f04950e5e3ad30b91aa366d909"
           },
           "closure": {
             "ref": {
@@ -200,9 +200,9 @@
               1
             ],
             "registry_schema_version": 1,
-            "database_schema_version": 5,
-            "database_schema_hash": "sha256:49aaee7c8f046cd9a15b3bc5b77fbcf1713be2a1872078941043f5ccdca29024",
-            "compatibility_hash": "sha256:1399627706b6ea6159616ed1ef9800ff969885875b79adf3a72f171b4ffcafc0"
+            "database_schema_version": 6,
+            "database_schema_hash": "sha256:d35c2d6fe2aaaf87ad102561d1595d016f8ef2f04950e5e3ad30b91aa366d909",
+            "compatibility_hash": "sha256:df178bba865c1ad6d9b8ad67264f61040d46ba06939bf1be08c980ea9e9ca22a"
           },
           "run_protocol": {
             "ref": {
@@ -297,10 +297,10 @@
               "id": "fixture.retention-abi-snapshot",
               "version": "1.0.0"
             },
-            "snapshot_hash": "sha256:7a383dafced5b170f749042435d0da7aac45aea908b66bdf667a1198761f3f76",
-            "expected_compiler_version": "3.0.2",
+            "snapshot_hash": "sha256:0ade1da8bb4fcbf52bbb689d35372df00063ec71c9db637b635d55bd4960b131",
+            "expected_compiler_version": "3.0.3",
             "expected_core_build_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-            "expected_database_schema_hash": "sha256:49aaee7c8f046cd9a15b3bc5b77fbcf1713be2a1872078941043f5ccdca29024"
+            "expected_database_schema_hash": "sha256:d35c2d6fe2aaaf87ad102561d1595d016f8ef2f04950e5e3ad30b91aa366d909"
           },
           "closure": {
             "ref": {
@@ -466,9 +466,9 @@
               1
             ],
             "registry_schema_version": 1,
-            "database_schema_version": 5,
-            "database_schema_hash": "sha256:49aaee7c8f046cd9a15b3bc5b77fbcf1713be2a1872078941043f5ccdca29024",
-            "compatibility_hash": "sha256:1399627706b6ea6159616ed1ef9800ff969885875b79adf3a72f171b4ffcafc0"
+            "database_schema_version": 6,
+            "database_schema_hash": "sha256:d35c2d6fe2aaaf87ad102561d1595d016f8ef2f04950e5e3ad30b91aa366d909",
+            "compatibility_hash": "sha256:df178bba865c1ad6d9b8ad67264f61040d46ba06939bf1be08c980ea9e9ca22a"
           },
           "run_protocol": {
             "ref": {
@@ -564,10 +564,10 @@
               "id": "fixture.retention-abi-snapshot",
               "version": "1.0.0"
             },
-            "snapshot_hash": "sha256:7a383dafced5b170f749042435d0da7aac45aea908b66bdf667a1198761f3f76",
-            "expected_compiler_version": "3.0.2",
+            "snapshot_hash": "sha256:0ade1da8bb4fcbf52bbb689d35372df00063ec71c9db637b635d55bd4960b131",
+            "expected_compiler_version": "3.0.3",
             "expected_core_build_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-            "expected_database_schema_hash": "sha256:49aaee7c8f046cd9a15b3bc5b77fbcf1713be2a1872078941043f5ccdca29024"
+            "expected_database_schema_hash": "sha256:d35c2d6fe2aaaf87ad102561d1595d016f8ef2f04950e5e3ad30b91aa366d909"
           },
           "closure": {
             "ref": {
@@ -733,9 +733,9 @@
               1
             ],
             "registry_schema_version": 1,
-            "database_schema_version": 5,
-            "database_schema_hash": "sha256:49aaee7c8f046cd9a15b3bc5b77fbcf1713be2a1872078941043f5ccdca29024",
-            "compatibility_hash": "sha256:1399627706b6ea6159616ed1ef9800ff969885875b79adf3a72f171b4ffcafc0"
+            "database_schema_version": 6,
+            "database_schema_hash": "sha256:d35c2d6fe2aaaf87ad102561d1595d016f8ef2f04950e5e3ad30b91aa366d909",
+            "compatibility_hash": "sha256:df178bba865c1ad6d9b8ad67264f61040d46ba06939bf1be08c980ea9e9ca22a"
           },
           "run_protocol": {
             "ref": {
@@ -830,10 +830,10 @@
               "id": "fixture.retention-abi-snapshot",
               "version": "1.0.0"
             },
-            "snapshot_hash": "sha256:7a383dafced5b170f749042435d0da7aac45aea908b66bdf667a1198761f3f76",
-            "expected_compiler_version": "3.0.2",
+            "snapshot_hash": "sha256:0ade1da8bb4fcbf52bbb689d35372df00063ec71c9db637b635d55bd4960b131",
+            "expected_compiler_version": "3.0.3",
             "expected_core_build_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-            "expected_database_schema_hash": "sha256:49aaee7c8f046cd9a15b3bc5b77fbcf1713be2a1872078941043f5ccdca29024"
+            "expected_database_schema_hash": "sha256:d35c2d6fe2aaaf87ad102561d1595d016f8ef2f04950e5e3ad30b91aa366d909"
           },
           "closure": {
             "ref": {
@@ -999,9 +999,9 @@
               1
             ],
             "registry_schema_version": 1,
-            "database_schema_version": 5,
-            "database_schema_hash": "sha256:49aaee7c8f046cd9a15b3bc5b77fbcf1713be2a1872078941043f5ccdca29024",
-            "compatibility_hash": "sha256:1399627706b6ea6159616ed1ef9800ff969885875b79adf3a72f171b4ffcafc0"
+            "database_schema_version": 6,
+            "database_schema_hash": "sha256:d35c2d6fe2aaaf87ad102561d1595d016f8ef2f04950e5e3ad30b91aa366d909",
+            "compatibility_hash": "sha256:df178bba865c1ad6d9b8ad67264f61040d46ba06939bf1be08c980ea9e9ca22a"
           },
           "run_protocol": {
             "ref": {
@@ -1096,10 +1096,10 @@
               "id": "fixture.retention-abi-snapshot",
               "version": "1.0.0"
             },
-            "snapshot_hash": "sha256:7a383dafced5b170f749042435d0da7aac45aea908b66bdf667a1198761f3f76",
-            "expected_compiler_version": "3.0.2",
+            "snapshot_hash": "sha256:0ade1da8bb4fcbf52bbb689d35372df00063ec71c9db637b635d55bd4960b131",
+            "expected_compiler_version": "3.0.3",
             "expected_core_build_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-            "expected_database_schema_hash": "sha256:49aaee7c8f046cd9a15b3bc5b77fbcf1713be2a1872078941043f5ccdca29024"
+            "expected_database_schema_hash": "sha256:d35c2d6fe2aaaf87ad102561d1595d016f8ef2f04950e5e3ad30b91aa366d909"
           },
           "closure": {
             "ref": {
@@ -1265,9 +1265,9 @@
               1
             ],
             "registry_schema_version": 1,
-            "database_schema_version": 5,
-            "database_schema_hash": "sha256:49aaee7c8f046cd9a15b3bc5b77fbcf1713be2a1872078941043f5ccdca29024",
-            "compatibility_hash": "sha256:1399627706b6ea6159616ed1ef9800ff969885875b79adf3a72f171b4ffcafc0"
+            "database_schema_version": 6,
+            "database_schema_hash": "sha256:d35c2d6fe2aaaf87ad102561d1595d016f8ef2f04950e5e3ad30b91aa366d909",
+            "compatibility_hash": "sha256:df178bba865c1ad6d9b8ad67264f61040d46ba06939bf1be08c980ea9e9ca22a"
           },
           "run_protocol": {
             "ref": {
@@ -1342,5 +1342,5 @@
       }
     ]
   },
-  "hash": "sha256:572c61de8dd9c1509fc2f077661ada022a08b175749def6565f71e07ca2ef531"
+  "hash": "sha256:7cce7f68941a75e548dd5efe3210d0f1d4f276c17b43d6804e74bf24b9de8580"
 }

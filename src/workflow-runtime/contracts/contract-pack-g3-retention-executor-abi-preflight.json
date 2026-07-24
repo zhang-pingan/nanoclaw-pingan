@@ -11,9 +11,9 @@
     "slice": "G3.6",
     "status": "DONE",
     "g3_status": "IN_PROGRESS",
-    "upstream_g3_3_pack_hash": "sha256:ff5d40589df9bc78e2e7f4f0e2fdcd5f0a7b7f34e0d0592e5308c1230425f1b3",
+    "upstream_g3_3_pack_hash": "sha256:635fd7ac9c15212f50df1845a8267c5cad576aa34d475164e060946cb42987e5",
     "upstream_g3_5_pack_hash": "sha256:bbc4e2cb402c8058a6412da0ebd5a284c2c7af831453cafaa84738a391c15718",
-    "upstream_g1_schema_root_hash": "sha256:baa39d55cac34133a29b461466aa450fec59bd2fd6df72334e8b33d1d1619869",
+    "upstream_g1_schema_root_hash": "sha256:ff588497b32eacc268c379d220fedbb3d29f69a0fdb9337c7a1e429ee7a868eb",
     "publisher_persistence_readiness": "PUBLISHER_SCHEMA_PREREQUISITE_READY",
     "publisher_schema_gap": null,
     "resolution_mode": "immutable_exact_only",
@@ -36,7 +36,7 @@
         },
         "version": 1,
         "domain_separator": "icarus:workflow-retention-executor-abi-preflight-profile-schema:1\n",
-        "hash": "sha256:0def58877dfa1399c959e032409d8fa63d28cb148953d8b2e3be75fcd32872c5"
+        "hash": "sha256:df33c3784b1951521a8149ea414075fe5d3cd12265d77fc16529b6b7918a8edf"
       },
       {
         "path": "registry/workflow-retention-executor-abi-preflight-profile@1.json",
@@ -47,7 +47,7 @@
         },
         "version": 1,
         "domain_separator": "icarus:workflow-retention-executor-abi-preflight-profile:1\n",
-        "hash": "sha256:f1f923c7c8c5fc3e564f740fd046fc9e00424b6ad03528b55f88ccbcce327c62"
+        "hash": "sha256:ac7cd859c28366c5ddc19d2e89dc68264d2a1119bb74e62f2ee314123dfa407c"
       },
       {
         "path": "registry/workflow-retention-executor-abi-preflight-input-schema@1.json",
@@ -69,7 +69,7 @@
         },
         "version": 1,
         "domain_separator": "icarus:workflow-retention-executor-abi-preflight-result-schema:1\n",
-        "hash": "sha256:89b39840e8e365cf976a0331b5b9963399def03984baccdc545f200ed7e5aeeb"
+        "hash": "sha256:00d86d808e6acc87518fe984ad9e19ff4345581998c44d805e1c1c7273046cba"
       },
       {
         "path": "conformance/g3-retention-executor-abi-preflight/positive-cases.json",
@@ -80,7 +80,7 @@
         },
         "version": 1,
         "domain_separator": "icarus:workflow-g3-retention-executor-abi-positive-cases:1\n",
-        "hash": "sha256:cab74580ceffe0bc99b141f4c5ec2ed3656eebf56cacf378afbeeebc74eecd43"
+        "hash": "sha256:3f9127580925d03f7dc0cc17f1e8211f20e35e642134da11fd501cdd7ba0580e"
       },
       {
         "path": "conformance/g3-retention-executor-abi-preflight/negative-cases.json",
@@ -91,7 +91,7 @@
         },
         "version": 1,
         "domain_separator": "icarus:workflow-g3-retention-executor-abi-negative-cases:1\n",
-        "hash": "sha256:572c61de8dd9c1509fc2f077661ada022a08b175749def6565f71e07ca2ef531"
+        "hash": "sha256:7cce7f68941a75e548dd5efe3210d0f1d4f276c17b43d6804e74bf24b9de8580"
       },
       {
         "path": "registry/workflow-retention-executor-abi-preflight-domain-separators@1.json",
@@ -109,5 +109,5 @@
     "negative_case_count": 5,
     "g4_through_g9_status": "NOT_READY"
   },
-  "hash": "sha256:4dd52b4f38da315ba0194fd23a9c681ffdba6aac37291100dd6d6b944178acd9"
+  "hash": "sha256:da15a3b9e7f3215f879d43b8f321c07f432f7d928d42314f22f6028b61f16aa9"
 }

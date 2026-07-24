@@ -1,6 +1,13 @@
 import type { JsonObject, JsonValue, VersionedRef } from './types.js';
+import { buildGeneratedSchema } from './generated-schema-authority.js';
 
 const HASH = `sha256:${'0'.repeat(64)}`;
+
+function withoutKey(value: JsonObject, omittedKey: string): JsonObject {
+  return Object.fromEntries(
+    Object.entries(value).filter(([key]) => key !== omittedKey),
+  );
+}
 
 function versionedRef(id: string): VersionedRef {
   return { id, version: '1.0.0' };
@@ -348,13 +355,11 @@ const compiledSystemNode: JsonObject = {
   },
   input_ports: {
     request: {
-      schema: {
-        type: 'generated',
-        generator: 'join_expose',
-        parameter_hash: HASH,
-        schema_ref: 'schema:request',
-        schema_hash: HASH,
-      },
+      schema: buildGeneratedSchema(
+        'join_expose',
+        { node_id: 'work', input_port: 'request' },
+        { type: 'string' },
+      ),
       max_bytes: 0,
       aggregation: { type: 'single', required: false, select: 'only' },
     },
@@ -793,7 +798,7 @@ export const CLOSED_SCHEMA_NEGATIVE_CASES: ClosedSchemaNegativeCase[] = [
     expected_additional_property: 'runtime_fallback',
   },
   {
-    case_id: 'compiled_plan_rejects_both_generated_schema_sources',
+    case_id: 'compiled_plan_rejects_unknown_generated_schema_scheme',
     schema_format: 'icarus.workflow-compiled-scope-plan-schema/1',
     instance: {
       ...compiledScopePlan,
@@ -809,7 +814,7 @@ export const CLOSED_SCHEMA_NEGATIVE_CASES: ClosedSchemaNegativeCase[] = [
                   (compiledSystemNode.input_ports as JsonObject)
                     .request as JsonObject
                 ).schema as JsonObject),
-                schema_json: { type: 'string' },
+                schema_ref: `schema:${'0'.repeat(64)}`,
               },
             },
           },
@@ -817,7 +822,36 @@ export const CLOSED_SCHEMA_NEGATIVE_CASES: ClosedSchemaNegativeCase[] = [
         ...(compiledScopePlan.nodes as JsonValue[]).slice(1),
       ],
     },
-    expected_keyword: 'oneOf',
+    expected_keyword: 'pattern',
+    expected_instance_pointer: '/nodes/0/input_ports/request/schema/schema_ref',
+    expected_additional_property: null,
+  },
+  {
+    case_id: 'compiled_plan_rejects_missing_generated_schema_json',
+    schema_format: 'icarus.workflow-compiled-scope-plan-schema/1',
+    instance: {
+      ...compiledScopePlan,
+      nodes: [
+        {
+          ...compiledSystemNode,
+          input_ports: {
+            request: {
+              ...((compiledSystemNode.input_ports as JsonObject)
+                .request as JsonObject),
+              schema: withoutKey(
+                (
+                  (compiledSystemNode.input_ports as JsonObject)
+                    .request as JsonObject
+                ).schema as JsonObject,
+                'schema_json',
+              ),
+            },
+          },
+        },
+        ...(compiledScopePlan.nodes as JsonValue[]).slice(1),
+      ],
+    },
+    expected_keyword: 'required',
     expected_instance_pointer: '/nodes/0/input_ports/request/schema',
     expected_additional_property: null,
   },
