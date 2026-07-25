@@ -2545,7 +2545,7 @@ Protected boundary相对`7005ca`为零diff：冻结G0.10 artifacts、G2 v1-v5 se
 
 ### G5 Basic Runtime NodeOutputEnvelope schema authority blocker
 
-**结论**：`BLOCKED_BY_SPEC`。独立G5 whole-gate regression `019f9793-9dfb-7e91-8d72-002bd9427218`已明确拒绝current candidate；`60140018541dd02cda44a0dc2f83c5236403321f`及账本事实返修`479ec461560958308caea49bddf09e0fef00f75d`完整保留。本轮从clean local `main@479ec461560958308caea49bddf09e0fef00f75d`开始，parent=`60140018541dd02cda44a0dc2f83c5236403321f`；没有worktree、Handoff、sub-agent、approval/escalation、push、amend、rebase、reset、历史改写或G6施工。
+**结论**：`BLOCKED_BY_SPEC`。独立G5 whole-gate regression `019f9793-9dfb-7e91-8d72-002bd9427218`已明确拒绝current candidate；`60140018541dd02cda44a0dc2f83c5236403321f`及账本事实返修`479ec461560958308caea49bddf09e0fef00f75d`完整保留。本轮从clean local `main@479ec461560958308caea49bddf09e0fef00f75d`开始，parent=`479ec461560958308caea49bddf09e0fef00f75d`；没有worktree、Handoff、sub-agent、approval/escalation、push、amend、rebase、reset、历史改写或G6施工。
 
 Current规范与machine authority没有共同定义canonical `NodeOutputEnvelope`自身的合法、exact、可持久化Schema authority：
 
