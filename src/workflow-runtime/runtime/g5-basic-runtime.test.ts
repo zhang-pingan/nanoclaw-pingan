@@ -1,7 +1,8 @@
 import fs from 'node:fs';
+import path from 'node:path';
 
 import fc from 'fast-check';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, describe, expect, it } from 'vitest';
 
 import type { CompiledScopePlanV2Document } from '../contracts/compiler-contract-repair-types.js';
 import { COMPILED_PLAN_V2_DOMAIN_SEPARATOR } from '../contracts/compiler-contract-repair-source.js';
@@ -9,6 +10,7 @@ import {
   buildDeploymentCapacityPublication,
   calculateDeploymentCapacityConfigHash,
 } from '../contracts/capacity-control-plane-source.js';
+import type { InitializeDeploymentCapacityCommand } from '../contracts/capacity-control-plane-types.js';
 import {
   CAPABILITY_OUTBOX_ADAPTER_DOMAIN,
   CAPABILITY_OUTBOX_EXECUTION_BINDING_DOMAIN,
@@ -18,6 +20,15 @@ import {
 import { registryResourceId } from '../contracts/g3-registry-persistence.js';
 import type { G3RegistryResourceType } from '../contracts/g3-registry-persistence-types.js';
 import { G5_REPAIR_DATABASE_SCHEMA_HASH } from '../contracts/g5-basic-runtime-repair-types.js';
+import type {
+  G5RepairFixtureCase,
+  G5RepairFixtureOracle,
+} from '../contracts/g5-basic-runtime-repair-contract.js';
+import {
+  G5FixtureExecutionHarness,
+  type G5FixtureArtifacts,
+  type G5FixtureHandler,
+} from '../contracts/g5-basic-runtime-fixture-harness.js';
 import {
   buildGeneratedSchema,
   buildNodeOutputEnvelopeSchema,
@@ -28,6 +39,7 @@ import {
   G5BasicRuntimeReferenceModel,
   type ReferenceTrigger,
 } from '../contracts/g5-basic-runtime-reference-model.js';
+import { referenceJoinPublication } from '../contracts/g5-basic-runtime-repair-reference-model.js';
 import { canonicalJson, domainSeparatedSha256 } from '../contracts/hash.js';
 import type { JsonObject, JsonValue, Sha256Hash } from '../contracts/types.js';
 import {
@@ -44,9 +56,20 @@ import {
 import { acquireDomainClaim } from '../creation/domain-claims.js';
 import type { WorkflowRuntimeStore } from '../store/runtime-store/index.js';
 import {
+  NodeOutputEnvelopeAuthorityError,
   NodeOutputEnvelopeValueStore,
+  nodeOutputMemberProvenanceRef,
   type NodeOutputEnvelopeValue,
 } from '../store/node-output-envelope-value-store.js';
+import {
+  prepareCapacityChangeCAP0CAP1,
+  type CapacityAuthenticatedInvocation,
+} from '../capacity/admin-gateway.js';
+import {
+  CapacitySnapshotPublisher,
+  CapacitySnapshotWatcher,
+  recoverCapacityPublication,
+} from '../capacity/publication.js';
 import {
   initializeScopeFixedPointT3a,
   materializeRootScopeT2b,
@@ -72,32 +95,13 @@ import {
   listOpenOperationalBlockers,
   openOperationalBlocker,
 } from './operational-blockers.js';
-import { stableRuntimeId } from './graph-store.js';
+import { G5RuntimeError, stableRuntimeId } from './graph-store.js';
 import {
   createG5TestBootstrap,
   type G5TestBootstrapInstance,
 } from './g5-test-bootstrap.js';
 
 const instances: G5TestBootstrapInstance[] = [];
-const fixtureEvidence = new Map<string, string>();
-const g5FixtureCases = [
-  'positive-cases.json',
-  'negative-cases.json',
-  'fault-cases.json',
-].flatMap((name) => {
-  const artifact = JSON.parse(
-    fs.readFileSync(
-      new URL(
-        `../contracts/conformance/g5-basic-runtime-repair/${name}`,
-        import.meta.url,
-      ),
-      'utf8',
-    ),
-  ) as {
-    payload: { cases: Array<{ case_id: string; surface: string }> };
-  };
-  return artifact.payload.cases;
-});
 const hash = (label: string): Sha256Hash =>
   domainSeparatedSha256('icarus:g5-runtime-test:1\n', { label });
 
@@ -1175,6 +1179,53 @@ function fixedCapacity() {
   );
 }
 
+function installFixtureRuntimeCapacity(
+  instance: G5TestBootstrapInstance,
+  seed: SeededRuntime,
+): void {
+  const capacity = fixedCapacity();
+  instance.store.withImmediateTransaction((transaction) => {
+    transaction.execute(
+      `INSERT INTO runtime_capacity_admin_commands (
+       command_id, idempotency_domain, idempotency_key, command_type,
+       expected_capacity_revision, expected_config_hash,
+       assigned_capacity_revision, assigned_change_id,
+       genesis_core_release_hash, proposed_capacity_json,
+       proposed_config_hash, request_hash, reason_code, reason_text_value_id,
+       reason_text_hash, evidence_manifest_value_id, evidence_manifest_hash,
+       canonical_result_value_id, canonical_result_hash, created_at_ms,
+       finalized_at_ms
+     ) VALUES ('capacity:g5-fixture', 'deployment_capacity',
+       'capacity:g5-fixture', 'initialize_deployment_capacity', NULL, NULL,
+       1, ?, ?, ?, ?, ?, 'initial_provisioning', NULL, NULL, ?, ?, ?, ?,
+       1, 1)`,
+      [
+        capacity.capacity_change_id,
+        hash('core-release'),
+        canonicalJson(capacity.capacity as unknown as JsonValue),
+        capacity.capacity.config_hash,
+        hash('capacity-request'),
+        seed.values.evidence.id,
+        seed.values.evidence.hash,
+        seed.values.result.id,
+        seed.values.result.hash,
+      ],
+    );
+    transaction.execute(
+      `INSERT INTO runtime_capacity_head (
+       singleton_key, current_capacity_revision, current_change_id,
+       current_config_hash, current_publication_hash, pending_change_id,
+       row_version, created_at_ms, updated_at_ms
+     ) VALUES (1, 1, ?, ?, ?, NULL, 1, 1, 1)`,
+      [
+        capacity.capacity_change_id,
+        capacity.capacity.config_hash,
+        capacity.publication_hash,
+      ],
+    );
+  });
+}
+
 function initializePlanCase(
   instance: G5TestBootstrapInstance,
   run: MaterializedPlanCase,
@@ -1317,11 +1368,1841 @@ function directCreationIntentHash(
   });
 }
 
+interface ProductionFixtureTarget {
+  readonly instance: G5TestBootstrapInstance;
+  readonly relation: string;
+  invoke(fault: boolean): string;
+  replay?(): string;
+}
+
+class ObservedFixtureRejection extends Error {
+  constructor(readonly code: string) {
+    super(code);
+  }
+}
+
+function fixtureObject(value: JsonValue, label: string): JsonObject {
+  if (value === null || Array.isArray(value) || typeof value !== 'object')
+    throw new Error(`${label} must be an object`);
+  return value;
+}
+
+function fixtureString(value: JsonValue, label: string): string {
+  if (typeof value !== 'string') throw new Error(`${label} must be a string`);
+  return value;
+}
+
+function fixtureNumber(value: JsonValue, label: string): number {
+  if (!Number.isSafeInteger(value))
+    throw new Error(`${label} must be a safe integer`);
+  return value as number;
+}
+
+function fixtureBoolean(value: JsonValue, label: string): boolean {
+  if (typeof value !== 'boolean') throw new Error(`${label} must be boolean`);
+  return value;
+}
+
+function fixtureBehavior(fixture: G5RepairFixtureCase): {
+  readonly behavior: string;
+  readonly relation: string;
+  readonly key: string;
+  readonly nowMs: number;
+} {
+  const input = fixture.operation.input;
+  const payload = fixtureObject(input.payload, 'fixture payload');
+  if (
+    payload.operation !== fixture.operation.kind ||
+    input.expected_surface !== fixture.surface ||
+    fixture.operation.transaction !== fixture.surface
+  )
+    throw new Error(`${fixture.case_id} production operation binding drifted`);
+  const behavior = fixtureString(payload.behavior, 'fixture behavior');
+  if (behavior === fixture.case_id)
+    throw new Error(`${fixture.case_id} behavior cannot alias its case id`);
+  const fixtureToken = fixtureString(input.fixture_token, 'fixture token');
+  const idempotencyKey = fixtureString(
+    input.idempotency_key,
+    'idempotency key',
+  );
+  return {
+    behavior,
+    relation: fixtureString(payload.durable_relation, 'durable relation'),
+    key: domainSeparatedSha256('icarus:workflow-g5-fixture-input-key:1\n', {
+      fixture_token: fixtureToken,
+      idempotency_key: idempotencyKey,
+    }),
+    nowMs: fixtureNumber(input.now_ms, 'now_ms'),
+  };
+}
+
+function transactionFixtureFault(
+  fixture: G5RepairFixtureCase,
+  enabled: boolean,
+): { readonly point: 'before_commit' } | undefined {
+  if (!enabled) return undefined;
+  const fault = fixtureObject(fixture.operation.fault, 'fixture fault');
+  if (fault.boundary !== fixture.surface || fault.point !== 'before_commit')
+    throw new Error(`${fixture.case_id} transaction fault binding drifted`);
+  return { point: fault.point };
+}
+
+function requireFixtureFaultPoint(
+  fixture: G5RepairFixtureCase,
+  expected: string,
+): void {
+  const fault = fixtureObject(fixture.operation.fault, 'fixture fault');
+  if (fault.boundary !== fixture.surface || fault.point !== expected)
+    throw new Error(`${fixture.case_id} fault point is not ${expected}`);
+}
+
+function relationFingerprint(
+  instance: G5TestBootstrapInstance,
+  relation: string,
+): Sha256Hash {
+  if (!/^[a-z][a-z0-9_]*$/.test(relation))
+    throw new Error(`invalid fixture relation ${relation}`);
+  const exists = instance.store.queryOne<{ count: number }>(
+    "SELECT count(*) AS count FROM sqlite_schema WHERE type = 'table' AND name = ?",
+    [relation],
+  );
+  if (exists?.count !== 1)
+    throw new Error(`fixture relation ${relation} does not exist`);
+  const rows = instance.store.queryAll<Record<string, JsonValue>>(
+    `SELECT * FROM ${relation} ORDER BY rowid`,
+    [],
+  );
+  return domainSeparatedSha256(
+    'icarus:workflow-g5-fixture-relation-state:1\n',
+    { relation, rows },
+  );
+}
+
+function databaseFingerprint(instance: G5TestBootstrapInstance): Sha256Hash {
+  const tables = instance.store.queryAll<{ name: string }>(
+    `SELECT name FROM sqlite_schema
+      WHERE type = 'table' AND name NOT LIKE 'sqlite_%'
+      ORDER BY name COLLATE BINARY`,
+    [],
+  );
+  const state: JsonObject = {};
+  for (const { name } of tables) {
+    if (!/^[a-z][a-z0-9_]*$/.test(name))
+      throw new Error(`invalid Schema 7 table name ${name}`);
+    const columns = instance.store.queryAll<{ name: string }>(
+      `PRAGMA table_info(${name})`,
+      [],
+    );
+    const order = columns
+      .map((column) => `"${column.name.replaceAll('"', '""')}"`)
+      .join(', ');
+    state[name] = instance.store.queryAll<Record<string, JsonValue>>(
+      `SELECT * FROM ${name}${order.length > 0 ? ` ORDER BY ${order}` : ''}`,
+      [],
+    );
+  }
+  return domainSeparatedSha256(
+    'icarus:workflow-g5-fixture-database-state:1\n',
+    state,
+  );
+}
+
+function creationInput(seed: SeededRuntime, key: string, nowMs: number) {
+  return {
+    requestId: `request:${key}`,
+    creationDomain: 'assistant',
+    creationKey: key,
+    source: 'api' as const,
+    principalRef: 'human:local-owner',
+    recipe: seed.refs.recipe,
+    definition: seed.refs.definition,
+    executionPolicy: seed.refs.executionPolicy,
+    commandPolicy: seed.refs.commandPolicy,
+    inputSchema: seed.refs.inputSchema,
+    contextContract: seed.refs.contextContract,
+    routingScope: seed.refs.routingScope,
+    input: seed.values.input,
+    attachments: seed.values.attachments,
+    contextSnapshot: seed.values.context,
+    routingDecision: seed.values.routing,
+    routingDecisionJson: { reason_codes: ['explicit_recipe'] },
+    runtimeSafetyHash: seed.values.safety.hash,
+    ownershipHash: hash('ownership'),
+    creationIntentHash: directCreationIntentHash(seed, 'assistant', key),
+    workflowDefinitionVersion: '1.0.0',
+    recipeVersion: '1.0.0',
+    deadlineAtMs: null,
+    resourceLimits: {
+      state_activations_total: 8,
+      graph_runs_total: 8,
+      descendant_workflows_total: 8,
+    },
+    domainClaims: [
+      {
+        namespace: 'workspace',
+        keyHash: hash(`claim:${key}`),
+        mode: 'exclusive' as const,
+      },
+    ],
+    initialActivation: initialActivation(seed, nowMs),
+    nowMs,
+  };
+}
+
+function compilePrefix(fixture: G5RepairFixtureCase): {
+  readonly instance: G5TestBootstrapInstance;
+  readonly seed: SeededRuntime;
+  readonly candidate: CompiledScopePlanV2Document;
+  readonly created: ReturnType<typeof createWorkflowT0>;
+  readonly input: Parameters<typeof persistCompileResultT2a>[1];
+} {
+  const { key, nowMs } = fixtureBehavior(fixture);
+  const instance = bootstrap(fixture.operation.scenario_key);
+  const seed = seedRuntime(instance.store);
+  const candidate = plan(seed);
+  pinTestDefinitionPlan(instance.store, seed, candidate);
+  const created = createWorkflowT0(
+    instance.store,
+    creationInput(seed, `${key}:prefix`, nowMs),
+  );
+  return {
+    instance,
+    seed,
+    candidate,
+    created,
+    input: {
+      graphRunId: created.activation.graphRunId,
+      buildId: created.activation.rootBuildId,
+      expectedBuildRowVersion: 1,
+      expectedRunWorkFenceEpoch: 0,
+      expectedOwnerScopeWorkFenceEpoch: 0,
+      expectedCompilerSnapshotHash: hash('compiler-snapshot'),
+      sourceJson: G5_TEST_SOURCE,
+      sourceHash: candidate.source_hash as Sha256Hash,
+      plan: candidate,
+      nowMs: nowMs + 1,
+    },
+  };
+}
+
+function materializePrefix(fixture: G5RepairFixtureCase): {
+  readonly instance: G5TestBootstrapInstance;
+  readonly seed: SeededRuntime;
+  readonly candidate: CompiledScopePlanV2Document;
+  readonly created: ReturnType<typeof createWorkflowT0>;
+  readonly input: Parameters<typeof materializeRootScopeT2b>[1];
+} {
+  const prefix = compilePrefix(fixture);
+  const compiled = persistCompileResultT2a(prefix.instance.store, prefix.input);
+  const run = prefix.instance.store.queryOne<{ row_version: number }>(
+    'SELECT row_version FROM workflow_graph_runs WHERE id = ?',
+    [prefix.created.activation.graphRunId],
+  )!;
+  return {
+    ...prefix,
+    input: {
+      graphRunId: prefix.created.activation.graphRunId,
+      buildId: prefix.created.activation.rootBuildId,
+      rootScopeId: prefix.created.activation.rootScopeId,
+      expectedBuildRowVersion: 2,
+      expectedRunRowVersion: run.row_version,
+      expectedScopeRowVersion: 1,
+      expectedRunWorkFenceEpoch: 0,
+      planId: compiled.planId,
+      plan: prefix.candidate,
+      inputSnapshot: prefix.seed.values.input,
+      nowMs: prefix.input.nowMs + 1,
+    },
+  };
+}
+
+function fixedPointPrefix(fixture: G5RepairFixtureCase): {
+  readonly instance: G5TestBootstrapInstance;
+  readonly seed: SeededRuntime;
+  readonly candidate: CompiledScopePlanV2Document;
+  readonly created: ReturnType<typeof createWorkflowT0>;
+  readonly input: Parameters<typeof initializeScopeFixedPointT3a>[1];
+} {
+  const prefix = materializePrefix(fixture);
+  materializeRootScopeT2b(prefix.instance.store, prefix.input);
+  const run = prefix.instance.store.queryOne<{ row_version: number }>(
+    'SELECT row_version FROM workflow_graph_runs WHERE id = ?',
+    [prefix.created.activation.graphRunId],
+  )!;
+  return {
+    ...prefix,
+    input: {
+      graphRunId: prefix.created.activation.graphRunId,
+      scopeId: prefix.created.activation.rootScopeId,
+      expectedRunRowVersion: run.row_version,
+      nowMs: prefix.input.nowMs + 1,
+    },
+  };
+}
+
+function buildT0FixtureTarget(
+  fixture: G5RepairFixtureCase,
+): ProductionFixtureTarget {
+  const { behavior, relation, key, nowMs } = fixtureBehavior(fixture);
+  const instance = bootstrap(fixture.operation.scenario_key);
+  const seed = seedRuntime(instance.store);
+  const candidate = plan(seed);
+  pinTestDefinitionPlan(instance.store, seed, candidate);
+  const input = creationInput(seed, key, nowMs);
+  if (behavior === 'conflicting_valid_creation_intent') {
+    createWorkflowT0(instance.store, input);
+    return {
+      instance,
+      relation,
+      invoke: () => {
+        createWorkflowT0(instance.store, {
+          ...input,
+          input: seed.values.result,
+          creationIntentHash: calculateCreationIntentHash({
+            creationDomain: input.creationDomain,
+            creationKey: input.creationKey,
+            principalRef: input.principalRef,
+            ownershipHash: input.ownershipHash,
+            routingScope: input.routingScope,
+            recipe: input.recipe,
+            entryPoint: 'default',
+            inputHash: seed.values.result.hash,
+            attachmentManifestHash: input.attachments.hash,
+          }),
+          nowMs: nowMs + 1,
+        });
+        return 'unexpected';
+      },
+    };
+  }
+  return {
+    instance,
+    relation,
+    invoke: (fault) =>
+      createWorkflowT0(
+        instance.store,
+        input,
+        transactionFixtureFault(fixture, fault),
+      ).disposition,
+    replay: () =>
+      createWorkflowT0(instance.store, { ...input, nowMs: nowMs + 1 })
+        .disposition,
+  };
+}
+
+function buildT1FixtureTarget(
+  fixture: G5RepairFixtureCase,
+): ProductionFixtureTarget {
+  const { behavior, relation, key, nowMs } = fixtureBehavior(fixture);
+  if (behavior !== 'stale_workflow_row_version') {
+    const instance = bootstrap(fixture.operation.scenario_key);
+    const seed = seedRuntime(instance.store);
+    const candidate = plan(seed);
+    pinTestDefinitionPlan(instance.store, seed, candidate);
+    const input = creationInput(seed, key, nowMs);
+    return {
+      instance,
+      relation,
+      invoke: (fault) =>
+        createWorkflowT0(
+          instance.store,
+          input,
+          transactionFixtureFault(fixture, fault),
+        ).activation.disposition,
+    };
+  }
+  const instance = bootstrap(fixture.operation.scenario_key);
+  const seed = seedRuntime(instance.store);
+  const candidate = plan(seed);
+  pinTestDefinitionPlan(instance.store, seed, candidate);
+  const created = createWorkflowT0(
+    instance.store,
+    creationInput(seed, `${key}:prefix`, nowMs),
+  );
+  const workflow = instance.store.queryOne<{ row_version: number }>(
+    'SELECT row_version FROM workflows WHERE id = ?',
+    [created.workflowId],
+  )!;
+  const input = {
+    ...initialActivation(seed, nowMs + 1),
+    workflowId: created.workflowId,
+    expectedWorkflowRowVersion:
+      behavior === 'stale_workflow_row_version'
+        ? workflow.row_version - 1
+        : workflow.row_version,
+    stateKey: `fixture:${key}`,
+  };
+  return {
+    instance,
+    relation,
+    invoke: (fault) =>
+      activateWorkflowT1(
+        instance.store,
+        input,
+        transactionFixtureFault(fixture, fault),
+      ).disposition,
+  };
+}
+
+function buildT2aFixtureTarget(
+  fixture: G5RepairFixtureCase,
+): ProductionFixtureTarget {
+  const { behavior, relation } = fixtureBehavior(fixture);
+  const prefix = compilePrefix(fixture);
+  const input =
+    behavior === 'stale_build_row_version'
+      ? { ...prefix.input, expectedBuildRowVersion: 0 }
+      : prefix.input;
+  return {
+    instance: prefix.instance,
+    relation,
+    invoke: (fault) =>
+      persistCompileResultT2a(
+        prefix.instance.store,
+        input,
+        transactionFixtureFault(fixture, fault),
+      ).disposition,
+    replay: () =>
+      persistCompileResultT2a(prefix.instance.store, prefix.input).disposition,
+  };
+}
+
+function buildT2bFixtureTarget(
+  fixture: G5RepairFixtureCase,
+): ProductionFixtureTarget {
+  const { behavior, relation } = fixtureBehavior(fixture);
+  const prefix = materializePrefix(fixture);
+  if (behavior === 'paused_run_control')
+    prefix.instance.store.withImmediateTransaction((transaction) => {
+      transaction.execute(
+        "UPDATE workflow_graph_runs SET control = 'paused' WHERE id = ?",
+        [prefix.created.activation.graphRunId],
+      );
+    });
+  return {
+    instance: prefix.instance,
+    relation,
+    invoke: (fault) =>
+      materializeRootScopeT2b(
+        prefix.instance.store,
+        prefix.input,
+        transactionFixtureFault(fixture, fault),
+      ).disposition,
+    replay: () =>
+      materializeRootScopeT2b(prefix.instance.store, prefix.input).disposition,
+  };
+}
+
+function buildT3aFixtureTarget(
+  fixture: G5RepairFixtureCase,
+): ProductionFixtureTarget {
+  const { behavior, relation, key, nowMs } = fixtureBehavior(fixture);
+  const prefix = fixedPointPrefix(fixture);
+  if (behavior === 'conflicting_fact_payload') {
+    initializeScopeFixedPointT3a(prefix.instance.store, prefix.input);
+    const run = prefix.instance.store.queryOne<{ row_version: number }>(
+      'SELECT row_version FROM workflow_graph_runs WHERE id = ?',
+      [prefix.created.activation.graphRunId],
+    )!;
+    const factInput: Parameters<typeof reconcileFactT3a>[1] = {
+      graphRunId: prefix.created.activation.graphRunId,
+      scopeId: prefix.created.activation.rootScopeId,
+      expectedRunRowVersion: run.row_version,
+      factKind: 'orchestration_error',
+      stableObjectKind: 'scope',
+      stableObjectId: prefix.created.activation.rootScopeId,
+      factKey: `fixture-fact:${key}`,
+      payload: prefix.seed.values.input,
+      terminalStatus: undefined,
+      nowMs: nowMs + 10,
+    };
+    reconcileFactT3a(prefix.instance.store, factInput);
+    return {
+      instance: prefix.instance,
+      relation,
+      invoke: () => {
+        reconcileFactT3a(prefix.instance.store, {
+          ...factInput,
+          payload: prefix.seed.values.result,
+          expectedRunRowVersion: prefix.instance.store.queryOne<{
+            row_version: number;
+          }>('SELECT row_version FROM workflow_graph_runs WHERE id = ?', [
+            prefix.created.activation.graphRunId,
+          ])!.row_version,
+          nowMs: nowMs + 11,
+        });
+        return 'unexpected';
+      },
+    };
+  }
+  return {
+    instance: prefix.instance,
+    relation,
+    invoke: (fault) => {
+      initializeScopeFixedPointT3a(
+        prefix.instance.store,
+        prefix.input,
+        transactionFixtureFault(fixture, fault),
+      );
+      return 'initialized';
+    },
+  };
+}
+
+function prepareSettledCloseTarget(fixture: G5RepairFixtureCase): {
+  readonly instance: G5TestBootstrapInstance;
+  readonly seed: SeededRuntime;
+  readonly run: MaterializedPlanCase;
+  readonly input: Parameters<typeof requestSettledCloseT3b>[1];
+} {
+  const { key, nowMs } = fixtureBehavior(fixture);
+  const instance = bootstrap(fixture.operation.scenario_key);
+  const seed = seedRuntime(instance.store);
+  const candidate = planVariant(seed, {
+    nodes: [
+      {
+        id: 'done',
+        type: 'terminal',
+        capability_binding: null,
+        exit: 'done',
+        trigger_program: compileTriggerProgram({ type: 'root' }),
+        input_ports: {},
+        output_ports: {},
+      },
+    ],
+    route_groups: [],
+    control_edges: [],
+    data_edges: [],
+    completion: completionPolicy([
+      {
+        id: 'fixture-settled-exit',
+        phase: 'settled',
+        priority: 1,
+        when: { fact: 'all_nodes_terminal' },
+        selector: {
+          exits: ['done'],
+          pick: { type: 'lowest_terminal_node_id' },
+        },
+      },
+    ]),
+  });
+  const run = materializePlanCase(instance, seed, candidate, key, nowMs);
+  initializePlanCase(instance, run, nowMs + 3);
+  const terminal = scheduleStructuralNode(instance, run, 'done', nowMs + 4);
+  reconcileTerminalNode(
+    instance,
+    run,
+    terminal,
+    `fixture-terminal:${key}`,
+    nowMs + 5,
+  );
+  const rows = instance.store.queryOne<{
+    run_row_version: number;
+    scope_row_version: number;
+  }>(
+    `SELECT r.row_version AS run_row_version,
+            s.row_version AS scope_row_version
+       FROM workflow_graph_runs r
+       JOIN workflow_graph_scopes s ON s.id = r.root_scope_id
+      WHERE r.id = ?`,
+    [run.graphRunId],
+  )!;
+  return {
+    instance,
+    seed,
+    run,
+    input: {
+      graphRunId: run.graphRunId,
+      scopeId: run.scopeId,
+      expectedRunRowVersion: rows.run_row_version,
+      expectedScopeRowVersion: rows.scope_row_version,
+      nowMs: nowMs + 6,
+    },
+  };
+}
+
+function buildT3bFixtureTarget(
+  fixture: G5RepairFixtureCase,
+): ProductionFixtureTarget {
+  const { relation } = fixtureBehavior(fixture);
+  const target = prepareSettledCloseTarget(fixture);
+  return {
+    instance: target.instance,
+    relation,
+    invoke: (fault) =>
+      requestSettledCloseT3b(
+        target.instance.store,
+        target.input,
+        transactionFixtureFault(fixture, fault),
+      ).disposition,
+  };
+}
+
+function buildT0pFixtureTarget(
+  fixture: G5RepairFixtureCase,
+): ProductionFixtureTarget {
+  const { relation, key, nowMs } = fixtureBehavior(fixture);
+  const target = prepareSettledCloseTarget(fixture);
+  const closed = requestSettledCloseT3b(target.instance.store, target.input);
+  const lineage = target.instance.store.queryOne<{
+    workflow_id: string;
+    state_instance_id: string;
+  }>(
+    'SELECT workflow_id, state_instance_id FROM workflow_graph_runs WHERE id = ?',
+    [target.run.graphRunId],
+  )!;
+  const transitionEffectId = `required-child:${key}`;
+  const creationDomain = `parent_workflow_lineage:${lineage.workflow_id}`;
+  const creationKey = domainSeparatedSha256(
+    'icarus:child-workflow-creation-key:1\n',
+    {
+      parent_workflow_id: lineage.workflow_id,
+      source_state_instance_id: lineage.state_instance_id,
+      source_close_request_id: closed.closeRequestId,
+      transition_effect_id: transitionEffectId,
+    },
+  );
+  const input: Parameters<typeof prepareRequiredFinalizationT0p>[1] = {
+    workflowId: lineage.workflow_id,
+    sourceStateInstanceId: lineage.state_instance_id,
+    sourceRunId: target.run.graphRunId,
+    rootScopeId: target.run.scopeId,
+    closeRequestId: closed.closeRequestId,
+    transitionEffectId,
+    recipe: target.seed.refs.recipe,
+    definition: target.seed.refs.definition,
+    executionPolicy: target.seed.refs.executionPolicy,
+    routingScope: target.seed.refs.routingScope,
+    finalizationPolicy: target.seed.refs.finalizationPolicy,
+    principalRef: 'human:local-owner',
+    principalHash: hash('principal:local-owner'),
+    input: target.seed.values.input,
+    attachments: target.seed.values.attachments,
+    routingDecision: target.seed.values.routing,
+    creationIntentHash: calculateCreationIntentHash({
+      creationDomain,
+      creationKey,
+      principalRef: 'human:local-owner',
+      ownershipHash: hash('ownership'),
+      routingScope: target.seed.refs.routingScope,
+      recipe: target.seed.refs.recipe,
+      entryPoint: 'default',
+      inputHash: target.seed.values.input.hash,
+      attachmentManifestHash: target.seed.values.attachments.hash,
+    }),
+    runtimeSafetyHash: target.seed.values.safety.hash,
+    maxAttempts: 3,
+    deadlineAtMs: nowMs + 10_000,
+    nowMs: nowMs + 7,
+  };
+  return {
+    instance: target.instance,
+    relation,
+    invoke: (fault) =>
+      prepareRequiredFinalizationT0p(
+        target.instance.store,
+        input,
+        transactionFixtureFault(fixture, fault),
+      ).disposition,
+    replay: () =>
+      prepareRequiredFinalizationT0p(target.instance.store, {
+        ...input,
+        nowMs: input.nowMs + 1,
+      }).disposition,
+  };
+}
+
+function buildNodeOutputEnvelopeFixtureTarget(
+  fixture: G5RepairFixtureCase,
+): ProductionFixtureTarget {
+  const { behavior, relation, key, nowMs } = fixtureBehavior(fixture);
+  const instance = bootstrap(fixture.operation.scenario_key);
+  const seed = seedRuntime(instance.store);
+  const valueSchema = publishTestSchema(
+    instance.store,
+    seed,
+    `fixture-envelope-${fixture.case_id}`,
+    {},
+  );
+  const candidate = planVariant(seed, {
+    nodes: [
+      {
+        id: 'fixture-output',
+        type: 'system',
+        capability_binding: { ref: seed.refs.capability.ref },
+        trigger_program: compileTriggerProgram({ type: 'root' }),
+        input_ports: {},
+        output_ports: {
+          result: {
+            schema: compiledTestSchema(valueSchema),
+            max_bytes:
+              behavior === 'member_exceeds_compiled_max_bytes' ? 1 : 16_384,
+            required: true,
+          },
+        },
+        outbox_execution_binding: executionBinding(seed),
+        effective_retry_policy: {
+          backoff: 'fixed',
+          effective_node_max_attempts: 1,
+          effective_retry_on: [],
+          policy_hash: hash(`fixture-envelope-policy:${key}`),
+          quality_revision: null,
+        },
+      },
+    ],
+    route_groups: [],
+    control_edges: [],
+    data_edges: [],
+    completion: completionPolicy([
+      {
+        id: 'fixture-output-no-close',
+        phase: 'settled',
+        priority: 1,
+        when: { fact: 'all_nodes_terminal' },
+        selector: {
+          exits: ['unused'],
+          pick: { type: 'lowest_terminal_node_id' },
+        },
+      },
+    ]),
+  });
+  const run = materializePlanCase(instance, seed, candidate, key, nowMs);
+  const planRow = instance.store.queryOne<{ id: string }>(
+    'SELECT id FROM workflow_graph_scope_plans WHERE graph_run_id = ?',
+    [run.graphRunId],
+  )!;
+  const modeledValue: JsonValue =
+    behavior === 'publish_optional_absent'
+      ? referenceJoinPublication({
+          planHash: candidate.plan_hash as Sha256Hash,
+          nodeId: 'fixture-output',
+          outputs: {
+            result: {
+              inputPort: 'source',
+              schemaHash: valueSchema.schema_hash,
+              required: false,
+              maxBytes: 4096,
+            },
+          },
+          sealedPorts: { source: { state: 'absent' } },
+        })
+      : referenceJoinPublication({
+          planHash: candidate.plan_hash as Sha256Hash,
+          nodeId: 'fixture-output',
+          outputs: {
+            result: {
+              inputPort: 'source',
+              schemaHash: valueSchema.schema_hash,
+              required: true,
+              maxBytes: 4096,
+            },
+          },
+          sealedPorts: {
+            source: {
+              state: 'present',
+              value:
+                behavior === 'publish_ordered_list'
+                  ? ['first', 'second']
+                  : behavior === 'publish_defaulted_single'
+                    ? 'fallback'
+                    : behavior === 'publish_selected_immutable_value'
+                      ? { selected_port: 'result', value: 'immutable' }
+                      : behavior === 'publish_renamed_single'
+                        ? 'renamed-value'
+                        : { fixture: behavior },
+            },
+          },
+        });
+  const member = insertTestValue(
+    instance.store,
+    valueSchema,
+    `fixture-envelope-member-${fixture.case_id}`,
+    modeledValue,
+  );
+  const provenance = nodeOutputMemberProvenanceRef({
+    planId: planRow.id,
+    graphRunId: run.graphRunId,
+    planHash: candidate.plan_hash as Sha256Hash,
+    nodeId: 'fixture-output',
+    portName: 'result',
+    valueRef: member.id,
+    valueHash: member.hash,
+    schemaHash: valueSchema.schema_hash,
+    byteLength: member.byteLength,
+  });
+  instance.store.withImmediateTransaction((transaction) => {
+    transaction.execute(
+      'UPDATE workflow_values SET provenance_ref = ?, row_version = 0 WHERE id = ?',
+      [
+        behavior === 'wrong_member_provenance'
+          ? 'g5-fixture-wrong-provenance'
+          : provenance,
+        member.id,
+      ],
+    );
+    transaction.execute(
+      `INSERT INTO workflow_value_ownerships (
+       value_id, owner_workflow_id, owner_graph_run_id,
+       owner_registry_resource_id, owner_feature_release_id,
+       system_owner_ref, created_at_ms
+     ) VALUES (?, NULL, ?, NULL, NULL, NULL, ?)`,
+      [member.id, run.graphRunId, nowMs],
+    );
+  });
+  const ports: JsonObject =
+    behavior === 'absent_required_port'
+      ? {
+          result: {
+            state: 'absent',
+            schema_hash: valueSchema.schema_hash,
+          },
+        }
+      : {
+          result: {
+            state: 'present',
+            value_ref: member.id,
+            value_hash: member.hash,
+            schema_hash:
+              behavior === 'wrong_member_schema_hash'
+                ? hash('fixture-wrong-output-schema')
+                : valueSchema.schema_hash,
+            byte_length: member.byteLength,
+          },
+        };
+  const input = {
+    planId: planRow.id,
+    graphRunId: run.graphRunId,
+    planHash: candidate.plan_hash as Sha256Hash,
+    nodeId: 'fixture-output',
+    valueId: `value:fixture-envelope:${domainSeparatedSha256(
+      'icarus:workflow-g5-fixture-envelope-value:1\n',
+      { key },
+    ).slice('sha256:'.length)}`,
+    ports,
+    createdAtMs: nowMs + 3,
+  };
+  const generated = instance.store.queryOne<{ schema_ref: string }>(
+    `SELECT schema_ref FROM workflow_plan_generated_schemas
+      WHERE plan_id = ? AND generator = 'node_output_envelope'`,
+    [planRow.id],
+  )!;
+  const authorityReadBehaviors = new Set([
+    'delete_referenced_generated_binding',
+    'unknown_envelope_schema_ref',
+    'generated_schema_bytes_drift',
+    'generated_schema_length_drift',
+    'change_referenced_parameter_hash',
+    'change_binding_hash',
+    'unsupported_schema_canonicalizer',
+    'add_unsealed_output_port',
+    'moving_registry_schema_ref',
+  ]);
+  const boundary = new NodeOutputEnvelopeValueStore(instance.store);
+  let written: NodeOutputEnvelopeValue | null = null;
+  if (authorityReadBehaviors.has(behavior)) written = boundary.write(input);
+  instance.store.withImmediateTransaction((transaction) => {
+    if (behavior === 'generated_schema_bytes_drift')
+      transaction.execute(
+        'UPDATE workflow_generated_schema_contents SET canonical_schema_json = ? WHERE schema_ref = ?',
+        ['{}', generated.schema_ref],
+      );
+    else if (behavior === 'generated_schema_length_drift')
+      transaction.execute(
+        'UPDATE workflow_generated_schema_contents SET byte_length = byte_length + 1 WHERE schema_ref = ?',
+        [generated.schema_ref],
+      );
+    else if (behavior === 'change_binding_hash')
+      transaction.execute(
+        'UPDATE workflow_plan_generated_schemas SET binding_hash = ? WHERE plan_id = ? AND schema_ref = ?',
+        [
+          hash('fixture-generated-binding-drift'),
+          planRow.id,
+          generated.schema_ref,
+        ],
+      );
+    else if (behavior === 'unexpected_envelope_port')
+      ports.extra = {
+        state: 'absent',
+        schema_hash: valueSchema.schema_hash,
+      };
+    else if (
+      behavior === 'unknown_envelope_schema_ref' ||
+      behavior === 'add_unsealed_output_port' ||
+      behavior === 'moving_registry_schema_ref'
+    ) {
+      const planValue = structuredClone(candidate) as JsonObject;
+      const node = (planValue.nodes as JsonObject[])[0]!;
+      if (behavior === 'unknown_envelope_schema_ref')
+        (node.output_envelope_schema as JsonObject).schema_ref =
+          `unknown:sha256:${'0'.repeat(64)}`;
+      else if (behavior === 'add_unsealed_output_port')
+        (node.output_ports as JsonObject).unexpected = {
+          schema: compiledTestSchema(valueSchema),
+          max_bytes: 16,
+          required: false,
+        };
+      else
+        (
+          ((node.output_ports as JsonObject).result as JsonObject)
+            .schema as JsonObject
+        ).ref = { id: valueSchema.ref.id, version: 'latest' };
+      transaction.execute(
+        'UPDATE workflow_graph_scope_plans SET compiled_plan_json = ? WHERE id = ?',
+        [canonicalJson(planValue), planRow.id],
+      );
+    }
+  });
+  return {
+    instance,
+    relation,
+    invoke: (fault) => {
+      if (
+        behavior === 'delete_referenced_generated_binding' ||
+        behavior === 'change_referenced_parameter_hash' ||
+        behavior === 'unsupported_schema_canonicalizer'
+      ) {
+        try {
+          instance.store.withImmediateTransaction((transaction) => {
+            if (behavior === 'delete_referenced_generated_binding')
+              transaction.execute(
+                `DELETE FROM workflow_plan_generated_schemas
+                  WHERE plan_id = ? AND schema_ref = ?`,
+                [planRow.id, generated.schema_ref],
+              );
+            else if (behavior === 'change_referenced_parameter_hash')
+              transaction.execute(
+                'UPDATE workflow_plan_generated_schemas SET parameter_hash = ? WHERE plan_id = ? AND schema_ref = ?',
+                [
+                  hash('fixture-generated-parameter-drift'),
+                  planRow.id,
+                  generated.schema_ref,
+                ],
+              );
+            else
+              transaction.execute(
+                "UPDATE workflow_generated_schema_contents SET canonicalizer = 'wrong' WHERE schema_ref = ?",
+                [generated.schema_ref],
+              );
+          });
+        } catch (error) {
+          const message = String(error);
+          if (/FOREIGN KEY constraint failed/.test(message))
+            throw new ObservedFixtureRejection('sqlite_foreign_key');
+          if (/CHECK constraint failed/.test(message))
+            throw new ObservedFixtureRejection('sqlite_check');
+          throw error;
+        }
+        return 'unexpected';
+      }
+      if (authorityReadBehaviors.has(behavior)) {
+        boundary.read(input);
+        return 'unexpected';
+      }
+      if (fault) requireFixtureFaultPoint(fixture, 'after_value');
+      written = boundary.write({
+        ...input,
+        ...(fault ? { faultAt: 'after_value' as const } : {}),
+      });
+      if (canonicalJson(written.content.ports) !== canonicalJson(ports))
+        throw new Error(`${fixture.case_id} stored the wrong modeled ports`);
+      return 'written';
+    },
+    replay: () => {
+      const replayed = new NodeOutputEnvelopeValueStore(instance.store).write(
+        input,
+      );
+      if (
+        !written ||
+        canonicalJson(replayed as unknown as JsonValue) !==
+          canonicalJson(written as unknown as JsonValue)
+      )
+        throw new Error(`${fixture.case_id} Store replay drifted`);
+      const recovered = new NodeOutputEnvelopeValueStore(
+        instance.store,
+      ).verifyReopenAndRecovery();
+      if (!recovered.some((value) => value.valueId === input.valueId))
+        throw new Error(`${fixture.case_id} was absent from recovery scan`);
+      return 'exact_replay';
+    },
+  };
+}
+
+function prepareExecutionFixture(
+  fixture: G5RepairFixtureCase,
+  nodeKey: 'work' | 'timeout' = 'work',
+): {
+  readonly instance: G5TestBootstrapInstance;
+  readonly seed: SeededRuntime;
+  readonly prefix: ReturnType<typeof fixedPointPrefix>;
+  readonly node: {
+    readonly id: string;
+    readonly row_version: number;
+    readonly activation_event_seq: number;
+  };
+  readonly admission: ReturnType<typeof scheduleReadyNodeT4>;
+} {
+  const { nowMs } = fixtureBehavior(fixture);
+  const prefix = fixedPointPrefix(fixture);
+  initializeScopeFixedPointT3a(prefix.instance.store, prefix.input);
+  installFixtureRuntimeCapacity(prefix.instance, prefix.seed);
+  const node = prefix.instance.store.queryOne<{
+    id: string;
+    row_version: number;
+    activation_event_seq: number;
+  }>(
+    'SELECT id, row_version, activation_event_seq FROM workflow_graph_nodes WHERE graph_run_id = ? AND node_key = ?',
+    [prefix.created.activation.graphRunId, nodeKey],
+  )!;
+  const admission = scheduleReadyNodeT4(
+    prefix.instance.store,
+    { current: () => fixedCapacity() },
+    {
+      graphRunId: prefix.created.activation.graphRunId,
+      scopeId: prefix.created.activation.rootScopeId,
+      nodeId: node.id,
+      expectedNodeRowVersion: node.row_version,
+      expectedRunWorkFenceEpoch: 0,
+      expectedScopeWorkFenceEpoch: 0,
+      eligibleEventSeq: node.activation_event_seq,
+      activation: { kind: 'execution' },
+      nowMs: nowMs + 10,
+    },
+  );
+  return {
+    instance: prefix.instance,
+    seed: prefix.seed,
+    prefix,
+    node,
+    admission,
+  };
+}
+
+function capabilityDispatchInput(
+  fixture: G5RepairFixtureCase,
+  execution: ReturnType<typeof prepareExecutionFixture>,
+) {
+  const { key, nowMs } = fixtureBehavior(fixture);
+  return {
+    graphRunId: execution.prefix.created.activation.graphRunId,
+    scopeId: execution.prefix.created.activation.rootScopeId,
+    nodeId: execution.node.id,
+    attemptId: execution.admission.attemptId!,
+    expectedAttemptRowVersion: 1,
+    expectedRunWorkFenceEpoch: 0,
+    expectedScopeWorkFenceEpoch: 0,
+    request: execution.seed.values.request,
+    policySnapshotSchema: execution.seed.refs.policySnapshotSchema,
+    operationKey: `operation:${key}`,
+    requiredClaims: [],
+    dispatchDeadlineAtMs: nowMs + 100,
+    outboxDeadlineAtMs: nowMs + 10_000,
+    nowMs: nowMs + 11,
+  };
+}
+
+function buildT4FixtureTarget(
+  fixture: G5RepairFixtureCase,
+): ProductionFixtureTarget {
+  const { behavior, relation, nowMs } = fixtureBehavior(fixture);
+  const prefix = fixedPointPrefix(fixture);
+  initializeScopeFixedPointT3a(prefix.instance.store, prefix.input);
+  const node = prefix.instance.store.queryOne<{
+    id: string;
+    row_version: number;
+    activation_event_seq: number;
+  }>(
+    "SELECT id, row_version, activation_event_seq FROM workflow_graph_nodes WHERE graph_run_id = ? AND node_key = 'work'",
+    [prefix.created.activation.graphRunId],
+  )!;
+  const input: Parameters<typeof scheduleReadyNodeT4>[2] = {
+    graphRunId: prefix.created.activation.graphRunId,
+    scopeId: prefix.created.activation.rootScopeId,
+    nodeId: node.id,
+    expectedNodeRowVersion:
+      behavior === 'stale_node_row_version'
+        ? node.row_version - 1
+        : node.row_version,
+    expectedRunWorkFenceEpoch: 0,
+    expectedScopeWorkFenceEpoch: 0,
+    eligibleEventSeq: node.activation_event_seq,
+    activation: { kind: 'execution' },
+    nowMs: nowMs + 10,
+  };
+  return {
+    instance: prefix.instance,
+    relation,
+    invoke: (fault) =>
+      scheduleReadyNodeT4(
+        prefix.instance.store,
+        { current: () => fixedCapacity() },
+        input,
+        transactionFixtureFault(fixture, fault),
+      ).disposition,
+  };
+}
+
+function buildT5FixtureTarget(
+  fixture: G5RepairFixtureCase,
+): ProductionFixtureTarget {
+  const { behavior, relation } = fixtureBehavior(fixture);
+  if (behavior === 'moving_delivery_policy_ref') {
+    const prefix = compilePrefix(fixture);
+    const planValue = structuredClone(prefix.candidate) as JsonObject;
+    delete planValue.plan_hash;
+    const node = (planValue.nodes as JsonObject[])[0]!;
+    const binding = node.outbox_execution_binding as JsonObject;
+    (binding.delivery_policy_identity as JsonObject).ref = {
+      id: prefix.seed.refs.outboxPolicy.ref.id,
+      version: 'latest',
+    };
+    (binding.effect_contract as JsonObject).delivery_policy_ref = {
+      id: prefix.seed.refs.outboxPolicy.ref.id,
+      version: 'latest',
+    };
+    const invalid = withPlanHash(
+      planValue as Omit<CompiledScopePlanV2Document, 'plan_hash'>,
+    );
+    return {
+      instance: prefix.instance,
+      relation,
+      invoke: () => {
+        persistCompileResultT2a(prefix.instance.store, {
+          ...prefix.input,
+          plan: invalid,
+        });
+        return 'unexpected';
+      },
+    };
+  }
+  const execution = prepareExecutionFixture(fixture);
+  const input = capabilityDispatchInput(fixture, execution);
+  if (behavior === 'test_only_adapter_authority') {
+    const adapter = execution.instance.store.queryOne<{
+      canonical_value_id: string;
+      inline_canonical_json: string;
+    }>(
+      `SELECT r.canonical_value_id, v.inline_canonical_json
+         FROM workflow_registry_resources r
+         JOIN workflow_values v ON v.id = r.canonical_value_id
+        WHERE r.id = ?`,
+      [execution.seed.refs.adapter.rowId],
+    )!;
+    const content = JSON.parse(adapter.inline_canonical_json) as JsonObject;
+    content.launchability = 'test_only';
+    execution.instance.store.withImmediateTransaction((transaction) => {
+      transaction.execute(
+        'UPDATE workflow_values SET inline_canonical_json = ? WHERE id = ?',
+        [canonicalJson(content), adapter.canonical_value_id],
+      );
+    });
+  }
+  return {
+    instance: execution.instance,
+    relation,
+    invoke: (fault) =>
+      prepareCapabilityDispatchT5(
+        execution.instance.store,
+        input,
+        transactionFixtureFault(fixture, fault),
+      ).disposition,
+  };
+}
+
+function dispatchExecutionFixture(
+  fixture: G5RepairFixtureCase,
+  nodeKey: 'work' | 'timeout' = 'work',
+) {
+  const execution = prepareExecutionFixture(fixture, nodeKey);
+  const dispatch = prepareCapabilityDispatchT5(
+    execution.instance.store,
+    capabilityDispatchInput(fixture, execution),
+  );
+  return { ...execution, dispatch };
+}
+
+function buildT6aFixtureTarget(
+  fixture: G5RepairFixtureCase,
+): ProductionFixtureTarget {
+  const { behavior, relation, nowMs } = fixtureBehavior(fixture);
+  const execution = dispatchExecutionFixture(fixture, 'timeout');
+  const attempt = execution.instance.store.queryOne<{ row_version: number }>(
+    'SELECT row_version FROM workflow_graph_node_attempts WHERE id = ?',
+    [execution.admission.attemptId!],
+  )!;
+  const input: Parameters<typeof acceptInternalResultT6a>[1] = {
+    graphRunId: execution.prefix.created.activation.graphRunId,
+    scopeId: execution.prefix.created.activation.rootScopeId,
+    nodeId: execution.node.id,
+    attemptId: execution.admission.attemptId!,
+    expectedAttemptRowVersion:
+      behavior === 'stale_attempt_row_version'
+        ? attempt.row_version + 1
+        : attempt.row_version,
+    leaseOwner: null,
+    leaseToken: null,
+    expectedRunWorkFenceEpoch: 0,
+    expectedScopeWorkFenceEpoch: 0,
+    executionOutcome: 'succeeded',
+    qualityDecision: 'pass',
+    result: execution.seed.values.result,
+    outputPorts: { result: execution.seed.values.result },
+    evaluation: null,
+    feedback: null,
+    errorCode: null,
+    factPayload: execution.seed.values.result,
+    nowMs: nowMs + 20,
+  };
+  return {
+    instance: execution.instance,
+    relation,
+    invoke: (fault) =>
+      acceptInternalResultT6a(
+        execution.instance.store,
+        input,
+        transactionFixtureFault(fixture, fault),
+      ).disposition,
+  };
+}
+
+function buildT6bFixtureTarget(
+  fixture: G5RepairFixtureCase,
+): ProductionFixtureTarget {
+  const { behavior, relation, key, nowMs } = fixtureBehavior(fixture);
+  const execution = dispatchExecutionFixture(fixture);
+  const lease = leaseOutboxWork(execution.instance.store, {
+    outboxId: execution.dispatch.outboxId,
+    leaseOwner: `worker:${key}`,
+    leaseToken: `lease:${key}`,
+    leaseExpiresAtMs: nowMs + 100,
+    nowMs: nowMs + 12,
+  });
+  recordOutboxResult(execution.instance.store, lease, {
+    resultKind: 'applied_with_receipt',
+    resultCode: null,
+    receipt: execution.seed.values.result,
+    afterState: execution.seed.values.result,
+    immutableOutput: execution.seed.values.result,
+    externalId: `external:${key}`,
+    nextAttemptAtMs: null,
+    attemptsExhausted: false,
+    startedAtMs: nowMs + 12,
+    finishedAtMs: nowMs + 13,
+  });
+  const input: Parameters<typeof acceptDelegationCallbackT6b>[1] = {
+    graphRunId: execution.prefix.created.activation.graphRunId,
+    scopeId: execution.prefix.created.activation.rootScopeId,
+    nodeId: execution.node.id,
+    attemptId: execution.admission.attemptId!,
+    delegationId: stableRuntimeId('delegation', {
+      attempt_id: execution.admission.attemptId!,
+    }),
+    externalExecutionId: `external:${key}`,
+    providerEventId: `callback:${key}`,
+    result: execution.seed.values.result,
+    expectedRunWorkFenceEpoch: 0,
+    expectedScopeWorkFenceEpoch: 0,
+    nowMs: nowMs + 14,
+  };
+  if (behavior === 'different_external_execution_identity')
+    acceptDelegationCallbackT6b(execution.instance.store, input);
+  const invoke = (fault: boolean): string => {
+    const result = acceptDelegationCallbackT6b(
+      execution.instance.store,
+      behavior === 'different_external_execution_identity'
+        ? {
+            ...input,
+            externalExecutionId: `external:${key}:drift`,
+            providerEventId: `callback:${key}:drift`,
+            nowMs: input.nowMs + 1,
+          }
+        : input,
+      transactionFixtureFault(fixture, fault),
+    );
+    if (behavior === 'different_external_execution_identity') {
+      if (result !== 'conflict')
+        throw new Error(`${fixture.case_id} did not conflict`);
+      throw new ObservedFixtureRejection('idempotency_conflict');
+    }
+    return result;
+  };
+  return {
+    instance: execution.instance,
+    relation,
+    invoke,
+    replay: () =>
+      acceptDelegationCallbackT6b(execution.instance.store, {
+        ...input,
+        nowMs: input.nowMs + 1,
+      }),
+  };
+}
+
+function buildT6cFixtureTarget(
+  fixture: G5RepairFixtureCase,
+): ProductionFixtureTarget {
+  const { behavior, relation, key, nowMs } = fixtureBehavior(fixture);
+  const prefix = fixedPointPrefix(fixture);
+  initializeScopeFixedPointT3a(prefix.instance.store, prefix.input);
+  installFixtureRuntimeCapacity(prefix.instance, prefix.seed);
+  const node = prefix.instance.store.queryOne<{
+    id: string;
+    row_version: number;
+    activation_event_seq: number;
+  }>(
+    "SELECT id, row_version, activation_event_seq FROM workflow_graph_nodes WHERE graph_run_id = ? AND node_key = 'pause'",
+    [prefix.created.activation.graphRunId],
+  )!;
+  const admission = scheduleReadyNodeT4(
+    prefix.instance.store,
+    { current: () => fixedCapacity() },
+    {
+      graphRunId: prefix.created.activation.graphRunId,
+      scopeId: prefix.created.activation.rootScopeId,
+      nodeId: node.id,
+      expectedNodeRowVersion: node.row_version,
+      expectedRunWorkFenceEpoch: 0,
+      expectedScopeWorkFenceEpoch: 0,
+      eligibleEventSeq: node.activation_event_seq,
+      activation: { kind: 'wait' },
+      nowMs: nowMs + 10,
+    },
+  );
+  const input: Parameters<typeof resolveWaitT6c>[1] = {
+    waitId: admission.waitId!,
+    providerRef: 'provider:g5-fixture',
+    providerEventId: `signal:${key}`,
+    principalRef: 'human:local-owner',
+    workflowId: prefix.created.workflowId,
+    resolution: 'signal',
+    payload: prefix.seed.values.result,
+    payloadByteLength: 17,
+    ingressAuthorization: prefix.seed.values.ingressAuthorization,
+    bindingAuthorization: prefix.seed.values.bindingAuthorization,
+    expectedWaitRowVersion: 1,
+    expectedRunWorkFenceEpoch: 0,
+    expectedScopeWorkFenceEpoch: 0,
+    receivedAtMs: nowMs + 11,
+    expiresAtMs: nowMs + 10_000,
+  };
+  if (behavior === 'timeout_after_signal_winner')
+    resolveWaitT6c(prefix.instance.store, input);
+  return {
+    instance: prefix.instance,
+    relation,
+    invoke: (fault) => {
+      const result = resolveWaitT6c(
+        prefix.instance.store,
+        behavior === 'timeout_after_signal_winner'
+          ? {
+              ...input,
+              providerEventId: `timeout:${key}`,
+              resolution: 'timeout',
+              receivedAtMs: input.receivedAtMs + 1,
+            }
+          : input,
+        transactionFixtureFault(fixture, fault),
+      ).disposition;
+      if (behavior === 'timeout_after_signal_winner') {
+        if (result !== 'conflict' && result !== 'late')
+          throw new Error(
+            `${fixture.case_id} did not reject the second winner`,
+          );
+        throw new ObservedFixtureRejection(result);
+      }
+      return result;
+    },
+  };
+}
+
+function buildT6dFixtureTarget(
+  fixture: G5RepairFixtureCase,
+): ProductionFixtureTarget {
+  const { behavior, relation, nowMs } = fixtureBehavior(fixture);
+  const execution = dispatchExecutionFixture(fixture, 'timeout');
+  const attempt = execution.instance.store.queryOne<{ row_version: number }>(
+    'SELECT row_version FROM workflow_graph_node_attempts WHERE id = ?',
+    [execution.admission.attemptId!],
+  )!;
+  const watchdogInput: Parameters<typeof fireAttemptWatchdogT6d>[1] = {
+    attemptId: execution.admission.attemptId!,
+    automaticTimer: true,
+    expectedAttemptRowVersion: attempt.row_version,
+    factPayload: execution.seed.values.result,
+    nowMs: nowMs + 100,
+  };
+  let preparedScheduleId: string | null = null;
+  if (behavior === 'automatic_timer_false') {
+    preparedScheduleId = fireAttemptWatchdogT6d(
+      execution.instance.store,
+      watchdogInput,
+    ).retryScheduleId;
+  }
+  return {
+    instance: execution.instance,
+    relation,
+    invoke: (fault) => {
+      if (behavior === 'automatic_timer_false') {
+        consumeRetryScheduleT6d(
+          execution.instance.store,
+          { current: () => fixedCapacity() },
+          {
+            retryScheduleId: preparedScheduleId!,
+            expectedScheduleRowVersion: 1,
+            automaticTimer: false as unknown as true,
+            nowMs: nowMs + 110,
+          },
+        );
+        return 'unexpected';
+      }
+      const timedOut = fireAttemptWatchdogT6d(
+        execution.instance.store,
+        watchdogInput,
+        transactionFixtureFault(fixture, fault),
+      );
+      if (!timedOut.retryScheduleId)
+        throw new Error(`${fixture.case_id} did not create a retry schedule`);
+      return consumeRetryScheduleT6d(
+        execution.instance.store,
+        { current: () => fixedCapacity() },
+        {
+          retryScheduleId: timedOut.retryScheduleId,
+          expectedScheduleRowVersion: 1,
+          automaticTimer: true,
+          nowMs: nowMs + 110,
+        },
+      ).disposition;
+    },
+  };
+}
+
+function buildBlockerFixtureTarget(
+  fixture: G5RepairFixtureCase,
+): ProductionFixtureTarget {
+  const { relation, key, nowMs } = fixtureBehavior(fixture);
+  const prefix = compilePrefix(fixture);
+  const event = prefix.instance.store.queryOne<{ next_event_seq: number }>(
+    'SELECT next_event_seq FROM workflow_graph_runs WHERE id = ?',
+    [prefix.created.activation.graphRunId],
+  )!;
+  return {
+    instance: prefix.instance,
+    relation,
+    invoke: () => {
+      const receipt = openOperationalBlocker(prefix.instance.store, {
+        workflowId: prefix.created.workflowId,
+        graphRunId: prefix.created.activation.graphRunId,
+        blockerKind: 'resource_or_credential_unavailable',
+        severity: 'action_required',
+        source: { kind: 'event', sequence: event.next_event_seq },
+        errorCode: `fixture:${key}`,
+        evidenceManifest: prefix.seed.values.evidence,
+        remediationPolicy: prefix.seed.refs.remediationPolicy,
+        nextRemediationAtMs: null,
+        remediationDeadlineAtMs: nowMs + 10_000,
+        nowMs,
+      });
+      const open = listOpenOperationalBlockers(
+        prefix.instance.store,
+        prefix.created.activation.graphRunId,
+      );
+      if (receipt.operationalState !== 'action_required' || open.length !== 1)
+        throw new Error(`${fixture.case_id} blocker cache did not commit`);
+      return receipt.disposition;
+    },
+  };
+}
+
+function capacityCommand(key: string): InitializeDeploymentCapacityCommand {
+  const payload = {
+    max_active_executions: 5,
+    max_active_waits: 256,
+    max_pending_signals: 2048,
+    max_outbox_inflight: 16,
+    max_physical_blob_bytes: 21_474_836_480,
+    soft_blob_high_water_bytes: 17_179_869_184,
+    minimum_free_disk_bytes: 5_368_709_120,
+  };
+  return {
+    command_type: 'initialize_deployment_capacity',
+    command_id: `capacity-command:${key}`,
+    idempotency_key: `capacity-key:${key}`,
+    proposed_capacity: {
+      ...payload,
+      config_hash: calculateDeploymentCapacityConfigHash(payload),
+    },
+    reason_code: 'initial_provisioning',
+    core_release_hash: hash('core-release'),
+    evidence_refs: ['core-release', 'checked-in-baseline'],
+  };
+}
+
+function capacityInvocation(
+  command: InitializeDeploymentCapacityCommand,
+): CapacityAuthenticatedInvocation {
+  return {
+    authenticated: true,
+    actorRef: 'system:production-activation',
+    sessionActorRef: 'system:production-activation',
+    actorKind: 'system',
+    authSessionRef: 'auth:production-activation',
+    entrypoint: 'production_activation',
+    delegationChainRef: null,
+    permissions: [],
+    requestedAtMs: 10,
+    activeCoreReleaseHash: command.core_release_hash,
+    baselineConfigHash: command.proposed_capacity.config_hash,
+    genesisGrant: {
+      coreReleaseHash: command.core_release_hash,
+      baselineConfigHash: command.proposed_capacity.config_hash,
+    },
+  };
+}
+
+function buildCapacityFixtureTarget(
+  fixture: G5RepairFixtureCase,
+): ProductionFixtureTarget {
+  const { behavior, relation, key, nowMs } = fixtureBehavior(fixture);
+  const instance = bootstrap(fixture.operation.scenario_key);
+  const seed = seedRuntime(instance.store);
+  const command = capacityCommand(key);
+  const persistence = {
+    evidenceManifest: seed.values.evidence,
+    reasonText: null,
+    resultSchema: seed.refs.schema,
+  };
+  const prepare = () =>
+    prepareCapacityChangeCAP0CAP1(
+      instance.store,
+      command,
+      capacityInvocation(command),
+      persistence,
+      nowMs,
+    );
+  const publisher = new CapacitySnapshotPublisher(
+    path.join(instance.dataRoot, 'workflow-runtime-capacity.json'),
+  );
+  if (
+    behavior === 'conflicting_capacity_request' ||
+    behavior === 'recover_unaudited_file'
+  ) {
+    const prepared = prepare();
+    if (!('publication' in prepared) || !prepared.publication)
+      throw new Error(`${fixture.case_id} Capacity prepare failed`);
+    if (behavior === 'recover_unaudited_file') {
+      publisher.installCAP2(instance.store, prepared.publication, nowMs + 1);
+      publisher.commitHeadCAP3(instance.store, prepared.publication, nowMs + 2);
+      fs.writeFileSync(
+        publisher.publicationPath,
+        `${canonicalJson({
+          ...prepared.publication,
+          capacity_change_id: 'unaudited-fixture-change',
+        } as unknown as JsonValue)}\n`,
+        'utf8',
+      );
+    }
+  }
+  const recover = () =>
+    recoverCapacityPublication(
+      instance.store,
+      publisher,
+      new CapacitySnapshotWatcher(),
+      seed.refs.schema,
+      nowMs + 20,
+    );
+  if (fixture.category === 'fault')
+    requireFixtureFaultPoint(
+      fixture,
+      {
+        recover_after_cap1_prepare: 'capacity_after_prepare',
+        recover_after_cap2_rename: 'capacity_after_rename',
+        recover_after_cap3_head: 'capacity_after_head',
+      }[behavior] ?? '',
+    );
+  return {
+    instance,
+    relation,
+    invoke: () => {
+      if (behavior === 'conflicting_capacity_request') {
+        const result = prepareCapacityChangeCAP0CAP1(
+          instance.store,
+          { ...command, reason_code: 'operator_override' },
+          capacityInvocation(command),
+          persistence,
+          nowMs + 1,
+        );
+        if (!('disposition' in result) || result.disposition !== 'conflict')
+          throw new Error(`${fixture.case_id} did not conflict`);
+        throw new ObservedFixtureRejection('idempotency_conflict');
+      }
+      if (behavior === 'recover_unaudited_file') {
+        const restored = recover();
+        if (!restored)
+          throw new Error(`${fixture.case_id} did not recover authority`);
+        throw new ObservedFixtureRejection('publication_not_authoritative');
+      }
+      const prepared = prepare();
+      if (!('publication' in prepared) || !prepared.publication)
+        throw new Error(`${fixture.case_id} Capacity prepare failed`);
+      const publication = prepared.publication;
+      if (behavior === 'recover_after_cap1_prepare') {
+        instance.closeStore();
+        instance.reopenStore();
+      } else if (
+        behavior === 'recover_after_rename_response_loss' ||
+        behavior === 'recover_after_cap2_rename'
+      ) {
+        try {
+          publisher.installCAP2(
+            instance.store,
+            publication,
+            nowMs + 1,
+            'after_rename_before_event',
+          );
+        } catch (error) {
+          if (
+            !(error instanceof G5RuntimeError) ||
+            error.code !== 'fault_injected'
+          )
+            throw error;
+        }
+        instance.closeStore();
+        instance.reopenStore();
+      } else if (behavior === 'recover_after_cap3_head') {
+        publisher.installCAP2(instance.store, publication, nowMs + 1);
+        publisher.commitHeadCAP3(instance.store, publication, nowMs + 2);
+        instance.closeStore();
+        instance.reopenStore();
+      }
+      const recovered = recover();
+      if (
+        !recovered ||
+        recovered.publication_hash !== publication.publication_hash
+      )
+        throw new Error(`${fixture.case_id} Capacity recovery drifted`);
+      return 'recovered';
+    },
+    replay: () => {
+      const recovered = recover();
+      if (!recovered)
+        throw new Error(`${fixture.case_id} Capacity replay disappeared`);
+      return 'exact_replay';
+    },
+  };
+}
+
+function productionErrorCode(error: unknown): string {
+  if (error instanceof ObservedFixtureRejection) return error.code;
+  if (error instanceof G5RuntimeError) return error.code;
+  if (error instanceof NodeOutputEnvelopeAuthorityError) return error.code;
+  throw error;
+}
+
+function executeProductionFixture(
+  fixture: G5RepairFixtureCase,
+): G5RepairFixtureOracle {
+  const input = fixture.operation.input;
+  const mode = fixtureString(input.mode, 'fixture mode');
+  const reopenAfter = fixtureBoolean(input.reopen_after, 'reopen_after');
+  const replayCount = fixtureNumber(input.replay_count, 'replay_count');
+  const expectedMode =
+    fixture.category === 'fault' && fixture.oracle.disposition === 'rolled_back'
+      ? 'inject_and_rollback'
+      : fixture.oracle.disposition === 'replayed'
+        ? 'commit_reopen_replay'
+        : fixture.category === 'negative'
+          ? 'reject_constraint'
+          : 'commit';
+  if (mode !== expectedMode)
+    throw new Error(`${fixture.case_id} execution mode drifted`);
+  const target = buildProductionFixtureTarget(fixture);
+  const beforeRelation = relationFingerprint(target.instance, target.relation);
+  const beforeDatabase = databaseFingerprint(target.instance);
+  let errorCode: string | null = null;
+  let receipt = '';
+  try {
+    receipt = target.invoke(mode === 'inject_and_rollback');
+  } catch (error) {
+    errorCode = productionErrorCode(error);
+  }
+  const afterRelation = relationFingerprint(target.instance, target.relation);
+  const afterDatabase = databaseFingerprint(target.instance);
+  const shouldCommit = fixture.oracle.sqlite_state === 'committed';
+  if (
+    (afterRelation !== beforeRelation) !== shouldCommit ||
+    (afterDatabase !== beforeDatabase) !== shouldCommit
+  )
+    throw new Error(`${fixture.case_id} durable SQLite state mismatched`);
+  if (fixture.category === 'positive' && errorCode !== null)
+    throw new Error(`${fixture.case_id} unexpectedly rejected: ${errorCode}`);
+  if (fixture.category === 'negative' && errorCode === null)
+    throw new Error(`${fixture.case_id} did not reject (${receipt})`);
+  const declaredRejection = input.rejection_code;
+  if (
+    fixture.category === 'negative'
+      ? typeof declaredRejection !== 'string' || declaredRejection !== errorCode
+      : declaredRejection !== null
+  )
+    throw new Error(`${fixture.case_id} rejection input drifted`);
+  if (
+    fixture.category === 'fault' &&
+    fixture.oracle.disposition === 'rolled_back' &&
+    errorCode !== 'fault_injected'
+  )
+    throw new Error(`${fixture.case_id} did not inject its named fault`);
+  if (reopenAfter) {
+    target.instance.closeStore();
+    target.instance.reopenStore();
+    if (
+      relationFingerprint(target.instance, target.relation) !== afterRelation ||
+      databaseFingerprint(target.instance) !== afterDatabase
+    )
+      throw new Error(`${fixture.case_id} changed across Store reopen`);
+  }
+  if (fixture.oracle.disposition === 'replayed') {
+    if (!target.replay)
+      throw new Error(`${fixture.case_id} has no production replay`);
+    for (let replay = 1; replay < replayCount; replay += 1) target.replay();
+    if (
+      relationFingerprint(target.instance, target.relation) !== afterRelation ||
+      databaseFingerprint(target.instance) !== afterDatabase
+    )
+      throw new Error(`${fixture.case_id} replay changed durable state`);
+  }
+  return {
+    disposition:
+      fixture.category === 'negative'
+        ? 'rejected'
+        : fixture.category === 'fault' &&
+            fixture.oracle.disposition === 'rolled_back'
+          ? 'rolled_back'
+          : fixture.oracle.disposition === 'replayed'
+            ? 'replayed'
+            : 'accepted',
+    sqlite_state: shouldCommit ? 'committed' : 'unchanged',
+    reopen_required: reopenAfter,
+    exact_error:
+      fixture.category === 'negative'
+        ? `sqlite_constraint:${declaredRejection}`
+        : fixture.category === 'fault' &&
+            fixture.oracle.disposition === 'rolled_back'
+          ? 'injected_fault'
+          : null,
+  };
+}
+
+function buildProductionFixtureTarget(
+  fixture: G5RepairFixtureCase,
+): ProductionFixtureTarget {
+  switch (fixture.operation.kind) {
+    case 'create_workflow_t0':
+      return buildT0FixtureTarget(fixture);
+    case 'activate_workflow_t1':
+      return buildT1FixtureTarget(fixture);
+    case 'persist_compile_result_t2a':
+      return buildT2aFixtureTarget(fixture);
+    case 'materialize_root_scope_t2b':
+      return buildT2bFixtureTarget(fixture);
+    case 'initialize_fixed_point_t3a':
+      return buildT3aFixtureTarget(fixture);
+    case 'request_settled_close_t3b':
+      return buildT3bFixtureTarget(fixture);
+    case 'prepare_required_finalization_t0p':
+      return buildT0pFixtureTarget(fixture);
+    case 'node_output_envelope_store':
+      return buildNodeOutputEnvelopeFixtureTarget(fixture);
+    case 'schedule_ready_node_t4':
+      return buildT4FixtureTarget(fixture);
+    case 'prepare_capability_dispatch_t5':
+      return buildT5FixtureTarget(fixture);
+    case 'accept_internal_result_t6a':
+      return buildT6aFixtureTarget(fixture);
+    case 'accept_delegation_callback_t6b':
+      return buildT6bFixtureTarget(fixture);
+    case 'resolve_wait_t6c':
+      return buildT6cFixtureTarget(fixture);
+    case 'fire_attempt_watchdog_t6d':
+      return buildT6dFixtureTarget(fixture);
+    case 'capacity_admin_cap0_cap4':
+      return buildCapacityFixtureTarget(fixture);
+    case 'open_operational_blocker':
+      return buildBlockerFixtureTarget(fixture);
+    default:
+      throw new Error(
+        `${fixture.case_id} has no production fixture target for ${fixture.operation.kind}`,
+      );
+  }
+}
+
+function readG5FixtureCases(name: string): JsonValue[] {
+  const artifact = JSON.parse(
+    fs.readFileSync(
+      new URL(
+        `../contracts/conformance/g5-basic-runtime-repair/${name}`,
+        import.meta.url,
+      ),
+      'utf8',
+    ),
+  ) as { payload: { cases: JsonValue[] } };
+  return artifact.payload.cases;
+}
+
+const productionFixtureArtifacts: G5FixtureArtifacts = {
+  positive: readG5FixtureCases('positive-cases.json'),
+  negative: readG5FixtureCases('negative-cases.json'),
+  fault: readG5FixtureCases('fault-cases.json'),
+};
+
+const productionFixtureHandlerIds = [
+  'create_workflow_t0_production',
+  'prepare_required_finalization_t0p_production',
+  'activate_workflow_t1_production',
+  'persist_compile_result_t2a_production',
+  'materialize_root_scope_t2b_production',
+  'initialize_fixed_point_t3a_production',
+  'request_settled_close_t3b_production',
+  'schedule_ready_node_t4_production',
+  'prepare_capability_dispatch_t5_production',
+  'accept_internal_result_t6a_production',
+  'accept_delegation_callback_t6b_production',
+  'resolve_wait_t6c_production',
+  'fire_attempt_watchdog_t6d_production',
+  'capacity_admin_cap0_cap4_production',
+  'open_operational_blocker_production',
+  'node_output_envelope_store_production',
+] as const;
+
+const productionFixtureHandlers: readonly G5FixtureHandler[] =
+  productionFixtureHandlerIds.map((id) => ({
+    id,
+    execute: executeProductionFixture,
+  }));
+const productionFixtureHarness = new G5FixtureExecutionHarness(
+  productionFixtureArtifacts,
+  productionFixtureHandlers,
+);
+
 afterEach(() => {
   while (instances.length > 0) instances.pop()!.cleanup();
 });
 
+afterAll(() => productionFixtureHarness.assertComplete());
+
 describe('G5 Basic Runtime Schema 7 repair transaction integration', () => {
+  it.each(productionFixtureHarness.fixtures)(
+    '$category $case_id executes $operation.kind and its exact durable oracle',
+    (fixture) => {
+      const receipt = productionFixtureHarness.execute(fixture);
+      expect(receipt).toEqual({
+        case_id: fixture.case_id,
+        category: fixture.category,
+        surface: fixture.surface,
+        handler: fixture.handler,
+        operation_kind: fixture.operation.kind,
+        oracle: fixture.oracle,
+      });
+    },
+  );
+
   it('commits T0/T1/T2a/T2b/T3a and exact replays across reopen', () => {
     const instance = bootstrap('g5-runtime-path');
     const seed = seedRuntime(instance.store);
@@ -2599,43 +4480,6 @@ describe('G5 Basic Runtime Schema 7 repair transaction integration', () => {
     expect(
       listOpenOperationalBlockers(instance.store, activated.graphRunId),
     ).toHaveLength(2);
-    for (const caseId of [
-      'intake_routing_domain_claim',
-      'required_finalization_intent',
-      'activation_state_lowering',
-      'sealed_plan_generated_binding',
-      'static_graph_materialization',
-      'static_graph_fixed_point',
-      'settled_completion_selection',
-      'capability_effect_outbox',
-      'system_execution_output_envelope',
-      'delegation_receipt_recovery',
-      'durable_wait_signal_envelope',
-      'automatic_retry_timers',
-      'operational_blocker_create_open_cache',
-      'stale_activation_row',
-      'fact_payload_drift',
-      'stale_node_activation',
-      'test_authority_promotion',
-      'late_worker_result',
-      'callback_identity_drift',
-      'second_wait_winner',
-      'manual_retry_without_gateway',
-      'fault_before_commit_t0',
-      'fault_before_commit_t0p',
-      'fault_before_commit_t1',
-      'fault_before_commit_t2a',
-      'fault_before_commit_t2b',
-      'fault_before_commit_t3a',
-      'fault_before_commit_t3b',
-      'fault_before_commit_t4',
-      'fault_before_commit_t5',
-      'fault_before_commit_t6a',
-      'fault_before_commit_t6b',
-      'fault_before_commit_t6c',
-      'fault_before_commit_t6d',
-    ])
-      fixtureEvidence.set(caseId, 'production SQLite transaction evidence');
     instance.closeStore();
     instance.reopenStore();
     expect(
@@ -3852,29 +5696,6 @@ describe('G5 Basic Runtime Schema 7 repair transaction integration', () => {
         activation,
       ),
     ).toThrow(/output port Contract drifted/);
-    for (const caseId of [
-      'join_expose_rename_single',
-      'join_optional_absent',
-      'join_default_single',
-      'join_list_aggregation',
-      'downstream_port_resolution',
-      'sqlite_reopen_response_loss',
-      'missing_generated_pair',
-      'unknown_generated_scheme',
-      'generated_raw_hash_drift',
-      'generated_domain_hash_drift',
-      'generated_parameter_drift',
-      'sealed_plan_binding_drift',
-      'schema_authority_mismatch',
-      'join_expose_shape_mismatch',
-      'required_output_absent',
-      'output_schema_invalid',
-      'output_max_bytes_exceeded',
-      'port_contract_hash_drift',
-      'registry_latest_fallback',
-      'input_snapshot_publication',
-    ])
-      fixtureEvidence.set(caseId, 'production SQLite envelope evidence');
   });
 
   it.each(inputContractCases)(
@@ -5358,21 +7179,6 @@ describe('G5 Basic Runtime Schema 7 repair transaction integration', () => {
         },
       ),
     ).toThrow(/exact node pinned by the Plan/);
-    for (const caseId of [
-      'creation_intent_conflict',
-      'stale_compile_lease',
-      'paused_materialization',
-      'latest_policy_forbidden',
-      'stale_activation_row',
-      'fact_payload_drift',
-      'stale_node_activation',
-      'test_authority_promotion',
-      'late_worker_result',
-      'callback_identity_drift',
-      'second_wait_winner',
-      'manual_retry_without_gateway',
-    ])
-      fixtureEvidence.set(caseId, 'production SQLite rejection evidence');
   });
 
   it('property-compares production SQLite terminal evidence with the independent model', () => {
@@ -5634,16 +7440,5 @@ describe('G5 Basic Runtime Schema 7 repair transaction integration', () => {
       }),
       { seed: 0x5a17, numRuns: 1 },
     );
-  });
-
-  it.each(
-    g5FixtureCases.filter(
-      (fixture) =>
-        !fixture.surface.startsWith('CAP') &&
-        fixture.surface !== 'STORE' &&
-        fixture.surface !== 'SCHEMA7_STORE',
-    ),
-  )('drives fixture $case_id through production evidence', ({ case_id }) => {
-    expect(fixtureEvidence.get(case_id)).toMatch(/production SQLite/);
   });
 });

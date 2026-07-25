@@ -42,6 +42,7 @@ export const G5_REPAIR_IMPLEMENTATION_SOURCE_PATHS = [
 ] as const;
 
 const evidenceSourcePaths = [
+  'src/workflow-runtime/contracts/g5-basic-runtime-fixture-harness.ts',
   'src/workflow-runtime/contracts/g5-basic-runtime-repair-reference-model.ts',
   'src/workflow-runtime/contracts/g5-basic-runtime-repair-reference-model.test.ts',
   'src/workflow-runtime/contracts/g5-basic-runtime-repair-contract.test.ts',
@@ -119,14 +120,52 @@ const exactBindings = [
   },
 ] as const;
 
-interface RepairCase extends JsonObject {
+export type G5RepairFixtureCategory = 'positive' | 'negative' | 'fault';
+
+interface RepairCaseSeed extends JsonObject {
   readonly case_id: string;
   readonly surface: string;
   readonly assertion: string;
   readonly expected: 'accepted' | 'rejected' | 'rolled_back' | 'replayed';
 }
 
-const positiveCases: readonly RepairCase[] = [
+export interface G5RepairFixtureOperation extends JsonObject {
+  readonly kind: string;
+  readonly scenario_key: string;
+  readonly transaction: string;
+  readonly input: JsonObject;
+  readonly fault: JsonObject | null;
+}
+
+export interface G5RepairFixtureOracle extends JsonObject {
+  readonly disposition: 'accepted' | 'rejected' | 'rolled_back' | 'replayed';
+  readonly sqlite_state: 'committed' | 'unchanged';
+  readonly reopen_required: boolean;
+  readonly exact_error: string | null;
+}
+
+export interface G5RepairFixtureCase extends JsonObject {
+  readonly case_id: string;
+  readonly category: G5RepairFixtureCategory;
+  readonly surface: string;
+  readonly assertion: string;
+  readonly handler: string;
+  readonly operation: G5RepairFixtureOperation;
+  readonly oracle: G5RepairFixtureOracle;
+  readonly binding_hash: Sha256Hash;
+}
+
+export type G5RepairFixtureBindingInput = {
+  readonly case_id: string;
+  readonly category: G5RepairFixtureCategory;
+  readonly surface: string;
+  readonly assertion: string;
+  readonly handler: string;
+  readonly operation: G5RepairFixtureOperation;
+  readonly oracle: G5RepairFixtureOracle;
+};
+
+const positiveCaseSeeds: readonly RepairCaseSeed[] = [
   {
     case_id: 'intake_routing_domain_claim',
     surface: 'T0',
@@ -269,7 +308,7 @@ const positiveCases: readonly RepairCase[] = [
   },
 ] as const;
 
-const negativeCases: readonly RepairCase[] = [
+const negativeCaseSeeds: readonly RepairCaseSeed[] = [
   [
     'creation_intent_conflict',
     'same creation key with different intent bytes conflicts',
@@ -387,7 +426,7 @@ const negativeCases: readonly RepairCase[] = [
     'T4',
   ],
 ].map(
-  ([caseId, assertion, surface]): RepairCase => ({
+  ([caseId, assertion, surface]): RepairCaseSeed => ({
     case_id: caseId!,
     surface: surface!,
     assertion: assertion!,
@@ -395,7 +434,7 @@ const negativeCases: readonly RepairCase[] = [
   }),
 );
 
-const faultCases: readonly RepairCase[] = [
+const faultCaseSeeds: readonly RepairCaseSeed[] = [
   ...[
     'T0',
     'T0p',
@@ -411,7 +450,7 @@ const faultCases: readonly RepairCase[] = [
     'T6c',
     'T6d',
   ].map(
-    (surface): RepairCase => ({
+    (surface): RepairCaseSeed => ({
       case_id: `fault_before_commit_${surface.toLowerCase()}`,
       surface,
       assertion: `${surface} rolls back every write when failure is injected before commit`,
@@ -445,6 +484,357 @@ const faultCases: readonly RepairCase[] = [
     expected: 'replayed',
   },
 ] as const;
+
+const generatedEnvelopeCases = new Set([
+  'join_expose_rename_single',
+  'join_optional_absent',
+  'join_default_single',
+  'join_list_aggregation',
+  'downstream_port_resolution',
+  'sqlite_reopen_response_loss',
+  'missing_generated_pair',
+  'unknown_generated_scheme',
+  'generated_raw_hash_drift',
+  'generated_domain_hash_drift',
+  'generated_parameter_drift',
+  'sealed_plan_binding_drift',
+  'schema_authority_mismatch',
+  'join_expose_shape_mismatch',
+  'required_output_absent',
+  'output_schema_invalid',
+  'output_max_bytes_exceeded',
+  'port_contract_hash_drift',
+  'registry_latest_fallback',
+  'input_snapshot_publication',
+]);
+
+const exactNegativeErrors: Readonly<Record<string, string>> = {
+  creation_intent_conflict: 'idempotency_conflict',
+  stale_activation_row: 'cas_conflict',
+  stale_compile_lease: 'cas_conflict',
+  paused_materialization: 'cas_conflict',
+  fact_payload_drift: 'integrity_violation',
+  stale_node_activation: 'cas_conflict',
+  latest_policy_forbidden: 'integrity_violation',
+  test_authority_promotion: 'forbidden_surface',
+  late_worker_result: 'cas_conflict',
+  callback_identity_drift: 'idempotency_conflict',
+  second_wait_winner: 'late',
+  manual_retry_without_gateway: 'forbidden_surface',
+  capacity_file_tamper: 'publication_not_authoritative',
+  capacity_idempotency_conflict: 'idempotency_conflict',
+  missing_generated_pair: 'sqlite_foreign_key',
+  unknown_generated_scheme: 'plan_authority_invalid',
+  generated_raw_hash_drift: 'generated_schema_invalid',
+  generated_domain_hash_drift: 'generated_schema_invalid',
+  generated_parameter_drift: 'sqlite_foreign_key',
+  sealed_plan_binding_drift: 'binding_invalid',
+  schema_authority_mismatch: 'sqlite_check',
+  join_expose_shape_mismatch: 'plan_authority_invalid',
+  required_output_absent: 'envelope_invalid',
+  output_schema_invalid: 'envelope_invalid',
+  output_max_bytes_exceeded: 'envelope_invalid',
+  port_contract_hash_drift: 'envelope_invalid',
+  registry_latest_fallback: 'plan_authority_invalid',
+  input_snapshot_publication: 'member_value_invalid',
+};
+
+export type G5RepairFixtureOperationKind =
+  | 'create_workflow_t0'
+  | 'prepare_required_finalization_t0p'
+  | 'activate_workflow_t1'
+  | 'persist_compile_result_t2a'
+  | 'materialize_root_scope_t2b'
+  | 'initialize_fixed_point_t3a'
+  | 'request_settled_close_t3b'
+  | 'schedule_ready_node_t4'
+  | 'prepare_capability_dispatch_t5'
+  | 'accept_internal_result_t6a'
+  | 'accept_delegation_callback_t6b'
+  | 'resolve_wait_t6c'
+  | 'fire_attempt_watchdog_t6d'
+  | 'capacity_admin_cap0_cap4'
+  | 'open_operational_blocker'
+  | 'node_output_envelope_store';
+
+const fixtureOperationByCase: Readonly<
+  Record<string, G5RepairFixtureOperationKind>
+> = {
+  intake_routing_domain_claim: 'create_workflow_t0',
+  creation_intent_conflict: 'create_workflow_t0',
+  fault_before_commit_t0: 'create_workflow_t0',
+  required_finalization_intent: 'prepare_required_finalization_t0p',
+  fault_before_commit_t0p: 'prepare_required_finalization_t0p',
+  activation_state_lowering: 'activate_workflow_t1',
+  stale_activation_row: 'activate_workflow_t1',
+  fault_before_commit_t1: 'activate_workflow_t1',
+  sealed_plan_generated_binding: 'persist_compile_result_t2a',
+  stale_compile_lease: 'persist_compile_result_t2a',
+  fault_before_commit_t2a: 'persist_compile_result_t2a',
+  static_graph_materialization: 'materialize_root_scope_t2b',
+  paused_materialization: 'materialize_root_scope_t2b',
+  fault_before_commit_t2b: 'materialize_root_scope_t2b',
+  static_graph_fixed_point: 'initialize_fixed_point_t3a',
+  fact_payload_drift: 'initialize_fixed_point_t3a',
+  fault_before_commit_t3a: 'initialize_fixed_point_t3a',
+  settled_completion_selection: 'request_settled_close_t3b',
+  fault_before_commit_t3b: 'request_settled_close_t3b',
+  join_expose_rename_single: 'schedule_ready_node_t4',
+  join_optional_absent: 'schedule_ready_node_t4',
+  join_default_single: 'schedule_ready_node_t4',
+  join_list_aggregation: 'schedule_ready_node_t4',
+  downstream_port_resolution: 'schedule_ready_node_t4',
+  sqlite_reopen_response_loss: 'schedule_ready_node_t4',
+  stale_node_activation: 'schedule_ready_node_t4',
+  missing_generated_pair: 'schedule_ready_node_t4',
+  unknown_generated_scheme: 'schedule_ready_node_t4',
+  generated_raw_hash_drift: 'schedule_ready_node_t4',
+  generated_domain_hash_drift: 'schedule_ready_node_t4',
+  generated_parameter_drift: 'schedule_ready_node_t4',
+  sealed_plan_binding_drift: 'schedule_ready_node_t4',
+  schema_authority_mismatch: 'schedule_ready_node_t4',
+  join_expose_shape_mismatch: 'schedule_ready_node_t4',
+  required_output_absent: 'schedule_ready_node_t4',
+  output_schema_invalid: 'schedule_ready_node_t4',
+  output_max_bytes_exceeded: 'schedule_ready_node_t4',
+  port_contract_hash_drift: 'schedule_ready_node_t4',
+  registry_latest_fallback: 'schedule_ready_node_t4',
+  input_snapshot_publication: 'schedule_ready_node_t4',
+  fault_before_commit_t4: 'schedule_ready_node_t4',
+  capability_effect_outbox: 'prepare_capability_dispatch_t5',
+  latest_policy_forbidden: 'prepare_capability_dispatch_t5',
+  test_authority_promotion: 'prepare_capability_dispatch_t5',
+  fault_before_commit_t5: 'prepare_capability_dispatch_t5',
+  system_execution_output_envelope: 'accept_internal_result_t6a',
+  late_worker_result: 'accept_internal_result_t6a',
+  fault_before_commit_t6a: 'accept_internal_result_t6a',
+  delegation_receipt_recovery: 'accept_delegation_callback_t6b',
+  callback_identity_drift: 'accept_delegation_callback_t6b',
+  fault_before_commit_t6b: 'accept_delegation_callback_t6b',
+  durable_wait_signal_envelope: 'resolve_wait_t6c',
+  second_wait_winner: 'resolve_wait_t6c',
+  fault_before_commit_t6c: 'resolve_wait_t6c',
+  automatic_retry_timers: 'fire_attempt_watchdog_t6d',
+  manual_retry_without_gateway: 'fire_attempt_watchdog_t6d',
+  fault_before_commit_t6d: 'fire_attempt_watchdog_t6d',
+  capacity_admin_recovery: 'capacity_admin_cap0_cap4',
+  capacity_file_tamper: 'capacity_admin_cap0_cap4',
+  capacity_idempotency_conflict: 'capacity_admin_cap0_cap4',
+  fault_capacity_after_prepare: 'capacity_admin_cap0_cap4',
+  fault_capacity_after_rename: 'capacity_admin_cap0_cap4',
+  fault_capacity_after_head: 'capacity_admin_cap0_cap4',
+  operational_blocker_create_open_cache: 'open_operational_blocker',
+  node_output_envelope_store_recovery: 'node_output_envelope_store',
+  fault_node_output_envelope_boundary: 'node_output_envelope_store',
+};
+
+const fixtureRelationByOperation: Readonly<
+  Record<G5RepairFixtureOperationKind, string>
+> = {
+  create_workflow_t0: 'workflows',
+  prepare_required_finalization_t0p: 'workflow_root_finalization_schedules',
+  activate_workflow_t1: 'workflow_state_activations',
+  persist_compile_result_t2a: 'workflow_graph_scope_plans',
+  materialize_root_scope_t2b: 'workflow_graph_run_manifest',
+  initialize_fixed_point_t3a: 'workflow_graph_facts',
+  request_settled_close_t3b: 'workflow_graph_scope_close_requests',
+  schedule_ready_node_t4: 'workflow_graph_nodes',
+  prepare_capability_dispatch_t5: 'workflow_outbox',
+  accept_internal_result_t6a: 'workflow_graph_node_attempts',
+  accept_delegation_callback_t6b: 'workflow_graph_node_attempts',
+  resolve_wait_t6c: 'workflow_graph_waits',
+  fire_attempt_watchdog_t6d: 'workflow_graph_retry_schedules',
+  capacity_admin_cap0_cap4: 'runtime_capacity_admin_commands',
+  open_operational_blocker: 'workflow_operational_blockers',
+  node_output_envelope_store: 'workflow_values',
+};
+
+const fixtureRelationByCase: Readonly<Record<string, string>> = {
+  callback_identity_drift: 'workflow_graph_late_results',
+  second_wait_winner: 'workflow_graph_late_results',
+  capacity_file_tamper: 'runtime_capacity_change_events',
+  capacity_idempotency_conflict: 'runtime_capacity_admin_invocations',
+};
+
+const negativeCasesWithDurableAudit = new Set(
+  Object.keys(fixtureRelationByCase),
+);
+
+const fixtureBehaviorByCase: Readonly<Record<string, string>> = {
+  creation_intent_conflict: 'conflicting_valid_creation_intent',
+  stale_activation_row: 'stale_workflow_row_version',
+  stale_compile_lease: 'stale_build_row_version',
+  paused_materialization: 'paused_run_control',
+  fact_payload_drift: 'conflicting_fact_payload',
+  stale_node_activation: 'stale_node_row_version',
+  latest_policy_forbidden: 'moving_delivery_policy_ref',
+  test_authority_promotion: 'test_only_adapter_authority',
+  late_worker_result: 'stale_attempt_row_version',
+  callback_identity_drift: 'different_external_execution_identity',
+  second_wait_winner: 'timeout_after_signal_winner',
+  manual_retry_without_gateway: 'automatic_timer_false',
+  capacity_file_tamper: 'recover_unaudited_file',
+  capacity_idempotency_conflict: 'conflicting_capacity_request',
+  missing_generated_pair: 'delete_referenced_generated_binding',
+  unknown_generated_scheme: 'unknown_envelope_schema_ref',
+  generated_raw_hash_drift: 'generated_schema_bytes_drift',
+  generated_domain_hash_drift: 'generated_schema_length_drift',
+  generated_parameter_drift: 'change_referenced_parameter_hash',
+  sealed_plan_binding_drift: 'change_binding_hash',
+  schema_authority_mismatch: 'unsupported_schema_canonicalizer',
+  join_expose_shape_mismatch: 'add_unsealed_output_port',
+  required_output_absent: 'absent_required_port',
+  output_schema_invalid: 'wrong_member_schema_hash',
+  output_max_bytes_exceeded: 'member_exceeds_compiled_max_bytes',
+  port_contract_hash_drift: 'unexpected_envelope_port',
+  registry_latest_fallback: 'moving_registry_schema_ref',
+  input_snapshot_publication: 'wrong_member_provenance',
+  join_expose_rename_single: 'publish_renamed_single',
+  join_optional_absent: 'publish_optional_absent',
+  join_default_single: 'publish_defaulted_single',
+  join_list_aggregation: 'publish_ordered_list',
+  downstream_port_resolution: 'publish_selected_immutable_value',
+  capacity_admin_recovery: 'recover_after_rename_response_loss',
+  fault_capacity_after_prepare: 'recover_after_cap1_prepare',
+  fault_capacity_after_rename: 'recover_after_cap2_rename',
+  fault_capacity_after_head: 'recover_after_cap3_head',
+  fault_node_output_envelope_boundary: 'rollback_after_envelope_value',
+};
+
+function fixtureBehaviorName(
+  seed: RepairCaseSeed,
+  category: G5RepairFixtureCategory,
+): string {
+  const explicit = fixtureBehaviorByCase[seed.case_id];
+  if (explicit) return explicit;
+  if (seed.case_id.startsWith('fault_before_commit_'))
+    return 'rollback_before_commit';
+  if (category === 'positive')
+    return seed.expected === 'replayed'
+      ? 'commit_reopen_exact_replay'
+      : 'commit_and_reopen';
+  throw new Error(`G5 fixture ${seed.case_id} has no executable behavior`);
+}
+
+function fixtureOperationKind(caseId: string): G5RepairFixtureOperationKind {
+  if (generatedEnvelopeCases.has(caseId)) return 'node_output_envelope_store';
+  const kind = fixtureOperationByCase[caseId];
+  if (!kind) throw new Error(`G5 fixture ${caseId} has no operation binding`);
+  return kind;
+}
+
+function fixtureHandler(kind: G5RepairFixtureOperationKind): string {
+  return `${kind}_production`;
+}
+
+function fixtureInput(
+  seed: RepairCaseSeed,
+  category: G5RepairFixtureCategory,
+  kind: G5RepairFixtureOperationKind,
+): JsonObject {
+  return {
+    fixture_token: `g5-fixture:${seed.case_id}`,
+    idempotency_key: `g5-fixture:${seed.case_id}`,
+    now_ms: 1_780_000_000_000,
+    expected_surface: seed.surface,
+    mode:
+      category === 'fault' && seed.expected === 'rolled_back'
+        ? 'inject_and_rollback'
+        : category === 'fault'
+          ? 'commit_reopen_replay'
+          : category === 'negative'
+            ? 'reject_constraint'
+            : seed.expected === 'replayed'
+              ? 'commit_reopen_replay'
+              : 'commit',
+    payload: {
+      operation: kind,
+      behavior: fixtureBehaviorName(seed, category),
+      durable_relation:
+        fixtureRelationByCase[seed.case_id] ?? fixtureRelationByOperation[kind],
+    },
+    rejection_code:
+      category === 'negative'
+        ? (exactNegativeErrors[seed.case_id] ?? 'rejected')
+        : null,
+    replay_count: seed.expected === 'replayed' ? 2 : 1,
+    reopen_after: true,
+  };
+}
+
+export function calculateG5RepairFixtureBindingHash(
+  fixture: G5RepairFixtureBindingInput,
+): Sha256Hash {
+  return domainSeparatedSha256(
+    'icarus:workflow-g5-basic-runtime-repair-fixture-binding:1\n',
+    fixture,
+  );
+}
+
+function buildFixtureCase(
+  seed: RepairCaseSeed,
+  category: G5RepairFixtureCategory,
+): G5RepairFixtureCase {
+  const kind = fixtureOperationKind(seed.case_id);
+  const handler = fixtureHandler(kind);
+  const fault =
+    category === 'fault'
+      ? {
+          point:
+            seed.case_id === 'fault_node_output_envelope_boundary'
+              ? 'after_value'
+              : seed.case_id.startsWith('fault_before_commit_')
+                ? 'before_commit'
+                : seed.case_id.replace(/^fault_/, ''),
+          boundary: seed.surface,
+        }
+      : null;
+  const fixtureWithoutHash: G5RepairFixtureBindingInput = {
+    case_id: seed.case_id,
+    category,
+    surface: seed.surface,
+    assertion: seed.assertion,
+    handler,
+    operation: {
+      kind,
+      scenario_key: `g5-fixture:${category}:${seed.case_id}`,
+      transaction: seed.surface,
+      input: fixtureInput(seed, category, kind),
+      fault,
+    },
+    oracle: {
+      disposition: seed.expected,
+      sqlite_state:
+        seed.expected === 'rejected' &&
+        negativeCasesWithDurableAudit.has(seed.case_id)
+          ? 'committed'
+          : seed.expected === 'rejected' || seed.expected === 'rolled_back'
+            ? 'unchanged'
+            : 'committed',
+      reopen_required: true,
+      exact_error:
+        category === 'negative'
+          ? `sqlite_constraint:${exactNegativeErrors[seed.case_id] ?? 'rejected'}`
+          : category === 'fault' && seed.expected === 'rolled_back'
+            ? 'injected_fault'
+            : null,
+    },
+  };
+  return {
+    ...fixtureWithoutHash,
+    binding_hash: calculateG5RepairFixtureBindingHash(fixtureWithoutHash),
+  };
+}
+
+export const G5_REPAIR_POSITIVE_FIXTURES = positiveCaseSeeds.map((seed) =>
+  buildFixtureCase(seed, 'positive'),
+);
+export const G5_REPAIR_NEGATIVE_FIXTURES = negativeCaseSeeds.map((seed) =>
+  buildFixtureCase(seed, 'negative'),
+);
+export const G5_REPAIR_FAULT_FIXTURES = faultCaseSeeds.map((seed) =>
+  buildFixtureCase(seed, 'fault'),
+);
 
 const artifactPaths = {
   protocol:
@@ -551,6 +941,15 @@ function buildArtifacts(): Array<[string, ContractArtifactEnvelope]> {
       ],
       transaction_host: 'WorkflowRuntimeStore.withImmediateTransaction',
       transaction_mode: 'BEGIN_IMMEDIATE',
+      fixture_execution: {
+        record_shape:
+          'closed_category_surface_handler_operation_fault_oracle_binding',
+        dispatch: 'exactly_one_registered_handler_per_checked_in_record',
+        completion:
+          'missing_duplicate_unknown_unhandled_or_multiply_handled_fails',
+        contract_checker_scope: 'closed_structure_identity_and_bytes_only',
+        runtime_execution_proof: 'managed_test_g5_fixture_execution_only',
+      },
       fallback: [
         'registry_latest_forbidden',
         'network_forbidden',
@@ -587,19 +986,19 @@ function buildArtifacts(): Array<[string, ContractArtifactEnvelope]> {
     'icarus.workflow-g5-basic-runtime-repair-positive-cases/1',
     'icarus.workflow-g5-basic-runtime-repair-positive-cases',
     'icarus:workflow-g5-basic-runtime-repair-positive-cases:1\n',
-    { cases: positiveCases as unknown as JsonValue },
+    { cases: G5_REPAIR_POSITIVE_FIXTURES as unknown as JsonValue },
   );
   const negative = artifact(
     'icarus.workflow-g5-basic-runtime-repair-negative-cases/1',
     'icarus.workflow-g5-basic-runtime-repair-negative-cases',
     'icarus:workflow-g5-basic-runtime-repair-negative-cases:1\n',
-    { cases: negativeCases as unknown as JsonValue },
+    { cases: G5_REPAIR_NEGATIVE_FIXTURES as unknown as JsonValue },
   );
   const fault = artifact(
     'icarus.workflow-g5-basic-runtime-repair-fault-cases/1',
     'icarus.workflow-g5-basic-runtime-repair-fault-cases',
     'icarus:workflow-g5-basic-runtime-repair-fault-cases:1\n',
-    { cases: faultCases as unknown as JsonValue },
+    { cases: G5_REPAIR_FAULT_FIXTURES as unknown as JsonValue },
   );
   const evidence = inventory(evidenceSourcePaths);
   const reference = artifact(
@@ -610,6 +1009,13 @@ function buildArtifacts(): Array<[string, ContractArtifactEnvelope]> {
       independent_from_runtime: true,
       deterministic_property_tests: true,
       real_sqlite_runtime_tests: true,
+      checked_in_fixture_execution: {
+        full_record_required: true,
+        exact_once_required: true,
+        exact_oracle_required: true,
+        mutation_tests_required: true,
+        contract_checker_does_not_claim_runtime_execution: true,
+      },
       evidence,
       evidence_tree_hash: domainSeparatedSha256(
         'icarus:workflow-g5-basic-runtime-repair-evidence-tree:1\n',
@@ -655,9 +1061,10 @@ function buildArtifacts(): Array<[string, ContractArtifactEnvelope]> {
       g5_done: false,
       g6_through_g9: 'NOT_READY',
       historical_g5_candidate_authority: 'forbidden',
-      positive_case_count: positiveCases.length,
-      negative_case_count: negativeCases.length,
-      fault_case_count: faultCases.length,
+      fixture_count_is_not_runtime_execution_proof: true,
+      positive_case_count: G5_REPAIR_POSITIVE_FIXTURES.length,
+      negative_case_count: G5_REPAIR_NEGATIVE_FIXTURES.length,
+      fault_case_count: G5_REPAIR_FAULT_FIXTURES.length,
       member_count: members.length,
       members,
       member_tree_hash: domainSeparatedSha256(

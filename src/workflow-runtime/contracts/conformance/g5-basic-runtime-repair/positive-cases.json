@@ -10,131 +10,740 @@
     "cases": [
       {
         "case_id": "intake_routing_domain_claim",
+        "category": "positive",
         "surface": "T0",
         "assertion": "intake, exact routing, creation intent, workflow, activation, and claims commit and replay atomically",
-        "expected": "accepted"
+        "handler": "create_workflow_t0_production",
+        "operation": {
+          "kind": "create_workflow_t0",
+          "scenario_key": "g5-fixture:positive:intake_routing_domain_claim",
+          "transaction": "T0",
+          "input": {
+            "fixture_token": "g5-fixture:intake_routing_domain_claim",
+            "idempotency_key": "g5-fixture:intake_routing_domain_claim",
+            "now_ms": 1780000000000,
+            "expected_surface": "T0",
+            "mode": "commit",
+            "payload": {
+              "operation": "create_workflow_t0",
+              "behavior": "commit_and_reopen",
+              "durable_relation": "workflows"
+            },
+            "rejection_code": null,
+            "replay_count": 1,
+            "reopen_after": true
+          },
+          "fault": null
+        },
+        "oracle": {
+          "disposition": "accepted",
+          "sqlite_state": "committed",
+          "reopen_required": true,
+          "exact_error": null
+        },
+        "binding_hash": "sha256:39baad23f6ae6cc8c1738da614c1a8fd9c6f5109cd62d97feaa5d85a54fb0b03"
       },
       {
         "case_id": "required_finalization_intent",
+        "category": "positive",
         "surface": "T0p",
         "assertion": "required finalization creates one stable intent and exact replay",
-        "expected": "accepted"
+        "handler": "prepare_required_finalization_t0p_production",
+        "operation": {
+          "kind": "prepare_required_finalization_t0p",
+          "scenario_key": "g5-fixture:positive:required_finalization_intent",
+          "transaction": "T0p",
+          "input": {
+            "fixture_token": "g5-fixture:required_finalization_intent",
+            "idempotency_key": "g5-fixture:required_finalization_intent",
+            "now_ms": 1780000000000,
+            "expected_surface": "T0p",
+            "mode": "commit",
+            "payload": {
+              "operation": "prepare_required_finalization_t0p",
+              "behavior": "commit_and_reopen",
+              "durable_relation": "workflow_root_finalization_schedules"
+            },
+            "rejection_code": null,
+            "replay_count": 1,
+            "reopen_after": true
+          },
+          "fault": null
+        },
+        "oracle": {
+          "disposition": "accepted",
+          "sqlite_state": "committed",
+          "reopen_required": true,
+          "exact_error": null
+        },
+        "binding_hash": "sha256:1056e194378fa9442ae8cdfde5b1a1819d1035866dd094d1985bb23262408f29"
       },
       {
         "case_id": "activation_state_lowering",
+        "category": "positive",
         "surface": "T1",
         "assertion": "activation lowers the exact state and immutable context authority",
-        "expected": "accepted"
+        "handler": "activate_workflow_t1_production",
+        "operation": {
+          "kind": "activate_workflow_t1",
+          "scenario_key": "g5-fixture:positive:activation_state_lowering",
+          "transaction": "T1",
+          "input": {
+            "fixture_token": "g5-fixture:activation_state_lowering",
+            "idempotency_key": "g5-fixture:activation_state_lowering",
+            "now_ms": 1780000000000,
+            "expected_surface": "T1",
+            "mode": "commit",
+            "payload": {
+              "operation": "activate_workflow_t1",
+              "behavior": "commit_and_reopen",
+              "durable_relation": "workflow_state_activations"
+            },
+            "rejection_code": null,
+            "replay_count": 1,
+            "reopen_after": true
+          },
+          "fault": null
+        },
+        "oracle": {
+          "disposition": "accepted",
+          "sqlite_state": "committed",
+          "reopen_required": true,
+          "exact_error": null
+        },
+        "binding_hash": "sha256:d536012fe980b8b189251c52c55c289817b15c1703ec1a81cdf3d68d978e83e4"
       },
       {
         "case_id": "sealed_plan_generated_binding",
+        "category": "positive",
         "surface": "T2a",
         "assertion": "exact generated content and Plan bindings persist atomically",
-        "expected": "accepted"
+        "handler": "persist_compile_result_t2a_production",
+        "operation": {
+          "kind": "persist_compile_result_t2a",
+          "scenario_key": "g5-fixture:positive:sealed_plan_generated_binding",
+          "transaction": "T2a",
+          "input": {
+            "fixture_token": "g5-fixture:sealed_plan_generated_binding",
+            "idempotency_key": "g5-fixture:sealed_plan_generated_binding",
+            "now_ms": 1780000000000,
+            "expected_surface": "T2a",
+            "mode": "commit",
+            "payload": {
+              "operation": "persist_compile_result_t2a",
+              "behavior": "commit_and_reopen",
+              "durable_relation": "workflow_graph_scope_plans"
+            },
+            "rejection_code": null,
+            "replay_count": 1,
+            "reopen_after": true
+          },
+          "fault": null
+        },
+        "oracle": {
+          "disposition": "accepted",
+          "sqlite_state": "committed",
+          "reopen_required": true,
+          "exact_error": null
+        },
+        "binding_hash": "sha256:d98d0f84d56d75a8a683a948ceca639a674d0d77a44c5f418fe1c217eaa4b281"
       },
       {
         "case_id": "static_graph_materialization",
+        "category": "positive",
         "surface": "T2b",
         "assertion": "exact Plan nodes, edges, limits, and bindings materialize atomically",
-        "expected": "accepted"
+        "handler": "materialize_root_scope_t2b_production",
+        "operation": {
+          "kind": "materialize_root_scope_t2b",
+          "scenario_key": "g5-fixture:positive:static_graph_materialization",
+          "transaction": "T2b",
+          "input": {
+            "fixture_token": "g5-fixture:static_graph_materialization",
+            "idempotency_key": "g5-fixture:static_graph_materialization",
+            "now_ms": 1780000000000,
+            "expected_surface": "T2b",
+            "mode": "commit",
+            "payload": {
+              "operation": "materialize_root_scope_t2b",
+              "behavior": "commit_and_reopen",
+              "durable_relation": "workflow_graph_run_manifest"
+            },
+            "rejection_code": null,
+            "replay_count": 1,
+            "reopen_after": true
+          },
+          "fault": null
+        },
+        "oracle": {
+          "disposition": "accepted",
+          "sqlite_state": "committed",
+          "reopen_required": true,
+          "exact_error": null
+        },
+        "binding_hash": "sha256:ed8db8789813a0ad8bad36744a75837ddce146f762cf38540a2cd632fc562ddd"
       },
       {
         "case_id": "static_graph_fixed_point",
+        "category": "positive",
         "surface": "T3a",
         "assertion": "routing, data, trigger, input sealing, scheduler, Fact, Event, and ledger reach a deterministic fixed point",
-        "expected": "accepted"
+        "handler": "initialize_fixed_point_t3a_production",
+        "operation": {
+          "kind": "initialize_fixed_point_t3a",
+          "scenario_key": "g5-fixture:positive:static_graph_fixed_point",
+          "transaction": "T3a",
+          "input": {
+            "fixture_token": "g5-fixture:static_graph_fixed_point",
+            "idempotency_key": "g5-fixture:static_graph_fixed_point",
+            "now_ms": 1780000000000,
+            "expected_surface": "T3a",
+            "mode": "commit",
+            "payload": {
+              "operation": "initialize_fixed_point_t3a",
+              "behavior": "commit_and_reopen",
+              "durable_relation": "workflow_graph_facts"
+            },
+            "rejection_code": null,
+            "replay_count": 1,
+            "reopen_after": true
+          },
+          "fault": null
+        },
+        "oracle": {
+          "disposition": "accepted",
+          "sqlite_state": "committed",
+          "reopen_required": true,
+          "exact_error": null
+        },
+        "binding_hash": "sha256:49148397dfe292f8ad6e9bf1ef124412c6374ca80ecfa50e750996d03ada42af"
       },
       {
         "case_id": "settled_completion_selection",
+        "category": "positive",
         "surface": "T3b",
         "assertion": "settled completion selects one exact named exit or engine error",
-        "expected": "accepted"
+        "handler": "request_settled_close_t3b_production",
+        "operation": {
+          "kind": "request_settled_close_t3b",
+          "scenario_key": "g5-fixture:positive:settled_completion_selection",
+          "transaction": "T3b",
+          "input": {
+            "fixture_token": "g5-fixture:settled_completion_selection",
+            "idempotency_key": "g5-fixture:settled_completion_selection",
+            "now_ms": 1780000000000,
+            "expected_surface": "T3b",
+            "mode": "commit",
+            "payload": {
+              "operation": "request_settled_close_t3b",
+              "behavior": "commit_and_reopen",
+              "durable_relation": "workflow_graph_scope_close_requests"
+            },
+            "rejection_code": null,
+            "replay_count": 1,
+            "reopen_after": true
+          },
+          "fault": null
+        },
+        "oracle": {
+          "disposition": "accepted",
+          "sqlite_state": "committed",
+          "reopen_required": true,
+          "exact_error": null
+        },
+        "binding_hash": "sha256:c63dcdb3c16c908d4467057747b7a6499694fc8097e856b5b1f7fa3cb06cdc92"
       },
       {
         "case_id": "join_expose_rename_single",
+        "category": "positive",
         "surface": "T4",
         "assertion": "renamed required single output publishes a generated Value",
-        "expected": "accepted"
+        "handler": "node_output_envelope_store_production",
+        "operation": {
+          "kind": "node_output_envelope_store",
+          "scenario_key": "g5-fixture:positive:join_expose_rename_single",
+          "transaction": "T4",
+          "input": {
+            "fixture_token": "g5-fixture:join_expose_rename_single",
+            "idempotency_key": "g5-fixture:join_expose_rename_single",
+            "now_ms": 1780000000000,
+            "expected_surface": "T4",
+            "mode": "commit",
+            "payload": {
+              "operation": "node_output_envelope_store",
+              "behavior": "publish_renamed_single",
+              "durable_relation": "workflow_values"
+            },
+            "rejection_code": null,
+            "replay_count": 1,
+            "reopen_after": true
+          },
+          "fault": null
+        },
+        "oracle": {
+          "disposition": "accepted",
+          "sqlite_state": "committed",
+          "reopen_required": true,
+          "exact_error": null
+        },
+        "binding_hash": "sha256:8829ce04b001913d8b12e587aa2a3f472b79ad6a05d37e38aa62908df77d3303"
       },
       {
         "case_id": "join_optional_absent",
+        "category": "positive",
         "surface": "T4",
         "assertion": "optional missing single publishes explicit absent",
-        "expected": "accepted"
+        "handler": "node_output_envelope_store_production",
+        "operation": {
+          "kind": "node_output_envelope_store",
+          "scenario_key": "g5-fixture:positive:join_optional_absent",
+          "transaction": "T4",
+          "input": {
+            "fixture_token": "g5-fixture:join_optional_absent",
+            "idempotency_key": "g5-fixture:join_optional_absent",
+            "now_ms": 1780000000000,
+            "expected_surface": "T4",
+            "mode": "commit",
+            "payload": {
+              "operation": "node_output_envelope_store",
+              "behavior": "publish_optional_absent",
+              "durable_relation": "workflow_values"
+            },
+            "rejection_code": null,
+            "replay_count": 1,
+            "reopen_after": true
+          },
+          "fault": null
+        },
+        "oracle": {
+          "disposition": "accepted",
+          "sqlite_state": "committed",
+          "reopen_required": true,
+          "exact_error": null
+        },
+        "binding_hash": "sha256:3ce0eaed8d68687cb4be064fc71ba6990f505100191c7b9267d46915bd0b8fbc"
       },
       {
         "case_id": "join_default_single",
+        "category": "positive",
         "surface": "T3a_T4",
         "assertion": "defaulted single persists and publishes its logical Value",
-        "expected": "accepted"
+        "handler": "node_output_envelope_store_production",
+        "operation": {
+          "kind": "node_output_envelope_store",
+          "scenario_key": "g5-fixture:positive:join_default_single",
+          "transaction": "T3a_T4",
+          "input": {
+            "fixture_token": "g5-fixture:join_default_single",
+            "idempotency_key": "g5-fixture:join_default_single",
+            "now_ms": 1780000000000,
+            "expected_surface": "T3a_T4",
+            "mode": "commit",
+            "payload": {
+              "operation": "node_output_envelope_store",
+              "behavior": "publish_defaulted_single",
+              "durable_relation": "workflow_values"
+            },
+            "rejection_code": null,
+            "replay_count": 1,
+            "reopen_after": true
+          },
+          "fault": null
+        },
+        "oracle": {
+          "disposition": "accepted",
+          "sqlite_state": "committed",
+          "reopen_required": true,
+          "exact_error": null
+        },
+        "binding_hash": "sha256:ab5ec5197e80af58cf34a0985df513980fe662ea3c15a96858d380ee3c8cc2a9"
       },
       {
         "case_id": "join_list_aggregation",
+        "category": "positive",
         "surface": "T3a_T4",
         "assertion": "sealed list order and aggregate bytes are preserved",
-        "expected": "accepted"
+        "handler": "node_output_envelope_store_production",
+        "operation": {
+          "kind": "node_output_envelope_store",
+          "scenario_key": "g5-fixture:positive:join_list_aggregation",
+          "transaction": "T3a_T4",
+          "input": {
+            "fixture_token": "g5-fixture:join_list_aggregation",
+            "idempotency_key": "g5-fixture:join_list_aggregation",
+            "now_ms": 1780000000000,
+            "expected_surface": "T3a_T4",
+            "mode": "commit",
+            "payload": {
+              "operation": "node_output_envelope_store",
+              "behavior": "publish_ordered_list",
+              "durable_relation": "workflow_values"
+            },
+            "rejection_code": null,
+            "replay_count": 1,
+            "reopen_after": true
+          },
+          "fault": null
+        },
+        "oracle": {
+          "disposition": "accepted",
+          "sqlite_state": "committed",
+          "reopen_required": true,
+          "exact_error": null
+        },
+        "binding_hash": "sha256:4a4bee8b7e9f9050c25c0ab244fdb988bb01f0d4f504f5f59e2be18e8c114706"
       },
       {
         "case_id": "downstream_port_resolution",
+        "category": "positive",
         "surface": "T3a",
         "assertion": "downstream reads the immutable port Value from the envelope",
-        "expected": "accepted"
+        "handler": "node_output_envelope_store_production",
+        "operation": {
+          "kind": "node_output_envelope_store",
+          "scenario_key": "g5-fixture:positive:downstream_port_resolution",
+          "transaction": "T3a",
+          "input": {
+            "fixture_token": "g5-fixture:downstream_port_resolution",
+            "idempotency_key": "g5-fixture:downstream_port_resolution",
+            "now_ms": 1780000000000,
+            "expected_surface": "T3a",
+            "mode": "commit",
+            "payload": {
+              "operation": "node_output_envelope_store",
+              "behavior": "publish_selected_immutable_value",
+              "durable_relation": "workflow_values"
+            },
+            "rejection_code": null,
+            "replay_count": 1,
+            "reopen_after": true
+          },
+          "fault": null
+        },
+        "oracle": {
+          "disposition": "accepted",
+          "sqlite_state": "committed",
+          "reopen_required": true,
+          "exact_error": null
+        },
+        "binding_hash": "sha256:60f51ead1ed87524c5e2b6622ead7c49bdb3f6034f2862352ec63236daeea493"
       },
       {
         "case_id": "capability_effect_outbox",
+        "category": "positive",
         "surface": "T5",
         "assertion": "exact Adapter, Policy, effect, idempotency key, claims, and outbox binding persist before external work",
-        "expected": "accepted"
+        "handler": "prepare_capability_dispatch_t5_production",
+        "operation": {
+          "kind": "prepare_capability_dispatch_t5",
+          "scenario_key": "g5-fixture:positive:capability_effect_outbox",
+          "transaction": "T5",
+          "input": {
+            "fixture_token": "g5-fixture:capability_effect_outbox",
+            "idempotency_key": "g5-fixture:capability_effect_outbox",
+            "now_ms": 1780000000000,
+            "expected_surface": "T5",
+            "mode": "commit",
+            "payload": {
+              "operation": "prepare_capability_dispatch_t5",
+              "behavior": "commit_and_reopen",
+              "durable_relation": "workflow_outbox"
+            },
+            "rejection_code": null,
+            "replay_count": 1,
+            "reopen_after": true
+          },
+          "fault": null
+        },
+        "oracle": {
+          "disposition": "accepted",
+          "sqlite_state": "committed",
+          "reopen_required": true,
+          "exact_error": null
+        },
+        "binding_hash": "sha256:e12b122bec43fabe099abb7ea7d51990026166c29b31df62b6dc933c93feedf8"
       },
       {
         "case_id": "system_execution_output_envelope",
+        "category": "positive",
         "surface": "T6a",
         "assertion": "terminal success publishes the exact compiled port set in its canonical envelope",
-        "expected": "accepted"
+        "handler": "accept_internal_result_t6a_production",
+        "operation": {
+          "kind": "accept_internal_result_t6a",
+          "scenario_key": "g5-fixture:positive:system_execution_output_envelope",
+          "transaction": "T6a",
+          "input": {
+            "fixture_token": "g5-fixture:system_execution_output_envelope",
+            "idempotency_key": "g5-fixture:system_execution_output_envelope",
+            "now_ms": 1780000000000,
+            "expected_surface": "T6a",
+            "mode": "commit",
+            "payload": {
+              "operation": "accept_internal_result_t6a",
+              "behavior": "commit_and_reopen",
+              "durable_relation": "workflow_graph_node_attempts"
+            },
+            "rejection_code": null,
+            "replay_count": 1,
+            "reopen_after": true
+          },
+          "fault": null
+        },
+        "oracle": {
+          "disposition": "accepted",
+          "sqlite_state": "committed",
+          "reopen_required": true,
+          "exact_error": null
+        },
+        "binding_hash": "sha256:208660cd411312d376ec0b2aa17bbc09113ec5bfb4cff3236e882a785a6eb326"
       },
       {
         "case_id": "delegation_receipt_recovery",
+        "category": "positive",
         "surface": "T6b",
         "assertion": "unknown external outcome reconciles without a second operation identity",
-        "expected": "replayed"
+        "handler": "accept_delegation_callback_t6b_production",
+        "operation": {
+          "kind": "accept_delegation_callback_t6b",
+          "scenario_key": "g5-fixture:positive:delegation_receipt_recovery",
+          "transaction": "T6b",
+          "input": {
+            "fixture_token": "g5-fixture:delegation_receipt_recovery",
+            "idempotency_key": "g5-fixture:delegation_receipt_recovery",
+            "now_ms": 1780000000000,
+            "expected_surface": "T6b",
+            "mode": "commit_reopen_replay",
+            "payload": {
+              "operation": "accept_delegation_callback_t6b",
+              "behavior": "commit_reopen_exact_replay",
+              "durable_relation": "workflow_graph_node_attempts"
+            },
+            "rejection_code": null,
+            "replay_count": 2,
+            "reopen_after": true
+          },
+          "fault": null
+        },
+        "oracle": {
+          "disposition": "replayed",
+          "sqlite_state": "committed",
+          "reopen_required": true,
+          "exact_error": null
+        },
+        "binding_hash": "sha256:0dfa2d2192accb451f778fb8161dde7d91c7b250c4adb07bc63b477bd9c2ba53"
       },
       {
         "case_id": "durable_wait_signal_envelope",
+        "category": "positive",
         "surface": "T6c",
         "assertion": "one wait winner records typed authorization, inbox, Fact, Event, ledger release, and resolution envelope",
-        "expected": "accepted"
+        "handler": "resolve_wait_t6c_production",
+        "operation": {
+          "kind": "resolve_wait_t6c",
+          "scenario_key": "g5-fixture:positive:durable_wait_signal_envelope",
+          "transaction": "T6c",
+          "input": {
+            "fixture_token": "g5-fixture:durable_wait_signal_envelope",
+            "idempotency_key": "g5-fixture:durable_wait_signal_envelope",
+            "now_ms": 1780000000000,
+            "expected_surface": "T6c",
+            "mode": "commit",
+            "payload": {
+              "operation": "resolve_wait_t6c",
+              "behavior": "commit_and_reopen",
+              "durable_relation": "workflow_graph_waits"
+            },
+            "rejection_code": null,
+            "replay_count": 1,
+            "reopen_after": true
+          },
+          "fault": null
+        },
+        "oracle": {
+          "disposition": "accepted",
+          "sqlite_state": "committed",
+          "reopen_required": true,
+          "exact_error": null
+        },
+        "binding_hash": "sha256:b1803e60798bce1e5a1879874e209763d0a692c718a590ecb43a276eab6e563b"
       },
       {
         "case_id": "automatic_retry_timers",
+        "category": "positive",
         "surface": "T6d",
         "assertion": "watchdog and automatic retry consume the exact schedule and current Capacity lineage",
-        "expected": "accepted"
+        "handler": "fire_attempt_watchdog_t6d_production",
+        "operation": {
+          "kind": "fire_attempt_watchdog_t6d",
+          "scenario_key": "g5-fixture:positive:automatic_retry_timers",
+          "transaction": "T6d",
+          "input": {
+            "fixture_token": "g5-fixture:automatic_retry_timers",
+            "idempotency_key": "g5-fixture:automatic_retry_timers",
+            "now_ms": 1780000000000,
+            "expected_surface": "T6d",
+            "mode": "commit",
+            "payload": {
+              "operation": "fire_attempt_watchdog_t6d",
+              "behavior": "commit_and_reopen",
+              "durable_relation": "workflow_graph_retry_schedules"
+            },
+            "rejection_code": null,
+            "replay_count": 1,
+            "reopen_after": true
+          },
+          "fault": null
+        },
+        "oracle": {
+          "disposition": "accepted",
+          "sqlite_state": "committed",
+          "reopen_required": true,
+          "exact_error": null
+        },
+        "binding_hash": "sha256:1ee9452f7f3b986d46f3fe6143d6422657c7d6721d420082e82a5c81f034199d"
       },
       {
         "case_id": "capacity_admin_recovery",
+        "category": "positive",
         "surface": "CAP0_CAP4",
         "assertion": "prepared publication and committed head recover across rename and reopen boundaries",
-        "expected": "replayed"
+        "handler": "capacity_admin_cap0_cap4_production",
+        "operation": {
+          "kind": "capacity_admin_cap0_cap4",
+          "scenario_key": "g5-fixture:positive:capacity_admin_recovery",
+          "transaction": "CAP0_CAP4",
+          "input": {
+            "fixture_token": "g5-fixture:capacity_admin_recovery",
+            "idempotency_key": "g5-fixture:capacity_admin_recovery",
+            "now_ms": 1780000000000,
+            "expected_surface": "CAP0_CAP4",
+            "mode": "commit_reopen_replay",
+            "payload": {
+              "operation": "capacity_admin_cap0_cap4",
+              "behavior": "recover_after_rename_response_loss",
+              "durable_relation": "runtime_capacity_admin_commands"
+            },
+            "rejection_code": null,
+            "replay_count": 2,
+            "reopen_after": true
+          },
+          "fault": null
+        },
+        "oracle": {
+          "disposition": "replayed",
+          "sqlite_state": "committed",
+          "reopen_required": true,
+          "exact_error": null
+        },
+        "binding_hash": "sha256:28b7968bb4371dd4e0eee16561369caf64044151c7d486a5d32ad72b88c7c77e"
       },
       {
         "case_id": "operational_blocker_create_open_cache",
+        "category": "positive",
         "surface": "G5_BLOCKER",
         "assertion": "blocker create, open listing, and run/workflow action-required caches commit together",
-        "expected": "accepted"
+        "handler": "open_operational_blocker_production",
+        "operation": {
+          "kind": "open_operational_blocker",
+          "scenario_key": "g5-fixture:positive:operational_blocker_create_open_cache",
+          "transaction": "G5_BLOCKER",
+          "input": {
+            "fixture_token": "g5-fixture:operational_blocker_create_open_cache",
+            "idempotency_key": "g5-fixture:operational_blocker_create_open_cache",
+            "now_ms": 1780000000000,
+            "expected_surface": "G5_BLOCKER",
+            "mode": "commit",
+            "payload": {
+              "operation": "open_operational_blocker",
+              "behavior": "commit_and_reopen",
+              "durable_relation": "workflow_operational_blockers"
+            },
+            "rejection_code": null,
+            "replay_count": 1,
+            "reopen_after": true
+          },
+          "fault": null
+        },
+        "oracle": {
+          "disposition": "accepted",
+          "sqlite_state": "committed",
+          "reopen_required": true,
+          "exact_error": null
+        },
+        "binding_hash": "sha256:45540c60da72d0f775b5149f1a9bebda730b4feebd9e471e58b7596473d3373a"
       },
       {
         "case_id": "node_output_envelope_store_recovery",
+        "category": "positive",
         "surface": "SCHEMA7_STORE",
         "assertion": "canonical envelope and present members retain exact bytes, schema authority, provenance, and ownership through read, reopen, and recovery scan",
-        "expected": "replayed"
+        "handler": "node_output_envelope_store_production",
+        "operation": {
+          "kind": "node_output_envelope_store",
+          "scenario_key": "g5-fixture:positive:node_output_envelope_store_recovery",
+          "transaction": "SCHEMA7_STORE",
+          "input": {
+            "fixture_token": "g5-fixture:node_output_envelope_store_recovery",
+            "idempotency_key": "g5-fixture:node_output_envelope_store_recovery",
+            "now_ms": 1780000000000,
+            "expected_surface": "SCHEMA7_STORE",
+            "mode": "commit_reopen_replay",
+            "payload": {
+              "operation": "node_output_envelope_store",
+              "behavior": "commit_reopen_exact_replay",
+              "durable_relation": "workflow_values"
+            },
+            "rejection_code": null,
+            "replay_count": 2,
+            "reopen_after": true
+          },
+          "fault": null
+        },
+        "oracle": {
+          "disposition": "replayed",
+          "sqlite_state": "committed",
+          "reopen_required": true,
+          "exact_error": null
+        },
+        "binding_hash": "sha256:d16b1564d0aaccc694ed606b3a026301ce526809e11d9cbb15cab0ac3943a1a0"
       },
       {
         "case_id": "sqlite_reopen_response_loss",
+        "category": "positive",
         "surface": "T4",
         "assertion": "response-loss replay is exact before and after Store reopen",
-        "expected": "replayed"
+        "handler": "node_output_envelope_store_production",
+        "operation": {
+          "kind": "node_output_envelope_store",
+          "scenario_key": "g5-fixture:positive:sqlite_reopen_response_loss",
+          "transaction": "T4",
+          "input": {
+            "fixture_token": "g5-fixture:sqlite_reopen_response_loss",
+            "idempotency_key": "g5-fixture:sqlite_reopen_response_loss",
+            "now_ms": 1780000000000,
+            "expected_surface": "T4",
+            "mode": "commit_reopen_replay",
+            "payload": {
+              "operation": "node_output_envelope_store",
+              "behavior": "commit_reopen_exact_replay",
+              "durable_relation": "workflow_values"
+            },
+            "rejection_code": null,
+            "replay_count": 2,
+            "reopen_after": true
+          },
+          "fault": null
+        },
+        "oracle": {
+          "disposition": "replayed",
+          "sqlite_state": "committed",
+          "reopen_required": true,
+          "exact_error": null
+        },
+        "binding_hash": "sha256:26becd9c15f0a1b322da50b5daca5ff11da763296cb97f71286a64644cecd039"
       }
     ]
   },
-  "hash": "sha256:67f1a94acf041beed1bf6b230c6e1e6ea3beace1c17e6244bf18f373de9c8e57"
+  "hash": "sha256:4d3c3847b862c4d41909ff06c36209cd6b59506d31a53ccc64a2f4112c25686c"
 }

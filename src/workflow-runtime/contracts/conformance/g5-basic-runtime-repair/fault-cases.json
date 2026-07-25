@@ -10,107 +10,651 @@
     "cases": [
       {
         "case_id": "fault_before_commit_t0",
+        "category": "fault",
         "surface": "T0",
         "assertion": "T0 rolls back every write when failure is injected before commit",
-        "expected": "rolled_back"
+        "handler": "create_workflow_t0_production",
+        "operation": {
+          "kind": "create_workflow_t0",
+          "scenario_key": "g5-fixture:fault:fault_before_commit_t0",
+          "transaction": "T0",
+          "input": {
+            "fixture_token": "g5-fixture:fault_before_commit_t0",
+            "idempotency_key": "g5-fixture:fault_before_commit_t0",
+            "now_ms": 1780000000000,
+            "expected_surface": "T0",
+            "mode": "inject_and_rollback",
+            "payload": {
+              "operation": "create_workflow_t0",
+              "behavior": "rollback_before_commit",
+              "durable_relation": "workflows"
+            },
+            "rejection_code": null,
+            "replay_count": 1,
+            "reopen_after": true
+          },
+          "fault": {
+            "point": "before_commit",
+            "boundary": "T0"
+          }
+        },
+        "oracle": {
+          "disposition": "rolled_back",
+          "sqlite_state": "unchanged",
+          "reopen_required": true,
+          "exact_error": "injected_fault"
+        },
+        "binding_hash": "sha256:10e4caa5785bcf68deefa2f2e696b45fc966d230985d3d5459665fad6003682b"
       },
       {
         "case_id": "fault_before_commit_t0p",
+        "category": "fault",
         "surface": "T0p",
         "assertion": "T0p rolls back every write when failure is injected before commit",
-        "expected": "rolled_back"
+        "handler": "prepare_required_finalization_t0p_production",
+        "operation": {
+          "kind": "prepare_required_finalization_t0p",
+          "scenario_key": "g5-fixture:fault:fault_before_commit_t0p",
+          "transaction": "T0p",
+          "input": {
+            "fixture_token": "g5-fixture:fault_before_commit_t0p",
+            "idempotency_key": "g5-fixture:fault_before_commit_t0p",
+            "now_ms": 1780000000000,
+            "expected_surface": "T0p",
+            "mode": "inject_and_rollback",
+            "payload": {
+              "operation": "prepare_required_finalization_t0p",
+              "behavior": "rollback_before_commit",
+              "durable_relation": "workflow_root_finalization_schedules"
+            },
+            "rejection_code": null,
+            "replay_count": 1,
+            "reopen_after": true
+          },
+          "fault": {
+            "point": "before_commit",
+            "boundary": "T0p"
+          }
+        },
+        "oracle": {
+          "disposition": "rolled_back",
+          "sqlite_state": "unchanged",
+          "reopen_required": true,
+          "exact_error": "injected_fault"
+        },
+        "binding_hash": "sha256:4de7d91239458807006e256274bed592441dca89f8a1350be24f67569053174c"
       },
       {
         "case_id": "fault_before_commit_t1",
+        "category": "fault",
         "surface": "T1",
         "assertion": "T1 rolls back every write when failure is injected before commit",
-        "expected": "rolled_back"
+        "handler": "activate_workflow_t1_production",
+        "operation": {
+          "kind": "activate_workflow_t1",
+          "scenario_key": "g5-fixture:fault:fault_before_commit_t1",
+          "transaction": "T1",
+          "input": {
+            "fixture_token": "g5-fixture:fault_before_commit_t1",
+            "idempotency_key": "g5-fixture:fault_before_commit_t1",
+            "now_ms": 1780000000000,
+            "expected_surface": "T1",
+            "mode": "inject_and_rollback",
+            "payload": {
+              "operation": "activate_workflow_t1",
+              "behavior": "rollback_before_commit",
+              "durable_relation": "workflow_state_activations"
+            },
+            "rejection_code": null,
+            "replay_count": 1,
+            "reopen_after": true
+          },
+          "fault": {
+            "point": "before_commit",
+            "boundary": "T1"
+          }
+        },
+        "oracle": {
+          "disposition": "rolled_back",
+          "sqlite_state": "unchanged",
+          "reopen_required": true,
+          "exact_error": "injected_fault"
+        },
+        "binding_hash": "sha256:e232fd6643828904f75f84bda165ac76b50e02d908ef253be749be24d2009f9f"
       },
       {
         "case_id": "fault_before_commit_t2a",
+        "category": "fault",
         "surface": "T2a",
         "assertion": "T2a rolls back every write when failure is injected before commit",
-        "expected": "rolled_back"
+        "handler": "persist_compile_result_t2a_production",
+        "operation": {
+          "kind": "persist_compile_result_t2a",
+          "scenario_key": "g5-fixture:fault:fault_before_commit_t2a",
+          "transaction": "T2a",
+          "input": {
+            "fixture_token": "g5-fixture:fault_before_commit_t2a",
+            "idempotency_key": "g5-fixture:fault_before_commit_t2a",
+            "now_ms": 1780000000000,
+            "expected_surface": "T2a",
+            "mode": "inject_and_rollback",
+            "payload": {
+              "operation": "persist_compile_result_t2a",
+              "behavior": "rollback_before_commit",
+              "durable_relation": "workflow_graph_scope_plans"
+            },
+            "rejection_code": null,
+            "replay_count": 1,
+            "reopen_after": true
+          },
+          "fault": {
+            "point": "before_commit",
+            "boundary": "T2a"
+          }
+        },
+        "oracle": {
+          "disposition": "rolled_back",
+          "sqlite_state": "unchanged",
+          "reopen_required": true,
+          "exact_error": "injected_fault"
+        },
+        "binding_hash": "sha256:d84eb8fcf62a5661fce78b68882174c49846b2b10b14d55b30a1a00b6450a436"
       },
       {
         "case_id": "fault_before_commit_t2b",
+        "category": "fault",
         "surface": "T2b",
         "assertion": "T2b rolls back every write when failure is injected before commit",
-        "expected": "rolled_back"
+        "handler": "materialize_root_scope_t2b_production",
+        "operation": {
+          "kind": "materialize_root_scope_t2b",
+          "scenario_key": "g5-fixture:fault:fault_before_commit_t2b",
+          "transaction": "T2b",
+          "input": {
+            "fixture_token": "g5-fixture:fault_before_commit_t2b",
+            "idempotency_key": "g5-fixture:fault_before_commit_t2b",
+            "now_ms": 1780000000000,
+            "expected_surface": "T2b",
+            "mode": "inject_and_rollback",
+            "payload": {
+              "operation": "materialize_root_scope_t2b",
+              "behavior": "rollback_before_commit",
+              "durable_relation": "workflow_graph_run_manifest"
+            },
+            "rejection_code": null,
+            "replay_count": 1,
+            "reopen_after": true
+          },
+          "fault": {
+            "point": "before_commit",
+            "boundary": "T2b"
+          }
+        },
+        "oracle": {
+          "disposition": "rolled_back",
+          "sqlite_state": "unchanged",
+          "reopen_required": true,
+          "exact_error": "injected_fault"
+        },
+        "binding_hash": "sha256:81e81444a60f1c930a776849ef3229c31091b9434b341a9309bdf4936fe88cf9"
       },
       {
         "case_id": "fault_before_commit_t3a",
+        "category": "fault",
         "surface": "T3a",
         "assertion": "T3a rolls back every write when failure is injected before commit",
-        "expected": "rolled_back"
+        "handler": "initialize_fixed_point_t3a_production",
+        "operation": {
+          "kind": "initialize_fixed_point_t3a",
+          "scenario_key": "g5-fixture:fault:fault_before_commit_t3a",
+          "transaction": "T3a",
+          "input": {
+            "fixture_token": "g5-fixture:fault_before_commit_t3a",
+            "idempotency_key": "g5-fixture:fault_before_commit_t3a",
+            "now_ms": 1780000000000,
+            "expected_surface": "T3a",
+            "mode": "inject_and_rollback",
+            "payload": {
+              "operation": "initialize_fixed_point_t3a",
+              "behavior": "rollback_before_commit",
+              "durable_relation": "workflow_graph_facts"
+            },
+            "rejection_code": null,
+            "replay_count": 1,
+            "reopen_after": true
+          },
+          "fault": {
+            "point": "before_commit",
+            "boundary": "T3a"
+          }
+        },
+        "oracle": {
+          "disposition": "rolled_back",
+          "sqlite_state": "unchanged",
+          "reopen_required": true,
+          "exact_error": "injected_fault"
+        },
+        "binding_hash": "sha256:d395ce451ae1616b0e91ab0b553f6841ec914fc5732a1e57e262c41c0e29c775"
       },
       {
         "case_id": "fault_before_commit_t3b",
+        "category": "fault",
         "surface": "T3b",
         "assertion": "T3b rolls back every write when failure is injected before commit",
-        "expected": "rolled_back"
+        "handler": "request_settled_close_t3b_production",
+        "operation": {
+          "kind": "request_settled_close_t3b",
+          "scenario_key": "g5-fixture:fault:fault_before_commit_t3b",
+          "transaction": "T3b",
+          "input": {
+            "fixture_token": "g5-fixture:fault_before_commit_t3b",
+            "idempotency_key": "g5-fixture:fault_before_commit_t3b",
+            "now_ms": 1780000000000,
+            "expected_surface": "T3b",
+            "mode": "inject_and_rollback",
+            "payload": {
+              "operation": "request_settled_close_t3b",
+              "behavior": "rollback_before_commit",
+              "durable_relation": "workflow_graph_scope_close_requests"
+            },
+            "rejection_code": null,
+            "replay_count": 1,
+            "reopen_after": true
+          },
+          "fault": {
+            "point": "before_commit",
+            "boundary": "T3b"
+          }
+        },
+        "oracle": {
+          "disposition": "rolled_back",
+          "sqlite_state": "unchanged",
+          "reopen_required": true,
+          "exact_error": "injected_fault"
+        },
+        "binding_hash": "sha256:475968634833d930c3d1055020edd514b2c08fb8a28768142fba6ca9f30ea58d"
       },
       {
         "case_id": "fault_before_commit_t4",
+        "category": "fault",
         "surface": "T4",
         "assertion": "T4 rolls back every write when failure is injected before commit",
-        "expected": "rolled_back"
+        "handler": "schedule_ready_node_t4_production",
+        "operation": {
+          "kind": "schedule_ready_node_t4",
+          "scenario_key": "g5-fixture:fault:fault_before_commit_t4",
+          "transaction": "T4",
+          "input": {
+            "fixture_token": "g5-fixture:fault_before_commit_t4",
+            "idempotency_key": "g5-fixture:fault_before_commit_t4",
+            "now_ms": 1780000000000,
+            "expected_surface": "T4",
+            "mode": "inject_and_rollback",
+            "payload": {
+              "operation": "schedule_ready_node_t4",
+              "behavior": "rollback_before_commit",
+              "durable_relation": "workflow_graph_nodes"
+            },
+            "rejection_code": null,
+            "replay_count": 1,
+            "reopen_after": true
+          },
+          "fault": {
+            "point": "before_commit",
+            "boundary": "T4"
+          }
+        },
+        "oracle": {
+          "disposition": "rolled_back",
+          "sqlite_state": "unchanged",
+          "reopen_required": true,
+          "exact_error": "injected_fault"
+        },
+        "binding_hash": "sha256:6ee610c7f7d231bf414c3401d46b1d9f5ae710438c346c9b6af6b27b368a0bff"
       },
       {
         "case_id": "fault_before_commit_t5",
+        "category": "fault",
         "surface": "T5",
         "assertion": "T5 rolls back every write when failure is injected before commit",
-        "expected": "rolled_back"
+        "handler": "prepare_capability_dispatch_t5_production",
+        "operation": {
+          "kind": "prepare_capability_dispatch_t5",
+          "scenario_key": "g5-fixture:fault:fault_before_commit_t5",
+          "transaction": "T5",
+          "input": {
+            "fixture_token": "g5-fixture:fault_before_commit_t5",
+            "idempotency_key": "g5-fixture:fault_before_commit_t5",
+            "now_ms": 1780000000000,
+            "expected_surface": "T5",
+            "mode": "inject_and_rollback",
+            "payload": {
+              "operation": "prepare_capability_dispatch_t5",
+              "behavior": "rollback_before_commit",
+              "durable_relation": "workflow_outbox"
+            },
+            "rejection_code": null,
+            "replay_count": 1,
+            "reopen_after": true
+          },
+          "fault": {
+            "point": "before_commit",
+            "boundary": "T5"
+          }
+        },
+        "oracle": {
+          "disposition": "rolled_back",
+          "sqlite_state": "unchanged",
+          "reopen_required": true,
+          "exact_error": "injected_fault"
+        },
+        "binding_hash": "sha256:be2e5272a333cc57f90295f87dfd290e6058955feceae0360bbcd0ba8a1186b3"
       },
       {
         "case_id": "fault_before_commit_t6a",
+        "category": "fault",
         "surface": "T6a",
         "assertion": "T6a rolls back every write when failure is injected before commit",
-        "expected": "rolled_back"
+        "handler": "accept_internal_result_t6a_production",
+        "operation": {
+          "kind": "accept_internal_result_t6a",
+          "scenario_key": "g5-fixture:fault:fault_before_commit_t6a",
+          "transaction": "T6a",
+          "input": {
+            "fixture_token": "g5-fixture:fault_before_commit_t6a",
+            "idempotency_key": "g5-fixture:fault_before_commit_t6a",
+            "now_ms": 1780000000000,
+            "expected_surface": "T6a",
+            "mode": "inject_and_rollback",
+            "payload": {
+              "operation": "accept_internal_result_t6a",
+              "behavior": "rollback_before_commit",
+              "durable_relation": "workflow_graph_node_attempts"
+            },
+            "rejection_code": null,
+            "replay_count": 1,
+            "reopen_after": true
+          },
+          "fault": {
+            "point": "before_commit",
+            "boundary": "T6a"
+          }
+        },
+        "oracle": {
+          "disposition": "rolled_back",
+          "sqlite_state": "unchanged",
+          "reopen_required": true,
+          "exact_error": "injected_fault"
+        },
+        "binding_hash": "sha256:31a5605c38b87e02c2a4d9ab960d0c9b5d1d70955fd01cb25290779a6fac7da4"
       },
       {
         "case_id": "fault_before_commit_t6b",
+        "category": "fault",
         "surface": "T6b",
         "assertion": "T6b rolls back every write when failure is injected before commit",
-        "expected": "rolled_back"
+        "handler": "accept_delegation_callback_t6b_production",
+        "operation": {
+          "kind": "accept_delegation_callback_t6b",
+          "scenario_key": "g5-fixture:fault:fault_before_commit_t6b",
+          "transaction": "T6b",
+          "input": {
+            "fixture_token": "g5-fixture:fault_before_commit_t6b",
+            "idempotency_key": "g5-fixture:fault_before_commit_t6b",
+            "now_ms": 1780000000000,
+            "expected_surface": "T6b",
+            "mode": "inject_and_rollback",
+            "payload": {
+              "operation": "accept_delegation_callback_t6b",
+              "behavior": "rollback_before_commit",
+              "durable_relation": "workflow_graph_node_attempts"
+            },
+            "rejection_code": null,
+            "replay_count": 1,
+            "reopen_after": true
+          },
+          "fault": {
+            "point": "before_commit",
+            "boundary": "T6b"
+          }
+        },
+        "oracle": {
+          "disposition": "rolled_back",
+          "sqlite_state": "unchanged",
+          "reopen_required": true,
+          "exact_error": "injected_fault"
+        },
+        "binding_hash": "sha256:f9ced1542d64e66732357499f7ded2a5d6bbe3629d4bcb9a426f4287a51c91c8"
       },
       {
         "case_id": "fault_before_commit_t6c",
+        "category": "fault",
         "surface": "T6c",
         "assertion": "T6c rolls back every write when failure is injected before commit",
-        "expected": "rolled_back"
+        "handler": "resolve_wait_t6c_production",
+        "operation": {
+          "kind": "resolve_wait_t6c",
+          "scenario_key": "g5-fixture:fault:fault_before_commit_t6c",
+          "transaction": "T6c",
+          "input": {
+            "fixture_token": "g5-fixture:fault_before_commit_t6c",
+            "idempotency_key": "g5-fixture:fault_before_commit_t6c",
+            "now_ms": 1780000000000,
+            "expected_surface": "T6c",
+            "mode": "inject_and_rollback",
+            "payload": {
+              "operation": "resolve_wait_t6c",
+              "behavior": "rollback_before_commit",
+              "durable_relation": "workflow_graph_waits"
+            },
+            "rejection_code": null,
+            "replay_count": 1,
+            "reopen_after": true
+          },
+          "fault": {
+            "point": "before_commit",
+            "boundary": "T6c"
+          }
+        },
+        "oracle": {
+          "disposition": "rolled_back",
+          "sqlite_state": "unchanged",
+          "reopen_required": true,
+          "exact_error": "injected_fault"
+        },
+        "binding_hash": "sha256:5715ee994f247acd3ff65b5ea5a1d3eafcd75caafeb2c433aab260c74465ffa6"
       },
       {
         "case_id": "fault_before_commit_t6d",
+        "category": "fault",
         "surface": "T6d",
         "assertion": "T6d rolls back every write when failure is injected before commit",
-        "expected": "rolled_back"
+        "handler": "fire_attempt_watchdog_t6d_production",
+        "operation": {
+          "kind": "fire_attempt_watchdog_t6d",
+          "scenario_key": "g5-fixture:fault:fault_before_commit_t6d",
+          "transaction": "T6d",
+          "input": {
+            "fixture_token": "g5-fixture:fault_before_commit_t6d",
+            "idempotency_key": "g5-fixture:fault_before_commit_t6d",
+            "now_ms": 1780000000000,
+            "expected_surface": "T6d",
+            "mode": "inject_and_rollback",
+            "payload": {
+              "operation": "fire_attempt_watchdog_t6d",
+              "behavior": "rollback_before_commit",
+              "durable_relation": "workflow_graph_retry_schedules"
+            },
+            "rejection_code": null,
+            "replay_count": 1,
+            "reopen_after": true
+          },
+          "fault": {
+            "point": "before_commit",
+            "boundary": "T6d"
+          }
+        },
+        "oracle": {
+          "disposition": "rolled_back",
+          "sqlite_state": "unchanged",
+          "reopen_required": true,
+          "exact_error": "injected_fault"
+        },
+        "binding_hash": "sha256:1339484e3dac412c1cc3458c4f195805367913669630021fe7537282e2fda9fb"
       },
       {
         "case_id": "fault_node_output_envelope_boundary",
+        "category": "fault",
         "surface": "STORE",
         "assertion": "generated content, binding, member Values, envelope, and ownership roll back together at every injected stage",
-        "expected": "rolled_back"
+        "handler": "node_output_envelope_store_production",
+        "operation": {
+          "kind": "node_output_envelope_store",
+          "scenario_key": "g5-fixture:fault:fault_node_output_envelope_boundary",
+          "transaction": "STORE",
+          "input": {
+            "fixture_token": "g5-fixture:fault_node_output_envelope_boundary",
+            "idempotency_key": "g5-fixture:fault_node_output_envelope_boundary",
+            "now_ms": 1780000000000,
+            "expected_surface": "STORE",
+            "mode": "inject_and_rollback",
+            "payload": {
+              "operation": "node_output_envelope_store",
+              "behavior": "rollback_after_envelope_value",
+              "durable_relation": "workflow_values"
+            },
+            "rejection_code": null,
+            "replay_count": 1,
+            "reopen_after": true
+          },
+          "fault": {
+            "point": "after_value",
+            "boundary": "STORE"
+          }
+        },
+        "oracle": {
+          "disposition": "rolled_back",
+          "sqlite_state": "unchanged",
+          "reopen_required": true,
+          "exact_error": "injected_fault"
+        },
+        "binding_hash": "sha256:76743620f23583ce5d22ed6f1d0a46f79ec15aaae8278ccf70e65219b9128d25"
       },
       {
         "case_id": "fault_capacity_after_prepare",
+        "category": "fault",
         "surface": "CAP1_CAP2",
         "assertion": "prepared Capacity invocation survives crash and resumes the same publication",
-        "expected": "replayed"
+        "handler": "capacity_admin_cap0_cap4_production",
+        "operation": {
+          "kind": "capacity_admin_cap0_cap4",
+          "scenario_key": "g5-fixture:fault:fault_capacity_after_prepare",
+          "transaction": "CAP1_CAP2",
+          "input": {
+            "fixture_token": "g5-fixture:fault_capacity_after_prepare",
+            "idempotency_key": "g5-fixture:fault_capacity_after_prepare",
+            "now_ms": 1780000000000,
+            "expected_surface": "CAP1_CAP2",
+            "mode": "commit_reopen_replay",
+            "payload": {
+              "operation": "capacity_admin_cap0_cap4",
+              "behavior": "recover_after_cap1_prepare",
+              "durable_relation": "runtime_capacity_admin_commands"
+            },
+            "rejection_code": null,
+            "replay_count": 2,
+            "reopen_after": true
+          },
+          "fault": {
+            "point": "capacity_after_prepare",
+            "boundary": "CAP1_CAP2"
+          }
+        },
+        "oracle": {
+          "disposition": "replayed",
+          "sqlite_state": "committed",
+          "reopen_required": true,
+          "exact_error": null
+        },
+        "binding_hash": "sha256:42ed4729ab3dc78b3c000a60a7913bc213a9bcdf18c9f4fae45eb93a298f0219"
       },
       {
         "case_id": "fault_capacity_after_rename",
+        "category": "fault",
         "surface": "CAP2_CAP3",
         "assertion": "Watcher rejects or resumes a renamed file before head commit",
-        "expected": "replayed"
+        "handler": "capacity_admin_cap0_cap4_production",
+        "operation": {
+          "kind": "capacity_admin_cap0_cap4",
+          "scenario_key": "g5-fixture:fault:fault_capacity_after_rename",
+          "transaction": "CAP2_CAP3",
+          "input": {
+            "fixture_token": "g5-fixture:fault_capacity_after_rename",
+            "idempotency_key": "g5-fixture:fault_capacity_after_rename",
+            "now_ms": 1780000000000,
+            "expected_surface": "CAP2_CAP3",
+            "mode": "commit_reopen_replay",
+            "payload": {
+              "operation": "capacity_admin_cap0_cap4",
+              "behavior": "recover_after_cap2_rename",
+              "durable_relation": "runtime_capacity_admin_commands"
+            },
+            "rejection_code": null,
+            "replay_count": 2,
+            "reopen_after": true
+          },
+          "fault": {
+            "point": "capacity_after_rename",
+            "boundary": "CAP2_CAP3"
+          }
+        },
+        "oracle": {
+          "disposition": "replayed",
+          "sqlite_state": "committed",
+          "reopen_required": true,
+          "exact_error": null
+        },
+        "binding_hash": "sha256:bfa61a93f952053df79fa95a3ef3df156c5d68b93de8f15e757ecd8f563a79a6"
       },
       {
         "case_id": "fault_capacity_after_head",
+        "category": "fault",
         "surface": "CAP3_CAP4",
         "assertion": "CAP4 reopens the committed head and finalizes exactly once",
-        "expected": "replayed"
+        "handler": "capacity_admin_cap0_cap4_production",
+        "operation": {
+          "kind": "capacity_admin_cap0_cap4",
+          "scenario_key": "g5-fixture:fault:fault_capacity_after_head",
+          "transaction": "CAP3_CAP4",
+          "input": {
+            "fixture_token": "g5-fixture:fault_capacity_after_head",
+            "idempotency_key": "g5-fixture:fault_capacity_after_head",
+            "now_ms": 1780000000000,
+            "expected_surface": "CAP3_CAP4",
+            "mode": "commit_reopen_replay",
+            "payload": {
+              "operation": "capacity_admin_cap0_cap4",
+              "behavior": "recover_after_cap3_head",
+              "durable_relation": "runtime_capacity_admin_commands"
+            },
+            "rejection_code": null,
+            "replay_count": 2,
+            "reopen_after": true
+          },
+          "fault": {
+            "point": "capacity_after_head",
+            "boundary": "CAP3_CAP4"
+          }
+        },
+        "oracle": {
+          "disposition": "replayed",
+          "sqlite_state": "committed",
+          "reopen_required": true,
+          "exact_error": null
+        },
+        "binding_hash": "sha256:e97bedd3efbf486d769955d47c556c6d5e23e41d7f118e30400778f0053f98d4"
       }
     ]
   },
-  "hash": "sha256:172324f37d126ed84e52d846d691bc1dcdef9d345d0930c2f186f6233db79d9e"
+  "hash": "sha256:0b973b6b2d297df0afbd6b8b3a4f9ce748bda2f6c65333b1b012c64f0e6606d3"
 }

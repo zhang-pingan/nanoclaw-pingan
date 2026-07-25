@@ -10,7 +10,18 @@
     "independent_from_runtime": true,
     "deterministic_property_tests": true,
     "real_sqlite_runtime_tests": true,
+    "checked_in_fixture_execution": {
+      "full_record_required": true,
+      "exact_once_required": true,
+      "exact_oracle_required": true,
+      "mutation_tests_required": true,
+      "contract_checker_does_not_claim_runtime_execution": true
+    },
     "evidence": [
+      {
+        "path": "src/workflow-runtime/contracts/g5-basic-runtime-fixture-harness.ts",
+        "raw_sha256": "sha256:329c05fc563a2c1abca2d596e7295ec3294c5bf446da05d78d61722291befc31"
+      },
       {
         "path": "src/workflow-runtime/contracts/g5-basic-runtime-repair-reference-model.ts",
         "raw_sha256": "sha256:95d183ebb7d0b5941685a3a301250227b0efc9f573f2d79621f3af3f86bb590a"
@@ -21,7 +32,7 @@
       },
       {
         "path": "src/workflow-runtime/contracts/g5-basic-runtime-repair-contract.test.ts",
-        "raw_sha256": "sha256:e40793c0738dcf72ee50e62809d18e212af1a39b6498920845166ef9a8ea68e3"
+        "raw_sha256": "sha256:34eaffbb9646321419772f68c53d22957b0f7bdafd4dc2a44242665da5294874"
       },
       {
         "path": "src/workflow-runtime/contracts/g5-capacity-runtime-readiness-audit.test.ts",
@@ -45,14 +56,14 @@
       },
       {
         "path": "src/workflow-runtime/runtime/g5-basic-runtime.test.ts",
-        "raw_sha256": "sha256:e17cba5ee081e6bb45548337549db03e4b8976804804d67e11489b909dda8a64"
+        "raw_sha256": "sha256:4bdc1e23971387dce83a402592524359721ceb9db8f3a7f82dd107e197315527"
       },
       {
         "path": "src/workflow-runtime/capacity/capacity-admin.test.ts",
-        "raw_sha256": "sha256:9d6262e5d1c63f17187298ef8f3225633995ce60512269eb372b495b50e5c1fe"
+        "raw_sha256": "sha256:06d0b8cee866ec721a34dca293ed549d948831d81966dada5feaf4312c0be513"
       }
     ],
-    "evidence_tree_hash": "sha256:aebacebbbd2dab4e78f7ec28c3a3fd3d7a2119dfa2b44ac36fb4ad889d66b81d"
+    "evidence_tree_hash": "sha256:dfa084bda9b48df486cd2a92a51a782923e1b9dbda3ce37a7b5ca5be7176e21a"
   },
-  "hash": "sha256:f1a78a4e6d64940de3088162d04775f5135b7f8764d640ac77369620539f4efb"
+  "hash": "sha256:d03cabfe7782cf315ffb0c24358ef21c77ef73b959da5a55e24692dcdc307717"
 }

@@ -32,6 +32,13 @@
     ],
     "transaction_host": "WorkflowRuntimeStore.withImmediateTransaction",
     "transaction_mode": "BEGIN_IMMEDIATE",
+    "fixture_execution": {
+      "record_shape": "closed_category_surface_handler_operation_fault_oracle_binding",
+      "dispatch": "exactly_one_registered_handler_per_checked_in_record",
+      "completion": "missing_duplicate_unknown_unhandled_or_multiply_handled_fails",
+      "contract_checker_scope": "closed_structure_identity_and_bytes_only",
+      "runtime_execution_proof": "managed_test_g5_fixture_execution_only"
+    },
     "fallback": [
       "registry_latest_forbidden",
       "network_forbidden",
@@ -124,5 +131,5 @@
       }
     ]
   },
-  "hash": "sha256:d269db10b7e4ae10de2cc52e01ae08df525b59f574b88ecb633dddae08d70667"
+  "hash": "sha256:bd72e28685e09870bac59c3a543d6180e39208d2ce029ca49bb61ee9fddc38cb"
 }
