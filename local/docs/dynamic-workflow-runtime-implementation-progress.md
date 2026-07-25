@@ -113,7 +113,7 @@ Agent Container 运行于独立 VM，Node identity 由 VM image gate 保证；�
 | G2 Compiler / Golden | `DONE` | G1 + R-019 | Compiler 3.0.4/G2 v6 successor review/seal与40/40 exact replay已通过独立affected-chain regression；v1-v5冻结 | 本原子闭合提交 |
 | G3 Registry / Authoring / Publish | `DONE` | G1 + G2 | G3.1/3.3/G3.5/G3.6/G3.7/G3.9 current pins已级联重建并通过独立affected-chain regression；G3.8A冻结 | 本原子闭合提交 |
 | G4 Test Bootstrap | `DONE` | G1 + G2 + G3 | additive G4 authority successor绑定Schema 7/G2 v6/current G3并通过独立affected-chain regression；历史G4 bootstrap全树冻结且不可重写 | 本原子闭合提交 |
-| G5 Basic Runtime | `READY_FOR_G5_REPAIR/NOT_DONE` | current G1-G4 closure + 后续独立G5 repair successor | NodeOutputEnvelope schema authority缺口已闭合；旧G5 candidate仍为失效只读历史，本轮未修改或执行G5 Runtime施工 | 本原子闭合提交 |
+| G5 Basic Runtime | `G5_REPAIR_EXIT_CANDIDATE_PENDING_INDEPENDENT_G5_WHOLE_GATE_REGRESSION/NOT_DONE` | current G1-G4 closure + current G5 repair candidate `2f52212d22cf01ddee47c45249961416e286def8` | current candidate `2f52212d22cf01ddee47c45249961416e286def8`已完成construction；下一步只能由中控创建fresh independent local G5 whole-gate regression | 本原子闭合提交 |
 | G6 Dynamic / Close | `NOT_READY` | G5 | T7/T8/child/compensation fixtures | - |
 | G7 Control / Card / Projection / Recovery | `NOT_READY` | G6 | Deadline Watchdog -> Gateway -> T7c stable-key/System Grant/audit + authorized manual retry handoff + T6e/resolution/recovery/card/projection fixtures | - |
 | G8 Certification | `NOT_READY` | G7 | certified profile meeting Product Floor | - |
@@ -124,11 +124,11 @@ Agent Container 运行于独立 VM，Node identity 由 VM image gate 保证；�
 | 工作包 | 范围 | 状态 | 当前 Gate/切片 |
 | --- | --- | --- | --- |
 | I0 | Publish、Registry、Recipe 与执行版本固定 | `IN_PROGRESS` | G3 current exact closure已随Schema 7/G2 v6重建并通过独立affected-chain regression；等待future G5消费 |
-| I1 | Intake、Routing、幂等创建、Child provenance、Claim | `IN_PROGRESS` | 旧G5 intake/routing/domain claim实现仅作只读历史；current状态为`READY_FOR_G5_REPAIR/NOT_DONE` |
-| I2 | Definition、State lowering、Context、transition | `IN_PROGRESS` | Compiler 3.0.4/G2 v6 envelope descriptor successor已批准、seal并独立回归；G5 Runtime repair未开始 |
+| I1 | Intake、Routing、幂等创建、Child provenance、Claim | `IN_PROGRESS` | current candidate `2f52212d22cf01ddee47c45249961416e286def8`已完成intake/routing/domain claim construction；current状态为`G5_REPAIR_EXIT_CANDIDATE_PENDING_INDEPENDENT_G5_WHOLE_GATE_REGRESSION/NOT_DONE` |
+| I2 | Definition、State lowering、Context、transition | `IN_PROGRESS` | Compiler 3.0.4/G2 v6 envelope descriptor successor已批准、seal并独立回归；current G5 repair candidate `2f52212d22cf01ddee47c45249961416e286def8`已完成construction且状态为`G5_REPAIR_EXIT_CANDIDATE_PENDING_INDEPENDENT_G5_WHOLE_GATE_REGRESSION/NOT_DONE` |
 | I3 | Source/Compiled IR、Port、Compiler | `IN_PROGRESS` | Compiler 3.0.4为每个node封存exact `output_envelope_schema`且G2 current closure为`DONE`；等待future G5消费 |
 | I4 | Runtime Store、SQLite relation、Value/Blob、migration | `IN_PROGRESS` | Schema 7与独立NodeOutputEnvelope Value write/read/reopen/recovery boundary已通过回归；Blob/GC仍未实现 |
-| I5 | Graph 状态机、reconcile、Scheduler、Ledger | `IN_PROGRESS` | 旧G5 static graph实现仅作只读历史；NodeOutputEnvelope authority已闭合，下一步只能是新的G5 repair |
+| I5 | Graph 状态机、reconcile、Scheduler、Ledger | `IN_PROGRESS` | current candidate `2f52212d22cf01ddee47c45249961416e286def8`已完成Graph状态机、reconcile、Scheduler、Ledger construction且状态为`G5_REPAIR_EXIT_CANDIDATE_PENDING_INDEPENDENT_G5_WHOLE_GATE_REGRESSION/NOT_DONE`；下一步只能由中控创建fresh independent local G5 whole-gate regression |
 | I6 | Delegation/System、Capability Effect、Outbox | `IN_PROGRESS` | G5 T5 exact execution binding与T6a/T6b已实现，等待独立G5 whole-gate回归 |
 | I7 | Durable Wait、Signal/Timer/Approval、Inbox | `IN_PROGRESS` | G5 wait/inbox与automatic retry timers已实现，Workflow deadline继续归未来G7 |
 | I8 | Subgraph、Expand、Map、child scope | `NOT_READY` | G6 起 |
