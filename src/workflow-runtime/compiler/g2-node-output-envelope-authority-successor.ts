@@ -252,25 +252,69 @@ function isLexicalBindingIdentifier(node: ts.Identifier): boolean {
   );
 }
 
-function unwrapParenthesizedExpression(
-  expression: ts.Expression,
-): ts.Expression {
+function unwrapTransparentExpression(expression: ts.Expression): ts.Expression {
   let current = expression;
-  while (ts.isParenthesizedExpression(current)) {
-    current = current.expression;
+  while (true) {
+    if (
+      ts.isParenthesizedExpression(current) ||
+      ts.isAsExpression(current) ||
+      ts.isTypeAssertionExpression(current) ||
+      ts.isSatisfiesExpression(current) ||
+      ts.isNonNullExpression(current) ||
+      ts.isAwaitExpression(current)
+    ) {
+      current = current.expression;
+      continue;
+    }
+    return current;
   }
-  return current;
+}
+
+function expressionCanEvaluateTo(
+  expression: ts.Expression | undefined,
+  matchesLeaf: (expression: ts.Expression) => boolean,
+): boolean {
+  if (!expression) return false;
+  const unwrapped = unwrapTransparentExpression(expression);
+  if (matchesLeaf(unwrapped)) return true;
+  if (ts.isConditionalExpression(unwrapped)) {
+    return (
+      expressionCanEvaluateTo(unwrapped.whenTrue, matchesLeaf) ||
+      expressionCanEvaluateTo(unwrapped.whenFalse, matchesLeaf)
+    );
+  }
+  if (!ts.isBinaryExpression(unwrapped)) return false;
+  switch (unwrapped.operatorToken.kind) {
+    case ts.SyntaxKind.CommaToken:
+    case ts.SyntaxKind.AmpersandAmpersandToken:
+      return expressionCanEvaluateTo(unwrapped.right, matchesLeaf);
+    case ts.SyntaxKind.BarBarToken:
+    case ts.SyntaxKind.QuestionQuestionToken:
+      return (
+        expressionCanEvaluateTo(unwrapped.left, matchesLeaf) ||
+        expressionCanEvaluateTo(unwrapped.right, matchesLeaf)
+      );
+    default:
+      return false;
+  }
 }
 
 function isExactAuthoringModuleSpecifier(
   expression: ts.Expression | undefined,
 ): boolean {
-  if (!expression) return false;
-  const unwrapped = unwrapParenthesizedExpression(expression);
-  return (
-    (ts.isStringLiteral(unwrapped) ||
-      ts.isNoSubstitutionTemplateLiteral(unwrapped)) &&
-    unwrapped.text === G2_NODE_OUTPUT_ENVELOPE_AUTHORING_MODULE_SPECIFIER
+  return expressionCanEvaluateTo(
+    expression,
+    (candidate) =>
+      (ts.isStringLiteral(candidate) ||
+        ts.isNoSubstitutionTemplateLiteral(candidate)) &&
+      candidate.text === G2_NODE_OUTPUT_ENVELOPE_AUTHORING_MODULE_SPECIFIER,
+  );
+}
+
+function isDirectRequireCallee(expression: ts.Expression): boolean {
+  return expressionCanEvaluateTo(
+    expression,
+    (candidate) => ts.isIdentifier(candidate) && candidate.text === 'require',
   );
 }
 
@@ -451,16 +495,11 @@ function authoringGeneratorIdentity(
     ) {
       alternateAuthoringModuleAccess = true;
     }
-    const callTarget = ts.isCallExpression(node)
-      ? unwrapParenthesizedExpression(node.expression)
-      : undefined;
     if (
       ts.isCallExpression(node) &&
       isExactAuthoringModuleSpecifier(node.arguments[0]) &&
-      (callTarget?.kind === ts.SyntaxKind.ImportKeyword ||
-        (callTarget &&
-          ts.isIdentifier(callTarget) &&
-          callTarget.text === 'require'))
+      (node.expression.kind === ts.SyntaxKind.ImportKeyword ||
+        isDirectRequireCallee(node.expression))
     ) {
       alternateAuthoringModuleAccess = true;
     }

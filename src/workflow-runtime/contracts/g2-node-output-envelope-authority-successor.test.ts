@@ -133,6 +133,19 @@ describe('G2 v6 authoring generator AST binding', () => {
     ).toEqual(expectedIdentity);
   });
 
+  it('accepts wrapped dynamic and require access to unrelated modules', () => {
+    const source = authoringBindingFixture({
+      imports: normalAuthoringImport(),
+      declarations: [
+        "const unrelatedDynamic = import((('../contracts/unrelated.js' as const) satisfies string)!);",
+        "const unrelatedRequired = (require as any)!((0, '../contracts/unrelated.js' as const));",
+      ].join('\n'),
+    });
+    expect(
+      assertG2NodeOutputEnvelopeAuthoringGeneratorBindingForTest(source),
+    ).toEqual(expectedIdentity);
+  });
+
   it.each([
     {
       name: 'all helpers from the wrong module',
@@ -306,6 +319,13 @@ describe('G2 v6 authoring generator AST binding', () => {
       }),
     },
     {
+      name: 'dynamic access with a trailing comma',
+      source: authoringBindingFixture({
+        imports: normalAuthoringImport(),
+        declarations: `const dynamicAuthoring = import('${authoringModule}',);`,
+      }),
+    },
+    {
       name: 'two-argument dynamic access with empty options',
       source: authoringBindingFixture({
         imports: normalAuthoringImport(),
@@ -334,10 +354,101 @@ describe('G2 v6 authoring generator AST binding', () => {
       }),
     },
     {
+      name: 'dynamic access with an as-const specifier',
+      source: authoringBindingFixture({
+        imports: normalAuthoringImport(),
+        declarations: `const dynamicAuthoring = import('${authoringModule}' as const);`,
+      }),
+    },
+    {
+      name: 'dynamic access with an angle-bracket type assertion',
+      source: authoringBindingFixture({
+        imports: normalAuthoringImport(),
+        declarations: `const dynamicAuthoring = import(<string>'${authoringModule}');`,
+      }),
+    },
+    {
+      name: 'dynamic access with a satisfies specifier',
+      source: authoringBindingFixture({
+        imports: normalAuthoringImport(),
+        declarations: `const dynamicAuthoring = import('${authoringModule}' satisfies string);`,
+      }),
+    },
+    {
+      name: 'dynamic access with a non-null specifier',
+      source: authoringBindingFixture({
+        imports: normalAuthoringImport(),
+        declarations: `const dynamicAuthoring = import('${authoringModule}'!);`,
+      }),
+    },
+    {
+      name: 'dynamic access with an awaited exact specifier',
+      source: authoringBindingFixture({
+        imports: normalAuthoringImport(),
+        declarations: `const dynamicAuthoring = import(await '${authoringModule}');`,
+      }),
+    },
+    {
+      name: 'dynamic access with a sequence specifier',
+      source: authoringBindingFixture({
+        imports: normalAuthoringImport(),
+        declarations: `const dynamicAuthoring = import((0, '${authoringModule}'));`,
+      }),
+    },
+    {
+      name: 'dynamic access with an exact conditional branch',
+      source: authoringBindingFixture({
+        imports: normalAuthoringImport(),
+        declarations: `const dynamicAuthoring = import(condition ? '${authoringModule}' : '../contracts/unrelated.js');`,
+      }),
+    },
+    {
+      name: 'dynamic access with an exact alternate conditional branch',
+      source: authoringBindingFixture({
+        imports: normalAuthoringImport(),
+        declarations: `const dynamicAuthoring = import(condition ? '../contracts/unrelated.js' : '${authoringModule}');`,
+      }),
+    },
+    {
+      name: 'dynamic access with a logical-and exact result',
+      source: authoringBindingFixture({
+        imports: normalAuthoringImport(),
+        declarations: `const dynamicAuthoring = import(condition && '${authoringModule}');`,
+      }),
+    },
+    {
+      name: 'dynamic access with a logical-or exact result',
+      source: authoringBindingFixture({
+        imports: normalAuthoringImport(),
+        declarations: `const dynamicAuthoring = import(condition || '${authoringModule}');`,
+      }),
+    },
+    {
+      name: 'dynamic access with a nullish exact result',
+      source: authoringBindingFixture({
+        imports: normalAuthoringImport(),
+        declarations: `const dynamicAuthoring = import(condition ?? '${authoringModule}');`,
+      }),
+    },
+    {
+      name: 'dynamic access with nested transparent and result expressions',
+      source: authoringBindingFixture({
+        imports: normalAuthoringImport(),
+        declarations: `const dynamicAuthoring = import((condition ? (0, ('${authoringModule}' satisfies string)!) : '../contracts/unrelated.js') as string, { with: { type: 'json' } });`,
+      }),
+    },
+    {
       name: 'require access alongside the required named imports',
       source: authoringBindingFixture({
         imports: normalAuthoringImport(),
         declarations: `const requiredAuthoring = require('${authoringModule}');`,
+      }),
+    },
+    {
+      name: 'require access with a trailing comma',
+      source: authoringBindingFixture({
+        imports: normalAuthoringImport(),
+        declarations: `const requiredAuthoring = require('${authoringModule}',);`,
       }),
     },
     {
@@ -359,6 +470,111 @@ describe('G2 v6 authoring generator AST binding', () => {
       source: authoringBindingFixture({
         imports: normalAuthoringImport(),
         declarations: `const requiredAuthoring = require(\`${authoringModule}\`);`,
+      }),
+    },
+    {
+      name: 'require access with a parenthesized exact specifier',
+      source: authoringBindingFixture({
+        imports: normalAuthoringImport(),
+        declarations: `const requiredAuthoring = require(('${authoringModule}'));`,
+      }),
+    },
+    {
+      name: 'require access with an as-const specifier',
+      source: authoringBindingFixture({
+        imports: normalAuthoringImport(),
+        declarations: `const requiredAuthoring = require('${authoringModule}' as const);`,
+      }),
+    },
+    {
+      name: 'require access with an angle-bracket type assertion specifier',
+      source: authoringBindingFixture({
+        imports: normalAuthoringImport(),
+        declarations: `const requiredAuthoring = require(<string>'${authoringModule}');`,
+      }),
+    },
+    {
+      name: 'require access with a satisfies specifier',
+      source: authoringBindingFixture({
+        imports: normalAuthoringImport(),
+        declarations: `const requiredAuthoring = require('${authoringModule}' satisfies string);`,
+      }),
+    },
+    {
+      name: 'require access with a non-null specifier',
+      source: authoringBindingFixture({
+        imports: normalAuthoringImport(),
+        declarations: `const requiredAuthoring = require('${authoringModule}'!);`,
+      }),
+    },
+    {
+      name: 'require access with a sequence specifier',
+      source: authoringBindingFixture({
+        imports: normalAuthoringImport(),
+        declarations: `const requiredAuthoring = require((0, '${authoringModule}'));`,
+      }),
+    },
+    {
+      name: 'require access with an exact conditional branch',
+      source: authoringBindingFixture({
+        imports: normalAuthoringImport(),
+        declarations: `const requiredAuthoring = require(condition ? '../contracts/unrelated.js' : '${authoringModule}');`,
+      }),
+    },
+    {
+      name: 'require access with an as-expression callee',
+      source: authoringBindingFixture({
+        imports: normalAuthoringImport(),
+        declarations: `const requiredAuthoring = (require as any)('${authoringModule}');`,
+      }),
+    },
+    {
+      name: 'require access with an angle-bracket asserted callee',
+      source: authoringBindingFixture({
+        imports: normalAuthoringImport(),
+        declarations: `const requiredAuthoring = (<typeof require>require)('${authoringModule}');`,
+      }),
+    },
+    {
+      name: 'require access with a satisfies callee',
+      source: authoringBindingFixture({
+        imports: normalAuthoringImport(),
+        declarations: `const requiredAuthoring = (require satisfies unknown)('${authoringModule}');`,
+      }),
+    },
+    {
+      name: 'require access with a non-null callee',
+      source: authoringBindingFixture({
+        imports: normalAuthoringImport(),
+        declarations: `const requiredAuthoring = require!('${authoringModule}');`,
+      }),
+    },
+    {
+      name: 'require access with a sequence callee',
+      source: authoringBindingFixture({
+        imports: normalAuthoringImport(),
+        declarations: `const requiredAuthoring = (0, require)('${authoringModule}');`,
+      }),
+    },
+    {
+      name: 'require access with a conditional callee',
+      source: authoringBindingFixture({
+        imports: normalAuthoringImport(),
+        declarations: `const requiredAuthoring = (condition ? require : otherRequire)('${authoringModule}');`,
+      }),
+    },
+    {
+      name: 'optional require access with a wrapped callee',
+      source: authoringBindingFixture({
+        imports: normalAuthoringImport(),
+        declarations: `const requiredAuthoring = (require as any)!?.('${authoringModule}');`,
+      }),
+    },
+    {
+      name: 'require access with nested callee and specifier wrappers',
+      source: authoringBindingFixture({
+        imports: normalAuthoringImport(),
+        declarations: `const requiredAuthoring = ((require as any) satisfies unknown)!((0, ('${authoringModule}' as const)!));`,
       }),
     },
   ])('rejects $name', ({ source }) => {
