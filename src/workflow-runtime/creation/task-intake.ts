@@ -2,7 +2,7 @@ import type {
   RuntimeRegistryRef,
   RuntimeValueRef,
 } from '../contracts/g5-basic-runtime-types.js';
-import { G5_DATABASE_SCHEMA_HASH } from '../contracts/g5-basic-runtime-types.js';
+import { G5_REPAIR_DATABASE_SCHEMA_HASH } from '../contracts/g5-basic-runtime-repair-types.js';
 import type { JsonObject, Sha256Hash } from '../contracts/types.js';
 import { domainSeparatedSha256 } from '../contracts/hash.js';
 import type { WorkflowRuntimeStore } from '../store/runtime-store/index.js';
@@ -98,12 +98,12 @@ export function createWorkflowT0(
   fault?: G5TransactionFault,
 ): T0CreationReceipt {
   if (
-    store.frozenInputs.schemaHash !== G5_DATABASE_SCHEMA_HASH ||
+    store.frozenInputs.schemaHash !== G5_REPAIR_DATABASE_SCHEMA_HASH ||
     input.initialActivation.databaseSchemaHash !== store.frozenInputs.schemaHash
   )
     throw new G5RuntimeError(
       'integrity_violation',
-      'T0 requires the current frozen Schema 5 identity',
+      'T0 requires the current frozen Schema 6 identity',
     );
   const observedCreationIntentHash = calculateCreationIntentHash({
     creationDomain: input.creationDomain,

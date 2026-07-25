@@ -3,9 +3,9 @@ import type {
   RuntimeValueRef,
 } from '../contracts/g5-basic-runtime-types.js';
 import {
-  G5_DATABASE_SCHEMA_HASH,
-  G5_DATABASE_SCHEMA_VERSION,
-} from '../contracts/g5-basic-runtime-types.js';
+  G5_REPAIR_DATABASE_SCHEMA_HASH,
+  G5_REPAIR_DATABASE_SCHEMA_VERSION,
+} from '../contracts/g5-basic-runtime-repair-types.js';
 import type { JsonObject, Sha256Hash } from '../contracts/types.js';
 import type {
   WorkflowRuntimeStore,
@@ -67,12 +67,12 @@ export function activateWorkflowT1(
   fault?: G5TransactionFault,
 ): T1ActivationReceipt {
   if (
-    store.frozenInputs.schemaHash !== G5_DATABASE_SCHEMA_HASH ||
+    store.frozenInputs.schemaHash !== G5_REPAIR_DATABASE_SCHEMA_HASH ||
     input.databaseSchemaHash !== store.frozenInputs.schemaHash
   )
     throw new G5RuntimeError(
       'integrity_violation',
-      'T1 requires the current frozen Schema 5 identity',
+      'T1 requires the current frozen Schema 6 identity',
     );
   return runImmediateG5Transaction(
     store,
@@ -85,10 +85,10 @@ export function activateWorkflowT1InTransaction(
   transaction: WorkflowRuntimeWriteTransaction,
   input: T1ActivationInput,
 ): T1ActivationReceipt {
-  if (input.databaseSchemaHash !== G5_DATABASE_SCHEMA_HASH)
+  if (input.databaseSchemaHash !== G5_REPAIR_DATABASE_SCHEMA_HASH)
     throw new G5RuntimeError(
       'integrity_violation',
-      'T1 activation carries a non-current Schema 5 identity',
+      'T1 activation carries a non-current Schema 6 identity',
     );
   for (const [label, resource] of Object.entries({
     definition: input.definition,
@@ -255,7 +255,7 @@ export function activateWorkflowT1InTransaction(
       input.coreReleaseRef,
       input.coreReleaseHash,
       input.coreBuildHash,
-      G5_DATABASE_SCHEMA_VERSION,
+      G5_REPAIR_DATABASE_SCHEMA_VERSION,
       input.databaseSchemaHash,
       input.sourceSeedHash,
       rootScopeId,

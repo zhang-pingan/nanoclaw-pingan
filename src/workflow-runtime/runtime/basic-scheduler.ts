@@ -1,7 +1,7 @@
 import type { CapacitySnapshotWatcher } from '../capacity/publication.js';
 import { registryResourceId } from '../contracts/g3-registry-persistence.js';
 import { canonicalJson } from '../contracts/hash.js';
-import type { JsonObject } from '../contracts/types.js';
+import type { JsonObject, Sha256Hash } from '../contracts/types.js';
 import type { WorkflowRuntimeStore } from '../store/runtime-store/index.js';
 import {
   G5RuntimeError,
@@ -16,6 +16,7 @@ import {
   loadMaterializedNodeAuthority,
   requiredObjectField,
 } from './plan-authority.js';
+import { persistStructuralNodeOutputEnvelope } from './generated-schema-runtime.js';
 
 export type T4ActivationRequest =
   | {
@@ -95,9 +96,12 @@ export function scheduleReadyNodeT4(
         activation_event_seq: number | null;
         run_work_fence_epoch_at_activation: number | null;
         scope_work_fence_epoch_at_activation: number | null;
+        published_output_envelope_value_id: string | null;
+        published_output_envelope_hash: string | null;
+        port_contract_hash: string;
         row_version: number;
       }>(
-        'SELECT node_type, phase, input_snapshot_json, input_snapshot_value_id, input_snapshot_hash, selected_edges_json, current_attempt_id, active_wait_id, activation_event_seq, run_work_fence_epoch_at_activation, scope_work_fence_epoch_at_activation, row_version FROM workflow_graph_nodes WHERE id = ? AND graph_run_id = ? AND scope_id = ?',
+        'SELECT node_type, phase, input_snapshot_json, input_snapshot_value_id, input_snapshot_hash, selected_edges_json, current_attempt_id, active_wait_id, activation_event_seq, run_work_fence_epoch_at_activation, scope_work_fence_epoch_at_activation, published_output_envelope_value_id, published_output_envelope_hash, port_contract_hash, row_version FROM workflow_graph_nodes WHERE id = ? AND graph_run_id = ? AND scope_id = ?',
         [input.nodeId, input.graphRunId, input.scopeId],
       );
       const authority = loadMaterializedNodeAuthority(
@@ -121,30 +125,12 @@ export function scheduleReadyNodeT4(
         node.run_work_fence_epoch_at_activation !==
           input.expectedRunWorkFenceEpoch ||
         node.scope_work_fence_epoch_at_activation !==
-          input.expectedScopeWorkFenceEpoch ||
-        node.row_version !== input.expectedNodeRowVersion
+          input.expectedScopeWorkFenceEpoch
       )
         throw new G5RuntimeError(
           'cas_conflict',
           'T4 run, scope, node, or work epoch is stale',
         );
-      if (node.phase !== 'ready') {
-        if (
-          node.current_attempt_id ||
-          node.active_wait_id ||
-          node.phase === 'terminal'
-        )
-          return {
-            disposition: 'exact_replay',
-            attemptId: node.current_attempt_id,
-            waitId: node.active_wait_id,
-            admissionSequence: null,
-          };
-        throw new G5RuntimeError(
-          'precondition_failed',
-          'T4 requires a ready node',
-        );
-      }
       if (['subgraph', 'expand', 'map'].includes(node.node_type))
         throw new G5RuntimeError(
           'forbidden_surface',
@@ -213,6 +199,91 @@ export function scheduleReadyNodeT4(
         id: derivedInput.id,
         hash: derivedInput.hash as `sha256:${string}`,
       };
+      const structuralOutput =
+        input.activation.kind === 'structural'
+          ? (() => {
+              if (node.input_snapshot_json === null)
+                throw new G5RuntimeError(
+                  'integrity_violation',
+                  'T4 structural node requires a canonical input snapshot',
+                );
+              const output = persistStructuralNodeOutputEnvelope(transaction, {
+                identity: {
+                  planId: authority.planId,
+                  graphRunId: authority.graphRunId,
+                  planHash: authority.planHash,
+                  plan: authority.plan,
+                },
+                node: authority.node,
+                inputSnapshotJson: node.input_snapshot_json,
+                carrierValueId: contextPack.id,
+                carrierValueHash: contextPack.hash,
+                nowMs: input.nowMs,
+              });
+              if (node.port_contract_hash !== output.portContractHash)
+                throw new G5RuntimeError(
+                  'integrity_violation',
+                  'T4 structural Node output port Contract drifted',
+                );
+              return output;
+            })()
+          : null;
+      if (node.phase !== 'ready') {
+        if (
+          input.activation.kind === 'structural' &&
+          node.phase === 'terminal' &&
+          structuralOutput !== null &&
+          node.row_version === input.expectedNodeRowVersion + 1
+        ) {
+          if (
+            node.published_output_envelope_value_id !== structuralOutput.id ||
+            node.published_output_envelope_hash !== structuralOutput.hash ||
+            node.port_contract_hash !== structuralOutput.portContractHash
+          )
+            throw new G5RuntimeError(
+              'integrity_violation',
+              'T4 structural exact replay publication drifted',
+            );
+          const event = transaction.queryOne<{
+            payload_value_id: string | null;
+            payload_hash: string | null;
+          }>(
+            "SELECT payload_value_id, payload_hash FROM workflow_graph_events WHERE graph_run_id = ? AND idempotency_key = ? AND event_type = 'node_terminal'",
+            [input.graphRunId, `structural-terminal:${input.nodeId}`],
+          );
+          if (
+            !event ||
+            event.payload_value_id !== structuralOutput.id ||
+            event.payload_hash !== structuralOutput.hash
+          )
+            throw new G5RuntimeError(
+              'integrity_violation',
+              'T4 structural exact replay event drifted',
+            );
+          return {
+            disposition: 'exact_replay',
+            attemptId: null,
+            waitId: null,
+            admissionSequence: null,
+          };
+        }
+        if (node.current_attempt_id || node.active_wait_id)
+          return {
+            disposition: 'exact_replay',
+            attemptId: node.current_attempt_id,
+            waitId: node.active_wait_id,
+            admissionSequence: null,
+          };
+        throw new G5RuntimeError(
+          'precondition_failed',
+          'T4 requires a ready node',
+        );
+      }
+      if (node.row_version !== input.expectedNodeRowVersion)
+        throw new G5RuntimeError(
+          'cas_conflict',
+          'T4 Node row version is stale',
+        );
       let waitBinding: JsonObject | null = null;
       let waitContract: {
         rowId: string;
@@ -265,35 +336,43 @@ export function scheduleReadyNodeT4(
           'T4 Plan-pinned wait Contract',
         );
       }
-      const activeCount = transaction.queryOne<{ count: number }>(
-        input.activation.kind === 'wait'
-          ? "SELECT count(*) AS count FROM workflow_graph_waits WHERE status IN ('registering', 'armed')"
-          : "SELECT count(*) AS count FROM workflow_graph_node_attempts WHERE phase IN ('preparing', 'dispatch_pending', 'running', 'evaluating')",
-        [],
-      )!.count;
-      const physicalLimit =
-        input.activation.kind === 'wait'
-          ? capacity.capacity.max_active_waits
-          : capacity.capacity.max_active_executions;
-      if (activeCount >= physicalLimit)
-        return {
-          disposition: 'backpressure',
-          attemptId: null,
-          waitId: null,
-          admissionSequence: null,
-        };
+      if (input.activation.kind !== 'structural') {
+        const activeCount = transaction.queryOne<{ count: number }>(
+          input.activation.kind === 'wait'
+            ? "SELECT count(*) AS count FROM workflow_graph_waits WHERE status IN ('registering', 'armed')"
+            : "SELECT count(*) AS count FROM workflow_graph_node_attempts WHERE phase IN ('preparing', 'dispatch_pending', 'running', 'evaluating')",
+          [],
+        )!.count;
+        const physicalLimit =
+          input.activation.kind === 'wait'
+            ? capacity.capacity.max_active_waits
+            : capacity.capacity.max_active_executions;
+        if (activeCount >= physicalLimit)
+          return {
+            disposition: 'backpressure',
+            attemptId: null,
+            waitId: null,
+            admissionSequence: null,
+          };
+      }
       const eventSequence = run.next_event_seq + 1;
       if (input.activation.kind === 'structural') {
+        if (structuralOutput === null)
+          throw new G5RuntimeError(
+            'integrity_violation',
+            'T4 structural output was not materialized',
+          );
         const candidateSequence = transaction.queryOne<{ value: number }>(
           'SELECT count(*) + 1 AS value FROM workflow_graph_terminal_candidates WHERE graph_run_id = ? AND scope_id = ?',
           [input.graphRunId, input.scopeId],
         )!.value;
         if (
           transaction.execute(
-            "UPDATE workflow_graph_nodes SET phase = 'terminal', terminal_status = 'succeeded', published_output_envelope_value_id = ?, published_output_envelope_hash = ?, terminal_at_ms = ?, row_version = row_version + 1, updated_at_ms = ? WHERE id = ? AND row_version = ? AND phase = 'ready'",
+            "UPDATE workflow_graph_nodes SET phase = 'terminal', terminal_status = 'succeeded', published_output_envelope_value_id = ?, published_output_envelope_hash = ?, port_contract_hash = ?, terminal_at_ms = ?, row_version = row_version + 1, updated_at_ms = ? WHERE id = ? AND row_version = ? AND phase = 'ready'",
             [
-              contextPack.id,
-              contextPack.hash,
+              structuralOutput.id,
+              structuralOutput.hash,
+              structuralOutput.portContractHash,
               input.nowMs,
               input.nowMs,
               input.nodeId,
@@ -326,8 +405,8 @@ export function scheduleReadyNodeT4(
               input.scopeId,
               input.nodeId,
               authority.node.exit,
-              contextPack.id,
-              contextPack.hash,
+              structuralOutput.id,
+              structuralOutput.hash,
               candidateSequence,
               input.nowMs,
             ],
@@ -351,8 +430,8 @@ export function scheduleReadyNodeT4(
           attemptId: null,
           eventType: 'node_terminal',
           idempotencyKey: `structural-terminal:${input.nodeId}`,
-          payloadValueId: contextPack.id,
-          payloadHash: contextPack.hash,
+          payloadValueId: structuralOutput.id,
+          payloadHash: structuralOutput.hash,
           occurredAtMs: input.nowMs,
           createdAtMs: input.nowMs,
         });

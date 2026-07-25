@@ -1,0 +1,32 @@
+{
+  "format": "icarus.workflow-g5-basic-runtime-repair-fault-cases/1",
+  "ref": {
+    "id": "icarus.workflow-g5-basic-runtime-repair-fault-cases",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-g5-basic-runtime-repair-fault-cases:1\n",
+  "payload": {
+    "cases": [
+      {
+        "case_id": "fault_t2a_before_commit",
+        "surface": "T2a",
+        "assertion": "Plan, generated content, and bindings roll back together",
+        "expected": "rolled_back"
+      },
+      {
+        "case_id": "fault_t3a_before_commit",
+        "surface": "T3a",
+        "assertion": "aggregated generated Value and readiness roll back together",
+        "expected": "rolled_back"
+      },
+      {
+        "case_id": "fault_t4_before_commit",
+        "surface": "T4",
+        "assertion": "port Values, envelope, Node, Event, and candidate roll back together",
+        "expected": "rolled_back"
+      }
+    ]
+  },
+  "hash": "sha256:6f65394d7948984330c6a763acde46a42c9803eeeaba750617683cd5556ef834"
+}

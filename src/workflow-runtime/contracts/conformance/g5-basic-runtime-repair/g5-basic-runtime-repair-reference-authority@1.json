@@ -1,0 +1,34 @@
+{
+  "format": "icarus.workflow-g5-basic-runtime-repair-reference-authority/1",
+  "ref": {
+    "id": "icarus.workflow-g5-basic-runtime-repair-reference-authority",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-g5-basic-runtime-repair-reference-authority:1\n",
+  "payload": {
+    "independent_from_runtime": true,
+    "deterministic_property_tests": true,
+    "real_sqlite_runtime_tests": true,
+    "evidence": [
+      {
+        "path": "src/workflow-runtime/contracts/g5-basic-runtime-repair-reference-model.ts",
+        "raw_sha256": "sha256:95d183ebb7d0b5941685a3a301250227b0efc9f573f2d79621f3af3f86bb590a"
+      },
+      {
+        "path": "src/workflow-runtime/contracts/g5-basic-runtime-repair-reference-model.test.ts",
+        "raw_sha256": "sha256:8813bfa2eeb2f90b91fd9f7ecf423e5cb5e38bf6b97e19f1da44ee1bbbe91b1d"
+      },
+      {
+        "path": "src/workflow-runtime/contracts/g5-basic-runtime-repair-contract.test.ts",
+        "raw_sha256": "sha256:47419c2f087620e20820c310421265366d2009e435a716732843070164bf264c"
+      },
+      {
+        "path": "src/workflow-runtime/runtime/g5-basic-runtime.test.ts",
+        "raw_sha256": "sha256:f907b9536f29e549bcddb0d52e93a518a640a085caa90dffd8e975c9aebb1364"
+      }
+    ],
+    "evidence_tree_hash": "sha256:5c757822fe91f9c8f7f74e8e7cc2f7f71c561fff07165f3aaa8d65c8c92f0b57"
+  },
+  "hash": "sha256:5ba26544170e95280d4d2a9eea50a244732fa0db73c35ae07b3fad55c0d043bb"
+}

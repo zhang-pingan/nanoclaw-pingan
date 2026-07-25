@@ -4,10 +4,10 @@ import type { CompiledScopePlanV2Document } from '../contracts/compiler-contract
 import { COMPILED_PLAN_V2_DOMAIN_SEPARATOR } from '../contracts/compiler-contract-repair-source.js';
 import type { JsonObject, JsonValue, Sha256Hash } from '../contracts/types.js';
 import {
-  G5_DATABASE_SCHEMA_HASH,
-  G5_DATABASE_SCHEMA_VERSION,
-  type RuntimeValueRef,
-} from '../contracts/g5-basic-runtime-types.js';
+  G5_REPAIR_DATABASE_SCHEMA_HASH,
+  G5_REPAIR_DATABASE_SCHEMA_VERSION,
+} from '../contracts/g5-basic-runtime-repair-types.js';
+import type { RuntimeValueRef } from '../contracts/g5-basic-runtime-types.js';
 import type {
   WorkflowRuntimeStore,
   WorkflowRuntimeWriteTransaction,
@@ -34,7 +34,15 @@ import {
   runtimeObjectHash,
   stableRuntimeId,
   type G5TransactionFault,
+  type InlineValueSchemaAuthority,
 } from './graph-store.js';
+import {
+  loadPersistedPlanGeneratedSchemaAuthority,
+  nodeOutputPortContractHash,
+  persistPlanGeneratedSchemaAuthorities,
+  verifyPersistedPlanGeneratedSchemaAuthorities,
+  type PersistedPlanIdentity,
+} from './generated-schema-runtime.js';
 import { chargeAndInsertGraphFact, reserveLedgerResources } from './ledger.js';
 import {
   loadMaterializedNodeAuthority,
@@ -153,12 +161,12 @@ export function persistCompileResultT2a(
         input.plan.runtime_safety_hash !== run.runtime_safety_snapshot_hash ||
         input.plan.compiler_toolchain_hash !==
           run.compiler_toolchain_resource_hash ||
-        run.database_schema_version !== G5_DATABASE_SCHEMA_VERSION ||
-        run.database_schema_hash !== G5_DATABASE_SCHEMA_HASH
+        run.database_schema_version !== G5_REPAIR_DATABASE_SCHEMA_VERSION ||
+        run.database_schema_hash !== G5_REPAIR_DATABASE_SCHEMA_HASH
       )
         throw new G5RuntimeError(
           'integrity_violation',
-          'T2a Plan safety, toolchain, or Schema 5 identity drift',
+          'T2a Plan safety, toolchain, or Schema 6 identity drift',
         );
       if (build.status === 'compiled') {
         if (
@@ -169,6 +177,12 @@ export function persistCompileResultT2a(
             'integrity_violation',
             'T2a same build has different compiled bytes',
           );
+        verifyPersistedPlanGeneratedSchemaAuthorities(transaction, {
+          planId,
+          graphRunId: input.graphRunId,
+          planHash: input.plan.plan_hash as Sha256Hash,
+          plan: input.plan,
+        });
         return { planId, disposition: 'exact_replay' };
       }
       if (
@@ -206,6 +220,19 @@ export function persistCompileResultT2a(
           input.plan.capability_catalog_hash,
           input.nowMs,
         ],
+      );
+      persistPlanGeneratedSchemaAuthorities(
+        transaction,
+        {
+          planId,
+          graphRunId: input.graphRunId,
+          planHash: input.plan.plan_hash as Sha256Hash,
+          plan: input.plan,
+        },
+        input.nowMs,
+        (compiledSchema, label) =>
+          loadCompiledSchemaAuthority(transaction, compiledSchema, label)
+            .schema,
       );
       const changed = transaction.execute(
         `UPDATE workflow_graph_scope_builds
@@ -370,6 +397,12 @@ export function materializeRootScopeT2b(
           'cas_conflict',
           'T2b run, scope, build, or epoch precondition failed',
         );
+      verifyPersistedPlanGeneratedSchemaAuthorities(transaction, {
+        planId: input.planId,
+        graphRunId: input.graphRunId,
+        planHash: input.plan.plan_hash as Sha256Hash,
+        plan: input.plan,
+      });
       const reservationGroupId = stableRuntimeId('reservation-group', {
         graph_run_id: input.graphRunId,
         scope_id: input.rootScopeId,
@@ -464,7 +497,7 @@ export function materializeRootScopeT2b(
             capabilityRef ? String(capabilityRef.version) : null,
             capabilityResource?.content_hash ?? null,
             canonicalJson(node),
-            input.plan.interface_snapshot_hash,
+            nodeOutputPortContractHash(objectField(node, 'output_ports') ?? {}),
             null,
             null,
             input.nowMs,
@@ -649,13 +682,13 @@ interface InlineValueAuthority {
   readonly ref: RuntimeValueRef;
   readonly content: JsonValue;
   readonly byteLength: number;
-  readonly schemaResourceId: string;
-  readonly schemaResourceHash: Sha256Hash;
+  readonly schemaAuthority: InlineValueSchemaAuthority;
+  readonly schemaHash: Sha256Hash;
 }
 
 interface CompiledSchemaAuthority {
   readonly schema: JsonObject;
-  readonly resourceId: string | null;
+  readonly valueAuthority: InlineValueSchemaAuthority;
   readonly hash: Sha256Hash;
 }
 
@@ -670,12 +703,22 @@ function loadInlineValueAuthority(
     inline_canonical_json: string | null;
     content_hash: string;
     byte_length: number;
-    schema_resource_id: string;
-    schema_resource_hash: string;
+    schema_resource_id: string | null;
+    schema_resource_hash: string | null;
+    schema_authority_kind: string;
+    schema_plan_id: string | null;
+    schema_plan_hash: string | null;
+    generated_schema_ref: string | null;
+    generated_schema_hash: string | null;
+    generated_schema_generator: string | null;
+    generated_schema_parameter_hash: string | null;
     payload_state: string;
   }>(
     `SELECT storage_kind, inline_canonical_json, content_hash, byte_length,
-            schema_resource_id, schema_resource_hash, payload_state
+            schema_resource_id, schema_resource_hash, schema_authority_kind,
+            schema_plan_id, schema_plan_hash, generated_schema_ref,
+            generated_schema_hash, generated_schema_generator,
+            generated_schema_parameter_hash, payload_state
        FROM workflow_values WHERE id = ? AND content_hash = ?`,
     [valueId, valueHash],
   );
@@ -699,12 +742,63 @@ function loadInlineValueAuthority(
       'integrity_violation',
       `${label} Value byte authority drifted`,
     );
+  let schemaAuthority: InlineValueSchemaAuthority;
+  if (
+    row.schema_authority_kind === 'registry' &&
+    row.schema_resource_id !== null &&
+    row.schema_resource_hash !== null &&
+    row.schema_plan_id === null &&
+    row.schema_plan_hash === null &&
+    row.generated_schema_ref === null &&
+    row.generated_schema_hash === null &&
+    row.generated_schema_generator === null &&
+    row.generated_schema_parameter_hash === null
+  ) {
+    schemaAuthority = {
+      kind: 'registry',
+      resourceId: row.schema_resource_id,
+      resourceHash: row.schema_resource_hash as Sha256Hash,
+    };
+  } else if (
+    row.schema_authority_kind === 'plan_generated' &&
+    row.schema_resource_id === null &&
+    row.schema_resource_hash === null &&
+    row.schema_plan_id !== null &&
+    row.schema_plan_hash !== null &&
+    row.generated_schema_ref !== null &&
+    row.generated_schema_hash !== null &&
+    ['join_expose', 'child_completion', 'map_result'].includes(
+      String(row.generated_schema_generator),
+    ) &&
+    row.generated_schema_parameter_hash !== null
+  ) {
+    schemaAuthority = {
+      kind: 'plan_generated',
+      planId: row.schema_plan_id,
+      planHash: row.schema_plan_hash as Sha256Hash,
+      schemaRef: row.generated_schema_ref,
+      schemaHash: row.generated_schema_hash as Sha256Hash,
+      generator: row.generated_schema_generator as
+        | 'join_expose'
+        | 'child_completion'
+        | 'map_result',
+      parameterHash: row.generated_schema_parameter_hash as Sha256Hash,
+    };
+  } else {
+    throw new G5RuntimeError(
+      'integrity_violation',
+      `${label} Value schema authority shape drifted`,
+    );
+  }
   return {
     ref: { id: valueId, hash: valueHash as Sha256Hash },
     content: parsed,
     byteLength: row.byte_length,
-    schemaResourceId: row.schema_resource_id,
-    schemaResourceHash: row.schema_resource_hash as Sha256Hash,
+    schemaAuthority,
+    schemaHash:
+      schemaAuthority.kind === 'registry'
+        ? schemaAuthority.resourceHash
+        : schemaAuthority.schemaHash,
   };
 }
 
@@ -722,6 +816,7 @@ function loadCompiledSchemaAuthority(
   transaction: WorkflowRuntimeWriteTransaction,
   compiledSchema: JsonObject,
   label: string,
+  planIdentity?: PersistedPlanIdentity,
 ): CompiledSchemaAuthority {
   const claimedHash = compiledSchema.schema_hash;
   if (typeof claimedHash !== 'string')
@@ -730,22 +825,20 @@ function loadCompiledSchemaAuthority(
       `${label} compiled schema hash is missing`,
     );
   if (compiledSchema.type === 'generated') {
-    const schema = requiredObjectField(
-      compiledSchema,
-      'schema_json',
-      `${label} generated schema`,
-    );
-    if (
-      domainSeparatedSha256('icarus:workflow-generated-schema:1\n', schema) !==
-      claimedHash
-    )
+    if (!planIdentity)
       throw new G5RuntimeError(
         'integrity_violation',
-        `${label} generated schema hash drifted`,
+        `${label} generated schema requires exact persisted Plan authority`,
       );
+    const persisted = loadPersistedPlanGeneratedSchemaAuthority(
+      transaction,
+      planIdentity,
+      compiledSchema,
+      label,
+    );
     return {
-      schema,
-      resourceId: null,
+      schema: persisted.schema,
+      valueAuthority: persisted.authority,
       hash: claimedHash as Sha256Hash,
     };
   }
@@ -801,15 +894,20 @@ function loadCompiledSchemaAuthority(
     );
   return {
     schema: value.content as JsonObject,
-    resourceId,
+    valueAuthority: {
+      kind: 'registry',
+      resourceId,
+      resourceHash: claimedHash as Sha256Hash,
+    },
     hash: claimedHash as Sha256Hash,
   };
 }
 
 function inputSchemaAuthority(
   transaction: WorkflowRuntimeWriteTransaction,
-  plan: CompiledScopePlanV2Document,
+  planIdentity: PersistedPlanIdentity,
 ): InputSchemaAuthority {
+  const plan = planIdentity.plan;
   const safety = objectField(
     plan as unknown as JsonObject,
     'runtime_safety_snapshot',
@@ -818,7 +916,12 @@ function inputSchemaAuthority(
   const maximum = valueSafety?.max_single_value_bytes;
   return {
     resolveSchema: (compiledSchema, label) =>
-      loadCompiledSchemaAuthority(transaction, compiledSchema, label).schema,
+      loadCompiledSchemaAuthority(
+        transaction,
+        compiledSchema,
+        label,
+        planIdentity,
+      ).schema,
     maxSingleValueBytes:
       maximum === undefined || maximum === null
         ? null
@@ -920,7 +1023,7 @@ function selectedPortValue(
           `${label} port ${port}`,
         );
         if (
-          entry.schema_hash !== authority.schemaResourceHash ||
+          entry.schema_hash !== authority.schemaHash ||
           !Number.isSafeInteger(entry.byte_length) ||
           entry.byte_length !== authority.byteLength
         )
@@ -985,7 +1088,7 @@ function planDataTargetContract(
 function persistPlanSelectedValue(
   transaction: WorkflowRuntimeWriteTransaction,
   input: {
-    readonly plan: CompiledScopePlanV2Document;
+    readonly planIdentity: PersistedPlanIdentity;
     readonly edge: JsonObject;
     readonly content: JsonValue;
     readonly sourceIdentity: JsonValue;
@@ -1001,14 +1104,11 @@ function persistPlanSelectedValue(
     transaction,
     derivedSchema,
     'Plan data edge derived schema',
+    input.planIdentity,
   );
-  if (schema.resourceId === null)
-    throw new G5RuntimeError(
-      'integrity_violation',
-      'G5 selected data Value requires a Published Registry schema',
-    );
+  const plan = input.planIdentity.plan;
   const identity: JsonObject = {
-    plan_hash: input.plan.plan_hash,
+    plan_hash: plan.plan_hash,
     edge_id: String(input.edge.id),
     source: input.sourceIdentity,
     value: input.content,
@@ -1021,9 +1121,8 @@ function persistPlanSelectedValue(
     id: value.id,
     content: input.content,
     contentHash: value.hash,
-    schemaResourceId: schema.resourceId,
-    schemaResourceHash: schema.hash,
-    provenanceRef: `plan-data:${input.plan.plan_hash}:${String(input.edge.id)}`,
+    schemaAuthority: schema.valueAuthority,
+    provenanceRef: `plan-data:${plan.plan_hash}:${String(input.edge.id)}`,
     retentionClass: 'run_recovery',
     createdAtMs: input.nowMs,
   });
@@ -1033,7 +1132,7 @@ function persistPlanSelectedValue(
 function selectAndValidateDataValue(
   transaction: WorkflowRuntimeWriteTransaction,
   input: {
-    readonly plan: CompiledScopePlanV2Document;
+    readonly planIdentity: PersistedPlanIdentity;
     readonly edge: JsonObject;
     readonly root: InlineValueAuthority | null;
     readonly literal: JsonValue | undefined;
@@ -1045,6 +1144,7 @@ function selectAndValidateDataValue(
   | { readonly state: 'missing' }
   | { readonly state: 'error'; readonly errorCode: string } {
   try {
+    const plan = input.planIdentity.plan;
     const from = requiredObjectField(input.edge, 'from', 'Plan data edge');
     const selection =
       input.literal !== undefined
@@ -1066,11 +1166,14 @@ function selectAndValidateDataValue(
     if (
       selection.authority &&
       typeof input.edge.producer_schema_hash === 'string' &&
-      selection.authority.schemaResourceHash !== input.edge.producer_schema_hash
+      selection.authority.schemaHash !== input.edge.producer_schema_hash
     )
       return { state: 'error', errorCode: 'data_value_authority_invalid' };
-    const schemaAuthority = inputSchemaAuthority(transaction, input.plan);
-    const target = planDataTargetContract(input.plan, input.edge);
+    const schemaAuthority = inputSchemaAuthority(
+      transaction,
+      input.planIdentity,
+    );
+    const target = planDataTargetContract(plan, input.edge);
     const targetFailure = validateCompiledInputValue(
       selected,
       target.schema,
@@ -1097,7 +1200,7 @@ function selectAndValidateDataValue(
     return {
       state: 'available',
       value: persistPlanSelectedValue(transaction, {
-        plan: input.plan,
+        planIdentity: input.planIdentity,
         edge: input.edge,
         content: selected,
         sourceIdentity:
@@ -1124,7 +1227,7 @@ function scopePlanAuthority(
   transaction: WorkflowRuntimeWriteTransaction,
   graphRunId: string,
   scopeId: string,
-): CompiledScopePlanV2Document {
+): PersistedPlanIdentity {
   const first = transaction.queryOne<{ id: string }>(
     'SELECT id FROM workflow_graph_nodes WHERE graph_run_id = ? AND scope_id = ? ORDER BY node_key COLLATE BINARY LIMIT 1',
     [graphRunId, scopeId],
@@ -1134,12 +1237,18 @@ function scopePlanAuthority(
       'precondition_failed',
       'T3 materialized scope has no Plan nodes',
     );
-  return loadMaterializedNodeAuthority(
+  const authority = loadMaterializedNodeAuthority(
     transaction,
     graphRunId,
     scopeId,
     first.id,
-  ).plan;
+  );
+  return {
+    planId: authority.planId,
+    graphRunId: authority.graphRunId,
+    planHash: authority.planHash,
+    plan: authority.plan,
+  };
 }
 
 function planEdge(
@@ -1510,13 +1619,14 @@ function resolveTerminalDataEdges(
   input: {
     graphRunId: string;
     scopeId: string;
-    plan: CompiledScopePlanV2Document;
+    planIdentity: PersistedPlanIdentity;
     source: T3NodeRow;
     payload: RuntimeValueRef;
     append: AppendFixedPointFact;
     nowMs: number;
   },
 ): boolean {
+  const plan = input.planIdentity.plan;
   let output: InlineValueAuthority | undefined;
   let outputAuthorityError = false;
   if (
@@ -1536,7 +1646,7 @@ function resolveTerminalDataEdges(
     }
   }
   let orchestrationError = false;
-  for (const edge of (input.plan.data_edges as JsonObject[])
+  for (const edge of (plan.data_edges as JsonObject[])
     .filter(
       (candidate) =>
         objectField(candidate, 'from')?.node_id === input.source.node_key,
@@ -1587,7 +1697,7 @@ function resolveTerminalDataEdges(
       continue;
     }
     const selected = selectAndValidateDataValue(transaction, {
-      plan: input.plan,
+      planIdentity: input.planIdentity,
       edge,
       root: output,
       literal: undefined,
@@ -1721,7 +1831,7 @@ function triggerObservations(
 function materializeSealedInputValues(
   transaction: WorkflowRuntimeWriteTransaction,
   input: {
-    readonly plan: CompiledScopePlanV2Document;
+    readonly planIdentity: PersistedPlanIdentity;
     readonly node: JsonObject;
     readonly seal: InputSealEvaluation;
     readonly nowMs: number;
@@ -1733,6 +1843,7 @@ function materializeSealedInputValues(
       'Sealed input snapshot is missing',
     );
   const snapshot = JSON.parse(canonicalJson(input.seal.snapshot)) as JsonObject;
+  const plan = input.planIdentity.plan;
   const snapshotPorts = requiredObjectField(
     snapshot,
     'ports',
@@ -1744,6 +1855,7 @@ function materializeSealedInputValues(
       transaction,
       portValue.schema,
       `Plan input port ${portValue.port}`,
+      input.planIdentity,
     );
     let value: RuntimeValueRef;
     let valueSchemaHash: Sha256Hash;
@@ -1760,15 +1872,10 @@ function materializeSealedInputValues(
           `Plan input port ${portValue.port} Value content drifted`,
         );
       value = existing.ref;
-      valueSchemaHash = existing.schemaResourceHash;
+      valueSchemaHash = existing.schemaHash;
     } else {
-      if (schema.resourceId === null)
-        throw new G5RuntimeError(
-          'integrity_violation',
-          'G5 aggregated input Value requires a Published Registry schema',
-        );
       const identity: JsonObject = {
-        plan_hash: input.plan.plan_hash,
+        plan_hash: plan.plan_hash,
         node_id: String(input.node.id),
         port: portValue.port,
         aggregation: portValue.aggregation,
@@ -1782,9 +1889,8 @@ function materializeSealedInputValues(
         id: value.id,
         content: portValue.value,
         contentHash: value.hash,
-        schemaResourceId: schema.resourceId,
-        schemaResourceHash: schema.hash,
-        provenanceRef: `plan-input:${input.plan.plan_hash}:${String(input.node.id)}:${portValue.port}`,
+        schemaAuthority: schema.valueAuthority,
+        provenanceRef: `plan-input:${plan.plan_hash}:${String(input.node.id)}:${portValue.port}`,
         retentionClass: 'run_recovery',
         createdAtMs: input.nowMs,
       });
@@ -1814,7 +1920,7 @@ function advancePendingNodesT3(
   input: {
     graphRunId: string;
     scopeId: string;
-    plan: CompiledScopePlanV2Document;
+    planIdentity: PersistedPlanIdentity;
     runWorkFenceEpoch: number;
     scopeWorkFenceEpoch: number;
     scopeInput: RuntimeValueRef;
@@ -1831,8 +1937,9 @@ function advancePendingNodesT3(
   const readyNodeIds: string[] = [];
   const skippedNodeIds: string[] = [];
   let orchestrationError = false;
-  for (const planNode of [...(input.plan.nodes as JsonObject[])].sort(
-    (left, right) => String(left.id).localeCompare(String(right.id), 'en'),
+  const plan = input.planIdentity.plan;
+  for (const planNode of [...(plan.nodes as JsonObject[])].sort((left, right) =>
+    String(left.id).localeCompare(String(right.id), 'en'),
   )) {
     let row = transaction.queryOne<T3NodeRow>(
       `SELECT id, node_key, phase, trigger_state, input_state,
@@ -1936,7 +2043,7 @@ function advancePendingNodesT3(
         seal = evaluateInputSeal(
           planNode,
           data,
-          inputSchemaAuthority(transaction, input.plan),
+          inputSchemaAuthority(transaction, input.planIdentity),
         );
       } catch (error) {
         if (!(error instanceof G5RuntimeError)) throw error;
@@ -1974,7 +2081,7 @@ function advancePendingNodesT3(
         let sealedSnapshot: JsonObject;
         try {
           sealedSnapshot = materializeSealedInputValues(transaction, {
-            plan: input.plan,
+            planIdentity: input.planIdentity,
             node: planNode,
             seal,
             nowMs: input.nowMs,
@@ -2049,7 +2156,7 @@ function advancePendingNodesT3(
         seal = evaluateInputSeal(
           planNode,
           data,
-          inputSchemaAuthority(transaction, input.plan),
+          inputSchemaAuthority(transaction, input.planIdentity),
         );
         if (seal.state !== 'sealed' || seal.snapshot === null)
           throw new G5RuntimeError(
@@ -2057,7 +2164,7 @@ function advancePendingNodesT3(
             'T3 sealed input no longer matches the persisted Plan',
           );
         materialized = materializeSealedInputValues(transaction, {
-          plan: input.plan,
+          planIdentity: input.planIdentity,
           node: planNode,
           seal,
           nowMs: input.nowMs,
@@ -2484,11 +2591,12 @@ export function initializeScopeFixedPointT3a(
         });
         return sequence;
       };
-      const plan = scopePlanAuthority(
+      const planIdentity = scopePlanAuthority(
         transaction,
         input.graphRunId,
         input.scopeId,
       );
+      const plan = planIdentity.plan;
       const scopeInputAuthority = loadInlineValueAuthority(
         transaction,
         scopeInput.id,
@@ -2512,7 +2620,7 @@ export function initializeScopeFixedPointT3a(
           'Plan data edge',
         );
         const selected = selectAndValidateDataValue(transaction, {
-          plan,
+          planIdentity,
           edge,
           root: from.type === 'scope_input' ? scopeInputAuthority : null,
           literal:
@@ -2554,7 +2662,7 @@ export function initializeScopeFixedPointT3a(
       const advanced = advancePendingNodesT3(transaction, {
         graphRunId: input.graphRunId,
         scopeId: input.scopeId,
-        plan,
+        planIdentity,
         runWorkFenceEpoch: run.work_fence_epoch,
         scopeWorkFenceEpoch: scope.work_fence_epoch,
         scopeInput,
@@ -2762,11 +2870,12 @@ export function reconcileFactT3a(
             'precondition_failed',
             'T3a terminal fact is not backed by persisted Node output',
           );
-        const plan = scopePlanAuthority(
+        const planIdentity = scopePlanAuthority(
           transaction,
           input.graphRunId,
           input.scopeId,
         );
+        const plan = planIdentity.plan;
         const scopeInput = {
           id: scope.input_snapshot_value_id,
           hash: scope.input_snapshot_hash,
@@ -2813,7 +2922,7 @@ export function reconcileFactT3a(
             resolveTerminalDataEdges(transaction, {
               graphRunId: input.graphRunId,
               scopeId: input.scopeId,
-              plan,
+              planIdentity,
               source: terminal,
               payload: input.payload,
               append,
@@ -2822,7 +2931,7 @@ export function reconcileFactT3a(
           const advanced = advancePendingNodesT3(transaction, {
             graphRunId: input.graphRunId,
             scopeId: input.scopeId,
-            plan,
+            planIdentity,
             runWorkFenceEpoch: run.work_fence_epoch,
             scopeWorkFenceEpoch: scope.work_fence_epoch,
             scopeInput,
@@ -2872,7 +2981,8 @@ export function reconcileFactT3a(
       const early = recordAndArbitrateEarlyCompletionT3(transaction, {
         graphRunId: input.graphRunId,
         scopeId: input.scopeId,
-        plan: scopePlanAuthority(transaction, input.graphRunId, input.scopeId),
+        plan: scopePlanAuthority(transaction, input.graphRunId, input.scopeId)
+          .plan,
         runControl: run.control,
         runWorkFenceEpoch: run.work_fence_epoch,
         scopeWorkFenceEpoch: scope.work_fence_epoch,

@@ -1,0 +1,98 @@
+{
+  "format": "icarus.workflow-g5-basic-runtime-repair-negative-cases/1",
+  "ref": {
+    "id": "icarus.workflow-g5-basic-runtime-repair-negative-cases",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-g5-basic-runtime-repair-negative-cases:1\n",
+  "payload": {
+    "cases": [
+      {
+        "case_id": "missing_generated_pair",
+        "surface": "T2a_T3a_T4",
+        "assertion": "persisted content or Plan binding pair is absent",
+        "expected": "rejected"
+      },
+      {
+        "case_id": "unknown_generated_scheme",
+        "surface": "T2a_T3a_T4",
+        "assertion": "generated schema ref scheme is unknown",
+        "expected": "rejected"
+      },
+      {
+        "case_id": "generated_raw_hash_drift",
+        "surface": "T2a_T3a_T4",
+        "assertion": "canonical bytes and raw hash disagree",
+        "expected": "rejected"
+      },
+      {
+        "case_id": "generated_domain_hash_drift",
+        "surface": "T2a_T3a_T4",
+        "assertion": "schema domain hash disagrees",
+        "expected": "rejected"
+      },
+      {
+        "case_id": "generated_parameter_drift",
+        "surface": "T2a_T3a_T4",
+        "assertion": "join expose parameter hash disagrees",
+        "expected": "rejected"
+      },
+      {
+        "case_id": "sealed_plan_binding_drift",
+        "surface": "T2a_T3a_T4",
+        "assertion": "persisted Plan bytes or hash disagree",
+        "expected": "rejected"
+      },
+      {
+        "case_id": "schema_authority_mismatch",
+        "surface": "T2a_T3a_T4",
+        "assertion": "Value authority and envelope port disagree",
+        "expected": "rejected"
+      },
+      {
+        "case_id": "join_expose_shape_mismatch",
+        "surface": "T2a_T3a_T4",
+        "assertion": "expose and output port sets disagree",
+        "expected": "rejected"
+      },
+      {
+        "case_id": "required_output_absent",
+        "surface": "T2a_T3a_T4",
+        "assertion": "required output cannot be absent",
+        "expected": "rejected"
+      },
+      {
+        "case_id": "output_schema_invalid",
+        "surface": "T2a_T3a_T4",
+        "assertion": "output content violates the generated schema",
+        "expected": "rejected"
+      },
+      {
+        "case_id": "output_max_bytes_exceeded",
+        "surface": "T2a_T3a_T4",
+        "assertion": "output content exceeds the compiled maximum",
+        "expected": "rejected"
+      },
+      {
+        "case_id": "port_contract_hash_drift",
+        "surface": "T2a_T3a_T4",
+        "assertion": "materialized port contract hash disagrees",
+        "expected": "rejected"
+      },
+      {
+        "case_id": "registry_latest_fallback",
+        "surface": "T2a_T3a_T4",
+        "assertion": "Registry latest or network fallback is forbidden",
+        "expected": "rejected"
+      },
+      {
+        "case_id": "input_snapshot_publication",
+        "surface": "T2a_T3a_T4",
+        "assertion": "input snapshot cannot masquerade as output",
+        "expected": "rejected"
+      }
+    ]
+  },
+  "hash": "sha256:3c204836a446e81cbd2ccbd346d17c0f5e3e87d04e2277a300181bd68658b728"
+}

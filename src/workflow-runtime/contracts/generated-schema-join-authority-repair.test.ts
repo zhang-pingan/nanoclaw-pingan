@@ -57,7 +57,7 @@ describe('generated schema and join expose repair authority', () => {
     );
     expect(progress.match(/^\| R-019 \|/gm)).toEqual(['| R-019 |']);
     expect(progress).toContain(
-      '| R-019 | Generated Schema 与 Join Expose Authority | `REPAIR_EXIT_CANDIDATE_PENDING_INDEPENDENT_AFFECTED_CHAIN_REGRESSION` |',
+      '| R-019 | Generated Schema 与 Join Expose Authority | `CLOSED/DONE` |',
     );
 
     const document = fs.readFileSync(

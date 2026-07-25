@@ -1,0 +1,56 @@
+{
+  "format": "icarus.workflow-g5-basic-runtime-repair-positive-cases/1",
+  "ref": {
+    "id": "icarus.workflow-g5-basic-runtime-repair-positive-cases",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-g5-basic-runtime-repair-positive-cases:1\n",
+  "payload": {
+    "cases": [
+      {
+        "case_id": "sealed_plan_generated_binding",
+        "surface": "T2a",
+        "assertion": "exact generated content and Plan bindings persist atomically",
+        "expected": "accepted"
+      },
+      {
+        "case_id": "join_expose_rename_single",
+        "surface": "T4",
+        "assertion": "renamed required single output publishes a generated Value",
+        "expected": "accepted"
+      },
+      {
+        "case_id": "join_optional_absent",
+        "surface": "T4",
+        "assertion": "optional missing single publishes explicit absent",
+        "expected": "accepted"
+      },
+      {
+        "case_id": "join_default_single",
+        "surface": "T3a_T4",
+        "assertion": "defaulted single persists and publishes its logical Value",
+        "expected": "accepted"
+      },
+      {
+        "case_id": "join_list_aggregation",
+        "surface": "T3a_T4",
+        "assertion": "sealed list order and aggregate bytes are preserved",
+        "expected": "accepted"
+      },
+      {
+        "case_id": "downstream_port_resolution",
+        "surface": "T3a",
+        "assertion": "downstream reads the immutable port Value from the envelope",
+        "expected": "accepted"
+      },
+      {
+        "case_id": "sqlite_reopen_response_loss",
+        "surface": "T4",
+        "assertion": "response-loss replay is exact before and after Store reopen",
+        "expected": "replayed"
+      }
+    ]
+  },
+  "hash": "sha256:23b95b337fd4bc3eccdba3e577d3cd9195bae7f9535d1d5f5c266bee87e82cee"
+}

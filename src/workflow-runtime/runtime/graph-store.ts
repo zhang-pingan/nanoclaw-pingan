@@ -87,14 +87,28 @@ export function assertExactPublishedRegistryResource(
     );
 }
 
+export type InlineValueSchemaAuthority =
+  | {
+      readonly kind: 'registry';
+      readonly resourceId: string;
+      readonly resourceHash: Sha256Hash;
+    }
+  | {
+      readonly kind: 'plan_generated';
+      readonly planId: string;
+      readonly planHash: Sha256Hash;
+      readonly schemaRef: string;
+      readonly schemaHash: Sha256Hash;
+      readonly generator: 'join_expose' | 'child_completion' | 'map_result';
+      readonly parameterHash: Sha256Hash;
+    };
+
 export function insertInlineValue(
   transaction: WorkflowRuntimeWriteTransaction,
   input: {
     readonly id: string;
     readonly content: JsonValue;
     readonly contentHash: Sha256Hash;
-    readonly schemaResourceId: string;
-    readonly schemaResourceHash: Sha256Hash;
     readonly provenanceRef: string;
     readonly retentionClass:
       | 'transient'
@@ -103,21 +117,47 @@ export function insertInlineValue(
       | 'user_artifact'
       | 'pinned';
     readonly createdAtMs: number;
-  },
+  } & (
+    | {
+        readonly schemaAuthority: InlineValueSchemaAuthority;
+        readonly schemaResourceId?: never;
+        readonly schemaResourceHash?: never;
+      }
+    | {
+        readonly schemaAuthority?: never;
+        readonly schemaResourceId: string;
+        readonly schemaResourceHash: Sha256Hash;
+      }
+  ),
 ): 'inserted' | 'exact_replay' {
   const canonical = canonicalJson(input.content);
+  const authority: InlineValueSchemaAuthority = input.schemaAuthority ?? {
+    kind: 'registry',
+    resourceId: input.schemaResourceId,
+    resourceHash: input.schemaResourceHash,
+  };
   const existing = transaction.queryOne<{
     id: string;
     inline_canonical_json: string;
     content_hash: string;
-    schema_resource_id: string;
-    schema_resource_hash: string;
+    schema_resource_id: string | null;
+    schema_resource_hash: string | null;
+    schema_authority_kind: string;
+    schema_plan_id: string | null;
+    schema_plan_hash: string | null;
+    generated_schema_ref: string | null;
+    generated_schema_hash: string | null;
+    generated_schema_generator: string | null;
+    generated_schema_parameter_hash: string | null;
     provenance_ref: string;
     retention_class: string;
     payload_state: string;
   }>(
     `SELECT id, inline_canonical_json, content_hash, schema_resource_id,
-            schema_resource_hash, provenance_ref, retention_class, payload_state
+            schema_resource_hash, schema_authority_kind, schema_plan_id,
+            schema_plan_hash, generated_schema_ref, generated_schema_hash,
+            generated_schema_generator, generated_schema_parameter_hash,
+            provenance_ref, retention_class, payload_state
        FROM workflow_values WHERE id = ?`,
     [input.id],
   );
@@ -125,8 +165,25 @@ export function insertInlineValue(
     if (
       existing.inline_canonical_json !== canonical ||
       existing.content_hash !== input.contentHash ||
-      existing.schema_resource_id !== input.schemaResourceId ||
-      existing.schema_resource_hash !== input.schemaResourceHash ||
+      existing.schema_authority_kind !== authority.kind ||
+      existing.schema_resource_id !==
+        (authority.kind === 'registry' ? authority.resourceId : null) ||
+      existing.schema_resource_hash !==
+        (authority.kind === 'registry' ? authority.resourceHash : null) ||
+      existing.schema_plan_id !==
+        (authority.kind === 'plan_generated' ? authority.planId : null) ||
+      existing.schema_plan_hash !==
+        (authority.kind === 'plan_generated' ? authority.planHash : null) ||
+      existing.generated_schema_ref !==
+        (authority.kind === 'plan_generated' ? authority.schemaRef : null) ||
+      existing.generated_schema_hash !==
+        (authority.kind === 'plan_generated' ? authority.schemaHash : null) ||
+      existing.generated_schema_generator !==
+        (authority.kind === 'plan_generated' ? authority.generator : null) ||
+      existing.generated_schema_parameter_hash !==
+        (authority.kind === 'plan_generated'
+          ? authority.parameterHash
+          : null) ||
       existing.provenance_ref !== input.provenanceRef ||
       existing.retention_class !== input.retentionClass ||
       existing.payload_state !== 'live'
@@ -143,18 +200,29 @@ export function insertInlineValue(
        id, storage_kind, inline_canonical_json, blob_hash,
        immutable_external_locator, expected_hash, content_hash, byte_length,
        media_type, schema_resource_id, schema_resource_hash, provenance_ref,
-       retention_class, payload_state, payload_pruned_at_ms, created_at_ms, row_version
-     ) VALUES (?, 'inline', ?, NULL, NULL, NULL, ?, ?, 'application/json', ?, ?, ?, ?, 'live', NULL, ?, 1)`,
+       retention_class, payload_state, payload_pruned_at_ms, created_at_ms,
+       row_version, schema_authority_kind, schema_plan_id, schema_plan_hash,
+       generated_schema_ref, generated_schema_hash, generated_schema_generator,
+       generated_schema_parameter_hash
+     ) VALUES (?, 'inline', ?, NULL, NULL, NULL, ?, ?, 'application/json', ?, ?,
+       ?, ?, 'live', NULL, ?, 1, ?, ?, ?, ?, ?, ?, ?)`,
     [
       input.id,
       canonical,
       input.contentHash,
       Buffer.byteLength(canonical, 'utf8'),
-      input.schemaResourceId,
-      input.schemaResourceHash,
+      authority.kind === 'registry' ? authority.resourceId : null,
+      authority.kind === 'registry' ? authority.resourceHash : null,
       input.provenanceRef,
       input.retentionClass,
       input.createdAtMs,
+      authority.kind,
+      authority.kind === 'plan_generated' ? authority.planId : null,
+      authority.kind === 'plan_generated' ? authority.planHash : null,
+      authority.kind === 'plan_generated' ? authority.schemaRef : null,
+      authority.kind === 'plan_generated' ? authority.schemaHash : null,
+      authority.kind === 'plan_generated' ? authority.generator : null,
+      authority.kind === 'plan_generated' ? authority.parameterHash : null,
     ],
   );
   return 'inserted';

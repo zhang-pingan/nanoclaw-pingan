@@ -23,15 +23,26 @@ function objects(value: unknown): JsonObject[] {
 }
 
 describe('G5 Basic Runtime readiness audit', () => {
-  it('keeps G5 blocked on the generated-schema repair independent regression', () => {
-    const repair = readArtifact(
-      'conformance/generated-schema-join-authority-repair/contract-pack-generated-schema-join-authority-repair.json',
-    );
+  it('binds the current G5 repair exit candidate without marking G5 done', () => {
+    const repair = readArtifact('contract-pack-g5-basic-runtime-repair.json');
     expect(repair.payload).toMatchObject({
       status:
-        'GENERATED_SCHEMA_JOIN_AUTHORITY_REPAIR_EXIT_CANDIDATE_PENDING_INDEPENDENT_AFFECTED_CHAIN_REGRESSION',
-      g5_status: 'BLOCKED_BY_SPEC_NOT_READY',
-      g6_through_g9_status: 'NOT_READY',
+        'G5_REPAIR_EXIT_CANDIDATE_PENDING_INDEPENDENT_G5_WHOLE_GATE_REGRESSION',
+      g5_done: false,
+      g6_through_g9: 'NOT_READY',
+      historical_g5_candidate_authority: 'forbidden',
+    });
+    const protocol = readArtifact(
+      'conformance/g5-basic-runtime-repair/g5-basic-runtime-repair-protocol@1.json',
+    );
+    expect(protocol.payload).toMatchObject({
+      plan_authority:
+        'persisted_hash_verified_sealed_plan_plus_exact_generated_content_and_binding_rows',
+      generated_value_authority:
+        'plan_generated_only_without_registry_fabrication',
+      output_publication:
+        'canonical_node_output_envelope_with_exact_port_values',
+      next_task_only: 'independent_G5_whole_gate_regression',
     });
   });
 

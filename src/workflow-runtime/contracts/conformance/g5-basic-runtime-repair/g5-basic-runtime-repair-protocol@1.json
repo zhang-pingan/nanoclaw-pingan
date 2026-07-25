@@ -1,0 +1,116 @@
+{
+  "format": "icarus.workflow-g5-basic-runtime-repair-protocol/1",
+  "ref": {
+    "id": "icarus.workflow-g5-basic-runtime-repair-protocol",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-g5-basic-runtime-repair-protocol:1\n",
+  "payload": {
+    "gate": "G5",
+    "status": "G5_REPAIR_EXIT_CANDIDATE_PENDING_INDEPENDENT_G5_WHOLE_GATE_REGRESSION",
+    "g5_done": false,
+    "database_schema_version": 6,
+    "database_schema_hash": "sha256:37f0102a9d6b0077f0d44f20182a7d5768ce32b1c0c2c3998937178b06c9b474",
+    "plan_authority": "persisted_hash_verified_sealed_plan_plus_exact_generated_content_and_binding_rows",
+    "generated_value_authority": "plan_generated_only_without_registry_fabrication",
+    "output_publication": "canonical_node_output_envelope_with_exact_port_values",
+    "join_contracts": [
+      "expose_rename",
+      "required_single",
+      "optional_absent_single",
+      "default_single",
+      "list_aggregation",
+      "required_max_schema_port_contract"
+    ],
+    "transaction_host": "WorkflowRuntimeStore.withImmediateTransaction",
+    "transaction_mode": "BEGIN_IMMEDIATE",
+    "fallback": [
+      "registry_latest_forbidden",
+      "network_forbidden",
+      "runtime_fallback_forbidden"
+    ],
+    "preserved": [
+      "T0_T6d",
+      "CAP0_CAP4",
+      "ownership",
+      "readiness",
+      "fencing",
+      "idempotency",
+      "fact_event",
+      "open_blocker_cache"
+    ],
+    "g4_isolation_authority_hash": "sha256:bd7b944c66181e05add3618e6355a1acc64ff452dc4c027d4556c776a4402046",
+    "forbidden": [
+      "Gateway",
+      "Command_Invocation_audit",
+      "T6e",
+      "blocker_resolve_abandon",
+      "workflow_deadline",
+      "manual_retry_bypass",
+      "G6_plus",
+      "certification",
+      "Production_activation"
+    ],
+    "next_task_only": "independent_G5_whole_gate_regression",
+    "bindings": [
+      {
+        "name": "r019_generated_schema_join_authority",
+        "path": "src/workflow-runtime/contracts/conformance/generated-schema-join-authority-repair/contract-pack-generated-schema-join-authority-repair.json",
+        "hash": "sha256:0c9b1a04a013bf6284b36c550ead6d81cffecacbe4a9d6495d6153b2335a04fc"
+      },
+      {
+        "name": "database_schema_6",
+        "path": "src/workflow-runtime/store/schema/contract-pack-g1-executable-schema.json",
+        "hash": "sha256:3cc206a6dfb1bbaed1bb0f4305323729db23d839652d8a0e020a9a6c4d3e3dd6"
+      },
+      {
+        "name": "g2_v5_sealed_compiler_plan",
+        "path": "src/workflow-runtime/contracts/conformance/sealed/g2-generated-schema-join-authority-v5/golden-conformance-bundle@2.json",
+        "hash": "sha256:f59040be6f71d8655afcb11ab4527a6683125a7a4e683f1e734b44448f7bb72e",
+        "bundle_hash": "sha256:b37ddf415d12d759ddd4b72b754568e01715704d254da26e3355e0898cfeda05"
+      },
+      {
+        "name": "g3_registry_publish_foundation",
+        "path": "src/workflow-runtime/contracts/contract-pack-g3-registry-publish-foundation.json",
+        "hash": "sha256:c9364171a3d28a752d4510f59e5e45016cd86be14d7e151b483fc0c6c7a2807d"
+      },
+      {
+        "name": "g3_registry_persistence",
+        "path": "src/workflow-runtime/contracts/contract-pack-g3-registry-persistence.json",
+        "hash": "sha256:590acdd52626838bf30ae14bb04b6f0ee59a95e1efadc4911ff850acc2970763"
+      },
+      {
+        "name": "g3_registry_exact_query",
+        "path": "src/workflow-runtime/contracts/contract-pack-g3-registry-exact-resource-query.json",
+        "hash": "sha256:b6a4ec1dac738c6036869c763708f8aa144d0a864c8c392ee18cb3aba8c83417"
+      },
+      {
+        "name": "g3_retention_executor_preflight",
+        "path": "src/workflow-runtime/contracts/contract-pack-g3-retention-executor-abi-preflight.json",
+        "hash": "sha256:7f807ae53e13bcec7712f77c1ebaba7aab5f72d2779ed5d99d33b0e6c54e98d3"
+      },
+      {
+        "name": "g3_workflow_publisher",
+        "path": "src/workflow-runtime/contracts/contract-pack-g3-workflow-publisher.json",
+        "hash": "sha256:5d023a5323aec482781b0e992197571db9a09481a394eaf955d4598c249e4ec1"
+      },
+      {
+        "name": "g3_feature_release_activation",
+        "path": "src/workflow-runtime/contracts/contract-pack-g3.9-feature-release-activation.json",
+        "hash": "sha256:cbb6b355819b1eefefa7af5289b10b367c42bbe32b09f003151bc7f9ebf475d7"
+      },
+      {
+        "name": "gate_ownership",
+        "path": "src/workflow-runtime/contracts/governance/workflow-runtime-gate-ownership@1.json",
+        "hash": "sha256:712a7440e83f087e4bbb1e465a1a677a16708429f46766029baa0f90734e5017"
+      },
+      {
+        "name": "capacity",
+        "path": "src/workflow-runtime/contracts/conformance/capacity-control-plane-addendum/contract-pack-capacity-control-plane-addendum.json",
+        "hash": "sha256:d436710893239f01e53d668c23d5ddcfe1a7e4dbee3c00074bc4cd43871c98a6"
+      }
+    ]
+  },
+  "hash": "sha256:c63f4683d640a437e17c89285915e0cd47b3bdb31ea42f82c2944ce2a956d250"
+}

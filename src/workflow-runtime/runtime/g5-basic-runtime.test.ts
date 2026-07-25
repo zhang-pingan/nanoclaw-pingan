@@ -24,7 +24,8 @@ import {
 } from '../contracts/capability-outbox-binding-contract.js';
 import { registryResourceId } from '../contracts/g3-registry-persistence.js';
 import type { G3RegistryResourceType } from '../contracts/g3-registry-persistence-types.js';
-import { G5_DATABASE_SCHEMA_HASH } from '../contracts/g5-basic-runtime-types.js';
+import { G5_REPAIR_DATABASE_SCHEMA_HASH } from '../contracts/g5-basic-runtime-repair-types.js';
+import { buildGeneratedSchema } from '../contracts/generated-schema-authority.js';
 import {
   evaluateReferenceInputContract,
   evaluateReferenceTrigger,
@@ -897,7 +898,7 @@ function initialActivation(seed: SeededRuntime, nowMs: number) {
     coreReleaseRef: 'icarus.core@1.0.0',
     coreReleaseHash: hash('core-release'),
     coreBuildHash: hash('core-build'),
-    databaseSchemaHash: G5_DATABASE_SCHEMA_HASH,
+    databaseSchemaHash: G5_REPAIR_DATABASE_SCHEMA_HASH,
     sourceSeedHash: plan(seed).source_hash as Sha256Hash,
     compilerSnapshotHash: hash('compiler-snapshot'),
     inputSnapshot: seed.values.input,
@@ -1203,7 +1204,7 @@ afterEach(() => {
   while (instances.length > 0) instances.pop()!.cleanup();
 });
 
-describe('G5 Basic Runtime Schema 5 transaction integration', () => {
+describe('G5 Basic Runtime Schema 6 repair transaction integration', () => {
   it('commits T0/T1/T2a/T2b/T3a and exact replays across reopen', () => {
     const instance = bootstrap('g5-runtime-path');
     const seed = seedRuntime(instance.store);
@@ -2153,6 +2154,13 @@ describe('G5 Basic Runtime Schema 5 transaction integration', () => {
       activation: { kind: 'structural' },
       nowMs: 161,
     });
+    const joinOutput = instance.store.queryOne<{
+      id: string;
+      hash: Sha256Hash;
+    }>(
+      'SELECT published_output_envelope_value_id AS id, published_output_envelope_hash AS hash FROM workflow_graph_nodes WHERE id = ?',
+      [joinNode.id],
+    )!;
     const runBeforeJoinReconcile = instance.store.queryOne<{
       row_version: number;
     }>('SELECT row_version FROM workflow_graph_runs WHERE id = ?', [
@@ -2166,7 +2174,7 @@ describe('G5 Basic Runtime Schema 5 transaction integration', () => {
       stableObjectKind: 'node',
       stableObjectId: joinNode.id,
       factKey: `node-terminal-reconcile:${joinNode.id}`,
-      payload: seed.values.result,
+      payload: joinOutput,
       terminalStatus: 'succeeded',
       nowMs: 162,
     });
@@ -2928,23 +2936,24 @@ describe('G5 Basic Runtime Schema 5 transaction integration', () => {
   it('binds scope and node data edges to selected immutable Values and persists pointer Values', () => {
     const instance = bootstrap('g5-selected-data-value-authority');
     const seed = seedRuntime(instance.store);
+    const objectSchemaJson: JsonObject = {
+      type: 'object',
+      additionalProperties: false,
+      required: ['nested'],
+      properties: {
+        nested: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['answer'],
+          properties: { answer: { type: 'integer' } },
+        },
+      },
+    };
     const objectSchema = publishTestSchema(
       instance.store,
       seed,
       'selected-object',
-      {
-        type: 'object',
-        additionalProperties: false,
-        required: ['nested'],
-        properties: {
-          nested: {
-            type: 'object',
-            additionalProperties: false,
-            required: ['answer'],
-            properties: { answer: { type: 'integer' } },
-          },
-        },
-      },
+      objectSchemaJson,
     );
     const numberSchema = publishTestSchema(
       instance.store,
@@ -2980,6 +2989,20 @@ describe('G5 Basic Runtime Schema 5 transaction integration', () => {
       max_bytes: 1_024,
       aggregation: { type: 'single', select: 'only', required: true },
     });
+    const sourceInput = inputPort(objectSchema);
+    const sourceOutputSchema = buildGeneratedSchema(
+      'join_expose',
+      {
+        node_id: 'source',
+        output_port: 'result',
+        input_port: 'value',
+        input_schema: sourceInput.schema as JsonValue,
+        aggregation: sourceInput.aggregation as JsonValue,
+        max_bytes: sourceInput.max_bytes as JsonValue,
+        required: true,
+      },
+      objectSchemaJson,
+    );
     const target = (id: string, schema: TestSchemaAuthority): JsonObject => ({
       id,
       type: 'join',
@@ -3011,10 +3034,11 @@ describe('G5 Basic Runtime Schema 5 transaction integration', () => {
           type: 'join',
           capability_binding: null,
           trigger_program: compileTriggerProgram({ type: 'root' }),
-          input_ports: {},
+          input_ports: { value: sourceInput },
+          expose: { result: { input_port: 'value' } },
           output_ports: {
             result: {
-              schema: compiledTestSchema(objectSchema),
+              schema: sourceOutputSchema,
               max_bytes: 1_024,
               required: true,
             },
@@ -3028,6 +3052,12 @@ describe('G5 Basic Runtime Schema 5 transaction integration', () => {
       route_groups: [],
       control_edges: [],
       data_edges: [
+        dataEdge(
+          'source-input-edge',
+          'source',
+          { type: 'scope_input', port: 'result' },
+          objectSchema,
+        ),
         dataEdge(
           'scope-direct-edge',
           'scope-direct',
@@ -3044,23 +3074,38 @@ describe('G5 Basic Runtime Schema 5 transaction integration', () => {
           },
           numberSchema,
         ),
-        dataEdge(
-          'node-direct-edge',
-          'node-direct',
-          { type: 'node_output', node_id: 'source', port: 'result' },
-          objectSchema,
-        ),
-        dataEdge(
-          'node-pointer-edge',
-          'node-pointer',
-          {
-            type: 'node_output',
-            node_id: 'source',
-            port: 'result',
-            pointer: '/nested/answer',
+        {
+          ...dataEdge(
+            'node-direct-edge',
+            'node-direct',
+            { type: 'node_output', node_id: 'source', port: 'result' },
+            objectSchema,
+          ),
+          derived_schema: sourceOutputSchema,
+          producer_schema_hash: sourceOutputSchema.schema_hash,
+          compatibility_proof: {
+            producer_schema_hash: sourceOutputSchema.schema_hash,
+            proof_hash: hash('selected-edge-proof:node-direct-edge'),
           },
-          numberSchema,
-        ),
+        },
+        {
+          ...dataEdge(
+            'node-pointer-edge',
+            'node-pointer',
+            {
+              type: 'node_output',
+              node_id: 'source',
+              port: 'result',
+              pointer: '/nested/answer',
+            },
+            numberSchema,
+          ),
+          producer_schema_hash: sourceOutputSchema.schema_hash,
+          compatibility_proof: {
+            producer_schema_hash: sourceOutputSchema.schema_hash,
+            proof_hash: hash('selected-edge-proof:node-pointer-edge'),
+          },
+        },
       ],
       completion: completionPolicy([
         {
@@ -3155,8 +3200,22 @@ describe('G5 Basic Runtime Schema 5 transaction integration', () => {
       value_hash: selected.hash,
     });
     expect(byEdge.get('node-direct-edge')).toMatchObject({
-      value_value_id: selected.id,
-      value_hash: selected.hash,
+      value_value_id: expect.stringMatching(/^g5:join-output-port-value:/),
+      value_hash: expect.stringMatching(/^sha256:/),
+    });
+    expect(
+      instance.store.queryOne<{
+        schema_authority_kind: string;
+        schema_resource_id: string | null;
+        generated_schema_hash: string;
+      }>(
+        'SELECT schema_authority_kind, schema_resource_id, generated_schema_hash FROM workflow_values WHERE id = ?',
+        [byEdge.get('node-direct-edge')!.value_value_id],
+      ),
+    ).toEqual({
+      schema_authority_kind: 'plan_generated',
+      schema_resource_id: null,
+      generated_schema_hash: sourceOutputSchema.schema_hash,
     });
     for (const edgeId of ['scope-pointer-edge', 'node-pointer-edge']) {
       const resolution = byEdge.get(edgeId)!;
@@ -3175,6 +3234,451 @@ describe('G5 Basic Runtime Schema 5 transaction integration', () => {
         schema_resource_hash: numberSchema.schema_hash,
       });
     }
+  });
+
+  it('publishes canonical generated join outputs across rename, optional, default, list, rollback, reopen, and response loss', () => {
+    const instance = bootstrap('g5-generated-join-publication');
+    const seed = seedRuntime(instance.store);
+    const stringJson: JsonObject = { type: 'string' };
+    const arrayJson: JsonObject = { type: 'array', items: stringJson };
+    const stringSchema = publishTestSchema(
+      instance.store,
+      seed,
+      'generated-join-string',
+      stringJson,
+    );
+    const arraySchema = publishTestSchema(
+      instance.store,
+      seed,
+      'generated-join-array',
+      arrayJson,
+    );
+    const values = {
+      renamed: insertTestValue(
+        instance.store,
+        stringSchema,
+        'generated-join-renamed',
+        'renamed-value',
+      ),
+      first: insertTestValue(
+        instance.store,
+        stringSchema,
+        'generated-join-first',
+        'first',
+      ),
+      second: insertTestValue(
+        instance.store,
+        stringSchema,
+        'generated-join-second',
+        'second',
+      ),
+    };
+    replaceSeedInputContent(instance.store, seed, {
+      port_contract_hash: hash('generated-join-root-contract'),
+      ports: Object.fromEntries(
+        Object.entries(values).map(([port, value]) => [
+          port,
+          {
+            state: 'present',
+            value_ref: value.id,
+            value_hash: value.hash,
+            schema_hash: stringSchema.schema_hash,
+            byte_length: value.byteLength,
+          },
+        ]),
+      ),
+      envelope_hash: hash('generated-join-root-envelope'),
+    });
+    const single = (required: boolean, defaultValue?: string): JsonObject => ({
+      schema: compiledTestSchema(stringSchema),
+      max_bytes: 128,
+      aggregation: {
+        type: 'single',
+        select: 'only',
+        required,
+        ...(defaultValue === undefined ? {} : { default: defaultValue }),
+      },
+    });
+    const inputs: JsonObject = {
+      original: single(true),
+      optional: single(false),
+      defaulted: single(false, 'fallback'),
+      collected: {
+        schema: compiledTestSchema(arraySchema),
+        item_schema: compiledTestSchema(stringSchema),
+        max_bytes: 256,
+        item_max_bytes: 128,
+        aggregation: {
+          type: 'list',
+          order: 'edge_id',
+          min_items: 1,
+          seal: { type: 'all_sources_resolved' },
+        },
+      },
+    };
+    const expose: JsonObject = {
+      renamed: { input_port: 'original' },
+      optional: { input_port: 'optional' },
+      defaulted: { input_port: 'defaulted' },
+      collected: { input_port: 'collected' },
+    };
+    const outputSchema = (
+      outputName: string,
+      inputName: string,
+      schemaJson: JsonObject,
+    ): JsonObject => {
+      const contract = inputs[inputName] as JsonObject;
+      const aggregation = contract.aggregation as JsonObject;
+      const required =
+        aggregation.type === 'list' ||
+        aggregation.required === true ||
+        Object.prototype.hasOwnProperty.call(aggregation, 'default');
+      return buildGeneratedSchema(
+        'join_expose',
+        {
+          node_id: 'join',
+          output_port: outputName,
+          input_port: inputName,
+          input_schema: contract.schema as JsonValue,
+          aggregation,
+          max_bytes: contract.max_bytes as JsonValue,
+          required,
+          ...(aggregation.type === 'list'
+            ? {
+                item_schema: contract.item_schema as JsonValue,
+                item_max_bytes: contract.item_max_bytes as JsonValue,
+              }
+            : {}),
+        },
+        schemaJson,
+      );
+    };
+    const outputs: JsonObject = Object.fromEntries(
+      Object.entries(expose).map(([outputName, exposure]) => {
+        const inputName = String((exposure as JsonObject).input_port);
+        const input = inputs[inputName] as JsonObject;
+        const aggregation = input.aggregation as JsonObject;
+        return [
+          outputName,
+          {
+            schema: outputSchema(
+              outputName,
+              inputName,
+              inputName === 'collected' ? arrayJson : stringJson,
+            ),
+            max_bytes: input.max_bytes,
+            required:
+              aggregation.type === 'list' ||
+              aggregation.required === true ||
+              Object.prototype.hasOwnProperty.call(aggregation, 'default'),
+          },
+        ];
+      }),
+    );
+    const edge = (
+      id: string,
+      fromPort: string,
+      toPort: string,
+    ): JsonObject => ({
+      id,
+      from: { type: 'scope_input', port: fromPort },
+      to: { node_id: 'join', port: toPort },
+      derived_schema: compiledTestSchema(stringSchema),
+      producer_schema_hash: stringSchema.schema_hash,
+      consumer_schema_hash: stringSchema.schema_hash,
+      on_missing: 'error',
+      guard_control_edge_id: null,
+      compiled_edge_hash: hash(`generated-join-edge:${id}`),
+    });
+    const candidate = planVariant(seed, {
+      nodes: [
+        {
+          id: 'join',
+          type: 'join',
+          capability_binding: null,
+          trigger_program: compileTriggerProgram({ type: 'root' }),
+          input_ports: inputs,
+          expose,
+          output_ports: outputs,
+        },
+      ],
+      route_groups: [],
+      control_edges: [],
+      data_edges: [
+        edge('rename-edge', 'renamed', 'original'),
+        edge('a-list-edge', 'first', 'collected'),
+        edge('z-list-edge', 'second', 'collected'),
+      ],
+      completion: completionPolicy([
+        {
+          id: 'generated-join-no-close',
+          phase: 'settled',
+          priority: 1,
+          when: { fact: 'all_nodes_terminal' },
+          selector: {
+            exits: ['unused'],
+            pick: { type: 'lowest_terminal_node_id' },
+          },
+        },
+      ]),
+      runtime_safety_snapshot: {
+        value: { max_single_value_bytes: 4_096 },
+      },
+    });
+    const invalidCandidate = (
+      mutate: (value: CompiledScopePlanV2Document) => void,
+    ): CompiledScopePlanV2Document => {
+      const value = structuredClone(candidate);
+      mutate(value);
+      const { plan_hash: _planHash, ...withoutHash } = value;
+      void _planHash;
+      return withPlanHash(withoutHash);
+    };
+    expect(() =>
+      materializePlanCase(
+        instance,
+        seed,
+        invalidCandidate((value) => {
+          const schema = (
+            (value.nodes[0] as JsonObject).output_ports as JsonObject
+          ).renamed as JsonObject;
+          (schema.schema as JsonObject).schema_ref =
+            `unknown-generated-schema:sha256:${'0'.repeat(64)}`;
+        }),
+        'generated-join-unknown-scheme',
+        150,
+      ),
+    ).toThrow(/generated schema authority is invalid/);
+    expect(() =>
+      materializePlanCase(
+        instance,
+        seed,
+        invalidCandidate((value) => {
+          const schema = (
+            (value.nodes[0] as JsonObject).output_ports as JsonObject
+          ).renamed as JsonObject;
+          (schema.schema as JsonObject).parameter_hash = hash(
+            'generated-join-parameter-drift',
+          );
+        }),
+        'generated-join-parameter-drift',
+        160,
+      ),
+    ).toThrow(/contract or parameter binding drifted/);
+    expect(() =>
+      materializePlanCase(
+        instance,
+        seed,
+        invalidCandidate((value) => {
+          delete ((value.nodes[0] as JsonObject).expose as JsonObject).optional;
+        }),
+        'generated-join-shape-drift',
+        170,
+      ),
+    ).toThrow(/expose\/output port shape mismatch/);
+    const missingBinding = materializePlanCase(
+      instance,
+      seed,
+      candidate,
+      'generated-join-missing-binding',
+      180,
+    );
+    initializePlanCase(instance, missingBinding, 183);
+    const missingBindingNode = instance.store.queryOne<{
+      id: string;
+      row_version: number;
+      activation_event_seq: number;
+    }>(
+      "SELECT id, row_version, activation_event_seq FROM workflow_graph_nodes WHERE graph_run_id = ? AND node_key = 'join'",
+      [missingBinding.graphRunId],
+    )!;
+    instance.store.withImmediateTransaction((transaction) => {
+      transaction.execute(
+        `DELETE FROM workflow_plan_generated_schemas
+          WHERE plan_id = (
+            SELECT compiled_plan_id FROM workflow_graph_scope_builds
+             WHERE graph_run_id = ?
+          ) AND rowid = (
+            SELECT min(rowid) FROM workflow_plan_generated_schemas
+             WHERE plan_id = (
+               SELECT compiled_plan_id FROM workflow_graph_scope_builds
+                WHERE graph_run_id = ?
+             )
+          )`,
+        [missingBinding.graphRunId, missingBinding.graphRunId],
+      );
+    });
+    expect(() =>
+      scheduleReadyNodeT4(
+        instance.store,
+        { current: () => fixedCapacity() },
+        {
+          graphRunId: missingBinding.graphRunId,
+          scopeId: missingBinding.scopeId,
+          nodeId: missingBindingNode.id,
+          expectedNodeRowVersion: missingBindingNode.row_version,
+          expectedRunWorkFenceEpoch: 0,
+          expectedScopeWorkFenceEpoch: 0,
+          eligibleEventSeq: missingBindingNode.activation_event_seq,
+          activation: { kind: 'structural' },
+          nowMs: 184,
+        },
+      ),
+    ).toThrow(/binding set drifted/);
+    const run = materializePlanCase(
+      instance,
+      seed,
+      candidate,
+      'generated-join-publication',
+      200,
+    );
+    initializePlanCase(instance, run, 203);
+    const node = instance.store.queryOne<{
+      id: string;
+      row_version: number;
+      activation_event_seq: number;
+    }>(
+      "SELECT id, row_version, activation_event_seq FROM workflow_graph_nodes WHERE graph_run_id = ? AND node_key = 'join'",
+      [run.graphRunId],
+    )!;
+    const activation = {
+      graphRunId: run.graphRunId,
+      scopeId: run.scopeId,
+      nodeId: node.id,
+      expectedNodeRowVersion: node.row_version,
+      expectedRunWorkFenceEpoch: 0,
+      expectedScopeWorkFenceEpoch: 0,
+      eligibleEventSeq: node.activation_event_seq,
+      activation: { kind: 'structural' as const },
+      nowMs: 204,
+    };
+    expect(() =>
+      scheduleReadyNodeT4(
+        instance.store,
+        { current: () => fixedCapacity() },
+        activation,
+        { point: 'before_commit' },
+      ),
+    ).toThrow(/Injected (?:G5 )?fault/);
+    expect(
+      instance.store.queryOne<{ count: number }>(
+        "SELECT count(*) AS count FROM workflow_values WHERE provenance_ref LIKE 'join-output:%' OR provenance_ref LIKE 'node-output-envelope:%'",
+        [],
+      )!.count,
+    ).toBe(0);
+    expect(
+      scheduleReadyNodeT4(
+        instance.store,
+        { current: () => fixedCapacity() },
+        activation,
+      ).disposition,
+    ).toBe('activated');
+    expect(
+      scheduleReadyNodeT4(
+        instance.store,
+        { current: () => fixedCapacity() },
+        activation,
+      ).disposition,
+    ).toBe('exact_replay');
+    instance.closeStore();
+    instance.reopenStore();
+    expect(
+      scheduleReadyNodeT4(
+        instance.store,
+        { current: () => fixedCapacity() },
+        activation,
+      ).disposition,
+    ).toBe('exact_replay');
+    const publication = instance.store.queryOne<{
+      id: string;
+      hash: Sha256Hash;
+      inline_canonical_json: string;
+    }>(
+      `SELECT n.published_output_envelope_value_id AS id,
+              n.published_output_envelope_hash AS hash, v.inline_canonical_json
+         FROM workflow_graph_nodes n JOIN workflow_values v
+           ON v.id = n.published_output_envelope_value_id
+          AND v.content_hash = n.published_output_envelope_hash
+        WHERE n.id = ?`,
+      [node.id],
+    )!;
+    const envelope = JSON.parse(
+      publication.inline_canonical_json,
+    ) as JsonObject;
+    expect(envelope.envelope_hash).toBe(publication.hash);
+    const ports = envelope.ports as JsonObject;
+    expect((ports.optional as JsonObject).state).toBe('absent');
+    const expectedContent: Record<string, JsonValue> = {
+      renamed: 'renamed-value',
+      defaulted: 'fallback',
+      collected: ['first', 'second'],
+    };
+    for (const [port, content] of Object.entries(expectedContent)) {
+      const published = ports[port] as JsonObject;
+      const row = instance.store.queryOne<{
+        inline_canonical_json: string;
+        schema_authority_kind: string;
+        schema_resource_id: string | null;
+        schema_plan_id: string;
+        generated_schema_hash: string;
+      }>(
+        `SELECT inline_canonical_json, schema_authority_kind,
+                schema_resource_id, schema_plan_id, generated_schema_hash
+           FROM workflow_values WHERE id = ? AND content_hash = ?`,
+        [String(published.value_ref), String(published.value_hash)],
+      )!;
+      expect(JSON.parse(row.inline_canonical_json)).toEqual(content);
+      expect(row).toMatchObject({
+        schema_authority_kind: 'plan_generated',
+        schema_resource_id: null,
+        generated_schema_hash: (outputs[port] as JsonObject).schema
+          ? ((outputs[port] as JsonObject).schema as JsonObject).schema_hash
+          : undefined,
+      });
+    }
+    expect(
+      instance.store.queryOne<{ count: number }>(
+        'SELECT count(*) AS count FROM workflow_plan_generated_schemas WHERE plan_id = (SELECT compiled_plan_id FROM workflow_graph_scope_builds WHERE graph_run_id = ?)',
+        [run.graphRunId],
+      )!.count,
+    ).toBe(4);
+    const generatedContent = instance.store.queryOne<{
+      schema_ref: string;
+      canonical_schema_json: string;
+    }>(
+      'SELECT schema_ref, canonical_schema_json FROM workflow_generated_schema_contents ORDER BY schema_ref COLLATE BINARY LIMIT 1',
+      [],
+    )!;
+    instance.store.withImmediateTransaction((transaction) => {
+      transaction.execute(
+        'UPDATE workflow_generated_schema_contents SET canonical_schema_json = ? WHERE schema_ref = ?',
+        ['{}', generatedContent.schema_ref],
+      );
+    });
+    expect(() =>
+      scheduleReadyNodeT4(
+        instance.store,
+        { current: () => fixedCapacity() },
+        activation,
+      ),
+    ).toThrow(/generated schema bytes\/hash drifted/);
+    instance.store.withImmediateTransaction((transaction) => {
+      transaction.execute(
+        'UPDATE workflow_generated_schema_contents SET canonical_schema_json = ? WHERE schema_ref = ?',
+        [generatedContent.canonical_schema_json, generatedContent.schema_ref],
+      );
+      transaction.execute(
+        'UPDATE workflow_graph_nodes SET port_contract_hash = ? WHERE id = ?',
+        [hash('generated-join-port-contract-drift'), node.id],
+      );
+    });
+    expect(() =>
+      scheduleReadyNodeT4(
+        instance.store,
+        { current: () => fixedCapacity() },
+        activation,
+      ),
+    ).toThrow(/output port Contract drifted/);
   });
 
   it.each(inputContractCases)(
@@ -4459,7 +4963,7 @@ describe('G5 Basic Runtime Schema 5 transaction integration', () => {
           databaseSchemaHash: hash('wrong-schema'),
         },
       }),
-    ).toThrow(/current frozen Schema 5 identity/);
+    ).toThrow(/current frozen Schema 6 identity/);
 
     const compiledPlan = plan(seed);
     const compileInput = {
@@ -4502,7 +5006,7 @@ describe('G5 Basic Runtime Schema 5 transaction integration', () => {
           >,
         ),
       }),
-    ).toThrow(/Plan safety, toolchain, or Schema 5 identity drift/);
+    ).toThrow(/Plan safety, toolchain, or Schema 6 identity drift/);
     expect(() =>
       persistCompileResultT2a(instance.store, {
         ...compileInput,

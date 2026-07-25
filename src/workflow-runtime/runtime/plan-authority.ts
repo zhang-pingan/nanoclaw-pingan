@@ -6,6 +6,8 @@ import type { WorkflowRuntimeWriteTransaction } from '../store/runtime-store/ind
 import { G5RuntimeError } from './graph-store.js';
 
 export interface MaterializedNodeAuthority {
+  readonly planId: string;
+  readonly graphRunId: string;
   readonly plan: CompiledScopePlanV2Document;
   readonly node: JsonObject;
   readonly planHash: Sha256Hash;
@@ -61,6 +63,7 @@ export function loadMaterializedNodeAuthority(
   nodeId: string,
 ): MaterializedNodeAuthority {
   const row = transaction.queryOne<{
+    plan_id: string;
     root_plan_hash: string | null;
     runtime_safety_snapshot_hash: string;
     compiler_toolchain_resource_hash: string;
@@ -75,7 +78,7 @@ export function loadMaterializedNodeAuthority(
     capability_version: string | null;
     capability_hash: string | null;
   }>(
-    `SELECT r.root_plan_hash, r.runtime_safety_snapshot_hash,
+    `SELECT p.id AS plan_id, r.root_plan_hash, r.runtime_safety_snapshot_hash,
             r.compiler_toolchain_resource_hash,
             r.work_fence_epoch AS run_work_fence_epoch,
             s.plan_hash AS scope_plan_hash,
@@ -170,6 +173,8 @@ export function loadMaterializedNodeAuthority(
       );
   }
   return {
+    planId: row.plan_id,
+    graphRunId,
     plan,
     node: planNode,
     planHash,
