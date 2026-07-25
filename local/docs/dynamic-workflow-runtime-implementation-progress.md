@@ -1,8 +1,8 @@
 # Dynamic Workflow Runtime 实施进度
 
-> **状态**: `NODE_OUTPUT_ENVELOPE_SCHEMA_AUTHORITY_REPAIR_EXIT_CANDIDATE_PENDING_INDEPENDENT_AFFECTED_CHAIN_REGRESSION`
-> **当前 Gate**: R-019/Schema 7/Compiler 3.0.4/G2 v6/Store/G3/G4 successor已形成candidate；受影响G1-G4 current closure保持reopened/pending；G5=`BLOCKED_BY_SPEC/NOT_READY`；G6-G9=`NOT_READY`
-> **下一独立会话**: 只能由中控创建新的独立NodeOutputEnvelope authority affected-chain regression；不得继续G5 Runtime或开始G6
+> **状态**: `NODE_OUTPUT_ENVELOPE_SCHEMA_AUTHORITY_REPAIR_DONE`
+> **当前 Gate**: R-019/Schema 7/Compiler 3.0.4/G2 v6/Store/G3/G4已在fresh independent affected-chain regression后闭合/`DONE`；G5=`READY_FOR_G5_REPAIR/NOT_DONE`；G6-G9=`NOT_READY`
+> **下一独立会话**: 只能由中控创建新的独立本地G5 Runtime repair successor；不得开始G6
 > **最后更新**: 2026-07-25
 > **规范权威**: `local/docs/dynamic-workflow-dag-framework.md`
 
