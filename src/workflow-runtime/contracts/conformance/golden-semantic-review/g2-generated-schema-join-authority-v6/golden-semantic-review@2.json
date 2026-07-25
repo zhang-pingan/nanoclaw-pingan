@@ -6,12 +6,12 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-compiler-golden-semantic-review-artifact:1\n",
-  "hash": "sha256:4e31b459ee015ca8b4b9c602db394585ef36fad191da1868fc528ea2ae667c28",
+  "hash": "sha256:09725beed1ff8370eec5a095968bf1ac8c3d8dcb68c1a8b01e36f102528a6db5",
   "payload": {
     "format": "icarus.workflow-compiler-golden-semantic-review/1",
     "gate": "G2",
     "construction_phase": "RC_REVIEW",
-    "review_id": "g2-generated-schema-join-authority-v6-e2b42ce214a96dfb",
+    "review_id": "g2-generated-schema-join-authority-v6-56538abb3748d134",
     "bundle_version": "2.0.0",
     "case_ids": [
       "negative.capability-not-allowed",
@@ -57,11 +57,11 @@
     ],
     "case_count": 40,
     "draft_manifest_ref": "conformance/golden-draft/g2-generated-schema-join-authority-v6/golden-draft-manifest@2.json",
-    "draft_manifest_hash": "sha256:e2b42ce214a96dfb00ceba4f4bb49c8ee9e25fdbf34a25aa376e7c336a7a4cf8",
-    "draft_artifact_hash": "sha256:081ccddd26499f672bd0dac93996ae0b7b5a23347f59b4c1c8ae84b5d68ccb2e",
+    "draft_manifest_hash": "sha256:56538abb3748d134b25e1eee26e2d6198784b456412a60a3ce1c34ee5d79c804",
+    "draft_artifact_hash": "sha256:b43960ab002a49d918bddbce057e51e1055b65e2e7a1d10e44fed25c28ea66c4",
     "golden_review_report_ref": "conformance/golden-review/g2-generated-schema-join-authority-v6/golden-review-report@2.json",
-    "golden_review_report_hash": "sha256:68b492f3261ad1b91d1596485be6d8cda00ddf4517cc957759d9cb08d5f1031c",
-    "golden_review_report_artifact_hash": "sha256:f20e55f79fa6636d70cff3a46cacaf9b39fc49794b4a69977b381ba7b599a6c0",
+    "golden_review_report_hash": "sha256:b909526bc8d4c76d3a1079bee54de072eb6dd7bdd16ee3ae91b27d1f9a6954b1",
+    "golden_review_report_artifact_hash": "sha256:4ebc90aa4028f68580fa2aaaaaf23ef7e27bd61c9e285a8f648a42278b0e9aa0",
     "reviewer_actor_ref": "human:local-owner",
     "decision": "approved",
     "checklist_version": "g2-node-output-envelope-authority-successor-semantic-review/2",
@@ -75,6 +75,7 @@
       "compiled_pointer_differences_0_verified",
       "predecessor_immutable_lineage_verified",
       "generated_schema_join_authority_semantics_reviewed",
+      "declared_authoring_generator_exact_binding_verified",
       "draft_working_rc_identity_mutation_not_authorized",
       "g3_through_g9_not_authorized"
     ],
@@ -99,7 +100,7 @@
     "signature_policy": "not_required_local_single_user",
     "notes_ref": null,
     "notes_hash": null,
-    "reviewed_at_ms": 1784966400000,
-    "review_hash": "sha256:ca3fc5fd0de7c9a71eb865b4e4b0e24d119f4683446f9ddbdeadebfa847ce694"
+    "reviewed_at_ms": 1784970823000,
+    "review_hash": "sha256:0d1c4f636ef7c819aa62cd255dca9e67d6a27bbca689d88e0a791338b463fbb9"
   }
 }

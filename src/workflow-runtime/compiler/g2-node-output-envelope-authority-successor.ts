@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { Ajv2020, type AnySchema } from 'ajv/dist/2020.js';
+import ts from 'typescript';
 
 import { compileWorkflow } from './compiler.js';
 import {
@@ -88,6 +89,9 @@ export const G2_NODE_OUTPUT_ENVELOPE_DRAFT_INVENTORY_PATH = `${G2_NODE_OUTPUT_EN
 export const G2_NODE_OUTPUT_ENVELOPE_DRAFT_MANIFEST_PATH = `${G2_NODE_OUTPUT_ENVELOPE_DRAFT_ROOT}/golden-draft-manifest@2.json`;
 export const G2_NODE_OUTPUT_ENVELOPE_REVIEW_REPORT_PATH = `${G2_NODE_OUTPUT_ENVELOPE_REVIEW_ROOT}/golden-review-report@2.json`;
 
+export const G2_NODE_OUTPUT_ENVELOPE_AUTHORING_GENERATOR_REF =
+  'src/workflow-runtime/contracts/node-output-envelope-golden-authoring.ts';
+
 const DRAFT_CASES_SCHEMA_PATH = `${G2_NODE_OUTPUT_ENVELOPE_DRAFT_ROOT}/schemas/golden-draft-cases-schema@1.json`;
 const DRAFT_INVENTORY_SCHEMA_PATH = `${G2_NODE_OUTPUT_ENVELOPE_DRAFT_ROOT}/schemas/golden-draft-inventory-schema@1.json`;
 const DRAFT_MANIFEST_SCHEMA_PATH = `${G2_NODE_OUTPUT_ENVELOPE_DRAFT_ROOT}/schemas/golden-draft-manifest-schema@1.json`;
@@ -143,7 +147,8 @@ const ARTIFACT_DOMAINS = Object.freeze({
     'icarus:workflow-compiler-g2-node-output-envelope-authority-working-candidate-artifact:1\n',
   working_review:
     'icarus:workflow-compiler-g2-node-output-envelope-authority-working-review-artifact:1\n',
-  rc_cases: 'icarus:workflow-compiler-g2-node-output-envelope-authority-rc-cases-artifact:1\n',
+  rc_cases:
+    'icarus:workflow-compiler-g2-node-output-envelope-authority-rc-cases-artifact:1\n',
   rc_inventory:
     'icarus:workflow-compiler-g2-node-output-envelope-authority-rc-inventory-artifact:1\n',
   rc: 'icarus:workflow-compiler-g2-node-output-envelope-authority-rc-artifact:1\n',
@@ -215,6 +220,104 @@ function objects(value: JsonValue, label: string): JsonObject[] {
 
 function rawHash(bytes: Uint8Array | string): Sha256Hash {
   return `sha256:${crypto.createHash('sha256').update(bytes).digest('hex')}`;
+}
+
+function authoringGeneratorIdentity(
+  successorSourceText = fs.readFileSync(
+    path.resolve(
+      projectRoot,
+      'src/workflow-runtime/compiler/g2-node-output-envelope-authority-successor.ts',
+    ),
+    'utf8',
+  ),
+): { ref: string; rawHash: Sha256Hash } {
+  const sourceFile = ts.createSourceFile(
+    'g2-node-output-envelope-authority-successor.ts',
+    successorSourceText,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  );
+  const requiredImports = new Set([
+    'authorCurrentG2GoldenExpectedResult',
+    'extractCurrentG2GoldenProgramBytes',
+    'extractCurrentG2GoldenProofBytes',
+  ]);
+  const importedFrom: string[] = [];
+  const localAuthoringBindings = new Set<string>();
+
+  for (const statement of sourceFile.statements) {
+    if (
+      !ts.isImportDeclaration(statement) ||
+      !ts.isStringLiteral(statement.moduleSpecifier) ||
+      !statement.importClause?.namedBindings ||
+      !ts.isNamedImports(statement.importClause.namedBindings)
+    ) {
+      continue;
+    }
+    const importedNames = new Set(
+      statement.importClause.namedBindings.elements.map(
+        (element) => element.propertyName?.text ?? element.name.text,
+      ),
+    );
+    if (![...requiredImports].every((name) => importedNames.has(name))) {
+      continue;
+    }
+    importedFrom.push(statement.moduleSpecifier.text);
+    for (const element of statement.importClause.namedBindings.elements) {
+      const importedName = element.propertyName?.text ?? element.name.text;
+      if (requiredImports.has(importedName)) {
+        localAuthoringBindings.add(element.name.text);
+      }
+    }
+  }
+
+  let authoringCallCount = 0;
+  const visit = (node: ts.Node): void => {
+    if (
+      ts.isCallExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      localAuthoringBindings.has(node.expression.text) &&
+      node.expression.text === 'authorCurrentG2GoldenExpectedResult'
+    ) {
+      authoringCallCount += 1;
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+
+  if (importedFrom.length !== 1 || authoringCallCount !== 1) {
+    throw new G2NodeOutputEnvelopeSuccessorError(
+      'Successor expected authoring must have one exact imported generator and one invocation',
+    );
+  }
+  const resolvedImport = path.resolve(
+    import.meta.dirname,
+    importedFrom[0]!.replace(/\.js$/, '.ts'),
+  );
+  const declaredPath = path.resolve(
+    projectRoot,
+    G2_NODE_OUTPUT_ENVELOPE_AUTHORING_GENERATOR_REF,
+  );
+  if (
+    resolvedImport !== declaredPath ||
+    path.relative(projectRoot, resolvedImport).split(path.sep).join('/') !==
+      G2_NODE_OUTPUT_ENVELOPE_AUTHORING_GENERATOR_REF
+  ) {
+    throw new G2NodeOutputEnvelopeSuccessorError(
+      'Declared authoring generator is not the generator actually imported and invoked',
+    );
+  }
+  return {
+    ref: G2_NODE_OUTPUT_ENVELOPE_AUTHORING_GENERATOR_REF,
+    rawHash: rawHash(fs.readFileSync(declaredPath)),
+  };
+}
+
+export function assertG2NodeOutputEnvelopeAuthoringGeneratorBindingForTest(
+  successorSourceText?: string,
+): { ref: string; rawHash: Sha256Hash } {
+  return authoringGeneratorIdentity(successorSourceText);
 }
 
 function render(value: JsonValue): string {
@@ -627,6 +730,7 @@ function joinAuthoritySource(
 }
 
 export function buildG2NodeOutputEnvelopeSuccessor(): G2NodeOutputEnvelopeSuccessorBuild {
+  const authoringGenerator = authoringGeneratorIdentity();
   const predecessorLineage = validatePredecessor();
   const semanticContract = checkCompilerSemanticCorrectionContract();
   const generatedSchemaJoinAuthorityContract =
@@ -1002,7 +1106,10 @@ export function buildG2NodeOutputEnvelopeSuccessor(): G2NodeOutputEnvelopeSucces
       path: G2_NODE_OUTPUT_ENVELOPE_CONTRACT_ROOT_PATH,
       artifact: contractRoot,
     },
-    input: { path: G2_NODE_OUTPUT_ENVELOPE_INPUT_ROOT_PATH, artifact: inputRoot },
+    input: {
+      path: G2_NODE_OUTPUT_ENVELOPE_INPUT_ROOT_PATH,
+      artifact: inputRoot,
+    },
     candidate: {
       path: G2_NODE_OUTPUT_ENVELOPE_CANDIDATE_ROOT_PATH,
       artifact: candidateRoot,
@@ -1019,7 +1126,8 @@ export function buildG2NodeOutputEnvelopeSuccessor(): G2NodeOutputEnvelopeSucces
     '2.0.0-rc',
     ARTIFACT_DOMAINS.rc_cases,
     {
-      format: 'icarus.workflow-compiler-g2-node-output-envelope-authority-rc-cases/1',
+      format:
+        'icarus.workflow-compiler-g2-node-output-envelope-authority-rc-cases/1',
       construction_phase: 'RC_REVIEW',
       case_count: 40,
       source_set_hash: sourceSetHash,
@@ -1062,7 +1170,8 @@ export function buildG2NodeOutputEnvelopeSuccessor(): G2NodeOutputEnvelopeSucces
       left.path < right.path ? -1 : left.path > right.path ? 1 : 0,
     );
   const rcInventoryPayloadWithoutHash = {
-    format: 'icarus.workflow-compiler-g2-node-output-envelope-authority-inventory/1',
+    format:
+      'icarus.workflow-compiler-g2-node-output-envelope-authority-inventory/1',
     construction_phase: 'RC_REVIEW',
     inventory_scope: 'successor_rc_leaf_artifacts_excluding_inventory_and_root',
     entry_count: rcInventoryEntries.length,
@@ -1355,8 +1464,6 @@ export function buildG2NodeOutputEnvelopeSuccessor(): G2NodeOutputEnvelopeSucces
     render(draftInventoryArtifact),
   );
 
-  const authoringGeneratorRef =
-    'src/workflow-runtime/contracts/generated-schema-join-authority-golden-authoring.ts';
   const draftManifestWithoutHash = {
     format:
       'icarus.workflow-compiler-current-g2-golden-draft-manifest/1' as const,
@@ -1372,7 +1479,8 @@ export function buildG2NodeOutputEnvelopeSuccessor(): G2NodeOutputEnvelopeSucces
     semantic_correction_contract_ref:
       COMPILER_SEMANTIC_CORRECTION_MANIFEST_PATH,
     semantic_correction_contract_hash: semanticContract.hash,
-    semantic_correction_input_manifest_ref: G2_NODE_OUTPUT_ENVELOPE_INPUT_ROOT_PATH,
+    semantic_correction_input_manifest_ref:
+      G2_NODE_OUTPUT_ENVELOPE_INPUT_ROOT_PATH,
     semantic_correction_input_manifest_hash: inputRoot.hash,
     source_case_catalog_ref: G2_NODE_OUTPUT_ENVELOPE_RC_CASES_PATH,
     source_case_catalog_hash: rcCases.hash,
@@ -1380,10 +1488,8 @@ export function buildG2NodeOutputEnvelopeSuccessor(): G2NodeOutputEnvelopeSucces
     case_input_binding_hash: binding.binding_hash,
     toolchain_file_ref: G2_NODE_OUTPUT_ENVELOPE_TOOLCHAIN_PATH,
     toolchain_file_hash: toolchain.toolchain_hash,
-    authoring_generator_ref: authoringGeneratorRef,
-    authoring_generator_hash: rawHash(
-      fs.readFileSync(path.resolve(projectRoot, authoringGeneratorRef)),
-    ),
+    authoring_generator_ref: authoringGenerator.ref,
+    authoring_generator_hash: authoringGenerator.rawHash,
     exact_compiler_identity: compilerIdentity,
     cases_ref: G2_NODE_OUTPUT_ENVELOPE_DRAFT_CASES_PATH,
     cases_hash: draftCasesArtifact.hash,

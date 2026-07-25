@@ -188,9 +188,9 @@ export const G3_CURRENT_UPSTREAM_IDENTITY: G3UpstreamIdentity = {
   g2_sealed_bundle_ref:
     'conformance/sealed/g2-generated-schema-join-authority-v6/golden-conformance-bundle@2.json',
   g2_sealed_bundle_artifact_hash:
-    'sha256:0e5ea012864bce2dae7d0435e700b78b6d3299703f896c737677d24f46d8f78f',
+    'sha256:5cf2d899d0bf8d7cc0d4b70cc7796a123b8b5384bbbefe3e204e70bddf33fe11',
   g2_sealed_bundle_hash:
-    'sha256:4110072a90b441f154f580a647a30bd24a9aa3f052635c22e8e7d3dbe0a31967',
+    'sha256:0820328ae1cfdba7d05948d9e36498a5428d997d6eabfb833ef0ba7d84b77db7',
   compiler: {
     compiler_toolchain_manifest_ref: {
       id: 'icarus.workflow-compiler-toolchain',

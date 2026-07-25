@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-compiler-conformance-artifact:1\n",
-  "hash": "sha256:0e5ea012864bce2dae7d0435e700b78b6d3299703f896c737677d24f46d8f78f",
+  "hash": "sha256:5cf2d899d0bf8d7cc0d4b70cc7796a123b8b5384bbbefe3e204e70bddf33fe11",
   "payload": {
     "format": "icarus.workflow-compiler-conformance/1",
     "gate": "G2",
@@ -48,14 +48,14 @@
       "conformance_result_schema_hash": "sha256:ee41b9dff7eb2c97a75c81a7c15ec3bcf935ce233c29468a4ef7b7bfa047987e"
     },
     "draft_manifest_ref": "conformance/golden-draft/g2-generated-schema-join-authority-v6/golden-draft-manifest@2.json",
-    "draft_manifest_hash": "sha256:e2b42ce214a96dfb00ceba4f4bb49c8ee9e25fdbf34a25aa376e7c336a7a4cf8",
-    "draft_artifact_hash": "sha256:081ccddd26499f672bd0dac93996ae0b7b5a23347f59b4c1c8ae84b5d68ccb2e",
+    "draft_manifest_hash": "sha256:56538abb3748d134b25e1eee26e2d6198784b456412a60a3ce1c34ee5d79c804",
+    "draft_artifact_hash": "sha256:b43960ab002a49d918bddbce057e51e1055b65e2e7a1d10e44fed25c28ea66c4",
     "golden_review_report_ref": "conformance/golden-review/g2-generated-schema-join-authority-v6/golden-review-report@2.json",
-    "golden_review_report_hash": "sha256:68b492f3261ad1b91d1596485be6d8cda00ddf4517cc957759d9cb08d5f1031c",
-    "golden_review_report_artifact_hash": "sha256:f20e55f79fa6636d70cff3a46cacaf9b39fc49794b4a69977b381ba7b599a6c0",
+    "golden_review_report_hash": "sha256:b909526bc8d4c76d3a1079bee54de072eb6dd7bdd16ee3ae91b27d1f9a6954b1",
+    "golden_review_report_artifact_hash": "sha256:4ebc90aa4028f68580fa2aaaaaf23ef7e27bd61c9e285a8f648a42278b0e9aa0",
     "golden_semantic_review_ref": "conformance/golden-semantic-review/g2-generated-schema-join-authority-v6/golden-semantic-review@2.json",
-    "golden_semantic_review_hash": "sha256:ca3fc5fd0de7c9a71eb865b4e4b0e24d119f4683446f9ddbdeadebfa847ce694",
-    "golden_semantic_review_artifact_hash": "sha256:4e31b459ee015ca8b4b9c602db394585ef36fad191da1868fc528ea2ae667c28",
+    "golden_semantic_review_hash": "sha256:0d1c4f636ef7c819aa62cd255dca9e67d6a27bbca689d88e0a791338b463fbb9",
+    "golden_semantic_review_artifact_hash": "sha256:09725beed1ff8370eec5a095968bf1ac8c3d8dcb68c1a8b01e36f102528a6db5",
     "approval_status": "approved",
     "signature_policy": "not_required_local_single_user",
     "review_assignment": "exactly_one_approved_review_per_case",
@@ -108,7 +108,7 @@
           }
         ],
         "approved_review_ref": "conformance/golden-semantic-review/g2-generated-schema-join-authority-v6/golden-semantic-review@2.json",
-        "approved_review_hash": "sha256:ca3fc5fd0de7c9a71eb865b4e4b0e24d119f4683446f9ddbdeadebfa847ce694"
+        "approved_review_hash": "sha256:0d1c4f636ef7c819aa62cd255dca9e67d6a27bbca689d88e0a791338b463fbb9"
       },
       {
         "case_id": "negative.child-recipe-dependency-cycle",
@@ -149,7 +149,7 @@
           }
         ],
         "approved_review_ref": "conformance/golden-semantic-review/g2-generated-schema-join-authority-v6/golden-semantic-review@2.json",
-        "approved_review_hash": "sha256:ca3fc5fd0de7c9a71eb865b4e4b0e24d119f4683446f9ddbdeadebfa847ce694"
+        "approved_review_hash": "sha256:0d1c4f636ef7c819aa62cd255dca9e67d6a27bbca689d88e0a791338b463fbb9"
       },
       {
         "case_id": "negative.child-recipe-set-mismatch",
@@ -190,7 +190,7 @@
           }
         ],
         "approved_review_ref": "conformance/golden-semantic-review/g2-generated-schema-join-authority-v6/golden-semantic-review@2.json",
-        "approved_review_hash": "sha256:ca3fc5fd0de7c9a71eb865b4e4b0e24d119f4683446f9ddbdeadebfa847ce694"
+        "approved_review_hash": "sha256:0d1c4f636ef7c819aa62cd255dca9e67d6a27bbca689d88e0a791338b463fbb9"
       },
       {
         "case_id": "negative.compiler-integrity-mismatch",
@@ -231,7 +231,7 @@
           }
         ],
         "approved_review_ref": "conformance/golden-semantic-review/g2-generated-schema-join-authority-v6/golden-semantic-review@2.json",
-        "approved_review_hash": "sha256:ca3fc5fd0de7c9a71eb865b4e4b0e24d119f4683446f9ddbdeadebfa847ce694"
+        "approved_review_hash": "sha256:0d1c4f636ef7c819aa62cd255dca9e67d6a27bbca689d88e0a791338b463fbb9"
       },
       {
         "case_id": "negative.completion-contract-invalid",
@@ -272,7 +272,7 @@
           }
         ],
         "approved_review_ref": "conformance/golden-semantic-review/g2-generated-schema-join-authority-v6/golden-semantic-review@2.json",
-        "approved_review_hash": "sha256:ca3fc5fd0de7c9a71eb865b4e4b0e24d119f4683446f9ddbdeadebfa847ce694"
+        "approved_review_hash": "sha256:0d1c4f636ef7c819aa62cd255dca9e67d6a27bbca689d88e0a791338b463fbb9"
       },
       {
         "case_id": "negative.condition-complexity-exceeded",
@@ -313,7 +313,7 @@
           }
         ],
         "approved_review_ref": "conformance/golden-semantic-review/g2-generated-schema-join-authority-v6/golden-semantic-review@2.json",
-        "approved_review_hash": "sha256:ca3fc5fd0de7c9a71eb865b4e4b0e24d119f4683446f9ddbdeadebfa847ce694"
+        "approved_review_hash": "sha256:0d1c4f636ef7c819aa62cd255dca9e67d6a27bbca689d88e0a791338b463fbb9"
       },
       {
         "case_id": "negative.condition-type-mismatch",
@@ -354,7 +354,7 @@
           }
         ],
         "approved_review_ref": "conformance/golden-semantic-review/g2-generated-schema-join-authority-v6/golden-semantic-review@2.json",
-        "approved_review_hash": "sha256:ca3fc5fd0de7c9a71eb865b4e4b0e24d119f4683446f9ddbdeadebfa847ce694"
+        "approved_review_hash": "sha256:0d1c4f636ef7c819aa62cd255dca9e67d6a27bbca689d88e0a791338b463fbb9"
       },
       {
         "case_id": "negative.definition-child-creation-key-template",
@@ -395,7 +395,7 @@
           }
         ],
         "approved_review_ref": "conformance/golden-semantic-review/g2-generated-schema-join-authority-v6/golden-semantic-review@2.json",
-        "approved_review_hash": "sha256:ca3fc5fd0de7c9a71eb865b4e4b0e24d119f4683446f9ddbdeadebfa847ce694"
+        "approved_review_hash": "sha256:0d1c4f636ef7c819aa62cd255dca9e67d6a27bbca689d88e0a791338b463fbb9"
       },
       {
         "case_id": "negative.definition-notification-delivery-requirement",
@@ -436,7 +436,7 @@
           }
         ],
         "approved_review_ref": "conformance/golden-semantic-review/g2-generated-schema-join-authority-v6/golden-semantic-review@2.json",
-        "approved_review_hash": "sha256:ca3fc5fd0de7c9a71eb865b4e4b0e24d119f4683446f9ddbdeadebfa847ce694"
+        "approved_review_hash": "sha256:0d1c4f636ef7c819aa62cd255dca9e67d6a27bbca689d88e0a791338b463fbb9"
       },
       {
         "case_id": "negative.early-completion-non-monotone",
@@ -477,7 +477,7 @@
           }
         ],
         "approved_review_ref": "conformance/golden-semantic-review/g2-generated-schema-join-authority-v6/golden-semantic-review@2.json",
-        "approved_review_hash": "sha256:ca3fc5fd0de7c9a71eb865b4e4b0e24d119f4683446f9ddbdeadebfa847ce694"
+        "approved_review_hash": "sha256:0d1c4f636ef7c819aa62cd255dca9e67d6a27bbca689d88e0a791338b463fbb9"
       },
       {
         "case_id": "negative.graph-cross-scope-edge",
@@ -518,7 +518,7 @@
           }
         ],
         "approved_review_ref": "conformance/golden-semantic-review/g2-generated-schema-join-authority-v6/golden-semantic-review@2.json",
-        "approved_review_hash": "sha256:ca3fc5fd0de7c9a71eb865b4e4b0e24d119f4683446f9ddbdeadebfa847ce694"
+        "approved_review_hash": "sha256:0d1c4f636ef7c819aa62cd255dca9e67d6a27bbca689d88e0a791338b463fbb9"
       },
       {
         "case_id": "negative.graph-dependency-cycle",
@@ -559,7 +559,7 @@
           }
         ],
         "approved_review_ref": "conformance/golden-semantic-review/g2-generated-schema-join-authority-v6/golden-semantic-review@2.json",
-        "approved_review_hash": "sha256:ca3fc5fd0de7c9a71eb865b4e4b0e24d119f4683446f9ddbdeadebfa847ce694"
+        "approved_review_hash": "sha256:0d1c4f636ef7c819aa62cd255dca9e67d6a27bbca689d88e0a791338b463fbb9"
       },
       {
         "case_id": "negative.graph-endpoint-not-found",
@@ -600,7 +600,7 @@
           }
         ],
         "approved_review_ref": "conformance/golden-semantic-review/g2-generated-schema-join-authority-v6/golden-semantic-review@2.json",
-        "approved_review_hash": "sha256:ca3fc5fd0de7c9a71eb865b4e4b0e24d119f4683446f9ddbdeadebfa847ce694"
+        "approved_review_hash": "sha256:0d1c4f636ef7c819aa62cd255dca9e67d6a27bbca689d88e0a791338b463fbb9"
       },
       {
         "case_id": "negative.graph-id-duplicate",
@@ -641,7 +641,7 @@
           }
         ],
         "approved_review_ref": "conformance/golden-semantic-review/g2-generated-schema-join-authority-v6/golden-semantic-review@2.json",
-        "approved_review_hash": "sha256:ca3fc5fd0de7c9a71eb865b4e4b0e24d119f4683446f9ddbdeadebfa847ce694"
+        "approved_review_hash": "sha256:0d1c4f636ef7c819aa62cd255dca9e67d6a27bbca689d88e0a791338b463fbb9"
       },
       {
         "case_id": "negative.json-duplicate-key",
@@ -682,7 +682,7 @@
           }
         ],
         "approved_review_ref": "conformance/golden-semantic-review/g2-generated-schema-join-authority-v6/golden-semantic-review@2.json",
-        "approved_review_hash": "sha256:ca3fc5fd0de7c9a71eb865b4e4b0e24d119f4683446f9ddbdeadebfa847ce694"
+        "approved_review_hash": "sha256:0d1c4f636ef7c819aa62cd255dca9e67d6a27bbca689d88e0a791338b463fbb9"
       },
       {
         "case_id": "negative.json-pointer-non-total",
@@ -723,7 +723,7 @@
           }
         ],
         "approved_review_ref": "conformance/golden-semantic-review/g2-generated-schema-join-authority-v6/golden-semantic-review@2.json",
-        "approved_review_hash": "sha256:ca3fc5fd0de7c9a71eb865b4e4b0e24d119f4683446f9ddbdeadebfa847ce694"
+        "approved_review_hash": "sha256:0d1c4f636ef7c819aa62cd255dca9e67d6a27bbca689d88e0a791338b463fbb9"
       },
       {
         "case_id": "negative.json-syntax-invalid",
@@ -764,7 +764,7 @@
           }
         ],
         "approved_review_ref": "conformance/golden-semantic-review/g2-generated-schema-join-authority-v6/golden-semantic-review@2.json",
-        "approved_review_hash": "sha256:ca3fc5fd0de7c9a71eb865b4e4b0e24d119f4683446f9ddbdeadebfa847ce694"
+        "approved_review_hash": "sha256:0d1c4f636ef7c819aa62cd255dca9e67d6a27bbca689d88e0a791338b463fbb9"
       },
       {
         "case_id": "negative.policy-escalation",
@@ -805,7 +805,7 @@
           }
         ],
         "approved_review_ref": "conformance/golden-semantic-review/g2-generated-schema-join-authority-v6/golden-semantic-review@2.json",
-        "approved_review_hash": "sha256:ca3fc5fd0de7c9a71eb865b4e4b0e24d119f4683446f9ddbdeadebfa847ce694"
+        "approved_review_hash": "sha256:0d1c4f636ef7c819aa62cd255dca9e67d6a27bbca689d88e0a791338b463fbb9"
       },
       {
         "case_id": "negative.quality-revision-effect-key-incompatible",
@@ -846,7 +846,7 @@
           }
         ],
         "approved_review_ref": "conformance/golden-semantic-review/g2-generated-schema-join-authority-v6/golden-semantic-review@2.json",
-        "approved_review_hash": "sha256:ca3fc5fd0de7c9a71eb865b4e4b0e24d119f4683446f9ddbdeadebfa847ce694"
+        "approved_review_hash": "sha256:0d1c4f636ef7c819aa62cd255dca9e67d6a27bbca689d88e0a791338b463fbb9"
       },
       {
         "case_id": "negative.quality-revision-missing-feedback-schema",
@@ -887,7 +887,7 @@
           }
         ],
         "approved_review_ref": "conformance/golden-semantic-review/g2-generated-schema-join-authority-v6/golden-semantic-review@2.json",
-        "approved_review_hash": "sha256:ca3fc5fd0de7c9a71eb865b4e4b0e24d119f4683446f9ddbdeadebfa847ce694"
+        "approved_review_hash": "sha256:0d1c4f636ef7c819aa62cd255dca9e67d6a27bbca689d88e0a791338b463fbb9"
       },
       {
         "case_id": "negative.quality-revision-missing-quality-gate",
@@ -928,7 +928,7 @@
           }
         ],
         "approved_review_ref": "conformance/golden-semantic-review/g2-generated-schema-join-authority-v6/golden-semantic-review@2.json",
-        "approved_review_hash": "sha256:ca3fc5fd0de7c9a71eb865b4e4b0e24d119f4683446f9ddbdeadebfa847ce694"
+        "approved_review_hash": "sha256:0d1c4f636ef7c819aa62cd255dca9e67d6a27bbca689d88e0a791338b463fbb9"
       },
       {
         "case_id": "negative.registry-ref-not-found",
@@ -969,7 +969,7 @@
           }
         ],
         "approved_review_ref": "conformance/golden-semantic-review/g2-generated-schema-join-authority-v6/golden-semantic-review@2.json",
-        "approved_review_hash": "sha256:ca3fc5fd0de7c9a71eb865b4e4b0e24d119f4683446f9ddbdeadebfa847ce694"
+        "approved_review_hash": "sha256:0d1c4f636ef7c819aa62cd255dca9e67d6a27bbca689d88e0a791338b463fbb9"
       },
       {
         "case_id": "negative.registry-ref-unpinned",
@@ -1010,7 +1010,7 @@
           }
         ],
         "approved_review_ref": "conformance/golden-semantic-review/g2-generated-schema-join-authority-v6/golden-semantic-review@2.json",
-        "approved_review_hash": "sha256:ca3fc5fd0de7c9a71eb865b4e4b0e24d119f4683446f9ddbdeadebfa847ce694"
+        "approved_review_hash": "sha256:0d1c4f636ef7c819aa62cd255dca9e67d6a27bbca689d88e0a791338b463fbb9"
       },
       {
         "case_id": "negative.route-group-ambiguous",
@@ -1051,7 +1051,7 @@
           }
         ],
         "approved_review_ref": "conformance/golden-semantic-review/g2-generated-schema-join-authority-v6/golden-semantic-review@2.json",
-        "approved_review_hash": "sha256:ca3fc5fd0de7c9a71eb865b4e4b0e24d119f4683446f9ddbdeadebfa847ce694"
+        "approved_review_hash": "sha256:0d1c4f636ef7c819aa62cd255dca9e67d6a27bbca689d88e0a791338b463fbb9"
       },
       {
         "case_id": "negative.runtime-safety-limit-exceeded",
@@ -1092,7 +1092,7 @@
           }
         ],
         "approved_review_ref": "conformance/golden-semantic-review/g2-generated-schema-join-authority-v6/golden-semantic-review@2.json",
-        "approved_review_hash": "sha256:ca3fc5fd0de7c9a71eb865b4e4b0e24d119f4683446f9ddbdeadebfa847ce694"
+        "approved_review_hash": "sha256:0d1c4f636ef7c819aa62cd255dca9e67d6a27bbca689d88e0a791338b463fbb9"
       },
       {
         "case_id": "negative.schema-not-assignable",
@@ -1133,7 +1133,7 @@
           }
         ],
         "approved_review_ref": "conformance/golden-semantic-review/g2-generated-schema-join-authority-v6/golden-semantic-review@2.json",
-        "approved_review_hash": "sha256:ca3fc5fd0de7c9a71eb865b4e4b0e24d119f4683446f9ddbdeadebfa847ce694"
+        "approved_review_hash": "sha256:0d1c4f636ef7c819aa62cd255dca9e67d6a27bbca689d88e0a791338b463fbb9"
       },
       {
         "case_id": "negative.schema-profile-keyword-unsupported",
@@ -1174,7 +1174,7 @@
           }
         ],
         "approved_review_ref": "conformance/golden-semantic-review/g2-generated-schema-join-authority-v6/golden-semantic-review@2.json",
-        "approved_review_hash": "sha256:ca3fc5fd0de7c9a71eb865b4e4b0e24d119f4683446f9ddbdeadebfa847ce694"
+        "approved_review_hash": "sha256:0d1c4f636ef7c819aa62cd255dca9e67d6a27bbca689d88e0a791338b463fbb9"
       },
       {
         "case_id": "negative.schema-unknown-field",
@@ -1215,7 +1215,7 @@
           }
         ],
         "approved_review_ref": "conformance/golden-semantic-review/g2-generated-schema-join-authority-v6/golden-semantic-review@2.json",
-        "approved_review_hash": "sha256:ca3fc5fd0de7c9a71eb865b4e4b0e24d119f4683446f9ddbdeadebfa847ce694"
+        "approved_review_hash": "sha256:0d1c4f636ef7c819aa62cd255dca9e67d6a27bbca689d88e0a791338b463fbb9"
       },
       {
         "case_id": "negative.trigger-contract-invalid",
@@ -1256,7 +1256,7 @@
           }
         ],
         "approved_review_ref": "conformance/golden-semantic-review/g2-generated-schema-join-authority-v6/golden-semantic-review@2.json",
-        "approved_review_hash": "sha256:ca3fc5fd0de7c9a71eb865b4e4b0e24d119f4683446f9ddbdeadebfa847ce694"
+        "approved_review_hash": "sha256:0d1c4f636ef7c819aa62cd255dca9e67d6a27bbca689d88e0a791338b463fbb9"
       },
       {
         "case_id": "positive.compiler-integrity-match-control",
@@ -1315,7 +1315,7 @@
         ],
         "expected_diagnostics": [],
         "approved_review_ref": "conformance/golden-semantic-review/g2-generated-schema-join-authority-v6/golden-semantic-review@2.json",
-        "approved_review_hash": "sha256:ca3fc5fd0de7c9a71eb865b4e4b0e24d119f4683446f9ddbdeadebfa847ce694"
+        "approved_review_hash": "sha256:0d1c4f636ef7c819aa62cd255dca9e67d6a27bbca689d88e0a791338b463fbb9"
       },
       {
         "case_id": "positive.condition-route",
@@ -1379,7 +1379,7 @@
         ],
         "expected_diagnostics": [],
         "approved_review_ref": "conformance/golden-semantic-review/g2-generated-schema-join-authority-v6/golden-semantic-review@2.json",
-        "approved_review_hash": "sha256:ca3fc5fd0de7c9a71eb865b4e4b0e24d119f4683446f9ddbdeadebfa847ce694"
+        "approved_review_hash": "sha256:0d1c4f636ef7c819aa62cd255dca9e67d6a27bbca689d88e0a791338b463fbb9"
       },
       {
         "case_id": "positive.expand",
@@ -1440,7 +1440,7 @@
         ],
         "expected_diagnostics": [],
         "approved_review_ref": "conformance/golden-semantic-review/g2-generated-schema-join-authority-v6/golden-semantic-review@2.json",
-        "approved_review_hash": "sha256:ca3fc5fd0de7c9a71eb865b4e4b0e24d119f4683446f9ddbdeadebfa847ce694"
+        "approved_review_hash": "sha256:0d1c4f636ef7c819aa62cd255dca9e67d6a27bbca689d88e0a791338b463fbb9"
       },
       {
         "case_id": "positive.map",
@@ -1501,7 +1501,7 @@
         ],
         "expected_diagnostics": [],
         "approved_review_ref": "conformance/golden-semantic-review/g2-generated-schema-join-authority-v6/golden-semantic-review@2.json",
-        "approved_review_hash": "sha256:ca3fc5fd0de7c9a71eb865b4e4b0e24d119f4683446f9ddbdeadebfa847ce694"
+        "approved_review_hash": "sha256:0d1c4f636ef7c819aa62cd255dca9e67d6a27bbca689d88e0a791338b463fbb9"
       },
       {
         "case_id": "positive.policy-intersection",
@@ -1560,7 +1560,7 @@
         ],
         "expected_diagnostics": [],
         "approved_review_ref": "conformance/golden-semantic-review/g2-generated-schema-join-authority-v6/golden-semantic-review@2.json",
-        "approved_review_hash": "sha256:ca3fc5fd0de7c9a71eb865b4e4b0e24d119f4683446f9ddbdeadebfa847ce694"
+        "approved_review_hash": "sha256:0d1c4f636ef7c819aa62cd255dca9e67d6a27bbca689d88e0a791338b463fbb9"
       },
       {
         "case_id": "positive.quality-revision-binding",
@@ -1620,7 +1620,7 @@
         ],
         "expected_diagnostics": [],
         "approved_review_ref": "conformance/golden-semantic-review/g2-generated-schema-join-authority-v6/golden-semantic-review@2.json",
-        "approved_review_hash": "sha256:ca3fc5fd0de7c9a71eb865b4e4b0e24d119f4683446f9ddbdeadebfa847ce694"
+        "approved_review_hash": "sha256:0d1c4f636ef7c819aa62cd255dca9e67d6a27bbca689d88e0a791338b463fbb9"
       },
       {
         "case_id": "positive.sound-subtype-different-hash",
@@ -1682,7 +1682,7 @@
         ],
         "expected_diagnostics": [],
         "approved_review_ref": "conformance/golden-semantic-review/g2-generated-schema-join-authority-v6/golden-semantic-review@2.json",
-        "approved_review_hash": "sha256:ca3fc5fd0de7c9a71eb865b4e4b0e24d119f4683446f9ddbdeadebfa847ce694"
+        "approved_review_hash": "sha256:0d1c4f636ef7c819aa62cd255dca9e67d6a27bbca689d88e0a791338b463fbb9"
       },
       {
         "case_id": "positive.static-child-closure",
@@ -1742,7 +1742,7 @@
         ],
         "expected_diagnostics": [],
         "approved_review_ref": "conformance/golden-semantic-review/g2-generated-schema-join-authority-v6/golden-semantic-review@2.json",
-        "approved_review_hash": "sha256:ca3fc5fd0de7c9a71eb865b4e4b0e24d119f4683446f9ddbdeadebfa847ce694"
+        "approved_review_hash": "sha256:0d1c4f636ef7c819aa62cd255dca9e67d6a27bbca689d88e0a791338b463fbb9"
       },
       {
         "case_id": "positive.static-lowering",
@@ -1803,7 +1803,7 @@
         ],
         "expected_diagnostics": [],
         "approved_review_ref": "conformance/golden-semantic-review/g2-generated-schema-join-authority-v6/golden-semantic-review@2.json",
-        "approved_review_hash": "sha256:ca3fc5fd0de7c9a71eb865b4e4b0e24d119f4683446f9ddbdeadebfa847ce694"
+        "approved_review_hash": "sha256:0d1c4f636ef7c819aa62cd255dca9e67d6a27bbca689d88e0a791338b463fbb9"
       },
       {
         "case_id": "positive.subgraph",
@@ -1863,7 +1863,7 @@
         ],
         "expected_diagnostics": [],
         "approved_review_ref": "conformance/golden-semantic-review/g2-generated-schema-join-authority-v6/golden-semantic-review@2.json",
-        "approved_review_hash": "sha256:ca3fc5fd0de7c9a71eb865b4e4b0e24d119f4683446f9ddbdeadebfa847ce694"
+        "approved_review_hash": "sha256:0d1c4f636ef7c819aa62cd255dca9e67d6a27bbca689d88e0a791338b463fbb9"
       },
       {
         "case_id": "positive.wait",
@@ -1924,7 +1924,7 @@
         ],
         "expected_diagnostics": [],
         "approved_review_ref": "conformance/golden-semantic-review/g2-generated-schema-join-authority-v6/golden-semantic-review@2.json",
-        "approved_review_hash": "sha256:ca3fc5fd0de7c9a71eb865b4e4b0e24d119f4683446f9ddbdeadebfa847ce694"
+        "approved_review_hash": "sha256:0d1c4f636ef7c819aa62cd255dca9e67d6a27bbca689d88e0a791338b463fbb9"
       }
     ],
     "inventory_ref": "conformance/sealed/g2-generated-schema-join-authority-v6/artifact-inventory@2.json",
@@ -1932,6 +1932,6 @@
     "sealed_artifact_count": 157,
     "ci_replay_status": "not_run_at_seal_time",
     "g3_through_g9_status": "not_started",
-    "bundle_hash": "sha256:4110072a90b441f154f580a647a30bd24a9aa3f052635c22e8e7d3dbe0a31967"
+    "bundle_hash": "sha256:0820328ae1cfdba7d05948d9e36498a5428d997d6eabfb833ef0ba7d84b77db7"
   }
 }

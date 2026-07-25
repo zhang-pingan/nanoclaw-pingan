@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-current-g2-golden-draft-manifest-artifact:1\n",
-  "hash": "sha256:081ccddd26499f672bd0dac93996ae0b7b5a23347f59b4c1c8ae84b5d68ccb2e",
+  "hash": "sha256:b43960ab002a49d918bddbce057e51e1055b65e2e7a1d10e44fed25c28ea66c4",
   "payload": {
     "format": "icarus.workflow-compiler-current-g2-golden-draft-manifest/1",
     "gate": "G2",
@@ -49,8 +49,8 @@
     "case_input_binding_hash": "sha256:70050bb1eeb2e7ae16bb9651d1044bd66f2eb7d0f8638b7576060fa2f1da2959",
     "toolchain_file_ref": "conformance/review-candidate/g2-generated-schema-join-authority-v6/workflow-compiler-toolchain@3.0.4.json",
     "toolchain_file_hash": "sha256:c9c5c9b9180ecb9ffde5f8456e44c4e93fc51686988c74e47faa1b2f7fae3ffa",
-    "authoring_generator_ref": "src/workflow-runtime/contracts/generated-schema-join-authority-golden-authoring.ts",
-    "authoring_generator_hash": "sha256:6c5b9d0387b4535731b9d9029f503c2b08703cfa4ed3dcb2af7ad3b91087f031",
+    "authoring_generator_ref": "src/workflow-runtime/contracts/node-output-envelope-golden-authoring.ts",
+    "authoring_generator_hash": "sha256:a574091ca544a7b838936403d1bd55d3f1757468d453d5205aaa6f8a11f897ec",
     "exact_compiler_identity": {
       "compiler_toolchain_manifest_ref": {
         "id": "icarus.workflow-compiler-toolchain",
@@ -111,6 +111,6 @@
     "golden_semantic_review_status": "not_run",
     "golden_review_report_status": "generated_after_draft_freeze",
     "g3_through_g9_status": "not_started",
-    "draft_manifest_hash": "sha256:e2b42ce214a96dfb00ceba4f4bb49c8ee9e25fdbf34a25aa376e7c336a7a4cf8"
+    "draft_manifest_hash": "sha256:56538abb3748d134b25e1eee26e2d6198784b456412a60a3ce1c34ee5d79c804"
   }
 }

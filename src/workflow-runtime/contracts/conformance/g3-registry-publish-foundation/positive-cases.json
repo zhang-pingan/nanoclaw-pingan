@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-g3-registry-publish-positive-cases:1\n",
-  "hash": "sha256:bb6cc8621499d31a83e26f64a7f0269764649bb21937d7f22024742e4bbf71c0",
+  "hash": "sha256:213a3c78c5c4adc1cdec4c36f363f4f5555394f0901798f8d28684f1f062837d",
   "payload": {
     "fixture_scope": "test_only",
     "cases": [
@@ -30,8 +30,8 @@
             "g1_schema_hash": "sha256:27a212831d2abd8898eb8becbfd714d96b1bfb15d818d471cfc58fdc36196e65",
             "g1_migration_sha256": "sha256:b4307930cedd9e0b8acbec599a2b3b29cb18f78840a726532b108459a4df2497",
             "g2_sealed_bundle_ref": "conformance/sealed/g2-generated-schema-join-authority-v6/golden-conformance-bundle@2.json",
-            "g2_sealed_bundle_artifact_hash": "sha256:0e5ea012864bce2dae7d0435e700b78b6d3299703f896c737677d24f46d8f78f",
-            "g2_sealed_bundle_hash": "sha256:4110072a90b441f154f580a647a30bd24a9aa3f052635c22e8e7d3dbe0a31967",
+            "g2_sealed_bundle_artifact_hash": "sha256:5cf2d899d0bf8d7cc0d4b70cc7796a123b8b5384bbbefe3e204e70bddf33fe11",
+            "g2_sealed_bundle_hash": "sha256:0820328ae1cfdba7d05948d9e36498a5428d997d6eabfb833ef0ba7d84b77db7",
             "compiler": {
               "compiler_toolchain_manifest_ref": {
                 "id": "icarus.workflow-compiler-toolchain",
@@ -60,7 +60,7 @@
           },
           "requested_registry_write": false,
           "requested_activation": false,
-          "preflight_hash": "sha256:5a5f93e757ce8271435c8ac197706d433e0e729183cd68ae7e72738615d1b284"
+          "preflight_hash": "sha256:f3908e1b0efe7b72bb26ea9d16d849900cf783b1df2d1226db7972cf1b734707"
         },
         "expected_result": {
           "format": "icarus.workflow-registry-publish-preflight-result/1",
@@ -143,8 +143,8 @@
             "g1_schema_hash": "sha256:27a212831d2abd8898eb8becbfd714d96b1bfb15d818d471cfc58fdc36196e65",
             "g1_migration_sha256": "sha256:b4307930cedd9e0b8acbec599a2b3b29cb18f78840a726532b108459a4df2497",
             "g2_sealed_bundle_ref": "conformance/sealed/g2-generated-schema-join-authority-v6/golden-conformance-bundle@2.json",
-            "g2_sealed_bundle_artifact_hash": "sha256:0e5ea012864bce2dae7d0435e700b78b6d3299703f896c737677d24f46d8f78f",
-            "g2_sealed_bundle_hash": "sha256:4110072a90b441f154f580a647a30bd24a9aa3f052635c22e8e7d3dbe0a31967",
+            "g2_sealed_bundle_artifact_hash": "sha256:5cf2d899d0bf8d7cc0d4b70cc7796a123b8b5384bbbefe3e204e70bddf33fe11",
+            "g2_sealed_bundle_hash": "sha256:0820328ae1cfdba7d05948d9e36498a5428d997d6eabfb833ef0ba7d84b77db7",
             "compiler": {
               "compiler_toolchain_manifest_ref": {
                 "id": "icarus.workflow-compiler-toolchain",
@@ -173,7 +173,7 @@
           },
           "requested_registry_write": false,
           "requested_activation": false,
-          "preflight_hash": "sha256:b6be33f453a69044649dda7983d532a1af01febf739cbd417273c82cc2df4c75"
+          "preflight_hash": "sha256:ce79203c6e6795ebef525ef6620b72dd07cfb26de85d8b8690907abcb46514b3"
         },
         "expected_result": {
           "format": "icarus.workflow-registry-publish-preflight-result/1",
@@ -295,8 +295,8 @@
             "g1_schema_hash": "sha256:27a212831d2abd8898eb8becbfd714d96b1bfb15d818d471cfc58fdc36196e65",
             "g1_migration_sha256": "sha256:b4307930cedd9e0b8acbec599a2b3b29cb18f78840a726532b108459a4df2497",
             "g2_sealed_bundle_ref": "conformance/sealed/g2-generated-schema-join-authority-v6/golden-conformance-bundle@2.json",
-            "g2_sealed_bundle_artifact_hash": "sha256:0e5ea012864bce2dae7d0435e700b78b6d3299703f896c737677d24f46d8f78f",
-            "g2_sealed_bundle_hash": "sha256:4110072a90b441f154f580a647a30bd24a9aa3f052635c22e8e7d3dbe0a31967",
+            "g2_sealed_bundle_artifact_hash": "sha256:5cf2d899d0bf8d7cc0d4b70cc7796a123b8b5384bbbefe3e204e70bddf33fe11",
+            "g2_sealed_bundle_hash": "sha256:0820328ae1cfdba7d05948d9e36498a5428d997d6eabfb833ef0ba7d84b77db7",
             "compiler": {
               "compiler_toolchain_manifest_ref": {
                 "id": "icarus.workflow-compiler-toolchain",
@@ -325,7 +325,7 @@
           },
           "requested_registry_write": false,
           "requested_activation": false,
-          "preflight_hash": "sha256:06f49334be7d82b34b32646a1e380cac4b3f90e0a5b0c16d4c84f0cb129f21ae"
+          "preflight_hash": "sha256:90c3587fbf911d75f827ae3076bd990e383483a10dfc605b341386af5a6720d2"
         },
         "expected_result": {
           "format": "icarus.workflow-registry-publish-preflight-result/1",

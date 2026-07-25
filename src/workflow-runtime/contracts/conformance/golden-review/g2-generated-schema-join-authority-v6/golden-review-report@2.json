@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-current-g2-golden-review-report-artifact:1\n",
-  "hash": "sha256:f20e55f79fa6636d70cff3a46cacaf9b39fc49794b4a69977b381ba7b599a6c0",
+  "hash": "sha256:4ebc90aa4028f68580fa2aaaaaf23ef7e27bd61c9e285a8f648a42278b0e9aa0",
   "payload": {
     "format": "icarus.workflow-compiler-current-g2-golden-review-report/1",
     "construction_phase": "RC_REVIEW",
@@ -14,7 +14,7 @@
     "publishable": false,
     "production_reachable": false,
     "draft_manifest_ref": "conformance/golden-draft/g2-generated-schema-join-authority-v6/golden-draft-manifest@2.json",
-    "draft_manifest_hash": "sha256:e2b42ce214a96dfb00ceba4f4bb49c8ee9e25fdbf34a25aa376e7c336a7a4cf8",
+    "draft_manifest_hash": "sha256:56538abb3748d134b25e1eee26e2d6198784b456412a60a3ce1c34ee5d79c804",
     "review_candidate_ref": "conformance/review-candidate/g2-generated-schema-join-authority-v6/review-candidate@2.json",
     "review_candidate_hash": "sha256:64fec8c48d3c6685f83bce980b8f85c03ce0d989aaa944e85e6a0d61c40297f1",
     "candidate_root_ref": "conformance/review-candidate/g2-generated-schema-join-authority-v6/working-candidate-root@2.json",
@@ -7510,6 +7510,6 @@
     "seal_status": "absent",
     "golden_semantic_review_status": "not_run",
     "g3_through_g9_status": "not_started",
-    "report_hash": "sha256:68b492f3261ad1b91d1596485be6d8cda00ddf4517cc957759d9cb08d5f1031c"
+    "report_hash": "sha256:b909526bc8d4c76d3a1079bee54de072eb6dd7bdd16ee3ae91b27d1f9a6954b1"
   }
 }

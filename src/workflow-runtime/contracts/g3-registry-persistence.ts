@@ -1005,7 +1005,7 @@ function validateUpstreamIdentities(): void {
   const exactArtifacts: Array<[string, Sha256Hash]> = [
     [
       'contract-pack-g3-registry-publish-foundation.json',
-      'sha256:a25e99fce7485ce433f96291ddea64a90f15fa839296c8496eded4c168c7b70b',
+      'sha256:54355b3c74eb311e495ea31effcbfca6e3ce7547f2ccae663805556060b0b685',
     ],
     [
       'contract-pack-g3.2a-feature-manifest-intake.json',
@@ -1025,9 +1025,9 @@ function validateUpstreamIdentities(): void {
   );
   if (
     sealed.hash !==
-      'sha256:0e5ea012864bce2dae7d0435e700b78b6d3299703f896c737677d24f46d8f78f' ||
+      'sha256:5cf2d899d0bf8d7cc0d4b70cc7796a123b8b5384bbbefe3e204e70bddf33fe11' ||
     sealed.payload.bundle_hash !==
-      'sha256:4110072a90b441f154f580a647a30bd24a9aa3f052635c22e8e7d3dbe0a31967'
+      'sha256:0820328ae1cfdba7d05948d9e36498a5428d997d6eabfb833ef0ba7d84b77db7'
   ) {
     throw new Error('G3 Registry upstream G2 sealed identity drift');
   }
@@ -1148,11 +1148,11 @@ function buildManifest(
       upstream_g3_2a_pack_hash:
         'sha256:c9c273b6d294d512a3578203d91d4bdce7863a3ccb561fdd7da08d072b3d8cd9',
       upstream_g3_1_pack_hash:
-        'sha256:a25e99fce7485ce433f96291ddea64a90f15fa839296c8496eded4c168c7b70b',
+        'sha256:54355b3c74eb311e495ea31effcbfca6e3ce7547f2ccae663805556060b0b685',
       upstream_g3_2_pack_hash:
         'sha256:1eb0b81f488f4a37fa4503ddfef0dfa8a56d40fdeb535c9758d9d21fd39bb92b',
       upstream_g2_sealed_bundle_hash:
-        'sha256:4110072a90b441f154f580a647a30bd24a9aa3f052635c22e8e7d3dbe0a31967',
+        'sha256:0820328ae1cfdba7d05948d9e36498a5428d997d6eabfb833ef0ba7d84b77db7',
       upstream_g1_schema_root_hash:
         'sha256:b60e3c7fe91d1cfab341d487102c7bff13ad73a320444b45fb6ea71d8b914306',
       upstream_g1_schema_hash:

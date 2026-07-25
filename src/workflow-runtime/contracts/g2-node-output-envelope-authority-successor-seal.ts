@@ -43,9 +43,9 @@ export const G2_NODE_OUTPUT_ENVELOPE_SEALED_BUNDLE_SCHEMA_REF = `${G2_NODE_OUTPU
 export const G2_NODE_OUTPUT_ENVELOPE_SEALED_INVENTORY_SCHEMA_REF = `${G2_NODE_OUTPUT_ENVELOPE_SEALED_ROOT}/schemas/golden-conformance-inventory-schema@2.json`;
 
 const DRAFT_ARTIFACT_HASH =
-  'sha256:081ccddd26499f672bd0dac93996ae0b7b5a23347f59b4c1c8ae84b5d68ccb2e';
+  'sha256:b43960ab002a49d918bddbce057e51e1055b65e2e7a1d10e44fed25c28ea66c4';
 const REVIEW_REPORT_ARTIFACT_HASH =
-  'sha256:f20e55f79fa6636d70cff3a46cacaf9b39fc49794b4a69977b381ba7b599a6c0';
+  'sha256:4ebc90aa4028f68580fa2aaaaaf23ef7e27bd61c9e285a8f648a42278b0e9aa0';
 const RAW_SOURCE_DOMAIN = 'icarus:workflow-semantic-correction-raw-source:1\n';
 const RESULT_DOMAIN = 'icarus:workflow-compiler-conformance-case-result:1\n';
 const PLAN_DOMAIN = 'icarus:workflow-graph-plan:2\n';

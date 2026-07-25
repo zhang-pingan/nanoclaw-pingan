@@ -36,17 +36,17 @@ const AUTHORITY_INPUTS = [
   {
     role: 'g2_v6_sealed_bundle',
     path: 'src/workflow-runtime/contracts/conformance/sealed/g2-generated-schema-join-authority-v6/golden-conformance-bundle@2.json',
-    hash: 'sha256:0e5ea012864bce2dae7d0435e700b78b6d3299703f896c737677d24f46d8f78f',
+    hash: 'sha256:5cf2d899d0bf8d7cc0d4b70cc7796a123b8b5384bbbefe3e204e70bddf33fe11',
   },
   {
     role: 'g3_6_retention_executor_abi',
     path: 'src/workflow-runtime/contracts/contract-pack-g3-retention-executor-abi-preflight.json',
-    hash: 'sha256:0b1079429b4fa65ffdad1061a0e664ae2a08b6c692645067787b051031c49337',
+    hash: 'sha256:207c7604cf8157dc6e17fe4440bdb6651fed22018e094d0a4342e4dce3c1117d',
   },
   {
     role: 'g3_7_workflow_publisher',
     path: 'src/workflow-runtime/contracts/contract-pack-g3-workflow-publisher.json',
-    hash: 'sha256:bc0c536a09f8bd79cffa5da78add54747c7a6f075e58ab0bfc93f0d13ce363b1',
+    hash: 'sha256:d25e7842961ee76b5736b3217628daf5adf7cd00b52d64c15020b7a2bde3f622',
   },
   {
     role: 'g3_8a_frozen_activation_repair',
@@ -56,12 +56,12 @@ const AUTHORITY_INPUTS = [
   {
     role: 'g3_9_feature_release_activation',
     path: 'src/workflow-runtime/contracts/contract-pack-g3.9-feature-release-activation.json',
-    hash: 'sha256:5ab7b3b322b4bad4a08e56569b79f4b9ec3ecd8b8240c013b5992a8d16eb5593',
+    hash: 'sha256:5411955aa8cd10888fb1ca3df38f311d0a0310d2bd5570ef1f7a9ed41fe08d95',
   },
   {
     role: 'g4_reopened_authority_successor',
     path: 'src/workflow-runtime/contracts/contract-pack-g4-node-output-envelope-authority-successor.json',
-    hash: 'sha256:2e77b1514cdccf445f936e0ce5746138a14a11b820140a58fc92f8fea2a43cf8',
+    hash: 'sha256:2b27a8fad1e9a690922186d11bc173f4242174efc843c3eb35e8dfeb94f5c34f',
   },
   {
     role: 'frozen_gate_ownership_authority',

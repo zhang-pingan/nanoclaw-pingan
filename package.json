@@ -78,7 +78,7 @@
     "g2:replay-repair:seal:check": "tsx src/workflow-runtime/contracts/g2-replay-repair-successor-seal-cli.ts check",
     "g2:node-output-envelope:generate": "tsx src/workflow-runtime/compiler/g2-node-output-envelope-successor-cli.ts generate",
     "g2:node-output-envelope:check": "tsx src/workflow-runtime/compiler/g2-node-output-envelope-successor-cli.ts check",
-    "g2:node-output-envelope:semantic-review:generate": "tsx src/workflow-runtime/contracts/g2-node-output-envelope-authority-successor-semantic-review-cli.ts generate --authorized-by human:local-owner --decision approved --draft-manifest-hash sha256:e2b42ce214a96dfb00ceba4f4bb49c8ee9e25fdbf34a25aa376e7c336a7a4cf8 --review-report-hash sha256:68b492f3261ad1b91d1596485be6d8cda00ddf4517cc957759d9cb08d5f1031c --reviewed-at-ms 1784966400000",
+    "g2:node-output-envelope:semantic-review:generate": "tsx src/workflow-runtime/contracts/g2-node-output-envelope-authority-successor-semantic-review-cli.ts generate --authorized-by human:local-owner --decision approved --draft-manifest-hash sha256:56538abb3748d134b25e1eee26e2d6198784b456412a60a3ce1c34ee5d79c804 --review-report-hash sha256:b909526bc8d4c76d3a1079bee54de072eb6dd7bdd16ee3ae91b27d1f9a6954b1 --reviewed-at-ms 1784970823000",
     "g2:node-output-envelope:semantic-review:check": "tsx src/workflow-runtime/contracts/g2-node-output-envelope-authority-successor-semantic-review-cli.ts check",
     "g2:node-output-envelope:seal:generate": "tsx src/workflow-runtime/contracts/g2-node-output-envelope-authority-successor-seal-cli.ts generate",
     "g2:node-output-envelope:seal:check": "tsx src/workflow-runtime/contracts/g2-node-output-envelope-authority-successor-seal-cli.ts check",

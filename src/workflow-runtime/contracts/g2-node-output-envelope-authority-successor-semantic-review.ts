@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -17,10 +18,10 @@ import type {
 const contractsRoot = import.meta.dirname;
 
 export const G2_NODE_OUTPUT_ENVELOPE_APPROVED_DRAFT_MANIFEST_HASH =
-  'sha256:e2b42ce214a96dfb00ceba4f4bb49c8ee9e25fdbf34a25aa376e7c336a7a4cf8';
+  'sha256:56538abb3748d134b25e1eee26e2d6198784b456412a60a3ce1c34ee5d79c804';
 export const G2_NODE_OUTPUT_ENVELOPE_APPROVED_REVIEW_REPORT_HASH =
-  'sha256:68b492f3261ad1b91d1596485be6d8cda00ddf4517cc957759d9cb08d5f1031c';
-export const G2_NODE_OUTPUT_ENVELOPE_OWNER_APPROVAL_REVIEWED_AT_MS = 1_784_966_400_000;
+  'sha256:b909526bc8d4c76d3a1079bee54de072eb6dd7bdd16ee3ae91b27d1f9a6954b1';
+export const G2_NODE_OUTPUT_ENVELOPE_OWNER_APPROVAL_REVIEWED_AT_MS = 1_784_970_823_000;
 
 export const G2_NODE_OUTPUT_ENVELOPE_DRAFT_MANIFEST_REF =
   'conformance/golden-draft/g2-generated-schema-join-authority-v6/golden-draft-manifest@2.json';
@@ -40,9 +41,9 @@ export const G2_NODE_OUTPUT_ENVELOPE_SEALED_ROOT =
   'conformance/sealed/g2-generated-schema-join-authority-v6';
 
 const DRAFT_ARTIFACT_HASH =
-  'sha256:081ccddd26499f672bd0dac93996ae0b7b5a23347f59b4c1c8ae84b5d68ccb2e';
+  'sha256:b43960ab002a49d918bddbce057e51e1055b65e2e7a1d10e44fed25c28ea66c4';
 const REVIEW_REPORT_ARTIFACT_HASH =
-  'sha256:f20e55f79fa6636d70cff3a46cacaf9b39fc49794b4a69977b381ba7b599a6c0';
+  'sha256:4ebc90aa4028f68580fa2aaaaaf23ef7e27bd61c9e285a8f648a42278b0e9aa0';
 const RC_ARTIFACT_HASH =
   'sha256:64fec8c48d3c6685f83bce980b8f85c03ce0d989aaa944e85e6a0d61c40297f1';
 const PREDECESSOR_DRAFT_HASH =
@@ -62,6 +63,8 @@ const REVIEW_ARTIFACT_DOMAIN =
 const REVIEW_SCHEMA_DOMAIN =
   'icarus:workflow-compiler-golden-semantic-review-schema:1\n';
 const AUTHORIZED_ACTOR = 'human:local-owner';
+const AUTHORING_GENERATOR_REF =
+  'src/workflow-runtime/contracts/node-output-envelope-golden-authoring.ts';
 
 export type G2NodeOutputEnvelopeDecision = 'approved' | 'changes_requested';
 
@@ -166,6 +169,10 @@ function render(value: JsonValue): string {
   return `${JSON.stringify(value, null, 2)}\n`;
 }
 
+function rawHash(bytes: Uint8Array): Sha256Hash {
+  return `sha256:${crypto.createHash('sha256').update(bytes).digest('hex')}`;
+}
+
 function validateInput(input: G2NodeOutputEnvelopeSemanticReviewInput): void {
   if (input.authorizedBy !== AUTHORIZED_ACTOR) {
     throw new G2NodeOutputEnvelopeSemanticReviewError(
@@ -268,6 +275,17 @@ export function buildG2NodeOutputEnvelopeSemanticReview(
       'Approved successor Draft or review evidence is incomplete or drifted',
     );
   }
+  const authoringBytes = fs.readFileSync(
+    path.resolve(contractsRoot, '../../..', AUTHORING_GENERATOR_REF),
+  );
+  if (
+    draft.payload.authoring_generator_ref !== AUTHORING_GENERATOR_REF ||
+    draft.payload.authoring_generator_hash !== rawHash(authoringBytes)
+  ) {
+    throw new G2NodeOutputEnvelopeSemanticReviewError(
+      'Approved successor Draft does not bind the actual NodeOutputEnvelope authoring generator bytes',
+    );
+  }
   validatePredecessorLineage(rc);
 
   const caseIds = objects(draftCases.payload.cases, 'Draft cases')
@@ -297,7 +315,7 @@ export function buildG2NodeOutputEnvelopeSemanticReview(
     format: 'icarus.workflow-compiler-golden-semantic-review/1',
     gate: 'G2',
     construction_phase: 'RC_REVIEW',
-    review_id: 'g2-generated-schema-join-authority-v6-e2b42ce214a96dfb',
+    review_id: 'g2-generated-schema-join-authority-v6-56538abb3748d134',
     bundle_version: '2.0.0',
     case_ids: caseIds,
     case_count: 40,
@@ -322,6 +340,7 @@ export function buildG2NodeOutputEnvelopeSemanticReview(
       'compiled_pointer_differences_0_verified',
       'predecessor_immutable_lineage_verified',
       'generated_schema_join_authority_semantics_reviewed',
+      'declared_authoring_generator_exact_binding_verified',
       'draft_working_rc_identity_mutation_not_authorized',
       'g3_through_g9_not_authorized',
     ],
