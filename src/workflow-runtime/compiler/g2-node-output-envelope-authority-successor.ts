@@ -252,6 +252,28 @@ function isLexicalBindingIdentifier(node: ts.Identifier): boolean {
   );
 }
 
+function unwrapParenthesizedExpression(
+  expression: ts.Expression,
+): ts.Expression {
+  let current = expression;
+  while (ts.isParenthesizedExpression(current)) {
+    current = current.expression;
+  }
+  return current;
+}
+
+function isExactAuthoringModuleSpecifier(
+  expression: ts.Expression | undefined,
+): boolean {
+  if (!expression) return false;
+  const unwrapped = unwrapParenthesizedExpression(expression);
+  return (
+    (ts.isStringLiteral(unwrapped) ||
+      ts.isNoSubstitutionTemplateLiteral(unwrapped)) &&
+    unwrapped.text === G2_NODE_OUTPUT_ENVELOPE_AUTHORING_MODULE_SPECIFIER
+  );
+}
+
 function boundSuccessorSource(successorSourceText: string): {
   sourceFile: ts.SourceFile;
   checker: ts.TypeChecker;
@@ -429,15 +451,16 @@ function authoringGeneratorIdentity(
     ) {
       alternateAuthoringModuleAccess = true;
     }
+    const callTarget = ts.isCallExpression(node)
+      ? unwrapParenthesizedExpression(node.expression)
+      : undefined;
     if (
       ts.isCallExpression(node) &&
-      node.arguments.length === 1 &&
-      ts.isStringLiteral(node.arguments[0]!) &&
-      node.arguments[0]!.text ===
-        G2_NODE_OUTPUT_ENVELOPE_AUTHORING_MODULE_SPECIFIER &&
-      (node.expression.kind === ts.SyntaxKind.ImportKeyword ||
-        (ts.isIdentifier(node.expression) &&
-          node.expression.text === 'require'))
+      isExactAuthoringModuleSpecifier(node.arguments[0]) &&
+      (callTarget?.kind === ts.SyntaxKind.ImportKeyword ||
+        (callTarget &&
+          ts.isIdentifier(callTarget) &&
+          callTarget.text === 'require'))
     ) {
       alternateAuthoringModuleAccess = true;
     }

@@ -306,10 +306,59 @@ describe('G2 v6 authoring generator AST binding', () => {
       }),
     },
     {
+      name: 'two-argument dynamic access with empty options',
+      source: authoringBindingFixture({
+        imports: normalAuthoringImport(),
+        declarations: `const dynamicAuthoring = import('${authoringModule}', {});`,
+      }),
+    },
+    {
+      name: 'two-argument dynamic access with import attributes',
+      source: authoringBindingFixture({
+        imports: normalAuthoringImport(),
+        declarations: `const dynamicAuthoring = import('${authoringModule}', { with: { type: 'json' } });`,
+      }),
+    },
+    {
+      name: 'dynamic access with a no-substitution template specifier',
+      source: authoringBindingFixture({
+        imports: normalAuthoringImport(),
+        declarations: `const dynamicAuthoring = import(\`${authoringModule}\`);`,
+      }),
+    },
+    {
+      name: 'dynamic access with a parenthesized exact specifier',
+      source: authoringBindingFixture({
+        imports: normalAuthoringImport(),
+        declarations: `const dynamicAuthoring = import(('${authoringModule}'), {});`,
+      }),
+    },
+    {
       name: 'require access alongside the required named imports',
       source: authoringBindingFixture({
         imports: normalAuthoringImport(),
         declarations: `const requiredAuthoring = require('${authoringModule}');`,
+      }),
+    },
+    {
+      name: 'require access with an extra argument',
+      source: authoringBindingFixture({
+        imports: normalAuthoringImport(),
+        declarations: `const requiredAuthoring = require('${authoringModule}', {});`,
+      }),
+    },
+    {
+      name: 'parenthesized require access',
+      source: authoringBindingFixture({
+        imports: normalAuthoringImport(),
+        declarations: `const requiredAuthoring = (require)('${authoringModule}');`,
+      }),
+    },
+    {
+      name: 'require access with a no-substitution template specifier',
+      source: authoringBindingFixture({
+        imports: normalAuthoringImport(),
+        declarations: `const requiredAuthoring = require(\`${authoringModule}\`);`,
       }),
     },
   ])('rejects $name', ({ source }) => {
