@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { Ajv2020, type AnySchema } from 'ajv/dist/2020.js';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   buildG2NodeOutputEnvelopeSuccessor,
@@ -50,6 +50,34 @@ function rawHash(bytes: Uint8Array | string): string {
   return `sha256:${crypto.createHash('sha256').update(bytes).digest('hex')}`;
 }
 
+const authoringModule = '../contracts/node-output-envelope-golden-authoring.js';
+const authoringRef =
+  'src/workflow-runtime/contracts/node-output-envelope-golden-authoring.ts';
+const expectedResultHelper = 'authorCurrentG2GoldenExpectedResult';
+const programBytesHelper = 'extractCurrentG2GoldenProgramBytes';
+const proofBytesHelper = 'extractCurrentG2GoldenProofBytes';
+
+function authoringBindingFixture(input: {
+  imports: string;
+  invocation?: string;
+  declarations?: string;
+  declaredRef?: string;
+}): string {
+  return [
+    input.declaredRef ??
+      `export const G2_NODE_OUTPUT_ENVELOPE_AUTHORING_GENERATOR_REF = '${authoringRef}';`,
+    input.imports,
+    input.declarations ?? '',
+    'export function buildFixture() {',
+    input.invocation ?? `return ${expectedResultHelper}({});`,
+    '}',
+  ].join('\n');
+}
+
+function normalAuthoringImport(moduleSpecifier = authoringModule): string {
+  return `import { ${expectedResultHelper}, ${programBytesHelper}, ${proofBytesHelper} } from '${moduleSpecifier}';`;
+}
+
 function approvedInput() {
   return {
     authorizedBy: 'human:local-owner',
@@ -61,6 +89,235 @@ function approvedInput() {
     reviewedAtMs: G2_NODE_OUTPUT_ENVELOPE_OWNER_APPROVAL_REVIEWED_AT_MS,
   };
 }
+
+describe('G2 v6 authoring generator AST binding', () => {
+  const expectedIdentity = {
+    ref: authoringRef,
+    rawHash:
+      'sha256:a574091ca544a7b838936403d1bd55d3f1757468d453d5205aaa6f8a11f897ec',
+  };
+
+  it('accepts one normal named import bound to the exact module', () => {
+    expect(
+      assertG2NodeOutputEnvelopeAuthoringGeneratorBindingForTest(
+        authoringBindingFixture({ imports: normalAuthoringImport() }),
+      ),
+    ).toEqual(expectedIdentity);
+  });
+
+  it('accepts legal local aliases and counts the aliased expected-result call', () => {
+    const source = authoringBindingFixture({
+      imports: `import {
+        ${expectedResultHelper} as authorExpectedResult,
+        ${programBytesHelper} as readProgramBytes,
+        ${proofBytesHelper} as readProofBytes,
+      } from '${authoringModule}';`,
+      invocation: 'return authorExpectedResult({});',
+    });
+    expect(
+      assertG2NodeOutputEnvelopeAuthoringGeneratorBindingForTest(source),
+    ).toEqual(expectedIdentity);
+  });
+
+  it('accepts split named imports from the same exact module', () => {
+    const source = authoringBindingFixture({
+      imports: [
+        `import { ${expectedResultHelper} as authorExpectedResult } from '${authoringModule}';`,
+        `import { ${programBytesHelper} } from '${authoringModule}';`,
+        `import { ${proofBytesHelper} as readProofBytes } from '${authoringModule}';`,
+      ].join('\n'),
+      invocation: 'return authorExpectedResult({});',
+    });
+    expect(
+      assertG2NodeOutputEnvelopeAuthoringGeneratorBindingForTest(source),
+    ).toEqual(expectedIdentity);
+  });
+
+  it.each([
+    {
+      name: 'all helpers from the wrong module',
+      source: authoringBindingFixture({
+        imports: normalAuthoringImport(
+          '../contracts/generated-schema-join-authority-golden-authoring.js',
+        ),
+      }),
+    },
+    {
+      name: 'one helper from the wrong module',
+      source: authoringBindingFixture({
+        imports: [
+          `import { ${expectedResultHelper}, ${programBytesHelper} } from '${authoringModule}';`,
+          `import { ${proofBytesHelper} } from '../contracts/generated-schema-join-authority-golden-authoring.js';`,
+        ].join('\n'),
+      }),
+    },
+    {
+      name: 'equivalent path with drifted module source bytes',
+      source: authoringBindingFixture({
+        imports: normalAuthoringImport(
+          '../contracts/./node-output-envelope-golden-authoring.js',
+        ),
+      }),
+    },
+    {
+      name: 'missing expected-result helper',
+      source: authoringBindingFixture({
+        imports: `import { ${programBytesHelper}, ${proofBytesHelper} } from '${authoringModule}';`,
+        declarations: `const ${expectedResultHelper} = (_input: unknown) => ({});`,
+      }),
+    },
+    {
+      name: 'missing program-bytes helper',
+      source: authoringBindingFixture({
+        imports: `import { ${expectedResultHelper}, ${proofBytesHelper} } from '${authoringModule}';`,
+      }),
+    },
+    {
+      name: 'missing proof-bytes helper',
+      source: authoringBindingFixture({
+        imports: `import { ${expectedResultHelper}, ${programBytesHelper} } from '${authoringModule}';`,
+      }),
+    },
+    {
+      name: 'duplicate exported helper under two aliases',
+      source: authoringBindingFixture({
+        imports: [
+          normalAuthoringImport(),
+          `import { ${expectedResultHelper} as secondAuthor } from '${authoringModule}';`,
+        ].join('\n'),
+      }),
+    },
+    {
+      name: 'conflicting local aliases for two helpers',
+      source: authoringBindingFixture({
+        imports: `import {
+          ${expectedResultHelper} as authorHelper,
+          ${programBytesHelper} as authorHelper,
+          ${proofBytesHelper},
+        } from '${authoringModule}';`,
+        invocation: 'return authorHelper({});',
+      }),
+    },
+    {
+      name: 'zero expected-result calls',
+      source: authoringBindingFixture({
+        imports: normalAuthoringImport(),
+        invocation: 'return {};',
+      }),
+    },
+    {
+      name: 'two expected-result calls',
+      source: authoringBindingFixture({
+        imports: normalAuthoringImport(),
+        invocation: `${expectedResultHelper}({}); return ${expectedResultHelper}({});`,
+      }),
+    },
+    {
+      name: 'indirect expected-result call through an escaped binding',
+      source: authoringBindingFixture({
+        imports: normalAuthoringImport(),
+        invocation: `const indirect = ${expectedResultHelper}; return indirect({});`,
+      }),
+    },
+    {
+      name: 'direct plus indirect expected-result calls',
+      source: authoringBindingFixture({
+        imports: normalAuthoringImport(),
+        invocation: `const indirect = ${expectedResultHelper}; ${expectedResultHelper}({}); return indirect({});`,
+      }),
+    },
+    {
+      name: 'optional expected-result call',
+      source: authoringBindingFixture({
+        imports: normalAuthoringImport(),
+        invocation: `return ${expectedResultHelper}?.({});`,
+      }),
+    },
+    {
+      name: 'declared ref drift',
+      source: authoringBindingFixture({
+        imports: normalAuthoringImport(),
+        declaredRef:
+          "export const G2_NODE_OUTPUT_ENVELOPE_AUTHORING_GENERATOR_REF = 'src/workflow-runtime/contracts/generated-schema-join-authority-golden-authoring.ts';",
+      }),
+    },
+    {
+      name: 'duplicate declared ref',
+      source: authoringBindingFixture({
+        imports: normalAuthoringImport(),
+        declarations: `function nested() { const G2_NODE_OUTPUT_ENVELOPE_AUTHORING_GENERATOR_REF = '${authoringRef}'; return G2_NODE_OUTPUT_ENVELOPE_AUTHORING_GENERATOR_REF; }`,
+      }),
+    },
+    {
+      name: 'unrelated same-export-name local',
+      source: authoringBindingFixture({
+        imports: `import {
+          ${expectedResultHelper} as authorExpectedResult,
+          ${programBytesHelper},
+          ${proofBytesHelper},
+        } from '${authoringModule}';`,
+        declarations: `const ${expectedResultHelper} = (_input: unknown) => ({});`,
+        invocation: 'return authorExpectedResult({});',
+      }),
+    },
+    {
+      name: 'shadowed expected-result local binding',
+      source: authoringBindingFixture({
+        imports: `import {
+          ${expectedResultHelper} as authorExpectedResult,
+          ${programBytesHelper},
+          ${proofBytesHelper},
+        } from '${authoringModule}';`,
+        declarations:
+          'function shadow(authorExpectedResult: (_input: unknown) => unknown) { return authorExpectedResult({}); }',
+        invocation: 'shadow(() => ({})); return authorExpectedResult({});',
+      }),
+    },
+    {
+      name: 'type-only helper imports',
+      source: authoringBindingFixture({
+        imports: `import type { ${expectedResultHelper}, ${programBytesHelper}, ${proofBytesHelper} } from '${authoringModule}';`,
+      }),
+    },
+    {
+      name: 'namespace import indirection',
+      source: authoringBindingFixture({
+        imports: `import * as authoring from '${authoringModule}';`,
+        invocation: `return authoring.${expectedResultHelper}({});`,
+      }),
+    },
+    {
+      name: 'parallel namespace access to the exact module',
+      source: authoringBindingFixture({
+        imports: `${normalAuthoringImport()}\nimport * as authoring from '${authoringModule}';`,
+      }),
+    },
+    {
+      name: 'default access alongside the required named imports',
+      source: authoringBindingFixture({
+        imports: `import authoring, { ${expectedResultHelper}, ${programBytesHelper}, ${proofBytesHelper} } from '${authoringModule}';`,
+      }),
+    },
+    {
+      name: 'dynamic access alongside the required named imports',
+      source: authoringBindingFixture({
+        imports: normalAuthoringImport(),
+        declarations: `const dynamicAuthoring = import('${authoringModule}');`,
+      }),
+    },
+    {
+      name: 'require access alongside the required named imports',
+      source: authoringBindingFixture({
+        imports: normalAuthoringImport(),
+        declarations: `const requiredAuthoring = require('${authoringModule}');`,
+      }),
+    },
+  ])('rejects $name', ({ source }) => {
+    expect(() =>
+      assertG2NodeOutputEnvelopeAuthoringGeneratorBindingForTest(source),
+    ).toThrow();
+  });
+});
 
 describe('G2 v6 NodeOutputEnvelope authority successor', () => {
   it('builds a deterministic 40/40 Compiler 3.0.4 Draft', () => {
@@ -288,6 +545,35 @@ describe('G2 v6 NodeOutputEnvelope authority successor', () => {
         'sha256:0820328ae1cfdba7d05948d9e36498a5428d997d6eabfb833ef0ba7d84b77db7',
     });
   }, 30_000);
+
+  it('rejects authoring source-byte drift against the approved Draft binding', () => {
+    const authoringPath = path.join(
+      repoRoot,
+      G2_NODE_OUTPUT_ENVELOPE_AUTHORING_GENERATOR_REF,
+    );
+    const readFileSync = fs.readFileSync;
+    const readFileSyncSpy = vi
+      .spyOn(fs, 'readFileSync')
+      .mockImplementation(((
+        filePath: fs.PathOrFileDescriptor,
+        options?: unknown,
+      ) =>
+        path.resolve(String(filePath)) === authoringPath
+          ? Buffer.from('drifted NodeOutputEnvelope authoring source')
+          : readFileSync(
+              filePath,
+              options as never,
+            )) as typeof fs.readFileSync);
+    try {
+      expect(() =>
+        buildG2NodeOutputEnvelopeSemanticReview(approvedInput()),
+      ).toThrow(
+        'Approved successor Draft does not bind the actual NodeOutputEnvelope authoring generator bytes',
+      );
+    } finally {
+      readFileSyncSpy.mockRestore();
+    }
+  });
 
   it('passes exact current sealed replay', () => {
     expect(evaluateCurrentG2GoldenReplay()).toMatchObject({

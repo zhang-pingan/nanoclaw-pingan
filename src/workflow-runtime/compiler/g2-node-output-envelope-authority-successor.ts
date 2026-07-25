@@ -92,6 +92,14 @@ export const G2_NODE_OUTPUT_ENVELOPE_REVIEW_REPORT_PATH = `${G2_NODE_OUTPUT_ENVE
 export const G2_NODE_OUTPUT_ENVELOPE_AUTHORING_GENERATOR_REF =
   'src/workflow-runtime/contracts/node-output-envelope-golden-authoring.ts';
 
+const G2_NODE_OUTPUT_ENVELOPE_AUTHORING_MODULE_SPECIFIER =
+  '../contracts/node-output-envelope-golden-authoring.js';
+const G2_NODE_OUTPUT_ENVELOPE_AUTHORING_HELPERS = [
+  'authorCurrentG2GoldenExpectedResult',
+  'extractCurrentG2GoldenProgramBytes',
+  'extractCurrentG2GoldenProofBytes',
+] as const;
+
 const DRAFT_CASES_SCHEMA_PATH = `${G2_NODE_OUTPUT_ENVELOPE_DRAFT_ROOT}/schemas/golden-draft-cases-schema@1.json`;
 const DRAFT_INVENTORY_SCHEMA_PATH = `${G2_NODE_OUTPUT_ENVELOPE_DRAFT_ROOT}/schemas/golden-draft-inventory-schema@1.json`;
 const DRAFT_MANIFEST_SCHEMA_PATH = `${G2_NODE_OUTPUT_ENVELOPE_DRAFT_ROOT}/schemas/golden-draft-manifest-schema@1.json`;
@@ -222,6 +230,76 @@ function rawHash(bytes: Uint8Array | string): Sha256Hash {
   return `sha256:${crypto.createHash('sha256').update(bytes).digest('hex')}`;
 }
 
+function isLexicalBindingIdentifier(node: ts.Identifier): boolean {
+  const parent = node.parent;
+  return (
+    (ts.isVariableDeclaration(parent) && parent.name === node) ||
+    (ts.isBindingElement(parent) && parent.name === node) ||
+    (ts.isParameter(parent) && parent.name === node) ||
+    (ts.isFunctionDeclaration(parent) && parent.name === node) ||
+    (ts.isFunctionExpression(parent) && parent.name === node) ||
+    (ts.isClassDeclaration(parent) && parent.name === node) ||
+    (ts.isClassExpression(parent) && parent.name === node) ||
+    (ts.isInterfaceDeclaration(parent) && parent.name === node) ||
+    (ts.isTypeAliasDeclaration(parent) && parent.name === node) ||
+    (ts.isEnumDeclaration(parent) && parent.name === node) ||
+    (ts.isModuleDeclaration(parent) && parent.name === node) ||
+    (ts.isTypeParameterDeclaration(parent) && parent.name === node) ||
+    (ts.isImportClause(parent) && parent.name === node) ||
+    (ts.isNamespaceImport(parent) && parent.name === node) ||
+    (ts.isImportEqualsDeclaration(parent) && parent.name === node) ||
+    (ts.isImportSpecifier(parent) && parent.name === node)
+  );
+}
+
+function boundSuccessorSource(successorSourceText: string): {
+  sourceFile: ts.SourceFile;
+  checker: ts.TypeChecker;
+} {
+  const sourcePath = path.resolve(
+    import.meta.dirname,
+    'g2-node-output-envelope-authority-successor.ts',
+  );
+  const options: ts.CompilerOptions = {
+    module: ts.ModuleKind.ESNext,
+    noLib: true,
+    noResolve: true,
+    target: ts.ScriptTarget.Latest,
+  };
+  const sourceFile = ts.createSourceFile(
+    sourcePath,
+    successorSourceText,
+    options.target!,
+    true,
+    ts.ScriptKind.TS,
+  );
+  const host: ts.CompilerHost = {
+    fileExists: (fileName) => fileName === sourcePath,
+    getCanonicalFileName: (fileName) => fileName,
+    getCurrentDirectory: () => projectRoot,
+    getDefaultLibFileName: () => 'lib.d.ts',
+    getDirectories: () => [],
+    getNewLine: () => '\n',
+    getSourceFile: (fileName) =>
+      fileName === sourcePath ? sourceFile : undefined,
+    readFile: (fileName) =>
+      fileName === sourcePath ? successorSourceText : undefined,
+    useCaseSensitiveFileNames: () => true,
+    writeFile: () => undefined,
+  };
+  const program = ts.createProgram([sourcePath], options, host);
+  const boundSource = program.getSourceFile(sourcePath);
+  if (
+    boundSource !== sourceFile ||
+    program.getSyntacticDiagnostics(sourceFile).length !== 0
+  ) {
+    throw new G2NodeOutputEnvelopeSuccessorError(
+      'Successor authoring binding source is not valid TypeScript',
+    );
+  }
+  return { sourceFile, checker: program.getTypeChecker() };
+}
+
 function authoringGeneratorIdentity(
   successorSourceText = fs.readFileSync(
     path.resolve(
@@ -231,22 +309,30 @@ function authoringGeneratorIdentity(
     'utf8',
   ),
 ): { ref: string; rawHash: Sha256Hash } {
-  const sourceFile = ts.createSourceFile(
-    'g2-node-output-envelope-authority-successor.ts',
-    successorSourceText,
-    ts.ScriptTarget.Latest,
-    true,
-    ts.ScriptKind.TS,
+  const { sourceFile, checker } = boundSuccessorSource(successorSourceText);
+  const requiredImports = new Set<string>(
+    G2_NODE_OUTPUT_ENVELOPE_AUTHORING_HELPERS,
   );
-  const requiredImports = new Set([
-    'authorCurrentG2GoldenExpectedResult',
-    'extractCurrentG2GoldenProgramBytes',
-    'extractCurrentG2GoldenProofBytes',
-  ]);
-  const importedFrom: string[] = [];
-  const localAuthoringBindings = new Set<string>();
+  const importedBindings = new Map<
+    string,
+    Array<{ declaration: ts.ImportSpecifier; moduleSpecifier: string }>
+  >(G2_NODE_OUTPUT_ENVELOPE_AUTHORING_HELPERS.map((name) => [name, []]));
 
   for (const statement of sourceFile.statements) {
+    if (
+      ts.isImportDeclaration(statement) &&
+      ts.isStringLiteral(statement.moduleSpecifier) &&
+      statement.moduleSpecifier.text ===
+        G2_NODE_OUTPUT_ENVELOPE_AUTHORING_MODULE_SPECIFIER &&
+      (!statement.importClause ||
+        statement.importClause.name !== undefined ||
+        !statement.importClause.namedBindings ||
+        !ts.isNamedImports(statement.importClause.namedBindings))
+    ) {
+      throw new G2NodeOutputEnvelopeSuccessorError(
+        'Successor authoring module access must use unique named imports',
+      );
+    }
     if (
       !ts.isImportDeclaration(statement) ||
       !ts.isStringLiteral(statement.moduleSpecifier) ||
@@ -255,30 +341,131 @@ function authoringGeneratorIdentity(
     ) {
       continue;
     }
-    const importedNames = new Set(
-      statement.importClause.namedBindings.elements.map(
-        (element) => element.propertyName?.text ?? element.name.text,
-      ),
-    );
-    if (![...requiredImports].every((name) => importedNames.has(name))) {
-      continue;
-    }
-    importedFrom.push(statement.moduleSpecifier.text);
     for (const element of statement.importClause.namedBindings.elements) {
       const importedName = element.propertyName?.text ?? element.name.text;
       if (requiredImports.has(importedName)) {
-        localAuthoringBindings.add(element.name.text);
+        importedBindings.get(importedName)!.push({
+          declaration: element,
+          moduleSpecifier: statement.moduleSpecifier.text,
+        });
       }
     }
   }
 
+  const resolvedBindings = new Map<
+    string,
+    { declaration: ts.ImportSpecifier; localName: string; symbol: ts.Symbol }
+  >();
+  for (const exportedName of G2_NODE_OUTPUT_ENVELOPE_AUTHORING_HELPERS) {
+    const candidates = importedBindings.get(exportedName)!;
+    if (candidates.length !== 1) {
+      throw new G2NodeOutputEnvelopeSuccessorError(
+        'Successor authoring helpers must each have one unique named import',
+      );
+    }
+    const { declaration, moduleSpecifier } = candidates[0]!;
+    const importDeclaration = declaration.parent.parent.parent;
+    if (
+      moduleSpecifier !== G2_NODE_OUTPUT_ENVELOPE_AUTHORING_MODULE_SPECIFIER ||
+      !ts.isImportDeclaration(importDeclaration) ||
+      importDeclaration.importClause?.isTypeOnly === true ||
+      declaration.isTypeOnly
+    ) {
+      throw new G2NodeOutputEnvelopeSuccessorError(
+        'Declared authoring generator is not the generator actually imported and invoked',
+      );
+    }
+    const symbol = checker.getSymbolAtLocation(declaration.name);
+    if (
+      !symbol ||
+      !(symbol.flags & ts.SymbolFlags.Alias) ||
+      symbol.declarations?.length !== 1 ||
+      symbol.declarations[0] !== declaration
+    ) {
+      throw new G2NodeOutputEnvelopeSuccessorError(
+        'Successor authoring helper local binding is conflicting or non-unique',
+      );
+    }
+    resolvedBindings.set(exportedName, {
+      declaration,
+      localName: declaration.name.text,
+      symbol,
+    });
+  }
+
+  if (
+    new Set([...resolvedBindings.values()].map(({ symbol }) => symbol)).size !==
+      G2_NODE_OUTPUT_ENVELOPE_AUTHORING_HELPERS.length ||
+    new Set([...resolvedBindings.values()].map(({ localName }) => localName))
+      .size !== G2_NODE_OUTPUT_ENVELOPE_AUTHORING_HELPERS.length
+  ) {
+    throw new G2NodeOutputEnvelopeSuccessorError(
+      'Successor authoring helper local binding is conflicting or non-unique',
+    );
+  }
+
+  const protectedBindingNames = new Set([
+    ...G2_NODE_OUTPUT_ENVELOPE_AUTHORING_HELPERS,
+    ...[...resolvedBindings.values()].map(({ localName }) => localName),
+  ]);
+  const acceptedDeclarations = new Set(
+    [...resolvedBindings.values()].map(({ declaration }) => declaration.name),
+  );
+  let shadowedBinding = false;
   let authoringCallCount = 0;
+  let escapedAuthoringBinding = false;
+  let alternateAuthoringModuleAccess = false;
+  const expectedResultSymbol = resolvedBindings.get(
+    'authorCurrentG2GoldenExpectedResult',
+  )!.symbol;
   const visit = (node: ts.Node): void => {
+    if (
+      ts.isImportEqualsDeclaration(node) &&
+      ts.isExternalModuleReference(node.moduleReference) &&
+      node.moduleReference.expression &&
+      ts.isStringLiteral(node.moduleReference.expression) &&
+      node.moduleReference.expression.text ===
+        G2_NODE_OUTPUT_ENVELOPE_AUTHORING_MODULE_SPECIFIER
+    ) {
+      alternateAuthoringModuleAccess = true;
+    }
+    if (
+      ts.isCallExpression(node) &&
+      node.arguments.length === 1 &&
+      ts.isStringLiteral(node.arguments[0]!) &&
+      node.arguments[0]!.text ===
+        G2_NODE_OUTPUT_ENVELOPE_AUTHORING_MODULE_SPECIFIER &&
+      (node.expression.kind === ts.SyntaxKind.ImportKeyword ||
+        (ts.isIdentifier(node.expression) &&
+          node.expression.text === 'require'))
+    ) {
+      alternateAuthoringModuleAccess = true;
+    }
+    if (
+      ts.isIdentifier(node) &&
+      protectedBindingNames.has(node.text) &&
+      isLexicalBindingIdentifier(node) &&
+      !acceptedDeclarations.has(node)
+    ) {
+      shadowedBinding = true;
+    }
+    if (
+      ts.isIdentifier(node) &&
+      checker.getSymbolAtLocation(node) === expectedResultSymbol &&
+      !acceptedDeclarations.has(node) &&
+      !(
+        ts.isCallExpression(node.parent) &&
+        node.parent.expression === node &&
+        node.parent.questionDotToken === undefined
+      )
+    ) {
+      escapedAuthoringBinding = true;
+    }
     if (
       ts.isCallExpression(node) &&
       ts.isIdentifier(node.expression) &&
-      localAuthoringBindings.has(node.expression.text) &&
-      node.expression.text === 'authorCurrentG2GoldenExpectedResult'
+      node.questionDotToken === undefined &&
+      checker.getSymbolAtLocation(node.expression) === expectedResultSymbol
     ) {
       authoringCallCount += 1;
     }
@@ -286,14 +473,57 @@ function authoringGeneratorIdentity(
   };
   visit(sourceFile);
 
-  if (importedFrom.length !== 1 || authoringCallCount !== 1) {
+  if (
+    shadowedBinding ||
+    escapedAuthoringBinding ||
+    alternateAuthoringModuleAccess
+  ) {
+    throw new G2NodeOutputEnvelopeSuccessorError(
+      'Successor authoring helper local binding is shadowed or non-unique',
+    );
+  }
+  if (authoringCallCount !== 1) {
     throw new G2NodeOutputEnvelopeSuccessorError(
       'Successor expected authoring must have one exact imported generator and one invocation',
     );
   }
+
+  const declaredRefs: ts.VariableDeclaration[] = [];
+  const collectDeclaredRefs = (node: ts.Node): void => {
+    if (
+      ts.isVariableDeclaration(node) &&
+      ts.isIdentifier(node.name) &&
+      node.name.text === 'G2_NODE_OUTPUT_ENVELOPE_AUTHORING_GENERATOR_REF'
+    ) {
+      declaredRefs.push(node);
+    }
+    ts.forEachChild(node, collectDeclaredRefs);
+  };
+  collectDeclaredRefs(sourceFile);
+  const declaredRef = declaredRefs[0];
+  const declaredRefStatement = declaredRef?.parent.parent;
+  if (
+    declaredRefs.length !== 1 ||
+    !declaredRef ||
+    !ts.isVariableStatement(declaredRefStatement) ||
+    declaredRefStatement.parent !== sourceFile ||
+    !(declaredRef.parent.flags & ts.NodeFlags.Const) ||
+    !declaredRefStatement.modifiers?.some(
+      ({ kind }) => kind === ts.SyntaxKind.ExportKeyword,
+    ) ||
+    !declaredRef.initializer ||
+    !ts.isStringLiteral(declaredRef.initializer) ||
+    declaredRef.initializer.text !==
+      G2_NODE_OUTPUT_ENVELOPE_AUTHORING_GENERATOR_REF
+  ) {
+    throw new G2NodeOutputEnvelopeSuccessorError(
+      'Declared authoring generator ref is missing, conflicting, or drifted',
+    );
+  }
+
   const resolvedImport = path.resolve(
     import.meta.dirname,
-    importedFrom[0]!.replace(/\.js$/, '.ts'),
+    G2_NODE_OUTPUT_ENVELOPE_AUTHORING_MODULE_SPECIFIER.replace(/\.js$/, '.ts'),
   );
   const declaredPath = path.resolve(
     projectRoot,
