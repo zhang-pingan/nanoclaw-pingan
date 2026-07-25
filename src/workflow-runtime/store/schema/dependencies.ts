@@ -37,6 +37,10 @@ import {
   buildGeneratedSchemaPrerequisiteArtifact,
   GENERATED_SCHEMA_INPUT_RELATIVE_PATH,
 } from './generated-schema-source.js';
+import {
+  buildNodeOutputEnvelopeSchemaPrerequisiteArtifact,
+  NODE_OUTPUT_ENVELOPE_SCHEMA_INPUT_RELATIVE_PATH,
+} from './node-output-envelope-source.js';
 
 export const G1_SCHEMA_DEPENDENCY_MANIFEST_DOMAIN_SEPARATOR =
   'icarus:workflow-runtime-schema-dependency-manifest:1\n';
@@ -166,6 +170,20 @@ const INPUT_MEMBER_SPECS = [
     expected_semantic_hash: buildGeneratedSchemaPrerequisiteArtifact().hash,
   },
   {
+    role: 'node_output_envelope_schema_authority_prerequisite',
+    identity_effect: 'physical_schema_input',
+    path: `store/schema/${NODE_OUTPUT_ENVELOPE_SCHEMA_INPUT_RELATIVE_PATH}`,
+    format:
+      'icarus.workflow-node-output-envelope-schema-authority-prerequisite/1',
+    ref: {
+      id: 'icarus.workflow-node-output-envelope-schema-authority-prerequisite',
+      version: '1.0.0',
+    },
+    version: 1,
+    expected_semantic_hash:
+      buildNodeOutputEnvelopeSchemaPrerequisiteArtifact().hash,
+  },
+  {
     role: 'sqlite_execution_profile',
     identity_effect: 'physical_schema_input',
     path: 'contracts/sqlite/local_single_user_sqlite@1.json',
@@ -189,9 +207,9 @@ const OUTPUT_MEMBER_SPECS = [
   {
     role: 'canonical_migration',
     identity_effect: 'physical_schema_output',
-    path: 'store/schema/migration/workflow-runtime-schema-v6.sql',
+    path: 'store/schema/migration/workflow-runtime-schema-v7.sql',
     format: 'icarus.workflow-runtime-sqlite-migration/1',
-    ref: { id: 'icarus.workflow-runtime-schema-v6-migration', version: '1' },
+    ref: { id: 'icarus.workflow-runtime-schema-v7-migration', version: '1' },
     version: 1,
   },
   {
@@ -223,6 +241,17 @@ const OUTPUT_MEMBER_SPECS = [
     format: 'icarus.workflow-runtime-sqlite-schema-upgrade/1',
     ref: {
       id: 'icarus.workflow-runtime-schema-v5-to-v6-upgrade',
+      version: '1',
+    },
+    version: 1,
+  },
+  {
+    role: 'schema6_to_schema7_upgrade',
+    identity_effect: 'physical_schema_output',
+    path: 'store/schema/migration/workflow-runtime-schema-v6-to-v7.sql',
+    format: 'icarus.workflow-runtime-sqlite-schema-upgrade/1',
+    ref: {
+      id: 'icarus.workflow-runtime-schema-v6-to-v7-upgrade',
       version: '1',
     },
     version: 1,
@@ -379,7 +408,7 @@ export function assertClosedSchemaDependencyManifest(
     payload.dependency_set_id !== 'workflow-runtime-schema-v1' ||
     payload.identity_scope !== 'physical_schema_and_migration' ||
     payload.member_count !== G1_SCHEMA_DEPENDENCY_ROLES.length ||
-    payload.physical_member_count !== 14 ||
+    payload.physical_member_count !== 16 ||
     payload.construction_provenance_count !== 1 ||
     !Array.isArray(payload.members) ||
     payload.members.length !== G1_SCHEMA_DEPENDENCY_ROLES.length
@@ -447,6 +476,7 @@ export function buildSchemaDependencyManifestArtifact(
   schema3To4UpgradeSql: string,
   schema4To5UpgradeSql: string,
   schema5To6UpgradeSql: string,
+  schema6To7UpgradeSql: string,
 ): ContractArtifactEnvelope {
   if (schema3To4UpgradeSql.trim().length === 0) {
     throw new Error('Schema 3 to 4 upgrade SQL must not be empty');
@@ -456,6 +486,9 @@ export function buildSchemaDependencyManifestArtifact(
   }
   if (schema5To6UpgradeSql.trim().length === 0) {
     throw new Error('Schema 5 to 6 upgrade SQL must not be empty');
+  }
+  if (schema6To7UpgradeSql.trim().length === 0) {
+    throw new Error('Schema 6 to 7 upgrade SQL must not be empty');
   }
   const inputs = Object.fromEntries(
     INPUT_MEMBER_SPECS.map((spec) => [
@@ -522,12 +555,23 @@ export function buildSchemaDependencyManifestArtifact(
     semantic_hash: schema5To6UpgradeSha256,
     raw_sha256: schema5To6UpgradeSha256,
   });
+  const schema6To7UpgradeSha256 = rawSha256(schema6To7UpgradeSql);
+  members.push({
+    role: 'schema6_to_schema7_upgrade',
+    identity_effect: 'physical_schema_output',
+    path: OUTPUT_MEMBER_SPECS[5].path,
+    format: OUTPUT_MEMBER_SPECS[5].format,
+    ref: { ...OUTPUT_MEMBER_SPECS[5].ref },
+    version: OUTPUT_MEMBER_SPECS[5].version,
+    semantic_hash: schema6To7UpgradeSha256,
+    raw_sha256: schema6To7UpgradeSha256,
+  });
 
   const payload: G1SchemaDependencyManifestPayload = {
     dependency_set_id: 'workflow-runtime-schema-v1',
     identity_scope: 'physical_schema_and_migration',
-    member_count: 15,
-    physical_member_count: 14,
+    member_count: 17,
+    physical_member_count: 16,
     construction_provenance_count: 1,
     members,
     physical_schema_identity: calculatePhysicalSchemaIdentity(members),
@@ -580,7 +624,8 @@ export function verifySchemaDependencyManifestArtifact(
       member.role === 'canonical_migration' ||
       member.role === 'schema3_to_schema4_upgrade' ||
       member.role === 'schema4_to_schema5_upgrade' ||
-      member.role === 'schema5_to_schema6_upgrade'
+      member.role === 'schema5_to_schema6_upgrade' ||
+      member.role === 'schema6_to_schema7_upgrade'
     ) {
       if (member.semantic_hash !== observedRaw) {
         throw new Error('canonical_migration semantic hash mismatch');

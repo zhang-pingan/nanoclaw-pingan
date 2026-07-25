@@ -1,109 +1,37 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  buildG2ReplayRepairSuccessor,
-  G2_REPLAY_REPAIR_DRAFT_MANIFEST_PATH,
-  G2_REPLAY_REPAIR_RC_MANIFEST_PATH,
-  G2_REPLAY_REPAIR_REVIEW_REPORT_PATH,
-  generateG2ReplayRepairSuccessor,
-} from '../compiler/g2-replay-repair-successor.js';
-import {
-  checkCurrentSealedEraLegacyGoldenDraft,
-  checkCurrentSealedEraLegacyGoldenReview,
-  checkCurrentSealedEraLegacyGoldenSeal,
-  checkCurrentSealedEraWorkingCompilerCandidate,
-} from './current-sealed-era-historical-checks.js';
-import type { ContractArtifactEnvelope, JsonObject } from './types.js';
+import { evaluateHistoricalGeneratedSchemaJoinAuthorityV5Replay } from '../compiler/current-g2-golden-replay.js';
+import { checkG2ReplayRepairSeal } from './g2-replay-repair-successor-seal.js';
+import { checkG2ReplayRepairSemanticReview } from './g2-replay-repair-successor-semantic-review.js';
 
-function artifact(bytes: string): ContractArtifactEnvelope {
-  return JSON.parse(bytes) as ContractArtifactEnvelope;
-}
-
-describe('G2 Production Compiler replay-repair successor', () => {
-  it('builds a deterministic complete Draft and read-only 40/40 comparison', () => {
-    const first = buildG2ReplayRepairSuccessor();
-    const second = buildG2ReplayRepairSuccessor();
-    expect([...second.files]).toEqual([...first.files]);
-    expect(first.files).toHaveLength(172);
-    expect(first.exactEqualCount).toBe(40);
-    expect(first.pointerDifferenceCount).toBe(0);
-    expect(first.rc.hash).toBe(
-      'sha256:6fe9c6804237ea00dfb73c50dcd9a5dd658956b54e67db554817067433c584f6',
-    );
-    expect(first.draft.payload.draft_manifest_hash).toBe(
-      'sha256:965b1af2c4688c827a9d63f6b939a130271ab0e8b0fcf85a614cdd2620cb757e',
-    );
-    expect(first.review.payload.report_hash).toBe(
-      'sha256:96f6d0feee0e4a7d77349e0d8210875dc518a40ada167785c0859193a0246180',
-    );
-    expect(first.review.payload).toMatchObject({
-      construction_phase: 'RC_REVIEW',
-      byte_equal_count: 40,
-      semantic_equal_count: 40,
-      semantic_assertion_count: 95,
-      semantic_assertion_failure_count: 0,
-      difference_count: 0,
-      approval_status: 'absent',
-      seal_status: 'absent',
-      golden_semantic_review_status: 'not_run',
-      g3_through_g9_status: 'not_started',
+describe('historical G2 v5 generated-schema authority', () => {
+  it('preserves the exact immutable semantic review and seal', () => {
+    expect(checkG2ReplayRepairSemanticReview()).toMatchObject({
+      hash: 'sha256:f5c07ae45d93124cda1247aeca1cdb4df8d2cc7398e2129cd7d90f4ab529526b',
+      payload: {
+        decision: 'approved',
+        review_hash:
+          'sha256:4481515b905ca062e3d028e17bb13ed2d4080059e844efa6c609ef292967e0de',
+      },
     });
-  }, 30_000);
-
-  it('requires exact human authority before writing the additive trees', () => {
-    expect(() => generateG2ReplayRepairSuccessor('codex:self')).toThrow(
-      /not authorized/,
-    );
+    expect(checkG2ReplayRepairSeal()).toMatchObject({
+      hash: 'sha256:f59040be6f71d8655afcb11ab4527a6683125a7a4e683f1e734b44448f7bb72e',
+      payload: {
+        bundle_hash:
+          'sha256:b37ddf415d12d759ddd4b72b754568e01715704d254da26e3355e0898cfeda05',
+        case_count: 40,
+        sealed_artifact_count: 157,
+      },
+    });
   });
 
-  it('preserves predecessor immutable lineage and exact identities', () => {
-    expect(checkCurrentSealedEraWorkingCompilerCandidate().hash).toBe(
-      'sha256:54ba5b80b92a9c053e4439964fbea03326c9c8b7fc3cc3fe244dffa2144d341a',
-    );
-    expect(
-      checkCurrentSealedEraLegacyGoldenDraft().payload.draft_manifest_hash,
-    ).toBe(
-      'sha256:fb94f5e65425b482eee369bb115e46e884b249978e0f408832574d5be41dccbd',
-    );
-    expect(checkCurrentSealedEraLegacyGoldenReview().payload.report_hash).toBe(
-      'sha256:d8b2164b0d8e8b6ab7a3fe50559327e7f944312194251bc72a4330845969ad91',
-    );
-    expect(checkCurrentSealedEraLegacyGoldenSeal().payload.bundle_hash).toBe(
-      'sha256:d00dc96d90ccfadd6081a77d7c4a16024e188b9a77a123743bc601f971219555',
-    );
-    const built = buildG2ReplayRepairSuccessor();
-    const rc = artifact(
-      built.files.get(G2_REPLAY_REPAIR_RC_MANIFEST_PATH)!,
-    ).payload;
-    const lineage = rc.predecessor_lineage as JsonObject;
-    expect(lineage).toMatchObject({
-      predecessor_review_candidate_root:
-        'sha256:b0a8d7599073b9f4ae222fac799a9923b14c0762aa70a88746adfc2953809996',
-      predecessor_draft_manifest_hash:
-        'sha256:5f8eb14f6566379bc0047b72b991f76030f12c116f3cb09d1d0649ef9e18ae3e',
-      predecessor_golden_semantic_review_hash:
-        'sha256:056151bf316cc526db1b77393524c79532cc6706c88efd3d29394d76a8d2f39b',
-      predecessor_sealed_bundle_hash:
-        'sha256:b7d26b8622b1ceadff419430f443a9b0ceb377cbd47af20e9109ea878046abf9',
-      approved_expected_semantics: 'changed_by_current_review',
-    });
-  }, 30_000);
-
-  it('contains no approval, GoldenSemanticReview, seal, Publisher, or G3+ output', () => {
-    const built = buildG2ReplayRepairSuccessor();
-    const paths = [...built.files.keys()];
-    expect(paths).toContain(G2_REPLAY_REPAIR_DRAFT_MANIFEST_PATH);
-    expect(paths).toContain(G2_REPLAY_REPAIR_REVIEW_REPORT_PATH);
-    for (const path of paths) {
-      expect(path).not.toMatch(
-        /golden-semantic-review|conformance\/sealed|publisher|registry\/authoring|\/g[3-9](?:\/|\.|-)/i,
-      );
-    }
-    expect(built.draft.payload).toMatchObject({
-      draft_status: 'frozen_pending_human_approval',
-      approval: { status: 'absent', ref: null, hash: null },
-      golden_semantic_review_status: 'not_run',
-      g3_through_g9_status: 'not_started',
+  it('replays the frozen Plan shape with its exact Compiler 3.0.3 identity', () => {
+    expect(evaluateHistoricalGeneratedSchemaJoinAuthorityV5Replay()).toMatchObject({
+      expected_bundle_hash:
+        'sha256:b37ddf415d12d759ddd4b72b754568e01715704d254da26e3355e0898cfeda05',
+      exact_equal_count: 40,
+      mismatch_count: 0,
+      passed: true,
     });
   }, 30_000);
 });

@@ -13,7 +13,7 @@ import type {
 } from './types.js';
 
 export const MIGRATION_RELATIVE_PATH =
-  'migration/workflow-runtime-schema-v6.sql';
+  'migration/workflow-runtime-schema-v7.sql';
 
 function q(identifier: string): string {
   return `"${identifier.replaceAll('"', '""')}"`;
@@ -180,7 +180,7 @@ function operationalStateSql(runExpression: string): string {
 }
 
 export function buildSchemaTriggers(
-  databaseSchemaVersion: 3 | 4 | 5 | 6 = 6,
+  databaseSchemaVersion: 3 | 4 | 5 | 6 | 7 = 7,
 ): SchemaTriggerDefinition[] {
   const refreshBody = (row: 'NEW' | 'OLD') => `
   UPDATE "workflow_graph_runs"
@@ -696,6 +696,8 @@ export const SCHEMA4_TO_SCHEMA5_UPGRADE_RELATIVE_PATH =
   'migration/workflow-runtime-schema-v4-to-v5.sql';
 export const SCHEMA5_TO_SCHEMA6_UPGRADE_RELATIVE_PATH =
   'migration/workflow-runtime-schema-v5-to-v6.sql';
+export const SCHEMA6_TO_SCHEMA7_UPGRADE_RELATIVE_PATH =
+  'migration/workflow-runtime-schema-v6-to-v7.sql';
 
 const ACTIVATION_REBUILT_TABLES = [
   'workflow_feature_release_activation_commands',
@@ -870,6 +872,71 @@ export function renderSchema5To6Upgrade(
     ...valueTriggers.map((trigger) => trigger.sql),
     'PRAGMA legacy_alter_table = OFF',
     'PRAGMA user_version = 6',
+  ];
+  return {
+    sql: `${statements.map((statement) => `${statement};`).join('\n\n')}\n`,
+    statement_count: statements.length,
+    triggers: valueTriggers,
+  };
+}
+
+export function renderSchema6To7Upgrade(
+  schema6: ExecutableSchemaSource,
+  schema7: ExecutableSchemaSource,
+): RenderedMigration {
+  if (
+    schema6.database_schema_version !== 6 ||
+    schema7.database_schema_version !== 7
+  ) {
+    throw new Error('Schema 6 to 7 upgrade source versions are invalid');
+  }
+  const affected = [
+    'workflow_values',
+    'workflow_plan_generated_schemas',
+  ] as const;
+  const sourceTables = affected.map((name) =>
+    schema6.tables.find((table) => table.name === name),
+  );
+  const targetTables = affected.map((name) =>
+    schema7.tables.find((table) => table.name === name),
+  );
+  if (sourceTables.some((table) => !table) || targetTables.some((table) => !table)) {
+    throw new Error('Schema 7 NodeOutputEnvelope authority table is missing');
+  }
+  for (let index = 0; index < affected.length; index += 1) {
+    const sourceColumns = sourceTables[index]!.columns.map((column) => column.name);
+    const targetColumns = targetTables[index]!.columns.map((column) => column.name);
+    if (
+      sourceColumns.length !== targetColumns.length ||
+      sourceColumns.some((column, columnIndex) => column !== targetColumns[columnIndex])
+    ) {
+      throw new Error(`Schema 7 ${affected[index]} cannot change columns`);
+    }
+  }
+  const values = targetTables[0]!;
+  const bindings = targetTables[1]!;
+  const valuesColumns = values.columns.map((column) => column.name).map(q).join(', ');
+  const bindingColumns = bindings.columns.map((column) => column.name).map(q).join(', ');
+  const valueTriggers = buildSchemaTriggers(7).filter(
+    (trigger) => trigger.table === values.name,
+  );
+  const statements = [
+    'PRAGMA legacy_alter_table = ON',
+    `ALTER TABLE ${q(values.name)} RENAME TO ${q(`${values.name}_schema6`)}`,
+    `ALTER TABLE ${q(bindings.name)} RENAME TO ${q(`${bindings.name}_schema6`)}`,
+    renderTable(bindings, 7),
+    renderTable(values, 7),
+    `INSERT INTO ${q(bindings.name)} (${bindingColumns}) SELECT ${bindingColumns} FROM ${q(`${bindings.name}_schema6`)}`,
+    `INSERT INTO ${q(values.name)} (${valuesColumns}) SELECT ${valuesColumns} FROM ${q(`${values.name}_schema6`)}`,
+    `DROP TABLE ${q(`${values.name}_schema6`)}`,
+    `DROP TABLE ${q(`${bindings.name}_schema6`)}`,
+    ...bindings.unique_keys.map((key) => renderUniqueIndex(bindings, key)),
+    ...bindings.indexes.map((indexValue) => renderIndex(bindings, indexValue)),
+    ...values.unique_keys.map((key) => renderUniqueIndex(values, key)),
+    ...values.indexes.map((indexValue) => renderIndex(values, indexValue)),
+    ...valueTriggers.map((trigger) => trigger.sql),
+    'PRAGMA legacy_alter_table = OFF',
+    'PRAGMA user_version = 7',
   ];
   return {
     sql: `${statements.map((statement) => `${statement};`).join('\n\n')}\n`,

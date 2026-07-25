@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-g3-registry-publish-negative-cases:1\n",
-  "hash": "sha256:147e5638793126fbdc1fa9a6d221bc6991f6425b1b87c4f21584013a07164a38",
+  "hash": "sha256:38d6bd4becaca2260c0903dc38f3ef26011f0f7e1d0aa97e543e60f01f1b2b1b",
   "payload": {
     "fixture_scope": "test_only",
     "cases": [
@@ -313,16 +313,16 @@
               "content_hash": "sha256:ede8625861f47dcd9eebd48b232c36dd04f72bc8c702928070ea186643863937",
               "dependencies": [],
               "compiled_plan_pin": {
-                "plan_ref": "conformance/sealed/g2-generated-schema-join-authority-v5/expected/positive.static-lowering.plan.json",
-                "plan_hash": "sha256:266fd7bb686a454e8615c6147e963661a340e30e279e92e0d02f135f9e459bac",
+                "plan_ref": "conformance/sealed/g2-generated-schema-join-authority-v6/expected/positive.static-lowering.plan.json",
+                "plan_hash": "sha256:7a06f414e398ca3bde05c22ac3aeb817b725b8ad21abd3d88cae1f00c8f20b12",
                 "plan_format": "icarus.workflow-graph-scope-plan/2",
-                "compiler_toolchain_hash": "sha256:acc4bd6e6444f9903e3054bf637dee28ee8b25fbfc5eebd49b9aaf37582ff493",
-                "compiler_build_hash": "sha256:eae5b2002226b9110dddba57dce528af91439ae760c5d30636631bcb464d86b2",
+                "compiler_toolchain_hash": "sha256:c9c5c9b9180ecb9ffde5f8456e44c4e93fc51686988c74e47faa1b2f7fae3ffa",
+                "compiler_build_hash": "sha256:9333356a10b8c5345bfacc80c6071640e5e26561581f39969c7ecabc16ac97c0",
                 "provenance": "sealed_g2_expected"
               },
               "execution_artifact_pin": null,
               "capability_outbox_binding": null,
-              "resource_hash": "sha256:fc79625c2aff984386a7bd9a9b579044f51df8d0cb9519a004fc03e42790eb48"
+              "resource_hash": "sha256:0516c83df1a70ce3c33d7318534577802a78a1904e0d3ad5bcea1f6a744c650d"
             }
           }
         ],

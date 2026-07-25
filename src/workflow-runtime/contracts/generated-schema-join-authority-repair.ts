@@ -4,7 +4,7 @@ import path from 'node:path';
 
 import { parseContractArtifactEnvelope } from './artifact.js';
 import { calculateArtifactHash, domainSeparatedSha256 } from './hash.js';
-import { strictParseJsonBytes } from './strict-json.js';
+import { assertJsonObject, strictParseJsonBytes } from './strict-json.js';
 import type {
   ContractArtifactEnvelope,
   JsonObject,
@@ -18,6 +18,7 @@ const projectRoot = path.resolve(contractsRoot, '../../..');
 export const GENERATED_SCHEMA_JOIN_AUTHORITY_REPAIR_ROOT =
   'conformance/generated-schema-join-authority-repair';
 export const GENERATED_SCHEMA_JOIN_AUTHORITY_REPAIR_DECISION_PATH = `${GENERATED_SCHEMA_JOIN_AUTHORITY_REPAIR_ROOT}/generated-schema-join-authority-contract@1.json`;
+export const NODE_OUTPUT_ENVELOPE_PLAN_SCHEMA_PATH = `${GENERATED_SCHEMA_JOIN_AUTHORITY_REPAIR_ROOT}/compiled-scope-plan-v2-node-output-envelope-schema@1.json`;
 export const GENERATED_SCHEMA_JOIN_AUTHORITY_REPAIR_PACK_PATH = `${GENERATED_SCHEMA_JOIN_AUTHORITY_REPAIR_ROOT}/contract-pack-generated-schema-join-authority-repair.json`;
 export const GENERATED_SCHEMA_JOIN_AUTHORITY_REPAIR_SPEC_HEADING =
   '### R-019：Generated Schema 与 Join Expose Authority 决议';
@@ -30,6 +31,8 @@ const SPEC_SECTION_DOMAIN =
   'icarus:workflow-generated-schema-join-authority-spec-section:1\n';
 const MEMBER_TREE_DOMAIN =
   'icarus:workflow-generated-schema-join-authority-member-tree:1\n';
+const PLAN_SCHEMA_DOMAIN =
+  'icarus:workflow-compiled-scope-plan-v2-node-output-envelope-schema:1\n';
 
 const INPUTS = Object.freeze({
   g03_pack: {
@@ -48,17 +51,17 @@ const INPUTS = Object.freeze({
     path: 'src/workflow-runtime/contracts/conformance/capability-outbox-execution-binding/schemas/compiled-scope-plan-v2-execution-binding-schema@1.json',
     hash: 'sha256:e582abc7a221f4d1afd66d12c2a87816cb228f6139a77d9abfaa1a397844f947',
   },
-  schema6_prerequisite: {
-    path: 'src/workflow-runtime/store/schema/inputs/workflow-generated-schema-authority-prerequisite@1.json',
-    hash: 'sha256:55bf95fa677ae2d2be30575fcbe68ed8b051913379ceb131b983dfe62658dc00',
+  schema7_prerequisite: {
+    path: 'src/workflow-runtime/store/schema/inputs/workflow-node-output-envelope-schema-authority-prerequisite@1.json',
+    hash: 'sha256:cfb14fbbf3bc6ca92d09d7b77e01ff0c281e529f8419f7f155403dd08e642d02',
   },
-  schema6_pack: {
+  schema7_pack: {
     path: 'src/workflow-runtime/store/schema/contract-pack-g1-executable-schema.json',
-    hash: 'sha256:3cc206a6dfb1bbaed1bb0f4305323729db23d839652d8a0e020a9a6c4d3e3dd6',
+    hash: 'sha256:b60e3c7fe91d1cfab341d487102c7bff13ad73a320444b45fb6ea71d8b914306',
   },
   predecessor_seal: {
-    path: 'src/workflow-runtime/contracts/conformance/sealed/g2-capability-outbox-binding-v3/golden-conformance-bundle@2.json',
-    hash: 'sha256:967437bb9f91e32e5014b2af90a23f5646e491eb427bdf55accb345ead70db8f',
+    path: 'src/workflow-runtime/contracts/conformance/sealed/g2-generated-schema-join-authority-v5/golden-conformance-bundle@2.json',
+    hash: 'sha256:f59040be6f71d8655afcb11ab4527a6683125a7a4e683f1e734b44448f7bb72e',
   },
 });
 
@@ -144,7 +147,94 @@ function specSection(document?: string): string {
   return source.slice(start, end).trimEnd();
 }
 
-function buildDecision(section: string): ContractArtifactEnvelope {
+function buildNodeOutputEnvelopePlanSchema(): ContractArtifactEnvelope {
+  const predecessor = readPinnedArtifact(INPUTS.plan_v2_schema).artifact;
+  const schema = structuredClone(predecessor.payload);
+  assertJsonObject(schema);
+  const defs = schema.$defs;
+  assertJsonObject(defs);
+  const compiledNode = defs.compiled_node;
+  assertJsonObject(compiledNode);
+  if (!Array.isArray(compiledNode.oneOf)) {
+    throw new GeneratedSchemaJoinAuthorityRepairError(
+      'Plan predecessor compiled_node union is missing',
+    );
+  }
+  const hashSchema: JsonObject = {
+    type: 'string',
+    pattern: '^sha256:[0-9a-f]{64}$',
+  };
+  defs.node_output_envelope_schema = {
+    type: 'object',
+    additionalProperties: false,
+    required: [
+      'type',
+      'generator',
+      'canonicalizer',
+      'parameter_hash',
+      'schema_ref',
+      'schema_raw_hash',
+      'schema_hash',
+      'schema_byte_length',
+      'schema_json',
+    ],
+    properties: {
+      type: { const: 'generated' },
+      generator: { const: 'node_output_envelope' },
+      canonicalizer: { const: 'RFC8785-JCS' },
+      parameter_hash: hashSchema,
+      schema_ref: {
+        type: 'string',
+        pattern: '^icarus-generated-schema:sha256:[0-9a-f]{64}$',
+      },
+      schema_raw_hash: hashSchema,
+      schema_hash: hashSchema,
+      schema_byte_length: {
+        type: 'integer',
+        minimum: 0,
+        maximum: Number.MAX_SAFE_INTEGER,
+      },
+      schema_json: { $ref: '#/$defs/json_value' },
+    },
+  };
+  for (const [index, branchValue] of compiledNode.oneOf.entries()) {
+    assertJsonObject(branchValue);
+    if (!Array.isArray(branchValue.required)) {
+      throw new GeneratedSchemaJoinAuthorityRepairError(
+        `Plan predecessor compiled_node branch ${index} required set is missing`,
+      );
+    }
+    const required = branchValue.required.map(String);
+    const outputPortsIndex = required.indexOf('output_ports');
+    if (outputPortsIndex < 0 || required.includes('output_envelope_schema')) {
+      throw new GeneratedSchemaJoinAuthorityRepairError(
+        `Plan predecessor compiled_node branch ${index} shape drifted`,
+      );
+    }
+    required.splice(outputPortsIndex + 1, 0, 'output_envelope_schema');
+    branchValue.required = required;
+    assertJsonObject(branchValue.properties);
+    branchValue.properties.output_envelope_schema = {
+      $ref: '#/$defs/node_output_envelope_schema',
+    };
+  }
+  schema.$id =
+    'https://icarus.local/workflow/compiled-scope-plan-v2-node-output-envelope-schema@1';
+  schema.title =
+    'Compiled Scope Plan v2 with canonical NodeOutputEnvelope authority';
+  return artifact(
+    'icarus.workflow-compiled-scope-plan-v2-node-output-envelope-schema/1',
+    'icarus.workflow-compiled-scope-plan-v2-node-output-envelope-schema',
+    '1.0.0',
+    PLAN_SCHEMA_DOMAIN,
+    schema,
+  );
+}
+
+function buildDecision(
+  section: string,
+  planSchema: ContractArtifactEnvelope,
+): ContractArtifactEnvelope {
   const upstream = Object.fromEntries(
     Object.entries(INPUTS).map(([name, input]) => {
       const value = readPinnedArtifact(input);
@@ -158,21 +248,30 @@ function buildDecision(section: string): ContractArtifactEnvelope {
       ];
     }),
   );
-  const prerequisite = readPinnedArtifact(INPUTS.schema6_prerequisite).artifact;
-  const schema6Pack = readPinnedArtifact(INPUTS.schema6_pack).artifact;
+  const prerequisite = readPinnedArtifact(INPUTS.schema7_prerequisite).artifact;
+  const schema7Pack = readPinnedArtifact(INPUTS.schema7_pack).artifact;
   const predecessor = readPinnedArtifact(INPUTS.predecessor_seal).artifact;
   if (
-    prerequisite.payload.database_schema_version !== 6 ||
-    prerequisite.payload.delta_hash !==
-      'sha256:6705a3d4810f1fb040cd6753fcaccad40b704d76c628827472ee47add34d9804' ||
-    schema6Pack.payload.schema5_source_migration_sha256 !==
+    prerequisite.payload.database_schema_version !== 7 ||
+    prerequisite.payload.predecessor_database_schema_version !== 6 ||
+    prerequisite.payload.generated_schema_generator !==
+      'node_output_envelope' ||
+    schema7Pack.payload.schema5_source_migration_sha256 !==
       'sha256:2ead40dc2f1618f87247e9d3bb476266797c38560e1ad0537a6afa6f71a3fbf6' ||
-    schema6Pack.payload.schema5_source_sqlite_schema_identity !==
+    schema7Pack.payload.schema5_source_sqlite_schema_identity !==
       'sha256:5ee3c119cc6a0e0552e2a6fe45b51c8ffd08ec7acdbac66748978ed0d21fdb0a' ||
-    schema6Pack.payload.schema5_to_schema6_upgrade_sha256 !==
+    schema7Pack.payload.schema5_to_schema6_upgrade_sha256 !==
       'sha256:dc94fa0867ca572b7ec39ffb8df448e38be00ca4831f1d420885ee7cc097687d' ||
+    (prerequisite.payload.historical_schema6 as JsonObject)
+      .migration_sha256 !==
+      'sha256:16a46e84c77d734013e18b4b00b86564f6188ea73717763e9fb7a884d62faa41' ||
+    (prerequisite.payload.historical_schema6 as JsonObject)
+      .sqlite_schema_identity !==
+      'sha256:a4936a9a71670cb30b1c974ee3cf9cd21375fb743e8c2278d8db08c685854486' ||
+    schema7Pack.payload.schema6_to_schema7_upgrade_sha256 !==
+      'sha256:225c5f148347dc42ca086bfb0bf7db957d13eb1be502f155465e20ee66010062' ||
     predecessor.payload.bundle_hash !==
-      'sha256:b3ed9e43bd0fadaf40520257926dcf690ee8495bb417220245f248385bde9efb'
+      'sha256:b37ddf415d12d759ddd4b72b754568e01715704d254da26e3355e0898cfeda05'
   ) {
     throw new GeneratedSchemaJoinAuthorityRepairError(
       'Generated schema repair prerequisite or predecessor semantics drifted',
@@ -187,7 +286,7 @@ function buildDecision(section: string): ContractArtifactEnvelope {
       decision_id: 'R-019',
       gate: 'G2_SCHEMA_G3_GENERATED_SCHEMA_JOIN_AUTHORITY_REPAIR',
       status:
-        'GENERATED_SCHEMA_JOIN_AUTHORITY_REPAIR_EXIT_CANDIDATE_PENDING_INDEPENDENT_AFFECTED_CHAIN_REGRESSION',
+        'NODE_OUTPUT_ENVELOPE_SCHEMA_AUTHORITY_REPAIR_EXIT_CANDIDATE_PENDING_INDEPENDENT_AFFECTED_CHAIN_REGRESSION',
       normative_spec: {
         path: 'local/docs/dynamic-workflow-dag-framework.md',
         section_heading: GENERATED_SCHEMA_JOIN_AUTHORITY_REPAIR_SPEC_HEADING,
@@ -243,9 +342,21 @@ function buildDecision(section: string): ContractArtifactEnvelope {
           required_fields: ['generator', 'child_interface_ref', 'exits'],
           exits_order: 'ascii_ascending',
         },
+        node_output_envelope: {
+          required_fields: [
+            'node_id',
+            'port_contract_hash',
+            'output_ports',
+          ],
+          output_ports_authority: 'exact_compiled_node_output_ports',
+          port_contract_hash_domain:
+            'icarus:workflow-node-output-port-contract:1\n',
+        },
       },
       plan_binding: {
         plan_format: 'icarus.workflow-graph-scope-plan/2',
+        current_plan_schema_ref: NODE_OUTPUT_ENVELOPE_PLAN_SCHEMA_PATH,
+        current_plan_schema_hash: planSchema.hash,
         descriptor_in_plan_hash: true,
         binding_hash_domain:
           'icarus:workflow-plan-generated-schema-binding:1\n',
@@ -259,6 +370,9 @@ function buildDecision(section: string): ContractArtifactEnvelope {
           'parameter_hash',
         ],
         caller_output_ports_authority: 'forbidden',
+        sealed_plan_validation:
+          'canonical_bytes_and_plan_hash_before_content_or_binding_write',
+        exact_node_envelope_descriptor_count: 1,
       },
       join_expose_lowering: {
         source_authority: 'input_ports_plus_expose_only',
@@ -273,16 +387,52 @@ function buildDecision(section: string): ContractArtifactEnvelope {
         plan_proof_program_replay: 'byte_exact',
       },
       stored_value_authority: {
-        database_schema_version: 6,
+        database_schema_version: 7,
+        predecessor_database_schema_version: 6,
         authority_kinds: ['registry', 'plan_generated'],
         authority_shape: 'mutually_exclusive_and_complete',
         generated_content_table: 'workflow_generated_schema_contents',
         plan_binding_table: 'workflow_plan_generated_schemas',
         value_binding: 'deferred_composite_fk_to_exact_plan_generated_schema',
         published_registry_identity_for_generated_schema: 'forbidden',
-        schema5_identity: 'immutable_historical_predecessor',
-        schema5_to_schema6_upgrade:
-          'preserve_all_legal_rows_and_inbound_fk_targets_or_rollback',
+        node_output_envelope_authority:
+          'first_class_plan_generated_exact_envelope_descriptor_tuple',
+        business_port_or_input_snapshot_authority: 'forbidden',
+        schema5_and_schema6_identity: 'immutable_historical_predecessors',
+        schema6_to_schema7_upgrade:
+          'rebuild_closed_generator_checks_preserve_rows_fks_or_rollback',
+      },
+      node_output_envelope_value: {
+        draft: 'https://json-schema.org/draft/2020-12/schema',
+        closed_port_set: 'exact_compiled_output_ports',
+        port_state_union: 'required_present_optional_present_or_absent',
+        content_hash_domain: 'icarus:workflow-node-output-envelope:1\n',
+        content_hash_payload: ['port_contract_hash', 'ports'],
+        canonical_content_fields: [
+          'port_contract_hash',
+          'ports',
+          'envelope_hash',
+        ],
+        provenance_hash_domain:
+          'icarus:workflow-node-output-envelope-provenance:1\n',
+        present_member_provenance_hash_domain:
+          'icarus:workflow-node-output-member-provenance:1\n',
+        storage_kind: 'inline',
+        media_type: 'application/json',
+        payload_state: 'live',
+        row_version: 0,
+        owner: 'exact_owner_graph_run_id_only',
+        present_member_validation:
+          'exact_live_value_hash_schema_length_and_plan_run_provenance',
+        validation_boundaries: [
+          'write',
+          'exact_replay',
+          'read',
+          'store_reopen',
+          'recovery_scan',
+        ],
+        failure_behavior:
+          'atomic_fail_closed_no_rewrite_no_latest_network_or_fallback',
       },
       publication_store_runtime_handoff: {
         publisher_validation: 'complete_hash_verified_descriptor_only',
@@ -300,35 +450,55 @@ function buildDecision(section: string): ContractArtifactEnvelope {
         next_required_gate: 'independent_affected_chain_whole_gate_regression',
       },
       exact_upstream_identities: upstream,
-      schema6_delta_hash: prerequisite.payload.delta_hash,
+      schema7_prerequisite_hash: prerequisite.hash,
       historical_schema5: {
         source_migration_path:
           'src/workflow-runtime/store/schema/migration/workflow-runtime-schema-v1.sql',
         source_migration_sha256:
-          schema6Pack.payload.schema5_source_migration_sha256,
+          schema7Pack.payload.schema5_source_migration_sha256,
         sqlite_schema_identity:
-          schema6Pack.payload.schema5_source_sqlite_schema_identity,
+          schema7Pack.payload.schema5_source_sqlite_schema_identity,
         user_version: 5,
       },
-      fresh_schema6: {
+      historical_schema6: {
         source_migration_path:
           'src/workflow-runtime/store/schema/migration/workflow-runtime-schema-v6.sql',
-        source_migration_sha256: schema6Pack.payload.migration_sha256,
-        dependency_manifest_role: 'canonical_migration',
-        store_bootstrap_source: 'canonical_migration',
+        source_migration_sha256:
+          (prerequisite.payload.historical_schema6 as JsonObject)
+            .migration_sha256,
+        sqlite_schema_identity:
+          (prerequisite.payload.historical_schema6 as JsonObject)
+            .sqlite_schema_identity,
         user_version: 6,
       },
       schema5_to_schema6_upgrade_sha256:
-        schema6Pack.payload.schema5_to_schema6_upgrade_sha256,
-      predecessor_g2_v3_bundle_hash: predecessor.payload.bundle_hash,
+        schema7Pack.payload.schema5_to_schema6_upgrade_sha256,
+      fresh_schema7: {
+        source_migration_path:
+          'src/workflow-runtime/store/schema/migration/workflow-runtime-schema-v7.sql',
+        source_migration_sha256: schema7Pack.payload.migration_sha256,
+        dependency_manifest_role: 'canonical_migration',
+        store_bootstrap_source: 'canonical_migration',
+        user_version: 7,
+      },
+      schema6_to_schema7_upgrade_sha256:
+        schema7Pack.payload.schema6_to_schema7_upgrade_sha256,
+      predecessor_g2_v5_bundle_hash: predecessor.payload.bundle_hash,
     },
   );
 }
 
 function expectedFiles(document?: string): Map<string, string> {
-  const decision = buildDecision(specSection(document));
+  const planSchema = buildNodeOutputEnvelopePlanSchema();
+  const planSchemaBytes = render(planSchema);
+  const decision = buildDecision(specSection(document), planSchema);
   const decisionBytes = render(decision);
   const members = [
+    {
+      path: NODE_OUTPUT_ENVELOPE_PLAN_SCHEMA_PATH,
+      artifact_hash: planSchema.hash,
+      raw_bytes_hash: rawHash(planSchemaBytes),
+    },
     {
       path: GENERATED_SCHEMA_JOIN_AUTHORITY_REPAIR_DECISION_PATH,
       artifact_hash: decision.hash,
@@ -343,7 +513,7 @@ function expectedFiles(document?: string): Map<string, string> {
     {
       gate: 'G2_SCHEMA_G3_GENERATED_SCHEMA_JOIN_AUTHORITY_REPAIR',
       status:
-        'GENERATED_SCHEMA_JOIN_AUTHORITY_REPAIR_EXIT_CANDIDATE_PENDING_INDEPENDENT_AFFECTED_CHAIN_REGRESSION',
+        'NODE_OUTPUT_ENVELOPE_SCHEMA_AUTHORITY_REPAIR_EXIT_CANDIDATE_PENDING_INDEPENDENT_AFFECTED_CHAIN_REGRESSION',
       member_count: members.length,
       members,
       member_tree_hash: domainSeparatedSha256(MEMBER_TREE_DOMAIN, members),
@@ -352,6 +522,7 @@ function expectedFiles(document?: string): Map<string, string> {
     },
   );
   return new Map([
+    [NODE_OUTPUT_ENVELOPE_PLAN_SCHEMA_PATH, planSchemaBytes],
     [GENERATED_SCHEMA_JOIN_AUTHORITY_REPAIR_DECISION_PATH, decisionBytes],
     [GENERATED_SCHEMA_JOIN_AUTHORITY_REPAIR_PACK_PATH, render(pack)],
   ]);

@@ -1,0 +1,237 @@
+import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
+
+import { parseContractArtifactEnvelope } from './artifact.js';
+import { calculateArtifactHash } from './hash.js';
+import { strictParseJsonBytes } from './strict-json.js';
+import type {
+  ContractArtifactEnvelope,
+  JsonObject,
+  Sha256Hash,
+} from './types.js';
+
+const contractsRoot = import.meta.dirname;
+const repoRoot = path.resolve(contractsRoot, '../../..');
+
+export const NODE_OUTPUT_ENVELOPE_REPAIR_READINESS_PATH =
+  'contract-pack-node-output-envelope-schema-authority-readiness.json';
+
+const DOMAIN =
+  'icarus:workflow-node-output-envelope-schema-authority-readiness:1\n';
+const EXIT_STATUS =
+  'NODE_OUTPUT_ENVELOPE_SCHEMA_AUTHORITY_REPAIR_EXIT_CANDIDATE_PENDING_INDEPENDENT_AFFECTED_CHAIN_REGRESSION';
+
+const AUTHORITY_INPUTS = [
+  {
+    role: 'r019_node_output_envelope_authority',
+    path: 'src/workflow-runtime/contracts/conformance/generated-schema-join-authority-repair/contract-pack-generated-schema-join-authority-repair.json',
+    hash: 'sha256:7a852ff21a77a767b708ab8a4fc5c329024ca954422b26d71210b0385ce05441',
+  },
+  {
+    role: 'g1_schema_7',
+    path: 'src/workflow-runtime/store/schema/contract-pack-g1-executable-schema.json',
+    hash: 'sha256:b60e3c7fe91d1cfab341d487102c7bff13ad73a320444b45fb6ea71d8b914306',
+  },
+  {
+    role: 'g2_v6_sealed_bundle',
+    path: 'src/workflow-runtime/contracts/conformance/sealed/g2-generated-schema-join-authority-v6/golden-conformance-bundle@2.json',
+    hash: 'sha256:0e5ea012864bce2dae7d0435e700b78b6d3299703f896c737677d24f46d8f78f',
+  },
+  {
+    role: 'g3_6_retention_executor_abi',
+    path: 'src/workflow-runtime/contracts/contract-pack-g3-retention-executor-abi-preflight.json',
+    hash: 'sha256:0b1079429b4fa65ffdad1061a0e664ae2a08b6c692645067787b051031c49337',
+  },
+  {
+    role: 'g3_7_workflow_publisher',
+    path: 'src/workflow-runtime/contracts/contract-pack-g3-workflow-publisher.json',
+    hash: 'sha256:bc0c536a09f8bd79cffa5da78add54747c7a6f075e58ab0bfc93f0d13ce363b1',
+  },
+  {
+    role: 'g3_8a_frozen_activation_repair',
+    path: 'src/workflow-runtime/contracts/contract-pack-g3.8a-activation-contract-repair.json',
+    hash: 'sha256:d8412111a0f3dcabb4ce416b99086701ea3e3911ff431b5457eb957b2f69722f',
+  },
+  {
+    role: 'g3_9_feature_release_activation',
+    path: 'src/workflow-runtime/contracts/contract-pack-g3.9-feature-release-activation.json',
+    hash: 'sha256:5ab7b3b322b4bad4a08e56569b79f4b9ec3ecd8b8240c013b5992a8d16eb5593',
+  },
+  {
+    role: 'g4_reopened_authority_successor',
+    path: 'src/workflow-runtime/contracts/contract-pack-g4-node-output-envelope-authority-successor.json',
+    hash: 'sha256:2e77b1514cdccf445f936e0ce5746138a14a11b820140a58fc92f8fea2a43cf8',
+  },
+  {
+    role: 'frozen_gate_ownership_authority',
+    path: 'src/workflow-runtime/contracts/governance/workflow-runtime-gate-ownership@1.json',
+    hash: 'sha256:712a7440e83f087e4bbb1e465a1a677a16708429f46766029baa0f90734e5017',
+  },
+] as const;
+
+const PROTECTED_RUNTIME_SOURCES = [
+  {
+    path: 'src/workflow-runtime/runtime/generated-schema-runtime.ts',
+    raw_sha256:
+      'sha256:01f3118ade3563d1b06ad053d760bc175896454fd6ba23c3c84c192683f6dd9c',
+  },
+  {
+    path: 'src/workflow-runtime/runtime/basic-scheduler.ts',
+    raw_sha256:
+      'sha256:c80144ecef8efd58de2730ea6623bfd42a8adf9fa452c64352557a9bcdb354de',
+  },
+] as const;
+
+const INVALIDATED_G5_INPUTS = [
+  {
+    role: 'predecessor_g5_repair_pack',
+    path: 'src/workflow-runtime/contracts/contract-pack-g5-basic-runtime-repair.json',
+    raw_sha256:
+      'sha256:8548234cac7f157a769b2ec8db69dcb93ea0f672a3cd67a0bbd5f6d6ebdcb1be',
+    artifact_hash:
+      'sha256:2c9f98f135ed4ee7186aa1f8ae15528d90ca2710d674b84e04eb0e25dac68ad4',
+  },
+  {
+    role: 'predecessor_g5_implementation_artifact',
+    path: 'src/workflow-runtime/contracts/implementation/g5-basic-runtime-repair-implementation@1.json',
+    raw_sha256:
+      'sha256:5b6d9ccc91a8e9f8269832dcbaa2c0745b0c8ef17adfe95ec3956ad2e84cc97e',
+    artifact_hash:
+      'sha256:d874eafbd58a056d116cd9e695281374b615c7a5e4539fe1eac6f8351634bd51',
+  },
+] as const;
+
+function rawSha256(bytes: Uint8Array): Sha256Hash {
+  return `sha256:${crypto.createHash('sha256').update(bytes).digest('hex')}`;
+}
+
+function readRepoArtifact(relativePath: string): ContractArtifactEnvelope {
+  return parseContractArtifactEnvelope(
+    strictParseJsonBytes(fs.readFileSync(path.join(repoRoot, relativePath))),
+  );
+}
+
+function assertInputs(): void {
+  for (const input of AUTHORITY_INPUTS) {
+    if (readRepoArtifact(input.path).hash !== input.hash) {
+      throw new Error(`Readiness authority input drifted: ${input.role}`);
+    }
+  }
+  for (const source of PROTECTED_RUNTIME_SOURCES) {
+    if (
+      rawSha256(fs.readFileSync(path.join(repoRoot, source.path))) !==
+      source.raw_sha256
+    ) {
+      throw new Error(`Protected G5 Runtime source drifted: ${source.path}`);
+    }
+  }
+  for (const input of INVALIDATED_G5_INPUTS) {
+    const bytes = fs.readFileSync(path.join(repoRoot, input.path));
+    if (rawSha256(bytes) !== input.raw_sha256) {
+      throw new Error(`Invalidated G5 historical bytes drifted: ${input.role}`);
+    }
+    if (
+      parseContractArtifactEnvelope(strictParseJsonBytes(bytes)).hash !==
+      input.artifact_hash
+    ) {
+      throw new Error(`Invalidated G5 historical identity drifted: ${input.role}`);
+    }
+  }
+}
+
+function buildReadiness(): ContractArtifactEnvelope {
+  assertInputs();
+  const artifact: ContractArtifactEnvelope = {
+    format: 'icarus.workflow-node-output-envelope-schema-authority-readiness/1',
+    ref: {
+      id: 'icarus.workflow-node-output-envelope-schema-authority-readiness',
+      version: '1.0.0',
+    },
+    version: 1,
+    domain_separator: DOMAIN,
+    payload: {
+      status: EXIT_STATUS,
+      current_machine_authority: true,
+      authority_inputs: AUTHORITY_INPUTS.map((entry) => ({ ...entry })),
+      current_schema: {
+        database_schema_version: 7,
+        database_schema_hash:
+          'sha256:27a212831d2abd8898eb8becbfd714d96b1bfb15d818d471cfc58fdc36196e65',
+        schema7_migration_hash:
+          'sha256:b4307930cedd9e0b8acbec599a2b3b29cb18f78840a726532b108459a4df2497',
+        schema6_to_7_upgrade_hash:
+          'sha256:225c5f148347dc42ca086bfb0bf7db957d13eb1be502f155465e20ee66010062',
+        stored_value_authority: 'first_class_plan_generated_node_output_envelope',
+      },
+      g1_through_g4_current_closure:
+        'REOPENED_PENDING_INDEPENDENT_AFFECTED_CHAIN_REGRESSION',
+      g5: {
+        gate_status: 'BLOCKED_BY_SPEC',
+        readiness: 'NOT_READY',
+        predecessor_candidate: 'INVALIDATED_HISTORICAL_BYTES_ONLY',
+        defect:
+          'canonical_envelope_object_is_persisted_with_first_business_port_or_carrier_schema_authority',
+        minimal_source_reproduction: {
+          authority_selection:
+            'generated-schema-runtime.ts:764-780,867-873',
+          envelope_write: 'generated-schema-runtime.ts:874-889',
+          scheduler_handoff: 'basic-scheduler.ts:202-228',
+        },
+        required_future_consumer:
+          'independent_g5_successor_consumes_node_output_envelope_value_store_and_compiled_output_envelope_schema',
+        runtime_construction_performed: false,
+      },
+      protected_runtime_sources: PROTECTED_RUNTIME_SOURCES.map((entry) => ({
+        ...entry,
+      })),
+      invalidated_historical_g5: INVALIDATED_G5_INPUTS.map((entry) => ({
+        ...entry,
+      })),
+      forbidden_resolution: {
+        business_port_or_input_snapshot_schema: true,
+        registry_latest_or_fabricated_publication: true,
+        network_or_fallback: true,
+        manual_bypass: true,
+      },
+      g6_through_g9_status: 'NOT_READY',
+      blocker_resolution_or_abandon_performed: false,
+      workflow_deadline_or_t6e_performed: false,
+      certification_or_production_authorized: false,
+    },
+    hash: '' as Sha256Hash,
+  };
+  artifact.hash = calculateArtifactHash(artifact);
+  return artifact;
+}
+
+function render(value: ContractArtifactEnvelope): string {
+  return `${JSON.stringify(value, null, 2)}\n`;
+}
+
+function targetPath(): string {
+  return path.join(contractsRoot, NODE_OUTPUT_ENVELOPE_REPAIR_READINESS_PATH);
+}
+
+export function generateNodeOutputEnvelopeRepairReadiness(): ContractArtifactEnvelope {
+  const artifact = buildReadiness();
+  const target = targetPath();
+  const temporary = `${target}.tmp-${process.pid}`;
+  fs.writeFileSync(temporary, render(artifact), 'utf8');
+  fs.renameSync(temporary, target);
+  return artifact;
+}
+
+export function checkNodeOutputEnvelopeRepairReadiness(): ContractArtifactEnvelope {
+  const expected = buildReadiness();
+  const bytes = fs.readFileSync(targetPath());
+  const actual = parseContractArtifactEnvelope(strictParseJsonBytes(bytes));
+  if (bytes.toString('utf8') !== render(expected) || actual.hash !== expected.hash) {
+    throw new Error('NodeOutputEnvelope repair readiness authority drifted');
+  }
+  return expected;
+}
+
+export function nodeOutputEnvelopeRepairStatusForTest(): Readonly<JsonObject> {
+  return structuredClone(buildReadiness().payload);
+}

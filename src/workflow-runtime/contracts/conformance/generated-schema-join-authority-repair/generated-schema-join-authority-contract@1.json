@@ -6,16 +6,16 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-generated-schema-join-authority-contract:1\n",
-  "hash": "sha256:b53f8a77e51adba5d1b8f41766336bae2a59a05e5ced1959996218d745d5ebd4",
+  "hash": "sha256:53c2e01ad466ef5f3716b5b152efdd6052a66aab8bf7fb880ac6df4b230a6528",
   "payload": {
     "decision_id": "R-019",
     "gate": "G2_SCHEMA_G3_GENERATED_SCHEMA_JOIN_AUTHORITY_REPAIR",
-    "status": "GENERATED_SCHEMA_JOIN_AUTHORITY_REPAIR_EXIT_CANDIDATE_PENDING_INDEPENDENT_AFFECTED_CHAIN_REGRESSION",
+    "status": "NODE_OUTPUT_ENVELOPE_SCHEMA_AUTHORITY_REPAIR_EXIT_CANDIDATE_PENDING_INDEPENDENT_AFFECTED_CHAIN_REGRESSION",
     "normative_spec": {
       "path": "local/docs/dynamic-workflow-dag-framework.md",
       "section_heading": "### R-019：Generated Schema 与 Join Expose Authority 决议",
-      "section_raw_sha256": "sha256:1f728c8e36be03ee6a4ff48da4640bef20cc63910c03579b446e60d1ce76861f",
-      "section_semantic_hash": "sha256:ca5d6e998c36ff9ead7f92f3d89e45a7f676ec27c2b1759f1c8968de4625fbef"
+      "section_raw_sha256": "sha256:7c7361c32b6d9870b8753b4354ac1587eee4976d26e00e4c3015ace0b02a8025",
+      "section_semantic_hash": "sha256:e3210af82c49a6919300de3dc78d78ecbe18926d4cfae2b800e02393f13a9ae3"
     },
     "generated_schema_authority": {
       "descriptor_fields": [
@@ -73,10 +73,21 @@
           "exits"
         ],
         "exits_order": "ascii_ascending"
+      },
+      "node_output_envelope": {
+        "required_fields": [
+          "node_id",
+          "port_contract_hash",
+          "output_ports"
+        ],
+        "output_ports_authority": "exact_compiled_node_output_ports",
+        "port_contract_hash_domain": "icarus:workflow-node-output-port-contract:1\n"
       }
     },
     "plan_binding": {
       "plan_format": "icarus.workflow-graph-scope-plan/2",
+      "current_plan_schema_ref": "conformance/generated-schema-join-authority-repair/compiled-scope-plan-v2-node-output-envelope-schema@1.json",
+      "current_plan_schema_hash": "sha256:3dd4f2be80d1e824cd2c0f02aec82830ceeb858d51fbd36c13f7574f032bf51e",
       "descriptor_in_plan_hash": true,
       "binding_hash_domain": "icarus:workflow-plan-generated-schema-binding:1\n",
       "exact_fields": [
@@ -88,7 +99,9 @@
         "generator",
         "parameter_hash"
       ],
-      "caller_output_ports_authority": "forbidden"
+      "caller_output_ports_authority": "forbidden",
+      "sealed_plan_validation": "canonical_bytes_and_plan_hash_before_content_or_binding_write",
+      "exact_node_envelope_descriptor_count": 1
     },
     "join_expose_lowering": {
       "source_authority": "input_ports_plus_expose_only",
@@ -103,7 +116,8 @@
       "plan_proof_program_replay": "byte_exact"
     },
     "stored_value_authority": {
-      "database_schema_version": 6,
+      "database_schema_version": 7,
+      "predecessor_database_schema_version": 6,
       "authority_kinds": [
         "registry",
         "plan_generated"
@@ -113,8 +127,41 @@
       "plan_binding_table": "workflow_plan_generated_schemas",
       "value_binding": "deferred_composite_fk_to_exact_plan_generated_schema",
       "published_registry_identity_for_generated_schema": "forbidden",
-      "schema5_identity": "immutable_historical_predecessor",
-      "schema5_to_schema6_upgrade": "preserve_all_legal_rows_and_inbound_fk_targets_or_rollback"
+      "node_output_envelope_authority": "first_class_plan_generated_exact_envelope_descriptor_tuple",
+      "business_port_or_input_snapshot_authority": "forbidden",
+      "schema5_and_schema6_identity": "immutable_historical_predecessors",
+      "schema6_to_schema7_upgrade": "rebuild_closed_generator_checks_preserve_rows_fks_or_rollback"
+    },
+    "node_output_envelope_value": {
+      "draft": "https://json-schema.org/draft/2020-12/schema",
+      "closed_port_set": "exact_compiled_output_ports",
+      "port_state_union": "required_present_optional_present_or_absent",
+      "content_hash_domain": "icarus:workflow-node-output-envelope:1\n",
+      "content_hash_payload": [
+        "port_contract_hash",
+        "ports"
+      ],
+      "canonical_content_fields": [
+        "port_contract_hash",
+        "ports",
+        "envelope_hash"
+      ],
+      "provenance_hash_domain": "icarus:workflow-node-output-envelope-provenance:1\n",
+      "present_member_provenance_hash_domain": "icarus:workflow-node-output-member-provenance:1\n",
+      "storage_kind": "inline",
+      "media_type": "application/json",
+      "payload_state": "live",
+      "row_version": 0,
+      "owner": "exact_owner_graph_run_id_only",
+      "present_member_validation": "exact_live_value_hash_schema_length_and_plan_run_provenance",
+      "validation_boundaries": [
+        "write",
+        "exact_replay",
+        "read",
+        "store_reopen",
+        "recovery_scan"
+      ],
+      "failure_behavior": "atomic_fail_closed_no_rewrite_no_latest_network_or_fallback"
     },
     "publication_store_runtime_handoff": {
       "publisher_validation": "complete_hash_verified_descriptor_only",
@@ -150,37 +197,44 @@
         "artifact_hash": "sha256:e582abc7a221f4d1afd66d12c2a87816cb228f6139a77d9abfaa1a397844f947",
         "raw_bytes_hash": "sha256:0f0de63d58bf35908d57e5bf7c7b7ad9f6fe794aed370da16ea234231960c9da"
       },
-      "schema6_prerequisite": {
-        "path": "src/workflow-runtime/store/schema/inputs/workflow-generated-schema-authority-prerequisite@1.json",
-        "artifact_hash": "sha256:55bf95fa677ae2d2be30575fcbe68ed8b051913379ceb131b983dfe62658dc00",
-        "raw_bytes_hash": "sha256:702a8c7b4ba2e2defcd6d275c885483b22e56e3ed3b94fc8590a32470bd40fd7"
+      "schema7_prerequisite": {
+        "path": "src/workflow-runtime/store/schema/inputs/workflow-node-output-envelope-schema-authority-prerequisite@1.json",
+        "artifact_hash": "sha256:cfb14fbbf3bc6ca92d09d7b77e01ff0c281e529f8419f7f155403dd08e642d02",
+        "raw_bytes_hash": "sha256:75f8def71e1cfe698cb0f1f1150f907ad95fb9aec6ec0e68d126105a1409792d"
       },
-      "schema6_pack": {
+      "schema7_pack": {
         "path": "src/workflow-runtime/store/schema/contract-pack-g1-executable-schema.json",
-        "artifact_hash": "sha256:3cc206a6dfb1bbaed1bb0f4305323729db23d839652d8a0e020a9a6c4d3e3dd6",
-        "raw_bytes_hash": "sha256:483af9e1cff82f99ed9a42b44312936121ba689f103df29dc70a20c0653b5bae"
+        "artifact_hash": "sha256:b60e3c7fe91d1cfab341d487102c7bff13ad73a320444b45fb6ea71d8b914306",
+        "raw_bytes_hash": "sha256:af6663d4b0f5010454e13e12eb15e3dd96333b22aef81f7070477eb6b4115e02"
       },
       "predecessor_seal": {
-        "path": "src/workflow-runtime/contracts/conformance/sealed/g2-capability-outbox-binding-v3/golden-conformance-bundle@2.json",
-        "artifact_hash": "sha256:967437bb9f91e32e5014b2af90a23f5646e491eb427bdf55accb345ead70db8f",
-        "raw_bytes_hash": "sha256:b49eb5b2de71438a6e58a95ce200e4499c66b56835e41d4cedbda2db9cb0c545"
+        "path": "src/workflow-runtime/contracts/conformance/sealed/g2-generated-schema-join-authority-v5/golden-conformance-bundle@2.json",
+        "artifact_hash": "sha256:f59040be6f71d8655afcb11ab4527a6683125a7a4e683f1e734b44448f7bb72e",
+        "raw_bytes_hash": "sha256:db4a155b191de68e6f7589a7a912031acb056f03dc09c8cc62451ea06e597fb7"
       }
     },
-    "schema6_delta_hash": "sha256:6705a3d4810f1fb040cd6753fcaccad40b704d76c628827472ee47add34d9804",
+    "schema7_prerequisite_hash": "sha256:cfb14fbbf3bc6ca92d09d7b77e01ff0c281e529f8419f7f155403dd08e642d02",
     "historical_schema5": {
       "source_migration_path": "src/workflow-runtime/store/schema/migration/workflow-runtime-schema-v1.sql",
       "source_migration_sha256": "sha256:2ead40dc2f1618f87247e9d3bb476266797c38560e1ad0537a6afa6f71a3fbf6",
       "sqlite_schema_identity": "sha256:5ee3c119cc6a0e0552e2a6fe45b51c8ffd08ec7acdbac66748978ed0d21fdb0a",
       "user_version": 5
     },
-    "fresh_schema6": {
+    "historical_schema6": {
       "source_migration_path": "src/workflow-runtime/store/schema/migration/workflow-runtime-schema-v6.sql",
       "source_migration_sha256": "sha256:16a46e84c77d734013e18b4b00b86564f6188ea73717763e9fb7a884d62faa41",
-      "dependency_manifest_role": "canonical_migration",
-      "store_bootstrap_source": "canonical_migration",
+      "sqlite_schema_identity": "sha256:a4936a9a71670cb30b1c974ee3cf9cd21375fb743e8c2278d8db08c685854486",
       "user_version": 6
     },
     "schema5_to_schema6_upgrade_sha256": "sha256:dc94fa0867ca572b7ec39ffb8df448e38be00ca4831f1d420885ee7cc097687d",
-    "predecessor_g2_v3_bundle_hash": "sha256:b3ed9e43bd0fadaf40520257926dcf690ee8495bb417220245f248385bde9efb"
+    "fresh_schema7": {
+      "source_migration_path": "src/workflow-runtime/store/schema/migration/workflow-runtime-schema-v7.sql",
+      "source_migration_sha256": "sha256:b4307930cedd9e0b8acbec599a2b3b29cb18f78840a726532b108459a4df2497",
+      "dependency_manifest_role": "canonical_migration",
+      "store_bootstrap_source": "canonical_migration",
+      "user_version": 7
+    },
+    "schema6_to_schema7_upgrade_sha256": "sha256:225c5f148347dc42ca086bfb0bf7db957d13eb1be502f155465e20ee66010062",
+    "predecessor_g2_v5_bundle_hash": "sha256:b37ddf415d12d759ddd4b72b754568e01715704d254da26e3355e0898cfeda05"
   }
 }

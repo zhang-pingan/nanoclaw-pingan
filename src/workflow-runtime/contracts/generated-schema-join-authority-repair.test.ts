@@ -36,8 +36,8 @@ describe('generated schema and join expose repair authority', () => {
     const pack = checkGeneratedSchemaJoinAuthorityRepair();
     expect(pack.payload).toMatchObject({
       status:
-        'GENERATED_SCHEMA_JOIN_AUTHORITY_REPAIR_EXIT_CANDIDATE_PENDING_INDEPENDENT_AFFECTED_CHAIN_REGRESSION',
-      member_count: 1,
+        'NODE_OUTPUT_ENVELOPE_SCHEMA_AUTHORITY_REPAIR_EXIT_CANDIDATE_PENDING_INDEPENDENT_AFFECTED_CHAIN_REGRESSION',
+      member_count: 2,
       g5_status: 'BLOCKED_BY_SPEC_NOT_READY',
       g6_through_g9_status: 'NOT_READY',
     });
@@ -57,7 +57,7 @@ describe('generated schema and join expose repair authority', () => {
     );
     expect(progress.match(/^\| R-019 \|/gm)).toEqual(['| R-019 |']);
     expect(progress).toContain(
-      '| R-019 | Generated Schema 与 Join Expose Authority | `CLOSED/DONE` |',
+      '| R-019 | Generated Schema、Join Expose 与 NodeOutputEnvelope Authority | `CLOSED/EXIT_CANDIDATE_PENDING_INDEPENDENT_AFFECTED_CHAIN_REGRESSION` |',
     );
 
     const document = fs.readFileSync(
@@ -96,10 +96,13 @@ describe('generated schema and join expose repair authority', () => {
 
   it('machine-closes content, Plan, Value, lowering, and G5 handoff semantics', () => {
     const pack = checkGeneratedSchemaJoinAuthorityRepair();
-    const member = (pack.payload.members as Array<{ path: string }>)[0]!;
+    const member = (pack.payload.members as Array<{ path: string }>).find(
+      ({ path }) => path === GENERATED_SCHEMA_JOIN_AUTHORITY_REPAIR_DECISION_PATH,
+    );
+    expect(member).toBeDefined();
     const decision = parseContractArtifactEnvelope(
       strictParseJsonBytes(
-        fs.readFileSync(path.resolve(contractsRoot, member.path)),
+        fs.readFileSync(path.resolve(contractsRoot, member!.path)),
       ),
     );
     expect(decision.payload.generated_schema_authority).toMatchObject({
@@ -115,10 +118,14 @@ describe('generated schema and join expose repair authority', () => {
       plan_proof_program_replay: 'byte_exact',
     });
     expect(decision.payload.stored_value_authority).toMatchObject({
-      database_schema_version: 6,
+      database_schema_version: 7,
+      predecessor_database_schema_version: 6,
       authority_kinds: ['registry', 'plan_generated'],
       published_registry_identity_for_generated_schema: 'forbidden',
-      schema5_identity: 'immutable_historical_predecessor',
+      node_output_envelope_authority:
+        'first_class_plan_generated_exact_envelope_descriptor_tuple',
+      business_port_or_input_snapshot_authority: 'forbidden',
+      schema5_and_schema6_identity: 'immutable_historical_predecessors',
     });
     expect(decision.payload.historical_schema5).toEqual({
       source_migration_path:
@@ -129,14 +136,34 @@ describe('generated schema and join expose repair authority', () => {
         'sha256:5ee3c119cc6a0e0552e2a6fe45b51c8ffd08ec7acdbac66748978ed0d21fdb0a',
       user_version: 5,
     });
-    expect(decision.payload.fresh_schema6).toMatchObject({
+    expect(decision.payload.historical_schema6).toMatchObject({
       source_migration_path:
         'src/workflow-runtime/store/schema/migration/workflow-runtime-schema-v6.sql',
       source_migration_sha256:
         'sha256:16a46e84c77d734013e18b4b00b86564f6188ea73717763e9fb7a884d62faa41',
+      user_version: 6,
+    });
+    expect(decision.payload.fresh_schema7).toMatchObject({
+      source_migration_path:
+        'src/workflow-runtime/store/schema/migration/workflow-runtime-schema-v7.sql',
+      source_migration_sha256:
+        'sha256:b4307930cedd9e0b8acbec599a2b3b29cb18f78840a726532b108459a4df2497',
       dependency_manifest_role: 'canonical_migration',
       store_bootstrap_source: 'canonical_migration',
-      user_version: 6,
+      user_version: 7,
+    });
+    expect(decision.payload.node_output_envelope_value).toMatchObject({
+      draft: 'https://json-schema.org/draft/2020-12/schema',
+      closed_port_set: 'exact_compiled_output_ports',
+      validation_boundaries: [
+        'write',
+        'exact_replay',
+        'read',
+        'store_reopen',
+        'recovery_scan',
+      ],
+      failure_behavior:
+        'atomic_fail_closed_no_rewrite_no_latest_network_or_fallback',
     });
     expect(decision.payload.publication_store_runtime_handoff).toMatchObject({
       runtime_fallback: 'forbidden',

@@ -8,6 +8,8 @@ export const G2_CAPABILITY_OUTBOX_BINDING_SEALED_DIRECTORY =
   'g2-capability-outbox-binding-v3';
 export const G2_GENERATED_SCHEMA_JOIN_AUTHORITY_SEALED_DIRECTORY =
   'g2-generated-schema-join-authority-v5';
+export const G2_NODE_OUTPUT_ENVELOPE_AUTHORITY_SEALED_DIRECTORY =
+  'g2-generated-schema-join-authority-v6';
 export const G2_GENERATED_SCHEMA_JOIN_AUTHORITY_PREDECESSOR_SEALED_DIRECTORY =
   'g2-generated-schema-join-authority-v4';
 
@@ -29,6 +31,7 @@ export function assertCurrentG2SealedBoundary(
     G2_CAPABILITY_OUTBOX_BINDING_SEALED_DIRECTORY,
     G2_GENERATED_SCHEMA_JOIN_AUTHORITY_PREDECESSOR_SEALED_DIRECTORY,
     G2_GENERATED_SCHEMA_JOIN_AUTHORITY_SEALED_DIRECTORY,
+    G2_NODE_OUTPUT_ENVELOPE_AUTHORITY_SEALED_DIRECTORY,
   ]);
   if (
     entries.some((entry) => !allowed.has(entry)) ||

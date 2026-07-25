@@ -399,7 +399,7 @@ const compiledPlanArtifact = strictParseJsonBytes(
   fs.readFileSync(
     path.join(
       import.meta.dirname,
-      'conformance/capability-outbox-execution-binding/schemas/compiled-scope-plan-v2-execution-binding-schema@1.json',
+      'conformance/generated-schema-join-authority-repair/compiled-scope-plan-v2-node-output-envelope-schema@1.json',
     ),
   ),
 ) as JsonObject;
@@ -938,11 +938,11 @@ export function g37SchemasForTest(): {
 export const G37_UPSTREAM_IDENTITIES = {
   g1_schema_root_hash: G3_CURRENT_UPSTREAM_IDENTITY.g1_schema_root_hash,
   g3_1_pack_hash:
-    'sha256:c9364171a3d28a752d4510f59e5e45016cd86be14d7e151b483fc0c6c7a2807d',
+    'sha256:a25e99fce7485ce433f96291ddea64a90f15fa839296c8496eded4c168c7b70b',
   g3_3_pack_hash:
-    'sha256:590acdd52626838bf30ae14bb04b6f0ee59a95e1efadc4911ff850acc2970763',
+    'sha256:9d8516b3324f1ebea6b276b4ad5a3129f1dc41c174e3c441b1ec29909b3d7431',
   g3_5_pack_hash:
-    'sha256:b6a4ec1dac738c6036869c763708f8aa144d0a864c8c392ee18cb3aba8c83417',
+    'sha256:143dcb784271232f245ae55cbaf25738b4138868a6ed6fccd889ff0465672a16',
   g3_6_pack_hash:
-    'sha256:7f807ae53e13bcec7712f77c1ebaba7aab5f72d2779ed5d99d33b0e6c54e98d3',
+    'sha256:0b1079429b4fa65ffdad1061a0e664ae2a08b6c692645067787b051031c49337',
 } as const;

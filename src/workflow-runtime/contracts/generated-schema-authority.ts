@@ -13,6 +13,10 @@ export const GENERATED_SCHEMA_PARAMETER_DOMAIN =
 export const GENERATED_SCHEMA_DOMAIN = 'icarus:workflow-generated-schema:2\n';
 export const GENERATED_SCHEMA_PLAN_BINDING_DOMAIN =
   'icarus:workflow-plan-generated-schema-binding:1\n';
+export const NODE_OUTPUT_PORT_CONTRACT_DOMAIN =
+  'icarus:workflow-node-output-port-contract:1\n';
+export const NODE_OUTPUT_ENVELOPE_DOMAIN =
+  'icarus:workflow-node-output-envelope:1\n';
 export const GENERATED_SCHEMA_CANONICALIZER = 'RFC8785-JCS';
 export const GENERATED_SCHEMA_REF_PATTERN =
   '^icarus-generated-schema:sha256:[0-9a-f]{64}$';
@@ -23,6 +27,9 @@ export type GeneratedSchemaGenerator =
   | 'join_expose'
   | 'child_completion'
   | 'map_result';
+export type PlanGeneratedSchemaGenerator =
+  | GeneratedSchemaGenerator
+  | 'node_output_envelope';
 
 export class GeneratedSchemaAuthorityError extends Error {
   constructor(message: string) {
@@ -49,7 +56,7 @@ export function generatedSchemaRef(rawHash: Sha256Hash): string {
 }
 
 export function generatedSchemaParameterHash(
-  generator: GeneratedSchemaGenerator,
+  generator: PlanGeneratedSchemaGenerator,
   parameters: JsonObject,
 ): Sha256Hash {
   return domainSeparatedSha256(GENERATED_SCHEMA_PARAMETER_DOMAIN, {
@@ -62,8 +69,124 @@ export function generatedSchemaContentHash(schemaJson: JsonValue): Sha256Hash {
   return domainSeparatedSha256(GENERATED_SCHEMA_DOMAIN, schemaJson);
 }
 
+function hashSchema(): JsonObject {
+  return { type: 'string', pattern: '^sha256:[0-9a-f]{64}$' };
+}
+
+function publishedPortSchema(
+  schemaHash: Sha256Hash,
+  maxBytes: number | null,
+  required: boolean,
+): JsonObject {
+  const present: JsonObject = {
+    type: 'object',
+    additionalProperties: false,
+    required: [
+      'state',
+      'value_ref',
+      'value_hash',
+      'schema_hash',
+      'byte_length',
+    ],
+    properties: {
+      state: { const: 'present' },
+      value_ref: { type: 'string', minLength: 1 },
+      value_hash: hashSchema(),
+      schema_hash: { const: schemaHash },
+      byte_length: {
+        type: 'integer',
+        minimum: 0,
+        maximum: maxBytes ?? Number.MAX_SAFE_INTEGER,
+      },
+    },
+  };
+  if (required) return present;
+  return {
+    oneOf: [
+      present,
+      {
+        type: 'object',
+        additionalProperties: false,
+        required: ['state', 'schema_hash'],
+        properties: {
+          state: { const: 'absent' },
+          schema_hash: { const: schemaHash },
+        },
+      },
+    ],
+  };
+}
+
+export function nodeOutputPortContractHash(
+  outputPorts: JsonObject,
+): Sha256Hash {
+  return domainSeparatedSha256(NODE_OUTPUT_PORT_CONTRACT_DOMAIN, outputPorts);
+}
+
+export function buildNodeOutputEnvelopeSchema(
+  nodeId: string,
+  outputPorts: JsonObject,
+): JsonObject {
+  if (nodeId.length === 0) {
+    throw new GeneratedSchemaAuthorityError('Node output envelope node id is empty');
+  }
+  const portNames = Object.keys(outputPorts).sort();
+  const portProperties: JsonObject = {};
+  for (const portName of portNames) {
+    const contract = outputPorts[portName];
+    assertJsonObject(contract);
+    assertJsonObject(contract.schema);
+    const schemaHash = parseSha256Hash(contract.schema.schema_hash);
+    const maxBytes = contract.max_bytes;
+    if (
+      maxBytes !== null &&
+      (!Number.isSafeInteger(maxBytes) || Number(maxBytes) < 0)
+    ) {
+      throw new GeneratedSchemaAuthorityError(
+        `Node output port ${portName} has an invalid max_bytes`,
+      );
+    }
+    if (typeof contract.required !== 'boolean') {
+      throw new GeneratedSchemaAuthorityError(
+        `Node output port ${portName} has an invalid required flag`,
+      );
+    }
+    portProperties[portName] = publishedPortSchema(
+      schemaHash,
+      maxBytes === null ? null : Number(maxBytes),
+      contract.required,
+    );
+  }
+  const portContractHash = nodeOutputPortContractHash(outputPorts);
+  const schemaJson: JsonObject = {
+    $schema: 'https://json-schema.org/draft/2020-12/schema',
+    type: 'object',
+    additionalProperties: false,
+    required: ['port_contract_hash', 'ports', 'envelope_hash'],
+    properties: {
+      port_contract_hash: { const: portContractHash },
+      ports: {
+        type: 'object',
+        additionalProperties: false,
+        properties: portProperties,
+        ...(portNames.length > 0 ? { required: portNames } : {}),
+      },
+      envelope_hash: hashSchema(),
+    },
+  };
+  return buildGeneratedSchema(
+    'node_output_envelope',
+    {
+      node_id: nodeId,
+      port_contract_hash: portContractHash,
+      output_ports: outputPorts,
+    },
+    schemaJson,
+  );
+}
+
 export function buildGeneratedSchema(
-  generator: GeneratedSchemaGenerator,
+  generator: PlanGeneratedSchemaGenerator,
   parameters: JsonObject,
   schemaJson: JsonValue,
 ): JsonObject {
@@ -99,7 +222,12 @@ export function assertGeneratedSchemaAuthority(
       'schema_json',
     ]) ||
     value.type !== 'generated' ||
-    !['join_expose', 'child_completion', 'map_result'].includes(
+    ![
+      'join_expose',
+      'child_completion',
+      'map_result',
+      'node_output_envelope',
+    ].includes(
       String(value.generator),
     ) ||
     value.canonicalizer !== GENERATED_SCHEMA_CANONICALIZER ||
@@ -180,7 +308,12 @@ export function assertPlanGeneratedSchemaBinding(
     value.graph_run_id.length === 0 ||
     typeof value.schema_ref !== 'string' ||
     !generatedSchemaRefPattern.test(value.schema_ref) ||
-    !['join_expose', 'child_completion', 'map_result'].includes(
+    ![
+      'join_expose',
+      'child_completion',
+      'map_result',
+      'node_output_envelope',
+    ].includes(
       String(value.generator),
     )
   ) {

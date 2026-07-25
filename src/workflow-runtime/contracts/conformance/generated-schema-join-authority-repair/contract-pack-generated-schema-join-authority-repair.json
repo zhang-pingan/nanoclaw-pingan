@@ -6,19 +6,24 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-contract-pack-generated-schema-join-authority-repair:1\n",
-  "hash": "sha256:0c9b1a04a013bf6284b36c550ead6d81cffecacbe4a9d6495d6153b2335a04fc",
+  "hash": "sha256:7a852ff21a77a767b708ab8a4fc5c329024ca954422b26d71210b0385ce05441",
   "payload": {
     "gate": "G2_SCHEMA_G3_GENERATED_SCHEMA_JOIN_AUTHORITY_REPAIR",
-    "status": "GENERATED_SCHEMA_JOIN_AUTHORITY_REPAIR_EXIT_CANDIDATE_PENDING_INDEPENDENT_AFFECTED_CHAIN_REGRESSION",
-    "member_count": 1,
+    "status": "NODE_OUTPUT_ENVELOPE_SCHEMA_AUTHORITY_REPAIR_EXIT_CANDIDATE_PENDING_INDEPENDENT_AFFECTED_CHAIN_REGRESSION",
+    "member_count": 2,
     "members": [
       {
+        "path": "conformance/generated-schema-join-authority-repair/compiled-scope-plan-v2-node-output-envelope-schema@1.json",
+        "artifact_hash": "sha256:3dd4f2be80d1e824cd2c0f02aec82830ceeb858d51fbd36c13f7574f032bf51e",
+        "raw_bytes_hash": "sha256:b87b9c921468186547e4bde9ce6c0b9a72b973d03d70c7b778b1746c565bed0a"
+      },
+      {
         "path": "conformance/generated-schema-join-authority-repair/generated-schema-join-authority-contract@1.json",
-        "artifact_hash": "sha256:b53f8a77e51adba5d1b8f41766336bae2a59a05e5ced1959996218d745d5ebd4",
-        "raw_bytes_hash": "sha256:8eb326ff97a9fa6e33a0855f0d259c3ec69cce95214fe90fe3c1dfa8f760f91e"
+        "artifact_hash": "sha256:53c2e01ad466ef5f3716b5b152efdd6052a66aab8bf7fb880ac6df4b230a6528",
+        "raw_bytes_hash": "sha256:71c9f5bb5c190b5598478fc6514d0ef5097ad8698ee2438aef335b35fda1f6bd"
       }
     ],
-    "member_tree_hash": "sha256:6caab0e9795b1e97a809c7312de6734b763a3506d538580ee6744621d919cdc7",
+    "member_tree_hash": "sha256:8f1a5294830de96151a4ee749343f468d168ed8e51a48a2a8ab9b1c30cbc7f2e",
     "g5_status": "BLOCKED_BY_SPEC_NOT_READY",
     "g6_through_g9_status": "NOT_READY"
   }

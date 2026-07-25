@@ -1,0 +1,1415 @@
+{
+  "format": "icarus.workflow-compiler-conformance-inventory/1",
+  "ref": {
+    "id": "icarus.workflow-compiler-conformance-inventory.g2-generated-schema-join-authority-v6",
+    "version": "2.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-compiler-conformance-inventory-artifact:1\n",
+  "hash": "sha256:11913de4f099b21c7eb5a95cbb3fa86b43e3e76fdb9645303c180ccd299c1dfa",
+  "payload": {
+    "format": "icarus.workflow-compiler-conformance-inventory/1",
+    "gate": "G2",
+    "bundle_version": "2.0.0",
+    "inventory_scope": "all_sealed_leaf_artifacts_excluding_inventory_and_bundle",
+    "entry_count": 155,
+    "entries": [
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/expected/negative.capability-not-allowed.result.json",
+        "kind": "expected_result",
+        "case_id": "negative.capability-not-allowed",
+        "original_ref": "conformance/golden-draft/g2-generated-schema-join-authority-v6/expected/negative.capability-not-allowed.result.json",
+        "raw_bytes_hash": "sha256:3fa7379547cd01b7780b0e7ed33bdddb3cef4881f343603b057d9f3c274dd107",
+        "semantic_hash": "sha256:d65447a304cdb84de22c5ad9a822d596c3d078f447d42a7b7e2871dc9391b23a",
+        "domain_separator": "icarus:workflow-compiler-conformance-case-result:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/expected/negative.child-recipe-dependency-cycle.result.json",
+        "kind": "expected_result",
+        "case_id": "negative.child-recipe-dependency-cycle",
+        "original_ref": "conformance/golden-draft/g2-generated-schema-join-authority-v6/expected/negative.child-recipe-dependency-cycle.result.json",
+        "raw_bytes_hash": "sha256:6d6f35bc37bb3bb228358067df13d177b85b30e084e84406f61ba50268ddaa28",
+        "semantic_hash": "sha256:259ef5633067429e0421034b807e5fe6810d0cbb2650326ffef21f150e2e9569",
+        "domain_separator": "icarus:workflow-compiler-conformance-case-result:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/expected/negative.child-recipe-set-mismatch.result.json",
+        "kind": "expected_result",
+        "case_id": "negative.child-recipe-set-mismatch",
+        "original_ref": "conformance/golden-draft/g2-generated-schema-join-authority-v6/expected/negative.child-recipe-set-mismatch.result.json",
+        "raw_bytes_hash": "sha256:c1fd2138a21e58b723bb85ee661c306e8b729398ff0a6cece7acbca77a591b91",
+        "semantic_hash": "sha256:93336a0e4a063e813ec863c88155a0da81302c5141aa6374a993e910dee3ec4b",
+        "domain_separator": "icarus:workflow-compiler-conformance-case-result:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/expected/negative.compiler-integrity-mismatch.result.json",
+        "kind": "expected_result",
+        "case_id": "negative.compiler-integrity-mismatch",
+        "original_ref": "conformance/golden-draft/g2-generated-schema-join-authority-v6/expected/negative.compiler-integrity-mismatch.result.json",
+        "raw_bytes_hash": "sha256:cc0c0c19afdeecb9c663ca8b61677076292af17258d16e4738e2b09ef2016ecf",
+        "semantic_hash": "sha256:aff3242c3060304e64b69fb259b1e428634201cd56ed35848b7c9b63afc2f484",
+        "domain_separator": "icarus:workflow-compiler-conformance-case-result:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/expected/negative.completion-contract-invalid.result.json",
+        "kind": "expected_result",
+        "case_id": "negative.completion-contract-invalid",
+        "original_ref": "conformance/golden-draft/g2-generated-schema-join-authority-v6/expected/negative.completion-contract-invalid.result.json",
+        "raw_bytes_hash": "sha256:7016727fb2617427e9e85b087bcc7dcd8af37dd0bfddf6d2703a390c70fbddb3",
+        "semantic_hash": "sha256:ab16948d4f4658bab290a3201ebcd0aa4ea753df445289a21231d3d8a756c149",
+        "domain_separator": "icarus:workflow-compiler-conformance-case-result:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/expected/negative.condition-complexity-exceeded.result.json",
+        "kind": "expected_result",
+        "case_id": "negative.condition-complexity-exceeded",
+        "original_ref": "conformance/golden-draft/g2-generated-schema-join-authority-v6/expected/negative.condition-complexity-exceeded.result.json",
+        "raw_bytes_hash": "sha256:4a78e14eeb5c56a66c0eca2c9bb407071a14d7d84ecd893ab9f2c86608a989d0",
+        "semantic_hash": "sha256:b66d4eb73f64c21d0c0d2724e2d4704c9192a47f1874e0e12870f76019972673",
+        "domain_separator": "icarus:workflow-compiler-conformance-case-result:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/expected/negative.condition-type-mismatch.result.json",
+        "kind": "expected_result",
+        "case_id": "negative.condition-type-mismatch",
+        "original_ref": "conformance/golden-draft/g2-generated-schema-join-authority-v6/expected/negative.condition-type-mismatch.result.json",
+        "raw_bytes_hash": "sha256:3dade061fbc412ad165b33f9e40156f7a83c04271db38212240b7ab001f6bfbd",
+        "semantic_hash": "sha256:2a1b649b4f06eec42a905b2fac2273ae2013e0a22aa2de04aae64b770e594909",
+        "domain_separator": "icarus:workflow-compiler-conformance-case-result:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/expected/negative.definition-child-creation-key-template.result.json",
+        "kind": "expected_result",
+        "case_id": "negative.definition-child-creation-key-template",
+        "original_ref": "conformance/golden-draft/g2-generated-schema-join-authority-v6/expected/negative.definition-child-creation-key-template.result.json",
+        "raw_bytes_hash": "sha256:262e774f9d8ceaf1beabcb78b0e821b047b02600ac5ad4ffb73104d5330cf2b5",
+        "semantic_hash": "sha256:ce36802ebc2b6a0792840498841e4fb2363dd52871c55517e0b83ddcc599f7fb",
+        "domain_separator": "icarus:workflow-compiler-conformance-case-result:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/expected/negative.definition-notification-delivery-requirement.result.json",
+        "kind": "expected_result",
+        "case_id": "negative.definition-notification-delivery-requirement",
+        "original_ref": "conformance/golden-draft/g2-generated-schema-join-authority-v6/expected/negative.definition-notification-delivery-requirement.result.json",
+        "raw_bytes_hash": "sha256:4f1ff85e3f78284ea22173b31843bd534d63643d2549ba0bd0811f1db1e9cd32",
+        "semantic_hash": "sha256:4e0817ef9945a8b136d0b5f7c28674ebbbbae0e40dd00bc2d17465b12eb565eb",
+        "domain_separator": "icarus:workflow-compiler-conformance-case-result:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/expected/negative.early-completion-non-monotone.result.json",
+        "kind": "expected_result",
+        "case_id": "negative.early-completion-non-monotone",
+        "original_ref": "conformance/golden-draft/g2-generated-schema-join-authority-v6/expected/negative.early-completion-non-monotone.result.json",
+        "raw_bytes_hash": "sha256:b3290584bd265f989e02542021d5784e5a166b7283ffa35cfe5ef12a6deb1500",
+        "semantic_hash": "sha256:f962a08b0d0294a7e219e423a2e738468403f90fbd3b6ffaf7b9b506479f1895",
+        "domain_separator": "icarus:workflow-compiler-conformance-case-result:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/expected/negative.graph-cross-scope-edge.result.json",
+        "kind": "expected_result",
+        "case_id": "negative.graph-cross-scope-edge",
+        "original_ref": "conformance/golden-draft/g2-generated-schema-join-authority-v6/expected/negative.graph-cross-scope-edge.result.json",
+        "raw_bytes_hash": "sha256:5e85f1cbdfc42c5e95f1ca66b0248932f62f177c96d02f35d4537bb3606f49ee",
+        "semantic_hash": "sha256:ab58bd637a169b12a39003abcfce7162d11df18c3e95286a55e483440aaf673d",
+        "domain_separator": "icarus:workflow-compiler-conformance-case-result:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/expected/negative.graph-dependency-cycle.result.json",
+        "kind": "expected_result",
+        "case_id": "negative.graph-dependency-cycle",
+        "original_ref": "conformance/golden-draft/g2-generated-schema-join-authority-v6/expected/negative.graph-dependency-cycle.result.json",
+        "raw_bytes_hash": "sha256:281c9348e73b53e49c8cca498703278aea50eae835aeb899dc202c40898c5653",
+        "semantic_hash": "sha256:b21dc62a6c39e6e8d2f93fd882aab67c74146465d04386bdb5600484fcd44571",
+        "domain_separator": "icarus:workflow-compiler-conformance-case-result:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/expected/negative.graph-endpoint-not-found.result.json",
+        "kind": "expected_result",
+        "case_id": "negative.graph-endpoint-not-found",
+        "original_ref": "conformance/golden-draft/g2-generated-schema-join-authority-v6/expected/negative.graph-endpoint-not-found.result.json",
+        "raw_bytes_hash": "sha256:a41a0dcea7837d48a7fc61e6f3be4281d112aac2890c47c031874f300466188d",
+        "semantic_hash": "sha256:42459b590dcb5c69345f4e9be89c38fb3c246f5af58a13182fb26c5d6306c766",
+        "domain_separator": "icarus:workflow-compiler-conformance-case-result:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/expected/negative.graph-id-duplicate.result.json",
+        "kind": "expected_result",
+        "case_id": "negative.graph-id-duplicate",
+        "original_ref": "conformance/golden-draft/g2-generated-schema-join-authority-v6/expected/negative.graph-id-duplicate.result.json",
+        "raw_bytes_hash": "sha256:9ca2ad9816ef58d00509c534a56de0782358d2e77d51dc24e49ccaf55bd33dc5",
+        "semantic_hash": "sha256:4a960d8b76374c193e9502d0131ef7b0372e4bf0a9f0e16030129ddb7f01e9af",
+        "domain_separator": "icarus:workflow-compiler-conformance-case-result:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/expected/negative.json-duplicate-key.result.json",
+        "kind": "expected_result",
+        "case_id": "negative.json-duplicate-key",
+        "original_ref": "conformance/golden-draft/g2-generated-schema-join-authority-v6/expected/negative.json-duplicate-key.result.json",
+        "raw_bytes_hash": "sha256:c775a5b73d278e0666e70b30231994248658789b7ddf7a101515a0c0e1b56b30",
+        "semantic_hash": "sha256:3098554e01b7a9b6ac8ef2ef43c476f0b3405117ef1a0c1203eededf1bd7a887",
+        "domain_separator": "icarus:workflow-compiler-conformance-case-result:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/expected/negative.json-pointer-non-total.result.json",
+        "kind": "expected_result",
+        "case_id": "negative.json-pointer-non-total",
+        "original_ref": "conformance/golden-draft/g2-generated-schema-join-authority-v6/expected/negative.json-pointer-non-total.result.json",
+        "raw_bytes_hash": "sha256:61fa2cf63bc914df7756fb3361eaa12df8ec159aa61633fdc118fa9969d10562",
+        "semantic_hash": "sha256:91cbde1f43db77e57686dabc77dc199db822d551feac18a838732fa4f2f21b2e",
+        "domain_separator": "icarus:workflow-compiler-conformance-case-result:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/expected/negative.json-syntax-invalid.result.json",
+        "kind": "expected_result",
+        "case_id": "negative.json-syntax-invalid",
+        "original_ref": "conformance/golden-draft/g2-generated-schema-join-authority-v6/expected/negative.json-syntax-invalid.result.json",
+        "raw_bytes_hash": "sha256:44b34da8d2b67ff5965f26c30f4e09da9f37352981222477923f6d1051b1e7ec",
+        "semantic_hash": "sha256:59102ca6bccb67130e63a38ff0b483be4d31a049330e7badeae6385da044b991",
+        "domain_separator": "icarus:workflow-compiler-conformance-case-result:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/expected/negative.policy-escalation.result.json",
+        "kind": "expected_result",
+        "case_id": "negative.policy-escalation",
+        "original_ref": "conformance/golden-draft/g2-generated-schema-join-authority-v6/expected/negative.policy-escalation.result.json",
+        "raw_bytes_hash": "sha256:dae9c40c66031c29f2c261036fabe3dfb538454f85d72dfb43f4b45a2205be89",
+        "semantic_hash": "sha256:a1b3969df17bd81263bac35bdffe740c310fca7f3a617545bdfb57e0c68c9034",
+        "domain_separator": "icarus:workflow-compiler-conformance-case-result:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/expected/negative.quality-revision-effect-key-incompatible.result.json",
+        "kind": "expected_result",
+        "case_id": "negative.quality-revision-effect-key-incompatible",
+        "original_ref": "conformance/golden-draft/g2-generated-schema-join-authority-v6/expected/negative.quality-revision-effect-key-incompatible.result.json",
+        "raw_bytes_hash": "sha256:ee605125fb405652222e871550f6f905fce4e708946bff7df20655568e54c45b",
+        "semantic_hash": "sha256:e1b6b334fbc81988a7e0bfdda392f7bd11738cba7528be74e93aaf59991388dd",
+        "domain_separator": "icarus:workflow-compiler-conformance-case-result:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/expected/negative.quality-revision-missing-feedback-schema.result.json",
+        "kind": "expected_result",
+        "case_id": "negative.quality-revision-missing-feedback-schema",
+        "original_ref": "conformance/golden-draft/g2-generated-schema-join-authority-v6/expected/negative.quality-revision-missing-feedback-schema.result.json",
+        "raw_bytes_hash": "sha256:c73728dfbbfbbdaf55526121329ff2f5d8ea2e446f788695f0c4aecf152a2c70",
+        "semantic_hash": "sha256:2ddd3993c64c6bf26ed44696d78de6d361ca4a563c7ce2c7d86ad04e4d6eea8d",
+        "domain_separator": "icarus:workflow-compiler-conformance-case-result:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/expected/negative.quality-revision-missing-quality-gate.result.json",
+        "kind": "expected_result",
+        "case_id": "negative.quality-revision-missing-quality-gate",
+        "original_ref": "conformance/golden-draft/g2-generated-schema-join-authority-v6/expected/negative.quality-revision-missing-quality-gate.result.json",
+        "raw_bytes_hash": "sha256:21082baa138ec345524757f3442c13bb1ddb1a1e08926b19903c461d2bc2d5e8",
+        "semantic_hash": "sha256:8cf152272eabaed77e47a59126590f39803143600252b1aa9b44198029d1cb20",
+        "domain_separator": "icarus:workflow-compiler-conformance-case-result:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/expected/negative.registry-ref-not-found.result.json",
+        "kind": "expected_result",
+        "case_id": "negative.registry-ref-not-found",
+        "original_ref": "conformance/golden-draft/g2-generated-schema-join-authority-v6/expected/negative.registry-ref-not-found.result.json",
+        "raw_bytes_hash": "sha256:b308b10e80a2299ea84669a6bf669343f7fdbf1b922c6e5bc103e4d3528fc189",
+        "semantic_hash": "sha256:d63589474da6b4eeddc69ef8286b846dddea6548a7a70c531a7b0daedfcf9cd2",
+        "domain_separator": "icarus:workflow-compiler-conformance-case-result:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/expected/negative.registry-ref-unpinned.result.json",
+        "kind": "expected_result",
+        "case_id": "negative.registry-ref-unpinned",
+        "original_ref": "conformance/golden-draft/g2-generated-schema-join-authority-v6/expected/negative.registry-ref-unpinned.result.json",
+        "raw_bytes_hash": "sha256:7b39ee15c6e3c66f5dd19b79b6f3c27314c83c742d1e789e184f99d80a069674",
+        "semantic_hash": "sha256:ac8b9a484b2ddf98c557394eade4a155b8d8c85b623d0bf2f587875d5e48434e",
+        "domain_separator": "icarus:workflow-compiler-conformance-case-result:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/expected/negative.route-group-ambiguous.result.json",
+        "kind": "expected_result",
+        "case_id": "negative.route-group-ambiguous",
+        "original_ref": "conformance/golden-draft/g2-generated-schema-join-authority-v6/expected/negative.route-group-ambiguous.result.json",
+        "raw_bytes_hash": "sha256:1cc0d50f4a40dc49fbb316147fb8ca7e5bb039c9ed8de6443936a05161bca98b",
+        "semantic_hash": "sha256:4b4cb7f9f520cb511be0ce728074664401c35e25816e345010bde264722d0b13",
+        "domain_separator": "icarus:workflow-compiler-conformance-case-result:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/expected/negative.runtime-safety-limit-exceeded.result.json",
+        "kind": "expected_result",
+        "case_id": "negative.runtime-safety-limit-exceeded",
+        "original_ref": "conformance/golden-draft/g2-generated-schema-join-authority-v6/expected/negative.runtime-safety-limit-exceeded.result.json",
+        "raw_bytes_hash": "sha256:4ff4cc3b8df16c277c8e9cf3f616fd58f6affa1fa21dce8a1ad8c61cd85c1d24",
+        "semantic_hash": "sha256:6788ad318eddb05584e4e136d727faad747781d0cd3bb4cf81786875c3610b63",
+        "domain_separator": "icarus:workflow-compiler-conformance-case-result:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/expected/negative.schema-not-assignable.result.json",
+        "kind": "expected_result",
+        "case_id": "negative.schema-not-assignable",
+        "original_ref": "conformance/golden-draft/g2-generated-schema-join-authority-v6/expected/negative.schema-not-assignable.result.json",
+        "raw_bytes_hash": "sha256:210d30db886ef60e254bda2aeb3970ea309555d2e4c1ee2d752f6cf771095dd9",
+        "semantic_hash": "sha256:a2834ebef0a1e400139fc587be5162a07b5b186fa7679ffa51e0812fe533ff6e",
+        "domain_separator": "icarus:workflow-compiler-conformance-case-result:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/expected/negative.schema-profile-keyword-unsupported.result.json",
+        "kind": "expected_result",
+        "case_id": "negative.schema-profile-keyword-unsupported",
+        "original_ref": "conformance/golden-draft/g2-generated-schema-join-authority-v6/expected/negative.schema-profile-keyword-unsupported.result.json",
+        "raw_bytes_hash": "sha256:272e8506a5819e69274184a87b8d82c86e83376dde3be84d478f458b4bf6ffe0",
+        "semantic_hash": "sha256:34e9a56946f9deaa283ffdd768d755512147d13a9d9a38d8b92d70296d15749d",
+        "domain_separator": "icarus:workflow-compiler-conformance-case-result:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/expected/negative.schema-unknown-field.result.json",
+        "kind": "expected_result",
+        "case_id": "negative.schema-unknown-field",
+        "original_ref": "conformance/golden-draft/g2-generated-schema-join-authority-v6/expected/negative.schema-unknown-field.result.json",
+        "raw_bytes_hash": "sha256:77578314e70a0eb3cacb7fd1b8a662641e3e7fa14bd2389b37cb5da942c82e69",
+        "semantic_hash": "sha256:dbf93cd9a3c096dfb0fec133f21a87815a92e7a52bc1c5950b8cca17c22b9e58",
+        "domain_separator": "icarus:workflow-compiler-conformance-case-result:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/expected/negative.trigger-contract-invalid.result.json",
+        "kind": "expected_result",
+        "case_id": "negative.trigger-contract-invalid",
+        "original_ref": "conformance/golden-draft/g2-generated-schema-join-authority-v6/expected/negative.trigger-contract-invalid.result.json",
+        "raw_bytes_hash": "sha256:186a0c482d24069447467e2798529a302dcfcb3dd85a40a5a7760d243a6e2e1e",
+        "semantic_hash": "sha256:47a8dc3c9a139a66e8a82d80fff482e3c4805b168fa56cc760c47e027a35c30b",
+        "domain_separator": "icarus:workflow-compiler-conformance-case-result:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/expected/positive.compiler-integrity-match-control.plan.json",
+        "kind": "expected_plan",
+        "case_id": "positive.compiler-integrity-match-control",
+        "original_ref": "conformance/golden-draft/g2-generated-schema-join-authority-v6/expected/positive.compiler-integrity-match-control.plan.json",
+        "raw_bytes_hash": "sha256:6469fb815f1c6e27d27606afdf7751f02aab27d9ff46ac700061f5c5f4dd31e4",
+        "semantic_hash": "sha256:2f763ead24d01060247a4cda9ae8e5535695e947f5351a2fe88384d4efab1599",
+        "domain_separator": "icarus:workflow-graph-plan:2\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/expected/positive.compiler-integrity-match-control.programs.json",
+        "kind": "expected_programs",
+        "case_id": "positive.compiler-integrity-match-control",
+        "original_ref": "conformance/golden-draft/g2-generated-schema-join-authority-v6/expected/positive.compiler-integrity-match-control.programs.json",
+        "raw_bytes_hash": "sha256:e29ef4ba941b0ace42023232eb0610ad0507ec0047df030a5ab4c2146bc020e4",
+        "semantic_hash": "sha256:1a9bc9e632e02e7f9fe3c0badc502e460c5f15ca568b19985bef783e4868f654",
+        "domain_separator": "icarus:workflow-current-g2-golden-program-bytes:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/expected/positive.compiler-integrity-match-control.proofs.json",
+        "kind": "expected_proofs",
+        "case_id": "positive.compiler-integrity-match-control",
+        "original_ref": "conformance/golden-draft/g2-generated-schema-join-authority-v6/expected/positive.compiler-integrity-match-control.proofs.json",
+        "raw_bytes_hash": "sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "semantic_hash": "sha256:6a21268114301bf2a5431ba2e0e2aeacae1e40a8519fed03caa9c60521fcc744",
+        "domain_separator": "icarus:workflow-current-g2-golden-proof-bytes:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/expected/positive.compiler-integrity-match-control.result.json",
+        "kind": "expected_result",
+        "case_id": "positive.compiler-integrity-match-control",
+        "original_ref": "conformance/golden-draft/g2-generated-schema-join-authority-v6/expected/positive.compiler-integrity-match-control.result.json",
+        "raw_bytes_hash": "sha256:4cc32dfb95964d4a203ac4fe0395435f64f09763a2a81e6d4705c05ac772df2c",
+        "semantic_hash": "sha256:433d4c49e1d1b7d118999a709d3f91df52950f87aca2dbb8b3b8545ce74e60c6",
+        "domain_separator": "icarus:workflow-compiler-conformance-case-result:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/expected/positive.condition-route.plan.json",
+        "kind": "expected_plan",
+        "case_id": "positive.condition-route",
+        "original_ref": "conformance/golden-draft/g2-generated-schema-join-authority-v6/expected/positive.condition-route.plan.json",
+        "raw_bytes_hash": "sha256:16411e7b273c82512c01107119c9de51508e8cccf4b6ff9998f5f2d84d3f3228",
+        "semantic_hash": "sha256:528815cb58ad723dfda13012fa91330f498fe0d8e8de4ad1697dbcd1b679bac4",
+        "domain_separator": "icarus:workflow-graph-plan:2\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/expected/positive.condition-route.programs.json",
+        "kind": "expected_programs",
+        "case_id": "positive.condition-route",
+        "original_ref": "conformance/golden-draft/g2-generated-schema-join-authority-v6/expected/positive.condition-route.programs.json",
+        "raw_bytes_hash": "sha256:f7348b38cac59a5f16289420d071dc324458c44067acbace125b16b37db31382",
+        "semantic_hash": "sha256:ef6b03e8122da8ae3ee34a671603360588aeb88a59594347ee5826089ad7fcbd",
+        "domain_separator": "icarus:workflow-current-g2-golden-program-bytes:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/expected/positive.condition-route.proofs.json",
+        "kind": "expected_proofs",
+        "case_id": "positive.condition-route",
+        "original_ref": "conformance/golden-draft/g2-generated-schema-join-authority-v6/expected/positive.condition-route.proofs.json",
+        "raw_bytes_hash": "sha256:444c486f0ce4a3dbf964a79faa43133349478363bc648d0b135d106b5b8f8392",
+        "semantic_hash": "sha256:c29b619283ad99eb898e673cb2e88a34b6117f4e8222faa2730be670105d3adf",
+        "domain_separator": "icarus:workflow-current-g2-golden-proof-bytes:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/expected/positive.condition-route.result.json",
+        "kind": "expected_result",
+        "case_id": "positive.condition-route",
+        "original_ref": "conformance/golden-draft/g2-generated-schema-join-authority-v6/expected/positive.condition-route.result.json",
+        "raw_bytes_hash": "sha256:15682b38c30a9b5cfd76fbc51359da6d0db97b4bf445c44a95df6ce3e0958dc7",
+        "semantic_hash": "sha256:3407fd9960c297ec0fefbce02880033037f02eb5df0864e76b78cbfcd59cb988",
+        "domain_separator": "icarus:workflow-compiler-conformance-case-result:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/expected/positive.expand.plan.json",
+        "kind": "expected_plan",
+        "case_id": "positive.expand",
+        "original_ref": "conformance/golden-draft/g2-generated-schema-join-authority-v6/expected/positive.expand.plan.json",
+        "raw_bytes_hash": "sha256:148495f594708c9434830625d87f4a0620fcad4dfb3b6d4402ac53bda9275ed7",
+        "semantic_hash": "sha256:e84a56f8e0b0bfa58a41256cc232253cf70580e0db39b5a2362be2d7943c1955",
+        "domain_separator": "icarus:workflow-graph-plan:2\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/expected/positive.expand.programs.json",
+        "kind": "expected_programs",
+        "case_id": "positive.expand",
+        "original_ref": "conformance/golden-draft/g2-generated-schema-join-authority-v6/expected/positive.expand.programs.json",
+        "raw_bytes_hash": "sha256:419909084e3aae9131dc6f60c5db134c18fd8fa7cd536d84cb7508ff294f5e5b",
+        "semantic_hash": "sha256:8982751cdf17cad08538241de366f3085008b3ecef56cde4d0b68a1d5ba8a565",
+        "domain_separator": "icarus:workflow-current-g2-golden-program-bytes:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/expected/positive.expand.proofs.json",
+        "kind": "expected_proofs",
+        "case_id": "positive.expand",
+        "original_ref": "conformance/golden-draft/g2-generated-schema-join-authority-v6/expected/positive.expand.proofs.json",
+        "raw_bytes_hash": "sha256:bcfe2474252b389385abce52486e5d061e617bfa751d8d71d678d24eb48b8b49",
+        "semantic_hash": "sha256:38046cdbd398064daf538da11167e93061ca98f3f5d005248edd0e5b9b960c3f",
+        "domain_separator": "icarus:workflow-current-g2-golden-proof-bytes:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/expected/positive.expand.result.json",
+        "kind": "expected_result",
+        "case_id": "positive.expand",
+        "original_ref": "conformance/golden-draft/g2-generated-schema-join-authority-v6/expected/positive.expand.result.json",
+        "raw_bytes_hash": "sha256:072c7766a14c1608bcb5af8b2f79572f5fd42c43ed3ecce778e2491a28adb81d",
+        "semantic_hash": "sha256:89ce11b25267838be331ab9207fc347a9c03484190869ce24719219270301667",
+        "domain_separator": "icarus:workflow-compiler-conformance-case-result:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/expected/positive.map.plan.json",
+        "kind": "expected_plan",
+        "case_id": "positive.map",
+        "original_ref": "conformance/golden-draft/g2-generated-schema-join-authority-v6/expected/positive.map.plan.json",
+        "raw_bytes_hash": "sha256:a7c08c502f20ff96ec0514c3a0a4f0489c53d6a7503fdcb25ec37f333d120dfd",
+        "semantic_hash": "sha256:3b48bc4c09d41e4926b86b171a88bd1d0cc880cd17ee1e31ea24aeabae65ea65",
+        "domain_separator": "icarus:workflow-graph-plan:2\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/expected/positive.map.programs.json",
+        "kind": "expected_programs",
+        "case_id": "positive.map",
+        "original_ref": "conformance/golden-draft/g2-generated-schema-join-authority-v6/expected/positive.map.programs.json",
+        "raw_bytes_hash": "sha256:3b026ed0fd0655b2e2289d4674c30713b9b5674aece5476023cf765a9e752d9b",
+        "semantic_hash": "sha256:8b9e513df64afef6276984139e1ece542cb4a822e8fa4d7f22c4e5f897787f6f",
+        "domain_separator": "icarus:workflow-current-g2-golden-program-bytes:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/expected/positive.map.proofs.json",
+        "kind": "expected_proofs",
+        "case_id": "positive.map",
+        "original_ref": "conformance/golden-draft/g2-generated-schema-join-authority-v6/expected/positive.map.proofs.json",
+        "raw_bytes_hash": "sha256:4d3ddc824b0ef1dfa5638712c7fc2c22e20eacdcde72e36ae706cfef5cb944e2",
+        "semantic_hash": "sha256:667837b0cf6ce5c5ce6ef63b4e97367761327877499d2c2ffa98447dbb6a3dd1",
+        "domain_separator": "icarus:workflow-current-g2-golden-proof-bytes:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/expected/positive.map.result.json",
+        "kind": "expected_result",
+        "case_id": "positive.map",
+        "original_ref": "conformance/golden-draft/g2-generated-schema-join-authority-v6/expected/positive.map.result.json",
+        "raw_bytes_hash": "sha256:5ab3ef955a2c4c2c64ee17f30211c55a5bb95a6c216326ceefb48bbf49c742e8",
+        "semantic_hash": "sha256:d85b0ba3ccdee3e715fe9fd145853b6512e079d9a3c160789c956e56a6270051",
+        "domain_separator": "icarus:workflow-compiler-conformance-case-result:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/expected/positive.policy-intersection.plan.json",
+        "kind": "expected_plan",
+        "case_id": "positive.policy-intersection",
+        "original_ref": "conformance/golden-draft/g2-generated-schema-join-authority-v6/expected/positive.policy-intersection.plan.json",
+        "raw_bytes_hash": "sha256:fddf206de4b2581211329ab0f3f6db33075253b9916a30e650adafc8fe1894ef",
+        "semantic_hash": "sha256:68c88f200f37f0271822bf594aba1596bfa1b270c8221e5f220268890a514d1e",
+        "domain_separator": "icarus:workflow-graph-plan:2\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/expected/positive.policy-intersection.programs.json",
+        "kind": "expected_programs",
+        "case_id": "positive.policy-intersection",
+        "original_ref": "conformance/golden-draft/g2-generated-schema-join-authority-v6/expected/positive.policy-intersection.programs.json",
+        "raw_bytes_hash": "sha256:e29ef4ba941b0ace42023232eb0610ad0507ec0047df030a5ab4c2146bc020e4",
+        "semantic_hash": "sha256:1a9bc9e632e02e7f9fe3c0badc502e460c5f15ca568b19985bef783e4868f654",
+        "domain_separator": "icarus:workflow-current-g2-golden-program-bytes:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/expected/positive.policy-intersection.proofs.json",
+        "kind": "expected_proofs",
+        "case_id": "positive.policy-intersection",
+        "original_ref": "conformance/golden-draft/g2-generated-schema-join-authority-v6/expected/positive.policy-intersection.proofs.json",
+        "raw_bytes_hash": "sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "semantic_hash": "sha256:6a21268114301bf2a5431ba2e0e2aeacae1e40a8519fed03caa9c60521fcc744",
+        "domain_separator": "icarus:workflow-current-g2-golden-proof-bytes:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/expected/positive.policy-intersection.result.json",
+        "kind": "expected_result",
+        "case_id": "positive.policy-intersection",
+        "original_ref": "conformance/golden-draft/g2-generated-schema-join-authority-v6/expected/positive.policy-intersection.result.json",
+        "raw_bytes_hash": "sha256:7589a08c952486097344de19b0b44a87190da85109ed11a204f29a621c003002",
+        "semantic_hash": "sha256:3a11e5f183f37b227ec4b7c90db713fcee979968df9884475c5e176c02e4bf84",
+        "domain_separator": "icarus:workflow-compiler-conformance-case-result:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/expected/positive.quality-revision-binding.plan.json",
+        "kind": "expected_plan",
+        "case_id": "positive.quality-revision-binding",
+        "original_ref": "conformance/golden-draft/g2-generated-schema-join-authority-v6/expected/positive.quality-revision-binding.plan.json",
+        "raw_bytes_hash": "sha256:7ad82384a193e1f2bdcc86da2be49327a964ba29c8f2451ac0a580485995caa1",
+        "semantic_hash": "sha256:000d1516662105a6f6c27d36f3e68f691ff8e12476fc8f43ade5794783ed4fa5",
+        "domain_separator": "icarus:workflow-graph-plan:2\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/expected/positive.quality-revision-binding.programs.json",
+        "kind": "expected_programs",
+        "case_id": "positive.quality-revision-binding",
+        "original_ref": "conformance/golden-draft/g2-generated-schema-join-authority-v6/expected/positive.quality-revision-binding.programs.json",
+        "raw_bytes_hash": "sha256:8c18e8183ddfaccf0973ceea992a53256fbc828dc902fd411d9f29e0d6dab553",
+        "semantic_hash": "sha256:4005b607fc613723033736e3aed6acbf591c62a52ecbd1d1caaaa2c2bbced3e6",
+        "domain_separator": "icarus:workflow-current-g2-golden-program-bytes:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/expected/positive.quality-revision-binding.proofs.json",
+        "kind": "expected_proofs",
+        "case_id": "positive.quality-revision-binding",
+        "original_ref": "conformance/golden-draft/g2-generated-schema-join-authority-v6/expected/positive.quality-revision-binding.proofs.json",
+        "raw_bytes_hash": "sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "semantic_hash": "sha256:6a21268114301bf2a5431ba2e0e2aeacae1e40a8519fed03caa9c60521fcc744",
+        "domain_separator": "icarus:workflow-current-g2-golden-proof-bytes:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/expected/positive.quality-revision-binding.result.json",
+        "kind": "expected_result",
+        "case_id": "positive.quality-revision-binding",
+        "original_ref": "conformance/golden-draft/g2-generated-schema-join-authority-v6/expected/positive.quality-revision-binding.result.json",
+        "raw_bytes_hash": "sha256:b26b1e6f29d43794a49352f0a922892596b38bd127944e233c890298261620cb",
+        "semantic_hash": "sha256:5a8582cd2c94f3aac5eb4e1ce66b0139d9a66c2d227e8ac3c080389798207b6d",
+        "domain_separator": "icarus:workflow-compiler-conformance-case-result:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/expected/positive.sound-subtype-different-hash.plan.json",
+        "kind": "expected_plan",
+        "case_id": "positive.sound-subtype-different-hash",
+        "original_ref": "conformance/golden-draft/g2-generated-schema-join-authority-v6/expected/positive.sound-subtype-different-hash.plan.json",
+        "raw_bytes_hash": "sha256:eefc742a0ee1daddfc055711e13b2656de0cd3aef29a6e774299e77f23ba2f5a",
+        "semantic_hash": "sha256:1d11eb7120db3b42d478cb89c9473e9e912dd03ceca5188beddfca7c03c4685a",
+        "domain_separator": "icarus:workflow-graph-plan:2\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/expected/positive.sound-subtype-different-hash.programs.json",
+        "kind": "expected_programs",
+        "case_id": "positive.sound-subtype-different-hash",
+        "original_ref": "conformance/golden-draft/g2-generated-schema-join-authority-v6/expected/positive.sound-subtype-different-hash.programs.json",
+        "raw_bytes_hash": "sha256:feef7fe6cc57b0b0fe75fe4c7dcb3caa2cf4b7884fdf39976677102178e6901f",
+        "semantic_hash": "sha256:0290c9306657287536d6a00313579539d9d07e809d3e574173f07d373ab104fb",
+        "domain_separator": "icarus:workflow-current-g2-golden-program-bytes:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/expected/positive.sound-subtype-different-hash.proofs.json",
+        "kind": "expected_proofs",
+        "case_id": "positive.sound-subtype-different-hash",
+        "original_ref": "conformance/golden-draft/g2-generated-schema-join-authority-v6/expected/positive.sound-subtype-different-hash.proofs.json",
+        "raw_bytes_hash": "sha256:6bce376f93ebeaaf900ef04192ce465af0dfcfd997d6909068c23fe534828465",
+        "semantic_hash": "sha256:ab79c8c12913bfa666a044570742ae288688b506a4dcce8e365ae67a1b5ae19c",
+        "domain_separator": "icarus:workflow-current-g2-golden-proof-bytes:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/expected/positive.sound-subtype-different-hash.result.json",
+        "kind": "expected_result",
+        "case_id": "positive.sound-subtype-different-hash",
+        "original_ref": "conformance/golden-draft/g2-generated-schema-join-authority-v6/expected/positive.sound-subtype-different-hash.result.json",
+        "raw_bytes_hash": "sha256:a333c64c8564ee01361e81637a9d6f0dc843c24627838fea8117f74d8aec5aa5",
+        "semantic_hash": "sha256:24af0f6ab8a43fd4be050d5fca1f792d46d97487c7e75fb2b54b1a09e1aeb7d8",
+        "domain_separator": "icarus:workflow-compiler-conformance-case-result:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/expected/positive.static-child-closure.plan.json",
+        "kind": "expected_plan",
+        "case_id": "positive.static-child-closure",
+        "original_ref": "conformance/golden-draft/g2-generated-schema-join-authority-v6/expected/positive.static-child-closure.plan.json",
+        "raw_bytes_hash": "sha256:3a058fcc1b93ddd1136c31f73b930e3ddbab7c5773bfdb6c4f071a13b01b137b",
+        "semantic_hash": "sha256:042a4243db0e7c3263b9582bc991365efb53fe663208d3077634ae86257998e7",
+        "domain_separator": "icarus:workflow-graph-plan:2\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/expected/positive.static-child-closure.programs.json",
+        "kind": "expected_programs",
+        "case_id": "positive.static-child-closure",
+        "original_ref": "conformance/golden-draft/g2-generated-schema-join-authority-v6/expected/positive.static-child-closure.programs.json",
+        "raw_bytes_hash": "sha256:470d6fcfb8e6a71c6e2e23a4a48388e6d78ca4903959affd142d7a240e2fb0fa",
+        "semantic_hash": "sha256:04fd6e08f740d4d9d0d57962c20a2bf622dfdc6b200844a5a1bfea71dbae58a9",
+        "domain_separator": "icarus:workflow-current-g2-golden-program-bytes:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/expected/positive.static-child-closure.proofs.json",
+        "kind": "expected_proofs",
+        "case_id": "positive.static-child-closure",
+        "original_ref": "conformance/golden-draft/g2-generated-schema-join-authority-v6/expected/positive.static-child-closure.proofs.json",
+        "raw_bytes_hash": "sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "semantic_hash": "sha256:6a21268114301bf2a5431ba2e0e2aeacae1e40a8519fed03caa9c60521fcc744",
+        "domain_separator": "icarus:workflow-current-g2-golden-proof-bytes:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/expected/positive.static-child-closure.result.json",
+        "kind": "expected_result",
+        "case_id": "positive.static-child-closure",
+        "original_ref": "conformance/golden-draft/g2-generated-schema-join-authority-v6/expected/positive.static-child-closure.result.json",
+        "raw_bytes_hash": "sha256:9704935e67f4718488779bf2abab759fecf0e958a3cb2a4952b586468cb695ce",
+        "semantic_hash": "sha256:c7c9fc92c6718bf4e7df6a7be0577985b612992097802a5969ea94777e15f815",
+        "domain_separator": "icarus:workflow-compiler-conformance-case-result:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/expected/positive.static-lowering.plan.json",
+        "kind": "expected_plan",
+        "case_id": "positive.static-lowering",
+        "original_ref": "conformance/golden-draft/g2-generated-schema-join-authority-v6/expected/positive.static-lowering.plan.json",
+        "raw_bytes_hash": "sha256:42e69668ddfdea601602ffc94cefdca50d58007295bd3ce4953eaf53245e4dd5",
+        "semantic_hash": "sha256:7a06f414e398ca3bde05c22ac3aeb817b725b8ad21abd3d88cae1f00c8f20b12",
+        "domain_separator": "icarus:workflow-graph-plan:2\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/expected/positive.static-lowering.programs.json",
+        "kind": "expected_programs",
+        "case_id": "positive.static-lowering",
+        "original_ref": "conformance/golden-draft/g2-generated-schema-join-authority-v6/expected/positive.static-lowering.programs.json",
+        "raw_bytes_hash": "sha256:d5c445642d48eb2ef751b61bba27627caac4ff9b50911fbcd7a85d5b48159ad6",
+        "semantic_hash": "sha256:01aed54fc1a8ab4c71d193e4b3095d75173a691bee2a858f5cff63bb0da55fdd",
+        "domain_separator": "icarus:workflow-current-g2-golden-program-bytes:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/expected/positive.static-lowering.proofs.json",
+        "kind": "expected_proofs",
+        "case_id": "positive.static-lowering",
+        "original_ref": "conformance/golden-draft/g2-generated-schema-join-authority-v6/expected/positive.static-lowering.proofs.json",
+        "raw_bytes_hash": "sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "semantic_hash": "sha256:6a21268114301bf2a5431ba2e0e2aeacae1e40a8519fed03caa9c60521fcc744",
+        "domain_separator": "icarus:workflow-current-g2-golden-proof-bytes:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/expected/positive.static-lowering.result.json",
+        "kind": "expected_result",
+        "case_id": "positive.static-lowering",
+        "original_ref": "conformance/golden-draft/g2-generated-schema-join-authority-v6/expected/positive.static-lowering.result.json",
+        "raw_bytes_hash": "sha256:1757cef5e2c3d0a6f7a33b6f977e6c34d09ec70e43cb91a68c644c81d8650740",
+        "semantic_hash": "sha256:a09b8c0ef277d3a71cd486ccb96fedb2afe32ac15f05a86d2cbf5e071c95d394",
+        "domain_separator": "icarus:workflow-compiler-conformance-case-result:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/expected/positive.subgraph.plan.json",
+        "kind": "expected_plan",
+        "case_id": "positive.subgraph",
+        "original_ref": "conformance/golden-draft/g2-generated-schema-join-authority-v6/expected/positive.subgraph.plan.json",
+        "raw_bytes_hash": "sha256:d237474c5865fc0f9d914bd853673c87d4fc3c4938e13c383f853d782536e0bf",
+        "semantic_hash": "sha256:6f0ad799d612780d88df8ff908bb8d5e55aa707c790ee0c87865286417d87443",
+        "domain_separator": "icarus:workflow-graph-plan:2\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/expected/positive.subgraph.programs.json",
+        "kind": "expected_programs",
+        "case_id": "positive.subgraph",
+        "original_ref": "conformance/golden-draft/g2-generated-schema-join-authority-v6/expected/positive.subgraph.programs.json",
+        "raw_bytes_hash": "sha256:83cf0dc22c9f89541e59b5b7cebea0029768364214e281bdff7cf555c2683f73",
+        "semantic_hash": "sha256:f443be3b16fd97997e59e1679f4fd74fda137c0b329973fb71cdde8bd963e62a",
+        "domain_separator": "icarus:workflow-current-g2-golden-program-bytes:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/expected/positive.subgraph.proofs.json",
+        "kind": "expected_proofs",
+        "case_id": "positive.subgraph",
+        "original_ref": "conformance/golden-draft/g2-generated-schema-join-authority-v6/expected/positive.subgraph.proofs.json",
+        "raw_bytes_hash": "sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "semantic_hash": "sha256:6a21268114301bf2a5431ba2e0e2aeacae1e40a8519fed03caa9c60521fcc744",
+        "domain_separator": "icarus:workflow-current-g2-golden-proof-bytes:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/expected/positive.subgraph.result.json",
+        "kind": "expected_result",
+        "case_id": "positive.subgraph",
+        "original_ref": "conformance/golden-draft/g2-generated-schema-join-authority-v6/expected/positive.subgraph.result.json",
+        "raw_bytes_hash": "sha256:e6aa68e5d8323dbc1364f8ff7f94e135fe11dfa089847c663b37346be9911e40",
+        "semantic_hash": "sha256:b3ae4860a83521e164f64942bc11b5f84388f53a50c46768e6f32bf5deb6310f",
+        "domain_separator": "icarus:workflow-compiler-conformance-case-result:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/expected/positive.wait.plan.json",
+        "kind": "expected_plan",
+        "case_id": "positive.wait",
+        "original_ref": "conformance/golden-draft/g2-generated-schema-join-authority-v6/expected/positive.wait.plan.json",
+        "raw_bytes_hash": "sha256:7a7c968591b9ccd43753cb0065d69b7b07b75e35cf5ad8032a864504e2110a1d",
+        "semantic_hash": "sha256:29506ec16415571175f3e66cb3cd07922f556be6973d4aecef97aeadbafe8686",
+        "domain_separator": "icarus:workflow-graph-plan:2\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/expected/positive.wait.programs.json",
+        "kind": "expected_programs",
+        "case_id": "positive.wait",
+        "original_ref": "conformance/golden-draft/g2-generated-schema-join-authority-v6/expected/positive.wait.programs.json",
+        "raw_bytes_hash": "sha256:6c47b443bac3784d3037595f0dc824dcf49062eceadbc9828c4336608f4538ca",
+        "semantic_hash": "sha256:233fd240c34e33e59fc1d307534d187e80c3484eb82c104266077d3815058322",
+        "domain_separator": "icarus:workflow-current-g2-golden-program-bytes:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/expected/positive.wait.proofs.json",
+        "kind": "expected_proofs",
+        "case_id": "positive.wait",
+        "original_ref": "conformance/golden-draft/g2-generated-schema-join-authority-v6/expected/positive.wait.proofs.json",
+        "raw_bytes_hash": "sha256:e0112a6e7c2a705458564790b45396d059ef4ebe1ae72d02017f902bd17d16ea",
+        "semantic_hash": "sha256:2870805f9b6979fcbfde0d54caaf2e08f4e8835988dae4c8f71daf22e6e38d74",
+        "domain_separator": "icarus:workflow-current-g2-golden-proof-bytes:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/expected/positive.wait.result.json",
+        "kind": "expected_result",
+        "case_id": "positive.wait",
+        "original_ref": "conformance/golden-draft/g2-generated-schema-join-authority-v6/expected/positive.wait.result.json",
+        "raw_bytes_hash": "sha256:0dbc052ede004b76e47b225dbbdd5f9f853ae8db9d28aed12e4ee61a81a80485",
+        "semantic_hash": "sha256:05fd9be349696832f1b1fff0a6f43158ffbf991abce3804f773e4136a244bc17",
+        "domain_separator": "icarus:workflow-compiler-conformance-case-result:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/inputs/negative.capability-not-allowed.snapshot@2.json",
+        "kind": "input_snapshot",
+        "case_id": "negative.capability-not-allowed",
+        "original_ref": "conformance/review-candidate/g2-generated-schema-join-authority-v6/inputs/negative.capability-not-allowed.snapshot@2.json",
+        "raw_bytes_hash": "sha256:abcd4bc91d9f14439821f6d52e51da342bfad4a9bae5abf2d39ccc618b30fcdd",
+        "semantic_hash": "sha256:428c6db07a0fd88e8c1faccd1a416fb088c5c66926e32d76e4522049e301548f",
+        "domain_separator": "icarus:workflow-compiler-input-snapshot-artifact:2\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/inputs/negative.capability-not-allowed.source.json",
+        "kind": "raw_source",
+        "case_id": "negative.capability-not-allowed",
+        "original_ref": "conformance/sealed/g2-semantic-correction/inputs/negative.capability-not-allowed.source.json",
+        "raw_bytes_hash": "sha256:4e582a18224587fc1aa584776f18c6458a4c4a109933f1ea5fed6c8c8bf7540b",
+        "semantic_hash": "sha256:c44ab22e8485ac45bd115450ccba0a2eb4c3883cb9bb36f34320e95559babaa2",
+        "domain_separator": "icarus:workflow-semantic-correction-raw-source:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/inputs/negative.child-recipe-dependency-cycle.snapshot@2.json",
+        "kind": "input_snapshot",
+        "case_id": "negative.child-recipe-dependency-cycle",
+        "original_ref": "conformance/review-candidate/g2-generated-schema-join-authority-v6/inputs/negative.child-recipe-dependency-cycle.snapshot@2.json",
+        "raw_bytes_hash": "sha256:98ee8e3128e736f1d284444b00a1baf6c3fa2e4339c4c3325151a7fe9ca27037",
+        "semantic_hash": "sha256:ad78b4c801ea7d9311148607b207591e1347543203af12621d33c570c7496627",
+        "domain_separator": "icarus:workflow-compiler-input-snapshot-artifact:2\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/inputs/negative.child-recipe-dependency-cycle.source.json",
+        "kind": "raw_source",
+        "case_id": "negative.child-recipe-dependency-cycle",
+        "original_ref": "conformance/sealed/g2-semantic-correction/inputs/negative.child-recipe-dependency-cycle.source.json",
+        "raw_bytes_hash": "sha256:3c8a78d338950091afe49ceae01fbf1b386d996b851e089cef0f7f21fa1a0598",
+        "semantic_hash": "sha256:6958494e8112059188207529a7bf651633d993743ee553ade70771ed02b4587e",
+        "domain_separator": "icarus:workflow-semantic-correction-raw-source:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/inputs/negative.child-recipe-set-mismatch.snapshot@2.json",
+        "kind": "input_snapshot",
+        "case_id": "negative.child-recipe-set-mismatch",
+        "original_ref": "conformance/review-candidate/g2-generated-schema-join-authority-v6/inputs/negative.child-recipe-set-mismatch.snapshot@2.json",
+        "raw_bytes_hash": "sha256:a27edd6f325862fcbbee23eed86facc246d887afe6fb478a88f18aa5950e4eb5",
+        "semantic_hash": "sha256:7a49be239af308ff892be072e4a2a10df6b4612f8b0789293217a8198b1e5785",
+        "domain_separator": "icarus:workflow-compiler-input-snapshot-artifact:2\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/inputs/negative.child-recipe-set-mismatch.source.json",
+        "kind": "raw_source",
+        "case_id": "negative.child-recipe-set-mismatch",
+        "original_ref": "conformance/sealed/g2-semantic-correction/inputs/negative.child-recipe-set-mismatch.source.json",
+        "raw_bytes_hash": "sha256:a12517eb9f6c8b9506368e44b77c212d30ad17341e8b578461d7dff4d91a307a",
+        "semantic_hash": "sha256:3a641426b7fc7e475ae48f879c23b33af77607bde8e69d8e80702758ca3ed9bb",
+        "domain_separator": "icarus:workflow-semantic-correction-raw-source:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/inputs/negative.compiler-integrity-mismatch.snapshot@2.json",
+        "kind": "input_snapshot",
+        "case_id": "negative.compiler-integrity-mismatch",
+        "original_ref": "conformance/review-candidate/g2-generated-schema-join-authority-v6/inputs/negative.compiler-integrity-mismatch.snapshot@2.json",
+        "raw_bytes_hash": "sha256:faf94b12d7b1a049b771597d643f0f6fe9da1d2e27b2d31a2c01454aaf7c57e6",
+        "semantic_hash": "sha256:37d5877985c163e1e4dcb229a5075a0ed04cc3d8b1c62827cb745e6a3f64b9f2",
+        "domain_separator": "icarus:workflow-compiler-input-snapshot-artifact:2\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/inputs/negative.compiler-integrity-mismatch.source.json",
+        "kind": "raw_source",
+        "case_id": "negative.compiler-integrity-mismatch",
+        "original_ref": "conformance/sealed/g2-semantic-correction/inputs/negative.compiler-integrity-mismatch.source.json",
+        "raw_bytes_hash": "sha256:5f7458cec11efd0a0ccc5f2d867524fabf03d88f0b1884ffa6e264a5a64b8577",
+        "semantic_hash": "sha256:481cdf19686ef9646d45c111b2a8710be5c2cb3be964b535abf895e2ca227436",
+        "domain_separator": "icarus:workflow-semantic-correction-raw-source:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/inputs/negative.completion-contract-invalid.snapshot@2.json",
+        "kind": "input_snapshot",
+        "case_id": "negative.completion-contract-invalid",
+        "original_ref": "conformance/review-candidate/g2-generated-schema-join-authority-v6/inputs/negative.completion-contract-invalid.snapshot@2.json",
+        "raw_bytes_hash": "sha256:31ec764e3bf5156b1176824617482900b17bdb9d74b7b2f59d3ecb5f168eea39",
+        "semantic_hash": "sha256:cc6b9f1684cfeb9aeaec42be7589a57c69238201a51a572d493ab69e0d944618",
+        "domain_separator": "icarus:workflow-compiler-input-snapshot-artifact:2\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/inputs/negative.completion-contract-invalid.source.json",
+        "kind": "raw_source",
+        "case_id": "negative.completion-contract-invalid",
+        "original_ref": "conformance/sealed/g2-semantic-correction/inputs/negative.completion-contract-invalid.source.json",
+        "raw_bytes_hash": "sha256:ec6b19ca9966277faadaadf01efeb4ab6ed852cb64ece429627705e4ec57c638",
+        "semantic_hash": "sha256:3cb7bb9aa5ef9286eb642935a948150d25f2a1a16231712137153f2b8beb05a0",
+        "domain_separator": "icarus:workflow-semantic-correction-raw-source:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/inputs/negative.condition-complexity-exceeded.snapshot@2.json",
+        "kind": "input_snapshot",
+        "case_id": "negative.condition-complexity-exceeded",
+        "original_ref": "conformance/review-candidate/g2-generated-schema-join-authority-v6/inputs/negative.condition-complexity-exceeded.snapshot@2.json",
+        "raw_bytes_hash": "sha256:dc1a8740b852330e9d5ec7e8de526507beac015fde0b7ef5dd5ece2adea5c21a",
+        "semantic_hash": "sha256:bace6d28f5fc155b28a8ff8b9ff58279359d205e1d82e1c08e3fca79b8e54efd",
+        "domain_separator": "icarus:workflow-compiler-input-snapshot-artifact:2\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/inputs/negative.condition-complexity-exceeded.source.json",
+        "kind": "raw_source",
+        "case_id": "negative.condition-complexity-exceeded",
+        "original_ref": "conformance/sealed/g2-semantic-correction/inputs/negative.condition-complexity-exceeded.source.json",
+        "raw_bytes_hash": "sha256:0b98e0d86fd2b1307aabe20da39f1e1ce1c0225aa45807c630ec9e2801ab5385",
+        "semantic_hash": "sha256:3f826dc323d04beafe2457894460b0485c7fff1b276a11f40bbff7376259066f",
+        "domain_separator": "icarus:workflow-semantic-correction-raw-source:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/inputs/negative.condition-type-mismatch.snapshot@2.json",
+        "kind": "input_snapshot",
+        "case_id": "negative.condition-type-mismatch",
+        "original_ref": "conformance/review-candidate/g2-generated-schema-join-authority-v6/inputs/negative.condition-type-mismatch.snapshot@2.json",
+        "raw_bytes_hash": "sha256:53129a408745f4e2b3170691edfd751133921889e724dcb2d3d1b87bb6aa918c",
+        "semantic_hash": "sha256:254aa6d6dc2261fd56983a570756fbded450cd7c4f4513e01313bd7b1bf6e124",
+        "domain_separator": "icarus:workflow-compiler-input-snapshot-artifact:2\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/inputs/negative.condition-type-mismatch.source.json",
+        "kind": "raw_source",
+        "case_id": "negative.condition-type-mismatch",
+        "original_ref": "conformance/sealed/g2-semantic-correction/inputs/negative.condition-type-mismatch.source.json",
+        "raw_bytes_hash": "sha256:e936e11aadb4999a4f14755802c728327a17e3568258074405397e88753a6826",
+        "semantic_hash": "sha256:c4514dd6ba73b7f25fb677d89a75d5d296e1a6067797b003981ffeae862f0e81",
+        "domain_separator": "icarus:workflow-semantic-correction-raw-source:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/inputs/negative.definition-child-creation-key-template.snapshot@2.json",
+        "kind": "input_snapshot",
+        "case_id": "negative.definition-child-creation-key-template",
+        "original_ref": "conformance/review-candidate/g2-generated-schema-join-authority-v6/inputs/negative.definition-child-creation-key-template.snapshot@2.json",
+        "raw_bytes_hash": "sha256:2794e3259bab382569485e853dbc57b9e716e1f1660fd29c0f498c482806960a",
+        "semantic_hash": "sha256:b976427a732d14857175dfd861ef8fc3ba9fd0b7472431e937b67c001596e21d",
+        "domain_separator": "icarus:workflow-compiler-input-snapshot-artifact:2\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/inputs/negative.definition-child-creation-key-template.source.json",
+        "kind": "raw_source",
+        "case_id": "negative.definition-child-creation-key-template",
+        "original_ref": "conformance/sealed/g2-semantic-correction/inputs/negative.definition-child-creation-key-template.source.json",
+        "raw_bytes_hash": "sha256:d8895a3e929d4528eeaa366436c428862fa755099e07ed78ee1b12eb4c579730",
+        "semantic_hash": "sha256:647fa51666aa27e7f95a3078b1096b6266959da3e7a48cd8850b927c8eb010b8",
+        "domain_separator": "icarus:workflow-semantic-correction-raw-source:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/inputs/negative.definition-notification-delivery-requirement.snapshot@2.json",
+        "kind": "input_snapshot",
+        "case_id": "negative.definition-notification-delivery-requirement",
+        "original_ref": "conformance/review-candidate/g2-generated-schema-join-authority-v6/inputs/negative.definition-notification-delivery-requirement.snapshot@2.json",
+        "raw_bytes_hash": "sha256:60788f1903d2ddafa807383254db89348174c11854f4ae26e95043eb8fa971c6",
+        "semantic_hash": "sha256:f1f915db6d1f4319e5922f028cc3b0e56dfd4c8c7b6bd7914aa5705c5bcb452e",
+        "domain_separator": "icarus:workflow-compiler-input-snapshot-artifact:2\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/inputs/negative.definition-notification-delivery-requirement.source.json",
+        "kind": "raw_source",
+        "case_id": "negative.definition-notification-delivery-requirement",
+        "original_ref": "conformance/sealed/g2-semantic-correction/inputs/negative.definition-notification-delivery-requirement.source.json",
+        "raw_bytes_hash": "sha256:57ba710f86a3c1f22c15b1bef753c4e43a422be979ce606e0385d6e2b00fdd58",
+        "semantic_hash": "sha256:1cbcad7aabc4f9a6787040c64f523f6a2afb72b426a617d2b4b6f6752441cdb1",
+        "domain_separator": "icarus:workflow-semantic-correction-raw-source:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/inputs/negative.early-completion-non-monotone.snapshot@2.json",
+        "kind": "input_snapshot",
+        "case_id": "negative.early-completion-non-monotone",
+        "original_ref": "conformance/review-candidate/g2-generated-schema-join-authority-v6/inputs/negative.early-completion-non-monotone.snapshot@2.json",
+        "raw_bytes_hash": "sha256:340b7107b3edb34ad34c2654584b2502725bbbe4cd0048982c3334d58e9e213c",
+        "semantic_hash": "sha256:3561c3af0740583abca2655295864949b88e3c709dd45aa61542cdff55668f9a",
+        "domain_separator": "icarus:workflow-compiler-input-snapshot-artifact:2\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/inputs/negative.early-completion-non-monotone.source.json",
+        "kind": "raw_source",
+        "case_id": "negative.early-completion-non-monotone",
+        "original_ref": "conformance/sealed/g2-semantic-correction/inputs/negative.early-completion-non-monotone.source.json",
+        "raw_bytes_hash": "sha256:3f516fd39b987f03cc48a3ddff23769b7569ec2e9c60797f14646b3ea3aecfe0",
+        "semantic_hash": "sha256:6f20c172d4dcbf7e72c7b088a7b1b8bfa745f9713fcc522fc7ef15e95f35c989",
+        "domain_separator": "icarus:workflow-semantic-correction-raw-source:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/inputs/negative.graph-cross-scope-edge.snapshot@2.json",
+        "kind": "input_snapshot",
+        "case_id": "negative.graph-cross-scope-edge",
+        "original_ref": "conformance/review-candidate/g2-generated-schema-join-authority-v6/inputs/negative.graph-cross-scope-edge.snapshot@2.json",
+        "raw_bytes_hash": "sha256:49b05afdd66da6a66e868d83bfb2dfd14e12e30ca08c289158893a2171f59a56",
+        "semantic_hash": "sha256:bbbbf759312a597579cd0729db237168a37fe6d96045361ce627daa6933b53d5",
+        "domain_separator": "icarus:workflow-compiler-input-snapshot-artifact:2\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/inputs/negative.graph-cross-scope-edge.source.json",
+        "kind": "raw_source",
+        "case_id": "negative.graph-cross-scope-edge",
+        "original_ref": "conformance/review-candidate/g2-generated-schema-join-authority-v6/inputs/negative.graph-cross-scope-edge.source.json",
+        "raw_bytes_hash": "sha256:0a1aaee239050abdd41e6cb72973410b316658bd33b57e38a99c6d9500a07ff7",
+        "semantic_hash": "sha256:3c7a84ce8ddf9a4e0a5f0db86dee147446ecbb1cdf1107386c7d370ef905e649",
+        "domain_separator": "icarus:workflow-semantic-correction-raw-source:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/inputs/negative.graph-dependency-cycle.snapshot@2.json",
+        "kind": "input_snapshot",
+        "case_id": "negative.graph-dependency-cycle",
+        "original_ref": "conformance/review-candidate/g2-generated-schema-join-authority-v6/inputs/negative.graph-dependency-cycle.snapshot@2.json",
+        "raw_bytes_hash": "sha256:c7ac039a678ea408e6178748a632cc0aecebaa10357585e8913d75b2b42861c9",
+        "semantic_hash": "sha256:8c274f1d510dd7919676de8453bbf82268e5bc369edd27f2c14402c5c4b3d54f",
+        "domain_separator": "icarus:workflow-compiler-input-snapshot-artifact:2\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/inputs/negative.graph-dependency-cycle.source.json",
+        "kind": "raw_source",
+        "case_id": "negative.graph-dependency-cycle",
+        "original_ref": "conformance/sealed/g2-semantic-correction/inputs/negative.graph-dependency-cycle.source.json",
+        "raw_bytes_hash": "sha256:c669eacbc23123996f1e9c68f3fe73bc748c98bba2bf146e8b8d8bd448ccfd84",
+        "semantic_hash": "sha256:d6eacdfa648a421231d3836a6618f789da839625e773b33fc27895a50ee44aa5",
+        "domain_separator": "icarus:workflow-semantic-correction-raw-source:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/inputs/negative.graph-endpoint-not-found.snapshot@2.json",
+        "kind": "input_snapshot",
+        "case_id": "negative.graph-endpoint-not-found",
+        "original_ref": "conformance/review-candidate/g2-generated-schema-join-authority-v6/inputs/negative.graph-endpoint-not-found.snapshot@2.json",
+        "raw_bytes_hash": "sha256:d7773e9ed3296f96712b846abe25281db014988cde42cda0b2ae67f77d94075c",
+        "semantic_hash": "sha256:14bfb7bb0049c6c87f33e53e316536b6a6fff8feb46e642fb56f57260504708e",
+        "domain_separator": "icarus:workflow-compiler-input-snapshot-artifact:2\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/inputs/negative.graph-endpoint-not-found.source.json",
+        "kind": "raw_source",
+        "case_id": "negative.graph-endpoint-not-found",
+        "original_ref": "conformance/sealed/g2-semantic-correction/inputs/negative.graph-endpoint-not-found.source.json",
+        "raw_bytes_hash": "sha256:22dcc5c449caee2c47f541661ff32f40888446003d0214d0cf491c9ad49335ca",
+        "semantic_hash": "sha256:356a7bd04dae89a3752f81a3497102baf4f0db096a45ffada33e58a757fba0bc",
+        "domain_separator": "icarus:workflow-semantic-correction-raw-source:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/inputs/negative.graph-id-duplicate.snapshot@2.json",
+        "kind": "input_snapshot",
+        "case_id": "negative.graph-id-duplicate",
+        "original_ref": "conformance/review-candidate/g2-generated-schema-join-authority-v6/inputs/negative.graph-id-duplicate.snapshot@2.json",
+        "raw_bytes_hash": "sha256:70ae8a58aade69726c21afd34b108ab51532831fb1edeccd6cd2391080951809",
+        "semantic_hash": "sha256:98c35233c610f9724420f22486787c20f3bc6e7583ce63db52ebb9da2c6bfe5a",
+        "domain_separator": "icarus:workflow-compiler-input-snapshot-artifact:2\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/inputs/negative.graph-id-duplicate.source.json",
+        "kind": "raw_source",
+        "case_id": "negative.graph-id-duplicate",
+        "original_ref": "conformance/sealed/g2-semantic-correction/inputs/negative.graph-id-duplicate.source.json",
+        "raw_bytes_hash": "sha256:d113ad77ad1229b2f8a051b1ef1532fb0c7e90e196780d4ac3b84ff65444ce02",
+        "semantic_hash": "sha256:1c8ab4d75c1a34c6ddacb0bc0d25b804185e0faec3b3f68e46796656605236f7",
+        "domain_separator": "icarus:workflow-semantic-correction-raw-source:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/inputs/negative.json-duplicate-key.snapshot@2.json",
+        "kind": "input_snapshot",
+        "case_id": "negative.json-duplicate-key",
+        "original_ref": "conformance/review-candidate/g2-generated-schema-join-authority-v6/inputs/negative.json-duplicate-key.snapshot@2.json",
+        "raw_bytes_hash": "sha256:438e11e050dc0740a727ab6eeb79e4f8c31e44a46af0bbc625096ae4a1bfb222",
+        "semantic_hash": "sha256:0ab5fb21a81f8e886f4418a0c9c0a4fb6ac9f149827b8acb1db6099c5fc7485a",
+        "domain_separator": "icarus:workflow-compiler-input-snapshot-artifact:2\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/inputs/negative.json-duplicate-key.source.json",
+        "kind": "raw_source",
+        "case_id": "negative.json-duplicate-key",
+        "original_ref": "conformance/sealed/g2-semantic-correction/inputs/negative.json-duplicate-key.source.json",
+        "raw_bytes_hash": "sha256:17eff513e8b200604882189a92ec75a23b5cc6cb9d645bf9fa243f29a93d7be8",
+        "semantic_hash": "sha256:befdfa568fb31e78b9c83a1beb294aea8d216bc84f47bdbda5af0508ae03612b",
+        "domain_separator": "icarus:workflow-semantic-correction-raw-source:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/inputs/negative.json-pointer-non-total.snapshot@2.json",
+        "kind": "input_snapshot",
+        "case_id": "negative.json-pointer-non-total",
+        "original_ref": "conformance/review-candidate/g2-generated-schema-join-authority-v6/inputs/negative.json-pointer-non-total.snapshot@2.json",
+        "raw_bytes_hash": "sha256:7ec991217b25120e1eee4b2dad6789dc25eb09963fd8ef69bb6e39a8ee3b3d3d",
+        "semantic_hash": "sha256:6560c349d4dbf286a60806bd83ea819ca083153f4f119ccaf1afecf18a631ce1",
+        "domain_separator": "icarus:workflow-compiler-input-snapshot-artifact:2\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/inputs/negative.json-pointer-non-total.source.json",
+        "kind": "raw_source",
+        "case_id": "negative.json-pointer-non-total",
+        "original_ref": "conformance/sealed/g2-semantic-correction/inputs/negative.json-pointer-non-total.source.json",
+        "raw_bytes_hash": "sha256:250c4b55261c7ef504a298442bcc920e52e0ab7f612ba34504aa213fde8b968e",
+        "semantic_hash": "sha256:38117236d671e9145a2b79d85bb7853d6e574ffc51fb48f7aa8fc1e6b49595ec",
+        "domain_separator": "icarus:workflow-semantic-correction-raw-source:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/inputs/negative.json-syntax-invalid.snapshot@2.json",
+        "kind": "input_snapshot",
+        "case_id": "negative.json-syntax-invalid",
+        "original_ref": "conformance/review-candidate/g2-generated-schema-join-authority-v6/inputs/negative.json-syntax-invalid.snapshot@2.json",
+        "raw_bytes_hash": "sha256:f351e9b655b95aadc90593b51d9a7a43b3b651ce30bb0d101e22f1ea1d1ccc8f",
+        "semantic_hash": "sha256:5e84cd345528fc5fc6b379125790afbc86eb3755affb74a1ce761f4766503a72",
+        "domain_separator": "icarus:workflow-compiler-input-snapshot-artifact:2\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/inputs/negative.json-syntax-invalid.source.json",
+        "kind": "raw_source",
+        "case_id": "negative.json-syntax-invalid",
+        "original_ref": "conformance/sealed/g2-semantic-correction/inputs/negative.json-syntax-invalid.source.json",
+        "raw_bytes_hash": "sha256:93854b93e37cdb128d1ab12965b4c9c1a66293a923999616d77af658807d9a22",
+        "semantic_hash": "sha256:1de314242c7f8dfde49d4c5f2c3f7b51f299fd2120fa25ed1f6f155399480cf4",
+        "domain_separator": "icarus:workflow-semantic-correction-raw-source:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/inputs/negative.policy-escalation.snapshot@2.json",
+        "kind": "input_snapshot",
+        "case_id": "negative.policy-escalation",
+        "original_ref": "conformance/review-candidate/g2-generated-schema-join-authority-v6/inputs/negative.policy-escalation.snapshot@2.json",
+        "raw_bytes_hash": "sha256:8a867466616aedbdda2022c30618c5531d92d5b469d33250f9696ad180ca1243",
+        "semantic_hash": "sha256:3c43698728073ad99bc62267fa323d7e6d7046e0793c8126e47a5c8ecf470ffe",
+        "domain_separator": "icarus:workflow-compiler-input-snapshot-artifact:2\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/inputs/negative.policy-escalation.source.json",
+        "kind": "raw_source",
+        "case_id": "negative.policy-escalation",
+        "original_ref": "conformance/sealed/g2-semantic-correction/inputs/negative.policy-escalation.source.json",
+        "raw_bytes_hash": "sha256:ef4185af554ddc82c1fdd21a3124a49e24fb223c1c5ae411a59936d69e008553",
+        "semantic_hash": "sha256:988002925d36493afa191bffffee9fbb5c2b184722dc390a43af8a24c18e7edc",
+        "domain_separator": "icarus:workflow-semantic-correction-raw-source:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/inputs/negative.quality-revision-effect-key-incompatible.snapshot@2.json",
+        "kind": "input_snapshot",
+        "case_id": "negative.quality-revision-effect-key-incompatible",
+        "original_ref": "conformance/review-candidate/g2-generated-schema-join-authority-v6/inputs/negative.quality-revision-effect-key-incompatible.snapshot@2.json",
+        "raw_bytes_hash": "sha256:bbe3f2ac3af0dfa19b409144e00be46b3a5f196610424e7f1b3e6c470869e2df",
+        "semantic_hash": "sha256:d6df8f52667c3310ed1c8d2c08b668f5debdad312911a9b8e7f1aa1d14a9ee88",
+        "domain_separator": "icarus:workflow-compiler-input-snapshot-artifact:2\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/inputs/negative.quality-revision-effect-key-incompatible.source.json",
+        "kind": "raw_source",
+        "case_id": "negative.quality-revision-effect-key-incompatible",
+        "original_ref": "conformance/sealed/g2-semantic-correction/inputs/negative.quality-revision-effect-key-incompatible.source.json",
+        "raw_bytes_hash": "sha256:605f1d71149064e8798e9e58da05d0ae8c177f427400f7e88fbc9691fb6e414b",
+        "semantic_hash": "sha256:4618a8ce3038ff55575e68af108edf3e6d1eaf8b0827652726820f295a33bcf2",
+        "domain_separator": "icarus:workflow-semantic-correction-raw-source:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/inputs/negative.quality-revision-missing-feedback-schema.snapshot@2.json",
+        "kind": "input_snapshot",
+        "case_id": "negative.quality-revision-missing-feedback-schema",
+        "original_ref": "conformance/review-candidate/g2-generated-schema-join-authority-v6/inputs/negative.quality-revision-missing-feedback-schema.snapshot@2.json",
+        "raw_bytes_hash": "sha256:51c0d8d8135630c7a27e496a18a264e342712c2a992b256250759611d82ed430",
+        "semantic_hash": "sha256:98c2db412ec1a8515d85996ea0add1f8b978539c866a0729eb2dac23a0da2983",
+        "domain_separator": "icarus:workflow-compiler-input-snapshot-artifact:2\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/inputs/negative.quality-revision-missing-feedback-schema.source.json",
+        "kind": "raw_source",
+        "case_id": "negative.quality-revision-missing-feedback-schema",
+        "original_ref": "conformance/sealed/g2-semantic-correction/inputs/negative.quality-revision-missing-feedback-schema.source.json",
+        "raw_bytes_hash": "sha256:4ab8bc453027f4a7c29b00234e327e18e5507e2d9fa92ee2afb97d08463fce5e",
+        "semantic_hash": "sha256:b01039c59ef3023a97bb277bfa04df4004774e7a1bc2044936d349d44bcaa41e",
+        "domain_separator": "icarus:workflow-semantic-correction-raw-source:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/inputs/negative.quality-revision-missing-quality-gate.snapshot@2.json",
+        "kind": "input_snapshot",
+        "case_id": "negative.quality-revision-missing-quality-gate",
+        "original_ref": "conformance/review-candidate/g2-generated-schema-join-authority-v6/inputs/negative.quality-revision-missing-quality-gate.snapshot@2.json",
+        "raw_bytes_hash": "sha256:5133beae92ab7037840c66fc010045ab46c0f231440b226aeef8713e46f5e4a4",
+        "semantic_hash": "sha256:d406f5900e426d960d57b70678713149b669e05ae53cac81dfc1c260982f882c",
+        "domain_separator": "icarus:workflow-compiler-input-snapshot-artifact:2\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/inputs/negative.quality-revision-missing-quality-gate.source.json",
+        "kind": "raw_source",
+        "case_id": "negative.quality-revision-missing-quality-gate",
+        "original_ref": "conformance/sealed/g2-semantic-correction/inputs/negative.quality-revision-missing-quality-gate.source.json",
+        "raw_bytes_hash": "sha256:47e8d727fb94fb8bb7a47716b69510b8f04e617ec18673ee31a7fd90270971f1",
+        "semantic_hash": "sha256:beb23549193eda9f4d71d532202b0549c2176edc7258ad431b1317165f65bc69",
+        "domain_separator": "icarus:workflow-semantic-correction-raw-source:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/inputs/negative.registry-ref-not-found.snapshot@2.json",
+        "kind": "input_snapshot",
+        "case_id": "negative.registry-ref-not-found",
+        "original_ref": "conformance/review-candidate/g2-generated-schema-join-authority-v6/inputs/negative.registry-ref-not-found.snapshot@2.json",
+        "raw_bytes_hash": "sha256:36289d7fe8670683b53699b79988b2000f364425d2e945b40304f28d86b9bc18",
+        "semantic_hash": "sha256:3d87b39488d739448b5304ce10800cd916b9d479d24955947d1313a5310480bf",
+        "domain_separator": "icarus:workflow-compiler-input-snapshot-artifact:2\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/inputs/negative.registry-ref-not-found.source.json",
+        "kind": "raw_source",
+        "case_id": "negative.registry-ref-not-found",
+        "original_ref": "conformance/sealed/g2-semantic-correction/inputs/negative.registry-ref-not-found.source.json",
+        "raw_bytes_hash": "sha256:fec7cac3f467848e8a7ee899310e8a9b641af134652993199b0f44abc021a745",
+        "semantic_hash": "sha256:523d10fe2da3f9b2578731fb624aad1b3c993eb2c2c915e2e8016634aba48b27",
+        "domain_separator": "icarus:workflow-semantic-correction-raw-source:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/inputs/negative.registry-ref-unpinned.snapshot@2.json",
+        "kind": "input_snapshot",
+        "case_id": "negative.registry-ref-unpinned",
+        "original_ref": "conformance/review-candidate/g2-generated-schema-join-authority-v6/inputs/negative.registry-ref-unpinned.snapshot@2.json",
+        "raw_bytes_hash": "sha256:5f188fb400f604f9cea15000a4f380b410731b704000459ab625a8a8e8c5f7f1",
+        "semantic_hash": "sha256:69317b43c47fa089590e0a8aeff9c16884a594235aaf110199ee309e8f9c91b9",
+        "domain_separator": "icarus:workflow-compiler-input-snapshot-artifact:2\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/inputs/negative.registry-ref-unpinned.source.json",
+        "kind": "raw_source",
+        "case_id": "negative.registry-ref-unpinned",
+        "original_ref": "conformance/sealed/g2-semantic-correction/inputs/negative.registry-ref-unpinned.source.json",
+        "raw_bytes_hash": "sha256:3e9a957e912854c14eac2a3c292d32f1ebd00b9086e4f8042344281f44f6a15a",
+        "semantic_hash": "sha256:d59b468f1955e1dc7c99909a0c6cb5a03f5d1df48cce52006a0d4c41afc591ce",
+        "domain_separator": "icarus:workflow-semantic-correction-raw-source:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/inputs/negative.route-group-ambiguous.snapshot@2.json",
+        "kind": "input_snapshot",
+        "case_id": "negative.route-group-ambiguous",
+        "original_ref": "conformance/review-candidate/g2-generated-schema-join-authority-v6/inputs/negative.route-group-ambiguous.snapshot@2.json",
+        "raw_bytes_hash": "sha256:7969d42ae17ee031d96a6aebab59b8b7fcb1617600451f899c5c264d5b03e50f",
+        "semantic_hash": "sha256:bf5e1627cfaca45163de38aa6442f9a45555dc6f76865729fdd2474c74a67fd2",
+        "domain_separator": "icarus:workflow-compiler-input-snapshot-artifact:2\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/inputs/negative.route-group-ambiguous.source.json",
+        "kind": "raw_source",
+        "case_id": "negative.route-group-ambiguous",
+        "original_ref": "conformance/sealed/g2-semantic-correction/inputs/negative.route-group-ambiguous.source.json",
+        "raw_bytes_hash": "sha256:ad82d80e734ca875bb625a4d31425cf34dbd6863ccc1c778d92b7dd5138abd36",
+        "semantic_hash": "sha256:ead93010823d1a2a091066d8af0b3bf3b301669f37b64975b8ff62fff9991ccc",
+        "domain_separator": "icarus:workflow-semantic-correction-raw-source:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/inputs/negative.runtime-safety-limit-exceeded.snapshot@2.json",
+        "kind": "input_snapshot",
+        "case_id": "negative.runtime-safety-limit-exceeded",
+        "original_ref": "conformance/review-candidate/g2-generated-schema-join-authority-v6/inputs/negative.runtime-safety-limit-exceeded.snapshot@2.json",
+        "raw_bytes_hash": "sha256:8574f34946e1a3e9b872b6eb3b7c47a7e28b49681c122ee0f53d7a9c30664105",
+        "semantic_hash": "sha256:2b6b58bd9b0f598d6f3b9f3e7431c0df024a29ef2f4b6c25d582ddd3bcb92c26",
+        "domain_separator": "icarus:workflow-compiler-input-snapshot-artifact:2\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/inputs/negative.runtime-safety-limit-exceeded.source.json",
+        "kind": "raw_source",
+        "case_id": "negative.runtime-safety-limit-exceeded",
+        "original_ref": "conformance/sealed/g2-semantic-correction/inputs/negative.runtime-safety-limit-exceeded.source.json",
+        "raw_bytes_hash": "sha256:2b6e705bcf78a8a44e34ba0d197cdf735a017729c802d747cd36fa108086d15b",
+        "semantic_hash": "sha256:5dfe6cf019131213a304f30b19e1933ca2670327bdab4e720c5feb91acc9dcaf",
+        "domain_separator": "icarus:workflow-semantic-correction-raw-source:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/inputs/negative.schema-not-assignable.snapshot@2.json",
+        "kind": "input_snapshot",
+        "case_id": "negative.schema-not-assignable",
+        "original_ref": "conformance/review-candidate/g2-generated-schema-join-authority-v6/inputs/negative.schema-not-assignable.snapshot@2.json",
+        "raw_bytes_hash": "sha256:f4f4c368eedc2262e210d236501a46e9a8471d70bebf58dc36fa28b087c89413",
+        "semantic_hash": "sha256:50127efdd57485e4488c0a34395eef936c27324ff12ba6bc0d7ec7a18f9e90e2",
+        "domain_separator": "icarus:workflow-compiler-input-snapshot-artifact:2\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/inputs/negative.schema-not-assignable.source.json",
+        "kind": "raw_source",
+        "case_id": "negative.schema-not-assignable",
+        "original_ref": "conformance/sealed/g2-semantic-correction/inputs/negative.schema-not-assignable.source.json",
+        "raw_bytes_hash": "sha256:af08f9171315360faa64e7cf3e2cf5cd4fc8a90dc587ac714d5c5bbc8fefd87b",
+        "semantic_hash": "sha256:dc3e83f1a4bf7f3ef60fff7a9565541c91523df02ad49c303f1c03f63d207cca",
+        "domain_separator": "icarus:workflow-semantic-correction-raw-source:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/inputs/negative.schema-profile-keyword-unsupported.snapshot@2.json",
+        "kind": "input_snapshot",
+        "case_id": "negative.schema-profile-keyword-unsupported",
+        "original_ref": "conformance/review-candidate/g2-generated-schema-join-authority-v6/inputs/negative.schema-profile-keyword-unsupported.snapshot@2.json",
+        "raw_bytes_hash": "sha256:91d6d3d3c7f3bd7c48d4d41ab1cf8a9e8e26b5e7ec1184cabfeaab8490c7276f",
+        "semantic_hash": "sha256:ce7837469c9a534af179caedd6b8409666c48e8ad319375d6550d723940c2358",
+        "domain_separator": "icarus:workflow-compiler-input-snapshot-artifact:2\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/inputs/negative.schema-profile-keyword-unsupported.source.json",
+        "kind": "raw_source",
+        "case_id": "negative.schema-profile-keyword-unsupported",
+        "original_ref": "conformance/sealed/g2-semantic-correction/inputs/negative.schema-profile-keyword-unsupported.source.json",
+        "raw_bytes_hash": "sha256:6b4deaf748203c7a32ff8acb6989d551931604274d69789bc9e57846e1519c41",
+        "semantic_hash": "sha256:a817204105e364a76b1ec511670e37f39bdc5002873548763bdba20348a8a85d",
+        "domain_separator": "icarus:workflow-semantic-correction-raw-source:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/inputs/negative.schema-unknown-field.snapshot@2.json",
+        "kind": "input_snapshot",
+        "case_id": "negative.schema-unknown-field",
+        "original_ref": "conformance/review-candidate/g2-generated-schema-join-authority-v6/inputs/negative.schema-unknown-field.snapshot@2.json",
+        "raw_bytes_hash": "sha256:7399a1785c0c1f070fb2e7389554157e25e08dc2e34ed4ce10886f1663d78b39",
+        "semantic_hash": "sha256:13934126c36820f67786fbd91ea7faadce0c94a59d745d1a345c4787b1be59e4",
+        "domain_separator": "icarus:workflow-compiler-input-snapshot-artifact:2\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/inputs/negative.schema-unknown-field.source.json",
+        "kind": "raw_source",
+        "case_id": "negative.schema-unknown-field",
+        "original_ref": "conformance/sealed/g2-semantic-correction/inputs/negative.schema-unknown-field.source.json",
+        "raw_bytes_hash": "sha256:a70599b6a0601d91213991d93c1ffad26b31c78c94b82128b49041ce2dfbf7ce",
+        "semantic_hash": "sha256:876a758b55e4be95b74b9a4d50544fd3aab8a76e7ef79328e45134e0079c7fcc",
+        "domain_separator": "icarus:workflow-semantic-correction-raw-source:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/inputs/negative.trigger-contract-invalid.snapshot@2.json",
+        "kind": "input_snapshot",
+        "case_id": "negative.trigger-contract-invalid",
+        "original_ref": "conformance/review-candidate/g2-generated-schema-join-authority-v6/inputs/negative.trigger-contract-invalid.snapshot@2.json",
+        "raw_bytes_hash": "sha256:c1491e741ab1124a41eea5ebeddd6a236e415d2256a271aa4d0cd3a76a559148",
+        "semantic_hash": "sha256:c897c2d9fcb0530b1a13a0dfeb6059f466789a9dbfd40b2a5a46fe7d3a4214fb",
+        "domain_separator": "icarus:workflow-compiler-input-snapshot-artifact:2\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/inputs/negative.trigger-contract-invalid.source.json",
+        "kind": "raw_source",
+        "case_id": "negative.trigger-contract-invalid",
+        "original_ref": "conformance/sealed/g2-semantic-correction/inputs/negative.trigger-contract-invalid.source.json",
+        "raw_bytes_hash": "sha256:df5de8d743ed24f455f4e6234e78ac5ef1bae032c01fc839c69b794e7c70260f",
+        "semantic_hash": "sha256:9ff3ff71fd019c9ed98644aa09f194341d91e08dca0a3bb2ad3ee634d18ecb06",
+        "domain_separator": "icarus:workflow-semantic-correction-raw-source:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/inputs/positive.compiler-integrity-match-control.snapshot@2.json",
+        "kind": "input_snapshot",
+        "case_id": "positive.compiler-integrity-match-control",
+        "original_ref": "conformance/review-candidate/g2-generated-schema-join-authority-v6/inputs/positive.compiler-integrity-match-control.snapshot@2.json",
+        "raw_bytes_hash": "sha256:7c5b7cc3d2e8d31943d30e99a4c4da6cf3018af4897cdf8ab77b9dc754f40ed8",
+        "semantic_hash": "sha256:89884f1a80dc608b59f32cad7480900e096519fbc7e1011b70d2ed2f30a9ef30",
+        "domain_separator": "icarus:workflow-compiler-input-snapshot-artifact:2\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/inputs/positive.compiler-integrity-match-control.source.json",
+        "kind": "raw_source",
+        "case_id": "positive.compiler-integrity-match-control",
+        "original_ref": "conformance/sealed/g2-semantic-correction/inputs/positive.compiler-integrity-match-control.source.json",
+        "raw_bytes_hash": "sha256:5f7458cec11efd0a0ccc5f2d867524fabf03d88f0b1884ffa6e264a5a64b8577",
+        "semantic_hash": "sha256:481cdf19686ef9646d45c111b2a8710be5c2cb3be964b535abf895e2ca227436",
+        "domain_separator": "icarus:workflow-semantic-correction-raw-source:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/inputs/positive.condition-route.snapshot@2.json",
+        "kind": "input_snapshot",
+        "case_id": "positive.condition-route",
+        "original_ref": "conformance/review-candidate/g2-generated-schema-join-authority-v6/inputs/positive.condition-route.snapshot@2.json",
+        "raw_bytes_hash": "sha256:7305dba6fd4ec4c1ee1710e3af950b3b8831fc0ef922aed12592738a8fa987bf",
+        "semantic_hash": "sha256:b7d0abac25df004dc17d84a74d8511e7a4650dc70a48d2237c8bbddc63455d08",
+        "domain_separator": "icarus:workflow-compiler-input-snapshot-artifact:2\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/inputs/positive.condition-route.source.json",
+        "kind": "raw_source",
+        "case_id": "positive.condition-route",
+        "original_ref": "conformance/review-candidate/g2-generated-schema-join-authority-v6/inputs/positive.condition-route.source.json",
+        "raw_bytes_hash": "sha256:4035eeade0d742cdde0b6a7e2a12d4c06401fa46ceb2c15d565f8178cbf5f872",
+        "semantic_hash": "sha256:553efe5d6cc339f525dfbd9c41067bb33474df0874f71ace3989e215fc6bc775",
+        "domain_separator": "icarus:workflow-semantic-correction-raw-source:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/inputs/positive.expand.snapshot@2.json",
+        "kind": "input_snapshot",
+        "case_id": "positive.expand",
+        "original_ref": "conformance/review-candidate/g2-generated-schema-join-authority-v6/inputs/positive.expand.snapshot@2.json",
+        "raw_bytes_hash": "sha256:8e5a46b504c66605ca1fa8f68f6ca9ee6c8636711c8251ea848470905044efa1",
+        "semantic_hash": "sha256:47f3462d5cef2064678a96410c4c746d49e9c3aed66048fbee9e90355f42e29c",
+        "domain_separator": "icarus:workflow-compiler-input-snapshot-artifact:2\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/inputs/positive.expand.source.json",
+        "kind": "raw_source",
+        "case_id": "positive.expand",
+        "original_ref": "conformance/sealed/g2-semantic-correction/inputs/positive.expand.source.json",
+        "raw_bytes_hash": "sha256:6f1518615e19d2ec49a4568f3d1999471cbb26f416a1b3b6b2a523caaa72d62f",
+        "semantic_hash": "sha256:ae55106db6354cf2be27e559a6e60d394b79c933a6474dcf022d9e53d0d320b5",
+        "domain_separator": "icarus:workflow-semantic-correction-raw-source:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/inputs/positive.map.snapshot@2.json",
+        "kind": "input_snapshot",
+        "case_id": "positive.map",
+        "original_ref": "conformance/review-candidate/g2-generated-schema-join-authority-v6/inputs/positive.map.snapshot@2.json",
+        "raw_bytes_hash": "sha256:6cf2ff79af132a4e3223d724532d9394f30db0c3eed7041b013cb314edf6dbe8",
+        "semantic_hash": "sha256:c3d16548c4bbeb1d240757017751e1d13054ace66a9a745e2a08c8d0b4cadce6",
+        "domain_separator": "icarus:workflow-compiler-input-snapshot-artifact:2\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/inputs/positive.map.source.json",
+        "kind": "raw_source",
+        "case_id": "positive.map",
+        "original_ref": "conformance/sealed/g2-semantic-correction/inputs/positive.map.source.json",
+        "raw_bytes_hash": "sha256:99de853d7b67b3fb153eba19ceaea973a9da06611cd52b3b92cb2b0a98083c8e",
+        "semantic_hash": "sha256:433e319a42c2d7201152100f536bd85fda009f88a4b7a4935f45ed52303ae959",
+        "domain_separator": "icarus:workflow-semantic-correction-raw-source:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/inputs/positive.policy-intersection.snapshot@2.json",
+        "kind": "input_snapshot",
+        "case_id": "positive.policy-intersection",
+        "original_ref": "conformance/review-candidate/g2-generated-schema-join-authority-v6/inputs/positive.policy-intersection.snapshot@2.json",
+        "raw_bytes_hash": "sha256:5e4c98e51e1ea843a60d474e42ea1aa97598a9b72346448dda6c337cda4043f7",
+        "semantic_hash": "sha256:b15f726675c99892856f33a917499df00073b792acc6add25a12ecacb11e1eef",
+        "domain_separator": "icarus:workflow-compiler-input-snapshot-artifact:2\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/inputs/positive.policy-intersection.source.json",
+        "kind": "raw_source",
+        "case_id": "positive.policy-intersection",
+        "original_ref": "conformance/sealed/g2-semantic-correction/inputs/positive.policy-intersection.source.json",
+        "raw_bytes_hash": "sha256:4bfa616cbcea23dd752ba879159e664ed2c5f618f8797972d3127c135b7f6149",
+        "semantic_hash": "sha256:675fd0232dd501fa8dfcd3eab3d4841fba62d78a7ed592bf1a2b268f3f99cdf4",
+        "domain_separator": "icarus:workflow-semantic-correction-raw-source:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/inputs/positive.quality-revision-binding.snapshot@2.json",
+        "kind": "input_snapshot",
+        "case_id": "positive.quality-revision-binding",
+        "original_ref": "conformance/review-candidate/g2-generated-schema-join-authority-v6/inputs/positive.quality-revision-binding.snapshot@2.json",
+        "raw_bytes_hash": "sha256:6ba02b6de1ca3e5e3454a4482a32215be8297ebe990d2ecf7cd2acba76673e84",
+        "semantic_hash": "sha256:4bf540c2087c212511bc5e0323f7065de8efc18ca044ba2edc7ae15d3a4435ef",
+        "domain_separator": "icarus:workflow-compiler-input-snapshot-artifact:2\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/inputs/positive.quality-revision-binding.source.json",
+        "kind": "raw_source",
+        "case_id": "positive.quality-revision-binding",
+        "original_ref": "conformance/sealed/g2-semantic-correction/inputs/positive.quality-revision-binding.source.json",
+        "raw_bytes_hash": "sha256:89fe94d5f9c0c465e7d63756771f158b60d621f6d49e2e94e1d2fc9dbbf70aad",
+        "semantic_hash": "sha256:9ebf77d5a67cc3c01faf7346ec1ad77d75874d8078ed586ce98839c77c287f98",
+        "domain_separator": "icarus:workflow-semantic-correction-raw-source:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/inputs/positive.sound-subtype-different-hash.snapshot@2.json",
+        "kind": "input_snapshot",
+        "case_id": "positive.sound-subtype-different-hash",
+        "original_ref": "conformance/review-candidate/g2-generated-schema-join-authority-v6/inputs/positive.sound-subtype-different-hash.snapshot@2.json",
+        "raw_bytes_hash": "sha256:ae4c9e52af7fc71f133a33b6a660fa440b60c4ed5939d9d5494a02e42599d3d7",
+        "semantic_hash": "sha256:0d4c2642a82d7c3dafe40c3841e496e7f999aa15ad4f9ac7cc1d324fecc77afc",
+        "domain_separator": "icarus:workflow-compiler-input-snapshot-artifact:2\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/inputs/positive.sound-subtype-different-hash.source.json",
+        "kind": "raw_source",
+        "case_id": "positive.sound-subtype-different-hash",
+        "original_ref": "conformance/sealed/g2-semantic-correction/inputs/positive.sound-subtype-different-hash.source.json",
+        "raw_bytes_hash": "sha256:68134ff8aba0ff89945b56a7e280e762da8e836d9ec3e9541c8f7a24e9401b31",
+        "semantic_hash": "sha256:7494cf363261d784f64194c6e3ae183ab0aec81530bca88034a6eb8bc540b223",
+        "domain_separator": "icarus:workflow-semantic-correction-raw-source:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/inputs/positive.static-child-closure.snapshot@2.json",
+        "kind": "input_snapshot",
+        "case_id": "positive.static-child-closure",
+        "original_ref": "conformance/review-candidate/g2-generated-schema-join-authority-v6/inputs/positive.static-child-closure.snapshot@2.json",
+        "raw_bytes_hash": "sha256:6e189b06d063cbfb395df3c64730184ff0f91ae6437b4718c983c04d87996ec5",
+        "semantic_hash": "sha256:8ca34dd25dcaf6d8a26238c00d2d78b8cdc329a01687e4b25200afce18d77481",
+        "domain_separator": "icarus:workflow-compiler-input-snapshot-artifact:2\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/inputs/positive.static-child-closure.source.json",
+        "kind": "raw_source",
+        "case_id": "positive.static-child-closure",
+        "original_ref": "conformance/sealed/g2-semantic-correction/inputs/positive.static-child-closure.source.json",
+        "raw_bytes_hash": "sha256:e00d231bb96f5b669dc399ac3ba8acd7e396d82b139546f121b28fba7a2d2a48",
+        "semantic_hash": "sha256:95003607a882135dacd0840e64848b38d812db92a1fdf1703b161b029d6605f6",
+        "domain_separator": "icarus:workflow-semantic-correction-raw-source:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/inputs/positive.static-lowering.snapshot@2.json",
+        "kind": "input_snapshot",
+        "case_id": "positive.static-lowering",
+        "original_ref": "conformance/review-candidate/g2-generated-schema-join-authority-v6/inputs/positive.static-lowering.snapshot@2.json",
+        "raw_bytes_hash": "sha256:7adfb70ce07c8a26e1c141c2a881aa4b56622ec59f046d6de88f256466fff9d5",
+        "semantic_hash": "sha256:74d21d1b356bfd0220cba058f2f48a064b94d8c336b3a114cdaeb6c979a66898",
+        "domain_separator": "icarus:workflow-compiler-input-snapshot-artifact:2\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/inputs/positive.static-lowering.source.json",
+        "kind": "raw_source",
+        "case_id": "positive.static-lowering",
+        "original_ref": "conformance/sealed/g2-semantic-correction/inputs/positive.static-lowering.source.json",
+        "raw_bytes_hash": "sha256:6bf9bcfd3d046852a293042b276524589d3f6a66f78e5c097878fa2f337d97c3",
+        "semantic_hash": "sha256:2ff581e6599426c801e40d832941da392fb46042360e8552bfca4e6b6c0f6375",
+        "domain_separator": "icarus:workflow-semantic-correction-raw-source:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/inputs/positive.subgraph.snapshot@2.json",
+        "kind": "input_snapshot",
+        "case_id": "positive.subgraph",
+        "original_ref": "conformance/review-candidate/g2-generated-schema-join-authority-v6/inputs/positive.subgraph.snapshot@2.json",
+        "raw_bytes_hash": "sha256:87a4bf6c9a9e047cd455d762ac71eb78cbaf6aee4697cba8ed74576af11829be",
+        "semantic_hash": "sha256:de2e399e405858a834e608bb80670e5f258cd53ce6fb766991ac9fa51f86304d",
+        "domain_separator": "icarus:workflow-compiler-input-snapshot-artifact:2\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/inputs/positive.subgraph.source.json",
+        "kind": "raw_source",
+        "case_id": "positive.subgraph",
+        "original_ref": "conformance/sealed/g2-semantic-correction/inputs/positive.subgraph.source.json",
+        "raw_bytes_hash": "sha256:47c9d691f565f3b9df290b6f65357d03ed47bd755694e6884e78f86ea7c6987f",
+        "semantic_hash": "sha256:1514c5978cfd1dc479a326a3efda6dbe2145914b4fba6728f57dff7048e57583",
+        "domain_separator": "icarus:workflow-semantic-correction-raw-source:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/inputs/positive.wait.snapshot@2.json",
+        "kind": "input_snapshot",
+        "case_id": "positive.wait",
+        "original_ref": "conformance/review-candidate/g2-generated-schema-join-authority-v6/inputs/positive.wait.snapshot@2.json",
+        "raw_bytes_hash": "sha256:d311e8d6d2a0fa8eb08de2bafdf26ebba66d669d674d57775a186554246fff6f",
+        "semantic_hash": "sha256:d403641f98ed3a093301ffc43f6c1aa8f97b8ad9a82c40952ff395464a43a3cd",
+        "domain_separator": "icarus:workflow-compiler-input-snapshot-artifact:2\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/inputs/positive.wait.source.json",
+        "kind": "raw_source",
+        "case_id": "positive.wait",
+        "original_ref": "conformance/sealed/g2-semantic-correction/inputs/positive.wait.source.json",
+        "raw_bytes_hash": "sha256:b9b051e49d6413ae9a809f5308cb2d57bd8058fa2633b361f366b5f037770096",
+        "semantic_hash": "sha256:cb98184e425d0cea2c45945204c2c17c9f5416f2a6870940f435a2f4c99b4be1",
+        "domain_separator": "icarus:workflow-semantic-correction-raw-source:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/schemas/golden-conformance-bundle-schema@2.json",
+        "kind": "schema",
+        "case_id": null,
+        "original_ref": null,
+        "raw_bytes_hash": "sha256:8db0f47dd1205ad04cf76aeebb22b3dd04f25d7e04978ab53d478944da2285af",
+        "semantic_hash": "sha256:54f14e1fc16274f81b032ce0b7a9f0b3630f0a25ab1a2d251319d47e4d057763",
+        "domain_separator": "icarus:workflow-compiler-conformance-bundle-schema:1\n"
+      },
+      {
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/schemas/golden-conformance-inventory-schema@2.json",
+        "kind": "schema",
+        "case_id": null,
+        "original_ref": null,
+        "raw_bytes_hash": "sha256:db908f35b1d7280c74c450c53fc13a9cfd6c1fce96e67a7526bd5c0228803cd9",
+        "semantic_hash": "sha256:2655cf18fb42f2e9bf4d32fbc6acfabcda51470c3aebef13d0b42b5b3c111010",
+        "domain_separator": "icarus:workflow-compiler-conformance-inventory-schema:1\n"
+      }
+    ],
+    "inventory_hash": "sha256:df341739351d81bb91971c57bb58e4c48902cefaa5bd5e130e9dd412ab4d8446"
+  }
+}

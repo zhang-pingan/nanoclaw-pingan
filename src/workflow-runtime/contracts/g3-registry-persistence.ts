@@ -871,7 +871,7 @@ export function g3RegistryPersistenceFixturesForTest(): {
     ref: FIXTURE_SNAPSHOT_REF,
     closure_ref: closure.ref,
     closure_hash: closure.closure_hash,
-    compiler_version: '3.0.3',
+    compiler_version: '3.0.4',
     core_build_hash:
       'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' as Sha256Hash,
     database_schema_hash:
@@ -1005,7 +1005,7 @@ function validateUpstreamIdentities(): void {
   const exactArtifacts: Array<[string, Sha256Hash]> = [
     [
       'contract-pack-g3-registry-publish-foundation.json',
-      'sha256:c9364171a3d28a752d4510f59e5e45016cd86be14d7e151b483fc0c6c7a2807d',
+      'sha256:a25e99fce7485ce433f96291ddea64a90f15fa839296c8496eded4c168c7b70b',
     ],
     [
       'contract-pack-g3.2a-feature-manifest-intake.json',
@@ -1021,13 +1021,13 @@ function validateUpstreamIdentities(): void {
       throw new Error(`G3 Registry upstream identity drift: ${file}`);
   }
   const sealed = readArtifact(
-    'conformance/sealed/g2-generated-schema-join-authority-v5/golden-conformance-bundle@2.json',
+    'conformance/sealed/g2-generated-schema-join-authority-v6/golden-conformance-bundle@2.json',
   );
   if (
     sealed.hash !==
-      'sha256:f59040be6f71d8655afcb11ab4527a6683125a7a4e683f1e734b44448f7bb72e' ||
+      'sha256:0e5ea012864bce2dae7d0435e700b78b6d3299703f896c737677d24f46d8f78f' ||
     sealed.payload.bundle_hash !==
-      'sha256:b37ddf415d12d759ddd4b72b754568e01715704d254da26e3355e0898cfeda05'
+      'sha256:4110072a90b441f154f580a647a30bd24a9aa3f052635c22e8e7d3dbe0a31967'
   ) {
     throw new Error('G3 Registry upstream G2 sealed identity drift');
   }
@@ -1148,17 +1148,17 @@ function buildManifest(
       upstream_g3_2a_pack_hash:
         'sha256:c9c273b6d294d512a3578203d91d4bdce7863a3ccb561fdd7da08d072b3d8cd9',
       upstream_g3_1_pack_hash:
-        'sha256:c9364171a3d28a752d4510f59e5e45016cd86be14d7e151b483fc0c6c7a2807d',
+        'sha256:a25e99fce7485ce433f96291ddea64a90f15fa839296c8496eded4c168c7b70b',
       upstream_g3_2_pack_hash:
         'sha256:1eb0b81f488f4a37fa4503ddfef0dfa8a56d40fdeb535c9758d9d21fd39bb92b',
       upstream_g2_sealed_bundle_hash:
-        'sha256:b37ddf415d12d759ddd4b72b754568e01715704d254da26e3355e0898cfeda05',
+        'sha256:4110072a90b441f154f580a647a30bd24a9aa3f052635c22e8e7d3dbe0a31967',
       upstream_g1_schema_root_hash:
-        'sha256:3cc206a6dfb1bbaed1bb0f4305323729db23d839652d8a0e020a9a6c4d3e3dd6',
+        'sha256:b60e3c7fe91d1cfab341d487102c7bff13ad73a320444b45fb6ea71d8b914306',
       upstream_g1_schema_hash:
-        'sha256:37f0102a9d6b0077f0d44f20182a7d5768ce32b1c0c2c3998937178b06c9b474',
+        'sha256:27a212831d2abd8898eb8becbfd714d96b1bfb15d818d471cfc58fdc36196e65',
       upstream_g1_migration_sha256:
-        'sha256:16a46e84c77d734013e18b4b00b86564f6188ea73717763e9fb7a884d62faa41',
+        'sha256:b4307930cedd9e0b8acbec599a2b3b29cb18f78840a726532b108459a4df2497',
       production_registry_write_performed: false,
       production_activation_performed: false,
       publisher_implemented: false,

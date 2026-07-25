@@ -12,10 +12,12 @@
     "status": "DONE",
     "g3_status": "EXIT_CANDIDATE_PENDING_INDEPENDENT_G3_REGRESSION",
     "upstream": {
-      "database_schema_version": 6,
-      "g1_root_hash": "sha256:3cc206a6dfb1bbaed1bb0f4305323729db23d839652d8a0e020a9a6c4d3e3dd6",
-      "database_schema_hash": "sha256:37f0102a9d6b0077f0d44f20182a7d5768ce32b1c0c2c3998937178b06c9b474",
+      "database_schema_version": 7,
+      "g1_root_hash": "sha256:b60e3c7fe91d1cfab341d487102c7bff13ad73a320444b45fb6ea71d8b914306",
+      "database_schema_hash": "sha256:27a212831d2abd8898eb8becbfd714d96b1bfb15d818d471cfc58fdc36196e65",
+      "schema7_migration_hash": "sha256:b4307930cedd9e0b8acbec599a2b3b29cb18f78840a726532b108459a4df2497",
       "schema6_migration_hash": "sha256:16a46e84c77d734013e18b4b00b86564f6188ea73717763e9fb7a884d62faa41",
+      "schema6_to_7_upgrade_hash": "sha256:225c5f148347dc42ca086bfb0bf7db957d13eb1be502f155465e20ee66010062",
       "schema5_migration_hash": "sha256:2ead40dc2f1618f87247e9d3bb476266797c38560e1ad0537a6afa6f71a3fbf6",
       "schema5_to_6_upgrade_hash": "sha256:dc94fa0867ca572b7ec39ffb8df448e38be00ca4831f1d420885ee7cc097687d",
       "schema3_to_4_upgrade_hash": "sha256:5ac263fe3279c61f74ba6314f5df98fff59a8f8b32acfa784d2040421ebaa3cf",
@@ -24,18 +26,18 @@
       "g3_8a_pack_hash": "sha256:d8412111a0f3dcabb4ce416b99086701ea3e3911ff431b5457eb957b2f69722f",
       "g3_8a_repair_artifact_hash": "sha256:94cb2c390bb44298238b1ffac4184b04f59efbbeae6f268fbce7618104ec406b",
       "g3_8a_internal_contract_hash": "sha256:70d4b9ef47c83711415636737292450538acaf5cc4547d3130b04b101e6707ae",
-      "g3_6_pack_hash": "sha256:7f807ae53e13bcec7712f77c1ebaba7aab5f72d2779ed5d99d33b0e6c54e98d3",
-      "g3_7_pack_hash": "sha256:5d023a5323aec482781b0e992197571db9a09481a394eaf955d4598c249e4ec1",
-      "g2_sealed_bundle_hash": "sha256:b37ddf415d12d759ddd4b72b754568e01715704d254da26e3355e0898cfeda05"
+      "g3_6_pack_hash": "sha256:0b1079429b4fa65ffdad1061a0e664ae2a08b6c692645067787b051031c49337",
+      "g3_7_pack_hash": "sha256:bc0c536a09f8bd79cffa5da78add54747c7a6f075e58ab0bfc93f0d13ce363b1",
+      "g2_sealed_bundle_hash": "sha256:4110072a90b441f154f580a647a30bd24a9aa3f052635c22e8e7d3dbe0a31967"
     },
     "schema_resource_hashes": {
       "request": "sha256:b1eb5681861d4537eb9dc5bf77844c00176d9445eb76b5eb82494504f2f62116",
       "receipt": "sha256:68049e60a9febc4c65a162c930f93757386503ee054ce64046e562b134c85ffe",
       "result": "sha256:c99c78fb1a7701264e20ae1d29824bafac183787ba79ab22398d4d5045f80f1a",
       "compatibility_input": "sha256:512107167b9951f331eef329aac6620d8a460ad578ff3296be87b0540b8fc462",
-      "compatibility_result": "sha256:c831744be71e3592e569c91dc0d7469a97364a59a6ba980c6d2c33bcf34298a5"
+      "compatibility_result": "sha256:1fcd97626dad67482a3a22ca0de3050ff236be5341590dee759e8d325318c35b"
     },
-    "fixture_digest": "sha256:5678c30d064563334b97ca1d9b252066e3e4972bab34f349de9a032bea875229",
+    "fixture_digest": "sha256:d1450ac95337c321bdd3d37721ac71a14c69118e573d9ed14c3d1363825dcc62",
     "error_precedence": [
       "activation_request_strict_parse_invalid",
       "activation_request_removed_field",
@@ -187,5 +189,5 @@
     "authoring_stages_implemented": false,
     "g4_through_g9_status": "NOT_READY"
   },
-  "hash": "sha256:cbb6b355819b1eefefa7af5289b10b367c42bbe32b09f003151bc7f9ebf475d7"
+  "hash": "sha256:5ab7b3b322b4bad4a08e56569b79f4b9ec3ecd8b8240c013b5992a8d16eb5593"
 }

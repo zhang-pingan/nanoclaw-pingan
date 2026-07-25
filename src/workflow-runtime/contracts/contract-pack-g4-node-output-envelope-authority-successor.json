@@ -1,0 +1,81 @@
+{
+  "format": "icarus.workflow-g4-node-output-envelope-authority-successor/1",
+  "ref": {
+    "id": "icarus.workflow-g4-node-output-envelope-authority-successor",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-g4-node-output-envelope-authority-successor:1\n",
+  "payload": {
+    "gate": "G4",
+    "status": "NODE_OUTPUT_ENVELOPE_SCHEMA_AUTHORITY_REPAIR_EXIT_CANDIDATE_PENDING_INDEPENDENT_AFFECTED_CHAIN_REGRESSION",
+    "current_closure": "REOPENED_PENDING_INDEPENDENT_AFFECTED_CHAIN_REGRESSION",
+    "predecessor": {
+      "path": "contract-pack-g4-test-bootstrap.json",
+      "raw_sha256": "sha256:1760da21231d46a323caf43ab5936ba90fbe378bf978e4a638caeefcd95082c7",
+      "artifact_hash": "sha256:bd7b944c66181e05add3618e6355a1acc64ff452dc4c027d4556c776a4402046",
+      "member_count": 14,
+      "member_raw_tree_hash": "sha256:d4ad1ff6e3f08cbaa5e9b54f1342213d9612dd03078bdcd21abf1870c28f7bf2",
+      "profile_hash": "sha256:87956027bca69d9fcdb1891298dc2a083a9e413c4530d7aff71473b74a58c106",
+      "implementation_artifact_hash": "sha256:4ced1df4314038474b41c19b313531b25bc31671969529caa33876f18d448275",
+      "implementation_hash": "sha256:1a04adf90718c7ad7f53caf93fd2a02ca00857e86ab96bfcf81ae137aef1a552",
+      "disposition": "frozen_historical_authority"
+    },
+    "current_store": {
+      "database_schema_version": 7,
+      "g1_root_hash": "sha256:b60e3c7fe91d1cfab341d487102c7bff13ad73a320444b45fb6ea71d8b914306",
+      "database_schema_hash": "sha256:27a212831d2abd8898eb8becbfd714d96b1bfb15d818d471cfc58fdc36196e65",
+      "schema7_migration_hash": "sha256:b4307930cedd9e0b8acbec599a2b3b29cb18f78840a726532b108459a4df2497",
+      "schema6_to_7_upgrade_hash": "sha256:225c5f148347dc42ca086bfb0bf7db957d13eb1be502f155465e20ee66010062"
+    },
+    "upstreams": [
+      {
+        "role": "r019_node_output_envelope_authority",
+        "path": "conformance/generated-schema-join-authority-repair/contract-pack-generated-schema-join-authority-repair.json",
+        "hash": "sha256:7a852ff21a77a767b708ab8a4fc5c329024ca954422b26d71210b0385ce05441"
+      },
+      {
+        "role": "g1_schema_7",
+        "path": "../store/schema/contract-pack-g1-executable-schema.json",
+        "hash": "sha256:b60e3c7fe91d1cfab341d487102c7bff13ad73a320444b45fb6ea71d8b914306"
+      },
+      {
+        "role": "g2_v6_sealed_bundle",
+        "path": "conformance/sealed/g2-generated-schema-join-authority-v6/golden-conformance-bundle@2.json",
+        "hash": "sha256:0e5ea012864bce2dae7d0435e700b78b6d3299703f896c737677d24f46d8f78f"
+      },
+      {
+        "role": "g3_6_retention_executor_abi",
+        "path": "contract-pack-g3-retention-executor-abi-preflight.json",
+        "hash": "sha256:0b1079429b4fa65ffdad1061a0e664ae2a08b6c692645067787b051031c49337"
+      },
+      {
+        "role": "g3_7_workflow_publisher",
+        "path": "contract-pack-g3-workflow-publisher.json",
+        "hash": "sha256:bc0c536a09f8bd79cffa5da78add54747c7a6f075e58ab0bfc93f0d13ce363b1"
+      },
+      {
+        "role": "g3_8a_frozen_activation_repair",
+        "path": "contract-pack-g3.8a-activation-contract-repair.json",
+        "hash": "sha256:d8412111a0f3dcabb4ce416b99086701ea3e3911ff431b5457eb957b2f69722f"
+      },
+      {
+        "role": "g3_9_feature_release_activation",
+        "path": "contract-pack-g3.9-feature-release-activation.json",
+        "hash": "sha256:5ab7b3b322b4bad4a08e56569b79f4b9ec3ecd8b8240c013b5992a8d16eb5593"
+      }
+    ],
+    "selection": {
+      "successor_is_current_machine_authority": true,
+      "bootstrap_runtime_selectable": false,
+      "activation_condition": "independent_affected_chain_regression_required",
+      "registry_latest_lookup": "forbidden",
+      "network_or_fallback": "forbidden"
+    },
+    "g5_status": "BLOCKED_BY_SPEC/NOT_READY",
+    "g6_through_g9_status": "NOT_READY",
+    "runtime_construction_performed": false,
+    "production_authorization": false
+  },
+  "hash": "sha256:2e77b1514cdccf445f936e0ce5746138a14a11b820140a58fc92f8fea2a43cf8"
+}

@@ -1,0 +1,375 @@
+{
+  "format": "icarus.workflow-compiler-g2-node-output-envelope-authority-inventory/1",
+  "ref": {
+    "id": "icarus.workflow-compiler-g2-node-output-envelope-authority-inventory",
+    "version": "2.0.0-rc"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-compiler-g2-node-output-envelope-authority-rc-inventory-artifact:1\n",
+  "hash": "sha256:7b6e3bed7fa1d8ed4c2266c742196082fa15e7cd67d1ac1c3063a3fc43aae1bc",
+  "payload": {
+    "format": "icarus.workflow-compiler-g2-node-output-envelope-authority-inventory/1",
+    "construction_phase": "RC_REVIEW",
+    "inventory_scope": "successor_rc_leaf_artifacts_excluding_inventory_and_root",
+    "entry_count": 89,
+    "entries": [
+      {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v6/actual/negative.capability-not-allowed.result.json",
+        "raw_bytes_hash": "sha256:3fa7379547cd01b7780b0e7ed33bdddb3cef4881f343603b057d9f3c274dd107"
+      },
+      {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v6/actual/negative.child-recipe-dependency-cycle.result.json",
+        "raw_bytes_hash": "sha256:6d6f35bc37bb3bb228358067df13d177b85b30e084e84406f61ba50268ddaa28"
+      },
+      {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v6/actual/negative.child-recipe-set-mismatch.result.json",
+        "raw_bytes_hash": "sha256:c1fd2138a21e58b723bb85ee661c306e8b729398ff0a6cece7acbca77a591b91"
+      },
+      {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v6/actual/negative.compiler-integrity-mismatch.result.json",
+        "raw_bytes_hash": "sha256:cc0c0c19afdeecb9c663ca8b61677076292af17258d16e4738e2b09ef2016ecf"
+      },
+      {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v6/actual/negative.completion-contract-invalid.result.json",
+        "raw_bytes_hash": "sha256:7016727fb2617427e9e85b087bcc7dcd8af37dd0bfddf6d2703a390c70fbddb3"
+      },
+      {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v6/actual/negative.condition-complexity-exceeded.result.json",
+        "raw_bytes_hash": "sha256:4a78e14eeb5c56a66c0eca2c9bb407071a14d7d84ecd893ab9f2c86608a989d0"
+      },
+      {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v6/actual/negative.condition-type-mismatch.result.json",
+        "raw_bytes_hash": "sha256:3dade061fbc412ad165b33f9e40156f7a83c04271db38212240b7ab001f6bfbd"
+      },
+      {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v6/actual/negative.definition-child-creation-key-template.result.json",
+        "raw_bytes_hash": "sha256:262e774f9d8ceaf1beabcb78b0e821b047b02600ac5ad4ffb73104d5330cf2b5"
+      },
+      {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v6/actual/negative.definition-notification-delivery-requirement.result.json",
+        "raw_bytes_hash": "sha256:4f1ff85e3f78284ea22173b31843bd534d63643d2549ba0bd0811f1db1e9cd32"
+      },
+      {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v6/actual/negative.early-completion-non-monotone.result.json",
+        "raw_bytes_hash": "sha256:b3290584bd265f989e02542021d5784e5a166b7283ffa35cfe5ef12a6deb1500"
+      },
+      {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v6/actual/negative.graph-cross-scope-edge.result.json",
+        "raw_bytes_hash": "sha256:5e85f1cbdfc42c5e95f1ca66b0248932f62f177c96d02f35d4537bb3606f49ee"
+      },
+      {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v6/actual/negative.graph-dependency-cycle.result.json",
+        "raw_bytes_hash": "sha256:281c9348e73b53e49c8cca498703278aea50eae835aeb899dc202c40898c5653"
+      },
+      {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v6/actual/negative.graph-endpoint-not-found.result.json",
+        "raw_bytes_hash": "sha256:a41a0dcea7837d48a7fc61e6f3be4281d112aac2890c47c031874f300466188d"
+      },
+      {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v6/actual/negative.graph-id-duplicate.result.json",
+        "raw_bytes_hash": "sha256:9ca2ad9816ef58d00509c534a56de0782358d2e77d51dc24e49ccaf55bd33dc5"
+      },
+      {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v6/actual/negative.json-duplicate-key.result.json",
+        "raw_bytes_hash": "sha256:c775a5b73d278e0666e70b30231994248658789b7ddf7a101515a0c0e1b56b30"
+      },
+      {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v6/actual/negative.json-pointer-non-total.result.json",
+        "raw_bytes_hash": "sha256:61fa2cf63bc914df7756fb3361eaa12df8ec159aa61633fdc118fa9969d10562"
+      },
+      {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v6/actual/negative.json-syntax-invalid.result.json",
+        "raw_bytes_hash": "sha256:44b34da8d2b67ff5965f26c30f4e09da9f37352981222477923f6d1051b1e7ec"
+      },
+      {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v6/actual/negative.policy-escalation.result.json",
+        "raw_bytes_hash": "sha256:dae9c40c66031c29f2c261036fabe3dfb538454f85d72dfb43f4b45a2205be89"
+      },
+      {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v6/actual/negative.quality-revision-effect-key-incompatible.result.json",
+        "raw_bytes_hash": "sha256:ee605125fb405652222e871550f6f905fce4e708946bff7df20655568e54c45b"
+      },
+      {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v6/actual/negative.quality-revision-missing-feedback-schema.result.json",
+        "raw_bytes_hash": "sha256:c73728dfbbfbbdaf55526121329ff2f5d8ea2e446f788695f0c4aecf152a2c70"
+      },
+      {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v6/actual/negative.quality-revision-missing-quality-gate.result.json",
+        "raw_bytes_hash": "sha256:21082baa138ec345524757f3442c13bb1ddb1a1e08926b19903c461d2bc2d5e8"
+      },
+      {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v6/actual/negative.registry-ref-not-found.result.json",
+        "raw_bytes_hash": "sha256:b308b10e80a2299ea84669a6bf669343f7fdbf1b922c6e5bc103e4d3528fc189"
+      },
+      {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v6/actual/negative.registry-ref-unpinned.result.json",
+        "raw_bytes_hash": "sha256:7b39ee15c6e3c66f5dd19b79b6f3c27314c83c742d1e789e184f99d80a069674"
+      },
+      {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v6/actual/negative.route-group-ambiguous.result.json",
+        "raw_bytes_hash": "sha256:1cc0d50f4a40dc49fbb316147fb8ca7e5bb039c9ed8de6443936a05161bca98b"
+      },
+      {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v6/actual/negative.runtime-safety-limit-exceeded.result.json",
+        "raw_bytes_hash": "sha256:4ff4cc3b8df16c277c8e9cf3f616fd58f6affa1fa21dce8a1ad8c61cd85c1d24"
+      },
+      {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v6/actual/negative.schema-not-assignable.result.json",
+        "raw_bytes_hash": "sha256:210d30db886ef60e254bda2aeb3970ea309555d2e4c1ee2d752f6cf771095dd9"
+      },
+      {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v6/actual/negative.schema-profile-keyword-unsupported.result.json",
+        "raw_bytes_hash": "sha256:272e8506a5819e69274184a87b8d82c86e83376dde3be84d478f458b4bf6ffe0"
+      },
+      {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v6/actual/negative.schema-unknown-field.result.json",
+        "raw_bytes_hash": "sha256:77578314e70a0eb3cacb7fd1b8a662641e3e7fa14bd2389b37cb5da942c82e69"
+      },
+      {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v6/actual/negative.trigger-contract-invalid.result.json",
+        "raw_bytes_hash": "sha256:186a0c482d24069447467e2798529a302dcfcb3dd85a40a5a7760d243a6e2e1e"
+      },
+      {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v6/actual/positive.compiler-integrity-match-control.result.json",
+        "raw_bytes_hash": "sha256:4cc32dfb95964d4a203ac4fe0395435f64f09763a2a81e6d4705c05ac772df2c"
+      },
+      {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v6/actual/positive.condition-route.result.json",
+        "raw_bytes_hash": "sha256:15682b38c30a9b5cfd76fbc51359da6d0db97b4bf445c44a95df6ce3e0958dc7"
+      },
+      {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v6/actual/positive.expand.result.json",
+        "raw_bytes_hash": "sha256:072c7766a14c1608bcb5af8b2f79572f5fd42c43ed3ecce778e2491a28adb81d"
+      },
+      {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v6/actual/positive.map.result.json",
+        "raw_bytes_hash": "sha256:5ab3ef955a2c4c2c64ee17f30211c55a5bb95a6c216326ceefb48bbf49c742e8"
+      },
+      {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v6/actual/positive.policy-intersection.result.json",
+        "raw_bytes_hash": "sha256:7589a08c952486097344de19b0b44a87190da85109ed11a204f29a621c003002"
+      },
+      {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v6/actual/positive.quality-revision-binding.result.json",
+        "raw_bytes_hash": "sha256:b26b1e6f29d43794a49352f0a922892596b38bd127944e233c890298261620cb"
+      },
+      {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v6/actual/positive.sound-subtype-different-hash.result.json",
+        "raw_bytes_hash": "sha256:a333c64c8564ee01361e81637a9d6f0dc843c24627838fea8117f74d8aec5aa5"
+      },
+      {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v6/actual/positive.static-child-closure.result.json",
+        "raw_bytes_hash": "sha256:9704935e67f4718488779bf2abab759fecf0e958a3cb2a4952b586468cb695ce"
+      },
+      {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v6/actual/positive.static-lowering.result.json",
+        "raw_bytes_hash": "sha256:1757cef5e2c3d0a6f7a33b6f977e6c34d09ec70e43cb91a68c644c81d8650740"
+      },
+      {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v6/actual/positive.subgraph.result.json",
+        "raw_bytes_hash": "sha256:e6aa68e5d8323dbc1364f8ff7f94e135fe11dfa089847c663b37346be9911e40"
+      },
+      {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v6/actual/positive.wait.result.json",
+        "raw_bytes_hash": "sha256:0dbc052ede004b76e47b225dbbdd5f9f853ae8db9d28aed12e4ee61a81a80485"
+      },
+      {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v6/g2-case-input-binding@4.json",
+        "raw_bytes_hash": "sha256:b56c906bb54b331329447df273c1cc40899278b3c326d0199149ec4a4a7893fb"
+      },
+      {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v6/inputs/negative.capability-not-allowed.snapshot@2.json",
+        "raw_bytes_hash": "sha256:abcd4bc91d9f14439821f6d52e51da342bfad4a9bae5abf2d39ccc618b30fcdd"
+      },
+      {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v6/inputs/negative.child-recipe-dependency-cycle.snapshot@2.json",
+        "raw_bytes_hash": "sha256:98ee8e3128e736f1d284444b00a1baf6c3fa2e4339c4c3325151a7fe9ca27037"
+      },
+      {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v6/inputs/negative.child-recipe-set-mismatch.snapshot@2.json",
+        "raw_bytes_hash": "sha256:a27edd6f325862fcbbee23eed86facc246d887afe6fb478a88f18aa5950e4eb5"
+      },
+      {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v6/inputs/negative.compiler-integrity-mismatch.snapshot@2.json",
+        "raw_bytes_hash": "sha256:faf94b12d7b1a049b771597d643f0f6fe9da1d2e27b2d31a2c01454aaf7c57e6"
+      },
+      {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v6/inputs/negative.completion-contract-invalid.snapshot@2.json",
+        "raw_bytes_hash": "sha256:31ec764e3bf5156b1176824617482900b17bdb9d74b7b2f59d3ecb5f168eea39"
+      },
+      {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v6/inputs/negative.condition-complexity-exceeded.snapshot@2.json",
+        "raw_bytes_hash": "sha256:dc1a8740b852330e9d5ec7e8de526507beac015fde0b7ef5dd5ece2adea5c21a"
+      },
+      {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v6/inputs/negative.condition-type-mismatch.snapshot@2.json",
+        "raw_bytes_hash": "sha256:53129a408745f4e2b3170691edfd751133921889e724dcb2d3d1b87bb6aa918c"
+      },
+      {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v6/inputs/negative.definition-child-creation-key-template.snapshot@2.json",
+        "raw_bytes_hash": "sha256:2794e3259bab382569485e853dbc57b9e716e1f1660fd29c0f498c482806960a"
+      },
+      {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v6/inputs/negative.definition-notification-delivery-requirement.snapshot@2.json",
+        "raw_bytes_hash": "sha256:60788f1903d2ddafa807383254db89348174c11854f4ae26e95043eb8fa971c6"
+      },
+      {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v6/inputs/negative.early-completion-non-monotone.snapshot@2.json",
+        "raw_bytes_hash": "sha256:340b7107b3edb34ad34c2654584b2502725bbbe4cd0048982c3334d58e9e213c"
+      },
+      {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v6/inputs/negative.graph-cross-scope-edge.snapshot@2.json",
+        "raw_bytes_hash": "sha256:49b05afdd66da6a66e868d83bfb2dfd14e12e30ca08c289158893a2171f59a56"
+      },
+      {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v6/inputs/negative.graph-cross-scope-edge.source.json",
+        "raw_bytes_hash": "sha256:0a1aaee239050abdd41e6cb72973410b316658bd33b57e38a99c6d9500a07ff7"
+      },
+      {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v6/inputs/negative.graph-dependency-cycle.snapshot@2.json",
+        "raw_bytes_hash": "sha256:c7ac039a678ea408e6178748a632cc0aecebaa10357585e8913d75b2b42861c9"
+      },
+      {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v6/inputs/negative.graph-endpoint-not-found.snapshot@2.json",
+        "raw_bytes_hash": "sha256:d7773e9ed3296f96712b846abe25281db014988cde42cda0b2ae67f77d94075c"
+      },
+      {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v6/inputs/negative.graph-id-duplicate.snapshot@2.json",
+        "raw_bytes_hash": "sha256:70ae8a58aade69726c21afd34b108ab51532831fb1edeccd6cd2391080951809"
+      },
+      {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v6/inputs/negative.json-duplicate-key.snapshot@2.json",
+        "raw_bytes_hash": "sha256:438e11e050dc0740a727ab6eeb79e4f8c31e44a46af0bbc625096ae4a1bfb222"
+      },
+      {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v6/inputs/negative.json-pointer-non-total.snapshot@2.json",
+        "raw_bytes_hash": "sha256:7ec991217b25120e1eee4b2dad6789dc25eb09963fd8ef69bb6e39a8ee3b3d3d"
+      },
+      {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v6/inputs/negative.json-syntax-invalid.snapshot@2.json",
+        "raw_bytes_hash": "sha256:f351e9b655b95aadc90593b51d9a7a43b3b651ce30bb0d101e22f1ea1d1ccc8f"
+      },
+      {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v6/inputs/negative.policy-escalation.snapshot@2.json",
+        "raw_bytes_hash": "sha256:8a867466616aedbdda2022c30618c5531d92d5b469d33250f9696ad180ca1243"
+      },
+      {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v6/inputs/negative.quality-revision-effect-key-incompatible.snapshot@2.json",
+        "raw_bytes_hash": "sha256:bbe3f2ac3af0dfa19b409144e00be46b3a5f196610424e7f1b3e6c470869e2df"
+      },
+      {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v6/inputs/negative.quality-revision-missing-feedback-schema.snapshot@2.json",
+        "raw_bytes_hash": "sha256:51c0d8d8135630c7a27e496a18a264e342712c2a992b256250759611d82ed430"
+      },
+      {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v6/inputs/negative.quality-revision-missing-quality-gate.snapshot@2.json",
+        "raw_bytes_hash": "sha256:5133beae92ab7037840c66fc010045ab46c0f231440b226aeef8713e46f5e4a4"
+      },
+      {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v6/inputs/negative.registry-ref-not-found.snapshot@2.json",
+        "raw_bytes_hash": "sha256:36289d7fe8670683b53699b79988b2000f364425d2e945b40304f28d86b9bc18"
+      },
+      {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v6/inputs/negative.registry-ref-unpinned.snapshot@2.json",
+        "raw_bytes_hash": "sha256:5f188fb400f604f9cea15000a4f380b410731b704000459ab625a8a8e8c5f7f1"
+      },
+      {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v6/inputs/negative.route-group-ambiguous.snapshot@2.json",
+        "raw_bytes_hash": "sha256:7969d42ae17ee031d96a6aebab59b8b7fcb1617600451f899c5c264d5b03e50f"
+      },
+      {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v6/inputs/negative.runtime-safety-limit-exceeded.snapshot@2.json",
+        "raw_bytes_hash": "sha256:8574f34946e1a3e9b872b6eb3b7c47a7e28b49681c122ee0f53d7a9c30664105"
+      },
+      {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v6/inputs/negative.schema-not-assignable.snapshot@2.json",
+        "raw_bytes_hash": "sha256:f4f4c368eedc2262e210d236501a46e9a8471d70bebf58dc36fa28b087c89413"
+      },
+      {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v6/inputs/negative.schema-profile-keyword-unsupported.snapshot@2.json",
+        "raw_bytes_hash": "sha256:91d6d3d3c7f3bd7c48d4d41ab1cf8a9e8e26b5e7ec1184cabfeaab8490c7276f"
+      },
+      {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v6/inputs/negative.schema-unknown-field.snapshot@2.json",
+        "raw_bytes_hash": "sha256:7399a1785c0c1f070fb2e7389554157e25e08dc2e34ed4ce10886f1663d78b39"
+      },
+      {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v6/inputs/negative.trigger-contract-invalid.snapshot@2.json",
+        "raw_bytes_hash": "sha256:c1491e741ab1124a41eea5ebeddd6a236e415d2256a271aa4d0cd3a76a559148"
+      },
+      {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v6/inputs/positive.compiler-integrity-match-control.snapshot@2.json",
+        "raw_bytes_hash": "sha256:7c5b7cc3d2e8d31943d30e99a4c4da6cf3018af4897cdf8ab77b9dc754f40ed8"
+      },
+      {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v6/inputs/positive.condition-route.snapshot@2.json",
+        "raw_bytes_hash": "sha256:7305dba6fd4ec4c1ee1710e3af950b3b8831fc0ef922aed12592738a8fa987bf"
+      },
+      {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v6/inputs/positive.condition-route.source.json",
+        "raw_bytes_hash": "sha256:4035eeade0d742cdde0b6a7e2a12d4c06401fa46ceb2c15d565f8178cbf5f872"
+      },
+      {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v6/inputs/positive.expand.snapshot@2.json",
+        "raw_bytes_hash": "sha256:8e5a46b504c66605ca1fa8f68f6ca9ee6c8636711c8251ea848470905044efa1"
+      },
+      {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v6/inputs/positive.map.snapshot@2.json",
+        "raw_bytes_hash": "sha256:6cf2ff79af132a4e3223d724532d9394f30db0c3eed7041b013cb314edf6dbe8"
+      },
+      {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v6/inputs/positive.policy-intersection.snapshot@2.json",
+        "raw_bytes_hash": "sha256:5e4c98e51e1ea843a60d474e42ea1aa97598a9b72346448dda6c337cda4043f7"
+      },
+      {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v6/inputs/positive.quality-revision-binding.snapshot@2.json",
+        "raw_bytes_hash": "sha256:6ba02b6de1ca3e5e3454a4482a32215be8297ebe990d2ecf7cd2acba76673e84"
+      },
+      {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v6/inputs/positive.sound-subtype-different-hash.snapshot@2.json",
+        "raw_bytes_hash": "sha256:ae4c9e52af7fc71f133a33b6a660fa440b60c4ed5939d9d5494a02e42599d3d7"
+      },
+      {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v6/inputs/positive.static-child-closure.snapshot@2.json",
+        "raw_bytes_hash": "sha256:6e189b06d063cbfb395df3c64730184ff0f91ae6437b4718c983c04d87996ec5"
+      },
+      {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v6/inputs/positive.static-lowering.snapshot@2.json",
+        "raw_bytes_hash": "sha256:7adfb70ce07c8a26e1c141c2a881aa4b56622ec59f046d6de88f256466fff9d5"
+      },
+      {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v6/inputs/positive.subgraph.snapshot@2.json",
+        "raw_bytes_hash": "sha256:87a4bf6c9a9e047cd455d762ac71eb78cbaf6aee4697cba8ed74576af11829be"
+      },
+      {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v6/inputs/positive.wait.snapshot@2.json",
+        "raw_bytes_hash": "sha256:d311e8d6d2a0fa8eb08de2bafdf26ebba66d669d674d57775a186554246fff6f"
+      },
+      {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v6/review-candidate-cases@2.json",
+        "raw_bytes_hash": "sha256:b3b7997d00df1744c1ea3cc70235c478e7c9e347655f3a35efdff5aad91aaa31"
+      },
+      {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v6/workflow-compiler-toolchain@3.0.4.json",
+        "raw_bytes_hash": "sha256:96163d67afa7c20d536350bc8284a60ebe373fcba654ddf42b2ab07b211eb69b"
+      },
+      {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v6/working-candidate-root@2.json",
+        "raw_bytes_hash": "sha256:08a19fa441598e24ef107117f807a8670ecc9e4ec00b0d27620093105a33f774"
+      },
+      {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v6/working-contract-root@2.json",
+        "raw_bytes_hash": "sha256:f9ff2ded2811b5619c265ffd5582c0d195989d6421ac94326e45da2e745600b2"
+      },
+      {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v6/working-input-root@2.json",
+        "raw_bytes_hash": "sha256:3884108d6fb45be3a22348f8883e32a4791e1879a14912f41e2d5896452e53a9"
+      },
+      {
+        "path": "conformance/review-candidate/g2-generated-schema-join-authority-v6/working-review-root@2.json",
+        "raw_bytes_hash": "sha256:3cf78c78286136ebce1dec24d77ad1069fe7f3e28b2f25dab64b36a769ae81ff"
+      }
+    ],
+    "inventory_hash": "sha256:b64eb8c97a5ac71950872ba6d1acfb968c0b8ce2a315c03a0bc47c47a4aa9a69"
+  }
+}

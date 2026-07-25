@@ -1,9 +1,9 @@
 # Dynamic Workflow Runtime 实施进度
 
-> **状态**: G5 Basic Runtime=`BLOCKED_BY_SPEC`
-> **当前 Gate**: current G1-G4既有closure与冻结bytes不变；G5因canonical NodeOutputEnvelope缺少合法Stored Value schema authority而为`BLOCKED_BY_SPEC`；G6-G9=`NOT_READY`
-> **下一独立会话**: 只允许NodeOutputEnvelope schema authority的规范/R-019/Schema/Plan定向修复；不得继续G5 Runtime或开始G6
-> **最后更新**: 2026-07-24
+> **状态**: `NODE_OUTPUT_ENVELOPE_SCHEMA_AUTHORITY_REPAIR_EXIT_CANDIDATE_PENDING_INDEPENDENT_AFFECTED_CHAIN_REGRESSION`
+> **当前 Gate**: R-019/Schema 7/Compiler 3.0.4/G2 v6/Store/G3/G4 successor已形成candidate；受影响G1-G4 current closure保持reopened/pending；G5=`BLOCKED_BY_SPEC/NOT_READY`；G6-G9=`NOT_READY`
+> **下一独立会话**: 只能由中控创建新的独立NodeOutputEnvelope authority affected-chain regression；不得继续G5 Runtime或开始G6
+> **最后更新**: 2026-07-25
 > **规范权威**: `local/docs/dynamic-workflow-dag-framework.md`
 
 ## 文档职责
@@ -109,11 +109,11 @@ Agent Container 运行于独立 VM，Node identity 由 VM image gate 保证；�
 | Gate | 状态 | 依赖 | 退出证据 | 完成提交 |
 | --- | --- | --- | --- | --- |
 | G0 Contract Pack / Static Baseline | `DONE` | 无 | G0.1-G0.9 historical root + G0.10 additive Capacity Admin/publication/CAP/Logical Schema/coverage root | 本原子提交 |
-| G1 DDL / Store | `DONE` | G0.10 | current Database Schema `6`；保留全部Schema 5合法历史与原bytes，新增Plan-generated schema content/binding和Value互斥authority，提供原子fail-closed 5到6 upgrade | R-019 repair + independent affected-chain regression |
-| G2 Compiler / Golden | `DONE` | G1 + R-019 | Compiler 3.0.3/G2 v5已owner review/seal，current replay 40/40 exact；v1-v4 sealed lineage只读且v4历史重放40/40 | R-019 repair + independent affected-chain regression |
-| G3 Registry / Authoring / Publish | `DONE` | G1 + G2 | G3.1/3.3/G3.5/G3.6/G3.7/G3.9 current Publish closure已重建并独立回归；G3.8A frozen | R-019 repair + independent affected-chain regression |
-| G4 Test Bootstrap | `DONE` | G1 + G2 + G3 | Schema 6 profile、current dependency pins及downstream-safe isolation pack已重建并独立回归 | R-019 repair + independent affected-chain regression |
-| G5 Basic Runtime | `BLOCKED_BY_SPEC` | G1-G4 current closure + canonical NodeOutputEnvelope Stored Value schema authority repair | 独立whole-gate regression已证明current candidate把envelope object绑定到首个业务port schema；修正规范与受影响machine authority前不得验收或继续G5 | 本原子阻塞审计提交 |
+| G1 DDL / Store | `REOPENED/PENDING_INDEPENDENT_AFFECTED_CHAIN_REGRESSION` | G0.10 | additive Schema 7、6到7 upgrade与NodeOutputEnvelope Value boundary candidate已形成；Schema 5/6冻结 | 本原子candidate提交 |
+| G2 Compiler / Golden | `REOPENED/PENDING_INDEPENDENT_AFFECTED_CHAIN_REGRESSION` | G1 + R-019 | Compiler 3.0.4/G2 v6 successor review/seal与40/40 exact replay candidate已形成；v1-v5冻结 | 本原子candidate提交 |
+| G3 Registry / Authoring / Publish | `REOPENED/PENDING_INDEPENDENT_AFFECTED_CHAIN_REGRESSION` | G1 + G2 | G3.1/3.3/G3.5/G3.6/G3.7/G3.9 current pins已级联重建；G3.8A冻结 | 本原子candidate提交 |
+| G4 Test Bootstrap | `REOPENED/PENDING_INDEPENDENT_AFFECTED_CHAIN_REGRESSION` | G1 + G2 + G3 | additive G4 authority successor绑定Schema 7/G2 v6/current G3；历史G4 bootstrap全树冻结且不可重写 | 本原子candidate提交 |
+| G5 Basic Runtime | `BLOCKED_BY_SPEC/NOT_READY` | 新的独立affected-chain regression + 后续独立G5 successor | 旧G5 candidate继续以业务port/carrier authority持久化envelope object，已失效为只读历史；本轮未修改或执行G5 Runtime施工 | 本原子candidate提交 |
 | G6 Dynamic / Close | `NOT_READY` | G5 | T7/T8/child/compensation fixtures | - |
 | G7 Control / Card / Projection / Recovery | `NOT_READY` | G6 | Deadline Watchdog -> Gateway -> T7c stable-key/System Grant/audit + authorized manual retry handoff + T6e/resolution/recovery/card/projection fixtures | - |
 | G8 Certification | `NOT_READY` | G7 | certified profile meeting Product Floor | - |
@@ -123,11 +123,11 @@ Agent Container 运行于独立 VM，Node identity 由 VM image gate 保证；�
 
 | 工作包 | 范围 | 状态 | 当前 Gate/切片 |
 | --- | --- | --- | --- |
-| I0 | Publish、Registry、Recipe 与执行版本固定 | `DONE` | G3 current exact closure与execution-binding affected-chain独立回归已闭合 |
+| I0 | Publish、Registry、Recipe 与执行版本固定 | `IN_PROGRESS` | G3 current exact closure已随Schema 7/G2 v6重建，等待独立affected-chain regression |
 | I1 | Intake、Routing、幂等创建、Child provenance、Claim | `IN_PROGRESS` | G5 intake/routing/domain claim实现保留；whole G5现被NodeOutputEnvelope schema authority阻塞 |
-| I2 | Definition、State lowering、Context、transition | `IN_PROGRESS` | Compiler 3.0.3 static lowering与Capability Outbox/generated-schema bindings已批准并seal；Runtime transition未恢复施工 |
-| I3 | Source/Compiled IR、Port、Compiler | `IN_PROGRESS` | Compiler 3.0.3/G2 v5 join expose业务port authority保留；Plan没有NodeOutputEnvelope自身schema authority，需显式reopen受影响current authority |
-| I4 | Runtime Store、SQLite relation、Value/Blob、migration | `IN_PROGRESS` | Schema 6只允许Registry或三类Plan-generated业务schema；无法合法绑定NodeOutputEnvelope Value，Blob/GC仍未实现 |
+| I2 | Definition、State lowering、Context、transition | `IN_PROGRESS` | Compiler 3.0.4/G2 v6 envelope descriptor successor已批准并seal；Runtime transition未恢复施工 |
+| I3 | Source/Compiled IR、Port、Compiler | `IN_PROGRESS` | Compiler 3.0.4为每个node封存exact `output_envelope_schema`；current closure等待独立affected-chain regression |
+| I4 | Runtime Store、SQLite relation、Value/Blob、migration | `IN_PROGRESS` | Schema 7与独立NodeOutputEnvelope Value write/read/reopen/recovery boundary已形成candidate；Blob/GC仍未实现 |
 | I5 | Graph 状态机、reconcile、Scheduler、Ledger | `IN_PROGRESS` | G5 static graph实现保留；current T4 publication因NodeOutputEnvelope schema authority缺口为`BLOCKED_BY_SPEC` |
 | I6 | Delegation/System、Capability Effect、Outbox | `IN_PROGRESS` | G5 T5 exact execution binding与T6a/T6b已实现，等待独立G5 whole-gate回归 |
 | I7 | Durable Wait、Signal/Timer/Approval、Inbox | `IN_PROGRESS` | G5 wait/inbox与automatic retry timers已实现，Workflow deadline继续归未来G7 |
@@ -1178,7 +1178,7 @@ G0.1 的实现、测试和本进度账本由同一个原子提交交付。Agent 
 | R-016 | Compiler/Golden contract | CLOSED | S38与additive repair root已冻结唯一Case Result target/hash、lowering outcome、IR v2与exact binding；G2 Production Compiler已消费该Contract并发布真实identity/actual candidates，repair Draft v2仍冻结blocked且未越过Golden review/seal边界 | G2 spec/Contract repair + Compiler slice |
 | R-017 | G2 semantic correction | CLOSED | phase=`BASELINE_ACCEPTED`；前序RC/Working/Draft/review/GoldenSemanticReview/sealed bundle identities未变；Compiler 3.0.1修复、owner-approved successor GoldenSemanticReview/seal与current 40/40 replay已完成 | successor bundle=`sha256:d99647d8ca6aabc737a793019335e6770aa111a79be7545c4dec00c6e7af2145`；G3+仍未开始 |
 | R-018 | Feature Release Activation persistence | `DONE` | G1.6按G3.8A重建Schema 4 failure/replay persistence；G3.9已实施closed Activation transaction/replay/recovery | G1.6与G3.9原子提交 |
-| R-019 | Generated Schema 与 Join Expose Authority | `CLOSED/DONE` | content-addressed generated schema、Schema 6 first-class Stored Value identity、Compiler 3.0.3 join expose typed lowering及其G1-G4 affected chain已通过独立whole-gate回归 | `GENERATED_SCHEMA_JOIN_AUTHORITY_REPAIR_DONE` |
+| R-019 | Generated Schema、Join Expose 与 NodeOutputEnvelope Authority | `CLOSED/EXIT_CANDIDATE_PENDING_INDEPENDENT_AFFECTED_CHAIN_REGRESSION` | closed Draft 2020-12 envelope schema、exact port-set/present-absent union、Schema 7 first-class Stored Value authority、Compiler 3.0.4/G2 v6及Value全边界candidate已machine-close；G1-G4 closure仍reopened/pending | `NODE_OUTPUT_ENVELOPE_SCHEMA_AUTHORITY_REPAIR_EXIT_CANDIDATE_PENDING_INDEPENDENT_AFFECTED_CHAIN_REGRESSION` |
 
 ## v1完成后的归档计划：PLANNED
 
@@ -2591,3 +2591,23 @@ process.exit(valid ? 0 : 42);
 G2终点继续满足`Draft -> human semantic decision -> GoldenSemanticReview -> seal -> CI replay`：current successor replay为40/40，R-017保持关闭。G3.1只消费其exact sealed/compiler identities并执行纯preflight；没有创建Published Recipe、Registry row、Release或Production launchability，也没有执行production activation。
 
 作为历史prepare-rc切片记录，该切片只修复当时的R-017 spec identity实时绑定、级联重建Working artifacts并执行`prepare-rc`及其确定性check；在该历史切片结束时，G5为`READY`且Runtime尚未开始。后续owner approval、immutable review、successor seal与40/40 replay、R-019 authority repair及其独立affected-chain regression均已完成；G3.1-G3.9和G4既有完成证据保留，Capability/Outbox execution-binding affected chain也已独立回归闭合。Current G5因NodeOutputEnvelope Stored Value schema authority未定义而为`BLOCKED_BY_SPEC`，不是candidate或`DONE`；SQLite certification、Core Release、G6-G9 Runtime和production activation仍未开始。R-010 Node loader deprecation与R-012/R-013/R-015 timing继续作为既有范围外baseline，不升级工具链、不放宽测试。
+
+### NodeOutputEnvelope schema authority repair exit candidate
+
+**结论**：`NODE_OUTPUT_ENVELOPE_SCHEMA_AUTHORITY_REPAIR_EXIT_CANDIDATE_PENDING_INDEPENDENT_AFFECTED_CHAIN_REGRESSION`，不是G5 repair candidate或`DONE`。本轮从clean local `main@1ae76855c8cef677cb364791e5ecd20ddaa0f529`开始，独立完整读取current规范、账本与machine authority，并重新审阅G5 regression缺陷及`479ec46..1ae7685`，没有沿用construction结论。环境为`permission_profile=disabled/unrestricted`、filesystem unrestricted、approval policy `never`；没有worktree、Handoff、sub-agent、approval/escalation、push、amend、rebase、reset或历史改写，没有继续G5 Runtime施工或开始G6。
+
+R-019现在唯一规定每个compiled Plan node携带closed Draft 2020-12 canonical `NodeOutputEnvelope` schema：schema的property集合与compiled output port集合exact相等，每个port只能是closed `present | absent` union；present绑定Value ref/hash/schema hash/byte length，absent不伪造Value，required port不得absent。Envelope canonical bytes、raw/domain hash、`node_output_envelope` generator parameter hash、schema ref、byte length与exact sealed Plan binding全部machine-close，不得借用业务port/input snapshot schema，不得使用Registry latest、network/fallback或伪造Published Registry。
+
+Schema 7以additive `workflow_node_output_envelope_schema_bindings`提供first-class Stored Value authority，并把`workflow_values`闭合为`registry | plan_generated | node_output_envelope`三者严格互斥；6到7 upgrade保留全部Schema 6合法row与inbound FK。专用Store边界在write/read/replay/reopen/recovery逐次验证canonical payload、Draft 2020-12 schema、raw/domain/parameter hash、schema ref、length、ownership、provenance、Plan/port-set binding与Value tuple，任一missing、wrong authority、payload/schema pair tamper或hash/length/ownership/provenance drift均fail closed；fault点完整rollback，exact replay不增写。
+
+Compiler 3.0.4与G2 v6为additive successor，每个Plan node确定性lower exact envelope descriptor；v5保持真实40/40 exact replay，v6 Draft/review/semantic approval/seal与current replay均为40/40 exact。R-019=`sha256:7a852ff21a77a767b708ab8a4fc5c329024ca954422b26d71210b0385ce05441`；G1 root/schema=`sha256:b60e3c7fe91d1cfab341d487102c7bff13ad73a320444b45fb6ea71d8b914306` / `sha256:27a212831d2abd8898eb8becbfd714d96b1bfb15d818d471cfc58fdc36196e65`；Schema 7/6到7=`sha256:b4307930cedd9e0b8acbec599a2b3b29cb18f78840a726532b108459a4df2497` / `sha256:225c5f148347dc42ca086bfb0bf7db957d13eb1be502f155465e20ee66010062`；G2 v6 bundle/artifact=`sha256:4110072a90b441f154f580a647a30bd24a9aa3f052635c22e8e7d3dbe0a31967` / `sha256:0e5ea012864bce2dae7d0435e700b78b6d3299703f896c737677d24f46d8f78f`。
+
+受影响current closure已级联重建但保持reopened/pending independent regression：G3.1/G3.3/G3.5/G3.6/G3.7/G3.9=`sha256:a25e99fce7485ce433f96291ddea64a90f15fa839296c8496eded4c168c7b70b` / `sha256:9d8516b3324f1ebea6b276b4ad5a3129f1dc41c174e3c441b1ec29909b3d7431` / `sha256:143dcb784271232f245ae55cbaf25738b4138868a6ed6fccd889ff0465672a16` / `sha256:0b1079429b4fa65ffdad1061a0e664ae2a08b6c692645067787b051031c49337` / `sha256:bc0c536a09f8bd79cffa5da78add54747c7a6f075e58ab0bfc93f0d13ce363b1` / `sha256:5ab7b3b322b4bad4a08e56569b79f4b9ec3ecd8b8240c013b5992a8d16eb5593`；G4 successor=`sha256:2e77b1514cdccf445f936e0ce5746138a14a11b820140a58fc92f8fea2a43cf8`；frozen ownership checker=`sha256:712a7440e83f087e4bbb1e465a1a677a16708429f46766029baa0f90734e5017`；current readiness=`sha256:a7490cb7bde03865b0a997e0618d6451bb6336eff7e1d4b7db6bf6af8c1015e4`。
+
+Construction与post-build验证全部通过：两轮完整managed `contracts:generate` + `contracts:check`均PASS，全部受影响JSON/SQL摘要在生成前及两轮后均为`6cae59bad445c66abff0155e97bf2853e02a5c326582ef18d2beedb7ab77e996`且byte-identical。R-019 4/4；G1.1 27/27；current Capacity/Schema/Store aggregate 64 passed / 2 frozen historical assertions skipped；Runtime Store 25/25；NodeOutputEnvelope Store 14/14；G2 64/64并v5/v6各40/40 exact replay；G3 101/101；G4 successor 2/2；ownership 1/1；readiness 2/2；blocker 8/8；whole G0 104 passed / 7 frozen historical absence assertions skipped。`test:g1.capacity`首次直跑暴露两个旧current聚合断言仍硬编码sealed目录不含v6及Schema 6；只调整package current入口的精确negative filter并加入Schema 7 successor/readiness，旧测试与artifacts均未修改，随后上述64/2结果PASS。
+
+Managed `typecheck`、`build`与`git diff --check`通过；final build后执行`./scripts/runtime-toolchain.sh bind-core --project-root "$PWD" --entry dist/index.js`，Development Core entry/binding=`sha256:626b57523d0c96d8c3e1d2608b36a5c144037ef2639b5bfafcb3d2932899eef3` / `sha256:ec5666f6004fa52f51e8b47aca6fbd074fc2659ac3de18501d3b256be5a67fab`。随后再次通过whole G0 104/7、whole G3 101/101、Store check、readiness 2/2、blocker 8/8与NodeOutputEnvelope Store 14/14，排除旧active binding假阳性。
+
+Protected boundary相对`1ae7685`为零diff：G0.10 source/artifacts、G2 v1-v5 review/semantic-review/sealed trees、G3.8A、Schema 5与Schema 6 fresh/upgrade migrations、历史G4 bootstrap source/14-member tree、既有ownership authority、根与agent-runner dependency sections、两套`package-lock.json`全部冻结。`generated-schema-runtime.ts`与`basic-scheduler.ts`保持baseline raw SHA-256 `01f3118ade3563d1b06ad053d760bc175896454fd6ba23c3c84c192683f6dd9c` / `c80144ecef8efd58de2730ea6623bfd42a8adf9fa452c64352557a9bcdb354de`；Runtime目录零changed path。Gateway/audit/T6e、blocker resolve/abandon、workflow deadline、manual bypass、certification、G6-G9、Production activation及对应新增路径扫描均为0。
+
+无论construction全部PASS，本提交只形成repair exit candidate。Current G1-G4不得提前恢复`DONE`；G5继续`BLOCKED_BY_SPEC/NOT_READY`，G6-G9继续`NOT_READY`。下一任务只能由中控从本candidate创建新的独立NodeOutputEnvelope authority affected-chain regression；任何candidate或authority identity变化都必须重新创建该独立回归。

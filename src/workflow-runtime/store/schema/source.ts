@@ -23,6 +23,7 @@ import {
 } from './publisher-source.js';
 import type { ExecutableSchemaSource } from './types.js';
 import { applyGeneratedSchemaPrerequisite } from './generated-schema-source.js';
+import { applyNodeOutputEnvelopeSchemaPrerequisite } from './node-output-envelope-source.js';
 
 interface AdditiveTableExtension {
   name: string;
@@ -109,8 +110,8 @@ function assertSchema3ExecutableSource(source: ExecutableSchemaSource): void {
 }
 
 function assertExecutableSource(source: ExecutableSchemaSource): void {
-  if (source.database_schema_version !== 6) {
-    throw new Error('Current executable Database Schema must be version 6');
+  if (source.database_schema_version !== 7) {
+    throw new Error('Current executable Database Schema must be version 7');
   }
   if (source.tables.length !== 86) {
     throw new Error(`Expected 86 v1 tables, received ${source.tables.length}`);
@@ -404,6 +405,28 @@ export function loadExecutableSchemaSource(
   contractsRoot?: string,
 ): ExecutableSchemaSource {
   const inputs = readPinnedSchemaInputArtifacts({ contractsRoot });
+  const schema6 = buildSchema6ExecutableSource(inputs);
+  const tables = applyNodeOutputEnvelopeSchemaPrerequisite(
+    schema6.tables,
+    inputs.node_output_envelope_schema_authority_prerequisite.artifact,
+  );
+  const result: ExecutableSchemaSource = {
+    ...schema6,
+    database_schema_version: 7,
+    tables,
+    logical_inputs: {
+      ...schema6.logical_inputs,
+      node_output_envelope_schema_authority_prerequisite_hash:
+        inputs.node_output_envelope_schema_authority_prerequisite.artifact.hash,
+    },
+  };
+  assertExecutableSource(result);
+  return result;
+}
+
+function buildSchema6ExecutableSource(
+  inputs: LoadedSchemaInputArtifacts,
+): ExecutableSchemaSource {
   const schema5 = buildSchema5ExecutableSource(inputs);
   const applied = applyGeneratedSchemaPrerequisite(
     schema5.tables,
@@ -420,8 +443,15 @@ export function loadExecutableSchemaSource(
         inputs.generated_schema_authority_prerequisite.artifact.hash,
     },
   };
-  assertExecutableSource(result);
   return result;
+}
+
+export function loadSchema6ExecutableSchemaSource(
+  contractsRoot?: string,
+): ExecutableSchemaSource {
+  return buildSchema6ExecutableSource(
+    readPinnedSchemaInputArtifacts({ contractsRoot }),
+  );
 }
 
 function buildSchema5ExecutableSource(

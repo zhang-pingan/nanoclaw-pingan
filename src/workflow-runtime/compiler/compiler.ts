@@ -34,7 +34,10 @@ import {
   CompilerProofError,
   schemaAssignable,
 } from './proofs.js';
-import { buildGeneratedSchema } from '../contracts/generated-schema-authority.js';
+import {
+  buildGeneratedSchema,
+  buildNodeOutputEnvelopeSchema,
+} from '../contracts/generated-schema-authority.js';
 import { assertSourceObject, validateClosedSource } from './schema-profile.js';
 import {
   bindCompilerSnapshot,
@@ -1940,7 +1943,7 @@ function compiledChildPolicy(
   };
 }
 
-function compileGraphNode(
+function compileGraphNodeCore(
   node: JsonObject,
   state: CompilationState,
   ownerPath: string[],
@@ -2111,6 +2114,24 @@ function compileGraphNode(
     };
   }
   throw new Error(`Unsupported compiled node type: ${String(node.type)}`);
+}
+
+function compileGraphNode(
+  node: JsonObject,
+  state: CompilationState,
+  ownerPath: string[],
+  factoryByNode: Map<string, FactoryCompilation>,
+): JsonObject {
+  const compiled = compileGraphNodeCore(node, state, ownerPath, factoryByNode);
+  if (state.identity.compiler_version !== '3.0.4') return compiled;
+  assertJsonObject(compiled.output_ports);
+  return {
+    ...compiled,
+    output_envelope_schema: buildNodeOutputEnvelopeSchema(
+      String(compiled.id),
+      compiled.output_ports,
+    ),
+  };
 }
 
 function validateChildInputBindings(
