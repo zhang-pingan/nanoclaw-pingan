@@ -1,8 +1,8 @@
 # Dynamic Workflow Runtime 实施进度
 
-> **状态**: `NODE_OUTPUT_ENVELOPE_SCHEMA_AUTHORITY_REPAIR_DONE`
-> **当前 Gate**: R-019/Schema 7/Compiler 3.0.4/G2 v6/Store/G3/G4已在fresh independent affected-chain regression后闭合/`DONE`；G5=`READY_FOR_G5_REPAIR/NOT_DONE`；G6-G9=`NOT_READY`
-> **下一独立会话**: 只能由中控创建新的独立本地G5 Runtime repair successor；不得开始G6
+> **状态**: `G5_REPAIR_EXIT_CANDIDATE_PENDING_INDEPENDENT_G5_WHOLE_GATE_REGRESSION`
+> **当前 Gate**: R-019/Schema 7/Compiler 3.0.4/G2 v6/Store/G3/G4 current closure均为`DONE`；G5=`G5_REPAIR_EXIT_CANDIDATE_PENDING_INDEPENDENT_G5_WHOLE_GATE_REGRESSION/NOT_DONE`；G6-G9=`NOT_READY`
+> **下一独立会话**: 只能由中控创建fresh independent local G5 whole-gate regression；不得开始G6
 > **最后更新**: 2026-07-25
 > **规范权威**: `local/docs/dynamic-workflow-dag-framework.md`
 
@@ -2674,7 +2674,7 @@ R-019与NodeOutputEnvelope schema authority repair现为`CLOSED/DONE`、`NODE_OU
 
 ### 2026-07-25：G5 Basic Runtime NodeOutputEnvelope repair exit candidate
 
-**结论**：`G5_REPAIR_EXIT_CANDIDATE_PENDING_INDEPENDENT_G5_WHOLE_GATE_REGRESSION`，不是`DONE`。本次独立G5 repair从clean local `main@a75076f3c6ff140616c8002da6d6bd1599e0dbe9`开始，唯一parent=`7fc5769ffaf307d733583e9c5ef303573b54bc1c`。施工前完整复读架构规范、本进度账本、G5实现索引主要入口/必须联读/验收条款，并记录`git status --short`、branch、五条log及`a75076f3` stat/精确diff；历史G5 Runtime/Contract/fixtures/reference只作为失效输入审计，没有复用其identity或测试结论。没有worktree、Handoff、sub-agent、approval/escalation、push、amend、rebase、reset或历史改写，没有开始G6。
+**结论**：`G5_REPAIR_EXIT_CANDIDATE_PENDING_INDEPENDENT_G5_WHOLE_GATE_REGRESSION`，不是`DONE`。本次独立G5 repair从clean local `main@a75076f3c6ff140616c8002da6d6bd1599e0dbe9`开始，唯一parent=`a75076f3c6ff140616c8002da6d6bd1599e0dbe9`。施工前完整复读架构规范、本进度账本、G5实现索引主要入口/必须联读/验收条款，并记录`git status --short`、branch、五条log及`a75076f3` stat/精确diff；历史G5 Runtime/Contract/fixtures/reference只作为失效输入审计，没有复用其identity或测试结论。没有worktree、Handoff、sub-agent、approval/escalation、push、amend、rebase、reset或历史改写，没有开始G6。
 
 Current G5 Contract Pack被独立重建为`sha256:84b6de036a9ef137ed0db6b5a715c440fa4d0b93eab7dc5f96984f43ab273582`，member tree=`sha256:3abd116319e0f3fac16be4135a43297f02ff156e47fe3f8a7ee5e8f31bff8406`；protocol/positive/negative/fault=`sha256:d269db10b7e4ae10de2cc52e01ae08df525b59f574b88ecb633dddae08d70667` / `sha256:67f1a94acf041beed1bf6b230c6e1e6ea3beace1c17e6244bf18f373de9c8e57` / `sha256:2f05e5472f7416358c9bc1369874eca1977ac766fd96e15533c34fbda195ab9d` / `sha256:172324f37d126ed84e52d846d691bc1dcdef9d345d0930c2f186f6233db79d9e`，reference/evidence tree=`sha256:f1a78a4e6d64940de3088162d04775f5135b7f8764d640ac77369620539f4efb` / `sha256:aebacebbbd2dab4e78f7ec28c3a3fd3d7a2119dfa2b44ac36fb4ad889d66b81d`，implementation/18-source tree=`sha256:8107311c6ca5c26b1da2410200f94410b0fdc6c9f08323b2d04b356418ffec71` / `sha256:700921bd70425d5448316444263dcbb08a1fcb409a54b37fd186aac82646c206`。Pack exact绑定closed R-019=`sha256:7a852ff21a77a767b708ab8a4fc5c329024ca954422b26d71210b0385ce05441`、Schema 7=`sha256:b60e3c7fe91d1cfab341d487102c7bff13ad73a320444b45fb6ea71d8b914306`、G2 v6 sealed artifact/bundle=`sha256:5cf2d899d0bf8d7cc0d4b70cc7796a123b8b5384bbbefe3e204e70bddf33fe11` / `sha256:0820328ae1cfdba7d05948d9e36498a5428d997d6eabfb833ef0ba7d84b77db7`及current G3/G4、ownership、Capacity identity。Closed fixtures为21 positive / 28 negative / 17 fault，覆盖G5-owned T0-T6d、Capacity、blocker与Store envelope recovery；历史candidate pack/member/reference/implementation不进入current aggregate。
 
