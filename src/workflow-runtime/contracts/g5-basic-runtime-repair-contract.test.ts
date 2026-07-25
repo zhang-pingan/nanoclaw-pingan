@@ -19,9 +19,9 @@ describe('current G5 Basic Runtime repair Contract Pack', () => {
       g5_done: false,
       g6_through_g9: 'NOT_READY',
       historical_g5_candidate_authority: 'forbidden',
-      positive_case_count: 7,
-      negative_case_count: 14,
-      fault_case_count: 3,
+      positive_case_count: 21,
+      negative_case_count: 28,
+      fault_case_count: 17,
     });
     expect(JSON.stringify(pack)).not.toContain(
       'contract-pack-g5-basic-runtime.json',

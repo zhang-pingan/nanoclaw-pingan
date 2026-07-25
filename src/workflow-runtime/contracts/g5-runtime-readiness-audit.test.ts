@@ -39,7 +39,7 @@ describe('G5 Basic Runtime readiness audit', () => {
       plan_authority:
         'persisted_hash_verified_sealed_plan_plus_exact_generated_content_and_binding_rows',
       generated_value_authority:
-        'plan_generated_only_without_registry_fabrication',
+        'business_members_use_exact_compiled_schema_and_envelope_uses_exact_node_output_envelope_schema',
       output_publication:
         'canonical_node_output_envelope_with_exact_port_values',
       next_task_only: 'independent_G5_whole_gate_regression',
@@ -180,7 +180,7 @@ describe('G5 Basic Runtime readiness audit', () => {
     });
   });
 
-  it('proves Schema 6 needs no deadline handoff relation and still denies G5 Command ownership', () => {
+  it('proves Schema 7 needs no deadline handoff relation and still denies G5 Command ownership', () => {
     const queries = readArtifact(
       'sqlite/workflow-runtime-query-catalog@1.json',
     );
@@ -212,9 +212,9 @@ describe('G5 Basic Runtime readiness audit', () => {
       '../store/schema/artifacts/workflow-runtime-schema-manifest@1.json',
     );
     expect(manifest.hash).toBe(
-      'sha256:30b88b9df7dc7f8318ce8fcb5c38ca94c585d8585deff83235b8a8b8f582e0e2',
+      'sha256:cf623c1fe300b8f6065b2e5edce07a5ce6dc8c5d84453c457387953493336b4f',
     );
-    expect(manifest.payload.database_schema_version).toBe(6);
+    expect(manifest.payload.database_schema_version).toBe(7);
     const schemaTables = objects(manifest.payload.tables);
     const tableNames = schemaTables.map((table) => String(table.name));
     const handoffPattern =

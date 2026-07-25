@@ -35,6 +35,7 @@ export function verifyCompiledPlanAuthority(
   );
   if (
     plan.format !== 'icarus.workflow-graph-scope-plan/2' ||
+    plan.compiler_version !== '3.0.4' ||
     claimedPlanHash !== observed ||
     !Array.isArray(plan.nodes) ||
     !Array.isArray(plan.control_edges) ||

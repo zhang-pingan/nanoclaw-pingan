@@ -9,9 +9,45 @@
   "payload": {
     "cases": [
       {
+        "case_id": "intake_routing_domain_claim",
+        "surface": "T0",
+        "assertion": "intake, exact routing, creation intent, workflow, activation, and claims commit and replay atomically",
+        "expected": "accepted"
+      },
+      {
+        "case_id": "required_finalization_intent",
+        "surface": "T0p",
+        "assertion": "required finalization creates one stable intent and exact replay",
+        "expected": "accepted"
+      },
+      {
+        "case_id": "activation_state_lowering",
+        "surface": "T1",
+        "assertion": "activation lowers the exact state and immutable context authority",
+        "expected": "accepted"
+      },
+      {
         "case_id": "sealed_plan_generated_binding",
         "surface": "T2a",
         "assertion": "exact generated content and Plan bindings persist atomically",
+        "expected": "accepted"
+      },
+      {
+        "case_id": "static_graph_materialization",
+        "surface": "T2b",
+        "assertion": "exact Plan nodes, edges, limits, and bindings materialize atomically",
+        "expected": "accepted"
+      },
+      {
+        "case_id": "static_graph_fixed_point",
+        "surface": "T3a",
+        "assertion": "routing, data, trigger, input sealing, scheduler, Fact, Event, and ledger reach a deterministic fixed point",
+        "expected": "accepted"
+      },
+      {
+        "case_id": "settled_completion_selection",
+        "surface": "T3b",
+        "assertion": "settled completion selects one exact named exit or engine error",
         "expected": "accepted"
       },
       {
@@ -45,6 +81,54 @@
         "expected": "accepted"
       },
       {
+        "case_id": "capability_effect_outbox",
+        "surface": "T5",
+        "assertion": "exact Adapter, Policy, effect, idempotency key, claims, and outbox binding persist before external work",
+        "expected": "accepted"
+      },
+      {
+        "case_id": "system_execution_output_envelope",
+        "surface": "T6a",
+        "assertion": "terminal success publishes the exact compiled port set in its canonical envelope",
+        "expected": "accepted"
+      },
+      {
+        "case_id": "delegation_receipt_recovery",
+        "surface": "T6b",
+        "assertion": "unknown external outcome reconciles without a second operation identity",
+        "expected": "replayed"
+      },
+      {
+        "case_id": "durable_wait_signal_envelope",
+        "surface": "T6c",
+        "assertion": "one wait winner records typed authorization, inbox, Fact, Event, ledger release, and resolution envelope",
+        "expected": "accepted"
+      },
+      {
+        "case_id": "automatic_retry_timers",
+        "surface": "T6d",
+        "assertion": "watchdog and automatic retry consume the exact schedule and current Capacity lineage",
+        "expected": "accepted"
+      },
+      {
+        "case_id": "capacity_admin_recovery",
+        "surface": "CAP0_CAP4",
+        "assertion": "prepared publication and committed head recover across rename and reopen boundaries",
+        "expected": "replayed"
+      },
+      {
+        "case_id": "operational_blocker_create_open_cache",
+        "surface": "G5_BLOCKER",
+        "assertion": "blocker create, open listing, and run/workflow action-required caches commit together",
+        "expected": "accepted"
+      },
+      {
+        "case_id": "node_output_envelope_store_recovery",
+        "surface": "SCHEMA7_STORE",
+        "assertion": "canonical envelope and present members retain exact bytes, schema authority, provenance, and ownership through read, reopen, and recovery scan",
+        "expected": "replayed"
+      },
+      {
         "case_id": "sqlite_reopen_response_loss",
         "surface": "T4",
         "assertion": "response-loss replay is exact before and after Store reopen",
@@ -52,5 +136,5 @@
       }
     ]
   },
-  "hash": "sha256:23b95b337fd4bc3eccdba3e577d3cd9195bae7f9535d1d5f5c266bee87e82cee"
+  "hash": "sha256:67f1a94acf041beed1bf6b230c6e1e6ea3beace1c17e6244bf18f373de9c8e57"
 }

@@ -1,5 +1,6 @@
 import { canonicalJson, domainSeparatedSha256 } from '../contracts/hash.js';
 import { registryResourceId } from '../contracts/g3-registry-persistence.js';
+import type { PlanGeneratedSchemaGenerator } from '../contracts/generated-schema-authority.js';
 import type { CompiledScopePlanV2Document } from '../contracts/compiler-contract-repair-types.js';
 import { COMPILED_PLAN_V2_DOMAIN_SEPARATOR } from '../contracts/compiler-contract-repair-source.js';
 import type { JsonObject, JsonValue, Sha256Hash } from '../contracts/types.js';
@@ -37,11 +38,13 @@ import {
   type InlineValueSchemaAuthority,
 } from './graph-store.js';
 import {
+  buildCanonicalNodeOutputEnvelope,
   loadPersistedPlanGeneratedSchemaAuthority,
   nodeOutputPortContractHash,
   persistPlanGeneratedSchemaAuthorities,
   verifyPersistedPlanGeneratedSchemaAuthorities,
   type PersistedPlanIdentity,
+  type PublishedNodeOutputPort,
 } from './generated-schema-runtime.js';
 import { chargeAndInsertGraphFact, reserveLedgerResources } from './ledger.js';
 import {
@@ -157,6 +160,7 @@ export function persistCompileResultT2a(
           input.plan.compiler_toolchain_hash ||
         planPin.compiler_build_hash !== input.plan.compiler_build_hash ||
         planPin.provenance !== 'sealed_g2_expected' ||
+        input.plan.compiler_version !== '3.0.4' ||
         run.source_seed_hash !== input.sourceHash ||
         input.plan.runtime_safety_hash !== run.runtime_safety_snapshot_hash ||
         input.plan.compiler_toolchain_hash !==
@@ -166,7 +170,7 @@ export function persistCompileResultT2a(
       )
         throw new G5RuntimeError(
           'integrity_violation',
-          'T2a Plan safety, toolchain, or Schema 6 identity drift',
+          'T2a Plan safety, toolchain, or Schema 7 identity drift',
         );
       if (build.status === 'compiled') {
         if (
@@ -767,9 +771,12 @@ function loadInlineValueAuthority(
     row.schema_plan_hash !== null &&
     row.generated_schema_ref !== null &&
     row.generated_schema_hash !== null &&
-    ['join_expose', 'child_completion', 'map_result'].includes(
-      String(row.generated_schema_generator),
-    ) &&
+    [
+      'join_expose',
+      'child_completion',
+      'map_result',
+      'node_output_envelope',
+    ].includes(String(row.generated_schema_generator)) &&
     row.generated_schema_parameter_hash !== null
   ) {
     schemaAuthority = {
@@ -778,10 +785,7 @@ function loadInlineValueAuthority(
       planHash: row.schema_plan_hash as Sha256Hash,
       schemaRef: row.generated_schema_ref,
       schemaHash: row.generated_schema_hash as Sha256Hash,
-      generator: row.generated_schema_generator as
-        | 'join_expose'
-        | 'child_completion'
-        | 'map_result',
+      generator: row.generated_schema_generator as PlanGeneratedSchemaGenerator,
       parameterHash: row.generated_schema_parameter_hash as Sha256Hash,
     };
   } else {
@@ -969,29 +973,35 @@ function portValue(
   root: JsonValue,
   port: string,
 ): JsonValue | undefined {
-  if (root && typeof root === 'object' && !Array.isArray(root)) {
-    const ports = root.ports;
-    if (ports && typeof ports === 'object' && !Array.isArray(ports)) {
-      const entry = ports[port];
-      if (!entry || typeof entry !== 'object' || Array.isArray(entry))
-        return undefined;
-      if (entry.state === 'absent') return undefined;
-      if (Object.prototype.hasOwnProperty.call(entry, 'value'))
-        return entry.value as JsonValue;
-      const valueId = entry.value_ref ?? entry.value_id;
-      const valueHash = entry.value_hash;
-      if (typeof valueId === 'string' && typeof valueHash === 'string')
-        return loadInlineValue(
-          transaction,
-          valueId,
-          valueHash,
-          `Output port ${port}`,
-        );
-      return undefined;
-    }
-    if (Object.prototype.hasOwnProperty.call(root, port)) return root[port];
-  }
-  return port === 'result' ? root : undefined;
+  if (!root || typeof root !== 'object' || Array.isArray(root))
+    return undefined;
+  const ports = root.ports;
+  if (!ports || typeof ports !== 'object' || Array.isArray(ports))
+    return undefined;
+  const entry = ports[port];
+  if (!entry || typeof entry !== 'object' || Array.isArray(entry))
+    return undefined;
+  if (entry.state === 'absent') return undefined;
+  const valueId = entry.value_ref;
+  const valueHash = entry.value_hash;
+  if (typeof valueId !== 'string' || typeof valueHash !== 'string')
+    return undefined;
+  const authority = loadInlineValueAuthority(
+    transaction,
+    valueId,
+    valueHash,
+    `Output port ${port}`,
+  );
+  if (
+    entry.schema_hash !== authority.schemaHash ||
+    !Number.isSafeInteger(entry.byte_length) ||
+    entry.byte_length !== authority.byteLength
+  )
+    throw new G5RuntimeError(
+      'integrity_violation',
+      `Output port ${port} Value metadata drifted`,
+    );
+  return authority.content;
 }
 
 interface SelectedPortValue {
@@ -1006,43 +1016,108 @@ function selectedPortValue(
   label: string,
 ): SelectedPortValue | undefined {
   const value = root.content;
-  if (value && typeof value === 'object' && !Array.isArray(value)) {
-    const ports = value.ports;
-    if (ports && typeof ports === 'object' && !Array.isArray(ports)) {
-      const entry = ports[port];
-      if (!entry || typeof entry !== 'object' || Array.isArray(entry))
-        return undefined;
-      if (entry.state === 'absent') return undefined;
-      const valueId = entry.value_ref ?? entry.value_id;
-      const valueHash = entry.value_hash;
-      if (typeof valueId === 'string' && typeof valueHash === 'string') {
-        const authority = loadInlineValueAuthority(
-          transaction,
-          valueId,
-          valueHash,
-          `${label} port ${port}`,
-        );
-        if (
-          entry.schema_hash !== authority.schemaHash ||
-          !Number.isSafeInteger(entry.byte_length) ||
-          entry.byte_length !== authority.byteLength
-        )
-          throw new G5RuntimeError(
-            'integrity_violation',
-            `${label} port ${port} Value metadata drifted`,
-          );
-        return { content: authority.content, authority };
-      }
-      if (Object.prototype.hasOwnProperty.call(entry, 'value'))
-        return { content: entry.value as JsonValue, authority: null };
-      return undefined;
-    }
-    if (Object.prototype.hasOwnProperty.call(value, port))
-      return { content: value[port]!, authority: null };
-  }
-  return port === 'result'
-    ? { content: root.content, authority: root }
-    : undefined;
+  if (!value || typeof value !== 'object' || Array.isArray(value))
+    return undefined;
+  const ports = value.ports;
+  if (!ports || typeof ports !== 'object' || Array.isArray(ports))
+    return undefined;
+  const entry = ports[port];
+  if (!entry || typeof entry !== 'object' || Array.isArray(entry))
+    return undefined;
+  if (entry.state === 'absent') return undefined;
+  const valueId = entry.value_ref;
+  const valueHash = entry.value_hash;
+  if (typeof valueId !== 'string' || typeof valueHash !== 'string')
+    return undefined;
+  const authority = loadInlineValueAuthority(
+    transaction,
+    valueId,
+    valueHash,
+    `${label} port ${port}`,
+  );
+  if (
+    entry.schema_hash !== authority.schemaHash ||
+    !Number.isSafeInteger(entry.byte_length) ||
+    entry.byte_length !== authority.byteLength
+  )
+    throw new G5RuntimeError(
+      'integrity_violation',
+      `${label} port ${port} Value metadata drifted`,
+    );
+  return { content: authority.content, authority };
+}
+
+function assertNodeOutputEnvelopeAuthority(
+  transaction: WorkflowRuntimeWriteTransaction,
+  planIdentity: PersistedPlanIdentity,
+  node: JsonObject,
+  root: InlineValueAuthority,
+): void {
+  const nodeId = String(node.id);
+  const descriptor = requiredObjectField(
+    node,
+    'output_envelope_schema',
+    `Plan node ${nodeId}`,
+  );
+  const outputPorts = requiredObjectField(
+    node,
+    'output_ports',
+    `Plan node ${nodeId}`,
+  );
+  const persisted = loadPersistedPlanGeneratedSchemaAuthority(
+    transaction,
+    planIdentity,
+    descriptor,
+    `Node ${nodeId} output envelope`,
+  );
+  if (
+    root.schemaAuthority.kind !== 'plan_generated' ||
+    root.schemaAuthority.planId !== planIdentity.planId ||
+    root.schemaAuthority.planHash !== planIdentity.planHash ||
+    root.schemaAuthority.schemaRef !== persisted.authority.schemaRef ||
+    root.schemaAuthority.schemaHash !== persisted.authority.schemaHash ||
+    root.schemaAuthority.generator !== 'node_output_envelope' ||
+    root.schemaAuthority.parameterHash !== persisted.authority.parameterHash ||
+    root.schemaHash !== descriptor.schema_hash
+  )
+    throw new G5RuntimeError(
+      'integrity_violation',
+      `Node ${nodeId} output envelope schema authority drifted`,
+    );
+  const validation = validateCompiledInputValue(
+    root.content,
+    descriptor,
+    null,
+    inputSchemaAuthority(transaction, planIdentity),
+    `Node ${nodeId} output envelope`,
+  );
+  if (validation !== null)
+    throw new G5RuntimeError(
+      'integrity_violation',
+      `Node ${nodeId} output envelope ${validation}`,
+    );
+  const content = requiredObjectField(
+    { content: root.content },
+    'content',
+    `Node ${nodeId} output envelope`,
+  );
+  const ports = requiredObjectField(
+    content,
+    'ports',
+    `Node ${nodeId} output envelope`,
+  );
+  const expected = buildCanonicalNodeOutputEnvelope(
+    outputPorts,
+    ports as unknown as Record<string, PublishedNodeOutputPort>,
+  );
+  if (
+    canonicalJson(content) !== canonicalJson(expected) ||
+    root.ref.hash !== expected.envelope_hash
+  )
+    throw new G5RuntimeError(
+      'integrity_violation',
+      `Node ${nodeId} output envelope payload/hash drifted`,
+    );
 }
 
 function planDataTargetContract(
@@ -1397,7 +1472,7 @@ function resolveTerminalControlRoutes(
   input: {
     graphRunId: string;
     scopeId: string;
-    plan: CompiledScopePlanV2Document;
+    planIdentity: PersistedPlanIdentity;
     source: T3NodeRow;
     scopeInput: JsonValue;
     payload: RuntimeValueRef;
@@ -1405,19 +1480,37 @@ function resolveTerminalControlRoutes(
     nowMs: number;
   },
 ): boolean {
-  const edges = (input.plan.control_edges as JsonObject[]).filter(
+  const plan = input.planIdentity.plan;
+  const edges = (plan.control_edges as JsonObject[]).filter(
     (edge) => edge.from_node_id === input.source.node_key,
   );
-  const sourceOutput =
+  const sourceOutputAuthority =
     input.source.published_output_envelope_value_id &&
     input.source.published_output_envelope_hash
-      ? loadInlineValue(
+      ? loadInlineValueAuthority(
           transaction,
           input.source.published_output_envelope_value_id,
           input.source.published_output_envelope_hash,
           `Node ${input.source.node_key} output`,
         )
       : undefined;
+  if (sourceOutputAuthority) {
+    const sourceNode = (plan.nodes as JsonObject[]).find(
+      (candidate) => candidate.id === input.source.node_key,
+    );
+    if (!sourceNode)
+      throw new G5RuntimeError(
+        'integrity_violation',
+        `Control source node is missing from Plan: ${input.source.node_key}`,
+      );
+    assertNodeOutputEnvelopeAuthority(
+      transaction,
+      input.planIdentity,
+      sourceNode,
+      sourceOutputAuthority,
+    );
+  }
+  const sourceOutput = sourceOutputAuthority?.content;
   const evaluate = (edge: JsonObject): 'taken' | 'not_taken' | 'error' => {
     if (edge.is_default === true) return 'not_taken';
     if (!outcomeMatches(input.source, edge.outcome_match)) return 'not_taken';
@@ -1440,8 +1533,8 @@ function resolveTerminalControlRoutes(
   };
   const grouped = new Set<string>();
   let orchestrationError = false;
-  const routeGroups = Array.isArray(input.plan.route_groups)
-    ? (input.plan.route_groups as JsonObject[])
+  const routeGroups = Array.isArray(plan.route_groups)
+    ? (plan.route_groups as JsonObject[])
     : [];
   for (const group of routeGroups.filter(
     (candidate) => candidate.from_node_id === input.source.node_key,
@@ -1639,6 +1732,20 @@ function resolveTerminalDataEdges(
         input.source.published_output_envelope_value_id,
         input.source.published_output_envelope_hash,
         `Node ${input.source.node_key} output`,
+      );
+      const sourceNode = (plan.nodes as JsonObject[]).find(
+        (candidate) => candidate.id === input.source.node_key,
+      );
+      if (!sourceNode)
+        throw new G5RuntimeError(
+          'integrity_violation',
+          `Data source node is missing from Plan: ${input.source.node_key}`,
+        );
+      assertNodeOutputEnvelopeAuthority(
+        transaction,
+        input.planIdentity,
+        sourceNode,
+        output,
       );
     } catch (error) {
       if (!(error instanceof G5RuntimeError)) throw error;
@@ -2911,7 +3018,7 @@ export function reconcileFactT3a(
             resolveTerminalControlRoutes(transaction, {
               graphRunId: input.graphRunId,
               scopeId: input.scopeId,
-              plan,
+              planIdentity,
               source: terminal,
               scopeInput: scopeInputJson,
               payload: input.payload,

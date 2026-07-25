@@ -1,6 +1,7 @@
 import { canonicalJson, domainSeparatedSha256 } from '../contracts/hash.js';
 import type { JsonObject, JsonValue, Sha256Hash } from '../contracts/types.js';
 import type { RuntimeRegistryRef } from '../contracts/g5-basic-runtime-types.js';
+import type { PlanGeneratedSchemaGenerator } from '../contracts/generated-schema-authority.js';
 import type {
   WorkflowRuntimeSqlValue,
   WorkflowRuntimeStore,
@@ -99,7 +100,7 @@ export type InlineValueSchemaAuthority =
       readonly planHash: Sha256Hash;
       readonly schemaRef: string;
       readonly schemaHash: Sha256Hash;
-      readonly generator: 'join_expose' | 'child_completion' | 'map_result';
+      readonly generator: PlanGeneratedSchemaGenerator;
       readonly parameterHash: Sha256Hash;
     };
 
@@ -117,6 +118,8 @@ export function insertInlineValue(
       | 'user_artifact'
       | 'pinned';
     readonly createdAtMs: number;
+    readonly rowVersion?: 0 | 1;
+    readonly ownerGraphRunId?: string;
   } & (
     | {
         readonly schemaAuthority: InlineValueSchemaAuthority;
@@ -152,12 +155,13 @@ export function insertInlineValue(
     provenance_ref: string;
     retention_class: string;
     payload_state: string;
+    row_version: number;
   }>(
     `SELECT id, inline_canonical_json, content_hash, schema_resource_id,
             schema_resource_hash, schema_authority_kind, schema_plan_id,
             schema_plan_hash, generated_schema_ref, generated_schema_hash,
             generated_schema_generator, generated_schema_parameter_hash,
-            provenance_ref, retention_class, payload_state
+            provenance_ref, retention_class, payload_state, row_version
        FROM workflow_values WHERE id = ?`,
     [input.id],
   );
@@ -186,12 +190,40 @@ export function insertInlineValue(
           : null) ||
       existing.provenance_ref !== input.provenanceRef ||
       existing.retention_class !== input.retentionClass ||
-      existing.payload_state !== 'live'
+      existing.payload_state !== 'live' ||
+      existing.row_version !== (input.rowVersion ?? 1)
     ) {
       throw new G5RuntimeError(
         'integrity_violation',
         `Immutable workflow value identity collision: ${input.id}`,
       );
+    }
+    if (input.ownerGraphRunId !== undefined) {
+      const ownership = transaction.queryAll<{
+        owner_workflow_id: string | null;
+        owner_graph_run_id: string | null;
+        owner_registry_resource_id: string | null;
+        owner_feature_release_id: string | null;
+        system_owner_ref: string | null;
+      }>(
+        `SELECT owner_workflow_id, owner_graph_run_id,
+                owner_registry_resource_id, owner_feature_release_id,
+                system_owner_ref
+           FROM workflow_value_ownerships WHERE value_id = ?`,
+        [input.id],
+      );
+      if (
+        ownership.length !== 1 ||
+        ownership[0]!.owner_workflow_id !== null ||
+        ownership[0]!.owner_graph_run_id !== input.ownerGraphRunId ||
+        ownership[0]!.owner_registry_resource_id !== null ||
+        ownership[0]!.owner_feature_release_id !== null ||
+        ownership[0]!.system_owner_ref !== null
+      )
+        throw new G5RuntimeError(
+          'integrity_violation',
+          `Immutable workflow value ownership drifted: ${input.id}`,
+        );
     }
     return 'exact_replay';
   }
@@ -205,7 +237,7 @@ export function insertInlineValue(
        generated_schema_ref, generated_schema_hash, generated_schema_generator,
        generated_schema_parameter_hash
      ) VALUES (?, 'inline', ?, NULL, NULL, NULL, ?, ?, 'application/json', ?, ?,
-       ?, ?, 'live', NULL, ?, 1, ?, ?, ?, ?, ?, ?, ?)`,
+       ?, ?, 'live', NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       input.id,
       canonical,
@@ -216,6 +248,7 @@ export function insertInlineValue(
       input.provenanceRef,
       input.retentionClass,
       input.createdAtMs,
+      input.rowVersion ?? 1,
       authority.kind,
       authority.kind === 'plan_generated' ? authority.planId : null,
       authority.kind === 'plan_generated' ? authority.planHash : null,
@@ -225,6 +258,20 @@ export function insertInlineValue(
       authority.kind === 'plan_generated' ? authority.parameterHash : null,
     ],
   );
+  if (input.ownerGraphRunId !== undefined) {
+    requireSingleChange(
+      transaction.execute(
+        `INSERT INTO workflow_value_ownerships (
+           value_id, owner_workflow_id, owner_graph_run_id,
+           owner_registry_resource_id, owner_feature_release_id,
+           system_owner_ref, created_at_ms
+         ) VALUES (?, NULL, ?, NULL, NULL, NULL, ?)`,
+        [input.id, input.ownerGraphRunId, input.createdAtMs],
+      ).changes,
+      `Workflow Value ownership insert ${input.id}`,
+      'integrity_violation',
+    );
+  }
   return 'inserted';
 }
 

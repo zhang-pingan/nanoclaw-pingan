@@ -9,24 +9,108 @@
   "payload": {
     "cases": [
       {
-        "case_id": "fault_t2a_before_commit",
+        "case_id": "fault_before_commit_t0",
+        "surface": "T0",
+        "assertion": "T0 rolls back every write when failure is injected before commit",
+        "expected": "rolled_back"
+      },
+      {
+        "case_id": "fault_before_commit_t0p",
+        "surface": "T0p",
+        "assertion": "T0p rolls back every write when failure is injected before commit",
+        "expected": "rolled_back"
+      },
+      {
+        "case_id": "fault_before_commit_t1",
+        "surface": "T1",
+        "assertion": "T1 rolls back every write when failure is injected before commit",
+        "expected": "rolled_back"
+      },
+      {
+        "case_id": "fault_before_commit_t2a",
         "surface": "T2a",
-        "assertion": "Plan, generated content, and bindings roll back together",
+        "assertion": "T2a rolls back every write when failure is injected before commit",
         "expected": "rolled_back"
       },
       {
-        "case_id": "fault_t3a_before_commit",
+        "case_id": "fault_before_commit_t2b",
+        "surface": "T2b",
+        "assertion": "T2b rolls back every write when failure is injected before commit",
+        "expected": "rolled_back"
+      },
+      {
+        "case_id": "fault_before_commit_t3a",
         "surface": "T3a",
-        "assertion": "aggregated generated Value and readiness roll back together",
+        "assertion": "T3a rolls back every write when failure is injected before commit",
         "expected": "rolled_back"
       },
       {
-        "case_id": "fault_t4_before_commit",
-        "surface": "T4",
-        "assertion": "port Values, envelope, Node, Event, and candidate roll back together",
+        "case_id": "fault_before_commit_t3b",
+        "surface": "T3b",
+        "assertion": "T3b rolls back every write when failure is injected before commit",
         "expected": "rolled_back"
+      },
+      {
+        "case_id": "fault_before_commit_t4",
+        "surface": "T4",
+        "assertion": "T4 rolls back every write when failure is injected before commit",
+        "expected": "rolled_back"
+      },
+      {
+        "case_id": "fault_before_commit_t5",
+        "surface": "T5",
+        "assertion": "T5 rolls back every write when failure is injected before commit",
+        "expected": "rolled_back"
+      },
+      {
+        "case_id": "fault_before_commit_t6a",
+        "surface": "T6a",
+        "assertion": "T6a rolls back every write when failure is injected before commit",
+        "expected": "rolled_back"
+      },
+      {
+        "case_id": "fault_before_commit_t6b",
+        "surface": "T6b",
+        "assertion": "T6b rolls back every write when failure is injected before commit",
+        "expected": "rolled_back"
+      },
+      {
+        "case_id": "fault_before_commit_t6c",
+        "surface": "T6c",
+        "assertion": "T6c rolls back every write when failure is injected before commit",
+        "expected": "rolled_back"
+      },
+      {
+        "case_id": "fault_before_commit_t6d",
+        "surface": "T6d",
+        "assertion": "T6d rolls back every write when failure is injected before commit",
+        "expected": "rolled_back"
+      },
+      {
+        "case_id": "fault_node_output_envelope_boundary",
+        "surface": "STORE",
+        "assertion": "generated content, binding, member Values, envelope, and ownership roll back together at every injected stage",
+        "expected": "rolled_back"
+      },
+      {
+        "case_id": "fault_capacity_after_prepare",
+        "surface": "CAP1_CAP2",
+        "assertion": "prepared Capacity invocation survives crash and resumes the same publication",
+        "expected": "replayed"
+      },
+      {
+        "case_id": "fault_capacity_after_rename",
+        "surface": "CAP2_CAP3",
+        "assertion": "Watcher rejects or resumes a renamed file before head commit",
+        "expected": "replayed"
+      },
+      {
+        "case_id": "fault_capacity_after_head",
+        "surface": "CAP3_CAP4",
+        "assertion": "CAP4 reopens the committed head and finalizes exactly once",
+        "expected": "replayed"
       }
     ]
   },
-  "hash": "sha256:6f65394d7948984330c6a763acde46a42c9803eeeaba750617683cd5556ef834"
+  "hash": "sha256:172324f37d126ed84e52d846d691bc1dcdef9d345d0930c2f186f6233db79d9e"
 }

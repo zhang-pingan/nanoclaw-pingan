@@ -18,6 +18,7 @@ import {
   loadMaterializedNodeAuthority,
   requiredObjectField,
 } from './plan-authority.js';
+import { persistNodeOutputEnvelope } from './generated-schema-runtime.js';
 
 export interface T6aResultInput {
   readonly graphRunId: string;
@@ -32,6 +33,7 @@ export interface T6aResultInput {
   readonly executionOutcome: 'succeeded' | 'failed' | 'cancelled';
   readonly qualityDecision: 'pass' | 'needs_revision' | 'fail' | null;
   readonly result: RuntimeValueRef | null;
+  readonly outputPorts: Readonly<Record<string, RuntimeValueRef | null>> | null;
   readonly evaluation: RuntimeValueRef | null;
   readonly feedback: RuntimeValueRef | null;
   readonly errorCode: string | null;
@@ -145,6 +147,32 @@ export function acceptInternalResultT6a(
             : input.qualityDecision === 'fail'
               ? 'quality_rejected'
               : input.errorCode;
+        const expectedTerminalSuccess =
+          retryReason === null &&
+          input.executionOutcome === 'succeeded' &&
+          expectedQuality === 'pass';
+        if (expectedTerminalSuccess !== (input.outputPorts !== null))
+          throw new G5RuntimeError(
+            'contract_invalid',
+            'T6a output port publication must exist only for terminal success',
+          );
+        const published = expectedTerminalSuccess
+          ? persistNodeOutputEnvelope(transaction, {
+              identity: authority,
+              node: authority.node,
+              sourcePorts: input.outputPorts!,
+              nowMs: input.nowMs,
+            })
+          : null;
+        const terminalNode = transaction.queryOne<{
+          published_output_envelope_value_id: string | null;
+          published_output_envelope_hash: string | null;
+        }>(
+          `SELECT published_output_envelope_value_id,
+                  published_output_envelope_hash
+             FROM workflow_graph_nodes WHERE id = ?`,
+          [input.nodeId],
+        );
         if (
           attempt.execution_outcome !== input.executionOutcome ||
           attempt.quality_decision !== expectedQuality ||
@@ -157,7 +185,12 @@ export function acceptInternalResultT6a(
           attempt.quality_revision_feedback_hash !==
             (expectedFeedback?.hash ?? null) ||
           attempt.retry_reason_code !== retryReason ||
-          attempt.error_code !== expectedErrorCode
+          attempt.error_code !== expectedErrorCode ||
+          !terminalNode ||
+          terminalNode.published_output_envelope_value_id !==
+            (published?.id ?? null) ||
+          terminalNode.published_output_envelope_hash !==
+            (published?.hash ?? null)
         )
           throw new G5RuntimeError(
             'integrity_violation',
@@ -350,6 +383,19 @@ export function acceptInternalResultT6a(
         disposition === 'terminal' &&
         input.executionOutcome === 'succeeded' &&
         terminalQuality === 'pass';
+      if (terminalSuccess !== (input.outputPorts !== null))
+        throw new G5RuntimeError(
+          'contract_invalid',
+          'T6a output port publication must exist only for terminal success',
+        );
+      const published = terminalSuccess
+        ? persistNodeOutputEnvelope(transaction, {
+            identity: authority,
+            node: authority.node,
+            sourcePorts: input.outputPorts!,
+            nowMs: input.nowMs,
+          })
+        : null;
       if (disposition === 'retry_scheduled') {
         if (
           transaction.execute(
@@ -369,8 +415,8 @@ export function acceptInternalResultT6a(
                   ? 'cancelled'
                   : 'failed',
               terminalErrorCode,
-              terminalSuccess ? (input.result?.id ?? null) : null,
-              terminalSuccess ? (input.result?.hash ?? null) : null,
+              published?.id ?? null,
+              published?.hash ?? null,
               input.nowMs,
               input.nowMs,
               input.nodeId,

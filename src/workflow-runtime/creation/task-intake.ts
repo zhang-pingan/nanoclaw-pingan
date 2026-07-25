@@ -103,7 +103,7 @@ export function createWorkflowT0(
   )
     throw new G5RuntimeError(
       'integrity_violation',
-      'T0 requires the current frozen Schema 6 identity',
+      'T0 requires the current frozen Schema 7 identity',
     );
   const observedCreationIntentHash = calculateCreationIntentHash({
     creationDomain: input.creationDomain,

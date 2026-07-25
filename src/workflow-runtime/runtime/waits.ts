@@ -19,6 +19,7 @@ import {
   loadMaterializedNodeAuthority,
   requiredObjectField,
 } from './plan-authority.js';
+import { persistNodeOutputEnvelope } from './generated-schema-runtime.js';
 
 function assertAuthorizationValue(
   transaction: WorkflowRuntimeWriteTransaction,
@@ -192,6 +193,32 @@ export function resolveWaitT6c(
             input.expectedScopeWorkFenceEpoch &&
           (priorInbox.disposition !== 'accepted' ||
             priorWait.status === expectedWaitStatus);
+        if (exact && input.resolution === 'signal') {
+          const published = persistNodeOutputEnvelope(transaction, {
+            identity: priorAuthority,
+            node: priorAuthority.node,
+            sourcePorts: { resolution: input.payload },
+            nowMs: input.receivedAtMs,
+          });
+          const node = transaction.queryOne<{
+            published_output_envelope_value_id: string | null;
+            published_output_envelope_hash: string | null;
+          }>(
+            `SELECT published_output_envelope_value_id,
+                    published_output_envelope_hash
+               FROM workflow_graph_nodes WHERE id = ?`,
+            [priorWait.node_id],
+          );
+          if (
+            !node ||
+            node.published_output_envelope_value_id !== published.id ||
+            node.published_output_envelope_hash !== published.hash
+          )
+            throw new G5RuntimeError(
+              'integrity_violation',
+              'T6c duplicate signal NodeOutputEnvelope drifted',
+            );
+        }
         return {
           disposition: exact ? 'duplicate' : 'conflict',
           inboxSequence: priorInbox.inbox_seq,
@@ -391,6 +418,15 @@ export function resolveWaitT6c(
           : input.resolution === 'timeout'
             ? 'timed_out'
             : 'cancelled';
+      const published =
+        input.resolution === 'signal'
+          ? persistNodeOutputEnvelope(transaction, {
+              identity: authority,
+              node: authority.node,
+              sourcePorts: { resolution: input.payload },
+              nowMs: input.receivedAtMs,
+            })
+          : null;
       if (
         transaction.execute(
           "UPDATE workflow_graph_waits SET status = ?, payload_value_id = ?, payload_hash = ?, resolved_at_ms = ?, registration_lease_owner = NULL, registration_lease_token = NULL, registration_lease_expires_at_ms = NULL, row_version = row_version + 1, updated_at_ms = ? WHERE id = ? AND row_version = ? AND status = 'armed' AND run_work_fence_epoch = ? AND scope_work_fence_epoch = ?",
@@ -418,8 +454,8 @@ export function resolveWaitT6c(
                 ? 'failed'
                 : 'cancelled',
             input.resolution === 'timeout' ? 'wait_timeout' : null,
-            input.resolution === 'signal' ? input.payload.id : null,
-            input.resolution === 'signal' ? input.payload.hash : null,
+            published?.id ?? null,
+            published?.hash ?? null,
             input.receivedAtMs,
             input.receivedAtMs,
             wait.node_id,

@@ -21,14 +21,38 @@
       },
       {
         "path": "src/workflow-runtime/contracts/g5-basic-runtime-repair-contract.test.ts",
-        "raw_sha256": "sha256:47419c2f087620e20820c310421265366d2009e435a716732843070164bf264c"
+        "raw_sha256": "sha256:e40793c0738dcf72ee50e62809d18e212af1a39b6498920845166ef9a8ea68e3"
+      },
+      {
+        "path": "src/workflow-runtime/contracts/g5-capacity-runtime-readiness-audit.test.ts",
+        "raw_sha256": "sha256:1f5cbc3dd8e1f0eb9d640d7a41934d8e3f4fc31a5a53406ee72d2b493c124742"
+      },
+      {
+        "path": "src/workflow-runtime/contracts/g5-runtime-readiness-audit.test.ts",
+        "raw_sha256": "sha256:bd4fc1ca1f7c0a9b76a66c5ebcd10c79cd3c823be9a92c2a04763c47cceccad2"
+      },
+      {
+        "path": "src/workflow-runtime/contracts/g5-capability-outbox-blocker.test.ts",
+        "raw_sha256": "sha256:67b947742e1d78bc73564fdfb98e22f7ad5f12ad50b45552ab5fb94668031d7a"
+      },
+      {
+        "path": "src/workflow-runtime/store/node-output-envelope-value-store.test.ts",
+        "raw_sha256": "sha256:12ccdf69ad64403e93fac52b8761f00136385a558a3683eaef845c4f179b9f88"
+      },
+      {
+        "path": "src/workflow-runtime/runtime/g5-test-bootstrap.ts",
+        "raw_sha256": "sha256:f5c78661c96a0fbe55d0fb098ce3757a17e438a383a8340ae5ac97f7921c01bd"
       },
       {
         "path": "src/workflow-runtime/runtime/g5-basic-runtime.test.ts",
-        "raw_sha256": "sha256:f907b9536f29e549bcddb0d52e93a518a640a085caa90dffd8e975c9aebb1364"
+        "raw_sha256": "sha256:e17cba5ee081e6bb45548337549db03e4b8976804804d67e11489b909dda8a64"
+      },
+      {
+        "path": "src/workflow-runtime/capacity/capacity-admin.test.ts",
+        "raw_sha256": "sha256:9d6262e5d1c63f17187298ef8f3225633995ce60512269eb372b495b50e5c1fe"
       }
     ],
-    "evidence_tree_hash": "sha256:5c757822fe91f9c8f7f74e8e7cc2f7f71c561fff07165f3aaa8d65c8c92f0b57"
+    "evidence_tree_hash": "sha256:aebacebbbd2dab4e78f7ec28c3a3fd3d7a2119dfa2b44ac36fb4ad889d66b81d"
   },
-  "hash": "sha256:5ba26544170e95280d4d2a9eea50a244732fa0db73c35ae07b3fad55c0d043bb"
+  "hash": "sha256:f1a78a4e6d64940de3088162d04775f5135b7f8764d640ac77369620539f4efb"
 }

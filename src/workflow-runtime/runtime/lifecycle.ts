@@ -72,7 +72,7 @@ export function activateWorkflowT1(
   )
     throw new G5RuntimeError(
       'integrity_violation',
-      'T1 requires the current frozen Schema 6 identity',
+      'T1 requires the current frozen Schema 7 identity',
     );
   return runImmediateG5Transaction(
     store,
@@ -88,7 +88,7 @@ export function activateWorkflowT1InTransaction(
   if (input.databaseSchemaHash !== G5_REPAIR_DATABASE_SCHEMA_HASH)
     throw new G5RuntimeError(
       'integrity_violation',
-      'T1 activation carries a non-current Schema 6 identity',
+      'T1 activation carries a non-current Schema 7 identity',
     );
   for (const [label, resource] of Object.entries({
     definition: input.definition,

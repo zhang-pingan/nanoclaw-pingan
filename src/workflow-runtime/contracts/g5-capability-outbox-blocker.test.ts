@@ -71,12 +71,12 @@ function insertRegistryResource(
     .run(id, resourceType, resourceId, valueId, contentHash);
 }
 
-function schema6Database(): Database.Database {
+function schema7Database(): Database.Database {
   const database = new Database(':memory:');
   database.pragma('foreign_keys = ON');
   database.exec(
     read(
-      'src/workflow-runtime/store/schema/migration/workflow-runtime-schema-v6.sql',
+      'src/workflow-runtime/store/schema/migration/workflow-runtime-schema-v7.sql',
     ).toString('utf8'),
   );
   database.exec('BEGIN');
@@ -244,8 +244,8 @@ describe('G5 Capability to Outbox execution-binding Contract repair', () => {
     expect(snapshot.snapshot_hash).toMatch(/^sha256:[0-9a-f]{64}$/);
   });
 
-  it('persists the exact binding through Schema 6 registry-authority Value FKs', () => {
-    const database = schema6Database();
+  it('persists the exact binding through Schema 7 registry-authority Value FKs', () => {
+    const database = schema7Database();
     try {
       database.exec('BEGIN');
       insertOutbox(database, HASH_B);
@@ -267,8 +267,8 @@ describe('G5 Capability to Outbox execution-binding Contract repair', () => {
     }
   });
 
-  it('rejects an Adapter identity drift at the deferred Schema 6 FK handoff', () => {
-    const database = schema6Database();
+  it('rejects an Adapter identity drift at the deferred Schema 7 FK handoff', () => {
+    const database = schema7Database();
     try {
       database.exec('BEGIN');
       insertOutbox(database, HASH_E);
@@ -279,8 +279,8 @@ describe('G5 Capability to Outbox execution-binding Contract repair', () => {
     }
   });
 
-  it('rejects a Policy snapshot hash drift at the deferred Schema 6 FK handoff', () => {
-    const database = schema6Database();
+  it('rejects a Policy snapshot hash drift at the deferred Schema 7 FK handoff', () => {
+    const database = schema7Database();
     try {
       database.exec('BEGIN');
       insertOutbox(database, HASH_B, HASH_E);

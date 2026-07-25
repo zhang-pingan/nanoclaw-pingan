@@ -57,7 +57,7 @@ describe('generated schema and join expose repair authority', () => {
     );
     expect(progress.match(/^\| R-019 \|/gm)).toEqual(['| R-019 |']);
     expect(progress).toContain(
-      '| R-019 | Generated Schema、Join Expose 与 NodeOutputEnvelope Authority | `CLOSED/EXIT_CANDIDATE_PENDING_INDEPENDENT_AFFECTED_CHAIN_REGRESSION` |',
+      '| R-019 | Generated Schema、Join Expose 与 NodeOutputEnvelope Authority | `CLOSED/DONE` |',
     );
 
     const document = fs.readFileSync(
@@ -97,7 +97,8 @@ describe('generated schema and join expose repair authority', () => {
   it('machine-closes content, Plan, Value, lowering, and G5 handoff semantics', () => {
     const pack = checkGeneratedSchemaJoinAuthorityRepair();
     const member = (pack.payload.members as Array<{ path: string }>).find(
-      ({ path }) => path === GENERATED_SCHEMA_JOIN_AUTHORITY_REPAIR_DECISION_PATH,
+      ({ path }) =>
+        path === GENERATED_SCHEMA_JOIN_AUTHORITY_REPAIR_DECISION_PATH,
     );
     expect(member).toBeDefined();
     const decision = parseContractArtifactEnvelope(

@@ -12,9 +12,9 @@
     "g5_done": false,
     "g6_through_g9": "NOT_READY",
     "historical_g5_candidate_authority": "forbidden",
-    "positive_case_count": 7,
-    "negative_case_count": 14,
-    "fault_case_count": 3,
+    "positive_case_count": 21,
+    "negative_case_count": 28,
+    "fault_case_count": 17,
     "member_count": 6,
     "members": [
       {
@@ -23,7 +23,7 @@
           "id": "icarus.workflow-g5-basic-runtime-repair-protocol",
           "version": "1.0.0"
         },
-        "hash": "sha256:c63f4683d640a437e17c89285915e0cd47b3bdb31ea42f82c2944ce2a956d250"
+        "hash": "sha256:d269db10b7e4ae10de2cc52e01ae08df525b59f574b88ecb633dddae08d70667"
       },
       {
         "format": "icarus.workflow-g5-basic-runtime-repair-positive-cases/1",
@@ -31,7 +31,7 @@
           "id": "icarus.workflow-g5-basic-runtime-repair-positive-cases",
           "version": "1.0.0"
         },
-        "hash": "sha256:23b95b337fd4bc3eccdba3e577d3cd9195bae7f9535d1d5f5c266bee87e82cee"
+        "hash": "sha256:67f1a94acf041beed1bf6b230c6e1e6ea3beace1c17e6244bf18f373de9c8e57"
       },
       {
         "format": "icarus.workflow-g5-basic-runtime-repair-negative-cases/1",
@@ -39,7 +39,7 @@
           "id": "icarus.workflow-g5-basic-runtime-repair-negative-cases",
           "version": "1.0.0"
         },
-        "hash": "sha256:3c204836a446e81cbd2ccbd346d17c0f5e3e87d04e2277a300181bd68658b728"
+        "hash": "sha256:2f05e5472f7416358c9bc1369874eca1977ac766fd96e15533c34fbda195ab9d"
       },
       {
         "format": "icarus.workflow-g5-basic-runtime-repair-fault-cases/1",
@@ -47,7 +47,7 @@
           "id": "icarus.workflow-g5-basic-runtime-repair-fault-cases",
           "version": "1.0.0"
         },
-        "hash": "sha256:6f65394d7948984330c6a763acde46a42c9803eeeaba750617683cd5556ef834"
+        "hash": "sha256:172324f37d126ed84e52d846d691bc1dcdef9d345d0930c2f186f6233db79d9e"
       },
       {
         "format": "icarus.workflow-g5-basic-runtime-repair-reference-authority/1",
@@ -55,7 +55,7 @@
           "id": "icarus.workflow-g5-basic-runtime-repair-reference-authority",
           "version": "1.0.0"
         },
-        "hash": "sha256:5ba26544170e95280d4d2a9eea50a244732fa0db73c35ae07b3fad55c0d043bb"
+        "hash": "sha256:f1a78a4e6d64940de3088162d04775f5135b7f8764d640ac77369620539f4efb"
       },
       {
         "format": "icarus.workflow-g5-basic-runtime-repair-implementation/1",
@@ -63,10 +63,10 @@
           "id": "icarus.workflow-g5-basic-runtime-repair-implementation",
           "version": "1.0.0"
         },
-        "hash": "sha256:d874eafbd58a056d116cd9e695281374b615c7a5e4539fe1eac6f8351634bd51"
+        "hash": "sha256:8107311c6ca5c26b1da2410200f94410b0fdc6c9f08323b2d04b356418ffec71"
       }
     ],
-    "member_tree_hash": "sha256:2d755557b235f46caabbb267f21b09833a89243420eadff7aa32d77e798df075"
+    "member_tree_hash": "sha256:3abd116319e0f3fac16be4135a43297f02ff156e47fe3f8a7ee5e8f31bff8406"
   },
-  "hash": "sha256:2c9f98f135ed4ee7186aa1f8ae15528d90ca2710d674b84e04eb0e25dac68ad4"
+  "hash": "sha256:84b6de036a9ef137ed0db6b5a715c440fa4d0b93eab7dc5f96984f43ab273582"
 }

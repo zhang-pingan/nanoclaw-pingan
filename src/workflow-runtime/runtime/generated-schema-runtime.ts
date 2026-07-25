@@ -1,10 +1,12 @@
 import type { CompiledScopePlanV2Document } from '../contracts/compiler-contract-repair-types.js';
 import {
   assertGeneratedSchemaAuthority,
+  buildNodeOutputEnvelopeSchema,
   buildPlanGeneratedSchemaBinding,
   generatedSchemaParameterHash,
-  type GeneratedSchemaGenerator,
+  type PlanGeneratedSchemaGenerator,
 } from '../contracts/generated-schema-authority.js';
+import { registryResourceId } from '../contracts/g3-registry-persistence.js';
 import {
   G5_REPAIR_NODE_OUTPUT_ENVELOPE_DOMAIN,
   G5_REPAIR_NODE_OUTPUT_PORT_CONTRACT_DOMAIN,
@@ -12,6 +14,10 @@ import {
 import { canonicalJson, domainSeparatedSha256 } from '../contracts/hash.js';
 import type { JsonObject, JsonValue, Sha256Hash } from '../contracts/types.js';
 import type { WorkflowRuntimeWriteTransaction } from '../store/runtime-store/index.js';
+import {
+  nodeOutputEnvelopeProvenanceRef,
+  nodeOutputMemberProvenanceRef,
+} from '../store/node-output-envelope-value-store.js';
 import { validateCompiledInputValue } from './fixed-point-authority.js';
 import {
   G5RuntimeError,
@@ -34,7 +40,7 @@ export interface PlanGeneratedValueAuthority {
   readonly planHash: Sha256Hash;
   readonly schemaRef: string;
   readonly schemaHash: Sha256Hash;
-  readonly generator: GeneratedSchemaGenerator;
+  readonly generator: PlanGeneratedSchemaGenerator;
   readonly parameterHash: Sha256Hash;
 }
 
@@ -116,6 +122,12 @@ function compiledSchemas(plan: CompiledScopePlanV2Document): JsonObject[] {
       const contract = object(contractValue, 'Plan output port contract');
       schemas.push(object(contract.schema, 'Plan output port schema'));
     }
+    schemas.push(
+      object(
+        node.output_envelope_schema,
+        `Plan node ${String(node.id)} output_envelope_schema`,
+      ),
+    );
   }
   for (const edge of plan.data_edges as JsonObject[])
     schemas.push(object(edge.derived_schema, 'Plan data edge derived_schema'));
@@ -290,9 +302,23 @@ export function assertCurrentPlanGeneratedSchemaAuthority(
   ) => JsonObject,
 ): JsonObject[] {
   const schemas = collectPlanGeneratedSchemas(plan);
-  for (const node of plan.nodes as JsonObject[])
+  for (const node of plan.nodes as JsonObject[]) {
+    const outputPorts = object(
+      node.output_ports,
+      `Plan node ${String(node.id)} output_ports`,
+    );
+    const descriptor = object(
+      node.output_envelope_schema,
+      `Plan node ${String(node.id)} output_envelope_schema`,
+    );
+    if (
+      canonicalJson(descriptor) !==
+      canonicalJson(buildNodeOutputEnvelopeSchema(String(node.id), outputPorts))
+    )
+      fail(`Plan node ${String(node.id)} output envelope descriptor drifted`);
     if (node.type === 'join')
       validateJoinAuthority(plan, node, resolveRegistrySchema);
+  }
   return schemas;
 }
 
@@ -553,7 +579,9 @@ export function loadPersistedPlanGeneratedSchemaAuthority(
       planHash: identity.planHash,
       schemaRef: String(compiledSchema.schema_ref),
       schemaHash: String(compiledSchema.schema_hash) as Sha256Hash,
-      generator: String(compiledSchema.generator) as GeneratedSchemaGenerator,
+      generator: String(
+        compiledSchema.generator,
+      ) as PlanGeneratedSchemaGenerator,
       parameterHash: String(compiledSchema.parameter_hash) as Sha256Hash,
     },
   };
@@ -701,7 +729,8 @@ function exactInlineValue(
         planHash: row.schema_plan_hash as Sha256Hash,
         schemaRef: row.generated_schema_ref,
         schemaHash: row.generated_schema_hash as Sha256Hash,
-        generator: row.generated_schema_generator as GeneratedSchemaGenerator,
+        generator:
+          row.generated_schema_generator as PlanGeneratedSchemaGenerator,
         parameterHash: row.generated_schema_parameter_hash as Sha256Hash,
       },
     };
@@ -719,6 +748,222 @@ function runtimeValueLimit(plan: CompiledScopePlanV2Document): number | null {
   if (!Number.isSafeInteger(maximum) || Number(maximum) < 0)
     fail('Plan max_single_value_bytes is invalid');
   return Number(maximum);
+}
+
+function loadCompiledOutputSchemaAuthority(
+  transaction: WorkflowRuntimeWriteTransaction,
+  identity: PersistedPlanIdentity,
+  compiledSchema: JsonObject,
+  label: string,
+): { schema: JsonObject; authority: InlineValueSchemaAuthority } {
+  if (compiledSchema.type === 'generated')
+    return loadPersistedPlanGeneratedSchemaAuthority(
+      transaction,
+      identity,
+      compiledSchema,
+      label,
+    );
+  if (compiledSchema.type !== 'registry')
+    fail(`${label} schema type is unsupported`);
+  const ref = object(compiledSchema.ref, `${label} Registry ref`);
+  const resourceId = registryResourceId({
+    resource_type: 'schema',
+    ref: { id: String(ref.id), version: String(ref.version) },
+  });
+  const row = transaction.queryOne<{
+    resource_id: string;
+    resource_version: string;
+    content_hash: string;
+    publication_state: string;
+    canonical_value_id: string;
+  }>(
+    `SELECT resource_id, resource_version, content_hash, publication_state,
+            canonical_value_id
+       FROM workflow_registry_resources
+      WHERE id = ? AND resource_type = 'schema'`,
+    [resourceId],
+  );
+  if (
+    !row ||
+    row.resource_id !== ref.id ||
+    row.resource_version !== ref.version ||
+    row.content_hash !== compiledSchema.schema_hash ||
+    row.publication_state !== 'published'
+  )
+    fail(`${label} exact Published Registry schema is unavailable`);
+  const stored = exactInlineValue(
+    transaction,
+    row.canonical_value_id,
+    row.content_hash as Sha256Hash,
+    `${label} Registry schema`,
+  );
+  return {
+    schema: object(stored.content, `${label} Registry schema content`),
+    authority: {
+      kind: 'registry',
+      resourceId,
+      resourceHash: row.content_hash as Sha256Hash,
+    },
+  };
+}
+
+export function persistNodeOutputEnvelope(
+  transaction: WorkflowRuntimeWriteTransaction,
+  input: {
+    readonly identity: PersistedPlanIdentity;
+    readonly node: JsonObject;
+    readonly sourcePorts: Readonly<
+      Record<string, { readonly id: string; readonly hash: Sha256Hash } | null>
+    >;
+    readonly nowMs: number;
+  },
+): PersistedNodeOutputEnvelope {
+  verifyPersistedPlanGeneratedSchemaAuthorities(transaction, input.identity);
+  const nodeId = String(input.node.id);
+  const exactNode = (input.identity.plan.nodes as JsonObject[]).find(
+    (candidate) => candidate.id === nodeId,
+  );
+  if (!exactNode || canonicalJson(exactNode) !== canonicalJson(input.node))
+    fail(`Node ${nodeId} is not the exact persisted Plan node`);
+  const outputPorts = object(
+    input.node.output_ports,
+    `Node ${nodeId} output_ports`,
+  );
+  if (!sameKeys(outputPorts, input.sourcePorts as unknown as JsonObject))
+    fail(`Node ${nodeId} output source map does not cover the exact port set`);
+
+  const published: Record<string, PublishedNodeOutputPort> = {};
+  for (const portName of Object.keys(outputPorts).sort(ascii)) {
+    const contract = object(
+      outputPorts[portName],
+      `Node ${nodeId} output ${portName}`,
+    );
+    const compiledSchema = object(
+      contract.schema,
+      `Node ${nodeId} output ${portName} schema`,
+    );
+    const schemaHash = String(compiledSchema.schema_hash) as Sha256Hash;
+    const sourceRef = input.sourcePorts[portName];
+    if (sourceRef === null) {
+      published[portName] = { state: 'absent', schema_hash: schemaHash };
+      continue;
+    }
+    const source = exactInlineValue(
+      transaction,
+      sourceRef.id,
+      sourceRef.hash,
+      `Node ${nodeId} output source ${portName}`,
+    );
+    const schema = loadCompiledOutputSchemaAuthority(
+      transaction,
+      input.identity,
+      compiledSchema,
+      `Node ${nodeId} output ${portName}`,
+    );
+    const validation = validateCompiledInputValue(
+      source.content,
+      compiledSchema,
+      contract.max_bytes,
+      {
+        resolveSchema: () => schema.schema,
+        maxSingleValueBytes: runtimeValueLimit(input.identity.plan),
+      },
+      `Node ${nodeId} output ${portName}`,
+    );
+    if (validation !== null)
+      fail(`Node ${nodeId} output ${portName} ${validation}`);
+    const memberIdentity: JsonObject = {
+      plan_id: input.identity.planId,
+      graph_run_id: input.identity.graphRunId,
+      plan_hash: input.identity.planHash,
+      node_id: nodeId,
+      port_name: portName,
+      source_value_id: sourceRef.id,
+      source_value_hash: sourceRef.hash,
+      value: source.content,
+    };
+    const valueId = stableRuntimeId('node-output-member', memberIdentity);
+    const valueHash = runtimeObjectHash('node-output-member', memberIdentity);
+    const provenanceRef = nodeOutputMemberProvenanceRef({
+      planId: input.identity.planId,
+      graphRunId: input.identity.graphRunId,
+      planHash: input.identity.planHash,
+      nodeId,
+      portName,
+      valueRef: valueId,
+      valueHash,
+      schemaHash,
+      byteLength: source.byteLength,
+    });
+    insertInlineValue(transaction, {
+      id: valueId,
+      content: source.content,
+      contentHash: valueHash,
+      schemaAuthority: schema.authority,
+      provenanceRef,
+      retentionClass: 'run_recovery',
+      createdAtMs: input.nowMs,
+      rowVersion: 0,
+      ownerGraphRunId: input.identity.graphRunId,
+    });
+    published[portName] = {
+      state: 'present',
+      value_ref: valueId,
+      value_hash: valueHash,
+      schema_hash: schemaHash,
+      byte_length: source.byteLength,
+    };
+  }
+
+  const descriptor = object(
+    input.node.output_envelope_schema,
+    `Node ${nodeId} output_envelope_schema`,
+  );
+  const envelopeAuthority = loadPersistedPlanGeneratedSchemaAuthority(
+    transaction,
+    input.identity,
+    descriptor,
+    `Node ${nodeId} output envelope`,
+  );
+  if (envelopeAuthority.authority.generator !== 'node_output_envelope')
+    fail(`Node ${nodeId} output envelope generator drifted`);
+  const envelope = buildCanonicalNodeOutputEnvelope(outputPorts, published);
+  const hash = String(envelope.envelope_hash) as Sha256Hash;
+  const id = stableRuntimeId('node-output-envelope', {
+    plan_id: input.identity.planId,
+    graph_run_id: input.identity.graphRunId,
+    plan_hash: input.identity.planHash,
+    node_id: nodeId,
+    envelope_hash: hash,
+  });
+  const provenanceRef = nodeOutputEnvelopeProvenanceRef({
+    planId: input.identity.planId,
+    graphRunId: input.identity.graphRunId,
+    planHash: input.identity.planHash,
+    nodeId,
+    schemaRef: envelopeAuthority.authority.schemaRef,
+    schemaHash: envelopeAuthority.authority.schemaHash,
+    parameterHash: envelopeAuthority.authority.parameterHash,
+    portContractHash: String(envelope.port_contract_hash) as Sha256Hash,
+    envelopeHash: hash,
+  });
+  insertInlineValue(transaction, {
+    id,
+    content: envelope,
+    contentHash: hash,
+    schemaAuthority: envelopeAuthority.authority,
+    provenanceRef,
+    retentionClass: 'run_recovery',
+    createdAtMs: input.nowMs,
+    rowVersion: 0,
+    ownerGraphRunId: input.identity.graphRunId,
+  });
+  return {
+    id,
+    hash,
+    portContractHash: String(envelope.port_contract_hash) as Sha256Hash,
+    envelope,
+  };
 }
 
 export function persistStructuralNodeOutputEnvelope(
@@ -760,24 +1005,11 @@ export function persistStructuralNodeOutputEnvelope(
   if (input.node.type !== 'join' && Object.keys(outputPorts).length !== 0)
     fail(`Structural node ${nodeId} has unsupported output ports`);
 
-  const published: Record<string, PublishedNodeOutputPort> = {};
-  let carrierAuthority: InlineValueSchemaAuthority | null = null;
+  const sourcePorts: Record<
+    string,
+    { readonly id: string; readonly hash: Sha256Hash } | null
+  > = {};
   for (const outputName of Object.keys(outputPorts).sort(ascii)) {
-    const output = object(
-      outputPorts[outputName],
-      `Node ${nodeId} output ${outputName}`,
-    );
-    const outputSchema = object(
-      output.schema,
-      `Node ${nodeId} output ${outputName} schema`,
-    );
-    const persistedSchema = loadPersistedPlanGeneratedSchemaAuthority(
-      transaction,
-      input.identity,
-      outputSchema,
-      `Node ${nodeId} output ${outputName}`,
-    );
-    carrierAuthority ??= persistedSchema.authority;
     const exposure = object(
       expose[outputName],
       `Join ${nodeId} expose ${outputName}`,
@@ -788,10 +1020,7 @@ export function persistStructuralNodeOutputEnvelope(
       `Join ${nodeId} input snapshot ${inputName}`,
     );
     if (snapshotPort.state === 'absent') {
-      published[outputName] = {
-        state: 'absent',
-        schema_hash: String(outputSchema.schema_hash) as Sha256Hash,
-      };
+      sourcePorts[outputName] = null;
       continue;
     }
     if (snapshotPort.state !== 'present')
@@ -820,77 +1049,15 @@ export function persistStructuralNodeOutputEnvelope(
       source.byteLength !== logical.byte_length
     )
       fail(`Join ${nodeId} input ${inputName} Value authority drifted`);
-    const validation = validateCompiledInputValue(
-      source.content,
-      outputSchema,
-      output.max_bytes,
-      {
-        resolveSchema: () => persistedSchema.schema,
-        maxSingleValueBytes: runtimeValueLimit(input.identity.plan),
-      },
-      `Join ${nodeId} output ${outputName}`,
-    );
-    if (validation !== null)
-      fail(`Join ${nodeId} output ${outputName} ${validation}`);
-    const valueIdentity: JsonObject = {
-      plan_hash: input.identity.planHash,
-      node_id: nodeId,
-      output_port: outputName,
-      input_port: inputName,
-      source_value_id: logical.value_id,
-      source_value_hash: logical.value_hash,
-      value: source.content,
-    };
-    const valueId = stableRuntimeId('join-output-port-value', valueIdentity);
-    const valueHash = runtimeObjectHash(
-      'join-output-port-value',
-      valueIdentity,
-    );
-    insertInlineValue(transaction, {
-      id: valueId,
-      content: source.content,
-      contentHash: valueHash,
-      schemaAuthority: persistedSchema.authority,
-      provenanceRef: `join-output:${input.identity.planHash}:${nodeId}:${outputName}`,
-      retentionClass: 'run_recovery',
-      createdAtMs: input.nowMs,
-    });
-    published[outputName] = {
-      state: 'present',
-      value_ref: valueId,
-      value_hash: valueHash,
-      schema_hash: String(outputSchema.schema_hash) as Sha256Hash,
-      byte_length: source.byteLength,
+    sourcePorts[outputName] = {
+      id: logical.value_id,
+      hash: logical.value_hash as Sha256Hash,
     };
   }
-
-  if (carrierAuthority === null)
-    carrierAuthority = exactInlineValue(
-      transaction,
-      input.carrierValueId,
-      input.carrierValueHash,
-      `Node ${nodeId} envelope carrier`,
-    ).authority;
-  const envelope = buildCanonicalNodeOutputEnvelope(outputPorts, published);
-  const hash = String(envelope.envelope_hash) as Sha256Hash;
-  const id = stableRuntimeId('node-output-envelope', {
-    plan_hash: input.identity.planHash,
-    node_id: nodeId,
-    envelope_hash: hash,
+  return persistNodeOutputEnvelope(transaction, {
+    identity: input.identity,
+    node: input.node,
+    sourcePorts,
+    nowMs: input.nowMs,
   });
-  insertInlineValue(transaction, {
-    id,
-    content: envelope,
-    contentHash: hash,
-    schemaAuthority: carrierAuthority,
-    provenanceRef: `node-output-envelope:${input.identity.planHash}:${nodeId}`,
-    retentionClass: 'run_recovery',
-    createdAtMs: input.nowMs,
-  });
-  return {
-    id,
-    hash,
-    portContractHash: String(envelope.port_contract_hash) as Sha256Hash,
-    envelope,
-  };
 }

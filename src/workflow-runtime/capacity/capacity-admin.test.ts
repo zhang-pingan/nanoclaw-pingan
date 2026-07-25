@@ -1,5 +1,4 @@
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
@@ -9,11 +8,9 @@ import type { InitializeDeploymentCapacityCommand } from '../contracts/capacity-
 import { domainSeparatedSha256 } from '../contracts/hash.js';
 import type { JsonObject, Sha256Hash } from '../contracts/types.js';
 import {
-  createG4TestBootstrap,
-  currentG4TestBootstrapSelector,
-  deriveG4TestDataRoot,
-  type G4TestBootstrapInstance,
-} from '../bootstrap/index.js';
+  createG5TestBootstrap,
+  type G5TestBootstrapInstance,
+} from '../runtime/g5-test-bootstrap.js';
 import type { WorkflowRuntimeStore } from '../store/runtime-store/index.js';
 import {
   prepareCapacityChangeCAP0CAP1,
@@ -25,19 +22,13 @@ import {
   recoverCapacityPublication,
 } from './publication.js';
 
-const instances: G4TestBootstrapInstance[] = [];
+const instances: G5TestBootstrapInstance[] = [];
 const capacityFixtureEvidence = new Map<string, string>();
 const hash = (label: string): Sha256Hash =>
   domainSeparatedSha256('icarus:g5-capacity-test:1\n', { label });
 
-function bootstrap(key: string): G4TestBootstrapInstance {
-  const selector = currentG4TestBootstrapSelector();
-  const parent = fs.realpathSync(os.tmpdir());
-  const instance = createG4TestBootstrap({
-    ...selector,
-    instanceKey: key,
-    dataRoot: deriveG4TestDataRoot(parent, key),
-  });
+function bootstrap(key: string): G5TestBootstrapInstance {
+  const instance = createG5TestBootstrap(key);
   instances.push(instance);
   return instance;
 }
@@ -339,7 +330,7 @@ describe('G5 Capacity Admin CAP0-CAP4 production prerequisite', () => {
       )!.count,
     ).toBe(1);
     for (const caseId of [
-      'capacity_recovery',
+      'capacity_admin_recovery',
       'capacity_file_tamper',
       'fault_capacity_after_prepare',
       'fault_capacity_after_rename',
@@ -378,7 +369,7 @@ describe('G5 Capacity Admin CAP0-CAP4 production prerequisite', () => {
   });
 
   it.each([
-    'capacity_recovery',
+    'capacity_admin_recovery',
     'capacity_file_tamper',
     'capacity_idempotency_conflict',
     'fault_capacity_after_prepare',

@@ -45,56 +45,67 @@ const evidenceSourcePaths = [
   'src/workflow-runtime/contracts/g5-basic-runtime-repair-reference-model.ts',
   'src/workflow-runtime/contracts/g5-basic-runtime-repair-reference-model.test.ts',
   'src/workflow-runtime/contracts/g5-basic-runtime-repair-contract.test.ts',
+  'src/workflow-runtime/contracts/g5-capacity-runtime-readiness-audit.test.ts',
+  'src/workflow-runtime/contracts/g5-runtime-readiness-audit.test.ts',
+  'src/workflow-runtime/contracts/g5-capability-outbox-blocker.test.ts',
+  'src/workflow-runtime/store/node-output-envelope-value-store.test.ts',
+  'src/workflow-runtime/runtime/g5-test-bootstrap.ts',
   'src/workflow-runtime/runtime/g5-basic-runtime.test.ts',
+  'src/workflow-runtime/capacity/capacity-admin.test.ts',
 ] as const;
 
 const exactBindings = [
   {
     name: 'r019_generated_schema_join_authority',
     path: 'src/workflow-runtime/contracts/conformance/generated-schema-join-authority-repair/contract-pack-generated-schema-join-authority-repair.json',
-    hash: 'sha256:0c9b1a04a013bf6284b36c550ead6d81cffecacbe4a9d6495d6153b2335a04fc',
+    hash: 'sha256:7a852ff21a77a767b708ab8a4fc5c329024ca954422b26d71210b0385ce05441',
   },
   {
-    name: 'database_schema_6',
+    name: 'database_schema_7',
     path: 'src/workflow-runtime/store/schema/contract-pack-g1-executable-schema.json',
-    hash: 'sha256:3cc206a6dfb1bbaed1bb0f4305323729db23d839652d8a0e020a9a6c4d3e3dd6',
+    hash: 'sha256:b60e3c7fe91d1cfab341d487102c7bff13ad73a320444b45fb6ea71d8b914306',
   },
   {
-    name: 'g2_v5_sealed_compiler_plan',
-    path: 'src/workflow-runtime/contracts/conformance/sealed/g2-generated-schema-join-authority-v5/golden-conformance-bundle@2.json',
-    hash: 'sha256:f59040be6f71d8655afcb11ab4527a6683125a7a4e683f1e734b44448f7bb72e',
+    name: 'g2_v6_sealed_compiler_plan',
+    path: 'src/workflow-runtime/contracts/conformance/sealed/g2-generated-schema-join-authority-v6/golden-conformance-bundle@2.json',
+    hash: 'sha256:5cf2d899d0bf8d7cc0d4b70cc7796a123b8b5384bbbefe3e204e70bddf33fe11',
     bundleHash:
-      'sha256:b37ddf415d12d759ddd4b72b754568e01715704d254da26e3355e0898cfeda05',
+      'sha256:0820328ae1cfdba7d05948d9e36498a5428d997d6eabfb833ef0ba7d84b77db7',
   },
   {
     name: 'g3_registry_publish_foundation',
     path: 'src/workflow-runtime/contracts/contract-pack-g3-registry-publish-foundation.json',
-    hash: 'sha256:c9364171a3d28a752d4510f59e5e45016cd86be14d7e151b483fc0c6c7a2807d',
+    hash: 'sha256:54355b3c74eb311e495ea31effcbfca6e3ce7547f2ccae663805556060b0b685',
   },
   {
     name: 'g3_registry_persistence',
     path: 'src/workflow-runtime/contracts/contract-pack-g3-registry-persistence.json',
-    hash: 'sha256:590acdd52626838bf30ae14bb04b6f0ee59a95e1efadc4911ff850acc2970763',
+    hash: 'sha256:746280b172ab970a953a20aaaf3dbff557fa7aaecfad6e20bcedc0a0171d72cb',
   },
   {
     name: 'g3_registry_exact_query',
     path: 'src/workflow-runtime/contracts/contract-pack-g3-registry-exact-resource-query.json',
-    hash: 'sha256:b6a4ec1dac738c6036869c763708f8aa144d0a864c8c392ee18cb3aba8c83417',
+    hash: 'sha256:0ef337e5b94dcbd279589a7522744462e7a5240e12be54cd47f6afd413675ed1',
   },
   {
     name: 'g3_retention_executor_preflight',
     path: 'src/workflow-runtime/contracts/contract-pack-g3-retention-executor-abi-preflight.json',
-    hash: 'sha256:7f807ae53e13bcec7712f77c1ebaba7aab5f72d2779ed5d99d33b0e6c54e98d3',
+    hash: 'sha256:207c7604cf8157dc6e17fe4440bdb6651fed22018e094d0a4342e4dce3c1117d',
   },
   {
     name: 'g3_workflow_publisher',
     path: 'src/workflow-runtime/contracts/contract-pack-g3-workflow-publisher.json',
-    hash: 'sha256:5d023a5323aec482781b0e992197571db9a09481a394eaf955d4598c249e4ec1',
+    hash: 'sha256:d25e7842961ee76b5736b3217628daf5adf7cd00b52d64c15020b7a2bde3f622',
   },
   {
     name: 'g3_feature_release_activation',
     path: 'src/workflow-runtime/contracts/contract-pack-g3.9-feature-release-activation.json',
-    hash: 'sha256:cbb6b355819b1eefefa7af5289b10b367c42bbe32b09f003151bc7f9ebf475d7',
+    hash: 'sha256:5411955aa8cd10888fb1ca3df38f311d0a0310d2bd5570ef1f7a9ed41fe08d95',
+  },
+  {
+    name: 'g4_node_output_envelope_authority_successor',
+    path: 'src/workflow-runtime/contracts/contract-pack-g4-node-output-envelope-authority-successor.json',
+    hash: 'sha256:2b27a8fad1e9a690922186d11bc173f4242174efc843c3eb35e8dfeb94f5c34f',
   },
   {
     name: 'gate_ownership',
@@ -117,9 +128,51 @@ interface RepairCase extends JsonObject {
 
 const positiveCases: readonly RepairCase[] = [
   {
+    case_id: 'intake_routing_domain_claim',
+    surface: 'T0',
+    assertion:
+      'intake, exact routing, creation intent, workflow, activation, and claims commit and replay atomically',
+    expected: 'accepted',
+  },
+  {
+    case_id: 'required_finalization_intent',
+    surface: 'T0p',
+    assertion:
+      'required finalization creates one stable intent and exact replay',
+    expected: 'accepted',
+  },
+  {
+    case_id: 'activation_state_lowering',
+    surface: 'T1',
+    assertion:
+      'activation lowers the exact state and immutable context authority',
+    expected: 'accepted',
+  },
+  {
     case_id: 'sealed_plan_generated_binding',
     surface: 'T2a',
     assertion: 'exact generated content and Plan bindings persist atomically',
+    expected: 'accepted',
+  },
+  {
+    case_id: 'static_graph_materialization',
+    surface: 'T2b',
+    assertion:
+      'exact Plan nodes, edges, limits, and bindings materialize atomically',
+    expected: 'accepted',
+  },
+  {
+    case_id: 'static_graph_fixed_point',
+    surface: 'T3a',
+    assertion:
+      'routing, data, trigger, input sealing, scheduler, Fact, Event, and ledger reach a deterministic fixed point',
+    expected: 'accepted',
+  },
+  {
+    case_id: 'settled_completion_selection',
+    surface: 'T3b',
+    assertion:
+      'settled completion selects one exact named exit or engine error',
     expected: 'accepted',
   },
   {
@@ -153,6 +206,62 @@ const positiveCases: readonly RepairCase[] = [
     expected: 'accepted',
   },
   {
+    case_id: 'capability_effect_outbox',
+    surface: 'T5',
+    assertion:
+      'exact Adapter, Policy, effect, idempotency key, claims, and outbox binding persist before external work',
+    expected: 'accepted',
+  },
+  {
+    case_id: 'system_execution_output_envelope',
+    surface: 'T6a',
+    assertion:
+      'terminal success publishes the exact compiled port set in its canonical envelope',
+    expected: 'accepted',
+  },
+  {
+    case_id: 'delegation_receipt_recovery',
+    surface: 'T6b',
+    assertion:
+      'unknown external outcome reconciles without a second operation identity',
+    expected: 'replayed',
+  },
+  {
+    case_id: 'durable_wait_signal_envelope',
+    surface: 'T6c',
+    assertion:
+      'one wait winner records typed authorization, inbox, Fact, Event, ledger release, and resolution envelope',
+    expected: 'accepted',
+  },
+  {
+    case_id: 'automatic_retry_timers',
+    surface: 'T6d',
+    assertion:
+      'watchdog and automatic retry consume the exact schedule and current Capacity lineage',
+    expected: 'accepted',
+  },
+  {
+    case_id: 'capacity_admin_recovery',
+    surface: 'CAP0_CAP4',
+    assertion:
+      'prepared publication and committed head recover across rename and reopen boundaries',
+    expected: 'replayed',
+  },
+  {
+    case_id: 'operational_blocker_create_open_cache',
+    surface: 'G5_BLOCKER',
+    assertion:
+      'blocker create, open listing, and run/workflow action-required caches commit together',
+    expected: 'accepted',
+  },
+  {
+    case_id: 'node_output_envelope_store_recovery',
+    surface: 'SCHEMA7_STORE',
+    assertion:
+      'canonical envelope and present members retain exact bytes, schema authority, provenance, and ownership through read, reopen, and recovery scan',
+    expected: 'replayed',
+  },
+  {
     case_id: 'sqlite_reopen_response_loss',
     surface: 'T4',
     assertion: 'response-loss replay is exact before and after Store reopen',
@@ -162,53 +271,178 @@ const positiveCases: readonly RepairCase[] = [
 
 const negativeCases: readonly RepairCase[] = [
   [
+    'creation_intent_conflict',
+    'same creation key with different intent bytes conflicts',
+    'T0',
+  ],
+  [
+    'stale_activation_row',
+    'stale activation row version cannot partially activate',
+    'T1',
+  ],
+  [
+    'stale_compile_lease',
+    'stale compile lease, epoch, source, or snapshot is rejected',
+    'T2a',
+  ],
+  [
+    'paused_materialization',
+    'paused or unhealthy runs cannot materialize',
+    'T2b',
+  ],
+  [
+    'fact_payload_drift',
+    'same Fact key with different bytes is an integrity violation',
+    'T3a',
+  ],
+  [
+    'stale_node_activation',
+    'node activation requires current work epochs and row version',
+    'T4',
+  ],
+  [
+    'latest_policy_forbidden',
+    'moving or latest Adapter and Delivery Policy lookup is forbidden',
+    'T5',
+  ],
+  [
+    'test_authority_promotion',
+    'test-only Registry authority cannot authorize Production dispatch',
+    'T5',
+  ],
+  ['late_worker_result', 'fenced acceptance cannot publish output', 'T6a'],
+  [
+    'callback_identity_drift',
+    'delegation callback identity drift is conflict or late evidence',
+    'T6b',
+  ],
+  [
+    'second_wait_winner',
+    'a terminal wait cannot accept a second winner',
+    'T6c',
+  ],
+  [
+    'manual_retry_without_gateway',
+    'manual retry requires future G7 authorization and audit',
+    'T6d',
+  ],
+  [
+    'capacity_file_tamper',
+    'a valid but unaudited Capacity file never becomes authority',
+    'CAP0_CAP4',
+  ],
+  [
+    'capacity_idempotency_conflict',
+    'same Capacity key with different request bytes conflicts',
+    'CAP0_CAP4',
+  ],
+  [
     'missing_generated_pair',
     'persisted content or Plan binding pair is absent',
+    'T2a_T3a_T4',
   ],
-  ['unknown_generated_scheme', 'generated schema ref scheme is unknown'],
-  ['generated_raw_hash_drift', 'canonical bytes and raw hash disagree'],
-  ['generated_domain_hash_drift', 'schema domain hash disagrees'],
-  ['generated_parameter_drift', 'join expose parameter hash disagrees'],
-  ['sealed_plan_binding_drift', 'persisted Plan bytes or hash disagree'],
-  ['schema_authority_mismatch', 'Value authority and envelope port disagree'],
-  ['join_expose_shape_mismatch', 'expose and output port sets disagree'],
-  ['required_output_absent', 'required output cannot be absent'],
-  ['output_schema_invalid', 'output content violates the generated schema'],
-  ['output_max_bytes_exceeded', 'output content exceeds the compiled maximum'],
-  ['port_contract_hash_drift', 'materialized port contract hash disagrees'],
+  ['unknown_generated_scheme', 'generated schema ref scheme is unknown', 'T2a'],
+  ['generated_raw_hash_drift', 'canonical bytes and raw hash disagree', 'T2a'],
+  ['generated_domain_hash_drift', 'schema domain hash disagrees', 'T2a'],
+  ['generated_parameter_drift', 'join expose parameter hash disagrees', 'T2a'],
+  [
+    'sealed_plan_binding_drift',
+    'persisted Plan bytes or hash disagree',
+    'T2a_T3a_T4',
+  ],
+  [
+    'schema_authority_mismatch',
+    'Value authority and envelope port disagree',
+    'T3a_T4',
+  ],
+  [
+    'join_expose_shape_mismatch',
+    'expose and output port sets disagree',
+    'T2a_T4',
+  ],
+  ['required_output_absent', 'required output cannot be absent', 'T4'],
+  [
+    'output_schema_invalid',
+    'output content violates the generated schema',
+    'T3a_T4',
+  ],
+  [
+    'output_max_bytes_exceeded',
+    'output content exceeds the compiled maximum',
+    'T3a_T4',
+  ],
+  [
+    'port_contract_hash_drift',
+    'materialized port contract hash disagrees',
+    'T3a_T4',
+  ],
   [
     'registry_latest_fallback',
     'Registry latest or network fallback is forbidden',
+    'T2a_T3a_T4',
   ],
-  ['input_snapshot_publication', 'input snapshot cannot masquerade as output'],
+  [
+    'input_snapshot_publication',
+    'input snapshot cannot masquerade as output',
+    'T4',
+  ],
 ].map(
-  ([caseId, assertion]): RepairCase => ({
+  ([caseId, assertion, surface]): RepairCase => ({
     case_id: caseId!,
-    surface: 'T2a_T3a_T4',
+    surface: surface!,
     assertion: assertion!,
     expected: 'rejected',
   }),
 );
 
 const faultCases: readonly RepairCase[] = [
+  ...[
+    'T0',
+    'T0p',
+    'T1',
+    'T2a',
+    'T2b',
+    'T3a',
+    'T3b',
+    'T4',
+    'T5',
+    'T6a',
+    'T6b',
+    'T6c',
+    'T6d',
+  ].map(
+    (surface): RepairCase => ({
+      case_id: `fault_before_commit_${surface.toLowerCase()}`,
+      surface,
+      assertion: `${surface} rolls back every write when failure is injected before commit`,
+      expected: 'rolled_back',
+    }),
+  ),
   {
-    case_id: 'fault_t2a_before_commit',
-    surface: 'T2a',
-    assertion: 'Plan, generated content, and bindings roll back together',
-    expected: 'rolled_back',
-  },
-  {
-    case_id: 'fault_t3a_before_commit',
-    surface: 'T3a',
-    assertion: 'aggregated generated Value and readiness roll back together',
-    expected: 'rolled_back',
-  },
-  {
-    case_id: 'fault_t4_before_commit',
-    surface: 'T4',
+    case_id: 'fault_node_output_envelope_boundary',
+    surface: 'STORE',
     assertion:
-      'port Values, envelope, Node, Event, and candidate roll back together',
+      'generated content, binding, member Values, envelope, and ownership roll back together at every injected stage',
     expected: 'rolled_back',
+  },
+  {
+    case_id: 'fault_capacity_after_prepare',
+    surface: 'CAP1_CAP2',
+    assertion:
+      'prepared Capacity invocation survives crash and resumes the same publication',
+    expected: 'replayed',
+  },
+  {
+    case_id: 'fault_capacity_after_rename',
+    surface: 'CAP2_CAP3',
+    assertion: 'Watcher rejects or resumes a renamed file before head commit',
+    expected: 'replayed',
+  },
+  {
+    case_id: 'fault_capacity_after_head',
+    surface: 'CAP3_CAP4',
+    assertion: 'CAP4 reopens the committed head and finalizes exactly once',
+    expected: 'replayed',
   },
 ] as const;
 
@@ -297,9 +531,16 @@ function buildArtifacts(): Array<[string, ContractArtifactEnvelope]> {
       plan_authority:
         'persisted_hash_verified_sealed_plan_plus_exact_generated_content_and_binding_rows',
       generated_value_authority:
-        'plan_generated_only_without_registry_fabrication',
+        'business_members_use_exact_compiled_schema_and_envelope_uses_exact_node_output_envelope_schema',
       output_publication:
         'canonical_node_output_envelope_with_exact_port_values',
+      node_output_envelope_store_boundary: [
+        'write',
+        'exact_replay',
+        'read',
+        'reopen',
+        'recovery_scan',
+      ],
       join_contracts: [
         'expose_rename',
         'required_single',
@@ -326,7 +567,7 @@ function buildArtifacts(): Array<[string, ContractArtifactEnvelope]> {
         'open_blocker_cache',
       ],
       g4_isolation_authority_hash:
-        'sha256:bd7b944c66181e05add3618e6355a1acc64ff452dc4c027d4556c776a4402046',
+        'sha256:2b27a8fad1e9a690922186d11bc173f4242174efc843c3eb35e8dfeb94f5c34f',
       forbidden: [
         'Gateway',
         'Command_Invocation_audit',

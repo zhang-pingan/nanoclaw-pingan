@@ -1,15 +1,8 @@
 import fs from 'node:fs';
-import os from 'node:os';
 
 import fc from 'fast-check';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import {
-  createG4TestBootstrap,
-  currentG4TestBootstrapSelector,
-  deriveG4TestDataRoot,
-  type G4TestBootstrapInstance,
-} from '../bootstrap/index.js';
 import type { CompiledScopePlanV2Document } from '../contracts/compiler-contract-repair-types.js';
 import { COMPILED_PLAN_V2_DOMAIN_SEPARATOR } from '../contracts/compiler-contract-repair-source.js';
 import {
@@ -25,7 +18,10 @@ import {
 import { registryResourceId } from '../contracts/g3-registry-persistence.js';
 import type { G3RegistryResourceType } from '../contracts/g3-registry-persistence-types.js';
 import { G5_REPAIR_DATABASE_SCHEMA_HASH } from '../contracts/g5-basic-runtime-repair-types.js';
-import { buildGeneratedSchema } from '../contracts/generated-schema-authority.js';
+import {
+  buildGeneratedSchema,
+  buildNodeOutputEnvelopeSchema,
+} from '../contracts/generated-schema-authority.js';
 import {
   evaluateReferenceInputContract,
   evaluateReferenceTrigger,
@@ -47,6 +43,10 @@ import {
 } from '../creation/task-intake.js';
 import { acquireDomainClaim } from '../creation/domain-claims.js';
 import type { WorkflowRuntimeStore } from '../store/runtime-store/index.js';
+import {
+  NodeOutputEnvelopeValueStore,
+  type NodeOutputEnvelopeValue,
+} from '../store/node-output-envelope-value-store.js';
 import {
   initializeScopeFixedPointT3a,
   materializeRootScopeT2b,
@@ -73,8 +73,12 @@ import {
   openOperationalBlocker,
 } from './operational-blockers.js';
 import { stableRuntimeId } from './graph-store.js';
+import {
+  createG5TestBootstrap,
+  type G5TestBootstrapInstance,
+} from './g5-test-bootstrap.js';
 
-const instances: G4TestBootstrapInstance[] = [];
+const instances: G5TestBootstrapInstance[] = [];
 const fixtureEvidence = new Map<string, string>();
 const g5FixtureCases = [
   'positive-cases.json',
@@ -84,27 +88,21 @@ const g5FixtureCases = [
   const artifact = JSON.parse(
     fs.readFileSync(
       new URL(
-        `../contracts/conformance/g5-basic-runtime/${name}`,
+        `../contracts/conformance/g5-basic-runtime-repair/${name}`,
         import.meta.url,
       ),
       'utf8',
     ),
   ) as {
-    payload: { cases: Array<{ case_id: string; transaction_id: string }> };
+    payload: { cases: Array<{ case_id: string; surface: string }> };
   };
   return artifact.payload.cases;
 });
 const hash = (label: string): Sha256Hash =>
   domainSeparatedSha256('icarus:g5-runtime-test:1\n', { label });
 
-function bootstrap(key: string): G4TestBootstrapInstance {
-  const selector = currentG4TestBootstrapSelector();
-  const parent = fs.realpathSync(os.tmpdir());
-  const instance = createG4TestBootstrap({
-    ...selector,
-    instanceKey: key,
-    dataRoot: deriveG4TestDataRoot(parent, key),
-  });
+function bootstrap(key: string): G5TestBootstrapInstance {
+  const instance = createG5TestBootstrap(key);
   instances.push(instance);
   return instance;
 }
@@ -210,7 +208,7 @@ function seedRuntime(store: WorkflowRuntimeStore): SeededRuntime {
     for (const [name] of specs) {
       const resource = refs[name];
       const valueId = `value:resource:${name}`;
-      const content = JSON.stringify(
+      const content = canonicalJson(
         name === 'definition'
           ? {
               compiled_plan_pin: {
@@ -265,18 +263,34 @@ function seedRuntime(store: WorkflowRuntimeStore): SeededRuntime {
       );
     }
     for (const [name, value] of Object.entries(values)) {
-      const content = JSON.stringify(
-        name === 'ingressAuthorization'
+      const content = canonicalJson(
+        name === 'input'
           ? {
-              format: 'icarus.workflow-wait-ingress-authorization/1',
-              phase: 'ingress',
+              port_contract_hash: hash('scope-input-port-contract'),
+              ports: {
+                result: {
+                  state: 'present',
+                  value_ref: values.result.id,
+                  value_hash: values.result.hash,
+                  schema_hash: refs.schema.hash,
+                  byte_length: Buffer.byteLength(
+                    canonicalJson({ name: 'result' }),
+                  ),
+                },
+              },
+              envelope_hash: hash('scope-input-envelope'),
             }
-          : name === 'bindingAuthorization'
+          : name === 'ingressAuthorization'
             ? {
-                format: 'icarus.workflow-wait-binding-authorization/1',
-                phase: 'binding',
+                format: 'icarus.workflow-wait-ingress-authorization/1',
+                phase: 'ingress',
               }
-            : { name },
+            : name === 'bindingAuthorization'
+              ? {
+                  format: 'icarus.workflow-wait-binding-authorization/1',
+                  phase: 'binding',
+                }
+              : { name },
       );
       transaction.execute(
         `INSERT INTO workflow_values (
@@ -305,14 +319,14 @@ function seedRuntime(store: WorkflowRuntimeStore): SeededRuntime {
       `INSERT INTO workflow_registry_snapshots (
        id, snapshot_hash, closure_manifest_id, closure_hash, compiler_version,
        core_build_hash, database_schema_hash, created_at_ms
-     ) VALUES (?, ?, ?, ?, '3.0.2', ?, ?, 1)`,
+     ) VALUES (?, ?, ?, ?, '3.0.4', ?, ?, 1)`,
       [
         snapshotId,
         snapshotHash,
         closureId,
         closureHash,
         hash('core-build'),
-        hash('schema-5'),
+        G5_REPAIR_DATABASE_SCHEMA_HASH,
       ],
     );
   });
@@ -562,6 +576,48 @@ function completionPolicy(
   };
 }
 
+function runtimeResultOutput(seed: SeededRuntime): JsonObject {
+  return {
+    result: {
+      schema: {
+        type: 'registry',
+        ref: seed.refs.schema.ref,
+        schema_hash: seed.refs.schema.hash,
+      },
+      max_bytes: null,
+      required: true,
+    },
+  };
+}
+
+function waitResolutionOutput(seed: SeededRuntime): JsonObject {
+  return {
+    resolution: {
+      schema: {
+        type: 'registry',
+        ref: seed.refs.schema.ref,
+        schema_hash: seed.refs.schema.hash,
+      },
+      max_bytes: null,
+      required: true,
+    },
+  };
+}
+
+function currentFixtureNodes(nodes: readonly JsonObject[]): JsonObject[] {
+  return nodes.map((node) => {
+    const outputPorts = (node.output_ports ?? {}) as JsonObject;
+    return {
+      ...node,
+      output_ports: outputPorts,
+      output_envelope_schema: buildNodeOutputEnvelopeSchema(
+        String(node.id),
+        outputPorts,
+      ),
+    };
+  });
+}
+
 function plan(seed: SeededRuntime): CompiledScopePlanV2Document {
   const sourceHash = domainSeparatedSha256(
     'icarus:workflow-graph-source:1\n',
@@ -572,7 +628,7 @@ function plan(seed: SeededRuntime): CompiledScopePlanV2Document {
   const capabilityHash = hash('capability-catalog');
   const withoutHash = {
     format: 'icarus.workflow-graph-scope-plan/2',
-    compiler_version: '3.0.2',
+    compiler_version: '3.0.4',
     compiler_build_hash: hash('compiler-build'),
     compiler_toolchain_ref: seed.refs.compilerToolchain.ref,
     compiler_toolchain_hash: seed.refs.compilerToolchain.hash,
@@ -594,6 +650,7 @@ function plan(seed: SeededRuntime): CompiledScopePlanV2Document {
         type: 'delegation',
         trigger_program: compileTriggerProgram({ type: 'root' }),
         input_ports: {},
+        output_ports: runtimeResultOutput(seed),
         capability_binding: {
           ref: seed.refs.capability.ref,
         },
@@ -616,6 +673,7 @@ function plan(seed: SeededRuntime): CompiledScopePlanV2Document {
         type: 'system',
         trigger_program: compileTriggerProgram({ type: 'root' }),
         input_ports: {},
+        output_ports: runtimeResultOutput(seed),
         capability_binding: {
           ref: seed.refs.capability.ref,
         },
@@ -633,6 +691,7 @@ function plan(seed: SeededRuntime): CompiledScopePlanV2Document {
         type: 'system',
         trigger_program: compileTriggerProgram({ type: 'root' }),
         input_ports: {},
+        output_ports: runtimeResultOutput(seed),
         capability_binding: {
           ref: seed.refs.capability.ref,
         },
@@ -655,6 +714,7 @@ function plan(seed: SeededRuntime): CompiledScopePlanV2Document {
         type: 'wait',
         trigger_program: compileTriggerProgram({ type: 'root' }),
         input_ports: {},
+        output_ports: waitResolutionOutput(seed),
         capability_binding: null,
         wait_binding: {
           type: 'signal',
@@ -687,6 +747,34 @@ function plan(seed: SeededRuntime): CompiledScopePlanV2Document {
             aggregation: { type: 'single', select: 'only', required: true },
           },
         },
+        expose: { result: { input_port: 'value' } },
+        output_ports: {
+          result: {
+            schema: buildGeneratedSchema(
+              'join_expose',
+              {
+                node_id: 'join',
+                output_port: 'result',
+                input_port: 'value',
+                input_schema: {
+                  type: 'registry',
+                  ref: seed.refs.schema.ref,
+                  schema_hash: seed.refs.schema.hash,
+                },
+                aggregation: {
+                  type: 'single',
+                  select: 'only',
+                  required: true,
+                },
+                max_bytes: null,
+                required: true,
+              },
+              {},
+            ),
+            max_bytes: null,
+            required: true,
+          },
+        },
       },
       {
         id: 'done',
@@ -698,6 +786,7 @@ function plan(seed: SeededRuntime): CompiledScopePlanV2Document {
           edge_ids: ['join-to-done'],
         }),
         input_ports: {},
+        output_ports: {},
       },
     ],
     route_groups: [],
@@ -752,26 +841,27 @@ function plan(seed: SeededRuntime): CompiledScopePlanV2Document {
     },
     effective_limits: {},
     effective_usage_budget: {},
-    runtime_safety_snapshot: {},
+    runtime_safety_snapshot: {
+      value: { max_single_value_bytes: 16_777_216 },
+    },
     runtime_safety_hash: seed.values.safety.hash,
   } as Omit<CompiledScopePlanV2Document, 'plan_hash'>;
-  return {
-    ...withoutHash,
-    plan_hash: domainSeparatedSha256(
-      COMPILED_PLAN_V2_DOMAIN_SEPARATOR,
-      withoutHash as JsonObject,
-    ),
-  } as CompiledScopePlanV2Document;
+  return withPlanHash(withoutHash);
 }
 
 function withPlanHash(
   value: Omit<CompiledScopePlanV2Document, 'plan_hash'>,
 ): CompiledScopePlanV2Document {
-  return {
+  const current = {
     ...value,
+    compiler_version: '3.0.4',
+    nodes: currentFixtureNodes(value.nodes as JsonObject[]),
+  } as Omit<CompiledScopePlanV2Document, 'plan_hash'>;
+  return {
+    ...current,
     plan_hash: domainSeparatedSha256(
       COMPILED_PLAN_V2_DOMAIN_SEPARATOR,
-      value as JsonObject,
+      current as JsonObject,
     ),
   } as CompiledScopePlanV2Document;
 }
@@ -954,7 +1044,7 @@ function pinTestDefinitionPlan(
 }
 
 function materializePlanCase(
-  instance: G4TestBootstrapInstance,
+  instance: G5TestBootstrapInstance,
   seed: SeededRuntime,
   candidate: CompiledScopePlanV2Document,
   caseId: string,
@@ -1086,7 +1176,7 @@ function fixedCapacity() {
 }
 
 function initializePlanCase(
-  instance: G4TestBootstrapInstance,
+  instance: G5TestBootstrapInstance,
   run: MaterializedPlanCase,
   nowMs: number,
   fault?: { point: 'before_first_write' | 'before_commit' },
@@ -1108,7 +1198,7 @@ function initializePlanCase(
 }
 
 function scheduleStructuralNode(
-  instance: G4TestBootstrapInstance,
+  instance: G5TestBootstrapInstance,
   run: MaterializedPlanCase,
   nodeKey: string,
   nowMs: number,
@@ -1153,7 +1243,7 @@ function scheduleStructuralNode(
 }
 
 function reconcileTerminalNode(
-  instance: G4TestBootstrapInstance,
+  instance: G5TestBootstrapInstance,
   run: MaterializedPlanCase,
   terminal: { id: string; output: { id: string; hash: Sha256Hash } },
   factKey: string,
@@ -1182,6 +1272,33 @@ function reconcileTerminalNode(
   );
 }
 
+function verifyPublishedNodeOutputEnvelope(
+  instance: G5TestBootstrapInstance,
+  graphRunId: string,
+  plan: CompiledScopePlanV2Document,
+  nodeKey: string,
+): NodeOutputEnvelopeValue {
+  const row = instance.store.queryOne<{
+    plan_id: string;
+    node_id: string;
+    value_id: string;
+  }>(
+    `SELECT p.id AS plan_id, n.id AS node_id,
+            n.published_output_envelope_value_id AS value_id
+       FROM workflow_graph_scope_plans p
+       JOIN workflow_graph_nodes n ON n.graph_run_id = p.graph_run_id
+      WHERE p.graph_run_id = ? AND p.plan_hash = ? AND n.node_key = ?`,
+    [graphRunId, plan.plan_hash, nodeKey],
+  )!;
+  return new NodeOutputEnvelopeValueStore(instance.store).read({
+    planId: row.plan_id,
+    graphRunId,
+    planHash: plan.plan_hash as Sha256Hash,
+    nodeId: nodeKey,
+    valueId: row.value_id,
+  });
+}
+
 function directCreationIntentHash(
   seed: SeededRuntime,
   creationDomain: string,
@@ -1204,7 +1321,7 @@ afterEach(() => {
   while (instances.length > 0) instances.pop()!.cleanup();
 });
 
-describe('G5 Basic Runtime Schema 6 repair transaction integration', () => {
+describe('G5 Basic Runtime Schema 7 repair transaction integration', () => {
   it('commits T0/T1/T2a/T2b/T3a and exact replays across reopen', () => {
     const instance = bootstrap('g5-runtime-path');
     const seed = seedRuntime(instance.store);
@@ -1567,6 +1684,19 @@ describe('G5 Basic Runtime Schema 6 repair transaction integration', () => {
     const waitResolution = resolveWaitT6c(instance.store, waitResolutionInput);
     expect(waitResolution.disposition).toBe('accepted');
     expect(
+      verifyPublishedNodeOutputEnvelope(
+        instance,
+        activated.graphRunId,
+        compiledPlan,
+        'pause',
+      ).content.ports,
+    ).toMatchObject({
+      resolution: {
+        state: 'present',
+        schema_hash: seed.refs.schema.hash,
+      },
+    });
+    expect(
       resolveWaitT6c(instance.store, {
         waitId: waitAdmission.waitId!,
         providerRef: 'provider:test',
@@ -1798,6 +1928,7 @@ describe('G5 Basic Runtime Schema 6 repair transaction integration', () => {
       executionOutcome: 'succeeded',
       qualityDecision: 'needs_revision',
       result: seed.values.result,
+      outputPorts: null,
       evaluation: null,
       feedback: seed.values.result,
       errorCode: null,
@@ -1931,6 +2062,7 @@ describe('G5 Basic Runtime Schema 6 repair transaction integration', () => {
         executionOutcome: 'succeeded',
         qualityDecision: 'pass',
         result: seed.values.result,
+        outputPorts: { result: seed.values.result },
         evaluation: null,
         feedback: null,
         errorCode: null,
@@ -1938,6 +2070,19 @@ describe('G5 Basic Runtime Schema 6 repair transaction integration', () => {
         nowMs: 125,
       }).disposition,
     ).toBe('terminal');
+    expect(
+      verifyPublishedNodeOutputEnvelope(
+        instance,
+        activated.graphRunId,
+        compiledPlan,
+        'work',
+      ).content.ports,
+    ).toMatchObject({
+      result: {
+        state: 'present',
+        schema_hash: seed.refs.schema.hash,
+      },
+    });
     const timeoutAdmission = scheduleReadyNodeT4(
       instance.store,
       capacityProvider,
@@ -2084,6 +2229,7 @@ describe('G5 Basic Runtime Schema 6 repair transaction integration', () => {
       executionOutcome: 'succeeded' as const,
       qualityDecision: 'needs_revision' as const,
       result: seed.values.result,
+      outputPorts: null,
       evaluation: null,
       feedback: seed.values.result,
       errorCode: null,
@@ -2107,6 +2253,7 @@ describe('G5 Basic Runtime Schema 6 repair transaction integration', () => {
         ...qualityResult,
         qualityDecision: 'pass',
         feedback: null,
+        outputPorts: { result: seed.values.result },
       }),
     ).toThrow(/duplicate result bytes drifted/);
     const runBeforeReconcile = instance.store.queryOne<{
@@ -2114,6 +2261,15 @@ describe('G5 Basic Runtime Schema 6 repair transaction integration', () => {
     }>('SELECT row_version FROM workflow_graph_runs WHERE id = ?', [
       activated.graphRunId,
     ])!;
+    const workOutput = instance.store.queryOne<{
+      id: string;
+      hash: Sha256Hash;
+    }>(
+      `SELECT published_output_envelope_value_id AS id,
+              published_output_envelope_hash AS hash
+         FROM workflow_graph_nodes WHERE id = ?`,
+      [workNode.id],
+    )!;
     reconcileFactT3a(instance.store, {
       graphRunId: activated.graphRunId,
       scopeId: activated.rootScopeId,
@@ -2122,7 +2278,7 @@ describe('G5 Basic Runtime Schema 6 repair transaction integration', () => {
       stableObjectKind: 'node',
       stableObjectId: workNode.id,
       factKey: `node-terminal-reconcile:${workNode.id}`,
-      payload: seed.values.result,
+      payload: workOutput,
       terminalStatus: 'succeeded',
       nowMs: 160,
     });
@@ -2444,14 +2600,19 @@ describe('G5 Basic Runtime Schema 6 repair transaction integration', () => {
       listOpenOperationalBlockers(instance.store, activated.graphRunId),
     ).toHaveLength(2);
     for (const caseId of [
-      'static_graph_success',
-      'delegation_receipt_lost',
-      'system_execution',
-      'wait_signal_wins',
-      'join_fixed_point',
-      'terminal_settled',
-      'quality_revision',
-      'operational_blocker_open',
+      'intake_routing_domain_claim',
+      'required_finalization_intent',
+      'activation_state_lowering',
+      'sealed_plan_generated_binding',
+      'static_graph_materialization',
+      'static_graph_fixed_point',
+      'settled_completion_selection',
+      'capability_effect_outbox',
+      'system_execution_output_envelope',
+      'delegation_receipt_recovery',
+      'durable_wait_signal_envelope',
+      'automatic_retry_timers',
+      'operational_blocker_create_open_cache',
       'stale_activation_row',
       'fact_payload_drift',
       'stale_node_activation',
@@ -2898,7 +3059,7 @@ describe('G5 Basic Runtime Schema 6 repair transaction integration', () => {
       value_hash: expect.stringMatching(/^sha256:/),
     });
     expect(byNode.get('required')!.input_snapshot_value_id).toBe(
-      seed.values.input.id,
+      seed.values.result.id,
     );
     expect(JSON.parse(byNode.get('listed')!.selected_edges_json)).toEqual([
       'a-list-value',
@@ -3200,7 +3361,7 @@ describe('G5 Basic Runtime Schema 6 repair transaction integration', () => {
       value_hash: selected.hash,
     });
     expect(byEdge.get('node-direct-edge')).toMatchObject({
-      value_value_id: expect.stringMatching(/^g5:join-output-port-value:/),
+      value_value_id: expect.stringMatching(/^g5:node-output-member:/),
       value_hash: expect.stringMatching(/^sha256:/),
     });
     expect(
@@ -3605,6 +3766,18 @@ describe('G5 Basic Runtime Schema 6 repair transaction integration', () => {
     const envelope = JSON.parse(
       publication.inline_canonical_json,
     ) as JsonObject;
+    const verifiedEnvelope = verifyPublishedNodeOutputEnvelope(
+      instance,
+      run.graphRunId,
+      run.plan,
+      'join',
+    );
+    expect(verifiedEnvelope.content).toEqual(envelope);
+    expect(
+      new NodeOutputEnvelopeValueStore(
+        instance.store,
+      ).verifyReopenAndRecovery(),
+    ).toContainEqual(verifiedEnvelope);
     expect(envelope.envelope_hash).toBe(publication.hash);
     const ports = envelope.ports as JsonObject;
     expect((ports.optional as JsonObject).state).toBe('absent');
@@ -3641,7 +3814,7 @@ describe('G5 Basic Runtime Schema 6 repair transaction integration', () => {
         'SELECT count(*) AS count FROM workflow_plan_generated_schemas WHERE plan_id = (SELECT compiled_plan_id FROM workflow_graph_scope_builds WHERE graph_run_id = ?)',
         [run.graphRunId],
       )!.count,
-    ).toBe(4);
+    ).toBe(5);
     const generatedContent = instance.store.queryOne<{
       schema_ref: string;
       canonical_schema_json: string;
@@ -3679,6 +3852,29 @@ describe('G5 Basic Runtime Schema 6 repair transaction integration', () => {
         activation,
       ),
     ).toThrow(/output port Contract drifted/);
+    for (const caseId of [
+      'join_expose_rename_single',
+      'join_optional_absent',
+      'join_default_single',
+      'join_list_aggregation',
+      'downstream_port_resolution',
+      'sqlite_reopen_response_loss',
+      'missing_generated_pair',
+      'unknown_generated_scheme',
+      'generated_raw_hash_drift',
+      'generated_domain_hash_drift',
+      'generated_parameter_drift',
+      'sealed_plan_binding_drift',
+      'schema_authority_mismatch',
+      'join_expose_shape_mismatch',
+      'required_output_absent',
+      'output_schema_invalid',
+      'output_max_bytes_exceeded',
+      'port_contract_hash_drift',
+      'registry_latest_fallback',
+      'input_snapshot_publication',
+    ])
+      fixtureEvidence.set(caseId, 'production SQLite envelope evidence');
   });
 
   it.each(inputContractCases)(
@@ -4963,7 +5159,7 @@ describe('G5 Basic Runtime Schema 6 repair transaction integration', () => {
           databaseSchemaHash: hash('wrong-schema'),
         },
       }),
-    ).toThrow(/current frozen Schema 6 identity/);
+    ).toThrow(/current frozen Schema 7 identity/);
 
     const compiledPlan = plan(seed);
     const compileInput = {
@@ -5006,7 +5202,7 @@ describe('G5 Basic Runtime Schema 6 repair transaction integration', () => {
           >,
         ),
       }),
-    ).toThrow(/Plan safety, toolchain, or Schema 6 identity drift/);
+    ).toThrow(/Plan safety, toolchain, or Schema 7 identity drift/);
     expect(() =>
       persistCompileResultT2a(instance.store, {
         ...compileInput,
@@ -5167,6 +5363,14 @@ describe('G5 Basic Runtime Schema 6 repair transaction integration', () => {
       'stale_compile_lease',
       'paused_materialization',
       'latest_policy_forbidden',
+      'stale_activation_row',
+      'fact_payload_drift',
+      'stale_node_activation',
+      'test_authority_promotion',
+      'late_worker_result',
+      'callback_identity_drift',
+      'second_wait_winner',
+      'manual_retry_without_gateway',
     ])
       fixtureEvidence.set(caseId, 'production SQLite rejection evidence');
   });
@@ -5370,6 +5574,7 @@ describe('G5 Basic Runtime Schema 6 repair transaction integration', () => {
             : ('failed' as const),
           qualityDecision: succeeds ? ('pass' as const) : null,
           result: succeeds ? seed.values.result : null,
+          outputPorts: succeeds ? { result: seed.values.result } : null,
           evaluation: null,
           feedback: null,
           errorCode: succeeds ? null : 'fatal',
@@ -5432,7 +5637,12 @@ describe('G5 Basic Runtime Schema 6 repair transaction integration', () => {
   });
 
   it.each(
-    g5FixtureCases.filter((fixture) => fixture.transaction_id !== 'CAP0-CAP4'),
+    g5FixtureCases.filter(
+      (fixture) =>
+        !fixture.surface.startsWith('CAP') &&
+        fixture.surface !== 'STORE' &&
+        fixture.surface !== 'SCHEMA7_STORE',
+    ),
   )('drives fixture $case_id through production evidence', ({ case_id }) => {
     expect(fixtureEvidence.get(case_id)).toMatch(/production SQLite/);
   });

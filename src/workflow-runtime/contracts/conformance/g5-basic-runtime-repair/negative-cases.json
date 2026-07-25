@@ -9,6 +9,90 @@
   "payload": {
     "cases": [
       {
+        "case_id": "creation_intent_conflict",
+        "surface": "T0",
+        "assertion": "same creation key with different intent bytes conflicts",
+        "expected": "rejected"
+      },
+      {
+        "case_id": "stale_activation_row",
+        "surface": "T1",
+        "assertion": "stale activation row version cannot partially activate",
+        "expected": "rejected"
+      },
+      {
+        "case_id": "stale_compile_lease",
+        "surface": "T2a",
+        "assertion": "stale compile lease, epoch, source, or snapshot is rejected",
+        "expected": "rejected"
+      },
+      {
+        "case_id": "paused_materialization",
+        "surface": "T2b",
+        "assertion": "paused or unhealthy runs cannot materialize",
+        "expected": "rejected"
+      },
+      {
+        "case_id": "fact_payload_drift",
+        "surface": "T3a",
+        "assertion": "same Fact key with different bytes is an integrity violation",
+        "expected": "rejected"
+      },
+      {
+        "case_id": "stale_node_activation",
+        "surface": "T4",
+        "assertion": "node activation requires current work epochs and row version",
+        "expected": "rejected"
+      },
+      {
+        "case_id": "latest_policy_forbidden",
+        "surface": "T5",
+        "assertion": "moving or latest Adapter and Delivery Policy lookup is forbidden",
+        "expected": "rejected"
+      },
+      {
+        "case_id": "test_authority_promotion",
+        "surface": "T5",
+        "assertion": "test-only Registry authority cannot authorize Production dispatch",
+        "expected": "rejected"
+      },
+      {
+        "case_id": "late_worker_result",
+        "surface": "T6a",
+        "assertion": "fenced acceptance cannot publish output",
+        "expected": "rejected"
+      },
+      {
+        "case_id": "callback_identity_drift",
+        "surface": "T6b",
+        "assertion": "delegation callback identity drift is conflict or late evidence",
+        "expected": "rejected"
+      },
+      {
+        "case_id": "second_wait_winner",
+        "surface": "T6c",
+        "assertion": "a terminal wait cannot accept a second winner",
+        "expected": "rejected"
+      },
+      {
+        "case_id": "manual_retry_without_gateway",
+        "surface": "T6d",
+        "assertion": "manual retry requires future G7 authorization and audit",
+        "expected": "rejected"
+      },
+      {
+        "case_id": "capacity_file_tamper",
+        "surface": "CAP0_CAP4",
+        "assertion": "a valid but unaudited Capacity file never becomes authority",
+        "expected": "rejected"
+      },
+      {
+        "case_id": "capacity_idempotency_conflict",
+        "surface": "CAP0_CAP4",
+        "assertion": "same Capacity key with different request bytes conflicts",
+        "expected": "rejected"
+      },
+      {
         "case_id": "missing_generated_pair",
         "surface": "T2a_T3a_T4",
         "assertion": "persisted content or Plan binding pair is absent",
@@ -16,25 +100,25 @@
       },
       {
         "case_id": "unknown_generated_scheme",
-        "surface": "T2a_T3a_T4",
+        "surface": "T2a",
         "assertion": "generated schema ref scheme is unknown",
         "expected": "rejected"
       },
       {
         "case_id": "generated_raw_hash_drift",
-        "surface": "T2a_T3a_T4",
+        "surface": "T2a",
         "assertion": "canonical bytes and raw hash disagree",
         "expected": "rejected"
       },
       {
         "case_id": "generated_domain_hash_drift",
-        "surface": "T2a_T3a_T4",
+        "surface": "T2a",
         "assertion": "schema domain hash disagrees",
         "expected": "rejected"
       },
       {
         "case_id": "generated_parameter_drift",
-        "surface": "T2a_T3a_T4",
+        "surface": "T2a",
         "assertion": "join expose parameter hash disagrees",
         "expected": "rejected"
       },
@@ -46,37 +130,37 @@
       },
       {
         "case_id": "schema_authority_mismatch",
-        "surface": "T2a_T3a_T4",
+        "surface": "T3a_T4",
         "assertion": "Value authority and envelope port disagree",
         "expected": "rejected"
       },
       {
         "case_id": "join_expose_shape_mismatch",
-        "surface": "T2a_T3a_T4",
+        "surface": "T2a_T4",
         "assertion": "expose and output port sets disagree",
         "expected": "rejected"
       },
       {
         "case_id": "required_output_absent",
-        "surface": "T2a_T3a_T4",
+        "surface": "T4",
         "assertion": "required output cannot be absent",
         "expected": "rejected"
       },
       {
         "case_id": "output_schema_invalid",
-        "surface": "T2a_T3a_T4",
+        "surface": "T3a_T4",
         "assertion": "output content violates the generated schema",
         "expected": "rejected"
       },
       {
         "case_id": "output_max_bytes_exceeded",
-        "surface": "T2a_T3a_T4",
+        "surface": "T3a_T4",
         "assertion": "output content exceeds the compiled maximum",
         "expected": "rejected"
       },
       {
         "case_id": "port_contract_hash_drift",
-        "surface": "T2a_T3a_T4",
+        "surface": "T3a_T4",
         "assertion": "materialized port contract hash disagrees",
         "expected": "rejected"
       },
@@ -88,11 +172,11 @@
       },
       {
         "case_id": "input_snapshot_publication",
-        "surface": "T2a_T3a_T4",
+        "surface": "T4",
         "assertion": "input snapshot cannot masquerade as output",
         "expected": "rejected"
       }
     ]
   },
-  "hash": "sha256:3c204836a446e81cbd2ccbd346d17c0f5e3e87d04e2277a300181bd68658b728"
+  "hash": "sha256:2f05e5472f7416358c9bc1369874eca1977ac766fd96e15533c34fbda195ab9d"
 }
