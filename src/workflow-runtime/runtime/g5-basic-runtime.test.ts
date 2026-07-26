@@ -4,8 +4,16 @@ import path from 'node:path';
 import fc from 'fast-check';
 import { afterAll, afterEach, describe, expect, it } from 'vitest';
 
-import type { CompiledScopePlanV2Document } from '../contracts/compiler-contract-repair-types.js';
-import { COMPILED_PLAN_V2_DOMAIN_SEPARATOR } from '../contracts/compiler-contract-repair-source.js';
+import type {
+  CompiledScopePlanV2Document,
+  CompiledStaticChildPlanClosureMemberV1,
+} from '../contracts/compiler-contract-repair-types.js';
+import {
+  COMPILED_PLAN_V2_DOMAIN_SEPARATOR,
+  STATIC_CHILD_CLOSURE_DOMAIN_SEPARATOR,
+  STATIC_CHILD_CLOSURE_MEMBER_DOMAIN_SEPARATOR,
+} from '../contracts/compiler-contract-repair-source.js';
+import type { WorkflowCompilerStaticChildPlanBundle } from '../contracts/static-child-plan-bundle-types.js';
 import {
   buildDeploymentCapacityPublication,
   calculateDeploymentCapacityConfigHash,
@@ -104,6 +112,10 @@ import {
 const instances: G5TestBootstrapInstance[] = [];
 const hash = (label: string): Sha256Hash =>
   domainSeparatedSha256('icarus:g5-runtime-test:1\n', { label });
+const EMPTY_STATIC_CHILD_PLAN_BUNDLE: WorkflowCompilerStaticChildPlanBundle = {
+  format: 'icarus.workflow-compiler-static-child-plan-bundle/1',
+  entries: [],
+};
 
 function bootstrap(key: string): G5TestBootstrapInstance {
   const instance = createG5TestBootstrap(key);
@@ -838,11 +850,7 @@ function plan(seed: SeededRuntime): CompiledScopePlanV2Document {
       },
     ]),
     complexity_summary: {},
-    static_child_plan_closure: {
-      members: [],
-      member_count: 0,
-      closure_hash: hash('static-closure'),
-    },
+    static_child_plan_closure: emptyStaticChildPlanClosure(),
     effective_limits: {},
     effective_usage_budget: {},
     runtime_safety_snapshot: {
@@ -851,6 +859,142 @@ function plan(seed: SeededRuntime): CompiledScopePlanV2Document {
     runtime_safety_hash: seed.values.safety.hash,
   } as Omit<CompiledScopePlanV2Document, 'plan_hash'>;
   return withPlanHash(withoutHash);
+}
+
+function emptyStaticChildPlanClosure() {
+  const withoutHash = { members: [], member_count: 0 };
+  return {
+    ...withoutHash,
+    closure_hash: domainSeparatedSha256(
+      STATIC_CHILD_CLOSURE_DOMAIN_SEPARATOR,
+      withoutHash,
+    ),
+  };
+}
+
+function staticChildClosureMember(input: {
+  closureKey: string;
+  scopeKey: string;
+  source: JsonObject;
+  plan: CompiledScopePlanV2Document;
+}): CompiledStaticChildPlanClosureMemberV1 {
+  const ownerNodePath = input.closureKey.split('/');
+  const withoutHash = {
+    closure_key: input.closureKey,
+    parent_closure_key:
+      ownerNodePath.length === 1 ? null : ownerNodePath.slice(0, -1).join('/'),
+    scope_key: input.scopeKey,
+    owner_node_path: ownerNodePath,
+    factory_kind: 'inline' as const,
+    source_ref: null,
+    source_hash: domainSeparatedSha256(
+      'icarus:workflow-graph-source:1\n',
+      input.source,
+    ),
+    plan_ref: `content-addressed:workflow-plan/${input.plan.plan_hash.slice('sha256:'.length)}`,
+    plan_hash: input.plan.plan_hash as Sha256Hash,
+    interface_snapshot_hash: input.plan.interface_snapshot_hash as Sha256Hash,
+  };
+  return {
+    ...withoutHash,
+    member_hash: domainSeparatedSha256(
+      STATIC_CHILD_CLOSURE_MEMBER_DOMAIN_SEPARATOR,
+      withoutHash,
+    ),
+  };
+}
+
+function staticChildClosure(members: CompiledStaticChildPlanClosureMemberV1[]) {
+  const withoutHash = { members, member_count: members.length };
+  return {
+    ...withoutHash,
+    closure_hash: domainSeparatedSha256(
+      STATIC_CHILD_CLOSURE_DOMAIN_SEPARATOR,
+      withoutHash,
+    ),
+  };
+}
+
+function planWithSourceAndClosure(
+  seed: SeededRuntime,
+  source: JsonObject,
+  members: ReturnType<typeof staticChildClosureMember>[],
+): CompiledScopePlanV2Document {
+  const { plan_hash: _planHash, ...withoutHash } = plan(seed);
+  void _planHash;
+  return withPlanHash({
+    ...withoutHash,
+    source_hash: domainSeparatedSha256(
+      'icarus:workflow-graph-source:1\n',
+      source,
+    ),
+    static_child_plan_closure: staticChildClosure(members),
+  });
+}
+
+function staticChildBundleFixture(seed: SeededRuntime): {
+  parentPlan: CompiledScopePlanV2Document;
+  bundle: WorkflowCompilerStaticChildPlanBundle;
+  uniqueChildPlanHashes: string[];
+} {
+  const leafSource: JsonObject = {
+    format: 'icarus.workflow-graph-scope/1',
+    scope_key: 'shared_leaf',
+  };
+  const nestedSource: JsonObject = {
+    format: 'icarus.workflow-graph-scope/1',
+    scope_key: 'nested_child',
+  };
+  const leafPlan = planWithSourceAndClosure(seed, leafSource, []);
+  const aLeaf = staticChildClosureMember({
+    closureKey: 'a/leaf',
+    scopeKey: 'shared_leaf',
+    source: leafSource,
+    plan: leafPlan,
+  });
+  const bLeaf = staticChildClosureMember({
+    closureKey: 'b/leaf',
+    scopeKey: 'shared_leaf',
+    source: leafSource,
+    plan: leafPlan,
+  });
+  const aPlan = planWithSourceAndClosure(seed, nestedSource, [aLeaf]);
+  const bPlan = planWithSourceAndClosure(seed, nestedSource, [bLeaf]);
+  const a = staticChildClosureMember({
+    closureKey: 'a',
+    scopeKey: 'nested_child',
+    source: nestedSource,
+    plan: aPlan,
+  });
+  const b = staticChildClosureMember({
+    closureKey: 'b',
+    scopeKey: 'nested_child',
+    source: nestedSource,
+    plan: bPlan,
+  });
+  const parentPlan = planWithSourceAndClosure(seed, G5_TEST_SOURCE, [
+    a,
+    aLeaf,
+    b,
+    bLeaf,
+  ]);
+  return {
+    parentPlan,
+    bundle: {
+      format: 'icarus.workflow-compiler-static-child-plan-bundle/1',
+      entries: [
+        { closureKey: 'a', source: nestedSource, plan: aPlan },
+        { closureKey: 'a/leaf', source: leafSource, plan: leafPlan },
+        { closureKey: 'b', source: nestedSource, plan: bPlan },
+        { closureKey: 'b/leaf', source: leafSource, plan: leafPlan },
+      ],
+    },
+    uniqueChildPlanHashes: [
+      aPlan.plan_hash,
+      bPlan.plan_hash,
+      leafPlan.plan_hash,
+    ],
+  };
 }
 
 function withPlanHash(
@@ -1100,9 +1244,11 @@ function materializePlanCase(
     expectedRunWorkFenceEpoch: 0,
     expectedOwnerScopeWorkFenceEpoch: 0,
     expectedCompilerSnapshotHash: hash('compiler-snapshot'),
+    expectedBuildLease: null,
     sourceJson: G5_TEST_SOURCE,
     sourceHash: candidate.source_hash as Sha256Hash,
     plan: candidate,
+    staticChildPlanBundle: EMPTY_STATIC_CHILD_PLAN_BUNDLE,
     nowMs: nowMs + 1,
   });
   const run = instance.store.queryOne<{ row_version: number }>(
@@ -1578,9 +1724,11 @@ function compilePrefix(fixture: G5RepairFixtureCase): {
       expectedRunWorkFenceEpoch: 0,
       expectedOwnerScopeWorkFenceEpoch: 0,
       expectedCompilerSnapshotHash: hash('compiler-snapshot'),
+      expectedBuildLease: null,
       sourceJson: G5_TEST_SOURCE,
       sourceHash: candidate.source_hash as Sha256Hash,
       plan: candidate,
+      staticChildPlanBundle: EMPTY_STATIC_CHILD_PLAN_BUNDLE,
       nowMs: nowMs + 1,
     },
   };
@@ -3426,6 +3574,493 @@ describe('G5 Basic Runtime Schema 7 repair transaction integration', () => {
     },
   );
 
+  it('atomically persists nested and shared static child Plans with exact replay and reopen', () => {
+    const instance = bootstrap('static-child-plan-bundle-atomic');
+    const seed = seedRuntime(instance.store);
+    const fixture = staticChildBundleFixture(seed);
+    pinTestDefinitionPlan(instance.store, seed, fixture.parentPlan);
+    const created = createWorkflowT0(
+      instance.store,
+      creationInput(seed, 'static-child-plan-bundle-atomic', 10),
+    );
+    const input: Parameters<typeof persistCompileResultT2a>[1] = {
+      graphRunId: created.activation.graphRunId,
+      buildId: created.activation.rootBuildId,
+      expectedBuildRowVersion: 1,
+      expectedRunWorkFenceEpoch: 0,
+      expectedOwnerScopeWorkFenceEpoch: 0,
+      expectedCompilerSnapshotHash: hash('compiler-snapshot'),
+      expectedBuildLease: null,
+      sourceJson: G5_TEST_SOURCE,
+      sourceHash: fixture.parentPlan.source_hash as Sha256Hash,
+      plan: fixture.parentPlan,
+      staticChildPlanBundle: fixture.bundle,
+      nowMs: 20,
+    };
+
+    expect(() =>
+      persistCompileResultT2a(instance.store, input, {
+        point: 'before_first_write',
+      }),
+    ).toThrow(/Injected fault before first write/);
+    expect(
+      instance.store.queryOne<{ count: number }>(
+        'SELECT count(*) AS count FROM workflow_graph_scope_plans WHERE graph_run_id = ?',
+        [created.activation.graphRunId],
+      )!.count,
+    ).toBe(0);
+    expect(
+      instance.store.queryOne<{ count: number }>(
+        'SELECT count(*) AS count FROM workflow_plan_generated_schemas WHERE graph_run_id = ?',
+        [created.activation.graphRunId],
+      )!.count,
+    ).toBe(0);
+
+    expect(() =>
+      persistCompileResultT2a(instance.store, input, {
+        point: 'before_commit',
+      }),
+    ).toThrow(/Injected fault before commit/);
+    expect(
+      instance.store.queryOne<{ count: number }>(
+        'SELECT count(*) AS count FROM workflow_graph_scope_plans WHERE graph_run_id = ?',
+        [created.activation.graphRunId],
+      )!.count,
+    ).toBe(0);
+    expect(
+      instance.store.queryOne<{ count: number }>(
+        'SELECT count(*) AS count FROM workflow_plan_generated_schemas WHERE graph_run_id = ?',
+        [created.activation.graphRunId],
+      )!.count,
+    ).toBe(0);
+
+    const compiled = persistCompileResultT2a(instance.store, input);
+    expect(compiled.disposition).toBe('compiled');
+    const planRows = instance.store.queryAll<{
+      plan_hash: string;
+      compiled_plan_json: string;
+    }>(
+      `SELECT plan_hash, compiled_plan_json
+         FROM workflow_graph_scope_plans
+        WHERE graph_run_id = ? ORDER BY plan_hash COLLATE BINARY`,
+      [created.activation.graphRunId],
+    );
+    expect(planRows).toHaveLength(4);
+    expect(planRows.map((row) => row.plan_hash)).toEqual(
+      [fixture.parentPlan.plan_hash, ...fixture.uniqueChildPlanHashes].sort(),
+    );
+    const bindingCounts = instance.store.queryAll<{
+      plan_hash: string;
+      count: number;
+    }>(
+      `SELECT plan_hash, count(*) AS count
+         FROM workflow_plan_generated_schemas
+        WHERE graph_run_id = ?
+        GROUP BY plan_hash ORDER BY plan_hash COLLATE BINARY`,
+      [created.activation.graphRunId],
+    );
+    expect(bindingCounts).toHaveLength(4);
+    expect(bindingCounts.every((row) => row.count > 0)).toBe(true);
+
+    const persistedBytes = canonicalJson({ planRows, bindingCounts });
+    expect(persistCompileResultT2a(instance.store, input).disposition).toBe(
+      'exact_replay',
+    );
+    expect(
+      canonicalJson({
+        planRows: instance.store.queryAll<{
+          plan_hash: string;
+          compiled_plan_json: string;
+        }>(
+          `SELECT plan_hash, compiled_plan_json
+             FROM workflow_graph_scope_plans
+            WHERE graph_run_id = ? ORDER BY plan_hash COLLATE BINARY`,
+          [created.activation.graphRunId],
+        ),
+        bindingCounts: instance.store.queryAll<{
+          plan_hash: string;
+          count: number;
+        }>(
+          `SELECT plan_hash, count(*) AS count
+             FROM workflow_plan_generated_schemas
+            WHERE graph_run_id = ?
+            GROUP BY plan_hash ORDER BY plan_hash COLLATE BINARY`,
+          [created.activation.graphRunId],
+        ),
+      }),
+    ).toBe(persistedBytes);
+
+    instance.closeStore();
+    instance.reopenStore();
+    expect(persistCompileResultT2a(instance.store, input).disposition).toBe(
+      'exact_replay',
+    );
+
+    const childHash = fixture.uniqueChildPlanHashes[0]!;
+    instance.store.withImmediateTransaction((transaction) => {
+      transaction.execute(
+        "UPDATE workflow_graph_scope_plans SET compiled_plan_json = '{}' WHERE graph_run_id = ? AND plan_hash = ?",
+        [created.activation.graphRunId, childHash],
+      );
+    });
+    expect(() => persistCompileResultT2a(instance.store, input)).toThrow(
+      /content-addressed Plan collision/,
+    );
+    const child = fixture.bundle.entries.find(
+      (entry) => entry.plan.plan_hash === childHash,
+    )!;
+    instance.store.withImmediateTransaction((transaction) => {
+      transaction.execute(
+        'UPDATE workflow_graph_scope_plans SET compiled_plan_json = ? WHERE graph_run_id = ? AND plan_hash = ?',
+        [canonicalJson(child.plan), created.activation.graphRunId, childHash],
+      );
+      transaction.execute(
+        `DELETE FROM workflow_plan_generated_schemas
+          WHERE rowid = (
+            SELECT min(rowid) FROM workflow_plan_generated_schemas
+             WHERE graph_run_id = ? AND plan_hash = ?
+          )`,
+        [created.activation.graphRunId, childHash],
+      );
+    });
+    expect(() => persistCompileResultT2a(instance.store, input)).toThrow(
+      /generated schema binding set drifted/,
+    );
+  });
+
+  it('rejects partial, extra, duplicate, aliased, tampered, and stale static child bundles without writes', () => {
+    const instance = bootstrap('static-child-plan-bundle-negative');
+    const seed = seedRuntime(instance.store);
+    const fixture = staticChildBundleFixture(seed);
+    pinTestDefinitionPlan(instance.store, seed, fixture.parentPlan);
+    const created = createWorkflowT0(
+      instance.store,
+      creationInput(seed, 'static-child-plan-bundle-negative', 10),
+    );
+    const input: Parameters<typeof persistCompileResultT2a>[1] = {
+      graphRunId: created.activation.graphRunId,
+      buildId: created.activation.rootBuildId,
+      expectedBuildRowVersion: 1,
+      expectedRunWorkFenceEpoch: 0,
+      expectedOwnerScopeWorkFenceEpoch: 0,
+      expectedCompilerSnapshotHash: hash('compiler-snapshot'),
+      expectedBuildLease: null,
+      sourceJson: G5_TEST_SOURCE,
+      sourceHash: fixture.parentPlan.source_hash as Sha256Hash,
+      plan: fixture.parentPlan,
+      staticChildPlanBundle: fixture.bundle,
+      nowMs: 20,
+    };
+    const mutations: Array<WorkflowCompilerStaticChildPlanBundle> = [
+      { ...fixture.bundle, entries: fixture.bundle.entries.slice(0, -1) },
+      {
+        ...fixture.bundle,
+        entries: [...fixture.bundle.entries, fixture.bundle.entries[0]!],
+      },
+      {
+        ...fixture.bundle,
+        entries: [
+          fixture.bundle.entries[1]!,
+          fixture.bundle.entries[0]!,
+          ...fixture.bundle.entries.slice(2),
+        ],
+      },
+      {
+        ...fixture.bundle,
+        entries: fixture.bundle.entries.map((entry, index) =>
+          index === 3 ? fixture.bundle.entries[1]! : entry,
+        ),
+      },
+      {
+        ...fixture.bundle,
+        entries: fixture.bundle.entries.map((entry, index) =>
+          index === 0 ? { ...entry, closureKey: 'alias' } : entry,
+        ),
+      },
+      {
+        ...fixture.bundle,
+        entries: fixture.bundle.entries.map((entry, index) =>
+          index === 0
+            ? { ...entry, source: { ...entry.source, tampered: true } }
+            : entry,
+        ),
+      },
+      {
+        ...fixture.bundle,
+        entries: fixture.bundle.entries.map((entry, index) =>
+          index === 0
+            ? {
+                ...entry,
+                plan: {
+                  ...entry.plan,
+                  capability_catalog_hash: hash('tampered-catalog'),
+                },
+              }
+            : entry,
+        ),
+      },
+    ];
+    for (const staticChildPlanBundle of mutations) {
+      expect(() =>
+        persistCompileResultT2a(instance.store, {
+          ...input,
+          staticChildPlanBundle,
+        }),
+      ).toThrow();
+    }
+    for (const staticChildPlanBundle of [
+      {
+        ...fixture.bundle,
+        unknown: true,
+      } as unknown as WorkflowCompilerStaticChildPlanBundle,
+      {
+        ...fixture.bundle,
+        entries: fixture.bundle.entries.map((entry, index) =>
+          index === 0
+            ? ({ ...entry, unknown: true } as unknown as typeof entry)
+            : entry,
+        ),
+      },
+    ]) {
+      expect(() =>
+        persistCompileResultT2a(instance.store, {
+          ...input,
+          staticChildPlanBundle,
+        }),
+      ).toThrow(/unknown|closed shape/);
+    }
+    const replaceChildPlan = (
+      entryIndex: number,
+      childPlan: CompiledScopePlanV2Document,
+    ): {
+      parentPlan: CompiledScopePlanV2Document;
+      bundle: WorkflowCompilerStaticChildPlanBundle;
+    } => {
+      const bundle = structuredClone(fixture.bundle);
+      bundle.entries[entryIndex] = {
+        ...bundle.entries[entryIndex]!,
+        plan: childPlan,
+      };
+      const members = structuredClone(
+        fixture.parentPlan.static_child_plan_closure.members,
+      );
+      const { member_hash: _memberHash, ...memberWithoutHash } =
+        members[entryIndex]!;
+      void _memberHash;
+      const rebuiltMember = {
+        ...memberWithoutHash,
+        plan_ref: `content-addressed:workflow-plan/${childPlan.plan_hash.slice('sha256:'.length)}`,
+        plan_hash: childPlan.plan_hash as Sha256Hash,
+        interface_snapshot_hash:
+          childPlan.interface_snapshot_hash as Sha256Hash,
+      };
+      members[entryIndex] = {
+        ...rebuiltMember,
+        member_hash: domainSeparatedSha256(
+          STATIC_CHILD_CLOSURE_MEMBER_DOMAIN_SEPARATOR,
+          rebuiltMember,
+        ),
+      };
+      const { plan_hash: _parentHash, ...parentWithoutHash } =
+        fixture.parentPlan;
+      void _parentHash;
+      return {
+        parentPlan: withPlanHash({
+          ...parentWithoutHash,
+          static_child_plan_closure: staticChildClosure(members),
+        }),
+        bundle,
+      };
+    };
+    const nestedEntry = fixture.bundle.entries[0]!;
+    const { plan_hash: _nestedHash, ...nestedWithoutHash } = nestedEntry.plan;
+    void _nestedHash;
+    const nestedLineageDrift = replaceChildPlan(
+      0,
+      withPlanHash({
+        ...nestedWithoutHash,
+        static_child_plan_closure: emptyStaticChildPlanClosure(),
+      }),
+    );
+    const authorityDrifts = (
+      [
+        ['compiler_toolchain_hash', hash('tampered-child-toolchain')],
+        ['runtime_safety_hash', hash('tampered-child-safety')],
+      ] as const
+    ).map(([key, value]) => {
+      const { plan_hash: _childHash, ...childWithoutHash } = nestedEntry.plan;
+      void _childHash;
+      return replaceChildPlan(
+        0,
+        withPlanHash({ ...childWithoutHash, [key]: value }),
+      );
+    });
+    for (const drift of [nestedLineageDrift, ...authorityDrifts]) {
+      expect(() =>
+        persistCompileResultT2a(instance.store, {
+          ...input,
+          plan: drift.parentPlan,
+          staticChildPlanBundle: drift.bundle,
+        }),
+      ).toThrow(/nested lineage|content or authority drifted/);
+    }
+    expect(() =>
+      persistCompileResultT2a(instance.store, {
+        ...input,
+        expectedBuildLease: {
+          owner: 'stale-owner',
+          token: 'stale-token',
+          expiresAtMs: input.nowMs + 1_000,
+        },
+      }),
+    ).toThrow(/lease, epoch, hash, or row version is stale/);
+    instance.store.withImmediateTransaction((transaction) => {
+      transaction.execute(
+        'UPDATE workflow_graph_runs SET work_fence_epoch = 1 WHERE id = ?',
+        [created.activation.graphRunId],
+      );
+    });
+    expect(() => persistCompileResultT2a(instance.store, input)).toThrow(
+      /lease, epoch, hash, or row version is stale/,
+    );
+    instance.store.withImmediateTransaction((transaction) => {
+      transaction.execute(
+        'UPDATE workflow_graph_runs SET work_fence_epoch = 0 WHERE id = ?',
+        [created.activation.graphRunId],
+      );
+      transaction.execute(
+        'UPDATE workflow_graph_scopes SET work_fence_epoch = 1 WHERE id = ?',
+        [created.activation.rootScopeId],
+      );
+    });
+    expect(() => persistCompileResultT2a(instance.store, input)).toThrow(
+      /lease, epoch, hash, or row version is stale/,
+    );
+    instance.store.withImmediateTransaction((transaction) => {
+      transaction.execute(
+        'UPDATE workflow_graph_scopes SET work_fence_epoch = 0 WHERE id = ?',
+        [created.activation.rootScopeId],
+      );
+    });
+    expect(
+      instance.store.queryOne<{ count: number }>(
+        'SELECT count(*) AS count FROM workflow_graph_scope_plans WHERE graph_run_id = ?',
+        [created.activation.graphRunId],
+      )!.count,
+    ).toBe(0);
+    expect(
+      instance.store.queryOne<{ status: string }>(
+        'SELECT status FROM workflow_graph_scope_builds WHERE id = ?',
+        [created.activation.rootBuildId],
+      )!.status,
+    ).toBe('ready_to_compile');
+  });
+
+  it('requires an exact live compile lease before persisting the static child bundle', () => {
+    const instance = bootstrap('static-child-plan-bundle-lease');
+    const seed = seedRuntime(instance.store);
+    const fixture = staticChildBundleFixture(seed);
+    pinTestDefinitionPlan(instance.store, seed, fixture.parentPlan);
+    const created = createWorkflowT0(
+      instance.store,
+      creationInput(seed, 'static-child-plan-bundle-lease', 10),
+    );
+    instance.store.withImmediateTransaction((transaction) => {
+      transaction.execute(
+        `UPDATE workflow_graph_scope_builds
+            SET status = 'compiling', lease_owner = ?, lease_token = ?,
+                lease_expires_at_ms = ?, row_version = 2
+          WHERE id = ?`,
+        [
+          'compiler-worker',
+          'compile-token',
+          20,
+          created.activation.rootBuildId,
+        ],
+      );
+    });
+    const expiredInput: Parameters<typeof persistCompileResultT2a>[1] = {
+      graphRunId: created.activation.graphRunId,
+      buildId: created.activation.rootBuildId,
+      expectedBuildRowVersion: 2,
+      expectedRunWorkFenceEpoch: 0,
+      expectedOwnerScopeWorkFenceEpoch: 0,
+      expectedCompilerSnapshotHash: hash('compiler-snapshot'),
+      expectedBuildLease: {
+        owner: 'compiler-worker',
+        token: 'compile-token',
+        expiresAtMs: 20,
+      },
+      sourceJson: G5_TEST_SOURCE,
+      sourceHash: fixture.parentPlan.source_hash as Sha256Hash,
+      plan: fixture.parentPlan,
+      staticChildPlanBundle: fixture.bundle,
+      nowMs: 20,
+    };
+    expect(() => persistCompileResultT2a(instance.store, expiredInput)).toThrow(
+      /lease, epoch, hash, or row version is stale/,
+    );
+
+    instance.store.withImmediateTransaction((transaction) => {
+      transaction.execute(
+        `UPDATE workflow_graph_scope_builds
+            SET lease_expires_at_ms = 100, row_version = row_version + 1
+          WHERE id = ?`,
+        [created.activation.rootBuildId],
+      );
+    });
+    const liveInput: Parameters<typeof persistCompileResultT2a>[1] = {
+      ...expiredInput,
+      expectedBuildRowVersion: 3,
+      expectedBuildLease: {
+        owner: 'compiler-worker',
+        token: 'compile-token',
+        expiresAtMs: 100,
+      },
+    };
+    for (const expectedBuildLease of [
+      { ...liveInput.expectedBuildLease!, owner: 'other-worker' },
+      { ...liveInput.expectedBuildLease!, token: 'other-token' },
+      { ...liveInput.expectedBuildLease!, expiresAtMs: 101 },
+    ]) {
+      expect(() =>
+        persistCompileResultT2a(instance.store, {
+          ...liveInput,
+          expectedBuildLease,
+        }),
+      ).toThrow(/lease, epoch, hash, or row version is stale/);
+    }
+    expect(
+      instance.store.queryOne<{ count: number }>(
+        'SELECT count(*) AS count FROM workflow_graph_scope_plans WHERE graph_run_id = ?',
+        [created.activation.graphRunId],
+      )!.count,
+    ).toBe(0);
+
+    expect(persistCompileResultT2a(instance.store, liveInput).disposition).toBe(
+      'compiled',
+    );
+    expect(
+      instance.store.queryOne<{
+        status: string;
+        lease_owner: string | null;
+        lease_token: string | null;
+        lease_expires_at_ms: number | null;
+        row_version: number;
+      }>(
+        `SELECT status, lease_owner, lease_token, lease_expires_at_ms, row_version
+           FROM workflow_graph_scope_builds WHERE id = ?`,
+        [created.activation.rootBuildId],
+      ),
+    ).toEqual({
+      status: 'compiled',
+      lease_owner: null,
+      lease_token: null,
+      lease_expires_at_ms: null,
+      row_version: 4,
+    });
+  });
+
   it('rejects join_optional_absent model-as-member and required Plan mutations', () => {
     const schemaHash = hash('join-optional-absent-adversarial-schema');
     const modeled = referenceJoinPublication({
@@ -3618,9 +4253,11 @@ describe('G5 Basic Runtime Schema 7 repair transaction integration', () => {
       expectedRunWorkFenceEpoch: 0,
       expectedOwnerScopeWorkFenceEpoch: 0,
       expectedCompilerSnapshotHash: hash('compiler-snapshot'),
+      expectedBuildLease: null,
       sourceJson: G5_TEST_SOURCE,
       sourceHash: compiledPlan.source_hash as Sha256Hash,
       plan: compiledPlan,
+      staticChildPlanBundle: EMPTY_STATIC_CHILD_PLAN_BUNDLE,
       nowMs: 30,
     };
     expect(() =>
@@ -7260,9 +7897,11 @@ describe('G5 Basic Runtime Schema 7 repair transaction integration', () => {
       expectedRunWorkFenceEpoch: 0,
       expectedOwnerScopeWorkFenceEpoch: 0,
       expectedCompilerSnapshotHash: hash('compiler-snapshot'),
+      expectedBuildLease: null,
       sourceJson: G5_TEST_SOURCE,
       sourceHash: compiledPlan.source_hash as Sha256Hash,
       plan: compiledPlan,
+      staticChildPlanBundle: EMPTY_STATIC_CHILD_PLAN_BUNDLE,
       nowMs: 20,
     };
     expect(() =>
@@ -7503,9 +8142,11 @@ describe('G5 Basic Runtime Schema 7 repair transaction integration', () => {
           expectedRunWorkFenceEpoch: 0,
           expectedOwnerScopeWorkFenceEpoch: 0,
           expectedCompilerSnapshotHash: hash('compiler-snapshot'),
+          expectedBuildLease: null,
           sourceJson: G5_TEST_SOURCE,
           sourceHash: compiledPlan.source_hash as Sha256Hash,
           plan: compiledPlan,
+          staticChildPlanBundle: EMPTY_STATIC_CHILD_PLAN_BUNDLE,
           nowMs: 20,
         });
         const run = instance.store.queryOne<{ row_version: number }>(

@@ -309,7 +309,12 @@ describe('G0.2 Contract Pack conformance', () => {
                 path.resolve(
                   contractsRoot,
                   '../store/runtime-store/profile.js',
-                ));
+                )) ||
+            (path.basename(file) === 'static-child-plan-bundle-repair.ts' &&
+              [
+                path.resolve(contractsRoot, '../compiler/compiler.js'),
+                path.resolve(contractsRoot, '../compiler/identity.js'),
+              ].includes(resolved));
           expect(
             resolved.startsWith(`${contractsRoot}${path.sep}`) ||
               allowedConstructionImport,

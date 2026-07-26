@@ -105,7 +105,7 @@ describe('current G5 Basic Runtime repair Contract Pack', () => {
   });
 
   it('binds production sources and preserves forbidden ownership boundaries', () => {
-    expect(G5_REPAIR_IMPLEMENTATION_SOURCE_PATHS).toHaveLength(18);
+    expect(G5_REPAIR_IMPLEMENTATION_SOURCE_PATHS).toHaveLength(19);
     for (const relativePath of G5_REPAIR_IMPLEMENTATION_SOURCE_PATHS) {
       const source = fs.readFileSync(path.join(repoRoot, relativePath), 'utf8');
       expect(source).not.toMatch(

@@ -7,6 +7,7 @@ import { domainSeparatedSha256 } from '../contracts/hash.js';
 import type {
   CompilerConformanceDiagnosticV1,
   CompiledScopePlanV2Document,
+  CompiledStaticChildPlanClosureV1,
   CompiledStaticChildPlanClosureMemberV1,
 } from '../contracts/compiler-contract-repair-types.js';
 import type {
@@ -15,6 +16,7 @@ import type {
   Sha256Hash,
   VersionedRef,
 } from '../contracts/types.js';
+import type { WorkflowCompilerStaticChildPlanBundleEntry } from '../contracts/static-child-plan-bundle-types.js';
 import {
   compileTriggerProgram,
   compareAscii,
@@ -1857,6 +1859,7 @@ function compileCapabilityNode(
 interface FactoryCompilation {
   binding: JsonObject;
   childPlan: CompiledScopePlanV2Document;
+  staticChildPlans: WorkflowCompilerStaticChildPlanBundleEntry[];
   scopeKey: string;
   sourceHash: Sha256Hash;
   sourceRef: VersionedRef | null;
@@ -1906,7 +1909,8 @@ function compileFactory(
   };
   validateGraphBindings(childSource, childState);
   validateGraphStructure(childSource, childState);
-  const childPlan = compileGraphPlan(childSource, childState, ownerPath);
+  const childCompilation = compileGraphPlan(childSource, childState, ownerPath);
+  const childPlan = childCompilation.plan;
   const hash = sourceHash('graph_scope', childSource);
   if (factory.type === 'inline') sourceSnapshotRef = `inline:${hash}`;
   return {
@@ -1919,6 +1923,14 @@ function compileFactory(
       interface_snapshot: childPlan.interface_snapshot,
     },
     childPlan,
+    staticChildPlans: [
+      {
+        closureKey: ownerPath.join('/'),
+        source: childSource,
+        plan: childPlan,
+      },
+      ...childCompilation.staticChildPlans,
+    ],
     scopeKey: String(childSource.scope_key),
     sourceHash: hash,
     sourceRef,
@@ -2123,7 +2135,9 @@ function compileGraphNode(
   factoryByNode: Map<string, FactoryCompilation>,
 ): JsonObject {
   const compiled = compileGraphNodeCore(node, state, ownerPath, factoryByNode);
-  if (state.identity.compiler_version !== '3.0.4') return compiled;
+  if (!['3.0.4', '3.0.5'].includes(state.identity.compiler_version)) {
+    return compiled;
+  }
   assertJsonObject(compiled.output_ports);
   return {
     ...compiled,
@@ -2557,7 +2571,7 @@ function staticClosure(
   source: JsonObject,
   factoryByNode: Map<string, FactoryCompilation>,
   ownerPath: string[],
-): JsonObject {
+): CompiledStaticChildPlanClosureV1 {
   const members: CompiledStaticChildPlanClosureMemberV1[] = [];
   const append = (
     nodeId: string,
@@ -2587,7 +2601,7 @@ function staticClosure(
   return {
     ...withoutHash,
     closure_hash: semanticHash(STATIC_CLOSURE_DOMAIN_SEPARATOR, withoutHash),
-  };
+  } as CompiledStaticChildPlanClosureV1;
 }
 
 function complexitySummary(
@@ -2696,11 +2710,16 @@ function compileLiteralExpandCandidates(
   }
 }
 
+interface CompiledGraphPlanResult {
+  plan: CompiledScopePlanV2Document;
+  staticChildPlans: WorkflowCompilerStaticChildPlanBundleEntry[];
+}
+
 function compileGraphPlan(
   source: JsonObject,
   state: CompilationState,
   ownerPath: string[] = [],
-): CompiledScopePlanV2Document {
+): CompiledGraphPlanResult {
   assertJsonObject(source.interface_ref);
   assertJsonObject(source.requested_limits);
   const planPolicy = effectivePolicy(state.policy, source.requested_limits);
@@ -2772,10 +2791,37 @@ function compileGraphPlan(
     runtime_safety_snapshot: planState.snapshot.safety,
     runtime_safety_hash: planState.snapshot.safetyHash,
   };
-  return {
+  const plan = {
     ...withoutHash,
     plan_hash: semanticHash(PLAN_DOMAIN_SEPARATOR, withoutHash),
   } as CompiledScopePlanV2Document;
+  const childByClosureKey = new Map<
+    string,
+    WorkflowCompilerStaticChildPlanBundleEntry
+  >();
+  for (const factory of factoryByNode.values()) {
+    for (const child of factory.staticChildPlans) {
+      if (childByClosureKey.has(child.closureKey)) {
+        throw new Error(
+          `Duplicate static child closure key: ${child.closureKey}`,
+        );
+      }
+      childByClosureKey.set(child.closureKey, child);
+    }
+  }
+  const staticChildPlans = closure.members.map((member) => {
+    const child = childByClosureKey.get(String(member.closure_key));
+    if (!child) {
+      throw new Error(
+        `Static child Plan bytes are missing: ${String(member.closure_key)}`,
+      );
+    }
+    return child;
+  });
+  if (staticChildPlans.length !== childByClosureKey.size) {
+    throw new Error('Static child Plan bundle contains an unreferenced entry');
+  }
+  return { plan, staticChildPlans };
 }
 
 function compileDefinitionPlan(
@@ -2953,6 +2999,7 @@ function compileSuccess(
     programHashes: new Set(),
   };
   let plan: CompiledScopePlanV2Document;
+  let staticChildPlans: WorkflowCompilerStaticChildPlanBundleEntry[] = [];
   if (request.sourceKind === 'workflow_definition') {
     assertJsonObject(source.entry_points);
     assertJsonObject(source.states);
@@ -2971,7 +3018,9 @@ function compileSuccess(
   } else if (request.sourceKind === 'graph_scope') {
     validateGraphBindings(source, state);
     validateGraphStructure(source, state);
-    plan = compileGraphPlan(source, state);
+    const compiled = compileGraphPlan(source, state);
+    plan = compiled.plan;
+    staticChildPlans = compiled.staticChildPlans;
   } else {
     throw new CompilerDiagnosticError(
       diagnostic(
@@ -2986,6 +3035,10 @@ function compileSuccess(
   return {
     sourceHash: hash,
     plan,
+    staticChildPlanBundle: {
+      format: 'icarus.workflow-compiler-static-child-plan-bundle/1',
+      entries: staticChildPlans,
+    },
     proofHashes: [...state.proofHashes].sort(),
     programHashes: [...state.programHashes].sort(),
     staticLowering: request.sourceKind === 'workflow_definition',

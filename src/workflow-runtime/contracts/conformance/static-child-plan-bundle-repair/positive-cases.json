@@ -1,0 +1,31 @@
+{
+  "format": "icarus.workflow-static-child-plan-bundle-positive-cases/1",
+  "ref": {
+    "id": "icarus.workflow-static-child-plan-bundle-positive-cases",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-static-child-plan-bundle-positive-cases:1\n",
+  "payload": {
+    "cases": [
+      {
+        "case_id": "compiler_nested_bundle_parent_exact",
+        "assertion": "pure Compiler returns nested child source and Plan bytes while the fixed-identity parent remains exact"
+      },
+      {
+        "case_id": "compiler_shared_content_address",
+        "assertion": "two closure members may share one byte-identical descendant Plan hash"
+      },
+      {
+        "case_id": "t2a_atomic_parent_child_schema_persistence",
+        "assertion": "T2a atomically persists parent, unique child Plans, and every generated-schema authority"
+      },
+      {
+        "case_id": "t2a_replay_reopen_response_loss",
+        "assertion": "exact replay and reopen perform zero identity drift after response loss"
+      }
+    ],
+    "case_count": 4
+  },
+  "hash": "sha256:a9b27c68fba35b9857ae025a654395e792b237eacdb522884ece4b7f40662aff"
+}

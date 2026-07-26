@@ -9,7 +9,7 @@
   "payload": {
     "production_target": true,
     "production_ingress_enabled": false,
-    "source_count": 18,
+    "source_count": 19,
     "sources": [
       {
         "path": "src/workflow-runtime/capacity/admin-gateway.ts",
@@ -73,18 +73,22 @@
       },
       {
         "path": "src/workflow-runtime/runtime/plan-authority.ts",
-        "raw_sha256": "sha256:05b7f13d29da148b55d8f179925622536c6d0d271f98f286d7b31ffa21ad2e75"
+        "raw_sha256": "sha256:4240e08c99d579922871165e6bdd69b52b97b67aad49a87d13fa738001a316a5"
       },
       {
         "path": "src/workflow-runtime/runtime/reconciler.ts",
-        "raw_sha256": "sha256:6c282bc63432b5302e55bf68819c8ab7800f997b5cf705aed7b921d45d922e43"
+        "raw_sha256": "sha256:a0bc94d7a0f9d48758f63067c83694fb0a277acb857bf070c7fd648a8b410de1"
+      },
+      {
+        "path": "src/workflow-runtime/runtime/static-child-plan-bundle.ts",
+        "raw_sha256": "sha256:0cb7bfca92988c7ecb715ec639057515adda561a86af0f787b96cb1c4e677725"
       },
       {
         "path": "src/workflow-runtime/runtime/waits.ts",
         "raw_sha256": "sha256:21a197cb8412ec5dea734874e0530c3d00cbffc61b3219f65e7b4194f6b5bfa0"
       }
     ],
-    "source_tree_hash": "sha256:700921bd70425d5448316444263dcbb08a1fcb409a54b37fd186aac82646c206"
+    "source_tree_hash": "sha256:72f81daa7e819d2633597df42da6fc8f6edb1f35944727f8728d4d031de386e2"
   },
-  "hash": "sha256:8107311c6ca5c26b1da2410200f94410b0fdc6c9f08323b2d04b356418ffec71"
+  "hash": "sha256:efb0b516d7a27d602ef44ef2743b94f8af6f5e3b596cb4ad33e3924ed76600be"
 }

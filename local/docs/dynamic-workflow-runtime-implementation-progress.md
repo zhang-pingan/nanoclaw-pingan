@@ -1,8 +1,8 @@
 # Dynamic Workflow Runtime 实施进度
 
-> **状态**: `PASS / G5_DONE`
-> **当前 Gate**: R-019/Schema 7/Compiler 3.0.4/G2 v6/Store/G3/G4/G5 current closure均为`DONE`；G6=`READY/NOT_DONE`；G7-G9=`NOT_READY`
-> **下一独立会话**: 只能由中控创建fresh independent local G6 Dynamic / Close construction task；本次闭合不得开始G6
+> **状态**: `G2_G5_STATIC_CHILD_PLAN_PREREQUISITE_REPAIR_CANDIDATE_PENDING_INDEPENDENT_AFFECTED_CHAIN_REGRESSION/NOT_DONE`
+> **当前 Gate**: R-019/Schema 7/Store/G3/G4保持`DONE`；Compiler 3.0.5/G2与G5因static child Plan prerequisite repair显式reopen为`IN_PROGRESS`；G6-G9=`NOT_READY`
+> **下一独立会话**: 只能由中控创建fresh independent local G2/G5 affected-chain regression；通过前不得恢复G2/G5 closure或开始G6
 > **最后更新**: 2026-07-25
 > **规范权威**: `local/docs/dynamic-workflow-dag-framework.md`
 
@@ -110,11 +110,11 @@ Agent Container 运行于独立 VM，Node identity 由 VM image gate 保证；�
 | --- | --- | --- | --- | --- |
 | G0 Contract Pack / Static Baseline | `DONE` | 无 | G0.1-G0.9 historical root + G0.10 additive Capacity Admin/publication/CAP/Logical Schema/coverage root | 本原子提交 |
 | G1 DDL / Store | `DONE` | G0.10 | additive Schema 7、6到7 upgrade与NodeOutputEnvelope Value boundary已通过独立affected-chain regression；Schema 5/6冻结 | 本原子闭合提交 |
-| G2 Compiler / Golden | `DONE` | G1 + R-019 | Compiler 3.0.4/G2 v6 successor review/seal与40/40 exact replay已通过独立affected-chain regression；v1-v5冻结 | 本原子闭合提交 |
+| G2 Compiler / Golden | `IN_PROGRESS` | G1 + R-019 | Compiler 3.0.5 additive static-child-Plan bundle candidate已构建；冻结G2 v6仍40/40 exact，当前candidate必须通过fresh independent affected-chain regression后才能恢复closure | - |
 | G3 Registry / Authoring / Publish | `DONE` | G1 + G2 | G3.1/3.3/G3.5/G3.6/G3.7/G3.9 current pins已级联重建并通过独立affected-chain regression；G3.8A冻结 | 本原子闭合提交 |
 | G4 Test Bootstrap | `DONE` | G1 + G2 + G3 | additive G4 authority successor绑定Schema 7/G2 v6/current G3并通过独立affected-chain regression；历史G4 bootstrap全树冻结且不可重写 | 本原子闭合提交 |
-| G5 Basic Runtime | `DONE` | current G1-G4 closure + `b67265de8432702ab40432d80e8166a30eb2f3e5` repair exit candidate | fresh independent local G5 whole-gate regression完整PASS；66 records exact once、完整affected chain、两轮生成、build/bind/post-build与protected boundary均闭合 | 本原子ledger-only闭合提交 |
-| G6 Dynamic / Close | `READY/NOT_DONE` | G5 | T7/T8/child/compensation fixtures | - |
+| G5 Basic Runtime | `IN_PROGRESS` | current G1-G4 authority + G2 static-child-Plan bundle repair | T2a parent/child Plan与generated-schema authority原子持久化candidate已重建；fresh independent affected-chain regression尚未执行 | - |
+| G6 Dynamic / Close | `NOT_READY` | G5 | T7/T8/child/compensation fixtures | - |
 | G7 Control / Card / Projection / Recovery | `NOT_READY` | G6 | Deadline Watchdog -> Gateway -> T7c stable-key/System Grant/audit + authorized manual retry handoff + T6e/resolution/recovery/card/projection fixtures | - |
 | G8 Certification | `NOT_READY` | G7 | certified profile meeting Product Floor | - |
 | G9 Production Activation | `NOT_READY` | G8 + fresh current G0/G0.10 manifests | activation + Capacity genesis/preservation audit + startup/empty-state or Recipe smoke | - |
@@ -125,16 +125,16 @@ Agent Container 运行于独立 VM，Node identity 由 VM image gate 保证；�
 | --- | --- | --- | --- |
 | I0 | Publish、Registry、Recipe 与执行版本固定 | `IN_PROGRESS` | G3 current exact closure已随Schema 7/G2 v6重建并由G5 exact execution binding消费且通过独立whole-gate regression；G6+继续使用固定版本authority |
 | I1 | Intake、Routing、幂等创建、Child provenance、Claim | `IN_PROGRESS` | G5 intake/routing/domain claim production语义与closed fixture evidence已通过独立whole-gate regression；Child provenance继续属于G6+ |
-| I2 | Definition、State lowering、Context、transition | `IN_PROGRESS` | Compiler 3.0.4/G2 v6 envelope descriptor与G5 state lowering/context/transition已通过独立whole-gate regression |
-| I3 | Source/Compiled IR、Port、Compiler | `IN_PROGRESS` | Compiler 3.0.4为每个node封存exact `output_envelope_schema`且已由G5 exact Plan/port boundary消费并独立回归 |
+| I2 | Definition、State lowering、Context、transition | `IN_PROGRESS` | Compiler 3.0.5 static-child-Plan bundle candidate保持既有lowering；冻结G2 v6仍40/40 exact，fresh independent affected-chain regression待执行 |
+| I3 | Source/Compiled IR、Port、Compiler | `IN_PROGRESS` | Compiler 3.0.5在unchanged parent Plan之外返回closed content-addressed static child Plan bundle；current G2重新开启且未closure |
 | I4 | Runtime Store、SQLite relation、Value/Blob、migration | `IN_PROGRESS` | Schema 7与独立NodeOutputEnvelope Value write/read/reopen/recovery boundary已通过回归；Blob/GC仍未实现 |
-| I5 | Graph 状态机、reconcile、Scheduler、Ledger | `IN_PROGRESS` | G5 static Graph状态机、reconcile、Scheduler与Ledger已通过closed executable fixtures和独立whole-gate regression；G6 dynamic/close为下一施工边界 |
+| I5 | Graph 状态机、reconcile、Scheduler、Ledger | `IN_PROGRESS` | G5 T2a prerequisite candidate原子持久化parent/child Plans与generated-schema authority；G5重新开启，G6仍`NOT_READY` |
 | I6 | Delegation/System、Capability Effect、Outbox | `IN_PROGRESS` | G5 T5 exact execution binding与T6a/T6b已通过独立whole-gate regression；G6+未开始 |
 | I7 | Durable Wait、Signal/Timer/Approval、Inbox | `IN_PROGRESS` | G5 wait/inbox与automatic retry timers已通过独立whole-gate regression；Workflow deadline继续归未来G7 |
-| I8 | Subgraph、Expand、Map、child scope | `READY` | G6=`READY/NOT_DONE`，只能由中控创建fresh independent construction task后开始 |
-| I9 | Completion、Cancel、Compensation、Finalization、Recovery | `READY` | G5 blocker create/open/cache已闭合；G6 close/T7/T8为下一施工，G7 T6e resolution/abandon/Recovery仍`NOT_READY` |
+| I8 | Subgraph、Expand、Map、child scope | `NOT_READY` | G2/G5 prerequisite candidate独立回归通过前不得开始G6 |
+| I9 | Completion、Cancel、Compensation、Finalization、Recovery | `NOT_READY` | G5历史blocker行为保持；G6 close/T7/T8与G7 T6e resolution/abandon/Recovery均不得开始 |
 | I10 | Runtime Command、Capacity Admin、Runtime Center、Trace | `IN_PROGRESS` | G5 Capacity Admin与Operational Blocker open/cache已通过独立whole-gate regression；Workflow Deadline/Gateway/T7c/manual authorization仍归G7且未开始 |
-| I11 | Contract Pack、managed runtime toolchain/launcher、测试模型、发布门禁、absence baseline | `IN_PROGRESS` | Capacity Contract/Schema repair与G5 whole-gate regression已通过；继续随G6-G9提供Gate证据 |
+| I11 | Contract Pack、managed runtime toolchain/launcher、测试模型、发布门禁、absence baseline | `IN_PROGRESS` | additive G2/G5 static-child-Plan prerequisite candidate已构建，fresh independent affected-chain regression待执行 |
 
 ## G0 施工切片
 
@@ -172,6 +172,7 @@ G0.1-G0.9 已按当时规范完成并保留历史 identity。后续确认的 Cap
 | G2.1 | R-016 Spec/Contract Repair | `DONE` | lowering outcome、Compiled IR v2、完整 case result target、exact input binding requirement与 blocked Draft v2冻结 | 本原子提交（历史） |
 | G2.2 | Production Compiler / Exact Case-Input Identity | `DONE` | locked strict parser、closed validation、snapshot binding、static lowering、Plan normalization、program/proof/hash/diagnostic、真实 toolchain与40个actual candidate results | 本原子提交 |
 | G2.3 | Working Correction / RC Review / Seal | `DONE` | phase=`BASELINE_ACCEPTED`；前序四个Working root、RC、Draft、review、GoldenSemanticReview和157-artifact seal未变；additive successor Draft/report已批准，versioned GoldenSemanticReview与157-artifact seal完整，current replay 40/40 | 本原子提交（successor approval/seal） |
+| G2.4 | Static Child Plan Bundle Prerequisite Repair | `IN_PROGRESS` | Compiler在unchanged parent Plan外返回closed child Plan bundle；T2a exact验证并原子持久化全部Plan/schema authority；冻结v6 40/40 exact；fresh independent affected-chain regression待执行 | - |
 
 ## Runtime v1施工治理调整
 
@@ -2743,3 +2744,21 @@ Final candidate identities全部exact：pack/member tree=`sha256:158b2f2750f681e
 Protected/forbidden boundary相对candidate parent `2600bc459b16141a2ee33f82612c524c8e068781`保持exact：candidate只有账本、current G5 reference、current G5 pack、G5 Runtime test四个changed paths；G0.10/G0.3、R-019、Schema 7、G2 v6、current G3/G4、G2历史review/semantic-review/sealed、G3.8A、Schema 5/6 fresh及upgrade、历史G4 bootstrap、ownership、dependencies/package sections、两套lockfile和18个Production sources全部零diff。Production sources相对parent为18/18 raw-byte equal；Gateway/audit/T6e、blocker resolve/abandon、workflow deadline、manual bypass、certification、Production activation/loader/ingress/network、real Adapter、user-data与G6+新增或changed surface均为0。
 
 G5现在为`DONE`；G6为`READY/NOT_DONE`；G7-G9保持`NOT_READY`。下一任务只能由中控创建fresh independent local G6 Dynamic / Close construction task；本轮没有开始G6。
+
+### 2026-07-25：G6 static child Plan prerequisite directed repair candidate
+
+**结论**：`G2_G5_STATIC_CHILD_PLAN_PREREQUISITE_REPAIR_CANDIDATE_PENDING_INDEPENDENT_AFFECTED_CHAIN_REGRESSION/NOT_DONE`。本轮从clean local `main@ac1f373578bee524561d5e8862b3a52ea99cf372`开始，唯一parent=`b67265de8432702ab40432d80e8166a30eb2f3e5`；前序G0-G5 closure仅作为施工输入。没有worktree、Handoff、sub-agent、approval/escalation、push、amend、rebase、reset或历史改写。G2与G5因confirmed prerequisite defect显式reopen；G6-G9均为`NOT_READY`，本轮没有实现任何G6 Dynamic/Close或G7+行为。
+
+Confirmed defect已按架构权威关闭在最小边界内。Pure Compiler 3.0.5在unchanged parent `CompiledScopePlan v2`之外返回closed `icarus.workflow-compiler-static-child-plan-bundle/1`；entries只含`closureKey/source/plan`，按parent closure的parent-before-descendant/ASCII顺序保留每个inline/template factory的exact source与独立canonical child Plan。Bundle不进入parent Plan canonical bytes/hash、不从hash manifest重建、不读取moving Registry、不在Runtime recompile，也不成为第二份Golden oracle。固定3.0.4 identity的nested parent仍为`sha256:042a4243db0e7c3263b9582bc991365efb53fe663208d3077634ae86257998e7`，冻结G2 v6 bundle仍为`sha256:0820328ae1cfdba7d05948d9e36498a5428d997d6eabfb833ef0ba7d84b77db7`并40/40 exact。
+
+Production T2a在SQLite事务前验证bundle/entry closed keyset、完整membership/order、closure key、source/scope/source hash、Plan ref/hash/canonical bytes、interface/member/closure hash、nested global lineage及Compiler/Toolchain/Normalizer/Proof/Error Catalog/Runtime Safety/Catalog authority。Schema 7 `BEGIN IMMEDIATE`内按`graph_run_id + plan_hash`保存或exact验证parent与所有unique static child Plans，并为每个Plan保存generated-schema contents/bindings；全部成功后才CAS build compiled。Same identity/different bytes、existing partial schema binding、missing/extra/duplicate/alias/unknown/tamper、stale build row、exact lease owner/token/expiry（`expires_at_ms <= now_ms`）、live Run/Scope work fence均fail closed。Compiled replay只验证、零DML且不能补缺；pre-first-write与pre-commit faults均完整rollback。T2b语义未改，仍拒绝`subgraph/expand/map`为G6-owned surface。
+
+Current Compiler version/build/toolchain为`3.0.5` / `sha256:7eb0e64d00e79d3684f401a46549568f8997d2e02a6cffd0b573326dfb08bcc6` / `sha256:a48c43917d27271bf2edfc0b9a8625519e098917f2768ea447ffda7eb0d19c4e`。Additive bridge pack/member tree=`sha256:0f4bba85f8d25a16024877a236724dc119393d87aa773ca791253bbbfcd8ee90` / `sha256:c1c292e46a57caf7f190965d10960cf3bc4525669b9ba07e35ce2921e213b02d`，production/evidence source tree=`sha256:8103a9b1061c265cb0fd1c62e8383a9825cf3b193f1f1d703606588a2b372e0b` / `sha256:ab46b3ac9b4e6e57a1a13739a43a772dfacd42f9e3dd877e4a8070b9264d1cd5`，closed fixtures为4 positive / 12 negative / 6 fault。Rebuilt G5 pack/member tree=`sha256:07a19052c602ca26abd93ac7a8294fd69a0ab087ac0a84e9e73feecdb84108ea` / `sha256:845b9289a36ecc056d28337b94d565cfc26b422907dbb62d6acdacfd42bbb446`，reference/evidence tree=`sha256:0aaec6340219926f94c1b262f092fddffb07131153c851ea5cdac886b406ce5b` / `sha256:50b71e64d89f3661b45bbaff2f4013ce15e0fbd7f6414ec4c280f50413a2e31f`，implementation/19-source tree=`sha256:efb0b516d7a27d602ef44ef2743b94f8af6f5e3b596cb4ad33e3924ed76600be` / `sha256:72f81daa7e819d2633597df42da6fc8f6edb1f35944727f8728d4d031de386e2`；既有21 positive / 28 negative / 17 fault records保持closed。
+
+Managed verification全部通过：Compiler bundle 2/2；`test:g2` 9 files / 66 tests；冻结v6与historical replay各40/40 exact；`test:g1.1` 27/27，`test:g1.2` 25/25，Capacity/Schema/Store 63 passed / 1 frozen skip；G3 101/101；G4 2/2；ownership 1/1；whole G0 104 passed / 7 frozen skips。G5为5 files / 113 tests，其中real-file SQLite Runtime 88/88、NodeOutputEnvelope Store 14/14、Capacity 3/3、reference model 3/3、Contract/adversarial 5/5；readiness 7/7、blocker 6/6。Nested/shared Plan hashes、unique child schema bindings、exact replay、response loss、before-first-write/before-commit rollback、reopen、Plan collision、missing binding、unknown/partial/extra/duplicate/order/alias/source/Plan/nested/toolchain/safety tamper、live lease与Run/Scope fence均由direct production SQLite或Compiler tests执行。
+
+两轮连续完整managed `contracts:generate` + `contracts:check`均PASS；生成前、第一轮与第二轮后的Contract/Schema JSON/SQL tree digest均byte-identical为`56ff31107ca23c50af727a81bc4fab25bd3e4df0bef707b9a848ee8c664bc759`。Managed `typecheck`与`build` PASS；随后exact `./scripts/runtime-toolchain.sh bind-core --project-root "$PWD" --entry dist/index.js`成功，Runtime Launcher=`/Users/chelaile/Library/Application Support/Icarus/bin/icarus-runtime`，binding kind=`development_checkout`。Post-build再次PASS whole G0 104/7、G3 101/101、Store check、NodeOutputEnvelope Store 14/14、G5 113/113、readiness 7/7与blocker 6/6。Managed Node 26.5.0、Ajv、better-sqlite3 native module与real SQLite 3.53.2检查实际执行。
+
+本提交只形成directed-repair construction candidate，不创建semantic approval、seal、independent review或ledger-only closure，不声称G2/G5 `DONE`，也不恢复G6 readiness。下一任务只能由中控基于本candidate exact bytes创建fresh independent local G2/G5 affected-chain regression；只有该独立回归可以确认authority/candidate、恢复G2/G5 closure并决定G6是否重新`READY`。
+
+Final exact changed-path audit为34 paths。相对`ac1f373`，全部sealed/review/Golden artifact、完整Schema tree（含历史/current Schema 5/6/7 migration与upgrade）、G3.8A、current G3/G4、frozen gate ownership及两套lockfile均零diff；没有历史artifact覆盖或新的approval/seal。Root dependency section base/current digest同为`4c07645d4d4e47e92252dc90f477ef002f818f02e127807171169b10169d3089`，root/agent-runner lockfile raw分别保持`2b8c87e5549915e2d53c1eecdabef3ebb149bc8f03054d40f1924d93bf2bd085` / `d9b4b5d77dc6478348b81d74d65e2af1d3596ce45eea6742cae20cf105db379c`。Foundation production-import boundary 11/11 PASS，只对`static-child-plan-bundle-repair.ts -> compiler.ts/identity.ts`两个exact construction evidence imports增加file-and-target allowlist；无directory-wide exemption。Added-production diff scan没有Gateway/audit/T6e、blocker resolve/abandon、workflow deadline、manual retry、T7/T8、child creation/finalization、compensation、certification、Production activation/loader/ingress/network、real Adapter或G6+实现；`git diff --check` PASS。

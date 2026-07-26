@@ -38,6 +38,7 @@ export const G5_REPAIR_IMPLEMENTATION_SOURCE_PATHS = [
   'src/workflow-runtime/runtime/outbox.ts',
   'src/workflow-runtime/runtime/plan-authority.ts',
   'src/workflow-runtime/runtime/reconciler.ts',
+  'src/workflow-runtime/runtime/static-child-plan-bundle.ts',
   'src/workflow-runtime/runtime/waits.ts',
 ] as const;
 
@@ -52,10 +53,17 @@ const evidenceSourcePaths = [
   'src/workflow-runtime/store/node-output-envelope-value-store.test.ts',
   'src/workflow-runtime/runtime/g5-test-bootstrap.ts',
   'src/workflow-runtime/runtime/g5-basic-runtime.test.ts',
+  'src/workflow-runtime/compiler/static-child-plan-bundle.test.ts',
+  'src/workflow-runtime/contracts/static-child-plan-bundle-repair.test.ts',
   'src/workflow-runtime/capacity/capacity-admin.test.ts',
 ] as const;
 
 const exactBindings = [
+  {
+    name: 'g2_g5_static_child_plan_bundle_repair_candidate',
+    path: 'src/workflow-runtime/contracts/conformance/static-child-plan-bundle-repair/contract-pack-static-child-plan-bundle-repair.json',
+    hash: 'sha256:0f4bba85f8d25a16024877a236724dc119393d87aa773ca791253bbbfcd8ee90',
+  },
   {
     name: 'r019_generated_schema_join_authority',
     path: 'src/workflow-runtime/contracts/conformance/generated-schema-join-authority-repair/contract-pack-generated-schema-join-authority-repair.json',
@@ -978,7 +986,7 @@ function buildArtifacts(): Array<[string, ContractArtifactEnvelope]> {
         'certification',
         'Production_activation',
       ],
-      next_task_only: 'independent_G5_whole_gate_regression',
+      next_task_only: 'independent_G2_G5_affected_chain_regression',
       bindings: upstream,
     },
   );

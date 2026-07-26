@@ -22,12 +22,12 @@ import type {
 } from './types.js';
 import { compareAscii } from './normalizer.js';
 
-export const WORKFLOW_COMPILER_VERSION = '3.0.4';
+export const WORKFLOW_COMPILER_VERSION = '3.0.5';
 export const CANONICAL_NORMALIZER_VERSION = '2.0.1';
 export const PROOF_ALGORITHM_VERSION = '2.0.2';
 export const WORKFLOW_COMPILER_TOOLCHAIN_REF = {
   id: 'icarus.workflow-compiler-toolchain',
-  version: '3.0.4',
+  version: '3.0.5',
 } as const;
 
 const compilerRoot = import.meta.dirname;
@@ -38,6 +38,7 @@ const NORMALIZER_REFS = [
 const PROOF_REFS = ['src/workflow-runtime/compiler/proofs.ts'] as const;
 const COMPILER_REFS = [
   'src/workflow-runtime/contracts/generated-schema-authority.ts',
+  'src/workflow-runtime/contracts/static-child-plan-bundle-types.ts',
   'src/workflow-runtime/compiler/compiler.ts',
   'src/workflow-runtime/compiler/identity.ts',
   'src/workflow-runtime/compiler/normalizer.ts',

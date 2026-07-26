@@ -1,0 +1,63 @@
+{
+  "format": "icarus.workflow-static-child-plan-bundle-negative-cases/1",
+  "ref": {
+    "id": "icarus.workflow-static-child-plan-bundle-negative-cases",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-static-child-plan-bundle-negative-cases:1\n",
+  "payload": {
+    "cases": [
+      {
+        "case_id": "bundle_missing_member",
+        "assertion": "missing closure member fails before SQLite"
+      },
+      {
+        "case_id": "bundle_extra_member",
+        "assertion": "extra closure member fails before SQLite"
+      },
+      {
+        "case_id": "bundle_duplicate_member",
+        "assertion": "duplicate closure member fails before SQLite"
+      },
+      {
+        "case_id": "bundle_order_drift",
+        "assertion": "bundle order differing from parent closure fails"
+      },
+      {
+        "case_id": "bundle_closure_alias",
+        "assertion": "closure-key alias fails"
+      },
+      {
+        "case_id": "bundle_unknown_field",
+        "assertion": "unknown bundle or entry field fails closed"
+      },
+      {
+        "case_id": "bundle_source_tamper",
+        "assertion": "child source bytes/hash mismatch fails"
+      },
+      {
+        "case_id": "bundle_plan_tamper",
+        "assertion": "child canonical Plan bytes/hash mismatch fails"
+      },
+      {
+        "case_id": "bundle_nested_lineage_tamper",
+        "assertion": "nested child closure lineage mismatch fails"
+      },
+      {
+        "case_id": "bundle_toolchain_safety_drift",
+        "assertion": "child toolchain or safety authority drift fails"
+      },
+      {
+        "case_id": "persisted_plan_collision",
+        "assertion": "same content-addressed identity with different bytes fails"
+      },
+      {
+        "case_id": "persisted_child_schema_binding_missing",
+        "assertion": "missing child generated-schema binding fails exact replay"
+      }
+    ],
+    "case_count": 12
+  },
+  "hash": "sha256:b27b799caffd3e7f516a1ee586f39ec98c52467cec12f47ec8cff28347120c48"
+}

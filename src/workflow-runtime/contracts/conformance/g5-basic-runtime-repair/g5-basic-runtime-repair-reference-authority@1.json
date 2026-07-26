@@ -32,7 +32,7 @@
       },
       {
         "path": "src/workflow-runtime/contracts/g5-basic-runtime-repair-contract.test.ts",
-        "raw_sha256": "sha256:34eaffbb9646321419772f68c53d22957b0f7bdafd4dc2a44242665da5294874"
+        "raw_sha256": "sha256:372216f505695d043f95cde39d23bce9257327e7d33b8ae8b34e6f13c889f659"
       },
       {
         "path": "src/workflow-runtime/contracts/g5-capacity-runtime-readiness-audit.test.ts",
@@ -40,7 +40,7 @@
       },
       {
         "path": "src/workflow-runtime/contracts/g5-runtime-readiness-audit.test.ts",
-        "raw_sha256": "sha256:bd4fc1ca1f7c0a9b76a66c5ebcd10c79cd3c823be9a92c2a04763c47cceccad2"
+        "raw_sha256": "sha256:f60f9fad25d1e2f398f8fa3970fc654242d5d6a397b65960590ecbafab7b82c1"
       },
       {
         "path": "src/workflow-runtime/contracts/g5-capability-outbox-blocker.test.ts",
@@ -56,14 +56,22 @@
       },
       {
         "path": "src/workflow-runtime/runtime/g5-basic-runtime.test.ts",
-        "raw_sha256": "sha256:670d767cbcffa7965e56c3ba7b236985d7799f94bb3d52ac2111c20ded1b43cd"
+        "raw_sha256": "sha256:fec4c7a87f6d9a61d988d9832e590f8b00a0edb7dfc38d39fce062666763f917"
+      },
+      {
+        "path": "src/workflow-runtime/compiler/static-child-plan-bundle.test.ts",
+        "raw_sha256": "sha256:2411c2645376daa24590d7837357685c0382591dc1c08fb0a224cfd20c67b952"
+      },
+      {
+        "path": "src/workflow-runtime/contracts/static-child-plan-bundle-repair.test.ts",
+        "raw_sha256": "sha256:475e6934ed46347dac3c8d8f68c3c05a11aecdf5bcaad0f2032b6981258ace7c"
       },
       {
         "path": "src/workflow-runtime/capacity/capacity-admin.test.ts",
         "raw_sha256": "sha256:06d0b8cee866ec721a34dca293ed549d948831d81966dada5feaf4312c0be513"
       }
     ],
-    "evidence_tree_hash": "sha256:568f61d324b1a166e8e671bc33a3e715f7bdd4e3f9d4918dc1abc9020c9eb699"
+    "evidence_tree_hash": "sha256:50b71e64d89f3661b45bbaff2f4013ce15e0fbd7f6414ec4c280f50413a2e31f"
   },
-  "hash": "sha256:caae9af7b7310b7d044728b1f4d6f5f18f87f3d66d161969ff17443c4290522f"
+  "hash": "sha256:0aaec6340219926f94c1b262f092fddffb07131153c851ea5cdac886b406ce5b"
 }

@@ -3,6 +3,7 @@ import { registryResourceId } from '../contracts/g3-registry-persistence.js';
 import type { PlanGeneratedSchemaGenerator } from '../contracts/generated-schema-authority.js';
 import type { CompiledScopePlanV2Document } from '../contracts/compiler-contract-repair-types.js';
 import { COMPILED_PLAN_V2_DOMAIN_SEPARATOR } from '../contracts/compiler-contract-repair-source.js';
+import type { WorkflowCompilerStaticChildPlanBundle } from '../contracts/static-child-plan-bundle-types.js';
 import type { JsonObject, JsonValue, Sha256Hash } from '../contracts/types.js';
 import {
   G5_REPAIR_DATABASE_SCHEMA_HASH,
@@ -52,6 +53,124 @@ import {
   requiredObjectField,
   verifyCompiledPlanAuthority,
 } from './plan-authority.js';
+import {
+  verifyStaticChildPlanBundle,
+  type VerifiedStaticChildPlan,
+} from './static-child-plan-bundle.js';
+
+interface T2PlanArtifact {
+  readonly source: JsonObject;
+  readonly sourceHash: Sha256Hash;
+  readonly plan: CompiledScopePlanV2Document;
+}
+
+function contentAddressedPlanId(graphRunId: string, planHash: string): string {
+  return stableRuntimeId('plan', {
+    graph_run_id: graphRunId,
+    plan_hash: planHash,
+  });
+}
+
+function persistOrVerifyT2Plan(
+  transaction: WorkflowRuntimeWriteTransaction,
+  graphRunId: string,
+  artifact: T2PlanArtifact,
+  nowMs: number,
+  allowInsert: boolean,
+): string {
+  const planId = contentAddressedPlanId(graphRunId, artifact.plan.plan_hash);
+  const expected = {
+    id: planId,
+    graph_run_id: graphRunId,
+    plan_hash: artifact.plan.plan_hash,
+    format: artifact.plan.format,
+    compiler_version: artifact.plan.compiler_version,
+    source_json: canonicalJson(artifact.source),
+    source_value_id: null,
+    source_hash: artifact.sourceHash,
+    compiled_plan_json: canonicalJson(artifact.plan),
+    compiled_plan_value_id: null,
+    interface_snapshot_json: canonicalJson(artifact.plan.interface_snapshot),
+    interface_snapshot_hash: artifact.plan.interface_snapshot_hash,
+    policy_snapshot_json: canonicalJson(
+      artifact.plan.effective_policy_snapshot,
+    ),
+    policy_snapshot_hash: artifact.plan.policy_snapshot_hash,
+    capability_catalog_hash: artifact.plan.capability_catalog_hash,
+  };
+  const rows = transaction.queryAll<typeof expected>(
+    `SELECT id, graph_run_id, plan_hash, format, compiler_version, source_json,
+            source_value_id, source_hash, compiled_plan_json,
+            compiled_plan_value_id, interface_snapshot_json,
+            interface_snapshot_hash, policy_snapshot_json,
+            policy_snapshot_hash, capability_catalog_hash
+       FROM workflow_graph_scope_plans
+      WHERE id = ? OR (graph_run_id = ? AND plan_hash = ?)
+      ORDER BY id COLLATE BINARY`,
+    [planId, graphRunId, artifact.plan.plan_hash],
+  );
+  if (rows.length > 0) {
+    if (
+      rows.length !== 1 ||
+      canonicalJson(rows[0]!) !== canonicalJson(expected)
+    ) {
+      throw new G5RuntimeError(
+        'integrity_violation',
+        `T2a content-addressed Plan collision: ${artifact.plan.plan_hash}`,
+      );
+    }
+    verifyPersistedPlanGeneratedSchemaAuthorities(transaction, {
+      planId,
+      graphRunId,
+      planHash: artifact.plan.plan_hash as Sha256Hash,
+      plan: artifact.plan,
+    });
+    return planId;
+  }
+  if (!allowInsert) {
+    throw new G5RuntimeError(
+      'integrity_violation',
+      `T2a compiled replay is missing Plan ${artifact.plan.plan_hash}`,
+    );
+  }
+  transaction.execute(
+    `INSERT INTO workflow_graph_scope_plans (
+       id, graph_run_id, plan_hash, format, compiler_version, source_json,
+       source_value_id, source_hash, compiled_plan_json, compiled_plan_value_id,
+       interface_snapshot_json, interface_snapshot_hash, policy_snapshot_json,
+       policy_snapshot_hash, capability_catalog_hash, created_at_ms
+     ) VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, NULL, ?, ?, ?, ?, ?, ?)`,
+    [
+      expected.id,
+      expected.graph_run_id,
+      expected.plan_hash,
+      expected.format,
+      expected.compiler_version,
+      expected.source_json,
+      expected.source_hash,
+      expected.compiled_plan_json,
+      expected.interface_snapshot_json,
+      expected.interface_snapshot_hash,
+      expected.policy_snapshot_json,
+      expected.policy_snapshot_hash,
+      expected.capability_catalog_hash,
+      nowMs,
+    ],
+  );
+  persistPlanGeneratedSchemaAuthorities(
+    transaction,
+    {
+      planId,
+      graphRunId,
+      planHash: artifact.plan.plan_hash as Sha256Hash,
+      plan: artifact.plan,
+    },
+    nowMs,
+    (compiledSchema, label) =>
+      loadCompiledSchemaAuthority(transaction, compiledSchema, label).schema,
+  );
+  return planId;
+}
 
 export interface T2CompileInput {
   readonly graphRunId: string;
@@ -60,9 +179,15 @@ export interface T2CompileInput {
   readonly expectedRunWorkFenceEpoch: number;
   readonly expectedOwnerScopeWorkFenceEpoch: number;
   readonly expectedCompilerSnapshotHash: Sha256Hash;
+  readonly expectedBuildLease: {
+    readonly owner: string;
+    readonly token: string;
+    readonly expiresAtMs: number;
+  } | null;
   readonly sourceJson: JsonObject;
   readonly sourceHash: Sha256Hash;
   readonly plan: CompiledScopePlanV2Document;
+  readonly staticChildPlanBundle: WorkflowCompilerStaticChildPlanBundle;
   readonly nowMs: number;
 }
 
@@ -87,26 +212,46 @@ export function persistCompileResultT2a(
       'T2a requires the pinned Compiler Plan v2 result',
     );
   }
-  const planId = stableRuntimeId('plan', {
-    graph_run_id: input.graphRunId,
-    plan_hash: input.plan.plan_hash,
-  });
+  const staticChildPlans = verifyStaticChildPlanBundle(
+    input.plan,
+    input.staticChildPlanBundle,
+  );
+  const planId = contentAddressedPlanId(input.graphRunId, input.plan.plan_hash);
+  const planArtifacts: readonly T2PlanArtifact[] = [
+    {
+      source: input.sourceJson,
+      sourceHash: input.sourceHash,
+      plan: input.plan,
+    },
+    ...staticChildPlans.map((child: VerifiedStaticChildPlan) => ({
+      source: child.source,
+      sourceHash: child.sourceHash,
+      plan: child.plan,
+    })),
+  ];
   return runImmediateG5Transaction(
     store,
     (transaction) => {
       const build = transaction.queryOne<{
         graph_run_id: string;
+        owner_scope_id: string | null;
+        target_scope_id: string | null;
         compiler_snapshot_hash: string;
         run_work_fence_epoch: number;
         owner_scope_work_fence_epoch: number;
         status: string;
         compiled_plan_id: string | null;
         compiled_plan_hash: string | null;
+        lease_owner: string | null;
+        lease_token: string | null;
+        lease_expires_at_ms: number | null;
         row_version: number;
       }>(
-        `SELECT graph_run_id, compiler_snapshot_hash, run_work_fence_epoch,
+        `SELECT graph_run_id, owner_scope_id, target_scope_id,
+              compiler_snapshot_hash, run_work_fence_epoch,
               owner_scope_work_fence_epoch, status, compiled_plan_id,
-              compiled_plan_hash, row_version
+              compiled_plan_hash, lease_owner, lease_token,
+              lease_expires_at_ms, row_version
          FROM workflow_graph_scope_builds WHERE id = ?`,
         [input.buildId],
       );
@@ -114,11 +259,12 @@ export function persistCompileResultT2a(
         runtime_safety_snapshot_hash: string;
         compiler_toolchain_resource_hash: string;
         source_seed_hash: string;
+        work_fence_epoch: number;
         database_schema_version: number;
         database_schema_hash: string;
       }>(
         `SELECT runtime_safety_snapshot_hash, compiler_toolchain_resource_hash,
-                source_seed_hash,
+                source_seed_hash, work_fence_epoch,
                 database_schema_version, database_schema_hash
            FROM workflow_graph_runs WHERE id = ?`,
         [input.graphRunId],
@@ -146,6 +292,13 @@ export function persistCompileResultT2a(
       const planPin = definitionContent
         ? objectField(definitionContent, 'compiled_plan_pin')
         : null;
+      const fenceScopeId = build?.owner_scope_id ?? build?.target_scope_id;
+      const fenceScope = fenceScopeId
+        ? transaction.queryOne<{ work_fence_epoch: number }>(
+            'SELECT work_fence_epoch FROM workflow_graph_scopes WHERE id = ? AND graph_run_id = ?',
+            [fenceScopeId, input.graphRunId],
+          )
+        : null;
       if (!build || build.graph_run_id !== input.graphRunId)
         throw new G5RuntimeError('precondition_failed', 'T2a build is missing');
       if (
@@ -160,7 +313,7 @@ export function persistCompileResultT2a(
           input.plan.compiler_toolchain_hash ||
         planPin.compiler_build_hash !== input.plan.compiler_build_hash ||
         planPin.provenance !== 'sealed_g2_expected' ||
-        input.plan.compiler_version !== '3.0.4' ||
+        !['3.0.4', '3.0.5'].includes(input.plan.compiler_version) ||
         run.source_seed_hash !== input.sourceHash ||
         input.plan.runtime_safety_hash !== run.runtime_safety_snapshot_hash ||
         input.plan.compiler_toolchain_hash !==
@@ -181,12 +334,15 @@ export function persistCompileResultT2a(
             'integrity_violation',
             'T2a same build has different compiled bytes',
           );
-        verifyPersistedPlanGeneratedSchemaAuthorities(transaction, {
-          planId,
-          graphRunId: input.graphRunId,
-          planHash: input.plan.plan_hash as Sha256Hash,
-          plan: input.plan,
-        });
+        for (const artifact of planArtifacts) {
+          persistOrVerifyT2Plan(
+            transaction,
+            input.graphRunId,
+            artifact,
+            input.nowMs,
+            false,
+          );
+        }
         return { planId, disposition: 'exact_replay' };
       }
       if (
@@ -195,49 +351,36 @@ export function persistCompileResultT2a(
         build.run_work_fence_epoch !== input.expectedRunWorkFenceEpoch ||
         build.owner_scope_work_fence_epoch !==
           input.expectedOwnerScopeWorkFenceEpoch ||
-        build.compiler_snapshot_hash !== input.expectedCompilerSnapshotHash
+        run.work_fence_epoch !== input.expectedRunWorkFenceEpoch ||
+        !fenceScope ||
+        fenceScope.work_fence_epoch !==
+          input.expectedOwnerScopeWorkFenceEpoch ||
+        build.compiler_snapshot_hash !== input.expectedCompilerSnapshotHash ||
+        (build.status === 'ready_to_compile'
+          ? input.expectedBuildLease !== null ||
+            build.lease_owner !== null ||
+            build.lease_token !== null ||
+            build.lease_expires_at_ms !== null
+          : input.expectedBuildLease === null ||
+            build.lease_owner !== input.expectedBuildLease.owner ||
+            build.lease_token !== input.expectedBuildLease.token ||
+            build.lease_expires_at_ms !==
+              input.expectedBuildLease.expiresAtMs ||
+            input.expectedBuildLease.expiresAtMs <= input.nowMs)
       )
         throw new G5RuntimeError(
           'cas_conflict',
           'T2a lease, epoch, hash, or row version is stale',
         );
-      transaction.execute(
-        `INSERT INTO workflow_graph_scope_plans (
-       id, graph_run_id, plan_hash, format, compiler_version, source_json,
-       source_value_id, source_hash, compiled_plan_json, compiled_plan_value_id,
-       interface_snapshot_json, interface_snapshot_hash, policy_snapshot_json,
-       policy_snapshot_hash, capability_catalog_hash, created_at_ms
-     ) VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, NULL, ?, ?, ?, ?, ?, ?)`,
-        [
-          planId,
+      for (const artifact of planArtifacts) {
+        persistOrVerifyT2Plan(
+          transaction,
           input.graphRunId,
-          input.plan.plan_hash,
-          input.plan.format,
-          input.plan.compiler_version,
-          canonicalJson(input.sourceJson),
-          input.sourceHash,
-          canonicalJson(input.plan),
-          canonicalJson(input.plan.interface_snapshot),
-          input.plan.interface_snapshot_hash,
-          canonicalJson(input.plan.effective_policy_snapshot),
-          input.plan.policy_snapshot_hash,
-          input.plan.capability_catalog_hash,
+          artifact,
           input.nowMs,
-        ],
-      );
-      persistPlanGeneratedSchemaAuthorities(
-        transaction,
-        {
-          planId,
-          graphRunId: input.graphRunId,
-          planHash: input.plan.plan_hash as Sha256Hash,
-          plan: input.plan,
-        },
-        input.nowMs,
-        (compiledSchema, label) =>
-          loadCompiledSchemaAuthority(transaction, compiledSchema, label)
-            .schema,
-      );
+          true,
+        );
+      }
       const changed = transaction.execute(
         `UPDATE workflow_graph_scope_builds
           SET status = 'compiled', compiled_plan_id = ?, compiled_plan_hash = ?,

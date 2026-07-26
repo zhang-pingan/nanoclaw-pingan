@@ -3656,6 +3656,10 @@ Plan保存完整effective business policy、runtime safety snapshot、Compiler/T
 
 Parent compile 同时产生所有 inline/template static factory 的 content-addressed child plan closure；`CompiledStaticScopeFactoryBinding.precompiled_plan_hash` 必须指向该 closure。T2a 原子保存 parent plan 及缺失的 static child plans；subgraph/map build 直接绑定 pinned precompiled plan，只有 expand 才编译运行时冻结的 candidate spec。
 
+Compiler成功返回必须在parent `CompiledScopePlan v2`之外携带closed `icarus.workflow-compiler-static-child-plan-bundle/1`。Bundle只有`format + entries`；每个entry只有`closureKey + source + plan`，其中`source`是该static factory实际编译的exact pinned/inline Graph Scope JSON，`plan`是独立canonical `CompiledScopePlan v2`。Entries必须与parent `static_child_plan_closure.members`一一对应并保持同一parent-before-descendant/ASCII顺序。Bundle不进入parent Plan canonical bytes/hash，不是第二份Golden oracle，也不能只从hash manifest重建；相同child Plan hash可以由多个closure member共享，但source/Plan canonical bytes必须exact相同。
+
+T2a在开启写事务前必须验证bundle closed keyset、完整membership/order、closure key、source/scope/source hash、plan ref/hash、interface hash、member/closure hash、nested closure lineage，以及每个child与parent的Compiler/Toolchain/Normalizer/Proof/Error Catalog/Runtime Safety/Catalog authority。Missing、extra、duplicate、alias、partial、unknown field或任一bytes/hash/lineage/authority drift全部fail closed。Schema 7事务内按`graph_run_id + plan_hash` content-addressed identity保存parent及每个缺失的unique child Plan，并为每个Plan保存其exact generated-schema contents/bindings；same identity/different bytes或已有partial schema binding属于integrity violation。只有全部Plan与schema authority已insert或exact-verified后才可CAS build=`compiled`；compiled replay只验证且必须零DML，不能补写缺失成员。
+
 下文 [T1 activation ingress](#事务边界与-cas) 会先创建 `lifecycle=materializing, plan_id=NULL` 的 root scope shell，因此 root snapshot/compiler failure 仍有合法 scope 挂载 engine-error close request/cut，并终结同一个 root run。Subgraph/expand 的 single child build failure 不创建 child scope，直接终结 owner node 为 failed；map item build failure 则原子填写该 item 的 `errored/scope_id=null` result slot 并重新计算 map policy，不能提前 terminalize 整个 map owner。任何 compile failure 都不能部分 materialize executable node。
 
 ## Graph 与 Node 状态模型
@@ -5488,7 +5492,10 @@ T1  standalone activation ingress:
 T2a compile result persistence:
     outside tx resolve frozen locator and run pinned pure compiler;
     CAS build lease + source/input/compiler hashes + saved work epochs + row_version;
-    insert immutable parent/static-child plan closure; set build=compiled;
+    verify exact closed Compiler static-child Plan bundle against parent closure;
+    insert/verify immutable parent + every unique static-child Plan and each Plan's
+    generated-schema contents/bindings in one Schema 7 transaction; set build=compiled;
+    compiled replay is verify-only zero-DML; collision/partial/tamper fails closed;
     non-retryable failure sets build=failed and records the appropriate fact
 
 T2b scope materialization:

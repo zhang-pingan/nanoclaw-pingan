@@ -8,6 +8,7 @@ import type {
   Sha256Hash,
   VersionedRef,
 } from '../contracts/types.js';
+import type { WorkflowCompilerStaticChildPlanBundle } from '../contracts/static-child-plan-bundle-types.js';
 
 export type WorkflowCompilerSourceKind =
   | 'graph_scope'
@@ -95,6 +96,7 @@ export interface WorkflowCompilerRequest {
 export interface WorkflowCompilerSuccess {
   sourceHash: Sha256Hash;
   plan: CompiledScopePlanV2Document;
+  staticChildPlanBundle: WorkflowCompilerStaticChildPlanBundle;
   proofHashes: Sha256Hash[];
   programHashes: Sha256Hash[];
   staticLowering: boolean;

@@ -1,0 +1,67 @@
+{
+  "format": "icarus.workflow-contract-pack-static-child-plan-bundle-repair/1",
+  "ref": {
+    "id": "icarus.workflow-contract-pack-static-child-plan-bundle-repair",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-contract-pack-static-child-plan-bundle-repair:1\n",
+  "payload": {
+    "gates": [
+      "G2",
+      "G5"
+    ],
+    "status": "DIRECTED_REPAIR_CANDIDATE_PENDING_INDEPENDENT_AFFECTED_CHAIN_REGRESSION",
+    "predecessor_g2_v6_seal_ref": "src/workflow-runtime/contracts/conformance/sealed/g2-generated-schema-join-authority-v6/golden-conformance-bundle@2.json",
+    "predecessor_g2_v6_seal_hash": "sha256:5cf2d899d0bf8d7cc0d4b70cc7796a123b8b5384bbbefe3e204e70bddf33fe11",
+    "predecessor_g2_v6_bundle_hash": "sha256:0820328ae1cfdba7d05948d9e36498a5428d997d6eabfb833ef0ba7d84b77db7",
+    "g2_g5_closed": false,
+    "g6_ready": false,
+    "independent_review_required": true,
+    "member_count": 5,
+    "members": [
+      {
+        "format": "icarus.workflow-static-child-plan-bundle-protocol/1",
+        "ref": {
+          "id": "icarus.workflow-static-child-plan-bundle-protocol",
+          "version": "1.0.0"
+        },
+        "hash": "sha256:1dbabbeae920bf65266db76677794aa2364c5c192f562ae279f9df1e581e13f2"
+      },
+      {
+        "format": "icarus.workflow-static-child-plan-bundle-positive-cases/1",
+        "ref": {
+          "id": "icarus.workflow-static-child-plan-bundle-positive-cases",
+          "version": "1.0.0"
+        },
+        "hash": "sha256:a9b27c68fba35b9857ae025a654395e792b237eacdb522884ece4b7f40662aff"
+      },
+      {
+        "format": "icarus.workflow-static-child-plan-bundle-negative-cases/1",
+        "ref": {
+          "id": "icarus.workflow-static-child-plan-bundle-negative-cases",
+          "version": "1.0.0"
+        },
+        "hash": "sha256:b27b799caffd3e7f516a1ee586f39ec98c52467cec12f47ec8cff28347120c48"
+      },
+      {
+        "format": "icarus.workflow-static-child-plan-bundle-fault-cases/1",
+        "ref": {
+          "id": "icarus.workflow-static-child-plan-bundle-fault-cases",
+          "version": "1.0.0"
+        },
+        "hash": "sha256:4d0d89e4e67c26d3cd81b5a226f63150a96042b3136fb7a62efe09a4f5e35e09"
+      },
+      {
+        "format": "icarus.workflow-static-child-plan-bundle-evidence/1",
+        "ref": {
+          "id": "icarus.workflow-static-child-plan-bundle-evidence",
+          "version": "1.0.0"
+        },
+        "hash": "sha256:cc2231d4ebf8e910fffc45422c67ac284132e96c56de90e4d558b3ec5be39a0f"
+      }
+    ],
+    "member_tree_hash": "sha256:c1c292e46a57caf7f190965d10960cf3bc4525669b9ba07e35ce2921e213b02d"
+  },
+  "hash": "sha256:0f4bba85f8d25a16024877a236724dc119393d87aa773ca791253bbbfcd8ee90"
+}

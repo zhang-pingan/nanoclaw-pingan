@@ -5,11 +5,11 @@ import { Ajv2020, type AnySchema } from 'ajv/dist/2020.js';
 import { describe, expect, it } from 'vitest';
 
 import {
-  evaluateCurrentG2GoldenReplay,
   evaluateHistoricalGeneratedSchemaJoinAuthorityV4Replay,
   evaluateHistoricalGeneratedSchemaJoinAuthorityV5Replay,
   evaluatePredecessorG2GoldenReplay,
 } from '../compiler/current-g2-golden-replay.js';
+import { checkG2V6FrozenReplay } from '../compiler/g2-v6-frozen-replay.js';
 import { checkCurrentG2GoldenSeal } from './current-g2-golden-seal.js';
 import {
   G2_REPLAY_REPAIR_CONFORMANCE_BUNDLE_SCHEMA,
@@ -137,10 +137,10 @@ describe('G2 replay-repair successor immutable review and seal', () => {
       mismatch_count: 11,
       passed: false,
     });
-    expect(evaluateCurrentG2GoldenReplay()).toMatchObject({
-      exact_equal_count: 40,
-      mismatch_count: 0,
-      passed: true,
+    expect(checkG2V6FrozenReplay()).toMatchObject({
+      exactCount: 40,
+      bundleHash:
+        'sha256:0820328ae1cfdba7d05948d9e36498a5428d997d6eabfb833ef0ba7d84b77db7',
     });
     expect(
       evaluateHistoricalGeneratedSchemaJoinAuthorityV5Replay(),

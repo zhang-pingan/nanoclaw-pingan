@@ -27,7 +27,7 @@ describe('G5 Basic Runtime readiness audit', () => {
     const repair = readArtifact('contract-pack-g5-basic-runtime-repair.json');
     expect(repair.payload).toMatchObject({
       status:
-        'G5_REPAIR_EXIT_CANDIDATE_PENDING_INDEPENDENT_G5_WHOLE_GATE_REGRESSION',
+        'G5_STATIC_CHILD_PLAN_PREREQUISITE_REPAIR_CANDIDATE_PENDING_INDEPENDENT_AFFECTED_CHAIN_REGRESSION',
       g5_done: false,
       g6_through_g9: 'NOT_READY',
       historical_g5_candidate_authority: 'forbidden',
@@ -42,7 +42,7 @@ describe('G5 Basic Runtime readiness audit', () => {
         'business_members_use_exact_compiled_schema_and_envelope_uses_exact_node_output_envelope_schema',
       output_publication:
         'canonical_node_output_envelope_with_exact_port_values',
-      next_task_only: 'independent_G5_whole_gate_regression',
+      next_task_only: 'independent_G2_G5_affected_chain_regression',
     });
   });
 
