@@ -1,8 +1,8 @@
 # Dynamic Workflow Runtime 实施进度
 
-> **状态**: `G6_BLOCKED_BY_SPEC_MAP_TERMINAL_CONSUMPTION`
-> **当前 Gate**: G0/G1/G2/G3/G4/G5=`DONE`；R-020=`DONE`；G6=`BLOCKED_BY_SPEC`；G7-G9=`NOT_READY`
-> **后续边界**: 下一切片只能是fresh independent R-021 spec/Contract/Schema repair；不得继续G6 Production或开始G7+
+> **状态**: `R021_MAP_TERMINAL_CONSUMPTION_REPAIR_EXIT_CANDIDATE_PENDING_INDEPENDENT_AFFECTED_CHAIN_REGRESSION`
+> **当前 Gate**: G0/G2与R-020=`DONE`；R-021/G1/G3/G4/G5=`IN_PROGRESS`；G6=`BLOCKED_PENDING_REGRESSION/NOT_STARTED`；G7-G9=`NOT_READY`
+> **后续边界**: 只能由fresh independent affected-chain regression复核R-021及受影响G1/G3/G4/G5；不得继续G6 Production或开始G7+
 > **最后更新**: 2026-07-26
 > **规范权威**: `local/docs/dynamic-workflow-dag-framework.md`
 
@@ -109,12 +109,12 @@ Agent Container 运行于独立 VM，Node identity 由 VM image gate 保证；�
 | Gate | 状态 | 依赖 | 退出证据 | 完成提交 |
 | --- | --- | --- | --- | --- |
 | G0 Contract Pack / Static Baseline | `DONE` | 无 | G0.1-G0.9 historical root + G0.10 additive Capacity Admin/publication/CAP/Logical Schema/coverage root | 本原子提交 |
-| G1 DDL / Store | `DONE` | G0.10 | additive Schema 8、7到8 upgrade与Store current identity已完成construction及fresh independent affected-chain regression；Schema 5/6/7及既有upgrade冻结 | `9fdf904` regression closure |
+| G1 DDL / Store | `IN_PROGRESS` | G0.10 | R-021 additive Schema 9、8到9 upgrade与Store current identity已完成directed-repair construction，等待fresh independent affected-chain regression；Schema 8及更早artifact/DDL/upgrade冻结 | 本R-021 candidate |
 | G2 Compiler / Golden | `DONE` | G1 + R-019 | Compiler 3.0.6 closed ChildCompletionEnvelope/MapResultManifest、additive v8 authority、current/v6各40/40 exact及fresh independent affected-chain regression全部通过 | 本原子闭合提交 |
-| G3 Registry / Authoring / Publish | `DONE` | G1 + G2 | current Schema 8 exact pins与evidence已机械级联；construction及fresh independent whole G3 101/101 affected-chain regression通过 | `9fdf904` regression closure |
-| G4 Test Bootstrap | `DONE` | G1 + G2 + G3 | current Schema 8/G3 closure已机械级联；construction及fresh independent G4 2/2与ownership 1/1 affected-chain regression通过 | `9fdf904` regression closure |
-| G5 Basic Runtime | `DONE` | current G1-G4 authority + current G2 authority | current Schema 8/G3/G4 exact pins已机械级联；construction及fresh independent focused bridge 22/88、full G5 135/135 affected-chain regression通过 | `9fdf904` regression closure |
-| G6 Dynamic / Close | `BLOCKED_BY_SPEC` | G5 + R-020 fresh independent regression | R-021：Map child的`errored/cancelled`真实terminal outcome无法通过Schema 8 closed disposition/composite FK写入唯一parent consumption；Production实现计数保持0 | - |
+| G3 Registry / Authoring / Publish | `IN_PROGRESS` | G1 + G2 | current Schema 9 exact pins与evidence已机械级联，等待fresh independent affected-chain regression | 本R-021 candidate |
+| G4 Test Bootstrap | `IN_PROGRESS` | G1 + G2 + G3 | current Schema 9/R-021/G3 exact closure已机械级联，等待fresh independent affected-chain regression | 本R-021 candidate |
+| G5 Basic Runtime | `IN_PROGRESS` | current G1-G4 authority + current G2 authority | current Schema 9/R-020/R-021/G3/G4 exact pins已机械级联，等待fresh independent affected-chain regression | 本R-021 candidate |
+| G6 Dynamic / Close | `BLOCKED_PENDING_REGRESSION/NOT_STARTED` | G5 + R-021 fresh independent regression | Schema 9已闭合四种Map真实terminal consumption tuple，但G6 Production实现计数保持0且不得在regression前施工 | - |
 | G7 Control / Card / Projection / Recovery | `NOT_READY` | G6 | Deadline Watchdog -> Gateway -> T7c stable-key/System Grant/audit + authorized manual retry handoff + T6e/resolution/recovery/card/projection fixtures | - |
 | G8 Certification | `NOT_READY` | G7 | certified profile meeting Product Floor | - |
 | G9 Production Activation | `NOT_READY` | G8 + fresh current G0/G0.10 manifests | activation + Capacity genesis/preservation audit + startup/empty-state or Recipe smoke | - |
@@ -127,14 +127,14 @@ Agent Container 运行于独立 VM，Node identity 由 VM image gate 保证；�
 | I1 | Intake、Routing、幂等创建、Child provenance、Claim | `IN_PROGRESS` | G5 intake/routing/domain claim production语义与closed fixture evidence已通过独立whole-gate regression；Child provenance继续属于G6+ |
 | I2 | Definition、State lowering、Context、transition | `IN_PROGRESS` | Compiler 3.0.6只修复generated output schema authority；冻结3.0.4/v6与superseded 3.0.5/v7语义分别保留 |
 | I3 | Source/Compiled IR、Port、Compiler | `DONE` | Compiler 3.0.6 child completion与Map result closed schema、additive v8 authority及fresh independent affected-chain regression已闭合 |
-| I4 | Runtime Store、SQLite relation、Value/Blob、migration | `IN_PROGRESS` | additive Schema 8 exact child-consumption lineage与7到8 upgrade已通过fresh independent affected-chain regression并闭合；Blob/GC仍未实现 |
+| I4 | Runtime Store、SQLite relation、Value/Blob、migration | `IN_PROGRESS` | additive Schema 9 Map terminal consumption closed catalog与8到9 upgrade已完成directed repair并等待独立回归；Schema 8及更早冻结，Blob/GC仍未实现 |
 | I5 | Graph 状态机、reconcile、Scheduler、Ledger | `IN_PROGRESS` | G5 exact Plan compiler-version binding与T0-T6d既有行为已随Schema 8 affected chain独立回归闭合；G6仍未开始 |
 | I6 | Delegation/System、Capability Effect、Outbox | `IN_PROGRESS` | G5 T5 exact execution binding与T6a/T6b已通过独立whole-gate regression；G6+未开始 |
 | I7 | Durable Wait、Signal/Timer/Approval、Inbox | `IN_PROGRESS` | G5 wait/inbox与automatic retry timers已通过独立whole-gate regression；Workflow deadline继续归未来G7 |
-| I8 | Subgraph、Expand、Map、child scope | `BLOCKED_BY_SPEC` | R-021：Schema 8无法忠实消费Map child的`errored/cancelled`slot terminal outcome；dynamic materialization与child lifecycle未实现 |
-| I9 | Completion、Cancel、Compensation、Finalization、Recovery | `BLOCKED_BY_SPEC` | R-021阻断T7b child finalizer与Map policy reconciliation，因而G6 close/T7/T8不得继续；G7 T6e resolution/abandon/Recovery仍为`NOT_READY` |
+| I8 | Subgraph、Expand、Map、child scope | `BLOCKED_PENDING_REGRESSION` | R-021 Schema 9关系authority已闭合四种Map slot terminal consumption；dynamic materialization与child lifecycle仍未实现且不得开始 |
+| I9 | Completion、Cancel、Compensation、Finalization、Recovery | `BLOCKED_PENDING_REGRESSION` | R-021 prerequisite已形成candidate；G6 close/T7/T8仍为`NOT_STARTED`，G7 T6e resolution/abandon/Recovery仍为`NOT_READY` |
 | I10 | Runtime Command、Capacity Admin、Runtime Center、Trace | `IN_PROGRESS` | G5 Capacity Admin与Operational Blocker open/cache已通过独立whole-gate regression；Workflow Deadline/Gateway/T7c/manual authorization仍归G7且未开始 |
-| I11 | Contract Pack、managed runtime toolchain/launcher、测试模型、发布门禁、absence baseline | `IN_PROGRESS` | R-020 Contract、additive Schema 8及affected exact identity cascade已通过fresh independent affected-chain regression闭合；G6+门禁尚未施工 |
+| I11 | Contract Pack、managed runtime toolchain/launcher、测试模型、发布门禁、absence baseline | `IN_PROGRESS` | R-021 Contract、additive Schema 9及affected exact identity cascade已形成directed-repair candidate，等待fresh independent affected-chain regression；G6+门禁尚未施工 |
 
 ## G0 施工切片
 
@@ -157,8 +157,8 @@ G0.1-G0.9 已按当时规范完成并保留历史 identity。后续确认的 Cap
 
 | 切片 | 内容 | 状态 | 主要退出条件 | 完成提交 |
 | --- | --- | --- | --- | --- |
-| G1.1 | Executable DDL / Schema Manifest | `DONE` | G0.6 + G0.10 全量 canonical SQLite migration、closed introspected Manifest、schema lint、constraint/trigger/query-plan fixtures、真实文件与 managed identity gate | 本原子提交 |
-| G1.2 | Store Base / Connection Factory | `DONE` | production-target Store 基础、连接生命周期/完整 PRAGMA/read-only policy、identity gate、参数化 query API 与短写事务 host 的 candidate 开发验证 | 本原子提交 |
+| G1.1 | Executable DDL / Schema Manifest | `IN_PROGRESS` | R-021 additive Schema 9 fresh DDL、closed introspected Manifest、constraint/query-plan fixtures及8到9 upgrade已完成construction，等待fresh independent affected-chain regression | 本R-021 candidate |
+| G1.2 | Store Base / Connection Factory | `IN_PROGRESS` | Store current identity与8到9 upgrade path已完成construction，等待fresh independent affected-chain regression；无G6业务事务 | 本R-021 candidate |
 | G1.3 | Dependency Identity Repair | `DONE` | closed exact-member dependency manifest；physical identity与Gate provenance分离；Store不扫描Contract目录；migration bytes/78 tables/行为不变 | 本原子提交 |
 | G1.4 | Publisher Idempotency / Audit Schema Prerequisite | `DONE` | additive physical input；3张first-class Publisher表；schema-bound Value、typed FK、caller UK、invocation/event hash chain；Database Schema 2；G1/G3 identity cascade；无Publisher业务事务 | 本原子提交 |
 | G1.5 | Feature Release Activation Schema Prerequisite | `DONE` | additive physical input；3张Activation表；pointer owner/CAS、Release lifecycle、held Retention binding、recovery queries；Database Schema 3；无Activation DML | 本原子提交 |
@@ -1182,7 +1182,7 @@ G0.1 的实现、测试和本进度账本由同一个原子提交交付。Agent 
 | R-018 | Feature Release Activation persistence | `DONE` | G1.6按G3.8A重建Schema 4 failure/replay persistence；G3.9已实施closed Activation transaction/replay/recovery | G1.6与G3.9原子提交 |
 | R-019 | Generated Schema、Join Expose 与 NodeOutputEnvelope Authority | `CLOSED/DONE` | closed Draft 2020-12 envelope schema、exact port-set/present-absent union、Schema 7 first-class Stored Value authority、Compiler 3.0.4/G2 v6及Value全边界已machine-close并通过fresh independent affected-chain regression；G1-G4 current closure恢复`DONE` | `NODE_OUTPUT_ENVELOPE_SCHEMA_AUTHORITY_REPAIR_DONE` |
 | R-020 | T7b Child Cut / Parent Consumption DB Lineage | `CLOSED/DONE` | Schema 8以六组deferred composite FK闭合child cut与唯一parent consumption exact lineage；fresh/nonempty Schema 7到8 upgrade、rollback/reopen及完整affected-chain regression均PASS | Schema 8 + 7到8 regression closure（`9fdf904`） |
-| R-021 | Map terminal child consumption | `OPEN_BLOCKING_G6` | 架构要求Map child的`errored/cancelled`真实Cut、slot outcome、唯一parent consumption和policy reconciliation闭环；Schema 8 slot-bearing consumption只允许`map_slot_completed/completed`或`map_slot_fenced/fenced`，其余disposition禁止携带slot/outcome，故真实terminal tuple不可提交 | 独立spec/Contract/Schema repair；不得由G6实现自行选择语义 |
+| R-021 | Map terminal child consumption | `EXIT_CANDIDATE_PENDING_INDEPENDENT_AFFECTED_CHAIN_REGRESSION` | Additive Schema 9定义四组exact slot-bearing disposition/outcome tuple，保留六组deferred composite FK；Schema 8历史阻塞证据继续有效，G6 Production实现计数为0 | fresh independent affected-chain regression；不得由本candidate创建closure或开始G6 |
 
 ## v1完成后的归档计划：PLANNED
 
@@ -2935,3 +2935,21 @@ Current Schema 8无法表达该合法状态。`workflow_graph_child_completion_c
 既有authority完整性验证：managed `contracts:check` PASS，包含R-020 pack=`sha256:8a24efc4bd98c02b92cc6d6ce70f13c879d7e537e1081e4d57d561a63ea85c5a`、Schema root/schema=`sha256:0373eac8da2f96c1377e934ea5bcfdb701e96954720c2719aa756be778cc3995` / `sha256:1c7592c8b24a2b032217f42b31a5af3ebf39a9dd4dd10f1158ab9ced340142c6`、G4=`sha256:510fd27b7b1d5698f35b42e4fc7846733c34206dbd55c611c79344e9f1a8ed93`、ownership=`sha256:712a7440e83f087e4bbb1e465a1a677a16708429f46766029baa0f90734e5017`与G5=`sha256:bd5851c377001432beafc4f10cca188d3478fcf12839f06ac56f4dfede09d455`；current/historical G2 replay仍各40/40。Managed typecheck PASS；新增TypeScript与`package.json` targeted Prettier PASS。Final `git diff --check` PASS；changed boundary精确为本账本、`package.json`与blocker test三条路径，Schema/Store/Runtime/Compiler、既有Contract artifact、lockfile及全部protected/frozen authority保持零diff；blocker test SHA-256=`2ed2b74305e0eaeb49c5bfd08a0a2d2e87dabaf77e4bc85fd446f665a9ca77a2`。
 
 阻塞发生在任何G6 machine Contract、protocol、fixture pack、generator/checker、reference/model/property/fault evidence、implementation/source identity或Production transaction形成之前。G6完整positive/negative/fault rows、T7a/T7b/T8/Root Finalization/child/compensation的rollback/response-loss/reopen/exact-replay/tamper/fence/lease/lineage gate、两轮generate/check、build/bind、post-build key chain和完整G0-G6 affected chain均未运行且不得声称PASS，因为对应G6 construction artifacts不存在。当前提交只能是atomic blocker evidence，不是G6 construction exit candidate、regression或closure；G6/I8/I9保持`BLOCKED_BY_SPEC`，G0-G5与R-020保持`DONE`，G7-G9保持`NOT_READY`。
+
+### 2026-07-26：R-021 Map terminal child consumption directed repair
+
+**结论**：`R021_MAP_TERMINAL_CONSUMPTION_REPAIR_EXIT_CANDIDATE_PENDING_INDEPENDENT_AFFECTED_CHAIN_REGRESSION / G1_G3_G4_G5_IN_PROGRESS / G6_BLOCKED_PENDING_REGRESSION_NOT_STARTED / G7_G9_NOT_READY`。本轮从exact clean local `main@e10b8fe509b59a6e6a93c4960e8ee523b267cbfa`开始，唯一parent=`562b9502f7166fc7af10ec0a7deb339eea3988d0`；本atomic successor唯一parent固定为`e10b8fe509b59a6e6a93c4960e8ee523b267cbfa`。只修复R-021规范、Contract、Schema 9、fresh DDL、8到9 upgrade、Store current identity与机械必要的G3/G4/G5 exact identity/evidence/readiness级联；没有worktree、branch、Handoff、sub-agent、approval/escalation、push、amend、rebase、reset、stash、regression、closure、下一任务或G6+ Production施工。全部Node/npm/npx命令均经`./scripts/runtime-toolchain.sh exec --`执行。
+
+唯一方案为additive Database Schema 9。Slot-bearing consumption的closed catalog固定为`map_slot_completed/completed`、`map_slot_errored/errored`、`map_slot_cancelled/cancelled`与`map_slot_fenced/fenced`；普通`owner_output_published`及`non_publish_parent_fenced/non_publish_owner_fenced`必须同时具有null slot/outcome，三类边界互斥。`fenced`只扩展Map slot terminal outcome，不修改既有Cut的`completed | errored | cancelled`catalog。Schema 8的六组deferred composite FK、两个consumption unique keys、exact lookup query及其target candidate keys原样保留，所以wrong disposition/outcome、missing slot/outcome、cross-run/scope/child/Cut/parent/owner/map-slot/Event、duplicate与tamper均由SQLite关系/CHECK/unique fail closed；应用层query、boolean preauthorization、伪装completed/fenced或parent/owner fence均不是证明。
+
+R-021 Contract/prerequisite为`sha256:b5e9237d09d829946c496e19eddf16b21c94fb4fd59b3588900f4764332d0699` / `sha256:448d579e7a0e36901827eda084fc14a02625081350e1210bb0e70b3ef092c4c8`。Schema 9 root/schema/migration/8到9 upgrade/SQLite/dependency/physical identities为`sha256:c32fc2db46c49b09edeea2a31d07b4decf3b89a6272a3b7b69d933288efe24ca` / `sha256:9a36d16fd52d26af009f64f6d26b0bf5d713c16a6f9bad3e6e1019d354bc4ff9` / `sha256:4591e2dd417d439c813026816572e8a66e9d088efa6a8de88ebfb38a68cf9837` / `sha256:890c911a27074cca3ee34f9a7f022e4fbda6edf77fbe2ad75f2b77d0d1bed23b` / `sha256:395d3f8ddb5817610af4bbb95d239f3143fde6ba6fba1a94694e23328f09fc13` / `sha256:c2b9566b0ca7a6f861d2fc8522c71524265b7117779eeb7cced00ad1883ae65b` / `sha256:3d44091dce7f015aeb7f0ed2f99c235afdac1da94e6f673292053dc1c3805dc8`。G3.1/3.3/3.5/3.6/3.7/3.9为`sha256:96f6ed7b832b33a924222585f3f55de47264bf462e8b12ffb4b28f4d7ac2621e` / `sha256:9b295834dc499b5590566a0bee5ac053adc0da1879699626e0e94ec825e443cd` / `sha256:8734b6a44d11180b507a0e546bc5784a5ee0073cb94c85785c05eed995d50ba9` / `sha256:71be35581adb4717230bb106c658db91777126c8e59bc9c0e95ef5d7bd651e43` / `sha256:88705beddf6965dc8a947aba1f3dd9fbb2b9124f33824dafe7ad0881ab561be3` / `sha256:230fa30e795e0931d27acfb5a4215e7f30e4d806a525dea6e6966036ee1ea6ee`；G4/G5为`sha256:58704cc29429d323bc8c3bcb825cfd1d153528671be7ebb63a7f2127d45b0ee4` / `sha256:ccf6e69cac403384b08ef46100c2341648f77751466daa7f93d8d8cf44a7f04d`。
+
+真实file SQLite定向证据为R-021/blocker 11/11及R-020/R-021/G6 readiness 19/19：四种真实Map terminal tuple均在同一`BEGIN IMMEDIATE`内commit、close/reopen、exact replay；普通owner output和两种fence tuple合法；全部wrong pair、missing field、lineage splice、duplicate、tamper和Store identity drift fail closed。合法nonempty Schema 8全部disposition逐行8到9迁移并reopen；非法历史和copy fault完整rollback至原user_version、SQLite identity及rows。Schema 8 blocker继续独立证明`errored/cancelled`不可表达，没有被Schema 9 successor覆盖或抹除。
+
+完整construction与post-build affected chain均PASS：G1.1 27/27、G1.2 29/29、direct Schema/Store checks、current/historical G2 replay各40/40、whole G3 101/101、G4/ownership 2/2与1/1、focused bridge `22 passed / 88 skipped`、full G5 135/135且bridge/G5 completeness独立、G5 readiness/blocker 7/7与6/6、R-020/R-021/G6 readiness 19/19、whole G0 `104 passed / 7 frozen skips`。首次whole G0在新增R-021 Contract到Schema source的跨目录import上由foundation boundary正确fail closed，补入唯一exact source-target allowlist后PASS；post-build一次既有runtime-toolchain 5秒测试以5.669秒超时，未修改timeout或实现，目标单测3.610秒PASS且随后串行whole G0再次104/7 PASS。
+
+连续两轮最终managed `contracts:generate` + `contracts:check`全部PASS；pre-generation、round 1、round 2及final Contract+Schema JSON/SQL path-sorted raw-SHA tree digest均为`b51ce36c8148ec0f54217ce39ee33ecd5a5b081602cee1bc91c0ed931860a2d1`。Managed typecheck/build PASS；exact Core bind返回`/Users/chelaile/Library/Application Support/Icarus/bin/icarus-runtime`与`development_checkout`。Ajv=`8.20.0`、better-sqlite3=`12.11.1` native load、real-file SQLite=`3.53.2`及Schema/Store reopen evidence全部PASS。
+
+Schema 8及更早全部fresh migration、全部既有upgrade、完整Schema 8 `@2`及更早artifact/DDL pack、R-020 Contract、G2 sealed/review/current v8 authority、G3.8A、frozen G4 bootstrap、ownership、dependency provenance和两套lockfile保持byte-exact；root/agent-runner lockfile仍为`sha256:2b8c87e5549915e2d53c1eecdabef3ebb149bc8f03054d40f1924d93bf2bd085` / `sha256:d9b4b5d77dc6478348b81d74d65e2af1d3596ce45eea6742cae20cf105db379c`。Exact changed boundary为72 paths；唯一changed Runtime path是G5 test bootstrap的current G4 hash。Gateway/audit/T6e、blocker resolve/abandon、workflow deadline、manual retry bypass、Recovery/Card/Projection、certification、Production loader/activation/ingress/network、real Adapter/user data、T7a/T7b/T8 Production事务、dynamic child creation/finalization、subgraph/expand/map materialization、controller/quorum/fail-fast、hierarchical fence/Fact、compensation、Root Finalization及G7+ changed implementation surface均为0。
+
+本提交只形成R-021 directed-repair successor candidate。R-020保持`DONE`；R-021及受影响G1/G3/G4/G5保持`IN_PROGRESS`等待fresh independent affected-chain regression；G6保持`BLOCKED_PENDING_REGRESSION/NOT_STARTED`且Production implementation count为0；G7-G9保持`NOT_READY`。本轮没有创建regression、closure或下一任务。

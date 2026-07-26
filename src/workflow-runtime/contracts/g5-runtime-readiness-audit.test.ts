@@ -36,6 +36,9 @@ describe('G5 Basic Runtime readiness audit', () => {
       'conformance/g5-basic-runtime-repair/g5-basic-runtime-repair-protocol@1.json',
     );
     expect(protocol.payload).toMatchObject({
+      database_schema_version: 9,
+      database_schema_hash:
+        'sha256:9a36d16fd52d26af009f64f6d26b0bf5d713c16a6f9bad3e6e1019d354bc4ff9',
       plan_authority:
         'persisted_hash_verified_sealed_plan_plus_exact_generated_content_and_binding_rows',
       generated_value_authority:
@@ -46,6 +49,26 @@ describe('G5 Basic Runtime readiness audit', () => {
         'independent_G2_G3_G4_G5_generated_output_schema_affected_chain_regression',
     });
     const bindings = objects(protocol.payload.bindings);
+    expect(bindings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: 'database_schema_9',
+          hash: 'sha256:c32fc2db46c49b09edeea2a31d07b4decf3b89a6272a3b7b69d933288efe24ca',
+        }),
+        expect.objectContaining({
+          name: 'r020_child_consumption_lineage',
+          hash: 'sha256:8a24efc4bd98c02b92cc6d6ce70f13c879d7e537e1081e4d57d561a63ea85c5a',
+        }),
+        expect.objectContaining({
+          name: 'r021_map_terminal_consumption',
+          hash: 'sha256:b5e9237d09d829946c496e19eddf16b21c94fb4fd59b3588900f4764332d0699',
+        }),
+        expect.objectContaining({
+          name: 'g4_node_output_envelope_authority_successor',
+          hash: 'sha256:58704cc29429d323bc8c3bcb825cfd1d153528671be7ebb63a7f2127d45b0ee4',
+        }),
+      ]),
+    );
     expect(
       bindings.find(
         (entry) =>

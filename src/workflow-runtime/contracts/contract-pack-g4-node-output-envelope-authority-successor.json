@@ -22,9 +22,11 @@
       "disposition": "frozen_historical_authority"
     },
     "current_store": {
-      "database_schema_version": 8,
-      "g1_root_hash": "sha256:0373eac8da2f96c1377e934ea5bcfdb701e96954720c2719aa756be778cc3995",
-      "database_schema_hash": "sha256:1c7592c8b24a2b032217f42b31a5af3ebf39a9dd4dd10f1158ab9ced340142c6",
+      "database_schema_version": 9,
+      "g1_root_hash": "sha256:c32fc2db46c49b09edeea2a31d07b4decf3b89a6272a3b7b69d933288efe24ca",
+      "database_schema_hash": "sha256:9a36d16fd52d26af009f64f6d26b0bf5d713c16a6f9bad3e6e1019d354bc4ff9",
+      "schema9_migration_hash": "sha256:4591e2dd417d439c813026816572e8a66e9d088efa6a8de88ebfb38a68cf9837",
+      "schema8_to_9_upgrade_hash": "sha256:890c911a27074cca3ee34f9a7f022e4fbda6edf77fbe2ad75f2b77d0d1bed23b",
       "schema8_migration_hash": "sha256:b19ebe83ea8b7c53a2ab54a901df092b4e343ee4e1d5772ed6bc3143a82746ad",
       "schema7_to_8_upgrade_hash": "sha256:544af9b55349268d152650c9a9fda5c399bb0e665750a2c47a6155d22ca6e3a9"
     },
@@ -35,9 +37,14 @@
         "hash": "sha256:7a852ff21a77a767b708ab8a4fc5c329024ca954422b26d71210b0385ce05441"
       },
       {
-        "role": "g1_schema_8",
-        "path": "../store/schema/contract-pack-g1-executable-schema-v8.json",
-        "hash": "sha256:0373eac8da2f96c1377e934ea5bcfdb701e96954720c2719aa756be778cc3995"
+        "role": "g1_schema_9",
+        "path": "../store/schema/contract-pack-g1-executable-schema-v9.json",
+        "hash": "sha256:c32fc2db46c49b09edeea2a31d07b4decf3b89a6272a3b7b69d933288efe24ca"
+      },
+      {
+        "role": "r021_map_terminal_consumption",
+        "path": "contract-pack-r021-map-terminal-consumption.json",
+        "hash": "sha256:b5e9237d09d829946c496e19eddf16b21c94fb4fd59b3588900f4764332d0699"
       },
       {
         "role": "g2_v6_sealed_bundle",
@@ -47,12 +54,12 @@
       {
         "role": "g3_6_retention_executor_abi",
         "path": "contract-pack-g3-retention-executor-abi-preflight.json",
-        "hash": "sha256:8d8d57da7b33bdb481fa527afa5862ee46b4d17b3e623a7e4e45492bfefe4a15"
+        "hash": "sha256:71be35581adb4717230bb106c658db91777126c8e59bc9c0e95ef5d7bd651e43"
       },
       {
         "role": "g3_7_workflow_publisher",
         "path": "contract-pack-g3-workflow-publisher.json",
-        "hash": "sha256:9962475983c767315f74c43ad70f43b657d2a03119019f3953869e1585a3ffde"
+        "hash": "sha256:88705beddf6965dc8a947aba1f3dd9fbb2b9124f33824dafe7ad0881ab561be3"
       },
       {
         "role": "g3_8a_frozen_activation_repair",
@@ -62,7 +69,7 @@
       {
         "role": "g3_9_feature_release_activation",
         "path": "contract-pack-g3.9-feature-release-activation.json",
-        "hash": "sha256:1020ace8fd72b5482742bcc67330e9f2b596925acd9c729bef556f3c30ec4a79"
+        "hash": "sha256:230fa30e795e0931d27acfb5a4215e7f30e4d806a525dea6e6966036ee1ea6ee"
       }
     ],
     "selection": {
@@ -72,10 +79,11 @@
       "registry_latest_lookup": "forbidden",
       "network_or_fallback": "forbidden"
     },
-    "g5_status": "BLOCKED_BY_SPEC/NOT_READY",
-    "g6_through_g9_status": "NOT_READY",
+    "g5_status": "IN_PROGRESS",
+    "g6_status": "BLOCKED_PENDING_REGRESSION/NOT_STARTED",
+    "g7_through_g9_status": "NOT_READY",
     "runtime_construction_performed": false,
     "production_authorization": false
   },
-  "hash": "sha256:510fd27b7b1d5698f35b42e4fc7846733c34206dbd55c611c79344e9f1a8ed93"
+  "hash": "sha256:58704cc29429d323bc8c3bcb825cfd1d153528671be7ebb63a7f2127d45b0ee4"
 }

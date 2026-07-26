@@ -1,0 +1,87 @@
+{
+  "format": "icarus.workflow-r021-map-terminal-consumption-contract/1",
+  "ref": {
+    "id": "icarus.workflow-r021-map-terminal-consumption-contract",
+    "version": "1"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-r021-map-terminal-consumption-contract:1\n",
+  "hash": "sha256:ef7ae6b411c0f2a436c3d449b758c69e74d5d4220ce82379385b6515885f1e65",
+  "payload": {
+    "decision_id": "R-021",
+    "status": "R021_MAP_TERMINAL_CONSUMPTION_REPAIR_EXIT_CANDIDATE_PENDING_INDEPENDENT_AFFECTED_CHAIN_REGRESSION",
+    "normative_spec": {
+      "path": "local/docs/dynamic-workflow-dag-framework.md",
+      "section_heading": "### R-021：Map Terminal Child Consumption Closed Catalog 决议",
+      "section_raw_sha256": "sha256:aaaae03235a1d383d456d6bb637e966d58db4256d49e68353eb9bd4cda1c6eaa",
+      "section_semantic_hash": "sha256:9e67cda1c097dc169469e74ba19ea1ec8d21cfa3fb762a33066307f4faa9c79f"
+    },
+    "selected_authority": {
+      "database_schema_version": 9,
+      "predecessor_database_schema_version": 8,
+      "map_terminal_disposition_outcome_pairs": [
+        [
+          "map_slot_completed",
+          "completed"
+        ],
+        [
+          "map_slot_errored",
+          "errored"
+        ],
+        [
+          "map_slot_cancelled",
+          "cancelled"
+        ],
+        [
+          "map_slot_fenced",
+          "fenced"
+        ]
+      ],
+      "non_map_dispositions": [
+        "owner_output_published",
+        "non_publish_parent_fenced",
+        "non_publish_owner_fenced"
+      ],
+      "non_map_slot_and_outcome": "both_null",
+      "exact_lineage_enforcement": "preserved_six_deferred_composite_foreign_keys",
+      "application_query_or_boolean_preauthorization": "forbidden_as_proof"
+    },
+    "schema_prerequisite": {
+      "path": "src/workflow-runtime/store/schema/inputs/workflow-map-terminal-consumption-schema-prerequisite@1.json",
+      "hash": "sha256:448d579e7a0e36901827eda084fc14a02625081350e1210bb0e70b3ef092c4c8",
+      "typed_relation_count": 6,
+      "affected_table_count": 1,
+      "added_candidate_key_count": 0,
+      "query_intent_count": 1
+    },
+    "preserved_schema8_authority": {
+      "migration_sha256": "sha256:b19ebe83ea8b7c53a2ab54a901df092b4e343ee4e1d5772ed6bc3143a82746ad",
+      "schema7_to_schema8_upgrade_sha256": "sha256:544af9b55349268d152650c9a9fda5c399bb0e665750a2c47a6155d22ca6e3a9",
+      "sqlite_schema_identity": "sha256:fc5fe00fb26b187cf4d0b2927a97de1851fffc2ba5283811312397255ffd5b3b",
+      "artifact_pack": "byte_exact"
+    },
+    "preserved_contracts": [
+      "unique_child_scope_cut",
+      "unique_child_scope_consumption",
+      "single_map_slot_terminal_outcome",
+      "t7b_atomic_cut_slot_consumption_and_policy_fact",
+      "six_exact_composite_lineage_foreign_keys"
+    ],
+    "fail_closed_cases": [
+      "wrong_disposition_outcome",
+      "missing_slot_or_outcome",
+      "non_map_slot_or_outcome",
+      "cross_run_scope_child_cut_parent_owner_map_slot_event",
+      "duplicate_consumption",
+      "tamper",
+      "identity_drift",
+      "invalid_schema8_upgrade_history"
+    ],
+    "implementation_boundary": {
+      "g6_production_implementation_count": 0,
+      "r021_g1_g3_g4_g5_status": "IN_PROGRESS",
+      "g6_status": "BLOCKED_PENDING_REGRESSION_NOT_STARTED",
+      "g7_through_g9": "NOT_READY"
+    }
+  }
+}

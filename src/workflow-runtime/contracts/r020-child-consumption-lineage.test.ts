@@ -26,14 +26,14 @@ import {
 } from '../store/schema/ddl.js';
 import { calculateDatabaseSqliteSchemaIdentity } from '../store/schema/database-identity.js';
 import {
-  loadExecutableSchemaSource,
   loadSchema7ExecutableSchemaSource,
+  loadSchema8ExecutableSchemaSource,
 } from '../store/schema/source.js';
 import { createMigratedDatabase } from '../store/schema/sqlite-gate.js';
 import { CURRENT_G1_SCHEMA_IDENTITIES } from '../store/runtime-store/profile.js';
 
 const projectRoot = path.resolve(import.meta.dirname, '../../..');
-const schema8 = loadExecutableSchemaSource();
+const schema8 = loadSchema8ExecutableSchemaSource();
 const schema7 = loadSchema7ExecutableSchemaSource();
 const schema8Migration = renderMigration(schema8);
 const schema7Migration = renderMigration(schema7);
@@ -592,7 +592,7 @@ describe('R-020 child cut / parent consumption database lineage', () => {
       database.pragma('foreign_keys = ON');
       expect(database.pragma('user_version', { simple: true })).toBe(8);
       expect(calculateDatabaseSqliteSchemaIdentity(database)).toBe(
-        CURRENT_G1_SCHEMA_IDENTITIES.sqliteSchema,
+        CURRENT_G1_SCHEMA_IDENTITIES.schema8SourceSqliteSchema,
       );
       expect(
         database

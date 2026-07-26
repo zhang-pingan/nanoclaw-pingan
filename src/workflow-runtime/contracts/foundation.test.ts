@@ -327,6 +327,13 @@ describe('G0.2 Contract Pack conformance', () => {
                 path.resolve(
                   contractsRoot,
                   '../store/schema/child-completion-lineage-source.js',
+                )) ||
+            (path.basename(file) ===
+              'r021-map-terminal-consumption-contract.ts' &&
+              resolved ===
+                path.resolve(
+                  contractsRoot,
+                  '../store/schema/map-terminal-consumption-source.js',
                 ));
           expect(
             resolved.startsWith(`${contractsRoot}${path.sep}`) ||

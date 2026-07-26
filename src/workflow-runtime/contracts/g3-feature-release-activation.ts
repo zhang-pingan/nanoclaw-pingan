@@ -860,11 +860,15 @@ export function g39SchemasForTest(): {
 }
 
 export const G39_UPSTREAM_IDENTITIES = {
-  database_schema_version: 8,
+  database_schema_version: 9,
   g1_root_hash:
-    'sha256:0373eac8da2f96c1377e934ea5bcfdb701e96954720c2719aa756be778cc3995',
+    'sha256:c32fc2db46c49b09edeea2a31d07b4decf3b89a6272a3b7b69d933288efe24ca',
   database_schema_hash:
-    'sha256:1c7592c8b24a2b032217f42b31a5af3ebf39a9dd4dd10f1158ab9ced340142c6',
+    'sha256:9a36d16fd52d26af009f64f6d26b0bf5d713c16a6f9bad3e6e1019d354bc4ff9',
+  schema9_migration_hash:
+    'sha256:4591e2dd417d439c813026816572e8a66e9d088efa6a8de88ebfb38a68cf9837',
+  schema8_to_9_upgrade_hash:
+    'sha256:890c911a27074cca3ee34f9a7f022e4fbda6edf77fbe2ad75f2b77d0d1bed23b',
   schema8_migration_hash:
     'sha256:b19ebe83ea8b7c53a2ab54a901df092b4e343ee4e1d5772ed6bc3143a82746ad',
   schema7_migration_hash:
@@ -892,9 +896,9 @@ export const G39_UPSTREAM_IDENTITIES = {
   g3_8a_internal_contract_hash:
     'sha256:70d4b9ef47c83711415636737292450538acaf5cc4547d3130b04b101e6707ae',
   g3_6_pack_hash:
-    'sha256:8d8d57da7b33bdb481fa527afa5862ee46b4d17b3e623a7e4e45492bfefe4a15',
+    'sha256:71be35581adb4717230bb106c658db91777126c8e59bc9c0e95ef5d7bd651e43',
   g3_7_pack_hash:
-    'sha256:9962475983c767315f74c43ad70f43b657d2a03119019f3953869e1585a3ffde',
+    'sha256:88705beddf6965dc8a947aba1f3dd9fbb2b9124f33824dafe7ad0881ab561be3',
   g2_sealed_bundle_hash:
     'sha256:0820328ae1cfdba7d05948d9e36498a5428d997d6eabfb833ef0ba7d84b77db7',
 } as const;

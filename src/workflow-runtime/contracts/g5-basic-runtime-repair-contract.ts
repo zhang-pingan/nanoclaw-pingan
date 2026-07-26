@@ -84,14 +84,19 @@ const exactBindings = [
     hash: 'sha256:7a852ff21a77a767b708ab8a4fc5c329024ca954422b26d71210b0385ce05441',
   },
   {
-    name: 'database_schema_8',
-    path: 'src/workflow-runtime/store/schema/contract-pack-g1-executable-schema-v8.json',
-    hash: 'sha256:0373eac8da2f96c1377e934ea5bcfdb701e96954720c2719aa756be778cc3995',
+    name: 'database_schema_9',
+    path: 'src/workflow-runtime/store/schema/contract-pack-g1-executable-schema-v9.json',
+    hash: 'sha256:c32fc2db46c49b09edeea2a31d07b4decf3b89a6272a3b7b69d933288efe24ca',
   },
   {
     name: 'r020_child_consumption_lineage',
     path: 'src/workflow-runtime/contracts/contract-pack-r020-child-consumption-lineage.json',
     hash: 'sha256:8a24efc4bd98c02b92cc6d6ce70f13c879d7e537e1081e4d57d561a63ea85c5a',
+  },
+  {
+    name: 'r021_map_terminal_consumption',
+    path: 'src/workflow-runtime/contracts/contract-pack-r021-map-terminal-consumption.json',
+    hash: 'sha256:b5e9237d09d829946c496e19eddf16b21c94fb4fd59b3588900f4764332d0699',
   },
   {
     name: 'g2_v6_sealed_compiler_plan',
@@ -103,37 +108,37 @@ const exactBindings = [
   {
     name: 'g3_registry_publish_foundation',
     path: 'src/workflow-runtime/contracts/contract-pack-g3-registry-publish-foundation.json',
-    hash: 'sha256:2f637bff3e4bf635efb5f1d62239aa4c539f997f98f35f6a061a773968f098b6',
+    hash: 'sha256:96f6ed7b832b33a924222585f3f55de47264bf462e8b12ffb4b28f4d7ac2621e',
   },
   {
     name: 'g3_registry_persistence',
     path: 'src/workflow-runtime/contracts/contract-pack-g3-registry-persistence.json',
-    hash: 'sha256:373692196d3746f34cf49cd43f3be1c54e77fe5b5e4fb813acd14a82054d4d58',
+    hash: 'sha256:9b295834dc499b5590566a0bee5ac053adc0da1879699626e0e94ec825e443cd',
   },
   {
     name: 'g3_registry_exact_query',
     path: 'src/workflow-runtime/contracts/contract-pack-g3-registry-exact-resource-query.json',
-    hash: 'sha256:d8e253c60ce4627a23fac2cebb608626a1eaacf5338314420dee23281a232786',
+    hash: 'sha256:8734b6a44d11180b507a0e546bc5784a5ee0073cb94c85785c05eed995d50ba9',
   },
   {
     name: 'g3_retention_executor_preflight',
     path: 'src/workflow-runtime/contracts/contract-pack-g3-retention-executor-abi-preflight.json',
-    hash: 'sha256:8d8d57da7b33bdb481fa527afa5862ee46b4d17b3e623a7e4e45492bfefe4a15',
+    hash: 'sha256:71be35581adb4717230bb106c658db91777126c8e59bc9c0e95ef5d7bd651e43',
   },
   {
     name: 'g3_workflow_publisher',
     path: 'src/workflow-runtime/contracts/contract-pack-g3-workflow-publisher.json',
-    hash: 'sha256:9962475983c767315f74c43ad70f43b657d2a03119019f3953869e1585a3ffde',
+    hash: 'sha256:88705beddf6965dc8a947aba1f3dd9fbb2b9124f33824dafe7ad0881ab561be3',
   },
   {
     name: 'g3_feature_release_activation',
     path: 'src/workflow-runtime/contracts/contract-pack-g3.9-feature-release-activation.json',
-    hash: 'sha256:1020ace8fd72b5482742bcc67330e9f2b596925acd9c729bef556f3c30ec4a79',
+    hash: 'sha256:230fa30e795e0931d27acfb5a4215e7f30e4d806a525dea6e6966036ee1ea6ee',
   },
   {
     name: 'g4_node_output_envelope_authority_successor',
     path: 'src/workflow-runtime/contracts/contract-pack-g4-node-output-envelope-authority-successor.json',
-    hash: 'sha256:510fd27b7b1d5698f35b42e4fc7846733c34206dbd55c611c79344e9f1a8ed93',
+    hash: 'sha256:58704cc29429d323bc8c3bcb825cfd1d153528671be7ebb63a7f2127d45b0ee4',
   },
   {
     name: 'gate_ownership',
@@ -993,7 +998,7 @@ function buildArtifacts(): Array<[string, ContractArtifactEnvelope]> {
         'open_blocker_cache',
       ],
       g4_isolation_authority_hash:
-        'sha256:510fd27b7b1d5698f35b42e4fc7846733c34206dbd55c611c79344e9f1a8ed93',
+        'sha256:58704cc29429d323bc8c3bcb825cfd1d153528671be7ebb63a7f2127d45b0ee4',
       forbidden: [
         'Gateway',
         'Command_Invocation_audit',

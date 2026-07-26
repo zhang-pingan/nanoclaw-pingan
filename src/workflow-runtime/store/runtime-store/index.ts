@@ -241,11 +241,12 @@ function upgradeSchemaIfEligible(
       version !== 4 &&
       version !== 5 &&
       version !== 6 &&
-      version !== 7
+      version !== 7 &&
+      version !== 8
     ) {
       throw new WorkflowRuntimeStoreError(
         'database_schema_mismatch',
-        `Schema upgrade requires user_version 3, 4, 5, 6, 7, or ${inputs.schemaManifest.database_schema_version}, received ${version}`,
+        `Schema upgrade requires user_version 3, 4, 5, 6, 7, 8, or ${inputs.schemaManifest.database_schema_version}, received ${version}`,
       );
     }
     database.pragma('foreign_keys = OFF');
@@ -325,7 +326,7 @@ function upgradeSchemaIfEligible(
           );
         }
       }
-      if (version !== 7) {
+      if (version < 7) {
         database.exec(inputs.schema6To7UpgradeSql);
         const schema7Version = Number(scalarPragma(database, 'user_version'));
         const schema7Identity = calculateDatabaseSqliteSchemaIdentity(database);
@@ -337,7 +338,7 @@ function upgradeSchemaIfEligible(
             `Schema ${version} to 7 upgrade did not produce frozen Schema 7: expected identity ${inputs.schema7SourceSqliteSchemaIdentity}, received version ${schema7Version} identity ${schema7Identity}`,
           );
         }
-      } else {
+      } else if (version === 7) {
         const sourceIdentity = calculateDatabaseSqliteSchemaIdentity(database);
         if (sourceIdentity !== inputs.schema7SourceSqliteSchemaIdentity) {
           throw new Error(
@@ -345,7 +346,27 @@ function upgradeSchemaIfEligible(
           );
         }
       }
-      database.exec(inputs.schema7To8UpgradeSql);
+      if (version < 8) {
+        database.exec(inputs.schema7To8UpgradeSql);
+        const schema8Version = Number(scalarPragma(database, 'user_version'));
+        const schema8Identity = calculateDatabaseSqliteSchemaIdentity(database);
+        if (
+          schema8Version !== 8 ||
+          schema8Identity !== inputs.schema8SourceSqliteSchemaIdentity
+        ) {
+          throw new Error(
+            `Schema ${version} to 8 upgrade did not produce frozen Schema 8: expected identity ${inputs.schema8SourceSqliteSchemaIdentity}, received version ${schema8Version} identity ${schema8Identity}`,
+          );
+        }
+      } else {
+        const sourceIdentity = calculateDatabaseSqliteSchemaIdentity(database);
+        if (sourceIdentity !== inputs.schema8SourceSqliteSchemaIdentity) {
+          throw new Error(
+            `Schema 8 sqlite_schema identity mismatch: expected ${inputs.schema8SourceSqliteSchemaIdentity}, received ${sourceIdentity}`,
+          );
+        }
+      }
+      database.exec(inputs.schema8To9UpgradeSql);
       const upgradedVersion = Number(scalarPragma(database, 'user_version'));
       const upgradedIdentity = calculateDatabaseSqliteSchemaIdentity(database);
       if (
@@ -353,7 +374,7 @@ function upgradeSchemaIfEligible(
         upgradedIdentity !== inputs.sqliteSchemaIdentity
       ) {
         throw new Error(
-          `Schema ${version} to 8 upgrade did not produce current Schema 8: expected version ${inputs.schemaManifest.database_schema_version} identity ${inputs.sqliteSchemaIdentity}, received version ${upgradedVersion} identity ${upgradedIdentity}`,
+          `Schema ${version} to 9 upgrade did not produce current Schema 9: expected version ${inputs.schemaManifest.database_schema_version} identity ${inputs.sqliteSchemaIdentity}, received version ${upgradedVersion} identity ${upgradedIdentity}`,
         );
       }
       verifyIntegrity(database);

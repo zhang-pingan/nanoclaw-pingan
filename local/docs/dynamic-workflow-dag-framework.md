@@ -3204,6 +3204,26 @@ Schema 5、6、7 fresh migration、全部既有upgrade和Schema 7 `@1` artifact 
 
 本repair只关闭R-020规范、Contract、Schema、DDL、upgrade、Store identity和readiness prerequisite，不新增或调用T7a/T7b/T8 Production事务、child creation/finalization、subgraph/expand/map materialization、controller/quorum/fail-fast、hierarchical fence/Fact、compensation、Root Finalization、G7+ Gateway/Deadline/Recovery/Card/Projection、loader/ingress/network或真实Adapter/user data。Candidate状态固定为`R020_CHILD_CONSUMPTION_LINEAGE_REPAIR_EXIT_CANDIDATE_PENDING_INDEPENDENT_AFFECTED_CHAIN_REGRESSION`；所有真正消费新Schema identity的Gate保持`IN_PROGRESS`等待fresh independent regression。R-020/G6不得在本任务中标`DONE`或开始G6 construction，G6 Production implementation count必须为0，G7-G9保持`NOT_READY`。
 
+### R-021：Map Terminal Child Consumption Closed Catalog 决议
+
+R-021保留R-020 Database Schema 8作为byte-immutable predecessor，并选择additive Database Schema 9作为唯一current关系authority。Map已物化child产生真实terminal Cut后，对应Map slot的真实terminal outcome集合固定为`completed | errored | cancelled | fenced`；其中`fenced`是parent close/fail-fast/quorum截断后的slot outcome，Cut自身继续使用既有`completed | errored | cancelled` outcome contract。T7b必须在同一`BEGIN IMMEDIATE`内写入Cut、exact slot terminal outcome和唯一`workflow_graph_child_completion_consumptions`。这些真实slot terminal outcome随后才可参与`all_settled`、`all_accepted`、quorum和fail-fast completion policy；不得把`errored/cancelled`伪装成`completed/fenced`，也不得伪装成parent或owner fence。
+
+Schema 9的consumption closed catalog唯一为：
+
+- `owner_output_published`：普通subgraph/expand owner接受child output；`map_slot_id`与`map_slot_outcome_state`必须同时为null。
+- `map_slot_completed | map_slot_errored | map_slot_cancelled | map_slot_fenced`：Map真实terminal consumption；必须携带非null slot，并分别精确匹配`completed | errored | cancelled | fenced` outcome。
+- `non_publish_parent_fenced | non_publish_owner_fenced`：parent或owner已fence而不再发布/填充Map slot；`map_slot_id`与`map_slot_outcome_state`必须同时为null。
+
+上述三组互斥边界同时由closed disposition enum、closed terminal outcome enum和一个完整state-field-consistency CHECK执行。R-020的六条deferred、`ON DELETE RESTRICT` composite FK原样保留；尤其六列`(graph_run_id, parent_scope_id, owner_node_id, map_slot_id, child_scope_id, map_slot_outcome_state)`仍精确引用Map result的同run/parent/owner/slot/child/outcome candidate key。因此wrong disposition/outcome、missing slot/outcome、wrong slot/child/run/owner、cross-lineage和借用另一个合法tuple都必须在SQLite transaction内fail closed。`UNIQUE(child_scope_id)`、`UNIQUE(graph_run_id, child_scope_id)`、unique child Cut、single map-slot terminal outcome及exact replay只读既有同tuple的合同不变；duplicate consumption必须继续由数据库拒绝。
+
+G0.6冻结Logical Schema/typed relation/query catalog、R-020 Schema 8 prerequisite、Schema 8 fresh migration、7到8 upgrade及Schema 8 `@2`完整artifact pack全部保持byte-exact。R-021使用独立`workflow-map-terminal-consumption-schema-prerequisite@1.json`机器化Schema 9完整consumption table、继承的六条typed relations、零新增candidate key和原exact lookup query；fresh `workflow-runtime-schema-v9.sql`、introspected Schema Manifest、constraint/query-plan fixtures、SQLite PRAGMA及Store current identity必须逐字段一致。Production不得另有catalog或关系解释。
+
+Schema 8到9 upgrade只能在一个`BEGIN IMMEDIATE`内rebuild consumption、逐列无损复制全部Schema 8合法nonempty rows、恢复原unique/index并设置`PRAGMA user_version=9`。它不得重写disposition、outcome、slot、lineage或event。copy、CHECK、FK、unique、fault、introspection identity或commit前任一步失败必须rollback为原Schema 8 user_version、SQLite identity和rows；Store必须先验证frozen Schema 8 migration/SQLite identity，升级后执行`foreign_key_check`并验证current Schema 9 identity。Schema 8及更早全部fresh migration、upgrade、artifact/DDL bytes保持不变。
+
+R-021测试必须覆盖fresh real-file Schema 9上四种Map terminal consumption的commit、reopen与exact replay，以及普通owner output和两种fence disposition；wrong disposition/outcome、missing slot/outcome、cross-run/scope/child/cut/parent/owner/map-slot/event、duplicate、tamper和identity drift必须fail closed。另需在真实nonempty Schema 8上逐行保留全部Schema 8合法disposition，证明8到9 upgrade非空且可reopen；非法历史与注入fault必须完整rollback。历史Schema 8 blocker evidence继续证明`errored/cancelled`在Schema 8不可表达，不得被current successor测试抹掉。
+
+本repair只关闭R-021规范、Contract、Schema 9、fresh DDL、8到9 upgrade、Store current identity及机械必要的G3/G4/G5 exact identity/evidence/readiness级联。不新增或调用T7a/T7b/T8 Production事务、dynamic child creation/finalization、subgraph/expand/map materialization、controller/quorum/fail-fast、hierarchical fence/Fact、compensation、Root Finalization或任何G7+、certification、Production loader/activation/ingress/network/Adapter/user-data surface。Candidate状态固定为`R021_MAP_TERMINAL_CONSUMPTION_REPAIR_EXIT_CANDIDATE_PENDING_INDEPENDENT_AFFECTED_CHAIN_REGRESSION`；R-021及受影响G1/G3/G4/G5保持`IN_PROGRESS`，G6保持`BLOCKED_PENDING_REGRESSION/NOT_STARTED`且Production implementation count为0，G7-G9保持`NOT_READY`。
+
 ### Runtime v1施工生命周期与生产发布生命周期
 
 Runtime v1重构期间使用临时施工生命周期：
@@ -5326,9 +5346,12 @@ UNIQUE(close_request_id)
 
 workflow_graph_child_completion_consumptions
   - id
-  - child_scope_id/child_completion_cut_id
+  - graph_run_id/child_scope_id/child_completion_cut_id
   - parent_scope_id/owner_node_id/map_slot_id
+  - map_slot_outcome_state             nullable; completed | errored |
+                                       cancelled | fenced
   - disposition            owner_output_published | map_slot_completed |
+                           map_slot_errored | map_slot_cancelled |
                            map_slot_fenced | non_publish_parent_fenced |
                            non_publish_owner_fenced
   - parent_work_fence_epoch

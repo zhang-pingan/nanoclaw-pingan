@@ -13,7 +13,7 @@ import type {
 } from './types.js';
 
 export const MIGRATION_RELATIVE_PATH =
-  'migration/workflow-runtime-schema-v8.sql';
+  'migration/workflow-runtime-schema-v9.sql';
 
 function q(identifier: string): string {
   return `"${identifier.replaceAll('"', '""')}"`;
@@ -180,7 +180,7 @@ function operationalStateSql(runExpression: string): string {
 }
 
 export function buildSchemaTriggers(
-  databaseSchemaVersion: 3 | 4 | 5 | 6 | 7 | 8 = 8,
+  databaseSchemaVersion: 3 | 4 | 5 | 6 | 7 | 8 | 9 = 9,
 ): SchemaTriggerDefinition[] {
   const refreshBody = (row: 'NEW' | 'OLD') => `
   UPDATE "workflow_graph_runs"
@@ -700,6 +700,8 @@ export const SCHEMA6_TO_SCHEMA7_UPGRADE_RELATIVE_PATH =
   'migration/workflow-runtime-schema-v6-to-v7.sql';
 export const SCHEMA7_TO_SCHEMA8_UPGRADE_RELATIVE_PATH =
   'migration/workflow-runtime-schema-v7-to-v8.sql';
+export const SCHEMA8_TO_SCHEMA9_UPGRADE_RELATIVE_PATH =
+  'migration/workflow-runtime-schema-v8-to-v9.sql';
 
 const ACTIVATION_REBUILT_TABLES = [
   'workflow_feature_release_activation_commands',
@@ -902,23 +904,38 @@ export function renderSchema6To7Upgrade(
   const targetTables = affected.map((name) =>
     schema7.tables.find((table) => table.name === name),
   );
-  if (sourceTables.some((table) => !table) || targetTables.some((table) => !table)) {
+  if (
+    sourceTables.some((table) => !table) ||
+    targetTables.some((table) => !table)
+  ) {
     throw new Error('Schema 7 NodeOutputEnvelope authority table is missing');
   }
   for (let index = 0; index < affected.length; index += 1) {
-    const sourceColumns = sourceTables[index]!.columns.map((column) => column.name);
-    const targetColumns = targetTables[index]!.columns.map((column) => column.name);
+    const sourceColumns = sourceTables[index]!.columns.map(
+      (column) => column.name,
+    );
+    const targetColumns = targetTables[index]!.columns.map(
+      (column) => column.name,
+    );
     if (
       sourceColumns.length !== targetColumns.length ||
-      sourceColumns.some((column, columnIndex) => column !== targetColumns[columnIndex])
+      sourceColumns.some(
+        (column, columnIndex) => column !== targetColumns[columnIndex],
+      )
     ) {
       throw new Error(`Schema 7 ${affected[index]} cannot change columns`);
     }
   }
   const values = targetTables[0]!;
   const bindings = targetTables[1]!;
-  const valuesColumns = values.columns.map((column) => column.name).map(q).join(', ');
-  const bindingColumns = bindings.columns.map((column) => column.name).map(q).join(', ');
+  const valuesColumns = values.columns
+    .map((column) => column.name)
+    .map(q)
+    .join(', ');
+  const bindingColumns = bindings.columns
+    .map((column) => column.name)
+    .map(q)
+    .join(', ');
   const valueTriggers = buildSchemaTriggers(7).filter(
     (trigger) => trigger.table === values.name,
   );
@@ -1008,7 +1025,8 @@ export function renderSchema7To8Upgrade(
     .map((column) => q(column.name))
     .join(', ');
   const selectExpressions = schema8Consumption.columns.map((column) => {
-    if (column.name === 'graph_run_id') return `${q('scope')}.${q('graph_run_id')}`;
+    if (column.name === 'graph_run_id')
+      return `${q('scope')}.${q('graph_run_id')}`;
     if (column.name === 'map_slot_outcome_state') {
       return `CASE ${q('consumption')}.${q('disposition')} WHEN 'map_slot_completed' THEN 'completed' WHEN 'map_slot_fenced' THEN 'fenced' ELSE NULL END`;
     }
@@ -1030,6 +1048,64 @@ export function renderSchema7To8Upgrade(
     ),
     'PRAGMA legacy_alter_table = OFF',
     'PRAGMA user_version = 8',
+  ];
+  return {
+    sql: `${statements.map((statement) => `${statement};`).join('\n\n')}\n`,
+    statement_count: statements.length,
+    triggers: [],
+  };
+}
+
+export function renderSchema8To9Upgrade(
+  schema8: ExecutableSchemaSource,
+  schema9: ExecutableSchemaSource,
+): RenderedMigration {
+  if (
+    schema8.database_schema_version !== 8 ||
+    schema9.database_schema_version !== 9
+  ) {
+    throw new Error('Schema 8 to 9 upgrade source versions are invalid');
+  }
+  const consumptionName = 'workflow_graph_child_completion_consumptions';
+  const oldConsumptionName = `${consumptionName}_schema8`;
+  const schema8Consumption = schema8.tables.find(
+    (table) => table.name === consumptionName,
+  );
+  const schema9Consumption = schema9.tables.find(
+    (table) => table.name === consumptionName,
+  );
+  if (!schema8Consumption || !schema9Consumption) {
+    throw new Error('Schema 9 R-021 consumption table is missing');
+  }
+  if (
+    schema8Consumption.columns.map((column) => column.name).join('\0') !==
+      schema9Consumption.columns.map((column) => column.name).join('\0') ||
+    JSON.stringify(schema8Consumption.foreign_keys) !==
+      JSON.stringify(schema9Consumption.foreign_keys) ||
+    JSON.stringify(schema8Consumption.unique_keys) !==
+      JSON.stringify(schema9Consumption.unique_keys) ||
+    JSON.stringify(schema8Consumption.indexes) !==
+      JSON.stringify(schema9Consumption.indexes)
+  ) {
+    throw new Error('Schema 9 R-021 physical lineage shape drifted');
+  }
+  const columns = schema9Consumption.columns
+    .map((column) => q(column.name))
+    .join(', ');
+  const statements = [
+    'PRAGMA legacy_alter_table = ON',
+    `ALTER TABLE ${q(consumptionName)} RENAME TO ${q(oldConsumptionName)}`,
+    renderTable(schema9Consumption, 9),
+    `INSERT INTO ${q(consumptionName)} (${columns}) SELECT ${columns} FROM ${q(oldConsumptionName)}`,
+    `DROP TABLE ${q(oldConsumptionName)}`,
+    ...schema9Consumption.unique_keys.map((key) =>
+      renderUniqueIndex(schema9Consumption, key),
+    ),
+    ...schema9Consumption.indexes.map((indexValue) =>
+      renderIndex(schema9Consumption, indexValue),
+    ),
+    'PRAGMA legacy_alter_table = OFF',
+    'PRAGMA user_version = 9',
   ];
   return {
     sql: `${statements.map((statement) => `${statement};`).join('\n\n')}\n`,

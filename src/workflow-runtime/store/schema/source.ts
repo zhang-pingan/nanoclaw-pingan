@@ -25,6 +25,7 @@ import type { ExecutableSchemaSource } from './types.js';
 import { applyGeneratedSchemaPrerequisite } from './generated-schema-source.js';
 import { applyNodeOutputEnvelopeSchemaPrerequisite } from './node-output-envelope-source.js';
 import { applyChildCompletionLineageSchemaPrerequisite } from './child-completion-lineage-source.js';
+import { applyMapTerminalConsumptionSchemaPrerequisite } from './map-terminal-consumption-source.js';
 
 interface AdditiveTableExtension {
   name: string;
@@ -111,8 +112,8 @@ function assertSchema3ExecutableSource(source: ExecutableSchemaSource): void {
 }
 
 function assertExecutableSource(source: ExecutableSchemaSource): void {
-  if (source.database_schema_version !== 8) {
-    throw new Error('Current executable Database Schema must be version 8');
+  if (source.database_schema_version !== 9) {
+    throw new Error('Current executable Database Schema must be version 9');
   }
   if (source.tables.length !== 86) {
     throw new Error(`Expected 86 v1 tables, received ${source.tables.length}`);
@@ -406,6 +407,30 @@ export function loadExecutableSchemaSource(
   contractsRoot?: string,
 ): ExecutableSchemaSource {
   const inputs = readPinnedSchemaInputArtifacts({ contractsRoot });
+  const schema8 = buildSchema8ExecutableSource(inputs);
+  const applied = applyMapTerminalConsumptionSchemaPrerequisite(
+    schema8.tables,
+    schema8.queries,
+    inputs.map_terminal_consumption_schema_prerequisite.artifact,
+  );
+  const result: ExecutableSchemaSource = {
+    ...schema8,
+    database_schema_version: 9,
+    tables: applied.tables,
+    queries: applied.queries,
+    logical_inputs: {
+      ...schema8.logical_inputs,
+      map_terminal_consumption_schema_prerequisite_hash:
+        inputs.map_terminal_consumption_schema_prerequisite.artifact.hash,
+    },
+  };
+  assertExecutableSource(result);
+  return result;
+}
+
+function buildSchema8ExecutableSource(
+  inputs: LoadedSchemaInputArtifacts,
+): ExecutableSchemaSource {
   const schema7 = buildSchema7ExecutableSource(inputs);
   const applied = applyChildCompletionLineageSchemaPrerequisite(
     schema7.tables,
@@ -423,8 +448,15 @@ export function loadExecutableSchemaSource(
         inputs.child_completion_lineage_schema_prerequisite.artifact.hash,
     },
   };
-  assertExecutableSource(result);
   return result;
+}
+
+export function loadSchema8ExecutableSchemaSource(
+  contractsRoot?: string,
+): ExecutableSchemaSource {
+  return buildSchema8ExecutableSource(
+    readPinnedSchemaInputArtifacts({ contractsRoot }),
+  );
 }
 
 function buildSchema7ExecutableSource(

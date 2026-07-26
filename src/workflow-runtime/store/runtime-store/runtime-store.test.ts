@@ -13,6 +13,7 @@ import { buildSchemaTriggers, renderMigration } from '../schema/ddl.js';
 import {
   loadSchema3ExecutableSchemaSource,
   loadSchema4ExecutableSchemaSource,
+  loadSchema8ExecutableSchemaSource,
 } from '../schema/source.js';
 import {
   WorkflowRuntimeConnectionFactory,
@@ -136,6 +137,20 @@ function createSchema4Database(databasePath: string): void {
     database.pragma('auto_vacuum = INCREMENTAL');
     database.pragma('foreign_keys = ON');
     database.exec(renderMigration(loadSchema4ExecutableSchemaSource()).sql);
+    database.pragma('journal_mode = WAL');
+  } finally {
+    database.close();
+  }
+}
+
+function createSchema8Database(databasePath: string): void {
+  const profile = loadFrozenWorkflowRuntimeStoreInputs().profile;
+  const database = new Database(databasePath);
+  try {
+    database.pragma(`page_size = ${profile.page_size}`);
+    database.pragma('auto_vacuum = INCREMENTAL');
+    database.pragma('foreign_keys = ON');
+    database.exec(renderMigration(loadSchema8ExecutableSchemaSource()).sql);
     database.pragma('journal_mode = WAL');
   } finally {
     database.close();
@@ -379,7 +394,7 @@ describe.sequential('G1.2 Workflow Runtime Store base', () => {
     ).toThrow(/canonical_migration raw hash mismatch|migration drifted/);
   });
 
-  it('fails closed on current Schema 8 migration drift', () => {
+  it('fails closed on frozen historical Schema 8 migration drift', () => {
     const { root } = temporaryDatabase();
     const copiedSchema = path.join(root, 'schema');
     fs.cpSync(path.resolve(import.meta.dirname, '../schema'), copiedSchema, {
@@ -387,6 +402,21 @@ describe.sequential('G1.2 Workflow Runtime Store base', () => {
     });
     fs.appendFileSync(
       path.join(copiedSchema, 'migration/workflow-runtime-schema-v8.sql'),
+      '\n-- drift\n',
+    );
+    expect(() =>
+      loadFrozenWorkflowRuntimeStoreInputs({ schemaRoot: copiedSchema }),
+    ).toThrow(/canonical_migration raw hash mismatch|migration drifted/);
+  });
+
+  it('fails closed on current Schema 9 migration drift', () => {
+    const { root } = temporaryDatabase();
+    const copiedSchema = path.join(root, 'schema');
+    fs.cpSync(path.resolve(import.meta.dirname, '../schema'), copiedSchema, {
+      recursive: true,
+    });
+    fs.appendFileSync(
+      path.join(copiedSchema, 'migration/workflow-runtime-schema-v9.sql'),
       '\n-- drift\n',
     );
     expect(() =>
@@ -521,7 +551,7 @@ describe.sequential('G1.2 Workflow Runtime Store base', () => {
     expect(
       store.queryOne<{ user_version: number }>('PRAGMA user_version', [])
         ?.user_version,
-    ).toBe(8);
+    ).toBe(9);
     expect(store.identityEvidence).toMatchObject({
       certification_status: 'candidate_not_certified',
       platform: 'darwin',
@@ -549,7 +579,7 @@ describe.sequential('G1.2 Workflow Runtime Store base', () => {
     );
   });
 
-  it('upgrades an empty frozen Schema 3 real file through historical Schema 4, 5, 6, and 7 to Schema 8', () => {
+  it('upgrades an empty frozen Schema 3 real file through historical Schema 4-8 to Schema 9', () => {
     const { databasePath } = temporaryDatabase();
     createSchema3Database(databasePath);
     const before = new Database(databasePath, { readonly: true });
@@ -571,7 +601,7 @@ describe.sequential('G1.2 Workflow Runtime Store base', () => {
     expect(
       upgraded.queryOne<{ user_version: number }>('PRAGMA user_version', [])
         ?.user_version,
-    ).toBe(8);
+    ).toBe(9);
     expect(
       upgraded.queryOne<{ count: number }>(
         'SELECT count(*) AS count FROM pragma_foreign_key_check',
@@ -580,7 +610,7 @@ describe.sequential('G1.2 Workflow Runtime Store base', () => {
     ).toBe(0);
   });
 
-  it('upgrades a nonempty frozen Schema 4 real file through Schema 5, 6, and 7 to Schema 8 and preserves rows', () => {
+  it('upgrades a nonempty frozen Schema 4 real file through Schema 5-8 to Schema 9 and preserves rows', () => {
     const { databasePath } = temporaryDatabase();
     createSchema4Database(databasePath);
     const seed = new Database(databasePath);
@@ -613,13 +643,56 @@ describe.sequential('G1.2 Workflow Runtime Store base', () => {
     expect(
       upgraded.queryOne<{ user_version: number }>('PRAGMA user_version', [])
         ?.user_version,
-    ).toBe(8);
+    ).toBe(9);
     expect(
       upgraded.queryOne<{ current_fencing_token: number; row_version: number }>(
         'SELECT current_fencing_token, row_version FROM workflow_domain_resource_heads WHERE namespace = ?',
         ['capacity-upgrade-preserved'],
       ),
     ).toEqual({ current_fencing_token: 7, row_version: 3 });
+  });
+
+  it('opens a frozen Schema 8 real file only after exact identity validation and upgrades it to Schema 9', () => {
+    const { databasePath } = temporaryDatabase();
+    createSchema8Database(databasePath);
+    const before = databaseGateSnapshot(databasePath);
+    expect(before.userVersion).toBe(8);
+    expect(before.sqliteSchemaIdentity).toBe(
+      CURRENT_G1_SCHEMA_IDENTITIES.schema8SourceSqliteSchema,
+    );
+    const upgraded = WorkflowRuntimeConnectionFactory.openStore({
+      databasePath,
+      databaseMode: 'open_existing',
+      identityMode: 'candidate_development',
+    });
+    openStores.push(upgraded);
+    expect(
+      upgraded.queryOne<{ user_version: number }>('PRAGMA user_version', [])
+        ?.user_version,
+    ).toBe(9);
+  });
+
+  it('rejects Schema 8 sqlite_schema identity drift before the 8-to-9 upgrade and preserves bytes', () => {
+    const { databasePath } = temporaryDatabase();
+    createSchema8Database(databasePath);
+    const database = new Database(databasePath);
+    database.exec(
+      'CREATE INDEX "idx:test:schema8_identity_drift" ON "workflow_graph_child_completion_consumptions" ("created_at_ms")',
+    );
+    database.close();
+    const before = databaseGateSnapshot(databasePath);
+    expect(before.userVersion).toBe(8);
+    expect(before.sqliteSchemaIdentity).not.toBe(
+      CURRENT_G1_SCHEMA_IDENTITIES.schema8SourceSqliteSchema,
+    );
+    expect(() =>
+      WorkflowRuntimeConnectionFactory.openStore({
+        databasePath,
+        databaseMode: 'open_existing',
+        identityMode: 'candidate_development',
+      }),
+    ).toThrow('Schema 8 sqlite_schema identity mismatch');
+    expectDatabaseGateUnchanged(databasePath, before);
   });
 
   it('rejects Schema 4 sqlite_schema identity drift before the first upgrade DDL', () => {

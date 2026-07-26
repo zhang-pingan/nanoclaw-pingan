@@ -11,8 +11,8 @@
     "slice": "G3.5",
     "status": "DONE",
     "g3_status": "IN_PROGRESS",
-    "upstream_g3_3_pack_hash": "sha256:373692196d3746f34cf49cd43f3be1c54e77fe5b5e4fb813acd14a82054d4d58",
-    "upstream_g1_schema_root_hash": "sha256:0373eac8da2f96c1377e934ea5bcfdb701e96954720c2719aa756be778cc3995",
+    "upstream_g3_3_pack_hash": "sha256:9b295834dc499b5590566a0bee5ac053adc0da1879699626e0e94ec825e443cd",
+    "upstream_g1_schema_root_hash": "sha256:c32fc2db46c49b09edeea2a31d07b4decf3b89a6272a3b7b69d933288efe24ca",
     "query_mode": "exact_resource_type_ref_content_hash_only",
     "result_schema": "closed",
     "read_only": true,
@@ -106,5 +106,5 @@
     "negative_case_count": 5,
     "g4_through_g9_status": "NOT_READY"
   },
-  "hash": "sha256:d8e253c60ce4627a23fac2cebb608626a1eaacf5338314420dee23281a232786"
+  "hash": "sha256:8734b6a44d11180b507a0e546bc5784a5ee0073cb94c85785c05eed995d50ba9"
 }

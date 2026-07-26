@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 
 import { parseContractArtifactEnvelope } from './artifact.js';
 import { checkR020ChildConsumptionLineageContract } from './r020-child-consumption-lineage-contract.js';
+import { checkR021MapTerminalConsumptionContract } from './r021-map-terminal-consumption-contract.js';
 import { strictParseJsonBytes } from './strict-json.js';
 import type { JsonObject } from './types.js';
 import { WorkflowRuntimeConnectionFactory } from '../store/runtime-store/index.js';
@@ -48,13 +49,20 @@ describe('G6 Dynamic / Close readiness audit', () => {
     });
   });
 
-  it('selects the unique R-020 Schema 8 composite-lineage authority while keeping G6 Production implementation at zero', () => {
-    const pack = checkR020ChildConsumptionLineageContract();
-    expect(pack.payload).toMatchObject({
+  it('preserves R-020 Schema 8 provenance and selects the R-021 Schema 9 successor while keeping G6 Production at zero', () => {
+    const predecessor = checkR020ChildConsumptionLineageContract();
+    expect(predecessor.payload).toMatchObject({
       gate: 'R-020_G6_PREREQUISITE',
       status: 'EXIT_CANDIDATE_PENDING_INDEPENDENT_AFFECTED_CHAIN_REGRESSION',
       g6_production_implementation_count: 0,
-      g6_status: 'BLOCKED_PENDING_INDEPENDENT_AFFECTED_CHAIN_REGRESSION',
+    });
+    const current = checkR021MapTerminalConsumptionContract();
+    expect(current.payload).toMatchObject({
+      gate: 'R-021_G6_PREREQUISITE',
+      status: 'EXIT_CANDIDATE_PENDING_INDEPENDENT_AFFECTED_CHAIN_REGRESSION',
+      affected_gate_status: 'IN_PROGRESS',
+      g6_production_implementation_count: 0,
+      g6_status: 'BLOCKED_PENDING_REGRESSION_NOT_STARTED',
       g7_through_g9_status: 'NOT_READY',
     });
     for (const relativePath of [
@@ -68,11 +76,11 @@ describe('G6 Dynamic / Close readiness audit', () => {
     }
   });
 
-  it('proves the current Manifest and a fresh real-file Store expose all six exact composite FKs', () => {
+  it('proves the current Schema 9 Manifest and a fresh real-file Store expose all six exact composite FKs and four terminal pairs', () => {
     const manifest = readArtifact(
-      '../store/schema/artifacts/workflow-runtime-schema-manifest@2.json',
+      '../store/schema/artifacts/workflow-runtime-schema-manifest@3.json',
     );
-    expect(manifest.payload.database_schema_version).toBe(8);
+    expect(manifest.payload.database_schema_version).toBe(9);
     const consumption = objects(manifest.payload.tables).find(
       (table) => table.name === 'workflow_graph_child_completion_consumptions',
     )!;
@@ -96,6 +104,23 @@ describe('G6 Dynamic / Close readiness audit', () => {
         ['graph_run_id', 'disposition_event_seq'],
       ].sort((left, right) => left.join('\0').localeCompare(right.join('\0'))),
     );
+    const checks = objects(consumption.checks);
+    expect(
+      checks.find(
+        (check) =>
+          check.check_id ===
+          'ck:workflow_graph_child_completion_consumptions:disposition:enum',
+      )?.expression_sql,
+    ).toContain(
+      "'map_slot_completed', 'map_slot_errored', 'map_slot_cancelled', 'map_slot_fenced'",
+    );
+    expect(
+      checks.find(
+        (check) =>
+          check.check_id ===
+          'ck:workflow_graph_child_completion_consumptions:map_slot_outcome_state:enum',
+      )?.expression_sql,
+    ).toContain("'completed', 'errored', 'cancelled', 'fenced'");
 
     const root = fs.mkdtempSync(
       path.join(os.tmpdir(), 'icarus-g6-readiness-audit-'),
@@ -110,7 +135,7 @@ describe('G6 Dynamic / Close readiness audit', () => {
         expect(
           store.queryOne<{ user_version: number }>('PRAGMA user_version', [])
             ?.user_version,
-        ).toBe(8);
+        ).toBe(9);
         const rows = store.queryAll<{
           id: number;
           seq: number;

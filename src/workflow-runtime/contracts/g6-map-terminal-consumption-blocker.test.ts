@@ -8,10 +8,10 @@ import { describe, expect, it } from 'vitest';
 
 import type { LogicalTableMetadata } from './logical-schema-types.js';
 import { renderMigration } from '../store/schema/ddl.js';
-import { loadExecutableSchemaSource } from '../store/schema/source.js';
+import { loadSchema8ExecutableSchemaSource } from '../store/schema/source.js';
 import { createMigratedDatabase } from '../store/schema/sqlite-gate.js';
 
-const schema8 = loadExecutableSchemaSource();
+const schema8 = loadSchema8ExecutableSchemaSource();
 const migration = renderMigration(schema8);
 
 function hash(label: string): `sha256:${string}` {

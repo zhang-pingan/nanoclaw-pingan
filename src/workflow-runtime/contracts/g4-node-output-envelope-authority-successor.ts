@@ -41,9 +41,14 @@ const CURRENT_UPSTREAMS = [
     hash: 'sha256:7a852ff21a77a767b708ab8a4fc5c329024ca954422b26d71210b0385ce05441',
   },
   {
-    role: 'g1_schema_8',
-    path: '../store/schema/contract-pack-g1-executable-schema-v8.json',
-    hash: 'sha256:0373eac8da2f96c1377e934ea5bcfdb701e96954720c2719aa756be778cc3995',
+    role: 'g1_schema_9',
+    path: '../store/schema/contract-pack-g1-executable-schema-v9.json',
+    hash: 'sha256:c32fc2db46c49b09edeea2a31d07b4decf3b89a6272a3b7b69d933288efe24ca',
+  },
+  {
+    role: 'r021_map_terminal_consumption',
+    path: 'contract-pack-r021-map-terminal-consumption.json',
+    hash: 'sha256:b5e9237d09d829946c496e19eddf16b21c94fb4fd59b3588900f4764332d0699',
   },
   {
     role: 'g2_v6_sealed_bundle',
@@ -53,12 +58,12 @@ const CURRENT_UPSTREAMS = [
   {
     role: 'g3_6_retention_executor_abi',
     path: 'contract-pack-g3-retention-executor-abi-preflight.json',
-    hash: 'sha256:8d8d57da7b33bdb481fa527afa5862ee46b4d17b3e623a7e4e45492bfefe4a15',
+    hash: 'sha256:71be35581adb4717230bb106c658db91777126c8e59bc9c0e95ef5d7bd651e43',
   },
   {
     role: 'g3_7_workflow_publisher',
     path: 'contract-pack-g3-workflow-publisher.json',
-    hash: 'sha256:9962475983c767315f74c43ad70f43b657d2a03119019f3953869e1585a3ffde',
+    hash: 'sha256:88705beddf6965dc8a947aba1f3dd9fbb2b9124f33824dafe7ad0881ab561be3',
   },
   {
     role: 'g3_8a_frozen_activation_repair',
@@ -68,7 +73,7 @@ const CURRENT_UPSTREAMS = [
   {
     role: 'g3_9_feature_release_activation',
     path: 'contract-pack-g3.9-feature-release-activation.json',
-    hash: 'sha256:1020ace8fd72b5482742bcc67330e9f2b596925acd9c729bef556f3c30ec4a79',
+    hash: 'sha256:230fa30e795e0931d27acfb5a4215e7f30e4d806a525dea6e6966036ee1ea6ee',
   },
 ] as const;
 
@@ -160,6 +165,18 @@ function assertCurrentUpstreams(): void {
       'src/workflow-runtime/store/schema/migration/workflow-runtime-schema-v7-to-v8.sql',
     ),
   );
+  const schema9 = fs.readFileSync(
+    path.join(
+      repoRoot,
+      'src/workflow-runtime/store/schema/migration/workflow-runtime-schema-v9.sql',
+    ),
+  );
+  const schema8To9Upgrade = fs.readFileSync(
+    path.join(
+      repoRoot,
+      'src/workflow-runtime/store/schema/migration/workflow-runtime-schema-v8-to-v9.sql',
+    ),
+  );
   if (
     rawSha256(schema8) !==
       'sha256:b19ebe83ea8b7c53a2ab54a901df092b4e343ee4e1d5772ed6bc3143a82746ad' ||
@@ -167,6 +184,14 @@ function assertCurrentUpstreams(): void {
       'sha256:544af9b55349268d152650c9a9fda5c399bb0e665750a2c47a6155d22ca6e3a9'
   ) {
     throw new Error('G4 successor Schema 8 migration identity drifted');
+  }
+  if (
+    rawSha256(schema9) !==
+      'sha256:4591e2dd417d439c813026816572e8a66e9d088efa6a8de88ebfb38a68cf9837' ||
+    rawSha256(schema8To9Upgrade) !==
+      'sha256:890c911a27074cca3ee34f9a7f022e4fbda6edf77fbe2ad75f2b77d0d1bed23b'
+  ) {
+    throw new Error('G4 successor Schema 9 migration identity drifted');
   }
 }
 
@@ -198,11 +223,15 @@ function buildSuccessor(): ContractArtifactEnvelope {
         disposition: 'frozen_historical_authority',
       },
       current_store: {
-        database_schema_version: 8,
+        database_schema_version: 9,
         g1_root_hash:
-          'sha256:0373eac8da2f96c1377e934ea5bcfdb701e96954720c2719aa756be778cc3995',
+          'sha256:c32fc2db46c49b09edeea2a31d07b4decf3b89a6272a3b7b69d933288efe24ca',
         database_schema_hash:
-          'sha256:1c7592c8b24a2b032217f42b31a5af3ebf39a9dd4dd10f1158ab9ced340142c6',
+          'sha256:9a36d16fd52d26af009f64f6d26b0bf5d713c16a6f9bad3e6e1019d354bc4ff9',
+        schema9_migration_hash:
+          'sha256:4591e2dd417d439c813026816572e8a66e9d088efa6a8de88ebfb38a68cf9837',
+        schema8_to_9_upgrade_hash:
+          'sha256:890c911a27074cca3ee34f9a7f022e4fbda6edf77fbe2ad75f2b77d0d1bed23b',
         schema8_migration_hash:
           'sha256:b19ebe83ea8b7c53a2ab54a901df092b4e343ee4e1d5772ed6bc3143a82746ad',
         schema7_to_8_upgrade_hash:
@@ -216,8 +245,9 @@ function buildSuccessor(): ContractArtifactEnvelope {
         registry_latest_lookup: 'forbidden',
         network_or_fallback: 'forbidden',
       },
-      g5_status: 'BLOCKED_BY_SPEC/NOT_READY',
-      g6_through_g9_status: 'NOT_READY',
+      g5_status: 'IN_PROGRESS',
+      g6_status: 'BLOCKED_PENDING_REGRESSION/NOT_STARTED',
+      g7_through_g9_status: 'NOT_READY',
       runtime_construction_performed: false,
       production_authorization: false,
     },

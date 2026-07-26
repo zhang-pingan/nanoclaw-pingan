@@ -1,0 +1,40 @@
+{
+  "format": "icarus.workflow-runtime-schema-domain-separators/1",
+  "ref": {
+    "id": "icarus.workflow-runtime-schema-domain-separators",
+    "version": "1"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-runtime-schema-domain-separators:1\n",
+  "hash": "sha256:50e4ffc7789ac6b4c5c4c749b3e3bb134ca488bf2e52bc188add994901e0f504",
+  "payload": {
+    "entries": [
+      "icarus:workflow-child-completion-lineage-schema-prerequisite:1\n",
+      "icarus:workflow-contract-pack-g1-executable-schema:1\n",
+      "icarus:workflow-feature-release-activation-failure-replay-logical-schema-delta:1\n",
+      "icarus:workflow-feature-release-activation-failure-replay-schema-prerequisite:1\n",
+      "icarus:workflow-feature-release-activation-logical-schema-delta:1\n",
+      "icarus:workflow-feature-release-activation-schema-prerequisite:1\n",
+      "icarus:workflow-generated-schema-authority-logical-schema-delta:1\n",
+      "icarus:workflow-generated-schema-authority-prerequisite:1\n",
+      "icarus:workflow-generated-schema-parameter:2\n",
+      "icarus:workflow-generated-schema:2\n",
+      "icarus:workflow-map-terminal-consumption-schema-prerequisite:1\n",
+      "icarus:workflow-node-output-envelope-schema-authority-prerequisite:1\n",
+      "icarus:workflow-plan-generated-schema-binding:1\n",
+      "icarus:workflow-runtime-constraint-trigger-fixtures:1\n",
+      "icarus:workflow-runtime-executable-ddl:1\n",
+      "icarus:workflow-runtime-physical-schema-identity:1\n",
+      "icarus:workflow-runtime-query-plan-fixtures:1\n",
+      "icarus:workflow-runtime-schema-dependency-manifest-contract:1\n",
+      "icarus:workflow-runtime-schema-dependency-manifest:1\n",
+      "icarus:workflow-runtime-schema-determinism:1\n",
+      "icarus:workflow-runtime-schema-domain-separators:1\n",
+      "icarus:workflow-runtime-schema-lint:1\n",
+      "icarus:workflow-runtime-schema-manifest-contract:1\n",
+      "icarus:workflow-runtime-schema-manifest:1\n",
+      "icarus:workflow-runtime-schema:1\n",
+      "icarus:workflow-runtime-sqlite-schema-identity:1\n"
+    ]
+  }
+}
