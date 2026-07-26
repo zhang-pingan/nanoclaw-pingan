@@ -45,7 +45,11 @@ export const STATIC_CHILD_PLAN_BUNDLE_REPAIR_SOURCE_PATHS = [
 
 export const STATIC_CHILD_PLAN_BUNDLE_REPAIR_EVIDENCE_PATHS = [
   'src/workflow-runtime/compiler/g2-v6-frozen-replay.ts',
+  'src/workflow-runtime/compiler/current-g2-golden-replay.ts',
   'src/workflow-runtime/compiler/static-child-plan-bundle.test.ts',
+  'src/workflow-runtime/contracts/current-g2-static-child-replay-authority.ts',
+  'src/workflow-runtime/contracts/current-g2-static-child-replay-authority-cli.ts',
+  'src/workflow-runtime/contracts/current-g2-static-child-replay-authority.test.ts',
   'src/workflow-runtime/contracts/static-child-plan-bundle-fixture-harness.ts',
   'src/workflow-runtime/contracts/static-child-plan-bundle-repair.test.ts',
   'src/workflow-runtime/contracts/g5-basic-runtime-repair-reference-model.ts',

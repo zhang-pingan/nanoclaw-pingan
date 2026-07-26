@@ -1,0 +1,23 @@
+{
+  "format": "icarus.workflow-compiler-conformance-case-result/1",
+  "case_id": "negative.graph-cross-scope-edge",
+  "source_kind": "graph_scope",
+  "source_hash": "sha256:6f551f82405061afad65cef7fc45b9960720bbb3343993d932711f0c9ac43d9c",
+  "outcome": "rejected",
+  "normalized_plan": null,
+  "static_lowering_contract_ref": null,
+  "static_lowering_contract_hash": null,
+  "diagnostics": [
+    {
+      "code": "schema_unknown_field",
+      "detail_ref": null,
+      "instance_pointer": "/nodes/1/output_ports",
+      "phase": "schema",
+      "schema_pointer": "#/oneOf/3/additionalProperties",
+      "stable_object_id": "join"
+    }
+  ],
+  "proof_hashes": [],
+  "program_hashes": [],
+  "result_hash": "sha256:ab58bd637a169b12a39003abcfce7162d11df18c3e95286a55e483440aaf673d"
+}

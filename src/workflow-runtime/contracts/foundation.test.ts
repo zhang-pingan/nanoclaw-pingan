@@ -314,6 +314,12 @@ describe('G0.2 Contract Pack conformance', () => {
               [
                 path.resolve(contractsRoot, '../compiler/compiler.js'),
                 path.resolve(contractsRoot, '../compiler/identity.js'),
+              ].includes(resolved)) ||
+            (path.basename(file) ===
+              'current-g2-static-child-replay-authority.ts' &&
+              [
+                path.resolve(contractsRoot, '../compiler/identity.js'),
+                path.resolve(contractsRoot, '../compiler/types.js'),
               ].includes(resolved));
           expect(
             resolved.startsWith(`${contractsRoot}${path.sep}`) ||

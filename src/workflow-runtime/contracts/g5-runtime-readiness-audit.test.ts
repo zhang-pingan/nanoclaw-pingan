@@ -44,6 +44,29 @@ describe('G5 Basic Runtime readiness audit', () => {
         'canonical_node_output_envelope_with_exact_port_values',
       next_task_only: 'independent_G2_G5_affected_chain_regression',
     });
+    const bindings = objects(protocol.payload.bindings);
+    expect(
+      bindings.find(
+        (entry) => entry.name === 'g2_current_compiler_3_0_5_replay_authority',
+      ),
+    ).toMatchObject({
+      hash: 'sha256:2c1192f3cd74a1a5dc753b9fd9dd2d66f98d7d1f22b659360d6f148f057600e0',
+      bundle_hash:
+        'sha256:314ceb2f907243288815ddf029fee0b716c16d7b567d0a25da978b94a47f80ab',
+    });
+    const readiness = readArtifact(
+      'conformance/current/g2-static-child-plan-bundle-replay-v7/g2-g5-readiness@1.json',
+    );
+    expect(readiness.payload).toMatchObject({
+      g2_status: 'IN_PROGRESS',
+      g5_status: 'IN_PROGRESS',
+      g6_through_g9_status: 'NOT_READY',
+      current_replay_case_count: 40,
+      current_replay_exact_required: true,
+      semantic_approval_created: false,
+      independent_regression_created: false,
+      closure_performed: false,
+    });
   });
 
   it('proves G5-owned T6d is executable without Gateway or Command writes', () => {

@@ -1,0 +1,23 @@
+{
+  "format": "icarus.workflow-compiler-conformance-case-result/1",
+  "case_id": "negative.graph-dependency-cycle",
+  "source_kind": "graph_scope",
+  "source_hash": "sha256:1cdbfd4a9d67974f38cf1a952043c278bf8a4b11874407ead4c2e024e9091b63",
+  "outcome": "rejected",
+  "normalized_plan": null,
+  "static_lowering_contract_ref": null,
+  "static_lowering_contract_hash": null,
+  "diagnostics": [
+    {
+      "code": "graph_dependency_cycle",
+      "detail_ref": null,
+      "instance_pointer": "/control_edges",
+      "phase": "prove",
+      "schema_pointer": null,
+      "stable_object_id": "edge.ab"
+    }
+  ],
+  "proof_hashes": [],
+  "program_hashes": [],
+  "result_hash": "sha256:b21dc62a6c39e6e8d2f93fd882aab67c74146465d04386bdb5600484fcd44571"
+}

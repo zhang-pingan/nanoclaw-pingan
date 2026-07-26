@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://icarus.local/schemas/current-g2-static-child-replay-inventory-v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "scope",
+    "entry_count",
+    "entries",
+    "inventory_hash"
+  ],
+  "properties": {
+    "format": {
+      "const": "icarus.workflow-compiler-current-g2-static-child-replay-inventory/1"
+    },
+    "scope": {
+      "const": "all_current_authority_leaf_artifacts_excluding_inventory_and_authority"
+    },
+    "entry_count": {
+      "const": 84
+    },
+    "entries": {
+      "type": "array",
+      "minItems": 84,
+      "maxItems": 84,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "path",
+          "kind",
+          "case_id",
+          "raw_bytes_hash",
+          "artifact_hash",
+          "semantic_hash"
+        ],
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "kind": {
+            "enum": [
+              "schema",
+              "current_snapshot",
+              "expected_result",
+              "readiness"
+            ]
+          },
+          "case_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "raw_bytes_hash": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "artifact_hash": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "semantic_hash": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          }
+        }
+      }
+    },
+    "inventory_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    }
+  }
+}

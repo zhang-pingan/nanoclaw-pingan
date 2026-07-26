@@ -1,0 +1,25 @@
+{
+  "format": "icarus.workflow-g2-g5-static-child-replay-readiness/1",
+  "ref": {
+    "id": "icarus.workflow-g2-g5-static-child-replay-readiness",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-g2-g5-static-child-replay-readiness:1\n",
+  "payload": {
+    "format": "icarus.workflow-g2-g5-static-child-replay-readiness/1",
+    "g2_status": "IN_PROGRESS",
+    "g5_status": "IN_PROGRESS",
+    "g6_through_g9_status": "NOT_READY",
+    "current_replay_case_count": 40,
+    "current_replay_exact_required": true,
+    "current_compiler_identity_hash": "sha256:60ddd2058f22c8787809d5232cace5e0e1d4fde83833a0879577237bf76460a1",
+    "case_set_hash": "sha256:546509fcc828722e3524c14c374a71151e7c1546dc1c55d8bd998d2e85b1712b",
+    "predecessor_v6_bundle_hash": "sha256:0820328ae1cfdba7d05948d9e36498a5428d997d6eabfb833ef0ba7d84b77db7",
+    "static_child_bridge_pack_hash": "sha256:13d30af76e8e957154447be0d6ab3aada93aee77711cbf5f27fb71168876d437",
+    "semantic_approval_created": false,
+    "independent_regression_created": false,
+    "closure_performed": false
+  },
+  "hash": "sha256:76f4512b35c7390f918b71bb337a3df158662c430bbe73903f83ef27c79a7417"
+}

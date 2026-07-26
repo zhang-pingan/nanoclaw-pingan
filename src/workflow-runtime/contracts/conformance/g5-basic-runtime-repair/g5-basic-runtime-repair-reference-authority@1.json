@@ -19,6 +19,22 @@
     },
     "evidence": [
       {
+        "path": "src/workflow-runtime/compiler/current-g2-golden-replay.ts",
+        "raw_sha256": "sha256:3a19f14c1dcbbb04073e3d0e8d8af5408cbf52845a7b8427e0568b1bba238b4c"
+      },
+      {
+        "path": "src/workflow-runtime/contracts/current-g2-static-child-replay-authority.ts",
+        "raw_sha256": "sha256:ad6b16ce064100b3516586fbfcbe76c4867471ea3d4520c00aaff70c6cd61a78"
+      },
+      {
+        "path": "src/workflow-runtime/contracts/current-g2-static-child-replay-authority-cli.ts",
+        "raw_sha256": "sha256:3ed22682f82991888bab2d198c200245b09313cfb8b439007e4cc68c4bbafb9d"
+      },
+      {
+        "path": "src/workflow-runtime/contracts/current-g2-static-child-replay-authority.test.ts",
+        "raw_sha256": "sha256:c503e542a0cfda5b3a3b21d1c6480fd3d931f61520e8a0e1ebeb357c58e07104"
+      },
+      {
         "path": "src/workflow-runtime/contracts/g5-basic-runtime-fixture-harness.ts",
         "raw_sha256": "sha256:329c05fc563a2c1abca2d596e7295ec3294c5bf446da05d78d61722291befc31"
       },
@@ -40,7 +56,7 @@
       },
       {
         "path": "src/workflow-runtime/contracts/g5-runtime-readiness-audit.test.ts",
-        "raw_sha256": "sha256:f60f9fad25d1e2f398f8fa3970fc654242d5d6a397b65960590ecbafab7b82c1"
+        "raw_sha256": "sha256:c42abee6cb9d6957a989005ac48b5981a6d954813d2ab993160e7db9033a4a55"
       },
       {
         "path": "src/workflow-runtime/contracts/g5-capability-outbox-blocker.test.ts",
@@ -75,7 +91,7 @@
         "raw_sha256": "sha256:06d0b8cee866ec721a34dca293ed549d948831d81966dada5feaf4312c0be513"
       }
     ],
-    "evidence_tree_hash": "sha256:37fe6ec7c5691fd7643938372bb2a8521ddce77d97204944145a154c010724da"
+    "evidence_tree_hash": "sha256:dfc02a574a5e33b525048894b92247b49430ffff107b0482f14e2d95d675b2a8"
   },
-  "hash": "sha256:3f51774d3846d61bc8ec0ae814a6bf5bed2e79ed768e6067a30728e54a19bb50"
+  "hash": "sha256:c1863dd810d1cc632ed3cf7c944ddc7df341b5acc2c271976f1455c45359affd"
 }

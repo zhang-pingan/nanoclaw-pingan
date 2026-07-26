@@ -6,13 +6,13 @@ import { Ajv2020, type AnySchema } from 'ajv/dist/2020.js';
 import { describe, expect, it, vi } from 'vitest';
 
 import {
-  buildG2NodeOutputEnvelopeSuccessor,
   assertG2NodeOutputEnvelopeAuthoringGeneratorBindingForTest,
   G2_NODE_OUTPUT_ENVELOPE_AUTHORING_GENERATOR_REF,
   G2_NODE_OUTPUT_ENVELOPE_DRAFT_CASES_PATH,
   G2_NODE_OUTPUT_ENVELOPE_DRAFT_MANIFEST_PATH,
 } from '../compiler/g2-node-output-envelope-authority-successor.js';
 import { evaluateCurrentG2GoldenReplay } from '../compiler/current-g2-golden-replay.js';
+import { checkG2V6FrozenReplay } from '../compiler/g2-v6-frozen-replay.js';
 import { parseContractArtifactEnvelope } from './artifact.js';
 import {
   G2_NODE_OUTPUT_ENVELOPE_CONFORMANCE_BUNDLE_SCHEMA,
@@ -585,45 +585,66 @@ describe('G2 v6 authoring generator AST binding', () => {
 });
 
 describe('G2 v6 NodeOutputEnvelope authority successor', () => {
-  it('builds a deterministic 40/40 Compiler 3.0.4 Draft', () => {
-    const first = buildG2NodeOutputEnvelopeSuccessor();
-    const second = buildG2NodeOutputEnvelopeSuccessor();
-    expect([...second.files]).toEqual([...first.files]);
-    expect(first.files).toHaveLength(172);
-    expect(first.exactEqualCount).toBe(40);
-    expect(first.pointerDifferenceCount).toBe(0);
-    expect(first.rc.hash).toBe(
-      'sha256:64fec8c48d3c6685f83bce980b8f85c03ce0d989aaa944e85e6a0d61c40297f1',
-    );
-    expect(first.draft.payload.draft_manifest_hash).toBe(
-      G2_NODE_OUTPUT_ENVELOPE_APPROVED_DRAFT_MANIFEST_HASH,
-    );
-    expect(first.review.payload.report_hash).toBe(
-      G2_NODE_OUTPUT_ENVELOPE_APPROVED_REVIEW_REPORT_HASH,
+  it('checks the frozen 40/40 Compiler 3.0.4 Draft and RC identities', () => {
+    const rc = parseContractArtifactEnvelope(
+      strictParseJsonBytes(
+        fs.readFileSync(
+          path.join(
+            contractsRoot,
+            'conformance/review-candidate/g2-generated-schema-join-authority-v6/review-candidate@2.json',
+          ),
+        ),
+      ),
     );
     const draft = parseContractArtifactEnvelope(
       strictParseJsonBytes(
-        Buffer.from(
-          first.files.get(G2_NODE_OUTPUT_ENVELOPE_DRAFT_MANIFEST_PATH)!,
+        fs.readFileSync(
+          path.join(contractsRoot, G2_NODE_OUTPUT_ENVELOPE_DRAFT_MANIFEST_PATH),
         ),
       ),
+    );
+    const review = parseContractArtifactEnvelope(
+      strictParseJsonBytes(
+        fs.readFileSync(
+          path.join(
+            contractsRoot,
+            'conformance/golden-review/g2-generated-schema-join-authority-v6/golden-review-report@2.json',
+          ),
+        ),
+      ),
+    );
+    expect(rc.hash).toBe(
+      'sha256:64fec8c48d3c6685f83bce980b8f85c03ce0d989aaa944e85e6a0d61c40297f1',
+    );
+    expect(draft.payload.draft_manifest_hash).toBe(
+      G2_NODE_OUTPUT_ENVELOPE_APPROVED_DRAFT_MANIFEST_HASH,
+    );
+    expect(review.payload.report_hash).toBe(
+      G2_NODE_OUTPUT_ENVELOPE_APPROVED_REVIEW_REPORT_HASH,
     );
     expect(draft.payload).toMatchObject({
       case_count: 40,
       expected_result_coverage: 40,
       draft_status: 'frozen_pending_human_approval',
+      exact_compiler_identity: { compiler_version: '3.0.4' },
+    });
+    expect(checkG2V6FrozenReplay()).toEqual({
+      exactCount: 40,
+      bundleHash:
+        'sha256:0820328ae1cfdba7d05948d9e36498a5428d997d6eabfb833ef0ba7d84b77db7',
     });
   }, 30_000);
 
   it('puts one exact envelope descriptor on every compiled Plan node', () => {
-    const built = buildG2NodeOutputEnvelopeSuccessor();
-    const plans = [...built.files]
-      .filter(
-        ([path]) => path.includes('/expected/') && path.endsWith('.plan.json'),
-      )
-      .map(
-        ([, bytes]) => strictParseJsonBytes(Buffer.from(bytes)) as JsonObject,
-      );
+    const sealed = checkG2NodeOutputEnvelopeSeal();
+    const plans = (sealed.payload.cases as JsonObject[])
+      .filter((entry) => entry.outcome === 'compiled')
+      .map((entry) => {
+        const expectedPlan = entry.expected_plan as JsonObject;
+        return strictParseJsonBytes(
+          fs.readFileSync(path.join(contractsRoot, String(expectedPlan.path))),
+        ) as JsonObject;
+      });
     expect(plans.length).toBeGreaterThan(0);
     for (const plan of plans) {
       expect(Array.isArray(plan.nodes)).toBe(true);
@@ -638,11 +659,10 @@ describe('G2 v6 NodeOutputEnvelope authority successor', () => {
   }, 30_000);
 
   it('binds the declared authoring source to the invoked generator and rejects the v5 impersonator', () => {
-    const built = buildG2NodeOutputEnvelopeSuccessor();
     const draftManifest = parseContractArtifactEnvelope(
       strictParseJsonBytes(
-        Buffer.from(
-          built.files.get(G2_NODE_OUTPUT_ENVELOPE_DRAFT_MANIFEST_PATH)!,
+        fs.readFileSync(
+          path.join(contractsRoot, G2_NODE_OUTPUT_ENVELOPE_DRAFT_MANIFEST_PATH),
         ),
       ),
     );
@@ -685,7 +705,9 @@ describe('G2 v6 NodeOutputEnvelope authority successor', () => {
 
     const cases = parseContractArtifactEnvelope(
       strictParseJsonBytes(
-        Buffer.from(built.files.get(G2_NODE_OUTPUT_ENVELOPE_DRAFT_CASES_PATH)!),
+        fs.readFileSync(
+          path.join(contractsRoot, G2_NODE_OUTPUT_ENVELOPE_DRAFT_CASES_PATH),
+        ),
       ),
     );
     const staticLowering = (cases.payload.cases as JsonObject[]).find(
@@ -708,18 +730,22 @@ describe('G2 v6 NodeOutputEnvelope authority successor', () => {
     const expectedProofsBinding = staticLowering.expected_proofs as JsonObject;
     const expectedProgramsBinding =
       staticLowering.expected_programs as JsonObject;
-    const expectedResultBytes = built.files.get(
-      String(expectedResultBinding.path),
-    )!;
-    const expectedPlanBytes = built.files.get(
-      String(expectedPlanBinding.path),
-    )!;
-    const expectedProofsBytes = built.files.get(
-      String(expectedProofsBinding.path),
-    )!;
-    const expectedProgramsBytes = built.files.get(
-      String(expectedProgramsBinding.path),
-    )!;
+    const expectedResultBytes = fs.readFileSync(
+      path.join(contractsRoot, String(expectedResultBinding.path)),
+      'utf8',
+    );
+    const expectedPlanBytes = fs.readFileSync(
+      path.join(contractsRoot, String(expectedPlanBinding.path)),
+      'utf8',
+    );
+    const expectedProofsBytes = fs.readFileSync(
+      path.join(contractsRoot, String(expectedProofsBinding.path)),
+      'utf8',
+    );
+    const expectedProgramsBytes = fs.readFileSync(
+      path.join(contractsRoot, String(expectedProgramsBinding.path)),
+      'utf8',
+    );
     const expectedResult = strictParseJsonBytes(
       Buffer.from(expectedResultBytes),
     ) as JsonObject;

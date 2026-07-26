@@ -11,9 +11,9 @@ import {
   G2_REPLAY_REPAIR_SEALED_BUNDLE_REF,
 } from '../contracts/g2-replay-repair-successor-seal.js';
 import {
-  checkG2NodeOutputEnvelopeSeal,
-  G2_NODE_OUTPUT_ENVELOPE_SEALED_BUNDLE_REF,
-} from '../contracts/g2-node-output-envelope-authority-successor-seal.js';
+  checkCurrentG2StaticChildReplayAuthority,
+  CURRENT_G2_STATIC_CHILD_REPLAY_AUTHORITY_REF,
+} from '../contracts/current-g2-static-child-replay-authority.js';
 import type { CurrentG2GoldenReplayResult } from '../contracts/current-g2-golden-seal-types.js';
 import { canonicalJson } from '../contracts/hash.js';
 import {
@@ -31,10 +31,7 @@ import {
   compileG2ReplayRepairCase,
   G2_REPLAY_REPAIR_CANDIDATE_ROOT_PATH,
 } from './g2-replay-repair-successor.js';
-import {
-  compileG2NodeOutputEnvelopeCase,
-  G2_NODE_OUTPUT_ENVELOPE_CANDIDATE_ROOT_PATH,
-} from './g2-node-output-envelope-authority-successor.js';
+import { compileG2NodeOutputEnvelopeCase } from './g2-node-output-envelope-authority-successor.js';
 import type { WorkflowCompilerIdentity } from './types.js';
 import { workflowCompilerIdentity } from './identity.js';
 
@@ -155,12 +152,8 @@ export function evaluatePredecessorG2GoldenReplay(): CurrentG2GoldenReplayResult
 }
 
 export function evaluateCurrentG2GoldenReplay(): CurrentG2GoldenReplayResult {
-  const checkedBundle = checkG2NodeOutputEnvelopeSeal();
-  const bundle = parseContractArtifactEnvelope(
-    strictParseJsonBytes(
-      fs.readFileSync(absolute(G2_NODE_OUTPUT_ENVELOPE_SEALED_BUNDLE_REF)),
-    ),
-  );
+  const currentAuthority = checkCurrentG2StaticChildReplayAuthority();
+  const bundle = currentAuthority.authority;
   const identity = workflowCompilerIdentity();
   if (
     canonicalJson(bundle.payload.exact_compiler_identity) !==
@@ -190,17 +183,11 @@ export function evaluateCurrentG2GoldenReplay(): CurrentG2GoldenReplayResult {
       ) as unknown as JsonObject;
     },
   );
-  const candidateRootBytes = fs.readFileSync(
-    absolute(G2_NODE_OUTPUT_ENVELOPE_CANDIDATE_ROOT_PATH),
-  );
-  const candidateRoot = parseContractArtifactEnvelope(
-    strictParseJsonBytes(candidateRootBytes),
-  );
   return evaluateReplay(
-    G2_NODE_OUTPUT_ENVELOPE_SEALED_BUNDLE_REF,
-    checkedBundle,
+    CURRENT_G2_STATIC_CHILD_REPLAY_AUTHORITY_REF,
+    bundle,
     actualResults,
-    candidateRoot.hash,
+    currentAuthority.caseSetHash,
   );
 }
 

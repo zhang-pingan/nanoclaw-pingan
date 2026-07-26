@@ -65,12 +65,28 @@
     "production_source_tree_hash": "sha256:8103a9b1061c265cb0fd1c62e8383a9825cf3b193f1f1d703606588a2b372e0b",
     "evidence_sources": [
       {
+        "path": "src/workflow-runtime/compiler/current-g2-golden-replay.ts",
+        "raw_sha256": "sha256:3a19f14c1dcbbb04073e3d0e8d8af5408cbf52845a7b8427e0568b1bba238b4c"
+      },
+      {
         "path": "src/workflow-runtime/compiler/g2-v6-frozen-replay.ts",
         "raw_sha256": "sha256:4ff71de35e7dfa7b2c81a289c92d277ea60a48a20039687e576f172aeac3415b"
       },
       {
         "path": "src/workflow-runtime/compiler/static-child-plan-bundle.test.ts",
         "raw_sha256": "sha256:2411c2645376daa24590d7837357685c0382591dc1c08fb0a224cfd20c67b952"
+      },
+      {
+        "path": "src/workflow-runtime/contracts/current-g2-static-child-replay-authority-cli.ts",
+        "raw_sha256": "sha256:3ed22682f82991888bab2d198c200245b09313cfb8b439007e4cc68c4bbafb9d"
+      },
+      {
+        "path": "src/workflow-runtime/contracts/current-g2-static-child-replay-authority.test.ts",
+        "raw_sha256": "sha256:c503e542a0cfda5b3a3b21d1c6480fd3d931f61520e8a0e1ebeb357c58e07104"
+      },
+      {
+        "path": "src/workflow-runtime/contracts/current-g2-static-child-replay-authority.ts",
+        "raw_sha256": "sha256:ad6b16ce064100b3516586fbfcbe76c4867471ea3d4520c00aaff70c6cd61a78"
       },
       {
         "path": "src/workflow-runtime/contracts/g5-basic-runtime-repair-reference-model.test.ts",
@@ -93,7 +109,7 @@
         "raw_sha256": "sha256:156f7b4b3a11d2ea47b3c7e06b513f75e002e9b23afd94090d758c24694725c8"
       }
     ],
-    "evidence_source_tree_hash": "sha256:e4e8368c29b9eca7506e7aa3aaa4ee1bf6a1f9c1a3647353fb1c1cb26d593f22"
+    "evidence_source_tree_hash": "sha256:c07076c2475031d18d3ba7bf24865c8dbbe164326dd73d08dcb71bb6dbbfdab5"
   },
-  "hash": "sha256:b4996780c7eb56a37effec4d1f932db096c7c6d72778f2dbbe7d1e6f2be4b4ba"
+  "hash": "sha256:23835d831d6c19df173d2af3ecc88e26575e1e308aa58eb923f00453b9fa6d16"
 }

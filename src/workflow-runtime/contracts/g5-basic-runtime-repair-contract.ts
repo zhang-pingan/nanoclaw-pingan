@@ -43,6 +43,10 @@ export const G5_REPAIR_IMPLEMENTATION_SOURCE_PATHS = [
 ] as const;
 
 const evidenceSourcePaths = [
+  'src/workflow-runtime/compiler/current-g2-golden-replay.ts',
+  'src/workflow-runtime/contracts/current-g2-static-child-replay-authority.ts',
+  'src/workflow-runtime/contracts/current-g2-static-child-replay-authority-cli.ts',
+  'src/workflow-runtime/contracts/current-g2-static-child-replay-authority.test.ts',
   'src/workflow-runtime/contracts/g5-basic-runtime-fixture-harness.ts',
   'src/workflow-runtime/contracts/g5-basic-runtime-repair-reference-model.ts',
   'src/workflow-runtime/contracts/g5-basic-runtime-repair-reference-model.test.ts',
@@ -63,7 +67,14 @@ const exactBindings = [
   {
     name: 'g2_g5_static_child_plan_bundle_repair_candidate',
     path: 'src/workflow-runtime/contracts/conformance/static-child-plan-bundle-repair/contract-pack-static-child-plan-bundle-repair.json',
-    hash: 'sha256:777dd67bb51be338136a9478d3122a35159c422110ddbe7c6e54582010c572ee',
+    hash: 'sha256:13d30af76e8e957154447be0d6ab3aada93aee77711cbf5f27fb71168876d437',
+  },
+  {
+    name: 'g2_current_compiler_3_0_5_replay_authority',
+    path: 'src/workflow-runtime/contracts/conformance/current/g2-static-child-plan-bundle-replay-v7/current-replay-authority@1.json',
+    hash: 'sha256:2c1192f3cd74a1a5dc753b9fd9dd2d66f98d7d1f22b659360d6f148f057600e0',
+    bundleHash:
+      'sha256:314ceb2f907243288815ddf029fee0b716c16d7b567d0a25da978b94a47f80ab',
   },
   {
     name: 'r019_generated_schema_join_authority',
