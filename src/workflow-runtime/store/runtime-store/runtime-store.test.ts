@@ -364,7 +364,7 @@ describe.sequential('G1.2 Workflow Runtime Store base', () => {
     ).toThrow(/canonical_migration raw hash mismatch|migration drifted/);
   });
 
-  it('fails closed on current Schema 7 migration drift', () => {
+  it('fails closed on frozen historical Schema 7 migration drift', () => {
     const { root } = temporaryDatabase();
     const copiedSchema = path.join(root, 'schema');
     fs.cpSync(path.resolve(import.meta.dirname, '../schema'), copiedSchema, {
@@ -372,6 +372,21 @@ describe.sequential('G1.2 Workflow Runtime Store base', () => {
     });
     fs.appendFileSync(
       path.join(copiedSchema, 'migration/workflow-runtime-schema-v7.sql'),
+      '\n-- drift\n',
+    );
+    expect(() =>
+      loadFrozenWorkflowRuntimeStoreInputs({ schemaRoot: copiedSchema }),
+    ).toThrow(/canonical_migration raw hash mismatch|migration drifted/);
+  });
+
+  it('fails closed on current Schema 8 migration drift', () => {
+    const { root } = temporaryDatabase();
+    const copiedSchema = path.join(root, 'schema');
+    fs.cpSync(path.resolve(import.meta.dirname, '../schema'), copiedSchema, {
+      recursive: true,
+    });
+    fs.appendFileSync(
+      path.join(copiedSchema, 'migration/workflow-runtime-schema-v8.sql'),
       '\n-- drift\n',
     );
     expect(() =>
@@ -506,7 +521,7 @@ describe.sequential('G1.2 Workflow Runtime Store base', () => {
     expect(
       store.queryOne<{ user_version: number }>('PRAGMA user_version', [])
         ?.user_version,
-    ).toBe(7);
+    ).toBe(8);
     expect(store.identityEvidence).toMatchObject({
       certification_status: 'candidate_not_certified',
       platform: 'darwin',
@@ -534,7 +549,7 @@ describe.sequential('G1.2 Workflow Runtime Store base', () => {
     );
   });
 
-  it('upgrades an empty frozen Schema 3 real file through historical Schema 4, 5, and 6 to Schema 7', () => {
+  it('upgrades an empty frozen Schema 3 real file through historical Schema 4, 5, 6, and 7 to Schema 8', () => {
     const { databasePath } = temporaryDatabase();
     createSchema3Database(databasePath);
     const before = new Database(databasePath, { readonly: true });
@@ -556,7 +571,7 @@ describe.sequential('G1.2 Workflow Runtime Store base', () => {
     expect(
       upgraded.queryOne<{ user_version: number }>('PRAGMA user_version', [])
         ?.user_version,
-    ).toBe(7);
+    ).toBe(8);
     expect(
       upgraded.queryOne<{ count: number }>(
         'SELECT count(*) AS count FROM pragma_foreign_key_check',
@@ -565,7 +580,7 @@ describe.sequential('G1.2 Workflow Runtime Store base', () => {
     ).toBe(0);
   });
 
-  it('upgrades a nonempty frozen Schema 4 real file through Schema 5 and 6 to Schema 7 and preserves rows', () => {
+  it('upgrades a nonempty frozen Schema 4 real file through Schema 5, 6, and 7 to Schema 8 and preserves rows', () => {
     const { databasePath } = temporaryDatabase();
     createSchema4Database(databasePath);
     const seed = new Database(databasePath);
@@ -598,7 +613,7 @@ describe.sequential('G1.2 Workflow Runtime Store base', () => {
     expect(
       upgraded.queryOne<{ user_version: number }>('PRAGMA user_version', [])
         ?.user_version,
-    ).toBe(7);
+    ).toBe(8);
     expect(
       upgraded.queryOne<{ current_fencing_token: number; row_version: number }>(
         'SELECT current_fencing_token, row_version FROM workflow_domain_resource_heads WHERE namespace = ?',
@@ -654,7 +669,7 @@ describe.sequential('G1.2 Workflow Runtime Store base', () => {
     expectDatabaseGateUnchanged(databasePath, before);
   });
 
-  it('rolls back the complete Schema 3 to 7 DDL when target verification fails', () => {
+  it('rolls back the complete Schema 3 to 8 DDL when target verification fails', () => {
     const { databasePath } = temporaryDatabase();
     createSchema3Database(databasePath);
     insertPreservedForeignKeyViolation(databasePath);

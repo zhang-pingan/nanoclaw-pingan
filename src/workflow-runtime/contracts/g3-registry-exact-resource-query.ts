@@ -540,7 +540,7 @@ function validateUpstreamIdentity(): void {
   const upstream = readArtifact('contract-pack-g3-registry-persistence.json');
   if (
     upstream.hash !==
-    'sha256:746280b172ab970a953a20aaaf3dbff557fa7aaecfad6e20bcedc0a0171d72cb'
+    'sha256:373692196d3746f34cf49cd43f3be1c54e77fe5b5e4fb813acd14a82054d4d58'
   ) {
     throw new Error('G3.3 Registry persistence identity drift');
   }
@@ -651,9 +651,9 @@ function buildManifest(
       status: 'DONE',
       g3_status: 'IN_PROGRESS',
       upstream_g3_3_pack_hash:
-        'sha256:746280b172ab970a953a20aaaf3dbff557fa7aaecfad6e20bcedc0a0171d72cb',
+        'sha256:373692196d3746f34cf49cd43f3be1c54e77fe5b5e4fb813acd14a82054d4d58',
       upstream_g1_schema_root_hash:
-        'sha256:b60e3c7fe91d1cfab341d487102c7bff13ad73a320444b45fb6ea71d8b914306',
+        'sha256:0373eac8da2f96c1377e934ea5bcfdb701e96954720c2719aa756be778cc3995',
       query_mode: 'exact_resource_type_ref_content_hash_only',
       result_schema: 'closed',
       read_only: true,

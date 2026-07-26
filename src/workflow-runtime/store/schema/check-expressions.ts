@@ -150,6 +150,8 @@ const CUSTOM_CHECKS: Readonly<Record<string, string>> = {
     '(("outcome_kind" = \'completed\' AND "exit_name" IS NOT NULL AND "output_value_id" IS NOT NULL AND "selected_rule_id" IS NOT NULL AND "candidate_id" IS NOT NULL) OR ("outcome_kind" IN (\'errored\', \'cancelled\') AND "exit_name" IS NULL AND "output_value_id" IS NULL AND "selected_rule_id" IS NULL AND "candidate_id" IS NULL))',
   'ck:child_consumptions:map_disposition':
     "((\"disposition\" IN ('map_slot_completed', 'map_slot_fenced') AND \"map_slot_id\" IS NOT NULL) OR (\"disposition\" IN ('owner_output_published', 'non_publish_parent_fenced', 'non_publish_owner_fenced') AND \"map_slot_id\" IS NULL))",
+  'ck:child_consumptions:map_disposition_lineage':
+    '(("disposition" = \'map_slot_completed\' AND "map_slot_id" IS NOT NULL AND "map_slot_outcome_state" = \'completed\') OR ("disposition" = \'map_slot_fenced\' AND "map_slot_id" IS NOT NULL AND "map_slot_outcome_state" = \'fenced\') OR ("disposition" IN (\'owner_output_published\', \'non_publish_parent_fenced\', \'non_publish_owner_fenced\') AND "map_slot_id" IS NULL AND "map_slot_outcome_state" IS NULL))',
   'ck:inbox_events:disposition_shape':
     '(("disposition" = \'pending\' AND "resolved_at_ms" IS NULL) OR ("disposition" <> \'pending\' AND "resolved_at_ms" IS NOT NULL)) AND ("disposition" NOT IN (\'accepted\', \'rejected\') OR "binding_authorization_value_id" IS NOT NULL)',
   'ck:effect_operations:lane_close':

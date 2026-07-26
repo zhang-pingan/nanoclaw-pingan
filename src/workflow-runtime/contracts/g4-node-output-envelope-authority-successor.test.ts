@@ -13,7 +13,7 @@ describe('G4 NodeOutputEnvelope authority successor', () => {
       status:
         'NODE_OUTPUT_ENVELOPE_SCHEMA_AUTHORITY_REPAIR_EXIT_CANDIDATE_PENDING_INDEPENDENT_AFFECTED_CHAIN_REGRESSION',
       current_closure: 'REOPENED_PENDING_INDEPENDENT_AFFECTED_CHAIN_REGRESSION',
-      current_store: { database_schema_version: 7 },
+      current_store: { database_schema_version: 8 },
       selection: {
         successor_is_current_machine_authority: true,
         bootstrap_runtime_selectable: false,

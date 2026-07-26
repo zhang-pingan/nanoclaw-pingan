@@ -10,7 +10,7 @@ import {
 } from '../store/runtime-store/index.js';
 
 const CURRENT_G4_SUCCESSOR_HASH =
-  'sha256:2b27a8fad1e9a690922186d11bc173f4242174efc843c3eb35e8dfeb94f5c34f';
+  'sha256:510fd27b7b1d5698f35b42e4fc7846733c34206dbd55c611c79344e9f1a8ed93';
 
 export class G5TestBootstrapInstance {
   readonly dataRoot: string;

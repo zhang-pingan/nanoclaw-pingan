@@ -13,7 +13,7 @@ import type {
 } from './types.js';
 
 export const MIGRATION_RELATIVE_PATH =
-  'migration/workflow-runtime-schema-v7.sql';
+  'migration/workflow-runtime-schema-v8.sql';
 
 function q(identifier: string): string {
   return `"${identifier.replaceAll('"', '""')}"`;
@@ -180,7 +180,7 @@ function operationalStateSql(runExpression: string): string {
 }
 
 export function buildSchemaTriggers(
-  databaseSchemaVersion: 3 | 4 | 5 | 6 | 7 = 7,
+  databaseSchemaVersion: 3 | 4 | 5 | 6 | 7 | 8 = 8,
 ): SchemaTriggerDefinition[] {
   const refreshBody = (row: 'NEW' | 'OLD') => `
   UPDATE "workflow_graph_runs"
@@ -698,6 +698,8 @@ export const SCHEMA5_TO_SCHEMA6_UPGRADE_RELATIVE_PATH =
   'migration/workflow-runtime-schema-v5-to-v6.sql';
 export const SCHEMA6_TO_SCHEMA7_UPGRADE_RELATIVE_PATH =
   'migration/workflow-runtime-schema-v6-to-v7.sql';
+export const SCHEMA7_TO_SCHEMA8_UPGRADE_RELATIVE_PATH =
+  'migration/workflow-runtime-schema-v7-to-v8.sql';
 
 const ACTIVATION_REBUILT_TABLES = [
   'workflow_feature_release_activation_commands',
@@ -942,6 +944,97 @@ export function renderSchema6To7Upgrade(
     sql: `${statements.map((statement) => `${statement};`).join('\n\n')}\n`,
     statement_count: statements.length,
     triggers: valueTriggers,
+  };
+}
+
+export function renderSchema7To8Upgrade(
+  schema7: ExecutableSchemaSource,
+  schema8: ExecutableSchemaSource,
+): RenderedMigration {
+  if (
+    schema7.database_schema_version !== 7 ||
+    schema8.database_schema_version !== 8
+  ) {
+    throw new Error('Schema 7 to 8 upgrade source versions are invalid');
+  }
+  const consumptionName = 'workflow_graph_child_completion_consumptions';
+  const scopeName = 'workflow_graph_scopes';
+  const mapResultName = 'workflow_graph_map_item_results';
+  const oldConsumptionName = `${consumptionName}_schema7`;
+  const schema7Consumption = schema7.tables.find(
+    (table) => table.name === consumptionName,
+  );
+  const schema8Consumption = schema8.tables.find(
+    (table) => table.name === consumptionName,
+  );
+  const schema7Scope = schema7.tables.find((table) => table.name === scopeName);
+  const schema8Scope = schema8.tables.find((table) => table.name === scopeName);
+  const schema7MapResult = schema7.tables.find(
+    (table) => table.name === mapResultName,
+  );
+  const schema8MapResult = schema8.tables.find(
+    (table) => table.name === mapResultName,
+  );
+  if (
+    !schema7Consumption ||
+    !schema8Consumption ||
+    !schema7Scope ||
+    !schema8Scope ||
+    !schema7MapResult ||
+    !schema8MapResult
+  ) {
+    throw new Error('Schema 8 R-020 lineage table is missing');
+  }
+  const scopeAddedKeys = schema8Scope.unique_keys.filter(
+    (key) =>
+      !schema7Scope.unique_keys.some(
+        (candidate) => candidate.key_id === key.key_id,
+      ),
+  );
+  const mapAddedKeys = schema8MapResult.unique_keys.filter(
+    (key) =>
+      !schema7MapResult.unique_keys.some(
+        (candidate) => candidate.key_id === key.key_id,
+      ),
+  );
+  if (
+    scopeAddedKeys.length !== 1 ||
+    mapAddedKeys.length !== 2 ||
+    schema8Consumption.columns.length !== schema7Consumption.columns.length + 2
+  ) {
+    throw new Error('Schema 8 R-020 lineage delta drifted');
+  }
+  const targetColumns = schema8Consumption.columns
+    .map((column) => q(column.name))
+    .join(', ');
+  const selectExpressions = schema8Consumption.columns.map((column) => {
+    if (column.name === 'graph_run_id') return `${q('scope')}.${q('graph_run_id')}`;
+    if (column.name === 'map_slot_outcome_state') {
+      return `CASE ${q('consumption')}.${q('disposition')} WHEN 'map_slot_completed' THEN 'completed' WHEN 'map_slot_fenced' THEN 'fenced' ELSE NULL END`;
+    }
+    return `${q('consumption')}.${q(column.name)}`;
+  });
+  const statements = [
+    'PRAGMA legacy_alter_table = ON',
+    `ALTER TABLE ${q(consumptionName)} RENAME TO ${q(oldConsumptionName)}`,
+    ...scopeAddedKeys.map((key) => renderUniqueIndex(schema8Scope, key)),
+    ...mapAddedKeys.map((key) => renderUniqueIndex(schema8MapResult, key)),
+    renderTable(schema8Consumption, 8),
+    `INSERT INTO ${q(consumptionName)} (${targetColumns}) SELECT ${selectExpressions.join(', ')} FROM ${q(oldConsumptionName)} AS ${q('consumption')} JOIN ${q(scopeName)} AS ${q('scope')} ON ${q('scope')}.${q('id')} = ${q('consumption')}.${q('child_scope_id')}`,
+    `DROP TABLE ${q(oldConsumptionName)}`,
+    ...schema8Consumption.unique_keys.map((key) =>
+      renderUniqueIndex(schema8Consumption, key),
+    ),
+    ...schema8Consumption.indexes.map((indexValue) =>
+      renderIndex(schema8Consumption, indexValue),
+    ),
+    'PRAGMA legacy_alter_table = OFF',
+    'PRAGMA user_version = 8',
+  ];
+  return {
+    sql: `${statements.map((statement) => `${statement};`).join('\n\n')}\n`,
+    statement_count: statements.length,
+    triggers: [],
   };
 }
 

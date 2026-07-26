@@ -1,0 +1,26 @@
+{
+  "format": "icarus.workflow-contract-pack-r020-child-consumption-lineage/1",
+  "ref": {
+    "id": "icarus.workflow-contract-pack-r020-child-consumption-lineage",
+    "version": "1"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-contract-pack-r020-child-consumption-lineage:1\n",
+  "hash": "sha256:8a24efc4bd98c02b92cc6d6ce70f13c879d7e537e1081e4d57d561a63ea85c5a",
+  "payload": {
+    "gate": "R-020_G6_PREREQUISITE",
+    "status": "EXIT_CANDIDATE_PENDING_INDEPENDENT_AFFECTED_CHAIN_REGRESSION",
+    "member_count": 1,
+    "members": [
+      {
+        "path": "conformance/r020-child-consumption-lineage/child-consumption-lineage-contract@1.json",
+        "artifact_hash": "sha256:4f09fcf20e8effd40d00391ae5d18a43b5d342aa4c3dbc418979ce4eede5d833",
+        "raw_sha256": "sha256:ddafdaaa25695a363668159c1f0a93a651a567c8ce6b99bcbf5862bc7ae07f41"
+      }
+    ],
+    "member_tree_hash": "sha256:0cf3ff3b8bb3323406d94a24c5d7c1766b5753ea51f7ee19c60e1f8312bbf2d4",
+    "g6_production_implementation_count": 0,
+    "g6_status": "BLOCKED_PENDING_INDEPENDENT_AFFECTED_CHAIN_REGRESSION",
+    "g7_through_g9_status": "NOT_READY"
+  }
+}

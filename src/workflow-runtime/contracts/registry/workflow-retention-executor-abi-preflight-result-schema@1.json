@@ -226,7 +226,7 @@
             "pattern": "^sha256:[0-9a-f]{64}$"
           },
           "database_schema_version": {
-            "const": 7
+            "const": 8
           },
           "database_schema_hash": {
             "type": "string",
@@ -266,5 +266,5 @@
       }
     }
   },
-  "hash": "sha256:2707d71b4c824777ed211d7f61de5416c01e7a459157e7e3b71f80c281be558f"
+  "hash": "sha256:d5b884498ee438d331d913d6c0ce02f5a6f9bbc443e42cdaba7cbc45df18d314"
 }

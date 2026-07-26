@@ -320,7 +320,14 @@ describe('G0.2 Contract Pack conformance', () => {
               [
                 path.resolve(contractsRoot, '../compiler/identity.js'),
                 path.resolve(contractsRoot, '../compiler/types.js'),
-              ].includes(resolved));
+              ].includes(resolved)) ||
+            (path.basename(file) ===
+              'r020-child-consumption-lineage-contract.ts' &&
+              resolved ===
+                path.resolve(
+                  contractsRoot,
+                  '../store/schema/child-completion-lineage-source.js',
+                ));
           expect(
             resolved.startsWith(`${contractsRoot}${path.sep}`) ||
               allowedConstructionImport,

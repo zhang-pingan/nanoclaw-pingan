@@ -1,0 +1,40 @@
+{
+  "format": "icarus.workflow-runtime-schema-lint/1",
+  "ref": {
+    "id": "icarus.workflow-runtime-schema-lint",
+    "version": "1"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-runtime-schema-lint:1\n",
+  "hash": "sha256:ae96e2412f7d48b87d72b1d1bc2ced8f5dd28a8aef215478c411e60a69b9dacf",
+  "payload": {
+    "status": "closed_fail_on_violation",
+    "rules": [
+      "all_v1_logical_tables_present",
+      "internal_relations_use_typed_foreign_keys",
+      "typed_multi_targets_use_nullable_columns_and_exactly_one_check",
+      "external_refs_have_validator_owner_and_reference_domain",
+      "no_bare_internal_kind_id",
+      "no_unowned_ref_column",
+      "no_generic_error_json_error_text_or_error_fields",
+      "no_ref_or_hash_abbreviation",
+      "all_logical_checks_have_executable_named_sql",
+      "all_query_intents_have_fixed_explain_fixture",
+      "publisher_commands_invocations_and_events_are_first_class_tables",
+      "publisher_values_bind_exact_value_hash_and_schema_identity",
+      "publisher_invocations_and_events_are_append_only_hash_chains",
+      "activation_commands_invocations_and_events_are_first_class_tables",
+      "activation_values_bind_exact_value_hash_and_schema_identity",
+      "activation_verified_groups_are_nullable_prefix_ordered",
+      "activation_terminal_result_binds_immutable_invocation_composite",
+      "activation_release_pointer_and_retention_relations_are_typed",
+      "activation_invocations_and_events_are_append_only_hash_chains",
+      "capacity_prepared_invocation_is_closed_and_append_only",
+      "feature_release_lifecycle_and_active_pointer_cas_are_trigger_constrained",
+      "child_completion_consumption_uses_exact_composite_lineage"
+    ],
+    "table_count": 86,
+    "query_count": 45,
+    "result": "pass"
+  }
+}

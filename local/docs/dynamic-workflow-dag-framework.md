@@ -3186,6 +3186,24 @@ NodeOutputEnvelope专用Value边界必须在write、exact replay、read、Store 
 
 本修复的唯一完成状态是`NODE_OUTPUT_ENVELOPE_SCHEMA_AUTHORITY_REPAIR_EXIT_CANDIDATE_PENDING_INDEPENDENT_AFFECTED_CHAIN_REGRESSION`。Candidate形成后，受影响G1-G4 current closure必须保持reopened/pending independent affected-chain regression，不得提前标DONE；G5继续`BLOCKED_BY_SPEC/NOT_READY`，G6-G9继续`NOT_READY`。任何candidate或authority identity变化都要求中控创建新的独立affected-chain regression；不得把本修复写成G5 repair candidate、G5 `DONE`或Production activation授权。
 
+### R-020：T7b Child Cut / Parent Consumption Database Lineage 决议
+
+T7b的唯一可执行关系authority是Database Schema 8的复合外键方案，不采用应用层查询、boolean preauthorization、测试直写、单列FK或仅由trigger模拟的替代方案。`workflow_graph_child_completion_consumptions`新增required `graph_run_id`及nullable `map_slot_outcome_state`；后者的closed catalog只有`completed | fenced`。同一consumption必须同时满足以下六条deferred、`ON DELETE RESTRICT`关系，任一列来自另一条合法lineage都必须在事务commit前由SQLite fail closed：
+
+- `(graph_run_id, child_scope_id, parent_scope_id, owner_node_id)`引用`workflow_graph_scopes(graph_run_id, id, parent_scope_id, owner_node_id)`，证明child scope、parent和owner是同一run的exact ownership tuple。
+- `(graph_run_id, child_scope_id, child_completion_cut_id)`引用`workflow_graph_completion_cuts(graph_run_id, scope_id, id)`，证明cut属于该child和该run；scope A与cut B即使单列ID都存在也不合法。
+- `(graph_run_id, parent_scope_id)`引用`workflow_graph_scopes(graph_run_id, id)`，且`(graph_run_id, parent_scope_id, owner_node_id)`引用`workflow_graph_nodes(graph_run_id, scope_id, id)`。
+- map disposition使用`(graph_run_id, parent_scope_id, owner_node_id, map_slot_id, child_scope_id, map_slot_outcome_state)`引用`workflow_graph_map_item_results(graph_run_id, owner_scope_id, owner_node_id, id, scope_id, outcome_state)`。`map_slot_completed`必须携带同一slot的`completed`，`map_slot_fenced`必须携带同一slot的`fenced`；其他三种disposition的slot和outcome必须同时为null。
+- `(graph_run_id, disposition_event_seq)`引用`workflow_graph_events(graph_run_id, seq)`，禁止借用另一run的合法Event seq。
+
+为使上述关系在SQLite中可执行，Schema 8只增加三个candidate-key集合：Scope的`(graph_run_id, id, parent_scope_id, owner_node_id)`；Map result的`(graph_run_id, owner_scope_id, owner_node_id, id, scope_id, outcome_state)`与`(graph_run_id, owner_scope_id, owner_node_id, scope_id)`。后一个key使一个terminal child scope在同一parent/owner下只能归属一个map slot，nullable未物化slot仍按SQLite NULL语义保持合法。Consumption保留`UNIQUE(child_scope_id)`并增加`UNIQUE(graph_run_id, child_scope_id)`供`query:child_completion_consumption_exact_lineage`使用。因此unique child cut、unique parent consumption、single map-slot terminal outcome和T7b cut+consumption同一`BEGIN IMMEDIATE`原子事务合同全部保留；exact replay只可读取既有同tuple行，不能重写或另建consumption。
+
+G0.6的Logical Schema、typed relation catalog和query catalog保持冻结历史输入；Schema 8的additive prerequisite必须机器化完整重建后的Logical table、上述六条typed relation delta、三个target candidate-key delta与exact lookup query。Fresh DDL、introspected Schema Manifest、constraint/query-plan fixtures和SQLite PRAGMA结果必须与该prerequisite逐字段一致，Production不得另有关系解释。
+
+Schema 5、6、7 fresh migration、全部既有upgrade和Schema 7 `@1` artifact pack均为byte-immutable predecessor。Fresh Schema 8使用独立`workflow-runtime-schema-v8.sql`、`@2` Manifest/dependency/fixture pack和显式current pointer。Schema 7到8 upgrade只能在一个`BEGIN IMMEDIATE`内增加target candidate keys、rebuild consumption、由exact child scope派生`graph_run_id`，并按`map_slot_completed -> completed`、`map_slot_fenced -> fenced`、其他disposition -> null派生map outcome；随后必须执行CHECK、unique、`foreign_key_check`、introspection identity和commit。任何Schema 7历史cross-scope/cross-run/parent/owner/map/event拼接、copy fault或identity drift都必须rollback到原Schema 7 bytes、SQLite identity和rows；合法nonempty历史必须逐行保留且可reopen/replay。
+
+本repair只关闭R-020规范、Contract、Schema、DDL、upgrade、Store identity和readiness prerequisite，不新增或调用T7a/T7b/T8 Production事务、child creation/finalization、subgraph/expand/map materialization、controller/quorum/fail-fast、hierarchical fence/Fact、compensation、Root Finalization、G7+ Gateway/Deadline/Recovery/Card/Projection、loader/ingress/network或真实Adapter/user data。Candidate状态固定为`R020_CHILD_CONSUMPTION_LINEAGE_REPAIR_EXIT_CANDIDATE_PENDING_INDEPENDENT_AFFECTED_CHAIN_REGRESSION`；所有真正消费新Schema identity的Gate保持`IN_PROGRESS`等待fresh independent regression。R-020/G6不得在本任务中标`DONE`或开始G6 construction，G6 Production implementation count必须为0，G7-G9保持`NOT_READY`。
+
 ### Runtime v1施工生命周期与生产发布生命周期
 
 Runtime v1重构期间使用临时施工生命周期：

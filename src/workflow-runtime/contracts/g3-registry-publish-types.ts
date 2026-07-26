@@ -176,15 +176,15 @@ export type G3RegistryPublishPreflightResult =
 
 export const G3_CURRENT_UPSTREAM_IDENTITY: G3UpstreamIdentity = {
   g1_schema_root_hash:
-    'sha256:b60e3c7fe91d1cfab341d487102c7bff13ad73a320444b45fb6ea71d8b914306',
+    'sha256:0373eac8da2f96c1377e934ea5bcfdb701e96954720c2719aa756be778cc3995',
   g1_schema_dependency_manifest_hash:
-    'sha256:33fbf81006c0966864c561ece9ff64af57e4f899e0e31142fdca2284c05a03d8',
+    'sha256:e09243fdc43f591f820c4f090284eedfda1b855e514545faf4dd6089f9c33e7f',
   g1_physical_schema_identity:
-    'sha256:ee3412854f4e61e2f68dc88ccabf6f4ba2b83c98e1f4a652a460b34a2433a496',
+    'sha256:01c9aba5e41b05f91eb4ede8fe6150e6d737f7140e16d05ad7b60816ff1fb472',
   g1_schema_hash:
-    'sha256:27a212831d2abd8898eb8becbfd714d96b1bfb15d818d471cfc58fdc36196e65',
+    'sha256:1c7592c8b24a2b032217f42b31a5af3ebf39a9dd4dd10f1158ab9ced340142c6',
   g1_migration_sha256:
-    'sha256:b4307930cedd9e0b8acbec599a2b3b29cb18f78840a726532b108459a4df2497',
+    'sha256:b19ebe83ea8b7c53a2ab54a901df092b4e343ee4e1d5772ed6bc3143a82746ad',
   g2_sealed_bundle_ref:
     'conformance/sealed/g2-generated-schema-join-authority-v6/golden-conformance-bundle@2.json',
   g2_sealed_bundle_artifact_hash:

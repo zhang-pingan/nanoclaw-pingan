@@ -460,6 +460,7 @@ export function assertClosedSchemaManifest(
       'activation_failure_replay_schema_prerequisite_hash',
       'generated_schema_authority_prerequisite_hash',
       'node_output_envelope_schema_authority_prerequisite_hash',
+      'child_completion_lineage_schema_prerequisite_hash',
       'sqlite_profile_hash',
     ],
     'Schema Manifest logical_inputs',

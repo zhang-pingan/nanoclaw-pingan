@@ -67,6 +67,8 @@ const PREDECESSOR_BUNDLE_HASH =
   'sha256:0820328ae1cfdba7d05948d9e36498a5428d997d6eabfb833ef0ba7d84b77db7';
 const SNAPSHOT_DOMAIN = 'icarus:workflow-compiler-input-snapshot:2\n';
 const ARCHITECTURE_PATH = 'local/docs/dynamic-workflow-dag-framework.md';
+const FROZEN_ARCHITECTURE_RAW_SHA256 =
+  'sha256:270da49017232f24bf1517eee8e847bb2123a994191ee085203573a2c5e6c3bf';
 const STATUS =
   'DIRECTED_REPAIR_CANDIDATE_PENDING_INDEPENDENT_AFFECTED_CHAIN_REGRESSION';
 
@@ -696,7 +698,7 @@ function buildArtifacts(): Array<[string, ContractArtifactEnvelope]> {
     {
       compiler: compilerEvidence(),
       architecture_ref: ARCHITECTURE_PATH,
-      architecture_raw_sha256: rawHash(bytes(ARCHITECTURE_PATH)),
+      architecture_raw_sha256: FROZEN_ARCHITECTURE_RAW_SHA256,
       real_file_sqlite: true,
       generated_schema_authority_verified_per_unique_plan: true,
       production_sources: sources,

@@ -6,13 +6,13 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-contract-pack-g3-registry-publish-foundation:1\n",
-  "hash": "sha256:54355b3c74eb311e495ea31effcbfca6e3ce7547f2ccae663805556060b0b685",
+  "hash": "sha256:2f637bff3e4bf635efb5f1d62239aa4c539f997f98f35f6a061a773968f098b6",
   "payload": {
     "gate": "G3",
     "slice": "G3.1",
     "status": "DONE",
     "g3_status": "IN_PROGRESS",
-    "upstream_g1_root_hash": "sha256:b60e3c7fe91d1cfab341d487102c7bff13ad73a320444b45fb6ea71d8b914306",
+    "upstream_g1_root_hash": "sha256:0373eac8da2f96c1377e934ea5bcfdb701e96954720c2719aa756be778cc3995",
     "upstream_g2_sealed_bundle_hash": "sha256:0820328ae1cfdba7d05948d9e36498a5428d997d6eabfb833ef0ba7d84b77db7",
     "upstream_compiler_toolchain_hash": "sha256:c9c5c9b9180ecb9ffde5f8456e44c4e93fc51686988c74e47faa1b2f7fae3ffa",
     "upstream_compiler_build_hash": "sha256:9333356a10b8c5345bfacc80c6071640e5e26561581f39969c7ecabc16ac97c0",
@@ -64,7 +64,7 @@
         },
         "version": 1,
         "domain_separator": "icarus:workflow-registry-publish-foundation:1\n",
-        "hash": "sha256:7008fc7e667cdfcace9b7046329dcd54afc42496bf106fed8b9f10a22e34a21b"
+        "hash": "sha256:e62f0df70b461b7fc688402de6eb53c1765c58b6c31ccf53940f29cd1c4e1e79"
       },
       {
         "path": "conformance/g3-registry-publish-foundation/positive-cases.json",
@@ -75,7 +75,7 @@
         },
         "version": 1,
         "domain_separator": "icarus:workflow-g3-registry-publish-positive-cases:1\n",
-        "hash": "sha256:213a3c78c5c4adc1cdec4c36f363f4f5555394f0901798f8d28684f1f062837d"
+        "hash": "sha256:d7180d95f39a0d214f6d9367326d40816d447b13ee4306ddee538755ef49acff"
       },
       {
         "path": "conformance/g3-registry-publish-foundation/negative-cases.json",

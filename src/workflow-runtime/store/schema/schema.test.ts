@@ -34,6 +34,7 @@ import {
   renderSchema4To5Upgrade,
   renderSchema5To6Upgrade,
   renderSchema6To7Upgrade,
+  renderSchema7To8Upgrade,
 } from './ddl.js';
 import { calculateDatabaseSqliteSchemaIdentity } from './database-identity.js';
 import {
@@ -46,6 +47,7 @@ import {
   loadSchema4ExecutableSchemaSource,
   loadSchema5ExecutableSchemaSource,
   loadSchema6ExecutableSchemaSource,
+  loadSchema7ExecutableSchemaSource,
 } from './source.js';
 import {
   createMigratedDatabase,
@@ -65,9 +67,15 @@ const schema5Source = loadSchema5ExecutableSchemaSource();
 const schema5Migration = renderMigration(schema5Source);
 const schema6Source = loadSchema6ExecutableSchemaSource();
 const schema6Migration = renderMigration(schema6Source);
+const schema7Source = loadSchema7ExecutableSchemaSource();
+const schema7Migration = renderMigration(schema7Source);
 const schema4To5Upgrade = renderSchema4To5Upgrade(schema4Source, schema5Source);
 const schema5To6Upgrade = renderSchema5To6Upgrade(schema5Source, schema6Source);
-const schema6To7Upgrade = renderSchema6To7Upgrade(schema6Source, source);
+const schema6To7Upgrade = renderSchema6To7Upgrade(
+  schema6Source,
+  schema7Source,
+);
+const schema7To8Upgrade = renderSchema7To8Upgrade(schema7Source, source);
 
 function q(identifier: string): string {
   return `"${identifier.replaceAll('"', '""')}"`;
@@ -164,7 +172,7 @@ function withDatabase(
 }
 
 describe('G1.1 executable workflow runtime schema', () => {
-  it('keeps Schema 5/6 frozen and selects an additive fresh Schema 7 migration', () => {
+  it('keeps Schema 5/6/7 frozen and selects an additive fresh Schema 8 migration', () => {
     const schema5Path = path.join(
       import.meta.dirname,
       'migration/workflow-runtime-schema-v1.sql',
@@ -177,11 +185,16 @@ describe('G1.1 executable workflow runtime schema', () => {
       import.meta.dirname,
       'migration/workflow-runtime-schema-v7.sql',
     );
+    const schema8Path = path.join(
+      import.meta.dirname,
+      'migration/workflow-runtime-schema-v8.sql',
+    );
     const schema5Bytes = fs.readFileSync(schema5Path, 'utf8');
     const schema6Bytes = fs.readFileSync(schema6Path, 'utf8');
     const schema7Bytes = fs.readFileSync(schema7Path, 'utf8');
+    const schema8Bytes = fs.readFileSync(schema8Path, 'utf8');
     expect(G1_ARTIFACT_PATHS.migration).toBe(
-      'migration/workflow-runtime-schema-v7.sql',
+      'migration/workflow-runtime-schema-v8.sql',
     );
     expect(schema5Bytes).toBe(schema5Migration.sql);
     expect(rawHash(schema5Bytes)).toBe(
@@ -191,10 +204,11 @@ describe('G1.1 executable workflow runtime schema', () => {
     expect(rawHash(schema6Bytes)).toBe(
       'sha256:16a46e84c77d734013e18b4b00b86564f6188ea73717763e9fb7a884d62faa41',
     );
-    expect(schema7Bytes).toBe(migration.sql);
+    expect(schema7Bytes).toBe(schema7Migration.sql);
     expect(rawHash(schema7Bytes)).toBe(
       'sha256:b4307930cedd9e0b8acbec599a2b3b29cb18f78840a726532b108459a4df2497',
     );
+    expect(schema8Bytes).toBe(migration.sql);
 
     const root = fs.mkdtempSync(
       path.join(os.tmpdir(), 'icarus-schema5-schema6-paths-'),
@@ -211,14 +225,20 @@ describe('G1.1 executable workflow runtime schema', () => {
       path.join(root, 'schema7.db'),
       schema7Bytes,
     );
+    const schema8Database = createMigratedDatabase(
+      path.join(root, 'schema8.db'),
+      schema8Bytes,
+    );
     try {
       expect(schema5Database.pragma('user_version', { simple: true })).toBe(5);
       expect(schema6Database.pragma('user_version', { simple: true })).toBe(6);
       expect(schema7Database.pragma('user_version', { simple: true })).toBe(7);
+      expect(schema8Database.pragma('user_version', { simple: true })).toBe(8);
     } finally {
       schema5Database.close();
       schema6Database.close();
       schema7Database.close();
+      schema8Database.close();
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
@@ -266,14 +286,15 @@ describe('G1.1 executable workflow runtime schema', () => {
         built.schema4To5UpgradeSql,
         built.schema5To6UpgradeSql,
         built.schema6To7UpgradeSql,
+        built.schema7To8UpgradeSql,
       ),
     ).toThrow('Schema 3 to 4 upgrade SQL must not be empty');
     const payload = built.dependencyManifest
       .payload as unknown as G1SchemaDependencyManifestPayload;
     expect(() => assertClosedSchemaDependencyManifest(payload)).not.toThrow();
     expect(payload).toMatchObject({
-      member_count: 17,
-      physical_member_count: 16,
+      member_count: 19,
+      physical_member_count: 18,
       construction_provenance_count: 1,
     });
     expect(payload.members.map((member) => member.role)).toEqual([
@@ -287,6 +308,7 @@ describe('G1.1 executable workflow runtime schema', () => {
       'activation_failure_replay_schema_prerequisite',
       'generated_schema_authority_prerequisite',
       'node_output_envelope_schema_authority_prerequisite',
+      'child_completion_lineage_schema_prerequisite',
       'sqlite_execution_profile',
       'schema_manifest',
       'canonical_migration',
@@ -294,6 +316,7 @@ describe('G1.1 executable workflow runtime schema', () => {
       'schema4_to_schema5_upgrade',
       'schema5_to_schema6_upgrade',
       'schema6_to_schema7_upgrade',
+      'schema7_to_schema8_upgrade',
     ]);
     expect(payload.members).toEqual(
       expect.arrayContaining([
@@ -303,16 +326,16 @@ describe('G1.1 executable workflow runtime schema', () => {
             'store',
             'schema',
             'migration',
-            'workflow-runtime-schema-v7.sql',
+            'workflow-runtime-schema-v8.sql',
           ].join('/'),
           ref: {
-            id: 'icarus.workflow-runtime-schema-v7-migration',
+            id: 'icarus.workflow-runtime-schema-v8-migration',
             version: '1',
           },
           semantic_hash:
-            'sha256:b4307930cedd9e0b8acbec599a2b3b29cb18f78840a726532b108459a4df2497',
+            'sha256:b19ebe83ea8b7c53a2ab54a901df092b4e343ee4e1d5772ed6bc3143a82746ad',
           raw_sha256:
-            'sha256:b4307930cedd9e0b8acbec599a2b3b29cb18f78840a726532b108459a4df2497',
+            'sha256:b19ebe83ea8b7c53a2ab54a901df092b4e343ee4e1d5772ed6bc3143a82746ad',
         }),
         expect.objectContaining({
           role: 'schema3_to_schema4_upgrade',
@@ -333,6 +356,11 @@ describe('G1.1 executable workflow runtime schema', () => {
           role: 'schema6_to_schema7_upgrade',
           semantic_hash:
             'sha256:225c5f148347dc42ca086bfb0bf7db957d13eb1be502f155465e20ee66010062',
+        }),
+        expect.objectContaining({
+          role: 'schema7_to_schema8_upgrade',
+          semantic_hash:
+            'sha256:544af9b55349268d152650c9a9fda5c399bb0e665750a2c47a6155d22ca6e3a9',
         }),
       ]),
     );
@@ -393,6 +421,7 @@ describe('G1.1 executable workflow runtime schema', () => {
         built.schema4To5UpgradeSql,
         built.schema5To6UpgradeSql,
         built.schema6To7UpgradeSql,
+        built.schema7To8UpgradeSql,
       );
       for (const relativePath of [
         'unrelated/new-contract.json',
@@ -411,6 +440,7 @@ describe('G1.1 executable workflow runtime schema', () => {
         built.schema4To5UpgradeSql,
         built.schema5To6UpgradeSql,
         built.schema6To7UpgradeSql,
+        built.schema7To8UpgradeSql,
       );
       expect(after).toEqual(before);
       expect(after).toEqual(built.dependencyManifest);
@@ -452,6 +482,7 @@ describe('G1.1 executable workflow runtime schema', () => {
         built.schema4To5UpgradeSql,
         built.schema5To6UpgradeSql,
         built.schema6To7UpgradeSql,
+        built.schema7To8UpgradeSql,
       );
       const originalPayload = built.dependencyManifest
         .payload as unknown as G1SchemaDependencyManifestPayload;
@@ -498,6 +529,7 @@ describe('G1.1 executable workflow runtime schema', () => {
           built.schema4To5UpgradeSql,
           built.schema5To6UpgradeSql,
           built.schema6To7UpgradeSql,
+          built.schema7To8UpgradeSql,
         ),
       ).toThrow('query_catalog published semantic identity drifted');
 
@@ -516,6 +548,7 @@ describe('G1.1 executable workflow runtime schema', () => {
           built.schema4To5UpgradeSql,
           built.schema5To6UpgradeSql,
           built.schema6To7UpgradeSql,
+          built.schema7To8UpgradeSql,
         ),
       ).toThrow();
     } finally {
@@ -2238,7 +2271,7 @@ describe('G1.1 executable workflow runtime schema', () => {
       database.exec('COMMIT');
       const fresh = createMigratedDatabase(
         path.join(root, 'fresh-schema7.db'),
-        migration.sql,
+        schema7Migration.sql,
       );
       expect(calculateDatabaseSqliteSchemaIdentity(database)).toBe(
         calculateDatabaseSqliteSchemaIdentity(fresh),
@@ -2247,7 +2280,7 @@ describe('G1.1 executable workflow runtime schema', () => {
 
       const fkDatabase = createMigratedDatabase(
         path.join(root, 'fk-schema7.db'),
-        migration.sql,
+        schema7Migration.sql,
       );
       try {
         expect(() =>

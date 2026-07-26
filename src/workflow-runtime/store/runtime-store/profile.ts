@@ -61,21 +61,23 @@ export const FROZEN_G1_1_IDENTITIES = {
 } as const;
 
 export const CURRENT_G1_SCHEMA_IDENTITIES = {
-  root: 'sha256:b60e3c7fe91d1cfab341d487102c7bff13ad73a320444b45fb6ea71d8b914306',
+  root: 'sha256:0373eac8da2f96c1377e934ea5bcfdb701e96954720c2719aa756be778cc3995',
   dependencyManifest:
-    'sha256:33fbf81006c0966864c561ece9ff64af57e4f899e0e31142fdca2284c05a03d8',
+    'sha256:e09243fdc43f591f820c4f090284eedfda1b855e514545faf4dd6089f9c33e7f',
   physicalSchema:
-    'sha256:ee3412854f4e61e2f68dc88ccabf6f4ba2b83c98e1f4a652a460b34a2433a496',
+    'sha256:01c9aba5e41b05f91eb4ede8fe6150e6d737f7140e16d05ad7b60816ff1fb472',
   schema:
-    'sha256:27a212831d2abd8898eb8becbfd714d96b1bfb15d818d471cfc58fdc36196e65',
+    'sha256:1c7592c8b24a2b032217f42b31a5af3ebf39a9dd4dd10f1158ab9ced340142c6',
   migration:
-    'sha256:b4307930cedd9e0b8acbec599a2b3b29cb18f78840a726532b108459a4df2497',
+    'sha256:b19ebe83ea8b7c53a2ab54a901df092b4e343ee4e1d5772ed6bc3143a82746ad',
   schema3To4Upgrade: FROZEN_G1_1_IDENTITIES.schema3To4Upgrade,
   schema4To5Upgrade: FROZEN_G1_1_IDENTITIES.schema4To5Upgrade,
   schema5To6Upgrade:
     'sha256:dc94fa0867ca572b7ec39ffb8df448e38be00ca4831f1d420885ee7cc097687d',
   schema6To7Upgrade:
     'sha256:225c5f148347dc42ca086bfb0bf7db957d13eb1be502f155465e20ee66010062',
+  schema7To8Upgrade:
+    'sha256:544af9b55349268d152650c9a9fda5c399bb0e665750a2c47a6155d22ca6e3a9',
   schema3SourceMigration: FROZEN_G1_1_IDENTITIES.schema3SourceMigration,
   schema3SourceSqliteSchema: FROZEN_G1_1_IDENTITIES.schema3SourceSqliteSchema,
   schema4SourceMigration: FROZEN_G1_1_IDENTITIES.schema4SourceMigration,
@@ -86,14 +88,18 @@ export const CURRENT_G1_SCHEMA_IDENTITIES = {
     'sha256:16a46e84c77d734013e18b4b00b86564f6188ea73717763e9fb7a884d62faa41',
   schema6SourceSqliteSchema:
     'sha256:a4936a9a71670cb30b1c974ee3cf9cd21375fb743e8c2278d8db08c685854486',
-  sqliteSchema:
+  schema7SourceMigration:
+    'sha256:b4307930cedd9e0b8acbec599a2b3b29cb18f78840a726532b108459a4df2497',
+  schema7SourceSqliteSchema:
     'sha256:89ea6f6cfd7753938722aaf2ea7201d25f6546c12bd54a42441ec451810c8b96',
+  sqliteSchema:
+    'sha256:fc5fe00fb26b187cf4d0b2927a97de1851fffc2ba5283811312397255ffd5b3b',
   deterministic:
-    'sha256:809f476f452ddc46243fd0fce0c000938f67525c3c4707637e624bb49f7f8cec',
+    'sha256:54a9933266d7765ad931f7e203e22359ec87307a90b4f4c343af193a3688a561',
   manifest:
-    'sha256:cf623c1fe300b8f6065b2e5edce07a5ce6dc8c5d84453c457387953493336b4f',
+    'sha256:6658a3545932cef875289536d5f70b242ccdbe21c6ee8fcdf5c6f1935d1512f1',
   executableDdl:
-    'sha256:bba56da8a6aedda6386786669bfac8b5d5659c6cfb1eda7f72fe6f8bff5c58b9',
+    'sha256:6434fb948e1f8aa12b2359c661a45ebc2e6f995d535f1caefadb6928bda21460',
   profile: FROZEN_G1_1_IDENTITIES.profile,
 } as const;
 
@@ -272,6 +278,8 @@ export interface FrozenWorkflowRuntimeStoreInputs {
   readonly schema5To6UpgradeSha256: Sha256Hash;
   readonly schema6To7UpgradeSql: string;
   readonly schema6To7UpgradeSha256: Sha256Hash;
+  readonly schema7To8UpgradeSql: string;
+  readonly schema7To8UpgradeSha256: Sha256Hash;
   readonly schema3SourceMigrationSha256: Sha256Hash;
   readonly schema3SourceSqliteSchemaIdentity: Sha256Hash;
   readonly schema4SourceMigrationSha256: Sha256Hash;
@@ -280,6 +288,8 @@ export interface FrozenWorkflowRuntimeStoreInputs {
   readonly schema5SourceSqliteSchemaIdentity: Sha256Hash;
   readonly schema6SourceMigrationSha256: Sha256Hash;
   readonly schema6SourceSqliteSchemaIdentity: Sha256Hash;
+  readonly schema7SourceMigrationSha256: Sha256Hash;
+  readonly schema7SourceSqliteSchemaIdentity: Sha256Hash;
   readonly sqliteSchemaIdentity: Sha256Hash;
   readonly schema3RequiredEmptyRelations: readonly string[];
   readonly schemaManifest: Readonly<WorkflowRuntimeSchemaManifestPayload>;
@@ -311,7 +321,7 @@ export function loadFrozenWorkflowRuntimeStoreInputs(
 
   const dependencyManifestArtifact = readArtifact(
     schemaRoot,
-    'artifacts/workflow-runtime-schema-dependency-manifest@1.json',
+    'artifacts/workflow-runtime-schema-dependency-manifest@2.json',
   );
   expectArtifact(
     dependencyManifestArtifact,
@@ -331,7 +341,7 @@ export function loadFrozenWorkflowRuntimeStoreInputs(
 
   const root = readArtifact(
     schemaRoot,
-    'contract-pack-g1-executable-schema.json',
+    'contract-pack-g1-executable-schema-v8.json',
   );
   expectArtifact(
     root,
@@ -355,6 +365,8 @@ export function loadFrozenWorkflowRuntimeStoreInputs(
       CURRENT_G1_SCHEMA_IDENTITIES.schema5To6Upgrade ||
     rootPayload.schema6_to_schema7_upgrade_sha256 !==
       CURRENT_G1_SCHEMA_IDENTITIES.schema6To7Upgrade ||
+    rootPayload.schema7_to_schema8_upgrade_sha256 !==
+      CURRENT_G1_SCHEMA_IDENTITIES.schema7To8Upgrade ||
     rootPayload.schema3_source_migration_sha256 !==
       CURRENT_G1_SCHEMA_IDENTITIES.schema3SourceMigration ||
     rootPayload.schema3_source_sqlite_schema_identity !==
@@ -367,6 +379,10 @@ export function loadFrozenWorkflowRuntimeStoreInputs(
       CURRENT_G1_SCHEMA_IDENTITIES.schema5SourceMigration ||
     rootPayload.schema5_source_sqlite_schema_identity !==
       CURRENT_G1_SCHEMA_IDENTITIES.schema5SourceSqliteSchema ||
+    rootPayload.schema7_source_migration_sha256 !==
+      CURRENT_G1_SCHEMA_IDENTITIES.schema7SourceMigration ||
+    rootPayload.schema7_source_sqlite_schema_identity !==
+      CURRENT_G1_SCHEMA_IDENTITIES.schema7SourceSqliteSchema ||
     rootPayload.sqlite_schema_identity !==
       CURRENT_G1_SCHEMA_IDENTITIES.sqliteSchema ||
     rootPayload.deterministic_digest !==
@@ -379,7 +395,7 @@ export function loadFrozenWorkflowRuntimeStoreInputs(
 
   const executableDdl = readArtifact(
     schemaRoot,
-    'artifacts/workflow-runtime-executable-ddl@1.json',
+    'artifacts/workflow-runtime-executable-ddl@2.json',
   );
   expectArtifact(
     executableDdl,
@@ -391,7 +407,7 @@ export function loadFrozenWorkflowRuntimeStoreInputs(
     executableDdl.payload.schema_hash !== CURRENT_G1_SCHEMA_IDENTITIES.schema ||
     executableDdl.payload.migration_sha256 !==
       CURRENT_G1_SCHEMA_IDENTITIES.migration ||
-    executableDdl.payload.database_schema_version !== 7 ||
+    executableDdl.payload.database_schema_version !== 8 ||
     executableDdl.payload.schema3_upgrade_mode !==
       'empty_activation_state_only_or_fail_closed' ||
     executableDdl.payload.schema4_upgrade_mode !==
@@ -399,7 +415,9 @@ export function loadFrozenWorkflowRuntimeStoreInputs(
     executableDdl.payload.schema5_upgrade_mode !==
       'rebuild_workflow_values_preserve_all_rows_and_inbound_foreign_keys_or_fail_closed' ||
     executableDdl.payload.schema6_upgrade_mode !==
-      'rebuild_generated_schema_binding_and_values_preserve_all_rows_or_fail_closed'
+      'rebuild_generated_schema_binding_and_values_preserve_all_rows_or_fail_closed' ||
+    executableDdl.payload.schema7_upgrade_mode !==
+      'rebuild_child_consumption_with_exact_lineage_preserve_valid_rows_or_fail_closed'
   ) {
     throw new Error('G1.1 executable DDL payload drifted');
   }
@@ -424,6 +442,9 @@ export function loadFrozenWorkflowRuntimeStoreInputs(
   const schema6To7UpgradeSha256 = parseSha256Hash(
     executableDdl.payload.schema6_to_schema7_upgrade_sha256,
   );
+  const schema7To8UpgradeSha256 = parseSha256Hash(
+    executableDdl.payload.schema7_to_schema8_upgrade_sha256,
+  );
   const schema4SourceMigrationSha256 = parseSha256Hash(
     executableDdl.payload.schema4_source_migration_sha256,
   );
@@ -440,6 +461,12 @@ export function loadFrozenWorkflowRuntimeStoreInputs(
     CURRENT_G1_SCHEMA_IDENTITIES.schema6SourceMigration;
   const schema6SourceSqliteSchemaIdentity =
     CURRENT_G1_SCHEMA_IDENTITIES.schema6SourceSqliteSchema;
+  const schema7SourceMigrationSha256 = parseSha256Hash(
+    executableDdl.payload.schema7_source_migration_sha256,
+  );
+  const schema7SourceSqliteSchemaIdentity = parseSha256Hash(
+    executableDdl.payload.schema7_source_sqlite_schema_identity,
+  );
   if (
     schema3To4UpgradeSha256 !==
       CURRENT_G1_SCHEMA_IDENTITIES.schema3To4Upgrade ||
@@ -449,6 +476,8 @@ export function loadFrozenWorkflowRuntimeStoreInputs(
       CURRENT_G1_SCHEMA_IDENTITIES.schema5To6Upgrade ||
     schema6To7UpgradeSha256 !==
       CURRENT_G1_SCHEMA_IDENTITIES.schema6To7Upgrade ||
+    schema7To8UpgradeSha256 !==
+      CURRENT_G1_SCHEMA_IDENTITIES.schema7To8Upgrade ||
     schema3SourceMigrationSha256 !==
       CURRENT_G1_SCHEMA_IDENTITIES.schema3SourceMigration ||
     schema3SourceSqliteSchemaIdentity !==
@@ -461,6 +490,10 @@ export function loadFrozenWorkflowRuntimeStoreInputs(
       CURRENT_G1_SCHEMA_IDENTITIES.schema5SourceMigration ||
     schema5SourceSqliteSchemaIdentity !==
       CURRENT_G1_SCHEMA_IDENTITIES.schema5SourceSqliteSchema ||
+    schema7SourceMigrationSha256 !==
+      CURRENT_G1_SCHEMA_IDENTITIES.schema7SourceMigration ||
+    schema7SourceSqliteSchemaIdentity !==
+      CURRENT_G1_SCHEMA_IDENTITIES.schema7SourceSqliteSchema ||
     sqliteSchemaIdentity !== CURRENT_G1_SCHEMA_IDENTITIES.sqliteSchema
   ) {
     throw new Error('G1.6 Schema 3/4 frozen SQLite identity drifted');
@@ -482,7 +515,7 @@ export function loadFrozenWorkflowRuntimeStoreInputs(
 
   const manifestArtifact = readArtifact(
     schemaRoot,
-    'artifacts/workflow-runtime-schema-manifest@1.json',
+    'artifacts/workflow-runtime-schema-manifest@2.json',
   );
   expectArtifact(
     manifestArtifact,
@@ -516,7 +549,7 @@ export function loadFrozenWorkflowRuntimeStoreInputs(
     );
   }
   const migrationBytes = fs.readFileSync(
-    path.join(schemaRoot, 'migration/workflow-runtime-schema-v7.sql'),
+    path.join(schemaRoot, 'migration/workflow-runtime-schema-v8.sql'),
   );
   const migrationSha256 = rawSha256(migrationBytes);
   if (migrationSha256 !== CURRENT_G1_SCHEMA_IDENTITIES.migration) {
@@ -569,6 +602,24 @@ export function loadFrozenWorkflowRuntimeStoreInputs(
       `G1 Schema 6 to 7 upgrade drifted: expected ${schema6To7UpgradeSha256}, received ${observedSchema6To7UpgradeSha256}`,
     );
   }
+  const schema7MigrationBytes = fs.readFileSync(
+    path.join(schemaRoot, 'migration/workflow-runtime-schema-v7.sql'),
+  );
+  const observedSchema7MigrationSha256 = rawSha256(schema7MigrationBytes);
+  if (observedSchema7MigrationSha256 !== schema7SourceMigrationSha256) {
+    throw new Error(
+      `Historical Schema 7 source migration drifted: expected ${schema7SourceMigrationSha256}, received ${observedSchema7MigrationSha256}`,
+    );
+  }
+  const schema7To8UpgradeBytes = fs.readFileSync(
+    path.join(schemaRoot, 'migration/workflow-runtime-schema-v7-to-v8.sql'),
+  );
+  const observedSchema7To8UpgradeSha256 = rawSha256(schema7To8UpgradeBytes);
+  if (observedSchema7To8UpgradeSha256 !== schema7To8UpgradeSha256) {
+    throw new Error(
+      `G1 Schema 7 to 8 upgrade drifted: expected ${schema7To8UpgradeSha256}, received ${observedSchema7To8UpgradeSha256}`,
+    );
+  }
   const memberHash = (role: string): Sha256Hash | undefined =>
     dependencyManifest.members.find((member) => member.role === role)
       ?.raw_sha256;
@@ -578,7 +629,7 @@ export function loadFrozenWorkflowRuntimeStoreInputs(
         fs.readFileSync(
           path.join(
             schemaRoot,
-            'artifacts/workflow-runtime-schema-manifest@1.json',
+            'artifacts/workflow-runtime-schema-manifest@2.json',
           ),
         ),
       ) ||
@@ -590,6 +641,8 @@ export function loadFrozenWorkflowRuntimeStoreInputs(
       observedSchema5To6UpgradeSha256 ||
     memberHash('schema6_to_schema7_upgrade') !==
       observedSchema6To7UpgradeSha256 ||
+    memberHash('schema7_to_schema8_upgrade') !==
+      observedSchema7To8UpgradeSha256 ||
     memberHash('sqlite_execution_profile') !==
       rawSha256(
         fs.readFileSync(
@@ -613,6 +666,8 @@ export function loadFrozenWorkflowRuntimeStoreInputs(
     schema5To6UpgradeSha256: observedSchema5To6UpgradeSha256,
     schema6To7UpgradeSql: schema6To7UpgradeBytes.toString('utf8'),
     schema6To7UpgradeSha256: observedSchema6To7UpgradeSha256,
+    schema7To8UpgradeSql: schema7To8UpgradeBytes.toString('utf8'),
+    schema7To8UpgradeSha256: observedSchema7To8UpgradeSha256,
     schema3SourceMigrationSha256,
     schema3SourceSqliteSchemaIdentity,
     schema4SourceMigrationSha256,
@@ -621,6 +676,8 @@ export function loadFrozenWorkflowRuntimeStoreInputs(
     schema5SourceSqliteSchemaIdentity,
     schema6SourceMigrationSha256,
     schema6SourceSqliteSchemaIdentity,
+    schema7SourceMigrationSha256,
+    schema7SourceSqliteSchemaIdentity,
     sqliteSchemaIdentity,
     schema3RequiredEmptyRelations: [...expectedRequiredEmpty],
     schemaManifest: structuredClone(manifest),
