@@ -6,6 +6,16 @@ import { describe, expect, it } from 'vitest';
 
 import { parseContractArtifactEnvelope } from './artifact.js';
 import {
+  G5_REPAIR_FAULT_FIXTURES,
+  G5_REPAIR_NEGATIVE_FIXTURES,
+  G5_REPAIR_POSITIVE_FIXTURES,
+  type G5RepairFixtureCase,
+} from './g5-basic-runtime-repair-contract.js';
+import {
+  G5FixtureExecutionHarness,
+  type G5FixtureHandler,
+} from './g5-basic-runtime-fixture-harness.js';
+import {
   StaticChildPlanBundleFixtureExecutionHarness,
   type StaticChildPlanBundleFixtureArtifacts,
   type StaticChildPlanBundleFixtureHandler,
@@ -44,6 +54,18 @@ function acceptingHandlers(): readonly StaticChildPlanBundleFixtureHandler[] {
     { id: 'compile_workflow_production', execute },
     { id: 'persist_static_child_plan_bundle_t2a_production', execute },
   ];
+}
+
+function acceptingG5Handlers(): readonly G5FixtureHandler[] {
+  const fixtures = [
+    ...G5_REPAIR_POSITIVE_FIXTURES,
+    ...G5_REPAIR_NEGATIVE_FIXTURES,
+    ...G5_REPAIR_FAULT_FIXTURES,
+  ];
+  return [...new Set(fixtures.map((fixture) => fixture.handler))].map((id) => ({
+    id,
+    execute: (fixture: G5RepairFixtureCase) => fixture.oracle,
+  }));
 }
 
 function cloneArtifacts(): {
@@ -228,6 +250,47 @@ describe('static child Plan bundle directed repair Contract', () => {
     expect(() => mismatched.execute(mismatched.fixtures[0]!)).toThrow(
       /execution oracle mismatched/,
     );
+  });
+
+  it('keeps both fixture completeness authorities independent and fail closed', () => {
+    const bridgeComplete = new StaticChildPlanBundleFixtureExecutionHarness(
+      fixtureArtifacts(),
+      acceptingHandlers(),
+    );
+    for (const fixture of bridgeComplete.fixtures)
+      bridgeComplete.execute(fixture);
+    expect(() => bridgeComplete.assertComplete()).not.toThrow();
+
+    const g5Incomplete = new G5FixtureExecutionHarness(
+      {
+        positive: G5_REPAIR_POSITIVE_FIXTURES,
+        negative: G5_REPAIR_NEGATIVE_FIXTURES,
+        fault: G5_REPAIR_FAULT_FIXTURES,
+      },
+      acceptingG5Handlers(),
+    );
+    expect(() => g5Incomplete.assertComplete()).toThrow(
+      /unhandled G5 fixtures/,
+    );
+
+    const bridgeIncomplete = new StaticChildPlanBundleFixtureExecutionHarness(
+      fixtureArtifacts(),
+      acceptingHandlers(),
+    );
+    expect(() => bridgeIncomplete.assertComplete()).toThrow(
+      /unhandled static child Plan bundle fixtures/,
+    );
+
+    const g5Complete = new G5FixtureExecutionHarness(
+      {
+        positive: G5_REPAIR_POSITIVE_FIXTURES,
+        negative: G5_REPAIR_NEGATIVE_FIXTURES,
+        fault: G5_REPAIR_FAULT_FIXTURES,
+      },
+      acceptingG5Handlers(),
+    );
+    for (const fixture of g5Complete.fixtures) g5Complete.execute(fixture);
+    expect(() => g5Complete.assertComplete()).not.toThrow();
   });
 
   it('independently rejects honestly rehashed semantic drift across every record', () => {

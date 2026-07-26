@@ -4592,12 +4592,9 @@ afterEach(() => {
   while (instances.length > 0) instances.pop()!.cleanup();
 });
 
-afterAll(() => {
-  productionFixtureHarness.assertComplete();
-  staticChildBridgeHarness.assertComplete();
-});
+describe('focused static child Plan bridge execution gate', () => {
+  afterAll(() => staticChildBridgeHarness.assertComplete());
 
-describe('G5 Basic Runtime Schema 7 repair transaction integration', () => {
   it.each(staticChildBridgeHarness.fixtures)(
     'bridge $category $case_id executes exactly once through $handler',
     (fixture) => {
@@ -4613,6 +4610,10 @@ describe('G5 Basic Runtime Schema 7 repair transaction integration', () => {
       });
     },
   );
+});
+
+describe('G5 Basic Runtime Schema 7 repair transaction integration', () => {
+  afterAll(() => productionFixtureHarness.assertComplete());
 
   it.each(productionFixtureHarness.fixtures)(
     '$category $case_id executes $operation.kind and its exact durable oracle',

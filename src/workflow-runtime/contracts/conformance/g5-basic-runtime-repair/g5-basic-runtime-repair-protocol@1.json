@@ -71,7 +71,7 @@
       {
         "name": "g2_g5_static_child_plan_bundle_repair_candidate",
         "path": "src/workflow-runtime/contracts/conformance/static-child-plan-bundle-repair/contract-pack-static-child-plan-bundle-repair.json",
-        "hash": "sha256:f4429d7243739a24ff7199c82f18e4e7d7eff791c3e5b4d3032675bee889e8b3"
+        "hash": "sha256:777dd67bb51be338136a9478d3122a35159c422110ddbe7c6e54582010c572ee"
       },
       {
         "name": "r019_generated_schema_join_authority",
@@ -136,5 +136,5 @@
       }
     ]
   },
-  "hash": "sha256:88b100c475e2db8c4526776a04001bfeed5fc009cbb8b48c3778ffe1c9f41e66"
+  "hash": "sha256:df781c386ccf86e5895193c3a55ba962df5c526ed30f84dbfa6054b50bafb5c0"
 }

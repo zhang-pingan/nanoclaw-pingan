@@ -58,10 +58,10 @@
           "id": "icarus.workflow-static-child-plan-bundle-evidence",
           "version": "1.0.0"
         },
-        "hash": "sha256:9056977fb26e716868fbda2636e082c35d4b08c5bf2d75e1fc5ceb310ae39e44"
+        "hash": "sha256:b4996780c7eb56a37effec4d1f932db096c7c6d72778f2dbbe7d1e6f2be4b4ba"
       }
     ],
-    "member_tree_hash": "sha256:798f393e90b4e99bbc3032b3ede155b7f11c9054b73279ce4c5dc47d5f052bb5"
+    "member_tree_hash": "sha256:c14ee1d21fed9cb30b3203feeeb1c580de36bcedb74b85dda45adaec7aad0057"
   },
-  "hash": "sha256:f4429d7243739a24ff7199c82f18e4e7d7eff791c3e5b4d3032675bee889e8b3"
+  "hash": "sha256:777dd67bb51be338136a9478d3122a35159c422110ddbe7c6e54582010c572ee"
 }

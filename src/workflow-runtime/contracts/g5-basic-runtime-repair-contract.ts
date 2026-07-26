@@ -63,7 +63,7 @@ const exactBindings = [
   {
     name: 'g2_g5_static_child_plan_bundle_repair_candidate',
     path: 'src/workflow-runtime/contracts/conformance/static-child-plan-bundle-repair/contract-pack-static-child-plan-bundle-repair.json',
-    hash: 'sha256:f4429d7243739a24ff7199c82f18e4e7d7eff791c3e5b4d3032675bee889e8b3',
+    hash: 'sha256:777dd67bb51be338136a9478d3122a35159c422110ddbe7c6e54582010c572ee',
   },
   {
     name: 'r019_generated_schema_join_authority',
