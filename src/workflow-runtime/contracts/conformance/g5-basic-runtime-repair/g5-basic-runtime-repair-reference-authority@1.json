@@ -56,22 +56,26 @@
       },
       {
         "path": "src/workflow-runtime/runtime/g5-basic-runtime.test.ts",
-        "raw_sha256": "sha256:fec4c7a87f6d9a61d988d9832e590f8b00a0edb7dfc38d39fce062666763f917"
+        "raw_sha256": "sha256:28659ce0eb06fb1f13a5350ee48d7d68311e09d3978adc94bcaa2037ce9f1a0c"
       },
       {
         "path": "src/workflow-runtime/compiler/static-child-plan-bundle.test.ts",
         "raw_sha256": "sha256:2411c2645376daa24590d7837357685c0382591dc1c08fb0a224cfd20c67b952"
       },
       {
+        "path": "src/workflow-runtime/contracts/static-child-plan-bundle-fixture-harness.ts",
+        "raw_sha256": "sha256:db9553d02b0d4519571271568957847a29d9e5bbb941123f3ab023c33bffa98f"
+      },
+      {
         "path": "src/workflow-runtime/contracts/static-child-plan-bundle-repair.test.ts",
-        "raw_sha256": "sha256:475e6934ed46347dac3c8d8f68c3c05a11aecdf5bcaad0f2032b6981258ace7c"
+        "raw_sha256": "sha256:8fb68f757e09fc4a88d049f60da881c71a5ab24c16c260e0d93c602ebd837c55"
       },
       {
         "path": "src/workflow-runtime/capacity/capacity-admin.test.ts",
         "raw_sha256": "sha256:06d0b8cee866ec721a34dca293ed549d948831d81966dada5feaf4312c0be513"
       }
     ],
-    "evidence_tree_hash": "sha256:50b71e64d89f3661b45bbaff2f4013ce15e0fbd7f6414ec4c280f50413a2e31f"
+    "evidence_tree_hash": "sha256:057bd7299ce34a121680299ef00039c67ddc2c38d88dd365f18f29945dc50ac6"
   },
-  "hash": "sha256:0aaec6340219926f94c1b262f092fddffb07131153c851ea5cdac886b406ce5b"
+  "hash": "sha256:ca8afe2675bfb681d0ca99354b745e86a912e1a41471f0e6725353ea803fa85e"
 }

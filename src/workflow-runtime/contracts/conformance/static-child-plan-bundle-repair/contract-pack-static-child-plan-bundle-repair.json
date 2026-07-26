@@ -26,7 +26,7 @@
           "id": "icarus.workflow-static-child-plan-bundle-protocol",
           "version": "1.0.0"
         },
-        "hash": "sha256:1dbabbeae920bf65266db76677794aa2364c5c192f562ae279f9df1e581e13f2"
+        "hash": "sha256:0f2fba2ea6bc739bfc1642e1e748c58611350a76cb2028a5cf93b8e5d46566f2"
       },
       {
         "format": "icarus.workflow-static-child-plan-bundle-positive-cases/1",
@@ -34,7 +34,7 @@
           "id": "icarus.workflow-static-child-plan-bundle-positive-cases",
           "version": "1.0.0"
         },
-        "hash": "sha256:a9b27c68fba35b9857ae025a654395e792b237eacdb522884ece4b7f40662aff"
+        "hash": "sha256:aaf88ea336274c1fed6b7c3c16077c72b5d792ac4c7e805b13a5374914b98726"
       },
       {
         "format": "icarus.workflow-static-child-plan-bundle-negative-cases/1",
@@ -42,7 +42,7 @@
           "id": "icarus.workflow-static-child-plan-bundle-negative-cases",
           "version": "1.0.0"
         },
-        "hash": "sha256:b27b799caffd3e7f516a1ee586f39ec98c52467cec12f47ec8cff28347120c48"
+        "hash": "sha256:962350e7bdbae8e24cd998f454ab891e676ef98ca69058872413d4a6cbd54777"
       },
       {
         "format": "icarus.workflow-static-child-plan-bundle-fault-cases/1",
@@ -50,7 +50,7 @@
           "id": "icarus.workflow-static-child-plan-bundle-fault-cases",
           "version": "1.0.0"
         },
-        "hash": "sha256:4d0d89e4e67c26d3cd81b5a226f63150a96042b3136fb7a62efe09a4f5e35e09"
+        "hash": "sha256:9cea07206887b9429ca9db16eeb1da4202ccd54279e968c3bb130f2873edfa89"
       },
       {
         "format": "icarus.workflow-static-child-plan-bundle-evidence/1",
@@ -58,10 +58,10 @@
           "id": "icarus.workflow-static-child-plan-bundle-evidence",
           "version": "1.0.0"
         },
-        "hash": "sha256:cc2231d4ebf8e910fffc45422c67ac284132e96c56de90e4d558b3ec5be39a0f"
+        "hash": "sha256:9056977fb26e716868fbda2636e082c35d4b08c5bf2d75e1fc5ceb310ae39e44"
       }
     ],
-    "member_tree_hash": "sha256:c1c292e46a57caf7f190965d10960cf3bc4525669b9ba07e35ce2921e213b02d"
+    "member_tree_hash": "sha256:798f393e90b4e99bbc3032b3ede155b7f11c9054b73279ce4c5dc47d5f052bb5"
   },
-  "hash": "sha256:0f4bba85f8d25a16024877a236724dc119393d87aa773ca791253bbbfcd8ee90"
+  "hash": "sha256:f4429d7243739a24ff7199c82f18e4e7d7eff791c3e5b4d3032675bee889e8b3"
 }

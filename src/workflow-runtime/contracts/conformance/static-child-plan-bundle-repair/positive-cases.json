@@ -10,22 +10,124 @@
     "cases": [
       {
         "case_id": "compiler_nested_bundle_parent_exact",
-        "assertion": "pure Compiler returns nested child source and Plan bytes while the fixed-identity parent remains exact"
+        "assertion": "pure Compiler returns nested child source and Plan bytes while the fixed-identity parent remains exact",
+        "category": "positive",
+        "surface": "Compiler",
+        "handler": "compile_workflow_production",
+        "operation": "compile_workflow",
+        "input": {
+          "behavior": "compile_nested_closure_and_compare_fixed_parent",
+          "expected_surface": "Compiler",
+          "fixture_token": "static-child-plan-bundle-fixture:compiler_nested_bundle_parent_exact",
+          "variants": [
+            "nested_parent"
+          ]
+        },
+        "fault": null,
+        "oracle": {
+          "disposition": "compiled",
+          "sqlite_state": "not_applicable",
+          "exact_error": null,
+          "checks": [
+            "parent_plan_canonical_bytes_exact",
+            "bundle_membership_order_key_ref_hash",
+            "nested_source_and_plan_canonical_bytes",
+            "nested_lineage_exact"
+          ]
+        },
+        "binding_hash": "sha256:70e34f4f779d1eb2ae0186fd4fa412c7dbd583f313f4deacae5f50dde8268978"
       },
       {
         "case_id": "compiler_shared_content_address",
-        "assertion": "two closure members may share one byte-identical descendant Plan hash"
+        "assertion": "two closure members may share one byte-identical descendant Plan hash",
+        "category": "positive",
+        "surface": "Compiler",
+        "handler": "compile_workflow_production",
+        "operation": "compile_workflow",
+        "input": {
+          "behavior": "compile_repeated_nested_factory_and_compare_shared_descendant",
+          "expected_surface": "Compiler",
+          "fixture_token": "static-child-plan-bundle-fixture:compiler_shared_content_address",
+          "variants": [
+            "shared_descendant"
+          ]
+        },
+        "fault": null,
+        "oracle": {
+          "disposition": "compiled",
+          "sqlite_state": "not_applicable",
+          "exact_error": null,
+          "checks": [
+            "closure_membership_and_order_exact",
+            "shared_descendant_plan_hash",
+            "shared_descendant_plan_canonical_bytes",
+            "shared_descendant_source_canonical_bytes"
+          ]
+        },
+        "binding_hash": "sha256:76be1af03e2b059e634aeec1361deaee52cf1ccb01828d29fe9fa349479fc7b4"
       },
       {
         "case_id": "t2a_atomic_parent_child_schema_persistence",
-        "assertion": "T2a atomically persists parent, unique child Plans, and every generated-schema authority"
+        "assertion": "T2a atomically persists parent, unique child Plans, and every generated-schema authority",
+        "category": "positive",
+        "surface": "T2a",
+        "handler": "persist_static_child_plan_bundle_t2a_production",
+        "operation": "persist_compile_result_t2a",
+        "input": {
+          "behavior": "persist_parent_unique_children_and_generated_schema_authorities",
+          "expected_surface": "T2a",
+          "fixture_token": "static-child-plan-bundle-fixture:t2a_atomic_parent_child_schema_persistence",
+          "variants": [
+            "atomic_commit"
+          ]
+        },
+        "fault": null,
+        "oracle": {
+          "disposition": "persisted",
+          "sqlite_state": "committed",
+          "exact_error": null,
+          "checks": [
+            "parent_and_unique_child_plans_atomic",
+            "generated_schema_bindings_per_unique_plan",
+            "canonical_source_and_plan_bytes",
+            "shared_child_content_deduplicated"
+          ]
+        },
+        "binding_hash": "sha256:ecc7d27301308be69744ca31c1ee61210807cea1b113d0190ced6abdf6948123"
       },
       {
         "case_id": "t2a_replay_reopen_response_loss",
-        "assertion": "exact replay and reopen perform zero identity drift after response loss"
+        "assertion": "exact replay and reopen perform zero identity drift after response loss",
+        "category": "positive",
+        "surface": "T2a",
+        "handler": "persist_static_child_plan_bundle_t2a_production",
+        "operation": "persist_compile_result_t2a",
+        "input": {
+          "behavior": "lose_commit_response_reopen_and_exact_replay",
+          "expected_surface": "T2a",
+          "fixture_token": "static-child-plan-bundle-fixture:t2a_replay_reopen_response_loss",
+          "variants": [
+            "response_loss",
+            "same_connection_replay",
+            "reopen_replay"
+          ]
+        },
+        "fault": null,
+        "oracle": {
+          "disposition": "replayed",
+          "sqlite_state": "committed",
+          "exact_error": null,
+          "checks": [
+            "response_loss_recovery",
+            "same_connection_zero_dml",
+            "reopen_zero_dml",
+            "canonical_database_state_exact"
+          ]
+        },
+        "binding_hash": "sha256:ae76ef5e0f0454bf42bce6f554ae0b679fc357413f0eddb76073c3560e4bd3d0"
       }
     ],
     "case_count": 4
   },
-  "hash": "sha256:a9b27c68fba35b9857ae025a654395e792b237eacdb522884ece4b7f40662aff"
+  "hash": "sha256:aaf88ea336274c1fed6b7c3c16077c72b5d792ac4c7e805b13a5374914b98726"
 }

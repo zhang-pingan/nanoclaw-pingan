@@ -19,6 +19,20 @@
     "persistence_transaction": "T2a",
     "persistence_semantics": "parent_plus_all_missing_unique_static_children_and_generated_schema_authorities",
     "replay_semantics": "verify_exact_zero_dml",
+    "fixture_execution": {
+      "record_shape": "closed_category_surface_handler_operation_input_fault_oracle_binding",
+      "binding_domain": "icarus:workflow-static-child-plan-bundle-fixture-binding:1\n",
+      "registry": "derived_from_exact_checked_in_records",
+      "dispatch": "exactly_one_registered_production_handler_per_record",
+      "completion": "missing_duplicate_unknown_malformed_unhandled_multiply_handled_or_binding_drift_fails_closed",
+      "compiler_handler": "compileWorkflow",
+      "t2a_handler": "persistCompileResultT2a",
+      "exact_once_counts": {
+        "positive": 4,
+        "negative": 12,
+        "fault": 6
+      }
+    },
     "forbidden": [
       "runtime_recompile",
       "moving_registry_resolution",
@@ -27,5 +41,5 @@
       "embedded_second_golden_oracle"
     ]
   },
-  "hash": "sha256:1dbabbeae920bf65266db76677794aa2364c5c192f562ae279f9df1e581e13f2"
+  "hash": "sha256:0f2fba2ea6bc739bfc1642e1e748c58611350a76cb2028a5cf93b8e5d46566f2"
 }

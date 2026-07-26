@@ -54,6 +54,7 @@ const evidenceSourcePaths = [
   'src/workflow-runtime/runtime/g5-test-bootstrap.ts',
   'src/workflow-runtime/runtime/g5-basic-runtime.test.ts',
   'src/workflow-runtime/compiler/static-child-plan-bundle.test.ts',
+  'src/workflow-runtime/contracts/static-child-plan-bundle-fixture-harness.ts',
   'src/workflow-runtime/contracts/static-child-plan-bundle-repair.test.ts',
   'src/workflow-runtime/capacity/capacity-admin.test.ts',
 ] as const;
@@ -62,7 +63,7 @@ const exactBindings = [
   {
     name: 'g2_g5_static_child_plan_bundle_repair_candidate',
     path: 'src/workflow-runtime/contracts/conformance/static-child-plan-bundle-repair/contract-pack-static-child-plan-bundle-repair.json',
-    hash: 'sha256:0f4bba85f8d25a16024877a236724dc119393d87aa773ca791253bbbfcd8ee90',
+    hash: 'sha256:f4429d7243739a24ff7199c82f18e4e7d7eff791c3e5b4d3032675bee889e8b3',
   },
   {
     name: 'r019_generated_schema_join_authority',

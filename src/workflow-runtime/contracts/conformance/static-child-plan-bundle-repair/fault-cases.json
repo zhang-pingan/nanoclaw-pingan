@@ -10,30 +10,211 @@
     "cases": [
       {
         "case_id": "fault_before_first_write",
-        "assertion": "fault before first write leaves Plan and binding tables unchanged"
+        "assertion": "fault before first write leaves Plan and binding tables unchanged",
+        "category": "fault",
+        "surface": "T2a",
+        "handler": "persist_static_child_plan_bundle_t2a_production",
+        "operation": "persist_compile_result_t2a",
+        "input": {
+          "behavior": "inject_before_first_t2a_write",
+          "expected_surface": "T2a",
+          "fixture_token": "static-child-plan-bundle-fixture:fault_before_first_write",
+          "variants": [
+            "before_first_write"
+          ]
+        },
+        "fault": {
+          "point": "before_first_write",
+          "variants": [
+            "before_first_write"
+          ]
+        },
+        "oracle": {
+          "disposition": "rolled_back",
+          "sqlite_state": "unchanged",
+          "exact_error": "fault_injected",
+          "checks": [
+            "plan_table_unchanged",
+            "schema_binding_table_unchanged"
+          ]
+        },
+        "binding_hash": "sha256:2c7122c537639a7c05da2178bf3151ebf98e3526c84212bd3ce7c595f0aba8ec"
       },
       {
         "case_id": "fault_before_commit",
-        "assertion": "fault after all inserts and before commit rolls back the complete bundle"
+        "assertion": "fault after all inserts and before commit rolls back the complete bundle",
+        "category": "fault",
+        "surface": "T2a",
+        "handler": "persist_static_child_plan_bundle_t2a_production",
+        "operation": "persist_compile_result_t2a",
+        "input": {
+          "behavior": "inject_after_all_t2a_writes_before_commit",
+          "expected_surface": "T2a",
+          "fixture_token": "static-child-plan-bundle-fixture:fault_before_commit",
+          "variants": [
+            "before_commit"
+          ]
+        },
+        "fault": {
+          "point": "before_commit",
+          "variants": [
+            "before_commit"
+          ]
+        },
+        "oracle": {
+          "disposition": "rolled_back",
+          "sqlite_state": "unchanged",
+          "exact_error": "fault_injected",
+          "checks": [
+            "parent_and_child_plan_rows_rolled_back",
+            "generated_schema_rows_rolled_back",
+            "build_cas_rolled_back"
+          ]
+        },
+        "binding_hash": "sha256:5190aa97f63732e5feb34ec00220806c7fbc35cba3796346b3156a0215115c72"
       },
       {
         "case_id": "stale_build_row_version",
-        "assertion": "stale build row version performs no Plan writes"
+        "assertion": "stale build row version performs no Plan writes",
+        "category": "fault",
+        "surface": "T2a",
+        "handler": "persist_static_child_plan_bundle_t2a_production",
+        "operation": "persist_compile_result_t2a",
+        "input": {
+          "behavior": "submit_stale_build_row_version",
+          "expected_surface": "T2a",
+          "fixture_token": "static-child-plan-bundle-fixture:stale_build_row_version",
+          "variants": [
+            "row_version"
+          ]
+        },
+        "fault": {
+          "point": "stale_build_row_version",
+          "variants": [
+            "row_version"
+          ]
+        },
+        "oracle": {
+          "disposition": "rejected",
+          "sqlite_state": "unchanged",
+          "exact_error": "cas_conflict",
+          "checks": [
+            "build_row_version_cas",
+            "zero_dml"
+          ]
+        },
+        "binding_hash": "sha256:b7e58386acd7dfcd2ae9a59d335e7aff40663c221531a99d3029c03f68f08cf4"
       },
       {
         "case_id": "stale_compile_lease",
-        "assertion": "stale compile lease owner, token, or expiry performs no Plan writes"
+        "assertion": "stale compile lease owner, token, or expiry performs no Plan writes",
+        "category": "fault",
+        "surface": "T2a",
+        "handler": "persist_static_child_plan_bundle_t2a_production",
+        "operation": "persist_compile_result_t2a",
+        "input": {
+          "behavior": "submit_stale_compile_lease_identity_or_expiry",
+          "expected_surface": "T2a",
+          "fixture_token": "static-child-plan-bundle-fixture:stale_compile_lease",
+          "variants": [
+            "owner",
+            "token",
+            "expiry"
+          ]
+        },
+        "fault": {
+          "point": "stale_compile_lease",
+          "variants": [
+            "owner",
+            "token",
+            "expiry"
+          ]
+        },
+        "oracle": {
+          "disposition": "rejected",
+          "sqlite_state": "unchanged",
+          "exact_error": "cas_conflict",
+          "checks": [
+            "lease_owner_exact",
+            "lease_token_exact",
+            "lease_expiry_live",
+            "zero_dml"
+          ]
+        },
+        "binding_hash": "sha256:ae14be2f56ddec9964507659eeb135da34dc90e639cd5d55e45769bafeb7de86"
       },
       {
         "case_id": "stale_work_fence",
-        "assertion": "stale run or scope work fence performs no Plan writes"
+        "assertion": "stale run or scope work fence performs no Plan writes",
+        "category": "fault",
+        "surface": "T2a",
+        "handler": "persist_static_child_plan_bundle_t2a_production",
+        "operation": "persist_compile_result_t2a",
+        "input": {
+          "behavior": "submit_stale_run_or_scope_work_fence",
+          "expected_surface": "T2a",
+          "fixture_token": "static-child-plan-bundle-fixture:stale_work_fence",
+          "variants": [
+            "run_fence",
+            "scope_fence"
+          ]
+        },
+        "fault": {
+          "point": "stale_work_fence",
+          "variants": [
+            "run_fence",
+            "scope_fence"
+          ]
+        },
+        "oracle": {
+          "disposition": "rejected",
+          "sqlite_state": "unchanged",
+          "exact_error": "cas_conflict",
+          "checks": [
+            "run_work_fence_exact",
+            "scope_work_fence_exact",
+            "zero_dml"
+          ]
+        },
+        "binding_hash": "sha256:25c83bbff8776e6d405b591f2bb21d61a61406fe969ff3aeabd705c6c98eb63d"
       },
       {
         "case_id": "reopen_tamper_recovery",
-        "assertion": "reopen replay detects Plan or generated-schema tamper without repair"
+        "assertion": "reopen replay detects Plan or generated-schema tamper without repair",
+        "category": "fault",
+        "surface": "T2a",
+        "handler": "persist_static_child_plan_bundle_t2a_production",
+        "operation": "persist_compile_result_t2a",
+        "input": {
+          "behavior": "reopen_then_detect_persisted_plan_or_schema_binding_tamper",
+          "expected_surface": "T2a",
+          "fixture_token": "static-child-plan-bundle-fixture:reopen_tamper_recovery",
+          "variants": [
+            "compiled_plan_json",
+            "generated_schema_binding"
+          ]
+        },
+        "fault": {
+          "point": "reopen_tamper_recovery",
+          "variants": [
+            "compiled_plan_json",
+            "generated_schema_binding"
+          ]
+        },
+        "oracle": {
+          "disposition": "rejected",
+          "sqlite_state": "unchanged",
+          "exact_error": "integrity_violation",
+          "checks": [
+            "sqlite_reopen",
+            "tamper_detected",
+            "no_repair_on_recovery"
+          ]
+        },
+        "binding_hash": "sha256:e1fc36b3c3b1459ed982076c9e97d4946c04c390fa5db9a73a7f430ed6d3ce4c"
       }
     ],
     "case_count": 6
   },
-  "hash": "sha256:4d0d89e4e67c26d3cd81b5a226f63150a96042b3136fb7a62efe09a4f5e35e09"
+  "hash": "sha256:9cea07206887b9429ca9db16eeb1da4202ccd54279e968c3bb130f2873edfa89"
 }
