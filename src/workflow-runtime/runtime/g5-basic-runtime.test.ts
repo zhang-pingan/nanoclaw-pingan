@@ -1373,6 +1373,7 @@ interface ProductionFixtureTarget {
   readonly relation: string;
   invoke(fault: boolean): string;
   replay?(): string;
+  verifyAfterReopen?(): void;
 }
 
 class ObservedFixtureRejection extends Error {
@@ -2012,10 +2013,45 @@ function buildT0pFixtureTarget(
   };
 }
 
+function assertReferenceNodeOutputPort(input: {
+  readonly caseId: string;
+  readonly modeledPort: JsonObject;
+  readonly planContract: JsonObject;
+  readonly actualPort: JsonObject;
+}): void {
+  const schema = fixtureObject(
+    input.planContract.schema as JsonValue,
+    `${input.caseId} output schema`,
+  );
+  if (
+    input.modeledPort.state === 'absent' &&
+    input.planContract.required !== false
+  )
+    throw new Error(`${input.caseId} required/optional Plan drifted`);
+  if (input.actualPort.state !== input.modeledPort.state)
+    throw new Error(`${input.caseId} reference publication state drifted`);
+  if (
+    input.actualPort.schema_hash !== input.modeledPort.schema_hash ||
+    input.actualPort.schema_hash !== schema.schema_hash
+  )
+    throw new Error(`${input.caseId} reference publication schema drifted`);
+  if (
+    input.modeledPort.state === 'absent'
+      ? canonicalJson(input.actualPort) !== canonicalJson(input.modeledPort)
+      : input.actualPort.byte_length !== input.modeledPort.byte_length
+  )
+    throw new Error(`${input.caseId} reference publication envelope drifted`);
+}
+
 function buildNodeOutputEnvelopeFixtureTarget(
   fixture: G5RepairFixtureCase,
 ): ProductionFixtureTarget {
   const { behavior, relation, key, nowMs } = fixtureBehavior(fixture);
+  const publishesOptionalAbsent = behavior === 'publish_optional_absent';
+  const publishesAbsent =
+    publishesOptionalAbsent || behavior === 'absent_required_port';
+  const compiledMaxBytes =
+    behavior === 'member_exceeds_compiled_max_bytes' ? 1 : 16_384;
   const instance = bootstrap(fixture.operation.scenario_key);
   const seed = seedRuntime(instance.store);
   const valueSchema = publishTestSchema(
@@ -2035,9 +2071,8 @@ function buildNodeOutputEnvelopeFixtureTarget(
         output_ports: {
           result: {
             schema: compiledTestSchema(valueSchema),
-            max_bytes:
-              behavior === 'member_exceeds_compiled_max_bytes' ? 1 : 16_384,
-            required: true,
+            max_bytes: compiledMaxBytes,
+            required: !publishesOptionalAbsent,
           },
         },
         outbox_execution_binding: executionBinding(seed),
@@ -2071,8 +2106,18 @@ function buildNodeOutputEnvelopeFixtureTarget(
     'SELECT id FROM workflow_graph_scope_plans WHERE graph_run_id = ?',
     [run.graphRunId],
   )!;
-  const modeledValue: JsonValue =
-    behavior === 'publish_optional_absent'
+  const logicalMemberValue: JsonValue =
+    behavior === 'publish_ordered_list'
+      ? ['first', 'second']
+      : behavior === 'publish_defaulted_single'
+        ? 'fallback'
+        : behavior === 'publish_selected_immutable_value'
+          ? { selected_port: 'result', value: 'immutable' }
+          : behavior === 'publish_renamed_single'
+            ? 'renamed-value'
+            : { fixture: behavior };
+  const modeledPublication =
+    fixture.category === 'positive'
       ? referenceJoinPublication({
           planHash: candidate.plan_hash as Sha256Hash,
           nodeId: 'fixture-output',
@@ -2080,95 +2125,76 @@ function buildNodeOutputEnvelopeFixtureTarget(
             result: {
               inputPort: 'source',
               schemaHash: valueSchema.schema_hash,
-              required: false,
-              maxBytes: 4096,
-            },
-          },
-          sealedPorts: { source: { state: 'absent' } },
-        })
-      : referenceJoinPublication({
-          planHash: candidate.plan_hash as Sha256Hash,
-          nodeId: 'fixture-output',
-          outputs: {
-            result: {
-              inputPort: 'source',
-              schemaHash: valueSchema.schema_hash,
-              required: true,
-              maxBytes: 4096,
+              required: !publishesOptionalAbsent,
+              maxBytes: compiledMaxBytes,
             },
           },
           sealedPorts: {
-            source: {
-              state: 'present',
-              value:
-                behavior === 'publish_ordered_list'
-                  ? ['first', 'second']
-                  : behavior === 'publish_defaulted_single'
-                    ? 'fallback'
-                    : behavior === 'publish_selected_immutable_value'
-                      ? { selected_port: 'result', value: 'immutable' }
-                      : behavior === 'publish_renamed_single'
-                        ? 'renamed-value'
-                        : { fixture: behavior },
-            },
+            source: publishesOptionalAbsent
+              ? { state: 'absent' }
+              : { state: 'present', value: logicalMemberValue },
           },
-        });
-  const member = insertTestValue(
-    instance.store,
-    valueSchema,
-    `fixture-envelope-member-${fixture.case_id}`,
-    modeledValue,
-  );
-  const provenance = nodeOutputMemberProvenanceRef({
-    planId: planRow.id,
-    graphRunId: run.graphRunId,
-    planHash: candidate.plan_hash as Sha256Hash,
-    nodeId: 'fixture-output',
-    portName: 'result',
-    valueRef: member.id,
-    valueHash: member.hash,
-    schemaHash: valueSchema.schema_hash,
-    byteLength: member.byteLength,
-  });
-  instance.store.withImmediateTransaction((transaction) => {
-    transaction.execute(
-      'UPDATE workflow_values SET provenance_ref = ?, row_version = 0 WHERE id = ?',
-      [
-        behavior === 'wrong_member_provenance'
-          ? 'g5-fixture-wrong-provenance'
-          : provenance,
-        member.id,
-      ],
-    );
-    transaction.execute(
-      `INSERT INTO workflow_value_ownerships (
-       value_id, owner_workflow_id, owner_graph_run_id,
-       owner_registry_resource_id, owner_feature_release_id,
-       system_owner_ref, created_at_ms
-     ) VALUES (?, NULL, ?, NULL, NULL, NULL, ?)`,
-      [member.id, run.graphRunId, nowMs],
-    );
-  });
-  const ports: JsonObject =
-    behavior === 'absent_required_port'
+        })
+      : null;
+  const memberLabel = `fixture-envelope-member-${fixture.case_id}`;
+  const memberId = `value:test:${memberLabel}`;
+  const member = publishesAbsent
+    ? null
+    : insertTestValue(
+        instance.store,
+        valueSchema,
+        memberLabel,
+        logicalMemberValue,
+      );
+  if (member) {
+    const provenance = nodeOutputMemberProvenanceRef({
+      planId: planRow.id,
+      graphRunId: run.graphRunId,
+      planHash: candidate.plan_hash as Sha256Hash,
+      nodeId: 'fixture-output',
+      portName: 'result',
+      valueRef: member.id,
+      valueHash: member.hash,
+      schemaHash: valueSchema.schema_hash,
+      byteLength: member.byteLength,
+    });
+    instance.store.withImmediateTransaction((transaction) => {
+      transaction.execute(
+        'UPDATE workflow_values SET provenance_ref = ?, row_version = 0 WHERE id = ?',
+        [
+          behavior === 'wrong_member_provenance'
+            ? 'g5-fixture-wrong-provenance'
+            : provenance,
+          member.id,
+        ],
+      );
+      transaction.execute(
+        `INSERT INTO workflow_value_ownerships (
+         value_id, owner_workflow_id, owner_graph_run_id,
+         owner_registry_resource_id, owner_feature_release_id,
+         system_owner_ref, created_at_ms
+       ) VALUES (?, NULL, ?, NULL, NULL, NULL, ?)`,
+        [member.id, run.graphRunId, nowMs],
+      );
+    });
+  }
+  const ports: JsonObject = {
+    result: publishesAbsent
       ? {
-          result: {
-            state: 'absent',
-            schema_hash: valueSchema.schema_hash,
-          },
+          state: 'absent',
+          schema_hash: valueSchema.schema_hash,
         }
       : {
-          result: {
-            state: 'present',
-            value_ref: member.id,
-            value_hash: member.hash,
-            schema_hash:
-              behavior === 'wrong_member_schema_hash'
-                ? hash('fixture-wrong-output-schema')
-                : valueSchema.schema_hash,
-            byte_length: member.byteLength,
-          },
-        };
+          state: 'present',
+          value_ref: member!.id,
+          value_hash: member!.hash,
+          schema_hash:
+            behavior === 'wrong_member_schema_hash'
+              ? hash('fixture-wrong-output-schema')
+              : valueSchema.schema_hash,
+          byte_length: member!.byteLength,
+        },
+  };
   const input = {
     planId: planRow.id,
     graphRunId: run.graphRunId,
@@ -2181,8 +2207,29 @@ function buildNodeOutputEnvelopeFixtureTarget(
     ports,
     createdAtMs: nowMs + 3,
   };
-  const generated = instance.store.queryOne<{ schema_ref: string }>(
-    `SELECT schema_ref FROM workflow_plan_generated_schemas
+  const planNode = (candidate.nodes as JsonObject[]).find(
+    (node) => node.id === 'fixture-output',
+  )!;
+  const outputContract = fixtureObject(
+    (planNode.output_ports as JsonObject).result as JsonValue,
+    `${fixture.case_id} Plan output contract`,
+  );
+  const descriptor = fixtureObject(
+    planNode.output_envelope_schema as JsonValue,
+    `${fixture.case_id} Plan output envelope descriptor`,
+  );
+  const generated = instance.store.queryOne<{
+    plan_id: string;
+    graph_run_id: string;
+    plan_hash: string;
+    schema_ref: string;
+    schema_hash: string;
+    generator: string;
+    parameter_hash: string;
+  }>(
+    `SELECT plan_id, graph_run_id, plan_hash, schema_ref, schema_hash,
+            generator, parameter_hash
+       FROM workflow_plan_generated_schemas
       WHERE plan_id = ? AND generator = 'node_output_envelope'`,
     [planRow.id],
   )!;
@@ -2199,6 +2246,121 @@ function buildNodeOutputEnvelopeFixtureTarget(
   ]);
   const boundary = new NodeOutputEnvelopeValueStore(instance.store);
   let written: NodeOutputEnvelopeValue | null = null;
+  const assertPersistedEvidence = (
+    observed: NodeOutputEnvelopeValue,
+    stage: string,
+  ): void => {
+    const actualPort = fixtureObject(
+      (observed.content.ports as JsonObject).result as JsonValue,
+      `${fixture.case_id} ${stage} result port`,
+    );
+    if (modeledPublication) {
+      const modeledPort = fixtureObject(
+        (modeledPublication.ports as JsonObject).result as JsonValue,
+        `${fixture.case_id} modeled result port`,
+      );
+      assertReferenceNodeOutputPort({
+        caseId: fixture.case_id,
+        modeledPort,
+        planContract: outputContract,
+        actualPort,
+      });
+    }
+    if (
+      observed.planId !== planRow.id ||
+      observed.graphRunId !== run.graphRunId ||
+      observed.planHash !== candidate.plan_hash ||
+      observed.nodeId !== 'fixture-output' ||
+      observed.schemaRef !== descriptor.schema_ref ||
+      observed.schemaHash !== descriptor.schema_hash ||
+      observed.parameterHash !== descriptor.parameter_hash ||
+      generated.plan_id !== planRow.id ||
+      generated.graph_run_id !== run.graphRunId ||
+      generated.plan_hash !== candidate.plan_hash ||
+      generated.schema_ref !== descriptor.schema_ref ||
+      generated.schema_hash !== descriptor.schema_hash ||
+      generated.generator !== 'node_output_envelope' ||
+      generated.parameter_hash !== descriptor.parameter_hash
+    )
+      throw new Error(
+        `${fixture.case_id} ${stage} Plan/schema binding drifted`,
+      );
+    const stored = instance.store.queryOne<{
+      inline_canonical_json: string;
+      schema_authority_kind: string;
+      schema_plan_id: string;
+      schema_plan_hash: string;
+      generated_schema_ref: string;
+      generated_schema_hash: string;
+      generated_schema_generator: string;
+      generated_schema_parameter_hash: string;
+    }>(
+      `SELECT inline_canonical_json, schema_authority_kind, schema_plan_id,
+              schema_plan_hash, generated_schema_ref, generated_schema_hash,
+              generated_schema_generator, generated_schema_parameter_hash
+         FROM workflow_values WHERE id = ?`,
+      [observed.valueId],
+    );
+    if (
+      !stored ||
+      stored.inline_canonical_json !== canonicalJson(observed.content) ||
+      stored.schema_authority_kind !== 'plan_generated' ||
+      stored.schema_plan_id !== planRow.id ||
+      stored.schema_plan_hash !== candidate.plan_hash ||
+      stored.generated_schema_ref !== descriptor.schema_ref ||
+      stored.generated_schema_hash !== descriptor.schema_hash ||
+      stored.generated_schema_generator !== 'node_output_envelope' ||
+      stored.generated_schema_parameter_hash !== descriptor.parameter_hash
+    )
+      throw new Error(
+        `${fixture.case_id} ${stage} Stored Value binding drifted`,
+      );
+    if (publishesOptionalAbsent) {
+      if (
+        canonicalJson(actualPort) !==
+          canonicalJson({
+            state: 'absent',
+            schema_hash: valueSchema.schema_hash,
+          }) ||
+        'value_ref' in actualPort ||
+        'value_hash' in actualPort ||
+        'byte_length' in actualPort
+      )
+        throw new Error(`${fixture.case_id} ${stage} was not truly absent`);
+      const fabricated = instance.store.queryOne<{ count: number }>(
+        `SELECT count(*) AS count FROM workflow_values
+          WHERE id = ? OR provenance_ref LIKE 'icarus-node-output-member-provenance:%'`,
+        [memberId],
+      )!.count;
+      const fabricatedOwnership = instance.store.queryOne<{ count: number }>(
+        `SELECT count(*) AS count FROM workflow_value_ownerships o
+          JOIN workflow_values v ON v.id = o.value_id
+         WHERE v.id = ? OR v.provenance_ref LIKE 'icarus-node-output-member-provenance:%'`,
+        [memberId],
+      )!.count;
+      if (fabricated !== 0 || fabricatedOwnership !== 0)
+        throw new Error(
+          `${fixture.case_id} ${stage} fabricated an absent member`,
+        );
+    } else if (fixture.category === 'positive') {
+      const memberValue = instance.store.queryOne<{
+        inline_canonical_json: string;
+      }>('SELECT inline_canonical_json FROM workflow_values WHERE id = ?', [
+        String(actualPort.value_ref),
+      ]);
+      if (
+        !memberValue ||
+        memberValue.inline_canonical_json !==
+          canonicalJson(logicalMemberValue) ||
+        (modeledPublication &&
+          memberValue.inline_canonical_json ===
+            canonicalJson(modeledPublication))
+      )
+        throw new Error(
+          `${fixture.case_id} ${stage} stored model-as-member data`,
+        );
+    }
+  };
   if (authorityReadBehaviors.has(behavior)) written = boundary.write(input);
   instance.store.withImmediateTransaction((transaction) => {
     if (behavior === 'generated_schema_bytes_drift')
@@ -2305,6 +2467,33 @@ function buildNodeOutputEnvelopeFixtureTarget(
       });
       if (canonicalJson(written.content.ports) !== canonicalJson(ports))
         throw new Error(`${fixture.case_id} stored the wrong modeled ports`);
+      if (fixture.category === 'positive') {
+        assertPersistedEvidence(written, 'write');
+        const replayed = boundary.write(input);
+        if (
+          canonicalJson(replayed as unknown as JsonValue) !==
+          canonicalJson(written as unknown as JsonValue)
+        )
+          throw new Error(`${fixture.case_id} immediate Store replay drifted`);
+        assertPersistedEvidence(replayed, 'exact replay');
+        const read = boundary.read(input);
+        if (
+          canonicalJson(read as unknown as JsonValue) !==
+          canonicalJson(written as unknown as JsonValue)
+        )
+          throw new Error(`${fixture.case_id} Store read drifted`);
+        assertPersistedEvidence(read, 'read');
+        const recovered = boundary
+          .verifyReopenAndRecovery()
+          .find((value) => value.valueId === input.valueId);
+        if (
+          !recovered ||
+          canonicalJson(recovered as unknown as JsonValue) !==
+            canonicalJson(written as unknown as JsonValue)
+        )
+          throw new Error(`${fixture.case_id} recovery scan drifted`);
+        assertPersistedEvidence(recovered, 'recovery');
+      }
       return 'written';
     },
     replay: () => {
@@ -2317,12 +2506,45 @@ function buildNodeOutputEnvelopeFixtureTarget(
           canonicalJson(written as unknown as JsonValue)
       )
         throw new Error(`${fixture.case_id} Store replay drifted`);
+      if (fixture.category === 'positive') {
+        assertPersistedEvidence(replayed, 'post-reopen replay');
+        const read = new NodeOutputEnvelopeValueStore(instance.store).read(
+          input,
+        );
+        assertPersistedEvidence(read, 'post-reopen replay read');
+      }
       const recovered = new NodeOutputEnvelopeValueStore(
         instance.store,
       ).verifyReopenAndRecovery();
-      if (!recovered.some((value) => value.valueId === input.valueId))
+      const recoveredValue = recovered.find(
+        (value) => value.valueId === input.valueId,
+      );
+      if (!recoveredValue)
         throw new Error(`${fixture.case_id} was absent from recovery scan`);
+      if (fixture.category === 'positive')
+        assertPersistedEvidence(recoveredValue, 'post-reopen replay recovery');
       return 'exact_replay';
+    },
+    verifyAfterReopen: () => {
+      if (fixture.category !== 'positive' || !written) return;
+      const reopened = new NodeOutputEnvelopeValueStore(instance.store);
+      const read = reopened.read(input);
+      if (
+        canonicalJson(read as unknown as JsonValue) !==
+        canonicalJson(written as unknown as JsonValue)
+      )
+        throw new Error(`${fixture.case_id} reopened Store read drifted`);
+      assertPersistedEvidence(read, 'reopen read');
+      const recovered = reopened
+        .verifyReopenAndRecovery()
+        .find((value) => value.valueId === input.valueId);
+      if (
+        !recovered ||
+        canonicalJson(recovered as unknown as JsonValue) !==
+          canonicalJson(written as unknown as JsonValue)
+      )
+        throw new Error(`${fixture.case_id} reopened recovery scan drifted`);
+      assertPersistedEvidence(recovered, 'reopen recovery');
     },
   };
 }
@@ -3057,6 +3279,7 @@ function executeProductionFixture(
       databaseFingerprint(target.instance) !== afterDatabase
     )
       throw new Error(`${fixture.case_id} changed across Store reopen`);
+    target.verifyAfterReopen?.();
   }
   if (fixture.oracle.disposition === 'replayed') {
     if (!target.replay)
@@ -3202,6 +3425,53 @@ describe('G5 Basic Runtime Schema 7 repair transaction integration', () => {
       });
     },
   );
+
+  it('rejects join_optional_absent model-as-member and required Plan mutations', () => {
+    const schemaHash = hash('join-optional-absent-adversarial-schema');
+    const modeled = referenceJoinPublication({
+      planHash: hash('join-optional-absent-adversarial-plan'),
+      nodeId: 'fixture-output',
+      outputs: {
+        result: {
+          inputPort: 'source',
+          schemaHash,
+          required: false,
+          maxBytes: 16_384,
+        },
+      },
+      sealedPorts: { source: { state: 'absent' } },
+    });
+    const modeledPort = (modeled.ports as JsonObject).result as JsonObject;
+    const optionalContract: JsonObject = {
+      schema: { schema_hash: schemaHash },
+      max_bytes: 16_384,
+      required: false,
+    };
+    const falsePositivePayload = modeled;
+    const falsePositiveBytes = canonicalJson(falsePositivePayload);
+    expect(() =>
+      assertReferenceNodeOutputPort({
+        caseId: 'join_optional_absent',
+        modeledPort,
+        planContract: optionalContract,
+        actualPort: {
+          state: 'present',
+          value_ref: 'value:false-positive-model-member',
+          value_hash: hash(`false-positive:${falsePositiveBytes}`),
+          schema_hash: schemaHash,
+          byte_length: Buffer.byteLength(falsePositiveBytes),
+        },
+      }),
+    ).toThrow(/reference publication state drifted/);
+    expect(() =>
+      assertReferenceNodeOutputPort({
+        caseId: 'join_optional_absent',
+        modeledPort,
+        planContract: { ...optionalContract, required: true },
+        actualPort: modeledPort,
+      }),
+    ).toThrow(/required\/optional Plan drifted/);
+  });
 
   it('commits T0/T1/T2a/T2b/T3a and exact replays across reopen', () => {
     const instance = bootstrap('g5-runtime-path');
