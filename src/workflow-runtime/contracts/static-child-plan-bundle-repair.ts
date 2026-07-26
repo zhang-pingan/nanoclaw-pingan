@@ -46,7 +46,9 @@ export const STATIC_CHILD_PLAN_BUNDLE_REPAIR_SOURCE_PATHS = [
 export const STATIC_CHILD_PLAN_BUNDLE_REPAIR_EVIDENCE_PATHS = [
   'src/workflow-runtime/compiler/g2-v6-frozen-replay.ts',
   'src/workflow-runtime/compiler/current-g2-golden-replay.ts',
+  'src/workflow-runtime/compiler/generated-output-schema-authority.test.ts',
   'src/workflow-runtime/compiler/static-child-plan-bundle.test.ts',
+  'src/workflow-runtime/contracts/current-g2-generated-output-schema-golden-authoring.ts',
   'src/workflow-runtime/contracts/current-g2-static-child-replay-authority.ts',
   'src/workflow-runtime/contracts/current-g2-static-child-replay-authority-cli.ts',
   'src/workflow-runtime/contracts/current-g2-static-child-replay-authority.test.ts',
@@ -489,36 +491,44 @@ function readArtifact(relativePath: string): ContractArtifactEnvelope {
   );
 }
 
-function withoutCompilerIdentity(plan: JsonObject): JsonObject {
-  const copy = structuredClone(plan);
-  const strip = (value: JsonValue): void => {
+function withoutVersionedCompilerAndGeneratedOutputIdentity(
+  plan: JsonObject,
+): JsonObject {
+  const strip = (value: JsonValue): JsonValue => {
     if (Array.isArray(value)) {
-      for (const child of value) strip(child);
-      return;
+      return value.map(strip);
     }
-    if (!value || typeof value !== 'object') return;
-    for (const key of Object.keys(value)) {
-      if (
-        [
-          'plan_hash',
-          'plan_ref',
-          'precompiled_plan_hash',
-          'member_hash',
-          'closure_hash',
-          'compiler_version',
-          'compiler_build_hash',
-          'compiler_toolchain_ref',
-          'compiler_toolchain_hash',
-        ].includes(key)
-      ) {
-        delete value[key];
-      } else {
-        strip(value[key] as JsonValue);
-      }
+    if (!value || typeof value !== 'object') return value;
+    if (
+      value.type === 'generated' &&
+      ['child_completion', 'map_result', 'node_output_envelope'].includes(
+        String(value.generator),
+      )
+    ) {
+      return { type: value.type, generator: value.generator };
     }
+    return Object.fromEntries(
+      Object.entries(value).flatMap(([key, child]) => {
+        if (
+          [
+            'plan_hash',
+            'plan_ref',
+            'precompiled_plan_hash',
+            'member_hash',
+            'closure_hash',
+            'compiler_version',
+            'compiler_build_hash',
+            'compiler_toolchain_ref',
+            'compiler_toolchain_hash',
+          ].includes(key)
+        ) {
+          return [];
+        }
+        return [[key, strip(child)]];
+      }),
+    );
   };
-  strip(copy);
-  return copy;
+  return strip(plan) as JsonObject;
 }
 
 function compilerEvidence(): JsonObject {
@@ -578,8 +588,12 @@ function compilerEvidence(): JsonObject {
   if (!current.ok)
     throw new Error('Current static child bundle fixture rejected');
   if (
-    canonicalJson(withoutCompilerIdentity(current.value.plan)) !==
-    canonicalJson(withoutCompilerIdentity(predecessorPlan))
+    canonicalJson(
+      withoutVersionedCompilerAndGeneratedOutputIdentity(current.value.plan),
+    ) !==
+    canonicalJson(
+      withoutVersionedCompilerAndGeneratedOutputIdentity(predecessorPlan),
+    )
   ) {
     throw new Error('Static child bundle repair changed parent Plan lowering');
   }
@@ -600,7 +614,7 @@ function compilerEvidence(): JsonObject {
     compiler_toolchain_hash: identity.compiler_toolchain_hash,
     predecessor_parent_plan_exact: true,
     predecessor_parent_plan_hash: predecessor.value.plan.plan_hash,
-    current_parent_plan_lowering_exact_excluding_compiler_and_content_identities: true,
+    current_parent_plan_lowering_exact_excluding_versioned_compiler_and_generated_output_schema_identities: true,
     current_parent_plan_hash: current.value.plan.plan_hash,
     bundle_format: current.value.staticChildPlanBundle.format,
     bundle_entries: entries,

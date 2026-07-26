@@ -1,0 +1,23 @@
+{
+  "format": "icarus.workflow-compiler-conformance-case-result/1",
+  "case_id": "negative.graph-endpoint-not-found",
+  "source_kind": "graph_scope",
+  "source_hash": "sha256:a2e845341699e6ade977e2346b581bf81e866604ab5b3d5119bad7fa4bb32feb",
+  "outcome": "rejected",
+  "normalized_plan": null,
+  "static_lowering_contract_ref": null,
+  "static_lowering_contract_hash": null,
+  "diagnostics": [
+    {
+      "code": "graph_endpoint_not_found",
+      "detail_ref": null,
+      "instance_pointer": "/control_edges/0/to_node_id",
+      "phase": "bind",
+      "schema_pointer": null,
+      "stable_object_id": "edge.missing"
+    }
+  ],
+  "proof_hashes": [],
+  "program_hashes": [],
+  "result_hash": "sha256:42459b590dcb5c69345f4e9be89c38fb3c246f5af58a13182fb26c5d6306c766"
+}

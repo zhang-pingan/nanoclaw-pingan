@@ -44,6 +44,8 @@ export const G5_REPAIR_IMPLEMENTATION_SOURCE_PATHS = [
 
 const evidenceSourcePaths = [
   'src/workflow-runtime/compiler/current-g2-golden-replay.ts',
+  'src/workflow-runtime/compiler/generated-output-schema-authority.test.ts',
+  'src/workflow-runtime/contracts/current-g2-generated-output-schema-golden-authoring.ts',
   'src/workflow-runtime/contracts/current-g2-static-child-replay-authority.ts',
   'src/workflow-runtime/contracts/current-g2-static-child-replay-authority-cli.ts',
   'src/workflow-runtime/contracts/current-g2-static-child-replay-authority.test.ts',
@@ -67,14 +69,14 @@ const exactBindings = [
   {
     name: 'g2_g5_static_child_plan_bundle_repair_candidate',
     path: 'src/workflow-runtime/contracts/conformance/static-child-plan-bundle-repair/contract-pack-static-child-plan-bundle-repair.json',
-    hash: 'sha256:13d30af76e8e957154447be0d6ab3aada93aee77711cbf5f27fb71168876d437',
+    hash: 'sha256:072c612da8d0f42073a1a6ea3c80953936dfdd1c606ed9eef5c6a114225b9a3e',
   },
   {
-    name: 'g2_current_compiler_3_0_5_replay_authority',
-    path: 'src/workflow-runtime/contracts/conformance/current/g2-static-child-plan-bundle-replay-v7/current-replay-authority@1.json',
-    hash: 'sha256:2c1192f3cd74a1a5dc753b9fd9dd2d66f98d7d1f22b659360d6f148f057600e0',
+    name: 'g2_current_compiler_3_0_6_generated_output_schema_replay_authority',
+    path: 'src/workflow-runtime/contracts/conformance/current/g2-generated-output-schema-authority-replay-v8/current-replay-authority@2.json',
+    hash: 'sha256:d8134a41081786d2f19c99930d89ae3a88ea3af8ba937f5063c07768211019ac',
     bundleHash:
-      'sha256:314ceb2f907243288815ddf029fee0b716c16d7b567d0a25da978b94a47f80ab',
+      'sha256:fe308ba0f8d9b8c9604aff39163029bf05e0aa80c7b461a9f2f80d27c2984bd3',
   },
   {
     name: 'r019_generated_schema_join_authority',
@@ -998,7 +1000,8 @@ function buildArtifacts(): Array<[string, ContractArtifactEnvelope]> {
         'certification',
         'Production_activation',
       ],
-      next_task_only: 'independent_G2_G5_affected_chain_regression',
+      next_task_only:
+        'independent_G2_G3_G4_G5_generated_output_schema_affected_chain_regression',
       bindings: upstream,
     },
   );

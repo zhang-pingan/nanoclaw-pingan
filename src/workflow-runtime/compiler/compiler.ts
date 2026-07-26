@@ -1428,6 +1428,7 @@ function compileOutputPorts(
 function generatedCompiledSchema(
   generator: 'child_completion' | 'map_result',
   childInterface: JsonObject,
+  compilerVersion: string,
 ): JsonObject {
   assertJsonObject(childInterface.exits);
   const exits = Object.keys(childInterface.exits).sort(compareAscii);
@@ -1437,32 +1438,64 @@ function generatedCompiledSchema(
     exits,
   } as JsonObject;
   const schemaJson: JsonObject =
-    generator === 'child_completion'
-      ? {
-          type: 'object',
-          additionalProperties: false,
-          required: ['exit', 'output_ports'],
-          properties: {
-            exit: { type: 'string', enum: exits },
-            output_ports: { type: 'object' },
-          },
-        }
-      : {
-          type: 'array',
-          items: {
+    compilerVersion === '3.0.6'
+      ? generator === 'child_completion'
+        ? childCompletionSchema(exits)
+        : mapResultSchema()
+      : generator === 'child_completion'
+        ? {
             type: 'object',
             additionalProperties: false,
-            required: ['item_index', 'outcome'],
+            required: ['exit', 'output_ports'],
             properties: {
-              item_index: { type: 'integer', minimum: 0 },
-              outcome: {
-                type: 'string',
-                enum: ['completed', 'errored', 'cancelled'],
+              exit: { type: 'string', enum: exits },
+              output_ports: { type: 'object' },
+            },
+          }
+        : {
+            type: 'array',
+            items: {
+              type: 'object',
+              additionalProperties: false,
+              required: ['item_index', 'outcome'],
+              properties: {
+                item_index: { type: 'integer', minimum: 0 },
+                outcome: {
+                  type: 'string',
+                  enum: ['completed', 'errored', 'cancelled'],
+                },
               },
             },
-          },
-        };
+          };
   return buildGeneratedSchema(generator, parameters, schemaJson);
+}
+
+function childCompletionSchema(exits: string[]): JsonObject {
+  const hash = { type: 'string', pattern: '^sha256:[0-9a-f]{64}$' };
+  return {
+    type: 'object',
+    additionalProperties: false,
+    required: [
+      'scope_id',
+      'exit',
+      'output_envelope_ref',
+      'output_envelope_hash',
+      'plan_hash',
+      'cut_event_seq',
+    ],
+    properties: {
+      scope_id: { type: 'string', minLength: 1 },
+      exit: { type: 'string', enum: exits },
+      output_envelope_ref: { type: 'string', minLength: 1 },
+      output_envelope_hash: hash,
+      plan_hash: hash,
+      cut_event_seq: {
+        type: 'integer',
+        minimum: 1,
+        maximum: Number.MAX_SAFE_INTEGER,
+      },
+    },
+  };
 }
 
 function registrySchemaJson(
@@ -1553,7 +1586,11 @@ function childOwnerOutputPorts(
   const completionPort = String(node.completion_output_port);
   const output: JsonObject = {
     [completionPort]: {
-      schema: generatedCompiledSchema('child_completion', childInterface),
+      schema: generatedCompiledSchema(
+        'child_completion',
+        childInterface,
+        state.identity.compiler_version,
+      ),
       max_bytes: Number(state.snapshot.safety.value.max_single_value_bytes),
       required: true,
     },
@@ -1629,7 +1666,11 @@ function mapOwnerOutputPorts(
   const resultPort = String(node.result_output_port);
   return {
     [resultPort]: {
-      schema: generatedCompiledSchema('map_result', childInterface),
+      schema: generatedCompiledSchema(
+        'map_result',
+        childInterface,
+        state.identity.compiler_version,
+      ),
       max_bytes: Number(state.snapshot.safety.value.max_single_value_bytes),
       required: true,
     },
@@ -2135,7 +2176,7 @@ function compileGraphNode(
   factoryByNode: Map<string, FactoryCompilation>,
 ): JsonObject {
   const compiled = compileGraphNodeCore(node, state, ownerPath, factoryByNode);
-  if (!['3.0.4', '3.0.5'].includes(state.identity.compiler_version)) {
+  if (!['3.0.4', '3.0.5', '3.0.6'].includes(state.identity.compiler_version)) {
     return compiled;
   }
   assertJsonObject(compiled.output_ports);

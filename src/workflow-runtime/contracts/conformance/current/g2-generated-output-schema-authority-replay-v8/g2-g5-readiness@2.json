@@ -1,0 +1,28 @@
+{
+  "format": "icarus.workflow-g2-g5-generated-output-schema-replay-readiness/2",
+  "ref": {
+    "id": "icarus.workflow-g2-g5-generated-output-schema-replay-readiness",
+    "version": "2.0.0"
+  },
+  "version": 2,
+  "domain_separator": "icarus:workflow-g2-g5-generated-output-schema-replay-readiness:2\n",
+  "payload": {
+    "format": "icarus.workflow-g2-g5-generated-output-schema-replay-readiness/2",
+    "g2_status": "IN_PROGRESS",
+    "g3_status": "IN_PROGRESS",
+    "g4_status": "IN_PROGRESS",
+    "g5_status": "IN_PROGRESS",
+    "g6_through_g9_status": "NOT_READY",
+    "current_replay_case_count": 40,
+    "current_replay_exact_required": true,
+    "current_compiler_identity_hash": "sha256:c9796f4b93a53208633d1e621052ffa425e3f3616b69c4dad0cba97b17525ab5",
+    "case_set_hash": "sha256:72ce785cb1919960ad42f5f6ef24c5372508fa20b77be9c7eff9668a0a79e0b2",
+    "predecessor_v7_bundle_hash": "sha256:314ceb2f907243288815ddf029fee0b716c16d7b567d0a25da978b94a47f80ab",
+    "predecessor_v6_bundle_hash": "sha256:0820328ae1cfdba7d05948d9e36498a5428d997d6eabfb833ef0ba7d84b77db7",
+    "static_child_bridge_pack_hash": "sha256:072c612da8d0f42073a1a6ea3c80953936dfdd1c606ed9eef5c6a114225b9a3e",
+    "semantic_approval_created": false,
+    "independent_regression_created": false,
+    "closure_performed": false
+  },
+  "hash": "sha256:d918888d8b4be11816b870101e94fde05dd95bb99133aa1050e2404beb3f9e55"
+}

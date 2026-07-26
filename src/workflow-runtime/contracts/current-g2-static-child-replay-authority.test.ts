@@ -45,7 +45,7 @@ function copyAuthority(name: string): string {
   return target;
 }
 
-describe('current G2 Compiler 3.0.5 static-child replay authority', () => {
+describe('current G2 Compiler 3.0.6 generated-output schema replay authority', () => {
   it('builds a deterministic closed 40-case authority without fabricating approval or closure', () => {
     const second = buildCurrentG2StaticChildReplayAuthority();
     expect([...second.files]).toEqual([...built.files]);
@@ -53,7 +53,9 @@ describe('current G2 Compiler 3.0.5 static-child replay authority', () => {
     expect(built.authoredExactCount).toBe(40);
     expect(built.authority.payload).toMatchObject({
       authority_kind: 'additive_current_replay_not_semantic_seal',
-      authority_status: 'G2_IN_PROGRESS_G5_IN_PROGRESS_G6_G9_NOT_READY',
+      authority_status:
+        'G2_IN_PROGRESS_G3_IN_PROGRESS_G4_IN_PROGRESS_G5_IN_PROGRESS_G6_G9_NOT_READY',
+      authority_version: '8.0.0-current',
       approval_status: 'absent_not_fabricated',
       seal_status: 'not_created',
       independent_regression_status: 'not_created_by_directed_repair',
@@ -67,7 +69,7 @@ describe('current G2 Compiler 3.0.5 static-child replay authority', () => {
     );
   }, 30_000);
 
-  it('keeps current 3.0.5 and historical sealed v6 3.0.4 replay authorities distinct and exact', () => {
+  it('keeps current 3.0.6, superseded v7 3.0.5, and sealed v6 3.0.4 authorities distinct', () => {
     const current = evaluateCurrentG2GoldenReplay();
     const historical = checkG2V6FrozenReplay();
     expect(current).toMatchObject({
@@ -81,11 +83,20 @@ describe('current G2 Compiler 3.0.5 static-child replay authority', () => {
       bundleHash:
         'sha256:0820328ae1cfdba7d05948d9e36498a5428d997d6eabfb833ef0ba7d84b77db7',
     });
-    const predecessor = built.authority.payload.predecessor_v6 as JsonObject;
-    const historicalIdentity = predecessor.compiler_identity as JsonObject;
+    const predecessorV7 = built.authority.payload.predecessor_v7 as JsonObject;
+    const predecessorV7Identity = predecessorV7.compiler_identity as JsonObject;
+    const predecessorV6 = built.authority.payload.predecessor_v6 as JsonObject;
+    const historicalIdentity = predecessorV6.compiler_identity as JsonObject;
     expect(historicalIdentity.compiler_version).toBe('3.0.4');
-    expect(built.compilerIdentity.compiler_version).toBe('3.0.5');
+    expect(predecessorV7Identity.compiler_version).toBe('3.0.5');
+    expect(built.compilerIdentity.compiler_version).toBe('3.0.6');
+    expect(predecessorV7.bundle_hash).toBe(
+      'sha256:314ceb2f907243288815ddf029fee0b716c16d7b567d0a25da978b94a47f80ab',
+    );
     expect(canonicalJson(historicalIdentity)).not.toBe(
+      canonicalJson(predecessorV7Identity),
+    );
+    expect(canonicalJson(predecessorV7Identity)).not.toBe(
       canonicalJson(built.compilerIdentity as unknown as JsonObject),
     );
     expect(built.authority.payload.bundle_hash).not.toBe(historical.bundleHash);
@@ -131,6 +142,26 @@ describe('current G2 Compiler 3.0.5 static-child replay authority', () => {
     wrongCases[0]!.expected_result = wrongCases[0]!.historical_expected_result;
     expect(() =>
       validateCurrentG2StaticChildReplayAuthorityPayloadForTest(wrongExpected),
+    ).toThrow(/Current expected result consumed the wrong authority/);
+
+    const predecessorSnapshot = structuredClone(built.authority.payload);
+    const predecessorSnapshotCases = predecessorSnapshot.cases as JsonObject[];
+    predecessorSnapshotCases[0]!.registry_snapshot_ref =
+      predecessorSnapshotCases[0]!.predecessor_registry_snapshot_ref;
+    expect(() =>
+      validateCurrentG2StaticChildReplayAuthorityPayloadForTest(
+        predecessorSnapshot,
+      ),
+    ).toThrow(/Current snapshot consumed the wrong authority/);
+
+    const predecessorExpected = structuredClone(built.authority.payload);
+    const predecessorExpectedCases = predecessorExpected.cases as JsonObject[];
+    predecessorExpectedCases[0]!.expected_result =
+      predecessorExpectedCases[0]!.predecessor_expected_result;
+    expect(() =>
+      validateCurrentG2StaticChildReplayAuthorityPayloadForTest(
+        predecessorExpected,
+      ),
     ).toThrow(/Current expected result consumed the wrong authority/);
   });
 

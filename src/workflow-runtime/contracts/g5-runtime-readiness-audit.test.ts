@@ -27,7 +27,7 @@ describe('G5 Basic Runtime readiness audit', () => {
     const repair = readArtifact('contract-pack-g5-basic-runtime-repair.json');
     expect(repair.payload).toMatchObject({
       status:
-        'G5_STATIC_CHILD_PLAN_PREREQUISITE_REPAIR_CANDIDATE_PENDING_INDEPENDENT_AFFECTED_CHAIN_REGRESSION',
+        'G5_GENERATED_OUTPUT_SCHEMA_AUTHORITY_REPAIR_CANDIDATE_PENDING_INDEPENDENT_AFFECTED_CHAIN_REGRESSION',
       g5_done: false,
       g6_through_g9: 'NOT_READY',
       historical_g5_candidate_authority: 'forbidden',
@@ -42,23 +42,28 @@ describe('G5 Basic Runtime readiness audit', () => {
         'business_members_use_exact_compiled_schema_and_envelope_uses_exact_node_output_envelope_schema',
       output_publication:
         'canonical_node_output_envelope_with_exact_port_values',
-      next_task_only: 'independent_G2_G5_affected_chain_regression',
+      next_task_only:
+        'independent_G2_G3_G4_G5_generated_output_schema_affected_chain_regression',
     });
     const bindings = objects(protocol.payload.bindings);
     expect(
       bindings.find(
-        (entry) => entry.name === 'g2_current_compiler_3_0_5_replay_authority',
+        (entry) =>
+          entry.name ===
+          'g2_current_compiler_3_0_6_generated_output_schema_replay_authority',
       ),
     ).toMatchObject({
-      hash: 'sha256:2c1192f3cd74a1a5dc753b9fd9dd2d66f98d7d1f22b659360d6f148f057600e0',
+      hash: 'sha256:d8134a41081786d2f19c99930d89ae3a88ea3af8ba937f5063c07768211019ac',
       bundle_hash:
-        'sha256:314ceb2f907243288815ddf029fee0b716c16d7b567d0a25da978b94a47f80ab',
+        'sha256:fe308ba0f8d9b8c9604aff39163029bf05e0aa80c7b461a9f2f80d27c2984bd3',
     });
     const readiness = readArtifact(
-      'conformance/current/g2-static-child-plan-bundle-replay-v7/g2-g5-readiness@1.json',
+      'conformance/current/g2-generated-output-schema-authority-replay-v8/g2-g5-readiness@2.json',
     );
     expect(readiness.payload).toMatchObject({
       g2_status: 'IN_PROGRESS',
+      g3_status: 'IN_PROGRESS',
+      g4_status: 'IN_PROGRESS',
       g5_status: 'IN_PROGRESS',
       g6_through_g9_status: 'NOT_READY',
       current_replay_case_count: 40,

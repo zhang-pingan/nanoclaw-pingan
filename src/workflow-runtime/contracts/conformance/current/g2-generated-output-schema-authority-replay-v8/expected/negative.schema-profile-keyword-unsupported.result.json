@@ -1,0 +1,23 @@
+{
+  "format": "icarus.workflow-compiler-conformance-case-result/1",
+  "case_id": "negative.schema-profile-keyword-unsupported",
+  "source_kind": "workflow_schema",
+  "source_hash": "sha256:ec2a9be4659118d6e5c83237b032530da6dc9eb39fbf1aa38eec78fa97a3d266",
+  "outcome": "rejected",
+  "normalized_plan": null,
+  "static_lowering_contract_ref": null,
+  "static_lowering_contract_hash": null,
+  "diagnostics": [
+    {
+      "code": "schema_profile_keyword_unsupported",
+      "detail_ref": null,
+      "instance_pointer": "/anyOf",
+      "phase": "schema",
+      "schema_pointer": "#/profile/forbiddenKeywords",
+      "stable_object_id": null
+    }
+  ],
+  "proof_hashes": [],
+  "program_hashes": [],
+  "result_hash": "sha256:34e9a56946f9deaa283ffdd768d755512147d13a9d9a38d8b92d70296d15749d"
+}

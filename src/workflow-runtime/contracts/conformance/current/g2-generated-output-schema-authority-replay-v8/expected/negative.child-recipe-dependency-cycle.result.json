@@ -1,0 +1,23 @@
+{
+  "format": "icarus.workflow-compiler-conformance-case-result/1",
+  "case_id": "negative.child-recipe-dependency-cycle",
+  "source_kind": "workflow_definition",
+  "source_hash": "sha256:d1e597a32c1aafccbdfc962630bdc44bda29031e07cc285acc7de7fc04ddf1ba",
+  "outcome": "rejected",
+  "normalized_plan": null,
+  "static_lowering_contract_ref": null,
+  "static_lowering_contract_hash": null,
+  "diagnostics": [
+    {
+      "code": "child_recipe_dependency_cycle",
+      "detail_ref": null,
+      "instance_pointer": "/ref",
+      "phase": "prove",
+      "schema_pointer": null,
+      "stable_object_id": "fixture.recipe.cycle-a"
+    }
+  ],
+  "proof_hashes": [],
+  "program_hashes": [],
+  "result_hash": "sha256:259ef5633067429e0421034b807e5fe6810d0cbb2650326ffef21f150e2e9569"
+}
