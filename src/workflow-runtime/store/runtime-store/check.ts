@@ -19,9 +19,9 @@ try {
     'SELECT count(*) AS table_count FROM sqlite_schema WHERE type = ? AND name NOT LIKE ?',
     ['table', 'sqlite_%'],
   );
-  if (tableCount?.table_count !== 86) {
+  if (tableCount?.table_count !== 87) {
     throw new Error(
-      `Expected 86 current Workflow Runtime tables, received ${String(tableCount?.table_count)}`,
+      `Expected 87 current Workflow Runtime tables, received ${String(tableCount?.table_count)}`,
     );
   }
   const evidence = store.identityEvidence;

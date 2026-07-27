@@ -36,9 +36,9 @@ describe('G5 Basic Runtime readiness audit', () => {
       'conformance/g5-basic-runtime-repair/g5-basic-runtime-repair-protocol@1.json',
     );
     expect(protocol.payload).toMatchObject({
-      database_schema_version: 9,
+      database_schema_version: 10,
       database_schema_hash:
-        'sha256:9a36d16fd52d26af009f64f6d26b0bf5d713c16a6f9bad3e6e1019d354bc4ff9',
+        'sha256:1ff4fd63239e85630923fa16e204645367958ae487933338a6f676ec9be6faad',
       plan_authority:
         'persisted_hash_verified_sealed_plan_plus_exact_generated_content_and_binding_rows',
       generated_value_authority:
@@ -52,8 +52,8 @@ describe('G5 Basic Runtime readiness audit', () => {
     expect(bindings).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          name: 'database_schema_9',
-          hash: 'sha256:c32fc2db46c49b09edeea2a31d07b4decf3b89a6272a3b7b69d933288efe24ca',
+          name: 'database_schema_10',
+          hash: 'sha256:05169ddfdc2c53371a0e4464dcc8b109608e1ff9b3d0276478da464c11266682',
         }),
         expect.objectContaining({
           name: 'r020_child_consumption_lineage',
@@ -64,8 +64,12 @@ describe('G5 Basic Runtime readiness audit', () => {
           hash: 'sha256:b5e9237d09d829946c496e19eddf16b21c94fb4fd59b3588900f4764332d0699',
         }),
         expect.objectContaining({
+          name: 'r022_domain_claim_handoff',
+          hash: 'sha256:ea97a3d52a2e4a14fb2671b2191b1b1cb6acc22c4ecded7db2e141a1716b516e',
+        }),
+        expect.objectContaining({
           name: 'g4_node_output_envelope_authority_successor',
-          hash: 'sha256:58704cc29429d323bc8c3bcb825cfd1d153528671be7ebb63a7f2127d45b0ee4',
+          hash: 'sha256:b38643bc516b176988fd143fef6bc13b92389682ffb4e49aec01e9ff0861bec5',
         }),
       ]),
     );
@@ -76,9 +80,9 @@ describe('G5 Basic Runtime readiness audit', () => {
           'g2_current_compiler_3_0_6_generated_output_schema_replay_authority',
       ),
     ).toMatchObject({
-      hash: 'sha256:d8134a41081786d2f19c99930d89ae3a88ea3af8ba937f5063c07768211019ac',
+      hash: 'sha256:3ae1838abece3981c61f6164620cbf26377b9b859c559548f9835fb8f873c326',
       bundle_hash:
-        'sha256:fe308ba0f8d9b8c9604aff39163029bf05e0aa80c7b461a9f2f80d27c2984bd3',
+        'sha256:f29e0c843accb8533e50bd999195cbeff7d419c6ede154a6dab052bd67bc8ac9',
     });
     const readiness = readArtifact(
       'conformance/current/g2-generated-output-schema-authority-replay-v8/g2-g5-readiness@2.json',

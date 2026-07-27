@@ -384,7 +384,7 @@ const bindingsSchema: JsonObject = {
     core_release_ref: { $ref: '#/$defs/versioned_ref' },
     core_release_hash: hashSchema,
     core_build_hash: hashSchema,
-    database_schema_version: { const: 9 },
+    database_schema_version: { const: 10 },
     database_schema_hash: hashSchema,
     run_protocol_ref: { $ref: '#/$defs/versioned_ref' },
     run_protocol_hash: hashSchema,
@@ -486,7 +486,7 @@ export const G3_RETENTION_EXECUTOR_ABI_PROFILE_SCHEMA: JsonObject = {
         run_protocol_major: { const: 1 },
         executor_abi_major: { const: 1 },
         registry_schema_version: { const: 1 },
-        database_schema_version: { const: 9 },
+        database_schema_version: { const: 10 },
       },
     },
     retention_policy_ref: { $ref: '#/$defs/versioned_ref' },
@@ -686,7 +686,7 @@ export function verifyCoreProtocolFacts(
     calculateCoreCompatibilityHash(withoutHash) !==
       input.core_compatibility.compatibility_hash ||
     input.core_compatibility.registry_schema_version !== 1 ||
-    input.core_compatibility.database_schema_version !== 9 ||
+    input.core_compatibility.database_schema_version !== 10 ||
     input.core_compatibility.database_schema_hash !==
       G3_CURRENT_UPSTREAM_IDENTITY.g1_schema_hash ||
     input.snapshot.expected_core_build_hash !==
@@ -762,7 +762,7 @@ export function buildAcceptedRetentionExecutorAbiResult(
       core_release_ref: input.core_compatibility.core_release_ref,
       core_release_hash: input.core_compatibility.core_release_hash,
       core_build_hash: input.core_compatibility.core_build_hash,
-      database_schema_version: 9,
+      database_schema_version: 10,
       database_schema_hash: input.core_compatibility.database_schema_hash,
       run_protocol_ref: input.run_protocol.ref,
       run_protocol_hash: input.run_protocol.hash,
@@ -804,7 +804,7 @@ export function buildG3RetentionExecutorAbiProfile(): G3RetentionExecutorAbiPref
       run_protocol_major: 1,
       executor_abi_major: 1,
       registry_schema_version: 1,
-      database_schema_version: 9,
+      database_schema_version: 10,
     },
     retention_policy_ref: G3_RETENTION_POLICY_REF,
     retention_policy_hash: G3_RETENTION_POLICY_HASH,
@@ -981,7 +981,7 @@ export function g3RetentionExecutorAbiStoreFixtureForTest(): {
     supported_run_protocol_majors: [1],
     supported_executor_abi_majors: [1],
     registry_schema_version: 1 as const,
-    database_schema_version: 9 as const,
+    database_schema_version: 10 as const,
     database_schema_hash: G3_CURRENT_UPSTREAM_IDENTITY.g1_schema_hash,
   };
   const coreCompatibility: G3CoreCompatibilitySnapshot = {
@@ -1172,13 +1172,13 @@ function validateUpstreamIdentity(): void {
   );
   if (
     registry.hash !==
-    'sha256:9b295834dc499b5590566a0bee5ac053adc0da1879699626e0e94ec825e443cd'
+    'sha256:0228a5f064f64e5e187bd0a493c980fd4b2d229cd83e9d8fea9fdfeca1158627'
   ) {
     throw new Error('G3.3 Registry persistence identity drift');
   }
   if (
     queryPack.hash !==
-    'sha256:8734b6a44d11180b507a0e546bc5784a5ee0073cb94c85785c05eed995d50ba9'
+    'sha256:56a2a50ff2c63b986bf0d075e9d0fa2f9b377465c7c0b6f99d67438e31e88702'
   ) {
     throw new Error('G3.5 exact resource query identity drift');
   }
@@ -1285,9 +1285,9 @@ function buildManifest(
       status: 'DONE',
       g3_status: 'IN_PROGRESS',
       upstream_g3_3_pack_hash:
-        'sha256:9b295834dc499b5590566a0bee5ac053adc0da1879699626e0e94ec825e443cd',
+        'sha256:0228a5f064f64e5e187bd0a493c980fd4b2d229cd83e9d8fea9fdfeca1158627',
       upstream_g3_5_pack_hash:
-        'sha256:8734b6a44d11180b507a0e546bc5784a5ee0073cb94c85785c05eed995d50ba9',
+        'sha256:56a2a50ff2c63b986bf0d075e9d0fa2f9b377465c7c0b6f99d67438e31e88702',
       upstream_g1_schema_root_hash:
         G3_CURRENT_UPSTREAM_IDENTITY.g1_schema_root_hash,
       publisher_persistence_readiness: 'PUBLISHER_SCHEMA_PREREQUISITE_READY',

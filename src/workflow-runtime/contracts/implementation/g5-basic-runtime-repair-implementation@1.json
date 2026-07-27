@@ -21,7 +21,7 @@
       },
       {
         "path": "src/workflow-runtime/creation/domain-claims.ts",
-        "raw_sha256": "sha256:0102b862650cecdf9bc44688e6a6618ace7eee12680a22562d70a38920023411"
+        "raw_sha256": "sha256:121c22e8f9cca813cd43a8692011c4d2147c0d2743b4cc9887343209df89bb1f"
       },
       {
         "path": "src/workflow-runtime/creation/recipe-registry.ts",
@@ -33,7 +33,7 @@
       },
       {
         "path": "src/workflow-runtime/creation/task-intake.ts",
-        "raw_sha256": "sha256:5779ea26614fc0d33ad4535ea3d64623d2209af9f6f68bd80bba1ca4e42ae966"
+        "raw_sha256": "sha256:4abc82f735b04df1bb568efaacd1f3077d2c34797c137421214f6a5be849ca92"
       },
       {
         "path": "src/workflow-runtime/runtime/basic-scheduler.ts",
@@ -69,7 +69,7 @@
       },
       {
         "path": "src/workflow-runtime/runtime/outbox.ts",
-        "raw_sha256": "sha256:26003b141090df4eb513ada27e0d3fbdd87ac2d5efe17d2f6d3f8d041b03581a"
+        "raw_sha256": "sha256:ba91926da97d3907ea330a5912fef2647975afaaf8a3cec9ee83627a02358016"
       },
       {
         "path": "src/workflow-runtime/runtime/plan-authority.ts",
@@ -88,7 +88,7 @@
         "raw_sha256": "sha256:21a197cb8412ec5dea734874e0530c3d00cbffc61b3219f65e7b4194f6b5bfa0"
       }
     ],
-    "source_tree_hash": "sha256:16d9d98e3787159bccda8e011fe5f3372ed21b450a1b606a9181e6b42296eb8f"
+    "source_tree_hash": "sha256:4fb99ee30cee99c43224ade653013432dc07ca67fad0a05bbc15967ad7c6980f"
   },
-  "hash": "sha256:f559c2da3a68a6e68af0e98b15a3a3acbb3370266e485470d24a1debf77da182"
+  "hash": "sha256:ed86b1c4167a82ca27c1acd020378d888cf8ed29d9bceba14d6b51ee08e34b16"
 }

@@ -31,10 +31,10 @@
               "id": "fixture.retention-abi-snapshot",
               "version": "1.0.0"
             },
-            "snapshot_hash": "sha256:8b3c6b7798adf0294749e97c23e45c4740822f5f065ef865cf49276dcc538d7b",
+            "snapshot_hash": "sha256:5ea0321b76c3a23686ac0492cf243df11e6eaec4b9e5f77f784d488dd79e5e8a",
             "expected_compiler_version": "3.0.4",
             "expected_core_build_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-            "expected_database_schema_hash": "sha256:9a36d16fd52d26af009f64f6d26b0bf5d713c16a6f9bad3e6e1019d354bc4ff9"
+            "expected_database_schema_hash": "sha256:1ff4fd63239e85630923fa16e204645367958ae487933338a6f676ec9be6faad"
           },
           "closure": {
             "ref": {
@@ -200,9 +200,9 @@
               1
             ],
             "registry_schema_version": 1,
-            "database_schema_version": 9,
-            "database_schema_hash": "sha256:9a36d16fd52d26af009f64f6d26b0bf5d713c16a6f9bad3e6e1019d354bc4ff9",
-            "compatibility_hash": "sha256:cc643349c2dc08a90d2adf8bf541b2899c021b23c0d4217cf36ca819ab7821d2"
+            "database_schema_version": 10,
+            "database_schema_hash": "sha256:1ff4fd63239e85630923fa16e204645367958ae487933338a6f676ec9be6faad",
+            "compatibility_hash": "sha256:2d40b619ad89ade020a3bee7e4f6041f9accb66397ac5e31811e264b19a205e6"
           },
           "run_protocol": {
             "ref": {
@@ -287,7 +287,7 @@
               "id": "fixture.retention-abi-snapshot",
               "version": "1.0.0"
             },
-            "snapshot_hash": "sha256:8b3c6b7798adf0294749e97c23e45c4740822f5f065ef865cf49276dcc538d7b",
+            "snapshot_hash": "sha256:5ea0321b76c3a23686ac0492cf243df11e6eaec4b9e5f77f784d488dd79e5e8a",
             "closure_ref": {
               "id": "fixture.retention-abi-closure",
               "version": "1.0.0"
@@ -300,15 +300,15 @@
               "id": "fixture.core-compatibility",
               "version": "1.0.0"
             },
-            "core_compatibility_hash": "sha256:cc643349c2dc08a90d2adf8bf541b2899c021b23c0d4217cf36ca819ab7821d2",
+            "core_compatibility_hash": "sha256:2d40b619ad89ade020a3bee7e4f6041f9accb66397ac5e31811e264b19a205e6",
             "core_release_ref": {
               "id": "icarus.core-release",
               "version": "1.0.0"
             },
             "core_release_hash": "sha256:1212121212121212121212121212121212121212121212121212121212121212",
             "core_build_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-            "database_schema_version": 9,
-            "database_schema_hash": "sha256:9a36d16fd52d26af009f64f6d26b0bf5d713c16a6f9bad3e6e1019d354bc4ff9",
+            "database_schema_version": 10,
+            "database_schema_hash": "sha256:1ff4fd63239e85630923fa16e204645367958ae487933338a6f676ec9be6faad",
             "run_protocol_ref": {
               "id": "icarus.workflow-contract-pack-catalog-protocols",
               "version": "1.0.0"
@@ -333,5 +333,5 @@
       }
     ]
   },
-  "hash": "sha256:a8a1815111b6798d9096d47a4d32026d04f6a7b995c423b9a05e09054a5fd0d2"
+  "hash": "sha256:f2977cbda295b54aba99a860f06dca632355caf79c1c14bc5384121ca42289f6"
 }

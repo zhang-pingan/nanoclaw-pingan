@@ -72,7 +72,7 @@ import {
   createWorkflowT0,
   prepareRequiredFinalizationT0p,
 } from '../creation/task-intake.js';
-import { acquireDomainClaim } from '../creation/domain-claims.js';
+import { acquireCurrentDomainClaim } from '../creation/domain-claims.js';
 import type { WorkflowRuntimeStore } from '../store/runtime-store/index.js';
 import {
   NodeOutputEnvelopeAuthorityError,
@@ -5234,12 +5234,12 @@ describe('G5 Basic Runtime Schema 7 repair transaction integration', () => {
     };
     instance.store.withImmediateTransaction((transaction) => {
       expect(
-        acquireDomainClaim(transaction, sharedClaimInput).disposition,
+        acquireCurrentDomainClaim(transaction, sharedClaimInput).disposition,
       ).toBe('acquired');
     });
     expect(() =>
       instance.store.withImmediateTransaction((transaction) =>
-        acquireDomainClaim(transaction, {
+        acquireCurrentDomainClaim(transaction, {
           ...sharedClaimInput,
           mode: 'exclusive',
           creationKey: 'task-1-exclusive-conflict',
@@ -5254,12 +5254,12 @@ describe('G5 Basic Runtime Schema 7 repair transaction integration', () => {
     };
     instance.store.withImmediateTransaction((transaction) => {
       expect(
-        acquireDomainClaim(transaction, exclusiveClaimInput).disposition,
+        acquireCurrentDomainClaim(transaction, exclusiveClaimInput).disposition,
       ).toBe('acquired');
     });
     expect(() =>
       instance.store.withImmediateTransaction((transaction) =>
-        acquireDomainClaim(transaction, {
+        acquireCurrentDomainClaim(transaction, {
           ...exclusiveClaimInput,
           mode: 'shared',
           creationKey: 'task-1-shared-conflict',

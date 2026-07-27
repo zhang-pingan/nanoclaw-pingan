@@ -22,9 +22,11 @@
       "disposition": "frozen_historical_authority"
     },
     "current_store": {
-      "database_schema_version": 9,
-      "g1_root_hash": "sha256:c32fc2db46c49b09edeea2a31d07b4decf3b89a6272a3b7b69d933288efe24ca",
-      "database_schema_hash": "sha256:9a36d16fd52d26af009f64f6d26b0bf5d713c16a6f9bad3e6e1019d354bc4ff9",
+      "database_schema_version": 10,
+      "g1_root_hash": "sha256:05169ddfdc2c53371a0e4464dcc8b109608e1ff9b3d0276478da464c11266682",
+      "database_schema_hash": "sha256:1ff4fd63239e85630923fa16e204645367958ae487933338a6f676ec9be6faad",
+      "schema10_migration_hash": "sha256:269645a9f093dc35fd35a04336d71e38cc17b7168584752f9b9bdfc106f46fad",
+      "schema9_to_10_upgrade_hash": "sha256:19c24f06558a3e98f1415468c4af8ce44e94afcad8be3428ebdc133bf4a353c5",
       "schema9_migration_hash": "sha256:4591e2dd417d439c813026816572e8a66e9d088efa6a8de88ebfb38a68cf9837",
       "schema8_to_9_upgrade_hash": "sha256:890c911a27074cca3ee34f9a7f022e4fbda6edf77fbe2ad75f2b77d0d1bed23b",
       "schema8_migration_hash": "sha256:b19ebe83ea8b7c53a2ab54a901df092b4e343ee4e1d5772ed6bc3143a82746ad",
@@ -37,14 +39,19 @@
         "hash": "sha256:7a852ff21a77a767b708ab8a4fc5c329024ca954422b26d71210b0385ce05441"
       },
       {
-        "role": "g1_schema_9",
-        "path": "../store/schema/contract-pack-g1-executable-schema-v9.json",
-        "hash": "sha256:c32fc2db46c49b09edeea2a31d07b4decf3b89a6272a3b7b69d933288efe24ca"
+        "role": "g1_schema_10",
+        "path": "../store/schema/contract-pack-g1-executable-schema-v10.json",
+        "hash": "sha256:05169ddfdc2c53371a0e4464dcc8b109608e1ff9b3d0276478da464c11266682"
       },
       {
         "role": "r021_map_terminal_consumption",
         "path": "contract-pack-r021-map-terminal-consumption.json",
         "hash": "sha256:b5e9237d09d829946c496e19eddf16b21c94fb4fd59b3588900f4764332d0699"
+      },
+      {
+        "role": "r022_domain_claim_handoff",
+        "path": "contract-pack-r022-domain-claim-handoff.json",
+        "hash": "sha256:ea97a3d52a2e4a14fb2671b2191b1b1cb6acc22c4ecded7db2e141a1716b516e"
       },
       {
         "role": "g2_v6_sealed_bundle",
@@ -54,12 +61,12 @@
       {
         "role": "g3_6_retention_executor_abi",
         "path": "contract-pack-g3-retention-executor-abi-preflight.json",
-        "hash": "sha256:71be35581adb4717230bb106c658db91777126c8e59bc9c0e95ef5d7bd651e43"
+        "hash": "sha256:53f83f24a9ffd2d194105003077bad472bf3ef9e8f6aa05c8b3bb60f1279956c"
       },
       {
         "role": "g3_7_workflow_publisher",
         "path": "contract-pack-g3-workflow-publisher.json",
-        "hash": "sha256:88705beddf6965dc8a947aba1f3dd9fbb2b9124f33824dafe7ad0881ab561be3"
+        "hash": "sha256:80f0bbd0c977ffe9def9fd854f7ae99099f736fe3cc7c17170e326b181db61bc"
       },
       {
         "role": "g3_8a_frozen_activation_repair",
@@ -69,7 +76,7 @@
       {
         "role": "g3_9_feature_release_activation",
         "path": "contract-pack-g3.9-feature-release-activation.json",
-        "hash": "sha256:230fa30e795e0931d27acfb5a4215e7f30e4d806a525dea6e6966036ee1ea6ee"
+        "hash": "sha256:fc6eb2fa95176e728e95f3ae67663b4ca355cbe4cf371b06a8f0a7728d88b884"
       }
     ],
     "selection": {
@@ -85,5 +92,5 @@
     "runtime_construction_performed": false,
     "production_authorization": false
   },
-  "hash": "sha256:58704cc29429d323bc8c3bcb825cfd1d153528671be7ebb63a7f2127d45b0ee4"
+  "hash": "sha256:b38643bc516b176988fd143fef6bc13b92389682ffb4e49aec01e9ff0861bec5"
 }

@@ -10,12 +10,12 @@ import type { LogicalTableMetadata } from '../../contracts/logical-schema-types.
 import { buildActivationRepairSchemaPrerequisitePayload } from './activation-repair-source.js';
 import { buildQueryFixtures, renderMigration } from './ddl.js';
 import {
-  loadExecutableSchemaSource,
+  loadCurrentExecutableSchemaSource,
   loadSchema3ExecutableSchemaSource,
 } from './source.js';
 import { createMigratedDatabase, verifyQueryPlans } from './sqlite-gate.js';
 
-const source = loadExecutableSchemaSource();
+const source = loadCurrentExecutableSchemaSource();
 const schema3 = loadSchema3ExecutableSchemaSource();
 const migration = renderMigration(source);
 

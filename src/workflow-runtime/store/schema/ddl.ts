@@ -13,7 +13,7 @@ import type {
 } from './types.js';
 
 export const MIGRATION_RELATIVE_PATH =
-  'migration/workflow-runtime-schema-v9.sql';
+  'migration/workflow-runtime-schema-v10.sql';
 
 function q(identifier: string): string {
   return `"${identifier.replaceAll('"', '""')}"`;
@@ -180,7 +180,7 @@ function operationalStateSql(runExpression: string): string {
 }
 
 export function buildSchemaTriggers(
-  databaseSchemaVersion: 3 | 4 | 5 | 6 | 7 | 8 | 9 = 9,
+  databaseSchemaVersion: 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 = 10,
 ): SchemaTriggerDefinition[] {
   const refreshBody = (row: 'NEW' | 'OLD') => `
   UPDATE "workflow_graph_runs"
@@ -543,6 +543,86 @@ export function buildSchemaTriggers(
       sql: `CREATE TRIGGER ${q('trg:activation_events:immutable_delete')} BEFORE DELETE ON ${q('workflow_feature_release_activation_events')} BEGIN\n  SELECT RAISE(ABORT, 'activation_event_is_immutable');\nEND`,
     },
   ];
+  if (databaseSchemaVersion >= 10) {
+    triggers.push(
+      {
+        name: 'trg:domain_claims:immutable_identity',
+        table: 'workflow_domain_resource_claims',
+        timing: 'before',
+        event: 'update',
+        owner_intent:
+          'owner-bound append-history Claim identity and provenance are immutable',
+        sql: `CREATE TRIGGER ${q('trg:domain_claims:immutable_identity')} BEFORE UPDATE OF "id", "namespace", "key_hash", "mode", "owner_workflow_id", "recipe_resource_id", "recipe_resource_hash", "source_intake_id", "creation_key", "fencing_token", "acquired_at_ms", "claim_epoch", "fencing_token_identity", "acquisition_kind", "predecessor_claim_id", "handoff_id" ON ${q('workflow_domain_resource_claims')} BEGIN\n  SELECT RAISE(ABORT, 'domain_claim_identity_is_immutable');\nEND`,
+      },
+      {
+        name: 'trg:domain_claims:release_transition',
+        table: 'workflow_domain_resource_claims',
+        timing: 'before',
+        event: 'update',
+        owner_intent:
+          'Claim lifecycle advances by one CAS version and released history is terminal',
+        sql: `CREATE TRIGGER ${q('trg:domain_claims:release_transition')} BEFORE UPDATE ON ${q('workflow_domain_resource_claims')} BEGIN\n  SELECT CASE WHEN NEW."row_version" <> OLD."row_version" + 1 OR NOT ((OLD."status" = 'held' AND NEW."status" = 'release_pending' AND NEW."released_at_ms" IS NULL AND NEW."active_head_claim_id" = NEW."id") OR (OLD."status" IN ('held', 'release_pending') AND NEW."status" = 'released' AND NEW."released_at_ms" IS NOT NULL AND NEW."active_head_claim_id" IS NULL)) THEN RAISE(ABORT, 'domain_claim_release_transition_invalid') END;\nEND`,
+      },
+      {
+        name: 'trg:domain_claims:immutable_delete',
+        table: 'workflow_domain_resource_claims',
+        timing: 'before',
+        event: 'delete',
+        owner_intent: 'released Claim history is append-only audit evidence',
+        sql: `CREATE TRIGGER ${q('trg:domain_claims:immutable_delete')} BEFORE DELETE ON ${q('workflow_domain_resource_claims')} BEGIN\n  SELECT RAISE(ABORT, 'domain_claim_history_is_immutable');\nEND`,
+      },
+      {
+        name: 'trg:domain_resource_heads:cas_transition',
+        table: 'workflow_domain_resource_heads',
+        timing: 'before',
+        event: 'update',
+        owner_intent:
+          'Resource Head accepts only one-version acquire release or exclusive handoff CAS',
+        sql: `CREATE TRIGGER ${q('trg:domain_resource_heads:cas_transition')} BEFORE UPDATE ON ${q('workflow_domain_resource_heads')} BEGIN\n  SELECT CASE WHEN NEW."namespace" IS NOT OLD."namespace" OR NEW."key_hash" IS NOT OLD."key_hash" OR NEW."row_version" <> OLD."row_version" + 1 OR NOT ((OLD."active_claim_id" IS NULL AND OLD."active_claim_link_id" IS NULL AND NEW."active_claim_id" IS NOT NULL AND NEW."active_claim_link_id" = NEW."active_claim_id" AND NEW."latest_claim_epoch" = OLD."latest_claim_epoch" + 1 AND NEW."active_claim_epoch" = NEW."latest_claim_epoch" AND ((NEW."active_claim_mode" = 'shared' AND NEW."current_fencing_token" = OLD."current_fencing_token" AND NEW."active_fencing_token_identity" = 0) OR (NEW."active_claim_mode" = 'exclusive' AND OLD."current_fencing_token" < 9007199254740991 AND NEW."current_fencing_token" = OLD."current_fencing_token" + 1 AND NEW."active_fencing_token_identity" = NEW."current_fencing_token"))) OR (OLD."active_claim_id" IS NOT NULL AND OLD."active_claim_link_id" = OLD."active_claim_id" AND NEW."active_claim_id" IS NULL AND NEW."active_claim_link_id" IS NULL AND NEW."latest_claim_epoch" = OLD."latest_claim_epoch" AND NEW."current_fencing_token" = OLD."current_fencing_token") OR (OLD."active_claim_id" IS NOT NULL AND OLD."active_claim_link_id" = OLD."active_claim_id" AND NEW."active_claim_id" IS NOT NULL AND NEW."active_claim_link_id" = NEW."active_claim_id" AND OLD."active_claim_id" <> NEW."active_claim_id" AND OLD."active_claim_owner_workflow_id" <> NEW."active_claim_owner_workflow_id" AND OLD."active_claim_mode" = 'exclusive' AND NEW."active_claim_mode" = 'exclusive' AND NEW."latest_claim_epoch" = OLD."latest_claim_epoch" + 1 AND NEW."active_claim_epoch" = NEW."latest_claim_epoch" AND OLD."current_fencing_token" < 9007199254740991 AND NEW."current_fencing_token" = OLD."current_fencing_token" + 1 AND NEW."active_fencing_token_identity" = NEW."current_fencing_token")) THEN RAISE(ABORT, 'domain_resource_head_cas_transition_invalid') END;\nEND`,
+      },
+      {
+        name: 'trg:domain_resource_heads:immutable_delete',
+        table: 'workflow_domain_resource_heads',
+        timing: 'before',
+        event: 'delete',
+        owner_intent:
+          'Resource Head preserves monotonic Claim epoch and fencing authority after release',
+        sql: `CREATE TRIGGER ${q('trg:domain_resource_heads:immutable_delete')} BEFORE DELETE ON ${q('workflow_domain_resource_heads')} BEGIN\n  SELECT RAISE(ABORT, 'domain_resource_head_history_is_immutable');\nEND`,
+      },
+      {
+        name: 'trg:domain_claim_handoffs:immutable_update',
+        table: 'workflow_domain_resource_claim_handoffs',
+        timing: 'before',
+        event: 'update',
+        owner_intent: 'required Child Claim handoff provenance is immutable',
+        sql: `CREATE TRIGGER ${q('trg:domain_claim_handoffs:immutable_update')} BEFORE UPDATE ON ${q('workflow_domain_resource_claim_handoffs')} BEGIN\n  SELECT RAISE(ABORT, 'domain_claim_handoff_is_immutable');\nEND`,
+      },
+      {
+        name: 'trg:domain_claim_handoffs:immutable_delete',
+        table: 'workflow_domain_resource_claim_handoffs',
+        timing: 'before',
+        event: 'delete',
+        owner_intent: 'required Child Claim handoff provenance is immutable',
+        sql: `CREATE TRIGGER ${q('trg:domain_claim_handoffs:immutable_delete')} BEFORE DELETE ON ${q('workflow_domain_resource_claim_handoffs')} BEGIN\n  SELECT RAISE(ABORT, 'domain_claim_handoff_is_immutable');\nEND`,
+      },
+      {
+        name: 'trg:effect_claims:immutable_update',
+        table: 'workflow_graph_effect_operation_claims',
+        timing: 'before',
+        event: 'update',
+        owner_intent: 'Effect Claim authorization lineage is immutable',
+        sql: `CREATE TRIGGER ${q('trg:effect_claims:immutable_update')} BEFORE UPDATE ON ${q('workflow_graph_effect_operation_claims')} BEGIN\n  SELECT RAISE(ABORT, 'effect_claim_lineage_is_immutable');\nEND`,
+      },
+      {
+        name: 'trg:effect_claims:immutable_delete',
+        table: 'workflow_graph_effect_operation_claims',
+        timing: 'before',
+        event: 'delete',
+        owner_intent: 'Effect Claim authorization lineage is immutable',
+        sql: `CREATE TRIGGER ${q('trg:effect_claims:immutable_delete')} BEFORE DELETE ON ${q('workflow_graph_effect_operation_claims')} BEGIN\n  SELECT RAISE(ABORT, 'effect_claim_lineage_is_immutable');\nEND`,
+      },
+    );
+  }
   if (databaseSchemaVersion >= 5) {
     triggers.push(
       {
@@ -702,6 +782,8 @@ export const SCHEMA7_TO_SCHEMA8_UPGRADE_RELATIVE_PATH =
   'migration/workflow-runtime-schema-v7-to-v8.sql';
 export const SCHEMA8_TO_SCHEMA9_UPGRADE_RELATIVE_PATH =
   'migration/workflow-runtime-schema-v8-to-v9.sql';
+export const SCHEMA9_TO_SCHEMA10_UPGRADE_RELATIVE_PATH =
+  'migration/workflow-runtime-schema-v9-to-v10.sql';
 
 const ACTIVATION_REBUILT_TABLES = [
   'workflow_feature_release_activation_commands',
@@ -1111,6 +1193,144 @@ export function renderSchema8To9Upgrade(
     sql: `${statements.map((statement) => `${statement};`).join('\n\n')}\n`,
     statement_count: statements.length,
     triggers: [],
+  };
+}
+
+export function renderSchema9To10Upgrade(
+  schema9: ExecutableSchemaSource,
+  schema10: ExecutableSchemaSource,
+): RenderedMigration {
+  if (
+    schema9.database_schema_version !== 9 ||
+    schema10.database_schema_version !== 10
+  ) {
+    throw new Error('Schema 9 to 10 upgrade source versions are invalid');
+  }
+  const claimsName = 'workflow_domain_resource_claims';
+  const headsName = 'workflow_domain_resource_heads';
+  const handoffsName = 'workflow_domain_resource_claim_handoffs';
+  const effectClaimsName = 'workflow_graph_effect_operation_claims';
+  const effectOperationsName = 'workflow_graph_effect_operations';
+  const schedulesName = 'workflow_root_finalization_schedules';
+  const relationsName = 'workflow_relations';
+  const rebuiltNames = [claimsName, headsName, effectClaimsName] as const;
+  const oldName = (name: string) => `${name}_schema9`;
+  const sourceTables = new Map(
+    rebuiltNames.map((name) => [
+      name,
+      schema9.tables.find((table) => table.name === name),
+    ]),
+  );
+  const targetTables = new Map(
+    [...rebuiltNames, handoffsName].map((name) => [
+      name,
+      schema10.tables.find((table) => table.name === name),
+    ]),
+  );
+  if (
+    [...sourceTables.values()].some((table) => !table) ||
+    [...targetTables.values()].some((table) => !table)
+  ) {
+    throw new Error('Schema 10 R-022 Claim handoff table is missing');
+  }
+  const claims = targetTables.get(claimsName)!;
+  const heads = targetTables.get(headsName)!;
+  const handoffs = targetTables.get(handoffsName)!;
+  const effectClaims = targetTables.get(effectClaimsName)!;
+  const sourceClaims = sourceTables.get(claimsName)!;
+  const sourceEffectClaims = sourceTables.get(effectClaimsName)!;
+  const expectedClaimPrefix = sourceClaims.columns.map((column) => column.name);
+  const expectedEffectClaimPrefix = sourceEffectClaims.columns.map(
+    (column) => column.name,
+  );
+  if (
+    expectedClaimPrefix.some(
+      (name, index) => claims.columns[index]?.name !== name,
+    ) ||
+    expectedEffectClaimPrefix.some(
+      (name, index) => effectClaims.columns[index]?.name !== name,
+    )
+  ) {
+    throw new Error('Schema 10 R-022 rebuild does not preserve Schema 9 prefixes');
+  }
+  const addedKeyStatements = [effectOperationsName, schedulesName, relationsName]
+    .flatMap((name) => {
+      const before = schema9.tables.find((table) => table.name === name);
+      const after = schema10.tables.find((table) => table.name === name);
+      if (!before || !after)
+        throw new Error(`Schema 10 candidate-key target is missing: ${name}`);
+      return after.unique_keys
+        .filter(
+          (key) =>
+            !before.unique_keys.some(
+              (candidate) => candidate.key_id === key.key_id,
+            ),
+        )
+        .map((key) => renderUniqueIndex(after, key));
+    });
+  if (addedKeyStatements.length !== 3) {
+    throw new Error('Schema 10 R-022 candidate-key delta drifted');
+  }
+  const schema9TriggerNames = new Set(
+    buildSchemaTriggers(9).map((trigger) => trigger.name),
+  );
+  const addedTriggers = buildSchemaTriggers(10).filter(
+    (trigger) => !schema9TriggerNames.has(trigger.name),
+  );
+  if (addedTriggers.length !== 9) {
+    throw new Error('Schema 10 R-022 trigger delta drifted');
+  }
+  const claimPrefix = expectedClaimPrefix.map(q).join(', ');
+  const claimColumns = claims.columns.map((column) => q(column.name)).join(', ');
+  const effectClaimPrefix = expectedEffectClaimPrefix
+    .map((name) => `${q('effect_claim')}.${q(name)}`)
+    .join(', ');
+  const effectClaimColumns = effectClaims.columns
+    .map((column) => q(column.name))
+    .join(', ');
+  const statements = [
+    'PRAGMA legacy_alter_table = ON',
+    `ALTER TABLE ${q(effectClaimsName)} RENAME TO ${q(oldName(effectClaimsName))}`,
+    `ALTER TABLE ${q(claimsName)} RENAME TO ${q(oldName(claimsName))}`,
+    `ALTER TABLE ${q(headsName)} RENAME TO ${q(oldName(headsName))}`,
+    ...addedKeyStatements,
+    renderTable(claims, 10),
+    renderTable(heads, 10),
+    renderTable(handoffs, 10),
+    renderTable(effectClaims, 10),
+    ...claims.unique_keys.map((key) => renderUniqueIndex(claims, key)),
+    ...heads.unique_keys.map((key) => renderUniqueIndex(heads, key)),
+    ...handoffs.unique_keys.map((key) => renderUniqueIndex(handoffs, key)),
+    ...effectClaims.unique_keys.map((key) =>
+      renderUniqueIndex(effectClaims, key),
+    ),
+    'CREATE TEMP TABLE "r022_schema9_history_guard" ("violation_count" INTEGER NOT NULL CHECK ("violation_count" = 0))',
+    `INSERT INTO "r022_schema9_history_guard" ("violation_count") SELECT count(*) FROM ${q(oldName(claimsName))} AS claim LEFT JOIN ${q(oldName(headsName))} AS head ON head."namespace" = claim."namespace" AND head."key_hash" = claim."key_hash" WHERE (claim."mode" = 'exclusive' AND (head."namespace" IS NULL OR head."current_fencing_token" IS NOT claim."fencing_token")) OR (claim."mode" = 'shared' AND head."namespace" IS NOT NULL)`,
+    `INSERT INTO ${q(claimsName)} (${claimColumns}) SELECT ${claimPrefix}, 1, coalesce("fencing_token", 0), 'direct', NULL, NULL, CASE WHEN "status" IN ('held', 'release_pending') THEN "id" ELSE NULL END FROM ${q(oldName(claimsName))}`,
+    `INSERT INTO ${q(headsName)} ("namespace", "key_hash", "current_fencing_token", "row_version", "latest_claim_epoch", "active_claim_id", "active_claim_owner_workflow_id", "active_claim_mode", "active_claim_epoch", "active_fencing_token_identity", "active_claim_link_id") SELECT head."namespace", head."key_hash", head."current_fencing_token", head."row_version", CASE WHEN claim."id" IS NULL THEN 0 ELSE 1 END, CASE WHEN claim."status" IN ('held', 'release_pending') THEN claim."id" ELSE NULL END, CASE WHEN claim."status" IN ('held', 'release_pending') THEN claim."owner_workflow_id" ELSE NULL END, CASE WHEN claim."status" IN ('held', 'release_pending') THEN claim."mode" ELSE NULL END, CASE WHEN claim."status" IN ('held', 'release_pending') THEN 1 ELSE NULL END, CASE WHEN claim."status" IN ('held', 'release_pending') THEN coalesce(claim."fencing_token", 0) ELSE NULL END, CASE WHEN claim."status" IN ('held', 'release_pending') THEN claim."id" ELSE NULL END FROM ${q(oldName(headsName))} AS head LEFT JOIN ${q(oldName(claimsName))} AS claim ON claim."namespace" = head."namespace" AND claim."key_hash" = head."key_hash"`,
+    `INSERT INTO ${q(headsName)} ("namespace", "key_hash", "current_fencing_token", "row_version", "latest_claim_epoch", "active_claim_id", "active_claim_owner_workflow_id", "active_claim_mode", "active_claim_epoch", "active_fencing_token_identity", "active_claim_link_id") SELECT claim."namespace", claim."key_hash", 0, 1, 1, CASE WHEN claim."status" IN ('held', 'release_pending') THEN claim."id" ELSE NULL END, CASE WHEN claim."status" IN ('held', 'release_pending') THEN claim."owner_workflow_id" ELSE NULL END, CASE WHEN claim."status" IN ('held', 'release_pending') THEN claim."mode" ELSE NULL END, CASE WHEN claim."status" IN ('held', 'release_pending') THEN 1 ELSE NULL END, CASE WHEN claim."status" IN ('held', 'release_pending') THEN 0 ELSE NULL END, CASE WHEN claim."status" IN ('held', 'release_pending') THEN claim."id" ELSE NULL END FROM ${q(oldName(claimsName))} AS claim LEFT JOIN ${q(oldName(headsName))} AS head ON head."namespace" = claim."namespace" AND head."key_hash" = claim."key_hash" WHERE claim."mode" = 'shared' AND head."namespace" IS NULL`,
+    `INSERT INTO ${q(effectClaimsName)} (${effectClaimColumns}) SELECT ${effectClaimPrefix}, operation."graph_run_id", claim."owner_workflow_id", claim."namespace", claim."key_hash", 1, coalesce(claim."fencing_token", 0) FROM ${q(oldName(effectClaimsName))} AS effect_claim JOIN ${q(oldName(claimsName))} AS claim ON claim."id" = effect_claim."claim_id" JOIN ${q(effectOperationsName)} AS operation ON operation."id" = effect_claim."operation_id"`,
+    `INSERT INTO "r022_schema9_history_guard" ("violation_count") SELECT abs((SELECT count(*) FROM ${q(oldName(claimsName))}) - (SELECT count(*) FROM ${q(claimsName)}))`,
+    `INSERT INTO "r022_schema9_history_guard" ("violation_count") SELECT abs((SELECT count(*) FROM ${q(oldName(effectClaimsName))}) - (SELECT count(*) FROM ${q(effectClaimsName)}))`,
+    `INSERT INTO "r022_schema9_history_guard" ("violation_count") SELECT abs(((SELECT count(*) FROM ${q(oldName(headsName))}) + (SELECT count(*) FROM ${q(oldName(claimsName))} AS claim LEFT JOIN ${q(oldName(headsName))} AS head ON head."namespace" = claim."namespace" AND head."key_hash" = claim."key_hash" WHERE claim."mode" = 'shared' AND head."namespace" IS NULL)) - (SELECT count(*) FROM ${q(headsName)}))`,
+    'DROP TABLE "r022_schema9_history_guard"',
+    `DROP TABLE ${q(oldName(effectClaimsName))}`,
+    `DROP TABLE ${q(oldName(headsName))}`,
+    `DROP TABLE ${q(oldName(claimsName))}`,
+    ...claims.indexes.map((indexValue) => renderIndex(claims, indexValue)),
+    ...heads.indexes.map((indexValue) => renderIndex(heads, indexValue)),
+    ...handoffs.indexes.map((indexValue) => renderIndex(handoffs, indexValue)),
+    ...effectClaims.indexes.map((indexValue) =>
+      renderIndex(effectClaims, indexValue),
+    ),
+    ...addedTriggers.map((trigger) => trigger.sql),
+    'PRAGMA legacy_alter_table = OFF',
+    'PRAGMA user_version = 10',
+  ];
+  return {
+    sql: `${statements.map((statement) => `${statement};`).join('\n\n')}\n`,
+    statement_count: statements.length,
+    triggers: addedTriggers,
   };
 }
 

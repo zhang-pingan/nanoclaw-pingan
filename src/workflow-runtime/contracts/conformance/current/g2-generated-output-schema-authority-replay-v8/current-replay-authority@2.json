@@ -75,8 +75,8 @@
     },
     "static_child_plan_bundle_authority": {
       "pack_ref": "conformance/static-child-plan-bundle-repair/contract-pack-static-child-plan-bundle-repair.json",
-      "pack_hash": "sha256:072c612da8d0f42073a1a6ea3c80953936dfdd1c606ed9eef5c6a114225b9a3e",
-      "member_tree_hash": "sha256:f8e36b2539d65622341ae6e9a14e2af6a98415287e369fd582c6e5106d76e73f",
+      "pack_hash": "sha256:63973f00b924c1d1214368d6ba75ae3caacc02e5d8f320778cb3391b7095331a",
+      "member_tree_hash": "sha256:81ec939dfed98d10ac9e2bf0c70ea244a8114b07760c5e2c25a1c7b7c3f5d366",
       "status": "DIRECTED_REPAIR_CANDIDATE_PENDING_INDEPENDENT_AFFECTED_CHAIN_REGRESSION"
     },
     "exact_compiler_identity": {
@@ -1358,10 +1358,10 @@
       }
     ],
     "inventory_ref": "conformance/current/g2-generated-output-schema-authority-replay-v8/artifact-inventory@2.json",
-    "inventory_hash": "sha256:dc270ee69dc71ebc84c64c082b7bcb44aab29bf4a5abc13c18bf9b13a8180307",
+    "inventory_hash": "sha256:52229f9d1fccaebc49b879ef7a5f573c3116e4265513436186ea8076770977ba",
     "inventory_entry_count": 84,
     "readiness_ref": "conformance/current/g2-generated-output-schema-authority-replay-v8/g2-g5-readiness@2.json",
-    "readiness_hash": "sha256:d918888d8b4be11816b870101e94fde05dd95bb99133aa1050e2404beb3f9e55",
+    "readiness_hash": "sha256:96c2b97b7f65e9fb06d8af09e4e15d669718d52c746654c5e1e1a0ab4bf8ddb4",
     "member_count": 6,
     "members": [
       {
@@ -1377,7 +1377,7 @@
       {
         "role": "current_static_child_bridge_pack",
         "path": "conformance/static-child-plan-bundle-repair/contract-pack-static-child-plan-bundle-repair.json",
-        "hash": "sha256:072c612da8d0f42073a1a6ea3c80953936dfdd1c606ed9eef5c6a114225b9a3e"
+        "hash": "sha256:63973f00b924c1d1214368d6ba75ae3caacc02e5d8f320778cb3391b7095331a"
       },
       {
         "role": "independent_golden_authoring",
@@ -1387,16 +1387,16 @@
       {
         "role": "current_g2_g3_g4_g5_readiness",
         "path": "conformance/current/g2-generated-output-schema-authority-replay-v8/g2-g5-readiness@2.json",
-        "hash": "sha256:d918888d8b4be11816b870101e94fde05dd95bb99133aa1050e2404beb3f9e55"
+        "hash": "sha256:96c2b97b7f65e9fb06d8af09e4e15d669718d52c746654c5e1e1a0ab4bf8ddb4"
       },
       {
         "role": "current_replay_inventory",
         "path": "conformance/current/g2-generated-output-schema-authority-replay-v8/artifact-inventory@2.json",
-        "hash": "sha256:dc270ee69dc71ebc84c64c082b7bcb44aab29bf4a5abc13c18bf9b13a8180307"
+        "hash": "sha256:52229f9d1fccaebc49b879ef7a5f573c3116e4265513436186ea8076770977ba"
       }
     ],
-    "member_tree_hash": "sha256:f10be814dc1aa5a10f25c42186bff1c2aa8733c1ae2a6c3d92141d6ebac08266",
-    "bundle_hash": "sha256:fe308ba0f8d9b8c9604aff39163029bf05e0aa80c7b461a9f2f80d27c2984bd3"
+    "member_tree_hash": "sha256:e27aaea742e9a91f5033aa161c299aea55989f6f40f902a1525bf891774804d1",
+    "bundle_hash": "sha256:f29e0c843accb8533e50bd999195cbeff7d419c6ede154a6dab052bd67bc8ac9"
   },
-  "hash": "sha256:d8134a41081786d2f19c99930d89ae3a88ea3af8ba937f5063c07768211019ac"
+  "hash": "sha256:3ae1838abece3981c61f6164620cbf26377b9b859c559548f9835fb8f873c326"
 }

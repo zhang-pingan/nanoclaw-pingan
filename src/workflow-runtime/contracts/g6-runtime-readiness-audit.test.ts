@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { parseContractArtifactEnvelope } from './artifact.js';
 import { checkR020ChildConsumptionLineageContract } from './r020-child-consumption-lineage-contract.js';
 import { checkR021MapTerminalConsumptionContract } from './r021-map-terminal-consumption-contract.js';
+import { checkR022DomainClaimHandoffContract } from './r022-domain-claim-handoff-contract.js';
 import { strictParseJsonBytes } from './strict-json.js';
 import type { JsonObject } from './types.js';
 import { WorkflowRuntimeConnectionFactory } from '../store/runtime-store/index.js';
@@ -49,16 +50,22 @@ describe('G6 Dynamic / Close readiness audit', () => {
     });
   });
 
-  it('preserves R-020 Schema 8 provenance and selects the R-021 Schema 9 successor while keeping G6 Production at zero', () => {
+  it('preserves R-020/R-021 provenance and selects the R-022 Schema 10 successor while keeping G6 Production at zero', () => {
     const predecessor = checkR020ChildConsumptionLineageContract();
     expect(predecessor.payload).toMatchObject({
       gate: 'R-020_G6_PREREQUISITE',
       status: 'EXIT_CANDIDATE_PENDING_INDEPENDENT_AFFECTED_CHAIN_REGRESSION',
       g6_production_implementation_count: 0,
     });
-    const current = checkR021MapTerminalConsumptionContract();
-    expect(current.payload).toMatchObject({
+    const mapTerminal = checkR021MapTerminalConsumptionContract();
+    expect(mapTerminal.payload).toMatchObject({
       gate: 'R-021_G6_PREREQUISITE',
+      status: 'EXIT_CANDIDATE_PENDING_INDEPENDENT_AFFECTED_CHAIN_REGRESSION',
+      g6_production_implementation_count: 0,
+    });
+    const current = checkR022DomainClaimHandoffContract();
+    expect(current.payload).toMatchObject({
+      gate: 'R-022_G6_PREREQUISITE',
       status: 'EXIT_CANDIDATE_PENDING_INDEPENDENT_AFFECTED_CHAIN_REGRESSION',
       affected_gate_status: 'IN_PROGRESS',
       g6_production_implementation_count: 0,
@@ -76,11 +83,11 @@ describe('G6 Dynamic / Close readiness audit', () => {
     }
   });
 
-  it('proves the current Schema 9 Manifest and a fresh real-file Store expose all six exact composite FKs and four terminal pairs', () => {
+  it('proves the current Schema 10 Manifest and a fresh real-file Store retain all six exact composite FKs and four terminal pairs', () => {
     const manifest = readArtifact(
-      '../store/schema/artifacts/workflow-runtime-schema-manifest@3.json',
+      '../store/schema/artifacts/workflow-runtime-schema-manifest@4.json',
     );
-    expect(manifest.payload.database_schema_version).toBe(9);
+    expect(manifest.payload.database_schema_version).toBe(10);
     const consumption = objects(manifest.payload.tables).find(
       (table) => table.name === 'workflow_graph_child_completion_consumptions',
     )!;
@@ -135,7 +142,7 @@ describe('G6 Dynamic / Close readiness audit', () => {
         expect(
           store.queryOne<{ user_version: number }>('PRAGMA user_version', [])
             ?.user_version,
-        ).toBe(9);
+        ).toBe(10);
         const rows = store.queryAll<{
           id: number;
           seq: number;

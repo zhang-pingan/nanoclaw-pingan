@@ -553,7 +553,7 @@ describe('R-021 map terminal consumption directed repair', () => {
         database.pragma('foreign_keys = ON');
         expect(database.pragma('user_version', { simple: true })).toBe(9);
         expect(calculateDatabaseSqliteSchemaIdentity(database)).toBe(
-          CURRENT_G1_SCHEMA_IDENTITIES.sqliteSchema,
+          CURRENT_G1_SCHEMA_IDENTITIES.schema9SourceSqliteSchema,
         );
         expect(consumptionRows(database)).toEqual(before);
         database.close();

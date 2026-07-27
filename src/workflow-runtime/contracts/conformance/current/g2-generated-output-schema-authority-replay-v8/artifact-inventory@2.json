@@ -335,9 +335,9 @@
         "path": "conformance/current/g2-generated-output-schema-authority-replay-v8/g2-g5-readiness@2.json",
         "kind": "readiness",
         "case_id": null,
-        "raw_bytes_hash": "sha256:91616662d4169559d0dfc6fd965e02120f6070d08dd2521d8dfeda708e5fd418",
-        "artifact_hash": "sha256:d918888d8b4be11816b870101e94fde05dd95bb99133aa1050e2404beb3f9e55",
-        "semantic_hash": "sha256:d918888d8b4be11816b870101e94fde05dd95bb99133aa1050e2404beb3f9e55"
+        "raw_bytes_hash": "sha256:04cd43e046fd70433a893a0a6afd27848afbf76aa43ee9bcdb4bf587844d9f48",
+        "artifact_hash": "sha256:96c2b97b7f65e9fb06d8af09e4e15d669718d52c746654c5e1e1a0ab4bf8ddb4",
+        "semantic_hash": "sha256:96c2b97b7f65e9fb06d8af09e4e15d669718d52c746654c5e1e1a0ab4bf8ddb4"
       },
       {
         "path": "conformance/current/g2-generated-output-schema-authority-replay-v8/schemas/artifact-inventory-schema@2.json",
@@ -684,7 +684,7 @@
         "semantic_hash": "sha256:ecddcf894535b92e38a68e3f33ca43f0a14f1f8abe7a214b52907478e59b9aa8"
       }
     ],
-    "inventory_hash": "sha256:9a4c5d4ca1b9c72a5562cc46104f91b019199ff788cbbcae0d9f011eb3439739"
+    "inventory_hash": "sha256:38491bda7e4e4aab86eeab12379b14954748cc4d90d88a3d5b56817a7a1ffaa2"
   },
-  "hash": "sha256:dc270ee69dc71ebc84c64c082b7bcb44aab29bf4a5abc13c18bf9b13a8180307"
+  "hash": "sha256:52229f9d1fccaebc49b879ef7a5f573c3116e4265513436186ea8076770977ba"
 }

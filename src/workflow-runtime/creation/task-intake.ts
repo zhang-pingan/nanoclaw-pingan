@@ -11,7 +11,7 @@ import {
   type T1ActivationInput,
   type T1ActivationReceipt,
 } from '../runtime/lifecycle.js';
-import { acquireDomainClaim } from './domain-claims.js';
+import { acquireCurrentDomainClaim } from './domain-claims.js';
 import {
   G5RuntimeError,
   assertExactPublishedRegistryResource,
@@ -445,7 +445,7 @@ export function createWorkflowT0(
         );
       }
       for (const claim of input.domainClaims) {
-        acquireDomainClaim(transaction, {
+        acquireCurrentDomainClaim(transaction, {
           ...claim,
           ownerWorkflowId: workflowId,
           recipeResourceId: input.recipe.rowId,

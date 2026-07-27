@@ -40,6 +40,16 @@ const CUSTOM_CHECKS: Readonly<Record<string, string>> = {
     '(("mode" = \'exclusive\' AND "fencing_token" IS NOT NULL) OR ("mode" = \'shared\' AND "fencing_token" IS NULL))',
   'ck:domain_claims:release_state':
     '(("status" = \'released\' AND "released_at_ms" IS NOT NULL) OR ("status" IN (\'held\', \'release_pending\') AND "released_at_ms" IS NULL))',
+  'ck:domain_claims:fencing_identity':
+    '(("mode" = \'shared\' AND "fencing_token" IS NULL AND "fencing_token_identity" = 0) OR ("mode" = \'exclusive\' AND "fencing_token" IS NOT NULL AND "fencing_token" > 0 AND "fencing_token_identity" = "fencing_token"))',
+  'ck:domain_claims:active_head_state':
+    '(("status" IN (\'held\', \'release_pending\') AND "active_head_claim_id" = "id" AND "released_at_ms" IS NULL) OR ("status" = \'released\' AND "active_head_claim_id" IS NULL AND "released_at_ms" IS NOT NULL))',
+  'ck:domain_claims:acquisition_lineage':
+    '(("acquisition_kind" = \'direct\' AND "predecessor_claim_id" IS NULL AND "handoff_id" IS NULL) OR ("acquisition_kind" = \'handoff\' AND "predecessor_claim_id" IS NOT NULL AND "handoff_id" IS NOT NULL))',
+  'ck:domain_resource_heads:active_shape':
+    '(("active_claim_id" IS NULL AND "active_claim_owner_workflow_id" IS NULL AND "active_claim_mode" IS NULL AND "active_claim_epoch" IS NULL AND "active_fencing_token_identity" IS NULL AND "active_claim_link_id" IS NULL) OR ("active_claim_id" IS NOT NULL AND "active_claim_link_id" = "active_claim_id" AND "active_claim_owner_workflow_id" IS NOT NULL AND "active_claim_mode" IS NOT NULL AND "active_claim_epoch" IS NOT NULL AND "active_claim_epoch" > 0 AND "active_claim_epoch" <= "latest_claim_epoch" AND (("active_claim_mode" = \'shared\' AND "active_fencing_token_identity" = 0) OR ("active_claim_mode" = \'exclusive\' AND "active_fencing_token_identity" = "current_fencing_token" AND "active_fencing_token_identity" > 0))))',
+  'ck:domain_claim_handoffs:exclusive_token_step':
+    '("parent_claim_id" <> "child_claim_id" AND "parent_workflow_id" <> "child_workflow_id" AND "parent_claim_mode" = \'exclusive\' AND "child_claim_mode" = \'exclusive\' AND "parent_fencing_token" < 9007199254740991 AND "child_fencing_token" = "parent_fencing_token" + 1 AND "parent_claim_epoch" < 9007199254740991 AND "child_claim_epoch" = "parent_claim_epoch" + 1)',
   'ck:values:storage_shape':
     '(("storage_kind" = \'inline\' AND "inline_canonical_json" IS NOT NULL AND "blob_hash" IS NULL AND "immutable_external_locator" IS NULL AND "expected_hash" IS NULL) OR ("storage_kind" = \'blob\' AND "inline_canonical_json" IS NULL AND "blob_hash" IS NOT NULL AND "immutable_external_locator" IS NULL AND "expected_hash" IS NULL) OR ("storage_kind" = \'immutable_external\' AND "inline_canonical_json" IS NULL AND "blob_hash" IS NULL AND "immutable_external_locator" IS NOT NULL AND "expected_hash" IS NOT NULL))',
   'ck:values:payload_state':
@@ -162,6 +172,8 @@ const CUSTOM_CHECKS: Readonly<Record<string, string>> = {
     '(("status" IN (\'intended\', \'dispatched\') AND "receipt_value_id" IS NULL AND "compensation_value_id" IS NULL) OR ("status" = \'succeeded\' AND "receipt_value_id" IS NOT NULL AND "after_state_value_id" IS NOT NULL AND "immutable_output_snapshot_value_id" IS NOT NULL) OR ("status" IN (\'failed\', \'action_required\')) OR ("status" = \'compensation_pending\' AND "compensation_value_id" IS NULL) OR ("status" IN (\'compensated\', \'compensation_not_required\') AND "compensation_value_id" IS NOT NULL))',
   'ck:effect_claims:write_fence':
     '(("access" = \'write\' AND "fencing_token" IS NOT NULL) OR ("access" = \'read\' AND "fencing_token" IS NULL))',
+  'ck:effect_claims:fencing_identity':
+    '(("access" = \'write\' AND "fencing_token" IS NOT NULL AND "fencing_token" > 0 AND "fencing_token_identity" = "fencing_token") OR ("access" = \'read\' AND "fencing_token" IS NULL AND "fencing_token_identity" = 0))',
   'ck:outbox:aggregate_version':
     '(("projection_target_ref" IS NOT NULL AND "aggregate_row_version" IS NULL) OR ("projection_target_ref" IS NULL AND "aggregate_row_version" IS NOT NULL))',
   'ck:outbox:status_time':

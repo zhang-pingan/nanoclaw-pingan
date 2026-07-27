@@ -3224,6 +3224,41 @@ R-021测试必须覆盖fresh real-file Schema 9上四种Map terminal consumption
 
 本repair只关闭R-021规范、Contract、Schema 9、fresh DDL、8到9 upgrade、Store current identity及机械必要的G3/G4/G5 exact identity/evidence/readiness级联。不新增或调用T7a/T7b/T8 Production事务、dynamic child creation/finalization、subgraph/expand/map materialization、controller/quorum/fail-fast、hierarchical fence/Fact、compensation、Root Finalization或任何G7+、certification、Production loader/activation/ingress/network/Adapter/user-data surface。Candidate状态固定为`R021_MAP_TERMINAL_CONSUMPTION_REPAIR_EXIT_CANDIDATE_PENDING_INDEPENDENT_AFFECTED_CHAIN_REGRESSION`；R-021及受影响G1/G3/G4/G5保持`IN_PROGRESS`，G6保持`BLOCKED_PENDING_REGRESSION/NOT_STARTED`且Production implementation count为0，G7-G9保持`NOT_READY`。
 
+### R-022：Required Child Domain Claim Handoff 决议
+
+R-022保留Database Schema 9、R-020/R-021及其全部migration/upgrade/artifact/DDL作为byte-immutable predecessor，并选择additive Database Schema 10的`owner-bound append-history + exact current-head slot`作为唯一current Claim authority。Schema 9的全状态`UNIQUE(namespace,key_hash)`继续是required Child reacquire不可能性的历史证明，不是current执行模型；blocker test原始SHA-256必须保持`09e03107610774db306ac6ef22b8fde2001f9a54073ae44ca2d7db57720adaf3`并继续2/2 PASS。
+
+Canonical Claim identity保持`H(namespace,key_hash,owner_workflow_id,creation_key)`的owner-bound stable ID。每次新的owner acquisition创建一条新Claim历史行，并取得同resource严格递增的`claim_epoch`；released Parent行、owner、resource、Recipe、Intake、creation key、epoch和fencing token永不rekey、复用、删除或转移。Schema 10拒绝以下替代模型：把released row的resource改名释放unique键；原地把Parent Claim改成Child owner；只把全状态unique改为partial unique而没有current-head关系；删除或查询时忽略released row；在Root Cut提交后再异步acquire。上述方案分别破坏resource provenance、owner-bound identity、数据库互斥证明、历史/Effect lineage或T8原子性。
+
+Resource Head新增`latest_claim_epoch`及nullable exact active tuple。Claim新增`claim_epoch/fencing_token_identity/acquisition_kind/predecessor_claim_id/handoff_id/active_head_claim_id`。两组`DEFERRABLE INITIALLY DEFERRED ON DELETE RESTRICT` composite FK形成双向关系：
+
+- Active Claim的`(namespace,key_hash,active_head_claim_id,mode,claim_epoch,fencing_token_identity)`引用Head的同resource active tuple；CHECK要求`held/release_pending`时`active_head_claim_id=id`，released时为null。
+- Head的`(namespace,key_hash,active_claim_id,active_claim_mode,active_claim_epoch,active_fencing_token_identity,active_claim_link_id)`反向引用Claim的`(namespace,key_hash,id,mode,claim_epoch,fencing_token_identity,active_head_claim_id)`；`active_claim_link_id=active_claim_id`，因此Head不能继续引用active link已清空的released Claim，active tuple必须all-null或all-present。
+- `UNIQUE(namespace,key_hash,claim_epoch)`保留每个resource的append-only generation；Head PK继续唯一化resource current slot。Schema 9实际执行的单current-holder互斥不被放宽，shared仍只表示read authorization且fencing identity为0；exclusive identity等于positive fencing token和Head current token。
+
+Resource Head一旦建立不得删除或重置；即使active tuple为all-null，其`latest_claim_epoch/current_fencing_token`仍是下一次acquire的CAS与单调性authority。删除空闲Head会丢失fencing历史并把后续acquire变成不可恢复的epoch冲突，因此Schema 10必须以immutable-delete trigger在数据库边界拒绝。
+
+Direct acquire在一个`BEGIN IMMEDIATE`中CAS/insert Head、递增`latest_claim_epoch`、按exclusive规则递增`current_fencing_token`并插入`acquisition_kind=direct`的新owner-bound Claim。Release在同一事务CAS Claim row version与Head row version，把Claim转为released、写released time、清空Head active tuple；response loss exact replay只接受完全相同的terminal事实。Application conflict query可以用于稳定错误分类，但不是互斥或current-holder证明；commit时的双向关系才是authority。
+
+Required Child handoff只允许exclusive Parent到exclusive Child，并由可嵌入T8外层事务的G5 Claim primitive执行。Primitive必须重新读取并CAS Parent Claim/Head；Child `claim_epoch=latest_claim_epoch+1`、`fencing_token=parent.fencing_token+1`，新Claim使用Child owner/Recipe/Intake/creation key派生的新ID。一个事务同时提交Parent released、Head exact Child tuple、新Child Claim和一条immutable `workflow_domain_resource_claim_handoffs`；任一fault、stale version、duplicate drift或relation失败全部回滚，Parent仍held且Head/token不变。
+
+Handoff row必须以复合FK精确证明：
+
+- Parent与Child Claim属于同一`namespace/key_hash`，分别匹配owner、exclusive mode、claim epoch与fencing identity，且Child token恰为Parent token+1。
+- `(schedule_id,parent_workflow_id,creation_request_id,child_workflow_id)`引用同一succeeded Root Finalization Schedule tuple。
+- `(workflow_relation_id,parent_workflow_id,child_workflow_id)`引用同一Workflow Relation tuple。
+- Child Claim的`(handoff_id,id,predecessor_claim_id)`反向引用该handoff的`(id,child_claim_id,parent_claim_id)`；每个Parent Claim、Child Claim及Schedule/resource tuple最多一个handoff。
+
+因此wrong owner、wrong parent-child、wrong resource、wrong token、wrong Schedule/Creation Request/Relation、duplicate Parent或Child consumption及tamper必须由SQLite CHECK/UK/FK在commit前fail closed。Exact replay按deterministic handoff ID读取同一tuple，返回既有Child Claim/token且零DML；same ID或same schedule/resource的任何语义漂移返回conflict，不能修补历史。
+
+Schema 10同时重建`workflow_graph_effect_operation_claims`的exact lineage。每行新增`graph_run_id/owner_workflow_id/namespace/key_hash/claim_epoch/fencing_token_identity`，并以deferred composite FK证明operation/run、run/workflow owner及Claim exact resource generation。Write token必须等于positive identity，read必须为null token与identity 0。已有Effect Claim继续引用released Parent历史；handoff不迁移、不改写、不删除旧Effect Claim。Child effect必须明确绑定Child Claim及新token，wrong owner/resource/epoch/token即使单列ID分别存在也不能commit。
+
+Schema 9到10 upgrade只在Store验证frozen Schema 9 migration与SQLite identity后，在一个`BEGIN IMMEDIATE`内执行。既有Claim映射为`claim_epoch=1/acquisition_kind=direct`，released history保留且无active link；held/release_pending行必须与exact Head一致，否则升级失败。Shared历史若Schema 9没有Head，upgrade创建token 0的Head；exclusive历史缺Head、token/head不一致、cross-owner Effect Claim或copy fault均必须rollback到原user_version、SQLite identity和全部rows。Upgrade新增空handoff表并逐行扩展合法Effect Claim lineage，随后执行CHECK/unique/`foreign_key_check`/introspection identity再commit；Schema 9及更早全部bytes不变。
+
+R-022 Contract/Schema/transaction测试必须覆盖direct acquire/release/reacquire append history、required Child handoff、commit/reopen/response-loss exact replay、Parent与Effect历史保持、current-vs-historical authority fail-closed；以及duplicate、stale Claim/Head version、tamper、wrong owner/parent-child/resource/token/Schedule/Creation Request/Relation、Effect Claim lineage、每个pre-commit fault、合法nonempty Schema 9 upgrade、invalid history/copy/commit fault rollback和Store reopen identity。证明必须来自real-file SQLite relations与transaction digest，不能以fixture label、application boolean或mock替代。
+
+本repair只关闭R-022规范、additive machine Contract、Schema 10、fresh DDL、9到10 upgrade、Store current identity、G5 Domain Claim acquire/release/handoff与Effect Claim exact persistence，以及机械必要的current G1/G3/G4/G5 identity/evidence/readiness级联。不新增或调用G6 T7a/T7b/T8完整业务事务、Child creation/finalization、dynamic materialization、controller/quorum/fail-fast、compensation、Root Finalization或任何G7+、certification、Production loader/activation/ingress/network/Adapter/user-data surface。Candidate状态固定为`R022_REQUIRED_CHILD_DOMAIN_CLAIM_HANDOFF_REPAIR_EXIT_CANDIDATE_PENDING_INDEPENDENT_AFFECTED_CHAIN_REGRESSION`；R-022及受影响G1/G3/G4/G5保持`IN_PROGRESS`，G6保持`BLOCKED_PENDING_REGRESSION/NOT_STARTED`且Production implementation count为0，G7-G9保持`NOT_READY`。
+
 ### Runtime v1施工生命周期与生产发布生命周期
 
 Runtime v1重构期间使用临时施工生命周期：
@@ -3872,24 +3907,43 @@ workflow_domain_resource_claims
   - fencing_token                shared 时为 null；exclusive 时固定
   - status                       held | release_pending | released
   - acquired_at_ms/released_at_ms/row_version
+  - claim_epoch/fencing_token_identity
+  - acquisition_kind             direct | handoff
+  - predecessor_claim_id/handoff_id
+  - active_head_claim_id          held/release_pending时等于id；released时null
 
 workflow_domain_resource_heads
   - namespace/key_hash
   - current_fencing_token
+  - latest_claim_epoch
+  - active_claim_id/mode/epoch/fencing_token_identity/active_claim_link_id
   - row_version
 
+workflow_domain_resource_claim_handoffs
+  - id/namespace/key_hash
+  - parent_claim_id/workflow_id/mode/epoch/fencing_token
+  - child_claim_id/workflow_id/mode/epoch/fencing_token
+  - source_root_finalization_schedule_id/source_creation_request_id
+  - source_workflow_relation_id/created_at_ms
+
 UNIQUE(owner_workflow_id, namespace, key_hash)
-UNIQUE(namespace, key_hash)
+UNIQUE(namespace, key_hash, claim_epoch)
+UNIQUE(parent_claim_id)
+UNIQUE(child_claim_id)
 INDEX(namespace, key_hash, status, mode)
 ```
 
-T0 创建事务必须在插入 Workflow 前原子检查 shared/exclusive compatibility并写 held claim；冲突返回结构化 `resource_busy` 与现有 owner，不允许先创建 Workflow 再异步抢锁。Shared Claim 只授权读取且不递增 token；mutation 必须持有 exclusive Claim。Exclusive acquire 以 CAS 递增资源头的 `current_fencing_token` 并把新 token 固定到 Claim。Claim 不因进程 lease、pause、human wait 或普通 worker crash 自动过期；只在 Workflow normal/error/cancel terminal、可信 remediation 或 administrative abandon policy 明确允许时释放。
+Current Database Schema 10采用R-022唯一的`owner-bound append-history + exact current-head slot`模型。每次direct acquire或required Child handoff都创建新的owner-bound Claim行并递增同resource的`claim_epoch`；旧Claim不得rekey、复用、删除或改写owner/resource identity。Claim与Resource Head以两组方向相反的deferred composite FK互相证明：每个`held/release_pending` Claim必须恰是Head的active tuple，Head的非空active tuple也必须通过等于`active_claim_id`的`active_claim_link_id`精确引用Claim的`active_head_claim_id`及resource、mode、epoch与fencing identity；released Claim保留完整历史且active head link为null，因而不能继续被Head占用。Schema 9实际执行的单current-holder互斥继续保留：v1的`shared`表示只读授权而不是并发多holder；未来若允许多个shared holder必须发布新的关系模型，不能只放宽unique或应用查询。
+
+T0 创建事务必须在插入 Workflow 前原子CAS Resource Head并写held Claim；冲突返回结构化`resource_busy`与现有owner，不允许先创建Workflow再异步抢锁。Shared Claim只授权读取且不递增`current_fencing_token`；mutation必须持有exclusive Claim。每次acquire仍递增`latest_claim_epoch`，exclusive acquire另以CAS递增`current_fencing_token`并把新token固定到Claim。Claim不因进程lease、pause、human wait或普通worker crash自动过期；只在Workflow normal/error/cancel terminal、可信remediation或administrative abandon policy明确允许时释放。Release必须在同一`BEGIN IMMEDIATE`内把Claim转为released并清空Head active tuple；任一version/head/关系失败全部回滚。
+
+Required Child exclusive handoff不得调用“release后再普通acquire”的两步语义。R-022 handoff primitive在外层T8同一事务中CAS Parent Claim/Head，创建owner-bound Child Claim，令`child.claim_epoch=head.latest_claim_epoch+1`及`child.fencing_token=parent.fencing_token+1`，并写immutable handoff row。Handoff row通过deferred composite FK精确绑定Parent/Child Claim、Root Finalization Schedule的Parent/Creation Request/Child tuple及Workflow Relation的Parent/Child tuple；Child Claim通过`handoff_id + child_claim_id + predecessor_claim_id`反向引用同一handoff。任一wrong owner、parent/child、resource、token、Schedule、Creation Request或Relation lineage都必须在SQLite commit前失败。
 
 正式 mutation 不能由 Worker 直接写目标资源。Worker 只能写 staging/shadow；受信任 mutation gateway 在最终 promote/commit 前必须同时验证 `claim.status=held`、`mode=exclusive`、owner Workflow、namespace/key 与 `claim.fencing_token=resource_head.current_fencing_token`。Release 后旧 Claim 即因 status 失效，即使尚无新 holder 也不能写。一个 effect 的全部 required claim slot 在 intent transaction 中原子解析；缺少任一 slot 都不得 dispatch。
 
 第一版 Claim 只允许在 T0 根据可信 Task Input 获取。Graph 只能选择 Recipe 已获得的逻辑 claim spec id，不能在运行时发现 raw key 后动态抢锁；需要修改新资源时，由 trusted transition 创建使用新 Recipe/T0 的 child Workflow，避免动态多资源加锁和死锁。Recipe 应使用最细业务 key，避免一个长时间 human wait 用 workspace 全局锁阻塞无关 package。
 
-同一 `creation_key + creation_intent_hash` 重放若已存在 Workflow，返回原 Workflow 和原 claims；同 key 不同 intent 必须返回 `idempotency_conflict`，不得静默复用旧 Workflow，也不得因为当前 claim 冲突创建第二个实例。Claim acquisition/release、Workflow lifecycle event 和 outbox effect 使用稳定 idempotency key。运行中心必须展示 owner、key summary、mode、token、held duration 和解除条件，但不得泄露 secret key material。
+同一 `creation_key + creation_intent_hash` 重放若已存在 Workflow，返回原 Workflow 和原 claims；同 key 不同 intent 必须返回 `idempotency_conflict`，不得静默复用旧 Workflow，也不得因为当前 claim 冲突创建第二个实例。Claim acquisition/release/handoff、Workflow lifecycle event 和 outbox effect 使用稳定 idempotency key。Response loss后的handoff replay只接受同一immutable handoff/Parent/Child/Schedule/Relation tuple，不重做Head CAS或创建第二个Claim。运行中心必须展示 owner、key summary、mode、epoch、token、held duration、predecessor/handoff provenance和解除条件，但不得泄露 secret key material。
 
 ## 持久化字段、时间与 SQLite 约束
 
@@ -5420,11 +5474,15 @@ workflow_graph_effect_operations
   - row_version/created_at_ms/updated_at_ms
 
 workflow_graph_effect_operation_claims
-  - operation_id/claim_id/claim_spec_id
+  - operation_id/graph_run_id/owner_workflow_id
+  - claim_id/claim_spec_id
+  - namespace/key_hash/claim_epoch/fencing_token_identity
   - access                 read | write
   - fencing_token          write 时 required
 
 UNIQUE(operation_id, claim_id)
+
+Effect Claim不是仅凭`claim_id`和应用层boolean成立的授权。Schema 10以deferred composite FK同时证明`operation_id + graph_run_id`、`graph_run_id + owner_workflow_id`以及Claim的`namespace + key_hash + id + owner_workflow_id + claim_epoch + fencing_token_identity`；write row的`fencing_token`必须等于positive identity，read row必须为null token与identity 0。Parent Effect继续引用released Parent Claim历史，Child Effect只可引用新的Child Claim；handoff不得重写既有Effect Claim或把Parent token冒充为Child current token。
 
 workflow_graph_facts
   - id
@@ -5675,7 +5733,7 @@ T8  root commit and outer transition:
 
 T8 的 route source 由 root outcome kind 唯一决定：`completed` 使用 selected named exit 对应的 `exit_routes`；`errored` 使用 `on_error`；`cancelled/local_graph` 使用 `on_local_cancel`；`cancelled/workflow` 不读取 definition transition，不创建 terminal activation，固定终止 Workflow、清空 current run并写 final checkpoint/history。四种路径不能互相 fallback。Normal completed path 按 published Transition 的 typed Context Patch 更新 slots；error/local-cancel 默认 canonical no-op patch，除非其受信任 transition 明确定义 typed patch。Terminal target 必须创建 exact Definition/version 的 terminal activation；normal terminal 验证唯一 final output binding，errored terminal 验证 error code/binding，然后与 Workflow final fields、history 和 checkpoint 同事务提交。
 
-Required Child Workflow creation 是 T8 的原子前置条件：Root 进入 closing 后按 close request/effect id 创建 durable、finite Root Finalization Schedule；Schedule Attempt 只运行 local T0/T1 的 pure resolution/preflight，不提前写 Workflow、Relation 或 Claim acquisition。全部 required schedule `ready` 后，T8 才在提交 Root Cut/transition 的同一事务中 exactly-once 创建 Child 并标记 schedule succeeded；冲突时不写 Cut/Child，只追加有限 retry，耗尽进入 `action_required` 并阻止 Root Cut。Best-effort child creation 随 T8 写 Outbox，失败只记录 delivery failure。Parent 在 terminal T8 需要把本地 authoritative Claim 交给 Child 时，先在同一事务将 Parent Claim released，再由 Child T0 acquire 并递增 fencing token；事务失败则 Parent Claim 仍 held。Parent 进入另一个 non-terminal State 时仍持有 Claim，Child 冲突按 required/best-effort 合同处理，不能隐式共享 exclusive token。
+Required Child Workflow creation 是 T8 的原子前置条件：Root 进入 closing 后按 close request/effect id 创建 durable、finite Root Finalization Schedule；Schedule Attempt 只运行 local T0/T1 的 pure resolution/preflight，不提前写 Workflow、Relation 或 Claim acquisition。全部 required schedule `ready` 后，T8 才在提交 Root Cut/transition 的同一事务中 exactly-once 创建 Child 并标记 schedule succeeded；冲突时不写 Cut/Child，只追加有限 retry，耗尽进入 `action_required` 并阻止 Root Cut。Best-effort child creation 随 T8 写 Outbox，失败只记录 delivery failure。Parent 在terminal T8需要把本地authoritative exclusive Claim交给required Child时，必须在同一事务调用R-022 handoff primitive：Parent Claim `held -> released`、Head从Parent exact tuple CAS为Child exact tuple、Child owner-bound Claim与immutable handoff relation同时写入，且Child token恰为Parent token+1；不得拆成普通release/acquire、复用Parent行或只靠应用查询。任一CAS/FK/CHECK失败时Parent仍held且Cut/transition/Child/Relation/Schedule全部不提交。Parent进入另一个non-terminal State时仍持有Claim，Child冲突按required/best-effort合同处理，不能隐式共享exclusive token。
 
 `T2a` 只持久化 immutable compile result，不消费 scope/node quota；`T2b` 才 materialize。Root build failure 在 shell 上走 `T7a(engine_error)`，随后由 T8 生成 root cut；paused 时先保存 failed build，resume transaction 再创建 request。Subgraph/expand build failure terminalize single owner；map item build failure 必须先填写对应 `errored/scope_id=null` slot，再运行 map policy。
 

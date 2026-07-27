@@ -14,11 +14,15 @@ describe('G4 NodeOutputEnvelope authority successor', () => {
         'NODE_OUTPUT_ENVELOPE_SCHEMA_AUTHORITY_REPAIR_EXIT_CANDIDATE_PENDING_INDEPENDENT_AFFECTED_CHAIN_REGRESSION',
       current_closure: 'REOPENED_PENDING_INDEPENDENT_AFFECTED_CHAIN_REGRESSION',
       current_store: {
-        database_schema_version: 9,
+        database_schema_version: 10,
         g1_root_hash:
-          'sha256:c32fc2db46c49b09edeea2a31d07b4decf3b89a6272a3b7b69d933288efe24ca',
+          'sha256:05169ddfdc2c53371a0e4464dcc8b109608e1ff9b3d0276478da464c11266682',
         database_schema_hash:
-          'sha256:9a36d16fd52d26af009f64f6d26b0bf5d713c16a6f9bad3e6e1019d354bc4ff9',
+          'sha256:1ff4fd63239e85630923fa16e204645367958ae487933338a6f676ec9be6faad',
+        schema10_migration_hash:
+          'sha256:269645a9f093dc35fd35a04336d71e38cc17b7168584752f9b9bdfc106f46fad',
+        schema9_to_10_upgrade_hash:
+          'sha256:19c24f06558a3e98f1415468c4af8ce44e94afcad8be3428ebdc133bf4a353c5',
         schema9_migration_hash:
           'sha256:4591e2dd417d439c813026816572e8a66e9d088efa6a8de88ebfb38a68cf9837',
         schema8_to_9_upgrade_hash:
@@ -28,6 +32,10 @@ describe('G4 NodeOutputEnvelope authority successor', () => {
         expect.objectContaining({
           role: 'r021_map_terminal_consumption',
           hash: 'sha256:b5e9237d09d829946c496e19eddf16b21c94fb4fd59b3588900f4764332d0699',
+        }),
+        expect.objectContaining({
+          role: 'r022_domain_claim_handoff',
+          hash: 'sha256:ea97a3d52a2e4a14fb2671b2191b1b1cb6acc22c4ecded7db2e141a1716b516e',
         }),
       ]),
       selection: {

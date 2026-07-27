@@ -597,10 +597,11 @@ export function prepareCapabilityDispatchT5(
         };
       }
       const run = transaction.queryOne<{
+        workflow_id: string;
         control: string;
         operational_state: string;
       }>(
-        'SELECT control, operational_state FROM workflow_graph_runs WHERE id = ?',
+        'SELECT workflow_id, control, operational_state FROM workflow_graph_runs WHERE id = ?',
         [input.graphRunId],
       );
       if (
@@ -623,26 +624,74 @@ export function prepareCapabilityDispatchT5(
         input.policySnapshotSchema,
         'T5 effective Policy snapshot schema',
       );
+      const verifiedClaims: Array<{
+        required: (typeof input.requiredClaims)[number];
+        ownerWorkflowId: string;
+        namespace: string;
+        keyHash: string;
+        claimEpoch: number;
+        fencingTokenIdentity: number;
+      }> = [];
       for (const required of input.requiredClaims) {
         const claim = transaction.queryOne<{
           status: string;
           fencing_token: number | null;
+          owner_workflow_id: string;
+          namespace: string;
+          key_hash: string;
+          claim_epoch: number;
+          fencing_token_identity: number;
+          active_head_claim_id: string | null;
+          active_claim_id: string | null;
+          active_claim_owner_workflow_id: string | null;
+          active_claim_mode: string | null;
+          active_claim_epoch: number | null;
+          active_fencing_token_identity: number | null;
         }>(
-          'SELECT status, fencing_token FROM workflow_domain_resource_claims WHERE id = ?',
+          `SELECT claim.status, claim.fencing_token, claim.owner_workflow_id,
+                  claim.namespace, claim.key_hash, claim.claim_epoch,
+                  claim.fencing_token_identity, claim.active_head_claim_id,
+                  head.active_claim_id, head.active_claim_owner_workflow_id,
+                  head.active_claim_mode,
+                  head.active_claim_epoch, head.active_fencing_token_identity
+             FROM workflow_domain_resource_claims AS claim
+             JOIN workflow_domain_resource_heads AS head
+               ON head.namespace = claim.namespace AND head.key_hash = claim.key_hash
+            WHERE claim.id = ?`,
           [required.claimId],
         );
         if (
           !claim ||
           claim.status !== 'held' ||
+          claim.owner_workflow_id !== run.workflow_id ||
+          claim.active_head_claim_id !== required.claimId ||
+          claim.active_claim_id !== required.claimId ||
+          claim.active_claim_owner_workflow_id !== claim.owner_workflow_id ||
+          claim.active_claim_epoch !== claim.claim_epoch ||
+          claim.active_fencing_token_identity !==
+            claim.fencing_token_identity ||
           (required.access === 'write' &&
             (required.fencingToken === null ||
-              claim.fencing_token !== required.fencingToken)) ||
-          (required.access === 'read' && required.fencingToken !== null)
+              claim.fencing_token !== required.fencingToken ||
+              claim.fencing_token_identity !== required.fencingToken ||
+              claim.active_claim_mode !== 'exclusive')) ||
+          (required.access === 'read' &&
+            (required.fencingToken !== null ||
+              claim.fencing_token_identity !== 0 ||
+              claim.active_claim_mode !== 'shared'))
         )
           throw new G5RuntimeError(
             'precondition_failed',
             `T5 required claim is not held/current: ${required.claimId}`,
           );
+        verifiedClaims.push({
+          required,
+          ownerWorkflowId: claim.owner_workflow_id,
+          namespace: claim.namespace,
+          keyHash: claim.key_hash,
+          claimEpoch: claim.claim_epoch,
+          fencingTokenIdentity: claim.fencing_token_identity,
+        });
       }
       reserveLedgerResources(transaction, {
         graphRunId: input.graphRunId,
@@ -694,15 +743,25 @@ export function prepareCapabilityDispatchT5(
           input.nowMs,
         ],
       );
-      for (const required of input.requiredClaims)
+      for (const verified of verifiedClaims)
         transaction.execute(
-          'INSERT INTO workflow_graph_effect_operation_claims (operation_id, claim_id, claim_spec_id, access, fencing_token) VALUES (?, ?, ?, ?, ?)',
+          `INSERT INTO workflow_graph_effect_operation_claims (
+             operation_id, claim_id, claim_spec_id, access, fencing_token,
+             graph_run_id, owner_workflow_id, namespace, key_hash, claim_epoch,
+             fencing_token_identity
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             effectOperationId,
-            required.claimId,
-            required.claimSpecId,
-            required.access,
-            required.fencingToken,
+            verified.required.claimId,
+            verified.required.claimSpecId,
+            verified.required.access,
+            verified.required.fencingToken,
+            input.graphRunId,
+            verified.ownerWorkflowId,
+            verified.namespace,
+            verified.keyHash,
+            verified.claimEpoch,
+            verified.fencingTokenIdentity,
           ],
         );
       transaction.execute(

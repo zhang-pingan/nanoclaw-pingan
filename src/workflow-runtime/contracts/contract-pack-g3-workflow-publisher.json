@@ -13,11 +13,11 @@
     "g3_status": "IN_PROGRESS",
     "publisher_schema_readiness": "PUBLISHER_SCHEMA_PREREQUISITE_READY",
     "upstream": {
-      "g1_schema_root_hash": "sha256:c32fc2db46c49b09edeea2a31d07b4decf3b89a6272a3b7b69d933288efe24ca",
-      "g3_1_pack_hash": "sha256:96f6ed7b832b33a924222585f3f55de47264bf462e8b12ffb4b28f4d7ac2621e",
-      "g3_3_pack_hash": "sha256:9b295834dc499b5590566a0bee5ac053adc0da1879699626e0e94ec825e443cd",
-      "g3_5_pack_hash": "sha256:8734b6a44d11180b507a0e546bc5784a5ee0073cb94c85785c05eed995d50ba9",
-      "g3_6_pack_hash": "sha256:71be35581adb4717230bb106c658db91777126c8e59bc9c0e95ef5d7bd651e43"
+      "g1_schema_root_hash": "sha256:05169ddfdc2c53371a0e4464dcc8b109608e1ff9b3d0276478da464c11266682",
+      "g3_1_pack_hash": "sha256:0d50e658d32b0ccc274d71e5529f1377a4e338193f24b3aeb7345281712522a2",
+      "g3_3_pack_hash": "sha256:0228a5f064f64e5e187bd0a493c980fd4b2d229cd83e9d8fea9fdfeca1158627",
+      "g3_5_pack_hash": "sha256:56a2a50ff2c63b986bf0d075e9d0fa2f9b377465c7c0b6f99d67438e31e88702",
+      "g3_6_pack_hash": "sha256:53f83f24a9ffd2d194105003077bad472bf3ef9e8f6aa05c8b3bb60f1279956c"
     },
     "request_schema_resource_hash": "sha256:9aec8a311f11d6b7a46de125ffac54840cdb31630e32f5abb11149d7df3f0939",
     "receipt_schema_resource_hash": "sha256:2dc6be728d9ff9353f0ec30949191f34526138472a309cd82be952dd2dcaedde",
@@ -86,7 +86,7 @@
         },
         "version": 1,
         "domain_separator": "icarus:workflow-g3-staged-publish-positive-cases:1\n",
-        "hash": "sha256:0a61b06ff0c1a71a278c360d52a15f1aa069a68a99fe189a68eed260832a609d"
+        "hash": "sha256:ac5bdf56b5aef06877b5cbb90ec03cbac07479b441e11e2ac8a610666fa77e0a"
       },
       {
         "path": "conformance/g3-workflow-publisher/negative-cases.json",
@@ -97,7 +97,7 @@
         },
         "version": 1,
         "domain_separator": "icarus:workflow-g3-staged-publish-negative-cases:1\n",
-        "hash": "sha256:6cc50be55e7b9d256743595188b59884adc9e2f3d172370ce5d71b9f4bd61201"
+        "hash": "sha256:bc7d8473a1826bd853b534e5595d52db2341a6a8fcb4bf26996e71fb1d3d8547"
       },
       {
         "path": "registry/workflow-staged-publish-domain-separators@1.json",
@@ -114,5 +114,5 @@
     "positive_case_count": 1,
     "negative_case_count": 3
   },
-  "hash": "sha256:88705beddf6965dc8a947aba1f3dd9fbb2b9124f33824dafe7ad0881ab561be3"
+  "hash": "sha256:80f0bbd0c977ffe9def9fd854f7ae99099f736fe3cc7c17170e326b181db61bc"
 }

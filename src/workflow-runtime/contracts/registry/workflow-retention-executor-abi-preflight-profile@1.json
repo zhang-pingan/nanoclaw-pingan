@@ -19,7 +19,7 @@
       "run_protocol_major": 1,
       "executor_abi_major": 1,
       "registry_schema_version": 1,
-      "database_schema_version": 9
+      "database_schema_version": 10
     },
     "retention_policy_ref": {
       "id": "icarus.local-single-user-retention",
@@ -64,5 +64,5 @@
     "deterministic": true,
     "read_only": true
   },
-  "hash": "sha256:76c618f9f34d0db8342f7b96d19677e0142a078906f744ba8b816135d6010f9f"
+  "hash": "sha256:1123925f869b402eefab900220545320fedec48edf4947c4d969aa94347b5c40"
 }

@@ -26,6 +26,7 @@ import { applyGeneratedSchemaPrerequisite } from './generated-schema-source.js';
 import { applyNodeOutputEnvelopeSchemaPrerequisite } from './node-output-envelope-source.js';
 import { applyChildCompletionLineageSchemaPrerequisite } from './child-completion-lineage-source.js';
 import { applyMapTerminalConsumptionSchemaPrerequisite } from './map-terminal-consumption-source.js';
+import { applyDomainClaimHandoffSchemaPrerequisite } from './domain-claim-handoff-source.js';
 
 interface AdditiveTableExtension {
   name: string;
@@ -112,15 +113,15 @@ function assertSchema3ExecutableSource(source: ExecutableSchemaSource): void {
 }
 
 function assertExecutableSource(source: ExecutableSchemaSource): void {
-  if (source.database_schema_version !== 9) {
-    throw new Error('Current executable Database Schema must be version 9');
+  if (source.database_schema_version !== 10) {
+    throw new Error('Current executable Database Schema must be version 10');
   }
-  if (source.tables.length !== 86) {
-    throw new Error(`Expected 86 v1 tables, received ${source.tables.length}`);
+  if (source.tables.length !== 87) {
+    throw new Error(`Expected 87 v1 tables, received ${source.tables.length}`);
   }
-  if (source.queries.length !== 45) {
+  if (source.queries.length !== 46) {
     throw new Error(
-      `Expected 45 query intents, received ${source.queries.length}`,
+      `Expected 46 query intents, received ${source.queries.length}`,
     );
   }
   assertUnique(
@@ -406,7 +407,39 @@ export function loadSchema3ExecutableSchemaSource(
 export function loadExecutableSchemaSource(
   contractsRoot?: string,
 ): ExecutableSchemaSource {
+  return buildSchema9ExecutableSource(
+    readPinnedSchemaInputArtifacts({ contractsRoot }),
+  );
+}
+
+export function loadCurrentExecutableSchemaSource(
+  contractsRoot?: string,
+): ExecutableSchemaSource {
   const inputs = readPinnedSchemaInputArtifacts({ contractsRoot });
+  const schema9 = buildSchema9ExecutableSource(inputs);
+  const applied = applyDomainClaimHandoffSchemaPrerequisite(
+    schema9.tables,
+    schema9.queries,
+    inputs.domain_claim_handoff_schema_prerequisite.artifact,
+  );
+  const result: ExecutableSchemaSource = {
+    ...schema9,
+    database_schema_version: 10,
+    tables: applied.tables,
+    queries: applied.queries,
+    logical_inputs: {
+      ...schema9.logical_inputs,
+      domain_claim_handoff_schema_prerequisite_hash:
+        inputs.domain_claim_handoff_schema_prerequisite.artifact.hash,
+    },
+  };
+  assertExecutableSource(result);
+  return result;
+}
+
+function buildSchema9ExecutableSource(
+  inputs: LoadedSchemaInputArtifacts,
+): ExecutableSchemaSource {
   const schema8 = buildSchema8ExecutableSource(inputs);
   const applied = applyMapTerminalConsumptionSchemaPrerequisite(
     schema8.tables,
@@ -424,8 +457,15 @@ export function loadExecutableSchemaSource(
         inputs.map_terminal_consumption_schema_prerequisite.artifact.hash,
     },
   };
-  assertExecutableSource(result);
   return result;
+}
+
+export function loadSchema9ExecutableSchemaSource(
+  contractsRoot?: string,
+): ExecutableSchemaSource {
+  return buildSchema9ExecutableSource(
+    readPinnedSchemaInputArtifacts({ contractsRoot }),
+  );
 }
 
 function buildSchema8ExecutableSource(

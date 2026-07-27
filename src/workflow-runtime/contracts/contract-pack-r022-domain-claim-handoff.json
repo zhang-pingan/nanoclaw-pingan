@@ -1,0 +1,34 @@
+{
+  "format": "icarus.workflow-contract-pack-r022-domain-claim-handoff/1",
+  "ref": {
+    "id": "icarus.workflow-contract-pack-r022-domain-claim-handoff",
+    "version": "1"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-contract-pack-r022-domain-claim-handoff:1\n",
+  "hash": "sha256:ea97a3d52a2e4a14fb2671b2191b1b1cb6acc22c4ecded7db2e141a1716b516e",
+  "payload": {
+    "gate": "R-022_G6_PREREQUISITE",
+    "status": "EXIT_CANDIDATE_PENDING_INDEPENDENT_AFFECTED_CHAIN_REGRESSION",
+    "member_count": 1,
+    "members": [
+      {
+        "path": "conformance/r022-domain-claim-handoff/domain-claim-handoff-contract@1.json",
+        "artifact_hash": "sha256:c6e1d6aaaedf09f055759d05010d866e8f724da7c9a688ae53bc3530b2bb2243",
+        "raw_sha256": "sha256:13b381dc55fddd9ae872e5eda31e6e826aaca258885b5f61135549f69d377221"
+      }
+    ],
+    "member_tree_hash": "sha256:86f637e3f84ce62ec9f7d2549919f484e830df920ab83767770e1f2806d029b0",
+    "affected_gate_status": "IN_PROGRESS",
+    "affected_gates": [
+      "R-022",
+      "G1",
+      "G3",
+      "G4",
+      "G5"
+    ],
+    "g6_production_implementation_count": 0,
+    "g6_status": "BLOCKED_PENDING_REGRESSION_NOT_STARTED",
+    "g7_through_g9_status": "NOT_READY"
+  }
+}
