@@ -88,6 +88,47 @@ export function assertExactPublishedRegistryResource(
     );
 }
 
+export function loadInlineValue(
+  transaction: WorkflowRuntimeWriteTransaction,
+  valueId: string,
+  valueHash: string,
+  label: string,
+): JsonValue {
+  const row = transaction.queryOne<{
+    storage_kind: string;
+    inline_canonical_json: string | null;
+    content_hash: string;
+    byte_length: number;
+    payload_state: string;
+  }>(
+    `SELECT storage_kind, inline_canonical_json, content_hash, byte_length,
+            payload_state
+       FROM workflow_values WHERE id = ? AND content_hash = ?`,
+    [valueId, valueHash],
+  );
+  if (
+    !row ||
+    row.storage_kind !== 'inline' ||
+    row.inline_canonical_json === null ||
+    row.content_hash !== valueHash ||
+    row.payload_state !== 'live'
+  )
+    throw new G5RuntimeError(
+      'integrity_violation',
+      `${label} Value is unavailable or not inline canonical JSON`,
+    );
+  const parsed = JSON.parse(row.inline_canonical_json) as JsonValue;
+  if (
+    canonicalJson(parsed) !== row.inline_canonical_json ||
+    Buffer.byteLength(row.inline_canonical_json, 'utf8') !== row.byte_length
+  )
+    throw new G5RuntimeError(
+      'integrity_violation',
+      `${label} Value byte authority drifted`,
+    );
+  return parsed;
+}
+
 export type InlineValueSchemaAuthority =
   | {
       readonly kind: 'registry';
@@ -120,6 +161,7 @@ export function insertInlineValue(
     readonly createdAtMs: number;
     readonly rowVersion?: 0 | 1;
     readonly ownerGraphRunId?: string;
+    readonly ownerWorkflowId?: string;
   } & (
     | {
         readonly schemaAuthority: InlineValueSchemaAuthority;
@@ -133,6 +175,14 @@ export function insertInlineValue(
       }
   ),
 ): 'inserted' | 'exact_replay' {
+  if (
+    input.ownerGraphRunId !== undefined &&
+    input.ownerWorkflowId !== undefined
+  )
+    throw new G5RuntimeError(
+      'contract_invalid',
+      'A workflow Value cannot have both Run and Workflow ownership',
+    );
   const canonical = canonicalJson(input.content);
   const authority: InlineValueSchemaAuthority = input.schemaAuthority ?? {
     kind: 'registry',
@@ -198,7 +248,10 @@ export function insertInlineValue(
         `Immutable workflow value identity collision: ${input.id}`,
       );
     }
-    if (input.ownerGraphRunId !== undefined) {
+    if (
+      input.ownerGraphRunId !== undefined ||
+      input.ownerWorkflowId !== undefined
+    ) {
       const ownership = transaction.queryAll<{
         owner_workflow_id: string | null;
         owner_graph_run_id: string | null;
@@ -214,8 +267,8 @@ export function insertInlineValue(
       );
       if (
         ownership.length !== 1 ||
-        ownership[0]!.owner_workflow_id !== null ||
-        ownership[0]!.owner_graph_run_id !== input.ownerGraphRunId ||
+        ownership[0]!.owner_workflow_id !== (input.ownerWorkflowId ?? null) ||
+        ownership[0]!.owner_graph_run_id !== (input.ownerGraphRunId ?? null) ||
         ownership[0]!.owner_registry_resource_id !== null ||
         ownership[0]!.owner_feature_release_id !== null ||
         ownership[0]!.system_owner_ref !== null
@@ -258,15 +311,23 @@ export function insertInlineValue(
       authority.kind === 'plan_generated' ? authority.parameterHash : null,
     ],
   );
-  if (input.ownerGraphRunId !== undefined) {
+  if (
+    input.ownerGraphRunId !== undefined ||
+    input.ownerWorkflowId !== undefined
+  ) {
     requireSingleChange(
       transaction.execute(
         `INSERT INTO workflow_value_ownerships (
            value_id, owner_workflow_id, owner_graph_run_id,
            owner_registry_resource_id, owner_feature_release_id,
            system_owner_ref, created_at_ms
-         ) VALUES (?, NULL, ?, NULL, NULL, NULL, ?)`,
-        [input.id, input.ownerGraphRunId, input.createdAtMs],
+         ) VALUES (?, ?, ?, NULL, NULL, NULL, ?)`,
+        [
+          input.id,
+          input.ownerWorkflowId ?? null,
+          input.ownerGraphRunId ?? null,
+          input.createdAtMs,
+        ],
       ).changes,
       `Workflow Value ownership insert ${input.id}`,
       'integrity_violation',

@@ -71,13 +71,13 @@
       {
         "name": "g2_g5_static_child_plan_bundle_repair_candidate",
         "path": "src/workflow-runtime/contracts/conformance/static-child-plan-bundle-repair/contract-pack-static-child-plan-bundle-repair.json",
-        "hash": "sha256:63973f00b924c1d1214368d6ba75ae3caacc02e5d8f320778cb3391b7095331a"
+        "hash": "sha256:cde0d8acb1c524ca3c7b8bd130c8c4ae766995663b35c5ba409c8e9a3f9fc222"
       },
       {
         "name": "g2_current_compiler_3_0_6_generated_output_schema_replay_authority",
         "path": "src/workflow-runtime/contracts/conformance/current/g2-generated-output-schema-authority-replay-v8/current-replay-authority@2.json",
-        "hash": "sha256:3ae1838abece3981c61f6164620cbf26377b9b859c559548f9835fb8f873c326",
-        "bundle_hash": "sha256:f29e0c843accb8533e50bd999195cbeff7d419c6ede154a6dab052bd67bc8ac9"
+        "hash": "sha256:91b8745e5024382569648b6627d469452d3ff2551e61c0ee2a66f323814ef880",
+        "bundle_hash": "sha256:8c269ac93025279d6751664e2da9246727b9c553b8e1def5bc06d82067076332"
       },
       {
         "name": "r019_generated_schema_join_authority",
@@ -157,5 +157,5 @@
       }
     ]
   },
-  "hash": "sha256:e5ea7ed95bad16e5b27c0015d8c0cccbab9b7df3782cd46c00871ca0fa276de8"
+  "hash": "sha256:0a7de989b741824bfebbdebfcbd97b550dadad576d4450ce5f7a8a3e8cee473f"
 }

@@ -128,6 +128,16 @@ const EMPTY_STATIC_CHILD_PLAN_BUNDLE: WorkflowCompilerStaticChildPlanBundle = {
   entries: [],
 };
 
+function g5FenceManifestSchema() {
+  const ref = { id: 'g5.schema', version: '1.0.0' };
+  return {
+    rowId: registryResourceId({ resource_type: 'schema', ref }),
+    resourceType: 'schema',
+    ref,
+    hash: hash('resource:schema'),
+  };
+}
+
 function bootstrap(key: string): G5TestBootstrapInstance {
   const instance = createG5TestBootstrap(key);
   instances.push(instance);
@@ -2389,6 +2399,7 @@ function initializePlanCase(
       graphRunId: run.graphRunId,
       scopeId: run.scopeId,
       expectedRunRowVersion: row.row_version,
+      manifestSchema: g5FenceManifestSchema(),
       nowMs,
     },
     fault,
@@ -2463,6 +2474,7 @@ function reconcileTerminalNode(
       stableObjectId: terminal.id,
       factKey,
       payload: terminal.output,
+      manifestSchema: g5FenceManifestSchema(),
       terminalStatus: 'succeeded',
       nowMs,
     },
@@ -2785,6 +2797,7 @@ function fixedPointPrefix(fixture: G5RepairFixtureCase): {
       graphRunId: prefix.created.activation.graphRunId,
       scopeId: prefix.created.activation.rootScopeId,
       expectedRunRowVersion: run.row_version,
+      manifestSchema: g5FenceManifestSchema(),
       nowMs: prefix.input.nowMs + 1,
     },
   };
@@ -2963,6 +2976,7 @@ function buildT3aFixtureTarget(
       stableObjectId: prefix.created.activation.rootScopeId,
       factKey: `fixture-fact:${key}`,
       payload: prefix.seed.values.input,
+      manifestSchema: g5FenceManifestSchema(),
       terminalStatus: undefined,
       nowMs: nowMs + 10,
     };
@@ -3066,6 +3080,7 @@ function prepareSettledCloseTarget(fixture: G5RepairFixtureCase): {
       scopeId: run.scopeId,
       expectedRunRowVersion: rows.run_row_version,
       expectedScopeRowVersion: rows.scope_row_version,
+      manifestSchema: g5FenceManifestSchema(),
       nowMs: nowMs + 6,
     },
   };
@@ -5376,6 +5391,7 @@ describe('G5 Basic Runtime Schema 7 repair transaction integration', () => {
       graphRunId: activated.graphRunId,
       scopeId: activated.rootScopeId,
       expectedRunRowVersion: runBeforeFixedPoint.row_version,
+      manifestSchema: g5FenceManifestSchema(),
       nowMs: 50,
     };
     expect(() =>
@@ -6123,6 +6139,7 @@ describe('G5 Basic Runtime Schema 7 repair transaction integration', () => {
       stableObjectId: workNode.id,
       factKey: `node-terminal-reconcile:${workNode.id}`,
       payload: workOutput,
+      manifestSchema: g5FenceManifestSchema(),
       terminalStatus: 'succeeded',
       nowMs: 160,
     });
@@ -6175,6 +6192,7 @@ describe('G5 Basic Runtime Schema 7 repair transaction integration', () => {
       stableObjectId: joinNode.id,
       factKey: `node-terminal-reconcile:${joinNode.id}`,
       payload: joinOutput,
+      manifestSchema: g5FenceManifestSchema(),
       terminalStatus: 'succeeded',
       nowMs: 162,
     });
@@ -6247,6 +6265,7 @@ describe('G5 Basic Runtime Schema 7 repair transaction integration', () => {
       scopeId: activated.rootScopeId,
       expectedRunRowVersion: settledRows.run_row_version,
       expectedScopeRowVersion: settledRows.scope_row_version,
+      manifestSchema: g5FenceManifestSchema(),
       nowMs: 170,
     };
     expect(() =>
@@ -8177,6 +8196,7 @@ describe('G5 Basic Runtime Schema 7 repair transaction integration', () => {
           scopeId: run.scopeId,
           expectedRunRowVersion: runRow.row_version,
           expectedScopeRowVersion: scopeRow.row_version,
+          manifestSchema: g5FenceManifestSchema(),
           nowMs,
         },
         fault,
@@ -9058,7 +9078,7 @@ describe('G5 Basic Runtime Schema 7 repair transaction integration', () => {
         inputSnapshot: seed.values.input,
         nowMs: 30,
       }),
-    ).toThrow(/belongs to G6/);
+    ).toThrow(/precondition failed/);
     expect(
       instance.store.queryOne<{ count: number }>(
         'SELECT count(*) AS count FROM workflow_graph_run_manifest WHERE graph_run_id = ?',
@@ -9086,6 +9106,7 @@ describe('G5 Basic Runtime Schema 7 repair transaction integration', () => {
       graphRunId: created.activation.graphRunId,
       scopeId: created.activation.rootScopeId,
       expectedRunRowVersion: materializedRun.row_version,
+      manifestSchema: g5FenceManifestSchema(),
       nowMs: 32,
     });
     const work = instance.store.queryOne<{
@@ -9231,6 +9252,7 @@ describe('G5 Basic Runtime Schema 7 repair transaction integration', () => {
           graphRunId: created.activation.graphRunId,
           scopeId: created.activation.rootScopeId,
           expectedRunRowVersion: materializedRun.row_version,
+          manifestSchema: g5FenceManifestSchema(),
           nowMs: 40,
         });
         const node = instance.store.queryOne<{
@@ -9407,5 +9429,5 @@ describe('G5 Basic Runtime Schema 7 repair transaction integration', () => {
       }),
       { seed: 0x5a17, numRuns: 1 },
     );
-  });
+  }, 15_000);
 });

@@ -218,9 +218,7 @@ function validateCandidateSchemas(files: Map<string, string>): void {
 function validateBoundaries(): void {
   checkHistoricalCompilerContractRepair();
   try {
-    assertCurrentG2SealedBoundary(
-      absoluteContractPath('conformance/sealed'),
-    );
+    assertCurrentG2SealedBoundary(absoluteContractPath('conformance/sealed'));
   } catch {
     throw new Error('Golden/conformance sealed boundary crossed');
   }
@@ -238,11 +236,7 @@ function validateBoundaries(): void {
       }
     }
   }
-  for (const forbidden of [
-    'registry',
-    'runtime/graph-runtime.ts',
-    'projection/runtime-center-api.ts',
-  ]) {
+  for (const forbidden of ['registry', 'projection/runtime-center-api.ts']) {
     if (fs.existsSync(path.join(workflowRuntimeRoot, forbidden))) {
       throw new Error(`G3+ boundary crossed: ${forbidden}`);
     }

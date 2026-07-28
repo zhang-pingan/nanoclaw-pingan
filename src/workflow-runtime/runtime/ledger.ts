@@ -240,6 +240,7 @@ export function chargeWorkflowLifetimeResources(
   input: {
     readonly graphRunId: string;
     readonly workflowId: string;
+    readonly accountWorkflowId?: string;
     readonly reservationGroupId: string;
     readonly amounts: Readonly<Record<string, number>>;
     readonly purpose: string;
@@ -275,7 +276,7 @@ export function chargeWorkflowLifetimeResources(
       row_version: number;
     }>(
       'SELECT id, hard_limit, reserved_amount, consumed_amount, row_version FROM workflow_graph_resource_accounts WHERE workflow_id = ? AND resource_type = ?',
-      [input.workflowId, resourceType],
+      [input.accountWorkflowId ?? input.workflowId, resourceType],
     );
     if (
       !account ||

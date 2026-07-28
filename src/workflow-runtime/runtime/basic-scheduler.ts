@@ -27,6 +27,9 @@ export type T4ActivationRequest =
     }
   | {
       readonly kind: 'structural';
+    }
+  | {
+      readonly kind: 'child_owner';
     };
 
 export interface T4SchedulerInput {
@@ -131,11 +134,7 @@ export function scheduleReadyNodeT4(
           'cas_conflict',
           'T4 run, scope, node, or work epoch is stale',
         );
-      if (['subgraph', 'expand', 'map'].includes(node.node_type))
-        throw new G5RuntimeError(
-          'forbidden_surface',
-          'Dynamic node activation belongs to G6',
-        );
+      const childOwner = ['subgraph', 'expand', 'map'].includes(node.node_type);
       if (
         input.activation.kind === 'execution' &&
         !['delegation', 'system'].includes(node.node_type)
@@ -156,6 +155,16 @@ export function scheduleReadyNodeT4(
         throw new G5RuntimeError(
           'contract_invalid',
           'Structural activation requires join/terminal',
+        );
+      if (input.activation.kind === 'child_owner' && !childOwner)
+        throw new G5RuntimeError(
+          'contract_invalid',
+          'Child-owner activation requires subgraph/expand/map',
+        );
+      if (input.activation.kind !== 'child_owner' && childOwner)
+        throw new G5RuntimeError(
+          'contract_invalid',
+          'Dynamic nodes require child-owner activation',
         );
       const derivedInput =
         node.input_snapshot_value_id !== null &&
@@ -336,7 +345,10 @@ export function scheduleReadyNodeT4(
           'T4 Plan-pinned wait Contract',
         );
       }
-      if (input.activation.kind !== 'structural') {
+      if (
+        input.activation.kind !== 'structural' &&
+        input.activation.kind !== 'child_owner'
+      ) {
         const activeCount = transaction.queryOne<{ count: number }>(
           input.activation.kind === 'wait'
             ? "SELECT count(*) AS count FROM workflow_graph_waits WHERE status IN ('registering', 'armed')"
@@ -356,6 +368,53 @@ export function scheduleReadyNodeT4(
           };
       }
       const eventSequence = run.next_event_seq + 1;
+      if (input.activation.kind === 'child_owner') {
+        if (
+          transaction.execute(
+            `UPDATE workflow_graph_nodes
+                SET phase = 'active', row_version = row_version + 1,
+                    updated_at_ms = ?
+              WHERE id = ? AND row_version = ? AND phase = 'ready'
+                AND controller_state = 'sealing'`,
+            [input.nowMs, input.nodeId, input.expectedNodeRowVersion],
+          ).changes !== 1
+        )
+          throw new G5RuntimeError(
+            'cas_conflict',
+            'T4 child-owner Node CAS failed',
+          );
+        if (
+          transaction.execute(
+            `UPDATE workflow_graph_runs
+                SET next_event_seq = ?, row_version = row_version + 1,
+                    updated_at_ms = ?
+              WHERE id = ? AND row_version = ?`,
+            [eventSequence, input.nowMs, input.graphRunId, run.row_version],
+          ).changes !== 1
+        )
+          throw new G5RuntimeError(
+            'cas_conflict',
+            'T4 child-owner event head CAS failed',
+          );
+        insertGraphEvent(transaction, {
+          graphRunId: input.graphRunId,
+          sequence: eventSequence,
+          scopeId: input.scopeId,
+          nodeId: input.nodeId,
+          attemptId: null,
+          eventType: 'scheduler_admitted',
+          idempotencyKey: `child-owner-admitted:${input.nodeId}`,
+          payloadJson: { node_type: node.node_type },
+          occurredAtMs: input.nowMs,
+          createdAtMs: input.nowMs,
+        });
+        return {
+          disposition: 'activated',
+          attemptId: null,
+          waitId: null,
+          admissionSequence: null,
+        };
+      }
       if (input.activation.kind === 'structural') {
         if (structuralOutput === null)
           throw new G5RuntimeError(

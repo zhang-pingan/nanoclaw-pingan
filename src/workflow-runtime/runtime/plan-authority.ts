@@ -65,6 +65,7 @@ export function loadMaterializedNodeAuthority(
 ): MaterializedNodeAuthority {
   const row = transaction.queryOne<{
     plan_id: string;
+    root_scope_id: string;
     root_plan_hash: string | null;
     runtime_safety_snapshot_hash: string;
     compiler_toolchain_resource_hash: string;
@@ -79,7 +80,8 @@ export function loadMaterializedNodeAuthority(
     capability_version: string | null;
     capability_hash: string | null;
   }>(
-    `SELECT p.id AS plan_id, r.root_plan_hash, r.runtime_safety_snapshot_hash,
+    `SELECT p.id AS plan_id, r.root_scope_id, r.root_plan_hash,
+            r.runtime_safety_snapshot_hash,
             r.compiler_toolchain_resource_hash,
             r.work_fence_epoch AS run_work_fence_epoch,
             s.plan_hash AS scope_plan_hash,
@@ -110,7 +112,7 @@ export function loadMaterializedNodeAuthority(
   if (
     row.scope_plan_hash !== planHash ||
     row.plan_hash !== planHash ||
-    row.root_plan_hash !== planHash ||
+    (scopeId === row.root_scope_id && row.root_plan_hash !== planHash) ||
     plan.runtime_safety_hash !== row.runtime_safety_snapshot_hash ||
     plan.compiler_toolchain_hash !== row.compiler_toolchain_resource_hash
   )

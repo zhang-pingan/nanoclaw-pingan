@@ -1,0 +1,612 @@
+{
+  "format": "icarus.workflow-g6-dynamic-close-negative-cases/1",
+  "ref": {
+    "id": "icarus.workflow-g6-dynamic-close-negative-cases",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-g6-dynamic-close-negative-cases:1\n",
+  "payload": {
+    "cases": [
+      {
+        "case_id": "stale_run_version",
+        "category": "negative",
+        "transaction": "T7a",
+        "assertion": "stale Run row version rejects before writes",
+        "handler": "g6_t7a_production",
+        "operation": {
+          "scenario_key": "g6:negative:stale_run_version",
+          "database": "isolated_real_file_sqlite",
+          "transaction_mode": "BEGIN_IMMEDIATE",
+          "virtual_clock_ms": 1781000000000,
+          "fake_adapter_only": true,
+          "fault_point": null,
+          "reopen": false
+        },
+        "oracle": {
+          "disposition": "rejected",
+          "sqlite_state": "unchanged",
+          "exact_error": "cas_conflict",
+          "duplicate_writes": 0
+        },
+        "binding_hash": "sha256:68575e5341ed1c0c56046754aa3381b101419fb9812b9d3c015f8a0402608590"
+      },
+      {
+        "case_id": "stale_scope_version",
+        "category": "negative",
+        "transaction": "T7a",
+        "assertion": "stale Scope row version rejects before writes",
+        "handler": "g6_t7a_production",
+        "operation": {
+          "scenario_key": "g6:negative:stale_scope_version",
+          "database": "isolated_real_file_sqlite",
+          "transaction_mode": "BEGIN_IMMEDIATE",
+          "virtual_clock_ms": 1781000000000,
+          "fake_adapter_only": true,
+          "fault_point": null,
+          "reopen": false
+        },
+        "oracle": {
+          "disposition": "rejected",
+          "sqlite_state": "unchanged",
+          "exact_error": "cas_conflict",
+          "duplicate_writes": 0
+        },
+        "binding_hash": "sha256:fa05360b60d559e66c57a5fbb6bfba658538c1e27b4f3ff2835bbff7ac9a34d8"
+      },
+      {
+        "case_id": "stale_run_fence",
+        "category": "negative",
+        "transaction": "T7a",
+        "assertion": "stale Run work epoch cannot cross close fence",
+        "handler": "g6_t7a_production",
+        "operation": {
+          "scenario_key": "g6:negative:stale_run_fence",
+          "database": "isolated_real_file_sqlite",
+          "transaction_mode": "BEGIN_IMMEDIATE",
+          "virtual_clock_ms": 1781000000000,
+          "fake_adapter_only": true,
+          "fault_point": null,
+          "reopen": false
+        },
+        "oracle": {
+          "disposition": "rejected",
+          "sqlite_state": "unchanged",
+          "exact_error": "cas_conflict",
+          "duplicate_writes": 0
+        },
+        "binding_hash": "sha256:3bb31199e9456b017d80294ad5a440bf1a1cfdfdeecdf86871a56e19c74fc73a"
+      },
+      {
+        "case_id": "stale_scope_fence",
+        "category": "negative",
+        "transaction": "T7a",
+        "assertion": "stale Scope work epoch cannot cross close fence",
+        "handler": "g6_t7a_production",
+        "operation": {
+          "scenario_key": "g6:negative:stale_scope_fence",
+          "database": "isolated_real_file_sqlite",
+          "transaction_mode": "BEGIN_IMMEDIATE",
+          "virtual_clock_ms": 1781000000000,
+          "fake_adapter_only": true,
+          "fault_point": null,
+          "reopen": false
+        },
+        "oracle": {
+          "disposition": "rejected",
+          "sqlite_state": "unchanged",
+          "exact_error": "cas_conflict",
+          "duplicate_writes": 0
+        },
+        "binding_hash": "sha256:480e00f76596656ac2dd73ed4b01f41d82fde0ef2875ea9d1a94f25450ee1214"
+      },
+      {
+        "case_id": "close_cause_replay_drift",
+        "category": "negative",
+        "transaction": "T7a",
+        "assertion": "replay with different close cause is an idempotency conflict",
+        "handler": "g6_t7a_production",
+        "operation": {
+          "scenario_key": "g6:negative:close_cause_replay_drift",
+          "database": "isolated_real_file_sqlite",
+          "transaction_mode": "BEGIN_IMMEDIATE",
+          "virtual_clock_ms": 1781000000000,
+          "fake_adapter_only": true,
+          "fault_point": null,
+          "reopen": false
+        },
+        "oracle": {
+          "disposition": "rejected",
+          "sqlite_state": "unchanged",
+          "exact_error": "idempotency_conflict",
+          "duplicate_writes": 0
+        },
+        "binding_hash": "sha256:fa1924ea72d861feba0593797f4e3c33f07ab4f792373d56ee38cc2b8e1cd1ce"
+      },
+      {
+        "case_id": "static_plan_binding_drift",
+        "category": "negative",
+        "transaction": "T4",
+        "assertion": "static subgraph or map body Plan drift rejects",
+        "handler": "g6_t4_production",
+        "operation": {
+          "scenario_key": "g6:negative:static_plan_binding_drift",
+          "database": "isolated_real_file_sqlite",
+          "transaction_mode": "BEGIN_IMMEDIATE",
+          "virtual_clock_ms": 1781000000000,
+          "fake_adapter_only": true,
+          "fault_point": null,
+          "reopen": false
+        },
+        "oracle": {
+          "disposition": "rejected",
+          "sqlite_state": "unchanged",
+          "exact_error": "integrity_violation",
+          "duplicate_writes": 0
+        },
+        "binding_hash": "sha256:47da9d03533d04476caf6bc8403c7b7fa23d471a8254c7678fec8902438e427c"
+      },
+      {
+        "case_id": "dynamic_source_hash_drift",
+        "category": "negative",
+        "transaction": "T2a",
+        "assertion": "dynamic compile source hash drift rejects",
+        "handler": "g6_t2a_production",
+        "operation": {
+          "scenario_key": "g6:negative:dynamic_source_hash_drift",
+          "database": "isolated_real_file_sqlite",
+          "transaction_mode": "BEGIN_IMMEDIATE",
+          "virtual_clock_ms": 1781000000000,
+          "fake_adapter_only": true,
+          "fault_point": null,
+          "reopen": false
+        },
+        "oracle": {
+          "disposition": "rejected",
+          "sqlite_state": "unchanged",
+          "exact_error": "integrity_violation",
+          "duplicate_writes": 0
+        },
+        "binding_hash": "sha256:9b3e48856e6a9be6060063832072dd723db2fe8f5c79fc0eaae22e0cb1aa14f4"
+      },
+      {
+        "case_id": "dynamic_policy_widening",
+        "category": "negative",
+        "transaction": "T2a",
+        "assertion": "dynamic plan cannot widen the compiled child policy",
+        "handler": "g6_t2a_production",
+        "operation": {
+          "scenario_key": "g6:negative:dynamic_policy_widening",
+          "database": "isolated_real_file_sqlite",
+          "transaction_mode": "BEGIN_IMMEDIATE",
+          "virtual_clock_ms": 1781000000000,
+          "fake_adapter_only": true,
+          "fault_point": null,
+          "reopen": false
+        },
+        "oracle": {
+          "disposition": "rejected",
+          "sqlite_state": "unchanged",
+          "exact_error": "integrity_violation",
+          "duplicate_writes": 0
+        },
+        "binding_hash": "sha256:098a4e5c8c3f2f8559c7c61dd78d59631f555765688ad6e130a547d9e6a6bd59"
+      },
+      {
+        "case_id": "stale_build_version",
+        "category": "negative",
+        "transaction": "T2a/T2b",
+        "assertion": "stale build CAS rejects",
+        "handler": "g6_t2a_t2b_production",
+        "operation": {
+          "scenario_key": "g6:negative:stale_build_version",
+          "database": "isolated_real_file_sqlite",
+          "transaction_mode": "BEGIN_IMMEDIATE",
+          "virtual_clock_ms": 1781000000000,
+          "fake_adapter_only": true,
+          "fault_point": null,
+          "reopen": false
+        },
+        "oracle": {
+          "disposition": "rejected",
+          "sqlite_state": "unchanged",
+          "exact_error": "cas_conflict",
+          "duplicate_writes": 0
+        },
+        "binding_hash": "sha256:f9fbec38164ba1597004f4e310b884348709e8e4405dd4cb29bb756510641b6a"
+      },
+      {
+        "case_id": "stale_owner_node_version",
+        "category": "negative",
+        "transaction": "T4/T2b",
+        "assertion": "stale controller node CAS rejects",
+        "handler": "g6_t4_t2b_production",
+        "operation": {
+          "scenario_key": "g6:negative:stale_owner_node_version",
+          "database": "isolated_real_file_sqlite",
+          "transaction_mode": "BEGIN_IMMEDIATE",
+          "virtual_clock_ms": 1781000000000,
+          "fake_adapter_only": true,
+          "fault_point": null,
+          "reopen": false
+        },
+        "oracle": {
+          "disposition": "rejected",
+          "sqlite_state": "unchanged",
+          "exact_error": "cas_conflict",
+          "duplicate_writes": 0
+        },
+        "binding_hash": "sha256:cb773e8f66d40528c44830177463f2e54d753a7cd954d2aa494f6375f9341a0d"
+      },
+      {
+        "case_id": "duplicate_map_item_key",
+        "category": "negative",
+        "transaction": "T4",
+        "assertion": "duplicate map key cannot create two slots",
+        "handler": "g6_t4_production",
+        "operation": {
+          "scenario_key": "g6:negative:duplicate_map_item_key",
+          "database": "isolated_real_file_sqlite",
+          "transaction_mode": "BEGIN_IMMEDIATE",
+          "virtual_clock_ms": 1781000000000,
+          "fake_adapter_only": true,
+          "fault_point": null,
+          "reopen": false
+        },
+        "oracle": {
+          "disposition": "rejected",
+          "sqlite_state": "unchanged",
+          "exact_error": "contract_invalid",
+          "duplicate_writes": 0
+        },
+        "binding_hash": "sha256:5ca5e4129bfaabb16c5a2654cc6332a504bb52c36710a967f890fc4b15c20cd0"
+      },
+      {
+        "case_id": "invalid_quorum",
+        "category": "negative",
+        "transaction": "T4",
+        "assertion": "nonpositive or nonfinite quorum rejects",
+        "handler": "g6_t4_production",
+        "operation": {
+          "scenario_key": "g6:negative:invalid_quorum",
+          "database": "isolated_real_file_sqlite",
+          "transaction_mode": "BEGIN_IMMEDIATE",
+          "virtual_clock_ms": 1781000000000,
+          "fake_adapter_only": true,
+          "fault_point": null,
+          "reopen": false
+        },
+        "oracle": {
+          "disposition": "rejected",
+          "sqlite_state": "unchanged",
+          "exact_error": "contract_invalid",
+          "duplicate_writes": 0
+        },
+        "binding_hash": "sha256:17526fb90a0297d735599ea750477907c2f7af8c3eae8b203c0e50a32bd41c59"
+      },
+      {
+        "case_id": "child_cut_before_compensation",
+        "category": "negative",
+        "transaction": "T7b",
+        "assertion": "unsettled required compensation blocks child Cut",
+        "handler": "g6_t7b_production",
+        "operation": {
+          "scenario_key": "g6:negative:child_cut_before_compensation",
+          "database": "isolated_real_file_sqlite",
+          "transaction_mode": "BEGIN_IMMEDIATE",
+          "virtual_clock_ms": 1781000000000,
+          "fake_adapter_only": true,
+          "fault_point": null,
+          "reopen": false
+        },
+        "oracle": {
+          "disposition": "rejected",
+          "sqlite_state": "unchanged",
+          "exact_error": "precondition_failed",
+          "duplicate_writes": 0
+        },
+        "binding_hash": "sha256:c7b4615f6e28fef06da041bcf28ed3bc8aff67033a193e4f15aab9c2bfc3870b"
+      },
+      {
+        "case_id": "root_cut_before_descendants",
+        "category": "negative",
+        "transaction": "T8",
+        "assertion": "open descendant blocks root Cut",
+        "handler": "g6_t8_production",
+        "operation": {
+          "scenario_key": "g6:negative:root_cut_before_descendants",
+          "database": "isolated_real_file_sqlite",
+          "transaction_mode": "BEGIN_IMMEDIATE",
+          "virtual_clock_ms": 1781000000000,
+          "fake_adapter_only": true,
+          "fault_point": null,
+          "reopen": false
+        },
+        "oracle": {
+          "disposition": "rejected",
+          "sqlite_state": "unchanged",
+          "exact_error": "precondition_failed",
+          "duplicate_writes": 0
+        },
+        "binding_hash": "sha256:f02e483fc174b2873ec60e63ed706879c636768eafb2cd117a01a48a651061bf"
+      },
+      {
+        "case_id": "root_cut_before_compensation",
+        "category": "negative",
+        "transaction": "T8",
+        "assertion": "unsettled compensation blocks root Cut",
+        "handler": "g6_t8_production",
+        "operation": {
+          "scenario_key": "g6:negative:root_cut_before_compensation",
+          "database": "isolated_real_file_sqlite",
+          "transaction_mode": "BEGIN_IMMEDIATE",
+          "virtual_clock_ms": 1781000000000,
+          "fake_adapter_only": true,
+          "fault_point": null,
+          "reopen": false
+        },
+        "oracle": {
+          "disposition": "rejected",
+          "sqlite_state": "unchanged",
+          "exact_error": "precondition_failed",
+          "duplicate_writes": 0
+        },
+        "binding_hash": "sha256:2535765bf768e09461460776ee4540a305ebb5d641f54621c92c85f38442c2f1"
+      },
+      {
+        "case_id": "wrong_route_source",
+        "category": "negative",
+        "transaction": "T8",
+        "assertion": "route source must match root outcome authority",
+        "handler": "g6_t8_production",
+        "operation": {
+          "scenario_key": "g6:negative:wrong_route_source",
+          "database": "isolated_real_file_sqlite",
+          "transaction_mode": "BEGIN_IMMEDIATE",
+          "virtual_clock_ms": 1781000000000,
+          "fake_adapter_only": true,
+          "fault_point": null,
+          "reopen": false
+        },
+        "oracle": {
+          "disposition": "rejected",
+          "sqlite_state": "unchanged",
+          "exact_error": "precondition_failed",
+          "duplicate_writes": 0
+        },
+        "binding_hash": "sha256:8dbd80391f2be3c50cbf9b1da74adb5148e5ee914944602ab146a4ab763035ae"
+      },
+      {
+        "case_id": "wrong_definition_target",
+        "category": "negative",
+        "transaction": "T8",
+        "assertion": "target state must equal published route target",
+        "handler": "g6_t8_production",
+        "operation": {
+          "scenario_key": "g6:negative:wrong_definition_target",
+          "database": "isolated_real_file_sqlite",
+          "transaction_mode": "BEGIN_IMMEDIATE",
+          "virtual_clock_ms": 1781000000000,
+          "fake_adapter_only": true,
+          "fault_point": null,
+          "reopen": false
+        },
+        "oracle": {
+          "disposition": "rejected",
+          "sqlite_state": "unchanged",
+          "exact_error": "integrity_violation",
+          "duplicate_writes": 0
+        },
+        "binding_hash": "sha256:d6d14f84751869d57590e80b90e325917ddde128b1e71f17f1ec4db8e78097c2"
+      },
+      {
+        "case_id": "wrong_target_kind",
+        "category": "negative",
+        "transaction": "T8",
+        "assertion": "terminal versus graph kind must equal published Definition",
+        "handler": "g6_t8_production",
+        "operation": {
+          "scenario_key": "g6:negative:wrong_target_kind",
+          "database": "isolated_real_file_sqlite",
+          "transaction_mode": "BEGIN_IMMEDIATE",
+          "virtual_clock_ms": 1781000000000,
+          "fake_adapter_only": true,
+          "fault_point": null,
+          "reopen": false
+        },
+        "oracle": {
+          "disposition": "rejected",
+          "sqlite_state": "unchanged",
+          "exact_error": "integrity_violation",
+          "duplicate_writes": 0
+        },
+        "binding_hash": "sha256:340a9fd08ed6ed986bd62853d275e785f5172a363ea567f89220736547398200"
+      },
+      {
+        "case_id": "stale_workflow_version",
+        "category": "negative",
+        "transaction": "T8",
+        "assertion": "stale Workflow row version rejects",
+        "handler": "g6_t8_production",
+        "operation": {
+          "scenario_key": "g6:negative:stale_workflow_version",
+          "database": "isolated_real_file_sqlite",
+          "transaction_mode": "BEGIN_IMMEDIATE",
+          "virtual_clock_ms": 1781000000000,
+          "fake_adapter_only": true,
+          "fault_point": null,
+          "reopen": false
+        },
+        "oracle": {
+          "disposition": "rejected",
+          "sqlite_state": "unchanged",
+          "exact_error": "cas_conflict",
+          "duplicate_writes": 0
+        },
+        "binding_hash": "sha256:8eae06a9059b2e7421a0d25da0733581910f28673c510a0f7583f16425a365de"
+      },
+      {
+        "case_id": "stale_activation_version",
+        "category": "negative",
+        "transaction": "T8",
+        "assertion": "stale source Activation row version rejects",
+        "handler": "g6_t8_production",
+        "operation": {
+          "scenario_key": "g6:negative:stale_activation_version",
+          "database": "isolated_real_file_sqlite",
+          "transaction_mode": "BEGIN_IMMEDIATE",
+          "virtual_clock_ms": 1781000000000,
+          "fake_adapter_only": true,
+          "fault_point": null,
+          "reopen": false
+        },
+        "oracle": {
+          "disposition": "rejected",
+          "sqlite_state": "unchanged",
+          "exact_error": "cas_conflict",
+          "duplicate_writes": 0
+        },
+        "binding_hash": "sha256:886cf96e5b19ff78d81b33d0927476408d50a3590a9e0369fc3d07990c3b8ea4"
+      },
+      {
+        "case_id": "missing_required_schedule",
+        "category": "negative",
+        "transaction": "T8",
+        "assertion": "every required effect needs exact ready Schedule provenance",
+        "handler": "g6_t8_production",
+        "operation": {
+          "scenario_key": "g6:negative:missing_required_schedule",
+          "database": "isolated_real_file_sqlite",
+          "transaction_mode": "BEGIN_IMMEDIATE",
+          "virtual_clock_ms": 1781000000000,
+          "fake_adapter_only": true,
+          "fault_point": null,
+          "reopen": false
+        },
+        "oracle": {
+          "disposition": "rejected",
+          "sqlite_state": "unchanged",
+          "exact_error": "precondition_failed",
+          "duplicate_writes": 0
+        },
+        "binding_hash": "sha256:fae0970bbd8fcbaa887fbb5c098c0df9f4345d20ef960ca16590d055f5cb3751"
+      },
+      {
+        "case_id": "required_effect_set_drift",
+        "category": "negative",
+        "transaction": "T8",
+        "assertion": "caller required effects must equal published transition effects",
+        "handler": "g6_t8_production",
+        "operation": {
+          "scenario_key": "g6:negative:required_effect_set_drift",
+          "database": "isolated_real_file_sqlite",
+          "transaction_mode": "BEGIN_IMMEDIATE",
+          "virtual_clock_ms": 1781000000000,
+          "fake_adapter_only": true,
+          "fault_point": null,
+          "reopen": false
+        },
+        "oracle": {
+          "disposition": "rejected",
+          "sqlite_state": "unchanged",
+          "exact_error": "integrity_violation",
+          "duplicate_writes": 0
+        },
+        "binding_hash": "sha256:0e5d6a6c5907a09cff597f79aedec0209ad9fbe4734a4029680f5f2394b22e0d"
+      },
+      {
+        "case_id": "best_effort_effect_set_drift",
+        "category": "negative",
+        "transaction": "T8",
+        "assertion": "caller best-effort effects must equal published transition effects",
+        "handler": "g6_t8_production",
+        "operation": {
+          "scenario_key": "g6:negative:best_effort_effect_set_drift",
+          "database": "isolated_real_file_sqlite",
+          "transaction_mode": "BEGIN_IMMEDIATE",
+          "virtual_clock_ms": 1781000000000,
+          "fake_adapter_only": true,
+          "fault_point": null,
+          "reopen": false
+        },
+        "oracle": {
+          "disposition": "rejected",
+          "sqlite_state": "unchanged",
+          "exact_error": "integrity_violation",
+          "duplicate_writes": 0
+        },
+        "binding_hash": "sha256:46f0235e2dcbe174639fe9d044955dc38e104ebe577b39eff8e61a56eb30e388"
+      },
+      {
+        "case_id": "required_claim_head_stale",
+        "category": "negative",
+        "transaction": "T8/R-022",
+        "assertion": "stale Claim or Resource Head tuple rolls back the entire T8",
+        "handler": "g6_t8_r_022_production",
+        "operation": {
+          "scenario_key": "g6:negative:required_claim_head_stale",
+          "database": "isolated_real_file_sqlite",
+          "transaction_mode": "BEGIN_IMMEDIATE",
+          "virtual_clock_ms": 1781000000000,
+          "fake_adapter_only": true,
+          "fault_point": null,
+          "reopen": false
+        },
+        "oracle": {
+          "disposition": "rejected",
+          "sqlite_state": "unchanged",
+          "exact_error": "cas_conflict",
+          "duplicate_writes": 0
+        },
+        "binding_hash": "sha256:ad87f828f85a59d43602cec2df6bcb8dff67c2a06c7665ca2e61864f0138b642"
+      },
+      {
+        "case_id": "t8_replay_intent_drift",
+        "category": "negative",
+        "transaction": "T8",
+        "assertion": "route target child and outbox replay intent must be exact",
+        "handler": "g6_t8_production",
+        "operation": {
+          "scenario_key": "g6:negative:t8_replay_intent_drift",
+          "database": "isolated_real_file_sqlite",
+          "transaction_mode": "BEGIN_IMMEDIATE",
+          "virtual_clock_ms": 1781000000000,
+          "fake_adapter_only": true,
+          "fault_point": null,
+          "reopen": false
+        },
+        "oracle": {
+          "disposition": "rejected",
+          "sqlite_state": "unchanged",
+          "exact_error": "idempotency_conflict",
+          "duplicate_writes": 0
+        },
+        "binding_hash": "sha256:a896c3c40f82ae362e190eda8b6bc4921845ae3e65046c4367b047e94df96bb5"
+      },
+      {
+        "case_id": "g7_gateway_surface_forbidden",
+        "category": "negative",
+        "transaction": "boundary",
+        "assertion": "G6 cannot create Gateway Command Invocation T7c or T6e behavior",
+        "handler": "g6_boundary_production",
+        "operation": {
+          "scenario_key": "g6:negative:g7_gateway_surface_forbidden",
+          "database": "isolated_real_file_sqlite",
+          "transaction_mode": "BEGIN_IMMEDIATE",
+          "virtual_clock_ms": 1781000000000,
+          "fake_adapter_only": true,
+          "fault_point": null,
+          "reopen": false
+        },
+        "oracle": {
+          "disposition": "rejected",
+          "sqlite_state": "unchanged",
+          "exact_error": "forbidden_surface",
+          "duplicate_writes": 0
+        },
+        "binding_hash": "sha256:aee7e2d2368855168afd0aca6fe541af8bab029ae964dbe925b5290195243d04"
+      }
+    ]
+  },
+  "hash": "sha256:3b1d6989ebbe4ec8e3d744b3ccf5325fe702e6fac64f2719221628f873eea9c6"
+}

@@ -8,12 +8,12 @@ import { parseContractArtifactEnvelope } from './artifact.js';
 import { checkR020ChildConsumptionLineageContract } from './r020-child-consumption-lineage-contract.js';
 import { checkR021MapTerminalConsumptionContract } from './r021-map-terminal-consumption-contract.js';
 import { checkR022DomainClaimHandoffContract } from './r022-domain-claim-handoff-contract.js';
+import { checkG6DynamicCloseContracts } from './g6-dynamic-close-contract.js';
 import { strictParseJsonBytes } from './strict-json.js';
 import type { JsonObject } from './types.js';
 import { WorkflowRuntimeConnectionFactory } from '../store/runtime-store/index.js';
 
 const contractsRoot = import.meta.dirname;
-const projectRoot = path.resolve(contractsRoot, '../../..');
 
 function readArtifact(relativePath: string) {
   return parseContractArtifactEnvelope(
@@ -50,7 +50,7 @@ describe('G6 Dynamic / Close readiness audit', () => {
     });
   });
 
-  it('preserves R-020/R-021 provenance and selects the R-022 Schema 10 successor while keeping G6 Production at zero', () => {
+  it('preserves R-020/R-021/R-022 prerequisite provenance and selects the current G6 authority', () => {
     const predecessor = checkR020ChildConsumptionLineageContract();
     expect(predecessor.payload).toMatchObject({
       gate: 'R-020_G6_PREREQUISITE',
@@ -72,15 +72,13 @@ describe('G6 Dynamic / Close readiness audit', () => {
       g6_status: 'BLOCKED_PENDING_REGRESSION_NOT_STARTED',
       g7_through_g9_status: 'NOT_READY',
     });
-    for (const relativePath of [
-      'src/workflow-runtime/runtime/g6-dynamic-close.ts',
-      'src/workflow-runtime/runtime/child-database-finalizer.ts',
-      'src/workflow-runtime/runtime/dynamic-scope-materializer.ts',
-      'src/workflow-runtime/runtime/root-finalization-coordinator.ts',
-      'src/workflow-runtime/runtime/g6-runtime.ts',
-    ]) {
-      expect(fs.existsSync(path.join(projectRoot, relativePath))).toBe(false);
-    }
+    expect(checkG6DynamicCloseContracts().payload).toMatchObject({
+      gate: 'G6',
+      g6_state: 'IN_PROGRESS',
+      g6_done: false,
+      g7_through_g9: 'NOT_READY',
+      production_implementation_count: 9,
+    });
   });
 
   it('proves the current Schema 10 Manifest and a fresh real-file Store retain all six exact composite FKs and four terminal pairs', () => {

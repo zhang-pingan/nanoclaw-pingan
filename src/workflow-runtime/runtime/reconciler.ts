@@ -9,7 +9,10 @@ import {
   G5_REPAIR_DATABASE_SCHEMA_HASH,
   G5_REPAIR_DATABASE_SCHEMA_VERSION,
 } from '../contracts/g5-basic-runtime-repair-types.js';
-import type { RuntimeValueRef } from '../contracts/g5-basic-runtime-types.js';
+import type {
+  RuntimeRegistryRef,
+  RuntimeValueRef,
+} from '../contracts/g5-basic-runtime-types.js';
 import type {
   WorkflowRuntimeStore,
   WorkflowRuntimeWriteTransaction,
@@ -38,6 +41,7 @@ import {
   type G5TransactionFault,
   type InlineValueSchemaAuthority,
 } from './graph-store.js';
+import { requestScopeCloseT7aInTransaction } from './graph-runtime.js';
 import {
   buildCanonicalNodeOutputEnvelope,
   loadPersistedPlanGeneratedSchemaAuthority,
@@ -441,14 +445,6 @@ export function materializeRootScopeT2b(
 } {
   verifyCompiledPlanAuthority(input.plan);
   const nodes = input.plan.nodes as JsonObject[];
-  const dynamicNode = nodes.find((node) =>
-    ['subgraph', 'expand', 'map'].includes(String(node.type)),
-  );
-  if (dynamicNode)
-    throw new G5RuntimeError(
-      'forbidden_surface',
-      `T2b dynamic node ${String(dynamicNode.id)} belongs to G6`,
-    );
   const edges = [
     ...(input.plan.control_edges as JsonObject[]),
     ...(input.plan.data_edges as JsonObject[]),
@@ -645,8 +641,8 @@ export function materializeRootScopeT2b(
             capabilityResource?.content_hash ?? null,
             canonicalJson(node),
             nodeOutputPortContractHash(objectField(node, 'output_ports') ?? {}),
-            null,
-            null,
+            ['subgraph', 'expand', 'map'].includes(nodeType) ? 'sealing' : null,
+            ['subgraph', 'expand', 'map'].includes(nodeType) ? 0 : null,
             input.nowMs,
             input.nowMs,
           ],
@@ -796,6 +792,7 @@ export interface ReconcileIngressFact {
   readonly stableObjectId: string;
   readonly factKey: string;
   readonly payload: RuntimeValueRef;
+  readonly manifestSchema: RuntimeRegistryRef;
   readonly terminalStatus?: 'succeeded' | 'failed' | 'skipped' | 'cancelled';
   readonly nowMs: number;
 }
@@ -2488,6 +2485,7 @@ function recordAndArbitrateEarlyCompletionT3(
     scopeRowVersion: number;
     eligibilityEventSequence: number;
     payload: RuntimeValueRef;
+    manifestSchema: RuntimeRegistryRef;
     append: AppendFixedPointFact;
     recordOnly?: boolean;
     nowMs: number;
@@ -2632,13 +2630,6 @@ function recordAndArbitrateEarlyCompletionT3(
       'integrity_violation',
       'Early completion candidate is no longer persisted',
     );
-  const frontierNodes = nodeRows as unknown as JsonObject[];
-  const edgeRows = transaction.queryAll<JsonObject>(
-    'SELECT id, edge_kind FROM workflow_graph_edges WHERE graph_run_id = ? AND scope_id = ? ORDER BY edge_key COLLATE BINARY',
-    [input.graphRunId, input.scopeId],
-  );
-  const nodeFrontierHash = runtimeObjectHash('node-frontier', frontierNodes);
-  const edgeFrontierHash = runtimeObjectHash('edge-frontier', edgeRows);
   const currentRun = transaction.queryOne<{
     row_version: number;
     next_event_seq: number;
@@ -2646,101 +2637,48 @@ function recordAndArbitrateEarlyCompletionT3(
     'SELECT row_version, next_event_seq FROM workflow_graph_runs WHERE id = ?',
     [input.graphRunId],
   )!;
-  const closeSequence =
-    Math.max(
-      input.eligibilityEventSequence,
-      transaction.queryOne<{ value: number }>(
-        'SELECT max(seq) AS value FROM workflow_graph_events WHERE graph_run_id = ?',
-        [input.graphRunId],
-      )!.value,
-    ) + 1;
-  const requestPayload: JsonObject = {
-    graph_run_id: input.graphRunId,
-    scope_id: input.scopeId,
-    selected_rule_id: selectedEligibility.rule_id,
-    candidate_id: selectedCandidate.id,
-    fact_snapshot_hash: selectedEligibility.fact_snapshot_hash,
-    node_frontier_hash: nodeFrontierHash,
-    edge_frontier_hash: edgeFrontierHash,
-    completion_policy_hash: completion.policy_hash,
-    trigger_event_seq: closeSequence,
-    fenced_work_epoch: input.scopeWorkFenceEpoch,
-  };
-  const requestHash = runtimeObjectHash('scope-close-request', requestPayload);
-  const closeRequestId = stableRuntimeId('close-request', {
-    graph_run_id: input.graphRunId,
-    scope_id: input.scopeId,
-    request_hash: requestHash,
-  });
-  transaction.execute(
-    `INSERT INTO workflow_graph_scope_close_requests (
-       id, graph_run_id, scope_id, selected_rule_id, candidate_id,
-       eligibility_event_seq, fact_snapshot_json, fact_snapshot_hash,
-       node_frontier_json, node_frontier_hash, edge_frontier_json,
-       edge_frontier_hash, trigger_event_seq, fenced_work_epoch_at_creation,
-       reason, error_code, error_detail_value_id, error_detail_hash,
-       cancel_payload_json, cancel_payload_hash, request_hash, created_at_ms
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'normal', NULL,
-       NULL, NULL, NULL, NULL, ?, ?)`,
-    [
-      closeRequestId,
-      input.graphRunId,
-      input.scopeId,
-      selectedEligibility.rule_id,
-      selectedCandidate.id,
-      selectedEligibility.eligibility_event_seq,
-      selectedEligibility.fact_snapshot_json,
-      selectedEligibility.fact_snapshot_hash,
-      canonicalJson(frontierNodes),
-      nodeFrontierHash,
-      canonicalJson(edgeRows),
-      edgeFrontierHash,
-      closeSequence,
-      input.scopeWorkFenceEpoch,
-      requestHash,
-      input.nowMs,
-    ],
-  );
+  const factHead = transaction.queryOne<{ value: number }>(
+    'SELECT max(seq) AS value FROM workflow_graph_events WHERE graph_run_id = ?',
+    [input.graphRunId],
+  )!.value;
   if (
     transaction.execute(
-      "UPDATE workflow_graph_scopes SET lifecycle = 'closing', close_request_id = ?, work_fence_epoch = work_fence_epoch + 1, row_version = row_version + 1, updated_at_ms = ? WHERE id = ? AND row_version = ? AND lifecycle = 'active' AND work_fence_epoch = ?",
+      'UPDATE workflow_graph_runs SET next_event_seq = ?, row_version = row_version + 1, updated_at_ms = ? WHERE id = ? AND row_version = ? AND next_event_seq = ?',
       [
-        closeRequestId,
-        input.nowMs,
-        input.scopeId,
-        input.scopeRowVersion,
-        input.scopeWorkFenceEpoch,
-      ],
-    ).changes !== 1
-  )
-    throw new G5RuntimeError('cas_conflict', 'T3 early close Scope CAS failed');
-  if (
-    transaction.execute(
-      "UPDATE workflow_graph_runs SET lifecycle = 'closing', root_close_request_id = ?, work_fence_epoch = work_fence_epoch + 1, next_event_seq = ?, row_version = row_version + 1, updated_at_ms = ? WHERE id = ? AND row_version = ? AND lifecycle = 'executing' AND control = 'running' AND operational_state = 'healthy' AND work_fence_epoch = ?",
-      [
-        closeRequestId,
-        closeSequence,
+        factHead,
         input.nowMs,
         input.graphRunId,
         currentRun.row_version,
-        input.runWorkFenceEpoch,
+        currentRun.next_event_seq,
       ],
     ).changes !== 1
   )
-    throw new G5RuntimeError('cas_conflict', 'T3 early close Run CAS failed');
-  insertGraphEvent(transaction, {
+    throw new G5RuntimeError('cas_conflict', 'T3 early fact-head CAS failed');
+  const refreshedRun = transaction.queryOne<{ row_version: number }>(
+    'SELECT row_version FROM workflow_graph_runs WHERE id = ?',
+    [input.graphRunId],
+  )!;
+  const closed = requestScopeCloseT7aInTransaction(transaction, {
     graphRunId: input.graphRunId,
-    sequence: closeSequence,
     scopeId: input.scopeId,
-    nodeId: null,
-    attemptId: null,
-    eventType: 'scope_close_requested',
-    idempotencyKey: `scope-close:${input.scopeId}`,
-    payloadJson: requestPayload,
-    occurredAtMs: input.nowMs,
-    createdAtMs: input.nowMs,
+    expectedRunRowVersion: refreshedRun.row_version,
+    expectedScopeRowVersion: input.scopeRowVersion,
+    expectedRunWorkFenceEpoch: input.runWorkFenceEpoch,
+    expectedScopeWorkFenceEpoch: input.scopeWorkFenceEpoch,
+    cause: {
+      reason: 'normal',
+      selectedRuleId: selectedEligibility.rule_id,
+      candidateId: selectedCandidate.id,
+      eligibilityEventSeq: selectedEligibility.eligibility_event_seq,
+    },
+    manifestSchema: input.manifestSchema,
+    nowMs: input.nowMs,
   });
-  return { closed: true, eventSequence: closeSequence };
+  const eventSequence = transaction.queryOne<{ next_event_seq: number }>(
+    'SELECT next_event_seq FROM workflow_graph_runs WHERE id = ?',
+    [input.graphRunId],
+  )!.next_event_seq;
+  return { closed: closed.disposition === 'close_requested', eventSequence };
 }
 
 export function initializeScopeFixedPointT3a(
@@ -2749,6 +2687,7 @@ export function initializeScopeFixedPointT3a(
     readonly graphRunId: string;
     readonly scopeId: string;
     readonly expectedRunRowVersion: number;
+    readonly manifestSchema: RuntimeRegistryRef;
     readonly nowMs: number;
   },
   fault?: G5TransactionFault,
@@ -2934,18 +2873,22 @@ export function initializeScopeFixedPointT3a(
         closeFixedPointEngineErrorT3(transaction, {
           graphRunId: input.graphRunId,
           scopeId: input.scopeId,
-          plan,
           expectedRunRowVersion: refreshed.row_version,
           expectedScopeRowVersion: scope.row_version,
           runNextEventSequence: sequence,
           runWorkFenceEpoch: run.work_fence_epoch,
           scopeWorkFenceEpoch: scope.work_fence_epoch,
           errorCode: 'fixed_point_resolution_error',
+          manifestSchema: input.manifestSchema,
           nowMs: input.nowMs,
         });
+        const closedHead = transaction.queryOne<{ next_event_seq: number }>(
+          'SELECT next_event_seq FROM workflow_graph_runs WHERE id = ?',
+          [input.graphRunId],
+        )!;
         return {
           readyNodeIds: advanced.readyNodeIds,
-          lastEventSequence: sequence + 2,
+          lastEventSequence: closedHead.next_event_seq,
         };
       }
       const refreshed = transaction.queryOne<{
@@ -3147,6 +3090,7 @@ export function reconcileFactT3a(
             scopeRowVersion: scope.row_version,
             eligibilityEventSequence,
             payload: input.payload,
+            manifestSchema: input.manifestSchema,
             append,
             recordOnly: true,
             nowMs: input.nowMs,
@@ -3216,16 +3160,22 @@ export function reconcileFactT3a(
           closeFixedPointEngineErrorT3(transaction, {
             graphRunId: input.graphRunId,
             scopeId: input.scopeId,
-            plan,
             expectedRunRowVersion: refreshed.row_version,
             expectedScopeRowVersion: scope.row_version,
             runNextEventSequence: sequence,
             runWorkFenceEpoch: run.work_fence_epoch,
             scopeWorkFenceEpoch: scope.work_fence_epoch,
             errorCode: 'fixed_point_resolution_error',
+            manifestSchema: input.manifestSchema,
             nowMs: input.nowMs,
           });
-          return { disposition: 'reconciled', eventSequence: sequence + 2 };
+          return {
+            disposition: 'reconciled',
+            eventSequence: transaction.queryOne<{ next_event_seq: number }>(
+              'SELECT next_event_seq FROM workflow_graph_runs WHERE id = ?',
+              [input.graphRunId],
+            )!.next_event_seq,
+          };
         }
       }
       const early = recordAndArbitrateEarlyCompletionT3(transaction, {
@@ -3239,6 +3189,7 @@ export function reconcileFactT3a(
         scopeRowVersion: scope.row_version,
         eligibilityEventSequence: sequence,
         payload: input.payload,
+        manifestSchema: input.manifestSchema,
         append,
         nowMs: input.nowMs,
       });
@@ -3276,154 +3227,17 @@ function closeFixedPointEngineErrorT3(
   input: {
     readonly graphRunId: string;
     readonly scopeId: string;
-    readonly plan: CompiledScopePlanV2Document;
     readonly expectedRunRowVersion: number;
     readonly expectedScopeRowVersion: number;
     readonly runNextEventSequence: number;
     readonly runWorkFenceEpoch: number;
     readonly scopeWorkFenceEpoch: number;
     readonly errorCode: string;
-    readonly nowMs: number;
-  },
-): string {
-  const factRows = transaction.queryAll<JsonObject>(
-    'SELECT fact_key, payload_hash FROM workflow_graph_facts WHERE graph_run_id = ? AND scope_id = ? ORDER BY event_seq, fact_key COLLATE BINARY',
-    [input.graphRunId, input.scopeId],
-  );
-  const nodeRows = transaction.queryAll<JsonObject>(
-    'SELECT id, phase, terminal_status, row_version FROM workflow_graph_nodes WHERE graph_run_id = ? AND scope_id = ? ORDER BY node_key COLLATE BINARY',
-    [input.graphRunId, input.scopeId],
-  );
-  const edgeRows = transaction.queryAll<JsonObject>(
-    'SELECT id, edge_kind FROM workflow_graph_edges WHERE graph_run_id = ? AND scope_id = ? ORDER BY edge_key COLLATE BINARY',
-    [input.graphRunId, input.scopeId],
-  );
-  return insertEngineErrorCloseRequestT3(transaction, {
-    graphRunId: input.graphRunId,
-    scopeId: input.scopeId,
-    expectedRunRowVersion: input.expectedRunRowVersion,
-    expectedScopeRowVersion: input.expectedScopeRowVersion,
-    runNextEventSequence: input.runNextEventSequence,
-    runWorkFenceEpoch: input.runWorkFenceEpoch,
-    scopeWorkFenceEpoch: input.scopeWorkFenceEpoch,
-    errorCode: input.errorCode,
-    completionPolicyHash: verifyCompletionPolicyAuthority(
-      requiredObjectField(
-        input.plan as unknown as JsonObject,
-        'completion',
-        'Compiled Plan v2',
-      ),
-    ).policy_hash as Sha256Hash,
-    factRows,
-    factSnapshotHash: runtimeObjectHash('fact-snapshot', factRows),
-    nodeRows,
-    nodeFrontierHash: runtimeObjectHash('node-frontier', nodeRows),
-    edgeRows,
-    edgeFrontierHash: runtimeObjectHash('edge-frontier', edgeRows),
-    nowMs: input.nowMs,
-  });
-}
-
-function insertEngineErrorCloseRequestT3(
-  transaction: WorkflowRuntimeWriteTransaction,
-  input: {
-    readonly graphRunId: string;
-    readonly scopeId: string;
-    readonly expectedRunRowVersion: number;
-    readonly expectedScopeRowVersion: number;
-    readonly runNextEventSequence: number;
-    readonly runWorkFenceEpoch: number;
-    readonly scopeWorkFenceEpoch: number;
-    readonly errorCode: string;
-    readonly completionPolicyHash: Sha256Hash;
-    readonly factRows: readonly JsonObject[];
-    readonly factSnapshotHash: Sha256Hash;
-    readonly nodeRows: readonly JsonObject[];
-    readonly nodeFrontierHash: Sha256Hash;
-    readonly edgeRows: readonly JsonObject[];
-    readonly edgeFrontierHash: Sha256Hash;
+    readonly manifestSchema: RuntimeRegistryRef;
     readonly nowMs: number;
   },
 ): string {
   const errorSequence = input.runNextEventSequence + 1;
-  const closeSequence = errorSequence + 1;
-  const requestPayload: JsonObject = {
-    graph_run_id: input.graphRunId,
-    scope_id: input.scopeId,
-    selected_rule_id: null,
-    candidate_id: null,
-    fact_snapshot_hash: input.factSnapshotHash,
-    node_frontier_hash: input.nodeFrontierHash,
-    edge_frontier_hash: input.edgeFrontierHash,
-    completion_policy_hash: input.completionPolicyHash,
-    trigger_event_seq: closeSequence,
-    fenced_work_epoch: input.scopeWorkFenceEpoch,
-    reason: 'engine_error',
-    error_code: input.errorCode,
-  };
-  const requestHash = runtimeObjectHash('scope-close-request', requestPayload);
-  const closeRequestId = stableRuntimeId('close-request', {
-    graph_run_id: input.graphRunId,
-    scope_id: input.scopeId,
-    request_hash: requestHash,
-  });
-  transaction.execute(
-    `INSERT INTO workflow_graph_scope_close_requests (
-       id, graph_run_id, scope_id, selected_rule_id, candidate_id,
-       eligibility_event_seq, fact_snapshot_json, fact_snapshot_hash,
-       node_frontier_json, node_frontier_hash, edge_frontier_json,
-       edge_frontier_hash, trigger_event_seq, fenced_work_epoch_at_creation,
-       reason, error_code, error_detail_value_id, error_detail_hash,
-       cancel_payload_json, cancel_payload_hash, request_hash, created_at_ms
-     ) VALUES (?, ?, ?, NULL, NULL, NULL, ?, ?, ?, ?, ?, ?, ?, ?,
-       'engine_error', ?, NULL, NULL, NULL, NULL, ?, ?)`,
-    [
-      closeRequestId,
-      input.graphRunId,
-      input.scopeId,
-      canonicalJson(input.factRows as JsonObject[]),
-      input.factSnapshotHash,
-      canonicalJson(input.nodeRows as JsonObject[]),
-      input.nodeFrontierHash,
-      canonicalJson(input.edgeRows as JsonObject[]),
-      input.edgeFrontierHash,
-      closeSequence,
-      input.scopeWorkFenceEpoch,
-      input.errorCode,
-      requestHash,
-      input.nowMs,
-    ],
-  );
-  if (
-    transaction.execute(
-      "UPDATE workflow_graph_scopes SET lifecycle = 'closing', close_request_id = ?, work_fence_epoch = work_fence_epoch + 1, row_version = row_version + 1, updated_at_ms = ? WHERE id = ? AND row_version = ? AND lifecycle = 'active' AND work_fence_epoch = ?",
-      [
-        closeRequestId,
-        input.nowMs,
-        input.scopeId,
-        input.expectedScopeRowVersion,
-        input.scopeWorkFenceEpoch,
-      ],
-    ).changes !== 1
-  )
-    throw new G5RuntimeError(
-      'cas_conflict',
-      'T3 engine-error Scope CAS failed',
-    );
-  if (
-    transaction.execute(
-      "UPDATE workflow_graph_runs SET lifecycle = 'closing', root_close_request_id = ?, work_fence_epoch = work_fence_epoch + 1, next_event_seq = ?, row_version = row_version + 1, updated_at_ms = ? WHERE id = ? AND row_version = ? AND lifecycle = 'executing' AND work_fence_epoch = ?",
-      [
-        closeRequestId,
-        closeSequence,
-        input.nowMs,
-        input.graphRunId,
-        input.expectedRunRowVersion,
-        input.runWorkFenceEpoch,
-      ],
-    ).changes !== 1
-  )
-    throw new G5RuntimeError('cas_conflict', 'T3 engine-error Run CAS failed');
   insertGraphEvent(transaction, {
     graphRunId: input.graphRunId,
     sequence: errorSequence,
@@ -3436,19 +3250,43 @@ function insertEngineErrorCloseRequestT3(
     occurredAtMs: input.nowMs,
     createdAtMs: input.nowMs,
   });
-  insertGraphEvent(transaction, {
+  const persistedHead = transaction.queryOne<{
+    next_event_seq: number;
+    row_version: number;
+  }>(
+    'SELECT next_event_seq, row_version FROM workflow_graph_runs WHERE id = ?',
+    [input.graphRunId],
+  );
+  if (
+    !persistedHead ||
+    persistedHead.row_version !== input.expectedRunRowVersion ||
+    transaction.execute(
+      'UPDATE workflow_graph_runs SET next_event_seq = ?, row_version = row_version + 1, updated_at_ms = ? WHERE id = ? AND row_version = ? AND next_event_seq = ?',
+      [
+        errorSequence,
+        input.nowMs,
+        input.graphRunId,
+        input.expectedRunRowVersion,
+        persistedHead.next_event_seq,
+      ],
+    ).changes !== 1
+  )
+    throw new G5RuntimeError('cas_conflict', 'T3 engine-error head CAS failed');
+  const refreshedRun = transaction.queryOne<{ row_version: number }>(
+    'SELECT row_version FROM workflow_graph_runs WHERE id = ?',
+    [input.graphRunId],
+  )!;
+  return requestScopeCloseT7aInTransaction(transaction, {
     graphRunId: input.graphRunId,
-    sequence: closeSequence,
     scopeId: input.scopeId,
-    nodeId: null,
-    attemptId: null,
-    eventType: 'scope_close_requested',
-    idempotencyKey: `scope-close:${input.scopeId}`,
-    payloadJson: requestPayload,
-    occurredAtMs: input.nowMs,
-    createdAtMs: input.nowMs,
-  });
-  return closeRequestId;
+    expectedRunRowVersion: refreshedRun.row_version,
+    expectedScopeRowVersion: input.expectedScopeRowVersion,
+    expectedRunWorkFenceEpoch: input.runWorkFenceEpoch,
+    expectedScopeWorkFenceEpoch: input.scopeWorkFenceEpoch,
+    cause: { reason: 'engine_error', errorCode: input.errorCode },
+    manifestSchema: input.manifestSchema,
+    nowMs: input.nowMs,
+  }).closeRequestId;
 }
 
 export interface T3bSettledCloseInput {
@@ -3456,6 +3294,7 @@ export interface T3bSettledCloseInput {
   readonly scopeId: string;
   readonly expectedRunRowVersion: number;
   readonly expectedScopeRowVersion: number;
+  readonly manifestSchema: RuntimeRegistryRef;
   readonly nowMs: number;
 }
 
@@ -3650,7 +3489,7 @@ export function requestSettledCloseT3b(
       });
       const selected = applicable[0];
       if (!selected) {
-        const closeRequestId = insertEngineErrorCloseRequestT3(transaction, {
+        const closeRequestId = closeFixedPointEngineErrorT3(transaction, {
           graphRunId: input.graphRunId,
           scopeId: input.scopeId,
           expectedRunRowVersion: input.expectedRunRowVersion,
@@ -3659,13 +3498,7 @@ export function requestSettledCloseT3b(
           runWorkFenceEpoch: run.work_fence_epoch,
           scopeWorkFenceEpoch: scope.work_fence_epoch,
           errorCode: 'no_exit_selected',
-          completionPolicyHash,
-          factRows: factRows as unknown as JsonObject[],
-          factSnapshotHash,
-          nodeRows: nodeRows as unknown as JsonObject[],
-          nodeFrontierHash,
-          edgeRows: edgeRows as unknown as JsonObject[],
-          edgeFrontierHash,
+          manifestSchema: input.manifestSchema,
           nowMs: input.nowMs,
         });
         return { disposition: 'close_requested', closeRequestId };
@@ -3674,7 +3507,6 @@ export function requestSettledCloseT3b(
       const selectedRuleId = String(selectedRule.id);
       const candidate = selected.candidate;
       const eligibilitySequence = run.next_event_seq + 1;
-      const closeSequence = eligibilitySequence + 1;
       const eligibilityId = stableRuntimeId('eligibility', {
         graph_run_id: input.graphRunId,
         scope_id: input.scopeId,
@@ -3695,83 +3527,6 @@ export function requestSettledCloseT3b(
           input.nowMs,
         ],
       );
-      const requestPayload: JsonObject = {
-        graph_run_id: input.graphRunId,
-        scope_id: input.scopeId,
-        selected_rule_id: selectedRuleId,
-        candidate_id: candidate.id,
-        fact_snapshot_hash: factSnapshotHash,
-        node_frontier_hash: nodeFrontierHash,
-        edge_frontier_hash: edgeFrontierHash,
-        completion_policy_hash: completionPolicyHash,
-        trigger_event_seq: closeSequence,
-        fenced_work_epoch: scope.work_fence_epoch,
-      };
-      const requestHash = runtimeObjectHash(
-        'scope-close-request',
-        requestPayload,
-      );
-      const closeRequestId = stableRuntimeId('close-request', {
-        graph_run_id: input.graphRunId,
-        scope_id: input.scopeId,
-        request_hash: requestHash,
-      });
-      transaction.execute(
-        `INSERT INTO workflow_graph_scope_close_requests (
-       id, graph_run_id, scope_id, selected_rule_id, candidate_id,
-       eligibility_event_seq, fact_snapshot_json, fact_snapshot_hash,
-       node_frontier_json, node_frontier_hash, edge_frontier_json,
-       edge_frontier_hash, trigger_event_seq, fenced_work_epoch_at_creation,
-       reason, error_code, error_detail_value_id, error_detail_hash,
-       cancel_payload_json, cancel_payload_hash, request_hash, created_at_ms
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'normal', NULL, NULL,
-       NULL, NULL, NULL, ?, ?)`,
-        [
-          closeRequestId,
-          input.graphRunId,
-          input.scopeId,
-          selectedRuleId,
-          candidate.id,
-          eligibilitySequence,
-          canonicalJson(factRows as unknown as JsonObject[]),
-          factSnapshotHash,
-          canonicalJson(nodeRows as unknown as JsonObject[]),
-          nodeFrontierHash,
-          canonicalJson(edgeRows as unknown as JsonObject[]),
-          edgeFrontierHash,
-          closeSequence,
-          scope.work_fence_epoch,
-          requestHash,
-          input.nowMs,
-        ],
-      );
-      if (
-        transaction.execute(
-          "UPDATE workflow_graph_scopes SET lifecycle = 'closing', close_request_id = ?, work_fence_epoch = work_fence_epoch + 1, row_version = row_version + 1, updated_at_ms = ? WHERE id = ? AND row_version = ? AND lifecycle = 'active' AND work_fence_epoch = ?",
-          [
-            closeRequestId,
-            input.nowMs,
-            input.scopeId,
-            input.expectedScopeRowVersion,
-            scope.work_fence_epoch,
-          ],
-        ).changes !== 1
-      )
-        throw new G5RuntimeError('cas_conflict', 'T3b Scope close CAS failed');
-      if (
-        transaction.execute(
-          "UPDATE workflow_graph_runs SET lifecycle = 'closing', root_close_request_id = ?, work_fence_epoch = work_fence_epoch + 1, next_event_seq = ?, row_version = row_version + 1, updated_at_ms = ? WHERE id = ? AND row_version = ? AND lifecycle = 'executing' AND work_fence_epoch = ?",
-          [
-            closeRequestId,
-            closeSequence,
-            input.nowMs,
-            input.graphRunId,
-            input.expectedRunRowVersion,
-            run.work_fence_epoch,
-          ],
-        ).changes !== 1
-      )
-        throw new G5RuntimeError('cas_conflict', 'T3b Run close CAS failed');
       insertGraphEvent(transaction, {
         graphRunId: input.graphRunId,
         sequence: eligibilitySequence,
@@ -3803,19 +3558,53 @@ export function requestSettledCloseT3b(
         payloadHash: candidate.outputHash,
         createdAtMs: input.nowMs,
       });
-      insertGraphEvent(transaction, {
+      const runAfterEligibility = transaction.queryOne<{
+        next_event_seq: number;
+        row_version: number;
+      }>(
+        'SELECT next_event_seq, row_version FROM workflow_graph_runs WHERE id = ?',
+        [input.graphRunId],
+      )!;
+      if (
+        transaction.execute(
+          'UPDATE workflow_graph_runs SET next_event_seq = ?, row_version = row_version + 1, updated_at_ms = ? WHERE id = ? AND row_version = ? AND next_event_seq = ?',
+          [
+            eligibilitySequence,
+            input.nowMs,
+            input.graphRunId,
+            runAfterEligibility.row_version,
+            runAfterEligibility.next_event_seq,
+          ],
+        ).changes !== 1
+      )
+        throw new G5RuntimeError(
+          'cas_conflict',
+          'T3b eligibility event-head CAS failed',
+        );
+      const refreshedRun = transaction.queryOne<{ row_version: number }>(
+        'SELECT row_version FROM workflow_graph_runs WHERE id = ?',
+        [input.graphRunId],
+      )!;
+      const closed = requestScopeCloseT7aInTransaction(transaction, {
         graphRunId: input.graphRunId,
-        sequence: closeSequence,
         scopeId: input.scopeId,
-        nodeId: null,
-        attemptId: null,
-        eventType: 'scope_close_requested',
-        idempotencyKey: `scope-close:${input.scopeId}`,
-        payloadJson: requestPayload,
-        occurredAtMs: input.nowMs,
-        createdAtMs: input.nowMs,
+        expectedRunRowVersion: refreshedRun.row_version,
+        expectedScopeRowVersion: input.expectedScopeRowVersion,
+        expectedRunWorkFenceEpoch: run.work_fence_epoch,
+        expectedScopeWorkFenceEpoch: scope.work_fence_epoch,
+        cause: {
+          reason: 'normal',
+          selectedRuleId,
+          candidateId: candidate.id,
+          eligibilityEventSeq: eligibilitySequence,
+        },
+        manifestSchema: input.manifestSchema,
+        nowMs: input.nowMs,
       });
-      return { disposition: 'close_requested', closeRequestId };
+      return {
+        disposition: 'close_requested',
+        closeRequestId: closed.closeRequestId,
+      };
     },
     fault,
   );

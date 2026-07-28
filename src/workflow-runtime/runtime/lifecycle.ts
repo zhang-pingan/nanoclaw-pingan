@@ -84,6 +84,7 @@ export function activateWorkflowT1(
 export function activateWorkflowT1InTransaction(
   transaction: WorkflowRuntimeWriteTransaction,
   input: T1ActivationInput,
+  options: { readonly writeInitialCheckpoint?: boolean } = {},
 ): T1ActivationReceipt {
   if (input.databaseSchemaHash !== G5_REPAIR_DATABASE_SCHEMA_HASH)
     throw new G5RuntimeError(
@@ -237,7 +238,7 @@ export function activateWorkflowT1InTransaction(
       graphRunId,
       input.workflowId,
       input.stateKey,
-      workflow.state_instance_id,
+      activationId,
       input.definitionVersion,
       input.stateConfig.id,
       input.stateConfig.hash,
@@ -390,35 +391,38 @@ export function activateWorkflowT1InTransaction(
      ) VALUES (?, 2, ?, NULL, NULL, 'run_created', ?, NULL, NULL, NULL, ?, ?)`,
     [graphRunId, rootScopeId, `run:${graphRunId}`, input.nowMs, input.nowMs],
   );
-  transaction.execute(
-    `INSERT INTO workflow_checkpoints (
+  if (options.writeInitialCheckpoint !== false)
+    transaction.execute(
+      `INSERT INTO workflow_checkpoints (
        id, workflow_id, checkpoint_version, workflow_revision,
        source_state_instance_id, source_run_id, completion_cut_id,
        snapshot_json, snapshot_value_id, snapshot_hash, created_at_ms
      ) VALUES (?, ?, 1, 0, ?, ?, NULL, ?, NULL, ?, ?)`,
-    [
-      stableRuntimeId('checkpoint', {
-        workflow_id: input.workflowId,
-        checkpoint_version: 1,
-      }),
-      input.workflowId,
-      workflow.state_instance_id,
-      graphRunId,
-      JSON.stringify(input.checkpoint),
-      input.runtimeSafetySnapshot.hash,
-      input.nowMs,
-    ],
-  );
+      [
+        stableRuntimeId('checkpoint', {
+          workflow_id: input.workflowId,
+          checkpoint_version: 1,
+        }),
+        input.workflowId,
+        activationId,
+        graphRunId,
+        JSON.stringify(input.checkpoint),
+        input.runtimeSafetySnapshot.hash,
+        input.nowMs,
+      ],
+    );
   const changed = transaction.execute(
     `UPDATE workflows
           SET state_activation_count = ?, graph_run_count = ?,
-              current_graph_run_id = ?, row_version = row_version + 1,
+              state_instance_id = ?, current_graph_run_id = ?,
+              row_version = row_version + 1,
               updated_at_ms = ?
         WHERE id = ? AND row_version = ? AND status = 'active'
           AND operational_state = 'healthy'`,
     [
       activationNo,
       runNo,
+      activationId,
       graphRunId,
       input.nowMs,
       input.workflowId,

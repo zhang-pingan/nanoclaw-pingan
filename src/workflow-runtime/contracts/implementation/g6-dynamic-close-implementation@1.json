@@ -1,0 +1,54 @@
+{
+  "format": "icarus.workflow-g6-dynamic-close-implementation/1",
+  "ref": {
+    "id": "icarus.workflow-g6-dynamic-close-implementation",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-g6-dynamic-close-implementation:1\n",
+  "payload": {
+    "production_target": true,
+    "production_ingress_enabled": false,
+    "production_implementation_count": 9,
+    "sources": [
+      {
+        "path": "src/workflow-runtime/runtime/basic-scheduler.ts",
+        "raw_sha256": "sha256:f3b3cf52988e1bdf713e4a547c3be9e275e4c2eb15c7148a2cfcda7a3e2e6583"
+      },
+      {
+        "path": "src/workflow-runtime/runtime/child-runtime.ts",
+        "raw_sha256": "sha256:1b33c8f9b01598f2e98f4acaa5a14ebaa59b840ad23eca36e817bf96ebb0bf03"
+      },
+      {
+        "path": "src/workflow-runtime/runtime/graph-runtime.ts",
+        "raw_sha256": "sha256:b664ac3dc16b301f27c161b8024d81f1d4375df5b7ed6675701c78dddef0671d"
+      },
+      {
+        "path": "src/workflow-runtime/runtime/graph-store.ts",
+        "raw_sha256": "sha256:defdde362dcefe430b52d599fafa767af156cb8bace3e23c9b2ff14eeabb934f"
+      },
+      {
+        "path": "src/workflow-runtime/runtime/ledger.ts",
+        "raw_sha256": "sha256:46a3d4cffed5810a13a534c4444ec6edd8d40ec11a15243d7d1f01dc17b7a020"
+      },
+      {
+        "path": "src/workflow-runtime/runtime/lifecycle.ts",
+        "raw_sha256": "sha256:b61e56d84871c8d5aa840710a310de57163a3390fd309e1cf9585bf127572d21"
+      },
+      {
+        "path": "src/workflow-runtime/runtime/plan-authority.ts",
+        "raw_sha256": "sha256:aad1b52c3396aac352f9f80e8ca11ad76cdb4278343d936dd006714dc167dd9b"
+      },
+      {
+        "path": "src/workflow-runtime/runtime/reconciler.ts",
+        "raw_sha256": "sha256:e695585679d0ee07ed0f22886f72af92ca3307bf7b35a7f145f5c43d7f1720f2"
+      },
+      {
+        "path": "src/workflow-runtime/runtime/root-finalizer.ts",
+        "raw_sha256": "sha256:07559cfad7236bff0e3ab498c7c8854fd86f83d4c3fbd00e2863984b9c5eeee4"
+      }
+    ],
+    "source_tree_hash": "sha256:94d45a7f6115e6a6a6097917575e48b0e63d73933f11ffc8a16bb48e3025afe9"
+  },
+  "hash": "sha256:fc06635d92dc7cc25d73cb16cae8d753224570097f4cf47bdd8243ef759dcb07"
+}
