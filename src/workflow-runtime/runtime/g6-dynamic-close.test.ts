@@ -32,6 +32,7 @@ import {
 } from './g6-test-support.js';
 
 const fixtures: G6MapFixture[] = [];
+type SqlSnapshotRow = Record<string, string | number | null>;
 
 afterEach(() => {
   while (fixtures.length > 0) fixtures.pop()!.instance.cleanup();
@@ -71,6 +72,57 @@ function currentNode(fixture: G6MapFixture, nodeId: string) {
        FROM workflow_graph_nodes WHERE id = ? AND graph_run_id = ?`,
     [nodeId, fixture.graphRunId],
   )!;
+}
+
+function closedChildAuthorityBytes(
+  fixture: G6MapFixture,
+  childScopeId: string,
+): string {
+  const scope = fixture.instance.store.queryOne<SqlSnapshotRow>(
+    `SELECT * FROM workflow_graph_scopes
+      WHERE id = ? AND graph_run_id = ?`,
+    [childScopeId, fixture.graphRunId],
+  )!;
+  const closeRequest = fixture.instance.store.queryOne<SqlSnapshotRow>(
+    'SELECT * FROM workflow_graph_scope_close_requests WHERE id = ?',
+    [scope.close_request_id],
+  )!;
+  const cut = fixture.instance.store.queryOne<SqlSnapshotRow>(
+    'SELECT * FROM workflow_graph_completion_cuts WHERE id = ?',
+    [scope.completion_cut_id],
+  )!;
+  const candidate = cut.candidate_id
+    ? (fixture.instance.store.queryOne<SqlSnapshotRow>(
+        'SELECT * FROM workflow_graph_terminal_candidates WHERE id = ?',
+        [cut.candidate_id],
+      ) ?? null)
+    : null;
+  const output = scope.output_value_id
+    ? (fixture.instance.store.queryOne<SqlSnapshotRow>(
+        'SELECT * FROM workflow_values WHERE id = ?',
+        [scope.output_value_id],
+      ) ?? null)
+    : null;
+  const consumption = fixture.instance.store.queryOne<SqlSnapshotRow>(
+    `SELECT * FROM workflow_graph_child_completion_consumptions
+      WHERE graph_run_id = ? AND child_scope_id = ?`,
+    [fixture.graphRunId, childScopeId],
+  )!;
+  const events = fixture.instance.store.queryAll<SqlSnapshotRow>(
+    `SELECT * FROM workflow_graph_events
+      WHERE graph_run_id = ? AND scope_id = ?
+      ORDER BY seq`,
+    [fixture.graphRunId, childScopeId],
+  );
+  return canonicalJson({
+    scope,
+    close_request: closeRequest,
+    completion_cut: cut,
+    candidate,
+    output,
+    consumption,
+    events,
+  });
 }
 
 function materializeMapChildren(
@@ -662,6 +714,188 @@ describe('G6 dynamic materialization and close', () => {
         }).disposition,
       ).toBe('exact_replay');
     }
+  });
+
+  it('closes an ancestor after child T7b without rewriting closed child authority', () => {
+    const fixture = createG6MapFixture('child-first-ancestor-close', {
+      dynamicMode: 'subgraph',
+    });
+    fixtures.push(fixture);
+    const dynamic = materializeSingleDynamicChild(fixture, 'subgraph', 225);
+    completeChildNormally(fixture, dynamic.childScopeId, 235);
+    const child = currentScope(fixture, dynamic.childScopeId);
+    const parent = currentScope(fixture, fixture.rootScopeId);
+    const owner = currentNode(fixture, dynamic.ownerId);
+    const childFinalizeInput: Parameters<typeof finalizeChildScopeT7b>[1] = {
+      graphRunId: fixture.graphRunId,
+      childScopeId: dynamic.childScopeId,
+      expectedChildScopeRowVersion: child.row_version,
+      expectedParentScopeRowVersion: parent.row_version,
+      expectedOwnerNodeRowVersion: owner.row_version,
+      expectedRunWorkFenceEpoch: currentRun(fixture).work_fence_epoch,
+      expectedParentScopeWorkFenceEpoch: parent.work_fence_epoch,
+      fenceManifestSchema: fixture.seed.refs.fenceManifestSchema!,
+      mapItemResultsManifestSchema:
+        fixture.seed.refs.mapItemResultsManifestSchema!,
+      nowMs: 245,
+    };
+    expect(
+      finalizeChildScopeT7b(fixture.instance.store, childFinalizeInput),
+    ).toMatchObject({
+      disposition: 'consumed',
+      parentDisposition: 'owner_output_published',
+      ownerTerminal: true,
+    });
+    expect(currentScope(fixture, dynamic.childScopeId).lifecycle).toBe(
+      'closed',
+    );
+    const frozenChildBytes = closedChildAuthorityBytes(
+      fixture,
+      dynamic.childScopeId,
+    );
+
+    fixture.instance.closeStore();
+    fixture.instance.reopenStore();
+    expect(closedChildAuthorityBytes(fixture, dynamic.childScopeId)).toBe(
+      frozenChildBytes,
+    );
+    const runBeforeClose = currentRun(fixture);
+    const rootBeforeClose = currentScope(fixture, fixture.rootScopeId);
+    const closeInput: Parameters<typeof requestScopeCloseT7a>[1] = {
+      graphRunId: fixture.graphRunId,
+      scopeId: fixture.rootScopeId,
+      expectedRunRowVersion: runBeforeClose.row_version,
+      expectedScopeRowVersion: rootBeforeClose.row_version,
+      expectedRunWorkFenceEpoch: runBeforeClose.work_fence_epoch,
+      expectedScopeWorkFenceEpoch: rootBeforeClose.work_fence_epoch,
+      cause: { reason: 'engine_error', errorCode: 'ancestor_after_child' },
+      manifestSchema: fixture.seed.refs.fenceManifestSchema!,
+      nowMs: 255,
+    };
+    expect(() =>
+      requestScopeCloseT7a(fixture.instance.store, closeInput, {
+        point: 'before_commit',
+      }),
+    ).toThrow(/Injected fault before commit/);
+    expect(closedChildAuthorityBytes(fixture, dynamic.childScopeId)).toBe(
+      frozenChildBytes,
+    );
+    expect(
+      fixture.instance.store.queryOne<{ count: number }>(
+        `SELECT count(*) AS count
+           FROM workflow_graph_scope_close_requests
+          WHERE graph_run_id = ? AND scope_id = ?`,
+        [fixture.graphRunId, fixture.rootScopeId],
+      )!.count,
+    ).toBe(0);
+    expect(() =>
+      requestScopeCloseT7a(fixture.instance.store, {
+        ...closeInput,
+        expectedScopeRowVersion: closeInput.expectedScopeRowVersion + 1,
+      }),
+    ).toThrow(/stale/);
+    expect(closedChildAuthorityBytes(fixture, dynamic.childScopeId)).toBe(
+      frozenChildBytes,
+    );
+
+    const close = requestScopeCloseT7a(fixture.instance.store, closeInput);
+    expect(close).toMatchObject({
+      disposition: 'close_requested',
+      fencedScopeIds: [fixture.rootScopeId],
+      createdDescendantRequestIds: [],
+    });
+    expect(currentScope(fixture, fixture.rootScopeId).lifecycle).toBe(
+      'closing',
+    );
+    expect(closedChildAuthorityBytes(fixture, dynamic.childScopeId)).toBe(
+      frozenChildBytes,
+    );
+    expect(
+      finalizeChildScopeT7b(fixture.instance.store, childFinalizeInput)
+        .disposition,
+    ).toBe('exact_replay');
+    expect(
+      requestScopeCloseT7a(fixture.instance.store, closeInput),
+    ).toMatchObject({
+      disposition: 'exact_replay',
+      fencedScopeIds: [fixture.rootScopeId],
+    });
+
+    const workflow = fixture.instance.store.queryOne<{
+      state_instance_id: string;
+      row_version: number;
+    }>('SELECT state_instance_id, row_version FROM workflows WHERE id = ?', [
+      fixture.workflowId,
+    ])!;
+    const activation = fixture.instance.store.queryOne<{ row_version: number }>(
+      'SELECT row_version FROM workflow_state_activations WHERE id = ?',
+      [workflow.state_instance_id],
+    )!;
+    const run = currentRun(fixture);
+    const root = currentScope(fixture, fixture.rootScopeId);
+    const t8Input: Parameters<typeof commitRootT8>[1] = {
+      workflowId: fixture.workflowId,
+      sourceActivationId: workflow.state_instance_id,
+      sourceRunId: fixture.graphRunId,
+      rootScopeId: fixture.rootScopeId,
+      closeRequestId: close.closeRequestId,
+      expectedWorkflowRowVersion: workflow.row_version,
+      expectedSourceActivationRowVersion: activation.row_version,
+      expectedSourceRunRowVersion: run.row_version,
+      expectedRootScopeRowVersion: root.row_version,
+      routeSource: 'on_error',
+      target: {
+        kind: 'terminal',
+        stateKey: 'failed',
+        definition: fixture.seed.refs.definition!,
+        definitionVersion: '1.0.0',
+        stateConfig: fixture.seed.values.stateConfig!,
+        terminalKind: 'errored',
+        output: null,
+        outputSchemaHash: null,
+        errorCode: 'ancestor_after_child',
+        errorDetail: null,
+      },
+      contextValueSchema: fixture.seed.refs.schema!,
+      requiredChildren: [],
+      bestEffortOutbox: [],
+      nowMs: 256,
+    };
+    const rootCut = commitRootT8(fixture.instance.store, t8Input);
+    expect(rootCut.disposition).toBe('committed');
+    expect(closedChildAuthorityBytes(fixture, dynamic.childScopeId)).toBe(
+      frozenChildBytes,
+    );
+    fixture.instance.closeStore();
+    fixture.instance.reopenStore();
+    expect(commitRootT8(fixture.instance.store, t8Input).disposition).toBe(
+      'exact_replay',
+    );
+    expect(closedChildAuthorityBytes(fixture, dynamic.childScopeId)).toBe(
+      frozenChildBytes,
+    );
+
+    const manifestValue = fixture.instance.store.queryOne<{ id: string }>(
+      `SELECT scope_epochs_manifest_value_id AS id
+         FROM workflow_graph_subtree_fence_manifests
+        WHERE id = ?`,
+      [close.subtreeFenceManifestId],
+    )!;
+    fixture.instance.store.withImmediateTransaction((transaction) => {
+      expect(
+        transaction.execute(
+          `UPDATE workflow_values SET inline_canonical_json = '[]'
+            WHERE id = ?`,
+          [manifestValue.id],
+        ).changes,
+      ).toBe(1);
+    });
+    expect(() =>
+      requestScopeCloseT7a(fixture.instance.store, closeInput),
+    ).toThrow(/manifest Value bytes\/hash drifted/);
+    expect(closedChildAuthorityBytes(fixture, dynamic.childScopeId)).toBe(
+      frozenChildBytes,
+    );
   });
 
   it('preserves a child close when its ancestor fences publication', () => {

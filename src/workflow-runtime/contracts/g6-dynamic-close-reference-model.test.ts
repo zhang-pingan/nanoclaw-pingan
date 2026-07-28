@@ -94,16 +94,28 @@ describe('G6 Dynamic / Close independent reference model', () => {
     expect(
       referenceHierarchicalClose(
         [
-          { scopeId: 'root', parentScopeId: null, existingReason: null },
+          {
+            scopeId: 'root',
+            parentScopeId: null,
+            lifecycle: 'open',
+            existingReason: null,
+          },
           {
             scopeId: 'child:a',
             parentScopeId: 'root',
+            lifecycle: 'closed',
             existingReason: 'normal',
           },
-          { scopeId: 'child:b', parentScopeId: 'root', existingReason: null },
+          {
+            scopeId: 'child:b',
+            parentScopeId: 'root',
+            lifecycle: 'open',
+            existingReason: null,
+          },
           {
             scopeId: 'grandchild',
             parentScopeId: 'child:b',
+            lifecycle: 'open',
             existingReason: null,
           },
         ],
@@ -117,7 +129,7 @@ describe('G6 Dynamic / Close independent reference model', () => {
         'child:b': 'parent_close',
         grandchild: 'parent_close',
       },
-      fenced_scope_ids: ['root', 'child:a', 'child:b', 'grandchild'],
+      fenced_scope_ids: ['root', 'child:b', 'grandchild'],
       fence_hash: expect.stringMatching(/^sha256:/),
     });
   });
@@ -143,5 +155,25 @@ describe('G6 Dynamic / Close independent reference model', () => {
         acceptedExits: ['accepted'],
       }),
     ).toThrow(/invalid_quorum/);
+    expect(() =>
+      referenceHierarchicalClose(
+        [
+          {
+            scopeId: 'root',
+            parentScopeId: null,
+            lifecycle: 'open',
+            existingReason: null,
+          },
+          {
+            scopeId: 'closed-child',
+            parentScopeId: 'root',
+            lifecycle: 'closed',
+            existingReason: null,
+          },
+        ],
+        'root',
+        'engine_error',
+      ),
+    ).toThrow(/closed_scope_missing_close_authority/);
   });
 });

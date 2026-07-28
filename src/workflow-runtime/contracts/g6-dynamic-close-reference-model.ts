@@ -160,6 +160,7 @@ export function referenceMapDecision(
 export interface ReferenceScopeClose {
   readonly scopeId: string;
   readonly parentScopeId: string | null;
+  readonly lifecycle: 'open' | 'closed';
   readonly existingReason: string | null;
 }
 
@@ -182,15 +183,21 @@ export function referenceHierarchicalClose(
     .sort((left, right) => ascii(left.scopeId, right.scopeId));
   const requests: JsonObject = {};
   const target = byId.get(targetScopeId)!;
+  if (target.lifecycle !== 'open') throw new Error('target_scope_not_open');
   requests[targetScopeId] = target.existingReason ?? targetReason;
-  for (const scope of descendants)
+  for (const scope of descendants) {
+    if (scope.lifecycle === 'closed' && scope.existingReason === null)
+      throw new Error('closed_scope_missing_close_authority');
     requests[scope.scopeId] = scope.existingReason ?? 'parent_close';
+  }
   const payload = {
     target_scope_id: targetScopeId,
     requests,
     fenced_scope_ids: [
       targetScopeId,
-      ...descendants.map((scope) => scope.scopeId),
+      ...descendants
+        .filter((scope) => scope.lifecycle === 'open')
+        .map((scope) => scope.scopeId),
     ],
   };
   return {

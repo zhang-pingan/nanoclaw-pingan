@@ -373,18 +373,22 @@ function assertReplay(
       id: manifest.scope_epochs_manifest_value_id,
       hash: manifest.scope_epochs_manifest_hash,
       domain: 'subtree-scope-epochs-manifest',
+      kind: 'subtree-scope-epochs',
     },
     {
       id: manifest.fenced_work_manifest_value_id,
       hash: manifest.fenced_work_manifest_hash,
       domain: 'subtree-fenced-work-manifest',
+      kind: 'subtree-fenced-work',
     },
     {
       id: manifest.cleanup_effect_keys_manifest_value_id,
       hash: manifest.cleanup_effect_keys_manifest_hash,
       domain: 'subtree-cleanup-keys-manifest',
+      kind: 'subtree-cleanup-keys',
     },
   ] as const;
+  let scopeEpochsContent: JsonValue | undefined;
   for (const binding of valueBindings) {
     const value = transaction.queryOne<{
       inline_canonical_json: string | null;
@@ -421,12 +425,20 @@ function assertReplay(
     }
     if (
       canonicalJson(content) !== value.inline_canonical_json ||
-      runtimeObjectHash(binding.domain, content) !== binding.hash
+      runtimeObjectHash(binding.domain, content) !== binding.hash ||
+      binding.id !==
+        stableRuntimeId('value', {
+          graph_run_id: input.graphRunId,
+          source_close_request_id: prior.id,
+          kind: binding.kind,
+          content_hash: binding.hash,
+        })
     )
       throw new G5RuntimeError(
         'integrity_violation',
         'T7a replay manifest Value bytes/hash drifted',
       );
+    if (binding.kind === 'subtree-scope-epochs') scopeEpochsContent = content;
   }
   const expectedFenceHash = runtimeObjectHash('subtree-fence-manifest', {
     graph_run_id: input.graphRunId,
@@ -449,21 +461,61 @@ function assertReplay(
       'integrity_violation',
       'T7a replay subtree fence identity drifted',
     );
-  const scopes = transaction.queryAll<{ id: string }>(
-    `WITH RECURSIVE subtree(id) AS (
-       SELECT id FROM workflow_graph_scopes WHERE id = ? AND graph_run_id = ?
-       UNION ALL
-       SELECT child.id FROM workflow_graph_scopes child
-       JOIN subtree parent ON child.parent_scope_id = parent.id
-       WHERE child.graph_run_id = ?
-     ) SELECT id FROM subtree ORDER BY id COLLATE BINARY`,
-    [input.scopeId, input.graphRunId, input.graphRunId],
-  );
+  if (!Array.isArray(scopeEpochsContent) || scopeEpochsContent.length === 0)
+    throw new G5RuntimeError(
+      'integrity_violation',
+      'T7a replay Scope epoch manifest is not a non-empty array',
+    );
+  const fencedScopeIds: string[] = [];
+  let previousScopeId: string | undefined;
+  for (const value of scopeEpochsContent) {
+    if (!value || typeof value !== 'object' || Array.isArray(value))
+      throw new G5RuntimeError(
+        'integrity_violation',
+        'T7a replay Scope epoch manifest entry is malformed',
+      );
+    const entry = value as Record<string, JsonValue>;
+    if (
+      Object.keys(entry).sort().join(',') !==
+        'close_request_id,new_epoch,old_epoch,scope_id' ||
+      typeof entry.scope_id !== 'string' ||
+      typeof entry.close_request_id !== 'string' ||
+      !Number.isSafeInteger(entry.old_epoch) ||
+      !Number.isSafeInteger(entry.new_epoch) ||
+      (entry.old_epoch as number) < 0 ||
+      entry.new_epoch !== (entry.old_epoch as number) + 1 ||
+      (previousScopeId !== undefined && previousScopeId >= entry.scope_id)
+    )
+      throw new G5RuntimeError(
+        'integrity_violation',
+        'T7a replay Scope epoch manifest entry drifted',
+      );
+    const scope = transaction.queryOne<{
+      close_request_id: string | null;
+      work_fence_epoch: number;
+    }>(
+      `SELECT close_request_id, work_fence_epoch
+         FROM workflow_graph_scopes
+        WHERE id = ? AND graph_run_id = ?`,
+      [entry.scope_id, input.graphRunId],
+    );
+    if (
+      !scope ||
+      scope.close_request_id !== entry.close_request_id ||
+      scope.work_fence_epoch < (entry.new_epoch as number)
+    )
+      throw new G5RuntimeError(
+        'integrity_violation',
+        'T7a replay Scope epoch manifest authority drifted',
+      );
+    previousScopeId = entry.scope_id;
+    fencedScopeIds.push(entry.scope_id);
+  }
   return {
     disposition: 'exact_replay',
     closeRequestId: prior.id,
     subtreeFenceManifestId: manifest.id,
-    fencedScopeIds: scopes.map((scope) => scope.id),
+    fencedScopeIds,
     createdDescendantRequestIds: [],
   };
 }
@@ -551,14 +603,25 @@ export function requestScopeCloseT7aInTransaction(
           `SELECT id, scope_id, reason, selected_rule_id, candidate_id,
                   eligibility_event_seq, error_code, error_detail_value_id,
                   error_detail_hash, cancel_payload_hash, request_hash
-             FROM workflow_graph_scope_close_requests WHERE id = ?`,
-          [scope.close_request_id],
+             FROM workflow_graph_scope_close_requests
+            WHERE id = ? AND graph_run_id = ? AND scope_id = ?`,
+          [scope.close_request_id, input.graphRunId, scope.id],
         )
       : undefined;
-    if (existing) {
+    if (scope.close_request_id !== null) {
+      if (!existing)
+        throw new G5RuntimeError(
+          'integrity_violation',
+          `T7a Scope ${scope.id} close authority drifted`,
+        );
       requestByScope.set(scope.id, existing);
       continue;
     }
+    if (scope.lifecycle === 'closed')
+      throw new G5RuntimeError(
+        'integrity_violation',
+        `T7a closed Scope ${scope.id} has no close authority`,
+      );
     sequence += 1;
     const request = insertCloseRequest(transaction, {
       graphRunId: input.graphRunId,
@@ -571,6 +634,9 @@ export function requestScopeCloseT7aInTransaction(
     if (scope.id !== target.id) createdDescendantRequestIds.push(request.id);
   }
   const targetRequest = requestByScope.get(target.id)!;
+  const fenceableScopes = subtree.filter(
+    (scope) => scope.lifecycle !== 'closed',
+  );
 
   const attemptIds = transaction.queryAll<{ id: string }>(
     `SELECT a.id FROM workflow_graph_node_attempts a
@@ -708,7 +774,7 @@ export function requestScopeCloseT7aInTransaction(
     [input.graphRunId, ...subtree.map((scope) => scope.id)],
   );
 
-  const scopeEpochs = subtree.map((scope) => ({
+  const scopeEpochs = fenceableScopes.map((scope) => ({
     scope_id: scope.id,
     old_epoch: scope.work_fence_epoch,
     new_epoch: scope.work_fence_epoch + 1,
@@ -815,7 +881,7 @@ export function requestScopeCloseT7aInTransaction(
     );
   }
 
-  for (const scope of subtree) {
+  for (const scope of fenceableScopes) {
     const request = requestByScope.get(scope.id)!;
     requireSingleChange(
       transaction.execute(
@@ -927,7 +993,7 @@ export function requestScopeCloseT7aInTransaction(
     disposition: 'close_requested',
     closeRequestId: targetRequest.id,
     subtreeFenceManifestId,
-    fencedScopeIds: subtree.map((scope) => scope.id),
+    fencedScopeIds: fenceableScopes.map((scope) => scope.id),
     createdDescendantRequestIds,
   };
 }

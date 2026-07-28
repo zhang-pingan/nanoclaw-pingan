@@ -152,7 +152,7 @@ const positiveSeeds: readonly FixtureSeed[] = [
   [
     'ancestor_preserves_child_close',
     'T7a',
-    'ancestor parent-close never overwrites an existing child close authority',
+    'ancestor fences only open scopes and preserves closed child close and Cut authority byte-exact',
   ],
   [
     'compensation_barrier',
@@ -642,7 +642,8 @@ function buildArtifacts(): Array<[string, ContractArtifactEnvelope]> {
     {
       independent_from_runtime: true,
       map_policy_model: 'completion_seq_then_item_index',
-      hierarchical_close_model: 'preserve_existing_descendant_request',
+      hierarchical_close_model:
+        'preserve_closed_descendant_authority_fence_open_only',
       property_tests: true,
       real_file_sqlite_runtime_evidence: true,
       virtual_clock_and_fake_adapter_only: true,

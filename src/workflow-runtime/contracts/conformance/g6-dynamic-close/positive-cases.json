@@ -242,7 +242,7 @@
         "case_id": "ancestor_preserves_child_close",
         "category": "positive",
         "transaction": "T7a",
-        "assertion": "ancestor parent-close never overwrites an existing child close authority",
+        "assertion": "ancestor fences only open scopes and preserves closed child close and Cut authority byte-exact",
         "handler": "g6_t7a_production",
         "operation": {
           "scenario_key": "g6:positive:ancestor_preserves_child_close",
@@ -259,7 +259,7 @@
           "exact_error": null,
           "duplicate_writes": 0
         },
-        "binding_hash": "sha256:6e8d06d64671556ef649958d63c5ccb26d687cbd7b2723c74da5e2d987f32a0f"
+        "binding_hash": "sha256:24a82c02686a401deedfec7fe675bbce5a8bce41a7d67223d518da6703704659"
       },
       {
         "case_id": "compensation_barrier",
@@ -493,5 +493,5 @@
       }
     ]
   },
-  "hash": "sha256:6659a936d8e3eebeabe2a640f52ff67c8a57776f2255ed3f413fb2f0a8693b26"
+  "hash": "sha256:c626df346866fe1703571fad681a0cfb2d6e1d02dda82ee2cc725c29ee8c3ebd"
 }

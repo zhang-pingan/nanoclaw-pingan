@@ -9,7 +9,7 @@
   "payload": {
     "independent_from_runtime": true,
     "map_policy_model": "completion_seq_then_item_index",
-    "hierarchical_close_model": "preserve_existing_descendant_request",
+    "hierarchical_close_model": "preserve_closed_descendant_authority_fence_open_only",
     "property_tests": true,
     "real_file_sqlite_runtime_evidence": true,
     "virtual_clock_and_fake_adapter_only": true,
@@ -20,7 +20,7 @@
       },
       {
         "path": "src/workflow-runtime/contracts/g6-dynamic-close-contract.ts",
-        "raw_sha256": "sha256:77b84de4d5547bb797c52b6b07c1461d0643dea662480d3df9ef6099d0e29e64"
+        "raw_sha256": "sha256:675673b0610d9c30ee99b8cba735a50ab73dd9c87ae8cb51c1186ef8563844bf"
       },
       {
         "path": "src/workflow-runtime/contracts/g6-dynamic-close-contract-cli.ts",
@@ -32,11 +32,11 @@
       },
       {
         "path": "src/workflow-runtime/contracts/g6-dynamic-close-reference-model.ts",
-        "raw_sha256": "sha256:2b2e138f1c89a05f7229a7d8a970064765ff6b9244766a0d82915451981ecf07"
+        "raw_sha256": "sha256:ddbf7ceeb75084ded5afb0cd1aeebc84af0bf9f0aad970c216ec0048845f9afa"
       },
       {
         "path": "src/workflow-runtime/contracts/g6-dynamic-close-reference-model.test.ts",
-        "raw_sha256": "sha256:3579fd254c3ffc2b698e695bcfbfd26736fdef1e5c1bcf9aac0645115c5474e4"
+        "raw_sha256": "sha256:5caf98b8ed59a4619f7688db9d0b8fac7e9a999d6164fe13d782a209bdb64b35"
       },
       {
         "path": "src/workflow-runtime/contracts/g6-runtime-readiness-audit.test.ts",
@@ -48,10 +48,10 @@
       },
       {
         "path": "src/workflow-runtime/runtime/g6-dynamic-close.test.ts",
-        "raw_sha256": "sha256:0ca0571c38e548c5f5dcb4cb9fc3cc1ebf3309383916566c6a96bb810cb640e0"
+        "raw_sha256": "sha256:c94423b4db18f077d42f783dac431bdcc0999cccf8fec7987cadd3adc06870bd"
       }
     ],
-    "evidence_tree_hash": "sha256:a857fa4866a013840cb0e3ab606b8db4f566f5a4a05fd5dc9124df8811d78c8a"
+    "evidence_tree_hash": "sha256:18350b5f0ef60cc4d58880dfda224cefefeaf8bd9aae6171f48049d4727a1539"
   },
-  "hash": "sha256:ca3244c2abcf6fbbb57882c1a05e82f57ea6d9a19a3f2794afaab5987c92fadf"
+  "hash": "sha256:0ffd68c45108f2086ced87ea0a762b7b4ed5ccb9d5c00566fdc10fd028154681"
 }
