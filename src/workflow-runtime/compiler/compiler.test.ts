@@ -83,7 +83,7 @@ describe('frozen G2 Production Compiler publication', () => {
       'workflow-publisher.test.ts',
       'workflow-publisher.ts',
     ]);
-    for (const forbidden of ['registry', 'projection/runtime-center-api.ts']) {
+    for (const forbidden of ['registry']) {
       expect(fs.existsSync(path.join(compilerRoot, '..', forbidden))).toBe(
         false,
       );

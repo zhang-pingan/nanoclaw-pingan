@@ -1,0 +1,55 @@
+{
+  "format": "icarus.workflow-g7-control-card-projection-recovery-implementation/1",
+  "ref": {
+    "id": "icarus.workflow-g7-control-card-projection-recovery-implementation",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-g7-control-card-projection-recovery-implementation:1\n",
+  "payload": {
+    "production_target": true,
+    "production_ingress_enabled": false,
+    "certification_enabled": false,
+    "production_implementation_count": 9,
+    "sources": [
+      {
+        "path": "src/workflow-runtime/runtime/commands.ts",
+        "raw_sha256": "sha256:2025ac172ffe66c4d9b53dabad61cd3bcac18a4ddfdadc3ac4e16fac564dcf62"
+      },
+      {
+        "path": "src/workflow-runtime/runtime/node-execution.ts",
+        "raw_sha256": "sha256:19fbfca93f25a1cb06080004c1ee0d872fccadfd1ce0413fb6dccf3b9d4048fd"
+      },
+      {
+        "path": "src/workflow-runtime/runtime/root-finalizer.ts",
+        "raw_sha256": "sha256:346a16f123bc1fa84da89558335ebec32ccf5d52481a7f08332537903bfdd1a3"
+      },
+      {
+        "path": "src/workflow-runtime/runtime/graph-runtime.ts",
+        "raw_sha256": "sha256:556dbec6b86469cf6c1568816b94942d7d5e7068b71de1659c210ae452906e4c"
+      },
+      {
+        "path": "src/workflow-runtime/runtime/card-presentation.ts",
+        "raw_sha256": "sha256:121c3d48ab0e0885c23399a0a07c19faf55a0af429b66314362c8dc82f03857c"
+      },
+      {
+        "path": "src/workflow-runtime/capacity/runtime-center-api.ts",
+        "raw_sha256": "sha256:3168ded0eaa7c43967d76a1e2433b8c27c1f2452afd13497132d5205af89ed7d"
+      },
+      {
+        "path": "src/workflow-runtime/projection/workflow-projection.ts",
+        "raw_sha256": "sha256:849731dd0949380b3cc06dfdc348b2446822e5b80281750f8b221116ff89aecd"
+      },
+      {
+        "path": "src/workflow-runtime/projection/runtime-center-api.ts",
+        "raw_sha256": "sha256:172a6c3839c2c6bcdd6ec8e935a4aee73eec8eabfd8744290a8f28262e3d479d"
+      },
+      {
+        "path": "src/workflow-runtime/projection/runtime-center-renderer/entry.ts",
+        "raw_sha256": "sha256:001aaa2e06dfd0efeeaa639ffb2517ee536860f8874114fe7ed121bec061a1e5"
+      }
+    ],
+    "source_tree_hash": "sha256:95223a644558f8a747af120f6bf8fd3f8362ff5ec8b73b2793e651093b3105b6"
+  },
+  "hash": "sha256:37d80650e79af280dc611d0d2168742ef69acb9cb74cea7204f5fb4b523eb296"
+}

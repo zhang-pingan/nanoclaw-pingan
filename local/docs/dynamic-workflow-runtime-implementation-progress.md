@@ -1,8 +1,8 @@
 # Dynamic Workflow Runtime 实施进度
 
-> **状态**: `G7_CONTROL_CARD_PROJECTION_RECOVERY_CONSTRUCTION_IN_PROGRESS`
+> **状态**: `G7_CONTROL_CARD_PROJECTION_RECOVERY_CONSTRUCTION_CANDIDATE_PENDING_INDEPENDENT_WHOLE_GATE_ACCEPTANCE`
 > **当前 Gate**: G0-G6与R-020/R-021/R-022=`DONE`；G7=`IN_PROGRESS/NOT_DONE`；G8-G9=`NOT_READY`
-> **后续边界**: G7 continuous construction与内部验证完成后，只允许controller创建一次fresh independent whole-Gate acceptance；不得开始或标记G8+
+> **后续边界**: 只允许controller基于完整clean G7 candidate创建一次fresh independent whole-Gate acceptance；不得开始或标记G8+
 > **最后更新**: 2026-07-28
 > **规范权威**: `local/docs/dynamic-workflow-dag-framework.md`
 
@@ -117,7 +117,7 @@ Agent Container 运行于独立 VM，Node identity 由 VM image gate 保证；�
 | G4 Test Bootstrap | `DONE` | G1 + G2 + G3 | current Schema 10/R-022/G3 exact authority已机械级联并通过fresh independent R-022 affected-chain regression；frozen bootstrap保持不变 | R-022 candidate + 本原子闭合提交 |
 | G5 Basic Runtime | `DONE` | current G1-G4 authority + current G2 authority | owner-bound append-history acquire/release、Resource Head CAS、required Child handoff与Effect Claim lineage已按R-022实现并通过fresh independent affected-chain regression | R-022 candidate + 本原子闭合提交 |
 | G6 Dynamic / Close | `DONE` | G5 + R-022 fresh independent regression closure | controller确认fresh independent whole-Gate acceptance已在clean `main@dd3c10831dd2e9da91dcb83f28e321d538f41a05` PASS；9个Production source与current G6 pack保持accepted authority | `dd3c108` + controller acceptance |
-| G7 Control / Card / Projection / Recovery | `IN_PROGRESS/NOT_DONE` | G6 | continuous construction已实现Deadline Watchdog/Gateway/T7c、authorized manual retry、T6e/resolution/recovery并进入同Gate后续Card/Projection/Capacity与完整内部验证；尚未执行fresh independent G7 acceptance | 本原子提交起连续G7 candidate |
+| G7 Control / Card / Projection / Recovery | `IN_PROGRESS/NOT_DONE` | G6 | complete construction candidate已包含Gateway/Deadline/T7c/T6e/Recovery、Card/Action、Projection/Runtime Center、Capacity API、machine pack及完整内部affected-chain验证；等待controller执行一次fresh independent whole-Gate acceptance | `4b68940` + `7ec7aee` + 本原子candidate提交 |
 | G8 Certification | `NOT_READY` | G7 | certified profile meeting Product Floor | - |
 | G9 Production Activation | `NOT_READY` | G8 + fresh current G0/G0.10 manifests | activation + Capacity genesis/preservation audit + startup/empty-state or Recipe smoke | - |
 
@@ -126,17 +126,17 @@ Agent Container 运行于独立 VM，Node identity 由 VM image gate 保证；�
 | 工作包 | 范围 | 状态 | 当前 Gate/切片 |
 | --- | --- | --- | --- |
 | I0 | Publish、Registry、Recipe 与执行版本固定 | `IN_PROGRESS` | G3 current exact closure已随Schema 10/R-022级联并由G5 exact execution binding消费且通过fresh independent affected-chain regression；G6+继续使用固定版本authority |
-| I1 | Intake、Routing、幂等创建、Child provenance、Claim | `IN_PROGRESS` | G6 required Child与R-022 Claim handoff已随G6 whole-Gate acceptance闭合；G7 source-bound Claim release remediation已形成construction candidate |
+| I1 | Intake、Routing、幂等创建、Child provenance、Claim | `IN_PROGRESS` | G6 required Child与R-022 Claim handoff已随G6 whole-Gate acceptance闭合；G7 source-bound Claim release remediation已完成construction并等待G7 acceptance |
 | I2 | Definition、State lowering、Context、transition | `IN_PROGRESS` | Compiler 3.0.6只修复generated output schema authority；冻结3.0.4/v6与superseded 3.0.5/v7语义分别保留 |
 | I3 | Source/Compiled IR、Port、Compiler | `DONE` | Compiler 3.0.6 child completion与Map result closed schema、additive v8 authority及fresh independent affected-chain regression已闭合 |
 | I4 | Runtime Store、SQLite relation、Value/Blob、migration | `IN_PROGRESS` | additive Schema 10 Claim history/Resource Head/handoff/Effect Claim lineage与9到10 upgrade已通过R-022独立回归；Schema 9及更早冻结，Blob/GC仍未实现 |
-| I5 | Graph 状态机、reconcile、Scheduler、Ledger | `IN_PROGRESS` | G6 dynamic/close authority已accepted；G7 pause/resume/cancel、manual skip/retry handoff与Recovery construction candidate保持既有fence/ledger/deadline |
-| I6 | Delegation/System、Capability Effect、Outbox | `IN_PROGRESS` | G5/G6 effect与compensation authority已accepted；G7 source-specific effect/compensation remediation construction candidate不连接真实Adapter |
-| I7 | Durable Wait、Signal/Timer/Approval、Inbox | `IN_PROGRESS` | G5 automatic retry authority保持不变；G7 Deadline Watchdog与authorized manual T6d handoff已形成construction candidate |
+| I5 | Graph 状态机、reconcile、Scheduler、Ledger | `IN_PROGRESS` | G6 dynamic/close authority已accepted；G7 pause/resume/cancel、manual skip/retry handoff与Recovery complete candidate保持既有fence/ledger/deadline |
+| I6 | Delegation/System、Capability Effect、Outbox | `IN_PROGRESS` | G5/G6 effect与compensation authority已accepted；G7 source-specific effect/compensation remediation已完成construction且不连接真实Adapter |
+| I7 | Durable Wait、Signal/Timer/Approval、Inbox | `IN_PROGRESS` | G5 automatic retry authority保持不变；G7 Deadline Watchdog与authorized manual T6d handoff已完成construction并等待G7 acceptance |
 | I8 | Subgraph、Expand、Map、child scope | `IN_PROGRESS` | G6 subgraph/expand/map与T7b已随whole-Gate acceptance闭合；G7不改写其closed child authority |
-| I9 | Completion、Cancel、Compensation、Finalization、Recovery | `IN_PROGRESS` | G6 T7a/T7b/T8与Root Finalization已accepted；G7 T7c/T6e/last-blocker restoration/administrative abandon/Recovery construction candidate等待完整Gate验证 |
-| I10 | Runtime Command、Capacity Admin、Runtime Center、Trace | `IN_PROGRESS` | G7 Workflow Command Gateway、deadline grant、Command/Invocation/Event audit已形成construction candidate；Runtime Center/Card/Projection/Capacity仍在同一Gate连续施工 |
-| I11 | Contract Pack、managed runtime toolchain/launcher、测试模型、发布门禁、absence baseline | `IN_PROGRESS` | G6 pack为accepted upstream；G7 machine pack与完整affected-chain verification仍在同一continuous construction Gate内进行 |
+| I9 | Completion、Cancel、Compensation、Finalization、Recovery | `IN_PROGRESS` | G6 T7a/T7b/T8与Root Finalization已accepted；G7 T7c/T6e/last-blocker restoration/administrative abandon/Recovery complete candidate等待whole-Gate acceptance |
+| I10 | Runtime Command、Capacity Admin、Runtime Center、Trace | `IN_PROGRESS` | G7 Workflow Command Gateway、deadline grant、Command/Invocation/Event audit、Card/Projection/Runtime Center/Capacity complete candidate等待whole-Gate acceptance |
+| I11 | Contract Pack、managed runtime toolchain/launcher、测试模型、发布门禁、absence baseline | `IN_PROGRESS` | G7 machine pack、independent model、fault/tamper/reopen/replay evidence及完整内部affected-chain verification已完成；等待controller acceptance |
 
 ## G0 施工切片
 
@@ -3064,3 +3064,19 @@ Workflow Projection实现严格相邻`source_stream/source_seq/previous_hash/eve
 规范要求的Capacity诊断/管理子页由独立authoritative API实现，不增加第五个执行视图。Exact routes为`GET /api/runtime-admin/capacity`、`GET /api/runtime-admin/capacity/changes`与`POST /api/runtime-admin/capacity/changes`；GET直接读取committed Head、exact Command lineage、完整snapshot、pending publication、Watcher状态、实时usage/backpressure/over-capacity与immutable Command/Event history。POST只接受closed full `replace_deployment_capacity` Command，拒绝genesis initialize和field patch，并通过既有Capacity Admin Gateway及唯一Publisher/Watcher依次执行CAP0-CAP4；认证Human Session、`runtime.capacity.manage`、delegation prohibition、expected revision/config hash仍由authoritative Gateway在事务中重验，Renderer/Projection不直接写活动文件或Runtime DB。
 
 Focused managed验证PASS：typecheck；Card `6/6`，包含cross-Run identity、canonical tamper、ownership rollback、expiry与secret rejection；Projection/Runtime Center/Capacity `7/7`，包含real CAP0-CAP4 replacement、initialize/patch/delegation negative、cursor tamper/snapshot mismatch、event atomicity、rebuild failure、empty state/deep link与diagnostic rebuild permission。该提交仍不是G7 whole-Gate acceptance或`DONE`证据；machine pack与完整affected-chain验证继续由同一worker完成，G8-G9保持`NOT_READY`。
+
+### 2026-07-28：G7 complete construction candidate与内部affected-chain验证
+
+**结论**：`G7_CONTROL_CARD_PROJECTION_RECOVERY_CONSTRUCTION_CANDIDATE_PENDING_ONE_FRESH_INDEPENDENT_WHOLE_GATE_ACCEPTANCE / G7_IN_PROGRESS_NOT_DONE / G8_G9_NOT_READY`。本continuous worker在accepted `main@dd3c10831dd2e9da91dcb83f28e321d538f41a05`上以`4b68940`和`7ec7aee`两个正常原子切片完成Production Command/Recovery与Card/Projection/Runtime Center/Capacity施工，本原子candidate提交补齐machine pack、current identity cascade、temporal boundary修复与完整内部验证。没有formal G7 acceptance、G8 certification、G9 loader/activation/ingress/network、real Adapter/user data、authentication bypass、worktree、branch、Handoff、sub-agent、push、amend、rebase、reset或stash。
+
+G7 machine authority包含closed generator/checker、29 positive / 33 negative / 16 fault fixtures、independent reference/property evidence、九源Production implementation inventory和Contract Pack。Positive/negative/fault/protocol identities为`sha256:0efe66d6bd5d75893c1e83c504c44bf205292adeb67ddf2eda78ddcf35a68726` / `sha256:0b85691a186af3073b4d9f370162b53b40baa0976d6209529c31dbd22cf1f083` / `sha256:e5f9e53eda2af2dbecff00d0812e48aad5c5d76d3877fa391490a338028b6da5` / `sha256:0d74d2b45fe44b04ec19234a6ad514d614f51bc9f9ca7d4a49b7c3aef7d36f13`；reference/evidence tree=`sha256:60aa823011345c9abe95c3860010f7d7f142b5ab5595297b3c7f7abcfc16a99b` / `sha256:f7455b905febc022c5f30333d39279e5f01a6bc11daa2eadfe524c49d7bc7a2f`；implementation/source tree=`sha256:37d80650e79af280dc611d0d2168742ef69acb9cb74cea7204f5fb4b523eb296` / `sha256:95223a644558f8a747af120f6bf8fd3f8362ff5ec8b73b2793e651093b3105b6`；pack/member tree=`sha256:b6fa3c48fd14d94fa75e28edc4afea597cfdd37eea9141c71e9e986ed866325b` / `sha256:f58ccb55a428b2441442d02e9077ea9735cd19a09908cd8549b6afb29eacf4c7`。Pack保持`G7 IN_PROGRESS/NOT_DONE`并明确G8-G9 `NOT_READY`。
+
+G7对共享Production source的合法扩展触发current-only identity cascade：G5 `node-execution.ts` inventory使implementation/source tree与pack/member tree变为`sha256:1d55622aebcde07e59793b9cea7429502cda6cab9fbb5e7f3b02d9ebc5c260e7` / `sha256:29cf59e09b7923af50bd9cefec881244c03b0f052c600c4d4e3ab8228fe1fbe9`与`sha256:fe7fbc82bebd623f545a6cd9f0105c21ed46ab7a9e063691dd4e98ad1fb121e1` / `sha256:0e62284a5930530b2ec8b666e985edbeec035093e262946d91fdc150de0467ed`；G6 `graph-runtime.ts`/`root-finalizer.ts` inventory及exact G5 prerequisite使implementation/source tree与pack/member tree变为`sha256:d5f8fdd11b95f34ab36a441ceca14a69a7187f841af6e8c2bfa8050289c9d214` / `sha256:a27a2e1999dc775366b16715d76ebc5e40f6323d58c8314131020c30a2fd9a23`与`sha256:34c32ecc104f7c440b2f80ab03f19f5c8231722486b88c3601f1ae0f8cea86be` / `sha256:5533b417077bf934efeeb27df7d4ab5f9fd4f393ba8469afb3706417a439e4ec`。G7 exact pin随后绑定最终G6 root。该级联没有重开G6语义、修改frozen history或放宽任何identity checker。
+
+完整managed construction与post-build验证全部PASS：G7 `40/40`，其中Command/Recovery `14/14`、Card `6/6`、Projection/Runtime Center/Capacity `7/7`，其余machine/readiness/reference `13/13`；G6 `24/24`与readiness `40/40`；R-020/R-021/R-022分别`5/5`、`11/11`、`17/17`；G5 `135/135`、readiness `7/7`、blocker `6/6`；G1 Schema/Store `27/27`与`32/32`并通过direct Schema/Store checks；G2 `101/101`、current Golden replay `40/40`、frozen v6 replay `40/40`；G3 `101/101`、G4 `2/2`、ownership `1/1`；whole G0 `104 passed / 7 frozen skips`。Fault evidence覆盖ordinary Command、T7c、manual T6d、T6e、administrative abandon、Card ownership与Recovery的事务rollback；negative/reopen evidence覆盖permission/ownership/Feature/state/version denial、source identity splice、snapshot/cursor/event/result tamper、response-loss/exact replay、last-blocker restoration和CAP0-CAP4 crash/reopen。
+
+Exact candidate boundary相对accepted G6 base为39 paths。Managed typecheck/build与exact Core bind PASS，Runtime Launcher=`/Users/chelaile/Library/Application Support/Icarus/bin/icarus-runtime`且binding kind=`development_checkout`。连续两轮完整managed `contracts:generate` + `contracts:check`均PASS；pre-generation、round 1与round 2的2641-file Contract+Schema JSON/SQL path-sorted raw-SHA tree digest均byte-identical为`775d5ed520eb5615a0c9db4197eff2616b3119eae388f063f7e69ec657712723`。Schema 10及全部migration/upgrade、sealed/review/Golden/semantic-review、G3.8A、G4、ownership、dependencies与两套lockfile保持相对accepted G6 base byte-exact；root/agent-runner lockfile仍为`sha256:2b8c87e5549915e2d53c1eecdabef3ebb149bc8f03054d40f1924d93bf2bd085` / `sha256:d9b4b5d77dc6478348b81d74d65e2af1d3596ce45eea6742cae20cf105db379c`，dependency-section digest保持`035a7dd312240ded0f22fb28131045cf49b70f66e2530661e5b22f8888452b89`。
+
+G2与G3的current temporal absence checks只移除G7已经合法拥有的exact Projection filesystem absence断言；G2仍验证sealed/frozen authority与Registry边界，G3仍禁止自身source导入Projection并保持Production loader/G8+边界。现有Schema 10 typed-target FK无法为不存在target合法持久化Header/Invocation，故该窄场景继续以`target_not_found + invocation_id=null` fail closed并保留既有`BLOCKED_BY_SPEC_UNRESOLVED_TARGET_INVOCATION_AUDIT`记录；没有伪造target、旁路FK或降低audit identity。其余G7 authority和exit evidence完整。
+
+本完整candidate仍不是independent acceptance、closure或G7 `DONE`证据。G0-G6与R-020/R-021/R-022保持`DONE`；G7保持`IN_PROGRESS/NOT_DONE`等待controller创建唯一一次fresh independent whole-Gate acceptance；G8-G9保持`NOT_READY`，不得由本worker开始或标记。

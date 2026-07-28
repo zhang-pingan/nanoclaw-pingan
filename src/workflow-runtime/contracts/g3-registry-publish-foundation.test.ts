@@ -172,7 +172,7 @@ describe('G3.1 Registry publish preflight foundation', () => {
     ).toThrow(/Duplicate object key/);
   });
 
-  it('contains no Publisher execution, Production loader, or G7+ implementation', () => {
+  it('contains no Publisher execution, Production loader, or G8+ implementation', () => {
     const source = fs.readFileSync(
       path.join(contractsRoot, 'g3-registry-publish-foundation.ts'),
       'utf8',
@@ -193,7 +193,6 @@ describe('G3.1 Registry publish preflight foundation', () => {
       'registry/feature-manifest.ts',
       'registry/core-upgrade.ts',
       'authoring/workflow-authoring.ts',
-      'projection/runtime-center-api.ts',
     ]) {
       expect(fs.existsSync(path.join(workflowRuntimeRoot, relativePath))).toBe(
         false,

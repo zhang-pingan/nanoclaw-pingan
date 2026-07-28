@@ -1,0 +1,93 @@
+{
+  "format": "icarus.workflow-g7-control-card-projection-recovery-protocol/1",
+  "ref": {
+    "id": "icarus.workflow-g7-control-card-projection-recovery-protocol",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-g7-control-card-projection-recovery-protocol:1\n",
+  "payload": {
+    "gate": "G7",
+    "status": "G7_CONTROL_CARD_PROJECTION_RECOVERY_CONSTRUCTION_CANDIDATE_PENDING_INDEPENDENT_WHOLE_GATE_ACCEPTANCE",
+    "persistent_mode_policy": "HYBRID_GATE_CONTINUOUS_RUNTIME_V1",
+    "accepted_base": "main@dd3c10831dd2e9da91dcb83f28e321d538f41a05",
+    "database_schema_version": 10,
+    "database_schema_hash": "sha256:1ff4fd63239e85630923fa16e204645367958ae487933338a6f676ec9be6faad",
+    "schema_change_required": false,
+    "transaction_host": "WorkflowRuntimeStore.withImmediateTransaction",
+    "transaction_mode": "BEGIN_IMMEDIATE",
+    "owned_transactions": [
+      "COMMAND",
+      "T7c",
+      "T6e",
+      "Recovery"
+    ],
+    "owned_surfaces": [
+      "Deadline_Watchdog_System_Grant",
+      "Runtime_Command_Gateway",
+      "authorized_manual_retry_handoff",
+      "Operational_Blocker_resolution_and_abandon",
+      "Card_Presentation_and_action_ingress",
+      "Workflow_Projection_and_Runtime_Center_API",
+      "Runtime_Center_Capacity_authoritative_subpage",
+      "Runtime_Center_renderer_isolation"
+    ],
+    "exact_deadline_authority": {
+      "actor": "system:deadline-watchdog",
+      "domain": "system:deadline-watchdog",
+      "key": "workflow-deadline:<workflow_id>:<deadline_at_ms>",
+      "reasons": [
+        "deadline_enforced",
+        "safety_enforced"
+      ],
+      "predicate": "due_target",
+      "grant": "cancel_workflow_only"
+    },
+    "projection_write_boundary": "projection_and_renderer_have_no_authoritative_Runtime_Store_write_connection",
+    "authority_residuals": [
+      {
+        "code": "BLOCKED_BY_SPEC_UNRESOLVED_TARGET_INVOCATION_AUDIT",
+        "behavior": "target_not_found_returns_invocation_id_null",
+        "reason": "Schema_10_Command_Header_typed_target_FK_requires_an_existing_target_and_forbids_opaque_target_rows",
+        "prohibited_workaround": "fabricated_or_opaque_target_identity"
+      }
+    ],
+    "bindings": [
+      {
+        "name": "g6_dynamic_close_accepted_candidate",
+        "path": "src/workflow-runtime/contracts/contract-pack-g6-dynamic-close.json",
+        "hash": "sha256:34c32ecc104f7c440b2f80ab03f19f5c8231722486b88c3601f1ae0f8cea86be"
+      },
+      {
+        "name": "workflow_runtime_command_protocol",
+        "path": "src/workflow-runtime/contracts/protocols/workflow-runtime-command-protocol-table.json",
+        "hash": "sha256:43cc8ef247fcba4bac5e9fccdd654fd393928120755a6405bad232043f0c94ba"
+      },
+      {
+        "name": "workflow_run_transaction_protocol",
+        "path": "src/workflow-runtime/contracts/protocols/workflow-run-transaction-protocol-table.json",
+        "hash": "sha256:3d5474096d89fbd723e34e0d2f9d1dadd1b955b5fc36ff447d026257852cac79"
+      },
+      {
+        "name": "closed_schema_pack",
+        "path": "src/workflow-runtime/contracts/contract-pack-closed-schemas.json",
+        "hash": "sha256:6f7aa5b997c5a496a4eb95776a09f18e3c25753e7324a6ef1f095a23b8413d81"
+      },
+      {
+        "name": "database_schema_10",
+        "path": "src/workflow-runtime/store/schema/contract-pack-g1-executable-schema-v10.json",
+        "hash": "sha256:05169ddfdc2c53371a0e4464dcc8b109608e1ff9b3d0276478da464c11266682"
+      }
+    ],
+    "forbidden": [
+      "G8_certification",
+      "G9_loader_activation_ingress_network",
+      "real_Adapter_or_user_data",
+      "authentication_bypass",
+      "Projection_Runtime_write_connection",
+      "terminal_Node_or_State_reopen",
+      "frozen_historical_artifact_rewrite"
+    ]
+  },
+  "hash": "sha256:0d74d2b45fe44b04ec19234a6ad514d614f51bc9f9ca7d4a49b7c3aef7d36f13"
+}

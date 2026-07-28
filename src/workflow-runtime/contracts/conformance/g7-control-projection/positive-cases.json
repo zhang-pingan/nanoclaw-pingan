@@ -1,0 +1,739 @@
+{
+  "format": "icarus.workflow-g7-control-card-projection-recovery-positive-cases/1",
+  "ref": {
+    "id": "icarus.workflow-g7-control-card-projection-recovery-positive-cases",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-g7-control-card-projection-recovery-positive-cases:1\n",
+  "payload": {
+    "cases": [
+      {
+        "case_id": "authenticated_gateway_audit",
+        "category": "positive",
+        "surface": "Command",
+        "assertion": "authenticated server actor produces Header and Invocation",
+        "handler": "g7_command_production",
+        "operation": {
+          "scenario_key": "g7:positive:authenticated_gateway_audit",
+          "runtime_database": "isolated_real_file_sqlite",
+          "projection_database": "isolated_generation_store",
+          "transaction_mode": "BEGIN_IMMEDIATE",
+          "virtual_clock_ms": 1782000000000,
+          "fake_adapter_only": true,
+          "fault_point": null,
+          "reopen": false
+        },
+        "oracle": {
+          "disposition": "committed",
+          "authoritative_runtime_state": "committed",
+          "exact_error": null,
+          "duplicate_authoritative_writes": 0,
+          "projection_can_write_runtime": false
+        },
+        "binding_hash": "sha256:ba1776a836956a4b30965c31a4727592c10d22e3c40628bd19bf4da30c30b8f6"
+      },
+      {
+        "case_id": "command_duplicate_conflict",
+        "category": "positive",
+        "surface": "Command",
+        "assertion": "same key exact request duplicates and drift conflicts without mutation",
+        "handler": "g7_command_production",
+        "operation": {
+          "scenario_key": "g7:positive:command_duplicate_conflict",
+          "runtime_database": "isolated_real_file_sqlite",
+          "projection_database": "isolated_generation_store",
+          "transaction_mode": "BEGIN_IMMEDIATE",
+          "virtual_clock_ms": 1782000000000,
+          "fake_adapter_only": true,
+          "fault_point": null,
+          "reopen": false
+        },
+        "oracle": {
+          "disposition": "committed",
+          "authoritative_runtime_state": "committed",
+          "exact_error": null,
+          "duplicate_authoritative_writes": 0,
+          "projection_can_write_runtime": false
+        },
+        "binding_hash": "sha256:ebe2b6e65e2be0f9aca502af00e084a4c6988896c260c1bfde38efd0d170f660"
+      },
+      {
+        "case_id": "pause_resume_recovery",
+        "category": "positive",
+        "surface": "Command/Recovery",
+        "assertion": "paused resumes through resuming drain without authority reset",
+        "handler": "g7_command_recovery_production",
+        "operation": {
+          "scenario_key": "g7:positive:pause_resume_recovery",
+          "runtime_database": "isolated_real_file_sqlite",
+          "projection_database": "isolated_generation_store",
+          "transaction_mode": "BEGIN_IMMEDIATE",
+          "virtual_clock_ms": 1782000000000,
+          "fake_adapter_only": true,
+          "fault_point": null,
+          "reopen": false
+        },
+        "oracle": {
+          "disposition": "committed",
+          "authoritative_runtime_state": "committed",
+          "exact_error": null,
+          "duplicate_authoritative_writes": 0,
+          "projection_can_write_runtime": false
+        },
+        "binding_hash": "sha256:2b7f820df69f808b7b60a1be21ef5a26e88722c9c8712dc875b2e3c46a3037e9"
+      },
+      {
+        "case_id": "cancel_run_t7c",
+        "category": "positive",
+        "surface": "T7c",
+        "assertion": "local graph cancel wins the root close CAS and freezes local scope",
+        "handler": "g7_t7c_production",
+        "operation": {
+          "scenario_key": "g7:positive:cancel_run_t7c",
+          "runtime_database": "isolated_real_file_sqlite",
+          "projection_database": "isolated_generation_store",
+          "transaction_mode": "BEGIN_IMMEDIATE",
+          "virtual_clock_ms": 1782000000000,
+          "fake_adapter_only": true,
+          "fault_point": null,
+          "reopen": false
+        },
+        "oracle": {
+          "disposition": "committed",
+          "authoritative_runtime_state": "committed",
+          "exact_error": null,
+          "duplicate_authoritative_writes": 0,
+          "projection_can_write_runtime": false
+        },
+        "binding_hash": "sha256:b4a03edada4e6d413cbee95e1a0489babc5d0166ebeba89184b2268615d8874c"
+      },
+      {
+        "case_id": "cancel_workflow_t7c",
+        "category": "positive",
+        "surface": "T7c",
+        "assertion": "workflow cancel wins the root close CAS and freezes workflow scope",
+        "handler": "g7_t7c_production",
+        "operation": {
+          "scenario_key": "g7:positive:cancel_workflow_t7c",
+          "runtime_database": "isolated_real_file_sqlite",
+          "projection_database": "isolated_generation_store",
+          "transaction_mode": "BEGIN_IMMEDIATE",
+          "virtual_clock_ms": 1782000000000,
+          "fake_adapter_only": true,
+          "fault_point": null,
+          "reopen": false
+        },
+        "oracle": {
+          "disposition": "committed",
+          "authoritative_runtime_state": "committed",
+          "exact_error": null,
+          "duplicate_authoritative_writes": 0,
+          "projection_can_write_runtime": false
+        },
+        "binding_hash": "sha256:da6c313171d311f91b71ae87bfcca095aa18987efda6e81cc6428133873e2fb1"
+      },
+      {
+        "case_id": "deadline_system_grant",
+        "category": "positive",
+        "surface": "Deadline/T7c",
+        "assertion": "deadline actor uses due-target grant and stable workflow deadline key",
+        "handler": "g7_deadline_t7c_production",
+        "operation": {
+          "scenario_key": "g7:positive:deadline_system_grant",
+          "runtime_database": "isolated_real_file_sqlite",
+          "projection_database": "isolated_generation_store",
+          "transaction_mode": "BEGIN_IMMEDIATE",
+          "virtual_clock_ms": 1782000000000,
+          "fake_adapter_only": true,
+          "fault_point": null,
+          "reopen": false
+        },
+        "oracle": {
+          "disposition": "committed",
+          "authoritative_runtime_state": "committed",
+          "exact_error": null,
+          "duplicate_authoritative_writes": 0,
+          "projection_can_write_runtime": false
+        },
+        "binding_hash": "sha256:00a927d80d47b81bc6147a2913e43c6f625e0a47a03d1d4c982b0e6440d5e861"
+      },
+      {
+        "case_id": "manual_skip_fact",
+        "category": "positive",
+        "surface": "Command/T3",
+        "assertion": "paused nonterminal node becomes skipped and emits terminal Fact",
+        "handler": "g7_command_t3_production",
+        "operation": {
+          "scenario_key": "g7:positive:manual_skip_fact",
+          "runtime_database": "isolated_real_file_sqlite",
+          "projection_database": "isolated_generation_store",
+          "transaction_mode": "BEGIN_IMMEDIATE",
+          "virtual_clock_ms": 1782000000000,
+          "fake_adapter_only": true,
+          "fault_point": null,
+          "reopen": false
+        },
+        "oracle": {
+          "disposition": "committed",
+          "authoritative_runtime_state": "committed",
+          "exact_error": null,
+          "duplicate_authoritative_writes": 0,
+          "projection_can_write_runtime": false
+        },
+        "binding_hash": "sha256:87c3c77ee966125fe3e118c3b3eb9417e0fc7d0d521f33c6a588088b0cd928d2"
+      },
+      {
+        "case_id": "authorized_manual_retry",
+        "category": "positive",
+        "surface": "Command/T6d",
+        "assertion": "Gateway audit precedes authorized early schedule consumption",
+        "handler": "g7_command_t6d_production",
+        "operation": {
+          "scenario_key": "g7:positive:authorized_manual_retry",
+          "runtime_database": "isolated_real_file_sqlite",
+          "projection_database": "isolated_generation_store",
+          "transaction_mode": "BEGIN_IMMEDIATE",
+          "virtual_clock_ms": 1782000000000,
+          "fake_adapter_only": true,
+          "fault_point": null,
+          "reopen": false
+        },
+        "oracle": {
+          "disposition": "committed",
+          "authoritative_runtime_state": "committed",
+          "exact_error": null,
+          "duplicate_authoritative_writes": 0,
+          "projection_can_write_runtime": false
+        },
+        "binding_hash": "sha256:62365638464b4f88a50a7763d2bd8a4fc7f3314e24cc4b295393a0b62a9c541d"
+      },
+      {
+        "case_id": "effect_reconcile_retry_wait",
+        "category": "positive",
+        "surface": "T6e",
+        "assertion": "reconcile records finite retry-wait attempt without false success",
+        "handler": "g7_t6e_production",
+        "operation": {
+          "scenario_key": "g7:positive:effect_reconcile_retry_wait",
+          "runtime_database": "isolated_real_file_sqlite",
+          "projection_database": "isolated_generation_store",
+          "transaction_mode": "BEGIN_IMMEDIATE",
+          "virtual_clock_ms": 1782000000000,
+          "fake_adapter_only": true,
+          "fault_point": null,
+          "reopen": false
+        },
+        "oracle": {
+          "disposition": "committed",
+          "authoritative_runtime_state": "committed",
+          "exact_error": null,
+          "duplicate_authoritative_writes": 0,
+          "projection_can_write_runtime": false
+        },
+        "binding_hash": "sha256:891bec9e1ccdd68a8e4df2f2531955bbbd93f54c63f7f30a7add2dea3b009b47"
+      },
+      {
+        "case_id": "effect_receipt_recovered",
+        "category": "positive",
+        "surface": "T6e",
+        "assertion": "verified receipt and immutable snapshots resolve effect_unknown",
+        "handler": "g7_t6e_production",
+        "operation": {
+          "scenario_key": "g7:positive:effect_receipt_recovered",
+          "runtime_database": "isolated_real_file_sqlite",
+          "projection_database": "isolated_generation_store",
+          "transaction_mode": "BEGIN_IMMEDIATE",
+          "virtual_clock_ms": 1782000000000,
+          "fake_adapter_only": true,
+          "fault_point": null,
+          "reopen": false
+        },
+        "oracle": {
+          "disposition": "committed",
+          "authoritative_runtime_state": "committed",
+          "exact_error": null,
+          "duplicate_authoritative_writes": 0,
+          "projection_can_write_runtime": false
+        },
+        "binding_hash": "sha256:d75d9ad664a1f364f1581b103b81c15b3924cd7b6e4ea9b3770cb19db6484b48"
+      },
+      {
+        "case_id": "effect_not_applied",
+        "category": "positive",
+        "surface": "T6e",
+        "assertion": "verified not-applied proof resolves effect_unknown as failed",
+        "handler": "g7_t6e_production",
+        "operation": {
+          "scenario_key": "g7:positive:effect_not_applied",
+          "runtime_database": "isolated_real_file_sqlite",
+          "projection_database": "isolated_generation_store",
+          "transaction_mode": "BEGIN_IMMEDIATE",
+          "virtual_clock_ms": 1782000000000,
+          "fake_adapter_only": true,
+          "fault_point": null,
+          "reopen": false
+        },
+        "oracle": {
+          "disposition": "committed",
+          "authoritative_runtime_state": "committed",
+          "exact_error": null,
+          "duplicate_authoritative_writes": 0,
+          "projection_can_write_runtime": false
+        },
+        "binding_hash": "sha256:80e617021c4cb4f6e58ce5ff33ac17dc0644691101a5dcabea36af5b333deb3a"
+      },
+      {
+        "case_id": "compensation_source_resolution",
+        "category": "positive",
+        "surface": "T6e",
+        "assertion": "verified compensation closes compensation dead-letter blocker",
+        "handler": "g7_t6e_production",
+        "operation": {
+          "scenario_key": "g7:positive:compensation_source_resolution",
+          "runtime_database": "isolated_real_file_sqlite",
+          "projection_database": "isolated_generation_store",
+          "transaction_mode": "BEGIN_IMMEDIATE",
+          "virtual_clock_ms": 1782000000000,
+          "fake_adapter_only": true,
+          "fault_point": null,
+          "reopen": false
+        },
+        "oracle": {
+          "disposition": "committed",
+          "authoritative_runtime_state": "committed",
+          "exact_error": null,
+          "duplicate_authoritative_writes": 0,
+          "projection_can_write_runtime": false
+        },
+        "binding_hash": "sha256:64de2293a21562165cfd272e6d6f36d57d46f46330e076e8cb001a57f4f19f96"
+      },
+      {
+        "case_id": "claim_release_source_resolution",
+        "category": "positive",
+        "surface": "T6e",
+        "assertion": "released fenced Claim closes claim blocker",
+        "handler": "g7_t6e_production",
+        "operation": {
+          "scenario_key": "g7:positive:claim_release_source_resolution",
+          "runtime_database": "isolated_real_file_sqlite",
+          "projection_database": "isolated_generation_store",
+          "transaction_mode": "BEGIN_IMMEDIATE",
+          "virtual_clock_ms": 1782000000000,
+          "fake_adapter_only": true,
+          "fault_point": null,
+          "reopen": false
+        },
+        "oracle": {
+          "disposition": "committed",
+          "authoritative_runtime_state": "committed",
+          "exact_error": null,
+          "duplicate_authoritative_writes": 0,
+          "projection_can_write_runtime": false
+        },
+        "binding_hash": "sha256:bd24c08417192513f031c95fea61e4a2a93137c3c9c869a91b0649209a06da3c"
+      },
+      {
+        "case_id": "resource_preflight_source_resolution",
+        "category": "positive",
+        "surface": "T6e",
+        "assertion": "scheduled exact retry preflight closes resource blocker",
+        "handler": "g7_t6e_production",
+        "operation": {
+          "scenario_key": "g7:positive:resource_preflight_source_resolution",
+          "runtime_database": "isolated_real_file_sqlite",
+          "projection_database": "isolated_generation_store",
+          "transaction_mode": "BEGIN_IMMEDIATE",
+          "virtual_clock_ms": 1782000000000,
+          "fake_adapter_only": true,
+          "fault_point": null,
+          "reopen": false
+        },
+        "oracle": {
+          "disposition": "committed",
+          "authoritative_runtime_state": "committed",
+          "exact_error": null,
+          "duplicate_authoritative_writes": 0,
+          "projection_can_write_runtime": false
+        },
+        "binding_hash": "sha256:d01591d0b025bc05329de7c7cedd65523a95b553d4062f376eb98c3cb55f5492"
+      },
+      {
+        "case_id": "integrity_restore_source_resolution",
+        "category": "positive",
+        "surface": "T6e",
+        "assertion": "trusted full-chain evidence closes quarantine blocker",
+        "handler": "g7_t6e_production",
+        "operation": {
+          "scenario_key": "g7:positive:integrity_restore_source_resolution",
+          "runtime_database": "isolated_real_file_sqlite",
+          "projection_database": "isolated_generation_store",
+          "transaction_mode": "BEGIN_IMMEDIATE",
+          "virtual_clock_ms": 1782000000000,
+          "fake_adapter_only": true,
+          "fault_point": null,
+          "reopen": false
+        },
+        "oracle": {
+          "disposition": "committed",
+          "authoritative_runtime_state": "committed",
+          "exact_error": null,
+          "duplicate_authoritative_writes": 0,
+          "projection_can_write_runtime": false
+        },
+        "binding_hash": "sha256:b8943e2d4ae6a9c60898366699d8cccb3d329535dfc584d6f76d6411c97bf6b3"
+      },
+      {
+        "case_id": "root_finalization_t8_resolution",
+        "category": "positive",
+        "surface": "T6e/T8",
+        "assertion": "ready finalization source and blocker close commit with T8",
+        "handler": "g7_t6e_t8_production",
+        "operation": {
+          "scenario_key": "g7:positive:root_finalization_t8_resolution",
+          "runtime_database": "isolated_real_file_sqlite",
+          "projection_database": "isolated_generation_store",
+          "transaction_mode": "BEGIN_IMMEDIATE",
+          "virtual_clock_ms": 1782000000000,
+          "fake_adapter_only": true,
+          "fault_point": null,
+          "reopen": false
+        },
+        "oracle": {
+          "disposition": "committed",
+          "authoritative_runtime_state": "committed",
+          "exact_error": null,
+          "duplicate_authoritative_writes": 0,
+          "projection_can_write_runtime": false
+        },
+        "binding_hash": "sha256:7e2548e650d531f3f2ee5ce9a4c3f69f6200eecc72e58c996b1abcc15b45e68e"
+      },
+      {
+        "case_id": "last_blocker_restoration",
+        "category": "positive",
+        "surface": "T6e",
+        "assertion": "highest remaining severity drives cache and last close restores healthy",
+        "handler": "g7_t6e_production",
+        "operation": {
+          "scenario_key": "g7:positive:last_blocker_restoration",
+          "runtime_database": "isolated_real_file_sqlite",
+          "projection_database": "isolated_generation_store",
+          "transaction_mode": "BEGIN_IMMEDIATE",
+          "virtual_clock_ms": 1782000000000,
+          "fake_adapter_only": true,
+          "fault_point": null,
+          "reopen": false
+        },
+        "oracle": {
+          "disposition": "committed",
+          "authoritative_runtime_state": "committed",
+          "exact_error": null,
+          "duplicate_authoritative_writes": 0,
+          "projection_can_write_runtime": false
+        },
+        "binding_hash": "sha256:36a0b805bbac55eb14d714843f3cf814ed51a53be30b3a393c114df1af01c4e6"
+      },
+      {
+        "case_id": "administrative_abandon_confirmation",
+        "category": "positive",
+        "surface": "Command",
+        "assertion": "same Human session consumes one five-minute confirmation",
+        "handler": "g7_command_production",
+        "operation": {
+          "scenario_key": "g7:positive:administrative_abandon_confirmation",
+          "runtime_database": "isolated_real_file_sqlite",
+          "projection_database": "isolated_generation_store",
+          "transaction_mode": "BEGIN_IMMEDIATE",
+          "virtual_clock_ms": 1782000000000,
+          "fake_adapter_only": true,
+          "fault_point": null,
+          "reopen": false
+        },
+        "oracle": {
+          "disposition": "committed",
+          "authoritative_runtime_state": "committed",
+          "exact_error": null,
+          "duplicate_authoritative_writes": 0,
+          "projection_can_write_runtime": false
+        },
+        "binding_hash": "sha256:597ac672feee92005b64e0efdf6400f99e0c73100ef4f05f52256f71e7aa4d93"
+      },
+      {
+        "case_id": "card_deterministic_snapshot",
+        "category": "positive",
+        "surface": "Card",
+        "assertion": "exact identities deterministically persist pinned rendered snapshot",
+        "handler": "g7_card_production",
+        "operation": {
+          "scenario_key": "g7:positive:card_deterministic_snapshot",
+          "runtime_database": "isolated_real_file_sqlite",
+          "projection_database": "isolated_generation_store",
+          "transaction_mode": "BEGIN_IMMEDIATE",
+          "virtual_clock_ms": 1782000000000,
+          "fake_adapter_only": true,
+          "fault_point": null,
+          "reopen": false
+        },
+        "oracle": {
+          "disposition": "committed",
+          "authoritative_runtime_state": "committed",
+          "exact_error": null,
+          "duplicate_authoritative_writes": 0,
+          "projection_can_write_runtime": false
+        },
+        "binding_hash": "sha256:fb62dd18bf4593883a3dfa0c68c2b94a5f9a792a475f2fa57c538f82612ed3cf"
+      },
+      {
+        "case_id": "card_typed_action_dispatch",
+        "category": "positive",
+        "surface": "Card",
+        "assertion": "closed action dispatches only wait business or runtime handler",
+        "handler": "g7_card_production",
+        "operation": {
+          "scenario_key": "g7:positive:card_typed_action_dispatch",
+          "runtime_database": "isolated_real_file_sqlite",
+          "projection_database": "isolated_generation_store",
+          "transaction_mode": "BEGIN_IMMEDIATE",
+          "virtual_clock_ms": 1782000000000,
+          "fake_adapter_only": true,
+          "fault_point": null,
+          "reopen": false
+        },
+        "oracle": {
+          "disposition": "committed",
+          "authoritative_runtime_state": "committed",
+          "exact_error": null,
+          "duplicate_authoritative_writes": 0,
+          "projection_can_write_runtime": false
+        },
+        "binding_hash": "sha256:0d4195c589ca49a5e32b13cbab7253415c1ed001713d9bbb91d20cfb9608547c"
+      },
+      {
+        "case_id": "projection_event_replay",
+        "category": "positive",
+        "surface": "Projection",
+        "assertion": "adjacent source hash chain applies and exact replay duplicates",
+        "handler": "g7_projection_production",
+        "operation": {
+          "scenario_key": "g7:positive:projection_event_replay",
+          "runtime_database": "isolated_real_file_sqlite",
+          "projection_database": "isolated_generation_store",
+          "transaction_mode": "BEGIN_IMMEDIATE",
+          "virtual_clock_ms": 1782000000000,
+          "fake_adapter_only": true,
+          "fault_point": null,
+          "reopen": false
+        },
+        "oracle": {
+          "disposition": "committed",
+          "authoritative_runtime_state": "committed",
+          "exact_error": null,
+          "duplicate_authoritative_writes": 0,
+          "projection_can_write_runtime": false
+        },
+        "binding_hash": "sha256:a8c54ecd2a184a52c30b3c6301effa304c82674618e568f7e8ba883c37ef7b04"
+      },
+      {
+        "case_id": "projection_generation_rebuild",
+        "category": "positive",
+        "surface": "Projection",
+        "assertion": "validated export switches one generation atomically",
+        "handler": "g7_projection_production",
+        "operation": {
+          "scenario_key": "g7:positive:projection_generation_rebuild",
+          "runtime_database": "isolated_real_file_sqlite",
+          "projection_database": "isolated_generation_store",
+          "transaction_mode": "BEGIN_IMMEDIATE",
+          "virtual_clock_ms": 1782000000000,
+          "fake_adapter_only": true,
+          "fault_point": null,
+          "reopen": false
+        },
+        "oracle": {
+          "disposition": "committed",
+          "authoritative_runtime_state": "committed",
+          "exact_error": null,
+          "duplicate_authoritative_writes": 0,
+          "projection_can_write_runtime": false
+        },
+        "binding_hash": "sha256:74a4da788d9abdee9f6dc94e521ecb9e95a446961559872c50c060a847a2f329"
+      },
+      {
+        "case_id": "runtime_center_closed_api",
+        "category": "positive",
+        "surface": "Projection/API",
+        "assertion": "four views enforce closed filters sorts and page bounds",
+        "handler": "g7_projection_api_production",
+        "operation": {
+          "scenario_key": "g7:positive:runtime_center_closed_api",
+          "runtime_database": "isolated_real_file_sqlite",
+          "projection_database": "isolated_generation_store",
+          "transaction_mode": "BEGIN_IMMEDIATE",
+          "virtual_clock_ms": 1782000000000,
+          "fake_adapter_only": true,
+          "fault_point": null,
+          "reopen": false
+        },
+        "oracle": {
+          "disposition": "committed",
+          "authoritative_runtime_state": "committed",
+          "exact_error": null,
+          "duplicate_authoritative_writes": 0,
+          "projection_can_write_runtime": false
+        },
+        "binding_hash": "sha256:1fbb6fb02d6471a6e0fa2231c5a0bab1e46b7708ed3ab1cdcafb31e2b85e7c75"
+      },
+      {
+        "case_id": "runtime_center_signed_cursor",
+        "category": "positive",
+        "surface": "Projection/API",
+        "assertion": "HMAC cursor binds view filter sort and source head",
+        "handler": "g7_projection_api_production",
+        "operation": {
+          "scenario_key": "g7:positive:runtime_center_signed_cursor",
+          "runtime_database": "isolated_real_file_sqlite",
+          "projection_database": "isolated_generation_store",
+          "transaction_mode": "BEGIN_IMMEDIATE",
+          "virtual_clock_ms": 1782000000000,
+          "fake_adapter_only": true,
+          "fault_point": null,
+          "reopen": false
+        },
+        "oracle": {
+          "disposition": "committed",
+          "authoritative_runtime_state": "committed",
+          "exact_error": null,
+          "duplicate_authoritative_writes": 0,
+          "projection_can_write_runtime": false
+        },
+        "binding_hash": "sha256:29b252d1f3930582a710522dbf53c033f80620504fb7779a049a17a3ef9862f2"
+      },
+      {
+        "case_id": "runtime_center_empty_state",
+        "category": "positive",
+        "surface": "Projection/Renderer",
+        "assertion": "zero rows remains distinct ready empty state",
+        "handler": "g7_projection_renderer_production",
+        "operation": {
+          "scenario_key": "g7:positive:runtime_center_empty_state",
+          "runtime_database": "isolated_real_file_sqlite",
+          "projection_database": "isolated_generation_store",
+          "transaction_mode": "BEGIN_IMMEDIATE",
+          "virtual_clock_ms": 1782000000000,
+          "fake_adapter_only": true,
+          "fault_point": null,
+          "reopen": false
+        },
+        "oracle": {
+          "disposition": "committed",
+          "authoritative_runtime_state": "committed",
+          "exact_error": null,
+          "duplicate_authoritative_writes": 0,
+          "projection_can_write_runtime": false
+        },
+        "binding_hash": "sha256:3624937aec946d207a1996a604d732ed2feb070dcca0279865f2c6edeed171e8"
+      },
+      {
+        "case_id": "runtime_center_deep_link",
+        "category": "positive",
+        "surface": "Projection/API",
+        "assertion": "typed deep link verifies bidirectional lineage",
+        "handler": "g7_projection_api_production",
+        "operation": {
+          "scenario_key": "g7:positive:runtime_center_deep_link",
+          "runtime_database": "isolated_real_file_sqlite",
+          "projection_database": "isolated_generation_store",
+          "transaction_mode": "BEGIN_IMMEDIATE",
+          "virtual_clock_ms": 1782000000000,
+          "fake_adapter_only": true,
+          "fault_point": null,
+          "reopen": false
+        },
+        "oracle": {
+          "disposition": "committed",
+          "authoritative_runtime_state": "committed",
+          "exact_error": null,
+          "duplicate_authoritative_writes": 0,
+          "projection_can_write_runtime": false
+        },
+        "binding_hash": "sha256:bdb85d8fc8fdb67bfe448845ce0632d366fd15ae2c82f143cfd8e98efbb6495b"
+      },
+      {
+        "case_id": "capacity_authoritative_subpage",
+        "category": "positive",
+        "surface": "Capacity/API",
+        "assertion": "diagnostic subpage reads authoritative head snapshot telemetry and history",
+        "handler": "g7_capacity_api_production",
+        "operation": {
+          "scenario_key": "g7:positive:capacity_authoritative_subpage",
+          "runtime_database": "isolated_real_file_sqlite",
+          "projection_database": "isolated_generation_store",
+          "transaction_mode": "BEGIN_IMMEDIATE",
+          "virtual_clock_ms": 1782000000000,
+          "fake_adapter_only": true,
+          "fault_point": null,
+          "reopen": false
+        },
+        "oracle": {
+          "disposition": "committed",
+          "authoritative_runtime_state": "committed",
+          "exact_error": null,
+          "duplicate_authoritative_writes": 0,
+          "projection_can_write_runtime": false
+        },
+        "binding_hash": "sha256:d810d8516baeec0e84c0f0062184a292e8a8c0a4df2465da789ebc5bda0872af"
+      },
+      {
+        "case_id": "capacity_full_snapshot_replace",
+        "category": "positive",
+        "surface": "Capacity/API",
+        "assertion": "closed full replacement calls Capacity Admin CAP0 through CAP4",
+        "handler": "g7_capacity_api_production",
+        "operation": {
+          "scenario_key": "g7:positive:capacity_full_snapshot_replace",
+          "runtime_database": "isolated_real_file_sqlite",
+          "projection_database": "isolated_generation_store",
+          "transaction_mode": "BEGIN_IMMEDIATE",
+          "virtual_clock_ms": 1782000000000,
+          "fake_adapter_only": true,
+          "fault_point": null,
+          "reopen": false
+        },
+        "oracle": {
+          "disposition": "committed",
+          "authoritative_runtime_state": "committed",
+          "exact_error": null,
+          "duplicate_authoritative_writes": 0,
+          "projection_can_write_runtime": false
+        },
+        "binding_hash": "sha256:df4a19134a75fbd687709fabeded005a2a210fb8c9491dac0f78a6358ef3e53d"
+      },
+      {
+        "case_id": "renderer_import_isolation",
+        "category": "positive",
+        "surface": "Boundary",
+        "assertion": "Runtime Center renderer is independent from Feature and monolith",
+        "handler": "g7_boundary_production",
+        "operation": {
+          "scenario_key": "g7:positive:renderer_import_isolation",
+          "runtime_database": "isolated_real_file_sqlite",
+          "projection_database": "isolated_generation_store",
+          "transaction_mode": "BEGIN_IMMEDIATE",
+          "virtual_clock_ms": 1782000000000,
+          "fake_adapter_only": true,
+          "fault_point": null,
+          "reopen": false
+        },
+        "oracle": {
+          "disposition": "committed",
+          "authoritative_runtime_state": "committed",
+          "exact_error": null,
+          "duplicate_authoritative_writes": 0,
+          "projection_can_write_runtime": false
+        },
+        "binding_hash": "sha256:170d2e2951fbdabc267d9bbe754e5f334399924f931b9dd782e118a4c14faaa7"
+      }
+    ]
+  },
+  "hash": "sha256:0efe66d6bd5d75893c1e83c504c44bf205292adeb67ddf2eda78ddcf35a68726"
+}

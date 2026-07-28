@@ -1,0 +1,839 @@
+{
+  "format": "icarus.workflow-g7-control-card-projection-recovery-negative-cases/1",
+  "ref": {
+    "id": "icarus.workflow-g7-control-card-projection-recovery-negative-cases",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-g7-control-card-projection-recovery-negative-cases:1\n",
+  "payload": {
+    "cases": [
+      {
+        "case_id": "unauthenticated_actor",
+        "category": "negative",
+        "surface": "Command",
+        "assertion": "missing server authentication rejects",
+        "handler": "g7_command_production",
+        "operation": {
+          "scenario_key": "g7:negative:unauthenticated_actor",
+          "runtime_database": "isolated_real_file_sqlite",
+          "projection_database": "isolated_generation_store",
+          "transaction_mode": "BEGIN_IMMEDIATE",
+          "virtual_clock_ms": 1782000000000,
+          "fake_adapter_only": true,
+          "fault_point": null,
+          "reopen": false
+        },
+        "oracle": {
+          "disposition": "rejected",
+          "authoritative_runtime_state": "unchanged",
+          "exact_error": "forbidden_surface",
+          "duplicate_authoritative_writes": 0,
+          "projection_can_write_runtime": false
+        },
+        "binding_hash": "sha256:41c754b22ea70c2c22a1437b7bae6c621f5cb31d3f180c5500a47f88ae94235f"
+      },
+      {
+        "case_id": "permission_denied",
+        "category": "negative",
+        "surface": "Command",
+        "assertion": "missing minimum permission denies and audits",
+        "handler": "g7_command_production",
+        "operation": {
+          "scenario_key": "g7:negative:permission_denied",
+          "runtime_database": "isolated_real_file_sqlite",
+          "projection_database": "isolated_generation_store",
+          "transaction_mode": "BEGIN_IMMEDIATE",
+          "virtual_clock_ms": 1782000000000,
+          "fake_adapter_only": true,
+          "fault_point": null,
+          "reopen": false
+        },
+        "oracle": {
+          "disposition": "rejected",
+          "authoritative_runtime_state": "unchanged",
+          "exact_error": "permission_denied",
+          "duplicate_authoritative_writes": 0,
+          "projection_can_write_runtime": false
+        },
+        "binding_hash": "sha256:db0cbcaaa70c7623865ed694328f988ae7dbdc89821927e93fc1bee79095dffc"
+      },
+      {
+        "case_id": "feature_ceiling_denied",
+        "category": "negative",
+        "surface": "Command",
+        "assertion": "Feature ceiling cannot be widened by actor permission",
+        "handler": "g7_command_production",
+        "operation": {
+          "scenario_key": "g7:negative:feature_ceiling_denied",
+          "runtime_database": "isolated_real_file_sqlite",
+          "projection_database": "isolated_generation_store",
+          "transaction_mode": "BEGIN_IMMEDIATE",
+          "virtual_clock_ms": 1782000000000,
+          "fake_adapter_only": true,
+          "fault_point": null,
+          "reopen": false
+        },
+        "oracle": {
+          "disposition": "rejected",
+          "authoritative_runtime_state": "unchanged",
+          "exact_error": "feature_ceiling_denied",
+          "duplicate_authoritative_writes": 0,
+          "projection_can_write_runtime": false
+        },
+        "binding_hash": "sha256:876aa70be687f5bacd4af641a781123bda2c12547ef92aed95a1e73a90551b51"
+      },
+      {
+        "case_id": "command_policy_denied",
+        "category": "negative",
+        "surface": "Command",
+        "assertion": "Published policy false denies and audits",
+        "handler": "g7_command_production",
+        "operation": {
+          "scenario_key": "g7:negative:command_policy_denied",
+          "runtime_database": "isolated_real_file_sqlite",
+          "projection_database": "isolated_generation_store",
+          "transaction_mode": "BEGIN_IMMEDIATE",
+          "virtual_clock_ms": 1782000000000,
+          "fake_adapter_only": true,
+          "fault_point": null,
+          "reopen": false
+        },
+        "oracle": {
+          "disposition": "rejected",
+          "authoritative_runtime_state": "unchanged",
+          "exact_error": "command_policy_denied",
+          "duplicate_authoritative_writes": 0,
+          "projection_can_write_runtime": false
+        },
+        "binding_hash": "sha256:206c5b6e12be1974ba2031e0b10cff9cff52e1668af69a8a0bfd84f1cdbecc88"
+      },
+      {
+        "case_id": "state_guard_failed",
+        "category": "negative",
+        "surface": "Command",
+        "assertion": "closed state guard cannot be bypassed",
+        "handler": "g7_command_production",
+        "operation": {
+          "scenario_key": "g7:negative:state_guard_failed",
+          "runtime_database": "isolated_real_file_sqlite",
+          "projection_database": "isolated_generation_store",
+          "transaction_mode": "BEGIN_IMMEDIATE",
+          "virtual_clock_ms": 1782000000000,
+          "fake_adapter_only": true,
+          "fault_point": null,
+          "reopen": false
+        },
+        "oracle": {
+          "disposition": "rejected",
+          "authoritative_runtime_state": "unchanged",
+          "exact_error": "state_guard_failed",
+          "duplicate_authoritative_writes": 0,
+          "projection_can_write_runtime": false
+        },
+        "binding_hash": "sha256:b4f6a384a0bca879ecc07b5e88af738be4c6f048796a17303d2f430664e5ec3c"
+      },
+      {
+        "case_id": "row_version_conflict",
+        "category": "negative",
+        "surface": "Command",
+        "assertion": "stale expected version conflicts without target mutation",
+        "handler": "g7_command_production",
+        "operation": {
+          "scenario_key": "g7:negative:row_version_conflict",
+          "runtime_database": "isolated_real_file_sqlite",
+          "projection_database": "isolated_generation_store",
+          "transaction_mode": "BEGIN_IMMEDIATE",
+          "virtual_clock_ms": 1782000000000,
+          "fake_adapter_only": true,
+          "fault_point": null,
+          "reopen": false
+        },
+        "oracle": {
+          "disposition": "rejected",
+          "authoritative_runtime_state": "unchanged",
+          "exact_error": "row_version_conflict",
+          "duplicate_authoritative_writes": 0,
+          "projection_can_write_runtime": false
+        },
+        "binding_hash": "sha256:00e539fc242bd99b07fc06795715f275a60035d9b5c68e98c386c48052ef0d40"
+      },
+      {
+        "case_id": "target_kind_invalid",
+        "category": "negative",
+        "surface": "Command",
+        "assertion": "opaque or mismatched target shape rejects",
+        "handler": "g7_command_production",
+        "operation": {
+          "scenario_key": "g7:negative:target_kind_invalid",
+          "runtime_database": "isolated_real_file_sqlite",
+          "projection_database": "isolated_generation_store",
+          "transaction_mode": "BEGIN_IMMEDIATE",
+          "virtual_clock_ms": 1782000000000,
+          "fake_adapter_only": true,
+          "fault_point": null,
+          "reopen": false
+        },
+        "oracle": {
+          "disposition": "rejected",
+          "authoritative_runtime_state": "unchanged",
+          "exact_error": "target_kind_invalid",
+          "duplicate_authoritative_writes": 0,
+          "projection_can_write_runtime": false
+        },
+        "binding_hash": "sha256:063a80f99466e8ad346632e0c9141deb6bedafa7e0e05eec6058ff52421dc4f2"
+      },
+      {
+        "case_id": "target_not_found_physical_residual",
+        "category": "negative",
+        "surface": "Command",
+        "assertion": "missing typed FK target returns stable denial without fabricated target",
+        "handler": "g7_command_production",
+        "operation": {
+          "scenario_key": "g7:negative:target_not_found_physical_residual",
+          "runtime_database": "isolated_real_file_sqlite",
+          "projection_database": "isolated_generation_store",
+          "transaction_mode": "BEGIN_IMMEDIATE",
+          "virtual_clock_ms": 1782000000000,
+          "fake_adapter_only": true,
+          "fault_point": null,
+          "reopen": false
+        },
+        "oracle": {
+          "disposition": "rejected",
+          "authoritative_runtime_state": "unchanged",
+          "exact_error": "target_not_found",
+          "duplicate_authoritative_writes": 0,
+          "projection_can_write_runtime": false
+        },
+        "binding_hash": "sha256:7acd56948e165567acf52ad17411d9464a4fc4e92032b024ea261bbaf773863a"
+      },
+      {
+        "case_id": "evidence_invalid",
+        "category": "negative",
+        "surface": "Command",
+        "assertion": "required typed evidence cannot be omitted",
+        "handler": "g7_command_production",
+        "operation": {
+          "scenario_key": "g7:negative:evidence_invalid",
+          "runtime_database": "isolated_real_file_sqlite",
+          "projection_database": "isolated_generation_store",
+          "transaction_mode": "BEGIN_IMMEDIATE",
+          "virtual_clock_ms": 1782000000000,
+          "fake_adapter_only": true,
+          "fault_point": null,
+          "reopen": false
+        },
+        "oracle": {
+          "disposition": "rejected",
+          "authoritative_runtime_state": "unchanged",
+          "exact_error": "evidence_invalid",
+          "duplicate_authoritative_writes": 0,
+          "projection_can_write_runtime": false
+        },
+        "binding_hash": "sha256:1f4dea2c3fd2cc9c899c498812d28d03605bf6d1715d8f5da106257cea45895f"
+      },
+      {
+        "case_id": "idempotency_conflict",
+        "category": "negative",
+        "surface": "Command",
+        "assertion": "same domain/key request drift conflicts",
+        "handler": "g7_command_production",
+        "operation": {
+          "scenario_key": "g7:negative:idempotency_conflict",
+          "runtime_database": "isolated_real_file_sqlite",
+          "projection_database": "isolated_generation_store",
+          "transaction_mode": "BEGIN_IMMEDIATE",
+          "virtual_clock_ms": 1782000000000,
+          "fake_adapter_only": true,
+          "fault_point": null,
+          "reopen": false
+        },
+        "oracle": {
+          "disposition": "rejected",
+          "authoritative_runtime_state": "unchanged",
+          "exact_error": "idempotency_conflict",
+          "duplicate_authoritative_writes": 0,
+          "projection_can_write_runtime": false
+        },
+        "binding_hash": "sha256:d600e3e80ac47a9cafe83b739ac30973e4f036bd7d13959ad8c054f9424d0b04"
+      },
+      {
+        "case_id": "late_cancel_command",
+        "category": "negative",
+        "surface": "T7c",
+        "assertion": "losing close command audits late and preserves winner",
+        "handler": "g7_t7c_production",
+        "operation": {
+          "scenario_key": "g7:negative:late_cancel_command",
+          "runtime_database": "isolated_real_file_sqlite",
+          "projection_database": "isolated_generation_store",
+          "transaction_mode": "BEGIN_IMMEDIATE",
+          "virtual_clock_ms": 1782000000000,
+          "fake_adapter_only": true,
+          "fault_point": null,
+          "reopen": false
+        },
+        "oracle": {
+          "disposition": "rejected",
+          "authoritative_runtime_state": "unchanged",
+          "exact_error": "late_command",
+          "duplicate_authoritative_writes": 0,
+          "projection_can_write_runtime": false
+        },
+        "binding_hash": "sha256:8341b78d0b1b4d18a0ff2e222977e1bdf87c8b08ef7071fd3d059d336c046454"
+      },
+      {
+        "case_id": "deadline_actor_drift",
+        "category": "negative",
+        "surface": "Deadline/T7c",
+        "assertion": "wrong actor reason key or not-due target rejects dedicated grant",
+        "handler": "g7_deadline_t7c_production",
+        "operation": {
+          "scenario_key": "g7:negative:deadline_actor_drift",
+          "runtime_database": "isolated_real_file_sqlite",
+          "projection_database": "isolated_generation_store",
+          "transaction_mode": "BEGIN_IMMEDIATE",
+          "virtual_clock_ms": 1782000000000,
+          "fake_adapter_only": true,
+          "fault_point": null,
+          "reopen": false
+        },
+        "oracle": {
+          "disposition": "rejected",
+          "authoritative_runtime_state": "unchanged",
+          "exact_error": "permission_denied",
+          "duplicate_authoritative_writes": 0,
+          "projection_can_write_runtime": false
+        },
+        "binding_hash": "sha256:3fc87a8f20698be57447de5d36ce225e743d33ceb447afde30d7c8f237927690"
+      },
+      {
+        "case_id": "manual_retry_direct_g5",
+        "category": "negative",
+        "surface": "T6d",
+        "assertion": "G5 public timer entry rejects manual authorization bypass",
+        "handler": "g7_t6d_production",
+        "operation": {
+          "scenario_key": "g7:negative:manual_retry_direct_g5",
+          "runtime_database": "isolated_real_file_sqlite",
+          "projection_database": "isolated_generation_store",
+          "transaction_mode": "BEGIN_IMMEDIATE",
+          "virtual_clock_ms": 1782000000000,
+          "fake_adapter_only": true,
+          "fault_point": null,
+          "reopen": false
+        },
+        "oracle": {
+          "disposition": "rejected",
+          "authoritative_runtime_state": "unchanged",
+          "exact_error": "forbidden_surface",
+          "duplicate_authoritative_writes": 0,
+          "projection_can_write_runtime": false
+        },
+        "binding_hash": "sha256:2e620a58e3dd87f9739d7d3cbef748e58c9072f6a483a885fbdf50b0d0ab99da"
+      },
+      {
+        "case_id": "manual_skip_unknown_effect",
+        "category": "negative",
+        "surface": "Command",
+        "assertion": "unknown active effect prevents skip",
+        "handler": "g7_command_production",
+        "operation": {
+          "scenario_key": "g7:negative:manual_skip_unknown_effect",
+          "runtime_database": "isolated_real_file_sqlite",
+          "projection_database": "isolated_generation_store",
+          "transaction_mode": "BEGIN_IMMEDIATE",
+          "virtual_clock_ms": 1782000000000,
+          "fake_adapter_only": true,
+          "fault_point": null,
+          "reopen": false
+        },
+        "oracle": {
+          "disposition": "rejected",
+          "authoritative_runtime_state": "unchanged",
+          "exact_error": "state_guard_failed",
+          "duplicate_authoritative_writes": 0,
+          "projection_can_write_runtime": false
+        },
+        "binding_hash": "sha256:10709f46cb3760e69d6c822df6330f0e15b08e79b1872d2220c98f7a387fa0ec"
+      },
+      {
+        "case_id": "effect_key_mismatch",
+        "category": "negative",
+        "surface": "T6e",
+        "assertion": "receipt or proof for another operation cannot resolve blocker",
+        "handler": "g7_t6e_production",
+        "operation": {
+          "scenario_key": "g7:negative:effect_key_mismatch",
+          "runtime_database": "isolated_real_file_sqlite",
+          "projection_database": "isolated_generation_store",
+          "transaction_mode": "BEGIN_IMMEDIATE",
+          "virtual_clock_ms": 1782000000000,
+          "fake_adapter_only": true,
+          "fault_point": null,
+          "reopen": false
+        },
+        "oracle": {
+          "disposition": "rejected",
+          "authoritative_runtime_state": "unchanged",
+          "exact_error": "precondition_failed",
+          "duplicate_authoritative_writes": 0,
+          "projection_can_write_runtime": false
+        },
+        "binding_hash": "sha256:fa6409a16bd4149743922abe3be48a0a98d20e97eb82d645cfecd4be2a7c2806"
+      },
+      {
+        "case_id": "claim_not_released",
+        "category": "negative",
+        "surface": "T6e",
+        "assertion": "held Claim cannot resolve claim blocker",
+        "handler": "g7_t6e_production",
+        "operation": {
+          "scenario_key": "g7:negative:claim_not_released",
+          "runtime_database": "isolated_real_file_sqlite",
+          "projection_database": "isolated_generation_store",
+          "transaction_mode": "BEGIN_IMMEDIATE",
+          "virtual_clock_ms": 1782000000000,
+          "fake_adapter_only": true,
+          "fault_point": null,
+          "reopen": false
+        },
+        "oracle": {
+          "disposition": "rejected",
+          "authoritative_runtime_state": "unchanged",
+          "exact_error": "precondition_failed",
+          "duplicate_authoritative_writes": 0,
+          "projection_can_write_runtime": false
+        },
+        "binding_hash": "sha256:ddbbeb336f921d8953691b816e7eac7a66edccdc13061235e5eefc4c1fbb093b"
+      },
+      {
+        "case_id": "resource_preflight_missing",
+        "category": "negative",
+        "surface": "T6e",
+        "assertion": "missing or consumed schedule cannot resolve resource blocker",
+        "handler": "g7_t6e_production",
+        "operation": {
+          "scenario_key": "g7:negative:resource_preflight_missing",
+          "runtime_database": "isolated_real_file_sqlite",
+          "projection_database": "isolated_generation_store",
+          "transaction_mode": "BEGIN_IMMEDIATE",
+          "virtual_clock_ms": 1782000000000,
+          "fake_adapter_only": true,
+          "fault_point": null,
+          "reopen": false
+        },
+        "oracle": {
+          "disposition": "rejected",
+          "authoritative_runtime_state": "unchanged",
+          "exact_error": "precondition_failed",
+          "duplicate_authoritative_writes": 0,
+          "projection_can_write_runtime": false
+        },
+        "binding_hash": "sha256:9ca8d167f105d5aac5bd64dc85d71417eca2821866622629e2bf61d057068ecb"
+      },
+      {
+        "case_id": "integrity_evidence_mismatch",
+        "category": "negative",
+        "surface": "T6e",
+        "assertion": "hash mismatch or partial chain cannot restore quarantine",
+        "handler": "g7_t6e_production",
+        "operation": {
+          "scenario_key": "g7:negative:integrity_evidence_mismatch",
+          "runtime_database": "isolated_real_file_sqlite",
+          "projection_database": "isolated_generation_store",
+          "transaction_mode": "BEGIN_IMMEDIATE",
+          "virtual_clock_ms": 1782000000000,
+          "fake_adapter_only": true,
+          "fault_point": null,
+          "reopen": false
+        },
+        "oracle": {
+          "disposition": "rejected",
+          "authoritative_runtime_state": "unchanged",
+          "exact_error": "command_policy_denied",
+          "duplicate_authoritative_writes": 0,
+          "projection_can_write_runtime": false
+        },
+        "binding_hash": "sha256:acc9478d898733e8afe1ae4dbc8fb8be9f1dd491a5cd5305bc7969fec5867bb2"
+      },
+      {
+        "case_id": "root_finalization_not_ready",
+        "category": "negative",
+        "surface": "T6e/T8",
+        "assertion": "non-ready finalization source cannot resolve or invoke T8",
+        "handler": "g7_t6e_t8_production",
+        "operation": {
+          "scenario_key": "g7:negative:root_finalization_not_ready",
+          "runtime_database": "isolated_real_file_sqlite",
+          "projection_database": "isolated_generation_store",
+          "transaction_mode": "BEGIN_IMMEDIATE",
+          "virtual_clock_ms": 1782000000000,
+          "fake_adapter_only": true,
+          "fault_point": null,
+          "reopen": false
+        },
+        "oracle": {
+          "disposition": "rejected",
+          "authoritative_runtime_state": "unchanged",
+          "exact_error": "precondition_failed",
+          "duplicate_authoritative_writes": 0,
+          "projection_can_write_runtime": false
+        },
+        "binding_hash": "sha256:a2538df33f711b5f2c09f0e2274b90f57dde01c0d8167b96520af3d431244f3d"
+      },
+      {
+        "case_id": "remediation_budget_exhausted",
+        "category": "negative",
+        "surface": "T6e",
+        "assertion": "finite attempt or deadline ceiling rejects retry wait",
+        "handler": "g7_t6e_production",
+        "operation": {
+          "scenario_key": "g7:negative:remediation_budget_exhausted",
+          "runtime_database": "isolated_real_file_sqlite",
+          "projection_database": "isolated_generation_store",
+          "transaction_mode": "BEGIN_IMMEDIATE",
+          "virtual_clock_ms": 1782000000000,
+          "fake_adapter_only": true,
+          "fault_point": null,
+          "reopen": false
+        },
+        "oracle": {
+          "disposition": "rejected",
+          "authoritative_runtime_state": "unchanged",
+          "exact_error": "resource_unavailable",
+          "duplicate_authoritative_writes": 0,
+          "projection_can_write_runtime": false
+        },
+        "binding_hash": "sha256:2c205ca1bdf4bc9eeb9b5483adee15e1603f976024048a9d06f0b7558ee71656"
+      },
+      {
+        "case_id": "abandon_session_mismatch",
+        "category": "negative",
+        "surface": "Command",
+        "assertion": "confirmation is bound to same Human session",
+        "handler": "g7_command_production",
+        "operation": {
+          "scenario_key": "g7:negative:abandon_session_mismatch",
+          "runtime_database": "isolated_real_file_sqlite",
+          "projection_database": "isolated_generation_store",
+          "transaction_mode": "BEGIN_IMMEDIATE",
+          "virtual_clock_ms": 1782000000000,
+          "fake_adapter_only": true,
+          "fault_point": null,
+          "reopen": false
+        },
+        "oracle": {
+          "disposition": "rejected",
+          "authoritative_runtime_state": "unchanged",
+          "exact_error": "confirmation_required",
+          "duplicate_authoritative_writes": 0,
+          "projection_can_write_runtime": false
+        },
+        "binding_hash": "sha256:2f267d0db521f231e505141ff935c4d9574bc2f5fd7ff9dae140927332d2bb2c"
+      },
+      {
+        "case_id": "abandon_confirmation_expired",
+        "category": "negative",
+        "surface": "Command",
+        "assertion": "confirmation expires after exactly five minutes",
+        "handler": "g7_command_production",
+        "operation": {
+          "scenario_key": "g7:negative:abandon_confirmation_expired",
+          "runtime_database": "isolated_real_file_sqlite",
+          "projection_database": "isolated_generation_store",
+          "transaction_mode": "BEGIN_IMMEDIATE",
+          "virtual_clock_ms": 1782000000000,
+          "fake_adapter_only": true,
+          "fault_point": null,
+          "reopen": false
+        },
+        "oracle": {
+          "disposition": "rejected",
+          "authoritative_runtime_state": "unchanged",
+          "exact_error": "confirmation_required",
+          "duplicate_authoritative_writes": 0,
+          "projection_can_write_runtime": false
+        },
+        "binding_hash": "sha256:48125dcafd77ca9c2965d4efcbcc217772ac704524b256f26c68ab467af340eb"
+      },
+      {
+        "case_id": "card_secret_material",
+        "category": "negative",
+        "surface": "Card",
+        "assertion": "secret-bearing field or obvious secret bytes reject before persistence",
+        "handler": "g7_card_production",
+        "operation": {
+          "scenario_key": "g7:negative:card_secret_material",
+          "runtime_database": "isolated_real_file_sqlite",
+          "projection_database": "isolated_generation_store",
+          "transaction_mode": "BEGIN_IMMEDIATE",
+          "virtual_clock_ms": 1782000000000,
+          "fake_adapter_only": true,
+          "fault_point": null,
+          "reopen": false
+        },
+        "oracle": {
+          "disposition": "rejected",
+          "authoritative_runtime_state": "unchanged",
+          "exact_error": "contract_invalid",
+          "duplicate_authoritative_writes": 0,
+          "projection_can_write_runtime": false
+        },
+        "binding_hash": "sha256:56657d5f65e39f184d446a2b14d4886c1494ae6598d39384966d1c3a669bc179"
+      },
+      {
+        "case_id": "card_snapshot_tamper",
+        "category": "negative",
+        "surface": "Card",
+        "assertion": "snapshot byte/hash drift fails before action handler",
+        "handler": "g7_card_production",
+        "operation": {
+          "scenario_key": "g7:negative:card_snapshot_tamper",
+          "runtime_database": "isolated_real_file_sqlite",
+          "projection_database": "isolated_generation_store",
+          "transaction_mode": "BEGIN_IMMEDIATE",
+          "virtual_clock_ms": 1782000000000,
+          "fake_adapter_only": true,
+          "fault_point": null,
+          "reopen": false
+        },
+        "oracle": {
+          "disposition": "rejected",
+          "authoritative_runtime_state": "unchanged",
+          "exact_error": "integrity_violation",
+          "duplicate_authoritative_writes": 0,
+          "projection_can_write_runtime": false
+        },
+        "binding_hash": "sha256:d346fe3fc8763eb1161c7d4eab2823b6fe3beeffd4b0f574fee4e99ebb0a9a10"
+      },
+      {
+        "case_id": "card_action_expired",
+        "category": "negative",
+        "surface": "Card",
+        "assertion": "expired action returns inert denial without dispatch",
+        "handler": "g7_card_production",
+        "operation": {
+          "scenario_key": "g7:negative:card_action_expired",
+          "runtime_database": "isolated_real_file_sqlite",
+          "projection_database": "isolated_generation_store",
+          "transaction_mode": "BEGIN_IMMEDIATE",
+          "virtual_clock_ms": 1782000000000,
+          "fake_adapter_only": true,
+          "fault_point": null,
+          "reopen": false
+        },
+        "oracle": {
+          "disposition": "rejected",
+          "authoritative_runtime_state": "unchanged",
+          "exact_error": "action_expired",
+          "duplicate_authoritative_writes": 0,
+          "projection_can_write_runtime": false
+        },
+        "binding_hash": "sha256:934cf4a2036eb320cf59744cd15bf046b64b58c961b8753fff697dcccc5ffd43"
+      },
+      {
+        "case_id": "projection_gap",
+        "category": "negative",
+        "surface": "Projection",
+        "assertion": "source sequence gap degrades affected generation",
+        "handler": "g7_projection_production",
+        "operation": {
+          "scenario_key": "g7:negative:projection_gap",
+          "runtime_database": "isolated_real_file_sqlite",
+          "projection_database": "isolated_generation_store",
+          "transaction_mode": "BEGIN_IMMEDIATE",
+          "virtual_clock_ms": 1782000000000,
+          "fake_adapter_only": true,
+          "fault_point": null,
+          "reopen": false
+        },
+        "oracle": {
+          "disposition": "rejected",
+          "authoritative_runtime_state": "unchanged",
+          "exact_error": "source_sequence_gap",
+          "duplicate_authoritative_writes": 0,
+          "projection_can_write_runtime": false
+        },
+        "binding_hash": "sha256:7ec408d7e1829164aad46c0e5ecd2d2702f6476e89773243bd16d75e990b408a"
+      },
+      {
+        "case_id": "projection_hash_tamper",
+        "category": "negative",
+        "surface": "Projection",
+        "assertion": "source event hash mismatch degrades without partial write",
+        "handler": "g7_projection_production",
+        "operation": {
+          "scenario_key": "g7:negative:projection_hash_tamper",
+          "runtime_database": "isolated_real_file_sqlite",
+          "projection_database": "isolated_generation_store",
+          "transaction_mode": "BEGIN_IMMEDIATE",
+          "virtual_clock_ms": 1782000000000,
+          "fake_adapter_only": true,
+          "fault_point": null,
+          "reopen": false
+        },
+        "oracle": {
+          "disposition": "rejected",
+          "authoritative_runtime_state": "unchanged",
+          "exact_error": "source_event_hash_mismatch",
+          "duplicate_authoritative_writes": 0,
+          "projection_can_write_runtime": false
+        },
+        "binding_hash": "sha256:8391a5d8aeee41074bc3eb98c50d33bbe38af33b5c1c7fc1716a2c223aa6553b"
+      },
+      {
+        "case_id": "cursor_tamper_or_mismatch",
+        "category": "negative",
+        "surface": "Projection/API",
+        "assertion": "signature request or snapshot mismatch fails closed",
+        "handler": "g7_projection_api_production",
+        "operation": {
+          "scenario_key": "g7:negative:cursor_tamper_or_mismatch",
+          "runtime_database": "isolated_real_file_sqlite",
+          "projection_database": "isolated_generation_store",
+          "transaction_mode": "BEGIN_IMMEDIATE",
+          "virtual_clock_ms": 1782000000000,
+          "fake_adapter_only": true,
+          "fault_point": null,
+          "reopen": false
+        },
+        "oracle": {
+          "disposition": "rejected",
+          "authoritative_runtime_state": "unchanged",
+          "exact_error": "cursor_invalid",
+          "duplicate_authoritative_writes": 0,
+          "projection_can_write_runtime": false
+        },
+        "binding_hash": "sha256:4b7819e73c741a4c91c0cf4b87d169b7f759eab1b98a71f88b2b90235703b0cc"
+      },
+      {
+        "case_id": "deep_link_lineage_mismatch",
+        "category": "negative",
+        "surface": "Projection/API",
+        "assertion": "broken lineage returns integrity error",
+        "handler": "g7_projection_api_production",
+        "operation": {
+          "scenario_key": "g7:negative:deep_link_lineage_mismatch",
+          "runtime_database": "isolated_real_file_sqlite",
+          "projection_database": "isolated_generation_store",
+          "transaction_mode": "BEGIN_IMMEDIATE",
+          "virtual_clock_ms": 1782000000000,
+          "fake_adapter_only": true,
+          "fault_point": null,
+          "reopen": false
+        },
+        "oracle": {
+          "disposition": "rejected",
+          "authoritative_runtime_state": "unchanged",
+          "exact_error": "broken_link_integrity_error",
+          "duplicate_authoritative_writes": 0,
+          "projection_can_write_runtime": false
+        },
+        "binding_hash": "sha256:46518f129eb942eedc291cd3c09d818f77cdb6dfd5d94afe4db8e8bb3df71c7c"
+      },
+      {
+        "case_id": "capacity_initialize_or_patch",
+        "category": "negative",
+        "surface": "Capacity/API",
+        "assertion": "Runtime Center rejects genesis initialization and field patch input",
+        "handler": "g7_capacity_api_production",
+        "operation": {
+          "scenario_key": "g7:negative:capacity_initialize_or_patch",
+          "runtime_database": "isolated_real_file_sqlite",
+          "projection_database": "isolated_generation_store",
+          "transaction_mode": "BEGIN_IMMEDIATE",
+          "virtual_clock_ms": 1782000000000,
+          "fake_adapter_only": true,
+          "fault_point": null,
+          "reopen": false
+        },
+        "oracle": {
+          "disposition": "rejected",
+          "authoritative_runtime_state": "unchanged",
+          "exact_error": "forbidden_surface",
+          "duplicate_authoritative_writes": 0,
+          "projection_can_write_runtime": false
+        },
+        "binding_hash": "sha256:6cb773f131d6f7b592b0522a5bf3313b2a10d4e20b68fe4031459695fa073faf"
+      },
+      {
+        "case_id": "capacity_delegation_bypass",
+        "category": "negative",
+        "surface": "Capacity/API",
+        "assertion": "delegation cannot derive deployment Capacity authority",
+        "handler": "g7_capacity_api_production",
+        "operation": {
+          "scenario_key": "g7:negative:capacity_delegation_bypass",
+          "runtime_database": "isolated_real_file_sqlite",
+          "projection_database": "isolated_generation_store",
+          "transaction_mode": "BEGIN_IMMEDIATE",
+          "virtual_clock_ms": 1782000000000,
+          "fake_adapter_only": true,
+          "fault_point": null,
+          "reopen": false
+        },
+        "oracle": {
+          "disposition": "rejected",
+          "authoritative_runtime_state": "unchanged",
+          "exact_error": "permission_denied",
+          "duplicate_authoritative_writes": 0,
+          "projection_can_write_runtime": false
+        },
+        "binding_hash": "sha256:7cf45c4049a6a1c1b30db9e1e2216720ec1d5edcffd144e70d237a45e97807dc"
+      },
+      {
+        "case_id": "projection_runtime_write_import",
+        "category": "negative",
+        "surface": "Boundary",
+        "assertion": "Projection cannot import Runtime Store write connection",
+        "handler": "g7_boundary_production",
+        "operation": {
+          "scenario_key": "g7:negative:projection_runtime_write_import",
+          "runtime_database": "isolated_real_file_sqlite",
+          "projection_database": "isolated_generation_store",
+          "transaction_mode": "BEGIN_IMMEDIATE",
+          "virtual_clock_ms": 1782000000000,
+          "fake_adapter_only": true,
+          "fault_point": null,
+          "reopen": false
+        },
+        "oracle": {
+          "disposition": "rejected",
+          "authoritative_runtime_state": "unchanged",
+          "exact_error": "forbidden_surface",
+          "duplicate_authoritative_writes": 0,
+          "projection_can_write_runtime": false
+        },
+        "binding_hash": "sha256:759d3dc3fbe955183300d86cee7dcddd8523ed456d588e465de6bfc5023edb99"
+      },
+      {
+        "case_id": "g8_g9_surface_forbidden",
+        "category": "negative",
+        "surface": "Boundary",
+        "assertion": "G7 cannot implement certification loader activation ingress or network",
+        "handler": "g7_boundary_production",
+        "operation": {
+          "scenario_key": "g7:negative:g8_g9_surface_forbidden",
+          "runtime_database": "isolated_real_file_sqlite",
+          "projection_database": "isolated_generation_store",
+          "transaction_mode": "BEGIN_IMMEDIATE",
+          "virtual_clock_ms": 1782000000000,
+          "fake_adapter_only": true,
+          "fault_point": null,
+          "reopen": false
+        },
+        "oracle": {
+          "disposition": "rejected",
+          "authoritative_runtime_state": "unchanged",
+          "exact_error": "forbidden_surface",
+          "duplicate_authoritative_writes": 0,
+          "projection_can_write_runtime": false
+        },
+        "binding_hash": "sha256:f33d3241d4e3505e669f74e978ef6fc013e6d87625b72c3c379ca6a099e3a450"
+      }
+    ]
+  },
+  "hash": "sha256:0b85691a186af3073b4d9f370162b53b40baa0976d6209529c31dbd22cf1f083"
+}

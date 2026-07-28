@@ -236,7 +236,7 @@ function validateBoundaries(): void {
       }
     }
   }
-  for (const forbidden of ['registry', 'projection/runtime-center-api.ts']) {
+  for (const forbidden of ['registry']) {
     if (fs.existsSync(path.join(workflowRuntimeRoot, forbidden))) {
       throw new Error(`G3+ boundary crossed: ${forbidden}`);
     }

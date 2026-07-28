@@ -1,0 +1,75 @@
+{
+  "format": "icarus.workflow-contract-pack-g7-control-card-projection-recovery/1",
+  "ref": {
+    "id": "icarus.workflow-contract-pack-g7-control-card-projection-recovery",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-contract-pack-g7-control-card-projection-recovery:1\n",
+  "payload": {
+    "gate": "G7",
+    "status": "G7_CONTROL_CARD_PROJECTION_RECOVERY_CONSTRUCTION_CANDIDATE_PENDING_INDEPENDENT_WHOLE_GATE_ACCEPTANCE",
+    "g6_state": "DONE_OPERATIONALLY_ACCEPTED",
+    "g7_state": "IN_PROGRESS",
+    "g7_done": false,
+    "g8_through_g9": "NOT_READY",
+    "persistent_mode_policy": "HYBRID_GATE_CONTINUOUS_RUNTIME_V1",
+    "production_implementation_count": 9,
+    "positive_case_count": 29,
+    "negative_case_count": 33,
+    "fault_case_count": 16,
+    "member_count": 6,
+    "members": [
+      {
+        "format": "icarus.workflow-g7-control-card-projection-recovery-protocol/1",
+        "ref": {
+          "id": "icarus.workflow-g7-control-card-projection-recovery-protocol",
+          "version": "1.0.0"
+        },
+        "hash": "sha256:0d74d2b45fe44b04ec19234a6ad514d614f51bc9f9ca7d4a49b7c3aef7d36f13"
+      },
+      {
+        "format": "icarus.workflow-g7-control-card-projection-recovery-positive-cases/1",
+        "ref": {
+          "id": "icarus.workflow-g7-control-card-projection-recovery-positive-cases",
+          "version": "1.0.0"
+        },
+        "hash": "sha256:0efe66d6bd5d75893c1e83c504c44bf205292adeb67ddf2eda78ddcf35a68726"
+      },
+      {
+        "format": "icarus.workflow-g7-control-card-projection-recovery-negative-cases/1",
+        "ref": {
+          "id": "icarus.workflow-g7-control-card-projection-recovery-negative-cases",
+          "version": "1.0.0"
+        },
+        "hash": "sha256:0b85691a186af3073b4d9f370162b53b40baa0976d6209529c31dbd22cf1f083"
+      },
+      {
+        "format": "icarus.workflow-g7-control-card-projection-recovery-fault-cases/1",
+        "ref": {
+          "id": "icarus.workflow-g7-control-card-projection-recovery-fault-cases",
+          "version": "1.0.0"
+        },
+        "hash": "sha256:e5f9e53eda2af2dbecff00d0812e48aad5c5d76d3877fa391490a338028b6da5"
+      },
+      {
+        "format": "icarus.workflow-g7-control-card-projection-recovery-reference-authority/1",
+        "ref": {
+          "id": "icarus.workflow-g7-control-card-projection-recovery-reference-authority",
+          "version": "1.0.0"
+        },
+        "hash": "sha256:60aa823011345c9abe95c3860010f7d7f142b5ab5595297b3c7f7abcfc16a99b"
+      },
+      {
+        "format": "icarus.workflow-g7-control-card-projection-recovery-implementation/1",
+        "ref": {
+          "id": "icarus.workflow-g7-control-card-projection-recovery-implementation",
+          "version": "1.0.0"
+        },
+        "hash": "sha256:37d80650e79af280dc611d0d2168742ef69acb9cb74cea7204f5fb4b523eb296"
+      }
+    ],
+    "member_tree_hash": "sha256:f58ccb55a428b2441442d02e9077ea9735cd19a09908cd8549b6afb29eacf4c7"
+  },
+  "hash": "sha256:b6fa3c48fd14d94fa75e28edc4afea597cfdd37eea9141c71e9e986ed866325b"
+}
