@@ -1755,16 +1755,12 @@ function assertT8Replay(
   };
 }
 
-export function commitRootT8(
-  store: WorkflowRuntimeStore,
+export function commitRootT8InTransaction(
+  transaction: WorkflowRuntimeWriteTransaction,
   input: T8RootCommitInput,
-  fault?: G5TransactionFault,
 ): T8RootCommitReceipt {
-  return runImmediateG5Transaction(
-    store,
-    (transaction) => {
-      const replay = transaction.queryOne<T8ReplayRow>(
-        `SELECT c.id AS cut_id, h.id AS history_id, cp.id AS checkpoint_id,
+  const replay = transaction.queryOne<T8ReplayRow>(
+    `SELECT c.id AS cut_id, h.id AS history_id, cp.id AS checkpoint_id,
                 h.target_state_instance_id, h.target_run_id
            FROM workflow_graph_completion_cuts c
            JOIN workflow_state_transition_history h
@@ -1772,88 +1768,88 @@ export function commitRootT8(
            JOIN workflow_checkpoints cp ON cp.completion_cut_id = c.id
           WHERE c.close_request_id = ? AND c.graph_run_id = ?
             AND c.scope_id = ?`,
-        [input.closeRequestId, input.sourceRunId, input.rootScopeId],
-      );
-      if (replay) return assertT8Replay(transaction, input, replay);
-      const workflow = transaction.queryOne<{
-        status: string;
-        operational_state: string;
-        state_instance_id: string;
-        current_graph_run_id: string | null;
-        workflow_revision: number;
-        state_activation_count: number;
-        state_transition_count: number;
-        child_workflow_count: number;
-        row_version: number;
-      }>(
-        `SELECT status, operational_state, state_instance_id,
+    [input.closeRequestId, input.sourceRunId, input.rootScopeId],
+  );
+  if (replay) return assertT8Replay(transaction, input, replay);
+  const workflow = transaction.queryOne<{
+    status: string;
+    operational_state: string;
+    state_instance_id: string;
+    current_graph_run_id: string | null;
+    workflow_revision: number;
+    state_activation_count: number;
+    state_transition_count: number;
+    child_workflow_count: number;
+    row_version: number;
+  }>(
+    `SELECT status, operational_state, state_instance_id,
                 current_graph_run_id, workflow_revision,
                 state_activation_count, state_transition_count,
                 child_workflow_count, row_version
            FROM workflows WHERE id = ?`,
-        [input.workflowId],
-      );
-      const run = transaction.queryOne<{
-        lifecycle: string;
-        operational_state: string;
-        root_scope_id: string;
-        root_close_request_id: string | null;
-        root_cancel_scope: string | null;
-        work_fence_epoch: number;
-        next_event_seq: number;
-        row_version: number;
-      }>(
-        `SELECT lifecycle, operational_state, root_scope_id,
+    [input.workflowId],
+  );
+  const run = transaction.queryOne<{
+    lifecycle: string;
+    operational_state: string;
+    root_scope_id: string;
+    root_close_request_id: string | null;
+    root_cancel_scope: string | null;
+    work_fence_epoch: number;
+    next_event_seq: number;
+    row_version: number;
+  }>(
+    `SELECT lifecycle, operational_state, root_scope_id,
                 root_close_request_id, root_cancel_scope, work_fence_epoch, next_event_seq,
                 row_version
            FROM workflow_graph_runs WHERE id = ? AND workflow_id = ?`,
-        [input.sourceRunId, input.workflowId],
-      );
-      const root = transaction.queryOne<{
-        lifecycle: string;
-        close_request_id: string | null;
-        work_fence_epoch: number;
-        row_version: number;
-      }>(
-        `SELECT lifecycle, close_request_id, work_fence_epoch, row_version
+    [input.sourceRunId, input.workflowId],
+  );
+  const root = transaction.queryOne<{
+    lifecycle: string;
+    close_request_id: string | null;
+    work_fence_epoch: number;
+    row_version: number;
+  }>(
+    `SELECT lifecycle, close_request_id, work_fence_epoch, row_version
            FROM workflow_graph_scopes WHERE id = ? AND graph_run_id = ?`,
-        [input.rootScopeId, input.sourceRunId],
-      );
-      const activation = transaction.queryOne<{
-        status: string;
-        row_version: number;
-      }>(
-        `SELECT status, row_version FROM workflow_state_activations
+    [input.rootScopeId, input.sourceRunId],
+  );
+  const activation = transaction.queryOne<{
+    status: string;
+    row_version: number;
+  }>(
+    `SELECT status, row_version FROM workflow_state_activations
           WHERE id = ? AND workflow_id = ? AND graph_run_id = ?`,
-        [input.sourceActivationId, input.workflowId, input.sourceRunId],
-      );
-      if (
-        !workflow ||
-        !run ||
-        !root ||
-        !activation ||
-        workflow.status !== 'active' ||
-        workflow.operational_state !== 'healthy' ||
-        workflow.state_instance_id !== input.sourceActivationId ||
-        workflow.current_graph_run_id !== input.sourceRunId ||
-        workflow.row_version !== input.expectedWorkflowRowVersion ||
-        run.lifecycle !== 'closing' ||
-        run.operational_state !== 'healthy' ||
-        run.root_scope_id !== input.rootScopeId ||
-        run.root_close_request_id !== input.closeRequestId ||
-        run.row_version !== input.expectedSourceRunRowVersion ||
-        root.lifecycle !== 'closing' ||
-        root.close_request_id !== input.closeRequestId ||
-        root.row_version !== input.expectedRootScopeRowVersion ||
-        activation.status !== 'active' ||
-        activation.row_version !== input.expectedSourceActivationRowVersion
-      )
-        throw new G5RuntimeError(
-          'cas_conflict',
-          'T8 Workflow, Run, Scope, or Activation authority is stale',
-        );
-      const descendant = transaction.queryOne<{ id: string }>(
-        `WITH RECURSIVE subtree(id) AS (
+    [input.sourceActivationId, input.workflowId, input.sourceRunId],
+  );
+  if (
+    !workflow ||
+    !run ||
+    !root ||
+    !activation ||
+    workflow.status !== 'active' ||
+    workflow.operational_state !== 'healthy' ||
+    workflow.state_instance_id !== input.sourceActivationId ||
+    workflow.current_graph_run_id !== input.sourceRunId ||
+    workflow.row_version !== input.expectedWorkflowRowVersion ||
+    run.lifecycle !== 'closing' ||
+    run.operational_state !== 'healthy' ||
+    run.root_scope_id !== input.rootScopeId ||
+    run.root_close_request_id !== input.closeRequestId ||
+    run.row_version !== input.expectedSourceRunRowVersion ||
+    root.lifecycle !== 'closing' ||
+    root.close_request_id !== input.closeRequestId ||
+    root.row_version !== input.expectedRootScopeRowVersion ||
+    activation.status !== 'active' ||
+    activation.row_version !== input.expectedSourceActivationRowVersion
+  )
+    throw new G5RuntimeError(
+      'cas_conflict',
+      'T8 Workflow, Run, Scope, or Activation authority is stale',
+    );
+  const descendant = transaction.queryOne<{ id: string }>(
+    `WITH RECURSIVE subtree(id) AS (
            SELECT id FROM workflow_graph_scopes WHERE parent_scope_id = ?
            UNION ALL
            SELECT child.id FROM workflow_graph_scopes child
@@ -1861,182 +1857,178 @@ export function commitRootT8(
          ) SELECT s.id FROM subtree tree
            JOIN workflow_graph_scopes s ON s.id = tree.id
           WHERE s.lifecycle <> 'closed' LIMIT 1`,
-        [input.rootScopeId],
-      );
-      const unsettledCompensation = transaction.queryOne<{ id: string }>(
-        `SELECT id FROM workflow_graph_effect_operations
+    [input.rootScopeId],
+  );
+  const unsettledCompensation = transaction.queryOne<{ id: string }>(
+    `SELECT id FROM workflow_graph_effect_operations
           WHERE graph_run_id = ? AND execution_lane = 'close_cleanup'
             AND status NOT IN ('compensated','compensation_not_required')
           LIMIT 1`,
-        [input.sourceRunId],
-      );
-      if (descendant || unsettledCompensation)
-        throw new G5RuntimeError(
-          'precondition_failed',
-          'T8 requires closed descendants and successful compensation',
-        );
-      const cut = rootCutAuthority(transaction, input);
-      const expectedRootCancelScope =
-        cut.cancelReason === 'workflow_cancel'
-          ? 'workflow'
-          : cut.cancelReason === 'local_cancel'
-            ? 'local_graph'
-            : null;
-      if (run.root_cancel_scope !== expectedRootCancelScope)
-        throw new G5RuntimeError(
-          'integrity_violation',
-          'T8 root outcome does not match the frozen Run cancel scope',
-        );
-      const route = loadTransitionAuthority(transaction, input, cut);
-      assertTransitionEffectIntent(transaction, input, route.effects);
-      const cutSequence = run.next_event_seq + 1;
-      const completionCutId = stableRuntimeId('completion-cut', {
-        graph_run_id: input.sourceRunId,
-        scope_id: input.rootScopeId,
-        close_request_id: input.closeRequestId,
-      });
-      const cutPayload: JsonObject = {
-        graph_run_id: input.sourceRunId,
-        scope_id: input.rootScopeId,
-        close_request_id: input.closeRequestId,
-        selected_rule_id: cut.selectedRuleId,
-        candidate_id: cut.candidateId,
-        outcome_kind: cut.outcomeKind,
-        exit_name: cut.exitName,
-        output_hash: cut.output?.hash ?? null,
-        completion_policy_hash: cut.completionPolicyHash,
-        cut_event_seq: cutSequence,
-      };
-      const cutHash = runtimeObjectHash('completion-cut', cutPayload);
-      insertGraphEvent(transaction, {
-        graphRunId: input.sourceRunId,
-        sequence: cutSequence,
-        scopeId: input.rootScopeId,
-        nodeId: null,
-        attemptId: null,
-        eventType: 'completion_cut_committed',
-        idempotencyKey: `root-cut:${input.closeRequestId}`,
-        payloadJson: cutPayload,
-        occurredAtMs: input.nowMs,
-        createdAtMs: input.nowMs,
-      });
-      transaction.execute(
-        `INSERT INTO workflow_graph_completion_cuts (
+    [input.sourceRunId],
+  );
+  if (descendant || unsettledCompensation)
+    throw new G5RuntimeError(
+      'precondition_failed',
+      'T8 requires closed descendants and successful compensation',
+    );
+  const cut = rootCutAuthority(transaction, input);
+  const expectedRootCancelScope =
+    cut.cancelReason === 'workflow_cancel'
+      ? 'workflow'
+      : cut.cancelReason === 'local_cancel'
+        ? 'local_graph'
+        : null;
+  if (run.root_cancel_scope !== expectedRootCancelScope)
+    throw new G5RuntimeError(
+      'integrity_violation',
+      'T8 root outcome does not match the frozen Run cancel scope',
+    );
+  const route = loadTransitionAuthority(transaction, input, cut);
+  assertTransitionEffectIntent(transaction, input, route.effects);
+  const cutSequence = run.next_event_seq + 1;
+  const completionCutId = stableRuntimeId('completion-cut', {
+    graph_run_id: input.sourceRunId,
+    scope_id: input.rootScopeId,
+    close_request_id: input.closeRequestId,
+  });
+  const cutPayload: JsonObject = {
+    graph_run_id: input.sourceRunId,
+    scope_id: input.rootScopeId,
+    close_request_id: input.closeRequestId,
+    selected_rule_id: cut.selectedRuleId,
+    candidate_id: cut.candidateId,
+    outcome_kind: cut.outcomeKind,
+    exit_name: cut.exitName,
+    output_hash: cut.output?.hash ?? null,
+    completion_policy_hash: cut.completionPolicyHash,
+    cut_event_seq: cutSequence,
+  };
+  const cutHash = runtimeObjectHash('completion-cut', cutPayload);
+  insertGraphEvent(transaction, {
+    graphRunId: input.sourceRunId,
+    sequence: cutSequence,
+    scopeId: input.rootScopeId,
+    nodeId: null,
+    attemptId: null,
+    eventType: 'completion_cut_committed',
+    idempotencyKey: `root-cut:${input.closeRequestId}`,
+    payloadJson: cutPayload,
+    occurredAtMs: input.nowMs,
+    createdAtMs: input.nowMs,
+  });
+  transaction.execute(
+    `INSERT INTO workflow_graph_completion_cuts (
            id, graph_run_id, scope_id, close_request_id, selected_rule_id,
            candidate_id, outcome_kind, exit_name, output_value_id, output_hash,
            completion_policy_hash, cut_event_seq, cut_hash, created_at_ms
          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          completionCutId,
-          input.sourceRunId,
-          input.rootScopeId,
-          input.closeRequestId,
-          cut.selectedRuleId,
-          cut.candidateId,
-          cut.outcomeKind,
-          cut.exitName,
-          cut.output?.id ?? null,
-          cut.output?.hash ?? null,
-          cut.completionPolicyHash,
-          cutSequence,
-          cutHash,
-          input.nowMs,
-        ],
-      );
-      requireSingleChange(
-        transaction.execute(
-          `UPDATE workflow_state_activations
+    [
+      completionCutId,
+      input.sourceRunId,
+      input.rootScopeId,
+      input.closeRequestId,
+      cut.selectedRuleId,
+      cut.candidateId,
+      cut.outcomeKind,
+      cut.exitName,
+      cut.output?.id ?? null,
+      cut.output?.hash ?? null,
+      cut.completionPolicyHash,
+      cutSequence,
+      cutHash,
+      input.nowMs,
+    ],
+  );
+  requireSingleChange(
+    transaction.execute(
+      `UPDATE workflow_state_activations
               SET status = 'completed', finished_at_ms = ?,
                   row_version = row_version + 1
             WHERE id = ? AND row_version = ? AND status = 'active'`,
-          [
-            input.nowMs,
-            input.sourceActivationId,
-            input.expectedSourceActivationRowVersion,
-          ],
-        ).changes,
-        'T8 source Activation',
+      [
+        input.nowMs,
+        input.sourceActivationId,
+        input.expectedSourceActivationRowVersion,
+      ],
+    ).changes,
+    'T8 source Activation',
+  );
+  const workflowRevision = workflow.workflow_revision + 1;
+  const context = persistContextRevision(
+    transaction,
+    input,
+    completionCutId,
+    workflowRevision,
+  );
+  const childResults = input.requiredChildren.map((child) =>
+    createRequiredChild(transaction, input, child, completionCutId),
+  );
+  for (const item of input.bestEffortOutbox)
+    insertBestEffortOutbox(transaction, input, item);
+  const transitionHistoryId = stableRuntimeId('transition', {
+    workflow_id: input.workflowId,
+    source_state_instance_id: input.sourceActivationId,
+    completion_cut_id: completionCutId,
+  });
+  let targetActivation: T1ActivationReceipt | null = null;
+  let targetActivationId: string | null = null;
+  let targetRunId: string | null = null;
+  let terminalActivationCount = workflow.state_activation_count;
+  if (input.target.kind === 'nonterminal') {
+    const current = transaction.queryOne<{ row_version: number }>(
+      'SELECT row_version FROM workflows WHERE id = ?',
+      [input.workflowId],
+    )!;
+    targetActivation = activateWorkflowT1InTransaction(
+      transaction,
+      {
+        ...input.target.activation,
+        workflowId: input.workflowId,
+        expectedWorkflowRowVersion: current.row_version,
+        stateKey: input.target.stateKey,
+      },
+      { writeInitialCheckpoint: false },
+    );
+    targetActivationId = targetActivation.activationId;
+    targetRunId = targetActivation.graphRunId;
+  } else if (input.target.kind === 'terminal') {
+    if (
+      (cut.outcomeKind === 'completed' &&
+        (input.target.terminalKind !== 'normal' ||
+          input.target.output === null ||
+          input.target.outputSchemaHash === null ||
+          input.target.errorCode !== null ||
+          input.target.errorDetail !== null)) ||
+      (cut.outcomeKind === 'errored' &&
+        (input.target.terminalKind !== 'errored' ||
+          input.target.output !== null ||
+          input.target.outputSchemaHash !== null ||
+          input.target.errorCode !== cut.errorCode))
+    )
+      throw new G5RuntimeError(
+        'contract_invalid',
+        'T8 terminal Activation outcome shape is invalid',
       );
-      const workflowRevision = workflow.workflow_revision + 1;
-      const context = persistContextRevision(
+    if (input.target.output)
+      assertStoredValue(transaction, input.target.output, 'Terminal output');
+    if (input.target.errorDetail)
+      assertStoredValue(
         transaction,
-        input,
-        completionCutId,
-        workflowRevision,
+        input.target.errorDetail,
+        'Terminal error detail',
       );
-      const childResults = input.requiredChildren.map((child) =>
-        createRequiredChild(transaction, input, child, completionCutId),
-      );
-      for (const item of input.bestEffortOutbox)
-        insertBestEffortOutbox(transaction, input, item);
-      const transitionHistoryId = stableRuntimeId('transition', {
-        workflow_id: input.workflowId,
-        source_state_instance_id: input.sourceActivationId,
-        completion_cut_id: completionCutId,
-      });
-      let targetActivation: T1ActivationReceipt | null = null;
-      let targetActivationId: string | null = null;
-      let targetRunId: string | null = null;
-      let terminalActivationCount = workflow.state_activation_count;
-      if (input.target.kind === 'nonterminal') {
-        const current = transaction.queryOne<{ row_version: number }>(
-          'SELECT row_version FROM workflows WHERE id = ?',
-          [input.workflowId],
-        )!;
-        targetActivation = activateWorkflowT1InTransaction(
-          transaction,
-          {
-            ...input.target.activation,
-            workflowId: input.workflowId,
-            expectedWorkflowRowVersion: current.row_version,
-            stateKey: input.target.stateKey,
-          },
-          { writeInitialCheckpoint: false },
-        );
-        targetActivationId = targetActivation.activationId;
-        targetRunId = targetActivation.graphRunId;
-      } else if (input.target.kind === 'terminal') {
-        if (
-          (cut.outcomeKind === 'completed' &&
-            (input.target.terminalKind !== 'normal' ||
-              input.target.output === null ||
-              input.target.outputSchemaHash === null ||
-              input.target.errorCode !== null ||
-              input.target.errorDetail !== null)) ||
-          (cut.outcomeKind === 'errored' &&
-            (input.target.terminalKind !== 'errored' ||
-              input.target.output !== null ||
-              input.target.outputSchemaHash !== null ||
-              input.target.errorCode !== cut.errorCode))
-        )
-          throw new G5RuntimeError(
-            'contract_invalid',
-            'T8 terminal Activation outcome shape is invalid',
-          );
-        if (input.target.output)
-          assertStoredValue(
-            transaction,
-            input.target.output,
-            'Terminal output',
-          );
-        if (input.target.errorDetail)
-          assertStoredValue(
-            transaction,
-            input.target.errorDetail,
-            'Terminal error detail',
-          );
-        assertExactPublishedRegistryResource(
-          transaction,
-          input.target.definition,
-          'T8 terminal Definition',
-        );
-        terminalActivationCount += 1;
-        targetActivationId = stableRuntimeId('activation', {
-          workflow_id: input.workflowId,
-          activation_no: terminalActivationCount,
-        });
-        transaction.execute(
-          `INSERT INTO workflow_state_activations (
+    assertExactPublishedRegistryResource(
+      transaction,
+      input.target.definition,
+      'T8 terminal Definition',
+    );
+    terminalActivationCount += 1;
+    targetActivationId = stableRuntimeId('activation', {
+      workflow_id: input.workflowId,
+      activation_no: terminalActivationCount,
+    });
+    transaction.execute(
+      `INSERT INTO workflow_state_activations (
              id, workflow_id, state_key, state_type, activation_no,
              workflow_definition_resource_id,
              workflow_definition_resource_hash, workflow_definition_version,
@@ -2048,128 +2040,128 @@ export function commitRootT8(
              started_at_ms, finished_at_ms, row_version
            ) VALUES (?, ?, ?, 'terminal', ?, ?, ?, ?, ?, ?, 'completed', NULL,
              ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
-          [
-            targetActivationId,
-            input.workflowId,
-            input.target.stateKey,
-            terminalActivationCount,
-            input.target.definition.rowId,
-            input.target.definition.hash,
-            input.target.definitionVersion,
-            input.target.stateConfig.id,
-            input.target.stateConfig.hash,
-            transitionHistoryId,
-            input.target.terminalKind,
-            input.target.output?.id ?? null,
-            input.target.output?.hash ?? null,
-            input.target.outputSchemaHash,
-            input.target.errorCode,
-            input.target.errorDetail?.id ?? null,
-            input.target.errorDetail?.hash ?? null,
-            input.nowMs,
-            input.nowMs,
-          ],
-        );
-        chargeWorkflowLifetimeResources(transaction, {
-          graphRunId: input.sourceRunId,
-          workflowId: input.workflowId,
-          reservationGroupId: stableRuntimeId('reservation-group', {
-            graph_run_id: input.sourceRunId,
-            activation_id: targetActivationId,
-            purpose: 'terminal_activation',
-          }),
-          amounts: { state_activations_total: 1 },
-          purpose: 'terminal_activation',
-          nowMs: input.nowMs,
-        });
-      }
-      transaction.execute(
-        `INSERT INTO workflow_state_transition_history (
+      [
+        targetActivationId,
+        input.workflowId,
+        input.target.stateKey,
+        terminalActivationCount,
+        input.target.definition.rowId,
+        input.target.definition.hash,
+        input.target.definitionVersion,
+        input.target.stateConfig.id,
+        input.target.stateConfig.hash,
+        transitionHistoryId,
+        input.target.terminalKind,
+        input.target.output?.id ?? null,
+        input.target.output?.hash ?? null,
+        input.target.outputSchemaHash,
+        input.target.errorCode,
+        input.target.errorDetail?.id ?? null,
+        input.target.errorDetail?.hash ?? null,
+        input.nowMs,
+        input.nowMs,
+      ],
+    );
+    chargeWorkflowLifetimeResources(transaction, {
+      graphRunId: input.sourceRunId,
+      workflowId: input.workflowId,
+      reservationGroupId: stableRuntimeId('reservation-group', {
+        graph_run_id: input.sourceRunId,
+        activation_id: targetActivationId,
+        purpose: 'terminal_activation',
+      }),
+      amounts: { state_activations_total: 1 },
+      purpose: 'terminal_activation',
+      nowMs: input.nowMs,
+    });
+  }
+  transaction.execute(
+    `INSERT INTO workflow_state_transition_history (
            id, workflow_id, source_state_instance_id, source_run_id,
            completion_cut_id, target_state_key, target_state_instance_id,
            target_run_id, workflow_revision, context_patch_hash, created_at_ms
          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          transitionHistoryId,
-          input.workflowId,
-          input.sourceActivationId,
-          input.sourceRunId,
-          completionCutId,
-          input.target.kind === 'global_cancel' ? null : input.target.stateKey,
-          targetActivationId,
-          targetRunId,
-          workflowRevision,
-          context.patchHash,
-          input.nowMs,
-        ],
-      );
-      if (input.target.kind === 'nonterminal')
-        requireSingleChange(
-          transaction.execute(
-            `UPDATE workflow_state_activations
+    [
+      transitionHistoryId,
+      input.workflowId,
+      input.sourceActivationId,
+      input.sourceRunId,
+      completionCutId,
+      input.target.kind === 'global_cancel' ? null : input.target.stateKey,
+      targetActivationId,
+      targetRunId,
+      workflowRevision,
+      context.patchHash,
+      input.nowMs,
+    ],
+  );
+  if (input.target.kind === 'nonterminal')
+    requireSingleChange(
+      transaction.execute(
+        `UPDATE workflow_state_activations
                 SET entered_via_transition_id = ?
               WHERE id = ? AND entered_via_transition_id IS NULL`,
-            [transitionHistoryId, targetActivationId],
-          ).changes,
-          'T8 target Activation transition',
-        );
-      const checkpointVersion = transaction.queryOne<{ value: number }>(
-        `SELECT coalesce(max(checkpoint_version), 0) + 1 AS value
+        [transitionHistoryId, targetActivationId],
+      ).changes,
+      'T8 target Activation transition',
+    );
+  const checkpointVersion = transaction.queryOne<{ value: number }>(
+    `SELECT coalesce(max(checkpoint_version), 0) + 1 AS value
              FROM workflow_checkpoints WHERE workflow_id = ?`,
-        [input.workflowId],
-      )!.value;
-      const checkpointId = stableRuntimeId('checkpoint', {
-        workflow_id: input.workflowId,
-        checkpoint_version: checkpointVersion,
-      });
-      const checkpointPayload: JsonObject = {
-        completed: {
-          state_instance_id: input.sourceActivationId,
-          run_id: input.sourceRunId,
-          root_scope_id: input.rootScopeId,
-          completion_cut_id: completionCutId,
-          work_fence_epoch: run.work_fence_epoch,
-          row_version: input.expectedSourceRunRowVersion + 1,
-          completed_at_ms: input.nowMs,
-        },
-        current:
-          targetRunId === null
-            ? null
-            : {
-                state_instance_id: targetActivationId,
-                run_id: targetRunId,
-                root_scope_id: targetActivation!.rootScopeId,
-                root_build_id: targetActivation!.rootBuildId,
-                row_version: 1,
-                started_at_ms: input.nowMs,
-              },
-      };
-      transaction.execute(
-        `INSERT INTO workflow_checkpoints (
+    [input.workflowId],
+  )!.value;
+  const checkpointId = stableRuntimeId('checkpoint', {
+    workflow_id: input.workflowId,
+    checkpoint_version: checkpointVersion,
+  });
+  const checkpointPayload: JsonObject = {
+    completed: {
+      state_instance_id: input.sourceActivationId,
+      run_id: input.sourceRunId,
+      root_scope_id: input.rootScopeId,
+      completion_cut_id: completionCutId,
+      work_fence_epoch: run.work_fence_epoch,
+      row_version: input.expectedSourceRunRowVersion + 1,
+      completed_at_ms: input.nowMs,
+    },
+    current:
+      targetRunId === null
+        ? null
+        : {
+            state_instance_id: targetActivationId,
+            run_id: targetRunId,
+            root_scope_id: targetActivation!.rootScopeId,
+            root_build_id: targetActivation!.rootBuildId,
+            row_version: 1,
+            started_at_ms: input.nowMs,
+          },
+  };
+  transaction.execute(
+    `INSERT INTO workflow_checkpoints (
            id, workflow_id, checkpoint_version, workflow_revision,
            source_state_instance_id, source_run_id, completion_cut_id,
            snapshot_json, snapshot_value_id, snapshot_hash, created_at_ms
          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)`,
-        [
-          checkpointId,
-          input.workflowId,
-          checkpointVersion,
-          workflowRevision,
-          input.sourceActivationId,
-          input.sourceRunId,
-          completionCutId,
-          canonicalJson(checkpointPayload),
-          runtimeObjectHash('checkpoint', checkpointPayload),
-          input.nowMs,
-        ],
-      );
-      const runAfterLedger = transaction.queryOne<{ row_version: number }>(
-        'SELECT row_version FROM workflow_graph_runs WHERE id = ?',
-        [input.sourceRunId],
-      )!;
-      requireSingleChange(
-        transaction.execute(
-          `UPDATE workflow_graph_scopes
+    [
+      checkpointId,
+      input.workflowId,
+      checkpointVersion,
+      workflowRevision,
+      input.sourceActivationId,
+      input.sourceRunId,
+      completionCutId,
+      canonicalJson(checkpointPayload),
+      runtimeObjectHash('checkpoint', checkpointPayload),
+      input.nowMs,
+    ],
+  );
+  const runAfterLedger = transaction.queryOne<{ row_version: number }>(
+    'SELECT row_version FROM workflow_graph_runs WHERE id = ?',
+    [input.sourceRunId],
+  )!;
+  requireSingleChange(
+    transaction.execute(
+      `UPDATE workflow_graph_scopes
               SET lifecycle = 'closed', outcome_kind = ?, exit_name = ?,
                   candidate_node_id = ?, output_value_id = ?, output_hash = ?,
                   error_code = ?, error_detail_value_id = ?,
@@ -2178,28 +2170,28 @@ export function commitRootT8(
                   updated_at_ms = ?
             WHERE id = ? AND row_version = ? AND lifecycle = 'closing'
               AND close_request_id = ?`,
-          [
-            cut.outcomeKind,
-            cut.exitName,
-            cut.candidateId,
-            cut.output?.id ?? null,
-            cut.output?.hash ?? null,
-            cut.errorCode,
-            cut.errorDetail?.id ?? null,
-            cut.errorDetail?.hash ?? null,
-            completionCutId,
-            input.nowMs,
-            input.nowMs,
-            input.rootScopeId,
-            input.expectedRootScopeRowVersion,
-            input.closeRequestId,
-          ],
-        ).changes,
-        'T8 root Scope Cut',
-      );
-      requireSingleChange(
-        transaction.execute(
-          `UPDATE workflow_graph_runs
+      [
+        cut.outcomeKind,
+        cut.exitName,
+        cut.candidateId,
+        cut.output?.id ?? null,
+        cut.output?.hash ?? null,
+        cut.errorCode,
+        cut.errorDetail?.id ?? null,
+        cut.errorDetail?.hash ?? null,
+        completionCutId,
+        input.nowMs,
+        input.nowMs,
+        input.rootScopeId,
+        input.expectedRootScopeRowVersion,
+        input.closeRequestId,
+      ],
+    ).changes,
+    'T8 root Scope Cut',
+  );
+  requireSingleChange(
+    transaction.execute(
+      `UPDATE workflow_graph_runs
               SET lifecycle = 'closed', completion_cut_id = ?,
                   outcome_kind = ?, exit_name = ?, output_value_id = ?,
                   output_hash = ?, error_code = ?, error_detail_value_id = ?,
@@ -2207,40 +2199,40 @@ export function commitRootT8(
                   row_version = row_version + 1, updated_at_ms = ?
             WHERE id = ? AND row_version = ? AND lifecycle = 'closing'
               AND root_close_request_id = ?`,
-          [
-            completionCutId,
-            cut.outcomeKind,
-            cut.exitName,
-            cut.output?.id ?? null,
-            cut.output?.hash ?? null,
-            cut.errorCode,
-            cut.errorDetail?.id ?? null,
-            cut.errorDetail?.hash ?? null,
-            cutSequence,
-            input.nowMs,
-            input.nowMs,
-            input.sourceRunId,
-            runAfterLedger.row_version,
-            input.closeRequestId,
-          ],
-        ).changes,
-        'T8 source Run Cut',
-      );
-      const workflowAfterTarget = transaction.queryOne<{ row_version: number }>(
-        'SELECT row_version FROM workflows WHERE id = ?',
-        [input.workflowId],
-      )!;
-      const terminalStatus =
-        input.target.kind === 'global_cancel'
-          ? 'cancelled'
-          : input.target.kind === 'terminal'
-            ? input.target.terminalKind === 'normal'
-              ? 'completed'
-              : 'errored'
-            : 'active';
-      requireSingleChange(
-        transaction.execute(
-          `UPDATE workflows
+      [
+        completionCutId,
+        cut.outcomeKind,
+        cut.exitName,
+        cut.output?.id ?? null,
+        cut.output?.hash ?? null,
+        cut.errorCode,
+        cut.errorDetail?.id ?? null,
+        cut.errorDetail?.hash ?? null,
+        cutSequence,
+        input.nowMs,
+        input.nowMs,
+        input.sourceRunId,
+        runAfterLedger.row_version,
+        input.closeRequestId,
+      ],
+    ).changes,
+    'T8 source Run Cut',
+  );
+  const workflowAfterTarget = transaction.queryOne<{ row_version: number }>(
+    'SELECT row_version FROM workflows WHERE id = ?',
+    [input.workflowId],
+  )!;
+  const terminalStatus =
+    input.target.kind === 'global_cancel'
+      ? 'cancelled'
+      : input.target.kind === 'terminal'
+        ? input.target.terminalKind === 'normal'
+          ? 'completed'
+          : 'errored'
+        : 'active';
+  requireSingleChange(
+    transaction.execute(
+      `UPDATE workflows
               SET status = ?, state_instance_id = ?, current_graph_run_id = ?,
                   current_context_snapshot_id = ?,
                   current_context_snapshot_hash = ?, workflow_revision = ?,
@@ -2254,72 +2246,79 @@ export function commitRootT8(
                   finished_at_ms = ?, row_version = row_version + 1,
                   updated_at_ms = ?
             WHERE id = ? AND row_version = ?`,
-          [
-            terminalStatus,
-            targetActivationId ?? input.sourceActivationId,
-            targetRunId,
-            context.snapshotId,
-            context.snapshotHash,
-            workflowRevision,
-            input.target.kind === 'terminal'
-              ? terminalActivationCount
-              : input.target.kind === 'nonterminal'
-                ? workflow.state_activation_count + 1
-                : workflow.state_activation_count,
-            childResults.length,
-            terminalStatus === 'completed'
-              ? 'normal'
-              : terminalStatus === 'errored'
-                ? 'errored'
-                : terminalStatus === 'cancelled'
-                  ? 'cancelled'
-                  : null,
-            input.target.kind === 'terminal'
-              ? (input.target.output?.id ?? null)
+      [
+        terminalStatus,
+        targetActivationId ?? input.sourceActivationId,
+        targetRunId,
+        context.snapshotId,
+        context.snapshotHash,
+        workflowRevision,
+        input.target.kind === 'terminal'
+          ? terminalActivationCount
+          : input.target.kind === 'nonterminal'
+            ? workflow.state_activation_count + 1
+            : workflow.state_activation_count,
+        childResults.length,
+        terminalStatus === 'completed'
+          ? 'normal'
+          : terminalStatus === 'errored'
+            ? 'errored'
+            : terminalStatus === 'cancelled'
+              ? 'cancelled'
               : null,
-            input.target.kind === 'terminal'
-              ? (input.target.output?.hash ?? null)
-              : null,
-            input.target.kind === 'terminal'
-              ? input.target.outputSchemaHash
-              : null,
-            terminalStatus === 'errored'
-              ? input.target.kind === 'terminal'
-                ? input.target.errorCode
-                : cut.errorCode
-              : null,
-            terminalStatus === 'errored' && input.target.kind === 'terminal'
-              ? (input.target.errorDetail?.id ?? null)
-              : null,
-            terminalStatus === 'errored' && input.target.kind === 'terminal'
-              ? (input.target.errorDetail?.hash ?? null)
-              : null,
-            terminalStatus === 'cancelled' ? cut.cancelReason : null,
-            terminalStatus === 'active' ? null : input.nowMs,
-            input.nowMs,
-            input.workflowId,
-            workflowAfterTarget.row_version,
-          ],
-        ).changes,
-        'T8 Workflow transition',
-      );
-      appendRootFinalizationEvent(transaction, {
-        graphRunId: input.sourceRunId,
-        scheduleId: input.closeRequestId,
-        status: 'committed',
-        nowMs: input.nowMs,
-        suffix: 't8',
-      });
-      assertNoDeferredForeignKeyViolations(transaction, 'T8 root commit');
-      return {
-        disposition: 'committed',
-        completionCutId,
-        transitionHistoryId,
-        checkpointId,
-        targetActivation,
-        childWorkflowIds: childResults.map((result) => result.childWorkflowId),
-      };
-    },
+        input.target.kind === 'terminal'
+          ? (input.target.output?.id ?? null)
+          : null,
+        input.target.kind === 'terminal'
+          ? (input.target.output?.hash ?? null)
+          : null,
+        input.target.kind === 'terminal' ? input.target.outputSchemaHash : null,
+        terminalStatus === 'errored'
+          ? input.target.kind === 'terminal'
+            ? input.target.errorCode
+            : cut.errorCode
+          : null,
+        terminalStatus === 'errored' && input.target.kind === 'terminal'
+          ? (input.target.errorDetail?.id ?? null)
+          : null,
+        terminalStatus === 'errored' && input.target.kind === 'terminal'
+          ? (input.target.errorDetail?.hash ?? null)
+          : null,
+        terminalStatus === 'cancelled' ? cut.cancelReason : null,
+        terminalStatus === 'active' ? null : input.nowMs,
+        input.nowMs,
+        input.workflowId,
+        workflowAfterTarget.row_version,
+      ],
+    ).changes,
+    'T8 Workflow transition',
+  );
+  appendRootFinalizationEvent(transaction, {
+    graphRunId: input.sourceRunId,
+    scheduleId: input.closeRequestId,
+    status: 'committed',
+    nowMs: input.nowMs,
+    suffix: 't8',
+  });
+  assertNoDeferredForeignKeyViolations(transaction, 'T8 root commit');
+  return {
+    disposition: 'committed',
+    completionCutId,
+    transitionHistoryId,
+    checkpointId,
+    targetActivation,
+    childWorkflowIds: childResults.map((result) => result.childWorkflowId),
+  };
+}
+
+export function commitRootT8(
+  store: WorkflowRuntimeStore,
+  input: T8RootCommitInput,
+  fault?: G5TransactionFault,
+): T8RootCommitReceipt {
+  return runImmediateG5Transaction(
+    store,
+    (transaction) => commitRootT8InTransaction(transaction, input),
     fault,
   );
 }

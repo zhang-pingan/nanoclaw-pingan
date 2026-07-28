@@ -1009,3 +1009,292 @@ export function requestScopeCloseT7a(
     fault,
   );
 }
+
+export interface G7RecoveryInput {
+  readonly graphRunId: string;
+  readonly expectedRunRowVersion: number;
+  readonly integrityEvidence: RuntimeValueRef;
+  readonly remediationPolicy: RuntimeRegistryRef;
+  readonly remediationDeadlineAtMs: number;
+  readonly nowMs: number;
+}
+
+export interface G7RecoveryReceipt {
+  readonly disposition: 'stable' | 'resumed' | 'quarantined';
+  readonly eventSequence: number | null;
+  readonly blockerId: string | null;
+  readonly finding: string | null;
+}
+
+export function coordinateGraphRecoveryG7(
+  store: WorkflowRuntimeStore,
+  input: G7RecoveryInput,
+  fault?: G5TransactionFault,
+): G7RecoveryReceipt {
+  if (
+    !Number.isSafeInteger(input.expectedRunRowVersion) ||
+    input.expectedRunRowVersion < 0 ||
+    !Number.isSafeInteger(input.remediationDeadlineAtMs) ||
+    input.remediationDeadlineAtMs < input.nowMs
+  )
+    throw new G5RuntimeError(
+      'contract_invalid',
+      'G7 recovery CAS or remediation deadline is invalid',
+    );
+  return runImmediateG5Transaction(
+    store,
+    (transaction) => {
+      const authority = transaction.queryOne<{
+        workflow_id: string;
+        lifecycle: string;
+        control: string;
+        operational_state: string;
+        root_close_request_id: string | null;
+        completion_cut_id: string | null;
+        next_event_seq: number;
+        row_version: number;
+        workflow_status: string;
+        workflow_operational_state: string;
+        current_graph_run_id: string | null;
+        open_action_required: number;
+        open_quarantine: number;
+        close_manifest_count: number;
+      }>(
+        `SELECT r.workflow_id, r.lifecycle, r.control, r.operational_state,
+                r.root_close_request_id, r.completion_cut_id, r.next_event_seq,
+                r.row_version, w.status AS workflow_status,
+                w.operational_state AS workflow_operational_state,
+                w.current_graph_run_id,
+                (SELECT count(*) FROM workflow_operational_blockers b
+                  WHERE b.graph_run_id = r.id AND b.status = 'open'
+                    AND b.severity = 'action_required') AS open_action_required,
+                (SELECT count(*) FROM workflow_operational_blockers b
+                  WHERE b.graph_run_id = r.id AND b.status = 'open'
+                    AND b.severity = 'quarantine') AS open_quarantine,
+                (SELECT count(*)
+                   FROM workflow_graph_subtree_fence_manifests m
+                  WHERE m.graph_run_id = r.id
+                    AND m.source_close_request_id = r.root_close_request_id)
+                  AS close_manifest_count
+           FROM workflow_graph_runs r JOIN workflows w ON w.id = r.workflow_id
+          WHERE r.id = ?`,
+        [input.graphRunId],
+      );
+      if (!authority)
+        throw new G5RuntimeError(
+          'precondition_failed',
+          'G7 recovery target Run does not exist',
+        );
+      if (authority.row_version !== input.expectedRunRowVersion)
+        throw new G5RuntimeError('cas_conflict', 'G7 recovery Run CAS failed');
+
+      const expectedOperationalState =
+        authority.open_quarantine > 0
+          ? 'quarantined'
+          : authority.open_action_required > 0
+            ? 'action_required'
+            : 'healthy';
+      let finding: string | null = null;
+      if (
+        authority.operational_state !== 'administratively_abandoned' &&
+        (authority.operational_state !== expectedOperationalState ||
+          authority.workflow_operational_state !== expectedOperationalState)
+      )
+        finding = 'operational_blocker_cache_mismatch';
+      else if (
+        (authority.operational_state === 'administratively_abandoned') !==
+        (authority.workflow_operational_state === 'administratively_abandoned')
+      )
+        finding = 'administrative_abandon_cache_mismatch';
+      else if (
+        authority.workflow_status === 'active' &&
+        authority.current_graph_run_id !== input.graphRunId
+      )
+        finding = 'current_run_binding_mismatch';
+      else if (
+        authority.root_close_request_id !== null &&
+        authority.close_manifest_count !== 1
+      )
+        finding = 'close_manifest_missing_or_duplicated';
+      else if (
+        (authority.lifecycle === 'closed') !==
+        (authority.completion_cut_id !== null)
+      )
+        finding = 'completion_cut_lifecycle_mismatch';
+
+      if (finding !== null) {
+        assertExactPublishedRegistryResource(
+          transaction,
+          input.remediationPolicy,
+          'G7 Recovery remediation policy',
+        );
+        const evidence = transaction.queryOne<{
+          content_hash: string;
+          payload_state: string;
+        }>(
+          'SELECT content_hash, payload_state FROM workflow_values WHERE id = ?',
+          [input.integrityEvidence.id],
+        );
+        if (
+          !evidence ||
+          evidence.content_hash !== input.integrityEvidence.hash ||
+          evidence.payload_state !== 'live'
+        )
+          throw new G5RuntimeError(
+            'integrity_violation',
+            'G7 Recovery integrity evidence is unavailable',
+          );
+        const findingSequence = authority.next_event_seq + 1;
+        const blockerSequence = findingSequence + 1;
+        const blockerId = stableRuntimeId('blocker', {
+          graph_run_id: input.graphRunId,
+          blocker_kind: 'integrity_quarantine',
+          source_kind: 'event',
+          source_identity: findingSequence,
+        });
+        insertGraphEvent(transaction, {
+          graphRunId: input.graphRunId,
+          sequence: findingSequence,
+          scopeId: null,
+          nodeId: null,
+          attemptId: null,
+          eventType: 'recovery_decision_recorded',
+          idempotencyKey: `recovery-finding:${blockerId}`,
+          payloadJson: {
+            disposition: 'quarantined',
+            finding,
+            blocker_id: blockerId,
+          },
+          occurredAtMs: input.nowMs,
+          createdAtMs: input.nowMs,
+        });
+        insertGraphEvent(transaction, {
+          graphRunId: input.graphRunId,
+          sequence: blockerSequence,
+          scopeId: null,
+          nodeId: null,
+          attemptId: null,
+          eventType: 'operational_blocker_changed',
+          idempotencyKey: `blocker-open:${blockerId}`,
+          payloadJson: {
+            blocker_id: blockerId,
+            status: 'open',
+            severity: 'quarantine',
+          },
+          occurredAtMs: input.nowMs,
+          createdAtMs: input.nowMs,
+        });
+        transaction.execute(
+          `INSERT INTO workflow_operational_blockers (
+             id, workflow_id, graph_run_id, blocker_kind, severity,
+             source_effect_operation_id, source_outbox_id,
+             source_root_finalization_schedule_id, source_claim_id,
+             source_event_seq, error_code, evidence_manifest_value_id,
+             evidence_manifest_hash, status, remediation_policy_resource_id,
+             remediation_policy_resource_hash, remediation_attempt_count,
+             next_remediation_at_ms, remediation_deadline_at_ms,
+             opened_event_seq, resolved_event_seq, resolution_command_id,
+             resolution_value_id, resolution_hash, row_version, opened_at_ms,
+             resolved_at_ms, abandoned_at_ms
+           ) VALUES (?, ?, ?, 'integrity_quarantine', 'quarantine',
+             NULL, NULL, NULL, NULL, ?, ?, ?, ?, 'open', ?, ?, 0, NULL, ?, ?,
+             NULL, NULL, NULL, NULL, 1, ?, NULL, NULL)`,
+          [
+            blockerId,
+            authority.workflow_id,
+            input.graphRunId,
+            findingSequence,
+            finding,
+            input.integrityEvidence.id,
+            input.integrityEvidence.hash,
+            input.remediationPolicy.rowId,
+            input.remediationPolicy.hash,
+            input.remediationDeadlineAtMs,
+            blockerSequence,
+            input.nowMs,
+          ],
+        );
+        const refreshed = transaction.queryOne<{ row_version: number }>(
+          'SELECT row_version FROM workflow_graph_runs WHERE id = ?',
+          [input.graphRunId],
+        )!;
+        requireSingleChange(
+          transaction.execute(
+            `UPDATE workflow_graph_runs SET next_event_seq = ?,
+                    row_version = row_version + 1, updated_at_ms = ?
+              WHERE id = ? AND row_version = ?`,
+            [
+              blockerSequence,
+              input.nowMs,
+              input.graphRunId,
+              refreshed.row_version,
+            ],
+          ).changes,
+          'G7 Recovery quarantine event head',
+        );
+        assertNoDeferredForeignKeyViolations(
+          transaction,
+          'G7 Recovery quarantine',
+        );
+        return {
+          disposition: 'quarantined',
+          eventSequence: findingSequence,
+          blockerId,
+          finding,
+        };
+      }
+
+      if (authority.control !== 'resuming')
+        return {
+          disposition: 'stable',
+          eventSequence: null,
+          blockerId: null,
+          finding: null,
+        };
+      if (
+        authority.operational_state !== 'healthy' ||
+        authority.lifecycle === 'closed'
+      )
+        throw new G5RuntimeError(
+          'precondition_failed',
+          'G7 Recovery cannot resume an unhealthy or closed Run',
+        );
+      const sequence = authority.next_event_seq + 1;
+      insertGraphEvent(transaction, {
+        graphRunId: input.graphRunId,
+        sequence,
+        scopeId: null,
+        nodeId: null,
+        attemptId: null,
+        eventType: 'recovery_decision_recorded',
+        idempotencyKey: `recovery-resume:${input.graphRunId}:${authority.row_version}`,
+        payloadJson: {
+          disposition: 'resumed',
+          lifecycle: authority.lifecycle,
+          preserved_work_fence: true,
+          preserved_deadline_ledger_attempts: true,
+        },
+        occurredAtMs: input.nowMs,
+        createdAtMs: input.nowMs,
+      });
+      requireSingleChange(
+        transaction.execute(
+          `UPDATE workflow_graph_runs SET control = 'running', next_event_seq = ?,
+                  row_version = row_version + 1, updated_at_ms = ?
+            WHERE id = ? AND row_version = ? AND control = 'resuming'
+              AND operational_state = 'healthy' AND lifecycle <> 'closed'`,
+          [sequence, input.nowMs, input.graphRunId, authority.row_version],
+        ).changes,
+        'G7 Recovery resume CAS',
+      );
+      assertNoDeferredForeignKeyViolations(transaction, 'G7 Recovery resume');
+      return {
+        disposition: 'resumed',
+        eventSequence: sequence,
+        blockerId: null,
+        finding: null,
+      };
+    },
+    fault,
+  );
+}

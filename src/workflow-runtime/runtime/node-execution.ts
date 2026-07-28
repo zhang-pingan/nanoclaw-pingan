@@ -1,7 +1,10 @@
 import type { CapacitySnapshotWatcher } from '../capacity/publication.js';
 import type { RuntimeValueRef } from '../contracts/g5-basic-runtime-types.js';
 import type { JsonObject, Sha256Hash } from '../contracts/types.js';
-import type { WorkflowRuntimeStore } from '../store/runtime-store/index.js';
+import type {
+  WorkflowRuntimeStore,
+  WorkflowRuntimeWriteTransaction,
+} from '../store/runtime-store/index.js';
 import {
   G5RuntimeError,
   insertGraphEvent,
@@ -700,178 +703,177 @@ export interface T6dConsumeInput {
   readonly nowMs: number;
 }
 
-export function consumeRetryScheduleT6d(
-  store: WorkflowRuntimeStore,
+export interface T6dConsumePrimitiveInput {
+  readonly retryScheduleId: string;
+  readonly expectedScheduleRowVersion: number;
+  readonly ingress: 'automatic_timer' | 'authorized_manual_retry';
+  readonly nowMs: number;
+}
+
+export function consumeExistingRetryScheduleT6dInTransaction(
+  transaction: WorkflowRuntimeWriteTransaction,
   watcher: Pick<CapacitySnapshotWatcher, 'current'>,
-  input: T6dConsumeInput,
-  fault?: G5TransactionFault,
+  input: T6dConsumePrimitiveInput,
 ): { disposition: 'consumed' | 'duplicate_timer'; attemptId: string } {
-  if (input.automaticTimer !== true)
-    throw new G5RuntimeError(
-      'forbidden_surface',
-      'G5 does not authorize manual retry',
-    );
   const capacity = watcher.current();
   if (!capacity)
     throw new G5RuntimeError(
       'resource_unavailable',
       'T6d live Capacity snapshot is unavailable',
     );
-  return runImmediateG5Transaction(
-    store,
-    (transaction) => {
-      const schedule = transaction.queryOne<{
-        graph_run_id: string;
-        scope_id: string;
-        node_id: string;
-        source_attempt_id: string;
-        source_attempt_no: number;
-        next_attempt_no: number;
-        continuation_kind: 'execution_retry' | 'quality_revision';
-        quality_revision_feedback_value_id: string | null;
-        quality_revision_feedback_hash: string | null;
-        retry_reason_code: string;
-        retry_policy_hash: string;
-        backoff_ms: number;
-        eligible_at_ms: number;
-        attempt_reservation_id: string;
-        status: string;
-        row_version: number;
-      }>(
-        'SELECT graph_run_id, scope_id, node_id, source_attempt_id, source_attempt_no, next_attempt_no, continuation_kind, quality_revision_feedback_value_id, quality_revision_feedback_hash, retry_reason_code, retry_policy_hash, backoff_ms, eligible_at_ms, attempt_reservation_id, status, row_version FROM workflow_graph_retry_schedules WHERE id = ?',
-        [input.retryScheduleId],
-      );
-      if (!schedule)
-        throw new G5RuntimeError(
-          'precondition_failed',
-          'T6d retry schedule is missing',
-        );
-      const attemptId = stableRuntimeId('attempt', {
-        graph_run_id: schedule.graph_run_id,
-        node_id: schedule.node_id,
-        attempt_no: schedule.next_attempt_no,
-      });
-      if (schedule.status === 'consumed')
-        return { disposition: 'duplicate_timer', attemptId };
-      if (
-        schedule.status !== 'scheduled' ||
-        schedule.row_version !== input.expectedScheduleRowVersion ||
-        schedule.eligible_at_ms > input.nowMs
-      )
-        throw new G5RuntimeError(
-          'cas_conflict',
-          'T6d retry schedule is stale or not due',
-        );
-      const source = transaction.queryOne<{
-        input_snapshot_json: string | null;
-        input_snapshot_value_id: string | null;
-        input_snapshot_hash: string | null;
-        selected_edges_json: string;
-        context_pack_value_id: string;
-        context_pack_hash: string;
-        action_name: string | null;
-        query_id: string | null;
-        run_work_fence_epoch: number;
-        scope_work_fence_epoch: number;
-      }>(
-        'SELECT input_snapshot_json, input_snapshot_value_id, input_snapshot_hash, selected_edges_json, context_pack_value_id, context_pack_hash, action_name, query_id, run_work_fence_epoch, scope_work_fence_epoch FROM workflow_graph_node_attempts WHERE id = ?',
-        [schedule.source_attempt_id],
-      );
-      const reservation = transaction.queryOne<{
-        reservation_group_id: string;
-      }>(
-        'SELECT reservation_group_id FROM workflow_graph_resource_reservations WHERE id = ?',
-        [schedule.attempt_reservation_id],
-      );
-      const run = transaction.queryOne<{
-        control: string;
-        operational_state: string;
-        work_fence_epoch: number;
-        runtime_supported_limits_resource_hash: string;
-        next_event_seq: number;
-        row_version: number;
-      }>(
-        'SELECT control, operational_state, work_fence_epoch, runtime_supported_limits_resource_hash, next_event_seq, row_version FROM workflow_graph_runs WHERE id = ?',
-        [schedule.graph_run_id],
-      );
-      const scope = transaction.queryOne<{
-        work_fence_epoch: number;
-        lifecycle: string;
-      }>(
-        'SELECT work_fence_epoch, lifecycle FROM workflow_graph_scopes WHERE id = ?',
-        [schedule.scope_id],
-      );
-      const capacityHead = transaction.queryOne<{
-        current_capacity_revision: number | null;
-        current_change_id: string | null;
-        current_config_hash: string | null;
-        pending_change_id: string | null;
-      }>(
-        'SELECT current_capacity_revision, current_change_id, current_config_hash, pending_change_id FROM runtime_capacity_head WHERE singleton_key = 1',
-        [],
-      );
-      const authority = loadMaterializedNodeAuthority(
-        transaction,
-        schedule.graph_run_id,
-        schedule.scope_id,
-        schedule.node_id,
-      );
-      const retryPolicy = requiredObjectField(
-        authority.node,
-        'effective_retry_policy',
-        'Plan node',
-      );
-      if (
-        !source ||
-        !reservation ||
-        !run ||
-        !scope ||
-        run.control !== 'running' ||
-        run.operational_state !== 'healthy' ||
-        scope.lifecycle !== 'active' ||
-        source.run_work_fence_epoch !== authority.runWorkFenceEpoch ||
-        source.scope_work_fence_epoch !== authority.scopeWorkFenceEpoch ||
-        run.work_fence_epoch !== authority.runWorkFenceEpoch ||
-        scope.work_fence_epoch !== authority.scopeWorkFenceEpoch ||
-        schedule.retry_policy_hash !== String(retryPolicy.policy_hash) ||
-        schedule.backoff_ms !== 0 ||
-        (schedule.continuation_kind === 'quality_revision' &&
-          retryPolicy.quality_revision === null) ||
-        (schedule.continuation_kind === 'execution_retry' &&
-          (!Array.isArray(retryPolicy.effective_retry_on) ||
-            !retryPolicy.effective_retry_on
-              .map(String)
-              .includes(schedule.retry_reason_code))) ||
-        !capacityHead ||
-        capacityHead.pending_change_id !== null ||
-        capacityHead.current_capacity_revision !== capacity.capacity_revision ||
-        capacityHead.current_change_id !== capacity.capacity_change_id ||
-        capacityHead.current_config_hash !== capacity.capacity.config_hash
-      )
-        throw new G5RuntimeError(
-          'precondition_failed',
-          'T6d run/scope/source is not executable',
-        );
-      const activeCount = transaction.queryOne<{ count: number }>(
-        "SELECT count(*) AS count FROM workflow_graph_node_attempts WHERE phase IN ('preparing', 'dispatch_pending', 'running', 'evaluating')",
-        [],
-      )!.count;
-      if (activeCount >= capacity.capacity.max_active_executions)
-        throw new G5RuntimeError(
-          'resource_unavailable',
-          'T6d live Capacity has no execution slot',
-        );
-      const [slotReservationId] = reserveLedgerResources(transaction, {
-        graphRunId: schedule.graph_run_id,
-        reservationGroupId: reservation.reservation_group_id,
-        consumer: { attemptId },
-        amounts: { active_executions: 1 },
-        purpose: 'scheduler_admission',
-        settlementMode: 'hold_then_release',
-        nowMs: input.nowMs,
-      });
-      transaction.execute(
-        `INSERT INTO workflow_graph_node_attempts (
+  const schedule = transaction.queryOne<{
+    graph_run_id: string;
+    scope_id: string;
+    node_id: string;
+    source_attempt_id: string;
+    source_attempt_no: number;
+    next_attempt_no: number;
+    continuation_kind: 'execution_retry' | 'quality_revision';
+    quality_revision_feedback_value_id: string | null;
+    quality_revision_feedback_hash: string | null;
+    retry_reason_code: string;
+    retry_policy_hash: string;
+    backoff_ms: number;
+    eligible_at_ms: number;
+    attempt_reservation_id: string;
+    status: string;
+    row_version: number;
+  }>(
+    'SELECT graph_run_id, scope_id, node_id, source_attempt_id, source_attempt_no, next_attempt_no, continuation_kind, quality_revision_feedback_value_id, quality_revision_feedback_hash, retry_reason_code, retry_policy_hash, backoff_ms, eligible_at_ms, attempt_reservation_id, status, row_version FROM workflow_graph_retry_schedules WHERE id = ?',
+    [input.retryScheduleId],
+  );
+  if (!schedule)
+    throw new G5RuntimeError(
+      'precondition_failed',
+      'T6d retry schedule is missing',
+    );
+  const attemptId = stableRuntimeId('attempt', {
+    graph_run_id: schedule.graph_run_id,
+    node_id: schedule.node_id,
+    attempt_no: schedule.next_attempt_no,
+  });
+  if (schedule.status === 'consumed')
+    return { disposition: 'duplicate_timer', attemptId };
+  if (
+    schedule.status !== 'scheduled' ||
+    schedule.row_version !== input.expectedScheduleRowVersion ||
+    (input.ingress === 'automatic_timer' &&
+      schedule.eligible_at_ms > input.nowMs)
+  )
+    throw new G5RuntimeError(
+      'cas_conflict',
+      'T6d retry schedule is stale or not due',
+    );
+  const source = transaction.queryOne<{
+    input_snapshot_json: string | null;
+    input_snapshot_value_id: string | null;
+    input_snapshot_hash: string | null;
+    selected_edges_json: string;
+    context_pack_value_id: string;
+    context_pack_hash: string;
+    action_name: string | null;
+    query_id: string | null;
+    run_work_fence_epoch: number;
+    scope_work_fence_epoch: number;
+  }>(
+    'SELECT input_snapshot_json, input_snapshot_value_id, input_snapshot_hash, selected_edges_json, context_pack_value_id, context_pack_hash, action_name, query_id, run_work_fence_epoch, scope_work_fence_epoch FROM workflow_graph_node_attempts WHERE id = ?',
+    [schedule.source_attempt_id],
+  );
+  const reservation = transaction.queryOne<{
+    reservation_group_id: string;
+  }>(
+    'SELECT reservation_group_id FROM workflow_graph_resource_reservations WHERE id = ?',
+    [schedule.attempt_reservation_id],
+  );
+  const run = transaction.queryOne<{
+    control: string;
+    operational_state: string;
+    work_fence_epoch: number;
+    runtime_supported_limits_resource_hash: string;
+    next_event_seq: number;
+    row_version: number;
+  }>(
+    'SELECT control, operational_state, work_fence_epoch, runtime_supported_limits_resource_hash, next_event_seq, row_version FROM workflow_graph_runs WHERE id = ?',
+    [schedule.graph_run_id],
+  );
+  const scope = transaction.queryOne<{
+    work_fence_epoch: number;
+    lifecycle: string;
+  }>(
+    'SELECT work_fence_epoch, lifecycle FROM workflow_graph_scopes WHERE id = ?',
+    [schedule.scope_id],
+  );
+  const capacityHead = transaction.queryOne<{
+    current_capacity_revision: number | null;
+    current_change_id: string | null;
+    current_config_hash: string | null;
+    pending_change_id: string | null;
+  }>(
+    'SELECT current_capacity_revision, current_change_id, current_config_hash, pending_change_id FROM runtime_capacity_head WHERE singleton_key = 1',
+    [],
+  );
+  const authority = loadMaterializedNodeAuthority(
+    transaction,
+    schedule.graph_run_id,
+    schedule.scope_id,
+    schedule.node_id,
+  );
+  const retryPolicy = requiredObjectField(
+    authority.node,
+    'effective_retry_policy',
+    'Plan node',
+  );
+  if (
+    !source ||
+    !reservation ||
+    !run ||
+    !scope ||
+    run.control !==
+      (input.ingress === 'automatic_timer' ? 'running' : 'paused') ||
+    run.operational_state !== 'healthy' ||
+    scope.lifecycle !== 'active' ||
+    source.run_work_fence_epoch !== authority.runWorkFenceEpoch ||
+    source.scope_work_fence_epoch !== authority.scopeWorkFenceEpoch ||
+    run.work_fence_epoch !== authority.runWorkFenceEpoch ||
+    scope.work_fence_epoch !== authority.scopeWorkFenceEpoch ||
+    schedule.retry_policy_hash !== String(retryPolicy.policy_hash) ||
+    (schedule.continuation_kind === 'quality_revision' &&
+      retryPolicy.quality_revision === null) ||
+    (schedule.continuation_kind === 'execution_retry' &&
+      (!Array.isArray(retryPolicy.effective_retry_on) ||
+        !retryPolicy.effective_retry_on
+          .map(String)
+          .includes(schedule.retry_reason_code))) ||
+    !capacityHead ||
+    capacityHead.pending_change_id !== null ||
+    capacityHead.current_capacity_revision !== capacity.capacity_revision ||
+    capacityHead.current_change_id !== capacity.capacity_change_id ||
+    capacityHead.current_config_hash !== capacity.capacity.config_hash
+  )
+    throw new G5RuntimeError(
+      'precondition_failed',
+      'T6d run/scope/source is not executable',
+    );
+  const activeCount = transaction.queryOne<{ count: number }>(
+    "SELECT count(*) AS count FROM workflow_graph_node_attempts WHERE phase IN ('preparing', 'dispatch_pending', 'running', 'evaluating')",
+    [],
+  )!.count;
+  if (activeCount >= capacity.capacity.max_active_executions)
+    throw new G5RuntimeError(
+      'resource_unavailable',
+      'T6d live Capacity has no execution slot',
+    );
+  const [slotReservationId] = reserveLedgerResources(transaction, {
+    graphRunId: schedule.graph_run_id,
+    reservationGroupId: reservation.reservation_group_id,
+    consumer: { attemptId },
+    amounts: { active_executions: 1 },
+    purpose: 'scheduler_admission',
+    settlementMode: 'hold_then_release',
+    nowMs: input.nowMs,
+  });
+  transaction.execute(
+    `INSERT INTO workflow_graph_node_attempts (
        id, graph_run_id, scope_id, node_id, attempt_no, continuation_kind,
        parent_attempt_id, parent_attempt_no, phase, execution_outcome,
        quality_decision, input_snapshot_json, input_snapshot_value_id,
@@ -894,130 +896,145 @@ export function consumeRetryScheduleT6d(
        NULL, NULL, ?, ?, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
        NULL, NULL, ?, ?, NULL, NULL, NULL, NULL, NULL, NULL, 'open', ?, ?, ?,
        NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, NULL, 1, ?, ?, NULL)`,
-        [
-          attemptId,
-          schedule.graph_run_id,
-          schedule.scope_id,
-          schedule.node_id,
-          schedule.next_attempt_no,
-          schedule.continuation_kind,
-          schedule.source_attempt_id,
-          schedule.source_attempt_no,
-          source.input_snapshot_json ?? null,
-          source.input_snapshot_value_id ?? null,
-          source.input_snapshot_hash ?? null,
-          source.selected_edges_json,
-          source.context_pack_value_id,
-          source.context_pack_hash,
-          source.action_name ?? null,
-          source.query_id ?? null,
-          schedule.quality_revision_feedback_value_id,
-          schedule.quality_revision_feedback_hash,
-          run.work_fence_epoch,
-          scope.work_fence_epoch,
-          reservation.reservation_group_id,
-          input.nowMs,
-          input.nowMs,
-        ],
-      );
-      const retryEvent = transaction.queryOne<{ seq: number }>(
-        'SELECT seq FROM workflow_graph_events WHERE graph_run_id = ? AND idempotency_key = ?',
-        [schedule.graph_run_id, `retry-schedule:${input.retryScheduleId}`],
-      );
-      if (!retryEvent)
-        throw new G5RuntimeError(
-          'integrity_violation',
-          'T6d retry schedule has no causal event',
-        );
-      const admissionInsert = transaction.execute(
-        `INSERT INTO workflow_graph_scheduler_admissions (
+    [
+      attemptId,
+      schedule.graph_run_id,
+      schedule.scope_id,
+      schedule.node_id,
+      schedule.next_attempt_no,
+      schedule.continuation_kind,
+      schedule.source_attempt_id,
+      schedule.source_attempt_no,
+      source.input_snapshot_json ?? null,
+      source.input_snapshot_value_id ?? null,
+      source.input_snapshot_hash ?? null,
+      source.selected_edges_json,
+      source.context_pack_value_id,
+      source.context_pack_hash,
+      source.action_name ?? null,
+      source.query_id ?? null,
+      schedule.quality_revision_feedback_value_id,
+      schedule.quality_revision_feedback_hash,
+      run.work_fence_epoch,
+      scope.work_fence_epoch,
+      reservation.reservation_group_id,
+      input.nowMs,
+      input.nowMs,
+    ],
+  );
+  const retryEvent = transaction.queryOne<{ seq: number }>(
+    'SELECT seq FROM workflow_graph_events WHERE graph_run_id = ? AND idempotency_key = ?',
+    [schedule.graph_run_id, `retry-schedule:${input.retryScheduleId}`],
+  );
+  if (!retryEvent)
+    throw new G5RuntimeError(
+      'integrity_violation',
+      'T6d retry schedule has no causal event',
+    );
+  const admissionInsert = transaction.execute(
+    `INSERT INTO workflow_graph_scheduler_admissions (
            graph_run_id, scope_id, node_id, attempt_id,
            eligible_event_seq, execution_reservation_id, capacity_config_hash,
            runtime_supported_limits_hash, created_at_ms, capacity_revision,
            capacity_change_id
          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          schedule.graph_run_id,
-          schedule.scope_id,
-          schedule.node_id,
-          attemptId,
-          retryEvent.seq,
-          slotReservationId,
-          capacity.capacity.config_hash,
-          run.runtime_supported_limits_resource_hash,
-          input.nowMs,
-          capacity.capacity_revision,
-          capacity.capacity_change_id,
-        ],
-      );
-      const admissionSequence = Number(admissionInsert.lastInsertRowid);
-      if (
-        admissionInsert.changes !== 1 ||
-        !Number.isSafeInteger(admissionSequence) ||
-        admissionSequence <= 0
-      )
-        throw new G5RuntimeError(
-          'integrity_violation',
-          'T6d failed to allocate retry admission sequence',
-        );
-      if (
-        transaction.execute(
-          "UPDATE workflow_graph_retry_schedules SET status = 'consumed', row_version = row_version + 1, updated_at_ms = ? WHERE id = ? AND row_version = ? AND status = 'scheduled'",
-          [
-            input.nowMs,
-            input.retryScheduleId,
-            input.expectedScheduleRowVersion,
-          ],
-        ).changes !== 1
-      )
-        throw new G5RuntimeError('cas_conflict', 'T6d schedule CAS failed');
-      if (
-        transaction.execute(
-          "UPDATE workflow_graph_nodes SET phase = 'active', current_attempt_id = ?, current_attempt_no = ?, row_version = row_version + 1, updated_at_ms = ? WHERE id = ? AND phase = 'retry_wait' AND current_attempt_id = ?",
-          [
-            attemptId,
-            schedule.next_attempt_no,
-            input.nowMs,
-            schedule.node_id,
-            schedule.source_attempt_id,
-          ],
-        ).changes !== 1
-      )
-        throw new G5RuntimeError('cas_conflict', 'T6d Node retry CAS failed');
-      const refreshedRun = transaction.queryOne<{
-        next_event_seq: number;
-        row_version: number;
-      }>(
-        'SELECT next_event_seq, row_version FROM workflow_graph_runs WHERE id = ?',
-        [schedule.graph_run_id],
-      )!;
-      const sequence = refreshedRun.next_event_seq + 1;
-      if (
-        transaction.execute(
-          'UPDATE workflow_graph_runs SET last_admission_seq = ?, next_event_seq = ?, row_version = row_version + 1, updated_at_ms = ? WHERE id = ? AND row_version = ?',
-          [
-            admissionSequence,
-            sequence,
-            input.nowMs,
-            schedule.graph_run_id,
-            refreshedRun.row_version,
-          ],
-        ).changes !== 1
-      )
-        throw new G5RuntimeError('cas_conflict', 'T6d event head CAS failed');
-      insertGraphEvent(transaction, {
-        graphRunId: schedule.graph_run_id,
-        sequence,
-        scopeId: schedule.scope_id,
-        nodeId: schedule.node_id,
+    [
+      schedule.graph_run_id,
+      schedule.scope_id,
+      schedule.node_id,
+      attemptId,
+      retryEvent.seq,
+      slotReservationId,
+      capacity.capacity.config_hash,
+      run.runtime_supported_limits_resource_hash,
+      input.nowMs,
+      capacity.capacity_revision,
+      capacity.capacity_change_id,
+    ],
+  );
+  const admissionSequence = Number(admissionInsert.lastInsertRowid);
+  if (
+    admissionInsert.changes !== 1 ||
+    !Number.isSafeInteger(admissionSequence) ||
+    admissionSequence <= 0
+  )
+    throw new G5RuntimeError(
+      'integrity_violation',
+      'T6d failed to allocate retry admission sequence',
+    );
+  if (
+    transaction.execute(
+      "UPDATE workflow_graph_retry_schedules SET status = 'consumed', row_version = row_version + 1, updated_at_ms = ? WHERE id = ? AND row_version = ? AND status = 'scheduled'",
+      [input.nowMs, input.retryScheduleId, input.expectedScheduleRowVersion],
+    ).changes !== 1
+  )
+    throw new G5RuntimeError('cas_conflict', 'T6d schedule CAS failed');
+  if (
+    transaction.execute(
+      "UPDATE workflow_graph_nodes SET phase = 'active', current_attempt_id = ?, current_attempt_no = ?, row_version = row_version + 1, updated_at_ms = ? WHERE id = ? AND phase = 'retry_wait' AND current_attempt_id = ?",
+      [
         attemptId,
-        eventType: 'retry_schedule_consumed',
-        idempotencyKey: `retry-consumed:${input.retryScheduleId}`,
-        occurredAtMs: input.nowMs,
-        createdAtMs: input.nowMs,
-      });
-      return { disposition: 'consumed', attemptId };
-    },
+        schedule.next_attempt_no,
+        input.nowMs,
+        schedule.node_id,
+        schedule.source_attempt_id,
+      ],
+    ).changes !== 1
+  )
+    throw new G5RuntimeError('cas_conflict', 'T6d Node retry CAS failed');
+  const refreshedRun = transaction.queryOne<{
+    next_event_seq: number;
+    row_version: number;
+  }>(
+    'SELECT next_event_seq, row_version FROM workflow_graph_runs WHERE id = ?',
+    [schedule.graph_run_id],
+  )!;
+  const sequence = refreshedRun.next_event_seq + 1;
+  if (
+    transaction.execute(
+      'UPDATE workflow_graph_runs SET last_admission_seq = ?, next_event_seq = ?, row_version = row_version + 1, updated_at_ms = ? WHERE id = ? AND row_version = ?',
+      [
+        admissionSequence,
+        sequence,
+        input.nowMs,
+        schedule.graph_run_id,
+        refreshedRun.row_version,
+      ],
+    ).changes !== 1
+  )
+    throw new G5RuntimeError('cas_conflict', 'T6d event head CAS failed');
+  insertGraphEvent(transaction, {
+    graphRunId: schedule.graph_run_id,
+    sequence,
+    scopeId: schedule.scope_id,
+    nodeId: schedule.node_id,
+    attemptId,
+    eventType: 'retry_schedule_consumed',
+    idempotencyKey: `retry-consumed:${input.retryScheduleId}`,
+    occurredAtMs: input.nowMs,
+    createdAtMs: input.nowMs,
+  });
+  return { disposition: 'consumed', attemptId };
+}
+
+export function consumeRetryScheduleT6d(
+  store: WorkflowRuntimeStore,
+  watcher: Pick<CapacitySnapshotWatcher, 'current'>,
+  input: T6dConsumeInput,
+  fault?: G5TransactionFault,
+): { disposition: 'consumed' | 'duplicate_timer'; attemptId: string } {
+  if (input.automaticTimer !== true)
+    throw new G5RuntimeError(
+      'forbidden_surface',
+      'G5 does not authorize manual retry',
+    );
+  return runImmediateG5Transaction(
+    store,
+    (transaction) =>
+      consumeExistingRetryScheduleT6dInTransaction(transaction, watcher, {
+        ...input,
+        ingress: 'automatic_timer',
+      }),
     fault,
   );
 }
