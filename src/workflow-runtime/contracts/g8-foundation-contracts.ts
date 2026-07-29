@@ -6,10 +6,17 @@ import { fileURLToPath } from 'node:url';
 import { parseContractArtifactEnvelope } from './artifact.js';
 import { domainSeparatedSha256, parseSha256Hash } from './hash.js';
 import type {
+  G8BenchmarkHarnessPayload,
   G8FoundationContractArtifact,
+  G8LimitDerivationPayload,
   G8MinimumMachineClassPayload,
   G8StartupSmokeHarnessPayload,
 } from './g8-certification-types.js';
+import {
+  G8_BENCHMARK_PROFILES,
+  G8_BENCHMARK_SHAPES,
+  createG8LimitDerivation,
+} from './g8-limits.js';
 import { strictParseJsonBytes } from './strict-json.js';
 import type { JsonObject, JsonValue, Sha256Hash } from './types.js';
 
@@ -17,6 +24,10 @@ export const G8_MINIMUM_MACHINE_CLASS_PATH =
   'src/workflow-runtime/contracts/certification/minimum-machine-class@1.json';
 export const G8_STARTUP_SMOKE_HARNESS_PATH =
   'src/workflow-runtime/contracts/certification/startup-smoke-harness@1.json';
+export const G8_BENCHMARK_HARNESS_PATH =
+  'src/workflow-runtime/contracts/certification/benchmark-harness@1.json';
+export const G8_LIMIT_DERIVATION_PATH =
+  'src/workflow-runtime/contracts/certification/limit-derivation@1.json';
 
 const minimumMachineSources = [
   'src/workflow-runtime/certification/machine-class.ts',
@@ -30,6 +41,18 @@ const startupSmokeSources = [
   'src/workflow-runtime/store/runtime-store/identity.ts',
   'src/workflow-runtime/store/runtime-store/index.ts',
   'src/workflow-runtime/store/runtime-store/profile.ts',
+] as const;
+const benchmarkHarnessSources = [
+  'src/workflow-runtime/certification/benchmark-runner.ts',
+  'src/workflow-runtime/certification/benchmark-shapes.ts',
+  'src/workflow-runtime/contracts/g8-limits.ts',
+  'src/workflow-runtime/runtime/graph-runtime.ts',
+  'src/workflow-runtime/runtime/reconciler.ts',
+  'src/workflow-runtime/runtime/root-finalizer.ts',
+] as const;
+const limitDerivationSources = [
+  'src/workflow-runtime/contracts/g8-limits.ts',
+  'src/workflow-runtime/contracts/g8-certification-types.ts',
 ] as const;
 
 function rawSha256(filePath: string): Sha256Hash {
@@ -73,6 +96,8 @@ function artifact<TPayload extends JsonObject>(
 export interface G8FoundationArtifacts {
   readonly minimumMachineClass: G8FoundationContractArtifact<G8MinimumMachineClassPayload>;
   readonly startupSmokeHarness: G8FoundationContractArtifact<G8StartupSmokeHarnessPayload>;
+  readonly benchmarkHarness: G8FoundationContractArtifact<G8BenchmarkHarnessPayload>;
+  readonly limitDerivation: G8FoundationContractArtifact<G8LimitDerivationPayload>;
 }
 
 export function createG8FoundationArtifacts(
@@ -129,7 +154,72 @@ export function createG8FoundationArtifacts(
     'icarus:startup-smoke-harness:1\n',
     startupSmokePayload,
   );
-  return { minimumMachineClass, startupSmokeHarness };
+  const benchmarkHarnessPayload: G8BenchmarkHarnessPayload = {
+    harness_id: 'local_single_user_benchmark_harness@1',
+    benchmark_harness_version: '1.0.0',
+    deployment_profile: 'local_single_user',
+    runtime_surface: 'node_service',
+    platform: 'darwin',
+    arch: 'arm64',
+    build_kind: 'release',
+    identity_mode: 'certification_observation',
+    database_kind: 'isolated_temporary_real_file',
+    connection_profile: 'production_pragmas',
+    transaction_kind: 'begin_immediate',
+    warmup_iterations: 10,
+    measurement_iterations: 100,
+    profiles: [...G8_BENCHMARK_PROFILES],
+    shapes: {
+      t3: [...G8_BENCHMARK_SHAPES.t3],
+      t7: [...G8_BENCHMARK_SHAPES.t7],
+      t8: [...G8_BENCHMARK_SHAPES.t8],
+    },
+    metrics: [
+      'p50_ms',
+      'p95_ms',
+      'p99_ms',
+      'max_ms',
+      'wal_bytes',
+      'peak_rss_bytes',
+      'affected_rows',
+    ],
+    p99_budgets_ms: { t3: 250, t7: 1000, t8: 500 },
+    max_to_p99_budget_multiplier: 2,
+    beyond_limit_rejection: 'before_atomic_write',
+    production_entries: {
+      t3: 'reconcileFactT3a',
+      t7: 'requestScopeCloseT7a',
+      t8: 'commitRootT8',
+    },
+    implementation_source_tree_hash: sourceTreeHash(
+      projectRoot,
+      'icarus:benchmark-harness-implementation-source-tree:1\n',
+      benchmarkHarnessSources,
+    ),
+  };
+  const benchmarkHarness = artifact(
+    'icarus.workflow-runtime-benchmark-harness/1',
+    { id: 'local_single_user_benchmark_harness', version: '1.0.0' },
+    'icarus:workflow-runtime-benchmark-harness:1\n',
+    benchmarkHarnessPayload,
+  );
+  const derivationSourceTreeHash = sourceTreeHash(
+    projectRoot,
+    'icarus:limit-derivation-implementation-source-tree:1\n',
+    limitDerivationSources,
+  );
+  const limitDerivation = artifact(
+    'icarus.workflow-runtime-limit-derivation/1',
+    { id: 'local_single_user_limit_derivation', version: '1.0.0' },
+    'icarus:workflow-runtime-limit-derivation:1\n',
+    createG8LimitDerivation(projectRoot, derivationSourceTreeHash),
+  );
+  return {
+    minimumMachineClass,
+    startupSmokeHarness,
+    benchmarkHarness,
+    limitDerivation,
+  };
 }
 
 function exactKeys(value: object, expected: readonly string[], label: string) {
@@ -216,5 +306,57 @@ export function loadG8FoundationArtifacts(
       'implementation_source_tree_hash',
     ],
   );
-  return { minimumMachineClass, startupSmokeHarness };
+  const benchmarkHarness = readArtifact<G8BenchmarkHarnessPayload>(
+    path.join(contractsRoot, 'benchmark-harness@1.json'),
+    'icarus.workflow-runtime-benchmark-harness/1',
+    { id: 'local_single_user_benchmark_harness', version: '1.0.0' },
+    'icarus:workflow-runtime-benchmark-harness:1\n',
+    [
+      'harness_id',
+      'benchmark_harness_version',
+      'deployment_profile',
+      'runtime_surface',
+      'platform',
+      'arch',
+      'build_kind',
+      'identity_mode',
+      'database_kind',
+      'connection_profile',
+      'transaction_kind',
+      'warmup_iterations',
+      'measurement_iterations',
+      'profiles',
+      'shapes',
+      'metrics',
+      'p99_budgets_ms',
+      'max_to_p99_budget_multiplier',
+      'beyond_limit_rejection',
+      'production_entries',
+      'implementation_source_tree_hash',
+    ],
+  );
+  const limitDerivation = readArtifact<G8LimitDerivationPayload>(
+    path.join(contractsRoot, 'limit-derivation@1.json'),
+    'icarus.workflow-runtime-limit-derivation/1',
+    { id: 'local_single_user_limit_derivation', version: '1.0.0' },
+    'icarus:workflow-runtime-limit-derivation:1\n',
+    [
+      'derivation_id',
+      'algorithm_version',
+      'supported_limits',
+      'product_floor_ref',
+      'product_floor_hash',
+      'product_floor_coverage',
+      'worst_case_t7_facts',
+      'worst_case_t7_manifest_bytes',
+      'benchmark_shape_requirements',
+      'implementation_source_tree_hash',
+    ],
+  );
+  return {
+    minimumMachineClass,
+    startupSmokeHarness,
+    benchmarkHarness,
+    limitDerivation,
+  };
 }

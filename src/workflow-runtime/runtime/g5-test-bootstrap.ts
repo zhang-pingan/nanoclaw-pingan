@@ -8,6 +8,7 @@ import {
   WorkflowRuntimeConnectionFactory,
   type WorkflowRuntimeStore,
 } from '../store/runtime-store/index.js';
+import type { WorkflowRuntimeIdentityMode } from '../store/runtime-store/identity.js';
 
 const CURRENT_G4_SUCCESSOR_HASH =
   'sha256:1cd67bad72a3fb147db7943d669800c2f56fabf4c255d42af8f7704f0e9a0cae';
@@ -15,11 +16,17 @@ const CURRENT_G4_SUCCESSOR_HASH =
 export class G5TestBootstrapInstance {
   readonly dataRoot: string;
   readonly databasePath: string;
+  readonly identityMode: WorkflowRuntimeIdentityMode;
   #store: WorkflowRuntimeStore | null;
 
-  constructor(dataRoot: string, store: WorkflowRuntimeStore) {
+  constructor(
+    dataRoot: string,
+    store: WorkflowRuntimeStore,
+    identityMode: WorkflowRuntimeIdentityMode = 'candidate_development',
+  ) {
     this.dataRoot = dataRoot;
     this.databasePath = path.join(dataRoot, 'workflow-runtime.db');
+    this.identityMode = identityMode;
     this.#store = store;
   }
 
@@ -38,7 +45,7 @@ export class G5TestBootstrapInstance {
       this.#store = WorkflowRuntimeConnectionFactory.openStore({
         databasePath: this.databasePath,
         databaseMode: 'open_existing',
-        identityMode: 'candidate_development',
+        identityMode: this.identityMode,
       });
     }
     return this.#store;
@@ -48,6 +55,28 @@ export class G5TestBootstrapInstance {
     this.closeStore();
     fs.rmSync(this.dataRoot, { recursive: true, force: true });
   }
+}
+
+export function openG5IsolatedBootstrap(
+  dataRoot: string,
+  identityMode: WorkflowRuntimeIdentityMode,
+): G5TestBootstrapInstance {
+  const canonicalRoot = fs.realpathSync(dataRoot);
+  if (
+    !fs.statSync(canonicalRoot).isDirectory() ||
+    fs.readdirSync(canonicalRoot).length !== 0
+  ) {
+    throw new Error(
+      'Isolated bootstrap root must be an existing empty directory',
+    );
+  }
+  const databasePath = path.join(canonicalRoot, 'workflow-runtime.db');
+  const store = WorkflowRuntimeConnectionFactory.openStore({
+    databasePath,
+    databaseMode: 'create',
+    identityMode,
+  });
+  return new G5TestBootstrapInstance(canonicalRoot, store, identityMode);
 }
 
 export function createG5TestBootstrap(

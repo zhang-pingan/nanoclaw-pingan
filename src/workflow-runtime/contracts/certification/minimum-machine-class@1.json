@@ -19,7 +19,7 @@
     "startup_power_source": "any",
     "certification_power_source": "ac_power",
     "certification_interference": "none_operator_confirmed",
-    "observation_source_tree_hash": "sha256:d5bc884d59c6e1028e172c4430d3d5de4df6388997b35bdc21bb40cbf480d38f"
+    "observation_source_tree_hash": "sha256:2341b34b2b26bf6d3724d1b2625b1af449e2f4afd1439a3183e402e63962ab49"
   },
-  "hash": "sha256:11b5ee191bad490dd9d5501f610c73802d03f3990faeab76043a215dad2cfc33"
+  "hash": "sha256:00b3a1b7085f4e5bf4f7e3a6d898009eb049e5538e765765443d2b5c8ac65a0a"
 }

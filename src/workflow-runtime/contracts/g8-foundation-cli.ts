@@ -2,6 +2,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import {
+  G8_BENCHMARK_HARNESS_PATH,
+  G8_LIMIT_DERIVATION_PATH,
   createG8FoundationArtifacts,
   G8_MINIMUM_MACHINE_CLASS_PATH,
   G8_STARTUP_SMOKE_HARNESS_PATH,
@@ -22,6 +24,14 @@ const outputs = [
   {
     relativePath: G8_STARTUP_SMOKE_HARNESS_PATH,
     artifact: artifacts.startupSmokeHarness,
+  },
+  {
+    relativePath: G8_BENCHMARK_HARNESS_PATH,
+    artifact: artifacts.benchmarkHarness,
+  },
+  {
+    relativePath: G8_LIMIT_DERIVATION_PATH,
+    artifact: artifacts.limitDerivation,
   },
 ];
 for (const { relativePath, artifact } of outputs) {

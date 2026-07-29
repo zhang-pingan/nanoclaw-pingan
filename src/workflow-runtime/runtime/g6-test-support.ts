@@ -56,7 +56,7 @@ const g3Types = new Set<string>([
 export const g6Hash = (label: string): Sha256Hash =>
   domainSeparatedSha256('icarus:g6-runtime-test:1\n', { label });
 
-interface CompiledDynamicFixture {
+export interface G6CompiledFixture {
   readonly source: JsonObject;
   readonly snapshot: JsonObject;
   readonly plan: CompiledScopePlanV2Document;
@@ -98,6 +98,9 @@ export interface G6MapFixtureOptions {
     keyHash: Sha256Hash;
     mode: 'shared' | 'exclusive';
   }[];
+  readonly compiledFixture?: G6CompiledFixture;
+  readonly bootstrapInstance?: G5TestBootstrapInstance;
+  readonly runResourceLimits?: Readonly<Record<string, number>>;
 }
 
 function readJson(file: string): JsonObject {
@@ -106,7 +109,7 @@ function readJson(file: string): JsonObject {
 
 function compileDynamicFixture(
   options: G6MapFixtureOptions,
-): CompiledDynamicFixture {
+): G6CompiledFixture {
   const mode = options.dynamicMode ?? 'map';
   const source = readJson(
     path.join(G2_SOURCE_ROOT, `positive.${mode}.source.json`),
@@ -190,7 +193,7 @@ function rowId(resourceType: string, ref: { id: string; version: string }) {
 
 function seedG6Runtime(
   store: WorkflowRuntimeStore,
-  compiled: CompiledDynamicFixture,
+  compiled: G6CompiledFixture,
   options: G6MapFixtureOptions,
 ): G6Seed {
   const identity = compiled.snapshot.compiler_identity as JsonObject;
@@ -220,6 +223,7 @@ function seedG6Runtime(
       ['inputSchema', 'schema'],
       ['contextContract', 'context_contract'],
       ['routingScope', 'routing_scope'],
+      ['waitContract', 'wait_contract'],
       ['supportedLimits', 'runtime_supported_limits'],
       ['sqliteProfile', 'sqlite_execution_profile'],
       ['finalizationPolicy', 'root_finalization_policy'],
@@ -426,10 +430,10 @@ export function createG6MapFixture(
   key: string,
   options: G6MapFixtureOptions = {},
 ): G6MapFixture {
-  const compiled = compileDynamicFixture(options);
-  const instance = createG5TestBootstrap(
-    `g6-${options.dynamicMode ?? 'map'}-${key}`,
-  );
+  const compiled = options.compiledFixture ?? compileDynamicFixture(options);
+  const instance =
+    options.bootstrapInstance ??
+    createG5TestBootstrap(`g6-${options.dynamicMode ?? 'map'}-${key}`);
   const seed = seedG6Runtime(instance.store, compiled, options);
   const creationKey = `g6-map:${key}`;
   const ownershipHash = g6Hash('ownership');
@@ -495,7 +499,7 @@ export function createG6MapFixture(
       sourceSeedHash: compiled.plan.source_hash as Sha256Hash,
       compilerSnapshotHash: g6Hash('compiler-snapshot'),
       inputSnapshot: seed.values.input!,
-      runResourceLimits: {
+      runResourceLimits: options.runResourceLimits ?? {
         scopes_total: 32,
         nodes_total: 64,
         edges_total: 64,
