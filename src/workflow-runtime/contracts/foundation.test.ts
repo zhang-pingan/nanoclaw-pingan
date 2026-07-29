@@ -268,6 +268,7 @@ describe('G0.2 Contract Pack conformance', () => {
       'node:crypto',
       'node:fs',
       'node:path',
+      'node:url',
       'os',
       'path',
       'typescript',
@@ -335,8 +336,7 @@ describe('G0.2 Contract Pack conformance', () => {
                   contractsRoot,
                   '../store/schema/map-terminal-consumption-source.js',
                 )) ||
-            (path.basename(file) ===
-              'r022-domain-claim-handoff-contract.ts' &&
+            (path.basename(file) === 'r022-domain-claim-handoff-contract.ts' &&
               resolved ===
                 path.resolve(
                   contractsRoot,
