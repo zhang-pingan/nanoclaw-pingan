@@ -574,12 +574,115 @@ write_core_binding() {
   set_relative_pointer "$ACTIVE_CORE_POINTER" "core-bindings/${binding_hash#sha256:}"
 }
 
+write_release_core_binding() {
+  local release_relative="$1"
+  local manifest_relative="$2"
+  local release_artifact_hash="$3"
+  local core_build_hash="$4"
+  local core_entry_relative="$5"
+  local certification_entry_relative="$6"
+  local release_root
+  local manifest_real
+  local manifest_sha
+  local core_entry_real
+  local core_entry_sha
+  local certification_entry_real
+  local certification_entry_sha
+  local canonical
+  local binding_hash
+  local binding_directory
+  local binding_file
+  local temporary
+
+  assert_relative_safe_path "$release_relative" core_release_path_invalid
+  assert_relative_safe_path "$manifest_relative" core_release_manifest_invalid
+  assert_core_entry_relative "$core_entry_relative"
+  assert_core_entry_relative "$certification_entry_relative"
+  [[ "$release_relative" =~ ^core-releases/[0-9a-f]{64}$ ]] || fail core_release_path_invalid "$release_relative"
+  [[ "$release_artifact_hash" =~ ^sha256:[0-9a-f]{64}$ ]] || fail core_release_identity_invalid release_artifact_hash
+  [[ "$core_build_hash" =~ ^sha256:[0-9a-f]{64}$ ]] || fail core_release_identity_invalid core_build_hash
+  [ "${release_relative#core-releases/}" = "${release_artifact_hash#sha256:}" ] || fail core_release_path_mismatch
+  [ -d "$RUNTIME_HOME/$release_relative" ] || fail core_release_missing "$release_relative"
+  release_root="$(cd -P "$RUNTIME_HOME/$release_relative" && pwd)"
+  case "$release_root" in
+    "$RUNTIME_HOME/core-releases"/*) ;;
+    *) fail core_release_outside_root "$release_root" ;;
+  esac
+
+  [ -f "$release_root/$manifest_relative" ] || fail core_release_manifest_missing
+  manifest_real="$(resolve_self "$release_root/$manifest_relative")"
+  case "$manifest_real" in
+    "$release_root"/*) ;;
+    *) fail core_release_manifest_outside_root "$manifest_real" ;;
+  esac
+  manifest_sha="sha256:$(sha256_file "$manifest_real")"
+
+  [ -f "$release_root/$core_entry_relative" ] || fail core_entry_missing
+  core_entry_real="$(resolve_self "$release_root/$core_entry_relative")"
+  case "$core_entry_real" in
+    "$release_root"/*) ;;
+    *) fail core_entry_outside_project "$core_entry_real" ;;
+  esac
+  core_entry_sha="sha256:$(sha256_file "$core_entry_real")"
+
+  [ -f "$release_root/$certification_entry_relative" ] || fail certification_entry_missing
+  certification_entry_real="$(resolve_self "$release_root/$certification_entry_relative")"
+  case "$certification_entry_real" in
+    "$release_root"/*) ;;
+    *) fail certification_entry_outside_release "$certification_entry_real" ;;
+  esac
+  certification_entry_sha="sha256:$(sha256_file "$certification_entry_real")"
+
+  canonical="{\"binding_kind\":\"certified_release\",\"certification_entry_relative_path\":\"${certification_entry_relative}\",\"certification_entry_sha256\":\"${certification_entry_sha}\",\"core_build_hash\":\"${core_build_hash}\",\"core_entry_relative_path\":\"${core_entry_relative}\",\"core_entry_sha256\":\"${core_entry_sha}\",\"core_release_relative_path\":\"${release_relative}\",\"format\":\"icarus.core-runtime-launch-binding/2\",\"managed_node_manifest_hash\":\"${MANIFEST_HASH}\",\"release_artifact_hash\":\"${release_artifact_hash}\",\"release_manifest_relative_path\":\"${manifest_relative}\",\"release_manifest_sha256\":\"${manifest_sha}\"}"
+  binding_hash="sha256:$(printf '%s\n%s' 'icarus:core-runtime-launch-binding:2' "$canonical" | sha256_stdin)"
+  binding_directory="$RUNTIME_HOME/core-bindings/${binding_hash#sha256:}"
+  binding_file="$binding_directory/binding.json"
+  mkdir -p "$binding_directory"
+  temporary="$(mktemp "$binding_directory/.binding.XXXXXX")"
+  TEMP_PATHS+=("$temporary")
+  printf '%s\n' \
+    '{' \
+    '  "format": "icarus.core-runtime-launch-binding/2",' \
+    '  "binding_kind": "certified_release",' \
+    "  \"core_release_relative_path\": \"${release_relative}\"," \
+    "  \"release_manifest_relative_path\": \"${manifest_relative}\"," \
+    "  \"release_manifest_sha256\": \"${manifest_sha}\"," \
+    "  \"release_artifact_hash\": \"${release_artifact_hash}\"," \
+    "  \"core_build_hash\": \"${core_build_hash}\"," \
+    "  \"core_entry_relative_path\": \"${core_entry_relative}\"," \
+    "  \"core_entry_sha256\": \"${core_entry_sha}\"," \
+    "  \"certification_entry_relative_path\": \"${certification_entry_relative}\"," \
+    "  \"certification_entry_sha256\": \"${certification_entry_sha}\"," \
+    "  \"managed_node_manifest_hash\": \"${MANIFEST_HASH}\"," \
+    "  \"binding_hash\": \"${binding_hash}\"" \
+    '}' > "$temporary"
+  chmod 644 "$temporary"
+  sync_filesystem
+  if [ -f "$binding_file" ]; then
+    if ! cmp -s "$temporary" "$binding_file"; then
+      fail core_binding_collision "$binding_file"
+    fi
+    rm -f "$temporary"
+  else
+    mv "$temporary" "$binding_file"
+    sync_filesystem
+  fi
+  set_relative_pointer "$ACTIVE_CORE_POINTER" "core-bindings/${binding_hash#sha256:}"
+}
+
 assert_core_binding_keyset() {
   local file="$1"
+  local kind="$2"
   local actual
   local expected
   actual="$(sed -nE 's/^[[:space:]]*"([^\"]+)"[[:space:]]*:.*/\1/p' "$file" | LC_ALL=C sort)"
-  expected="$(printf '%s\n' binding_hash binding_kind core_entry_relative_path core_entry_sha256 format managed_node_manifest_hash project_root | LC_ALL=C sort)"
+  if [ "$kind" = "development_checkout" ]; then
+    expected="$(printf '%s\n' binding_hash binding_kind core_entry_relative_path core_entry_sha256 format managed_node_manifest_hash project_root | LC_ALL=C sort)"
+  elif [ "$kind" = "certified_release" ]; then
+    expected="$(printf '%s\n' binding_hash binding_kind certification_entry_relative_path certification_entry_sha256 core_build_hash core_entry_relative_path core_entry_sha256 core_release_relative_path format managed_node_manifest_hash release_artifact_hash release_manifest_relative_path release_manifest_sha256 | LC_ALL=C sort)"
+  else
+    fail core_binding_invalid binding_kind
+  fi
   [ "$actual" = "$expected" ] || fail core_binding_invalid "unexpected, duplicate, or missing field"
 }
 
@@ -609,6 +712,42 @@ assert_core_binding_serialization() {
   [ "$actual" = "$expected" ] || fail core_binding_invalid "non-canonical JSON document"
 }
 
+assert_release_core_binding_serialization() {
+  local file="$1"
+  local release_relative="$2"
+  local manifest_relative="$3"
+  local manifest_sha="$4"
+  local release_artifact_hash="$5"
+  local core_build_hash="$6"
+  local entry_relative="$7"
+  local entry_sha="$8"
+  local certification_relative="$9"
+  local certification_sha="${10}"
+  local manifest_hash="${11}"
+  local binding_hash="${12}"
+  local actual
+  local expected
+
+  actual="$(cat "$file")"
+  expected="$(printf '%s\n' \
+    '{' \
+    '  "format": "icarus.core-runtime-launch-binding/2",' \
+    '  "binding_kind": "certified_release",' \
+    '  "core_release_relative_path": "'"${release_relative}"'",' \
+    '  "release_manifest_relative_path": "'"${manifest_relative}"'",' \
+    '  "release_manifest_sha256": "'"${manifest_sha}"'",' \
+    '  "release_artifact_hash": "'"${release_artifact_hash}"'",' \
+    '  "core_build_hash": "'"${core_build_hash}"'",' \
+    '  "core_entry_relative_path": "'"${entry_relative}"'",' \
+    '  "core_entry_sha256": "'"${entry_sha}"'",' \
+    '  "certification_entry_relative_path": "'"${certification_relative}"'",' \
+    '  "certification_entry_sha256": "'"${certification_sha}"'",' \
+    '  "managed_node_manifest_hash": "'"${manifest_hash}"'",' \
+    '  "binding_hash": "'"${binding_hash}"'"' \
+    '}')"
+  [ "$actual" = "$expected" ] || fail core_binding_invalid "non-canonical JSON document"
+}
+
 verify_core_binding() {
   local binding_directory
   local binding_file
@@ -626,9 +765,13 @@ verify_core_binding() {
   binding_directory="$(resolve_pointer "$ACTIVE_CORE_POINTER" "$RUNTIME_HOME/core-bindings" active_core_pointer)"
   binding_file="$binding_directory/binding.json"
   [ -f "$binding_file" ] || fail core_binding_missing "$binding_file"
-  assert_core_binding_keyset "$binding_file"
-  format="$(json_string "$binding_file" format)"
   kind="$(json_string "$binding_file" binding_kind)"
+  assert_core_binding_keyset "$binding_file" "$kind"
+  format="$(json_string "$binding_file" format)"
+  if [ "$kind" = "certified_release" ]; then
+    verify_release_core_binding "$binding_directory" "$binding_file" "$format"
+    return
+  fi
   project_root="$(json_string "$binding_file" project_root)"
   entry_relative="$(json_string "$binding_file" core_entry_relative_path)"
   entry_sha="$(json_string "$binding_file" core_entry_sha256)"
@@ -670,6 +813,123 @@ verify_core_binding() {
   CORE_ENTRY_PATH="$entry_real"
 }
 
+verify_release_core_binding() {
+  local binding_directory="$1"
+  local binding_file="$2"
+  local format="$3"
+  local release_relative
+  local manifest_relative
+  local manifest_sha
+  local release_artifact_hash
+  local core_build_hash
+  local entry_relative
+  local entry_sha
+  local certification_relative
+  local certification_sha
+  local manifest_hash
+  local binding_hash
+  local release_root
+  local resolved
+  local canonical
+  local calculated
+  local release_manifest
+  local manifest_value
+
+  release_relative="$(json_string "$binding_file" core_release_relative_path)"
+  manifest_relative="$(json_string "$binding_file" release_manifest_relative_path)"
+  manifest_sha="$(json_string "$binding_file" release_manifest_sha256)"
+  release_artifact_hash="$(json_string "$binding_file" release_artifact_hash)"
+  core_build_hash="$(json_string "$binding_file" core_build_hash)"
+  entry_relative="$(json_string "$binding_file" core_entry_relative_path)"
+  entry_sha="$(json_string "$binding_file" core_entry_sha256)"
+  certification_relative="$(json_string "$binding_file" certification_entry_relative_path)"
+  certification_sha="$(json_string "$binding_file" certification_entry_sha256)"
+  manifest_hash="$(json_string "$binding_file" managed_node_manifest_hash)"
+  binding_hash="$(json_string "$binding_file" binding_hash)"
+  assert_release_core_binding_serialization \
+    "$binding_file" \
+    "$release_relative" \
+    "$manifest_relative" \
+    "$manifest_sha" \
+    "$release_artifact_hash" \
+    "$core_build_hash" \
+    "$entry_relative" \
+    "$entry_sha" \
+    "$certification_relative" \
+    "$certification_sha" \
+    "$manifest_hash" \
+    "$binding_hash"
+  [ "$format" = "icarus.core-runtime-launch-binding/2" ] || fail core_binding_invalid format
+  [ "$manifest_hash" = "$MANIFEST_HASH" ] || fail core_binding_manifest_mismatch
+  for calculated in "$manifest_sha" "$release_artifact_hash" "$core_build_hash" "$entry_sha" "$certification_sha" "$binding_hash"; do
+    [[ "$calculated" =~ ^sha256:[0-9a-f]{64}$ ]] || fail core_binding_invalid hash
+  done
+  assert_relative_safe_path "$release_relative" core_release_path_invalid
+  assert_relative_safe_path "$manifest_relative" core_release_manifest_invalid
+  assert_core_entry_relative "$entry_relative"
+  assert_core_entry_relative "$certification_relative"
+  [[ "$release_relative" =~ ^core-releases/[0-9a-f]{64}$ ]] || fail core_release_path_invalid
+  [ "${release_relative#core-releases/}" = "${release_artifact_hash#sha256:}" ] || fail core_release_path_mismatch
+  [ -d "$RUNTIME_HOME/$release_relative" ] || fail core_release_missing "$release_relative"
+  release_root="$(cd -P "$RUNTIME_HOME/$release_relative" && pwd)"
+  case "$release_root" in
+    "$RUNTIME_HOME/core-releases"/*) ;;
+    *) fail core_release_outside_root "$release_root" ;;
+  esac
+  release_manifest="$release_root/$manifest_relative"
+  [ -f "$release_manifest" ] || fail core_release_manifest_missing "$release_manifest"
+  resolved="$(resolve_self "$release_manifest")"
+  case "$resolved" in "$release_root"/*) ;; *) fail core_release_manifest_outside_root ;; esac
+  release_manifest="$resolved"
+  calculated="sha256:$(sha256_file "$release_manifest")"
+  [ "$calculated" = "$manifest_sha" ] || fail core_release_manifest_hash_mismatch
+  manifest_value="$(json_string "$release_manifest" format)"
+  [ "$manifest_value" = "icarus.core-release-manifest/1" ] || fail core_release_manifest_identity_mismatch format
+  manifest_value="$(json_string "$release_manifest" release_scope)"
+  [ "$manifest_value" = "workflow_runtime_g8_certification" ] || fail core_release_manifest_identity_mismatch release_scope
+  manifest_value="$(json_string "$release_manifest" build_kind)"
+  [ "$manifest_value" = "release" ] || fail core_release_manifest_identity_mismatch build_kind
+  manifest_value="$(json_string "$release_manifest" platform)"
+  [ "$manifest_value" = "$MANIFEST_PLATFORM" ] || fail core_release_manifest_identity_mismatch platform
+  manifest_value="$(json_string "$release_manifest" arch)"
+  [ "$manifest_value" = "$MANIFEST_ARCH" ] || fail core_release_manifest_identity_mismatch arch
+  manifest_value="$(json_string "$release_manifest" managed_node_distribution_hash)"
+  [ "$manifest_value" = "$MANIFEST_HASH" ] || fail core_release_manifest_identity_mismatch managed_node_distribution_hash
+  manifest_value="$(json_string "$release_manifest" runtime_launcher_hash)"
+  calculated="sha256:$(sha256_file "$RUNTIME_LAUNCHER_PATH")"
+  [ "$manifest_value" = "$calculated" ] || fail core_release_manifest_identity_mismatch runtime_launcher_hash
+  manifest_value="$(json_string "$release_manifest" runtime_toolchain_hash)"
+  calculated="sha256:$(sha256_file "$INSTALLED_TOOLCHAIN_PATH")"
+  [ "$manifest_value" = "$calculated" ] || fail core_release_manifest_identity_mismatch runtime_toolchain_hash
+  manifest_value="$(json_string "$release_manifest" release_artifact_hash)"
+  [ "$manifest_value" = "$release_artifact_hash" ] || fail core_release_manifest_identity_mismatch release_artifact_hash
+  manifest_value="$(json_string "$release_manifest" core_build_hash)"
+  [ "$manifest_value" = "$core_build_hash" ] || fail core_release_manifest_identity_mismatch core_build_hash
+  manifest_value="$(json_string "$release_manifest" core_entry_relative_path)"
+  [ "$manifest_value" = "$entry_relative" ] || fail core_release_manifest_identity_mismatch core_entry_relative_path
+  manifest_value="$(json_string "$release_manifest" core_entry_sha256)"
+  [ "$manifest_value" = "$entry_sha" ] || fail core_release_manifest_identity_mismatch core_entry_sha256
+  manifest_value="$(json_string "$release_manifest" certification_entry_relative_path)"
+  [ "$manifest_value" = "$certification_relative" ] || fail core_release_manifest_identity_mismatch certification_entry_relative_path
+  manifest_value="$(json_string "$release_manifest" certification_entry_sha256)"
+  [ "$manifest_value" = "$certification_sha" ] || fail core_release_manifest_identity_mismatch certification_entry_sha256
+  [ -f "$release_root/$entry_relative" ] || fail core_entry_missing
+  resolved="$(resolve_self "$release_root/$entry_relative")"
+  case "$resolved" in "$release_root"/*) ;; *) fail core_entry_outside_project ;; esac
+  calculated="sha256:$(sha256_file "$resolved")"
+  [ "$calculated" = "$entry_sha" ] || fail core_entry_hash_mismatch
+  [ -f "$release_root/$certification_relative" ] || fail certification_entry_missing
+  resolved="$(resolve_self "$release_root/$certification_relative")"
+  case "$resolved" in "$release_root"/*) ;; *) fail certification_entry_outside_release ;; esac
+  calculated="sha256:$(sha256_file "$resolved")"
+  [ "$calculated" = "$certification_sha" ] || fail certification_entry_hash_mismatch
+  canonical="{\"binding_kind\":\"certified_release\",\"certification_entry_relative_path\":\"${certification_relative}\",\"certification_entry_sha256\":\"${certification_sha}\",\"core_build_hash\":\"${core_build_hash}\",\"core_entry_relative_path\":\"${entry_relative}\",\"core_entry_sha256\":\"${entry_sha}\",\"core_release_relative_path\":\"${release_relative}\",\"format\":\"${format}\",\"managed_node_manifest_hash\":\"${manifest_hash}\",\"release_artifact_hash\":\"${release_artifact_hash}\",\"release_manifest_relative_path\":\"${manifest_relative}\",\"release_manifest_sha256\":\"${manifest_sha}\"}"
+  calculated="sha256:$(printf '%s\n%s' 'icarus:core-runtime-launch-binding:2' "$canonical" | sha256_stdin)"
+  [ "$calculated" = "$binding_hash" ] || fail core_binding_hash_mismatch
+  [ "$(basename "$binding_directory")" = "${binding_hash#sha256:}" ] || fail core_binding_path_mismatch
+  CORE_ENTRY_PATH="$resolved"
+}
+
 managed_exec() {
   local source_manifest="$1"
   local command
@@ -699,16 +959,17 @@ launcher_exec() {
   verify_active_distribution "$installed_manifest"
   verify_core_binding
   unset NODE_OPTIONS NODE_PATH ICARUS_RUNTIME_HOME ICARUS_TOOLCHAIN_MANIFEST
-  PATH="$ACTIVE_INSTALL_PATH/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/local/sbin:/usr/bin:/bin:/usr/sbin:/sbin" exec "$ACTIVE_INSTALL_PATH/bin/node" "$CORE_ENTRY_PATH"
+  PATH="$ACTIVE_INSTALL_PATH/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/local/sbin:/usr/bin:/bin:/usr/sbin:/sbin" exec "$ACTIVE_INSTALL_PATH/bin/node" "$CORE_ENTRY_PATH" "$@"
 }
 
 usage() {
-  echo "Usage: scripts/runtime-toolchain.sh [--runtime-home PATH] [--manifest PATH] <install|verify|exec|active-path|bind-core>" >&2
+  echo "Usage: scripts/runtime-toolchain.sh [--runtime-home PATH] [--manifest PATH] <install|verify|exec|active-path|bind-core|bind-release>" >&2
   exit 64
 }
 
 if [ "${1:-}" = "launcher-exec" ]; then
-  launcher_exec
+  shift
+  launcher_exec "$@"
 fi
 
 RUNTIME_HOME_ARG=""
@@ -800,6 +1061,32 @@ case "$COMMAND" in
     verify_core_binding
     printf 'runtime_launcher=%s\n' "$RUNTIME_LAUNCHER_PATH"
     printf 'core_binding_kind=development_checkout\n'
+    ;;
+  bind-release)
+    RELEASE_RELATIVE=""
+    RELEASE_MANIFEST_RELATIVE="core-release-manifest.json"
+    RELEASE_ARTIFACT_HASH=""
+    CORE_BUILD_HASH=""
+    CORE_ENTRY_RELATIVE="dist/index.js"
+    CERTIFICATION_ENTRY_RELATIVE="dist/workflow-runtime/certification/release-entry.js"
+    while [ "$#" -gt 0 ]; do
+      case "$1" in
+        --release-relative) [ "$#" -ge 2 ] || usage; RELEASE_RELATIVE="$2"; shift 2 ;;
+        --release-manifest) [ "$#" -ge 2 ] || usage; RELEASE_MANIFEST_RELATIVE="$2"; shift 2 ;;
+        --release-artifact-hash) [ "$#" -ge 2 ] || usage; RELEASE_ARTIFACT_HASH="$2"; shift 2 ;;
+        --core-build-hash) [ "$#" -ge 2 ] || usage; CORE_BUILD_HASH="$2"; shift 2 ;;
+        --core-entry) [ "$#" -ge 2 ] || usage; CORE_ENTRY_RELATIVE="$2"; shift 2 ;;
+        --certification-entry) [ "$#" -ge 2 ] || usage; CERTIFICATION_ENTRY_RELATIVE="$2"; shift 2 ;;
+        *) usage ;;
+      esac
+    done
+    [ -n "$RELEASE_RELATIVE" ] && [ -n "$RELEASE_ARTIFACT_HASH" ] && [ -n "$CORE_BUILD_HASH" ] || usage
+    verify_active_distribution "$MANIFEST_PATH"
+    install_launcher_components
+    write_release_core_binding "$RELEASE_RELATIVE" "$RELEASE_MANIFEST_RELATIVE" "$RELEASE_ARTIFACT_HASH" "$CORE_BUILD_HASH" "$CORE_ENTRY_RELATIVE" "$CERTIFICATION_ENTRY_RELATIVE"
+    verify_core_binding
+    printf 'runtime_launcher=%s\n' "$RUNTIME_LAUNCHER_PATH"
+    printf 'core_binding_kind=certified_release\n'
     ;;
   *) usage ;;
 esac

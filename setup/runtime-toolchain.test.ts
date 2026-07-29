@@ -5,6 +5,7 @@ import os from 'os';
 import path from 'path';
 
 import { canonicalize } from 'json-canonicalize';
+import { Ajv2020, type AnySchema } from 'ajv/dist/2020.js';
 import { afterEach, describe, expect, it } from 'vitest';
 
 const projectRoot = path.resolve(import.meta.dirname, '..');
@@ -58,6 +59,10 @@ if [ "\${1:-}" = "--version" ]; then
 fi
 printf 'managed-node=%s\\n' "$0"
 printf 'core-entry=%s\\n' "\${1:-}"
+shift || true
+for argument in "$@"; do
+  printf 'core-argument=%s\\n' "$argument"
+done
 `,
   );
   writeExecutable(
@@ -134,6 +139,88 @@ function runToolchain(
 function expectFailure(result: ReturnType<typeof runToolchain>, code: string) {
   expect(result.status).toBe(78);
   expect(result.stderr).toContain(`icarus-toolchain:${code}`);
+}
+
+function domainHash(domain: string, value: unknown): string {
+  return `sha256:${hashBytes(`${domain}${canonicalize(value)}`)}`;
+}
+
+function createCertifiedReleaseFixture(
+  fixture: ToolchainFixture,
+  runtimeHome: string,
+): { releaseArtifactHash: string; certificationEntry: string } {
+  const certificationEntry =
+    'dist/workflow-runtime/certification/release-entry.js';
+  const coreEntry = 'dist/index.js';
+  const stage = temporaryRoot('icarus-core-release-stage-');
+  fs.mkdirSync(path.join(stage, path.dirname(certificationEntry)), {
+    recursive: true,
+  });
+  fs.writeFileSync(path.join(stage, coreEntry), 'console.log("core");\n');
+  fs.writeFileSync(
+    path.join(stage, certificationEntry),
+    'console.log("certification");\n',
+  );
+  const inventory = [coreEntry, certificationEntry].sort().map((entry) => {
+    const bytes = fs.readFileSync(path.join(stage, entry));
+    return {
+      path: entry,
+      byte_length: bytes.byteLength,
+      executable: false,
+      raw_sha256: `sha256:${hashBytes(bytes)}`,
+    };
+  });
+  const distribution = JSON.parse(
+    fs.readFileSync(fixture.manifest, 'utf8'),
+  ) as {
+    ref: { id: string; version: string };
+    manifest_hash: string;
+  };
+  const coreInventory = inventory.filter((entry) =>
+    entry.path.startsWith('dist/'),
+  );
+  const payload = {
+    format: 'icarus.core-release-manifest/1',
+    ref: { id: 'icarus.core', version: '1.2.14' },
+    release_scope: 'workflow_runtime_g8_certification',
+    build_kind: 'release',
+    platform: 'darwin',
+    arch: 'arm64',
+    run_protocol_majors: [1],
+    executor_abi_majors: [1],
+    database_schema_version: 11,
+    database_schema_hash: `sha256:${'1'.repeat(64)}`,
+    managed_node_distribution_ref: distribution.ref,
+    managed_node_distribution_hash: distribution.manifest_hash,
+    runtime_launcher_hash: `sha256:${hashBytes(fs.readFileSync(launcherSource))}`,
+    runtime_toolchain_hash: `sha256:${hashBytes(fs.readFileSync(toolchain))}`,
+    core_entry_relative_path: coreEntry,
+    core_entry_sha256: inventory.find((entry) => entry.path === coreEntry)!
+      .raw_sha256,
+    certification_entry_relative_path: certificationEntry,
+    certification_entry_sha256: inventory.find(
+      (entry) => entry.path === certificationEntry,
+    )!.raw_sha256,
+    core_build_hash: domainHash('icarus:core-release-build:1\n', coreInventory),
+    inventory,
+    inventory_hash: domainHash('icarus:core-release-inventory:1\n', inventory),
+  };
+  const releaseArtifactHash = domainHash(
+    'icarus:core-release-manifest:1\n',
+    payload,
+  );
+  const releaseRoot = path.join(
+    runtimeHome,
+    'core-releases',
+    releaseArtifactHash.slice('sha256:'.length),
+  );
+  fs.mkdirSync(path.dirname(releaseRoot), { recursive: true });
+  fs.renameSync(stage, releaseRoot);
+  fs.writeFileSync(
+    path.join(releaseRoot, 'core-release-manifest.json'),
+    `${JSON.stringify({ ...payload, release_artifact_hash: releaseArtifactHash }, null, 2)}\n`,
+  );
+  return { releaseArtifactHash, certificationEntry };
 }
 
 afterEach(() => {
@@ -323,6 +410,71 @@ describe('managed runtime bootstrap', () => {
 });
 
 describe('stable runtime launcher', () => {
+  it('binds a content-addressed Core Release and forwards certification arguments', () => {
+    const fixture = createFixture();
+    const runtimeHome = temporaryRoot('icarus-runtime-home-');
+    const install = runToolchain(fixture, runtimeHome, [
+      'install',
+      '--archive',
+      fixture.archive,
+    ]);
+    expect(install.status, install.stderr).toBe(0);
+    const release = createCertifiedReleaseFixture(fixture, runtimeHome);
+    const relative = `core-releases/${release.releaseArtifactHash.slice('sha256:'.length)}`;
+    const manifest = JSON.parse(
+      fs.readFileSync(
+        path.join(runtimeHome, relative, 'core-release-manifest.json'),
+        'utf8',
+      ),
+    ) as { core_build_hash: string };
+    const bind = runToolchain(fixture, runtimeHome, [
+      'bind-release',
+      '--release-relative',
+      relative,
+      '--release-artifact-hash',
+      release.releaseArtifactHash,
+      '--core-build-hash',
+      manifest.core_build_hash,
+    ]);
+    expect(bind.status, bind.stderr).toBe(0);
+    expect(bind.stdout).toContain('core_binding_kind=certified_release');
+    const binding = JSON.parse(
+      fs.readFileSync(
+        path.join(
+          fs.realpathSync(path.join(runtimeHome, 'active-core')),
+          'binding.json',
+        ),
+        'utf8',
+      ),
+    );
+    const bindingSchema = JSON.parse(
+      fs.readFileSync(
+        path.join(
+          projectRoot,
+          'src/workflow-runtime/contracts/certification/core-runtime-launch-binding-v2-schema.json',
+        ),
+        'utf8',
+      ),
+    ) as AnySchema;
+    expect(
+      new Ajv2020({ strict: true, allErrors: true }).compile(bindingSchema)(
+        binding,
+      ),
+    ).toBe(true);
+
+    const launcher = path.join(runtimeHome, 'bin', 'icarus-runtime');
+    const launched = spawnSync(launcher, ['identity', '--sample'], {
+      encoding: 'utf8',
+      env: { ...process.env, NODE_OPTIONS: '--require /not/present' },
+    });
+    expect(launched.status, launched.stderr).toBe(0);
+    expect(launched.stdout).toContain(
+      `core-entry=${path.join(fs.realpathSync(runtimeHome), relative, release.certificationEntry)}`,
+    );
+    expect(launched.stdout).toContain('core-argument=identity');
+    expect(launched.stdout).toContain('core-argument=--sample');
+  });
+
   it('derives its root from realpath and never falls back to inherited PATH', () => {
     const fixture = createFixture();
     const runtimeHome = temporaryRoot('icarus-runtime-home-');

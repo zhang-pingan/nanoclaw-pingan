@@ -38,4 +38,4 @@ if [ ! -x "$TOOLCHAIN_EXECUTOR" ]; then
   exit 78
 fi
 
-exec "$TOOLCHAIN_EXECUTOR" launcher-exec
+exec "$TOOLCHAIN_EXECUTOR" launcher-exec "$@"

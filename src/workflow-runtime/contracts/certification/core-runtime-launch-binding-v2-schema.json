@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:icarus:core-runtime-launch-binding:2",
+  "title": "Icarus Certified Core Release Launch Binding v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "binding_kind",
+    "core_release_relative_path",
+    "release_manifest_relative_path",
+    "release_manifest_sha256",
+    "release_artifact_hash",
+    "core_build_hash",
+    "core_entry_relative_path",
+    "core_entry_sha256",
+    "certification_entry_relative_path",
+    "certification_entry_sha256",
+    "managed_node_manifest_hash",
+    "binding_hash"
+  ],
+  "properties": {
+    "format": { "const": "icarus.core-runtime-launch-binding/2" },
+    "binding_kind": { "const": "certified_release" },
+    "core_release_relative_path": {
+      "type": "string",
+      "pattern": "^core-releases/[0-9a-f]{64}$"
+    },
+    "release_manifest_relative_path": {
+      "const": "core-release-manifest.json"
+    },
+    "release_manifest_sha256": { "$ref": "#/$defs/hash" },
+    "release_artifact_hash": { "$ref": "#/$defs/hash" },
+    "core_build_hash": { "$ref": "#/$defs/hash" },
+    "core_entry_relative_path": { "const": "dist/index.js" },
+    "core_entry_sha256": { "$ref": "#/$defs/hash" },
+    "certification_entry_relative_path": {
+      "const": "dist/workflow-runtime/certification/release-entry.js"
+    },
+    "certification_entry_sha256": { "$ref": "#/$defs/hash" },
+    "managed_node_manifest_hash": { "$ref": "#/$defs/hash" },
+    "binding_hash": { "$ref": "#/$defs/hash" }
+  },
+  "$defs": {
+    "hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    }
+  }
+}

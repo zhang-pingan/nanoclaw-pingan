@@ -38,6 +38,7 @@
     "contracts:g2:static-child-replay:check": "tsx src/workflow-runtime/contracts/current-g2-static-child-replay-authority-cli.ts check",
     "store:check": "tsx src/workflow-runtime/store/runtime-store/check.ts",
     "typecheck": "tsc --noEmit",
+    "certification:g8:release:install": "tsx src/workflow-runtime/certification/release-cli.ts install",
     "format": "prettier --write \"src/**/*.ts\"",
     "format:fix": "prettier --write \"src/**/*.ts\"",
     "format:check": "prettier --check \"src/**/*.ts\"",
