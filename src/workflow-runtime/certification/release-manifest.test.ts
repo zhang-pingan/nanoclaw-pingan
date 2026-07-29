@@ -118,13 +118,18 @@ describe('G8 Core Release manifest', () => {
     ).toBe(true);
     expect(fs.readFileSync(secondOutput)).toEqual(fs.readFileSync(firstOutput));
     expect(first.inventory.map((entry) => entry.path)).not.toContain(
-      'src/workflow-runtime/contracts/sqlite/local_single_user_sqlite@1.json',
+      'dist/workflow-runtime/contracts/sqlite/local_single_user_sqlite@1.json',
     );
     expect(
       first.inventory.some((entry) =>
-        entry.path.startsWith('src/workflow-runtime/contracts/certification/'),
+        entry.path.startsWith(
+          'dist/workflow-runtime/contracts/certification/generated/',
+        ),
       ),
     ).toBe(false);
+    expect(first.inventory.map((entry) => entry.path)).toContain(
+      'certification-inputs/sqlite/local_single_user_sqlite-candidate@1.json',
+    );
     checkInstalledG8CoreRelease(runtimeHome, first);
     expect(
       readInstalledG8CoreReleaseManifest(

@@ -956,6 +956,7 @@ launcher_exec() {
   installed_manifest="$RUNTIME_HOME/contracts/managed-node-runtime-distribution.json"
   load_manifest "$installed_manifest"
   runtime_layout "$RUNTIME_HOME"
+  unset NODE_OPTIONS NODE_PATH ICARUS_RUNTIME_HOME ICARUS_TOOLCHAIN_MANIFEST
   verify_active_distribution "$installed_manifest"
   verify_core_binding
   unset NODE_OPTIONS NODE_PATH ICARUS_RUNTIME_HOME ICARUS_TOOLCHAIN_MANIFEST

@@ -1,0 +1,25 @@
+{
+  "format": "icarus.minimum-machine-class/1",
+  "ref": {
+    "id": "local_single_user_minimum_machine",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:minimum-machine-class:1\n",
+  "payload": {
+    "class_id": "local_single_user_minimum_machine@1",
+    "deployment_profile": "local_single_user",
+    "platform": "darwin",
+    "arch": "arm64",
+    "cpu_family": "apple_silicon",
+    "minimum_cpu_generation": 2,
+    "minimum_memory_bytes": 17179869184,
+    "filesystem_type": "apfs",
+    "storage_class": "internal_ssd",
+    "startup_power_source": "any",
+    "certification_power_source": "ac_power",
+    "certification_interference": "none_operator_confirmed",
+    "observation_source_tree_hash": "sha256:d5bc884d59c6e1028e172c4430d3d5de4df6388997b35bdc21bb40cbf480d38f"
+  },
+  "hash": "sha256:11b5ee191bad490dd9d5501f610c73802d03f3990faeab76043a215dad2cfc33"
+}

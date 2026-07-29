@@ -20,6 +20,8 @@ const CORE_ENTRY = 'dist/index.js' as const;
 const CERTIFICATION_ENTRY =
   'dist/workflow-runtime/certification/release-entry.js' as const;
 const RELEASE_MANIFEST = 'core-release-manifest.json';
+const SQLITE_CERTIFICATION_INPUT =
+  'certification-inputs/sqlite/local_single_user_sqlite-candidate@1.json';
 const RELEASE_MANIFEST_KEYS = [
   'arch',
   'build_kind',
@@ -178,20 +180,31 @@ function copyWorkflowRuntimeAssets(
   const sourceRoot = path.join(projectRoot, 'src/workflow-runtime');
   for (const absolute of walkFiles(sourceRoot)) {
     if (!/\.(?:json|sql)$/.test(absolute)) continue;
-    const relative = path.relative(projectRoot, absolute);
+    const sourceRelative = path.relative(sourceRoot, absolute);
     if (
-      relative.startsWith(
-        `src${path.sep}workflow-runtime${path.sep}contracts${path.sep}certification${path.sep}`,
+      sourceRelative.startsWith(
+        `contracts${path.sep}certification${path.sep}generated${path.sep}`,
       ) ||
-      relative ===
-        `src${path.sep}workflow-runtime${path.sep}contracts${path.sep}sqlite${path.sep}local_single_user_sqlite@1.json`
+      sourceRelative ===
+        `contracts${path.sep}sqlite${path.sep}local_single_user_sqlite@1.json`
     )
       continue;
-    const target = path.join(stageRoot, relative);
+    const target = path.join(
+      stageRoot,
+      'dist/workflow-runtime',
+      sourceRelative,
+    );
     fs.mkdirSync(path.dirname(target), { recursive: true });
     fs.copyFileSync(absolute, target);
     fs.chmodSync(target, 0o644);
   }
+  const certificationInput = path.join(stageRoot, SQLITE_CERTIFICATION_INPUT);
+  fs.mkdirSync(path.dirname(certificationInput), { recursive: true });
+  fs.copyFileSync(
+    path.join(sourceRoot, 'contracts/sqlite/local_single_user_sqlite@1.json'),
+    certificationInput,
+  );
+  fs.chmodSync(certificationInput, 0o644);
 }
 
 function inventory(root: string): G8ReleaseInventoryEntry[] {

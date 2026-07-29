@@ -1,4 +1,4 @@
-import type { Sha256Hash, VersionedRef } from './types.js';
+import type { JsonObject, Sha256Hash, VersionedRef } from './types.js';
 
 export interface G8ReleaseInventoryEntry {
   readonly path: string;
@@ -46,4 +46,67 @@ export interface G8CertifiedReleaseBinding {
   readonly certification_entry_sha256: Sha256Hash;
   readonly managed_node_manifest_hash: Sha256Hash;
   readonly binding_hash: Sha256Hash;
+}
+
+export interface G8MinimumMachineClassPayload extends JsonObject {
+  readonly class_id: 'local_single_user_minimum_machine@1';
+  readonly deployment_profile: 'local_single_user';
+  readonly platform: 'darwin';
+  readonly arch: 'arm64';
+  readonly cpu_family: 'apple_silicon';
+  readonly minimum_cpu_generation: 2;
+  readonly minimum_memory_bytes: 17179869184;
+  readonly filesystem_type: 'apfs';
+  readonly storage_class: 'internal_ssd';
+  readonly startup_power_source: 'any';
+  readonly certification_power_source: 'ac_power';
+  readonly certification_interference: 'none_operator_confirmed';
+  readonly observation_source_tree_hash: Sha256Hash;
+}
+
+export interface G8StartupSmokeHarnessPayload extends JsonObject {
+  readonly harness_id: 'local_single_user_startup_smoke@1';
+  readonly deployment_profile: 'local_single_user';
+  readonly runtime_surface: 'node_service';
+  readonly identity_mode: 'certification_observation';
+  readonly database_schema_version: 11;
+  readonly database_kind: 'isolated_temporary_real_file';
+  readonly database_filename: 'workflow-runtime.db';
+  readonly connection_profile: 'production_pragmas';
+  readonly transaction_kind: 'begin_immediate';
+  readonly transaction_probe: 'zero_row_parameterized_dml';
+  readonly reopen_required: true;
+  readonly integrity_check_required: true;
+  readonly startup_smoke_max_duration_ms: 5000;
+  readonly implementation_source_tree_hash: Sha256Hash;
+}
+
+export interface G8FoundationContractArtifact<
+  TPayload extends JsonObject = JsonObject,
+> extends JsonObject {
+  readonly format:
+    | 'icarus.minimum-machine-class/1'
+    | 'icarus.startup-smoke-harness/1';
+  readonly ref: VersionedRef;
+  readonly version: 1;
+  readonly domain_separator: string;
+  readonly hash: Sha256Hash;
+  readonly payload: TPayload;
+}
+
+export interface G8MinimumMachineObservation extends JsonObject {
+  readonly format: 'icarus.minimum-machine-observation/1';
+  readonly purpose: 'certification_reference' | 'startup_preflight';
+  readonly minimum_machine_class_ref: VersionedRef;
+  readonly minimum_machine_class_hash: Sha256Hash;
+  readonly cpu_brand: string;
+  readonly cpu_generation: number;
+  readonly memory_bytes: number;
+  readonly filesystem_type: 'apfs';
+  readonly filesystem_device: string;
+  readonly storage_class: 'internal_ssd';
+  readonly power_source: 'ac_power' | 'battery' | 'not_required';
+  readonly benchmark_interference: 'none_operator_confirmed' | 'not_applicable';
+  readonly reference_machine: string;
+  readonly observation_hash: Sha256Hash;
 }

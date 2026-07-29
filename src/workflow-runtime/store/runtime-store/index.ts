@@ -92,6 +92,19 @@ export class WorkflowRuntimeStoreError extends Error {
 const writerOwners = new Set<string>();
 const storeConstructorToken = Symbol('WorkflowRuntimeStore');
 
+function storeInputRootsForIdentityMode(
+  identityMode: WorkflowRuntimeIdentityMode,
+): { profilePath?: string } {
+  if (identityMode !== 'certification_observation') return {};
+  const releaseRoot = path.resolve(import.meta.dirname, '../../../..');
+  return {
+    profilePath: path.join(
+      releaseRoot,
+      'certification-inputs/sqlite/local_single_user_sqlite-candidate@1.json',
+    ),
+  };
+}
+
 function scalarPragma(
   database: Database.Database,
   pragma: string,
@@ -856,7 +869,9 @@ export class WorkflowRuntimeConnectionFactory {
   static openStore(
     options: OpenWorkflowRuntimeStoreOptions,
   ): WorkflowRuntimeStore {
-    const inputs = loadFrozenWorkflowRuntimeStoreInputs();
+    const inputs = loadFrozenWorkflowRuntimeStoreInputs(
+      storeInputRootsForIdentityMode(options.identityMode),
+    );
     assertRuntimeHostIdentity(inputs.profile, options.identityMode);
     const databasePath = canonicalDatabasePath(
       options.databasePath,
@@ -925,7 +940,9 @@ export class WorkflowRuntimeConnectionFactory {
   static openReadOnly(
     options: OpenWorkflowRuntimeReadOnlyOptions,
   ): WorkflowRuntimeReadConnection {
-    const inputs = loadFrozenWorkflowRuntimeStoreInputs();
+    const inputs = loadFrozenWorkflowRuntimeStoreInputs(
+      storeInputRootsForIdentityMode(options.identityMode),
+    );
     assertRuntimeHostIdentity(inputs.profile, options.identityMode);
     const databasePath = canonicalDatabasePath(
       options.databasePath,

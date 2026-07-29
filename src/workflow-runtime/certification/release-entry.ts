@@ -1,6 +1,16 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+import { observeMinimumMachineClass } from './machine-class.js';
+import { runG8StartupSmoke } from './startup-smoke.js';
+
+function option(name: string): string {
+  const index = process.argv.indexOf(name);
+  if (index < 0 || !process.argv[index + 1])
+    throw new Error(`Missing required option ${name}`);
+  return process.argv[index + 1]!;
+}
+
 const command = process.argv[2];
 
 if (command === 'identity') {
@@ -21,6 +31,28 @@ if (command === 'identity') {
       arch: process.arch,
     }),
   );
+} else if (command === 'machine-observation') {
+  console.log(
+    JSON.stringify(
+      observeMinimumMachineClass({
+        targetPath: path.resolve(option('--target-path')),
+        purpose: 'certification_reference',
+        confirmNoConcurrentBenchmarkInterference: process.argv.includes(
+          '--confirm-no-concurrent-interference',
+        ),
+      }),
+    ),
+  );
+} else if (command === 'startup-smoke') {
+  const report = runG8StartupSmoke({
+    storeDir: path.resolve(option('--store-dir')),
+    reportOutput: path.resolve(option('--report-output')),
+  });
+  console.log(`startup_smoke_status=${report.status}`);
+  console.log(`startup_smoke_duration_ms=${report.duration_ms}`);
+  console.log(`startup_smoke_report_hash=${report.report_hash}`);
 } else {
-  throw new Error('Usage: release-entry.js <identity|startup-smoke|benchmark>');
+  throw new Error(
+    'Usage: release-entry.js <identity|machine-observation|startup-smoke|benchmark>',
+  );
 }
