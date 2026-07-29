@@ -60,9 +60,10 @@ import {
   verifyQueryPlans,
   verifyReadOnlyConnection,
 } from './sqlite-gate.js';
-import type {
-  G1SchemaDependencyManifestPayload,
-  WorkflowRuntimeSchemaManifestPayload,
+import {
+  G1_SCHEMA_DEPENDENCY_ROLES,
+  type G1SchemaDependencyManifestPayload,
+  type WorkflowRuntimeSchemaManifestPayload,
 } from './types.js';
 
 const source = loadCurrentExecutableSchemaSource();
@@ -387,6 +388,15 @@ describe('G1.1 executable workflow runtime schema', () => {
       'schema8_to_schema9_upgrade',
       'schema9_to_schema10_upgrade',
       'schema10_to_schema11_upgrade',
+    ]);
+    expect(payload.members.map((member) => member.role)).toEqual([
+      ...G1_SCHEMA_DEPENDENCY_ROLES,
+    ]);
+    const dependencyContract = built.artifacts.find(([relativePath]) =>
+      relativePath.includes('schema-dependency-manifest-contract'),
+    )?.[1];
+    expect(dependencyContract?.payload.required_roles).toEqual([
+      ...G1_SCHEMA_DEPENDENCY_ROLES,
     ]);
     expect(payload.members).toEqual(
       expect.arrayContaining([
@@ -948,10 +958,10 @@ describe('G1.1 executable workflow runtime schema', () => {
                     authorization_result='not_evaluated',
                     execution_result='denied', denial_code='target_not_found',
                     canonical_result_json='{}', canonical_result_hash=?,
-                    decided_at_ms=99
+                    decided_at_ms=99, terminal_binding_hash=?
               WHERE id='ingress:missing-target'`,
           )
-          .run(hash('result:chronology')),
+          .run(hash('result:chronology'), hash('binding:chronology')),
       ).toThrow('ck:command_ingress:chronology');
       database
         .prepare(
@@ -960,10 +970,10 @@ describe('G1.1 executable workflow runtime schema', () => {
                   authorization_result='not_evaluated',
                   execution_result='denied', denial_code='target_not_found',
                   canonical_result_json='{}', canonical_result_hash=?,
-                  decided_at_ms=100
+                  decided_at_ms=100, terminal_binding_hash=?
             WHERE id='ingress:missing-target'`,
         )
-        .run(hash('result:missing-target'));
+        .run(hash('result:missing-target'), hash('binding:missing-target'));
       expect(() =>
         database
           .prepare(
@@ -990,10 +1000,10 @@ describe('G1.1 executable workflow runtime schema', () => {
                     execution_result='applied', canonical_result_json='{}',
                     canonical_result_hash=?, resolved_command_id='command:fake',
                     resolved_invocation_id='invocation:fake', decided_at_ms=100,
-                    applied_at_ms=100
+                    applied_at_ms=100, terminal_binding_hash=?
               WHERE id='ingress:fake-resolved'`,
           )
-          .run(hash('result:fake-resolved')),
+          .run(hash('result:fake-resolved'), hash('binding:fake-resolved')),
       ).toThrow('FOREIGN KEY constraint failed');
 
       database.pragma('foreign_keys = OFF');

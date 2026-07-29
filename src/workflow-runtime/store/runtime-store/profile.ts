@@ -61,13 +61,13 @@ export const FROZEN_G1_1_IDENTITIES = {
 } as const;
 
 export const CURRENT_G1_SCHEMA_IDENTITIES = {
-  root: 'sha256:d4dfd9e1beaea10ab7ecca33308d0624fe7ae4c45518a98729198ed7c6f09375',
+  root: 'sha256:2adb9376d341ad430155829647086bcc76f84ebf22dffac28c19d4026ea06ab2',
   dependencyManifest:
-    'sha256:3f68cbd5618060135f7bd7f46589bc4a7b8f0647d6e8efda9bec1d8b55ce7ede',
+    'sha256:a1f0d2ad63d87124512e3390eafdae2b4a2f5c5e5b57839016cc3ebf2d636afd',
   physicalSchema:
-    'sha256:edf59d731f72e5cfd437bed52e8faf73d306456d58a17d1f14448af1a34b26bb',
-  schema: 'sha256:4d096ce9c2ed47a195c36d11a6540a3c0191183a521b59a1520279a0ffaf9be2',
-  migration: 'sha256:2a29e1f527f47eb43799a7a35a5272b85f5dc154c003f92f71e152788b17f530',
+    'sha256:58ea51aadb366ce0926a9c99f1e3507de257322a096f980f72c47c386b9ffedf',
+  schema: 'sha256:ad998b2d0bb5e5f158b0be6d13db79cb6a0c0650d5064b267262551af266189c',
+  migration: 'sha256:ccaa7699894da98284b9ce86767d917e355441df93e010d90751ccb713c9b872',
   schema3To4Upgrade: FROZEN_G1_1_IDENTITIES.schema3To4Upgrade,
   schema4To5Upgrade: FROZEN_G1_1_IDENTITIES.schema4To5Upgrade,
   schema5To6Upgrade:
@@ -81,7 +81,7 @@ export const CURRENT_G1_SCHEMA_IDENTITIES = {
   schema9To10Upgrade:
     'sha256:19c24f06558a3e98f1415468c4af8ce44e94afcad8be3428ebdc133bf4a353c5',
   schema10To11Upgrade:
-    'sha256:740aab608641511e4cb9ca991e0d60ffd3679c02b1ca4a063422128aa8fb830b',
+    'sha256:cb7c434266a62899323a03c83ee36fae01d3bf25ace4e81c82ea8f4ed1ded381',
   schema3SourceMigration: FROZEN_G1_1_IDENTITIES.schema3SourceMigration,
   schema3SourceSqliteSchema: FROZEN_G1_1_IDENTITIES.schema3SourceSqliteSchema,
   schema4SourceMigration: FROZEN_G1_1_IDENTITIES.schema4SourceMigration,
@@ -108,10 +108,10 @@ export const CURRENT_G1_SCHEMA_IDENTITIES = {
     'sha256:269645a9f093dc35fd35a04336d71e38cc17b7168584752f9b9bdfc106f46fad',
   schema10SourceSqliteSchema:
     'sha256:ca934ef152c32f08b6afc4b7395b9f35ac85b12cfef04b5f75e4a12a5903faee',
-  sqliteSchema: 'sha256:89a7e376e6a579eab9f3e6cd3a154a088749fac21d9edfba9a3285cac832494a',
-  deterministic: 'sha256:5d6f928e83ed1fb171f7a78f3d7d02d41a0e424e371b8496a437f6012e0dc45c',
-  manifest: 'sha256:0ae202b73c2b9ad7e85954f1e678ba871b03f1d8be45deea870c8caf75688365',
-  executableDdl: 'sha256:bb65dc2e4aabf5e97330de2471617ad4ea30756b36c0516a7a81478791bd7081',
+  sqliteSchema: 'sha256:7c817c097e7478d2d9eede99a9309b661b4585b346e440c2d3c37d0acfbb6d31',
+  deterministic: 'sha256:35c1d70b2d7c30b593130d9d3dad928a6b7b5741c7eab7828fb64ff93bc9ef27',
+  manifest: 'sha256:d1eb94304bda5495ed548ac875a210509e8d92d30f55da9b391b10b5754c6123',
+  executableDdl: 'sha256:3551a9431a6f1c94b92426792a7d10f57e9a1f89ec4f38983bd00047c11b3ca5',
   profile: FROZEN_G1_1_IDENTITIES.profile,
 } as const;
 

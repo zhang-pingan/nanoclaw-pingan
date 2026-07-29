@@ -43,7 +43,7 @@ const CURRENT_UPSTREAMS = [
   {
     role: 'g1_schema_11',
     path: '../store/schema/contract-pack-g1-executable-schema-v11.json',
-    hash: 'sha256:d4dfd9e1beaea10ab7ecca33308d0624fe7ae4c45518a98729198ed7c6f09375',
+    hash: 'sha256:2adb9376d341ad430155829647086bcc76f84ebf22dffac28c19d4026ea06ab2',
   },
   {
     role: 'r021_map_terminal_consumption',
@@ -63,12 +63,12 @@ const CURRENT_UPSTREAMS = [
   {
     role: 'g3_6_retention_executor_abi',
     path: 'contract-pack-g3-retention-executor-abi-preflight.json',
-    hash: 'sha256:b9b8577586d37c099466575187b753df37ba350d55e85936294389bd98fe923c',
+    hash: 'sha256:3fa7afb5fa9294325004476ee230b896bc08fe8a6e6fe7f8c719c130e4c6911b',
   },
   {
     role: 'g3_7_workflow_publisher',
     path: 'contract-pack-g3-workflow-publisher.json',
-    hash: 'sha256:c4ba78fdec84d6ec91f0afec1eae09e33c38e5790626c645551c725bc97ac5c0',
+    hash: 'sha256:7d51a4406c0f1e72ad195b7bb8ad8c3800dfc08761022d4ce15ce0fae4ec5560',
   },
   {
     role: 'g3_8a_frozen_activation_repair',
@@ -78,7 +78,7 @@ const CURRENT_UPSTREAMS = [
   {
     role: 'g3_9_feature_release_activation',
     path: 'contract-pack-g3.9-feature-release-activation.json',
-    hash: 'sha256:e6997e4fde1d5cf7a1b112323729636fe3c17307a65abcedae94ff96be71296e',
+    hash: 'sha256:d8e9a00949477e58920de22324b1895578745438f3b6245fd42d6edb6b1fb867',
   },
 ] as const;
 
@@ -232,9 +232,9 @@ function assertCurrentUpstreams(): void {
   }
   if (
     rawSha256(schema11) !==
-      'sha256:2a29e1f527f47eb43799a7a35a5272b85f5dc154c003f92f71e152788b17f530' ||
+      'sha256:ccaa7699894da98284b9ce86767d917e355441df93e010d90751ccb713c9b872' ||
     rawSha256(schema10To11Upgrade) !==
-      'sha256:740aab608641511e4cb9ca991e0d60ffd3679c02b1ca4a063422128aa8fb830b'
+      'sha256:cb7c434266a62899323a03c83ee36fae01d3bf25ace4e81c82ea8f4ed1ded381'
   ) {
     throw new Error('G4 successor Schema 11 migration identity drifted');
   }
@@ -270,13 +270,13 @@ function buildSuccessor(): ContractArtifactEnvelope {
       current_store: {
         database_schema_version: 11,
         g1_root_hash:
-          'sha256:d4dfd9e1beaea10ab7ecca33308d0624fe7ae4c45518a98729198ed7c6f09375',
+          'sha256:2adb9376d341ad430155829647086bcc76f84ebf22dffac28c19d4026ea06ab2',
         database_schema_hash:
-          'sha256:4d096ce9c2ed47a195c36d11a6540a3c0191183a521b59a1520279a0ffaf9be2',
+          'sha256:ad998b2d0bb5e5f158b0be6d13db79cb6a0c0650d5064b267262551af266189c',
         schema11_migration_hash:
-          'sha256:2a29e1f527f47eb43799a7a35a5272b85f5dc154c003f92f71e152788b17f530',
+          'sha256:ccaa7699894da98284b9ce86767d917e355441df93e010d90751ccb713c9b872',
         schema10_to_11_upgrade_hash:
-          'sha256:740aab608641511e4cb9ca991e0d60ffd3679c02b1ca4a063422128aa8fb830b',
+          'sha256:cb7c434266a62899323a03c83ee36fae01d3bf25ace4e81c82ea8f4ed1ded381',
         schema10_migration_hash:
           'sha256:269645a9f093dc35fd35a04336d71e38cc17b7168584752f9b9bdfc106f46fad',
         schema9_to_10_upgrade_hash:

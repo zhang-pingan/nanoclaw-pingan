@@ -7,8 +7,8 @@ import {
   type RuntimeCenterProjectionStatus,
   type RuntimeCenterView,
   type WorkflowProjectionRow,
+  RuntimeStoreWorkflowProjectionRebuildAuthority,
   WorkflowProjectionStore,
-  WorkflowProjectionRebuildAuthority,
 } from './workflow-projection.js';
 
 export type RuntimeCenterSort =
@@ -281,7 +281,7 @@ export class RuntimeCenterProjectionApi {
   constructor(
     private readonly projection: WorkflowProjectionStore,
     private readonly cursorSecret: Buffer,
-    private readonly rebuildAuthority: WorkflowProjectionRebuildAuthority | null =
+    private readonly rebuildAuthority: RuntimeStoreWorkflowProjectionRebuildAuthority | null =
       null,
   ) {
     if (cursorSecret.byteLength < 32)

@@ -1144,13 +1144,27 @@ export function coordinateGraphRecoveryG7(
             'integrity_violation',
             'G7 Recovery integrity evidence is unavailable',
           );
-        const findingSequence = authority.next_event_seq + 1;
+        const sourceErrorSequence = authority.next_event_seq + 1;
+        const findingSequence = sourceErrorSequence + 1;
         const blockerSequence = findingSequence + 1;
         const blockerId = stableRuntimeId('blocker', {
           graph_run_id: input.graphRunId,
           blocker_kind: 'integrity_quarantine',
           source_kind: 'event',
-          source_identity: findingSequence,
+          source_identity: sourceErrorSequence,
+        });
+        insertGraphEvent(transaction, {
+          graphRunId: input.graphRunId,
+          sequence: sourceErrorSequence,
+          scopeId: null,
+          nodeId: null,
+          attemptId: null,
+          eventType: 'orchestration_error',
+          idempotencyKey: `recovery-integrity-error:${blockerId}`,
+          payloadValueId: input.integrityEvidence.id,
+          payloadHash: input.integrityEvidence.hash,
+          occurredAtMs: input.nowMs,
+          createdAtMs: input.nowMs,
         });
         insertGraphEvent(transaction, {
           graphRunId: input.graphRunId,
@@ -1164,6 +1178,9 @@ export function coordinateGraphRecoveryG7(
             disposition: 'quarantined',
             finding,
             blocker_id: blockerId,
+            source_event_seq: sourceErrorSequence,
+            evidence_value_id: input.integrityEvidence.id,
+            evidence_hash: input.integrityEvidence.hash,
           },
           occurredAtMs: input.nowMs,
           createdAtMs: input.nowMs,
@@ -1203,7 +1220,7 @@ export function coordinateGraphRecoveryG7(
             blockerId,
             authority.workflow_id,
             input.graphRunId,
-            findingSequence,
+            sourceErrorSequence,
             finding,
             input.integrityEvidence.id,
             input.integrityEvidence.hash,

@@ -11,9 +11,9 @@
     "slice": "G3.6",
     "status": "DONE",
     "g3_status": "IN_PROGRESS",
-    "upstream_g3_3_pack_hash": "sha256:8789eea6449da946faed62fe693ebb959a04247c3d60a72e3e54d57214c2501e",
-    "upstream_g3_5_pack_hash": "sha256:1edce6faf49f7f50a9d4af34bcdae17fa2dee64e101fc03d07bb52a6be0bec90",
-    "upstream_g1_schema_root_hash": "sha256:d4dfd9e1beaea10ab7ecca33308d0624fe7ae4c45518a98729198ed7c6f09375",
+    "upstream_g3_3_pack_hash": "sha256:969e586947ef065c3c81955eea9e9077bc7057cd80090e05e0a6a994d097b88b",
+    "upstream_g3_5_pack_hash": "sha256:80c8436bdee143790c16e1c383e2e29916358d2cbe17f121154966d231811c4a",
+    "upstream_g1_schema_root_hash": "sha256:2adb9376d341ad430155829647086bcc76f84ebf22dffac28c19d4026ea06ab2",
     "publisher_persistence_readiness": "PUBLISHER_SCHEMA_PREREQUISITE_READY",
     "publisher_schema_gap": null,
     "resolution_mode": "immutable_exact_only",
@@ -80,7 +80,7 @@
         },
         "version": 1,
         "domain_separator": "icarus:workflow-g3-retention-executor-abi-positive-cases:1\n",
-        "hash": "sha256:98c6d725584370b9f7f2d3b76fb4340636f92f7ba5323deff68b493fd00ad47a"
+        "hash": "sha256:8aefa02763165e7d11d46711f39cb2eeac8afafdab4824e62d349616eae9ba51"
       },
       {
         "path": "conformance/g3-retention-executor-abi-preflight/negative-cases.json",
@@ -91,7 +91,7 @@
         },
         "version": 1,
         "domain_separator": "icarus:workflow-g3-retention-executor-abi-negative-cases:1\n",
-        "hash": "sha256:c8a2ddb044b0d0e68955b0a4275a74ba9849d0aefb4f22cae3e03b2a69fc8e07"
+        "hash": "sha256:5adb37023ca216fa61eb6ace2a0dd72b774f29f9690b37b64f9ab1c60fbe2d41"
       },
       {
         "path": "registry/workflow-retention-executor-abi-preflight-domain-separators@1.json",
@@ -109,5 +109,5 @@
     "negative_case_count": 5,
     "g4_through_g9_status": "NOT_READY"
   },
-  "hash": "sha256:b9b8577586d37c099466575187b753df37ba350d55e85936294389bd98fe923c"
+  "hash": "sha256:3fa7afb5fa9294325004476ee230b896bc08fe8a6e6fe7f8c719c130e4c6911b"
 }

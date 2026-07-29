@@ -15,6 +15,7 @@ import {
   loadFrozenWorkflowRuntimeStoreInputs,
   type FrozenWorkflowRuntimeStoreInputs,
 } from './profile.js';
+import { assertRuntimeCommandIngressIntegrity } from './command-ingress-integrity.js';
 
 export type WorkflowRuntimeSqlValue = string | number | bigint | Buffer | null;
 
@@ -71,6 +72,7 @@ export class WorkflowRuntimeStoreError extends Error {
       | 'database_missing'
       | 'database_profile_mismatch'
       | 'database_schema_mismatch'
+      | 'database_integrity_mismatch'
       | 'writer_already_owned'
       | 'connection_closed'
       | 'transaction_already_active'
@@ -534,6 +536,15 @@ function openConfiguredDatabase(
     verifyCompleteProfile(database, inputs, readOnly);
     verifyIntegrity(database);
     verifyFrozenSchema(database, inputs);
+    try {
+      assertRuntimeCommandIngressIntegrity(new ReadConnection(database));
+    } catch (error) {
+      throw new WorkflowRuntimeStoreError(
+        'database_integrity_mismatch',
+        'Runtime Command ingress trusted terminal authority is invalid',
+        { cause: error },
+      );
+    }
     return database;
   } catch (error) {
     database.close();

@@ -38,7 +38,7 @@ describe('G5 Basic Runtime readiness audit', () => {
     expect(protocol.payload).toMatchObject({
       database_schema_version: 11,
       database_schema_hash:
-        'sha256:4d096ce9c2ed47a195c36d11a6540a3c0191183a521b59a1520279a0ffaf9be2',
+        'sha256:ad998b2d0bb5e5f158b0be6d13db79cb6a0c0650d5064b267262551af266189c',
       plan_authority:
         'persisted_hash_verified_sealed_plan_plus_exact_generated_content_and_binding_rows',
       generated_value_authority:
@@ -53,7 +53,7 @@ describe('G5 Basic Runtime readiness audit', () => {
       expect.arrayContaining([
         expect.objectContaining({
           name: 'database_schema_11',
-          hash: 'sha256:d4dfd9e1beaea10ab7ecca33308d0624fe7ae4c45518a98729198ed7c6f09375',
+          hash: 'sha256:2adb9376d341ad430155829647086bcc76f84ebf22dffac28c19d4026ea06ab2',
         }),
         expect.objectContaining({
           name: 'r020_child_consumption_lineage',
@@ -69,7 +69,7 @@ describe('G5 Basic Runtime readiness audit', () => {
         }),
         expect.objectContaining({
           name: 'g4_node_output_envelope_authority_successor',
-          hash: 'sha256:ac46ca96d081f189f041c98aa9bb8bafe391a0e505514d41351f2ff797f594a2',
+          hash: 'sha256:1cd67bad72a3fb147db7943d669800c2f56fabf4c255d42af8f7704f0e9a0cae',
         }),
       ]),
     );

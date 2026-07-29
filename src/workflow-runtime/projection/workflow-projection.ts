@@ -1,5 +1,6 @@
 import { canonicalJson, domainSeparatedSha256 } from '../contracts/hash.js';
 import type { JsonObject, Sha256Hash } from '../contracts/types.js';
+import { WorkflowRuntimeStore } from '../store/runtime-store/index.js';
 
 export type RuntimeCenterView =
   | 'workflows'
@@ -132,7 +133,10 @@ function rebuildAuthorityProof(
 
 const trustedRebuildExports = new WeakMap<
   ProjectionRebuildExport,
-  WorkflowProjectionRebuildAuthority
+  {
+    readonly authority: RuntimeStoreWorkflowProjectionRebuildAuthority;
+    readonly issuedProof: Sha256Hash;
+  }
 >();
 
 function assertProjectionRow(row: WorkflowProjectionRow): void {
@@ -162,7 +166,7 @@ export class WorkflowProjectionStore {
 
   constructor(
     readonly projectionVersion = 'g7.1',
-    private readonly rebuildAuthority: WorkflowProjectionRebuildAuthority | null =
+    private readonly rebuildAuthority: RuntimeStoreWorkflowProjectionRebuildAuthority | null =
       null,
   ) {
     for (const view of [
@@ -301,9 +305,11 @@ export class WorkflowProjectionStore {
     exported: ProjectionRebuildExport,
     completedAtMs: number,
   ): ProjectionRebuildReceipt {
+    const issued = trustedRebuildExports.get(exported);
     if (
       !this.rebuildAuthority ||
-      trustedRebuildExports.get(exported) !== this.rebuildAuthority ||
+      issued?.authority !== this.rebuildAuthority ||
+      issued.issuedProof !== exported.authorityProof ||
       exported.authorityRef !== this.rebuildAuthority.authorityRef
     )
       throw new Error('projection_rebuild_source_untrusted');
@@ -389,10 +395,6 @@ export class WorkflowProjectionStore {
     }
   }
 
-  exportRowsHash(view: RuntimeCenterView): Sha256Hash {
-    return rowsHash(this.rows(view));
-  }
-
   canonicalState(view: RuntimeCenterView): string {
     return canonicalJson({
       rows: [...this.rows(view)],
@@ -400,46 +402,364 @@ export class WorkflowProjectionStore {
     });
   }
 
-  issueRebuildExport(
-    authority: WorkflowProjectionRebuildAuthority,
-    view: RuntimeCenterView,
-  ): ProjectionRebuildExport {
-    if (authority.source !== this)
-      throw new Error('projection_rebuild_authority_source_mismatch');
-    const rows = this.rows(view);
-    const status = this.status(view);
-    const withoutProof: Omit<ProjectionRebuildExport, 'authorityProof'> = {
-      view,
-      rows,
-      rowCount: rows.length,
-      rowsHash: rowsHash(rows),
-      sourceHeadSeq: status.projected_head_seq,
-      sourceHeadHash: sourceHeadHash(
-        view,
-        status.projected_head_seq,
-        this.sourceHeads,
-      ),
-      authorityRef: authority.authorityRef,
-    };
-    const exported: ProjectionRebuildExport = {
-      ...withoutProof,
-      authorityProof: rebuildAuthorityProof(withoutProof),
-    };
-    trustedRebuildExports.set(exported, authority);
-    return exported;
-  }
 }
 
-export class WorkflowProjectionRebuildAuthority {
+interface RuntimeProjectionEventRow extends Record<string, unknown> {
+  readonly graph_run_id: string;
+  readonly workflow_id: string;
+  readonly seq: number;
+  readonly next_event_seq: number;
+  readonly scope_id: string | null;
+  readonly node_id: string | null;
+  readonly attempt_id: string | null;
+  readonly event_type: string;
+  readonly idempotency_key: string;
+  readonly payload_json: string | null;
+  readonly payload_value_id: string | null;
+  readonly payload_hash: Sha256Hash | null;
+  readonly occurred_at_ms: number;
+  readonly created_at_ms: number;
+  readonly value_content_hash: Sha256Hash | null;
+  readonly value_payload_state: string | null;
+}
+
+function assertCanonicalStoredJson(value: string, label: string): JsonObject {
+  let parsed: JsonObject;
+  try {
+    parsed = JSON.parse(value) as JsonObject;
+  } catch (error) {
+    throw new Error(`${label}_json_invalid`, { cause: error });
+  }
+  if (
+    !parsed ||
+    typeof parsed !== 'object' ||
+    Array.isArray(parsed) ||
+    canonicalJson(parsed) !== value
+  )
+    throw new Error(`${label}_json_noncanonical`);
+  return parsed;
+}
+
+function loadTrustedRuntimeEvents(
+  source: WorkflowRuntimeStore,
+): readonly RuntimeProjectionEventRow[] {
+  const events = source.queryAll<RuntimeProjectionEventRow>(
+    `SELECT event.graph_run_id, run.workflow_id, event.seq,
+            run.next_event_seq, event.scope_id, event.node_id, event.attempt_id,
+            event.event_type, event.idempotency_key, event.payload_json,
+            event.payload_value_id, event.payload_hash, event.occurred_at_ms,
+            event.created_at_ms, value.content_hash AS value_content_hash,
+            value.payload_state AS value_payload_state
+       FROM workflow_graph_events AS event
+       JOIN workflow_graph_runs AS run ON run.id = event.graph_run_id
+       LEFT JOIN workflow_values AS value ON value.id = event.payload_value_id
+      ORDER BY event.graph_run_id COLLATE BINARY, event.seq`,
+    [],
+  );
+  const runs = source.queryAll<{
+    id: string;
+    next_event_seq: number;
+  } & Record<string, unknown>>(
+    'SELECT id, next_event_seq FROM workflow_graph_runs ORDER BY id COLLATE BINARY',
+    [],
+  );
+  const observed = new Map<string, number>();
+  for (const event of events) {
+    const expectedSequence = (observed.get(event.graph_run_id) ?? 0) + 1;
+    if (
+      event.seq !== expectedSequence ||
+      event.seq > event.next_event_seq ||
+      !Number.isSafeInteger(event.occurred_at_ms) ||
+      !Number.isSafeInteger(event.created_at_ms)
+    )
+      throw new Error('projection_runtime_event_sequence_invalid');
+    observed.set(event.graph_run_id, event.seq);
+    if (event.payload_json !== null)
+      assertCanonicalStoredJson(event.payload_json, 'projection_runtime_event');
+    if (
+      (event.payload_value_id === null) !== (event.payload_hash === null) ||
+      (event.payload_value_id !== null &&
+        (event.value_content_hash !== event.payload_hash ||
+          event.value_payload_state !== 'live'))
+    )
+      throw new Error('projection_runtime_event_value_binding_invalid');
+  }
+  for (const run of runs) {
+    if ((observed.get(run.id) ?? 0) !== run.next_event_seq)
+      throw new Error('projection_runtime_event_head_invalid');
+  }
+  return events;
+}
+
+function workflowRows(source: WorkflowRuntimeStore): WorkflowProjectionRow[] {
+  const rows = source.queryAll<
+    {
+      id: string;
+      status: string;
+      operational_state: string;
+      current_graph_run_id: string | null;
+      workflow_revision: number;
+      row_version: number;
+      started_at_ms: number;
+      deadline_at_ms: number | null;
+      updated_at_ms: number;
+      state_key: string | null;
+      next_event_seq: number | null;
+    } & Record<string, unknown>
+  >(
+    `SELECT workflow.id, workflow.status, workflow.operational_state,
+            workflow.current_graph_run_id, workflow.workflow_revision,
+            workflow.row_version, workflow.started_at_ms,
+            workflow.deadline_at_ms, workflow.updated_at_ms,
+            run.state_key, run.next_event_seq
+       FROM workflows AS workflow
+       LEFT JOIN workflow_graph_runs AS run
+         ON run.id = workflow.current_graph_run_id
+      ORDER BY workflow.id COLLATE BINARY`,
+    [],
+  );
+  return rows.map((row) => ({
+    id: row.id,
+    view: 'workflows',
+    source_stream: row.current_graph_run_id
+      ? `runtime:graph-events:${row.current_graph_run_id}`
+      : 'runtime:workflows',
+    source_row_version: row.row_version,
+    source_event_seq: row.next_event_seq ?? 0,
+    projected_at_ms: row.updated_at_ms,
+    updated_at_ms: row.updated_at_ms,
+    started_at_ms: row.started_at_ms,
+    deadline_at_ms: row.deadline_at_ms,
+    severity_rank:
+      row.operational_state === 'quarantined'
+        ? 0
+        : row.operational_state === 'action_required'
+          ? 1
+          : null,
+    feature_id: null,
+    workflow_status: row.status,
+    operational_state: row.operational_state,
+    source_kind: 'runtime_store',
+    pending_kind: null,
+    trace_root_kind: null,
+    workflow_id: row.id,
+    run_id: row.current_graph_run_id,
+    summary: {
+      state_key: row.state_key,
+      workflow_revision: row.workflow_revision,
+    },
+  }));
+}
+
+function agentExecutionRows(
+  source: WorkflowRuntimeStore,
+): WorkflowProjectionRow[] {
+  const rows = source.queryAll<
+    {
+      id: string;
+      graph_run_id: string;
+      workflow_id: string;
+      node_id: string;
+      phase: string;
+      execution_outcome: string | null;
+      row_version: number;
+      created_at_ms: number;
+      updated_at_ms: number;
+      execution_started_at_ms: number | null;
+      execution_deadline_at_ms: number | null;
+      next_event_seq: number;
+    } & Record<string, unknown>
+  >(
+    `SELECT attempt.id, attempt.graph_run_id, run.workflow_id,
+            attempt.node_id, attempt.phase, attempt.execution_outcome,
+            attempt.row_version, attempt.created_at_ms, attempt.updated_at_ms,
+            attempt.execution_started_at_ms, attempt.execution_deadline_at_ms,
+            run.next_event_seq
+       FROM workflow_graph_node_attempts AS attempt
+       JOIN workflow_graph_runs AS run ON run.id = attempt.graph_run_id
+      ORDER BY attempt.id COLLATE BINARY`,
+    [],
+  );
+  return rows.map((row) => ({
+    id: row.id,
+    view: 'agent_executions',
+    source_stream: `runtime:graph-events:${row.graph_run_id}`,
+    source_row_version: row.row_version,
+    source_event_seq: row.next_event_seq,
+    projected_at_ms: row.updated_at_ms,
+    updated_at_ms: row.updated_at_ms,
+    started_at_ms: row.execution_started_at_ms ?? row.created_at_ms,
+    deadline_at_ms: row.execution_deadline_at_ms,
+    severity_rank: null,
+    feature_id: null,
+    workflow_status: null,
+    operational_state: null,
+    source_kind: 'runtime_store',
+    pending_kind: null,
+    trace_root_kind: 'agent_execution',
+    workflow_id: row.workflow_id,
+    run_id: row.graph_run_id,
+    summary: {
+      node_id: row.node_id,
+      phase: row.phase,
+      execution_outcome: row.execution_outcome,
+    },
+  }));
+}
+
+function pendingRows(source: WorkflowRuntimeStore): WorkflowProjectionRow[] {
+  const rows = source.queryAll<
+    {
+      id: string;
+      workflow_id: string;
+      graph_run_id: string;
+      blocker_kind: string;
+      severity: string;
+      row_version: number;
+      opened_at_ms: number;
+      remediation_deadline_at_ms: number;
+      next_event_seq: number;
+    } & Record<string, unknown>
+  >(
+    `SELECT blocker.id, blocker.workflow_id, blocker.graph_run_id,
+            blocker.blocker_kind, blocker.severity, blocker.row_version,
+            blocker.opened_at_ms, blocker.remediation_deadline_at_ms,
+            run.next_event_seq
+       FROM workflow_operational_blockers AS blocker
+       JOIN workflow_graph_runs AS run ON run.id = blocker.graph_run_id
+      WHERE blocker.status = 'open'
+      ORDER BY blocker.id COLLATE BINARY`,
+    [],
+  );
+  return rows.map((row) => ({
+    id: row.id,
+    view: 'pending',
+    source_stream: `runtime:graph-events:${row.graph_run_id}`,
+    source_row_version: row.row_version,
+    source_event_seq: row.next_event_seq,
+    projected_at_ms: row.opened_at_ms,
+    updated_at_ms: row.opened_at_ms,
+    started_at_ms: row.opened_at_ms,
+    deadline_at_ms: row.remediation_deadline_at_ms,
+    severity_rank: row.severity === 'quarantine' ? 0 : 1,
+    feature_id: null,
+    workflow_status: null,
+    operational_state: row.severity,
+    source_kind: 'runtime_store',
+    pending_kind: row.blocker_kind,
+    trace_root_kind: null,
+    workflow_id: row.workflow_id,
+    run_id: row.graph_run_id,
+    summary: { blocker_kind: row.blocker_kind, severity: row.severity },
+  }));
+}
+
+function traceRows(
+  events: readonly RuntimeProjectionEventRow[],
+): WorkflowProjectionRow[] {
+  return events.map((event) => ({
+    id: `event:${event.graph_run_id}:${event.seq}`,
+    view: 'trace',
+    source_stream: `runtime:graph-events:${event.graph_run_id}`,
+    source_row_version: event.seq,
+    source_event_seq: event.seq,
+    projected_at_ms: event.created_at_ms,
+    updated_at_ms: event.created_at_ms,
+    started_at_ms: event.occurred_at_ms,
+    deadline_at_ms: null,
+    severity_rank: event.event_type === 'orchestration_error' ? 0 : null,
+    feature_id: null,
+    workflow_status: null,
+    operational_state: null,
+    source_kind: 'runtime_store_event',
+    pending_kind: null,
+    trace_root_kind: 'workflow',
+    workflow_id: event.workflow_id,
+    run_id: event.graph_run_id,
+    summary: {
+      event_type: event.event_type,
+      idempotency_key: event.idempotency_key,
+      scope_id: event.scope_id,
+      node_id: event.node_id,
+      attempt_id: event.attempt_id,
+    },
+  }));
+}
+
+function freezeExport(exported: ProjectionRebuildExport): ProjectionRebuildExport {
+  for (const row of exported.rows) {
+    Object.freeze(row.summary);
+    Object.freeze(row);
+  }
+  Object.freeze(exported.rows);
+  return Object.freeze(exported);
+}
+
+export class RuntimeStoreWorkflowProjectionRebuildAuthority {
   constructor(
-    readonly source: WorkflowProjectionStore,
+    readonly source: WorkflowRuntimeStore,
     readonly authorityRef: string,
   ) {
+    if (!(source instanceof WorkflowRuntimeStore))
+      throw new Error('projection_rebuild_runtime_store_required');
     if (authorityRef.length === 0)
       throw new Error('projection_rebuild_authority_ref_invalid');
   }
 
   export(view: RuntimeCenterView): ProjectionRebuildExport {
-    return this.source.issueRebuildExport(this, view);
+    if (!this.source.isOpen)
+      throw new Error('projection_rebuild_runtime_store_closed');
+    const events = loadTrustedRuntimeEvents(this.source);
+    const rows = (
+      view === 'workflows'
+        ? workflowRows(this.source)
+        : view === 'agent_executions'
+          ? agentExecutionRows(this.source)
+          : view === 'pending'
+            ? pendingRows(this.source)
+            : traceRows(events)
+    ).sort((left, right) => left.id.localeCompare(right.id, 'en'));
+    const sourceHeadSeq = events.length;
+    const sourceHeadHash = domainSeparatedSha256(
+      'icarus:workflow-projection-runtime-store-source-head:1\n',
+      {
+        database_schema_hash: this.source.frozenInputs.schemaHash,
+        view,
+        source_event_count: events.length,
+        events: events.map((event) => ({
+          graph_run_id: event.graph_run_id,
+          seq: event.seq,
+          scope_id: event.scope_id,
+          node_id: event.node_id,
+          attempt_id: event.attempt_id,
+          event_type: event.event_type,
+          idempotency_key: event.idempotency_key,
+          payload_json: event.payload_json,
+          payload_value_id: event.payload_value_id,
+          payload_hash: event.payload_hash,
+          occurred_at_ms: event.occurred_at_ms,
+          created_at_ms: event.created_at_ms,
+        })),
+        projected_rows_hash: rowsHash(rows),
+      },
+    );
+    const withoutProof: Omit<ProjectionRebuildExport, 'authorityProof'> = {
+      view,
+      rows,
+      rowCount: rows.length,
+      rowsHash: rowsHash(rows),
+      sourceHeadSeq,
+      sourceHeadHash,
+      authorityRef: this.authorityRef,
+    };
+    const exported = freezeExport({
+      ...withoutProof,
+      authorityProof: rebuildAuthorityProof(withoutProof),
+    });
+    trustedRebuildExports.set(exported, {
+      authority: this,
+      issuedProof: exported.authorityProof,
+    });
+    return exported;
   }
 }

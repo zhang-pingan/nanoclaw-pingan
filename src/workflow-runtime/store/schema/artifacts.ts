@@ -116,10 +116,11 @@ import {
   verifyQueryPlans,
   verifyReadOnlyConnection,
 } from './sqlite-gate.js';
-import type {
-  ExecutableSchemaSource,
-  G1SchemaDependencyManifestPayload,
-  WorkflowRuntimeSchemaManifestPayload,
+import {
+  G1_SCHEMA_DEPENDENCY_ROLES,
+  type ExecutableSchemaSource,
+  type G1SchemaDependencyManifestPayload,
+  type WorkflowRuntimeSchemaManifestPayload,
 } from './types.js';
 
 const schemaRoot = import.meta.dirname;
@@ -222,31 +223,7 @@ function buildDependencyManifestContractArtifact(): ContractArtifactEnvelope {
         'raw_sha256',
       ],
       ref_keys: ['id', 'version'],
-      required_roles: [
-        'g0_6_logical_schema_manifest',
-        'logical_schema_source',
-        'typed_relation_catalog',
-        'query_catalog',
-        'g0_10_capacity_logical_schema_delta',
-        'publisher_schema_prerequisite',
-        'feature_release_activation_schema_prerequisite',
-        'activation_failure_replay_schema_prerequisite',
-        'generated_schema_authority_prerequisite',
-        'node_output_envelope_schema_authority_prerequisite',
-        'child_completion_lineage_schema_prerequisite',
-        'map_terminal_consumption_schema_prerequisite',
-        'domain_claim_handoff_schema_prerequisite',
-        'sqlite_execution_profile',
-        'schema_manifest',
-        'canonical_migration',
-        'schema3_to_schema4_upgrade',
-        'schema4_to_schema5_upgrade',
-        'schema5_to_schema6_upgrade',
-        'schema6_to_schema7_upgrade',
-        'schema7_to_schema8_upgrade',
-        'schema8_to_schema9_upgrade',
-        'schema9_to_schema10_upgrade',
-      ],
+      required_roles: [...G1_SCHEMA_DEPENDENCY_ROLES],
       member_order: 'required_roles_order',
       physical_identity_domain_separator:
         G1_PHYSICAL_SCHEMA_IDENTITY_DOMAIN_SEPARATOR,

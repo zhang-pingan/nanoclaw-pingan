@@ -23,6 +23,8 @@ const contractsRoot = import.meta.dirname;
 const repoRoot = path.resolve(contractsRoot, '../../..');
 
 export const G7_IMPLEMENTATION_SOURCE_PATHS = [
+  'src/workflow-runtime/store/runtime-store/command-ingress-integrity.ts',
+  'src/workflow-runtime/store/runtime-store/index.ts',
   'src/workflow-runtime/runtime/commands.ts',
   'src/workflow-runtime/runtime/node-execution.ts',
   'src/workflow-runtime/runtime/root-finalizer.ts',
@@ -52,7 +54,7 @@ const exactBindings = [
   {
     name: 'g6_dynamic_close_accepted_candidate',
     path: 'src/workflow-runtime/contracts/contract-pack-g6-dynamic-close.json',
-    hash: 'sha256:666db064b6f08174daf9f59acc6e12f554c0dd4471ca0e167454205eca77ed8f',
+    hash: 'sha256:f5fc01bc2adeeb68a4bab1329184f0a0bb079fa0596f32e19eaf55ba7ea11dc7',
   },
   {
     name: 'workflow_runtime_command_protocol',
@@ -72,7 +74,7 @@ const exactBindings = [
   {
     name: 'database_schema_11',
     path: 'src/workflow-runtime/store/schema/contract-pack-g1-executable-schema-v11.json',
-    hash: 'sha256:d4dfd9e1beaea10ab7ecca33308d0624fe7ae4c45518a98729198ed7c6f09375',
+    hash: 'sha256:2adb9376d341ad430155829647086bcc76f84ebf22dffac28c19d4026ea06ab2',
   },
 ] as const;
 

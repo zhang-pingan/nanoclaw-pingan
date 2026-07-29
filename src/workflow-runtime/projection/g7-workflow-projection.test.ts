@@ -1,6 +1,7 @@
 import path from 'node:path';
 
-import { describe, expect, it } from 'vitest';
+import Database from 'better-sqlite3';
+import { afterEach, describe, expect, it } from 'vitest';
 
 import {
   CapacitySnapshotPublisher,
@@ -26,12 +27,26 @@ import {
 } from './runtime-center-renderer/entry.js';
 import {
   calculateWorkflowProjectionEventHash,
-  WorkflowProjectionRebuildAuthority,
+  RuntimeStoreWorkflowProjectionRebuildAuthority,
   WorkflowProjectionStore,
   type RuntimeCenterView,
+  type ProjectionRebuildExport,
   type WorkflowProjectionEvent,
   type WorkflowProjectionRow,
 } from './workflow-projection.js';
+
+const projectionFixtures: ReturnType<typeof createG7Fixture>[] = [];
+
+afterEach(() => {
+  while (projectionFixtures.length > 0)
+    projectionFixtures.pop()!.instance.cleanup();
+});
+
+function projectionFixture(key: string): ReturnType<typeof createG7Fixture> {
+  const created = createG7Fixture(`projection-${key}`);
+  projectionFixtures.push(created);
+  return created;
+}
 
 const badHash = domainSeparatedSha256(
   'icarus:g7-projection-test-tamper:1\n',
@@ -152,13 +167,9 @@ describe('G7 Workflow Projection and Runtime Center API', () => {
   });
 
   it('atomically switches validated rebuild generations and preserves failures', () => {
-    const source = new WorkflowProjectionStore();
-    const sourceEvents = consumeRows(source, [
-      row('workflow:1', 1),
-      row('workflow:2', 2),
-    ]);
-    const authority = new WorkflowProjectionRebuildAuthority(
-      source,
+    const source = projectionFixture('generation-switch');
+    const authority = new RuntimeStoreWorkflowProjectionRebuildAuthority(
+      source.instance.store,
       'projection-authority:g7',
     );
     const exported = authority.export('workflows');
@@ -166,17 +177,25 @@ describe('G7 Workflow Projection and Runtime Center API', () => {
     const rebuilt = target.rebuild('workflows', 'rebuild:g7:1', exported, 500);
     expect(rebuilt.disposition).toBe('rebuilt');
     expect(target.rows('workflows')).toEqual(exported.rows);
+    expect(target.row('workflows', source.workflowId)).toMatchObject({
+      workflow_id: source.workflowId,
+      run_id: source.graphRunId,
+      source_kind: 'runtime_store',
+    });
     expect(
       target.rebuild('workflows', 'rebuild:g7:1', exported, 501),
     ).toMatchObject({
       disposition: 'duplicate',
       generationId: rebuilt.generationId,
     });
-    expect(
-      source.consume(
-        event(3, sourceEvents[1]!.eventHash, [row('workflow:3', 3)]),
-      ),
-    ).toBe('applied');
+    source.instance.store.withImmediateTransaction((transaction) => {
+      transaction.execute(
+        `UPDATE workflows
+            SET row_version = row_version + 1, updated_at_ms = 501
+          WHERE id = ?`,
+        [source.workflowId],
+      );
+    });
     const driftedJobExport = authority.export('workflows');
     expect(() =>
       target.rebuild(
@@ -188,38 +207,127 @@ describe('G7 Workflow Projection and Runtime Center API', () => {
     ).toThrow(/projection_rebuild_job_conflict/);
     expect(target.rows('workflows')).toEqual(exported.rows);
 
-    const before = target.canonicalState('workflows');
-    const corrupted = authority.export('workflows') as {
-      rowsHash: typeof badHash;
-    } & typeof exported;
-    corrupted.rowsHash = badHash;
+    expect(() => {
+      (exported as { rowsHash: typeof badHash }).rowsHash = badHash;
+    }).toThrow();
+    const beforeRows = target.rows('workflows');
+    const wrongView = authority.export('trace');
     expect(() =>
-      target.rebuild('workflows', 'rebuild:g7:bad', corrupted, 502),
-    ).toThrow(/projection_rebuild_hash_mismatch/);
-    expect(target.rows('workflows')).toEqual(exported.rows);
+      target.rebuild('workflows', 'rebuild:g7:bad', wrongView, 502),
+    ).toThrow(/projection_rebuild_export_invalid/);
+    expect(target.rows('workflows')).toEqual(beforeRows);
     expect(target.status('workflows')).toMatchObject({
       state: 'degraded',
-      degradation_code: 'projection_rebuild_hash_mismatch',
+      degradation_code: 'projection_rebuild_export_invalid',
     });
-    expect(before).not.toBe(target.canonicalState('workflows'));
 
-    const forgedSource = new WorkflowProjectionStore();
-    consumeRows(forgedSource, [
-      row('workflow:forged', 1, { summary: { label: 'forged' } }),
-    ]);
     const forged = {
-      rows: forgedSource.rows('workflows'),
-      rowsHash: forgedSource.exportRowsHash('workflows'),
-      sourceHeadSeq: forgedSource.status('workflows').projected_head_seq,
+      ...exported,
+      rows: [row('workflow:forged', 1)],
+      rowCount: 1,
+      rowsHash: badHash,
     };
     expect(() =>
-      new WorkflowProjectionStore().rebuild(
+      target.rebuild(
         'workflows',
         'rebuild:g7:forged',
-        forged as unknown as Parameters<WorkflowProjectionStore['rebuild']>[2],
+        forged as ProjectionRebuildExport,
         503,
       ),
     ).toThrow(/projection_rebuild_source_untrusted/);
+    expect(
+      () =>
+        new RuntimeStoreWorkflowProjectionRebuildAuthority(
+          new WorkflowProjectionStore() as never,
+          'projection-authority:forged',
+        ),
+    ).toThrow(/runtime_store_required/);
+
+    source.instance.closeStore();
+    expect(() => authority.export('workflows')).toThrow(/runtime_store_closed/);
+    source.instance.reopenStore();
+    const reopenedAuthority =
+      new RuntimeStoreWorkflowProjectionRebuildAuthority(
+        source.instance.store,
+        'projection-authority:g7',
+      );
+    const reopenedExport = reopenedAuthority.export('workflows');
+    expect(reopenedExport.rowsHash).toBe(driftedJobExport.rowsHash);
+    const reopenedProjection = new WorkflowProjectionStore(
+      'g7.1',
+      reopenedAuthority,
+    );
+    expect(
+      reopenedProjection.rebuild(
+        'workflows',
+        'rebuild:g7:reopen',
+        reopenedExport,
+        504,
+      ).disposition,
+    ).toBe('rebuilt');
+    expect(reopenedProjection.row('workflows', source.workflowId)).toBeDefined();
+  });
+
+  it('rejects forged persisted projection source after reopen', () => {
+    const source = projectionFixture('persisted-event-tamper');
+    const authority = new RuntimeStoreWorkflowProjectionRebuildAuthority(
+      source.instance.store,
+      'projection-authority:tamper',
+    );
+    expect(authority.export('trace').rows.length).toBeGreaterThan(0);
+    source.instance.closeStore();
+    const database = new Database(source.instance.databasePath);
+    try {
+      database.pragma('ignore_check_constraints = ON');
+      database
+        .prepare(
+          `UPDATE workflow_graph_events
+              SET payload_json = '{ "forged": true }',
+                  payload_value_id = NULL, payload_hash = NULL
+            WHERE graph_run_id = ? AND seq = 1`,
+        )
+        .run(source.graphRunId);
+      database.pragma('ignore_check_constraints = OFF');
+    } finally {
+      database.close();
+    }
+    source.instance.reopenStore();
+    const reopenedAuthority =
+      new RuntimeStoreWorkflowProjectionRebuildAuthority(
+        source.instance.store,
+        'projection-authority:tamper',
+      );
+    expect(() => reopenedAuthority.export('trace')).toThrow(
+      /projection_runtime_event_json_noncanonical/,
+    );
+  });
+
+  it('rejects a persisted event with a spliced Value/hash shape', () => {
+    const source = projectionFixture('persisted-value-splice');
+    source.instance.closeStore();
+    const database = new Database(source.instance.databasePath);
+    try {
+      database.pragma('ignore_check_constraints = ON');
+      database
+        .prepare(
+          `UPDATE workflow_graph_events
+              SET payload_json = NULL, payload_value_id = NULL,
+                  payload_hash = ?
+            WHERE graph_run_id = ? AND seq = 1`,
+        )
+        .run(g7Hash('projection-forged-payload'), source.graphRunId);
+      database.pragma('ignore_check_constraints = OFF');
+    } finally {
+      database.close();
+    }
+    source.instance.reopenStore();
+    const authority = new RuntimeStoreWorkflowProjectionRebuildAuthority(
+      source.instance.store,
+      'projection-authority:value-splice',
+    );
+    expect(() => authority.export('trace')).toThrow(
+      /projection_runtime_event_value_binding_invalid/,
+    );
   });
 
   it('binds signed cursors to view, filters, sort, and snapshot head', () => {
@@ -327,9 +435,9 @@ describe('G7 Workflow Projection and Runtime Center API', () => {
   });
 
   it('restricts rebuild to a diagnostic Human actor', () => {
-    const source = new WorkflowProjectionStore();
-    const authority = new WorkflowProjectionRebuildAuthority(
-      source,
+    const source = projectionFixture('runtime-center');
+    const authority = new RuntimeStoreWorkflowProjectionRebuildAuthority(
+      source.instance.store,
       'projection-authority:runtime-center',
     );
     const projection = new WorkflowProjectionStore('g7.1', authority);

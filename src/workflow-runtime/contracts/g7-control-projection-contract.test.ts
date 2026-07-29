@@ -40,7 +40,7 @@ describe('current G7 Control / Card / Projection / Recovery Contract Pack', () =
       g7_done: false,
       g8_through_g9: 'NOT_READY',
       persistent_mode_policy: G7_PERSISTENT_MODE_POLICY,
-      production_implementation_count: 9,
+      production_implementation_count: 11,
       positive_case_count: 29,
       negative_case_count: 33,
       fault_case_count: 16,
@@ -64,7 +64,7 @@ describe('current G7 Control / Card / Projection / Recovery Contract Pack', () =
       expect.arrayContaining([
         expect.objectContaining({
           name: 'g6_dynamic_close_accepted_candidate',
-          hash: 'sha256:666db064b6f08174daf9f59acc6e12f554c0dd4471ca0e167454205eca77ed8f',
+          hash: 'sha256:f5fc01bc2adeeb68a4bab1329184f0a0bb079fa0596f32e19eaf55ba7ea11dc7',
         }),
         expect.objectContaining({
           name: 'workflow_runtime_command_protocol',
@@ -76,7 +76,7 @@ describe('current G7 Control / Card / Projection / Recovery Contract Pack', () =
         }),
         expect.objectContaining({
           name: 'database_schema_11',
-          hash: 'sha256:d4dfd9e1beaea10ab7ecca33308d0624fe7ae4c45518a98729198ed7c6f09375',
+          hash: 'sha256:2adb9376d341ad430155829647086bcc76f84ebf22dffac28c19d4026ea06ab2',
         }),
       ]),
     );
@@ -130,7 +130,7 @@ describe('current G7 Control / Card / Projection / Recovery Contract Pack', () =
   });
 
   it('keeps the G7 implementation boundary free of G8/G9 activation surfaces', () => {
-    expect(G7_IMPLEMENTATION_SOURCE_PATHS).toHaveLength(9);
+    expect(G7_IMPLEMENTATION_SOURCE_PATHS).toHaveLength(11);
     for (const relativePath of G7_IMPLEMENTATION_SOURCE_PATHS) {
       const source = fs.readFileSync(path.join(repoRoot, relativePath), 'utf8');
       expect(source).not.toMatch(

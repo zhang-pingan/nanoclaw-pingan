@@ -12,7 +12,7 @@
     "persistent_mode_policy": "HYBRID_GATE_CONTINUOUS_RUNTIME_V1",
     "accepted_base": "main@dd3c10831dd2e9da91dcb83f28e321d538f41a05",
     "database_schema_version": 11,
-    "database_schema_hash": "sha256:4d096ce9c2ed47a195c36d11a6540a3c0191183a521b59a1520279a0ffaf9be2",
+    "database_schema_hash": "sha256:ad998b2d0bb5e5f158b0be6d13db79cb6a0c0650d5064b267262551af266189c",
     "schema_change_required": true,
     "transaction_host": "WorkflowRuntimeStore.withImmediateTransaction",
     "transaction_mode": "BEGIN_IMMEDIATE",
@@ -64,7 +64,7 @@
       {
         "name": "g6_dynamic_close_accepted_candidate",
         "path": "src/workflow-runtime/contracts/contract-pack-g6-dynamic-close.json",
-        "hash": "sha256:666db064b6f08174daf9f59acc6e12f554c0dd4471ca0e167454205eca77ed8f"
+        "hash": "sha256:f5fc01bc2adeeb68a4bab1329184f0a0bb079fa0596f32e19eaf55ba7ea11dc7"
       },
       {
         "name": "workflow_runtime_command_protocol",
@@ -84,7 +84,7 @@
       {
         "name": "database_schema_11",
         "path": "src/workflow-runtime/store/schema/contract-pack-g1-executable-schema-v11.json",
-        "hash": "sha256:d4dfd9e1beaea10ab7ecca33308d0624fe7ae4c45518a98729198ed7c6f09375"
+        "hash": "sha256:2adb9376d341ad430155829647086bcc76f84ebf22dffac28c19d4026ea06ab2"
       }
     ],
     "forbidden": [
@@ -97,5 +97,5 @@
       "frozen_historical_artifact_rewrite"
     ]
   },
-  "hash": "sha256:3ee3c176b99ec8be51b5cef9da6d4f452c290857d83883aeb0b434ee134fa105"
+  "hash": "sha256:0f5524c27d27ec98126f0313c6b0a4439dcf7a2c5a97bacb2398c7387bbf7a42"
 }

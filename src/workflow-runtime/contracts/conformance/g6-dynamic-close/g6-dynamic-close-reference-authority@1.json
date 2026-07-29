@@ -16,11 +16,11 @@
     "evidence": [
       {
         "path": "src/workflow-runtime/contracts/g6-dynamic-close-types.ts",
-        "raw_sha256": "sha256:e64ca90def5d4db0a3d80ae0a40f53dc9b4c67752006409bbe429ad5a385cfb5"
+        "raw_sha256": "sha256:c27a932a42637c5c0aa4524a8aae812db37453c9d1617f2d61278b25d2f8e970"
       },
       {
         "path": "src/workflow-runtime/contracts/g6-dynamic-close-contract.ts",
-        "raw_sha256": "sha256:7391676194811feee67aa74e89c8359d76d2298f493f1575dd9b941579e3276f"
+        "raw_sha256": "sha256:b0bca24e3bbc70d7cdca8387935485834def99b8a46e07b99ef60b2e7aefa019"
       },
       {
         "path": "src/workflow-runtime/contracts/g6-dynamic-close-contract-cli.ts",
@@ -28,7 +28,7 @@
       },
       {
         "path": "src/workflow-runtime/contracts/g6-dynamic-close-contract.test.ts",
-        "raw_sha256": "sha256:61b7240fefb56ed0439e75bff60bfacf0f6803dec9051ae81cbfec83ffaf04e5"
+        "raw_sha256": "sha256:c0979009420e804273bb71d2ec40e851d759491093ee5507faffd08dcde74d4c"
       },
       {
         "path": "src/workflow-runtime/contracts/g6-dynamic-close-reference-model.ts",
@@ -51,7 +51,7 @@
         "raw_sha256": "sha256:c94423b4db18f077d42f783dac431bdcc0999cccf8fec7987cadd3adc06870bd"
       }
     ],
-    "evidence_tree_hash": "sha256:5e8d8caa9f9a40149ccef1e7263afc44e481c03f34925befd910cb497569a81f"
+    "evidence_tree_hash": "sha256:c72b6805a88c7c53cec0bd1c79519d1102812cd5d502aad82c6e86ad8b8ea924"
   },
-  "hash": "sha256:d2709619ac03d7755ea1dab6dcb735f1245f1634866383cae878aad545577914"
+  "hash": "sha256:c32d057c4764327a982842f1c098be91d63682c6ab1508ee61f55d377f6ec569"
 }

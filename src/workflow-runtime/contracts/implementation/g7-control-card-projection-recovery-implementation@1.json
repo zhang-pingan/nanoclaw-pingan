@@ -10,11 +10,19 @@
     "production_target": true,
     "production_ingress_enabled": false,
     "certification_enabled": false,
-    "production_implementation_count": 9,
+    "production_implementation_count": 11,
     "sources": [
       {
+        "path": "src/workflow-runtime/store/runtime-store/command-ingress-integrity.ts",
+        "raw_sha256": "sha256:6c0dc840d0b6cea816320e78687b668808651d5b8a5119bdc5f6ecb866118689"
+      },
+      {
+        "path": "src/workflow-runtime/store/runtime-store/index.ts",
+        "raw_sha256": "sha256:614a3e22f97b7038aea4abdd5b40c3be2ceea429474e4caa9f21b192cc943f5b"
+      },
+      {
         "path": "src/workflow-runtime/runtime/commands.ts",
-        "raw_sha256": "sha256:f6fdf15952eb7443268d0c11c53a2689c86a9caf1916ad605cfc1dac75bbff64"
+        "raw_sha256": "sha256:61a14f44e6dd2ebc4cbfbbcd32353d34fb42fa7dcaf5ac0ad130184e5ad11002"
       },
       {
         "path": "src/workflow-runtime/runtime/node-execution.ts",
@@ -26,7 +34,7 @@
       },
       {
         "path": "src/workflow-runtime/runtime/graph-runtime.ts",
-        "raw_sha256": "sha256:556dbec6b86469cf6c1568816b94942d7d5e7068b71de1659c210ae452906e4c"
+        "raw_sha256": "sha256:abbf3174ad6e3435a790ef31ec980644962b448442bfe083f6290291802ed09b"
       },
       {
         "path": "src/workflow-runtime/runtime/card-presentation.ts",
@@ -38,18 +46,18 @@
       },
       {
         "path": "src/workflow-runtime/projection/workflow-projection.ts",
-        "raw_sha256": "sha256:d6a3519117e418956759194a1ac3d8546b71f3c56975645a1c2d4fc8bd2c57ac"
+        "raw_sha256": "sha256:e771596786281805ee3c5fff54e8493a14ab0181cf1d0ba6bcc96b40804b81f6"
       },
       {
         "path": "src/workflow-runtime/projection/runtime-center-api.ts",
-        "raw_sha256": "sha256:25477ea288264c5c4df04a592697c9f0fd07de97acc6379fbca6f568a6a651ce"
+        "raw_sha256": "sha256:9bdb9a8b88846e0ff5df6d17e5ac717a930a6ce75ae54fb711d86bc26f716504"
       },
       {
         "path": "src/workflow-runtime/projection/runtime-center-renderer/entry.ts",
         "raw_sha256": "sha256:001aaa2e06dfd0efeeaa639ffb2517ee536860f8874114fe7ed121bec061a1e5"
       }
     ],
-    "source_tree_hash": "sha256:d28b89a446e3d075340657b88c558bacfea5114ff10fbc3aafbf27479a51d184"
+    "source_tree_hash": "sha256:c3d11df92570c3a74f6636aa36a9f7d77a83a7d4038902135b621b5bab47dcda"
   },
-  "hash": "sha256:b1ded97326a2eb633e77f1b4e7692db0c24c6e05c2284321aabfd1f97f1d6e53"
+  "hash": "sha256:c49896b7d12356dd5d898bf8197021ec02affbd29b32142808f450704d7a3ebc"
 }

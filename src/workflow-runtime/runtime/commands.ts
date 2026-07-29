@@ -21,6 +21,10 @@ import type {
   WorkflowRuntimeWriteTransaction,
 } from '../store/runtime-store/index.js';
 import {
+  assertRuntimeCommandIngressIntegrity,
+  calculateRuntimeCommandIngressTerminalBinding,
+} from '../store/runtime-store/command-ingress-integrity.js';
+import {
   G5RuntimeError,
   assertExactPublishedRegistryResource,
   assertNoDeferredForeignKeyViolations,
@@ -163,6 +167,7 @@ interface RuntimeCommandClaimedTarget {
 
 interface PreparedRuntimeCommandIngress {
   readonly id: string;
+  readonly ingressNo: number;
   readonly requestHash: Sha256Hash;
   readonly domain: string;
   readonly claimedTarget: RuntimeCommandClaimedTarget;
@@ -330,6 +335,18 @@ function assertRuntimeCommandIngressHistory(
   domain: string,
   idempotencyKey: string,
 ): void {
+  try {
+    assertRuntimeCommandIngressIntegrity(transaction, {
+      domain,
+      key: idempotencyKey,
+    });
+  } catch (error) {
+    throw new G5RuntimeError(
+      'integrity_violation',
+      'Runtime Command ingress trusted terminal binding drifted',
+      { cause: error },
+    );
+  }
   const history = transaction.queryAll<{
     id: string;
     ingress_no: number;
@@ -412,18 +429,6 @@ function assertRuntimeCommandIngressHistory(
         'integrity_violation',
         'Runtime Command ingress identity or terminal authority drifted',
       );
-    const result = parseCanonicalIngressJson(
-      row.canonical_result_json,
-      'Runtime Command ingress result',
-    );
-    if (
-      runtimeObjectHash('runtime-command-ingress-result', result) !==
-      row.canonical_result_hash
-    )
-      throw new G5RuntimeError(
-        'integrity_violation',
-        'Runtime Command ingress result hash authority drifted',
-      );
   }
 }
 
@@ -496,7 +501,7 @@ function prepareRuntimeCommandIngress(
       input.nowMs,
     ],
   );
-  return { id, requestHash, domain, claimedTarget };
+  return { id, ingressNo, requestHash, domain, claimedTarget };
 }
 
 function terminalizeRuntimeCommandIngress(
@@ -511,6 +516,55 @@ function terminalizeRuntimeCommandIngress(
     'runtime-command-ingress-result',
     receipt.canonicalResult,
   );
+  const canonicalRequestJson = canonicalJson(
+    input.command as unknown as JsonValue,
+  );
+  const canonicalResultJson = canonicalJson(receipt.canonicalResult);
+  const appliedAtMs =
+    receipt.executionResult === 'applied' ? input.nowMs : null;
+  const claimedTargets = {
+    workflow: null,
+    run: null,
+    node: null,
+    retry_schedule: null,
+    effect_operation: null,
+    operational_blocker: null,
+  } as Record<RuntimeCommandClaimedTargetKind, string | null>;
+  claimedTargets[ingress.claimedTarget.kind] = ingress.claimedTarget.id;
+  const terminalBindingHash = calculateRuntimeCommandIngressTerminalBinding({
+    id: ingress.id,
+    idempotency_domain: ingress.domain,
+    idempotency_key: input.command.idempotency_key,
+    ingress_no: ingress.ingressNo,
+    submitted_command_id: input.command.command_id,
+    canonical_request_json: canonicalRequestJson,
+    submitted_request_hash: ingress.requestHash,
+    command_type: input.command.command_type,
+    claimed_target_kind: ingress.claimedTarget.kind,
+    claimed_workflow_id: claimedTargets.workflow,
+    claimed_run_id: claimedTargets.run,
+    claimed_node_id: claimedTargets.node,
+    claimed_retry_schedule_id: claimedTargets.retry_schedule,
+    claimed_effect_operation_id: claimedTargets.effect_operation,
+    claimed_operational_blocker_id: claimedTargets.operational_blocker,
+    actor_ref: input.actor.actorRef,
+    actor_kind: input.actor.actorKind,
+    auth_session_ref: input.actor.authSessionRef,
+    entrypoint: input.actor.entrypoint,
+    source_feature_id: input.actor.sourceFeatureId,
+    delegation_chain_ref: input.actor.delegationChainRef,
+    resolution_result: resolutionResult,
+    authorization_result: authorizationResult,
+    execution_result: receipt.executionResult,
+    denial_code: receipt.denialCode,
+    canonical_result_json: canonicalResultJson,
+    canonical_result_hash: resultHash,
+    resolved_command_id: receipt.commandId,
+    resolved_invocation_id: receipt.invocationId,
+    requested_at_ms: input.nowMs,
+    decided_at_ms: input.nowMs,
+    applied_at_ms: appliedAtMs,
+  });
   requireSingleChange(
     transaction.execute(
       `UPDATE workflow_runtime_command_ingress_invocations
@@ -518,24 +572,37 @@ function terminalizeRuntimeCommandIngress(
               execution_result = ?, denial_code = ?,
               canonical_result_json = ?, canonical_result_hash = ?,
               resolved_command_id = ?, resolved_invocation_id = ?,
-              decided_at_ms = ?, applied_at_ms = ?
+              decided_at_ms = ?, applied_at_ms = ?, terminal_binding_hash = ?
         WHERE id = ? AND resolution_result = 'prepared'`,
       [
         resolutionResult,
         authorizationResult,
         receipt.executionResult,
         receipt.denialCode,
-        canonicalJson(receipt.canonicalResult),
+        canonicalResultJson,
         resultHash,
         receipt.commandId,
         receipt.invocationId,
         input.nowMs,
-        receipt.executionResult === 'applied' ? input.nowMs : null,
+        appliedAtMs,
+        terminalBindingHash,
         ingress.id,
       ],
     ).changes,
     'Runtime Command ingress terminalization',
   );
+  try {
+    assertRuntimeCommandIngressIntegrity(transaction, {
+      domain: ingress.domain,
+      key: input.command.idempotency_key,
+    });
+  } catch (error) {
+    throw new G5RuntimeError(
+      'integrity_violation',
+      'Runtime Command ingress terminal binding verification failed',
+      { cause: error },
+    );
+  }
   return { ingressInvocationId: ingress.id, ...receipt };
 }
 
@@ -2443,12 +2510,7 @@ function gatewayTransaction(
     input,
     ingress,
     'resolved',
-    denial &&
-      [
-        'permission_denied',
-        'feature_ceiling_denied',
-        'command_policy_denied',
-      ].includes(denial)
+    resolvedReceipt.executionResult === 'denied'
       ? 'denied'
       : 'allowed',
     resolvedReceipt,

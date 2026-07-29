@@ -6,19 +6,19 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-runtime-current-schema:1\n",
-  "hash": "sha256:fe272a7e5a7b42bf892d0fa889248e98924f8bf834c3dd5c44672989078bd541",
+  "hash": "sha256:9e7c5a1033154a6691b7ef2ee16df58acf929b1ae63391d93001eba4f58421d5",
   "payload": {
     "database_schema_version": 11,
     "predecessor_database_schema_version": 10,
     "schema_manifest_path": "artifacts/workflow-runtime-schema-manifest@5.json",
-    "schema_manifest_hash": "sha256:0ae202b73c2b9ad7e85954f1e678ba871b03f1d8be45deea870c8caf75688365",
+    "schema_manifest_hash": "sha256:d1eb94304bda5495ed548ac875a210509e8d92d30f55da9b391b10b5754c6123",
     "canonical_migration_path": "migration/workflow-runtime-schema-v11.sql",
-    "canonical_migration_sha256": "sha256:2a29e1f527f47eb43799a7a35a5272b85f5dc154c003f92f71e152788b17f530",
+    "canonical_migration_sha256": "sha256:ccaa7699894da98284b9ce86767d917e355441df93e010d90751ccb713c9b872",
     "predecessor_migration_path": "migration/workflow-runtime-schema-v10.sql",
     "predecessor_migration_sha256": "sha256:269645a9f093dc35fd35a04336d71e38cc17b7168584752f9b9bdfc106f46fad",
     "upgrade_path": "migration/workflow-runtime-schema-v10-to-v11.sql",
-    "upgrade_sha256": "sha256:740aab608641511e4cb9ca991e0d60ffd3679c02b1ca4a063422128aa8fb830b",
-    "schema_hash": "sha256:4d096ce9c2ed47a195c36d11a6540a3c0191183a521b59a1520279a0ffaf9be2",
-    "sqlite_schema_identity": "sha256:89a7e376e6a579eab9f3e6cd3a154a088749fac21d9edfba9a3285cac832494a"
+    "upgrade_sha256": "sha256:cb7c434266a62899323a03c83ee36fae01d3bf25ace4e81c82ea8f4ed1ded381",
+    "schema_hash": "sha256:ad998b2d0bb5e5f158b0be6d13db79cb6a0c0650d5064b267262551af266189c",
+    "sqlite_schema_identity": "sha256:7c817c097e7478d2d9eede99a9309b661b4585b346e440c2d3c37d0acfbb6d31"
   }
 }

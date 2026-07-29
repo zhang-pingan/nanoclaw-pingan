@@ -53,6 +53,39 @@ function fixture(key: string, claims: boolean | number = false): G7Fixture {
   return created;
 }
 
+function tamperTerminalIngress(
+  databasePath: string,
+  commandId: string,
+  assignmentSql: string,
+  parameters: readonly (string | number | null)[] = [],
+): void {
+  const database = new Database(databasePath);
+  let triggerSql: string | null = null;
+  let triggerDropped = false;
+  try {
+    database.pragma('foreign_keys = ON');
+    triggerSql = database
+      .prepare(
+        `SELECT sql FROM sqlite_schema
+          WHERE type='trigger' AND name='trg:command_ingress:terminal_transition'`,
+      )
+      .pluck()
+      .get() as string;
+    database.exec('DROP TRIGGER "trg:command_ingress:terminal_transition"');
+    triggerDropped = true;
+    database
+      .prepare(
+        `UPDATE workflow_runtime_command_ingress_invocations
+            SET ${assignmentSql}
+          WHERE submitted_command_id = ?`,
+      )
+      .run(...parameters, commandId);
+  } finally {
+    if (triggerDropped && triggerSql !== null) database.exec(triggerSql);
+    database.close();
+  }
+}
+
 function runVersion(target: G7Fixture): number {
   return target.instance.store.queryOne<{ row_version: number }>(
     'SELECT row_version FROM workflow_graph_runs WHERE id = ?',
@@ -1664,6 +1697,153 @@ describe('G7 command, recovery, and resolution', () => {
       disposition: 'quarantined',
       finding: 'operational_blocker_cache_mismatch',
     });
+    const source = target.instance.store.queryOne<{
+      source_event_seq: number;
+      evidence_manifest_value_id: string;
+      evidence_manifest_hash: Sha256Hash;
+    }>(
+      `SELECT source_event_seq, evidence_manifest_value_id,
+              evidence_manifest_hash
+         FROM workflow_operational_blockers WHERE id = ?`,
+      [receipt.blockerId!],
+    )!;
+    expect(source).toMatchObject({
+      evidence_manifest_value_id: target.seed.values.context!.id,
+      evidence_manifest_hash: target.seed.values.context!.hash,
+    });
+    expect(
+      target.instance.store.queryOne(
+        `SELECT event_type, payload_json, payload_value_id, payload_hash
+           FROM workflow_graph_events WHERE graph_run_id = ? AND seq = ?`,
+        [target.graphRunId, source.source_event_seq],
+      ),
+    ).toEqual({
+      event_type: 'orchestration_error',
+      payload_json: null,
+      payload_value_id: target.seed.values.context!.id,
+      payload_hash: target.seed.values.context!.hash,
+    });
+
+    const restore: WorkflowRuntimeCommandDocument = {
+      command_id: 'g7:recovery-integrity-restore',
+      command_type: 'restore_integrity',
+      target: { operational_blocker_id: receipt.blockerId! },
+      idempotency_key: 'recovery-integrity-restore',
+      expected_row_version: 1,
+      reason_code: 'hash_revalidated',
+      evidence_refs: ['trusted-backup', 'full-chain'],
+    };
+    expect(() =>
+      submitRuntimeCommand(
+        target.instance.store,
+        commandInput(target, restore, 502, {
+          verification: {
+            kind: 'integrity_restored',
+            expectedHash: target.seed.values.context!.hash,
+            restoredHash: target.seed.values.context!.hash,
+            fullChainVerified: true,
+          },
+        }),
+        { point: 'before_commit' },
+      ),
+    ).toThrow(/fault/i);
+    expectCommandAuditAbsent(target, restore.command_id);
+    expect(
+      target.instance.store.queryOne(
+        'SELECT status, row_version FROM workflow_operational_blockers WHERE id = ?',
+        [receipt.blockerId!],
+      ),
+    ).toMatchObject({ status: 'open', row_version: 1 });
+
+    target.instance.closeStore();
+    target.instance.reopenStore();
+    expect(
+      submitRuntimeCommand(
+        target.instance.store,
+        commandInput(target, restore, 503, {
+          verification: {
+            kind: 'integrity_restored',
+            expectedHash: target.seed.values.context!.hash,
+            restoredHash: target.seed.values.context!.hash,
+            fullChainVerified: true,
+          },
+        }),
+      ).executionResult,
+    ).toBe('applied');
+    expect(
+      target.instance.store.queryOne(
+        'SELECT status FROM workflow_operational_blockers WHERE id = ?',
+        [receipt.blockerId!],
+      ),
+    ).toMatchObject({ status: 'resolved' });
+    expect(
+      target.instance.store.queryOne(
+        'SELECT operational_state FROM workflow_graph_runs WHERE id = ?',
+        [target.graphRunId],
+      ),
+    ).toMatchObject({ operational_state: 'healthy' });
+  });
+
+  it('rejects Recovery integrity evidence spliced to its decision event', () => {
+    const target = fixture('recovery-source-splice');
+    target.instance.store.withImmediateTransaction((transaction) => {
+      transaction.execute(
+        "UPDATE workflow_graph_runs SET operational_state = 'action_required' WHERE id = ?",
+        [target.graphRunId],
+      );
+    });
+    const recovery = coordinateGraphRecoveryG7(target.instance.store, {
+      graphRunId: target.graphRunId,
+      expectedRunRowVersion: runVersion(target),
+      integrityEvidence: target.seed.values.context!,
+      remediationPolicy: target.remediationPolicy,
+      remediationDeadlineAtMs: 10_000,
+      nowMs: 510,
+    });
+    const decision = target.instance.store.queryOne<{ seq: number }>(
+      `SELECT seq FROM workflow_graph_events
+        WHERE graph_run_id = ? AND event_type = 'recovery_decision_recorded'
+          AND json_extract(payload_json, '$.blocker_id') = ?`,
+      [target.graphRunId, recovery.blockerId!],
+    )!.seq;
+    target.instance.store.withImmediateTransaction((transaction) => {
+      transaction.execute(
+        'UPDATE workflow_operational_blockers SET source_event_seq = ? WHERE id = ?',
+        [decision, recovery.blockerId!],
+      );
+    });
+    expect(() =>
+      submitRuntimeCommand(
+        target.instance.store,
+        commandInput(
+          target,
+          {
+            command_id: 'g7:recovery-source-splice',
+            command_type: 'restore_integrity',
+            target: { operational_blocker_id: recovery.blockerId! },
+            idempotency_key: 'recovery-source-splice',
+            expected_row_version: 1,
+            reason_code: 'hash_revalidated',
+            evidence_refs: ['trusted-backup', 'full-chain'],
+          },
+          511,
+          {
+            verification: {
+              kind: 'integrity_restored',
+              expectedHash: target.seed.values.context!.hash,
+              restoredHash: target.seed.values.context!.hash,
+              fullChainVerified: true,
+            },
+          },
+        ),
+      ),
+    ).toThrow(/verification did not close integrity_quarantine/);
+    expect(
+      target.instance.store.queryOne(
+        'SELECT status, row_version FROM workflow_operational_blockers WHERE id = ?',
+        [recovery.blockerId!],
+      ),
+    ).toMatchObject({ status: 'open', row_version: 1 });
   });
 
   it('rolls command authority and audit back together at every gateway fault boundary', () => {
@@ -2194,26 +2374,173 @@ describe('G7 command, recovery, and resolution', () => {
     } finally {
       database.close();
     }
-    target.instance.reopenStore();
-    const ingressCount = target.instance.store.queryOne<{ count: number }>(
-      `SELECT count(*) AS count
-         FROM workflow_runtime_command_ingress_invocations
-        WHERE submitted_command_id = ?`,
-      [command.command_id],
-    )!.count;
+    expect(() => target.instance.reopenStore()).toThrow(
+      /ingress trusted terminal authority is invalid/i,
+    );
+  });
+
+  it.each([
+    ['actor identity', 'actor_ref = ?', ['human:forged']],
+    ['authentication session', 'auth_session_ref = ?', ['session:forged']],
+    ['entrypoint', 'entrypoint = ?', ['deadline_watchdog']],
+    ['source feature', 'source_feature_id = ?', ['feature:forged']],
+    ['delegation chain', 'delegation_chain_ref = ?', ['delegation:forged']],
+    [
+      'terminal disposition',
+      `authorization_result = 'not_evaluated',
+       execution_result = 'duplicate', applied_at_ms = NULL`,
+      [],
+    ],
+    [
+      'chronology',
+      'requested_at_ms = requested_at_ms - 1',
+      [],
+    ],
+  ] as const)(
+    'rejects schema-valid ingress %s tamper during Store startup',
+    (_label, assignmentSql, parameters) => {
+      const target = fixture(
+        `ingress-${String(_label).replaceAll(' ', '-')}`,
+      );
+      const command: WorkflowRuntimeCommandDocument = {
+        command_id: `g7:ingress:${String(_label).replaceAll(' ', '-')}`,
+        command_type: 'pause_run',
+        target: { run_id: target.graphRunId },
+        idempotency_key: `ingress:${String(_label).replaceAll(' ', '-')}`,
+        expected_row_version: runVersion(target),
+        reason_code: 'operator_requested',
+        evidence_refs: [],
+      };
+      expect(
+        submitRuntimeCommand(
+          target.instance.store,
+          commandInput(target, command, 1_000),
+        ).executionResult,
+      ).toBe('applied');
+      target.instance.closeStore();
+      tamperTerminalIngress(
+        target.instance.databasePath,
+        command.command_id,
+        assignmentSql,
+        parameters,
+      );
+      expect(() => target.instance.reopenStore()).toThrow(
+        /ingress trusted terminal authority is invalid/i,
+      );
+    },
+  );
+
+  it('rejects a schema-valid resolved Invocation identity splice on reopen', () => {
+    const target = fixture('ingress-resolved-identity');
+    const command: WorkflowRuntimeCommandDocument = {
+      command_id: 'g7:ingress:resolved-identity',
+      command_type: 'pause_run',
+      target: { run_id: target.graphRunId },
+      idempotency_key: 'ingress:resolved-identity',
+      expected_row_version: runVersion(target),
+      reason_code: 'operator_requested',
+      evidence_refs: [],
+    };
+    expect(
+      submitRuntimeCommand(
+        target.instance.store,
+        commandInput(target, command, 1_100),
+      ).executionResult,
+    ).toBe('applied');
+    target.instance.closeStore();
+    const database = new Database(target.instance.databasePath);
+    try {
+      database.pragma('foreign_keys = ON');
+      database
+        .prepare(
+          `INSERT INTO workflow_runtime_command_invocations (
+             id, command_id, invocation_no, submitted_request_hash, actor_ref,
+             actor_kind, auth_session_ref, entrypoint, source_feature_id,
+             delegation_chain_ref, required_permission,
+             command_policy_resource_id, command_policy_resource_hash,
+             authorization_result, execution_result, target_before_hash,
+             target_after_hash, resulting_event_seq, close_request_id,
+             effect_operation_id, requested_at_ms, decided_at_ms, applied_at_ms
+           )
+           SELECT 'command-invocation:integrity-splice', command_id,
+                  invocation_no + 1, submitted_request_hash, actor_ref,
+                  actor_kind, auth_session_ref, entrypoint, source_feature_id,
+                  delegation_chain_ref, required_permission,
+                  command_policy_resource_id, command_policy_resource_hash,
+                  authorization_result, execution_result, target_before_hash,
+                  target_after_hash, resulting_event_seq, close_request_id,
+                  effect_operation_id, requested_at_ms, decided_at_ms,
+                  applied_at_ms
+             FROM workflow_runtime_command_invocations
+            WHERE command_id = ? AND invocation_no = 1`,
+        )
+        .run(command.command_id);
+    } finally {
+      database.close();
+    }
+    tamperTerminalIngress(
+      target.instance.databasePath,
+      command.command_id,
+      'resolved_invocation_id = ?',
+      ['command-invocation:integrity-splice'],
+    );
+    expect(() => target.instance.reopenStore()).toThrow(
+      /ingress trusted terminal authority is invalid/i,
+    );
+  });
+
+  it('rejects trusted ingress identity drift before exact replay append', () => {
+    const target = fixture('ingress-replay-verifier');
+    const command: WorkflowRuntimeCommandDocument = {
+      command_id: 'g7:ingress:replay-verifier',
+      command_type: 'pause_run',
+      target: { run_id: target.graphRunId },
+      idempotency_key: 'ingress:replay-verifier',
+      expected_row_version: runVersion(target),
+      reason_code: 'operator_requested',
+      evidence_refs: [],
+    };
+    expect(
+      submitRuntimeCommand(
+        target.instance.store,
+        commandInput(target, command, 1_200),
+      ).executionResult,
+    ).toBe('applied');
+    const before = target.instance.store.queryOne<{
+      ingress_count: number;
+      invocation_count: number;
+    }>(
+      `SELECT
+         (SELECT count(*) FROM workflow_runtime_command_ingress_invocations
+           WHERE idempotency_key = ?) AS ingress_count,
+         (SELECT count(*) FROM workflow_runtime_command_invocations
+           WHERE command_id = ?) AS invocation_count`,
+      [command.idempotency_key, command.command_id],
+    )!;
+    tamperTerminalIngress(
+      target.instance.databasePath,
+      command.command_id,
+      'actor_ref = ?',
+      ['human:replay-forged'],
+    );
     expect(() =>
       submitRuntimeCommand(
         target.instance.store,
-        commandInput(target, command, 961),
+        commandInput(target, command, 1_201),
       ),
-    ).toThrow(/ingress request no longer satisfies|ingress identity/i);
+    ).toThrow(/trusted terminal binding drifted/i);
     expect(
-      target.instance.store.queryOne<{ count: number }>(
-        `SELECT count(*) AS count
-           FROM workflow_runtime_command_ingress_invocations
-          WHERE submitted_command_id = ?`,
-        [command.command_id],
-      )!.count,
-    ).toBe(ingressCount);
+      target.instance.store.queryOne<{
+        ingress_count: number;
+        invocation_count: number;
+      }>(
+        `SELECT
+           (SELECT count(*) FROM workflow_runtime_command_ingress_invocations
+             WHERE idempotency_key = ?) AS ingress_count,
+           (SELECT count(*) FROM workflow_runtime_command_invocations
+             WHERE command_id = ?) AS invocation_count`,
+        [command.idempotency_key, command.command_id],
+      ),
+    ).toEqual(before);
   });
 });

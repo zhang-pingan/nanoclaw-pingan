@@ -50,7 +50,7 @@ const exactBindings = [
   {
     name: 'g5_basic_runtime',
     path: 'src/workflow-runtime/contracts/contract-pack-g5-basic-runtime-repair.json',
-    hash: 'sha256:0a0e13f4529cfcc042184ce3a29b7b75342ac57a68befd26a9629b444874639a',
+    hash: 'sha256:c37f77dbe704f1e55656d93ae9f35faafad9bbeb524cdab914a0897a3592e540',
   },
   {
     name: 'r020_child_consumption_lineage',
@@ -70,7 +70,7 @@ const exactBindings = [
   {
     name: 'database_schema_11',
     path: 'src/workflow-runtime/store/schema/contract-pack-g1-executable-schema-v11.json',
-    hash: 'sha256:d4dfd9e1beaea10ab7ecca33308d0624fe7ae4c45518a98729198ed7c6f09375',
+    hash: 'sha256:2adb9376d341ad430155829647086bcc76f84ebf22dffac28c19d4026ea06ab2',
   },
 ] as const;
 

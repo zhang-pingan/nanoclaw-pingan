@@ -241,6 +241,7 @@ function buildIngressTable(ordinal: number): LogicalTableMetadata {
     column(30, 'requested_at_ms', 'integer'),
     column(31, 'decided_at_ms', 'integer', true),
     column(32, 'applied_at_ms', 'integer', true),
+    column(33, 'terminal_binding_hash', 'hash', true),
   ];
   const table: LogicalTableMetadata = {
     ordinal,
@@ -334,6 +335,12 @@ function buildIngressTable(ordinal: number): LogicalTableMetadata {
         ['canonical_result_hash'],
         'sha256:<64 lowercase hexadecimal characters>',
       ),
+      check(
+        'ck:workflow_runtime_command_ingress_invocations:terminal_binding_hash:hash',
+        'hash_format',
+        ['terminal_binding_hash'],
+        'sha256:<64 lowercase hexadecimal characters>',
+      ),
       ...['requested_at_ms', 'decided_at_ms', 'applied_at_ms'].map((name) =>
         check(
           `ck:workflow_runtime_command_ingress_invocations:${name}:safe_integer`,
@@ -384,8 +391,9 @@ function buildIngressTable(ordinal: number): LogicalTableMetadata {
           'resolved_command_id',
           'decided_at_ms',
           'applied_at_ms',
+          'terminal_binding_hash',
         ],
-        'prepared is incomplete; unresolved denial has no resolved identity; resolved terminal disposition has exact resolved identity',
+        'prepared has no binding; every unresolved or resolved terminal disposition has an exact domain-separated binding',
       ),
       check(
         'ck:command_ingress:chronology',

@@ -82,13 +82,24 @@ describe('G7 Control / Card / Projection / Recovery readiness audit', () => {
     });
   });
 
-  it('keeps Projection and Renderer outside authoritative Runtime writes and monolith imports', () => {
-    const projectionPaths = [
-      'src/workflow-runtime/projection/workflow-projection.ts',
+  it('limits Runtime Store projection access to the read-only rebuild exporter', () => {
+    const exporter = fs.readFileSync(
+      path.join(
+        repoRoot,
+        'src/workflow-runtime/projection/workflow-projection.ts',
+      ),
+      'utf8',
+    );
+    expect(exporter).toMatch(/WorkflowRuntimeStore/);
+    expect(exporter).toMatch(/source\.queryAll/);
+    expect(exporter).not.toMatch(
+      /WorkflowRuntimeWriteTransaction|withImmediateTransaction|transaction\.execute/,
+    );
+    const presentationPaths = [
       'src/workflow-runtime/projection/runtime-center-api.ts',
       'src/workflow-runtime/projection/runtime-center-renderer/entry.ts',
     ];
-    for (const relativePath of projectionPaths) {
+    for (const relativePath of presentationPaths) {
       const source = fs.readFileSync(path.join(repoRoot, relativePath), 'utf8');
       expect(source).not.toMatch(
         /store\/runtime-store|runtime\/graph-store|WorkflowRuntimeWriteTransaction|withImmediateTransaction/,

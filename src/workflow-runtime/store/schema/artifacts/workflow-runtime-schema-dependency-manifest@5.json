@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-runtime-schema-dependency-manifest:1\n",
-  "hash": "sha256:3f68cbd5618060135f7bd7f46589bc4a7b8f0647d6e8efda9bec1d8b55ce7ede",
+  "hash": "sha256:a1f0d2ad63d87124512e3390eafdae2b4a2f5c5e5b57839016cc3ebf2d636afd",
   "payload": {
     "dependency_set_id": "workflow-runtime-schema-v1",
     "identity_scope": "physical_schema_and_migration",
@@ -219,8 +219,8 @@
           "version": "1"
         },
         "version": 1,
-        "semantic_hash": "sha256:0ae202b73c2b9ad7e85954f1e678ba871b03f1d8be45deea870c8caf75688365",
-        "raw_sha256": "sha256:cbeecd21aa54d038baa0b75e4329c752391be986c75c0e57d306f64b1c07c958"
+        "semantic_hash": "sha256:d1eb94304bda5495ed548ac875a210509e8d92d30f55da9b391b10b5754c6123",
+        "raw_sha256": "sha256:5d9f16233e06c543a9648268d3b316070d4d93f479db3c2177b7c9fd95a37071"
       },
       {
         "role": "canonical_migration",
@@ -232,8 +232,8 @@
           "version": "1"
         },
         "version": 1,
-        "semantic_hash": "sha256:2a29e1f527f47eb43799a7a35a5272b85f5dc154c003f92f71e152788b17f530",
-        "raw_sha256": "sha256:2a29e1f527f47eb43799a7a35a5272b85f5dc154c003f92f71e152788b17f530"
+        "semantic_hash": "sha256:ccaa7699894da98284b9ce86767d917e355441df93e010d90751ccb713c9b872",
+        "raw_sha256": "sha256:ccaa7699894da98284b9ce86767d917e355441df93e010d90751ccb713c9b872"
       },
       {
         "role": "schema3_to_schema4_upgrade",
@@ -336,10 +336,10 @@
           "version": "1"
         },
         "version": 1,
-        "semantic_hash": "sha256:740aab608641511e4cb9ca991e0d60ffd3679c02b1ca4a063422128aa8fb830b",
-        "raw_sha256": "sha256:740aab608641511e4cb9ca991e0d60ffd3679c02b1ca4a063422128aa8fb830b"
+        "semantic_hash": "sha256:cb7c434266a62899323a03c83ee36fae01d3bf25ace4e81c82ea8f4ed1ded381",
+        "raw_sha256": "sha256:cb7c434266a62899323a03c83ee36fae01d3bf25ace4e81c82ea8f4ed1ded381"
       }
     ],
-    "physical_schema_identity": "sha256:edf59d731f72e5cfd437bed52e8faf73d306456d58a17d1f14448af1a34b26bb"
+    "physical_schema_identity": "sha256:58ea51aadb366ce0926a9c99f1e3507de257322a096f980f72c47c386b9ffedf"
   }
 }
