@@ -1137,6 +1137,43 @@ describe.sequential('G1.2 Workflow Runtime Store base', () => {
     ).toBe(1);
   });
 
+  it('stages bounded transient ID sets with fixed Store-owned TEMP DDL', () => {
+    const { databasePath } = temporaryDatabase();
+    const store = openFresh(databasePath);
+    const ids = Array.from(
+      { length: 2048 },
+      (_, index) => `scope-${String(index).padStart(4, '0')}`,
+    );
+    store.withImmediateTransaction((transaction) => {
+      expect(transaction.stageTransientIdSet!('t7a-test', ids)).toBe(
+        ids.length,
+      );
+      expect(
+        transaction.queryAll<{ id: string }>(
+          `SELECT id FROM temp.workflow_runtime_transient_id_sets
+            WHERE set_key = ? ORDER BY ordinal`,
+          ['t7a-test'],
+        ),
+      ).toEqual(ids.map((id) => ({ id })));
+      expect(() =>
+        transaction.stageTransientIdSet!('t7a-test', [ids[0]!, ids[0]!]),
+      ).toThrowError(
+        expect.objectContaining<Partial<WorkflowRuntimeStoreError>>({
+          code: 'transient_id_set_invalid',
+        }),
+      );
+    });
+    store.withImmediateTransaction((transaction) => {
+      expect(
+        transaction.queryOne<{ count: number }>(
+          `SELECT count(*) AS count
+             FROM temp.workflow_runtime_transient_id_sets`,
+          [],
+        )?.count,
+      ).toBe(0);
+    });
+  });
+
   it('serializes a competing process behind a real BEGIN IMMEDIATE writer lock', async () => {
     const { databasePath } = temporaryDatabase();
     const store = openFresh(databasePath);

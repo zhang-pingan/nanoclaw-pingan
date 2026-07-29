@@ -65,10 +65,10 @@
           "id": "icarus.workflow-g6-dynamic-close-implementation",
           "version": "1.0.0"
         },
-        "hash": "sha256:7953297dd7fc8a1d13d6bc0b8fc52dbe272a2c2084de3cb0fe99a04481c827b1"
+        "hash": "sha256:d1b4b56ec9f1a4cf98136d8b80d6ee6daf9720f769f30245bfdc71084066aed4"
       }
     ],
-    "member_tree_hash": "sha256:ac087b0550412788c7ee05325fb8d8fe60217a2c165186606796eea5eb5fb833"
+    "member_tree_hash": "sha256:29b30b454bdc85f41684928f9616694e09507b81bae8ba97ea911fb93562f1b6"
   },
-  "hash": "sha256:f5fc01bc2adeeb68a4bab1329184f0a0bb079fa0596f32e19eaf55ba7ea11dc7"
+  "hash": "sha256:ff3ed60a8526f2be21ee20ed63415fddf4705fea424bd011e3019db41f829a20"
 }

@@ -1,9 +1,9 @@
 # Dynamic Workflow Runtime 实施进度
 
-> **状态**: `G7_CONTROL_CARD_PROJECTION_RECOVERY_CONSTRUCTION_CANDIDATE_PENDING_INDEPENDENT_WHOLE_GATE_ACCEPTANCE`
-> **当前 Gate**: G0-G6与R-020/R-021/R-022=`DONE`；G7=`IN_PROGRESS/NOT_DONE`；G8-G9=`NOT_READY`
-> **后续边界**: 只允许controller基于完整clean G7 candidate创建一次fresh independent whole-Gate acceptance；不得开始或标记G8+
-> **最后更新**: 2026-07-28
+> **状态**: `G8_CERTIFICATION_CONSTRUCTION_IN_PROGRESS`
+> **当前 Gate**: G0-G7与R-020/R-021/R-022=`DONE`；G8=`IN_PROGRESS/NOT_DONE`；G9=`NOT_READY`
+> **后续边界**: 由唯一continuous G8 worker完成release/profile/limits/smoke/benchmark完整certification candidate；不得实现或激活G9
+> **最后更新**: 2026-07-29
 > **规范权威**: `local/docs/dynamic-workflow-dag-framework.md`
 
 ## 文档职责
@@ -117,8 +117,8 @@ Agent Container 运行于独立 VM，Node identity 由 VM image gate 保证；�
 | G4 Test Bootstrap | `DONE` | G1 + G2 + G3 | frozen bootstrap保持不变；current Schema 11/G3 exact authority只在successor profile与tests机械级联 | R-022 closure + 本原子G7 repair提交 |
 | G5 Basic Runtime | `DONE` | current G1-G4 authority + current G2 authority | accepted G5语义不变；Schema 11与G7共享source identity只在current pack/evidence机械级联 | R-022 closure + 本原子G7 repair提交 |
 | G6 Dynamic / Close | `DONE` | G5 + R-022 fresh independent regression closure | controller确认fresh independent whole-Gate acceptance已在clean `main@dd3c10831dd2e9da91dcb83f28e321d538f41a05` PASS；G7 repair只机械级联current Schema/G5/shared-source prerequisites，不重开accepted G6语义 | `dd3c108` + controller acceptance + 本原子G7 repair提交 |
-| G7 Control / Card / Projection / Recovery | `IN_PROGRESS/NOT_DONE` | G6 | replacement candidate新增closed immutable pre-resolution authenticated ingress audit，并修复exact replay、strict confirmation TTL/intent、Recovery到T6e persisted source evidence、Store-backed authoritative projection rebuild及Ingress完整trusted terminal binding；完整内部affected-chain已通过，等待controller执行一次fresh independent whole-Gate acceptance | `4b68940` + `7ec7aee` + rejected `db78b42` + rejected `8ec4a1c` + 本原子repair提交 |
-| G8 Certification | `NOT_READY` | G7 | certified profile meeting Product Floor | - |
+| G7 Control / Card / Projection / Recovery | `DONE` | G6 | controller确认fresh independent static-source-and-existing-tests-only whole-Gate acceptance已在exact clean `main@549e8ee59e3a55f7886aed5a591f60d1c4725d26`统一PASS；无blocker、无`SECURITY_VALIDATION_NOT_RUN`、无其他`NOT_RUN` | `4b68940` + `7ec7aee` + replacement repairs + `549e8ee` + controller acceptance |
+| G8 Certification | `IN_PROGRESS/NOT_DONE` | G7 | 首个compatibility切片以Store-owned TEMP subtree ID set替换T7a超长动态`IN (...)`，并机械级联current G6/G7 machine authority；release/profile/limits/smoke/benchmark与完整certification exit继续由同一worker施工 | 本原子G8 compatibility提交 |
 | G9 Production Activation | `NOT_READY` | G8 + fresh current G0/G0.10 manifests | activation + Capacity genesis/preservation audit + startup/empty-state or Recipe smoke | - |
 
 ## 工作包总览
@@ -129,14 +129,14 @@ Agent Container 运行于独立 VM，Node identity 由 VM image gate 保证；�
 | I1 | Intake、Routing、幂等创建、Child provenance、Claim | `IN_PROGRESS` | G6 required Child与R-022 Claim handoff已随G6 whole-Gate acceptance闭合；G7 source-bound Claim release remediation已完成construction并等待G7 acceptance |
 | I2 | Definition、State lowering、Context、transition | `IN_PROGRESS` | Compiler 3.0.6只修复generated output schema authority；冻结3.0.4/v6与superseded 3.0.5/v7语义分别保留 |
 | I3 | Source/Compiled IR、Port、Compiler | `DONE` | Compiler 3.0.6 child completion与Map result closed schema、additive v8 authority及fresh independent affected-chain regression已闭合 |
-| I4 | Runtime Store、SQLite relation、Value/Blob、migration | `IN_PROGRESS` | accepted Schema 10及更早历史冻结；G7 additive Schema 11/10到11 upgrade增加immutable ingress audit与resolved identity FK，Blob/GC仍未实现 |
-| I5 | Graph 状态机、reconcile、Scheduler、Ledger | `IN_PROGRESS` | G6 dynamic/close authority已accepted；G7 pause/resume/cancel、manual skip/retry handoff与Recovery complete candidate保持既有fence/ledger/deadline |
+| I4 | Runtime Store、SQLite relation、Value/Blob、migration | `IN_PROGRESS` | Schema 11及10以前历史冻结；G8 writer connection新增固定Store-owned TEMP ID-set table，仅用于事务内有界集合定位，不改变persistent schema或开放DDL |
+| I5 | Graph 状态机、reconcile、Scheduler、Ledger | `IN_PROGRESS` | G6/G7已accepted；G8 compatibility将T7a Recursive CTE结果一次性stage并以固定set-based SQL定位完整subtree，原子fence/cleanup/hash/replay语义不变 |
 | I6 | Delegation/System、Capability Effect、Outbox | `IN_PROGRESS` | G5/G6 effect与compensation authority已accepted；G7 source-specific effect/compensation remediation已完成construction且不连接真实Adapter |
 | I7 | Durable Wait、Signal/Timer/Approval、Inbox | `IN_PROGRESS` | G5 automatic retry authority保持不变；G7 Deadline Watchdog与authorized manual T6d handoff已完成construction并等待G7 acceptance |
 | I8 | Subgraph、Expand、Map、child scope | `IN_PROGRESS` | G6 subgraph/expand/map与T7b已随whole-Gate acceptance闭合；G7不改写其closed child authority |
 | I9 | Completion、Cancel、Compensation、Finalization、Recovery | `IN_PROGRESS` | G6 T7a/T7b/T8与Root Finalization已accepted；G7 T7c/T6e/last-blocker restoration/administrative abandon/Recovery complete candidate等待whole-Gate acceptance |
 | I10 | Runtime Command、Capacity Admin、Runtime Center、Trace | `IN_PROGRESS` | G7 Gateway现在为每次authenticated调用追加pre-resolution ingress identity；resolved调用再绑定Header/Invocation，missing/invalid target不伪造target；Deadline/Card/Projection/Runtime Center/Capacity candidate等待whole-Gate acceptance |
-| I11 | Contract Pack、managed runtime toolchain/launcher、测试模型、发布门禁、absence baseline | `IN_PROGRESS` | Schema 11与G7 machine pack、independent model、duplicate/denial/tamper/reopen/rollback/source-splice/projection-forgery evidence及完整内部affected-chain verification已完成；等待controller acceptance |
+| I11 | Contract Pack、managed runtime toolchain/launcher、测试模型、发布门禁、absence baseline | `IN_PROGRESS` | G7 whole-Gate已accepted；G8 current G6/G7 exact source dependency已机械级联，release/profile/limits/smoke/benchmark certification authority正在施工 |
 
 ## G0 施工切片
 
@@ -3131,3 +3131,13 @@ Current G7 protocol/positive/negative/fault/reference/evidence-tree/implementati
 Managed typecheck/build PASS；Core bind返回Runtime Launcher `/Users/chelaile/Library/Application Support/Icarus/bin/icarus-runtime`与`development_checkout`；post-build Store check保持Schema 11/Profile candidate并明确`release_identity_status=missing_until_g8`。Schema 10及更早migration/upgrade/numbered artifacts相对rejected candidate保持byte-exact；Compiler/Golden/sealed/review/semantic-review、R-020/R-021/R-022、G3.8A与frozen gate ownership未重标。Root/container agent-runner lockfile保持`sha256:2b8c87e5549915e2d53c1eecdabef3ebb149bc8f03054d40f1924d93bf2bd085` / `sha256:d9b4b5d77dc6478348b81d74d65e2af1d3596ce45eea6742cae20cf105db379c`且dependency zero-diff。
 
 本repair commit只形成changed clean replacement candidate，不是formal acceptance、closure或G7 `DONE`证据。G0-G6与R-020/R-021/R-022保持`DONE`；G7保持`IN_PROGRESS/NOT_DONE`，下一步只能由controller基于新candidate创建fresh independent whole-Gate acceptance；G8-G9保持`NOT_READY`，不得开始certification、Production loader/activation/ingress/network、real Adapter/user data或authentication bypass。
+
+### 2026-07-29：G7 whole-Gate acceptance closure与G8 T7 certification compatibility施工
+
+**结论**：`G7_DONE_OPERATIONALLY_ACCEPTED / G8_CERTIFICATION_CONSTRUCTION_IN_PROGRESS / G9_NOT_READY`。Controller authority确认fresh independent static-source-and-existing-tests-only whole-Gate acceptance已在exact clean `main@549e8ee59e3a55f7886aed5a591f60d1c4725d26`统一PASS；该candidate唯一parent为`cfbbdfc50839abf645fb41e1bbb9771dad1d3fc2`，无blocker、无`SECURITY_VALIDATION_NOT_RUN`、无其他`NOT_RUN`。本唯一continuous G8 worker从该accepted clean boundary开始，不重开G7语义、不查询已关闭验收任务，也不实现或激活G9 Production loader/activation/ingress/network、真实Adapter、用户数据或真实Runtime DB。
+
+首个正常G8 implementation切片关闭SQLite Execution Profile对T7超长动态`IN (...)`的兼容差距。`WorkflowRuntimeStore` writer connection在完整Production PRAGMA配置后创建固定`TEMP workflow_runtime_transient_id_sets`，public transaction仍只允许参数化DML且不能执行DDL；`stageTransientIdSet`先验证non-empty key与non-empty unique IDs，再通过单个`json_each` set-based INSERT保留确定ordinal，每个`BEGIN IMMEDIATE`在callback前清空connection-local transient rows。T7a继续使用indexed `parent_scope_id` Recursive CTE得到完整subtree，在任何fence写前一次性stage scope IDs，随后Attempt/Wait/Build/Controller/Map/Effect的查询与set-based UPDATE全部使用固定TEMP subquery，不再构造随subtree增长的SQL或占位符。Close request/frontier hash、Scope CAS、cleanup/compensation、manifest、Event、exact replay和closed-child authority语义保持不变；persistent Schema保持11，未引入Schema 12。
+
+Focused managed验证已通过typecheck、G1.2 real-file Store `36/36`及G6 Production `16/16`；G6首次完整suite仅因受治理的`graph-runtime.ts` source identity改变而由checker按预期fail closed，没有测试语义失败。随后current G6 implementation/source tree机械级联为`sha256:d1b4b56ec9f1a4cf98136d8b80d6ee6daf9720f769f30245bfdc71084066aed4` / `sha256:71e4134bafcd24902d37977873ecb3ea16c783662190eb52b6d90f5b5957090a`，pack/member tree为`sha256:ff3ed60a8526f2be21ee20ed63415fddf4705fea424bd011e3019db41f829a20` / `sha256:29b30b454bdc85f41684928f9616694e09507b81bae8ba97ea911fb93562f1b6`；G7 exact G6 prerequisite同步后current pack/member tree为`sha256:3c3044a7371be8272bf11e36524296ff49de0fcbbadab061538e1b020be5d74c` / `sha256:4e430f813f915146a3c444aa7c5a3562f0c74fcfdbacfb3930bd625d6a1c14e3`。G6/G7 read-only checker及最终完整G6 `24/24`、G7 `55/55`重跑均PASS；Schema 11及10以前migration/upgrade/numbered artifacts、Compiler/Golden sealed authority、G3.8A、frozen G4 bootstrap、R-020/R-021/R-022、ownership与两套lockfile未修改或重标。
+
+本提交只是可独立回退的G8 certification compatibility切片，不是G8 candidate、formal acceptance或`DONE`证据。`RuntimeSupportedLimits`、certified SQLite Profile、Core Release/content-addressed binding、minimum machine class、startup smoke、真实release benchmark observation、deterministic certification artifacts/CLI/checker/fixtures/tests及完整affected-chain/shadow acceptance继续由同一continuous G8 worker完成；G8保持`IN_PROGRESS/NOT_DONE`，G9保持`NOT_READY`。

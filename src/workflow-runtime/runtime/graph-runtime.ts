@@ -593,6 +593,16 @@ export function requestScopeCloseT7aInTransaction(
   );
   if (subtree.length === 0)
     throw new G5RuntimeError('integrity_violation', 'T7a subtree is empty');
+  if (!transaction.stageTransientIdSet)
+    throw new G5RuntimeError(
+      'integrity_violation',
+      'T7a requires Store-owned transient subtree staging',
+    );
+  const subtreeSetKey = 't7a-subtree';
+  transaction.stageTransientIdSet(
+    subtreeSetKey,
+    subtree.map((scope) => scope.id),
+  );
 
   let sequence = run.next_event_seq;
   const requestByScope = new Map<string, CloseRequestRow>();
@@ -640,45 +650,55 @@ export function requestScopeCloseT7aInTransaction(
 
   const attemptIds = transaction.queryAll<{ id: string }>(
     `SELECT a.id FROM workflow_graph_node_attempts a
-      WHERE a.graph_run_id = ? AND a.scope_id IN (${subtree.map(() => '?').join(',')})
+      WHERE a.graph_run_id = ? AND a.scope_id IN (
+        SELECT id FROM temp.workflow_runtime_transient_id_sets WHERE set_key = ?
+      )
         AND a.acceptance_state = 'open'
       ORDER BY a.id COLLATE BINARY`,
-    [input.graphRunId, ...subtree.map((scope) => scope.id)],
+    [input.graphRunId, subtreeSetKey],
   );
   const waitIds = transaction.queryAll<{
     id: string;
     resource_reservation_group_id: string;
   }>(
     `SELECT id, resource_reservation_group_id FROM workflow_graph_waits
-      WHERE graph_run_id = ? AND scope_id IN (${subtree.map(() => '?').join(',')})
+      WHERE graph_run_id = ? AND scope_id IN (
+        SELECT id FROM temp.workflow_runtime_transient_id_sets WHERE set_key = ?
+      )
         AND status IN ('registering', 'armed')
       ORDER BY id COLLATE BINARY`,
-    [input.graphRunId, ...subtree.map((scope) => scope.id)],
+    [input.graphRunId, subtreeSetKey],
   );
   const buildIds = transaction.queryAll<{ id: string }>(
     `SELECT id FROM workflow_graph_scope_builds
-      WHERE graph_run_id = ? AND owner_scope_id IN (${subtree.map(() => '?').join(',')})
+      WHERE graph_run_id = ? AND owner_scope_id IN (
+        SELECT id FROM temp.workflow_runtime_transient_id_sets WHERE set_key = ?
+      )
         AND status IN ('pending_snapshot', 'ready_to_compile', 'compiling', 'compiled')
       ORDER BY id COLLATE BINARY`,
-    [input.graphRunId, ...subtree.map((scope) => scope.id)],
+    [input.graphRunId, subtreeSetKey],
   );
   const controllerRows = transaction.queryAll<{
     id: string;
     controller_reservation_group_id: string | null;
   }>(
     `SELECT id, controller_reservation_group_id FROM workflow_graph_nodes
-      WHERE graph_run_id = ? AND scope_id IN (${subtree.map(() => '?').join(',')})
+      WHERE graph_run_id = ? AND scope_id IN (
+        SELECT id FROM temp.workflow_runtime_transient_id_sets WHERE set_key = ?
+      )
         AND node_type IN ('subgraph', 'expand', 'map')
         AND controller_state IN ('sealing', 'running', 'closing_remaining')
       ORDER BY id COLLATE BINARY`,
-    [input.graphRunId, ...subtree.map((scope) => scope.id)],
+    [input.graphRunId, subtreeSetKey],
   );
   const mapSlots = transaction.queryAll<{ id: string; owner_scope_id: string }>(
     `SELECT id, owner_scope_id FROM workflow_graph_map_item_results
-      WHERE graph_run_id = ? AND owner_scope_id IN (${subtree.map(() => '?').join(',')})
+      WHERE graph_run_id = ? AND owner_scope_id IN (
+        SELECT id FROM temp.workflow_runtime_transient_id_sets WHERE set_key = ?
+      )
         AND outcome_state = 'open'
       ORDER BY owner_scope_id COLLATE BINARY, item_index`,
-    [input.graphRunId, ...subtree.map((scope) => scope.id)],
+    [input.graphRunId, subtreeSetKey],
   );
 
   transaction.execute(
@@ -687,9 +707,11 @@ export function requestScopeCloseT7aInTransaction(
             lease_expires_at_ms = NULL, evaluation_lease_owner = NULL,
             evaluation_lease_token = NULL, evaluation_lease_expires_at_ms = NULL,
             row_version = row_version + 1, updated_at_ms = ?
-      WHERE graph_run_id = ? AND scope_id IN (${subtree.map(() => '?').join(',')})
+      WHERE graph_run_id = ? AND scope_id IN (
+        SELECT id FROM temp.workflow_runtime_transient_id_sets WHERE set_key = ?
+      )
         AND acceptance_state = 'open'`,
-    [input.nowMs, input.graphRunId, ...subtree.map((scope) => scope.id)],
+    [input.nowMs, input.graphRunId, subtreeSetKey],
   );
   transaction.execute(
     `UPDATE workflow_graph_waits
@@ -698,24 +720,22 @@ export function requestScopeCloseT7aInTransaction(
             registration_lease_token = NULL,
             registration_lease_expires_at_ms = NULL,
             row_version = row_version + 1, updated_at_ms = ?
-      WHERE graph_run_id = ? AND scope_id IN (${subtree.map(() => '?').join(',')})
+      WHERE graph_run_id = ? AND scope_id IN (
+        SELECT id FROM temp.workflow_runtime_transient_id_sets WHERE set_key = ?
+      )
         AND status IN ('registering', 'armed')`,
-    [
-      input.nowMs,
-      input.nowMs,
-      input.nowMs,
-      input.graphRunId,
-      ...subtree.map((scope) => scope.id),
-    ],
+    [input.nowMs, input.nowMs, input.nowMs, input.graphRunId, subtreeSetKey],
   );
   transaction.execute(
     `UPDATE workflow_graph_scope_builds
         SET status = 'fenced', lease_owner = NULL, lease_token = NULL,
             lease_expires_at_ms = NULL, row_version = row_version + 1,
             updated_at_ms = ?
-      WHERE graph_run_id = ? AND owner_scope_id IN (${subtree.map(() => '?').join(',')})
+      WHERE graph_run_id = ? AND owner_scope_id IN (
+        SELECT id FROM temp.workflow_runtime_transient_id_sets WHERE set_key = ?
+      )
         AND status IN ('pending_snapshot', 'ready_to_compile', 'compiling', 'compiled')`,
-    [input.nowMs, input.graphRunId, ...subtree.map((scope) => scope.id)],
+    [input.nowMs, input.graphRunId, subtreeSetKey],
   );
   for (const slot of mapSlots) {
     const request = requestByScope.get(slot.owner_scope_id)!;
@@ -741,10 +761,12 @@ export function requestScopeCloseT7aInTransaction(
     `UPDATE workflow_graph_nodes
         SET controller_state = 'closing_remaining', row_version = row_version + 1,
             updated_at_ms = ?
-      WHERE graph_run_id = ? AND scope_id IN (${subtree.map(() => '?').join(',')})
+      WHERE graph_run_id = ? AND scope_id IN (
+        SELECT id FROM temp.workflow_runtime_transient_id_sets WHERE set_key = ?
+      )
         AND node_type IN ('subgraph', 'expand', 'map')
         AND controller_state IN ('sealing', 'running')`,
-    [input.nowMs, input.graphRunId, ...subtree.map((scope) => scope.id)],
+    [input.nowMs, input.graphRunId, subtreeSetKey],
   );
   const reservationGroups = new Set<string>();
   for (const wait of waitIds)
@@ -767,11 +789,13 @@ export function requestScopeCloseT7aInTransaction(
     status: string;
   }>(
     `SELECT id, scope_id, status FROM workflow_graph_effect_operations
-      WHERE graph_run_id = ? AND scope_id IN (${subtree.map(() => '?').join(',')})
+      WHERE graph_run_id = ? AND scope_id IN (
+        SELECT id FROM temp.workflow_runtime_transient_id_sets WHERE set_key = ?
+      )
         AND execution_lane = 'normal'
         AND status IN ('intended', 'dispatched', 'succeeded', 'failed')
       ORDER BY id COLLATE BINARY`,
-    [input.graphRunId, ...subtree.map((scope) => scope.id)],
+    [input.graphRunId, subtreeSetKey],
   );
 
   const scopeEpochs = fenceableScopes.map((scope) => ({

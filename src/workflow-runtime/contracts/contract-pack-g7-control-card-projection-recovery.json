@@ -26,7 +26,7 @@
           "id": "icarus.workflow-g7-control-card-projection-recovery-protocol",
           "version": "1.0.0"
         },
-        "hash": "sha256:0f5524c27d27ec98126f0313c6b0a4439dcf7a2c5a97bacb2398c7387bbf7a42"
+        "hash": "sha256:7921ebf064a82979eeb016e05526df7d353d01b2a2c16ad953574efee5d1ae04"
       },
       {
         "format": "icarus.workflow-g7-control-card-projection-recovery-positive-cases/1",
@@ -58,7 +58,7 @@
           "id": "icarus.workflow-g7-control-card-projection-recovery-reference-authority",
           "version": "1.0.0"
         },
-        "hash": "sha256:251b10b71660296fa24dde81315c420fd83c64c2c92777cc66321f92afe8fb2e"
+        "hash": "sha256:6442fcee65bd5c6cceaff99fcc324e8bf74aea5972921642e3ac99420f0df2fe"
       },
       {
         "format": "icarus.workflow-g7-control-card-projection-recovery-implementation/1",
@@ -66,10 +66,10 @@
           "id": "icarus.workflow-g7-control-card-projection-recovery-implementation",
           "version": "1.0.0"
         },
-        "hash": "sha256:c49896b7d12356dd5d898bf8197021ec02affbd29b32142808f450704d7a3ebc"
+        "hash": "sha256:25a407a58c29f0b5b8eca46db893e72e57eecb3d15ec077922f20911d5b801b1"
       }
     ],
-    "member_tree_hash": "sha256:2ec1b78ef3f8a033a684b3ad2d1b8375ea2c26f45a519b2259c2e6317d6ea363"
+    "member_tree_hash": "sha256:4e430f813f915146a3c444aa7c5a3562f0c74fcfdbacfb3930bd625d6a1c14e3"
   },
-  "hash": "sha256:9757ff5047938015750cc9b20ae7474b31b09ad7366d6a73709c920795284585"
+  "hash": "sha256:3c3044a7371be8272bf11e36524296ff49de0fcbbadab061538e1b020be5d74c"
 }

@@ -39,6 +39,7 @@ export interface WorkflowRuntimeReadConnection {
 
 export interface WorkflowRuntimeWriteTransaction {
   readonly transactionKind: 'immediate';
+  stageTransientIdSet?(setKey: string, ids: readonly string[]): number;
   execute(
     sql: string,
     parameters: readonly WorkflowRuntimeSqlValue[],
@@ -77,6 +78,7 @@ export class WorkflowRuntimeStoreError extends Error {
       | 'connection_closed'
       | 'transaction_already_active'
       | 'transaction_callback_async'
+      | 'transient_id_set_invalid'
       | 'write_statement_forbidden'
       | 'read_statement_required',
     message: string,
@@ -150,6 +152,20 @@ function configureConnection(
   database.pragma('read_uncommitted = OFF');
   database.pragma('locking_mode = NORMAL');
   database.pragma(`query_only = ${readOnly ? 'ON' : 'OFF'}`);
+}
+
+const TRANSIENT_ID_SET_TABLE = 'workflow_runtime_transient_id_sets';
+
+function configureWriterTransientTables(database: Database.Database): void {
+  database.exec(
+    `CREATE TEMP TABLE ${TRANSIENT_ID_SET_TABLE} (
+       set_key TEXT NOT NULL,
+       ordinal INTEGER NOT NULL,
+       id TEXT NOT NULL,
+       PRIMARY KEY (set_key, id),
+       UNIQUE (set_key, ordinal)
+     ) WITHOUT ROWID`,
+  );
 }
 
 function verifyCompleteProfile(
@@ -615,6 +631,38 @@ class WriteTransaction implements WorkflowRuntimeWriteTransaction {
     this.#database = database;
   }
 
+  stageTransientIdSet(setKey: string, ids: readonly string[]): number {
+    if (
+      setKey.length === 0 ||
+      ids.length === 0 ||
+      ids.some((id) => id.length === 0) ||
+      new Set(ids).size !== ids.length
+    ) {
+      throw new WorkflowRuntimeStoreError(
+        'transient_id_set_invalid',
+        'Transient ID sets require a non-empty key and non-empty unique IDs',
+      );
+    }
+    this.#database
+      .prepare(`DELETE FROM temp.${TRANSIENT_ID_SET_TABLE} WHERE set_key = ?`)
+      .run(setKey);
+    const result = this.#database
+      .prepare(
+        `INSERT INTO temp.${TRANSIENT_ID_SET_TABLE} (set_key, ordinal, id)
+         SELECT ?, CAST(key AS INTEGER), value
+           FROM json_each(?)
+          ORDER BY CAST(key AS INTEGER)`,
+      )
+      .run(setKey, JSON.stringify(ids));
+    if (result.changes !== ids.length) {
+      throw new WorkflowRuntimeStoreError(
+        'transient_id_set_invalid',
+        `Transient ID set staging changed ${result.changes} rows; expected ${ids.length}`,
+      );
+    }
+    return result.changes;
+  }
+
   execute(
     sql: string,
     parameters: readonly WorkflowRuntimeSqlValue[],
@@ -755,6 +803,7 @@ export class WorkflowRuntimeStore {
     this.#transactionActive = true;
     this.#writer.exec('BEGIN IMMEDIATE');
     try {
+      this.#writer.prepare(`DELETE FROM temp.${TRANSIENT_ID_SET_TABLE}`).run();
       const result = callback(new WriteTransaction(this.#writer));
       if (isThenable(result)) {
         throw new WorkflowRuntimeStoreError(
@@ -844,6 +893,7 @@ export class WorkflowRuntimeConnectionFactory {
         upgradeSchemaIfEligible(databasePath, inputs);
       }
       writer = openConfiguredDatabase(databasePath, inputs, false);
+      configureWriterTransientTables(writer);
       const identityEvidence = collectWorkflowRuntimeIdentityEvidence(
         writer,
         inputs.profile,

@@ -64,7 +64,7 @@ describe('current G7 Control / Card / Projection / Recovery Contract Pack', () =
       expect.arrayContaining([
         expect.objectContaining({
           name: 'g6_dynamic_close_accepted_candidate',
-          hash: 'sha256:f5fc01bc2adeeb68a4bab1329184f0a0bb079fa0596f32e19eaf55ba7ea11dc7',
+          hash: 'sha256:ff3ed60a8526f2be21ee20ed63415fddf4705fea424bd011e3019db41f829a20',
         }),
         expect.objectContaining({
           name: 'workflow_runtime_command_protocol',
