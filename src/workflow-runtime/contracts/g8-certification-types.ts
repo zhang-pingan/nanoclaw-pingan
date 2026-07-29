@@ -219,21 +219,26 @@ export interface G8BenchmarkCaseObservation extends JsonObject {
 
 export interface G8BenchmarkObservation extends JsonObject {
   readonly format: 'icarus.workflow-runtime-benchmark-observation/1';
+  readonly ref: VersionedRef;
   readonly benchmark_harness_ref: VersionedRef;
   readonly benchmark_harness_hash: Sha256Hash;
   readonly benchmark_harness_version: '1.0.0';
   readonly build_kind: 'release';
   readonly database_kind: 'isolated_temporary_real_file';
+  readonly sqlite_profile_ref: VersionedRef;
   readonly sqlite_profile_hash: Sha256Hash;
+  readonly release_manifest_hash: Sha256Hash;
   readonly release_artifact_hash: Sha256Hash;
   readonly core_build_hash: Sha256Hash;
   readonly database_schema_hash: Sha256Hash;
   readonly runtime_launcher_hash: Sha256Hash;
+  readonly runtime_toolchain_hash: Sha256Hash;
   readonly managed_node_distribution_hash: Sha256Hash;
   readonly machine_observation: G8MinimumMachineObservation;
   readonly warmup_iterations: 10;
   readonly measurement_iterations: 100;
   readonly cases: G8BenchmarkCaseObservation[];
+  readonly cases_hash: Sha256Hash;
   readonly observation_hash: Sha256Hash;
 }
 
@@ -254,11 +259,28 @@ export interface G8LimitDerivationPayload extends JsonObject {
 }
 
 export interface G8RuntimeSupportedLimits extends JsonObject {
-  readonly format: 'icarus.runtime-supported-limits/1';
   readonly ref: VersionedRef;
-  readonly version: 1;
-  readonly domain_separator: 'icarus:runtime-supported-limits:1\n';
-  readonly limits: G8SupportedLimitValues;
+  readonly max_scopes_total: number;
+  readonly max_nodes_total: number;
+  readonly max_edges_total: number;
+  readonly max_attempts_total: number;
+  readonly max_waits_total: number;
+  readonly max_builds_total: number;
+  readonly max_effect_operations_total: number;
+  readonly max_facts_per_transaction: number;
+  readonly max_frontier_bytes: number;
+  readonly max_subtree_scopes_per_fence: number;
+  readonly max_subtree_nodes_per_fence: number;
+  readonly max_subtree_edges_per_fence: number;
+  readonly max_subtree_attempts_per_fence: number;
+  readonly max_subtree_waits_per_fence: number;
+  readonly max_subtree_builds_per_fence: number;
+  readonly max_subtree_map_slots_per_fence: number;
+  readonly max_subtree_effects_per_fence: number;
+  readonly max_t7_derived_facts_per_fence: number;
+  readonly max_subtree_fence_manifest_bytes: number;
+  readonly max_map_items_total: number;
+  readonly max_required_child_creations_per_t8: number;
   readonly certification: JsonObject & {
     readonly status: 'certified';
     readonly deployment_profile: 'local_single_user';
@@ -291,9 +313,8 @@ export interface G8RuntimeSupportedLimits extends JsonObject {
   readonly profile_hash: Sha256Hash;
 }
 
-export interface G8CertifiedSQLiteProfilePayload extends JsonObject {
-  readonly profile_id: 'local_single_user_sqlite@1';
-  readonly certification_status: 'certified';
+export interface G8CertifiedSQLiteProfile extends JsonObject {
+  readonly ref: VersionedRef;
   readonly deployment_profile: 'local_single_user';
   readonly runtime_surface: 'node_service';
   readonly platform: 'darwin';
@@ -325,6 +346,58 @@ export interface G8CertifiedSQLiteProfilePayload extends JsonObject {
   readonly node_executable_hash: Sha256Hash;
   readonly release_artifact_hash: Sha256Hash;
   readonly runtime_launcher_hash: Sha256Hash;
-  readonly identity_binding_rule: 'release_build_generated_at_g8';
-  readonly profile_application: 'immutable_restart_and_recertification_required';
+  readonly profile_hash: Sha256Hash;
+}
+
+export interface G8CertificationKey extends JsonObject {
+  readonly deployment_profile: 'local_single_user';
+  readonly runtime_surface: 'node_service';
+  readonly platform: 'darwin';
+  readonly arch: 'arm64';
+  readonly release_manifest_hash: Sha256Hash;
+  readonly release_artifact_hash: Sha256Hash;
+  readonly core_build_hash: Sha256Hash;
+  readonly database_schema_hash: Sha256Hash;
+  readonly runtime_launcher_hash: Sha256Hash;
+  readonly runtime_toolchain_hash: Sha256Hash;
+  readonly managed_node_distribution_ref: VersionedRef;
+  readonly managed_node_distribution_hash: Sha256Hash;
+  readonly node_runtime_version: '26.5.0';
+  readonly node_executable_hash: Sha256Hash;
+  readonly better_sqlite3_version: '12.11.1';
+  readonly better_sqlite3_native_module_hash: Sha256Hash;
+  readonly sqlite_version: string;
+  readonly sqlite_source_id: string;
+  readonly sqlite_compile_options_hash: Sha256Hash;
+  readonly sqlite_execution_profile_ref: VersionedRef;
+  readonly sqlite_execution_profile_hash: Sha256Hash;
+  readonly benchmark_harness_ref: VersionedRef;
+  readonly benchmark_harness_version: '1.0.0';
+  readonly benchmark_harness_hash: Sha256Hash;
+  readonly benchmark_observation_hash: Sha256Hash;
+  readonly limit_derivation_ref: VersionedRef;
+  readonly limit_derivation_hash: Sha256Hash;
+  readonly runtime_supported_limits_ref: VersionedRef;
+  readonly runtime_supported_limits_hash: Sha256Hash;
+  readonly product_floor_ref: VersionedRef;
+  readonly product_floor_hash: Sha256Hash;
+  readonly minimum_machine_class_ref: VersionedRef;
+  readonly minimum_machine_class_hash: Sha256Hash;
+  readonly minimum_machine_observation_hash: Sha256Hash;
+  readonly startup_smoke_harness_ref: VersionedRef;
+  readonly startup_smoke_harness_hash: Sha256Hash;
+  readonly startup_smoke_report_hash: Sha256Hash;
+}
+
+export interface G8CertificationPack extends JsonObject {
+  readonly format: 'icarus.workflow-runtime-certification-pack/1';
+  readonly ref: VersionedRef;
+  readonly version: 1;
+  readonly status: 'certified';
+  readonly certification_key: G8CertificationKey;
+  readonly certification_key_hash: Sha256Hash;
+  readonly certified_at_ms: number;
+  readonly security_sensitive_validation: 'SECURITY_VALIDATION_NOT_RUN';
+  readonly security_validation_basis: 'static_source_existing_tests_and_invariant_mapping_only';
+  readonly pack_hash: Sha256Hash;
 }

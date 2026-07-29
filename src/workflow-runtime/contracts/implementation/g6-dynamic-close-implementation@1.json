@@ -25,11 +25,11 @@
       },
       {
         "path": "src/workflow-runtime/runtime/graph-store.ts",
-        "raw_sha256": "sha256:defdde362dcefe430b52d599fafa767af156cb8bace3e23c9b2ff14eeabb934f"
+        "raw_sha256": "sha256:f033c8b932059714b67cf86d077476cac0b57734cd24c3ee617fbb7272dd388e"
       },
       {
         "path": "src/workflow-runtime/runtime/ledger.ts",
-        "raw_sha256": "sha256:46a3d4cffed5810a13a534c4444ec6edd8d40ec11a15243d7d1f01dc17b7a020"
+        "raw_sha256": "sha256:78fa14fc4a967062276a12b7b5caeaded5bcd41df14f63d00a61c1cb94791d63"
       },
       {
         "path": "src/workflow-runtime/runtime/lifecycle.ts",
@@ -41,14 +41,14 @@
       },
       {
         "path": "src/workflow-runtime/runtime/reconciler.ts",
-        "raw_sha256": "sha256:3d0a72734ade4b293f88b9a321124526c27cce76cc9fb96b94c647281b8bf256"
+        "raw_sha256": "sha256:742521d9eadb3a837cd7084b2f87437f3ecd48479e076ece98ddbd43d79d0093"
       },
       {
         "path": "src/workflow-runtime/runtime/root-finalizer.ts",
         "raw_sha256": "sha256:346a16f123bc1fa84da89558335ebec32ccf5d52481a7f08332537903bfdd1a3"
       }
     ],
-    "source_tree_hash": "sha256:71e4134bafcd24902d37977873ecb3ea16c783662190eb52b6d90f5b5957090a"
+    "source_tree_hash": "sha256:a8e8766c77f26482cbceeaf2e0afbb28fd7d45a274bfc90f3cc949f25f96c2de"
   },
-  "hash": "sha256:d1b4b56ec9f1a4cf98136d8b80d6ee6daf9720f769f30245bfdc71084066aed4"
+  "hash": "sha256:a36731dd404e3128f81124b063dc03e753e25ce2eaf4a84f7fc64a4a529d3d7f"
 }

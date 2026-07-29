@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { observeMinimumMachineClass } from './machine-class.js';
+import { runG8ReleaseBenchmark } from './release-benchmark.js';
 import { runG8StartupSmoke } from './startup-smoke.js';
 
 function option(name: string): string {
@@ -51,6 +52,29 @@ if (command === 'identity') {
   console.log(`startup_smoke_status=${report.status}`);
   console.log(`startup_smoke_duration_ms=${report.duration_ms}`);
   console.log(`startup_smoke_report_hash=${report.report_hash}`);
+} else if (command === 'benchmark') {
+  const result = runG8ReleaseBenchmark({
+    benchmarkRoot: path.resolve(option('--benchmark-root')),
+    outputRoot: path.resolve(option('--output-root')),
+    confirmNoConcurrentInterference: process.argv.includes(
+      '--confirm-no-concurrent-interference',
+    ),
+    onCaseCompleted: (observation) => {
+      if (observation.statistics) {
+        console.log(
+          `benchmark_case=${observation.case_id} p99_ms=${observation.statistics.p99_ms} max_ms=${observation.statistics.max_ms}`,
+        );
+      } else {
+        console.log(
+          `benchmark_case=${observation.case_id} status=rejected_before_atomic_write`,
+        );
+      }
+    },
+  });
+  console.log(`sqlite_profile_hash=${result.profile.profile_hash}`);
+  console.log(
+    `benchmark_observation_hash=${result.observation.observation_hash}`,
+  );
 } else {
   throw new Error(
     'Usage: release-entry.js <identity|machine-observation|startup-smoke|benchmark>',

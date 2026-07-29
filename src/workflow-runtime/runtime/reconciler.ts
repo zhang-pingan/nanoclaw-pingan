@@ -34,10 +34,13 @@ import {
 import {
   G5RuntimeError,
   insertGraphEvent,
+  insertGraphEvents,
   insertInlineValue,
   runImmediateG5Transaction,
   runtimeObjectHash,
   stableRuntimeId,
+  type GraphEventInsertInput,
+  type GraphFactInsertInput,
   type G5TransactionFault,
   type InlineValueSchemaAuthority,
 } from './graph-store.js';
@@ -51,7 +54,11 @@ import {
   type PersistedPlanIdentity,
   type PublishedNodeOutputPort,
 } from './generated-schema-runtime.js';
-import { chargeAndInsertGraphFact, reserveLedgerResources } from './ledger.js';
+import {
+  chargeAndInsertGraphFact,
+  chargeAndInsertGraphFacts,
+  reserveLedgerResources,
+} from './ledger.js';
 import {
   loadMaterializedNodeAuthority,
   requiredObjectField,
@@ -822,6 +829,25 @@ interface T3NodeRow extends Record<string, unknown> {
   readonly row_version: number;
 }
 
+interface T3MaterializedNodeRow extends T3NodeRow {
+  readonly normalized_node_json: string;
+  readonly capability_resource_id: string | null;
+  readonly capability_version: string | null;
+  readonly capability_hash: string | null;
+  readonly registry_publication_state: string | null;
+  readonly registry_resource_id: string | null;
+  readonly registry_resource_version: string | null;
+  readonly registry_content_hash: string | null;
+}
+
+interface T3MaterializedControlEdgeRow extends Record<string, unknown> {
+  readonly id: string;
+  readonly edge_key: string;
+  readonly compiled_edge_json: string;
+  readonly state: TriggerEdgeObservation['state'];
+  readonly resolution_seq: number | null;
+}
+
 interface InlineValueAuthority {
   readonly ref: RuntimeValueRef;
   readonly content: JsonValue;
@@ -1466,6 +1492,120 @@ function scopePlanAuthority(
   };
 }
 
+function loadT3ScopeNodeAuthority(
+  transaction: WorkflowRuntimeWriteTransaction,
+  input: {
+    readonly graphRunId: string;
+    readonly scopeId: string;
+    readonly planIdentity: PersistedPlanIdentity;
+  },
+): Map<string, T3MaterializedNodeRow> {
+  const rows = transaction.queryAll<T3MaterializedNodeRow>(
+    `SELECT n.id, n.node_key, n.phase, n.trigger_state, n.input_state,
+            n.current_attempt_id, n.terminal_status, n.terminal_code,
+            n.child_exit, n.published_output_envelope_value_id,
+            n.published_output_envelope_hash, n.row_version,
+            n.normalized_node_json, n.capability_resource_id,
+            n.capability_version, n.capability_hash,
+            rr.publication_state AS registry_publication_state,
+            rr.resource_id AS registry_resource_id,
+            rr.resource_version AS registry_resource_version,
+            rr.content_hash AS registry_content_hash
+       FROM workflow_graph_nodes n
+       LEFT JOIN workflow_registry_resources rr
+         ON rr.id = n.capability_resource_id
+        AND rr.resource_type = 'capability'
+      WHERE n.graph_run_id = ? AND n.scope_id = ?
+      ORDER BY n.node_key COLLATE BINARY`,
+    [input.graphRunId, input.scopeId],
+  );
+  const planNodes = input.planIdentity.plan.nodes as JsonObject[];
+  if (rows.length !== planNodes.length)
+    throw new G5RuntimeError(
+      'integrity_violation',
+      'T3 materialized Scope node set differs from the persisted Plan',
+    );
+  const byNodeKey = new Map(rows.map((row) => [row.node_key, row]));
+  for (const planNode of planNodes) {
+    const nodeKey = String(planNode.id);
+    const row = byNodeKey.get(nodeKey);
+    if (!row || row.normalized_node_json !== canonicalJson(planNode))
+      throw new G5RuntimeError(
+        'integrity_violation',
+        `T3 materialized node authority drifted: ${nodeKey}`,
+      );
+    const capability = planNode.capability_binding;
+    if (capability === null || capability === undefined) {
+      if (
+        row.capability_resource_id !== null ||
+        row.capability_version !== null ||
+        row.capability_hash !== null ||
+        row.registry_publication_state !== null
+      )
+        throw new G5RuntimeError(
+          'integrity_violation',
+          `T3 non-capability node carries capability authority: ${nodeKey}`,
+        );
+      continue;
+    }
+    const binding = requiredObjectField(
+      planNode,
+      'capability_binding',
+      'Plan node',
+    );
+    const ref = requiredObjectField(binding, 'ref', 'Plan capability binding');
+    if (
+      row.capability_resource_id === null ||
+      row.capability_version !== ref.version ||
+      row.capability_hash === null ||
+      row.registry_publication_state !== 'published' ||
+      row.registry_resource_id !== ref.id ||
+      row.registry_resource_version !== ref.version ||
+      row.registry_content_hash !== row.capability_hash
+    )
+      throw new G5RuntimeError(
+        'precondition_failed',
+        `T3 exact Published capability authority is unavailable: ${nodeKey}`,
+      );
+  }
+  return byNodeKey;
+}
+
+function loadT3ScopeControlEdgeAuthority(
+  transaction: WorkflowRuntimeWriteTransaction,
+  input: {
+    readonly graphRunId: string;
+    readonly scopeId: string;
+    readonly planIdentity: PersistedPlanIdentity;
+  },
+): Map<string, T3MaterializedControlEdgeRow> {
+  const rows = transaction.queryAll<T3MaterializedControlEdgeRow>(
+    `SELECT e.id, e.edge_key, e.compiled_edge_json, r.state, r.resolution_seq
+       FROM workflow_graph_edges e
+       JOIN workflow_graph_control_edge_resolutions r ON r.edge_id = e.id
+      WHERE e.graph_run_id = ? AND e.scope_id = ? AND e.edge_kind = 'control'
+      ORDER BY e.edge_key COLLATE BINARY`,
+    [input.graphRunId, input.scopeId],
+  );
+  const planEdges = input.planIdentity.plan.control_edges as JsonObject[];
+  if (rows.length !== planEdges.length)
+    throw new G5RuntimeError(
+      'integrity_violation',
+      'T3 materialized Scope control-edge set differs from the persisted Plan',
+    );
+  const byEdgeKey = new Map(rows.map((row) => [row.edge_key, row]));
+  for (const planEdge of planEdges) {
+    const edgeKey = String(planEdge.id);
+    const row = byEdgeKey.get(edgeKey);
+    if (!row || row.compiled_edge_json !== canonicalJson(planEdge))
+      throw new G5RuntimeError(
+        'integrity_violation',
+        `T3 materialized control-edge authority drifted: ${edgeKey}`,
+      );
+  }
+  return byEdgeKey;
+}
+
 function planEdge(
   plan: CompiledScopePlanV2Document,
   edgeId: string,
@@ -1539,22 +1679,21 @@ function resolveControlEdge(
     source: T3NodeRow;
     payload: RuntimeValueRef;
     append: AppendFixedPointFact;
+    controlEdgeRows?: Map<string, T3MaterializedControlEdgeRow>;
     nowMs: number;
   },
 ): void {
-  const row = transaction.queryOne<{ id: string; state: string }>(
-    `SELECT e.id, r.state
-       FROM workflow_graph_edges e
-       JOIN workflow_graph_control_edge_resolutions r ON r.edge_id = e.id
-      WHERE e.graph_run_id = ? AND e.scope_id = ? AND e.edge_key = ?
-        AND e.compiled_edge_json = ?`,
-    [
-      input.graphRunId,
-      input.scopeId,
-      String(input.edge.id),
-      canonicalJson(input.edge),
-    ],
-  );
+  const edgeKey = String(input.edge.id);
+  const row =
+    input.controlEdgeRows?.get(edgeKey) ??
+    transaction.queryOne<T3MaterializedControlEdgeRow>(
+      `SELECT e.id, e.edge_key, e.compiled_edge_json, r.state, r.resolution_seq
+         FROM workflow_graph_edges e
+         JOIN workflow_graph_control_edge_resolutions r ON r.edge_id = e.id
+        WHERE e.graph_run_id = ? AND e.scope_id = ? AND e.edge_key = ?
+          AND e.compiled_edge_json = ?`,
+      [input.graphRunId, input.scopeId, edgeKey, canonicalJson(input.edge)],
+    );
   if (!row)
     throw new G5RuntimeError(
       'integrity_violation',
@@ -1605,6 +1744,11 @@ function resolveControlEdge(
       'cas_conflict',
       `T3a control edge CAS failed: ${row.id}`,
     );
+  input.controlEdgeRows?.set(edgeKey, {
+    ...row,
+    state: input.state,
+    resolution_seq: resolutionSequence,
+  });
 }
 
 function resolveTerminalControlRoutes(
@@ -1617,6 +1761,7 @@ function resolveTerminalControlRoutes(
     scopeInput: JsonValue;
     payload: RuntimeValueRef;
     append: AppendFixedPointFact;
+    controlEdgeRows?: Map<string, T3MaterializedControlEdgeRow>;
     nowMs: number;
   },
 ): boolean {
@@ -1670,6 +1815,17 @@ function resolveTerminalControlRoutes(
       if (error instanceof G5RuntimeError) return 'error';
       throw error;
     }
+  };
+  const resolve = (
+    edge: JsonObject,
+    state: 'taken' | 'not_taken' | 'error',
+  ): void => {
+    resolveControlEdge(transaction, {
+      ...input,
+      edge,
+      state,
+      errorCode: state === 'error' ? 'condition_error' : undefined,
+    });
   };
   const grouped = new Set<string>();
   let orchestrationError = false;
@@ -1743,12 +1899,7 @@ function resolveTerminalControlRoutes(
     for (const edge of ordered) {
       const decision = decisions.get(String(edge.id))!;
       orchestrationError ||= decision === 'error';
-      resolveControlEdge(transaction, {
-        ...input,
-        edge,
-        state: decision,
-        errorCode: decision === 'error' ? 'condition_error' : undefined,
-      });
+      resolve(edge, decision);
     }
   }
   for (const edge of edges.filter(
@@ -1756,12 +1907,7 @@ function resolveTerminalControlRoutes(
   )) {
     const decision = evaluate(edge);
     orchestrationError ||= decision === 'error';
-    resolveControlEdge(transaction, {
-      ...input,
-      edge,
-      state: decision,
-      errorCode: decision === 'error' ? 'condition_error' : undefined,
-    });
+    resolve(edge, decision);
   }
   return orchestrationError;
 }
@@ -1860,6 +2006,15 @@ function resolveTerminalDataEdges(
   },
 ): boolean {
   const plan = input.planIdentity.plan;
+  const edges = (plan.data_edges as JsonObject[])
+    .filter(
+      (candidate) =>
+        objectField(candidate, 'from')?.node_id === input.source.node_key,
+    )
+    .sort((left, right) =>
+      String(left.id).localeCompare(String(right.id), 'en'),
+    );
+  if (edges.length === 0) return false;
   let output: InlineValueAuthority | undefined;
   let outputAuthorityError = false;
   if (
@@ -1893,14 +2048,7 @@ function resolveTerminalDataEdges(
     }
   }
   let orchestrationError = false;
-  for (const edge of (plan.data_edges as JsonObject[])
-    .filter(
-      (candidate) =>
-        objectField(candidate, 'from')?.node_id === input.source.node_key,
-    )
-    .sort((left, right) =>
-      String(left.id).localeCompare(String(right.id), 'en'),
-    )) {
+  for (const edge of edges) {
     const from = requiredObjectField(edge, 'from', 'Plan data edge');
     const guardId =
       typeof edge.guard_control_edge_id === 'string'
@@ -1989,90 +2137,94 @@ function resolveTerminalDataEdges(
   return orchestrationError;
 }
 
-function dataObservations(
-  transaction: WorkflowRuntimeWriteTransaction,
-  graphRunId: string,
-  scopeId: string,
-  nodeKey: string,
-): DataResolutionObservation[] {
-  return transaction
-    .queryAll<{
-      edge_id: string;
-      edge_key: string;
-      compiled_edge_json: string;
-      state: DataResolutionObservation['state'];
-      value_value_id: string | null;
-      value_hash: Sha256Hash | null;
-      schema_hash: Sha256Hash | null;
-      resolution_seq: number | null;
-    }>(
-      `SELECT e.id AS edge_id, e.edge_key, e.compiled_edge_json, r.state,
-              r.value_value_id, r.value_hash, r.schema_hash, r.resolution_seq
-         FROM workflow_graph_edges e
-         JOIN workflow_graph_data_edge_resolutions r ON r.edge_id = e.id
-        WHERE e.graph_run_id = ? AND e.scope_id = ? AND e.edge_kind = 'data'
-          AND json_extract(e.compiled_edge_json, '$.to.node_id') = ?
-        ORDER BY e.edge_key COLLATE BINARY`,
-      [graphRunId, scopeId, nodeKey],
-    )
-    .map((row) => {
-      const value =
-        row.state === 'available' && row.value_value_id && row.value_hash
-          ? loadInlineValueAuthority(
-              transaction,
-              row.value_value_id,
-              row.value_hash,
-              `Data edge ${row.edge_key}`,
-            )
-          : null;
-      if (row.state === 'available' && value === null)
-        throw new G5RuntimeError(
-          'integrity_violation',
-          `Available data edge ${row.edge_key} has no Value authority`,
-        );
-      return {
-        edgeId: row.edge_key,
-        edgeKey: row.edge_key,
-        port: String(
-          objectField(JSON.parse(row.compiled_edge_json) as JsonObject, 'to')
-            ?.port,
-        ),
-        state: row.state,
-        valueId: row.value_value_id,
-        valueHash: row.value_hash,
-        schemaHash: row.schema_hash,
-        resolutionSequence: row.resolution_seq,
-        value: value?.content ?? null,
-        byteLength: value?.byteLength ?? null,
-      };
-    });
+interface T3ScopeObservations {
+  readonly controlByNodeKey: Map<string, TriggerEdgeObservation[]>;
+  readonly dataByNodeKey: Map<string, DataResolutionObservation[]>;
 }
 
-function triggerObservations(
+function loadT3ScopeObservations(
   transaction: WorkflowRuntimeWriteTransaction,
   graphRunId: string,
   scopeId: string,
-  nodeKey: string,
-): TriggerEdgeObservation[] {
-  return transaction
-    .queryAll<{
-      edge_key: string;
-      state: TriggerEdgeObservation['state'];
-      resolution_seq: number | null;
-    }>(
-      `SELECT e.edge_key, r.state, r.resolution_seq
-         FROM workflow_graph_edges e
-         JOIN workflow_graph_control_edge_resolutions r ON r.edge_id = e.id
-        WHERE e.graph_run_id = ? AND e.scope_id = ? AND e.edge_kind = 'control'
-          AND json_extract(e.compiled_edge_json, '$.to_node_id') = ?
-        ORDER BY e.edge_key COLLATE BINARY`,
-      [graphRunId, scopeId, nodeKey],
-    )
-    .map((row) => ({
+  controlEdgeRows?: ReadonlyMap<string, T3MaterializedControlEdgeRow>,
+): T3ScopeObservations {
+  const controlByNodeKey = new Map<string, TriggerEdgeObservation[]>();
+  const controlRows = controlEdgeRows
+    ? [...controlEdgeRows.values()].sort((left, right) =>
+        left.edge_key.localeCompare(right.edge_key, 'en'),
+      )
+    : transaction.queryAll<T3MaterializedControlEdgeRow>(
+        `SELECT e.id, e.edge_key, e.compiled_edge_json, r.state, r.resolution_seq
+           FROM workflow_graph_edges e
+           JOIN workflow_graph_control_edge_resolutions r ON r.edge_id = e.id
+          WHERE e.graph_run_id = ? AND e.scope_id = ? AND e.edge_kind = 'control'
+          ORDER BY e.edge_key COLLATE BINARY`,
+        [graphRunId, scopeId],
+      );
+  for (const row of controlRows) {
+    const targetNodeKey = String(
+      (JSON.parse(row.compiled_edge_json) as JsonObject).to_node_id,
+    );
+    const observations = controlByNodeKey.get(targetNodeKey) ?? [];
+    observations.push({
       edgeId: row.edge_key,
       state: row.state,
       resolutionSequence: row.resolution_seq,
-    }));
+    });
+    controlByNodeKey.set(targetNodeKey, observations);
+  }
+
+  const dataByNodeKey = new Map<string, DataResolutionObservation[]>();
+  for (const row of transaction.queryAll<{
+    edge_id: string;
+    edge_key: string;
+    compiled_edge_json: string;
+    state: DataResolutionObservation['state'];
+    value_value_id: string | null;
+    value_hash: Sha256Hash | null;
+    schema_hash: Sha256Hash | null;
+    resolution_seq: number | null;
+  }>(
+    `SELECT e.id AS edge_id, e.edge_key, e.compiled_edge_json, r.state,
+            r.value_value_id, r.value_hash, r.schema_hash, r.resolution_seq
+       FROM workflow_graph_edges e
+       JOIN workflow_graph_data_edge_resolutions r ON r.edge_id = e.id
+      WHERE e.graph_run_id = ? AND e.scope_id = ? AND e.edge_kind = 'data'
+      ORDER BY e.edge_key COLLATE BINARY`,
+    [graphRunId, scopeId],
+  )) {
+    const compiledEdge = JSON.parse(row.compiled_edge_json) as JsonObject;
+    const targetNodeKey = String(objectField(compiledEdge, 'to')?.node_id);
+    const value =
+      row.state === 'available' && row.value_value_id && row.value_hash
+        ? loadInlineValueAuthority(
+            transaction,
+            row.value_value_id,
+            row.value_hash,
+            `Data edge ${row.edge_key}`,
+          )
+        : null;
+    if (row.state === 'available' && value === null)
+      throw new G5RuntimeError(
+        'integrity_violation',
+        `Available data edge ${row.edge_key} has no Value authority`,
+      );
+    const observations = dataByNodeKey.get(targetNodeKey) ?? [];
+    observations.push({
+      edgeId: row.edge_key,
+      edgeKey: row.edge_key,
+      port: String(objectField(compiledEdge, 'to')?.port),
+      state: row.state,
+      valueId: row.value_value_id,
+      valueHash: row.value_hash,
+      schemaHash: row.schema_hash,
+      resolutionSequence: row.resolution_seq,
+      value: value?.content ?? null,
+      byteLength: value?.byteLength ?? null,
+    });
+    dataByNodeKey.set(targetNodeKey, observations);
+  }
+  return { controlByNodeKey, dataByNodeKey };
 }
 
 function materializeSealedInputValues(
@@ -2173,6 +2325,8 @@ function advancePendingNodesT3(
     scopeInput: RuntimeValueRef;
     payload: RuntimeValueRef;
     append: AppendFixedPointFact;
+    nodeRows?: Map<string, T3MaterializedNodeRow>;
+    controlEdgeRows?: Map<string, T3MaterializedControlEdgeRow>;
     onPostStateTerminal?: (eventSequence: number) => void;
     nowMs: number;
   },
@@ -2185,36 +2339,34 @@ function advancePendingNodesT3(
   const skippedNodeIds: string[] = [];
   let orchestrationError = false;
   const plan = input.planIdentity.plan;
-  for (const planNode of [...(plan.nodes as JsonObject[])].sort((left, right) =>
-    String(left.id).localeCompare(String(right.id), 'en'),
-  )) {
-    let row = transaction.queryOne<T3NodeRow>(
-      `SELECT id, node_key, phase, trigger_state, input_state,
-              current_attempt_id, terminal_status, terminal_code, child_exit,
-              published_output_envelope_value_id,
-              published_output_envelope_hash, row_version
-         FROM workflow_graph_nodes
-        WHERE graph_run_id = ? AND scope_id = ? AND node_key = ?`,
-      [input.graphRunId, input.scopeId, String(planNode.id)],
+  const nodeRows =
+    input.nodeRows ??
+    loadT3ScopeNodeAuthority(transaction, {
+      graphRunId: input.graphRunId,
+      scopeId: input.scopeId,
+      planIdentity: input.planIdentity,
+    });
+  const pendingPlanNodes = [...(plan.nodes as JsonObject[])]
+    .sort((left, right) =>
+      String(left.id).localeCompare(String(right.id), 'en'),
+    )
+    .filter(
+      (planNode) => nodeRows.get(String(planNode.id))?.phase === 'pending',
     );
+  if (pendingPlanNodes.length === 0)
+    return { readyNodeIds, skippedNodeIds, orchestrationError };
+  const observations = loadT3ScopeObservations(
+    transaction,
+    input.graphRunId,
+    input.scopeId,
+    input.controlEdgeRows,
+  );
+  const schemaAuthority = inputSchemaAuthority(transaction, input.planIdentity);
+  const decidedTriggerCuts = new Map<string, JsonObject>();
+  for (const planNode of pendingPlanNodes) {
+    let row = nodeRows.get(String(planNode.id));
     if (!row || row.phase !== 'pending') continue;
-    const authority = loadMaterializedNodeAuthority(
-      transaction,
-      input.graphRunId,
-      input.scopeId,
-      row.id,
-    );
-    if (canonicalJson(authority.node) !== canonicalJson(planNode))
-      throw new G5RuntimeError(
-        'integrity_violation',
-        'T3 node authority drifted',
-      );
-    const control = triggerObservations(
-      transaction,
-      input.graphRunId,
-      input.scopeId,
-      row.node_key,
-    );
+    const control = observations.controlByNodeKey.get(row.node_key) ?? [];
     if (control.some((edge) => edge.state === 'error')) {
       orchestrationError = true;
       continue;
@@ -2227,6 +2379,7 @@ function advancePendingNodesT3(
           witness: trigger.witness,
           truth_program_hash: trigger.truthProgramHash,
         };
+        decidedTriggerCuts.set(row.id, cut);
         input.append(
           'trigger_decided',
           'node',
@@ -2251,6 +2404,7 @@ function advancePendingNodesT3(
           trigger_state: trigger.truth,
           row_version: row.row_version + 1,
         };
+        nodeRows.set(row.node_key, row);
         if (trigger.truth === 'false') {
           const skippedSequence = input.append(
             'node_skipped',
@@ -2271,6 +2425,14 @@ function advancePendingNodesT3(
               `T3 skip CAS failed: ${row.id}`,
             );
           void skippedSequence;
+          nodeRows.set(row.node_key, {
+            ...row,
+            phase: 'terminal',
+            input_state: 'impossible',
+            terminal_status: 'skipped',
+            terminal_code: 'trigger_false',
+            row_version: row.row_version + 1,
+          });
           input.onPostStateTerminal?.(skippedSequence);
           skippedNodeIds.push(row.id);
           continue;
@@ -2281,17 +2443,8 @@ function advancePendingNodesT3(
     if (row.input_state === 'open') {
       let seal: InputSealEvaluation;
       try {
-        const data = dataObservations(
-          transaction,
-          input.graphRunId,
-          input.scopeId,
-          row.node_key,
-        );
-        seal = evaluateInputSeal(
-          planNode,
-          data,
-          inputSchemaAuthority(transaction, input.planIdentity),
-        );
+        const data = observations.dataByNodeKey.get(row.node_key) ?? [];
+        seal = evaluateInputSeal(planNode, data, schemaAuthority);
       } catch (error) {
         if (!(error instanceof G5RuntimeError)) throw error;
         orchestrationError = true;
@@ -2321,6 +2474,14 @@ function advancePendingNodesT3(
             `T3 input skip CAS failed: ${row.id}`,
           );
         input.onPostStateTerminal?.(skippedSequence);
+        nodeRows.set(row.node_key, {
+          ...row,
+          phase: 'terminal',
+          input_state: 'impossible',
+          terminal_status: 'skipped',
+          terminal_code: 'input_unavailable',
+          row_version: row.row_version + 1,
+        });
         skippedNodeIds.push(row.id);
         continue;
       }
@@ -2367,26 +2528,30 @@ function advancePendingNodesT3(
           input_state: 'sealed',
           row_version: row.row_version + 1,
         };
+        nodeRows.set(row.node_key, row);
       }
     }
     if (row.trigger_state === 'true' && row.input_state === 'sealed') {
-      const triggerEvent = transaction.queryOne<{
-        payload_json: string | null;
-      }>(
-        'SELECT payload_json FROM workflow_graph_events WHERE graph_run_id = ? AND idempotency_key = ?',
-        [input.graphRunId, `trigger-decided:${row.id}`],
-      );
-      if (!triggerEvent?.payload_json)
-        throw new G5RuntimeError(
-          'integrity_violation',
-          'T3 trigger cut Event authority is missing',
+      let triggerCut = decidedTriggerCuts.get(row.id);
+      if (!triggerCut) {
+        const triggerEvent = transaction.queryOne<{
+          payload_json: string | null;
+        }>(
+          'SELECT payload_json FROM workflow_graph_events WHERE graph_run_id = ? AND idempotency_key = ?',
+          [input.graphRunId, `trigger-decided:${row.id}`],
         );
-      const triggerCut = JSON.parse(triggerEvent.payload_json) as JsonObject;
-      if (canonicalJson(triggerCut) !== triggerEvent.payload_json)
-        throw new G5RuntimeError(
-          'integrity_violation',
-          'T3 trigger cut Event bytes drifted',
-        );
+        if (!triggerEvent?.payload_json)
+          throw new G5RuntimeError(
+            'integrity_violation',
+            'T3 trigger cut Event authority is missing',
+          );
+        triggerCut = JSON.parse(triggerEvent.payload_json) as JsonObject;
+        if (canonicalJson(triggerCut) !== triggerEvent.payload_json)
+          throw new G5RuntimeError(
+            'integrity_violation',
+            'T3 trigger cut Event bytes drifted',
+          );
+      }
       let data: DataResolutionObservation[];
       let seal: InputSealEvaluation;
       let materialized: {
@@ -2394,17 +2559,8 @@ function advancePendingNodesT3(
         primaryValue: RuntimeValueRef | null;
       };
       try {
-        data = dataObservations(
-          transaction,
-          input.graphRunId,
-          input.scopeId,
-          row.node_key,
-        );
-        seal = evaluateInputSeal(
-          planNode,
-          data,
-          inputSchemaAuthority(transaction, input.planIdentity),
-        );
+        data = observations.dataByNodeKey.get(row.node_key) ?? [];
+        seal = evaluateInputSeal(planNode, data, schemaAuthority);
         if (seal.state !== 'sealed' || seal.snapshot === null)
           throw new G5RuntimeError(
             'integrity_violation',
@@ -2468,6 +2624,11 @@ function advancePendingNodesT3(
           `T3 ready CAS failed: ${row.id}`,
         );
       readyNodeIds.push(row.id);
+      nodeRows.set(row.node_key, {
+        ...row,
+        phase: 'ready',
+        row_version: row.row_version + 1,
+      });
     }
   }
   return { readyNodeIds, skippedNodeIds, orchestrationError };
@@ -2985,6 +3146,14 @@ export function reconcileFactT3a(
         );
       let sequence = run.next_event_seq;
       let ingressSequence: number | null = null;
+      const pendingEvents: GraphEventInsertInput[] = [];
+      const pendingFacts: GraphFactInsertInput[] = [];
+      const flushFacts = (): void => {
+        insertGraphEvents(transaction, pendingEvents);
+        chargeAndInsertGraphFacts(transaction, pendingFacts);
+        pendingEvents.length = 0;
+        pendingFacts.length = 0;
+      };
       const append = (
         factKind: string,
         stableObjectKind: string,
@@ -2995,7 +3164,7 @@ export function reconcileFactT3a(
         payloadJson?: JsonValue,
       ): number => {
         sequence += 1;
-        insertGraphEvent(transaction, {
+        pendingEvents.push({
           graphRunId: input.graphRunId,
           sequence,
           scopeId: input.scopeId,
@@ -3009,7 +3178,7 @@ export function reconcileFactT3a(
           occurredAtMs: input.nowMs,
           createdAtMs: input.nowMs,
         });
-        chargeAndInsertGraphFact(transaction, {
+        pendingFacts.push({
           id: stableRuntimeId('fact', {
             graph_run_id: input.graphRunId,
             fact_key: factKey,
@@ -3029,6 +3198,11 @@ export function reconcileFactT3a(
         });
         return sequence;
       };
+      const appendAndFlush: AppendFixedPointFact = (...arguments_) => {
+        const appendedSequence = append(...arguments_);
+        flushFacts();
+        return appendedSequence;
+      };
       ingressSequence = append(
         input.factKind,
         input.stableObjectKind,
@@ -3037,16 +3211,28 @@ export function reconcileFactT3a(
         input.payload,
         0,
       );
+      const planIdentity = scopePlanAuthority(
+        transaction,
+        input.graphRunId,
+        input.scopeId,
+      );
       if (input.factKind === 'node_terminal' && input.terminalStatus) {
-        const source = transaction.queryOne<T3NodeRow>(
-          `SELECT id, node_key, phase, trigger_state, input_state,
-                  current_attempt_id, terminal_status, terminal_code, child_exit,
-                  published_output_envelope_value_id,
-                  published_output_envelope_hash, row_version
-             FROM workflow_graph_nodes
-            WHERE id = ? AND graph_run_id = ? AND scope_id = ?`,
-          [input.stableObjectId, input.graphRunId, input.scopeId],
+        const nodeRows = loadT3ScopeNodeAuthority(transaction, {
+          graphRunId: input.graphRunId,
+          scopeId: input.scopeId,
+          planIdentity,
+        });
+        const controlEdgeRows = loadT3ScopeControlEdgeAuthority(transaction, {
+          graphRunId: input.graphRunId,
+          scopeId: input.scopeId,
+          planIdentity,
+        });
+        const nodeKeysById = new Map(
+          [...nodeRows.values()].map((row) => [row.id, row.node_key]),
         );
+        const sourceNodeKey = nodeKeysById.get(input.stableObjectId);
+        const source =
+          sourceNodeKey === undefined ? undefined : nodeRows.get(sourceNodeKey);
         if (!source)
           throw new G5RuntimeError(
             'precondition_failed',
@@ -3063,11 +3249,6 @@ export function reconcileFactT3a(
             'precondition_failed',
             'T3a terminal fact is not backed by persisted Node output',
           );
-        const planIdentity = scopePlanAuthority(
-          transaction,
-          input.graphRunId,
-          input.scopeId,
-        );
         const plan = planIdentity.plan;
         const scopeInput = {
           id: scope.input_snapshot_value_id,
@@ -3080,6 +3261,7 @@ export function reconcileFactT3a(
           'Scope input',
         );
         const recordEarlyAt = (eligibilityEventSequence: number): void => {
+          flushFacts();
           recordAndArbitrateEarlyCompletionT3(transaction, {
             graphRunId: input.graphRunId,
             scopeId: input.scopeId,
@@ -3110,6 +3292,7 @@ export function reconcileFactT3a(
               scopeInput: scopeInputJson,
               payload: input.payload,
               append,
+              controlEdgeRows,
               nowMs: input.nowMs,
             }) || orchestrationError;
           orchestrationError =
@@ -3131,19 +3314,18 @@ export function reconcileFactT3a(
             scopeInput,
             payload: input.payload,
             append,
+            nodeRows,
+            controlEdgeRows,
             onPostStateTerminal: recordEarlyAt,
             nowMs: input.nowMs,
           });
           orchestrationError ||= advanced.orchestrationError;
           for (const skippedId of advanced.skippedNodeIds) {
-            const skipped = transaction.queryOne<T3NodeRow>(
-              `SELECT id, node_key, phase, trigger_state, input_state,
-                      current_attempt_id, terminal_status, terminal_code,
-                      child_exit, published_output_envelope_value_id,
-                      published_output_envelope_hash, row_version
-                 FROM workflow_graph_nodes WHERE id = ?`,
-              [skippedId],
-            );
+            const skippedNodeKey = nodeKeysById.get(skippedId);
+            const skipped =
+              skippedNodeKey === undefined
+                ? undefined
+                : nodeRows.get(skippedNodeKey);
             if (!skipped)
               throw new G5RuntimeError(
                 'integrity_violation',
@@ -3153,6 +3335,7 @@ export function reconcileFactT3a(
           }
         }
         if (orchestrationError) {
+          flushFacts();
           const refreshed = transaction.queryOne<{ row_version: number }>(
             'SELECT row_version FROM workflow_graph_runs WHERE id = ?',
             [input.graphRunId],
@@ -3178,11 +3361,11 @@ export function reconcileFactT3a(
           };
         }
       }
+      flushFacts();
       const early = recordAndArbitrateEarlyCompletionT3(transaction, {
         graphRunId: input.graphRunId,
         scopeId: input.scopeId,
-        plan: scopePlanAuthority(transaction, input.graphRunId, input.scopeId)
-          .plan,
+        plan: planIdentity.plan,
         runControl: run.control,
         runWorkFenceEpoch: run.work_fence_epoch,
         scopeWorkFenceEpoch: scope.work_fence_epoch,
@@ -3190,7 +3373,7 @@ export function reconcileFactT3a(
         eligibilityEventSequence: sequence,
         payload: input.payload,
         manifestSchema: input.manifestSchema,
-        append,
+        append: appendAndFlush,
         nowMs: input.nowMs,
       });
       if (early.closed)

@@ -66,6 +66,25 @@ describe('G8 real-file benchmark runner', () => {
       expect(benchmarkCase.statistics!.affected_rows).toBeGreaterThan(0);
   }, 60_000);
 
+  it('seeds two distinct 128-item manifests at the supported nested-map limit', () => {
+    const cases = runG8BenchmarkCases({
+      rootDir: temporaryRoot('icarus-g8-t7-supported-map-runner-'),
+      identityMode: 'candidate_development',
+      warmupIterations: 0,
+      measurementIterations: 1,
+      profiles: ['supported_limit'],
+      transactions: ['t7'],
+      shapes: { t7: ['large_nested_map'] },
+    });
+    expect(cases).toHaveLength(1);
+    expect(cases[0]!.dimensions).toMatchObject({
+      max_map_items_total: 256,
+      max_subtree_map_slots_per_fence: 256,
+      observed_max_items_per_map: 128,
+    });
+    expect(cases[0]!.statistics!.affected_rows).toBeGreaterThan(0);
+  }, 120_000);
+
   it('measures every production T8 required-child atomic shape', () => {
     const cases = runG8BenchmarkCases({
       rootDir: temporaryRoot('icarus-g8-t8-runner-'),

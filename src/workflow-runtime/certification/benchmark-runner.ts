@@ -118,6 +118,7 @@ export interface RunG8BenchmarkOptions {
   readonly shapes?: Readonly<
     Partial<Record<G8BenchmarkTransaction, readonly string[]>>
   >;
+  readonly onCaseCompleted?: (observation: G8BenchmarkCaseObservation) => void;
 }
 
 function rawSha256(filePath: string): Sha256Hash {
@@ -844,15 +845,18 @@ function seedEffect(
 function seedMapSlots(
   transaction: WorkflowRuntimeWriteTransaction,
   fixture: G6MapFixture,
-  owner: { readonly scopeId: string; readonly nodeId: string },
+  owners: readonly { readonly scopeId: string; readonly nodeId: string }[],
   count: number,
 ): void {
   const manifestCounts = distribute(
     count,
     Math.ceil(count / G8_PRODUCT_FLOOR_COVERAGE.max_items_per_map),
   );
+  if (owners.length < manifestCounts.length)
+    throw new Error('G8 nested map fixture has too few distinct owners');
   let globalIndex = 0;
   for (const [manifestIndex, manifestCount] of manifestCounts.entries()) {
+    const owner = owners[manifestIndex]!;
     const expansionManifestId = stableRuntimeId('expansion-manifest', {
       graph_run_id: fixture.graphRunId,
       owner_scope_id: owner.scopeId,
@@ -1118,7 +1122,15 @@ function seedT7Workload(
       );
     }
     if (shape === 'large_nested_map') {
-      seedMapSlots(transaction, fixture, allNodes[0]!, dimensions.mapItemCount);
+      const nestedMapOwners = [
+        ...new Map(allNodes.map((node) => [node.scopeId, node])).values(),
+      ];
+      seedMapSlots(
+        transaction,
+        fixture,
+        nestedMapOwners,
+        dimensions.mapItemCount,
+      );
     }
     assertNoDeferredForeignKeyViolations(transaction, 'G8 T7 fixture');
   });
@@ -1955,7 +1967,7 @@ export function runG8BenchmarkCases(
             ),
           );
         }
-        cases.push({
+        const observation: G8BenchmarkCaseObservation = {
           case_id: caseId,
           transaction,
           shape,
@@ -1969,7 +1981,9 @@ export function runG8BenchmarkCases(
           correctness_invariants: [...prepared.correctnessInvariants],
           statistics: statistics(samples),
           beyond_limit_rejection: null,
-        });
+        };
+        cases.push(observation);
+        options.onCaseCompleted?.(observation);
       }
       if (profiles.includes('beyond_limit')) {
         if (!supportedBase) {
@@ -1987,15 +2001,15 @@ export function runG8BenchmarkCases(
             'smoke',
           ).baseDatabasePath;
         }
-        cases.push(
-          beyondLimitObservation(
-            transaction,
-            shape,
-            supportedBase,
-            warmupIterations,
-            measurementIterations,
-          ),
+        const observation = beyondLimitObservation(
+          transaction,
+          shape,
+          supportedBase,
+          warmupIterations,
+          measurementIterations,
         );
+        cases.push(observation);
+        options.onCaseCompleted?.(observation);
       }
     }
   }

@@ -39,6 +39,8 @@
     "store:check": "tsx src/workflow-runtime/store/runtime-store/check.ts",
     "typecheck": "tsc --noEmit",
     "certification:g8:release:install": "tsx src/workflow-runtime/certification/release-cli.ts install",
+    "certification:g8:assemble": "tsx src/workflow-runtime/certification/g8-certification-cli.ts assemble",
+    "certification:g8:check": "tsx src/workflow-runtime/certification/g8-certification-cli.ts check",
     "contracts:g8:foundation:generate": "tsx src/workflow-runtime/contracts/g8-foundation-cli.ts generate",
     "contracts:g8:foundation:check": "tsx src/workflow-runtime/contracts/g8-foundation-cli.ts check",
     "test:g8:startup": "npm run build && vitest run src/workflow-runtime/certification/startup-smoke.integration.test.ts",

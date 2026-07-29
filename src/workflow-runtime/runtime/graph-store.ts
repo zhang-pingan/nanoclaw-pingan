@@ -361,22 +361,45 @@ export function nextRunEventSequence(
   return sequence;
 }
 
+export interface GraphEventInsertInput {
+  readonly graphRunId: string;
+  readonly sequence: number;
+  readonly scopeId: string | null;
+  readonly nodeId: string | null;
+  readonly attemptId: string | null;
+  readonly eventType: string;
+  readonly idempotencyKey: string;
+  readonly payloadJson?: JsonValue | null;
+  readonly payloadValueId?: string | null;
+  readonly payloadHash?: Sha256Hash | null;
+  readonly occurredAtMs: number;
+  readonly createdAtMs: number;
+}
+
+function graphEventParameters(
+  input: GraphEventInsertInput,
+): WorkflowRuntimeSqlValue[] {
+  return [
+    input.graphRunId,
+    input.sequence,
+    input.scopeId,
+    input.nodeId,
+    input.attemptId,
+    input.eventType,
+    input.idempotencyKey,
+    input.payloadJson === undefined || input.payloadJson === null
+      ? null
+      : canonicalJson(input.payloadJson),
+    input.payloadValueId ?? null,
+    input.payloadHash ?? null,
+    input.occurredAtMs,
+    input.createdAtMs,
+  ];
+}
+
 export function insertGraphEvent(
   transaction: WorkflowRuntimeWriteTransaction,
-  input: {
-    readonly graphRunId: string;
-    readonly sequence: number;
-    readonly scopeId: string | null;
-    readonly nodeId: string | null;
-    readonly attemptId: string | null;
-    readonly eventType: string;
-    readonly idempotencyKey: string;
-    readonly payloadJson?: JsonValue | null;
-    readonly payloadValueId?: string | null;
-    readonly payloadHash?: Sha256Hash | null;
-    readonly occurredAtMs: number;
-    readonly createdAtMs: number;
-  },
+  input: GraphEventInsertInput,
 ): void {
   transaction.execute(
     `INSERT INTO workflow_graph_events (
@@ -384,23 +407,30 @@ export function insertGraphEvent(
        idempotency_key, payload_json, payload_value_id, payload_hash,
        occurred_at_ms, created_at_ms
      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [
-      input.graphRunId,
-      input.sequence,
-      input.scopeId,
-      input.nodeId,
-      input.attemptId,
-      input.eventType,
-      input.idempotencyKey,
-      input.payloadJson === undefined || input.payloadJson === null
-        ? null
-        : canonicalJson(input.payloadJson),
-      input.payloadValueId ?? null,
-      input.payloadHash ?? null,
-      input.occurredAtMs,
-      input.createdAtMs,
-    ],
+    graphEventParameters(input),
   );
+}
+
+export function insertGraphEvents(
+  transaction: WorkflowRuntimeWriteTransaction,
+  inputs: readonly GraphEventInsertInput[],
+): void {
+  const maximumRowsPerStatement = 2_000;
+  for (
+    let offset = 0;
+    offset < inputs.length;
+    offset += maximumRowsPerStatement
+  ) {
+    const chunk = inputs.slice(offset, offset + maximumRowsPerStatement);
+    transaction.execute(
+      `INSERT INTO workflow_graph_events (
+       graph_run_id, seq, scope_id, node_id, attempt_id, event_type,
+       idempotency_key, payload_json, payload_value_id, payload_hash,
+       occurred_at_ms, created_at_ms
+     ) VALUES ${chunk.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').join(', ')}`,
+      chunk.flatMap(graphEventParameters),
+    );
+  }
 }
 
 export interface GraphFactInsertInput {

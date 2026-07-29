@@ -235,6 +235,195 @@ export function chargeAndInsertGraphFact(
   return insertGraphFact(transaction, input);
 }
 
+export function chargeAndInsertGraphFacts(
+  transaction: WorkflowRuntimeWriteTransaction,
+  inputs: readonly GraphFactInsertInput[],
+): void {
+  if (inputs.length === 0) return;
+  const graphRunId = inputs[0]!.graphRunId;
+  if (
+    inputs.some((input) => input.graphRunId !== graphRunId) ||
+    new Set(inputs.map((input) => input.factKey)).size !== inputs.length ||
+    new Set(inputs.map((input) => input.id)).size !== inputs.length
+  )
+    throw new G5RuntimeError(
+      'contract_invalid',
+      'Batched fixed-point facts require one Run and unique identities',
+    );
+
+  const existing = transaction.queryAll<{ fact_key: string }>(
+    `SELECT fact_key FROM workflow_graph_facts
+      WHERE graph_run_id = ? AND fact_key IN (${inputs.map(() => '?').join(', ')})`,
+    [graphRunId, ...inputs.map((input) => input.factKey)],
+  );
+  if (existing.length > 0) {
+    for (const input of inputs) chargeAndInsertGraphFact(transaction, input);
+    return;
+  }
+
+  const run = transaction.queryOne<{
+    ledger_seq: number;
+    ledger_head_hash: Sha256Hash;
+  }>(
+    'SELECT ledger_seq, ledger_head_hash FROM workflow_graph_runs WHERE id = ?',
+    [graphRunId],
+  );
+  const account = transaction.queryOne<{
+    id: string;
+    hard_limit: number;
+    reserved_amount: number;
+    consumed_amount: number;
+    row_version: number;
+  }>(
+    'SELECT id, hard_limit, reserved_amount, consumed_amount, row_version FROM workflow_graph_resource_accounts WHERE graph_run_id = ? AND resource_type = ?',
+    [graphRunId, 'facts_total'],
+  );
+  if (!run)
+    throw new G5RuntimeError('precondition_failed', 'Ledger Run is missing');
+  if (
+    !account ||
+    account.reserved_amount + account.consumed_amount + inputs.length >
+      account.hard_limit
+  )
+    throw new G5RuntimeError(
+      'resource_unavailable',
+      'Ledger quota exhausted: facts_total',
+    );
+
+  let sequence = run.ledger_seq;
+  let previousHash = run.ledger_head_hash;
+  for (const input of inputs) {
+    const reservationGroupId = stableRuntimeId('reservation-group', {
+      graph_run_id: graphRunId,
+      fact_id: input.id,
+      purpose: 'fixed_point_fact',
+    });
+    const reservationId = stableRuntimeId('reservation', {
+      reservation_group_id: reservationGroupId,
+      resource_type: 'facts_total',
+    });
+    transaction.execute(
+      `INSERT INTO workflow_graph_resource_reservations (
+       id, graph_run_id, reservation_group_id, consumer_workflow_id,
+       consumer_build_id, consumer_scope_id, consumer_node_id,
+       consumer_attempt_id, consumer_wait_id, consumer_effect_id,
+       consumer_fact_id, resource_type, purpose, settlement_mode,
+       reserved_remaining, consumed_amount, status, created_at_ms,
+       settled_at_ms, row_version
+     ) VALUES (?, ?, ?, NULL, NULL, NULL, NULL, NULL, NULL, NULL, ?,
+       'facts_total', 'fixed_point_fact', 'consume_on_create', 0, 1,
+       'committed', ?, ?, 1)`,
+      [
+        reservationId,
+        graphRunId,
+        reservationGroupId,
+        input.id,
+        input.createdAtMs,
+        input.createdAtMs,
+      ],
+    );
+    transaction.execute(
+      `INSERT INTO workflow_graph_resource_reservation_postings (
+       reservation_id, account_id, reserved_remaining, consumed_amount,
+       status, row_version
+     ) VALUES (?, ?, 0, 1, 'committed', 1)`,
+      [reservationId, account.id],
+    );
+    sequence += 1;
+    const payload: JsonObject = {
+      graph_run_id: graphRunId,
+      ledger_seq: sequence,
+      reservation_group_id: reservationGroupId,
+      account_id: account.id,
+      reservation_id: reservationId,
+      operation: 'charge',
+      delta_reserved: 0,
+      delta_consumed: 1,
+      idempotency_key: `charge:${reservationId}`,
+      previous_chain_hash: previousHash,
+      created_at_ms: input.createdAtMs,
+    };
+    const chainHash = ledgerHash(payload);
+    transaction.execute(
+      `INSERT INTO workflow_graph_resource_ledger_entries (
+       id, graph_run_id, ledger_seq, reservation_group_id, account_id,
+       reservation_id, operation, delta_reserved, delta_consumed,
+       idempotency_key, previous_chain_hash, chain_hash, created_at_ms
+     ) VALUES (?, ?, ?, ?, ?, ?, 'charge', 0, 1, ?, ?, ?, ?)`,
+      [
+        stableRuntimeId('ledger-entry', {
+          graph_run_id: graphRunId,
+          ledger_seq: sequence,
+        }),
+        graphRunId,
+        sequence,
+        reservationGroupId,
+        account.id,
+        reservationId,
+        `charge:${reservationId}`,
+        previousHash,
+        chainHash,
+        input.createdAtMs,
+      ],
+    );
+    transaction.execute(
+      `INSERT INTO workflow_graph_facts (
+       id, graph_run_id, scope_id, event_seq, causal_event_seq, causal_wave,
+       fact_kind, stable_object_kind, stable_object_id, fact_key,
+       payload_value_id, payload_hash, created_at_ms
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        input.id,
+        graphRunId,
+        input.scopeId,
+        input.eventSeq,
+        input.causalEventSeq,
+        input.causalWave,
+        input.factKind,
+        input.stableObjectKind,
+        input.stableObjectId,
+        input.factKey,
+        input.payloadValueId,
+        input.payloadHash,
+        input.createdAtMs,
+      ],
+    );
+    previousHash = chainHash;
+  }
+
+  if (
+    transaction.execute(
+      'UPDATE workflow_graph_resource_accounts SET consumed_amount = consumed_amount + ?, row_version = row_version + ? WHERE id = ? AND row_version = ? AND reserved_amount + consumed_amount + ? <= hard_limit',
+      [
+        inputs.length,
+        inputs.length,
+        account.id,
+        account.row_version,
+        inputs.length,
+      ],
+    ).changes !== 1
+  )
+    throw new G5RuntimeError(
+      'cas_conflict',
+      `Ledger account changed: ${account.id}`,
+    );
+  if (
+    transaction.execute(
+      'UPDATE workflow_graph_runs SET ledger_seq = ?, ledger_head_hash = ?, row_version = row_version + ?, updated_at_ms = ? WHERE id = ? AND ledger_seq = ? AND ledger_head_hash = ?',
+      [
+        sequence,
+        previousHash,
+        inputs.length,
+        inputs.at(-1)!.createdAtMs,
+        graphRunId,
+        run.ledger_seq,
+        run.ledger_head_hash,
+      ],
+    ).changes !== 1
+  )
+    throw new G5RuntimeError('cas_conflict', 'Ledger head CAS failed');
+}
+
 export function chargeWorkflowLifetimeResources(
   transaction: WorkflowRuntimeWriteTransaction,
   input: {

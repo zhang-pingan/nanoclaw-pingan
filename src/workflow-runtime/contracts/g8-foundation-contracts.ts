@@ -43,8 +43,12 @@ const startupSmokeSources = [
   'src/workflow-runtime/store/runtime-store/profile.ts',
 ] as const;
 const benchmarkHarnessSources = [
+  'src/workflow-runtime/certification/g8-certification-artifacts.ts',
   'src/workflow-runtime/certification/benchmark-runner.ts',
   'src/workflow-runtime/certification/benchmark-shapes.ts',
+  'src/workflow-runtime/certification/release-benchmark.ts',
+  'src/workflow-runtime/contracts/certification/g8-certification-artifacts-schema.json',
+  'src/workflow-runtime/contracts/g8-certification-types.ts',
   'src/workflow-runtime/contracts/g8-limits.ts',
   'src/workflow-runtime/runtime/graph-runtime.ts',
   'src/workflow-runtime/runtime/reconciler.ts',

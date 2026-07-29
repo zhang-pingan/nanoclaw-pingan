@@ -59,7 +59,7 @@
       {
         "name": "g5_basic_runtime",
         "path": "src/workflow-runtime/contracts/contract-pack-g5-basic-runtime-repair.json",
-        "hash": "sha256:c37f77dbe704f1e55656d93ae9f35faafad9bbeb524cdab914a0897a3592e540"
+        "hash": "sha256:c4fc33c361c4f7e4b62f1848518fade64d15b143ddff711b988a147e28f2ba9c"
       },
       {
         "name": "r020_child_consumption_lineage",
@@ -83,5 +83,5 @@
       }
     ]
   },
-  "hash": "sha256:475a66d7e90f07af1e34a6281ee4881676717b2b81229ee2a33117acacac816f"
+  "hash": "sha256:87a7d66d38113d489f37283550da339c4338c0cb98df811a89dab906a2c5d85a"
 }

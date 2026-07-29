@@ -54,7 +54,7 @@ const exactBindings = [
   {
     name: 'g6_dynamic_close_accepted_candidate',
     path: 'src/workflow-runtime/contracts/contract-pack-g6-dynamic-close.json',
-    hash: 'sha256:f1ac0dce6b0bbf33988e7bab530ed6fbac783b5cdca1f7ac832783a452816273',
+    hash: 'sha256:d6d1957d342ff4d0259ede4ec8e6dcc14f3ebad08408fc555a71832428b17f94',
   },
   {
     name: 'workflow_runtime_command_protocol',
