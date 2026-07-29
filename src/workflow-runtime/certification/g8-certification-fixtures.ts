@@ -283,7 +283,7 @@ export function createG8BenchmarkCasesFixture(): G8BenchmarkCaseObservation[] {
                   p50_ms: 1,
                   p95_ms: 2,
                   p99_ms: 3,
-                  max_ms: 4,
+                  max_ms: 4.25,
                   wal_bytes: 4096,
                   peak_rss_bytes: 17179869184,
                   affected_rows: 1,

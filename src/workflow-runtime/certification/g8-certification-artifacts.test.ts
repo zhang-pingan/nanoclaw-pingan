@@ -125,9 +125,9 @@ describe('G8 certification artifacts', () => {
     expect(limits.max_required_child_creations_per_t8).toBe(8);
     expect(limits.certification).toMatchObject({
       status: 'certified',
-      t3_max_transaction_duration_ms: 4,
-      t7_max_transaction_duration_ms: 4,
-      t8_max_transaction_duration_ms: 4,
+      t3_max_transaction_duration_ms: 4.25,
+      t7_max_transaction_duration_ms: 4.25,
+      t8_max_transaction_duration_ms: 4.25,
       certified_at_ms: certifiedAtMs,
     });
     expect('limits' in limits).toBe(false);

@@ -955,10 +955,13 @@ export function parseG8RuntimeSupportedLimits(
   ] as const)
     parseSha256Hash(certification[key]);
   for (const key of [
-    'startup_smoke_max_duration_ms',
     't3_max_transaction_duration_ms',
     't7_max_transaction_duration_ms',
     't8_max_transaction_duration_ms',
+  ] as const)
+    nonNegativeFinite(certification[key], `RuntimeSupportedLimits ${key}`);
+  for (const key of [
+    'startup_smoke_max_duration_ms',
     'certified_at_ms',
   ] as const)
     positiveSafeInteger(certification[key], `RuntimeSupportedLimits ${key}`);
