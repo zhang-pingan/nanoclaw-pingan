@@ -463,6 +463,7 @@ export function assertClosedSchemaManifest(
       'child_completion_lineage_schema_prerequisite_hash',
       'map_terminal_consumption_schema_prerequisite_hash',
       'domain_claim_handoff_schema_prerequisite_hash',
+      'runtime_command_ingress_schema_prerequisite_hash',
       'sqlite_profile_hash',
     ],
     'Schema Manifest logical_inputs',

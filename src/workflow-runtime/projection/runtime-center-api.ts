@@ -3,12 +3,12 @@ import crypto from 'node:crypto';
 import { canonicalJson } from '../contracts/hash.js';
 import type { JsonObject } from '../contracts/types.js';
 import {
-  type ProjectionRebuildExport,
   type ProjectionRebuildReceipt,
   type RuntimeCenterProjectionStatus,
   type RuntimeCenterView,
   type WorkflowProjectionRow,
   WorkflowProjectionStore,
+  WorkflowProjectionRebuildAuthority,
 } from './workflow-projection.js';
 
 export type RuntimeCenterSort =
@@ -281,6 +281,8 @@ export class RuntimeCenterProjectionApi {
   constructor(
     private readonly projection: WorkflowProjectionStore,
     private readonly cursorSecret: Buffer,
+    private readonly rebuildAuthority: WorkflowProjectionRebuildAuthority | null =
+      null,
   ) {
     if (cursorSecret.byteLength < 32)
       throw new RuntimeCenterApiError(
@@ -446,7 +448,6 @@ export class RuntimeCenterProjectionApi {
   rebuild(
     view: RuntimeCenterView,
     jobRef: string,
-    exported: ProjectionRebuildExport,
     actor: {
       readonly actorKind: string;
       readonly permissions: ReadonlySet<string>;
@@ -461,7 +462,17 @@ export class RuntimeCenterProjectionApi {
         'permission_denied',
         'Projection rebuild requires a diagnostic Human actor',
       );
-    return this.projection.rebuild(view, jobRef, exported, nowMs);
+    if (!this.rebuildAuthority)
+      throw new RuntimeCenterApiError(
+        'invalid_request',
+        'Projection rebuild authority is unavailable',
+      );
+    return this.projection.rebuild(
+      view,
+      jobRef,
+      this.rebuildAuthority.export(view),
+      nowMs,
+    );
   }
 }
 

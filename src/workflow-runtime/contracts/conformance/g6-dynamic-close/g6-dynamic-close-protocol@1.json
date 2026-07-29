@@ -10,8 +10,8 @@
     "gate": "G6",
     "status": "G6_DYNAMIC_CLOSE_CONSTRUCTION_CANDIDATE_PENDING_INDEPENDENT_AFFECTED_CHAIN_REGRESSION",
     "persistent_mode_policy": "HYBRID_GATE_CONTINUOUS_RUNTIME_V1",
-    "database_schema_version": 10,
-    "database_schema_hash": "sha256:1ff4fd63239e85630923fa16e204645367958ae487933338a6f676ec9be6faad",
+    "database_schema_version": 11,
+    "database_schema_hash": "sha256:4d096ce9c2ed47a195c36d11a6540a3c0191183a521b59a1520279a0ffaf9be2",
     "transaction_host": "WorkflowRuntimeStore.withImmediateTransaction",
     "transaction_mode": "BEGIN_IMMEDIATE",
     "owned_transactions": [
@@ -59,7 +59,7 @@
       {
         "name": "g5_basic_runtime",
         "path": "src/workflow-runtime/contracts/contract-pack-g5-basic-runtime-repair.json",
-        "hash": "sha256:fe7fbc82bebd623f545a6cd9f0105c21ed46ab7a9e063691dd4e98ad1fb121e1"
+        "hash": "sha256:0a0e13f4529cfcc042184ce3a29b7b75342ac57a68befd26a9629b444874639a"
       },
       {
         "name": "r020_child_consumption_lineage",
@@ -77,11 +77,11 @@
         "hash": "sha256:ea97a3d52a2e4a14fb2671b2191b1b1cb6acc22c4ecded7db2e141a1716b516e"
       },
       {
-        "name": "database_schema_10",
-        "path": "src/workflow-runtime/store/schema/contract-pack-g1-executable-schema-v10.json",
-        "hash": "sha256:05169ddfdc2c53371a0e4464dcc8b109608e1ff9b3d0276478da464c11266682"
+        "name": "database_schema_11",
+        "path": "src/workflow-runtime/store/schema/contract-pack-g1-executable-schema-v11.json",
+        "hash": "sha256:d4dfd9e1beaea10ab7ecca33308d0624fe7ae4c45518a98729198ed7c6f09375"
       }
     ]
   },
-  "hash": "sha256:d99a7a9a29b34ee3c570976db204e7a39737a3a508ff5dd0db41d319eb514e2c"
+  "hash": "sha256:9080eee20f096152e465f81bae8243f65250169f9984f03589859b4efb9c0bec"
 }

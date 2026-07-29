@@ -5044,7 +5044,9 @@ Operational Blocker 是 `action_required/quarantined` 的权威原因集合，�
 
 Run/Workflow `operational_state` 是由 open blocker 集合维护的数据库 cache：migration 为 blocker INSERT、`open -> resolved/abandoned` 建 immediate trigger，在同一事务按 `quarantine > action_required > healthy` 更新两级 cache 和 row version；普通 Store API 不提供 operational-state setter，且唯一 Runtime DB write connection 不暴露 raw SQL。唯一例外是 Administrative Abandon transaction：先把 open blocker 标成 abandoned，再把 Run/Workflow operational state 与 Workflow status 设为 `administratively_abandoned`。Constraint/trigger fixture 必须证明 insert/resolve/abandon、多 blocker severity 和两级 cache 更新原子一致；API boundary test 证明不存在普通 setter。Recovery 仍做双向扫描以检测磁盘损坏或被绕过的非法写入。
 
-T6e remediation/restoration 只能通过 Runtime Command Gateway 执行。`action_required` blocker 必须沿原 effect key、schedule 或 claim 协议追加有限 Attempt/Receipt/Reconcile 事实；`integrity_quarantine` 只能从可信备份或重新验证的同 hash 数据恢复，禁止 recompile/re-prove 或用“等价”新内容覆盖原事实。单个 blocker 成功时以 `status=open + row_version` CAS 转为 `resolved` 并写 resolution evidence；事务内按剩余最高 severity 同时更新 Run/Workflow operational state，无 open blocker 才恢复为 `healthy`，但绝不改写 Workflow business status。恢复不回退 lifecycle/control/work fence，不清零 attempts/ledger/deadline；Run 已 closing/cancelling/closed 时只重新开放适用的 close-cleanup 或 claim-release lane，不开放 ordinary scheduler。Administrative Abandon 把剩余 open blocker 标成 `abandoned` 并保留证据，绝不把它们伪装为 resolved。
+T6e remediation/restoration 只能通过 Runtime Command Gateway 执行。验证必须从持久化Blocker重新加载exact source tuple：`source_effect_operation_id/source_outbox_id/source_root_finalization_schedule_id/source_claim_id/source_event_seq` exactly-one，并以其graph/run/workflow、event sequence/type、idempotency key、node/attempt、schedule/claim lineage为authority；caller提供的matching id/hash只可作请求材料，不能替代持久化source identity。Resource remediation必须绑定该source event与其exact retry schedule；integrity restoration必须加载Blocker指向的exact persisted `orchestration_error` Event，并验证该Event payload Value/hash与Blocker evidence相同，不能接受unrelated event、same-hash source splice或caller自报的expected/restored hash。
+
+`action_required` blocker 必须沿原 effect key、schedule 或 claim 协议追加有限 Attempt/Receipt/Reconcile 事实；`integrity_quarantine` 只能从可信备份或重新验证的同 hash 数据恢复，禁止 recompile/re-prove 或用“等价”新内容覆盖原事实。单个 blocker 成功时以 `status=open + row_version` CAS 转为 `resolved` 并写 resolution evidence；事务内按剩余最高 severity 同时更新 Run/Workflow operational state，无 open blocker 才恢复为 `healthy`，但绝不改写 Workflow business status。恢复不回退 lifecycle/control/work fence，不清零 attempts/ledger/deadline；Run 已 closing/cancelling/closed 时只重新开放适用的 close-cleanup 或 claim-release lane，不开放 ordinary scheduler。Administrative Abandon 把剩余 open blocker 标成 `abandoned` 并保留证据，绝不把它们伪装为 resolved。
 
 Blocker 关闭证明固定如下；“已追加新预算/已补 credential/已点击重试”本身都不算 resolved：
 
@@ -5954,13 +5956,29 @@ workflow.integrity.restore
 workflow.administrative_abandon
 ```
 
-`pause_run/resume_run` 要求 `workflow.operate`；`cancel_run/cancel_workflow` 要求服务端 ownership resolver 证明 `workflow.cancel.own`，否则要求 `workflow.cancel.any`；`skip_node`、`advance_retry_schedule`、三种 Effect remediation、普通 T6e、integrity restore 和两阶段 abandon 分别要求同名最小权限。`human:local-owner` 拥有全部上述权限但仍受 Published Command Policy、Feature ceiling、state guard 与 expected version 约束。Feature 代表 Human 时 Manifest ceiling 可以声明 operate/cancel-own/skip/retry/effect/blocker remediation，不能声明 integrity restore 或 abandon；后台 Feature Service/Automation 默认无控制权限，只能显式获得 `cancel.own`。G7 Deadline Watchdog使用绑定`cancel_workflow + deadline_enforced|safety_enforced + due_target + cancel_workflow_only`的专用System Grant，Gateway派生`system:deadline-watchdog` domain与`workflow-deadline:<workflow_id>:<deadline_at_ms>` key，并为applied/denied/conflict/duplicate/late每次追加Invocation；该Grant不获得通用admin authority。
+`pause_run/resume_run` 要求 `workflow.operate`；`cancel_run/cancel_workflow` 要求服务端 ownership resolver 证明 `workflow.cancel.own`，否则要求 `workflow.cancel.any`；`skip_node`、`advance_retry_schedule`、三种 Effect remediation、普通 T6e、integrity restore 和两阶段 abandon 分别要求同名最小权限。`human:local-owner` 拥有全部上述权限但仍受 Published Command Policy、Feature ceiling、state guard 与 expected version 约束。Feature 代表 Human 时 Manifest ceiling 可以声明 operate/cancel-own/skip/retry/effect/blocker remediation，不能声明 integrity restore 或 abandon；后台 Feature Service/Automation 默认无控制权限，只能显式获得 `cancel.own`。G7 Deadline Watchdog使用绑定`cancel_workflow + deadline_enforced|safety_enforced + due_target + cancel_workflow_only`的专用System Grant，Gateway派生`system:deadline-watchdog` domain与`workflow-deadline:<workflow_id>:<deadline_at_ms>` key，并为每次authenticated调用追加Ingress Invocation；目标解析成功后，applied/denied/conflict/duplicate/late还追加resolved Command Invocation。该Grant不获得通用admin authority。
 
 Command Catalog 还固定 denial code 为 `permission_denied | feature_ceiling_denied | command_policy_denied | state_guard_failed | target_not_found | target_kind_invalid | row_version_conflict | evidence_invalid | confirmation_required | idempotency_conflict | late_command`。每个 command type 的 allowed reason code、required evidence schema、target kind、permission 和 state guard 都在 Contract Pack 逐项列出；任意开放字符串或模块私有 reason fallback 都非法。
 
 Definition/Recipe 固定 versioned `WorkflowCommandPolicy`，声明 manual skip、retry advance、允许的 cancel scope、receipt remediation contract、administrative abandon 与 claim disposition。UI 根据 Projection 展示按钮仅是提示；Gateway 必须在权威事务内重新检查 Actor permission、resource scope、Feature ceiling、Published Policy、expected row version 与当前状态。
 
 ```text
+workflow_runtime_command_ingress_invocations
+  - id/idempotency_domain/idempotency_key/ingress_no
+  - submitted_command_id/canonical_request_json/submitted_request_hash
+  - command_type/claimed_target_kind
+  - claimed_workflow_id/claimed_run_id/claimed_node_id
+  - claimed_retry_schedule_id/claimed_effect_operation_id
+  - claimed_operational_blocker_id
+  - actor_ref/actor_kind/auth_session_ref
+  - entrypoint/source_feature_id/delegation_chain_ref
+  - resolution_result        prepared | resolved | target_not_found | target_kind_invalid
+  - authorization_result     pending | not_evaluated | allowed | denied
+  - execution_result         prepared | applied | denied | conflict | duplicate | late
+  - denial_code/canonical_result_json/result_hash
+  - resolved_command_id/resolved_invocation_id
+  - requested_at_ms/decided_at_ms/applied_at_ms
+
 workflow_runtime_commands
   - command_id
   - idempotency_domain/idempotency_key
@@ -5991,20 +6009,27 @@ workflow_runtime_command_confirmations
   - actor_ref/auth_session_ref
   - expected_workflow_row_version
   - request_hash/evidence_manifest_ref/evidence_manifest_hash
+  - request_hash binds the original reason code/text, evidence and expected version
   - status                  pending | consumed | expired
   - expires_at_ms/consumed_at_ms/row_version
 
 UNIQUE(idempotency_domain, idempotency_key)
 UNIQUE(command_id, invocation_no)
 UNIQUE(request_command_id)
+UNIQUE(ingress idempotency_domain, idempotency_key, ingress_no)
+CHECK (Ingress claimed target has exactly one closed typed non-FK identifier)
+CHECK (Ingress command_type, claimed_target_kind and claimed typed column match)
+CHECK (resolved_command_id/resolved_invocation_id are all-or-none and exact-FK bound)
 CHECK (exactly one typed target column is non-null)
 CHECK (command_type and non-null target column match the closed Command Catalog)
 CHECK (Confirmation status/time fields are consistent and expires_at_ms is request time + 300000)
 ```
 
-`scope_id/attempt_id/wait_id/root_finalization_schedule_id` 第一版不是 Runtime Command target；相关恢复通过 Effect Operation 或 source-typed Operational Blocker/T6e 执行。API 的 discriminated target 由 Gateway 展开为上述真实 FK，权威 Schema 不保存开放 `target_ref`。
+`scope_id/attempt_id/wait_id/root_finalization_schedule_id` 第一版不是 Runtime Command target；相关恢复通过 Effect Operation 或 source-typed Operational Blocker/T6e 执行。API 的 discriminated target 在Ingress中展开为六种closed claimed typed columns。Claimed target只是外部请求声明，不是已验证内部关系，因此这些claimed identifier不设伪FK；它们也不得退化为开放`target_ref`、opaque/sentinel target或fabricated target。目标解析成功后，Gateway才创建由真实typed FK约束的Command Header和resolved Invocation，并把Ingress exact绑定到二者。
 
-`idempotency_domain` 由 Gateway 根据 Actor/Feature/API credential 的可信 namespace 派生，客户端不能自报。相同 domain/key/request hash 返回 Header 的 canonical 原结果，并追加 `duplicate` Invocation；同 domain/key 不同请求追加 `conflict` Invocation 并返回 `idempotency_conflict`。首次 applied/denied/late 结果同样写 Invocation，Header 只保存 canonical request/final result，不覆盖历史。这样唯一幂等请求与“每次 authenticated 调用都追加不可变审计”可以同时成立。
+`idempotency_domain` 由 Gateway 根据 Actor/Feature/API credential 的可信 namespace 派生，客户端不能自报。Authentication成功后、authoritative target解析前，每次调用先追加一条独立Ingress Invocation；`target_not_found/target_kind_invalid`只把该Ingress终局化为denied，Receipt返回不可空的`ingress_invocation_id`，不得创建伪Header或伪resolved Invocation。目标解析成功的调用才创建或绑定Header与resolved Invocation；Receipt同时返回exact `command_id/invocation_id`。
+
+相同 domain/key/request hash 必须跳过当前authorization、state guard和execution，返回Header不可变的canonical原结果，同时追加`authorization_result=not_evaluated/execution_result=duplicate` Ingress与一个绑定原Header authority的resolved duplicate Invocation；后者沿用首次持久化的permission/policy binding，不表示重新授权。相同 domain/key 不同请求同样不重授权，追加`not_evaluated/conflict` Ingress与resolved conflict Invocation并返回`idempotency_conflict`。late、denied与首次applied每次都追加Ingress及resolved Invocation；Header只保存唯一canonical request/final result，任何duplicate/conflict不得覆盖它。Ingress从prepared到terminal的唯一转换只能发生在创建它的同一`BEGIN IMMEDIATE`事务中，terminal row与resolved Invocation/Event/domain mutation全成或全回滚；commit后Ingress、Header request identity、resolved Invocation与Event均不可更新或删除。Reopen必须复算request/result hash及Ingress/Invocation/Event identity，tamper即fail closed。
 
 命令语义固定：
 
@@ -6012,7 +6037,7 @@ CHECK (Confirmation status/time fields are consistent and expires_at_ms is reque
 - Retry 不能重开 terminal Node/Attempt；业务返工使用 Definition 发布的 typed Rework Command 创建新 Activation/Run。
 - Receipt Remediation 只能按原 effect key/external id Reconcile、提交 Adapter 可验证 Receipt 或 immutable before/after snapshot、或证明 not-applied 后重投；人工文字只能是审计备注，不能直接把 Mutable Effect 改成 succeeded。
 - Operational Remediation 必须以 `operational_blocker_id` 为 target，并调用 T6e；命令成功只关闭已完成 source-specific verification 的 blocker。关闭最后一个 blocker 时才原子恢复 operational state=`healthy`，但不改写 Workflow business status；存在 quarantine blocker 时不得因较低严重度 remediation 降级为 `action_required`。
-- Administrative Abandon 只允许专门权限、强制 reason/evidence 与 intent-bound 二次确认。`request_administrative_abandon` 只创建绑定 actor/session、Workflow/expected row version、canonical request hash 与 evidence hash 的单次 Confirmation，TTL 固定 `300000 ms`，不修改 Workflow；`confirm_administrative_abandon` 必须由同一 authenticated Human Session 在 TTL 内消费且只能成功一次。AI、Feature Service、Automation 与 System Actor 均不能批准。成功事务停止 scheduler、将当前 non-terminal activation `active -> abandoned` 并标记 Run/Workflow `administratively_abandoned`，但不生成 Completion Cut、不伪造 normal/error/cancel、不触发正常 transition。Held Claim 默认保留；只有 Published Abandon Policy 允许且已建立可信新 Fence/处置证明时才可释放。
+- Administrative Abandon 只允许专门权限、强制 reason/evidence 与 intent-bound 二次确认。`request_administrative_abandon` 只创建绑定原Human actor/session、Workflow/expected row version、canonical request hash、reason code/text与exact evidence identity/hash的单次 Confirmation，TTL 固定 `300000 ms`，不修改 Workflow；`confirm_administrative_abandon`只能重申原intent，不能替换reason、reason text、evidence或expected version。它必须由同一 authenticated Human Session 在严格`now_ms < expires_at_ms`时消费且只能成功一次；精确端点及之后均为expired。AI、Feature Service、Automation 与 System Actor 均不能批准。成功事务停止 scheduler、将当前 non-terminal activation `active -> abandoned` 并标记 Run/Workflow `administratively_abandoned`，但不生成 Completion Cut、不伪造 normal/error/cancel、不触发正常 transition。Held Claim 默认保留；只有 Published Abandon Policy 允许且已建立可信新 Fence/处置证明时才可释放。
 - Feature 自定义“批准、拒绝、重新生成、接受交付物”等业务操作必须发布 typed Business Command Contract，并 lower 为 Signal、新 Activation 或 Published Rework；不得映射成任意状态跳转或 Admin 数据修改。
 
 ## Outbox、Lease 与恢复
@@ -6344,7 +6369,7 @@ interface RuntimeCenterListResponse<T> {
 
 API 固定为 `GET /api/runtime-center/{workflows|agent-executions|pending|trace}`、`GET /api/runtime-center/workflows/:workflowId`、`GET /api/runtime-center/runs/:runId` 和 `POST /api/runtime-center/projections/:view/rebuild`。`page_size` 为 `1..200`；cursor 是 server-signed opaque token，绑定 view、normalized filters、sort、snapshot head 与最后一行稳定 sort tuple，客户端不得拼 offset 或修改过滤条件。每种 view 只允许上面 closed filter/sort catalog 中适用的组合；unknown filter/sort 返回稳定 400。详情 API 返回 Projection 状态、source row version 和 typed link，不把原始 Runtime row 暴露为开放 JSON。
 
-Rebuild API 只允许有诊断权限的 Human 调用，返回幂等 rebuild job ref；它删除/替换的只有可重建 Projection generation，不改 Runtime、Trace、Feature domain data 或 Command audit。新 generation 追平 frozen source head、通过 row-count/hash/referential fixture 后原子切换；失败继续服务上一 generation并标记 degraded。Projection lag/degraded 时列表和详情仍返回最后可信 snapshot及显式 freshness，Command 按钮默认 disabled；用户经详情重新读取权威 target 后仍可提交的命令必须由 Gateway 独立判断，不能由前端绕过。
+Rebuild API 只允许有诊断权限的 Human 提交closed `view + rebuild_job_ref` intent，返回幂等 rebuild job ref；Human/API caller不得提交rows、export hash或source head。Server-owned Runtime query/export authority在可信Runtime read boundary冻结exact source head并生成export，export object带不可伪造的authority identity/proof，Projection只接受该authority实例产生的对象。相同job ref必须绑定同一view与同一authoritative export proof；不同view、rows/head/hash/count或export drift均为conflict，不能作为duplicate吞掉。Rebuild删除/替换的只有可重建 Projection generation，不改 Runtime、Trace、Feature domain data 或 Command audit。新 generation 追平 frozen source head、通过 row-count/hash/referential fixture后原子切换；伪造、自算hash、source lineage断裂或任何失败都继续服务上一 generation并标记degraded。Projection lag/degraded 时列表和详情仍返回最后可信 snapshot及显式 freshness，Command 按钮默认 disabled；用户经详情重新读取权威 target 后仍可提交的命令必须由 Gateway 独立判断，不能由前端绕过。
 
 零 Published Recipe、零 Workflow、零 Run 与零 pending item 是正常产品状态：四个 view 返回 `items=[]/next_cursor=null/state=ready`，页面展示无创建器、无迁移提示的稳定空状态；Trace view 仍可展示非 Workflow Trace。`rebuilding/degraded` 不是空状态，必须显示 projection status、last success 和诊断入口。Projection 指向已被 retention 清理的合法对象时展示 `target_retained_metadata_only`；ID/hash 所属链不一致时展示 `broken_link_integrity_error` 并触发 integrity audit，不能静默隐藏或拼接近似对象。
 
@@ -6542,11 +6567,11 @@ action-required/quarantine blocker; remediation success/retry/exhaustion
 | Registry/Upgrade | Publish 后 ref/hash 不变；旧 Run 固定旧 Artifact/Prompt/Protocol；不兼容 Core/Feature Release 无法激活 |
 | Outbox | delivery/reconcile 尝试有限；unknown outcome 不盲重投；Dead Letter 不会按错误 Effect 语义推进 Graph；required child 永不进入 Outbox；notification failure 不回滚 Workflow |
 | Blob | DB 引用只指向 durable live Blob；GC 不删除新引用/Backup Pin；Crash 后只产生可识别 orphan 或 quarantine |
-| Command | Feature/运行中心提交同一 closed command 得到相同授权；Actor/WorkflowControlOwnership 不可伪造；command-to-target/permission/reason 映射封闭；Header 幂等且每次调用追加 Invocation；denied/duplicate/late 不改变目标状态；G7 deadline固定System Grant、`workflow-deadline:<workflow_id>:<deadline_at_ms>`与T7c audit；manual retry必须先经G7 authorization/audit再调用G5 primitive；Administrative Abandon Confirmation 绑定同一 Human Session/request/evidence/version、5 分钟过期且最多消费一次 |
+| Command | Feature/运行中心提交同一 closed command 得到相同授权；Actor/WorkflowControlOwnership 不可伪造；command-to-target/permission/reason 映射封闭；每次authenticated调用在target resolution前追加closed immutable Ingress Invocation并返回其identity，missing/invalid target不得伪造Header；resolved调用追加真实FK Header/Invocation；exact replay不重授权/不重执行且Header canonical result不变；denied/duplicate/late 不改变目标状态；G7 deadline固定System Grant、`workflow-deadline:<workflow_id>:<deadline_at_ms>`与T7c audit；manual retry必须先经G7 authorization/audit再调用G5 primitive；Administrative Abandon Confirmation 绑定同一 Human Session/request/reason/evidence/version、严格5分钟TTL且最多消费一次 |
 | Capacity Admin | 只有 local-owner/一次性 genesis grant 可授权；完整 snapshot 同时满足 revision+hash CAS；同 hash 新 revision 保留不同 change lineage；并发 stale command 至多一个成功；denied/conflict/duplicate 不改变 head；Admission 的 revision/change/hash 与实际使用的单一 immutable snapshot 一致；direct-file write 永不成为授权事实 |
 | Absence/Coverage | source/API/UI/schema/filesystem/resource absence 全部匹配同一 source build；removed surface 具有 negative fixture 且 replacement=null；候选资料 source/build/release/runtime reachability 全部为零 |
 | Operational / G5 | blocker create与open集合、Run/Workflow operational-state cache双向一致且不覆盖Workflow business status；不得执行、模拟或用预授权boolean消费open->resolved/abandoned |
-| Operational / G7 | T6e只能经Runtime Command Gateway；不能提前恢复、非法降级quarantine、重置fence/ledger/deadline或丢失失败restoration attempt；resolution必须具有真实Command/Invocation/Event |
+| Operational / G7 | T6e只能经Runtime Command Gateway并从持久化Blocker加载exact source tuple；不能信任caller matching hash、拼接unrelated source/event、提前恢复、非法降级quarantine、重置fence/ledger/deadline或丢失失败restoration attempt；resolution必须具有真实Ingress/Command/Invocation/Event |
 | Trace | 独立 Agent Trace 不要求 Workflow；non-null Workflow correlation 所属链完整；对话发起 Workflow 可同时按 causation 与 Attempt 查询；禁止 orphan/伪造关联 |
 | Time/DDL | 权威时间均为 safe-integer `*_at_ms`；Activation/Finalization/Fact/Blocker/Command 的状态 CHECK、row version、typed FK/exactly-one 与 partial-index 查询覆盖一致；database/connection PRAGMA 与完整 certification key 逐项匹配 Profile |
 
@@ -6781,14 +6806,14 @@ Current G1已使用closed、显式Schema Dependency Manifest，只读取exact re
 - 普通 node 不写共享 workflow context；只有 root coordinator 在 T8 提交受信任 typed Context Patch 和 terminal output binding。一个 Patch Header 可以原子包含多个 set/clear Operation，同一 Patch 不得重复 target slot，任一 Operation 失败时全部不提交。
 - Transition history 与 checkpoint unique key 证明 root cut 只推进一次；checkpoint 的 nullable root plan、Run Manifest、ledger、close/cut/output hashes 能定位完整动态执行历史。
 - Trusted child-workflow effect 固定 completed-output port、delivery requirement、principal binding、creation domain 与 routing scope。Required effect 通过 finite Root Finalization Schedule/Attempt preflight，并与 Root Cut/transition/Claim handoff/Child/Relation 在 T8 原子提交；best-effort 只写 Outbox。两者的 creation domain/key 由 Run Protocol 根据 root lineage、Parent、source activation/close request 与 effect id 固定派生，Definition 不含自由模板；相同 key 的 Recipe/principal/input 漂移由 `creation_intent_hash` 拒绝。两者均受 Parent Recipe exact allowlist、direct/depth/root-descendant budget 约束；需要同步结果的流程使用 subgraph 或显式 wait/signal。
-- Runtime Center、Feature Page、API、Automation与G7 Deadline Watchdog共用Runtime Command Gateway；只接受本文 closed Command Union、六种 typed target、closed Permission/Reason/Denial Catalog，不存在开放 `command_type/target_ref`。T0 冻结 first-class `WorkflowControlOwnership`，`creation_domain`/Recipe owner 不直接授予 `own`；Command Header 对 `(idempotency_domain,key)` 保存 canonical request/result，每次 authenticated 调用都追加 Invocation，Human/Feature Service/System Actor、Delegation Chain、Permission/Policy/State Guard 和 applied/denied/conflict/duplicate/late 审计均可验证。System deadline只能使用专用Grant与稳定key；manual retry只能在Gateway authorization/audit后调用G5 primitive。Receipt remediation 不能人工改成功，Administrative Abandon 必须由 `human:local-owner` 以 5 分钟 intent-bound Confirmation 二次确认且不伪造 cut/outcome。Capacity Admin 是独立 deployment gateway/permission/catalog/CAS，不扩展 Workflow Command target 或继承 Workflow ownership/policy。
+- Runtime Center、Feature Page、API、Automation与G7 Deadline Watchdog共用Runtime Command Gateway；只接受本文 closed Command Union、六种 typed target、closed Permission/Reason/Denial Catalog，不存在开放 `command_type/target_ref`。T0 冻结 first-class `WorkflowControlOwnership`，`creation_domain`/Recipe owner 不直接授予 `own`；每次authenticated调用在target resolution前追加closed typed Ingress Invocation并返回其identity，claimed target不设伪FK，missing/invalid target不创建伪Header。解析成功后才绑定真实FK Command Header/Invocation；exact replay不重授权/不重执行且Header canonical result不可覆盖，Human/Feature Service/System Actor、Delegation Chain、Permission/Policy/State Guard 和 applied/denied/conflict/duplicate/late 审计均可验证。System deadline只能使用专用Grant与稳定key；manual retry只能在Gateway authorization/audit后调用G5 primitive。Receipt remediation 不能人工改成功，Administrative Abandon 必须由 `human:local-owner` 以严格5分钟intent-bound Confirmation二次确认且不伪造cut/outcome。Capacity Admin 是独立 deployment gateway/permission/catalog/CAS，不扩展 Workflow Command target 或继承 Workflow ownership/policy。
 - Runtime Center 提供工作流、Agent 执行、待处理和 Trace 四类一级视图，以及不增加一级执行类型的 Capacity 诊断/管理子页；Projection API 使用 closed cursor/filter/sort、generation rebuild 和 ready/rebuilding/degraded 状态，零数据空状态与断链原因可区分。Workflow 详情展示 scope tree、DAG、edge resolution、input seal、attempt/wait、ledger、candidate 和 completion cut；typed deep link 双向验证 lineage，Projection button 只作提示且 Command/Capacity Admin Gateway 重验 expected version/权限/state guard。
 - Core Runtime Center 与每个 Feature UI 使用独立 renderer entry/bundle，只通过 typed deep link、API client 与 Gateway 协作；import/build fixture 阻止 Runtime Center、DAG viewer、projection client 或 Feature 业务继续进入 monolithic `electron/renderer/app.js`。
 - 全局 Trace 保留 Workflow 与非 Workflow 执行；独立对话 Trace 只要求 conversation/message/agent execution correlation，Workflow Trace 的 activation/run/scope/node/attempt 所属链可验证。对话发起 Workflow 时支持 causation 与 Attempt 双向查询，禁止为了统一展示创建伪 Workflow。
 - Feature UI 负责领域任务发起、产出解释和 typed Business Command；Runtime Center 只提供跨 Feature 索引、统一待处理、通用 Runtime Command、诊断、审计和深链，不重复实现完整领域工作面。
 - Engine error、action-required 与 quarantine 边界明确；integrity quarantine 停止所有状态推进且不能伪造 cut，只能恢复可信数据或写独立审计的 administrative abandon。
 - Workflow 权威事实只写独立 `workflow-runtime.db`，`messages.db` 仅保存可重建的新 Projection；跨库只走幂等 Outbox。Bootstrap 在建表前固定 database-level `page_size=4096/auto_vacuum=incremental`；所有 Runtime 连接由统一 Factory 按 `local_single_user_sqlite@1` 设置并回验 WAL/FULL/FK、timeout/temp/checkpoint、journal/cache/mmap 与 trusted-schema/trigger/read/locking/query-only 全部 PRAGMA，启动同时核对 SQLite/source/compile-options、`better-sqlite3@12.11.1` native module、Managed Node Distribution ref/hash、Node `26.5.0` executable hash 与 stable Launcher/Core Release identity。SQLite Profile 只能通过新 version、重启和重新认证修改，不能 production hot reload。
-- Logical Schema 不含 `control_epoch`、无后缀时间或 `version/timestamps` 缩写；absolute time 全部是 UTC Unix millisecond `*_at_ms`，CAS 使用 `row_version`，状态组合由 SQLite CHECK，Deadline/Retry/Lease/Outbox/TTL 使用 Partial Index。内部多类型关系全部展开为 typed nullable FK + exactly-one CHECK，external ref 在 Manifest 显式标注；migration 不含 polymorphic `kind/id`、`error fields/error_json` 或无 target metadata 的裸 ref。Executable DDL Gate 必须覆盖 Value ownership、Registry/Retention/Backup、Capacity Head/Admin Command/Invocation/Change Event、Activation/Transition/Root Finalization、Fact/Operational Blocker、Command/Confirmation/Invocation 等全部持久化对象，并通过真实文件 SQLite migration、reopen、integrity/foreign-key check、Schema Manifest、constraint/schema-lint fixture 与固定查询的 query-plan fixture。
+- Logical Schema 不含 `control_epoch`、无后缀时间或 `version/timestamps` 缩写；absolute time 全部是 UTC Unix millisecond `*_at_ms`，CAS 使用 `row_version`，状态组合由 SQLite CHECK，Deadline/Retry/Lease/Outbox/TTL 使用 Partial Index。内部多类型关系全部展开为 typed nullable FK + exactly-one CHECK，external ref 在 Manifest 显式标注；migration 不含 polymorphic `kind/id`、`error fields/error_json` 或无 target metadata 的裸 ref。Executable DDL Gate 必须覆盖 Value ownership、Registry/Retention/Backup、Capacity Head/Admin Command/Invocation/Change Event、Activation/Transition/Root Finalization、Fact/Operational Blocker、Runtime Command Ingress/Command/Confirmation/resolved Invocation 等全部持久化对象，并通过真实文件 SQLite migration、reopen、integrity/foreign-key check、Schema Manifest、constraint/schema-lint fixture 与固定查询的 query-plan fixture。
 - Checkpoint schema v7 不含 `controlEpoch`，只保存用于水位定位的 `rowVersion`；权威更新时间使用 `updatedAtMs` safe integer，ISO 时间只能由 API/运行中心 projection 派生。
 - Fixture、Property Test、独立 Reference Model、Virtual Clock/Fake Adapter 与 Fault Injection 同为强制门禁；随机失败保存 seed、shrinking 后转成永久回归 Fixture。
 - T3/T7/Root Finalization 使用真实文件 SQLite 在 versioned Supported Limit 上覆盖最坏 Graph/Scope/required-child 形状；certified profile 达到 `local_single_user_product_floor@1`，并通过 T3/T7/T8 p99 250/1000/500 ms、复杂度和正确性预算；配置不得超过认证上限。

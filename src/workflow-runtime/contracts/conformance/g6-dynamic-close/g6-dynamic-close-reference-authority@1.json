@@ -16,11 +16,11 @@
     "evidence": [
       {
         "path": "src/workflow-runtime/contracts/g6-dynamic-close-types.ts",
-        "raw_sha256": "sha256:f278891437fa48d87dd08af7cd2040e8bfaa79b0efaa6077143ff2e52042d0e3"
+        "raw_sha256": "sha256:e64ca90def5d4db0a3d80ae0a40f53dc9b4c67752006409bbe429ad5a385cfb5"
       },
       {
         "path": "src/workflow-runtime/contracts/g6-dynamic-close-contract.ts",
-        "raw_sha256": "sha256:e2b796368d9545614db4452edb1070d0db940286ae9efe35a5b9f366746c2807"
+        "raw_sha256": "sha256:7391676194811feee67aa74e89c8359d76d2298f493f1575dd9b941579e3276f"
       },
       {
         "path": "src/workflow-runtime/contracts/g6-dynamic-close-contract-cli.ts",
@@ -28,7 +28,7 @@
       },
       {
         "path": "src/workflow-runtime/contracts/g6-dynamic-close-contract.test.ts",
-        "raw_sha256": "sha256:eb078455e9e0a41a70276675900164885f640909a83a6c0fa0dccf2c00d5d7c5"
+        "raw_sha256": "sha256:61b7240fefb56ed0439e75bff60bfacf0f6803dec9051ae81cbfec83ffaf04e5"
       },
       {
         "path": "src/workflow-runtime/contracts/g6-dynamic-close-reference-model.ts",
@@ -40,7 +40,7 @@
       },
       {
         "path": "src/workflow-runtime/contracts/g6-runtime-readiness-audit.test.ts",
-        "raw_sha256": "sha256:44a4029055f33e1b93f1282b7feee55a31335784a5e185bca61bbebd15aeb725"
+        "raw_sha256": "sha256:e1ffc0860b637d19f8063ffa19dbb9e794e2bcc2a3e1d5dbf0ecd70ff2907189"
       },
       {
         "path": "src/workflow-runtime/runtime/g6-test-support.ts",
@@ -51,7 +51,7 @@
         "raw_sha256": "sha256:c94423b4db18f077d42f783dac431bdcc0999cccf8fec7987cadd3adc06870bd"
       }
     ],
-    "evidence_tree_hash": "sha256:9d1a8b832b83a15b4c41451b09cc96146d507efff56aee713eb4ae8a37343575"
+    "evidence_tree_hash": "sha256:5e8d8caa9f9a40149ccef1e7263afc44e481c03f34925befd910cb497569a81f"
   },
-  "hash": "sha256:c7b512fa5d91b236bbc23f35e8d6943e1abe7cb65d7e4c7c27519a962cc3a922"
+  "hash": "sha256:d2709619ac03d7755ea1dab6dcb735f1245f1634866383cae878aad545577914"
 }

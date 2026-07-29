@@ -81,9 +81,14 @@ interface SourceHead {
 }
 
 export interface ProjectionRebuildExport {
+  readonly view: RuntimeCenterView;
   readonly rows: readonly WorkflowProjectionRow[];
+  readonly rowCount: number;
   readonly rowsHash: Sha256Hash;
   readonly sourceHeadSeq: number;
+  readonly sourceHeadHash: Sha256Hash;
+  readonly authorityRef: string;
+  readonly authorityProof: Sha256Hash;
 }
 
 export interface ProjectionRebuildReceipt {
@@ -98,6 +103,37 @@ function rowsHash(rows: readonly WorkflowProjectionRow[]): Sha256Hash {
     [...rows].sort((left, right) => left.id.localeCompare(right.id, 'en')),
   );
 }
+
+function sourceHeadHash(
+  view: RuntimeCenterView,
+  sourceHeadSeq: number,
+  sourceHeads: ReadonlyMap<string, SourceHead>,
+): Sha256Hash {
+  return domainSeparatedSha256(
+    'icarus:workflow-projection-rebuild-source-head:1\n',
+    {
+      view,
+      source_head_seq: sourceHeadSeq,
+      source_heads: [...sourceHeads.entries()]
+        .map(([stream, head]) => ({ stream, ...head }))
+        .sort((left, right) => left.stream.localeCompare(right.stream, 'en')),
+    },
+  );
+}
+
+function rebuildAuthorityProof(
+  exported: Omit<ProjectionRebuildExport, 'authorityProof'>,
+): Sha256Hash {
+  return domainSeparatedSha256(
+    'icarus:workflow-projection-rebuild-authority:1\n',
+    exported as unknown as JsonObject,
+  );
+}
+
+const trustedRebuildExports = new WeakMap<
+  ProjectionRebuildExport,
+  WorkflowProjectionRebuildAuthority
+>();
 
 function assertProjectionRow(row: WorkflowProjectionRow): void {
   if (
@@ -115,9 +151,20 @@ function assertProjectionRow(row: WorkflowProjectionRow): void {
 export class WorkflowProjectionStore {
   private readonly active = new Map<RuntimeCenterView, ProjectionGeneration>();
   private readonly sourceHeads = new Map<string, SourceHead>();
-  private readonly rebuildJobs = new Map<string, ProjectionRebuildReceipt>();
+  private readonly rebuildJobs = new Map<
+    string,
+    {
+      readonly view: RuntimeCenterView;
+      readonly authorityProof: Sha256Hash;
+      readonly receipt: ProjectionRebuildReceipt;
+    }
+  >();
 
-  constructor(readonly projectionVersion = 'g7.1') {
+  constructor(
+    readonly projectionVersion = 'g7.1',
+    private readonly rebuildAuthority: WorkflowProjectionRebuildAuthority | null =
+      null,
+  ) {
     for (const view of [
       'workflows',
       'agent_executions',
@@ -254,12 +301,32 @@ export class WorkflowProjectionStore {
     exported: ProjectionRebuildExport,
     completedAtMs: number,
   ): ProjectionRebuildReceipt {
+    if (
+      !this.rebuildAuthority ||
+      trustedRebuildExports.get(exported) !== this.rebuildAuthority ||
+      exported.authorityRef !== this.rebuildAuthority.authorityRef
+    )
+      throw new Error('projection_rebuild_source_untrusted');
     const existing = this.rebuildJobs.get(jobRef);
-    if (existing) return { ...existing, disposition: 'duplicate' };
+    if (existing) {
+      if (
+        existing.view !== view ||
+        existing.authorityProof !== exported.authorityProof
+      )
+        throw new Error('projection_rebuild_job_conflict');
+      return { ...existing.receipt, disposition: 'duplicate' };
+    }
     const previous = this.active.get(view)!;
     previous.status = { ...previous.status, state: 'rebuilding' };
     const ids = new Set<string>();
     try {
+      if (
+        exported.view !== view ||
+        exported.rowCount !== exported.rows.length ||
+        exported.sourceHeadSeq < 0 ||
+        !Number.isSafeInteger(exported.sourceHeadSeq)
+      )
+        throw new Error('projection_rebuild_export_invalid');
       for (const row of exported.rows) {
         assertProjectionRow(row);
         if (
@@ -272,6 +339,18 @@ export class WorkflowProjectionStore {
       }
       if (rowsHash(exported.rows) !== exported.rowsHash)
         throw new Error('projection_rebuild_hash_mismatch');
+      if (
+        rebuildAuthorityProof({
+          view: exported.view,
+          rows: exported.rows,
+          rowCount: exported.rowCount,
+          rowsHash: exported.rowsHash,
+          sourceHeadSeq: exported.sourceHeadSeq,
+          sourceHeadHash: exported.sourceHeadHash,
+          authorityRef: exported.authorityRef,
+        }) !== exported.authorityProof
+      )
+        throw new Error('projection_rebuild_authority_proof_mismatch');
       const generationId = `generation:${view}:${exported.sourceHeadSeq}:${exported.rowsHash}`;
       const generation: ProjectionGeneration = {
         id: generationId,
@@ -293,7 +372,11 @@ export class WorkflowProjectionStore {
         disposition: 'rebuilt',
         generationId,
       };
-      this.rebuildJobs.set(jobRef, receipt);
+      this.rebuildJobs.set(jobRef, {
+        view,
+        authorityProof: exported.authorityProof,
+        receipt,
+      });
       return receipt;
     } catch (error) {
       previous.status = {
@@ -315,5 +398,48 @@ export class WorkflowProjectionStore {
       rows: [...this.rows(view)],
       status: { ...this.status(view) },
     });
+  }
+
+  issueRebuildExport(
+    authority: WorkflowProjectionRebuildAuthority,
+    view: RuntimeCenterView,
+  ): ProjectionRebuildExport {
+    if (authority.source !== this)
+      throw new Error('projection_rebuild_authority_source_mismatch');
+    const rows = this.rows(view);
+    const status = this.status(view);
+    const withoutProof: Omit<ProjectionRebuildExport, 'authorityProof'> = {
+      view,
+      rows,
+      rowCount: rows.length,
+      rowsHash: rowsHash(rows),
+      sourceHeadSeq: status.projected_head_seq,
+      sourceHeadHash: sourceHeadHash(
+        view,
+        status.projected_head_seq,
+        this.sourceHeads,
+      ),
+      authorityRef: authority.authorityRef,
+    };
+    const exported: ProjectionRebuildExport = {
+      ...withoutProof,
+      authorityProof: rebuildAuthorityProof(withoutProof),
+    };
+    trustedRebuildExports.set(exported, authority);
+    return exported;
+  }
+}
+
+export class WorkflowProjectionRebuildAuthority {
+  constructor(
+    readonly source: WorkflowProjectionStore,
+    readonly authorityRef: string,
+  ) {
+    if (authorityRef.length === 0)
+      throw new Error('projection_rebuild_authority_ref_invalid');
+  }
+
+  export(view: RuntimeCenterView): ProjectionRebuildExport {
+    return this.source.issueRebuildExport(this, view);
   }
 }

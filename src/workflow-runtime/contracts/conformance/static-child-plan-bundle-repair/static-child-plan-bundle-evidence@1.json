@@ -55,14 +55,14 @@
       },
       {
         "path": "src/workflow-runtime/runtime/reconciler.ts",
-        "raw_sha256": "sha256:e695585679d0ee07ed0f22886f72af92ca3307bf7b35a7f145f5c43d7f1720f2"
+        "raw_sha256": "sha256:3d0a72734ade4b293f88b9a321124526c27cce76cc9fb96b94c647281b8bf256"
       },
       {
         "path": "src/workflow-runtime/runtime/static-child-plan-bundle.ts",
         "raw_sha256": "sha256:0cb7bfca92988c7ecb715ec639057515adda561a86af0f787b96cb1c4e677725"
       }
     ],
-    "production_source_tree_hash": "sha256:c06dbdff48cca833895b6b6b54dea0b3b2343b708d770391b3e87e45815f2e2e",
+    "production_source_tree_hash": "sha256:ed735e637cefb024161f4416f033562dbd27570de501950f243d50996eb9f4fe",
     "evidence_sources": [
       {
         "path": "src/workflow-runtime/compiler/current-g2-golden-replay.ts",
@@ -114,10 +114,10 @@
       },
       {
         "path": "src/workflow-runtime/runtime/g5-basic-runtime.test.ts",
-        "raw_sha256": "sha256:4aba5bec40fa07329e5a61ea0435ce2787f6315a87de6a237944bc726e8ba73f"
+        "raw_sha256": "sha256:e62f46d3f6b44e7d0c4c03fc0e3afe6a594374f8ba09492021d31e2456f4af37"
       }
     ],
-    "evidence_source_tree_hash": "sha256:2ffeb539b523e8ca47796d360878402bd829b6cc363773ad190108f11c6f9fe6"
+    "evidence_source_tree_hash": "sha256:a7b4499ae5d998b48038a0c2edeb2ca3c0fe5aca4f108b7906d11cee4e7f20f0"
   },
-  "hash": "sha256:58a029afdceba60f2868fa31f1be0066ab232a44cf2a55adfec170bd2b9ff0b3"
+  "hash": "sha256:102cf3ec28b345574f7069e8c9a680778dd5ed4e943df1a8f0abe5673de40f66"
 }

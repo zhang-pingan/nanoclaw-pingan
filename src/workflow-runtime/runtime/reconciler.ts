@@ -327,7 +327,7 @@ export function persistCompileResultT2a(
       )
         throw new G5RuntimeError(
           'integrity_violation',
-          'T2a Plan safety, toolchain, or Schema 7 identity drift',
+          'T2a Plan safety, toolchain, or Schema 11 identity drift',
         );
       if (build.status === 'compiled') {
         if (

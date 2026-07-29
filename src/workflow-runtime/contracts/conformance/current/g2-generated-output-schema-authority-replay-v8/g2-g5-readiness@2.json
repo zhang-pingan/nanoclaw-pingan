@@ -19,10 +19,10 @@
     "case_set_hash": "sha256:72ce785cb1919960ad42f5f6ef24c5372508fa20b77be9c7eff9668a0a79e0b2",
     "predecessor_v7_bundle_hash": "sha256:314ceb2f907243288815ddf029fee0b716c16d7b567d0a25da978b94a47f80ab",
     "predecessor_v6_bundle_hash": "sha256:0820328ae1cfdba7d05948d9e36498a5428d997d6eabfb833ef0ba7d84b77db7",
-    "static_child_bridge_pack_hash": "sha256:cde0d8acb1c524ca3c7b8bd130c8c4ae766995663b35c5ba409c8e9a3f9fc222",
+    "static_child_bridge_pack_hash": "sha256:216d0d67847cc9c1d17cde7d2e96bd963ba445ec153e73d9640cd924f5c61417",
     "semantic_approval_created": false,
     "independent_regression_created": false,
     "closure_performed": false
   },
-  "hash": "sha256:80a75c86d5ac1565f5ff688ac159d14b7e54e357a8c94e50fa384962eb0840ec"
+  "hash": "sha256:7eb71608f8a5e1b0b8b8108bb05ea9543a2f4a96ac440eb364e5d1ad7c8ee0ae"
 }

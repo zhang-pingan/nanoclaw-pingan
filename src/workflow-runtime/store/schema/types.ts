@@ -23,6 +23,7 @@ export const G1_SCHEMA_DEPENDENCY_ROLES = [
   'child_completion_lineage_schema_prerequisite',
   'map_terminal_consumption_schema_prerequisite',
   'domain_claim_handoff_schema_prerequisite',
+  'runtime_command_ingress_schema_prerequisite',
   'sqlite_execution_profile',
   'schema_manifest',
   'canonical_migration',
@@ -33,6 +34,7 @@ export const G1_SCHEMA_DEPENDENCY_ROLES = [
   'schema7_to_schema8_upgrade',
   'schema8_to_schema9_upgrade',
   'schema9_to_schema10_upgrade',
+  'schema10_to_schema11_upgrade',
 ] as const;
 
 export type G1SchemaDependencyRole =
@@ -55,8 +57,8 @@ export interface G1SchemaDependencyMember extends JsonObject {
 export interface G1SchemaDependencyManifestPayload extends JsonObject {
   dependency_set_id: 'workflow-runtime-schema-v1';
   identity_scope: 'physical_schema_and_migration';
-  member_count: 23;
-  physical_member_count: 22;
+  member_count: 25;
+  physical_member_count: 24;
   construction_provenance_count: 1;
   members: G1SchemaDependencyMember[] & JsonObject[];
   physical_schema_identity: Sha256Hash;
@@ -64,7 +66,7 @@ export interface G1SchemaDependencyManifestPayload extends JsonObject {
 
 export interface ExecutableSchemaSource {
   schema_id: 'workflow-runtime-schema-v1';
-  database_schema_version: 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10;
+  database_schema_version: 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11;
   tables: LogicalTableMetadata[];
   queries: LogicalQueryIntent[];
   logical_inputs: SchemaLogicalInputs;
@@ -83,6 +85,7 @@ export interface SchemaLogicalInputs {
   child_completion_lineage_schema_prerequisite_hash?: Sha256Hash;
   map_terminal_consumption_schema_prerequisite_hash?: Sha256Hash;
   domain_claim_handoff_schema_prerequisite_hash?: Sha256Hash;
+  runtime_command_ingress_schema_prerequisite_hash?: Sha256Hash;
   sqlite_profile_hash: Sha256Hash;
 }
 
@@ -167,7 +170,7 @@ export interface SchemaManifestTrigger extends SchemaTriggerDefinition {}
 export interface WorkflowRuntimeSchemaManifestPayload extends JsonObject {
   schema_id: 'workflow-runtime-schema-v1';
   database_name: 'workflow-runtime.db';
-  database_schema_version: 10;
+  database_schema_version: 11;
   logical_inputs: SchemaLogicalInputs & JsonObject;
   migration_path: string;
   migration_sha256: Sha256Hash;

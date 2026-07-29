@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import Database from 'better-sqlite3';
 
 import { COMPILED_PLAN_V2_DOMAIN_SEPARATOR } from '../contracts/compiler-contract-repair-source.js';
 import type { WorkflowRuntimeCommandDocument } from '../contracts/closed-schema-types.js';
@@ -156,6 +157,44 @@ function seedTerminalAttemptAndEffect(
     );
   });
   return { attemptId, effectId, operationKey };
+}
+
+function appendIntegrityDetectionEvent(
+  target: G7Fixture,
+  key: string,
+  evidence = target.seed.values.context!,
+): number {
+  return target.instance.store.withImmediateTransaction((transaction) => {
+    const run = transaction.queryOne<{
+      next_event_seq: number;
+      row_version: number;
+    }>(
+      'SELECT next_event_seq, row_version FROM workflow_graph_runs WHERE id = ?',
+      [target.graphRunId],
+    )!;
+    const sequence = run.next_event_seq + 1;
+    transaction.execute(
+      `UPDATE workflow_graph_runs
+          SET next_event_seq = ?, row_version = row_version + 1,
+              updated_at_ms = 400
+        WHERE id = ? AND row_version = ?`,
+      [sequence, target.graphRunId, run.row_version],
+    );
+    insertGraphEvent(transaction, {
+      graphRunId: target.graphRunId,
+      sequence,
+      scopeId: target.rootScopeId,
+      nodeId: null,
+      attemptId: null,
+      eventType: 'orchestration_error',
+      idempotencyKey: `integrity-detection:${key}`,
+      payloadValueId: evidence.id,
+      payloadHash: evidence.hash,
+      occurredAtMs: 400,
+      createdAtMs: 400,
+    });
+    return sequence;
+  });
 }
 
 function prepareManualRetry(target: G7Fixture): {
@@ -487,6 +526,24 @@ function commandInput(
   };
 }
 
+function expectCommandAuditAbsent(
+  target: G7Fixture,
+  submittedCommandId: string,
+): void {
+  expect(
+    target.instance.store.queryOne<{ count: number }>(
+      `SELECT
+         (SELECT count(*) FROM workflow_runtime_commands
+           WHERE command_id = ?) +
+         (SELECT count(*) FROM workflow_runtime_command_invocations
+           WHERE command_id = ?) +
+         (SELECT count(*) FROM workflow_runtime_command_ingress_invocations
+           WHERE submitted_command_id = ?) AS count`,
+      [submittedCommandId, submittedCommandId, submittedCommandId],
+    )!.count,
+  ).toBe(0);
+}
+
 describe('G7 command, recovery, and resolution', () => {
   it('audits pause/resume duplicate and conflict invocations and resumes without resetting authority', () => {
     const target = fixture('control-idempotency');
@@ -507,13 +564,26 @@ describe('G7 command, recovery, and resolution', () => {
       executionResult: 'applied',
       denialCode: null,
     });
+    const canonicalHeader = target.instance.store.queryOne<{
+      canonical_result_value_id: string;
+      canonical_result_hash: Sha256Hash;
+    }>(
+      `SELECT canonical_result_value_id, canonical_result_hash
+         FROM workflow_runtime_commands WHERE command_id = ?`,
+      [pause.command_id],
+    )!;
     const valueCount = target.instance.store.queryOne<{ count: number }>(
       'SELECT count(*) AS count FROM workflow_values',
       [],
     )!.count;
     const duplicate = submitRuntimeCommand(
       target.instance.store,
-      commandInput(target, pause, 101),
+      commandInput(target, pause, 101, {
+        actor: {
+          ...target.actor,
+          permissions: new Set<RuntimePermissionCode>(),
+        },
+      }),
     );
     expect(duplicate).toMatchObject({
       commandId: 'g7:pause:1',
@@ -545,6 +615,44 @@ describe('G7 command, recovery, and resolution', () => {
         ['g7:pause:1'],
       ),
     ).toHaveLength(3);
+    expect(
+      target.instance.store.queryAll(
+        `SELECT execution_result, authorization_result, resolution_result,
+                resolved_command_id, resolved_invocation_id
+           FROM workflow_runtime_command_ingress_invocations
+          WHERE idempotency_key = ? ORDER BY ingress_no`,
+        [pause.idempotency_key],
+      ),
+    ).toEqual([
+      expect.objectContaining({
+        execution_result: 'applied',
+        authorization_result: 'allowed',
+        resolution_result: 'resolved',
+        resolved_command_id: pause.command_id,
+        resolved_invocation_id: applied.invocationId,
+      }),
+      expect.objectContaining({
+        execution_result: 'duplicate',
+        authorization_result: 'not_evaluated',
+        resolution_result: 'resolved',
+        resolved_command_id: pause.command_id,
+        resolved_invocation_id: duplicate.invocationId,
+      }),
+      expect.objectContaining({
+        execution_result: 'conflict',
+        authorization_result: 'not_evaluated',
+        resolution_result: 'resolved',
+        resolved_command_id: pause.command_id,
+        resolved_invocation_id: conflict.invocationId,
+      }),
+    ]);
+    expect(
+      target.instance.store.queryOne(
+        `SELECT canonical_result_value_id, canonical_result_hash
+           FROM workflow_runtime_commands WHERE command_id = ?`,
+        [pause.command_id],
+      ),
+    ).toEqual(canonicalHeader);
 
     const resume = submitRuntimeCommand(
       target.instance.store,
@@ -679,9 +787,54 @@ describe('G7 command, recovery, and resolution', () => {
       ),
     );
     expect(missing).toMatchObject({
+      commandId: null,
       invocationId: null,
       denialCode: 'target_not_found',
     });
+    expect(missing.ingressInvocationId).toMatch(/^runtime-command-ingress:/);
+    expect(
+      target.instance.store.queryOne(
+        `SELECT resolution_result, execution_result, denial_code,
+                resolved_command_id, resolved_invocation_id
+           FROM workflow_runtime_command_ingress_invocations WHERE id = ?`,
+        [missing.ingressInvocationId],
+      ),
+    ).toMatchObject({
+      resolution_result: 'target_not_found',
+      execution_result: 'denied',
+      denial_code: 'target_not_found',
+      resolved_command_id: null,
+      resolved_invocation_id: null,
+    });
+    expect(
+      target.instance.store.queryOne<{ count: number }>(
+        'SELECT count(*) AS count FROM workflow_runtime_commands WHERE command_id = ?',
+        ['g7:missing'],
+      )!.count,
+    ).toBe(0);
+
+    const mismatched = submitRuntimeCommand(
+      target.instance.store,
+      commandInput(
+        target,
+        {
+          ...base,
+          command_id: 'g7:target-kind-invalid',
+          idempotency_key: 'target-kind-invalid',
+          target: { workflow_id: target.workflowId },
+        } as unknown as WorkflowRuntimeCommandDocument,
+        204,
+      ),
+    );
+    expect(mismatched).toMatchObject({
+      commandId: null,
+      invocationId: null,
+      executionResult: 'denied',
+      denialCode: 'target_kind_invalid',
+    });
+    expect(mismatched.ingressInvocationId).toMatch(
+      /^runtime-command-ingress:/,
+    );
   });
 
   it('uses the fixed deadline System Grant/key and audits winner, duplicate, and late decisions', () => {
@@ -1090,6 +1243,60 @@ describe('G7 command, recovery, and resolution', () => {
     expect(resource.executionResult).toBe('applied');
   });
 
+  it('rejects a resource preflight schedule spliced onto another persisted source event', () => {
+    const target = fixture('resource-source-splice');
+    const schedule = prepareManualRetry(target);
+    const unrelatedEventSequence = target.instance.store.queryOne<{
+      seq: number;
+    }>(
+      'SELECT min(seq) AS seq FROM workflow_graph_events WHERE graph_run_id = ?',
+      [target.graphRunId],
+    )!.seq;
+    const blocker = openOperationalBlocker(target.instance.store, {
+      workflowId: target.workflowId,
+      graphRunId: target.graphRunId,
+      blockerKind: 'resource_or_credential_unavailable',
+      severity: 'action_required',
+      source: { kind: 'event', sequence: unrelatedEventSequence },
+      errorCode: 'credential_unavailable',
+      evidenceManifest: target.seed.values.context!,
+      remediationPolicy: target.remediationPolicy,
+      nextRemediationAtMs: null,
+      remediationDeadlineAtMs: 10_000,
+      nowMs: 824,
+    });
+    expect(() =>
+      submitRuntimeCommand(
+        target.instance.store,
+        commandInput(
+          target,
+          {
+            command_id: 'g7:resource-source-splice',
+            command_type: 'remediate_operational_blocker',
+            target: { operational_blocker_id: blocker.blockerId },
+            idempotency_key: 'resource-source-splice',
+            expected_row_version: 1,
+            reason_code: 'credential_restored',
+            evidence_refs: ['credential-preflight'],
+          },
+          825,
+          {
+            verification: {
+              kind: 'resource_preflight_scheduled',
+              retryScheduleId: schedule.scheduleId,
+            },
+          },
+        ),
+      ),
+    ).toThrow(/persisted source event/);
+    expect(
+      target.instance.store.queryOne(
+        'SELECT status FROM workflow_operational_blockers WHERE id = ?',
+        [blocker.blockerId],
+      ),
+    ).toMatchObject({ status: 'open' });
+  });
+
   it('resolves source-verified blockers and restores only after the last severity closes', () => {
     const target = fixture('blockers', 2);
     const [claim, otherClaim] = target.instance.store.queryAll<{
@@ -1119,10 +1326,10 @@ describe('G7 command, recovery, and resolution', () => {
       remediationDeadlineAtMs: 10_000,
       nowMs: 400,
     });
-    const sourceEvent = target.instance.store.queryOne<{ seq: number }>(
-      'SELECT min(seq) AS seq FROM workflow_graph_events WHERE graph_run_id = ?',
-      [target.graphRunId],
-    )!.seq;
+    const sourceEvent = appendIntegrityDetectionEvent(
+      target,
+      'last-blocker-restoration',
+    );
     const quarantine = openOperationalBlocker(target.instance.store, {
       workflowId: target.workflowId,
       graphRunId: target.graphRunId,
@@ -1235,8 +1442,8 @@ describe('G7 command, recovery, and resolution', () => {
         {
           verification: {
             kind: 'integrity_restored',
-            expectedHash: g7Hash('restored'),
-            restoredHash: g7Hash('restored'),
+            expectedHash: target.seed.values.context!.hash,
+            restoredHash: target.seed.values.context!.hash,
             fullChainVerified: true,
           },
         },
@@ -1249,6 +1456,68 @@ describe('G7 command, recovery, and resolution', () => {
         [target.workflowId],
       ),
     ).toMatchObject({ operational_state: 'healthy' });
+  });
+
+  it('rejects integrity restoration spliced onto a non-detection event with the same evidence hash', () => {
+    const target = fixture('integrity-source-splice');
+    const unrelatedEvent = target.instance.store.queryOne<{
+      seq: number;
+    }>(
+      `SELECT seq FROM workflow_graph_events
+        WHERE graph_run_id = ? AND event_type <> 'orchestration_error'
+        ORDER BY seq LIMIT 1`,
+      [target.graphRunId],
+    )!.seq;
+    const blocker = openOperationalBlocker(target.instance.store, {
+      workflowId: target.workflowId,
+      graphRunId: target.graphRunId,
+      blockerKind: 'integrity_quarantine',
+      severity: 'quarantine',
+      source: { kind: 'event', sequence: unrelatedEvent },
+      errorCode: 'integrity_hash_mismatch',
+      evidenceManifest: target.seed.values.context!,
+      remediationPolicy: target.remediationPolicy,
+      nextRemediationAtMs: null,
+      remediationDeadlineAtMs: 10_000,
+      nowMs: 405,
+    });
+    expect(() =>
+      submitRuntimeCommand(
+        target.instance.store,
+        commandInput(
+          target,
+          {
+            command_id: 'g7:integrity-source-splice',
+            command_type: 'restore_integrity',
+            target: { operational_blocker_id: blocker.blockerId },
+            idempotency_key: 'integrity-source-splice',
+            expected_row_version: 1,
+            reason_code: 'hash_revalidated',
+            evidence_refs: ['trusted-backup', 'full-chain'],
+          },
+          406,
+          {
+            verification: {
+              kind: 'integrity_restored',
+              expectedHash: target.seed.values.context!.hash,
+              restoredHash: target.seed.values.context!.hash,
+              fullChainVerified: true,
+            },
+          },
+        ),
+      ),
+    ).toThrow(/verification did not close integrity_quarantine/);
+    expect(
+      target.instance.store.queryOne(
+        `SELECT status, remediation_attempt_count, row_version
+           FROM workflow_operational_blockers WHERE id = ?`,
+        [blocker.blockerId],
+      ),
+    ).toMatchObject({
+      status: 'open',
+      remediation_attempt_count: 0,
+      row_version: 1,
+    });
   });
 
   it('binds root remediation to its frozen Schedule and rolls T6e back when T8 fails', () => {
@@ -1425,12 +1694,7 @@ describe('G7 command, recovery, and resolution', () => {
         [controlTarget.graphRunId],
       ),
     ).toMatchObject({ control: 'running', row_version: controlVersion });
-    expect(
-      controlTarget.instance.store.queryOne<{ count: number }>(
-        'SELECT count(*) AS count FROM workflow_runtime_commands WHERE command_id = ?',
-        ['g7:rollback-control'],
-      )!.count,
-    ).toBe(0);
+    expectCommandAuditAbsent(controlTarget, 'g7:rollback-control');
 
     const cancelTarget = fixture('rollback-t7c');
     expect(() =>
@@ -1468,6 +1732,7 @@ describe('G7 command, recovery, and resolution', () => {
         [cancelTarget.graphRunId],
       )!.count,
     ).toBe(0);
+    expectCommandAuditAbsent(cancelTarget, 'g7:rollback-t7c');
 
     const retryTarget = fixture('rollback-t6d');
     const prepared = prepareManualRetry(retryTarget);
@@ -1502,6 +1767,7 @@ describe('G7 command, recovery, and resolution', () => {
         [prepared.sourceAttemptId],
       )!.count,
     ).toBe(0);
+    expectCommandAuditAbsent(retryTarget, 'g7:rollback-t6d');
 
     const remediationTarget = fixture('rollback-t6e');
     const effect = seedTerminalAttemptAndEffect(
@@ -1562,6 +1828,7 @@ describe('G7 command, recovery, and resolution', () => {
       remediation_attempt_count: 0,
       row_version: 1,
     });
+    expectCommandAuditAbsent(remediationTarget, 'g7:rollback-t6e');
 
     const abandonTarget = fixture('rollback-abandon');
     const abandonVersion = workflowVersion(abandonTarget);
@@ -1613,12 +1880,7 @@ describe('G7 command, recovery, and resolution', () => {
         [String(request.canonicalResult.confirmation_ref)],
       ),
     ).toMatchObject({ status: 'pending', consumed_at_ms: null });
-    expect(
-      abandonTarget.instance.store.queryOne<{ count: number }>(
-        'SELECT count(*) AS count FROM workflow_runtime_commands WHERE command_id = ?',
-        ['g7:rollback-abandon-confirm'],
-      )!.count,
-    ).toBe(0);
+    expectCommandAuditAbsent(abandonTarget, 'g7:rollback-abandon-confirm');
   });
 
   it('requires and consumes the same-session administrative abandon confirmation', () => {
@@ -1635,6 +1897,7 @@ describe('G7 command, recovery, and resolution', () => {
           idempotency_key: 'abandon-request',
           expected_row_version: expected,
           reason_code: 'unrecoverable_state',
+          reason_text: 'Original irreversible abandon intent',
           evidence_refs: ['incident:1', 'operator-approval'],
         },
         600,
@@ -1660,6 +1923,63 @@ describe('G7 command, recovery, and resolution', () => {
       ),
     );
     expect(wrongSession.denialCode).toBe('confirmation_required');
+    const replacedIntent = submitRuntimeCommand(
+      target.instance.store,
+      commandInput(
+        target,
+        {
+          command_id: 'g7:abandon-replaced-intent',
+          command_type: 'confirm_administrative_abandon',
+          target: { workflow_id: target.workflowId },
+          confirmation_ref: confirmation,
+          idempotency_key: 'abandon-replaced-intent',
+          expected_row_version: expected,
+          reason_code: 'unrecoverable_state',
+          reason_text: 'Replacement intent must not be accepted',
+          evidence_refs: ['incident:1', 'operator-approval'],
+        },
+        601,
+      ),
+    );
+    expect(replacedIntent.denialCode).toBe('confirmation_required');
+    const changedReason = submitRuntimeCommand(
+      target.instance.store,
+      commandInput(
+        target,
+        {
+          command_id: 'g7:abandon-changed-reason',
+          command_type: 'confirm_administrative_abandon',
+          target: { workflow_id: target.workflowId },
+          confirmation_ref: confirmation,
+          idempotency_key: 'abandon-changed-reason',
+          expected_row_version: expected,
+          reason_code: 'data_loss_accepted',
+          reason_text: 'Original irreversible abandon intent',
+          evidence_refs: ['incident:1', 'operator-approval'],
+        },
+        601,
+      ),
+    );
+    expect(changedReason.denialCode).toBe('confirmation_required');
+    const changedEvidence = submitRuntimeCommand(
+      target.instance.store,
+      commandInput(
+        target,
+        {
+          command_id: 'g7:abandon-changed-evidence',
+          command_type: 'confirm_administrative_abandon',
+          target: { workflow_id: target.workflowId },
+          confirmation_ref: confirmation,
+          idempotency_key: 'abandon-changed-evidence',
+          expected_row_version: expected,
+          reason_code: 'unrecoverable_state',
+          reason_text: 'Original irreversible abandon intent',
+          evidence_refs: ['incident:2', 'operator-approval'],
+        },
+        601,
+      ),
+    );
+    expect(changedEvidence.denialCode).toBe('confirmation_required');
     const confirm: WorkflowRuntimeCommandDocument = {
       command_id: 'g7:abandon-confirm',
       command_type: 'confirm_administrative_abandon',
@@ -1668,6 +1988,7 @@ describe('G7 command, recovery, and resolution', () => {
       idempotency_key: 'abandon-confirm',
       expected_row_version: expected,
       reason_code: 'unrecoverable_state',
+      reason_text: 'Original irreversible abandon intent',
       evidence_refs: ['incident:1', 'operator-approval'],
     };
     const applied = submitRuntimeCommand(
@@ -1685,6 +2006,17 @@ describe('G7 command, recovery, and resolution', () => {
       operational_state: 'administratively_abandoned',
     });
     expect(
+      target.instance.store.queryOne(
+        `SELECT status, consumed_at_ms, row_version
+           FROM workflow_runtime_command_confirmations WHERE id = ?`,
+        [confirmation],
+      ),
+    ).toMatchObject({
+      status: 'consumed',
+      consumed_at_ms: 602,
+      row_version: 2,
+    });
+    expect(
       target.instance.store.queryOne<{ count: number }>(
         'SELECT count(*) AS count FROM workflow_graph_completion_cuts WHERE graph_run_id = ?',
         [target.graphRunId],
@@ -1695,6 +2027,17 @@ describe('G7 command, recovery, and resolution', () => {
       commandInput(target, confirm, 603),
     );
     expect(duplicate.executionResult).toBe('duplicate');
+    expect(
+      target.instance.store.queryOne(
+        `SELECT status, consumed_at_ms, row_version
+           FROM workflow_runtime_command_confirmations WHERE id = ?`,
+        [confirmation],
+      ),
+    ).toMatchObject({
+      status: 'consumed',
+      consumed_at_ms: 602,
+      row_version: 2,
+    });
   });
 
   it('expires administrative abandon confirmation without changing workflow authority', () => {
@@ -1731,7 +2074,7 @@ describe('G7 command, recovery, and resolution', () => {
           reason_code: 'data_loss_accepted',
           evidence_refs: ['incident:expired'],
         },
-        300_901,
+        300_900,
       ),
     );
     expect(expired).toMatchObject({
@@ -1808,5 +2151,69 @@ describe('G7 command, recovery, and resolution', () => {
         [command.command_id],
       )!.count,
     ).toBe(invocationCount);
+  });
+
+  it('fails closed on authenticated ingress request tamper after reopen', () => {
+    const target = fixture('ingress-tamper');
+    const command: WorkflowRuntimeCommandDocument = {
+      command_id: 'g7:tamper-ingress-pause',
+      command_type: 'pause_run',
+      target: { run_id: target.graphRunId },
+      idempotency_key: 'tamper-ingress-pause',
+      expected_row_version: runVersion(target),
+      reason_code: 'operator_requested',
+      evidence_refs: [],
+    };
+    expect(
+      submitRuntimeCommand(
+        target.instance.store,
+        commandInput(target, command, 960),
+      ).executionResult,
+    ).toBe('applied');
+    target.instance.closeStore();
+    const database = new Database(target.instance.databasePath);
+    try {
+      const trigger = database
+        .prepare(
+          `SELECT sql FROM sqlite_schema
+            WHERE type='trigger' AND name='trg:command_ingress:terminal_transition'`,
+        )
+        .pluck()
+        .get() as string;
+      database.exec(
+        'DROP TRIGGER "trg:command_ingress:terminal_transition"',
+      );
+      database
+        .prepare(
+          `UPDATE workflow_runtime_command_ingress_invocations
+              SET canonical_request_json='{}'
+            WHERE submitted_command_id=?`,
+        )
+        .run(command.command_id);
+      database.exec(trigger);
+    } finally {
+      database.close();
+    }
+    target.instance.reopenStore();
+    const ingressCount = target.instance.store.queryOne<{ count: number }>(
+      `SELECT count(*) AS count
+         FROM workflow_runtime_command_ingress_invocations
+        WHERE submitted_command_id = ?`,
+      [command.command_id],
+    )!.count;
+    expect(() =>
+      submitRuntimeCommand(
+        target.instance.store,
+        commandInput(target, command, 961),
+      ),
+    ).toThrow(/ingress request no longer satisfies|ingress identity/i);
+    expect(
+      target.instance.store.queryOne<{ count: number }>(
+        `SELECT count(*) AS count
+           FROM workflow_runtime_command_ingress_invocations
+          WHERE submitted_command_id = ?`,
+        [command.command_id],
+      )!.count,
+    ).toBe(ingressCount);
   });
 });

@@ -30,6 +30,14 @@ function oneOf(column: string, values: string[]): string {
 }
 
 const CUSTOM_CHECKS: Readonly<Record<string, string>> = {
+  'ck:command_ingress:claimed_target_mapping':
+    '(("claimed_target_kind" = \'workflow\' AND "claimed_workflow_id" IS NOT NULL) OR ("claimed_target_kind" = \'run\' AND "claimed_run_id" IS NOT NULL) OR ("claimed_target_kind" = \'node\' AND "claimed_node_id" IS NOT NULL) OR ("claimed_target_kind" = \'retry_schedule\' AND "claimed_retry_schedule_id" IS NOT NULL) OR ("claimed_target_kind" = \'effect_operation\' AND "claimed_effect_operation_id" IS NOT NULL) OR ("claimed_target_kind" = \'operational_blocker\' AND "claimed_operational_blocker_id" IS NOT NULL))',
+  'ck:command_ingress:canonical_request_json':
+    'json_valid("canonical_request_json")',
+  'ck:command_ingress:terminal_shape':
+    '(("resolution_result" = \'prepared\' AND "authorization_result" = \'pending\' AND "execution_result" = \'prepared\' AND "denial_code" IS NULL AND "canonical_result_json" IS NULL AND "resolved_command_id" IS NULL AND "decided_at_ms" IS NULL AND "applied_at_ms" IS NULL) OR ("resolution_result" IN (\'target_not_found\', \'target_kind_invalid\') AND "authorization_result" = \'not_evaluated\' AND "execution_result" = \'denied\' AND "denial_code" = "resolution_result" AND "canonical_result_json" IS NOT NULL AND "resolved_command_id" IS NULL AND "decided_at_ms" IS NOT NULL AND "applied_at_ms" IS NULL) OR ("resolution_result" = \'resolved\' AND "execution_result" IN (\'applied\', \'denied\', \'conflict\', \'duplicate\', \'late\') AND "canonical_result_json" IS NOT NULL AND "resolved_command_id" IS NOT NULL AND "decided_at_ms" IS NOT NULL AND (("execution_result" = \'applied\' AND "authorization_result" = \'allowed\' AND "denial_code" IS NULL AND "applied_at_ms" IS NOT NULL) OR ("execution_result" = \'duplicate\' AND "authorization_result" = \'not_evaluated\' AND "denial_code" IS NULL AND "applied_at_ms" IS NULL) OR ("execution_result" = \'conflict\' AND "denial_code" = \'idempotency_conflict\' AND "authorization_result" = \'not_evaluated\' AND "applied_at_ms" IS NULL) OR ("execution_result" IN (\'denied\', \'conflict\', \'late\') AND "denial_code" IS NOT NULL AND "denial_code" <> \'idempotency_conflict\' AND "authorization_result" IN (\'allowed\', \'denied\') AND "applied_at_ms" IS NULL))))',
+  'ck:command_ingress:chronology':
+    '(("decided_at_ms" IS NULL AND "applied_at_ms" IS NULL) OR ("decided_at_ms" >= "requested_at_ms" AND ("applied_at_ms" IS NULL OR ("applied_at_ms" >= "requested_at_ms" AND "applied_at_ms" <= "decided_at_ms"))))',
   'ck:scope_builds:source_shapes':
     '(("source_seed_json" IS NOT NULL) + ("source_seed_value_id" IS NOT NULL) <= 1) AND (("source_snapshot_json" IS NOT NULL) + ("source_snapshot_value_id" IS NOT NULL) <= 1) AND (("input_snapshot_json" IS NOT NULL) + ("input_snapshot_value_id" IS NOT NULL) <= 1)',
   'ck:resource_accounts:under_limit':

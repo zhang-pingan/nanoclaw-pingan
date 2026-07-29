@@ -45,12 +45,14 @@ describe('G7 independent control/projection reference model', () => {
         });
         expect(first.canonicalResult).toBe('applied');
         expect(duplicate).toMatchObject({
-          canonicalResult: 'duplicate',
+          canonicalResult: 'applied',
+          lastInvocationResult: 'duplicate',
           targetVersion: 4,
           invocationCount: 2,
         });
         expect(conflict).toMatchObject({
-          canonicalResult: 'conflict',
+          canonicalResult: 'applied',
+          lastInvocationResult: 'conflict',
           targetVersion: 4,
           invocationCount: 3,
         });

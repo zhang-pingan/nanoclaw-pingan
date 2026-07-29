@@ -14,11 +14,15 @@ describe('G4 NodeOutputEnvelope authority successor', () => {
         'NODE_OUTPUT_ENVELOPE_SCHEMA_AUTHORITY_REPAIR_EXIT_CANDIDATE_PENDING_INDEPENDENT_AFFECTED_CHAIN_REGRESSION',
       current_closure: 'REOPENED_PENDING_INDEPENDENT_AFFECTED_CHAIN_REGRESSION',
       current_store: {
-        database_schema_version: 10,
+        database_schema_version: 11,
         g1_root_hash:
-          'sha256:05169ddfdc2c53371a0e4464dcc8b109608e1ff9b3d0276478da464c11266682',
+          'sha256:d4dfd9e1beaea10ab7ecca33308d0624fe7ae4c45518a98729198ed7c6f09375',
         database_schema_hash:
-          'sha256:1ff4fd63239e85630923fa16e204645367958ae487933338a6f676ec9be6faad',
+          'sha256:4d096ce9c2ed47a195c36d11a6540a3c0191183a521b59a1520279a0ffaf9be2',
+        schema11_migration_hash:
+          'sha256:2a29e1f527f47eb43799a7a35a5272b85f5dc154c003f92f71e152788b17f530',
+        schema10_to_11_upgrade_hash:
+          'sha256:740aab608641511e4cb9ca991e0d60ffd3679c02b1ca4a063422128aa8fb830b',
         schema10_migration_hash:
           'sha256:269645a9f093dc35fd35a04336d71e38cc17b7168584752f9b9bdfc106f46fad',
         schema9_to_10_upgrade_hash:

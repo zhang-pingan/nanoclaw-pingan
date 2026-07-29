@@ -47,6 +47,7 @@ import {
   SCHEMA7_TO_SCHEMA8_UPGRADE_RELATIVE_PATH,
   SCHEMA8_TO_SCHEMA9_UPGRADE_RELATIVE_PATH,
   SCHEMA9_TO_SCHEMA10_UPGRADE_RELATIVE_PATH,
+  SCHEMA10_TO_SCHEMA11_UPGRADE_RELATIVE_PATH,
   buildQueryFixtures,
   renderMigration,
   renderSchema3To4Upgrade,
@@ -56,6 +57,7 @@ import {
   renderSchema7To8Upgrade,
   renderSchema8To9Upgrade,
   renderSchema9To10Upgrade,
+  renderSchema10To11Upgrade,
 } from './ddl.js';
 import {
   assertClosedSchemaManifest,
@@ -71,6 +73,7 @@ import {
   loadSchema7ExecutableSchemaSource,
   loadSchema8ExecutableSchemaSource,
   loadSchema9ExecutableSchemaSource,
+  loadSchema10ExecutableSchemaSource,
 } from './source.js';
 import {
   buildGeneratedSchemaPrerequisiteArtifact,
@@ -98,6 +101,11 @@ import {
   DOMAIN_CLAIM_HANDOFF_SCHEMA_INPUT_DOMAIN,
   DOMAIN_CLAIM_HANDOFF_SCHEMA_INPUT_RELATIVE_PATH,
 } from './domain-claim-handoff-source.js';
+import {
+  buildRuntimeCommandIngressSchemaPrerequisiteArtifact,
+  RUNTIME_COMMAND_INGRESS_SCHEMA_INPUT_DOMAIN,
+  RUNTIME_COMMAND_INGRESS_SCHEMA_INPUT_RELATIVE_PATH,
+} from './runtime-command-ingress-source.js';
 import {
   buildPublisherSchemaPrerequisiteArtifact,
   PUBLISHER_SCHEMA_INPUT_RELATIVE_PATH,
@@ -129,7 +137,9 @@ export const G1_ARTIFACT_PATHS = {
     MAP_TERMINAL_CONSUMPTION_SCHEMA_INPUT_RELATIVE_PATH,
   domainClaimHandoffSchemaInput:
     DOMAIN_CLAIM_HANDOFF_SCHEMA_INPUT_RELATIVE_PATH,
-  migration: 'migration/workflow-runtime-schema-v10.sql',
+  runtimeCommandIngressSchemaInput:
+    RUNTIME_COMMAND_INGRESS_SCHEMA_INPUT_RELATIVE_PATH,
+  migration: 'migration/workflow-runtime-schema-v11.sql',
   schema3To4Upgrade: SCHEMA3_TO_SCHEMA4_UPGRADE_RELATIVE_PATH,
   schema4To5Upgrade: SCHEMA4_TO_SCHEMA5_UPGRADE_RELATIVE_PATH,
   schema5To6Upgrade: SCHEMA5_TO_SCHEMA6_UPGRADE_RELATIVE_PATH,
@@ -137,21 +147,22 @@ export const G1_ARTIFACT_PATHS = {
   schema7To8Upgrade: SCHEMA7_TO_SCHEMA8_UPGRADE_RELATIVE_PATH,
   schema8To9Upgrade: SCHEMA8_TO_SCHEMA9_UPGRADE_RELATIVE_PATH,
   schema9To10Upgrade: SCHEMA9_TO_SCHEMA10_UPGRADE_RELATIVE_PATH,
+  schema10To11Upgrade: SCHEMA10_TO_SCHEMA11_UPGRADE_RELATIVE_PATH,
   dependencyManifest:
-    'artifacts/workflow-runtime-schema-dependency-manifest@4.json',
+    'artifacts/workflow-runtime-schema-dependency-manifest@5.json',
   dependencyManifestContract:
-    'artifacts/workflow-runtime-schema-dependency-manifest-contract@4.json',
-  manifest: 'artifacts/workflow-runtime-schema-manifest@4.json',
+    'artifacts/workflow-runtime-schema-dependency-manifest-contract@5.json',
+  manifest: 'artifacts/workflow-runtime-schema-manifest@5.json',
   manifestContract:
     'artifacts/workflow-runtime-schema-manifest-contract@1.json',
-  executableDdl: 'artifacts/workflow-runtime-executable-ddl@4.json',
-  queryFixtures: 'fixtures/workflow-runtime-query-plan-fixtures@4.json',
+  executableDdl: 'artifacts/workflow-runtime-executable-ddl@5.json',
+  queryFixtures: 'fixtures/workflow-runtime-query-plan-fixtures@5.json',
   constraintFixtures:
-    'fixtures/workflow-runtime-constraint-trigger-fixtures@4.json',
-  schemaLint: 'artifacts/workflow-runtime-schema-lint@4.json',
-  domains: 'catalogs/workflow-runtime-schema-domain-separators@4.json',
+    'fixtures/workflow-runtime-constraint-trigger-fixtures@5.json',
+  schemaLint: 'artifacts/workflow-runtime-schema-lint@5.json',
+  domains: 'catalogs/workflow-runtime-schema-domain-separators@5.json',
   currentPointer: 'artifacts/workflow-runtime-current-schema@1.json',
-  root: 'contract-pack-g1-executable-schema-v10.json',
+  root: 'contract-pack-g1-executable-schema-v11.json',
 } as const;
 
 function asJson(value: unknown): JsonValue {
@@ -527,6 +538,7 @@ export interface BuiltG1Artifacts {
   schema7To8UpgradeSql: string;
   schema8To9UpgradeSql: string;
   schema9To10UpgradeSql: string;
+  schema10To11UpgradeSql: string;
   manifest: ContractArtifactEnvelope;
   dependencyManifest: ContractArtifactEnvelope;
   artifacts: Array<[string, ContractArtifactEnvelope]>;
@@ -559,6 +571,9 @@ export function buildG1Artifacts(
   const schema9Source = loadSchema9ExecutableSchemaSource(
     options.contractsRoot,
   );
+  const schema10Source = loadSchema10ExecutableSchemaSource(
+    options.contractsRoot,
+  );
   const migration = renderMigration(source);
   const schema3Migration = renderMigration(schema3Source);
   const schema4Migration = renderMigration(schema4Source);
@@ -567,6 +582,7 @@ export function buildG1Artifacts(
   const schema7Migration = renderMigration(schema7Source);
   const schema8Migration = renderMigration(schema8Source);
   const schema9Migration = renderMigration(schema9Source);
+  const schema10Migration = renderMigration(schema10Source);
   if (
     rawSha256(schema3Migration.sql) !==
     'sha256:eea3547a0f5208d08bfbe771de3895bba020ca3cf34ddf2fb4e3b7945765d345'
@@ -621,6 +637,14 @@ export function buildG1Artifacts(
       'Reproducible historical Schema 9 migration identity drifted',
     );
   }
+  if (
+    rawSha256(schema10Migration.sql) !==
+    'sha256:269645a9f093dc35fd35a04336d71e38cc17b7168584752f9b9bdfc106f46fad'
+  ) {
+    throw new Error(
+      'Reproducible historical Schema 10 migration identity drifted',
+    );
+  }
   const schema3To4Upgrade = renderSchema3To4Upgrade(
     schema3Source,
     schema4Source,
@@ -645,7 +669,11 @@ export function buildG1Artifacts(
     schema8Source,
     schema9Source,
   );
-  const schema9To10Upgrade = renderSchema9To10Upgrade(schema9Source, source);
+  const schema9To10Upgrade = renderSchema9To10Upgrade(
+    schema9Source,
+    schema10Source,
+  );
+  const schema10To11Upgrade = renderSchema10To11Upgrade(schema10Source, source);
   const temporaryRoot = fs.mkdtempSync(
     path.join(os.tmpdir(), 'icarus-g1-schema-'),
   );
@@ -673,6 +701,10 @@ export function buildG1Artifacts(
   const schema9DatabasePath = path.join(
     temporaryRoot,
     'workflow-runtime-schema9.db',
+  );
+  const schema10DatabasePath = path.join(
+    temporaryRoot,
+    'workflow-runtime-schema10.db',
   );
   const schema3Database = createMigratedDatabase(
     schema3DatabasePath,
@@ -772,6 +804,25 @@ export function buildG1Artifacts(
   } finally {
     schema9Database.close();
   }
+  const schema10Database = createMigratedDatabase(
+    schema10DatabasePath,
+    schema10Migration.sql,
+  );
+  let schema10SqliteSchemaIdentity: string;
+  try {
+    schema10SqliteSchemaIdentity =
+      calculateDatabaseSqliteSchemaIdentity(schema10Database);
+    if (
+      schema10SqliteSchemaIdentity !==
+      'sha256:ca934ef152c32f08b6afc4b7395b9f35ac85b12cfef04b5f75e4a12a5903faee'
+    ) {
+      throw new Error(
+        'Reproducible historical Schema 10 SQLite identity drifted',
+      );
+    }
+  } finally {
+    schema10Database.close();
+  }
   const database = createMigratedDatabase(databasePath, migration.sql);
   let manifestPayload: WorkflowRuntimeSchemaManifestPayload;
   let environmentSummary: ReturnType<typeof collectSqliteEnvironmentEvidence>;
@@ -788,7 +839,7 @@ export function buildG1Artifacts(
       calculateDatabaseSqliteSchemaIdentity(database) !==
       calculateManifestSqliteSchemaIdentity(manifestPayload)
     ) {
-      throw new Error('Schema 10 SQLite identity differs from its Manifest');
+      throw new Error('Schema 11 SQLite identity differs from its Manifest');
     }
     runSchemaLint(source, manifestPayload, migration.sql);
     verifyQueryPlans(database, buildQueryFixtures(source));
@@ -818,6 +869,7 @@ export function buildG1Artifacts(
     schema7To8Upgrade.sql,
     schema8To9Upgrade.sql,
     schema9To10Upgrade.sql,
+    schema10To11Upgrade.sql,
   );
   const executableDdl = buildArtifact(
     'icarus.workflow-runtime-executable-ddl/1',
@@ -843,6 +895,8 @@ export function buildG1Artifacts(
       schema8_to_schema9_upgrade_sha256: rawSha256(schema8To9Upgrade.sql),
       schema9_to_schema10_upgrade_path: G1_ARTIFACT_PATHS.schema9To10Upgrade,
       schema9_to_schema10_upgrade_sha256: rawSha256(schema9To10Upgrade.sql),
+      schema10_to_schema11_upgrade_path: G1_ARTIFACT_PATHS.schema10To11Upgrade,
+      schema10_to_schema11_upgrade_sha256: rawSha256(schema10To11Upgrade.sql),
       schema3_source_migration_sha256: rawSha256(schema3Migration.sql),
       schema3_source_sqlite_schema_identity: schema3SqliteSchemaIdentity,
       schema4_source_migration_sha256: rawSha256(schema4Migration.sql),
@@ -855,6 +909,8 @@ export function buildG1Artifacts(
       schema8_source_sqlite_schema_identity: schema8SqliteSchemaIdentity,
       schema9_source_migration_sha256: rawSha256(schema9Migration.sql),
       schema9_source_sqlite_schema_identity: schema9SqliteSchemaIdentity,
+      schema10_source_migration_sha256: rawSha256(schema10Migration.sql),
+      schema10_source_sqlite_schema_identity: schema10SqliteSchemaIdentity,
       sqlite_schema_identity:
         calculateManifestSqliteSchemaIdentity(manifestPayload),
       schema3_upgrade_mode: 'empty_activation_state_only_or_fail_closed',
@@ -870,6 +926,8 @@ export function buildG1Artifacts(
         'rebuild_child_consumption_terminal_catalog_preserve_all_rows_or_fail_closed',
       schema9_upgrade_mode:
         'append_claim_history_exact_head_handoff_and_effect_lineage_or_fail_closed',
+      schema10_upgrade_mode:
+        'add_authenticated_ingress_audit_and_exact_resolved_invocation_binding_or_fail_closed',
       schema3_required_empty_relations: [
         'workflow_feature_release_activation_commands',
         'workflow_feature_release_activation_invocations',
@@ -930,6 +988,7 @@ export function buildG1Artifacts(
         CHILD_COMPLETION_LINEAGE_SCHEMA_INPUT_DOMAIN,
         MAP_TERMINAL_CONSUMPTION_SCHEMA_INPUT_DOMAIN,
         DOMAIN_CLAIM_HANDOFF_SCHEMA_INPUT_DOMAIN,
+        RUNTIME_COMMAND_INGRESS_SCHEMA_INPUT_DOMAIN,
         SQLITE_SCHEMA_IDENTITY_DOMAIN_SEPARATOR,
         G1_SCHEMA_DEPENDENCY_MANIFEST_DOMAIN_SEPARATOR,
         G1_PHYSICAL_SCHEMA_IDENTITY_DOMAIN_SEPARATOR,
@@ -979,6 +1038,10 @@ export function buildG1Artifacts(
       G1_ARTIFACT_PATHS.domainClaimHandoffSchemaInput,
       buildDomainClaimHandoffSchemaPrerequisiteArtifact(),
     ],
+    [
+      G1_ARTIFACT_PATHS.runtimeCommandIngressSchemaInput,
+      buildRuntimeCommandIngressSchemaPrerequisiteArtifact(),
+    ],
     [G1_ARTIFACT_PATHS.dependencyManifestContract, dependencyManifestContract],
     [G1_ARTIFACT_PATHS.dependencyManifest, dependencyManifest],
     [G1_ARTIFACT_PATHS.manifestContract, manifestContract],
@@ -994,16 +1057,16 @@ export function buildG1Artifacts(
     'icarus.workflow-runtime-current-schema',
     'icarus:workflow-runtime-current-schema:1\n',
     {
-      database_schema_version: 10,
-      predecessor_database_schema_version: 9,
+      database_schema_version: 11,
+      predecessor_database_schema_version: 10,
       schema_manifest_path: G1_ARTIFACT_PATHS.manifest,
       schema_manifest_hash: manifest.hash,
       canonical_migration_path: G1_ARTIFACT_PATHS.migration,
       canonical_migration_sha256: rawSha256(migration.sql),
-      predecessor_migration_path: 'migration/workflow-runtime-schema-v9.sql',
-      predecessor_migration_sha256: rawSha256(schema9Migration.sql),
-      upgrade_path: G1_ARTIFACT_PATHS.schema9To10Upgrade,
-      upgrade_sha256: rawSha256(schema9To10Upgrade.sql),
+      predecessor_migration_path: 'migration/workflow-runtime-schema-v10.sql',
+      predecessor_migration_sha256: rawSha256(schema10Migration.sql),
+      upgrade_path: G1_ARTIFACT_PATHS.schema10To11Upgrade,
+      upgrade_sha256: rawSha256(schema10To11Upgrade.sql),
       schema_hash: manifestPayload.schema_hash,
       sqlite_schema_identity:
         calculateManifestSqliteSchemaIdentity(manifestPayload),
@@ -1030,6 +1093,7 @@ export function buildG1Artifacts(
       schema7_to_schema8_upgrade_sha256: rawSha256(schema7To8Upgrade.sql),
       schema8_to_schema9_upgrade_sha256: rawSha256(schema8To9Upgrade.sql),
       schema9_to_schema10_upgrade_sha256: rawSha256(schema9To10Upgrade.sql),
+      schema10_to_schema11_upgrade_sha256: rawSha256(schema10To11Upgrade.sql),
       schema3_source_migration_sha256: rawSha256(schema3Migration.sql),
       schema3_source_sqlite_schema_identity: schema3SqliteSchemaIdentity,
       schema4_source_migration_sha256: rawSha256(schema4Migration.sql),
@@ -1042,6 +1106,8 @@ export function buildG1Artifacts(
       schema8_source_sqlite_schema_identity: schema8SqliteSchemaIdentity,
       schema9_source_migration_sha256: rawSha256(schema9Migration.sql),
       schema9_source_sqlite_schema_identity: schema9SqliteSchemaIdentity,
+      schema10_source_migration_sha256: rawSha256(schema10Migration.sql),
+      schema10_source_sqlite_schema_identity: schema10SqliteSchemaIdentity,
       sqlite_schema_identity:
         calculateManifestSqliteSchemaIdentity(manifestPayload),
       deterministic_digest: domainSeparatedSha256(
@@ -1055,6 +1121,9 @@ export function buildG1Artifacts(
           schema7_to_schema8_upgrade_sha256: rawSha256(schema7To8Upgrade.sql),
           schema8_to_schema9_upgrade_sha256: rawSha256(schema8To9Upgrade.sql),
           schema9_to_schema10_upgrade_sha256: rawSha256(schema9To10Upgrade.sql),
+          schema10_to_schema11_upgrade_sha256: rawSha256(
+            schema10To11Upgrade.sql,
+          ),
           schema_hash: manifestPayload.schema_hash,
           member_hashes: members.map(([, artifact]) => artifact.hash),
         }),
@@ -1097,6 +1166,7 @@ export function buildG1Artifacts(
     schema7To8UpgradeSql: schema7To8Upgrade.sql,
     schema8To9UpgradeSql: schema8To9Upgrade.sql,
     schema9To10UpgradeSql: schema9To10Upgrade.sql,
+    schema10To11UpgradeSql: schema10To11Upgrade.sql,
     manifest,
     dependencyManifest,
     artifacts: members,
@@ -1158,6 +1228,10 @@ export function generateG1Artifacts(): BuiltG1Artifacts {
     G1_ARTIFACT_PATHS.domainClaimHandoffSchemaInput,
     renderJson(buildDomainClaimHandoffSchemaPrerequisiteArtifact()),
   );
+  writeAtomic(
+    G1_ARTIFACT_PATHS.runtimeCommandIngressSchemaInput,
+    renderJson(buildRuntimeCommandIngressSchemaPrerequisiteArtifact()),
+  );
   const built = buildG1Artifacts();
   writeAtomic(G1_ARTIFACT_PATHS.migration, built.migrationSql);
   writeAtomic(G1_ARTIFACT_PATHS.schema3To4Upgrade, built.schema3To4UpgradeSql);
@@ -1169,6 +1243,10 @@ export function generateG1Artifacts(): BuiltG1Artifacts {
   writeAtomic(
     G1_ARTIFACT_PATHS.schema9To10Upgrade,
     built.schema9To10UpgradeSql,
+  );
+  writeAtomic(
+    G1_ARTIFACT_PATHS.schema10To11Upgrade,
+    built.schema10To11UpgradeSql,
   );
   for (const [artifactPath, artifact] of built.artifacts) {
     writeAtomic(artifactPath, renderJson(artifact));
@@ -1285,6 +1363,21 @@ export function checkG1Artifacts(): BuiltG1Artifacts {
       `${G1_ARTIFACT_PATHS.domainClaimHandoffSchemaInput} drifted; run npm run schema:generate`,
     );
   }
+  const expectedRuntimeCommandIngressSchemaInput = renderJson(
+    buildRuntimeCommandIngressSchemaPrerequisiteArtifact(),
+  );
+  const actualRuntimeCommandIngressSchemaInput = fs.readFileSync(
+    absoluteSchemaPath(G1_ARTIFACT_PATHS.runtimeCommandIngressSchemaInput),
+    'utf8',
+  );
+  if (
+    actualRuntimeCommandIngressSchemaInput !==
+    expectedRuntimeCommandIngressSchemaInput
+  ) {
+    throw new Error(
+      `${G1_ARTIFACT_PATHS.runtimeCommandIngressSchemaInput} drifted; run npm run schema:generate`,
+    );
+  }
   const built = buildG1Artifacts();
   const migrationBytes = fs.readFileSync(
     absoluteSchemaPath(G1_ARTIFACT_PATHS.migration),
@@ -1354,6 +1447,15 @@ export function checkG1Artifacts(): BuiltG1Artifacts {
   if (schema9To10UpgradeBytes !== built.schema9To10UpgradeSql) {
     throw new Error(
       'Schema 9 to 10 upgrade drifted; run npm run schema:generate',
+    );
+  }
+  const schema10To11UpgradeBytes = fs.readFileSync(
+    absoluteSchemaPath(G1_ARTIFACT_PATHS.schema10To11Upgrade),
+    'utf8',
+  );
+  if (schema10To11UpgradeBytes !== built.schema10To11UpgradeSql) {
+    throw new Error(
+      'Schema 10 to 11 upgrade drifted; run npm run schema:generate',
     );
   }
   for (const [artifactPath, artifact] of built.artifacts) {

@@ -52,7 +52,7 @@ const exactBindings = [
   {
     name: 'g6_dynamic_close_accepted_candidate',
     path: 'src/workflow-runtime/contracts/contract-pack-g6-dynamic-close.json',
-    hash: 'sha256:34c32ecc104f7c440b2f80ab03f19f5c8231722486b88c3601f1ae0f8cea86be',
+    hash: 'sha256:666db064b6f08174daf9f59acc6e12f554c0dd4471ca0e167454205eca77ed8f',
   },
   {
     name: 'workflow_runtime_command_protocol',
@@ -70,9 +70,9 @@ const exactBindings = [
     hash: 'sha256:6f7aa5b997c5a496a4eb95776a09f18e3c25753e7324a6ef1f095a23b8413d81',
   },
   {
-    name: 'database_schema_10',
-    path: 'src/workflow-runtime/store/schema/contract-pack-g1-executable-schema-v10.json',
-    hash: 'sha256:05169ddfdc2c53371a0e4464dcc8b109608e1ff9b3d0276478da464c11266682',
+    name: 'database_schema_11',
+    path: 'src/workflow-runtime/store/schema/contract-pack-g1-executable-schema-v11.json',
+    hash: 'sha256:d4dfd9e1beaea10ab7ecca33308d0624fe7ae4c45518a98729198ed7c6f09375',
   },
 ] as const;
 
@@ -104,12 +104,12 @@ const positiveSeeds: readonly FixtureSeed[] = [
   [
     'authenticated_gateway_audit',
     'Command',
-    'authenticated server actor produces Header and Invocation',
+    'every authenticated call appends ingress audit and resolved calls also bind Header and Invocation',
   ],
   [
     'command_duplicate_conflict',
     'Command',
-    'same key exact request duplicates and drift conflicts without mutation',
+    'exact replay preserves Header canonical result without reauthorization or execution and appends duplicate audits',
   ],
   [
     'pause_resume_recovery',
@@ -293,13 +293,13 @@ const negativeSeeds: readonly FixtureSeed[] = [
   [
     'target_kind_invalid',
     'Command',
-    'opaque or mismatched target shape rejects',
+    'closed typed claim resolving in a different target relation persists terminal ingress denial',
     'target_kind_invalid',
   ],
   [
-    'target_not_found_physical_residual',
+    'target_not_found_ingress_denial',
     'Command',
-    'missing typed FK target returns stable denial without fabricated target',
+    'missing claimed typed target persists terminal ingress denial without fabricated Header or Invocation',
     'target_not_found',
   ],
   [
@@ -684,7 +684,7 @@ function buildArtifacts(): Array<[string, ContractArtifactEnvelope]> {
       accepted_base: 'main@dd3c10831dd2e9da91dcb83f28e321d538f41a05',
       database_schema_version: G7_DATABASE_SCHEMA_VERSION,
       database_schema_hash: G7_DATABASE_SCHEMA_HASH,
-      schema_change_required: false,
+      schema_change_required: true,
       transaction_host: 'WorkflowRuntimeStore.withImmediateTransaction',
       transaction_mode: 'BEGIN_IMMEDIATE',
       owned_transactions: ['COMMAND', 'T7c', 'T6e', 'Recovery'],
@@ -708,15 +708,26 @@ function buildArtifacts(): Array<[string, ContractArtifactEnvelope]> {
       },
       projection_write_boundary:
         'projection_and_renderer_have_no_authoritative_Runtime_Store_write_connection',
-      authority_residuals: [
-        {
-          code: 'BLOCKED_BY_SPEC_UNRESOLVED_TARGET_INVOCATION_AUDIT',
-          behavior: 'target_not_found_returns_invocation_id_null',
-          reason:
-            'Schema_10_Command_Header_typed_target_FK_requires_an_existing_target_and_forbids_opaque_target_rows',
-          prohibited_workaround: 'fabricated_or_opaque_target_identity',
-        },
-      ],
+      authenticated_ingress_audit: {
+        relation: 'workflow_runtime_command_ingress_invocations',
+        append_per_authenticated_call: true,
+        pre_resolution: true,
+        claimed_target: 'closed_exactly_one_typed_non_fk_union',
+        unresolved_terminal_denials: [
+          'target_not_found',
+          'target_kind_invalid',
+        ],
+        unresolved_resolved_identity: 'forbidden',
+        resolved_identity:
+          'exact_workflow_runtime_commands_and_workflow_runtime_command_invocations',
+        atomicity:
+          'ingress_header_invocation_event_and_domain_mutation_same_immediate_transaction',
+        exact_replay:
+          'append_ingress_and_resolved_invocation_without_reauthorization_or_reexecution_and_preserve_header_canonical_result',
+        same_key_drift:
+          'append_ingress_and_resolved_conflict_invocation_without_header_overwrite',
+      },
+      authority_residuals: [],
       bindings: upstream,
       forbidden: [
         'G8_certification',

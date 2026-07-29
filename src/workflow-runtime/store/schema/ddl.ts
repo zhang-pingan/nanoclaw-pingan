@@ -13,7 +13,7 @@ import type {
 } from './types.js';
 
 export const MIGRATION_RELATIVE_PATH =
-  'migration/workflow-runtime-schema-v10.sql';
+  'migration/workflow-runtime-schema-v11.sql';
 
 function q(identifier: string): string {
   return `"${identifier.replaceAll('"', '""')}"`;
@@ -180,7 +180,7 @@ function operationalStateSql(runExpression: string): string {
 }
 
 export function buildSchemaTriggers(
-  databaseSchemaVersion: 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 = 10,
+  databaseSchemaVersion: 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 = 11,
 ): SchemaTriggerDefinition[] {
   const refreshBody = (row: 'NEW' | 'OLD') => `
   UPDATE "workflow_graph_runs"
@@ -623,6 +623,130 @@ export function buildSchemaTriggers(
       },
     );
   }
+  if (databaseSchemaVersion >= 11) {
+    triggers.push(
+      {
+        name: 'trg:runtime_commands:pending_insert',
+        table: 'workflow_runtime_commands',
+        timing: 'before',
+        event: 'insert',
+        owner_intent:
+          'new Runtime Command Header starts without a canonical terminal result',
+        sql: `CREATE TRIGGER ${q('trg:runtime_commands:pending_insert')} BEFORE INSERT ON ${q('workflow_runtime_commands')} BEGIN\n  SELECT CASE WHEN NEW."canonical_result_value_id" IS NOT NULL OR NEW."canonical_result_hash" IS NOT NULL OR NEW."finalized_at_ms" IS NOT NULL THEN RAISE(ABORT, 'runtime_command_must_start_pending') END;\nEND`,
+      },
+      {
+        name: 'trg:runtime_commands:immutable_identity',
+        table: 'workflow_runtime_commands',
+        timing: 'before',
+        event: 'update',
+        owner_intent:
+          'Runtime Command request, target, reason, evidence, and idempotency identity are immutable',
+        sql: `CREATE TRIGGER ${q('trg:runtime_commands:immutable_identity')} BEFORE UPDATE OF "command_id", "idempotency_domain", "idempotency_key", "command_type", "workflow_id", "run_id", "node_id", "retry_schedule_id", "effect_operation_id", "operational_blocker_id", "expected_row_version", "reason_code", "reason_text_value_id", "reason_text_hash", "evidence_manifest_value_id", "evidence_manifest_hash", "request_hash", "created_at_ms" ON ${q('workflow_runtime_commands')} BEGIN\n  SELECT RAISE(ABORT, 'runtime_command_identity_is_immutable');\nEND`,
+      },
+      {
+        name: 'trg:runtime_commands:terminalization',
+        table: 'workflow_runtime_commands',
+        timing: 'before',
+        event: 'update',
+        owner_intent: 'Runtime Command Header canonical result finalizes exactly once',
+        sql: `CREATE TRIGGER ${q('trg:runtime_commands:terminalization')} BEFORE UPDATE OF "canonical_result_value_id", "canonical_result_hash", "finalized_at_ms" ON ${q('workflow_runtime_commands')} BEGIN\n  SELECT CASE WHEN OLD."canonical_result_value_id" IS NOT NULL OR OLD."canonical_result_hash" IS NOT NULL OR OLD."finalized_at_ms" IS NOT NULL OR NEW."canonical_result_value_id" IS NULL OR NEW."canonical_result_hash" IS NULL OR NEW."finalized_at_ms" IS NULL OR NEW."finalized_at_ms" < NEW."created_at_ms" THEN RAISE(ABORT, 'runtime_command_terminalization_invalid') END;\nEND`,
+      },
+      {
+        name: 'trg:runtime_commands:immutable_delete',
+        table: 'workflow_runtime_commands',
+        timing: 'before',
+        event: 'delete',
+        owner_intent: 'Runtime Command Header is immutable audit history',
+        sql: `CREATE TRIGGER ${q('trg:runtime_commands:immutable_delete')} BEFORE DELETE ON ${q('workflow_runtime_commands')} BEGIN\n  SELECT RAISE(ABORT, 'runtime_command_is_immutable');\nEND`,
+      },
+      {
+        name: 'trg:command_invocations:immutable_update',
+        table: 'workflow_runtime_command_invocations',
+        timing: 'before',
+        event: 'update',
+        owner_intent: 'resolved Runtime Command Invocation audit is immutable',
+        sql: `CREATE TRIGGER ${q('trg:command_invocations:immutable_update')} BEFORE UPDATE ON ${q('workflow_runtime_command_invocations')} BEGIN\n  SELECT RAISE(ABORT, 'runtime_command_invocation_is_immutable');\nEND`,
+      },
+      {
+        name: 'trg:command_invocations:immutable_delete',
+        table: 'workflow_runtime_command_invocations',
+        timing: 'before',
+        event: 'delete',
+        owner_intent: 'resolved Runtime Command Invocation audit is immutable',
+        sql: `CREATE TRIGGER ${q('trg:command_invocations:immutable_delete')} BEFORE DELETE ON ${q('workflow_runtime_command_invocations')} BEGIN\n  SELECT RAISE(ABORT, 'runtime_command_invocation_is_immutable');\nEND`,
+      },
+      {
+        name: 'trg:command_ingress:prepared_insert',
+        table: 'workflow_runtime_command_ingress_invocations',
+        timing: 'before',
+        event: 'insert',
+        owner_intent:
+          'authenticated ingress is durably introduced before target resolution',
+        sql: `CREATE TRIGGER ${q('trg:command_ingress:prepared_insert')} BEFORE INSERT ON ${q('workflow_runtime_command_ingress_invocations')} BEGIN\n  SELECT CASE WHEN NEW."resolution_result" <> 'prepared' OR NEW."authorization_result" <> 'pending' OR NEW."execution_result" <> 'prepared' THEN RAISE(ABORT, 'command_ingress_must_start_prepared') END;\nEND`,
+      },
+      {
+        name: 'trg:command_ingress:terminal_transition',
+        table: 'workflow_runtime_command_ingress_invocations',
+        timing: 'before',
+        event: 'update',
+        owner_intent:
+          'single prepared-to-terminal transition with immutable authenticated request and claimed target identity',
+        sql: `CREATE TRIGGER ${q('trg:command_ingress:terminal_transition')} BEFORE UPDATE ON ${q('workflow_runtime_command_ingress_invocations')} BEGIN\n  SELECT CASE WHEN OLD."resolution_result" <> 'prepared' OR NEW."resolution_result" = 'prepared' OR NEW."id" IS NOT OLD."id" OR NEW."idempotency_domain" IS NOT OLD."idempotency_domain" OR NEW."idempotency_key" IS NOT OLD."idempotency_key" OR NEW."ingress_no" IS NOT OLD."ingress_no" OR NEW."submitted_command_id" IS NOT OLD."submitted_command_id" OR NEW."canonical_request_json" IS NOT OLD."canonical_request_json" OR NEW."submitted_request_hash" IS NOT OLD."submitted_request_hash" OR NEW."command_type" IS NOT OLD."command_type" OR NEW."claimed_target_kind" IS NOT OLD."claimed_target_kind" OR NEW."claimed_workflow_id" IS NOT OLD."claimed_workflow_id" OR NEW."claimed_run_id" IS NOT OLD."claimed_run_id" OR NEW."claimed_node_id" IS NOT OLD."claimed_node_id" OR NEW."claimed_retry_schedule_id" IS NOT OLD."claimed_retry_schedule_id" OR NEW."claimed_effect_operation_id" IS NOT OLD."claimed_effect_operation_id" OR NEW."claimed_operational_blocker_id" IS NOT OLD."claimed_operational_blocker_id" OR NEW."actor_ref" IS NOT OLD."actor_ref" OR NEW."actor_kind" IS NOT OLD."actor_kind" OR NEW."auth_session_ref" IS NOT OLD."auth_session_ref" OR NEW."entrypoint" IS NOT OLD."entrypoint" OR NEW."source_feature_id" IS NOT OLD."source_feature_id" OR NEW."delegation_chain_ref" IS NOT OLD."delegation_chain_ref" OR NEW."requested_at_ms" IS NOT OLD."requested_at_ms" THEN RAISE(ABORT, 'command_ingress_terminal_transition_invalid') END;\nEND`,
+      },
+      {
+        name: 'trg:command_ingress:immutable_delete',
+        table: 'workflow_runtime_command_ingress_invocations',
+        timing: 'before',
+        event: 'delete',
+        owner_intent: 'authenticated ingress audit is never deleted',
+        sql: `CREATE TRIGGER ${q('trg:command_ingress:immutable_delete')} BEFORE DELETE ON ${q('workflow_runtime_command_ingress_invocations')} BEGIN\n  SELECT RAISE(ABORT, 'command_ingress_is_immutable');\nEND`,
+      },
+      {
+        name: 'trg:command_confirmations:request_binding',
+        table: 'workflow_runtime_command_confirmations',
+        timing: 'after',
+        event: 'insert',
+        owner_intent:
+          'confirmation binds the original abandon request target version request hash and evidence identity',
+        sql: `CREATE TRIGGER ${q('trg:command_confirmations:request_binding')} AFTER INSERT ON ${q('workflow_runtime_command_confirmations')} BEGIN\n  SELECT CASE WHEN NOT EXISTS (SELECT 1 FROM "workflow_runtime_commands" AS command WHERE command."command_id" = NEW."request_command_id" AND command."command_type" = 'request_administrative_abandon' AND command."workflow_id" = NEW."workflow_id" AND command."expected_row_version" = NEW."expected_workflow_row_version" AND command."request_hash" = NEW."request_hash" AND command."evidence_manifest_value_id" = NEW."evidence_manifest_value_id" AND command."evidence_manifest_hash" = NEW."evidence_manifest_hash") THEN RAISE(ABORT, 'command_confirmation_request_binding_invalid') END;\nEND`,
+      },
+      {
+        name: 'trg:command_confirmations:actor_binding',
+        table: 'workflow_runtime_command_invocations',
+        timing: 'after',
+        event: 'insert',
+        owner_intent:
+          'request confirmation binds the original authenticated human session',
+        sql: `CREATE TRIGGER ${q('trg:command_confirmations:actor_binding')} AFTER INSERT ON ${q('workflow_runtime_command_invocations')} WHEN NEW."execution_result" = 'applied' AND EXISTS (SELECT 1 FROM "workflow_runtime_command_confirmations" AS confirmation WHERE confirmation."request_command_id" = NEW."command_id") BEGIN\n  SELECT CASE WHEN NOT EXISTS (SELECT 1 FROM "workflow_runtime_command_confirmations" AS confirmation WHERE confirmation."request_command_id" = NEW."command_id" AND confirmation."actor_ref" = NEW."actor_ref" AND confirmation."auth_session_ref" = NEW."auth_session_ref") THEN RAISE(ABORT, 'command_confirmation_actor_binding_invalid') END;\nEND`,
+      },
+      {
+        name: 'trg:command_confirmations:immutable_identity',
+        table: 'workflow_runtime_command_confirmations',
+        timing: 'before',
+        event: 'update',
+        owner_intent:
+          'original abandon intent target human session hash evidence and expiry are immutable',
+        sql: `CREATE TRIGGER ${q('trg:command_confirmations:immutable_identity')} BEFORE UPDATE ON ${q('workflow_runtime_command_confirmations')} BEGIN\n  SELECT CASE WHEN NEW."id" IS NOT OLD."id" OR NEW."request_command_id" IS NOT OLD."request_command_id" OR NEW."workflow_id" IS NOT OLD."workflow_id" OR NEW."actor_ref" IS NOT OLD."actor_ref" OR NEW."auth_session_ref" IS NOT OLD."auth_session_ref" OR NEW."expected_workflow_row_version" IS NOT OLD."expected_workflow_row_version" OR NEW."request_hash" IS NOT OLD."request_hash" OR NEW."evidence_manifest_value_id" IS NOT OLD."evidence_manifest_value_id" OR NEW."evidence_manifest_hash" IS NOT OLD."evidence_manifest_hash" OR NEW."expires_at_ms" IS NOT OLD."expires_at_ms" THEN RAISE(ABORT, 'command_confirmation_identity_is_immutable') END;\nEND`,
+      },
+      {
+        name: 'trg:command_confirmations:consume_transition',
+        table: 'workflow_runtime_command_confirmations',
+        timing: 'before',
+        event: 'update',
+        owner_intent:
+          'pending confirmation is consumed once strictly before expiry',
+        sql: `CREATE TRIGGER ${q('trg:command_confirmations:consume_transition')} BEFORE UPDATE OF "status", "consumed_at_ms", "row_version" ON ${q('workflow_runtime_command_confirmations')} BEGIN\n  SELECT CASE WHEN OLD."status" <> 'pending' OR NEW."row_version" <> OLD."row_version" + 1 OR NOT ((NEW."status" = 'consumed' AND NEW."consumed_at_ms" IS NOT NULL AND NEW."consumed_at_ms" < OLD."expires_at_ms") OR (NEW."status" = 'expired' AND NEW."consumed_at_ms" IS NULL)) THEN RAISE(ABORT, 'command_confirmation_consume_transition_invalid') END;\nEND`,
+      },
+      {
+        name: 'trg:command_confirmations:immutable_delete',
+        table: 'workflow_runtime_command_confirmations',
+        timing: 'before',
+        event: 'delete',
+        owner_intent: 'administrative-abandon confirmation history is immutable',
+        sql: `CREATE TRIGGER ${q('trg:command_confirmations:immutable_delete')} BEFORE DELETE ON ${q('workflow_runtime_command_confirmations')} BEGIN\n  SELECT RAISE(ABORT, 'command_confirmation_is_immutable');\nEND`,
+      },
+    );
+  }
   if (databaseSchemaVersion >= 5) {
     triggers.push(
       {
@@ -784,6 +908,8 @@ export const SCHEMA8_TO_SCHEMA9_UPGRADE_RELATIVE_PATH =
   'migration/workflow-runtime-schema-v8-to-v9.sql';
 export const SCHEMA9_TO_SCHEMA10_UPGRADE_RELATIVE_PATH =
   'migration/workflow-runtime-schema-v9-to-v10.sql';
+export const SCHEMA10_TO_SCHEMA11_UPGRADE_RELATIVE_PATH =
+  'migration/workflow-runtime-schema-v10-to-v11.sql';
 
 const ACTIVATION_REBUILT_TABLES = [
   'workflow_feature_release_activation_commands',
@@ -1326,6 +1452,75 @@ export function renderSchema9To10Upgrade(
     ...addedTriggers.map((trigger) => trigger.sql),
     'PRAGMA legacy_alter_table = OFF',
     'PRAGMA user_version = 10',
+  ];
+  return {
+    sql: `${statements.map((statement) => `${statement};`).join('\n\n')}\n`,
+    statement_count: statements.length,
+    triggers: addedTriggers,
+  };
+}
+
+export function renderSchema10To11Upgrade(
+  schema10: ExecutableSchemaSource,
+  schema11: ExecutableSchemaSource,
+): RenderedMigration {
+  if (
+    schema10.database_schema_version !== 10 ||
+    schema11.database_schema_version !== 11
+  ) {
+    throw new Error('Schema 10 to 11 upgrade source versions are invalid');
+  }
+  const invocationName = 'workflow_runtime_command_invocations';
+  const ingressName = 'workflow_runtime_command_ingress_invocations';
+  const schema10Invocations = schema10.tables.find(
+    (table) => table.name === invocationName,
+  );
+  const schema11Invocations = schema11.tables.find(
+    (table) => table.name === invocationName,
+  );
+  const ingress = schema11.tables.find((table) => table.name === ingressName);
+  if (!schema10Invocations || !schema11Invocations || !ingress) {
+    throw new Error('Schema 11 Runtime Command ingress delta is missing');
+  }
+  if (
+    schema10Invocations.columns.map((column) => column.name).join('\0') !==
+      schema11Invocations.columns.map((column) => column.name).join('\0') ||
+    schema10Invocations.foreign_keys.length !==
+      schema11Invocations.foreign_keys.length ||
+    schema10Invocations.indexes.length !== schema11Invocations.indexes.length
+  ) {
+    throw new Error('Schema 11 cannot rewrite resolved Command Invocation rows');
+  }
+  const addedInvocationKeys = schema11Invocations.unique_keys.filter(
+    (key) =>
+      !schema10Invocations.unique_keys.some(
+        (candidate) => candidate.key_id === key.key_id,
+      ),
+  );
+  if (
+    addedInvocationKeys.length !== 1 ||
+    addedInvocationKeys[0]?.key_id !== 'uk:command_invocations:command_id'
+  ) {
+    throw new Error('Schema 11 resolved Invocation candidate key drifted');
+  }
+  const schema10TriggerNames = new Set(
+    buildSchemaTriggers(10).map((trigger) => trigger.name),
+  );
+  const addedTriggers = buildSchemaTriggers(11).filter(
+    (trigger) => !schema10TriggerNames.has(trigger.name),
+  );
+  if (addedTriggers.length !== 14) {
+    throw new Error('Schema 11 Runtime Command trigger delta drifted');
+  }
+  const statements = [
+    ...addedInvocationKeys.map((key) =>
+      renderUniqueIndex(schema11Invocations, key),
+    ),
+    renderTable(ingress, 11),
+    ...ingress.unique_keys.map((key) => renderUniqueIndex(ingress, key)),
+    ...ingress.indexes.map((indexValue) => renderIndex(ingress, indexValue)),
+    ...addedTriggers.map((trigger) => trigger.sql),
+    'PRAGMA user_version = 11',
   ];
   return {
     sql: `${statements.map((statement) => `${statement};`).join('\n\n')}\n`,

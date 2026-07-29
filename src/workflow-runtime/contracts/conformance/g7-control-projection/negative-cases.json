@@ -162,7 +162,7 @@
         "case_id": "target_kind_invalid",
         "category": "negative",
         "surface": "Command",
-        "assertion": "opaque or mismatched target shape rejects",
+        "assertion": "closed typed claim resolving in a different target relation persists terminal ingress denial",
         "handler": "g7_command_production",
         "operation": {
           "scenario_key": "g7:negative:target_kind_invalid",
@@ -181,16 +181,16 @@
           "duplicate_authoritative_writes": 0,
           "projection_can_write_runtime": false
         },
-        "binding_hash": "sha256:063a80f99466e8ad346632e0c9141deb6bedafa7e0e05eec6058ff52421dc4f2"
+        "binding_hash": "sha256:661ba14e0dedf7f5399893f042241144a8367b3ea3c4bdf70faa7b13d3ea6feb"
       },
       {
-        "case_id": "target_not_found_physical_residual",
+        "case_id": "target_not_found_ingress_denial",
         "category": "negative",
         "surface": "Command",
-        "assertion": "missing typed FK target returns stable denial without fabricated target",
+        "assertion": "missing claimed typed target persists terminal ingress denial without fabricated Header or Invocation",
         "handler": "g7_command_production",
         "operation": {
-          "scenario_key": "g7:negative:target_not_found_physical_residual",
+          "scenario_key": "g7:negative:target_not_found_ingress_denial",
           "runtime_database": "isolated_real_file_sqlite",
           "projection_database": "isolated_generation_store",
           "transaction_mode": "BEGIN_IMMEDIATE",
@@ -206,7 +206,7 @@
           "duplicate_authoritative_writes": 0,
           "projection_can_write_runtime": false
         },
-        "binding_hash": "sha256:7acd56948e165567acf52ad17411d9464a4fc4e92032b024ea261bbaf773863a"
+        "binding_hash": "sha256:9fe92bd6a7c73663623155f7a1d7caf2f95411b0cf5ae518c819d57357bc8c87"
       },
       {
         "case_id": "evidence_invalid",
@@ -835,5 +835,5 @@
       }
     ]
   },
-  "hash": "sha256:0b85691a186af3073b4d9f370162b53b40baa0976d6209529c31dbd22cf1f083"
+  "hash": "sha256:4eded709aca848663a23cbb71dd975b05a5c008f4f8a3c900793dd117927a2e0"
 }

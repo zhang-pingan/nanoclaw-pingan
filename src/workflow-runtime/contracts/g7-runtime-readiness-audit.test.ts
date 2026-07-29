@@ -127,11 +127,11 @@ describe('G7 Control / Card / Projection / Recovery readiness audit', () => {
     expect(source).not.toMatch(/\b(?:INSERT|UPDATE|DELETE)\b/);
   });
 
-  it('records the physical unresolved-target audit residual without weakening typed FKs', () => {
+  it('binds the closed pre-resolution ingress audit without weakening resolved typed FKs', () => {
     const schema = fs.readFileSync(
       path.join(
         repoRoot,
-        'src/workflow-runtime/store/schema/migration/workflow-runtime-schema-v10.sql',
+        'src/workflow-runtime/store/schema/migration/workflow-runtime-schema-v11.sql',
       ),
       'utf8',
     );
@@ -141,7 +141,15 @@ describe('G7 Control / Card / Projection / Recovery readiness audit', () => {
     expect(schema).toMatch(
       /FOREIGN KEY \("run_id"\) REFERENCES "workflow_graph_runs"/,
     );
-    expect(schema).not.toMatch(/opaque_target|unresolved_target/);
+    expect(schema).toMatch(
+      /CREATE TABLE "workflow_runtime_command_ingress_invocations"/,
+    );
+    expect(schema).toMatch(/"ck:command_ingress:claimed_target_exactly_one"/);
+    expect(schema).toMatch(/"ck:command_ingress:claimed_target_mapping"/);
+    expect(schema).toMatch(
+      /FOREIGN KEY \("resolved_command_id", "resolved_invocation_id"\) REFERENCES "workflow_runtime_command_invocations"/,
+    );
+    expect(schema).not.toMatch(/opaque_target|unresolved_target|claimed_target_ref/);
     const pack = checkG7ControlProjectionContracts();
     expect(pack.payload).toMatchObject({
       g7_done: false,

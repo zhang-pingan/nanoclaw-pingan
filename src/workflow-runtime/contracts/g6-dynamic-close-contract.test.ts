@@ -68,8 +68,8 @@ describe('current G6 Dynamic / Close Contract Pack', () => {
           hash: 'sha256:ea97a3d52a2e4a14fb2671b2191b1b1cb6acc22c4ecded7db2e141a1716b516e',
         }),
         expect.objectContaining({
-          name: 'database_schema_10',
-          hash: 'sha256:05169ddfdc2c53371a0e4464dcc8b109608e1ff9b3d0276478da464c11266682',
+          name: 'database_schema_11',
+          hash: 'sha256:d4dfd9e1beaea10ab7ecca33308d0624fe7ae4c45518a98729198ed7c6f09375',
         }),
       ]),
     );

@@ -742,7 +742,7 @@ describe('R-022 required Child Domain Claim handoff', () => {
 
   it('fails closed when current and historical Schema/Claim authorities cross', () => {
     expect(schema9.database_schema_version).toBe(9);
-    expect(currentSchema.database_schema_version).toBe(10);
+    expect(currentSchema.database_schema_version).toBe(11);
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'icarus-r022-cross-'));
     roots.push(root);
     const historical = createMigratedDatabase(

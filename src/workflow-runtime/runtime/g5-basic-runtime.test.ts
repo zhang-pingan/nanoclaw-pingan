@@ -2648,7 +2648,7 @@ function databaseFingerprint(instance: G5TestBootstrapInstance): Sha256Hash {
   const state: JsonObject = {};
   for (const { name } of tables) {
     if (!/^[a-z][a-z0-9_]*$/.test(name))
-      throw new Error(`invalid Schema 7 table name ${name}`);
+      throw new Error(`invalid Schema 11 table name ${name}`);
     const columns = instance.store.queryAll<{ name: string }>(
       `PRAGMA table_info(${name})`,
       [],
@@ -4627,7 +4627,7 @@ describe('focused static child Plan bridge execution gate', () => {
   );
 });
 
-describe('G5 Basic Runtime Schema 7 repair transaction integration', () => {
+describe('G5 Basic Runtime current-schema repair transaction integration', () => {
   afterAll(() => productionFixtureHarness.assertComplete());
 
   it.each(productionFixtureHarness.fixtures)(
@@ -8963,7 +8963,7 @@ describe('G5 Basic Runtime Schema 7 repair transaction integration', () => {
           databaseSchemaHash: hash('wrong-schema'),
         },
       }),
-    ).toThrow(/current frozen Schema 7 identity/);
+    ).toThrow(/current frozen Schema 11 identity/);
 
     const compiledPlan = plan(seed);
     const compileInput = {
@@ -9008,7 +9008,7 @@ describe('G5 Basic Runtime Schema 7 repair transaction integration', () => {
           >,
         ),
       }),
-    ).toThrow(/Plan safety, toolchain, or Schema 7 identity drift/);
+    ).toThrow(/Plan safety, toolchain, or Schema 11 identity drift/);
     expect(() =>
       persistCompileResultT2a(instance.store, {
         ...compileInput,

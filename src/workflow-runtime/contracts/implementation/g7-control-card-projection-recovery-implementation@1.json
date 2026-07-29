@@ -14,7 +14,7 @@
     "sources": [
       {
         "path": "src/workflow-runtime/runtime/commands.ts",
-        "raw_sha256": "sha256:2025ac172ffe66c4d9b53dabad61cd3bcac18a4ddfdadc3ac4e16fac564dcf62"
+        "raw_sha256": "sha256:f6fdf15952eb7443268d0c11c53a2689c86a9caf1916ad605cfc1dac75bbff64"
       },
       {
         "path": "src/workflow-runtime/runtime/node-execution.ts",
@@ -38,18 +38,18 @@
       },
       {
         "path": "src/workflow-runtime/projection/workflow-projection.ts",
-        "raw_sha256": "sha256:849731dd0949380b3cc06dfdc348b2446822e5b80281750f8b221116ff89aecd"
+        "raw_sha256": "sha256:d6a3519117e418956759194a1ac3d8546b71f3c56975645a1c2d4fc8bd2c57ac"
       },
       {
         "path": "src/workflow-runtime/projection/runtime-center-api.ts",
-        "raw_sha256": "sha256:172a6c3839c2c6bcdd6ec8e935a4aee73eec8eabfd8744290a8f28262e3d479d"
+        "raw_sha256": "sha256:25477ea288264c5c4df04a592697c9f0fd07de97acc6379fbca6f568a6a651ce"
       },
       {
         "path": "src/workflow-runtime/projection/runtime-center-renderer/entry.ts",
         "raw_sha256": "sha256:001aaa2e06dfd0efeeaa639ffb2517ee536860f8874114fe7ed121bec061a1e5"
       }
     ],
-    "source_tree_hash": "sha256:95223a644558f8a747af120f6bf8fd3f8362ff5ec8b73b2793e651093b3105b6"
+    "source_tree_hash": "sha256:d28b89a446e3d075340657b88c558bacfea5114ff10fbc3aafbf27479a51d184"
   },
-  "hash": "sha256:37d80650e79af280dc611d0d2168742ef69acb9cb74cea7204f5fb4b523eb296"
+  "hash": "sha256:b1ded97326a2eb633e77f1b4e7692db0c24c6e05c2284321aabfd1f97f1d6e53"
 }

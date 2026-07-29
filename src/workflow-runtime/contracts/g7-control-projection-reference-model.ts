@@ -23,6 +23,7 @@ export interface G7ModelCommandHeader {
   readonly commandId: string;
   readonly requestHash: Sha256Hash;
   readonly canonicalResult: G7ModelExecutionResult;
+  readonly lastInvocationResult: G7ModelExecutionResult;
   readonly invocationCount: number;
   readonly targetVersion: number;
 }
@@ -42,7 +43,7 @@ export function applyG7ModelCommand(
   if (prior) {
     return {
       ...prior,
-      canonicalResult:
+      lastInvocationResult:
         prior.requestHash === requestHash ? 'duplicate' : 'conflict',
       invocationCount: prior.invocationCount + 1,
     };
@@ -58,6 +59,7 @@ export function applyG7ModelCommand(
     commandId: request.command_id,
     requestHash,
     canonicalResult: result,
+    lastInvocationResult: result,
     invocationCount: 1,
     targetVersion:
       result === 'applied'

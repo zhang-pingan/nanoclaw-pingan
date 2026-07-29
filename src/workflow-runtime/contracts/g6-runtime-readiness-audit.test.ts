@@ -81,11 +81,11 @@ describe('G6 Dynamic / Close readiness audit', () => {
     });
   });
 
-  it('proves the current Schema 10 Manifest and a fresh real-file Store retain all six exact composite FKs and four terminal pairs', () => {
+  it('proves the current Schema 11 Manifest and a fresh real-file Store retain all six exact composite FKs and four terminal pairs', () => {
     const manifest = readArtifact(
-      '../store/schema/artifacts/workflow-runtime-schema-manifest@4.json',
+      '../store/schema/artifacts/workflow-runtime-schema-manifest@5.json',
     );
-    expect(manifest.payload.database_schema_version).toBe(10);
+    expect(manifest.payload.database_schema_version).toBe(11);
     const consumption = objects(manifest.payload.tables).find(
       (table) => table.name === 'workflow_graph_child_completion_consumptions',
     )!;
@@ -140,7 +140,7 @@ describe('G6 Dynamic / Close readiness audit', () => {
         expect(
           store.queryOne<{ user_version: number }>('PRAGMA user_version', [])
             ?.user_version,
-        ).toBe(10);
+        ).toBe(11);
         const rows = store.queryAll<{
           id: number;
           seq: number;

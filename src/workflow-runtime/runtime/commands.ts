@@ -135,7 +135,8 @@ export interface RuntimeCommandGatewayInput {
 }
 
 export interface RuntimeCommandGatewayReceipt {
-  readonly commandId: string;
+  readonly ingressInvocationId: string;
+  readonly commandId: string | null;
   readonly invocationId: string | null;
   readonly executionResult:
     | 'applied'
@@ -145,6 +146,26 @@ export interface RuntimeCommandGatewayReceipt {
     | 'late';
   readonly denialCode: RuntimeCommandDenialCode | null;
   readonly canonicalResult: JsonObject;
+}
+
+type RuntimeCommandClaimedTargetKind =
+  | 'workflow'
+  | 'run'
+  | 'node'
+  | 'retry_schedule'
+  | 'effect_operation'
+  | 'operational_blocker';
+
+interface RuntimeCommandClaimedTarget {
+  readonly kind: RuntimeCommandClaimedTargetKind;
+  readonly id: string;
+}
+
+interface PreparedRuntimeCommandIngress {
+  readonly id: string;
+  readonly requestHash: Sha256Hash;
+  readonly domain: string;
+  readonly claimedTarget: RuntimeCommandClaimedTarget;
 }
 
 interface TargetAuthority extends Record<string, unknown> {
@@ -199,7 +220,12 @@ interface ExecutionOutcome {
   readonly result: JsonObject;
 }
 
-function assertCommandShape(command: WorkflowRuntimeCommandDocument): void {
+function assertCommandShape(
+  command: WorkflowRuntimeCommandDocument,
+): {
+  entry: RuntimeCommandProtocolEntry;
+  claimedTarget: RuntimeCommandClaimedTarget;
+} {
   const entry = RUNTIME_COMMAND_PROTOCOL_ENTRIES.find(
     (candidate) => candidate.command_type === command.command_type,
   );
@@ -238,17 +264,33 @@ function assertCommandShape(command: WorkflowRuntimeCommandDocument): void {
       'contract_invalid',
       'Runtime command shape is invalid',
     );
-  const expectedTargetKey = `${entry.target_kind}_id`;
   const target = command.target as unknown as Record<string, unknown>;
+  const targetKeys = {
+    workflow_id: 'workflow',
+    run_id: 'run',
+    node_id: 'node',
+    retry_schedule_id: 'retry_schedule',
+    effect_operation_id: 'effect_operation',
+    operational_blocker_id: 'operational_blocker',
+  } as const;
+  const targetKey = Object.keys(target)[0] as keyof typeof targetKeys;
   if (
     Object.keys(target).length !== 1 ||
-    typeof target[expectedTargetKey] !== 'string' ||
-    String(target[expectedTargetKey]).length === 0
+    !(targetKey in targetKeys) ||
+    typeof target[targetKey] !== 'string' ||
+    String(target[targetKey]).length === 0
   )
     throw new G5RuntimeError(
       'contract_invalid',
       'Runtime command typed target is invalid',
     );
+  return {
+    entry,
+    claimedTarget: {
+      kind: targetKeys[targetKey],
+      id: String(target[targetKey]),
+    },
+  };
 }
 
 function targetId(command: WorkflowRuntimeCommandDocument): string {
@@ -259,6 +301,242 @@ function idempotencyDomain(input: RuntimeCommandGatewayInput): string {
   if (input.actor.actorKind === 'system') return SYSTEM_DEADLINE_DOMAIN;
   const source = input.actor.sourceFeatureId ?? input.actor.entrypoint;
   return `${input.actor.actorKind}:${input.actor.actorRef}:${source}`;
+}
+
+function parseCanonicalIngressJson(
+  bytes: string,
+  label: string,
+): JsonValue {
+  let parsed: JsonValue;
+  try {
+    parsed = JSON.parse(bytes) as JsonValue;
+  } catch (error) {
+    throw new G5RuntimeError(
+      'integrity_violation',
+      `${label} is not valid JSON`,
+      { cause: error },
+    );
+  }
+  if (canonicalJson(parsed) !== bytes)
+    throw new G5RuntimeError(
+      'integrity_violation',
+      `${label} is not canonical JSON`,
+    );
+  return parsed;
+}
+
+function assertRuntimeCommandIngressHistory(
+  transaction: WorkflowRuntimeWriteTransaction,
+  domain: string,
+  idempotencyKey: string,
+): void {
+  const history = transaction.queryAll<{
+    id: string;
+    ingress_no: number;
+    submitted_command_id: string;
+    canonical_request_json: string;
+    submitted_request_hash: Sha256Hash;
+    command_type: WorkflowCommandType;
+    claimed_target_kind: RuntimeCommandClaimedTargetKind;
+    claimed_workflow_id: string | null;
+    claimed_run_id: string | null;
+    claimed_node_id: string | null;
+    claimed_retry_schedule_id: string | null;
+    claimed_effect_operation_id: string | null;
+    claimed_operational_blocker_id: string | null;
+    resolution_result: string;
+    canonical_result_json: string | null;
+    canonical_result_hash: Sha256Hash | null;
+  }>(
+    `SELECT id, ingress_no, submitted_command_id, canonical_request_json,
+            submitted_request_hash, command_type, claimed_target_kind,
+            claimed_workflow_id, claimed_run_id, claimed_node_id,
+            claimed_retry_schedule_id, claimed_effect_operation_id,
+            claimed_operational_blocker_id, resolution_result,
+            canonical_result_json, canonical_result_hash
+       FROM workflow_runtime_command_ingress_invocations
+      WHERE idempotency_domain = ? AND idempotency_key = ?
+      ORDER BY ingress_no`,
+    [domain, idempotencyKey],
+  );
+  for (const [index, row] of history.entries()) {
+    const request = parseCanonicalIngressJson(
+      row.canonical_request_json,
+      'Runtime Command ingress request',
+    );
+    if (!request || typeof request !== 'object' || Array.isArray(request))
+      throw new G5RuntimeError(
+        'integrity_violation',
+        'Runtime Command ingress request is not an object',
+      );
+    let parsed: ReturnType<typeof assertCommandShape>;
+    try {
+      parsed = assertCommandShape(
+        request as unknown as WorkflowRuntimeCommandDocument,
+      );
+    } catch (error) {
+      throw new G5RuntimeError(
+        'integrity_violation',
+        'Runtime Command ingress request no longer satisfies the closed contract',
+        { cause: error },
+      );
+    }
+    const expectedNo = index + 1;
+    const expectedId = stableRuntimeId('runtime-command-ingress', {
+      idempotency_domain: domain,
+      idempotency_key: idempotencyKey,
+      ingress_no: expectedNo,
+    }).replace(/^g5:/, '');
+    const claimedColumns: Record<RuntimeCommandClaimedTargetKind, string | null> = {
+      workflow: row.claimed_workflow_id,
+      run: row.claimed_run_id,
+      node: row.claimed_node_id,
+      retry_schedule: row.claimed_retry_schedule_id,
+      effect_operation: row.claimed_effect_operation_id,
+      operational_blocker: row.claimed_operational_blocker_id,
+    };
+    if (
+      row.ingress_no !== expectedNo ||
+      row.id !== expectedId ||
+      runtimeObjectHash('runtime-command-request', request) !==
+        row.submitted_request_hash ||
+      row.submitted_command_id !== String(request.command_id) ||
+      row.command_type !== parsed.entry.command_type ||
+      row.claimed_target_kind !== parsed.claimedTarget.kind ||
+      claimedColumns[row.claimed_target_kind] !== parsed.claimedTarget.id ||
+      row.resolution_result === 'prepared' ||
+      row.canonical_result_json === null ||
+      row.canonical_result_hash === null
+    )
+      throw new G5RuntimeError(
+        'integrity_violation',
+        'Runtime Command ingress identity or terminal authority drifted',
+      );
+    const result = parseCanonicalIngressJson(
+      row.canonical_result_json,
+      'Runtime Command ingress result',
+    );
+    if (
+      runtimeObjectHash('runtime-command-ingress-result', result) !==
+      row.canonical_result_hash
+    )
+      throw new G5RuntimeError(
+        'integrity_violation',
+        'Runtime Command ingress result hash authority drifted',
+      );
+  }
+}
+
+function prepareRuntimeCommandIngress(
+  transaction: WorkflowRuntimeWriteTransaction,
+  input: RuntimeCommandGatewayInput,
+  claimedTarget: RuntimeCommandClaimedTarget,
+): PreparedRuntimeCommandIngress {
+  const requestHash = runtimeObjectHash(
+    'runtime-command-request',
+    input.command as unknown as JsonObject,
+  );
+  const domain = idempotencyDomain(input);
+  const ingressNo = transaction.queryOne<{ next_no: number }>(
+    `SELECT coalesce(max(ingress_no), 0) + 1 AS next_no
+       FROM workflow_runtime_command_ingress_invocations
+      WHERE idempotency_domain = ? AND idempotency_key = ?`,
+    [domain, input.command.idempotency_key],
+  )!.next_no;
+  const id = stableRuntimeId('runtime-command-ingress', {
+    idempotency_domain: domain,
+    idempotency_key: input.command.idempotency_key,
+    ingress_no: ingressNo,
+  }).replace(/^g5:/, '');
+  const targets: Record<RuntimeCommandClaimedTargetKind, string | null> = {
+    workflow: null,
+    run: null,
+    node: null,
+    retry_schedule: null,
+    effect_operation: null,
+    operational_blocker: null,
+  };
+  targets[claimedTarget.kind] = claimedTarget.id;
+  transaction.execute(
+    `INSERT INTO workflow_runtime_command_ingress_invocations (
+       id, idempotency_domain, idempotency_key, ingress_no,
+       submitted_command_id, canonical_request_json, submitted_request_hash,
+       command_type, claimed_target_kind, claimed_workflow_id, claimed_run_id,
+       claimed_node_id, claimed_retry_schedule_id, claimed_effect_operation_id,
+       claimed_operational_blocker_id, actor_ref, actor_kind, auth_session_ref,
+       entrypoint, source_feature_id, delegation_chain_ref, resolution_result,
+       authorization_result, execution_result, denial_code,
+       canonical_result_json, canonical_result_hash, resolved_command_id,
+       resolved_invocation_id, requested_at_ms, decided_at_ms, applied_at_ms
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+       'prepared', 'pending', 'prepared', NULL, NULL, NULL, NULL, NULL, ?, NULL,
+       NULL)`,
+    [
+      id,
+      domain,
+      input.command.idempotency_key,
+      ingressNo,
+      input.command.command_id,
+      canonicalJson(input.command as unknown as JsonValue),
+      requestHash,
+      input.command.command_type,
+      claimedTarget.kind,
+      targets.workflow,
+      targets.run,
+      targets.node,
+      targets.retry_schedule,
+      targets.effect_operation,
+      targets.operational_blocker,
+      input.actor.actorRef,
+      input.actor.actorKind,
+      input.actor.authSessionRef,
+      input.actor.entrypoint,
+      input.actor.sourceFeatureId,
+      input.actor.delegationChainRef,
+      input.nowMs,
+    ],
+  );
+  return { id, requestHash, domain, claimedTarget };
+}
+
+function terminalizeRuntimeCommandIngress(
+  transaction: WorkflowRuntimeWriteTransaction,
+  input: RuntimeCommandGatewayInput,
+  ingress: PreparedRuntimeCommandIngress,
+  resolutionResult: 'resolved' | 'target_not_found' | 'target_kind_invalid',
+  authorizationResult: 'not_evaluated' | 'allowed' | 'denied',
+  receipt: Omit<RuntimeCommandGatewayReceipt, 'ingressInvocationId'>,
+): RuntimeCommandGatewayReceipt {
+  const resultHash = runtimeObjectHash(
+    'runtime-command-ingress-result',
+    receipt.canonicalResult,
+  );
+  requireSingleChange(
+    transaction.execute(
+      `UPDATE workflow_runtime_command_ingress_invocations
+          SET resolution_result = ?, authorization_result = ?,
+              execution_result = ?, denial_code = ?,
+              canonical_result_json = ?, canonical_result_hash = ?,
+              resolved_command_id = ?, resolved_invocation_id = ?,
+              decided_at_ms = ?, applied_at_ms = ?
+        WHERE id = ? AND resolution_result = 'prepared'`,
+      [
+        resolutionResult,
+        authorizationResult,
+        receipt.executionResult,
+        receipt.denialCode,
+        canonicalJson(receipt.canonicalResult),
+        resultHash,
+        receipt.commandId,
+        receipt.invocationId,
+        input.nowMs,
+        receipt.executionResult === 'applied' ? input.nowMs : null,
+        ingress.id,
+      ],
+    ).changes,
+    'Runtime Command ingress terminalization',
+  );
+  return { ingressInvocationId: ingress.id, ...receipt };
 }
 
 function loadTarget(
@@ -766,7 +1044,7 @@ function finalizeAndInvoke(
   targetBeforeHash: Sha256Hash,
   outcome: ExecutionOutcome,
   canonicalCommandId = input.command.command_id,
-): RuntimeCommandGatewayReceipt {
+): Omit<RuntimeCommandGatewayReceipt, 'ingressInvocationId'> {
   const header = transaction.queryOne<{
     canonical_result_value_id: string | null;
     canonical_result_hash: Sha256Hash | null;
@@ -1195,6 +1473,87 @@ function verifyAndMutateSource(
       'precondition_failed',
       'T6e source-specific verification is required',
     );
+  const persistedSource = transaction.queryOne<{
+    workflow_id: string;
+    graph_run_id: string;
+    source_effect_operation_id: string | null;
+    source_outbox_id: string | null;
+    source_root_finalization_schedule_id: string | null;
+    source_claim_id: string | null;
+    source_event_seq: number | null;
+    evidence_manifest_value_id: string;
+    evidence_manifest_hash: Sha256Hash;
+  }>(
+    `SELECT workflow_id, graph_run_id, source_effect_operation_id,
+            source_outbox_id, source_root_finalization_schedule_id,
+            source_claim_id, source_event_seq, evidence_manifest_value_id,
+            evidence_manifest_hash
+       FROM workflow_operational_blockers
+      WHERE id = ? AND status = 'open'`,
+    [target.blocker_id],
+  );
+  if (
+    !persistedSource ||
+    persistedSource.workflow_id !== target.workflow_id ||
+    persistedSource.graph_run_id !== target.run_id
+  )
+    throw new G5RuntimeError(
+      'integrity_violation',
+      'T6e persisted Blocker source identity drifted',
+    );
+  loadInlineValue(
+    transaction,
+    persistedSource.evidence_manifest_value_id,
+    persistedSource.evidence_manifest_hash,
+    'T6e persisted Blocker evidence',
+  );
+  const sourceShapeMatches = (() => {
+    switch (target.blocker_kind) {
+      case 'effect_unknown':
+      case 'compensation_dead_letter':
+        return (
+          persistedSource.source_effect_operation_id !== null &&
+          persistedSource.source_effect_operation_id ===
+            target.effect_operation_id &&
+          persistedSource.source_outbox_id === null &&
+          persistedSource.source_root_finalization_schedule_id === null &&
+          persistedSource.source_claim_id === null &&
+          persistedSource.source_event_seq === null
+        );
+      case 'claim_release_failed':
+        return (
+          persistedSource.source_claim_id !== null &&
+          persistedSource.source_effect_operation_id === null &&
+          persistedSource.source_outbox_id === null &&
+          persistedSource.source_root_finalization_schedule_id === null &&
+          persistedSource.source_event_seq === null
+        );
+      case 'root_finalization_exhausted':
+        return (
+          persistedSource.source_root_finalization_schedule_id !== null &&
+          persistedSource.source_effect_operation_id === null &&
+          persistedSource.source_outbox_id === null &&
+          persistedSource.source_claim_id === null &&
+          persistedSource.source_event_seq === null
+        );
+      case 'resource_or_credential_unavailable':
+      case 'integrity_quarantine':
+        return (
+          persistedSource.source_event_seq !== null &&
+          persistedSource.source_effect_operation_id === null &&
+          persistedSource.source_outbox_id === null &&
+          persistedSource.source_root_finalization_schedule_id === null &&
+          persistedSource.source_claim_id === null
+        );
+      default:
+        return false;
+    }
+  })();
+  if (!sourceShapeMatches)
+    throw new G5RuntimeError(
+      'integrity_violation',
+      'T6e Blocker kind is not bound to its persisted typed source',
+    );
   if (verification.kind === 'retry_wait') return 'retry_wait';
   switch (target.blocker_kind) {
     case 'effect_unknown':
@@ -1312,7 +1671,7 @@ function verifyAndMutateSource(
     case 'claim_release_failed': {
       if (
         verification.kind !== 'claim_released' ||
-        verification.claimId !== target.blocker_source_claim_id
+        verification.claimId !== persistedSource.source_claim_id
       )
         break;
       const claim = transaction.queryOne<{ status: string }>(
@@ -1325,25 +1684,58 @@ function verifyAndMutateSource(
     case 'resource_or_credential_unavailable': {
       if (verification.kind !== 'resource_preflight_scheduled') break;
       const schedule = transaction.queryOne<{ status: string }>(
-        'SELECT status FROM workflow_graph_retry_schedules WHERE id = ?',
-        [verification.retryScheduleId],
+        `SELECT schedule.status
+           FROM workflow_graph_retry_schedules AS schedule
+           JOIN workflow_graph_events AS source_event
+             ON source_event.graph_run_id = schedule.graph_run_id
+            AND source_event.seq = ?
+            AND source_event.scope_id IS schedule.scope_id
+            AND source_event.node_id IS schedule.node_id
+            AND source_event.attempt_id IS schedule.source_attempt_id
+            AND source_event.event_type = 'attempt_phase_changed'
+            AND source_event.idempotency_key = 'retry-schedule:' || schedule.id
+          WHERE schedule.id = ? AND schedule.graph_run_id = ?`,
+        [
+          persistedSource.source_event_seq,
+          verification.retryScheduleId,
+          persistedSource.graph_run_id,
+        ],
       );
       if (schedule?.status === 'scheduled') return 'resolved';
-      break;
+      throw new G5RuntimeError(
+        'precondition_failed',
+        'T6e retry Schedule does not match the persisted source event',
+      );
     }
-    case 'integrity_quarantine':
+    case 'integrity_quarantine': {
+      if (verification.kind !== 'integrity_restored') break;
+      const sourceEvent = transaction.queryOne<{
+        event_type: string;
+        payload_value_id: string | null;
+        payload_hash: Sha256Hash | null;
+      }>(
+        `SELECT event_type, payload_value_id, payload_hash
+           FROM workflow_graph_events
+          WHERE graph_run_id = ? AND seq = ?`,
+        [persistedSource.graph_run_id, persistedSource.source_event_seq],
+      );
       if (
-        verification.kind === 'integrity_restored' &&
+        sourceEvent?.event_type === 'orchestration_error' &&
+        sourceEvent.payload_value_id ===
+          persistedSource.evidence_manifest_value_id &&
+        sourceEvent.payload_hash === persistedSource.evidence_manifest_hash &&
+        verification.expectedHash === persistedSource.evidence_manifest_hash &&
         verification.expectedHash === verification.restoredHash &&
         verification.fullChainVerified
       )
         return 'resolved';
       break;
+    }
     case 'root_finalization_exhausted': {
       if (
         verification.kind !== 'root_finalization_ready' ||
         verification.scheduleId !==
-          target.blocker_source_root_finalization_schedule_id
+          persistedSource.source_root_finalization_schedule_id
       )
         break;
       const schedule = transaction.queryOne<{ status: string }>(
@@ -1620,12 +2012,34 @@ function executeAbandonConfirm(
     status: string;
     expires_at_ms: number;
     row_version: number;
+    request_command_id: string;
+    request_reason_code: string;
+    request_reason_text_hash: string | null;
+    request_evidence_hash: string;
   }>(
-    `SELECT workflow_id, actor_ref, auth_session_ref,
-            expected_workflow_row_version, evidence_manifest_hash, status,
-            expires_at_ms, row_version
-       FROM workflow_runtime_command_confirmations WHERE id = ?`,
+    `SELECT confirmation.workflow_id, confirmation.actor_ref,
+            confirmation.auth_session_ref,
+            confirmation.expected_workflow_row_version,
+            confirmation.evidence_manifest_hash, confirmation.status,
+            confirmation.expires_at_ms, confirmation.row_version,
+            confirmation.request_command_id,
+            request.reason_code AS request_reason_code,
+            request.reason_text_hash AS request_reason_text_hash,
+            request.evidence_manifest_hash AS request_evidence_hash
+       FROM workflow_runtime_command_confirmations AS confirmation
+       JOIN workflow_runtime_commands AS request
+         ON request.command_id = confirmation.request_command_id
+      WHERE confirmation.id = ?`,
     [command.confirmation_ref],
+  );
+  const confirmingIntent = transaction.queryOne<{
+    reason_code: string;
+    reason_text_hash: string | null;
+    evidence_manifest_hash: string;
+  }>(
+    `SELECT reason_code, reason_text_hash, evidence_manifest_hash
+       FROM workflow_runtime_commands WHERE command_id = ?`,
+    [command.command_id],
   );
   if (
     !confirmation ||
@@ -1635,10 +2049,15 @@ function executeAbandonConfirm(
     confirmation.expected_workflow_row_version !==
       command.expected_row_version ||
     confirmation.evidence_manifest_hash !== evidence.hash ||
-    confirmation.status !== 'pending'
+    confirmation.request_evidence_hash !== evidence.hash ||
+    confirmation.status !== 'pending' ||
+    !confirmingIntent ||
+    confirmingIntent.reason_code !== confirmation.request_reason_code ||
+    confirmingIntent.reason_text_hash !== confirmation.request_reason_text_hash ||
+    confirmingIntent.evidence_manifest_hash !== confirmation.request_evidence_hash
   )
     return deny('confirmation_required', command.command_id);
-  if (input.nowMs > confirmation.expires_at_ms) {
+  if (input.nowMs >= confirmation.expires_at_ms) {
     requireSingleChange(
       transaction.execute(
         `UPDATE workflow_runtime_command_confirmations SET status = 'expired',
@@ -1789,7 +2208,6 @@ function gatewayTransaction(
   transaction: WorkflowRuntimeWriteTransaction,
   input: RuntimeCommandGatewayInput,
 ): RuntimeCommandGatewayReceipt {
-  assertCommandShape(input.command);
   if (
     input.actor.authenticated !== true ||
     input.actor.actorRef.length === 0 ||
@@ -1799,32 +2217,68 @@ function gatewayTransaction(
       'forbidden_surface',
       'Runtime Command Gateway requires an authenticated server actor context',
     );
-  const entry = RUNTIME_COMMAND_PROTOCOL_ENTRIES.find(
-    (candidate) => candidate.command_type === input.command.command_type,
-  )!;
-  const target = loadTarget(transaction, input.command);
-  if (!target)
-    return {
-      commandId: input.command.command_id,
-      invocationId: null,
-      executionResult: 'denied',
-      denialCode: 'target_not_found',
-      canonicalResult: {
-        command_id: input.command.command_id,
-        execution_result: 'denied',
-        denial_code: 'target_not_found',
-      },
-    };
-  const requestHash = runtimeObjectHash(
-    'runtime-command-request',
-    input.command as unknown as JsonObject,
+  const { entry, claimedTarget } = assertCommandShape(input.command);
+  assertRuntimeCommandIngressHistory(
+    transaction,
+    idempotencyDomain(input),
+    input.command.idempotency_key,
   );
-  const domain = idempotencyDomain(input);
+  const ingress = prepareRuntimeCommandIngress(
+    transaction,
+    input,
+    claimedTarget,
+  );
+  if (claimedTarget.kind !== entry.target_kind) {
+    const receipt = terminalizeRuntimeCommandIngress(
+      transaction,
+      input,
+      ingress,
+      'target_kind_invalid',
+      'not_evaluated',
+      {
+        commandId: null,
+        invocationId: null,
+        executionResult: 'denied',
+        denialCode: 'target_kind_invalid',
+        canonicalResult: {
+          command_id: input.command.command_id,
+          execution_result: 'denied',
+          denial_code: 'target_kind_invalid',
+        },
+      },
+    );
+    assertNoDeferredForeignKeyViolations(transaction, 'Runtime Command Gateway');
+    return receipt;
+  }
+  const target = loadTarget(transaction, input.command);
+  if (!target) {
+    const receipt = terminalizeRuntimeCommandIngress(
+      transaction,
+      input,
+      ingress,
+      'target_not_found',
+      'not_evaluated',
+      {
+        commandId: null,
+        invocationId: null,
+        executionResult: 'denied',
+        denialCode: 'target_not_found',
+        canonicalResult: {
+          command_id: input.command.command_id,
+          execution_result: 'denied',
+          denial_code: 'target_not_found',
+        },
+      },
+    );
+    assertNoDeferredForeignKeyViolations(transaction, 'Runtime Command Gateway');
+    return receipt;
+  }
+  const requestHash = ingress.requestHash;
+  const domain = ingress.domain;
   const targetBeforeHash = runtimeObjectHash(
     'command-target-before',
     targetSnapshot(target),
   );
-  const required = requiredPermission(entry, input.actor, target);
   const existing = transaction.queryOne<{
     command_id: string;
     request_hash: Sha256Hash;
@@ -1832,45 +2286,35 @@ function gatewayTransaction(
     canonical_result_hash: Sha256Hash;
     command_policy_resource_id: string;
     command_policy_resource_hash: Sha256Hash;
+    required_permission: RuntimePermissionCode;
   }>(
     `SELECT c.command_id, c.request_hash, c.canonical_result_value_id,
             c.canonical_result_hash, i.command_policy_resource_id,
-            i.command_policy_resource_hash
+            i.command_policy_resource_hash, i.required_permission
        FROM workflow_runtime_commands c
        JOIN workflow_runtime_command_invocations i ON i.command_id = c.command_id
       WHERE c.idempotency_domain = ? AND c.idempotency_key = ?
       ORDER BY i.invocation_no LIMIT 1`,
     [domain, input.command.idempotency_key],
   );
-  const actorKindAllowed = (
-    entry.allowed_actor_kinds as readonly CommandActorKind[]
-  ).includes(input.actor.actorKind);
-  const permissionAllowed = input.actor.permissions.has(required);
-  const ceilingAllowed =
-    input.actor.featurePermissionCeiling === null ||
-    input.actor.featurePermissionCeiling.has(required);
   if (existing) {
     const outcome =
-      !actorKindAllowed || !permissionAllowed
-        ? deny('permission_denied', existing.command_id)
-        : !ceilingAllowed
-          ? deny('feature_ceiling_denied', existing.command_id)
-          : existing.request_hash === requestHash
-            ? {
-                executionResult: 'duplicate' as const,
-                denialCode: null,
-                resultingEventSeq: null,
-                closeRequestId: null,
-                effectOperationId: null,
-                result: loadG7AuditValue(
-                  transaction,
-                  existing.canonical_result_value_id,
-                  existing.canonical_result_hash,
-                  'command-result',
-                ) as JsonObject,
-              }
-            : deny('idempotency_conflict', existing.command_id);
-    return finalizeAndInvoke(
+      existing.request_hash === requestHash
+        ? {
+            executionResult: 'duplicate' as const,
+            denialCode: null,
+            resultingEventSeq: null,
+            closeRequestId: null,
+            effectOperationId: null,
+            result: loadG7AuditValue(
+              transaction,
+              existing.canonical_result_value_id,
+              existing.canonical_result_hash,
+              'command-result',
+            ) as JsonObject,
+          }
+        : deny('idempotency_conflict', existing.command_id);
+    const resolvedReceipt = finalizeAndInvoke(
       transaction,
       input,
       {
@@ -1878,13 +2322,31 @@ function gatewayTransaction(
         command_policy_resource_id: existing.command_policy_resource_id,
         command_policy_resource_hash: existing.command_policy_resource_hash,
       },
-      required,
+      existing.required_permission,
       requestHash,
       targetBeforeHash,
       outcome,
       existing.command_id,
     );
+    const receipt = terminalizeRuntimeCommandIngress(
+      transaction,
+      input,
+      ingress,
+      'resolved',
+      'not_evaluated',
+      resolvedReceipt,
+    );
+    assertNoDeferredForeignKeyViolations(transaction, 'Runtime Command Gateway');
+    return receipt;
   }
+  const required = requiredPermission(entry, input.actor, target);
+  const actorKindAllowed = (
+    entry.allowed_actor_kinds as readonly CommandActorKind[]
+  ).includes(input.actor.actorKind);
+  const permissionAllowed = input.actor.permissions.has(required);
+  const ceilingAllowed =
+    input.actor.featurePermissionCeiling === null ||
+    input.actor.featurePermissionCeiling.has(required);
   const evidenceContent = { evidence_refs: [...input.command.evidence_refs] };
   const evidence = persistAuditValue(
     transaction,
@@ -1967,7 +2429,7 @@ function gatewayTransaction(
   const outcome = denial
     ? deny(denial, input.command.command_id)
     : executeAuthorized(transaction, input, target, requestHash, evidence);
-  const receipt = finalizeAndInvoke(
+  const resolvedReceipt = finalizeAndInvoke(
     transaction,
     input,
     target,
@@ -1975,6 +2437,21 @@ function gatewayTransaction(
     requestHash,
     targetBeforeHash,
     outcome,
+  );
+  const receipt = terminalizeRuntimeCommandIngress(
+    transaction,
+    input,
+    ingress,
+    'resolved',
+    denial &&
+      [
+        'permission_denied',
+        'feature_ceiling_denied',
+        'command_policy_denied',
+      ].includes(denial)
+      ? 'denied'
+      : 'allowed',
+    resolvedReceipt,
   );
   assertNoDeferredForeignKeyViolations(transaction, 'Runtime Command Gateway');
   return receipt;

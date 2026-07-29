@@ -41,9 +41,9 @@ const CURRENT_UPSTREAMS = [
     hash: 'sha256:7a852ff21a77a767b708ab8a4fc5c329024ca954422b26d71210b0385ce05441',
   },
   {
-    role: 'g1_schema_10',
-    path: '../store/schema/contract-pack-g1-executable-schema-v10.json',
-    hash: 'sha256:05169ddfdc2c53371a0e4464dcc8b109608e1ff9b3d0276478da464c11266682',
+    role: 'g1_schema_11',
+    path: '../store/schema/contract-pack-g1-executable-schema-v11.json',
+    hash: 'sha256:d4dfd9e1beaea10ab7ecca33308d0624fe7ae4c45518a98729198ed7c6f09375',
   },
   {
     role: 'r021_map_terminal_consumption',
@@ -63,12 +63,12 @@ const CURRENT_UPSTREAMS = [
   {
     role: 'g3_6_retention_executor_abi',
     path: 'contract-pack-g3-retention-executor-abi-preflight.json',
-    hash: 'sha256:53f83f24a9ffd2d194105003077bad472bf3ef9e8f6aa05c8b3bb60f1279956c',
+    hash: 'sha256:b9b8577586d37c099466575187b753df37ba350d55e85936294389bd98fe923c',
   },
   {
     role: 'g3_7_workflow_publisher',
     path: 'contract-pack-g3-workflow-publisher.json',
-    hash: 'sha256:80f0bbd0c977ffe9def9fd854f7ae99099f736fe3cc7c17170e326b181db61bc',
+    hash: 'sha256:c4ba78fdec84d6ec91f0afec1eae09e33c38e5790626c645551c725bc97ac5c0',
   },
   {
     role: 'g3_8a_frozen_activation_repair',
@@ -78,7 +78,7 @@ const CURRENT_UPSTREAMS = [
   {
     role: 'g3_9_feature_release_activation',
     path: 'contract-pack-g3.9-feature-release-activation.json',
-    hash: 'sha256:fc6eb2fa95176e728e95f3ae67663b4ca355cbe4cf371b06a8f0a7728d88b884',
+    hash: 'sha256:e6997e4fde1d5cf7a1b112323729636fe3c17307a65abcedae94ff96be71296e',
   },
 ] as const;
 
@@ -194,6 +194,18 @@ function assertCurrentUpstreams(): void {
       'src/workflow-runtime/store/schema/migration/workflow-runtime-schema-v9-to-v10.sql',
     ),
   );
+  const schema11 = fs.readFileSync(
+    path.join(
+      repoRoot,
+      'src/workflow-runtime/store/schema/migration/workflow-runtime-schema-v11.sql',
+    ),
+  );
+  const schema10To11Upgrade = fs.readFileSync(
+    path.join(
+      repoRoot,
+      'src/workflow-runtime/store/schema/migration/workflow-runtime-schema-v10-to-v11.sql',
+    ),
+  );
   if (
     rawSha256(schema8) !==
       'sha256:b19ebe83ea8b7c53a2ab54a901df092b4e343ee4e1d5772ed6bc3143a82746ad' ||
@@ -217,6 +229,14 @@ function assertCurrentUpstreams(): void {
       'sha256:19c24f06558a3e98f1415468c4af8ce44e94afcad8be3428ebdc133bf4a353c5'
   ) {
     throw new Error('G4 successor Schema 10 migration identity drifted');
+  }
+  if (
+    rawSha256(schema11) !==
+      'sha256:2a29e1f527f47eb43799a7a35a5272b85f5dc154c003f92f71e152788b17f530' ||
+    rawSha256(schema10To11Upgrade) !==
+      'sha256:740aab608641511e4cb9ca991e0d60ffd3679c02b1ca4a063422128aa8fb830b'
+  ) {
+    throw new Error('G4 successor Schema 11 migration identity drifted');
   }
 }
 
@@ -248,11 +268,15 @@ function buildSuccessor(): ContractArtifactEnvelope {
         disposition: 'frozen_historical_authority',
       },
       current_store: {
-        database_schema_version: 10,
+        database_schema_version: 11,
         g1_root_hash:
-          'sha256:05169ddfdc2c53371a0e4464dcc8b109608e1ff9b3d0276478da464c11266682',
+          'sha256:d4dfd9e1beaea10ab7ecca33308d0624fe7ae4c45518a98729198ed7c6f09375',
         database_schema_hash:
-          'sha256:1ff4fd63239e85630923fa16e204645367958ae487933338a6f676ec9be6faad',
+          'sha256:4d096ce9c2ed47a195c36d11a6540a3c0191183a521b59a1520279a0ffaf9be2',
+        schema11_migration_hash:
+          'sha256:2a29e1f527f47eb43799a7a35a5272b85f5dc154c003f92f71e152788b17f530',
+        schema10_to_11_upgrade_hash:
+          'sha256:740aab608641511e4cb9ca991e0d60ffd3679c02b1ca4a063422128aa8fb830b',
         schema10_migration_hash:
           'sha256:269645a9f093dc35fd35a04336d71e38cc17b7168584752f9b9bdfc106f46fad',
         schema9_to_10_upgrade_hash:

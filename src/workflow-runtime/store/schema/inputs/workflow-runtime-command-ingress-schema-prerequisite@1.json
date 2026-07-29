@@ -1,0 +1,68 @@
+{
+  "format": "icarus.workflow-runtime-command-ingress-schema-prerequisite/1",
+  "ref": {
+    "id": "icarus.workflow-runtime-command-ingress-schema-prerequisite",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-runtime-command-ingress-schema-prerequisite:1\n",
+  "hash": "sha256:316cf28feab27e89a3ce2fdcd67c91e420a9579ea479b1d856a1b8502de63b5a",
+  "payload": {
+    "format": "icarus.workflow-runtime-command-ingress-schema-prerequisite/1",
+    "decision_id": "G7_MISSING_TARGET_AUDIT",
+    "schema_id": "workflow-runtime-schema-v1",
+    "database_schema_version": 11,
+    "predecessor_database_schema_version": 10,
+    "delta_mode": "additive_ingress_audit_and_candidate_key",
+    "audit_model": {
+      "authenticated_ingress": "one prepared then terminal immutable row per authenticated invocation",
+      "claimed_target": "closed exactly-one typed identifier without target foreign key",
+      "resolved_target": "exact composite foreign key to resolved Command Invocation",
+      "unresolved_target": "terminal denied ingress row without fabricated Command Header",
+      "transaction": "resolved ingress Header Invocation Event and mutation commit or roll back together",
+      "replay": "every exact replay drift late denial and applied call appends ingress history",
+      "header": "immutable request identity with exactly-once canonical result finalization",
+      "resolved_invocation": "append-only target-verified authorization and execution audit"
+    },
+    "affected_tables": [
+      "workflow_runtime_command_ingress_invocations",
+      "workflow_runtime_commands",
+      "workflow_runtime_command_invocations",
+      "workflow_runtime_command_confirmations"
+    ],
+    "added_table_count": 1,
+    "added_candidate_keys": [
+      "uk:command_invocations:command_id"
+    ],
+    "query_intents": [
+      {
+        "query_id": "query:command_ingress_idempotency_history",
+        "owner": "command_gateway",
+        "purpose": "load immutable authenticated ingress history for one trusted idempotency domain and key",
+        "table": "workflow_runtime_command_ingress_invocations",
+        "join_tables": [],
+        "equality_columns": [
+          "idempotency_domain",
+          "idempotency_key"
+        ],
+        "range_columns": [],
+        "state_predicate_intent": null,
+        "order_by": [
+          {
+            "column": "ingress_no",
+            "direction": "asc"
+          }
+        ],
+        "result_cardinality": "many",
+        "required_index_id": "idx:command_ingress:idempotency_history",
+        "execution_status": "intent_only"
+      }
+    ],
+    "historical_contract": {
+      "schema_10_and_earlier_artifacts": "byte_immutable",
+      "upgrade": "single_transaction_additive_or_full_rollback",
+      "claimed_identifier_foreign_keys": "forbidden",
+      "opaque_or_fabricated_target": "forbidden"
+    }
+  }
+}

@@ -37,6 +37,7 @@ import {
   renderSchema7To8Upgrade,
   renderSchema8To9Upgrade,
   renderSchema9To10Upgrade,
+  renderSchema10To11Upgrade,
 } from './ddl.js';
 import { calculateDatabaseSqliteSchemaIdentity } from './database-identity.js';
 import {
@@ -52,6 +53,7 @@ import {
   loadSchema7ExecutableSchemaSource,
   loadSchema8ExecutableSchemaSource,
   loadSchema9ExecutableSchemaSource,
+  loadSchema10ExecutableSchemaSource,
 } from './source.js';
 import {
   createMigratedDatabase,
@@ -77,12 +79,15 @@ const schema8Source = loadSchema8ExecutableSchemaSource();
 const schema8Migration = renderMigration(schema8Source);
 const schema9Source = loadSchema9ExecutableSchemaSource();
 const schema9Migration = renderMigration(schema9Source);
+const schema10Source = loadSchema10ExecutableSchemaSource();
+const schema10Migration = renderMigration(schema10Source);
 const schema4To5Upgrade = renderSchema4To5Upgrade(schema4Source, schema5Source);
 const schema5To6Upgrade = renderSchema5To6Upgrade(schema5Source, schema6Source);
 const schema6To7Upgrade = renderSchema6To7Upgrade(schema6Source, schema7Source);
 const schema7To8Upgrade = renderSchema7To8Upgrade(schema7Source, schema8Source);
 const schema8To9Upgrade = renderSchema8To9Upgrade(schema8Source, schema9Source);
-const schema9To10Upgrade = renderSchema9To10Upgrade(schema9Source, source);
+const schema9To10Upgrade = renderSchema9To10Upgrade(schema9Source, schema10Source);
+const schema10To11Upgrade = renderSchema10To11Upgrade(schema10Source, source);
 
 function q(identifier: string): string {
   return `"${identifier.replaceAll('"', '""')}"`;
@@ -179,7 +184,7 @@ function withDatabase(
 }
 
 describe('G1.1 executable workflow runtime schema', () => {
-  it('keeps Schema 5/6/7/8/9 frozen and selects an additive fresh Schema 10 migration', () => {
+  it('keeps Schema 5/6/7/8/9/10 frozen and selects an additive fresh Schema 11 migration', () => {
     const schema5Path = path.join(
       import.meta.dirname,
       'migration/workflow-runtime-schema-v1.sql',
@@ -204,14 +209,19 @@ describe('G1.1 executable workflow runtime schema', () => {
       import.meta.dirname,
       'migration/workflow-runtime-schema-v10.sql',
     );
+    const schema11Path = path.join(
+      import.meta.dirname,
+      'migration/workflow-runtime-schema-v11.sql',
+    );
     const schema5Bytes = fs.readFileSync(schema5Path, 'utf8');
     const schema6Bytes = fs.readFileSync(schema6Path, 'utf8');
     const schema7Bytes = fs.readFileSync(schema7Path, 'utf8');
     const schema8Bytes = fs.readFileSync(schema8Path, 'utf8');
     const schema9Bytes = fs.readFileSync(schema9Path, 'utf8');
     const schema10Bytes = fs.readFileSync(schema10Path, 'utf8');
+    const schema11Bytes = fs.readFileSync(schema11Path, 'utf8');
     expect(G1_ARTIFACT_PATHS.migration).toBe(
-      'migration/workflow-runtime-schema-v10.sql',
+      'migration/workflow-runtime-schema-v11.sql',
     );
     expect(schema5Bytes).toBe(schema5Migration.sql);
     expect(rawHash(schema5Bytes)).toBe(
@@ -233,7 +243,11 @@ describe('G1.1 executable workflow runtime schema', () => {
     expect(rawHash(schema9Bytes)).toBe(
       'sha256:4591e2dd417d439c813026816572e8a66e9d088efa6a8de88ebfb38a68cf9837',
     );
-    expect(schema10Bytes).toBe(migration.sql);
+    expect(schema10Bytes).toBe(schema10Migration.sql);
+    expect(rawHash(schema10Bytes)).toBe(
+      'sha256:269645a9f093dc35fd35a04336d71e38cc17b7168584752f9b9bdfc106f46fad',
+    );
+    expect(schema11Bytes).toBe(migration.sql);
 
     const root = fs.mkdtempSync(
       path.join(os.tmpdir(), 'icarus-schema5-schema6-paths-'),
@@ -262,6 +276,10 @@ describe('G1.1 executable workflow runtime schema', () => {
       path.join(root, 'schema10.db'),
       schema10Bytes,
     );
+    const schema11Database = createMigratedDatabase(
+      path.join(root, 'schema11.db'),
+      schema11Bytes,
+    );
     try {
       expect(schema5Database.pragma('user_version', { simple: true })).toBe(5);
       expect(schema6Database.pragma('user_version', { simple: true })).toBe(6);
@@ -271,6 +289,9 @@ describe('G1.1 executable workflow runtime schema', () => {
       expect(schema10Database.pragma('user_version', { simple: true })).toBe(
         10,
       );
+      expect(schema11Database.pragma('user_version', { simple: true })).toBe(
+        11,
+      );
     } finally {
       schema5Database.close();
       schema6Database.close();
@@ -278,6 +299,7 @@ describe('G1.1 executable workflow runtime schema', () => {
       schema8Database.close();
       schema9Database.close();
       schema10Database.close();
+      schema11Database.close();
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
@@ -328,14 +350,15 @@ describe('G1.1 executable workflow runtime schema', () => {
         built.schema7To8UpgradeSql,
         built.schema8To9UpgradeSql,
         built.schema9To10UpgradeSql,
+        built.schema10To11UpgradeSql,
       ),
     ).toThrow('Schema 3 to 4 upgrade SQL must not be empty');
     const payload = built.dependencyManifest
       .payload as unknown as G1SchemaDependencyManifestPayload;
     expect(() => assertClosedSchemaDependencyManifest(payload)).not.toThrow();
     expect(payload).toMatchObject({
-      member_count: 23,
-      physical_member_count: 22,
+      member_count: 25,
+      physical_member_count: 24,
       construction_provenance_count: 1,
     });
     expect(payload.members.map((member) => member.role)).toEqual([
@@ -352,6 +375,7 @@ describe('G1.1 executable workflow runtime schema', () => {
       'child_completion_lineage_schema_prerequisite',
       'map_terminal_consumption_schema_prerequisite',
       'domain_claim_handoff_schema_prerequisite',
+      'runtime_command_ingress_schema_prerequisite',
       'sqlite_execution_profile',
       'schema_manifest',
       'canonical_migration',
@@ -362,6 +386,7 @@ describe('G1.1 executable workflow runtime schema', () => {
       'schema7_to_schema8_upgrade',
       'schema8_to_schema9_upgrade',
       'schema9_to_schema10_upgrade',
+      'schema10_to_schema11_upgrade',
     ]);
     expect(payload.members).toEqual(
       expect.arrayContaining([
@@ -371,10 +396,10 @@ describe('G1.1 executable workflow runtime schema', () => {
             'store',
             'schema',
             'migration',
-            'workflow-runtime-schema-v10.sql',
+            'workflow-runtime-schema-v11.sql',
           ].join('/'),
           ref: {
-            id: 'icarus.workflow-runtime-schema-v10-migration',
+            id: 'icarus.workflow-runtime-schema-v11-migration',
             version: '1',
           },
           semantic_hash: rawHash(built.migrationSql),
@@ -413,6 +438,10 @@ describe('G1.1 executable workflow runtime schema', () => {
         expect.objectContaining({
           role: 'schema9_to_schema10_upgrade',
           semantic_hash: rawHash(built.schema9To10UpgradeSql),
+        }),
+        expect.objectContaining({
+          role: 'schema10_to_schema11_upgrade',
+          semantic_hash: rawHash(built.schema10To11UpgradeSql),
         }),
       ]),
     );
@@ -476,6 +505,7 @@ describe('G1.1 executable workflow runtime schema', () => {
         built.schema7To8UpgradeSql,
         built.schema8To9UpgradeSql,
         built.schema9To10UpgradeSql,
+        built.schema10To11UpgradeSql,
       );
       for (const relativePath of [
         'unrelated/new-contract.json',
@@ -497,6 +527,7 @@ describe('G1.1 executable workflow runtime schema', () => {
         built.schema7To8UpgradeSql,
         built.schema8To9UpgradeSql,
         built.schema9To10UpgradeSql,
+        built.schema10To11UpgradeSql,
       );
       expect(after).toEqual(before);
       expect(after).toEqual(built.dependencyManifest);
@@ -541,6 +572,7 @@ describe('G1.1 executable workflow runtime schema', () => {
         built.schema7To8UpgradeSql,
         built.schema8To9UpgradeSql,
         built.schema9To10UpgradeSql,
+        built.schema10To11UpgradeSql,
       );
       const originalPayload = built.dependencyManifest
         .payload as unknown as G1SchemaDependencyManifestPayload;
@@ -590,6 +622,7 @@ describe('G1.1 executable workflow runtime schema', () => {
           built.schema7To8UpgradeSql,
           built.schema8To9UpgradeSql,
           built.schema9To10UpgradeSql,
+          built.schema10To11UpgradeSql,
         ),
       ).toThrow('query_catalog published semantic identity drifted');
 
@@ -611,12 +644,13 @@ describe('G1.1 executable workflow runtime schema', () => {
           built.schema7To8UpgradeSql,
           built.schema8To9UpgradeSql,
           built.schema9To10UpgradeSql,
+          built.schema10To11UpgradeSql,
         ),
       ).toThrow();
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }
-  });
+  }, 15_000);
 
   it('rejects missing members, duplicate role/path, unknown fields, and hash mismatch', () => {
     const built = checkG1Artifacts();
@@ -766,14 +800,26 @@ describe('G1.1 executable workflow runtime schema', () => {
                   schema_raw_hash: generatedSchemaRawHash,
                 }
               : {};
-          expect(() =>
+          const insertInvalid = () =>
             insertRow(database, metadata.name, {
               ...validCapacityInvocation,
               ...validWorkflowValue,
               ...validGeneratedSchemaContent,
               [column.name]: '__invalid_closed_enum__',
-            }),
-          ).toThrow(checkId as string);
+            });
+          if (
+            metadata.name ===
+              'workflow_runtime_command_ingress_invocations' &&
+            ['resolution_result', 'authorization_result', 'execution_result'].includes(
+              column.name,
+            )
+          ) {
+            expect(insertInvalid).toThrow(
+              /command_ingress_must_start_prepared|ck:workflow_runtime_command_ingress_invocations:/,
+            );
+          } else {
+            expect(insertInvalid).toThrow(checkId as string);
+          }
           checked += 1;
         }
       }
@@ -822,6 +868,219 @@ describe('G1.1 executable workflow runtime schema', () => {
           workflow_id: 'workflow',
         }),
       ).toThrow('exactly_one');
+    });
+  });
+
+  it('enforces closed immutable ingress audit without claimed-target foreign keys', () => {
+    withDatabase((database) => {
+      const foreignKeys = database
+        .prepare(
+          'PRAGMA foreign_key_list("workflow_runtime_command_ingress_invocations")',
+        )
+        .all() as Array<{ from: string; table: string }>;
+      expect(foreignKeys).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            from: 'resolved_command_id',
+            table: 'workflow_runtime_command_invocations',
+          }),
+          expect.objectContaining({
+            from: 'resolved_invocation_id',
+            table: 'workflow_runtime_command_invocations',
+          }),
+        ]),
+      );
+      expect(
+        foreignKeys.some((foreignKey) =>
+          foreignKey.from.startsWith('claimed_'),
+        ),
+      ).toBe(false);
+
+      const insertPrepared = (
+        id: string,
+        claimedWorkflowId: string | null,
+        claimedRunId: string | null,
+      ) =>
+        database
+          .prepare(
+            `INSERT INTO workflow_runtime_command_ingress_invocations (
+               id, idempotency_domain, idempotency_key, ingress_no,
+               submitted_command_id, canonical_request_json,
+               submitted_request_hash, command_type, claimed_target_kind,
+               claimed_workflow_id, claimed_run_id, claimed_node_id,
+               claimed_retry_schedule_id, claimed_effect_operation_id,
+               claimed_operational_blocker_id, actor_ref, actor_kind,
+               auth_session_ref, entrypoint, source_feature_id,
+               delegation_chain_ref, resolution_result, authorization_result,
+               execution_result, denial_code, canonical_result_json,
+               canonical_result_hash, resolved_command_id,
+               resolved_invocation_id, requested_at_ms, decided_at_ms,
+               applied_at_ms
+             ) VALUES (?, 'human:owner:runtime_center', ?, 1, ?, '{}', ?,
+               'pause_run', ?, ?, ?, NULL, NULL, NULL, NULL, 'human:owner',
+               'human', 'session:owner', 'runtime_center', NULL, NULL,
+               'prepared', 'pending', 'prepared', NULL, NULL, NULL, NULL,
+               NULL, 100, NULL, NULL)`,
+          )
+          .run(
+            id,
+            `key:${id}`,
+            `command:${id}`,
+            hash(`request:${id}`),
+            claimedWorkflowId === null ? 'run' : 'workflow',
+            claimedWorkflowId,
+            claimedRunId,
+          );
+
+      expect(() =>
+        insertPrepared('ingress:zero', null, null),
+      ).toThrow('ck:command_ingress:claimed_target_exactly_one');
+      expect(() =>
+        insertPrepared('ingress:multi', 'workflow:claimed', 'run:claimed'),
+      ).toThrow('ck:command_ingress:claimed_target_exactly_one');
+
+      insertPrepared('ingress:missing-target', null, 'run:does-not-exist');
+      expect(() =>
+        database
+          .prepare(
+            `UPDATE workflow_runtime_command_ingress_invocations
+                SET resolution_result='target_not_found',
+                    authorization_result='not_evaluated',
+                    execution_result='denied', denial_code='target_not_found',
+                    canonical_result_json='{}', canonical_result_hash=?,
+                    decided_at_ms=99
+              WHERE id='ingress:missing-target'`,
+          )
+          .run(hash('result:chronology')),
+      ).toThrow('ck:command_ingress:chronology');
+      database
+        .prepare(
+          `UPDATE workflow_runtime_command_ingress_invocations
+              SET resolution_result='target_not_found',
+                  authorization_result='not_evaluated',
+                  execution_result='denied', denial_code='target_not_found',
+                  canonical_result_json='{}', canonical_result_hash=?,
+                  decided_at_ms=100
+            WHERE id='ingress:missing-target'`,
+        )
+        .run(hash('result:missing-target'));
+      expect(() =>
+        database
+          .prepare(
+            `UPDATE workflow_runtime_command_ingress_invocations
+                SET decided_at_ms=101 WHERE id='ingress:missing-target'`,
+          )
+          .run(),
+      ).toThrow('command_ingress_terminal_transition_invalid');
+      expect(() =>
+        database
+          .prepare(
+            `DELETE FROM workflow_runtime_command_ingress_invocations
+              WHERE id='ingress:missing-target'`,
+          )
+          .run(),
+      ).toThrow('command_ingress_is_immutable');
+
+      insertPrepared('ingress:fake-resolved', null, 'run:does-not-exist');
+      expect(() =>
+        database
+          .prepare(
+            `UPDATE workflow_runtime_command_ingress_invocations
+                SET resolution_result='resolved', authorization_result='allowed',
+                    execution_result='applied', canonical_result_json='{}',
+                    canonical_result_hash=?, resolved_command_id='command:fake',
+                    resolved_invocation_id='invocation:fake', decided_at_ms=100,
+                    applied_at_ms=100
+              WHERE id='ingress:fake-resolved'`,
+          )
+          .run(hash('result:fake-resolved')),
+      ).toThrow('FOREIGN KEY constraint failed');
+
+      database.pragma('foreign_keys = OFF');
+      expect(() =>
+        seedRow(database, 'workflow_runtime_commands', {
+          command_id: 'command:starts-terminal',
+          command_type: 'pause_run',
+          workflow_id: null,
+          run_id: 'run:claimed',
+          node_id: null,
+          retry_schedule_id: null,
+          effect_operation_id: null,
+          operational_blocker_id: null,
+          canonical_result_value_id: 'value:terminal',
+          canonical_result_hash: hash('value:terminal'),
+          finalized_at_ms: 101,
+        }),
+      ).toThrow('runtime_command_must_start_pending');
+      seedRow(database, 'workflow_runtime_commands', {
+        command_id: 'command:immutable',
+        command_type: 'pause_run',
+        workflow_id: null,
+        run_id: 'run:claimed',
+        node_id: null,
+        retry_schedule_id: null,
+        effect_operation_id: null,
+        operational_blocker_id: null,
+        canonical_result_value_id: null,
+        canonical_result_hash: null,
+        finalized_at_ms: null,
+        created_at_ms: 100,
+      });
+      expect(() =>
+        database
+          .prepare(
+            `UPDATE workflow_runtime_commands SET reason_code='rewritten'
+              WHERE command_id='command:immutable'`,
+          )
+          .run(),
+      ).toThrow('runtime_command_identity_is_immutable');
+      database
+        .prepare(
+          `UPDATE workflow_runtime_commands
+              SET canonical_result_value_id='value:terminal',
+                  canonical_result_hash=?, finalized_at_ms=101
+            WHERE command_id='command:immutable'`,
+        )
+        .run(hash('value:terminal'));
+      expect(() =>
+        database
+          .prepare(
+            `UPDATE workflow_runtime_commands SET finalized_at_ms=102
+              WHERE command_id='command:immutable'`,
+          )
+          .run(),
+      ).toThrow('runtime_command_terminalization_invalid');
+      expect(() =>
+        database
+          .prepare(
+            `DELETE FROM workflow_runtime_commands
+              WHERE command_id='command:immutable'`,
+          )
+          .run(),
+      ).toThrow('runtime_command_is_immutable');
+
+      seedRow(database, 'workflow_runtime_command_invocations', {
+        id: 'invocation:immutable',
+        command_id: 'command:immutable',
+        invocation_no: 1,
+      });
+      expect(() =>
+        database
+          .prepare(
+            `UPDATE workflow_runtime_command_invocations
+                SET decided_at_ms=decided_at_ms
+              WHERE id='invocation:immutable'`,
+          )
+          .run(),
+      ).toThrow('runtime_command_invocation_is_immutable');
+      expect(() =>
+        database
+          .prepare(
+            `DELETE FROM workflow_runtime_command_invocations
+              WHERE id='invocation:immutable'`,
+          )
+          .run(),
+      ).toThrow('runtime_command_invocation_is_immutable');
     });
   });
 
@@ -1058,12 +1317,28 @@ describe('G1.1 executable workflow runtime schema', () => {
 
       seedRow(database, 'workflow_runtime_commands', {
         command_id: 'command:ttl',
+        command_type: 'request_administrative_abandon',
+        workflow_id: 'workflow:blocker',
+        run_id: null,
+        node_id: null,
+        retry_schedule_id: null,
+        effect_operation_id: null,
+        operational_blocker_id: null,
+        expected_row_version: 0,
+        request_hash: hash('command:ttl:request'),
+        evidence_manifest_value_id: 'value:command:ttl:evidence',
+        evidence_manifest_hash: hash('command:ttl:evidence'),
         created_at_ms: 1000,
       });
       expect(() =>
         seedRow(database, 'workflow_runtime_command_confirmations', {
           id: 'confirmation:bad',
           request_command_id: 'command:ttl',
+          workflow_id: 'workflow:blocker',
+          expected_workflow_row_version: 0,
+          request_hash: hash('command:ttl:request'),
+          evidence_manifest_value_id: 'value:command:ttl:evidence',
+          evidence_manifest_hash: hash('command:ttl:evidence'),
           expires_at_ms: 300999,
         }),
       ).toThrow('command_confirmation_ttl_invalid');

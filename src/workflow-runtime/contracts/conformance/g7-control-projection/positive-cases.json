@@ -12,7 +12,7 @@
         "case_id": "authenticated_gateway_audit",
         "category": "positive",
         "surface": "Command",
-        "assertion": "authenticated server actor produces Header and Invocation",
+        "assertion": "every authenticated call appends ingress audit and resolved calls also bind Header and Invocation",
         "handler": "g7_command_production",
         "operation": {
           "scenario_key": "g7:positive:authenticated_gateway_audit",
@@ -31,13 +31,13 @@
           "duplicate_authoritative_writes": 0,
           "projection_can_write_runtime": false
         },
-        "binding_hash": "sha256:ba1776a836956a4b30965c31a4727592c10d22e3c40628bd19bf4da30c30b8f6"
+        "binding_hash": "sha256:0f92220b6c0f2d9bd1e9f53f22170a22311d979dfd0c65ce7bdc6ffe7320d390"
       },
       {
         "case_id": "command_duplicate_conflict",
         "category": "positive",
         "surface": "Command",
-        "assertion": "same key exact request duplicates and drift conflicts without mutation",
+        "assertion": "exact replay preserves Header canonical result without reauthorization or execution and appends duplicate audits",
         "handler": "g7_command_production",
         "operation": {
           "scenario_key": "g7:positive:command_duplicate_conflict",
@@ -56,7 +56,7 @@
           "duplicate_authoritative_writes": 0,
           "projection_can_write_runtime": false
         },
-        "binding_hash": "sha256:ebe2b6e65e2be0f9aca502af00e084a4c6988896c260c1bfde38efd0d170f660"
+        "binding_hash": "sha256:074ddb8e9569a0ce3e21500676e7df9d10dfc6afd8c0a9fccf65ea19b51e3764"
       },
       {
         "case_id": "pause_resume_recovery",
@@ -735,5 +735,5 @@
       }
     ]
   },
-  "hash": "sha256:0efe66d6bd5d75893c1e83c504c44bf205292adeb67ddf2eda78ddcf35a68726"
+  "hash": "sha256:e4205a276eee22a225bfaaa4562401f954b68bc66ae947ab0d13d50bdbd4d119"
 }

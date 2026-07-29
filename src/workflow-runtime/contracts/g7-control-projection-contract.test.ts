@@ -64,7 +64,7 @@ describe('current G7 Control / Card / Projection / Recovery Contract Pack', () =
       expect.arrayContaining([
         expect.objectContaining({
           name: 'g6_dynamic_close_accepted_candidate',
-          hash: 'sha256:34c32ecc104f7c440b2f80ab03f19f5c8231722486b88c3601f1ae0f8cea86be',
+          hash: 'sha256:666db064b6f08174daf9f59acc6e12f554c0dd4471ca0e167454205eca77ed8f',
         }),
         expect.objectContaining({
           name: 'workflow_runtime_command_protocol',
@@ -75,17 +75,26 @@ describe('current G7 Control / Card / Projection / Recovery Contract Pack', () =
           hash: 'sha256:3d5474096d89fbd723e34e0d2f9d1dadd1b955b5fc36ff447d026257852cac79',
         }),
         expect.objectContaining({
-          name: 'database_schema_10',
-          hash: 'sha256:05169ddfdc2c53371a0e4464dcc8b109608e1ff9b3d0276478da464c11266682',
+          name: 'database_schema_11',
+          hash: 'sha256:d4dfd9e1beaea10ab7ecca33308d0624fe7ae4c45518a98729198ed7c6f09375',
         }),
       ]),
     );
-    expect(protocol.payload.authority_residuals).toEqual([
-      expect.objectContaining({
-        code: 'BLOCKED_BY_SPEC_UNRESOLVED_TARGET_INVOCATION_AUDIT',
-        behavior: 'target_not_found_returns_invocation_id_null',
-      }),
-    ]);
+    expect(protocol.payload.authority_residuals).toEqual([]);
+    expect(protocol.payload).toMatchObject({
+      schema_change_required: true,
+      authenticated_ingress_audit: {
+        relation: 'workflow_runtime_command_ingress_invocations',
+        append_per_authenticated_call: true,
+        pre_resolution: true,
+        claimed_target: 'closed_exactly_one_typed_non_fk_union',
+        unresolved_terminal_denials: [
+          'target_not_found',
+          'target_kind_invalid',
+        ],
+        unresolved_resolved_identity: 'forbidden',
+      },
+    });
   });
 
   it('binds every fixture to a closed production surface, operation, and oracle', () => {

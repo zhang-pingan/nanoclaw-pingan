@@ -36,9 +36,9 @@ describe('G5 Basic Runtime readiness audit', () => {
       'conformance/g5-basic-runtime-repair/g5-basic-runtime-repair-protocol@1.json',
     );
     expect(protocol.payload).toMatchObject({
-      database_schema_version: 10,
+      database_schema_version: 11,
       database_schema_hash:
-        'sha256:1ff4fd63239e85630923fa16e204645367958ae487933338a6f676ec9be6faad',
+        'sha256:4d096ce9c2ed47a195c36d11a6540a3c0191183a521b59a1520279a0ffaf9be2',
       plan_authority:
         'persisted_hash_verified_sealed_plan_plus_exact_generated_content_and_binding_rows',
       generated_value_authority:
@@ -52,8 +52,8 @@ describe('G5 Basic Runtime readiness audit', () => {
     expect(bindings).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          name: 'database_schema_10',
-          hash: 'sha256:05169ddfdc2c53371a0e4464dcc8b109608e1ff9b3d0276478da464c11266682',
+          name: 'database_schema_11',
+          hash: 'sha256:d4dfd9e1beaea10ab7ecca33308d0624fe7ae4c45518a98729198ed7c6f09375',
         }),
         expect.objectContaining({
           name: 'r020_child_consumption_lineage',
@@ -69,7 +69,7 @@ describe('G5 Basic Runtime readiness audit', () => {
         }),
         expect.objectContaining({
           name: 'g4_node_output_envelope_authority_successor',
-          hash: 'sha256:b38643bc516b176988fd143fef6bc13b92389682ffb4e49aec01e9ff0861bec5',
+          hash: 'sha256:ac46ca96d081f189f041c98aa9bb8bafe391a0e505514d41351f2ff797f594a2',
         }),
       ]),
     );
@@ -80,9 +80,9 @@ describe('G5 Basic Runtime readiness audit', () => {
           'g2_current_compiler_3_0_6_generated_output_schema_replay_authority',
       ),
     ).toMatchObject({
-      hash: 'sha256:91b8745e5024382569648b6627d469452d3ff2551e61c0ee2a66f323814ef880',
+      hash: 'sha256:54c4030977a9aef6f7c713c18085d5fc5cb52632dc4f86732c3a7137b2da9edf',
       bundle_hash:
-        'sha256:8c269ac93025279d6751664e2da9246727b9c553b8e1def5bc06d82067076332',
+        'sha256:7b60eec3adfa1308e185c050d2c82a9725e41a880ea4670fd2f21cc29c2378a7',
     });
     const readiness = readArtifact(
       'conformance/current/g2-generated-output-schema-authority-replay-v8/g2-g5-readiness@2.json',

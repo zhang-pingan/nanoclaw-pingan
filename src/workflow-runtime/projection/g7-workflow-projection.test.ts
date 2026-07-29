@@ -26,6 +26,7 @@ import {
 } from './runtime-center-renderer/entry.js';
 import {
   calculateWorkflowProjectionEventHash,
+  WorkflowProjectionRebuildAuthority,
   WorkflowProjectionStore,
   type RuntimeCenterView,
   type WorkflowProjectionEvent,
@@ -152,13 +153,16 @@ describe('G7 Workflow Projection and Runtime Center API', () => {
 
   it('atomically switches validated rebuild generations and preserves failures', () => {
     const source = new WorkflowProjectionStore();
-    consumeRows(source, [row('workflow:1', 1), row('workflow:2', 2)]);
-    const exported = {
-      rows: source.rows('workflows'),
-      rowsHash: source.exportRowsHash('workflows'),
-      sourceHeadSeq: source.status('workflows').projected_head_seq,
-    };
-    const target = new WorkflowProjectionStore();
+    const sourceEvents = consumeRows(source, [
+      row('workflow:1', 1),
+      row('workflow:2', 2),
+    ]);
+    const authority = new WorkflowProjectionRebuildAuthority(
+      source,
+      'projection-authority:g7',
+    );
+    const exported = authority.export('workflows');
+    const target = new WorkflowProjectionStore('g7.1', authority);
     const rebuilt = target.rebuild('workflows', 'rebuild:g7:1', exported, 500);
     expect(rebuilt.disposition).toBe('rebuilt');
     expect(target.rows('workflows')).toEqual(exported.rows);
@@ -168,15 +172,29 @@ describe('G7 Workflow Projection and Runtime Center API', () => {
       disposition: 'duplicate',
       generationId: rebuilt.generationId,
     });
-
-    const before = target.canonicalState('workflows');
+    expect(
+      source.consume(
+        event(3, sourceEvents[1]!.eventHash, [row('workflow:3', 3)]),
+      ),
+    ).toBe('applied');
+    const driftedJobExport = authority.export('workflows');
     expect(() =>
       target.rebuild(
         'workflows',
-        'rebuild:g7:bad',
-        { ...exported, rowsHash: badHash },
-        502,
+        'rebuild:g7:1',
+        driftedJobExport,
+        501,
       ),
+    ).toThrow(/projection_rebuild_job_conflict/);
+    expect(target.rows('workflows')).toEqual(exported.rows);
+
+    const before = target.canonicalState('workflows');
+    const corrupted = authority.export('workflows') as {
+      rowsHash: typeof badHash;
+    } & typeof exported;
+    corrupted.rowsHash = badHash;
+    expect(() =>
+      target.rebuild('workflows', 'rebuild:g7:bad', corrupted, 502),
     ).toThrow(/projection_rebuild_hash_mismatch/);
     expect(target.rows('workflows')).toEqual(exported.rows);
     expect(target.status('workflows')).toMatchObject({
@@ -184,6 +202,24 @@ describe('G7 Workflow Projection and Runtime Center API', () => {
       degradation_code: 'projection_rebuild_hash_mismatch',
     });
     expect(before).not.toBe(target.canonicalState('workflows'));
+
+    const forgedSource = new WorkflowProjectionStore();
+    consumeRows(forgedSource, [
+      row('workflow:forged', 1, { summary: { label: 'forged' } }),
+    ]);
+    const forged = {
+      rows: forgedSource.rows('workflows'),
+      rowsHash: forgedSource.exportRowsHash('workflows'),
+      sourceHeadSeq: forgedSource.status('workflows').projected_head_seq,
+    };
+    expect(() =>
+      new WorkflowProjectionStore().rebuild(
+        'workflows',
+        'rebuild:g7:forged',
+        forged as unknown as Parameters<WorkflowProjectionStore['rebuild']>[2],
+        503,
+      ),
+    ).toThrow(/projection_rebuild_source_untrusted/);
   });
 
   it('binds signed cursors to view, filters, sort, and snapshot head', () => {
@@ -291,22 +327,22 @@ describe('G7 Workflow Projection and Runtime Center API', () => {
   });
 
   it('restricts rebuild to a diagnostic Human actor', () => {
-    const projection = new WorkflowProjectionStore();
-    const api = new RuntimeCenterProjectionApi(projection, Buffer.alloc(32, 5));
-    const exported = {
-      rows: [] as readonly WorkflowProjectionRow[],
-      rowsHash: domainSeparatedSha256(
-        'icarus:workflow-projection-rows:1\n',
-        [] as unknown as JsonObject,
-      ),
-      sourceHeadSeq: 0,
-    };
+    const source = new WorkflowProjectionStore();
+    const authority = new WorkflowProjectionRebuildAuthority(
+      source,
+      'projection-authority:runtime-center',
+    );
+    const projection = new WorkflowProjectionStore('g7.1', authority);
+    const api = new RuntimeCenterProjectionApi(
+      projection,
+      Buffer.alloc(32, 5),
+      authority,
+    );
     expectApiCode(
       () =>
         api.rebuild(
           'workflows',
           'job:denied',
-          exported,
           {
             actorKind: 'automation',
             permissions: new Set(['runtime.diagnose']),
@@ -319,7 +355,6 @@ describe('G7 Workflow Projection and Runtime Center API', () => {
       api.rebuild(
         'workflows',
         'job:allowed',
-        exported,
         { actorKind: 'human', permissions: new Set(['runtime.diagnose']) },
         601,
       ).disposition,

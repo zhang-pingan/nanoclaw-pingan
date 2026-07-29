@@ -27,6 +27,7 @@ import { applyNodeOutputEnvelopeSchemaPrerequisite } from './node-output-envelop
 import { applyChildCompletionLineageSchemaPrerequisite } from './child-completion-lineage-source.js';
 import { applyMapTerminalConsumptionSchemaPrerequisite } from './map-terminal-consumption-source.js';
 import { applyDomainClaimHandoffSchemaPrerequisite } from './domain-claim-handoff-source.js';
+import { applyRuntimeCommandIngressSchemaPrerequisite } from './runtime-command-ingress-source.js';
 
 interface AdditiveTableExtension {
   name: string;
@@ -113,15 +114,15 @@ function assertSchema3ExecutableSource(source: ExecutableSchemaSource): void {
 }
 
 function assertExecutableSource(source: ExecutableSchemaSource): void {
-  if (source.database_schema_version !== 10) {
-    throw new Error('Current executable Database Schema must be version 10');
+  if (source.database_schema_version !== 11) {
+    throw new Error('Current executable Database Schema must be version 11');
   }
-  if (source.tables.length !== 87) {
-    throw new Error(`Expected 87 v1 tables, received ${source.tables.length}`);
+  if (source.tables.length !== 88) {
+    throw new Error(`Expected 88 v1 tables, received ${source.tables.length}`);
   }
-  if (source.queries.length !== 46) {
+  if (source.queries.length !== 47) {
     throw new Error(
-      `Expected 46 query intents, received ${source.queries.length}`,
+      `Expected 47 query intents, received ${source.queries.length}`,
     );
   }
   assertUnique(
@@ -417,12 +418,44 @@ export function loadCurrentExecutableSchemaSource(
 ): ExecutableSchemaSource {
   const inputs = readPinnedSchemaInputArtifacts({ contractsRoot });
   const schema9 = buildSchema9ExecutableSource(inputs);
+  const schema10Applied = applyDomainClaimHandoffSchemaPrerequisite(
+    schema9.tables,
+    schema9.queries,
+    inputs.domain_claim_handoff_schema_prerequisite.artifact,
+  );
+  const applied = applyRuntimeCommandIngressSchemaPrerequisite(
+    schema10Applied.tables,
+    schema10Applied.queries,
+    inputs.runtime_command_ingress_schema_prerequisite.artifact,
+  );
+  const result: ExecutableSchemaSource = {
+    ...schema9,
+    database_schema_version: 11,
+    tables: applied.tables,
+    queries: applied.queries,
+    logical_inputs: {
+      ...schema9.logical_inputs,
+      domain_claim_handoff_schema_prerequisite_hash:
+        inputs.domain_claim_handoff_schema_prerequisite.artifact.hash,
+      runtime_command_ingress_schema_prerequisite_hash:
+        inputs.runtime_command_ingress_schema_prerequisite.artifact.hash,
+    },
+  };
+  assertExecutableSource(result);
+  return result;
+}
+
+export function loadSchema10ExecutableSchemaSource(
+  contractsRoot?: string,
+): ExecutableSchemaSource {
+  const inputs = readPinnedSchemaInputArtifacts({ contractsRoot });
+  const schema9 = buildSchema9ExecutableSource(inputs);
   const applied = applyDomainClaimHandoffSchemaPrerequisite(
     schema9.tables,
     schema9.queries,
     inputs.domain_claim_handoff_schema_prerequisite.artifact,
   );
-  const result: ExecutableSchemaSource = {
+  return {
     ...schema9,
     database_schema_version: 10,
     tables: applied.tables,
@@ -433,8 +466,6 @@ export function loadCurrentExecutableSchemaSource(
         inputs.domain_claim_handoff_schema_prerequisite.artifact.hash,
     },
   };
-  assertExecutableSource(result);
-  return result;
 }
 
 function buildSchema9ExecutableSource(

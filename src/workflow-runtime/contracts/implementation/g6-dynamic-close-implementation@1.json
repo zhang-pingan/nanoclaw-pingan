@@ -33,7 +33,7 @@
       },
       {
         "path": "src/workflow-runtime/runtime/lifecycle.ts",
-        "raw_sha256": "sha256:b61e56d84871c8d5aa840710a310de57163a3390fd309e1cf9585bf127572d21"
+        "raw_sha256": "sha256:aeb84824bee44ec078f133cad004d9215a0ee32914ebcbaea0956cf631d9ceb0"
       },
       {
         "path": "src/workflow-runtime/runtime/plan-authority.ts",
@@ -41,14 +41,14 @@
       },
       {
         "path": "src/workflow-runtime/runtime/reconciler.ts",
-        "raw_sha256": "sha256:e695585679d0ee07ed0f22886f72af92ca3307bf7b35a7f145f5c43d7f1720f2"
+        "raw_sha256": "sha256:3d0a72734ade4b293f88b9a321124526c27cce76cc9fb96b94c647281b8bf256"
       },
       {
         "path": "src/workflow-runtime/runtime/root-finalizer.ts",
         "raw_sha256": "sha256:346a16f123bc1fa84da89558335ebec32ccf5d52481a7f08332537903bfdd1a3"
       }
     ],
-    "source_tree_hash": "sha256:a27a2e1999dc775366b16715d76ebc5e40f6323d58c8314131020c30a2fd9a23"
+    "source_tree_hash": "sha256:fa4a341d7d777f722d8b245a49ebf1ea349e2aba2ccd0fb1adc117e0368d7387"
   },
-  "hash": "sha256:d5f8fdd11b95f34ab36a441ceca14a69a7187f841af6e8c2bfa8050289c9d214"
+  "hash": "sha256:42252429bf1c1b730a5def6aae91acbc89fcb0463c7dfeb0693c497967b36095"
 }

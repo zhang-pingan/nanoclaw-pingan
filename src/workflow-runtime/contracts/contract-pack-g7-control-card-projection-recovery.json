@@ -26,7 +26,7 @@
           "id": "icarus.workflow-g7-control-card-projection-recovery-protocol",
           "version": "1.0.0"
         },
-        "hash": "sha256:0d74d2b45fe44b04ec19234a6ad514d614f51bc9f9ca7d4a49b7c3aef7d36f13"
+        "hash": "sha256:3ee3c176b99ec8be51b5cef9da6d4f452c290857d83883aeb0b434ee134fa105"
       },
       {
         "format": "icarus.workflow-g7-control-card-projection-recovery-positive-cases/1",
@@ -34,7 +34,7 @@
           "id": "icarus.workflow-g7-control-card-projection-recovery-positive-cases",
           "version": "1.0.0"
         },
-        "hash": "sha256:0efe66d6bd5d75893c1e83c504c44bf205292adeb67ddf2eda78ddcf35a68726"
+        "hash": "sha256:e4205a276eee22a225bfaaa4562401f954b68bc66ae947ab0d13d50bdbd4d119"
       },
       {
         "format": "icarus.workflow-g7-control-card-projection-recovery-negative-cases/1",
@@ -42,7 +42,7 @@
           "id": "icarus.workflow-g7-control-card-projection-recovery-negative-cases",
           "version": "1.0.0"
         },
-        "hash": "sha256:0b85691a186af3073b4d9f370162b53b40baa0976d6209529c31dbd22cf1f083"
+        "hash": "sha256:4eded709aca848663a23cbb71dd975b05a5c008f4f8a3c900793dd117927a2e0"
       },
       {
         "format": "icarus.workflow-g7-control-card-projection-recovery-fault-cases/1",
@@ -58,7 +58,7 @@
           "id": "icarus.workflow-g7-control-card-projection-recovery-reference-authority",
           "version": "1.0.0"
         },
-        "hash": "sha256:60aa823011345c9abe95c3860010f7d7f142b5ab5595297b3c7f7abcfc16a99b"
+        "hash": "sha256:acf971b26e277d5c0ce655258bc671791ab1dd64d9c00fc82e1dea11957164c8"
       },
       {
         "format": "icarus.workflow-g7-control-card-projection-recovery-implementation/1",
@@ -66,10 +66,10 @@
           "id": "icarus.workflow-g7-control-card-projection-recovery-implementation",
           "version": "1.0.0"
         },
-        "hash": "sha256:37d80650e79af280dc611d0d2168742ef69acb9cb74cea7204f5fb4b523eb296"
+        "hash": "sha256:b1ded97326a2eb633e77f1b4e7692db0c24c6e05c2284321aabfd1f97f1d6e53"
       }
     ],
-    "member_tree_hash": "sha256:f58ccb55a428b2441442d02e9077ea9735cd19a09908cd8549b6afb29eacf4c7"
+    "member_tree_hash": "sha256:e8562ff29f6b765dc3f06771da36db2a32e2e30ddb63d384339aad40de9153aa"
   },
-  "hash": "sha256:b6fa3c48fd14d94fa75e28edc4afea597cfdd37eea9141c71e9e986ed866325b"
+  "hash": "sha256:4071a50c15ead0a303f7bcca00e322bb6809b980d828757e171dd5f41882829a"
 }
