@@ -80,9 +80,9 @@ describe('G5 Basic Runtime readiness audit', () => {
           'g2_current_compiler_3_0_6_generated_output_schema_replay_authority',
       ),
     ).toMatchObject({
-      hash: 'sha256:54c4030977a9aef6f7c713c18085d5fc5cb52632dc4f86732c3a7137b2da9edf',
+      hash: 'sha256:8c586a05ef9a7f61783f3dcef47f950b9247bb77d430c57ac7eff0ae759c0105',
       bundle_hash:
-        'sha256:7b60eec3adfa1308e185c050d2c82a9725e41a880ea4670fd2f21cc29c2378a7',
+        'sha256:9af424179813f4a1ae815ee165881bf6c5a17d2a962c780fc179b495202ec357',
     });
     const readiness = readArtifact(
       'conformance/current/g2-generated-output-schema-authority-replay-v8/g2-g5-readiness@2.json',
