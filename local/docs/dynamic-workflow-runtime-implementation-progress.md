@@ -1,9 +1,9 @@
 # Dynamic Workflow Runtime 实施进度
 
-> **状态**: `G8_CERTIFICATION_CONSTRUCTION_IN_PROGRESS`
+> **状态**: `G8_RELEASE_READINESS_DIRECTED_REPAIR_CANDIDATE_PENDING_FRESH_INDEPENDENT_ACCEPTANCE`
 > **当前 Gate**: G0-G7与R-020/R-021/R-022=`DONE`；G8=`IN_PROGRESS/NOT_DONE`；G9=`NOT_READY`
-> **后续边界**: 由唯一continuous G8 worker完成release/profile/limits/smoke/benchmark完整certification candidate；不得实现或激活G9
-> **最后更新**: 2026-07-29
+> **后续边界**: 当前repair candidate必须重新执行fresh independent G8 boundary acceptance；不得自验为`DONE`，不得实现或激活G9；扩展认证方案只有用户明确决定时才可另行启动
+> **最后更新**: 2026-07-30
 > **规范权威**: `local/docs/dynamic-workflow-dag-framework.md`
 
 ## 文档职责
@@ -118,7 +118,7 @@ Agent Container 运行于独立 VM，Node identity 由 VM image gate 保证；�
 | G5 Basic Runtime | `DONE` | current G1-G4 authority + current G2 authority | accepted G5语义不变；Schema 11与G7共享source identity只在current pack/evidence机械级联 | R-022 closure + 本原子G7 repair提交 |
 | G6 Dynamic / Close | `DONE` | G5 + R-022 fresh independent regression closure | controller确认fresh independent whole-Gate acceptance已在clean `main@dd3c10831dd2e9da91dcb83f28e321d538f41a05` PASS；G7 repair只机械级联current Schema/G5/shared-source prerequisites，不重开accepted G6语义 | `dd3c108` + controller acceptance + 本原子G7 repair提交 |
 | G7 Control / Card / Projection / Recovery | `DONE` | G6 | controller确认fresh independent static-source-and-existing-tests-only whole-Gate acceptance已在exact clean `main@549e8ee59e3a55f7886aed5a591f60d1c4725d26`统一PASS；无blocker、无`SECURITY_VALIDATION_NOT_RUN`、无其他`NOT_RUN` | `4b68940` + `7ec7aee` + replacement repairs + `549e8ee` + controller acceptance |
-| G8 Certification | `IN_PROGRESS/NOT_DONE` | G7 | 首个compatibility切片以Store-owned TEMP subtree ID set替换T7a超长动态`IN (...)`，并机械级联current G6/G7 machine authority；release/profile/limits/smoke/benchmark与完整certification exit继续由同一worker施工 | 本原子G8 compatibility提交 |
+| G8 Certification | `IN_PROGRESS/NOT_DONE` | G7 | current release-readiness Gate的首个fresh independent acceptance对`3505b9e`统一FAIL；本原子repair把readiness artifact exact绑定startup-smoke report hash，并使每个Beyond case实际执行authority规定的`1+5` rejection observations；仍待新的fresh independent acceptance | `3505b9e` + 本原子repair提交 |
 | G9 Production Activation | `NOT_READY` | G8 + fresh current G0/G0.10 manifests | activation + Capacity genesis/preservation audit + startup/empty-state or Recipe smoke | - |
 
 ## 工作包总览
@@ -136,7 +136,7 @@ Agent Container 运行于独立 VM，Node identity 由 VM image gate 保证；�
 | I8 | Subgraph、Expand、Map、child scope | `IN_PROGRESS` | G6 subgraph/expand/map与T7b已随whole-Gate acceptance闭合；G7不改写其closed child authority |
 | I9 | Completion、Cancel、Compensation、Finalization、Recovery | `IN_PROGRESS` | G6 T7a/T7b/T8与Root Finalization已accepted；G7 T7c/T6e/last-blocker restoration/administrative abandon/Recovery complete candidate等待whole-Gate acceptance |
 | I10 | Runtime Command、Capacity Admin、Runtime Center、Trace | `IN_PROGRESS` | G7 Gateway现在为每次authenticated调用追加pre-resolution ingress identity；resolved调用再绑定Header/Invocation，missing/invalid target不伪造target；Deadline/Card/Projection/Runtime Center/Capacity candidate等待whole-Gate acceptance |
-| I11 | Contract Pack、managed runtime toolchain/launcher、测试模型、发布门禁、absence baseline | `IN_PROGRESS` | G7 whole-Gate已accepted；G8 current G6/G7 exact source dependency已机械级联，release/profile/limits/smoke/benchmark certification authority正在施工 |
+| I11 | Contract Pack、managed runtime toolchain/launcher、测试模型、发布门禁、absence baseline | `IN_PROGRESS` | G7 whole-Gate已accepted；G8 current readiness repair已重建exact release/startup/readiness evidence并完成内部affected-chain self-check，等待fresh independent acceptance；扩展认证方案未执行 |
 
 ## G0 施工切片
 
@@ -3244,3 +3244,17 @@ Current machine authority固定六例为T3 `route_group`、T7 `mixed_lifecycle`�
 内部shadow验证矩阵：managed typecheck/build PASS；targeted Prettier、`bash -n`、`git diff --check` PASS；G8 release/model/runner/artifact `8/8`、stable Launcher/toolchain `6/6`、startup integration `1/1`、Store `36/36`、Schema `28/28`、G3 `101/101`、G4 `2/2`、frozen ownership `1/1`、G5 core/readiness/blocker `135/135 + 7/7 + 6/6`、G6 core/readiness `24/24 + 40/40`、G7 `55/55`全部PASS。此前同一candidate源码边界的whole G0为`104 passed / 7 intentional skips`、G2为`101/101`；最终格式化只改变G8/current identity bytes，不改变这些Gate语义，G5-G8 generate/check已再次串行通过。一次G3并发运行的单例5秒超时经单测`5/5`及`--maxWorkers=1`完整`101/101`复核确认无语义失败；一次Schema隔离runtime路径不满足既有字面`/Icarus/toolchains/node/`约束，随后按authority从默认active managed installation完整`28/28`通过。Startup integration在macOS默认per-user `os.tmpdir()`的冷release复制/全量hash上两次分别耗时`9592.846083/7057.673708 ms`而保留为FAIL事实；将该专项的隔离runtime/store根固定为Stage统一的`/private/tmp`后，在不预热、不提高5000 ms ceiling且不修改Production smoke的条件下完整`1/1`通过，随后已用新test source重建上述最终release并重跑正式smoke/readiness。
 
 本Stage没有设计或执行新的security-sensitive identity/integrity动态对抗probe、异常权威状态构造、保护绕过或credential/secret场景；该维度只映射静态源码和仓库已有测试，最终report与本账本均记录`SECURITY_VALIDATION_NOT_RUN`，不能据此记为PASS。扩展认证方案为current Gate范围外`NOT_RUN`；formal fresh independent G8 acceptance尚未运行。本candidate没有实现或激活Production loader、activation、real ingress/network、真实Adapter/user data、Production Registry pointer、Capacity genesis/preservation、startup activation或真实Runtime DB。G0-G7与R-020/R-021/R-022保持`DONE`；G8仍为`IN_PROGRESS/NOT_DONE`等待controller从exact clean candidate创建fresh independent acceptance；G9保持`NOT_READY`且不得开放。
+
+### 2026-07-30：G8 first boundary FAIL两项finding定向repair candidate
+
+**结论**：`G8_RELEASE_READINESS_DIRECTED_REPAIR_CANDIDATE_PENDING_FRESH_INDEPENDENT_ACCEPTANCE / VALID_G8_BOUNDARY_FAIL_COUNT_1 / G8_IN_PROGRESS_NOT_DONE / G9_NOT_READY`。Fresh independent G8 boundary acceptance对exact candidate `3505b9e3ff4524d946bf71e4a8378a39540f6676`统一FAIL；这是G8首次有效boundary FAIL。本continuous G8 main lineage只修复`FINDING-G8-RUNTIME-KEY-BINDING`与Beyond sample evidence，不执行扩展认证方案、不修改frozen historical authority、不开放下游Gate，也不把内部self-check写成formal acceptance。
+
+`FINDING-G8-RUNTIME-KEY-BINDING`保持`SECURITY_SENSITIVE_VALIDATION`分类。Current `G8ReadinessReport` closed contract新增exact `startup_smoke_harness_ref/hash`与`startup_smoke_report_hash`；readiness生成入口先strict parse并按`icarus:startup-smoke-report:1`重算startup report hash，再逐项绑定同一release manifest/artifact/Core/Schema/Launcher/managed Node/native SQLite/Profile identity，最后把startup report自身domain-separated hash写入readiness hashed payload。Read-only checker独立重算两个report hash并要求readiness内的startup report/harness identity与实际startup artifact逐字相等。该repair只使用静态source/diff、仓库已有G8 schema/runner/release/startup tests和normal positive generation/checker；没有新增或执行动态对抗probe、异常authority构造或可执行绕过步骤，继续记录`SECURITY_VALIDATION_NOT_RUN`，不声明security PASS。
+
+Beyond repair把每个T3/T7/T8 representative的`warmup_iterations=1`与`measurement_iterations=5`落实为六次真实guard invocation。每次observation都在Production callback和业务事务前调用同一Supported Limit guard，分别计算real-file database before/after raw hash、要求callback未进入、`affected_rows=0`且hash不变；closed report schema固定六条observation，checker固定顺序为`warmup:1`后`measurement:1..5`并逐条验证。Existing runner test直接使用authority默认迭代数并验证三个Beyond case各六条实际observation；没有降低pre-transaction/write rejection或Supported Limits。
+
+Current content-addressed依赖按foundation→managed build/release install→stable Launcher bind→startup smoke→readiness顺序重建。Startup harness保持`sha256:f3a812de84979c259cb47296fb08141b48f445a41995aea6bbe970ff118cef37`；readiness harness更新为`sha256:d279d3bda29f00f351e72fdb4121ac71338a462fc52ebaad3f99d2dfed193bd5`。Exact release/Core为`sha256:8234f51bc669f5c5119e6b3fee80565827b7af061b9013a59e513c90b09f9243` / `sha256:2778eef831bcff49bfff80df4d8a63f6f8a05164664c28d5f4537902e25dd5f5`；stable Launcher identity最终再次确认`content_addressed_release + v26.5.0 + darwin/arm64`。Startup smoke在隔离real-file Store以`2935.7990839999998 ms`通过，report=`sha256:ed5a15c8bfb267bb01eb43826249580b83368d1f6207d1e513884d23e19cb88c`。Readiness report=`sha256:222691989044f781e57f7e4d8113e93ada3de0a3d81a5a32cc291c146404563e`，明确`certification_status=not_certified`并exact包含上述startup report hash；Supported maxima为T3 `222.26991699999962 ms`、T7 `127.65479199999754 ms`、T8 `16.00550000000294 ms`。
+
+Compliant construction shadow self-check全部PASS：managed typecheck/build；G8 foundation generate/check与readiness read-only check；G8 release/model/runner/artifact `8/8`，其中每个Beyond case为实际`1+5`；stable Launcher/toolchain whole-G0 `105 passed / 7 intentional skips`；startup integration `1/1`；Schema `28/28`、Store `36/36`、G2 `101/101`、G3 `101/101`、G4 `2/2`、frozen ownership `1/1`、G5 `135/135 + 7/7 + 6/6`、G6 `24/24 + 40/40`、G7 `55/55`。首轮focused runner在active binding仍为prior content-addressed release时按`candidate_development`前置条件fail closed；使用正常managed `bind-core`恢复development binding后同一existing suite `8/8`通过，随后最终恢复上述exact release binding。`git diff --check` PASS。
+
+Frozen/lockfile/G9 boundary均保持：Schema/migration、current/frozen G2、Golden/sealed/review、frozen ownership、G5/G6/G7 Contract Pack相对`3505b9e`零diff；`.nvmrc`、root lockfile、agent-runner lockfile SHA-256分别为`904636927bbfe077d1a82001e3c09a336737410831611fa294eeeb27babf2c81` / `2b8c87e5549915e2d53c1eecdabef3ebb149bc8f03054d40f1924d93bf2bd085` / `d9b4b5d77dc6478348b81d74d65e2af1d3596ce45eea6742cae20cf105db379c`且零diff。`local/docs/dynamic-workflow-runtime-extended-certification-plan.md`零diff且未运行；repair changed-path scan没有G9/Production loader/activation/ingress/network/Adapter surface。两个isolated `/private/tmp/icarus-g8-repair-*`运行目录已删除。G8继续`IN_PROGRESS/NOT_DONE`，只允许controller从本clean candidate创建新的fresh independent acceptance；G9继续`NOT_READY`。

@@ -6,9 +6,9 @@
   },
   "status": "pass",
   "certification_status": "not_certified",
-  "release_manifest_hash": "sha256:70efad4c1a6500ed57544735de2e96ef82df7c679369d989b6f3bbda81e4a038",
-  "release_artifact_hash": "sha256:c4b9fb28a96f835955bfc214c4cce3db3c8096ccb2920f1c291459aab9041df8",
-  "core_build_hash": "sha256:1164aa53bf0551e801e60d9a89059e2e9edf12206fbcbd20fa5779da324e64f8",
+  "release_manifest_hash": "sha256:4648abdfdda3ae63d618edd5250df40ee47b51772c12743ca86801738132f7a2",
+  "release_artifact_hash": "sha256:8234f51bc669f5c5119e6b3fee80565827b7af061b9013a59e513c90b09f9243",
+  "core_build_hash": "sha256:2778eef831bcff49bfff80df4d8a63f6f8a05164664c28d5f4537902e25dd5f5",
   "database_schema_hash": "sha256:ad998b2d0bb5e5f158b0be6d13db79cb6a0c0650d5064b267262551af266189c",
   "runtime_launcher_hash": "sha256:01eb918209c446eabf17c9061ca78cd3a1477fa0f7effc7e7ab290da51e5f9bc",
   "runtime_toolchain_hash": "sha256:9d74186239625b0874d7f15b6af279f70da43f1f794efdf675a2c69b7c5c8286",
@@ -25,11 +25,17 @@
   "sqlite_source_id": "2026-06-03 19:12:13 d6e03d8c777cfa2d35e3b60d8ec3e0187f3e9f99d8e2ee9cac695fd6fcdf1a24",
   "sqlite_compile_options_hash": "sha256:b7145e6588d91dfdd16bd436e94007463fd4d69b6644beacc3d11ab111625d12",
   "sqlite_profile_candidate_hash": "sha256:3d69742dad2fefa8bef4ba47e375defd705e3b32920a92b105a43726436fb7af",
+  "startup_smoke_harness_ref": {
+    "id": "local_single_user_startup_smoke",
+    "version": "1.0.0"
+  },
+  "startup_smoke_harness_hash": "sha256:f3a812de84979c259cb47296fb08141b48f445a41995aea6bbe970ff118cef37",
+  "startup_smoke_report_hash": "sha256:ed5a15c8bfb267bb01eb43826249580b83368d1f6207d1e513884d23e19cb88c",
   "readiness_harness_ref": {
     "id": "local_single_user_g8_readiness",
     "version": "1.0.0"
   },
-  "readiness_harness_hash": "sha256:65f7f81b49e7612bb8d068a8014beff8427e279a947bf57a07c68b78eb5e20f8",
+  "readiness_harness_hash": "sha256:d279d3bda29f00f351e72fdb4121ac71338a462fc52ebaad3f99d2dfed193bd5",
   "warmup_iterations": 1,
   "measurement_iterations": 5,
   "cases": [
@@ -67,12 +73,12 @@
         "Graph Run event head advances by CAS exactly once"
       ],
       "statistics": {
-        "p50_ms": 255.12262499999997,
-        "p95_ms": 260.37758399999984,
-        "p99_ms": 260.37758399999984,
-        "max_ms": 260.37758399999984,
+        "p50_ms": 221.11983400000008,
+        "p95_ms": 222.26991699999962,
+        "p99_ms": 222.26991699999962,
+        "max_ms": 222.26991699999962,
         "wal_bytes": 2599752,
-        "peak_rss_bytes": 699203584,
+        "peak_rss_bytes": 645398528,
         "affected_rows": 2558
       },
       "beyond_limit_rejection": null
@@ -111,7 +117,63 @@
         },
         "database_before_hash": "sha256:dfcc92a6c8ddb3c55ecf2985d768cc5fdecbf83ef1e5f9f292ef435d4a6c5862",
         "database_after_hash": "sha256:dfcc92a6c8ddb3c55ecf2985d768cc5fdecbf83ef1e5f9f292ef435d4a6c5862",
-        "affected_rows": 0
+        "affected_rows": 0,
+        "observations": [
+          {
+            "phase": "warmup",
+            "iteration": 1,
+            "status": "rejected_before_atomic_write",
+            "error_code": "runtime_supported_limit_exceeded",
+            "database_before_hash": "sha256:dfcc92a6c8ddb3c55ecf2985d768cc5fdecbf83ef1e5f9f292ef435d4a6c5862",
+            "database_after_hash": "sha256:dfcc92a6c8ddb3c55ecf2985d768cc5fdecbf83ef1e5f9f292ef435d4a6c5862",
+            "affected_rows": 0
+          },
+          {
+            "phase": "measurement",
+            "iteration": 1,
+            "status": "rejected_before_atomic_write",
+            "error_code": "runtime_supported_limit_exceeded",
+            "database_before_hash": "sha256:dfcc92a6c8ddb3c55ecf2985d768cc5fdecbf83ef1e5f9f292ef435d4a6c5862",
+            "database_after_hash": "sha256:dfcc92a6c8ddb3c55ecf2985d768cc5fdecbf83ef1e5f9f292ef435d4a6c5862",
+            "affected_rows": 0
+          },
+          {
+            "phase": "measurement",
+            "iteration": 2,
+            "status": "rejected_before_atomic_write",
+            "error_code": "runtime_supported_limit_exceeded",
+            "database_before_hash": "sha256:dfcc92a6c8ddb3c55ecf2985d768cc5fdecbf83ef1e5f9f292ef435d4a6c5862",
+            "database_after_hash": "sha256:dfcc92a6c8ddb3c55ecf2985d768cc5fdecbf83ef1e5f9f292ef435d4a6c5862",
+            "affected_rows": 0
+          },
+          {
+            "phase": "measurement",
+            "iteration": 3,
+            "status": "rejected_before_atomic_write",
+            "error_code": "runtime_supported_limit_exceeded",
+            "database_before_hash": "sha256:dfcc92a6c8ddb3c55ecf2985d768cc5fdecbf83ef1e5f9f292ef435d4a6c5862",
+            "database_after_hash": "sha256:dfcc92a6c8ddb3c55ecf2985d768cc5fdecbf83ef1e5f9f292ef435d4a6c5862",
+            "affected_rows": 0
+          },
+          {
+            "phase": "measurement",
+            "iteration": 4,
+            "status": "rejected_before_atomic_write",
+            "error_code": "runtime_supported_limit_exceeded",
+            "database_before_hash": "sha256:dfcc92a6c8ddb3c55ecf2985d768cc5fdecbf83ef1e5f9f292ef435d4a6c5862",
+            "database_after_hash": "sha256:dfcc92a6c8ddb3c55ecf2985d768cc5fdecbf83ef1e5f9f292ef435d4a6c5862",
+            "affected_rows": 0
+          },
+          {
+            "phase": "measurement",
+            "iteration": 5,
+            "status": "rejected_before_atomic_write",
+            "error_code": "runtime_supported_limit_exceeded",
+            "database_before_hash": "sha256:dfcc92a6c8ddb3c55ecf2985d768cc5fdecbf83ef1e5f9f292ef435d4a6c5862",
+            "database_after_hash": "sha256:dfcc92a6c8ddb3c55ecf2985d768cc5fdecbf83ef1e5f9f292ef435d4a6c5862",
+            "affected_rows": 0
+          }
+        ]
       }
     },
     {
@@ -169,12 +231,12 @@
         "all descendant close requests, epochs, work manifests, and cleanup keys commit atomically"
       ],
       "statistics": {
-        "p50_ms": 144.62537499999962,
-        "p95_ms": 149.59833300000173,
-        "p99_ms": 149.59833300000173,
-        "max_ms": 149.59833300000173,
+        "p50_ms": 123.40191599999889,
+        "p95_ms": 127.65479199999754,
+        "p99_ms": 127.65479199999754,
+        "max_ms": 127.65479199999754,
         "wal_bytes": 9953952,
-        "peak_rss_bytes": 734756864,
+        "peak_rss_bytes": 983138304,
         "affected_rows": 4488
       },
       "beyond_limit_rejection": null
@@ -213,7 +275,63 @@
         },
         "database_before_hash": "sha256:ecd8065a5853a6e3254ecae8d118cc3f106b1b7fe76b29cf693bb25c17cd8bfc",
         "database_after_hash": "sha256:ecd8065a5853a6e3254ecae8d118cc3f106b1b7fe76b29cf693bb25c17cd8bfc",
-        "affected_rows": 0
+        "affected_rows": 0,
+        "observations": [
+          {
+            "phase": "warmup",
+            "iteration": 1,
+            "status": "rejected_before_atomic_write",
+            "error_code": "runtime_supported_limit_exceeded",
+            "database_before_hash": "sha256:ecd8065a5853a6e3254ecae8d118cc3f106b1b7fe76b29cf693bb25c17cd8bfc",
+            "database_after_hash": "sha256:ecd8065a5853a6e3254ecae8d118cc3f106b1b7fe76b29cf693bb25c17cd8bfc",
+            "affected_rows": 0
+          },
+          {
+            "phase": "measurement",
+            "iteration": 1,
+            "status": "rejected_before_atomic_write",
+            "error_code": "runtime_supported_limit_exceeded",
+            "database_before_hash": "sha256:ecd8065a5853a6e3254ecae8d118cc3f106b1b7fe76b29cf693bb25c17cd8bfc",
+            "database_after_hash": "sha256:ecd8065a5853a6e3254ecae8d118cc3f106b1b7fe76b29cf693bb25c17cd8bfc",
+            "affected_rows": 0
+          },
+          {
+            "phase": "measurement",
+            "iteration": 2,
+            "status": "rejected_before_atomic_write",
+            "error_code": "runtime_supported_limit_exceeded",
+            "database_before_hash": "sha256:ecd8065a5853a6e3254ecae8d118cc3f106b1b7fe76b29cf693bb25c17cd8bfc",
+            "database_after_hash": "sha256:ecd8065a5853a6e3254ecae8d118cc3f106b1b7fe76b29cf693bb25c17cd8bfc",
+            "affected_rows": 0
+          },
+          {
+            "phase": "measurement",
+            "iteration": 3,
+            "status": "rejected_before_atomic_write",
+            "error_code": "runtime_supported_limit_exceeded",
+            "database_before_hash": "sha256:ecd8065a5853a6e3254ecae8d118cc3f106b1b7fe76b29cf693bb25c17cd8bfc",
+            "database_after_hash": "sha256:ecd8065a5853a6e3254ecae8d118cc3f106b1b7fe76b29cf693bb25c17cd8bfc",
+            "affected_rows": 0
+          },
+          {
+            "phase": "measurement",
+            "iteration": 4,
+            "status": "rejected_before_atomic_write",
+            "error_code": "runtime_supported_limit_exceeded",
+            "database_before_hash": "sha256:ecd8065a5853a6e3254ecae8d118cc3f106b1b7fe76b29cf693bb25c17cd8bfc",
+            "database_after_hash": "sha256:ecd8065a5853a6e3254ecae8d118cc3f106b1b7fe76b29cf693bb25c17cd8bfc",
+            "affected_rows": 0
+          },
+          {
+            "phase": "measurement",
+            "iteration": 5,
+            "status": "rejected_before_atomic_write",
+            "error_code": "runtime_supported_limit_exceeded",
+            "database_before_hash": "sha256:ecd8065a5853a6e3254ecae8d118cc3f106b1b7fe76b29cf693bb25c17cd8bfc",
+            "database_after_hash": "sha256:ecd8065a5853a6e3254ecae8d118cc3f106b1b7fe76b29cf693bb25c17cd8bfc",
+            "affected_rows": 0
+          }
+        ]
       }
     },
     {
@@ -242,12 +360,12 @@
         "required Child Workflows, relations, optional Claim handoffs, Cut, checkpoint, and terminal Activation commit atomically"
       ],
       "statistics": {
-        "p50_ms": 17.38445800000045,
-        "p95_ms": 21.4061249999977,
-        "p99_ms": 21.4061249999977,
-        "max_ms": 21.4061249999977,
+        "p50_ms": 15.655166999997164,
+        "p95_ms": 16.00550000000294,
+        "p99_ms": 16.00550000000294,
+        "max_ms": 16.00550000000294,
         "wal_bytes": 659232,
-        "peak_rss_bytes": 807813120,
+        "peak_rss_bytes": 1144324096,
         "affected_rows": 454
       },
       "beyond_limit_rejection": null
@@ -282,12 +400,68 @@
         },
         "database_before_hash": "sha256:2813febc20eb8715ef6c5dbd242cc0ca97574941b524c7b80c6038459adee8d3",
         "database_after_hash": "sha256:2813febc20eb8715ef6c5dbd242cc0ca97574941b524c7b80c6038459adee8d3",
-        "affected_rows": 0
+        "affected_rows": 0,
+        "observations": [
+          {
+            "phase": "warmup",
+            "iteration": 1,
+            "status": "rejected_before_atomic_write",
+            "error_code": "runtime_supported_limit_exceeded",
+            "database_before_hash": "sha256:2813febc20eb8715ef6c5dbd242cc0ca97574941b524c7b80c6038459adee8d3",
+            "database_after_hash": "sha256:2813febc20eb8715ef6c5dbd242cc0ca97574941b524c7b80c6038459adee8d3",
+            "affected_rows": 0
+          },
+          {
+            "phase": "measurement",
+            "iteration": 1,
+            "status": "rejected_before_atomic_write",
+            "error_code": "runtime_supported_limit_exceeded",
+            "database_before_hash": "sha256:2813febc20eb8715ef6c5dbd242cc0ca97574941b524c7b80c6038459adee8d3",
+            "database_after_hash": "sha256:2813febc20eb8715ef6c5dbd242cc0ca97574941b524c7b80c6038459adee8d3",
+            "affected_rows": 0
+          },
+          {
+            "phase": "measurement",
+            "iteration": 2,
+            "status": "rejected_before_atomic_write",
+            "error_code": "runtime_supported_limit_exceeded",
+            "database_before_hash": "sha256:2813febc20eb8715ef6c5dbd242cc0ca97574941b524c7b80c6038459adee8d3",
+            "database_after_hash": "sha256:2813febc20eb8715ef6c5dbd242cc0ca97574941b524c7b80c6038459adee8d3",
+            "affected_rows": 0
+          },
+          {
+            "phase": "measurement",
+            "iteration": 3,
+            "status": "rejected_before_atomic_write",
+            "error_code": "runtime_supported_limit_exceeded",
+            "database_before_hash": "sha256:2813febc20eb8715ef6c5dbd242cc0ca97574941b524c7b80c6038459adee8d3",
+            "database_after_hash": "sha256:2813febc20eb8715ef6c5dbd242cc0ca97574941b524c7b80c6038459adee8d3",
+            "affected_rows": 0
+          },
+          {
+            "phase": "measurement",
+            "iteration": 4,
+            "status": "rejected_before_atomic_write",
+            "error_code": "runtime_supported_limit_exceeded",
+            "database_before_hash": "sha256:2813febc20eb8715ef6c5dbd242cc0ca97574941b524c7b80c6038459adee8d3",
+            "database_after_hash": "sha256:2813febc20eb8715ef6c5dbd242cc0ca97574941b524c7b80c6038459adee8d3",
+            "affected_rows": 0
+          },
+          {
+            "phase": "measurement",
+            "iteration": 5,
+            "status": "rejected_before_atomic_write",
+            "error_code": "runtime_supported_limit_exceeded",
+            "database_before_hash": "sha256:2813febc20eb8715ef6c5dbd242cc0ca97574941b524c7b80c6038459adee8d3",
+            "database_after_hash": "sha256:2813febc20eb8715ef6c5dbd242cc0ca97574941b524c7b80c6038459adee8d3",
+            "affected_rows": 0
+          }
+        ]
       }
     }
   ],
-  "cases_hash": "sha256:3096a513f6ef33d236933e57ae4c4578b1f65f3d27fb67f4c7c2279f98a2be95",
+  "cases_hash": "sha256:003d7a5c8bb824ae9e3fdedc5f7f9678ea0594f88edccfa5766869cba2443b52",
   "security_sensitive_validation": "SECURITY_VALIDATION_NOT_RUN",
   "security_validation_basis": "static_source_existing_tests_and_invariant_mapping_only",
-  "report_hash": "sha256:d66d3020fc7df6ede1208ec2d22278518f41dc8085300bdb8787a43d89729507"
+  "report_hash": "sha256:222691989044f781e57f7e4d8113e93ada3de0a3d81a5a32cc291c146404563e"
 }

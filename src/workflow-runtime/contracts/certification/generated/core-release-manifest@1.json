@@ -27,7 +27,7 @@
   "core_entry_sha256": "sha256:626b57523d0c96d8c3e1d2608b36a5c144037ef2639b5bfafcb3d2932899eef3",
   "validation_entry_relative_path": "dist/workflow-runtime/certification/release-entry.js",
   "validation_entry_sha256": "sha256:5e6c38a7eaeb4015e0d96109d17aa9fb1bb2b142643a6b91bfed6c7a93d067ff",
-  "core_build_hash": "sha256:1164aa53bf0551e801e60d9a89059e2e9edf12206fbcbd20fa5779da324e64f8",
+  "core_build_hash": "sha256:2778eef831bcff49bfff80df4d8a63f6f8a05164664c28d5f4537902e25dd5f5",
   "inventory": [
     {
       "path": "dist/agent-api.d.ts",
@@ -5079,19 +5079,19 @@
       "path": "dist/workflow-runtime/certification/benchmark-runner.d.ts.map",
       "byte_length": 947,
       "executable": false,
-      "raw_sha256": "sha256:5185bf9e396eb86881ec708d28757e8945adf9a080138c4e7d5fb03d185bb57e"
+      "raw_sha256": "sha256:41d2235eebc79f03db7b0ff2c53e18eef367707d95a5d35987cfdbc36cc53d54"
     },
     {
       "path": "dist/workflow-runtime/certification/benchmark-runner.js",
-      "byte_length": 67558,
+      "byte_length": 68484,
       "executable": false,
-      "raw_sha256": "sha256:f3262404488fa6b9b7629165a2eb7c407935a8124f5f43f672f781fb494eb790"
+      "raw_sha256": "sha256:0d28e972cf21025476901b3d007d25ba5fc766175b39728c3606dc592a09c41b"
     },
     {
       "path": "dist/workflow-runtime/certification/benchmark-runner.js.map",
-      "byte_length": 45129,
+      "byte_length": 45816,
       "executable": false,
-      "raw_sha256": "sha256:245fb2e99e02b993dc276b0b930655f54267641fb02b6e2d8f43bf432d04d0a0"
+      "raw_sha256": "sha256:794d13fd477aa78230265c610689baaf97554e19ac21e41e3a5833b3d4752e95"
     },
     {
       "path": "dist/workflow-runtime/certification/benchmark-runner.test.d.ts",
@@ -5107,15 +5107,15 @@
     },
     {
       "path": "dist/workflow-runtime/certification/benchmark-runner.test.js",
-      "byte_length": 2634,
+      "byte_length": 3514,
       "executable": false,
-      "raw_sha256": "sha256:df3de4807b6fab567eaf1f04da0c3970abe50ee3c34a9e5673eaca177fbfc8b3"
+      "raw_sha256": "sha256:c156f17a4e4c156f9087b67ff6d3a6e059f6dcb918f44b00d27a366d6cc9a53e"
     },
     {
       "path": "dist/workflow-runtime/certification/benchmark-runner.test.js.map",
-      "byte_length": 2622,
+      "byte_length": 3508,
       "executable": false,
-      "raw_sha256": "sha256:cde6ec3264c9bcb5a9dbc66662e681b602b51f8714067fb9d6eb33348e85ac12"
+      "raw_sha256": "sha256:f5cbad3732704a6233525fcc0a19feba2e3694f87e72e7000097df2a4fe820c7"
     },
     {
       "path": "dist/workflow-runtime/certification/benchmark-shapes.d.ts",
@@ -5239,27 +5239,27 @@
     },
     {
       "path": "dist/workflow-runtime/certification/g8-readiness-artifacts.d.ts",
-      "byte_length": 1530,
+      "byte_length": 1692,
       "executable": false,
-      "raw_sha256": "sha256:2490c59390ebe19ad3621f07cca4abe481e26226cdc56e5d64e73abd1e2c337e"
+      "raw_sha256": "sha256:3d69a264096c77bb4982a12f8fdca0bcc76270a2a765d1c1731bdf38db6f45d8"
     },
     {
       "path": "dist/workflow-runtime/certification/g8-readiness-artifacts.d.ts.map",
-      "byte_length": 1107,
+      "byte_length": 1217,
       "executable": false,
-      "raw_sha256": "sha256:493e3e4a1d885b21445459b2d3bb8d538fc0cef182991f6759a2b40ef8f57a25"
+      "raw_sha256": "sha256:db58607747604894501838b9acea622d204b4bac8c05c2a1b0da60f2b179f8f4"
     },
     {
       "path": "dist/workflow-runtime/certification/g8-readiness-artifacts.js",
-      "byte_length": 12424,
+      "byte_length": 16632,
       "executable": false,
-      "raw_sha256": "sha256:e5755bee2d7ad4f73130679fae994f5175c52ae529860db426002264054ddffb"
+      "raw_sha256": "sha256:f77f743d2b52e7bfc5409de171681b9d2c42d272028f6e5512d96133a10c34a5"
     },
     {
       "path": "dist/workflow-runtime/certification/g8-readiness-artifacts.js.map",
-      "byte_length": 8860,
+      "byte_length": 11541,
       "executable": false,
-      "raw_sha256": "sha256:f25ce75f0fdc2cc30c2271748b172136a92bb513d4f3cf3916af9e50d8f0a33e"
+      "raw_sha256": "sha256:6d0a64b12e7bd11c9546bd244b1c74569b912c65dc40acf1e7c3c628d92900c1"
     },
     {
       "path": "dist/workflow-runtime/certification/g8-readiness-artifacts.test.d.ts",
@@ -5275,15 +5275,15 @@
     },
     {
       "path": "dist/workflow-runtime/certification/g8-readiness-artifacts.test.js",
-      "byte_length": 3991,
+      "byte_length": 4613,
       "executable": false,
-      "raw_sha256": "sha256:bc6404a21c6de34150acde08eecb0ff5a40ce4617dcc8a9ca3b09a335c96b675"
+      "raw_sha256": "sha256:d878be53a5c5906e8c6c3eca807ebff4d982b0f5b0c968868ca258fc11e7f075"
     },
     {
       "path": "dist/workflow-runtime/certification/g8-readiness-artifacts.test.js.map",
-      "byte_length": 3186,
+      "byte_length": 3705,
       "executable": false,
-      "raw_sha256": "sha256:ad58a40c0077b534848e2e11e469fee447c6519ba81649cdf91f055810658ce3"
+      "raw_sha256": "sha256:53a7f7748bd98f5d21b33313b3e5b5f730d7f5472b3a4d5b65f1b8d1eb067b25"
     },
     {
       "path": "dist/workflow-runtime/certification/g8-readiness-cli.d.ts",
@@ -5463,19 +5463,19 @@
       "path": "dist/workflow-runtime/certification/release-validation.d.ts.map",
       "byte_length": 435,
       "executable": false,
-      "raw_sha256": "sha256:e0f550a63f513f2560c72374dc9e1f02b09b26f9480f8251e260b47f35e0334c"
+      "raw_sha256": "sha256:ef325a9b3055ebfb57c70b4aa732dd78f74ece01a297cabab903db46d3557a6e"
     },
     {
       "path": "dist/workflow-runtime/certification/release-validation.js",
-      "byte_length": 3453,
+      "byte_length": 3645,
       "executable": false,
-      "raw_sha256": "sha256:509552186579a9634ae1b5260b4a59e0cc1325542e7d9beb253a366a4d7596b4"
+      "raw_sha256": "sha256:41ebdfa69d41856cc357fea78f7e6fde05563e04b28467dc52f5407c60c31665"
     },
     {
       "path": "dist/workflow-runtime/certification/release-validation.js.map",
-      "byte_length": 3133,
+      "byte_length": 3255,
       "executable": false,
-      "raw_sha256": "sha256:169a094bf70704f7ae683efc95bcaa0e220f1a29b84e6637fc4bb8ab33847148"
+      "raw_sha256": "sha256:636cf1ec54ed07479aef6cbb33b81c24e8d24be2c6fd5d30c2565fec30dc8ca6"
     },
     {
       "path": "dist/workflow-runtime/certification/startup-smoke.d.ts",
@@ -6675,13 +6675,13 @@
       "path": "dist/workflow-runtime/contracts/certification/g8-readiness-harness@1.json",
       "byte_length": 2772,
       "executable": false,
-      "raw_sha256": "sha256:17a5c9294d01aaab925fb4615f65c74153f00350bdd455e4c711182b658dd281"
+      "raw_sha256": "sha256:59656c187fcafd157118e3cca4c5236e58cb87fac493a190b716d97f244de8be"
     },
     {
       "path": "dist/workflow-runtime/contracts/certification/g8-validation-reports-schema.json",
-      "byte_length": 12312,
+      "byte_length": 13646,
       "executable": false,
-      "raw_sha256": "sha256:b5dfbb8bf349ef5a5b9e7346d31d25ad864feadc183d22485fd7bbf6351cff32"
+      "raw_sha256": "sha256:dd04aa8a0ed600dcd582d348ff5556b0d9d2402911c9ef5e48264f309889639c"
     },
     {
       "path": "dist/workflow-runtime/contracts/certification/startup-smoke-harness@1.json",
@@ -25081,15 +25081,15 @@
     },
     {
       "path": "dist/workflow-runtime/contracts/g8-validation-types.d.ts",
-      "byte_length": 8549,
+      "byte_length": 10016,
       "executable": false,
-      "raw_sha256": "sha256:eae447ba2127a3640ea5022955b52f154a3636deeab07d409ba8a079a94ca4d1"
+      "raw_sha256": "sha256:d17bd2ff8354786a3abaab8261591962f59f5bc6476af51767f693158cbe5292"
     },
     {
       "path": "dist/workflow-runtime/contracts/g8-validation-types.d.ts.map",
-      "byte_length": 6471,
+      "byte_length": 7646,
       "executable": false,
-      "raw_sha256": "sha256:5cbc5dd924614e08ebef875bc4e9ec4754b0eddb3d0ed381ae1ad77e71341f81"
+      "raw_sha256": "sha256:8fff24e5df61a8eff2355e4717d0312e9454faacd566ba6434a2722575791f6b"
     },
     {
       "path": "dist/workflow-runtime/contracts/g8-validation-types.js",
@@ -25101,7 +25101,7 @@
       "path": "dist/workflow-runtime/contracts/g8-validation-types.js.map",
       "byte_length": 479,
       "executable": false,
-      "raw_sha256": "sha256:6aee53b650c185b35dc07ed7001bb5c234fb02b2d82f24f5b898c53c874daaeb"
+      "raw_sha256": "sha256:cc844354e2eab8fd1ef7663d3bb580c10aded0dcb32ceb7a03041d7b842ad76a"
     },
     {
       "path": "dist/workflow-runtime/contracts/gate-ownership-cli.d.ts",
@@ -56100,6 +56100,6 @@
       "raw_sha256": "sha256:fafac63ee1d805c88b99afeb7d516ebfca0c3781c1c8c1d3581f1ee9379f8d00"
     }
   ],
-  "inventory_hash": "sha256:08c22580a5aeee32c8285d66c848df223b51b76fe6500afcf064ede5bcee07a5",
-  "release_artifact_hash": "sha256:c4b9fb28a96f835955bfc214c4cce3db3c8096ccb2920f1c291459aab9041df8"
+  "inventory_hash": "sha256:7b12624d7fa2d29909fcb4d64cc91163247433e101bec30d906b5ccfe7b9fe82",
+  "release_artifact_hash": "sha256:8234f51bc669f5c5119e6b3fee80565827b7af061b9013a59e513c90b09f9243"
 }

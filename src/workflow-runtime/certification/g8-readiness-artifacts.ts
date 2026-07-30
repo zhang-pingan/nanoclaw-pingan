@@ -19,6 +19,7 @@ import type {
   G8BenchmarkTransaction,
   G8CoreReleaseManifest,
   G8ReadinessReport,
+  G8StartupSmokeReport,
 } from '../contracts/g8-validation-types.js';
 import {
   assertJsonObject,
@@ -94,19 +95,51 @@ function assertReadinessCases(
       throw new Error(`G8 ${transaction} supported representative failed`);
     }
     assertG8DimensionsWithinSupportedLimits(supported.limit_dimensions);
+    const beyondRejection = beyond?.beyond_limit_rejection;
     if (
       beyond?.statistics !== null ||
-      !beyond?.beyond_limit_rejection ||
-      beyond.beyond_limit_rejection.affected_rows !== 0 ||
-      beyond.beyond_limit_rejection.database_before_hash !==
-        beyond.beyond_limit_rejection.database_after_hash
+      !beyondRejection ||
+      beyondRejection.affected_rows !== 0 ||
+      beyondRejection.database_before_hash !==
+        beyondRejection.database_after_hash
     ) {
       throw new Error(`G8 ${transaction} Beyond Limit invariant failed`);
+    }
+    const expectedObservations = [
+      ...Array.from(
+        { length: G8_READINESS_WARMUP_ITERATIONS },
+        (_, index) => ({ phase: 'warmup', iteration: index + 1 }) as const,
+      ),
+      ...Array.from(
+        { length: G8_READINESS_MEASUREMENT_ITERATIONS },
+        (_, index) => ({ phase: 'measurement', iteration: index + 1 }) as const,
+      ),
+    ];
+    if (
+      beyondRejection.observations.length !== expectedObservations.length ||
+      beyondRejection.observations.some((observation, index) => {
+        const expected = expectedObservations[index]!;
+        return (
+          observation.phase !== expected.phase ||
+          observation.iteration !== expected.iteration ||
+          observation.status !== 'rejected_before_atomic_write' ||
+          observation.error_code !== 'runtime_supported_limit_exceeded' ||
+          observation.affected_rows !== 0 ||
+          observation.database_before_hash !==
+            observation.database_after_hash ||
+          observation.database_before_hash !==
+            beyondRejection.database_before_hash
+        );
+      })
+    ) {
+      throw new Error(
+        `G8 ${transaction} Beyond Limit observation count drifted`,
+      );
     }
     if (
       JSON.stringify(beyond.limit_dimensions) !==
         JSON.stringify(G8_READINESS_BEYOND_LIMIT_DIMENSIONS[transaction]) ||
-      JSON.stringify(beyond.beyond_limit_rejection.attempted_dimensions) !==
+      JSON.stringify(beyondRejection.attempted_dimensions) !==
         JSON.stringify(G8_READINESS_BEYOND_LIMIT_DIMENSIONS[transaction])
     ) {
       throw new Error(`G8 ${transaction} Beyond Limit dimensions drifted`);
@@ -117,6 +150,7 @@ function assertReadinessCases(
 export interface CreateG8ReadinessReportOptions {
   readonly release: G8CoreReleaseManifest;
   readonly releaseManifestHash: Sha256Hash;
+  readonly startupReport: G8StartupSmokeReport;
   readonly evidence: WorkflowRuntimeIdentityEvidence;
   readonly sqliteProfileCandidateHash: Sha256Hash;
   readonly cases: G8BenchmarkCaseObservation[];
@@ -138,7 +172,39 @@ export function createG8ReadinessReport(
   }
   assertReadinessCases(options.cases);
   const evidence = options.evidence;
+  const startupReport = options.startupReport;
+  const startupEvidence = startupReport.identity_evidence;
+  const { report_hash: startupReportHash, ...startupReportPayload } =
+    startupReport;
   if (
+    startupReportHash !==
+      domainSeparatedSha256(
+        'icarus:startup-smoke-report:1\n',
+        startupReportPayload as unknown as JsonValue,
+      ) ||
+    JSON.stringify(startupReport.startup_smoke_harness_ref) !==
+      JSON.stringify(artifacts.startupSmokeHarness.ref) ||
+    startupReport.startup_smoke_harness_hash !==
+      artifacts.startupSmokeHarness.hash ||
+    startupReport.database_schema_hash !== release.database_schema_hash ||
+    startupReport.sqlite_profile_candidate_hash !==
+      options.sqliteProfileCandidateHash ||
+    startupEvidence.release_manifest_hash !== options.releaseManifestHash ||
+    startupEvidence.release_artifact_profile_hash !==
+      release.release_artifact_hash ||
+    startupEvidence.core_build_hash !== release.core_build_hash ||
+    startupEvidence.runtime_launcher_observed_hash !==
+      release.runtime_launcher_hash ||
+    startupEvidence.managed_distribution_hash !==
+      release.managed_node_distribution_hash ||
+    startupEvidence.managed_node_executable_hash !==
+      evidence.managed_node_executable_hash ||
+    startupEvidence.better_sqlite3_native_module_hash !==
+      evidence.better_sqlite3_native_module_hash ||
+    startupEvidence.sqlite_version !== evidence.sqlite_version ||
+    startupEvidence.sqlite_source_id !== evidence.sqlite_source_id ||
+    startupEvidence.sqlite_compile_options_hash !==
+      evidence.sqlite_compile_options_hash ||
     evidence.identity_mode !== 'release_validation' ||
     evidence.validation_status !== 'release_validation' ||
     evidence.release_identity_status !== 'observed_for_validation' ||
@@ -180,6 +246,9 @@ export function createG8ReadinessReport(
     sqlite_source_id: evidence.sqlite_source_id,
     sqlite_compile_options_hash: evidence.sqlite_compile_options_hash,
     sqlite_profile_candidate_hash: options.sqliteProfileCandidateHash,
+    startup_smoke_harness_ref: startupReport.startup_smoke_harness_ref,
+    startup_smoke_harness_hash: startupReport.startup_smoke_harness_hash,
+    startup_smoke_report_hash: startupReport.report_hash,
     readiness_harness_ref: artifacts.readinessHarness.ref,
     readiness_harness_hash: artifacts.readinessHarness.hash,
     warmup_iterations: G8_READINESS_WARMUP_ITERATIONS,
@@ -224,6 +293,26 @@ function parseValidatedArtifact(filePath: string): JsonObject {
   return value;
 }
 
+export function readG8StartupSmokeReport(
+  filePath: string,
+): G8StartupSmokeReport {
+  const value = parseValidatedArtifact(filePath);
+  if (value.format !== 'icarus.startup-smoke-report/1')
+    throw new Error('G8 startup-smoke artifact kind drifted');
+  const report = value as unknown as G8StartupSmokeReport;
+  const { report_hash: reportHash, ...payload } = report;
+  if (
+    reportHash !==
+    domainSeparatedSha256(
+      'icarus:startup-smoke-report:1\n',
+      payload as unknown as JsonValue,
+    )
+  ) {
+    throw new Error('G8 startup-smoke artifact hash drifted');
+  }
+  return report;
+}
+
 export function checkG8ReadinessOutput(outputRootInput: string): {
   release: G8CoreReleaseManifest;
   startupReport: JsonObject;
@@ -234,7 +323,7 @@ export function checkG8ReadinessOutput(outputRootInput: string): {
   const release = parseG8CoreReleaseManifest(
     strictParseJsonBytes(fs.readFileSync(releasePath)),
   );
-  const startupReport = parseValidatedArtifact(
+  const startupReport = readG8StartupSmokeReport(
     path.join(outputRoot, G8_STARTUP_SMOKE_REPORT_FILENAME),
   );
   const readinessValue = parseValidatedArtifact(
@@ -273,6 +362,15 @@ export function checkG8ReadinessOutput(outputRootInput: string): {
     readinessReport.database_schema_hash !== release.database_schema_hash ||
     readinessReport.runtime_launcher_hash !== release.runtime_launcher_hash ||
     readinessReport.runtime_toolchain_hash !== release.runtime_toolchain_hash ||
+    readinessReport.startup_smoke_report_hash !== startupHash ||
+    readinessReport.startup_smoke_harness_hash !==
+      artifacts.startupSmokeHarness.hash ||
+    readinessReport.startup_smoke_harness_hash !==
+      startupReport.startup_smoke_harness_hash ||
+    JSON.stringify(readinessReport.startup_smoke_harness_ref) !==
+      JSON.stringify(artifacts.startupSmokeHarness.ref) ||
+    JSON.stringify(readinessReport.startup_smoke_harness_ref) !==
+      JSON.stringify(startupReport.startup_smoke_harness_ref) ||
     JSON.stringify(readinessReport.managed_node_distribution_ref) !==
       JSON.stringify(release.managed_node_distribution_ref) ||
     readinessReport.managed_node_distribution_hash !==

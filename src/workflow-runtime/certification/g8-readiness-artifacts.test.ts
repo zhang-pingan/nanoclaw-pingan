@@ -13,6 +13,20 @@ function readinessCase(
   profile: 'supported_limit' | 'beyond_limit',
 ) {
   const beyond = profile === 'beyond_limit';
+  const observations = [
+    { phase: 'warmup', iteration: 1 },
+    ...Array.from({ length: 5 }, (_, index) => ({
+      phase: 'measurement',
+      iteration: index + 1,
+    })),
+  ].map((observation) => ({
+    ...observation,
+    status: 'rejected_before_atomic_write',
+    error_code: 'runtime_supported_limit_exceeded',
+    database_before_hash: hash,
+    database_after_hash: hash,
+    affected_rows: 0,
+  }));
   return {
     case_id: `g8:${transaction}:${shape}:${profile}`,
     transaction,
@@ -50,6 +64,7 @@ function readinessCase(
           database_before_hash: hash,
           database_after_hash: hash,
           affected_rows: 0,
+          observations,
         }
       : null,
   };
@@ -88,6 +103,9 @@ function reportFixture() {
     sqlite_source_id: 'fixture-source',
     sqlite_compile_options_hash: hash,
     sqlite_profile_candidate_hash: hash,
+    startup_smoke_harness_ref: ref,
+    startup_smoke_harness_hash: hash,
+    startup_smoke_report_hash: hash,
     readiness_harness_ref: ref,
     readiness_harness_hash: hash,
     warmup_iterations: 1,

@@ -10,7 +10,9 @@ import { runG8BenchmarkCases } from './benchmark-runner.js';
 import {
   G8_CORE_RELEASE_MANIFEST_FILENAME,
   G8_READINESS_REPORT_FILENAME,
+  G8_STARTUP_SMOKE_REPORT_FILENAME,
   createG8ReadinessReport,
+  readG8StartupSmokeReport,
   writeG8JsonAtomic,
 } from './g8-readiness-artifacts.js';
 import {
@@ -82,6 +84,9 @@ export function runG8ReleaseValidation(options: RunG8ReleaseValidationOptions) {
   identityInstance.closeStore();
 
   const harness = loadG8FoundationArtifacts().readinessHarness.payload;
+  const startupReport = readG8StartupSmokeReport(
+    path.join(outputRoot, G8_STARTUP_SMOKE_REPORT_FILENAME),
+  );
   const casesRoot = path.join(validationRoot, 'cases');
   fs.mkdirSync(casesRoot);
   const cases = runG8BenchmarkCases({
@@ -97,6 +102,7 @@ export function runG8ReleaseValidation(options: RunG8ReleaseValidationOptions) {
   const report = createG8ReadinessReport({
     release,
     releaseManifestHash: rawSha256(releaseManifestPath),
+    startupReport,
     evidence,
     sqliteProfileCandidateHash,
     cases,

@@ -67,7 +67,10 @@
         "managed_distribution_hash": { "$ref": "#/$defs/hash" },
         "managed_installation_root": { "type": "string", "minLength": 1 },
         "better_sqlite3_version": { "const": "12.11.1" },
-        "better_sqlite3_native_module_path": { "type": "string", "minLength": 1 },
+        "better_sqlite3_native_module_path": {
+          "type": "string",
+          "minLength": 1
+        },
         "better_sqlite3_native_module_hash": { "$ref": "#/$defs/hash" },
         "sqlite_version": { "type": "string", "minLength": 1 },
         "sqlite_source_id": { "type": "string", "minLength": 1 },
@@ -118,12 +121,41 @@
         "attempted_dimensions",
         "database_before_hash",
         "database_after_hash",
-        "affected_rows"
+        "affected_rows",
+        "observations"
       ],
       "properties": {
         "status": { "const": "rejected_before_atomic_write" },
         "error_code": { "const": "runtime_supported_limit_exceeded" },
         "attempted_dimensions": { "$ref": "#/$defs/dimensions" },
+        "database_before_hash": { "$ref": "#/$defs/hash" },
+        "database_after_hash": { "$ref": "#/$defs/hash" },
+        "affected_rows": { "const": 0 },
+        "observations": {
+          "type": "array",
+          "minItems": 6,
+          "maxItems": 6,
+          "items": { "$ref": "#/$defs/beyond_limit_rejection_observation" }
+        }
+      }
+    },
+    "beyond_limit_rejection_observation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "phase",
+        "iteration",
+        "status",
+        "error_code",
+        "database_before_hash",
+        "database_after_hash",
+        "affected_rows"
+      ],
+      "properties": {
+        "phase": { "enum": ["warmup", "measurement"] },
+        "iteration": { "type": "integer", "minimum": 1, "maximum": 5 },
+        "status": { "const": "rejected_before_atomic_write" },
+        "error_code": { "const": "runtime_supported_limit_exceeded" },
         "database_before_hash": { "$ref": "#/$defs/hash" },
         "database_after_hash": { "$ref": "#/$defs/hash" },
         "affected_rows": { "const": 0 }
@@ -157,21 +189,25 @@
         "beyond_limit_rejection"
       ],
       "properties": {
-        "case_id": { "type": "string", "pattern": "^g8:(t3|t7|t8):[a-z0-9_]+:(supported_limit|beyond_limit)$" },
+        "case_id": {
+          "type": "string",
+          "pattern": "^g8:(t3|t7|t8):[a-z0-9_]+:(supported_limit|beyond_limit)$"
+        },
         "transaction": { "enum": ["t3", "t7", "t8"] },
-        "shape": { "enum": ["route_group", "mixed_lifecycle", "maximum_required_child"] },
+        "shape": {
+          "enum": ["route_group", "mixed_lifecycle", "maximum_required_child"]
+        },
         "profile": { "enum": ["supported_limit", "beyond_limit"] },
         "scale_percent": {
-          "oneOf": [
-            { "const": 100 },
-            { "type": "null" }
-          ]
+          "oneOf": [{ "const": 100 }, { "type": "null" }]
         },
         "warmup_iterations": { "const": 1 },
         "measurement_iterations": { "const": 5 },
         "dimensions": { "$ref": "#/$defs/dimensions" },
         "limit_dimensions": { "$ref": "#/$defs/dimensions" },
-        "production_entry": { "enum": ["reconcileFactT3a", "requestScopeCloseT7a", "commitRootT8"] },
+        "production_entry": {
+          "enum": ["reconcileFactT3a", "requestScopeCloseT7a", "commitRootT8"]
+        },
         "production_index_evidence": {
           "type": "array",
           "items": { "type": "string", "minLength": 1 },
@@ -184,10 +220,7 @@
           "uniqueItems": true
         },
         "statistics": {
-          "oneOf": [
-            { "$ref": "#/$defs/statistics" },
-            { "type": "null" }
-          ]
+          "oneOf": [{ "$ref": "#/$defs/statistics" }, { "type": "null" }]
         },
         "beyond_limit_rejection": {
           "oneOf": [
@@ -265,6 +298,9 @@
         "sqlite_source_id",
         "sqlite_compile_options_hash",
         "sqlite_profile_candidate_hash",
+        "startup_smoke_harness_ref",
+        "startup_smoke_harness_hash",
+        "startup_smoke_report_hash",
         "readiness_harness_ref",
         "readiness_harness_hash",
         "warmup_iterations",
@@ -307,6 +343,9 @@
         "sqlite_source_id": { "type": "string", "minLength": 1 },
         "sqlite_compile_options_hash": { "$ref": "#/$defs/hash" },
         "sqlite_profile_candidate_hash": { "$ref": "#/$defs/hash" },
+        "startup_smoke_harness_ref": { "$ref": "#/$defs/ref" },
+        "startup_smoke_harness_hash": { "$ref": "#/$defs/hash" },
+        "startup_smoke_report_hash": { "$ref": "#/$defs/hash" },
         "readiness_harness_ref": { "$ref": "#/$defs/ref" },
         "readiness_harness_hash": { "$ref": "#/$defs/hash" },
         "warmup_iterations": { "const": 1 },
@@ -318,8 +357,12 @@
           "items": { "$ref": "#/$defs/case" }
         },
         "cases_hash": { "$ref": "#/$defs/hash" },
-        "security_sensitive_validation": { "const": "SECURITY_VALIDATION_NOT_RUN" },
-        "security_validation_basis": { "const": "static_source_existing_tests_and_invariant_mapping_only" },
+        "security_sensitive_validation": {
+          "const": "SECURITY_VALIDATION_NOT_RUN"
+        },
+        "security_validation_basis": {
+          "const": "static_source_existing_tests_and_invariant_mapping_only"
+        },
         "report_hash": { "$ref": "#/$defs/hash" }
       }
     }

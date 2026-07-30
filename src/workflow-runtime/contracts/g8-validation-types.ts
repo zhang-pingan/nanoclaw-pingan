@@ -66,6 +66,27 @@ export interface G8StartupSmokeHarnessPayload extends JsonObject {
   readonly implementation_source_tree_hash: Sha256Hash;
 }
 
+export interface G8StartupSmokeReport extends JsonObject {
+  readonly format: 'icarus.startup-smoke-report/1';
+  readonly status: 'pass';
+  readonly startup_smoke_harness_ref: VersionedRef;
+  readonly startup_smoke_harness_hash: Sha256Hash;
+  readonly startup_smoke_max_duration_ms: 5000;
+  readonly duration_ms: number;
+  readonly database_schema_version: 11;
+  readonly database_schema_hash: Sha256Hash;
+  readonly sqlite_profile_candidate_hash: Sha256Hash;
+  readonly production_pragmas_verified: true;
+  readonly integrity_check_verified: true;
+  readonly foreign_key_check_verified: true;
+  readonly reopen_verified: true;
+  readonly database_bytes: number;
+  readonly wal_bytes: number;
+  readonly transaction_affected_rows: 0;
+  readonly identity_evidence: JsonObject;
+  readonly report_hash: Sha256Hash;
+}
+
 export type G8BenchmarkTransaction = 't3' | 't7' | 't8';
 export type G8BenchmarkProfile =
   | 'smoke'
@@ -164,6 +185,16 @@ export interface G8BenchmarkStatistics extends JsonObject {
   readonly affected_rows: number;
 }
 
+export interface G8BeyondLimitRejectionObservation extends JsonObject {
+  readonly phase: 'warmup' | 'measurement';
+  readonly iteration: number;
+  readonly status: 'rejected_before_atomic_write';
+  readonly error_code: 'runtime_supported_limit_exceeded';
+  readonly database_before_hash: Sha256Hash;
+  readonly database_after_hash: Sha256Hash;
+  readonly affected_rows: 0;
+}
+
 export interface G8BenchmarkCaseObservation extends JsonObject {
   readonly case_id: string;
   readonly transaction: G8BenchmarkTransaction;
@@ -185,6 +216,7 @@ export interface G8BenchmarkCaseObservation extends JsonObject {
     readonly database_before_hash: Sha256Hash;
     readonly database_after_hash: Sha256Hash;
     readonly affected_rows: 0;
+    readonly observations: G8BeyondLimitRejectionObservation[];
   } | null;
 }
 
@@ -209,6 +241,9 @@ export interface G8ReadinessReport extends JsonObject {
   readonly sqlite_source_id: string;
   readonly sqlite_compile_options_hash: Sha256Hash;
   readonly sqlite_profile_candidate_hash: Sha256Hash;
+  readonly startup_smoke_harness_ref: VersionedRef;
+  readonly startup_smoke_harness_hash: Sha256Hash;
+  readonly startup_smoke_report_hash: Sha256Hash;
   readonly readiness_harness_ref: VersionedRef;
   readonly readiness_harness_hash: Sha256Hash;
   readonly warmup_iterations: 1;

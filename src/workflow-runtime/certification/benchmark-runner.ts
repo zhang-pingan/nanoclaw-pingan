@@ -8,6 +8,7 @@ import type {
   G8BenchmarkProfile,
   G8BenchmarkStatistics,
   G8BenchmarkTransaction,
+  G8BeyondLimitRejectionObservation,
   G8SupportedLimitValues,
 } from '../contracts/g8-validation-types.js';
 import { canonicalJson, domainSeparatedSha256 } from '../contracts/hash.js';
@@ -1813,20 +1814,46 @@ function beyondLimitObservation(
   measurementIterations: number,
 ): G8BenchmarkCaseObservation {
   const dimensions = G8_READINESS_BEYOND_LIMIT_DIMENSIONS[transaction];
-  const beforeHash = rawSha256(baseDatabasePath);
-  let rejection: G8SupportedLimitError | null = null;
-  let productionEntryInvoked = false;
-  try {
-    invokeWithinG8SupportedLimits(dimensions, () => {
-      productionEntryInvoked = true;
+  const observations: G8BeyondLimitRejectionObservation[] = [];
+  const observe = (
+    phase: G8BeyondLimitRejectionObservation['phase'],
+    iteration: number,
+  ): void => {
+    const databaseBeforeHash = rawSha256(baseDatabasePath);
+    let rejection: G8SupportedLimitError | null = null;
+    let productionEntryInvoked = false;
+    try {
+      invokeWithinG8SupportedLimits(dimensions, () => {
+        productionEntryInvoked = true;
+      });
+    } catch (error) {
+      if (error instanceof G8SupportedLimitError) rejection = error;
+      else throw error;
+    }
+    const databaseAfterHash = rawSha256(baseDatabasePath);
+    if (
+      !rejection ||
+      productionEntryInvoked ||
+      databaseBeforeHash !== databaseAfterHash
+    ) {
+      throw new Error('G8 Beyond Limit did not reject before atomic write');
+    }
+    observations.push({
+      phase,
+      iteration,
+      status: 'rejected_before_atomic_write',
+      error_code: rejection.code,
+      database_before_hash: databaseBeforeHash,
+      database_after_hash: databaseAfterHash,
+      affected_rows: 0,
     });
-  } catch (error) {
-    if (error instanceof G8SupportedLimitError) rejection = error;
-    else throw error;
-  }
-  const afterHash = rawSha256(baseDatabasePath);
-  if (!rejection || productionEntryInvoked || beforeHash !== afterHash)
-    throw new Error('G8 Beyond Limit did not reject before atomic write');
+  };
+  for (let index = 1; index <= warmupIterations; index += 1)
+    observe('warmup', index);
+  for (let index = 1; index <= measurementIterations; index += 1)
+    observe('measurement', index);
+  const firstObservation = observations[0]!;
+  const finalObservation = observations.at(-1)!;
   return {
     case_id: benchmarkCaseId(transaction, shape, 'beyond_limit'),
     transaction,
@@ -1857,11 +1884,12 @@ function beyondLimitObservation(
     statistics: null,
     beyond_limit_rejection: {
       status: 'rejected_before_atomic_write',
-      error_code: rejection.code,
+      error_code: 'runtime_supported_limit_exceeded',
       attempted_dimensions: dimensions as JsonObject,
-      database_before_hash: beforeHash,
-      database_after_hash: afterHash,
+      database_before_hash: firstObservation.database_before_hash,
+      database_after_hash: finalObservation.database_after_hash,
       affected_rows: 0,
+      observations,
     },
   };
 }

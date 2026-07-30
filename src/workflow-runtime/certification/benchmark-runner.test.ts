@@ -25,8 +25,6 @@ describe('G8 real-file readiness runner', () => {
     const cases = runG8BenchmarkCases({
       rootDir: temporaryRoot('icarus-g8-readiness-runner-'),
       identityMode: 'candidate_development',
-      warmupIterations: 0,
-      measurementIterations: 1,
     });
     expect(cases).toHaveLength(6);
     for (const transaction of ['t3', 't7', 't8'] as const) {
@@ -44,6 +42,23 @@ describe('G8 real-file readiness runner', () => {
       expect(family[1]!.beyond_limit_rejection!.database_after_hash).toBe(
         family[1]!.beyond_limit_rejection!.database_before_hash,
       );
+      expect(family[1]!.warmup_iterations).toBe(1);
+      expect(family[1]!.measurement_iterations).toBe(5);
+      expect(family[1]!.beyond_limit_rejection!.observations).toMatchObject([
+        { phase: 'warmup', iteration: 1, affected_rows: 0 },
+        { phase: 'measurement', iteration: 1, affected_rows: 0 },
+        { phase: 'measurement', iteration: 2, affected_rows: 0 },
+        { phase: 'measurement', iteration: 3, affected_rows: 0 },
+        { phase: 'measurement', iteration: 4, affected_rows: 0 },
+        { phase: 'measurement', iteration: 5, affected_rows: 0 },
+      ]);
+      for (const observation of family[1]!.beyond_limit_rejection!
+        .observations) {
+        expect(observation.status).toBe('rejected_before_atomic_write');
+        expect(observation.database_after_hash).toBe(
+          observation.database_before_hash,
+        );
+      }
     }
   }, 120_000);
 
