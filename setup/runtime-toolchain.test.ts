@@ -145,23 +145,23 @@ function domainHash(domain: string, value: unknown): string {
   return `sha256:${hashBytes(`${domain}${canonicalize(value)}`)}`;
 }
 
-function createCertifiedReleaseFixture(
+function createContentAddressedReleaseFixture(
   fixture: ToolchainFixture,
   runtimeHome: string,
-): { releaseArtifactHash: string; certificationEntry: string } {
-  const certificationEntry =
+): { releaseArtifactHash: string; validationEntry: string } {
+  const validationEntry =
     'dist/workflow-runtime/certification/release-entry.js';
   const coreEntry = 'dist/index.js';
   const stage = temporaryRoot('icarus-core-release-stage-');
-  fs.mkdirSync(path.join(stage, path.dirname(certificationEntry)), {
+  fs.mkdirSync(path.join(stage, path.dirname(validationEntry)), {
     recursive: true,
   });
   fs.writeFileSync(path.join(stage, coreEntry), 'console.log("core");\n');
   fs.writeFileSync(
-    path.join(stage, certificationEntry),
-    'console.log("certification");\n',
+    path.join(stage, validationEntry),
+    'console.log("validation");\n',
   );
-  const inventory = [coreEntry, certificationEntry].sort().map((entry) => {
+  const inventory = [coreEntry, validationEntry].sort().map((entry) => {
     const bytes = fs.readFileSync(path.join(stage, entry));
     return {
       path: entry,
@@ -182,7 +182,7 @@ function createCertifiedReleaseFixture(
   const payload = {
     format: 'icarus.core-release-manifest/1',
     ref: { id: 'icarus.core', version: '1.2.14' },
-    release_scope: 'workflow_runtime_g8_certification',
+    release_scope: 'workflow_runtime_g8_validation',
     build_kind: 'release',
     platform: 'darwin',
     arch: 'arm64',
@@ -197,9 +197,9 @@ function createCertifiedReleaseFixture(
     core_entry_relative_path: coreEntry,
     core_entry_sha256: inventory.find((entry) => entry.path === coreEntry)!
       .raw_sha256,
-    certification_entry_relative_path: certificationEntry,
-    certification_entry_sha256: inventory.find(
-      (entry) => entry.path === certificationEntry,
+    validation_entry_relative_path: validationEntry,
+    validation_entry_sha256: inventory.find(
+      (entry) => entry.path === validationEntry,
     )!.raw_sha256,
     core_build_hash: domainHash('icarus:core-release-build:1\n', coreInventory),
     inventory,
@@ -220,7 +220,7 @@ function createCertifiedReleaseFixture(
     path.join(releaseRoot, 'core-release-manifest.json'),
     `${JSON.stringify({ ...payload, release_artifact_hash: releaseArtifactHash }, null, 2)}\n`,
   );
-  return { releaseArtifactHash, certificationEntry };
+  return { releaseArtifactHash, validationEntry };
 }
 
 afterEach(() => {
@@ -410,7 +410,7 @@ describe('managed runtime bootstrap', () => {
 });
 
 describe('stable runtime launcher', () => {
-  it('binds a content-addressed Core Release and forwards certification arguments', () => {
+  it('binds a content-addressed Core Release and forwards validation arguments', () => {
     const fixture = createFixture();
     const runtimeHome = temporaryRoot('icarus-runtime-home-');
     const install = runToolchain(fixture, runtimeHome, [
@@ -419,7 +419,7 @@ describe('stable runtime launcher', () => {
       fixture.archive,
     ]);
     expect(install.status, install.stderr).toBe(0);
-    const release = createCertifiedReleaseFixture(fixture, runtimeHome);
+    const release = createContentAddressedReleaseFixture(fixture, runtimeHome);
     const relative = `core-releases/${release.releaseArtifactHash.slice('sha256:'.length)}`;
     const manifest = JSON.parse(
       fs.readFileSync(
@@ -437,7 +437,9 @@ describe('stable runtime launcher', () => {
       manifest.core_build_hash,
     ]);
     expect(bind.status, bind.stderr).toBe(0);
-    expect(bind.stdout).toContain('core_binding_kind=certified_release');
+    expect(bind.stdout).toContain(
+      'core_binding_kind=content_addressed_release',
+    );
     const binding = JSON.parse(
       fs.readFileSync(
         path.join(
@@ -469,7 +471,7 @@ describe('stable runtime launcher', () => {
     });
     expect(launched.status, launched.stderr).toBe(0);
     expect(launched.stdout).toContain(
-      `core-entry=${path.join(fs.realpathSync(runtimeHome), relative, release.certificationEntry)}`,
+      `core-entry=${path.join(fs.realpathSync(runtimeHome), relative, release.validationEntry)}`,
     );
     expect(launched.stdout).toContain('core-argument=identity');
     expect(launched.stdout).toContain('core-argument=--sample');

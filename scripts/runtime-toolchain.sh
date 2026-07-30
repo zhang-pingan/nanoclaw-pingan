@@ -580,14 +580,14 @@ write_release_core_binding() {
   local release_artifact_hash="$3"
   local core_build_hash="$4"
   local core_entry_relative="$5"
-  local certification_entry_relative="$6"
+  local validation_entry_relative="$6"
   local release_root
   local manifest_real
   local manifest_sha
   local core_entry_real
   local core_entry_sha
-  local certification_entry_real
-  local certification_entry_sha
+  local validation_entry_real
+  local validation_entry_sha
   local canonical
   local binding_hash
   local binding_directory
@@ -597,7 +597,7 @@ write_release_core_binding() {
   assert_relative_safe_path "$release_relative" core_release_path_invalid
   assert_relative_safe_path "$manifest_relative" core_release_manifest_invalid
   assert_core_entry_relative "$core_entry_relative"
-  assert_core_entry_relative "$certification_entry_relative"
+  assert_core_entry_relative "$validation_entry_relative"
   [[ "$release_relative" =~ ^core-releases/[0-9a-f]{64}$ ]] || fail core_release_path_invalid "$release_relative"
   [[ "$release_artifact_hash" =~ ^sha256:[0-9a-f]{64}$ ]] || fail core_release_identity_invalid release_artifact_hash
   [[ "$core_build_hash" =~ ^sha256:[0-9a-f]{64}$ ]] || fail core_release_identity_invalid core_build_hash
@@ -625,15 +625,15 @@ write_release_core_binding() {
   esac
   core_entry_sha="sha256:$(sha256_file "$core_entry_real")"
 
-  [ -f "$release_root/$certification_entry_relative" ] || fail certification_entry_missing
-  certification_entry_real="$(resolve_self "$release_root/$certification_entry_relative")"
-  case "$certification_entry_real" in
+  [ -f "$release_root/$validation_entry_relative" ] || fail validation_entry_missing
+  validation_entry_real="$(resolve_self "$release_root/$validation_entry_relative")"
+  case "$validation_entry_real" in
     "$release_root"/*) ;;
-    *) fail certification_entry_outside_release "$certification_entry_real" ;;
+    *) fail validation_entry_outside_release "$validation_entry_real" ;;
   esac
-  certification_entry_sha="sha256:$(sha256_file "$certification_entry_real")"
+  validation_entry_sha="sha256:$(sha256_file "$validation_entry_real")"
 
-  canonical="{\"binding_kind\":\"certified_release\",\"certification_entry_relative_path\":\"${certification_entry_relative}\",\"certification_entry_sha256\":\"${certification_entry_sha}\",\"core_build_hash\":\"${core_build_hash}\",\"core_entry_relative_path\":\"${core_entry_relative}\",\"core_entry_sha256\":\"${core_entry_sha}\",\"core_release_relative_path\":\"${release_relative}\",\"format\":\"icarus.core-runtime-launch-binding/2\",\"managed_node_manifest_hash\":\"${MANIFEST_HASH}\",\"release_artifact_hash\":\"${release_artifact_hash}\",\"release_manifest_relative_path\":\"${manifest_relative}\",\"release_manifest_sha256\":\"${manifest_sha}\"}"
+  canonical="{\"binding_kind\":\"content_addressed_release\",\"core_build_hash\":\"${core_build_hash}\",\"core_entry_relative_path\":\"${core_entry_relative}\",\"core_entry_sha256\":\"${core_entry_sha}\",\"core_release_relative_path\":\"${release_relative}\",\"format\":\"icarus.core-runtime-launch-binding/2\",\"managed_node_manifest_hash\":\"${MANIFEST_HASH}\",\"release_artifact_hash\":\"${release_artifact_hash}\",\"release_manifest_relative_path\":\"${manifest_relative}\",\"release_manifest_sha256\":\"${manifest_sha}\",\"validation_entry_relative_path\":\"${validation_entry_relative}\",\"validation_entry_sha256\":\"${validation_entry_sha}\"}"
   binding_hash="sha256:$(printf '%s\n%s' 'icarus:core-runtime-launch-binding:2' "$canonical" | sha256_stdin)"
   binding_directory="$RUNTIME_HOME/core-bindings/${binding_hash#sha256:}"
   binding_file="$binding_directory/binding.json"
@@ -643,7 +643,7 @@ write_release_core_binding() {
   printf '%s\n' \
     '{' \
     '  "format": "icarus.core-runtime-launch-binding/2",' \
-    '  "binding_kind": "certified_release",' \
+    '  "binding_kind": "content_addressed_release",' \
     "  \"core_release_relative_path\": \"${release_relative}\"," \
     "  \"release_manifest_relative_path\": \"${manifest_relative}\"," \
     "  \"release_manifest_sha256\": \"${manifest_sha}\"," \
@@ -651,8 +651,8 @@ write_release_core_binding() {
     "  \"core_build_hash\": \"${core_build_hash}\"," \
     "  \"core_entry_relative_path\": \"${core_entry_relative}\"," \
     "  \"core_entry_sha256\": \"${core_entry_sha}\"," \
-    "  \"certification_entry_relative_path\": \"${certification_entry_relative}\"," \
-    "  \"certification_entry_sha256\": \"${certification_entry_sha}\"," \
+    "  \"validation_entry_relative_path\": \"${validation_entry_relative}\"," \
+    "  \"validation_entry_sha256\": \"${validation_entry_sha}\"," \
     "  \"managed_node_manifest_hash\": \"${MANIFEST_HASH}\"," \
     "  \"binding_hash\": \"${binding_hash}\"" \
     '}' > "$temporary"
@@ -678,8 +678,8 @@ assert_core_binding_keyset() {
   actual="$(sed -nE 's/^[[:space:]]*"([^\"]+)"[[:space:]]*:.*/\1/p' "$file" | LC_ALL=C sort)"
   if [ "$kind" = "development_checkout" ]; then
     expected="$(printf '%s\n' binding_hash binding_kind core_entry_relative_path core_entry_sha256 format managed_node_manifest_hash project_root | LC_ALL=C sort)"
-  elif [ "$kind" = "certified_release" ]; then
-    expected="$(printf '%s\n' binding_hash binding_kind certification_entry_relative_path certification_entry_sha256 core_build_hash core_entry_relative_path core_entry_sha256 core_release_relative_path format managed_node_manifest_hash release_artifact_hash release_manifest_relative_path release_manifest_sha256 | LC_ALL=C sort)"
+  elif [ "$kind" = "content_addressed_release" ]; then
+    expected="$(printf '%s\n' binding_hash binding_kind core_build_hash core_entry_relative_path core_entry_sha256 core_release_relative_path format managed_node_manifest_hash release_artifact_hash release_manifest_relative_path release_manifest_sha256 validation_entry_relative_path validation_entry_sha256 | LC_ALL=C sort)"
   else
     fail core_binding_invalid binding_kind
   fi
@@ -721,8 +721,8 @@ assert_release_core_binding_serialization() {
   local core_build_hash="$6"
   local entry_relative="$7"
   local entry_sha="$8"
-  local certification_relative="$9"
-  local certification_sha="${10}"
+  local validation_relative="$9"
+  local validation_sha="${10}"
   local manifest_hash="${11}"
   local binding_hash="${12}"
   local actual
@@ -732,7 +732,7 @@ assert_release_core_binding_serialization() {
   expected="$(printf '%s\n' \
     '{' \
     '  "format": "icarus.core-runtime-launch-binding/2",' \
-    '  "binding_kind": "certified_release",' \
+    '  "binding_kind": "content_addressed_release",' \
     '  "core_release_relative_path": "'"${release_relative}"'",' \
     '  "release_manifest_relative_path": "'"${manifest_relative}"'",' \
     '  "release_manifest_sha256": "'"${manifest_sha}"'",' \
@@ -740,8 +740,8 @@ assert_release_core_binding_serialization() {
     '  "core_build_hash": "'"${core_build_hash}"'",' \
     '  "core_entry_relative_path": "'"${entry_relative}"'",' \
     '  "core_entry_sha256": "'"${entry_sha}"'",' \
-    '  "certification_entry_relative_path": "'"${certification_relative}"'",' \
-    '  "certification_entry_sha256": "'"${certification_sha}"'",' \
+    '  "validation_entry_relative_path": "'"${validation_relative}"'",' \
+    '  "validation_entry_sha256": "'"${validation_sha}"'",' \
     '  "managed_node_manifest_hash": "'"${manifest_hash}"'",' \
     '  "binding_hash": "'"${binding_hash}"'"' \
     '}')"
@@ -768,7 +768,7 @@ verify_core_binding() {
   kind="$(json_string "$binding_file" binding_kind)"
   assert_core_binding_keyset "$binding_file" "$kind"
   format="$(json_string "$binding_file" format)"
-  if [ "$kind" = "certified_release" ]; then
+  if [ "$kind" = "content_addressed_release" ]; then
     verify_release_core_binding "$binding_directory" "$binding_file" "$format"
     return
   fi
@@ -824,8 +824,8 @@ verify_release_core_binding() {
   local core_build_hash
   local entry_relative
   local entry_sha
-  local certification_relative
-  local certification_sha
+  local validation_relative
+  local validation_sha
   local manifest_hash
   local binding_hash
   local release_root
@@ -842,8 +842,8 @@ verify_release_core_binding() {
   core_build_hash="$(json_string "$binding_file" core_build_hash)"
   entry_relative="$(json_string "$binding_file" core_entry_relative_path)"
   entry_sha="$(json_string "$binding_file" core_entry_sha256)"
-  certification_relative="$(json_string "$binding_file" certification_entry_relative_path)"
-  certification_sha="$(json_string "$binding_file" certification_entry_sha256)"
+  validation_relative="$(json_string "$binding_file" validation_entry_relative_path)"
+  validation_sha="$(json_string "$binding_file" validation_entry_sha256)"
   manifest_hash="$(json_string "$binding_file" managed_node_manifest_hash)"
   binding_hash="$(json_string "$binding_file" binding_hash)"
   assert_release_core_binding_serialization \
@@ -855,19 +855,19 @@ verify_release_core_binding() {
     "$core_build_hash" \
     "$entry_relative" \
     "$entry_sha" \
-    "$certification_relative" \
-    "$certification_sha" \
+    "$validation_relative" \
+    "$validation_sha" \
     "$manifest_hash" \
     "$binding_hash"
   [ "$format" = "icarus.core-runtime-launch-binding/2" ] || fail core_binding_invalid format
   [ "$manifest_hash" = "$MANIFEST_HASH" ] || fail core_binding_manifest_mismatch
-  for calculated in "$manifest_sha" "$release_artifact_hash" "$core_build_hash" "$entry_sha" "$certification_sha" "$binding_hash"; do
+  for calculated in "$manifest_sha" "$release_artifact_hash" "$core_build_hash" "$entry_sha" "$validation_sha" "$binding_hash"; do
     [[ "$calculated" =~ ^sha256:[0-9a-f]{64}$ ]] || fail core_binding_invalid hash
   done
   assert_relative_safe_path "$release_relative" core_release_path_invalid
   assert_relative_safe_path "$manifest_relative" core_release_manifest_invalid
   assert_core_entry_relative "$entry_relative"
-  assert_core_entry_relative "$certification_relative"
+  assert_core_entry_relative "$validation_relative"
   [[ "$release_relative" =~ ^core-releases/[0-9a-f]{64}$ ]] || fail core_release_path_invalid
   [ "${release_relative#core-releases/}" = "${release_artifact_hash#sha256:}" ] || fail core_release_path_mismatch
   [ -d "$RUNTIME_HOME/$release_relative" ] || fail core_release_missing "$release_relative"
@@ -886,7 +886,7 @@ verify_release_core_binding() {
   manifest_value="$(json_string "$release_manifest" format)"
   [ "$manifest_value" = "icarus.core-release-manifest/1" ] || fail core_release_manifest_identity_mismatch format
   manifest_value="$(json_string "$release_manifest" release_scope)"
-  [ "$manifest_value" = "workflow_runtime_g8_certification" ] || fail core_release_manifest_identity_mismatch release_scope
+  [ "$manifest_value" = "workflow_runtime_g8_validation" ] || fail core_release_manifest_identity_mismatch release_scope
   manifest_value="$(json_string "$release_manifest" build_kind)"
   [ "$manifest_value" = "release" ] || fail core_release_manifest_identity_mismatch build_kind
   manifest_value="$(json_string "$release_manifest" platform)"
@@ -909,21 +909,21 @@ verify_release_core_binding() {
   [ "$manifest_value" = "$entry_relative" ] || fail core_release_manifest_identity_mismatch core_entry_relative_path
   manifest_value="$(json_string "$release_manifest" core_entry_sha256)"
   [ "$manifest_value" = "$entry_sha" ] || fail core_release_manifest_identity_mismatch core_entry_sha256
-  manifest_value="$(json_string "$release_manifest" certification_entry_relative_path)"
-  [ "$manifest_value" = "$certification_relative" ] || fail core_release_manifest_identity_mismatch certification_entry_relative_path
-  manifest_value="$(json_string "$release_manifest" certification_entry_sha256)"
-  [ "$manifest_value" = "$certification_sha" ] || fail core_release_manifest_identity_mismatch certification_entry_sha256
+  manifest_value="$(json_string "$release_manifest" validation_entry_relative_path)"
+  [ "$manifest_value" = "$validation_relative" ] || fail core_release_manifest_identity_mismatch validation_entry_relative_path
+  manifest_value="$(json_string "$release_manifest" validation_entry_sha256)"
+  [ "$manifest_value" = "$validation_sha" ] || fail core_release_manifest_identity_mismatch validation_entry_sha256
   [ -f "$release_root/$entry_relative" ] || fail core_entry_missing
   resolved="$(resolve_self "$release_root/$entry_relative")"
   case "$resolved" in "$release_root"/*) ;; *) fail core_entry_outside_project ;; esac
   calculated="sha256:$(sha256_file "$resolved")"
   [ "$calculated" = "$entry_sha" ] || fail core_entry_hash_mismatch
-  [ -f "$release_root/$certification_relative" ] || fail certification_entry_missing
-  resolved="$(resolve_self "$release_root/$certification_relative")"
-  case "$resolved" in "$release_root"/*) ;; *) fail certification_entry_outside_release ;; esac
+  [ -f "$release_root/$validation_relative" ] || fail validation_entry_missing
+  resolved="$(resolve_self "$release_root/$validation_relative")"
+  case "$resolved" in "$release_root"/*) ;; *) fail validation_entry_outside_release ;; esac
   calculated="sha256:$(sha256_file "$resolved")"
-  [ "$calculated" = "$certification_sha" ] || fail certification_entry_hash_mismatch
-  canonical="{\"binding_kind\":\"certified_release\",\"certification_entry_relative_path\":\"${certification_relative}\",\"certification_entry_sha256\":\"${certification_sha}\",\"core_build_hash\":\"${core_build_hash}\",\"core_entry_relative_path\":\"${entry_relative}\",\"core_entry_sha256\":\"${entry_sha}\",\"core_release_relative_path\":\"${release_relative}\",\"format\":\"${format}\",\"managed_node_manifest_hash\":\"${manifest_hash}\",\"release_artifact_hash\":\"${release_artifact_hash}\",\"release_manifest_relative_path\":\"${manifest_relative}\",\"release_manifest_sha256\":\"${manifest_sha}\"}"
+  [ "$calculated" = "$validation_sha" ] || fail validation_entry_hash_mismatch
+  canonical="{\"binding_kind\":\"content_addressed_release\",\"core_build_hash\":\"${core_build_hash}\",\"core_entry_relative_path\":\"${entry_relative}\",\"core_entry_sha256\":\"${entry_sha}\",\"core_release_relative_path\":\"${release_relative}\",\"format\":\"${format}\",\"managed_node_manifest_hash\":\"${manifest_hash}\",\"release_artifact_hash\":\"${release_artifact_hash}\",\"release_manifest_relative_path\":\"${manifest_relative}\",\"release_manifest_sha256\":\"${manifest_sha}\",\"validation_entry_relative_path\":\"${validation_relative}\",\"validation_entry_sha256\":\"${validation_sha}\"}"
   calculated="sha256:$(printf '%s\n%s' 'icarus:core-runtime-launch-binding:2' "$canonical" | sha256_stdin)"
   [ "$calculated" = "$binding_hash" ] || fail core_binding_hash_mismatch
   [ "$(basename "$binding_directory")" = "${binding_hash#sha256:}" ] || fail core_binding_path_mismatch
@@ -1069,7 +1069,7 @@ case "$COMMAND" in
     RELEASE_ARTIFACT_HASH=""
     CORE_BUILD_HASH=""
     CORE_ENTRY_RELATIVE="dist/index.js"
-    CERTIFICATION_ENTRY_RELATIVE="dist/workflow-runtime/certification/release-entry.js"
+    VALIDATION_ENTRY_RELATIVE="dist/workflow-runtime/certification/release-entry.js"
     while [ "$#" -gt 0 ]; do
       case "$1" in
         --release-relative) [ "$#" -ge 2 ] || usage; RELEASE_RELATIVE="$2"; shift 2 ;;
@@ -1077,17 +1077,17 @@ case "$COMMAND" in
         --release-artifact-hash) [ "$#" -ge 2 ] || usage; RELEASE_ARTIFACT_HASH="$2"; shift 2 ;;
         --core-build-hash) [ "$#" -ge 2 ] || usage; CORE_BUILD_HASH="$2"; shift 2 ;;
         --core-entry) [ "$#" -ge 2 ] || usage; CORE_ENTRY_RELATIVE="$2"; shift 2 ;;
-        --certification-entry) [ "$#" -ge 2 ] || usage; CERTIFICATION_ENTRY_RELATIVE="$2"; shift 2 ;;
+        --validation-entry) [ "$#" -ge 2 ] || usage; VALIDATION_ENTRY_RELATIVE="$2"; shift 2 ;;
         *) usage ;;
       esac
     done
     [ -n "$RELEASE_RELATIVE" ] && [ -n "$RELEASE_ARTIFACT_HASH" ] && [ -n "$CORE_BUILD_HASH" ] || usage
     verify_active_distribution "$MANIFEST_PATH"
     install_launcher_components
-    write_release_core_binding "$RELEASE_RELATIVE" "$RELEASE_MANIFEST_RELATIVE" "$RELEASE_ARTIFACT_HASH" "$CORE_BUILD_HASH" "$CORE_ENTRY_RELATIVE" "$CERTIFICATION_ENTRY_RELATIVE"
+    write_release_core_binding "$RELEASE_RELATIVE" "$RELEASE_MANIFEST_RELATIVE" "$RELEASE_ARTIFACT_HASH" "$CORE_BUILD_HASH" "$CORE_ENTRY_RELATIVE" "$VALIDATION_ENTRY_RELATIVE"
     verify_core_binding
     printf 'runtime_launcher=%s\n' "$RUNTIME_LAUNCHER_PATH"
-    printf 'core_binding_kind=certified_release\n'
+    printf 'core_binding_kind=content_addressed_release\n'
     ;;
   *) usage ;;
 esac

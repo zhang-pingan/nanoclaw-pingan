@@ -64,7 +64,7 @@
       },
       {
         "path": "src/workflow-runtime/contracts/g5-runtime-readiness-audit.test.ts",
-        "raw_sha256": "sha256:730ab1e442296969c875a90649b5d7228506792465f1e8a11fa47487803a1333"
+        "raw_sha256": "sha256:ac1d98b01b870d676af6932fbb43d59519e9ebd94a5ee607ff3aa946eb09614d"
       },
       {
         "path": "src/workflow-runtime/contracts/g5-capability-outbox-blocker.test.ts",
@@ -99,7 +99,7 @@
         "raw_sha256": "sha256:06d0b8cee866ec721a34dca293ed549d948831d81966dada5feaf4312c0be513"
       }
     ],
-    "evidence_tree_hash": "sha256:f6ac0827f419c548af13313c54673a96e6a7b29da403a3d246075425655a5ea5"
+    "evidence_tree_hash": "sha256:2ff4423dffb741cf21c28e24438def3bf2c883f663f8345410b54c98864ecd79"
   },
-  "hash": "sha256:af49e0d46268871705be8635980468b2d435d5949a2debe7c3ab2ac08e165d4b"
+  "hash": "sha256:3bee6a4d8894e6224f4922b9b32db81468fbfcd1ddeae4a87357823e8c192585"
 }

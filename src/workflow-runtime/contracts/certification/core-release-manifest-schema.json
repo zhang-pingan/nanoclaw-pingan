@@ -21,8 +21,8 @@
     "runtime_toolchain_hash",
     "core_entry_relative_path",
     "core_entry_sha256",
-    "certification_entry_relative_path",
-    "certification_entry_sha256",
+    "validation_entry_relative_path",
+    "validation_entry_sha256",
     "core_build_hash",
     "inventory",
     "inventory_hash",
@@ -39,7 +39,7 @@
         "version": { "const": "1.2.14" }
       }
     },
-    "release_scope": { "const": "workflow_runtime_g8_certification" },
+    "release_scope": { "const": "workflow_runtime_g8_validation" },
     "build_kind": { "const": "release" },
     "platform": { "const": "darwin" },
     "arch": { "const": "arm64" },
@@ -65,10 +65,10 @@
     "runtime_toolchain_hash": { "$ref": "#/$defs/hash" },
     "core_entry_relative_path": { "const": "dist/index.js" },
     "core_entry_sha256": { "$ref": "#/$defs/hash" },
-    "certification_entry_relative_path": {
+    "validation_entry_relative_path": {
       "const": "dist/workflow-runtime/certification/release-entry.js"
     },
-    "certification_entry_sha256": { "$ref": "#/$defs/hash" },
+    "validation_entry_sha256": { "$ref": "#/$defs/hash" },
     "core_build_hash": { "$ref": "#/$defs/hash" },
     "inventory": {
       "type": "array",

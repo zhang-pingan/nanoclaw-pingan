@@ -22,13 +22,13 @@ function temporaryRoot(prefix: string): string {
 
 function releaseProjectFixture(): string {
   const root = temporaryRoot('icarus-g8-release-project-');
-  const certificationEntry = path.join(
+  const validationEntry = path.join(
     root,
     'dist/workflow-runtime/certification/release-entry.js',
   );
-  fs.mkdirSync(path.dirname(certificationEntry), { recursive: true });
+  fs.mkdirSync(path.dirname(validationEntry), { recursive: true });
   fs.writeFileSync(path.join(root, 'dist/index.js'), 'export {};\n');
-  fs.writeFileSync(certificationEntry, 'console.log("certification");\n');
+  fs.writeFileSync(validationEntry, 'console.log("validation");\n');
   fs.mkdirSync(path.join(root, 'scripts'), { recursive: true });
   fs.copyFileSync(
     path.join(repositoryRoot, 'scripts/runtime-launcher.sh'),
@@ -50,12 +50,12 @@ function releaseProjectFixture(): string {
   fs.mkdirSync(path.join(contractRoot, 'sqlite'), { recursive: true });
   fs.writeFileSync(
     path.join(contractRoot, 'sqlite/local_single_user_sqlite@1.json'),
-    '{"excluded":"certification output"}\n',
+    '{"excluded":"validation output"}\n',
   );
   fs.mkdirSync(path.join(contractRoot, 'certification'), { recursive: true });
   fs.writeFileSync(
     path.join(contractRoot, 'certification/generated.json'),
-    '{"excluded":"certification output"}\n',
+    '{"excluded":"validation output"}\n',
   );
   fs.writeFileSync(
     path.join(root, 'package.json'),
@@ -81,7 +81,7 @@ afterEach(() => {
 });
 
 describe('G8 Core Release manifest', () => {
-  it('installs a deterministic release without certification self-reference', () => {
+  it('installs a deterministic release without validation-output self-reference', () => {
     const projectRoot = releaseProjectFixture();
     const runtimeHome = runtimeHomeFixture();
     const firstOutput = path.join(
@@ -128,7 +128,7 @@ describe('G8 Core Release manifest', () => {
       ),
     ).toBe(false);
     expect(first.inventory.map((entry) => entry.path)).toContain(
-      'certification-inputs/sqlite/local_single_user_sqlite-candidate@1.json',
+      'validation-inputs/sqlite/local_single_user_sqlite-candidate@1.json',
     );
     checkInstalledG8CoreRelease(runtimeHome, first);
     expect(

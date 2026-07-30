@@ -95,12 +95,12 @@ const storeConstructorToken = Symbol('WorkflowRuntimeStore');
 function storeInputRootsForIdentityMode(
   identityMode: WorkflowRuntimeIdentityMode,
 ): { profilePath?: string } {
-  if (identityMode !== 'certification_observation') return {};
+  if (identityMode !== 'release_validation') return {};
   const releaseRoot = path.resolve(import.meta.dirname, '../../../..');
   return {
     profilePath: path.join(
       releaseRoot,
-      'certification-inputs/sqlite/local_single_user_sqlite-candidate@1.json',
+      'validation-inputs/sqlite/local_single_user_sqlite-candidate@1.json',
     ),
   };
 }

@@ -9,12 +9,15 @@ import type {
   G8BenchmarkStatistics,
   G8BenchmarkTransaction,
   G8SupportedLimitValues,
-} from '../contracts/g8-certification-types.js';
+} from '../contracts/g8-validation-types.js';
 import { canonicalJson, domainSeparatedSha256 } from '../contracts/hash.js';
 import {
-  G8_BENCHMARK_PROFILES,
-  G8_BENCHMARK_SHAPES,
-  G8_PRODUCT_FLOOR_COVERAGE,
+  G8_BENCHMARK_DIMENSION_LIMITS,
+  G8_READINESS_BEYOND_LIMIT_DIMENSIONS,
+  G8_READINESS_MEASUREMENT_ITERATIONS,
+  G8_READINESS_PROFILES,
+  G8_READINESS_REPRESENTATIVES,
+  G8_READINESS_WARMUP_ITERATIONS,
   G8_SUPPORTED_LIMITS,
   G8SupportedLimitError,
   assertG8DimensionsWithinSupportedLimits,
@@ -81,10 +84,6 @@ const T8_INDEX_EVIDENCE = [
   'child-relation->uk:workflow_relations:effect',
   'claim-handoff->uk:domain_claim_handoffs:parent',
 ] as const;
-
-const NORMAL_PROFILES = G8_BENCHMARK_PROFILES.filter(
-  (profile) => profile !== 'beyond_limit',
-);
 
 interface PreparedBenchmarkCase {
   readonly transaction: G8BenchmarkTransaction;
@@ -498,11 +497,11 @@ function t7Dimensions(profile: G8BenchmarkProfile): T7Dimensions {
       profile,
     ),
     nodesPerScopeMaximum: integerScale(
-      G8_PRODUCT_FLOOR_COVERAGE.max_nodes_per_scope,
+      G8_BENCHMARK_DIMENSION_LIMITS.max_nodes_per_scope,
       profile,
     ),
     edgesPerScopeMaximum: integerScale(
-      G8_PRODUCT_FLOOR_COVERAGE.max_edges_per_scope,
+      G8_BENCHMARK_DIMENSION_LIMITS.max_edges_per_scope,
       profile,
     ),
   };
@@ -850,7 +849,7 @@ function seedMapSlots(
 ): void {
   const manifestCounts = distribute(
     count,
-    Math.ceil(count / G8_PRODUCT_FLOOR_COVERAGE.max_items_per_map),
+    Math.ceil(count / G8_BENCHMARK_DIMENSION_LIMITS.max_items_per_map),
   );
   if (owners.length < manifestCounts.length)
     throw new Error('G8 nested map fixture has too few distinct owners');
@@ -1276,7 +1275,7 @@ function prepareT7Case(
       ? {
           observed_max_items_per_map: Math.min(
             dimensions.mapItemCount,
-            G8_PRODUCT_FLOOR_COVERAGE.max_items_per_map,
+            G8_BENCHMARK_DIMENSION_LIMITS.max_items_per_map,
           ),
         }
       : {}),
@@ -1806,25 +1805,6 @@ function benchmarkCaseId(
   return `g8:${transaction}:${shape}:${profile}`;
 }
 
-function beyondLimitDimensions(
-  transaction: G8BenchmarkTransaction,
-): Partial<G8SupportedLimitValues> {
-  if (transaction === 't3')
-    return {
-      max_facts_per_transaction:
-        G8_SUPPORTED_LIMITS.max_facts_per_transaction + 1,
-    };
-  if (transaction === 't7')
-    return {
-      max_subtree_scopes_per_fence:
-        G8_SUPPORTED_LIMITS.max_subtree_scopes_per_fence + 1,
-    };
-  return {
-    max_required_child_creations_per_t8:
-      G8_SUPPORTED_LIMITS.max_required_child_creations_per_t8 + 1,
-  };
-}
-
 function beyondLimitObservation(
   transaction: G8BenchmarkTransaction,
   shape: string,
@@ -1832,7 +1812,7 @@ function beyondLimitObservation(
   warmupIterations: number,
   measurementIterations: number,
 ): G8BenchmarkCaseObservation {
-  const dimensions = beyondLimitDimensions(transaction);
+  const dimensions = G8_READINESS_BEYOND_LIMIT_DIMENSIONS[transaction];
   const beforeHash = rawSha256(baseDatabasePath);
   let rejection: G8SupportedLimitError | null = null;
   let productionEntryInvoked = false;
@@ -1856,6 +1836,7 @@ function beyondLimitObservation(
     warmup_iterations: warmupIterations,
     measurement_iterations: measurementIterations,
     dimensions: dimensions as JsonObject,
+    limit_dimensions: dimensions as JsonObject,
     production_entry:
       transaction === 't3'
         ? 'reconcileFactT3a'
@@ -1903,8 +1884,10 @@ export function runG8BenchmarkCases(
   options: RunG8BenchmarkOptions,
 ): G8BenchmarkCaseObservation[] {
   const rootDir = assertEmptyDirectory(options.rootDir);
-  const warmupIterations = options.warmupIterations ?? 10;
-  const measurementIterations = options.measurementIterations ?? 100;
+  const warmupIterations =
+    options.warmupIterations ?? G8_READINESS_WARMUP_ITERATIONS;
+  const measurementIterations =
+    options.measurementIterations ?? G8_READINESS_MEASUREMENT_ITERATIONS;
   if (
     !Number.isSafeInteger(warmupIterations) ||
     warmupIterations < 0 ||
@@ -1913,12 +1896,13 @@ export function runG8BenchmarkCases(
   ) {
     throw new Error('G8 benchmark iteration counts are invalid');
   }
-  const profiles = options.profiles ?? G8_BENCHMARK_PROFILES;
+  const profiles = options.profiles ?? G8_READINESS_PROFILES;
   const transactions = options.transactions ?? (['t3', 't7', 't8'] as const);
   const cases: G8BenchmarkCaseObservation[] = [];
   for (const transaction of transactions) {
     const shapes =
-      options.shapes?.[transaction] ?? G8_BENCHMARK_SHAPES[transaction];
+      options.shapes?.[transaction] ??
+      G8_READINESS_REPRESENTATIVES[transaction];
     for (const shape of shapes) {
       let supportedBase: string | null = null;
       for (const profile of profiles.filter(
@@ -1976,6 +1960,7 @@ export function runG8BenchmarkCases(
           warmup_iterations: warmupIterations,
           measurement_iterations: measurementIterations,
           dimensions: prepared.dimensions,
+          limit_dimensions: prepared.supportedLimitDimensions as JsonObject,
           production_entry: prepared.productionEntry,
           production_index_evidence: [...prepared.productionIndexEvidence],
           correctness_invariants: [...prepared.correctnessInvariants],
@@ -2024,5 +2009,3 @@ export function hashG8BenchmarkCases(
     cases as unknown as JsonValue,
   );
 }
-
-export const G8_BENCHMARK_NORMAL_PROFILES = NORMAL_PROFILES;

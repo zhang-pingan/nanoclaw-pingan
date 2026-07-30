@@ -1,8 +1,9 @@
 # Dynamic Workflow Graph Runtime 完整架构方案
 
-> **状态**: 已确认目标架构、部署边界、创建溯源、恢复协议、首发产品下限、精确工具链、首个 Safety/Capacity/SQLite Profile、Capacity Admin 控制面、Command/Golden 治理与开发期 absence baseline（Store 开工受 Capacity Control-Plane Contract Addendum 与 Executable DDL Gate 约束，Production Runtime 激活受 certified Supported Limits、静态 absence baseline 与产品 surface coverage 门禁约束）
+> **状态**: 已确认目标架构、部署边界、创建溯源、恢复协议、首发 Safety/Capacity/SQLite Profile、精确工具链、Capacity Admin 控制面、Command/Golden 治理与开发期 absence baseline（Store 开工受 Capacity Control-Plane Contract Addendum 与 Executable DDL Gate 约束，Production Runtime 激活受 exact release readiness evidence、静态 absence baseline 与产品 surface coverage 门禁约束）
 > **范围**: Icarus core workflow runtime
 > **目标**: 统一静态 workflow、并行执行、运行时 DAG、条件路由、局部汇合、持久等待、子图和受约束动态扩图。
+> **未来独立方案**: `local/docs/dynamic-workflow-runtime-extended-certification-plan.md` 仅在用户明确决定时执行，不属于 G8、G9、默认 CI、release startup 或 automation 依赖。
 
 ## 导航
 
@@ -29,7 +30,7 @@
 2. 类型/Source IR、Compiler、Logical Schema、T0-T8 事务、Recovery 和测试模型共同构成执行合同。修改任一层时必须检查其他层是否需要同步变更。
 3. 示例和 Fixture 用于固定格式、Hash、Error Code 或关键场景，不能覆盖正文的一般规则；持久化字段清单是 Normative Logical Schema，不能代替 executable migration。
 4. 实现必须保持 exact version/hash、不可变 snapshot、CAS/fencing、幂等键和 append-only history 等既有约束，不得以临时 fallback、旁路 scheduler/completion 或事后修复原子事实简化工作包。
-5. 每个工作包完成时，按其联读章节定位 [测试策略与模型验证](#测试策略与模型验证) 和 [完整验收标准](#完整验收标准) 中的对应门禁；Store 开工受 [Executable DDL Gate](#executable-ddl-gate) 约束，Production Runtime 激活另受 certified Supported Limits、`local_single_user` deployment profile、开发期静态 absence baseline 与 `ProductSurfaceCoverageManifest` 约束。
+5. 每个工作包完成时，按其联读章节定位 [测试策略与模型验证](#测试策略与模型验证) 和 [完整验收标准](#完整验收标准) 中的对应门禁；Store 开工受 [Executable DDL Gate](#executable-ddl-gate) 约束，Production Runtime 激活另受 exact content-addressed release readiness evidence、`local_single_user` deployment profile、开发期静态 absence baseline 与 `ProductSurfaceCoverageManifest` 约束。
 
 ### 全局必读
 
@@ -56,7 +57,7 @@
 | I8 | Subgraph、Expand、Map 与 child scope lifecycle | [Subgraph 与 Expand](#subgraph-与-expand)、[Map](#map) | [Scope Build 与 Expansion Manifest](#scope-build-与-expansion-manifest)、[Resource Ledger 与调度](#resource-ledger-与调度)、[Completion Policy、Early Close 与 Named Exit](#completion-policyearly-close-与-named-exit)、[Edge Resolution、Candidate 与 Cut](#edge-resolutioncandidate-与-cut) | T2a、T2b、T3、T7a、T7b |
 | I9 | Completion、Pause/Cancel、Compensation、Operational Blocker、Root Finalization、Root Coordinator 与 Recovery | [Completion Policy、Early Close 与 Named Exit](#completion-policyearly-close-与-named-exit)、[Retry、Pause、Cancel 与 Compensation](#retrypausecancel-与-compensation) | [Edge Resolution、Candidate 与 Cut](#edge-resolutioncandidate-与-cut)、[Workflow 与 Run](#workflow-与-run)、[事务边界与 CAS](#事务边界与-cas)、[Outbox、Lease 与恢复](#outboxlease-与恢复)、[Snapshot 与 Checkpoint](#snapshot-与-checkpoint) | G5只拥有blocker create/open/cache；G6拥有T7a/T7b/T8 close；G7拥有T6e、blocker resolution/abandon、last-blocker restoration、Recovery与相关Fault fixtures |
 | I10 | Runtime Command、Capacity Admin、权限、Runtime Center 与 Trace | [Workflow Runtime Command 授权与审计](#workflow-runtime-command-授权与审计)、[Capacity 管理、发布与审计](#capacity-管理发布与审计)、[Runtime Center（运行中心）与 Trace](#runtime-center运行中心与-trace) | [权限与安全](#权限与安全)、[SQLite Execution Profile](#sqlite-execution-profile)、[Outbox、Lease 与恢复](#outboxlease-与恢复)、[模块边界](#模块边界) | G5只实现独立Capacity Admin；G7实现Deadline Watchdog -> Runtime Command Gateway -> T7c、T6e authorization/resolution audit、Command/Trace properties与projection outbox |
-| I11 | Contract Pack、managed runtime toolchain/launcher、测试模型、发布门禁、静态 absence baseline 与开发期交付 | [测试策略与模型验证](#测试策略与模型验证) | [Compiler Conformance Toolchain](#compiler-conformance-toolchain)、[开发期实施顺序](#开发期实施顺序)、[开发期直接重构约束](#开发期直接重构约束)、[完整验收标准](#完整验收标准)、[SQLite Execution Profile](#sqlite-execution-profile) | Managed distribution/Launcher proof、Contract Pack、current Gate ownership authority/checker、Sealed Golden、Fixture/Property/Model/Fault、Product Floor benchmark、absence/coverage gate |
+| I11 | Contract Pack、managed runtime toolchain/launcher、测试模型、发布门禁、静态 absence baseline 与开发期交付 | [测试策略与模型验证](#测试策略与模型验证) | [Compiler Conformance Toolchain](#compiler-conformance-toolchain)、[开发期实施顺序](#开发期实施顺序)、[开发期直接重构约束](#开发期直接重构约束)、[完整验收标准](#完整验收标准)、[SQLite Execution Profile](#sqlite-execution-profile) | Managed distribution/Launcher proof、Contract Pack、current Gate ownership authority/checker、Sealed Golden、Fixture/Property/Model/Fault、G8 readiness validation、absence/coverage gate |
 
 ### 变更联动检查
 
@@ -77,7 +78,7 @@
 
 1. 在任务说明中写明工作包 ID、计划修改的模块以及已经读取的必读章节。
 2. 搜索目标类型、表、事务编号和验收关键词在全文中的全部引用，确认不存在未纳入计划的跨章节约束。
-3. 若任务涉及 Store，先确认 executable migration 与 Schema Manifest 门禁；若会启动非 test-only Runtime，再确认 stable Launcher/active Managed Node Distribution、匹配环境的 certified Supported Limits、`local_single_user` deployment profile、静态 absence baseline 与产品 surface coverage manifest。
+3. 若任务涉及 Store，先确认 executable migration 与 Schema Manifest 门禁；若会启动非 test-only Runtime，再确认 stable Launcher/active Managed Node Distribution、与 exact content-addressed release 匹配的 G8 readiness evidence、`local_single_user` deployment profile、静态 absence baseline 与产品 surface coverage manifest。
 
 完成编码后：
 
@@ -114,7 +115,7 @@
 | E9 | 运行中心、Feature、API、Automation 共用 Runtime Command Gateway、Actor/Delegation 与不可变审计 | Runtime Command、运行中心 |
 | E10 | 权威时间统一 UTC Unix milliseconds；删除 `control_epoch`，统一 CHECK、Partial Index 与字段命名 | 持久化模型、SQLite DDL |
 | E11 | Required compensation 只有成功 terminal 才解除 Cut barrier；`action_required` fail-closed | Completion、T7/T8、Outbox |
-| E12 | Safety 与 certified Supported Limits 执行终止性交叉约束，保证合法 Run 一定可原子 root fence | Runtime Safety、SQLite Profile |
+| E12 | Safety 与 G8 readiness Supported 边界执行终止性交叉约束，保证合法 Run 一定可原子 root fence | Runtime Safety、SQLite Profile |
 | E13 | 持久化清单明确为 Logical Schema；Executable DDL、Manifest、constraint/query-plan fixture 是 Store 前置门禁 | 持久化模型、验收 |
 | E14 | Runtime Center 提供统一运行控制与观测入口；Trace 保持独立执行观测模型，Workflow 关联可空 | Runtime Center、Trace |
 | S1 | Terminal State 创建 first-class Activation 并计入 activation budget，但不创建 Graph Run；T8 原子完成终态 | State、Workflow/Run Schema、T8 |
@@ -126,7 +127,7 @@
 | S7 | Context Patch 使用 Header + 多 Operation，能原子表达多 Slot set/clear | Workflow/Context Schema、T8 |
 | S8 | Child Workflow Effect 固定 port、delivery、principal、creation domain 与 routing scope；required 创建由 Root Finalization Schedule 驱动并在 T8 原子提交 | Transition Effect、Finalization、T8 |
 | S9 | 第一版 Executor 属于 Trusted Computing Base；Worker Process 不是 hostile-code sandbox；不可信插件以 Container/OS sandbox 为前置门禁 | Executor、权限与安全 |
-| S10 | 实施顺序先冻结合同和 DDL/Store，再实现 durable T0/Runtime；test-only bootstrap 与 production certified-profile gate 分离 | 开发期实施顺序 |
+| S10 | 实施顺序先冻结合同和 DDL/Store，再实现 durable T0/Runtime；test-only bootstrap 与 exact release readiness gate 分离 | 开发期实施顺序 |
 | S11 | Command Header 负责幂等结果，Invocation 逐次追加认证、授权与 duplicate/conflict 审计 | Runtime Command Schema |
 | S12 | Compiler 固定 parser/validator/JCS/toolchain manifest、Error Catalog 与完整 Golden Conformance Bundle | Compiler、测试与发布门禁 |
 | S13 | Production v1 固定为 `local_single_user + node_service + darwin/arm64`，使用稳定 local-owner principal；Publisher/Executor 均为可信 TCB，不接纳不可信执行代码 | 权限与安全、Executor、Production Gate |
@@ -260,7 +261,7 @@ Workflow Instance                     外层状态机，可循环和长期运行
 28. 运行中心、Feature、API 与 Automation 共用 Runtime Command Gateway；Actor/Delegation、Permission/Policy/State Guard 与所有命令结果形成不可变审计。
 29. 权威时间全部是 UTC Unix milliseconds `*_at_ms`；CAS 使用 `row_version`，Fencing 使用明确 epoch，状态与关键字段组合由 SQLite CHECK/Partial Index 执行。
 30. Required compensation 的 `action_required/dead_letter/unknown` 均不算收敛；Scope 保持 closing、Run 保持 action-required并阻止 Child/Root Cut，只有成功 remediation 可继续，administrative abandon 不生成 Cut。
-31. Runtime 只能加载与当前 deployment/runtime/platform/arch/release artifact、DDL schema hash、Core build、stable Launcher/managed Node distribution、Node/SQLite binary/compile options/native module、minimum machine class、startup smoke 和 versioned SQLite Execution Profile 逐项匹配的 certified Supported Limits；Safety Ceiling 必须满足 Product Floor 与 root-fence 终止性交叉约束。
+31. Runtime 只能加载与当前 deployment/runtime/platform/arch/content-addressed release、DDL schema hash、Core build、stable Launcher/managed Node distribution、Node/SQLite binary/compile options/native module、startup smoke、readiness harness/report 和 versioned SQLite Execution Profile candidate 逐项匹配的 G8 readiness evidence；evidence 必须明确 `not_certified`，Safety Ceiling 必须满足固定 Supported 边界与 root-fence 终止性交叉约束。
 32. 本文持久化字段清单是 Normative Logical Schema，不是伪装成 SQL 的缩写 DDL；首个 Store patch 前必须产出并通过真实 SQLite 验证的完整 executable migration 与 Schema Manifest。
 33. Trace 是独立于 Workflow Projection 的通用执行观测模型；Workflow correlation 可空，且任一非空的下级标识必须具有完整上级所属链。非 terminal execution 验证 `workflow -> activation -> run -> scope -> node -> attempt`；terminal activation 合法地在 activation 层结束，禁止为其或独立 Agent 对话伪造 Run/Scope/Node。
 34. Direct Child Recipe allowlist 唯一归 Parent Recipe 所有，并与该 Recipe entrypoint 可达的 `start_child_workflow` exact refs 集合完全相等；Definition 不声明第二份 allowlist。Child Recipe dependency graph 第一版必须无环。
@@ -273,10 +274,10 @@ Workflow Instance                     外层状态机，可循环和长期运行
 41. Runtime 实施和 Production activation 都以机器生成的静态 absence baseline 与 `ProductSurfaceCoverageManifest` 为前提。任一已删除创建/控制/projection surface、旧 schema/resource key、绕过 Runtime Gateway 的直接 import 或候选资料可达路径重新出现时 fail-closed。
 42. Golden Conformance Bundle 的 expected diagnostics/Plan bytes/hash 必须来自独立手工审阅并 sealed 的 oracle artifact；生产 Compiler 或 `--accept` 模式不得生成自己的 expected output。
 43. 前置清理完成后，旧 Workflow 表/列/行、关联聊天、artifact/context、状态标签、旧代码、配置、Definition/Evaluator/Artifact Contract、测试 fixture、data directory 与兼容路径必须持续 absent；新 Runtime 不建立 archive/tombstone/compatibility reader，也不把任何旧业务资产或历史资料候选导入 Registry、Fixture、Build 或 Runtime。
-44. Production Registry 可以没有任何 launchable Domain Recipe。Contract Pack、Compiler、Store、Runtime 与 certification 使用 test-only synthetic Recipe/Definition；它们只存在于隔离测试 root，不得发布到 Production Registry 或形成创建入口。
+44. Production Registry 可以没有任何 launchable Domain Recipe。Contract Pack、Compiler、Store 与 Runtime validation 使用 test-only synthetic Recipe/Definition；它们只存在于隔离测试 root，不得发布到 Production Registry 或形成创建入口。
 45. 没有 Published Recipe 时，通用 Intake 返回稳定 `no_route_available`，不得暴露全局 Definition/Capability 选择器；Runtime Center 在零 Recipe、零 Workflow、零 Run 时返回正常空 Projection。
 46. 单 Agent 目标迭代不改变 DAG 或 Node input snapshot：每次真实重执行创建一个 immutable Attempt，non-initial Attempt 恰好引用同 Node 的相邻 parent，parent 最多一个后继。`needs_revision`、typed feedback、Schedule 和下一 Attempt reservation 原子提交；只有 pass 发布 logical output，Node/Run/Workflow 三层额度耗尽保持不同结果。
-47. Production `node_service` 只能由稳定 Icarus Runtime Launcher 启动项目托管的 exact Node distribution。launchd、setup service 和 restart script 不得直接执行 `command -v node`、`/opt/homebrew/bin/node`、`/opt/homebrew/opt/node*` 或其他 moving system path；managed runtime 缺失、版本/hash 不匹配时必须 fail-closed，禁止回退系统 Node。Agent Container 的 VM 镜像身份由独立镜像门禁负责，不进入本机 Core launcher 或 SQLite certification key。
+47. Production `node_service` 只能由稳定 Icarus Runtime Launcher 启动项目托管的 exact Node distribution。launchd、setup service 和 restart script 不得直接执行 `command -v node`、`/opt/homebrew/bin/node`、`/opt/homebrew/opt/node*` 或其他 moving system path；managed runtime 缺失、版本/hash 不匹配时必须 fail-closed，禁止回退系统 Node。Agent Container 的 VM 镜像身份由独立镜像门禁负责，不进入本机 Core launcher 或 G8 readiness identity。
 
 ## 术语
 
@@ -489,7 +490,7 @@ Macro Router 使用独立 `WorkflowRoutingCapability`，不是 Graph Node，也�
 
 Recipe 是一致性绑定单元。Router 不允许选择 Definition A、Policy B、Schema C 的自由组合；资源升级必须发布新 Recipe version。一个 Definition 可以被多个 Recipe 以不同 entrypoint 使用，多个 Recipe 也可以绑定不同 Definition。
 
-Production Registry 允许没有任何 Published Recipe。此时 Feature 单候选入口不得出现，通用 Intake 在验证 envelope、principal 与 routing scope 后返回稳定结果 `no_route_available`，不创建 Workflow、Activation、Run 或 Claim，也不退化为全局 Definition/Capability 浏览器。Contract Pack、Compiler、Store 和 Runtime certification 使用的 synthetic Recipe/Definition 只能位于隔离的 test-only Registry/data root，并携带 `launchability='test_only'`；Publisher 与 Production loader 必须拒绝把该标记转换成 production launchability。Recipe 数量为零不影响 Core Runtime、Runtime Center、Trace、Feature Package Runtime 或独立 Agent/Scheduled Task 能力。
+Production Registry 允许没有任何 Published Recipe。此时 Feature 单候选入口不得出现，通用 Intake 在验证 envelope、principal 与 routing scope 后返回稳定结果 `no_route_available`，不创建 Workflow、Activation、Run 或 Claim，也不退化为全局 Definition/Capability 浏览器。Contract Pack、Compiler、Store 和 Runtime validation 使用的 synthetic Recipe/Definition 只能位于隔离的 test-only Registry/data root，并携带 `launchability='test_only'`；Publisher 与 Production loader 必须拒绝把该标记转换成 production launchability。Recipe 数量为零不影响 Core Runtime、Runtime Center、Trace、Feature Package Runtime 或独立 Agent/Scheduled Task 能力。
 
 ### Workflow 级执行 Policy 与 Runtime Safety
 
@@ -646,8 +647,7 @@ interface SQLiteExecutionProfile {
   profile_hash: string;
 }
 
-interface RuntimeSupportedLimits {
-  ref: VersionedRef;
+interface G8ReadinessSupportedLimits {
   max_scopes_total: number;
   max_nodes_total: number;
   max_edges_total: number;
@@ -669,40 +669,12 @@ interface RuntimeSupportedLimits {
   max_subtree_fence_manifest_bytes: number;
   max_map_items_total: number;
   max_required_child_creations_per_t8: number;
-  certification: {
-    status: 'certified';
-    deployment_profile: 'local_single_user';
-    runtime_surface: 'node_service';
-    platform: 'darwin';
-    arch: 'arm64';
-    release_artifact_hash: string;
-    database_schema_hash: string;
-    core_build_hash: string;
-    runtime_launcher_hash: string;
-    managed_node_distribution_ref: VersionedRef;
-    managed_node_distribution_hash: string;
-    sqlite_execution_profile_ref: VersionedRef;
-    sqlite_execution_profile_hash: string;
-    benchmark_harness_version: string;
-    benchmark_harness_hash: string;
-    limit_derivation_hash: string;
-    reference_machine: string;
-    minimum_machine_class_ref: VersionedRef;
-    minimum_machine_class_hash: string;
-    startup_smoke_harness_hash: string;
-    startup_smoke_max_duration_ms: number;
-    filesystem_type: 'apfs';
-    storage_class: 'internal_ssd';
-    t3_max_transaction_duration_ms: number;
-    t7_max_transaction_duration_ms: number;
-    t8_max_transaction_duration_ms: number;
-    certified_at_ms: number;
-  };
-  profile_hash: string;
 }
 ```
 
-Production v1 固定发布 `local_single_user_safety@1`。下列值是首个目标 Safety Profile，不因机器空闲、业务配置或运行中 reload 改变；G8 只有在 certified Supported Limits 达到或超过这些值后才能激活 Production：
+`G8ReadinessSupportedLimits` 作为 `local_single_user_g8_readiness@1` harness payload 的 closed `supported_limits` 字段发布，并由 harness hash 与 implementation source-tree hash绑定；它不是 `RuntimeSupportedLimits` 发布物，不包含 certification key，也不得产生 certified 声明。
+
+Production v1 固定发布 `local_single_user_safety@1`。下列值是首个目标 Safety Profile，不因机器空闲、业务配置或运行中 reload 改变；G8 按固定 representative transaction 验证与这些原子事务相关的 Supported 边界：
 
 | Group | Exact ceilings |
 | --- | --- |
@@ -721,7 +693,7 @@ Production v1 固定发布 `local_single_user_safety@1`。下列值是首个目�
 | `reconciliation` | `max_condition_ast_nodes=256`、`max_condition_steps_per_evaluation=4096`、`max_facts_per_transaction=16384` |
 | `value` | `max_single_value_bytes=16777216`、`max_single_artifact_bytes=268435456`、`max_artifact_files=4096`、`max_artifact_manifest_bytes=4194304` |
 
-`local_single_user_safety@1` immutable；调整任何字段必须发布新 version/hash。已有 Workflow/Run 始终使用创建时 pinned Safety，不因 reload 收紧或放宽。新 Safety 调低只影响新创建对象；调高必须先证明不超过当前完整 certification key 的 Supported Limits，否则 Production loader 拒绝。Test-only bootstrap 可以发布更小的独立 profile，但不得复用 production ref/status。
+`local_single_user_safety@1` immutable；调整任何字段必须发布新 version/hash。已有 Workflow/Run 始终使用创建时 pinned Safety，不因 reload 收紧或放宽。新 Safety 调低只影响新创建对象；调高必须先发布覆盖新边界的 versioned readiness harness/report，否则 Production loader 拒绝。Test-only bootstrap 可以发布更小的独立 profile，但不得复用 production ref/status。
 
 配置载体固定分离：immutable Safety 位于 `src/workflow-runtime/contracts/safety/local_single_user_safety@1.json`，checked-in Capacity bootstrap baseline 位于 `config/workflow-runtime-capacity.json`，Production 活动 Capacity publication 位于 `data/workflow-runtime/workflow-runtime-capacity.json`，immutable SQLite Profile 位于 `src/workflow-runtime/contracts/sqlite/local_single_user_sqlite@1.json`。checked-in baseline 只用于 fresh deployment genesis，不是运行期活动文件；setup/upgrade 不得覆盖已有活动 publication。三者都先 strict parse/closed-schema/hash 再使用；Capacity watcher 只能从活动 publication 原子发布完整 validated snapshot，Safety/SQLite 文件变更必须走 Publish/version gate 而不是文件监听。
 
@@ -854,9 +826,9 @@ Capacity Admin CAP1 Invocation repair选择并闭合了真实的immutable prepar
 
 上述不可变审计在 `local_single_user` 信任边界内防止产品旁路、并发丢更新和无记录文件生效；拥有主机 root 且能同时篡改 DB、binary 和文件的对手不在 v1 威胁模型内。若未来要求抵抗本机管理员或提供不可否认性，必须把事件 hash chain 外送到签名/远程 append-only audit sink 后重新认证，不能只扩大 Actor Catalog。
 
-`RuntimeSupportedLimits` 不是手写默认值；它必须由相同 deployment/runtime/platform/arch/release artifact、DDL/schema hash、Core build、Runtime Launcher、Managed Node Distribution、Node executable、SQLite binary/compile options、完整 `SQLiteExecutionProfile` 和参考机器上的发布 benchmark 生成并以 `status=certified` 发布。Production v1 唯一首发认证目标是 `local_single_user + node_service + darwin/arm64`；系统 Node、Electron Renderer/Main、测试 Node、Rosetta/x64 或其他系统不得复用该认证。Electron 只通过 Runtime API/Command Gateway 访问，不得打开 Runtime DB。缺少 certified profile、profile 与当前完整认证键不匹配，或配置超过认证值时生产 Runtime 启动失败。
+G8 readiness evidence 固定绑定 `local_single_user + node_service + darwin/arm64`、content-addressed release artifact、DDL/schema hash、Core build、Runtime Launcher、Managed Node Distribution、Node executable、SQLite binary/compile options、candidate `SQLiteExecutionProfile`、startup-smoke harness/report 与 readiness harness/report。report 必须明确 `certification_status=not_certified`；系统 Node、Electron Renderer/Main、测试 Node、Rosetta/x64 或其他系统不得复用。Electron 只通过 Runtime API/Command Gateway 访问，不得打开 Runtime DB。缺少 evidence、任一 identity 与当前 release 不匹配，或配置超过 harness 的固定 Supported 边界时生产 Runtime 启动失败。
 
-启动时先验证 certified profile 达到 `local_single_user_product_floor@1`，再做同名字段比较与下列终止性不等式；它们保证任意被配置允许并成功 materialize 的 Run 都能由一次不可拆 T7 root fence 收敛，不能出现“能创建、不能取消”的合法状态：
+启动时先验证 readiness report 与当前 release、Schema 11、candidate SQLite Profile 和 harness hash exact匹配，再做同名字段比较与下列终止性不等式；它们保证任意被配置允许并成功 materialize 的 Run 都能由一次不可拆 T7 root fence 收敛，不能出现“能创建、不能取消”的合法状态：
 
 ```text
 safety.run.max_scopes_total            <= supported.max_subtree_scopes_per_fence
@@ -876,7 +848,7 @@ safety.workflow.max_required_child_creations_per_transition
                                           <= supported.max_required_child_creations_per_t8
 ```
 
-同名总量还分别要求 `safety.run.max_scopes_total/max_nodes_total/max_edges_total/max_attempts_total/max_waits_total/max_builds_total/max_effect_operations_total/max_map_items_total` 不超过 Supported 对应字段；`safety.scope.max_nodes_per_scope/max_edges_per_scope` 也不得超过 Supported 的 node/edge 总量。`deriveWorstCaseT7Facts/ManifestBytes` 是 Run Protocol versioned pure function，保守覆盖 scopes/nodes/edges/attempts/waits/builds/map slots/effects、close requests、eligibilities、events、固定 ID/hash 编码和 canonical manifest overhead；函数版本/hash 进入 certification/profile hash，不能由部署配置改写。Compiler 对每个 Plan 计算保守的 `max_reconcile_facts_per_ingress`、最大 source fan-out 和最大 frontier bytes；超过 Safety 或 Supported profile 时在 materialize 前拒绝。T2b、Map Manifest seal、retry/wait/effect 创建必须先在同一事务预留导致未来 root fence 所需的累计对象额度，再插入对象；不得等 T3/T7 已开始后以“事务太大”为业务错误中断。若 benchmark 无法覆盖某个高于 Product Floor 的可选合法形状，可以降低该可选 certified 上限；若 floor shape 也无法覆盖则 Production Gate 保持关闭并修改协议，不能依靠运行时猜测分批 fence。
+同名总量还分别要求 `safety.run.max_scopes_total/max_nodes_total/max_edges_total/max_attempts_total/max_waits_total/max_builds_total/max_effect_operations_total/max_map_items_total` 不超过 readiness Supported 对应字段；`safety.scope.max_nodes_per_scope/max_edges_per_scope` 也不得超过 Supported 的 node/edge 总量。`deriveWorstCaseT7Facts/ManifestBytes` 是 Run Protocol versioned pure function，保守覆盖 scopes/nodes/edges/attempts/waits/builds/map slots/effects、close requests、eligibilities、events、固定 ID/hash 编码和 canonical manifest overhead；函数实现进入 readiness implementation source-tree hash，不能由部署配置改写。Compiler 对每个 Plan 计算保守的 `max_reconcile_facts_per_ingress`、最大 source fan-out 和最大 frontier bytes；超过 Safety 或 readiness Supported boundary 时在 materialize 前拒绝。T2b、Map Manifest seal、retry/wait/effect 创建必须先在同一事务预留导致未来 root fence 所需的累计对象额度，再插入对象；不得等 T3/T7 已开始后以“事务太大”为业务错误中断。若配置超过 G8 已验证边界，Production Gate 保持关闭，不能依靠运行时猜测分批 fence。
 
 每个 Safety 字段必须进入规范 Enforcement Matrix，记录作用域、Account、执行组件、检查时点、reserve/consume/release、失败结果、错误码与是否进入 Plan hash。Published Safety Profile 必须把下列分组展开为每个具体字段的一对一记录；存在未映射字段、重复 owner 或缺少检查时点时发布失败：
 
@@ -3328,7 +3300,7 @@ Production v1 的 G0 精确工具链基线固定如下；`package.json` 中这�
 | --- | --- | --- |
 | Node.js | `26.5.0` | Core Runtime/Compiler/CI identity |
 | npm | `11.17.0` | `packageManager` 与 lock install identity |
-| `better-sqlite3` | `12.11.1` | Runtime/DDL/certification identity |
+| `better-sqlite3` | `12.11.1` | Runtime/DDL/release validation identity |
 | `jsonc-parser` | `3.3.1` | Runtime dependency |
 | `ajv` | `8.20.0` | Runtime dependency；禁止 transitive Ajv v6 |
 | `ajv-formats` | `3.0.1` | Runtime dependency |
@@ -3337,7 +3309,7 @@ Production v1 的 G0 精确工具链基线固定如下；`package.json` 中这�
 | `@types/node` | `26.1.1` | Dev dependency |
 | `@types/better-sqlite3` | `7.6.13` | Dev dependency |
 
-Repository 使用内容为 `26.5.0` 的 exact `.nvmrc` 作为唯一 Node version-manager source；CI 通过 `node-version-file: .nvmrc` 加载同一 patch，`package.json.packageManager` 固定 `npm@11.17.0`。本机开发、build、native install 和 Core `node_service` 不依赖用户修改系统 Node，也不依赖 nvm/fnm/Volta、shell profile 或 Homebrew moving symlink，而是使用下列项目托管的 distribution。Agent Container 位于独立 VM，其 Node identity 由 VM image gate 保证，不属于本机 managed runtime、G0.1 或 SQLite certification key；Electron 内置 Node 只属于 API client，也不是 Runtime Node identity。
+Repository 使用内容为 `26.5.0` 的 exact `.nvmrc` 作为唯一 Node version-manager source；CI 通过 `node-version-file: .nvmrc` 加载同一 patch，`package.json.packageManager` 固定 `npm@11.17.0`。本机开发、build、native install 和 Core `node_service` 不依赖用户修改系统 Node，也不依赖 nvm/fnm/Volta、shell profile 或 Homebrew moving symlink，而是使用下列项目托管的 distribution。Agent Container 位于独立 VM，其 Node identity 由 VM image gate 保证，不属于本机 managed runtime、G0.1 或 G8 readiness identity；Electron 内置 Node 只属于 API client，也不是 Runtime Node identity。
 
 ```ts
 interface ManagedNodeRuntimeDistributionManifest {
@@ -3363,7 +3335,7 @@ Managed runtime 默认安装到 `~/Library/Application Support/Icarus/toolchains
 
 `~/Library/Application Support/Icarus/bin/icarus-runtime` 是 launchd 唯一允许执行的稳定 Runtime Launcher；它从自身 `realpath` 所在的安装布局推导 runtime root，不读取 `HOME`、`PATH` 或 `ICARUS_*_HOME` 等继承环境来改写 production root，再通过原子 `active-node` pointer 选择上述 content-addressed installation，验证 pointer containment、Distribution Manifest、Node version/executable hash 和 active Core Release binding 后 `exec` managed `bin/node`。Setup 先旁路安装并验证新 distribution，再原子切换 pointer；旧进程继续使用原 binary，重启后才使用新 pointer。Launcher、pointer 或 managed runtime 缺失/损坏时返回稳定 identity error并退出，绝不尝试 `PATH`、`command -v node`、Homebrew、version manager 或 Electron Node fallback。测试把完全相同的 Launcher 安装到隔离临时布局并由其自身路径解析临时 root，不向 production Launcher 暴露 runtime-root override。Launcher source/hash 属于 Core Release artifact、SQLite Profile 与 G9 activation audit。
 
-本地所有最终 lock/native 证据和开发验证统一通过 `scripts/runtime-toolchain.sh exec -- <command>` 进入 managed `PATH`；`setup.sh` 负责在首次使用时自动安装，无需用户预装或切换系统 Node。CI 仍由 `actions/setup-node` 按 `.nvmrc` 提供同版本 Linux Node，并验证 npm/package-lock identity；CI Node executable hash 不复用 darwin/arm64 SQLite certification。
+本地所有最终 lock/native 证据和开发验证统一通过 `scripts/runtime-toolchain.sh exec -- <command>` 进入 managed `PATH`；`setup.sh` 负责在首次使用时自动安装，无需用户预装或切换系统 Node。CI 仍由 `actions/setup-node` 按 `.nvmrc` 提供同版本 Linux Node，并验证 npm/package-lock identity；CI Node executable hash 不复用 darwin/arm64 G8 readiness evidence。
 
 依赖必须作为 direct dependency 由上述 exact package/lock integrity 固定，不能依赖 transitive Ajv v6 或 semver floating resolution。Repository wrapper、Workflow Schema Profile、format registry、subtype/proof algorithm 和 Plan normalizer 都是 versioned Core source；其源码 hash、Node/npm identity 与 package-lock hash 一并进入下列 Manifest。任何包版本、配置、wrapper source 或 runtime version 变化都产生新的 `compiler_version/toolchain_hash`，必须重跑全部 Golden Bundle；不能在旧 version 下静默改变输出。
 
@@ -4036,8 +4008,8 @@ WHERE status IN ('preparing', 'installed');
 实现 `WorkflowRuntimeStore` 前必须先从本文 Logical Schema 冻结一份 canonical `workflow-runtime-schema-v1`，并满足以下阻塞门禁；DDL 未通过时不得开始 Store、Reconciler 或发布 production Domain Definition：
 
 1. Canonical migration 必须为每个 Logical Schema 对象展开完整 `CREATE TABLE/INDEX/TRIGGER`，明确 SQLite type、`NOT NULL`、default、enum/status CHECK、terminal 字段组合 CHECK、JS safe-integer CHECK、PK、全部单列/复合 FK、UNIQUE 与 Partial Index。禁止 `error fields`、`ref/hash` 或隐含 nullable 等缩写进入 migration。
-2. Schema Manifest 逐表列出 column/type/nullability/default、PK/UK/FK/CHECK/index，并计算 domain-separated `schema_hash`。TypeScript contract、Store query、RuntimeSupportedLimits certification 和 Core compatibility record 必须固定同一 hash；文档清单与 Manifest 不一致时以发布失败处理，不能由 Store 猜测。
-3. CI 必须在空的真实文件 SQLite 上先按 `SQLiteExecutionProfile` 设置 database-level `page_size/auto_vacuum`，再按顺序执行 migration、切换 WAL 并关闭连接；重新打开后通过 `PRAGMA integrity_check`、`PRAGMA foreign_key_check`，并逐项验证 `journal_mode/synchronous/foreign_keys/busy_timeout/page_size/auto_vacuum/temp_store/wal_autocheckpoint/journal_size_limit/cache_size/mmap_size/trusted_schema/recursive_triggers/read_uncommitted/locking_mode/query_only`。同时校验 `sqlite_version()/sqlite_source_id()`、排序后的 compile options hash、`better-sqlite3` version/native module hash 与 Node runtime version；任一不匹配都使 DDL Gate/Certification 失败。随后从 `sqlite_schema` 与 `pragma_table_info/foreign_key_list/index_list` 重建 Manifest 并逐字节匹配发布快照。
+2. Schema Manifest 逐表列出 column/type/nullability/default、PK/UK/FK/CHECK/index，并计算 domain-separated `schema_hash`。TypeScript contract、Store query、G8 release/readiness evidence 和 Core compatibility record 必须固定同一 hash；文档清单与 Manifest 不一致时以发布失败处理，不能由 Store 猜测。
+3. CI 必须在空的真实文件 SQLite 上先按 `SQLiteExecutionProfile` 设置 database-level `page_size/auto_vacuum`，再按顺序执行 migration、切换 WAL 并关闭连接；重新打开后通过 `PRAGMA integrity_check`、`PRAGMA foreign_key_check`，并逐项验证 `journal_mode/synchronous/foreign_keys/busy_timeout/page_size/auto_vacuum/temp_store/wal_autocheckpoint/journal_size_limit/cache_size/mmap_size/trusted_schema/recursive_triggers/read_uncommitted/locking_mode/query_only`。同时校验 `sqlite_version()/sqlite_source_id()`、排序后的 compile options hash、`better-sqlite3` version/native module hash 与 Node runtime version；任一不匹配都使 DDL/G8 readiness Gate 失败。随后从 `sqlite_schema` 与 `pragma_table_info/foreign_key_list/index_list` 重建 Manifest 并逐字节匹配发布快照。
 4. Constraint fixture 必须证明每个 enum 非法值、负数/溢出时间、Activation `active/completed/abandoned` 与 `finished_at_ms/state_type/graph_run_id` 的非法组合、Workflow business status/operational state 非法组合、Operational Blocker zero/multi-source 与非法 resolution 组合、typed relation zero/multi-target、Attempt initial/non-initial continuation、parent 同 Node/相邻序号、quality-feedback ref/hash nullability 与单后继的非法组合、terminal 字段互斥错误、cross-run/cross-scope FK、重复 idempotency key、第二个 root scope/cut/close request 和 stale composite lineage 均由 SQLite 拒绝，而不是只由 TypeScript 拒绝。
 5. Query-plan fixture 对 Scheduler、Watchdog、Recovery、Operational Blocker/T6e、T3/T7、Root Finalization、GC 和 Outbox 的固定查询运行 `EXPLAIN QUERY PLAN`，断言使用认证 index。任何 Logical Schema 新字段或状态变更必须先更新 migration、Manifest、fixtures 和 `database_schema_version`，再更新 Runtime 代码。
 6. 首个可执行 migration 的验收包括本文所有持久化对象，不能只建 Graph happy-path 表；Intake/Creation、Registry/Retention、Value/Blob/typed ownership、Ledger/Claim、Capacity Head/Admin Command/Invocation/Change Event、Workflow/Activation/Transition/Root Finalization、Run/Scope/Node/Fact/Operational Blocker、Inbox/Outbox/Effect、Command/Confirmation/Audit 和 Checkpoint 同属 v1 原子交付边界。Capacity publication fault fixture 必须覆盖 prepare、file fsync、rename、directory fsync、head commit、Watcher publish 各边界以及 direct-file tamper/restart recovery。
@@ -5794,11 +5766,11 @@ data/workflow-runtime/workflow-runtime.db
 data/workflow-runtime/blobs/
 ```
 
-Production v1 固定发布 `local_single_user_sqlite@1`：`busy_timeout_ms=5000`、`page_size=4096`、`auto_vacuum=incremental`、`temp_store=memory`、`wal_autocheckpoint_pages=4096`、`journal_size_limit_bytes=67108864`、`cache_size_kib=32768`、`mmap_size_bytes=0`、`trusted_schema=false`、`recursive_triggers=false`、`read_uncommitted=false`、`locking_mode=normal`、`read_only_query_only=true`，并沿用类型中固定的 `journal_mode=wal/synchronous=full/foreign_keys=true`。Launcher/Node/SQLite/source/compile-options/native module/release artifact 等 identity 字段在 exact Node `26.5.0` + `better-sqlite3@12.11.1` release build 上生成，不能手写或从开发机复制；G8 前该 Profile 只有 candidate 状态，不得伪造 `certified`。
+Production v1 固定使用 `local_single_user_sqlite@1` candidate：`busy_timeout_ms=5000`、`page_size=4096`、`auto_vacuum=incremental`、`temp_store=memory`、`wal_autocheckpoint_pages=4096`、`journal_size_limit_bytes=67108864`、`cache_size_kib=32768`、`mmap_size_bytes=0`、`trusted_schema=false`、`recursive_triggers=false`、`read_uncommitted=false`、`locking_mode=normal`、`read_only_query_only=true`，并沿用类型中固定的 `journal_mode=wal/synchronous=full/foreign_keys=true`。该冻结 candidate 保持 `certification_status=candidate`，不得原地重标或伪造 `certified`；Launcher/Node/SQLite/source/compile-options/native module/release artifact 的真实 identity 由 exact release startup/readiness report 单独记录并 content-addressed 绑定。
 
-上述 Node identity 必须来自 active `ManagedNodeRuntimeDistributionManifest` 对应的 content-addressed installation。G8 benchmark/certification 使用 managed launcher 启动的同一 `bin/node` 安装、构建并加载 `better-sqlite3`；G9 startup 重新验证 `realpath(process.execPath)` 位于 active managed installation、executable hash 与 Distribution/SQLite Profile 一致、launchd `ProgramArguments[0]` 为稳定 Icarus Runtime Launcher，且 Launcher/Core Release hash 与 activation audit 一致。仅有 `.nvmrc`、当前 shell `node --version` 或系统默认 Node 恰好相同不构成 Production runtime identity。
+Node identity 必须来自 active `ManagedNodeRuntimeDistributionManifest` 对应的 content-addressed installation。G8 readiness validation 使用 stable Launcher 启动同一 active managed `bin/node` 构建 release 并加载 `better-sqlite3@12.11.1`；G9 startup 重新验证 `realpath(process.execPath)` 位于 active managed installation、executable hash 与 Distribution/readiness report 一致、launchd `ProgramArguments[0]` 为稳定 Icarus Runtime Launcher，且 Launcher/Core Release hash 与 activation audit 一致。仅有 `.nvmrc`、当前 shell `node --version` 或系统默认 Node 恰好相同不构成 Production runtime identity。
 
-`page_size/auto_vacuum` 是建库属性；修改必须新建/迁移数据库并重新认证。其他 PRAGMA 即使 SQLite 允许在连接上修改，Production 也只能通过新 immutable Profile、进程重启、DDL/smoke/benchmark 和新 certification key 应用，不能 hot reload。`auto_vacuum=incremental` 必须由 Blob/Store Coordinator 执行 bounded incremental-vacuum maintenance，禁止在普通请求事务内做无界 vacuum。
+`page_size/auto_vacuum` 是建库属性；修改必须新建/迁移数据库并重新执行 DDL、startup smoke 与 readiness validation。其他 PRAGMA 即使 SQLite 允许在连接上修改，Production 也只能通过新 immutable Profile candidate、进程重启和与新 content-addressed release 精确绑定的 evidence 应用，不能 hot reload。`auto_vacuum=incremental` 必须由 Blob/Store Coordinator 执行 bounded incremental-vacuum maintenance，禁止在普通请求事务内做无界 vacuum。
 
 Task Intake/Revision、Routing/Creation、Registry Snapshot、Workflow/Run/Scope/Node/Attempt/Wait、Edge/Candidate/Close/Cut、Context/Checkpoint、Ledger、Domain Claim、Inbox/Outbox、Effect、Scheduler、Relation、Runtime Event 与 Value metadata 全部位于同一个 `workflow-runtime.db`，以保留 T0/T8 和全局 Claim/Ledger 的单事务约束。不得采用每 Workflow 一个数据库。
 
@@ -5824,36 +5796,21 @@ database.pragma('locking_mode = NORMAL');
 if (readOnly) database.pragma('query_only = ON');
 ```
 
-Profile loader 必须先验证 numeric 字段为有限 JS safe integer；除显式允许 `mmap_size_bytes=0` 的字段外均为正整数，enum/boolean 为 closed value，再允许上述 interpolation。Connection Factory 还要读取并回验全部 Profile PRAGMA 和 database-level `page_size/auto_vacuum`，并验证 deployment profile、runtime surface、`process.platform/process.arch`、release artifact hash、Runtime Launcher hash、managed Node distribution ref/hash、Node executable hash/version、SQLite version/source id、compile options hash、`better-sqlite3` version/native module hash 与 Profile/Certification 完全一致；Production activation 还要验证 minimum machine class，并在同一数据卷临时目录运行 certification 固定的 startup smoke harness，保存结果 hash/duration。不能只设置 PRAGMA 而忽略 identity fields，也不能自动改写数据库来迎合不匹配的 Profile。Repository 使用 exact `.nvmrc=26.5.0`、`packageManager=npm@11.17.0` 和 CI toolchain 固定 Node/npm patch identity；`package.json engines` 只能表达开发兼容性，不能作为 certification identity。Production Core 启动禁止读取系统 Node 或根据当前 PATH/环境变量改写 active distribution/profile。
+Profile loader 必须先验证 numeric 字段为有限 JS safe integer；除显式允许 `mmap_size_bytes=0` 的字段外均为正整数，enum/boolean 为 closed value，再允许上述 interpolation。Connection Factory 还要读取并回验全部 Profile PRAGMA 和 database-level `page_size/auto_vacuum`，并验证 deployment profile、runtime surface、`process.platform/process.arch`、release artifact hash、Runtime Launcher hash、managed Node distribution ref/hash、Node executable hash/version、SQLite version/source id、compile options hash、`better-sqlite3` version/native module hash 与 startup/readiness evidence 完全一致；Production activation 在同一数据卷临时目录运行固定 startup-smoke harness，保存结果 hash/duration。不能只设置 PRAGMA 而忽略 identity fields，也不能自动改写数据库来迎合不匹配的 Profile。Repository 使用 exact `.nvmrc=26.5.0`、`packageManager=npm@11.17.0` 和 CI toolchain 固定 Node/npm patch identity；`package.json engines` 只能表达开发兼容性，不能作为 G8 release identity。Production Core 启动禁止读取系统 Node 或根据当前 PATH/环境变量改写 active distribution/profile。
 
 关键 CAS transaction 使用 `BEGIN IMMEDIATE`，避免读取状态后才在写阶段失败；所有 composite FK/unique constraint 必须由 SQLite 实际执行。需要 WAL、durability、Writer 竞争或 crash 行为的测试必须使用真实文件 SQLite，不能用 `:memory:`。Runtime DB 与 Blob 目录作为一组恢复资产，备份使用 SQLite Backup API/一致性快照；恢复后执行 blob length/hash 与 orphan scan。
 
 T3/T7 继续保持不可拆分原子协议。T3 只增量处理本次影响的 Node/Edge/Fact，索引 source node/source port/target port/guard，使用确定性 fixed-point queue，目标复杂度接近 `O(affected nodes + edges + facts)`；禁止每个 Fact 重扫全 Scope或每 Edge 一次全表查询。T7 使用 indexed `parent_scope_id + Recursive CTE`、临时 subtree-id 表与 set-based UPDATE/INSERT，禁止 JavaScript 递归逐 Scope 查询、超长动态 `IN (...)`、逐 descendant transaction 或事务内等待 cancel ACK。Closure Table 只有真实 benchmark 证明必要时才引入。
 
-发布门禁按 versioned `RuntimeSupportedLimits` 测试，而不是固定 100 nodes/items。T3 至少覆盖长链、宽 fan-out/fan-in、diamond、route-group、completion-heavy、condition-heavy；T7 至少覆盖 deep/wide tree、large/nested map、mixed lifecycle 与 effect-heavy subtree；Root Finalization/T8 至少覆盖最大 required-child 集合、Claim handoff 竞争、retry/exhaustion 和全成或全不变。使用真实文件 SQLite、上述生产 PRAGMA/索引，记录 transaction duration、读写行、derived facts、subtree scopes、required-child 数量、WAL 增量与内存峰值。
+G8 的唯一 transaction readiness matrix 由 `local_single_user_g8_readiness@1` 固定：T3=`route_group`、T7=`mixed_lifecycle`、T8/Root Finalization=`maximum_required_child`；每个 family 各有一个 `supported_limit` 与一个 `beyond_limit` case，共六例。每个 Supported case先 warmup 1 次，再 measurement 5 次；使用 release build、真实隔离文件 SQLite、完整 Production PRAGMA/索引和 production transaction entry，记录 p50/p95/p99/max、WAL bytes、peak RSS 与 affected rows。T8 另保留一次 `all_or_nothing` before-commit fault regression，证明 Cut、Child relation 与 transition 全成或全不变。
 
-Benchmark 分为 Smoke、Supported Limit、Beyond Limit 与 25/50/100% Scaling；同时设置复杂度曲线、正确性不变量和参考机器上的绝对短事务预算。若合法最坏事务超出预算，第一版只能降低高于下述 Product Floor 的 Safety/Supported Limit，不能跌破 floor，也不能静默拆分 T3 fixed point、T7 subtree fence 或 T8 required-child 原子提交。未来需要超大 Graph 时必须另行设计不可见 generation barrier，而不是作为普通性能补丁。
+harness 的 `supported_limits` closed object 固定 scopes=128、nodes=1024、edges=4096、attempts=4096、waits=512、builds=512、effects=2048、facts/transaction=16384、frontier bytes=16777216、fence scopes/nodes/edges/attempts/waits/builds/map slots/effects=128/1024/4096/4096/512/512/256/2048、T7 derived facts=16384、fence manifest bytes=16777216、map items=256、T8 required children=8。Supported cases 必须保持 T3 fixed point、T7 subtree/root fence 与 T8 required-child commit 的不可拆原子语义，并通过完整 correctness invariant 与 SQLite integrity/foreign-key 回验。
 
-Production v1 的 `local_single_user_product_floor@1` 是发布最低能力，不是建议配置；certified profile 可以更高，不能更低：
+短时明显退化上限固定为 T3 max `1000 ms`、T7 max `2000 ms`、T8 max `1000 ms`。这些上限只判定当前 representative release validation；readiness report 必须明确 `certification_status=not_certified`。任何超限、零 affected rows、identity/shape/sample drift 或 invariant 失败都使 G8 fail closed。
 
-| Dimension | Minimum certified value |
-| --- | ---: |
-| `max_scopes_total` | 128 |
-| `max_nodes_total` / `max_nodes_per_scope` | 1024 / 128 |
-| `max_edges_total` / `max_edges_per_scope` | 4096 / 512 |
-| `max_map_items_total` / `max_items_per_map` | 256 / 128 |
-| `max_attempts_total` | 4096 |
-| `max_waits_total` | 512 |
-| `max_builds_total` | 512 |
-| `max_effect_operations_total` | 2048 |
-| `max_facts_per_transaction` | 16384 |
-| `max_frontier_bytes` | 16777216（16 MiB） |
-| `max_nesting_depth` | 8 |
-| `max_required_child_creations_per_t8` | 8 |
+每个 Beyond Limit case 必须在 business transaction callback、`BEGIN IMMEDIATE` 和任何写入前由同一 Supported-limit guard 确定性拒绝，返回 `runtime_supported_limit_exceeded`，记录 `affected_rows=0`，并证明已关闭 baseline database 的 before/after raw hash 相同。不得为拒绝 case 打开写连接或构造异常权威状态。
 
-基准参考等级固定为 Apple Silicon M2 或更高、16 GiB RAM、internal APFS SSD、AC power、release build、无并发 benchmark 干扰。每个形状先 warmup 10 次，再测量至少 100 次；记录 p50/p95/p99/max、WAL bytes、peak RSS 和受影响行。Supported Limit 必须满足 `T3 p99 <= 250 ms`、`T7 root-fence p99 <= 1000 ms`、`T8 required-child p99 <= 500 ms`，且 max 不超过对应预算的 2 倍；Beyond Limit 必须在原子写入前确定性拒绝。Certification 固定 versioned minimum-machine-class 与 startup-smoke harness；Production activation 在同一数据卷的临时 DB 上运行 bounded smoke，不接触 Runtime DB，结果超过 `startup_smoke_max_duration_ms` 时 fail-closed。参考机器更快不能降低功能 floor，生产机器未通过 machine-class/smoke preflight 则使用针对该机器另行认证的 profile。
-
-若任何 floor shape 无法在预算内通过，Production Gate 保持关闭并重新审查 schema/index/protocol；不能再按原文的“直接降低到更小认证值”静默上线。只有高于 floor 的可选上限可以根据 benchmark 下调。未来需要突破不可拆 T3/T7/T8 的规模时，必须发布新 Run Protocol，而不是牺牲原子性。
+G8 startup smoke 由 stable Launcher 从 active content-addressed release 的 validation entry 执行：在空隔离 `STORE_DIR` 创建 Schema 11 真实文件 DB，设置并回验完整 Production PRAGMA，执行零行参数化 `BEGIN IMMEDIATE`，close/reopen 后运行 integrity/foreign-key checks，并在 `5000 ms` 内清理 DB/WAL/SHM。readiness 与 startup report 采用 closed schema、domain-separated hash 和 read-only checker；security-sensitive identity/integrity 只使用静态源码、仓库已有测试及 invariant mapping，并记录 `SECURITY_VALIDATION_NOT_RUN`。
 
 ## Retry、Pause、Cancel 与 Compensation
 
@@ -6499,7 +6456,7 @@ root scope
 | `registry/prompt-registry.ts` | Base/Local Prompt、Promotion、Rebase 与 active pointer |
 | `registry/core-upgrade.ts` | Protocol/ABI/Registry/DB compatibility preflight |
 | `registry/feature-manifest.ts` | Feature Manifest vNext closed parse、ownership、dependency 与 removed-key rejection |
-| `registry/production-activation.ts` | certified key、deployment profile、absence/coverage gate 与原子激活 |
+| `registry/production-activation.ts` | exact content-addressed release/readiness evidence、deployment profile、absence/coverage gate 与原子激活 |
 | `authoring/workflow-authoring.ts` | scaffold/validate/compile/dry-run/review 的 staged source 工具 API |
 | `authoring/workflow-publisher.ts` | human approval、幂等 Publish/Activate 与失败恢复 |
 | `compiler/schema-registry.ts` | strict JSON、2020-12 Profile、RFC 6901 与 snapshot |
@@ -6574,11 +6531,11 @@ action-required/quarantine blocker; remediation success/retry/exhaustion
 | Operational / G5 | blocker create与open集合、Run/Workflow operational-state cache双向一致且不覆盖Workflow business status；不得执行、模拟或用预授权boolean消费open->resolved/abandoned |
 | Operational / G7 | T6e只能经Runtime Command Gateway并从持久化Blocker加载exact source tuple；不能信任caller matching hash、拼接unrelated source/event、提前恢复、非法降级quarantine、重置fence/ledger/deadline或丢失失败restoration attempt；resolution必须具有真实Ingress/Command/Invocation/Event |
 | Trace | 独立 Agent Trace 不要求 Workflow；non-null Workflow correlation 所属链完整；对话发起 Workflow 可同时按 causation 与 Attempt 查询；禁止 orphan/伪造关联 |
-| Time/DDL | 权威时间均为 safe-integer `*_at_ms`；Activation/Finalization/Fact/Blocker/Command 的状态 CHECK、row version、typed FK/exactly-one 与 partial-index 查询覆盖一致；database/connection PRAGMA 与完整 certification key 逐项匹配 Profile |
+| Time/DDL | 权威时间均为 safe-integer `*_at_ms`；Activation/Finalization/Fact/Blocker/Command 的状态 CHECK、row version、typed FK/exactly-one 与 partial-index 查询覆盖一致；database/connection PRAGMA 与 exact release startup/readiness evidence 逐项匹配 Profile candidate |
 
 所有时间测试使用 Virtual Clock，禁止真实 `sleep()`；Fake Adapter 可确定性返回 `not_applied/applied_with_receipt/applied_but_receipt_lost/still_running/unknown/cancelled/compensated`。Fault Injection 覆盖 managed Node archive download/hash/安全解包、temp install/fsync/no-replace/active-pointer swap、Launcher verify/exec，Capacity CAP1 prepare、temp write/file fsync/rename/directory fsync、CAP3 head commit、CAP4 Watcher publish、direct-file tamper、相同 hash 新 revision与冷启动恢复，intent、dispatch、external apply、receipt、Evaluator decision/feedback envelope/quality-revision Schedule/next Attempt、quality exhaustion detail、Node output、Fact/Event、Close Request、T0p transition provenance、Root Finalization preflight/retry、T8 required-child + Intake/Creation Request + source-activation completion原子提交、Notification intent/delivery failure、Completion Cut、Workflow transition，以及 Blob file fsync/install/directory fsync/DB commit、GC mark/delete/finalize和backup pin/copy边界；G5 fault范围包含Operational Blocker create/open/cache但不包含resolve/abandon。G7 fault范围增加T6e resolve/last-blocker state restore、Command/Invocation/Event原子性、Administrative Abandon request/expiry/confirm/consume与Recovery；SQLite事务内crash必须全回滚，外部effect边界按operation key/receipt/reconciliation收敛。Upgrade fixture覆盖managed Node side-by-side install/rollback、不得覆盖活动Capacity publication、Core Protocol/ABI兼容与拒绝、Prompt Rebase pass/fail、安全section覆盖和旧Run exact snapshot。
 
-CI 分层：普通提交运行 managed toolchain manifest/bootstrap/launcher/launchd conformance（使用临时 runtime home 和本地 archive fixture，不写系统目录）、Contract Pack conformance、Sealed Compiler Golden Bundle、固定 seed、小型 exhaustive、数百组 property、真实 data/store root write boundary、静态 absence baseline、removed surface negative fixtures 与候选目录不可达证明；完整回归扩大 seed、事件长度和 crash point；发布门禁另运行真实 managed darwin/arm64 Node distribution、真实 SQLite 的 Supported Limit T3/T7/Root Finalization benchmark，并对同一 source build 重新生成 absence/coverage hash。所有随机失败都必须能由 seed + shrunk event list 完整重放。
+CI 分层：普通提交运行 managed toolchain manifest/bootstrap/launcher/launchd conformance（使用临时 runtime home 和本地 archive fixture，不写系统目录）、Contract Pack conformance、Sealed Compiler Golden Bundle、固定 seed、小型 exhaustive、数百组 property、真实 data/store root write boundary、静态 absence baseline、removed surface negative fixtures 与候选目录不可达证明；完整回归扩大 seed、事件长度和 crash point；G8 另运行真实 managed darwin/arm64 Node distribution、stable Launcher startup smoke 与真实 SQLite 的六例 T3/T7/Root Finalization readiness validation，并对同一 source build 重新生成 absence/coverage hash。所有随机失败都必须能由 seed + shrunk event list 完整重放。
 
 ## 开发期实施顺序
 
@@ -6586,18 +6543,18 @@ CI 分层：普通提交运行 managed toolchain manifest/bootstrap/launcher/lau
 
 G0-G9施工使用上文临时施工生命周期。Gate标记`DONE`表示下游可以依赖当时current输出，不把未Seal/未Published的施工候选提升为生产兼容承诺；真实finding需要改变上游时，必须显式reopen Gate、记录影响并重建全部受影响下游current evidence。Working输出不得为了保留开发历史而强制additive命名或逐版全量human review；Git负责开发历史，只有显式RC、Sealed Golden、Published Registry resource和已激活Release进入不可变边界。历史G0/G1/R-016 artifact在本次治理切换前已经形成，继续作为construction provenance保留，但不授权后续Working修正复制同样的additive流程。
 
-本文批准即授权从第 1 步开始实施，不再等待额外架构确认。Contract Pack、Executable DDL、Schema Manifest、Sealed Golden Bundle 与 certified Supported Limits 是对应 gate 必须实际生成并由 CI/benchmark 证明的 exit artifact，不是批准本文前要伪造的附件，也不能因目标架构已确认而跳过。下列编号表示 capability gate，不表示所有工作必须串行；只有依赖 gate 通过后才能合并依赖它的实现。当前“可直接执行”指可以从 Contract Pack/Spec Stabilization 开工，不表示 Store 或 Production 已提前通过后续门禁。
+本文批准即授权从第 1 步开始实施，不再等待额外架构确认。Contract Pack、Executable DDL、Schema Manifest、Sealed Golden Bundle 与 G8 content-addressed release readiness evidence 是对应 gate 必须实际生成并由 CI/validation 证明的 exit artifact，不是批准本文前要伪造的附件，也不能因目标架构已确认而跳过。下列编号表示 capability gate，不表示所有工作必须串行；只有依赖 gate 通过后才能合并依赖它的实现。当前“可直接执行”指可以从 Contract Pack/Spec Stabilization 开工，不表示 Store 或 Production 已提前通过后续门禁。
 
 1. **Spec Stabilization / Contract Pack Gate**：在 `src/workflow-runtime/contracts/` 形成 Managed Node Runtime Distribution/Compiler Toolchain、Definition/Recipe/Command/Transition、Feature Manifest vNext、Card Presentation、Source/Compiled IR、Logical Schema typed relation metadata、Operational Blocker/T6e、`local_single_user_safety@1`/Capacity baseline/Product Floor/Retention、`local_single_user_sqlite@1`、Command/Permission/Reason/Denial Catalog 和 Golden Draft/Review的current machine baseline；按本文 S25 固定Node/npm/package identity，并交付不修改系统Node的side-by-side bootstrap、managed exec wrapper、stable Runtime Launcher、launchd binding与fail-closed fixture；生成并通过静态absence、surface coverage与candidate boundary manifest，不实现durable T0。G0.1-G0.9完成后新增Capacity control-plane时曾以G0.10 additive root保留当时施工证据；该历史处理不构成后续Working candidate必须additive的通用规则。
 2. **DDL 与 Store 基座 Gate**：只有 current Contract Pack root 已包含 G0.10 Capacity control-plane addendum 后，才产出覆盖全部持久化对象的 canonical executable migration、Schema Manifest、typed-FK/schema-lint、constraint/query-plan fixtures 和 empty-file SQLite DDL Gate；通过后实现独立 `workflow-runtime.db`、Connection Factory、短事务/CAS 与基础 query API。
 3. **确定性 Compiler / Sealed Golden Gate**：可在第 1 步通过后与第 2 步并行；按 pinned Toolchain 实现 strict parser、Schema/Profile、RFC 8785/domain hash、Definition/Scope Compiler、binding、DAG、condition/trigger/input、completion、policy/safety、Proof/Program 与 static child closure。Expected Plan/diagnostics 由独立 oracle review + `golden-seal` 生成 sealed artifact；逐字节通过完整 Sealed Golden Bundle 后才允许 Publisher 激活 executable resource。
 4. **Value/Registry/Authoring/Publish 基座**：实现 Value/Blob Write Intent/GC/Backup、Registry/Closure/Snapshot/Retention、Feature Manifest vNext、staged Publish、Execution Artifact 与 Core Protocol/ABI compatibility preflight；实现 `scaffold -> validate -> compile -> dry-run -> review -> publish -> activate` developer toolchain。此时尚不开放 Workflow 创建入口。
-5. **Test-only bootstrap**：提供只允许固定 fixture、Fake Adapter、临时数据目录且不可被Feature/API/Automation/host/Production入口消费的benchmark/bootstrap profile，用于开发Store/T0-T8和生成首个认证数据。它不是`certified`，必须在production build/startup中fail-closed，不能成为“开发默认配置”。该Gate exact拥有自身bootstrap source并实时检查当前import graph，但不要求后续已授权G5-G9 module path不存在，也不把持续增长的Production source count/hash纳入G4 identity。
+5. **Test-only bootstrap**：提供只允许固定 fixture、Fake Adapter、临时数据目录且不可被Feature/API/Automation/host/Production入口消费的benchmark/bootstrap profile，用于开发Store/T0-T8和生成 G8 readiness data。它不是production profile，必须在production build/startup中fail-closed，不能成为“开发默认配置”。该Gate exact拥有自身bootstrap source并实时检查当前import graph，但不要求后续已授权G5-G9 module path不存在，也不把持续增长的Production source count/hash纳入G4 identity。
 6. **Durable Creation 与基础 Runtime**：在 Store/Registry/Compiler 已存在后实现 Task Intake、durable T0/T0p、claims/ledger、State Activation、T1/T2、delegation/system/wait/join/terminal、T3/T4/T5/T6a-c，以及G5-owned T6d automatic attempt dispatch/execution watchdog、execution-retry/quality-revision durable timer与schedule-consumption primitive；G5 model/fault只覆盖automatic路径和“无G7 Gateway authorization不可调用manual入口”的negative evidence。实现Operational Blocker create/open集合与Run/Workflow operational-state cache一致性、effect key/mutable receipt、versioned Outbox Policy、typed adapter与Inbox/Outbox；G5失败路径可以幂等创建open blocker，但不得执行或测试`open -> resolved/abandoned`，不得实现Workflow deadline enforcement、Runtime Command Gateway、预授权boolean、伪造Command/Invocation/Event或test-only直写。Scheduler/Wait/Signal/Outbox/Blob开始消费Live Capacity前必须实现独立Capacity Admin Gateway、唯一Publisher、Watcher immutable pointer、CAP recovery与Admission revision/change/hash lineage。
 7. **动态结构与关闭协议**：实现 subgraph/expand/map、quorum/fail-fast、hierarchical fence、Fact Store、Root Finalization Schedule、required/best-effort child Workflow effect、T7/T8 与 compensation barrier。
 8. **控制、Card、Projection 与恢复**：实现G7-owned Deadline Watchdog，经Runtime Command Gateway使用专用System Grant和稳定key提交`cancel_workflow -> T7c`；实现authorized `advance_retry_schedule`在Gateway完成permission/policy/state guard/Command/Invocation audit后调用既有G5 T6d primitive。并实现pause/resuming/cancel、root coordinator、checkpoint、domain claim handoff/release、完整T6e authorization与source-specific remediation/integrity restoration、resolution Command/Invocation/Event、last-blocker operational restoration、administrative abandon、Recovery、Card Presentation/typed action、Runtime Center Projection/API/deep link、Capacity诊断/管理子页与独立renderer bundle；Capacity UI只能调用authoritative Capacity Admin API，仍只在test-only bootstrap下执行未认证Runtime。
-9. **认证门禁**：完成独立 Reference Model、Property/Model/Fault tests 与真实 SQLite Supported Limit T3/T7/Root-Finalization benchmark，达到 Product Floor/transaction budget，并发布与完整 certification key 精确绑定的首个 certified profile。
-10. **Production Activation**：对同一 release build 重新生成并校验 `WorkflowRuntimeAbsenceBaseline`、`ProductSurfaceCoverageManifest` 与 `MigrationCandidateBoundaryManifest`，由 stable Launcher 启动 active managed Node distribution，验证 Launcher/Core Release/Distribution/Node executable/native module/SQLite Profile 完整 certification key并运行 startup smoke；fresh deployment 以 `system:production-activation` 一次性 grant 从 checked-in baseline 创建 revision 1 genesis audit/publication，existing deployment 则验证并保留原 Capacity head/file，不得重置。随后原子激活 Core/Feature Registry pointer 与 Runtime Center Projection generation。Production Recipe inventory 可以为空；为空时验证通用 Intake=`no_route_available`、Runtime Center Workflow/待处理空状态和非 Workflow Trace 正常。存在 Published Recipe 时只验证其标准 Publish/Activate 合同，不增加任何历史候选特例。
+9. **G8 Gate**：完成受影响的 Reference Model、Property/Model/Fault tests 与基础 affected-chain regression；由 stable Launcher/active managed Node 对同一 content-addressed release 完成 Schema 11 startup smoke，并用真实 SQLite 执行固定六例 T3/T7/T8 readiness validation及T8 all-or-nothing fault regression。生成 closed startup/readiness reports并由只读 checker 通过；report 必须为 `not_certified`。
+10. **Production Activation**：对同一 release build 重新生成并校验 `WorkflowRuntimeAbsenceBaseline`、`ProductSurfaceCoverageManifest` 与 `MigrationCandidateBoundaryManifest`，由 stable Launcher 启动 active managed Node distribution，验证 Launcher/Core Release/Distribution/Node executable/native module/SQLite Profile candidate 与 G8 startup/readiness report exact匹配；fresh deployment 以 `system:production-activation` 一次性 grant 从 checked-in baseline 创建 revision 1 genesis audit/publication，existing deployment 则验证并保留原 Capacity head/file，不得重置。随后原子激活 Core/Feature Registry pointer 与 Runtime Center Projection generation。Production Recipe inventory 可以为空；为空时验证通用 Intake=`no_route_available`、Runtime Center Workflow/待处理空状态和非 Workflow Trace 正常。存在 Published Recipe 时只验证其标准 Publish/Activate 合同，不增加任何历史候选特例。
 11. **规范归档与验证生命周期切换**：G9和本文完整验收全部通过后，执行下文归档审计；冻结本文为v1只读设计底稿，移除agent全文必读和活动CI/identity依赖，将阶段性Gate证据转入可选archive audit。该步骤不得删除Schema、DDL、Store、Compiler、Golden、Plan、Toolchain、Release或Runtime启动验证，也不得改变已经激活release的identity。
 
 Gate 依赖与可并行关系固定如下：
@@ -6613,7 +6570,7 @@ Gate 依赖与可并行关系固定如下：
 | G5 Basic Runtime | G4 + current T6d ownership authority independent regression + Capacity Contract/Schema affected-chain regression | optional Domain Recipe authoring | exact T0/T0p/T1/T2a/T2b/T3a/T3b/T4/T5/T6a/T6b/T6c与T6d automatic timer/model/fault fixtures + manual-without-G7-authorization negative evidence + Operational Blocker create/open/cache fixtures；无deadline Gateway、Command write、resolution/abandon identity |
 | G6 Dynamic/Close | G5 | projection query model | T7/T8/child/compensation fixtures |
 | G7 Control/Card/Projection/Recovery | G6 | Runtime Center renderer | Deadline Watchdog -> Gateway -> T7c stable-key/System Grant/audit + authorized manual retry handoff + T6e + resolution Command/Invocation/Event + recovery/last-blocker restoration/administrative-abandon + card/projection fixtures |
-| G8 Certification | G7 | optional Domain Recipe release | certified profile meeting Product Floor |
+| G8 | G7 | optional Domain Recipe release | exact release manifest + startup-smoke report + six-case `not_certified` readiness report + affected reference/model/property/fault regression |
 | G9 Production Activation | G8 + fresh current G0/G0.10 manifests | 无 | activation + Capacity genesis/preservation audit + startup/empty-state or launchable-Recipe smoke |
 
 ### G5/G7 T6e Gate ownership resolution（历史闭合）
@@ -6707,13 +6664,13 @@ Absence generator 使用 TypeScript AST/import graph、Web route enumeration、E
 
 `local/migration-candidates/**` 允许保存历史领域材料、原始 bytes 和 checksum manifest，但不是 authoring source、test fixture、Registry resource、Feature package resource、Compiler input、compatibility reader 或 release asset。普通 content absence scan排除候选目录，独立 boundary gate 则从 production source、test helper、setup、Feature registry、Compiler fixture discovery、container/build context、package/release artifact 和 Runtime file access 两个方向证明不可达；任一 import、read、copy、glob discovery 或 Registry ref 都使 CI 失败。候选内容只能由显式人工文档审阅或 checksum verifier 读取，Runtime/Core/Feature/Assistant/Container code 不得引用。
 
-`dev_test/fix_test` 资源已作为不可执行 migration candidate 独立保存；是否迁移由 Runtime v1 完成后的独立产品决策决定，不属于本文实现、认证、Product Floor 或 Production Activation。
+`dev_test/fix_test` 资源已作为不可执行 migration candidate 独立保存；是否迁移由 Runtime v1 完成后的独立产品决策决定，不属于本文实现、G8 readiness validation 或 Production Activation。
 
-所有测试使用临时 `DATA_DIR/STORE_DIR`，不得写真实用户数据或把候选资料复制到 fixture root。Pure resolver/Compiler 与 test-only benchmark 可以在没有 certified profile 时运行；任何真实 ingress/Adapter 的 Runtime 必须通过 G8/G9。Production v1 仍固定本地单用户 `node_service + darwin/arm64`；真实文件 SQLite 的 T3/T7/Root Finalization Supported Limit、WAL、复杂度和绝对事务时长是发布门禁。若未来部署边界变为多用户、远程服务、多机或分布式 scheduler，必须重新打开 Threat Model、权限隔离、Value 机密性和存储选型，不得沿用本版本认证结论。
+所有测试使用临时 `DATA_DIR/STORE_DIR`，不得写真实用户数据或把候选资料复制到 fixture root。Pure resolver/Compiler 与 test-only benchmark 可以在没有 release readiness evidence 时运行；任何真实 ingress/Adapter 的 Runtime 必须通过 G8/G9。Production v1 仍固定本地单用户 `node_service + darwin/arm64`；真实文件 SQLite 的 T3/T7/Root Finalization representative Supported/Beyond、WAL、正确性和明显退化上限是发布门禁。若未来部署边界变为多用户、远程服务、多机或分布式 scheduler，必须重新打开 Threat Model、权限隔离、Value 机密性和存储选型，不得沿用本版本 validation 结论。
 
 ## v1验收完成后的规范归档与验证生命周期
 
-本文是Dynamic Workflow Runtime v1重构期间的完整施工设计底稿，不是Production Runtime输入，也不是永久日常开发入口。只有同时满足以下条件才允许归档：G0-G9和完整验收基于同一release全部通过；所有Normative字段、状态、事务、恢复和发布规则均已落入TypeScript/JSON Schema/Contract、DDL约束、实现或正反/Model/Fault测试；Sealed Golden、certified Profile、Core Release Manifest和G9 activation audit已发布；Production build/startup不读取本文；最终coverage audit没有发现只存在于Markdown的关键规则。
+本文是Dynamic Workflow Runtime v1重构期间的完整施工设计底稿，不是Production Runtime输入，也不是永久日常开发入口。只有同时满足以下条件才允许归档：G0-G9和完整验收基于同一release全部通过；所有Normative字段、状态、事务、恢复和发布规则均已落入TypeScript/JSON Schema/Contract、DDL约束、实现或正反/Model/Fault测试；Sealed Golden、G8 release/startup/readiness evidence、Core Release Manifest和G9 activation audit已发布；Production build/startup不读取本文；最终coverage audit没有发现只存在于Markdown的关键规则。
 
 归档操作固定为：
 
@@ -6754,7 +6711,7 @@ Current G1已使用closed、显式Schema Dependency Manifest，只读取exact re
 ## 完整验收标准
 
 - Feature UI 单候选、Feature 内多 Recipe 和全局 Domain->Recipe 两跳 routing fixture 均只能选择 pinned scope 内 exact Recipe；低置信度按 versioned selection policy 进入 clarification/confirmation，Router confidence 不构成授权。
-- Production Registry 中没有 Published Recipe 时，Runtime certification/activation 仍通过；通用 Intake 稳定返回 `no_route_available`，不创建 Workflow/Claim 且不暴露全局选择器，Runtime Center 返回零 Workflow/Recipe 的 ready 空状态。Synthetic Recipe/Definition 只存在于隔离 test-only Registry 且不能发布。
+- Production Registry 中没有 Published Recipe 时，Runtime validation/activation 仍通过；通用 Intake 稳定返回 `no_route_available`，不创建 Workflow/Claim 且不暴露全局选择器，Runtime Center 返回零 Workflow/Recipe 的 ready 空状态。Synthetic Recipe/Definition 只存在于隔离 test-only Registry 且不能发布。
 - Intake clarification 只追加合同允许的 input revision；Routing/Confirmation 都绑定 exact revision/hash。相同 `(creation_domain, creation_key, creation_intent_hash)` 的并发请求只创建一个 Workflow/activation/claims，同 key 不同 intent 返回 conflict。
 - Direct、required-finalization 与 best-effort-delivery 三种 creation mode 都具有真实 Intake/revision 0/Routing Attempt/Creation Request。Required Child Schedule 绑定 deterministic transition provenance，T8 原子把 Request/Intake 标成 created；不存在 nullable/synthetic intake 旁路。
 - Recipe 固定 Definition/entrypoint/execution policy/Context Contract/input-output schema/child allowlist；Publisher 从 Capability/Tool/MCP/file/transition/child Recipe 闭包派生 impact/recovery/permission，超过 effect ceiling 时拒绝。Micro Planner 只能生成指定 graph state 的 Scope Spec。
@@ -6790,7 +6747,7 @@ Current G1已使用closed、显式Schema Dependency Manifest，只读取exact re
 - Child policy profile 对 allowlist/recovery-kind 取交集、boolean AND、impact 与 numeric ceiling 逐层收紧；null child request 只表示继承。Compiled plan 保存完整 effective snapshot。
 - Ledger 明确区分 account scope 与 consumer；一个 Reservation 通过 Posting 原子更新 deployment/workflow/run/scope/node/execution-group accounts，保持 non-negative/under-limit/守恒与确定性失败顺序。
 - 每条进入 T3 fixed-point 的 ingress/derived Fact 都先消费 `facts_total`，再与同 seq Event 原子持久化；closed taxonomy、fact key 和 causal wave 可重放。纯 Projection/Trace/Notification 审计不计入 Fact。
-- RuntimeSafetyCeilings 按 workflow/run/scope/map/execution/wait/value 等作用域分组、全部显式 finite并进入 hash；首个 Production target 必须逐字段等于 `local_single_user_safety@1`，Pinned Safety immutable versioned，Live Capacity 使用已确认的 `5/256/2048/16 + 20/16/5 GiB` baseline并可原子热调，logical/stored/physical bytes 分开计账，每项均有一对一 Enforcement Matrix。已有 Run 不受新 Safety version影响，Capacity 调低只背压；Safety 调高超过 certified Supported Limits 时启动拒绝。启动必须验证 run total 不超过一次 T7 root fence 的 scopes/nodes/edges/attempts/waits/builds/map slots/effects认证上限。
+- RuntimeSafetyCeilings 按 workflow/run/scope/map/execution/wait/value 等作用域分组、全部显式 finite并进入 hash；首个 Production target 必须逐字段等于 `local_single_user_safety@1`，Pinned Safety immutable versioned，Live Capacity 使用已确认的 `5/256/2048/16 + 20/16/5 GiB` baseline并可原子热调，logical/stored/physical bytes 分开计账，每项均有一对一 Enforcement Matrix。已有 Run 不受新 Safety version影响，Capacity 调低只背压；Safety 调高超过 G8 readiness Supported 边界时启动拒绝。启动必须验证 run total 不超过一次 T7 root fence 的 scopes/nodes/edges/attempts/waits/builds/map slots/effects已验证上限。
 - Capacity 普通修改只有认证 `human:local-owner + runtime.capacity.manage` 可以发起；CLI/部署工具/Runtime Center 只是 entrypoint，Feature/Automation/Workflow/Executor 无 delegation path。完整 snapshot 以 expected revision+hash CAS，活动 publication 携带 revision/change id/config/publication hash，唯一 Publisher 执行 file/directory fsync + atomic rename，Watcher 只发布与 committed head 完全一致的单一 immutable pointer。Command/Invocation/Event audit 可回答 who/why/request/result/recovery；相同 config hash 的多次启用由不同 revision/change id 区分，Admission 保存三者。direct-file tamper、DB/文件各 crash point、cold start mismatch、upgrade preservation 和 genesis grant 均有 fail-closed fixture。
 - Workflow lifetime ledger 跨 activation/run 强制 activation、transition、child workflow、duration 与 usage budget；业务循环不能通过新 activation 重置累计额度。
 - Shared claim 只读、mutation 必须 exclusive；Capability claim slot 原子绑定全部 required claims，mutation gateway 在最终提交前逐项验证 held/current fencing token。第一版禁止 Graph 运行时动态抢锁。
@@ -6813,11 +6770,11 @@ Current G1已使用closed、显式Schema Dependency Manifest，只读取exact re
 - 全局 Trace 保留 Workflow 与非 Workflow 执行；独立对话 Trace 只要求 conversation/message/agent execution correlation，Workflow Trace 的 activation/run/scope/node/attempt 所属链可验证。对话发起 Workflow 时支持 causation 与 Attempt 双向查询，禁止为了统一展示创建伪 Workflow。
 - Feature UI 负责领域任务发起、产出解释和 typed Business Command；Runtime Center 只提供跨 Feature 索引、统一待处理、通用 Runtime Command、诊断、审计和深链，不重复实现完整领域工作面。
 - Engine error、action-required 与 quarantine 边界明确；integrity quarantine 停止所有状态推进且不能伪造 cut，只能恢复可信数据或写独立审计的 administrative abandon。
-- Workflow 权威事实只写独立 `workflow-runtime.db`，`messages.db` 仅保存可重建的新 Projection；跨库只走幂等 Outbox。Bootstrap 在建表前固定 database-level `page_size=4096/auto_vacuum=incremental`；所有 Runtime 连接由统一 Factory 按 `local_single_user_sqlite@1` 设置并回验 WAL/FULL/FK、timeout/temp/checkpoint、journal/cache/mmap 与 trusted-schema/trigger/read/locking/query-only 全部 PRAGMA，启动同时核对 SQLite/source/compile-options、`better-sqlite3@12.11.1` native module、Managed Node Distribution ref/hash、Node `26.5.0` executable hash 与 stable Launcher/Core Release identity。SQLite Profile 只能通过新 version、重启和重新认证修改，不能 production hot reload。
+- Workflow 权威事实只写独立 `workflow-runtime.db`，`messages.db` 仅保存可重建的新 Projection；跨库只走幂等 Outbox。Bootstrap 在建表前固定 database-level `page_size=4096/auto_vacuum=incremental`；所有 Runtime 连接由统一 Factory 按 `local_single_user_sqlite@1` 设置并回验 WAL/FULL/FK、timeout/temp/checkpoint、journal/cache/mmap 与 trusted-schema/trigger/read/locking/query-only 全部 PRAGMA，启动同时核对 SQLite/source/compile-options、`better-sqlite3@12.11.1` native module、Managed Node Distribution ref/hash、Node `26.5.0` executable hash 与 stable Launcher/Core Release identity。SQLite Profile 只能通过新 version、重启和重新执行 readiness validation 修改，不能 production hot reload。
 - Logical Schema 不含 `control_epoch`、无后缀时间或 `version/timestamps` 缩写；absolute time 全部是 UTC Unix millisecond `*_at_ms`，CAS 使用 `row_version`，状态组合由 SQLite CHECK，Deadline/Retry/Lease/Outbox/TTL 使用 Partial Index。内部多类型关系全部展开为 typed nullable FK + exactly-one CHECK，external ref 在 Manifest 显式标注；migration 不含 polymorphic `kind/id`、`error fields/error_json` 或无 target metadata 的裸 ref。Executable DDL Gate 必须覆盖 Value ownership、Registry/Retention/Backup、Capacity Head/Admin Command/Invocation/Change Event、Activation/Transition/Root Finalization、Fact/Operational Blocker、Runtime Command Ingress/Command/Confirmation/resolved Invocation 等全部持久化对象，并通过真实文件 SQLite migration、reopen、integrity/foreign-key check、Schema Manifest、constraint/schema-lint fixture 与固定查询的 query-plan fixture。
 - Checkpoint schema v7 不含 `controlEpoch`，只保存用于水位定位的 `rowVersion`；权威更新时间使用 `updatedAtMs` safe integer，ISO 时间只能由 API/运行中心 projection 派生。
 - Fixture、Property Test、独立 Reference Model、Virtual Clock/Fake Adapter 与 Fault Injection 同为强制门禁；随机失败保存 seed、shrinking 后转成永久回归 Fixture。
-- T3/T7/Root Finalization 使用真实文件 SQLite 在 versioned Supported Limit 上覆盖最坏 Graph/Scope/required-child 形状；certified profile 达到 `local_single_user_product_floor@1`，并通过 T3/T7/T8 p99 250/1000/500 ms、复杂度和正确性预算；配置不得超过认证上限。
-- 未认证阶段只有 fixture/Fake Adapter/test-data-dir 隔离的 test-only bootstrap 可以执行；任何真实 ingress/Adapter 的 Production Runtime 都必须加载与 DDL/Core/SQLite binary+compile options/Execution Profile/benchmark harness 精确匹配的 certified profile。
-- Production v1 只允许 `local_single_user + node_service + darwin/arm64` 完整 certification key、stable Launcher + active managed Node distribution、稳定 `human:local-owner` 与可信 Publisher/Executor；系统 Node、Electron/其他架构不能复用 profile，未受信任执行代码和远程多用户模式必须 fail-closed。Activation 对同一 source build 验证 `WorkflowRuntimeAbsenceBaseline`、`ProductSurfaceCoverageManifest` 与 `MigrationCandidateBoundaryManifest`：旧 table/column/row、旧关联字段、artifact/context asset、旧 data root、代码/route/config/Definition/Evaluator/Artifact Contract/fixture/import 全部 absent，removed surface 不得恢复，候选目录不得进入可执行闭包；不允许 archive/tombstone/compatibility reader 或历史导入路径。
+- G8 对 exact release 使用真实文件 SQLite 执行固定 T3 `route_group`、T7 `mixed_lifecycle`、T8 `maximum_required_child` 的 Supported/Beyond 六例：Supported 各 `1+5` 次并保持不可拆原子语义、integrity/foreign-key 与 max 1000/2000/1000 ms 上限；Beyond 在事务/写入前拒绝、affected rows为0且DB hash不变。T8另通过一次all-or-nothing fault regression。
+- Test-only bootstrap 不能进入 Production；任何真实 ingress/Adapter 的 Production Runtime 都必须加载与 DDL/Core/SQLite binary+compile options/Profile candidate/readiness harness 精确匹配的 content-addressed release startup/readiness evidence，且 report 明确 `not_certified`。
+- Production v1 只允许 `local_single_user + node_service + darwin/arm64` exact release readiness identity、stable Launcher + active managed Node distribution、稳定 `human:local-owner` 与可信 Publisher/Executor；系统 Node、Electron/其他架构不能复用 evidence，未受信任执行代码和远程多用户模式必须 fail-closed。Activation 对同一 source build 验证 `WorkflowRuntimeAbsenceBaseline`、`ProductSurfaceCoverageManifest` 与 `MigrationCandidateBoundaryManifest`：旧 table/column/row、旧关联字段、artifact/context asset、旧 data root、代码/route/config/Definition/Evaluator/Artifact Contract/fixture/import 全部 absent，removed surface 不得恢复，候选目录不得进入可执行闭包；不允许 archive/tombstone/compatibility reader 或历史导入路径。
 - Domain recipe 能组合完整 graph 能力而无需修改 core runtime。

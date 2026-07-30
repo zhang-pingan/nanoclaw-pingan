@@ -7,7 +7,7 @@ import { domainSeparatedSha256, parseSha256Hash } from '../contracts/hash.js';
 import type {
   G8CoreReleaseManifest,
   G8ReleaseInventoryEntry,
-} from '../contracts/g8-certification-types.js';
+} from '../contracts/g8-validation-types.js';
 import type { JsonObject, JsonValue, Sha256Hash } from '../contracts/types.js';
 import { parseVersionedRef } from '../contracts/versioned-ref.js';
 import {
@@ -17,16 +17,16 @@ import {
 import { CURRENT_G1_SCHEMA_IDENTITIES } from '../store/runtime-store/profile.js';
 
 const CORE_ENTRY = 'dist/index.js' as const;
-const CERTIFICATION_ENTRY =
+const VALIDATION_ENTRY =
   'dist/workflow-runtime/certification/release-entry.js' as const;
 const RELEASE_MANIFEST = 'core-release-manifest.json';
-const SQLITE_CERTIFICATION_INPUT =
-  'certification-inputs/sqlite/local_single_user_sqlite-candidate@1.json';
+const SQLITE_VALIDATION_INPUT =
+  'validation-inputs/sqlite/local_single_user_sqlite-candidate@1.json';
 const RELEASE_MANIFEST_KEYS = [
   'arch',
   'build_kind',
-  'certification_entry_relative_path',
-  'certification_entry_sha256',
+  'validation_entry_relative_path',
+  'validation_entry_sha256',
   'core_build_hash',
   'core_entry_relative_path',
   'core_entry_sha256',
@@ -198,13 +198,13 @@ function copyWorkflowRuntimeAssets(
     fs.copyFileSync(absolute, target);
     fs.chmodSync(target, 0o644);
   }
-  const certificationInput = path.join(stageRoot, SQLITE_CERTIFICATION_INPUT);
-  fs.mkdirSync(path.dirname(certificationInput), { recursive: true });
+  const validationInput = path.join(stageRoot, SQLITE_VALIDATION_INPUT);
+  fs.mkdirSync(path.dirname(validationInput), { recursive: true });
   fs.copyFileSync(
     path.join(sourceRoot, 'contracts/sqlite/local_single_user_sqlite@1.json'),
-    certificationInput,
+    validationInput,
   );
-  fs.chmodSync(certificationInput, 0o644);
+  fs.chmodSync(validationInput, 0o644);
 }
 
 function inventory(root: string): G8ReleaseInventoryEntry[] {
@@ -308,9 +308,7 @@ export function parseG8CoreReleaseManifest(
     runtime_launcher_hash: parseSha256Hash(value.runtime_launcher_hash),
     runtime_toolchain_hash: parseSha256Hash(value.runtime_toolchain_hash),
     core_entry_sha256: parseSha256Hash(value.core_entry_sha256),
-    certification_entry_sha256: parseSha256Hash(
-      value.certification_entry_sha256,
-    ),
+    validation_entry_sha256: parseSha256Hash(value.validation_entry_sha256),
     core_build_hash: parseSha256Hash(value.core_build_hash),
     inventory_hash: parseSha256Hash(value.inventory_hash),
     release_artifact_hash: parseSha256Hash(value.release_artifact_hash),
@@ -319,7 +317,7 @@ export function parseG8CoreReleaseManifest(
     value.format !== 'icarus.core-release-manifest/1' ||
     ref.id !== 'icarus.core' ||
     ref.version !== '1.2.14' ||
-    value.release_scope !== 'workflow_runtime_g8_certification' ||
+    value.release_scope !== 'workflow_runtime_g8_validation' ||
     value.build_kind !== 'release' ||
     value.platform !== 'darwin' ||
     value.arch !== 'arm64' ||
@@ -327,7 +325,7 @@ export function parseG8CoreReleaseManifest(
     JSON.stringify(value.executor_abi_majors) !== '[1]' ||
     value.database_schema_version !== 11 ||
     value.core_entry_relative_path !== CORE_ENTRY ||
-    value.certification_entry_relative_path !== CERTIFICATION_ENTRY
+    value.validation_entry_relative_path !== VALIDATION_ENTRY
   ) {
     throw new Error('Core Release Manifest fixed identity drifted');
   }
@@ -348,8 +346,8 @@ export function parseG8CoreReleaseManifest(
     runtime_toolchain_hash: hashes.runtime_toolchain_hash,
     core_entry_relative_path: CORE_ENTRY,
     core_entry_sha256: hashes.core_entry_sha256,
-    certification_entry_relative_path: CERTIFICATION_ENTRY,
-    certification_entry_sha256: hashes.certification_entry_sha256,
+    validation_entry_relative_path: VALIDATION_ENTRY,
+    validation_entry_sha256: hashes.validation_entry_sha256,
     core_build_hash: hashes.core_build_hash,
     inventory: inventoryEntries,
     inventory_hash: hashes.inventory_hash,
@@ -445,8 +443,8 @@ export function installG8CoreRelease(
   const distRoot = path.join(projectRoot, 'dist');
   if (!fs.existsSync(path.join(projectRoot, CORE_ENTRY)))
     throw new Error(`Release build is missing ${CORE_ENTRY}`);
-  if (!fs.existsSync(path.join(projectRoot, CERTIFICATION_ENTRY)))
-    throw new Error(`Release build is missing ${CERTIFICATION_ENTRY}`);
+  if (!fs.existsSync(path.join(projectRoot, VALIDATION_ENTRY)))
+    throw new Error(`Release build is missing ${VALIDATION_ENTRY}`);
 
   const releasesRoot = path.join(runtimeHome, 'core-releases');
   fs.mkdirSync(releasesRoot, { recursive: true });
@@ -479,7 +477,7 @@ export function installG8CoreRelease(
     const payload = {
       format: 'icarus.core-release-manifest/1',
       ref: { id: 'icarus.core', version: '1.2.14' },
-      release_scope: 'workflow_runtime_g8_certification',
+      release_scope: 'workflow_runtime_g8_validation',
       build_kind: 'release',
       platform: 'darwin',
       arch: 'arm64',
@@ -497,9 +495,9 @@ export function installG8CoreRelease(
       ),
       core_entry_relative_path: CORE_ENTRY,
       core_entry_sha256: rawSha256(path.join(stageRoot, CORE_ENTRY)),
-      certification_entry_relative_path: CERTIFICATION_ENTRY,
-      certification_entry_sha256: rawSha256(
-        path.join(stageRoot, CERTIFICATION_ENTRY),
+      validation_entry_relative_path: VALIDATION_ENTRY,
+      validation_entry_sha256: rawSha256(
+        path.join(stageRoot, VALIDATION_ENTRY),
       ),
       core_build_hash: coreBuildHash,
       inventory: entries,
@@ -572,8 +570,8 @@ export function checkInstalledG8CoreRelease(
     JSON.stringify(observed) !== JSON.stringify(parsed.inventory) ||
     rawSha256(path.join(releaseRoot, CORE_ENTRY)) !==
       parsed.core_entry_sha256 ||
-    rawSha256(path.join(releaseRoot, CERTIFICATION_ENTRY)) !==
-      parsed.certification_entry_sha256
+    rawSha256(path.join(releaseRoot, VALIDATION_ENTRY)) !==
+      parsed.validation_entry_sha256
   )
     throw new Error('Installed Core Release inventory drifted');
 }

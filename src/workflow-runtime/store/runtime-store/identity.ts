@@ -7,9 +7,9 @@ import type Database from 'better-sqlite3';
 
 import { readInstalledG8CoreReleaseManifest } from '../../certification/release-manifest.js';
 import type {
-  G8CertifiedReleaseBinding,
+  G8ContentAddressedReleaseBinding,
   G8CoreReleaseManifest,
-} from '../../contracts/g8-certification-types.js';
+} from '../../contracts/g8-validation-types.js';
 import {
   canonicalJson,
   domainSeparatedSha256,
@@ -29,7 +29,7 @@ import { parseVersionedRef } from '../../contracts/versioned-ref.js';
 
 export type WorkflowRuntimeIdentityMode =
   | 'candidate_development'
-  | 'certification_observation'
+  | 'release_validation'
   | 'production';
 
 export interface RuntimeHostObservation {
@@ -42,7 +42,7 @@ export interface RuntimeHostObservation {
 
 export interface WorkflowRuntimeIdentityEvidence {
   identity_mode: WorkflowRuntimeIdentityMode;
-  certification_status: 'candidate_not_certified' | 'certification_observation';
+  validation_status: 'candidate_not_validated' | 'release_validation';
   deployment_profile: 'local_single_user';
   runtime_surface: 'node_service';
   platform: 'darwin';
@@ -63,15 +63,15 @@ export interface WorkflowRuntimeIdentityEvidence {
   runtime_launcher_path: string;
   runtime_launcher_observed_hash: Sha256Hash;
   runtime_launcher_profile_hash: Sha256Hash | null;
-  core_binding_kind: 'development_checkout' | 'certified_release';
+  core_binding_kind: 'development_checkout' | 'content_addressed_release';
   core_binding_hash: Sha256Hash;
   core_entry_hash: Sha256Hash;
-  certification_entry_hash: Sha256Hash | null;
+  validation_entry_hash: Sha256Hash | null;
   core_build_hash: Sha256Hash | null;
   release_manifest_hash: Sha256Hash | null;
   release_database_schema_hash: Sha256Hash | null;
   release_artifact_profile_hash: Sha256Hash | null;
-  release_identity_status: 'missing_until_g8' | 'observed_for_certification';
+  release_identity_status: 'missing_until_g8' | 'observed_for_validation';
 }
 
 interface ManagedDistributionManifest extends JsonObject {
@@ -197,8 +197,8 @@ function checkedInDistribution(): ManagedDistributionManifest {
   );
 }
 
-interface CertifiedReleaseIdentity {
-  readonly binding: G8CertifiedReleaseBinding;
+interface ContentAddressedReleaseIdentity {
+  readonly binding: G8ContentAddressedReleaseBinding;
   readonly manifest: G8CoreReleaseManifest;
   readonly releaseManifestHash: Sha256Hash;
 }
@@ -218,17 +218,17 @@ function assertRelativePath(value: unknown, label: string): string {
   return value;
 }
 
-function verifyCertifiedReleaseBinding(
+function verifyContentAddressedReleaseBinding(
   runtimeHome: string,
   expectedManifestHash: Sha256Hash,
-): CertifiedReleaseIdentity {
+): ContentAddressedReleaseIdentity {
   const bindingDirectory = fs.realpathSync(
     path.join(runtimeHome, 'active-core'),
   );
   assertInside(
     path.join(runtimeHome, 'core-bindings'),
     bindingDirectory,
-    'Certified Core binding',
+    'Content-addressed Core binding',
   );
   const bindingPath = path.join(bindingDirectory, 'binding.json');
   const value = readJsonObject(bindingPath);
@@ -244,12 +244,12 @@ function verifyCertifiedReleaseBinding(
       'core_build_hash',
       'core_entry_relative_path',
       'core_entry_sha256',
-      'certification_entry_relative_path',
-      'certification_entry_sha256',
+      'validation_entry_relative_path',
+      'validation_entry_sha256',
       'managed_node_manifest_hash',
       'binding_hash',
     ],
-    'Certified Core Runtime binding',
+    'Content-addressed Core Runtime binding',
   );
   const releaseRelative = assertRelativePath(
     value.core_release_relative_path,
@@ -263,28 +263,26 @@ function verifyCertifiedReleaseBinding(
     value.core_entry_relative_path,
     'Core entry path',
   );
-  const certificationEntryRelative = assertRelativePath(
-    value.certification_entry_relative_path,
-    'Certification entry path',
+  const validationEntryRelative = assertRelativePath(
+    value.validation_entry_relative_path,
+    'Validation entry path',
   );
   const bindingHash = parseSha256Hash(value.binding_hash);
   const releaseManifestHash = parseSha256Hash(value.release_manifest_sha256);
   const releaseArtifactHash = parseSha256Hash(value.release_artifact_hash);
   const coreBuildHash = parseSha256Hash(value.core_build_hash);
   const coreEntryHash = parseSha256Hash(value.core_entry_sha256);
-  const certificationEntryHash = parseSha256Hash(
-    value.certification_entry_sha256,
-  );
+  const validationEntryHash = parseSha256Hash(value.validation_entry_sha256);
   const managedManifestHash = parseSha256Hash(value.managed_node_manifest_hash);
   const { binding_hash: _bindingHash, ...payload } = value;
   if (
     value.format !== 'icarus.core-runtime-launch-binding/2' ||
-    value.binding_kind !== 'certified_release' ||
+    value.binding_kind !== 'content_addressed_release' ||
     releaseRelative !==
       `core-releases/${releaseArtifactHash.slice('sha256:'.length)}` ||
     manifestRelative !== 'core-release-manifest.json' ||
     coreEntryRelative !== 'dist/index.js' ||
-    certificationEntryRelative !==
+    validationEntryRelative !==
       'dist/workflow-runtime/certification/release-entry.js' ||
     managedManifestHash !== expectedManifestHash ||
     domainSeparatedSha256(
@@ -293,7 +291,7 @@ function verifyCertifiedReleaseBinding(
     ) !== bindingHash ||
     path.basename(bindingDirectory) !== bindingHash.slice('sha256:'.length)
   ) {
-    throw new Error('Certified Core Runtime binding identity drifted');
+    throw new Error('Content-addressed Core Runtime binding identity drifted');
   }
   const releaseRoot = fs.realpathSync(path.join(runtimeHome, releaseRelative));
   assertInside(
@@ -307,7 +305,7 @@ function verifyCertifiedReleaseBinding(
   );
   if (fs.realpathSync(activeModuleReleaseRoot) !== releaseRoot) {
     throw new Error(
-      'Certification Store module is not loaded from the active Core Release',
+      'Validation Store module is not loaded from the active Core Release',
     );
   }
   const manifestPath = fs.realpathSync(
@@ -326,14 +324,16 @@ function verifyCertifiedReleaseBinding(
     manifest.core_build_hash !== coreBuildHash ||
     manifest.core_entry_relative_path !== coreEntryRelative ||
     manifest.core_entry_sha256 !== coreEntryHash ||
-    manifest.certification_entry_relative_path !== certificationEntryRelative ||
-    manifest.certification_entry_sha256 !== certificationEntryHash ||
+    manifest.validation_entry_relative_path !== validationEntryRelative ||
+    manifest.validation_entry_sha256 !== validationEntryHash ||
     manifest.managed_node_distribution_hash !== managedManifestHash
   ) {
-    throw new Error('Certified Core binding and Release Manifest disagree');
+    throw new Error(
+      'Content-addressed Core binding and Release Manifest disagree',
+    );
   }
   return {
-    binding: value as unknown as G8CertifiedReleaseBinding,
+    binding: value as unknown as G8ContentAddressedReleaseBinding,
     manifest,
     releaseManifestHash,
   };
@@ -357,7 +357,7 @@ export function assertRuntimeHostIdentity(
 ): void {
   if (mode === 'production') {
     throw new Error(
-      'Production Workflow Runtime identity is unavailable: local_single_user_sqlite@1 is candidate/not-certified and release/launcher certification fields are null until G8',
+      'Production Workflow Runtime identity is unavailable until G9 activation',
     );
   }
   if (
@@ -571,8 +571,8 @@ export function collectWorkflowRuntimeIdentityEvidence(
     runtime_launcher_path: launcherPath,
     runtime_launcher_observed_hash: launcherHash,
   } as const;
-  if (mode === 'certification_observation') {
-    const release = verifyCertifiedReleaseBinding(
+  if (mode === 'release_validation') {
+    const release = verifyContentAddressedReleaseBinding(
       runtimeHome,
       distribution.manifest_hash,
     );
@@ -581,17 +581,17 @@ export function collectWorkflowRuntimeIdentityEvidence(
     }
     return Object.freeze({
       ...common,
-      certification_status: 'certification_observation',
+      validation_status: 'release_validation',
       runtime_launcher_profile_hash: release.manifest.runtime_launcher_hash,
       core_binding_kind: release.binding.binding_kind,
       core_binding_hash: release.binding.binding_hash,
       core_entry_hash: release.binding.core_entry_sha256,
-      certification_entry_hash: release.binding.certification_entry_sha256,
+      validation_entry_hash: release.binding.validation_entry_sha256,
       core_build_hash: release.manifest.core_build_hash,
       release_manifest_hash: release.releaseManifestHash,
       release_database_schema_hash: release.manifest.database_schema_hash,
       release_artifact_profile_hash: release.manifest.release_artifact_hash,
-      release_identity_status: 'observed_for_certification',
+      release_identity_status: 'observed_for_validation',
     });
   }
   const coreBinding = verifyDevelopmentCoreBinding(
@@ -608,12 +608,12 @@ export function collectWorkflowRuntimeIdentityEvidence(
   }
   return Object.freeze({
     ...common,
-    certification_status: 'candidate_not_certified',
+    validation_status: 'candidate_not_validated',
     runtime_launcher_profile_hash: null,
     core_binding_kind: coreBinding.binding_kind,
     core_binding_hash: parseSha256Hash(coreBinding.binding_hash),
     core_entry_hash: parseSha256Hash(coreBinding.core_entry_sha256),
-    certification_entry_hash: null,
+    validation_entry_hash: null,
     core_build_hash: null,
     release_manifest_hash: null,
     release_database_schema_hash: null,

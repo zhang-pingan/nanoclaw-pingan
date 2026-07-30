@@ -4,6 +4,7 @@ import path from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { G8_READINESS_REPRESENTATIVES } from '../contracts/g8-limits.js';
 import { runG8BenchmarkCases } from './benchmark-runner.js';
 
 const roots: string[] = [];
@@ -19,90 +20,51 @@ function temporaryRoot(label: string): string {
   return root;
 }
 
-describe('G8 real-file benchmark runner', () => {
-  it('measures production T3 over an isolated cloned baseline', () => {
+describe('G8 real-file readiness runner', () => {
+  it('executes one Supported and one Beyond Limit representative per transaction family', () => {
     const cases = runG8BenchmarkCases({
-      rootDir: temporaryRoot('icarus-g8-t3-runner-'),
+      rootDir: temporaryRoot('icarus-g8-readiness-runner-'),
       identityMode: 'candidate_development',
       warmupIterations: 0,
       measurementIterations: 1,
-      profiles: ['smoke', 'beyond_limit'],
-      transactions: ['t3'],
-      shapes: { t3: ['long_chain'] },
     });
-    expect(cases).toHaveLength(2);
-    expect(cases[0]).toMatchObject({
-      transaction: 't3',
-      shape: 'long_chain',
-      profile: 'smoke',
-      production_entry: 'reconcileFactT3a',
-      beyond_limit_rejection: null,
-    });
-    expect(cases[0]!.statistics!.affected_rows).toBeGreaterThan(0);
-    expect(cases[1]!.beyond_limit_rejection).toMatchObject({
-      status: 'rejected_before_atomic_write',
-      affected_rows: 0,
-    });
-  }, 60_000);
-
-  it('measures every production T7 root-fence shape with staged subtree IDs', () => {
-    const cases = runG8BenchmarkCases({
-      rootDir: temporaryRoot('icarus-g8-t7-runner-'),
-      identityMode: 'candidate_development',
-      warmupIterations: 0,
-      measurementIterations: 1,
-      profiles: ['smoke'],
-      transactions: ['t7'],
-    });
-    expect(cases).toHaveLength(5);
-    expect(cases[0]).toMatchObject({
-      transaction: 't7',
-      shape: 'deep_tree',
-      profile: 'smoke',
-      production_entry: 'requestScopeCloseT7a',
-      beyond_limit_rejection: null,
-    });
-    for (const benchmarkCase of cases)
-      expect(benchmarkCase.statistics!.affected_rows).toBeGreaterThan(0);
-  }, 60_000);
-
-  it('seeds two distinct 128-item manifests at the supported nested-map limit', () => {
-    const cases = runG8BenchmarkCases({
-      rootDir: temporaryRoot('icarus-g8-t7-supported-map-runner-'),
-      identityMode: 'candidate_development',
-      warmupIterations: 0,
-      measurementIterations: 1,
-      profiles: ['supported_limit'],
-      transactions: ['t7'],
-      shapes: { t7: ['large_nested_map'] },
-    });
-    expect(cases).toHaveLength(1);
-    expect(cases[0]!.dimensions).toMatchObject({
-      max_map_items_total: 256,
-      max_subtree_map_slots_per_fence: 256,
-      observed_max_items_per_map: 128,
-    });
-    expect(cases[0]!.statistics!.affected_rows).toBeGreaterThan(0);
+    expect(cases).toHaveLength(6);
+    for (const transaction of ['t3', 't7', 't8'] as const) {
+      const family = cases.filter((entry) => entry.transaction === transaction);
+      expect(family).toHaveLength(2);
+      expect(family.map((entry) => entry.shape)).toEqual([
+        G8_READINESS_REPRESENTATIVES[transaction][0],
+        G8_READINESS_REPRESENTATIVES[transaction][0],
+      ]);
+      expect(family[0]!.statistics!.affected_rows).toBeGreaterThan(0);
+      expect(family[1]!.beyond_limit_rejection).toMatchObject({
+        status: 'rejected_before_atomic_write',
+        affected_rows: 0,
+      });
+      expect(family[1]!.beyond_limit_rejection!.database_after_hash).toBe(
+        family[1]!.beyond_limit_rejection!.database_before_hash,
+      );
+    }
   }, 120_000);
 
-  it('measures every production T8 required-child atomic shape', () => {
+  it('retains the T8 before-commit all-or-nothing fault invariant', () => {
     const cases = runG8BenchmarkCases({
-      rootDir: temporaryRoot('icarus-g8-t8-runner-'),
+      rootDir: temporaryRoot('icarus-g8-t8-atomic-runner-'),
       identityMode: 'candidate_development',
       warmupIterations: 0,
       measurementIterations: 1,
       profiles: ['smoke'],
       transactions: ['t8'],
+      shapes: { t8: ['all_or_nothing'] },
     });
-    expect(cases).toHaveLength(4);
+    expect(cases).toHaveLength(1);
     expect(cases[0]).toMatchObject({
       transaction: 't8',
-      shape: 'maximum_required_child',
-      profile: 'smoke',
+      shape: 'all_or_nothing',
       production_entry: 'commitRootT8',
-      beyond_limit_rejection: null,
     });
-    for (const benchmarkCase of cases)
-      expect(benchmarkCase.statistics!.affected_rows).toBeGreaterThan(0);
+    expect(cases[0]!.correctness_invariants).toContain(
+      'before_commit fault leaves Cut and Child relations absent',
+    );
   }, 60_000);
 });

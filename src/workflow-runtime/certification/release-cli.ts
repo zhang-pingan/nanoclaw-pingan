@@ -22,6 +22,4 @@ const manifest = installG8CoreRelease({
 console.log(`release_artifact_hash=${manifest.release_artifact_hash}`);
 console.log(`core_build_hash=${manifest.core_build_hash}`);
 console.log(`core_entry_sha256=${manifest.core_entry_sha256}`);
-console.log(
-  `certification_entry_sha256=${manifest.certification_entry_sha256}`,
-);
+console.log(`validation_entry_sha256=${manifest.validation_entry_sha256}`);

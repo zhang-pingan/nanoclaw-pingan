@@ -20,7 +20,7 @@
       },
       {
         "path": "src/workflow-runtime/contracts/g6-dynamic-close-contract.ts",
-        "raw_sha256": "sha256:99d7edb6fd2a2bce8ff3baafe6f9ac60122ead65fba7ada130c1f859251ae891"
+        "raw_sha256": "sha256:e341f8056dd33cd02cb5f2f9b3676cc93420dd048af82c8b0b2d8c1963718691"
       },
       {
         "path": "src/workflow-runtime/contracts/g6-dynamic-close-contract-cli.ts",
@@ -51,7 +51,7 @@
         "raw_sha256": "sha256:c94423b4db18f077d42f783dac431bdcc0999cccf8fec7987cadd3adc06870bd"
       }
     ],
-    "evidence_tree_hash": "sha256:e7f7a522857365fd2f384ad2ff38cec89c2a15dfb16cbdcabaa64189c4af9ce1"
+    "evidence_tree_hash": "sha256:3e448332373dd9b3cd26d7e49d8089c5390fa76e4c77ef6d4e88b3950459cb2b"
   },
-  "hash": "sha256:5fc08a3b169bb6260b2f6191fb710d4637876c0411450f6ef0e22fa2a20c2762"
+  "hash": "sha256:3c4e1fa2e9dd38a13062f72e2f36abae88eaabf15c86c12b866c31dc85d8a580"
 }

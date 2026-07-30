@@ -649,7 +649,7 @@ describe.sequential('G1.2 Workflow Runtime Store base', () => {
         ?.user_version,
     ).toBe(11);
     expect(store.identityEvidence).toMatchObject({
-      certification_status: 'candidate_not_certified',
+      validation_status: 'candidate_not_validated',
       platform: 'darwin',
       arch: 'arm64',
       managed_node_version: 'v26.5.0',
@@ -1234,10 +1234,10 @@ describe.sequential('G1.2 Workflow Runtime Store base', () => {
     ).toBe(2);
   }, 15_000);
 
-  it('fails closed on host/certification identity mismatches before creating a database', () => {
+  it('fails closed on host/release validation identity mismatches before creating a database', () => {
     const profile = loadFrozenWorkflowRuntimeStoreInputs().profile;
     expect(() => assertRuntimeHostIdentity(profile, 'production')).toThrow(
-      'candidate/not-certified',
+      'unavailable until G9 activation',
     );
     const host = currentRuntimeHostObservation();
     expect(() =>
@@ -1265,7 +1265,7 @@ describe.sequential('G1.2 Workflow Runtime Store base', () => {
         databaseMode: 'create',
         identityMode: 'production',
       }),
-    ).toThrow('release/launcher certification fields are null until G8');
+    ).toThrow('unavailable until G9 activation');
     expect(fs.existsSync(databasePath)).toBe(false);
   });
 });

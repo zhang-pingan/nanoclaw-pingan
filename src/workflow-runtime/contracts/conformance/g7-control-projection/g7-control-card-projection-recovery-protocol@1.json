@@ -64,7 +64,7 @@
       {
         "name": "g6_dynamic_close_accepted_candidate",
         "path": "src/workflow-runtime/contracts/contract-pack-g6-dynamic-close.json",
-        "hash": "sha256:d6d1957d342ff4d0259ede4ec8e6dcc14f3ebad08408fc555a71832428b17f94"
+        "hash": "sha256:6a71aa148617971a9bebc5f7c9e77e247106692b5b5442cf7175b7c5ca1d7c50"
       },
       {
         "name": "workflow_runtime_command_protocol",
@@ -97,5 +97,5 @@
       "frozen_historical_artifact_rewrite"
     ]
   },
-  "hash": "sha256:16003af5d3bdd7fe8c1874e46dd12a103e73d54e7d09117bf9be1c5ea6549f85"
+  "hash": "sha256:5b57d33a7115b3a03a9ff4e92ff82590bb8f13eefed39309ada198f7ac0c3dd0"
 }

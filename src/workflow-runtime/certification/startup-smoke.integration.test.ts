@@ -1,6 +1,5 @@
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
@@ -11,10 +10,11 @@ const distributionManifestPath = path.join(
   projectRoot,
   'src/workflow-runtime/contracts/toolchain/node-v26.5.0-darwin-arm64.json',
 );
+const stageTemporaryRoot = fs.realpathSync('/private/tmp');
 const temporaryRoots: string[] = [];
 
 function temporaryRoot(prefix: string): string {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+  const root = fs.mkdtempSync(path.join(stageTemporaryRoot, prefix));
   temporaryRoots.push(root);
   return root;
 }
@@ -148,9 +148,10 @@ describe('G8 release startup smoke', () => {
       database_schema_hash: string;
       production_pragmas_verified: boolean;
       integrity_check_verified: boolean;
+      foreign_key_check_verified: boolean;
       reopen_verified: boolean;
       identity_evidence: {
-        certification_status: string;
+        validation_status: string;
         release_identity_status: string;
         release_artifact_profile_hash: string;
         release_database_schema_hash: string;
@@ -167,10 +168,11 @@ describe('G8 release startup smoke', () => {
     );
     expect(report.production_pragmas_verified).toBe(true);
     expect(report.integrity_check_verified).toBe(true);
+    expect(report.foreign_key_check_verified).toBe(true);
     expect(report.reopen_verified).toBe(true);
     expect(report.identity_evidence).toMatchObject({
-      certification_status: 'certification_observation',
-      release_identity_status: 'observed_for_certification',
+      validation_status: 'release_validation',
+      release_identity_status: 'observed_for_validation',
       release_artifact_profile_hash: releaseManifest.release_artifact_hash,
       release_database_schema_hash: releaseManifest.database_schema_hash,
       better_sqlite3_version: '12.11.1',

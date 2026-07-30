@@ -1,0 +1,327 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://icarus.local/schema/workflow-runtime/g8-validation-reports@1",
+  "title": "G8 validation reports",
+  "oneOf": [
+    { "$ref": "#/$defs/startup_smoke_report" },
+    { "$ref": "#/$defs/readiness_report" }
+  ],
+  "$defs": {
+    "hash": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "version"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "version": { "type": "string", "minLength": 1 }
+      }
+    },
+    "identity_evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "identity_mode",
+        "validation_status",
+        "deployment_profile",
+        "runtime_surface",
+        "platform",
+        "arch",
+        "managed_node_version",
+        "managed_node_exec_path",
+        "managed_node_executable_hash",
+        "managed_distribution_ref",
+        "managed_distribution_hash",
+        "managed_installation_root",
+        "better_sqlite3_version",
+        "better_sqlite3_native_module_path",
+        "better_sqlite3_native_module_hash",
+        "sqlite_version",
+        "sqlite_source_id",
+        "sqlite_compile_options_hash",
+        "sqlite_compile_option_count",
+        "runtime_launcher_path",
+        "runtime_launcher_observed_hash",
+        "runtime_launcher_profile_hash",
+        "core_binding_kind",
+        "core_binding_hash",
+        "core_entry_hash",
+        "validation_entry_hash",
+        "core_build_hash",
+        "release_manifest_hash",
+        "release_database_schema_hash",
+        "release_artifact_profile_hash",
+        "release_identity_status"
+      ],
+      "properties": {
+        "identity_mode": { "const": "release_validation" },
+        "validation_status": { "const": "release_validation" },
+        "deployment_profile": { "const": "local_single_user" },
+        "runtime_surface": { "const": "node_service" },
+        "platform": { "const": "darwin" },
+        "arch": { "const": "arm64" },
+        "managed_node_version": { "const": "v26.5.0" },
+        "managed_node_exec_path": { "type": "string", "minLength": 1 },
+        "managed_node_executable_hash": { "$ref": "#/$defs/hash" },
+        "managed_distribution_ref": { "$ref": "#/$defs/ref" },
+        "managed_distribution_hash": { "$ref": "#/$defs/hash" },
+        "managed_installation_root": { "type": "string", "minLength": 1 },
+        "better_sqlite3_version": { "const": "12.11.1" },
+        "better_sqlite3_native_module_path": { "type": "string", "minLength": 1 },
+        "better_sqlite3_native_module_hash": { "$ref": "#/$defs/hash" },
+        "sqlite_version": { "type": "string", "minLength": 1 },
+        "sqlite_source_id": { "type": "string", "minLength": 1 },
+        "sqlite_compile_options_hash": { "$ref": "#/$defs/hash" },
+        "sqlite_compile_option_count": { "type": "integer", "minimum": 1 },
+        "runtime_launcher_path": { "type": "string", "minLength": 1 },
+        "runtime_launcher_observed_hash": { "$ref": "#/$defs/hash" },
+        "runtime_launcher_profile_hash": { "$ref": "#/$defs/hash" },
+        "core_binding_kind": { "const": "content_addressed_release" },
+        "core_binding_hash": { "$ref": "#/$defs/hash" },
+        "core_entry_hash": { "$ref": "#/$defs/hash" },
+        "validation_entry_hash": { "$ref": "#/$defs/hash" },
+        "core_build_hash": { "$ref": "#/$defs/hash" },
+        "release_manifest_hash": { "$ref": "#/$defs/hash" },
+        "release_database_schema_hash": { "$ref": "#/$defs/hash" },
+        "release_artifact_profile_hash": { "$ref": "#/$defs/hash" },
+        "release_identity_status": { "const": "observed_for_validation" }
+      }
+    },
+    "statistics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "p50_ms",
+        "p95_ms",
+        "p99_ms",
+        "max_ms",
+        "wal_bytes",
+        "peak_rss_bytes",
+        "affected_rows"
+      ],
+      "properties": {
+        "p50_ms": { "type": "number", "minimum": 0 },
+        "p95_ms": { "type": "number", "minimum": 0 },
+        "p99_ms": { "type": "number", "minimum": 0 },
+        "max_ms": { "type": "number", "minimum": 0 },
+        "wal_bytes": { "type": "integer", "minimum": 0 },
+        "peak_rss_bytes": { "type": "integer", "minimum": 1 },
+        "affected_rows": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "beyond_limit_rejection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "error_code",
+        "attempted_dimensions",
+        "database_before_hash",
+        "database_after_hash",
+        "affected_rows"
+      ],
+      "properties": {
+        "status": { "const": "rejected_before_atomic_write" },
+        "error_code": { "const": "runtime_supported_limit_exceeded" },
+        "attempted_dimensions": { "$ref": "#/$defs/dimensions" },
+        "database_before_hash": { "$ref": "#/$defs/hash" },
+        "database_after_hash": { "$ref": "#/$defs/hash" },
+        "affected_rows": { "const": 0 }
+      }
+    },
+    "dimensions": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991
+      }
+    },
+    "case": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "case_id",
+        "transaction",
+        "shape",
+        "profile",
+        "scale_percent",
+        "warmup_iterations",
+        "measurement_iterations",
+        "dimensions",
+        "limit_dimensions",
+        "production_entry",
+        "production_index_evidence",
+        "correctness_invariants",
+        "statistics",
+        "beyond_limit_rejection"
+      ],
+      "properties": {
+        "case_id": { "type": "string", "pattern": "^g8:(t3|t7|t8):[a-z0-9_]+:(supported_limit|beyond_limit)$" },
+        "transaction": { "enum": ["t3", "t7", "t8"] },
+        "shape": { "enum": ["route_group", "mixed_lifecycle", "maximum_required_child"] },
+        "profile": { "enum": ["supported_limit", "beyond_limit"] },
+        "scale_percent": {
+          "oneOf": [
+            { "const": 100 },
+            { "type": "null" }
+          ]
+        },
+        "warmup_iterations": { "const": 1 },
+        "measurement_iterations": { "const": 5 },
+        "dimensions": { "$ref": "#/$defs/dimensions" },
+        "limit_dimensions": { "$ref": "#/$defs/dimensions" },
+        "production_entry": { "enum": ["reconcileFactT3a", "requestScopeCloseT7a", "commitRootT8"] },
+        "production_index_evidence": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        },
+        "correctness_invariants": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        },
+        "statistics": {
+          "oneOf": [
+            { "$ref": "#/$defs/statistics" },
+            { "type": "null" }
+          ]
+        },
+        "beyond_limit_rejection": {
+          "oneOf": [
+            { "$ref": "#/$defs/beyond_limit_rejection" },
+            { "type": "null" }
+          ]
+        }
+      }
+    },
+    "startup_smoke_report": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "format",
+        "status",
+        "startup_smoke_harness_ref",
+        "startup_smoke_harness_hash",
+        "startup_smoke_max_duration_ms",
+        "duration_ms",
+        "database_schema_version",
+        "database_schema_hash",
+        "sqlite_profile_candidate_hash",
+        "production_pragmas_verified",
+        "integrity_check_verified",
+        "foreign_key_check_verified",
+        "reopen_verified",
+        "database_bytes",
+        "wal_bytes",
+        "transaction_affected_rows",
+        "identity_evidence",
+        "report_hash"
+      ],
+      "properties": {
+        "format": { "const": "icarus.startup-smoke-report/1" },
+        "status": { "const": "pass" },
+        "startup_smoke_harness_ref": { "$ref": "#/$defs/ref" },
+        "startup_smoke_harness_hash": { "$ref": "#/$defs/hash" },
+        "startup_smoke_max_duration_ms": { "const": 5000 },
+        "duration_ms": { "type": "number", "minimum": 0, "maximum": 5000 },
+        "database_schema_version": { "const": 11 },
+        "database_schema_hash": { "$ref": "#/$defs/hash" },
+        "sqlite_profile_candidate_hash": { "$ref": "#/$defs/hash" },
+        "production_pragmas_verified": { "const": true },
+        "integrity_check_verified": { "const": true },
+        "foreign_key_check_verified": { "const": true },
+        "reopen_verified": { "const": true },
+        "database_bytes": { "type": "integer", "minimum": 1 },
+        "wal_bytes": { "type": "integer", "minimum": 0 },
+        "transaction_affected_rows": { "const": 0 },
+        "identity_evidence": { "$ref": "#/$defs/identity_evidence" },
+        "report_hash": { "$ref": "#/$defs/hash" }
+      }
+    },
+    "readiness_report": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "format",
+        "ref",
+        "status",
+        "certification_status",
+        "release_manifest_hash",
+        "release_artifact_hash",
+        "core_build_hash",
+        "database_schema_hash",
+        "runtime_launcher_hash",
+        "runtime_toolchain_hash",
+        "managed_node_distribution_ref",
+        "managed_node_distribution_hash",
+        "node_runtime_version",
+        "node_executable_hash",
+        "better_sqlite3_version",
+        "better_sqlite3_native_module_hash",
+        "sqlite_version",
+        "sqlite_source_id",
+        "sqlite_compile_options_hash",
+        "sqlite_profile_candidate_hash",
+        "readiness_harness_ref",
+        "readiness_harness_hash",
+        "warmup_iterations",
+        "measurement_iterations",
+        "cases",
+        "cases_hash",
+        "security_sensitive_validation",
+        "security_validation_basis",
+        "report_hash"
+      ],
+      "properties": {
+        "format": { "const": "icarus.workflow-runtime-g8-readiness-report/1" },
+        "ref": {
+          "allOf": [
+            { "$ref": "#/$defs/ref" },
+            {
+              "type": "object",
+              "properties": {
+                "id": { "const": "icarus.workflow-runtime-g8-readiness" },
+                "version": { "const": "1.0.0" }
+              }
+            }
+          ]
+        },
+        "status": { "const": "pass" },
+        "certification_status": { "const": "not_certified" },
+        "release_manifest_hash": { "$ref": "#/$defs/hash" },
+        "release_artifact_hash": { "$ref": "#/$defs/hash" },
+        "core_build_hash": { "$ref": "#/$defs/hash" },
+        "database_schema_hash": { "$ref": "#/$defs/hash" },
+        "runtime_launcher_hash": { "$ref": "#/$defs/hash" },
+        "runtime_toolchain_hash": { "$ref": "#/$defs/hash" },
+        "managed_node_distribution_ref": { "$ref": "#/$defs/ref" },
+        "managed_node_distribution_hash": { "$ref": "#/$defs/hash" },
+        "node_runtime_version": { "const": "26.5.0" },
+        "node_executable_hash": { "$ref": "#/$defs/hash" },
+        "better_sqlite3_version": { "const": "12.11.1" },
+        "better_sqlite3_native_module_hash": { "$ref": "#/$defs/hash" },
+        "sqlite_version": { "type": "string", "minLength": 1 },
+        "sqlite_source_id": { "type": "string", "minLength": 1 },
+        "sqlite_compile_options_hash": { "$ref": "#/$defs/hash" },
+        "sqlite_profile_candidate_hash": { "$ref": "#/$defs/hash" },
+        "readiness_harness_ref": { "$ref": "#/$defs/ref" },
+        "readiness_harness_hash": { "$ref": "#/$defs/hash" },
+        "warmup_iterations": { "const": 1 },
+        "measurement_iterations": { "const": 5 },
+        "cases": {
+          "type": "array",
+          "minItems": 6,
+          "maxItems": 6,
+          "items": { "$ref": "#/$defs/case" }
+        },
+        "cases_hash": { "$ref": "#/$defs/hash" },
+        "security_sensitive_validation": { "const": "SECURITY_VALIDATION_NOT_RUN" },
+        "security_validation_basis": { "const": "static_source_existing_tests_and_invariant_mapping_only" },
+        "report_hash": { "$ref": "#/$defs/hash" }
+      }
+    }
+  }
+}

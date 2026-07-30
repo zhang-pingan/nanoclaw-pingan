@@ -10,7 +10,7 @@
     "harness_id": "local_single_user_startup_smoke@1",
     "deployment_profile": "local_single_user",
     "runtime_surface": "node_service",
-    "identity_mode": "certification_observation",
+    "identity_mode": "release_validation",
     "database_schema_version": 11,
     "database_kind": "isolated_temporary_real_file",
     "database_filename": "workflow-runtime.db",
@@ -19,8 +19,9 @@
     "transaction_probe": "zero_row_parameterized_dml",
     "reopen_required": true,
     "integrity_check_required": true,
+    "foreign_key_check_required": true,
     "startup_smoke_max_duration_ms": 5000,
-    "implementation_source_tree_hash": "sha256:42fc8bcd5c21269818e75e61d66ef0e3c2df5b589abe5d9b511684785130ec13"
+    "implementation_source_tree_hash": "sha256:ba33a68966e1b3a29db163582ebb531b1dc79939bed470f139cfb0a7df025a4d"
   },
-  "hash": "sha256:be57a2be932b3b0caee1abdceb9f9c59e1cad7a4b0c07367d13e5c1f59e850c9"
+  "hash": "sha256:f3a812de84979c259cb47296fb08141b48f445a41995aea6bbe970ff118cef37"
 }

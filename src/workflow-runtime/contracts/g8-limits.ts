@@ -1,21 +1,12 @@
-import fs from 'node:fs';
-import path from 'node:path';
-
-import { parseContractArtifactEnvelope } from './artifact.js';
-import { domainSeparatedSha256, parseSha256Hash } from './hash.js';
+import { domainSeparatedSha256 } from './hash.js';
 import {
   G8_SUPPORTED_LIMIT_KEYS,
   type G8BenchmarkCaseObservation,
   type G8BenchmarkTransaction,
-  type G8LimitDerivationPayload,
   type G8SupportedLimitKey,
   type G8SupportedLimitValues,
-} from './g8-certification-types.js';
-import { strictParseJsonBytes } from './strict-json.js';
-import type { JsonObject, JsonValue, Sha256Hash } from './types.js';
-
-export const G8_PRODUCT_FLOOR_HASH =
-  'sha256:370e01e401d98a25ca89088560edbb88d1a5cdb19d3409a877f9be5f39004521';
+} from './g8-validation-types.js';
+import type { JsonValue, Sha256Hash } from './types.js';
 
 export const G8_SUPPORTED_LIMITS: G8SupportedLimitValues = Object.freeze({
   max_scopes_total: 128,
@@ -41,57 +32,49 @@ export const G8_SUPPORTED_LIMITS: G8SupportedLimitValues = Object.freeze({
   max_required_child_creations_per_t8: 8,
 });
 
-export const G8_BENCHMARK_SHAPES = Object.freeze({
-  t3: [
-    'long_chain',
-    'wide_fan_out_fan_in',
-    'diamond',
-    'route_group',
-    'completion_heavy',
-    'condition_heavy',
-  ],
-  t7: [
-    'deep_tree',
-    'wide_tree',
-    'large_nested_map',
-    'mixed_lifecycle',
-    'effect_heavy_subtree',
-  ],
-  t8: [
-    'maximum_required_child',
-    'claim_handoff_competition',
-    'retry_exhaustion',
-    'all_or_nothing',
-  ],
-} as const satisfies Readonly<
-  Record<G8BenchmarkTransaction, readonly string[]>
->);
-
-export const G8_BENCHMARK_PROFILES = [
-  'smoke',
-  'scaling_25',
-  'scaling_50',
-  'scaling_100',
+export const G8_READINESS_PROFILES = [
   'supported_limit',
   'beyond_limit',
 ] as const;
 
-export const G8_PRODUCT_FLOOR_COVERAGE = Object.freeze({
-  max_scopes_total: 128,
-  max_nodes_total: 1024,
+export const G8_READINESS_REPRESENTATIVES = Object.freeze({
+  t3: ['route_group'],
+  t7: ['mixed_lifecycle'],
+  t8: ['maximum_required_child'],
+} as const satisfies Readonly<
+  Record<G8BenchmarkTransaction, readonly [string]>
+>);
+
+export const G8_READINESS_BEYOND_LIMIT_DIMENSIONS = Object.freeze({
+  t3: {
+    max_facts_per_transaction:
+      G8_SUPPORTED_LIMITS.max_facts_per_transaction + 1,
+  },
+  t7: {
+    max_subtree_scopes_per_fence:
+      G8_SUPPORTED_LIMITS.max_subtree_scopes_per_fence + 1,
+  },
+  t8: {
+    max_required_child_creations_per_t8:
+      G8_SUPPORTED_LIMITS.max_required_child_creations_per_t8 + 1,
+  },
+} as const satisfies Readonly<
+  Record<G8BenchmarkTransaction, Partial<G8SupportedLimitValues>>
+>);
+
+export const G8_READINESS_WARMUP_ITERATIONS = 1 as const;
+export const G8_READINESS_MEASUREMENT_ITERATIONS = 5 as const;
+
+export const G8_OBVIOUS_REGRESSION_MAX_MS = Object.freeze({
+  t3: 1000,
+  t7: 2000,
+  t8: 1000,
+} as const satisfies Readonly<Record<G8BenchmarkTransaction, number>>);
+
+export const G8_BENCHMARK_DIMENSION_LIMITS = Object.freeze({
   max_nodes_per_scope: 128,
-  max_edges_total: 4096,
   max_edges_per_scope: 512,
-  max_map_items_total: 256,
   max_items_per_map: 128,
-  max_attempts_total: 4096,
-  max_waits_total: 512,
-  max_builds_total: 512,
-  max_effect_operations_total: 2048,
-  max_facts_per_transaction: 16384,
-  max_frontier_bytes: 16777216,
-  max_nesting_depth: 8,
-  max_required_child_creations_per_t8: 8,
 });
 
 export function deriveWorstCaseT7Facts(
@@ -125,67 +108,6 @@ export function deriveWorstCaseT7ManifestBytes(
   return 4096 + records * (identifierAndHashBytes + recordEnvelopeBytes);
 }
 
-function loadProductFloor(projectRoot: string) {
-  const filePath = path.join(
-    projectRoot,
-    'src/workflow-runtime/contracts/safety/local_single_user_product_floor@1.json',
-  );
-  const artifact = parseContractArtifactEnvelope(
-    strictParseJsonBytes(fs.readFileSync(filePath)),
-  );
-  if (
-    artifact.format !== 'icarus.workflow-runtime-product-floor/1' ||
-    artifact.hash !== G8_PRODUCT_FLOOR_HASH
-  ) {
-    throw new Error('G8 Product Floor identity drifted');
-  }
-  return artifact;
-}
-
-export function createG8LimitDerivation(
-  projectRoot: string,
-  implementationSourceTreeHash: Sha256Hash,
-): G8LimitDerivationPayload {
-  parseSha256Hash(implementationSourceTreeHash);
-  const floor = loadProductFloor(projectRoot);
-  const limits = (floor.payload as JsonObject).limits;
-  if (!limits || typeof limits !== 'object' || Array.isArray(limits)) {
-    throw new Error('G8 Product Floor limits are malformed');
-  }
-  const expectedFloor = G8_PRODUCT_FLOOR_COVERAGE as Record<string, number>;
-  for (const [key, expected] of Object.entries(expectedFloor)) {
-    if ((limits as JsonObject)[key] !== expected) {
-      throw new Error(`G8 Product Floor ${key} drifted`);
-    }
-  }
-  const worstCaseFacts = deriveWorstCaseT7Facts();
-  const worstCaseManifestBytes = deriveWorstCaseT7ManifestBytes();
-  if (
-    worstCaseFacts > G8_SUPPORTED_LIMITS.max_t7_derived_facts_per_fence ||
-    worstCaseFacts > G8_SUPPORTED_LIMITS.max_facts_per_transaction ||
-    worstCaseManifestBytes >
-      G8_SUPPORTED_LIMITS.max_subtree_fence_manifest_bytes
-  ) {
-    throw new Error('G8 T7 termination derivation exceeds Supported Limits');
-  }
-  return {
-    derivation_id: 'local_single_user_limit_derivation@1',
-    algorithm_version: '1.0.0',
-    supported_limits: G8_SUPPORTED_LIMITS,
-    product_floor_ref: floor.ref,
-    product_floor_hash: floor.hash,
-    product_floor_coverage: G8_PRODUCT_FLOOR_COVERAGE,
-    worst_case_t7_facts: worstCaseFacts,
-    worst_case_t7_manifest_bytes: worstCaseManifestBytes,
-    benchmark_shape_requirements: {
-      t3: [...G8_BENCHMARK_SHAPES.t3],
-      t7: [...G8_BENCHMARK_SHAPES.t7],
-      t8: [...G8_BENCHMARK_SHAPES.t8],
-    },
-    implementation_source_tree_hash: implementationSourceTreeHash,
-  };
-}
-
 export class G8SupportedLimitError extends Error {
   readonly code = 'runtime_supported_limit_exceeded';
 }
@@ -206,7 +128,7 @@ export function assertG8DimensionsWithinSupportedLimits(
   }
   for (const key of keys as G8SupportedLimitKey[]) {
     if ((dimensions[key] ?? 0) > G8_SUPPORTED_LIMITS[key]) {
-      throw new G8SupportedLimitError(`${key} exceeds its certified limit`);
+      throw new G8SupportedLimitError(`${key} exceeds its supported limit`);
     }
   }
 }

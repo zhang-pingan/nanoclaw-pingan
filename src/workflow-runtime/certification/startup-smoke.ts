@@ -6,7 +6,6 @@ import { domainSeparatedSha256 } from '../contracts/hash.js';
 import { loadG8FoundationArtifacts } from '../contracts/g8-foundation-contracts.js';
 import type { JsonValue } from '../contracts/types.js';
 import { WorkflowRuntimeConnectionFactory } from '../store/runtime-store/index.js';
-import { observeMinimumMachineClass } from './machine-class.js';
 
 export interface RunStartupSmokeOptions {
   readonly storeDir: string;
@@ -40,17 +39,13 @@ export function runG8StartupSmoke(options: RunStartupSmokeOptions) {
   const harness = artifacts.startupSmokeHarness.payload;
   if (
     harness.harness_id !== 'local_single_user_startup_smoke@1' ||
-    harness.identity_mode !== 'certification_observation' ||
+    harness.identity_mode !== 'release_validation' ||
     harness.database_schema_version !== 11 ||
     harness.database_filename !== 'workflow-runtime.db' ||
     harness.startup_smoke_max_duration_ms !== 5000
   ) {
     throw new Error('Startup-smoke harness fixed values drifted');
   }
-  const machine = observeMinimumMachineClass({
-    targetPath: storeDir,
-    purpose: 'startup_preflight',
-  });
   const databasePath = path.join(storeDir, harness.database_filename);
   const startedAt = performance.now();
   let identityEvidence;
@@ -58,11 +53,13 @@ export function runG8StartupSmoke(options: RunStartupSmokeOptions) {
   let profileArtifactHash;
   let transactionAffectedRows = -1;
   let reopenedSchemaVersion = -1;
+  let integrityCheckVerified = false;
+  let foreignKeyCheckVerified = false;
   try {
     const store = WorkflowRuntimeConnectionFactory.openStore({
       databasePath,
       databaseMode: 'create',
-      identityMode: 'certification_observation',
+      identityMode: 'release_validation',
     });
     try {
       identityEvidence = store.identityEvidence;
@@ -81,13 +78,23 @@ export function runG8StartupSmoke(options: RunStartupSmokeOptions) {
     const reopened = WorkflowRuntimeConnectionFactory.openStore({
       databasePath,
       databaseMode: 'open_existing',
-      identityMode: 'certification_observation',
+      identityMode: 'release_validation',
     });
     try {
       reopenedSchemaVersion = Number(
         reopened.queryOne<{ user_version: number }>('PRAGMA user_version', [])
           ?.user_version,
       );
+      integrityCheckVerified =
+        reopened.queryOne<{ integrity_check: string }>(
+          'PRAGMA integrity_check',
+          [],
+        )?.integrity_check === 'ok';
+      foreignKeyCheckVerified =
+        reopened.queryAll<Record<string, unknown>>(
+          'PRAGMA foreign_key_check',
+          [],
+        ).length === 0;
     } finally {
       reopened.close();
     }
@@ -100,6 +107,8 @@ export function runG8StartupSmoke(options: RunStartupSmokeOptions) {
     if (
       transactionAffectedRows !== 0 ||
       reopenedSchemaVersion !== 11 ||
+      !integrityCheckVerified ||
+      !foreignKeyCheckVerified ||
       !identityEvidence ||
       !schemaHash ||
       !profileArtifactHash
@@ -117,12 +126,12 @@ export function runG8StartupSmoke(options: RunStartupSmokeOptions) {
       database_schema_hash: schemaHash,
       sqlite_profile_candidate_hash: profileArtifactHash,
       production_pragmas_verified: true,
-      integrity_check_verified: true,
+      integrity_check_verified: integrityCheckVerified,
+      foreign_key_check_verified: foreignKeyCheckVerified,
       reopen_verified: true,
       database_bytes: fileBytes(databasePath),
       wal_bytes: fileBytes(`${databasePath}-wal`),
       transaction_affected_rows: transactionAffectedRows,
-      machine_observation: machine,
       identity_evidence: identityEvidence,
     } as const;
     const report = {

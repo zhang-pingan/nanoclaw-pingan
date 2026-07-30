@@ -1,0 +1,293 @@
+{
+  "format": "icarus.workflow-runtime-g8-readiness-report/1",
+  "ref": {
+    "id": "icarus.workflow-runtime-g8-readiness",
+    "version": "1.0.0"
+  },
+  "status": "pass",
+  "certification_status": "not_certified",
+  "release_manifest_hash": "sha256:70efad4c1a6500ed57544735de2e96ef82df7c679369d989b6f3bbda81e4a038",
+  "release_artifact_hash": "sha256:c4b9fb28a96f835955bfc214c4cce3db3c8096ccb2920f1c291459aab9041df8",
+  "core_build_hash": "sha256:1164aa53bf0551e801e60d9a89059e2e9edf12206fbcbd20fa5779da324e64f8",
+  "database_schema_hash": "sha256:ad998b2d0bb5e5f158b0be6d13db79cb6a0c0650d5064b267262551af266189c",
+  "runtime_launcher_hash": "sha256:01eb918209c446eabf17c9061ca78cd3a1477fa0f7effc7e7ab290da51e5f9bc",
+  "runtime_toolchain_hash": "sha256:9d74186239625b0874d7f15b6af279f70da43f1f794efdf675a2c69b7c5c8286",
+  "managed_node_distribution_ref": {
+    "id": "nodejs.node-v26.5.0-darwin-arm64",
+    "version": "1.0.0"
+  },
+  "managed_node_distribution_hash": "sha256:0824f5044057d6ff26dc45022b842342f148b2dda2f0dd0feb17dd0b045f6cad",
+  "node_runtime_version": "26.5.0",
+  "node_executable_hash": "sha256:cbee2298aee5cc476bf8d5441e7348b627254a39d869743a5b04489028c729d4",
+  "better_sqlite3_version": "12.11.1",
+  "better_sqlite3_native_module_hash": "sha256:0000d73c6e2e94318ed2b9339139623d5a0908b195f1e761c16cfd98f9cc6229",
+  "sqlite_version": "3.53.2",
+  "sqlite_source_id": "2026-06-03 19:12:13 d6e03d8c777cfa2d35e3b60d8ec3e0187f3e9f99d8e2ee9cac695fd6fcdf1a24",
+  "sqlite_compile_options_hash": "sha256:b7145e6588d91dfdd16bd436e94007463fd4d69b6644beacc3d11ab111625d12",
+  "sqlite_profile_candidate_hash": "sha256:3d69742dad2fefa8bef4ba47e375defd705e3b32920a92b105a43726436fb7af",
+  "readiness_harness_ref": {
+    "id": "local_single_user_g8_readiness",
+    "version": "1.0.0"
+  },
+  "readiness_harness_hash": "sha256:65f7f81b49e7612bb8d068a8014beff8427e279a947bf57a07c68b78eb5e20f8",
+  "warmup_iterations": 1,
+  "measurement_iterations": 5,
+  "cases": [
+    {
+      "case_id": "g8:t3:route_group:supported_limit",
+      "transaction": "t3",
+      "shape": "route_group",
+      "profile": "supported_limit",
+      "scale_percent": 100,
+      "warmup_iterations": 1,
+      "measurement_iterations": 5,
+      "dimensions": {
+        "max_nodes_total": 128,
+        "max_edges_total": 127,
+        "max_facts_per_transaction": 255,
+        "max_frontier_bytes": 16777216,
+        "max_scopes_total": 1
+      },
+      "limit_dimensions": {
+        "max_nodes_total": 128,
+        "max_edges_total": 127,
+        "max_facts_per_transaction": 255,
+        "max_frontier_bytes": 16777216,
+        "max_scopes_total": 1
+      },
+      "production_entry": "reconcileFactT3a",
+      "production_index_evidence": [
+        "query:t3_affected_edges->idx:edges:scope_kind",
+        "query:t3_fact_frontier->idx:facts:scope_event",
+        "query:t3_fact_queue->idx:facts:queue"
+      ],
+      "correctness_invariants": [
+        "terminal ingress fact is backed by persisted Node output",
+        "fixed-point facts and edge resolutions commit atomically",
+        "Graph Run event head advances by CAS exactly once"
+      ],
+      "statistics": {
+        "p50_ms": 255.12262499999997,
+        "p95_ms": 260.37758399999984,
+        "p99_ms": 260.37758399999984,
+        "max_ms": 260.37758399999984,
+        "wal_bytes": 2599752,
+        "peak_rss_bytes": 699203584,
+        "affected_rows": 2558
+      },
+      "beyond_limit_rejection": null
+    },
+    {
+      "case_id": "g8:t3:route_group:beyond_limit",
+      "transaction": "t3",
+      "shape": "route_group",
+      "profile": "beyond_limit",
+      "scale_percent": null,
+      "warmup_iterations": 1,
+      "measurement_iterations": 5,
+      "dimensions": {
+        "max_facts_per_transaction": 16385
+      },
+      "limit_dimensions": {
+        "max_facts_per_transaction": 16385
+      },
+      "production_entry": "reconcileFactT3a",
+      "production_index_evidence": [
+        "query:t3_affected_edges->idx:edges:scope_kind",
+        "query:t3_fact_frontier->idx:facts:scope_event",
+        "query:t3_fact_queue->idx:facts:queue"
+      ],
+      "correctness_invariants": [
+        "RuntimeSupportedLimits guard executes before production transaction invocation",
+        "production transaction callback remains uninvoked on rejection",
+        "database bytes remain identical across deterministic rejection"
+      ],
+      "statistics": null,
+      "beyond_limit_rejection": {
+        "status": "rejected_before_atomic_write",
+        "error_code": "runtime_supported_limit_exceeded",
+        "attempted_dimensions": {
+          "max_facts_per_transaction": 16385
+        },
+        "database_before_hash": "sha256:dfcc92a6c8ddb3c55ecf2985d768cc5fdecbf83ef1e5f9f292ef435d4a6c5862",
+        "database_after_hash": "sha256:dfcc92a6c8ddb3c55ecf2985d768cc5fdecbf83ef1e5f9f292ef435d4a6c5862",
+        "affected_rows": 0
+      }
+    },
+    {
+      "case_id": "g8:t7:mixed_lifecycle:supported_limit",
+      "transaction": "t7",
+      "shape": "mixed_lifecycle",
+      "profile": "supported_limit",
+      "scale_percent": 100,
+      "warmup_iterations": 1,
+      "measurement_iterations": 5,
+      "dimensions": {
+        "max_scopes_total": 128,
+        "max_nodes_total": 1024,
+        "max_edges_total": 4096,
+        "max_attempts_total": 4096,
+        "max_waits_total": 512,
+        "max_builds_total": 512,
+        "max_effect_operations_total": 2048,
+        "max_subtree_scopes_per_fence": 128,
+        "max_subtree_nodes_per_fence": 1024,
+        "max_subtree_edges_per_fence": 4096,
+        "max_subtree_attempts_per_fence": 4096,
+        "max_subtree_waits_per_fence": 512,
+        "max_subtree_builds_per_fence": 512,
+        "max_subtree_effects_per_fence": 2048,
+        "observed_max_nodes_per_scope": 8,
+        "observed_max_edges_per_scope": 32,
+        "observed_max_nesting_depth": 7
+      },
+      "limit_dimensions": {
+        "max_scopes_total": 128,
+        "max_nodes_total": 1024,
+        "max_edges_total": 4096,
+        "max_attempts_total": 4096,
+        "max_waits_total": 512,
+        "max_builds_total": 512,
+        "max_effect_operations_total": 2048,
+        "max_subtree_scopes_per_fence": 128,
+        "max_subtree_nodes_per_fence": 1024,
+        "max_subtree_edges_per_fence": 4096,
+        "max_subtree_attempts_per_fence": 4096,
+        "max_subtree_waits_per_fence": 512,
+        "max_subtree_builds_per_fence": 512,
+        "max_subtree_effects_per_fence": 2048
+      },
+      "production_entry": "requestScopeCloseT7a",
+      "production_index_evidence": [
+        "recursive-subtree-anchor->sqlite_autoindex_workflow_graph_scopes_2",
+        "recursive-subtree-child->idx:scopes:parent",
+        "staged-subtree-membership->temp.workflow_runtime_transient_id_sets"
+      ],
+      "correctness_invariants": [
+        "Recursive CTE discovers the complete bounded subtree once",
+        "TEMP ID staging drives set-based fence updates without dynamic IN SQL",
+        "all descendant close requests, epochs, work manifests, and cleanup keys commit atomically"
+      ],
+      "statistics": {
+        "p50_ms": 144.62537499999962,
+        "p95_ms": 149.59833300000173,
+        "p99_ms": 149.59833300000173,
+        "max_ms": 149.59833300000173,
+        "wal_bytes": 9953952,
+        "peak_rss_bytes": 734756864,
+        "affected_rows": 4488
+      },
+      "beyond_limit_rejection": null
+    },
+    {
+      "case_id": "g8:t7:mixed_lifecycle:beyond_limit",
+      "transaction": "t7",
+      "shape": "mixed_lifecycle",
+      "profile": "beyond_limit",
+      "scale_percent": null,
+      "warmup_iterations": 1,
+      "measurement_iterations": 5,
+      "dimensions": {
+        "max_subtree_scopes_per_fence": 129
+      },
+      "limit_dimensions": {
+        "max_subtree_scopes_per_fence": 129
+      },
+      "production_entry": "requestScopeCloseT7a",
+      "production_index_evidence": [
+        "recursive-subtree-anchor->sqlite_autoindex_workflow_graph_scopes_2",
+        "recursive-subtree-child->idx:scopes:parent",
+        "staged-subtree-membership->temp.workflow_runtime_transient_id_sets"
+      ],
+      "correctness_invariants": [
+        "RuntimeSupportedLimits guard executes before production transaction invocation",
+        "production transaction callback remains uninvoked on rejection",
+        "database bytes remain identical across deterministic rejection"
+      ],
+      "statistics": null,
+      "beyond_limit_rejection": {
+        "status": "rejected_before_atomic_write",
+        "error_code": "runtime_supported_limit_exceeded",
+        "attempted_dimensions": {
+          "max_subtree_scopes_per_fence": 129
+        },
+        "database_before_hash": "sha256:ecd8065a5853a6e3254ecae8d118cc3f106b1b7fe76b29cf693bb25c17cd8bfc",
+        "database_after_hash": "sha256:ecd8065a5853a6e3254ecae8d118cc3f106b1b7fe76b29cf693bb25c17cd8bfc",
+        "affected_rows": 0
+      }
+    },
+    {
+      "case_id": "g8:t8:maximum_required_child:supported_limit",
+      "transaction": "t8",
+      "shape": "maximum_required_child",
+      "profile": "supported_limit",
+      "scale_percent": 100,
+      "warmup_iterations": 1,
+      "measurement_iterations": 5,
+      "dimensions": {
+        "max_required_child_creations_per_t8": 8
+      },
+      "limit_dimensions": {
+        "max_required_child_creations_per_t8": 8
+      },
+      "production_entry": "commitRootT8",
+      "production_index_evidence": [
+        "required-schedule->idx:root_finalization_schedules:close_status",
+        "child-creation->uk:workflows:creation",
+        "child-relation->uk:workflow_relations:effect",
+        "claim-handoff->uk:domain_claim_handoffs:parent"
+      ],
+      "correctness_invariants": [
+        "all required Child Schedules are ready with frozen provenance before T8",
+        "required Child Workflows, relations, optional Claim handoffs, Cut, checkpoint, and terminal Activation commit atomically"
+      ],
+      "statistics": {
+        "p50_ms": 17.38445800000045,
+        "p95_ms": 21.4061249999977,
+        "p99_ms": 21.4061249999977,
+        "max_ms": 21.4061249999977,
+        "wal_bytes": 659232,
+        "peak_rss_bytes": 807813120,
+        "affected_rows": 454
+      },
+      "beyond_limit_rejection": null
+    },
+    {
+      "case_id": "g8:t8:maximum_required_child:beyond_limit",
+      "transaction": "t8",
+      "shape": "maximum_required_child",
+      "profile": "beyond_limit",
+      "scale_percent": null,
+      "warmup_iterations": 1,
+      "measurement_iterations": 5,
+      "dimensions": {
+        "max_required_child_creations_per_t8": 9
+      },
+      "limit_dimensions": {
+        "max_required_child_creations_per_t8": 9
+      },
+      "production_entry": "commitRootT8",
+      "production_index_evidence": [],
+      "correctness_invariants": [
+        "RuntimeSupportedLimits guard executes before production transaction invocation",
+        "production transaction callback remains uninvoked on rejection",
+        "database bytes remain identical across deterministic rejection"
+      ],
+      "statistics": null,
+      "beyond_limit_rejection": {
+        "status": "rejected_before_atomic_write",
+        "error_code": "runtime_supported_limit_exceeded",
+        "attempted_dimensions": {
+          "max_required_child_creations_per_t8": 9
+        },
+        "database_before_hash": "sha256:2813febc20eb8715ef6c5dbd242cc0ca97574941b524c7b80c6038459adee8d3",
+        "database_after_hash": "sha256:2813febc20eb8715ef6c5dbd242cc0ca97574941b524c7b80c6038459adee8d3",
+        "affected_rows": 0
+      }
+    }
+  ],
+  "cases_hash": "sha256:3096a513f6ef33d236933e57ae4c4578b1f65f3d27fb67f4c7c2279f98a2be95",
+  "security_sensitive_validation": "SECURITY_VALIDATION_NOT_RUN",
+  "security_validation_basis": "static_source_existing_tests_and_invariant_mapping_only",
+  "report_hash": "sha256:d66d3020fc7df6ede1208ec2d22278518f41dc8085300bdb8787a43d89729507"
+}
