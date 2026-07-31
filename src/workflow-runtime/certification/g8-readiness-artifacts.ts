@@ -17,7 +17,6 @@ import {
 import type {
   G8BenchmarkCaseObservation,
   G8BenchmarkTransaction,
-  G8CoreReleaseManifest,
   G8ReadinessReport,
   G8StartupSmokeReport,
 } from '../contracts/g8-validation-types.js';
@@ -28,7 +27,10 @@ import {
 import type { JsonObject, JsonValue, Sha256Hash } from '../contracts/types.js';
 import type { WorkflowRuntimeIdentityEvidence } from '../store/runtime-store/identity.js';
 import { loadG8FoundationArtifacts } from '../contracts/g8-foundation-contracts.js';
-import { parseG8CoreReleaseManifest } from './release-manifest.js';
+import {
+  parseRevalidatableCoreReleaseManifest,
+  type RevalidatableCoreReleaseManifest,
+} from './release-manifest.js';
 
 export const G8_VALIDATION_OUTPUT_ROOT =
   'src/workflow-runtime/contracts/certification/generated';
@@ -148,7 +150,7 @@ function assertReadinessCases(
 }
 
 export interface CreateG8ReadinessReportOptions {
-  readonly release: G8CoreReleaseManifest;
+  readonly release: RevalidatableCoreReleaseManifest;
   readonly releaseManifestHash: Sha256Hash;
   readonly startupReport: G8StartupSmokeReport;
   readonly evidence: WorkflowRuntimeIdentityEvidence;
@@ -159,7 +161,7 @@ export interface CreateG8ReadinessReportOptions {
 export function createG8ReadinessReport(
   options: CreateG8ReadinessReportOptions,
 ): G8ReadinessReport {
-  const release = parseG8CoreReleaseManifest(options.release);
+  const release = parseRevalidatableCoreReleaseManifest(options.release);
   const artifacts = loadG8FoundationArtifacts();
   if (
     JSON.stringify(artifacts.readinessHarness.payload.supported_limits) !==
@@ -208,7 +210,10 @@ export function createG8ReadinessReport(
     evidence.identity_mode !== 'release_validation' ||
     evidence.validation_status !== 'release_validation' ||
     evidence.release_identity_status !== 'observed_for_validation' ||
-    evidence.core_binding_kind !== 'content_addressed_release' ||
+    ![
+      'content_addressed_release',
+      'content_addressed_production_release',
+    ].includes(evidence.core_binding_kind) ||
     evidence.release_artifact_profile_hash !== release.release_artifact_hash ||
     evidence.release_database_schema_hash !== release.database_schema_hash ||
     evidence.core_build_hash !== release.core_build_hash ||
@@ -314,13 +319,13 @@ export function readG8StartupSmokeReport(
 }
 
 export function checkG8ReadinessOutput(outputRootInput: string): {
-  release: G8CoreReleaseManifest;
+  release: RevalidatableCoreReleaseManifest;
   startupReport: JsonObject;
   readinessReport: G8ReadinessReport;
 } {
   const outputRoot = fs.realpathSync(outputRootInput);
   const releasePath = path.join(outputRoot, G8_CORE_RELEASE_MANIFEST_FILENAME);
-  const release = parseG8CoreReleaseManifest(
+  const release = parseRevalidatableCoreReleaseManifest(
     strictParseJsonBytes(fs.readFileSync(releasePath)),
   );
   const startupReport = readG8StartupSmokeReport(

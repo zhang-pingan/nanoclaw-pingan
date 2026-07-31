@@ -236,9 +236,18 @@ function validateBoundaries(): void {
       }
     }
   }
-  for (const forbidden of ['registry']) {
-    if (fs.existsSync(path.join(workflowRuntimeRoot, forbidden))) {
-      throw new Error(`G3+ boundary crossed: ${forbidden}`);
+  const registryRoot = path.join(workflowRuntimeRoot, 'registry');
+  if (fs.existsSync(registryRoot)) {
+    const allowedRegistryFiles = new Set([
+      'production-activation-entry.ts',
+      'production-activation-runtime.ts',
+      'production-activation.test.ts',
+      'production-activation.ts',
+    ]);
+    for (const entry of fs.readdirSync(registryRoot)) {
+      if (!allowedRegistryFiles.has(entry)) {
+        throw new Error(`G3+ boundary crossed: registry/${entry}`);
+      }
     }
   }
 }

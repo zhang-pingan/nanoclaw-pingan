@@ -83,10 +83,13 @@ describe('frozen G2 Production Compiler publication', () => {
       'workflow-publisher.test.ts',
       'workflow-publisher.ts',
     ]);
-    for (const forbidden of ['registry']) {
-      expect(fs.existsSync(path.join(compilerRoot, '..', forbidden))).toBe(
-        false,
-      );
-    }
+    expect(
+      fs.readdirSync(path.join(compilerRoot, '../registry')).sort(),
+    ).toEqual([
+      'production-activation-entry.ts',
+      'production-activation-runtime.ts',
+      'production-activation.test.ts',
+      'production-activation.ts',
+    ]);
   });
 });

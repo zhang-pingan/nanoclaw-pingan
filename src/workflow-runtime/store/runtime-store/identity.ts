@@ -5,11 +5,18 @@ import { createRequire } from 'module';
 
 import type Database from 'better-sqlite3';
 
-import { readInstalledG8CoreReleaseManifest } from '../../certification/release-manifest.js';
+import {
+  readInstalledG8CoreReleaseManifest,
+  readInstalledG9ProductionCandidateRelease,
+} from '../../certification/release-manifest.js';
 import type {
   G8ContentAddressedReleaseBinding,
   G8CoreReleaseManifest,
 } from '../../contracts/g8-validation-types.js';
+import type {
+  G9ContentAddressedCoreBinding,
+  G9ProductionCoreReleaseManifest,
+} from '../../contracts/g9-production-activation-types.js';
 import {
   canonicalJson,
   domainSeparatedSha256,
@@ -30,6 +37,7 @@ import { parseVersionedRef } from '../../contracts/versioned-ref.js';
 export type WorkflowRuntimeIdentityMode =
   | 'candidate_development'
   | 'release_validation'
+  | 'production_activation'
   | 'production';
 
 export interface RuntimeHostObservation {
@@ -42,7 +50,11 @@ export interface RuntimeHostObservation {
 
 export interface WorkflowRuntimeIdentityEvidence {
   identity_mode: WorkflowRuntimeIdentityMode;
-  validation_status: 'candidate_not_validated' | 'release_validation';
+  validation_status:
+    | 'candidate_not_validated'
+    | 'release_validation'
+    | 'production_activation'
+    | 'production';
   deployment_profile: 'local_single_user';
   runtime_surface: 'node_service';
   platform: 'darwin';
@@ -63,7 +75,10 @@ export interface WorkflowRuntimeIdentityEvidence {
   runtime_launcher_path: string;
   runtime_launcher_observed_hash: Sha256Hash;
   runtime_launcher_profile_hash: Sha256Hash | null;
-  core_binding_kind: 'development_checkout' | 'content_addressed_release';
+  core_binding_kind:
+    | 'development_checkout'
+    | 'content_addressed_release'
+    | 'content_addressed_production_release';
   core_binding_hash: Sha256Hash;
   core_entry_hash: Sha256Hash;
   validation_entry_hash: Sha256Hash | null;
@@ -71,7 +86,11 @@ export interface WorkflowRuntimeIdentityEvidence {
   release_manifest_hash: Sha256Hash | null;
   release_database_schema_hash: Sha256Hash | null;
   release_artifact_profile_hash: Sha256Hash | null;
-  release_identity_status: 'missing_until_g8' | 'observed_for_validation';
+  release_identity_status:
+    | 'missing_until_g8'
+    | 'observed_for_validation'
+    | 'observed_for_activation'
+    | 'active_production';
 }
 
 interface ManagedDistributionManifest extends JsonObject {
@@ -200,6 +219,12 @@ function checkedInDistribution(): ManagedDistributionManifest {
 interface ContentAddressedReleaseIdentity {
   readonly binding: G8ContentAddressedReleaseBinding;
   readonly manifest: G8CoreReleaseManifest;
+  readonly releaseManifestHash: Sha256Hash;
+}
+
+interface ProductionReleaseIdentity {
+  readonly binding: G9ContentAddressedCoreBinding;
+  readonly manifest: G9ProductionCoreReleaseManifest;
   readonly releaseManifestHash: Sha256Hash;
 }
 
@@ -339,6 +364,112 @@ function verifyContentAddressedReleaseBinding(
   };
 }
 
+function verifyProductionReleaseBinding(
+  runtimeHome: string,
+  expectedManifestHash: Sha256Hash,
+  pointerName: 'activation-core' | 'active-core',
+): ProductionReleaseIdentity {
+  const bindingDirectory = fs.realpathSync(path.join(runtimeHome, pointerName));
+  assertInside(
+    path.join(runtimeHome, 'core-bindings'),
+    bindingDirectory,
+    'Production Core binding',
+  );
+  const bindingPath = path.join(bindingDirectory, 'binding.json');
+  const value = readJsonObject(bindingPath);
+  exactKeys(
+    value,
+    [
+      'format',
+      'binding_kind',
+      'core_release_relative_path',
+      'release_manifest_relative_path',
+      'release_manifest_sha256',
+      'release_artifact_hash',
+      'core_build_hash',
+      'core_entry_relative_path',
+      'core_entry_sha256',
+      'validation_entry_relative_path',
+      'validation_entry_sha256',
+      'activation_entry_relative_path',
+      'activation_entry_sha256',
+      'managed_node_manifest_hash',
+      'binding_hash',
+    ],
+    'Production Core Runtime binding',
+  );
+  const binding = value as unknown as G9ContentAddressedCoreBinding;
+  const releaseRelative = assertRelativePath(
+    binding.core_release_relative_path,
+    'Production Core Release path',
+  );
+  const manifestRelative = assertRelativePath(
+    binding.release_manifest_relative_path,
+    'Production Core Release Manifest path',
+  );
+  const { binding_hash: _bindingHash, ...payload } = value;
+  for (const hash of [
+    binding.release_manifest_sha256,
+    binding.release_artifact_hash,
+    binding.core_build_hash,
+    binding.core_entry_sha256,
+    binding.validation_entry_sha256,
+    binding.activation_entry_sha256,
+    binding.managed_node_manifest_hash,
+    binding.binding_hash,
+  ])
+    parseSha256Hash(hash);
+  if (
+    binding.format !== 'icarus.core-runtime-launch-binding/3' ||
+    binding.binding_kind !== 'content_addressed_production_release' ||
+    releaseRelative !==
+      `core-releases/${binding.release_artifact_hash.slice('sha256:'.length)}` ||
+    manifestRelative !== 'core-production-release-manifest.json' ||
+    binding.managed_node_manifest_hash !== expectedManifestHash ||
+    domainSeparatedSha256(
+      'icarus:core-runtime-launch-binding:3\n',
+      payload as JsonValue,
+    ) !== binding.binding_hash ||
+    path.basename(bindingDirectory) !==
+      binding.binding_hash.slice('sha256:'.length)
+  )
+    throw new Error('Production Core Runtime binding identity drifted');
+  const releaseRoot = fs.realpathSync(path.join(runtimeHome, releaseRelative));
+  assertInside(
+    path.join(runtimeHome, 'core-releases'),
+    releaseRoot,
+    'Production Core Release',
+  );
+  const activeModuleReleaseRoot = fs.realpathSync(
+    path.resolve(import.meta.dirname, '../../../..'),
+  );
+  if (activeModuleReleaseRoot !== releaseRoot)
+    throw new Error(
+      'Production Store module is not loaded from the selected Core Release',
+    );
+  const manifestPath = fs.realpathSync(
+    path.join(releaseRoot, manifestRelative),
+  );
+  assertInside(releaseRoot, manifestPath, 'Production Core Release Manifest');
+  const releaseManifestHash = rawSha256(manifestPath);
+  if (releaseManifestHash !== binding.release_manifest_sha256)
+    throw new Error('Production Core Release Manifest raw hash mismatch');
+  const manifest = readInstalledG9ProductionCandidateRelease(
+    runtimeHome,
+    binding.release_artifact_hash,
+  );
+  if (
+    manifest.core_build_hash !== binding.core_build_hash ||
+    manifest.core_entry_sha256 !== binding.core_entry_sha256 ||
+    manifest.validation_entry_sha256 !== binding.validation_entry_sha256 ||
+    manifest.activation_entry_sha256 !== binding.activation_entry_sha256 ||
+    manifest.managed_node_distribution_hash !==
+      binding.managed_node_manifest_hash
+  )
+    throw new Error('Production Core binding and Release Manifest disagree');
+  return { binding, manifest, releaseManifestHash };
+}
+
 export function currentRuntimeHostObservation(): RuntimeHostObservation {
   const executablePath = fs.realpathSync(process.execPath);
   return {
@@ -355,11 +486,6 @@ export function assertRuntimeHostIdentity(
   mode: WorkflowRuntimeIdentityMode,
   observation: RuntimeHostObservation = currentRuntimeHostObservation(),
 ): void {
-  if (mode === 'production') {
-    throw new Error(
-      'Production Workflow Runtime identity is unavailable until G9 activation',
-    );
-  }
   if (
     profile.certification_status !== 'candidate' ||
     profile.release_artifact_hash !== null ||
@@ -571,17 +697,54 @@ export function collectWorkflowRuntimeIdentityEvidence(
     runtime_launcher_path: launcherPath,
     runtime_launcher_observed_hash: launcherHash,
   } as const;
-  if (mode === 'release_validation') {
-    const release = verifyContentAddressedReleaseBinding(
-      runtimeHome,
-      distribution.manifest_hash,
-    );
+  if (
+    mode === 'release_validation' ||
+    mode === 'production_activation' ||
+    mode === 'production'
+  ) {
+    const productionSelected =
+      mode !== 'release_validation' ||
+      fs.existsSync(path.join(runtimeHome, 'activation-core'));
+    const release = productionSelected
+      ? verifyProductionReleaseBinding(
+          runtimeHome,
+          distribution.manifest_hash,
+          mode === 'production' ? 'active-core' : 'activation-core',
+        )
+      : verifyContentAddressedReleaseBinding(
+          runtimeHome,
+          distribution.manifest_hash,
+        );
     if (launcherHash !== release.manifest.runtime_launcher_hash) {
       throw new Error('Runtime Launcher and Core Release Manifest disagree');
     }
+    if (mode === 'production') {
+      const deploymentPointer = fs.readlinkSync(
+        path.join(runtimeHome, 'active-deployment'),
+      );
+      const deploymentMatch = /^deployment-bindings\/([0-9a-f]{64})$/.exec(
+        deploymentPointer,
+      );
+      if (!deploymentMatch)
+        throw new Error('Active Deployment pointer identity drifted');
+      const deployment = readJsonObject(
+        path.join(
+          runtimeHome,
+          deploymentPointer,
+          'deployment-activation-binding.json',
+        ),
+      );
+      if (
+        deployment.binding_hash !== `sha256:${deploymentMatch[1]}` ||
+        deployment.core_binding_hash !== release.binding.binding_hash ||
+        deployment.release_artifact_hash !==
+          release.manifest.release_artifact_hash
+      )
+        throw new Error('Active Deployment and Core binding disagree');
+    }
     return Object.freeze({
       ...common,
-      validation_status: 'release_validation',
+      validation_status: mode,
       runtime_launcher_profile_hash: release.manifest.runtime_launcher_hash,
       core_binding_kind: release.binding.binding_kind,
       core_binding_hash: release.binding.binding_hash,
@@ -591,7 +754,12 @@ export function collectWorkflowRuntimeIdentityEvidence(
       release_manifest_hash: release.releaseManifestHash,
       release_database_schema_hash: release.manifest.database_schema_hash,
       release_artifact_profile_hash: release.manifest.release_artifact_hash,
-      release_identity_status: 'observed_for_validation',
+      release_identity_status:
+        mode === 'release_validation'
+          ? 'observed_for_validation'
+          : mode === 'production_activation'
+            ? 'observed_for_activation'
+            : 'active_production',
     });
   }
   const coreBinding = verifyDevelopmentCoreBinding(

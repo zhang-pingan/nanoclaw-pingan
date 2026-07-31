@@ -608,8 +608,15 @@ describe('R-016 Compiler spec and Contract repair', () => {
       'workflow-publisher.test.ts',
       'workflow-publisher.ts',
     ]);
+    expect(
+      fs.readdirSync(path.join(workflowRuntimeRoot, 'registry')).sort(),
+    ).toEqual([
+      'production-activation-entry.ts',
+      'production-activation-runtime.ts',
+      'production-activation.test.ts',
+      'production-activation.ts',
+    ]);
     for (const forbidden of [
-      'registry',
       'runtime/graph-runtime.ts',
       'projection/runtime-center-api.ts',
     ])

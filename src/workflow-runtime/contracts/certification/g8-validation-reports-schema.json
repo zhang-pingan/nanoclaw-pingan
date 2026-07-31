@@ -79,7 +79,12 @@
         "runtime_launcher_path": { "type": "string", "minLength": 1 },
         "runtime_launcher_observed_hash": { "$ref": "#/$defs/hash" },
         "runtime_launcher_profile_hash": { "$ref": "#/$defs/hash" },
-        "core_binding_kind": { "const": "content_addressed_release" },
+        "core_binding_kind": {
+          "enum": [
+            "content_addressed_release",
+            "content_addressed_production_release"
+          ]
+        },
         "core_binding_hash": { "$ref": "#/$defs/hash" },
         "core_entry_hash": { "$ref": "#/$defs/hash" },
         "validation_entry_hash": { "$ref": "#/$defs/hash" },

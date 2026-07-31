@@ -16,9 +16,10 @@ import {
   writeG8JsonAtomic,
 } from './g8-readiness-artifacts.js';
 import {
-  parseG8CoreReleaseManifest,
-  readInstalledG8CoreReleaseManifest,
+  parseRevalidatableCoreReleaseManifest,
+  readInstalledRevalidatableCoreReleaseManifest,
 } from './release-manifest.js';
+import { G9_PRODUCTION_RELEASE_MANIFEST_FILENAME } from '../contracts/g9-production-activation-types.js';
 
 function rawSha256(filePath: string): Sha256Hash {
   return `sha256:${crypto.createHash('sha256').update(fs.readFileSync(filePath)).digest('hex')}`;
@@ -48,11 +49,14 @@ export function runG8ReleaseValidation(options: RunG8ReleaseValidationOptions) {
   );
   const outputRoot = fs.realpathSync(options.outputRoot);
   const releaseRoot = path.resolve(import.meta.dirname, '../../..');
-  const releaseManifestPath = path.join(
+  const productionManifestPath = path.join(
     releaseRoot,
-    'core-release-manifest.json',
+    G9_PRODUCTION_RELEASE_MANIFEST_FILENAME,
   );
-  const release = parseG8CoreReleaseManifest(
+  const releaseManifestPath = fs.existsSync(productionManifestPath)
+    ? productionManifestPath
+    : path.join(releaseRoot, 'core-release-manifest.json');
+  const release = parseRevalidatableCoreReleaseManifest(
     JSON.parse(fs.readFileSync(releaseManifestPath, 'utf8')),
   );
   const executablePath = fs.realpathSync(process.execPath);
@@ -63,7 +67,7 @@ export function runG8ReleaseValidation(options: RunG8ReleaseValidationOptions) {
   const runtimeHome = executablePath.slice(0, markerIndex);
   if (
     JSON.stringify(
-      readInstalledG8CoreReleaseManifest(
+      readInstalledRevalidatableCoreReleaseManifest(
         runtimeHome,
         release.release_artifact_hash,
       ),

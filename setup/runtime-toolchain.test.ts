@@ -223,6 +223,139 @@ function createContentAddressedReleaseFixture(
   return { releaseArtifactHash, validationEntry };
 }
 
+function createProductionReleaseFixture(
+  fixture: ToolchainFixture,
+  runtimeHome: string,
+): {
+  bindingFile: string;
+  bindingHash: string;
+  coreEntry: string;
+  validationEntry: string;
+  activationEntry: string;
+} {
+  const coreEntry = 'dist/index.js';
+  const validationEntry =
+    'dist/workflow-runtime/certification/release-entry.js';
+  const activationEntry =
+    'dist/workflow-runtime/registry/production-activation-entry.js';
+  const stage = temporaryRoot('icarus-production-release-stage-');
+  for (const entry of [coreEntry, validationEntry, activationEntry]) {
+    fs.mkdirSync(path.join(stage, path.dirname(entry)), { recursive: true });
+    fs.writeFileSync(path.join(stage, entry), `${entry}\n`);
+  }
+  const inventory = [coreEntry, validationEntry, activationEntry]
+    .sort()
+    .map((entry) => {
+      const bytes = fs.readFileSync(path.join(stage, entry));
+      return {
+        path: entry,
+        byte_length: bytes.byteLength,
+        executable: false,
+        raw_sha256: `sha256:${hashBytes(bytes)}`,
+      };
+    });
+  const distribution = JSON.parse(
+    fs.readFileSync(fixture.manifest, 'utf8'),
+  ) as {
+    ref: { id: string; version: string };
+    manifest_hash: string;
+  };
+  const payload = {
+    format: 'icarus.core-production-release-manifest/1',
+    ref: { id: 'icarus.core', version: '1.2.14-g9.1' },
+    release_scope: 'workflow_runtime_g9_production_candidate',
+    build_kind: 'release',
+    activation_status: 'pending_fresh_independent_g8_boundary',
+    historical_g8_release_artifact_hash: `sha256:${'1'.repeat(64)}`,
+    g9_activation_contract_hash: `sha256:${'2'.repeat(64)}`,
+    static_source_core_build_hash: `sha256:${'3'.repeat(64)}`,
+    workflow_runtime_absence_baseline_hash: `sha256:${'4'.repeat(64)}`,
+    product_surface_coverage_manifest_hash: `sha256:${'5'.repeat(64)}`,
+    migration_candidate_boundary_manifest_hash: `sha256:${'6'.repeat(64)}`,
+    platform: 'darwin',
+    arch: 'arm64',
+    run_protocol_majors: [1],
+    executor_abi_majors: [1],
+    database_schema_version: 11,
+    database_schema_hash: `sha256:${'7'.repeat(64)}`,
+    managed_node_distribution_ref: distribution.ref,
+    managed_node_distribution_hash: distribution.manifest_hash,
+    runtime_launcher_hash: `sha256:${hashBytes(fs.readFileSync(launcherSource))}`,
+    runtime_toolchain_hash: `sha256:${hashBytes(fs.readFileSync(toolchain))}`,
+    core_entry_relative_path: coreEntry,
+    core_entry_sha256: inventory.find((entry) => entry.path === coreEntry)!
+      .raw_sha256,
+    validation_entry_relative_path: validationEntry,
+    validation_entry_sha256: inventory.find(
+      (entry) => entry.path === validationEntry,
+    )!.raw_sha256,
+    activation_entry_relative_path: activationEntry,
+    activation_entry_sha256: inventory.find(
+      (entry) => entry.path === activationEntry,
+    )!.raw_sha256,
+    core_build_hash: domainHash(
+      'icarus:core-production-release-build:1\n',
+      inventory,
+    ),
+    inventory,
+    inventory_hash: domainHash(
+      'icarus:core-production-release-inventory:1\n',
+      inventory,
+    ),
+  };
+  const releaseArtifactHash = domainHash(
+    'icarus:core-production-release-manifest:1\n',
+    payload,
+  );
+  const releaseRelative = `core-releases/${releaseArtifactHash.slice('sha256:'.length)}`;
+  const releaseRoot = path.join(runtimeHome, releaseRelative);
+  fs.mkdirSync(path.dirname(releaseRoot), { recursive: true });
+  fs.renameSync(stage, releaseRoot);
+  const manifestFile = path.join(
+    releaseRoot,
+    'core-production-release-manifest.json',
+  );
+  fs.writeFileSync(
+    manifestFile,
+    `${JSON.stringify({ ...payload, release_artifact_hash: releaseArtifactHash }, null, 2)}\n`,
+  );
+  const bindingPayload = {
+    format: 'icarus.core-runtime-launch-binding/3',
+    binding_kind: 'content_addressed_production_release',
+    core_release_relative_path: releaseRelative,
+    release_manifest_relative_path: 'core-production-release-manifest.json',
+    release_manifest_sha256: `sha256:${hashBytes(fs.readFileSync(manifestFile))}`,
+    release_artifact_hash: releaseArtifactHash,
+    core_build_hash: payload.core_build_hash,
+    core_entry_relative_path: coreEntry,
+    core_entry_sha256: payload.core_entry_sha256,
+    validation_entry_relative_path: validationEntry,
+    validation_entry_sha256: payload.validation_entry_sha256,
+    activation_entry_relative_path: activationEntry,
+    activation_entry_sha256: payload.activation_entry_sha256,
+    managed_node_manifest_hash: distribution.manifest_hash,
+  };
+  const bindingHash = domainHash(
+    'icarus:core-runtime-launch-binding:3\n',
+    bindingPayload,
+  );
+  const bindingFile = path.join(
+    temporaryRoot('icarus-production-binding-'),
+    'binding.json',
+  );
+  fs.writeFileSync(
+    bindingFile,
+    `${JSON.stringify({ ...bindingPayload, binding_hash: bindingHash }, null, 2)}\n`,
+  );
+  return {
+    bindingFile,
+    bindingHash,
+    coreEntry,
+    validationEntry,
+    activationEntry,
+  };
+}
+
 afterEach(() => {
   for (const root of temporaryRoots.splice(0)) {
     fs.rmSync(root, { recursive: true, force: true });
@@ -410,6 +543,64 @@ describe('managed runtime bootstrap', () => {
 });
 
 describe('stable runtime launcher', () => {
+  it('stages a v3 production release without changing active Core', () => {
+    const fixture = createFixture();
+    const runtimeHome = temporaryRoot('icarus-runtime-home-');
+    expect(
+      runToolchain(fixture, runtimeHome, [
+        'install',
+        '--archive',
+        fixture.archive,
+      ]).status,
+    ).toBe(0);
+    const coreProject = temporaryRoot('icarus-active-core-project-');
+    fs.mkdirSync(path.join(coreProject, 'dist'), { recursive: true });
+    fs.writeFileSync(path.join(coreProject, 'dist/index.js'), 'active core\n');
+    const active = runToolchain(fixture, runtimeHome, [
+      'bind-core',
+      '--project-root',
+      coreProject,
+    ]);
+    expect(active.status, active.stderr).toBe(0);
+    const activeCoreTarget = fs.readlinkSync(
+      path.join(runtimeHome, 'active-core'),
+    );
+    const production = createProductionReleaseFixture(fixture, runtimeHome);
+    const staged = runToolchain(fixture, runtimeHome, [
+      'stage-production-release',
+      '--binding',
+      production.bindingFile,
+    ]);
+    expect(staged.status, staged.stderr).toBe(0);
+    expect(fs.readlinkSync(path.join(runtimeHome, 'active-core'))).toBe(
+      activeCoreTarget,
+    );
+    expect(fs.readlinkSync(path.join(runtimeHome, 'activation-core'))).toBe(
+      `core-bindings/${production.bindingHash.slice('sha256:'.length)}`,
+    );
+
+    const launcher = path.join(runtimeHome, 'bin', 'icarus-runtime');
+    const validation = spawnSync(launcher, ['g8-validation', 'identity'], {
+      encoding: 'utf8',
+    });
+    expect(validation.status, validation.stderr).toBe(0);
+    expect(validation.stdout).toContain(production.validationEntry);
+    expect(validation.stdout).toContain('core-argument=identity');
+    const activation = spawnSync(
+      launcher,
+      [
+        'production-activation',
+        'recover',
+        '--audit-hash',
+        `sha256:${'8'.repeat(64)}`,
+      ],
+      { encoding: 'utf8' },
+    );
+    expect(activation.status, activation.stderr).toBe(0);
+    expect(activation.stdout).toContain(production.activationEntry);
+    expect(activation.stdout).toContain('core-argument=recover');
+  }, 15_000);
+
   it('binds a content-addressed Core Release and forwards validation arguments', () => {
     const fixture = createFixture();
     const runtimeHome = temporaryRoot('icarus-runtime-home-');

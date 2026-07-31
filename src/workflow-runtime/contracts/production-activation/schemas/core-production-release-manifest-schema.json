@@ -1,0 +1,227 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:icarus:core-production-release-manifest:1",
+  "title": "Icarus G9 Production Candidate Core Release Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "ref",
+    "release_scope",
+    "build_kind",
+    "activation_status",
+    "historical_g8_release_artifact_hash",
+    "g9_activation_contract_hash",
+    "static_source_core_build_hash",
+    "workflow_runtime_absence_baseline_hash",
+    "product_surface_coverage_manifest_hash",
+    "migration_candidate_boundary_manifest_hash",
+    "platform",
+    "arch",
+    "run_protocol_majors",
+    "executor_abi_majors",
+    "database_schema_version",
+    "database_schema_hash",
+    "managed_node_distribution_ref",
+    "managed_node_distribution_hash",
+    "runtime_launcher_hash",
+    "runtime_toolchain_hash",
+    "core_entry_relative_path",
+    "core_entry_sha256",
+    "validation_entry_relative_path",
+    "validation_entry_sha256",
+    "activation_entry_relative_path",
+    "activation_entry_sha256",
+    "core_build_hash",
+    "inventory",
+    "inventory_hash",
+    "release_artifact_hash"
+  ],
+  "properties": {
+    "format": {
+      "const": "icarus.core-production-release-manifest/1"
+    },
+    "ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "version"
+      ],
+      "properties": {
+        "id": {
+          "const": "icarus.core"
+        },
+        "version": {
+          "const": "1.2.14-g9.1"
+        }
+      }
+    },
+    "release_scope": {
+      "const": "workflow_runtime_g9_production_candidate"
+    },
+    "build_kind": {
+      "const": "release"
+    },
+    "activation_status": {
+      "const": "pending_fresh_independent_g8_boundary"
+    },
+    "historical_g8_release_artifact_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "g9_activation_contract_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "static_source_core_build_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "workflow_runtime_absence_baseline_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "product_surface_coverage_manifest_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "migration_candidate_boundary_manifest_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "database_schema_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "managed_node_distribution_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "runtime_launcher_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "runtime_toolchain_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "core_entry_sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "validation_entry_sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "activation_entry_sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "core_build_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "inventory_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "release_artifact_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "platform": {
+      "const": "darwin"
+    },
+    "arch": {
+      "const": "arm64"
+    },
+    "run_protocol_majors": {
+      "type": "array",
+      "prefixItems": [
+        {
+          "const": 1
+        }
+      ],
+      "items": false,
+      "minItems": 1,
+      "maxItems": 1
+    },
+    "executor_abi_majors": {
+      "type": "array",
+      "prefixItems": [
+        {
+          "const": 1
+        }
+      ],
+      "items": false,
+      "minItems": 1,
+      "maxItems": 1
+    },
+    "database_schema_version": {
+      "const": 11
+    },
+    "managed_node_distribution_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "version"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        }
+      }
+    },
+    "core_entry_relative_path": {
+      "const": "dist/index.js"
+    },
+    "validation_entry_relative_path": {
+      "const": "dist/workflow-runtime/certification/release-entry.js"
+    },
+    "activation_entry_relative_path": {
+      "const": "dist/workflow-runtime/registry/production-activation-entry.js"
+    },
+    "inventory": {
+      "type": "array",
+      "minItems": 3,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "path",
+          "byte_length",
+          "executable",
+          "raw_sha256"
+        ],
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^(?!/)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*//)[^\\\\]+$"
+          },
+          "byte_length": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "executable": {
+            "type": "boolean"
+          },
+          "raw_sha256": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          }
+        }
+      }
+    }
+  }
+}

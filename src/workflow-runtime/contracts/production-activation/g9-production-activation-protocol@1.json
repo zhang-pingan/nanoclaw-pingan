@@ -1,0 +1,60 @@
+{
+  "format": "icarus.workflow-runtime-g9-production-activation-protocol/1",
+  "ref": {
+    "id": "icarus.workflow-runtime-g9-production-activation-protocol",
+    "version": "1"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-runtime-g9-production-activation-protocol:1\n",
+  "payload": {
+    "gate": "G9",
+    "stage": "pre_activation_construction",
+    "authority_resolution": "option_a_new_exact_production_release",
+    "fixed_ruleset_id": "dynamic-workflow-runtime-controller-fixed-v10",
+    "project_ruleset_id": "dynamic-workflow-runtime-controller-project-v2",
+    "project_ruleset_block_sha256": "de02b6f7d4bf22c89159cba249eb4d764377d6ac146c8762d4612d4985fb19a5",
+    "historical_g8": {
+      "candidate_commit": "540af100a61b9181aead6923b829729a843c5ec1",
+      "release_artifact_hash": "sha256:8234f51bc669f5c5119e6b3fee80565827b7af061b9013a59e513c90b09f9243",
+      "core_build_hash": "sha256:2778eef831bcff49bfff80df4d8a63f6f8a05164664c28d5f4537902e25dd5f5",
+      "startup_report_hash": "sha256:ed5a15c8bfb267bb01eb43826249580b83368d1f6207d1e513884d23e19cb88c",
+      "readiness_report_hash": "sha256:222691989044f781e57f7e4d8113e93ada3de0a3d81a5a32cc291c146404563e"
+    },
+    "historical_g8_disposition": "immutable_acceptance_not_applicable_to_new_release",
+    "production_release_ref": {
+      "id": "icarus.core",
+      "version": "1.2.14-g9.1"
+    },
+    "production_release_status": "pending_fresh_independent_g8_boundary",
+    "database_schema_version": 11,
+    "database_schema_hash": "sha256:ad998b2d0bb5e5f158b0be6d13db79cb6a0c0650d5064b267262551af266189c",
+    "commit_point": "active-deployment-content-addressed-pointer-swap",
+    "precommit_authority": "previous_binding_or_absent",
+    "precommit_recovery": "deterministic_rollback_reversible_prepare_only",
+    "postcommit_authority": "target_deployment_binding",
+    "postcommit_recovery": "idempotent_roll_forward_only",
+    "fresh_capacity_phase": "postcommit_roll_forward",
+    "existing_capacity_policy": "verify_twice_and_preserve_exactly_without_write",
+    "feature_activation_contract": "standard_g3_publish_activate_only",
+    "projection_views": [
+      "workflows",
+      "agent_executions",
+      "pending",
+      "trace"
+    ],
+    "production_recipe_inventory": "zero_or_standard_published_only",
+    "activation_execution_status": "forbidden_before_fresh_independent_g8_pass",
+    "extended_certification_plan": "excluded",
+    "security_sensitive_validation": "STATIC_SOURCE_DIFF_EXISTING_TESTS_AND_NORMAL_POSITIVE_ONLY",
+    "source_tree_hash": "sha256:a88020a610d7da965cff2e3a59a5f19e223b2e2d5cc033f5f18512692444ce79",
+    "schema_hashes": {
+      "release": "sha256:b093f95cacc1945e7314b06a240df1534ba35d7605cd2b9c460d5de395541c00",
+      "coreBinding": "sha256:66b2ded83a3c5435428588cdfcc3611a022762467f4ddb571989a5f8c2a93431",
+      "deploymentBinding": "sha256:a2e35215f0f1f9de5f8e22216816c22b7c50218d7167beaca68c976df74569a7",
+      "journal": "sha256:98fb2f4e71c5ff490b5ed9c616fee3edfa23ba058e0f5ccde009ba0936dde8a0",
+      "audit": "sha256:37db7e563d805cdd0eab45896eb0ba418a059669b39d8722cf1a321f1f22870b",
+      "request": "sha256:cebd8e275a9b20ebc8f8f1b39e470abfd05e3ae0068b6197ca6c476450bbdacb"
+    }
+  },
+  "hash": "sha256:5e6b8f248751298c8d8695b8ae4d8af5e09b02b31ca5fbd97f51c3e155ffc432"
+}

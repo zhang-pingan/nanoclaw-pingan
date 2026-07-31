@@ -131,6 +131,14 @@ function rebuildAuthorityProof(
   );
 }
 
+export function runtimeCenterProjectionGenerationId(
+  view: RuntimeCenterView,
+  sourceHeadSeq: number,
+  rowsHashValue: Sha256Hash,
+): string {
+  return `generation:${view}:${sourceHeadSeq}:${rowsHashValue}`;
+}
+
 const trustedRebuildExports = new WeakMap<
   ProjectionRebuildExport,
   {
@@ -166,8 +174,7 @@ export class WorkflowProjectionStore {
 
   constructor(
     readonly projectionVersion = 'g7.1',
-    private readonly rebuildAuthority: RuntimeStoreWorkflowProjectionRebuildAuthority | null =
-      null,
+    private readonly rebuildAuthority: RuntimeStoreWorkflowProjectionRebuildAuthority | null = null,
   ) {
     for (const view of [
       'workflows',
@@ -357,7 +364,11 @@ export class WorkflowProjectionStore {
         }) !== exported.authorityProof
       )
         throw new Error('projection_rebuild_authority_proof_mismatch');
-      const generationId = `generation:${view}:${exported.sourceHeadSeq}:${exported.rowsHash}`;
+      const generationId = runtimeCenterProjectionGenerationId(
+        view,
+        exported.sourceHeadSeq,
+        exported.rowsHash,
+      );
       const generation: ProjectionGeneration = {
         id: generationId,
         rows: new Map(
@@ -401,7 +412,6 @@ export class WorkflowProjectionStore {
       status: { ...this.status(view) },
     });
   }
-
 }
 
 interface RuntimeProjectionEventRow extends Record<string, unknown> {
@@ -456,10 +466,12 @@ function loadTrustedRuntimeEvents(
       ORDER BY event.graph_run_id COLLATE BINARY, event.seq`,
     [],
   );
-  const runs = source.queryAll<{
-    id: string;
-    next_event_seq: number;
-  } & Record<string, unknown>>(
+  const runs = source.queryAll<
+    {
+      id: string;
+      next_event_seq: number;
+    } & Record<string, unknown>
+  >(
     'SELECT id, next_event_seq FROM workflow_graph_runs ORDER BY id COLLATE BINARY',
     [],
   );
@@ -686,7 +698,9 @@ function traceRows(
   }));
 }
 
-function freezeExport(exported: ProjectionRebuildExport): ProjectionRebuildExport {
+function freezeExport(
+  exported: ProjectionRebuildExport,
+): ProjectionRebuildExport {
   for (const row of exported.rows) {
     Object.freeze(row.summary);
     Object.freeze(row);

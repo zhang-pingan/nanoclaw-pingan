@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:icarus:deployment-activation-journal-event:1",
+  "title": "Icarus Deployment Activation Journal Event",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "activation_id",
+    "sequence",
+    "phase",
+    "participant",
+    "previous_event_hash",
+    "previous_binding_hash",
+    "target_binding_hash",
+    "operation_key",
+    "occurred_at_ms",
+    "event_hash"
+  ],
+  "properties": {
+    "format": {
+      "const": "icarus.deployment-activation-journal-event/1"
+    },
+    "activation_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255
+    },
+    "sequence": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "phase": {
+      "enum": [
+        "prepared",
+        "participant_prepared",
+        "precommit_rolled_back",
+        "precommit_rollback_completed",
+        "active_deployment_committed",
+        "participant_rolled_forward",
+        "completed"
+      ]
+    },
+    "participant": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        null,
+        "core_binding",
+        "feature_registry",
+        "runtime_center_projection",
+        "capacity",
+        "deployment_pointer"
+      ]
+    },
+    "previous_event_hash": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "previous_binding_hash": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "target_binding_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "operation_key": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255
+    },
+    "occurred_at_ms": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "event_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    }
+  }
+}

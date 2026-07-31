@@ -95,7 +95,7 @@ const storeConstructorToken = Symbol('WorkflowRuntimeStore');
 function storeInputRootsForIdentityMode(
   identityMode: WorkflowRuntimeIdentityMode,
 ): { profilePath?: string } {
-  if (identityMode !== 'release_validation') return {};
+  if (identityMode === 'candidate_development') return {};
   const releaseRoot = path.resolve(import.meta.dirname, '../../../..');
   return {
     profilePath: path.join(

@@ -1,0 +1,29 @@
+{
+  "format": "icarus.workflow-runtime-g9-production-activation-contract/1",
+  "ref": {
+    "id": "icarus.workflow-runtime-g9-production-activation-contract",
+    "version": "1"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-runtime-g9-production-activation-contract:1\n",
+  "payload": {
+    "gate": "G9",
+    "status": "PRE_ACTIVATION_PRODUCTION_CANDIDATE_AUTHORITY",
+    "protocol_hash": "sha256:5e6b8f248751298c8d8695b8ae4d8af5e09b02b31ca5fbd97f51c3e155ffc432",
+    "schema_hashes": {
+      "release": "sha256:b093f95cacc1945e7314b06a240df1534ba35d7605cd2b9c460d5de395541c00",
+      "coreBinding": "sha256:66b2ded83a3c5435428588cdfcc3611a022762467f4ddb571989a5f8c2a93431",
+      "deploymentBinding": "sha256:a2e35215f0f1f9de5f8e22216816c22b7c50218d7167beaca68c976df74569a7",
+      "journal": "sha256:98fb2f4e71c5ff490b5ed9c616fee3edfa23ba058e0f5ccde009ba0936dde8a0",
+      "audit": "sha256:37db7e563d805cdd0eab45896eb0ba418a059669b39d8722cf1a321f1f22870b",
+      "request": "sha256:cebd8e275a9b20ebc8f8f1b39e470abfd05e3ae0068b6197ca6c476450bbdacb"
+    },
+    "production_release_manifest_format": "icarus.core-production-release-manifest/1",
+    "production_activation_entry": "dist/workflow-runtime/registry/production-activation-entry.js",
+    "historical_g8_release_artifact_hash": "sha256:8234f51bc669f5c5119e6b3fee80565827b7af061b9013a59e513c90b09f9243",
+    "database_schema_hash": "sha256:ad998b2d0bb5e5f158b0be6d13db79cb6a0c0650d5064b267262551af266189c",
+    "activation_execution_authorized": false,
+    "next_required_gate": "fresh_independent_full_g8_boundary_revalidation"
+  },
+  "hash": "sha256:9b712be179d39861ec123f1e296dc89c48987cf6a31708c6579c6e8960ad1169"
+}

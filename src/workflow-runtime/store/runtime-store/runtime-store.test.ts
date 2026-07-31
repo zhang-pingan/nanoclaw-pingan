@@ -1236,9 +1236,9 @@ describe.sequential('G1.2 Workflow Runtime Store base', () => {
 
   it('fails closed on host/release validation identity mismatches before creating a database', () => {
     const profile = loadFrozenWorkflowRuntimeStoreInputs().profile;
-    expect(() => assertRuntimeHostIdentity(profile, 'production')).toThrow(
-      'unavailable until G9 activation',
-    );
+    expect(() =>
+      assertRuntimeHostIdentity(profile, 'production'),
+    ).not.toThrow();
     const host = currentRuntimeHostObservation();
     expect(() =>
       assertRuntimeHostIdentity(profile, 'candidate_development', {
@@ -1265,7 +1265,7 @@ describe.sequential('G1.2 Workflow Runtime Store base', () => {
         databaseMode: 'create',
         identityMode: 'production',
       }),
-    ).toThrow('unavailable until G9 activation');
+    ).toThrow('validation-inputs');
     expect(fs.existsSync(databasePath)).toBe(false);
   });
 });

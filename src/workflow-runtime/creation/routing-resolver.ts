@@ -12,18 +12,48 @@ export interface RoutingCandidate {
 
 export interface RoutingResolution {
   readonly id: string;
+  readonly disposition: 'routed';
   readonly decision: JsonObject;
   readonly decisionHash: Sha256Hash;
   readonly selected: RoutingCandidate;
+}
+
+export interface NoRouteAvailableResolution {
+  readonly id: string;
+  readonly disposition: 'no_route_available';
+  readonly decision: JsonObject;
+  readonly decisionHash: Sha256Hash;
+  readonly selected: null;
 }
 
 export function resolveDeterministicRoute(
   intakeId: string,
   revisionHash: Sha256Hash,
   candidates: readonly RoutingCandidate[],
-): RoutingResolution {
-  if (candidates.length === 0)
-    throw new Error('Routing requires at least one eligible candidate');
+): RoutingResolution | NoRouteAvailableResolution {
+  if (candidates.length === 0) {
+    const decision: JsonObject = {
+      format: 'icarus.workflow-g5-routing-decision/1',
+      intake_id: intakeId,
+      revision_hash: revisionHash,
+      disposition: 'no_route_available',
+      selected_recipe_resource_id: null,
+      selected_recipe_hash: null,
+      priority: null,
+      confidence_micros: null,
+      reason_codes: ['no_eligible_published_recipe'],
+    };
+    return {
+      id: stableRuntimeId('routing', {
+        intake_id: intakeId,
+        revision_hash: revisionHash,
+      }),
+      disposition: 'no_route_available',
+      decision: JSON.parse(canonicalJson(decision)) as JsonObject,
+      decisionHash: runtimeObjectHash('routing-decision', decision),
+      selected: null,
+    };
+  }
   const sorted = [...candidates].sort((left, right) =>
     left.priority !== right.priority
       ? left.priority - right.priority
@@ -59,6 +89,7 @@ export function resolveDeterministicRoute(
       intake_id: intakeId,
       revision_hash: revisionHash,
     }),
+    disposition: 'routed',
     decision: JSON.parse(canonicalJson(decision)) as JsonObject,
     decisionHash,
     selected,

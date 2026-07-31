@@ -3,6 +3,7 @@ import path from 'node:path';
 
 import { runG8ReleaseValidation } from './release-validation.js';
 import { runG8StartupSmoke } from './startup-smoke.js';
+import { G9_PRODUCTION_RELEASE_MANIFEST_FILENAME } from '../contracts/g9-production-activation-types.js';
 
 function option(name: string): string {
   const index = process.argv.indexOf(name);
@@ -15,9 +16,15 @@ const command = process.argv[2];
 
 if (command === 'identity') {
   const releaseRoot = path.resolve(import.meta.dirname, '../../..');
+  const productionManifestPath = path.join(
+    releaseRoot,
+    G9_PRODUCTION_RELEASE_MANIFEST_FILENAME,
+  );
   const manifest = JSON.parse(
     fs.readFileSync(
-      path.join(releaseRoot, 'core-release-manifest.json'),
+      fs.existsSync(productionManifestPath)
+        ? productionManifestPath
+        : path.join(releaseRoot, 'core-release-manifest.json'),
       'utf8',
     ),
   ) as { release_artifact_hash: string; core_build_hash: string };

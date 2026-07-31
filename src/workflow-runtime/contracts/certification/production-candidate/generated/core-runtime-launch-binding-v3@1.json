@@ -1,0 +1,17 @@
+{
+  "format": "icarus.core-runtime-launch-binding/3",
+  "binding_kind": "content_addressed_production_release",
+  "core_release_relative_path": "core-releases/bac74ee4e0a04409a9a188008fe6165f0cc24a3b29db3c0ed66f252ed2a32966",
+  "release_manifest_relative_path": "core-production-release-manifest.json",
+  "release_manifest_sha256": "sha256:1db06633f8f571f8bbaf32f0bdb7fbf121f2b4483473df514439668abc7c1010",
+  "release_artifact_hash": "sha256:bac74ee4e0a04409a9a188008fe6165f0cc24a3b29db3c0ed66f252ed2a32966",
+  "core_build_hash": "sha256:8518839ee9331c39c8246540ba72af362f82ec2fef7898b4232ba8794c2e3174",
+  "core_entry_relative_path": "dist/index.js",
+  "core_entry_sha256": "sha256:626b57523d0c96d8c3e1d2608b36a5c144037ef2639b5bfafcb3d2932899eef3",
+  "validation_entry_relative_path": "dist/workflow-runtime/certification/release-entry.js",
+  "validation_entry_sha256": "sha256:41e842bc760e65fc6ceefe0c757b6765328a55ba16cf004ec8477c0dec1d0fc8",
+  "activation_entry_relative_path": "dist/workflow-runtime/registry/production-activation-entry.js",
+  "activation_entry_sha256": "sha256:2b54c0cbeaff71af671d25172e9fa9abb45b2f0108c42a54ac6e5cd2e5350620",
+  "managed_node_manifest_hash": "sha256:0824f5044057d6ff26dc45022b842342f148b2dda2f0dd0feb17dd0b045f6cad",
+  "binding_hash": "sha256:cb9229672c8386a4a5ee4d56569dc3a202a6c772040ccac00dcec82cd7b2167c"
+}
