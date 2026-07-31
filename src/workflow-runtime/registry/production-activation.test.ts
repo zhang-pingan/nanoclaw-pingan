@@ -1,3 +1,6 @@
+import fs from 'node:fs';
+import path from 'node:path';
+
 import { describe, expect, it } from 'vitest';
 
 import type { Sha256Hash } from '../contracts/types.js';
@@ -8,6 +11,7 @@ import {
   buildG9ProductionActivationRequest,
   calculateG9FeaturePointerAggregateHash,
   calculateG9ProjectionGenerationAggregateHash,
+  assertG9DeploymentActivationJournalSequence,
   parseG9DeploymentActivationBinding,
   parseG9DeploymentJournalEvent,
   parseG9ProductionActivationRequest,
@@ -18,6 +22,23 @@ function hash(character: string): Sha256Hash {
 }
 
 describe('G9 pre-activation production authority', () => {
+  it('cleans only compiler-owned output before building release inventory', () => {
+    const projectRoot = path.resolve(import.meta.dirname, '../../..');
+    const packageJson = JSON.parse(
+      fs.readFileSync(path.join(projectRoot, 'package.json'), 'utf8'),
+    ) as { scripts: { build: string } };
+    expect(packageJson.scripts.build).toBe(
+      'node scripts/clean-typescript-output.mjs && tsc',
+    );
+    const cleaner = fs.readFileSync(
+      path.join(projectRoot, 'scripts/clean-typescript-output.mjs'),
+      'utf8',
+    );
+    expect(cleaner).toContain("path.join(projectRoot, 'dist')");
+    expect(cleaner).toContain('outputStat.isSymbolicLink()');
+    expect(cleaner).toContain('fs.rmSync(outputRoot, { recursive: true })');
+  });
+
   it('returns the generic zero-inventory Intake result', () => {
     const result = resolveDeterministicRoute('intake-empty', hash('0'), []);
     expect(result.disposition).toBe('no_route_available');
@@ -131,7 +152,7 @@ describe('G9 pre-activation production authority', () => {
     );
   });
 
-  it('builds an adjacent deterministic journal chain', () => {
+  it('builds a complete positive journal that is strictly replayable', () => {
     const first = buildG9DeploymentJournalEvent({
       activation_id: 'activation-g9-1',
       sequence: 1,
@@ -158,5 +179,34 @@ describe('G9 pre-activation production authority', () => {
     expect(parseG9DeploymentJournalEvent(second).previous_event_hash).toBe(
       first.event_hash,
     );
+    const events = [first, second];
+    for (const [phase, participant] of [
+      ['participant_prepared', 'feature_registry'],
+      ['participant_prepared', 'runtime_center_projection'],
+      ['participant_prepared', 'capacity'],
+      ['active_deployment_committed', 'deployment_pointer'],
+      ['participant_rolled_forward', 'core_binding'],
+      ['participant_rolled_forward', 'feature_registry'],
+      ['participant_rolled_forward', 'runtime_center_projection'],
+      ['participant_rolled_forward', 'capacity'],
+      ['completed', null],
+    ] as const) {
+      events.push(
+        buildG9DeploymentJournalEvent({
+          activation_id: 'activation-g9-1',
+          sequence: events.length + 1,
+          phase,
+          participant,
+          previous_event_hash: events.at(-1)!.event_hash,
+          previous_binding_hash: null,
+          target_binding_hash: hash('1'),
+          operation_key: 'deployment-g9-1',
+          occurred_at_ms: 1000 + events.length,
+        }),
+      );
+    }
+    expect(() =>
+      assertG9DeploymentActivationJournalSequence(events),
+    ).not.toThrow();
   });
 });

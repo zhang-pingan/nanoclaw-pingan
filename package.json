@@ -6,7 +6,7 @@
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
-    "build": "tsc",
+    "build": "node scripts/clean-typescript-output.mjs && tsc",
     "start": "./scripts/runtime-toolchain.sh install && ./scripts/runtime-toolchain.sh bind-core --project-root \"$PWD\" --entry dist/index.js && \"$HOME/Library/Application Support/Icarus/bin/icarus-runtime\"",
     "dev": "tsx src/index.ts",
     "dev:electron": "node scripts/build-electron.mjs && electron dist-electron/main.cjs",

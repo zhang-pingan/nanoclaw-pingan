@@ -8,7 +8,7 @@
   "build_kind": "release",
   "activation_status": "pending_fresh_independent_g8_boundary",
   "historical_g8_release_artifact_hash": "sha256:8234f51bc669f5c5119e6b3fee80565827b7af061b9013a59e513c90b09f9243",
-  "g9_activation_contract_hash": "sha256:9b712be179d39861ec123f1e296dc89c48987cf6a31708c6579c6e8960ad1169",
+  "g9_activation_contract_hash": "sha256:9f5b208aea85d5a99d674626e52806ad4d0eb7c00723de9bfa7b38c84f4b4d13",
   "static_source_core_build_hash": "sha256:9e24def00d6e3da7a9bb98036038816d1b77b13352584823a9846f2c9db2d8eb",
   "workflow_runtime_absence_baseline_hash": "sha256:f3899b9d328c3b03eeed3567978796fda5f7675873a5722a4092bf770fd748ab",
   "product_surface_coverage_manifest_hash": "sha256:b0b75a8d558863043b2abb5af5b18dddaaaec9191faa73e6516e01be3d060708",
@@ -36,7 +36,7 @@
   "validation_entry_sha256": "sha256:41e842bc760e65fc6ceefe0c757b6765328a55ba16cf004ec8477c0dec1d0fc8",
   "activation_entry_relative_path": "dist/workflow-runtime/registry/production-activation-entry.js",
   "activation_entry_sha256": "sha256:2b54c0cbeaff71af671d25172e9fa9abb45b2f0108c42a54ac6e5cd2e5350620",
-  "core_build_hash": "sha256:8518839ee9331c39c8246540ba72af362f82ec2fef7898b4232ba8794c2e3174",
+  "core_build_hash": "sha256:d5fcef48361e5f0486823518877f8533bdf250f3f048fd013444ebfab4197cbe",
   "inventory": [
     {
       "path": "config/workflow-runtime-capacity.json",
@@ -621,198 +621,6 @@
       "raw_sha256": "sha256:09511df947b4ce76d6f63edd3543b8cebc243f058347478dfc22a369c95dc024"
     },
     {
-      "path": "dist/assistant/evolution-card-actions.d.ts",
-      "byte_length": 338,
-      "executable": false,
-      "raw_sha256": "sha256:b99204adbdec36de413d44e1fa7f015a67044501ee4594627a1a3dcc6474a66c"
-    },
-    {
-      "path": "dist/assistant/evolution-card-actions.d.ts.map",
-      "byte_length": 360,
-      "executable": false,
-      "raw_sha256": "sha256:9345463ba1ad8728f5e4923a8af5431bafcc45039cbba44b7e8d00b9cf450aab"
-    },
-    {
-      "path": "dist/assistant/evolution-card-actions.js",
-      "byte_length": 3090,
-      "executable": false,
-      "raw_sha256": "sha256:059732b49fa996dbe1ea8e751ace7a74f8d6461692c7d669eb1ffb8563f6e75b"
-    },
-    {
-      "path": "dist/assistant/evolution-card-actions.js.map",
-      "byte_length": 2709,
-      "executable": false,
-      "raw_sha256": "sha256:db748db50181e575233fb79092c5b026f1a3404d207b0935a083e6f8d2e6049b"
-    },
-    {
-      "path": "dist/assistant/evolution-engine.d.ts",
-      "byte_length": 2500,
-      "executable": false,
-      "raw_sha256": "sha256:26bff2bb5a5c203138e7d69850286c2f766a583798d08af853b2e9abf002a887"
-    },
-    {
-      "path": "dist/assistant/evolution-engine.d.ts.map",
-      "byte_length": 2041,
-      "executable": false,
-      "raw_sha256": "sha256:7f5a9f261f61be37a511fd0eb7bd2cc00267c45429253dca741c9630915fb215"
-    },
-    {
-      "path": "dist/assistant/evolution-engine.js",
-      "byte_length": 43544,
-      "executable": false,
-      "raw_sha256": "sha256:9c043bf975cffb9ae2a47e389bf60b035806b8fb7e63663c5c1cb08383d3812f"
-    },
-    {
-      "path": "dist/assistant/evolution-engine.js.map",
-      "byte_length": 39140,
-      "executable": false,
-      "raw_sha256": "sha256:4701e05663b330d8ceacf53ffda4a37f0047ae2e8db1d44754ca873a419546aa"
-    },
-    {
-      "path": "dist/assistant/evolution-engine.test.d.ts",
-      "byte_length": 62,
-      "executable": false,
-      "raw_sha256": "sha256:86319167cfc3401033cbea81377fd6815bd5df6b5aec47718589d5c541c3426a"
-    },
-    {
-      "path": "dist/assistant/evolution-engine.test.d.ts.map",
-      "byte_length": 149,
-      "executable": false,
-      "raw_sha256": "sha256:92272052db6f642702b3516075432894e77dd0ff9f73befd6c79fe606d59d347"
-    },
-    {
-      "path": "dist/assistant/evolution-engine.test.js",
-      "byte_length": 42136,
-      "executable": false,
-      "raw_sha256": "sha256:bb6299c7ad88ed7b2a1d43e387bad4bc85f16510ff4ad445bc3feb4ee4d2e567"
-    },
-    {
-      "path": "dist/assistant/evolution-engine.test.js.map",
-      "byte_length": 31430,
-      "executable": false,
-      "raw_sha256": "sha256:953c7621c361d30f46527d6d83817ec6fde19ef7068b310b2e836b77da6d7c5e"
-    },
-    {
-      "path": "dist/assistant/evolution-git.d.ts",
-      "byte_length": 1273,
-      "executable": false,
-      "raw_sha256": "sha256:05864f14ed75fb39c42c0918e70b64312f1215b4579eaf0b42bd5550fe6804cb"
-    },
-    {
-      "path": "dist/assistant/evolution-git.d.ts.map",
-      "byte_length": 1395,
-      "executable": false,
-      "raw_sha256": "sha256:2598e065ff44e5f5dec0ec26450514d227d6c4681b3039ff8cbf043f94aaa276"
-    },
-    {
-      "path": "dist/assistant/evolution-git.js",
-      "byte_length": 5243,
-      "executable": false,
-      "raw_sha256": "sha256:6b6b87463dcba442356e0532e663017e8a25dc672a642d24323f1e2229f751c7"
-    },
-    {
-      "path": "dist/assistant/evolution-git.js.map",
-      "byte_length": 5613,
-      "executable": false,
-      "raw_sha256": "sha256:5e2ede67cc1a8e86b762b168ef64652f761a689ce10d7c59dc218717c4b16c13"
-    },
-    {
-      "path": "dist/assistant/evolution-runner.d.ts",
-      "byte_length": 2405,
-      "executable": false,
-      "raw_sha256": "sha256:d6c3dfb90f48363a0ced3a2d713424bed8bd9358576046b31c76412ffc3a0227"
-    },
-    {
-      "path": "dist/assistant/evolution-runner.d.ts.map",
-      "byte_length": 2144,
-      "executable": false,
-      "raw_sha256": "sha256:00744545ffacc2a4b024552b3424ec71e7d04b63caa370dd957161c28a2c3dca"
-    },
-    {
-      "path": "dist/assistant/evolution-runner.js",
-      "byte_length": 9040,
-      "executable": false,
-      "raw_sha256": "sha256:5095c34304f3386edf0dc55f0ffe301c24d9bf4a4ebc0fcf61cdca09be9c8b18"
-    },
-    {
-      "path": "dist/assistant/evolution-runner.js.map",
-      "byte_length": 6661,
-      "executable": false,
-      "raw_sha256": "sha256:3487207cf9c7de76a1327e749b7e58e42f75167237c4276df53997cf3461f748"
-    },
-    {
-      "path": "dist/assistant/evolution-runner.test.d.ts",
-      "byte_length": 62,
-      "executable": false,
-      "raw_sha256": "sha256:df21cdd98f662dc408696d52953d114707dd3bb3c6890687fe68f048d2a41111"
-    },
-    {
-      "path": "dist/assistant/evolution-runner.test.d.ts.map",
-      "byte_length": 149,
-      "executable": false,
-      "raw_sha256": "sha256:0ab76347a38d4e0110fd566a330f88e3f5d1439c3483749c30e7f0dde4f60117"
-    },
-    {
-      "path": "dist/assistant/evolution-runner.test.js",
-      "byte_length": 1834,
-      "executable": false,
-      "raw_sha256": "sha256:ae1ef0f23e4a62f55409f8611b20c00d426d5851dd6b6f7964f6c9158e489719"
-    },
-    {
-      "path": "dist/assistant/evolution-runner.test.js.map",
-      "byte_length": 1677,
-      "executable": false,
-      "raw_sha256": "sha256:b9e07aa3cbd870f883ee85895cbbab21c4971a03c3cd5642983af38c02b8d8a8"
-    },
-    {
-      "path": "dist/assistant/evolution-store.d.ts",
-      "byte_length": 6608,
-      "executable": false,
-      "raw_sha256": "sha256:ea1455984a801b2b9724a61b39786cbb147eaa7b3005a8f6a71543ed35560f07"
-    },
-    {
-      "path": "dist/assistant/evolution-store.d.ts.map",
-      "byte_length": 5797,
-      "executable": false,
-      "raw_sha256": "sha256:5433e688bcba1aff978c37ce86c1e00f4396f40a664c4b6e0cc4701194167e73"
-    },
-    {
-      "path": "dist/assistant/evolution-store.js",
-      "byte_length": 17721,
-      "executable": false,
-      "raw_sha256": "sha256:a3eab57fd2acb8ce67929eeffcdfe83bae17abad03d5504e48724c4e2c36b0a4"
-    },
-    {
-      "path": "dist/assistant/evolution-store.js.map",
-      "byte_length": 14593,
-      "executable": false,
-      "raw_sha256": "sha256:9db6180763163872696c7fe867b9b1a5a689d18f19377daecf7c29fc121be7d5"
-    },
-    {
-      "path": "dist/assistant/evolution-store.test.d.ts",
-      "byte_length": 61,
-      "executable": false,
-      "raw_sha256": "sha256:30bc52627d64b503e21bdd1ca8f0090b19edf142f11c344bc1a9f6638bb13af3"
-    },
-    {
-      "path": "dist/assistant/evolution-store.test.d.ts.map",
-      "byte_length": 147,
-      "executable": false,
-      "raw_sha256": "sha256:7481f32c468402ea4b268311437965703336cec2028d00ce177096c029b7cfd6"
-    },
-    {
-      "path": "dist/assistant/evolution-store.test.js",
-      "byte_length": 2682,
-      "executable": false,
-      "raw_sha256": "sha256:5d70c8d79a3aa7f1f749ea4987e13bca9e713022b58468a00e9578155b9c6258"
-    },
-    {
-      "path": "dist/assistant/evolution-store.test.js.map",
-      "byte_length": 2854,
-      "executable": false,
-      "raw_sha256": "sha256:5ee69f1a3729a3b276e4ca50e21575f6285f90a9e08cde9ee9db575a42edcb66"
-    },
-    {
       "path": "dist/assistant/online-error-log.d.ts",
       "byte_length": 1610,
       "executable": false,
@@ -1147,78 +955,6 @@
       "byte_length": 3888,
       "executable": false,
       "raw_sha256": "sha256:6cadb2a4364b5b37d657d3b6503eb197d0b8484701e8aa6634380aadf3f0db90"
-    },
-    {
-      "path": "dist/card-builder.d.ts",
-      "byte_length": 559,
-      "executable": false,
-      "raw_sha256": "sha256:8de5b53b5ba25ed11247c81630ff8d42216ccebc82917464989d8d817af6a3b2"
-    },
-    {
-      "path": "dist/card-builder.d.ts.map",
-      "byte_length": 624,
-      "executable": false,
-      "raw_sha256": "sha256:955ca041b55be45e1191388c75db6134ffe66ab2eb09f0e86785f922b7b605e7"
-    },
-    {
-      "path": "dist/card-builder.js",
-      "byte_length": 5179,
-      "executable": false,
-      "raw_sha256": "sha256:45f715287de1db73f08538371fc9aae54368cb5a7adf9f6aaa03009bc25083c8"
-    },
-    {
-      "path": "dist/card-builder.js.map",
-      "byte_length": 5273,
-      "executable": false,
-      "raw_sha256": "sha256:d3a9da8a3f3d222238851e89eac86b86700440a1da0f2a6f10bebf6d379d5d0d"
-    },
-    {
-      "path": "dist/card-config.d.ts",
-      "byte_length": 1681,
-      "executable": false,
-      "raw_sha256": "sha256:a6d1a9a02b20e8ca99b3bcd00a4f017137f0d9ba769cd533db8b8029ccc5c1bd"
-    },
-    {
-      "path": "dist/card-config.d.ts.map",
-      "byte_length": 1763,
-      "executable": false,
-      "raw_sha256": "sha256:53a35bbecb67dade42e37a2747f442ee8f9a9497361fad65c07495597458371b"
-    },
-    {
-      "path": "dist/card-config.js",
-      "byte_length": 3447,
-      "executable": false,
-      "raw_sha256": "sha256:a4d277f1bc8e6a77e758dbeda5e335e4636cbb4dd655b1f7a590d09f3c33075e"
-    },
-    {
-      "path": "dist/card-config.js.map",
-      "byte_length": 3563,
-      "executable": false,
-      "raw_sha256": "sha256:3eec9f326497ff643f27b464f1aaf58366e35afb2fb59b4d9d9caeb228f75690"
-    },
-    {
-      "path": "dist/card-files.d.ts",
-      "byte_length": 1089,
-      "executable": false,
-      "raw_sha256": "sha256:ca15a6f1b35005595c3c4f42c39484dde1a954776cfa8397f32a5e7e288ce1ad"
-    },
-    {
-      "path": "dist/card-files.d.ts.map",
-      "byte_length": 1040,
-      "executable": false,
-      "raw_sha256": "sha256:670e93a7092d688912dca4bebcf1f0cb640d80e8c0c14365bc6fd9bcf236ddc1"
-    },
-    {
-      "path": "dist/card-files.js",
-      "byte_length": 5116,
-      "executable": false,
-      "raw_sha256": "sha256:91070ec23b8a9c268a2d967b0ebbb916b2ecd38e04751392d12084238eadc083"
-    },
-    {
-      "path": "dist/card-files.js.map",
-      "byte_length": 5174,
-      "executable": false,
-      "raw_sha256": "sha256:6a41f67275fd8116130776aef9fce8608bd4ee605e15b337e4dde2a0cdd83958"
     },
     {
       "path": "dist/channels/assistant.d.ts",
@@ -2493,30 +2229,6 @@
       "raw_sha256": "sha256:98a8b21e6457a4d66533a9fb8b8cb27311352125da31de3230a51f161dd8f9ef"
     },
     {
-      "path": "dist/human-input-card.d.ts",
-      "byte_length": 289,
-      "executable": false,
-      "raw_sha256": "sha256:c99ea07235af636a8c50669c6f379515e32a3b4685e0c92d0652b14b23464025"
-    },
-    {
-      "path": "dist/human-input-card.d.ts.map",
-      "byte_length": 318,
-      "executable": false,
-      "raw_sha256": "sha256:8e672e00b0fdd666e4cec80e0087c8245d374335167bd9362210706de2ba82c4"
-    },
-    {
-      "path": "dist/human-input-card.js",
-      "byte_length": 16411,
-      "executable": false,
-      "raw_sha256": "sha256:12457d767a9e194c5ac857207e64dd3872908abb102a76e19e1585e97a5d8991"
-    },
-    {
-      "path": "dist/human-input-card.js.map",
-      "byte_length": 15496,
-      "executable": false,
-      "raw_sha256": "sha256:b1cf9afbe8972835c69b4c677365513adca57e655f9a88101a4c87946ae36671"
-    },
-    {
       "path": "dist/index.d.ts",
       "byte_length": 1437,
       "executable": false,
@@ -3381,30 +3093,6 @@
       "raw_sha256": "sha256:81dede910a214a55e3270dffa30f3f498472f33b422760cef69ad3069654710a"
     },
     {
-      "path": "dist/schema-card.d.ts",
-      "byte_length": 621,
-      "executable": false,
-      "raw_sha256": "sha256:fb3805f1c4b8bc29620a06a1eb9b7fb383ca710ae2864f932bb9263707de2561"
-    },
-    {
-      "path": "dist/schema-card.d.ts.map",
-      "byte_length": 615,
-      "executable": false,
-      "raw_sha256": "sha256:f913802bdd9b7a8f61db6aecc03867194e0a41d29e4d5bcb7c928a84eeb2ca4a"
-    },
-    {
-      "path": "dist/schema-card.js",
-      "byte_length": 6669,
-      "executable": false,
-      "raw_sha256": "sha256:5e40da96178fa9dff91c6edbffd41cbc2da2e0fc903b43c7de498b77b2b8f900"
-    },
-    {
-      "path": "dist/schema-card.js.map",
-      "byte_length": 6882,
-      "executable": false,
-      "raw_sha256": "sha256:be8183f96c91fe8eabbd9cb9c17677757329dfe475e49edc033031dd0c72508a"
-    },
-    {
       "path": "dist/sender-allowlist.d.ts",
       "byte_length": 701,
       "executable": false,
@@ -3861,894 +3549,6 @@
       "raw_sha256": "sha256:ab75407a9122019b63ef4ba4206e48d6ea0f6f9f5901b5df9d97dcc9cc3d5f6e"
     },
     {
-      "path": "dist/workbench-broadcast-actions.d.ts",
-      "byte_length": 1028,
-      "executable": false,
-      "raw_sha256": "sha256:603085ed4929158dbe59f22bcc4590969c3e0fe871b1be0680d3e80214d53a5e"
-    },
-    {
-      "path": "dist/workbench-broadcast-actions.d.ts.map",
-      "byte_length": 1013,
-      "executable": false,
-      "raw_sha256": "sha256:5018a03e82f5bf02304e78e737b2d25e030edbc7d7af852d98e6681d57b35df1"
-    },
-    {
-      "path": "dist/workbench-broadcast-actions.js",
-      "byte_length": 17201,
-      "executable": false,
-      "raw_sha256": "sha256:a398322bd704e830fafeeaa6aaf747296c0fb0056a4f1d6c0044fc05ced07178"
-    },
-    {
-      "path": "dist/workbench-broadcast-actions.js.map",
-      "byte_length": 12654,
-      "executable": false,
-      "raw_sha256": "sha256:60f6cae54779af0dcb8fe95c917825a4a792e46eb8e30fe1f19c02879dac58ba"
-    },
-    {
-      "path": "dist/workbench-broadcast-config.d.ts",
-      "byte_length": 465,
-      "executable": false,
-      "raw_sha256": "sha256:d4815d7127b68f646ef0dc1ae041b8396ac066dbca1408a0c33b7715f27130cd"
-    },
-    {
-      "path": "dist/workbench-broadcast-config.d.ts.map",
-      "byte_length": 454,
-      "executable": false,
-      "raw_sha256": "sha256:b2bcc02aba575c241dd5e9ff81f239d42c4b082581aa7be068246905d0be0841"
-    },
-    {
-      "path": "dist/workbench-broadcast-config.js",
-      "byte_length": 700,
-      "executable": false,
-      "raw_sha256": "sha256:8c592818d3caa73124cfd08413dabf499b5c527f342878ab330d1d02f31c07ab"
-    },
-    {
-      "path": "dist/workbench-broadcast-config.js.map",
-      "byte_length": 605,
-      "executable": false,
-      "raw_sha256": "sha256:35936e1459fe4e0157b5ba92b3318fb106b0f3d6b464d84d55ba05ab794e2167"
-    },
-    {
-      "path": "dist/workbench-broadcast-render.d.ts",
-      "byte_length": 707,
-      "executable": false,
-      "raw_sha256": "sha256:1079334cc0b8ad93942031d125af266dd6f7b8259173fd974b7551f698220ded"
-    },
-    {
-      "path": "dist/workbench-broadcast-render.d.ts.map",
-      "byte_length": 716,
-      "executable": false,
-      "raw_sha256": "sha256:95ca35035c54eccade0c3f478d70d6b9354a1ef8d4fd9d24ef9c3cede9dacbc7"
-    },
-    {
-      "path": "dist/workbench-broadcast-render.js",
-      "byte_length": 8881,
-      "executable": false,
-      "raw_sha256": "sha256:016b0bf194e01666fc2fba19ad5426e1fc7bd4249bc0c378434f8ebae0aebcb7"
-    },
-    {
-      "path": "dist/workbench-broadcast-render.js.map",
-      "byte_length": 8084,
-      "executable": false,
-      "raw_sha256": "sha256:65295843e6f3dd73dca184993537f54ece99540254b57ab4b13a178ae550f0d3"
-    },
-    {
-      "path": "dist/workbench-broadcast.d.ts",
-      "byte_length": 722,
-      "executable": false,
-      "raw_sha256": "sha256:ea61abd9a504eab62965c37c3d9c2733b5f7b134db3bed4f2e897470f19ff2ee"
-    },
-    {
-      "path": "dist/workbench-broadcast.d.ts.map",
-      "byte_length": 714,
-      "executable": false,
-      "raw_sha256": "sha256:c5ee3039ee36ef0680433235330d9921c1e86ac5f6183566b188ecbe5982d942"
-    },
-    {
-      "path": "dist/workbench-broadcast.js",
-      "byte_length": 3916,
-      "executable": false,
-      "raw_sha256": "sha256:ec41a503bebd346a5b10ed9ada0452f3edd69ee8a791b9f81a64fd3f7bf42627"
-    },
-    {
-      "path": "dist/workbench-broadcast.js.map",
-      "byte_length": 3454,
-      "executable": false,
-      "raw_sha256": "sha256:e590bfe8ef7070b9c1bd151f9c333a67f6bbf3c58de5da05186064f2b3eb16f4"
-    },
-    {
-      "path": "dist/workbench-events.d.ts",
-      "byte_length": 597,
-      "executable": false,
-      "raw_sha256": "sha256:3a07fd756cabba564b6db90b56c7aff91606660a0a592202d067e1b5596893b1"
-    },
-    {
-      "path": "dist/workbench-events.d.ts.map",
-      "byte_length": 537,
-      "executable": false,
-      "raw_sha256": "sha256:203a4de11aae447719e7da8e2c858e67f466698a98823048246e51f50c94335b"
-    },
-    {
-      "path": "dist/workbench-events.js",
-      "byte_length": 232,
-      "executable": false,
-      "raw_sha256": "sha256:790539239b854b3b047866b3838533cde8a7025046387c8134639e4899445472"
-    },
-    {
-      "path": "dist/workbench-events.js.map",
-      "byte_length": 306,
-      "executable": false,
-      "raw_sha256": "sha256:38a6651c13275b6c0586935eef515cd20c3ab1f29b2a0c35ce840a273363c280"
-    },
-    {
-      "path": "dist/workbench-query.d.ts",
-      "byte_length": 2925,
-      "executable": false,
-      "raw_sha256": "sha256:230105853f4f5dc91b3916568bd9d196eff0d8a89464eed2bed92cdb15e61e5c"
-    },
-    {
-      "path": "dist/workbench-query.d.ts.map",
-      "byte_length": 2734,
-      "executable": false,
-      "raw_sha256": "sha256:7dceff15cc918cddd6affdd6367c208af3ab3fe8b486a83b25e4fef8c1098375"
-    },
-    {
-      "path": "dist/workbench-query.js",
-      "byte_length": 6171,
-      "executable": false,
-      "raw_sha256": "sha256:1ac09fc416df1e7df6bbdc0194f697a6ee8444b65fcd66e1dba5dd53f6a616c4"
-    },
-    {
-      "path": "dist/workbench-query.js.map",
-      "byte_length": 5555,
-      "executable": false,
-      "raw_sha256": "sha256:e12802f69b62aeabdf0365b0e29239cf18e45d9797d980093ee77d7adff490e0"
-    },
-    {
-      "path": "dist/workbench-store.d.ts",
-      "byte_length": 2001,
-      "executable": false,
-      "raw_sha256": "sha256:fe42b213d0bacfa10d1ab69b716b95cd963077b708558620c5400cd3e2d80e86"
-    },
-    {
-      "path": "dist/workbench-store.d.ts.map",
-      "byte_length": 1874,
-      "executable": false,
-      "raw_sha256": "sha256:4f91c70503ec035e615581f18411cfbf87112d0f69a6c6645f30aa22cee943d3"
-    },
-    {
-      "path": "dist/workbench-store.js",
-      "byte_length": 48440,
-      "executable": false,
-      "raw_sha256": "sha256:a0fc76fe958f0ebaa7d99de60cf3d75b4a40f62804559a3a85025e7dae38db91"
-    },
-    {
-      "path": "dist/workbench-store.js.map",
-      "byte_length": 41444,
-      "executable": false,
-      "raw_sha256": "sha256:4df49f3478e3eab4c58842ed82302223d0edb25bfc1e9966f3c1ecc5d30517a0"
-    },
-    {
-      "path": "dist/workbench-store.test.d.ts",
-      "byte_length": 61,
-      "executable": false,
-      "raw_sha256": "sha256:19ab15bac75e1cdd2bad4211ca8fd084930417d2dc7440080e4ccc5dcdc1ac48"
-    },
-    {
-      "path": "dist/workbench-store.test.d.ts.map",
-      "byte_length": 134,
-      "executable": false,
-      "raw_sha256": "sha256:9fa049274b7d8580bdd63ad9347476884b0329726abac55f09b11d0246e514d5"
-    },
-    {
-      "path": "dist/workbench-store.test.js",
-      "byte_length": 96337,
-      "executable": false,
-      "raw_sha256": "sha256:73ae52a972e343dc14ac7dea455b2a8caff8dce3b8ea0d507ab58cde0ac6b551"
-    },
-    {
-      "path": "dist/workbench-store.test.js.map",
-      "byte_length": 62779,
-      "executable": false,
-      "raw_sha256": "sha256:51e16fc067a96043e5da057ae9b380ef4e05ee7c654af496548672142bc70f5d"
-    },
-    {
-      "path": "dist/workbench.d.ts",
-      "byte_length": 6274,
-      "executable": false,
-      "raw_sha256": "sha256:998a3f14d296777a5a63cb629841752e45470c5ae42e7f21bd0654df4c940f63"
-    },
-    {
-      "path": "dist/workbench.d.ts.map",
-      "byte_length": 6061,
-      "executable": false,
-      "raw_sha256": "sha256:dee6bf86d2de293bdebeba369ba13b6ac36d51f141cdb95c60105f0fe1ef733b"
-    },
-    {
-      "path": "dist/workbench.js",
-      "byte_length": 42209,
-      "executable": false,
-      "raw_sha256": "sha256:e6ff5741ac2f7676dcc2a3bb26759600e09462b90176353d0d843eff22a4c6a9"
-    },
-    {
-      "path": "dist/workbench.js.map",
-      "byte_length": 38056,
-      "executable": false,
-      "raw_sha256": "sha256:c3fb4d1647a6aeebcbdbd36959f53e6b03f7c551797b44a2623667de8b965ed9"
-    },
-    {
-      "path": "dist/workflow-actions/assert.d.ts",
-      "byte_length": 99,
-      "executable": false,
-      "raw_sha256": "sha256:d7985877cb5d3231200d4e24673256d79ac5c9d2137ad025af65586f36e25c1c"
-    },
-    {
-      "path": "dist/workflow-actions/assert.d.ts.map",
-      "byte_length": 161,
-      "executable": false,
-      "raw_sha256": "sha256:8b62d53621c408b05e45c51eda7744ebc4fb9906fe1a44332693eda1b3d91800"
-    },
-    {
-      "path": "dist/workflow-actions/assert.js",
-      "byte_length": 1348,
-      "executable": false,
-      "raw_sha256": "sha256:3d4694b2a5624f17db6674f0586d1452fe4cb71a9f5f0091aed4ca1cbecd0004"
-    },
-    {
-      "path": "dist/workflow-actions/assert.js.map",
-      "byte_length": 981,
-      "executable": false,
-      "raw_sha256": "sha256:01215297f22df053836a932e300117501b21ebd933ecd05a15a3c5f9a6e280e1"
-    },
-    {
-      "path": "dist/workflow-actions/context.d.ts",
-      "byte_length": 101,
-      "executable": false,
-      "raw_sha256": "sha256:69dba8fa5eb78b45c48efb3f40b733c5a5144d24808b9a175abfb0212d817e5e"
-    },
-    {
-      "path": "dist/workflow-actions/context.d.ts.map",
-      "byte_length": 163,
-      "executable": false,
-      "raw_sha256": "sha256:b89060efd9c1c0d954b5b0d1b33bd2779459b6e23a88b6c51236c88e720409d0"
-    },
-    {
-      "path": "dist/workflow-actions/context.js",
-      "byte_length": 3807,
-      "executable": false,
-      "raw_sha256": "sha256:b94e4d49cd8dbe988a4964d58defc8f5ecb445157d839c28c61d27191ca0d7e9"
-    },
-    {
-      "path": "dist/workflow-actions/context.js.map",
-      "byte_length": 2811,
-      "executable": false,
-      "raw_sha256": "sha256:dc8fa2eef43cb9d1ddf2b6f41f2d6c03017ca8cde841706efccb2e966d89d093"
-    },
-    {
-      "path": "dist/workflow-actions/index.d.ts",
-      "byte_length": 372,
-      "executable": false,
-      "raw_sha256": "sha256:888125853a41415930594f9f3672acf4e7bd3e83e85751026f3c9044901f63ab"
-    },
-    {
-      "path": "dist/workflow-actions/index.d.ts.map",
-      "byte_length": 314,
-      "executable": false,
-      "raw_sha256": "sha256:84719e049e17452c11dcedda75ab8a16426dc8dee3d29463b3783dc99d953720"
-    },
-    {
-      "path": "dist/workflow-actions/index.js",
-      "byte_length": 655,
-      "executable": false,
-      "raw_sha256": "sha256:5f4aec960836d5dcadf78d7d1fdea9c0ceee1600bdca9ca2ba518b2af499e0fd"
-    },
-    {
-      "path": "dist/workflow-actions/index.js.map",
-      "byte_length": 533,
-      "executable": false,
-      "raw_sha256": "sha256:3973f8e980990955b71dcd01e87c621bfeb016f9c31a394f314344763ffcb0f7"
-    },
-    {
-      "path": "dist/workflow-actions/json.d.ts",
-      "byte_length": 95,
-      "executable": false,
-      "raw_sha256": "sha256:10b52324f3588558f43ec3dc6a3bfc5a9cd89de15b66997d3fbaef720f99442f"
-    },
-    {
-      "path": "dist/workflow-actions/json.d.ts.map",
-      "byte_length": 157,
-      "executable": false,
-      "raw_sha256": "sha256:27df4566a5b6c09aabb23a9899ace38320301d6c6fa2934f9c8db2ccee8d054f"
-    },
-    {
-      "path": "dist/workflow-actions/json.js",
-      "byte_length": 1743,
-      "executable": false,
-      "raw_sha256": "sha256:88d0fdc4a90a148bd5f989d06679be553d5910a5f1d7187fba52aaaad1bd829e"
-    },
-    {
-      "path": "dist/workflow-actions/json.js.map",
-      "byte_length": 1294,
-      "executable": false,
-      "raw_sha256": "sha256:6e5bc17cdb9fcafdfb981257ae3c786cf4e65ed33b7b3fad0f0fb425beb970f3"
-    },
-    {
-      "path": "dist/workflow-actions/registry.d.ts",
-      "byte_length": 1525,
-      "executable": false,
-      "raw_sha256": "sha256:94fdbeececefac8936c3b4fb8811815328d316f804a6a68fa600d3d3f73f87d4"
-    },
-    {
-      "path": "dist/workflow-actions/registry.d.ts.map",
-      "byte_length": 1469,
-      "executable": false,
-      "raw_sha256": "sha256:9e5afca3ed7dc15a94c0becab9f09721d1a42d51a275c6feba05ca21f4cad43f"
-    },
-    {
-      "path": "dist/workflow-actions/registry.js",
-      "byte_length": 632,
-      "executable": false,
-      "raw_sha256": "sha256:1c7f4f562edca210cc885659c0e1cdda0db172e419ef478cde36c803633144a4"
-    },
-    {
-      "path": "dist/workflow-actions/registry.js.map",
-      "byte_length": 828,
-      "executable": false,
-      "raw_sha256": "sha256:eac961b0a672f38cdb2e78db4ffa75e035f8d1e5d5cb73eaa7f5e0d4a1751734"
-    },
-    {
-      "path": "dist/workflow-actions/registry.test.d.ts",
-      "byte_length": 54,
-      "executable": false,
-      "raw_sha256": "sha256:406d952a2e50ae48b496ace3e7d52883d60ce58a6c25ab02ec2bbd3158b2c5dc"
-    },
-    {
-      "path": "dist/workflow-actions/registry.test.d.ts.map",
-      "byte_length": 140,
-      "executable": false,
-      "raw_sha256": "sha256:3491d4fbebe1c4f9445501efd10291e609c6dbca35ec2293fe054177d383ee1e"
-    },
-    {
-      "path": "dist/workflow-actions/registry.test.js",
-      "byte_length": 7076,
-      "executable": false,
-      "raw_sha256": "sha256:20a4685c7c3e36c598de16f820339c45a2caf587ffb13b0daa79fff5a88634b7"
-    },
-    {
-      "path": "dist/workflow-actions/registry.test.js.map",
-      "byte_length": 3903,
-      "executable": false,
-      "raw_sha256": "sha256:94c9910c8f99976d99d39d27efa9a704e1ca858303e5e77e715cf05a9d7defd6"
-    },
-    {
-      "path": "dist/workflow-actions/script.d.ts",
-      "byte_length": 99,
-      "executable": false,
-      "raw_sha256": "sha256:1f7f893d863c2fe1620ce9c566a7d7bc69d1d81d7e7f0b2f93ebb3b072ab043c"
-    },
-    {
-      "path": "dist/workflow-actions/script.d.ts.map",
-      "byte_length": 161,
-      "executable": false,
-      "raw_sha256": "sha256:319f194751a61f40462601f4f91fa238f8e031634662efdc61547cd15372c127"
-    },
-    {
-      "path": "dist/workflow-actions/script.js",
-      "byte_length": 2876,
-      "executable": false,
-      "raw_sha256": "sha256:184b8cac11f7fd2266458398db298f773440933552ca86b503d9ef6a5fef506f"
-    },
-    {
-      "path": "dist/workflow-actions/script.js.map",
-      "byte_length": 2015,
-      "executable": false,
-      "raw_sha256": "sha256:259145c62871a44b52bc569c676847b3bcbae0d00464181f99ee2871268cf58b"
-    },
-    {
-      "path": "dist/workflow-actions/service.d.ts",
-      "byte_length": 195,
-      "executable": false,
-      "raw_sha256": "sha256:da66c912cf31ee97f87db44e2bb2ed518b2dcc044456b57f47f01c8e7b5d001c"
-    },
-    {
-      "path": "dist/workflow-actions/service.d.ts.map",
-      "byte_length": 241,
-      "executable": false,
-      "raw_sha256": "sha256:9c116227ffd9398512a92c261c0d9c81538be6280957dcff2883b09f316f35b1"
-    },
-    {
-      "path": "dist/workflow-actions/service.js",
-      "byte_length": 3681,
-      "executable": false,
-      "raw_sha256": "sha256:1eb9e9ff4a7c11417abceddef709f1bfd6e5840c27f75e207e31f53240856a7e"
-    },
-    {
-      "path": "dist/workflow-actions/service.js.map",
-      "byte_length": 2845,
-      "executable": false,
-      "raw_sha256": "sha256:e0ba498da5442a31be14d485e6da813a32fca0cda1bffe0f9c991192df9a8c33"
-    },
-    {
-      "path": "dist/workflow-actions/service.test.d.ts",
-      "byte_length": 53,
-      "executable": false,
-      "raw_sha256": "sha256:4f9125701f99c032879595806c0ba3ef075058696c934fce34cf6ee3f997ccd7"
-    },
-    {
-      "path": "dist/workflow-actions/service.test.d.ts.map",
-      "byte_length": 138,
-      "executable": false,
-      "raw_sha256": "sha256:d253e3605309d6444c91525b469d2237f796163e90505e3168051c2f84d14959"
-    },
-    {
-      "path": "dist/workflow-actions/service.test.js",
-      "byte_length": 1336,
-      "executable": false,
-      "raw_sha256": "sha256:beac1ecfd68dee0c7ef235984fe495e0c33ec810b2a6d787e15bac295b6f90cf"
-    },
-    {
-      "path": "dist/workflow-actions/service.test.js.map",
-      "byte_length": 1334,
-      "executable": false,
-      "raw_sha256": "sha256:7265768711be2069af294b1132914d0e2ed6de1b76dce56bc38601f5d757ba65"
-    },
-    {
-      "path": "dist/workflow-actions/utils.d.ts",
-      "byte_length": 265,
-      "executable": false,
-      "raw_sha256": "sha256:26456e61bf52562dd3ec5c4d9875d6f5e0785290bf1d210998196626ebb8512f"
-    },
-    {
-      "path": "dist/workflow-actions/utils.d.ts.map",
-      "byte_length": 342,
-      "executable": false,
-      "raw_sha256": "sha256:62ad989f4de49ab5f526f68c1dd1602368d66a6309abe3b62a4f67edf2ca3ee8"
-    },
-    {
-      "path": "dist/workflow-actions/utils.js",
-      "byte_length": 582,
-      "executable": false,
-      "raw_sha256": "sha256:afe224a57d9d25fbd8427baeaa2a0828e6e2ee509e9c9c0a516859965c1bdc14"
-    },
-    {
-      "path": "dist/workflow-actions/utils.js.map",
-      "byte_length": 770,
-      "executable": false,
-      "raw_sha256": "sha256:efc3d9f8967a2ae1a192add33fcace138063352d5f3baa616aae83a6fd6eb032"
-    },
-    {
-      "path": "dist/workflow-artifact-contract.d.ts",
-      "byte_length": 3173,
-      "executable": false,
-      "raw_sha256": "sha256:f563afb5ae03be95cbd4ead06590cf36b982854eb7d6ad6a6c5c78dc25ec88e5"
-    },
-    {
-      "path": "dist/workflow-artifact-contract.d.ts.map",
-      "byte_length": 2882,
-      "executable": false,
-      "raw_sha256": "sha256:ac2c3e09af99bb6b5aa484e6166b6b1adda19c473661996cef58adeb0e5aa09d"
-    },
-    {
-      "path": "dist/workflow-artifact-contract.js",
-      "byte_length": 25185,
-      "executable": false,
-      "raw_sha256": "sha256:f1d6b77516f7f6dd67c8e6bf714c8baca00e67fe293353c03dd546fe3f9d3ad2"
-    },
-    {
-      "path": "dist/workflow-artifact-contract.js.map",
-      "byte_length": 22168,
-      "executable": false,
-      "raw_sha256": "sha256:062ff545584b5499ea70be032f5a52e61e38d8098175ea45943f00e22c541222"
-    },
-    {
-      "path": "dist/workflow-artifact-contract.test.d.ts",
-      "byte_length": 72,
-      "executable": false,
-      "raw_sha256": "sha256:6549434990364dc5e5f510be25db125d7184fdbe17a3331d49507e5318d1198f"
-    },
-    {
-      "path": "dist/workflow-artifact-contract.test.d.ts.map",
-      "byte_length": 156,
-      "executable": false,
-      "raw_sha256": "sha256:623af15fa21d95ea686f559803debe3194685b1ae5b945b90289ddd5b950187f"
-    },
-    {
-      "path": "dist/workflow-artifact-contract.test.js",
-      "byte_length": 8041,
-      "executable": false,
-      "raw_sha256": "sha256:bdb04ed971e6c252beee8a34509df43adde126c9ec1abefd8023bf468f766197"
-    },
-    {
-      "path": "dist/workflow-artifact-contract.test.js.map",
-      "byte_length": 6720,
-      "executable": false,
-      "raw_sha256": "sha256:c264082116997b2b80364675c83e78d03b327ed692dba4f7fe513080d02246ef"
-    },
-    {
-      "path": "dist/workflow-artifacts.d.ts",
-      "byte_length": 1184,
-      "executable": false,
-      "raw_sha256": "sha256:46286bc3114140d7d5b07cc18c102513ba4eb891431574e29c958fd258351ec9"
-    },
-    {
-      "path": "dist/workflow-artifacts.d.ts.map",
-      "byte_length": 1084,
-      "executable": false,
-      "raw_sha256": "sha256:188b12625f4e7241b7dd24093dd620ede14f9b33cf475453e63e1aa556b44327"
-    },
-    {
-      "path": "dist/workflow-artifacts.js",
-      "byte_length": 2681,
-      "executable": false,
-      "raw_sha256": "sha256:7761d857308d4b91b6393bd2fad635b9923769dca7569a55484bb5809dc0d94d"
-    },
-    {
-      "path": "dist/workflow-artifacts.js.map",
-      "byte_length": 2224,
-      "executable": false,
-      "raw_sha256": "sha256:83151356eb44aa1c7027f871b2de001f11529b48414fe6aa2b18ee95ef231f65"
-    },
-    {
-      "path": "dist/workflow-compiler.d.ts",
-      "byte_length": 3049,
-      "executable": false,
-      "raw_sha256": "sha256:b009ff4fb15d129503fe4e6dfaf876787ba3071030d0108ba37128c3084d0990"
-    },
-    {
-      "path": "dist/workflow-compiler.d.ts.map",
-      "byte_length": 2634,
-      "executable": false,
-      "raw_sha256": "sha256:03afcddeb2bab7779cd37b83f31ddde31371778374ba4a5adbf020448e174040"
-    },
-    {
-      "path": "dist/workflow-compiler.js",
-      "byte_length": 35487,
-      "executable": false,
-      "raw_sha256": "sha256:3637d05de20f18b8a30f787c25aee571c8c6b02848a0b30b5c82d973a6706c41"
-    },
-    {
-      "path": "dist/workflow-compiler.js.map",
-      "byte_length": 30315,
-      "executable": false,
-      "raw_sha256": "sha256:4ed61a604bf07fa541cd6ab9bc1734d1e4a339d1c729f09d373c3de0f2993564"
-    },
-    {
-      "path": "dist/workflow-config.d.ts",
-      "byte_length": 5375,
-      "executable": false,
-      "raw_sha256": "sha256:3eb9760d20caa834c1d45705659392bd8f0895cbd11ba82c984da841463dce5d"
-    },
-    {
-      "path": "dist/workflow-config.d.ts.map",
-      "byte_length": 4248,
-      "executable": false,
-      "raw_sha256": "sha256:1f5e1789dca4820a0d2c104d54a7532cb0aa32cd67c1e11994c012801a903715"
-    },
-    {
-      "path": "dist/workflow-config.js",
-      "byte_length": 19769,
-      "executable": false,
-      "raw_sha256": "sha256:08494975fad85f462c9b73c9a6561dcd99291f9829935b431c5ebe892f48e307"
-    },
-    {
-      "path": "dist/workflow-config.js.map",
-      "byte_length": 17555,
-      "executable": false,
-      "raw_sha256": "sha256:9f093d534be1828f66ed4070bcde73cda5298b05a5e0416003a15513fc1d5476"
-    },
-    {
-      "path": "dist/workflow-context-pack.d.ts",
-      "byte_length": 2594,
-      "executable": false,
-      "raw_sha256": "sha256:6ad96395fed8fc8de8595e52b8b2cbd8a0d746d1bb4bef5473de3404af1d63cf"
-    },
-    {
-      "path": "dist/workflow-context-pack.d.ts.map",
-      "byte_length": 2447,
-      "executable": false,
-      "raw_sha256": "sha256:eed22b317d712522dc2ee1202ed8f0778dffc74beb632370e319e4cb50058384"
-    },
-    {
-      "path": "dist/workflow-context-pack.js",
-      "byte_length": 24457,
-      "executable": false,
-      "raw_sha256": "sha256:40b869df7c2f9015e43e3c4bbaefc3684c021f00200c13a0cd0affb0dc421e65"
-    },
-    {
-      "path": "dist/workflow-context-pack.js.map",
-      "byte_length": 22656,
-      "executable": false,
-      "raw_sha256": "sha256:891cd236151d56d4faa4723f7e1011f9d68e3f17f32a4b06d0587b229c1f3f21"
-    },
-    {
-      "path": "dist/workflow-context-pack.test.d.ts",
-      "byte_length": 67,
-      "executable": false,
-      "raw_sha256": "sha256:8b2d24a0495dbd708d67ec19834154bc0d59fe52f8b61ec148b7b9a51c522e44"
-    },
-    {
-      "path": "dist/workflow-context-pack.test.d.ts.map",
-      "byte_length": 146,
-      "executable": false,
-      "raw_sha256": "sha256:91cf3189c2dccead0acff1781507aee4ac3b3cd35fd2bded44e23f6dc19da564"
-    },
-    {
-      "path": "dist/workflow-context-pack.test.js",
-      "byte_length": 6588,
-      "executable": false,
-      "raw_sha256": "sha256:52dd14741adfcfe570dc4396c1696f3edd61e64597ea8d042d690764fcbbb7d1"
-    },
-    {
-      "path": "dist/workflow-context-pack.test.js.map",
-      "byte_length": 5247,
-      "executable": false,
-      "raw_sha256": "sha256:306dc2fdee1f00f09d4579db175f0f5da46718936c5893794a3e2f4271508732"
-    },
-    {
-      "path": "dist/workflow-context.d.ts",
-      "byte_length": 1639,
-      "executable": false,
-      "raw_sha256": "sha256:ad69f6cf47dbe074f1d5005dc965187e9c4b5609c44b404af120d07d03c722f4"
-    },
-    {
-      "path": "dist/workflow-context.d.ts.map",
-      "byte_length": 691,
-      "executable": false,
-      "raw_sha256": "sha256:10f28b91da265881d63fe28ba0fb9effdb1ab2ceaf92bd95cef37aed8f382dfd"
-    },
-    {
-      "path": "dist/workflow-context.js",
-      "byte_length": 1854,
-      "executable": false,
-      "raw_sha256": "sha256:e328293e3127f2d34396e11e07626ea3d68f11f1fed30137f8c23f916ab4da66"
-    },
-    {
-      "path": "dist/workflow-context.js.map",
-      "byte_length": 1623,
-      "executable": false,
-      "raw_sha256": "sha256:e56f7f530cbf6d992515b80f2d106c8d75e12d33bbf0fe5f473c4067a1948bf1"
-    },
-    {
-      "path": "dist/workflow-definition-files.d.ts",
-      "byte_length": 1321,
-      "executable": false,
-      "raw_sha256": "sha256:14d79663a969349acf7ca3a02a1a38e9b774445144bd282bcee8c4fd03eff499"
-    },
-    {
-      "path": "dist/workflow-definition-files.d.ts.map",
-      "byte_length": 971,
-      "executable": false,
-      "raw_sha256": "sha256:cc53cf159f0be582ecee57c80bb97b3e7f7a8d536bb0718655abecf25d72ddf1"
-    },
-    {
-      "path": "dist/workflow-definition-files.js",
-      "byte_length": 5440,
-      "executable": false,
-      "raw_sha256": "sha256:3c46f10ad7d9a6c705b66f399e94b4cc06d1fc1317516f90ef2296e6316b23c4"
-    },
-    {
-      "path": "dist/workflow-definition-files.js.map",
-      "byte_length": 5125,
-      "executable": false,
-      "raw_sha256": "sha256:5fa2adef30d3547729609633a60a3f4bfb469333a3801b6e1a3e075ca2268598"
-    },
-    {
-      "path": "dist/workflow-definition-registry.d.ts",
-      "byte_length": 324,
-      "executable": false,
-      "raw_sha256": "sha256:49549ce3b40fb1feac09c5f4ddb4ed5d798319048170412f9ddb04a7846c946d"
-    },
-    {
-      "path": "dist/workflow-definition-registry.d.ts.map",
-      "byte_length": 351,
-      "executable": false,
-      "raw_sha256": "sha256:072b7badfae3172d4456b685f0b2e91150c517c0ba9b20cd04d50030ad1b21b5"
-    },
-    {
-      "path": "dist/workflow-definition-registry.js",
-      "byte_length": 1915,
-      "executable": false,
-      "raw_sha256": "sha256:58f3a730c1d810c272bd01c65f9f007fec3ba7c0db00bed4d6feb4999170afef"
-    },
-    {
-      "path": "dist/workflow-definition-registry.js.map",
-      "byte_length": 1951,
-      "executable": false,
-      "raw_sha256": "sha256:78f87d9b036d73f5b81961f44083a6423dec27e52ba7d10fc27ce172cd3370d5"
-    },
-    {
-      "path": "dist/workflow-definition-store.d.ts",
-      "byte_length": 1711,
-      "executable": false,
-      "raw_sha256": "sha256:53dae53fc5586d951b568e48371bc6d6176739e1cb28423537ce8ed773169fd5"
-    },
-    {
-      "path": "dist/workflow-definition-store.d.ts.map",
-      "byte_length": 1644,
-      "executable": false,
-      "raw_sha256": "sha256:bb5cc032d14f108595a55a1c920d82fca9c217fdd61edc7a5a5ba2fc2f92a362"
-    },
-    {
-      "path": "dist/workflow-definition-store.js",
-      "byte_length": 6966,
-      "executable": false,
-      "raw_sha256": "sha256:e92d1ec68a90b0a13858766091aeeaa6e557ed576692c55f7a34d2d2dceb27bf"
-    },
-    {
-      "path": "dist/workflow-definition-store.js.map",
-      "byte_length": 7061,
-      "executable": false,
-      "raw_sha256": "sha256:11737c9ee3a1e91c7c358fe496b328824bf2f84564940c08517ea2f557eb37bf"
-    },
-    {
-      "path": "dist/workflow-definition.d.ts",
-      "byte_length": 9161,
-      "executable": false,
-      "raw_sha256": "sha256:52ff87fba91d2668b3d4965f2dd54e5e67edbbbe70e9d0f6fdd6ebca60d51cfc"
-    },
-    {
-      "path": "dist/workflow-definition.d.ts.map",
-      "byte_length": 7581,
-      "executable": false,
-      "raw_sha256": "sha256:ee81df05cd1151c920a8a72e6af17dc34c94be25e2eae832bc9a810d99631c5c"
-    },
-    {
-      "path": "dist/workflow-definition.js",
-      "byte_length": 183,
-      "executable": false,
-      "raw_sha256": "sha256:2108d688bd3529430db15eea3fe9d85d12afaeb87dc4402c746c66cb441ea8c2"
-    },
-    {
-      "path": "dist/workflow-definition.js.map",
-      "byte_length": 226,
-      "executable": false,
-      "raw_sha256": "sha256:85a9a53781f9b2509a7c13d250acc2933855b65997e73b214b299ee9c71e9719"
-    },
-    {
-      "path": "dist/workflow-evaluator-registry.d.ts",
-      "byte_length": 943,
-      "executable": false,
-      "raw_sha256": "sha256:4cea7a8df527655b7c7b235206c6c1a37c30c79161461db34aa86376c3e67010"
-    },
-    {
-      "path": "dist/workflow-evaluator-registry.d.ts.map",
-      "byte_length": 870,
-      "executable": false,
-      "raw_sha256": "sha256:ea272a2cdd617f9b2ca73f24099de889700c394e3001a677af78b92a145e81b5"
-    },
-    {
-      "path": "dist/workflow-evaluator-registry.js",
-      "byte_length": 2312,
-      "executable": false,
-      "raw_sha256": "sha256:d80bb68a05f1a70f1f0109c780d57dcf170924e5e2801d74796a66f4fd19f7ce"
-    },
-    {
-      "path": "dist/workflow-evaluator-registry.js.map",
-      "byte_length": 2255,
-      "executable": false,
-      "raw_sha256": "sha256:a28641cb8b6075d4c2f4a423219179f18e0e17fe3c15138f62d1de83b436f264"
-    },
-    {
-      "path": "dist/workflow-handoff.d.ts",
-      "byte_length": 1985,
-      "executable": false,
-      "raw_sha256": "sha256:7ccb98bfa3c7d4899474fac8d034c58bc8053c29201be187519eb9bedc0df0a3"
-    },
-    {
-      "path": "dist/workflow-handoff.d.ts.map",
-      "byte_length": 1820,
-      "executable": false,
-      "raw_sha256": "sha256:13b0f32605dfb9f9b218b28d449fd25c29d3909b871c2a27164daf7b235382b3"
-    },
-    {
-      "path": "dist/workflow-handoff.js",
-      "byte_length": 7345,
-      "executable": false,
-      "raw_sha256": "sha256:748c38c9e7130383959e74c5c513b0cf80ba6f296b86b281707d1e4f199eff51"
-    },
-    {
-      "path": "dist/workflow-handoff.js.map",
-      "byte_length": 6055,
-      "executable": false,
-      "raw_sha256": "sha256:86fc6735d28a3fe295e717f3503241810a162a615c1478bfcbad6936c05ee962"
-    },
-    {
-      "path": "dist/workflow-handoff.test.d.ts",
-      "byte_length": 62,
-      "executable": false,
-      "raw_sha256": "sha256:df5362550f81ae39dc0a935d3c0d1b805a34435cf09d2b5e0c499d5988eeeebe"
-    },
-    {
-      "path": "dist/workflow-handoff.test.d.ts.map",
-      "byte_length": 136,
-      "executable": false,
-      "raw_sha256": "sha256:584037488071067cad7525472d4c81127a4c0635c4a7d4a525d98db2a298e190"
-    },
-    {
-      "path": "dist/workflow-handoff.test.js",
-      "byte_length": 2918,
-      "executable": false,
-      "raw_sha256": "sha256:cb669a66eb970f12a9167cbcb3b480f0a7433b15cf83c5d1a2b37f2105979c61"
-    },
-    {
-      "path": "dist/workflow-handoff.test.js.map",
-      "byte_length": 2212,
-      "executable": false,
-      "raw_sha256": "sha256:cd1e3a5e8310dccc8f9236b33b27715873c8bf79e24bdca2f8589c5f4d9d9ade"
-    },
-    {
-      "path": "dist/workflow-interrupt-command.d.ts",
-      "byte_length": 636,
-      "executable": false,
-      "raw_sha256": "sha256:ca40a4beb1b7044cf9d627b86d16dd339ab8d581c79d4572f44ea1d826400162"
-    },
-    {
-      "path": "dist/workflow-interrupt-command.d.ts.map",
-      "byte_length": 706,
-      "executable": false,
-      "raw_sha256": "sha256:5ddb7252dbab4d9f653b4c2ad588d99e7ac746485cb1960953a3138fca481acc"
-    },
-    {
-      "path": "dist/workflow-interrupt-command.js",
-      "byte_length": 4954,
-      "executable": false,
-      "raw_sha256": "sha256:6718184bbcbcf57a552d97c854dd91dfc690a4b6063c06fdb1be9a636484a47e"
-    },
-    {
-      "path": "dist/workflow-interrupt-command.js.map",
-      "byte_length": 5150,
-      "executable": false,
-      "raw_sha256": "sha256:1980e74602fb34a54ac5b6eb68e9f0f9d60a4e1961afe5767f4913295dfb0c69"
-    },
-    {
-      "path": "dist/workflow-llm-judge.d.ts",
-      "byte_length": 958,
-      "executable": false,
-      "raw_sha256": "sha256:f8f2cf286762676c82fae6acc29aea4a89428aeeb7ed9405cdf8a91747f2a86c"
-    },
-    {
-      "path": "dist/workflow-llm-judge.d.ts.map",
-      "byte_length": 819,
-      "executable": false,
-      "raw_sha256": "sha256:3057787aa293850d0b1c4be0c495afe66865e0f59171127bbc51217172d3e21f"
-    },
-    {
-      "path": "dist/workflow-llm-judge.js",
-      "byte_length": 13437,
-      "executable": false,
-      "raw_sha256": "sha256:b72b516ed4cff1c78cdfb678efee4e2ab0cc6d01f8f9e4c85fae7bbc858e9c5b"
-    },
-    {
-      "path": "dist/workflow-llm-judge.js.map",
-      "byte_length": 11241,
-      "executable": false,
-      "raw_sha256": "sha256:5655a4f1fb4adf4ec2e1d647337325278b4faa280c2395cf593fc7f5a6756d92"
-    },
-    {
-      "path": "dist/workflow-quality-gate.d.ts",
-      "byte_length": 2378,
-      "executable": false,
-      "raw_sha256": "sha256:37496aa6da9d163377a291619d91a5021e7c5cb2838712ce9ec0168f1ba386de"
-    },
-    {
-      "path": "dist/workflow-quality-gate.d.ts.map",
-      "byte_length": 2148,
-      "executable": false,
-      "raw_sha256": "sha256:0fb47925452d56cc1af73aa67757a830007f8c358f1804e941081342b58340f0"
-    },
-    {
-      "path": "dist/workflow-quality-gate.js",
-      "byte_length": 47577,
-      "executable": false,
-      "raw_sha256": "sha256:c7a1113b81e996e8f7fd83fe966cdc9a84a1d6c37fa60014e1bd6529e2748fec"
-    },
-    {
-      "path": "dist/workflow-quality-gate.js.map",
-      "byte_length": 42389,
-      "executable": false,
-      "raw_sha256": "sha256:775a2a1a1e1d3eb0c49b54c47019f1fdd8a5079c64d33615ad952d6862e9bf94"
-    },
-    {
       "path": "dist/workflow-runtime/authoring/feature-release-activation.d.ts",
       "byte_length": 1686,
       "executable": false,
@@ -5157,102 +3957,6 @@
       "raw_sha256": "sha256:105981a6bd206634f255ec8bb3d606cf20d7e156804c7892176f4bd072b11a67"
     },
     {
-      "path": "dist/workflow-runtime/certification/g8-certification-artifacts.d.ts",
-      "byte_length": 3590,
-      "executable": false,
-      "raw_sha256": "sha256:f7ce762a3fdc0512b1ac43649bbffcd06c9c6a363d24b18900e77c21c67cc6fc"
-    },
-    {
-      "path": "dist/workflow-runtime/certification/g8-certification-artifacts.d.ts.map",
-      "byte_length": 2363,
-      "executable": false,
-      "raw_sha256": "sha256:71348e839284f2f720bf09fdadb196398f427efe91b0470be52ea1f81f937833"
-    },
-    {
-      "path": "dist/workflow-runtime/certification/g8-certification-artifacts.js",
-      "byte_length": 43784,
-      "executable": false,
-      "raw_sha256": "sha256:d12459367d6f066f1edd3bd311f8c67a54f5f16f2228336a4d5cd898e3d3a428"
-    },
-    {
-      "path": "dist/workflow-runtime/certification/g8-certification-artifacts.js.map",
-      "byte_length": 31423,
-      "executable": false,
-      "raw_sha256": "sha256:9051666a3c9feabeed762be53c5d628e440702a690295ace922a5864b41b9427"
-    },
-    {
-      "path": "dist/workflow-runtime/certification/g8-certification-artifacts.test.d.ts",
-      "byte_length": 72,
-      "executable": false,
-      "raw_sha256": "sha256:d5940f028551b86a7b14fb018946e5410824b28704c99f2738bb0212a4187601"
-    },
-    {
-      "path": "dist/workflow-runtime/certification/g8-certification-artifacts.test.d.ts.map",
-      "byte_length": 193,
-      "executable": false,
-      "raw_sha256": "sha256:eb141ba305a741881d810b25a9450847530c0af6e05e723420815d6e91b5d9d4"
-    },
-    {
-      "path": "dist/workflow-runtime/certification/g8-certification-artifacts.test.js",
-      "byte_length": 7263,
-      "executable": false,
-      "raw_sha256": "sha256:acdd11005f8219f0f054eb0e19edd36f464a886e150dd13300adb9c601266f71"
-    },
-    {
-      "path": "dist/workflow-runtime/certification/g8-certification-artifacts.test.js.map",
-      "byte_length": 6283,
-      "executable": false,
-      "raw_sha256": "sha256:f34de7f66a099a85c9863ccc22ed3e2087eeeed9043cc95d0aa877fff77a1efc"
-    },
-    {
-      "path": "dist/workflow-runtime/certification/g8-certification-cli.d.ts",
-      "byte_length": 61,
-      "executable": false,
-      "raw_sha256": "sha256:8ae8f53088f54ba1a02b03526a504617ed488e6806699e3cdf724287f167392b"
-    },
-    {
-      "path": "dist/workflow-runtime/certification/g8-certification-cli.d.ts.map",
-      "byte_length": 171,
-      "executable": false,
-      "raw_sha256": "sha256:85a7aa837fcb0af87d4c5ef080dd16c6d0d7488eee690ad790598407670b54c9"
-    },
-    {
-      "path": "dist/workflow-runtime/certification/g8-certification-cli.js",
-      "byte_length": 1794,
-      "executable": false,
-      "raw_sha256": "sha256:59e05c3294691cf7653d4891635a8000e6c54b7b896495218eca145675e95fea"
-    },
-    {
-      "path": "dist/workflow-runtime/certification/g8-certification-cli.js.map",
-      "byte_length": 1842,
-      "executable": false,
-      "raw_sha256": "sha256:2c02cdb42fc1a66bbd535e36e2130277d9e6f089bad068d84948d55010f5464d"
-    },
-    {
-      "path": "dist/workflow-runtime/certification/g8-certification-fixtures.d.ts",
-      "byte_length": 984,
-      "executable": false,
-      "raw_sha256": "sha256:d96c74e86f76b488ad5e252e409592688f647429fab5262dac851c03a8d3a737"
-    },
-    {
-      "path": "dist/workflow-runtime/certification/g8-certification-fixtures.d.ts.map",
-      "byte_length": 705,
-      "executable": false,
-      "raw_sha256": "sha256:204463197ac8641581ef5921efc400bfef15d83ccb067121a000a06063235056"
-    },
-    {
-      "path": "dist/workflow-runtime/certification/g8-certification-fixtures.js",
-      "byte_length": 12141,
-      "executable": false,
-      "raw_sha256": "sha256:6cbc88d9517e99d320c8467c056931aadc64e3a1b2128280a9b6538fb486b103"
-    },
-    {
-      "path": "dist/workflow-runtime/certification/g8-certification-fixtures.js.map",
-      "byte_length": 7804,
-      "executable": false,
-      "raw_sha256": "sha256:9a04f004e671fc769dfb13945a843f1dddffa6cbe13103491a2e7ea18ec1b492"
-    },
-    {
       "path": "dist/workflow-runtime/certification/g8-readiness-artifacts.d.ts",
       "byte_length": 1770,
       "executable": false,
@@ -5347,54 +4051,6 @@
       "byte_length": 3564,
       "executable": false,
       "raw_sha256": "sha256:3814d5e1856d81d9f00f8461cb4fabfdb786210ca62d322cbdabc1b90bf13086"
-    },
-    {
-      "path": "dist/workflow-runtime/certification/machine-class.d.ts",
-      "byte_length": 473,
-      "executable": false,
-      "raw_sha256": "sha256:6515e8d635131bf9aec158c2354790d73e92e47b82fb2e875f1d91529526f450"
-    },
-    {
-      "path": "dist/workflow-runtime/certification/machine-class.d.ts.map",
-      "byte_length": 426,
-      "executable": false,
-      "raw_sha256": "sha256:56409c38dd9ef17a254cb206fec2c702a7c220a7e1dede9e8f693a787440e9a3"
-    },
-    {
-      "path": "dist/workflow-runtime/certification/machine-class.js",
-      "byte_length": 4705,
-      "executable": false,
-      "raw_sha256": "sha256:ac7a68e4efe7de617f24be49d88f52a79caf76c786c1123f29994e9d1c11b949"
-    },
-    {
-      "path": "dist/workflow-runtime/certification/machine-class.js.map",
-      "byte_length": 4033,
-      "executable": false,
-      "raw_sha256": "sha256:017edb75e0a7419e09098ae28f4712c3d04e2fb051d95b0e5646195b6a61cac7"
-    },
-    {
-      "path": "dist/workflow-runtime/certification/release-benchmark.d.ts",
-      "byte_length": 747,
-      "executable": false,
-      "raw_sha256": "sha256:171f9f4198fb50afc8a900edbb371ac4f0197ccdfd66969d01d6c2023317b3f0"
-    },
-    {
-      "path": "dist/workflow-runtime/certification/release-benchmark.d.ts.map",
-      "byte_length": 472,
-      "executable": false,
-      "raw_sha256": "sha256:e599adbb83d41123e33f707b3fcbf8dd7cce305ae4678ef7f178eb1037f47f27"
-    },
-    {
-      "path": "dist/workflow-runtime/certification/release-benchmark.js",
-      "byte_length": 3868,
-      "executable": false,
-      "raw_sha256": "sha256:a103aa6b94affbb3a344c32fdafb3ea5ced4fee9cc8fd20a23b0fac770b86762"
-    },
-    {
-      "path": "dist/workflow-runtime/certification/release-benchmark.js.map",
-      "byte_length": 3327,
-      "executable": false,
-      "raw_sha256": "sha256:3e04babc8cdfa47b4ae35139fae8890cb9a7e5aa76a740befc9638a2bdbc062b"
     },
     {
       "path": "dist/workflow-runtime/certification/release-cli.d.ts",
@@ -21882,7 +20538,7 @@
       "path": "dist/workflow-runtime/contracts/contract-pack-g9-production-activation.json",
       "byte_length": 1692,
       "executable": false,
-      "raw_sha256": "sha256:50426732f83469286fe2d1582b9c059a4cc83f3359217121e7569bc4c4b7f714"
+      "raw_sha256": "sha256:f5773af786c8217e2350307e0480f46b562fcd9ccdaf09e6cb727f7e36d940e1"
     },
     {
       "path": "dist/workflow-runtime/contracts/contract-pack-golden-draft.json",
@@ -24333,30 +22989,6 @@
       "raw_sha256": "sha256:464a070ae563a8c9d97eaa5433f4f8e47f2cd464f68bc6c843b527a6142b454f"
     },
     {
-      "path": "dist/workflow-runtime/contracts/g5-basic-runtime-fixture-execution.test.d.ts",
-      "byte_length": 80,
-      "executable": false,
-      "raw_sha256": "sha256:0534ae328cd633263d73200ba79451842dab1e00f6117f452f110baec8273389"
-    },
-    {
-      "path": "dist/workflow-runtime/contracts/g5-basic-runtime-fixture-execution.test.d.ts.map",
-      "byte_length": 205,
-      "executable": false,
-      "raw_sha256": "sha256:4bc6d4339bd69af442617565d3bf0170220d3b4d485c4b815b2146375bbd2b5f"
-    },
-    {
-      "path": "dist/workflow-runtime/contracts/g5-basic-runtime-fixture-execution.test.js",
-      "byte_length": 12751,
-      "executable": false,
-      "raw_sha256": "sha256:485ff99fe853157a1b12449ed4ed6cd9a80281005f742059bbca2938dcc5581e"
-    },
-    {
-      "path": "dist/workflow-runtime/contracts/g5-basic-runtime-fixture-execution.test.js.map",
-      "byte_length": 9301,
-      "executable": false,
-      "raw_sha256": "sha256:89e8956b85e9a47cc1bfde663af6d03883ba2be0a7818f94fc484ea1be4ecc9a"
-    },
-    {
       "path": "dist/workflow-runtime/contracts/g5-basic-runtime-fixture-harness.d.ts",
       "byte_length": 1119,
       "executable": false,
@@ -25029,30 +23661,6 @@
       "raw_sha256": "sha256:6fc634c2c843f7b4285b2d8943d794da5e16c99755c55a503744ae2eb8b8e9de"
     },
     {
-      "path": "dist/workflow-runtime/contracts/g8-certification-types.d.ts",
-      "byte_length": 16546,
-      "executable": false,
-      "raw_sha256": "sha256:c259241c9d20f94eabd545a14f90ad6bb89faf980ce9cb19ed4115119310ac85"
-    },
-    {
-      "path": "dist/workflow-runtime/contracts/g8-certification-types.d.ts.map",
-      "byte_length": 12740,
-      "executable": false,
-      "raw_sha256": "sha256:7165d4c19eddfcd7d50580d36678ee5826653fc6b14cb3c2141bb07a0283053d"
-    },
-    {
-      "path": "dist/workflow-runtime/contracts/g8-certification-types.js",
-      "byte_length": 770,
-      "executable": false,
-      "raw_sha256": "sha256:9604dbbfec7fdbe7270a3b3efbfc742fa8420589660219787d5b9aa4f47e07fe"
-    },
-    {
-      "path": "dist/workflow-runtime/contracts/g8-certification-types.js.map",
-      "byte_length": 485,
-      "executable": false,
-      "raw_sha256": "sha256:5cccd8ff50a1c5377c11cbfefbd7f1b2a86ea92d3d76efe4881cd68ce9470560"
-    },
-    {
       "path": "dist/workflow-runtime/contracts/g8-foundation-cli.d.ts",
       "byte_length": 58,
       "executable": false,
@@ -25174,27 +23782,27 @@
     },
     {
       "path": "dist/workflow-runtime/contracts/g9-production-activation-contract.d.ts",
-      "byte_length": 2156,
+      "byte_length": 2211,
       "executable": false,
-      "raw_sha256": "sha256:4d1f1bfecb6f6c2aa8af9a5639c3bc16443dab8cff51ff69e851b7bfb8e709aa"
+      "raw_sha256": "sha256:477edc83c8f6c2699cccca40fe24b6dbf23fe4c6719748a6fd0736f35bd2de71"
     },
     {
       "path": "dist/workflow-runtime/contracts/g9-production-activation-contract.d.ts.map",
-      "byte_length": 553,
+      "byte_length": 554,
       "executable": false,
-      "raw_sha256": "sha256:8b253a1a0a25ef751fe36b174ffc0cca65d140523e281678f525a488a92930ae"
+      "raw_sha256": "sha256:36e54ec3ad6afa6945cbedb48710aaa3bb26b7d82b72fd1c639dcc7cc515fb50"
     },
     {
       "path": "dist/workflow-runtime/contracts/g9-production-activation-contract.js",
-      "byte_length": 27975,
+      "byte_length": 28356,
       "executable": false,
-      "raw_sha256": "sha256:c0f5d02243c47483c5aa90b220ea2561197c9985e797d20c900955c090df26e8"
+      "raw_sha256": "sha256:927a4944becf37948536d34cdefa229df807e6dc220d8d5968ab44efa8a3fff1"
     },
     {
       "path": "dist/workflow-runtime/contracts/g9-production-activation-contract.js.map",
-      "byte_length": 16398,
+      "byte_length": 16499,
       "executable": false,
-      "raw_sha256": "sha256:e0475919eb7d59baf3a12391dd18180dd46e2e678110b03164b387001d7fac7f"
+      "raw_sha256": "sha256:fa881a56d15ced1723e1093bb671c345fb83d10e9503ff03433393770623f30e"
     },
     {
       "path": "dist/workflow-runtime/contracts/g9-production-activation-types.d.ts",
@@ -25924,9 +24532,9 @@
     },
     {
       "path": "dist/workflow-runtime/contracts/production-activation/g9-production-activation-protocol@1.json",
-      "byte_length": 3315,
+      "byte_length": 3627,
       "executable": false,
-      "raw_sha256": "sha256:42f63d588aa13cadb807eb7ceedf08ed807a6abbce0a5f0678903055417bc82a"
+      "raw_sha256": "sha256:a3c83baef673c0952b94c88d1947b2d04e6116f68d45dae87351bd5935a3a83c"
     },
     {
       "path": "dist/workflow-runtime/contracts/production-activation/schemas/core-production-release-manifest-schema.json",
@@ -27112,15 +25720,15 @@
     },
     {
       "path": "dist/workflow-runtime/contracts/static-absence.test.js",
-      "byte_length": 9458,
+      "byte_length": 9466,
       "executable": false,
-      "raw_sha256": "sha256:d8f1dddd5fd82a0a56c73a08765dea06eb1762147b55c79dc2264447bf02d6c4"
+      "raw_sha256": "sha256:18506c7021ec32582db2d721c043489b286e80589dc0abd2aa3368bccac0889e"
     },
     {
       "path": "dist/workflow-runtime/contracts/static-absence.test.js.map",
-      "byte_length": 7760,
+      "byte_length": 7770,
       "executable": false,
-      "raw_sha256": "sha256:225cf08f6794768e0340a4254809112166e7aa9d56e9d3a00adcd8040af3e893"
+      "raw_sha256": "sha256:168aad26244fc892d8eb4faa8f7d124abd83dbc1709a4c518959e2a90bc93c65"
     },
     {
       "path": "dist/workflow-runtime/contracts/static-child-plan-bundle-fixture-harness.d.ts",
@@ -27586,51 +26194,51 @@
     },
     {
       "path": "dist/workflow-runtime/registry/production-activation-runtime.d.ts",
-      "byte_length": 1093,
+      "byte_length": 1236,
       "executable": false,
-      "raw_sha256": "sha256:6f41d7fd68fec9b7da7ba2a22cf42a33d4ab453a5765ba4197ee1fa660af3fde"
+      "raw_sha256": "sha256:48e971993d4c442f6c8b9cf130217fca46bb0d37ce36cdc2994a1a340c641d9e"
     },
     {
       "path": "dist/workflow-runtime/registry/production-activation-runtime.d.ts.map",
-      "byte_length": 928,
+      "byte_length": 1022,
       "executable": false,
-      "raw_sha256": "sha256:4e225456b59c85474166c9b635e599f869063572594e91f6cf4346907493df53"
+      "raw_sha256": "sha256:af0cf68ddee68ac14d46c56c6f5c7784e125f97fc5c354eb31fafd8e1c620900"
     },
     {
       "path": "dist/workflow-runtime/registry/production-activation-runtime.js",
-      "byte_length": 19459,
+      "byte_length": 24443,
       "executable": false,
-      "raw_sha256": "sha256:c3244c846f1f40c869eae727d78740ec27bb58478ac132a7520d846c6cc862f6"
+      "raw_sha256": "sha256:ed7beb045e721d079e62ad879edba86cbb1428a73945975138e502c6a1635cda"
     },
     {
       "path": "dist/workflow-runtime/registry/production-activation-runtime.js.map",
-      "byte_length": 14879,
+      "byte_length": 17946,
       "executable": false,
-      "raw_sha256": "sha256:2555f61aa88ccd799652376a75bfcfbf7801b094fe3bf671152d0a2e0728117a"
+      "raw_sha256": "sha256:c5b2b99106afc7fd6b045877debb1d7eb686c57bd4e51d9e4b5e5a12e9f541bd"
     },
     {
       "path": "dist/workflow-runtime/registry/production-activation.d.ts",
-      "byte_length": 3216,
+      "byte_length": 3346,
       "executable": false,
-      "raw_sha256": "sha256:8a4c5614978b9b87e355a23b4b6e6812719812612a77155a21d997d17d8b9ada"
+      "raw_sha256": "sha256:71e132cdafa37d196e66c0031588cff13b2f7823cf2793d46d5b90775e120f50"
     },
     {
       "path": "dist/workflow-runtime/registry/production-activation.d.ts.map",
-      "byte_length": 2199,
+      "byte_length": 2268,
       "executable": false,
-      "raw_sha256": "sha256:d67f762a9165a9ca0fbafa2cdb3d52cb3b46836a2debd0dd570e82bf5067987c"
+      "raw_sha256": "sha256:4b9b0f7f4cbfefdbe3cc0b7bacd8ad41837d128b1c24d7d0c032b9bc054a9af8"
     },
     {
       "path": "dist/workflow-runtime/registry/production-activation.js",
-      "byte_length": 33854,
+      "byte_length": 37174,
       "executable": false,
-      "raw_sha256": "sha256:4c3ad248c01886f48d665b637186f44b5c55c5f3369aa553cdf26a72c8554e94"
+      "raw_sha256": "sha256:0732a866ff8434e4bee5843fa27ca6bf21755c83c8f9647f4c14856afa8a63b1"
     },
     {
       "path": "dist/workflow-runtime/registry/production-activation.js.map",
-      "byte_length": 27539,
+      "byte_length": 30210,
       "executable": false,
-      "raw_sha256": "sha256:5e77747567aea39312008e7061d7d03e54f21df3da43606f22c03ee27200efff"
+      "raw_sha256": "sha256:7022be849ce020e7a1b83e0850d6123b4699fa635b3c16152a48c828da14753f"
     },
     {
       "path": "dist/workflow-runtime/registry/production-activation.test.d.ts",
@@ -27646,63 +26254,15 @@
     },
     {
       "path": "dist/workflow-runtime/registry/production-activation.test.js",
-      "byte_length": 6389,
+      "byte_length": 8412,
       "executable": false,
-      "raw_sha256": "sha256:9a100a31e16eb9be18dd2e2c97e2cbae621f6750366fe7e4820907573aff2846"
+      "raw_sha256": "sha256:2cf968a4c4b5be869f0642569ff02e8cc62451ce683cb679b8bd3ba6abe6f36f"
     },
     {
       "path": "dist/workflow-runtime/registry/production-activation.test.js.map",
-      "byte_length": 4601,
+      "byte_length": 6159,
       "executable": false,
-      "raw_sha256": "sha256:0e57398d91079830931c536cc9cfc09b55465bda2358f7497258192fa16e74d4"
-    },
-    {
-      "path": "dist/workflow-runtime/runtime/basic-runtime-types.d.ts",
-      "byte_length": 6530,
-      "executable": false,
-      "raw_sha256": "sha256:e4cc38861ddc2cfeaca55539913e2f2b35b0659d5df4b0f2b88c6a5711ed9f90"
-    },
-    {
-      "path": "dist/workflow-runtime/runtime/basic-runtime-types.d.ts.map",
-      "byte_length": 5982,
-      "executable": false,
-      "raw_sha256": "sha256:442f6a2b7ba560b073047028cadb90a27e71d35dd9bb6e1ab56c734dda74cce4"
-    },
-    {
-      "path": "dist/workflow-runtime/runtime/basic-runtime-types.js",
-      "byte_length": 58,
-      "executable": false,
-      "raw_sha256": "sha256:efc83445a2fd62f5c9d0bf9ff68cac0a1348381114582a37085a70cbb980e7a8"
-    },
-    {
-      "path": "dist/workflow-runtime/runtime/basic-runtime-types.js.map",
-      "byte_length": 161,
-      "executable": false,
-      "raw_sha256": "sha256:576edd4108c491ef1132ed5322d16aaa008f189b002006ab25a728319018ee5f"
-    },
-    {
-      "path": "dist/workflow-runtime/runtime/basic-runtime.test.d.ts",
-      "byte_length": 59,
-      "executable": false,
-      "raw_sha256": "sha256:2558042e8adc22cdf14f03ccb0224dff9648208aaa6088e88307fba465a62712"
-    },
-    {
-      "path": "dist/workflow-runtime/runtime/basic-runtime.test.d.ts.map",
-      "byte_length": 161,
-      "executable": false,
-      "raw_sha256": "sha256:301246d40517eeb2eac9dee34b4baee7a7e4f61c8ede17dce094dfbf65b7a7e8"
-    },
-    {
-      "path": "dist/workflow-runtime/runtime/basic-runtime.test.js",
-      "byte_length": 25649,
-      "executable": false,
-      "raw_sha256": "sha256:10f9aaf26c3fb762f6353c807c19874da7339487f5cad8e09403cf9f421c3e78"
-    },
-    {
-      "path": "dist/workflow-runtime/runtime/basic-runtime.test.js.map",
-      "byte_length": 21165,
-      "executable": false,
-      "raw_sha256": "sha256:a450933ab03f441fd5273031fd4e9bc02b228b966b850fcfbd336191aa6344fc"
+      "raw_sha256": "sha256:19c307ceb3278237f85cf7cd7057806c9ecd4ed7bddd55b458d6ba202cbce7cc"
     },
     {
       "path": "dist/workflow-runtime/runtime/basic-scheduler.d.ts",
@@ -27727,150 +26287,6 @@
       "byte_length": 14201,
       "executable": false,
       "raw_sha256": "sha256:8576e28d37061db4b6059cd3b83ca8884dfde34e89e4086143b23182c2c88f06"
-    },
-    {
-      "path": "dist/workflow-runtime/runtime/blob-admission.d.ts",
-      "byte_length": 424,
-      "executable": false,
-      "raw_sha256": "sha256:5d6b471d0e07f465279d0f2ece7d2f2d7416515af1068c52decfbe276d9d20ea"
-    },
-    {
-      "path": "dist/workflow-runtime/runtime/blob-admission.d.ts.map",
-      "byte_length": 427,
-      "executable": false,
-      "raw_sha256": "sha256:a41a97addc273970552323c09320d59108b642955ac7962d7a7b58bc8c5f8434"
-    },
-    {
-      "path": "dist/workflow-runtime/runtime/blob-admission.js",
-      "byte_length": 931,
-      "executable": false,
-      "raw_sha256": "sha256:6896b4bfa39114d22319afaae23e2009e0d1fb9613db237d5c71a6db10c6b50e"
-    },
-    {
-      "path": "dist/workflow-runtime/runtime/blob-admission.js.map",
-      "byte_length": 809,
-      "executable": false,
-      "raw_sha256": "sha256:15b963f67ddb5956e90fccedc0f0db2dea7a13afcc85853c8901dada5fed5183"
-    },
-    {
-      "path": "dist/workflow-runtime/runtime/canonical-value.d.ts",
-      "byte_length": 736,
-      "executable": false,
-      "raw_sha256": "sha256:50586e922ebe058b2ed6eecc29348c072f273f44726bfa9c00813e684d6f7d7f"
-    },
-    {
-      "path": "dist/workflow-runtime/runtime/canonical-value.d.ts.map",
-      "byte_length": 728,
-      "executable": false,
-      "raw_sha256": "sha256:e83eae23a5b385aa55d6e2512fe63dc59d1aef95e3b713af0e54d551f22878ab"
-    },
-    {
-      "path": "dist/workflow-runtime/runtime/canonical-value.js",
-      "byte_length": 1859,
-      "executable": false,
-      "raw_sha256": "sha256:e54c2ca92755b0dc17f9468991cf732e33de66cf3e9ca242ff16b12b8b4c1884"
-    },
-    {
-      "path": "dist/workflow-runtime/runtime/canonical-value.js.map",
-      "byte_length": 1137,
-      "executable": false,
-      "raw_sha256": "sha256:cd18aafd54c483082250e82fd79714483b93c1ac13b150c715a1105e9966e1c8"
-    },
-    {
-      "path": "dist/workflow-runtime/runtime/capacity-admin.d.ts",
-      "byte_length": 1348,
-      "executable": false,
-      "raw_sha256": "sha256:bd5d766ca3aa4d1ef7db3b3035f38868b905fab18a3df1f45f38f082d60fefb9"
-    },
-    {
-      "path": "dist/workflow-runtime/runtime/capacity-admin.d.ts.map",
-      "byte_length": 1112,
-      "executable": false,
-      "raw_sha256": "sha256:47d7cba4494c940dddfb806f3afcc94d15ee6c0688e286711709db76f2c4ca1e"
-    },
-    {
-      "path": "dist/workflow-runtime/runtime/capacity-admin.js",
-      "byte_length": 36766,
-      "executable": false,
-      "raw_sha256": "sha256:89f9ddd5bf69beb429f7956e1766d6e3a07c0205e096ec49726cb38afad8b4d7"
-    },
-    {
-      "path": "dist/workflow-runtime/runtime/capacity-admin.js.map",
-      "byte_length": 24928,
-      "executable": false,
-      "raw_sha256": "sha256:ae2438e40d19d7d59640de5d47652a3878289cd6acee350891272c78d8a02996"
-    },
-    {
-      "path": "dist/workflow-runtime/runtime/capacity-admin.test.d.ts",
-      "byte_length": 60,
-      "executable": false,
-      "raw_sha256": "sha256:1f5027276dc0864860428123208c7d3ac9c3938fcd3b9f51ea960b6ec4a28a05"
-    },
-    {
-      "path": "dist/workflow-runtime/runtime/capacity-admin.test.d.ts.map",
-      "byte_length": 163,
-      "executable": false,
-      "raw_sha256": "sha256:6b7825a66eea98e4d34c389ac24aff37fdf1a739bdb26cb07315b61bea777b05"
-    },
-    {
-      "path": "dist/workflow-runtime/runtime/capacity-admin.test.js",
-      "byte_length": 16979,
-      "executable": false,
-      "raw_sha256": "sha256:6d30cf22bee503bb577dd89282247ca38cc2912bd11b3842ce202861390528f1"
-    },
-    {
-      "path": "dist/workflow-runtime/runtime/capacity-admin.test.js.map",
-      "byte_length": 12848,
-      "executable": false,
-      "raw_sha256": "sha256:e1f27f5c45f1f92885ddfcf996949253faf775c94bbaecc4683947c1ff317f7a"
-    },
-    {
-      "path": "dist/workflow-runtime/runtime/capacity-publication.d.ts",
-      "byte_length": 2686,
-      "executable": false,
-      "raw_sha256": "sha256:db912304eb5252e697a32023ff7418419effd47634fd06e45209abc26a0fc911"
-    },
-    {
-      "path": "dist/workflow-runtime/runtime/capacity-publication.d.ts.map",
-      "byte_length": 2162,
-      "executable": false,
-      "raw_sha256": "sha256:58673b69a3e30d97a15fde03996a755b9d8050000c724f2e3189a00ffb8ed77e"
-    },
-    {
-      "path": "dist/workflow-runtime/runtime/capacity-publication.js",
-      "byte_length": 8742,
-      "executable": false,
-      "raw_sha256": "sha256:42f636c38cb4be3608d3d4b45f59262de1522638956d52ab5253f4db28278d42"
-    },
-    {
-      "path": "dist/workflow-runtime/runtime/capacity-publication.js.map",
-      "byte_length": 6741,
-      "executable": false,
-      "raw_sha256": "sha256:7447148422cd4575f46ff86204c84fea5f99fca95c9d64297925af4c7ee9ebe5"
-    },
-    {
-      "path": "dist/workflow-runtime/runtime/capacity-types.d.ts",
-      "byte_length": 3710,
-      "executable": false,
-      "raw_sha256": "sha256:042d24403e1cb1846b06fcf1d2f9363583403666c2c9c52f338a8f329689455d"
-    },
-    {
-      "path": "dist/workflow-runtime/runtime/capacity-types.d.ts.map",
-      "byte_length": 2816,
-      "executable": false,
-      "raw_sha256": "sha256:5888daa5a058931b3c3099a39bbc026192eece7440f480dbddcad042deef3edb"
-    },
-    {
-      "path": "dist/workflow-runtime/runtime/capacity-types.js",
-      "byte_length": 260,
-      "executable": false,
-      "raw_sha256": "sha256:196a5e5c0c5069a4343e17039a094b221e432cecbcb97cbc934afea096241caa"
-    },
-    {
-      "path": "dist/workflow-runtime/runtime/capacity-types.js.map",
-      "byte_length": 353,
-      "executable": false,
-      "raw_sha256": "sha256:5d5c97cd48cf8dd4c5ce538bbe5d95cecc3207ad62504ba93237a9b5b691fc5b"
     },
     {
       "path": "dist/workflow-runtime/runtime/card-presentation.d.ts",
@@ -27991,30 +26407,6 @@
       "byte_length": 230666,
       "executable": false,
       "raw_sha256": "sha256:5c3ef0103b65369c85a8aefaca4a7ef2791d3fceab237ea1ade24efb6417fa16"
-    },
-    {
-      "path": "dist/workflow-runtime/runtime/g5-model.test.d.ts",
-      "byte_length": 54,
-      "executable": false,
-      "raw_sha256": "sha256:b77c6cf60b2c69192ed0774bca84cdaa214d04183d86997ab14861a2203d37cf"
-    },
-    {
-      "path": "dist/workflow-runtime/runtime/g5-model.test.d.ts.map",
-      "byte_length": 151,
-      "executable": false,
-      "raw_sha256": "sha256:5526eef8201ba90d9a7efecac5365e2d30be0f3c26b9883f433b429dd488349a"
-    },
-    {
-      "path": "dist/workflow-runtime/runtime/g5-model.test.js",
-      "byte_length": 6140,
-      "executable": false,
-      "raw_sha256": "sha256:3eb9c43e1a16632213f56fcaef3efa25a90ac5591b65c33e8be3c088aea5fe0a"
-    },
-    {
-      "path": "dist/workflow-runtime/runtime/g5-model.test.js.map",
-      "byte_length": 7017,
-      "executable": false,
-      "raw_sha256": "sha256:7af5cd62de5817876d7ced74337fdc2eea1a2ba343cc01524210f19b17a826ad"
     },
     {
       "path": "dist/workflow-runtime/runtime/g5-reference-model.test.d.ts",
@@ -28449,78 +26841,6 @@
       "raw_sha256": "sha256:3268f68727fe9743246111e38c419560e4b39d06c7336c963e4101d6ab639477"
     },
     {
-      "path": "dist/workflow-runtime/runtime/runtime-error.d.ts",
-      "byte_length": 636,
-      "executable": false,
-      "raw_sha256": "sha256:231e9450abe31792482a08c63f62950bd48d74095b3a8d75c20e44521bc05890"
-    },
-    {
-      "path": "dist/workflow-runtime/runtime/runtime-error.d.ts.map",
-      "byte_length": 511,
-      "executable": false,
-      "raw_sha256": "sha256:5ebccdd2e222afec09d7d93264e7d9e72cb5f2f5ab3c6034288605ddbb351da2"
-    },
-    {
-      "path": "dist/workflow-runtime/runtime/runtime-error.js",
-      "byte_length": 247,
-      "executable": false,
-      "raw_sha256": "sha256:fb4996aec086f14a47eb6cbb7e96ae4d6018d3c7d6585620690e5bebee70a12f"
-    },
-    {
-      "path": "dist/workflow-runtime/runtime/runtime-error.js.map",
-      "byte_length": 348,
-      "executable": false,
-      "raw_sha256": "sha256:54dcfa8e22879486f96e88e3a9399c08957d4d4085c83f7b17e7df57fa8f0b69"
-    },
-    {
-      "path": "dist/workflow-runtime/runtime/runtime-values.d.ts",
-      "byte_length": 1732,
-      "executable": false,
-      "raw_sha256": "sha256:d7abc04a5c362347b60d6c54feaedec0cc4482aca2f95140067cc2f14c0f5b71"
-    },
-    {
-      "path": "dist/workflow-runtime/runtime/runtime-values.d.ts.map",
-      "byte_length": 1775,
-      "executable": false,
-      "raw_sha256": "sha256:22e1345d41413ef70bbdb028cab18a70687653b7d10fc8caa5130e2e665f0a30"
-    },
-    {
-      "path": "dist/workflow-runtime/runtime/runtime-values.js",
-      "byte_length": 4946,
-      "executable": false,
-      "raw_sha256": "sha256:becccf9b6bf056b9fe52bb12c1ebcfff71400d16e19698e8b11c93e23bce9072"
-    },
-    {
-      "path": "dist/workflow-runtime/runtime/runtime-values.js.map",
-      "byte_length": 3764,
-      "executable": false,
-      "raw_sha256": "sha256:30ca356ee51bf0cad193a5f1c3f6851a1eab2805e1eaa55db0f29438f94b121e"
-    },
-    {
-      "path": "dist/workflow-runtime/runtime/scheduler.d.ts",
-      "byte_length": 620,
-      "executable": false,
-      "raw_sha256": "sha256:b94b759fea46fa3a9bdd61f4d4a13cd5d4f698f23130216384db28658d29bcc4"
-    },
-    {
-      "path": "dist/workflow-runtime/runtime/scheduler.d.ts.map",
-      "byte_length": 583,
-      "executable": false,
-      "raw_sha256": "sha256:c9381e481507a5db5ed84c24bd7a7bb74c72371c0a909e76ac2f00bc8a313a87"
-    },
-    {
-      "path": "dist/workflow-runtime/runtime/scheduler.js",
-      "byte_length": 1915,
-      "executable": false,
-      "raw_sha256": "sha256:83fba7ce738ee0bfd67980a5cc60f3eec320d1d4339cc92e6a1b028e023287c7"
-    },
-    {
-      "path": "dist/workflow-runtime/runtime/scheduler.js.map",
-      "byte_length": 1141,
-      "executable": false,
-      "raw_sha256": "sha256:7437ded224c8ea6534f0b424afda0c7ee746a5004e6c95f14ad4099caaf0e3c9"
-    },
-    {
       "path": "dist/workflow-runtime/runtime/static-child-plan-bundle.d.ts",
       "byte_length": 698,
       "executable": false,
@@ -28545,30 +26865,6 @@
       "raw_sha256": "sha256:971775e32ecadd8c1e4262151626b808a74531920c1936a6a3d7e5ef40a65ba4"
     },
     {
-      "path": "dist/workflow-runtime/runtime/test-support/g5-test-fixture.d.ts",
-      "byte_length": 1097,
-      "executable": false,
-      "raw_sha256": "sha256:33c164e094d1332a9617ae19f725d7adb9adee8afe515a09a0a284b2705fcd6a"
-    },
-    {
-      "path": "dist/workflow-runtime/runtime/test-support/g5-test-fixture.d.ts.map",
-      "byte_length": 961,
-      "executable": false,
-      "raw_sha256": "sha256:3b72c5c434a186eb7d31d70707b371216a88964d9d260aa07aee55b015ae582a"
-    },
-    {
-      "path": "dist/workflow-runtime/runtime/test-support/g5-test-fixture.js",
-      "byte_length": 9315,
-      "executable": false,
-      "raw_sha256": "sha256:84bb60543c6a47fc59ad890c53c86927424e1984d6d18072693074c00d0861db"
-    },
-    {
-      "path": "dist/workflow-runtime/runtime/test-support/g5-test-fixture.js.map",
-      "byte_length": 6290,
-      "executable": false,
-      "raw_sha256": "sha256:25d276246e64212a4900334e0dba812213bf003e78529ebbdb3eb2c217ee72a1"
-    },
-    {
       "path": "dist/workflow-runtime/runtime/waits.d.ts",
       "byte_length": 1270,
       "executable": false,
@@ -28591,30 +26887,6 @@
       "byte_length": 10220,
       "executable": false,
       "raw_sha256": "sha256:eb6c3a7fa791ee48b70d213cf0b47a913795d98edad30313451f221e30e840c7"
-    },
-    {
-      "path": "dist/workflow-runtime/store/graph-store.d.ts",
-      "byte_length": 4519,
-      "executable": false,
-      "raw_sha256": "sha256:478b91dade3d8911fb928f855260a83499d331c061d6a882da07d92711063aa9"
-    },
-    {
-      "path": "dist/workflow-runtime/store/graph-store.d.ts.map",
-      "byte_length": 3955,
-      "executable": false,
-      "raw_sha256": "sha256:da1744fe053011b60e91e1eae43f7ba99f4b69158f3a0ecb7d399bf1cc4b03bd"
-    },
-    {
-      "path": "dist/workflow-runtime/store/graph-store.js",
-      "byte_length": 142553,
-      "executable": false,
-      "raw_sha256": "sha256:92f6bea09de789b698e1c75d3b87f466810b8f90edb8444d8ab8325b01cab508"
-    },
-    {
-      "path": "dist/workflow-runtime/store/graph-store.js.map",
-      "byte_length": 72033,
-      "executable": false,
-      "raw_sha256": "sha256:acfa59f96c72325558b5f00419c4f1cda074f6cd90f8c7cde53f23534f029ae3"
     },
     {
       "path": "dist/workflow-runtime/store/node-output-envelope-value-store.d.ts",
@@ -29905,126 +28177,6 @@
       "byte_length": 505,
       "executable": false,
       "raw_sha256": "sha256:5cc6ec3405be42f9c71cc976a97bc1e6bacb9e66e5db3bb681a02a97b07bd6ad"
-    },
-    {
-      "path": "dist/workflow-session-isolation.test.d.ts",
-      "byte_length": 72,
-      "executable": false,
-      "raw_sha256": "sha256:687ce7e66113b6e42e9277ad56eaa236702febbc645a36217b8057196cbfe563"
-    },
-    {
-      "path": "dist/workflow-session-isolation.test.d.ts.map",
-      "byte_length": 156,
-      "executable": false,
-      "raw_sha256": "sha256:7e3ff8eb8de2a3cb0414e1ac59db79564ff38d2905116831ab0ba58cc9bb8ae7"
-    },
-    {
-      "path": "dist/workflow-session-isolation.test.js",
-      "byte_length": 3895,
-      "executable": false,
-      "raw_sha256": "sha256:e658286a86531d29272274906907ebc8be2f39d9a602aeba298603b5c324f6fc"
-    },
-    {
-      "path": "dist/workflow-session-isolation.test.js.map",
-      "byte_length": 3489,
-      "executable": false,
-      "raw_sha256": "sha256:26b9c51dc98c9fce2dbd4e9cfa5f94cc275031814fb327aa3898dd29d21ec070"
-    },
-    {
-      "path": "dist/workflow-stage-evaluation.d.ts",
-      "byte_length": 1129,
-      "executable": false,
-      "raw_sha256": "sha256:7712acd5b7c43fc6c9ba705df68688674b801b674303637decd055ea60d14bfd"
-    },
-    {
-      "path": "dist/workflow-stage-evaluation.d.ts.map",
-      "byte_length": 577,
-      "executable": false,
-      "raw_sha256": "sha256:8d355c91c56015dad7310a159333d1f1956d6fdd7aafd1300ea34fc81b08b314"
-    },
-    {
-      "path": "dist/workflow-stage-evaluation.js",
-      "byte_length": 17609,
-      "executable": false,
-      "raw_sha256": "sha256:21a23f633de93b3359c84aacf9c0c21a847ec25c7cb05165219fdc9a749326f8"
-    },
-    {
-      "path": "dist/workflow-stage-evaluation.js.map",
-      "byte_length": 15517,
-      "executable": false,
-      "raw_sha256": "sha256:0c616380a457eeb1e084fb248dc6c97b00d5c93d56401fceab351155cc3e4f85"
-    },
-    {
-      "path": "dist/workflow-storage.d.ts",
-      "byte_length": 2904,
-      "executable": false,
-      "raw_sha256": "sha256:5ee368602d0c8636d00907c3f08f375f0ec610b377da15ea2357d2cbaea1f17f"
-    },
-    {
-      "path": "dist/workflow-storage.d.ts.map",
-      "byte_length": 2684,
-      "executable": false,
-      "raw_sha256": "sha256:cb5fe6a517c083c2512392cf588168a1705b696ea2a236b991a2c5511103660b"
-    },
-    {
-      "path": "dist/workflow-storage.js",
-      "byte_length": 20297,
-      "executable": false,
-      "raw_sha256": "sha256:8d5f4155bacac062d5add7fb7ba8a4011a9e0c48d59ad56b1401f187f76ba326"
-    },
-    {
-      "path": "dist/workflow-storage.js.map",
-      "byte_length": 17963,
-      "executable": false,
-      "raw_sha256": "sha256:41aecb9f0c8714b366ced47d2818362b177c81f22aafb052d8459598392ccf4e"
-    },
-    {
-      "path": "dist/workflow.d.ts",
-      "byte_length": 4018,
-      "executable": false,
-      "raw_sha256": "sha256:6e625b7b0e24f84e4f23dbe8680c76255b7a350fce04501db06dbc1651af56ed"
-    },
-    {
-      "path": "dist/workflow.d.ts.map",
-      "byte_length": 3588,
-      "executable": false,
-      "raw_sha256": "sha256:3965adfc109ef5912b719cae54e7db0442c3263a0972de4aa7ad13ab822f6d32"
-    },
-    {
-      "path": "dist/workflow.js",
-      "byte_length": 199692,
-      "executable": false,
-      "raw_sha256": "sha256:fd6db9a7d23cc42a932976087f222b265311013674cff230da4bda9df12ffd10"
-    },
-    {
-      "path": "dist/workflow.js.map",
-      "byte_length": 163582,
-      "executable": false,
-      "raw_sha256": "sha256:27221e32f5a5dd78b0a3f4acc37f329f059744ac3ae88ba62d66bafca709d92d"
-    },
-    {
-      "path": "dist/workflow.test.d.ts",
-      "byte_length": 54,
-      "executable": false,
-      "raw_sha256": "sha256:fc91377506a9b779d06d70fb540d14b35907d969041bb6e721f26fb8c8796615"
-    },
-    {
-      "path": "dist/workflow.test.d.ts.map",
-      "byte_length": 120,
-      "executable": false,
-      "raw_sha256": "sha256:4f687142674e430ffcf527874d2a0e230e96768ab00acd2de64591e811385022"
-    },
-    {
-      "path": "dist/workflow.test.js",
-      "byte_length": 136173,
-      "executable": false,
-      "raw_sha256": "sha256:2ac11c88d3b21a43fff90794011c7000794079528f21b300327f87dffb4285ac"
-    },
-    {
-      "path": "dist/workflow.test.js.map",
-      "byte_length": 95239,
-      "executable": false,
-      "raw_sha256": "sha256:73175eabd77fe196a198946d073aff17690f8495f03cc1e4b1a5e47c5f96307f"
     },
     {
       "path": "node_modules/@pinojs/redact/.github/dependabot.yml",
@@ -56368,9 +54520,9 @@
     },
     {
       "path": "package.json",
-      "byte_length": 25996,
+      "byte_length": 26040,
       "executable": false,
-      "raw_sha256": "sha256:5414dba45e51531f70bad847fb72ff9ce6ef266dcd26505749ddae06c83b2838"
+      "raw_sha256": "sha256:3670c0a7545c1b742c223d22672d13742517de8f9acfd231518b10aa7f7c2608"
     },
     {
       "path": "validation-inputs/sqlite/local_single_user_sqlite-candidate@1.json",
@@ -56379,6 +54531,6 @@
       "raw_sha256": "sha256:fafac63ee1d805c88b99afeb7d516ebfca0c3781c1c8c1d3581f1ee9379f8d00"
     }
   ],
-  "inventory_hash": "sha256:e54e7c8d6a49dd851b88dd2cd9bb261dba1d576df4d536f47b4decc8552dba08",
-  "release_artifact_hash": "sha256:bac74ee4e0a04409a9a188008fe6165f0cc24a3b29db3c0ed66f252ed2a32966"
+  "inventory_hash": "sha256:63cc32cb5327f946261f9ede4b1633994f1782aacd5efbc38bc1b510bd3418a2",
+  "release_artifact_hash": "sha256:8f6b5ca175aaccef70060c41b7bf8b2137a70e0552e1a57453dd4139bf7c613e"
 }

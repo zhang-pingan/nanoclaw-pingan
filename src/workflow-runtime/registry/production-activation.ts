@@ -758,6 +758,68 @@ function journalDirectory(runtimeHome: string, activationId: string): string {
   return path.join(runtimeHome, 'deployment-journals', activationId);
 }
 
+export function assertG9DeploymentActivationJournalSequence(
+  events: readonly G9DeploymentActivationJournalEvent[],
+): void {
+  if (events.length === 0) return;
+  let index = 0;
+  if (events[index]?.phase !== 'prepared')
+    throw new Error('deployment_activation_journal_phase_order_invalid');
+  index += 1;
+
+  let preparedCount = 0;
+  while (events[index]?.phase === 'participant_prepared') {
+    if (events[index]?.participant !== PARTICIPANT_ORDER[preparedCount])
+      throw new Error('deployment_activation_journal_phase_order_invalid');
+    preparedCount += 1;
+    index += 1;
+  }
+  if (index === events.length) return;
+
+  if (
+    events[index]?.phase === 'precommit_rolled_back' ||
+    events[index]?.phase === 'precommit_rollback_completed'
+  ) {
+    let rollbackIndex = preparedCount - 1;
+    while (events[index]?.phase === 'precommit_rolled_back') {
+      if (events[index]?.participant !== PARTICIPANT_ORDER[rollbackIndex])
+        throw new Error('deployment_activation_journal_phase_order_invalid');
+      rollbackIndex -= 1;
+      index += 1;
+    }
+    if (events[index]?.phase === 'precommit_rollback_completed') {
+      if (rollbackIndex !== -1)
+        throw new Error('deployment_activation_journal_phase_order_invalid');
+      index += 1;
+    }
+    if (index !== events.length)
+      throw new Error('deployment_activation_journal_phase_order_invalid');
+    return;
+  }
+
+  if (
+    events[index]?.phase !== 'active_deployment_committed' ||
+    preparedCount !== PARTICIPANT_ORDER.length
+  )
+    throw new Error('deployment_activation_journal_phase_order_invalid');
+  index += 1;
+
+  let rollForwardCount = 0;
+  while (events[index]?.phase === 'participant_rolled_forward') {
+    if (events[index]?.participant !== PARTICIPANT_ORDER[rollForwardCount])
+      throw new Error('deployment_activation_journal_phase_order_invalid');
+    rollForwardCount += 1;
+    index += 1;
+  }
+  if (events[index]?.phase === 'completed') {
+    if (rollForwardCount !== PARTICIPANT_ORDER.length)
+      throw new Error('deployment_activation_journal_phase_order_invalid');
+    index += 1;
+  }
+  if (index !== events.length)
+    throw new Error('deployment_activation_journal_phase_order_invalid');
+}
+
 export function readG9DeploymentActivationJournal(
   runtimeHomeInput: string,
   activationIdInput: string,
@@ -802,6 +864,7 @@ export function readG9DeploymentActivationJournal(
     )
       throw new Error('deployment_activation_journal_chain_invalid');
   });
+  assertG9DeploymentActivationJournalSequence(events);
   return events;
 }
 
@@ -883,6 +946,7 @@ function completedOutcome(
   bindingHash: Sha256Hash,
   events: readonly G9DeploymentActivationJournalEvent[],
 ): G9ProductionActivationOutcome {
+  assertG9DeploymentActivationJournalSequence(events);
   const head = events.at(-1);
   if (!head || head.phase !== 'completed')
     throw new Error('production_activation_completion_missing');
@@ -914,6 +978,7 @@ function terminalOutcome(
   bindingHash: Sha256Hash,
   events: readonly G9DeploymentActivationJournalEvent[],
 ): G9ProductionActivationOutcome | null {
+  assertG9DeploymentActivationJournalSequence(events);
   const head = events.at(-1);
   if (head?.phase === 'precommit_rollback_completed')
     if (
@@ -1002,17 +1067,29 @@ export function runG9ProductionActivation(
       );
     }
   } catch (error) {
+    events.splice(
+      0,
+      events.length,
+      ...readG9DeploymentActivationJournal(runtimeHome, request.activation_id),
+    );
     for (const participant of prepared.reverse()) {
       participant.rollback(request.deployment_binding);
-      events.push(
-        appendJournalEvent(
-          runtimeHome,
-          request,
-          events,
-          'precommit_rolled_back',
-          participant.name,
-        ),
-      );
+      if (
+        events.some(
+          (event) =>
+            event.phase === 'participant_prepared' &&
+            event.participant === participant.name,
+        )
+      )
+        events.push(
+          appendJournalEvent(
+            runtimeHome,
+            request,
+            events,
+            'precommit_rolled_back',
+            participant.name,
+          ),
+        );
     }
     events.push(
       appendJournalEvent(
@@ -1095,7 +1172,12 @@ export function recoverG9ProductionActivation(
       .filter((event) => event.phase === 'participant_prepared')
       .map((event) => event.participant),
   );
+  const commitRecorded = events.some(
+    (event) => event.phase === 'active_deployment_committed',
+  );
   if (!targetCommitted) {
+    if (commitRecorded)
+      throw new Error('production_activation_recovery_commit_pointer_mismatch');
     for (const name of [...PARTICIPANT_ORDER].reverse()) {
       if (
         prepared.has(name) &&
@@ -1127,6 +1209,20 @@ export function recoverG9ProductionActivation(
       ),
     );
     return terminalOutcome(request.deployment_binding.binding_hash, events)!;
+  }
+  if (prepared.size !== PARTICIPANT_ORDER.length)
+    throw new Error('production_activation_recovery_prepare_evidence_missing');
+  if (!commitRecorded) {
+    events.push(
+      appendJournalEvent(
+        runtimeHome,
+        request,
+        events,
+        'active_deployment_committed',
+        'deployment_pointer',
+      ),
+    );
+    assertG9DeploymentActivationJournalSequence(events);
   }
   for (const name of PARTICIPANT_ORDER) {
     if (

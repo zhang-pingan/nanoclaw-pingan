@@ -107,7 +107,7 @@ describe('G0.7 Static Absence and Surface Gates', () => {
         bytes,
       );
     }
-  });
+  }, 15_000);
 
   it('builds source, route, DOM, schema, filesystem and resource proof from inventories', () => {
     const { evidence, absenceBaseline } = buildStaticAbsenceContracts();

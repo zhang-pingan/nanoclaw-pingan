@@ -63,6 +63,8 @@ const protocolPath =
 const packPath = 'contract-pack-g9-production-activation.json';
 
 export const G9_IMPLEMENTATION_SOURCE_PATHS = [
+  'package.json',
+  'scripts/clean-typescript-output.mjs',
   'scripts/runtime-launcher.sh',
   'scripts/runtime-toolchain.sh',
   'src/workflow-runtime/compiler/artifacts.ts',
@@ -677,7 +679,13 @@ function buildArtifacts(): {
       precommit_recovery: 'deterministic_rollback_reversible_prepare_only',
       postcommit_authority: 'target_deployment_binding',
       postcommit_recovery: 'idempotent_roll_forward_only',
+      postcommit_commit_evidence_recovery:
+        'append_missing_active_deployment_committed_before_roll_forward',
       fresh_capacity_phase: 'postcommit_roll_forward',
+      fresh_capacity_terminal_recovery:
+        'read_only_exact_head_audit_publication_file_and_result_convergence',
+      release_build_inventory:
+        'clean_compiler_owned_dist_before_tsc_and_content_inventory',
       existing_capacity_policy:
         'verify_twice_and_preserve_exactly_without_write',
       feature_activation_contract: 'standard_g3_publish_activate_only',

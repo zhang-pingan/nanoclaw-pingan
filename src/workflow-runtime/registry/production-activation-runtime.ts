@@ -17,6 +17,7 @@ import {
   validateDeploymentCapacitySnapshot,
 } from '../contracts/capacity-control-plane-source.js';
 import type {
+  DeploymentRuntimeCapacityPublication,
   DeploymentRuntimeCapacitySnapshot,
   InitializeDeploymentCapacityCommand,
 } from '../contracts/capacity-control-plane-types.js';
@@ -286,6 +287,33 @@ interface CapacityHeadRow extends Record<string, unknown> {
   pending_change_id: string | null;
 }
 
+interface FreshCapacityCommandRow extends Record<string, unknown> {
+  command_type: string;
+  idempotency_key: string;
+  request_hash: Sha256Hash;
+  assigned_capacity_revision: number | null;
+  assigned_change_id: string | null;
+  genesis_core_release_hash: Sha256Hash | null;
+  proposed_capacity_json: string;
+  proposed_config_hash: Sha256Hash;
+  evidence_manifest_value_id: string;
+  evidence_manifest_hash: Sha256Hash;
+  canonical_result_value_id: string | null;
+  canonical_result_hash: Sha256Hash | null;
+  finalized_at_ms: number | null;
+}
+
+interface FreshCapacityResultRow extends Record<string, unknown> {
+  inline_canonical_json: string | null;
+  content_hash: Sha256Hash;
+  schema_resource_id: string | null;
+  schema_resource_hash: Sha256Hash | null;
+  provenance_ref: string;
+  retention_class: string;
+  payload_state: string;
+  created_at_ms: number;
+}
+
 function capacityHead(
   store: WorkflowRuntimeStore,
 ): CapacityHeadRow | undefined {
@@ -397,6 +425,117 @@ function freshCapacityInvocation(
   };
 }
 
+function freshCapacityTerminalIsExact(
+  store: WorkflowRuntimeStore,
+  capacityFile: string,
+  baseline: DeploymentRuntimeCapacitySnapshot,
+  request: G9ProductionActivationRequest,
+  requestHash: Sha256Hash,
+  expected: {
+    readonly changeId: string;
+    readonly publicationHash: Sha256Hash;
+    readonly auditHeadHash: Sha256Hash;
+    readonly publication: DeploymentRuntimeCapacityPublication;
+    readonly resultId: string;
+    readonly resultHash: Sha256Hash;
+  },
+): boolean {
+  const capacity = request.deployment_binding.capacity_authority;
+  if (capacity.mode !== 'fresh_genesis')
+    throw new Error('fresh_capacity_mode_required');
+  const head = capacityHead(store);
+  const command = store.queryOne<FreshCapacityCommandRow>(
+    `SELECT command_type, idempotency_key, request_hash,
+            assigned_capacity_revision, assigned_change_id,
+            genesis_core_release_hash, proposed_capacity_json,
+            proposed_config_hash, evidence_manifest_value_id,
+            evidence_manifest_hash, canonical_result_value_id,
+            canonical_result_hash, finalized_at_ms
+       FROM runtime_capacity_admin_commands WHERE command_id = ?`,
+    [capacity.genesis_command_id],
+  );
+  if (!command) {
+    if (
+      head?.current_capacity_revision !== null &&
+      head?.current_capacity_revision !== undefined
+    )
+      throw new Error('fresh_capacity_existing_authority_drift');
+    if (
+      capacityAuditHead(store) !== null ||
+      lstatIfPresent(capacityFile) !== null
+    )
+      throw new Error('fresh_capacity_terminal_authority_drift');
+    return false;
+  }
+  if (
+    head?.current_capacity_revision !== null &&
+    head?.current_capacity_revision !== undefined &&
+    (head.pending_change_id !== null ||
+      head.current_capacity_revision !== 1 ||
+      head.current_change_id !== capacity.expected_change_id ||
+      head.current_config_hash !== capacity.baseline_config_hash ||
+      head.current_publication_hash !== capacity.expected_publication_hash)
+  )
+    throw new Error('fresh_capacity_existing_authority_drift');
+  if (command.finalized_at_ms === null) return false;
+
+  const result = store.queryOne<FreshCapacityResultRow>(
+    `SELECT inline_canonical_json, content_hash, schema_resource_id,
+            schema_resource_hash, provenance_ref, retention_class,
+            payload_state, created_at_ms
+       FROM workflow_values WHERE id = ?`,
+    [expected.resultId],
+  );
+  const resultPayload = {
+    format: 'icarus.capacity-admin-result/1',
+    command_id: capacity.genesis_command_id,
+    disposition: 'applied',
+    capacity_revision: 1,
+    capacity_change_id: capacity.expected_change_id,
+    config_hash: capacity.baseline_config_hash,
+    publication_hash: capacity.expected_publication_hash,
+  } as const;
+  const publicationBytes = `${canonicalJson(expected.publication as unknown as JsonValue)}\n`;
+  if (
+    !head ||
+    head.pending_change_id !== null ||
+    head.current_capacity_revision !== 1 ||
+    head.current_change_id !== capacity.expected_change_id ||
+    head.current_config_hash !== capacity.baseline_config_hash ||
+    head.current_publication_hash !== capacity.expected_publication_hash ||
+    capacityAuditHead(store) !== capacity.expected_audit_head_hash ||
+    command.command_type !== 'initialize_deployment_capacity' ||
+    command.idempotency_key !== capacity.genesis_idempotency_key ||
+    command.request_hash !== requestHash ||
+    command.assigned_capacity_revision !== 1 ||
+    command.assigned_change_id !== capacity.expected_change_id ||
+    command.genesis_core_release_hash !==
+      request.deployment_binding.release_artifact_hash ||
+    command.proposed_capacity_json !== canonicalJson(baseline) ||
+    command.proposed_config_hash !== capacity.baseline_config_hash ||
+    command.evidence_manifest_value_id !==
+      capacity.genesis_evidence_manifest_id ||
+    command.evidence_manifest_hash !==
+      capacity.genesis_evidence_manifest_hash ||
+    command.canonical_result_value_id !== expected.resultId ||
+    command.canonical_result_hash !== expected.resultHash ||
+    command.finalized_at_ms !== request.requested_at_ms + 103 ||
+    !result ||
+    result.inline_canonical_json !== canonicalJson(resultPayload) ||
+    result.content_hash !== expected.resultHash ||
+    result.schema_resource_id !== capacity.genesis_result_schema_row_id ||
+    result.schema_resource_hash !== capacity.genesis_result_schema_hash ||
+    result.provenance_ref !== 'icarus.workflow-capacity-admin/1' ||
+    result.retention_class !== 'workflow_audit' ||
+    result.payload_state !== 'live' ||
+    result.created_at_ms !== request.requested_at_ms + 103 ||
+    !lstatIfPresent(capacityFile)?.isFile() ||
+    fs.readFileSync(capacityFile, 'utf8') !== publicationBytes
+  )
+    throw new Error('fresh_capacity_terminal_authority_drift');
+  return true;
+}
+
 function applyFreshCapacity(
   store: WorkflowRuntimeStore,
   capacityFile: string,
@@ -424,6 +563,17 @@ function applyFreshCapacity(
     expected.auditHeadHash !== capacity.expected_audit_head_hash
   )
     throw new Error('fresh_capacity_expected_identity_drift');
+  if (
+    freshCapacityTerminalIsExact(
+      store,
+      capacityFile,
+      baseline,
+      request,
+      requestHash,
+      expected,
+    )
+  )
+    return;
   const prepared = prepareCapacityChangeCAP0CAP1(
     store,
     command,
@@ -475,14 +625,15 @@ function applyFreshCapacity(
     },
     request.requested_at_ms + 103,
   );
-  const head = capacityHead(store);
   if (
-    !head ||
-    head.current_capacity_revision !== 1 ||
-    head.current_change_id !== capacity.expected_change_id ||
-    head.current_config_hash !== capacity.baseline_config_hash ||
-    head.current_publication_hash !== capacity.expected_publication_hash ||
-    capacityAuditHead(store) !== capacity.expected_audit_head_hash
+    !freshCapacityTerminalIsExact(
+      store,
+      capacityFile,
+      baseline,
+      request,
+      requestHash,
+      expected,
+    )
   )
     throw new Error('fresh_capacity_roll_forward_identity_drift');
 }
@@ -496,6 +647,9 @@ export function expectedFreshCapacityGenesisIdentity(input: {
   changeId: string;
   publicationHash: Sha256Hash;
   auditHeadHash: Sha256Hash;
+  publication: DeploymentRuntimeCapacityPublication;
+  resultId: string;
+  resultHash: Sha256Hash;
 } {
   const changeId = stableRuntimeId('capacity-change', {
     command_id: input.commandId,
@@ -533,10 +687,25 @@ export function expectedFreshCapacityGenesisIdentity(input: {
       },
     );
   });
+  const resultHash = domainSeparatedSha256('icarus:capacity-admin-result:1\n', {
+    format: 'icarus.capacity-admin-result/1',
+    command_id: input.commandId,
+    disposition: 'applied',
+    capacity_revision: 1,
+    capacity_change_id: changeId,
+    config_hash: input.baseline.config_hash,
+    publication_hash: publication.publication_hash,
+  });
   return {
     changeId,
     publicationHash: publication.publication_hash,
     auditHeadHash: previousEventHash!,
+    publication,
+    resultId: stableRuntimeId('capacity-result', {
+      command_id: input.commandId,
+      result_hash: resultHash,
+    }),
+    resultHash,
   };
 }
 

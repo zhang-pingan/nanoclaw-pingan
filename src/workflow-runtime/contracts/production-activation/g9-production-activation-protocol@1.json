@@ -33,7 +33,10 @@
     "precommit_recovery": "deterministic_rollback_reversible_prepare_only",
     "postcommit_authority": "target_deployment_binding",
     "postcommit_recovery": "idempotent_roll_forward_only",
+    "postcommit_commit_evidence_recovery": "append_missing_active_deployment_committed_before_roll_forward",
     "fresh_capacity_phase": "postcommit_roll_forward",
+    "fresh_capacity_terminal_recovery": "read_only_exact_head_audit_publication_file_and_result_convergence",
+    "release_build_inventory": "clean_compiler_owned_dist_before_tsc_and_content_inventory",
     "existing_capacity_policy": "verify_twice_and_preserve_exactly_without_write",
     "feature_activation_contract": "standard_g3_publish_activate_only",
     "projection_views": [
@@ -46,7 +49,7 @@
     "activation_execution_status": "forbidden_before_fresh_independent_g8_pass",
     "extended_certification_plan": "excluded",
     "security_sensitive_validation": "STATIC_SOURCE_DIFF_EXISTING_TESTS_AND_NORMAL_POSITIVE_ONLY",
-    "source_tree_hash": "sha256:a88020a610d7da965cff2e3a59a5f19e223b2e2d5cc033f5f18512692444ce79",
+    "source_tree_hash": "sha256:b1efc382b753b619162944e115806cd14ae4586a160c8c1037fb3a040e185516",
     "schema_hashes": {
       "release": "sha256:b093f95cacc1945e7314b06a240df1534ba35d7605cd2b9c460d5de395541c00",
       "coreBinding": "sha256:66b2ded83a3c5435428588cdfcc3611a022762467f4ddb571989a5f8c2a93431",
@@ -56,5 +59,5 @@
       "request": "sha256:cebd8e275a9b20ebc8f8f1b39e470abfd05e3ae0068b6197ca6c476450bbdacb"
     }
   },
-  "hash": "sha256:5e6b8f248751298c8d8695b8ae4d8af5e09b02b31ca5fbd97f51c3e155ffc432"
+  "hash": "sha256:18f72c9cda7d77dea1839459a3f366c826dc563736ee19a5015aef1e4cdf78ff"
 }
