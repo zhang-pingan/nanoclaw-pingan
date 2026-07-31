@@ -6,22 +6,10 @@ import { WorkflowRuntimeConnectionFactory } from '../store/runtime-store/index.j
 import {
   readG9ProductionActivationRequestFile,
   recoverG9ProductionActivation,
+  resolveG9ProductionActivationRuntimeLayout,
   runG9ProductionActivation,
 } from './production-activation.js';
 import { createG9ProductionActivationParticipants } from './production-activation-runtime.js';
-
-function runtimeLayout(): { runtimeHome: string; releaseRoot: string } {
-  const executable = fs.realpathSync(process.execPath);
-  const marker = `${path.sep}toolchains${path.sep}node${path.sep}`;
-  const index = executable.indexOf(marker);
-  if (index <= 0)
-    throw new Error('production_activation_managed_node_required');
-  const runtimeHome = fs.realpathSync(executable.slice(0, index));
-  const releaseRoot = fs.realpathSync(
-    path.resolve(import.meta.dirname, '../../../..'),
-  );
-  return { runtimeHome, releaseRoot };
-}
 
 function argument(name: string): string {
   const index = process.argv.indexOf(name);
@@ -40,7 +28,10 @@ if (
     'Usage: production-activation-entry.js <activate|recover> --audit-hash sha256:<hex>',
   );
 
-const { runtimeHome, releaseRoot } = runtimeLayout();
+const { runtimeHome, releaseRoot } = resolveG9ProductionActivationRuntimeLayout(
+  process.execPath,
+  import.meta.dirname,
+);
 const auditHash = parseSha256Hash(argument('--audit-hash'));
 const requestPath = path.join(
   runtimeHome,

@@ -26,6 +26,7 @@
       "version": "1.2.14-g9.1"
     },
     "production_release_status": "pending_fresh_independent_g8_boundary",
+    "installed_release_root_contract": "stable_launcher_v3_checked_entry_directory_three_level_ancestor_equals_runtime_home_core_releases_release_artifact_hash",
     "database_schema_version": 11,
     "database_schema_hash": "sha256:ad998b2d0bb5e5f158b0be6d13db79cb6a0c0650d5064b267262551af266189c",
     "commit_point": "active-deployment-content-addressed-pointer-swap",
@@ -49,7 +50,7 @@
     "activation_execution_status": "forbidden_before_fresh_independent_g8_pass",
     "extended_certification_plan": "excluded",
     "security_sensitive_validation": "STATIC_SOURCE_DIFF_EXISTING_TESTS_AND_NORMAL_POSITIVE_ONLY",
-    "source_tree_hash": "sha256:b1efc382b753b619162944e115806cd14ae4586a160c8c1037fb3a040e185516",
+    "source_tree_hash": "sha256:0b5b0890c022075e08496a4b6968b837ecb861d4a998dca729b12262d58651ce",
     "schema_hashes": {
       "release": "sha256:b093f95cacc1945e7314b06a240df1534ba35d7605cd2b9c460d5de395541c00",
       "coreBinding": "sha256:66b2ded83a3c5435428588cdfcc3611a022762467f4ddb571989a5f8c2a93431",
@@ -59,5 +60,5 @@
       "request": "sha256:cebd8e275a9b20ebc8f8f1b39e470abfd05e3ae0068b6197ca6c476450bbdacb"
     }
   },
-  "hash": "sha256:18f72c9cda7d77dea1839459a3f366c826dc563736ee19a5015aef1e4cdf78ff"
+  "hash": "sha256:e0ef56ff171cdfe73cf5a4ffaa2cab4dc1855038b9cd495fd9af22d2d51050eb"
 }

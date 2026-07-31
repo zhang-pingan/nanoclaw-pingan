@@ -50,6 +50,29 @@ export interface G9ProductionActivationOutcome {
   readonly journal_head_hash: Sha256Hash;
 }
 
+export function resolveG9ProductionActivationRuntimeLayout(
+  executablePath: string,
+  activationEntryDirectory: string,
+): { runtimeHome: string; releaseRoot: string } {
+  const executable = fs.realpathSync(executablePath);
+  const managedNodeMarker = `${path.sep}toolchains${path.sep}node${path.sep}`;
+  const markerIndex = executable.indexOf(managedNodeMarker);
+  if (markerIndex <= 0)
+    throw new Error('production_activation_managed_node_required');
+
+  const runtimeHome = fs.realpathSync(executable.slice(0, markerIndex));
+  const releasesRoot = fs.realpathSync(path.join(runtimeHome, 'core-releases'));
+  const releaseRoot = fs.realpathSync(
+    path.resolve(activationEntryDirectory, '../../..'),
+  );
+  if (
+    path.dirname(releaseRoot) !== releasesRoot ||
+    !/^[0-9a-f]{64}$/.test(path.basename(releaseRoot))
+  )
+    throw new Error('production_activation_release_root_invalid');
+  return { runtimeHome, releaseRoot };
+}
+
 function exactKeys(
   value: object,
   expected: readonly string[],

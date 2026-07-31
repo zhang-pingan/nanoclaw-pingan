@@ -57,6 +57,14 @@ if [ "\${1:-}" = "--version" ]; then
   echo "v26.5.0"
   exit 0
 fi
+case "\${1:-}" in
+  */dist/workflow-runtime/registry/production-activation-entry.js)
+    release_root="$(cd "$(dirname "$1")/../../.." && pwd -P)"
+    [ -f "$release_root/core-production-release-manifest.json" ] || exit 78
+    printf 'production-release-root=%s\\n' "$release_root"
+    printf 'production-release-manifest=%s\\n' "$release_root/core-production-release-manifest.json"
+    ;;
+esac
 printf 'managed-node=%s\\n' "$0"
 printf 'core-entry=%s\\n' "\${1:-}"
 shift || true
@@ -229,6 +237,7 @@ function createProductionReleaseFixture(
 ): {
   bindingFile: string;
   bindingHash: string;
+  releaseRoot: string;
   coreEntry: string;
   validationEntry: string;
   activationEntry: string;
@@ -350,6 +359,7 @@ function createProductionReleaseFixture(
   return {
     bindingFile,
     bindingHash,
+    releaseRoot: fs.realpathSync(releaseRoot),
     coreEntry,
     validationEntry,
     activationEntry,
@@ -599,6 +609,12 @@ describe('stable runtime launcher', () => {
     expect(activation.status, activation.stderr).toBe(0);
     expect(activation.stdout).toContain(production.activationEntry);
     expect(activation.stdout).toContain('core-argument=recover');
+    expect(activation.stdout).toContain(
+      `production-release-root=${production.releaseRoot}`,
+    );
+    expect(activation.stdout).toContain(
+      `production-release-manifest=${path.join(production.releaseRoot, 'core-production-release-manifest.json')}`,
+    );
   }, 15_000);
 
   it('binds a content-addressed Core Release and forwards validation arguments', () => {

@@ -15,6 +15,7 @@ import {
   parseG9DeploymentActivationBinding,
   parseG9DeploymentJournalEvent,
   parseG9ProductionActivationRequest,
+  resolveG9ProductionActivationRuntimeLayout,
 } from './production-activation.js';
 
 function hash(character: string): Sha256Hash {
@@ -22,6 +23,40 @@ function hash(character: string): Sha256Hash {
 }
 
 describe('G9 pre-activation production authority', () => {
+  it('resolves the managed content-addressed release root from the installed entry', () => {
+    const runtimeHome = fs.mkdtempSync(
+      '/private/tmp/icarus-g9-installed-layout-',
+    );
+    try {
+      const releaseHash = 'a'.repeat(64);
+      const releaseRoot = path.join(runtimeHome, 'core-releases', releaseHash);
+      const entryDirectory = path.join(
+        releaseRoot,
+        'dist/workflow-runtime/registry',
+      );
+      const executable = path.join(
+        runtimeHome,
+        'toolchains/node/26.5.0/bin/node',
+      );
+      fs.mkdirSync(entryDirectory, { recursive: true });
+      fs.mkdirSync(path.dirname(executable), { recursive: true });
+      fs.writeFileSync(executable, 'managed node fixture\n');
+      fs.writeFileSync(
+        path.join(releaseRoot, 'core-production-release-manifest.json'),
+        '{}\n',
+      );
+
+      expect(
+        resolveG9ProductionActivationRuntimeLayout(executable, entryDirectory),
+      ).toEqual({
+        runtimeHome: fs.realpathSync(runtimeHome),
+        releaseRoot: fs.realpathSync(releaseRoot),
+      });
+    } finally {
+      fs.rmSync(runtimeHome, { recursive: true, force: true });
+    }
+  });
+
   it('cleans only compiler-owned output before building release inventory', () => {
     const projectRoot = path.resolve(import.meta.dirname, '../../..');
     const packageJson = JSON.parse(

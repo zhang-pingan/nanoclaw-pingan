@@ -672,6 +672,8 @@ function buildArtifacts(): {
         'immutable_acceptance_not_applicable_to_new_release',
       production_release_ref: G9_PRODUCTION_RELEASE_REF,
       production_release_status: 'pending_fresh_independent_g8_boundary',
+      installed_release_root_contract:
+        'stable_launcher_v3_checked_entry_directory_three_level_ancestor_equals_runtime_home_core_releases_release_artifact_hash',
       database_schema_version: 11,
       database_schema_hash: G9_DATABASE_SCHEMA_HASH,
       commit_point: 'active-deployment-content-addressed-pointer-swap',

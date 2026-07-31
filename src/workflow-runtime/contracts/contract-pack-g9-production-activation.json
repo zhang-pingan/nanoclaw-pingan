@@ -9,7 +9,7 @@
   "payload": {
     "gate": "G9",
     "status": "PRE_ACTIVATION_PRODUCTION_CANDIDATE_AUTHORITY",
-    "protocol_hash": "sha256:18f72c9cda7d77dea1839459a3f366c826dc563736ee19a5015aef1e4cdf78ff",
+    "protocol_hash": "sha256:e0ef56ff171cdfe73cf5a4ffaa2cab4dc1855038b9cd495fd9af22d2d51050eb",
     "schema_hashes": {
       "release": "sha256:b093f95cacc1945e7314b06a240df1534ba35d7605cd2b9c460d5de395541c00",
       "coreBinding": "sha256:66b2ded83a3c5435428588cdfcc3611a022762467f4ddb571989a5f8c2a93431",
@@ -25,5 +25,5 @@
     "activation_execution_authorized": false,
     "next_required_gate": "fresh_independent_full_g8_boundary_revalidation"
   },
-  "hash": "sha256:9f5b208aea85d5a99d674626e52806ad4d0eb7c00723de9bfa7b38c84f4b4d13"
+  "hash": "sha256:dbf314425e06ce6c108bb40c2474c16103e43faf798f581225a1e946b2b2c095"
 }
