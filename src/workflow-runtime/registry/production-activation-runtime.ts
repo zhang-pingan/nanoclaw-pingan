@@ -31,6 +31,7 @@ import {
   type G9DeploymentActivationBinding,
   type G9ProductionActivationRequest,
   type G9ProjectionGenerationBinding,
+  type G9RuntimeCenterProjectionBinding,
 } from '../contracts/g9-production-activation-types.js';
 import {
   assertJsonObject,
@@ -277,6 +278,19 @@ function assertProjectionGenerations(
   )
     throw new Error('production_projection_generation_drift');
   return observed;
+}
+
+export function buildG9RuntimeCenterProjectionGenerationDocument(
+  projection: G9RuntimeCenterProjectionBinding,
+) {
+  return {
+    format: 'icarus.runtime-center-projection-generation/1',
+    projection_version: projection.projection_version,
+    generations: projection.generations.map((generation) => ({
+      ...generation,
+    })),
+    generation_aggregate_hash: projection.generation_aggregate_hash,
+  } as const;
 }
 
 interface CapacityHeadRow extends Record<string, unknown> {
@@ -770,13 +784,11 @@ export function createG9ProductionActivationParticipants(input: {
             generationHash.slice('sha256:'.length),
             'projection-generation.json',
           ),
-          {
-            format: 'icarus.runtime-center-projection-generation/1',
-            deployment_binding_hash: binding.binding_hash,
+          buildG9RuntimeCenterProjectionGenerationDocument({
             projection_version: 'g7.1',
             generations,
             generation_aggregate_hash: generationHash,
-          } as unknown as JsonValue,
+          }) as unknown as JsonValue,
         );
         atomicRelativePointer(
           runtimeHome,

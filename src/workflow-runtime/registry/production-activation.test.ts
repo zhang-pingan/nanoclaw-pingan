@@ -18,7 +18,10 @@ import {
   parseG9ProductionActivationRequest,
   resolveG9ProductionActivationRuntimeLayout,
 } from './production-activation.js';
-import { createG9ProductionActivationParticipants } from './production-activation-runtime.js';
+import {
+  buildG9RuntimeCenterProjectionGenerationDocument,
+  createG9ProductionActivationParticipants,
+} from './production-activation-runtime.js';
 
 function hash(character: string): Sha256Hash {
   return `sha256:${character.repeat(64)}`;
@@ -299,6 +302,23 @@ describe('G9 pre-activation production authority', () => {
     expect(request.audit.audit_hash).toBe(
       request.deployment_binding.activation_audit_hash,
     );
+    expect(
+      buildG9RuntimeCenterProjectionGenerationDocument(
+        request.deployment_binding.runtime_center_projection,
+      ),
+    ).toEqual({
+      format: 'icarus.runtime-center-projection-generation/1',
+      projection_version: 'g7.1',
+      generations,
+      generation_aggregate_hash:
+        request.deployment_binding.runtime_center_projection
+          .generation_aggregate_hash,
+    });
+    expect(
+      buildG9RuntimeCenterProjectionGenerationDocument(
+        request.deployment_binding.runtime_center_projection,
+      ),
+    ).not.toHaveProperty('deployment_binding_hash');
   });
 
   it('builds a complete positive journal that is strictly replayable', () => {

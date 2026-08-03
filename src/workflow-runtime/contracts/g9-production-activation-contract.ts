@@ -690,6 +690,8 @@ function buildArtifacts(): {
         'clean_compiler_owned_dist_before_tsc_and_content_inventory',
       existing_capacity_policy:
         'verify_twice_and_preserve_exactly_without_write',
+      projection_generation_object_identity:
+        'generation_aggregate_hash_over_exact_generations_with_fixed_projection_version_and_without_deployment_binding_hash',
       feature_activation_contract: 'standard_g3_publish_activate_only',
       projection_views: ['workflows', 'agent_executions', 'pending', 'trace'],
       production_recipe_inventory: 'zero_or_standard_published_only',
