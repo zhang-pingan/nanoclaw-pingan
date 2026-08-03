@@ -50,6 +50,7 @@
         "target_release_artifact_hash",
         "previous_deployment_binding_hash",
         "capacity_mode",
+        "authority_hash",
         "audit_hash"
       ],
       "properties": {
@@ -94,6 +95,10 @@
             "existing_preserved"
           ]
         },
+        "authority_hash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
         "audit_hash": {
           "type": "string",
           "pattern": "^sha256:[0-9a-f]{64}$"
@@ -114,6 +119,7 @@
         "release_artifact_hash",
         "core_build_hash",
         "core_binding_hash",
+        "capacity_genesis_bootstrap_bundle_hash",
         "applicable_g8_evidence",
         "static_authority",
         "feature_registry_pointer",
@@ -145,6 +151,10 @@
           "pattern": "^sha256:[0-9a-f]{64}$"
         },
         "core_binding_hash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "capacity_genesis_bootstrap_bundle_hash": {
           "type": "string",
           "pattern": "^sha256:[0-9a-f]{64}$"
         },
@@ -357,12 +367,9 @@
                 "genesis_command_id",
                 "genesis_idempotency_key",
                 "genesis_auth_session_ref",
-                "genesis_evidence_manifest_id",
-                "genesis_evidence_manifest_hash",
-                "genesis_result_schema_row_id",
-                "genesis_result_schema_resource_type",
-                "genesis_result_schema_ref",
-                "genesis_result_schema_hash"
+                "genesis_activation_audit_authority_hash",
+                "genesis_evidence_value_id",
+                "genesis_evidence_value_hash"
               ],
               "properties": {
                 "mode": {
@@ -410,44 +417,16 @@
                   "minLength": 1,
                   "maxLength": 255
                 },
-                "genesis_evidence_manifest_id": {
-                  "type": "string",
-                  "minLength": 1,
-                  "maxLength": 255
-                },
-                "genesis_evidence_manifest_hash": {
+                "genesis_activation_audit_authority_hash": {
                   "type": "string",
                   "pattern": "^sha256:[0-9a-f]{64}$"
                 },
-                "genesis_result_schema_row_id": {
+                "genesis_evidence_value_id": {
                   "type": "string",
                   "minLength": 1,
                   "maxLength": 255
                 },
-                "genesis_result_schema_resource_type": {
-                  "const": "schema"
-                },
-                "genesis_result_schema_ref": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "required": [
-                    "id",
-                    "version"
-                  ],
-                  "properties": {
-                    "id": {
-                      "type": "string",
-                      "minLength": 1,
-                      "maxLength": 255
-                    },
-                    "version": {
-                      "type": "string",
-                      "minLength": 1,
-                      "maxLength": 64
-                    }
-                  }
-                },
-                "genesis_result_schema_hash": {
+                "genesis_evidence_value_hash": {
                   "type": "string",
                   "pattern": "^sha256:[0-9a-f]{64}$"
                 }
@@ -463,7 +442,8 @@
                 "config_hash",
                 "publication_hash",
                 "publication_file_raw_hash",
-                "audit_head_hash"
+                "audit_head_hash",
+                "dependency_objects_hash"
               ],
               "properties": {
                 "mode": {
@@ -492,6 +472,10 @@
                   "pattern": "^sha256:[0-9a-f]{64}$"
                 },
                 "audit_head_hash": {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                },
+                "dependency_objects_hash": {
                   "type": "string",
                   "pattern": "^sha256:[0-9a-f]{64}$"
                 }

@@ -1,0 +1,291 @@
+{
+  "format": "icarus.capacity-genesis-bootstrap-bundle/1",
+  "ref": {
+    "id": "icarus.capacity-genesis-bootstrap-bundle",
+    "version": "1.0.0"
+  },
+  "owner_core_ref": {
+    "id": "icarus.core",
+    "version": "1.2.14-g9.1"
+  },
+  "member_order": [
+    "bootstrap_meta_schema",
+    "capacity_result_schema",
+    "genesis_evidence_schema"
+  ],
+  "install_order": [
+    "bootstrap_meta_schema_value",
+    "bootstrap_meta_schema_resource",
+    "capacity_result_schema_value",
+    "capacity_result_schema_resource",
+    "genesis_evidence_schema_value",
+    "genesis_evidence_schema_resource",
+    "exact_dependency_rows"
+  ],
+  "members": [
+    {
+      "role": "bootstrap_meta_schema",
+      "artifact_relative_path": "dist/workflow-runtime/contracts/production-activation/capacity-genesis-bootstrap/capacity-genesis-bootstrap-meta-schema@1.json",
+      "artifact_raw_sha256": "sha256:30963d909f0e45da8d9bc402021809538fab97d8c87a21ed1880ec26555827ed",
+      "canonical_content_json": "{\"$id\":\"urn:icarus:capacity-genesis-bootstrap-meta-schema:1\",\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"properties\":{\"$id\":{\"maxLength\":255,\"minLength\":1,\"type\":\"string\"},\"$schema\":{\"const\":\"https://json-schema.org/draft/2020-12/schema\"},\"additionalProperties\":{\"const\":false},\"properties\":{\"type\":\"object\"},\"required\":{\"items\":{\"maxLength\":255,\"minLength\":1,\"type\":\"string\"},\"minItems\":1,\"type\":\"array\",\"uniqueItems\":true},\"title\":{\"maxLength\":255,\"minLength\":1,\"type\":\"string\"},\"type\":{\"const\":\"object\"}},\"required\":[\"$schema\",\"$id\",\"title\",\"type\",\"additionalProperties\",\"required\",\"properties\"],\"title\":\"Icarus Capacity Genesis Bootstrap Schema Resource\",\"type\":\"object\"}",
+      "canonical_value_id": "registry-value:schema:icarus.capacity-genesis-bootstrap-meta-schema@1.0.0",
+      "resource_row_id": "registry-resource:schema:icarus.capacity-genesis-bootstrap-meta-schema@1.0.0",
+      "resource": {
+        "format": "icarus.workflow-registry-resource/1",
+        "resource_type": "schema",
+        "ref": {
+          "id": "icarus.capacity-genesis-bootstrap-meta-schema",
+          "version": "1.0.0"
+        },
+        "owner": {
+          "kind": "core",
+          "ref": {
+            "id": "icarus.core",
+            "version": "1.2.14-g9.1"
+          }
+        },
+        "schema_ref": {
+          "id": "icarus.capacity-genesis-bootstrap-meta-schema",
+          "version": "1.0.0"
+        },
+        "schema_hash": "sha256:bbb00955cde3bf25c117f5749a2701c03ef2aee1ea1e2e8d40111a5b37a7dbdd",
+        "content": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "$id": "urn:icarus:capacity-genesis-bootstrap-meta-schema:1",
+          "title": "Icarus Capacity Genesis Bootstrap Schema Resource",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "$schema",
+            "$id",
+            "title",
+            "type",
+            "additionalProperties",
+            "required",
+            "properties"
+          ],
+          "properties": {
+            "$schema": {
+              "const": "https://json-schema.org/draft/2020-12/schema"
+            },
+            "$id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            },
+            "title": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            },
+            "type": {
+              "const": "object"
+            },
+            "additionalProperties": {
+              "const": false
+            },
+            "required": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 255
+              }
+            },
+            "properties": {
+              "type": "object"
+            }
+          }
+        },
+        "dependencies": [],
+        "content_hash": "sha256:bbb00955cde3bf25c117f5749a2701c03ef2aee1ea1e2e8d40111a5b37a7dbdd"
+      }
+    },
+    {
+      "role": "capacity_result_schema",
+      "artifact_relative_path": "dist/workflow-runtime/contracts/production-activation/capacity-genesis-bootstrap/capacity-admin-result-schema@1.json",
+      "artifact_raw_sha256": "sha256:c80961705d0a8a5869d2b7a1ae20d7669130d954bf4820ded88d0cc76b729939",
+      "canonical_content_json": "{\"$id\":\"urn:icarus:capacity-admin-result:1\",\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"properties\":{\"capacity_change_id\":{\"maxLength\":255,\"minLength\":1,\"type\":\"string\"},\"capacity_revision\":{\"const\":1},\"command_id\":{\"maxLength\":255,\"minLength\":1,\"type\":\"string\"},\"config_hash\":{\"pattern\":\"^sha256:[0-9a-f]{64}$\",\"type\":\"string\"},\"disposition\":{\"const\":\"applied\"},\"format\":{\"const\":\"icarus.capacity-admin-result/1\"},\"publication_hash\":{\"pattern\":\"^sha256:[0-9a-f]{64}$\",\"type\":\"string\"}},\"required\":[\"format\",\"command_id\",\"disposition\",\"capacity_revision\",\"capacity_change_id\",\"config_hash\",\"publication_hash\"],\"title\":\"Icarus Revision 1 Applied Capacity Admin Result\",\"type\":\"object\"}",
+      "canonical_value_id": "registry-value:schema:icarus.capacity-admin-result@1.0.0",
+      "resource_row_id": "registry-resource:schema:icarus.capacity-admin-result@1.0.0",
+      "resource": {
+        "format": "icarus.workflow-registry-resource/1",
+        "resource_type": "schema",
+        "ref": {
+          "id": "icarus.capacity-admin-result",
+          "version": "1.0.0"
+        },
+        "owner": {
+          "kind": "core",
+          "ref": {
+            "id": "icarus.core",
+            "version": "1.2.14-g9.1"
+          }
+        },
+        "schema_ref": {
+          "id": "icarus.capacity-genesis-bootstrap-meta-schema",
+          "version": "1.0.0"
+        },
+        "schema_hash": "sha256:bbb00955cde3bf25c117f5749a2701c03ef2aee1ea1e2e8d40111a5b37a7dbdd",
+        "content": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "$id": "urn:icarus:capacity-admin-result:1",
+          "title": "Icarus Revision 1 Applied Capacity Admin Result",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "format",
+            "command_id",
+            "disposition",
+            "capacity_revision",
+            "capacity_change_id",
+            "config_hash",
+            "publication_hash"
+          ],
+          "properties": {
+            "format": {
+              "const": "icarus.capacity-admin-result/1"
+            },
+            "command_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            },
+            "disposition": {
+              "const": "applied"
+            },
+            "capacity_revision": {
+              "const": 1
+            },
+            "capacity_change_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            },
+            "config_hash": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "publication_hash": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            }
+          }
+        },
+        "dependencies": [
+          {
+            "resource_type": "schema",
+            "ref": {
+              "id": "icarus.capacity-genesis-bootstrap-meta-schema",
+              "version": "1.0.0"
+            },
+            "content_hash": "sha256:bbb00955cde3bf25c117f5749a2701c03ef2aee1ea1e2e8d40111a5b37a7dbdd",
+            "dependency_kind": "registry_exact"
+          }
+        ],
+        "content_hash": "sha256:245aaf4c1b147fd99e073ff6f0f06a44ec0e99d62483bc948e9769808b3f115a"
+      }
+    },
+    {
+      "role": "genesis_evidence_schema",
+      "artifact_relative_path": "dist/workflow-runtime/contracts/production-activation/capacity-genesis-bootstrap/capacity-genesis-evidence-schema@1.json",
+      "artifact_raw_sha256": "sha256:e91c5ae34669daf0e1ec404bae16b3f54ab4bdb8b771e03f31a780974a56658a",
+      "canonical_content_json": "{\"$id\":\"urn:icarus:capacity-genesis-evidence:1\",\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"properties\":{\"activation_audit_authority_hash\":{\"pattern\":\"^sha256:[0-9a-f]{64}$\",\"type\":\"string\"},\"baseline_config_hash\":{\"pattern\":\"^sha256:[0-9a-f]{64}$\",\"type\":\"string\"},\"capacity_revision\":{\"const\":1},\"core_release_artifact_hash\":{\"pattern\":\"^sha256:[0-9a-f]{64}$\",\"type\":\"string\"},\"format\":{\"const\":\"icarus.capacity-genesis-evidence/1\"},\"purpose\":{\"const\":\"initial_provisioning\"}},\"required\":[\"format\",\"core_release_artifact_hash\",\"baseline_config_hash\",\"activation_audit_authority_hash\",\"capacity_revision\",\"purpose\"],\"title\":\"Icarus Capacity Genesis Evidence\",\"type\":\"object\"}",
+      "canonical_value_id": "registry-value:schema:icarus.capacity-genesis-evidence@1.0.0",
+      "resource_row_id": "registry-resource:schema:icarus.capacity-genesis-evidence@1.0.0",
+      "resource": {
+        "format": "icarus.workflow-registry-resource/1",
+        "resource_type": "schema",
+        "ref": {
+          "id": "icarus.capacity-genesis-evidence",
+          "version": "1.0.0"
+        },
+        "owner": {
+          "kind": "core",
+          "ref": {
+            "id": "icarus.core",
+            "version": "1.2.14-g9.1"
+          }
+        },
+        "schema_ref": {
+          "id": "icarus.capacity-genesis-bootstrap-meta-schema",
+          "version": "1.0.0"
+        },
+        "schema_hash": "sha256:bbb00955cde3bf25c117f5749a2701c03ef2aee1ea1e2e8d40111a5b37a7dbdd",
+        "content": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "$id": "urn:icarus:capacity-genesis-evidence:1",
+          "title": "Icarus Capacity Genesis Evidence",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "format",
+            "core_release_artifact_hash",
+            "baseline_config_hash",
+            "activation_audit_authority_hash",
+            "capacity_revision",
+            "purpose"
+          ],
+          "properties": {
+            "format": {
+              "const": "icarus.capacity-genesis-evidence/1"
+            },
+            "core_release_artifact_hash": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "baseline_config_hash": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "activation_audit_authority_hash": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "capacity_revision": {
+              "const": 1
+            },
+            "purpose": {
+              "const": "initial_provisioning"
+            }
+          }
+        },
+        "dependencies": [
+          {
+            "resource_type": "schema",
+            "ref": {
+              "id": "icarus.capacity-genesis-bootstrap-meta-schema",
+              "version": "1.0.0"
+            },
+            "content_hash": "sha256:bbb00955cde3bf25c117f5749a2701c03ef2aee1ea1e2e8d40111a5b37a7dbdd",
+            "dependency_kind": "registry_exact"
+          }
+        ],
+        "content_hash": "sha256:f97cbaafe3564c8c3750296e910fae459f2000fb7a022eb9386732c324082c25"
+      }
+    }
+  ],
+  "evidence_contract": {
+    "format": "icarus.capacity-genesis-evidence-contract/1",
+    "schema_resource_id": "registry-resource:schema:icarus.capacity-genesis-evidence@1.0.0",
+    "schema_ref": {
+      "id": "icarus.capacity-genesis-evidence",
+      "version": "1.0.0"
+    },
+    "schema_hash": "sha256:f97cbaafe3564c8c3750296e910fae459f2000fb7a022eb9386732c324082c25",
+    "content_hash_domain": "icarus:capacity-genesis-evidence:1\n",
+    "value_id_prefix": "capacity-genesis-evidence-value:",
+    "exact_inputs": [
+      "core_release_artifact_hash",
+      "baseline_config_hash",
+      "activation_audit_authority_hash",
+      "capacity_revision",
+      "purpose"
+    ],
+    "capacity_revision": 1,
+    "purpose": "initial_provisioning"
+  },
+  "bundle_hash": "sha256:dec8fc5e9ebeec0b8d6033728d5131adb2009c32c48556242c8ac8fbb4b2fb33"
+}

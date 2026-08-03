@@ -1,12 +1,31 @@
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 
+import Database from 'better-sqlite3';
 import { describe, expect, it } from 'vitest';
 
-import type { Sha256Hash } from '../contracts/types.js';
+import type { JsonValue, Sha256Hash } from '../contracts/types.js';
+import {
+  buildG9ActivationAuditAuthority,
+  buildG9CapacityGenesisBootstrapArtifacts,
+  buildG9CapacityGenesisEvidence,
+  capacityGenesisBootstrapGeneratedOutputs,
+} from '../contracts/g9-capacity-genesis-bootstrap.js';
+import { calculateCapacityAdminRequestHash } from '../contracts/capacity-control-plane-source.js';
+import type {
+  DeploymentRuntimeCapacitySnapshot,
+  InitializeDeploymentCapacityCommand,
+} from '../contracts/capacity-control-plane-types.js';
+import { canonicalJson } from '../contracts/hash.js';
 import { resolveDeterministicRoute } from '../creation/routing-resolver.js';
 import { WorkflowProjectionStore } from '../projection/workflow-projection.js';
-import type { WorkflowRuntimeStore } from '../store/runtime-store/index.js';
+import type {
+  WorkflowRuntimeSqlValue,
+  WorkflowRuntimeStore,
+  WorkflowRuntimeWriteTransaction,
+} from '../store/runtime-store/index.js';
+import { loadFrozenWorkflowRuntimeStoreInputs } from '../store/runtime-store/profile.js';
 import {
   buildG9DeploymentJournalEvent,
   buildG9ProductionActivationRequest,
@@ -21,10 +40,91 @@ import {
 import {
   buildG9RuntimeCenterProjectionGenerationDocument,
   createG9ProductionActivationParticipants,
+  expectedFreshCapacityGenesisIdentity,
 } from './production-activation-runtime.js';
+import { calculateExistingCapacityDependencyObjectsHash } from './capacity-genesis-bootstrap-runtime.js';
 
 function hash(character: string): Sha256Hash {
   return `sha256:${character.repeat(64)}`;
+}
+
+function emptyProjectionBinding() {
+  const generations = ['workflows', 'agent_executions', 'pending', 'trace'].map(
+    (view) => ({
+      view,
+      generation_id: `generation:${view}:0:${hash('a')}`,
+      source_head_seq: 0,
+      rows_hash: hash('a'),
+    }),
+  ) as Parameters<typeof calculateG9ProjectionGenerationAggregateHash>[0];
+  return {
+    projection_version: 'g7.1' as const,
+    generations,
+    generation_aggregate_hash:
+      calculateG9ProjectionGenerationAggregateHash(generations),
+  };
+}
+
+function writeBootstrapReleaseAssets(releaseRoot: string): void {
+  for (const [relative, value] of capacityGenesisBootstrapGeneratedOutputs()) {
+    const output = path.join(
+      releaseRoot,
+      'dist/workflow-runtime/contracts',
+      relative,
+    );
+    fs.mkdirSync(path.dirname(output), { recursive: true });
+    fs.writeFileSync(output, `${JSON.stringify(value, null, 2)}\n`);
+  }
+}
+
+function openIsolatedSchema11Store(databasePath: string): {
+  readonly store: WorkflowRuntimeStore;
+  close(): void;
+} {
+  const database = new Database(databasePath);
+  database.pragma('foreign_keys = ON');
+  database.exec(loadFrozenWorkflowRuntimeStoreInputs().migrationSql);
+  const queryAll = <T extends Record<string, unknown>>(
+    sql: string,
+    parameters: readonly WorkflowRuntimeSqlValue[],
+  ): T[] => database.prepare(sql).all(...parameters) as T[];
+  const queryOne = <T extends Record<string, unknown>>(
+    sql: string,
+    parameters: readonly WorkflowRuntimeSqlValue[],
+  ): T | undefined => database.prepare(sql).get(...parameters) as T | undefined;
+  const store = {
+    queryAll,
+    queryOne,
+    withImmediateTransaction: <T>(
+      callback: (transaction: WorkflowRuntimeWriteTransaction) => T,
+    ): T => {
+      database.exec('BEGIN IMMEDIATE');
+      try {
+        const transaction = {
+          transactionKind: 'immediate' as const,
+          execute: (
+            sql: string,
+            parameters: readonly WorkflowRuntimeSqlValue[],
+          ) => {
+            const result = database.prepare(sql).run(...parameters);
+            return {
+              changes: result.changes,
+              lastInsertRowid: result.lastInsertRowid,
+            };
+          },
+          queryAll,
+          queryOne,
+        };
+        const result = callback(transaction);
+        database.exec('COMMIT');
+        return result;
+      } catch (error) {
+        if (database.inTransaction) database.exec('ROLLBACK');
+        throw error;
+      }
+    },
+  } as unknown as WorkflowRuntimeStore;
+  return { store, close: () => database.close() };
 }
 
 describe('G9 pre-activation production authority', () => {
@@ -126,6 +226,20 @@ describe('G9 pre-activation production authority', () => {
       const baseline = JSON.parse(fs.readFileSync(baselineFile, 'utf8')) as {
         config_hash: Sha256Hash;
       };
+      writeBootstrapReleaseAssets(releaseRoot);
+      const bootstrap = buildG9CapacityGenesisBootstrapArtifacts().bundle;
+      const auditAuthority = buildG9ActivationAuditAuthority({
+        activation_id: 'activation-capacity-baseline',
+        requested_at_ms: 1000,
+        target_release_artifact_hash: hash('2'),
+        previous_deployment_binding_hash: null,
+        capacity_mode: 'fresh_genesis',
+      });
+      const evidence = buildG9CapacityGenesisEvidence({
+        core_release_artifact_hash: hash('2'),
+        baseline_config_hash: baseline.config_hash,
+        activation_audit_authority_hash: auditAuthority.authority_hash,
+      });
       const generations = [
         'workflows',
         'agent_executions',
@@ -149,6 +263,7 @@ describe('G9 pre-activation production authority', () => {
           release_artifact_hash: hash('2'),
           core_build_hash: hash('3'),
           core_binding_hash: hash('4'),
+          capacity_genesis_bootstrap_bundle_hash: bootstrap.bundle_hash,
           applicable_g8_evidence: {
             status: 'fresh_independent_boundary_pass',
             release_artifact_hash: hash('2'),
@@ -190,15 +305,10 @@ describe('G9 pre-activation production authority', () => {
             genesis_command_id: 'capacity-command-1',
             genesis_idempotency_key: 'capacity-genesis-1',
             genesis_auth_session_ref: 'auth:capacity-genesis-1',
-            genesis_evidence_manifest_id: 'value:capacity-evidence-1',
-            genesis_evidence_manifest_hash: hash('3'),
-            genesis_result_schema_row_id: 'resource:capacity-result-schema-1',
-            genesis_result_schema_resource_type: 'schema',
-            genesis_result_schema_ref: {
-              id: 'icarus.capacity-admin-result',
-              version: '1.0.0',
-            },
-            genesis_result_schema_hash: hash('4'),
+            genesis_activation_audit_authority_hash:
+              auditAuthority.authority_hash,
+            genesis_evidence_value_id: evidence.value_id,
+            genesis_evidence_value_hash: evidence.value_hash,
           },
         },
       });
@@ -213,6 +323,273 @@ describe('G9 pre-activation production authority', () => {
       expect(() => capacity.prepare(request.deployment_binding)).not.toThrow();
     } finally {
       fs.rmSync(runtimeHome, { recursive: true, force: true });
+    }
+  });
+
+  it('installs the release-owned bootstrap before fresh CAP0-CAP4 and preserves existing authority', () => {
+    const root = fs.mkdtempSync('/private/tmp/icarus-g9-bootstrap-positive-');
+    const runtimeHome = path.join(root, 'runtime-home');
+    const releaseRoot = path.join(runtimeHome, 'synthetic-release');
+    const databasePath = path.join(root, 'workflow-runtime.db');
+    const baselineFile = path.join(
+      releaseRoot,
+      'config/workflow-runtime-capacity.json',
+    );
+    let isolated:
+      | { readonly store: WorkflowRuntimeStore; close(): void }
+      | undefined;
+    try {
+      fs.mkdirSync(path.dirname(baselineFile), { recursive: true });
+      fs.copyFileSync(
+        path.resolve(
+          import.meta.dirname,
+          '../../../config/workflow-runtime-capacity.json',
+        ),
+        baselineFile,
+      );
+      writeBootstrapReleaseAssets(releaseRoot);
+      fs.mkdirSync(runtimeHome, { recursive: true });
+      isolated = openIsolatedSchema11Store(databasePath);
+      const store = isolated.store;
+
+      const requestedAtMs = 2000;
+      const releaseHash = hash('2');
+      const baseline = JSON.parse(
+        fs.readFileSync(baselineFile, 'utf8'),
+      ) as DeploymentRuntimeCapacitySnapshot;
+      const bootstrap = buildG9CapacityGenesisBootstrapArtifacts().bundle;
+      const auditAuthority = buildG9ActivationAuditAuthority({
+        activation_id: 'activation-bootstrap-fresh',
+        requested_at_ms: requestedAtMs,
+        target_release_artifact_hash: releaseHash,
+        previous_deployment_binding_hash: null,
+        capacity_mode: 'fresh_genesis',
+      });
+      const evidence = buildG9CapacityGenesisEvidence({
+        core_release_artifact_hash: releaseHash,
+        baseline_config_hash: baseline.config_hash,
+        activation_audit_authority_hash: auditAuthority.authority_hash,
+      });
+      const command: InitializeDeploymentCapacityCommand = {
+        command_type: 'initialize_deployment_capacity',
+        command_id: 'capacity-command-bootstrap-fresh',
+        idempotency_key: 'capacity-bootstrap-fresh',
+        proposed_capacity: baseline,
+        reason_code: 'initial_provisioning',
+        core_release_hash: releaseHash,
+        evidence_refs: [
+          `core-release:${releaseHash}`,
+          `capacity-baseline:${baseline.config_hash}`,
+          `capacity-genesis-evidence:${evidence.value_hash}`,
+        ],
+      };
+      const expected = expectedFreshCapacityGenesisIdentity({
+        commandId: command.command_id,
+        requestHash: calculateCapacityAdminRequestHash(command),
+        baseline,
+        requestedAtMs,
+      });
+      const projection = emptyProjectionBinding();
+      const common = {
+        deployment_profile: 'local_single_user' as const,
+        runtime_surface: 'node_service' as const,
+        release_manifest_hash: hash('1'),
+        release_artifact_hash: releaseHash,
+        core_build_hash: hash('3'),
+        core_binding_hash: hash('4'),
+        capacity_genesis_bootstrap_bundle_hash: bootstrap.bundle_hash,
+        applicable_g8_evidence: {
+          status: 'fresh_independent_boundary_pass' as const,
+          release_artifact_hash: releaseHash,
+          startup_report_hash: hash('5'),
+          readiness_report_hash: hash('6'),
+          startup_harness_hash: hash('7'),
+          readiness_harness_hash: hash('8'),
+          sqlite_profile_candidate_hash: hash('9'),
+          node_executable_hash: hash('a'),
+          native_module_hash: hash('b'),
+        },
+        static_authority: {
+          source_core_build_hash: hash('c'),
+          absence_baseline_hash: hash('d'),
+          product_surface_manifest_hash: hash('e'),
+          migration_candidate_boundary_hash: hash('f'),
+        },
+        feature_registry_pointer: {
+          state: 'empty' as const,
+          active_release_count: 0,
+          pointers: [],
+          pointer_aggregate_hash: calculateG9FeaturePointerAggregateHash([]),
+        },
+        runtime_center_projection: projection,
+      };
+      const fresh = buildG9ProductionActivationRequest({
+        activation_id: 'activation-bootstrap-fresh',
+        operation_key: 'deployment-bootstrap-fresh',
+        requested_at_ms: requestedAtMs,
+        previous_deployment_binding_hash: null,
+        deployment_binding: {
+          ...common,
+          capacity_authority: {
+            mode: 'fresh_genesis',
+            expected_head_state: 'absent',
+            baseline_config_hash: baseline.config_hash,
+            expected_capacity_revision: 1,
+            expected_change_id: expected.changeId,
+            expected_publication_hash: expected.publicationHash,
+            expected_audit_head_hash: expected.auditHeadHash,
+            genesis_core_release_hash: releaseHash,
+            genesis_command_id: command.command_id,
+            genesis_idempotency_key: command.idempotency_key,
+            genesis_auth_session_ref: 'auth:capacity-bootstrap-fresh',
+            genesis_activation_audit_authority_hash:
+              auditAuthority.authority_hash,
+            genesis_evidence_value_id: evidence.value_id,
+            genesis_evidence_value_hash: evidence.value_hash,
+          },
+        },
+      });
+      const capacityFile = path.join(
+        runtimeHome,
+        'data',
+        'workflow-runtime',
+        'workflow-runtime-capacity.json',
+      );
+      const freshParticipant = createG9ProductionActivationParticipants({
+        runtimeHome,
+        releaseRoot,
+        store,
+        request: fresh,
+      }).find((participant) => participant.name === 'capacity')!;
+      freshParticipant.prepare(fresh.deployment_binding);
+      freshParticipant.rollForward(fresh.deployment_binding);
+
+      expect(
+        store.queryOne<{ revision: number }>(
+          'SELECT current_capacity_revision AS revision FROM runtime_capacity_head WHERE singleton_key = 1',
+          [],
+        ),
+      ).toEqual({ revision: 1 });
+      expect(
+        store.queryOne<{ count: number }>(
+          "SELECT COUNT(*) AS count FROM workflow_registry_resources WHERE publication_state = 'published' AND owner_core_ref = 'icarus.core@1.2.14-g9.1'",
+          [],
+        ),
+      ).toEqual({ count: 3 });
+      expect(
+        store.queryOne<{ content_hash: Sha256Hash }>(
+          'SELECT content_hash FROM workflow_values WHERE id = ?',
+          [evidence.value_id],
+        ),
+      ).toEqual({ content_hash: evidence.value_hash });
+      expect(fs.readFileSync(capacityFile, 'utf8')).toBe(
+        `${canonicalJson(expected.publication as unknown as JsonValue)}\n`,
+      );
+
+      const dependencyHash = calculateExistingCapacityDependencyObjectsHash(
+        store,
+        expected.changeId,
+      );
+      const existing = buildG9ProductionActivationRequest({
+        activation_id: 'activation-bootstrap-existing',
+        operation_key: 'deployment-bootstrap-existing',
+        requested_at_ms: 3000,
+        previous_deployment_binding_hash: fresh.deployment_binding.binding_hash,
+        deployment_binding: {
+          ...common,
+          capacity_authority: {
+            mode: 'existing_preserved',
+            capacity_revision: 1,
+            change_id: expected.changeId,
+            config_hash: baseline.config_hash,
+            publication_hash: expected.publicationHash,
+            publication_file_raw_hash: hash('0'),
+            audit_head_hash: expected.auditHeadHash,
+            dependency_objects_hash: dependencyHash,
+          },
+        },
+      });
+      const existingCapacity = existing.deployment_binding.capacity_authority;
+      if (existingCapacity.mode !== 'existing_preserved')
+        throw new Error('existing Capacity binding expected');
+      const rawHash = `sha256:${crypto
+        .createHash('sha256')
+        .update(fs.readFileSync(capacityFile))
+        .digest('hex')}` as Sha256Hash;
+      const exactExisting = buildG9ProductionActivationRequest({
+        ...{
+          activation_id: 'activation-bootstrap-existing',
+          operation_key: 'deployment-bootstrap-existing',
+          requested_at_ms: 3000,
+          previous_deployment_binding_hash:
+            fresh.deployment_binding.binding_hash,
+        },
+        deployment_binding: {
+          ...common,
+          capacity_authority: {
+            ...existingCapacity,
+            publication_file_raw_hash: rawHash,
+          },
+        },
+      });
+      const before = canonicalJson({
+        head: store.queryAll('SELECT * FROM runtime_capacity_head', []),
+        commands: store.queryAll(
+          'SELECT * FROM runtime_capacity_admin_commands',
+          [],
+        ),
+        events: store.queryAll(
+          'SELECT * FROM runtime_capacity_change_events ORDER BY event_seq',
+          [],
+        ),
+        resources: store.queryAll(
+          'SELECT * FROM workflow_registry_resources ORDER BY id',
+          [],
+        ),
+        values: store.queryAll('SELECT * FROM workflow_values ORDER BY id', []),
+        dependencies: store.queryAll(
+          'SELECT * FROM workflow_registry_resource_dependencies ORDER BY resource_id, dependency_resource_id',
+          [],
+        ),
+      } as unknown as JsonValue);
+      const beforeFile = fs.readFileSync(capacityFile);
+      const existingParticipant = createG9ProductionActivationParticipants({
+        runtimeHome,
+        releaseRoot,
+        store,
+        request: exactExisting,
+      }).find((participant) => participant.name === 'capacity')!;
+      existingParticipant.prepare(exactExisting.deployment_binding);
+      existingParticipant.rollForward(exactExisting.deployment_binding);
+      expect(fs.readFileSync(capacityFile)).toEqual(beforeFile);
+      expect(
+        canonicalJson({
+          head: store.queryAll('SELECT * FROM runtime_capacity_head', []),
+          commands: store.queryAll(
+            'SELECT * FROM runtime_capacity_admin_commands',
+            [],
+          ),
+          events: store.queryAll(
+            'SELECT * FROM runtime_capacity_change_events ORDER BY event_seq',
+            [],
+          ),
+          resources: store.queryAll(
+            'SELECT * FROM workflow_registry_resources ORDER BY id',
+            [],
+          ),
+          values: store.queryAll(
+            'SELECT * FROM workflow_values ORDER BY id',
+            [],
+          ),
+          dependencies: store.queryAll(
+            'SELECT * FROM workflow_registry_resource_dependencies ORDER BY resource_id, dependency_resource_id',
+            [],
+          ),
+        } as unknown as JsonValue),
+      ).toBe(before);
+    } finally {
+      isolated?.close();
+      fs.rmSync(root, { recursive: true, force: true });
     }
   });
 
@@ -255,6 +632,8 @@ describe('G9 pre-activation production authority', () => {
         release_artifact_hash: hash('2'),
         core_build_hash: hash('3'),
         core_binding_hash: hash('4'),
+        capacity_genesis_bootstrap_bundle_hash:
+          buildG9CapacityGenesisBootstrapArtifacts().bundle.bundle_hash,
         applicable_g8_evidence: {
           status: 'fresh_independent_boundary_pass',
           release_artifact_hash: hash('2'),
@@ -292,6 +671,7 @@ describe('G9 pre-activation production authority', () => {
           publication_hash: hash('2'),
           publication_file_raw_hash: hash('3'),
           audit_head_hash: hash('4'),
+          dependency_objects_hash: hash('5'),
         },
       },
     });

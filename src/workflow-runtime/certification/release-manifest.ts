@@ -10,6 +10,11 @@ import type {
 } from '../contracts/g8-validation-types.js';
 import { G9_HISTORICAL_ACCEPTED_G8 } from '../contracts/g9-production-activation-contract.js';
 import {
+  buildG9CapacityGenesisBootstrapArtifacts,
+  readInstalledG9CapacityGenesisBootstrapBundle,
+} from '../contracts/g9-capacity-genesis-bootstrap.js';
+import {
+  G9_CAPACITY_GENESIS_BOOTSTRAP_BUNDLE_RELEASE_PATH,
   G9_PRODUCTION_ACTIVATION_ENTRY,
   G9_PRODUCTION_RELEASE_MANIFEST_FILENAME,
   G9_PRODUCTION_RELEASE_MANIFEST_FORMAT,
@@ -68,6 +73,8 @@ const PRODUCTION_RELEASE_MANIFEST_KEYS = [
   'activation_status',
   'arch',
   'build_kind',
+  'capacity_genesis_bootstrap_bundle_hash',
+  'capacity_genesis_bootstrap_bundle_relative_path',
   'core_build_hash',
   'core_entry_relative_path',
   'core_entry_sha256',
@@ -461,6 +468,9 @@ export function parseG9ProductionCoreReleaseManifest(
     core_entry_sha256: parseSha256Hash(value.core_entry_sha256),
     validation_entry_sha256: parseSha256Hash(value.validation_entry_sha256),
     activation_entry_sha256: parseSha256Hash(value.activation_entry_sha256),
+    capacity_genesis_bootstrap_bundle_hash: parseSha256Hash(
+      value.capacity_genesis_bootstrap_bundle_hash,
+    ),
     core_build_hash: parseSha256Hash(value.core_build_hash),
     inventory_hash: parseSha256Hash(value.inventory_hash),
     release_artifact_hash: parseSha256Hash(value.release_artifact_hash),
@@ -481,7 +491,9 @@ export function parseG9ProductionCoreReleaseManifest(
     value.database_schema_version !== 11 ||
     value.core_entry_relative_path !== CORE_ENTRY ||
     value.validation_entry_relative_path !== VALIDATION_ENTRY ||
-    value.activation_entry_relative_path !== G9_PRODUCTION_ACTIVATION_ENTRY
+    value.activation_entry_relative_path !== G9_PRODUCTION_ACTIVATION_ENTRY ||
+    value.capacity_genesis_bootstrap_bundle_relative_path !==
+      G9_CAPACITY_GENESIS_BOOTSTRAP_BUNDLE_RELEASE_PATH
   ) {
     throw new Error('G9 Production Core Release fixed identity drifted');
   }
@@ -517,6 +529,10 @@ export function parseG9ProductionCoreReleaseManifest(
     validation_entry_sha256: hashes.validation_entry_sha256,
     activation_entry_relative_path: G9_PRODUCTION_ACTIVATION_ENTRY,
     activation_entry_sha256: hashes.activation_entry_sha256,
+    capacity_genesis_bootstrap_bundle_relative_path:
+      G9_CAPACITY_GENESIS_BOOTSTRAP_BUNDLE_RELEASE_PATH,
+    capacity_genesis_bootstrap_bundle_hash:
+      hashes.capacity_genesis_bootstrap_bundle_hash,
     core_build_hash: hashes.core_build_hash,
     inventory: inventoryEntries,
     inventory_hash: hashes.inventory_hash,
@@ -856,6 +872,11 @@ export function installG9ProductionCandidateRelease(
     );
     const distribution = checkedInDistribution(projectRoot);
     const authority = checkedInG9StaticReleaseAuthority(projectRoot);
+    const capacityBootstrap = buildG9CapacityGenesisBootstrapArtifacts().bundle;
+    readInstalledG9CapacityGenesisBootstrapBundle(
+      stageRoot,
+      capacityBootstrap.bundle_hash,
+    );
     const payload = {
       format: G9_PRODUCTION_RELEASE_MANIFEST_FORMAT,
       ref: G9_PRODUCTION_RELEASE_REF,
@@ -894,6 +915,9 @@ export function installG9ProductionCandidateRelease(
       activation_entry_sha256: rawSha256(
         path.join(stageRoot, G9_PRODUCTION_ACTIVATION_ENTRY),
       ),
+      capacity_genesis_bootstrap_bundle_relative_path:
+        G9_CAPACITY_GENESIS_BOOTSTRAP_BUNDLE_RELEASE_PATH,
+      capacity_genesis_bootstrap_bundle_hash: capacityBootstrap.bundle_hash,
       core_build_hash: coreBuildHash,
       inventory: entries,
       inventory_hash: inventoryHash,
@@ -1073,6 +1097,10 @@ export function checkInstalledG9ProductionCandidateRelease(
       parsed.activation_entry_sha256
   )
     throw new Error('Installed G9 Production Release inventory drifted');
+  readInstalledG9CapacityGenesisBootstrapBundle(
+    releaseRoot,
+    parsed.capacity_genesis_bootstrap_bundle_hash,
+  );
 }
 
 export function readInstalledG9ProductionCandidateRelease(

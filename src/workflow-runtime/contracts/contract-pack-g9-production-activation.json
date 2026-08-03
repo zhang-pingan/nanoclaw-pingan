@@ -9,21 +9,22 @@
   "payload": {
     "gate": "G9",
     "status": "PRE_ACTIVATION_PRODUCTION_CANDIDATE_AUTHORITY",
-    "protocol_hash": "sha256:95a62dc34880faabfabb561ba95ab1cfa3776fa275c88b64ed97f66417d71e00",
+    "protocol_hash": "sha256:d0cafe1a900255100bef910dac176fecf5d173abfa79d15d3760e314d108e5d8",
     "schema_hashes": {
-      "release": "sha256:b093f95cacc1945e7314b06a240df1534ba35d7605cd2b9c460d5de395541c00",
+      "release": "sha256:98348aa126fb9dd5a23f37d389bdfe21f35a5e5503116d005a31385384787ec2",
       "coreBinding": "sha256:66b2ded83a3c5435428588cdfcc3611a022762467f4ddb571989a5f8c2a93431",
-      "deploymentBinding": "sha256:a2e35215f0f1f9de5f8e22216816c22b7c50218d7167beaca68c976df74569a7",
+      "deploymentBinding": "sha256:c17d12c91621bcdea8b2d45506368ca3e051ca0c299f2c72352e3368da3cf31c",
       "journal": "sha256:98fb2f4e71c5ff490b5ed9c616fee3edfa23ba058e0f5ccde009ba0936dde8a0",
-      "audit": "sha256:37db7e563d805cdd0eab45896eb0ba418a059669b39d8722cf1a321f1f22870b",
-      "request": "sha256:cebd8e275a9b20ebc8f8f1b39e470abfd05e3ae0068b6197ca6c476450bbdacb"
+      "audit": "sha256:26ae95d394d7e66f926afb67a4860c9b56f82ba45da24d7f0b6ae8b502138ba1",
+      "request": "sha256:f0cc3172cea978c3bb976b605b4ffed5357ec77b30be0b964ac2520c633c2289"
     },
     "production_release_manifest_format": "icarus.core-production-release-manifest/1",
     "production_activation_entry": "dist/workflow-runtime/registry/production-activation-entry.js",
+    "capacity_genesis_bootstrap_bundle_hash": "sha256:dec8fc5e9ebeec0b8d6033728d5131adb2009c32c48556242c8ac8fbb4b2fb33",
     "historical_g8_release_artifact_hash": "sha256:8234f51bc669f5c5119e6b3fee80565827b7af061b9013a59e513c90b09f9243",
     "database_schema_hash": "sha256:ad998b2d0bb5e5f158b0be6d13db79cb6a0c0650d5064b267262551af266189c",
     "activation_execution_authorized": false,
     "next_required_gate": "fresh_independent_full_g8_boundary_revalidation"
   },
-  "hash": "sha256:52a58a2ace1695ed050b4dc63e2e11ffd5ad47c4d0d961c18ba63642669b5cd4"
+  "hash": "sha256:7f7fdae3f20a35df61ce28534227c81fc1b2001d48105098c8b0e05ba6653661"
 }

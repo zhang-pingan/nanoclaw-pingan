@@ -36,6 +36,38 @@
     "postcommit_recovery": "idempotent_roll_forward_only",
     "postcommit_commit_evidence_recovery": "append_missing_active_deployment_committed_before_roll_forward",
     "fresh_capacity_phase": "postcommit_roll_forward",
+    "capacity_genesis_bootstrap_bundle_hash": "sha256:dec8fc5e9ebeec0b8d6033728d5131adb2009c32c48556242c8ac8fbb4b2fb33",
+    "capacity_genesis_bootstrap_bundle_path": "dist/workflow-runtime/contracts/production-activation/capacity-genesis-bootstrap/capacity-genesis-bootstrap-bundle@1.json",
+    "capacity_genesis_bootstrap_identity_direction": "static_schema_bytes_to_registry_members_to_bundle_to_release_to_audit_authority_to_evidence_value_to_deployment_binding",
+    "capacity_genesis_bootstrap_install_order": [
+      "bootstrap_meta_schema_value",
+      "bootstrap_meta_schema_resource",
+      "capacity_result_schema_value",
+      "capacity_result_schema_resource",
+      "genesis_evidence_schema_value",
+      "genesis_evidence_schema_resource",
+      "exact_dependency_rows"
+    ],
+    "capacity_genesis_evidence_contract": {
+      "format": "icarus.capacity-genesis-evidence-contract/1",
+      "schema_resource_id": "registry-resource:schema:icarus.capacity-genesis-evidence@1.0.0",
+      "schema_ref": {
+        "id": "icarus.capacity-genesis-evidence",
+        "version": "1.0.0"
+      },
+      "schema_hash": "sha256:f97cbaafe3564c8c3750296e910fae459f2000fb7a022eb9386732c324082c25",
+      "content_hash_domain": "icarus:capacity-genesis-evidence:1\n",
+      "value_id_prefix": "capacity-genesis-evidence-value:",
+      "exact_inputs": [
+        "core_release_artifact_hash",
+        "baseline_config_hash",
+        "activation_audit_authority_hash",
+        "capacity_revision",
+        "purpose"
+      ],
+      "capacity_revision": 1,
+      "purpose": "initial_provisioning"
+    },
     "fresh_capacity_terminal_recovery": "read_only_exact_head_audit_publication_file_and_result_convergence",
     "release_build_inventory": "clean_compiler_owned_dist_before_tsc_and_content_inventory",
     "existing_capacity_policy": "verify_twice_and_preserve_exactly_without_write",
@@ -51,15 +83,15 @@
     "activation_execution_status": "forbidden_before_fresh_independent_g8_pass",
     "extended_certification_plan": "excluded",
     "security_sensitive_validation": "STATIC_SOURCE_DIFF_EXISTING_TESTS_AND_NORMAL_POSITIVE_ONLY",
-    "source_tree_hash": "sha256:afc101634581c6446240d22e4b71d7656f3510daca0d24bc27901561e0857e00",
+    "source_tree_hash": "sha256:e4f683caa0b7fb861f1252ed800de368f0aced8640af289d64edbb563fe5c2ca",
     "schema_hashes": {
-      "release": "sha256:b093f95cacc1945e7314b06a240df1534ba35d7605cd2b9c460d5de395541c00",
+      "release": "sha256:98348aa126fb9dd5a23f37d389bdfe21f35a5e5503116d005a31385384787ec2",
       "coreBinding": "sha256:66b2ded83a3c5435428588cdfcc3611a022762467f4ddb571989a5f8c2a93431",
-      "deploymentBinding": "sha256:a2e35215f0f1f9de5f8e22216816c22b7c50218d7167beaca68c976df74569a7",
+      "deploymentBinding": "sha256:c17d12c91621bcdea8b2d45506368ca3e051ca0c299f2c72352e3368da3cf31c",
       "journal": "sha256:98fb2f4e71c5ff490b5ed9c616fee3edfa23ba058e0f5ccde009ba0936dde8a0",
-      "audit": "sha256:37db7e563d805cdd0eab45896eb0ba418a059669b39d8722cf1a321f1f22870b",
-      "request": "sha256:cebd8e275a9b20ebc8f8f1b39e470abfd05e3ae0068b6197ca6c476450bbdacb"
+      "audit": "sha256:26ae95d394d7e66f926afb67a4860c9b56f82ba45da24d7f0b6ae8b502138ba1",
+      "request": "sha256:f0cc3172cea978c3bb976b605b4ffed5357ec77b30be0b964ac2520c633c2289"
     }
   },
-  "hash": "sha256:95a62dc34880faabfabb561ba95ab1cfa3776fa275c88b64ed97f66417d71e00"
+  "hash": "sha256:d0cafe1a900255100bef910dac176fecf5d173abfa79d15d3760e314d108e5d8"
 }

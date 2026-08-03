@@ -1,11 +1,11 @@
 {
   "format": "icarus.core-runtime-launch-binding/3",
   "binding_kind": "content_addressed_production_release",
-  "core_release_relative_path": "core-releases/9d667a425812131eae065977c4da957f408193c4e3cb3b48df429f04c3c36567",
+  "core_release_relative_path": "core-releases/3de887f1f822976631960aec663042ddd00ee5edb5db1dd50dc09a8bbcaca279",
   "release_manifest_relative_path": "core-production-release-manifest.json",
-  "release_manifest_sha256": "sha256:80c1085c10882c39a65cbc3d46d3949d2cb5ff11b354b8dce0cb23476043032c",
-  "release_artifact_hash": "sha256:9d667a425812131eae065977c4da957f408193c4e3cb3b48df429f04c3c36567",
-  "core_build_hash": "sha256:d7db0a52c465a0bc3e1eb07f5c35b794f8187fe0e811efeb56fead66f46d49dc",
+  "release_manifest_sha256": "sha256:b26fb66d84afdea65f4926afa7fddc9c61c25d52158ae36137299ae26b96d6ea",
+  "release_artifact_hash": "sha256:3de887f1f822976631960aec663042ddd00ee5edb5db1dd50dc09a8bbcaca279",
+  "core_build_hash": "sha256:9b64c44d5491c214d8ad22080a72459d5babc9fa44f0cc4c1b3585c0cff07d57",
   "core_entry_relative_path": "dist/index.js",
   "core_entry_sha256": "sha256:626b57523d0c96d8c3e1d2608b36a5c144037ef2639b5bfafcb3d2932899eef3",
   "validation_entry_relative_path": "dist/workflow-runtime/certification/release-entry.js",
@@ -13,5 +13,5 @@
   "activation_entry_relative_path": "dist/workflow-runtime/registry/production-activation-entry.js",
   "activation_entry_sha256": "sha256:d7e9ef78935eec45d42855fc6e39142d9f133c364c0d85adb1ec568d6860ed2a",
   "managed_node_manifest_hash": "sha256:0824f5044057d6ff26dc45022b842342f148b2dda2f0dd0feb17dd0b045f6cad",
-  "binding_hash": "sha256:bbe9a7efad57833472deb265d3223a73dea20053490c1331de576df9456366af"
+  "binding_hash": "sha256:9a191dca528d4cefa6545ca2a1311429b76c68efcea3d7db85f31da65d364dd6"
 }

@@ -26,6 +26,7 @@ import {
   domainSeparatedSha256,
   parseSha256Hash,
 } from '../contracts/hash.js';
+import { buildG9ActivationAuditAuthority } from '../contracts/g9-capacity-genesis-bootstrap.js';
 import {
   G9_PRODUCTION_RELEASE_MANIFEST_FILENAME,
   type G9DeploymentActivationBinding,
@@ -50,6 +51,13 @@ import {
   calculateG9ProjectionGenerationAggregateHash,
   type G9ProductionActivationParticipant,
 } from './production-activation.js';
+import {
+  assertG9CapacityGenesisBootstrapAuthority,
+  calculateExistingCapacityDependencyObjectsHash,
+  installG9CapacityGenesisBootstrapAuthority,
+  prepareG9CapacityGenesisBootstrap,
+  type G9CapacityGenesisBootstrapPreparation,
+} from './capacity-genesis-bootstrap-runtime.js';
 
 const VIEWS = [
   'workflows',
@@ -204,7 +212,9 @@ function assertProductionReleaseAuthority(
     manifest.product_surface_coverage_manifest_hash !==
       binding.static_authority.product_surface_manifest_hash ||
     manifest.migration_candidate_boundary_manifest_hash !==
-      binding.static_authority.migration_candidate_boundary_hash
+      binding.static_authority.migration_candidate_boundary_hash ||
+    manifest.capacity_genesis_bootstrap_bundle_hash !==
+      binding.capacity_genesis_bootstrap_bundle_hash
   )
     throw new Error('production_release_activation_authority_drift');
 }
@@ -383,6 +393,10 @@ function assertExistingCapacity(
     head.current_config_hash !== expected.config_hash ||
     head.current_publication_hash !== expected.publication_hash ||
     capacityAuditHead(store) !== expected.audit_head_hash ||
+    calculateExistingCapacityDependencyObjectsHash(
+      store,
+      expected.change_id,
+    ) !== expected.dependency_objects_hash ||
     !lstatIfPresent(capacityFile)?.isFile() ||
     rawSha256(capacityFile) !== expected.publication_file_raw_hash
   )
@@ -406,6 +420,7 @@ function freshCapacityCommand(
     evidence_refs: [
       `core-release:${binding.release_artifact_hash}`,
       `capacity-baseline:${capacity.baseline_config_hash}`,
+      `capacity-genesis-evidence:${capacity.genesis_evidence_value_hash}`,
     ],
   };
 }
@@ -441,6 +456,7 @@ function freshCapacityTerminalIsExact(
   baseline: DeploymentRuntimeCapacitySnapshot,
   request: G9ProductionActivationRequest,
   requestHash: Sha256Hash,
+  bootstrap: G9CapacityGenesisBootstrapPreparation,
   expected: {
     readonly changeId: string;
     readonly publicationHash: Sha256Hash;
@@ -506,6 +522,7 @@ function freshCapacityTerminalIsExact(
     publication_hash: capacity.expected_publication_hash,
   } as const;
   const publicationBytes = `${canonicalJson(expected.publication as unknown as JsonValue)}\n`;
+  const resultSchema = bootstrap.bundle.members[1]!;
   if (
     !head ||
     head.pending_change_id !== null ||
@@ -523,18 +540,16 @@ function freshCapacityTerminalIsExact(
       request.deployment_binding.release_artifact_hash ||
     command.proposed_capacity_json !== canonicalJson(baseline) ||
     command.proposed_config_hash !== capacity.baseline_config_hash ||
-    command.evidence_manifest_value_id !==
-      capacity.genesis_evidence_manifest_id ||
-    command.evidence_manifest_hash !==
-      capacity.genesis_evidence_manifest_hash ||
+    command.evidence_manifest_value_id !== capacity.genesis_evidence_value_id ||
+    command.evidence_manifest_hash !== capacity.genesis_evidence_value_hash ||
     command.canonical_result_value_id !== expected.resultId ||
     command.canonical_result_hash !== expected.resultHash ||
     command.finalized_at_ms !== request.requested_at_ms + 103 ||
     !result ||
     result.inline_canonical_json !== canonicalJson(resultPayload) ||
     result.content_hash !== expected.resultHash ||
-    result.schema_resource_id !== capacity.genesis_result_schema_row_id ||
-    result.schema_resource_hash !== capacity.genesis_result_schema_hash ||
+    result.schema_resource_id !== resultSchema.resource_row_id ||
+    result.schema_resource_hash !== resultSchema.resource.content_hash ||
     result.provenance_ref !== 'icarus.workflow-capacity-admin/1' ||
     result.retention_class !== 'workflow_audit' ||
     result.payload_state !== 'live' ||
@@ -559,6 +574,29 @@ function applyFreshCapacity(
   const baseline = readCapacityBaseline(releaseRoot);
   if (baseline.config_hash !== capacity.baseline_config_hash)
     throw new Error('fresh_capacity_baseline_hash_drift');
+  const auditAuthority = buildG9ActivationAuditAuthority({
+    activation_id: request.audit.activation_id,
+    requested_at_ms: request.audit.requested_at_ms,
+    target_release_artifact_hash: request.audit.target_release_artifact_hash,
+    previous_deployment_binding_hash:
+      request.audit.previous_deployment_binding_hash,
+    capacity_mode: request.audit.capacity_mode,
+  });
+  const bootstrap = prepareG9CapacityGenesisBootstrap({
+    releaseRoot,
+    bundleHash: binding.capacity_genesis_bootstrap_bundle_hash,
+    releaseArtifactHash: binding.release_artifact_hash,
+    baselineConfigHash: capacity.baseline_config_hash,
+    auditAuthority,
+  });
+  if (
+    auditAuthority.authority_hash !== request.audit.authority_hash ||
+    auditAuthority.authority_hash !==
+      capacity.genesis_activation_audit_authority_hash ||
+    bootstrap.evidence.value_id !== capacity.genesis_evidence_value_id ||
+    bootstrap.evidence.value_hash !== capacity.genesis_evidence_value_hash
+  )
+    throw new Error('fresh_capacity_bootstrap_binding_drift');
   const command = freshCapacityCommand(binding, baseline);
   const requestHash = calculateCapacityAdminRequestHash(command);
   const expected = expectedFreshCapacityGenesisIdentity({
@@ -580,25 +618,34 @@ function applyFreshCapacity(
       baseline,
       request,
       requestHash,
+      bootstrap,
       expected,
     )
-  )
+  ) {
+    assertG9CapacityGenesisBootstrapAuthority(store, bootstrap);
     return;
+  }
+  installG9CapacityGenesisBootstrapAuthority(
+    store,
+    bootstrap,
+    request.requested_at_ms + 90,
+  );
+  const resultSchema = bootstrap.bundle.members[1]!;
   const prepared = prepareCapacityChangeCAP0CAP1(
     store,
     command,
     freshCapacityInvocation(request),
     {
       evidenceManifest: {
-        id: capacity.genesis_evidence_manifest_id,
-        hash: capacity.genesis_evidence_manifest_hash,
+        id: capacity.genesis_evidence_value_id,
+        hash: capacity.genesis_evidence_value_hash,
       },
       reasonText: null,
       resultSchema: {
-        rowId: capacity.genesis_result_schema_row_id,
-        resourceType: capacity.genesis_result_schema_resource_type,
-        ref: capacity.genesis_result_schema_ref,
-        hash: capacity.genesis_result_schema_hash,
+        rowId: resultSchema.resource_row_id,
+        resourceType: 'schema',
+        ref: resultSchema.resource.ref,
+        hash: resultSchema.resource.content_hash,
       },
     },
     request.requested_at_ms + 100,
@@ -628,10 +675,10 @@ function applyFreshCapacity(
     store,
     publisher,
     {
-      rowId: capacity.genesis_result_schema_row_id,
-      resourceType: capacity.genesis_result_schema_resource_type,
-      ref: capacity.genesis_result_schema_ref,
-      hash: capacity.genesis_result_schema_hash,
+      rowId: resultSchema.resource_row_id,
+      resourceType: 'schema',
+      ref: resultSchema.resource.ref,
+      hash: resultSchema.resource.content_hash,
     },
     request.requested_at_ms + 103,
   );
@@ -642,6 +689,7 @@ function applyFreshCapacity(
       baseline,
       request,
       requestHash,
+      bootstrap,
       expected,
     )
   )
@@ -801,6 +849,22 @@ export function createG9ProductionActivationParticipants(input: {
       name: 'capacity',
       prepare: () => {
         if (binding.capacity_authority.mode === 'fresh_genesis') {
+          const auditAuthority = buildG9ActivationAuditAuthority({
+            activation_id: input.request.audit.activation_id,
+            requested_at_ms: input.request.audit.requested_at_ms,
+            target_release_artifact_hash:
+              input.request.audit.target_release_artifact_hash,
+            previous_deployment_binding_hash:
+              input.request.audit.previous_deployment_binding_hash,
+            capacity_mode: input.request.audit.capacity_mode,
+          });
+          const bootstrap = prepareG9CapacityGenesisBootstrap({
+            releaseRoot,
+            bundleHash: binding.capacity_genesis_bootstrap_bundle_hash,
+            releaseArtifactHash: binding.release_artifact_hash,
+            baselineConfigHash: binding.capacity_authority.baseline_config_hash,
+            auditAuthority,
+          });
           if (
             capacityHead(input.store) !== undefined ||
             capacityAuditHead(input.store) !== null ||
@@ -809,6 +873,16 @@ export function createG9ProductionActivationParticipants(input: {
               binding.capacity_authority.baseline_config_hash
           )
             throw new Error('fresh_capacity_precondition_drift');
+          if (
+            auditAuthority.authority_hash !==
+              binding.capacity_authority
+                .genesis_activation_audit_authority_hash ||
+            bootstrap.evidence.value_id !==
+              binding.capacity_authority.genesis_evidence_value_id ||
+            bootstrap.evidence.value_hash !==
+              binding.capacity_authority.genesis_evidence_value_hash
+          )
+            throw new Error('fresh_capacity_bootstrap_binding_drift');
         } else assertExistingCapacity(input.store, capacityFile, binding);
       },
       rollback: () => undefined,

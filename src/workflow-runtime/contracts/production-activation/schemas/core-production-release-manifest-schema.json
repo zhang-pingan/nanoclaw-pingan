@@ -32,6 +32,8 @@
     "validation_entry_sha256",
     "activation_entry_relative_path",
     "activation_entry_sha256",
+    "capacity_genesis_bootstrap_bundle_relative_path",
+    "capacity_genesis_bootstrap_bundle_hash",
     "core_build_hash",
     "inventory",
     "inventory_hash",
@@ -118,6 +120,10 @@
       "type": "string",
       "pattern": "^sha256:[0-9a-f]{64}$"
     },
+    "capacity_genesis_bootstrap_bundle_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
     "core_build_hash": {
       "type": "string",
       "pattern": "^sha256:[0-9a-f]{64}$"
@@ -189,6 +195,9 @@
     },
     "activation_entry_relative_path": {
       "const": "dist/workflow-runtime/registry/production-activation-entry.js"
+    },
+    "capacity_genesis_bootstrap_bundle_relative_path": {
+      "const": "dist/workflow-runtime/contracts/production-activation/capacity-genesis-bootstrap/capacity-genesis-bootstrap-bundle@1.json"
     },
     "inventory": {
       "type": "array",

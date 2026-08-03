@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:icarus:capacity-genesis-evidence:1",
+  "title": "Icarus Capacity Genesis Evidence",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "core_release_artifact_hash",
+    "baseline_config_hash",
+    "activation_audit_authority_hash",
+    "capacity_revision",
+    "purpose"
+  ],
+  "properties": {
+    "format": {
+      "const": "icarus.capacity-genesis-evidence/1"
+    },
+    "core_release_artifact_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "baseline_config_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "activation_audit_authority_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "capacity_revision": {
+      "const": 1
+    },
+    "purpose": {
+      "const": "initial_provisioning"
+    }
+  }
+}

@@ -24,6 +24,8 @@ export const G9_PRODUCTION_CORE_BINDING_OUTPUT =
   'src/workflow-runtime/contracts/certification/production-candidate/generated/core-runtime-launch-binding-v3@1.json' as const;
 export const G9_PRODUCTION_ACTIVATION_ENTRY =
   'dist/workflow-runtime/registry/production-activation-entry.js' as const;
+export const G9_CAPACITY_GENESIS_BOOTSTRAP_BUNDLE_RELEASE_PATH =
+  'dist/workflow-runtime/contracts/production-activation/capacity-genesis-bootstrap/capacity-genesis-bootstrap-bundle@1.json' as const;
 
 export interface G9ProductionCoreReleaseManifest {
   readonly format: typeof G9_PRODUCTION_RELEASE_MANIFEST_FORMAT;
@@ -53,6 +55,8 @@ export interface G9ProductionCoreReleaseManifest {
   readonly validation_entry_sha256: Sha256Hash;
   readonly activation_entry_relative_path: typeof G9_PRODUCTION_ACTIVATION_ENTRY;
   readonly activation_entry_sha256: Sha256Hash;
+  readonly capacity_genesis_bootstrap_bundle_relative_path: typeof G9_CAPACITY_GENESIS_BOOTSTRAP_BUNDLE_RELEASE_PATH;
+  readonly capacity_genesis_bootstrap_bundle_hash: Sha256Hash;
   readonly core_build_hash: Sha256Hash;
   readonly inventory: readonly G8ReleaseInventoryEntry[];
   readonly inventory_hash: Sha256Hash;
@@ -135,12 +139,9 @@ export type G9CapacityAuthorityBinding =
       readonly genesis_command_id: string;
       readonly genesis_idempotency_key: string;
       readonly genesis_auth_session_ref: string;
-      readonly genesis_evidence_manifest_id: string;
-      readonly genesis_evidence_manifest_hash: Sha256Hash;
-      readonly genesis_result_schema_row_id: string;
-      readonly genesis_result_schema_resource_type: 'schema';
-      readonly genesis_result_schema_ref: VersionedRef;
-      readonly genesis_result_schema_hash: Sha256Hash;
+      readonly genesis_activation_audit_authority_hash: Sha256Hash;
+      readonly genesis_evidence_value_id: string;
+      readonly genesis_evidence_value_hash: Sha256Hash;
     }
   | {
       readonly mode: 'existing_preserved';
@@ -150,7 +151,34 @@ export type G9CapacityAuthorityBinding =
       readonly publication_hash: Sha256Hash;
       readonly publication_file_raw_hash: Sha256Hash;
       readonly audit_head_hash: Sha256Hash;
+      readonly dependency_objects_hash: Sha256Hash;
     };
+
+export interface G9ActivationAuditAuthority {
+  readonly format: 'icarus.production-activation-audit-authority/1';
+  readonly activation_id: string;
+  readonly actor_ref: 'system:production-activation';
+  readonly requested_at_ms: number;
+  readonly target_release_artifact_hash: Sha256Hash;
+  readonly previous_deployment_binding_hash: Sha256Hash | null;
+  readonly capacity_mode: G9CapacityAuthorityBinding['mode'];
+  readonly authority_hash: Sha256Hash;
+}
+
+export interface G9CapacityGenesisEvidence {
+  readonly format: 'icarus.capacity-genesis-evidence/1';
+  readonly core_release_artifact_hash: Sha256Hash;
+  readonly baseline_config_hash: Sha256Hash;
+  readonly activation_audit_authority_hash: Sha256Hash;
+  readonly capacity_revision: 1;
+  readonly purpose: 'initial_provisioning';
+}
+
+export interface G9CapacityGenesisEvidenceIdentity {
+  readonly value_id: string;
+  readonly value_hash: Sha256Hash;
+  readonly document: G9CapacityGenesisEvidence;
+}
 
 export interface G9ActivationAudit {
   readonly format: 'icarus.production-activation-audit/1';
@@ -161,6 +189,7 @@ export interface G9ActivationAudit {
   readonly target_release_artifact_hash: Sha256Hash;
   readonly previous_deployment_binding_hash: Sha256Hash | null;
   readonly capacity_mode: G9CapacityAuthorityBinding['mode'];
+  readonly authority_hash: Sha256Hash;
   readonly audit_hash: Sha256Hash;
 }
 
@@ -172,6 +201,7 @@ export interface G9DeploymentActivationBinding {
   readonly release_artifact_hash: Sha256Hash;
   readonly core_build_hash: Sha256Hash;
   readonly core_binding_hash: Sha256Hash;
+  readonly capacity_genesis_bootstrap_bundle_hash: Sha256Hash;
   readonly applicable_g8_evidence: G9ApplicableG8Evidence;
   readonly static_authority: G9StaticActivationAuthority;
   readonly feature_registry_pointer: G9FeatureRegistryPointerBinding;

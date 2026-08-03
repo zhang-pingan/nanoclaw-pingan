@@ -86,6 +86,7 @@ describe('frozen G2 Production Compiler publication', () => {
     expect(
       fs.readdirSync(path.join(compilerRoot, '../registry')).sort(),
     ).toEqual([
+      'capacity-genesis-bootstrap-runtime.ts',
       'production-activation-entry.ts',
       'production-activation-runtime.ts',
       'production-activation.test.ts',

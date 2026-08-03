@@ -7,6 +7,10 @@ import {
   parseSha256Hash,
 } from '../contracts/hash.js';
 import {
+  buildG9ActivationAuditAuthority,
+  buildG9CapacityGenesisEvidence,
+} from '../contracts/g9-capacity-genesis-bootstrap.js';
+import {
   G9_DEPLOYMENT_JOURNAL_PHASES,
   G9_DEPLOYMENT_PARTICIPANTS,
   type G9ActivationAudit,
@@ -140,6 +144,15 @@ export function calculateG9ProjectionGenerationAggregateHash(
 export function buildG9ActivationAudit(
   input: Omit<G9ActivationAudit, 'format' | 'actor_ref' | 'audit_hash'>,
 ): G9ActivationAudit {
+  const authority = buildG9ActivationAuditAuthority({
+    activation_id: input.activation_id,
+    requested_at_ms: input.requested_at_ms,
+    target_release_artifact_hash: input.target_release_artifact_hash,
+    previous_deployment_binding_hash: input.previous_deployment_binding_hash,
+    capacity_mode: input.capacity_mode,
+  });
+  if (authority.authority_hash !== input.authority_hash)
+    throw new Error('production_activation_audit_authority_invalid');
   const withoutHash = {
     format: 'icarus.production-activation-audit/1',
     activation_id: assertSafeIdentity(input.activation_id, 'activation_id'),
@@ -157,6 +170,7 @@ export function buildG9ActivationAudit(
         ? null
         : parseSha256Hash(input.previous_deployment_binding_hash),
     capacity_mode: input.capacity_mode,
+    authority_hash: authority.authority_hash,
   } as const;
   return {
     ...withoutHash,
@@ -180,6 +194,7 @@ export function parseG9ActivationAudit(value: unknown): G9ActivationAudit {
       'target_release_artifact_hash',
       'previous_deployment_binding_hash',
       'capacity_mode',
+      'authority_hash',
       'audit_hash',
     ],
     'production_activation_audit',
@@ -195,6 +210,13 @@ export function parseG9ActivationAudit(value: unknown): G9ActivationAudit {
     audit.format !== 'icarus.production-activation-audit/1' ||
     audit.actor_ref !== 'system:production-activation' ||
     !['fresh_genesis', 'existing_preserved'].includes(audit.capacity_mode) ||
+    buildG9ActivationAuditAuthority({
+      activation_id: audit.activation_id,
+      requested_at_ms: audit.requested_at_ms,
+      target_release_artifact_hash: audit.target_release_artifact_hash,
+      previous_deployment_binding_hash: audit.previous_deployment_binding_hash,
+      capacity_mode: audit.capacity_mode,
+    }).authority_hash !== parseSha256Hash(audit.authority_hash) ||
     parseSha256Hash(audit.audit_hash) !==
       objectHash('icarus:production-activation-audit:1\n', audit, 'audit_hash')
   )
@@ -307,6 +329,7 @@ export function parseG9DeploymentActivationBinding(
       'release_artifact_hash',
       'core_build_hash',
       'core_binding_hash',
+      'capacity_genesis_bootstrap_bundle_hash',
       'applicable_g8_evidence',
       'static_authority',
       'feature_registry_pointer',
@@ -350,6 +373,7 @@ export function parseG9DeploymentActivationBinding(
     binding.release_artifact_hash,
     binding.core_build_hash,
     binding.core_binding_hash,
+    binding.capacity_genesis_bootstrap_bundle_hash,
     binding.activation_audit_hash,
     binding.binding_hash,
   ])
@@ -395,12 +419,9 @@ export function parseG9DeploymentActivationBinding(
         'genesis_command_id',
         'genesis_idempotency_key',
         'genesis_auth_session_ref',
-        'genesis_evidence_manifest_id',
-        'genesis_evidence_manifest_hash',
-        'genesis_result_schema_row_id',
-        'genesis_result_schema_resource_type',
-        'genesis_result_schema_ref',
-        'genesis_result_schema_hash',
+        'genesis_activation_audit_authority_hash',
+        'genesis_evidence_value_id',
+        'genesis_evidence_value_hash',
       ],
       'fresh_capacity_authority',
     );
@@ -416,31 +437,15 @@ export function parseG9DeploymentActivationBinding(
       binding.capacity_authority.genesis_command_id,
       binding.capacity_authority.genesis_idempotency_key,
       binding.capacity_authority.genesis_auth_session_ref,
-      binding.capacity_authority.genesis_evidence_manifest_id,
-      binding.capacity_authority.genesis_result_schema_row_id,
+      binding.capacity_authority.genesis_evidence_value_id,
     ])
       assertSafeIdentity(identity, 'fresh_capacity_identity');
-    assertJsonObject(binding.capacity_authority.genesis_result_schema_ref);
-    exactKeys(
-      binding.capacity_authority.genesis_result_schema_ref,
-      ['id', 'version'],
-      'fresh_capacity_result_schema_ref',
-    );
-    if (
-      binding.capacity_authority.genesis_result_schema_resource_type !==
-        'schema' ||
-      typeof binding.capacity_authority.genesis_result_schema_ref.id !==
-        'string' ||
-      typeof binding.capacity_authority.genesis_result_schema_ref.version !==
-        'string'
-    )
-      throw new Error('fresh_capacity_result_schema_invalid');
     for (const hash of [
       binding.capacity_authority.baseline_config_hash,
       binding.capacity_authority.expected_publication_hash,
       binding.capacity_authority.expected_audit_head_hash,
-      binding.capacity_authority.genesis_evidence_manifest_hash,
-      binding.capacity_authority.genesis_result_schema_hash,
+      binding.capacity_authority.genesis_activation_audit_authority_hash,
+      binding.capacity_authority.genesis_evidence_value_hash,
     ])
       parseSha256Hash(hash);
   } else if (binding.capacity_authority.mode === 'existing_preserved') {
@@ -454,6 +459,7 @@ export function parseG9DeploymentActivationBinding(
         'publication_hash',
         'publication_file_raw_hash',
         'audit_head_hash',
+        'dependency_objects_hash',
       ],
       'existing_capacity_authority',
     );
@@ -472,6 +478,7 @@ export function parseG9DeploymentActivationBinding(
       binding.capacity_authority.publication_hash,
       binding.capacity_authority.publication_file_raw_hash,
       binding.capacity_authority.audit_head_hash,
+      binding.capacity_authority.dependency_objects_hash,
     ])
       parseSha256Hash(hash);
   } else throw new Error('capacity_authority_mode_invalid');
@@ -605,6 +612,22 @@ export function parseG9ProductionActivationRequest(
       deployment_binding_intent: deploymentBindingIntent,
     } as unknown as JsonValue,
   );
+  if (binding.capacity_authority.mode === 'fresh_genesis') {
+    const evidence = buildG9CapacityGenesisEvidence({
+      core_release_artifact_hash: binding.release_artifact_hash,
+      baseline_config_hash: binding.capacity_authority.baseline_config_hash,
+      activation_audit_authority_hash: audit.authority_hash,
+    });
+    if (
+      binding.capacity_authority.genesis_activation_audit_authority_hash !==
+        audit.authority_hash ||
+      binding.capacity_authority.genesis_evidence_value_id !==
+        evidence.value_id ||
+      binding.capacity_authority.genesis_evidence_value_hash !==
+        evidence.value_hash
+    )
+      throw new Error('fresh_capacity_evidence_identity_invalid');
+  }
   if (
     request.format !== 'icarus.production-activation-request/1' ||
     request.operation !== 'activate' ||
@@ -632,6 +655,30 @@ export function buildG9ProductionActivationRequest(input: {
     'format' | 'activation_audit_hash' | 'binding_hash'
   >;
 }): G9ProductionActivationRequest {
+  const auditAuthority = buildG9ActivationAuditAuthority({
+    activation_id: input.activation_id,
+    requested_at_ms: input.requested_at_ms,
+    target_release_artifact_hash:
+      input.deployment_binding.release_artifact_hash,
+    previous_deployment_binding_hash: input.previous_deployment_binding_hash,
+    capacity_mode: input.deployment_binding.capacity_authority.mode,
+  });
+  if (input.deployment_binding.capacity_authority.mode === 'fresh_genesis') {
+    const capacity = input.deployment_binding.capacity_authority;
+    const evidence = buildG9CapacityGenesisEvidence({
+      core_release_artifact_hash:
+        input.deployment_binding.release_artifact_hash,
+      baseline_config_hash: capacity.baseline_config_hash,
+      activation_audit_authority_hash: auditAuthority.authority_hash,
+    });
+    if (
+      capacity.genesis_activation_audit_authority_hash !==
+        auditAuthority.authority_hash ||
+      capacity.genesis_evidence_value_id !== evidence.value_id ||
+      capacity.genesis_evidence_value_hash !== evidence.value_hash
+    )
+      throw new Error('fresh_capacity_evidence_identity_invalid');
+  }
   const requestHash = domainSeparatedSha256(
     'icarus:production-activation-request:1\n',
     {
@@ -654,6 +701,7 @@ export function buildG9ProductionActivationRequest(input: {
       input.deployment_binding.release_artifact_hash,
     previous_deployment_binding_hash: input.previous_deployment_binding_hash,
     capacity_mode: input.deployment_binding.capacity_authority.mode,
+    authority_hash: auditAuthority.authority_hash,
   });
   const deploymentBinding = buildG9DeploymentActivationBinding({
     ...input.deployment_binding,

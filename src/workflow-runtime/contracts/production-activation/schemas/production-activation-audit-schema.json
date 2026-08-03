@@ -13,6 +13,7 @@
     "target_release_artifact_hash",
     "previous_deployment_binding_hash",
     "capacity_mode",
+    "authority_hash",
     "audit_hash"
   ],
   "properties": {
@@ -56,6 +57,10 @@
         "fresh_genesis",
         "existing_preserved"
       ]
+    },
+    "authority_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
     },
     "audit_hash": {
       "type": "string",

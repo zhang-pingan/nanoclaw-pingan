@@ -5,8 +5,15 @@ import path from 'node:path';
 import { Ajv2020, type AnySchema } from 'ajv/dist/2020.js';
 
 import { parseContractArtifactEnvelope } from './artifact.js';
+import {
+  assertG9CapacityGenesisBootstrapBundle,
+  buildG9CapacityGenesisBootstrapArtifacts,
+  capacityGenesisBootstrapGeneratedOutputs,
+  G9_CAPACITY_GENESIS_BOOTSTRAP_BUNDLE_PATH,
+} from './g9-capacity-genesis-bootstrap.js';
 import { domainSeparatedSha256 } from './hash.js';
 import {
+  G9_CAPACITY_GENESIS_BOOTSTRAP_BUNDLE_RELEASE_PATH,
   G9_DEPLOYMENT_JOURNAL_PHASES,
   G9_DEPLOYMENT_PARTICIPANTS,
   G9_PRODUCTION_ACTIVATION_ENTRY,
@@ -70,11 +77,13 @@ export const G9_IMPLEMENTATION_SOURCE_PATHS = [
   'src/workflow-runtime/compiler/artifacts.ts',
   'src/workflow-runtime/certification/release-manifest.ts',
   'src/workflow-runtime/certification/g9-production-release-cli.ts',
+  'src/workflow-runtime/contracts/g9-capacity-genesis-bootstrap.ts',
   'src/workflow-runtime/contracts/g9-production-activation-contract.ts',
   'src/workflow-runtime/contracts/g9-production-activation-types.ts',
   'src/workflow-runtime/creation/routing-resolver.ts',
   'src/workflow-runtime/projection/workflow-projection.ts',
   'src/workflow-runtime/registry/production-activation-entry.ts',
+  'src/workflow-runtime/registry/capacity-genesis-bootstrap-runtime.ts',
   'src/workflow-runtime/registry/production-activation-runtime.ts',
   'src/workflow-runtime/registry/production-activation.ts',
   'src/workflow-runtime/store/runtime-store/identity.ts',
@@ -160,6 +169,8 @@ function releaseManifestSchema(): JsonObject {
     'validation_entry_sha256',
     'activation_entry_relative_path',
     'activation_entry_sha256',
+    'capacity_genesis_bootstrap_bundle_relative_path',
+    'capacity_genesis_bootstrap_bundle_hash',
     'core_build_hash',
     'inventory',
     'inventory_hash',
@@ -216,6 +227,9 @@ function releaseManifestSchema(): JsonObject {
       },
       activation_entry_relative_path: {
         const: G9_PRODUCTION_ACTIVATION_ENTRY,
+      },
+      capacity_genesis_bootstrap_bundle_relative_path: {
+        const: G9_CAPACITY_GENESIS_BOOTSTRAP_BUNDLE_RELEASE_PATH,
       },
       inventory: {
         type: 'array',
@@ -339,12 +353,9 @@ function deploymentBindingSchema(): JsonObject {
       'genesis_command_id',
       'genesis_idempotency_key',
       'genesis_auth_session_ref',
-      'genesis_evidence_manifest_id',
-      'genesis_evidence_manifest_hash',
-      'genesis_result_schema_row_id',
-      'genesis_result_schema_resource_type',
-      'genesis_result_schema_ref',
-      'genesis_result_schema_hash',
+      'genesis_activation_audit_authority_hash',
+      'genesis_evidence_value_id',
+      'genesis_evidence_value_hash',
     ],
     properties: {
       mode: { const: 'fresh_genesis' },
@@ -366,20 +377,13 @@ function deploymentBindingSchema(): JsonObject {
         minLength: 1,
         maxLength: 255,
       },
-      genesis_evidence_manifest_id: {
+      genesis_activation_audit_authority_hash: hashSchema,
+      genesis_evidence_value_id: {
         type: 'string',
         minLength: 1,
         maxLength: 255,
       },
-      genesis_evidence_manifest_hash: hashSchema,
-      genesis_result_schema_row_id: {
-        type: 'string',
-        minLength: 1,
-        maxLength: 255,
-      },
-      genesis_result_schema_resource_type: { const: 'schema' },
-      genesis_result_schema_ref: versionedRefSchema,
-      genesis_result_schema_hash: hashSchema,
+      genesis_evidence_value_hash: hashSchema,
     },
   };
   const capacityExisting = {
@@ -393,6 +397,7 @@ function deploymentBindingSchema(): JsonObject {
       'publication_hash',
       'publication_file_raw_hash',
       'audit_head_hash',
+      'dependency_objects_hash',
     ],
     properties: {
       mode: { const: 'existing_preserved' },
@@ -402,6 +407,7 @@ function deploymentBindingSchema(): JsonObject {
       publication_hash: hashSchema,
       publication_file_raw_hash: hashSchema,
       audit_head_hash: hashSchema,
+      dependency_objects_hash: hashSchema,
     },
   };
   return {
@@ -418,6 +424,7 @@ function deploymentBindingSchema(): JsonObject {
       'release_artifact_hash',
       'core_build_hash',
       'core_binding_hash',
+      'capacity_genesis_bootstrap_bundle_hash',
       'applicable_g8_evidence',
       'static_authority',
       'feature_registry_pointer',
@@ -434,6 +441,7 @@ function deploymentBindingSchema(): JsonObject {
       release_artifact_hash: hashSchema,
       core_build_hash: hashSchema,
       core_binding_hash: hashSchema,
+      capacity_genesis_bootstrap_bundle_hash: hashSchema,
       applicable_g8_evidence: applicableG8Schema(),
       static_authority: {
         type: 'object',
@@ -577,6 +585,7 @@ function auditSchema(): JsonObject {
       'target_release_artifact_hash',
       'previous_deployment_binding_hash',
       'capacity_mode',
+      'authority_hash',
       'audit_hash',
     ],
     properties: {
@@ -590,6 +599,7 @@ function auditSchema(): JsonObject {
         anyOf: [hashSchema, { type: 'null' }],
       },
       capacity_mode: { enum: ['fresh_genesis', 'existing_preserved'] },
+      authority_hash: hashSchema,
       audit_hash: hashSchema,
     },
   } as JsonObject;
@@ -647,6 +657,7 @@ function buildArtifacts(): {
     audit: auditSchema(),
     request: requestSchema(),
   };
+  const capacityBootstrap = buildG9CapacityGenesisBootstrapArtifacts();
   const schemaHashes = Object.fromEntries(
     Object.entries(schemas).map(([name, schema]) => [
       name,
@@ -684,6 +695,16 @@ function buildArtifacts(): {
       postcommit_commit_evidence_recovery:
         'append_missing_active_deployment_committed_before_roll_forward',
       fresh_capacity_phase: 'postcommit_roll_forward',
+      capacity_genesis_bootstrap_bundle_hash:
+        capacityBootstrap.bundle.bundle_hash,
+      capacity_genesis_bootstrap_bundle_path:
+        G9_CAPACITY_GENESIS_BOOTSTRAP_BUNDLE_RELEASE_PATH,
+      capacity_genesis_bootstrap_identity_direction:
+        'static_schema_bytes_to_registry_members_to_bundle_to_release_to_audit_authority_to_evidence_value_to_deployment_binding',
+      capacity_genesis_bootstrap_install_order: capacityBootstrap.bundle
+        .install_order as unknown as JsonValue,
+      capacity_genesis_evidence_contract: capacityBootstrap.bundle
+        .evidence_contract as unknown as JsonValue,
       fresh_capacity_terminal_recovery:
         'read_only_exact_head_audit_publication_file_and_result_convergence',
       release_build_inventory:
@@ -717,6 +738,8 @@ function buildArtifacts(): {
       schema_hashes: schemaHashes,
       production_release_manifest_format: G9_PRODUCTION_RELEASE_MANIFEST_FORMAT,
       production_activation_entry: G9_PRODUCTION_ACTIVATION_ENTRY,
+      capacity_genesis_bootstrap_bundle_hash:
+        capacityBootstrap.bundle.bundle_hash,
       historical_g8_release_artifact_hash:
         G9_HISTORICAL_ACCEPTED_G8.release_artifact_hash,
       database_schema_hash: G9_DATABASE_SCHEMA_HASH,
@@ -737,6 +760,9 @@ function absolute(relative: string): string {
 function expectedOutputs(): Array<[string, JsonValue]> {
   const built = buildArtifacts();
   return [
+    ...capacityGenesisBootstrapGeneratedOutputs().map(
+      ([relative, value]) => [relative, value] as [string, JsonValue],
+    ),
     ...Object.entries(schemaPaths).map(
       ([name, output]) =>
         [output, built.schemas[name as keyof typeof built.schemas]] as [
@@ -752,7 +778,13 @@ function expectedOutputs(): Array<[string, JsonValue]> {
 function validateOutputs(outputs: Array<[string, JsonValue]>): void {
   const ajv = new Ajv2020({ strict: true, allErrors: true });
   for (const [relative, value] of outputs) {
-    if (relative.includes('/schemas/')) ajv.compile(value as AnySchema);
+    if (relative === G9_CAPACITY_GENESIS_BOOTSTRAP_BUNDLE_PATH)
+      assertG9CapacityGenesisBootstrapBundle(value);
+    else if (
+      relative.includes('/schemas/') ||
+      relative.includes('/capacity-genesis-bootstrap/')
+    )
+      ajv.compile(value as AnySchema);
     else parseContractArtifactEnvelope(value);
   }
 }

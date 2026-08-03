@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:icarus:capacity-admin-result:1",
+  "title": "Icarus Revision 1 Applied Capacity Admin Result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "command_id",
+    "disposition",
+    "capacity_revision",
+    "capacity_change_id",
+    "config_hash",
+    "publication_hash"
+  ],
+  "properties": {
+    "format": {
+      "const": "icarus.capacity-admin-result/1"
+    },
+    "command_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255
+    },
+    "disposition": {
+      "const": "applied"
+    },
+    "capacity_revision": {
+      "const": 1
+    },
+    "capacity_change_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255
+    },
+    "config_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "publication_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    }
+  }
+}

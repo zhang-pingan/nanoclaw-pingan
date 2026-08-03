@@ -239,6 +239,7 @@ function validateBoundaries(): void {
   const registryRoot = path.join(workflowRuntimeRoot, 'registry');
   if (fs.existsSync(registryRoot)) {
     const allowedRegistryFiles = new Set([
+      'capacity-genesis-bootstrap-runtime.ts',
       'production-activation-entry.ts',
       'production-activation-runtime.ts',
       'production-activation.test.ts',
