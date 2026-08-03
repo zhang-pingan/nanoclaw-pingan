@@ -8,7 +8,7 @@
   "build_kind": "release",
   "activation_status": "pending_fresh_independent_g8_boundary",
   "historical_g8_release_artifact_hash": "sha256:8234f51bc669f5c5119e6b3fee80565827b7af061b9013a59e513c90b09f9243",
-  "g9_activation_contract_hash": "sha256:dbf314425e06ce6c108bb40c2474c16103e43faf798f581225a1e946b2b2c095",
+  "g9_activation_contract_hash": "sha256:c66ea981abb961cd7e5408939273b2fd600ce617c3ac6c65f378da8c098393fe",
   "static_source_core_build_hash": "sha256:9e24def00d6e3da7a9bb98036038816d1b77b13352584823a9846f2c9db2d8eb",
   "workflow_runtime_absence_baseline_hash": "sha256:f3899b9d328c3b03eeed3567978796fda5f7675873a5722a4092bf770fd748ab",
   "product_surface_coverage_manifest_hash": "sha256:b0b75a8d558863043b2abb5af5b18dddaaaec9191faa73e6516e01be3d060708",
@@ -36,7 +36,7 @@
   "validation_entry_sha256": "sha256:41e842bc760e65fc6ceefe0c757b6765328a55ba16cf004ec8477c0dec1d0fc8",
   "activation_entry_relative_path": "dist/workflow-runtime/registry/production-activation-entry.js",
   "activation_entry_sha256": "sha256:d7e9ef78935eec45d42855fc6e39142d9f133c364c0d85adb1ec568d6860ed2a",
-  "core_build_hash": "sha256:5b274392059b30bdc56034fee574eb5a18451e1bfd012821ab4c65a65694168a",
+  "core_build_hash": "sha256:451b87044575c24a3a55214015d6cbe77000500bcbadda2667f7bedce515800c",
   "inventory": [
     {
       "path": "config/workflow-runtime-capacity.json",
@@ -20538,7 +20538,7 @@
       "path": "dist/workflow-runtime/contracts/contract-pack-g9-production-activation.json",
       "byte_length": 1692,
       "executable": false,
-      "raw_sha256": "sha256:af124525e31355cfaf53a7e36eeac83fb361c8be159f1f184b60a3e36d0160d8"
+      "raw_sha256": "sha256:2d939ba2c2c11519edd53cd5bc7b964016c305f4bb1728d3b08aa3c7853db083"
     },
     {
       "path": "dist/workflow-runtime/contracts/contract-pack-golden-draft.json",
@@ -24534,7 +24534,7 @@
       "path": "dist/workflow-runtime/contracts/production-activation/g9-production-activation-protocol@1.json",
       "byte_length": 3789,
       "executable": false,
-      "raw_sha256": "sha256:18812936ee3d812a9e13e281851b76e0ccaa0e8634b96aa05f1cf2c56ac3e2f3"
+      "raw_sha256": "sha256:869d6c471cbb18ff809ba3daa85a7993a2b7bb6f90fdaf0f1a61b022d949c7d0"
     },
     {
       "path": "dist/workflow-runtime/contracts/production-activation/schemas/core-production-release-manifest-schema.json",
@@ -26202,19 +26202,19 @@
       "path": "dist/workflow-runtime/registry/production-activation-runtime.d.ts.map",
       "byte_length": 1022,
       "executable": false,
-      "raw_sha256": "sha256:af0cf68ddee68ac14d46c56c6f5c7784e125f97fc5c354eb31fafd8e1c620900"
+      "raw_sha256": "sha256:53c5d0059d178854862c45cf9165c5a70fa8f541996daca1b94feb450c4cc84a"
     },
     {
       "path": "dist/workflow-runtime/registry/production-activation-runtime.js",
-      "byte_length": 24443,
+      "byte_length": 24510,
       "executable": false,
-      "raw_sha256": "sha256:ed7beb045e721d079e62ad879edba86cbb1428a73945975138e502c6a1635cda"
+      "raw_sha256": "sha256:587bb97c23214f7de0d3316f46f86403a2f7a6e8d1c538d0dbc4ced59a274311"
     },
     {
       "path": "dist/workflow-runtime/registry/production-activation-runtime.js.map",
-      "byte_length": 17946,
+      "byte_length": 17865,
       "executable": false,
-      "raw_sha256": "sha256:c5b2b99106afc7fd6b045877debb1d7eb686c57bd4e51d9e4b5e5a12e9f541bd"
+      "raw_sha256": "sha256:a77fe732a3b9899758ab8e426f716bbef598124b1c0eaff7e2e958ed1cea51ed"
     },
     {
       "path": "dist/workflow-runtime/registry/production-activation.d.ts",
@@ -26254,15 +26254,15 @@
     },
     {
       "path": "dist/workflow-runtime/registry/production-activation.test.js",
-      "byte_length": 9628,
+      "byte_length": 14854,
       "executable": false,
-      "raw_sha256": "sha256:5a80bd792ebae932fc53ec93ef6d5847d7590349bad9661206ec8c6d079953ce"
+      "raw_sha256": "sha256:55e263c0049d2d4673b9e1ac286dd91eba0b7bfe205aecceef02e22c48165f82"
     },
     {
       "path": "dist/workflow-runtime/registry/production-activation.test.js.map",
-      "byte_length": 7181,
+      "byte_length": 10403,
       "executable": false,
-      "raw_sha256": "sha256:f7d8a51f7f200ab266b30f3a9f874a69337f2992f253c570d5365c5b5372453d"
+      "raw_sha256": "sha256:f800498e13709b2eacb61e2175eae414723f718a8ba08bf5f75667ac131e09a9"
     },
     {
       "path": "dist/workflow-runtime/runtime/basic-scheduler.d.ts",
@@ -54531,6 +54531,6 @@
       "raw_sha256": "sha256:fafac63ee1d805c88b99afeb7d516ebfca0c3781c1c8c1d3581f1ee9379f8d00"
     }
   ],
-  "inventory_hash": "sha256:a0961e3bf059a262d1c4ba75aa580969b108201c9f57f12d320ea1400fad1130",
-  "release_artifact_hash": "sha256:1411bb6814c16842d1c654b0577975c3a787c615ce02cbbf386fce4ac70fadb5"
+  "inventory_hash": "sha256:34d9286f715c9cb232bd2a2d1e11d4cd12e49652367e2c8293947faedebadca9",
+  "release_artifact_hash": "sha256:295074dbc8a56bbe0ddc655223039d36757383e2f0be86ca6ac89805851ff1e5"
 }

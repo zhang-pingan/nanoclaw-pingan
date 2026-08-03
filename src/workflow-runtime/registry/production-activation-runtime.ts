@@ -344,14 +344,10 @@ function readCapacityBaseline(
   );
   assertJsonObject(value);
   const baseline = value as unknown as DeploymentRuntimeCapacitySnapshot;
-  if (
-    validateDeploymentCapacitySnapshot(baseline) !== null ||
-    `${canonicalJson(baseline as unknown as JsonValue)}\n` !==
-      fs.readFileSync(
-        path.join(releaseRoot, 'config/workflow-runtime-capacity.json'),
-        'utf8',
-      )
-  )
+  // Core prepare already verifies every installed release file against the
+  // content-addressed inventory. Capacity owns strict semantic/config identity,
+  // not an additional JSON whitespace convention.
+  if (validateDeploymentCapacitySnapshot(baseline) !== null)
     throw new Error('production_capacity_baseline_invalid');
   return baseline;
 }

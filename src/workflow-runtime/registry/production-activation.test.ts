@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import type { Sha256Hash } from '../contracts/types.js';
 import { resolveDeterministicRoute } from '../creation/routing-resolver.js';
 import { WorkflowProjectionStore } from '../projection/workflow-projection.js';
+import type { WorkflowRuntimeStore } from '../store/runtime-store/index.js';
 import {
   buildG9DeploymentJournalEvent,
   buildG9ProductionActivationRequest,
@@ -17,6 +18,7 @@ import {
   parseG9ProductionActivationRequest,
   resolveG9ProductionActivationRuntimeLayout,
 } from './production-activation.js';
+import { createG9ProductionActivationParticipants } from './production-activation-runtime.js';
 
 function hash(character: string): Sha256Hash {
   return `sha256:${character.repeat(64)}`;
@@ -97,6 +99,118 @@ describe('G9 pre-activation production authority', () => {
       state: 'ready',
       projection_version: 'g7.1',
     });
+  });
+
+  it('accepts the checked-in Capacity baseline serialization', () => {
+    const projectRoot = path.resolve(import.meta.dirname, '../../..');
+    const runtimeHome = fs.mkdtempSync(
+      '/private/tmp/icarus-g9-capacity-baseline-',
+    );
+    const releaseRoot = path.join(runtimeHome, 'release');
+    const baselineFile = path.join(
+      releaseRoot,
+      'config/workflow-runtime-capacity.json',
+    );
+    const emptyStore = {
+      queryOne: () => undefined,
+    } as unknown as WorkflowRuntimeStore;
+    try {
+      fs.mkdirSync(path.dirname(baselineFile), { recursive: true });
+      fs.copyFileSync(
+        path.join(projectRoot, 'config/workflow-runtime-capacity.json'),
+        baselineFile,
+      );
+      const baseline = JSON.parse(fs.readFileSync(baselineFile, 'utf8')) as {
+        config_hash: Sha256Hash;
+      };
+      const generations = [
+        'workflows',
+        'agent_executions',
+        'pending',
+        'trace',
+      ].map((view) => ({
+        view,
+        generation_id: `generation:${view}:0:${hash('a')}`,
+        source_head_seq: 0,
+        rows_hash: hash('a'),
+      })) as Parameters<typeof calculateG9ProjectionGenerationAggregateHash>[0];
+      const request = buildG9ProductionActivationRequest({
+        activation_id: 'activation-capacity-baseline',
+        operation_key: 'deployment-capacity-baseline',
+        requested_at_ms: 1000,
+        previous_deployment_binding_hash: null,
+        deployment_binding: {
+          deployment_profile: 'local_single_user',
+          runtime_surface: 'node_service',
+          release_manifest_hash: hash('1'),
+          release_artifact_hash: hash('2'),
+          core_build_hash: hash('3'),
+          core_binding_hash: hash('4'),
+          applicable_g8_evidence: {
+            status: 'fresh_independent_boundary_pass',
+            release_artifact_hash: hash('2'),
+            startup_report_hash: hash('5'),
+            readiness_report_hash: hash('6'),
+            startup_harness_hash: hash('7'),
+            readiness_harness_hash: hash('8'),
+            sqlite_profile_candidate_hash: hash('9'),
+            node_executable_hash: hash('a'),
+            native_module_hash: hash('b'),
+          },
+          static_authority: {
+            source_core_build_hash: hash('c'),
+            absence_baseline_hash: hash('d'),
+            product_surface_manifest_hash: hash('e'),
+            migration_candidate_boundary_hash: hash('f'),
+          },
+          feature_registry_pointer: {
+            state: 'empty',
+            active_release_count: 0,
+            pointers: [],
+            pointer_aggregate_hash: calculateG9FeaturePointerAggregateHash([]),
+          },
+          runtime_center_projection: {
+            projection_version: 'g7.1',
+            generations,
+            generation_aggregate_hash:
+              calculateG9ProjectionGenerationAggregateHash(generations),
+          },
+          capacity_authority: {
+            mode: 'fresh_genesis',
+            expected_head_state: 'absent',
+            baseline_config_hash: baseline.config_hash,
+            expected_capacity_revision: 1,
+            expected_change_id: 'capacity-change-1',
+            expected_publication_hash: hash('1'),
+            expected_audit_head_hash: hash('2'),
+            genesis_core_release_hash: hash('2'),
+            genesis_command_id: 'capacity-command-1',
+            genesis_idempotency_key: 'capacity-genesis-1',
+            genesis_auth_session_ref: 'auth:capacity-genesis-1',
+            genesis_evidence_manifest_id: 'value:capacity-evidence-1',
+            genesis_evidence_manifest_hash: hash('3'),
+            genesis_result_schema_row_id: 'resource:capacity-result-schema-1',
+            genesis_result_schema_resource_type: 'schema',
+            genesis_result_schema_ref: {
+              id: 'icarus.capacity-admin-result',
+              version: '1.0.0',
+            },
+            genesis_result_schema_hash: hash('4'),
+          },
+        },
+      });
+      const capacity = createG9ProductionActivationParticipants({
+        runtimeHome,
+        releaseRoot,
+        store: emptyStore,
+        request,
+      }).find((participant) => participant.name === 'capacity')!;
+
+      expect(fs.readFileSync(baselineFile, 'utf8')).toContain('\n  "');
+      expect(() => capacity.prepare(request.deployment_binding)).not.toThrow();
+    } finally {
+      fs.rmSync(runtimeHome, { recursive: true, force: true });
+    }
   });
 
   it('builds one deterministic closed request, audit, and deployment binding', () => {
