@@ -17,12 +17,14 @@ import type {
   Sha256Hash,
 } from '../workflow-runtime/contracts/types.js';
 import { CURRENT_G1_SCHEMA_IDENTITIES } from '../workflow-runtime/store/runtime-store/profile.js';
+import { acquireHostCoreLock } from './lock.js';
 
 export const HOST_CORE_MANIFEST_FILENAME = 'core-release-manifest.json';
 export const HOST_CORE_ENTRY = 'dist/index.js';
 export const HOST_CORE_VALIDATION_ENTRY = 'dist/host-core/release-entry.js';
 export const HOST_CORE_VALIDATION_COMMANDS = [
   'test:current',
+  'contracts:check',
   'typecheck',
   'format:check',
 ] as const;
@@ -37,10 +39,10 @@ export interface HostCoreInventoryEntry {
 }
 
 export interface HostCoreReleaseManifest {
-  readonly format: 'icarus.core-release-manifest/1';
+  readonly format: 'icarus.host-core-release-manifest/1';
   readonly lifecycle: 'formal_host_core_release';
   readonly ref: { readonly id: 'icarus.host-core'; readonly version: string };
-  readonly release_scope: 'workflow_runtime_g8_validation';
+  readonly release_scope: 'icarus_host_core';
   readonly build_kind: 'release';
   readonly validation_status: HostCoreValidationStatus;
   readonly validation_commands: readonly string[];
@@ -50,6 +52,7 @@ export interface HostCoreReleaseManifest {
   readonly arch: 'arm64';
   readonly database_schema_version: number;
   readonly database_schema_hash: Sha256Hash;
+  readonly database_sqlite_schema_hash: Sha256Hash;
   readonly managed_node_distribution_ref: {
     readonly id: string;
     readonly version: string;
@@ -93,6 +96,7 @@ const MANIFEST_KEYS = [
   'core_entry_sha256',
   'database_schema_hash',
   'database_schema_version',
+  'database_sqlite_schema_hash',
   'format',
   'inventory',
   'inventory_hash',
@@ -284,10 +288,10 @@ export function parseHostCoreReleaseManifest(
   const inventoryEntries = parseInventory(value.inventory);
   const validationStatus = value.validation_status;
   if (
-    value.format !== 'icarus.core-release-manifest/1' ||
+    value.format !== 'icarus.host-core-release-manifest/1' ||
     value.lifecycle !== 'formal_host_core_release' ||
     value.ref.id !== 'icarus.host-core' ||
-    value.release_scope !== 'workflow_runtime_g8_validation' ||
+    value.release_scope !== 'icarus_host_core' ||
     value.build_kind !== 'release' ||
     (validationStatus !== 'PASS' && validationStatus !== 'SKIPPED_BY_USER') ||
     !Array.isArray(value.validation_commands) ||
@@ -327,6 +331,9 @@ export function parseHostCoreReleaseManifest(
     arch: value.arch,
     database_schema_version: Number(value.database_schema_version),
     database_schema_hash: parseSha256Hash(value.database_schema_hash),
+    database_sqlite_schema_hash: parseSha256Hash(
+      value.database_sqlite_schema_hash,
+    ),
     managed_node_distribution_ref: {
       id: value.managed_node_distribution_ref.id,
       version: value.managed_node_distribution_ref.version,
@@ -740,6 +747,11 @@ export interface InstallHostCoreReleaseOptions {
   readonly registeredAtMs: number;
   readonly includeDependencies?: boolean;
   readonly includeRuntimeAssets?: boolean;
+  readonly databaseSchemaIdentity?: {
+    readonly version: number;
+    readonly schemaHash: Sha256Hash;
+    readonly sqliteSchemaHash: Sha256Hash;
+  };
 }
 
 export function installHostCoreReleaseFromDist(
@@ -770,7 +782,7 @@ export function installHostCoreReleaseFromDist(
   const stageRoot = fs.mkdtempSync(
     path.join(releasesRoot, '.host-core-release-'),
   );
-  const lock = path.join(runtimeHome, '.host-core-release-registry.lock');
+  let registryLock: ReturnType<typeof acquireHostCoreLock> | null = null;
   try {
     copyTree(distRoot, path.join(stageRoot, 'dist'));
     if (options.includeRuntimeAssets !== false)
@@ -792,11 +804,21 @@ export function installHostCoreReleaseFromDist(
     }
     const entries = inventory(stageRoot);
     const distribution = checkedInDistribution(projectRoot);
+    const databaseSchema = options.databaseSchemaIdentity ?? {
+      version: 11,
+      schemaHash: CURRENT_G1_SCHEMA_IDENTITIES.schema,
+      sqliteSchemaHash: CURRENT_G1_SCHEMA_IDENTITIES.sqliteSchema,
+    };
+    if (
+      !Number.isSafeInteger(databaseSchema.version) ||
+      databaseSchema.version < 1
+    )
+      throw new Error('host_core_release_database_schema_version_invalid');
     const payload = {
-      format: 'icarus.core-release-manifest/1' as const,
+      format: 'icarus.host-core-release-manifest/1' as const,
       lifecycle: 'formal_host_core_release' as const,
       ref: { id: 'icarus.host-core' as const, version },
-      release_scope: 'workflow_runtime_g8_validation' as const,
+      release_scope: 'icarus_host_core' as const,
       build_kind: 'release' as const,
       validation_status: options.validationStatus,
       validation_commands:
@@ -807,8 +829,11 @@ export function installHostCoreReleaseFromDist(
       published_from_tree: tree,
       platform: 'darwin' as const,
       arch: 'arm64' as const,
-      database_schema_version: 11,
-      database_schema_hash: CURRENT_G1_SCHEMA_IDENTITIES.schema,
+      database_schema_version: databaseSchema.version,
+      database_schema_hash: parseSha256Hash(databaseSchema.schemaHash),
+      database_sqlite_schema_hash: parseSha256Hash(
+        databaseSchema.sqliteSchemaHash,
+      ),
       managed_node_distribution_ref: distribution.ref,
       managed_node_distribution_hash: distribution.manifest_hash,
       runtime_launcher_hash: rawSha256(
@@ -850,13 +875,11 @@ export function installHostCoreReleaseFromDist(
     );
     freezeTree(stageRoot);
 
-    try {
-      fs.mkdirSync(lock, { mode: 0o700 });
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'EEXIST')
-        throw new Error('host_core_registry_busy');
-      throw error;
-    }
+    registryLock = acquireHostCoreLock({
+      runtimeHome,
+      name: '.host-core-release-registry.lock',
+      busyError: 'host_core_registry_busy',
+    });
     ensureOwnedDirectory(runtimeHome, 'registry');
     const currentRegistry = readHostCoreReleaseRegistry(runtimeHome);
     const existingVersion = currentRegistry.entries.find(
@@ -916,8 +939,11 @@ export function installHostCoreReleaseFromDist(
     );
     return { manifest, registry };
   } finally {
-    if (fs.existsSync(lock)) fs.rmdirSync(lock);
-    removeFrozenTree(stageRoot);
+    try {
+      registryLock?.release();
+    } finally {
+      removeFrozenTree(stageRoot);
+    }
   }
 }
 

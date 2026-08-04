@@ -33,6 +33,10 @@ import type {
   Sha256Hash,
 } from '../../contracts/types.js';
 import { parseVersionedRef } from '../../contracts/versioned-ref.js';
+import {
+  verifyActiveHostCore,
+  verifyActiveHostCoreDeployment,
+} from '../../../host-core/activation.js';
 
 export type WorkflowRuntimeIdentityMode =
   | 'candidate_development'
@@ -79,7 +83,8 @@ export interface WorkflowRuntimeIdentityEvidence {
   core_binding_kind:
     | 'development_checkout'
     | 'content_addressed_release'
-    | 'content_addressed_production_release';
+    | 'content_addressed_production_release'
+    | 'content_addressed_host_core_release';
   core_binding_hash: Sha256Hash;
   core_entry_hash: Sha256Hash;
   validation_entry_hash: Sha256Hash | null;
@@ -233,6 +238,22 @@ interface ContentAddressedReleaseIdentity {
 interface ProductionReleaseIdentity {
   readonly binding: G9ContentAddressedCoreBinding;
   readonly manifest: G9ProductionCoreReleaseManifest;
+  readonly releaseManifestHash: Sha256Hash;
+}
+
+interface FormalHostCoreProductionIdentity {
+  readonly binding: {
+    readonly binding_kind: 'content_addressed_host_core_release';
+    readonly binding_hash: Sha256Hash;
+    readonly core_entry_sha256: Sha256Hash;
+    readonly validation_entry_sha256: Sha256Hash;
+  };
+  readonly manifest: {
+    readonly runtime_launcher_hash: Sha256Hash;
+    readonly core_build_hash: Sha256Hash;
+    readonly database_schema_hash: Sha256Hash;
+    readonly release_artifact_hash: Sha256Hash;
+  };
   readonly releaseManifestHash: Sha256Hash;
 }
 
@@ -476,6 +497,42 @@ function verifyProductionReleaseBinding(
   )
     throw new Error('Production Core binding and Release Manifest disagree');
   return { binding, manifest, releaseManifestHash };
+}
+
+export function verifyFormalHostCoreProductionIdentity(
+  runtimeHome: string,
+  expectedManifestHash: Sha256Hash,
+): FormalHostCoreProductionIdentity {
+  const active = verifyActiveHostCore(runtimeHome);
+  if (
+    !active.formal ||
+    active.binding_kind !== 'content_addressed_host_core_release' ||
+    active.managed_node_distribution_hash !== expectedManifestHash
+  )
+    throw new Error('Formal Host Core production identity drifted');
+  const activeModuleReleaseRoot = fs.realpathSync(
+    path.resolve(import.meta.dirname, '../../../..'),
+  );
+  if (activeModuleReleaseRoot !== active.release_root)
+    throw new Error(
+      'Production Store module is not loaded from the selected Host Core Release',
+    );
+  verifyActiveHostCoreDeployment(runtimeHome, active);
+  return {
+    binding: {
+      binding_kind: active.binding_kind,
+      binding_hash: active.binding_hash,
+      core_entry_sha256: active.core_entry_sha256,
+      validation_entry_sha256: active.validation_entry_sha256,
+    },
+    manifest: {
+      runtime_launcher_hash: active.runtime_launcher_hash,
+      core_build_hash: active.core_build_hash,
+      database_schema_hash: active.database_schema_hash,
+      release_artifact_hash: active.release_artifact_hash,
+    },
+    releaseManifestHash: active.release_manifest_sha256,
+  };
 }
 
 export function currentRuntimeHostObservation(): RuntimeHostObservation {
@@ -748,20 +805,36 @@ export function collectWorkflowRuntimeIdentityEvidence(
     const productionSelected =
       mode !== 'release_validation' ||
       fs.existsSync(path.join(runtimeHome, 'activation-core'));
-    const release = productionSelected
-      ? verifyProductionReleaseBinding(
+    const activeBinding =
+      mode === 'production'
+        ? readJsonObject(
+            path.join(
+              fs.realpathSync(path.join(runtimeHome, 'active-core')),
+              'binding.json',
+            ),
+          )
+        : null;
+    const hostCoreSelected =
+      activeBinding?.format === 'icarus.host-core-runtime-launch-binding/1';
+    const release = hostCoreSelected
+      ? verifyFormalHostCoreProductionIdentity(
           runtimeHome,
           distribution.manifest_hash,
-          mode === 'production' ? 'active-core' : 'activation-core',
         )
-      : verifyContentAddressedReleaseBinding(
-          runtimeHome,
-          distribution.manifest_hash,
-        );
+      : productionSelected
+        ? verifyProductionReleaseBinding(
+            runtimeHome,
+            distribution.manifest_hash,
+            mode === 'production' ? 'active-core' : 'activation-core',
+          )
+        : verifyContentAddressedReleaseBinding(
+            runtimeHome,
+            distribution.manifest_hash,
+          );
     if (launcherHash !== release.manifest.runtime_launcher_hash) {
       throw new Error('Runtime Launcher and Core Release Manifest disagree');
     }
-    if (mode === 'production') {
+    if (mode === 'production' && !hostCoreSelected) {
       const deploymentPointer = fs.readlinkSync(
         path.join(runtimeHome, 'active-deployment'),
       );

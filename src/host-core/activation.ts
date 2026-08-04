@@ -25,8 +25,20 @@ import {
   resolveHostCoreVersion,
   verifyInstalledHostCoreRelease,
 } from './release.js';
+import { acquireHostCoreLock } from './lock.js';
+import {
+  type HostCoreTargetSchemaIdentity,
+  type PersistentStateDecision,
+  type PersistentStateResetPlan,
+  type WorkflowRuntimeStateIdentity,
+  buildPersistentStateResetPlan,
+  decidePersistentStateCompatibility,
+  parsePersistentStateResetPlan,
+  quarantinePersistentState,
+  readPersistentStateResetBackup,
+} from './persistent-state.js';
 
-interface ContentAddressedCoreBinding {
+interface LegacyContentAddressedCoreBinding {
   readonly format: 'icarus.core-runtime-launch-binding/2';
   readonly binding_kind: 'content_addressed_release';
   readonly core_release_relative_path: string;
@@ -42,18 +54,51 @@ interface ContentAddressedCoreBinding {
   readonly binding_hash: Sha256Hash;
 }
 
+export interface FormalHostCoreBinding {
+  readonly format: 'icarus.host-core-runtime-launch-binding/1';
+  readonly binding_kind: 'content_addressed_host_core_release';
+  readonly core_release_relative_path: string;
+  readonly release_manifest_relative_path: typeof HOST_CORE_MANIFEST_FILENAME;
+  readonly release_manifest_sha256: Sha256Hash;
+  readonly release_artifact_hash: Sha256Hash;
+  readonly core_build_hash: Sha256Hash;
+  readonly core_entry_relative_path: string;
+  readonly core_entry_sha256: Sha256Hash;
+  readonly validation_entry_relative_path: string;
+  readonly validation_entry_sha256: Sha256Hash;
+  readonly managed_node_manifest_hash: Sha256Hash;
+  readonly binding_hash: Sha256Hash;
+}
+
+type ContentAddressedCoreBinding =
+  | LegacyContentAddressedCoreBinding
+  | FormalHostCoreBinding;
+
 export interface ActiveHostCoreIdentity {
   readonly version: string;
   readonly release_artifact_hash: Sha256Hash;
   readonly binding_hash: Sha256Hash;
   readonly formal: boolean;
+  readonly binding_kind:
+    | 'content_addressed_release'
+    | 'content_addressed_host_core_release';
   readonly database_schema_version: number;
   readonly database_schema_hash: Sha256Hash;
+  readonly database_sqlite_schema_hash: Sha256Hash | null;
+  readonly release_root: string;
+  readonly core_entry_path: string;
+  readonly core_entry_sha256: Sha256Hash;
+  readonly validation_entry_sha256: Sha256Hash;
+  readonly core_build_hash: Sha256Hash;
+  readonly release_manifest_sha256: Sha256Hash;
+  readonly runtime_launcher_hash: Sha256Hash;
+  readonly managed_node_distribution_hash: Sha256Hash;
 }
 
 type ActivationReadinessStatus = 'PASS' | 'SKIPPED_BY_USER';
 type JournalPhase =
   | 'prepared'
+  | 'persistent_state_quarantined'
   | 'activation_core_selected'
   | 'active_deployment_committed'
   | 'active_core_committed'
@@ -70,7 +115,21 @@ interface HostCoreActivationAudit {
   readonly previous_release_artifact_hash: Sha256Hash | null;
   readonly previous_core_binding_hash: Sha256Hash | null;
   readonly validation_status: HostCoreReleaseManifest['validation_status'];
+  readonly validation_commands: readonly string[];
   readonly readiness_status: ActivationReadinessStatus;
+  readonly persistent_state_action:
+    | 'NO_STATE'
+    | 'UNCHANGED'
+    | 'MIGRATION_ON_START'
+    | 'RESET_BY_USER';
+  readonly old_persistent_state_identity: WorkflowRuntimeStateIdentity | null;
+  readonly target_persistent_state_identity: HostCoreTargetSchemaIdentity;
+  readonly persistent_state_backup_identity: Sha256Hash | null;
+  readonly persistent_state_backup_relative_path: string | null;
+  readonly persistent_state_reset_plan: PersistentStateResetPlan | null;
+  readonly persistent_state_rollback:
+    | 'CODE_ROLLBACK_STATE_COMPATIBILITY_REQUIRED'
+    | 'CODE_ROLLBACK_DOES_NOT_RESTORE_QUARANTINED_STATE';
   readonly rollback: boolean;
   readonly audit_hash: Sha256Hash;
 }
@@ -115,12 +174,23 @@ const BINDING_KEYS = [
   'validation_entry_relative_path',
   'validation_entry_sha256',
 ] as const;
-const JOURNAL_PHASES: readonly JournalPhase[] = [
+const NORMAL_JOURNAL_PHASES: readonly JournalPhase[] = [
   'prepared',
   'activation_core_selected',
   'active_deployment_committed',
   'active_core_committed',
   'completed',
+];
+const RESET_JOURNAL_PHASES: readonly JournalPhase[] = [
+  'prepared',
+  'persistent_state_quarantined',
+  'activation_core_selected',
+  'active_deployment_committed',
+  'active_core_committed',
+  'completed',
+];
+const JOURNAL_PHASES: readonly JournalPhase[] = [
+  ...new Set([...NORMAL_JOURNAL_PHASES, ...RESET_JOURNAL_PHASES]),
 ];
 
 function exactKeys(
@@ -201,20 +271,24 @@ function resolveRelativeDirectory(
 function parseBinding(value: unknown): ContentAddressedCoreBinding {
   assertJsonObject(value);
   exactKeys(value, BINDING_KEYS, 'host_core_binding');
+  const legacy =
+    value.format === 'icarus.core-runtime-launch-binding/2' &&
+    value.binding_kind === 'content_addressed_release';
+  const formal =
+    value.format === 'icarus.host-core-runtime-launch-binding/1' &&
+    value.binding_kind === 'content_addressed_host_core_release';
   if (
-    value.format !== 'icarus.core-runtime-launch-binding/2' ||
-    value.binding_kind !== 'content_addressed_release' ||
+    (!legacy && !formal) ||
     value.release_manifest_relative_path !== HOST_CORE_MANIFEST_FILENAME
   )
     throw new Error('host_core_binding_identity_invalid');
-  const binding: ContentAddressedCoreBinding = {
-    format: value.format,
-    binding_kind: value.binding_kind,
+  const common = {
     core_release_relative_path: safeRelative(
       value.core_release_relative_path,
       'host_core_binding_release_path',
     ),
-    release_manifest_relative_path: value.release_manifest_relative_path,
+    release_manifest_relative_path:
+      HOST_CORE_MANIFEST_FILENAME as typeof HOST_CORE_MANIFEST_FILENAME,
     release_manifest_sha256: parseSha256Hash(value.release_manifest_sha256),
     release_artifact_hash: parseSha256Hash(value.release_artifact_hash),
     core_build_hash: parseSha256Hash(value.core_build_hash),
@@ -233,13 +307,26 @@ function parseBinding(value: unknown): ContentAddressedCoreBinding {
     ),
     binding_hash: parseSha256Hash(value.binding_hash),
   };
+  const binding = (
+    legacy
+      ? {
+          ...common,
+          format: 'icarus.core-runtime-launch-binding/2' as const,
+          binding_kind: 'content_addressed_release' as const,
+        }
+      : {
+          ...common,
+          format: 'icarus.host-core-runtime-launch-binding/1' as const,
+          binding_kind: 'content_addressed_host_core_release' as const,
+        }
+  ) satisfies ContentAddressedCoreBinding;
   const { binding_hash: _bindingHash, ...payload } = binding;
+  const domain = legacy
+    ? 'icarus:core-runtime-launch-binding:2\n'
+    : 'icarus:host-core-runtime-launch-binding:1\n';
   if (
     binding.binding_hash !==
-    domainSeparatedSha256(
-      'icarus:core-runtime-launch-binding:2\n',
-      payload as unknown as JsonValue,
-    )
+    domainSeparatedSha256(domain, payload as unknown as JsonValue)
   )
     throw new Error('host_core_binding_hash_invalid');
   if (
@@ -253,10 +340,10 @@ function parseBinding(value: unknown): ContentAddressedCoreBinding {
 function buildBinding(
   manifest: HostCoreReleaseManifest,
   manifestHash: Sha256Hash,
-): ContentAddressedCoreBinding {
+): FormalHostCoreBinding {
   const payload = {
-    format: 'icarus.core-runtime-launch-binding/2' as const,
-    binding_kind: 'content_addressed_release' as const,
+    format: 'icarus.host-core-runtime-launch-binding/1' as const,
+    binding_kind: 'content_addressed_host_core_release' as const,
     core_release_relative_path: `core-releases/${manifest.release_artifact_hash.slice('sha256:'.length)}`,
     release_manifest_relative_path: HOST_CORE_MANIFEST_FILENAME,
     release_manifest_sha256: manifestHash,
@@ -271,10 +358,10 @@ function buildBinding(
   return parseBinding({
     ...payload,
     binding_hash: domainSeparatedSha256(
-      'icarus:core-runtime-launch-binding:2\n',
+      'icarus:host-core-runtime-launch-binding:1\n',
       payload as unknown as JsonValue,
     ),
-  });
+  }) as FormalHostCoreBinding;
 }
 
 function inventoryFiles(
@@ -374,8 +461,27 @@ function verifyLegacyRelease(
     release_artifact_hash: artifactHash,
     binding_hash: `sha256:${'0'.repeat(64)}`,
     formal: false,
+    binding_kind: 'content_addressed_release',
     database_schema_version: Number(schemaVersion),
     database_schema_hash: parseSha256Hash(manifestValue.database_schema_hash),
+    database_sqlite_schema_hash: null,
+    release_root: releaseRoot,
+    core_entry_path: path.join(
+      releaseRoot,
+      safeRelative(manifestValue.core_entry_relative_path, 'legacy_core_entry'),
+    ),
+    core_entry_sha256: parseSha256Hash(manifestValue.core_entry_sha256),
+    validation_entry_sha256: parseSha256Hash(
+      manifestValue.validation_entry_sha256,
+    ),
+    core_build_hash: coreBuildHash,
+    release_manifest_sha256: rawSha256(
+      path.join(releaseRoot, HOST_CORE_MANIFEST_FILENAME),
+    ),
+    runtime_launcher_hash: parseSha256Hash(manifestValue.runtime_launcher_hash),
+    managed_node_distribution_hash: parseSha256Hash(
+      manifestValue.managed_node_distribution_hash,
+    ),
   };
 }
 
@@ -464,6 +570,8 @@ export function verifyActiveHostCore(
   assertJsonObject(value);
   let identity: ActiveHostCoreIdentity;
   if (value.lifecycle === 'formal_host_core_release') {
+    if (binding.binding_kind !== 'content_addressed_host_core_release')
+      throw new Error('active_core_formal_binding_kind_invalid');
     const manifest = verifyInstalledHostCoreRelease(
       releaseRoot,
       binding.release_artifact_hash,
@@ -474,10 +582,22 @@ export function verifyActiveHostCore(
       release_artifact_hash: manifest.release_artifact_hash,
       binding_hash: binding.binding_hash,
       formal: true,
+      binding_kind: binding.binding_kind,
       database_schema_version: manifest.database_schema_version,
       database_schema_hash: manifest.database_schema_hash,
+      database_sqlite_schema_hash: manifest.database_sqlite_schema_hash,
+      release_root: releaseRoot,
+      core_entry_path: path.join(releaseRoot, HOST_CORE_ENTRY),
+      core_entry_sha256: manifest.core_entry_sha256,
+      validation_entry_sha256: manifest.validation_entry_sha256,
+      core_build_hash: manifest.core_build_hash,
+      release_manifest_sha256: rawSha256(manifestPath),
+      runtime_launcher_hash: manifest.runtime_launcher_hash,
+      managed_node_distribution_hash: manifest.managed_node_distribution_hash,
     };
   } else {
+    if (binding.binding_kind !== 'content_addressed_release')
+      throw new Error('active_core_legacy_binding_kind_invalid');
     const legacy = verifyLegacyRelease(
       releaseRoot,
       value,
@@ -602,6 +722,70 @@ function activeDeploymentRelative(runtimeHome: string): string | null {
   return safeRelative(fs.readlinkSync(pointer), 'active_deployment_pointer');
 }
 
+export function verifyActiveHostCoreDeployment(
+  runtimeHomeInput: string,
+  activeInput?: ActiveHostCoreIdentity,
+): {
+  readonly deployment_hash: Sha256Hash;
+  readonly activation_audit_hash: Sha256Hash;
+} {
+  const runtimeHome = fs.realpathSync(runtimeHomeInput);
+  const active = activeInput ?? verifyActiveHostCore(runtimeHome);
+  if (!active.formal)
+    throw new Error('host_core_deployment_requires_formal_active_core');
+  const pointer = activeDeploymentRelative(runtimeHome);
+  if (!pointer || !/^deployment-bindings\/[0-9a-f]{64}$/.test(pointer))
+    throw new Error('host_core_active_deployment_pointer_invalid');
+  const directory = resolveRelativeDirectory(
+    runtimeHome,
+    pointer,
+    'deployment-bindings',
+  );
+  const file = path.join(directory, 'host-core-deployment.json');
+  assertRegularFile(file, 'host_core_active_deployment_file');
+  const deployment = strictParseJsonBytes(fs.readFileSync(file));
+  assertJsonObject(deployment);
+  exactKeys(
+    deployment,
+    [
+      'activation_audit_hash',
+      'activation_id',
+      'core_binding_hash',
+      'deployment_hash',
+      'format',
+      'previous_deployment_relative_path',
+      'release_artifact_hash',
+      'version',
+    ],
+    'host_core_active_deployment',
+  );
+  if (deployment.previous_deployment_relative_path !== null)
+    safeRelative(
+      deployment.previous_deployment_relative_path,
+      'host_core_previous_deployment',
+    );
+  const deploymentHash = parseSha256Hash(deployment.deployment_hash);
+  const auditHash = parseSha256Hash(deployment.activation_audit_hash);
+  const { deployment_hash: _deploymentHash, ...payload } = deployment;
+  if (
+    deployment.format !== 'icarus.host-core-deployment/1' ||
+    deployment.version !== active.version ||
+    deployment.release_artifact_hash !== active.release_artifact_hash ||
+    deployment.core_binding_hash !== active.binding_hash ||
+    deploymentHash !== `sha256:${path.basename(directory)}` ||
+    deploymentHash !==
+      domainSeparatedSha256(
+        'icarus:host-core-deployment:1\n',
+        payload as JsonValue,
+      )
+  )
+    throw new Error('host_core_active_deployment_identity_invalid');
+  return {
+    deployment_hash: deploymentHash,
+    activation_audit_hash: auditHash,
+  };
+}
+
 function buildAudit(
   input: Omit<HostCoreActivationAudit, 'format' | 'audit_hash'>,
 ): HostCoreActivationAudit {
@@ -721,10 +905,18 @@ export function readHostCoreActivationJournal(
       strictParseJsonBytes(fs.readFileSync(path.join(directory, file))),
     ),
   );
+  const phases = events.map((event) => event.phase);
+  const matchesNormal = phases.every(
+    (phase, index) => phase === NORMAL_JOURNAL_PHASES[index],
+  );
+  const matchesReset = phases.every(
+    (phase, index) => phase === RESET_JOURNAL_PHASES[index],
+  );
+  if (!matchesNormal && !matchesReset)
+    throw new Error('host_core_activation_journal_phase_invalid');
   events.forEach((event, index) => {
     if (
       event.sequence !== index + 1 ||
-      event.phase !== JOURNAL_PHASES[index] ||
       event.previous_event_hash !== (events[index - 1]?.event_hash ?? null) ||
       !files[index]!.includes(event.event_hash.slice('sha256:'.length))
     )
@@ -772,26 +964,14 @@ function appendJournal(
   return event;
 }
 
-function assertPersistentCompatibility(
-  runtimeHome: string,
-  current: ActiveHostCoreIdentity | null,
+function targetSchemaIdentity(
   target: HostCoreReleaseManifest,
-): void {
-  const database = lstatIfPresent(
-    path.join(runtimeHome, 'data/workflow-runtime/workflow-runtime.db'),
-  );
-  if (database) {
-    if (!database.isFile() || database.isSymbolicLink())
-      throw new Error('host_core_persistent_state_file_invalid');
-    if (!current)
-      throw new Error('host_core_persistent_state_identity_missing');
-  }
-  if (
-    current &&
-    (current.database_schema_version !== target.database_schema_version ||
-      current.database_schema_hash !== target.database_schema_hash)
-  )
-    throw new Error('host_core_persistent_state_incompatible');
+): HostCoreTargetSchemaIdentity {
+  return {
+    database_schema_version: target.database_schema_version,
+    database_schema_hash: target.database_schema_hash,
+    database_sqlite_schema_hash: target.database_sqlite_schema_hash,
+  };
 }
 
 function assertLightweightReadiness(
@@ -815,7 +995,10 @@ function assertLightweightReadiness(
 function verifyTransactionObjects(
   runtimeHome: string,
   first: HostCoreActivationJournalEvent,
-): void {
+): {
+  readonly persistentStateAction: HostCoreActivationAudit['persistent_state_action'];
+  readonly resetPlan: PersistentStateResetPlan | null;
+} {
   const bindingDirectory = resolveRelativeDirectory(
     runtimeHome,
     first.target_core_binding_relative_path,
@@ -844,14 +1027,16 @@ function verifyTransactionObjects(
   const deploymentDirectory = resolveRelativeDirectory(
     runtimeHome,
     first.target_deployment_relative_path,
-    'host-core-deployments',
+    'deployment-bindings',
   );
   assertRegularFile(
-    path.join(deploymentDirectory, 'deployment.json'),
+    path.join(deploymentDirectory, 'host-core-deployment.json'),
     'host_core_recovery_deployment_file',
   );
   const deployment = strictParseJsonBytes(
-    fs.readFileSync(path.join(deploymentDirectory, 'deployment.json')),
+    fs.readFileSync(
+      path.join(deploymentDirectory, 'host-core-deployment.json'),
+    ),
   );
   assertJsonObject(deployment);
   exactKeys(
@@ -905,23 +1090,72 @@ function verifyTransactionObjects(
       'previous_core_binding_hash',
       'previous_release_artifact_hash',
       'previous_version',
+      'old_persistent_state_identity',
+      'persistent_state_action',
+      'persistent_state_backup_identity',
+      'persistent_state_backup_relative_path',
+      'persistent_state_reset_plan',
+      'persistent_state_rollback',
       'readiness_status',
       'requested_at_ms',
       'rollback',
       'target_core_binding_hash',
+      'target_persistent_state_identity',
       'target_release_artifact_hash',
       'validation_status',
+      'validation_commands',
       'version',
     ],
     'host_core_recovery_audit',
   );
   const { audit_hash: _auditHash, ...auditPayload } = audit;
+  const persistentStateAction = audit.persistent_state_action;
+  if (
+    persistentStateAction !== 'NO_STATE' &&
+    persistentStateAction !== 'UNCHANGED' &&
+    persistentStateAction !== 'MIGRATION_ON_START' &&
+    persistentStateAction !== 'RESET_BY_USER'
+  )
+    throw new Error('host_core_recovery_persistent_state_action_invalid');
+  if (
+    JSON.stringify(audit.target_persistent_state_identity) !==
+      JSON.stringify(targetSchemaIdentity(resolved.manifest)) ||
+    (audit.readiness_status !== 'PASS' &&
+      audit.readiness_status !== 'SKIPPED_BY_USER') ||
+    (audit.persistent_state_rollback !==
+      'CODE_ROLLBACK_STATE_COMPATIBILITY_REQUIRED' &&
+      audit.persistent_state_rollback !==
+        'CODE_ROLLBACK_DOES_NOT_RESTORE_QUARANTINED_STATE')
+  )
+    throw new Error('host_core_recovery_persistent_state_identity_invalid');
+  const resetPlan =
+    persistentStateAction === 'RESET_BY_USER'
+      ? parsePersistentStateResetPlan(audit.persistent_state_reset_plan)
+      : null;
+  if (
+    (resetPlan === null &&
+      (audit.persistent_state_reset_plan !== null ||
+        audit.persistent_state_backup_identity !== null ||
+        audit.persistent_state_backup_relative_path !== null ||
+        audit.persistent_state_rollback !==
+          'CODE_ROLLBACK_STATE_COMPATIBILITY_REQUIRED')) ||
+    (resetPlan !== null &&
+      (audit.persistent_state_backup_identity !== resetPlan.backup_identity ||
+        audit.persistent_state_backup_relative_path !==
+          resetPlan.backup_relative_path ||
+        audit.persistent_state_rollback !==
+          'CODE_ROLLBACK_DOES_NOT_RESTORE_QUARANTINED_STATE'))
+  )
+    throw new Error('host_core_recovery_persistent_state_backup_invalid');
   if (
     audit.format !== 'icarus.host-core-activation-audit/1' ||
     audit.activation_id !== first.activation_id ||
     audit.version !== first.version ||
     audit.target_release_artifact_hash !== first.target_release_artifact_hash ||
     audit.target_core_binding_hash !== binding.binding_hash ||
+    JSON.stringify(audit.validation_commands) !==
+      JSON.stringify(resolved.manifest.validation_commands) ||
+    audit.validation_status !== resolved.manifest.validation_status ||
     auditHash !==
       domainSeparatedSha256(
         'icarus:host-core-activation-audit:1\n',
@@ -929,6 +1163,7 @@ function verifyTransactionObjects(
       )
   )
     throw new Error('host_core_recovery_audit_invalid');
+  return { persistentStateAction, resetPlan };
 }
 
 function recoverJournal(
@@ -938,7 +1173,7 @@ function recoverJournal(
   let events = [...readHostCoreActivationJournal(runtimeHome, activationId)];
   if (events.length === 0) throw new Error('host_core_recovery_journal_empty');
   const first = events[0]!;
-  verifyTransactionObjects(runtimeHome, first);
+  const transaction = verifyTransactionObjects(runtimeHome, first);
   const base = {
     activation_id: first.activation_id,
     version: first.version,
@@ -947,45 +1182,48 @@ function recoverJournal(
     target_deployment_relative_path: first.target_deployment_relative_path,
     occurred_at_ms: first.occurred_at_ms,
   };
-  if (events.length === 1) {
-    atomicPointer(
+  const expected = transaction.resetPlan
+    ? RESET_JOURNAL_PHASES
+    : NORMAL_JOURNAL_PHASES;
+  if (
+    transaction.resetPlan &&
+    events.some((event) => event.phase === 'persistent_state_quarantined')
+  )
+    readPersistentStateResetBackup(
       runtimeHome,
-      'activation-core',
-      first.target_core_binding_relative_path,
+      transaction.resetPlan.backup_relative_path,
     );
-    events.push(
-      appendJournal(runtimeHome, base, events, 'activation_core_selected'),
-    );
+  while (events.length < expected.length) {
+    const phase = expected[events.length]!;
+    if (phase === 'persistent_state_quarantined') {
+      quarantinePersistentState(runtimeHome, transaction.resetPlan!);
+    } else if (phase === 'activation_core_selected') {
+      atomicPointer(
+        runtimeHome,
+        'activation-core',
+        first.target_core_binding_relative_path,
+      );
+    } else if (phase === 'active_deployment_committed') {
+      atomicPointer(
+        runtimeHome,
+        'active-deployment',
+        first.target_deployment_relative_path,
+      );
+    } else if (phase === 'active_core_committed') {
+      atomicPointer(
+        runtimeHome,
+        'active-core',
+        first.target_core_binding_relative_path,
+      );
+    }
+    events.push(appendJournal(runtimeHome, base, events, phase));
   }
-  if (events.length === 2) {
-    atomicPointer(
-      runtimeHome,
-      'active-deployment',
-      first.target_deployment_relative_path,
-    );
-    events.push(
-      appendJournal(runtimeHome, base, events, 'active_deployment_committed'),
-    );
-  }
-  if (events.length === 3) {
-    atomicPointer(
-      runtimeHome,
-      'active-core',
-      first.target_core_binding_relative_path,
-    );
-    events.push(
-      appendJournal(runtimeHome, base, events, 'active_core_committed'),
-    );
-  }
-  if (events.length === 4)
-    events.push(appendJournal(runtimeHome, base, events, 'completed'));
   return events.at(-1)!;
 }
 
-export function recoverHostCoreActivations(
-  runtimeHomeInput: string,
+function recoverHostCoreActivationsUnlocked(
+  runtimeHome: string,
 ): readonly Sha256Hash[] {
-  const runtimeHome = fs.realpathSync(runtimeHomeInput);
   const root = path.join(runtimeHome, 'host-core-activation-journals');
   if (!fs.existsSync(root)) return [];
   const entries = fs.readdirSync(root, { withFileTypes: true });
@@ -1003,16 +1241,219 @@ export function recoverHostCoreActivations(
   return recovered;
 }
 
+export function recoverHostCoreActivations(
+  runtimeHomeInput: string,
+): readonly Sha256Hash[] {
+  const runtimeHome = fs.realpathSync(runtimeHomeInput);
+  const lock = acquireHostCoreLock({
+    runtimeHome,
+    name: '.host-core-activation.lock',
+    busyError: 'host_core_activation_busy',
+  });
+  try {
+    return recoverHostCoreActivationsUnlocked(runtimeHome);
+  } finally {
+    lock.release();
+  }
+}
+
+export interface HostCoreActivationPreflight {
+  readonly current: ActiveHostCoreIdentity | null;
+  readonly target: HostCoreReleaseManifest;
+  readonly persistent_state: PersistentStateDecision;
+}
+
+export function inspectHostCoreActivation(
+  runtimeHomeInput: string,
+  version: string,
+): HostCoreActivationPreflight {
+  const runtimeHome = fs.realpathSync(runtimeHomeInput);
+  const target = resolveHostCoreVersion(runtimeHome, version).manifest;
+  const current = lstatIfPresent(path.join(runtimeHome, 'active-core'))
+    ? verifyActiveHostCore(runtimeHome)
+    : null;
+  return {
+    current,
+    target,
+    persistent_state: decidePersistentStateCompatibility(
+      runtimeHome,
+      targetSchemaIdentity(target),
+    ),
+  };
+}
+
 export interface ActivateHostCoreOptions {
   readonly runtimeHome: string;
   readonly version: string;
   readonly skipValidation: boolean;
+  readonly resetIncompatibleState?: boolean;
   readonly confirm: (
     current: ActiveHostCoreIdentity | null,
     target: HostCoreReleaseManifest,
+    persistentState: PersistentStateDecision,
   ) => boolean;
   readonly now?: () => number;
   readonly activationId?: string;
+}
+
+export interface PreparedHostCoreActivation {
+  readonly version: string;
+  readonly release_artifact_hash: Sha256Hash;
+  readonly core_binding_hash: Sha256Hash;
+  readonly activation_audit_hash: Sha256Hash;
+  readonly activation_id: string;
+  readonly prepared_journal_hash: Sha256Hash;
+  readonly rollback: boolean;
+}
+
+function persistentStateAction(
+  decision: PersistentStateDecision,
+  reset: boolean,
+): HostCoreActivationAudit['persistent_state_action'] {
+  if (reset) return 'RESET_BY_USER';
+  if (decision.decision === 'NO_STATE') return 'NO_STATE';
+  if (decision.decision === 'SAME_SCHEMA') return 'UNCHANGED';
+  return 'MIGRATION_ON_START';
+}
+
+function prepareHostCoreActivationUnlocked(
+  options: ActivateHostCoreOptions,
+  runtimeHome: string,
+): PreparedHostCoreActivation {
+  const { entry, manifest } = resolveHostCoreVersion(
+    runtimeHome,
+    options.version,
+  );
+  let current: ActiveHostCoreIdentity | null = null;
+  if (lstatIfPresent(path.join(runtimeHome, 'active-core')))
+    current = verifyActiveHostCore(runtimeHome);
+  const persistentState = decidePersistentStateCompatibility(
+    runtimeHome,
+    targetSchemaIdentity(manifest),
+  );
+  if (persistentState.decision === 'UNKNOWN_BLOCKED')
+    throw new Error(
+      `host_core_persistent_state_unknown:${persistentState.reason}`,
+    );
+  const reset = persistentState.decision === 'RESET_REQUIRED';
+  if (reset && !options.resetIncompatibleState)
+    throw new Error(
+      `host_core_persistent_state_RESET_REQUIRED:${persistentState.reason}`,
+    );
+  if (!reset && options.resetIncompatibleState)
+    throw new Error('host_core_persistent_state_reset_not_required');
+  if (!options.confirm(current, manifest, persistentState))
+    throw new Error('host_core_activation_cancelled');
+  if (!options.skipValidation) assertLightweightReadiness(runtimeHome, entry);
+
+  const manifestPath = path.join(
+    runtimeHome,
+    entry.release_relative_path,
+    HOST_CORE_MANIFEST_FILENAME,
+  );
+  const binding = buildBinding(manifest, rawSha256(manifestPath));
+  const bindingRelative = installBinding(runtimeHome, binding);
+  const requestedAt = (options.now ?? Date.now)();
+  const activationId = safeId(
+    options.activationId ??
+      `host-core-${requestedAt}-${crypto.randomBytes(6).toString('hex')}`,
+    'host_core_activation_id',
+  );
+  const targetRegistrySequence = entry.registration_sequence;
+  const currentRegistrySequence = current?.formal
+    ? resolveHostCoreVersion(runtimeHome, current.version).entry
+        .registration_sequence
+    : null;
+  const rollback =
+    currentRegistrySequence !== null &&
+    targetRegistrySequence < currentRegistrySequence;
+  const resetPlan = reset
+    ? buildPersistentStateResetPlan(persistentState)
+    : null;
+  const stateAction = persistentStateAction(persistentState, reset);
+  const audit = buildAudit({
+    activation_id: activationId,
+    requested_at_ms: requestedAt,
+    version: manifest.ref.version,
+    target_release_artifact_hash: manifest.release_artifact_hash,
+    target_core_binding_hash: binding.binding_hash,
+    previous_version: current?.version ?? null,
+    previous_release_artifact_hash: current?.release_artifact_hash ?? null,
+    previous_core_binding_hash: current?.binding_hash ?? null,
+    validation_status: manifest.validation_status,
+    validation_commands: manifest.validation_commands,
+    readiness_status: options.skipValidation ? 'SKIPPED_BY_USER' : 'PASS',
+    persistent_state_action: stateAction,
+    old_persistent_state_identity: persistentState.old_identity,
+    target_persistent_state_identity: persistentState.target_identity,
+    persistent_state_backup_identity: resetPlan?.backup_identity ?? null,
+    persistent_state_backup_relative_path:
+      resetPlan?.backup_relative_path ?? null,
+    persistent_state_reset_plan: resetPlan,
+    persistent_state_rollback: reset
+      ? 'CODE_ROLLBACK_DOES_NOT_RESTORE_QUARANTINED_STATE'
+      : 'CODE_ROLLBACK_STATE_COMPATIBILITY_REQUIRED',
+    rollback,
+  });
+  const deployment = buildDeployment({
+    activation_id: activationId,
+    version: manifest.ref.version,
+    release_artifact_hash: manifest.release_artifact_hash,
+    core_binding_hash: binding.binding_hash,
+    previous_deployment_relative_path: activeDeploymentRelative(runtimeHome),
+    activation_audit_hash: audit.audit_hash,
+  });
+  const deploymentRelative = `deployment-bindings/${deployment.deployment_hash.slice('sha256:'.length)}`;
+  durableWriteExclusive(
+    runtimeHome,
+    path.join(runtimeHome, deploymentRelative, 'host-core-deployment.json'),
+    deployment as unknown as JsonValue,
+  );
+  durableWriteExclusive(
+    runtimeHome,
+    path.join(
+      runtimeHome,
+      'host-core-activation-audits',
+      audit.audit_hash.slice('sha256:'.length),
+      'activation-audit.json',
+    ),
+    audit as unknown as JsonValue,
+  );
+  const base = {
+    activation_id: activationId,
+    version: manifest.ref.version,
+    target_release_artifact_hash: manifest.release_artifact_hash,
+    target_core_binding_relative_path: bindingRelative,
+    target_deployment_relative_path: deploymentRelative,
+    occurred_at_ms: requestedAt,
+  };
+  const prepared = appendJournal(runtimeHome, base, [], 'prepared');
+  return {
+    version: manifest.ref.version,
+    release_artifact_hash: manifest.release_artifact_hash,
+    core_binding_hash: binding.binding_hash,
+    activation_audit_hash: audit.audit_hash,
+    activation_id: activationId,
+    prepared_journal_hash: prepared.event_hash,
+    rollback,
+  };
+}
+
+export function prepareHostCoreActivation(
+  options: ActivateHostCoreOptions,
+): PreparedHostCoreActivation {
+  const runtimeHome = fs.realpathSync(options.runtimeHome);
+  const lock = acquireHostCoreLock({
+    runtimeHome,
+    name: '.host-core-activation.lock',
+    busyError: 'host_core_activation_busy',
+  });
+  try {
+    recoverHostCoreActivationsUnlocked(runtimeHome);
+    return prepareHostCoreActivationUnlocked(options, runtimeHome);
+  } finally {
+    lock.release();
+  }
 }
 
 export function activateHostCoreRelease(options: ActivateHostCoreOptions): {
@@ -1024,105 +1465,26 @@ export function activateHostCoreRelease(options: ActivateHostCoreOptions): {
   readonly rollback: boolean;
 } {
   const runtimeHome = fs.realpathSync(options.runtimeHome);
-  const lock = path.join(runtimeHome, '.host-core-activation.lock');
+  const lock = acquireHostCoreLock({
+    runtimeHome,
+    name: '.host-core-activation.lock',
+    busyError: 'host_core_activation_busy',
+  });
   try {
-    fs.mkdirSync(lock, { mode: 0o700 });
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'EEXIST')
-      throw new Error('host_core_activation_busy');
-    throw error;
-  }
-  try {
-    recoverHostCoreActivations(runtimeHome);
-    const { entry, manifest } = resolveHostCoreVersion(
-      runtimeHome,
-      options.version,
-    );
-    let current: ActiveHostCoreIdentity | null = null;
-    if (lstatIfPresent(path.join(runtimeHome, 'active-core')))
-      current = verifyActiveHostCore(runtimeHome);
-    assertPersistentCompatibility(runtimeHome, current, manifest);
-    if (!options.confirm(current, manifest))
-      throw new Error('host_core_activation_cancelled');
-    if (!options.skipValidation) assertLightweightReadiness(runtimeHome, entry);
-
-    const manifestPath = path.join(
-      runtimeHome,
-      entry.release_relative_path,
-      HOST_CORE_MANIFEST_FILENAME,
-    );
-    const binding = buildBinding(manifest, rawSha256(manifestPath));
-    const bindingRelative = installBinding(runtimeHome, binding);
-    const requestedAt = (options.now ?? Date.now)();
-    const activationId = safeId(
-      options.activationId ??
-        `host-core-${requestedAt}-${crypto.randomBytes(6).toString('hex')}`,
-      'host_core_activation_id',
-    );
-    const targetRegistrySequence = entry.registration_sequence;
-    const currentRegistrySequence = current?.formal
-      ? resolveHostCoreVersion(runtimeHome, current.version).entry
-          .registration_sequence
-      : null;
-    const rollback =
-      currentRegistrySequence !== null &&
-      targetRegistrySequence < currentRegistrySequence;
-    const audit = buildAudit({
-      activation_id: activationId,
-      requested_at_ms: requestedAt,
-      version: manifest.ref.version,
-      target_release_artifact_hash: manifest.release_artifact_hash,
-      target_core_binding_hash: binding.binding_hash,
-      previous_version: current?.version ?? null,
-      previous_release_artifact_hash: current?.release_artifact_hash ?? null,
-      previous_core_binding_hash: current?.binding_hash ?? null,
-      validation_status: manifest.validation_status,
-      readiness_status: options.skipValidation ? 'SKIPPED_BY_USER' : 'PASS',
-      rollback,
-    });
-    const deployment = buildDeployment({
-      activation_id: activationId,
-      version: manifest.ref.version,
-      release_artifact_hash: manifest.release_artifact_hash,
-      core_binding_hash: binding.binding_hash,
-      previous_deployment_relative_path: activeDeploymentRelative(runtimeHome),
-      activation_audit_hash: audit.audit_hash,
-    });
-    const deploymentRelative = `host-core-deployments/${deployment.deployment_hash.slice('sha256:'.length)}`;
-    durableWriteExclusive(
-      runtimeHome,
-      path.join(runtimeHome, deploymentRelative, 'deployment.json'),
-      deployment as unknown as JsonValue,
-    );
-    durableWriteExclusive(
-      runtimeHome,
-      path.join(
-        runtimeHome,
-        'host-core-activation-audits',
-        audit.audit_hash.slice('sha256:'.length),
-        'activation-audit.json',
-      ),
-      audit as unknown as JsonValue,
-    );
-    const base = {
-      activation_id: activationId,
-      version: manifest.ref.version,
-      target_release_artifact_hash: manifest.release_artifact_hash,
-      target_core_binding_relative_path: bindingRelative,
-      target_deployment_relative_path: deploymentRelative,
-      occurred_at_ms: requestedAt,
-    };
-    const prepared = appendJournal(runtimeHome, base, [], 'prepared');
+    recoverHostCoreActivationsUnlocked(runtimeHome);
+    const prepared = prepareHostCoreActivationUnlocked(options, runtimeHome);
     const completed = recoverJournal(runtimeHome, prepared.activation_id);
+    if (completed.phase !== 'completed')
+      throw new Error('host_core_activation_recovery_incomplete');
     return {
-      version: manifest.ref.version,
-      release_artifact_hash: manifest.release_artifact_hash,
-      core_binding_hash: binding.binding_hash,
-      activation_audit_hash: audit.audit_hash,
+      version: prepared.version,
+      release_artifact_hash: prepared.release_artifact_hash,
+      core_binding_hash: prepared.core_binding_hash,
+      activation_audit_hash: prepared.activation_audit_hash,
       journal_head_hash: completed.event_hash,
-      rollback,
+      rollback: prepared.rollback,
     };
   } finally {
-    fs.rmdirSync(lock);
+    lock.release();
   }
 }

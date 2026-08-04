@@ -11,6 +11,8 @@ case "$HOST_MODE" in
     exec "$RUNTIME_TOOLCHAIN" --runtime-home "$RUNTIME_HOME" exec -- node "$BACKEND_ENTRY"
     ;;
   active)
-    exec "$RUNTIME_LAUNCHER" core
+    exec "$RUNTIME_TOOLCHAIN" --runtime-home "$RUNTIME_HOME" exec -- npx tsx "$HOST_CORE_RELEASE_CLI" \
+      launch-active \
+      --runtime-home "$RUNTIME_HOME"
     ;;
 esac
