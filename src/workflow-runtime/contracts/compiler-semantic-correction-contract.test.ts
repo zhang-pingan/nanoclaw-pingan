@@ -60,11 +60,12 @@ function artifact(relativePath: string) {
 
 describe('G2 working semantic correction Contract', () => {
   it('rebuilds deterministic current bytes and checks them read-only', () => {
+    const document = fs.readFileSync(architecturePath, 'utf8');
     const first = [
-      ...buildCompilerSemanticCorrectionContractArtifactsForTest(),
+      ...buildCompilerSemanticCorrectionContractArtifactsForTest(document),
     ];
     const second = [
-      ...buildCompilerSemanticCorrectionContractArtifactsForTest(),
+      ...buildCompilerSemanticCorrectionContractArtifactsForTest(document),
     ];
     expect(second).toEqual(first);
     const before = treeDigest();
@@ -106,7 +107,7 @@ describe('G2 working semantic correction Contract', () => {
     const document = fs.readFileSync(architecturePath, 'utf8');
     const section = currentR017Section(document);
     const generated = new Map(
-      buildCompilerSemanticCorrectionContractArtifactsForTest(),
+      buildCompilerSemanticCorrectionContractArtifactsForTest(document),
     );
     const decision = parseContractArtifactEnvelope(
       strictParseJsonBytes(

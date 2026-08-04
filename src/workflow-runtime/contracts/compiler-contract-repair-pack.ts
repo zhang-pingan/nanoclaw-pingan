@@ -73,6 +73,14 @@ import type {
 const contractsRoot = import.meta.dirname;
 const repoRoot = path.resolve(contractsRoot, '../../..');
 const workflowRuntimeRoot = path.resolve(contractsRoot, '..');
+const archivedFrameworkPath = path.join(
+  repoRoot,
+  'docs/archive/dynamic-workflow-runtime-v1/dynamic-workflow-dag-framework.md',
+);
+
+function archivedFramework(): string {
+  return fs.readFileSync(archivedFrameworkPath, 'utf8');
+}
 const HASH = `sha256:${'0'.repeat(64)}` as Sha256Hash;
 
 export class CompilerContractRepairError extends Error {
@@ -125,7 +133,9 @@ function artifactByFormat(
   return artifact;
 }
 
-function buildCoreArtifacts(): Array<[string, ContractArtifactEnvelope]> {
+function buildCoreArtifacts(
+  document: string,
+): Array<[string, ContractArtifactEnvelope]> {
   const schemas = buildCompilerContractRepairSchemaArtifacts();
   const schema = (format: string) => artifactByFormat(schemas, format);
 
@@ -200,6 +210,7 @@ function buildCoreArtifacts(): Array<[string, ContractArtifactEnvelope]> {
     bindingRequirement[1].hash,
     loweringPayload.contract_hash,
     draftManifest[1].hash,
+    compilerContractRepairSpecSectionHash(document),
   );
   const decision: [string, ContractArtifactEnvelope] = [
     COMPILER_CONTRACT_REPAIR_DECISION_PATH,
@@ -232,8 +243,10 @@ function buildCoreArtifacts(): Array<[string, ContractArtifactEnvelope]> {
   ].sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0));
 }
 
-function expectedArtifacts(): Array<[string, ContractArtifactEnvelope]> {
-  const core = buildCoreArtifacts();
+function expectedArtifacts(
+  document = archivedFramework(),
+): Array<[string, ContractArtifactEnvelope]> {
+  const core = buildCoreArtifacts(document);
   const domain = buildDomainCatalog(
     core,
     COMPILER_CONTRACT_REPAIR_SCHEMA_DESCRIPTORS,
@@ -249,6 +262,7 @@ function expectedArtifacts(): Array<[string, ContractArtifactEnvelope]> {
 
 function buildManifest(
   artifacts: Array<[string, ContractArtifactEnvelope]>,
+  document = archivedFramework(),
 ): ContractArtifactEnvelope {
   const decision = artifactByFormat(
     artifacts,
@@ -277,7 +291,7 @@ function buildManifest(
       normative_spec_ref: COMPILER_CONTRACT_REPAIR_SPEC_PATH,
       normative_spec_section: COMPILER_CONTRACT_REPAIR_SPEC_SECTION,
       normative_spec_section_raw_sha256:
-        compilerContractRepairSpecSectionHash(),
+        compilerContractRepairSpecSectionHash(document),
       generated_by_tool_hash: compilerContractRepairToolHash(),
       repair_decision_hash: decision.hash,
       golden_draft_v2_hash: draft.hash,

@@ -36,6 +36,7 @@ import { parseVersionedRef } from '../../contracts/versioned-ref.js';
 
 export type WorkflowRuntimeIdentityMode =
   | 'candidate_development'
+  | 'isolated_test'
   | 'release_validation'
   | 'production_activation'
   | 'production';
@@ -117,6 +118,13 @@ interface DevelopmentCoreBinding extends JsonObject {
   core_entry_sha256: Sha256Hash;
   managed_node_manifest_hash: Sha256Hash;
   binding_hash: Sha256Hash;
+}
+
+interface IsolatedTestCoreBinding {
+  readonly binding_kind: 'development_checkout';
+  readonly binding_hash: Sha256Hash;
+  readonly core_entry_sha256: Sha256Hash;
+  readonly project_root: string;
 }
 
 const require = createRequire(import.meta.url);
@@ -586,6 +594,41 @@ function verifyDevelopmentCoreBinding(
   return value as unknown as DevelopmentCoreBinding;
 }
 
+function verifyIsolatedTestCoreBinding(
+  expectedManifestHash: Sha256Hash,
+): IsolatedTestCoreBinding {
+  const projectRoot = fs.realpathSync(
+    path.resolve(import.meta.dirname, '../../../..'),
+  );
+  const packagePath = fs.realpathSync(path.join(projectRoot, 'package.json'));
+  const coreEntryPath = fs.realpathSync(path.join(projectRoot, 'src/index.ts'));
+  const launcherPath = fs.realpathSync(
+    path.join(projectRoot, 'scripts/runtime-launcher.sh'),
+  );
+  assertInside(projectRoot, packagePath, 'Isolated test package');
+  assertInside(projectRoot, coreEntryPath, 'Isolated test Core entry');
+  assertInside(projectRoot, launcherPath, 'Isolated test Runtime Launcher');
+  const coreEntryHash = rawSha256(coreEntryPath);
+  const payload = {
+    format: 'icarus.workflow-runtime-isolated-test-binding/1',
+    binding_kind: 'development_checkout',
+    package_json_sha256: rawSha256(packagePath),
+    core_entry_relative_path: 'src/index.ts',
+    core_entry_sha256: coreEntryHash,
+    managed_node_manifest_hash: expectedManifestHash,
+    runtime_launcher_sha256: rawSha256(launcherPath),
+  } as const;
+  return Object.freeze({
+    binding_kind: payload.binding_kind,
+    binding_hash: domainSeparatedSha256(
+      'icarus:workflow-runtime-isolated-test-binding:1\n',
+      payload,
+    ),
+    core_entry_sha256: coreEntryHash,
+    project_root: projectRoot,
+  });
+}
+
 export function collectWorkflowRuntimeIdentityEvidence(
   database: Database.Database,
   profile: Readonly<SQLiteExecutionProfileCandidate>,
@@ -762,10 +805,10 @@ export function collectWorkflowRuntimeIdentityEvidence(
             : 'active_production',
     });
   }
-  const coreBinding = verifyDevelopmentCoreBinding(
-    runtimeHome,
-    distribution.manifest_hash,
-  );
+  const coreBinding =
+    mode === 'isolated_test'
+      ? verifyIsolatedTestCoreBinding(distribution.manifest_hash)
+      : verifyDevelopmentCoreBinding(runtimeHome, distribution.manifest_hash);
   const checkedInLauncherHash = rawSha256(
     path.join(coreBinding.project_root, 'scripts/runtime-launcher.sh'),
   );

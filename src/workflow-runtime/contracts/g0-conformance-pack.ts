@@ -56,6 +56,14 @@ const repoRoot = path.resolve(contractsRoot, '../../..');
 const workflowRuntimeRoot = path.resolve(contractsRoot, '..');
 const manifestPath = 'contract-pack-g0-conformance-exit.json';
 const domainCatalogPath = 'catalogs/g0-conformance-domain-separators.json';
+const archivedFrameworkPath = path.join(
+  repoRoot,
+  'docs/archive/dynamic-workflow-runtime-v1/dynamic-workflow-dag-framework.md',
+);
+
+function archivedFramework(): string {
+  return fs.readFileSync(archivedFrameworkPath, 'utf8');
+}
 
 export class G0ConformanceContractError extends Error {
   readonly code = 'g0_conformance_contract_drift';
@@ -164,7 +172,7 @@ function buildDomainCatalogArtifact(
 }
 
 function expectedArtifacts(): Array<[string, ContractArtifactEnvelope]> {
-  const coverage = buildG0MarkdownContractCoverage();
+  const coverage = buildG0MarkdownContractCoverage(archivedFramework());
   const inventory = buildG0ArtifactHashInventory();
   const review = buildG0GateReview(coverage, inventory);
   const artifacts = [

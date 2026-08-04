@@ -179,7 +179,11 @@ describe('R-016 Compiler spec and Contract repair', () => {
     expect(rawSha256('conformance/draft/golden-draft-cases@1.json')).toBe(
       HISTORICAL_G0_8_CASE_CATALOG_RAW_SHA256,
     );
-    const sectionBytes = compilerContractRepairSpecSectionBytes();
+    const architecture = fs.readFileSync(
+      path.join(repoRoot, COMPILER_CONTRACT_REPAIR_SPEC_PATH),
+      'utf8',
+    );
+    const sectionBytes = compilerContractRepairSpecSectionBytes(architecture);
     expect(sectionBytes.toString('utf8')).toMatch(
       new RegExp(`^${COMPILER_CONTRACT_REPAIR_SPEC_SECTION}`),
     );
@@ -187,10 +191,8 @@ describe('R-016 Compiler spec and Contract repair', () => {
       .createHash('sha256')
       .update(sectionBytes)
       .digest('hex')}`;
-    expect(compilerContractRepairSpecSectionHash()).toBe(specSectionHash);
-    const architecture = fs.readFileSync(
-      path.join(repoRoot, COMPILER_CONTRACT_REPAIR_SPEC_PATH),
-      'utf8',
+    expect(compilerContractRepairSpecSectionHash(architecture)).toBe(
+      specSectionHash,
     );
     expect(
       extractCompilerContractRepairSpecSectionBytes(
@@ -587,8 +589,12 @@ describe('R-016 Compiler spec and Contract repair', () => {
       release_identity_status: 'missing_until_g8',
       normative_spec_ref: COMPILER_CONTRACT_REPAIR_SPEC_PATH,
       normative_spec_section: COMPILER_CONTRACT_REPAIR_SPEC_SECTION,
-      normative_spec_section_raw_sha256:
-        compilerContractRepairSpecSectionHash(),
+      normative_spec_section_raw_sha256: compilerContractRepairSpecSectionHash(
+        fs.readFileSync(
+          path.join(repoRoot, COMPILER_CONTRACT_REPAIR_SPEC_PATH),
+          'utf8',
+        ),
+      ),
     });
     expect(
       fs.readdirSync(path.join(contractsRoot, 'conformance/sealed')),

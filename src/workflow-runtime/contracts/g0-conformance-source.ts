@@ -366,8 +366,9 @@ function markdownSection(markdown: string, section: string): string {
   return lines.slice(start, end).join('\n');
 }
 
-export function buildG0MarkdownContractCoverage(): G0MarkdownContractCoverage {
-  const markdown = readRepoBytes(architecturePath).toString('utf8');
+export function buildG0MarkdownContractCoverage(
+  markdown: string,
+): G0MarkdownContractCoverage {
   const entries: G0MarkdownCoverageEntry[] = [];
   for (const seed of G0_MARKDOWN_SEMANTIC_FORMATS) {
     entries.push(

@@ -13,7 +13,7 @@ try {
   const store = WorkflowRuntimeConnectionFactory.openStore({
     databasePath,
     databaseMode: 'create',
-    identityMode: 'candidate_development',
+    identityMode: 'isolated_test',
   });
   const tableCount = store.queryOne<{ table_count: number }>(
     'SELECT count(*) AS table_count FROM sqlite_schema WHERE type = ? AND name NOT LIKE ?',
@@ -31,7 +31,7 @@ try {
   const reopened = WorkflowRuntimeConnectionFactory.openStore({
     databasePath,
     databaseMode: 'open_existing',
-    identityMode: 'candidate_development',
+    identityMode: 'isolated_test',
   });
   reopened.close();
 

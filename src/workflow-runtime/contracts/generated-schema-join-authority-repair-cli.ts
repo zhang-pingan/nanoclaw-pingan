@@ -6,7 +6,15 @@ import {
 const command = process.argv[2];
 
 if (command === 'generate') {
-  generateGeneratedSchemaJoinAuthorityRepair();
+  generateGeneratedSchemaJoinAuthorityRepair(
+    fs.readFileSync(
+      path.resolve(
+        import.meta.dirname,
+        '../../../docs/archive/dynamic-workflow-runtime-v1/dynamic-workflow-dag-framework.md',
+      ),
+      'utf8',
+    ),
+  );
   console.log(
     'Generated generated-schema/join-authority repair Contract Pack.',
   );
@@ -21,3 +29,5 @@ if (command === 'generate') {
   );
   process.exitCode = 1;
 }
+import fs from 'node:fs';
+import path from 'node:path';

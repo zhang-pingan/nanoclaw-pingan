@@ -14,7 +14,6 @@ import type {
 import { assertCurrentG2SealedBoundary } from './current-g2-sealed-boundary.js';
 
 const contractsRoot = import.meta.dirname;
-const projectRoot = path.resolve(contractsRoot, '../../..');
 
 export const COMPILER_SEMANTIC_CORRECTION_ROOT =
   'conformance/compiler-semantic-correction';
@@ -52,6 +51,29 @@ const ROOT_DOMAIN =
   'icarus:workflow-contract-pack-compiler-semantic-correction:1\n';
 const SPEC_SECTION_DOMAIN =
   'icarus:workflow-compiler-semantic-correction-spec-section:1\n';
+const CURRENT_FILES = Object.freeze([
+  {
+    path: COMPILER_SEMANTIC_CORRECTION_DECISION_PATH,
+    rawHash:
+      'sha256:519a10b68ae6ac4b20b2835937654b237c7372631f99d4c6fd9aead267e4024b',
+    artifactHash:
+      'sha256:03625b93f29fc04b5cd2f12c5d3e3f5c06b728ef4ba338c0aca818d5e25d4631',
+  },
+  {
+    path: COMPILER_ERROR_CATALOG_V2_PATH,
+    rawHash:
+      'sha256:769b88b972d188c23608cba7d67325df6b18fa7ec3db0852658708f4340bd84f',
+    artifactHash:
+      'sha256:8fc7139b29cdddf3c1e13e0f9d8bc6b19a1d32c02c1e7f4b7e33023fcece91ef',
+  },
+  {
+    path: COMPILER_SEMANTIC_CORRECTION_MANIFEST_PATH,
+    rawHash:
+      'sha256:c13247fc99cc4a2a45fde35ad35e3138d88fda1e86beb4c898a055b4509c7e82',
+    artifactHash:
+      'sha256:a2d8bcab971d1db75aad17d152c7c616371a4ceeb8d52f408674d744cf7866b8',
+  },
+]);
 
 function absoluteContractPath(relativePath: string): string {
   const absolute = path.resolve(contractsRoot, relativePath);
@@ -95,21 +117,12 @@ function artifact(
   return value;
 }
 
-function specSection(document?: string): string {
-  const source =
-    document ??
-    fs.readFileSync(
-      path.join(
-        projectRoot,
-        'docs/archive/dynamic-workflow-runtime-v1/dynamic-workflow-dag-framework.md',
-      ),
-      'utf8',
-    );
-  const start = source.indexOf(COMPILER_SEMANTIC_CORRECTION_SPEC_HEADING);
+function specSection(document: string): string {
+  const start = document.indexOf(COMPILER_SEMANTIC_CORRECTION_SPEC_HEADING);
   if (start < 0) throw new Error('R-017 spec section is missing');
-  const end = source.indexOf('\n### ', start + 1);
+  const end = document.indexOf('\n### ', start + 1);
   if (end < 0) throw new Error('R-017 spec section is not closed');
-  return source.slice(start, end).trimEnd();
+  return document.slice(start, end).trimEnd();
 }
 
 function buildDecision(section: string): ContractArtifactEnvelope {
@@ -275,7 +288,7 @@ function buildErrorCatalogV2(): ContractArtifactEnvelope {
   );
 }
 
-function expectedFiles(section = specSection()): Map<string, string> {
+function expectedFiles(section: string): Map<string, string> {
   const decision = buildDecision(section);
   const errorCatalog = buildErrorCatalogV2();
   const files = new Map<string, string>([
@@ -342,11 +355,10 @@ function validateBoundary(): void {
   }
 }
 
-export function buildCompilerSemanticCorrectionContractArtifactsForTest(): Map<
-  string,
-  string
-> {
-  return expectedFiles();
+export function buildCompilerSemanticCorrectionContractArtifactsForTest(
+  document: string,
+): Map<string, string> {
+  return expectedFiles(specSection(document));
 }
 
 export function checkCompilerSemanticCorrectionContractAgainstSpecDocumentForTest(
@@ -355,9 +367,11 @@ export function checkCompilerSemanticCorrectionContractAgainstSpecDocumentForTes
   return checkExpectedFiles(expectedFiles(specSection(document)));
 }
 
-export function generateCompilerSemanticCorrectionContract(): ContractArtifactEnvelope {
+export function generateCompilerSemanticCorrectionContract(
+  document: string,
+): ContractArtifactEnvelope {
   validateBoundary();
-  const files = expectedFiles();
+  const files = expectedFiles(specSection(document));
   for (const [relativePath, contents] of files) {
     writeAtomic(relativePath, contents);
   }
@@ -373,7 +387,28 @@ export function generateCompilerSemanticCorrectionContract(): ContractArtifactEn
 
 export function checkCompilerSemanticCorrectionContract(): ContractArtifactEnvelope {
   validateBoundary();
-  return checkExpectedFiles(expectedFiles());
+  const expectedPaths = CURRENT_FILES.map((entry) => entry.path).sort();
+  if (JSON.stringify(listFiles()) !== JSON.stringify(expectedPaths)) {
+    throw new Error('Semantic correction Contract inventory drift');
+  }
+  let manifest: ContractArtifactEnvelope | undefined;
+  for (const expected of CURRENT_FILES) {
+    const bytes = fs.readFileSync(absoluteContractPath(expected.path));
+    if (rawHash(bytes) !== expected.rawHash) {
+      throw new Error(`Semantic correction Contract drift: ${expected.path}`);
+    }
+    const parsed = parseContractArtifactEnvelope(strictParseJsonBytes(bytes));
+    if (parsed.hash !== expected.artifactHash) {
+      throw new Error(
+        `Semantic correction Contract identity drift: ${expected.path}`,
+      );
+    }
+    if (expected.path === COMPILER_SEMANTIC_CORRECTION_MANIFEST_PATH) {
+      manifest = parsed;
+    }
+  }
+  if (!manifest) throw new Error('Semantic correction Contract root missing');
+  return manifest;
 }
 
 function checkExpectedFiles(

@@ -22,7 +22,7 @@ export class G5TestBootstrapInstance {
   constructor(
     dataRoot: string,
     store: WorkflowRuntimeStore,
-    identityMode: WorkflowRuntimeIdentityMode = 'candidate_development',
+    identityMode: WorkflowRuntimeIdentityMode = 'isolated_test',
   ) {
     this.dataRoot = dataRoot;
     this.databasePath = path.join(dataRoot, 'workflow-runtime.db');
@@ -99,7 +99,7 @@ export function createG5TestBootstrap(
     const store = WorkflowRuntimeConnectionFactory.openStore({
       databasePath,
       databaseMode: 'create',
-      identityMode: 'candidate_development',
+      identityMode: 'isolated_test',
     });
     return new G5TestBootstrapInstance(dataRoot, store);
   } catch (error) {

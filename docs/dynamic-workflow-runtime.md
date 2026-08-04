@@ -32,7 +32,9 @@ Run Node/npm commands through the managed toolchain:
 ./scripts/runtime-toolchain.sh exec -- npm run workflow-runtime:release:check
 ```
 
-The accepted release verifier checks the immutable checked-in manifest and v3 binding. It does not rebuild, regenerate, rebind, stage, or activate the accepted release.
+The accepted release verifier checks the immutable manifest and v3 binding, then reads the Git-tracked compressed physical-release archive and verifies every manifest member's exact path, byte length, raw hash, and `0644`/`0755` mode. It does not rebuild, regenerate, rebind, stage, activate, or inspect an installed pointer.
+
+Store and Runtime tests use the explicit `isolated_test` identity mode. This mode keeps the managed Node, distribution, Launcher, native SQLite module, SQLite profile, and active managed-Node checks, but hashes the current test checkout in memory instead of reading a machine `active-core` pointer.
 
 ## Historical Archive
 

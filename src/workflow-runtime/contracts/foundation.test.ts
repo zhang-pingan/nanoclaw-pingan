@@ -7,19 +7,22 @@ import { describe, expect, it } from 'vitest';
 
 import {
   ContractArtifactError,
+  parseContractArtifactEnvelope,
+} from './artifact.js';
+import {
   ContractHashError,
-  StrictJsonError,
-  VersionedRefError,
-  assertJsonValue,
   calculateArtifactHash,
   canonicalJson,
   domainSeparatedSha256,
-  parseContractArtifactEnvelope,
   parseSha256Hash,
-  parseVersionedRef,
+} from './hash.js';
+import {
+  StrictJsonError,
+  assertJsonValue,
   strictParseJson,
   strictParseJsonBytes,
-} from './index.js';
+} from './strict-json.js';
+import { VersionedRefError, parseVersionedRef } from './versioned-ref.js';
 import { checkContractPackFoundation } from './contract-pack.js';
 import type {
   ContractArtifactEnvelope,

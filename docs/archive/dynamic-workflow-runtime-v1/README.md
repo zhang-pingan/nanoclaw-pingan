@@ -21,6 +21,8 @@ Accepted boundary:
 
 The archived documents intentionally retain former paths, candidate states, findings, and Gate language where those strings were part of historical evidence. Frozen generated JSON and the accepted `dist/` release may retain the same literals. Those literals are not live links or default inputs and must not be rewritten to relabel history.
 
+The accepted physical release inventory is retained separately as current release identity authority at [`src/workflow-runtime/contracts/certification/accepted-release-v1/`](../../../src/workflow-runtime/contracts/certification/accepted-release-v1/). It is not a rebuilt or successor release. The current release checker validates the archive container and all 9,094 manifest members without consulting an installed Runtime pointer.
+
 Current development starts at [`docs/dynamic-workflow-runtime.md`](../../dynamic-workflow-runtime.md) and the machine Contract README. The archive is excluded from default CI, build, release reconstruction, Runtime, Compiler, Store, Registry, and Launcher reads.
 
 Optional verification is read-only and non-default:

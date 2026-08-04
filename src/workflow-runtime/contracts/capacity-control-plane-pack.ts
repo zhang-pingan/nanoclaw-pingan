@@ -93,6 +93,14 @@ const workflowRuntimeRoot = path.resolve(contractsRoot, '..');
 const addendumRoot = 'conformance/capacity-control-plane-addendum';
 const manifestPath = `${addendumRoot}/contract-pack-capacity-control-plane-addendum.json`;
 const domainCatalogPath = `${addendumRoot}/catalogs/capacity-control-plane-domain-separators.json`;
+const archivedFrameworkPath = path.join(
+  repoRoot,
+  'docs/archive/dynamic-workflow-runtime-v1/dynamic-workflow-dag-framework.md',
+);
+
+function archivedFramework(): string {
+  return fs.readFileSync(archivedFrameworkPath, 'utf8');
+}
 
 export class CapacityControlPlaneContractError extends Error {
   readonly code = 'capacity_control_plane_contract_drift';
@@ -179,7 +187,7 @@ function buildLeafArtifacts(): Array<[string, ContractArtifactEnvelope]> {
   );
   const coverage = buildCapacityDynamicArtifact(
     'coverage',
-    buildCapacityMarkdownDeltaCoverage(),
+    buildCapacityMarkdownDeltaCoverage(archivedFramework()),
   );
   return [
     ...schemas,

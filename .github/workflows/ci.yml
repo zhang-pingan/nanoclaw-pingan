@@ -6,31 +6,25 @@ on:
 
 jobs:
   ci:
-    runs-on: ubuntu-latest
+    runs-on: macos-14-xlarge
+    env:
+      ICARUS_CI_RUNTIME_HOME: ${{ runner.temp }}/icarus-runtime
+      ICARUS_CI_TMPDIR: /private/tmp/icarus-ci-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version-file: .nvmrc
-          cache: npm
-      - name: Verify toolchain identity
-        shell: bash
-        run: |
-          test "$(node --version)" = "v$(cat .nvmrc)"
-          expected_npm="$(node -p "require('./package.json').packageManager.split('@')[1]")"
-          test "$(npm --version)" = "$expected_npm"
-      - run: npm ci
-      - name: Current Runtime contracts and toolchain
-        run: npm run test:g0
-      - name: Current Schema and Store boundary
-        run: npm run test:g1.1 && npm run test:g1.2
-      - name: Current Compiler and sealed replay
-        run: npm run test:g2 && npm run golden:current:replay:check
-      - name: Format check
-        run: npm run format:check
-
+      - name: Verify Darwin arm64 runner
+        run: test "$(uname -s)/$(uname -m)" = "Darwin/arm64"
+      - name: Prepare isolated test root
+        run: mkdir -p "$ICARUS_CI_TMPDIR"
+      - name: Install pinned managed runtime
+        run: ./scripts/runtime-toolchain.sh --runtime-home "$ICARUS_CI_RUNTIME_HOME" install
+      - name: Install dependencies with managed npm
+        run: ./scripts/runtime-toolchain.sh --runtime-home "$ICARUS_CI_RUNTIME_HOME" exec -- npm ci
+      - name: Current Runtime validation
+        run: TMPDIR="$ICARUS_CI_TMPDIR" ./scripts/runtime-toolchain.sh --runtime-home "$ICARUS_CI_RUNTIME_HOME" exec -- npm test
+      - name: Accepted release physical inventory
+        run: ./scripts/runtime-toolchain.sh --runtime-home "$ICARUS_CI_RUNTIME_HOME" exec -- npm run workflow-runtime:release:check
+      - name: Format boundary
+        run: ./scripts/runtime-toolchain.sh --runtime-home "$ICARUS_CI_RUNTIME_HOME" exec -- npm run format:check
       - name: Typecheck
-        run: npm run typecheck
-
-      - name: Tests
-        run: npm test
+        run: ./scripts/runtime-toolchain.sh --runtime-home "$ICARUS_CI_RUNTIME_HOME" exec -- npm run typecheck

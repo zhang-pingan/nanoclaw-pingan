@@ -1,9 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  buildStaticAbsenceContracts,
-  checkContractPackStaticAbsence,
-} from '../src/workflow-runtime/contracts/index.js';
+import { buildStaticAbsenceContracts } from '../src/workflow-runtime/contracts/static-absence-source.js';
+import { checkContractPackStaticAbsence } from '../src/workflow-runtime/contracts/static-absence-pack.js';
 import {
   REMOVED_API_FIXTURES,
   REMOVED_DOM_NAV_KEYS,

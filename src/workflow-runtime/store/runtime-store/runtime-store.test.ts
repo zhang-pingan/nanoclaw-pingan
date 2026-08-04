@@ -47,7 +47,7 @@ function openFresh(databasePath: string): WorkflowRuntimeStore {
   const store = WorkflowRuntimeConnectionFactory.openStore({
     databasePath,
     databaseMode: 'create',
-    identityMode: 'candidate_development',
+    identityMode: 'isolated_test',
   });
   openStores.push(store);
   return store;
@@ -649,6 +649,7 @@ describe.sequential('G1.2 Workflow Runtime Store base', () => {
         ?.user_version,
     ).toBe(11);
     expect(store.identityEvidence).toMatchObject({
+      identity_mode: 'isolated_test',
       validation_status: 'candidate_not_validated',
       platform: 'darwin',
       arch: 'arm64',
@@ -667,7 +668,7 @@ describe.sequential('G1.2 Workflow Runtime Store base', () => {
     const reopened = WorkflowRuntimeConnectionFactory.openStore({
       databasePath,
       databaseMode: 'open_existing',
-      identityMode: 'candidate_development',
+      identityMode: 'isolated_test',
     });
     openStores.push(reopened);
     expect(reopened.frozenInputs.schemaHash).toBe(
@@ -691,7 +692,7 @@ describe.sequential('G1.2 Workflow Runtime Store base', () => {
     const upgraded = WorkflowRuntimeConnectionFactory.openStore({
       databasePath,
       databaseMode: 'open_existing',
-      identityMode: 'candidate_development',
+      identityMode: 'isolated_test',
     });
     openStores.push(upgraded);
     expect(
@@ -739,7 +740,7 @@ describe.sequential('G1.2 Workflow Runtime Store base', () => {
     const upgraded = WorkflowRuntimeConnectionFactory.openStore({
       databasePath,
       databaseMode: 'open_existing',
-      identityMode: 'candidate_development',
+      identityMode: 'isolated_test',
     });
     openStores.push(upgraded);
     expect(
@@ -765,7 +766,7 @@ describe.sequential('G1.2 Workflow Runtime Store base', () => {
     const upgraded = WorkflowRuntimeConnectionFactory.openStore({
       databasePath,
       databaseMode: 'open_existing',
-      identityMode: 'candidate_development',
+      identityMode: 'isolated_test',
     });
     openStores.push(upgraded);
     expect(
@@ -786,7 +787,7 @@ describe.sequential('G1.2 Workflow Runtime Store base', () => {
     const upgraded = WorkflowRuntimeConnectionFactory.openStore({
       databasePath,
       databaseMode: 'open_existing',
-      identityMode: 'candidate_development',
+      identityMode: 'isolated_test',
     });
     openStores.push(upgraded);
     expect(
@@ -804,7 +805,7 @@ describe.sequential('G1.2 Workflow Runtime Store base', () => {
     const reopened = WorkflowRuntimeConnectionFactory.openStore({
       databasePath,
       databaseMode: 'open_existing',
-      identityMode: 'candidate_development',
+      identityMode: 'isolated_test',
     });
     openStores.push(reopened);
     expect(reopened.frozenInputs.sqliteSchemaIdentity).toBe(
@@ -824,7 +825,7 @@ describe.sequential('G1.2 Workflow Runtime Store base', () => {
     const upgraded = WorkflowRuntimeConnectionFactory.openStore({
       databasePath,
       databaseMode: 'open_existing',
-      identityMode: 'candidate_development',
+      identityMode: 'isolated_test',
     });
     openStores.push(upgraded);
     expect(
@@ -842,7 +843,7 @@ describe.sequential('G1.2 Workflow Runtime Store base', () => {
     const reopened = WorkflowRuntimeConnectionFactory.openStore({
       databasePath,
       databaseMode: 'open_existing',
-      identityMode: 'candidate_development',
+      identityMode: 'isolated_test',
     });
     openStores.push(reopened);
     expect(reopened.frozenInputs.sqliteSchemaIdentity).toBe(
@@ -867,7 +868,7 @@ describe.sequential('G1.2 Workflow Runtime Store base', () => {
       WorkflowRuntimeConnectionFactory.openStore({
         databasePath,
         databaseMode: 'open_existing',
-        identityMode: 'candidate_development',
+        identityMode: 'isolated_test',
       }),
     ).toThrow('Schema 8 sqlite_schema identity mismatch');
     expectDatabaseGateUnchanged(databasePath, before);
@@ -894,7 +895,7 @@ describe.sequential('G1.2 Workflow Runtime Store base', () => {
       WorkflowRuntimeConnectionFactory.openStore({
         databasePath,
         databaseMode: 'open_existing',
-        identityMode: 'candidate_development',
+        identityMode: 'isolated_test',
       }),
     ).toThrow('Schema 4 sqlite_schema identity mismatch');
     expectDatabaseGateUnchanged(databasePath, before);
@@ -914,7 +915,7 @@ describe.sequential('G1.2 Workflow Runtime Store base', () => {
       WorkflowRuntimeConnectionFactory.openStore({
         databasePath,
         databaseMode: 'open_existing',
-        identityMode: 'candidate_development',
+        identityMode: 'isolated_test',
       }),
     ).toThrow('Schema 3 sqlite_schema identity mismatch');
     expectDatabaseGateUnchanged(databasePath, before);
@@ -935,7 +936,7 @@ describe.sequential('G1.2 Workflow Runtime Store base', () => {
       WorkflowRuntimeConnectionFactory.openStore({
         databasePath,
         databaseMode: 'open_existing',
-        identityMode: 'candidate_development',
+        identityMode: 'isolated_test',
       }),
     ).toThrow('foreign_key_check returned violations');
     expectDatabaseGateUnchanged(databasePath, before);
@@ -962,7 +963,7 @@ describe.sequential('G1.2 Workflow Runtime Store base', () => {
         WorkflowRuntimeConnectionFactory.openStore({
           databasePath,
           databaseMode: 'open_existing',
-          identityMode: 'candidate_development',
+          identityMode: 'isolated_test',
         }),
       ).toThrow(`Schema 3 upgrade requires empty relation ${relation}`);
       expectDatabaseGateUnchanged(databasePath, before);
@@ -976,7 +977,7 @@ describe.sequential('G1.2 Workflow Runtime Store base', () => {
       WorkflowRuntimeConnectionFactory.openStore({
         databasePath,
         databaseMode: 'open_existing',
-        identityMode: 'candidate_development',
+        identityMode: 'isolated_test',
       }),
     ).toThrowError(
       expect.objectContaining<Partial<WorkflowRuntimeStoreError>>({
@@ -987,7 +988,7 @@ describe.sequential('G1.2 Workflow Runtime Store base', () => {
     const second = WorkflowRuntimeConnectionFactory.openStore({
       databasePath,
       databaseMode: 'open_existing',
-      identityMode: 'candidate_development',
+      identityMode: 'isolated_test',
     });
     openStores.push(second);
     expect(second.isOpen).toBe(true);
@@ -1012,7 +1013,7 @@ describe.sequential('G1.2 Workflow Runtime Store base', () => {
       WorkflowRuntimeConnectionFactory.openStore({
         databasePath,
         databaseMode: 'open_existing',
-        identityMode: 'candidate_development',
+        identityMode: 'isolated_test',
       }),
     ).toThrow();
   });
@@ -1031,7 +1032,7 @@ describe.sequential('G1.2 Workflow Runtime Store base', () => {
       WorkflowRuntimeConnectionFactory.openStore({
         databasePath,
         databaseMode: 'open_existing',
-        identityMode: 'candidate_development',
+        identityMode: 'isolated_test',
       }),
     ).toThrow('journal_mode: expected wal, received delete');
     const after = fs.readFileSync(databasePath);
@@ -1044,7 +1045,7 @@ describe.sequential('G1.2 Workflow Runtime Store base', () => {
     const store = openFresh(databasePath);
     const readOnly = WorkflowRuntimeConnectionFactory.openReadOnly({
       databasePath,
-      identityMode: 'candidate_development',
+      identityMode: 'isolated_test',
     });
     expect(
       readOnly.queryOne<{ query_only: number }>('PRAGMA query_only', [])
@@ -1187,7 +1188,7 @@ describe.sequential('G1.2 Workflow Runtime Store base', () => {
       const store = WorkflowRuntimeConnectionFactory.openStore({
         databasePath,
         databaseMode: 'open_existing',
-        identityMode: 'candidate_development',
+        identityMode: 'isolated_test',
       });
       console.log('ready');
       await delay(100);
@@ -1241,7 +1242,7 @@ describe.sequential('G1.2 Workflow Runtime Store base', () => {
     ).not.toThrow();
     const host = currentRuntimeHostObservation();
     expect(() =>
-      assertRuntimeHostIdentity(profile, 'candidate_development', {
+      assertRuntimeHostIdentity(profile, 'isolated_test', {
         ...host,
         platform: 'linux',
       }),
@@ -1252,7 +1253,7 @@ describe.sequential('G1.2 Workflow Runtime Store base', () => {
       WorkflowRuntimeConnectionFactory.openStore({
         databasePath: ':memory:',
         databaseMode: 'create',
-        identityMode: 'candidate_development',
+        identityMode: 'isolated_test',
       }),
     ).toThrowError(
       expect.objectContaining<Partial<WorkflowRuntimeStoreError>>({

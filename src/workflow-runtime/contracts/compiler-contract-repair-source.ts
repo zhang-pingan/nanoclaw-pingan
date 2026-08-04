@@ -154,14 +154,16 @@ export function extractCompilerContractRepairSpecSectionBytes(
   return Buffer.from(`${markdown.slice(start, end).trimEnd()}\n`, 'utf8');
 }
 
-export function compilerContractRepairSpecSectionBytes(): Buffer {
-  return extractCompilerContractRepairSpecSectionBytes(
-    readRepoBytes(COMPILER_CONTRACT_REPAIR_SPEC_PATH).toString('utf8'),
-  );
+export function compilerContractRepairSpecSectionBytes(
+  document: string,
+): Buffer {
+  return extractCompilerContractRepairSpecSectionBytes(document);
 }
 
-export function compilerContractRepairSpecSectionHash(): Sha256Hash {
-  return rawSha256(compilerContractRepairSpecSectionBytes());
+export function compilerContractRepairSpecSectionHash(
+  document: string,
+): Sha256Hash {
+  return rawSha256(compilerContractRepairSpecSectionBytes(document));
 }
 
 function withSemanticHash<T extends JsonObject>(
@@ -649,6 +651,7 @@ export function buildRepairDecision(
   bindingRequirementHash: Sha256Hash,
   staticLoweringHash: Sha256Hash,
   draftManifestHash: Sha256Hash,
+  specSectionHash: Sha256Hash,
 ): JsonObject {
   return withSemanticHash(
     {
@@ -658,7 +661,7 @@ export function buildRepairDecision(
       normative_spec: {
         spec_ref: COMPILER_CONTRACT_REPAIR_SPEC_PATH,
         section_heading: COMPILER_CONTRACT_REPAIR_SPEC_SECTION,
-        section_raw_sha256: compilerContractRepairSpecSectionHash(),
+        section_raw_sha256: specSectionHash,
         binding_scope: 'r016_section_only',
         authority: 'integrated_primary_spec',
       },

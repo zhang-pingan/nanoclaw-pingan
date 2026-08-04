@@ -59,11 +59,26 @@ describe('G0.1 toolchain identity', () => {
       '$HOME/Library/Application Support/Icarus/bin/icarus-runtime',
     );
     expect(packageJson.scripts.start).not.toMatch(/\bnode\s+dist\/index\.js\b/);
-    expect(ci).toContain('node-version-file: .nvmrc');
+    expect(ci).toContain('runs-on: macos-14-xlarge');
+    expect(ci).toContain('test "$(uname -s)/$(uname -m)" = "Darwin/arm64"');
+    expect(ci).not.toContain('actions/setup-node');
+    expect(ci).not.toContain('node-version-file:');
     expect(ci).not.toMatch(/node-version:\s*\d/);
-    expect(ci.indexOf('Verify toolchain identity')).toBeLessThan(
-      ci.indexOf('npm ci'),
+    expect(ci).toContain(
+      './scripts/runtime-toolchain.sh --runtime-home "$ICARUS_CI_RUNTIME_HOME" install',
     );
+    expect(ci).toContain(
+      './scripts/runtime-toolchain.sh --runtime-home "$ICARUS_CI_RUNTIME_HOME" exec -- npm ci',
+    );
+    expect(ci.indexOf('Install pinned managed runtime')).toBeLessThan(
+      ci.indexOf('Install dependencies with managed npm'),
+    );
+    for (const line of ci
+      .split('\n')
+      .filter((value) => /^\s+run:.*\bnpm\b/.test(value))) {
+      expect(line).toContain('runtime-toolchain.sh');
+      expect(line).toContain('exec -- npm');
+    }
     expect(process.version).toBe('v26.5.0');
   });
 

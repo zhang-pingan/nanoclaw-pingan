@@ -33,6 +33,29 @@ const MEMBER_TREE_DOMAIN =
   'icarus:workflow-generated-schema-join-authority-member-tree:1\n';
 const PLAN_SCHEMA_DOMAIN =
   'icarus:workflow-compiled-scope-plan-v2-node-output-envelope-schema:1\n';
+const CURRENT_FILES = Object.freeze([
+  {
+    path: NODE_OUTPUT_ENVELOPE_PLAN_SCHEMA_PATH,
+    rawHash:
+      'sha256:b87b9c921468186547e4bde9ce6c0b9a72b973d03d70c7b778b1746c565bed0a',
+    artifactHash:
+      'sha256:3dd4f2be80d1e824cd2c0f02aec82830ceeb858d51fbd36c13f7574f032bf51e',
+  },
+  {
+    path: GENERATED_SCHEMA_JOIN_AUTHORITY_REPAIR_DECISION_PATH,
+    rawHash:
+      'sha256:71c9f5bb5c190b5598478fc6514d0ef5097ad8698ee2438aef335b35fda1f6bd',
+    artifactHash:
+      'sha256:53c2e01ad466ef5f3716b5b152efdd6052a66aab8bf7fb880ac6df4b230a6528',
+  },
+  {
+    path: GENERATED_SCHEMA_JOIN_AUTHORITY_REPAIR_PACK_PATH,
+    rawHash:
+      'sha256:b52bc32520291647b740cdd9864444df15faf0089d0ecb11b9544a85a0b6cef5',
+    artifactHash:
+      'sha256:7a852ff21a77a767b708ab8a4fc5c329024ca954422b26d71210b0385ce05441',
+  },
+]);
 
 const INPUTS = Object.freeze({
   g03_pack: {
@@ -123,17 +146,8 @@ function readPinnedArtifact(input: { path: string; hash: string }): {
   return { artifact: parsed, raw_bytes_hash: rawHash(bytes) };
 }
 
-function specSection(document?: string): string {
-  const source =
-    document ??
-    fs.readFileSync(
-      path.join(
-        projectRoot,
-        'docs/archive/dynamic-workflow-runtime-v1/dynamic-workflow-dag-framework.md',
-      ),
-      'utf8',
-    );
-  const start = source.indexOf(
+function specSection(document: string): string {
+  const start = document.indexOf(
     GENERATED_SCHEMA_JOIN_AUTHORITY_REPAIR_SPEC_HEADING,
   );
   if (start < 0) {
@@ -141,13 +155,13 @@ function specSection(document?: string): string {
       'R-019 generated schema authority section is missing',
     );
   }
-  const end = source.indexOf('\n### ', start + 1);
+  const end = document.indexOf('\n### ', start + 1);
   if (end < 0) {
     throw new GeneratedSchemaJoinAuthorityRepairError(
       'R-019 generated schema authority section is not closed',
     );
   }
-  return source.slice(start, end).trimEnd();
+  return document.slice(start, end).trimEnd();
 }
 
 function buildNodeOutputEnvelopePlanSchema(): ContractArtifactEnvelope {
@@ -486,7 +500,7 @@ function buildDecision(
   );
 }
 
-function expectedFiles(document?: string): Map<string, string> {
+function expectedFiles(document: string): Map<string, string> {
   const planSchema = buildNodeOutputEnvelopePlanSchema();
   const planSchemaBytes = render(planSchema);
   const decision = buildDecision(specSection(document), planSchema);
@@ -534,32 +548,45 @@ function writeAtomic(relativePath: string, bytes: string): void {
   fs.renameSync(temporary, absolute);
 }
 
-export function generateGeneratedSchemaJoinAuthorityRepair(): void {
-  for (const [relativePath, bytes] of expectedFiles()) {
+export function generateGeneratedSchemaJoinAuthorityRepair(
+  document: string,
+): void {
+  for (const [relativePath, bytes] of expectedFiles(document)) {
     writeAtomic(relativePath, bytes);
   }
 }
 
 export function checkGeneratedSchemaJoinAuthorityRepair(): ContractArtifactEnvelope {
-  const expected = expectedFiles();
-  for (const [relativePath, bytes] of expected) {
-    const absolute = path.resolve(contractsRoot, relativePath);
-    if (
-      !fs.existsSync(absolute) ||
-      fs.readFileSync(absolute, 'utf8') !== bytes
-    ) {
+  let pack: ContractArtifactEnvelope | undefined;
+  for (const expected of CURRENT_FILES) {
+    const absolute = path.resolve(contractsRoot, expected.path);
+    if (!fs.existsSync(absolute)) {
       throw new GeneratedSchemaJoinAuthorityRepairError(
-        `Generated schema repair artifact drift: ${relativePath}`,
+        `Generated schema repair artifact missing: ${expected.path}`,
       );
     }
+    const bytes = fs.readFileSync(absolute);
+    if (rawHash(bytes) !== expected.rawHash) {
+      throw new GeneratedSchemaJoinAuthorityRepairError(
+        `Generated schema repair artifact drift: ${expected.path}`,
+      );
+    }
+    const parsed = parseContractArtifactEnvelope(strictParseJsonBytes(bytes));
+    if (parsed.hash !== expected.artifactHash) {
+      throw new GeneratedSchemaJoinAuthorityRepairError(
+        `Generated schema repair identity drift: ${expected.path}`,
+      );
+    }
+    if (expected.path === GENERATED_SCHEMA_JOIN_AUTHORITY_REPAIR_PACK_PATH) {
+      pack = parsed;
+    }
   }
-  return parseContractArtifactEnvelope(
-    strictParseJsonBytes(
-      Buffer.from(
-        expected.get(GENERATED_SCHEMA_JOIN_AUTHORITY_REPAIR_PACK_PATH)!,
-      ),
-    ),
-  );
+  if (!pack) {
+    throw new GeneratedSchemaJoinAuthorityRepairError(
+      'Generated schema repair root missing',
+    );
+  }
+  return pack;
 }
 
 export function buildGeneratedSchemaJoinAuthorityRepairArtifactsForTest(

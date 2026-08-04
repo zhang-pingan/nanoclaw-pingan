@@ -674,10 +674,8 @@ function coverageImpact(
 }
 
 export function buildCapacityMarkdownDeltaCoverage(
-  markdownOverride?: string,
+  markdown: string,
 ): CapacityMarkdownDeltaCoverage {
-  const markdown =
-    markdownOverride ?? readRepoBytes(architecturePath).toString('utf8');
   const entries = CAPACITY_MARKDOWN_DELTA_SEEDS.map((seed) => {
     const withoutHash = {
       coverage_id: `${seed.category}:${seed.value}`,

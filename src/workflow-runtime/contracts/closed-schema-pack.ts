@@ -16,11 +16,8 @@ import {
   CLOSED_SCHEMA_POSITIVE_CASES,
   type ClosedSchemaNegativeCase,
 } from './closed-schema-fixtures.js';
-import {
-  calculateArtifactHash,
-  canonicalJson,
-  parseContractArtifactEnvelope,
-} from './index.js';
+import { parseContractArtifactEnvelope } from './artifact.js';
+import { calculateArtifactHash, canonicalJson } from './hash.js';
 import {
   assertJsonObject,
   strictParseJson,

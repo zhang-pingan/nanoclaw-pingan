@@ -15,7 +15,15 @@ if (
 try {
   const manifest =
     command === 'generate'
-      ? generateCompilerSemanticCorrectionContract()
+      ? generateCompilerSemanticCorrectionContract(
+          fs.readFileSync(
+            path.resolve(
+              import.meta.dirname,
+              '../../../docs/archive/dynamic-workflow-runtime-v1/dynamic-workflow-dag-framework.md',
+            ),
+            'utf8',
+          ),
+        )
       : checkCompilerSemanticCorrectionContract();
   console.log(`compiler_working_contract=${command}:ok`);
   console.log(`compiler_working_contract_root=${manifest.hash}`);
@@ -27,3 +35,5 @@ try {
   );
   process.exitCode = 1;
 }
+import fs from 'node:fs';
+import path from 'node:path';
