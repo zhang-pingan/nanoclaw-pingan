@@ -25,6 +25,7 @@ import {
   buildPersistentStateResetPlan,
   currentWorkflowRuntimeSchemaCompatibility,
   decidePersistentStateCompatibility,
+  discoverPersistentStateResetRecovery,
   quarantinePersistentState,
   readPersistentStateResetBackup,
 } from './persistent-state.js';
@@ -42,7 +43,11 @@ import {
   parseWorkflowStateArguments,
   runWorkflowStateCli,
 } from './workflow-state-cli.js';
-import { inspectWorkflowState, resetWorkflowState } from './workflow-state.js';
+import {
+  inspectWorkflowState,
+  prepareWorkflowStateReset,
+  resetWorkflowState,
+} from './workflow-state.js';
 
 const projectRoot = path.resolve(import.meta.dirname, '../..');
 const temporaryRoots: string[] = [];
@@ -123,6 +128,50 @@ function createSchemaDatabase(
     database.close();
   }
   return databasePath;
+}
+
+function setDatabaseApplicationId(databasePath: string, value: number): void {
+  const database = new Database(databasePath);
+  try {
+    database.pragma(`application_id = ${String(value)}`);
+  } finally {
+    database.close();
+  }
+}
+
+function backupSnapshot(root: string): unknown {
+  return fs
+    .readdirSync(root)
+    .sort()
+    .map((name) => {
+      const file = path.join(root, name);
+      const stat = fs.lstatSync(file);
+      return {
+        name,
+        byte_length: stat.size,
+        mode: stat.mode & 0o777,
+        raw_sha256: rawHash(file),
+      };
+    });
+}
+
+async function runConfirmedWorkflowReset(
+  runtimeHome: string,
+): Promise<string[]> {
+  const output: string[] = [];
+  const status = await runWorkflowStateCli(
+    ['reset', '--mode', 'active', '--runtime-home', runtimeHome],
+    {
+      projectRoot,
+      inputIsTTY: true,
+      outputIsTTY: true,
+      hostIsRunning: () => false,
+      confirm: async () => true,
+      output: (line) => output.push(line),
+    },
+  );
+  expect(status).toBe(0);
+  return output;
 }
 
 function publishFixture(
@@ -1091,6 +1140,79 @@ describe('Workflow Runtime state decision and maintenance', () => {
         true,
       );
     }
+    expect(fs.readFileSync(unrelated, 'utf8')).toBe('preserved');
+  });
+
+  it('keeps a completed historical backup independent from a different new live generation', async () => {
+    const runtimeHome = prepareRuntimeHome();
+    publishFixture(runtimeHome, '5.4.0', 'historical-generation', {
+      schemaVersion: 10,
+    });
+    selectFixture(runtimeHome, '5.4.0');
+    const databasePath = createSchemaDatabase(
+      runtimeHome,
+      'workflow-runtime-schema-v11.sql',
+    );
+    setDatabaseApplicationId(databasePath, 101);
+    const unrelated = path.join(runtimeHome, 'registry/generation-sentinel');
+    fs.mkdirSync(path.dirname(unrelated), { recursive: true });
+    fs.writeFileSync(unrelated, 'preserved');
+
+    const first = prepareWorkflowStateReset(runtimeHome, 'active').plan;
+    await runConfirmedWorkflowReset(runtimeHome);
+    const firstRoot = path.join(runtimeHome, first.backup_relative_path);
+    const firstSnapshot = backupSnapshot(firstRoot);
+
+    createSchemaDatabase(runtimeHome, 'workflow-runtime-schema-v11.sql');
+    setDatabaseApplicationId(databasePath, 202);
+    expect(discoverPersistentStateResetRecovery(runtimeHome)).toBeNull();
+    const second = prepareWorkflowStateReset(runtimeHome, 'active').plan;
+    expect(second.backup_identity).not.toBe(first.backup_identity);
+    await runConfirmedWorkflowReset(runtimeHome);
+
+    expect(fs.existsSync(databasePath)).toBe(false);
+    expect(backupSnapshot(firstRoot)).toEqual(firstSnapshot);
+    expect(
+      readPersistentStateResetBackup(runtimeHome, second.backup_relative_path)
+        .backup_identity,
+    ).toBe(second.backup_identity);
+    expect(fs.readFileSync(unrelated, 'utf8')).toBe('preserved');
+  });
+
+  it('deduplicates a byte-identical new live generation without mutating its completed backup', async () => {
+    const runtimeHome = prepareRuntimeHome();
+    publishFixture(runtimeHome, '5.5.0', 'identical-generation', {
+      schemaVersion: 10,
+    });
+    selectFixture(runtimeHome, '5.5.0');
+    const databasePath = createSchemaDatabase(
+      runtimeHome,
+      'workflow-runtime-schema-v11.sql',
+    );
+    setDatabaseApplicationId(databasePath, 303);
+    const unrelated = path.join(runtimeHome, 'config/generation-sentinel');
+    fs.mkdirSync(path.dirname(unrelated), { recursive: true });
+    fs.writeFileSync(unrelated, 'preserved');
+
+    const first = prepareWorkflowStateReset(runtimeHome, 'active').plan;
+    await runConfirmedWorkflowReset(runtimeHome);
+    const firstRoot = path.join(runtimeHome, first.backup_relative_path);
+    const firstSnapshot = backupSnapshot(firstRoot);
+    fs.copyFileSync(
+      path.join(firstRoot, first.members[0]!.backup_name),
+      databasePath,
+    );
+
+    expect(discoverPersistentStateResetRecovery(runtimeHome)).toBeNull();
+    const duplicate = prepareWorkflowStateReset(runtimeHome, 'active').plan;
+    expect(duplicate.backup_identity).toBe(first.backup_identity);
+    const output = await runConfirmedWorkflowReset(runtimeHome);
+
+    expect(output).toContain(
+      `workflow_state_backup_identity=${first.backup_identity}`,
+    );
+    expect(fs.existsSync(databasePath)).toBe(false);
+    expect(backupSnapshot(firstRoot)).toEqual(firstSnapshot);
     expect(fs.readFileSync(unrelated, 'utf8')).toBe('preserved');
   });
 

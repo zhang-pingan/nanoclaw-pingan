@@ -672,8 +672,17 @@ export function quarantinePersistentState(
 ): void {
   const runtimeHome = fs.realpathSync(runtimeHomeInput);
   const plan = parsePersistentStateResetPlan(planInput);
+  const backupPath = path.join(runtimeHome, plan.backup_relative_path);
+  const backupExisted = lstatIfPresent(backupPath) !== null;
   const backupRoot = ensureDirectory(runtimeHome, plan.backup_relative_path);
   writeBackupManifest(path.join(backupRoot, 'backup-manifest.json'), plan);
+  if (
+    backupExisted &&
+    inspectResetRecoveryDirectory(runtimeHome, backupRoot) === null
+  ) {
+    deduplicateCompletedPersistentState(runtimeHome, plan);
+    return;
+  }
   for (const member of plan.members) {
     const source = path.join(runtimeHome, member.source_relative_path);
     const backup = path.join(backupRoot, member.backup_name);
@@ -693,6 +702,33 @@ export function quarantinePersistentState(
   fs.chmodSync(path.join(backupRoot, 'backup-manifest.json'), 0o400);
   fs.chmodSync(backupRoot, 0o500);
   fsyncDirectory(path.dirname(backupRoot));
+}
+
+function deduplicateCompletedPersistentState(
+  runtimeHome: string,
+  plan: PersistentStateResetPlan,
+): void {
+  const presentSources = plan.members.filter(
+    (member) =>
+      lstatIfPresent(path.join(runtimeHome, member.source_relative_path)) !==
+      null,
+  );
+  if (presentSources.length === 0) return;
+  if (presentSources.length !== plan.members.length)
+    throw new Error('host_core_state_backup_deduplication_unit_incomplete');
+  const sourceDirectory = path.dirname(
+    path.join(runtimeHome, WORKFLOW_STATE_DATABASE_RELATIVE),
+  );
+  if (fs.realpathSync(sourceDirectory) !== sourceDirectory)
+    throw new Error('host_core_state_backup_deduplication_path_invalid');
+  for (const member of plan.members)
+    verifyMember(path.join(runtimeHome, member.source_relative_path), member);
+
+  const primary = plan.members[0]!;
+  for (const member of [...plan.members.slice(1), primary]) {
+    fs.unlinkSync(path.join(runtimeHome, member.source_relative_path));
+    fsyncDirectory(sourceDirectory);
+  }
 }
 
 function backupIsFullyHardened(
@@ -755,6 +791,21 @@ function inspectResetRecoveryDirectory(
     observedEntries.some((entry) => !allowedEntries.has(entry))
   )
     throw new Error(`host_core_state_backup_recovery_entries_invalid:${root}`);
+
+  const allBackupMembersPresent = plan.members.every(
+    (member) => lstatIfPresent(path.join(root, member.backup_name)) !== null,
+  );
+  if (allBackupMembersPresent) {
+    try {
+      for (const member of plan.members)
+        verifyMember(path.join(root, member.backup_name), member);
+    } catch (error) {
+      throw new Error('host_core_state_backup_recovery_member_invalid', {
+        cause: error,
+      });
+    }
+    if (backupIsFullyHardened(root, plan)) return null;
+  }
 
   let allMembersMoved = true;
   for (const member of plan.members) {
