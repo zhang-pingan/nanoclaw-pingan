@@ -37,7 +37,7 @@ PM Pipeline：`features/pm-pipeline` 功能包，启用后成为独立一级业�
 - PM Pipeline 不实现 Feature-owned Evaluation Store、Experiment runner、Metric Engine、评估 scheduler、Candidate Builder、Promotion Gateway 或自进化状态机；只作为 Evaluation Framework 的领域 Provider。
 - PM 的运行中质量门禁、领域信号和知识库仍归 PM；离线评估、自进化、候选验证、依赖闭包发布、观察与回滚归 Icarus Core。
 
-本文以 `local/docs/dynamic-workflow-dag-framework.md` 为 PM 业务执行合同：Workflow Definition 固定外层 State/transition，每个 non-terminal State Activation 统一 lower 到 Graph Run；复杂阶段使用多节点 graph state，简单 delegation/system/interrupt state lower 为单节点 Graph。不存在 parallel state、旧 completion handler、多步骤 `system.run.steps`、transition 内嵌 delegate 或 graph/sequential 双轨 Runtime。
+本文以 `docs/dynamic-workflow-runtime.md` 索引的current machine Contracts与Runtime实现为 PM 业务执行合同：Workflow Definition 固定外层 State/transition，每个 non-terminal State Activation 统一 lower 到 Graph Run；复杂阶段使用多节点 graph state，简单 delegation/system/interrupt state lower 为单节点 Graph。不存在 parallel state、旧 completion handler、多步骤 `system.run.steps`、transition 内嵌 delegate 或 graph/sequential 双轨 Runtime。
 
 PM 的离线评估与自进化以 `local/docs/evaluation-self-evolution-framework.md` 为唯一目标合同。两个 Activation Gate 分开：
 
@@ -1649,7 +1649,7 @@ README.md
 
 虽然本方案按完整迁移设计，不以 MVP 为目标，但工程落地仍建议按依赖顺序实现，避免循环返工：
 
-1. 先完成 `dynamic-workflow-dag-framework.md` 的统一 Graph Runtime、T0 Recipe creation、Feature Graph resource manifest、domain claims、effect receipt/snapshot、wait contract 和 draining/executor retention。
+1. 先完成 `docs/dynamic-workflow-runtime.md` 索引的统一 Graph Runtime、T0 Recipe creation、Feature Graph resource manifest、domain claims、effect receipt/snapshot、wait contract 和 draining/executor retention。
 2. Dynamic Runtime Production Activation 后并行推进两个工作流：
    - PM Core Track：创建 `features/pm-pipeline` scaffold、workspace registry、required group 和 Feature lifecycle。
    - Evaluation Track：按 `evaluation-self-evolution-framework.md` 完成 E0-E6，尤其是 Domain Signal Source、Candidate Constraint、Promotion Binding/Bundle 和 Trigger Template。

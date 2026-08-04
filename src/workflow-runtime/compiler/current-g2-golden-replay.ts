@@ -11,7 +11,7 @@ import {
   G2_REPLAY_REPAIR_SEALED_BUNDLE_REF,
 } from '../contracts/g2-replay-repair-successor-seal.js';
 import {
-  checkCurrentG2StaticChildReplayAuthority,
+  checkCurrentG2StaticChildReplayAuthoritySnapshot,
   CURRENT_G2_STATIC_CHILD_REPLAY_AUTHORITY_REF,
 } from '../contracts/current-g2-static-child-replay-authority.js';
 import type { CurrentG2GoldenReplayResult } from '../contracts/current-g2-golden-seal-types.js';
@@ -152,7 +152,7 @@ export function evaluatePredecessorG2GoldenReplay(): CurrentG2GoldenReplayResult
 }
 
 export function evaluateCurrentG2GoldenReplay(): CurrentG2GoldenReplayResult {
-  const currentAuthority = checkCurrentG2StaticChildReplayAuthority();
+  const currentAuthority = checkCurrentG2StaticChildReplayAuthoritySnapshot();
   const bundle = currentAuthority.authority;
   const identity = workflowCompilerIdentity();
   if (

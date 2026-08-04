@@ -53,7 +53,10 @@ function render(value: ContractArtifactEnvelope): string {
 
 function readSpecDocument(): string {
   return fs.readFileSync(
-    path.join(projectRoot, 'local/docs/dynamic-workflow-dag-framework.md'),
+    path.join(
+      projectRoot,
+      'docs/archive/dynamic-workflow-runtime-v1/dynamic-workflow-dag-framework.md',
+    ),
     'utf8',
   );
 }
@@ -80,7 +83,7 @@ function expectedFiles(document = readSpecDocument()): Map<string, string> {
       status:
         'R021_MAP_TERMINAL_CONSUMPTION_REPAIR_EXIT_CANDIDATE_PENDING_INDEPENDENT_AFFECTED_CHAIN_REGRESSION',
       normative_spec: {
-        path: 'local/docs/dynamic-workflow-dag-framework.md',
+        path: 'docs/archive/dynamic-workflow-runtime-v1/dynamic-workflow-dag-framework.md',
         section_heading: R021_SPEC_HEADING,
         section_raw_sha256: rawHash(section),
         section_semantic_hash: domainSeparatedSha256(SPEC_DOMAIN, section),

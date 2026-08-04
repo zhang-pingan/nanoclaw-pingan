@@ -1,18 +1,20 @@
 # Dynamic Workflow Runtime 实施进度
 
-> **状态**: `G9_OPTION_A_FINAL_CONSTRUCTION_CANDIDATE_PENDING_FRESH_INDEPENDENT_G9_ACCEPTANCE`
-> **当前 Gate**: G0-G8与R-020/R-021/R-022=`DONE`（historical accepted G8=`540af100a61b9181aead6923b829729a843c5ec1`；exact current successor `aca1fd59413092abe834e95e11421ab489e0561c`已获fresh independent whole-G8 PASS）；G9=`IN_PROGRESS/NOT_DONE`；G8 revalidation有效FAIL次数=`0`
-> **后续边界**: controller必须从clean final G9 construction candidate创建fresh independent whole-G9 acceptance；worker不得自验G9为`DONE`，不得把isolated construction evidence提升为real deployment authority
+> **状态**: `CONSTRUCTION_ARCHIVED / CLOSED_HISTORICAL_PROVENANCE`
+> **当前 Gate**: G0-G9与R-020/R-021/R-022=`DONE`；fresh independent whole-G9 task `019fc76d-4aaf-71b1-9839-1d5a6fa21132`对exact `56a78b6dcede075c60d7e5b2049158824050410c`与release `sha256:3de887f1f822976631960aec663042ddd00ee5edb5db1dd50dc09a8bbcaca279`统一PASS
+> **失败计数**: G8 revalidation=`0`；G9 acceptance=`0`；S39 archive validation=`0`
+> **后续边界**: 无施工后继；本文是关闭的历史provenance，普通开发不再维护或消费G0-G9阶段状态
 > **最后更新**: 2026-08-03
-> **规范权威**: `local/docs/dynamic-workflow-dag-framework.md`
+> **历史设计底稿**: `docs/archive/dynamic-workflow-runtime-v1/dynamic-workflow-dag-framework.md`
+> **当前开发入口**: `docs/dynamic-workflow-runtime.md`与`src/workflow-runtime/contracts/README.md`
 
 ## 文档职责
 
-本文是 Dynamic Workflow Runtime 的实施状态账本，用于跨会话记录已经完成的施工切片、实际交付物、验证证据、提交和下一步。本文不定义 Runtime 语义，也不替代架构规范；类型、状态、事务、Logical Schema、Gate 和验收条款冲突时，始终以 `local/docs/dynamic-workflow-dag-framework.md` 为权威，并先修正规范或 Contract Pack，不能由实现自行选择语义。Machine Contract只绑定自己拥有的规范章节或closed contract values，不得以整份持续编辑的主规范raw hash作为无关领域identity输入。
+本文是已经关闭的 Dynamic Workflow Runtime v1 施工状态账本，只保留从前置清理、G0-G9到S39归档的历史provenance。它不再定义Runtime语义、不再作为agent开工前必读、默认CI输入、release identity输入或普通开发维护对象。当前语义由versioned machine Contract、Schema/DDL/Store、Compiler/Golden、Runtime实现与测试、Core Release/Launcher/startup identity共同约束；后续局部演进使用领域文档、ADR和新的Contract version，不回写本账本。
 
-下一会话 Prompt 不写入本文。每个施工切片完成并提交后，由当前会话在最终回复中根据实际 commit 和验证结果生成下一会话 Prompt。
+本文以下施工协议、候选状态、finding、失败与修复叙述均是历史记录，不是当前操作指令。历史内容中的旧`local/docs/...`字面路径为当时的exact evidence；S39后只有显式非默认`archive:verify:v1`审计可读取本归档。
 
-## 强制会话协议
+## 历史施工会话协议（已终止）
 
 每个新会话开始施工前必须：
 
@@ -49,7 +51,7 @@
 
 状态只能根据仓库事实和验证证据更新。创建目录、类型 skeleton、mock、跳过测试或只通过 happy-path unit test 均不构成 `DONE`。
 
-## 固定实施原则
+## 历史固定实施原则（已终止）
 
 `PERSISTENT_MODE_POLICY_V1 = HYBRID_GATE_CONTINUOUS_RUNTIME_V1`。G6-G9各Gate使用一个连续worker完成该Gate全部construction、诊断、in-scope修复、测试与evidence；普通实现缺陷、测试失败、identity cascade和candidate correction不创建per-defect successor或per-defect regression。连续worker可以创建正常原子实现提交，但每个实现提交必须在同一提交同步本账本；每个Gate仅在完整candidate内部验证通过后由controller创建一次fresh independent affected-chain regression。取消ledger-only closure与standalone ledger consistency commit；不得amend/rebase/reset或改写历史。此政策不放宽Gate依赖、semantic/frozen authority、G7+边界或fail-closed要求。
 
@@ -119,24 +121,24 @@ Agent Container 运行于独立 VM，Node identity 由 VM image gate 保证；�
 | G6 Dynamic / Close | `DONE` | G5 + R-022 fresh independent regression closure | controller确认fresh independent whole-Gate acceptance已在clean `main@dd3c10831dd2e9da91dcb83f28e321d538f41a05` PASS；G7 repair只机械级联current Schema/G5/shared-source prerequisites，不重开accepted G6语义 | `dd3c108` + controller acceptance + 本原子G7 repair提交 |
 | G7 Control / Card / Projection / Recovery | `DONE` | G6 | controller确认fresh independent static-source-and-existing-tests-only whole-Gate acceptance已在exact clean `main@549e8ee59e3a55f7886aed5a591f60d1c4725d26`统一PASS；无blocker、无`SECURITY_VALIDATION_NOT_RUN`、无其他`NOT_RUN` | `4b68940` + `7ec7aee` + replacement repairs + `549e8ee` + controller acceptance |
 | G8 Certification | `DONE` | G7 | controller对exact `540af100a61b9181aead6923b829729a843c5ec1`完成第二次fresh independent whole-Gate PASS；accepted release/startup/readiness保持immutable historical authority | `3505b9e` + `540af10` + controller acceptance |
-| G9 Production Activation | `IN_PROGRESS/NOT_DONE` | accepted G8 + fresh current G0/G0.10 manifests | exact `aca1fd5` successor已获fresh whole-G8 PASS；isolated fresh/existing ordinary-positive activation、CAP0-CAP4 genesis/existing byte preservation、journal/pointer closure与empty-state smoke均已闭合，等待controller fresh independent whole-G9 acceptance | `bd7bc17` + continuous repairs + `aca1fd5` + 本原子final construction提交 |
+| G9 Production Activation | `DONE` | accepted G8 + fresh current G0/G0.10 manifests | fresh independent task `019fc76d-4aaf-71b1-9839-1d5a6fa21132`对exact `56a78b6`与release `sha256:3de887f1f822976631960aec663042ddd00ee5edb5db1dd50dc09a8bbcaca279`完成whole-G9统一PASS；isolated activation/Capacity/evidence/protected boundary全部闭合 | `bd7bc17` + continuous repairs + `aca1fd5` + `56a78b6` + independent acceptance |
 
 ## 工作包总览
 
 | 工作包 | 范围 | 状态 | 当前 Gate/切片 |
 | --- | --- | --- | --- |
-| I0 | Publish、Registry、Recipe 与执行版本固定 | `IN_PROGRESS` | G3 current exact closure已随Schema 10/R-022级联并由G5 exact execution binding消费且通过fresh independent affected-chain regression；G6+继续使用固定版本authority |
-| I1 | Intake、Routing、幂等创建、Child provenance、Claim | `IN_PROGRESS` | G6 required Child与R-022 Claim handoff已随G6 whole-Gate acceptance闭合；G7 source-bound Claim release remediation已完成construction并等待G7 acceptance |
-| I2 | Definition、State lowering、Context、transition | `IN_PROGRESS` | Compiler 3.0.6只修复generated output schema authority；冻结3.0.4/v6与superseded 3.0.5/v7语义分别保留 |
+| I0 | Publish、Registry、Recipe 与执行版本固定 | `DONE` | Runtime v1 accepted；current exact Registry/Publish/activation authority由machine Contract与tests维护 |
+| I1 | Intake、Routing、幂等创建、Child provenance、Claim | `DONE` | Runtime v1 accepted；Intake/Creation/Claim authority由current Schema、Store与Runtime tests维护 |
+| I2 | Definition、State lowering、Context、transition | `DONE` | Runtime v1 accepted；Compiler 3.0.6与current Definition/Plan contracts维护active semantics |
 | I3 | Source/Compiled IR、Port、Compiler | `DONE` | Compiler 3.0.6 child completion与Map result closed schema、additive v8 authority及fresh independent affected-chain regression已闭合 |
-| I4 | Runtime Store、SQLite relation、Value/Blob、migration | `IN_PROGRESS` | Schema 11及10以前历史冻结；G8 writer connection新增固定Store-owned TEMP ID-set table，仅用于事务内有界集合定位，不改变persistent schema或开放DDL |
-| I5 | Graph 状态机、reconcile、Scheduler、Ledger | `IN_PROGRESS` | G6/G7已accepted；G8 compatibility将T7a Recursive CTE结果一次性stage并以固定set-based SQL定位完整subtree，原子fence/cleanup/hash/replay语义不变 |
-| I6 | Delegation/System、Capability Effect、Outbox | `IN_PROGRESS` | G5/G6 effect与compensation authority已accepted；G7 source-specific effect/compensation remediation已完成construction且不连接真实Adapter |
-| I7 | Durable Wait、Signal/Timer/Approval、Inbox | `IN_PROGRESS` | G5 automatic retry authority保持不变；G7 Deadline Watchdog与authorized manual T6d handoff已完成construction并等待G7 acceptance |
-| I8 | Subgraph、Expand、Map、child scope | `IN_PROGRESS` | G6 subgraph/expand/map与T7b已随whole-Gate acceptance闭合；G7不改写其closed child authority |
-| I9 | Completion、Cancel、Compensation、Finalization、Recovery | `IN_PROGRESS` | G6 T7a/T7b/T8与Root Finalization已accepted；G7 T7c/T6e/last-blocker restoration/administrative abandon/Recovery complete candidate等待whole-Gate acceptance |
-| I10 | Runtime Command、Capacity Admin、Runtime Center、Trace | `IN_PROGRESS` | G7 Gateway现在为每次authenticated调用追加pre-resolution ingress identity；resolved调用再绑定Header/Invocation，missing/invalid target不伪造target；Deadline/Card/Projection/Runtime Center/Capacity candidate等待whole-Gate acceptance |
-| I11 | Contract Pack、managed runtime toolchain/launcher、测试模型、发布门禁、absence baseline | `IN_PROGRESS` | Historical G8保持immutable；exact `aca1fd5` Option A release通过fresh whole-G8；CapacityGenesisBootstrapBundle、release/manifest/v3 binding及isolated fresh/existing activation evidence均已闭合，等待fresh independent whole-G9 acceptance，扩展认证方案未执行 |
+| I4 | Runtime Store、SQLite relation、Value/Blob、migration | `DONE` | Runtime v1 accepted；Schema 11与historical migrations保持受保护，current Store tests继续active |
+| I5 | Graph 状态机、reconcile、Scheduler、Ledger | `DONE` | Runtime v1 accepted；G5-G7 Runtime behavior/model/recovery tests继续active |
+| I6 | Delegation/System、Capability Effect、Outbox | `DONE` | Runtime v1 accepted；Capability/Effect/Outbox exact contracts与Runtime tests继续active |
+| I7 | Durable Wait、Signal/Timer/Approval、Inbox | `DONE` | Runtime v1 accepted；Wait/Timer/retry/authorization machine authority继续active |
+| I8 | Subgraph、Expand、Map、child scope | `DONE` | Runtime v1 accepted；G6 dynamic/close and child lineage tests继续active |
+| I9 | Completion、Cancel、Compensation、Finalization、Recovery | `DONE` | Runtime v1 accepted；T7/T8/Recovery contracts与tests继续active |
+| I10 | Runtime Command、Capacity Admin、Runtime Center、Trace | `DONE` | Runtime v1 accepted；Command/Capacity/Projection/Trace machine authority与tests继续active |
+| I11 | Contract Pack、managed runtime toolchain/launcher、测试模型、发布门禁、absence baseline | `DONE` | Runtime v1 exact release与whole-G9 acceptance已闭合；current machine/release checks继续active，扩展认证方案保持future-only archive |
 
 ## G0 施工切片
 
@@ -3388,3 +3390,21 @@ Security-sensitive invariant映射限定为permitted evidence，不声明general
 明确记录`DYNAMIC_ADVERSARIAL_SECURITY_VALIDATION_NOT_RUN(reason=prohibited_and_non_mandatory)`、`FAULT_INJECTION_OR_INTERRUPTION_VALIDATION_NOT_RUN(reason=prohibited_and_non_mandatory)`、`ABNORMAL_AUTHORITY_OR_BYPASS_REPLAY_VALIDATION_NOT_RUN(reason=prohibited_and_non_mandatory)`、`CREDENTIAL_REAL_STATE_NETWORK_ADAPTER_VALIDATION_NOT_RUN(reason=out_of_scope_and_prohibited)`、`REAL_PRODUCTION_ACTIVATION_NOT_RUN(reason=isolated_construction_only)`、`G9_FORMAL_ACCEPTANCE_NOT_RUN(reason=controller_owned)`与`EXTENDED_CERTIFICATION_PLAN_NOT_RUN(reason=future_only)`。No command targeted real `active-core`、`activation-core`、`active-deployment`、Production Capacity、DB/cache、network、Adapter、credential或user data；default toolchain identity suite只读验证managed distribution并把所有writes放在test-owned temporary roots。
 
 Protected boundary相对accepted start `aca1fd59413092abe834e95e11421ab489e0561c`只有本账本施工/evidence同步：release/source/generated machine authority、Schema 11及全部historical migrations、Compiler/Golden/current和historical replay/seal/review/conformance、accepted G8 releases/evidence、frozen ownership、framework、extended certification plan、`.nvmrc`与两套lockfile均为零diff。`.nvmrc`/root lock/container agent-runner lock/extended-plan raw SHA-256保持`904636927bbfe077d1a82001e3c09a336737410831611fa294eeeb27babf2c81` / `2b8c87e5549915e2d53c1eecdabef3ebb149bc8f03054d40f1924d93bf2bd085` / `d9b4b5d77dc6478348b81d74d65e2af1d3596ce45eea6742cae20cf105db379c` / `aac840fb176bf46470cc0ea4599b2c0d4d1937e9d304bb74774378168413e5d9`。Controller handoff唯一下一步是从clean atomic final construction commit创建fresh independent whole-G9 acceptance；G9继续`IN_PROGRESS/NOT_DONE`，不得自我accept或标记`DONE`。
+
+### 2026-08-03：S39 construction archive closure
+
+**结论**：`CONSTRUCTION_ARCHIVED / CLOSED_HISTORICAL_PROVENANCE`。Fresh independent whole-G9 task `019fc76d-4aaf-71b1-9839-1d5a6fa21132`对exact clean `main@56a78b6dcede075c60d7e5b2049158824050410c`与release `sha256:3de887f1f822976631960aec663042ddd00ee5edb5db1dd50dc09a8bbcaca279`完成统一PASS，无unresolved finding、blocker或mandatory gap。该acceptance覆盖complete affected G0-G9、isolated fresh/existing ordinary-positive activation、Capacity genesis/preservation、evidence reconstruction、protected boundaries与clean Git；G9据此成为`DONE`，G8/G9/S39 failure count重置为`0`。本文从本节起永久关闭，只作为历史provenance，不再由普通开发维护或消费。
+
+S39将六份Runtime-v1施工文档原子迁移到`docs/archive/dynamic-workflow-runtime-v1/`：`dynamic-workflow-dag-framework.md`、`dynamic-workflow-dag-framework-introduction.md`、`dynamic-workflow-runtime-implementation-progress.md`、`dynamic-workflow-runtime-extended-certification-plan.md`、`pre-dynamic-workflow-runtime-cleanup-handoff.md`与`pre-dynamic-workflow-runtime-cleanup-continuation-handoff.md`。Archive `README.md`保存exact former-path map、accepted boundary和historical-literal规则；current入口改为`docs/dynamic-workflow-runtime.md`与`src/workflow-runtime/contracts/README.md`。四份仍在维护的`local/docs/`业务文档已改指current入口，未移动任何无关文档。
+
+Default lifecycle不再读取或重算archived Markdown、historical G0/R-020/R-021/R-022 coverage、Working/Draft construction review或G5-G9 Gate candidate source trees。`contracts:check`只覆盖current foundation/schema machine artifacts、Production Compiler、checked-in current Golden replay closure、Registry/G4 authority、Schema、static absence与immutable accepted release；`test:current`保留current behavior suites。Current Golden replay新增read-only snapshot checker，直接验证checked-in 86-file closure、inventory/member identity、exact Compiler identity和40/40 replay，不调用Markdown-derived static-child construction generator。Historical Gate generators/checkers与`test:g8:validation`仍可显式调用，但不属于default aggregate/CI。`archive:verify:v1`是唯一显式非默认archive audit，验证六份文档hash、current index links、former-path live absence、default CI/package/runtime read absence及accepted boundary。
+
+S39 direct validation全部经managed Node，普通可写状态位于`/private/tmp/icarus-s39-validation.qspl2n`：current `contracts:check` PASS；Production Compiler root保持`sha256:c78a12ffdec353d3d3ec40350aeb6676e991e92cd5d6645946d5e21fcb013a77`，current Golden replay `40/40`且bundle `sha256:9af424179813f4a1ae815ee165881bf6c5a17d2a962c780fc179b495202ec357`；Schema 11 checker PASS；static absence pack保持`sha256:058519662cfdff17e7a11a40a6da3b3dfe9d2b27c5d7fc6a81b23a35fd9bd183`；managed typecheck PASS；direct Compiler tests `61/61`、G4 `2/2`、current certification manifest/model/readiness `6/6`、Production Activation/stable-toolchain existing tests `14/14`、G0 current aggregate `86 passed / 5 intentional skips`与Schema `28/28` PASS。Changed code/config targeted Prettier与`git diff --check` PASS。
+
+完整`npm test`重跑在G1.2停止：Store suite先完成`23/36`，另13个open/reopen cases在创建或打开test-owned DB前发现managed real `active-core`为production-format binding，而legacy `candidate_development` test identity只接受development binding。一次使用既有`--runtime-home`的isolated `/private/tmp` managed runtime尝试在Schema checker处被pinned application-install path规则拒绝，未弱化identity、未继续Runtime tests、未写real pointer。相同原因使legacy G8 benchmark runner的2 cases在benchmark前停止；manifest/model/readiness `6/6`仍PASS。记录`CURRENT_STORE_RUNTIME_FULL_REEXECUTION_NOT_RUN(reason=real_pointer_mutation_prohibited_and_private_tmp_runtime_rejected_by_pinned_identity)`与`LEGACY_G8_BENCHMARK_RERUN_NOT_RUN(reason=same_identity_boundary)`。Accepted `56a78b6` whole-G9 evidence已经覆盖Store `36/36`、G2 `101/101`、G3 `101/101`、G5-G7完整matrix、G8 `8/8 + startup 1/1`和G9 `14/14`；本S39 delta对`runtime/`、`store/`、`registry/`、`projection/`、`capacity/`、`certification/`、stable Launcher/toolchain、Schema/migrations、generated/frozen authority与`dist/`均为零diff，因此这些既有repository-test outputs是允许的unchanged-boundary evidence。
+
+Former six-path audit在candidate tracked/non-ignored boundary中为`live_former_reference_count=0`。`historical_literal_count=27`只存在于archived Markdown、frozen `contracts/conformance/` JSON或accepted `dist/`；这些literal保持当时exact evidence，不是live link/default input。Default archive read count为`0`，current Runtime/Compiler/Store/Registry/Projection/Capacity/Certification/Launcher/Toolchain均无archive read。
+
+Immutable release verifier只读确认release/raw manifest/Core/v3 binding/raw binding、activation entry、Bundle与inventory仍为`sha256:3de887f1f822976631960aec663042ddd00ee5edb5db1dd50dc09a8bbcaca279` / `sha256:b26fb66d84afdea65f4926afa7fddc9c61c25d52158ae36137299ae26b96d6ea` / `sha256:9b64c44d5491c214d8ad22080a72459d5babc9fa44f0cc4c1b3585c0cff07d57` / `sha256:9a191dca528d4cefa6545ca2a1311429b76c68efcea3d7db85f31da65d364dd6` / `sha256:e16b357c43ca0fd49aa2a9a7e6bbc6f23425f79adafcf75a8144cc42482e6ba7` / `sha256:d7e9ef78935eec45d42855fc6e39142d9f133c364c0d85adb1ec568d6860ed2a` / `sha256:dec8fc5e9ebeec0b8d6033728d5131adb2009c32c48556242c8ac8fbb4b2fb33` / `sha256:765cd6d00c26cf8fc627c6f081354ae346f26b79f5ad6c50b69721370acc11cd`，inventory为9,094 files/4,701 dist members。Framework/introduction/extended-plan/two handoff raw SHA-256保持`937344cc44a4f07917d51933c1aad04fc4e18fc98c3ad44d457a3b56ddea30ed` / `c6e539651a2372890d3e14b2e891bc1587e913d943f599a6ffe25f162902320b` / `aac840fb176bf46470cc0ea4599b2c0d4d1937e9d304bb74774378168413e5d9` / `780fe35b67124c1922be39673cd2761bbfdaae58bd9f925701e5f7fcc2783870` / `f1f912bf673ab7b76a0e1918685378f5635376e9517676ae7baed0bd3c78f025`；`.nvmrc`/root lock/agent-runner lock保持`904636927bbfe077d1a82001e3c09a336737410831611fa294eeeb27babf2c81` / `2b8c87e5549915e2d53c1eecdabef3ebb149bc8f03054d40f1924d93bf2bd085` / `d9b4b5d77dc6478348b81d74d65e2af1d3596ce45eea6742cae20cf105db379c`。
+
+Security-sensitive结论限于static source/exact diff、deterministic current/archive checkers、repository-existing accepted tests/output与ordinary non-adversarial validation，不声明general security PASS。明确记录`DYNAMIC_ADVERSARIAL_SECURITY_VALIDATION_NOT_RUN(reason=prohibited_and_non_mandatory)`、`FAULT_OR_INTERRUPTION_VALIDATION_NOT_RUN(reason=prohibited_and_non_mandatory)`、`ABNORMAL_AUTHORITY_BYPASS_RESIGN_REHASH_REPLAY_NOT_RUN(reason=prohibited_and_non_mandatory)`、`REAL_PRODUCTION_OPERATION_NOT_RUN(reason=out_of_scope_and_prohibited)`与`EXTENDED_CERTIFICATION_PLAN_NOT_RUN(reason=future_only)`。没有build/regenerate/rebind/re-hash/stage/activate accepted release，没有写real Production pointer、Capacity、DB/cache、network、Adapter、credential或user data；S39 commit仅关闭documentation/validation lifecycle，不创建successor G8/G9 candidate。

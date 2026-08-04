@@ -1,7 +1,7 @@
 # Icarus 对话式任务工作台框架方案
 
 > **状态**：方案讨论稿
-> **实施前置**：[Dynamic Workflow Graph Runtime](./dynamic-workflow-dag-framework.md) 已完整实现并通过 Production Activation Gate
+> **实施前置**：[Dynamic Workflow Runtime](../../docs/dynamic-workflow-runtime.md) 已完整实现、验收并归档施工生命周期
 > **范围**：Icarus Core Task Workspace、任务会话中控、临时 Workflow、运行干预、通用运行检查器与 Personal Workflow
 
 ## 导航

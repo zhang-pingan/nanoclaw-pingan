@@ -407,7 +407,10 @@ describe('G0.10 Capacity Control-Plane Addendum', () => {
     });
 
     const architecture = fs.readFileSync(
-      path.join(repoRoot, 'local/docs/dynamic-workflow-dag-framework.md'),
+      path.join(
+        repoRoot,
+        'docs/archive/dynamic-workflow-runtime-v1/dynamic-workflow-dag-framework.md',
+      ),
       'utf8',
     );
     expect(

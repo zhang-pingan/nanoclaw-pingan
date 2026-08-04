@@ -410,7 +410,8 @@ export function buildCapabilityOutboxBindingArtifacts(): Map<string, string> {
     {
       gate: 'G2_G3_G5_EXECUTION_BINDING_REPAIR',
       status: 'EXIT_CANDIDATE_PENDING_INDEPENDENT_AFFECTED_CHAIN_REGRESSION',
-      normative_spec_ref: 'local/docs/dynamic-workflow-dag-framework.md',
+      normative_spec_ref:
+        'docs/archive/dynamic-workflow-runtime-v1/dynamic-workflow-dag-framework.md',
       plan_format: 'icarus.workflow-graph-scope-plan/2',
       latest_lookup: 'forbidden',
       g4_fixture_authority: 'forbidden',

@@ -490,7 +490,10 @@ describe('R-020 child cut / parent consumption database lineage', () => {
     );
 
     const document = fs.readFileSync(
-      path.join(projectRoot, 'local/docs/dynamic-workflow-dag-framework.md'),
+      path.join(
+        projectRoot,
+        'docs/archive/dynamic-workflow-runtime-v1/dynamic-workflow-dag-framework.md',
+      ),
       'utf8',
     );
     const changed = document.replace(

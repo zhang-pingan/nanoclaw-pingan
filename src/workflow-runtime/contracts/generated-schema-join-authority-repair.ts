@@ -127,7 +127,10 @@ function specSection(document?: string): string {
   const source =
     document ??
     fs.readFileSync(
-      path.join(projectRoot, 'local/docs/dynamic-workflow-dag-framework.md'),
+      path.join(
+        projectRoot,
+        'docs/archive/dynamic-workflow-runtime-v1/dynamic-workflow-dag-framework.md',
+      ),
       'utf8',
     );
   const start = source.indexOf(
@@ -262,8 +265,7 @@ function buildDecision(
       'sha256:5ee3c119cc6a0e0552e2a6fe45b51c8ffd08ec7acdbac66748978ed0d21fdb0a' ||
     schema7Pack.payload.schema5_to_schema6_upgrade_sha256 !==
       'sha256:dc94fa0867ca572b7ec39ffb8df448e38be00ca4831f1d420885ee7cc097687d' ||
-    (prerequisite.payload.historical_schema6 as JsonObject)
-      .migration_sha256 !==
+    (prerequisite.payload.historical_schema6 as JsonObject).migration_sha256 !==
       'sha256:16a46e84c77d734013e18b4b00b86564f6188ea73717763e9fb7a884d62faa41' ||
     (prerequisite.payload.historical_schema6 as JsonObject)
       .sqlite_schema_identity !==
@@ -288,7 +290,7 @@ function buildDecision(
       status:
         'NODE_OUTPUT_ENVELOPE_SCHEMA_AUTHORITY_REPAIR_EXIT_CANDIDATE_PENDING_INDEPENDENT_AFFECTED_CHAIN_REGRESSION',
       normative_spec: {
-        path: 'local/docs/dynamic-workflow-dag-framework.md',
+        path: 'docs/archive/dynamic-workflow-runtime-v1/dynamic-workflow-dag-framework.md',
         section_heading: GENERATED_SCHEMA_JOIN_AUTHORITY_REPAIR_SPEC_HEADING,
         section_raw_sha256: rawHash(Buffer.from(section, 'utf8')),
         section_semantic_hash: domainSeparatedSha256(
@@ -343,11 +345,7 @@ function buildDecision(
           exits_order: 'ascii_ascending',
         },
         node_output_envelope: {
-          required_fields: [
-            'node_id',
-            'port_contract_hash',
-            'output_ports',
-          ],
+          required_fields: ['node_id', 'port_contract_hash', 'output_ports'],
           output_ports_authority: 'exact_compiled_node_output_ports',
           port_contract_hash_domain:
             'icarus:workflow-node-output-port-contract:1\n',
@@ -463,12 +461,12 @@ function buildDecision(
       historical_schema6: {
         source_migration_path:
           'src/workflow-runtime/store/schema/migration/workflow-runtime-schema-v6.sql',
-        source_migration_sha256:
-          (prerequisite.payload.historical_schema6 as JsonObject)
-            .migration_sha256,
-        sqlite_schema_identity:
-          (prerequisite.payload.historical_schema6 as JsonObject)
-            .sqlite_schema_identity,
+        source_migration_sha256: (
+          prerequisite.payload.historical_schema6 as JsonObject
+        ).migration_sha256,
+        sqlite_schema_identity: (
+          prerequisite.payload.historical_schema6 as JsonObject
+        ).sqlite_schema_identity,
         user_version: 6,
       },
       schema5_to_schema6_upgrade_sha256:

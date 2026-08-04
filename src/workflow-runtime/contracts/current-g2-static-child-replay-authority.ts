@@ -40,6 +40,8 @@ export const CURRENT_G2_STATIC_CHILD_REPLAY_ROOT =
 export const CURRENT_G2_STATIC_CHILD_REPLAY_AUTHORITY_REF = `${CURRENT_G2_STATIC_CHILD_REPLAY_ROOT}/current-replay-authority@2.json`;
 export const CURRENT_G2_STATIC_CHILD_REPLAY_INVENTORY_REF = `${CURRENT_G2_STATIC_CHILD_REPLAY_ROOT}/artifact-inventory@2.json`;
 export const CURRENT_G2_STATIC_CHILD_REPLAY_READINESS_REF = `${CURRENT_G2_STATIC_CHILD_REPLAY_ROOT}/g2-g5-readiness@2.json`;
+const CURRENT_G2_STATIC_CHILD_REPLAY_AUTHORITY_HASH =
+  'sha256:8c586a05ef9a7f61783f3dcef47f950b9247bb77d430c57ac7eff0ae759c0105';
 
 const AUTHORITY_SCHEMA_REF = `${CURRENT_G2_STATIC_CHILD_REPLAY_ROOT}/schemas/current-replay-authority-schema@2.json`;
 const INVENTORY_SCHEMA_REF = `${CURRENT_G2_STATIC_CHILD_REPLAY_ROOT}/schemas/artifact-inventory-schema@2.json`;
@@ -470,6 +472,14 @@ export interface CurrentG2StaticChildReplayAuthorityBuild {
   readonly compilerIdentity: WorkflowCompilerIdentity;
   readonly caseSetHash: Sha256Hash;
   readonly authoredExactCount: number;
+}
+
+export interface CurrentG2StaticChildReplayAuthoritySnapshot {
+  readonly authority: ContractArtifactEnvelope;
+  readonly inventory: ContractArtifactEnvelope;
+  readonly readiness: ContractArtifactEnvelope;
+  readonly compilerIdentity: WorkflowCompilerIdentity;
+  readonly caseSetHash: Sha256Hash;
 }
 
 export class CurrentG2StaticChildReplayAuthorityError extends Error {
@@ -1414,6 +1424,141 @@ function listFiles(root: string): string[] {
   };
   visit(root, '');
   return result.sort();
+}
+
+export function checkCurrentG2StaticChildReplayAuthoritySnapshot(): CurrentG2StaticChildReplayAuthoritySnapshot {
+  const authority = readArtifact(CURRENT_G2_STATIC_CHILD_REPLAY_AUTHORITY_REF);
+  if (authority.hash !== CURRENT_G2_STATIC_CHILD_REPLAY_AUTHORITY_HASH) {
+    throw new CurrentG2StaticChildReplayAuthorityError(
+      'Current replay snapshot authority identity drifted',
+    );
+  }
+  validateCurrentG2StaticChildReplayAuthorityPayloadForTest(authority.payload);
+
+  const inventoryRef = String(authority.payload.inventory_ref);
+  if (inventoryRef !== CURRENT_G2_STATIC_CHILD_REPLAY_INVENTORY_REF) {
+    throw new CurrentG2StaticChildReplayAuthorityError(
+      'Current replay inventory reference drifted',
+    );
+  }
+  const inventory = readArtifact(inventoryRef);
+  if (inventory.hash !== authority.payload.inventory_hash) {
+    throw new CurrentG2StaticChildReplayAuthorityError(
+      'Current replay inventory identity drifted',
+    );
+  }
+  validateSchema(
+    CURRENT_G2_STATIC_CHILD_REPLAY_INVENTORY_SCHEMA,
+    inventory.payload,
+    'Current G2 replay inventory',
+  );
+  const entries = objects(inventory.payload.entries, 'inventory entries');
+  const inventoryWithoutHash = structuredClone(inventory.payload);
+  delete inventoryWithoutHash.inventory_hash;
+  if (
+    entries.length !== authority.payload.inventory_entry_count ||
+    entries.length !== inventory.payload.entry_count ||
+    domainSeparatedSha256(INVENTORY_DOMAIN, inventoryWithoutHash) !==
+      inventory.payload.inventory_hash
+  ) {
+    throw new CurrentG2StaticChildReplayAuthorityError(
+      'Current replay inventory closure drifted',
+    );
+  }
+
+  const readinessRef = String(authority.payload.readiness_ref);
+  if (readinessRef !== CURRENT_G2_STATIC_CHILD_REPLAY_READINESS_REF) {
+    throw new CurrentG2StaticChildReplayAuthorityError(
+      'Current replay readiness reference drifted',
+    );
+  }
+  const readiness = readArtifact(readinessRef);
+  if (readiness.hash !== authority.payload.readiness_hash) {
+    throw new CurrentG2StaticChildReplayAuthorityError(
+      'Current replay readiness identity drifted',
+    );
+  }
+  validateSchema(
+    CURRENT_G2_STATIC_CHILD_REPLAY_READINESS_SCHEMA,
+    readiness.payload,
+    'Current G2 replay readiness',
+  );
+
+  const expectedPaths = [
+    ...entries.map((entry) => String(entry.path)),
+    inventoryRef,
+    CURRENT_G2_STATIC_CHILD_REPLAY_AUTHORITY_REF,
+  ].sort();
+  const actualPaths = listFiles(
+    absoluteContract(CURRENT_G2_STATIC_CHILD_REPLAY_ROOT),
+  )
+    .map((entry) => `${CURRENT_G2_STATIC_CHILD_REPLAY_ROOT}/${entry}`)
+    .sort();
+  if (canonicalJson(actualPaths) !== canonicalJson(expectedPaths)) {
+    throw new CurrentG2StaticChildReplayAuthorityError(
+      'Current replay snapshot file boundary drifted',
+    );
+  }
+  for (const entry of entries) {
+    const entryPath = String(entry.path);
+    if (!entryPath.startsWith(`${CURRENT_G2_STATIC_CHILD_REPLAY_ROOT}/`)) {
+      throw new CurrentG2StaticChildReplayAuthorityError(
+        `Current replay snapshot member escaped its root: ${entryPath}`,
+      );
+    }
+    const bytes = readContractBytes(entryPath);
+    if (rawHash(bytes) !== entry.raw_bytes_hash) {
+      throw new CurrentG2StaticChildReplayAuthorityError(
+        `Current replay snapshot member bytes drifted: ${entryPath}`,
+      );
+    }
+    if (entry.artifact_hash !== null) {
+      const artifactValue = parseContractArtifactEnvelope(
+        strictParseJsonBytes(bytes),
+      );
+      if (artifactValue.hash !== entry.artifact_hash) {
+        throw new CurrentG2StaticChildReplayAuthorityError(
+          `Current replay snapshot member identity drifted: ${entryPath}`,
+        );
+      }
+    }
+  }
+
+  for (const member of objects(
+    authority.payload.members,
+    'authority members',
+  )) {
+    const memberPath = String(member.path);
+    const expectedHash = String(member.hash);
+    if (memberPath.startsWith('src/')) {
+      const absolute = path.resolve(repoRoot, memberPath);
+      if (!absolute.startsWith(`${repoRoot}${path.sep}`)) {
+        throw new CurrentG2StaticChildReplayAuthorityError(
+          `Current replay source member escaped repository root: ${memberPath}`,
+        );
+      }
+      if (rawHash(fs.readFileSync(absolute)) !== expectedHash) {
+        throw new CurrentG2StaticChildReplayAuthorityError(
+          `Current replay source member bytes drifted: ${memberPath}`,
+        );
+      }
+    } else if (readArtifact(memberPath).hash !== expectedHash) {
+      throw new CurrentG2StaticChildReplayAuthorityError(
+        `Current replay authority member identity drifted: ${memberPath}`,
+      );
+    }
+  }
+
+  return {
+    authority,
+    inventory,
+    readiness,
+    compilerIdentity: object(
+      authority.payload.exact_compiler_identity,
+      'authority compiler identity',
+    ) as unknown as WorkflowCompilerIdentity,
+    caseSetHash: String(authority.payload.case_set_hash) as Sha256Hash,
+  };
 }
 
 export function checkCurrentG2StaticChildReplayAuthorityAtRootForTest(

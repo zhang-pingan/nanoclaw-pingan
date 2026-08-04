@@ -50,7 +50,7 @@ import {
 const contractsRoot = import.meta.dirname;
 const repoRoot = path.resolve(contractsRoot, '../../..');
 const architecturePath =
-  'local/docs/dynamic-workflow-dag-framework.md' as const;
+  'docs/archive/dynamic-workflow-runtime-v1/dynamic-workflow-dag-framework.md' as const;
 const addendumRoot = 'conformance/capacity-control-plane-addendum';
 
 export const G0_9_HISTORICAL_ROOT_HASH =

@@ -31,7 +31,7 @@ export interface G0MarkdownCoverageEntry {
 
 export interface G0MarkdownContractCoverage {
   format: 'icarus.workflow-markdown-contract-coverage/1';
-  architecture_path: 'local/docs/dynamic-workflow-dag-framework.md';
+  architecture_path: 'docs/archive/dynamic-workflow-runtime-v1/dynamic-workflow-dag-framework.md';
   architecture_sha256: Sha256Hash;
   extraction_policy: 'conformance_only_no_runtime_markdown_extraction';
   categories: G0CoverageCategory[];

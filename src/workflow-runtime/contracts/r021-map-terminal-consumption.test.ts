@@ -333,7 +333,10 @@ describe('R-021 map terminal consumption directed repair', () => {
       predecessor_database_schema_version: 8,
     });
     const document = fs.readFileSync(
-      path.join(projectRoot, 'local/docs/dynamic-workflow-dag-framework.md'),
+      path.join(
+        projectRoot,
+        'docs/archive/dynamic-workflow-runtime-v1/dynamic-workflow-dag-framework.md',
+      ),
       'utf8',
     );
     const changed = document.replace(

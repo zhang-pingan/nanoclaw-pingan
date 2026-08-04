@@ -19,7 +19,8 @@ export const R022_HISTORICAL_BLOCKER_SHA256 =
 const contractsRoot = import.meta.dirname;
 const projectRoot = path.resolve(contractsRoot, '../../..');
 const SPEC_DOMAIN = 'icarus:workflow-r022-domain-claim-handoff-spec:1\n';
-const CONTRACT_DOMAIN = 'icarus:workflow-r022-domain-claim-handoff-contract:1\n';
+const CONTRACT_DOMAIN =
+  'icarus:workflow-r022-domain-claim-handoff-contract:1\n';
 const PACK_DOMAIN =
   'icarus:workflow-contract-pack-r022-domain-claim-handoff:1\n';
 const MEMBER_DOMAIN =
@@ -53,7 +54,10 @@ function render(value: ContractArtifactEnvelope): string {
 
 function readSpecDocument(): string {
   return fs.readFileSync(
-    path.join(projectRoot, 'local/docs/dynamic-workflow-dag-framework.md'),
+    path.join(
+      projectRoot,
+      'docs/archive/dynamic-workflow-runtime-v1/dynamic-workflow-dag-framework.md',
+    ),
     'utf8',
   );
 }
@@ -91,7 +95,7 @@ function expectedFiles(document = readSpecDocument()): Map<string, string> {
       status:
         'R022_REQUIRED_CHILD_DOMAIN_CLAIM_HANDOFF_REPAIR_EXIT_CANDIDATE_PENDING_INDEPENDENT_AFFECTED_CHAIN_REGRESSION',
       normative_spec: {
-        path: 'local/docs/dynamic-workflow-dag-framework.md',
+        path: 'docs/archive/dynamic-workflow-runtime-v1/dynamic-workflow-dag-framework.md',
         section_heading: R022_SPEC_HEADING,
         section_raw_sha256: rawHash(section),
         section_semantic_hash: domainSeparatedSha256(SPEC_DOMAIN, section),
@@ -102,8 +106,7 @@ function expectedFiles(document = readSpecDocument()): Map<string, string> {
         claim_model: 'owner_bound_append_history_with_exact_current_head',
         claim_id: 'owner_workflow_and_creation_key_bound',
         resource_generation: 'strict_claim_epoch',
-        current_holder_proof:
-          'bidirectional_deferred_composite_foreign_keys',
+        current_holder_proof: 'bidirectional_deferred_composite_foreign_keys',
         handoff_proof:
           'exact_parent_child_claim_schedule_creation_request_workflow_relation',
         exclusive_token_rule: 'child_equals_parent_plus_one',

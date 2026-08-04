@@ -20,17 +20,17 @@ jobs:
           expected_npm="$(node -p "require('./package.json').packageManager.split('@')[1]")"
           test "$(npm --version)" = "$expected_npm"
       - run: npm ci
-      - name: Complete G0 conformance
+      - name: Current Runtime contracts and toolchain
         run: npm run test:g0
-      - name: G1 Store boundary
+      - name: Current Schema and Store boundary
         run: npm run test:g1.1 && npm run test:g1.2
-      - name: G2 compiler Contract repair
-        run: npm run test:g2:contract
+      - name: Current Compiler and sealed replay
+        run: npm run test:g2 && npm run golden:current:replay:check
       - name: Format check
         run: npm run format:check
 
       - name: Typecheck
-        run: npx tsc --noEmit
+        run: npm run typecheck
 
       - name: Tests
-        run: npx vitest run
+        run: npm test

@@ -663,7 +663,8 @@ function coverageSchema(): Schema {
           'icarus.workflow-capacity-control-plane-markdown-delta-coverage/1',
       },
       architecture_path: {
-        const: 'local/docs/dynamic-workflow-dag-framework.md',
+        const:
+          'docs/archive/dynamic-workflow-runtime-v1/dynamic-workflow-dag-framework.md',
       },
       spec_binding_scope: { const: 'capacity_contract_values_only' },
       prior_g0_9_root_hash: hash,

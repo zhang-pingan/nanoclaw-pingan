@@ -158,44 +158,68 @@ function fixture(): Fixture {
   for (const id of ['intake:parent', 'intake:child'])
     seedRow(database, currentSchema, 'workflow_task_intakes', { id }, id);
   for (const id of ['creation:child', 'creation:ready', 'creation:other'])
-    seedRow(
-      database,
-      currentSchema,
-      'workflow_creation_requests',
-      { id },
-      id,
-    );
-  seedRow(database, currentSchema, 'workflow_relations', {
-    id: 'relation:parent-child',
-    parent_workflow_id: 'workflow:parent',
-    child_workflow_id: 'workflow:child',
-  }, 'relation:parent-child');
-  seedRow(database, currentSchema, 'workflow_relations', {
-    id: 'relation:parent-other',
-    parent_workflow_id: 'workflow:parent',
-    child_workflow_id: 'workflow:other',
-  }, 'relation:parent-other');
-  seedRow(database, currentSchema, 'workflow_root_finalization_schedules', {
-    id: 'schedule:child',
-    workflow_id: 'workflow:parent',
-    creation_request_id: 'creation:child',
-    child_workflow_id: 'workflow:child',
-    status: 'succeeded',
-  }, 'schedule:child');
-  seedRow(database, currentSchema, 'workflow_root_finalization_schedules', {
-    id: 'schedule:ready',
-    workflow_id: 'workflow:parent',
-    creation_request_id: 'creation:ready',
-    child_workflow_id: 'workflow:child',
-    status: 'ready',
-  }, 'schedule:ready');
-  seedRow(database, currentSchema, 'workflow_root_finalization_schedules', {
-    id: 'schedule:parent-other',
-    workflow_id: 'workflow:parent',
-    creation_request_id: 'creation:other',
-    child_workflow_id: 'workflow:other',
-    status: 'succeeded',
-  }, 'schedule:parent-other');
+    seedRow(database, currentSchema, 'workflow_creation_requests', { id }, id);
+  seedRow(
+    database,
+    currentSchema,
+    'workflow_relations',
+    {
+      id: 'relation:parent-child',
+      parent_workflow_id: 'workflow:parent',
+      child_workflow_id: 'workflow:child',
+    },
+    'relation:parent-child',
+  );
+  seedRow(
+    database,
+    currentSchema,
+    'workflow_relations',
+    {
+      id: 'relation:parent-other',
+      parent_workflow_id: 'workflow:parent',
+      child_workflow_id: 'workflow:other',
+    },
+    'relation:parent-other',
+  );
+  seedRow(
+    database,
+    currentSchema,
+    'workflow_root_finalization_schedules',
+    {
+      id: 'schedule:child',
+      workflow_id: 'workflow:parent',
+      creation_request_id: 'creation:child',
+      child_workflow_id: 'workflow:child',
+      status: 'succeeded',
+    },
+    'schedule:child',
+  );
+  seedRow(
+    database,
+    currentSchema,
+    'workflow_root_finalization_schedules',
+    {
+      id: 'schedule:ready',
+      workflow_id: 'workflow:parent',
+      creation_request_id: 'creation:ready',
+      child_workflow_id: 'workflow:child',
+      status: 'ready',
+    },
+    'schedule:ready',
+  );
+  seedRow(
+    database,
+    currentSchema,
+    'workflow_root_finalization_schedules',
+    {
+      id: 'schedule:parent-other',
+      workflow_id: 'workflow:parent',
+      creation_request_id: 'creation:other',
+      child_workflow_id: 'workflow:other',
+      status: 'succeeded',
+    },
+    'schedule:parent-other',
+  );
   for (const [id, workflowId] of [
     ['run:parent', 'workflow:parent'],
     ['run:child', 'workflow:child'],
@@ -341,7 +365,7 @@ describe('R-022 required Child Domain Claim handoff', () => {
     const spec = fs.readFileSync(
       path.resolve(
         import.meta.dirname,
-        '../../../local/docs/dynamic-workflow-dag-framework.md',
+        '../../../docs/archive/dynamic-workflow-runtime-v1/dynamic-workflow-dag-framework.md',
       ),
       'utf8',
     );
@@ -807,7 +831,13 @@ describe('R-022 required Child Domain Claim handoff', () => {
         id: recipe,
         content_hash: hash(`recipe:${label}`),
       });
-      seedRow(database, schema9, 'workflow_task_intakes', { id: intake }, intake);
+      seedRow(
+        database,
+        schema9,
+        'workflow_task_intakes',
+        { id: intake },
+        intake,
+      );
       seedRow(database, schema9, 'workflow_domain_resource_claims', {
         id: `claim:${label}`,
         namespace: label,

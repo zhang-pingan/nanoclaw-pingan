@@ -152,7 +152,8 @@ function markdownCoverageSchema(): Schema {
     object({
       format: { const: 'icarus.workflow-markdown-contract-coverage/1' },
       architecture_path: {
-        const: 'local/docs/dynamic-workflow-dag-framework.md',
+        const:
+          'docs/archive/dynamic-workflow-runtime-v1/dynamic-workflow-dag-framework.md',
       },
       architecture_sha256: hash,
       extraction_policy: {

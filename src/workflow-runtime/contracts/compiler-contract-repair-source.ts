@@ -50,7 +50,7 @@ export const COMPILER_CONTRACT_REPAIR_DECISION_PATH =
 export const COMPILER_CONTRACT_REPAIR_FIXTURES_PATH =
   `${COMPILER_CONTRACT_REPAIR_ROOT}/contract-fixtures/repair-cases@1.json` as const;
 export const COMPILER_CONTRACT_REPAIR_SPEC_PATH =
-  'local/docs/dynamic-workflow-dag-framework.md' as const;
+  'docs/archive/dynamic-workflow-runtime-v1/dynamic-workflow-dag-framework.md' as const;
 export const COMPILER_CONTRACT_REPAIR_SPEC_SECTION =
   '### R-016：Compiler/Golden Contract 决议' as const;
 

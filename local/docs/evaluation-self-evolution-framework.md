@@ -1,7 +1,7 @@
 # Icarus 评估与自进化框架技术方案
 
 > **状态**：方案讨论稿
-> **实施前置**：[Dynamic Workflow Graph Runtime](./dynamic-workflow-dag-framework.md) 已完整实现并通过 Production Activation Gate
+> **实施前置**：[Dynamic Workflow Runtime](../../docs/dynamic-workflow-runtime.md) 已完整实现、验收并归档施工生命周期
 > **范围**：Icarus Core、独立 Agent 执行链路、Core-owned Workflow，以及由一个或多个 Workflow 组成的 Feature Package
 
 ## 导航
@@ -66,7 +66,7 @@ Icarus 需要建立一套统一的评估与自进化框架，使 Core 和 Featur
 
 ### 1. Dynamic Workflow Runtime 是实施前置
 
-本框架真正实施时，`dynamic-workflow-dag-framework.md` 已经完成。`WorkflowAdapter` 直接依赖正式的 Registry、Recipe、Definition、Compiled Plan、Run Snapshot、Value/Blob、Attempt、Artifact、Evaluator、Trace、Command Gateway、dry-run 和 test-only bootstrap 合同，不实现临时 Workflow 模拟器，也不兼容旧 Workflow。
+本框架真正实施时，`docs/dynamic-workflow-runtime.md` 索引的 Dynamic Workflow Runtime 已经完成。`WorkflowAdapter` 直接依赖正式的 Registry、Recipe、Definition、Compiled Plan、Run Snapshot、Value/Blob、Attempt、Artifact、Evaluator、Trace、Command Gateway、dry-run 和 test-only bootstrap 合同，不实现临时 Workflow 模拟器，也不兼容旧 Workflow。
 
 ### 2. 只有两类业务执行适配器
 

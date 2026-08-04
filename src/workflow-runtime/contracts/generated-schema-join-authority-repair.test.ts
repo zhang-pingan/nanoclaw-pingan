@@ -47,7 +47,7 @@ describe('generated schema and join expose repair authority', () => {
     const progress = fs.readFileSync(
       path.join(
         projectRoot,
-        'local/docs/dynamic-workflow-runtime-implementation-progress.md',
+        'docs/archive/dynamic-workflow-runtime-v1/dynamic-workflow-runtime-implementation-progress.md',
       ),
       'utf8',
     );
@@ -61,7 +61,10 @@ describe('generated schema and join expose repair authority', () => {
     );
 
     const document = fs.readFileSync(
-      path.join(projectRoot, 'local/docs/dynamic-workflow-dag-framework.md'),
+      path.join(
+        projectRoot,
+        'docs/archive/dynamic-workflow-runtime-v1/dynamic-workflow-dag-framework.md',
+      ),
       'utf8',
     );
     expect(document).not.toContain(
@@ -83,7 +86,7 @@ describe('generated schema and join expose repair authority', () => {
       ),
     );
     expect(decision.payload.normative_spec).toEqual({
-      path: 'local/docs/dynamic-workflow-dag-framework.md',
+      path: 'docs/archive/dynamic-workflow-runtime-v1/dynamic-workflow-dag-framework.md',
       section_heading: GENERATED_SCHEMA_JOIN_AUTHORITY_REPAIR_SPEC_HEADING,
       section_raw_sha256: rawHash(section),
       section_semantic_hash: domainSeparatedSha256(
@@ -174,7 +177,10 @@ describe('generated schema and join expose repair authority', () => {
 
   it('invalidates the pack on any normative section drift', () => {
     const document = fs.readFileSync(
-      path.join(projectRoot, 'local/docs/dynamic-workflow-dag-framework.md'),
+      path.join(
+        projectRoot,
+        'docs/archive/dynamic-workflow-runtime-v1/dynamic-workflow-dag-framework.md',
+      ),
       'utf8',
     );
     const changed = document.replace(

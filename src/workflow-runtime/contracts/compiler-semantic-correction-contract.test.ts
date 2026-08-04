@@ -20,7 +20,7 @@ const contractsRoot = import.meta.dirname;
 const projectRoot = path.resolve(contractsRoot, '../../..');
 const architecturePath = path.join(
   projectRoot,
-  'local/docs/dynamic-workflow-dag-framework.md',
+  'docs/archive/dynamic-workflow-runtime-v1/dynamic-workflow-dag-framework.md',
 );
 const specHeading = '### R-017：G2 Working Semantic Correction 决议';
 const specDomain =

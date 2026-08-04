@@ -99,7 +99,10 @@ function specSection(document?: string): string {
   const source =
     document ??
     fs.readFileSync(
-      path.join(projectRoot, 'local/docs/dynamic-workflow-dag-framework.md'),
+      path.join(
+        projectRoot,
+        'docs/archive/dynamic-workflow-runtime-v1/dynamic-workflow-dag-framework.md',
+      ),
       'utf8',
     );
   const start = source.indexOf(COMPILER_SEMANTIC_CORRECTION_SPEC_HEADING);
@@ -333,9 +336,7 @@ function writeAtomic(relativePath: string, contents: string): void {
 
 function validateBoundary(): void {
   try {
-    assertCurrentG2SealedBoundary(
-      absoluteContractPath('conformance/sealed'),
-    );
+    assertCurrentG2SealedBoundary(absoluteContractPath('conformance/sealed'));
   } catch {
     throw new Error('Semantic correction crossed sealed boundary');
   }

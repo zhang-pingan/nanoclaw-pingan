@@ -14,7 +14,7 @@
 本文不再承载 Icarus core workflow runtime 的框架改造设计；fan-in、外层 State、运行时动态 DAG、graph compiler、graph execution、checkpoint、Task Intake/Macro Router、Recipe Catalog、Feature lifecycle 和 Workbench/Trace 展示等通用能力统一由以下框架方案定义：
 
 ```text
-local/docs/dynamic-workflow-dag-framework.md
+docs/dynamic-workflow-runtime.md
 ```
 
 本方案只补充说明创业机会调研如何基于该通用 Dynamic Workflow DAG 框架实现：
@@ -91,7 +91,7 @@ AI 在家庭旅行场景有哪些值得小团队关注的方向
 
 GPT Researcher 项目（`/Users/chelaile/IdeaProjects/gpt-researcher`）当前更偏向通用研究报告生成，尤其是 `deep` 模式，重点是围绕一个查询进行初始检索、扩展问题、并发子研究、递归追问、上下文压缩、来源筛选并生成综合报告。实际使用中，GPT Researcher deep 生成的调研报告质量较高，说明它的流程设计有重要参考价值。
 
-Icarus 项目（`/Users/chelaile/IdeaProjects/icarus`）已有 workflow、delegation、skill、artifact contract、evaluator、host/container/IPC/MCP 等基础能力。通用 workflow runtime 如何把外层 State 与原生并发、runtime-generated DAG、Task Intake/Recipe routing 和统一恢复接入同一 Graph Runtime，由 `local/docs/dynamic-workflow-dag-framework.md` 统一定义。
+Icarus 项目（`/Users/chelaile/IdeaProjects/icarus`）已有 workflow、delegation、skill、artifact contract、evaluator、host/container/IPC/MCP 等基础能力。通用 workflow runtime 如何把外层 State 与原生并发、runtime-generated DAG、Task Intake/Recipe routing 和统一恢复接入同一 Graph Runtime，由 `docs/dynamic-workflow-runtime.md` 索引的current machine Contracts与Runtime实现统一定义。
 
 因此，本方案的核心动机不是新增第二套 Opportunity workflow engine，也不是在业务文档中定义 core framework，而是在通用 Dynamic Workflow DAG 框架之上定义创业机会调研 Recipe Family。
 
@@ -143,7 +143,7 @@ Icarus 项目（`/Users/chelaile/IdeaProjects/icarus`）已有 workflow、delega
 - 不把 GPT Researcher 作为黑盒主业务入口；它是流程参考和可选底层能力来源。
 - 不把 LLM 的自然语言报告作为唯一决策结果。
 - 不把成品服务降级成一次性报告生成；需要保留结构化判断层、评分、反证和可追踪审计产物。
-- 不在本方案中重新定义 core workflow runtime；并行/fan-in、Task Intake、Recipe routing 和动态 DAG 是 `local/docs/dynamic-workflow-dag-framework.md` 的通用能力。
+- 不在本方案中重新定义 core workflow runtime；并行/fan-in、Task Intake、Recipe routing 和动态 DAG 是 `docs/dynamic-workflow-runtime.md` 索引的通用能力。
 - 不让一个全局 Planner 同时选择 Recipe、Workflow Definition 和图内能力；Macro Router 只选本 routing scope 内 exact Recipe，Micro Planner 只规划已选 Recipe 的 graph state。
 - 当前 Feature 以消费者产品为主体；不默认原生 App 一定是首发形态，而是在 `native_app`、`mini_program`、`mobile_web`、`hybrid_app` 和必要时的人工辅助验证之间比较交付形态。SaaS、企业销售和 API/基础设施不是本版本的目标交付形态。
 - 不把 AI 作为独立业务 Recipe 或机会本体；AI 是解决方案候选的一类能力证据，也是相关概念验证中的条件性评估维度。
@@ -612,7 +612,7 @@ proposed -> screened -> recommended
 
 多 lane 调研、多 query 搜索、多机会 enrichment、多 reviewer 复核都不应被隐藏在一个 agent 节点内部。隐藏并行会降低 workflow 层可观测性、可恢复性和质量门控制。
 
-本方案基于 `local/docs/dynamic-workflow-dag-framework.md` 的通用能力表达这些执行关系。不存在 `parallel` state；固定并行结构使用 static Graph Scope Template，动态结构由 Micro Planner 生成 Scope Spec，多个 ready Graph Node 由 Runtime 原生并发执行。
+本方案基于 `docs/dynamic-workflow-runtime.md` 索引的通用能力表达这些执行关系。不存在 `parallel` state；固定并行结构使用 static Graph Scope Template，动态结构由 Micro Planner 生成 Scope Spec，多个 ready Graph Node 由 Runtime 原生并发执行。
 
 ```text
 startup opportunity recipe
@@ -679,7 +679,7 @@ Planner 可以选择 node、edge、condition、input binding、subgraph/map/expa
 通用 workflow 框架不在本文定义，详见：
 
 ```text
-local/docs/dynamic-workflow-dag-framework.md
+docs/dynamic-workflow-runtime.md
 ```
 
 本文只假设该框架已经提供外层 Workflow State、统一 Graph lowering、static/dynamic Graph、原生 ready-node 并发、graph compiler、node-level artifact/evaluator、fan-in、Task Intake/Recipe routing、checkpoint 和 Workbench/Trace 可观测性。
@@ -2273,7 +2273,7 @@ class OpportunityReporter:
 - Workflow lifetime budget、RuntimeSafetyCeilings、Feature draining/version retention。
 - Workbench/Trace 对 ready-node concurrency 和 dynamic DAG 的可观测性。
 
-统一由 `local/docs/dynamic-workflow-dag-framework.md` 定义。
+统一由 `docs/dynamic-workflow-runtime.md` 索引的machine Contracts与Runtime实现定义。
 
 创业机会调研 recipe 只负责在该框架之上定义业务节点、skill、artifact、evaluator、评分规则和报告结构。执行形态是：
 
@@ -3756,7 +3756,7 @@ Startup Opportunity Recipe Family 自己控制领域判断：机会发现负责�
 
 架构层范围：
 
-- 通用 Task Intake/Recipe routing、State-to-Graph lowering、ready-node concurrency、graph compiler/execution、join/fan-in、checkpoint、lifetime budget、Feature lifecycle 和 Workbench/Trace 由 `local/docs/dynamic-workflow-dag-framework.md` 定义。
+- 通用 Task Intake/Recipe routing、State-to-Graph lowering、ready-node concurrency、graph compiler/execution、join/fan-in、checkpoint、lifetime budget、Feature lifecycle 和 Workbench/Trace 由 `docs/dynamic-workflow-runtime.md` 索引的current authority定义。
 - 本方案只声明创业机会调研对该框架的使用方式和业务契约。
 
 机会发现 workflow 范围：
