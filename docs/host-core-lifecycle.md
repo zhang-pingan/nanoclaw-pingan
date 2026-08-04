@@ -22,7 +22,7 @@ Selection is a separate explicit command:
 local/shell/host-core-release.sh activate --version <version> [--skip-validation]
 ```
 
-Activate resolves the exact immutable version record, verifies the complete release, displays current and target identities, and requires confirmation. Unless skipped, it also performs the lightweight readiness check. It then atomically replaces only the `active-core` symlink and verifies the selected result.
+Activate resolves the exact immutable version record, verifies the complete release and its compatibility with the installed managed runtime launcher and toolchain, displays current and target identities, and requires confirmation. Unless skipped, it also performs the lightweight readiness check. Only after all deterministic target checks pass does it atomically replace `active-core` and verify the selected result. A target failure leaves the prior pointer byte-identical (or absent); an unexpected post-switch verification failure restores that prior state.
 
 Activation does not inspect, migrate, reset, quarantine, or otherwise touch Workflow Runtime state. It creates no deployment, audit, journal, recovery, or lock state. Historical lifecycle files are left untouched and ignored. Formal Host production identity is derived directly from the verified `active-core`. The accepted legacy G8 `1.2.14` active binding remains supported by the verifier and launcher.
 
@@ -41,7 +41,7 @@ local/shell/start.sh --mode active
 
 Immediately before either launch, startup performs a read-only schema decision for the selected code identity:
 
-- `NO_STATE`, `SAME_SCHEMA`, and `MIGRATION_SUPPORTED` allow startup. Supported migration remains owned by normal Store startup.
+- `NO_STATE`, `SAME_SCHEMA`, and `MIGRATION_SUPPORTED` allow startup. Supported migration remains owned by normal Store startup. Current mode uses current-checkout migration authority; active mode uses the selected release's frozen, integrity-checked compatibility descriptor and never inherits migration support from the current checkout. A legacy release without frozen migration authority can still launch with no state or the same verified schema, but any migration decision fails closed.
 - `RESET_REQUIRED` blocks startup with a stable decision.
 - `UNKNOWN_BLOCKED` blocks startup. Unverifiable databases, non-regular state files, and broken symlinks are never treated as no state.
 
@@ -56,7 +56,7 @@ local/shell/workflow-state.sh reset --mode <current|active>
 
 `inspect` is read-only. It reports the selected code identity, current and target schema identities, decision, reason, and the exact database paths.
 
-`reset` is available only for a recognized `RESET_REQUIRED` decision. Unknown identity remains blocked. The command refuses to continue while the launchd service or a direct current/active Host process is running, never stops it implicitly, displays the exact DB/WAL/SHM paths and identities, and requires confirmation.
+`reset` is available only for a recognized `RESET_REQUIRED` decision or to finish one unambiguous incomplete quarantine previously created by this command. Unknown identity remains blocked. The command refuses to continue while the launchd service or a direct current/active Host process is running, never stops it implicitly, displays the exact DB/WAL/SHM paths, recorded identities, and recovery path, and requires confirmation.
 
 Reset operates only on:
 
@@ -66,4 +66,4 @@ data/workflow-runtime/workflow-runtime.db-wal
 data/workflow-runtime/workflow-runtime.db-shm
 ```
 
-The present unit is moved into an immutable, content-identified `workflow-runtime-state-backups/<hash>/` quarantine with a manifest. Repeating the same quarantine completes or verifies the same recoverable result. Releases, version records, credentials, configuration, Capacity, Registry, container data, and unrelated project data are not reset.
+The present unit is moved into an immutable, content-identified `workflow-runtime-state-backups/<hash>/` quarantine with a manifest. If interruption occurs after that manifest is durable, repeating `reset` discovers a single incomplete quarantine in this dedicated directory, strictly verifies every planned member in exactly one recorded source or backup location, asks for confirmation again, and completes the move and hardening. Ambiguous, colliding, tampered, symlinked, unrelated, or inconsistent recovery evidence is reported and blocked. Completed backups are verified but not resumed. Releases, version records, credentials, configuration, Capacity, Registry, container data, and unrelated project data are not reset.

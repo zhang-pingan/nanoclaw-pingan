@@ -6,6 +6,7 @@ source "$SCRIPT_DIR/common.sh"
 
 usage() {
   echo "Usage: $0 <inspect|reset> --mode <current|active>" >&2
+  echo "reset can resume one strictly verified incomplete quarantine and always requires confirmation" >&2
   exit 64
 }
 

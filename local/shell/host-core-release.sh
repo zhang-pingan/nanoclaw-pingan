@@ -6,6 +6,7 @@ source "$SCRIPT_DIR/common.sh"
 
 usage() {
   echo "Usage: $0 <publish|activate> --version <version> [--skip-validation]" >&2
+  echo "publish freezes without selecting; activate verifies release and runtime identity before selecting active-core" >&2
   exit 64
 }
 

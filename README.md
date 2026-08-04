@@ -332,7 +332,7 @@ local/shell/start.sh --mode current
 local/shell/start.sh --mode active
 ```
 
-`current` 构建并运行当前检出；`active` 校验并运行 `active-core` 指向的不可变版本，不重建或改变选择。冻结版本只会由用户显式执行 publish 创建，publish 与 activate 相互独立。Workflow Runtime schema 检查在启动前只读执行；检查和重置使用独立的 `local/shell/workflow-state.sh` 命令。完整行为见 [`docs/host-core-lifecycle.md`](docs/host-core-lifecycle.md)。
+`current` 构建并运行当前检出；`active` 校验并运行 `active-core` 指向的不可变版本，不重建或改变选择。冻结版本只会由用户显式执行 publish 创建，publish 与 activate 相互独立；activate 会在改变指针前校验冻结版本与已安装托管运行时的身份。Workflow Runtime schema 检查在启动前只读执行：`current` 使用当前检出的迁移规则，`active` 使用冻结版本自带并经过完整性校验的兼容性描述。检查和重置使用独立的 `local/shell/workflow-state.sh` 命令；重复 reset 可以在严格校验并再次确认后继续一个明确的未完成隔离。完整行为见 [`docs/host-core-lifecycle.md`](docs/host-core-lifecycle.md)。
 
 ### 生产构建
 

@@ -24,6 +24,7 @@ import {
   resolveHostCoreVersion,
   verifyInstalledHostCoreRelease,
 } from './release.js';
+import type { WorkflowRuntimeSchemaCompatibility } from './persistent-state.js';
 
 interface LegacyContentAddressedCoreBinding {
   readonly format: 'icarus.core-runtime-launch-binding/2';
@@ -72,6 +73,7 @@ export interface ActiveHostCoreIdentity {
   readonly database_schema_version: number;
   readonly database_schema_hash: Sha256Hash;
   readonly database_sqlite_schema_hash: Sha256Hash | null;
+  readonly workflow_runtime_schema_compatibility: WorkflowRuntimeSchemaCompatibility | null;
   readonly release_root: string;
   readonly core_entry_path: string;
   readonly core_entry_sha256: Sha256Hash;
@@ -355,6 +357,8 @@ export function verifyActiveHostCore(
       database_schema_version: manifest.database_schema_version,
       database_schema_hash: manifest.database_schema_hash,
       database_sqlite_schema_hash: manifest.database_sqlite_schema_hash,
+      workflow_runtime_schema_compatibility:
+        manifest.workflow_runtime_schema_compatibility,
       release_root: releaseRoot,
       core_entry_path: path.join(releaseRoot, HOST_CORE_ENTRY),
       core_entry_sha256: manifest.core_entry_sha256,
@@ -381,6 +385,7 @@ export function verifyActiveHostCore(
       database_schema_version: manifest.database_schema_version,
       database_schema_hash: manifest.database_schema_hash,
       database_sqlite_schema_hash: null,
+      workflow_runtime_schema_compatibility: null,
       release_root: releaseRoot,
       core_entry_path: path.join(
         releaseRoot,
@@ -484,6 +489,26 @@ function atomicActiveCore(runtimeHome: string, relative: string): void {
   }
 }
 
+function restoreActiveCore(
+  runtimeHome: string,
+  installedRelative: string,
+  previousRelative: string | null,
+): void {
+  const pointer = path.join(runtimeHome, 'active-core');
+  const current = lstatIfPresent(pointer);
+  if (
+    !current ||
+    !current.isSymbolicLink() ||
+    fs.readlinkSync(pointer) !== installedRelative
+  )
+    throw new Error('host_core_activation_rollback_selection_changed');
+  if (previousRelative) atomicActiveCore(runtimeHome, previousRelative);
+  else {
+    fs.unlinkSync(pointer);
+    fsyncDirectory(runtimeHome);
+  }
+}
+
 function activeIdentityIfPresent(
   runtimeHome: string,
 ): ActiveHostCoreIdentity | null {
@@ -560,25 +585,44 @@ export function activateHostCoreRelease(options: ActivateHostCoreOptions): {
     );
   }
   const resolved = resolveHostCoreVersion(runtimeHome, options.version);
+  const currentBeforeSwitch = activeIdentityIfPresent(runtimeHome);
   if (
     resolved.manifest.release_artifact_hash !==
       initial.target.release_artifact_hash ||
-    !sameActiveIdentity(initial.current, activeIdentityIfPresent(runtimeHome))
+    !sameActiveIdentity(initial.current, currentBeforeSwitch)
   )
     throw new Error('host_core_activation_selection_changed');
+  verifyRuntimeIdentity(runtimeHome, resolved.manifest);
   const manifestPath = path.join(
     runtimeHome,
     resolved.record.release_relative_path,
     HOST_CORE_MANIFEST_FILENAME,
   );
   const binding = buildBinding(resolved.manifest, rawSha256(manifestPath));
-  atomicActiveCore(runtimeHome, installBinding(runtimeHome, binding));
-  const active = verifyActiveHostCore(runtimeHome);
-  if (
-    active.release_artifact_hash !== resolved.manifest.release_artifact_hash ||
-    active.binding_hash !== binding.binding_hash
-  )
-    throw new Error('host_core_activation_verification_failed');
+  const previousRelative = currentBeforeSwitch
+    ? fs.readlinkSync(path.join(runtimeHome, 'active-core'))
+    : null;
+  const bindingRelative = installBinding(runtimeHome, binding);
+  atomicActiveCore(runtimeHome, bindingRelative);
+  let active: ActiveHostCoreIdentity;
+  try {
+    active = verifyActiveHostCore(runtimeHome);
+    if (
+      active.release_artifact_hash !==
+        resolved.manifest.release_artifact_hash ||
+      active.binding_hash !== binding.binding_hash
+    )
+      throw new Error('host_core_activation_verification_failed');
+  } catch (error) {
+    try {
+      restoreActiveCore(runtimeHome, bindingRelative, previousRelative);
+    } catch (rollbackError) {
+      throw new Error('host_core_activation_rollback_failed', {
+        cause: new AggregateError([error, rollbackError]),
+      });
+    }
+    throw error;
+  }
   return {
     version: active.version,
     release_artifact_hash: active.release_artifact_hash,

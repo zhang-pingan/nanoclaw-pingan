@@ -9,8 +9,11 @@ import {
   type HostCoreTargetSchemaIdentity,
   type PersistentStateDecision,
   type PersistentStateResetPlan,
+  type WorkflowRuntimeSchemaCompatibility,
   buildPersistentStateResetPlan,
+  currentWorkflowRuntimeSchemaCompatibility,
   decidePersistentStateCompatibility,
+  discoverPersistentStateResetRecovery,
   quarantinePersistentState,
 } from './persistent-state.js';
 
@@ -22,6 +25,7 @@ export interface WorkflowStateTarget {
   readonly version: string | null;
   readonly release_artifact_hash: Sha256Hash | null;
   readonly schema: HostCoreTargetSchemaIdentity;
+  readonly schema_compatibility: WorkflowRuntimeSchemaCompatibility | null;
 }
 
 export interface WorkflowStateInspection {
@@ -40,6 +44,7 @@ function currentTarget(): WorkflowStateTarget {
       database_schema_hash: CURRENT_G1_SCHEMA_IDENTITIES.schema,
       database_sqlite_schema_hash: CURRENT_G1_SCHEMA_IDENTITIES.sqliteSchema,
     },
+    schema_compatibility: currentWorkflowRuntimeSchemaCompatibility(),
   };
 }
 
@@ -68,6 +73,7 @@ export function resolveWorkflowStateTarget(
       database_schema_hash: active.database_schema_hash,
       database_sqlite_schema_hash: sqliteSchemaHash,
     },
+    schema_compatibility: active.workflow_runtime_schema_compatibility,
   };
 }
 
@@ -79,7 +85,40 @@ export function inspectWorkflowState(
   const target = resolveWorkflowStateTarget(runtimeHome, mode);
   return {
     target,
-    decision: decidePersistentStateCompatibility(runtimeHome, target.schema),
+    decision: decidePersistentStateCompatibility(
+      runtimeHome,
+      target.schema,
+      target.schema_compatibility,
+    ),
+  };
+}
+
+export interface WorkflowStateResetPreparation {
+  readonly recovery: boolean;
+  readonly inspection: WorkflowStateInspection | null;
+  readonly plan: PersistentStateResetPlan;
+}
+
+export function prepareWorkflowStateReset(
+  runtimeHomeInput: string,
+  mode: WorkflowStateMode,
+): WorkflowStateResetPreparation {
+  const runtimeHome = fs.realpathSync(runtimeHomeInput);
+  const recovery = discoverPersistentStateResetRecovery(runtimeHome);
+  if (recovery) return { recovery: true, inspection: null, plan: recovery };
+  const inspection = inspectWorkflowState(runtimeHome, mode);
+  if (inspection.decision.decision === 'UNKNOWN_BLOCKED')
+    throw new Error(
+      `workflow_state_unknown_blocked:${inspection.decision.reason}`,
+    );
+  if (inspection.decision.decision !== 'RESET_REQUIRED')
+    throw new Error(
+      `workflow_state_reset_not_required:${inspection.decision.decision}`,
+    );
+  return {
+    recovery: false,
+    inspection,
+    plan: buildPersistentStateResetPlan(inspection.decision),
   };
 }
 
@@ -145,6 +184,7 @@ export function resetWorkflowState(options: {
   readonly mode: WorkflowStateMode;
   readonly confirmed: boolean;
   readonly hostIsRunning?: () => boolean;
+  readonly expectedPlan?: PersistentStateResetPlan;
   readonly onPlan?: (plan: PersistentStateResetPlan) => void;
 }): PersistentStateResetPlan {
   const runtimeHome = fs.realpathSync(options.runtimeHome);
@@ -153,17 +193,14 @@ export function resetWorkflowState(options: {
     runtimeHome,
     options.hostIsRunning,
   );
-  const inspection = inspectWorkflowState(runtimeHome, options.mode);
-  if (inspection.decision.decision === 'UNKNOWN_BLOCKED')
-    throw new Error(
-      `workflow_state_unknown_blocked:${inspection.decision.reason}`,
-    );
-  if (inspection.decision.decision !== 'RESET_REQUIRED')
-    throw new Error(
-      `workflow_state_reset_not_required:${inspection.decision.decision}`,
-    );
+  const preparation = prepareWorkflowStateReset(runtimeHome, options.mode);
   if (!options.confirmed) throw new Error('workflow_state_reset_cancelled');
-  const plan = buildPersistentStateResetPlan(inspection.decision);
+  const plan = preparation.plan;
+  if (
+    options.expectedPlan &&
+    options.expectedPlan.backup_identity !== plan.backup_identity
+  )
+    throw new Error('workflow_state_reset_plan_changed');
   options.onPlan?.(plan);
   quarantinePersistentState(runtimeHome, plan);
   return plan;

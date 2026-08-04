@@ -17,6 +17,11 @@ import type {
   Sha256Hash,
 } from '../workflow-runtime/contracts/types.js';
 import { CURRENT_G1_SCHEMA_IDENTITIES } from '../workflow-runtime/store/runtime-store/profile.js';
+import {
+  type WorkflowRuntimeSchemaCompatibility,
+  currentWorkflowRuntimeSchemaCompatibility,
+  parseWorkflowRuntimeSchemaCompatibility,
+} from './persistent-state.js';
 
 export const HOST_CORE_MANIFEST_FILENAME = 'core-release-manifest.json';
 export const HOST_CORE_ENTRY = 'dist/index.js';
@@ -38,7 +43,9 @@ export interface HostCoreInventoryEntry {
 }
 
 export interface HostCoreReleaseManifest {
-  readonly format: 'icarus.host-core-release-manifest/1';
+  readonly format:
+    | 'icarus.host-core-release-manifest/1'
+    | 'icarus.host-core-release-manifest/2';
   readonly lifecycle: 'formal_host_core_release';
   readonly ref: { readonly id: 'icarus.host-core'; readonly version: string };
   readonly release_scope: 'icarus_host_core';
@@ -52,6 +59,7 @@ export interface HostCoreReleaseManifest {
   readonly database_schema_version: number;
   readonly database_schema_hash: Sha256Hash;
   readonly database_sqlite_schema_hash: Sha256Hash;
+  readonly workflow_runtime_schema_compatibility: WorkflowRuntimeSchemaCompatibility | null;
   readonly managed_node_distribution_ref: {
     readonly id: string;
     readonly version: string;
@@ -81,7 +89,7 @@ export interface HostCoreVersionRecord {
   readonly record_hash: Sha256Hash;
 }
 
-const MANIFEST_KEYS = [
+const MANIFEST_V1_KEYS = [
   'arch',
   'build_kind',
   'core_build_hash',
@@ -108,6 +116,10 @@ const MANIFEST_KEYS = [
   'validation_entry_relative_path',
   'validation_entry_sha256',
   'validation_status',
+] as const;
+const MANIFEST_V2_KEYS = [
+  ...MANIFEST_V1_KEYS,
+  'workflow_runtime_schema_compatibility',
 ] as const;
 const INVENTORY_KEYS = [
   'byte_length',
@@ -268,7 +280,18 @@ export function parseHostCoreReleaseManifest(
   value: unknown,
 ): HostCoreReleaseManifest {
   assertJsonObject(value);
-  exactKeys(value, MANIFEST_KEYS, 'host_core_manifest');
+  const manifestVersion =
+    value.format === 'icarus.host-core-release-manifest/1'
+      ? 1
+      : value.format === 'icarus.host-core-release-manifest/2'
+        ? 2
+        : null;
+  if (!manifestVersion) throw new Error('host_core_manifest_identity_invalid');
+  exactKeys(
+    value,
+    manifestVersion === 1 ? MANIFEST_V1_KEYS : MANIFEST_V2_KEYS,
+    'host_core_manifest',
+  );
   assertJsonObject(value.ref);
   exactKeys(value.ref, ['id', 'version'], 'host_core_manifest_ref');
   assertJsonObject(value.managed_node_distribution_ref);
@@ -281,7 +304,6 @@ export function parseHostCoreReleaseManifest(
   const inventoryEntries = parseInventory(value.inventory);
   const validationStatus = value.validation_status;
   if (
-    value.format !== 'icarus.host-core-release-manifest/1' ||
     value.lifecycle !== 'formal_host_core_release' ||
     value.ref.id !== 'icarus.host-core' ||
     value.release_scope !== 'icarus_host_core' ||
@@ -304,8 +326,17 @@ export function parseHostCoreReleaseManifest(
   )
     throw new Error('host_core_manifest_identity_invalid');
 
+  const schemaCompatibility =
+    manifestVersion === 2
+      ? parseWorkflowRuntimeSchemaCompatibility(
+          value.workflow_runtime_schema_compatibility,
+        )
+      : null;
   const manifest: HostCoreReleaseManifest = {
-    format: value.format,
+    format:
+      manifestVersion === 1
+        ? 'icarus.host-core-release-manifest/1'
+        : 'icarus.host-core-release-manifest/2',
     lifecycle: value.lifecycle,
     ref: { id: 'icarus.host-core', version },
     release_scope: value.release_scope,
@@ -327,6 +358,7 @@ export function parseHostCoreReleaseManifest(
     database_sqlite_schema_hash: parseSha256Hash(
       value.database_sqlite_schema_hash,
     ),
+    workflow_runtime_schema_compatibility: schemaCompatibility,
     managed_node_distribution_ref: {
       id: value.managed_node_distribution_ref.id,
       version: value.managed_node_distribution_ref.version,
@@ -345,7 +377,25 @@ export function parseHostCoreReleaseManifest(
     inventory_hash: parseSha256Hash(value.inventory_hash),
     release_artifact_hash: parseSha256Hash(value.release_artifact_hash),
   };
-  const { release_artifact_hash: _releaseHash, ...payload } = manifest;
+  if (
+    schemaCompatibility &&
+    (schemaCompatibility.target_identity.database_schema_version !==
+      manifest.database_schema_version ||
+      schemaCompatibility.target_identity.database_schema_hash !==
+        manifest.database_schema_hash ||
+      schemaCompatibility.target_identity.database_sqlite_schema_hash !==
+        manifest.database_sqlite_schema_hash)
+  )
+    throw new Error('host_core_manifest_schema_compatibility_mismatch');
+  const { release_artifact_hash: _releaseHash, ...payloadWithCompatibility } =
+    manifest;
+  const payload =
+    manifestVersion === 1
+      ? (({
+          workflow_runtime_schema_compatibility: _compatibility,
+          ...legacyPayload
+        }) => legacyPayload)(payloadWithCompatibility)
+      : payloadWithCompatibility;
   if (
     domainSeparatedSha256(
       'icarus:host-core-release-inventory:1\n',
@@ -358,7 +408,7 @@ export function parseHostCoreReleaseManifest(
       ) as unknown as JsonValue,
     ) !== manifest.core_build_hash ||
     domainSeparatedSha256(
-      'icarus:host-core-release-manifest:1\n',
+      `icarus:host-core-release-manifest:${String(manifestVersion)}\n`,
       payload as unknown as JsonValue,
     ) !== manifest.release_artifact_hash
   )
@@ -679,6 +729,7 @@ export interface InstallHostCoreReleaseOptions {
     readonly schemaHash: Sha256Hash;
     readonly sqliteSchemaHash: Sha256Hash;
   };
+  readonly workflowRuntimeSchemaCompatibility?: WorkflowRuntimeSchemaCompatibility;
 }
 
 export function installHostCoreReleaseFromDist(
@@ -735,8 +786,12 @@ export function installHostCoreReleaseFromDist(
       databaseSchema.version < 1
     )
       throw new Error('host_core_release_database_schema_version_invalid');
+    const schemaCompatibility = parseWorkflowRuntimeSchemaCompatibility(
+      options.workflowRuntimeSchemaCompatibility ??
+        currentWorkflowRuntimeSchemaCompatibility(),
+    );
     const payload = {
-      format: 'icarus.host-core-release-manifest/1' as const,
+      format: 'icarus.host-core-release-manifest/2' as const,
       lifecycle: 'formal_host_core_release' as const,
       ref: { id: 'icarus.host-core' as const, version },
       release_scope: 'icarus_host_core' as const,
@@ -755,6 +810,7 @@ export function installHostCoreReleaseFromDist(
       database_sqlite_schema_hash: parseSha256Hash(
         databaseSchema.sqliteSchemaHash,
       ),
+      workflow_runtime_schema_compatibility: schemaCompatibility,
       managed_node_distribution_ref: distribution.ref,
       managed_node_distribution_hash: distribution.manifest_hash,
       runtime_launcher_hash: rawSha256(
@@ -784,7 +840,7 @@ export function installHostCoreReleaseFromDist(
     const manifest = parseHostCoreReleaseManifest({
       ...payload,
       release_artifact_hash: domainSeparatedSha256(
-        'icarus:host-core-release-manifest:1\n',
+        'icarus:host-core-release-manifest:2\n',
         payload as unknown as JsonValue,
       ),
     });

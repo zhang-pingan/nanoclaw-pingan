@@ -12,6 +12,7 @@ import {
   type WorkflowStateMode,
   assertIcarusHostStopped,
   inspectWorkflowState,
+  prepareWorkflowStateReset,
   resetWorkflowState,
 } from './workflow-state.js';
 
@@ -49,8 +50,9 @@ export function parseWorkflowStateArguments(
 function printIdentity(
   prefix: string,
   identity: PersistentStateDecision['old_identity'],
+  output: (line: string) => void = console.log,
 ): void {
-  console.log(
+  output(
     `${prefix}=${identity ? `${identity.database_schema_version} ${identity.database_sqlite_schema_hash}` : 'none'}`,
   );
 }
@@ -58,20 +60,22 @@ function printIdentity(
 function printInspection(
   runtimeHome: string,
   inspection: WorkflowStateInspection,
+  output: (line: string) => void = console.log,
 ): void {
-  console.log(`workflow_state_mode=${inspection.target.mode}`);
-  console.log(`workflow_state_target=${inspection.target.code_identity}`);
-  console.log(
+  output(`workflow_state_mode=${inspection.target.mode}`);
+  output(`workflow_state_target=${inspection.target.code_identity}`);
+  output(
     `workflow_state_target_schema=${inspection.target.schema.database_schema_version} ${inspection.target.schema.database_schema_hash} ${inspection.target.schema.database_sqlite_schema_hash}`,
   );
   printIdentity(
     'workflow_state_current_schema',
     inspection.decision.old_identity,
+    output,
   );
-  console.log(`workflow_state_decision=${inspection.decision.decision}`);
-  console.log(`workflow_state_reason=${inspection.decision.reason}`);
+  output(`workflow_state_decision=${inspection.decision.decision}`);
+  output(`workflow_state_reason=${inspection.decision.reason}`);
   for (const relative of WORKFLOW_STATE_RELATIVE_PATHS)
-    console.log(`workflow_state_path=${path.join(runtimeHome, relative)}`);
+    output(`workflow_state_path=${path.join(runtimeHome, relative)}`);
 }
 
 async function confirmReset(): Promise<boolean> {
@@ -89,49 +93,76 @@ async function confirmReset(): Promise<boolean> {
   }
 }
 
-async function main(): Promise<void> {
-  const options = parseWorkflowStateArguments(process.argv.slice(2));
-  const projectRoot = path.resolve(import.meta.dirname, '../..');
+export interface WorkflowStateCliDependencies {
+  readonly projectRoot?: string;
+  readonly inputIsTTY?: boolean;
+  readonly outputIsTTY?: boolean;
+  readonly hostIsRunning?: () => boolean;
+  readonly confirm?: () => Promise<boolean>;
+  readonly output?: (line: string) => void;
+}
+
+export async function runWorkflowStateCli(
+  args: readonly string[],
+  dependencies: WorkflowStateCliDependencies = {},
+): Promise<number> {
+  const options = parseWorkflowStateArguments(args);
+  const projectRoot =
+    dependencies.projectRoot ?? path.resolve(import.meta.dirname, '../..');
   const runtimeHome = fs.realpathSync(options.runtimeHome);
-  const inspection = inspectWorkflowState(runtimeHome, options.mode);
-  printInspection(runtimeHome, inspection);
+  const output = dependencies.output ?? console.log;
   if (options.command === 'inspect') {
+    const inspection = inspectWorkflowState(runtimeHome, options.mode);
+    printInspection(runtimeHome, inspection, output);
     if (
       inspection.decision.decision === 'RESET_REQUIRED' ||
       inspection.decision.decision === 'UNKNOWN_BLOCKED'
     )
-      process.exitCode = 78;
-    return;
+      return 78;
+    return 0;
   }
 
-  assertIcarusHostStopped(projectRoot, runtimeHome);
-  if (inspection.decision.decision === 'UNKNOWN_BLOCKED')
-    throw new Error(
-      `workflow_state_unknown_blocked:${inspection.decision.reason}`,
+  assertIcarusHostStopped(projectRoot, runtimeHome, dependencies.hostIsRunning);
+  const preparation = prepareWorkflowStateReset(runtimeHome, options.mode);
+  if (preparation.inspection)
+    printInspection(runtimeHome, preparation.inspection, output);
+  else {
+    output(`workflow_state_mode=${options.mode}`);
+    output('workflow_state_target=recovery_recorded');
+    output(
+      `workflow_state_target_schema=${preparation.plan.target_identity.database_schema_version} ${preparation.plan.target_identity.database_schema_hash} ${preparation.plan.target_identity.database_sqlite_schema_hash}`,
     );
-  if (inspection.decision.decision !== 'RESET_REQUIRED')
-    throw new Error(
-      `workflow_state_reset_not_required:${inspection.decision.decision}`,
+    printIdentity(
+      'workflow_state_current_schema',
+      preparation.plan.old_identity,
+      output,
     );
-  if (!process.stdin.isTTY || !process.stdout.isTTY)
+    output('workflow_state_decision=RESET_RECOVERY');
+    output('workflow_state_reason=incomplete_quarantine_recovery');
+    for (const relative of WORKFLOW_STATE_RELATIVE_PATHS)
+      output(`workflow_state_path=${path.join(runtimeHome, relative)}`);
+  }
+  output(`workflow_state_backup_identity=${preparation.plan.backup_identity}`);
+  output(
+    `workflow_state_recovery_path=${path.join(runtimeHome, preparation.plan.backup_relative_path)}`,
+  );
+  if (
+    !(dependencies.inputIsTTY ?? process.stdin.isTTY) ||
+    !(dependencies.outputIsTTY ?? process.stdout.isTTY)
+  )
     throw new Error('workflow_state_reset_confirmation_requires_tty');
-  const confirmed = await confirmReset();
+  const confirmed = await (dependencies.confirm ?? confirmReset)();
   const plan = resetWorkflowState({
     projectRoot,
     runtimeHome,
     mode: options.mode,
     confirmed,
-    onPlan: (candidate) => {
-      console.log(
-        `workflow_state_backup_identity=${candidate.backup_identity}`,
-      );
-      console.log(
-        `workflow_state_recovery_path=${path.join(runtimeHome, candidate.backup_relative_path)}`,
-      );
-    },
+    hostIsRunning: dependencies.hostIsRunning,
+    expectedPlan: preparation.plan,
   });
-  console.log(`workflow_state_reset=QUARANTINED`);
-  console.log(`workflow_state_backup_identity=${plan.backup_identity}`);
+  output('workflow_state_reset=QUARANTINED');
+  output(`workflow_state_backup_identity=${plan.backup_identity}`);
+  return 0;
 }
 
 if (
@@ -139,4 +170,4 @@ if (
   fs.realpathSync(process.argv[1]) ===
     fs.realpathSync(fileURLToPath(import.meta.url))
 )
-  await main();
+  process.exitCode = await runWorkflowStateCli(process.argv.slice(2));

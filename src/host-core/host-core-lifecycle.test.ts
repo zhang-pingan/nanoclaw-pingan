@@ -21,7 +21,9 @@ import { parseHostCoreReleaseArguments } from './host-core-release-cli.js';
 import {
   WORKFLOW_STATE_DATABASE_RELATIVE,
   WORKFLOW_STATE_RELATIVE_PATHS,
+  type WorkflowRuntimeSchemaCompatibility,
   buildPersistentStateResetPlan,
+  currentWorkflowRuntimeSchemaCompatibility,
   decidePersistentStateCompatibility,
   quarantinePersistentState,
   readPersistentStateResetBackup,
@@ -36,7 +38,10 @@ import {
   readHostCoreVersionRecord,
   resolveHostCoreVersion,
 } from './release.js';
-import { parseWorkflowStateArguments } from './workflow-state-cli.js';
+import {
+  parseWorkflowStateArguments,
+  runWorkflowStateCli,
+} from './workflow-state-cli.js';
 import { inspectWorkflowState, resetWorkflowState } from './workflow-state.js';
 
 const projectRoot = path.resolve(import.meta.dirname, '../..');
@@ -127,9 +132,42 @@ function publishFixture(
   options: {
     validationStatus?: 'PASS' | 'SKIPPED_BY_USER';
     schemaVersion?: 10 | 11;
+    schemaCompatibility?: WorkflowRuntimeSchemaCompatibility;
   } = {},
 ) {
   const schemaVersion = options.schemaVersion ?? 11;
+  const schemaIdentity = {
+    version: schemaVersion,
+    schemaHash:
+      schemaVersion === 11
+        ? CURRENT_G1_SCHEMA_IDENTITIES.schema
+        : (`sha256:${'5'.repeat(64)}` as Sha256Hash),
+    sqliteSchemaHash:
+      schemaVersion === 11
+        ? CURRENT_G1_SCHEMA_IDENTITIES.sqliteSchema
+        : CURRENT_G1_SCHEMA_IDENTITIES.schema10SourceSqliteSchema,
+  };
+  const schemaCompatibility =
+    options.schemaCompatibility ??
+    (schemaVersion === 11
+      ? currentWorkflowRuntimeSchemaCompatibility()
+      : {
+          format: 'icarus.workflow-runtime-schema-compatibility/1' as const,
+          target_identity: {
+            database_schema_version: schemaIdentity.version,
+            database_schema_hash: schemaIdentity.schemaHash,
+            database_sqlite_schema_hash: schemaIdentity.sqliteSchemaHash,
+          },
+          recognized_sources: [
+            {
+              database_schema_version: 11,
+              database_sqlite_schema_hash:
+                CURRENT_G1_SCHEMA_IDENTITIES.sqliteSchema,
+              migration: 'UNSUPPORTED' as const,
+              precondition: 'NONE' as const,
+            },
+          ],
+        });
   return installHostCoreReleaseFromDist({
     projectRoot,
     runtimeHome,
@@ -140,18 +178,47 @@ function publishFixture(
     tree: '2'.repeat(40),
     includeDependencies: false,
     includeRuntimeAssets: false,
-    databaseSchemaIdentity: {
-      version: schemaVersion,
-      schemaHash:
-        schemaVersion === 11
-          ? CURRENT_G1_SCHEMA_IDENTITIES.schema
-          : (`sha256:${'5'.repeat(64)}` as Sha256Hash),
-      sqliteSchemaHash:
-        schemaVersion === 11
-          ? CURRENT_G1_SCHEMA_IDENTITIES.sqliteSchema
-          : CURRENT_G1_SCHEMA_IDENTITIES.schema10SourceSqliteSchema,
-    },
+    databaseSchemaIdentity: schemaIdentity,
+    workflowRuntimeSchemaCompatibility: schemaCompatibility,
   });
+}
+
+function makeRuntimeMismatchProject(): string {
+  const root = temporaryRoot('icarus-host-mismatch-project-');
+  writeJson(path.join(root, 'package.json'), { version: '0.0.0' });
+  const contractRelative =
+    'src/workflow-runtime/contracts/toolchain/node-v26.5.0-darwin-arm64.json';
+  fs.mkdirSync(path.dirname(path.join(root, contractRelative)), {
+    recursive: true,
+  });
+  fs.copyFileSync(
+    path.join(projectRoot, contractRelative),
+    path.join(root, contractRelative),
+  );
+  fs.mkdirSync(path.join(root, 'scripts'), { recursive: true });
+  fs.writeFileSync(
+    path.join(root, 'scripts/runtime-launcher.sh'),
+    '#!/bin/bash\necho mismatched-runtime\n',
+  );
+  fs.copyFileSync(
+    path.join(projectRoot, 'scripts/runtime-toolchain.sh'),
+    path.join(root, 'scripts/runtime-toolchain.sh'),
+  );
+  return root;
+}
+
+function schema11Compatibility(
+  recognizedSources: WorkflowRuntimeSchemaCompatibility['recognized_sources'],
+): WorkflowRuntimeSchemaCompatibility {
+  return {
+    format: 'icarus.workflow-runtime-schema-compatibility/1',
+    target_identity: {
+      database_schema_version: 11,
+      database_schema_hash: CURRENT_G1_SCHEMA_IDENTITIES.schema,
+      database_sqlite_schema_hash: CURRENT_G1_SCHEMA_IDENTITIES.sqliteSchema,
+    },
+    recognized_sources: recognizedSources,
+  };
 }
 
 function selectFixture(
@@ -585,6 +652,56 @@ describe('single active-core selection', () => {
     );
   });
 
+  it('rejects target runtime mismatch before switching and permits a later valid activation', () => {
+    const runtimeHome = prepareRuntimeHome();
+    publishFixture(runtimeHome, '3.3.0', 'existing');
+    selectFixture(runtimeHome, '3.3.0');
+    const pointer = path.join(runtimeHome, 'active-core');
+    const previous = fs.readlinkSync(pointer);
+    installHostCoreReleaseFromDist({
+      projectRoot: makeRuntimeMismatchProject(),
+      runtimeHome,
+      distRoot: makeDist('runtime-mismatch'),
+      version: '3.4.0',
+      validationStatus: 'PASS',
+      commit: '8'.repeat(40),
+      tree: '9'.repeat(40),
+      includeDependencies: false,
+      includeRuntimeAssets: false,
+      workflowRuntimeSchemaCompatibility:
+        currentWorkflowRuntimeSchemaCompatibility(),
+    });
+    expect(() => selectFixture(runtimeHome, '3.4.0')).toThrow(
+      'active_core_runtime_identity_mismatch',
+    );
+    expect(fs.readlinkSync(pointer)).toBe(previous);
+
+    publishFixture(runtimeHome, '3.5.0', 'later-valid');
+    expect(selectFixture(runtimeHome, '3.5.0').version).toBe('3.5.0');
+    expect(fs.readlinkSync(pointer)).not.toBe(previous);
+  });
+
+  it('leaves active-core absent when a first activation has a runtime mismatch', () => {
+    const runtimeHome = prepareRuntimeHome();
+    installHostCoreReleaseFromDist({
+      projectRoot: makeRuntimeMismatchProject(),
+      runtimeHome,
+      distRoot: makeDist('first-runtime-mismatch'),
+      version: '3.6.0',
+      validationStatus: 'SKIPPED_BY_USER',
+      commit: 'a'.repeat(40),
+      tree: 'b'.repeat(40),
+      includeDependencies: false,
+      includeRuntimeAssets: false,
+      workflowRuntimeSchemaCompatibility:
+        currentWorkflowRuntimeSchemaCompatibility(),
+    });
+    expect(() => selectFixture(runtimeHome, '3.6.0')).toThrow(
+      'active_core_runtime_identity_mismatch',
+    );
+    expect(fs.existsSync(path.join(runtimeHome, 'active-core'))).toBe(false);
+  });
+
   it('verifies formal and accepted legacy G8 active releases without deployment state', () => {
     const formalHome = prepareRuntimeHome();
     publishFixture(formalHome, '4.0.0', 'formal');
@@ -613,6 +730,11 @@ describe('single active-core selection', () => {
     expect(inspectWorkflowState(legacyHome, 'active').decision.decision).toBe(
       'NO_STATE',
     );
+    createSchemaDatabase(legacyHome, 'workflow-runtime-schema-v10.sql');
+    expect(inspectWorkflowState(legacyHome, 'active').decision).toMatchObject({
+      decision: 'UNKNOWN_BLOCKED',
+      reason: 'frozen_migration_authority_unavailable',
+    });
   });
 });
 
@@ -643,12 +765,25 @@ describe('Workflow Runtime state decision and maintenance', () => {
 
     const reset = prepareRuntimeHome();
     createSchemaDatabase(reset, 'workflow-runtime-schema-v11.sql');
+    const schema10Target = {
+      database_schema_version: 10,
+      database_schema_hash: `sha256:${'5'.repeat(64)}` as Sha256Hash,
+      database_sqlite_schema_hash:
+        CURRENT_G1_SCHEMA_IDENTITIES.schema10SourceSqliteSchema,
+    };
     expect(
-      decidePersistentStateCompatibility(reset, {
-        database_schema_version: 10,
-        database_schema_hash: `sha256:${'5'.repeat(64)}`,
-        database_sqlite_schema_hash:
-          CURRENT_G1_SCHEMA_IDENTITIES.schema10SourceSqliteSchema,
+      decidePersistentStateCompatibility(reset, schema10Target, {
+        format: 'icarus.workflow-runtime-schema-compatibility/1',
+        target_identity: schema10Target,
+        recognized_sources: [
+          {
+            database_schema_version: 11,
+            database_sqlite_schema_hash:
+              CURRENT_G1_SCHEMA_IDENTITIES.sqliteSchema,
+            migration: 'UNSUPPORTED',
+            precondition: 'NONE',
+          },
+        ],
       }).decision,
     ).toBe('RESET_REQUIRED');
 
@@ -674,6 +809,76 @@ describe('Workflow Runtime state decision and maintenance', () => {
     );
     expect(brokenDecision.decision).toBe('UNKNOWN_BLOCKED');
     expect(brokenDecision.reason).toBe('persistent_state_path_invalid');
+  });
+
+  it('uses the selected frozen release migration authority in active mode', () => {
+    const supportedHome = prepareRuntimeHome();
+    createSchemaDatabase(supportedHome, 'workflow-runtime-schema-v10.sql');
+    publishFixture(supportedHome, '5.1.0', 'frozen-supported', {
+      schemaCompatibility: schema11Compatibility([
+        {
+          database_schema_version: 10,
+          database_sqlite_schema_hash:
+            CURRENT_G1_SCHEMA_IDENTITIES.schema10SourceSqliteSchema,
+          migration: 'SUPPORTED',
+          precondition: 'NONE',
+        },
+      ]),
+    });
+    selectFixture(supportedHome, '5.1.0');
+    expect(
+      inspectWorkflowState(supportedHome, 'active').decision,
+    ).toMatchObject({
+      decision: 'MIGRATION_SUPPORTED',
+      reason: 'frozen_authoritative_migration_supported',
+    });
+
+    const unsupportedHome = prepareRuntimeHome();
+    createSchemaDatabase(unsupportedHome, 'workflow-runtime-schema-v10.sql');
+    expect(
+      decidePersistentStateCompatibility(unsupportedHome, currentTarget)
+        .decision,
+    ).toBe('MIGRATION_SUPPORTED');
+    publishFixture(unsupportedHome, '5.2.0', 'frozen-unsupported', {
+      schemaCompatibility: schema11Compatibility([
+        {
+          database_schema_version: 10,
+          database_sqlite_schema_hash:
+            CURRENT_G1_SCHEMA_IDENTITIES.schema10SourceSqliteSchema,
+          migration: 'UNSUPPORTED',
+          precondition: 'NONE',
+        },
+      ]),
+    });
+    selectFixture(unsupportedHome, '5.2.0');
+    expect(
+      inspectWorkflowState(unsupportedHome, 'active').decision.decision,
+    ).toBe('RESET_REQUIRED');
+
+    const unknownHome = prepareRuntimeHome();
+    const unknownDatabase = createSchemaDatabase(
+      unknownHome,
+      'workflow-runtime-schema-v10.sql',
+    );
+    const unknown = new Database(unknownDatabase);
+    unknown.exec('CREATE TABLE release_unknown(value TEXT)');
+    unknown.close();
+    publishFixture(unknownHome, '5.3.0', 'frozen-unknown', {
+      schemaCompatibility: schema11Compatibility([
+        {
+          database_schema_version: 10,
+          database_sqlite_schema_hash:
+            CURRENT_G1_SCHEMA_IDENTITIES.schema10SourceSqliteSchema,
+          migration: 'SUPPORTED',
+          precondition: 'NONE',
+        },
+      ]),
+    });
+    selectFixture(unknownHome, '5.3.0');
+    expect(inspectWorkflowState(unknownHome, 'active').decision).toMatchObject({
+      decision: 'UNKNOWN_BLOCKED',
+      reason: 'database_schema_identity_unknown',
+    });
   });
 
   it('refuses a running Host and requires confirmation before reset', () => {
@@ -805,6 +1010,177 @@ describe('Workflow Runtime state decision and maintenance', () => {
       expect(fs.readFileSync(path.join(runtimeHome, relative), 'utf8')).toBe(
         `keep:${relative}`,
       );
+  });
+
+  it('resumes an interrupted DB/WAL/SHM quarantine through the public CLI orchestration', async () => {
+    const runtimeHome = prepareRuntimeHome();
+    const members = WORKFLOW_STATE_RELATIVE_PATHS.map((relative, index) => {
+      const file = path.join(runtimeHome, relative);
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, `public-state-member-${String(index)}`);
+      return {
+        source_relative_path: relative,
+        backup_name: path.basename(relative),
+        byte_length: fs.statSync(file).size,
+        raw_sha256: rawHash(file),
+      };
+    });
+    const plan = buildPersistentStateResetPlan({
+      decision: 'RESET_REQUIRED',
+      old_identity: {
+        database_schema_version: 11,
+        database_sqlite_schema_hash: CURRENT_G1_SCHEMA_IDENTITIES.sqliteSchema,
+      },
+      target_identity: {
+        database_schema_version: 10,
+        database_schema_hash: `sha256:${'5'.repeat(64)}`,
+        database_sqlite_schema_hash:
+          CURRENT_G1_SCHEMA_IDENTITIES.schema10SourceSqliteSchema,
+      },
+      affected_paths: members.map((member) =>
+        path.join(runtimeHome, member.source_relative_path),
+      ),
+      members,
+      reason: 'recognized_schema_without_supported_target_path',
+    });
+    const recoveryRoot = path.join(runtimeHome, plan.backup_relative_path);
+    fs.mkdirSync(recoveryRoot, { recursive: true });
+    writeJson(path.join(recoveryRoot, 'backup-manifest.json'), plan);
+    fs.renameSync(
+      path.join(runtimeHome, members[0]!.source_relative_path),
+      path.join(recoveryRoot, members[0]!.backup_name),
+    );
+    const unrelated = path.join(runtimeHome, 'registry/unrelated-state');
+    fs.mkdirSync(path.dirname(unrelated), { recursive: true });
+    fs.writeFileSync(unrelated, 'preserved');
+
+    const output: string[] = [];
+    let confirmedAfterEvidence = false;
+    const status = await runWorkflowStateCli(
+      ['reset', '--mode', 'active', '--runtime-home', runtimeHome],
+      {
+        projectRoot,
+        inputIsTTY: true,
+        outputIsTTY: true,
+        hostIsRunning: () => false,
+        output: (line) => output.push(line),
+        confirm: async () => {
+          confirmedAfterEvidence = output.some(
+            (line) =>
+              line ===
+              `workflow_state_recovery_path=${path.join(runtimeHome, plan.backup_relative_path)}`,
+          );
+          return true;
+        },
+      },
+    );
+    expect(status).toBe(0);
+    expect(confirmedAfterEvidence).toBe(true);
+    expect(output).toContain('workflow_state_decision=RESET_RECOVERY');
+    expect(output).toContain(
+      `workflow_state_current_schema=11 ${CURRENT_G1_SCHEMA_IDENTITIES.sqliteSchema}`,
+    );
+    expect(
+      readPersistentStateResetBackup(runtimeHome, plan.backup_relative_path),
+    ).toMatchObject({ backup_identity: plan.backup_identity });
+    for (const member of members) {
+      expect(
+        fs.existsSync(path.join(runtimeHome, member.source_relative_path)),
+      ).toBe(false);
+      expect(fs.existsSync(path.join(recoveryRoot, member.backup_name))).toBe(
+        true,
+      );
+    }
+    expect(fs.readFileSync(unrelated, 'utf8')).toBe('preserved');
+  });
+
+  it('refuses tampered and ambiguous public reset recovery evidence', async () => {
+    const makePlan = (runtimeHome: string, targetHashCharacter: string) => {
+      const file = path.join(runtimeHome, WORKFLOW_STATE_DATABASE_RELATIVE);
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      if (!fs.existsSync(file)) fs.writeFileSync(file, 'recovery-primary');
+      const member = {
+        source_relative_path: WORKFLOW_STATE_DATABASE_RELATIVE,
+        backup_name: path.basename(WORKFLOW_STATE_DATABASE_RELATIVE),
+        byte_length: fs.statSync(file).size,
+        raw_sha256: rawHash(file),
+      };
+      return buildPersistentStateResetPlan({
+        decision: 'RESET_REQUIRED',
+        old_identity: {
+          database_schema_version: 11,
+          database_sqlite_schema_hash:
+            CURRENT_G1_SCHEMA_IDENTITIES.sqliteSchema,
+        },
+        target_identity: {
+          database_schema_version: 10,
+          database_schema_hash:
+            `sha256:${targetHashCharacter.repeat(64)}` as Sha256Hash,
+          database_sqlite_schema_hash:
+            CURRENT_G1_SCHEMA_IDENTITIES.schema10SourceSqliteSchema,
+        },
+        affected_paths: [file],
+        members: [member],
+        reason: 'recognized_schema_without_supported_target_path',
+      });
+    };
+    const runReset = (runtimeHome: string, confirm: () => Promise<boolean>) =>
+      runWorkflowStateCli(
+        ['reset', '--mode', 'current', '--runtime-home', runtimeHome],
+        {
+          projectRoot,
+          inputIsTTY: true,
+          outputIsTTY: true,
+          hostIsRunning: () => false,
+          confirm,
+          output: () => undefined,
+        },
+      );
+
+    const tamperedHome = prepareRuntimeHome();
+    const tamperedPlan = makePlan(tamperedHome, '6');
+    const tamperedRoot = path.join(
+      tamperedHome,
+      tamperedPlan.backup_relative_path,
+    );
+    fs.mkdirSync(tamperedRoot, { recursive: true });
+    writeJson(path.join(tamperedRoot, 'backup-manifest.json'), tamperedPlan);
+    fs.renameSync(
+      path.join(tamperedHome, WORKFLOW_STATE_DATABASE_RELATIVE),
+      path.join(tamperedRoot, tamperedPlan.members[0]!.backup_name),
+    );
+    fs.appendFileSync(
+      path.join(tamperedRoot, tamperedPlan.members[0]!.backup_name),
+      'tampered',
+    );
+    let tamperedConfirmed = false;
+    await expect(
+      runReset(tamperedHome, async () => {
+        tamperedConfirmed = true;
+        return true;
+      }),
+    ).rejects.toThrow('host_core_state_backup_recovery_member_invalid');
+    expect(tamperedConfirmed).toBe(false);
+
+    const ambiguousHome = prepareRuntimeHome();
+    const first = makePlan(ambiguousHome, '7');
+    const second = makePlan(ambiguousHome, '8');
+    const source = path.join(ambiguousHome, WORKFLOW_STATE_DATABASE_RELATIVE);
+    for (const plan of [first, second]) {
+      const root = path.join(ambiguousHome, plan.backup_relative_path);
+      fs.mkdirSync(root, { recursive: true });
+      writeJson(path.join(root, 'backup-manifest.json'), plan);
+      fs.copyFileSync(source, path.join(root, plan.members[0]!.backup_name));
+    }
+    fs.unlinkSync(source);
+    let ambiguousConfirmed = false;
+    await expect(
+      runReset(ambiguousHome, async () => {
+        ambiguousConfirmed = true;
+        return true;
+      }),
+    ).rejects.toThrow('host_core_state_backup_recovery_ambiguous');
+    expect(ambiguousConfirmed).toBe(false);
   });
 
   it('keeps formal production identity independent of deployment pointers', () => {
