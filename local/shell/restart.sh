@@ -15,7 +15,7 @@ if [ -n "$containers" ]; then
   echo "containers stopped"
 fi
 
-# Prepare the selected Host Core without changing formal activation pointers
+# Prepare the selected Host Core without changing active-core
 prepare_host_mode "$HOST_MODE"
 
 # Rebuild container image

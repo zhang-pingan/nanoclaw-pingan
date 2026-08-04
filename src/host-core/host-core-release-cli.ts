@@ -15,12 +15,11 @@ interface ParsedOptions {
   readonly version?: string;
   readonly runtimeHome: string;
   readonly skipValidation: boolean;
-  readonly resetIncompatibleState: boolean;
 }
 
 function usage(): never {
   throw new Error(
-    'Usage: host-core-release <publish|activate> --version <version> --runtime-home <path> [--skip-validation] [--reset-incompatible-state]',
+    'Usage: host-core-release <publish|activate> --version <version> --runtime-home <path> [--skip-validation]',
   );
 }
 
@@ -33,7 +32,6 @@ export function parseHostCoreReleaseArguments(
       command: args[0],
       runtimeHome: path.resolve(args[2]),
       skipValidation: false,
-      resetIncompatibleState: false,
     };
   }
   if (
@@ -46,12 +44,8 @@ export function parseHostCoreReleaseArguments(
     usage();
   const flags = args.slice(5);
   if (
-    flags.some(
-      (flag) =>
-        flag !== '--skip-validation' && flag !== '--reset-incompatible-state',
-    ) ||
-    new Set(flags).size !== flags.length ||
-    (args[0] === 'publish' && flags.includes('--reset-incompatible-state'))
+    flags.some((flag) => flag !== '--skip-validation') ||
+    new Set(flags).size !== flags.length
   )
     usage();
   return {
@@ -59,7 +53,6 @@ export function parseHostCoreReleaseArguments(
     version: assertHostCoreVersion(args[2]),
     runtimeHome: path.resolve(args[4]),
     skipValidation: flags.includes('--skip-validation'),
-    resetIncompatibleState: flags.includes('--reset-incompatible-state'),
   };
 }
 
@@ -107,6 +100,7 @@ async function main(): Promise<void> {
       environment,
     );
   }
+
   const version = options.version!;
   if (options.command === 'publish') {
     const result = publishHostCoreRelease({
@@ -127,72 +121,32 @@ async function main(): Promise<void> {
   }
 
   const preflight = inspectHostCoreActivation(options.runtimeHome, version);
-  const { current, target } = preflight;
   console.log(
-    `current_host_core=${current ? `${current.version} ${current.release_artifact_hash}` : 'none'}`,
+    `current_host_core=${preflight.current ? `${preflight.current.version} ${preflight.current.release_artifact_hash}` : 'none'}`,
   );
   console.log(
-    `target_host_core=${target.ref.version} ${target.release_artifact_hash}`,
+    `target_host_core=${preflight.target.ref.version} ${preflight.target.release_artifact_hash}`,
   );
-  console.log(
-    `persistent_state_decision=${preflight.persistent_state.decision}`,
-  );
-  console.log(
-    `persistent_state_current=${preflight.persistent_state.old_identity ? `${preflight.persistent_state.old_identity.database_schema_version} ${preflight.persistent_state.old_identity.database_sqlite_schema_hash}` : 'none'}`,
-  );
-  console.log(
-    `persistent_state_target=${target.database_schema_version} ${target.database_schema_hash} ${target.database_sqlite_schema_hash}`,
-  );
-  for (const affected of preflight.persistent_state.affected_paths)
-    console.log(`persistent_state_path=${affected}`);
-  if (preflight.persistent_state.decision === 'UNKNOWN_BLOCKED')
-    throw new Error(
-      `host_core_persistent_state_unknown:${preflight.persistent_state.reason}`,
-    );
-  if (
-    preflight.persistent_state.decision === 'RESET_REQUIRED' &&
-    !options.resetIncompatibleState
-  )
-    throw new Error(
-      `host_core_persistent_state_RESET_REQUIRED:${preflight.persistent_state.reason}`,
-    );
-  if (
-    preflight.persistent_state.decision !== 'RESET_REQUIRED' &&
-    options.resetIncompatibleState
-  )
-    throw new Error('host_core_persistent_state_reset_not_required');
   if (!process.stdin.isTTY || !process.stdout.isTTY)
     throw new Error('host_core_activation_confirmation_requires_tty');
-  if (!(await confirm('Activate this Host Core? [y/N] ')))
+  if (!(await confirm('Select this Host Core as active-core? [y/N] ')))
     throw new Error('host_core_activation_cancelled');
-  if (
-    options.resetIncompatibleState &&
-    !(await confirm(
-      'Quarantine exactly the listed Workflow Runtime state paths before activation? [y/N] ',
-    ))
-  )
-    throw new Error('host_core_persistent_state_reset_cancelled');
   const outcome = activateHostCoreRelease({
     runtimeHome: options.runtimeHome,
     version,
     skipValidation: options.skipValidation,
-    resetIncompatibleState: options.resetIncompatibleState,
-    confirm: (observedCurrent, observedTarget, observedPersistentState) =>
-      observedCurrent?.release_artifact_hash ===
-        current?.release_artifact_hash &&
-      observedTarget.release_artifact_hash === target.release_artifact_hash &&
-      JSON.stringify(observedPersistentState) ===
-        JSON.stringify(preflight.persistent_state),
+    confirm: (current, target) =>
+      current?.release_artifact_hash ===
+        preflight.current?.release_artifact_hash &&
+      current?.binding_hash === preflight.current?.binding_hash &&
+      target.release_artifact_hash === preflight.target.release_artifact_hash,
   });
   console.log(`host_core_version=${outcome.version}`);
   console.log(
     `host_core_release_artifact_hash=${outcome.release_artifact_hash}`,
   );
   console.log(`host_core_binding_hash=${outcome.core_binding_hash}`);
-  console.log(
-    `host_core_activation_audit_hash=${outcome.activation_audit_hash}`,
-  );
-  console.log(`host_core_activation_rollback=${String(outcome.rollback)}`);
+  console.log(`host_core_readiness_status=${outcome.readiness_status}`);
 }
 
 if (

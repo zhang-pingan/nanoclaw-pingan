@@ -14,6 +14,7 @@ RUNTIME_HOME="${ICARUS_RUNTIME_HOME:-$HOME/Library/Application Support/Icarus}"
 RUNTIME_LAUNCHER="$RUNTIME_HOME/bin/icarus-runtime"
 HOST_LAUNCHER="$ROOT_DIR/local/shell/launch-host.sh"
 HOST_CORE_RELEASE_CLI="$ROOT_DIR/src/host-core/host-core-release-cli.ts"
+WORKFLOW_STATE_CLI="$ROOT_DIR/src/host-core/workflow-state-cli.ts"
 
 ensure_logs_dir() {
   mkdir -p "$ROOT_DIR/logs"
@@ -61,15 +62,25 @@ prepare_host_mode() {
       "$RUNTIME_TOOLCHAIN" --runtime-home "$RUNTIME_HOME" verify
       "$RUNTIME_TOOLCHAIN" --runtime-home "$RUNTIME_HOME" exec -- npm run build
       echo "typescript compiled"
+      inspect_workflow_state current
       ;;
     active)
       "$RUNTIME_TOOLCHAIN" --runtime-home "$RUNTIME_HOME" verify
       "$RUNTIME_TOOLCHAIN" --runtime-home "$RUNTIME_HOME" exec -- npx tsx "$HOST_CORE_RELEASE_CLI" \
         verify-active \
         --runtime-home "$RUNTIME_HOME"
+      inspect_workflow_state active
       ;;
     *) return 64 ;;
   esac
+}
+
+inspect_workflow_state() {
+  local mode="$1"
+  "$RUNTIME_TOOLCHAIN" --runtime-home "$RUNTIME_HOME" exec -- npx tsx "$WORKFLOW_STATE_CLI" \
+    inspect \
+    --mode "$mode" \
+    --runtime-home "$RUNTIME_HOME"
 }
 
 ensure_core_runtime() {
@@ -232,7 +243,10 @@ is_direct_icarus_pid() {
   fi
 
   command="$(ps -p "$pid" -o command= 2>/dev/null || true)"
-  [ -n "$command" ] && [[ "$command" == *"$BACKEND_ENTRY"* ]]
+  [ -n "$command" ] && {
+    [[ "$command" == *"$BACKEND_ENTRY"* ]] ||
+      { [[ "$command" == *"$RUNTIME_HOME/core-releases/"* ]] && [[ "$command" == *"/dist/index.js"* ]]; }
+  }
 }
 
 find_running_direct_icarus_pid() {
@@ -244,9 +258,21 @@ find_running_direct_icarus_pid() {
       echo "$pid"
       return 0
     fi
-  done < <(pgrep -f "$BACKEND_ENTRY" 2>/dev/null || true)
+  done < <(
+    {
+      pgrep -f "$BACKEND_ENTRY" 2>/dev/null || true
+      pgrep -f "$RUNTIME_HOME/core-releases/.*/dist/index.js" 2>/dev/null || true
+    } | sort -u
+  )
 
   return 1
+}
+
+assert_icarus_not_running() {
+  if is_launch_agent_loaded || find_running_direct_icarus_pid >/dev/null; then
+    echo "Icarus Host is running; stop it before resetting Workflow Runtime state" >&2
+    return 1
+  fi
 }
 
 wait_for_icarus_process_exit() {

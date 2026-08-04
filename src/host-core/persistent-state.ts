@@ -66,12 +66,13 @@ export interface PersistentStateResetPlan {
   readonly backup_relative_path: string;
 }
 
-const DATABASE_RELATIVE = 'data/workflow-runtime/workflow-runtime.db';
+export const WORKFLOW_STATE_DATABASE_RELATIVE =
+  'data/workflow-runtime/workflow-runtime.db';
 const require = createRequire(import.meta.url);
-const STATE_RELATIVES = [
-  DATABASE_RELATIVE,
-  `${DATABASE_RELATIVE}-wal`,
-  `${DATABASE_RELATIVE}-shm`,
+export const WORKFLOW_STATE_RELATIVE_PATHS = [
+  WORKFLOW_STATE_DATABASE_RELATIVE,
+  `${WORKFLOW_STATE_DATABASE_RELATIVE}-wal`,
+  `${WORKFLOW_STATE_DATABASE_RELATIVE}-shm`,
 ] as const;
 
 const KNOWN_SQLITE_IDENTITIES = new Map<number, Sha256Hash>([
@@ -88,6 +89,15 @@ const KNOWN_SQLITE_IDENTITIES = new Map<number, Sha256Hash>([
 
 function rawSha256(file: string): Sha256Hash {
   return `sha256:${crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex')}`;
+}
+
+function lstatIfPresent(file: string): fs.Stats | null {
+  try {
+    return fs.lstatSync(file);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
+    throw error;
+  }
 }
 
 function fsyncDirectory(directory: string): void {
@@ -113,10 +123,10 @@ function ensureDirectory(root: string, relative: string): string {
 
 function stateMembers(runtimeHome: string): StateFileIdentity[] {
   const members: StateFileIdentity[] = [];
-  for (const relative of STATE_RELATIVES) {
+  for (const relative of WORKFLOW_STATE_RELATIVE_PATHS) {
     const absolute = path.join(runtimeHome, relative);
-    if (!fs.existsSync(absolute)) continue;
-    const stat = fs.lstatSync(absolute);
+    const stat = lstatIfPresent(absolute);
+    if (!stat) continue;
     if (!stat.isFile() || stat.isSymbolicLink())
       throw new Error('host_core_persistent_state_file_invalid');
     if (fs.realpathSync(path.dirname(absolute)) !== path.dirname(absolute))
@@ -129,6 +139,12 @@ function stateMembers(runtimeHome: string): StateFileIdentity[] {
     });
   }
   return members;
+}
+
+function presentStatePaths(runtimeHome: string): string[] {
+  return WORKFLOW_STATE_RELATIVE_PATHS.map((relative) =>
+    path.join(runtimeHome, relative),
+  ).filter((absolute) => lstatIfPresent(absolute) !== null);
 }
 
 function targetFrom(
@@ -189,12 +205,25 @@ export function decidePersistentStateCompatibility(
 ): PersistentStateDecision {
   const runtimeHome = fs.realpathSync(runtimeHomeInput);
   const target = targetFrom(targetInput);
-  let members = stateMembers(runtimeHome);
+  let members: StateFileIdentity[];
+  try {
+    members = stateMembers(runtimeHome);
+  } catch {
+    return {
+      decision: 'UNKNOWN_BLOCKED',
+      old_identity: null,
+      target_identity: target,
+      affected_paths: presentStatePaths(runtimeHome),
+      members: [],
+      reason: 'persistent_state_path_invalid',
+    };
+  }
   let affectedPaths = members.map((member) =>
     path.join(runtimeHome, member.source_relative_path),
   );
-  const database = path.join(runtimeHome, DATABASE_RELATIVE);
-  if (!fs.existsSync(database)) {
+  const initialMembers = members;
+  const database = path.join(runtimeHome, WORKFLOW_STATE_DATABASE_RELATIVE);
+  if (!lstatIfPresent(database)) {
     if (members.length === 0)
       return {
         decision: 'NO_STATE',
@@ -218,10 +247,15 @@ export function decidePersistentStateCompatibility(
   try {
     observed = inspectDatabase(database);
   } catch {
-    members = stateMembers(runtimeHome);
-    affectedPaths = members.map((member) =>
-      path.join(runtimeHome, member.source_relative_path),
-    );
+    try {
+      members = stateMembers(runtimeHome);
+      affectedPaths = members.map((member) =>
+        path.join(runtimeHome, member.source_relative_path),
+      );
+    } catch {
+      affectedPaths = presentStatePaths(runtimeHome);
+      members = [];
+    }
     return {
       decision: 'UNKNOWN_BLOCKED',
       old_identity: null,
@@ -231,7 +265,27 @@ export function decidePersistentStateCompatibility(
       reason: 'database_identity_unverifiable',
     };
   }
-  members = stateMembers(runtimeHome);
+  try {
+    members = stateMembers(runtimeHome);
+  } catch {
+    return {
+      decision: 'UNKNOWN_BLOCKED',
+      old_identity: observed.identity,
+      target_identity: target,
+      affected_paths: presentStatePaths(runtimeHome),
+      members: [],
+      reason: 'persistent_state_changed_during_inspection',
+    };
+  }
+  if (JSON.stringify(members) !== JSON.stringify(initialMembers))
+    return {
+      decision: 'UNKNOWN_BLOCKED',
+      old_identity: observed.identity,
+      target_identity: target,
+      affected_paths: presentStatePaths(runtimeHome),
+      members: [],
+      reason: 'persistent_state_changed_during_inspection',
+    };
   affectedPaths = members.map((member) =>
     path.join(runtimeHome, member.source_relative_path),
   );
@@ -371,8 +425,8 @@ export function parsePersistentStateResetPlan(
       'host_core_state_backup_member',
     );
     if (
-      !STATE_RELATIVES.includes(
-        member.source_relative_path as (typeof STATE_RELATIVES)[number],
+      !WORKFLOW_STATE_RELATIVE_PATHS.includes(
+        member.source_relative_path as (typeof WORKFLOW_STATE_RELATIVE_PATHS)[number],
       ) ||
       member.backup_name !==
         path.basename(String(member.source_relative_path)) ||
@@ -389,14 +443,14 @@ export function parsePersistentStateResetPlan(
   });
   let previousMemberIndex = -1;
   for (const member of members) {
-    const memberIndex = STATE_RELATIVES.indexOf(
-      member.source_relative_path as (typeof STATE_RELATIVES)[number],
+    const memberIndex = WORKFLOW_STATE_RELATIVE_PATHS.indexOf(
+      member.source_relative_path as (typeof WORKFLOW_STATE_RELATIVE_PATHS)[number],
     );
     if (memberIndex <= previousMemberIndex)
       throw new Error('host_core_state_backup_member_order_invalid');
     previousMemberIndex = memberIndex;
   }
-  if (members[0]!.source_relative_path !== DATABASE_RELATIVE)
+  if (members[0]!.source_relative_path !== WORKFLOW_STATE_DATABASE_RELATIVE)
     throw new Error('host_core_state_backup_primary_missing');
   if (
     !Number.isSafeInteger(value.old_identity.database_schema_version) ||
@@ -490,8 +544,8 @@ export function quarantinePersistentState(
   for (const member of plan.members) {
     const source = path.join(runtimeHome, member.source_relative_path);
     const backup = path.join(backupRoot, member.backup_name);
-    const sourceExists = fs.existsSync(source);
-    const backupExists = fs.existsSync(backup);
+    const sourceExists = lstatIfPresent(source) !== null;
+    const backupExists = lstatIfPresent(backup) !== null;
     if (sourceExists === backupExists)
       throw new Error('host_core_state_backup_transition_invalid');
     if (sourceExists) {

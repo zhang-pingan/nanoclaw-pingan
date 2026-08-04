@@ -18,6 +18,7 @@ Start with the machine-contract index in [`src/workflow-runtime/contracts/README
 - Runtime behavior: `src/workflow-runtime/runtime/`, `capacity/`, `registry/`, and `projection/`
 - Release identity: `src/workflow-runtime/contracts/certification/production-candidate/generated/`
 - Stable managed runtime: `scripts/runtime-toolchain.sh` and `scripts/runtime-launcher.sh`
+- Current Host Core freeze, selection, startup, and state maintenance: [`host-core-lifecycle.md`](host-core-lifecycle.md)
 
 Use versioned machine Contracts, Schema/DDL/Store constraints, sealed Compiler replay, Runtime tests, and release identity as authority. For semantic changes, add a focused domain document or ADR and a new Contract version. Do not edit the archived construction framework or ledger.
 

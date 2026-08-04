@@ -33,10 +33,7 @@ import type {
   Sha256Hash,
 } from '../../contracts/types.js';
 import { parseVersionedRef } from '../../contracts/versioned-ref.js';
-import {
-  verifyActiveHostCore,
-  verifyActiveHostCoreDeployment,
-} from '../../../host-core/activation.js';
+import { verifyActiveHostCore } from '../../../host-core/activation.js';
 
 export type WorkflowRuntimeIdentityMode =
   | 'candidate_development'
@@ -517,7 +514,6 @@ export function verifyFormalHostCoreProductionIdentity(
     throw new Error(
       'Production Store module is not loaded from the selected Host Core Release',
     );
-  verifyActiveHostCoreDeployment(runtimeHome, active);
   return {
     binding: {
       binding_kind: active.binding_kind,

@@ -17,7 +17,6 @@ import type {
   Sha256Hash,
 } from '../workflow-runtime/contracts/types.js';
 import { CURRENT_G1_SCHEMA_IDENTITIES } from '../workflow-runtime/store/runtime-store/profile.js';
-import { acquireHostCoreLock } from './lock.js';
 
 export const HOST_CORE_MANIFEST_FILENAME = 'core-release-manifest.json';
 export const HOST_CORE_ENTRY = 'dist/index.js';
@@ -70,9 +69,8 @@ export interface HostCoreReleaseManifest {
   readonly release_artifact_hash: Sha256Hash;
 }
 
-export interface HostCoreRegistryEntry {
-  readonly registration_sequence: number;
-  readonly registered_at_ms: number;
+export interface HostCoreVersionRecord {
+  readonly format: 'icarus.host-core-version/1';
   readonly version: string;
   readonly release_artifact_hash: Sha256Hash;
   readonly release_relative_path: string;
@@ -80,12 +78,7 @@ export interface HostCoreRegistryEntry {
   readonly validation_status: HostCoreValidationStatus;
   readonly published_from_commit: string;
   readonly published_from_tree: string;
-}
-
-export interface HostCoreReleaseRegistry {
-  readonly format: 'icarus.host-core-release-registry/1';
-  readonly entries: readonly HostCoreRegistryEntry[];
-  readonly registry_hash: Sha256Hash;
+  readonly record_hash: Sha256Hash;
 }
 
 const MANIFEST_KEYS = [
@@ -122,11 +115,11 @@ const INVENTORY_KEYS = [
   'path',
   'raw_sha256',
 ] as const;
-const REGISTRY_ENTRY_KEYS = [
+const VERSION_RECORD_KEYS = [
+  'format',
   'published_from_commit',
   'published_from_tree',
-  'registered_at_ms',
-  'registration_sequence',
+  'record_hash',
   'release_artifact_hash',
   'release_manifest_sha256',
   'release_relative_path',
@@ -317,7 +310,7 @@ export function parseHostCoreReleaseManifest(
     ref: { id: 'icarus.host-core', version },
     release_scope: value.release_scope,
     build_kind: value.build_kind,
-    validation_status: validationStatus,
+    validation_status: validationStatus as HostCoreValidationStatus,
     validation_commands: [...value.validation_commands],
     published_from_commit: assertGitObjectId(
       value.published_from_commit,
@@ -405,117 +398,80 @@ export function verifyInstalledHostCoreRelease(
   return manifest;
 }
 
-function parseRegistryEntry(value: unknown): HostCoreRegistryEntry {
+export function parseHostCoreVersionRecord(
+  value: unknown,
+): HostCoreVersionRecord {
   assertJsonObject(value);
-  exactKeys(value, REGISTRY_ENTRY_KEYS, 'host_core_registry_entry');
+  exactKeys(value, VERSION_RECORD_KEYS, 'host_core_version_record');
   const version = assertHostCoreVersion(value.version);
   const releaseHash = parseSha256Hash(value.release_artifact_hash);
+  const validationStatus = value.validation_status;
   const relative = assertReleaseRelativePath(
     value.release_relative_path,
-    'host_core_registry_release_path',
+    'host_core_version_release_path',
   );
   if (
+    value.format !== 'icarus.host-core-version/1' ||
     relative !== `core-releases/${releaseHash.slice('sha256:'.length)}` ||
-    !Number.isSafeInteger(value.registration_sequence) ||
-    Number(value.registration_sequence) < 1 ||
-    !Number.isSafeInteger(value.registered_at_ms) ||
-    Number(value.registered_at_ms) < 0 ||
-    (value.validation_status !== 'PASS' &&
-      value.validation_status !== 'SKIPPED_BY_USER')
+    (validationStatus !== 'PASS' && validationStatus !== 'SKIPPED_BY_USER')
   )
-    throw new Error('host_core_registry_entry_invalid');
-  return {
-    registration_sequence: Number(value.registration_sequence),
-    registered_at_ms: Number(value.registered_at_ms),
+    throw new Error('host_core_version_record_invalid');
+  const payload = {
+    format: 'icarus.host-core-version/1' as const,
     version,
     release_artifact_hash: releaseHash,
     release_relative_path: relative,
     release_manifest_sha256: parseSha256Hash(value.release_manifest_sha256),
-    validation_status: value.validation_status,
+    validation_status: validationStatus as HostCoreValidationStatus,
     published_from_commit: assertGitObjectId(
       value.published_from_commit,
-      'registry_published_commit',
+      'version_record_published_commit',
     ),
     published_from_tree: assertGitObjectId(
       value.published_from_tree,
-      'registry_published_tree',
+      'version_record_published_tree',
     ),
   };
-}
-
-export function parseHostCoreReleaseRegistry(
-  value: unknown,
-): HostCoreReleaseRegistry {
-  assertJsonObject(value);
-  exactKeys(
-    value,
-    ['format', 'entries', 'registry_hash'],
-    'host_core_registry',
-  );
+  const recordHash = parseSha256Hash(value.record_hash);
   if (
-    value.format !== 'icarus.host-core-release-registry/1' ||
-    !Array.isArray(value.entries)
+    recordHash !==
+    domainSeparatedSha256(
+      'icarus:host-core-version:1\n',
+      payload as unknown as JsonValue,
+    )
   )
-    throw new Error('host_core_registry_invalid');
-  const entries = value.entries.map(parseRegistryEntry);
-  entries.forEach((entry, index) => {
-    if (entry.registration_sequence !== index + 1)
-      throw new Error('host_core_registry_order_invalid');
-  });
-  if (new Set(entries.map((entry) => entry.version)).size !== entries.length)
-    throw new Error('host_core_registry_version_ambiguity');
-  if (
-    new Set(entries.map((entry) => entry.release_artifact_hash)).size !==
-    entries.length
-  )
-    throw new Error('host_core_registry_release_ambiguity');
-  const registryHash = parseSha256Hash(value.registry_hash);
-  if (
-    registryHash !==
-    domainSeparatedSha256('icarus:host-core-release-registry:1\n', {
-      format: 'icarus.host-core-release-registry/1',
-      entries,
-    } as unknown as JsonValue)
-  )
-    throw new Error('host_core_registry_hash_invalid');
+    throw new Error('host_core_version_record_hash_invalid');
   return {
-    format: 'icarus.host-core-release-registry/1',
-    entries,
-    registry_hash: registryHash,
+    ...payload,
+    record_hash: recordHash,
   };
 }
 
-export function hostCoreRegistryPath(runtimeHome: string): string {
-  return path.join(runtimeHome, 'registry', 'host-core-releases.json');
+export function hostCoreVersionPath(
+  runtimeHome: string,
+  versionInput: string,
+): string {
+  const version = assertHostCoreVersion(versionInput);
+  return path.join(runtimeHome, 'host-core-versions', `${version}.json`);
 }
 
-export function readHostCoreReleaseRegistry(
+export function readHostCoreVersionRecord(
   runtimeHome: string,
-): HostCoreReleaseRegistry {
-  const file = hostCoreRegistryPath(runtimeHome);
-  const registryDirectory = lstatIfPresent(path.dirname(file));
+  versionInput: string,
+): HostCoreVersionRecord {
+  const file = hostCoreVersionPath(runtimeHome, versionInput);
+  const versionDirectory = lstatIfPresent(path.dirname(file));
   if (
-    registryDirectory &&
-    (!registryDirectory.isDirectory() || registryDirectory.isSymbolicLink())
+    !versionDirectory ||
+    !versionDirectory.isDirectory() ||
+    versionDirectory.isSymbolicLink()
   )
-    throw new Error('host_core_registry_directory_invalid');
+    throw new Error('host_core_version_not_registered');
   const stat = lstatIfPresent(file);
-  if (!stat) {
-    const payload = {
-      format: 'icarus.host-core-release-registry/1' as const,
-      entries: [] as readonly HostCoreRegistryEntry[],
-    };
-    return {
-      ...payload,
-      registry_hash: domainSeparatedSha256(
-        'icarus:host-core-release-registry:1\n',
-        payload as unknown as JsonValue,
-      ),
-    };
-  }
+  if (!stat) throw new Error('host_core_version_not_registered');
   if (!stat.isFile() || stat.isSymbolicLink())
-    throw new Error('host_core_registry_file_invalid');
-  return parseHostCoreReleaseRegistry(
+    throw new Error('host_core_version_record_file_invalid');
+  return parseHostCoreVersionRecord(
     strictParseJsonBytes(fs.readFileSync(file)),
   );
 }
@@ -524,16 +480,12 @@ export function resolveHostCoreVersion(
   runtimeHome: string,
   versionInput: string,
 ): {
-  readonly entry: HostCoreRegistryEntry;
+  readonly record: HostCoreVersionRecord;
   readonly manifest: HostCoreReleaseManifest;
 } {
   const version = assertHostCoreVersion(versionInput);
-  const matches = readHostCoreReleaseRegistry(runtimeHome).entries.filter(
-    (entry) => entry.version === version,
-  );
-  if (matches.length !== 1) throw new Error('host_core_version_not_registered');
-  const entry = matches[0]!;
-  const releaseRoot = path.join(runtimeHome, entry.release_relative_path);
+  const record = readHostCoreVersionRecord(runtimeHome, version);
+  const releaseRoot = path.join(runtimeHome, record.release_relative_path);
   const releasesDirectory = fs.lstatSync(
     path.join(runtimeHome, 'core-releases'),
   );
@@ -544,29 +496,29 @@ export function resolveHostCoreVersion(
     !releaseDirectory.isDirectory() ||
     releaseDirectory.isSymbolicLink()
   )
-    throw new Error('host_core_registry_release_directory_invalid');
+    throw new Error('host_core_version_release_directory_invalid');
   const releasesReal = fs.realpathSync(path.join(runtimeHome, 'core-releases'));
   const releaseReal = fs.realpathSync(releaseRoot);
   if (path.dirname(releaseReal) !== releasesReal)
-    throw new Error('host_core_registry_release_path_invalid');
+    throw new Error('host_core_version_release_path_invalid');
   const manifestPath = path.join(releaseRoot, HOST_CORE_MANIFEST_FILENAME);
   const manifestStat = fs.lstatSync(manifestPath);
   if (!manifestStat.isFile() || manifestStat.isSymbolicLink())
-    throw new Error('host_core_registry_manifest_file_invalid');
-  if (rawSha256(manifestPath) !== entry.release_manifest_sha256)
-    throw new Error('host_core_registry_manifest_hash_mismatch');
+    throw new Error('host_core_version_manifest_file_invalid');
+  if (rawSha256(manifestPath) !== record.release_manifest_sha256)
+    throw new Error('host_core_version_manifest_hash_mismatch');
   const manifest = verifyInstalledHostCoreRelease(
     releaseRoot,
-    entry.release_artifact_hash,
+    record.release_artifact_hash,
   );
   if (
-    manifest.ref.version !== entry.version ||
-    manifest.validation_status !== entry.validation_status ||
-    manifest.published_from_commit !== entry.published_from_commit ||
-    manifest.published_from_tree !== entry.published_from_tree
+    manifest.ref.version !== record.version ||
+    manifest.validation_status !== record.validation_status ||
+    manifest.published_from_commit !== record.published_from_commit ||
+    manifest.published_from_tree !== record.published_from_tree
   )
-    throw new Error('host_core_registry_manifest_identity_mismatch');
-  return { entry, manifest };
+    throw new Error('host_core_version_manifest_identity_mismatch');
+  return { record, manifest };
 }
 
 function copyTree(source: string, destination: string): void {
@@ -678,30 +630,6 @@ function checkedInDistribution(projectRoot: string): {
   };
 }
 
-function atomicWrite(file: string, bytes: string, mode = 0o600): void {
-  const parentStat = fs.lstatSync(path.dirname(file));
-  if (!parentStat.isDirectory() || parentStat.isSymbolicLink())
-    throw new Error('host_core_atomic_write_directory_invalid');
-  const temporary = path.join(
-    path.dirname(file),
-    `.${path.basename(file)}.${process.pid}.tmp`,
-  );
-  const descriptor = fs.openSync(temporary, 'wx', mode);
-  try {
-    fs.writeFileSync(descriptor, bytes);
-    fs.fsyncSync(descriptor);
-  } finally {
-    fs.closeSync(descriptor);
-  }
-  fs.renameSync(temporary, file);
-  const directory = fs.openSync(path.dirname(file), 'r');
-  try {
-    fs.fsyncSync(directory);
-  } finally {
-    fs.closeSync(directory);
-  }
-}
-
 function freezeTree(root: string): void {
   for (const absolute of walkFiles(root)) {
     const executable = (fs.statSync(absolute).mode & 0o111) !== 0;
@@ -744,7 +672,6 @@ export interface InstallHostCoreReleaseOptions {
   readonly validationStatus: HostCoreValidationStatus;
   readonly commit: string;
   readonly tree: string;
-  readonly registeredAtMs: number;
   readonly includeDependencies?: boolean;
   readonly includeRuntimeAssets?: boolean;
   readonly databaseSchemaIdentity?: {
@@ -758,7 +685,7 @@ export function installHostCoreReleaseFromDist(
   options: InstallHostCoreReleaseOptions,
 ): {
   readonly manifest: HostCoreReleaseManifest;
-  readonly registry: HostCoreReleaseRegistry;
+  readonly versionRecord: HostCoreVersionRecord;
 } {
   const projectRoot = fs.realpathSync(options.projectRoot);
   fs.mkdirSync(options.runtimeHome, { recursive: true, mode: 0o700 });
@@ -767,11 +694,6 @@ export function installHostCoreReleaseFromDist(
   const version = assertHostCoreVersion(options.version);
   const commit = assertGitObjectId(options.commit, 'published_commit');
   const tree = assertGitObjectId(options.tree, 'published_tree');
-  if (
-    !Number.isSafeInteger(options.registeredAtMs) ||
-    options.registeredAtMs < 0
-  )
-    throw new Error('host_core_registration_time_invalid');
   for (const required of [HOST_CORE_ENTRY, HOST_CORE_VALIDATION_ENTRY]) {
     const relative = required.slice('dist/'.length);
     if (!fs.existsSync(path.join(distRoot, relative)))
@@ -782,7 +704,6 @@ export function installHostCoreReleaseFromDist(
   const stageRoot = fs.mkdtempSync(
     path.join(releasesRoot, '.host-core-release-'),
   );
-  let registryLock: ReturnType<typeof acquireHostCoreLock> | null = null;
   try {
     copyTree(distRoot, path.join(stageRoot, 'dist'));
     if (options.includeRuntimeAssets !== false)
@@ -875,21 +796,6 @@ export function installHostCoreReleaseFromDist(
     );
     freezeTree(stageRoot);
 
-    registryLock = acquireHostCoreLock({
-      runtimeHome,
-      name: '.host-core-release-registry.lock',
-      busyError: 'host_core_registry_busy',
-    });
-    ensureOwnedDirectory(runtimeHome, 'registry');
-    const currentRegistry = readHostCoreReleaseRegistry(runtimeHome);
-    const existingVersion = currentRegistry.entries.find(
-      (entry) => entry.version === version,
-    );
-    if (
-      existingVersion &&
-      existingVersion.release_artifact_hash !== manifest.release_artifact_hash
-    )
-      throw new Error('host_core_version_rebind_rejected');
     const releaseRoot = path.join(
       releasesRoot,
       manifest.release_artifact_hash.slice('sha256:'.length),
@@ -905,12 +811,23 @@ export function installHostCoreReleaseFromDist(
       if (JSON.stringify(installed) !== JSON.stringify(manifest))
         throw new Error('host_core_release_collision');
       removeFrozenTree(stageRoot);
-    } else fs.renameSync(stageRoot, releaseRoot);
+    } else {
+      try {
+        fs.renameSync(stageRoot, releaseRoot);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+        const installed = verifyInstalledHostCoreRelease(
+          releaseRoot,
+          manifest.release_artifact_hash,
+        );
+        if (JSON.stringify(installed) !== JSON.stringify(manifest))
+          throw new Error('host_core_release_collision');
+        removeFrozenTree(stageRoot);
+      }
+    }
 
-    if (existingVersion) return { manifest, registry: currentRegistry };
-    const entry: HostCoreRegistryEntry = {
-      registration_sequence: currentRegistry.entries.length + 1,
-      registered_at_ms: options.registeredAtMs,
+    const recordPayload = {
+      format: 'icarus.host-core-version/1' as const,
       version,
       release_artifact_hash: manifest.release_artifact_hash,
       release_relative_path: `core-releases/${manifest.release_artifact_hash.slice('sha256:'.length)}`,
@@ -921,29 +838,51 @@ export function installHostCoreReleaseFromDist(
       published_from_commit: commit,
       published_from_tree: tree,
     };
-    const registryEntries = [...currentRegistry.entries, entry];
-    const registryPayload = {
-      format: 'icarus.host-core-release-registry/1' as const,
-      entries: registryEntries,
-    };
-    const registry = parseHostCoreReleaseRegistry({
-      ...registryPayload,
-      registry_hash: domainSeparatedSha256(
-        'icarus:host-core-release-registry:1\n',
-        registryPayload as unknown as JsonValue,
+    const versionRecord = parseHostCoreVersionRecord({
+      ...recordPayload,
+      record_hash: domainSeparatedSha256(
+        'icarus:host-core-version:1\n',
+        recordPayload as unknown as JsonValue,
       ),
     });
-    atomicWrite(
-      hostCoreRegistryPath(runtimeHome),
-      `${JSON.stringify(registry, null, 2)}\n`,
+    const versionsRoot = ensureOwnedDirectory(
+      runtimeHome,
+      'host-core-versions',
     );
-    return { manifest, registry };
-  } finally {
+    const recordPath = hostCoreVersionPath(runtimeHome, version);
+    const candidate = path.join(
+      versionsRoot,
+      `.${version}.${process.pid}.${crypto.randomBytes(8).toString('hex')}.tmp`,
+    );
+    const recordBytes = `${JSON.stringify(versionRecord, null, 2)}\n`;
+    const descriptor = fs.openSync(candidate, 'wx', 0o400);
     try {
-      registryLock?.release();
+      fs.writeFileSync(descriptor, recordBytes);
+      fs.fsyncSync(descriptor);
     } finally {
-      removeFrozenTree(stageRoot);
+      fs.closeSync(descriptor);
     }
+    try {
+      try {
+        fs.linkSync(candidate, recordPath);
+        const directory = fs.openSync(versionsRoot, 'r');
+        try {
+          fs.fsyncSync(directory);
+        } finally {
+          fs.closeSync(directory);
+        }
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+        const existing = readHostCoreVersionRecord(runtimeHome, version);
+        if (JSON.stringify(existing) !== JSON.stringify(versionRecord))
+          throw new Error('host_core_version_rebind_rejected');
+      }
+    } finally {
+      fs.unlinkSync(candidate);
+    }
+    return { manifest, versionRecord };
+  } finally {
+    removeFrozenTree(stageRoot);
   }
 }
 
@@ -1037,10 +976,9 @@ export function publishHostCoreRelease(options: {
   readonly runtimeHome: string;
   readonly version: string;
   readonly skipValidation: boolean;
-  readonly now?: () => number;
 }): {
   readonly manifest: HostCoreReleaseManifest;
-  readonly registry: HostCoreReleaseRegistry;
+  readonly versionRecord: HostCoreVersionRecord;
 } {
   const projectRoot = fs.realpathSync(options.projectRoot);
   fs.mkdirSync(options.runtimeHome, { recursive: true, mode: 0o700 });
@@ -1063,7 +1001,6 @@ export function publishHostCoreRelease(options: {
       validationStatus: options.skipValidation ? 'SKIPPED_BY_USER' : 'PASS',
       commit: source.commit,
       tree: source.tree,
-      registeredAtMs: (options.now ?? Date.now)(),
     });
   } finally {
     fs.rmSync(buildRoot, { recursive: true, force: true });

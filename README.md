@@ -323,6 +323,17 @@ http://localhost:3000/
 
 如果配置了 `WEB_TOKEN`，API 和 WebSocket 需要携带对应 token，Electron 客户端会从环境中读取。
 
+### Host Core 启动与冻结版本
+
+本项目是内部、单用户实验工具。宿主机正式启动必须显式选择当前检出或已冻结版本：
+
+```bash
+local/shell/start.sh --mode current
+local/shell/start.sh --mode active
+```
+
+`current` 构建并运行当前检出；`active` 校验并运行 `active-core` 指向的不可变版本，不重建或改变选择。冻结版本只会由用户显式执行 publish 创建，publish 与 activate 相互独立。Workflow Runtime schema 检查在启动前只读执行；检查和重置使用独立的 `local/shell/workflow-state.sh` 命令。完整行为见 [`docs/host-core-lifecycle.md`](docs/host-core-lifecycle.md)。
+
 ### 生产构建
 
 ```bash
@@ -392,6 +403,7 @@ Icarus 的核心安全边界是容器隔离，而不是让 Agent 在宿主机上
 
 - `docs/SPEC.md`：系统规格和频道架构。
 - `docs/startup-flow.md`：启动流程、消息链路、IPC、数据库表。
+- `docs/host-core-lifecycle.md`：Host Core 冻结、选择、启动和独立 Workflow Runtime 状态维护。
 - `docs/SECURITY.md`：安全模型、挂载策略、凭证隔离。
 - `docs/DEBUG_CHECKLIST.md`：调试检查清单。
 - `docs/docker-sandboxes.md`：容器沙箱说明。
