@@ -10,41 +10,54 @@ import { renderNohupWrapper, renderSystemdUnit } from './service.js';
 const projectRoot = path.resolve(import.meta.dirname, '..');
 const homeDir = '/Users/tester';
 const launcher = getRuntimeLauncherPath(homeDir);
+const hostLauncher = path.join(projectRoot, 'local', 'shell', 'launch-host.sh');
 
 describe('Core service launch identity', () => {
-  it('renders launchd with the stable Runtime Launcher as its only program argument', () => {
-    const plist = renderLaunchdPlist(projectRoot, launcher, homeDir);
+  it('renders launchd with one explicit Host mode', () => {
+    const plist = renderLaunchdPlist(projectRoot, hostLauncher, homeDir);
     const argumentsBlock = plist.match(
       /<key>ProgramArguments<\/key>\s*<array>([\s\S]*?)<\/array>/,
     );
 
     expect(argumentsBlock).not.toBeNull();
-    expect(argumentsBlock![1].match(/<string>/g)).toHaveLength(1);
-    expect(argumentsBlock![1]).toContain(`<string>${launcher}</string>`);
+    expect(argumentsBlock![1].match(/<string>/g)).toHaveLength(3);
+    expect(argumentsBlock![1]).toContain(`<string>${hostLauncher}</string>`);
+    expect(argumentsBlock![1]).toContain('<string>--mode</string>');
+    expect(argumentsBlock![1]).toContain('<string>current</string>');
     expect(argumentsBlock![1]).not.toContain('dist/index.js');
-    expect(plist).not.toContain('{{RUNTIME_LAUNCHER}}');
+    expect(plist).not.toContain('{{HOST_LAUNCHER}}');
+    expect(plist).not.toContain('{{HOST_MODE}}');
     expect(plist).not.toContain('{{NODE_PATH}}');
   });
 
-  it('renders systemd and nohup with the same stable Launcher', () => {
-    const userUnit = renderSystemdUnit(launcher, '/srv/icarus', homeDir, false);
+  it('renders systemd and nohup with the explicit current Host mode', () => {
+    const userUnit = renderSystemdUnit(
+      hostLauncher,
+      '/srv/icarus',
+      homeDir,
+      false,
+    );
     const systemUnit = renderSystemdUnit(
-      launcher,
+      hostLauncher,
       '/srv/icarus',
       homeDir,
       true,
     );
     const wrapper = renderNohupWrapper(
-      launcher,
+      hostLauncher,
       '/srv/icarus',
       '/srv/icarus/icarus.pid',
     );
 
-    expect(userUnit).toContain(`ExecStart=${JSON.stringify(launcher)}`);
+    expect(userUnit).toContain(
+      `ExecStart=${JSON.stringify(hostLauncher)} --mode current`,
+    );
     expect(userUnit).toContain('WantedBy=default.target');
     expect(systemUnit).toContain('WantedBy=multi-user.target');
     expect(userUnit).not.toMatch(/ExecStart=.*\bnode\b/);
-    expect(wrapper).toContain(`nohup ${JSON.stringify(launcher)}`);
+    expect(wrapper).toContain(
+      `nohup ${JSON.stringify(hostLauncher)} --mode current`,
+    );
     expect(wrapper).not.toContain('dist/index.js');
   });
 
@@ -54,8 +67,7 @@ describe('Core service launch identity', () => {
         path.join(projectRoot, 'local', 'shell', script),
         'utf8',
       );
-      expect(source).toContain('"$RUNTIME_TOOLCHAIN" install');
-      expect(source).toContain('"$RUNTIME_TOOLCHAIN" exec -- npm run build');
+      expect(source).toContain('prepare_host_mode "$HOST_MODE"');
       expect(source).not.toMatch(/^npm run build$/m);
     }
 
@@ -65,7 +77,8 @@ describe('Core service launch identity', () => {
     );
     expect(common).not.toContain('command -v node');
     expect(common).not.toContain('{{NODE_PATH}}');
-    expect(common).toContain('{{RUNTIME_LAUNCHER}}');
+    expect(common).toContain('{{HOST_LAUNCHER}}');
+    expect(common).not.toContain('bind-core');
 
     const groups = fs.readFileSync(
       path.join(projectRoot, 'setup', 'groups.ts'),

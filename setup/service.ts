@@ -10,12 +10,7 @@ import os from 'os';
 import path from 'path';
 
 import { logger } from '../src/logger.js';
-import {
-  getPlatform,
-  getRuntimeLauncherPath,
-  getServiceManager,
-  isRoot,
-} from './platform.js';
+import { getPlatform, getServiceManager, isRoot } from './platform.js';
 import { emitStatus } from './status.js';
 import { renderLaunchdPlist } from './launchd.js';
 
@@ -40,7 +35,12 @@ export async function run(_args: string[]): Promise<void> {
   const projectRoot = process.cwd();
   const platform = getPlatform();
   const homeDir = os.homedir();
-  const runtimeLauncherPath = getRuntimeLauncherPath(homeDir);
+  const hostLauncherPath = path.join(
+    projectRoot,
+    'local',
+    'shell',
+    'launch-host.sh',
+  );
   const runtimeToolchainPath = path.join(
     projectRoot,
     'scripts',
@@ -48,11 +48,11 @@ export async function run(_args: string[]): Promise<void> {
   );
 
   logger.info(
-    { platform, runtimeLauncherPath, projectRoot },
+    { platform, hostLauncherPath, projectRoot },
     'Setting up service',
   );
 
-  // Install and build through the managed runtime, then bind the immutable build bytes.
+  // Install and build through the managed runtime for the current Host launch.
   logger.info('Installing managed runtime and building TypeScript');
   try {
     execFileSync(runtimeToolchainPath, ['install'], {
@@ -63,20 +63,12 @@ export async function run(_args: string[]): Promise<void> {
       cwd: projectRoot,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
-    execFileSync(
-      runtimeToolchainPath,
-      ['bind-core', '--project-root', projectRoot, '--entry', 'dist/index.js'],
-      {
-        cwd: projectRoot,
-        stdio: ['ignore', 'pipe', 'pipe'],
-      },
-    );
-    logger.info('Managed build and Core launch binding succeeded');
+    logger.info('Managed build and current Host launch selection succeeded');
   } catch {
     logger.error('Managed runtime setup or build failed');
     emitStatus('SETUP_SERVICE', {
       SERVICE_TYPE: 'unknown',
-      RUNTIME_LAUNCHER: runtimeLauncherPath,
+      RUNTIME_LAUNCHER: hostLauncherPath,
       PROJECT_PATH: projectRoot,
       STATUS: 'failed',
       ERROR: 'managed_runtime_or_build_failed',
@@ -88,13 +80,13 @@ export async function run(_args: string[]): Promise<void> {
   fs.mkdirSync(path.join(projectRoot, 'logs'), { recursive: true });
 
   if (platform === 'macos') {
-    setupLaunchd(projectRoot, runtimeLauncherPath, homeDir);
+    setupLaunchd(projectRoot, hostLauncherPath, homeDir);
   } else if (platform === 'linux') {
-    setupLinux(projectRoot, runtimeLauncherPath, homeDir);
+    setupLinux(projectRoot, hostLauncherPath, homeDir);
   } else {
     emitStatus('SETUP_SERVICE', {
       SERVICE_TYPE: 'unknown',
-      RUNTIME_LAUNCHER: runtimeLauncherPath,
+      RUNTIME_LAUNCHER: hostLauncherPath,
       PROJECT_PATH: projectRoot,
       STATUS: 'failed',
       ERROR: 'unsupported_platform',
@@ -106,7 +98,7 @@ export async function run(_args: string[]): Promise<void> {
 
 function setupLaunchd(
   projectRoot: string,
-  runtimeLauncherPath: string,
+  hostLauncherPath: string,
   homeDir: string,
 ): void {
   const plistPath = path.join(
@@ -117,7 +109,7 @@ function setupLaunchd(
   );
   fs.mkdirSync(path.dirname(plistPath), { recursive: true });
 
-  const plist = renderLaunchdPlist(projectRoot, runtimeLauncherPath, homeDir);
+  const plist = renderLaunchdPlist(projectRoot, hostLauncherPath, homeDir);
 
   fs.writeFileSync(plistPath, plist);
   logger.info({ plistPath }, 'Wrote launchd plist');
@@ -142,7 +134,7 @@ function setupLaunchd(
 
   emitStatus('SETUP_SERVICE', {
     SERVICE_TYPE: 'launchd',
-    RUNTIME_LAUNCHER: runtimeLauncherPath,
+    RUNTIME_LAUNCHER: hostLauncherPath,
     PROJECT_PATH: projectRoot,
     PLIST_PATH: plistPath,
     SERVICE_LOADED: serviceLoaded,
@@ -153,16 +145,16 @@ function setupLaunchd(
 
 function setupLinux(
   projectRoot: string,
-  runtimeLauncherPath: string,
+  hostLauncherPath: string,
   homeDir: string,
 ): void {
   const serviceManager = getServiceManager();
 
   if (serviceManager === 'systemd') {
-    setupSystemd(projectRoot, runtimeLauncherPath, homeDir);
+    setupSystemd(projectRoot, hostLauncherPath, homeDir);
   } else {
     // WSL without systemd or other Linux without systemd
-    setupNohupFallback(projectRoot, runtimeLauncherPath);
+    setupNohupFallback(projectRoot, hostLauncherPath);
   }
 }
 
@@ -210,7 +202,7 @@ function checkDockerGroupStale(): boolean {
 
 function setupSystemd(
   projectRoot: string,
-  runtimeLauncherPath: string,
+  hostLauncherPath: string,
   homeDir: string,
 ): void {
   const runningAsRoot = isRoot();
@@ -231,7 +223,7 @@ function setupSystemd(
       logger.warn(
         'systemd user session not available — falling back to nohup wrapper',
       );
-      setupNohupFallback(projectRoot, runtimeLauncherPath);
+      setupNohupFallback(projectRoot, hostLauncherPath);
       return;
     }
     const unitDir = path.join(homeDir, '.config', 'systemd', 'user');
@@ -241,7 +233,7 @@ function setupSystemd(
   }
 
   const unit = renderSystemdUnit(
-    runtimeLauncherPath,
+    hostLauncherPath,
     projectRoot,
     homeDir,
     runningAsRoot,
@@ -291,7 +283,7 @@ function setupSystemd(
 
   emitStatus('SETUP_SERVICE', {
     SERVICE_TYPE: runningAsRoot ? 'systemd-system' : 'systemd-user',
-    RUNTIME_LAUNCHER: runtimeLauncherPath,
+    RUNTIME_LAUNCHER: hostLauncherPath,
     PROJECT_PATH: projectRoot,
     UNIT_PATH: unitPath,
     SERVICE_LOADED: serviceLoaded,
@@ -302,7 +294,7 @@ function setupSystemd(
 }
 
 export function renderSystemdUnit(
-  runtimeLauncherPath: string,
+  hostLauncherPath: string,
   projectRoot: string,
   homeDir: string,
   isSystem: boolean,
@@ -313,12 +305,12 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart=${JSON.stringify(runtimeLauncherPath)}
+ExecStart=${JSON.stringify(hostLauncherPath)} --mode current
 WorkingDirectory=${projectRoot}
 Restart=always
 RestartSec=5
 Environment=HOME=${homeDir}
-Environment=PATH=${servicePath(runtimeLauncherPath, homeDir)}
+Environment=PATH=${servicePath(hostLauncherPath, homeDir)}
 StandardOutput=append:${projectRoot}/logs/icarus.log
 StandardError=append:${projectRoot}/logs/icarus.error.log
 
@@ -328,21 +320,21 @@ WantedBy=${isSystem ? 'multi-user.target' : 'default.target'}`;
 
 function setupNohupFallback(
   projectRoot: string,
-  runtimeLauncherPath: string,
+  hostLauncherPath: string,
 ): void {
   logger.warn('No systemd detected — generating nohup wrapper script');
 
   const wrapperPath = path.join(projectRoot, 'start-icarus.sh');
   const pidFile = path.join(projectRoot, 'icarus.pid');
 
-  const wrapper = renderNohupWrapper(runtimeLauncherPath, projectRoot, pidFile);
+  const wrapper = renderNohupWrapper(hostLauncherPath, projectRoot, pidFile);
 
   fs.writeFileSync(wrapperPath, wrapper, { mode: 0o755 });
   logger.info({ wrapperPath }, 'Wrote nohup wrapper script');
 
   emitStatus('SETUP_SERVICE', {
     SERVICE_TYPE: 'nohup',
-    RUNTIME_LAUNCHER: runtimeLauncherPath,
+    RUNTIME_LAUNCHER: hostLauncherPath,
     PROJECT_PATH: projectRoot,
     WRAPPER_PATH: wrapperPath,
     SERVICE_LOADED: false,
@@ -353,7 +345,7 @@ function setupNohupFallback(
 }
 
 export function renderNohupWrapper(
-  runtimeLauncherPath: string,
+  hostLauncherPath: string,
   projectRoot: string,
   pidFile: string,
 ): string {
@@ -377,7 +369,7 @@ export function renderNohupWrapper(
     'fi',
     '',
     'echo "Starting Icarus..."',
-    `nohup ${JSON.stringify(runtimeLauncherPath)} \\`,
+    `nohup ${JSON.stringify(hostLauncherPath)} --mode current \\`,
     `  >> ${JSON.stringify(projectRoot + '/logs/icarus.log')} \\`,
     `  2>> ${JSON.stringify(projectRoot + '/logs/icarus.error.log')} &`,
     '',

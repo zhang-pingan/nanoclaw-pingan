@@ -6,7 +6,9 @@
     <string>com.icarus</string>
     <key>ProgramArguments</key>
     <array>
-        <string>{{RUNTIME_LAUNCHER}}</string>
+        <string>{{HOST_LAUNCHER}}</string>
+        <string>--mode</string>
+        <string>{{HOST_MODE}}</string>
     </array>
     <key>WorkingDirectory</key>
     <string>{{PROJECT_ROOT}}</string>

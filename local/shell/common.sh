@@ -10,8 +10,10 @@ LAUNCH_AGENT_TEMPLATE="$ROOT_DIR/launchd/$LAUNCHD_LABEL.plist"
 LAUNCH_AGENT_PLIST_CHANGED=0
 BACKEND_ENTRY="$ROOT_DIR/dist/index.js"
 RUNTIME_TOOLCHAIN="$ROOT_DIR/scripts/runtime-toolchain.sh"
-RUNTIME_HOME="$HOME/Library/Application Support/Icarus"
+RUNTIME_HOME="${ICARUS_RUNTIME_HOME:-$HOME/Library/Application Support/Icarus}"
 RUNTIME_LAUNCHER="$RUNTIME_HOME/bin/icarus-runtime"
+HOST_LAUNCHER="$ROOT_DIR/local/shell/launch-host.sh"
+HOST_CORE_RELEASE_CLI="$ROOT_DIR/src/host-core/host-core-release-cli.ts"
 
 ensure_logs_dir() {
   mkdir -p "$ROOT_DIR/logs"
@@ -36,12 +38,43 @@ get_web_port() {
   printf '3000\n'
 }
 
-ensure_core_runtime_binding() {
-  "$RUNTIME_TOOLCHAIN" install
-  "$RUNTIME_TOOLCHAIN" verify
-  "$RUNTIME_TOOLCHAIN" bind-core \
-    --project-root "$ROOT_DIR" \
-    --entry "dist/index.js"
+parse_host_mode() {
+  if [ "$#" -ne 2 ] || [ "$1" != "--mode" ]; then
+    echo "Usage: $0 --mode <current|active>" >&2
+    return 64
+  fi
+  case "$2" in
+    current|active) HOST_MODE="$2" ;;
+    *)
+      echo "Usage: $0 --mode <current|active>" >&2
+      return 64
+      ;;
+  esac
+}
+
+prepare_host_mode() {
+  local mode="$1"
+
+  case "$mode" in
+    current)
+      "$RUNTIME_TOOLCHAIN" --runtime-home "$RUNTIME_HOME" install
+      "$RUNTIME_TOOLCHAIN" --runtime-home "$RUNTIME_HOME" verify
+      "$RUNTIME_TOOLCHAIN" --runtime-home "$RUNTIME_HOME" exec -- npm run build
+      echo "typescript compiled"
+      ;;
+    active)
+      "$RUNTIME_TOOLCHAIN" --runtime-home "$RUNTIME_HOME" verify
+      "$RUNTIME_TOOLCHAIN" --runtime-home "$RUNTIME_HOME" exec -- npx tsx "$HOST_CORE_RELEASE_CLI" \
+        verify-active \
+        --runtime-home "$RUNTIME_HOME"
+      ;;
+    *) return 64 ;;
+  esac
+}
+
+ensure_core_runtime() {
+  "$RUNTIME_TOOLCHAIN" --runtime-home "$RUNTIME_HOME" install
+  "$RUNTIME_TOOLCHAIN" --runtime-home "$RUNTIME_HOME" verify
 }
 
 escape_sed_replacement() {
@@ -49,21 +82,27 @@ escape_sed_replacement() {
 }
 
 install_launch_agent_plist() {
+  local mode="$1"
+  local host_launcher_escaped
+  local host_mode_escaped
   local launcher_escaped
   local root_escaped
   local home_escaped
   local rendered
 
   ensure_logs_dir
-  ensure_core_runtime_binding
   mkdir -p "$LAUNCH_AGENT_DIR"
 
+  host_launcher_escaped="$(escape_sed_replacement "$HOST_LAUNCHER")"
+  host_mode_escaped="$(escape_sed_replacement "$mode")"
   launcher_escaped="$(escape_sed_replacement "$RUNTIME_LAUNCHER")"
   root_escaped="$(escape_sed_replacement "$ROOT_DIR")"
   home_escaped="$(escape_sed_replacement "$HOME")"
   rendered="$(mktemp)"
 
   sed \
+    -e "s/{{HOST_LAUNCHER}}/$host_launcher_escaped/g" \
+    -e "s/{{HOST_MODE}}/$host_mode_escaped/g" \
     -e "s/{{RUNTIME_LAUNCHER}}/$launcher_escaped/g" \
     -e "s/{{PROJECT_ROOT}}/$root_escaped/g" \
     -e "s/{{HOME}}/$home_escaped/g" \
@@ -127,7 +166,8 @@ wait_for_icarus_service() {
 }
 
 start_icarus_service() {
-  install_launch_agent_plist
+  local mode="$1"
+  install_launch_agent_plist "$mode"
 
   if is_launch_agent_loaded; then
     if [ "$LAUNCH_AGENT_PLIST_CHANGED" -eq 1 ]; then
@@ -148,7 +188,8 @@ start_icarus_service() {
 }
 
 restart_icarus_service() {
-  install_launch_agent_plist
+  local mode="$1"
+  install_launch_agent_plist "$mode"
 
   if stop_running_direct_icarus; then
     echo "direct icarus process stopped"

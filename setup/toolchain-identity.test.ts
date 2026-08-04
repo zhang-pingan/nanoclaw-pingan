@@ -52,12 +52,10 @@ describe('G0.1 toolchain identity', () => {
       fs.readFileSync(path.join(projectRoot, '.nvmrc'), 'utf8').trim(),
     ).toBe('26.5.0');
     expect(packageJson.packageManager).toBe('npm@11.17.0');
-    expect(packageJson.scripts.start).toContain(
-      './scripts/runtime-toolchain.sh bind-core',
+    expect(packageJson.scripts.start).toBe(
+      './local/shell/start.sh --mode current',
     );
-    expect(packageJson.scripts.start).toContain(
-      '$HOME/Library/Application Support/Icarus/bin/icarus-runtime',
-    );
+    expect(packageJson.scripts.start).not.toContain('bind-core');
     expect(packageJson.scripts.start).not.toMatch(/\bnode\s+dist\/index\.js\b/);
     expect(ci).toContain('runs-on: macos-14-xlarge');
     expect(ci).toContain('test "$(uname -s)/$(uname -m)" = "Darwin/arm64"');
