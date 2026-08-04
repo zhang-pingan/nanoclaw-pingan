@@ -45,7 +45,7 @@ const archivedDocuments = Object.freeze({
   'dynamic-workflow-dag-framework-introduction.md':
     'sha256:c6e539651a2372890d3e14b2e891bc1587e913d943f599a6ffe25f162902320b',
   'dynamic-workflow-runtime-implementation-progress.md':
-    'sha256:6052ba7357ca23e707bca1f10fe8f17dfacd5a434d051b6b781bc3f45c710338',
+    'sha256:e04865d74372b1ebec9bccb2e716695a5b7a49ec1237993b67e59251a442bea3',
   'dynamic-workflow-runtime-extended-certification-plan.md':
     'sha256:aac840fb176bf46470cc0ea4599b2c0d4d1937e9d304bb74774378168413e5d9',
   'pre-dynamic-workflow-runtime-cleanup-handoff.md':
@@ -298,7 +298,9 @@ function resolveSourceImport(containingFile, specifier) {
         `source import from ${relativePath(containingFile)}`,
       );
   }
-  return null;
+  fail(
+    `unresolved relative source import: ${relativePath(containingFile)} -> ${specifier}`,
+  );
 }
 
 function sourceDependencies(file) {
@@ -312,6 +314,7 @@ function sourceDependencies(file) {
   );
   const dependencies = [];
   const literals = [];
+  let relativeImportReferenceCount = 0;
   const initializers = new Map();
   const functions = [];
   const calls = [];
@@ -469,13 +472,19 @@ function sourceDependencies(file) {
       specifier = node.arguments[0].text;
     }
     if (specifier) {
+      if (specifier.startsWith('.')) relativeImportReferenceCount += 1;
       const resolved = resolveSourceImport(file, specifier);
       if (resolved) dependencies.push(resolved);
     }
     ts.forEachChild(node, visit);
   }
   visit(sourceFile);
-  return { archiveReads, dependencies, literals };
+  return {
+    archiveReads,
+    dependencies,
+    literals,
+    relativeImportReferenceCount,
+  };
 }
 
 for (const [name, expectedHash] of Object.entries(archivedDocuments)) {
@@ -536,7 +545,9 @@ for (const required of [
   acceptedTask,
   'G9 Production Activation | `DONE`',
   '019fcaa1-8e1e-7420-b631-f010ca7425db',
-  'S39 archive validation=`1`',
+  '019fcb2e-dc99-7341-85e2-30924d83b79b',
+  'S39 archive validation=`2`',
+  'VALID_S39_ARCHIVE_FAIL_COUNT_2',
 ]) {
   if (!ledger.includes(required)) fail(`ledger closure missing: ${required}`);
 }
@@ -615,6 +626,7 @@ const sourceQueue = [...defaultEntrypoints].map((entrypoint) =>
   ),
 );
 let sourceImportEdgeCount = 0;
+let sourceRelativeImportReferenceCount = 0;
 let defaultArchiveLiteralCount = 0;
 while (sourceQueue.length > 0) {
   const file = sourceQueue.shift();
@@ -627,7 +639,9 @@ while (sourceQueue.length > 0) {
     retiredConstructionReads.push(`source:${relative}`);
   if (!['.js', '.mjs', '.cjs', '.ts', '.tsx'].includes(path.extname(file)))
     continue;
-  const { archiveReads, dependencies, literals } = sourceDependencies(file);
+  const { archiveReads, dependencies, literals, relativeImportReferenceCount } =
+    sourceDependencies(file);
+  sourceRelativeImportReferenceCount += relativeImportReferenceCount;
   for (const literal of literals) {
     if (
       literal.includes('docs/archive/dynamic-workflow-runtime-v1') ||
@@ -647,6 +661,11 @@ while (sourceQueue.length > 0) {
     sourceQueue.push(dependency);
   }
 }
+
+const unresolvedSourceImportCount =
+  sourceRelativeImportReferenceCount - sourceImportEdgeCount;
+if (unresolvedSourceImportCount !== 0)
+  fail(`default dependency graph has unresolved relative imports`);
 
 if (defaultArchiveReads.length > 0)
   fail(
@@ -704,7 +723,10 @@ process.stdout.write(
       default_script_edge_count: scriptEdges.length,
       default_entrypoint_count: defaultEntrypoints.size,
       default_source_count: reachableSources.size,
+      default_source_relative_import_reference_count:
+        sourceRelativeImportReferenceCount,
       default_source_import_edge_count: sourceImportEdgeCount,
+      default_source_unresolved_import_count: unresolvedSourceImportCount,
       default_archive_literal_count: defaultArchiveLiteralCount,
       default_archive_read_count: defaultArchiveReads.length,
       default_retired_construction_read_count: retiredConstructionReads.length,
