@@ -10,11 +10,8 @@ import {
 } from '../contracts/strict-json.js';
 import type { JsonObject, JsonValue, Sha256Hash } from '../contracts/types.js';
 import { compileWorkflowCase } from './case-result.js';
-import {
-  WORKFLOW_COMPILER_VERSION,
-  workflowCompilerIdentity,
-} from './identity.js';
 import type { WorkflowCompilerSourceKind } from './types.js';
+import { WORKFLOW_COMPILER_VERSION } from './version.js';
 
 export const GOLDEN_CASES_FORMAT = 'icarus.workflow-compiler-golden-cases/1';
 export const GOLDEN_MANIFEST_FORMAT =
@@ -45,7 +42,8 @@ export interface GoldenCases extends JsonObject {
 export interface GoldenManifest {
   format: typeof GOLDEN_MANIFEST_FORMAT;
   corpus_version: typeof GOLDEN_CORPUS_VERSION;
-  compiler_version: string;
+  compiler_semantic_version: string;
+  schema_version: 1;
   case_count: number;
   corpus_hash: Sha256Hash;
   change_reason?: string;
@@ -118,7 +116,8 @@ function parseManifest(value: JsonValue): GoldenManifest {
   if (
     value.format !== GOLDEN_MANIFEST_FORMAT ||
     value.corpus_version !== GOLDEN_CORPUS_VERSION ||
-    typeof value.compiler_version !== 'string' ||
+    typeof value.compiler_semantic_version !== 'string' ||
+    value.schema_version !== 1 ||
     typeof value.case_count !== 'number' ||
     typeof value.corpus_hash !== 'string'
   ) {
@@ -152,24 +151,28 @@ export function generateGoldenCorpus(
   inputs: GoldenCases,
   changeReason?: string,
 ): { readonly cases: GoldenCases; readonly manifest: GoldenManifest } {
-  const identity = workflowCompilerIdentity();
   const cases: GoldenCases = {
     format: GOLDEN_CASES_FORMAT,
-    cases: inputs.cases.map((entry) => ({
-      ...entry,
-      expected_result: compileWorkflowCase(
-        entry.case_id,
-        entry.source_kind,
-        Buffer.from(entry.raw_source_base64, 'base64'),
-        entry.registry_snapshot,
-        identity,
-      ),
-    })),
+    cases: inputs.cases.map((entry) => {
+      const registrySnapshot = structuredClone(entry.registry_snapshot);
+      delete registrySnapshot.compiler_identity;
+      return {
+        ...entry,
+        registry_snapshot: registrySnapshot,
+        expected_result: compileWorkflowCase(
+          entry.case_id,
+          entry.source_kind,
+          Buffer.from(entry.raw_source_base64, 'base64'),
+          registrySnapshot,
+        ),
+      };
+    }),
   };
   const manifest: GoldenManifest = {
     format: GOLDEN_MANIFEST_FORMAT,
     corpus_version: GOLDEN_CORPUS_VERSION,
-    compiler_version: WORKFLOW_COMPILER_VERSION,
+    compiler_semantic_version: WORKFLOW_COMPILER_VERSION,
+    schema_version: 1,
     case_count: cases.cases.length,
     corpus_hash: corpusHash(cases),
     ...(changeReason ? { change_reason: changeReason } : {}),
@@ -193,7 +196,6 @@ export function replayGoldenCorpus(
   root = GOLDEN_CORPUS_ROOT,
 ): GoldenReplayResult {
   const { cases } = readGoldenCorpus(root);
-  const identity = workflowCompilerIdentity();
   const mismatchedCaseIds = cases.cases
     .filter((entry) => {
       const actual = compileWorkflowCase(
@@ -201,7 +203,6 @@ export function replayGoldenCorpus(
         entry.source_kind,
         Buffer.from(entry.raw_source_base64, 'base64'),
         entry.registry_snapshot,
-        identity,
       );
       return canonicalJson(actual) !== canonicalJson(entry.expected_result);
     })

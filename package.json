@@ -54,7 +54,6 @@
     "test:g1.2": "vitest run src/workflow-runtime/store/runtime-store/runtime-store.test.ts",
     "test:store:node-output-envelope": "vitest run src/workflow-runtime/store/node-output-envelope-value-store.test.ts",
     "test:g1.capacity": "vitest run src/workflow-runtime/contracts/capacity-control-plane.test.ts src/workflow-runtime/store/schema/schema.test.ts src/workflow-runtime/store/runtime-store/runtime-store.test.ts src/workflow-runtime/contracts/g5-capacity-runtime-readiness-audit.test.ts src/workflow-runtime/contracts/g0-node-output-envelope-successor-compatibility.test.ts -t '^(?!.*keeps the generated closure free).*$'",
-    "test:g2:contract": "vitest run src/workflow-runtime/contracts/compiler-semantic-correction-contract.test.ts",
     "golden:update": "tsx src/workflow-runtime/compiler/golden-cli.ts update",
     "golden:check": "tsx src/workflow-runtime/compiler/golden-cli.ts check",
     "golden:replay": "tsx src/workflow-runtime/compiler/golden-cli.ts replay",

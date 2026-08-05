@@ -395,14 +395,6 @@ export interface GraphScopeSourceDocument {
 export interface CompiledScopePlanDocument {
   format: 'icarus.workflow-graph-scope-plan/1';
   compiler_version: string;
-  compiler_build_hash: string;
-  compiler_toolchain_ref: VersionedRef;
-  compiler_toolchain_hash: string;
-  compiler_error_catalog_hash: string;
-  canonical_normalizer_version: string;
-  canonical_normalizer_hash: string;
-  proof_algorithm_version: string;
-  proof_algorithm_hash: string;
   plan_hash: string;
   source_hash: string;
   interface_snapshot_hash: string;
@@ -671,14 +663,6 @@ export const GRAPH_SCOPE_SOURCE_REQUIRED_KEYS = [
 export const COMPILED_SCOPE_PLAN_KEYS = [
   'format',
   'compiler_version',
-  'compiler_build_hash',
-  'compiler_toolchain_ref',
-  'compiler_toolchain_hash',
-  'compiler_error_catalog_hash',
-  'canonical_normalizer_version',
-  'canonical_normalizer_hash',
-  'proof_algorithm_version',
-  'proof_algorithm_hash',
   'plan_hash',
   'source_hash',
   'interface_snapshot_hash',
@@ -708,14 +692,6 @@ type _CompiledScopePlanKeys = Assert<
 export const COMPILED_SCOPE_PLAN_REQUIRED_KEYS = [
   'format',
   'compiler_version',
-  'compiler_build_hash',
-  'compiler_toolchain_ref',
-  'compiler_toolchain_hash',
-  'compiler_error_catalog_hash',
-  'canonical_normalizer_version',
-  'canonical_normalizer_hash',
-  'proof_algorithm_version',
-  'proof_algorithm_hash',
   'plan_hash',
   'source_hash',
   'interface_snapshot_hash',

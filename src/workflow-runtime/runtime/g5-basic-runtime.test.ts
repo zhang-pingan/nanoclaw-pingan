@@ -61,7 +61,6 @@ import { canonicalJson, domainSeparatedSha256 } from '../contracts/hash.js';
 import type { JsonObject, JsonValue, Sha256Hash } from '../contracts/types.js';
 import { compileWorkflow } from '../compiler/compiler.js';
 import { readGoldenCorpus } from '../compiler/golden.js';
-import type { WorkflowCompilerIdentity } from '../compiler/types.js';
 import {
   compileTriggerProgram,
   expressionSteps,
@@ -1086,7 +1085,6 @@ function invokeStaticChildCompiler(
     sourceKind: 'graph_scope',
     rawSourceBytes: Buffer.from(canonicalJson(source), 'utf8'),
     inputSnapshot: snapshot,
-    identity: snapshot.compiler_identity as unknown as WorkflowCompilerIdentity,
   });
   requireBridge(outcome.ok, `${fixture.case_id} Compiler rejected`);
   return outcome.value;
@@ -1426,8 +1424,12 @@ function observedStaticChildChecks(behavior: string): string[] {
       return ['plan_hash_and_canonical_bytes', 'zero_dml'];
     case 'rebind_child_plan_with_incomplete_nested_lineage':
       return ['global_nested_lineage', 'member_and_closure_hashes', 'zero_dml'];
-    case 'rebind_child_plan_with_authority_drift':
-      return ['toolchain_authority', 'runtime_safety_authority', 'zero_dml'];
+    case 'rebind_child_plan_with_semantic_or_safety_drift':
+      return [
+        'compiler_semantic_version',
+        'runtime_safety_authority',
+        'zero_dml',
+      ];
     case 'tamper_persisted_child_plan_bytes_then_replay':
       return ['content_addressed_collision', 'no_repair_on_replay'];
     case 'delete_persisted_child_generated_schema_binding_then_replay':
@@ -1442,7 +1444,7 @@ function observedStaticChildChecks(behavior: string): string[] {
       ];
     case 'submit_stale_build_row_version':
       return ['build_row_version_cas', 'zero_dml'];
-    case 'submit_stale_compile_lease_identity_or_expiry':
+    case 'submit_stale_compile_lease_or_expiry':
       return [
         'lease_owner_exact',
         'lease_token_exact',
@@ -1752,10 +1754,9 @@ function executeStaticChildT2aNegative(
         plan: drift.parentPlan,
         staticChildPlanBundle: drift.bundle,
       };
-    } else if (behavior === 'rebind_child_plan_with_authority_drift') {
+    } else if (behavior === 'rebind_child_plan_with_semantic_or_safety_drift') {
       requireBridge(
-        variant === 'compiler_toolchain_hash' ||
-          variant === 'runtime_safety_hash',
+        variant === 'compiler_version' || variant === 'runtime_safety_hash',
         `${fixture.case_id} authority variant is unknown`,
       );
       const nested = context.compiledFixture.bundle.entries[0]!.plan;
@@ -1766,7 +1767,10 @@ function executeStaticChildT2aNegative(
         0,
         withPlanHash({
           ...withoutHash,
-          [variant]: hash(`bridge-${variant}-drift`),
+          [variant]:
+            variant === 'compiler_version'
+              ? '0.0.0'
+              : hash(`bridge-${variant}-drift`),
         }),
       );
       input = {
@@ -4940,7 +4944,7 @@ describe('G5 Basic Runtime current-schema repair transaction integration', () =>
     );
     const authorityDrifts = (
       [
-        ['compiler_toolchain_hash', hash('tampered-child-toolchain')],
+        ['compiler_version', '0.0.0'],
         ['runtime_safety_hash', hash('tampered-child-safety')],
       ] as const
     ).map(([key, value]) => {

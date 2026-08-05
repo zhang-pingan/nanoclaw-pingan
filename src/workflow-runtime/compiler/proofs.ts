@@ -11,7 +11,6 @@ import {
 } from './normalizer.js';
 import type { BoundCompilerSnapshot, SnapshotResource } from './snapshot.js';
 import { refKey } from './snapshot.js';
-import type { WorkflowCompilerIdentity } from './types.js';
 import { assertGeneratedSchemaAuthority } from '../contracts/generated-schema-authority.js';
 
 export class CompilerProofError extends Error {
@@ -745,7 +744,6 @@ export function compileCompatibilityProof(
   edge: JsonObject,
   nodes: Map<string, JsonObject>,
   snapshot: BoundCompilerSnapshot,
-  identity: WorkflowCompilerIdentity,
   interfaceSnapshot: JsonObject,
 ): { proof: JsonObject; derivedSchema: JsonObject } {
   assertJsonObject(edge.from);
@@ -823,8 +821,6 @@ export function compileCompatibilityProof(
   );
   const derivedSchemaHash = producer.contentHash;
   const withoutHash = {
-    proof_algorithm_version: identity.proof_algorithm_version,
-    proof_algorithm_hash: identity.proof_algorithm_hash,
     producer_schema_hash: producer.contentHash,
     canonical_pointer: canonicalPointer,
     pointer_totality: 'total',

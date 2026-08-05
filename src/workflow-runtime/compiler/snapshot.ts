@@ -33,7 +33,6 @@ export interface SnapshotDependencyClosure {
 
 export interface BoundCompilerSnapshot {
   snapshotHash: Sha256Hash;
-  compilerIdentity: JsonObject;
   resources: SnapshotResource[];
   resourceByKey: Map<string, SnapshotResource>;
   dependencyClosures: SnapshotDependencyClosure[];
@@ -100,7 +99,6 @@ export function resourceDependencyRefs(
 export function bindCompilerSnapshot(
   snapshot: JsonObject,
 ): BoundCompilerSnapshot {
-  assertJsonObject(snapshot.compiler_identity);
   assertJsonObject(snapshot.registry_snapshot);
   assertJsonObject(snapshot.interface_snapshot);
   assertJsonObject(snapshot.policy_snapshot);
@@ -177,7 +175,6 @@ export function bindCompilerSnapshot(
   }
   return {
     snapshotHash: asHash(snapshot.snapshot_hash, 'snapshot_hash'),
-    compilerIdentity: snapshot.compiler_identity,
     resources,
     resourceByKey,
     dependencyClosures,

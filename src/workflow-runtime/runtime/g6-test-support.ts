@@ -9,10 +9,10 @@ import type {
   RuntimeValueRef,
 } from '../contracts/g5-basic-runtime-types.js';
 import { canonicalJson, domainSeparatedSha256 } from '../contracts/hash.js';
-import type { JsonObject, Sha256Hash } from '../contracts/types.js';
+import type { JsonObject, JsonValue, Sha256Hash } from '../contracts/types.js';
 import { compileWorkflow } from '../compiler/compiler.js';
 import { readGoldenCorpus } from '../compiler/golden.js';
-import type { WorkflowCompilerIdentity } from '../compiler/types.js';
+import { WORKFLOW_COMPILER_VERSION } from '../compiler/version.js';
 import {
   calculateCreationIntentHash,
   createWorkflowT0,
@@ -115,7 +115,6 @@ function compileDynamicFixture(
     sourceKind: 'graph_scope',
     rawSourceBytes: Buffer.from(canonicalJson(source), 'utf8'),
     inputSnapshot: snapshot,
-    identity: snapshot.compiler_identity as unknown as WorkflowCompilerIdentity,
   });
   if (!outcome.ok)
     throw new Error(
@@ -179,7 +178,6 @@ function seedG6Runtime(
   compiled: G6CompiledFixture,
   options: G6MapFixtureOptions,
 ): G6Seed {
-  const identity = compiled.snapshot.compiler_identity as JsonObject;
   const snapshotResources = (
     (compiled.snapshot.registry_snapshot as JsonObject)
       .resources as JsonObject[]
@@ -190,7 +188,13 @@ function seedG6Runtime(
     hash: resource.content_hash as Sha256Hash,
     content: resource.content,
   }));
-  const specs = [
+  const specs: Array<{
+    name: string;
+    resourceType: string;
+    ref: { id: string; version: string };
+    hash: Sha256Hash;
+    content: JsonValue;
+  }> = [
     {
       name: 'schema',
       resourceType: 'schema',
@@ -224,12 +228,12 @@ function seedG6Runtime(
     {
       name: 'compilerToolchain',
       resourceType: 'compiler_toolchain',
-      ref: identity.compiler_toolchain_manifest_ref as {
-        id: string;
-        version: string;
+      ref: {
+        id: 'icarus.workflow-compiler',
+        version: WORKFLOW_COMPILER_VERSION,
       },
-      hash: identity.compiler_toolchain_hash as Sha256Hash,
-      content: identity,
+      hash: g6Hash(`compiler:${WORKFLOW_COMPILER_VERSION}`),
+      content: { semantic_version: WORKFLOW_COMPILER_VERSION },
     },
     ...snapshotResources,
   ];
@@ -401,7 +405,7 @@ function seedG6Runtime(
         closureId,
         closureHash,
         compiled.plan.compiler_version,
-        compiled.plan.compiler_build_hash,
+        compiled.plan.plan_hash,
         G5_REPAIR_DATABASE_SCHEMA_HASH,
       ],
     );
@@ -477,7 +481,7 @@ export function createG6MapFixture(
       compilerToolchain: seed.refs.compilerToolchain!,
       coreReleaseRef: 'icarus.core@1.0.0',
       coreReleaseHash: g6Hash('core-release'),
-      coreBuildHash: compiled.plan.compiler_build_hash as Sha256Hash,
+      coreBuildHash: compiled.plan.plan_hash as Sha256Hash,
       databaseSchemaHash: G5_REPAIR_DATABASE_SCHEMA_HASH,
       sourceSeedHash: compiled.plan.source_hash as Sha256Hash,
       compilerSnapshotHash: g6Hash('compiler-snapshot'),

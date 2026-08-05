@@ -5,7 +5,6 @@ import { canonicalJson } from '../contracts/hash.js';
 import type { JsonObject } from '../contracts/types.js';
 import { compileWorkflow } from './compiler.js';
 import { readGoldenCorpus } from './golden.js';
-import type { WorkflowCompilerIdentity } from './types.js';
 
 function fixture(): {
   source: JsonObject;
@@ -37,7 +36,6 @@ function compile(source: JsonObject, snapshot: JsonObject) {
     sourceKind: 'graph_scope',
     rawSourceBytes: Buffer.from(canonicalJson(source), 'utf8'),
     inputSnapshot: snapshot,
-    identity: snapshot.compiler_identity as unknown as WorkflowCompilerIdentity,
   });
 }
 

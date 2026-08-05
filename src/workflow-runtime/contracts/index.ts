@@ -172,29 +172,6 @@ export type {
   TypedRelationRecord,
 } from './logical-schema-types.js';
 export {
-  checkContractPackGoldenDraft,
-  generateContractPackGoldenDraft,
-} from './golden-draft-pack.js';
-export {
-  GOLDEN_DRAFT_ADDITIONAL_NEGATIVE_COVERAGE,
-  GOLDEN_DRAFT_CASE_SEEDS,
-  GOLDEN_DRAFT_POSITIVE_COVERAGE,
-} from './golden-draft-source.js';
-export type {
-  GoldenDraftAssertionOperator,
-  GoldenDraftCase,
-  GoldenDraftCaseCatalog,
-  GoldenDraftCasePolarity,
-  GoldenDraftCompilerInputSnapshot,
-  GoldenDraftDiagnostic,
-  GoldenDraftManifest,
-  GoldenDraftReviewReportInput,
-  GoldenDraftReviewRequest,
-  GoldenDraftReviewStatus,
-  GoldenDraftSemanticAssertion,
-  GoldenDraftSourceKind,
-} from './golden-draft-types.js';
-export {
   checkContractPackG0Conformance,
   generateContractPackG0Conformance,
 } from './g0-conformance-pack.js';
@@ -310,68 +287,20 @@ export {
   checkHistoricalG0_9Conformance,
   generateContractPackCapacityControlPlane,
 } from './capacity-control-plane-pack.js';
-export {
-  COMPILED_CONDITION_OPERAND_TYPES,
-  COMPILER_G2_EXACT_IDENTITY_FIELDS,
-} from './compiler-contract-repair-types.js';
 export type {
   CompiledConditionOperandType,
   CompiledScopePlanV2Document,
   CompiledStaticChildPlanClosureMemberV1,
   CompiledStaticChildPlanClosureV1,
-  CompilerG2CaseInputBindingEntryV1,
-  CompilerG2CaseInputBindingRequirementV1,
-  CompilerG2CaseInputBindingV1,
-  CompilerSemanticAssertionTargetV1,
-  CompilerSemanticAssertionV2,
   DefinitionStaticLoweringContractV1,
-  GoldenDraftCaseCatalogV2,
-  GoldenDraftCaseV2,
-  GoldenDraftManifestV2,
   WorkflowCompilerConformanceCaseResultV1,
 } from './compiler-contract-repair-types.js';
 export {
   COMPILED_PLAN_V2_DOMAIN_SEPARATOR,
   COMPILER_CASE_RESULT_DOMAIN_SEPARATOR,
-  COMPILER_CONTRACT_REPAIR_BINDING_REQUIREMENT_PATH,
-  COMPILER_CONTRACT_REPAIR_DECISION_PATH,
-  COMPILER_CONTRACT_REPAIR_DOMAIN_CATALOG_PATH,
-  COMPILER_CONTRACT_REPAIR_DRAFT_CASES_PATH,
-  COMPILER_CONTRACT_REPAIR_DRAFT_MANIFEST_PATH,
-  COMPILER_CONTRACT_REPAIR_FIXTURES_PATH,
-  COMPILER_CONTRACT_REPAIR_MANIFEST_PATH,
-  COMPILER_CONTRACT_REPAIR_ROOT,
-  COMPILER_CONTRACT_REPAIR_SPEC_PATH,
-  COMPILER_CONTRACT_REPAIR_SPEC_SECTION,
-  COMPILER_CONTRACT_REPAIR_STATIC_LOWERING_PATH,
   CONDITION_PROGRAM_V2_DOMAIN_SEPARATOR,
-  G2_CASE_INPUT_BINDING_DOMAIN_SEPARATOR,
-  G2_CASE_INPUT_DOMAIN_SEPARATOR,
-  HISTORICAL_COMPILED_IR_SCHEMA_HASH,
-  HISTORICAL_G0_3_MANIFEST_HASH,
-  HISTORICAL_G0_8_CASE_CATALOG_HASH,
-  HISTORICAL_G0_8_MANIFEST_HASH,
   STATIC_CHILD_CLOSURE_DOMAIN_SEPARATOR,
   STATIC_CHILD_CLOSURE_MEMBER_DOMAIN_SEPARATOR,
-  assertHistoricalCompilerContractInputs,
-  buildG2BindingRequirement,
-  buildGoldenDraftCasesV2,
-  buildGoldenDraftManifestV2,
-  buildRepairDecision,
   buildStaticLoweringContract,
   calculateCompilerConformanceCaseResultHash,
-  calculateEffectiveG2CaseInputHash,
-  calculateG2CaseInputBindingHash,
-  compilerContractRepairSpecSectionBytes,
-  compilerContractRepairSpecSectionHash,
-  compilerContractRepairToolHash,
-  extractCompilerContractRepairSpecSectionBytes,
 } from './compiler-contract-repair-source.js';
-export {
-  COMPILER_CONTRACT_REPAIR_ARTIFACT_COUNT,
-  CompilerContractRepairError,
-  buildCompiledPlanV2SampleForTest,
-  buildCompilerContractRepairExpectedArtifactsForTest,
-  checkContractPackCompilerContractRepair,
-  generateContractPackCompilerContractRepair,
-} from './compiler-contract-repair-pack.js';

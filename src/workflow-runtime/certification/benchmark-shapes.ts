@@ -3,7 +3,6 @@ import { canonicalJson } from '../contracts/hash.js';
 import type { G6CompiledFixture } from '../runtime/g6-test-support.js';
 import { compileWorkflow } from '../compiler/compiler.js';
 import { readGoldenCorpus } from '../compiler/golden.js';
-import type { WorkflowCompilerIdentity } from '../compiler/types.js';
 
 export type G8T3Shape =
   | 'long_chain'
@@ -210,7 +209,6 @@ export function compileG8T3Fixture(
     sourceKind: 'graph_scope',
     rawSourceBytes: Buffer.from(canonicalJson(source), 'utf8'),
     inputSnapshot: snapshot,
-    identity: snapshot.compiler_identity as unknown as WorkflowCompilerIdentity,
   });
   if (!outcome.ok) {
     throw new Error(

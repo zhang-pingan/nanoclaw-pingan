@@ -51,18 +51,14 @@ import {
   type SnapshotDependencyClosure,
   type SnapshotResource,
 } from './snapshot.js';
-import {
-  COMPILER_EXACT_IDENTITY_FIELDS_V2,
-  COMPILER_SNAPSHOT_DEPENDENCY_CLOSURE_DOMAIN_V1,
-} from '../contracts/compiler-semantic-correction-contract.js';
 import type {
   WorkflowCompilerFailure,
-  WorkflowCompilerIdentity,
   WorkflowCompilerOutcome,
   WorkflowCompilerRequest,
   WorkflowCompilerSuccess,
   WorkflowCompilerSourceKind,
 } from './types.js';
+import { WORKFLOW_COMPILER_VERSION } from './version.js';
 
 export const STATIC_LOWERING_CONTRACT_REF = {
   id: 'icarus.workflow-definition-static-lowering-contract',
@@ -82,10 +78,11 @@ const OUTBOX_EFFECTIVE_POLICY_SNAPSHOT_DOMAIN =
   'icarus:workflow-outbox-effective-policy-snapshot:1\n';
 const CAPABILITY_OUTBOX_BINDING_DOMAIN =
   'icarus:workflow-capability-outbox-execution-binding:1\n';
+const COMPILER_SNAPSHOT_DEPENDENCY_CLOSURE_DOMAIN_V1 =
+  'icarus:workflow-registry-dependency-closure:1\n';
 
 interface CompilationState {
   snapshot: BoundCompilerSnapshot;
-  identity: WorkflowCompilerIdentity;
   policy: JsonObject;
   policyHash: Sha256Hash;
   proofHashes: Set<Sha256Hash>;
@@ -1589,7 +1586,7 @@ function childOwnerOutputPorts(
       schema: generatedCompiledSchema(
         'child_completion',
         childInterface,
-        state.identity.compiler_version,
+        WORKFLOW_COMPILER_VERSION,
       ),
       max_bytes: Number(state.snapshot.safety.value.max_single_value_bytes),
       required: true,
@@ -1669,7 +1666,7 @@ function mapOwnerOutputPorts(
       schema: generatedCompiledSchema(
         'map_result',
         childInterface,
-        state.identity.compiler_version,
+        WORKFLOW_COMPILER_VERSION,
       ),
       max_bytes: Number(state.snapshot.safety.value.max_single_value_bytes),
       required: true,
@@ -2176,9 +2173,6 @@ function compileGraphNode(
   factoryByNode: Map<string, FactoryCompilation>,
 ): JsonObject {
   const compiled = compileGraphNodeCore(node, state, ownerPath, factoryByNode);
-  if (!['3.0.4', '3.0.5', '3.0.6'].includes(state.identity.compiler_version)) {
-    return compiled;
-  }
   assertJsonObject(compiled.output_ports);
   return {
     ...compiled,
@@ -2366,7 +2360,6 @@ function compileDataEdges(
           edge,
           nodes,
           state.snapshot,
-          state.identity,
           interfaceSnapshot,
         );
       } catch (error) {
@@ -2790,15 +2783,7 @@ function compileGraphPlan(
   assertJsonObject(planState.snapshot.safety.scope);
   const withoutHash = {
     format: 'icarus.workflow-graph-scope-plan/2' as const,
-    compiler_version: state.identity.compiler_version,
-    compiler_build_hash: state.identity.compiler_build_hash,
-    compiler_toolchain_ref: state.identity.compiler_toolchain_manifest_ref,
-    compiler_toolchain_hash: state.identity.compiler_toolchain_hash,
-    compiler_error_catalog_hash: state.identity.error_catalog_hash,
-    canonical_normalizer_version: state.identity.canonical_normalizer_version,
-    canonical_normalizer_hash: state.identity.canonical_normalizer_hash,
-    proof_algorithm_version: state.identity.proof_algorithm_version,
-    proof_algorithm_hash: state.identity.proof_algorithm_hash,
+    compiler_version: WORKFLOW_COMPILER_VERSION,
     source_hash: sourceHash('graph_scope', source),
     interface_snapshot_hash: scopedInterfaceHash(interfaceSnapshot),
     policy_snapshot_hash: planState.policyHash,
@@ -2977,15 +2962,7 @@ function compileDefinitionPlan(
   assertJsonObject(state.snapshot.safety.scope);
   const withoutHash = {
     format: 'icarus.workflow-graph-scope-plan/2' as const,
-    compiler_version: state.identity.compiler_version,
-    compiler_build_hash: state.identity.compiler_build_hash,
-    compiler_toolchain_ref: state.identity.compiler_toolchain_manifest_ref,
-    compiler_toolchain_hash: state.identity.compiler_toolchain_hash,
-    compiler_error_catalog_hash: state.identity.error_catalog_hash,
-    canonical_normalizer_version: state.identity.canonical_normalizer_version,
-    canonical_normalizer_hash: state.identity.canonical_normalizer_hash,
-    proof_algorithm_version: state.identity.proof_algorithm_version,
-    proof_algorithm_hash: state.identity.proof_algorithm_hash,
+    compiler_version: WORKFLOW_COMPILER_VERSION,
     source_hash: sourceHash('workflow_definition', source),
     interface_snapshot_hash: scopedInterfaceHash(generatedInterface),
     policy_snapshot_hash: state.policyHash,
@@ -3033,7 +3010,6 @@ function compileSuccess(
 ): WorkflowCompilerSuccess {
   const state: CompilationState = {
     snapshot,
-    identity: request.identity,
     policy: snapshot.rootPolicy,
     policyHash: snapshot.rootPolicyHash,
     proofHashes: new Set(),
@@ -3086,26 +3062,6 @@ function compileSuccess(
   };
 }
 
-function identityFieldEqual(left: JsonValue, right: JsonValue): boolean {
-  return (
-    JSON.stringify(sortObjectKeys(left)) ===
-    JSON.stringify(sortObjectKeys(right))
-  );
-}
-
-function firstIdentityMismatch(
-  snapshot: JsonObject,
-  identity: WorkflowCompilerIdentity,
-): string | null {
-  assertJsonObject(snapshot.compiler_identity);
-  const actual = snapshot.compiler_identity;
-  const expected = identity as unknown as JsonObject;
-  for (const field of COMPILER_EXACT_IDENTITY_FIELDS_V2) {
-    if (!identityFieldEqual(actual[field], expected[field])) return field;
-  }
-  return null;
-}
-
 function definitionIdentityMatches(source: JsonObject): boolean {
   const { definition_hash: definitionHash, ...withoutHash } = source;
   return (
@@ -3152,20 +3108,6 @@ export function compileWorkflow(
       return reject(
         hash,
         diagnostic('compiler_integrity_mismatch', 'hash', '/definition_hash'),
-      );
-    }
-    const identityMismatch = firstIdentityMismatch(
-      request.inputSnapshot,
-      request.identity,
-    );
-    if (identityMismatch) {
-      return reject(
-        hash,
-        diagnostic(
-          'compiler_integrity_mismatch',
-          'hash',
-          `/compiler_identity/${identityMismatch}`,
-        ),
       );
     }
     const snapshot = bindCompilerSnapshot(request.inputSnapshot);

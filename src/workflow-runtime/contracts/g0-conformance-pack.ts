@@ -491,7 +491,6 @@ function validateBoundaries(): void {
   const forbiddenPaths = [
     'compiler/graph-compiler.ts',
     'compiler/definition-lowering.ts',
-    'compiler/conformance.ts',
     'store/runtime-store.ts',
     'store/schema/workflow-runtime-schema-v1.sql',
     'registry/resource-store.ts',

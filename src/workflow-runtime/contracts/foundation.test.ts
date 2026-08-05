@@ -23,7 +23,6 @@ import {
   strictParseJsonBytes,
 } from './strict-json.js';
 import { VersionedRefError, parseVersionedRef } from './versioned-ref.js';
-import { checkContractPackFoundation } from './contract-pack.js';
 import type {
   ContractArtifactEnvelope,
   JsonObject,
@@ -203,38 +202,7 @@ describe('G0.2 canonical and domain-separated hash', () => {
   });
 });
 
-describe('G0.2 Contract Pack conformance', () => {
-  it('checks generated artifacts, fixtures, directories, and G0.1 inputs', () => {
-    const before = new Map<string, Buffer>();
-    for (const relativePath of [
-      'contract-pack-foundation.json',
-      'foundation/artifact-envelope-schema.json',
-      'foundation/versioned-ref-schema.json',
-      'foundation/strict-json-profile.json',
-      'foundation/canonical-hash-profile.json',
-      'catalogs/foundation-domain-separators.json',
-      'conformance/foundation/hash-vectors.json',
-      'conformance/foundation/negative-cases.json',
-    ]) {
-      before.set(
-        relativePath,
-        fs.readFileSync(path.join(contractsRoot, relativePath)),
-      );
-    }
-
-    const manifest = checkContractPackFoundation();
-    expect(manifest.ref).toEqual({
-      id: 'icarus.workflow-contract-pack-foundation',
-      version: '1.0.0',
-    });
-    expect(manifest.hash).toMatch(/^sha256:[0-9a-f]{64}$/);
-    for (const [relativePath, bytes] of before) {
-      expect(fs.readFileSync(path.join(contractsRoot, relativePath))).toEqual(
-        bytes,
-      );
-    }
-  });
-
+describe('G0.2 Contract foundation', () => {
   it('keeps hand-authored vector canonical bytes independent of key insertion', () => {
     const vectorArtifact = parseContractArtifactEnvelope(
       strictParseJsonBytes(
@@ -301,13 +269,6 @@ describe('G0.2 Contract Pack conformance', () => {
         if (specifier.startsWith('.')) {
           const resolved = path.resolve(path.dirname(file), specifier);
           const allowedConstructionImport =
-            (path.basename(file) ===
-              'semantic-correction-review-candidate.ts' &&
-              resolved ===
-                path.resolve(
-                  contractsRoot,
-                  '../compiler/semantic-correction.js',
-                )) ||
             (path.basename(file) === 'g4-test-bootstrap-contract.ts' &&
               resolved ===
                 path.resolve(
@@ -315,16 +276,7 @@ describe('G0.2 Contract Pack conformance', () => {
                   '../store/runtime-store/profile.js',
                 )) ||
             (path.basename(file) === 'static-child-plan-bundle-repair.ts' &&
-              [
-                path.resolve(contractsRoot, '../compiler/compiler.js'),
-                path.resolve(contractsRoot, '../compiler/identity.js'),
-              ].includes(resolved)) ||
-            (path.basename(file) ===
-              'current-g2-static-child-replay-authority.ts' &&
-              [
-                path.resolve(contractsRoot, '../compiler/identity.js'),
-                path.resolve(contractsRoot, '../compiler/types.js'),
-              ].includes(resolved)) ||
+              resolved === path.resolve(contractsRoot, './hash.js')) ||
             (path.basename(file) ===
               'r020-child-consumption-lineage-contract.ts' &&
               resolved ===

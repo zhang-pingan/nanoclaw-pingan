@@ -62,14 +62,6 @@ function hasExactKeys(value: JsonObject, expected: readonly string[]): boolean {
 function planIdentity(plan: CompiledScopePlanV2Document): JsonObject {
   return {
     compiler_version: plan.compiler_version,
-    compiler_build_hash: plan.compiler_build_hash,
-    compiler_toolchain_ref: plan.compiler_toolchain_ref,
-    compiler_toolchain_hash: plan.compiler_toolchain_hash,
-    compiler_error_catalog_hash: plan.compiler_error_catalog_hash,
-    canonical_normalizer_version: plan.canonical_normalizer_version,
-    canonical_normalizer_hash: plan.canonical_normalizer_hash,
-    proof_algorithm_version: plan.proof_algorithm_version,
-    proof_algorithm_hash: plan.proof_algorithm_hash,
     capability_catalog_hash: plan.capability_catalog_hash,
     wait_contract_catalog_hash: plan.wait_contract_catalog_hash,
     runtime_safety_snapshot: plan.runtime_safety_snapshot,

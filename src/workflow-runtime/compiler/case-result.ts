@@ -6,10 +6,7 @@ import {
   STATIC_LOWERING_CONTRACT_HASH,
   STATIC_LOWERING_CONTRACT_REF,
 } from './compiler.js';
-import type {
-  WorkflowCompilerIdentity,
-  WorkflowCompilerSourceKind,
-} from './types.js';
+import type { WorkflowCompilerSourceKind } from './types.js';
 
 const RESULT_DOMAIN = 'icarus:workflow-compiler-conformance-case-result:1\n';
 
@@ -24,7 +21,6 @@ export function compileWorkflowCase(
   sourceKind: WorkflowCompilerSourceKind,
   sourceBytes: Uint8Array,
   snapshot: JsonValue,
-  compilerIdentity: WorkflowCompilerIdentity,
 ): WorkflowCompilerConformanceCaseResultV1 {
   if (!snapshot || Array.isArray(snapshot) || typeof snapshot !== 'object') {
     throw new Error(`Golden snapshot must be an object: ${caseId}`);
@@ -34,7 +30,6 @@ export function compileWorkflowCase(
     sourceKind,
     rawSourceBytes: sourceBytes,
     inputSnapshot: snapshot,
-    identity: compilerIdentity,
   });
   if (!outcome.ok) {
     const withoutHash = {

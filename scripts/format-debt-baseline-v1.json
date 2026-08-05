@@ -57,7 +57,6 @@
     "src/today-plan-mail.ts": "sha256:c1e4aecfc0f9b33632707e151f9cbdf71c358d7cafdc01501b20cbf1a65596cd",
     "src/today-plan.ts": "sha256:d984da303db99b44e4855ce8638cc2d6ffb32895c58a710985e34e709578c1c5",
     "src/wiki.ts": "sha256:2fefe702f63fc7c8c4393ab06147d5c6fb5aa70494e119096784551848216bee",
-    "src/workflow-runtime/contracts/compiler-semantic-correction-contract.ts": "sha256:7beec64e1d9f5fbf234701b1a74879f21dba03333fd953d341e7585516d07881",
     "src/workflow-runtime/contracts/g3-2a-feature-manifest-intake-cli.ts": "sha256:78e89bbef248b9647a69d5ad6dc29fe9ac4135b0d9d20cfdb430a87df99c8245",
     "src/workflow-runtime/contracts/g3-2a-feature-manifest-intake-types.ts": "sha256:76e29291d7f3b84485c2c461529074c28b0da10e5ae0e67e7265eeea4a183e54",
     "src/workflow-runtime/contracts/g3-2a-feature-manifest-intake.test.ts": "sha256:cdcc4471afa04a31d2d725a2fc2d807354d3a69dfd30af4f43df0f4df423f34e",
