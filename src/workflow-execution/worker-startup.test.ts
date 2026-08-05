@@ -4,7 +4,7 @@ import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { WorkflowRuntimeConnectionFactory } from '../workflow-runtime/store/runtime-store/index.js';
+import { WorkflowRuntimeConnectionFactory } from '../workflow-runtime/gateway/connection.js';
 import { WorkflowExecutionAdapterRegistry } from './adapter-registry.js';
 import { WorkflowAdapterExecutionStore } from './execution-store.js';
 import { WorkflowExecutionWorker } from './worker.js';

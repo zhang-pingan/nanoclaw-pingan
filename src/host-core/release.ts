@@ -16,7 +16,7 @@ import type {
   JsonValue,
   Sha256Hash,
 } from '../workflow-runtime/contracts/types.js';
-import { CURRENT_G1_SCHEMA_IDENTITIES } from '../workflow-runtime/store/runtime-store/profile.js';
+import { CURRENT_G1_SCHEMA_IDENTITIES } from '../workflow-runtime/gateway/host-core.js';
 import {
   type WorkflowRuntimeSchemaCompatibility,
   currentWorkflowRuntimeSchemaCompatibility,

@@ -13,17 +13,15 @@ import type {
   Sha256Hash,
 } from '../workflow-runtime/contracts/types.js';
 import {
+  acceptDelegationCallbackT6b,
   insertInlineValue,
-  runtimeObjectHash,
-  stableRuntimeId,
-} from '../workflow-runtime/runtime/graph-store.js';
-import { acceptDelegationCallbackT6b } from '../workflow-runtime/runtime/node-execution.js';
-import {
   leaseOutboxWork,
   recordOutboxResult,
+  runtimeObjectHash,
+  stableRuntimeId,
   type OutboxLease,
-} from '../workflow-runtime/runtime/outbox.js';
-import type { WorkflowRuntimeStore } from '../workflow-runtime/store/runtime-store/index.js';
+  type WorkflowRuntimeStore,
+} from '../workflow-runtime/gateway/execution.js';
 import { WorkflowExecutionAdapterRegistry } from './adapter-registry.js';
 import { WorkflowAdapterExecutionStore } from './execution-store.js';
 import {

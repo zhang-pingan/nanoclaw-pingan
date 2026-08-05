@@ -153,7 +153,7 @@ P7 完成后已重新验证 Electron build 通过。
 - `src/card-action-router.ts` 只保留 Ask User Question 和 Assistant Inbox Card action。
 - `src/ask-user-question.ts` 不再写 Workbench projection，也不再通过旧 Runtime 完成 delegation。
 - `src/container-runner.ts` 删除 Workflow runtime root 和 Feature data root 的 Workflow 专属挂载。
-- `src/agent-queue.ts` 停止 Agent 时不再 cancel Workflow，也不再显示 active Workflow count。
+- `src/group-queue.ts` 停止 Agent 时不再 cancel Workflow，也不再显示 active Workflow count。
 - `setup/index.ts` 删除 `workflow-groups` step。
 - `src/index.ts` 删除 Runtime 初始化、interrupt text command、Workbench event/broadcast 和 Workflow-aware execution wiring。
 - `src/ipc.ts` 删除 Workflow completion hook、handoff validation、Ask/Message 到 Workbench projection 和 Workbench query IPC。
@@ -209,10 +209,10 @@ P5-P7 已清除剩余 Workbench 类型、schema、渠道、MCP 和测试尾部�
 保留：
 
 - Feature 启停。
-- Feature Agent stop/reload。
+- Feature group stop/reload。
 - Feature 自有 data root。
 - external data root 报告但不删除。
-- Feature migration、projection table、Chat/Session/Memory/Scheduled Task 等 Agent-owned 数据清理。
+- Feature migration、projection table、Chat/Session/Memory/Scheduled Task 等 group-owned 数据清理。
 
 `src/features/manifest.ts` 和 `src/features/runtime.ts` 已：
 
@@ -296,7 +296,7 @@ Feature Runtime 测试已按新合同更新，验证通用 resources activation 
 已完成：
 
 - host/container execution context 收敛为仅 `delegationId`，不再注入 Workflow/stage env。
-- 删除 `query_workbench_tasks`、`workbench-results` MCP、`workbench-main` profile 及所有 Agent 引用。
+- 删除 `query_workbench_tasks`、`workbench-results` MCP、`workbench-main` profile 及所有 group 引用。
 - Today Plan MCP DTO/output 删除 Workbench task、task id 和 workflow 字段，只保留 manual chat/service branch 能力。
 - send message / Ask User Question IPC 删除 `workflowId/stageKey`。
 - `request_human_input` 文案改为通用用户交互。

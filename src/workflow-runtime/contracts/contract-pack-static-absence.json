@@ -14,11 +14,11 @@
     "catalog_protocol_manifest_hash": "sha256:078be3fed7e8d430b228c0aa526e15e6bd92665f863c6d0818eaebbcaf43b533",
     "safety_sqlite_manifest_hash": "sha256:e289868eb489bb3c41731afe17f50cbc06f2b10c549769c1786fcd185a0b5775",
     "logical_schema_manifest_hash": "sha256:e0b1bb30303e9bf0c45fdc5383ec7f61f90b2bb2e6ed8e422c5478a1dfd134cc",
-    "source_core_build_hash": "sha256:70ca72eff11bf0cf706a2f03f5622052c1a65cef71438f32c82a608d8579cf62",
+    "source_core_build_hash": "sha256:0beeff67b02d5f616168666bdda31268a7d4966b44f8df2b6fd5ba13c9359002",
     "generated_by_tool_hash": "sha256:4d3137e44c8d0903a90cbe5627e4c8e218c10bb8b156083a6ff821176407ac32",
-    "absence_baseline_hash": "sha256:a40c2c066aa829a25e844d97039fa55df95e3e579456df2c9261f137c488c217",
-    "product_surface_manifest_hash": "sha256:298cd7d445e59bfb22b314d9e706916f940d4c7f6555bb49733c32db39bee466",
-    "migration_candidate_boundary_hash": "sha256:fb846480ecde0dd4c2e6bc48c3b45120cec92d353ba9a40325f73b3148412fa7",
+    "absence_baseline_hash": "sha256:0984945e8131ca91c5bad3a15db90815f5ea67cfb55d71f459836c0ddfaa6829",
+    "product_surface_manifest_hash": "sha256:e97209ccc9ee723fe5dceb4da0aa7ec367e275bfe6a21d596a8a40f50db55879",
+    "migration_candidate_boundary_hash": "sha256:f9a19fbac7b9dd619339ccb3165f3df678ecc0579519e101352e99c201281a10",
     "schema_count": 3,
     "active_surface_count": 12,
     "removed_surface_count": 10,
@@ -93,7 +93,7 @@
         },
         "version": 1,
         "domain_separator": "icarus:migration-candidate-boundary-artifact:1\n",
-        "hash": "sha256:4c01b1a76a6321e3531663ee0531c9c888b9a4a59642a8478b25836ea2828f82"
+        "hash": "sha256:8eeb399e2d9bb7dd6262cb87654b51e9223cc383f0276b4ea69b4646d66ae0bb"
       },
       {
         "path": "static/product-surface-coverage-schema.json",
@@ -115,7 +115,7 @@
         },
         "version": 1,
         "domain_separator": "icarus:product-surface-coverage-artifact:1\n",
-        "hash": "sha256:361de14c7adddd25f47d45acb480b21d8b07674f1d2588e783337181fce73518"
+        "hash": "sha256:22adbf76a6a5614862fbe3350a16a5711ab75361bcff2534b9a53141b97d4493"
       },
       {
         "path": "static/workflow-runtime-absence-baseline-schema.json",
@@ -137,7 +137,7 @@
         },
         "version": 1,
         "domain_separator": "icarus:workflow-runtime-absence-baseline-artifact:1\n",
-        "hash": "sha256:8b2ad1b1858146acc22349f5b4b93d3f3f693090954f25e88f030e8407aa72df"
+        "hash": "sha256:fb7648a157ec3b9b8841e367d7abd461988218783f43dc00238fca392e8bb46f"
       }
     ],
     "next_reserved_directories": [
@@ -154,5 +154,5 @@
       "certified_sqlite_profile_or_supported_limits"
     ]
   },
-  "hash": "sha256:cc7845741226eec788828f2556d6758d4543d264d63f322e5399d09a741a492e"
+  "hash": "sha256:1df97367d986c962f4932cdb222ca5d8fa7e0e42bbe330eeb20ba8d5e875c1a3"
 }

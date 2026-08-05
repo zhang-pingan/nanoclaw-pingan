@@ -8,7 +8,7 @@
   "domain_separator": "icarus:product-surface-coverage-artifact:1\n",
   "payload": {
     "format": "icarus.product-surface-coverage/1",
-    "source_core_build_hash": "sha256:70ca72eff11bf0cf706a2f03f5622052c1a65cef71438f32c82a608d8579cf62",
+    "source_core_build_hash": "sha256:0beeff67b02d5f616168666bdda31268a7d4966b44f8df2b6fd5ba13c9359002",
     "generated_by_tool_hash": "sha256:4d3137e44c8d0903a90cbe5627e4c8e218c10bb8b156083a6ff821176407ac32",
     "entries": [
       {
@@ -77,9 +77,9 @@
         "owner_feature_id": null,
         "status": "active",
         "replacement_ref": "protected-capability:interactive_card_channel",
-        "contract_fixture_hash": "sha256:986a4a13ea68ee509feb931a551eee43aa7e1a7d2c7d55378ca0ec3be1b96f03",
+        "contract_fixture_hash": "sha256:7ff6b88a3147aa0762b8e029fad7477ff166d8158399d2ef699d3855b7134495",
         "removal_fixture_hash": null,
-        "entry_hash": "sha256:7f18222eba29be0596febcf5fb50e0337ed57621c4e2a9d3c471b6fa9243b313"
+        "entry_hash": "sha256:96b4b33ad50e022a57b2846d2ab1a3bb1683cfab7884ea10e84172e97245361c"
       },
       {
         "surface_id": "protected.memory",
@@ -168,8 +168,8 @@
         "status": "removed",
         "replacement_ref": null,
         "contract_fixture_hash": null,
-        "removal_fixture_hash": "sha256:c52000081032ee2d77ce71dd4b100390c432da4f7dfc550644c61bca3cc6a84e",
-        "entry_hash": "sha256:21f644830ddcb53e7312869222bdc163b1fe41c0f7d2750c55f5182dd817da58"
+        "removal_fixture_hash": "sha256:316506306684e8d2228d2139fd5079a561f42ac2f149feb91a3108b5c6c90009",
+        "entry_hash": "sha256:5649d72ea42dec3a497bd538fa1540a5fa3d43f3a4bb835b23d85bac0b349dd0"
       },
       {
         "surface_id": "removed.workbench_launch",
@@ -198,8 +198,8 @@
         "status": "removed",
         "replacement_ref": null,
         "contract_fixture_hash": null,
-        "removal_fixture_hash": "sha256:c52000081032ee2d77ce71dd4b100390c432da4f7dfc550644c61bca3cc6a84e",
-        "entry_hash": "sha256:e2682673b8bd2f7032577dab4d553f1e98202d106cc32d0001c7a484ef68a3cd"
+        "removal_fixture_hash": "sha256:316506306684e8d2228d2139fd5079a561f42ac2f149feb91a3108b5c6c90009",
+        "entry_hash": "sha256:df96c7be5997ffb40cae61d1a5048d6b1fea5a6e96146dc4a880a93bd6ee62f9"
       },
       {
         "surface_id": "removed.workflow_management_control",
@@ -234,7 +234,7 @@
     ],
     "active_surface_count": 12,
     "removed_surface_count": 10,
-    "manifest_hash": "sha256:298cd7d445e59bfb22b314d9e706916f940d4c7f6555bb49733c32db39bee466"
+    "manifest_hash": "sha256:e97209ccc9ee723fe5dceb4da0aa7ec367e275bfe6a21d596a8a40f50db55879"
   },
-  "hash": "sha256:361de14c7adddd25f47d45acb480b21d8b07674f1d2588e783337181fce73518"
+  "hash": "sha256:22adbf76a6a5614862fbe3350a16a5711ab75361bcff2534b9a53141b97d4493"
 }

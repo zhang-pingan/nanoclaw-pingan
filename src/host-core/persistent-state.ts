@@ -17,11 +17,11 @@ import type {
   JsonValue,
   Sha256Hash,
 } from '../workflow-runtime/contracts/types.js';
-import { calculateDatabaseSqliteSchemaIdentity } from '../workflow-runtime/store/schema/database-identity.js';
 import {
   CURRENT_G1_SCHEMA_IDENTITIES,
+  calculateDatabaseSqliteSchemaIdentity,
   loadFrozenWorkflowRuntimeStoreInputs,
-} from '../workflow-runtime/store/runtime-store/profile.js';
+} from '../workflow-runtime/gateway/host-core.js';
 
 export interface HostCoreTargetSchemaIdentity {
   readonly database_schema_version: number;

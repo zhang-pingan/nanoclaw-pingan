@@ -150,7 +150,7 @@ import { selectModel } from './model-selector.js';
 import { InternalAgentRunOnceService } from './internal-agent-run-once/service.js';
 import { InternalAgentChatService } from './internal-agent-run-once/chat-service.js';
 import { startInternalAgentRunOnceServer } from './internal-agent-run-once/server.js';
-import { WorkflowRuntimeConnectionFactory } from './workflow-runtime/store/runtime-store/index.js';
+import { WorkflowRuntimeConnectionFactory } from './workflow-runtime/gateway/connection.js';
 import { WorkflowExecutionAdapterRegistry } from './workflow-execution/adapter-registry.js';
 import { ContainerAgentAdapter } from './workflow-execution/container-agent-adapter.js';
 import { CodexTaskAdapter } from './workflow-execution/codex-task-adapter.js';

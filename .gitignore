@@ -24,7 +24,7 @@ agents/global/*
 !agents/global/CLAUDE.md
 !agents/global/services.json.example
 
-# One-time Agent migration input; initDatabase moves this tree to agents/.
+# Unsupported legacy Agent path; current code only reads and writes agents/.
 groups/
 
 # Secrets
