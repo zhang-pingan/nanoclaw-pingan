@@ -1,7 +1,7 @@
 # Workflow Runtime Guardrail Simplification Plan
 
 > **Status**: Approved design; the Runtime gateway prerequisite is implemented, while the six simplification phases have not started
-> **Scope**: Workflow Runtime public gateways, static import boundaries, conformance and Golden assets, G9 Production Activation, Host Core snapshots, Workflow Runtime state backup, managed Node identity
+> **Scope**: Workflow Runtime public gateways, static import boundaries, conformance and Golden assets, cross-module Identity governance, G9 Production Activation, Host Core snapshots, Workflow Runtime state backup, and Node compatibility
 > **Project boundary**: Icarus is an internal, experimental, single-user tool. This plan optimizes for local iteration stability and recoverability, not external delivery or production certification.
 
 ## 1. Decision Summary
@@ -49,6 +49,13 @@ optional local snapshot
 
 There is no deployment transaction, production activation journal, independent acceptance role, or Capacity activation ceremony in the target model.
 
+There is also no cross-module Identity governance layer. Runtime identity modes
+and evidence, formal Host/release identity, frozen Schema hash chains, and
+Compiler source/toolchain identity are removed. This does not remove functional
+Workflow/Run/Node/Delegation/Registry/database record IDs, idempotency keys,
+payload/object hashes with a live content-addressing or deduplication consumer,
+backup copy checksums, or download-time archive checksums.
+
 ## 2. Current Weight
 
 As measured on 2026-08-04:
@@ -82,6 +89,15 @@ The simplification must not weaken these controls:
 - Persisted-data and independently evolving process boundaries may retain small versioned contracts.
 - Runtime executable and Store internals must remain behind purpose-specific gateway entrypoints. Pure public contract helpers and types may remain directly importable.
 
+Schema compatibility uses one authority: SQLite `PRAGMA user_version`. Fresh
+databases write the current version. Supported older versions migrate in one
+transaction. Newer and unknown versions fail with a stable diagnostic. A current
+version must pass focused required table, column, and index smoke checks. A
+legacy database lacking `user_version` may derive the version once from explicit
+old metadata and write it transactionally; no normal path continues to read the
+old hash identity afterward. A complete logical DDL or physical SQLite hash must
+not be reintroduced under a new name.
+
 The following are not required boundaries:
 
 - independent approval actors;
@@ -92,6 +108,7 @@ The following are not required boundaries:
 - an exact Node executable hash when the Node ABI and native module are compatible.
 - a single aggregate Runtime barrel that loads unrelated dependency graphs;
 - whole-source hashes, generated contract envelopes, or pinned artifact hashes used only to prove an import boundary.
+- Runtime, Host, release, Compiler, Node distribution, or Schema Identity evidence used only to prove that separately evolving modules are the exact historical bytes.
 
 ## 4. Phase 1: Replace The Golden Lifecycle
 
@@ -116,6 +133,13 @@ The manifest contains only:
 - optional short change reason.
 
 It does not contain approver identities, review timestamps, approval decisions, predecessor seals, or manually supplied report hashes.
+
+The Compiler uses semantic version plus corpus/schema versions and deterministic
+replay. Delete `compiler/identity.ts` and generated Compiler identity artifacts
+that bind source, dependency, package-lock, parser wrapper, Node, toolchain, or
+implementation hashes. Runtime plan payload hashes remain only where a live
+content-addressing consumer requires them. A behavior-neutral Compiler refactor
+does not require an identity hash update.
 
 ### 4.3 Target Commands
 
@@ -153,6 +177,7 @@ Historical accepted bytes remain available through Git history and the existing 
 - `golden:replay` preserves all current semantic decisions.
 - No default script reaches draft/review/seal code.
 - At least 70% of Golden lifecycle implementation code is removed from HEAD.
+- Compiler semantic version and deterministic replay replace toolchain/source identity authority.
 
 ### 4.7 Rollback
 
@@ -356,6 +381,13 @@ Remove active dependencies in this order:
 6. Remove runtime toolchain selectors and `stage-production-release` behavior.
 7. Remove Registry activation entry/runtime/transaction modules.
 8. Remove G9 contract generators, schemas, package scripts, and default/full tests.
+9. Delete `store/runtime-store/identity.ts`, all `WorkflowRuntimeIdentityMode`
+   and `identityMode` parameters/branches, `WorkflowRuntimeIdentityEvidence`,
+   `store.identityEvidence`, formal Host identity, release identity evidence,
+   and the frozen logical/migration/physical Schema identity chain.
+
+Test isolation is established with temporary directories/databases and injected
+dependencies, never with an identity mode.
 
 Expected removal roots include:
 
@@ -384,6 +416,10 @@ Feature activation must not acquire G9 audit, deployment journal, Capacity genes
 - Current and snapshot Host startup work without G9 assets.
 - Feature release activation tests continue to pass independently.
 - No G9 API has been added to a Runtime gateway.
+- Active source contains no Runtime identity modes/evidence, formal Host identity,
+  or frozen Schema identity chain.
+- Fresh/current/supported-migration/newer/unknown databases and missing required
+  table/column cases are covered with version and focused-structure tests.
 
 ### 6.8 Rollback
 
@@ -423,12 +459,14 @@ active-core -> host-core-snapshots/<snapshot-id>
 - creation time;
 - Git commit and `dirty` flag;
 - Core entry relative path;
-- Workflow Runtime target schema identity and compatibility descriptor;
+- Workflow Runtime integer schema version and supported migration range;
 - Node major and native-module ABI expectations;
 - build-complete marker or a single snapshot/entry checksum;
 - validation result: `smoke_passed`, `full_passed`, or `skipped_by_user`.
 
-It does not contain a hash and mode for every file, an immutable human version binding, certification evidence, or a G9 activation entry.
+It does not contain a hash and mode for every file, an immutable human version
+binding, certification evidence, a G9 activation entry, or Runtime, Compiler,
+release, logical-schema, migration-file, or physical SQLite identity hashes.
 
 ### 7.4 Snapshot Creation
 
@@ -459,7 +497,8 @@ A dirty checkout is recorded and warned about, not universally blocked. The loca
 - separate release, production release, and activation bindings;
 - G8/G9 release entry selectors;
 - the direct `workflow-runtime/certification/release-manifest` import from Host Core activation;
-- obsolete G1 frozen-input and exact-identity exports from `gateway/host-core.ts` after the snapshot compatibility descriptor replaces them;
+- `CURRENT_G1_SCHEMA_IDENTITIES`, frozen Store inputs, database schema hash
+  calculation, and other exact-identity exports from `gateway/host-core.ts`;
 - clean-checkout hard blocking for ordinary local snapshots.
 
 ### 7.7 Exit Criteria
@@ -509,8 +548,8 @@ workflow-runtime-state-backups/
 
 - backup ID and creation time;
 - source paths;
-- observed schema identity when readable;
-- target schema identity for reset;
+- observed schema version when readable;
+- target schema version for reset;
 - file names, sizes, and ordinary checksums;
 - operation status and completion time.
 
@@ -561,7 +600,8 @@ Keep the most recent three to five backups by default. Cleanup is explicit throu
 
 - Reset cannot touch paths outside the Workflow Runtime DB unit.
 - Fault injection before copy, during copy, after manifest write, and before live deletion always leaves either live state or a restorable backup.
-- Restore recreates a DB that passes schema identity inspection.
+- Restore recreates a DB that passes schema-version inspection and the required
+  table/column/index structure smoke.
 - The command never mutates state without confirmation.
 
 ### 8.10 Rollback
@@ -650,14 +690,15 @@ Every phase runs focused tests plus the relevant rows below:
 | Current checkout startup with no Workflow DB | Starts and initializes local defaults |
 | Current checkout startup with same schema | Starts without state rewrite |
 | Supported schema migration | Migrates through Store authority |
-| Unsupported schema | Blocks with stable diagnostic |
+| Newer or unknown schema | Blocks with stable diagnostic |
+| Missing required table or column | Blocks in focused structure smoke |
 | Existing Capacity head | Preserved byte-for-byte by first-run initialization |
 | New local snapshot | Builds and passes startup smoke |
 | Broken snapshot entry | Cannot become active |
 | Snapshot pointer switch failure | Previous `active-core` preserved |
 | State reset | Complete backup exists before live deletion |
 | Interrupted state backup/reset | Explicit resume or restore remains possible |
-| State restore | Restored DB passes identity inspection |
+| State restore | Restored DB passes version and required-structure smoke |
 | Node patch upgrade in supported major | Starts after ABI smoke |
 | Native ABI mismatch | Blocks with rebuild/reinstall guidance |
 | Feature Registry publish/activate | Continues to work without G9 |
@@ -727,6 +768,12 @@ The full simplification is complete when:
 - Host Core no longer imports Runtime certification internals, and obsolete Host Core gateway identity exports are removed;
 - credential, mount, IPC, destructive-action, schema, backup, and rollback safeguards remain intact;
 - current tests, typecheck, schema checks, Golden replay, startup smoke, snapshot rollback, and state restore tests pass;
+- active source has no `WorkflowRuntimeIdentityMode`, `identityMode`,
+  `identityEvidence`, `CURRENT_G1_SCHEMA_IDENTITIES`, formal Host identity,
+  Compiler toolchain/source identity, or full logical/physical Schema identity
+  chain;
+- newer/unknown schema, missing required table/column, supported migration,
+  fresh database, and restored database structure smoke tests pass;
 - no active command hashes archived Markdown or compares current source with the accepted construction commit;
 - the historical release verifier and bundle have been removed after the legacy binding compatibility window.
 
