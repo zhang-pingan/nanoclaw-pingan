@@ -4,8 +4,11 @@
 
 - 状态：Draft
 - 日期：2026-08-04
+- 最后更新：2026-08-05
 - 范围：Icarus 第三种操作模式、Git 协作协议、群组状态机、执行器抽象、Codex App Server 适配器和 Web 客户端入口
-- 不包含：本方案的具体代码实现、现有 Dynamic Workflow Runtime 契约变更、公开群组注册中心
+- 不包含：本方案的具体代码实现、现有 Dynamic Workflow Runtime 内部接口变更、公开群组注册中心
+
+> **项目边界**：Icarus 是内部、实验性的单用户工具。Agent Group 连接多个分别由单个用户控制的 Icarus 实例，不把 Icarus 变成多租户产品，也不承诺第三方协议实现、长期向后兼容或不同版本长期混跑。跨实例协议只保留防止重复执行、状态分歧、越权推进和不可恢复数据损坏所需的最小机制。具体原则见 [Icarus Internal Experimental Scope](internal-experimental-scope.md)。
 
 ## 背景
 
@@ -33,13 +36,14 @@ Icarus 当前主要支持两种任务执行方式：
 | 会话 | 用户与本地 Icarus Agent 的现有消息、文件和上下文交互 |
 | Agent | Icarus 本地执行实体；原有代码中的 `group` 概念将由其他改造统一为 `agent` |
 | 群组 / Agent Group | 多个用户的 Icarus 通过 Git 共同参与的任务群组 |
-| 参与者 / Principal | 加入群组的用户身份，拥有可验证的签名公钥 |
+| 参与者 / Principal | 加入群组的用户身份，通过可验证的 Git commit 签名与协议事件关联 |
 | 角色 / Role | 群组状态机中的职责，例如开发、审查、发布 |
 | 角色认领 / Role Claim | 参与者把自己的某个本地 Agent 注册为指定角色的过程 |
 | 动作 / Action | 一次需要执行器完成的有边界任务 |
 | Turn | 群组状态机在某个状态下产生的一次可认领动作实例 |
 | Executor | Icarus 实际执行动作的后端，包括 run-once、workflow 和 external |
 | Projection | 从 Git 事件链重放得到的当前群组状态，本身不是事实源 |
+| Git Collaboration Protocol | 由 Icarus 源码拥有的当前仓库格式、授权规则和 reducer 语义，不是独立 Machine Contract 体系 |
 
 任务群组仓库中的 `groups/` 目录继续用于角色和成员协议。由于 Icarus 原有执行实体统一改名为 `agents`，本方案不再把 `groups/` 命名视为冲突或风险。
 
@@ -56,6 +60,8 @@ Icarus 当前主要支持两种任务执行方式：
 - 首个 External Executor 为 `codex-task`，传输方式固定为 Codex App Server。
 - 支持每个参与者在本地配置角色对应的 Agent、项目目录、权限上限和 prompt 参数。
 - 提供可审计、可重放、可恢复的状态变化和执行记录。
+- 保证同一协议版本和同一条有效 Git 事件历史在所有合规 Icarus 实例上产生相同 Projection。
+- 保证每个 revision 只有远端接受的 winning claim 对应的 fencing token 可以推进共享状态。
 - 在 Web 客户端新增“群组”一级导航作为本能力入口。
 
 ## 非目标
@@ -67,6 +73,9 @@ Icarus 当前主要支持两种任务执行方式：
 - 第一阶段不让远端群组配置自动提升本地 Agent 权限。
 - 第一阶段不把 Codex App 的内部 `create_thread`、`wait_threads` 工具作为外部公开协议。
 - 第一阶段不为 `codex-task` 配置 deep link fallback。
+- 第一阶段不支持 Icarus 之外的第三方独立实现直接读写群组协议；其他 Agent 服务只作为本地 Executor。
+- 不支持不同协议版本长期混跑；不兼容实例停止写入，升级通过暂停群组、统一升级和显式仓库迁移完成。
+- 不建立 contract pack、seal、全源码 hash、认证发布门禁或长期兼容矩阵。
 - 不修改现有 Dynamic Workflow Runtime 的 DAG 和完成语义来支持循环。
 - 不共享任何用户本地凭证、Codex 登录状态、绝对路径或私有会话内容。
 
@@ -144,6 +153,37 @@ interaction: visible_session  ->     transport: app_server
 
 远端要求不能扩大本地权限。Icarus 先判断本地允许上限是否覆盖动作的最低权限需求：能够覆盖时，只授予完成该动作所需的最小权限；不能覆盖时，动作进入阻塞状态。
 
+### 5. 使用轻量 Git 协议，不建立独立 Machine Contract 体系
+
+跨实例一致性由当前 Icarus 实现中的少量协议源码直接负责。建议权威边界为：
+
+```text
+src/collaboration/protocol/
+  schema.ts
+  reducer.ts
+  authorization.ts
+  version.ts
+  protocol.test.ts
+```
+
+- schema 定义当前协议可接受的仓库文件和事件。
+- reducer 是不读取本地时间、网络或 provider 状态的纯函数。
+- authorization 根据已验证的 Git commit signer、角色和当前 Projection 判定事件权限。
+- `protocol_version` 标识持久化语义；未知版本或不兼容版本必须停止写入。
+- 少量固定 `events -> expected projection` 测试向量和并发、恢复测试防止同一版本被原地改变。
+
+Markdown 用于解释设计，不是需要 hash、seal 或生成证明的协议工件。实现不生成 contract pack，不保存多阶段 conformance 历史，也不为普通协议代码调整增加认证或发布门禁。
+
+Draft 实现阶段可以自由修改 schema 和 reducer。第一次真实跨实例持久协作前才把当前语义声明为 v1。v1 使用后，破坏性变更通过暂停群组、统一升级 Icarus、显式迁移仓库并开启新 epoch 完成；不要求当前程序永久携带所有旧版本 reducer。
+
+轻量协议保证的是共享状态，而不是对任意实现或物理副作用的全面证明：
+
+- 同一 `protocol_version` 和同一条有效事件历史必须得到相同 Projection。
+- 每个 revision 只有 winning claim 对应的 fencing token 可以提交有效状态转换。
+- 外部动作仍可能在 crash 窗口被重复调用，因此 Executor 必须支持 idempotency key；无法确认结果时进入人工恢复，不能盲目重试。
+- 恶意或不合规客户端可能在自己的机器上执行任意本地动作，但其无效事件不能推进共享状态。
+- v1 不提供第三方独立实现认证、长期混合版本运行或旧 reducer 永久保留。
+
 ## 操作模式
 
 | 模式 | 触发者 | 控制面 | 执行范围 | 是否跨机器 |
@@ -182,8 +222,8 @@ interaction: visible_session  ->     transport: app_server
 
 - 控制分支：`refs/heads/icarus/control`
 - 动作产出分支：`refs/heads/icarus/work/{turn-id}/{role}`
-- 控制分支必须禁止 force push 和删除。
-- 允许已授权参与者执行 fast-forward push。
+- 控制分支应在 remote 上禁止 force push 和删除；这是部署建议，不属于 v1 仓库格式，也不要求为不同 Git 托管平台建立兼容矩阵。
+- 允许已授权参与者执行带可验证签名的 fast-forward push。
 - Icarus 只根据已 fetch 的远端控制分支推进状态。
 - 本地未提交文件、暂存区和其他分支不构成协议状态。
 
@@ -234,7 +274,7 @@ artifacts/
 | `machine.yaml` | 允许循环的群组有限状态机 |
 | `groups/roles/` | 角色定义、人数约束、允许执行的 transition 和能力要求 |
 | `groups/members/` | 参与者身份、公钥和本地 Agent 能力声明的公开部分 |
-| `groups/claims/` | 签名的角色认领记录 |
+| `groups/claims/` | 从角色认领事件物化出的当前认领记录 |
 | `actions/` | 状态转换引用的动作契约 |
 | `prompts/` | 可共享、可审计的 prompt 模板；始终按不可信输入处理 |
 | `events/` | 追加式协议事件 |
@@ -245,7 +285,7 @@ artifacts/
 ### 大文件和敏感信息
 
 - `data/` 默认只用于适合 Git 的小型文本或结构化数据。
-- 大文件应使用 Git LFS 或外部对象存储，并在事件中保存 content hash 和 locator。
+- 第一阶段可以直接拒绝超过本地配置上限的大文件。确有需要时再启用 Git LFS 或外部对象存储，并在事件中保存 content hash 和 locator；具体阈值和存储实现不是协议兼容条件。
 - `.gitignore` 不是安全边界。
 - 凭证、Codex auth、SSH 私钥、本地配置、绝对路径和完整 Agent transcript 不得写入群组仓库。
 
@@ -255,6 +295,7 @@ artifacts/
 
 ```yaml
 format: icarus.agent-group/1
+protocol_version: 1
 group_id: ag_01H...
 name: Example Engineering Group
 creator:
@@ -279,7 +320,7 @@ lifecycle_policy:
 1. 生成 `group_initialized` 事件。
 2. 注册自己的 Principal 和本地 Agent 公开能力。
 3. 认领一个允许的角色。
-4. 提交创建者签名。
+4. 使用创建者密钥创建并 fast-forward push 一个签名 Git commit。
 
 ## 角色和成员
 
@@ -306,6 +347,7 @@ executor_requirements:
   "format": "icarus.agent-group-member/1",
   "principal_id": "user_alice",
   "signing_key_ref": "ssh-ed25519:SHA256:...",
+  "signing_public_key": "ssh-ed25519 AAAA...",
   "agent_id": "local-agent-01",
   "capabilities": ["coding_task", "visible_session"],
   "registered_at_event": "evt_01H..."
@@ -344,7 +386,7 @@ FORMING -> READY -> RUNNING
 | `CLOSING` | 停止新工作，等待活动 Turn 和必要清理结束 |
 | `CLOSED` | 终态，只读保留历史 |
 
-只有创建者签名的命令可以触发：
+只有位于创建者签名 Git commit 中的命令可以触发：
 
 - `start`
 - `pause`
@@ -421,12 +463,13 @@ states:
 控制分支上的事件链是唯一事实源。每个控制 commit：
 
 - 必须以当前远端 HEAD 为父 commit。
-- 必须且只能追加一个规范化协议事件。
+- 必须具有可映射到事件 actor 的有效 Git commit 签名。
+- 必须且只能追加一个通过当前协议 schema 的事件。
 - 可以同时更新该事件明确授权的物化文件，例如成员、角色认领、`data/` 或 artifact 引用。
-- 事件 payload 必须记录所有受影响物化文件的规范化 content hash。
+- 物化文件由同一个 Git tree 固定，不再在事件 payload 中重复维护一套文件 hash 清单。
 - 可以同步更新可验证 Projection，但 Projection 不是独立写入权限。
-- 包含前一个有效事件 hash。
-- 包含 epoch、sequence、actor、签名和预期状态 revision。
+- Git parent commit 构成事件链，不再重复维护 `previous_event_hash`。
+- 事件包含协议版本、epoch、sequence、actor 和预期状态 revision；签名属于 Git commit，不在 payload 中重复签名。
 - 通过普通 fast-forward push 提交。
 
 事件 envelope 示例：
@@ -434,6 +477,7 @@ states:
 ```json
 {
   "format": "icarus.agent-group-event/1",
+  "protocol_version": 1,
   "group_id": "ag_01H...",
   "event_id": "evt_01H...",
   "epoch": 1,
@@ -444,7 +488,6 @@ states:
     "agent_id": "local-agent-01"
   },
   "expected": {
-    "previous_event_hash": "sha256:...",
     "state_revision": 7
   },
   "payload": {
@@ -453,8 +496,7 @@ states:
     "attempt": 1,
     "fencing_token": "sha256:..."
   },
-  "occurred_at": "2026-08-04T12:00:00Z",
-  "signature": "..."
+  "occurred_at": "2026-08-04T12:00:00Z"
 }
 ```
 
@@ -496,10 +538,11 @@ protocol_recovery
 
 ```text
 Git event commits
-  -> schema validation
-  -> signature validation
+  -> protocol version validation
+  -> event schema validation
+  -> Git commit signature validation
   -> authorization validation
-  -> previous hash / sequence validation
+  -> parent / sequence / state revision validation
   -> deterministic reducer
   -> local Projection
 ```
@@ -511,12 +554,13 @@ Git event commits
 遇到以下情况时，本地实例不得继续执行：
 
 - 控制分支被 force push 或历史重写。
+- 仓库协议版本不受当前 Icarus 支持。
 - 事件 schema 无效。
-- 签名无效或 actor 无权限。
-- sequence、previous event hash 或 state revision 不连续。
+- Git commit 签名无效、signer 与 actor 不匹配或 actor 无权限。
+- parent、sequence 或 state revision 不连续。
 - Projection 与事件重放结果不一致。
 
-实例进入 `PROTOCOL_QUARANTINED`。第一阶段通过创建者签名的 `protocol_recovery` 事件显式确认最后有效事件和处置方式；不能静默忽略完整性失败。
+不支持的协议版本进入 `PROTOCOL_VERSION_UNSUPPORTED`，其他完整性错误进入 `PROTOCOL_QUARANTINED`。第一阶段通过创建者签名 Git commit 中的 `protocol_recovery` 事件显式确认最后有效事件和处置方式；不能静默忽略完整性失败。
 
 ## 并发认领
 
@@ -525,7 +569,7 @@ Git event commits
 1. `git fetch` 控制分支。
 2. 校验并重放到远端 HEAD。
 3. 确认 Turn 仍为 `WAITING`，且本地 Principal 持有所需角色。
-4. 基于当前 HEAD 创建签名的 `turn_claimed` commit。
+4. 基于当前 HEAD 创建包含 `turn_claimed` 事件的签名 Git commit。
 5. 普通 push 到控制分支。
 6. push 成功者获得执行权。
 7. non-fast-forward 失败者重新 fetch 和重放，不得执行动作。
@@ -748,7 +792,7 @@ App Server dispatch/visibility precondition failed
 
 如果实机验证表明 App Server 创建的 thread 无法满足桌面 App 可见性要求，应通过新的设计决策和 adapter transport 版本改为 deep link，而不是在运行时静默降级。
 
-### Codex App Server 实机验证 Gate
+### Codex App Server 实机验证
 
 正式实现 `codex-task` 前必须完成独立 Spike：
 
@@ -762,7 +806,7 @@ App Server dispatch/visibility precondition failed
 8. `turn/interrupt`、等待审批、失败和恢复可以稳定映射。
 9. 不同项目目录和权限配置不会串到其他群组或角色。
 
-任何关键条件失败都表示 `codex-task/app_server` 暂不可发布，不进入 fallback。
+任何关键条件失败都表示 `codex-task/app_server` 暂不可启用，不进入 fallback。
 
 ## 本地持久化
 
@@ -795,15 +839,15 @@ collaboration_integrity_incidents
 
 ### 身份
 
-Git commit author 可以伪造，不能作为协议身份。第一阶段至少要求：
+Git commit author 可以伪造，不能作为协议身份。轻量协议直接复用 Git commit 签名，不再给事件 payload 增加第二层签名 envelope。第一阶段至少要求：
 
-- 创建者在 genesis 中固定签名公钥。
-- 成员注册和角色认领由成员签名。
-- 生命周期命令由创建者签名。
-- Turn claim 和执行结果由持有角色的成员签名。
-- 每个 Icarus 在重放时独立验证签名和 actor 权限。
+- 创建者在 genesis 中固定 SSH 签名公钥和 fingerprint。
+- 成员注册 commit 由成员声明的密钥签名，角色认领沿用该 Principal 身份。
+- 生命周期命令 commit 由创建者密钥签名。
+- Turn claim 和执行结果 commit 由持有角色的成员密钥签名。
+- 每个 Icarus 在重放时独立验证 Git commit 签名、signer 与事件 actor 的映射以及 actor 权限。
 
-可以使用 SSH signing 或 GPG signing，但协议应抽象为 `signing_key_ref + signature`，避免把业务 schema 绑定到单一签名实现。
+v1 只实现 Git SSH signing，复用 Git commit object 已覆盖的 parent、tree 和 message，不再定义独立 canonical bytes 或 domain-separated payload hash。GPG 或其他签名方式只在出现实际兼容需求后作为新协议能力增加，不提前抽象多套签名实现。
 
 ### 授权矩阵
 
@@ -896,7 +940,7 @@ reason = local_permission_insufficient
 - 加入群组：输入已初始化的 Git URL。
 - 展示已加入群组、生命周期、同步状态、当前业务状态和本地角色。
 - 手动立即同步。
-- 显示协议隔离、签名失败和远端不可用状态。
+- 显示协议版本不支持、协议隔离、Git commit 签名失败和远端不可用状态。
 
 第一阶段“加入”依赖已知 URL，不称为“搜索”。真正搜索需要后续注册中心。
 
@@ -909,7 +953,7 @@ reason = local_permission_insufficient
 | Overview | 生命周期、业务状态、创建者、Git remote、最新同步、当前 Turn |
 | Roles | 必需角色、认领情况、本地 Agent 绑定、能力满足情况 |
 | Runtime | 状态机、可用 transition、活动 Turn、阻塞和恢复操作 |
-| Events | 签名事件时间线、commit、actor、hash 和校验状态 |
+| Events | 事件时间线、签名 commit、actor 和校验状态 |
 | Data | `data/`、artifact refs 和 work branch commit |
 | Settings | 本地 workspace、Executor、权限上限、轮询策略和通知 |
 
@@ -965,7 +1009,7 @@ CodexTaskExecutorAdapter
 1. 本地身份认证。
 2. 群组 actor 授权。
 3. expected revision 校验。
-4. 事件生成和签名。
+4. 事件生成和 Git commit 签名。
 5. Git CAS push。
 6. 本地 Projection 更新和审计。
 
@@ -981,7 +1025,7 @@ Renderer 不直接执行 Git 命令，不直接调用 Codex App Server。
 - Workflow 终态通过 adapter 转换为 Action Observation。
 - Collaboration Runtime 只在验证 Observation 后推进群组 FSM。
 
-Dynamic Workflow Runtime 当前 authority 见 [Dynamic Workflow Runtime](dynamic-workflow-runtime.md)。未来如果需要修改其正式契约，应单独版本化，不能由本方案隐式改动 accepted v1。
+Dynamic Workflow Runtime 当前行为见 [Dynamic Workflow Runtime](dynamic-workflow-runtime.md)。群组协议通过现有受支持入口调用它，不把其内部接口纳入群组 v1，也不由本方案隐式改变其无环执行语义。
 
 ### Internal Agent run-once
 
@@ -1001,7 +1045,8 @@ Agent Group Collaboration Runtime 属于 core 执行和协调能力。Feature �
 | Git fetch 失败 | 本地显示离线，指数退避，不执行新 Turn |
 | claim push non-fast-forward | 重新 fetch；当前实例不执行 |
 | 控制分支被重写 | `PROTOCOL_QUARANTINED` |
-| 签名或事件无效 | `PROTOCOL_QUARANTINED` |
+| 协议版本不支持 | `PROTOCOL_VERSION_UNSUPPORTED`，停止写入和执行 |
+| Git commit 签名或事件无效 | `PROTOCOL_QUARANTINED` |
 | 本地角色未配置 Executor | `BLOCKED/executor_unconfigured` |
 | 本地权限不足 | `BLOCKED/local_permission_insufficient` |
 | App Server 不可用 | `BLOCKED/codex_app_server_unavailable` |
@@ -1020,14 +1065,15 @@ Agent Group Collaboration Runtime 属于 core 执行和协调能力。Feature �
 - 验证 cwd、权限、审批、继续会话和事件观察。
 - 验证 App Server schema 生成和版本 preflight。
 - 形成可重复的自动化验证脚本和人工桌面验收步骤。
-- Gate 不通过则停止 `codex-task` 实现，不自动改用 deep link。
+- 验收条件未满足则停止 `codex-task` 实现，不自动改用 deep link。
 
 ### Phase 1：Git 协议和 Reducer
 
-- 定义 `group/machine/role/member/action/event` v1 schemas。
-- 实现 canonical JSON/YAML 读取和 hash。
-- 实现签名验证和授权矩阵。
+- 在 `src/collaboration/protocol/` 定义 `group/machine/role/member/action/event` v1 schemas、版本检查和授权规则。
+- 使用 Git commit parent/tree/signature 作为已有完整性机制，不建立第二套事件 hash 链或 payload 签名。
+- 实现 Git SSH commit 签名验证和授权矩阵。
 - 实现 deterministic reducer 和 Projection 重建。
+- 增加少量固定 `events -> expected projection` 测试向量；不生成 contract pack、seal 或 conformance 历史。
 - 实现 init、join、role claim、start、pause、resume、close 命令。
 - 实现 fast-forward claim 竞争测试。
 
@@ -1057,10 +1103,10 @@ Agent Group Collaboration Runtime 属于 core 执行和协调能力。Feature �
 
 ### Phase 5：安全和可运维性
 
-- 分支保护配置检查。
+- 提供远端禁止 force push/delete 的配置提示，不为不同 Git provider 实现阻塞式兼容认证。
 - 协议 quarantine 和 recovery。
-- Git LFS/外部 artifact locator。
-- 审计、通知、Trace 和诊断导出。
+- 在出现实际大文件需求时接入 Git LFS 或外部 artifact locator，不把存储阈值写入协议。
+- 通知、Trace 和故障诊断导出。
 - 性能、长历史 snapshot 和事件压缩策略。
 
 ### Future：发现和更多 Adapter
@@ -1075,13 +1121,16 @@ Agent Group Collaboration Runtime 属于 core 执行和协调能力。Feature �
 
 ### 协议测试
 
-- 相同输入事件在不同机器得到完全一致 Projection。
+- 声明同一 `protocol_version` 的 Icarus 构建对固定输入事件得到完全一致 Projection。
+- reducer 不读取本地时间、网络、provider 状态或本地 Executor 配置。
+- 未知或不兼容协议版本停止写入和执行。
 - 两个成员同时 claim 时只有一个 fast-forward push 成功。
 - loser 不 dispatch Executor。
-- 非法签名、错误角色、错误 revision 和历史重写全部 fail closed。
+- 非法 Git commit 签名、错误角色、错误 revision 和历史重写全部 fail closed。
 - `A -> B -> A` 循环可以持续多轮且每个 Turn identity 唯一。
 - 旧 epoch 和旧 fencing token 不能提交有效结果。
 - Projection 删除后可从 genesis 完整重建。
+- 协议测试只产生普通测试结果，不生成 contract pack、sealed baseline 或源码 hash。
 
 ### 故障恢复测试
 
@@ -1121,7 +1170,7 @@ Agent Group Collaboration Runtime 属于 core 执行和协调能力。Feature �
 
 实现和评审必须持续验证以下不变量：
 
-1. 只有远端控制分支上的有效签名事件可以推进共享状态。
+1. 只有远端控制分支上、位于有效签名 Git commit 中的授权事件可以推进共享状态。
 2. Claim push 成功之前不得 dispatch 动作。
 3. Executor 结果不能直接修改群组 Projection。
 4. 旧 fencing token 永远不能推进新 revision。
@@ -1137,7 +1186,10 @@ Agent Group Collaboration Runtime 属于 core 执行和协调能力。Feature �
 | 决策 | 结论 |
 | --- | --- |
 | 第三种操作模式 | Agent Group Collaboration Runtime |
-| 协调事实源 | Git 远端控制分支上的签名事件链 |
+| 协调事实源 | Git 远端控制分支上的签名 commit 事件链 |
+| 协议形态 | Icarus 源码拥有的轻量 Git Collaboration Protocol，不建立独立 Machine Contract 体系 |
+| 协议兼容 | 版本不匹配时停止写入；暂停群组、统一升级、显式迁移并开启新 epoch |
+| 独立实现 | v1 只支持 Icarus 实现协议；其他 Agent 服务通过 Executor 接入 |
 | 流程模型 | 允许循环的有限状态机 |
 | 具体动作 | run-once、workflow、external |
 | Codex 归属 | `external` 下的 `codex-task` adapter |
@@ -1151,14 +1203,25 @@ Agent Group Collaboration Runtime 属于 core 执行和协调能力。Feature �
 | 卡死 Turn | 第一阶段由创建者人工恢复 |
 | 公开群组搜索 | 第一阶段不支持；通过已知 Git URL 加入 |
 
-## 后续需在实现前冻结的细节
+## v1 Git Collaboration Protocol 收敛边界
 
-- v1 schema 的精确字段、canonicalization 和 domain-separated hash 规则。
-- SSH/GPG signing 的默认实现和本地密钥 UX。
-- 控制分支保护在 GitHub、GitLab 和普通 bare remote 上的最低要求。
-- `data/` 默认大小上限和 Git LFS 启用策略。
-- 群组状态机 Definition 更新、epoch 变更和向后兼容规则。
-- Codex App Server 支持版本范围和 schema compatibility policy。
-- Web 路由迁移时现有 deep link、书签和客户端缓存的处理方式。
+Draft 实现期间可以根据 Spike、测试和真实使用调整协议。第一次真实跨实例持久协作前，需要把以下最小语义收敛为 v1：
 
-这些细节可以形成 v1 machine contract 和实现 ADR，但不得改变本文已经确认的核心边界。
+- 仓库根文件、事件和状态机 schema 的必需字段，以及 `protocol_version` 的拒绝规则。
+- Git commit parent、事件 sequence、state revision 和 epoch 的顺序规则。
+- deterministic reducer 的状态迁移语义。
+- Git SSH commit signer、Principal、角色和命令之间的授权规则。
+- claim、fencing、idempotency、结果提交和人工恢复语义。
+- 协议升级时暂停群组、统一升级、显式迁移和新 epoch 的流程。
+- 少量固定事件向量、并发竞争和故障恢复测试。
+
+v1 收敛不包括：
+
+- contract pack、seal、全源码或 Markdown hash、生成式 conformance 和发布认证。
+- GitHub、GitLab 或 bare remote 的平台专用分支保护配置。
+- `data/` 大小阈值、Git LFS 和外部对象存储的具体选择。
+- Codex App Server 支持版本矩阵和 provider schema 字段。
+- Web route、deep link、书签、缓存迁移和内部 service/gateway 结构。
+- Dynamic Workflow Runtime、run-once Agent 或 Executor adapter 的内部实现。
+
+同一 `protocol_version` 的持久化语义不能原地改变；这只服务于当前群组仓库在多个 Icarus 实例之间的一致解释，不构成长期兼容或第三方实现承诺。破坏性调整通过升级协议版本和显式迁移完成。安全不变量必须保留，其他设计决策可以根据实现证据通过 ADR 调整。
