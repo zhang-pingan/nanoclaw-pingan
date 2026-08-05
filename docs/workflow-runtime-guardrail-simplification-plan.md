@@ -25,7 +25,8 @@ The release and activation result is explicit:
 | Activation request/audit/journal/binding/recovery | Removed |
 | Capacity genesis activation | Replaced by idempotent first-run Store initialization |
 | Feature/Workflow Registry publish and activate | Retained as an internal business capability |
-| Historical accepted release bundle | Retained as non-default provenance; never regenerated |
+| `archive:verify:v1` / `contracts:archive:check` | Removed; Git history/tag is the historical authority |
+| Historical accepted release bundle | Retained only through the legacy compatibility window, then removed from active verification |
 
 The target startup model is:
 
@@ -59,6 +60,8 @@ As measured on 2026-08-04:
 - G9 semantics are referenced by certification, Capacity, Compiler inventory, Store identity, runtime toolchain, Registry activation, and generated contracts.
 
 The problem is not only repository size. Every additional generated identity, review state, pointer, and recovery protocol increases the number of files that must change together during ordinary iteration.
+
+The current archive verifier is also over-scoped. It pins the raw SHA-256 of six historical Markdown files, compares broad current Runtime source trees with one accepted commit, and performs reachability/provenance assertions. Editing historical documentation or legitimately evolving current source therefore makes an optional historical audit fail. Git already preserves the exact historical bytes, so this verifier adds maintenance cost without protecting local runtime state.
 
 ## 3. Required Boundaries
 
@@ -206,16 +209,40 @@ Deleting files from HEAD reduces working-tree and package weight. It does not re
 - `conformance/golden-semantic-review/`
 - superseded repair and milestone-specific copies that are no longer imported
 
-### 5.6 Exit Criteria
+### 5.6 Retire The Historical Archive Verifier
+
+`archive:verify:v1` and `contracts:archive:check` are removed during this phase.
+
+Delete:
+
+- `scripts/verify-dynamic-workflow-runtime-v1-archive.mjs`;
+- the two package scripts;
+- command references from current documentation;
+- raw Markdown hash constants;
+- accepted-commit diffs over current Runtime source;
+- retired-script reachability and historical-literal counts maintained only for archive proof.
+
+Historical authority becomes:
+
+1. the Git commit/tag containing the accepted v1 state;
+2. ordinary Git history for later documentation corrections;
+3. the temporary legacy release bundle only while an installed legacy binding still needs migration.
+
+If a lightweight boundary is still useful, `contracts:static:check` may contain a simple rule that active runtime source must not read `docs/archive/`. That rule must not hash Markdown, compare current source with an old commit, or walk package-script dependency graphs.
+
+The correct response to an edited historical document is not to update a frozen hash. Either accept the documentation correction in Git or retrieve the original bytes from the historical tag.
+
+### 5.7 Exit Criteria
 
 - Active conformance contains no more than 350 files and 5 MB unless a documented exception is approved by the local owner.
 - Every default conformance test reads only `current/` or a directly owned domain fixture.
 - No current runtime or build reads historical construction paths.
+- No package script verifies raw historical Markdown hashes or diffs current source against the accepted construction commit.
 - All retained error codes and known regression cases remain covered.
 
-### 5.7 Rollback
+### 5.8 Rollback
 
-Restore the removed paths from the history tag if an active case was missed. Do not regenerate the historical tree.
+Restore the removed paths from the history tag if an active case was missed. Do not regenerate the historical tree or restore raw-hash enforcement for Markdown.
 
 ## 6. Phase 3: Remove G9 Production Activation
 
@@ -298,7 +325,7 @@ Expected removal roots include:
 - `src/workflow-runtime/contracts/production-activation/`
 - `src/workflow-runtime/certification/g9-production-release-cli.ts`
 
-The accepted physical release bundle is not changed. Its internal G9 files remain historical bytes.
+The accepted physical release bundle is not changed during G9 removal. Its internal G9 files remain historical bytes until the legacy compatibility window closes.
 
 ### 6.6 Feature Activation Boundary
 
@@ -401,6 +428,8 @@ A dirty checkout is recorded and warned about, not universally blocked. The loca
 ### 7.8 Rollback
 
 During one stable snapshot cycle, readers accept both legacy Host Core version records and `snapshot.json`. New writes use only the new snapshot format.
+
+After the legacy binding has been migrated and one new snapshot has completed create/select/start/rollback validation, remove `workflow-runtime:release:check` and its physical bundle from active package scripts. The historical commit/tag remains sufficient if the old bytes are ever needed again.
 
 ## 8. Phase 5: Simplify Workflow State Backup And Reset
 
@@ -558,7 +587,7 @@ Each phase should be an independently reviewable and revertible change. Do not c
 | Change | Scope | Risk | Required predecessor |
 | --- | --- | --- | --- |
 | 1. Golden single baseline | Compiler contracts and scripts | Medium | None |
-| 2. Conformance collapse | Fixtures, generators, package scripts | Medium | Golden single baseline |
+| 2. Conformance and archive collapse | Fixtures, generators, archive verifier, package scripts | Medium | Golden single baseline |
 | 3. G9 removal | Store, Capacity, Compiler, certification, toolchain, Registry | High | Current baseline tests stable |
 | 4. Host Core snapshot v2 | Host Core release/activation and shell commands | High | G9 removed from release identity |
 | 5. State backup v2 | Persistent state and reset CLI | High | Snapshot/startup identity stable |
@@ -589,7 +618,7 @@ Every phase runs focused tests plus the relevant rows below:
 | Golden drift | `golden:check` fails |
 | Compiler semantic regression | `golden:replay` fails |
 
-The historical physical release verifier remains an explicit, non-default check and must continue to pass without regeneration.
+During the legacy compatibility window, the historical physical release verifier remains explicit and non-default and must pass without regeneration. After Host Core snapshot v2 has successfully replaced the legacy binding, remove the verifier and bundle from active package scripts rather than updating their hashes.
 
 ## 12. Repository Budgets
 
@@ -597,6 +626,7 @@ These budgets prevent the same governance weight from growing back:
 
 - Active conformance: at most 350 files and 5 MB without a documented exception.
 - Golden lifecycle: one current corpus and one replay path.
+- Historical documentation: Git history/tag only; no raw-hash gate.
 - Runtime selection: one authoritative pointer, `active-core`.
 - State reset: one backup manifest format for new writes.
 - Node selection: one configured Node path; no active distribution pointer.
@@ -644,6 +674,7 @@ The full simplification is complete when:
 - Feature/Workflow publish and activate still work;
 - credential, mount, IPC, destructive-action, schema, backup, and rollback safeguards remain intact;
 - current tests, typecheck, schema checks, Golden replay, startup smoke, snapshot rollback, and state restore tests pass;
-- the accepted historical release bundle still passes its explicit verifier without any byte changes.
+- no active command hashes archived Markdown or compares current source with the accepted construction commit;
+- the historical release verifier and bundle have been removed after the legacy binding compatibility window.
 
 This plan intentionally changes the release/activation mechanism: it removes G9 deployment activation and simplifies Host Core release/activation into local snapshot creation and selection. It does not remove the ability to maintain a known-good local runtime or activate internal Feature/Workflow versions.

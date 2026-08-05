@@ -78,6 +78,7 @@ The executable migration design is documented in [`workflow-runtime-guardrail-si
 5. Simplify workflow-state reset recovery to a timestamped backup directory plus manifest and atomic move where the platform permits. Retain confirmation, process-running detection, path scoping, and backup verification.
 6. Relax exact managed-Node identity only after checking the `better-sqlite3` native ABI constraint. Pinning a compatible Node major/ABI may be enough; downloading and hashing one exact distribution is stronger than ordinary local development needs.
 7. Review artifact contracts and stage gates by observed failure rate. Fields or approvals that have not prevented a real defect should become warnings or be removed.
+8. Remove raw-hash verification of archived Markdown and accepted-commit diffs over current source. Git history/tag is the historical authority; documentation corrections must not fail a runtime archive gate.
 
 ### Archive Rather Than Rewrite
 
