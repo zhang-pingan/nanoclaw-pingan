@@ -10,6 +10,7 @@ import {
   MINIMUM_WORKFLOW_RUNTIME_SCHEMA_VERSION,
   SCHEMA_3_REQUIRED_EMPTY_RELATIONS,
   assertCurrentWorkflowRuntimeStructure,
+  inspectWorkflowRuntimeSchema,
 } from '../workflow-runtime/gateway/host-core.js';
 
 export interface HostCoreTargetSchema {
@@ -34,11 +35,11 @@ export type PersistentStateDecisionKind =
   | 'RESET_REQUIRED'
   | 'UNKNOWN_BLOCKED';
 
-interface StateFileCopy {
+export interface StateBackupMember {
   readonly source_relative_path: string;
   readonly backup_name: string;
   readonly byte_length: number;
-  readonly raw_sha256: string;
+  readonly checksum: string;
 }
 
 export interface PersistentStateDecision {
@@ -46,27 +47,74 @@ export interface PersistentStateDecision {
   readonly observed_schema: WorkflowRuntimeStateSchema | null;
   readonly target_schema: HostCoreTargetSchema;
   readonly affected_paths: readonly string[];
-  readonly members: readonly StateFileCopy[];
+  readonly members: readonly StateBackupMember[];
   readonly reason: string;
 }
 
-export interface PersistentStateResetPlan {
-  readonly format: 'icarus.workflow-runtime-state-quarantine/2';
+export type PersistentStateBackupOperation = 'backup' | 'reset';
+export type PersistentStateBackupStatus = 'in_progress' | 'complete';
+
+export interface PersistentStateBackupManifest {
+  readonly format: 'icarus.workflow-runtime-state-backup/3';
+  readonly backup_id: string;
+  readonly created_at: string;
+  readonly completed_at: string | null;
+  readonly operation: PersistentStateBackupOperation;
+  readonly status: PersistentStateBackupStatus;
+  readonly source_relative_paths: readonly string[];
   readonly observed_schema_version: number;
   readonly target_schema_version: number;
-  readonly members: readonly StateFileCopy[];
+  readonly members: readonly StateBackupMember[];
+}
+
+interface LegacyPersistentStateBackup {
+  readonly format: 'icarus.workflow-runtime-state-quarantine/2';
   readonly backup_id: string;
   readonly backup_relative_path: string;
+  readonly observed_schema_version: number;
+  readonly target_schema_version: number;
+  readonly members: readonly StateBackupMember[];
+}
+
+export interface PersistentStateBackupSummary {
+  readonly backup_id: string;
+  readonly created_at: string | null;
+  readonly operation: PersistentStateBackupOperation | 'legacy_reset';
+  readonly status: PersistentStateBackupStatus | 'legacy_complete';
+  readonly observed_schema_version: number;
+  readonly target_schema_version: number;
+  readonly legacy: boolean;
+}
+
+export type PersistentStateFaultStage =
+  | 'before_copy'
+  | 'during_copy'
+  | 'after_manifest_write'
+  | 'before_live_deletion'
+  | 'during_restore';
+
+export interface PersistentStateOperationHooks {
+  readonly fault?: (
+    stage: PersistentStateFaultStage,
+    member?: StateBackupMember,
+  ) => void;
+  readonly completedAt?: () => Date;
 }
 
 export const WORKFLOW_STATE_DATABASE_RELATIVE =
   'data/workflow-runtime/workflow-runtime.db';
+export const WORKFLOW_STATE_BACKUP_DIRECTORY = 'workflow-runtime-state-backups';
+export const WORKFLOW_STATE_BACKUP_MANIFEST = 'backup.json';
+export const WORKFLOW_STATE_INCOMPLETE_MARKER = '.incomplete';
 export const WORKFLOW_STATE_RELATIVE_PATHS = [
   WORKFLOW_STATE_DATABASE_RELATIVE,
   `${WORKFLOW_STATE_DATABASE_RELATIVE}-wal`,
   `${WORKFLOW_STATE_DATABASE_RELATIVE}-shm`,
 ] as const;
 
+const NEW_BACKUP_ID = /^\d{8}T\d{9}Z-[0-9a-f]{8}$/;
+const LEGACY_BACKUP_ID = /^[0-9a-f]{64}$/;
+const CHECKSUM = /^sha256:[0-9a-f]{64}$/;
 const require = createRequire(import.meta.url);
 
 export function currentWorkflowRuntimeSchemaCompatibility(): WorkflowRuntimeSchemaCompatibility {
@@ -90,13 +138,6 @@ function sha256(file: string): string {
   return `sha256:${crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex')}`;
 }
 
-function canonicalHash(value: unknown): string {
-  return crypto
-    .createHash('sha256')
-    .update(JSON.stringify(value))
-    .digest('hex');
-}
-
 function fsyncDirectory(directory: string): void {
   const descriptor = fs.openSync(directory, 'r');
   try {
@@ -118,8 +159,33 @@ function ensureDirectory(root: string, relative: string): string {
   return current;
 }
 
-function stateMembers(runtimeHome: string): StateFileCopy[] {
-  const members: StateFileCopy[] = [];
+function assertBackupId(backupId: string): string {
+  if (!NEW_BACKUP_ID.test(backupId) && !LEGACY_BACKUP_ID.test(backupId))
+    throw new Error('host_core_state_backup_id_invalid');
+  return backupId;
+}
+
+function backupRoot(runtimeHome: string, backupId: string): string {
+  return path.join(
+    runtimeHome,
+    WORKFLOW_STATE_BACKUP_DIRECTORY,
+    assertBackupId(backupId),
+  );
+}
+
+function formatBackupId(now: Date, randomSuffix: string): string {
+  if (Number.isNaN(now.getTime()) || !/^[0-9a-f]{8}$/.test(randomSuffix))
+    throw new Error('host_core_state_backup_id_invalid');
+  const timestamp = now
+    .toISOString()
+    .replaceAll('-', '')
+    .replaceAll(':', '')
+    .replace('.', '');
+  return `${timestamp}-${randomSuffix}`;
+}
+
+function stateMembers(runtimeHome: string): StateBackupMember[] {
+  const members: StateBackupMember[] = [];
   for (const relative of WORKFLOW_STATE_RELATIVE_PATHS) {
     const absolute = path.join(runtimeHome, relative);
     const stat = lstatIfPresent(absolute);
@@ -132,10 +198,22 @@ function stateMembers(runtimeHome: string): StateFileCopy[] {
       source_relative_path: relative,
       backup_name: path.basename(relative),
       byte_length: stat.size,
-      raw_sha256: sha256(absolute),
+      checksum: sha256(absolute),
     });
   }
   return members;
+}
+
+function assertStatePaths(runtimeHome: string): void {
+  for (const relative of WORKFLOW_STATE_RELATIVE_PATHS) {
+    const absolute = path.join(runtimeHome, relative);
+    const stat = lstatIfPresent(absolute);
+    if (!stat) continue;
+    if (!stat.isFile() || stat.isSymbolicLink())
+      throw new Error('host_core_persistent_state_file_invalid');
+    if (fs.realpathSync(path.dirname(absolute)) !== path.dirname(absolute))
+      throw new Error('host_core_persistent_state_directory_invalid');
+  }
 }
 
 function presentStatePaths(runtimeHome: string): string[] {
@@ -166,13 +244,12 @@ function inspectDatabase(databasePath: string): {
     fileMustExist: true,
   });
   try {
-    const version = Number(database.pragma('user_version', { simple: true }));
-    if (!Number.isSafeInteger(version) || version < 1)
+    const inspection = inspectWorkflowRuntimeSchema(database);
+    if (inspection.schemaVersion < 1)
       throw new Error('workflow_runtime_schema_version_invalid');
-    if (version === CURRENT_WORKFLOW_RUNTIME_SCHEMA_VERSION)
-      assertCurrentWorkflowRuntimeStructure(database);
+    if (inspection.current) assertCurrentWorkflowRuntimeStructure(database);
     let schema3MigrationSafe = true;
-    if (version === 3) {
+    if (inspection.schemaVersion === 3) {
       schema3MigrationSafe = SCHEMA_3_REQUIRED_EMPTY_RELATIONS.every(
         (relation) => {
           const escaped = relation.replaceAll('"', '""');
@@ -188,9 +265,33 @@ function inspectDatabase(databasePath: string): {
       );
     }
     return {
-      schema: { database_schema_version: version },
+      schema: { database_schema_version: inspection.schemaVersion },
       schema3MigrationSafe,
     };
+  } finally {
+    database.close();
+  }
+}
+
+function verifyRestoredDatabase(
+  databasePath: string,
+  expectedSchemaVersion: number,
+): void {
+  const Database = require('better-sqlite3') as typeof BetterSqlite3;
+  const database = new Database(databasePath, {
+    readonly: true,
+    fileMustExist: true,
+  });
+  try {
+    const inspection = inspectWorkflowRuntimeSchema(database);
+    if (inspection.schemaVersion !== expectedSchemaVersion)
+      throw new Error('host_core_state_restore_schema_version_mismatch');
+    if (inspection.current) assertCurrentWorkflowRuntimeStructure(database);
+    const integrity = database.pragma('integrity_check', {
+      simple: true,
+    }) as unknown;
+    if (integrity !== 'ok')
+      throw new Error('host_core_state_restore_integrity_check_failed');
   } finally {
     database.close();
   }
@@ -243,9 +344,8 @@ export function decidePersistentStateCompatibility(
   )
     throw new Error('host_core_schema_compatibility_target_mismatch');
 
-  let members: StateFileCopy[];
   try {
-    members = stateMembers(runtimeHome);
+    assertStatePaths(runtimeHome);
   } catch {
     return {
       decision: 'UNKNOWN_BLOCKED',
@@ -257,17 +357,15 @@ export function decidePersistentStateCompatibility(
     };
   }
   const databasePath = path.join(runtimeHome, WORKFLOW_STATE_DATABASE_RELATIVE);
-  const affectedPaths = members.map((member) =>
-    path.join(runtimeHome, member.source_relative_path),
-  );
+  const affectedPaths = presentStatePaths(runtimeHome);
   if (!lstatIfPresent(databasePath)) {
-    return members.length === 0
+    return affectedPaths.length === 0
       ? {
           decision: 'NO_STATE',
           observed_schema: null,
           target_schema: target,
           affected_paths: [],
-          members,
+          members: [],
           reason: 'no_workflow_runtime_database',
         }
       : {
@@ -275,7 +373,7 @@ export function decidePersistentStateCompatibility(
           observed_schema: null,
           target_schema: target,
           affected_paths: affectedPaths,
-          members,
+          members: [],
           reason: 'database_companion_without_primary',
         };
   }
@@ -289,13 +387,14 @@ export function decidePersistentStateCompatibility(
       observed_schema: null,
       target_schema: target,
       affected_paths: affectedPaths,
-      members,
+      members: [],
       reason:
         error instanceof Error && error.message.includes('missing required')
           ? 'database_required_structure_missing'
           : 'database_schema_unverifiable',
     };
   }
+  const members = stateMembers(runtimeHome);
   const version = observed.schema.database_schema_version;
   if (version === target.database_schema_version)
     return {
@@ -352,33 +451,127 @@ export function decidePersistentStateCompatibility(
   };
 }
 
-export function buildPersistentStateResetPlan(
+export function buildPersistentStateBackupManifest(
   decision: PersistentStateDecision,
-): PersistentStateResetPlan {
-  if (decision.decision !== 'RESET_REQUIRED' || !decision.observed_schema)
+  options: {
+    readonly operation: PersistentStateBackupOperation;
+    readonly now?: Date;
+    readonly randomSuffix?: string;
+  },
+): PersistentStateBackupManifest {
+  if (!decision.observed_schema || decision.members.length < 1)
+    throw new Error('host_core_persistent_state_backup_not_available');
+  if (decision.decision === 'UNKNOWN_BLOCKED')
+    throw new Error('host_core_persistent_state_backup_unverifiable');
+  if (options.operation === 'reset' && decision.decision !== 'RESET_REQUIRED')
     throw new Error('host_core_persistent_state_reset_not_available');
-  const payload = {
-    format: 'icarus.workflow-runtime-state-quarantine/2' as const,
+  const createdAt = (options.now ?? new Date()).toISOString();
+  const backupId = formatBackupId(
+    new Date(createdAt),
+    options.randomSuffix ?? crypto.randomBytes(4).toString('hex'),
+  );
+  return {
+    format: 'icarus.workflow-runtime-state-backup/3',
+    backup_id: backupId,
+    created_at: createdAt,
+    completed_at: null,
+    operation: options.operation,
+    status: 'in_progress',
+    source_relative_paths: decision.members.map(
+      (member) => member.source_relative_path,
+    ),
     observed_schema_version: decision.observed_schema.database_schema_version,
     target_schema_version: decision.target_schema.database_schema_version,
     members: decision.members,
   };
-  const backupId = canonicalHash(payload);
+}
+
+function parseMember(value: unknown): StateBackupMember {
+  if (value === null || typeof value !== 'object' || Array.isArray(value))
+    throw new Error('host_core_state_backup_member_invalid');
+  const member = value as Record<string, unknown>;
+  if (
+    !WORKFLOW_STATE_RELATIVE_PATHS.includes(
+      member.source_relative_path as (typeof WORKFLOW_STATE_RELATIVE_PATHS)[number],
+    ) ||
+    member.backup_name !== path.basename(String(member.source_relative_path)) ||
+    !Number.isSafeInteger(member.byte_length) ||
+    Number(member.byte_length) < 0 ||
+    typeof member.checksum !== 'string' ||
+    !CHECKSUM.test(member.checksum)
+  )
+    throw new Error('host_core_state_backup_member_invalid');
   return {
-    ...payload,
-    backup_id: backupId,
-    backup_relative_path: `workflow-runtime-state-backups/${backupId}`,
+    source_relative_path: String(member.source_relative_path),
+    backup_name: String(member.backup_name),
+    byte_length: Number(member.byte_length),
+    checksum: member.checksum,
   };
 }
 
-export function parsePersistentStateResetPlan(
+export function parsePersistentStateBackupManifest(
   value: unknown,
-): PersistentStateResetPlan {
+): PersistentStateBackupManifest {
+  if (value === null || typeof value !== 'object' || Array.isArray(value))
+    throw new Error('host_core_state_backup_invalid');
+  const record = value as Record<string, unknown>;
+  if (
+    record.format !== 'icarus.workflow-runtime-state-backup/3' ||
+    typeof record.backup_id !== 'string' ||
+    !NEW_BACKUP_ID.test(record.backup_id) ||
+    typeof record.created_at !== 'string' ||
+    Number.isNaN(Date.parse(record.created_at)) ||
+    (record.completed_at !== null &&
+      (typeof record.completed_at !== 'string' ||
+        Number.isNaN(Date.parse(record.completed_at)))) ||
+    (record.operation !== 'backup' && record.operation !== 'reset') ||
+    (record.status !== 'in_progress' && record.status !== 'complete') ||
+    (record.status === 'in_progress' && record.completed_at !== null) ||
+    (record.status === 'complete' && record.completed_at === null) ||
+    !Array.isArray(record.members) ||
+    record.members.length < 1 ||
+    !Array.isArray(record.source_relative_paths) ||
+    !Number.isSafeInteger(record.observed_schema_version) ||
+    Number(record.observed_schema_version) < 1 ||
+    !Number.isSafeInteger(record.target_schema_version) ||
+    Number(record.target_schema_version) < 1
+  )
+    throw new Error('host_core_state_backup_invalid');
+  const members = record.members.map(parseMember);
+  if (members[0]!.source_relative_path !== WORKFLOW_STATE_DATABASE_RELATIVE)
+    throw new Error('host_core_state_backup_primary_missing');
+  const sourceRelativePaths = record.source_relative_paths.map(String);
+  if (
+    JSON.stringify(sourceRelativePaths) !==
+    JSON.stringify(members.map((member) => member.source_relative_path))
+  )
+    throw new Error('host_core_state_backup_sources_invalid');
+  return {
+    format: 'icarus.workflow-runtime-state-backup/3',
+    backup_id: record.backup_id,
+    created_at: record.created_at,
+    completed_at: record.completed_at as string | null,
+    operation: record.operation,
+    status: record.status,
+    source_relative_paths: sourceRelativePaths,
+    observed_schema_version: Number(record.observed_schema_version),
+    target_schema_version: Number(record.target_schema_version),
+    members,
+  };
+}
+
+function parseLegacyPersistentStateBackup(
+  value: unknown,
+): LegacyPersistentStateBackup {
   if (value === null || typeof value !== 'object' || Array.isArray(value))
     throw new Error('host_core_state_backup_invalid');
   const record = value as Record<string, unknown>;
   if (
     record.format !== 'icarus.workflow-runtime-state-quarantine/2' ||
+    typeof record.backup_id !== 'string' ||
+    !LEGACY_BACKUP_ID.test(record.backup_id) ||
+    record.backup_relative_path !==
+      `${WORKFLOW_STATE_BACKUP_DIRECTORY}/${record.backup_id}` ||
     !Array.isArray(record.members) ||
     record.members.length < 1 ||
     !Number.isSafeInteger(record.observed_schema_version) ||
@@ -387,147 +580,377 @@ export function parsePersistentStateResetPlan(
     Number(record.target_schema_version) < 1
   )
     throw new Error('host_core_state_backup_invalid');
-  const members = record.members.map((member) => {
-    if (member === null || typeof member !== 'object' || Array.isArray(member))
+  const members = record.members.map((value) => {
+    if (value === null || typeof value !== 'object' || Array.isArray(value))
       throw new Error('host_core_state_backup_member_invalid');
-    const copy = member as Record<string, unknown>;
-    if (
-      !WORKFLOW_STATE_RELATIVE_PATHS.includes(
-        copy.source_relative_path as (typeof WORKFLOW_STATE_RELATIVE_PATHS)[number],
-      ) ||
-      copy.backup_name !== path.basename(String(copy.source_relative_path)) ||
-      !Number.isSafeInteger(copy.byte_length) ||
-      Number(copy.byte_length) < 0 ||
-      typeof copy.raw_sha256 !== 'string' ||
-      !/^sha256:[0-9a-f]{64}$/.test(copy.raw_sha256)
-    )
-      throw new Error('host_core_state_backup_member_invalid');
-    return {
-      source_relative_path: String(copy.source_relative_path),
-      backup_name: String(copy.backup_name),
-      byte_length: Number(copy.byte_length),
-      raw_sha256: copy.raw_sha256,
-    };
+    const legacy = value as Record<string, unknown>;
+    return parseMember({
+      source_relative_path: legacy.source_relative_path,
+      backup_name: legacy.backup_name,
+      byte_length: legacy.byte_length,
+      checksum: legacy.raw_sha256,
+    });
   });
   if (members[0]!.source_relative_path !== WORKFLOW_STATE_DATABASE_RELATIVE)
     throw new Error('host_core_state_backup_primary_missing');
-  const payload = {
-    format: 'icarus.workflow-runtime-state-quarantine/2' as const,
+  return {
+    format: 'icarus.workflow-runtime-state-quarantine/2',
+    backup_id: record.backup_id,
+    backup_relative_path: record.backup_relative_path,
     observed_schema_version: Number(record.observed_schema_version),
     target_schema_version: Number(record.target_schema_version),
     members,
   };
-  const backupId = canonicalHash(payload);
-  if (
-    record.backup_id !== backupId ||
-    record.backup_relative_path !== `workflow-runtime-state-backups/${backupId}`
-  )
-    throw new Error('host_core_state_backup_plan_invalid');
-  return {
-    ...payload,
-    backup_id: backupId,
-    backup_relative_path: record.backup_relative_path,
-  };
 }
 
-function verifyMember(file: string, member: StateFileCopy): void {
+function verifyMember(file: string, member: StateBackupMember): void {
   const stat = fs.lstatSync(file);
   if (
     !stat.isFile() ||
     stat.isSymbolicLink() ||
     stat.size !== member.byte_length ||
-    sha256(file) !== member.raw_sha256
+    sha256(file) !== member.checksum
   )
-    throw new Error('host_core_state_backup_member_mismatch');
+    throw new Error(
+      `host_core_state_backup_member_mismatch:${member.backup_name}`,
+    );
 }
 
-export function quarantinePersistentState(
-  runtimeHomeInput: string,
-  planInput: PersistentStateResetPlan,
+function writeManifest(
+  root: string,
+  manifest: PersistentStateBackupManifest,
 ): void {
-  const runtimeHome = fs.realpathSync(runtimeHomeInput);
-  const plan = parsePersistentStateResetPlan(planInput);
-  const backupRoot = ensureDirectory(runtimeHome, plan.backup_relative_path);
-  const manifestFile = path.join(backupRoot, 'backup-manifest.json');
-  if (!fs.existsSync(manifestFile))
-    fs.writeFileSync(manifestFile, `${JSON.stringify(plan, null, 2)}\n`, {
-      mode: 0o600,
-      flag: 'wx',
-    });
-  for (const member of plan.members) {
-    const source = path.join(runtimeHome, member.source_relative_path);
-    const destination = path.join(backupRoot, member.backup_name);
-    const sourceExists = lstatIfPresent(source) !== null;
-    const destinationExists = lstatIfPresent(destination) !== null;
-    if (sourceExists && destinationExists) {
-      verifyMember(source, member);
-      verifyMember(destination, member);
-      fs.unlinkSync(source);
-    } else if (sourceExists) {
-      verifyMember(source, member);
-      fs.renameSync(source, destination);
-    } else if (destinationExists) verifyMember(destination, member);
-    else throw new Error('host_core_state_backup_member_missing');
-    fsyncDirectory(path.dirname(source));
+  const temporary = path.join(
+    root,
+    `${WORKFLOW_STATE_BACKUP_MANIFEST}.tmp-${String(process.pid)}-${crypto
+      .randomBytes(4)
+      .toString('hex')}`,
+  );
+  fs.writeFileSync(temporary, `${JSON.stringify(manifest, null, 2)}\n`, {
+    mode: 0o600,
+    flag: 'wx',
+  });
+  const descriptor = fs.openSync(temporary, 'r');
+  try {
+    fs.fsyncSync(descriptor);
+  } finally {
+    fs.closeSync(descriptor);
   }
-  fsyncDirectory(backupRoot);
+  fs.renameSync(temporary, path.join(root, WORKFLOW_STATE_BACKUP_MANIFEST));
+  fsyncDirectory(root);
 }
 
-function readBackupAt(
+function copyMember(
   runtimeHome: string,
   root: string,
-): PersistentStateResetPlan {
+  member: StateBackupMember,
+  hooks: PersistentStateOperationHooks,
+): void {
+  const source = path.join(runtimeHome, member.source_relative_path);
+  const destination = path.join(root, member.backup_name);
+  verifyMember(source, member);
+  const destinationStat = lstatIfPresent(destination);
+  if (destinationStat) {
+    verifyMember(destination, member);
+    return;
+  }
+  fs.copyFileSync(source, destination, fs.constants.COPYFILE_EXCL);
+  hooks.fault?.('during_copy', member);
+  verifyMember(destination, member);
+  fsyncDirectory(root);
+}
+
+function deleteLiveMembers(
+  runtimeHome: string,
+  members: readonly StateBackupMember[],
+): void {
+  for (const member of members) {
+    const source = path.join(runtimeHome, member.source_relative_path);
+    if (!lstatIfPresent(source)) continue;
+    verifyMember(source, member);
+    fs.unlinkSync(source);
+    fsyncDirectory(path.dirname(source));
+  }
+}
+
+function completedManifest(
+  manifest: PersistentStateBackupManifest,
+  hooks: PersistentStateOperationHooks,
+): PersistentStateBackupManifest {
+  return {
+    ...manifest,
+    status: 'complete',
+    completed_at: (hooks.completedAt?.() ?? new Date()).toISOString(),
+  };
+}
+
+export function createPersistentStateBackup(
+  runtimeHomeInput: string,
+  manifestInput: PersistentStateBackupManifest,
+  hooks: PersistentStateOperationHooks = {},
+): PersistentStateBackupManifest {
+  const runtimeHome = fs.realpathSync(runtimeHomeInput);
+  const manifest = parsePersistentStateBackupManifest(manifestInput);
+  if (manifest.status !== 'in_progress')
+    throw new Error('host_core_state_backup_already_complete');
+  const backupsRoot = ensureDirectory(
+    runtimeHome,
+    WORKFLOW_STATE_BACKUP_DIRECTORY,
+  );
+  const root = path.join(backupsRoot, manifest.backup_id);
+  fs.mkdirSync(root, { mode: 0o700 });
+  fs.writeFileSync(path.join(root, WORKFLOW_STATE_INCOMPLETE_MARKER), '', {
+    mode: 0o600,
+    flag: 'wx',
+  });
+  writeManifest(root, manifest);
+  hooks.fault?.('before_copy');
+  for (const member of manifest.members)
+    copyMember(runtimeHome, root, member, hooks);
+  const completed = completedManifest(manifest, hooks);
+  writeManifest(root, completed);
+  hooks.fault?.('after_manifest_write');
+  fs.unlinkSync(path.join(root, WORKFLOW_STATE_INCOMPLETE_MARKER));
+  fsyncDirectory(root);
+  if (manifest.operation === 'reset') {
+    hooks.fault?.('before_live_deletion');
+    deleteLiveMembers(runtimeHome, manifest.members);
+  }
+  return completed;
+}
+
+function readNewBackupAt(
+  root: string,
+  allowIncomplete: boolean,
+): PersistentStateBackupManifest {
   const stat = fs.lstatSync(root);
   if (!stat.isDirectory() || stat.isSymbolicLink())
     throw new Error('host_core_state_backup_path_invalid');
-  const manifest = fs.lstatSync(path.join(root, 'backup-manifest.json'));
-  if (!manifest.isFile() || manifest.isSymbolicLink())
+  const manifestPath = path.join(root, WORKFLOW_STATE_BACKUP_MANIFEST);
+  const manifestStat = fs.lstatSync(manifestPath);
+  if (!manifestStat.isFile() || manifestStat.isSymbolicLink())
     throw new Error('host_core_state_backup_manifest_invalid');
-  const plan = parsePersistentStateResetPlan(
-    JSON.parse(
-      fs.readFileSync(path.join(root, 'backup-manifest.json'), 'utf8'),
-    ),
+  const manifest = parsePersistentStateBackupManifest(
+    JSON.parse(fs.readFileSync(manifestPath, 'utf8')),
   );
-  if (path.join(runtimeHome, plan.backup_relative_path) !== root)
+  if (path.basename(root) !== manifest.backup_id)
     throw new Error('host_core_state_backup_path_invalid');
-  for (const member of plan.members)
-    verifyMember(path.join(root, member.backup_name), member);
-  return plan;
+  const incomplete =
+    lstatIfPresent(path.join(root, WORKFLOW_STATE_INCOMPLETE_MARKER)) !== null;
+  if (incomplete !== (manifest.status === 'in_progress') && !allowIncomplete)
+    throw new Error('host_core_state_backup_status_invalid');
+  if (incomplete && !allowIncomplete)
+    throw new Error('host_core_state_backup_incomplete');
+  if (!incomplete || manifest.status === 'complete') {
+    for (const member of manifest.members)
+      verifyMember(path.join(root, member.backup_name), member);
+  }
+  return manifest;
 }
 
-export function discoverPersistentStateResetRecovery(
-  runtimeHomeInput: string,
-): PersistentStateResetPlan | null {
-  const runtimeHome = fs.realpathSync(runtimeHomeInput);
-  const backupsRoot = path.join(runtimeHome, 'workflow-runtime-state-backups');
-  const stat = lstatIfPresent(backupsRoot);
-  if (!stat) return null;
+function readLegacyBackupAt(root: string): LegacyPersistentStateBackup {
+  const stat = fs.lstatSync(root);
   if (!stat.isDirectory() || stat.isSymbolicLink())
     throw new Error('host_core_state_backup_path_invalid');
-  const recoveries: PersistentStateResetPlan[] = [];
-  for (const name of fs.readdirSync(backupsRoot).sort()) {
-    if (!/^[0-9a-f]{64}$/.test(name))
-      throw new Error('host_core_state_backup_path_invalid');
-    const root = path.join(backupsRoot, name);
-    const plan = readBackupAt(runtimeHome, root);
-    const incomplete = plan.members.some(
-      (member) =>
-        lstatIfPresent(path.join(runtimeHome, member.source_relative_path)) !==
-        null,
-    );
-    if (incomplete) recoveries.push(plan);
-  }
-  if (recoveries.length > 1)
-    throw new Error('host_core_state_backup_recovery_ambiguous');
-  return recoveries[0] ?? null;
+  const manifestPath = path.join(root, 'backup-manifest.json');
+  const manifestStat = fs.lstatSync(manifestPath);
+  if (!manifestStat.isFile() || manifestStat.isSymbolicLink())
+    throw new Error('host_core_state_backup_manifest_invalid');
+  const manifest = parseLegacyPersistentStateBackup(
+    JSON.parse(fs.readFileSync(manifestPath, 'utf8')),
+  );
+  if (path.basename(root) !== manifest.backup_id)
+    throw new Error('host_core_state_backup_path_invalid');
+  for (const member of manifest.members)
+    verifyMember(path.join(root, member.backup_name), member);
+  return manifest;
 }
 
-export function readPersistentStateResetBackup(
+function readBackup(
+  runtimeHome: string,
+  backupId: string,
+  allowIncomplete = false,
+): PersistentStateBackupManifest | LegacyPersistentStateBackup {
+  const root = backupRoot(runtimeHome, backupId);
+  if (NEW_BACKUP_ID.test(backupId))
+    return readNewBackupAt(root, allowIncomplete);
+  return readLegacyBackupAt(root);
+}
+
+export function readPersistentStateBackup(
   runtimeHomeInput: string,
-  relative: string,
-): PersistentStateResetPlan {
+  backupId: string,
+): PersistentStateBackupManifest | LegacyPersistentStateBackup {
   const runtimeHome = fs.realpathSync(runtimeHomeInput);
-  if (!/^workflow-runtime-state-backups\/[0-9a-f]{64}$/.test(relative))
+  return readBackup(runtimeHome, backupId);
+}
+
+export function listPersistentStateBackups(
+  runtimeHomeInput: string,
+): PersistentStateBackupSummary[] {
+  const runtimeHome = fs.realpathSync(runtimeHomeInput);
+  const root = path.join(runtimeHome, WORKFLOW_STATE_BACKUP_DIRECTORY);
+  const stat = lstatIfPresent(root);
+  if (!stat) return [];
+  if (!stat.isDirectory() || stat.isSymbolicLink())
     throw new Error('host_core_state_backup_path_invalid');
-  return readBackupAt(runtimeHome, path.join(runtimeHome, relative));
+  const summaries: PersistentStateBackupSummary[] = [];
+  for (const backupId of fs.readdirSync(root).sort()) {
+    assertBackupId(backupId);
+    const backup = readBackup(runtimeHome, backupId, true);
+    if (backup.format === 'icarus.workflow-runtime-state-backup/3') {
+      const incomplete =
+        lstatIfPresent(
+          path.join(root, backupId, WORKFLOW_STATE_INCOMPLETE_MARKER),
+        ) !== null;
+      summaries.push({
+        backup_id: backup.backup_id,
+        created_at: backup.created_at,
+        operation: backup.operation,
+        status: incomplete ? 'in_progress' : backup.status,
+        observed_schema_version: backup.observed_schema_version,
+        target_schema_version: backup.target_schema_version,
+        legacy: false,
+      });
+    } else {
+      summaries.push({
+        backup_id: backup.backup_id,
+        created_at: null,
+        operation: 'legacy_reset',
+        status: 'legacy_complete',
+        observed_schema_version: backup.observed_schema_version,
+        target_schema_version: backup.target_schema_version,
+        legacy: true,
+      });
+    }
+  }
+  return summaries.sort((left, right) =>
+    left.backup_id.localeCompare(right.backup_id),
+  );
+}
+
+export function resumePersistentStateBackup(
+  runtimeHomeInput: string,
+  backupId: string,
+  hooks: PersistentStateOperationHooks = {},
+): PersistentStateBackupManifest {
+  const runtimeHome = fs.realpathSync(runtimeHomeInput);
+  if (!NEW_BACKUP_ID.test(backupId))
+    throw new Error('host_core_state_backup_not_resumable');
+  const root = backupRoot(runtimeHome, backupId);
+  const marker = path.join(root, WORKFLOW_STATE_INCOMPLETE_MARKER);
+  if (!lstatIfPresent(marker))
+    throw new Error('host_core_state_backup_not_incomplete');
+  const manifest = readNewBackupAt(root, true);
+  for (const member of manifest.members)
+    copyMember(runtimeHome, root, member, hooks);
+  const completed =
+    manifest.status === 'complete'
+      ? manifest
+      : completedManifest(manifest, hooks);
+  if (manifest.status !== 'complete') writeManifest(root, completed);
+  fs.unlinkSync(marker);
+  fsyncDirectory(root);
+  if (completed.operation === 'reset') {
+    hooks.fault?.('before_live_deletion');
+    deleteLiveMembers(runtimeHome, completed.members);
+  }
+  return completed;
+}
+
+export function discardIncompletePersistentStateBackup(
+  runtimeHomeInput: string,
+  backupId: string,
+): void {
+  const runtimeHome = fs.realpathSync(runtimeHomeInput);
+  if (!NEW_BACKUP_ID.test(backupId))
+    throw new Error('host_core_state_backup_not_discardable');
+  const root = backupRoot(runtimeHome, backupId);
+  readNewBackupAt(root, true);
+  if (!lstatIfPresent(path.join(root, WORKFLOW_STATE_INCOMPLETE_MARKER)))
+    throw new Error('host_core_state_backup_not_incomplete');
+  fs.rmSync(root, { recursive: true });
+  fsyncDirectory(path.dirname(root));
+}
+
+export function restorePersistentStateBackup(
+  runtimeHomeInput: string,
+  backupId: string,
+  hooks: PersistentStateOperationHooks = {},
+): void {
+  const runtimeHome = fs.realpathSync(runtimeHomeInput);
+  const backup = readBackup(runtimeHome, backupId, true);
+  const root = backupRoot(runtimeHome, backupId);
+  for (const member of backup.members)
+    verifyMember(path.join(root, member.backup_name), member);
+
+  const memberBySource = new Map(
+    backup.members.map((member) => [member.source_relative_path, member]),
+  );
+  for (const relative of WORKFLOW_STATE_RELATIVE_PATHS) {
+    const destination = path.join(runtimeHome, relative);
+    if (!lstatIfPresent(destination)) continue;
+    const member = memberBySource.get(relative);
+    if (!member) throw new Error('host_core_state_restore_destination_exists');
+    try {
+      verifyMember(destination, member);
+    } catch {
+      throw new Error('host_core_state_restore_destination_exists');
+    }
+  }
+
+  ensureDirectory(runtimeHome, path.dirname(WORKFLOW_STATE_DATABASE_RELATIVE));
+  const created: string[] = [];
+  const temporaryFiles: string[] = [];
+  try {
+    for (const member of backup.members) {
+      const destination = path.join(runtimeHome, member.source_relative_path);
+      if (lstatIfPresent(destination)) continue;
+      const temporary = `${destination}.restore-${backupId}`;
+      if (lstatIfPresent(temporary))
+        throw new Error('host_core_state_restore_temporary_exists');
+      temporaryFiles.push(temporary);
+      fs.copyFileSync(
+        path.join(root, member.backup_name),
+        temporary,
+        fs.constants.COPYFILE_EXCL,
+      );
+      hooks.fault?.('during_restore', member);
+      verifyMember(temporary, member);
+      fs.renameSync(temporary, destination);
+      temporaryFiles.pop();
+      created.push(destination);
+      fsyncDirectory(path.dirname(destination));
+    }
+    verifyRestoredDatabase(
+      path.join(runtimeHome, WORKFLOW_STATE_DATABASE_RELATIVE),
+      backup.observed_schema_version,
+    );
+  } catch (error) {
+    for (const temporary of temporaryFiles.reverse()) {
+      if (lstatIfPresent(temporary)) fs.unlinkSync(temporary);
+    }
+    for (const destination of created.reverse()) fs.unlinkSync(destination);
+    throw error;
+  }
+}
+
+export function gcPersistentStateBackups(
+  runtimeHomeInput: string,
+  keep: number,
+): string[] {
+  if (!Number.isSafeInteger(keep) || keep < 0)
+    throw new Error('host_core_state_backup_keep_invalid');
+  const runtimeHome = fs.realpathSync(runtimeHomeInput);
+  const summaries = listPersistentStateBackups(runtimeHome);
+  if (summaries.some((summary) => summary.status === 'in_progress'))
+    throw new Error('host_core_state_backup_incomplete_present');
+  const remove = summaries.slice(0, Math.max(0, summaries.length - keep));
+  for (const summary of remove) {
+    const root = backupRoot(runtimeHome, summary.backup_id);
+    readBackup(runtimeHome, summary.backup_id);
+    fs.rmSync(root, { recursive: true });
+    fsyncDirectory(path.dirname(root));
+  }
+  return remove.map((summary) => summary.backup_id);
 }

@@ -43,7 +43,11 @@ State inspection and reset remain separate from snapshot selection:
 
 ```sh
 local/shell/workflow-state.sh inspect --mode <current|active>
+local/shell/workflow-state.sh backup
 local/shell/workflow-state.sh reset --mode <current|active>
+local/shell/workflow-state.sh backups
+local/shell/workflow-state.sh restore --backup <backup-id>
+local/shell/workflow-state.sh gc --keep <count>
 ```
 
 Inspection reports integer schema versions and the exact DB/WAL/SHM paths. Reset is available only for `RESET_REQUIRED`, refuses while launchd or a direct Host process is running, shows the exact paths and recovery location, and requires confirmation. It operates only on:
@@ -54,6 +58,6 @@ data/workflow-runtime/workflow-runtime.db-wal
 data/workflow-runtime/workflow-runtime.db-shm
 ```
 
-The current quarantine implementation preserves these files under `workflow-runtime-state-backups/` before removing live state. Snapshot directories, credentials, configuration, Capacity, Registry, container data, and unrelated project data are never reset.
+New backups use `workflow-runtime-state-backups/<timestamp>-<random>/backup.json`. The manifest records the observed and target integer schema versions plus the size and checksum of each copied DB/WAL/SHM member. `.incomplete` marks an interrupted operation, which is handled only through explicit `resume`, `restore`, or `discard-incomplete` commands. Reset removes live files only after every backup member has been copied and verified; restore rechecks the schema version, SQLite integrity, and current-version required structure. Snapshot directories, credentials, configuration, Capacity, Registry, container data, and unrelated project data are never reset.
 
 The broader engineering-weight decision is recorded in [`internal-experimental-scope.md`](internal-experimental-scope.md).

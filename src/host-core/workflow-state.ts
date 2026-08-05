@@ -9,14 +9,20 @@ import {
 import { verifyActiveHostCore } from './activation.js';
 import {
   type HostCoreTargetSchema,
+  type PersistentStateBackupManifest,
+  type PersistentStateBackupSummary,
   type PersistentStateDecision,
-  type PersistentStateResetPlan,
+  type PersistentStateOperationHooks,
+  buildPersistentStateBackupManifest,
   type WorkflowRuntimeSchemaCompatibility,
-  buildPersistentStateResetPlan,
+  createPersistentStateBackup,
   currentWorkflowRuntimeSchemaCompatibility,
   decidePersistentStateCompatibility,
-  discoverPersistentStateResetRecovery,
-  quarantinePersistentState,
+  discardIncompletePersistentStateBackup,
+  gcPersistentStateBackups,
+  listPersistentStateBackups,
+  restorePersistentStateBackup,
+  resumePersistentStateBackup,
 } from './persistent-state.js';
 
 export type WorkflowStateMode = 'current' | 'active';
@@ -89,18 +95,29 @@ export function inspectWorkflowState(
 }
 
 export interface WorkflowStateResetPreparation {
-  readonly recovery: boolean;
-  readonly inspection: WorkflowStateInspection | null;
-  readonly plan: PersistentStateResetPlan;
+  readonly inspection: WorkflowStateInspection;
+  readonly manifest: PersistentStateBackupManifest;
+}
+
+function assertNoIncompleteBackups(runtimeHome: string): void {
+  const incomplete = listPersistentStateBackups(runtimeHome).filter(
+    (backup) => backup.status === 'in_progress',
+  );
+  if (incomplete.length > 0)
+    throw new Error(
+      `workflow_state_incomplete_backup:${incomplete
+        .map((backup) => backup.backup_id)
+        .join(',')}`,
+    );
 }
 
 export function prepareWorkflowStateReset(
   runtimeHomeInput: string,
   mode: WorkflowStateMode,
+  options: { readonly now?: Date; readonly randomSuffix?: string } = {},
 ): WorkflowStateResetPreparation {
   const runtimeHome = fs.realpathSync(runtimeHomeInput);
-  const recovery = discoverPersistentStateResetRecovery(runtimeHome);
-  if (recovery) return { recovery: true, inspection: null, plan: recovery };
+  assertNoIncompleteBackups(runtimeHome);
   const inspection = inspectWorkflowState(runtimeHome, mode);
   if (inspection.decision.decision === 'UNKNOWN_BLOCKED')
     throw new Error(
@@ -111,9 +128,28 @@ export function prepareWorkflowStateReset(
       `workflow_state_reset_not_required:${inspection.decision.decision}`,
     );
   return {
-    recovery: false,
     inspection,
-    plan: buildPersistentStateResetPlan(inspection.decision),
+    manifest: buildPersistentStateBackupManifest(inspection.decision, {
+      operation: 'reset',
+      ...options,
+    }),
+  };
+}
+
+export function prepareWorkflowStateBackup(
+  runtimeHomeInput: string,
+  mode: WorkflowStateMode,
+  options: { readonly now?: Date; readonly randomSuffix?: string } = {},
+): WorkflowStateResetPreparation {
+  const runtimeHome = fs.realpathSync(runtimeHomeInput);
+  assertNoIncompleteBackups(runtimeHome);
+  const inspection = inspectWorkflowState(runtimeHome, mode);
+  return {
+    inspection,
+    manifest: buildPersistentStateBackupManifest(inspection.decision, {
+      operation: 'backup',
+      ...options,
+    }),
   };
 }
 
@@ -179,21 +215,126 @@ export function resetWorkflowState(options: {
   readonly mode: WorkflowStateMode;
   readonly confirmed: boolean;
   readonly hostIsRunning?: () => boolean;
-  readonly expectedPlan?: PersistentStateResetPlan;
-  readonly onPlan?: (plan: PersistentStateResetPlan) => void;
-}): PersistentStateResetPlan {
+  readonly expectedManifest?: PersistentStateBackupManifest;
+  readonly hooks?: PersistentStateOperationHooks;
+}): PersistentStateBackupManifest {
   const runtimeHome = fs.realpathSync(options.runtimeHome);
   assertIcarusHostStopped(
     options.projectRoot,
     runtimeHome,
     options.hostIsRunning,
   );
-  const preparation = prepareWorkflowStateReset(runtimeHome, options.mode);
   if (!options.confirmed) throw new Error('workflow_state_reset_cancelled');
-  const plan = preparation.plan;
-  if (options.expectedPlan && options.expectedPlan.backup_id !== plan.backup_id)
+  assertNoIncompleteBackups(runtimeHome);
+  const inspection = inspectWorkflowState(runtimeHome, options.mode);
+  if (inspection.decision.decision !== 'RESET_REQUIRED')
+    throw new Error(
+      `workflow_state_reset_not_required:${inspection.decision.decision}`,
+    );
+  const manifest =
+    options.expectedManifest ??
+    buildPersistentStateBackupManifest(inspection.decision, {
+      operation: 'reset',
+    });
+  if (
+    manifest.operation !== 'reset' ||
+    manifest.observed_schema_version !==
+      inspection.decision.observed_schema?.database_schema_version ||
+    manifest.target_schema_version !==
+      inspection.decision.target_schema.database_schema_version ||
+    JSON.stringify(manifest.members) !==
+      JSON.stringify(inspection.decision.members)
+  )
     throw new Error('workflow_state_reset_plan_changed');
-  options.onPlan?.(plan);
-  quarantinePersistentState(runtimeHome, plan);
-  return plan;
+  return createPersistentStateBackup(runtimeHome, manifest, options.hooks);
+}
+
+export function backupWorkflowState(options: {
+  readonly projectRoot: string;
+  readonly runtimeHome: string;
+  readonly mode?: WorkflowStateMode;
+  readonly hostIsRunning?: () => boolean;
+  readonly expectedManifest?: PersistentStateBackupManifest;
+  readonly hooks?: PersistentStateOperationHooks;
+}): PersistentStateBackupManifest {
+  const runtimeHome = fs.realpathSync(options.runtimeHome);
+  assertIcarusHostStopped(
+    options.projectRoot,
+    runtimeHome,
+    options.hostIsRunning,
+  );
+  assertNoIncompleteBackups(runtimeHome);
+  const preparation = options.expectedManifest
+    ? null
+    : prepareWorkflowStateBackup(runtimeHome, options.mode ?? 'current');
+  const manifest = options.expectedManifest ?? preparation!.manifest;
+  if (manifest.operation !== 'backup')
+    throw new Error('workflow_state_backup_plan_invalid');
+  return createPersistentStateBackup(runtimeHome, manifest, options.hooks);
+}
+
+export function listWorkflowStateBackups(
+  runtimeHomeInput: string,
+): PersistentStateBackupSummary[] {
+  return listPersistentStateBackups(runtimeHomeInput);
+}
+
+export function resumeWorkflowStateBackup(options: {
+  readonly projectRoot: string;
+  readonly runtimeHome: string;
+  readonly backupId: string;
+  readonly confirmed: boolean;
+  readonly hostIsRunning?: () => boolean;
+  readonly hooks?: PersistentStateOperationHooks;
+}): PersistentStateBackupManifest {
+  if (!options.confirmed) throw new Error('workflow_state_resume_cancelled');
+  assertIcarusHostStopped(
+    options.projectRoot,
+    options.runtimeHome,
+    options.hostIsRunning,
+  );
+  return resumePersistentStateBackup(
+    options.runtimeHome,
+    options.backupId,
+    options.hooks,
+  );
+}
+
+export function restoreWorkflowState(options: {
+  readonly projectRoot: string;
+  readonly runtimeHome: string;
+  readonly backupId: string;
+  readonly confirmed: boolean;
+  readonly hostIsRunning?: () => boolean;
+  readonly hooks?: PersistentStateOperationHooks;
+}): void {
+  if (!options.confirmed) throw new Error('workflow_state_restore_cancelled');
+  assertIcarusHostStopped(
+    options.projectRoot,
+    options.runtimeHome,
+    options.hostIsRunning,
+  );
+  restorePersistentStateBackup(
+    options.runtimeHome,
+    options.backupId,
+    options.hooks,
+  );
+}
+
+export function discardIncompleteWorkflowStateBackup(options: {
+  readonly runtimeHome: string;
+  readonly backupId: string;
+  readonly confirmed: boolean;
+}): void {
+  if (!options.confirmed) throw new Error('workflow_state_discard_cancelled');
+  discardIncompletePersistentStateBackup(options.runtimeHome, options.backupId);
+}
+
+export function gcWorkflowStateBackups(options: {
+  readonly runtimeHome: string;
+  readonly keep: number;
+  readonly confirmed: boolean;
+}): string[] {
+  if (!options.confirmed) throw new Error('workflow_state_gc_cancelled');
+  return gcPersistentStateBackups(options.runtimeHome, options.keep);
 }
