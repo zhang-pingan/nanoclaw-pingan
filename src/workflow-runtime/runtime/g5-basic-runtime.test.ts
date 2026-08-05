@@ -1006,7 +1006,6 @@ function withPlanHash(
 ): CompiledScopePlanV2Document {
   const current = {
     ...value,
-    compiler_version: '3.0.4',
     nodes: currentFixtureNodes(value.nodes as JsonObject[]),
   } as Omit<CompiledScopePlanV2Document, 'plan_hash'>;
   return {
