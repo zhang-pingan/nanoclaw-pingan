@@ -1,0 +1,8 @@
+{
+  "format": "icarus.workflow-compiler-golden-manifest/1",
+  "corpus_version": "1.0.0",
+  "compiler_version": "3.0.6",
+  "case_count": 40,
+  "corpus_hash": "sha256:ffd426cec4269062fad47efeb75b7233a4d42a2961f724e480e33bf05ff81343",
+  "change_reason": "initial-single-corpus"
+}
