@@ -275,8 +275,6 @@ describe('G0.2 Contract foundation', () => {
                   contractsRoot,
                   '../store/runtime-store/profile.js',
                 )) ||
-            (path.basename(file) === 'static-child-plan-bundle-repair.ts' &&
-              resolved === path.resolve(contractsRoot, './hash.js')) ||
             (path.basename(file) ===
               'r020-child-consumption-lineage-contract.ts' &&
               resolved ===
