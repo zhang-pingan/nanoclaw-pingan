@@ -2,11 +2,13 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 
-import type { Sha256Hash } from '../workflow-runtime/contracts/types.js';
-import { CURRENT_G1_SCHEMA_IDENTITIES } from '../workflow-runtime/gateway/host-core.js';
+import {
+  CURRENT_WORKFLOW_RUNTIME_SCHEMA_VERSION,
+  MINIMUM_WORKFLOW_RUNTIME_SCHEMA_VERSION,
+} from '../workflow-runtime/gateway/host-core.js';
 import { verifyActiveHostCore } from './activation.js';
 import {
-  type HostCoreTargetSchemaIdentity,
+  type HostCoreTargetSchema,
   type PersistentStateDecision,
   type PersistentStateResetPlan,
   type WorkflowRuntimeSchemaCompatibility,
@@ -21,11 +23,10 @@ export type WorkflowStateMode = 'current' | 'active';
 
 export interface WorkflowStateTarget {
   readonly mode: WorkflowStateMode;
-  readonly code_identity: string;
-  readonly version: string | null;
-  readonly release_artifact_hash: Sha256Hash | null;
-  readonly schema: HostCoreTargetSchemaIdentity;
-  readonly schema_compatibility: WorkflowRuntimeSchemaCompatibility | null;
+  readonly code_marker: string;
+  readonly snapshot_id: string | null;
+  readonly schema: HostCoreTargetSchema;
+  readonly schema_compatibility: WorkflowRuntimeSchemaCompatibility;
 }
 
 export interface WorkflowStateInspection {
@@ -36,13 +37,11 @@ export interface WorkflowStateInspection {
 function currentTarget(): WorkflowStateTarget {
   return {
     mode: 'current',
-    code_identity: 'current_checkout',
-    version: null,
-    release_artifact_hash: null,
+    code_marker: 'current_checkout',
+    snapshot_id: null,
     schema: {
-      database_schema_version: 11,
-      database_schema_hash: CURRENT_G1_SCHEMA_IDENTITIES.schema,
-      database_sqlite_schema_hash: CURRENT_G1_SCHEMA_IDENTITIES.sqliteSchema,
+      database_schema_version: CURRENT_WORKFLOW_RUNTIME_SCHEMA_VERSION,
+      minimum_supported_schema_version: MINIMUM_WORKFLOW_RUNTIME_SCHEMA_VERSION,
     },
     schema_compatibility: currentWorkflowRuntimeSchemaCompatibility(),
   };
@@ -55,25 +54,21 @@ export function resolveWorkflowStateTarget(
   const runtimeHome = fs.realpathSync(runtimeHomeInput);
   if (mode === 'current') return currentTarget();
   const active = verifyActiveHostCore(runtimeHome);
-  const sqliteSchemaHash =
-    active.database_sqlite_schema_hash ??
-    (active.database_schema_version === 11 &&
-    active.database_schema_hash === CURRENT_G1_SCHEMA_IDENTITIES.schema
-      ? CURRENT_G1_SCHEMA_IDENTITIES.sqliteSchema
-      : null);
-  if (!sqliteSchemaHash)
-    throw new Error('workflow_state_active_schema_identity_unverifiable');
   return {
     mode,
-    code_identity: `${active.version} ${active.release_artifact_hash}`,
-    version: active.version,
-    release_artifact_hash: active.release_artifact_hash,
+    code_marker: `snapshot:${active.snapshot_id}`,
+    snapshot_id: active.snapshot_id,
     schema: {
-      database_schema_version: active.database_schema_version,
-      database_schema_hash: active.database_schema_hash,
-      database_sqlite_schema_hash: sqliteSchemaHash,
+      database_schema_version: active.manifest.workflow_schema.current_version,
+      minimum_supported_schema_version:
+        active.manifest.workflow_schema.minimum_supported_version,
     },
-    schema_compatibility: active.workflow_runtime_schema_compatibility,
+    schema_compatibility: {
+      format: 'icarus.workflow-runtime-schema-compatibility/2',
+      current_version: active.manifest.workflow_schema.current_version,
+      minimum_supported_version:
+        active.manifest.workflow_schema.minimum_supported_version,
+    },
   };
 }
 
@@ -144,13 +139,13 @@ export function isIcarusHostRunning(
   });
   if (launch.status === 0) return true;
   if (launch.status === null)
-    throw new Error('workflow_state_service_status_unverifiable');
+    throw new Error('workflow_state_process_status_unverifiable');
 
   const pids = commandOutput('/usr/bin/pgrep', ['-f', 'dist/index.js'])
     .split(/\s+/)
     .filter(Boolean);
   const currentEntry = path.join(projectRoot, 'dist/index.js');
-  const activePrefix = `${path.join(runtimeHome, 'core-releases')}${path.sep}`;
+  const activePrefix = `${path.join(runtimeHome, 'host-core-snapshots')}${path.sep}`;
   for (const pid of pids) {
     if (!/^[1-9][0-9]*$/.test(pid))
       throw new Error('workflow_state_process_status_unverifiable');
@@ -196,10 +191,7 @@ export function resetWorkflowState(options: {
   const preparation = prepareWorkflowStateReset(runtimeHome, options.mode);
   if (!options.confirmed) throw new Error('workflow_state_reset_cancelled');
   const plan = preparation.plan;
-  if (
-    options.expectedPlan &&
-    options.expectedPlan.backup_identity !== plan.backup_identity
-  )
+  if (options.expectedPlan && options.expectedPlan.backup_id !== plan.backup_id)
     throw new Error('workflow_state_reset_plan_changed');
   options.onPlan?.(plan);
   quarantinePersistentState(runtimeHome, plan);

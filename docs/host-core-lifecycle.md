@@ -1,34 +1,30 @@
 # Host Core Lifecycle
 
-Icarus is an internal, experimental, single-user tool. Host Core lifecycle commands are optional local rollback and state-protection controls for one machine, not a multi-user deployment transaction, production release system, or availability guarantee. Normal development should use `current`; create or select a snapshot only when a risky change makes a known-good local fallback valuable.
+Icarus is an internal, experimental, single-user tool. Host Core snapshots are optional local rollback controls, not product releases, deployment transactions, or availability guarantees. Normal development uses `current`; create a snapshot only when a risky change makes a known-good local fallback useful.
 
-Legacy command and serialized names retain `release`, `publish`, `activate`, `production`, and `frozen` for compatibility. In current project language these mean local snapshot and local selection. New work must not extend them with approval chains, deployment journals, certification stages, independent sign-off, or other product-release governance unless a concrete local failure mode first justifies the cost.
+## Local Snapshots
 
-## Local Stable Snapshots
-
-A local Host Core snapshot is created only by an explicit user command:
+The primary commands are:
 
 ```sh
-local/shell/host-core-release.sh publish --version <version> [--skip-validation]
+local/shell/host-core-release.sh snapshot create [--label <label>] [--full-check]
+local/shell/host-core-release.sh snapshot list
+local/shell/host-core-release.sh snapshot select --id <snapshot-id>
+local/shell/host-core-release.sh snapshot verify --id <snapshot-id>
+local/shell/host-core-release.sh snapshot remove --id <snapshot-id>
 ```
 
-`publish` currently requires a clean Git checkout at one exact commit and tree. It builds into isolated staging, inventories and hashes the complete artifact, installs it under its content hash, and creates one immutable `host-core-versions/<version>.json` record. These checks make local rollback deterministic, but the complete inventory and immutable version binding are stronger than the project's minimum requirement and are candidates for later simplification. They are not a release-quality promise.
+`publish --version <label>` and `activate --version <label>` remain one-cycle aliases for create and select. New code should use the snapshot commands.
 
-Default validation runs `test:current`, `contracts:check`, `typecheck`, and `format:check`. `--skip-validation` records `SKIPPED_BY_USER`; it does not skip the build, manifest parsing, inventory and entry hashing, artifact verification, or immutable version binding. Publish does not change `active-core` or inspect or modify Workflow Runtime state.
+Creation builds in an isolated staging directory and installs the result under `host-core-snapshots/<snapshot-id>/`. The ID combines a timestamp, short Git commit, and random suffix; it is not content-addressed. A dirty checkout is recorded and warned about rather than rejected.
 
-## Local Snapshot Selection
+The `snapshot.json` file records only creation time, optional label, Git commit and dirty flag, entry path and checksum, Workflow Runtime integer schema version and supported migration range, Node major/native ABI/platform/arch, and validation status. It does not contain a complete inventory, per-file hashes, immutable version binding, certification evidence, or Runtime, Compiler, release, logical-schema, migration-file, or physical-schema identity hashes.
 
-Selection is a separate explicit command:
+Default creation performs entry syntax and `better-sqlite3` smoke checks. `--full-check` additionally runs `test:current`, `contracts:check`, `typecheck`, and `format:check` before installation.
 
-```sh
-local/shell/host-core-release.sh activate --version <version> [--skip-validation]
-```
+## Selection And Startup
 
-`activate` resolves the requested local snapshot, verifies it, displays current and target identities, and requires confirmation. It atomically replaces `active-core` only after target checks pass; a failure keeps or restores the prior selection. Atomic selection and rollback protect normal local use. Full artifact/toolchain identity verification is compatibility behavior that may be reduced if it becomes a material iteration cost.
-
-Selection does not inspect, migrate, reset, quarantine, or otherwise touch Workflow Runtime state. It creates no deployment, audit, journal, recovery, or lock state. Historical lifecycle files are left untouched and ignored. Legacy Host identity fields are derived directly from the verified `active-core`; their former production wording has no external meaning. The legacy G8 `1.2.14` active binding remains supported only for compatibility with existing local state.
-
-## Startup
+Selection verifies the snapshot manifest, entry checksum, schema range, Node compatibility, and native-module smoke before atomically replacing `active-core`. It verifies the resulting pointer and restores the prior pointer if a post-switch check fails. An active snapshot cannot be removed.
 
 Host startup always names the code source:
 
@@ -37,30 +33,20 @@ local/shell/start.sh --mode current
 local/shell/start.sh --mode active
 ```
 
-`current` installs/verifies the managed toolchain, builds the current checkout, checks Workflow Runtime schema compatibility, and launches that build. It does not publish or change selection.
+`current` builds and launches the checkout. `active` verifies and launches the snapshot selected by `active-core` without rebuilding or changing selection. Host Core reaches Workflow Runtime schema behavior through `gateway/host-core.ts`; it does not import certification, Store implementation, or execution internals.
 
-`active` verifies and launches the local snapshot selected by `active-core` without rebuilding or changing selection.
-
-Immediately before either launch, startup performs a read-only schema decision for the selected code identity. This is a retained local-state safeguard:
-
-- `NO_STATE`, `SAME_SCHEMA`, and `MIGRATION_SUPPORTED` allow startup. Supported migration remains owned by normal Store startup. Current mode uses current-checkout migration authority; active mode uses the selected release's frozen, integrity-checked compatibility descriptor and never inherits migration support from the current checkout. A legacy release without frozen migration authority can still launch with no state or the same verified schema, but any migration decision fails closed.
-- `RESET_REQUIRED` blocks startup with a stable decision.
-- `UNKNOWN_BLOCKED` blocks startup. Unverifiable databases, non-regular state files, and broken symlinks are never treated as no state.
+Immediately before launch, startup reads `PRAGMA user_version`. `NO_STATE`, `SAME_SCHEMA`, and `MIGRATION_SUPPORTED` allow startup. `RESET_REQUIRED` and `UNKNOWN_BLOCKED` stop it. Current-version databases also run focused required table, column, and index checks. Supported older versions are migrated by normal Store startup.
 
 ## Workflow State Maintenance
 
-State inspection and reset are independent of publish and activation:
+State inspection and reset remain separate from snapshot selection:
 
 ```sh
 local/shell/workflow-state.sh inspect --mode <current|active>
 local/shell/workflow-state.sh reset --mode <current|active>
 ```
 
-`inspect` is read-only. It reports the selected code identity, current and target schema identities, decision, reason, and the exact database paths.
-
-`reset` is available only for a recognized `RESET_REQUIRED` decision or to finish one unambiguous incomplete quarantine previously created by this command. Unknown identity remains blocked. The command refuses to continue while the launchd service or a direct current/active Host process is running, never stops it implicitly, displays the exact DB/WAL/SHM paths, recorded identities, and recovery path, and requires confirmation.
-
-Reset operates only on:
+Inspection reports integer schema versions and the exact DB/WAL/SHM paths. Reset is available only for `RESET_REQUIRED`, refuses while launchd or a direct Host process is running, shows the exact paths and recovery location, and requires confirmation. It operates only on:
 
 ```text
 data/workflow-runtime/workflow-runtime.db
@@ -68,6 +54,6 @@ data/workflow-runtime/workflow-runtime.db-wal
 data/workflow-runtime/workflow-runtime.db-shm
 ```
 
-The present unit is moved into `workflow-runtime-state-backups/` before reset so the user has a recovery path. The current implementation also uses content identities, durable manifests, resumable interruption handling, strict collision/tamper checks, and hardened immutable backups. Backup-before-reset, exact path scoping, confirmation, and refusal while the Host is running are required local safety behavior. Content-addressed quarantine identities and exhaustive recovery proof are candidates for simplification if maintenance cost exceeds the real interruption risk. Snapshots, version records, credentials, configuration, Capacity, Registry, container data, and unrelated project data are not reset.
+The current quarantine implementation preserves these files under `workflow-runtime-state-backups/` before removing live state. Snapshot directories, credentials, configuration, Capacity, Registry, container data, and unrelated project data are never reset.
 
 The broader engineering-weight decision is recorded in [`internal-experimental-scope.md`](internal-experimental-scope.md).

@@ -6,49 +6,25 @@ import path from 'node:path';
 import type BetterSqlite3 from 'better-sqlite3';
 
 import {
-  domainSeparatedSha256,
-  parseSha256Hash,
-} from '../workflow-runtime/contracts/hash.js';
-import {
-  assertJsonObject,
-  strictParseJsonBytes,
-} from '../workflow-runtime/contracts/strict-json.js';
-import type {
-  JsonValue,
-  Sha256Hash,
-} from '../workflow-runtime/contracts/types.js';
-import {
-  CURRENT_G1_SCHEMA_IDENTITIES,
-  calculateDatabaseSqliteSchemaIdentity,
-  loadFrozenWorkflowRuntimeStoreInputs,
+  CURRENT_WORKFLOW_RUNTIME_SCHEMA_VERSION,
+  MINIMUM_WORKFLOW_RUNTIME_SCHEMA_VERSION,
+  SCHEMA_3_REQUIRED_EMPTY_RELATIONS,
+  assertCurrentWorkflowRuntimeStructure,
 } from '../workflow-runtime/gateway/host-core.js';
 
-export interface HostCoreTargetSchemaIdentity {
+export interface HostCoreTargetSchema {
   readonly database_schema_version: number;
-  readonly database_schema_hash: Sha256Hash;
-  readonly database_sqlite_schema_hash: Sha256Hash;
-}
-
-export type WorkflowRuntimeMigrationPrecondition =
-  | 'NONE'
-  | 'SCHEMA_3_REQUIRED_RELATIONS_EMPTY';
-
-export interface WorkflowRuntimeSchemaSourceCompatibility {
-  readonly database_schema_version: number;
-  readonly database_sqlite_schema_hash: Sha256Hash;
-  readonly migration: 'SUPPORTED' | 'UNSUPPORTED';
-  readonly precondition: WorkflowRuntimeMigrationPrecondition;
+  readonly minimum_supported_schema_version: number;
 }
 
 export interface WorkflowRuntimeSchemaCompatibility {
-  readonly format: 'icarus.workflow-runtime-schema-compatibility/1';
-  readonly target_identity: HostCoreTargetSchemaIdentity;
-  readonly recognized_sources: readonly WorkflowRuntimeSchemaSourceCompatibility[];
+  readonly format: 'icarus.workflow-runtime-schema-compatibility/2';
+  readonly current_version: number;
+  readonly minimum_supported_version: number;
 }
 
-export interface WorkflowRuntimeStateIdentity {
+export interface WorkflowRuntimeStateSchema {
   readonly database_schema_version: number;
-  readonly database_sqlite_schema_hash: Sha256Hash;
 }
 
 export type PersistentStateDecisionKind =
@@ -58,76 +34,47 @@ export type PersistentStateDecisionKind =
   | 'RESET_REQUIRED'
   | 'UNKNOWN_BLOCKED';
 
-interface StateFileIdentity {
+interface StateFileCopy {
   readonly source_relative_path: string;
   readonly backup_name: string;
   readonly byte_length: number;
-  readonly raw_sha256: Sha256Hash;
+  readonly raw_sha256: string;
 }
 
 export interface PersistentStateDecision {
   readonly decision: PersistentStateDecisionKind;
-  readonly old_identity: WorkflowRuntimeStateIdentity | null;
-  readonly target_identity: HostCoreTargetSchemaIdentity;
+  readonly observed_schema: WorkflowRuntimeStateSchema | null;
+  readonly target_schema: HostCoreTargetSchema;
   readonly affected_paths: readonly string[];
-  readonly members: readonly StateFileIdentity[];
+  readonly members: readonly StateFileCopy[];
   readonly reason: string;
 }
 
 export interface PersistentStateResetPlan {
-  readonly format: 'icarus.workflow-runtime-state-backup/1';
-  readonly old_identity: WorkflowRuntimeStateIdentity;
-  readonly target_identity: HostCoreTargetSchemaIdentity;
-  readonly members: readonly StateFileIdentity[];
-  readonly backup_identity: Sha256Hash;
+  readonly format: 'icarus.workflow-runtime-state-quarantine/2';
+  readonly observed_schema_version: number;
+  readonly target_schema_version: number;
+  readonly members: readonly StateFileCopy[];
+  readonly backup_id: string;
   readonly backup_relative_path: string;
 }
 
 export const WORKFLOW_STATE_DATABASE_RELATIVE =
   'data/workflow-runtime/workflow-runtime.db';
-const require = createRequire(import.meta.url);
 export const WORKFLOW_STATE_RELATIVE_PATHS = [
   WORKFLOW_STATE_DATABASE_RELATIVE,
   `${WORKFLOW_STATE_DATABASE_RELATIVE}-wal`,
   `${WORKFLOW_STATE_DATABASE_RELATIVE}-shm`,
 ] as const;
 
-const KNOWN_SQLITE_IDENTITIES = new Map<number, Sha256Hash>([
-  [3, CURRENT_G1_SCHEMA_IDENTITIES.schema3SourceSqliteSchema],
-  [4, CURRENT_G1_SCHEMA_IDENTITIES.schema4SourceSqliteSchema],
-  [5, CURRENT_G1_SCHEMA_IDENTITIES.schema5SourceSqliteSchema],
-  [6, CURRENT_G1_SCHEMA_IDENTITIES.schema6SourceSqliteSchema],
-  [7, CURRENT_G1_SCHEMA_IDENTITIES.schema7SourceSqliteSchema],
-  [8, CURRENT_G1_SCHEMA_IDENTITIES.schema8SourceSqliteSchema],
-  [9, CURRENT_G1_SCHEMA_IDENTITIES.schema9SourceSqliteSchema],
-  [10, CURRENT_G1_SCHEMA_IDENTITIES.schema10SourceSqliteSchema],
-  [11, CURRENT_G1_SCHEMA_IDENTITIES.sqliteSchema],
-]);
+const require = createRequire(import.meta.url);
 
 export function currentWorkflowRuntimeSchemaCompatibility(): WorkflowRuntimeSchemaCompatibility {
   return {
-    format: 'icarus.workflow-runtime-schema-compatibility/1',
-    target_identity: {
-      database_schema_version: 11,
-      database_schema_hash: CURRENT_G1_SCHEMA_IDENTITIES.schema,
-      database_sqlite_schema_hash: CURRENT_G1_SCHEMA_IDENTITIES.sqliteSchema,
-    },
-    recognized_sources: [...KNOWN_SQLITE_IDENTITIES.entries()]
-      .filter(([version]) => version < 11)
-      .map(([version, sqliteSchemaHash]) => ({
-        database_schema_version: version,
-        database_sqlite_schema_hash: sqliteSchemaHash,
-        migration: 'SUPPORTED' as const,
-        precondition:
-          version === 3
-            ? ('SCHEMA_3_REQUIRED_RELATIONS_EMPTY' as const)
-            : ('NONE' as const),
-      })),
+    format: 'icarus.workflow-runtime-schema-compatibility/2',
+    current_version: CURRENT_WORKFLOW_RUNTIME_SCHEMA_VERSION,
+    minimum_supported_version: MINIMUM_WORKFLOW_RUNTIME_SCHEMA_VERSION,
   };
-}
-
-function rawSha256(file: string): Sha256Hash {
-  return `sha256:${crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex')}`;
 }
 
 function lstatIfPresent(file: string): fs.Stats | null {
@@ -137,6 +84,17 @@ function lstatIfPresent(file: string): fs.Stats | null {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
     throw error;
   }
+}
+
+function sha256(file: string): string {
+  return `sha256:${crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex')}`;
+}
+
+function canonicalHash(value: unknown): string {
+  return crypto
+    .createHash('sha256')
+    .update(JSON.stringify(value))
+    .digest('hex');
 }
 
 function fsyncDirectory(directory: string): void {
@@ -160,8 +118,8 @@ function ensureDirectory(root: string, relative: string): string {
   return current;
 }
 
-function stateMembers(runtimeHome: string): StateFileIdentity[] {
-  const members: StateFileIdentity[] = [];
+function stateMembers(runtimeHome: string): StateFileCopy[] {
+  const members: StateFileCopy[] = [];
   for (const relative of WORKFLOW_STATE_RELATIVE_PATHS) {
     const absolute = path.join(runtimeHome, relative);
     const stat = lstatIfPresent(absolute);
@@ -174,7 +132,7 @@ function stateMembers(runtimeHome: string): StateFileIdentity[] {
       source_relative_path: relative,
       backup_name: path.basename(relative),
       byte_length: stat.size,
-      raw_sha256: rawSha256(absolute),
+      raw_sha256: sha256(absolute),
     });
   }
   return members;
@@ -186,25 +144,20 @@ function presentStatePaths(runtimeHome: string): string[] {
   ).filter((absolute) => lstatIfPresent(absolute) !== null);
 }
 
-function targetFrom(
-  input: HostCoreTargetSchemaIdentity,
-): HostCoreTargetSchemaIdentity {
+function assertTarget(input: HostCoreTargetSchema): HostCoreTargetSchema {
   if (
     !Number.isSafeInteger(input.database_schema_version) ||
-    input.database_schema_version < 1
+    input.database_schema_version < 1 ||
+    !Number.isSafeInteger(input.minimum_supported_schema_version) ||
+    input.minimum_supported_schema_version < 1 ||
+    input.minimum_supported_schema_version > input.database_schema_version
   )
     throw new Error('host_core_target_schema_version_invalid');
-  return {
-    database_schema_version: input.database_schema_version,
-    database_schema_hash: parseSha256Hash(input.database_schema_hash),
-    database_sqlite_schema_hash: parseSha256Hash(
-      input.database_sqlite_schema_hash,
-    ),
-  };
+  return { ...input };
 }
 
 function inspectDatabase(databasePath: string): {
-  identity: WorkflowRuntimeStateIdentity;
+  schema: WorkflowRuntimeStateSchema;
   schema3MigrationSafe: boolean;
 } {
   const Database = require('better-sqlite3') as typeof BetterSqlite3;
@@ -214,456 +167,278 @@ function inspectDatabase(databasePath: string): {
   });
   try {
     const version = Number(database.pragma('user_version', { simple: true }));
-    const identity = {
-      database_schema_version: version,
-      database_sqlite_schema_hash:
-        calculateDatabaseSqliteSchemaIdentity(database),
-    };
+    if (!Number.isSafeInteger(version) || version < 1)
+      throw new Error('workflow_runtime_schema_version_invalid');
+    if (version === CURRENT_WORKFLOW_RUNTIME_SCHEMA_VERSION)
+      assertCurrentWorkflowRuntimeStructure(database);
     let schema3MigrationSafe = true;
     if (version === 3) {
-      const relations =
-        loadFrozenWorkflowRuntimeStoreInputs().schema3RequiredEmptyRelations;
-      schema3MigrationSafe = relations.every((relation) => {
-        const escaped = relation.replaceAll('"', '""');
-        return (
-          Number(
-            database.prepare(`SELECT count(*) FROM "${escaped}"`).pluck().get(),
-          ) === 0
-        );
-      });
+      schema3MigrationSafe = SCHEMA_3_REQUIRED_EMPTY_RELATIONS.every(
+        (relation) => {
+          const escaped = relation.replaceAll('"', '""');
+          return (
+            Number(
+              database
+                .prepare(`SELECT count(*) FROM "${escaped}"`)
+                .pluck()
+                .get(),
+            ) === 0
+          );
+        },
+      );
     }
-    return { identity, schema3MigrationSafe };
+    return {
+      schema: { database_schema_version: version },
+      schema3MigrationSafe,
+    };
   } finally {
     database.close();
   }
 }
 
+export function parseWorkflowRuntimeSchemaCompatibility(
+  value: unknown,
+): WorkflowRuntimeSchemaCompatibility {
+  if (value === null || typeof value !== 'object' || Array.isArray(value))
+    throw new Error('host_core_schema_compatibility_invalid');
+  const record = value as Record<string, unknown>;
+  const keys = Object.keys(record).sort();
+  if (
+    JSON.stringify(keys) !==
+      JSON.stringify([
+        'current_version',
+        'format',
+        'minimum_supported_version',
+      ]) ||
+    record.format !== 'icarus.workflow-runtime-schema-compatibility/2'
+  )
+    throw new Error('host_core_schema_compatibility_invalid');
+  return {
+    format: 'icarus.workflow-runtime-schema-compatibility/2',
+    current_version: assertTarget({
+      database_schema_version: Number(record.current_version),
+      minimum_supported_schema_version: Number(
+        record.minimum_supported_version,
+      ),
+    }).database_schema_version,
+    minimum_supported_version: Number(record.minimum_supported_version),
+  };
+}
+
 export function decidePersistentStateCompatibility(
   runtimeHomeInput: string,
-  targetInput: HostCoreTargetSchemaIdentity,
+  targetInput: HostCoreTargetSchema,
   compatibilityInput: WorkflowRuntimeSchemaCompatibility | null = currentWorkflowRuntimeSchemaCompatibility(),
 ): PersistentStateDecision {
   const runtimeHome = fs.realpathSync(runtimeHomeInput);
-  const target = targetFrom(targetInput);
+  const target = assertTarget(targetInput);
   const compatibility = compatibilityInput
     ? parseWorkflowRuntimeSchemaCompatibility(compatibilityInput)
     : null;
   if (
     compatibility &&
-    JSON.stringify(compatibility.target_identity) !== JSON.stringify(target)
+    (compatibility.current_version !== target.database_schema_version ||
+      compatibility.minimum_supported_version !==
+        target.minimum_supported_schema_version)
   )
     throw new Error('host_core_schema_compatibility_target_mismatch');
-  let members: StateFileIdentity[];
+
+  let members: StateFileCopy[];
   try {
     members = stateMembers(runtimeHome);
   } catch {
     return {
       decision: 'UNKNOWN_BLOCKED',
-      old_identity: null,
-      target_identity: target,
+      observed_schema: null,
+      target_schema: target,
       affected_paths: presentStatePaths(runtimeHome),
       members: [],
       reason: 'persistent_state_path_invalid',
     };
   }
-  let affectedPaths = members.map((member) =>
+  const databasePath = path.join(runtimeHome, WORKFLOW_STATE_DATABASE_RELATIVE);
+  const affectedPaths = members.map((member) =>
     path.join(runtimeHome, member.source_relative_path),
   );
-  const initialMembers = members;
-  const database = path.join(runtimeHome, WORKFLOW_STATE_DATABASE_RELATIVE);
-  if (!lstatIfPresent(database)) {
-    if (members.length === 0)
-      return {
-        decision: 'NO_STATE',
-        old_identity: null,
-        target_identity: target,
-        affected_paths: [],
-        members,
-        reason: 'no_workflow_runtime_database',
-      };
-    return {
-      decision: 'UNKNOWN_BLOCKED',
-      old_identity: null,
-      target_identity: target,
-      affected_paths: affectedPaths,
-      members,
-      reason: 'database_companion_without_primary',
-    };
+  if (!lstatIfPresent(databasePath)) {
+    return members.length === 0
+      ? {
+          decision: 'NO_STATE',
+          observed_schema: null,
+          target_schema: target,
+          affected_paths: [],
+          members,
+          reason: 'no_workflow_runtime_database',
+        }
+      : {
+          decision: 'UNKNOWN_BLOCKED',
+          observed_schema: null,
+          target_schema: target,
+          affected_paths: affectedPaths,
+          members,
+          reason: 'database_companion_without_primary',
+        };
   }
 
   let observed: ReturnType<typeof inspectDatabase>;
   try {
-    observed = inspectDatabase(database);
-  } catch {
-    try {
-      members = stateMembers(runtimeHome);
-      affectedPaths = members.map((member) =>
-        path.join(runtimeHome, member.source_relative_path),
-      );
-    } catch {
-      affectedPaths = presentStatePaths(runtimeHome);
-      members = [];
-    }
+    observed = inspectDatabase(databasePath);
+  } catch (error) {
     return {
       decision: 'UNKNOWN_BLOCKED',
-      old_identity: null,
-      target_identity: target,
+      observed_schema: null,
+      target_schema: target,
       affected_paths: affectedPaths,
       members,
-      reason: 'database_identity_unverifiable',
+      reason:
+        error instanceof Error && error.message.includes('missing required')
+          ? 'database_required_structure_missing'
+          : 'database_schema_unverifiable',
     };
   }
-  try {
-    members = stateMembers(runtimeHome);
-  } catch {
-    return {
-      decision: 'UNKNOWN_BLOCKED',
-      old_identity: observed.identity,
-      target_identity: target,
-      affected_paths: presentStatePaths(runtimeHome),
-      members: [],
-      reason: 'persistent_state_changed_during_inspection',
-    };
-  }
-  if (JSON.stringify(members) !== JSON.stringify(initialMembers))
-    return {
-      decision: 'UNKNOWN_BLOCKED',
-      old_identity: observed.identity,
-      target_identity: target,
-      affected_paths: presentStatePaths(runtimeHome),
-      members: [],
-      reason: 'persistent_state_changed_during_inspection',
-    };
-  affectedPaths = members.map((member) =>
-    path.join(runtimeHome, member.source_relative_path),
-  );
-  const old = observed.identity;
-  if (
-    old.database_schema_version === target.database_schema_version &&
-    old.database_sqlite_schema_hash === target.database_sqlite_schema_hash
-  )
+  const version = observed.schema.database_schema_version;
+  if (version === target.database_schema_version)
     return {
       decision: 'SAME_SCHEMA',
-      old_identity: old,
-      target_identity: target,
+      observed_schema: observed.schema,
+      target_schema: target,
       affected_paths: affectedPaths,
       members,
-      reason: 'same_schema_identity',
+      reason: 'same_schema_version_and_required_structure',
     };
-
   if (!compatibility)
     return {
       decision: 'UNKNOWN_BLOCKED',
-      old_identity: old,
-      target_identity: target,
+      observed_schema: observed.schema,
+      target_schema: target,
       affected_paths: affectedPaths,
       members,
-      reason: 'frozen_migration_authority_unavailable',
+      reason: 'schema_compatibility_unavailable',
     };
-
-  const source = compatibility.recognized_sources.find(
-    (candidate) =>
-      candidate.database_schema_version === old.database_schema_version &&
-      candidate.database_sqlite_schema_hash === old.database_sqlite_schema_hash,
-  );
-  if (!source)
+  if (version > target.database_schema_version)
     return {
       decision: 'UNKNOWN_BLOCKED',
-      old_identity: old,
-      target_identity: target,
+      observed_schema: observed.schema,
+      target_schema: target,
       affected_paths: affectedPaths,
       members,
-      reason: 'database_schema_identity_unknown',
+      reason: 'database_schema_newer_than_target',
     };
-
-  if (
-    source.migration === 'SUPPORTED' &&
-    (source.precondition !== 'SCHEMA_3_REQUIRED_RELATIONS_EMPTY' ||
-      observed.schema3MigrationSafe)
-  )
+  if (version < target.minimum_supported_schema_version)
     return {
-      decision: 'MIGRATION_SUPPORTED',
-      old_identity: old,
-      target_identity: target,
+      decision: 'RESET_REQUIRED',
+      observed_schema: observed.schema,
+      target_schema: target,
       affected_paths: affectedPaths,
       members,
-      reason: 'frozen_authoritative_migration_supported',
+      reason: 'database_schema_older_than_supported_range',
     };
-
+  if (version === 3 && !observed.schema3MigrationSafe)
+    return {
+      decision: 'RESET_REQUIRED',
+      observed_schema: observed.schema,
+      target_schema: target,
+      affected_paths: affectedPaths,
+      members,
+      reason: 'schema_3_migration_requires_empty_relations',
+    };
   return {
-    decision: 'RESET_REQUIRED',
-    old_identity: old,
-    target_identity: target,
+    decision: 'MIGRATION_SUPPORTED',
+    observed_schema: observed.schema,
+    target_schema: target,
     affected_paths: affectedPaths,
     members,
-    reason:
-      source.precondition === 'SCHEMA_3_REQUIRED_RELATIONS_EMPTY' &&
-      !observed.schema3MigrationSafe
-        ? 'schema_3_migration_requires_empty_relations'
-        : 'recognized_schema_without_supported_target_path',
-  };
-}
-
-function exactKeys(
-  value: object,
-  expected: readonly string[],
-  label: string,
-): void {
-  const actual = Object.keys(value).sort();
-  const required = [...expected].sort();
-  if (
-    actual.length !== required.length ||
-    actual.some((key, index) => key !== required[index])
-  )
-    throw new Error(`${label}_keyset_invalid`);
-}
-
-export function parseWorkflowRuntimeSchemaCompatibility(
-  value: unknown,
-): WorkflowRuntimeSchemaCompatibility {
-  assertJsonObject(value);
-  exactKeys(
-    value,
-    ['format', 'recognized_sources', 'target_identity'],
-    'host_core_schema_compatibility',
-  );
-  if (
-    value.format !== 'icarus.workflow-runtime-schema-compatibility/1' ||
-    !Array.isArray(value.recognized_sources)
-  )
-    throw new Error('host_core_schema_compatibility_invalid');
-  assertJsonObject(value.target_identity);
-  const targetIdentity = targetFrom({
-    database_schema_version: Number(
-      value.target_identity.database_schema_version,
-    ),
-    database_schema_hash: parseSha256Hash(
-      value.target_identity.database_schema_hash,
-    ),
-    database_sqlite_schema_hash: parseSha256Hash(
-      value.target_identity.database_sqlite_schema_hash,
-    ),
-  });
-  const recognizedSources = value.recognized_sources.map((source, index) => {
-    assertJsonObject(source);
-    exactKeys(
-      source,
-      [
-        'database_schema_version',
-        'database_sqlite_schema_hash',
-        'migration',
-        'precondition',
-      ],
-      `host_core_schema_compatibility_source_${index}`,
-    );
-    if (
-      !Number.isSafeInteger(source.database_schema_version) ||
-      Number(source.database_schema_version) < 1 ||
-      (source.migration !== 'SUPPORTED' &&
-        source.migration !== 'UNSUPPORTED') ||
-      (source.precondition !== 'NONE' &&
-        source.precondition !== 'SCHEMA_3_REQUIRED_RELATIONS_EMPTY') ||
-      (source.migration === 'UNSUPPORTED' && source.precondition !== 'NONE') ||
-      (source.precondition === 'SCHEMA_3_REQUIRED_RELATIONS_EMPTY' &&
-        source.database_schema_version !== 3)
-    )
-      throw new Error('host_core_schema_compatibility_source_invalid');
-    return {
-      database_schema_version: Number(source.database_schema_version),
-      database_sqlite_schema_hash: parseSha256Hash(
-        source.database_sqlite_schema_hash,
-      ),
-      migration: source.migration,
-      precondition: source.precondition,
-    } as WorkflowRuntimeSchemaSourceCompatibility;
-  });
-  recognizedSources.forEach((source, index) => {
-    const previous = recognizedSources[index - 1];
-    if (
-      source.database_schema_version ===
-        targetIdentity.database_schema_version ||
-      (previous &&
-        previous.database_schema_version >= source.database_schema_version)
-    )
-      throw new Error('host_core_schema_compatibility_source_order_invalid');
-  });
-  return {
-    format: 'icarus.workflow-runtime-schema-compatibility/1',
-    target_identity: targetIdentity,
-    recognized_sources: recognizedSources,
+    reason: 'supported_schema_version_migration',
   };
 }
 
 export function buildPersistentStateResetPlan(
   decision: PersistentStateDecision,
 ): PersistentStateResetPlan {
-  if (decision.decision !== 'RESET_REQUIRED' || !decision.old_identity)
+  if (decision.decision !== 'RESET_REQUIRED' || !decision.observed_schema)
     throw new Error('host_core_persistent_state_reset_not_available');
   const payload = {
-    format: 'icarus.workflow-runtime-state-backup/1' as const,
-    old_identity: decision.old_identity,
-    target_identity: decision.target_identity,
+    format: 'icarus.workflow-runtime-state-quarantine/2' as const,
+    observed_schema_version: decision.observed_schema.database_schema_version,
+    target_schema_version: decision.target_schema.database_schema_version,
     members: decision.members,
   };
-  const backupIdentity = domainSeparatedSha256(
-    'icarus:workflow-runtime-state-backup:1\n',
-    payload as unknown as JsonValue,
-  );
+  const backupId = canonicalHash(payload);
   return {
     ...payload,
-    backup_identity: backupIdentity,
-    backup_relative_path: `workflow-runtime-state-backups/${backupIdentity.slice('sha256:'.length)}`,
+    backup_id: backupId,
+    backup_relative_path: `workflow-runtime-state-backups/${backupId}`,
   };
 }
 
 export function parsePersistentStateResetPlan(
   value: unknown,
 ): PersistentStateResetPlan {
-  assertJsonObject(value);
-  exactKeys(
-    value,
-    [
-      'backup_identity',
-      'backup_relative_path',
-      'format',
-      'members',
-      'old_identity',
-      'target_identity',
-    ],
-    'host_core_state_backup',
-  );
-  assertJsonObject(value.old_identity);
-  assertJsonObject(value.target_identity);
-  exactKeys(
-    value.old_identity,
-    ['database_schema_version', 'database_sqlite_schema_hash'],
-    'host_core_state_backup_old_identity',
-  );
-  exactKeys(
-    value.target_identity,
-    [
-      'database_schema_hash',
-      'database_schema_version',
-      'database_sqlite_schema_hash',
-    ],
-    'host_core_state_backup_target_identity',
-  );
-  if (!Array.isArray(value.members) || value.members.length < 1)
-    throw new Error('host_core_state_backup_members_invalid');
-  const members = value.members.map((member) => {
-    assertJsonObject(member);
-    exactKeys(
-      member,
-      ['backup_name', 'byte_length', 'raw_sha256', 'source_relative_path'],
-      'host_core_state_backup_member',
-    );
+  if (value === null || typeof value !== 'object' || Array.isArray(value))
+    throw new Error('host_core_state_backup_invalid');
+  const record = value as Record<string, unknown>;
+  if (
+    record.format !== 'icarus.workflow-runtime-state-quarantine/2' ||
+    !Array.isArray(record.members) ||
+    record.members.length < 1 ||
+    !Number.isSafeInteger(record.observed_schema_version) ||
+    Number(record.observed_schema_version) < 1 ||
+    !Number.isSafeInteger(record.target_schema_version) ||
+    Number(record.target_schema_version) < 1
+  )
+    throw new Error('host_core_state_backup_invalid');
+  const members = record.members.map((member) => {
+    if (member === null || typeof member !== 'object' || Array.isArray(member))
+      throw new Error('host_core_state_backup_member_invalid');
+    const copy = member as Record<string, unknown>;
     if (
       !WORKFLOW_STATE_RELATIVE_PATHS.includes(
-        member.source_relative_path as (typeof WORKFLOW_STATE_RELATIVE_PATHS)[number],
+        copy.source_relative_path as (typeof WORKFLOW_STATE_RELATIVE_PATHS)[number],
       ) ||
-      member.backup_name !==
-        path.basename(String(member.source_relative_path)) ||
-      !Number.isSafeInteger(member.byte_length) ||
-      Number(member.byte_length) < 0
+      copy.backup_name !== path.basename(String(copy.source_relative_path)) ||
+      !Number.isSafeInteger(copy.byte_length) ||
+      Number(copy.byte_length) < 0 ||
+      typeof copy.raw_sha256 !== 'string' ||
+      !/^sha256:[0-9a-f]{64}$/.test(copy.raw_sha256)
     )
       throw new Error('host_core_state_backup_member_invalid');
     return {
-      source_relative_path: String(member.source_relative_path),
-      backup_name: String(member.backup_name),
-      byte_length: Number(member.byte_length),
-      raw_sha256: parseSha256Hash(member.raw_sha256),
+      source_relative_path: String(copy.source_relative_path),
+      backup_name: String(copy.backup_name),
+      byte_length: Number(copy.byte_length),
+      raw_sha256: copy.raw_sha256,
     };
   });
-  let previousMemberIndex = -1;
-  for (const member of members) {
-    const memberIndex = WORKFLOW_STATE_RELATIVE_PATHS.indexOf(
-      member.source_relative_path as (typeof WORKFLOW_STATE_RELATIVE_PATHS)[number],
-    );
-    if (memberIndex <= previousMemberIndex)
-      throw new Error('host_core_state_backup_member_order_invalid');
-    previousMemberIndex = memberIndex;
-  }
   if (members[0]!.source_relative_path !== WORKFLOW_STATE_DATABASE_RELATIVE)
     throw new Error('host_core_state_backup_primary_missing');
-  if (
-    !Number.isSafeInteger(value.old_identity.database_schema_version) ||
-    Number(value.old_identity.database_schema_version) < 1
-  )
-    throw new Error('host_core_state_backup_old_identity_invalid');
-  const oldIdentity = {
-    database_schema_version: Number(value.old_identity.database_schema_version),
-    database_sqlite_schema_hash: parseSha256Hash(
-      value.old_identity.database_sqlite_schema_hash,
-    ),
-  };
-  const targetIdentity = targetFrom({
-    database_schema_version: Number(
-      value.target_identity.database_schema_version,
-    ),
-    database_schema_hash: parseSha256Hash(
-      value.target_identity.database_schema_hash,
-    ),
-    database_sqlite_schema_hash: parseSha256Hash(
-      value.target_identity.database_sqlite_schema_hash,
-    ),
-  });
   const payload = {
-    format: 'icarus.workflow-runtime-state-backup/1' as const,
-    old_identity: oldIdentity,
-    target_identity: targetIdentity,
+    format: 'icarus.workflow-runtime-state-quarantine/2' as const,
+    observed_schema_version: Number(record.observed_schema_version),
+    target_schema_version: Number(record.target_schema_version),
     members,
   };
-  const backupIdentity = domainSeparatedSha256(
-    'icarus:workflow-runtime-state-backup:1\n',
-    payload as unknown as JsonValue,
-  );
+  const backupId = canonicalHash(payload);
   if (
-    parseSha256Hash(value.backup_identity) !== backupIdentity ||
-    value.backup_relative_path !==
-      `workflow-runtime-state-backups/${backupIdentity.slice('sha256:'.length)}`
+    record.backup_id !== backupId ||
+    record.backup_relative_path !== `workflow-runtime-state-backups/${backupId}`
   )
-    throw new Error('host_core_state_backup_identity_invalid');
+    throw new Error('host_core_state_backup_plan_invalid');
   return {
     ...payload,
-    backup_identity: backupIdentity,
-    backup_relative_path: value.backup_relative_path,
+    backup_id: backupId,
+    backup_relative_path: record.backup_relative_path,
   };
 }
 
-function writeBackupManifest(
-  file: string,
-  plan: PersistentStateResetPlan,
-): void {
-  const bytes = `${JSON.stringify(plan, null, 2)}\n`;
-  if (fs.existsSync(file)) {
-    const stat = fs.lstatSync(file);
-    if (
-      !stat.isFile() ||
-      stat.isSymbolicLink() ||
-      fs.readFileSync(file, 'utf8') !== bytes
-    )
-      throw new Error('host_core_state_backup_collision');
-    return;
-  }
-  const descriptor = fs.openSync(file, 'wx', 0o400);
-  try {
-    fs.writeFileSync(descriptor, bytes);
-    fs.fsyncSync(descriptor);
-  } finally {
-    fs.closeSync(descriptor);
-  }
-  fsyncDirectory(path.dirname(file));
-}
-
-function verifyMember(file: string, member: StateFileIdentity): void {
+function verifyMember(file: string, member: StateFileCopy): void {
   const stat = fs.lstatSync(file);
   if (
     !stat.isFile() ||
     stat.isSymbolicLink() ||
     stat.size !== member.byte_length ||
-    rawSha256(file) !== member.raw_sha256
+    sha256(file) !== member.raw_sha256
   )
-    throw new Error('host_core_state_backup_member_identity_mismatch');
+    throw new Error('host_core_state_backup_member_mismatch');
 }
 
 export function quarantinePersistentState(
@@ -672,168 +447,52 @@ export function quarantinePersistentState(
 ): void {
   const runtimeHome = fs.realpathSync(runtimeHomeInput);
   const plan = parsePersistentStateResetPlan(planInput);
-  const backupPath = path.join(runtimeHome, plan.backup_relative_path);
-  const backupExisted = lstatIfPresent(backupPath) !== null;
   const backupRoot = ensureDirectory(runtimeHome, plan.backup_relative_path);
-  writeBackupManifest(path.join(backupRoot, 'backup-manifest.json'), plan);
-  if (
-    backupExisted &&
-    inspectResetRecoveryDirectory(runtimeHome, backupRoot) === null
-  ) {
-    deduplicateCompletedPersistentState(runtimeHome, plan);
-    return;
-  }
+  const manifestFile = path.join(backupRoot, 'backup-manifest.json');
+  if (!fs.existsSync(manifestFile))
+    fs.writeFileSync(manifestFile, `${JSON.stringify(plan, null, 2)}\n`, {
+      mode: 0o600,
+      flag: 'wx',
+    });
   for (const member of plan.members) {
     const source = path.join(runtimeHome, member.source_relative_path);
-    const backup = path.join(backupRoot, member.backup_name);
+    const destination = path.join(backupRoot, member.backup_name);
     const sourceExists = lstatIfPresent(source) !== null;
-    const backupExists = lstatIfPresent(backup) !== null;
-    if (sourceExists === backupExists)
-      throw new Error('host_core_state_backup_transition_invalid');
-    if (sourceExists) {
+    const destinationExists = lstatIfPresent(destination) !== null;
+    if (sourceExists && destinationExists) {
       verifyMember(source, member);
-      fs.renameSync(source, backup);
-      fsyncDirectory(path.dirname(source));
-      fsyncDirectory(backupRoot);
-    } else verifyMember(backup, member);
+      verifyMember(destination, member);
+      fs.unlinkSync(source);
+    } else if (sourceExists) {
+      verifyMember(source, member);
+      fs.renameSync(source, destination);
+    } else if (destinationExists) verifyMember(destination, member);
+    else throw new Error('host_core_state_backup_member_missing');
+    fsyncDirectory(path.dirname(source));
   }
-  for (const member of plan.members)
-    fs.chmodSync(path.join(backupRoot, member.backup_name), 0o400);
-  fs.chmodSync(path.join(backupRoot, 'backup-manifest.json'), 0o400);
-  fs.chmodSync(backupRoot, 0o500);
-  fsyncDirectory(path.dirname(backupRoot));
+  fsyncDirectory(backupRoot);
 }
 
-function deduplicateCompletedPersistentState(
-  runtimeHome: string,
-  plan: PersistentStateResetPlan,
-): void {
-  const presentSources = plan.members.filter(
-    (member) =>
-      lstatIfPresent(path.join(runtimeHome, member.source_relative_path)) !==
-      null,
-  );
-  if (presentSources.length === 0) return;
-  if (presentSources.length !== plan.members.length)
-    throw new Error('host_core_state_backup_deduplication_unit_incomplete');
-  const sourceDirectory = path.dirname(
-    path.join(runtimeHome, WORKFLOW_STATE_DATABASE_RELATIVE),
-  );
-  if (fs.realpathSync(sourceDirectory) !== sourceDirectory)
-    throw new Error('host_core_state_backup_deduplication_path_invalid');
-  for (const member of plan.members)
-    verifyMember(path.join(runtimeHome, member.source_relative_path), member);
-
-  const primary = plan.members[0]!;
-  for (const member of [...plan.members.slice(1), primary]) {
-    fs.unlinkSync(path.join(runtimeHome, member.source_relative_path));
-    fsyncDirectory(sourceDirectory);
-  }
-}
-
-function backupIsFullyHardened(
-  root: string,
-  plan: PersistentStateResetPlan,
-): boolean {
-  if ((fs.lstatSync(root).mode & 0o777) !== 0o500) return false;
-  for (const file of [
-    path.join(root, 'backup-manifest.json'),
-    ...plan.members.map((member) => path.join(root, member.backup_name)),
-  ]) {
-    if ((fs.lstatSync(file).mode & 0o777) !== 0o400) return false;
-  }
-  return true;
-}
-
-function inspectResetRecoveryDirectory(
+function readBackupAt(
   runtimeHome: string,
   root: string,
-): PersistentStateResetPlan | null {
-  const directory = fs.lstatSync(root);
-  if (!directory.isDirectory() || directory.isSymbolicLink())
-    throw new Error(`host_core_state_backup_recovery_path_invalid:${root}`);
-  if (
-    fs.realpathSync(root) !== root ||
-    path.dirname(root) !==
-      path.join(runtimeHome, 'workflow-runtime-state-backups')
-  )
-    throw new Error(`host_core_state_backup_recovery_path_invalid:${root}`);
-  const manifestFile = path.join(root, 'backup-manifest.json');
-  const manifestStat = lstatIfPresent(manifestFile);
-  if (!manifestStat || !manifestStat.isFile() || manifestStat.isSymbolicLink())
-    throw new Error(
-      `host_core_state_backup_recovery_manifest_invalid:${manifestFile}`,
-    );
-  let plan: PersistentStateResetPlan;
-  try {
-    plan = parsePersistentStateResetPlan(
-      strictParseJsonBytes(fs.readFileSync(manifestFile)),
-    );
-  } catch (error) {
-    throw new Error(
-      `host_core_state_backup_recovery_manifest_invalid:${manifestFile}`,
-      { cause: error },
-    );
-  }
-  if (
-    path.basename(root) !== plan.backup_identity.slice('sha256:'.length) ||
-    path.join(runtimeHome, plan.backup_relative_path) !== root
-  )
-    throw new Error(`host_core_state_backup_recovery_path_invalid:${root}`);
-
-  const allowedEntries = new Set([
-    'backup-manifest.json',
-    ...plan.members.map((member) => member.backup_name),
-  ]);
-  const observedEntries = fs.readdirSync(root).sort();
-  if (
-    !observedEntries.includes('backup-manifest.json') ||
-    observedEntries.some((entry) => !allowedEntries.has(entry))
-  )
-    throw new Error(`host_core_state_backup_recovery_entries_invalid:${root}`);
-
-  const allBackupMembersPresent = plan.members.every(
-    (member) => lstatIfPresent(path.join(root, member.backup_name)) !== null,
+): PersistentStateResetPlan {
+  const stat = fs.lstatSync(root);
+  if (!stat.isDirectory() || stat.isSymbolicLink())
+    throw new Error('host_core_state_backup_path_invalid');
+  const manifest = fs.lstatSync(path.join(root, 'backup-manifest.json'));
+  if (!manifest.isFile() || manifest.isSymbolicLink())
+    throw new Error('host_core_state_backup_manifest_invalid');
+  const plan = parsePersistentStateResetPlan(
+    JSON.parse(
+      fs.readFileSync(path.join(root, 'backup-manifest.json'), 'utf8'),
+    ),
   );
-  if (allBackupMembersPresent) {
-    try {
-      for (const member of plan.members)
-        verifyMember(path.join(root, member.backup_name), member);
-    } catch (error) {
-      throw new Error('host_core_state_backup_recovery_member_invalid', {
-        cause: error,
-      });
-    }
-    if (backupIsFullyHardened(root, plan)) return null;
-  }
-
-  let allMembersMoved = true;
-  for (const member of plan.members) {
-    const source = path.join(runtimeHome, member.source_relative_path);
-    const backup = path.join(root, member.backup_name);
-    const sourceExists = lstatIfPresent(source) !== null;
-    const backupExists = lstatIfPresent(backup) !== null;
-    if (sourceExists === backupExists)
-      throw new Error(
-        `host_core_state_backup_recovery_location_invalid:${member.source_relative_path}`,
-      );
-    try {
-      if (sourceExists) {
-        if (fs.realpathSync(path.dirname(source)) !== path.dirname(source))
-          throw new Error('source_directory_invalid');
-        verifyMember(source, member);
-        allMembersMoved = false;
-      } else {
-        verifyMember(backup, member);
-      }
-    } catch (error) {
-      throw new Error(
-        `host_core_state_backup_recovery_member_invalid:${member.source_relative_path}`,
-        { cause: error },
-      );
-    }
-  }
-  return allMembersMoved && backupIsFullyHardened(root, plan) ? null : plan;
+  if (path.join(runtimeHome, plan.backup_relative_path) !== root)
+    throw new Error('host_core_state_backup_path_invalid');
+  for (const member of plan.members)
+    verifyMember(path.join(root, member.backup_name), member);
+  return plan;
 }
 
 export function discoverPersistentStateResetRecovery(
@@ -841,33 +500,25 @@ export function discoverPersistentStateResetRecovery(
 ): PersistentStateResetPlan | null {
   const runtimeHome = fs.realpathSync(runtimeHomeInput);
   const backupsRoot = path.join(runtimeHome, 'workflow-runtime-state-backups');
-  const backupsStat = lstatIfPresent(backupsRoot);
-  if (!backupsStat) return null;
-  if (!backupsStat.isDirectory() || backupsStat.isSymbolicLink())
-    throw new Error(
-      `host_core_state_backup_recovery_root_invalid:${backupsRoot}`,
-    );
-  if (fs.realpathSync(backupsRoot) !== backupsRoot)
-    throw new Error(
-      `host_core_state_backup_recovery_root_invalid:${backupsRoot}`,
-    );
-
+  const stat = lstatIfPresent(backupsRoot);
+  if (!stat) return null;
+  if (!stat.isDirectory() || stat.isSymbolicLink())
+    throw new Error('host_core_state_backup_path_invalid');
   const recoveries: PersistentStateResetPlan[] = [];
   for (const name of fs.readdirSync(backupsRoot).sort()) {
     if (!/^[0-9a-f]{64}$/.test(name))
-      throw new Error(`host_core_state_backup_recovery_entry_invalid:${name}`);
-    const recovery = inspectResetRecoveryDirectory(
-      runtimeHome,
-      path.join(backupsRoot, name),
+      throw new Error('host_core_state_backup_path_invalid');
+    const root = path.join(backupsRoot, name);
+    const plan = readBackupAt(runtimeHome, root);
+    const incomplete = plan.members.some(
+      (member) =>
+        lstatIfPresent(path.join(runtimeHome, member.source_relative_path)) !==
+        null,
     );
-    if (recovery) recoveries.push(recovery);
+    if (incomplete) recoveries.push(plan);
   }
   if (recoveries.length > 1)
-    throw new Error(
-      `host_core_state_backup_recovery_ambiguous:${recoveries
-        .map((plan) => plan.backup_relative_path)
-        .join(',')}`,
-    );
+    throw new Error('host_core_state_backup_recovery_ambiguous');
   return recoveries[0] ?? null;
 }
 
@@ -878,20 +529,5 @@ export function readPersistentStateResetBackup(
   const runtimeHome = fs.realpathSync(runtimeHomeInput);
   if (!/^workflow-runtime-state-backups\/[0-9a-f]{64}$/.test(relative))
     throw new Error('host_core_state_backup_path_invalid');
-  const root = fs.realpathSync(path.join(runtimeHome, relative));
-  if (
-    path.dirname(root) !==
-    path.join(runtimeHome, 'workflow-runtime-state-backups')
-  )
-    throw new Error('host_core_state_backup_path_invalid');
-  const plan = parsePersistentStateResetPlan(
-    strictParseJsonBytes(
-      fs.readFileSync(path.join(root, 'backup-manifest.json')),
-    ),
-  );
-  if (plan.backup_relative_path !== relative)
-    throw new Error('host_core_state_backup_path_invalid');
-  for (const member of plan.members)
-    verifyMember(path.join(root, member.backup_name), member);
-  return plan;
+  return readBackupAt(runtimeHome, path.join(runtimeHome, relative));
 }

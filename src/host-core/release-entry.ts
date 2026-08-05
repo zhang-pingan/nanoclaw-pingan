@@ -1,22 +1,22 @@
 import path from 'node:path';
 
-import { verifyInstalledHostCoreRelease } from './release.js';
+import { verifyHostCoreSnapshot } from './release.js';
 
 function usage(): never {
-  throw new Error('Usage: release-entry.js verify --release-root <path>');
+  throw new Error(
+    'Usage: release-entry.js verify --runtime-home <path> --id <snapshot-id>',
+  );
 }
 
 const args = process.argv.slice(2);
 if (
-  args.length !== 3 ||
+  args.length !== 5 ||
   args[0] !== 'verify' ||
-  args[1] !== '--release-root' ||
-  !args[2]
+  args[1] !== '--runtime-home' ||
+  !args[2] ||
+  args[3] !== '--id' ||
+  !args[4]
 )
   usage();
-const manifest = verifyInstalledHostCoreRelease(path.resolve(args[2]));
-console.log(
-  `host_core_release_artifact_hash=${manifest.release_artifact_hash}`,
-);
-console.log(`host_core_version=${manifest.ref.version}`);
-console.log(`host_core_validation_status=${manifest.validation_status}`);
+const snapshot = verifyHostCoreSnapshot(path.resolve(args[2]), args[4]);
+console.log(`host_core_snapshot_verified=${snapshot.snapshot_id}`);

@@ -245,7 +245,7 @@ is_direct_icarus_pid() {
   command="$(ps -p "$pid" -o command= 2>/dev/null || true)"
   [ -n "$command" ] && {
     [[ "$command" == *"$BACKEND_ENTRY"* ]] ||
-      { [[ "$command" == *"$RUNTIME_HOME/core-releases/"* ]] && [[ "$command" == *"/dist/index.js"* ]]; }
+      { [[ "$command" == *"$RUNTIME_HOME/host-core-snapshots/"* ]] && [[ "$command" == *"/dist/index.js"* ]]; }
   }
 }
 
@@ -261,7 +261,7 @@ find_running_direct_icarus_pid() {
   done < <(
     {
       pgrep -f "$BACKEND_ENTRY" 2>/dev/null || true
-      pgrep -f "$RUNTIME_HOME/core-releases/.*/dist/index.js" 2>/dev/null || true
+      pgrep -f "$RUNTIME_HOME/host-core-snapshots/.*/dist/index.js" 2>/dev/null || true
     } | sort -u
   )
 

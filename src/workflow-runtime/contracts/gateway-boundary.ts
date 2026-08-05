@@ -15,11 +15,6 @@ const ALLOWED_RUNTIME_TARGETS = new Set([
   'contracts/types',
 ]);
 
-const LEGACY_HOST_CORE_CERTIFICATION_IMPORT = {
-  importer: 'host-core/activation.ts',
-  target: 'certification/release-manifest',
-} as const;
-
 export interface GatewayImportViolation {
   readonly importer: string;
   readonly modulePath: string;
@@ -99,13 +94,7 @@ export function inspectGatewayImports(
       modulePath,
       target: runtimeTarget(importer, modulePath),
     }))
-    .filter(({ target }) => {
-      if (!target || ALLOWED_RUNTIME_TARGETS.has(target)) return false;
-      return !(
-        importerRelative === LEGACY_HOST_CORE_CERTIFICATION_IMPORT.importer &&
-        target === LEGACY_HOST_CORE_CERTIFICATION_IMPORT.target
-      );
-    })
+    .filter(({ target }) => target && !ALLOWED_RUNTIME_TARGETS.has(target))
     .map(({ modulePath }) => ({ importer: importerRelative, modulePath }));
 }
 

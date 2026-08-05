@@ -1,5 +1,9 @@
 export {
-  CURRENT_G1_SCHEMA_IDENTITIES,
-  loadFrozenWorkflowRuntimeStoreInputs,
-} from '../store/runtime-store/profile.js';
-export { calculateDatabaseSqliteSchemaIdentity } from '../store/schema/database-identity.js';
+  assertCurrentWorkflowRuntimeStructure,
+  inspectWorkflowRuntimeSchema,
+} from '../store/schema/compatibility.js';
+export {
+  CURRENT_WORKFLOW_RUNTIME_SCHEMA_VERSION,
+  MINIMUM_WORKFLOW_RUNTIME_SCHEMA_VERSION,
+  SCHEMA_3_REQUIRED_EMPTY_RELATIONS,
+} from '../store/runtime-store/config.js';

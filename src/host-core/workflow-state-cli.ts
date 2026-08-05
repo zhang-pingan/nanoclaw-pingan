@@ -49,11 +49,11 @@ export function parseWorkflowStateArguments(
 
 function printIdentity(
   prefix: string,
-  identity: PersistentStateDecision['old_identity'],
+  identity: PersistentStateDecision['observed_schema'],
   output: (line: string) => void = console.log,
 ): void {
   output(
-    `${prefix}=${identity ? `${identity.database_schema_version} ${identity.database_sqlite_schema_hash}` : 'none'}`,
+    `${prefix}=${identity ? String(identity.database_schema_version) : 'none'}`,
   );
 }
 
@@ -63,13 +63,13 @@ function printInspection(
   output: (line: string) => void = console.log,
 ): void {
   output(`workflow_state_mode=${inspection.target.mode}`);
-  output(`workflow_state_target=${inspection.target.code_identity}`);
+  output(`workflow_state_target=${inspection.target.code_marker}`);
   output(
-    `workflow_state_target_schema=${inspection.target.schema.database_schema_version} ${inspection.target.schema.database_schema_hash} ${inspection.target.schema.database_sqlite_schema_hash}`,
+    `workflow_state_target_schema=${inspection.target.schema.database_schema_version} supported_from=${inspection.target.schema.minimum_supported_schema_version}`,
   );
   printIdentity(
     'workflow_state_current_schema',
-    inspection.decision.old_identity,
+    inspection.decision.observed_schema,
     output,
   );
   output(`workflow_state_decision=${inspection.decision.decision}`);
@@ -130,11 +130,13 @@ export async function runWorkflowStateCli(
     output(`workflow_state_mode=${options.mode}`);
     output('workflow_state_target=recovery_recorded');
     output(
-      `workflow_state_target_schema=${preparation.plan.target_identity.database_schema_version} ${preparation.plan.target_identity.database_schema_hash} ${preparation.plan.target_identity.database_sqlite_schema_hash}`,
+      `workflow_state_target_schema=${preparation.plan.target_schema_version}`,
     );
     printIdentity(
       'workflow_state_current_schema',
-      preparation.plan.old_identity,
+      {
+        database_schema_version: preparation.plan.observed_schema_version,
+      },
       output,
     );
     output('workflow_state_decision=RESET_RECOVERY');
@@ -142,7 +144,7 @@ export async function runWorkflowStateCli(
     for (const relative of WORKFLOW_STATE_RELATIVE_PATHS)
       output(`workflow_state_path=${path.join(runtimeHome, relative)}`);
   }
-  output(`workflow_state_backup_identity=${preparation.plan.backup_identity}`);
+  output(`workflow_state_backup=${preparation.plan.backup_id}`);
   output(
     `workflow_state_recovery_path=${path.join(runtimeHome, preparation.plan.backup_relative_path)}`,
   );
@@ -161,7 +163,7 @@ export async function runWorkflowStateCli(
     expectedPlan: preparation.plan,
   });
   output('workflow_state_reset=QUARANTINED');
-  output(`workflow_state_backup_identity=${plan.backup_identity}`);
+  output(`workflow_state_backup=${plan.backup_id}`);
   return 0;
 }
 
