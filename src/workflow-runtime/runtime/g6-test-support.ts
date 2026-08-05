@@ -1,6 +1,3 @@
-import fs from 'node:fs';
-import path from 'node:path';
-
 import type { CompiledScopePlanV2Document } from '../contracts/compiler-contract-repair-types.js';
 import { COMPILED_PLAN_V2_DOMAIN_SEPARATOR } from '../contracts/compiler-contract-repair-source.js';
 import type { WorkflowCompilerStaticChildPlanBundle } from '../contracts/static-child-plan-bundle-types.js';
@@ -14,6 +11,7 @@ import type {
 import { canonicalJson, domainSeparatedSha256 } from '../contracts/hash.js';
 import type { JsonObject, Sha256Hash } from '../contracts/types.js';
 import { compileWorkflow } from '../compiler/compiler.js';
+import { readGoldenCorpus } from '../compiler/golden.js';
 import type { WorkflowCompilerIdentity } from '../compiler/types.js';
 import {
   calculateCreationIntentHash,
@@ -28,15 +26,6 @@ import {
   createG5TestBootstrap,
   type G5TestBootstrapInstance,
 } from './g5-test-bootstrap.js';
-
-const CURRENT_G2_FIXTURE_ROOT = path.resolve(
-  import.meta.dirname,
-  '../contracts/conformance/current/g2-generated-output-schema-authority-replay-v8',
-);
-const G2_SOURCE_ROOT = path.resolve(
-  import.meta.dirname,
-  '../contracts/conformance/sealed/g2-generated-schema-join-authority-v6/inputs',
-);
 
 const g3Types = new Set<string>([
   'schema',
@@ -103,30 +92,24 @@ export interface G6MapFixtureOptions {
   readonly runResourceLimits?: Readonly<Record<string, number>>;
 }
 
-function readJson(file: string): JsonObject {
-  return JSON.parse(fs.readFileSync(file, 'utf8')) as JsonObject;
-}
-
 function compileDynamicFixture(
   options: G6MapFixtureOptions,
 ): G6CompiledFixture {
   const mode = options.dynamicMode ?? 'map';
-  const source = readJson(
-    path.join(G2_SOURCE_ROOT, `positive.${mode}.source.json`),
+  const goldenCase = readGoldenCorpus().cases.cases.find(
+    (entry) => entry.case_id === `positive.${mode}`,
   );
+  if (!goldenCase) throw new Error(`Golden case missing: positive.${mode}`);
+  const source = JSON.parse(
+    Buffer.from(goldenCase.raw_source_base64, 'base64').toString('utf8'),
+  ) as JsonObject;
   if (options.mapCompletionPolicy) {
     const nodes = source.nodes as JsonObject[];
     const mapNode = nodes.find((node) => node.type === 'map');
     if (!mapNode) throw new Error('Current G2 Map source has no Map owner');
     mapNode.completion = options.mapCompletionPolicy;
   }
-  const snapshotArtifact = readJson(
-    path.join(
-      CURRENT_G2_FIXTURE_ROOT,
-      `snapshots/positive.${mode}.snapshot@2.json`,
-    ),
-  );
-  const snapshot = snapshotArtifact.payload as JsonObject;
+  const snapshot = goldenCase.registry_snapshot;
   const outcome = compileWorkflow({
     caseId: `g6-runtime-positive-${mode}`,
     sourceKind: 'graph_scope',
@@ -304,7 +287,7 @@ function seedG6Runtime(
                 plan_format: compiled.plan.format,
                 compiler_toolchain_hash: compiled.plan.compiler_toolchain_hash,
                 compiler_build_hash: compiled.plan.compiler_build_hash,
-                provenance: 'sealed_g2_expected',
+                provenance: 'golden_corpus',
               },
               states: {
                 run: {

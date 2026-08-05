@@ -67,6 +67,31 @@ function artifactPayload(relativePath: string): JsonObject {
   return structuredClone(artifact.payload as JsonObject);
 }
 
+function goldenPlan(caseId: string): JsonObject {
+  const corpus = readJson('../compiler/golden/cases@1.json');
+  const cases = corpus.cases;
+  if (!Array.isArray(cases)) throw new Error('Golden corpus cases are missing');
+  const goldenCase = cases.find(
+    (entry) =>
+      typeof entry === 'object' &&
+      entry !== null &&
+      !Array.isArray(entry) &&
+      entry.case_id === caseId,
+  ) as JsonObject | undefined;
+  const expected = goldenCase?.expected_result;
+  if (
+    typeof expected !== 'object' ||
+    expected === null ||
+    Array.isArray(expected) ||
+    typeof expected.normalized_plan !== 'object' ||
+    expected.normalized_plan === null ||
+    Array.isArray(expected.normalized_plan)
+  ) {
+    throw new Error(`Golden plan is missing: ${caseId}`);
+  }
+  return structuredClone(expected.normalized_plan as JsonObject);
+}
+
 function resourceIdentity(
   resource: G3RegistryResourceRecord,
 ): G3RegistryResourceIdentity {
@@ -157,15 +182,14 @@ function planPin(
   plan: JsonObject,
 ): NonNullable<G3RegistryResourceCandidate['compiled_plan_pin']> {
   return {
-    plan_ref:
-      'conformance/sealed/g2-generated-schema-join-authority-v6/expected/positive.static-lowering.plan.json',
+    plan_ref: 'compiler/golden/cases@1.json#positive.static-lowering',
     plan_hash: plan.plan_hash as Sha256Hash,
     plan_format: 'icarus.workflow-graph-scope-plan/2',
     compiler_toolchain_hash:
       G3_CURRENT_UPSTREAM_IDENTITY.compiler.compiler_toolchain_hash,
     compiler_build_hash:
       G3_CURRENT_UPSTREAM_IDENTITY.compiler.compiler_build_hash,
-    provenance: 'sealed_g2_expected',
+    provenance: 'golden_corpus',
   };
 }
 
@@ -336,9 +360,7 @@ function updateCompatibilityInput(
 
 export function g37WorkflowPublisherStoreFixtureForTest(): G37WorkflowPublisherStoreFixture {
   const base = g3RetentionExecutorAbiStoreFixtureForTest();
-  const plan = readJson(
-    'conformance/sealed/g2-generated-schema-join-authority-v6/expected/positive.static-lowering.plan.json',
-  );
+  const plan = goldenPlan('positive.static-lowering');
   const original = structuredClone(base.batch.resources);
   const genericSchema = original.find(
     (resource) => resource.resource_type === 'schema',
@@ -470,7 +492,7 @@ export function g37WorkflowPublisherStoreFixtureForTest(): G37WorkflowPublisherS
     feature_release_hash: compatibility.feature_release_hash,
     resources: publishCandidates,
     upstream_identity: structuredClone(G3_CURRENT_UPSTREAM_IDENTITY),
-    expected_oracle: 'sealed_g2_independent_expected',
+    expected_oracle: 'golden_corpus_expected',
     production_compiler_actual_role: 'comparison_only',
     retention_policy_ref: structuredClone(G3_RETENTION_POLICY_REF),
     retention_policy_hash: G3_RETENTION_POLICY_HASH,

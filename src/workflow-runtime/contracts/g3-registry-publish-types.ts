@@ -60,7 +60,7 @@ export type G3PublishPreflightErrorCode =
 export interface G3ExactCompilerIdentity extends JsonObject {
   compiler_toolchain_manifest_ref: VersionedRef;
   compiler_toolchain_hash: Sha256Hash;
-  compiler_version: '3.0.4';
+  compiler_version: '3.0.6';
   compiler_build_hash: Sha256Hash;
   compiled_ir_schema_ref: string;
   compiled_ir_schema_hash: Sha256Hash;
@@ -74,9 +74,8 @@ export interface G3UpstreamIdentity extends JsonObject {
   g1_physical_schema_identity: Sha256Hash;
   g1_schema_hash: Sha256Hash;
   g1_migration_sha256: Sha256Hash;
-  g2_sealed_bundle_ref: string;
-  g2_sealed_bundle_artifact_hash: Sha256Hash;
-  g2_sealed_bundle_hash: Sha256Hash;
+  g2_golden_corpus_ref: string;
+  g2_golden_corpus_hash: Sha256Hash;
   compiler: G3ExactCompilerIdentity;
 }
 
@@ -92,7 +91,7 @@ export interface G3CompiledPlanPin extends JsonObject {
   plan_format: 'icarus.workflow-graph-scope-plan/2';
   compiler_toolchain_hash: Sha256Hash;
   compiler_build_hash: Sha256Hash;
-  provenance: 'sealed_g2_expected';
+  provenance: 'golden_corpus';
 }
 
 export interface G3ExecutionArtifactPin extends JsonObject {
@@ -138,7 +137,7 @@ export interface G3RegistryPublishPreflightInput extends JsonObject {
   feature_release_hash: Sha256Hash | null;
   resources: G3RegistryResourceCandidate[];
   upstream_identity: G3UpstreamIdentity;
-  expected_oracle: 'sealed_g2_independent_expected';
+  expected_oracle: 'golden_corpus_expected';
   production_compiler_actual_role: 'comparison_only' | 'expected_oracle';
   retention_policy_ref: VersionedRef;
   retention_policy_hash: Sha256Hash;
@@ -185,22 +184,19 @@ export const G3_CURRENT_UPSTREAM_IDENTITY: G3UpstreamIdentity = {
     'sha256:ad998b2d0bb5e5f158b0be6d13db79cb6a0c0650d5064b267262551af266189c',
   g1_migration_sha256:
     'sha256:ccaa7699894da98284b9ce86767d917e355441df93e010d90751ccb713c9b872',
-  g2_sealed_bundle_ref:
-    'conformance/sealed/g2-generated-schema-join-authority-v6/golden-conformance-bundle@2.json',
-  g2_sealed_bundle_artifact_hash:
-    'sha256:5cf2d899d0bf8d7cc0d4b70cc7796a123b8b5384bbbefe3e204e70bddf33fe11',
-  g2_sealed_bundle_hash:
-    'sha256:0820328ae1cfdba7d05948d9e36498a5428d997d6eabfb833ef0ba7d84b77db7',
+  g2_golden_corpus_ref: 'compiler/golden/cases@1.json',
+  g2_golden_corpus_hash:
+    'sha256:ffd426cec4269062fad47efeb75b7233a4d42a2961f724e480e33bf05ff81343',
   compiler: {
     compiler_toolchain_manifest_ref: {
       id: 'icarus.workflow-compiler-toolchain',
-      version: '3.0.4',
+      version: '3.0.6',
     },
     compiler_toolchain_hash:
-      'sha256:c9c5c9b9180ecb9ffde5f8456e44c4e93fc51686988c74e47faa1b2f7fae3ffa',
-    compiler_version: '3.0.4',
+      'sha256:dc01de3bbd06a70528b7466acfcc3b2c6e4b960de25d4a7cb5666ba9e06883e8',
+    compiler_version: '3.0.6',
     compiler_build_hash:
-      'sha256:9333356a10b8c5345bfacc80c6071640e5e26561581f39969c7ecabc16ac97c0',
+      'sha256:6ea4c825e91cc0fdaf3100e4b0f57e22723158bff1ad039ba359f857d285a069',
     compiled_ir_schema_ref:
       'conformance/generated-schema-join-authority-repair/compiled-scope-plan-v2-node-output-envelope-schema@1.json',
     compiled_ir_schema_hash:

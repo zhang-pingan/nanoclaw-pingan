@@ -172,39 +172,6 @@ export type {
   TypedRelationRecord,
 } from './logical-schema-types.js';
 export {
-  ABSENCE_BASELINE_KEYS,
-  MIGRATION_CANDIDATE_BOUNDARY_KEYS,
-  PRODUCT_SURFACE_ENTRY_KEYS,
-  PRODUCT_SURFACE_KINDS,
-  PRODUCT_SURFACE_MANIFEST_KEYS,
-  PRODUCT_SURFACE_STATUSES,
-  PROTECTED_CAPABILITY_FIXTURES,
-  REMOVED_API_FIXTURES,
-  REMOVED_DOM_NAV_KEYS,
-  REMOVED_DOM_SCREEN_IDS,
-  REMOVED_FEATURE_RESOURCE_KEYS,
-} from './static-absence-types.js';
-export type {
-  MigrationCandidateBoundaryManifest,
-  ProductSurfaceCoverageEntry,
-  ProductSurfaceCoverageManifest,
-  ProductSurfaceKind,
-  ProductSurfaceStatus,
-  WorkflowRuntimeAbsenceBaseline,
-} from './static-absence-types.js';
-export {
-  assertIsolatedTestRoots,
-  buildProductSurfaceCoverageManifest,
-  buildStaticAbsenceContracts,
-  buildStaticAbsenceProofEvidence,
-  buildWorkflowRuntimeAbsenceBaseline,
-  createIsolatedStaticGateTestRoots,
-} from './static-absence-source.js';
-export {
-  checkContractPackStaticAbsence,
-  generateContractPackStaticAbsence,
-} from './static-absence-pack.js';
-export {
   checkContractPackGoldenDraft,
   generateContractPackGoldenDraft,
 } from './golden-draft-pack.js';

@@ -185,7 +185,7 @@
             "const": "workflow-runtime.db"
           },
           "database_schema_version": {
-            "const": 6
+            "const": 11
           },
           "g1_root_hash": {
             "type": "string",
@@ -253,14 +253,14 @@
         "type": "object",
         "additionalProperties": false,
         "required": [
-          "g2_sealed_bundle_hash",
+          "g2_golden_corpus_hash",
           "g3_6_pack_hash",
           "g3_7_pack_hash",
           "g3_8a_pack_hash",
           "g3_9_pack_hash"
         ],
         "properties": {
-          "g2_sealed_bundle_hash": {
+          "g2_golden_corpus_hash": {
             "type": "string",
             "pattern": "^sha256:[0-9a-f]{64}$"
           },
@@ -495,5 +495,5 @@
       }
     }
   },
-  "hash": "sha256:085dad6c07f170ceb9da14d0e35041acb404f5e56756a5b5377d6c64ccce82a9"
+  "hash": "sha256:ce600781f8ec1263d5fb1b1748f8c806c73b7f26b08add39aedc240bf7ca3c5a"
 }

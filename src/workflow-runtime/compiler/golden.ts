@@ -28,11 +28,6 @@ export const GOLDEN_MANIFEST_PATH = path.join(
 );
 
 const CORPUS_HASH_DOMAIN = 'icarus:workflow-compiler-golden-corpus:1\n';
-const LEGACY_AUTHORITY = path.resolve(
-  import.meta.dirname,
-  '../contracts/conformance/current/g2-generated-output-schema-authority-replay-v8/current-replay-authority@2.json',
-);
-const CONTRACTS_ROOT = path.resolve(import.meta.dirname, '../contracts');
 
 export interface GoldenCase extends JsonObject {
   case_id: string;
@@ -68,16 +63,6 @@ function render(value: JsonValue): string {
 
 function readJson(filePath: string): JsonValue {
   return strictParseJsonBytes(fs.readFileSync(filePath));
-}
-
-function containedLegacyPath(relativePath: string): string {
-  const resolved = path.resolve(CONTRACTS_ROOT, relativePath);
-  if (!resolved.startsWith(`${CONTRACTS_ROOT}${path.sep}`)) {
-    throw new Error(
-      `Legacy Golden path escapes contracts root: ${relativePath}`,
-    );
-  }
-  return resolved;
 }
 
 function asSourceKind(value: JsonValue): WorkflowCompilerSourceKind {
@@ -163,40 +148,6 @@ export function readGoldenCorpus(root = GOLDEN_CORPUS_ROOT): {
   return { cases, manifest };
 }
 
-export function readLegacyGoldenCorpus(): GoldenCases {
-  const authority = readJson(LEGACY_AUTHORITY);
-  assertJsonObject(authority);
-  assertJsonObject(authority.payload);
-  if (!Array.isArray(authority.payload.cases)) {
-    throw new Error('Legacy Golden authority has no cases');
-  }
-  const cases = authority.payload.cases.map((entry) => {
-    assertJsonObject(entry);
-    assertJsonObject(entry.expected_result);
-    const snapshotEnvelope = readJson(
-      containedLegacyPath(String(entry.registry_snapshot_ref)),
-    );
-    assertJsonObject(snapshotEnvelope);
-    assertJsonObject(snapshotEnvelope.payload);
-    const expected = readJson(
-      containedLegacyPath(String(entry.expected_result.path)),
-    );
-    assertJsonObject(expected);
-    return {
-      case_id: String(entry.case_id),
-      source_kind: asSourceKind(entry.source_kind),
-      raw_source_base64: fs
-        .readFileSync(containedLegacyPath(String(entry.raw_source_bytes_ref)))
-        .toString('base64'),
-      registry_snapshot: snapshotEnvelope.payload,
-      expected_result:
-        expected as unknown as WorkflowCompilerConformanceCaseResultV1,
-    } satisfies GoldenCase;
-  });
-  cases.sort((left, right) => left.case_id.localeCompare(right.case_id, 'en'));
-  return { format: GOLDEN_CASES_FORMAT, cases };
-}
-
 export function generateGoldenCorpus(
   inputs: GoldenCases,
   changeReason?: string,
@@ -279,9 +230,7 @@ export function checkGoldenCorpus(): GoldenReplayResult {
 }
 
 export function updateGoldenCorpus(changeReason?: string): GoldenReplayResult {
-  const inputs = fs.existsSync(GOLDEN_CASES_PATH)
-    ? readGoldenCorpus().cases
-    : readLegacyGoldenCorpus();
+  const inputs = readGoldenCorpus().cases;
   const generated = generateGoldenCorpus(inputs, changeReason);
   const temporaryRoot = fs.mkdtempSync(
     path.join(os.tmpdir(), 'icarus-golden-'),

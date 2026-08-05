@@ -93,7 +93,7 @@ function expectFakeCode(run: () => unknown, code: G4FakeAdapterError['code']) {
 }
 
 describe('G4 Test Bootstrap', () => {
-  it('opens only a fresh Schema 6 real-file Store and emits a verifiable isolation receipt', () => {
+  it('opens only a fresh Schema 11 real-file Store and emits a verifiable isolation receipt', () => {
     const instance = track(createG4TestBootstrap(options('fresh')));
     expect(fs.realpathSync(instance.dataRoot)).toBe(instance.dataRoot);
     expect(instance.databasePath).toBe(
@@ -371,7 +371,7 @@ describe('G4 Test Bootstrap', () => {
     expectBootstrapCode(() => instance.reopenStore(), 'isolation_proof_failed');
   });
 
-  it('rejects replacement of the exact Schema 6 database file', () => {
+  it('rejects replacement of the exact Schema 11 database file', () => {
     const instance = track(
       createG4TestBootstrap(options('database-replacement')),
     );

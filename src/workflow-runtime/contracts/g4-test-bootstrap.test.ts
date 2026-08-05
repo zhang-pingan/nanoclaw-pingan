@@ -89,9 +89,9 @@ describe('G4 Test Bootstrap Contract Pack', () => {
       negative_case_count: 32,
       fault_case_count: 13,
       fake_adapter_outcome_count: 7,
-      database_schema_version: 6,
+      database_schema_version: 11,
       database_schema_hash:
-        'sha256:37f0102a9d6b0077f0d44f20182a7d5768ce32b1c0c2c3998937178b06c9b474',
+        'sha256:ad998b2d0bb5e5f158b0be6d13db79cb6a0c0650d5064b267262551af266189c',
       sqlite_profile_status: 'candidate',
       certification_status: 'not_certified',
       explicit_selection_required: true,
@@ -128,11 +128,11 @@ describe('G4 Test Bootstrap Contract Pack', () => {
         connection_factory: 'WorkflowRuntimeConnectionFactory',
         identity_mode: 'candidate_development',
         database_name: 'workflow-runtime.db',
-        database_schema_version: 6,
+        database_schema_version: 11,
         g1_root_hash:
-          'sha256:3cc206a6dfb1bbaed1bb0f4305323729db23d839652d8a0e020a9a6c4d3e3dd6',
+          'sha256:2adb9376d341ad430155829647086bcc76f84ebf22dffac28c19d4026ea06ab2',
         migration_hash:
-          'sha256:16a46e84c77d734013e18b4b00b86564f6188ea73717763e9fb7a884d62faa41',
+          'sha256:ccaa7699894da98284b9ce86767d917e355441df93e010d90751ccb713c9b872',
         schema3_to_4_upgrade_hash:
           'sha256:5ac263fe3279c61f74ba6314f5df98fff59a8f8b32acfa784d2040421ebaa3cf',
         schema4_to_5_upgrade_hash:
@@ -141,16 +141,16 @@ describe('G4 Test Bootstrap Contract Pack', () => {
           'sha256:dc94fa0867ca572b7ec39ffb8df448e38be00ca4831f1d420885ee7cc097687d',
       },
       upstream_contracts: {
-        g2_sealed_bundle_hash:
-          'sha256:b37ddf415d12d759ddd4b72b754568e01715704d254da26e3355e0898cfeda05',
+        g2_golden_corpus_hash:
+          'sha256:ffd426cec4269062fad47efeb75b7233a4d42a2961f724e480e33bf05ff81343',
         g3_6_pack_hash:
-          'sha256:7f807ae53e13bcec7712f77c1ebaba7aab5f72d2779ed5d99d33b0e6c54e98d3',
+          'sha256:3fa7afb5fa9294325004476ee230b896bc08fe8a6e6fe7f8c719c130e4c6911b',
         g3_7_pack_hash:
-          'sha256:5d023a5323aec482781b0e992197571db9a09481a394eaf955d4598c249e4ec1',
+          'sha256:e920dda8452f2b217bcbaf169c1109489456b082f6156d623410cd9ae0ed4ab9',
         g3_8a_pack_hash:
           'sha256:d8412111a0f3dcabb4ce416b99086701ea3e3911ff431b5457eb957b2f69722f',
         g3_9_pack_hash:
-          'sha256:cbb6b355819b1eefefa7af5289b10b367c42bbe32b09f003151bc7f9ebf475d7',
+          'sha256:7a073ac4591fb92afbd645ba5bd55fbb3a668dc79d90f5668a69d64c940ee0f7',
       },
     });
   });

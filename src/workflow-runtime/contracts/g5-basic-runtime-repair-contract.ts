@@ -113,12 +113,12 @@ const exactBindings = [
   {
     name: 'g3_registry_publish_foundation',
     path: 'src/workflow-runtime/contracts/contract-pack-g3-registry-publish-foundation.json',
-    hash: 'sha256:e1fd578c77620c3d516b35f7af5d9015f92f6bf40299b3ea0c77859fafd7237e',
+    hash: 'sha256:198c3184d98e3b1f19a8f9bbbf150fb6cff032a984fb66dfd99ce9044f3fd41c',
   },
   {
     name: 'g3_registry_persistence',
     path: 'src/workflow-runtime/contracts/contract-pack-g3-registry-persistence.json',
-    hash: 'sha256:969e586947ef065c3c81955eea9e9077bc7057cd80090e05e0a6a994d097b88b',
+    hash: 'sha256:772f9071985b4ee647b607e71662ffd828d4c2200397f2f9681f8e9f4c45f35c',
   },
   {
     name: 'g3_registry_exact_query',
@@ -133,7 +133,7 @@ const exactBindings = [
   {
     name: 'g3_workflow_publisher',
     path: 'src/workflow-runtime/contracts/contract-pack-g3-workflow-publisher.json',
-    hash: 'sha256:7d51a4406c0f1e72ad195b7bb8ad8c3800dfc08761022d4ce15ce0fae4ec5560',
+    hash: 'sha256:e920dda8452f2b217bcbaf169c1109489456b082f6156d623410cd9ae0ed4ab9',
   },
   {
     name: 'g3_feature_release_activation',

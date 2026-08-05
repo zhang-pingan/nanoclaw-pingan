@@ -96,7 +96,7 @@ const domains = {
 } as const;
 
 const CURRENT_G3_9_PACK_HASH =
-  'sha256:cbb6b355819b1eefefa7af5289b10b367c42bbe32b09f003151bc7f9ebf475d7';
+  'sha256:7a073ac4591fb92afbd645ba5bd55fbb3a668dc79d90f5668a69d64c940ee0f7';
 
 const hashSchema: JsonObject = {
   type: 'string',
@@ -149,7 +149,7 @@ export const G4_TEST_BOOTSTRAP_PROFILE_SCHEMA: JsonObject = {
       connection_factory: { const: 'WorkflowRuntimeConnectionFactory' },
       identity_mode: { const: 'candidate_development' },
       database_name: { const: 'workflow-runtime.db' },
-      database_schema_version: { const: 6 },
+      database_schema_version: { const: 11 },
       g1_root_hash: hashSchema,
       schema_dependency_manifest_hash: hashSchema,
       physical_schema_identity: hashSchema,
@@ -164,7 +164,7 @@ export const G4_TEST_BOOTSTRAP_PROFILE_SCHEMA: JsonObject = {
       certification_status: { const: 'not_certified' },
     }),
     upstream_contracts: closedObject({
-      g2_sealed_bundle_hash: hashSchema,
+      g2_golden_corpus_hash: hashSchema,
       g3_6_pack_hash: hashSchema,
       g3_7_pack_hash: hashSchema,
       g3_8a_pack_hash: hashSchema,
@@ -284,7 +284,7 @@ export const G4_ISOLATION_RECEIPT_SCHEMA: JsonObject = {
     root_inode: { type: 'string', minLength: 1 },
     database_device: { type: 'string', minLength: 1 },
     database_inode: { type: 'string', minLength: 1 },
-    database_schema_version: { const: 6 },
+    database_schema_version: { const: 11 },
     database_schema_hash: hashSchema,
     sqlite_profile_hash: hashSchema,
     production_surface_absence_hash: hashSchema,
@@ -376,26 +376,16 @@ export function buildG4BootstrapImplementationPayload(
 
 function upstreamIdentity(): JsonObject {
   const inputs = loadFrozenWorkflowRuntimeStoreInputs();
-  const sealed = readArtifact(
-    G3_CURRENT_UPSTREAM_IDENTITY.g2_sealed_bundle_ref,
-  );
   const distribution = strictParseJsonBytes(
     fs.readFileSync(
       path.join(contractsRoot, 'toolchain/node-v26.5.0-darwin-arm64.json'),
     ),
   ) as JsonObject;
-  const sealedBundleHash = parseSha256Hash(sealed.payload.bundle_hash);
-  if (
-    sealed.hash !==
-      G3_CURRENT_UPSTREAM_IDENTITY.g2_sealed_bundle_artifact_hash ||
-    sealedBundleHash !== G3_CURRENT_UPSTREAM_IDENTITY.g2_sealed_bundle_hash
-  ) {
-    throw new Error('G4 G2 sealed successor identity drifted');
-  }
   if (
     inputs.g1RootHash !== G39_UPSTREAM_IDENTITIES.g1_root_hash ||
     inputs.schemaHash !== G39_UPSTREAM_IDENTITIES.database_schema_hash ||
-    inputs.migrationSha256 !== G39_UPSTREAM_IDENTITIES.schema6_migration_hash ||
+    inputs.migrationSha256 !==
+      G39_UPSTREAM_IDENTITIES.schema11_migration_hash ||
     inputs.schema3To4UpgradeSha256 !==
       G39_UPSTREAM_IDENTITIES.schema3_to_4_upgrade_hash ||
     inputs.schema4To5UpgradeSha256 !==
@@ -445,7 +435,7 @@ function upstreamIdentity(): JsonObject {
       version: '1.0.0',
     },
     sqlite_profile_hash: inputs.profileArtifactHash,
-    g2_sealed_bundle_hash: sealedBundleHash,
+    g2_golden_corpus_hash: G3_CURRENT_UPSTREAM_IDENTITY.g2_golden_corpus_hash,
     g3_6_pack_hash: G39_UPSTREAM_IDENTITIES.g3_6_pack_hash,
     g3_7_pack_hash: G39_UPSTREAM_IDENTITIES.g3_7_pack_hash,
     g3_8a_pack_hash: G39_UPSTREAM_IDENTITIES.g3_8a_pack_hash,
@@ -574,7 +564,7 @@ function buildLeafArtifacts(): BuiltLeafArtifacts {
       connection_factory: 'WorkflowRuntimeConnectionFactory',
       identity_mode: 'candidate_development',
       database_name: 'workflow-runtime.db',
-      database_schema_version: 6,
+      database_schema_version: 11,
       g1_root_hash: upstream.g1_root_hash!,
       schema_dependency_manifest_hash:
         upstream.schema_dependency_manifest_hash!,
@@ -590,7 +580,7 @@ function buildLeafArtifacts(): BuiltLeafArtifacts {
       certification_status: 'not_certified',
     },
     upstream_contracts: {
-      g2_sealed_bundle_hash: upstream.g2_sealed_bundle_hash!,
+      g2_golden_corpus_hash: upstream.g2_golden_corpus_hash!,
       g3_6_pack_hash: upstream.g3_6_pack_hash!,
       g3_7_pack_hash: upstream.g3_7_pack_hash!,
       g3_8a_pack_hash: upstream.g3_8a_pack_hash!,
@@ -762,7 +752,7 @@ function buildManifest(built: BuiltLeafArtifacts): ContractArtifactEnvelope {
       fault_case_count: g4FaultCases().length,
       fake_adapter_outcome_count: G4_FAKE_ADAPTER_OUTCOMES.length,
       fake_adapter_outcomes: [...G4_FAKE_ADAPTER_OUTCOMES],
-      database_schema_version: 6,
+      database_schema_version: 11,
       database_schema_hash: G39_UPSTREAM_IDENTITIES.database_schema_hash,
       sqlite_profile_status: 'candidate',
       certification_status: 'not_certified',
@@ -853,15 +843,15 @@ function validateBuilt(
     store.g1_root_hash !== G39_UPSTREAM_IDENTITIES.g1_root_hash ||
     store.database_schema_hash !==
       G39_UPSTREAM_IDENTITIES.database_schema_hash ||
-    store.migration_hash !== G39_UPSTREAM_IDENTITIES.schema6_migration_hash ||
+    store.migration_hash !== G39_UPSTREAM_IDENTITIES.schema11_migration_hash ||
     store.schema3_to_4_upgrade_hash !==
       G39_UPSTREAM_IDENTITIES.schema3_to_4_upgrade_hash ||
     store.schema4_to_5_upgrade_hash !==
       G39_UPSTREAM_IDENTITIES.schema4_to_5_upgrade_hash ||
     store.schema5_to_6_upgrade_hash !==
       G39_UPSTREAM_IDENTITIES.schema5_to_6_upgrade_hash ||
-    upstream.g2_sealed_bundle_hash !==
-      G39_UPSTREAM_IDENTITIES.g2_sealed_bundle_hash ||
+    upstream.g2_golden_corpus_hash !==
+      G39_UPSTREAM_IDENTITIES.g2_golden_corpus_hash ||
     upstream.g3_6_pack_hash !== G39_UPSTREAM_IDENTITIES.g3_6_pack_hash ||
     upstream.g3_7_pack_hash !== G39_UPSTREAM_IDENTITIES.g3_7_pack_hash ||
     upstream.g3_8a_pack_hash !== G39_UPSTREAM_IDENTITIES.g3_8a_pack_hash ||

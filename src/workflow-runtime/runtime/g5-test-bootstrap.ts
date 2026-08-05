@@ -2,16 +2,12 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { checkG4NodeOutputEnvelopeAuthoritySuccessor } from '../contracts/g4-node-output-envelope-authority-successor.js';
 import { domainSeparatedSha256 } from '../contracts/hash.js';
 import {
   WorkflowRuntimeConnectionFactory,
   type WorkflowRuntimeStore,
 } from '../store/runtime-store/index.js';
 import type { WorkflowRuntimeIdentityMode } from '../store/runtime-store/identity.js';
-
-const CURRENT_G4_SUCCESSOR_HASH =
-  'sha256:1cd67bad72a3fb147db7943d669800c2f56fabf4c255d42af8f7704f0e9a0cae';
 
 export class G5TestBootstrapInstance {
   readonly dataRoot: string;
@@ -84,9 +80,6 @@ export function createG5TestBootstrap(
 ): G5TestBootstrapInstance {
   if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(instanceKey))
     throw new Error('G5 test bootstrap instance key is invalid');
-  const g4 = checkG4NodeOutputEnvelopeAuthoritySuccessor();
-  if (g4.hash !== CURRENT_G4_SUCCESSOR_HASH)
-    throw new Error('Current G4 successor identity drifted');
   const suffix = domainSeparatedSha256(
     'icarus:workflow-g5-test-bootstrap:1\n',
     { instance_key: instanceKey },

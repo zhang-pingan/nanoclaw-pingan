@@ -10,17 +10,17 @@ Legacy identifiers such as `production`, `release`, `activation`, `certification
 
 Use the smallest affected authority and its tests:
 
-| Area | Current authority |
-| --- | --- |
-| Common artifact identity | `artifact.ts`, `versioned-ref.ts`, `strict-json.ts`, `hash.ts` |
-| Definition, Recipe, Command, Feature, Card, Source and Compiled IR | `schemas/`, `closed-schema-pack.ts`, `catalogs/` |
-| Safety, Capacity baseline, Retention and SQLite profile | `safety/`, `capacity/`, `sqlite/` |
-| Current Logical Schema | `logical-schema/` plus `../store/schema/` |
-| Compiler authority | `../compiler/`, `conformance/current/`, and sealed replay inputs |
-| Registry and authoring | G3 contract packs and `../authoring/` tests |
-| Runtime behavior | G5-G7 contract packs plus `../runtime/`, `../capacity/`, and `../projection/` tests |
-| Local startup and rollback identity | current Launcher, Host Core, Store compatibility, and startup tests |
-| Legacy release/activation compatibility (non-default) | `certification/`, `production-activation/`, and explicit certification/activation tests |
+| Area                                                               | Current authority                                                                       |
+| ------------------------------------------------------------------ | --------------------------------------------------------------------------------------- |
+| Common artifact identity                                           | `artifact.ts`, `versioned-ref.ts`, `strict-json.ts`, `hash.ts`                          |
+| Definition, Recipe, Command, Feature, Card, Source and Compiled IR | `schemas/`, `closed-schema-pack.ts`, `catalogs/`                                        |
+| Safety, Capacity baseline, Retention and SQLite profile            | `safety/`, `capacity/`, `sqlite/`                                                       |
+| Current Logical Schema                                             | `logical-schema/` plus `../store/schema/`                                               |
+| Compiler authority                                                 | `../compiler/`, `conformance/current/`, and sealed replay inputs                        |
+| Registry and authoring                                             | G3 contract packs and `../authoring/` tests                                             |
+| Runtime behavior                                                   | G5-G7 contract packs plus `../runtime/`, `../capacity/`, and `../projection/` tests     |
+| Local startup and rollback identity                                | current Launcher, Host Core, Store compatibility, and startup tests                     |
+| Legacy release/activation compatibility (non-default)              | `certification/`, `production-activation/`, and explicit certification/activation tests |
 
 Historical G0/R-016/R-020/R-021/R-022 coverage, Working/Draft review artifacts, superseded Compiler authorities, Gate ownership/readiness assertions, and milestone candidate tests remain immutable under `conformance/`, explicit package entrypoints, or Git history. They are not default inputs and are not regenerated or executed by the current aggregate.
 
@@ -58,7 +58,7 @@ The read-only construction archive is indexed at [`docs/archive/dynamic-workflow
 Explicit non-default audit:
 
 ```sh
-./scripts/runtime-toolchain.sh exec -- npm run archive:verify:v1
+git show workflow-runtime-v1-conformance-history
 ```
 
 The archive checker preserves former-path literals only in archived Markdown, frozen generated JSON provenance, and accepted `dist/` bytes. Any former-path reference in live source, current documentation, package defaults, or CI fails.

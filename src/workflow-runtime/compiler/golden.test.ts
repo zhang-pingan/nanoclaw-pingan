@@ -4,26 +4,15 @@ import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { canonicalJson } from '../contracts/hash.js';
 import {
   checkGoldenCorpus,
   generateGoldenCorpus,
   GOLDEN_CASES_PATH,
   readGoldenCorpus,
-  readLegacyGoldenCorpus,
   replayGoldenCorpus,
 } from './golden.js';
 
 describe('Workflow Compiler Golden corpus', () => {
-  it('preserves the 40 accepted case inputs and decisions during migration', () => {
-    const legacy = readLegacyGoldenCorpus();
-    const current = readGoldenCorpus().cases;
-    expect(current.cases.map((entry) => entry.case_id)).toEqual(
-      legacy.cases.map((entry) => entry.case_id),
-    );
-    expect(canonicalJson(current)).toBe(canonicalJson(legacy));
-  });
-
   it('generates deterministically and replays every committed result', () => {
     const { cases, manifest } = readGoldenCorpus();
     expect(generateGoldenCorpus(cases, manifest.change_reason)).toEqual(

@@ -81,7 +81,7 @@ const externalBindings = [
       'sha256:baa39d55cac34133a29b461466aa450fec59bd2fd6df72334e8b33d1d1619869',
   },
   {
-    name: 'g2_sealed_v3',
+    name: 'g2_golden_corpus_v1',
     path: 'src/workflow-runtime/contracts/conformance/sealed/g2-capability-outbox-binding-v3/golden-conformance-bundle@2.json',
     expected:
       'sha256:967437bb9f91e32e5014b2af90a23f5646e491eb427bdf55accb345ead70db8f',

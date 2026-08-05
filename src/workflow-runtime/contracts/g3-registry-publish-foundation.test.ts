@@ -43,8 +43,8 @@ describe('G3.1 Registry publish preflight foundation', () => {
       status: 'DONE',
       g3_status: 'IN_PROGRESS',
       upstream_g1_root_hash: G3_CURRENT_UPSTREAM_IDENTITY.g1_schema_root_hash,
-      upstream_g2_sealed_bundle_hash:
-        G3_CURRENT_UPSTREAM_IDENTITY.g2_sealed_bundle_hash,
+      upstream_g2_golden_corpus_hash:
+        G3_CURRENT_UPSTREAM_IDENTITY.g2_golden_corpus_hash,
       upstream_compiler_toolchain_hash:
         G3_CURRENT_UPSTREAM_IDENTITY.compiler.compiler_toolchain_hash,
       upstream_compiler_build_hash:

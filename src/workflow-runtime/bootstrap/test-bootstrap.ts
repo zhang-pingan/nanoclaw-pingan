@@ -446,7 +446,7 @@ function buildReceipt(
     root_inode: String(rootStat.ino),
     database_device: String(databaseStat.dev),
     database_inode: String(databaseStat.ino),
-    database_schema_version: 6 as const,
+    database_schema_version: 11 as const,
     database_schema_hash: storeBinding.database_schema_hash as Sha256Hash,
     sqlite_profile_hash: storeBinding.sqlite_profile_hash as Sha256Hash,
     production_surface_absence_hash: contracts.isolationBoundary.hash,

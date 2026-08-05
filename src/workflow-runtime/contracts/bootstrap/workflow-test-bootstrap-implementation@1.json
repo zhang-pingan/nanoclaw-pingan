@@ -19,7 +19,7 @@
       },
       {
         "path": "src/workflow-runtime/bootstrap/test-bootstrap.ts",
-        "raw_sha256": "sha256:6dd776ff040a59dd62c084014ee8d5a0930bdad7aff64d60e0241c827944fd6c"
+        "raw_sha256": "sha256:fc1e338e2a66648d791051bd75e78c5dca71c22c4616c567ece5a84ef547b9fd"
       },
       {
         "path": "src/workflow-runtime/bootstrap/virtual-clock.ts",
@@ -27,7 +27,7 @@
       }
     ],
     "source_file_count": 4,
-    "implementation_hash": "sha256:1a04adf90718c7ad7f53caf93fd2a02ca00857e86ab96bfcf81ae137aef1a552"
+    "implementation_hash": "sha256:9ce11e9ff17af6681753b124670962ff29c3dbfa8b242481c1bd46de9ed39ebe"
   },
-  "hash": "sha256:4ced1df4314038474b41c19b313531b25bc31671969529caa33876f18d448275"
+  "hash": "sha256:d46bc8dc03ffd55a63f5d026f43fe19d9f67f367eadd15776d7abc8a535c6267"
 }

@@ -323,7 +323,7 @@ export function persistCompileResultT2a(
         planPin.compiler_toolchain_hash !==
           input.plan.compiler_toolchain_hash ||
         planPin.compiler_build_hash !== input.plan.compiler_build_hash ||
-        planPin.provenance !== 'sealed_g2_expected' ||
+        planPin.provenance !== 'golden_corpus' ||
         !['3.0.4', '3.0.5', '3.0.6'].includes(input.plan.compiler_version) ||
         run.source_seed_hash !== input.sourceHash ||
         input.plan.runtime_safety_hash !== run.runtime_safety_snapshot_hash ||

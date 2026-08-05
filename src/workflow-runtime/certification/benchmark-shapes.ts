@@ -1,16 +1,9 @@
-import fs from 'node:fs';
-import path from 'node:path';
-
 import type { JsonObject } from '../contracts/types.js';
 import { canonicalJson } from '../contracts/hash.js';
 import type { G6CompiledFixture } from '../runtime/g6-test-support.js';
 import { compileWorkflow } from '../compiler/compiler.js';
+import { readGoldenCorpus } from '../compiler/golden.js';
 import type { WorkflowCompilerIdentity } from '../compiler/types.js';
-
-const SNAPSHOT_PATH = path.resolve(
-  import.meta.dirname,
-  '../contracts/conformance/current/g2-generated-output-schema-authority-replay-v8/snapshots/positive.condition-route.snapshot@2.json',
-);
 
 export type G8T3Shape =
   | 'long_chain'
@@ -207,10 +200,10 @@ export function compileG8T3Fixture(
   shape: G8T3Shape,
   nodeCount: number,
 ): G6CompiledFixture {
-  const snapshotArtifact = JSON.parse(
-    fs.readFileSync(SNAPSHOT_PATH, 'utf8'),
-  ) as JsonObject;
-  const snapshot = snapshotArtifact.payload as JsonObject;
+  const snapshot = readGoldenCorpus().cases.cases.find(
+    (entry) => entry.case_id === 'positive.condition-route',
+  )?.registry_snapshot;
+  if (!snapshot) throw new Error('Golden condition-route snapshot is missing');
   const source = createG8T3Source(shape, nodeCount);
   const outcome = compileWorkflow({
     caseId: `g8-benchmark-${shape}-${nodeCount}`,

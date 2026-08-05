@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-g3-registry-publish-negative-cases:1\n",
-  "hash": "sha256:38d6bd4becaca2260c0903dc38f3ef26011f0f7e1d0aa97e543e60f01f1b2b1b",
+  "hash": "sha256:5be17eee03920c908a6ca0cf4c974ab94b1335c818e7d67299fba7747576c5a9",
   "payload": {
     "fixture_scope": "test_only",
     "cases": [
@@ -116,13 +116,13 @@
         "expected_code": "preflight_hash_mismatch"
       },
       {
-        "case_id": "negative.g2-sealed-identity",
+        "case_id": "negative.g2-golden-identity",
         "fixture_scope": "test_only",
         "base_case_id": "positive.production-empty-registry",
         "mutations": [
           {
             "operation": "set",
-            "pointer": "/upstream_identity/g2_sealed_bundle_hash",
+            "pointer": "/upstream_identity/g2_golden_corpus_hash",
             "value": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
           }
         ],
@@ -313,16 +313,16 @@
               "content_hash": "sha256:ede8625861f47dcd9eebd48b232c36dd04f72bc8c702928070ea186643863937",
               "dependencies": [],
               "compiled_plan_pin": {
-                "plan_ref": "conformance/sealed/g2-generated-schema-join-authority-v6/expected/positive.static-lowering.plan.json",
+                "plan_ref": "compiler/golden/cases@1.json#positive.static-lowering",
                 "plan_hash": "sha256:7a06f414e398ca3bde05c22ac3aeb817b725b8ad21abd3d88cae1f00c8f20b12",
                 "plan_format": "icarus.workflow-graph-scope-plan/2",
-                "compiler_toolchain_hash": "sha256:c9c5c9b9180ecb9ffde5f8456e44c4e93fc51686988c74e47faa1b2f7fae3ffa",
-                "compiler_build_hash": "sha256:9333356a10b8c5345bfacc80c6071640e5e26561581f39969c7ecabc16ac97c0",
-                "provenance": "sealed_g2_expected"
+                "compiler_toolchain_hash": "sha256:dc01de3bbd06a70528b7466acfcc3b2c6e4b960de25d4a7cb5666ba9e06883e8",
+                "compiler_build_hash": "sha256:6ea4c825e91cc0fdaf3100e4b0f57e22723158bff1ad039ba359f857d285a069",
+                "provenance": "golden_corpus"
               },
               "execution_artifact_pin": null,
               "capability_outbox_binding": null,
-              "resource_hash": "sha256:0516c83df1a70ce3c33d7318534577802a78a1904e0d3ad5bcea1f6a744c650d"
+              "resource_hash": "sha256:56d8f50cf500527ff7b337ac4632d0c2e2ccf13838a4198df91f40b158f33d6e"
             }
           }
         ],

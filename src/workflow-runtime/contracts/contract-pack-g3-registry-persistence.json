@@ -12,9 +12,9 @@
     "status": "DONE",
     "g3_status": "IN_PROGRESS",
     "upstream_g3_2a_pack_hash": "sha256:c9c273b6d294d512a3578203d91d4bdce7863a3ccb561fdd7da08d072b3d8cd9",
-    "upstream_g3_1_pack_hash": "sha256:e1fd578c77620c3d516b35f7af5d9015f92f6bf40299b3ea0c77859fafd7237e",
+    "upstream_g3_1_pack_hash": "sha256:198c3184d98e3b1f19a8f9bbbf150fb6cff032a984fb66dfd99ce9044f3fd41c",
     "upstream_g3_2_pack_hash": "sha256:1eb0b81f488f4a37fa4503ddfef0dfa8a56d40fdeb535c9758d9d21fd39bb92b",
-    "upstream_g2_sealed_bundle_hash": "sha256:0820328ae1cfdba7d05948d9e36498a5428d997d6eabfb833ef0ba7d84b77db7",
+    "upstream_g2_golden_corpus_hash": "sha256:ffd426cec4269062fad47efeb75b7233a4d42a2961f724e480e33bf05ff81343",
     "upstream_g1_schema_root_hash": "sha256:2adb9376d341ad430155829647086bcc76f84ebf22dffac28c19d4026ea06ab2",
     "upstream_g1_schema_hash": "sha256:ad998b2d0bb5e5f158b0be6d13db79cb6a0c0650d5064b267262551af266189c",
     "upstream_g1_migration_sha256": "sha256:ccaa7699894da98284b9ce86767d917e355441df93e010d90751ccb713c9b872",
@@ -116,5 +116,5 @@
     "negative_case_count": 4,
     "g4_through_g9_status": "NOT_READY"
   },
-  "hash": "sha256:969e586947ef065c3c81955eea9e9077bc7057cd80090e05e0a6a994d097b88b"
+  "hash": "sha256:772f9071985b4ee647b607e71662ffd828d4c2200397f2f9681f8e9f4c45f35c"
 }

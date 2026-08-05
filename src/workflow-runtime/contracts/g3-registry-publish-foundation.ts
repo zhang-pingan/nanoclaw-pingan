@@ -153,7 +153,7 @@ export const G3_REGISTRY_PUBLISH_PREFLIGHT_SCHEMA: JsonObject = {
       maxItems: 4096,
     },
     upstream_identity: { $ref: '#/$defs/upstream_identity' },
-    expected_oracle: { const: 'sealed_g2_independent_expected' },
+    expected_oracle: { const: 'golden_corpus_expected' },
     production_compiler_actual_role: {
       enum: ['comparison_only', 'expected_oracle'],
     },
@@ -248,7 +248,7 @@ export const G3_REGISTRY_PUBLISH_PREFLIGHT_SCHEMA: JsonObject = {
         plan_format: { const: 'icarus.workflow-graph-scope-plan/2' },
         compiler_toolchain_hash: hashSchema,
         compiler_build_hash: hashSchema,
-        provenance: { const: 'sealed_g2_expected' },
+        provenance: { const: 'golden_corpus' },
       },
     },
     execution_artifact_pin: {
@@ -335,9 +335,8 @@ export const G3_REGISTRY_PUBLISH_PREFLIGHT_SCHEMA: JsonObject = {
         'g1_physical_schema_identity',
         'g1_schema_hash',
         'g1_migration_sha256',
-        'g2_sealed_bundle_ref',
-        'g2_sealed_bundle_artifact_hash',
-        'g2_sealed_bundle_hash',
+        'g2_golden_corpus_ref',
+        'g2_golden_corpus_hash',
         'compiler',
       ],
       properties: {
@@ -346,9 +345,8 @@ export const G3_REGISTRY_PUBLISH_PREFLIGHT_SCHEMA: JsonObject = {
         g1_physical_schema_identity: hashSchema,
         g1_schema_hash: hashSchema,
         g1_migration_sha256: hashSchema,
-        g2_sealed_bundle_ref: { type: 'string', minLength: 1 },
-        g2_sealed_bundle_artifact_hash: hashSchema,
-        g2_sealed_bundle_hash: hashSchema,
+        g2_golden_corpus_ref: { type: 'string', minLength: 1 },
+        g2_golden_corpus_hash: hashSchema,
         compiler: { $ref: '#/$defs/compiler_identity' },
       },
     },
@@ -530,7 +528,7 @@ export const G3_REGISTRY_PUBLISH_FOUNDATION_SCHEMA: JsonObject = {
       additionalProperties: false,
       required: ['expected_source', 'production_compiler_actual_role'],
       properties: {
-        expected_source: { const: 'current_g2_sealed_bundle_only' },
+        expected_source: { const: 'current_golden_corpus' },
         production_compiler_actual_role: { const: 'comparison_only' },
       },
     },
@@ -1007,7 +1005,7 @@ function basePreflight(
     feature_release_hash: null,
     resources: [],
     upstream_identity: clone(G3_CURRENT_UPSTREAM_IDENTITY),
-    expected_oracle: 'sealed_g2_independent_expected',
+    expected_oracle: 'golden_corpus_expected',
     production_compiler_actual_role: 'comparison_only',
     retention_policy_ref: clone(G3_RETENTION_POLICY_REF),
     retention_policy_hash: G3_RETENTION_POLICY_HASH,
@@ -1030,8 +1028,7 @@ const testOnlyDefinition = withResourceHash({
     'sha256:ede8625861f47dcd9eebd48b232c36dd04f72bc8c702928070ea186643863937',
   dependencies: [],
   compiled_plan_pin: {
-    plan_ref:
-      'conformance/sealed/g2-generated-schema-join-authority-v6/expected/positive.static-lowering.plan.json',
+    plan_ref: 'compiler/golden/cases@1.json#positive.static-lowering',
     plan_hash:
       'sha256:7a06f414e398ca3bde05c22ac3aeb817b725b8ad21abd3d88cae1f00c8f20b12',
     plan_format: 'icarus.workflow-graph-scope-plan/2',
@@ -1039,7 +1036,7 @@ const testOnlyDefinition = withResourceHash({
       G3_CURRENT_UPSTREAM_IDENTITY.compiler.compiler_toolchain_hash,
     compiler_build_hash:
       G3_CURRENT_UPSTREAM_IDENTITY.compiler.compiler_build_hash,
-    provenance: 'sealed_g2_expected',
+    provenance: 'golden_corpus',
   },
   execution_artifact_pin: null,
 });
@@ -1305,13 +1302,13 @@ const NEGATIVE_CASES: NegativeCase[] = [
     expected_code: 'preflight_hash_mismatch',
   },
   {
-    case_id: 'negative.g2-sealed-identity',
+    case_id: 'negative.g2-golden-identity',
     fixture_scope: 'test_only',
     base_case_id: 'positive.production-empty-registry',
     mutations: [
       {
         operation: 'set',
-        pointer: '/upstream_identity/g2_sealed_bundle_hash',
+        pointer: '/upstream_identity/g2_golden_corpus_hash',
         value:
           'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
       },
@@ -1686,7 +1683,7 @@ function foundationPayload(): JsonObject {
       activate: 'not_implemented',
     },
     publisher_oracle_policy: {
-      expected_source: 'current_g2_sealed_bundle_only',
+      expected_source: 'current_golden_corpus',
       production_compiler_actual_role: 'comparison_only',
     },
     preflight_error_codes: [...G3_PUBLISH_PREFLIGHT_ERROR_CODES],
@@ -1798,8 +1795,8 @@ function buildManifest(
       status: 'DONE',
       g3_status: 'IN_PROGRESS',
       upstream_g1_root_hash: G3_CURRENT_UPSTREAM_IDENTITY.g1_schema_root_hash,
-      upstream_g2_sealed_bundle_hash:
-        G3_CURRENT_UPSTREAM_IDENTITY.g2_sealed_bundle_hash,
+      upstream_g2_golden_corpus_hash:
+        G3_CURRENT_UPSTREAM_IDENTITY.g2_golden_corpus_hash,
       upstream_compiler_toolchain_hash:
         G3_CURRENT_UPSTREAM_IDENTITY.compiler.compiler_toolchain_hash,
       upstream_compiler_build_hash:
@@ -1841,35 +1838,25 @@ function assertExactArtifact(
 }
 
 function validateCurrentUpstream(): void {
-  assertExactArtifact(
-    G3_CURRENT_UPSTREAM_IDENTITY.g2_sealed_bundle_ref,
-    G3_CURRENT_UPSTREAM_IDENTITY.g2_sealed_bundle_artifact_hash,
+  const goldenCases = strictParseJsonBytes(
+    fs.readFileSync(
+      path.join(
+        import.meta.dirname,
+        '..',
+        G3_CURRENT_UPSTREAM_IDENTITY.g2_golden_corpus_ref,
+      ),
+    ),
   );
-  const sealed = readArtifact(
-    G3_CURRENT_UPSTREAM_IDENTITY.g2_sealed_bundle_ref,
-  );
+  assertJsonObject(goldenCases);
   if (
-    sealed.payload.bundle_hash !==
-      G3_CURRENT_UPSTREAM_IDENTITY.g2_sealed_bundle_hash ||
-    canonicalJson(sealed.payload.exact_compiler_identity) !==
-      canonicalJson({
-        ...G3_CURRENT_UPSTREAM_IDENTITY.compiler,
-        canonical_normalizer_version: '2.0.1',
-        canonical_normalizer_hash:
-          'sha256:e32946d0d20cc92344a72d04e488951cc4a64be82d36384db26dfbf420e469ff',
-        proof_algorithm_version: '2.0.2',
-        proof_algorithm_hash:
-          'sha256:b6fda13a0acddf052cae5ed6f1bc89f2b9cfa91affbfcbb80aa44365f78c35d9',
-        error_catalog_ref: {
-          id: 'icarus.workflow-compiler-error-catalog',
-          version: '2.0.0',
-        },
-        error_catalog_hash:
-          'sha256:8fc7139b29cdddf3c1e13e0f9d8bc6b19a1d32c02c1e7f4b7e33023fcece91ef',
-      })
+    goldenCases.format !== 'icarus.workflow-compiler-golden-cases/1' ||
+    domainSeparatedSha256(
+      'icarus:workflow-compiler-golden-corpus:1\n',
+      goldenCases,
+    ) !== G3_CURRENT_UPSTREAM_IDENTITY.g2_golden_corpus_hash
   ) {
     throw new G3RegistryPublishPreflightError(
-      'G3 current G2 sealed/compiler identity drift',
+      'G3 current Golden corpus identity drift',
     );
   }
   assertExactArtifact(

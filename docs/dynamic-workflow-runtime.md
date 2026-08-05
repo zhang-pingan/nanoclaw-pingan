@@ -52,7 +52,7 @@ The complete v1 construction design, introduction, progress ledger, future-only 
 They are historical provenance, not Runtime input or default development authority. Optional audit is explicit:
 
 ```sh
-./scripts/runtime-toolchain.sh exec -- npm run archive:verify:v1
+git show workflow-runtime-v1-conformance-history
 ```
 
 See [`internal-experimental-scope.md`](internal-experimental-scope.md) for the project boundary and the prioritized simplification list.

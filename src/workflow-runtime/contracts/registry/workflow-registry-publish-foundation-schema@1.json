@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-registry-publish-foundation-schema:1\n",
-  "hash": "sha256:d0a2f83105a482d97ba9d18a817403233617a8120356ddf98144709d8152b3a6",
+  "hash": "sha256:4f1c654eda1d25a858873e37ca41b900c7459c29a715c72ebbcc8aca865a98b5",
   "payload": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "$id": "https://icarus.local/schemas/workflow-registry-publish-foundation/1",
@@ -61,9 +61,8 @@
           "g1_physical_schema_identity",
           "g1_schema_hash",
           "g1_migration_sha256",
-          "g2_sealed_bundle_ref",
-          "g2_sealed_bundle_artifact_hash",
-          "g2_sealed_bundle_hash",
+          "g2_golden_corpus_ref",
+          "g2_golden_corpus_hash",
           "compiler"
         ],
         "properties": {
@@ -87,15 +86,11 @@
             "type": "string",
             "pattern": "^sha256:[0-9a-f]{64}$"
           },
-          "g2_sealed_bundle_ref": {
+          "g2_golden_corpus_ref": {
             "type": "string",
             "minLength": 1
           },
-          "g2_sealed_bundle_artifact_hash": {
-            "type": "string",
-            "pattern": "^sha256:[0-9a-f]{64}$"
-          },
-          "g2_sealed_bundle_hash": {
+          "g2_golden_corpus_hash": {
             "type": "string",
             "pattern": "^sha256:[0-9a-f]{64}$"
           },
@@ -246,7 +241,7 @@
         ],
         "properties": {
           "expected_source": {
-            "const": "current_g2_sealed_bundle_only"
+            "const": "current_golden_corpus"
           },
           "production_compiler_actual_role": {
             "const": "comparison_only"

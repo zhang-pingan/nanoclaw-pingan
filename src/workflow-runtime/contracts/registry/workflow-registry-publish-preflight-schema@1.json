@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-registry-publish-preflight-schema:1\n",
-  "hash": "sha256:fd92c43f6e82503054cd6199bd1342ee4a53ea1eabd07aaef9ece000e839d5ed",
+  "hash": "sha256:50631c696c3af3acd5ff127dfcb10b4fb82b1b053e1445550f6d74de06458187",
   "payload": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "$id": "https://icarus.local/schemas/workflow-registry-publish-preflight/1",
@@ -105,7 +105,7 @@
         "$ref": "#/$defs/upstream_identity"
       },
       "expected_oracle": {
-        "const": "sealed_g2_independent_expected"
+        "const": "golden_corpus_expected"
       },
       "production_compiler_actual_role": {
         "enum": [
@@ -350,7 +350,7 @@
             "pattern": "^sha256:[0-9a-f]{64}$"
           },
           "provenance": {
-            "const": "sealed_g2_expected"
+            "const": "golden_corpus"
           }
         }
       },
@@ -538,9 +538,8 @@
           "g1_physical_schema_identity",
           "g1_schema_hash",
           "g1_migration_sha256",
-          "g2_sealed_bundle_ref",
-          "g2_sealed_bundle_artifact_hash",
-          "g2_sealed_bundle_hash",
+          "g2_golden_corpus_ref",
+          "g2_golden_corpus_hash",
           "compiler"
         ],
         "properties": {
@@ -564,15 +563,11 @@
             "type": "string",
             "pattern": "^sha256:[0-9a-f]{64}$"
           },
-          "g2_sealed_bundle_ref": {
+          "g2_golden_corpus_ref": {
             "type": "string",
             "minLength": 1
           },
-          "g2_sealed_bundle_artifact_hash": {
-            "type": "string",
-            "pattern": "^sha256:[0-9a-f]{64}$"
-          },
-          "g2_sealed_bundle_hash": {
+          "g2_golden_corpus_hash": {
             "type": "string",
             "pattern": "^sha256:[0-9a-f]{64}$"
           },

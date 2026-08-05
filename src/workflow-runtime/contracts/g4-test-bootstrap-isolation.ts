@@ -178,6 +178,8 @@ function isGeneratedDirectory(name: string): boolean {
   return (
     name === 'node_modules' ||
     name === '.git' ||
+    name === 'generated' ||
+    name === 'production-candidate' ||
     name === 'dist' ||
     name === 'dist-electron' ||
     name === 'dist-assistant' ||

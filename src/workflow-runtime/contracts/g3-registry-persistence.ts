@@ -21,6 +21,7 @@ import {
   type G3RegistrySnapshotPreflightInput,
   type G3RegistrySnapshotPreflightResult,
 } from './g3-registry-persistence-types.js';
+import { G3_CURRENT_UPSTREAM_IDENTITY } from './g3-registry-publish-types.js';
 import type {
   ContractArtifactEnvelope,
   JsonObject,
@@ -1005,7 +1006,7 @@ function validateUpstreamIdentities(): void {
   const exactArtifacts: Array<[string, Sha256Hash]> = [
     [
       'contract-pack-g3-registry-publish-foundation.json',
-      'sha256:e1fd578c77620c3d516b35f7af5d9015f92f6bf40299b3ea0c77859fafd7237e',
+      'sha256:198c3184d98e3b1f19a8f9bbbf150fb6cff032a984fb66dfd99ce9044f3fd41c',
     ],
     [
       'contract-pack-g3.2a-feature-manifest-intake.json',
@@ -1019,17 +1020,6 @@ function validateUpstreamIdentities(): void {
   for (const [file, expected] of exactArtifacts) {
     if (readArtifact(file).hash !== expected)
       throw new Error(`G3 Registry upstream identity drift: ${file}`);
-  }
-  const sealed = readArtifact(
-    'conformance/sealed/g2-generated-schema-join-authority-v6/golden-conformance-bundle@2.json',
-  );
-  if (
-    sealed.hash !==
-      'sha256:5cf2d899d0bf8d7cc0d4b70cc7796a123b8b5384bbbefe3e204e70bddf33fe11' ||
-    sealed.payload.bundle_hash !==
-      'sha256:0820328ae1cfdba7d05948d9e36498a5428d997d6eabfb833ef0ba7d84b77db7'
-  ) {
-    throw new Error('G3 Registry upstream G2 sealed identity drift');
   }
 }
 
@@ -1148,11 +1138,11 @@ function buildManifest(
       upstream_g3_2a_pack_hash:
         'sha256:c9c273b6d294d512a3578203d91d4bdce7863a3ccb561fdd7da08d072b3d8cd9',
       upstream_g3_1_pack_hash:
-        'sha256:e1fd578c77620c3d516b35f7af5d9015f92f6bf40299b3ea0c77859fafd7237e',
+        'sha256:198c3184d98e3b1f19a8f9bbbf150fb6cff032a984fb66dfd99ce9044f3fd41c',
       upstream_g3_2_pack_hash:
         'sha256:1eb0b81f488f4a37fa4503ddfef0dfa8a56d40fdeb535c9758d9d21fd39bb92b',
-      upstream_g2_sealed_bundle_hash:
-        'sha256:0820328ae1cfdba7d05948d9e36498a5428d997d6eabfb833ef0ba7d84b77db7',
+      upstream_g2_golden_corpus_hash:
+        G3_CURRENT_UPSTREAM_IDENTITY.g2_golden_corpus_hash,
       upstream_g1_schema_root_hash:
         'sha256:2adb9376d341ad430155829647086bcc76f84ebf22dffac28c19d4026ea06ab2',
       upstream_g1_schema_hash:

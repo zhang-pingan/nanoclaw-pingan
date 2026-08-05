@@ -60,6 +60,7 @@ import { referenceJoinPublication } from '../contracts/g5-basic-runtime-repair-r
 import { canonicalJson, domainSeparatedSha256 } from '../contracts/hash.js';
 import type { JsonObject, JsonValue, Sha256Hash } from '../contracts/types.js';
 import { compileWorkflow } from '../compiler/compiler.js';
+import { readGoldenCorpus } from '../compiler/golden.js';
 import type { WorkflowCompilerIdentity } from '../compiler/types.js';
 import {
   compileTriggerProgram,
@@ -253,7 +254,7 @@ function seedRuntime(store: WorkflowRuntimeStore): SeededRuntime {
                 plan_format: pinnedPlan.format,
                 compiler_toolchain_hash: pinnedPlan.compiler_toolchain_hash,
                 compiler_build_hash: pinnedPlan.compiler_build_hash,
-                provenance: 'sealed_g2_expected',
+                provenance: 'golden_corpus',
               },
             }
           : resource.resourceType === 'schema'
@@ -1018,11 +1019,6 @@ function staticChildBundleFixture(seed: SeededRuntime): {
   };
 }
 
-const staticChildCompilerFixtureRoot = path.resolve(
-  import.meta.dirname,
-  '../contracts/conformance/sealed/g2-generated-schema-join-authority-v6',
-);
-
 function requireBridge(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(`Static child fixture execution: ${message}`);
 }
@@ -1055,34 +1051,23 @@ function compilerStaticChildInput(): {
   readonly snapshot: JsonObject;
   readonly expectedPlan: CompiledScopePlanV2Document;
 } {
-  const source = JSON.parse(
-    fs.readFileSync(
-      path.join(
-        staticChildCompilerFixtureRoot,
-        'inputs/positive.static-child-closure.source.json',
-      ),
-      'utf8',
-    ),
-  ) as JsonObject;
-  const snapshot = JSON.parse(
-    fs.readFileSync(
-      path.join(
-        staticChildCompilerFixtureRoot,
-        'inputs/positive.static-child-closure.snapshot@2.json',
-      ),
-      'utf8',
-    ),
-  ) as { payload: JsonObject };
-  const expectedPlan = JSON.parse(
-    fs.readFileSync(
-      path.join(
-        staticChildCompilerFixtureRoot,
-        'expected/positive.static-child-closure.plan.json',
-      ),
-      'utf8',
-    ),
-  ) as CompiledScopePlanV2Document;
-  return { source, snapshot: snapshot.payload, expectedPlan };
+  const goldenCase = readGoldenCorpus().cases.cases.find(
+    (entry) => entry.case_id === 'positive.static-child-closure',
+  );
+  if (
+    !goldenCase ||
+    goldenCase.expected_result.outcome !== 'compiled' ||
+    !goldenCase.expected_result.normalized_plan
+  ) {
+    throw new Error('Golden static-child fixture is missing');
+  }
+  return {
+    source: JSON.parse(
+      Buffer.from(goldenCase.raw_source_base64, 'base64').toString('utf8'),
+    ) as JsonObject,
+    snapshot: goldenCase.registry_snapshot,
+    expectedPlan: goldenCase.expected_result.normalized_plan,
+  };
 }
 
 function invokeStaticChildCompiler(
@@ -2186,7 +2171,7 @@ function pinTestDefinitionPlan(
       plan_format: candidate.format,
       compiler_toolchain_hash: candidate.compiler_toolchain_hash,
       compiler_build_hash: candidate.compiler_build_hash,
-      provenance: 'sealed_g2_expected',
+      provenance: 'golden_corpus',
     },
   });
   store.withImmediateTransaction((transaction) => {

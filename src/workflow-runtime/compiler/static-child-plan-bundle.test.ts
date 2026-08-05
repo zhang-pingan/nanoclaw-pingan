@@ -1,46 +1,34 @@
-import fs from 'node:fs';
-import path from 'node:path';
-
 import { describe, expect, it } from 'vitest';
 
 import type { CompiledScopePlanV2Document } from '../contracts/compiler-contract-repair-types.js';
 import { canonicalJson } from '../contracts/hash.js';
 import type { JsonObject } from '../contracts/types.js';
 import { compileWorkflow } from './compiler.js';
+import { readGoldenCorpus } from './golden.js';
 import type { WorkflowCompilerIdentity } from './types.js';
-
-const sealedRoot = path.resolve(
-  import.meta.dirname,
-  '../contracts/conformance/sealed/g2-generated-schema-join-authority-v6',
-);
 
 function fixture(): {
   source: JsonObject;
   snapshot: JsonObject;
   expectedPlan: CompiledScopePlanV2Document;
 } {
-  const source = JSON.parse(
-    fs.readFileSync(
-      path.join(sealedRoot, 'inputs/positive.static-child-closure.source.json'),
-      'utf8',
-    ),
-  ) as JsonObject;
-  const snapshotArtifact = JSON.parse(
-    fs.readFileSync(
-      path.join(
-        sealedRoot,
-        'inputs/positive.static-child-closure.snapshot@2.json',
-      ),
-      'utf8',
-    ),
-  ) as { payload: JsonObject };
-  const expectedPlan = JSON.parse(
-    fs.readFileSync(
-      path.join(sealedRoot, 'expected/positive.static-child-closure.plan.json'),
-      'utf8',
-    ),
-  ) as CompiledScopePlanV2Document;
-  return { source, snapshot: snapshotArtifact.payload, expectedPlan };
+  const goldenCase = readGoldenCorpus().cases.cases.find(
+    (entry) => entry.case_id === 'positive.static-child-closure',
+  );
+  if (
+    !goldenCase ||
+    goldenCase.expected_result.outcome !== 'compiled' ||
+    !goldenCase.expected_result.normalized_plan
+  ) {
+    throw new Error('Golden static-child fixture is missing');
+  }
+  return {
+    source: JSON.parse(
+      Buffer.from(goldenCase.raw_source_base64, 'base64').toString('utf8'),
+    ) as JsonObject,
+    snapshot: goldenCase.registry_snapshot,
+    expectedPlan: goldenCase.expected_result.normalized_plan,
+  };
 }
 
 function compile(source: JsonObject, snapshot: JsonObject) {
