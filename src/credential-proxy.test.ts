@@ -69,9 +69,7 @@ class LocalServerResponse extends Writable {
 
     if (finalChunk !== undefined) {
       this.chunks.push(
-        typeof finalChunk === 'string'
-          ? Buffer.from(finalChunk)
-          : finalChunk,
+        typeof finalChunk === 'string' ? Buffer.from(finalChunk) : finalChunk,
       );
     }
 
@@ -255,10 +253,7 @@ function setupModuleMocks(): void {
 
     class FakeServer extends EventEmitter {
       listening = false;
-      readonly handler: (
-        req: PassThrough,
-        res: FakeServerResponse,
-      ) => void;
+      readonly handler: (req: PassThrough, res: FakeServerResponse) => void;
 
       constructor(
         handler: (req: PassThrough, res: FakeServerResponse) => void,
@@ -292,10 +287,12 @@ function setupModuleMocks(): void {
       },
       request: (
         options: RequestOptions,
-        callback?: (res: PassThrough & {
-          statusCode: number;
-          headers: IncomingHttpHeaders;
-        }) => void,
+        callback?: (
+          res: PassThrough & {
+            statusCode: number;
+            headers: IncomingHttpHeaders;
+          },
+        ) => void,
       ) => {
         const req = new EventEmitter() as EventEmitter & {
           write: (chunk: Buffer | string) => void;
@@ -305,9 +302,7 @@ function setupModuleMocks(): void {
         const chunks: Buffer[] = [];
 
         req.write = (chunk: Buffer | string) => {
-          chunks.push(
-            typeof chunk === 'string' ? Buffer.from(chunk) : chunk,
-          );
+          chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk);
         };
 
         req.end = () => {
@@ -794,9 +789,7 @@ describe('credential-proxy', () => {
     req.headers = { 'content-type': 'application/json' };
     const res = new LocalServerResponse();
     lastServer.handler(req, res as never);
-    req.end(
-      JSON.stringify({ model: 'claude-stream-usage', stream: true }),
-    );
+    req.end(JSON.stringify({ model: 'claude-stream-usage', stream: true }));
 
     await new Promise<void>((resolve) => setImmediate(resolve));
     upstreamResponse!.write(

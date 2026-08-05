@@ -648,7 +648,8 @@ export function buildSchemaTriggers(
         table: 'workflow_runtime_commands',
         timing: 'before',
         event: 'update',
-        owner_intent: 'Runtime Command Header canonical result finalizes exactly once',
+        owner_intent:
+          'Runtime Command Header canonical result finalizes exactly once',
         sql: `CREATE TRIGGER ${q('trg:runtime_commands:terminalization')} BEFORE UPDATE OF "canonical_result_value_id", "canonical_result_hash", "finalized_at_ms" ON ${q('workflow_runtime_commands')} BEGIN\n  SELECT CASE WHEN OLD."canonical_result_value_id" IS NOT NULL OR OLD."canonical_result_hash" IS NOT NULL OR OLD."finalized_at_ms" IS NOT NULL OR NEW."canonical_result_value_id" IS NULL OR NEW."canonical_result_hash" IS NULL OR NEW."finalized_at_ms" IS NULL OR NEW."finalized_at_ms" < NEW."created_at_ms" THEN RAISE(ABORT, 'runtime_command_terminalization_invalid') END;\nEND`,
       },
       {
@@ -742,7 +743,8 @@ export function buildSchemaTriggers(
         table: 'workflow_runtime_command_confirmations',
         timing: 'before',
         event: 'delete',
-        owner_intent: 'administrative-abandon confirmation history is immutable',
+        owner_intent:
+          'administrative-abandon confirmation history is immutable',
         sql: `CREATE TRIGGER ${q('trg:command_confirmations:immutable_delete')} BEFORE DELETE ON ${q('workflow_runtime_command_confirmations')} BEGIN\n  SELECT RAISE(ABORT, 'command_confirmation_is_immutable');\nEND`,
       },
     );
@@ -1377,23 +1379,28 @@ export function renderSchema9To10Upgrade(
       (name, index) => effectClaims.columns[index]?.name !== name,
     )
   ) {
-    throw new Error('Schema 10 R-022 rebuild does not preserve Schema 9 prefixes');
+    throw new Error(
+      'Schema 10 R-022 rebuild does not preserve Schema 9 prefixes',
+    );
   }
-  const addedKeyStatements = [effectOperationsName, schedulesName, relationsName]
-    .flatMap((name) => {
-      const before = schema9.tables.find((table) => table.name === name);
-      const after = schema10.tables.find((table) => table.name === name);
-      if (!before || !after)
-        throw new Error(`Schema 10 candidate-key target is missing: ${name}`);
-      return after.unique_keys
-        .filter(
-          (key) =>
-            !before.unique_keys.some(
-              (candidate) => candidate.key_id === key.key_id,
-            ),
-        )
-        .map((key) => renderUniqueIndex(after, key));
-    });
+  const addedKeyStatements = [
+    effectOperationsName,
+    schedulesName,
+    relationsName,
+  ].flatMap((name) => {
+    const before = schema9.tables.find((table) => table.name === name);
+    const after = schema10.tables.find((table) => table.name === name);
+    if (!before || !after)
+      throw new Error(`Schema 10 candidate-key target is missing: ${name}`);
+    return after.unique_keys
+      .filter(
+        (key) =>
+          !before.unique_keys.some(
+            (candidate) => candidate.key_id === key.key_id,
+          ),
+      )
+      .map((key) => renderUniqueIndex(after, key));
+  });
   if (addedKeyStatements.length !== 3) {
     throw new Error('Schema 10 R-022 candidate-key delta drifted');
   }
@@ -1407,7 +1414,9 @@ export function renderSchema9To10Upgrade(
     throw new Error('Schema 10 R-022 trigger delta drifted');
   }
   const claimPrefix = expectedClaimPrefix.map(q).join(', ');
-  const claimColumns = claims.columns.map((column) => q(column.name)).join(', ');
+  const claimColumns = claims.columns
+    .map((column) => q(column.name))
+    .join(', ');
   const effectClaimPrefix = expectedEffectClaimPrefix
     .map((name) => `${q('effect_claim')}.${q(name)}`)
     .join(', ');
@@ -1489,7 +1498,9 @@ export function renderSchema10To11Upgrade(
       schema11Invocations.foreign_keys.length ||
     schema10Invocations.indexes.length !== schema11Invocations.indexes.length
   ) {
-    throw new Error('Schema 11 cannot rewrite resolved Command Invocation rows');
+    throw new Error(
+      'Schema 11 cannot rewrite resolved Command Invocation rows',
+    );
   }
   const addedInvocationKeys = schema11Invocations.unique_keys.filter(
     (key) =>

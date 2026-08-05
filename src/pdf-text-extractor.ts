@@ -65,7 +65,11 @@ function mergeOverlappingPdfTokens(line: string): string {
     if (token === output.slice(-token.length)) continue;
 
     let merged = false;
-    for (let overlap = Math.min(output.length, token.length); overlap >= 1; overlap -= 1) {
+    for (
+      let overlap = Math.min(output.length, token.length);
+      overlap >= 1;
+      overlap -= 1
+    ) {
       if (output.slice(-overlap) === token.slice(0, overlap)) {
         output += token.slice(overlap);
         merged = true;
@@ -85,14 +89,10 @@ function normalizePdfExtractedLine(line: string): string {
   if (!line.trim()) return '';
 
   let normalized = mergeOverlappingPdfTokens(line);
-  normalized = normalized.replace(
-    /\b([A-Za-z])(?:\s+[A-Za-z])+\b/g,
-    (value) => value.replace(/\s+/g, ''),
+  normalized = normalized.replace(/\b([A-Za-z])(?:\s+[A-Za-z])+\b/g, (value) =>
+    value.replace(/\s+/g, ''),
   );
-  normalized = normalized.replace(
-    /\b([A-Za-z])\s+([A-Za-z]{2,})\b/g,
-    '$1$2',
-  );
+  normalized = normalized.replace(/\b([A-Za-z])\s+([A-Za-z]{2,})\b/g, '$1$2');
   normalized = normalized.replace(
     /(?<=[\p{Script=Han}])\s+(?=[\p{Script=Han}])/gu,
     '',
@@ -105,14 +105,8 @@ function normalizePdfExtractedLine(line: string): string {
     /(?<=[A-Za-z0-9])\s+(?=[\p{Script=Han}])/gu,
     '',
   );
-  normalized = normalized.replace(
-    /(?<=[【（《“‘])\s+/gu,
-    '',
-  );
-  normalized = normalized.replace(
-    /\s+(?=[】）》”’])/gu,
-    '',
-  );
+  normalized = normalized.replace(/(?<=[【（《“‘])\s+/gu, '');
+  normalized = normalized.replace(/\s+(?=[】）》”’])/gu, '');
   normalized = normalized.replace(
     /(?<=[\p{Script=Han}])\s+(?=[，。；：？！、])/gu,
     '',
@@ -167,10 +161,7 @@ function shouldMergePdfLines(previous: string, current: string): boolean {
   if (isPdfStructuredBreak(previous)) return false;
   if (/[。！？；]$/u.test(previous)) return false;
   if (/^[，。；：？！、）》】]/u.test(current)) return true;
-  if (
-    previous.length <= 2 ||
-    current.length <= 2
-  ) {
+  if (previous.length <= 2 || current.length <= 2) {
     return false;
   }
   if (
@@ -201,7 +192,11 @@ function normalizePdfPageText(pageText: string): string {
 
   for (const line of normalizedLines) {
     if (!line) {
-      if (mergedLines.length === 0 || mergedLines[mergedLines.length - 1] === '') continue;
+      if (
+        mergedLines.length === 0 ||
+        mergedLines[mergedLines.length - 1] === ''
+      )
+        continue;
       mergedLines.push('');
       continue;
     }
@@ -231,7 +226,9 @@ function normalizePdfPageText(pageText: string): string {
 }
 
 export function normalizePdfExtractedText(rawText: string): string {
-  const normalizedSource = rawText.replace(/\r\n/g, '\n').replace(/\u0000/g, '');
+  const normalizedSource = rawText
+    .replace(/\r\n/g, '\n')
+    .replace(/\u0000/g, '');
   const pages = normalizedSource
     .split(/\f+/)
     .map((page) => page.trim())
@@ -241,11 +238,7 @@ export function normalizePdfExtractedText(rawText: string): string {
     return normalizePdfPageText(normalizedSource);
   }
 
-  return pages
-    .map(normalizePdfPageText)
-    .filter(Boolean)
-    .join('\n\n')
-    .trim();
+  return pages.map(normalizePdfPageText).filter(Boolean).join('\n\n').trim();
 }
 
 const pdftotextExtractor: PdfTextExtractor = {
@@ -269,17 +262,13 @@ const pdfKitExtractor: PdfTextExtractor = {
   },
   extract(filePath: string): string {
     ensureDir(SWIFT_MODULE_CACHE_DIR);
-    return execFileSync(
-      'swift',
-      ['-e', PDF_TEXT_EXTRACT_SWIFT, filePath],
-      {
-        encoding: 'utf-8',
-        env: {
-          ...process.env,
-          CLANG_MODULE_CACHE_PATH: SWIFT_MODULE_CACHE_DIR,
-        },
+    return execFileSync('swift', ['-e', PDF_TEXT_EXTRACT_SWIFT, filePath], {
+      encoding: 'utf-8',
+      env: {
+        ...process.env,
+        CLANG_MODULE_CACHE_PATH: SWIFT_MODULE_CACHE_DIR,
       },
-    );
+    });
   },
 };
 
@@ -295,7 +284,9 @@ export function extractPdfText(filePath: string): PdfTextExtractionResult {
     if (!extractor.isSupported()) continue;
     try {
       const rawText = extractor.extract(filePath);
-      const text = normalizePdfExtractedText(rawText.replace(/^\uFEFF/, '').trim());
+      const text = normalizePdfExtractedText(
+        rawText.replace(/^\uFEFF/, '').trim(),
+      );
       if (!text) {
         throw new Error('no extractable text');
       }

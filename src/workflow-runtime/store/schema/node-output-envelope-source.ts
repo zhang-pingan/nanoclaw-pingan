@@ -20,8 +20,7 @@ const CURRENT_GENERATORS = [
   'node_output_envelope',
 ] as const;
 
-export interface NodeOutputEnvelopeSchemaPrerequisitePayload
-  extends JsonObject {
+export interface NodeOutputEnvelopeSchemaPrerequisitePayload extends JsonObject {
   format: 'icarus.workflow-node-output-envelope-schema-authority-prerequisite/1';
   schema_id: 'workflow-runtime-schema-v1';
   database_schema_version: 7;
@@ -106,7 +105,8 @@ function expandGeneratorCatalog(
   const column = result.columns.find((entry) => entry.name === columnName);
   if (
     !column ||
-    JSON.stringify(column.enum_values) !== JSON.stringify(PREDECESSOR_GENERATORS)
+    JSON.stringify(column.enum_values) !==
+      JSON.stringify(PREDECESSOR_GENERATORS)
   ) {
     throw new Error(
       `Schema 6 ${table.name}.${columnName} generator catalog drifted`,

@@ -225,9 +225,7 @@ interface ExecutionOutcome {
   readonly result: JsonObject;
 }
 
-function assertCommandShape(
-  command: WorkflowRuntimeCommandDocument,
-): {
+function assertCommandShape(command: WorkflowRuntimeCommandDocument): {
   entry: RuntimeCommandProtocolEntry;
   claimedTarget: RuntimeCommandClaimedTarget;
 } {
@@ -308,10 +306,7 @@ function idempotencyDomain(input: RuntimeCommandGatewayInput): string {
   return `${input.actor.actorKind}:${input.actor.actorRef}:${source}`;
 }
 
-function parseCanonicalIngressJson(
-  bytes: string,
-  label: string,
-): JsonValue {
+function parseCanonicalIngressJson(bytes: string, label: string): JsonValue {
   let parsed: JsonValue;
   try {
     parsed = JSON.parse(bytes) as JsonValue;
@@ -404,7 +399,10 @@ function assertRuntimeCommandIngressHistory(
       idempotency_key: idempotencyKey,
       ingress_no: expectedNo,
     }).replace(/^g5:/, '');
-    const claimedColumns: Record<RuntimeCommandClaimedTargetKind, string | null> = {
+    const claimedColumns: Record<
+      RuntimeCommandClaimedTargetKind,
+      string | null
+    > = {
       workflow: row.claimed_workflow_id,
       run: row.claimed_run_id,
       node: row.claimed_node_id,
@@ -2120,8 +2118,10 @@ function executeAbandonConfirm(
     confirmation.status !== 'pending' ||
     !confirmingIntent ||
     confirmingIntent.reason_code !== confirmation.request_reason_code ||
-    confirmingIntent.reason_text_hash !== confirmation.request_reason_text_hash ||
-    confirmingIntent.evidence_manifest_hash !== confirmation.request_evidence_hash
+    confirmingIntent.reason_text_hash !==
+      confirmation.request_reason_text_hash ||
+    confirmingIntent.evidence_manifest_hash !==
+      confirmation.request_evidence_hash
   )
     return deny('confirmation_required', command.command_id);
   if (input.nowMs >= confirmation.expires_at_ms) {
@@ -2314,7 +2314,10 @@ function gatewayTransaction(
         },
       },
     );
-    assertNoDeferredForeignKeyViolations(transaction, 'Runtime Command Gateway');
+    assertNoDeferredForeignKeyViolations(
+      transaction,
+      'Runtime Command Gateway',
+    );
     return receipt;
   }
   const target = loadTarget(transaction, input.command);
@@ -2337,7 +2340,10 @@ function gatewayTransaction(
         },
       },
     );
-    assertNoDeferredForeignKeyViolations(transaction, 'Runtime Command Gateway');
+    assertNoDeferredForeignKeyViolations(
+      transaction,
+      'Runtime Command Gateway',
+    );
     return receipt;
   }
   const requestHash = ingress.requestHash;
@@ -2403,7 +2409,10 @@ function gatewayTransaction(
       'not_evaluated',
       resolvedReceipt,
     );
-    assertNoDeferredForeignKeyViolations(transaction, 'Runtime Command Gateway');
+    assertNoDeferredForeignKeyViolations(
+      transaction,
+      'Runtime Command Gateway',
+    );
     return receipt;
   }
   const required = requiredPermission(entry, input.actor, target);
@@ -2510,9 +2519,7 @@ function gatewayTransaction(
     input,
     ingress,
     'resolved',
-    resolvedReceipt.executionResult === 'denied'
-      ? 'denied'
-      : 'allowed',
+    resolvedReceipt.executionResult === 'denied' ? 'denied' : 'allowed',
     resolvedReceipt,
   );
   assertNoDeferredForeignKeyViolations(transaction, 'Runtime Command Gateway');

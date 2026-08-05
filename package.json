@@ -35,7 +35,7 @@
     "test:workflow-runtime:activation": "vitest run src/workflow-runtime/registry/production-activation.test.ts setup/runtime-toolchain.test.ts",
     "format": "prettier --write \"src/**/*.ts\"",
     "format:fix": "prettier --write \"src/**/*.ts\"",
-    "format:check": "node scripts/verify-format-baseline.mjs",
+    "format:check": "prettier --check \"src/**/*.ts\"",
     "prepare": "husky",
     "setup": "tsx setup/index.ts",
     "test": "npm run test:current",

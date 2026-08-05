@@ -100,7 +100,6 @@ describe('agent-api', () => {
     ).rejects.toThrow('ICARUS_AGENT_API_API_KEY is required');
   });
 
-
   it('throws on non-ok anthropic responses', async () => {
     readEnvFileMock.mockReturnValue({
       ICARUS_AGENT_API_API_KEY: 'sk-test',

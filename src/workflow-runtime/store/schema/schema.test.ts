@@ -87,7 +87,10 @@ const schema5To6Upgrade = renderSchema5To6Upgrade(schema5Source, schema6Source);
 const schema6To7Upgrade = renderSchema6To7Upgrade(schema6Source, schema7Source);
 const schema7To8Upgrade = renderSchema7To8Upgrade(schema7Source, schema8Source);
 const schema8To9Upgrade = renderSchema8To9Upgrade(schema8Source, schema9Source);
-const schema9To10Upgrade = renderSchema9To10Upgrade(schema9Source, schema10Source);
+const schema9To10Upgrade = renderSchema9To10Upgrade(
+  schema9Source,
+  schema10Source,
+);
 const schema10To11Upgrade = renderSchema10To11Upgrade(schema10Source, source);
 
 function q(identifier: string): string {
@@ -818,11 +821,12 @@ describe('G1.1 executable workflow runtime schema', () => {
               [column.name]: '__invalid_closed_enum__',
             });
           if (
-            metadata.name ===
-              'workflow_runtime_command_ingress_invocations' &&
-            ['resolution_result', 'authorization_result', 'execution_result'].includes(
-              column.name,
-            )
+            metadata.name === 'workflow_runtime_command_ingress_invocations' &&
+            [
+              'resolution_result',
+              'authorization_result',
+              'execution_result',
+            ].includes(column.name)
           ) {
             expect(insertInvalid).toThrow(
               /command_ingress_must_start_prepared|ck:workflow_runtime_command_ingress_invocations:/,
@@ -942,9 +946,9 @@ describe('G1.1 executable workflow runtime schema', () => {
             claimedRunId,
           );
 
-      expect(() =>
-        insertPrepared('ingress:zero', null, null),
-      ).toThrow('ck:command_ingress:claimed_target_exactly_one');
+      expect(() => insertPrepared('ingress:zero', null, null)).toThrow(
+        'ck:command_ingress:claimed_target_exactly_one',
+      );
       expect(() =>
         insertPrepared('ingress:multi', 'workflow:claimed', 'run:claimed'),
       ).toThrow('ck:command_ingress:claimed_target_exactly_one');

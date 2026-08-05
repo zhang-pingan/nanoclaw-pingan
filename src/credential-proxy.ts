@@ -57,11 +57,11 @@ export function resolveCredentialProxyExecutionModel(
   return requestedModel;
 }
 
-function extractProxyRequestContext(rawUrl: string | undefined): ProxyRequestContext {
+function extractProxyRequestContext(
+  rawUrl: string | undefined,
+): ProxyRequestContext {
   const url = rawUrl || '/';
-  const match = url.match(
-    /^\/__icarus__\/([^/]+)\/([^/]+)(\/.*)?$/,
-  );
+  const match = url.match(/^\/__icarus__\/([^/]+)\/([^/]+)(\/.*)?$/);
   if (!match) {
     return { path: url };
   }
@@ -83,7 +83,9 @@ function parseProxyErrorBody(body: string): unknown {
 }
 
 function numberValue(value: unknown): number | undefined {
-  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+  return typeof value === 'number' && Number.isFinite(value)
+    ? value
+    : undefined;
 }
 
 function headerValue(
@@ -155,23 +157,25 @@ function appendModelTraceEvent(
   },
 ): void {
   if (!context.queryId) return;
-  void getTraceManager().then((manager) => {
-    if (!manager || !context.queryId) return;
-    try {
-      manager.appendStructuredEvent({
-        queryId: context.queryId,
-        category: 'model',
-        eventName: event.name,
-        status: event.status,
-        severity: event.status === 'error' ? 'error' : 'info',
-        summary: event.summary,
-        payload: event.payload,
-        latencyMs: event.latencyMs,
-      });
-    } catch {
-      // The proxy can serve model calls before/without an active trace.
-    }
-  }).catch(() => {});
+  void getTraceManager()
+    .then((manager) => {
+      if (!manager || !context.queryId) return;
+      try {
+        manager.appendStructuredEvent({
+          queryId: context.queryId,
+          category: 'model',
+          eventName: event.name,
+          status: event.status,
+          severity: event.status === 'error' ? 'error' : 'info',
+          summary: event.summary,
+          payload: event.payload,
+          latencyMs: event.latencyMs,
+        });
+      } catch {
+        // The proxy can serve model calls before/without an active trace.
+      }
+    })
+    .catch(() => {});
 }
 
 function makeModelRequestId(context: ProxyRequestContext): string {
@@ -186,53 +190,58 @@ function recordQueryModelUsage(
   requestId: string,
 ): void {
   if (!context.queryId) return;
-  void getTraceManager().then((manager) => {
-    if (!manager || !context.queryId) return;
-    try {
-      if (typeof manager.accumulateModelUsage === 'function') {
-        manager.accumulateModelUsage({
-          queryId: context.queryId,
-          requestId,
-          requestedModel:
-            typeof payload.requestedModel === 'string'
-              ? payload.requestedModel
-              : null,
-          actualModel:
-            typeof payload.actualModel === 'string' ? payload.actualModel : null,
-          inputTokens: numberValue(payload.inputTokens) ?? null,
-          outputTokens: numberValue(payload.outputTokens) ?? null,
-          cacheReadTokens: numberValue(payload.cacheReadTokens) ?? null,
-          cacheWriteTokens: numberValue(payload.cacheWriteTokens) ?? null,
-          latencyMs: numberValue(payload.latencyMs) ?? null,
-          traceSource:
-            typeof payload.traceSource === 'string'
-              ? payload.traceSource
-              : 'credential_proxy',
-        });
-        return;
-      }
+  void getTraceManager()
+    .then((manager) => {
+      if (!manager || !context.queryId) return;
+      try {
+        if (typeof manager.accumulateModelUsage === 'function') {
+          manager.accumulateModelUsage({
+            queryId: context.queryId,
+            requestId,
+            requestedModel:
+              typeof payload.requestedModel === 'string'
+                ? payload.requestedModel
+                : null,
+            actualModel:
+              typeof payload.actualModel === 'string'
+                ? payload.actualModel
+                : null,
+            inputTokens: numberValue(payload.inputTokens) ?? null,
+            outputTokens: numberValue(payload.outputTokens) ?? null,
+            cacheReadTokens: numberValue(payload.cacheReadTokens) ?? null,
+            cacheWriteTokens: numberValue(payload.cacheWriteTokens) ?? null,
+            latencyMs: numberValue(payload.latencyMs) ?? null,
+            traceSource:
+              typeof payload.traceSource === 'string'
+                ? payload.traceSource
+                : 'credential_proxy',
+          });
+          return;
+        }
 
-      const patch: Partial<AgentQueryRecord> = {};
-      if (typeof payload.actualModel === 'string') {
-        patch.actual_model = payload.actualModel;
+        const patch: Partial<AgentQueryRecord> = {};
+        if (typeof payload.actualModel === 'string') {
+          patch.actual_model = payload.actualModel;
+        }
+        const inputTokens = numberValue(payload.inputTokens);
+        if (inputTokens !== undefined) patch.input_tokens = inputTokens;
+        const outputTokens = numberValue(payload.outputTokens);
+        if (outputTokens !== undefined) patch.output_tokens = outputTokens;
+        const cacheReadTokens = numberValue(payload.cacheReadTokens);
+        if (cacheReadTokens !== undefined)
+          patch.cache_read_tokens = cacheReadTokens;
+        const cacheWriteTokens = numberValue(payload.cacheWriteTokens);
+        if (cacheWriteTokens !== undefined) {
+          patch.cache_write_tokens = cacheWriteTokens;
+        }
+        if (Object.keys(patch).length > 0) {
+          manager.updateQuery(context.queryId, patch);
+        }
+      } catch {
+        // ignore inactive or uninitialized trace storage
       }
-      const inputTokens = numberValue(payload.inputTokens);
-      if (inputTokens !== undefined) patch.input_tokens = inputTokens;
-      const outputTokens = numberValue(payload.outputTokens);
-      if (outputTokens !== undefined) patch.output_tokens = outputTokens;
-      const cacheReadTokens = numberValue(payload.cacheReadTokens);
-      if (cacheReadTokens !== undefined) patch.cache_read_tokens = cacheReadTokens;
-      const cacheWriteTokens = numberValue(payload.cacheWriteTokens);
-      if (cacheWriteTokens !== undefined) {
-        patch.cache_write_tokens = cacheWriteTokens;
-      }
-      if (Object.keys(patch).length > 0) {
-        manager.updateQuery(context.queryId, patch);
-      }
-    } catch {
-      // ignore inactive or uninitialized trace storage
-    }
-  }).catch(() => {});
+    })
+    .catch(() => {});
 }
 
 function normalizeUsagePayload(
@@ -286,7 +295,8 @@ function createAnthropicStreamingUsageCollector(): StreamingUsageCollector {
         message?.usage && typeof message.usage === 'object'
           ? (message.usage as Record<string, unknown>)
           : undefined;
-      if (messageUsage) latestUsage = { ...(latestUsage || {}), ...messageUsage };
+      if (messageUsage)
+        latestUsage = { ...(latestUsage || {}), ...messageUsage };
     } catch {
       // Ignore partial or non-JSON SSE data lines; streaming must continue.
     }
@@ -326,7 +336,12 @@ function recordModelTraceResolution(
     source,
     updatedAt: Date.now(),
   });
-  const payload = normalizeUsagePayload(requestedModel, actualModel, usage, latencyMs);
+  const payload = normalizeUsagePayload(
+    requestedModel,
+    actualModel,
+    usage,
+    latencyMs,
+  );
   appendModelTraceEvent(context, {
     name: 'model_resolution',
     status: 'success',
@@ -389,7 +404,10 @@ export function startCredentialProxy(
         let parsedJsonBody: Record<string, unknown> | null = null;
         if (modelOverride) {
           try {
-            const parsed = JSON.parse(body.toString()) as Record<string, unknown>;
+            const parsed = JSON.parse(body.toString()) as Record<
+              string,
+              unknown
+            >;
             parsedJsonBody = parsed;
             if (parsed.model) {
               parsed.model = modelOverride;
@@ -401,13 +419,20 @@ export function startCredentialProxy(
           }
         } else {
           try {
-            parsedJsonBody = JSON.parse(body.toString()) as Record<string, unknown>;
+            parsedJsonBody = JSON.parse(body.toString()) as Record<
+              string,
+              unknown
+            >;
           } catch {
             parsedJsonBody = null;
           }
         }
 
-        if (openAiCompat.enabled && targetPath === '/v1/messages' && parsedJsonBody) {
+        if (
+          openAiCompat.enabled &&
+          targetPath === '/v1/messages' &&
+          parsedJsonBody
+        ) {
           appendModelTraceEvent(requestContext, {
             name: 'model_request_started',
             status: 'running',
@@ -430,7 +455,7 @@ export function startCredentialProxy(
 
             const compatResult = await forwardAnthropicRequestToOpenAi(
               {
-                ...((parsedJsonBody as unknown) as AnthropicMessagesRequest),
+                ...(parsedJsonBody as unknown as AnthropicMessagesRequest),
                 model: openAiCompat.model,
               },
               {
@@ -474,7 +499,11 @@ export function startCredentialProxy(
                 payload: usagePayload,
                 latencyMs,
               });
-              recordQueryModelUsage(requestContext, usagePayload, modelRequestId);
+              recordQueryModelUsage(
+                requestContext,
+                usagePayload,
+                modelRequestId,
+              );
               res.writeHead(200, {
                 'content-type': compatResult.contentType,
                 'cache-control': 'no-cache',
@@ -491,7 +520,10 @@ export function startCredentialProxy(
               typeof compatResult.anthropicResponse === 'object' &&
               'usage' in compatResult.anthropicResponse &&
               typeof compatResult.anthropicResponse.usage === 'object'
-                ? (compatResult.anthropicResponse.usage as Record<string, unknown>)
+                ? (compatResult.anthropicResponse.usage as Record<
+                    string,
+                    unknown
+                  >)
                 : undefined;
             const actualModel = compatResult.model || openAiCompat.model;
             const usagePayload = normalizeUsagePayload(
@@ -555,7 +587,9 @@ export function startCredentialProxy(
             );
             if (!res.headersSent) {
               if (err instanceof OpenAiCompatRequestError) {
-                res.writeHead(err.status, { 'content-type': 'application/json' });
+                res.writeHead(err.status, {
+                  'content-type': 'application/json',
+                });
                 res.end(
                   JSON.stringify({
                     error: 'Gateway compatibility translation request failed',
@@ -597,7 +631,8 @@ export function startCredentialProxy(
           targetPath === '/v1/messages'
         ) {
           const requestedModel =
-            typeof parsedJsonBody.model === 'string' && parsedJsonBody.model.trim()
+            typeof parsedJsonBody.model === 'string' &&
+            parsedJsonBody.model.trim()
               ? parsedJsonBody.model
               : undefined;
           if (requestedModel) {
@@ -678,7 +713,11 @@ export function startCredentialProxy(
                   payload: usagePayload,
                   latencyMs,
                 });
-                recordQueryModelUsage(requestContext, usagePayload, modelRequestId);
+                recordQueryModelUsage(
+                  requestContext,
+                  usagePayload,
+                  modelRequestId,
+                );
               });
               upRes.pipe(res);
               return;
@@ -693,7 +732,9 @@ export function startCredentialProxy(
               const latencyMs = Date.now() - requestStartedAt;
               let responseJson: Record<string, unknown> | null = null;
               try {
-                responseJson = JSON.parse(responseBody.toString('utf-8')) as Record<string, unknown>;
+                responseJson = JSON.parse(
+                  responseBody.toString('utf-8'),
+                ) as Record<string, unknown>;
               } catch {
                 responseJson = null;
               }
@@ -746,7 +787,11 @@ export function startCredentialProxy(
                     payload: usagePayload,
                     latencyMs,
                   });
-                  recordQueryModelUsage(requestContext, usagePayload, modelRequestId);
+                  recordQueryModelUsage(
+                    requestContext,
+                    usagePayload,
+                    modelRequestId,
+                  );
                 }
               }
 

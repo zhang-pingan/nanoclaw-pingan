@@ -198,12 +198,7 @@ describe('G7 Workflow Projection and Runtime Center API', () => {
     });
     const driftedJobExport = authority.export('workflows');
     expect(() =>
-      target.rebuild(
-        'workflows',
-        'rebuild:g7:1',
-        driftedJobExport,
-        501,
-      ),
+      target.rebuild('workflows', 'rebuild:g7:1', driftedJobExport, 501),
     ).toThrow(/projection_rebuild_job_conflict/);
     expect(target.rows('workflows')).toEqual(exported.rows);
 
@@ -265,7 +260,9 @@ describe('G7 Workflow Projection and Runtime Center API', () => {
         504,
       ).disposition,
     ).toBe('rebuilt');
-    expect(reopenedProjection.row('workflows', source.workflowId)).toBeDefined();
+    expect(
+      reopenedProjection.row('workflows', source.workflowId),
+    ).toBeDefined();
   });
 
   it('rejects forged persisted projection source after reopen', () => {

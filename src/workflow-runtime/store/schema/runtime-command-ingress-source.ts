@@ -66,8 +66,10 @@ function column(
   logicalType: LogicalColumnMetadata['logical_type'],
   nullable = false,
   enumValues: readonly string[] = [],
-  safeIntegerIntent: LogicalColumnMetadata['safe_integer_intent'] =
-    logicalType === 'integer' ? 'non_negative' : 'not_applicable',
+  safeIntegerIntent: LogicalColumnMetadata['safe_integer_intent'] = logicalType ===
+  'integer'
+    ? 'non_negative'
+    : 'not_applicable',
   externalReference: LogicalColumnMetadata['external_reference'] = null,
 ): LogicalColumnMetadata {
   return {
@@ -120,10 +122,7 @@ function check(
   };
 }
 
-function uniqueKey(
-  keyId: string,
-  columns: string[],
-): LogicalUniqueKeyMetadata {
+function uniqueKey(keyId: string, columns: string[]): LogicalUniqueKeyMetadata {
   return { key_id: keyId, columns, predicate_intent: null };
 }
 
@@ -160,8 +159,11 @@ function foreignKey(
 function attachRelationIds(table: LogicalTableMetadata): LogicalTableMetadata {
   for (const relation of table.foreign_keys) {
     for (const source of relation.source_columns) {
-      const target = table.columns.find((candidate) => candidate.name === source);
-      if (!target) throw new Error(`Schema 11 relation column is absent: ${source}`);
+      const target = table.columns.find(
+        (candidate) => candidate.name === source,
+      );
+      if (!target)
+        throw new Error(`Schema 11 relation column is absent: ${source}`);
       target.relation_ids.push(relation.relation_id);
     }
   }
@@ -205,7 +207,13 @@ function buildIngressTable(ordinal: number): LogicalTableMetadata {
       'card_action',
       'deadline_watchdog',
     ]),
-    externalColumn(20, 'source_feature_id', 'feature_registry', 'feature', true),
+    externalColumn(
+      20,
+      'source_feature_id',
+      'feature_registry',
+      'feature',
+      true,
+    ),
     externalColumn(
       21,
       'delegation_chain_ref',
@@ -417,7 +425,8 @@ function buildIngressTable(ordinal: number): LogicalTableMetadata {
 const INGRESS_QUERY: LogicalQueryIntent = {
   query_id: 'query:command_ingress_idempotency_history',
   owner: 'command_gateway',
-  purpose: 'load immutable authenticated ingress history for one trusted idempotency domain and key',
+  purpose:
+    'load immutable authenticated ingress history for one trusted idempotency domain and key',
   table: INGRESS,
   join_tables: [],
   equality_columns: ['idempotency_domain', 'idempotency_key'],
@@ -435,13 +444,16 @@ function applySchema11(
 ): { tables: LogicalTableMetadata[]; queries: LogicalQueryIntent[] } {
   const tables = structuredClone(schema10Tables);
   const invocations = tables.find((table) => table.name === INVOCATIONS);
-  if (!invocations) throw new Error('Schema 10 Runtime Command Invocation is absent');
+  if (!invocations)
+    throw new Error('Schema 10 Runtime Command Invocation is absent');
   if (
     invocations.unique_keys.some(
       (key) => key.key_id === 'uk:command_invocations:command_id',
     )
   ) {
-    throw new Error('Schema 11 Runtime Command Invocation candidate key already exists');
+    throw new Error(
+      'Schema 11 Runtime Command Invocation candidate key already exists',
+    );
   }
   invocations.unique_keys.push(
     uniqueKey('uk:command_invocations:command_id', ['command_id', 'id']),
@@ -449,7 +461,10 @@ function applySchema11(
   tables.push(buildIngressTable(tables.length + 1));
   return {
     tables,
-    queries: [...structuredClone(schema10Queries), structuredClone(INGRESS_QUERY)],
+    queries: [
+      ...structuredClone(schema10Queries),
+      structuredClone(INGRESS_QUERY),
+    ],
   };
 }
 
@@ -462,14 +477,22 @@ export function buildRuntimeCommandIngressSchemaPrerequisiteArtifact(): Contract
     predecessor_database_schema_version: 10,
     delta_mode: 'additive_ingress_audit_and_candidate_key',
     audit_model: {
-      authenticated_ingress: 'one prepared then terminal immutable row per authenticated invocation',
-      claimed_target: 'closed exactly-one typed identifier without target foreign key',
-      resolved_target: 'exact composite foreign key to resolved Command Invocation',
-      unresolved_target: 'terminal denied ingress row without fabricated Command Header',
-      transaction: 'resolved ingress Header Invocation Event and mutation commit or roll back together',
-      replay: 'every exact replay drift late denial and applied call appends ingress history',
-      header: 'immutable request identity with exactly-once canonical result finalization',
-      resolved_invocation: 'append-only target-verified authorization and execution audit',
+      authenticated_ingress:
+        'one prepared then terminal immutable row per authenticated invocation',
+      claimed_target:
+        'closed exactly-one typed identifier without target foreign key',
+      resolved_target:
+        'exact composite foreign key to resolved Command Invocation',
+      unresolved_target:
+        'terminal denied ingress row without fabricated Command Header',
+      transaction:
+        'resolved ingress Header Invocation Event and mutation commit or roll back together',
+      replay:
+        'every exact replay drift late denial and applied call appends ingress history',
+      header:
+        'immutable request identity with exactly-once canonical result finalization',
+      resolved_invocation:
+        'append-only target-verified authorization and execution audit',
     },
     affected_tables: [
       INGRESS,
@@ -479,7 +502,9 @@ export function buildRuntimeCommandIngressSchemaPrerequisiteArtifact(): Contract
     ],
     added_table_count: 1,
     added_candidate_keys: ['uk:command_invocations:command_id'],
-    query_intents: [structuredClone(INGRESS_QUERY) as LogicalQueryIntent & JsonObject],
+    query_intents: [
+      structuredClone(INGRESS_QUERY) as LogicalQueryIntent & JsonObject,
+    ],
     historical_contract: {
       schema_10_and_earlier_artifacts: 'byte_immutable',
       upgrade: 'single_transaction_additive_or_full_rollback',

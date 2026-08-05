@@ -81,7 +81,11 @@ function eventIdentity(
   event: AgentQueryEventRecord,
   payload: JsonObject,
 ): string {
-  return traceEventIdentity(event.event_name, payload, String(event.event_index));
+  return traceEventIdentity(
+    event.event_name,
+    payload,
+    String(event.event_index),
+  );
 }
 
 function timestamp(value: string | null | undefined): number | null {
@@ -90,7 +94,10 @@ function timestamp(value: string | null | undefined): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function isErrorEvent(event: AgentQueryEventRecord, payload: JsonObject): boolean {
+function isErrorEvent(
+  event: AgentQueryEventRecord,
+  payload: JsonObject,
+): boolean {
   const status = stringValue(event.status).toLowerCase();
   const severity = stringValue(payload.severity).toLowerCase();
   const name = event.event_name.toLowerCase();
@@ -167,7 +174,10 @@ function backfillQuerySummary(
   }
 }
 
-function newestQuery(queryId: string, query: AgentQueryRecord): AgentQueryRecord {
+function newestQuery(
+  queryId: string,
+  query: AgentQueryRecord,
+): AgentQueryRecord {
   return getAgentQuery(queryId) ?? query;
 }
 
@@ -228,13 +238,17 @@ export function buildAgentQueryTraceDetail(
     if (category === 'container') {
       highlights.containers.push(event);
       if (name === 'container_spawned' && startedAt != null) {
-        containerStart = containerStart == null ? startedAt : Math.min(containerStart, startedAt);
+        containerStart =
+          containerStart == null
+            ? startedAt
+            : Math.min(containerStart, startedAt);
       }
       if (
         (name === 'container_exited' || name === 'container_timeout') &&
         startedAt != null
       ) {
-        containerEnd = containerEnd == null ? startedAt : Math.max(containerEnd, startedAt);
+        containerEnd =
+          containerEnd == null ? startedAt : Math.max(containerEnd, startedAt);
       }
     }
 
@@ -253,7 +267,8 @@ export function buildAgentQueryTraceDetail(
     if (category === 'file') {
       highlights.files.push(event);
       if (isFileReadEvent(name, payload)) {
-        const path = stringValue(payload.path) || stringValue(payload.resourceRef);
+        const path =
+          stringValue(payload.path) || stringValue(payload.resourceRef);
         if (path) fileReadPaths.add(path);
       }
       if (isAppliedTraceFileChangeEvent(name, status, payload)) {
@@ -324,9 +339,13 @@ export function buildAgentQueryTraceDetail(
     queueLatencyMs: derivedSummary.queue_latency_ms ?? queueLatencyMs,
     containerDurationMs,
     firstOutputDelayMs:
-      start != null && firstOutput != null ? Math.max(0, firstOutput - start) : null,
+      start != null && firstOutput != null
+        ? Math.max(0, firstOutput - start)
+        : null,
     firstToolDelayMs:
-      start != null && firstTool != null ? Math.max(0, firstTool - start) : null,
+      start != null && firstTool != null
+        ? Math.max(0, firstTool - start)
+        : null,
     toolCallCount: derivedSummary.tool_call_count,
     failedToolCallCount: derivedSummary.failed_tool_call_count,
     fileReadCount,
@@ -342,5 +361,11 @@ export function buildAgentQueryTraceDetail(
   };
 
   backfillQuerySummary(query, summary, derivedSummary.first_tool_at);
-  return { query: newestQuery(queryId, query), steps, events, summary, highlights };
+  return {
+    query: newestQuery(queryId, query),
+    steps,
+    events,
+    summary,
+    highlights,
+  };
 }
