@@ -254,8 +254,7 @@ function seedRuntime(store: WorkflowRuntimeStore): SeededRuntime {
               compiled_plan_pin: {
                 plan_hash: pinnedPlan.plan_hash,
                 plan_format: pinnedPlan.format,
-                compiler_toolchain_hash: pinnedPlan.compiler_toolchain_hash,
-                compiler_build_hash: pinnedPlan.compiler_build_hash,
+                compiler_version: pinnedPlan.compiler_version,
                 provenance: 'golden_corpus',
               },
             }
@@ -669,14 +668,6 @@ function plan(seed: SeededRuntime): CompiledScopePlanV2Document {
   const withoutHash = {
     format: 'icarus.workflow-graph-scope-plan/2',
     compiler_version: '3.0.4',
-    compiler_build_hash: hash('compiler-build'),
-    compiler_toolchain_ref: seed.refs.compilerToolchain.ref,
-    compiler_toolchain_hash: seed.refs.compilerToolchain.hash,
-    compiler_error_catalog_hash: hash('compiler-errors'),
-    canonical_normalizer_version: '2.0.1',
-    canonical_normalizer_hash: hash('normalizer'),
-    proof_algorithm_version: '2.0.1',
-    proof_algorithm_hash: hash('proof'),
     source_hash: sourceHash,
     interface_snapshot_hash: interfaceHash,
     policy_snapshot_hash: policyHash,
@@ -2176,8 +2167,7 @@ function pinTestDefinitionPlan(
     compiled_plan_pin: {
       plan_hash: candidate.plan_hash,
       plan_format: candidate.format,
-      compiler_toolchain_hash: candidate.compiler_toolchain_hash,
-      compiler_build_hash: candidate.compiler_build_hash,
+      compiler_version: candidate.compiler_version,
       provenance: 'golden_corpus',
     },
   });

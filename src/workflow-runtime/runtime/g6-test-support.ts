@@ -289,8 +289,7 @@ function seedG6Runtime(
               compiled_plan_pin: {
                 plan_hash: compiled.plan.plan_hash,
                 plan_format: compiled.plan.format,
-                compiler_toolchain_hash: compiled.plan.compiler_toolchain_hash,
-                compiler_build_hash: compiled.plan.compiler_build_hash,
+                compiler_version: compiled.plan.compiler_version,
                 provenance: 'golden_corpus',
               },
               states: {

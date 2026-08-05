@@ -268,14 +268,12 @@ export function persistCompileResultT2a(
       );
       const run = transaction.queryOne<{
         runtime_safety_snapshot_hash: string;
-        compiler_toolchain_resource_hash: string;
         source_seed_hash: string;
         work_fence_epoch: number;
         database_schema_version: number;
         database_schema_hash: string;
       }>(
-        `SELECT runtime_safety_snapshot_hash, compiler_toolchain_resource_hash,
-                source_seed_hash, work_fence_epoch,
+        `SELECT runtime_safety_snapshot_hash, source_seed_hash, work_fence_epoch,
                 database_schema_version, database_schema_hash
            FROM workflow_graph_runs WHERE id = ?`,
         [input.graphRunId],
@@ -320,21 +318,17 @@ export function persistCompileResultT2a(
         !planPin ||
         planPin.plan_hash !== input.plan.plan_hash ||
         planPin.plan_format !== input.plan.format ||
-        planPin.compiler_toolchain_hash !==
-          input.plan.compiler_toolchain_hash ||
-        planPin.compiler_build_hash !== input.plan.compiler_build_hash ||
+        planPin.compiler_version !== input.plan.compiler_version ||
         planPin.provenance !== 'golden_corpus' ||
         !['3.0.4', '3.0.5', '3.0.6'].includes(input.plan.compiler_version) ||
         run.source_seed_hash !== input.sourceHash ||
         input.plan.runtime_safety_hash !== run.runtime_safety_snapshot_hash ||
-        input.plan.compiler_toolchain_hash !==
-          run.compiler_toolchain_resource_hash ||
         run.database_schema_version !== G5_REPAIR_DATABASE_SCHEMA_VERSION ||
         run.database_schema_hash !== G5_REPAIR_DATABASE_SCHEMA_HASH
       )
         throw new G5RuntimeError(
           'integrity_violation',
-          'T2a Plan safety, toolchain, or Schema 11 identity drift',
+          'T2a Plan version, safety, or Schema 11 compatibility drift',
         );
       if (build.status === 'compiled') {
         if (
