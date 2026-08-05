@@ -1,5 +1,7 @@
 # PM 产研包流水线完整迁移方案
 
+> **项目边界**：本文中的 `Production Activation`、Activation Gate、正式发布、合同和审计均按内部实验工具解释。它们表示当前内部基线、本地启用条件、机器接口和排障记录，不要求外部交付、独立认证或长期兼容保证。Dynamic Workflow Runtime 已存在的 G9 激活只作为兼容性历史，不是后续功能必须复刻的流程。详见 [`../../docs/internal-experimental-scope.md`](../../docs/internal-experimental-scope.md)。
+
 ## 背景
 
 `/Users/chelaile/IdeaProjects/ai_workspace_pm` 是一套基于 Claude Code 的 PM 产研包流水线。它通过 `.claude/commands`、subagents、skills、hooks、脚本和目录契约，把一句话需求推进到研发可直接施工的 `.draft` 交付包，再经过 `.active`、`.done`、验收、归档、evals 和 prompt 优化形成闭环。

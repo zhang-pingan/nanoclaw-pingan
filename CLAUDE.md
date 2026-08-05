@@ -2,6 +2,8 @@
 
 Icarus is a personal Agent work system. It combines a user-driven Web workbench, a proactive desktop personal assistant, a mobile channel currently implemented through Feishu, a WeCom employee private channel, a trusted host service, and isolated container agents.
 
+Icarus is an internal, experimental, single-user tool, not a product with delivery, SLA, production-support, compliance, or long-term compatibility guarantees. Freeze checks, release/activation flows, contracts, approvals, and audit records are local development guardrails only: keep them when they protect local state or reduce net rework, and do not expand them into product-grade governance. Security boundaries around secrets, host access, external communication, and destructive actions remain mandatory.
+
 The most important product boundary:
 
 - **Web workbench client**: user-initiated. The user opens the workbench, creates tasks, reviews progress, adds context, approves actions, and inspects traces. Agent is a passive tool in this surface.
@@ -67,6 +69,7 @@ Web Workbench / Electron     Personal Assistant / tray     Mobile / Feishu     W
 
 ## Development Rules
 
+- Optimize engineering rigor for local iteration stability. Prefer focused tests, recoverable state changes, and debuggable snapshots; avoid adding certification stages, immutable evidence chains, independent approval roles, or release governance unless a concrete local failure mode requires them.
 - Run commands directly when needed; do not ask the user to run routine checks.
 - Prefer existing project patterns over new abstractions.
 - Keep changes scoped. Do not refactor unrelated modules while fixing a narrow issue.

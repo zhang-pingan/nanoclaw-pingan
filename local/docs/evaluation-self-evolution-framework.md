@@ -3,6 +3,7 @@
 > **状态**：方案讨论稿
 > **实施前置**：[Dynamic Workflow Runtime](../../docs/dynamic-workflow-runtime.md) 已完整实现、验收并归档施工生命周期
 > **范围**：Icarus Core、独立 Agent 执行链路、Core-owned Workflow，以及由一个或多个 Workflow 组成的 Feature Package
+> **项目边界**：本文中的 Production Activation、certification、Gate、正式发布和合同仅表示内部基线、可选验证、本地选择和机器接口。它们不构成外部交付或治理要求，也不要求新模块复制 G0-G9 证据链。详见 [`../../docs/internal-experimental-scope.md`](../../docs/internal-experimental-scope.md)。
 
 ## 导航
 

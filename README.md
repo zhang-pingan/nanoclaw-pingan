@@ -1,6 +1,8 @@
 # Icarus
 
-Icarus 是一个面向个人使用的 Agent 工作系统。它把用户主动发起的工作流、桌面个人助手的主动提醒、移动端补充入口、企微员工私人客服、宿主机上的任务编排，以及容器内的高权限 Agent 执行环境组合在一起，让 Agent 既可以作为用户工作台里的工具，也可以作为常驻的私人助手主动推进问题。
+Icarus 是一个面向个人使用的内部实验性 Agent 工作系统。它把用户主动发起的工作流、桌面个人助手的主动提醒、移动端补充入口、企微员工私人客服、宿主机上的任务编排，以及容器内的高权限 Agent 执行环境组合在一起，让 Agent 既可以作为用户工作台里的工具，也可以作为常驻的私人助手主动推进问题。
+
+本项目不是需要对外交付或承诺稳定服务的产品，不提供 SLA、长期兼容性、无中断升级或合规认证保证。项目中的冻结检测、发布/激活、合同、审计和审批机制，目的仅是降低开发返工、保护本机已有状态，并避免开发中的变更影响日常使用；它们不代表面向客户的生产发布流程。术语边界和减重原则见 [`docs/internal-experimental-scope.md`](docs/internal-experimental-scope.md)。
 
 项目当前由六个核心模块组成：
 
@@ -323,18 +325,18 @@ http://localhost:3000/
 
 如果配置了 `WEB_TOKEN`，API 和 WebSocket 需要携带对应 token，Electron 客户端会从环境中读取。
 
-### Host Core 启动与冻结版本
+### Host Core 启动与本地稳定快照
 
-本项目是内部、单用户实验工具。宿主机正式启动必须显式选择当前检出或已冻结版本：
+宿主机启动时需要显式选择当前检出或本地稳定快照：
 
 ```bash
 local/shell/start.sh --mode current
 local/shell/start.sh --mode active
 ```
 
-`current` 构建并运行当前检出；`active` 校验并运行 `active-core` 指向的不可变版本，不重建或改变选择。冻结版本只会由用户显式执行 publish 创建，publish 与 activate 相互独立；activate 会在改变指针前校验冻结版本与已安装托管运行时的身份。Workflow Runtime schema 检查在启动前只读执行：`current` 使用当前检出的迁移规则，`active` 使用冻结版本自带并经过完整性校验的兼容性描述。检查和重置使用独立的 `local/shell/workflow-state.sh` 命令；重复 reset 可以在严格校验并再次确认后继续一个明确的未完成隔离。完整行为见 [`docs/host-core-lifecycle.md`](docs/host-core-lifecycle.md)。
+`current` 构建并运行当前检出；`active` 校验并运行 `active-core` 指向的本地快照，不重建或改变选择。`publish` 只是显式创建一个可回退快照，`activate` 只是选择该快照，两者不是对外发布和部署。启动前的只读 schema 检查、重置前备份和指针原子替换用于保护本机状态；其他发布级完整性校验属于可简化的历史机制。完整行为见 [`docs/host-core-lifecycle.md`](docs/host-core-lifecycle.md)。
 
-### 生产构建
+### 本地构建与打包
 
 ```bash
 npm run build
@@ -402,8 +404,9 @@ Icarus 的核心安全边界是容器隔离，而不是让 Agent 在宿主机上
 ## 相关文档
 
 - `docs/SPEC.md`：系统规格和频道架构。
+- `docs/internal-experimental-scope.md`：项目边界、术语解释和工程机制减重清单。
 - `docs/startup-flow.md`：启动流程、消息链路、IPC、数据库表。
-- `docs/host-core-lifecycle.md`：Host Core 冻结、选择、启动和独立 Workflow Runtime 状态维护。
+- `docs/host-core-lifecycle.md`：Host Core 本地快照、选择、启动和独立 Workflow Runtime 状态维护。
 - `docs/SECURITY.md`：安全模型、挂载策略、凭证隔离。
 - `docs/DEBUG_CHECKLIST.md`：调试检查清单。
 - `docs/docker-sandboxes.md`：容器沙箱说明。
@@ -411,6 +414,8 @@ Icarus 的核心安全边界是容器隔离，而不是让 Agent 在宿主机上
 
 ## 设计原则
 
+- **内部实验工具优先**：只为当前使用者和本地环境优化，不把内部流程扩展成对外交付、SLA、合规或长期兼容承诺。
+- **护栏必须减少净返工**：冻结、合同、发布选择和检查只有在能保护本机状态或更早发现高概率回归时才保留；低频、重复或维护成本更高的门禁退出默认开发路径。
 - **用户主动和 Agent 主动分层**：工作台承载用户主动工作流，个人助理承载 Agent 主动发现和提醒。
 - **移动端只做补充入口**：飞书等移动端渠道用于任务查询、审批处理、提醒触达和简单任务下发，复杂编排和高风险操作回到工作台。
 - **企微私聊保持一对一客服边界**：企微员工私人渠道用于收集运行问题上下文和处理员工请求，不扩展成公开群聊、完整工作台或无审计的高权限控制面。

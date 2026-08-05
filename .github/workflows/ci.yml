@@ -22,8 +22,6 @@ jobs:
         run: ./scripts/runtime-toolchain.sh --runtime-home "$ICARUS_CI_RUNTIME_HOME" exec -- npm ci
       - name: Current Runtime validation
         run: TMPDIR="$ICARUS_CI_TMPDIR" ./scripts/runtime-toolchain.sh --runtime-home "$ICARUS_CI_RUNTIME_HOME" exec -- npm test
-      - name: Accepted release physical inventory
-        run: ./scripts/runtime-toolchain.sh --runtime-home "$ICARUS_CI_RUNTIME_HOME" exec -- npm run workflow-runtime:release:check
       - name: Format boundary
         run: ./scripts/runtime-toolchain.sh --runtime-home "$ICARUS_CI_RUNTIME_HOME" exec -- npm run format:check
       - name: Typecheck

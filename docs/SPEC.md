@@ -2,6 +2,8 @@
 
 A personal Claude assistant with multi-channel support, persistent memory per conversation, scheduled tasks, and container-isolated agent execution.
 
+This specification describes the current internal experiment; it is not a public product contract. Normative language defines consistency inside the current checkout only. It does not imply an external compatibility guarantee, production certification, SLA, or obligation to preserve an unused interface. Freeze, release, activation, and audit behavior is justified only by local iteration stability and protection of local state. See [`internal-experimental-scope.md`](internal-experimental-scope.md).
+
 ---
 
 ## Table of Contents

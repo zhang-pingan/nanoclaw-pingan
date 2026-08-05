@@ -1,5 +1,7 @@
 # Icarus Feature Package Runtime 方案
 
+> **项目边界**：本文描述内部实验工具的仓库内模块化机制。`contract` 是当前内部接口，`activate` 是本地进程加载，`audit` 是安全/排障记录；它们不构成第三方插件兼容承诺、产品发布流程或合规审计。门禁只在防止半加载、越权、数据破坏或明显返工时阻断。详见 [`internal-experimental-scope.md`](internal-experimental-scope.md)。
+
 ## 背景
 
 Icarus 作为底座版，已经承载 Web 工作台、个人助手、移动渠道、企微员工私聊、workflow runtime、container agent、知识库、记忆、Trace、配置管理等基础能力。后续会持续出现独立业务功能，例如专项 workflow 应用、行业 agent 包、内部工具包、数据分析包等。如果这些功能继续直接写进主服务、主前端和固定的 `container/` 资源目录，Icarus core 会逐步变成所有业务功能的集合体。
@@ -13,7 +15,7 @@ Icarus 作为底座版，已经承载 Web 工作台、个人助手、移动渠�
 - 支持在 Icarus 主配置中声明启用的功能包。
 - 未启用的功能包不注册 API、不出现在导航、不加载 workflow/skill/MCP/DB 资源、不启动后台任务。
 - 功能包代码可以放在当前仓库下，但 core 不静态 import 任何具体 feature 的业务模块。
-- Icarus core 只提供稳定扩展点：API route registry、frontend nav registry、workflow asset source registry、container resource registry、MCP registry、DB migration registry、event/subscription registry、permission/audit registry。
+- Icarus core 只提供当前功能包实际需要的明确扩展点：API route registry、frontend nav registry、workflow asset source registry、container resource registry、MCP registry、DB migration registry、event/subscription registry、permission/audit registry；不承诺面向第三方的长期兼容性。
 - 后续所有独立业务功能都按同一模型接入，避免继续膨胀 `src/channels/web.ts`、`electron/renderer/app.js`、`container/skills` 等核心目录。
 
 ## 非目标
@@ -175,7 +177,7 @@ features/{featureId}/
 }
 ```
 
-Manifest 是 core 和 feature package 之间的主要契约。core 通过 manifest 发现功能包，不通过业务 import 认识功能包。
+Manifest 是 core 和 feature package 之间的主要内部接口。core 通过 manifest 发现功能包，不通过业务 import 认识功能包。只有 persisted data 或独立演进边界确有需要时才增加版本，不为普通实现调整引入发布审批链。
 
 Manifest 规则：
 
@@ -648,9 +650,9 @@ Feature 代码在仓库中，开发环境可见，但未启用时：
 
 这能先解决主服务耦合和运行时膨胀问题。
 
-### 第二阶段：构建产物不包含
+### 可选阶段：构建产物不包含
 
-如果要发布真正的底座版安装包，还需要构建 profile：
+只有在本地包体或加载成本已经成为实际问题时，才需要增加构建 profile：
 
 ```bash
 npm run build -- --features=core
@@ -667,7 +669,7 @@ Icarus With Features
   - 包含构建 profile 指定的 feature bundles
 ```
 
-这样才解决“底座版安装包不带可选功能代码”的问题。
+这用于解决本地构建不携带未选择功能代码的问题，不是产品交付的必需阶段。
 
 ## 实施顺序
 

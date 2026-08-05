@@ -1,8 +1,10 @@
-# Dynamic Workflow Runtime Machine Contracts
+# Dynamic Workflow Runtime Internal Machine Contracts
 
-This directory is the active machine-readable contract authority for Dynamic Workflow Runtime v1. The G0-G9 construction lifecycle is complete and archived. Normal development does not derive semantics from the archived framework or progress ledger and does not maintain Gate milestone state.
+This directory contains internal machine interfaces and regression fixtures for Dynamic Workflow Runtime v1. These contracts keep the current checkout internally consistent; they are not customer contracts and do not promise public compatibility, production readiness, SLA, certification, or long-term support. A contract should remain on the normal development path only when it protects local state or prevents likely rework.
 
-The accepted v1 boundary is commit `56a78b6dcede075c60d7e5b2049158824050410c`, release `sha256:3de887f1f822976631960aec663042ddd00ee5edb5db1dd50dc09a8bbcaca279`, accepted by independent whole-G9 task `019fc76d-4aaf-71b1-9839-1d5a6fa21132`.
+The G0-G9 construction lifecycle is complete and archived. Its accepted commit `56a78b6dcede075c60d7e5b2049158824050410c` and snapshot `sha256:3de887f1f822976631960aec663042ddd00ee5edb5db1dd50dc09a8bbcaca279` are retained only as regression provenance. The former independent acceptance task and production terminology do not create a current approval or delivery requirement.
+
+Legacy identifiers such as `production`, `release`, `activation`, `certification`, `gate`, `frozen`, and `audit` remain in paths and serialized formats to avoid a high-churn compatibility rewrite. In current project language they mean local snapshot, local selection, optional exhaustive verification, historical milestone, immutable fixture, and diagnostic record respectively.
 
 ## Active Authority
 
@@ -17,27 +19,37 @@ Use the smallest affected authority and its tests:
 | Compiler authority | `../compiler/`, `conformance/current/`, and sealed replay inputs |
 | Registry and authoring | G3 contract packs and `../authoring/` tests |
 | Runtime behavior | G5-G7 contract packs plus `../runtime/`, `../capacity/`, and `../projection/` tests |
-| Release and startup identity | `certification/`, production-candidate generated manifest/binding, stable Launcher tests |
-| Production activation | `production-activation/` plus `../registry/production-activation.test.ts` |
+| Local startup and rollback identity | current Launcher, Host Core, Store compatibility, and startup tests |
+| Legacy release/activation compatibility (non-default) | `certification/`, `production-activation/`, and explicit certification/activation tests |
 
 Historical G0/R-016/R-020/R-021/R-022 coverage, Working/Draft review artifacts, superseded Compiler authorities, Gate ownership/readiness assertions, and milestone candidate tests remain immutable under `conformance/`, explicit package entrypoints, or Git history. They are not default inputs and are not regenerated or executed by the current aggregate.
 
-## Current Validation
+## Development Validation
 
-All local Node/npm commands use the managed toolchain:
+Normal development uses the smallest relevant contract check and focused tests. The aggregate current checks are:
 
 ```sh
 ./scripts/runtime-toolchain.sh exec -- npm run contracts:check
 ./scripts/runtime-toolchain.sh exec -- npm run test:current
 ./scripts/runtime-toolchain.sh exec -- npm run typecheck
-./scripts/runtime-toolchain.sh exec -- npm run workflow-runtime:release:check
 ```
 
-`contracts:check` verifies current foundation/schema artifacts, current Compiler and sealed replay, Registry authority, static absence, and the immutable accepted release. The release check validates a Git-tracked compressed copy of every accepted physical inventory member, including exact paths, lengths, hashes, and modes. `test:current` exercises current Store, Registry, authoring, Runtime, certification, and activation behavior against test-owned temporary state. Neither command reads archived construction Markdown, recomputes historical Markdown coverage, or executes retired Gate-state assertions.
+`contracts:check` verifies current foundation/schema artifacts, current Compiler and sealed replay, Registry authority, and static absence. `test:current` exercises the current Store, Registry, authoring, Runtime, and Host Core behavior against test-owned temporary state. Neither command treats certification, G9 production activation, the accepted physical snapshot, archived construction Markdown, or retired Gate-state assertions as a default development gate.
+
+The former exhaustive checks remain available for work that directly changes those compatibility surfaces:
+
+```sh
+./scripts/runtime-toolchain.sh exec -- npm run contracts:check:full
+./scripts/runtime-toolchain.sh exec -- npm run test:full
+```
+
+The physical snapshot verifier checks a Git-tracked compressed copy of every accepted inventory member, including exact paths, lengths, hashes, and modes. That is historical reproducibility evidence, not a prerequisite for unrelated local development.
 
 Current Store tests use `identityMode: 'isolated_test'`. That explicit internal mode verifies the pinned managed Node/distribution, active managed-Node installation, Launcher, `better-sqlite3` native module, and SQLite profile while deriving the non-production checkout binding in memory. It never reads or writes `active-core`; release-validation and Production modes retain their existing pointer and installed-release checks.
 
-Domain-specific generate commands remain implementation tools for future versioned changes. They must not be used to rewrite the accepted v1 release or frozen historical artifacts. A future release follows a new versioned construction/release boundary.
+Domain-specific generate commands remain implementation tools for versioned changes. They must not rewrite the retained v1 snapshot or historical fixtures in place. A future internal baseline should add only the minimum versioned boundary required by the affected data or runtime interface; it does not need to repeat G0-G9 certification.
+
+The engineering-weight review and further archive candidates are documented in [`docs/internal-experimental-scope.md`](../../../docs/internal-experimental-scope.md).
 
 ## Archive
 

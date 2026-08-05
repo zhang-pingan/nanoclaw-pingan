@@ -4,6 +4,18 @@ Original requirements and design decisions from the project creator.
 
 ---
 
+## Project Scope
+
+Icarus is an internal, experimental, single-user tool. It is not a delivered product and does not promise an SLA, uninterrupted upgrades, long-term backward compatibility, compliance certification, or production support.
+
+Freeze checks, release/activation commands, contracts, approvals, and audit records exist only when they reduce development rework, protect local state, or keep an in-progress checkout from disrupting normal local use. They are internal guardrails, not customer-facing obligations. A guardrail whose maintenance cost or iteration delay exceeds the local risk it prevents should be simplified, moved out of the default path, or archived.
+
+Security boundaries around credentials, host access, external messages, and destructive operations remain real safety requirements even for an internal tool.
+
+See [`internal-experimental-scope.md`](internal-experimental-scope.md) for the terminology and engineering-weight decisions.
+
+---
+
 ## Why This Exists
 
 This is a lightweight, secure alternative to OpenClaw (formerly ClawBot). That project became a monstrosity - 4-5 different processes running different gateways, endless configuration files, endless integrations. It's a security nightmare where agents don't run in isolated processes; there's all kinds of leaky workarounds trying to prevent them from accessing parts of the system they shouldn't. It's impossible for anyone to realistically understand the whole codebase. When you run it you're kind of just yoloing it.

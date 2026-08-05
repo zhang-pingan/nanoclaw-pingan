@@ -3,6 +3,7 @@
 > **状态**：方案讨论稿
 > **实施前置**：[Dynamic Workflow Runtime](../../docs/dynamic-workflow-runtime.md) 已完整实现、验收并归档施工生命周期
 > **范围**：Icarus Core Task Workspace、任务会话中控、临时 Workflow、运行干预、通用运行检查器与 Personal Workflow
+> **项目边界**：本文中的 Production Activation、Gate、publish、activate、合同和审计只表示当前内部基线、本地启用、机器接口和排障记录。它们不构成产品交付要求；后续工作不需要复制 G0-G9 认证流程。详见 [`../../docs/internal-experimental-scope.md`](../../docs/internal-experimental-scope.md)。
 
 ## 导航
 

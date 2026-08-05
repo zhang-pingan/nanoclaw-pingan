@@ -1,8 +1,8 @@
 # Icarus 核心技术介绍
 
-Icarus 是一套面向个人和小团队工程场景的 Agent 工作系统。它不是把大模型简单接入聊天窗口，而是把 Agent 执行、安全隔离、工作流编排、长期记忆、知识库、产物评估和多端交互组合成一套可落地的工程运行时。
+Icarus 是一套面向个人内部使用的实验性 Agent 工作系统。它不是需要对外交付或承诺稳定服务的产品，而是把 Agent 执行、安全隔离、工作流编排、长期记忆、知识库、产物评估和多端交互组合成一个可持续迭代的本地工具。
 
-项目的核心价值可以概括为：让 Agent 有足够强的执行能力，同时把执行边界、权限边界、会话边界和交付边界做清楚。Agent 可以读代码、写文档、跑命令、调用工具、推进流程；但密钥、宿主机权限、跨会话上下文和高风险操作都由宿主机可信控制面统一约束。
+项目的核心价值可以概括为：让 Agent 有足够强的执行能力，同时把执行边界、权限边界、会话边界和本地状态边界做清楚。Agent 可以读代码、写文档、跑命令、调用工具、推进流程；但密钥、宿主机权限、跨会话上下文和高风险操作都由宿主机可信控制面统一约束。合同、冻结和激活机制是内部防返工护栏，不是客户合同、生产认证或发布承诺。
 
 ## 1. 安全性：容器化沙箱和宿主机代理
 
@@ -48,12 +48,12 @@ Icarus 的 harness 不是单独的目录，而是一组工程化封装：容器 
 - **标准化执行环境**：容器 runner 统一挂载目录、注入占位凭证、配置模型代理、加载 Skill、启动 MCP、设置允许工具。
 - **流式输出解析**：容器 Agent 用固定 marker 输出结构化结果，宿主机实时解析 success/error/event，写入 Query Trace 和工作台状态。
 - **Agent Harness**：容器内通过 Claude Agent `query()` 执行，配置工具白名单、MCP server、hooks、session resume、isolated session、PreToolUse/PostToolUse 事件。
-- **工程产物契约**：`container/artifact-contracts/` 定义不同阶段必须返回的字段、文档路径、front matter、文件大小和允许根目录，避免 Agent 只给自然语言结论。
+- **工程产物契约**：`container/artifact-contracts/` 定义不同阶段建议稳定返回的字段、文档路径、front matter、文件大小和允许根目录，避免 Agent 只给自然语言结论。这里的“契约”是内部机器接口，不是对外兼容承诺。
 - **阶段评估器**：`workflow-stage-evaluation` 和 `workflow-evaluator-registry` 对交付结果做结构化判定，区分 passed、needs_revision、failed、pending 等结果。
 - **失败分类**：`failure-taxonomy` 把模型错误、工具错误、沙箱错误、超时、配置错误、权限错误、部署失败、测试失败等分类，方便重试、提醒和复盘。
 - **可观测 Trace**：`agent_queries`、`agent_query_steps`、`agent_query_events` 记录 Agent 查询、工具步骤、系统事件、模型解析和错误上下文。
 
-这套 harness 将 Agent 从“不可控的聊天模型”提升为“工程执行器”。它可以失败，但失败会被归类；可以中断，但能恢复；可以交付，但交付要满足契约。
+这套 harness 将 Agent 从“不可控的聊天模型”提升为“工程执行器”。它可以失败，但失败会被归类；可以中断，但能恢复；产物也可以用轻量内部契约检查。检查深度应与本地状态风险匹配，而不是追求交付级认证。
 
 ## 4. 记忆机制和 LLM Wiki
 
@@ -172,7 +172,7 @@ Icarus 与 Hermes 的取舍不同：Icarus 不把“越用越会自己长技能�
 - **执行权限更集中在可信宿主机控制面**：Hermes 支持多种运行后端和安全机制；Icarus 的设计重点是“控制面不进容器，执行面不越过控制面”，容器通过 IPC 向宿主机申请受控能力，宿主机按 group/main、workflow、stage 和 allowlist 判定。
 - **研发协作对象更明确**：Hermes 是一个泛化常驻个人 Agent；Icarus 把 planner/dev/reviewer/ops/test/wiki/assistant 等角色、产物契约和工作台操作面组合成研发团队语义，更适合需求开发、Bug 修复、预发部署、测试验证和线上故障处理这类多人/多阶段工程任务。
 
-总结来说，OpenClaw 更像多渠道 local-first 个人助手平台，Claude Code/Codex 更像强大的编程 Agent 工作台，Hermes 更像会长期学习的个人自动化 Agent；Icarus 的核心差异是把这些能力收束成“可信宿主机控制面 + 容器化执行面 + 状态机工作流 + 可审计交付契约”的工程运行时。
+总结来说，OpenClaw 更像多渠道 local-first 个人助手平台，Claude Code/Codex 更像强大的编程 Agent 工作台，Hermes 更像会长期学习的个人自动化 Agent；Icarus 的核心差异是把这些能力收束成“可信宿主机控制面 + 容器化执行面 + 状态机工作流 + 可追踪内部契约”的个人实验运行时。
 
 ## 9. 前沿 Agent 技术在本项目中的体现
 

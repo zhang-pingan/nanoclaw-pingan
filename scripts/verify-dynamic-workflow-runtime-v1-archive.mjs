@@ -75,7 +75,6 @@ const defaultScriptRoots = new Set([
   'test',
   'test:current',
   'typecheck',
-  'workflow-runtime:release:check',
 ]);
 const retiredConstructionScripts = new Set([
   'archive:verify:v1',
