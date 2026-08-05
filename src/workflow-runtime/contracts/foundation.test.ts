@@ -244,6 +244,10 @@ describe('G0.2 Contract foundation', () => {
       'path',
       'typescript',
     ]);
+    const allowedRuntimeVersionImports = new Set([
+      path.resolve(contractsRoot, '../compiler/version.js'),
+      path.resolve(contractsRoot, '../store/runtime-store/config.js'),
+    ]);
     const files = fs
       .readdirSync(contractsRoot, { recursive: true, withFileTypes: true })
       .filter(
@@ -268,36 +272,9 @@ describe('G0.2 Contract foundation', () => {
       for (const specifier of specifiers) {
         if (specifier.startsWith('.')) {
           const resolved = path.resolve(path.dirname(file), specifier);
-          const allowedConstructionImport =
-            (path.basename(file) === 'g4-test-bootstrap-contract.ts' &&
-              resolved ===
-                path.resolve(
-                  contractsRoot,
-                  '../store/runtime-store/profile.js',
-                )) ||
-            (path.basename(file) ===
-              'r020-child-consumption-lineage-contract.ts' &&
-              resolved ===
-                path.resolve(
-                  contractsRoot,
-                  '../store/schema/child-completion-lineage-source.js',
-                )) ||
-            (path.basename(file) ===
-              'r021-map-terminal-consumption-contract.ts' &&
-              resolved ===
-                path.resolve(
-                  contractsRoot,
-                  '../store/schema/map-terminal-consumption-source.js',
-                )) ||
-            (path.basename(file) === 'r022-domain-claim-handoff-contract.ts' &&
-              resolved ===
-                path.resolve(
-                  contractsRoot,
-                  '../store/schema/domain-claim-handoff-source.js',
-                ));
           expect(
             resolved.startsWith(`${contractsRoot}${path.sep}`) ||
-              allowedConstructionImport,
+              allowedRuntimeVersionImports.has(resolved),
           ).toBe(true);
         } else {
           expect(allowedPackages.has(specifier)).toBe(true);
