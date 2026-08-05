@@ -60,33 +60,7 @@
       "same_key_drift": "append_ingress_and_resolved_conflict_invocation_without_header_overwrite"
     },
     "authority_residuals": [],
-    "bindings": [
-      {
-        "name": "g6_dynamic_close_accepted_candidate",
-        "path": "src/workflow-runtime/contracts/contract-pack-g6-dynamic-close.json",
-        "hash": "sha256:532335390e4d117ae880f08d07334ac7c541e1a4e91dfbf3e3b992304ddc8cd1"
-      },
-      {
-        "name": "workflow_runtime_command_protocol",
-        "path": "src/workflow-runtime/contracts/protocols/workflow-runtime-command-protocol-table.json",
-        "hash": "sha256:43cc8ef247fcba4bac5e9fccdd654fd393928120755a6405bad232043f0c94ba"
-      },
-      {
-        "name": "workflow_run_transaction_protocol",
-        "path": "src/workflow-runtime/contracts/protocols/workflow-run-transaction-protocol-table.json",
-        "hash": "sha256:3d5474096d89fbd723e34e0d2f9d1dadd1b955b5fc36ff447d026257852cac79"
-      },
-      {
-        "name": "closed_schema_pack",
-        "path": "src/workflow-runtime/contracts/contract-pack-closed-schemas.json",
-        "hash": "sha256:6f7aa5b997c5a496a4eb95776a09f18e3c25753e7324a6ef1f095a23b8413d81"
-      },
-      {
-        "name": "database_schema_11",
-        "path": "src/workflow-runtime/store/schema/contract-pack-g1-executable-schema-v11.json",
-        "hash": "sha256:2adb9376d341ad430155829647086bcc76f84ebf22dffac28c19d4026ea06ab2"
-      }
-    ],
+    "bindings": [],
     "forbidden": [
       "G8_certification",
       "G9_loader_activation_ingress_network",
@@ -97,5 +71,5 @@
       "frozen_historical_artifact_rewrite"
     ]
   },
-  "hash": "sha256:3929ca671a4afbafa405f3e45ae157705618ef8d288da380ce35eed1428c387c"
+  "hash": "sha256:6749f81c374321a7546af716da68a3bbd9813e427cfb646431f7aa02faf4b3e4"
 }

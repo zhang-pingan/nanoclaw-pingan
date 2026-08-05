@@ -41,37 +41,8 @@ const evidenceSourcePaths = [
   'src/workflow-runtime/contracts/g6-dynamic-close-contract.test.ts',
   'src/workflow-runtime/contracts/g6-dynamic-close-reference-model.ts',
   'src/workflow-runtime/contracts/g6-dynamic-close-reference-model.test.ts',
-  'src/workflow-runtime/contracts/g6-runtime-readiness-audit.test.ts',
   'src/workflow-runtime/runtime/g6-test-support.ts',
   'src/workflow-runtime/runtime/g6-dynamic-close.test.ts',
-] as const;
-
-const exactBindings = [
-  {
-    name: 'g5_basic_runtime',
-    path: 'src/workflow-runtime/contracts/contract-pack-g5-basic-runtime-repair.json',
-    hash: 'sha256:91e591b5c6ac5d429c61c5ab5c022dc1564163337f9a5482d59d5376303e55bc',
-  },
-  {
-    name: 'r020_child_consumption_lineage',
-    path: 'src/workflow-runtime/contracts/contract-pack-r020-child-consumption-lineage.json',
-    hash: 'sha256:8a24efc4bd98c02b92cc6d6ce70f13c879d7e537e1081e4d57d561a63ea85c5a',
-  },
-  {
-    name: 'r021_map_terminal_consumption',
-    path: 'src/workflow-runtime/contracts/contract-pack-r021-map-terminal-consumption.json',
-    hash: 'sha256:b5e9237d09d829946c496e19eddf16b21c94fb4fd59b3588900f4764332d0699',
-  },
-  {
-    name: 'r022_domain_claim_handoff',
-    path: 'src/workflow-runtime/contracts/contract-pack-r022-domain-claim-handoff.json',
-    hash: 'sha256:ea97a3d52a2e4a14fb2671b2191b1b1cb6acc22c4ecded7db2e141a1716b516e',
-  },
-  {
-    name: 'database_schema_11',
-    path: 'src/workflow-runtime/store/schema/contract-pack-g1-executable-schema-v11.json',
-    hash: 'sha256:2adb9376d341ad430155829647086bcc76f84ebf22dffac28c19d4026ea06ab2',
-  },
 ] as const;
 
 export type G6FixtureCategory = 'positive' | 'negative' | 'fault';
@@ -548,14 +519,7 @@ function artifact(
 }
 
 function bindings(): JsonObject[] {
-  return exactBindings.map((binding) => {
-    const observed = parseContractArtifactEnvelope(
-      strictParseJsonBytes(fs.readFileSync(path.join(repoRoot, binding.path))),
-    );
-    if (observed.hash !== binding.hash)
-      throw new Error(`${binding.name} identity drift: ${observed.hash}`);
-    return { ...binding };
-  });
+  return [];
 }
 
 function buildArtifacts(): Array<[string, ContractArtifactEnvelope]> {

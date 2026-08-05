@@ -21,7 +21,7 @@
       },
       {
         "path": "src/workflow-runtime/creation/domain-claims.ts",
-        "raw_sha256": "sha256:0102b862650cecdf9bc44688e6a6618ace7eee12680a22562d70a38920023411"
+        "raw_sha256": "sha256:121c22e8f9cca813cd43a8692011c4d2147c0d2743b4cc9887343209df89bb1f"
       },
       {
         "path": "src/workflow-runtime/creation/recipe-registry.ts",
@@ -29,11 +29,11 @@
       },
       {
         "path": "src/workflow-runtime/creation/routing-resolver.ts",
-        "raw_sha256": "sha256:52d235ab71f29a119edc1d7fc973d67a8d15633046d3625a6b9911f293c64201"
+        "raw_sha256": "sha256:4069ebda987cbcfca21125483fad83d36a82d6fada32924fed4dde93fbbe588c"
       },
       {
         "path": "src/workflow-runtime/creation/task-intake.ts",
-        "raw_sha256": "sha256:af5d949ccd68ac36b27ebe95221281006a5420bea1fd1ea2fe953b0a7a52e102"
+        "raw_sha256": "sha256:4002bd43953cfb646fb016fcb0177dcdcae7de9d1a43789b716a3790a24bbbbe"
       },
       {
         "path": "src/workflow-runtime/runtime/fixed-point-authority.ts",
@@ -41,19 +41,19 @@
       },
       {
         "path": "src/workflow-runtime/runtime/graph-store.ts",
-        "raw_sha256": "sha256:ba46f6c3796edd81536ed3c05b692bab124bfbdad3c668bd73844efefc24f845"
+        "raw_sha256": "sha256:f033c8b932059714b67cf86d077476cac0b57734cd24c3ee617fbb7272dd388e"
       },
       {
         "path": "src/workflow-runtime/runtime/ledger.ts",
-        "raw_sha256": "sha256:fe33a9669fcf35117f58e85804ca73dbbcd20c7bbf5e9efef8595f19fe656693"
+        "raw_sha256": "sha256:78fa14fc4a967062276a12b7b5caeaded5bcd41df14f63d00a61c1cb94791d63"
       },
       {
         "path": "src/workflow-runtime/runtime/lifecycle.ts",
-        "raw_sha256": "sha256:5188933dc5d0413f5416983e5fceec79f7a4b987506327e92e6e6d16e0a06c1e"
+        "raw_sha256": "sha256:aeb84824bee44ec078f133cad004d9215a0ee32914ebcbaea0956cf631d9ceb0"
       },
       {
         "path": "src/workflow-runtime/runtime/node-execution.ts",
-        "raw_sha256": "sha256:09fb74d272f0cf3dbc7a34f0285ed37dfa772e7434fcf3b63253c74fbff2199c"
+        "raw_sha256": "sha256:19fbfca93f25a1cb06080004c1ee0d872fccadfd1ce0413fb6dccf3b9d4048fd"
       },
       {
         "path": "src/workflow-runtime/runtime/operational-blockers.ts",
@@ -61,26 +61,26 @@
       },
       {
         "path": "src/workflow-runtime/runtime/outbox.ts",
-        "raw_sha256": "sha256:26003b141090df4eb513ada27e0d3fbdd87ac2d5efe17d2f6d3f8d041b03581a"
+        "raw_sha256": "sha256:ba91926da97d3907ea330a5912fef2647975afaaf8a3cec9ee83627a02358016"
       },
       {
         "path": "src/workflow-runtime/runtime/plan-authority.ts",
-        "raw_sha256": "sha256:9d18f62615be365dc6e3867640fd791b3492f165fa3fd4a1e0ed630a6aafc417"
+        "raw_sha256": "sha256:2ed2ac24044ab39f0f080ebaa6fd13b3f1ad59aabd12512c87c3fd51100f27ac"
       },
       {
         "path": "src/workflow-runtime/runtime/reconciler.ts",
-        "raw_sha256": "sha256:b15ba969b2040bce4b2029681b2223906a801b87a9a24ae1dd4662d3e7e8411c"
+        "raw_sha256": "sha256:55742d0944b00f5a439472d4daea667b7e7042530a9c5f40e1ca0fb3959f0c53"
       },
       {
         "path": "src/workflow-runtime/runtime/basic-scheduler.ts",
-        "raw_sha256": "sha256:4525b576b8d20e3aba2721531181ca96806952409df2e1e2d6c2ba23f2d17d2e"
+        "raw_sha256": "sha256:f3b3cf52988e1bdf713e4a547c3be9e275e4c2eb15c7148a2cfcda7a3e2e6583"
       },
       {
         "path": "src/workflow-runtime/runtime/waits.ts",
-        "raw_sha256": "sha256:fff2b626d99b8708581328cbd7bbd612d6863375d43be4ca9e2a99344c7080a7"
+        "raw_sha256": "sha256:21a197cb8412ec5dea734874e0530c3d00cbffc61b3219f65e7b4194f6b5bfa0"
       }
     ],
-    "source_tree_hash": "sha256:7eb638cbe84c65b38511b9e699eab62f4b08ca2801e519498d052287156555c7"
+    "source_tree_hash": "sha256:912bb74677df74e523251bb99dc0aed68e493806ed01f70a42bc98e180b5a527"
   },
-  "hash": "sha256:867643cf2dfdb3e25b72d50023248a0aa8d49b388ff83e94236d6286b98ec842"
+  "hash": "sha256:bb4a162d87e828f5a12fec9753b61a7ac254e3ff808e77d9ee11fca188a9a008"
 }

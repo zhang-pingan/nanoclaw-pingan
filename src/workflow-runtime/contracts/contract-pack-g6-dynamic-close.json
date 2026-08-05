@@ -25,7 +25,7 @@
           "id": "icarus.workflow-g6-dynamic-close-protocol",
           "version": "1.0.0"
         },
-        "hash": "sha256:0d515437186fcf8642855c0bd3f28f06fd8fc4522b1628873645d86e481fe353"
+        "hash": "sha256:a5786e8c12802172d9027513d3251eb8a9ddd8bad19ad70751c651a379de4a5b"
       },
       {
         "format": "icarus.workflow-g6-dynamic-close-positive-cases/1",
@@ -57,7 +57,7 @@
           "id": "icarus.workflow-g6-dynamic-close-reference-authority",
           "version": "1.0.0"
         },
-        "hash": "sha256:6c2b6eddb98e2469660b9144cc84c90df5692db18a9133790085c1a14f52936e"
+        "hash": "sha256:65eeb10d73677325ec6941733308ff896f8d61a5efd523587b5c674812120585"
       },
       {
         "format": "icarus.workflow-g6-dynamic-close-implementation/1",
@@ -65,10 +65,10 @@
           "id": "icarus.workflow-g6-dynamic-close-implementation",
           "version": "1.0.0"
         },
-        "hash": "sha256:a36731dd404e3128f81124b063dc03e753e25ce2eaf4a84f7fc64a4a529d3d7f"
+        "hash": "sha256:54e66adaa05175a244c62e40adaa868f43fe72ce04dc97ecbb577f78112666b5"
       }
     ],
-    "member_tree_hash": "sha256:f33dc0329be89c149b1704b69001a09dc09ab0cca2cef7cc8c80e207c1668184"
+    "member_tree_hash": "sha256:3d5b21eed3c5b12327c6336155f04fa53505d7239e72d0827bc1da325853b388"
   },
-  "hash": "sha256:532335390e4d117ae880f08d07334ac7c541e1a4e91dfbf3e3b992304ddc8cd1"
+  "hash": "sha256:7f4d004e66e2025d2ebcb452f778a35a1b45c56ffb2075f63664ed7d3c7d2009"
 }

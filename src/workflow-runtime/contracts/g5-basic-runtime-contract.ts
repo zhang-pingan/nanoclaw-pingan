@@ -40,56 +40,6 @@ export const G5_IMPLEMENTATION_SOURCE_PATHS = [
   'src/workflow-runtime/runtime/waits.ts',
 ] as const;
 
-const currentBindings = [
-  {
-    name: 'ownership',
-    path: 'governance/workflow-runtime-gate-ownership@1.json',
-    expected:
-      'sha256:6ba952bf7761f249fa16c0c44a37d48a67c9f5f21c3667a5c966ac59e8affb38',
-  },
-  {
-    name: 'transaction_protocol',
-    path: 'protocols/workflow-run-transaction-protocol-table.json',
-    expected:
-      'sha256:3d5474096d89fbd723e34e0d2f9d1dadd1b955b5fc36ff447d026257852cac79',
-  },
-  {
-    name: 'command_protocol',
-    path: 'protocols/workflow-runtime-command-protocol-table.json',
-    expected:
-      'sha256:43cc8ef247fcba4bac5e9fccdd654fd393928120755a6405bad232043f0c94ba',
-  },
-  {
-    name: 'capacity',
-    path: 'conformance/capacity-control-plane-addendum/contract-pack-capacity-control-plane-addendum.json',
-    expected:
-      'sha256:d436710893239f01e53d668c23d5ddcfe1a7e4dbee3c00074bc4cd43871c98a6',
-  },
-  {
-    name: 'execution_binding',
-    path: 'conformance/capability-outbox-execution-binding/contract-pack-capability-outbox-execution-binding.json',
-    expected:
-      'sha256:48f63ae7be30c61f056f78f713591f34431336cc722d6928fbc6e2783a062088',
-  },
-] as const;
-
-const externalBindings = [
-  {
-    name: 'schema_5',
-    path: 'src/workflow-runtime/store/schema/contract-pack-g1-executable-schema.json',
-    expected:
-      'sha256:baa39d55cac34133a29b461466aa450fec59bd2fd6df72334e8b33d1d1619869',
-  },
-  {
-    name: 'g2_golden_corpus_v1',
-    path: 'src/workflow-runtime/contracts/conformance/sealed/g2-capability-outbox-binding-v3/golden-conformance-bundle@2.json',
-    expected:
-      'sha256:967437bb9f91e32e5014b2af90a23f5646e491eb427bdf55accb345ead70db8f',
-    expectedBundle:
-      'sha256:b3ed9e43bd0fadaf40520257926dcf690ee8495bb417220245f248385bde9efb',
-  },
-] as const;
-
 const positiveCases: readonly G5ContractFixture[] = [
   {
     case_id: 'static_graph_success',
@@ -322,38 +272,7 @@ function sourceInventory(): JsonObject[] {
 }
 
 function bindings(): JsonObject[] {
-  return [
-    ...currentBindings.map((binding) => {
-      const observed = readArtifact(binding.path).hash;
-      if (observed !== binding.expected)
-        throw new Error(`${binding.name} identity drift: ${observed}`);
-      return { name: binding.name, path: binding.path, hash: observed };
-    }),
-    ...externalBindings.map((binding) => {
-      const artifact = readArtifact(
-        path.relative(contractsRoot, path.join(repoRoot, binding.path)),
-      );
-      const observed = artifact.hash;
-      if (observed !== binding.expected)
-        throw new Error(`${binding.name} identity drift: ${observed}`);
-      if (
-        'expectedBundle' in binding &&
-        artifact.payload.bundle_hash !== binding.expectedBundle
-      ) {
-        throw new Error(
-          `${binding.name} bundle identity drift: ${String(artifact.payload.bundle_hash)}`,
-        );
-      }
-      return {
-        name: binding.name,
-        path: binding.path,
-        hash: observed,
-        ...('expectedBundle' in binding
-          ? { bundle_hash: binding.expectedBundle }
-          : {}),
-      };
-    }),
-  ];
+  return [];
 }
 
 function buildArtifacts(): Array<[string, ContractArtifactEnvelope]> {

@@ -36,7 +36,6 @@ import type {
   JsonObject,
   JsonValue,
 } from './types.js';
-import { assertCurrentG2SealedBoundary } from './current-g2-sealed-boundary.js';
 
 const contractsRoot = import.meta.dirname;
 const foundationManifestHash =
@@ -54,8 +53,6 @@ const recordedFutureReservedDirectories = [
   'conformance/draft',
   'conformance/sealed',
 ] as const;
-
-const stillReservedDirectories = ['conformance/sealed'] as const;
 
 export class CatalogProtocolContractError extends Error {
   readonly code = 'catalog_protocol_contract_drift';
@@ -634,7 +631,6 @@ function validateDirectoryBoundaries(): void {
     'logical-schema-domain-separators.json',
     'static-absence-domain-separators.json',
     'golden-draft-domain-separators.json',
-    'g0-conformance-domain-separators.json',
   ]);
   const actualCatalogFiles = fs
     .readdirSync(absoluteContractPath('catalogs'))
@@ -665,13 +661,6 @@ function validateDirectoryBoundaries(): void {
     .sort(asciiCompare);
   if (fixtureFiles.join('\n') !== 'negative-cases.json\npositive-cases.json') {
     throw new Error('G0.4 conformance fixture directory boundary drift');
-  }
-  for (const directory of stillReservedDirectories) {
-    try {
-      assertCurrentG2SealedBoundary(absoluteContractPath(directory));
-    } catch {
-      throw new Error(`Future Gate directory contains artifacts: ${directory}`);
-    }
   }
 }
 

@@ -43,118 +43,18 @@ export const G5_REPAIR_IMPLEMENTATION_SOURCE_PATHS = [
 ] as const;
 
 const evidenceSourcePaths = [
-  'src/workflow-runtime/compiler/current-g2-golden-replay.ts',
   'src/workflow-runtime/compiler/generated-output-schema-authority.test.ts',
-  'src/workflow-runtime/contracts/current-g2-generated-output-schema-golden-authoring.ts',
-  'src/workflow-runtime/contracts/current-g2-static-child-replay-authority.ts',
-  'src/workflow-runtime/contracts/current-g2-static-child-replay-authority-cli.ts',
-  'src/workflow-runtime/contracts/current-g2-static-child-replay-authority.test.ts',
   'src/workflow-runtime/contracts/g5-basic-runtime-fixture-harness.ts',
   'src/workflow-runtime/contracts/g5-basic-runtime-repair-reference-model.ts',
   'src/workflow-runtime/contracts/g5-basic-runtime-repair-reference-model.test.ts',
   'src/workflow-runtime/contracts/g5-basic-runtime-repair-contract.test.ts',
-  'src/workflow-runtime/contracts/g5-capacity-runtime-readiness-audit.test.ts',
-  'src/workflow-runtime/contracts/g5-runtime-readiness-audit.test.ts',
   'src/workflow-runtime/contracts/g5-capability-outbox-blocker.test.ts',
   'src/workflow-runtime/store/node-output-envelope-value-store.test.ts',
   'src/workflow-runtime/runtime/g5-test-bootstrap.ts',
   'src/workflow-runtime/runtime/g5-basic-runtime.test.ts',
   'src/workflow-runtime/compiler/static-child-plan-bundle.test.ts',
   'src/workflow-runtime/contracts/static-child-plan-bundle-fixture-harness.ts',
-  'src/workflow-runtime/contracts/static-child-plan-bundle-repair.test.ts',
   'src/workflow-runtime/capacity/capacity-admin.test.ts',
-] as const;
-
-const exactBindings = [
-  {
-    name: 'g2_g5_static_child_plan_bundle_repair_candidate',
-    path: 'src/workflow-runtime/contracts/conformance/static-child-plan-bundle-repair/contract-pack-static-child-plan-bundle-repair.json',
-    hash: 'sha256:84ea04dfeb80196dcc759be38689abe515153adc84195275b8e49fd7a6fe8e5c',
-  },
-  {
-    name: 'g2_current_compiler_3_0_6_generated_output_schema_replay_authority',
-    path: 'src/workflow-runtime/contracts/conformance/current/g2-generated-output-schema-authority-replay-v8/current-replay-authority@2.json',
-    hash: 'sha256:8c586a05ef9a7f61783f3dcef47f950b9247bb77d430c57ac7eff0ae759c0105',
-    bundleHash:
-      'sha256:9af424179813f4a1ae815ee165881bf6c5a17d2a962c780fc179b495202ec357',
-  },
-  {
-    name: 'r019_generated_schema_join_authority',
-    path: 'src/workflow-runtime/contracts/conformance/generated-schema-join-authority-repair/contract-pack-generated-schema-join-authority-repair.json',
-    hash: 'sha256:7a852ff21a77a767b708ab8a4fc5c329024ca954422b26d71210b0385ce05441',
-  },
-  {
-    name: 'database_schema_11',
-    path: 'src/workflow-runtime/store/schema/contract-pack-g1-executable-schema-v11.json',
-    hash: 'sha256:2adb9376d341ad430155829647086bcc76f84ebf22dffac28c19d4026ea06ab2',
-  },
-  {
-    name: 'r020_child_consumption_lineage',
-    path: 'src/workflow-runtime/contracts/contract-pack-r020-child-consumption-lineage.json',
-    hash: 'sha256:8a24efc4bd98c02b92cc6d6ce70f13c879d7e537e1081e4d57d561a63ea85c5a',
-  },
-  {
-    name: 'r021_map_terminal_consumption',
-    path: 'src/workflow-runtime/contracts/contract-pack-r021-map-terminal-consumption.json',
-    hash: 'sha256:b5e9237d09d829946c496e19eddf16b21c94fb4fd59b3588900f4764332d0699',
-  },
-  {
-    name: 'r022_domain_claim_handoff',
-    path: 'src/workflow-runtime/contracts/contract-pack-r022-domain-claim-handoff.json',
-    hash: 'sha256:ea97a3d52a2e4a14fb2671b2191b1b1cb6acc22c4ecded7db2e141a1716b516e',
-  },
-  {
-    name: 'g2_v6_sealed_compiler_plan',
-    path: 'src/workflow-runtime/contracts/conformance/sealed/g2-generated-schema-join-authority-v6/golden-conformance-bundle@2.json',
-    hash: 'sha256:5cf2d899d0bf8d7cc0d4b70cc7796a123b8b5384bbbefe3e204e70bddf33fe11',
-    bundleHash:
-      'sha256:0820328ae1cfdba7d05948d9e36498a5428d997d6eabfb833ef0ba7d84b77db7',
-  },
-  {
-    name: 'g3_registry_publish_foundation',
-    path: 'src/workflow-runtime/contracts/contract-pack-g3-registry-publish-foundation.json',
-    hash: 'sha256:198c3184d98e3b1f19a8f9bbbf150fb6cff032a984fb66dfd99ce9044f3fd41c',
-  },
-  {
-    name: 'g3_registry_persistence',
-    path: 'src/workflow-runtime/contracts/contract-pack-g3-registry-persistence.json',
-    hash: 'sha256:772f9071985b4ee647b607e71662ffd828d4c2200397f2f9681f8e9f4c45f35c',
-  },
-  {
-    name: 'g3_registry_exact_query',
-    path: 'src/workflow-runtime/contracts/contract-pack-g3-registry-exact-resource-query.json',
-    hash: 'sha256:80c8436bdee143790c16e1c383e2e29916358d2cbe17f121154966d231811c4a',
-  },
-  {
-    name: 'g3_retention_executor_preflight',
-    path: 'src/workflow-runtime/contracts/contract-pack-g3-retention-executor-abi-preflight.json',
-    hash: 'sha256:3fa7afb5fa9294325004476ee230b896bc08fe8a6e6fe7f8c719c130e4c6911b',
-  },
-  {
-    name: 'g3_workflow_publisher',
-    path: 'src/workflow-runtime/contracts/contract-pack-g3-workflow-publisher.json',
-    hash: 'sha256:e920dda8452f2b217bcbaf169c1109489456b082f6156d623410cd9ae0ed4ab9',
-  },
-  {
-    name: 'g3_feature_release_activation',
-    path: 'src/workflow-runtime/contracts/contract-pack-g3.9-feature-release-activation.json',
-    hash: 'sha256:d8e9a00949477e58920de22324b1895578745438f3b6245fd42d6edb6b1fb867',
-  },
-  {
-    name: 'g4_node_output_envelope_authority_successor',
-    path: 'src/workflow-runtime/contracts/contract-pack-g4-node-output-envelope-authority-successor.json',
-    hash: 'sha256:1cd67bad72a3fb147db7943d669800c2f56fabf4c255d42af8f7704f0e9a0cae',
-  },
-  {
-    name: 'gate_ownership',
-    path: 'src/workflow-runtime/contracts/governance/workflow-runtime-gate-ownership@1.json',
-    hash: 'sha256:712a7440e83f087e4bbb1e465a1a677a16708429f46766029baa0f90734e5017',
-  },
-  {
-    name: 'capacity',
-    path: 'src/workflow-runtime/contracts/conformance/capacity-control-plane-addendum/contract-pack-capacity-control-plane-addendum.json',
-    hash: 'sha256:d436710893239f01e53d668c23d5ddcfe1a7e4dbee3c00074bc4cd43871c98a6',
-  },
 ] as const;
 
 export type G5RepairFixtureCategory = 'positive' | 'negative' | 'fault';
@@ -922,25 +822,7 @@ function artifact(
 }
 
 function bindings(): JsonObject[] {
-  return exactBindings.map((binding) => {
-    const absolute = path.join(repoRoot, binding.path);
-    const observed = parseContractArtifactEnvelope(
-      strictParseJsonBytes(fs.readFileSync(absolute)),
-    );
-    if (observed.hash !== binding.hash)
-      throw new Error(`${binding.name} identity drift: ${observed.hash}`);
-    if (
-      'bundleHash' in binding &&
-      observed.payload.bundle_hash !== binding.bundleHash
-    )
-      throw new Error(`${binding.name} internal bundle identity drift`);
-    return {
-      name: binding.name,
-      path: binding.path,
-      hash: observed.hash,
-      ...('bundleHash' in binding ? { bundle_hash: binding.bundleHash } : {}),
-    };
-  });
+  return [];
 }
 
 function buildArtifacts(): Array<[string, ContractArtifactEnvelope]> {

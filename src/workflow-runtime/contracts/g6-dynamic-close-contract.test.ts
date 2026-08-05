@@ -29,7 +29,7 @@ function cases(name: string): G6FixtureCase[] {
 }
 
 describe('current G6 Dynamic / Close Contract Pack', () => {
-  it('binds a non-DONE construction candidate and exact current prerequisites', () => {
+  it('keeps the current behavior pack free of cross-pack identity bindings', () => {
     const pack = checkG6DynamicCloseContracts();
     expect(pack.payload).toMatchObject({
       gate: 'G6',
@@ -53,26 +53,7 @@ describe('current G6 Dynamic / Close Contract Pack', () => {
         'utf8',
       ),
     ) as { payload: { bindings: Array<{ name: string; hash: string }> } };
-    expect(protocol.payload.bindings).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          name: 'r020_child_consumption_lineage',
-          hash: 'sha256:8a24efc4bd98c02b92cc6d6ce70f13c879d7e537e1081e4d57d561a63ea85c5a',
-        }),
-        expect.objectContaining({
-          name: 'r021_map_terminal_consumption',
-          hash: 'sha256:b5e9237d09d829946c496e19eddf16b21c94fb4fd59b3588900f4764332d0699',
-        }),
-        expect.objectContaining({
-          name: 'r022_domain_claim_handoff',
-          hash: 'sha256:ea97a3d52a2e4a14fb2671b2191b1b1cb6acc22c4ecded7db2e141a1716b516e',
-        }),
-        expect.objectContaining({
-          name: 'database_schema_11',
-          hash: 'sha256:2adb9376d341ad430155829647086bcc76f84ebf22dffac28c19d4026ea06ab2',
-        }),
-      ]),
-    );
+    expect(protocol.payload.bindings).toEqual([]);
   });
 
   it('binds every fixture to a closed handler, operation, and oracle', () => {

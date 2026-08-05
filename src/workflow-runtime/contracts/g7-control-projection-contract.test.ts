@@ -30,7 +30,7 @@ function cases(name: string): G7FixtureCase[] {
 }
 
 describe('current G7 Control / Card / Projection / Recovery Contract Pack', () => {
-  it('binds the accepted G6 base and remains pending independent G7 acceptance', () => {
+  it('keeps the current behavior pack free of cross-pack identity bindings', () => {
     const pack = checkG7ControlProjectionContracts();
     expect(pack.payload).toMatchObject({
       gate: 'G7',
@@ -60,26 +60,7 @@ describe('current G7 Control / Card / Projection / Recovery Contract Pack', () =
         authority_residuals: JsonObject[];
       };
     };
-    expect(protocol.payload.bindings).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          name: 'g6_dynamic_close_accepted_candidate',
-          hash: 'sha256:532335390e4d117ae880f08d07334ac7c541e1a4e91dfbf3e3b992304ddc8cd1',
-        }),
-        expect.objectContaining({
-          name: 'workflow_runtime_command_protocol',
-          hash: 'sha256:43cc8ef247fcba4bac5e9fccdd654fd393928120755a6405bad232043f0c94ba',
-        }),
-        expect.objectContaining({
-          name: 'workflow_run_transaction_protocol',
-          hash: 'sha256:3d5474096d89fbd723e34e0d2f9d1dadd1b955b5fc36ff447d026257852cac79',
-        }),
-        expect.objectContaining({
-          name: 'database_schema_11',
-          hash: 'sha256:2adb9376d341ad430155829647086bcc76f84ebf22dffac28c19d4026ea06ab2',
-        }),
-      ]),
-    );
+    expect(protocol.payload.bindings).toEqual([]);
     expect(protocol.payload.authority_residuals).toEqual([]);
     expect(protocol.payload).toMatchObject({
       schema_change_required: true,

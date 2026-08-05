@@ -37,18 +37,18 @@
       },
       {
         "path": "src/workflow-runtime/runtime/plan-authority.ts",
-        "raw_sha256": "sha256:aad1b52c3396aac352f9f80e8ca11ad76cdb4278343d936dd006714dc167dd9b"
+        "raw_sha256": "sha256:2ed2ac24044ab39f0f080ebaa6fd13b3f1ad59aabd12512c87c3fd51100f27ac"
       },
       {
         "path": "src/workflow-runtime/runtime/reconciler.ts",
-        "raw_sha256": "sha256:742521d9eadb3a837cd7084b2f87437f3ecd48479e076ece98ddbd43d79d0093"
+        "raw_sha256": "sha256:55742d0944b00f5a439472d4daea667b7e7042530a9c5f40e1ca0fb3959f0c53"
       },
       {
         "path": "src/workflow-runtime/runtime/root-finalizer.ts",
         "raw_sha256": "sha256:346a16f123bc1fa84da89558335ebec32ccf5d52481a7f08332537903bfdd1a3"
       }
     ],
-    "source_tree_hash": "sha256:a8e8766c77f26482cbceeaf2e0afbb28fd7d45a274bfc90f3cc949f25f96c2de"
+    "source_tree_hash": "sha256:55b734dccc6a61d862559aa36104d35ac15fe9096b627fe94c1cc754a10fe2bc"
   },
-  "hash": "sha256:a36731dd404e3128f81124b063dc03e753e25ce2eaf4a84f7fc64a4a529d3d7f"
+  "hash": "sha256:54e66adaa05175a244c62e40adaa868f43fe72ce04dc97ecbb577f78112666b5"
 }

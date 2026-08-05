@@ -20,7 +20,7 @@
       },
       {
         "path": "src/workflow-runtime/contracts/g6-dynamic-close-contract.ts",
-        "raw_sha256": "sha256:a8b9e26b31d7f35d0435ca42decc5ff5101a0629840e36ec3070ac43b81a873c"
+        "raw_sha256": "sha256:5233596970d9a0b99b4ed57062f8751004d91e367b76285e6a816bcf23869b93"
       },
       {
         "path": "src/workflow-runtime/contracts/g6-dynamic-close-contract-cli.ts",
@@ -28,7 +28,7 @@
       },
       {
         "path": "src/workflow-runtime/contracts/g6-dynamic-close-contract.test.ts",
-        "raw_sha256": "sha256:c0979009420e804273bb71d2ec40e851d759491093ee5507faffd08dcde74d4c"
+        "raw_sha256": "sha256:b6e84be924b844499301c53c096ee83c931b168e1d460bd83516d94bd1d3abdd"
       },
       {
         "path": "src/workflow-runtime/contracts/g6-dynamic-close-reference-model.ts",
@@ -39,19 +39,15 @@
         "raw_sha256": "sha256:5caf98b8ed59a4619f7688db9d0b8fac7e9a999d6164fe13d782a209bdb64b35"
       },
       {
-        "path": "src/workflow-runtime/contracts/g6-runtime-readiness-audit.test.ts",
-        "raw_sha256": "sha256:e1ffc0860b637d19f8063ffa19dbb9e794e2bcc2a3e1d5dbf0ecd70ff2907189"
-      },
-      {
         "path": "src/workflow-runtime/runtime/g6-test-support.ts",
-        "raw_sha256": "sha256:4b7bc31d1b44155cbf37a257d79ad521a00c2dddb18ce96c229c5248b182b2ed"
+        "raw_sha256": "sha256:175a43b7e7d514b57373f46147f5e995910408c59bdbc05993fe54583afc4b40"
       },
       {
         "path": "src/workflow-runtime/runtime/g6-dynamic-close.test.ts",
         "raw_sha256": "sha256:c94423b4db18f077d42f783dac431bdcc0999cccf8fec7987cadd3adc06870bd"
       }
     ],
-    "evidence_tree_hash": "sha256:6f47a264b89d34949c4694ff6703b413651e99ded5450d0c3fec797695de52f2"
+    "evidence_tree_hash": "sha256:d95a8f9797278c4e81f933a6b768c09ea1656659db8af2c52c49fb3ccd8a66c6"
   },
-  "hash": "sha256:6c2b6eddb98e2469660b9144cc84c90df5692db18a9133790085c1a14f52936e"
+  "hash": "sha256:65eeb10d73677325ec6941733308ff896f8d61a5efd523587b5c674812120585"
 }

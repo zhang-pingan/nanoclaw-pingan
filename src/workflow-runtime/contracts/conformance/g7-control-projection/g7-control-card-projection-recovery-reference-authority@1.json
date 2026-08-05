@@ -22,7 +22,7 @@
       },
       {
         "path": "src/workflow-runtime/contracts/g7-control-projection-contract.ts",
-        "raw_sha256": "sha256:871c664906f5da8b96a18acfff235030c54d89fbda0d10a5cf8808f8065bcec7"
+        "raw_sha256": "sha256:f59d3b968e9c0cb6de6677e9835e0e4398fe48164e4970684d11405be87dd6e3"
       },
       {
         "path": "src/workflow-runtime/contracts/g7-control-projection-contract-cli.ts",
@@ -30,7 +30,7 @@
       },
       {
         "path": "src/workflow-runtime/contracts/g7-control-projection-contract.test.ts",
-        "raw_sha256": "sha256:827a1202909b7d738911edfc96946ab9febc2bf393cfdccd3178584d41f54b51"
+        "raw_sha256": "sha256:36e4775e1ebcde426a2be2630a02f5f5e0e232ec2ad72fd75199691ab08f9379"
       },
       {
         "path": "src/workflow-runtime/contracts/g7-control-projection-reference-model.ts",
@@ -39,10 +39,6 @@
       {
         "path": "src/workflow-runtime/contracts/g7-control-projection-reference-model.test.ts",
         "raw_sha256": "sha256:259db489caa313d0b7c70559552dd1df5ba446758790ddd28174b95c30c63dc6"
-      },
-      {
-        "path": "src/workflow-runtime/contracts/g7-runtime-readiness-audit.test.ts",
-        "raw_sha256": "sha256:c48ad0604bca0bfe881bedb16295479e8d85c203abe4436c49af28817a4791f6"
       },
       {
         "path": "src/workflow-runtime/runtime/g7-test-support.ts",
@@ -61,7 +57,7 @@
         "raw_sha256": "sha256:fb490249f77433543d360d345e31435c1805265d3c7f58c54fdd5fca8f98038c"
       }
     ],
-    "evidence_tree_hash": "sha256:78988e561204e5656a1d19b77237a12e995bdfbe759efdb95b0d92185257ea3b"
+    "evidence_tree_hash": "sha256:5a2ddc31b939d5ccd9c23b5dd60579ee348445fc2bbabc1bdbd607bdd4a864bf"
   },
-  "hash": "sha256:713839ca9078a95031ee6fd86f9a337ab37fd6b7b8b9b94f23c71a35bf9e465e"
+  "hash": "sha256:acd03f59ff883ad4dd8fc301c6b23df4917ad799c6bd7f9e50f1740139be1fce"
 }

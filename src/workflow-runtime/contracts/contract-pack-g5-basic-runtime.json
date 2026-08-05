@@ -20,7 +20,7 @@
           "id": "icarus.workflow-g5-basic-runtime-protocol",
           "version": "1.0.0"
         },
-        "hash": "sha256:87543c7cd905d47fa493f9558ea39b5be54ff0aafc5927c9237423de9f6c6ee3"
+        "hash": "sha256:e8e3fa1451e64a4f565e137aa6143ca78099d99fdc44eb89ec9e5321bd2e8978"
       },
       {
         "format": "icarus.workflow-g5-basic-runtime-record-schema/1",
@@ -60,10 +60,10 @@
           "id": "icarus.workflow-g5-basic-runtime-implementation",
           "version": "1.0.0"
         },
-        "hash": "sha256:867643cf2dfdb3e25b72d50023248a0aa8d49b388ff83e94236d6286b98ec842"
+        "hash": "sha256:bb4a162d87e828f5a12fec9753b61a7ac254e3ff808e77d9ee11fca188a9a008"
       }
     ],
-    "member_tree_hash": "sha256:17bdfbac49c858084cc1b47f60eb56dc096a4b6289a7050cc2fdb2bf55d57b26"
+    "member_tree_hash": "sha256:ff6ca436fcfa4383f7f2a07f10c3e548d1c7d6ec79bb8549ace22e433ba8711f"
   },
-  "hash": "sha256:73db71fbfe4ffbb41fc40181eb94d9d6f3fdbcff19a1f1e2180e427fdab6f348"
+  "hash": "sha256:cd2574967f37ecd082ecd9a52b846f56bd8fd1df5ec2db2c769862a72961f2aa"
 }

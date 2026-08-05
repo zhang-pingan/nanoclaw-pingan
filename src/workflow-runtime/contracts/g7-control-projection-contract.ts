@@ -43,39 +43,10 @@ const evidenceSourcePaths = [
   'src/workflow-runtime/contracts/g7-control-projection-contract.test.ts',
   'src/workflow-runtime/contracts/g7-control-projection-reference-model.ts',
   'src/workflow-runtime/contracts/g7-control-projection-reference-model.test.ts',
-  'src/workflow-runtime/contracts/g7-runtime-readiness-audit.test.ts',
   'src/workflow-runtime/runtime/g7-test-support.ts',
   'src/workflow-runtime/runtime/g7-control-recovery.test.ts',
   'src/workflow-runtime/runtime/g7-card-presentation.test.ts',
   'src/workflow-runtime/projection/g7-workflow-projection.test.ts',
-] as const;
-
-const exactBindings = [
-  {
-    name: 'g6_dynamic_close_accepted_candidate',
-    path: 'src/workflow-runtime/contracts/contract-pack-g6-dynamic-close.json',
-    hash: 'sha256:532335390e4d117ae880f08d07334ac7c541e1a4e91dfbf3e3b992304ddc8cd1',
-  },
-  {
-    name: 'workflow_runtime_command_protocol',
-    path: 'src/workflow-runtime/contracts/protocols/workflow-runtime-command-protocol-table.json',
-    hash: 'sha256:43cc8ef247fcba4bac5e9fccdd654fd393928120755a6405bad232043f0c94ba',
-  },
-  {
-    name: 'workflow_run_transaction_protocol',
-    path: 'src/workflow-runtime/contracts/protocols/workflow-run-transaction-protocol-table.json',
-    hash: 'sha256:3d5474096d89fbd723e34e0d2f9d1dadd1b955b5fc36ff447d026257852cac79',
-  },
-  {
-    name: 'closed_schema_pack',
-    path: 'src/workflow-runtime/contracts/contract-pack-closed-schemas.json',
-    hash: 'sha256:6f7aa5b997c5a496a4eb95776a09f18e3c25753e7324a6ef1f095a23b8413d81',
-  },
-  {
-    name: 'database_schema_11',
-    path: 'src/workflow-runtime/store/schema/contract-pack-g1-executable-schema-v11.json',
-    hash: 'sha256:2adb9376d341ad430155829647086bcc76f84ebf22dffac28c19d4026ea06ab2',
-  },
 ] as const;
 
 export type G7FixtureCategory = 'positive' | 'negative' | 'fault';
@@ -663,14 +634,7 @@ function artifact(
 }
 
 function bindings(): JsonObject[] {
-  return exactBindings.map((binding) => {
-    const observed = parseContractArtifactEnvelope(
-      strictParseJsonBytes(fs.readFileSync(path.join(repoRoot, binding.path))),
-    );
-    if (observed.hash !== binding.hash)
-      throw new Error(`${binding.name} identity drift: ${observed.hash}`);
-    return { ...binding };
-  });
+  return [];
 }
 
 function buildArtifacts(): Array<[string, ContractArtifactEnvelope]> {

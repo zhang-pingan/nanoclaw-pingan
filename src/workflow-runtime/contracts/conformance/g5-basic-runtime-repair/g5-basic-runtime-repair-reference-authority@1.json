@@ -19,28 +19,8 @@
     },
     "evidence": [
       {
-        "path": "src/workflow-runtime/compiler/current-g2-golden-replay.ts",
-        "raw_sha256": "sha256:3a19f14c1dcbbb04073e3d0e8d8af5408cbf52845a7b8427e0568b1bba238b4c"
-      },
-      {
         "path": "src/workflow-runtime/compiler/generated-output-schema-authority.test.ts",
-        "raw_sha256": "sha256:d10ed720a68183243e5d207f2368ce695e0b10025eeeb92f4608c8ce033f8166"
-      },
-      {
-        "path": "src/workflow-runtime/contracts/current-g2-generated-output-schema-golden-authoring.ts",
-        "raw_sha256": "sha256:a20a3358fde4cbc9cb3b5fc7d240e35d8593e480246a2fd397cf7bdbdd1c15ec"
-      },
-      {
-        "path": "src/workflow-runtime/contracts/current-g2-static-child-replay-authority.ts",
-        "raw_sha256": "sha256:1abd6bf8323947f02b38c51a96ee34078505e41053467224d8f13805d062c20b"
-      },
-      {
-        "path": "src/workflow-runtime/contracts/current-g2-static-child-replay-authority-cli.ts",
-        "raw_sha256": "sha256:3ed22682f82991888bab2d198c200245b09313cfb8b439007e4cc68c4bbafb9d"
-      },
-      {
-        "path": "src/workflow-runtime/contracts/current-g2-static-child-replay-authority.test.ts",
-        "raw_sha256": "sha256:3cb64877b30b281e1a245d1f4f341baa195616ef8cbb8c63174da87bea1d7e58"
+        "raw_sha256": "sha256:103fcdb5215aa6e93b040b30243c9067a2d5babdbae03b2e285c48263f4662a5"
       },
       {
         "path": "src/workflow-runtime/contracts/g5-basic-runtime-fixture-harness.ts",
@@ -59,14 +39,6 @@
         "raw_sha256": "sha256:372216f505695d043f95cde39d23bce9257327e7d33b8ae8b34e6f13c889f659"
       },
       {
-        "path": "src/workflow-runtime/contracts/g5-capacity-runtime-readiness-audit.test.ts",
-        "raw_sha256": "sha256:1f5cbc3dd8e1f0eb9d640d7a41934d8e3f4fc31a5a53406ee72d2b493c124742"
-      },
-      {
-        "path": "src/workflow-runtime/contracts/g5-runtime-readiness-audit.test.ts",
-        "raw_sha256": "sha256:ac1d98b01b870d676af6932fbb43d59519e9ebd94a5ee607ff3aa946eb09614d"
-      },
-      {
         "path": "src/workflow-runtime/contracts/g5-capability-outbox-blocker.test.ts",
         "raw_sha256": "sha256:67b947742e1d78bc73564fdfb98e22f7ad5f12ad50b45552ab5fb94668031d7a"
       },
@@ -76,30 +48,26 @@
       },
       {
         "path": "src/workflow-runtime/runtime/g5-test-bootstrap.ts",
-        "raw_sha256": "sha256:0da6a0769d1980465c905f39f2088c3d7af8beb2ea6dbc0dc5dfbf39018e5b12"
+        "raw_sha256": "sha256:280c0129639904f62479250c0ed387032e2d40fa90d61c13cb507c3f3f68bdba"
       },
       {
         "path": "src/workflow-runtime/runtime/g5-basic-runtime.test.ts",
-        "raw_sha256": "sha256:e62f46d3f6b44e7d0c4c03fc0e3afe6a594374f8ba09492021d31e2456f4af37"
+        "raw_sha256": "sha256:76496a96104ab825542ec7916a1f6153f9a3991d677e02a9085d2d3f55349044"
       },
       {
         "path": "src/workflow-runtime/compiler/static-child-plan-bundle.test.ts",
-        "raw_sha256": "sha256:2411c2645376daa24590d7837357685c0382591dc1c08fb0a224cfd20c67b952"
+        "raw_sha256": "sha256:386d5f8c73d13330500c43057ea99c72613165f151e7428128e7a26cd15b2ae2"
       },
       {
         "path": "src/workflow-runtime/contracts/static-child-plan-bundle-fixture-harness.ts",
         "raw_sha256": "sha256:db9553d02b0d4519571271568957847a29d9e5bbb941123f3ab023c33bffa98f"
       },
       {
-        "path": "src/workflow-runtime/contracts/static-child-plan-bundle-repair.test.ts",
-        "raw_sha256": "sha256:d82a9926502253e3e457e4f8b76cb20198706e080669cd82fe0211c52c093eb8"
-      },
-      {
         "path": "src/workflow-runtime/capacity/capacity-admin.test.ts",
         "raw_sha256": "sha256:06d0b8cee866ec721a34dca293ed549d948831d81966dada5feaf4312c0be513"
       }
     ],
-    "evidence_tree_hash": "sha256:2ff4423dffb741cf21c28e24438def3bf2c883f663f8345410b54c98864ecd79"
+    "evidence_tree_hash": "sha256:c3e1d213b3c59ef70e70cc08fd5a8148e7af77be89ef9da2f8efff965de5b8b8"
   },
-  "hash": "sha256:3bee6a4d8894e6224f4922b9b32db81468fbfcd1ddeae4a87357823e8c192585"
+  "hash": "sha256:553c756ec9bc3666a13d3ba7511ae2c866474c9e01d28c3a314f3eaec7a5760b"
 }
