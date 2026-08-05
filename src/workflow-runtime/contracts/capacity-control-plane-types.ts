@@ -113,8 +113,6 @@ export interface InitializeDeploymentCapacityCommand {
   idempotency_key: string;
   proposed_capacity: DeploymentRuntimeCapacitySnapshot;
   reason_code: 'initial_provisioning';
-  core_release_hash: Sha256Hash;
-  evidence_refs: string[];
 }
 
 export interface ReplaceDeploymentCapacityCommand {

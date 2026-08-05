@@ -37,16 +37,10 @@ export interface CapacityAuthenticatedInvocation {
     | 'runtime_center'
     | 'cli'
     | 'deployment_tool'
-    | 'production_activation';
+    | 'local_startup';
   readonly delegationChainRef: string | null;
   readonly permissions: readonly string[];
   readonly requestedAtMs: number;
-  readonly activeCoreReleaseHash: Sha256Hash;
-  readonly baselineConfigHash: Sha256Hash;
-  readonly genesisGrant: {
-    readonly coreReleaseHash: Sha256Hash;
-    readonly baselineConfigHash: Sha256Hash;
-  } | null;
 }
 
 export interface CapacityCommandPersistence {
@@ -103,8 +97,6 @@ function commandKeys(
         'idempotency_key',
         'proposed_capacity',
         'reason_code',
-        'core_release_hash',
-        'evidence_refs',
       ]
     : [
         'command_type',
@@ -146,8 +138,9 @@ export function parseCapacityAdminCommand(
     command.command_id.length === 0 ||
     typeof command.idempotency_key !== 'string' ||
     command.idempotency_key.length === 0 ||
-    !Array.isArray(command.evidence_refs) ||
-    command.evidence_refs.some((entry) => typeof entry !== 'string')
+    (command.command_type === 'replace_deployment_capacity' &&
+      (!Array.isArray(command.evidence_refs) ||
+        command.evidence_refs.some((entry) => typeof entry !== 'string')))
   ) {
     throw new G5RuntimeError(
       'contract_invalid',
@@ -319,21 +312,11 @@ function invocationAuthorizationDenial(
   if (command.command_type === 'initialize_deployment_capacity') {
     if (
       invocation.actorKind !== 'system' ||
-      invocation.actorRef !== 'system:production-activation' ||
-      invocation.entrypoint !== 'production_activation'
+      invocation.actorRef !== 'system:local-store' ||
+      invocation.sessionActorRef !== invocation.actorRef ||
+      invocation.entrypoint !== 'local_startup'
     )
       return 'actor_kind_denied';
-    if (
-      invocation.genesisGrant === null ||
-      invocation.genesisGrant.coreReleaseHash !==
-        invocation.activeCoreReleaseHash ||
-      invocation.genesisGrant.baselineConfigHash !==
-        invocation.baselineConfigHash ||
-      command.core_release_hash !== invocation.activeCoreReleaseHash ||
-      command.proposed_capacity.config_hash !== invocation.baselineConfigHash ||
-      command.evidence_refs.length < 2
-    )
-      return 'capacity_snapshot_invalid';
     return null;
   }
   if (invocation.actorKind !== 'human') return 'actor_kind_denied';
@@ -448,7 +431,7 @@ function insertCommand(
       assignedRevision,
       assignedChangeId,
       command.command_type === 'initialize_deployment_capacity'
-        ? command.core_release_hash
+        ? command.proposed_capacity.config_hash
         : null,
       canonicalJson(command.proposed_capacity),
       command.proposed_capacity.config_hash,

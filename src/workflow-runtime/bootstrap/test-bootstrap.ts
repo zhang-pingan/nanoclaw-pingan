@@ -30,6 +30,7 @@ import {
   WorkflowRuntimeConnectionFactory,
   type WorkflowRuntimeStore,
 } from '../store/runtime-store/index.js';
+import { CURRENT_WORKFLOW_RUNTIME_SCHEMA_VERSION } from '../store/runtime-store/config.js';
 import { G4FakeAdapter } from './fake-adapter.js';
 import { G4VirtualClock } from './virtual-clock.js';
 
@@ -46,7 +47,6 @@ export type G4BootstrapFaultInjection =
   | 'root_create_failure'
   | 'root_permission_denied'
   | 'store_open_failure'
-  | 'schema_profile_rejection'
   | 'interrupt_after_root_create'
   | 'interrupt_after_store_open'
   | 'cleanup_failure';
@@ -68,8 +68,8 @@ export class G4TestBootstrapError extends Error {
   constructor(
     readonly code:
       | 'bootstrap_options_invalid'
-      | 'profile_identity_mismatch'
-      | 'fixture_identity_mismatch'
+      | 'profile_selection_mismatch'
+      | 'fixture_selection_mismatch'
       | 'data_root_invalid'
       | 'data_root_not_temporary'
       | 'data_root_symlink_or_alias'
@@ -79,7 +79,6 @@ export class G4TestBootstrapError extends Error {
       | 'data_root_create_failed'
       | 'data_root_permission_denied'
       | 'store_open_failed'
-      | 'store_identity_rejected'
       | 'initialization_interrupted'
       | 'isolation_proof_failed'
       | 'instance_closed'
@@ -289,7 +288,7 @@ function assertSelection(
     !sameRef(options.profileRef, G4_TEST_BOOTSTRAP_PROFILE_REF)
   ) {
     throw new G4TestBootstrapError(
-      'profile_identity_mismatch',
+      'profile_selection_mismatch',
       'G4 bootstrap requires the exact current test-only profile ref/hash',
     );
   }
@@ -299,7 +298,7 @@ function assertSelection(
     !sameRef(options.fixtureSetRef, G4_TEST_BOOTSTRAP_FIXTURE_SET_REF)
   ) {
     throw new G4TestBootstrapError(
-      'fixture_identity_mismatch',
+      'fixture_selection_mismatch',
       'G4 bootstrap requires the exact registered fixture set ref/hash',
     );
   }
@@ -414,8 +413,8 @@ function buildReceipt(
   const rootStat = fs.statSync(root);
   const databaseStat = fs.statSync(databasePath);
   const activeRegistry = store.queryOne<{ count: number }>(
-    "SELECT count(*) AS count FROM workflow_registry_resources WHERE publication_state = 'published'",
-    [],
+    "SELECT count(*) AS count FROM workflow_registry_resources WHERE publication_state = 'published' AND resource_id <> ?",
+    ['icarus.local-capacity-defaults'],
   )!;
   const activePointers = store.queryOne<{ count: number }>(
     'SELECT count(*) AS count FROM workflow_feature_active_releases',
@@ -427,8 +426,6 @@ function buildReceipt(
       'Fresh G4 Store unexpectedly contains active Registry or Release facts',
     );
   }
-  const profile = contracts.profile.payload;
-  const storeBinding = profile.store_binding as JsonObject;
   const receiptWithoutHash = {
     format: 'icarus.workflow-test-bootstrap-isolation-receipt/1' as const,
     instance_id: instanceId,
@@ -438,7 +435,6 @@ function buildReceipt(
     fixture_set_hash: contracts.fixtureSet.hash,
     fake_adapter_profile_hash: contracts.fakeAdapterProfile.hash,
     virtual_clock_profile_hash: contracts.virtualClockProfile.hash,
-    bootstrap_implementation_hash: profile.bootstrap_implementation_hash,
     canonical_data_root: root,
     database_path: databasePath,
     owner_marker_hash: ownerMarkerHash,
@@ -446,10 +442,7 @@ function buildReceipt(
     root_inode: String(rootStat.ino),
     database_device: String(databaseStat.dev),
     database_inode: String(databaseStat.ino),
-    database_schema_version: 11 as const,
-    database_schema_hash: storeBinding.database_schema_hash as Sha256Hash,
-    sqlite_profile_hash: storeBinding.sqlite_profile_hash as Sha256Hash,
-    production_surface_absence_hash: contracts.isolationBoundary.hash,
+    database_schema_version: CURRENT_WORKFLOW_RUNTIME_SCHEMA_VERSION as 11,
     production_ingress_reachable: false as const,
     feature_ingress_reachable: false as const,
     api_ingress_reachable: false as const,
@@ -541,7 +534,6 @@ export class G4TestBootstrapInstance {
     this.#store = WorkflowRuntimeConnectionFactory.openStore({
       databasePath: this.databasePath,
       databaseMode: 'open_existing',
-      identityMode: 'candidate_development',
     });
     return this.#store;
   }
@@ -639,16 +631,10 @@ export function createG4TestBootstrap(
       store = WorkflowRuntimeConnectionFactory.openStore({
         databasePath,
         databaseMode: 'create',
-        identityMode:
-          options.faultInjection === 'schema_profile_rejection'
-            ? 'production'
-            : 'candidate_development',
       });
     } catch (error) {
       throw new G4TestBootstrapError(
-        options.faultInjection === 'schema_profile_rejection'
-          ? 'store_identity_rejected'
-          : 'store_open_failed',
+        'store_open_failed',
         'G4 Store rejected bootstrap',
         { cause: error },
       );

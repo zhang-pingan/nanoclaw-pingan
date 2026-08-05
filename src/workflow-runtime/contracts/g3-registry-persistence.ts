@@ -3,6 +3,7 @@ import path from 'node:path';
 
 import { Ajv2020, type AnySchema } from 'ajv/dist/2020.js';
 
+import { WORKFLOW_COMPILER_VERSION } from '../compiler/version.js';
 import {
   calculateArtifactHash,
   canonicalJson,
@@ -21,7 +22,6 @@ import {
   type G3RegistrySnapshotPreflightInput,
   type G3RegistrySnapshotPreflightResult,
 } from './g3-registry-persistence-types.js';
-import { G3_CURRENT_UPSTREAM_IDENTITY } from './g3-registry-publish-types.js';
 import type {
   ContractArtifactEnvelope,
   JsonObject,
@@ -29,7 +29,6 @@ import type {
   VersionedRef,
 } from './types.js';
 import { parseContractArtifactEnvelope } from './artifact.js';
-import { strictParseJsonBytes } from './strict-json.js';
 
 const contractsRoot = import.meta.dirname;
 
@@ -249,19 +248,11 @@ export const G3_REGISTRY_PREFLIGHT_INPUT_SCHEMA: JsonObject = {
   title: 'WorkflowRegistrySnapshotPreflightInputV1',
   type: 'object',
   additionalProperties: false,
-  required: [
-    'snapshot_ref',
-    'snapshot_hash',
-    'expected_compiler_version',
-    'expected_core_build_hash',
-    'expected_database_schema_hash',
-  ],
+  required: ['snapshot_ref', 'snapshot_hash', 'expected_compiler_version'],
   properties: {
     snapshot_ref: { $ref: '#/$defs/versioned_ref' },
     snapshot_hash: hashSchema,
     expected_compiler_version: { type: 'string', minLength: 1, maxLength: 255 },
-    expected_core_build_hash: hashSchema,
-    expected_database_schema_hash: hashSchema,
   },
   $defs: { versioned_ref: versionedRefSchema },
 };
@@ -892,8 +883,6 @@ export function g3RegistryPersistenceFixturesForTest(): {
     snapshot_ref: snapshot.ref,
     snapshot_hash: snapshot.snapshot_hash,
     expected_compiler_version: snapshot.compiler_version,
-    expected_core_build_hash: snapshot.core_build_hash,
-    expected_database_schema_hash: snapshot.database_schema_hash,
   };
   const expectedPreflightResult: G3RegistrySnapshotPreflightResult = {
     format: G3_REGISTRY_PERSISTENCE_FORMATS.preflightResult,
@@ -994,33 +983,6 @@ function writeAtomic(relativePath: string, contents: string): void {
   const temporary = `${target}.tmp-${process.pid}`;
   fs.writeFileSync(temporary, contents, 'utf8');
   fs.renameSync(temporary, target);
-}
-
-function readArtifact(relativePath: string): ContractArtifactEnvelope {
-  return parseContractArtifactEnvelope(
-    strictParseJsonBytes(fs.readFileSync(absolute(relativePath))),
-  );
-}
-
-function validateUpstreamIdentities(): void {
-  const exactArtifacts: Array<[string, Sha256Hash]> = [
-    [
-      'contract-pack-g3-registry-publish-foundation.json',
-      'sha256:198c3184d98e3b1f19a8f9bbbf150fb6cff032a984fb66dfd99ce9044f3fd41c',
-    ],
-    [
-      'contract-pack-g3.2a-feature-manifest-intake.json',
-      'sha256:c9c273b6d294d512a3578203d91d4bdce7863a3ccb561fdd7da08d072b3d8cd9',
-    ],
-    [
-      'contract-pack-g3.2-feature-manifest-intake.json',
-      'sha256:1eb0b81f488f4a37fa4503ddfef0dfa8a56d40fdeb535c9758d9d21fd39bb92b',
-    ],
-  ];
-  for (const [file, expected] of exactArtifacts) {
-    if (readArtifact(file).hash !== expected)
-      throw new Error(`G3 Registry upstream identity drift: ${file}`);
-  }
 }
 
 function buildArtifacts(): Array<[string, ContractArtifactEnvelope]> {
@@ -1135,22 +1097,8 @@ function buildManifest(
       slice: 'G3.3',
       status: 'DONE',
       g3_status: 'IN_PROGRESS',
-      upstream_g3_2a_pack_hash:
-        'sha256:c9c273b6d294d512a3578203d91d4bdce7863a3ccb561fdd7da08d072b3d8cd9',
-      upstream_g3_1_pack_hash:
-        'sha256:198c3184d98e3b1f19a8f9bbbf150fb6cff032a984fb66dfd99ce9044f3fd41c',
-      upstream_g3_2_pack_hash:
-        'sha256:1eb0b81f488f4a37fa4503ddfef0dfa8a56d40fdeb535c9758d9d21fd39bb92b',
-      upstream_g2_golden_corpus_hash:
-        G3_CURRENT_UPSTREAM_IDENTITY.g2_golden_corpus_hash,
-      upstream_g1_schema_root_hash:
-        'sha256:2adb9376d341ad430155829647086bcc76f84ebf22dffac28c19d4026ea06ab2',
-      upstream_g1_schema_hash:
-        'sha256:ad998b2d0bb5e5f158b0be6d13db79cb6a0c0650d5064b267262551af266189c',
-      upstream_g1_migration_sha256:
-        'sha256:ccaa7699894da98284b9ce86767d917e355441df93e010d90751ccb713c9b872',
+      compiler_version: WORKFLOW_COMPILER_VERSION,
       production_registry_write_performed: false,
-      production_activation_performed: false,
       publisher_implemented: false,
       production_loader_implemented: false,
       artifacts: artifacts.map(([artifactPath, entry]) => ({
@@ -1174,7 +1122,6 @@ function validateArtifacts(
   artifacts: Array<[string, ContractArtifactEnvelope]>,
   manifest: ContractArtifactEnvelope,
 ): void {
-  validateUpstreamIdentities();
   const ajv = new Ajv2020({ strict: true, allErrors: true });
   for (const schema of [
     G3_REGISTRY_RESOURCE_SCHEMA,

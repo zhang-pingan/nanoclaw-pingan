@@ -3,6 +3,7 @@ import path from 'node:path';
 
 import { Ajv2020, type AnySchema } from 'ajv/dist/2020.js';
 
+import { WORKFLOW_COMPILER_VERSION } from '../compiler/version.js';
 import { parseContractArtifactEnvelope } from './artifact.js';
 import {
   calculateArtifactHash,
@@ -10,7 +11,6 @@ import {
   domainSeparatedSha256,
 } from './hash.js';
 import {
-  G3_CURRENT_UPSTREAM_IDENTITY,
   G3_PUBLISH_PREFLIGHT_ERROR_CODES,
   G3_REGISTRY_RESOURCE_TYPES,
   G3_RETENTION_POLICY_HASH,
@@ -128,7 +128,6 @@ export const G3_REGISTRY_PUBLISH_PREFLIGHT_SCHEMA: JsonObject = {
     'feature_release_ref',
     'feature_release_hash',
     'resources',
-    'upstream_identity',
     'expected_oracle',
     'production_compiler_actual_role',
     'retention_policy_ref',
@@ -152,7 +151,6 @@ export const G3_REGISTRY_PUBLISH_PREFLIGHT_SCHEMA: JsonObject = {
       items: { $ref: '#/$defs/resource_candidate' },
       maxItems: 4096,
     },
-    upstream_identity: { $ref: '#/$defs/upstream_identity' },
     expected_oracle: { const: 'golden_corpus_expected' },
     production_compiler_actual_role: {
       enum: ['comparison_only', 'expected_oracle'],
@@ -238,16 +236,14 @@ export const G3_REGISTRY_PUBLISH_PREFLIGHT_SCHEMA: JsonObject = {
         'plan_ref',
         'plan_hash',
         'plan_format',
-        'compiler_toolchain_hash',
-        'compiler_build_hash',
+        'compiler_version',
         'provenance',
       ],
       properties: {
         plan_ref: { type: 'string', minLength: 1 },
         plan_hash: hashSchema,
         plan_format: { const: 'icarus.workflow-graph-scope-plan/2' },
-        compiler_toolchain_hash: hashSchema,
-        compiler_build_hash: hashSchema,
+        compiler_version: { type: 'string', minLength: 1 },
         provenance: { const: 'golden_corpus' },
       },
     },
@@ -300,54 +296,6 @@ export const G3_REGISTRY_PUBLISH_PREFLIGHT_SCHEMA: JsonObject = {
           ],
         },
         resource_hash: hashSchema,
-      },
-    },
-    compiler_identity: {
-      type: 'object',
-      additionalProperties: false,
-      required: [
-        'compiler_toolchain_manifest_ref',
-        'compiler_toolchain_hash',
-        'compiler_version',
-        'compiler_build_hash',
-        'compiled_ir_schema_ref',
-        'compiled_ir_schema_hash',
-        'conformance_result_schema_ref',
-        'conformance_result_schema_hash',
-      ],
-      properties: {
-        compiler_toolchain_manifest_ref: { $ref: '#/$defs/versioned_ref' },
-        compiler_toolchain_hash: hashSchema,
-        compiler_version: { type: 'string', minLength: 1 },
-        compiler_build_hash: hashSchema,
-        compiled_ir_schema_ref: { type: 'string', minLength: 1 },
-        compiled_ir_schema_hash: hashSchema,
-        conformance_result_schema_ref: { type: 'string', minLength: 1 },
-        conformance_result_schema_hash: hashSchema,
-      },
-    },
-    upstream_identity: {
-      type: 'object',
-      additionalProperties: false,
-      required: [
-        'g1_schema_root_hash',
-        'g1_schema_dependency_manifest_hash',
-        'g1_physical_schema_identity',
-        'g1_schema_hash',
-        'g1_migration_sha256',
-        'g2_golden_corpus_ref',
-        'g2_golden_corpus_hash',
-        'compiler',
-      ],
-      properties: {
-        g1_schema_root_hash: hashSchema,
-        g1_schema_dependency_manifest_hash: hashSchema,
-        g1_physical_schema_identity: hashSchema,
-        g1_schema_hash: hashSchema,
-        g1_migration_sha256: hashSchema,
-        g2_golden_corpus_ref: { type: 'string', minLength: 1 },
-        g2_golden_corpus_hash: hashSchema,
-        compiler: { $ref: '#/$defs/compiler_identity' },
       },
     },
   },
@@ -411,7 +359,6 @@ export const G3_REGISTRY_PUBLISH_FOUNDATION_SCHEMA: JsonObject = {
     'slice_status',
     'g3_status',
     'implemented_surface',
-    'upstream_identity',
     'feature_manifest_schema',
     'recipe_schema',
     'retention_policy',
@@ -433,11 +380,6 @@ export const G3_REGISTRY_PUBLISH_FOUNDATION_SCHEMA: JsonObject = {
     implemented_surface: {
       const: 'read_only_registry_publish_preflight_contract',
     },
-    upstream_identity: G3_REGISTRY_PUBLISH_PREFLIGHT_SCHEMA.$defs
-      ? {
-          $ref: 'workflow-registry-publish-preflight-schema@1.json#/$defs/upstream_identity',
-        }
-      : {},
     feature_manifest_schema: { $ref: '#/$defs/exact_artifact' },
     recipe_schema: { $ref: '#/$defs/exact_artifact' },
     retention_policy: { $ref: '#/$defs/exact_artifact' },
@@ -568,18 +510,6 @@ export const G3_REGISTRY_PUBLISH_FOUNDATION_SCHEMA: JsonObject = {
   },
 };
 
-// Ajv cannot resolve the sibling schema path while validating an in-memory
-// artifact, so the foundation schema receives the exact closed definition.
-(
-  G3_REGISTRY_PUBLISH_FOUNDATION_SCHEMA.properties as JsonObject
-).upstream_identity = structuredClone(
-  (G3_REGISTRY_PUBLISH_PREFLIGHT_SCHEMA.$defs as JsonObject).upstream_identity,
-) as JsonObject;
-(G3_REGISTRY_PUBLISH_FOUNDATION_SCHEMA.$defs as JsonObject).compiler_identity =
-  structuredClone(
-    (G3_REGISTRY_PUBLISH_PREFLIGHT_SCHEMA.$defs as JsonObject)
-      .compiler_identity,
-  ) as JsonObject;
 (G3_REGISTRY_PUBLISH_FOUNDATION_SCHEMA.$defs as JsonObject).versioned_ref =
   structuredClone(versionedRefSchema) as JsonObject;
 
@@ -741,12 +671,6 @@ export function evaluateG3RegistryPublishPreflight(
   if (calculateG3PublishPreflightHash(input) !== input.preflight_hash) {
     return rejected('preflight_hash_mismatch', value);
   }
-  if (
-    canonicalJson(input.upstream_identity) !==
-    canonicalJson(G3_CURRENT_UPSTREAM_IDENTITY)
-  ) {
-    return rejected('g2_identity_mismatch', value);
-  }
   if (input.production_compiler_actual_role !== 'comparison_only') {
     return rejected('production_compiler_actual_oracle_forbidden', value);
   }
@@ -794,12 +718,9 @@ export function evaluateG3RegistryPublishPreflight(
     }
     if (
       resource.compiled_plan_pin !== null &&
-      (resource.compiled_plan_pin.compiler_toolchain_hash !==
-        G3_CURRENT_UPSTREAM_IDENTITY.compiler.compiler_toolchain_hash ||
-        resource.compiled_plan_pin.compiler_build_hash !==
-          G3_CURRENT_UPSTREAM_IDENTITY.compiler.compiler_build_hash)
+      resource.compiled_plan_pin.compiler_version !== WORKFLOW_COMPILER_VERSION
     ) {
-      return rejected('g2_identity_mismatch', value);
+      return rejected('compiler_version_mismatch', value);
     }
   }
   for (const resource of resources) {
@@ -936,7 +857,6 @@ type G3RegistryPublishPreflightWithoutHash = Pick<
   | 'feature_release_ref'
   | 'feature_release_hash'
   | 'resources'
-  | 'upstream_identity'
   | 'expected_oracle'
   | 'production_compiler_actual_role'
   | 'retention_policy_ref'
@@ -977,7 +897,6 @@ function withPreflightHash(
     feature_release_ref: input.feature_release_ref,
     feature_release_hash: input.feature_release_hash,
     resources: input.resources,
-    upstream_identity: input.upstream_identity,
     expected_oracle: input.expected_oracle,
     production_compiler_actual_role: input.production_compiler_actual_role,
     retention_policy_ref: input.retention_policy_ref,
@@ -1004,7 +923,6 @@ function basePreflight(
     feature_release_ref: null,
     feature_release_hash: null,
     resources: [],
-    upstream_identity: clone(G3_CURRENT_UPSTREAM_IDENTITY),
     expected_oracle: 'golden_corpus_expected',
     production_compiler_actual_role: 'comparison_only',
     retention_policy_ref: clone(G3_RETENTION_POLICY_REF),
@@ -1032,10 +950,7 @@ const testOnlyDefinition = withResourceHash({
     plan_hash:
       'sha256:7a06f414e398ca3bde05c22ac3aeb817b725b8ad21abd3d88cae1f00c8f20b12',
     plan_format: 'icarus.workflow-graph-scope-plan/2',
-    compiler_toolchain_hash:
-      G3_CURRENT_UPSTREAM_IDENTITY.compiler.compiler_toolchain_hash,
-    compiler_build_hash:
-      G3_CURRENT_UPSTREAM_IDENTITY.compiler.compiler_build_hash,
+    compiler_version: WORKFLOW_COMPILER_VERSION,
     provenance: 'golden_corpus',
   },
   execution_artifact_pin: null,
@@ -1300,22 +1215,6 @@ const NEGATIVE_CASES: NegativeCase[] = [
     rehash_resource_hashes: false,
     rehash_preflight_hash: false,
     expected_code: 'preflight_hash_mismatch',
-  },
-  {
-    case_id: 'negative.g2-golden-identity',
-    fixture_scope: 'test_only',
-    base_case_id: 'positive.production-empty-registry',
-    mutations: [
-      {
-        operation: 'set',
-        pointer: '/upstream_identity/g2_golden_corpus_hash',
-        value:
-          'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-      },
-    ],
-    rehash_resource_hashes: false,
-    rehash_preflight_hash: true,
-    expected_code: 'g2_identity_mismatch',
   },
   {
     case_id: 'negative.production-compiler-actual-as-oracle',
@@ -1632,7 +1531,6 @@ function foundationPayload(): JsonObject {
     slice_status: 'DONE',
     g3_status: 'IN_PROGRESS',
     implemented_surface: 'read_only_registry_publish_preflight_contract',
-    upstream_identity: clone(G3_CURRENT_UPSTREAM_IDENTITY),
     feature_manifest_schema: {
       path: 'schemas/feature-manifest-v2-schema.json',
       ref: {
@@ -1794,15 +1692,8 @@ function buildManifest(
       slice: 'G3.1',
       status: 'DONE',
       g3_status: 'IN_PROGRESS',
-      upstream_g1_root_hash: G3_CURRENT_UPSTREAM_IDENTITY.g1_schema_root_hash,
-      upstream_g2_golden_corpus_hash:
-        G3_CURRENT_UPSTREAM_IDENTITY.g2_golden_corpus_hash,
-      upstream_compiler_toolchain_hash:
-        G3_CURRENT_UPSTREAM_IDENTITY.compiler.compiler_toolchain_hash,
-      upstream_compiler_build_hash:
-        G3_CURRENT_UPSTREAM_IDENTITY.compiler.compiler_build_hash,
+      compiler_version: WORKFLOW_COMPILER_VERSION,
       production_registry_write_performed: false,
-      production_activation_performed: false,
       published_recipe_count: 0,
       positive_case_count: POSITIVE_CASES.length,
       negative_case_count: NEGATIVE_CASES.length,
@@ -1838,27 +1729,6 @@ function assertExactArtifact(
 }
 
 function validateCurrentUpstream(): void {
-  const goldenCases = strictParseJsonBytes(
-    fs.readFileSync(
-      path.join(
-        import.meta.dirname,
-        '..',
-        G3_CURRENT_UPSTREAM_IDENTITY.g2_golden_corpus_ref,
-      ),
-    ),
-  );
-  assertJsonObject(goldenCases);
-  if (
-    goldenCases.format !== 'icarus.workflow-compiler-golden-cases/1' ||
-    domainSeparatedSha256(
-      'icarus:workflow-compiler-golden-corpus:1\n',
-      goldenCases,
-    ) !== G3_CURRENT_UPSTREAM_IDENTITY.g2_golden_corpus_hash
-  ) {
-    throw new G3RegistryPublishPreflightError(
-      'G3 current Golden corpus identity drift',
-    );
-  }
   assertExactArtifact(
     'schemas/feature-manifest-v2-schema.json',
     'sha256:e47344ea2f4bebde3688f76b3450d5143adfd99ab4cc30eb6fc48a9d5a398e2d',

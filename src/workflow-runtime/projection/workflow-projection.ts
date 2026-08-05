@@ -737,7 +737,7 @@ export class RuntimeStoreWorkflowProjectionRebuildAuthority {
     const sourceHeadHash = domainSeparatedSha256(
       'icarus:workflow-projection-runtime-store-source-head:1\n',
       {
-        database_schema_hash: this.source.frozenInputs.schemaHash,
+        database_schema_version: this.source.schemaVersion,
         view,
         source_event_count: events.length,
         events: events.map((event) => ({

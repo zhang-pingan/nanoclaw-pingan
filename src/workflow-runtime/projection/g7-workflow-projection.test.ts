@@ -491,7 +491,7 @@ describe('G7 Workflow Projection and Runtime Center API', () => {
         route: RUNTIME_CENTER_CAPACITY_ROUTES.current,
         current: {
           capacity_revision: 1,
-          capacity_change_id: `g7-capacity:${target.workflowId}`,
+          capacity_change_id: 'capacity-defaults-change:1',
         },
         pending: null,
         watcher: { state: 'unpublished' },
@@ -500,7 +500,13 @@ describe('G7 Workflow Projection and Runtime Center API', () => {
       expect(api.getChanges()).toMatchObject({
         route: RUNTIME_CENTER_CAPACITY_ROUTES.changes,
         changes: [expect.objectContaining({ assigned_capacity_revision: 1 })],
-        events: [],
+        events: [
+          expect.objectContaining({
+            capacity_revision: 1,
+            change_id: 'capacity-defaults-change:1',
+            event_type: 'head_committed',
+          }),
+        ],
       });
 
       const current = target.capacityWatcher.current()!;
@@ -536,9 +542,6 @@ describe('G7 Workflow Projection and Runtime Center API', () => {
         delegationChainRef: null,
         permissions: ['runtime.capacity.manage'],
         requestedAtMs: 700,
-        activeCoreReleaseHash: g7Hash('capacity-core'),
-        baselineConfigHash: current.capacity.config_hash,
-        genesisGrant: null,
       };
       const persistence = {
         evidenceManifest: target.seed.values.context!,
@@ -576,8 +579,6 @@ describe('G7 Workflow Projection and Runtime Center API', () => {
             idempotency_key: 'capacity:g7:initialize-forbidden',
             proposed_capacity: proposedCapacity,
             reason_code: 'initial_provisioning',
-            core_release_hash: g7Hash('capacity-core'),
-            evidence_refs: ['baseline', 'core-release'],
           },
           invocation,
           persistence,

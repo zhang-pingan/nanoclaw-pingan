@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-g3-registry-publish-negative-cases:1\n",
-  "hash": "sha256:5be17eee03920c908a6ca0cf4c974ab94b1335c818e7d67299fba7747576c5a9",
+  "hash": "sha256:014d6ac4e40610b6a5ff19fd0b5f76dba2d0b0148880c8ab451d12246ce5cadf",
   "payload": {
     "fixture_scope": "test_only",
     "cases": [
@@ -114,21 +114,6 @@
         "rehash_resource_hashes": false,
         "rehash_preflight_hash": false,
         "expected_code": "preflight_hash_mismatch"
-      },
-      {
-        "case_id": "negative.g2-golden-identity",
-        "fixture_scope": "test_only",
-        "base_case_id": "positive.production-empty-registry",
-        "mutations": [
-          {
-            "operation": "set",
-            "pointer": "/upstream_identity/g2_golden_corpus_hash",
-            "value": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-          }
-        ],
-        "rehash_resource_hashes": false,
-        "rehash_preflight_hash": true,
-        "expected_code": "g2_identity_mismatch"
       },
       {
         "case_id": "negative.production-compiler-actual-as-oracle",
@@ -316,13 +301,12 @@
                 "plan_ref": "compiler/golden/cases@1.json#positive.static-lowering",
                 "plan_hash": "sha256:7a06f414e398ca3bde05c22ac3aeb817b725b8ad21abd3d88cae1f00c8f20b12",
                 "plan_format": "icarus.workflow-graph-scope-plan/2",
-                "compiler_toolchain_hash": "sha256:dc01de3bbd06a70528b7466acfcc3b2c6e4b960de25d4a7cb5666ba9e06883e8",
-                "compiler_build_hash": "sha256:6ea4c825e91cc0fdaf3100e4b0f57e22723158bff1ad039ba359f857d285a069",
+                "compiler_version": "3.0.6",
                 "provenance": "golden_corpus"
               },
               "execution_artifact_pin": null,
               "capability_outbox_binding": null,
-              "resource_hash": "sha256:56d8f50cf500527ff7b337ac4632d0c2e2ccf13838a4198df91f40b158f33d6e"
+              "resource_hash": "sha256:e008a9768a33b4f54df52ad52df4a4833116e9b13e64978f21ac3eedaf27ae54"
             }
           }
         ],

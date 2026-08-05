@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+import { WORKFLOW_COMPILER_VERSION } from '../compiler/version.js';
 import { calculateG32AFeatureManifestHash } from './g3-2a-feature-manifest-intake.js';
 import type { G3RegistryExactResourceQueryInput } from './g3-registry-exact-resource-query-types.js';
 import {
@@ -21,7 +22,6 @@ import {
   calculateG3RegistryResourceHash,
 } from './g3-registry-publish-foundation.js';
 import {
-  G3_CURRENT_UPSTREAM_IDENTITY,
   G3_RETENTION_POLICY_HASH,
   G3_RETENTION_POLICY_REF,
   type G3RegistryResourceCandidate,
@@ -185,10 +185,7 @@ function planPin(
     plan_ref: 'compiler/golden/cases@1.json#positive.static-lowering',
     plan_hash: plan.plan_hash as Sha256Hash,
     plan_format: 'icarus.workflow-graph-scope-plan/2',
-    compiler_toolchain_hash:
-      G3_CURRENT_UPSTREAM_IDENTITY.compiler.compiler_toolchain_hash,
-    compiler_build_hash:
-      G3_CURRENT_UPSTREAM_IDENTITY.compiler.compiler_build_hash,
+    compiler_version: WORKFLOW_COMPILER_VERSION,
     provenance: 'golden_corpus',
   };
 }
@@ -339,8 +336,6 @@ function updateCompatibilityInput(
       snapshot_ref: batch.snapshot.ref,
       snapshot_hash: batch.snapshot.snapshot_hash,
       expected_compiler_version: batch.snapshot.compiler_version,
-      expected_core_build_hash: batch.snapshot.core_build_hash,
-      expected_database_schema_hash: batch.snapshot.database_schema_hash,
     },
     closure: {
       ref: batch.closure.ref,
@@ -491,7 +486,6 @@ export function g37WorkflowPublisherStoreFixtureForTest(): G37WorkflowPublisherS
     feature_release_ref: compatibility.feature_release_ref,
     feature_release_hash: compatibility.feature_release_hash,
     resources: publishCandidates,
-    upstream_identity: structuredClone(G3_CURRENT_UPSTREAM_IDENTITY),
     expected_oracle: 'golden_corpus_expected',
     production_compiler_actual_role: 'comparison_only',
     retention_policy_ref: structuredClone(G3_RETENTION_POLICY_REF),
@@ -514,8 +508,8 @@ export function g37WorkflowPublisherStoreFixtureForTest(): G37WorkflowPublisherS
       'sha256:0000000000000000000000000000000000000000000000000000000000000000',
     execution_artifact: compatibility.feature_release_execution_artifact!,
     compatibility_snapshot: {
-      ref: compatibility.core_compatibility.ref,
-      hash: compatibility.core_compatibility.compatibility_hash,
+      ref: compatibility.snapshot.snapshot_ref,
+      hash: compatibility.snapshot.snapshot_hash,
     },
     resources: releaseResources.map((entry) => ({
       resource: {

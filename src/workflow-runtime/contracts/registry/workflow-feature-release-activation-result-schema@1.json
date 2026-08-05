@@ -591,8 +591,6 @@
                       "executor_implementation_hash_mismatch",
                       "executor_implementation_mismatch",
                       "artifact_binding_mismatch",
-                      "core_compatibility_mismatch",
-                      "run_protocol_mismatch",
                       "executor_abi_mismatch",
                       "retention_policy_mismatch",
                       "retention_eligibility_mismatch"
@@ -627,18 +625,16 @@
           "id": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 255,
             "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._:/-]{0,253}[A-Za-z0-9])?$"
           },
           "version": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 64,
             "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,62}[A-Za-z0-9])?$"
           }
         }
       }
     }
   },
-  "hash": "sha256:a7898c73983b49a45399a0d28a992c9587821c595995234fdb671a91b5400753"
+  "hash": "sha256:5edb6ccdc0b4dc4d032c967cb5b29e7615a1969477cb9ab41800b18d8ca635f9"
 }

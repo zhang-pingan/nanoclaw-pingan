@@ -1,8 +1,6 @@
-import fs from 'node:fs';
-import path from 'node:path';
-
 import { Ajv2020, type AnySchema } from 'ajv/dist/2020.js';
 
+import { WORKFLOW_COMPILER_VERSION } from '../compiler/version.js';
 import { canonicalJson, domainSeparatedSha256 } from './hash.js';
 import { evaluateG32AFeatureManifest } from './g3-2a-feature-manifest-intake.js';
 import { validateRegistryExactResourceQueryInput } from './g3-registry-exact-resource-query.js';
@@ -18,10 +16,7 @@ import {
   calculateG3RegistryResourceHash,
   evaluateG3RegistryPublishPreflight,
 } from './g3-registry-publish-foundation.js';
-import {
-  G3_CURRENT_UPSTREAM_IDENTITY,
-  type G3RegistryResourceCandidate,
-} from './g3-registry-publish-types.js';
+import type { G3RegistryResourceCandidate } from './g3-registry-publish-types.js';
 import { validateRetentionExecutorAbiPreflightInput } from './g3-retention-executor-abi-preflight.js';
 import {
   G3_WORKFLOW_PUBLISHER_DISPOSITIONS,
@@ -33,7 +28,7 @@ import {
   type G3WorkflowPublisherResult,
   type G3WorkflowPublisherTargetRelease,
 } from './g3-workflow-publisher-types.js';
-import { strictParseJsonBytes } from './strict-json.js';
+import { assertJsonObject } from './strict-json.js';
 import { assertGeneratedSchemaAuthority } from './generated-schema-authority.js';
 import type {
   JsonObject,
@@ -395,17 +390,65 @@ const validateRequestSchema = ajv.compile(G37_REQUEST_SCHEMA as AnySchema);
 const validateReceiptSchema = ajv.compile(G37_RECEIPT_SCHEMA as AnySchema);
 const validateResultSchema = ajv.compile(G37_RESULT_SCHEMA as AnySchema);
 
-const compiledPlanArtifact = strictParseJsonBytes(
-  fs.readFileSync(
-    path.join(
-      import.meta.dirname,
-      'conformance/generated-schema-join-authority-repair/compiled-scope-plan-v2-node-output-envelope-schema@1.json',
-    ),
-  ),
-) as JsonObject;
-const validateCompiledPlan = ajv.compile(
-  compiledPlanArtifact.payload as AnySchema,
-);
+const CURRENT_COMPILED_PLAN_KEYS = [
+  'capability_catalog_hash',
+  'compiler_version',
+  'completion',
+  'complexity_summary',
+  'control_edges',
+  'data_edges',
+  'effective_limits',
+  'effective_policy_snapshot',
+  'effective_usage_budget',
+  'format',
+  'interface_snapshot',
+  'interface_snapshot_hash',
+  'nodes',
+  'plan_hash',
+  'policy_snapshot_hash',
+  'route_groups',
+  'runtime_safety_hash',
+  'runtime_safety_snapshot',
+  'source_hash',
+  'static_child_plan_closure',
+  'wait_contract_catalog_hash',
+] as const;
+
+function assertCurrentCompiledPlan(
+  value: JsonValue,
+): asserts value is JsonObject {
+  assertJsonObject(value);
+  const keys = Object.keys(value).sort();
+  if (
+    canonicalJson(keys) !== canonicalJson([...CURRENT_COMPILED_PLAN_KEYS]) ||
+    value.format !== 'icarus.workflow-graph-scope-plan/2' ||
+    value.compiler_version !== WORKFLOW_COMPILER_VERSION ||
+    !Array.isArray(value.nodes) ||
+    !Array.isArray(value.route_groups) ||
+    !Array.isArray(value.control_edges) ||
+    !Array.isArray(value.data_edges)
+  ) {
+    throw new Error(
+      `Compiled plan must use Compiler ${WORKFLOW_COMPILER_VERSION} and the current semantic shape`,
+    );
+  }
+  for (const field of [
+    'capability_catalog_hash',
+    'interface_snapshot_hash',
+    'plan_hash',
+    'policy_snapshot_hash',
+    'runtime_safety_hash',
+    'source_hash',
+    'wait_contract_catalog_hash',
+  ]) {
+    if (
+      typeof value[field] !== 'string' ||
+      !/^sha256:[0-9a-f]{64}$/.test(value[field])
+    ) {
+      throw new Error(`Compiled plan ${field} is invalid`);
+    }
+  }
+}
 
 export class G3WorkflowPublisherContractError extends Error {
   constructor(
@@ -689,10 +732,12 @@ export function validateG37WorkflowPublisherRequest(
       'Source manifest is not the exact accepted canonical manifest identity',
     );
   }
-  if (!(validateCompiledPlan(request.compiled_plan.content) as boolean)) {
+  try {
+    assertCurrentCompiledPlan(request.compiled_plan.content);
+  } catch (error) {
     throw new G3WorkflowPublisherContractError(
       'publish_identity_mismatch',
-      `Compiled plan is not closed Compiled IR v2: ${ajv.errorsText(validateCompiledPlan.errors)}`,
+      `Compiled plan is not current Compiled IR v2: ${error instanceof Error ? error.message : String(error)}`,
     );
   }
   const plan = request.compiled_plan.content;
@@ -803,10 +848,10 @@ export function validateG37WorkflowPublisherRequest(
       compatibility.retention.feature_release_hash ||
     !sameRef(
       request.target_release.compatibility_snapshot.ref,
-      compatibility.core_compatibility.ref,
+      compatibility.snapshot.snapshot_ref,
     ) ||
     request.target_release.compatibility_snapshot.hash !==
-      compatibility.core_compatibility.compatibility_hash ||
+      compatibility.snapshot.snapshot_hash ||
     compatibility.feature_release_execution_artifact === null ||
     !sameRef(
       request.target_release.execution_artifact.ref,
@@ -934,15 +979,3 @@ export function g37SchemasForTest(): {
     result: structuredClone(G37_RESULT_SCHEMA),
   };
 }
-
-export const G37_UPSTREAM_IDENTITIES = {
-  g1_schema_root_hash: G3_CURRENT_UPSTREAM_IDENTITY.g1_schema_root_hash,
-  g3_1_pack_hash:
-    'sha256:198c3184d98e3b1f19a8f9bbbf150fb6cff032a984fb66dfd99ce9044f3fd41c',
-  g3_3_pack_hash:
-    'sha256:969e586947ef065c3c81955eea9e9077bc7057cd80090e05e0a6a994d097b88b',
-  g3_5_pack_hash:
-    'sha256:80c8436bdee143790c16e1c383e2e29916358d2cbe17f121154966d231811c4a',
-  g3_6_pack_hash:
-    'sha256:3fa7afb5fa9294325004476ee230b896bc08fe8a6e6fe7f8c719c130e4c6911b',
-} as const;

@@ -236,9 +236,7 @@
           "closure",
           "execution_artifacts",
           "executor_implementations",
-          "core_compatibility",
-          "run_protocol",
-          "executor_abi",
+          "executor_abi_major",
           "retention",
           "requested_retention_handle_write",
           "requested_gc",
@@ -289,9 +287,7 @@
             "required": [
               "snapshot_ref",
               "snapshot_hash",
-              "expected_compiler_version",
-              "expected_core_build_hash",
-              "expected_database_schema_hash"
+              "expected_compiler_version"
             ],
             "properties": {
               "snapshot_ref": {
@@ -304,14 +300,6 @@
               "expected_compiler_version": {
                 "type": "string",
                 "minLength": 1
-              },
-              "expected_core_build_hash": {
-                "type": "string",
-                "pattern": "^sha256:[0-9a-f]{64}$"
-              },
-              "expected_database_schema_hash": {
-                "type": "string",
-                "pattern": "^sha256:[0-9a-f]{64}$"
               }
             }
           },
@@ -364,77 +352,9 @@
               "$ref": "#/$defs/exact_query"
             }
           },
-          "core_compatibility": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": [
-              "ref",
-              "core_release_ref",
-              "core_release_hash",
-              "core_build_hash",
-              "supported_run_protocol_majors",
-              "supported_executor_abi_majors",
-              "registry_schema_version",
-              "database_schema_version",
-              "database_schema_hash",
-              "compatibility_hash"
-            ],
-            "properties": {
-              "ref": {
-                "$ref": "#/$defs/versioned_ref"
-              },
-              "core_release_ref": {
-                "$ref": "#/$defs/versioned_ref"
-              },
-              "core_release_hash": {
-                "type": "string",
-                "pattern": "^sha256:[0-9a-f]{64}$"
-              },
-              "core_build_hash": {
-                "type": "string",
-                "pattern": "^sha256:[0-9a-f]{64}$"
-              },
-              "supported_run_protocol_majors": {
-                "type": "array",
-                "minItems": 1,
-                "maxItems": 16,
-                "items": {
-                  "type": "integer",
-                  "minimum": 1
-                }
-              },
-              "supported_executor_abi_majors": {
-                "type": "array",
-                "minItems": 1,
-                "maxItems": 16,
-                "items": {
-                  "type": "integer",
-                  "minimum": 1
-                }
-              },
-              "registry_schema_version": {
-                "type": "integer",
-                "minimum": 1
-              },
-              "database_schema_version": {
-                "type": "integer",
-                "minimum": 1
-              },
-              "database_schema_hash": {
-                "type": "string",
-                "pattern": "^sha256:[0-9a-f]{64}$"
-              },
-              "compatibility_hash": {
-                "type": "string",
-                "pattern": "^sha256:[0-9a-f]{64}$"
-              }
-            }
-          },
-          "run_protocol": {
-            "$ref": "#/$defs/protocol_binding"
-          },
-          "executor_abi": {
-            "$ref": "#/$defs/protocol_binding"
+          "executor_abi_major": {
+            "type": "integer",
+            "minimum": 1
           },
           "retention": {
             "type": "object",
@@ -471,7 +391,6 @@
               },
               "members": {
                 "type": "array",
-                "minItems": 1,
                 "maxItems": 4097,
                 "items": {
                   "$ref": "#/$defs/resource_identity"
@@ -631,13 +550,11 @@
           "id": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 255,
             "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._:/-]{0,253}[A-Za-z0-9])?$"
           },
           "version": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 64,
             "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,62}[A-Za-z0-9])?$"
           }
         }
@@ -861,30 +778,8 @@
             }
           }
         }
-      },
-      "protocol_binding": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "ref",
-          "hash",
-          "major"
-        ],
-        "properties": {
-          "ref": {
-            "$ref": "#/$defs/versioned_ref"
-          },
-          "hash": {
-            "type": "string",
-            "pattern": "^sha256:[0-9a-f]{64}$"
-          },
-          "major": {
-            "type": "integer",
-            "minimum": 1
-          }
-        }
       }
     }
   },
-  "hash": "sha256:f423f570ff05ba207fb3d3ae36115e6259fd97df075b6f7913940832363b360d"
+  "hash": "sha256:2d6740c32dd84128dc94b2d4d61180462d6cac382fb2369eedec17380b9bc79c"
 }

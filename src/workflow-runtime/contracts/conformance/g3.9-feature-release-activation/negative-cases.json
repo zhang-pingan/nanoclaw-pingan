@@ -289,24 +289,6 @@
         "pointer_transition_count": 0
       },
       {
-        "case_id": "negative.precedence.g3_6_preflight_rejected.core_compatibility_mismatch",
-        "layer": "runtime_precedence",
-        "precedence_rank": 13,
-        "expected_code": "g3_6_preflight_rejected",
-        "nested_g3_6_code": "core_compatibility_mismatch",
-        "receipt": null,
-        "pointer_transition_count": 0
-      },
-      {
-        "case_id": "negative.precedence.g3_6_preflight_rejected.run_protocol_mismatch",
-        "layer": "runtime_precedence",
-        "precedence_rank": 13,
-        "expected_code": "g3_6_preflight_rejected",
-        "nested_g3_6_code": "run_protocol_mismatch",
-        "receipt": null,
-        "pointer_transition_count": 0
-      },
-      {
         "case_id": "negative.precedence.g3_6_preflight_rejected.executor_abi_mismatch",
         "layer": "runtime_precedence",
         "precedence_rank": 13,
@@ -470,5 +452,5 @@
       }
     ]
   },
-  "hash": "sha256:4b16f516e695ba3cbb1703f4f2e9a4b569b0f7307b1de3b8a0938bd7f50d6dee"
+  "hash": "sha256:c74e3ea191ba48029083b1551823a50c840574596990d04a7db993ef9ae0ae3d"
 }

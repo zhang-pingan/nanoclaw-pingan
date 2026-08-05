@@ -259,18 +259,16 @@
           "id": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 255,
             "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._:/-]{0,253}[A-Za-z0-9])?$"
           },
           "version": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 64,
             "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,62}[A-Za-z0-9])?$"
           }
         }
       }
     }
   },
-  "hash": "sha256:2e9f36e1c7e289eb82791d1ae3751120424c24b2873ce0cb47cc8c392eb2b50e"
+  "hash": "sha256:259fd23c06c09112f9b942cb387c1c411140bbe14e4b0398f9981889041fad6d"
 }

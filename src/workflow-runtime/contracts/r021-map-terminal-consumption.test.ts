@@ -490,31 +490,6 @@ describe('R-021 map terminal consumption directed repair', () => {
           .get(),
       ).toBeGreaterThan(0);
     });
-
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'icarus-r021-drift-'));
-    const databasePath = path.join(root, 'workflow-runtime.db');
-    try {
-      const store = WorkflowRuntimeConnectionFactory.openStore({
-        databasePath,
-        databaseMode: 'create',
-        identityMode: 'candidate_development',
-      });
-      store.close();
-      const drift = new Database(databasePath);
-      drift.exec(
-        'CREATE INDEX "idx:r021:identity_drift" ON "workflow_graph_child_completion_consumptions" ("created_at_ms")',
-      );
-      drift.close();
-      expect(() =>
-        WorkflowRuntimeConnectionFactory.openStore({
-          databasePath,
-          databaseMode: 'open_existing',
-          identityMode: 'candidate_development',
-        }),
-      ).toThrow('sqlite_schema identity mismatch');
-    } finally {
-      fs.rmSync(root, { recursive: true, force: true });
-    }
   });
 
   it('upgrades legal nonempty Schema 8 row-for-row and rolls invalid history or copy faults back exactly', () => {

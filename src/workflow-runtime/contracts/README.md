@@ -4,7 +4,7 @@ This directory contains internal machine interfaces and regression fixtures for 
 
 The G0-G9 construction lifecycle is complete and archived. Its accepted commit `56a78b6dcede075c60d7e5b2049158824050410c` and snapshot `sha256:3de887f1f822976631960aec663042ddd00ee5edb5db1dd50dc09a8bbcaca279` are retained only as regression provenance. The former independent acceptance task and production terminology do not create a current approval or delivery requirement.
 
-Legacy identifiers such as `production`, `release`, `activation`, `certification`, `gate`, `frozen`, and `audit` remain in paths and serialized formats to avoid a high-churn compatibility rewrite. In current project language they mean local snapshot, local selection, optional exhaustive verification, historical milestone, immutable fixture, and diagnostic record respectively.
+Legacy identifiers such as `production`, `release`, `activation`, `gate`, and `audit` can remain in persisted formats where a rewrite would create migration risk. They do not create a current approval or delivery process.
 
 ## Active Authority
 
@@ -16,13 +16,13 @@ Use the smallest affected authority and its tests:
 | Definition, Recipe, Command, Feature, Card, Source and Compiled IR | `schemas/`, `closed-schema-pack.ts`, `catalogs/`                                        |
 | Safety, Capacity baseline, Retention and SQLite profile            | `safety/`, `capacity/`, `sqlite/`                                                       |
 | Current Logical Schema                                             | `logical-schema/` plus `../store/schema/`                                               |
-| Compiler authority                                                 | `../compiler/`, `conformance/current/`, and sealed replay inputs                        |
+| Compiler authority                                                 | `../compiler/`, `conformance/current/`, and deterministic replay                        |
 | Registry and authoring                                             | G3 contract packs and `../authoring/` tests                                             |
 | Runtime behavior                                                   | G5-G7 contract packs plus `../runtime/`, `../capacity/`, and `../projection/` tests     |
-| Local startup and rollback identity                                | current Launcher, Host Core, Store compatibility, and startup tests                     |
-| Legacy release/activation compatibility (non-default)              | `certification/`, `production-activation/`, and explicit certification/activation tests |
+| Local startup and rollback compatibility                           | current Launcher, Host Core, Store compatibility, and startup tests                     |
+| Legacy Core release inspection                                     | the minimal read-only `certification/release-manifest.ts` reader                        |
 
-Historical G0/R-016/R-020/R-021/R-022 coverage, Working/Draft review artifacts, superseded Compiler authorities, Gate ownership/readiness assertions, and milestone candidate tests remain immutable under `conformance/`, explicit package entrypoints, or Git history. They are not default inputs and are not regenerated or executed by the current aggregate.
+Historical construction coverage, review artifacts, superseded Compiler authorities, ownership/readiness assertions, and milestone candidate tests remain in Git history and the documentation archive. They are not current inputs and are not regenerated or executed by the current aggregate.
 
 ## Development Validation
 
@@ -34,18 +34,9 @@ Normal development uses the smallest relevant contract check and focused tests. 
 ./scripts/runtime-toolchain.sh exec -- npm run typecheck
 ```
 
-`contracts:check` verifies current foundation/schema artifacts, current Compiler and sealed replay, Registry authority, and static absence. `test:current` exercises the current Store, Registry, authoring, Runtime, and Host Core behavior against test-owned temporary state. Neither command treats certification, G9 production activation, the accepted physical snapshot, archived construction Markdown, or retired Gate-state assertions as a default development gate.
+`contracts:check` verifies current foundation/schema artifacts, current Compiler replay, Registry authority, and static boundaries. `test:current` exercises the current Store, Registry, authoring, Runtime, and Host Core behavior against test-owned temporary state. Neither command treats the accepted physical snapshot, archived construction Markdown, or retired Gate-state assertions as a development gate.
 
-The former exhaustive checks remain available for work that directly changes those compatibility surfaces:
-
-```sh
-./scripts/runtime-toolchain.sh exec -- npm run contracts:check:full
-./scripts/runtime-toolchain.sh exec -- npm run test:full
-```
-
-The physical snapshot verifier checks a Git-tracked compressed copy of every accepted inventory member, including exact paths, lengths, hashes, and modes. That is historical reproducibility evidence, not a prerequisite for unrelated local development.
-
-Current Store tests use `identityMode: 'isolated_test'`. That explicit internal mode verifies the pinned managed Node/distribution, active managed-Node installation, Launcher, `better-sqlite3` native module, and SQLite profile while deriving the non-production checkout binding in memory. It never reads or writes `active-core`; release-validation and Production modes retain their existing pointer and installed-release checks.
+Current Store tests create isolated databases under the OS temporary directory and inject test adapters and clocks explicitly. Store compatibility uses `PRAGMA user_version`, supported transactional migrations, and focused required-structure smoke checks; tests do not select a Runtime identity mode or read local Runtime pointers.
 
 Domain-specific generate commands remain implementation tools for versioned changes. They must not rewrite the retained v1 snapshot or historical fixtures in place. A future internal baseline should add only the minimum versioned boundary required by the affected data or runtime interface; it does not need to repeat G0-G9 certification.
 

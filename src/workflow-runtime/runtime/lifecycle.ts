@@ -67,12 +67,12 @@ export function activateWorkflowT1(
   fault?: G5TransactionFault,
 ): T1ActivationReceipt {
   if (
-    store.frozenInputs.schemaHash !== G5_REPAIR_DATABASE_SCHEMA_HASH ||
-    input.databaseSchemaHash !== store.frozenInputs.schemaHash
+    store.schemaVersion !== G5_REPAIR_DATABASE_SCHEMA_VERSION ||
+    input.databaseSchemaHash !== G5_REPAIR_DATABASE_SCHEMA_HASH
   )
     throw new G5RuntimeError(
       'integrity_violation',
-      'T1 requires the current frozen Schema 11 identity',
+      'T1 requires the current Schema version',
     );
   return runImmediateG5Transaction(
     store,

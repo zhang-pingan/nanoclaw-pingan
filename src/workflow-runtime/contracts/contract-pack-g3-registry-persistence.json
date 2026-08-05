@@ -11,15 +11,8 @@
     "slice": "G3.3",
     "status": "DONE",
     "g3_status": "IN_PROGRESS",
-    "upstream_g3_2a_pack_hash": "sha256:c9c273b6d294d512a3578203d91d4bdce7863a3ccb561fdd7da08d072b3d8cd9",
-    "upstream_g3_1_pack_hash": "sha256:198c3184d98e3b1f19a8f9bbbf150fb6cff032a984fb66dfd99ce9044f3fd41c",
-    "upstream_g3_2_pack_hash": "sha256:1eb0b81f488f4a37fa4503ddfef0dfa8a56d40fdeb535c9758d9d21fd39bb92b",
-    "upstream_g2_golden_corpus_hash": "sha256:ffd426cec4269062fad47efeb75b7233a4d42a2961f724e480e33bf05ff81343",
-    "upstream_g1_schema_root_hash": "sha256:2adb9376d341ad430155829647086bcc76f84ebf22dffac28c19d4026ea06ab2",
-    "upstream_g1_schema_hash": "sha256:ad998b2d0bb5e5f158b0be6d13db79cb6a0c0650d5064b267262551af266189c",
-    "upstream_g1_migration_sha256": "sha256:ccaa7699894da98284b9ce86767d917e355441df93e010d90751ccb713c9b872",
+    "compiler_version": "3.0.6",
     "production_registry_write_performed": false,
-    "production_activation_performed": false,
     "publisher_implemented": false,
     "production_loader_implemented": false,
     "artifacts": [
@@ -65,7 +58,7 @@
         },
         "version": 1,
         "domain_separator": "icarus:workflow-registry-snapshot-preflight-input-schema:1\n",
-        "hash": "sha256:f071c8153da168c8c5d7dd856c36db4ac012b92259d5398d5f138f6a144bccb7"
+        "hash": "sha256:d79943150051322acb5602235cb9d50ff94f408863e3017eaf434f0dc8823cd7"
       },
       {
         "path": "registry/workflow-registry-snapshot-preflight-result-schema@1.json",
@@ -87,7 +80,7 @@
         },
         "version": 1,
         "domain_separator": "icarus:workflow-g3-registry-persistence-positive-cases:1\n",
-        "hash": "sha256:479e7854b4a4b768314c0a19568b678e4e5bc4ecbef1a30d3ef678f35560cc7d"
+        "hash": "sha256:99ff360e34d8b1f39fe2aa25b2e47f48ce9531bcf61bee06f539debc32bf87aa"
       },
       {
         "path": "conformance/g3-registry-persistence/negative-cases.json",
@@ -116,5 +109,5 @@
     "negative_case_count": 4,
     "g4_through_g9_status": "NOT_READY"
   },
-  "hash": "sha256:772f9071985b4ee647b607e71662ffd828d4c2200397f2f9681f8e9f4c45f35c"
+  "hash": "sha256:4b2629bc53a8f40e75f11fa9161ebc0464f1a01f9e33086a2e09f6ce8a936da5"
 }

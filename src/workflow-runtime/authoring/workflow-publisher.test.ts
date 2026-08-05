@@ -36,7 +36,6 @@ function openFresh(): WorkflowRuntimeStore {
   const store = WorkflowRuntimeConnectionFactory.openStore({
     databasePath: path.join(root, 'workflow-runtime.db'),
     databaseMode: 'create',
-    identityMode: 'isolated_test',
   });
   stores.push(store);
   return store;
@@ -46,7 +45,6 @@ function reopen(root: string): WorkflowRuntimeStore {
   const store = WorkflowRuntimeConnectionFactory.openStore({
     databasePath: path.join(root, 'workflow-runtime.db'),
     databaseMode: 'open_existing',
-    identityMode: 'isolated_test',
   });
   stores.push(store);
   return store;

@@ -128,9 +128,7 @@
             "version": "1.0.0"
           },
           "snapshot_hash": "sha256:954177b6a193505187f6549b0f5beed2370fcc93639661b62342bfb7237a42e9",
-          "expected_compiler_version": "3.0.4",
-          "expected_core_build_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-          "expected_database_schema_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          "expected_compiler_version": "3.0.4"
         },
         "expected_preflight_result": {
           "format": "icarus.workflow-registry-snapshot-preflight-result/1",
@@ -148,5 +146,5 @@
       }
     ]
   },
-  "hash": "sha256:479e7854b4a4b768314c0a19568b678e4e5bc4ecbef1a30d3ef678f35560cc7d"
+  "hash": "sha256:99ff360e34d8b1f39fe2aa25b2e47f48ce9531bcf61bee06f539debc32bf87aa"
 }

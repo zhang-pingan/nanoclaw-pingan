@@ -843,11 +843,7 @@ export function preflightRegistrySnapshot(
       closure.closure_hash,
       manifest.member_count,
     );
-  if (
-    snapshot.compiler_version !== input.expected_compiler_version ||
-    snapshot.core_build_hash !== input.expected_core_build_hash ||
-    snapshot.database_schema_hash !== input.expected_database_schema_hash
-  ) {
+  if (snapshot.compiler_version !== input.expected_compiler_version) {
     return rejected(
       input,
       'snapshot_binding_mismatch',

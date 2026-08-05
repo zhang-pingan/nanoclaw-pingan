@@ -1,9 +1,13 @@
+import fs from 'node:fs';
+import path from 'node:path';
+
+import { parseContractArtifactEnvelope } from '../../contracts/artifact.js';
 import {
   calculateArtifactHash,
   canonicalJson,
   domainSeparatedSha256,
 } from '../../contracts/hash.js';
-import { buildG38ARepairPayload } from '../../contracts/g3-8a-activation-contract-repair.js';
+import { strictParseJsonBytes } from '../../contracts/strict-json.js';
 import type {
   ExternalReferenceMetadata,
   LogicalCheckMetadata,
@@ -22,10 +26,7 @@ import type {
   JsonValue,
   Sha256Hash,
 } from '../../contracts/types.js';
-import {
-  ACTIVATION_SCHEMA_INPUT_ARTIFACT_HASH,
-  buildActivationSchemaPrerequisitePayload,
-} from './activation-source.js';
+import { buildActivationSchemaPrerequisitePayload } from './activation-source.js';
 
 export const ACTIVATION_REPAIR_SCHEMA_INPUT_RELATIVE_PATH =
   'inputs/workflow-feature-release-activation-failure-replay-schema-prerequisite@1.json';
@@ -34,20 +35,12 @@ export const ACTIVATION_REPAIR_SCHEMA_INPUT_DOMAIN =
 export const ACTIVATION_REPAIR_SCHEMA_DELTA_DOMAIN =
   'icarus:workflow-feature-release-activation-failure-replay-logical-schema-delta:1\n';
 
-export const G38A_FROZEN_IDENTITIES = {
-  pack: 'sha256:d8412111a0f3dcabb4ce416b99086701ea3e3911ff431b5457eb957b2f69722f',
-  artifact:
-    'sha256:94cb2c390bb44298238b1ffac4184b04f59efbbeae6f268fbce7618104ec406b',
-  contract:
-    'sha256:70d4b9ef47c83711415636737292450538acaf5cc4547d3130b04b101e6707ae',
-} as const;
-
 type ActivationRelation =
   | 'workflow_feature_release_activation_commands'
   | 'workflow_feature_release_activation_invocations'
   | 'workflow_feature_release_activation_events';
 
-interface G38AColumnRequirement extends JsonObject {
+interface Schema4ColumnRequirement extends JsonObject {
   relation: ActivationRelation;
   name: string;
   sqlite_type: 'TEXT' | 'INTEGER';
@@ -57,7 +50,7 @@ interface G38AColumnRequirement extends JsonObject {
   role: string;
 }
 
-interface G38AForeignKeyRequirement extends JsonObject {
+interface Schema4ForeignKeyRequirement extends JsonObject {
   relation_id: string;
   source_relation: ActivationRelation;
   source_columns: string[];
@@ -67,7 +60,7 @@ interface G38AForeignKeyRequirement extends JsonObject {
   deferrability: 'deferred';
 }
 
-interface G38AUniqueKeyRequirement extends JsonObject {
+interface Schema4UniqueKeyRequirement extends JsonObject {
   key_id: string;
   relation: ActivationRelation;
   columns: string[];
@@ -79,22 +72,10 @@ export interface ActivationRepairSchemaPrerequisitePayload extends JsonObject {
   schema_id: 'workflow-runtime-schema-v1';
   database_schema_version: 4;
   delta_mode: 'rebuild_activation_relations';
-  contract_stage: 'g1_physical_schema_input';
-  historical_inputs: {
-    schema3_activation_prerequisite_hash: Sha256Hash;
-    identity_policy: 'preserve_schema3_as_upgrade_input';
-  } & JsonObject;
-  frozen_g3_8a_contract: {
-    pack_hash: Sha256Hash;
-    repair_artifact_hash: Sha256Hash;
-    internal_contract_hash: Sha256Hash;
-    column_requirement_count: 62;
-    foreign_key_requirement_count: 12;
-    unique_key_requirement_count: 7;
-  } & JsonObject;
-  column_requirements: G38AColumnRequirement[] & JsonObject[];
-  foreign_key_requirements: G38AForeignKeyRequirement[] & JsonObject[];
-  unique_key_requirements: G38AUniqueKeyRequirement[] & JsonObject[];
+  contract_stage: 'schema_migration_input';
+  column_requirements: Schema4ColumnRequirement[] & JsonObject[];
+  foreign_key_requirements: Schema4ForeignKeyRequirement[] & JsonObject[];
+  unique_key_requirements: Schema4UniqueKeyRequirement[] & JsonObject[];
   relation_requirements: JsonObject[];
   rebuilt_tables: LogicalTableMetadata[] & JsonObject[];
   replaced_query_ids: string[];
@@ -179,7 +160,9 @@ function externalReferenceFor(name: string): ExternalReferenceMetadata | null {
   return null;
 }
 
-function logicalTypeFor(requirement: G38AColumnRequirement): LogicalColumnType {
+function logicalTypeFor(
+  requirement: Schema4ColumnRequirement,
+): LogicalColumnType {
   if (requirement.sqlite_type === 'INTEGER') return 'integer';
   if (externalReferenceFor(requirement.name)) return 'external_reference';
   if (requirement.name.endsWith('_hash')) return 'hash';
@@ -193,7 +176,7 @@ function logicalTypeFor(requirement: G38AColumnRequirement): LogicalColumnType {
 }
 
 function requirementColumn(
-  requirement: G38AColumnRequirement,
+  requirement: Schema4ColumnRequirement,
 ): LogicalColumnMetadata {
   return {
     ordinal: 0,
@@ -283,14 +266,14 @@ function allOrNone(checkId: string, columns: string[]): LogicalCheckMetadata {
 }
 
 function requirementColumns(
-  requirements: G38AColumnRequirement[],
+  requirements: Schema4ColumnRequirement[],
   relation: ActivationRelation,
-): G38AColumnRequirement[] {
+): Schema4ColumnRequirement[] {
   return requirements.filter((entry) => entry.relation === relation);
 }
 
 function requirementForeignKeys(
-  requirements: G38AForeignKeyRequirement[],
+  requirements: Schema4ForeignKeyRequirement[],
   relation: ActivationRelation,
 ): LogicalForeignKeyMetadata[] {
   return requirements
@@ -303,7 +286,7 @@ function requirementForeignKeys(
 }
 
 function requirementUniqueKeys(
-  requirements: G38AUniqueKeyRequirement[],
+  requirements: Schema4UniqueKeyRequirement[],
   relation: ActivationRelation,
 ): LogicalUniqueKeyMetadata[] {
   return requirements
@@ -313,9 +296,9 @@ function requirementUniqueKeys(
 
 function buildCommandTable(
   schema3: LogicalTableMetadata,
-  columnRequirements: G38AColumnRequirement[],
-  fkRequirements: G38AForeignKeyRequirement[],
-  ukRequirements: G38AUniqueKeyRequirement[],
+  columnRequirements: Schema4ColumnRequirement[],
+  fkRequirements: Schema4ForeignKeyRequirement[],
+  ukRequirements: Schema4UniqueKeyRequirement[],
 ): LogicalTableMetadata {
   const retainedBefore = [
     'command_id',
@@ -545,9 +528,9 @@ function buildCommandTable(
 
 function buildInvocationTable(
   schema3: LogicalTableMetadata,
-  columnRequirements: G38AColumnRequirement[],
-  fkRequirements: G38AForeignKeyRequirement[],
-  ukRequirements: G38AUniqueKeyRequirement[],
+  columnRequirements: Schema4ColumnRequirement[],
+  fkRequirements: Schema4ForeignKeyRequirement[],
+  ukRequirements: Schema4UniqueKeyRequirement[],
 ): LogicalTableMetadata {
   const insertAfterInvocationNo = requirementColumns(
     columnRequirements,
@@ -640,9 +623,9 @@ function buildInvocationTable(
 
 function buildEventTable(
   schema3: LogicalTableMetadata,
-  columnRequirements: G38AColumnRequirement[],
-  fkRequirements: G38AForeignKeyRequirement[],
-  ukRequirements: G38AUniqueKeyRequirement[],
+  columnRequirements: Schema4ColumnRequirement[],
+  fkRequirements: Schema4ForeignKeyRequirement[],
+  ukRequirements: Schema4UniqueKeyRequirement[],
 ): LogicalTableMetadata {
   const replacements = new Map(
     requirementColumns(
@@ -893,9 +876,9 @@ const QUERY_INTENTS: LogicalQueryIntent[] = [
 ];
 
 function buildRebuiltTables(
-  columnRequirements: G38AColumnRequirement[],
-  fkRequirements: G38AForeignKeyRequirement[],
-  ukRequirements: G38AUniqueKeyRequirement[],
+  columnRequirements: Schema4ColumnRequirement[],
+  fkRequirements: Schema4ForeignKeyRequirement[],
+  ukRequirements: Schema4UniqueKeyRequirement[],
 ): LogicalTableMetadata[] {
   const schema3Tables = buildActivationSchemaPrerequisitePayload().added_tables;
   const table = (name: ActivationRelation) => {
@@ -927,15 +910,29 @@ function buildRebuiltTables(
 }
 
 export function buildActivationRepairSchemaPrerequisitePayload(): ActivationRepairSchemaPrerequisitePayload {
-  const repair = buildG38ARepairPayload();
-  if (repair.contract_hash !== G38A_FROZEN_IDENTITIES.contract) {
-    throw new Error('G3.8A internal Contract identity drifted');
-  }
-  const schema4 = repair.schema4_prerequisite as {
+  const storedArtifact = parseContractArtifactEnvelope(
+    strictParseJsonBytes(
+      fs.readFileSync(
+        path.resolve(
+          import.meta.dirname,
+          ACTIVATION_REPAIR_SCHEMA_INPUT_RELATIVE_PATH,
+        ),
+      ),
+    ),
+  );
+  const stored =
+    storedArtifact.payload as unknown as ActivationRepairSchemaPrerequisitePayload;
+  const schema4 = {
+    relation_changes: stored.relation_requirements,
+    column_requirements: stored.column_requirements,
+    foreign_key_requirements: stored.foreign_key_requirements,
+    unique_key_requirements: stored.unique_key_requirements,
+    query_intents: stored.replaced_query_ids,
+  } as {
     relation_changes: JsonObject[];
-    column_requirements: G38AColumnRequirement[];
-    foreign_key_requirements: G38AForeignKeyRequirement[];
-    unique_key_requirements: G38AUniqueKeyRequirement[];
+    column_requirements: Schema4ColumnRequirement[];
+    foreign_key_requirements: Schema4ForeignKeyRequirement[];
+    unique_key_requirements: Schema4UniqueKeyRequirement[];
     query_intents: string[];
   };
   if (
@@ -944,7 +941,7 @@ export function buildActivationRepairSchemaPrerequisitePayload(): ActivationRepa
     schema4.unique_key_requirements.length !== 7 ||
     schema4.query_intents.length !== 8
   ) {
-    throw new Error('G3.8A Schema 4 handoff cardinality drifted');
+    throw new Error('Schema 4 activation migration input is incomplete');
   }
   const withoutHash = {
     format:
@@ -952,20 +949,7 @@ export function buildActivationRepairSchemaPrerequisitePayload(): ActivationRepa
     schema_id: 'workflow-runtime-schema-v1' as const,
     database_schema_version: 4 as const,
     delta_mode: 'rebuild_activation_relations' as const,
-    contract_stage: 'g1_physical_schema_input' as const,
-    historical_inputs: {
-      schema3_activation_prerequisite_hash:
-        ACTIVATION_SCHEMA_INPUT_ARTIFACT_HASH,
-      identity_policy: 'preserve_schema3_as_upgrade_input' as const,
-    },
-    frozen_g3_8a_contract: {
-      pack_hash: G38A_FROZEN_IDENTITIES.pack,
-      repair_artifact_hash: G38A_FROZEN_IDENTITIES.artifact,
-      internal_contract_hash: G38A_FROZEN_IDENTITIES.contract,
-      column_requirement_count: 62 as const,
-      foreign_key_requirement_count: 12 as const,
-      unique_key_requirement_count: 7 as const,
-    },
+    contract_stage: 'schema_migration_input' as const,
     column_requirements: structuredClone(schema4.column_requirements),
     foreign_key_requirements: structuredClone(schema4.foreign_key_requirements),
     unique_key_requirements: structuredClone(schema4.unique_key_requirements),
@@ -989,7 +973,7 @@ export function buildActivationRepairSchemaPrerequisitePayload(): ActivationRepa
       'G1.5 Release active-pointer and Retention protection triggers remain byte-equivalent',
     ],
     constraint_fixture_cases: [
-      'g3_8a_exact_62_columns_12_foreign_keys_7_unique_keys',
+      'schema4_exact_62_columns_12_foreign_keys_7_unique_keys',
       'activation_insert_request_only_pending_shape',
       'activation_verified_prefix_no_holes_or_fabrication',
       'activation_owner_lifecycle_resource_g3_6_retention_failures_are_schema_valid',
@@ -1029,21 +1013,16 @@ export function buildActivationRepairSchemaPrerequisitePayload(): ActivationRepa
 }
 
 export function buildActivationRepairSchemaPrerequisiteArtifact(): ContractArtifactEnvelope {
-  const artifact: ContractArtifactEnvelope = {
-    format:
-      'icarus.workflow-feature-release-activation-failure-replay-schema-prerequisite/1',
-    ref: {
-      id: 'icarus.workflow-feature-release-activation-failure-replay-schema-prerequisite',
-      version: '1',
-    },
-    version: 1,
-    domain_separator: ACTIVATION_REPAIR_SCHEMA_INPUT_DOMAIN,
-    hash: 'sha256:0000000000000000000000000000000000000000000000000000000000000000',
-    payload:
-      buildActivationRepairSchemaPrerequisitePayload() as unknown as JsonObject,
-  };
-  artifact.hash = calculateArtifactHash(artifact);
-  return artifact;
+  return parseContractArtifactEnvelope(
+    strictParseJsonBytes(
+      fs.readFileSync(
+        path.resolve(
+          import.meta.dirname,
+          ACTIVATION_REPAIR_SCHEMA_INPUT_RELATIVE_PATH,
+        ),
+      ),
+    ),
+  );
 }
 
 export const ACTIVATION_REPAIR_SCHEMA_INPUT_ARTIFACT_HASH =
@@ -1052,20 +1031,29 @@ export const ACTIVATION_REPAIR_SCHEMA_INPUT_ARTIFACT_HASH =
 export function parseActivationRepairSchemaPrerequisiteArtifact(
   artifact: ContractArtifactEnvelope,
 ): ActivationRepairSchemaPrerequisitePayload {
-  const expected = buildActivationRepairSchemaPrerequisiteArtifact();
   if (
-    artifact.format !== expected.format ||
-    artifact.ref.id !== expected.ref.id ||
-    artifact.ref.version !== expected.ref.version ||
-    artifact.version !== expected.version ||
-    artifact.domain_separator !== expected.domain_separator ||
-    artifact.hash !== expected.hash ||
-    calculateArtifactHash(artifact) !== artifact.hash ||
-    canonicalJson(artifact.payload) !== canonicalJson(expected.payload)
+    artifact.format !==
+      'icarus.workflow-feature-release-activation-failure-replay-schema-prerequisite/1' ||
+    artifact.ref.id !==
+      'icarus.workflow-feature-release-activation-failure-replay-schema-prerequisite' ||
+    artifact.ref.version !== '1' ||
+    artifact.version !== 1 ||
+    artifact.domain_separator !== ACTIVATION_REPAIR_SCHEMA_INPUT_DOMAIN ||
+    calculateArtifactHash(artifact) !== artifact.hash
   ) {
-    throw new Error(
-      'Activation Failure / Replay Schema Prerequisite identity drifted',
-    );
+    throw new Error('Schema 4 activation migration input is invalid');
   }
-  return artifact.payload as unknown as ActivationRepairSchemaPrerequisitePayload;
+  const payload =
+    artifact.payload as unknown as ActivationRepairSchemaPrerequisitePayload;
+  if (
+    payload.database_schema_version !== 4 ||
+    payload.delta_mode !== 'rebuild_activation_relations' ||
+    payload.rebuilt_tables.length !== 3 ||
+    payload.column_requirements.length !== 62 ||
+    payload.foreign_key_requirements.length !== 12 ||
+    payload.unique_key_requirements.length !== 7
+  ) {
+    throw new Error('Schema 4 activation migration input is incomplete');
+  }
+  return payload;
 }

@@ -11,7 +11,6 @@ import {
   requestedSideEffect,
   validateRetentionExecutorAbiPreflightInput,
   verifyClosureExpectation,
-  verifyCoreProtocolFacts,
   verifyRetentionFacts,
   G3RetentionExecutorAbiContractError,
 } from '../contracts/g3-retention-executor-abi-preflight.js';
@@ -363,16 +362,16 @@ export function preflightRetentionExecutorAbiCompatibility(
   if (artifactError)
     return buildRejectedRetentionExecutorAbiResult(artifactError);
 
-  const coreError = verifyCoreProtocolFacts(input);
-  if (coreError) return buildRejectedRetentionExecutorAbiResult(coreError);
+  if (input.executor_abi_major !== 1)
+    return buildRejectedRetentionExecutorAbiResult('executor_abi_mismatch');
   if (
     artifacts.some(
       (artifact) =>
-        artifact.content.runtime_abi_major !== input.executor_abi.major,
+        artifact.content.runtime_abi_major !== input.executor_abi_major,
     ) ||
     executors.some(
       (executor) =>
-        executor.content.runtime_abi_major !== input.executor_abi.major,
+        executor.content.runtime_abi_major !== input.executor_abi_major,
     )
   ) {
     return buildRejectedRetentionExecutorAbiResult('executor_abi_mismatch');

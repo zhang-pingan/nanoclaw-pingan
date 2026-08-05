@@ -18,7 +18,10 @@ import {
   buildDeploymentCapacityPublication,
   calculateDeploymentCapacityConfigHash,
 } from '../contracts/capacity-control-plane-source.js';
-import type { InitializeDeploymentCapacityCommand } from '../contracts/capacity-control-plane-types.js';
+import type {
+  DeploymentRuntimeCapacitySnapshot,
+  ReplaceDeploymentCapacityCommand,
+} from '../contracts/capacity-control-plane-types.js';
 import {
   CAPABILITY_OUTBOX_ADAPTER_DOMAIN,
   CAPABILITY_OUTBOX_EXECUTION_BINDING_DOMAIN,
@@ -35,6 +38,7 @@ import {
   type G5RepairFixtureCase,
   type G5RepairFixtureOracle,
 } from '../contracts/g5-basic-runtime-repair-contract.js';
+import { buildDeploymentRuntimeCapacityBaseline } from '../contracts/safety-sqlite-artifacts.js';
 import {
   G5FixtureExecutionHarness,
   type G5FixtureArtifacts,
@@ -1307,71 +1311,26 @@ function conditionProgram(expression: JsonObject): JsonObject {
 }
 
 function fixedCapacity() {
-  const values = {
-    max_active_executions: 32,
-    max_active_waits: 32,
-    max_pending_signals: 64,
-    max_outbox_inflight: 16,
-    max_physical_blob_bytes: 21_474_836_480,
-    soft_blob_high_water_bytes: 17_179_869_184,
-    minimum_free_disk_bytes: 5_368_709_120,
-  };
   return buildDeploymentCapacityPublication(
     1,
-    'g5-fixed-point-capacity',
+    'capacity-defaults-change:1',
     null,
-    {
-      ...values,
-      config_hash: calculateDeploymentCapacityConfigHash(values),
-    },
+    buildDeploymentRuntimeCapacityBaseline() as DeploymentRuntimeCapacitySnapshot,
   );
 }
 
 function installFixtureRuntimeCapacity(
   instance: G5TestBootstrapInstance,
-  seed: SeededRuntime,
+  _seed: SeededRuntime,
 ): void {
-  const capacity = fixedCapacity();
-  instance.store.withImmediateTransaction((transaction) => {
-    transaction.execute(
-      `INSERT INTO runtime_capacity_admin_commands (
-       command_id, idempotency_domain, idempotency_key, command_type,
-       expected_capacity_revision, expected_config_hash,
-       assigned_capacity_revision, assigned_change_id,
-       genesis_core_release_hash, proposed_capacity_json,
-       proposed_config_hash, request_hash, reason_code, reason_text_value_id,
-       reason_text_hash, evidence_manifest_value_id, evidence_manifest_hash,
-       canonical_result_value_id, canonical_result_hash, created_at_ms,
-       finalized_at_ms
-     ) VALUES ('capacity:g5-fixture', 'deployment_capacity',
-       'capacity:g5-fixture', 'initialize_deployment_capacity', NULL, NULL,
-       1, ?, ?, ?, ?, ?, 'initial_provisioning', NULL, NULL, ?, ?, ?, ?,
-       1, 1)`,
-      [
-        capacity.capacity_change_id,
-        hash('core-release'),
-        canonicalJson(capacity.capacity as unknown as JsonValue),
-        capacity.capacity.config_hash,
-        hash('capacity-request'),
-        seed.values.evidence.id,
-        seed.values.evidence.hash,
-        seed.values.result.id,
-        seed.values.result.hash,
-      ],
-    );
-    transaction.execute(
-      `INSERT INTO runtime_capacity_head (
-       singleton_key, current_capacity_revision, current_change_id,
-       current_config_hash, current_publication_hash, pending_change_id,
-       row_version, created_at_ms, updated_at_ms
-     ) VALUES (1, 1, ?, ?, ?, NULL, 1, 1, 1)`,
-      [
-        capacity.capacity_change_id,
-        capacity.capacity.config_hash,
-        capacity.publication_hash,
-      ],
-    );
-  });
+  if (
+    !instance.store.queryOne(
+      'SELECT 1 AS present FROM runtime_capacity_head WHERE singleton_key = 1',
+      [],
+    )
+  ) {
+    throw new Error('fresh Store Capacity defaults are missing');
+  }
 }
 
 function initializePlanCase(
@@ -3189,7 +3148,7 @@ function buildBlockerFixtureTarget(
   };
 }
 
-function capacityCommand(key: string): InitializeDeploymentCapacityCommand {
+function capacityCommand(key: string): ReplaceDeploymentCapacityCommand {
   const payload = {
     max_active_executions: 5,
     max_active_waits: 256,
@@ -3199,39 +3158,36 @@ function capacityCommand(key: string): InitializeDeploymentCapacityCommand {
     soft_blob_high_water_bytes: 17_179_869_184,
     minimum_free_disk_bytes: 5_368_709_120,
   };
+  const baseline = buildDeploymentRuntimeCapacityBaseline();
   return {
-    command_type: 'initialize_deployment_capacity',
+    command_type: 'replace_deployment_capacity',
     command_id: `capacity-command:${key}`,
     idempotency_key: `capacity-key:${key}`,
+    expected_capacity_revision: 1,
+    expected_config_hash: baseline.config_hash as Sha256Hash,
     proposed_capacity: {
       ...payload,
       config_hash: calculateDeploymentCapacityConfigHash(payload),
     },
-    reason_code: 'initial_provisioning',
-    core_release_hash: hash('core-release'),
-    evidence_refs: ['core-release', 'checked-in-baseline'],
+    reason_code: 'planned_tuning',
+    reason_text: 'exercise local Capacity replacement',
+    evidence_refs: [],
   };
 }
 
 function capacityInvocation(
-  command: InitializeDeploymentCapacityCommand,
+  _command: ReplaceDeploymentCapacityCommand,
 ): CapacityAuthenticatedInvocation {
   return {
     authenticated: true,
-    actorRef: 'system:production-activation',
-    sessionActorRef: 'system:production-activation',
-    actorKind: 'system',
-    authSessionRef: 'auth:production-activation',
-    entrypoint: 'production_activation',
+    actorRef: 'human:local-owner',
+    sessionActorRef: 'human:local-owner',
+    actorKind: 'human',
+    authSessionRef: 'auth:local-owner',
+    entrypoint: 'runtime_center',
     delegationChainRef: null,
-    permissions: [],
+    permissions: ['runtime.capacity.manage'],
     requestedAtMs: 10,
-    activeCoreReleaseHash: command.core_release_hash,
-    baselineConfigHash: command.proposed_capacity.config_hash,
-    genesisGrant: {
-      coreReleaseHash: command.core_release_hash,
-      baselineConfigHash: command.proposed_capacity.config_hash,
-    },
   };
 }
 
@@ -3244,7 +3200,7 @@ function buildCapacityFixtureTarget(
   const command = capacityCommand(key);
   const persistence = {
     evidenceManifest: seed.values.evidence,
-    reasonText: null,
+    reasonText: seed.values.evidence,
     resultSchema: seed.refs.schema,
   };
   const prepare = () =>
@@ -3884,19 +3840,27 @@ describe('G5 Basic Runtime current-schema repair transaction integration', () =>
     ).map(([key, value]) => {
       const { plan_hash: _childHash, ...childWithoutHash } = nestedEntry.plan;
       void _childHash;
-      return replaceChildPlan(
-        0,
-        withPlanHash({ ...childWithoutHash, [key]: value }),
-      );
+      return [
+        key,
+        replaceChildPlan(
+          0,
+          withPlanHash({ ...childWithoutHash, [key]: value }),
+        ),
+      ] as const;
     });
-    for (const drift of [nestedLineageDrift, ...authorityDrifts]) {
-      expect(() =>
-        persistCompileResultT2a(instance.store, {
-          ...input,
-          plan: drift.parentPlan,
-          staticChildPlanBundle: drift.bundle,
-        }),
-      ).toThrow(/nested lineage|content or authority drifted/);
+    for (const [label, drift] of [
+      ['nested_lineage', nestedLineageDrift] as const,
+      ...authorityDrifts,
+    ]) {
+      expect(
+        () =>
+          persistCompileResultT2a(instance.store, {
+            ...input,
+            plan: drift.parentPlan,
+            staticChildPlanBundle: drift.bundle,
+          }),
+        label,
+      ).toThrow(/malformed|nested lineage|content or authority drifted/);
     }
     expect(() =>
       persistCompileResultT2a(instance.store, {
@@ -4327,63 +4291,7 @@ describe('G5 Basic Runtime current-schema repair transaction integration', () =>
       initializeInput,
     );
     expect(fixedPoint.readyNodeIds).toHaveLength(4);
-    const capacityPayload = {
-      max_active_executions: 5,
-      max_active_waits: 256,
-      max_pending_signals: 2048,
-      max_outbox_inflight: 16,
-      max_physical_blob_bytes: 21_474_836_480,
-      soft_blob_high_water_bytes: 17_179_869_184,
-      minimum_free_disk_bytes: 5_368_709_120,
-    };
-    const capacity = buildDeploymentCapacityPublication(
-      1,
-      'capacity-change-test',
-      null,
-      {
-        ...capacityPayload,
-        config_hash: calculateDeploymentCapacityConfigHash(capacityPayload),
-      },
-    );
-    instance.store.withImmediateTransaction((transaction) => {
-      transaction.execute(
-        `INSERT INTO runtime_capacity_admin_commands (
-         command_id, idempotency_domain, idempotency_key, command_type,
-         expected_capacity_revision, expected_config_hash,
-         assigned_capacity_revision, assigned_change_id,
-         genesis_core_release_hash, proposed_capacity_json,
-         proposed_config_hash, request_hash, reason_code, reason_text_value_id,
-         reason_text_hash, evidence_manifest_value_id, evidence_manifest_hash,
-         canonical_result_value_id, canonical_result_hash, created_at_ms,
-         finalized_at_ms
-       ) VALUES ('capacity:test', 'deployment_capacity', 'capacity:test',
-         'initialize_deployment_capacity', NULL, NULL, 1, ?, ?, ?, ?, ?,
-         'initial_provisioning', NULL, NULL, ?, ?, ?, ?, 1, 1)`,
-        [
-          capacity.capacity_change_id,
-          hash('core-release'),
-          JSON.stringify(capacity.capacity),
-          capacity.capacity.config_hash,
-          hash('capacity-request'),
-          seed.values.evidence.id,
-          seed.values.evidence.hash,
-          seed.values.result.id,
-          seed.values.result.hash,
-        ],
-      );
-      transaction.execute(
-        `INSERT INTO runtime_capacity_head (
-         singleton_key, current_capacity_revision, current_change_id,
-         current_config_hash, current_publication_hash, pending_change_id,
-         row_version, created_at_ms, updated_at_ms
-       ) VALUES (1, 1, ?, ?, ?, NULL, 1, 1, 1)`,
-        [
-          capacity.capacity_change_id,
-          capacity.capacity.config_hash,
-          capacity.publication_hash,
-        ],
-      );
-    });
+    const capacity = fixedCapacity();
     const capacityProvider = { current: () => capacity };
     const workNode = instance.store.queryOne<{
       id: string;
@@ -7886,7 +7794,7 @@ describe('G5 Basic Runtime current-schema repair transaction integration', () =>
           databaseSchemaHash: hash('wrong-schema'),
         },
       }),
-    ).toThrow(/current frozen Schema 11 identity/);
+    ).toThrow(/current Schema version/);
 
     const compiledPlan = plan(seed);
     const compileInput = {
@@ -7931,7 +7839,7 @@ describe('G5 Basic Runtime current-schema repair transaction integration', () =>
           >,
         ),
       }),
-    ).toThrow(/Plan safety, toolchain, or Schema 11 identity drift/);
+    ).toThrow(/Plan version, safety, or Schema 11 compatibility drift/);
     expect(() =>
       persistCompileResultT2a(instance.store, {
         ...compileInput,
@@ -8186,66 +8094,7 @@ describe('G5 Basic Runtime current-schema repair transaction integration', () =>
           "SELECT id, row_version, activation_event_seq FROM workflow_graph_nodes WHERE graph_run_id = ? AND node_key = 'timeout'",
           [created.activation.graphRunId],
         )!;
-        const capacityPayload = {
-          max_active_executions: 2,
-          max_active_waits: 2,
-          max_pending_signals: 8,
-          max_outbox_inflight: 2,
-          max_physical_blob_bytes: 1_000_000,
-          soft_blob_high_water_bytes: 800_000,
-          minimum_free_disk_bytes: 100_000,
-        };
-        const capacity = buildDeploymentCapacityPublication(
-          1,
-          `capacity-property-${scenario}`,
-          null,
-          {
-            ...capacityPayload,
-            config_hash: calculateDeploymentCapacityConfigHash(capacityPayload),
-          },
-        );
-        instance.store.withImmediateTransaction((transaction) => {
-          transaction.execute(
-            `INSERT INTO runtime_capacity_admin_commands (
-                   command_id, idempotency_domain, idempotency_key, command_type,
-                   expected_capacity_revision, expected_config_hash,
-                   assigned_capacity_revision, assigned_change_id,
-                   genesis_core_release_hash, proposed_capacity_json,
-                   proposed_config_hash, request_hash, reason_code,
-                   reason_text_value_id, reason_text_hash,
-                   evidence_manifest_value_id, evidence_manifest_hash,
-                   canonical_result_value_id, canonical_result_hash,
-                   created_at_ms, finalized_at_ms
-                 ) VALUES (?, 'deployment_capacity', ?,
-                   'initialize_deployment_capacity', NULL, NULL, 1, ?, ?, ?, ?, ?,
-                   'initial_provisioning', NULL, NULL, ?, ?, ?, ?, 1, 1)`,
-            [
-              `capacity-command-${scenario}`,
-              `capacity-key-${scenario}`,
-              capacity.capacity_change_id,
-              hash('core-release'),
-              JSON.stringify(capacity.capacity),
-              capacity.capacity.config_hash,
-              hash(`capacity-request-${scenario}`),
-              seed.values.evidence.id,
-              seed.values.evidence.hash,
-              seed.values.result.id,
-              seed.values.result.hash,
-            ],
-          );
-          transaction.execute(
-            `INSERT INTO runtime_capacity_head (
-                   singleton_key, current_capacity_revision, current_change_id,
-                   current_config_hash, current_publication_hash,
-                   pending_change_id, row_version, created_at_ms, updated_at_ms
-                 ) VALUES (1, 1, ?, ?, ?, NULL, 1, 1, 1)`,
-            [
-              capacity.capacity_change_id,
-              capacity.capacity.config_hash,
-              capacity.publication_hash,
-            ],
-          );
-        });
+        const capacity = fixedCapacity();
         const admission = scheduleReadyNodeT4(
           instance.store,
           { current: () => capacity },

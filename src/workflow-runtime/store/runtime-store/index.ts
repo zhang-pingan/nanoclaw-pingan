@@ -4,17 +4,16 @@ import { types as utilTypes } from 'node:util';
 
 import Database from 'better-sqlite3';
 
-import { calculateDatabaseSqliteSchemaIdentity } from '../schema/database-identity.js';
 import {
-  assertRuntimeHostIdentity,
-  collectWorkflowRuntimeIdentityEvidence,
-  type WorkflowRuntimeIdentityEvidence,
-  type WorkflowRuntimeIdentityMode,
-} from './identity.js';
+  assertCurrentWorkflowRuntimeStructure,
+  migrateWorkflowRuntimeSchema,
+} from '../schema/compatibility.js';
+import { ensureCapacityDefaults } from '../../capacity/defaults.js';
 import {
-  loadFrozenWorkflowRuntimeStoreInputs,
-  type FrozenWorkflowRuntimeStoreInputs,
-} from './profile.js';
+  CURRENT_WORKFLOW_RUNTIME_SCHEMA_VERSION,
+  readFreshWorkflowRuntimeSchemaSql,
+  WORKFLOW_RUNTIME_SQLITE_CONFIG,
+} from './config.js';
 import { assertRuntimeCommandIngressIntegrity } from './command-ingress-integrity.js';
 
 export type WorkflowRuntimeSqlValue = string | number | bigint | Buffer | null;
@@ -57,12 +56,10 @@ export interface WorkflowRuntimeWriteTransaction {
 export interface OpenWorkflowRuntimeStoreOptions {
   readonly databasePath: string;
   readonly databaseMode: 'create' | 'open_existing';
-  readonly identityMode: WorkflowRuntimeIdentityMode;
 }
 
 export interface OpenWorkflowRuntimeReadOnlyOptions {
   readonly databasePath: string;
-  readonly identityMode: WorkflowRuntimeIdentityMode;
 }
 
 export class WorkflowRuntimeStoreError extends Error {
@@ -92,23 +89,6 @@ export class WorkflowRuntimeStoreError extends Error {
 const writerOwners = new Set<string>();
 const storeConstructorToken = Symbol('WorkflowRuntimeStore');
 
-function storeInputRootsForIdentityMode(
-  identityMode: WorkflowRuntimeIdentityMode,
-): { profilePath?: string } {
-  if (
-    identityMode === 'candidate_development' ||
-    identityMode === 'isolated_test'
-  )
-    return {};
-  const releaseRoot = path.resolve(import.meta.dirname, '../../../..');
-  return {
-    profilePath: path.join(
-      releaseRoot,
-      'validation-inputs/sqlite/local_single_user_sqlite-candidate@1.json',
-    ),
-  };
-}
-
 function scalarPragma(
   database: Database.Database,
   pragma: string,
@@ -129,19 +109,15 @@ function assertEqual(actual: unknown, expected: unknown, label: string): void {
   }
 }
 
-function verifyDatabaseLevelProfile(
-  database: Database.Database,
-  inputs: Readonly<FrozenWorkflowRuntimeStoreInputs>,
-): void {
-  const profile = inputs.profile;
+function verifyDatabaseLevelProfile(database: Database.Database): void {
   assertEqual(
     String(scalarPragma(database, 'journal_mode')).toLowerCase(),
-    profile.journal_mode,
+    'wal',
     'journal_mode',
   );
   assertEqual(
     Number(scalarPragma(database, 'page_size')),
-    profile.page_size,
+    WORKFLOW_RUNTIME_SQLITE_CONFIG.pageSize,
     'page_size',
   );
   assertEqual(Number(scalarPragma(database, 'auto_vacuum')), 2, 'auto_vacuum');
@@ -149,21 +125,29 @@ function verifyDatabaseLevelProfile(
 
 function configureConnection(
   database: Database.Database,
-  inputs: Readonly<FrozenWorkflowRuntimeStoreInputs>,
   readOnly: boolean,
 ): void {
-  const profile = inputs.profile;
   if (!readOnly) {
     database.pragma('journal_mode = WAL');
   }
   database.pragma('synchronous = FULL');
   database.pragma('foreign_keys = ON');
-  database.pragma(`busy_timeout = ${profile.busy_timeout_ms}`);
+  database.pragma(
+    `busy_timeout = ${WORKFLOW_RUNTIME_SQLITE_CONFIG.busyTimeoutMs}`,
+  );
   database.pragma('temp_store = MEMORY');
-  database.pragma(`wal_autocheckpoint = ${profile.wal_autocheckpoint_pages}`);
-  database.pragma(`journal_size_limit = ${profile.journal_size_limit_bytes}`);
-  database.pragma(`cache_size = -${profile.cache_size_kib}`);
-  database.pragma(`mmap_size = ${profile.mmap_size_bytes}`);
+  database.pragma(
+    `wal_autocheckpoint = ${WORKFLOW_RUNTIME_SQLITE_CONFIG.walAutocheckpointPages}`,
+  );
+  database.pragma(
+    `journal_size_limit = ${WORKFLOW_RUNTIME_SQLITE_CONFIG.journalSizeLimitBytes}`,
+  );
+  database.pragma(
+    `cache_size = -${WORKFLOW_RUNTIME_SQLITE_CONFIG.cacheSizeKib}`,
+  );
+  database.pragma(
+    `mmap_size = ${WORKFLOW_RUNTIME_SQLITE_CONFIG.mmapSizeBytes}`,
+  );
   database.pragma('trusted_schema = OFF');
   database.pragma('recursive_triggers = OFF');
   database.pragma('read_uncommitted = OFF');
@@ -187,24 +171,28 @@ function configureWriterTransientTables(database: Database.Database): void {
 
 function verifyCompleteProfile(
   database: Database.Database,
-  inputs: Readonly<FrozenWorkflowRuntimeStoreInputs>,
   readOnly: boolean,
 ): void {
-  const profile = inputs.profile;
-  verifyDatabaseLevelProfile(database, inputs);
+  verifyDatabaseLevelProfile(database);
   const expected: Array<[string, string | number]> = [
     ['synchronous', 2],
     ['foreign_keys', 1],
-    ['busy_timeout', profile.busy_timeout_ms],
+    ['busy_timeout', WORKFLOW_RUNTIME_SQLITE_CONFIG.busyTimeoutMs],
     ['temp_store', 2],
-    ['wal_autocheckpoint', profile.wal_autocheckpoint_pages],
-    ['journal_size_limit', profile.journal_size_limit_bytes],
-    ['cache_size', -profile.cache_size_kib],
-    ['mmap_size', profile.mmap_size_bytes],
+    [
+      'wal_autocheckpoint',
+      WORKFLOW_RUNTIME_SQLITE_CONFIG.walAutocheckpointPages,
+    ],
+    [
+      'journal_size_limit',
+      WORKFLOW_RUNTIME_SQLITE_CONFIG.journalSizeLimitBytes,
+    ],
+    ['cache_size', -WORKFLOW_RUNTIME_SQLITE_CONFIG.cacheSizeKib],
+    ['mmap_size', WORKFLOW_RUNTIME_SQLITE_CONFIG.mmapSizeBytes],
     ['trusted_schema', 0],
     ['recursive_triggers', 0],
     ['read_uncommitted', 0],
-    ['locking_mode', profile.locking_mode],
+    ['locking_mode', 'normal'],
     ['query_only', readOnly ? 1 : 0],
   ];
   for (const [pragma, expectedValue] of expected) {
@@ -234,235 +222,31 @@ function verifyIntegrity(database: Database.Database): void {
   }
 }
 
-function verifyFrozenSchema(
-  database: Database.Database,
-  inputs: Readonly<FrozenWorkflowRuntimeStoreInputs>,
-): void {
+function verifyCurrentSchema(database: Database.Database): void {
   try {
-    assertEqual(
-      Number(scalarPragma(database, 'user_version')),
-      inputs.schemaManifest.database_schema_version,
-      'user_version',
-    );
-    const observed = calculateDatabaseSqliteSchemaIdentity(database);
-    if (observed !== inputs.sqliteSchemaIdentity) {
-      throw new Error(
-        `sqlite_schema identity mismatch: expected ${inputs.sqliteSchemaIdentity}, received ${observed}`,
-      );
-    }
+    assertCurrentWorkflowRuntimeStructure(database);
   } catch (error) {
     throw new WorkflowRuntimeStoreError(
       'database_schema_mismatch',
-      `workflow-runtime.db schema does not match frozen G1.1: ${error instanceof Error ? error.message : String(error)}`,
+      `workflow-runtime.db schema is incompatible: ${error instanceof Error ? error.message : String(error)}`,
       { cause: error },
     );
   }
 }
 
-function upgradeSchemaIfEligible(
-  databasePath: string,
-  inputs: Readonly<FrozenWorkflowRuntimeStoreInputs>,
-): void {
+function upgradeSchemaIfEligible(databasePath: string): void {
   const database = new Database(databasePath, {
     fileMustExist: true,
-    timeout: inputs.profile.busy_timeout_ms,
+    timeout: WORKFLOW_RUNTIME_SQLITE_CONFIG.busyTimeoutMs,
   });
   try {
-    verifyDatabaseLevelProfile(database, inputs);
+    verifyDatabaseLevelProfile(database);
     const version = Number(scalarPragma(database, 'user_version'));
-    if (version === inputs.schemaManifest.database_schema_version) return;
-    if (
-      version !== 3 &&
-      version !== 4 &&
-      version !== 5 &&
-      version !== 6 &&
-      version !== 7 &&
-      version !== 8 &&
-      version !== 9 &&
-      version !== 10
-    ) {
-      throw new WorkflowRuntimeStoreError(
-        'database_schema_mismatch',
-        `Schema upgrade requires user_version 3, 4, 5, 6, 7, 8, 9, 10, or ${inputs.schemaManifest.database_schema_version}, received ${version}`,
-      );
+    if (version === CURRENT_WORKFLOW_RUNTIME_SCHEMA_VERSION) {
+      verifyCurrentSchema(database);
+      return;
     }
-    database.pragma('foreign_keys = OFF');
-    database.exec('BEGIN IMMEDIATE');
-    try {
-      if (version === 3) {
-        const sourceIdentity = calculateDatabaseSqliteSchemaIdentity(database);
-        if (sourceIdentity !== inputs.schema3SourceSqliteSchemaIdentity) {
-          throw new Error(
-            `Schema 3 sqlite_schema identity mismatch: expected ${inputs.schema3SourceSqliteSchemaIdentity}, received ${sourceIdentity}`,
-          );
-        }
-        for (const relation of inputs.schema3RequiredEmptyRelations) {
-          const count = database
-            .prepare(`SELECT count(*) AS count FROM "${relation}"`)
-            .pluck()
-            .get() as number;
-          if (count !== 0) {
-            throw new Error(
-              `Schema 3 upgrade requires empty relation ${relation}, received ${count} row(s)`,
-            );
-          }
-        }
-        database.exec(inputs.schema3To4UpgradeSql);
-        if (
-          Number(scalarPragma(database, 'user_version')) !== 4 ||
-          calculateDatabaseSqliteSchemaIdentity(database) !==
-            inputs.schema4SourceSqliteSchemaIdentity
-        ) {
-          throw new Error(
-            'Schema 3 to 4 upgrade did not produce frozen historical Schema 4',
-          );
-        }
-      } else if (version === 4) {
-        const sourceIdentity = calculateDatabaseSqliteSchemaIdentity(database);
-        if (sourceIdentity !== inputs.schema4SourceSqliteSchemaIdentity) {
-          throw new Error(
-            `Schema 4 sqlite_schema identity mismatch: expected ${inputs.schema4SourceSqliteSchemaIdentity}, received ${sourceIdentity}`,
-          );
-        }
-      }
-      if (version === 3 || version === 4) {
-        database.exec(inputs.schema4To5UpgradeSql);
-        if (
-          Number(scalarPragma(database, 'user_version')) !== 5 ||
-          calculateDatabaseSqliteSchemaIdentity(database) !==
-            inputs.schema5SourceSqliteSchemaIdentity
-        ) {
-          throw new Error(
-            `Schema ${version} to 5 upgrade did not produce frozen historical Schema 5`,
-          );
-        }
-      } else if (version === 5) {
-        const sourceIdentity = calculateDatabaseSqliteSchemaIdentity(database);
-        if (sourceIdentity !== inputs.schema5SourceSqliteSchemaIdentity) {
-          throw new Error(
-            `Schema 5 sqlite_schema identity mismatch: expected ${inputs.schema5SourceSqliteSchemaIdentity}, received ${sourceIdentity}`,
-          );
-        }
-      }
-      if (version === 3 || version === 4 || version === 5) {
-        database.exec(inputs.schema5To6UpgradeSql);
-        if (
-          Number(scalarPragma(database, 'user_version')) !== 6 ||
-          calculateDatabaseSqliteSchemaIdentity(database) !==
-            inputs.schema6SourceSqliteSchemaIdentity
-        ) {
-          throw new Error(
-            `Schema ${version} to 6 upgrade did not produce frozen historical Schema 6`,
-          );
-        }
-      } else if (version === 6) {
-        const sourceIdentity = calculateDatabaseSqliteSchemaIdentity(database);
-        if (sourceIdentity !== inputs.schema6SourceSqliteSchemaIdentity) {
-          throw new Error(
-            `Schema 6 sqlite_schema identity mismatch: expected ${inputs.schema6SourceSqliteSchemaIdentity}, received ${sourceIdentity}`,
-          );
-        }
-      }
-      if (version < 7) {
-        database.exec(inputs.schema6To7UpgradeSql);
-        const schema7Version = Number(scalarPragma(database, 'user_version'));
-        const schema7Identity = calculateDatabaseSqliteSchemaIdentity(database);
-        if (
-          schema7Version !== 7 ||
-          schema7Identity !== inputs.schema7SourceSqliteSchemaIdentity
-        ) {
-          throw new Error(
-            `Schema ${version} to 7 upgrade did not produce frozen Schema 7: expected identity ${inputs.schema7SourceSqliteSchemaIdentity}, received version ${schema7Version} identity ${schema7Identity}`,
-          );
-        }
-      } else if (version === 7) {
-        const sourceIdentity = calculateDatabaseSqliteSchemaIdentity(database);
-        if (sourceIdentity !== inputs.schema7SourceSqliteSchemaIdentity) {
-          throw new Error(
-            `Schema 7 sqlite_schema identity mismatch: expected ${inputs.schema7SourceSqliteSchemaIdentity}, received ${sourceIdentity}`,
-          );
-        }
-      }
-      if (version < 8) {
-        database.exec(inputs.schema7To8UpgradeSql);
-        const schema8Version = Number(scalarPragma(database, 'user_version'));
-        const schema8Identity = calculateDatabaseSqliteSchemaIdentity(database);
-        if (
-          schema8Version !== 8 ||
-          schema8Identity !== inputs.schema8SourceSqliteSchemaIdentity
-        ) {
-          throw new Error(
-            `Schema ${version} to 8 upgrade did not produce frozen Schema 8: expected identity ${inputs.schema8SourceSqliteSchemaIdentity}, received version ${schema8Version} identity ${schema8Identity}`,
-          );
-        }
-      } else if (version === 8) {
-        const sourceIdentity = calculateDatabaseSqliteSchemaIdentity(database);
-        if (sourceIdentity !== inputs.schema8SourceSqliteSchemaIdentity) {
-          throw new Error(
-            `Schema 8 sqlite_schema identity mismatch: expected ${inputs.schema8SourceSqliteSchemaIdentity}, received ${sourceIdentity}`,
-          );
-        }
-      }
-      if (version < 9) {
-        database.exec(inputs.schema8To9UpgradeSql);
-        const schema9Version = Number(scalarPragma(database, 'user_version'));
-        const schema9Identity = calculateDatabaseSqliteSchemaIdentity(database);
-        if (
-          schema9Version !== 9 ||
-          schema9Identity !== inputs.schema9SourceSqliteSchemaIdentity
-        ) {
-          throw new Error(
-            `Schema ${version} to 9 upgrade did not produce frozen Schema 9: expected identity ${inputs.schema9SourceSqliteSchemaIdentity}, received version ${schema9Version} identity ${schema9Identity}`,
-          );
-        }
-      } else if (version === 9) {
-        const sourceIdentity = calculateDatabaseSqliteSchemaIdentity(database);
-        if (sourceIdentity !== inputs.schema9SourceSqliteSchemaIdentity) {
-          throw new Error(
-            `Schema 9 sqlite_schema identity mismatch: expected ${inputs.schema9SourceSqliteSchemaIdentity}, received ${sourceIdentity}`,
-          );
-        }
-      }
-      if (version < 10) {
-        database.exec(inputs.schema9To10UpgradeSql);
-        const schema10Version = Number(scalarPragma(database, 'user_version'));
-        const schema10Identity =
-          calculateDatabaseSqliteSchemaIdentity(database);
-        if (
-          schema10Version !== 10 ||
-          schema10Identity !== inputs.schema10SourceSqliteSchemaIdentity
-        ) {
-          throw new Error(
-            `Schema ${version} to 10 upgrade did not produce frozen Schema 10: expected identity ${inputs.schema10SourceSqliteSchemaIdentity}, received version ${schema10Version} identity ${schema10Identity}`,
-          );
-        }
-      } else {
-        const sourceIdentity = calculateDatabaseSqliteSchemaIdentity(database);
-        if (sourceIdentity !== inputs.schema10SourceSqliteSchemaIdentity) {
-          throw new Error(
-            `Schema 10 sqlite_schema identity mismatch: expected ${inputs.schema10SourceSqliteSchemaIdentity}, received ${sourceIdentity}`,
-          );
-        }
-      }
-      database.exec(inputs.schema10To11UpgradeSql);
-      const upgradedVersion = Number(scalarPragma(database, 'user_version'));
-      const upgradedIdentity = calculateDatabaseSqliteSchemaIdentity(database);
-      if (
-        upgradedVersion !== inputs.schemaManifest.database_schema_version ||
-        upgradedIdentity !== inputs.sqliteSchemaIdentity
-      ) {
-        throw new Error(
-          `Schema ${version} to 11 upgrade did not produce current Schema 11: expected version ${inputs.schemaManifest.database_schema_version} identity ${inputs.sqliteSchemaIdentity}, received version ${upgradedVersion} identity ${upgradedIdentity}`,
-        );
-      }
-      verifyIntegrity(database);
-      database.exec('COMMIT');
-      database.pragma('foreign_keys = ON');
-    } catch (error) {
-      if (database.inTransaction) database.exec('ROLLBACK');
-      database.pragma('foreign_keys = ON');
-      throw error;
-    }
+    migrateWorkflowRuntimeSchema(database);
   } catch (error) {
     if (error instanceof WorkflowRuntimeStoreError) throw error;
     throw new WorkflowRuntimeStoreError(
@@ -475,20 +259,16 @@ function upgradeSchemaIfEligible(
   }
 }
 
-function bootstrapFreshDatabase(
-  databasePath: string,
-  inputs: Readonly<FrozenWorkflowRuntimeStoreInputs>,
-): void {
-  const profile = inputs.profile;
+function bootstrapFreshDatabase(databasePath: string): void {
   const bootstrap = new Database(databasePath, {
-    timeout: profile.busy_timeout_ms,
+    timeout: WORKFLOW_RUNTIME_SQLITE_CONFIG.busyTimeoutMs,
   });
   try {
-    bootstrap.pragma(`page_size = ${profile.page_size}`);
+    bootstrap.pragma(`page_size = ${WORKFLOW_RUNTIME_SQLITE_CONFIG.pageSize}`);
     bootstrap.pragma('auto_vacuum = INCREMENTAL');
     assertEqual(
       Number(scalarPragma(bootstrap, 'page_size')),
-      profile.page_size,
+      WORKFLOW_RUNTIME_SQLITE_CONFIG.pageSize,
       'bootstrap page_size',
     );
     assertEqual(
@@ -497,7 +277,8 @@ function bootstrapFreshDatabase(
       'bootstrap auto_vacuum',
     );
     bootstrap.pragma('foreign_keys = ON');
-    bootstrap.exec(inputs.migrationSql);
+    bootstrap.exec(readFreshWorkflowRuntimeSchemaSql());
+    assertCurrentWorkflowRuntimeStructure(bootstrap);
     assertEqual(
       String(
         bootstrap.pragma('journal_mode = WAL', { simple: true }),
@@ -554,21 +335,20 @@ function canonicalDatabasePath(
 
 function openConfiguredDatabase(
   databasePath: string,
-  inputs: Readonly<FrozenWorkflowRuntimeStoreInputs>,
   readOnly: boolean,
 ): Database.Database {
   const database = new Database(databasePath, {
     readonly: readOnly,
     fileMustExist: true,
-    timeout: inputs.profile.busy_timeout_ms,
+    timeout: WORKFLOW_RUNTIME_SQLITE_CONFIG.busyTimeoutMs,
   });
   try {
     // Existing databases are verified before any profile-setting PRAGMA is issued.
-    verifyDatabaseLevelProfile(database, inputs);
-    configureConnection(database, inputs, readOnly);
-    verifyCompleteProfile(database, inputs, readOnly);
+    verifyDatabaseLevelProfile(database);
+    configureConnection(database, readOnly);
+    verifyCompleteProfile(database, readOnly);
     verifyIntegrity(database);
-    verifyFrozenSchema(database, inputs);
+    verifyCurrentSchema(database);
     try {
       assertRuntimeCommandIngressIntegrity(new ReadConnection(database));
     } catch (error) {
@@ -743,8 +523,7 @@ function isThenable(value: unknown): value is PromiseLike<unknown> {
 
 export class WorkflowRuntimeStore {
   readonly databasePath: string;
-  readonly identityEvidence: WorkflowRuntimeIdentityEvidence;
-  readonly frozenInputs: Readonly<FrozenWorkflowRuntimeStoreInputs>;
+  readonly schemaVersion = CURRENT_WORKFLOW_RUNTIME_SCHEMA_VERSION;
   #writer: Database.Database;
   #reader: WorkflowRuntimeReadConnection;
   #releaseWriter: () => void;
@@ -755,8 +534,6 @@ export class WorkflowRuntimeStore {
     databasePath: string,
     writer: Database.Database,
     reader: WorkflowRuntimeReadConnection,
-    identityEvidence: WorkflowRuntimeIdentityEvidence,
-    frozenInputs: Readonly<FrozenWorkflowRuntimeStoreInputs>,
     releaseWriter: () => void,
   ) {
     if (token !== storeConstructorToken) {
@@ -767,8 +544,6 @@ export class WorkflowRuntimeStore {
     this.databasePath = databasePath;
     this.#writer = writer;
     this.#reader = reader;
-    this.identityEvidence = identityEvidence;
-    this.frozenInputs = frozenInputs;
     this.#releaseWriter = releaseWriter;
   }
 
@@ -873,10 +648,6 @@ export class WorkflowRuntimeConnectionFactory {
   static openStore(
     options: OpenWorkflowRuntimeStoreOptions,
   ): WorkflowRuntimeStore {
-    const inputs = loadFrozenWorkflowRuntimeStoreInputs(
-      storeInputRootsForIdentityMode(options.identityMode),
-    );
-    assertRuntimeHostIdentity(inputs.profile, options.identityMode);
     const databasePath = canonicalDatabasePath(
       options.databasePath,
       options.databaseMode,
@@ -907,31 +678,22 @@ export class WorkflowRuntimeConnectionFactory {
     try {
       if (options.databaseMode === 'create') {
         fresh = true;
-        bootstrapFreshDatabase(databasePath, inputs);
+        bootstrapFreshDatabase(databasePath);
       } else {
-        upgradeSchemaIfEligible(databasePath, inputs);
+        upgradeSchemaIfEligible(databasePath);
       }
-      writer = openConfiguredDatabase(databasePath, inputs, false);
+      writer = openConfiguredDatabase(databasePath, false);
       configureWriterTransientTables(writer);
-      const identityEvidence = collectWorkflowRuntimeIdentityEvidence(
-        writer,
-        inputs.profile,
-        options.identityMode,
-      );
-      reader = this.openReadOnlyInternal(
-        databasePath,
-        inputs,
-        options.identityMode,
-      );
-      return new WorkflowRuntimeStore(
+      reader = this.openReadOnlyInternal(databasePath);
+      const store = new WorkflowRuntimeStore(
         storeConstructorToken,
         databasePath,
         writer,
         reader,
-        identityEvidence,
-        inputs,
         () => writerOwners.delete(databasePath),
       );
+      ensureCapacityDefaults(store);
+      return store;
     } catch (error) {
       reader?.close();
       if (writer?.open) writer.close();
@@ -944,10 +706,6 @@ export class WorkflowRuntimeConnectionFactory {
   static openReadOnly(
     options: OpenWorkflowRuntimeReadOnlyOptions,
   ): WorkflowRuntimeReadConnection {
-    const inputs = loadFrozenWorkflowRuntimeStoreInputs(
-      storeInputRootsForIdentityMode(options.identityMode),
-    );
-    assertRuntimeHostIdentity(inputs.profile, options.identityMode);
     const databasePath = canonicalDatabasePath(
       options.databasePath,
       'read_only',
@@ -958,29 +716,13 @@ export class WorkflowRuntimeConnectionFactory {
         `Existing Workflow Runtime database is missing: ${databasePath}`,
       );
     }
-    return this.openReadOnlyInternal(
-      databasePath,
-      inputs,
-      options.identityMode,
-    );
+    return this.openReadOnlyInternal(databasePath);
   }
 
   private static openReadOnlyInternal(
     databasePath: string,
-    inputs: Readonly<FrozenWorkflowRuntimeStoreInputs>,
-    identityMode: WorkflowRuntimeIdentityMode,
   ): WorkflowRuntimeReadConnection {
-    const database = openConfiguredDatabase(databasePath, inputs, true);
-    try {
-      collectWorkflowRuntimeIdentityEvidence(
-        database,
-        inputs.profile,
-        identityMode,
-      );
-      return new ReadConnection(database);
-    } catch (error) {
-      database.close();
-      throw error;
-    }
+    const database = openConfiguredDatabase(databasePath, true);
+    return new ReadConnection(database);
   }
 }

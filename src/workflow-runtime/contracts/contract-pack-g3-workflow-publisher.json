@@ -12,13 +12,6 @@
     "status": "DONE",
     "g3_status": "IN_PROGRESS",
     "publisher_schema_readiness": "PUBLISHER_SCHEMA_PREREQUISITE_READY",
-    "upstream": {
-      "g1_schema_root_hash": "sha256:2adb9376d341ad430155829647086bcc76f84ebf22dffac28c19d4026ea06ab2",
-      "g3_1_pack_hash": "sha256:198c3184d98e3b1f19a8f9bbbf150fb6cff032a984fb66dfd99ce9044f3fd41c",
-      "g3_3_pack_hash": "sha256:969e586947ef065c3c81955eea9e9077bc7057cd80090e05e0a6a994d097b88b",
-      "g3_5_pack_hash": "sha256:80c8436bdee143790c16e1c383e2e29916358d2cbe17f121154966d231811c4a",
-      "g3_6_pack_hash": "sha256:3fa7afb5fa9294325004476ee230b896bc08fe8a6e6fe7f8c719c130e4c6911b"
-    },
     "request_schema_resource_hash": "sha256:9aec8a311f11d6b7a46de125ffac54840cdb31630e32f5abb11149d7df3f0939",
     "receipt_schema_resource_hash": "sha256:2dc6be728d9ff9353f0ec30949191f34526138472a309cd82be952dd2dcaedde",
     "result_schema_resource_hash": "sha256:6d43220a2c169ba59b1db4f205d7c82dfba0d7e9db3d85cbc6065c5ece584644",
@@ -86,7 +79,7 @@
         },
         "version": 1,
         "domain_separator": "icarus:workflow-g3-staged-publish-positive-cases:1\n",
-        "hash": "sha256:787a3a33083fcee5210c2a3749410ef0304b9cdb991fca88adaa5ca92d10d9a5"
+        "hash": "sha256:6c3ba410fdb92a46e53e85f43cb16f5611dfff32e578dc4e652bcc2b5106df59"
       },
       {
         "path": "conformance/g3-workflow-publisher/negative-cases.json",
@@ -97,7 +90,7 @@
         },
         "version": 1,
         "domain_separator": "icarus:workflow-g3-staged-publish-negative-cases:1\n",
-        "hash": "sha256:346c633cae3bbc4f3a16ed44bdd7f6d7b64418ff109a984f6b895f0987e70884"
+        "hash": "sha256:74518e3b5deeda14bac60722dce863ecb0c9dae5b4d0fc9ef55443ad24b7e08e"
       },
       {
         "path": "registry/workflow-staged-publish-domain-separators@1.json",
@@ -114,5 +107,5 @@
     "positive_case_count": 1,
     "negative_case_count": 3
   },
-  "hash": "sha256:e920dda8452f2b217bcbaf169c1109489456b082f6156d623410cd9ae0ed4ab9"
+  "hash": "sha256:c454bd0da0a5d561bb86e187c4dd0e4b791042ae67bb3221c70a78b277f2d9b7"
 }

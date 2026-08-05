@@ -67,8 +67,6 @@ describe('G3.3 Registry persistence contracts', () => {
         snapshot_ref: batch.snapshot.ref,
         snapshot_hash: batch.snapshot.snapshot_hash,
         expected_compiler_version: batch.snapshot.compiler_version,
-        expected_core_build_hash: batch.snapshot.core_build_hash,
-        expected_database_schema_hash: batch.snapshot.database_schema_hash,
       }),
     ).toBe(true);
     const resultValidate = ajv.compile(

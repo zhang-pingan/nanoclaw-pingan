@@ -241,7 +241,6 @@ runtime_layout() {
   RUNTIME_LAUNCHER_PATH="$RUNTIME_HOME/bin/icarus-runtime"
   INSTALLED_TOOLCHAIN_PATH="$RUNTIME_HOME/libexec/icarus-runtime-toolchain"
   ACTIVE_CORE_POINTER="$RUNTIME_HOME/active-core"
-  ACTIVATION_CORE_POINTER="$RUNTIME_HOME/activation-core"
 }
 
 assert_relative_safe_path() {
@@ -671,34 +670,6 @@ write_release_core_binding() {
   set_relative_pointer "$ACTIVE_CORE_POINTER" "core-bindings/${binding_hash#sha256:}"
 }
 
-stage_production_core_binding() {
-  local source_binding="$1"
-  local source_real
-  local format
-  local kind
-  local binding_hash
-  local binding_directory
-  local binding_file
-
-  [ -f "$source_binding" ] && [ ! -L "$source_binding" ] || fail production_core_binding_missing
-  source_real="$(resolve_self "$source_binding")"
-  format="$(json_string "$source_real" format)"
-  kind="$(json_string "$source_real" binding_kind)"
-  binding_hash="$(json_string "$source_real" binding_hash)"
-  [ "$format" = "icarus.core-runtime-launch-binding/3" ] || fail core_binding_invalid format
-  [ "$kind" = "content_addressed_production_release" ] || fail core_binding_invalid binding_kind
-  [[ "$binding_hash" =~ ^sha256:[0-9a-f]{64}$ ]] || fail core_binding_invalid binding_hash
-  binding_directory="$RUNTIME_HOME/core-bindings/${binding_hash#sha256:}"
-  binding_file="$binding_directory/binding.json"
-  mkdir -p "$binding_directory"
-  if [ -f "$binding_file" ]; then
-    cmp -s "$source_real" "$binding_file" || fail core_binding_collision "$binding_file"
-  else
-    atomic_copy "$source_real" "$binding_file" 644
-  fi
-  STAGED_PRODUCTION_BINDING_RELATIVE="core-bindings/${binding_hash#sha256:}"
-}
-
 assert_core_binding_keyset() {
   local file="$1"
   local kind="$2"
@@ -709,8 +680,6 @@ assert_core_binding_keyset() {
     expected="$(printf '%s\n' binding_hash binding_kind core_entry_relative_path core_entry_sha256 format managed_node_manifest_hash project_root | LC_ALL=C sort)"
   elif [ "$kind" = "content_addressed_release" ]; then
     expected="$(printf '%s\n' binding_hash binding_kind core_build_hash core_entry_relative_path core_entry_sha256 core_release_relative_path format managed_node_manifest_hash release_artifact_hash release_manifest_relative_path release_manifest_sha256 validation_entry_relative_path validation_entry_sha256 | LC_ALL=C sort)"
-  elif [ "$kind" = "content_addressed_production_release" ]; then
-    expected="$(printf '%s\n' activation_entry_relative_path activation_entry_sha256 binding_hash binding_kind core_build_hash core_entry_relative_path core_entry_sha256 core_release_relative_path format managed_node_manifest_hash release_artifact_hash release_manifest_relative_path release_manifest_sha256 validation_entry_relative_path validation_entry_sha256 | LC_ALL=C sort)"
   else
     fail core_binding_invalid binding_kind
   fi
@@ -802,11 +771,6 @@ verify_core_binding() {
   format="$(json_string "$binding_file" format)"
   if [ "$kind" = "content_addressed_release" ]; then
     verify_release_core_binding "$binding_directory" "$binding_file" "$format"
-    CORE_BINDING_KIND="$kind"
-    return
-  fi
-  if [ "$kind" = "content_addressed_production_release" ]; then
-    verify_production_core_binding "$binding_directory" "$binding_file" "$format"
     CORE_BINDING_KIND="$kind"
     return
   fi
@@ -969,145 +933,6 @@ verify_release_core_binding() {
   CORE_ENTRY_PATH="$resolved"
 }
 
-verify_production_core_binding() {
-  local binding_directory="$1"
-  local binding_file="$2"
-  local format="$3"
-  local release_relative
-  local manifest_relative
-  local manifest_sha
-  local release_artifact_hash
-  local core_build_hash
-  local core_relative
-  local core_sha
-  local validation_relative
-  local validation_sha
-  local activation_relative
-  local activation_sha
-  local manifest_hash
-  local binding_hash
-  local release_root
-  local release_manifest
-  local resolved
-  local calculated
-  local canonical
-  local manifest_value
-  local actual
-  local expected
-
-  release_relative="$(json_string "$binding_file" core_release_relative_path)"
-  manifest_relative="$(json_string "$binding_file" release_manifest_relative_path)"
-  manifest_sha="$(json_string "$binding_file" release_manifest_sha256)"
-  release_artifact_hash="$(json_string "$binding_file" release_artifact_hash)"
-  core_build_hash="$(json_string "$binding_file" core_build_hash)"
-  core_relative="$(json_string "$binding_file" core_entry_relative_path)"
-  core_sha="$(json_string "$binding_file" core_entry_sha256)"
-  validation_relative="$(json_string "$binding_file" validation_entry_relative_path)"
-  validation_sha="$(json_string "$binding_file" validation_entry_sha256)"
-  activation_relative="$(json_string "$binding_file" activation_entry_relative_path)"
-  activation_sha="$(json_string "$binding_file" activation_entry_sha256)"
-  manifest_hash="$(json_string "$binding_file" managed_node_manifest_hash)"
-  binding_hash="$(json_string "$binding_file" binding_hash)"
-
-  actual="$(cat "$binding_file")"
-  expected="$(printf '%s\n' \
-    '{' \
-    '  "format": "icarus.core-runtime-launch-binding/3",' \
-    '  "binding_kind": "content_addressed_production_release",' \
-    '  "core_release_relative_path": "'"${release_relative}"'",' \
-    '  "release_manifest_relative_path": "'"${manifest_relative}"'",' \
-    '  "release_manifest_sha256": "'"${manifest_sha}"'",' \
-    '  "release_artifact_hash": "'"${release_artifact_hash}"'",' \
-    '  "core_build_hash": "'"${core_build_hash}"'",' \
-    '  "core_entry_relative_path": "'"${core_relative}"'",' \
-    '  "core_entry_sha256": "'"${core_sha}"'",' \
-    '  "validation_entry_relative_path": "'"${validation_relative}"'",' \
-    '  "validation_entry_sha256": "'"${validation_sha}"'",' \
-    '  "activation_entry_relative_path": "'"${activation_relative}"'",' \
-    '  "activation_entry_sha256": "'"${activation_sha}"'",' \
-    '  "managed_node_manifest_hash": "'"${manifest_hash}"'",' \
-    '  "binding_hash": "'"${binding_hash}"'"' \
-    '}')"
-  [ "$actual" = "$expected" ] || fail core_binding_invalid "non-canonical production JSON document"
-  [ "$format" = "icarus.core-runtime-launch-binding/3" ] || fail core_binding_invalid format
-  [ "$manifest_hash" = "$MANIFEST_HASH" ] || fail core_binding_manifest_mismatch
-  for calculated in "$manifest_sha" "$release_artifact_hash" "$core_build_hash" "$core_sha" "$validation_sha" "$activation_sha" "$binding_hash"; do
-    [[ "$calculated" =~ ^sha256:[0-9a-f]{64}$ ]] || fail core_binding_invalid hash
-  done
-  assert_relative_safe_path "$release_relative" core_release_path_invalid
-  assert_relative_safe_path "$manifest_relative" core_release_manifest_invalid
-  assert_core_entry_relative "$core_relative"
-  assert_core_entry_relative "$validation_relative"
-  assert_core_entry_relative "$activation_relative"
-  [[ "$release_relative" =~ ^core-releases/[0-9a-f]{64}$ ]] || fail core_release_path_invalid
-  [ "${release_relative#core-releases/}" = "${release_artifact_hash#sha256:}" ] || fail core_release_path_mismatch
-  [ "$manifest_relative" = "core-production-release-manifest.json" ] || fail core_release_manifest_identity_mismatch filename
-  [ "$core_relative" = "dist/index.js" ] || fail core_entry_invalid
-  [ "$validation_relative" = "dist/workflow-runtime/certification/release-entry.js" ] || fail validation_entry_invalid
-  [ "$activation_relative" = "dist/workflow-runtime/registry/production-activation-entry.js" ] || fail activation_entry_invalid
-
-  [ -d "$RUNTIME_HOME/$release_relative" ] || fail core_release_missing "$release_relative"
-  release_root="$(cd -P "$RUNTIME_HOME/$release_relative" && pwd)"
-  case "$release_root" in "$RUNTIME_HOME/core-releases"/*) ;; *) fail core_release_outside_root ;; esac
-  release_manifest="$release_root/$manifest_relative"
-  [ -f "$release_manifest" ] || fail core_release_manifest_missing
-  resolved="$(resolve_self "$release_manifest")"
-  case "$resolved" in "$release_root"/*) ;; *) fail core_release_manifest_outside_root ;; esac
-  release_manifest="$resolved"
-  calculated="sha256:$(sha256_file "$release_manifest")"
-  [ "$calculated" = "$manifest_sha" ] || fail core_release_manifest_hash_mismatch
-  manifest_value="$(json_string "$release_manifest" format)"
-  [ "$manifest_value" = "icarus.core-production-release-manifest/1" ] || fail core_release_manifest_identity_mismatch format
-  manifest_value="$(json_string "$release_manifest" release_scope)"
-  [ "$manifest_value" = "workflow_runtime_g9_production_candidate" ] || fail core_release_manifest_identity_mismatch release_scope
-  manifest_value="$(json_string "$release_manifest" activation_status)"
-  [ "$manifest_value" = "pending_fresh_independent_g8_boundary" ] || fail core_release_manifest_identity_mismatch activation_status
-  manifest_value="$(json_string "$release_manifest" build_kind)"
-  [ "$manifest_value" = "release" ] || fail core_release_manifest_identity_mismatch build_kind
-  manifest_value="$(json_string "$release_manifest" platform)"
-  [ "$manifest_value" = "$MANIFEST_PLATFORM" ] || fail core_release_manifest_identity_mismatch platform
-  manifest_value="$(json_string "$release_manifest" arch)"
-  [ "$manifest_value" = "$MANIFEST_ARCH" ] || fail core_release_manifest_identity_mismatch arch
-  manifest_value="$(json_string "$release_manifest" managed_node_distribution_hash)"
-  [ "$manifest_value" = "$MANIFEST_HASH" ] || fail core_release_manifest_identity_mismatch managed_node_distribution_hash
-  manifest_value="$(json_string "$release_manifest" runtime_launcher_hash)"
-  calculated="sha256:$(sha256_file "$RUNTIME_LAUNCHER_PATH")"
-  [ "$manifest_value" = "$calculated" ] || fail core_release_manifest_identity_mismatch runtime_launcher_hash
-  manifest_value="$(json_string "$release_manifest" runtime_toolchain_hash)"
-  calculated="sha256:$(sha256_file "$INSTALLED_TOOLCHAIN_PATH")"
-  [ "$manifest_value" = "$calculated" ] || fail core_release_manifest_identity_mismatch runtime_toolchain_hash
-  for manifest_value in \
-    "release_artifact_hash:$release_artifact_hash" \
-    "core_build_hash:$core_build_hash" \
-    "core_entry_relative_path:$core_relative" \
-    "core_entry_sha256:$core_sha" \
-    "validation_entry_relative_path:$validation_relative" \
-    "validation_entry_sha256:$validation_sha" \
-    "activation_entry_relative_path:$activation_relative" \
-    "activation_entry_sha256:$activation_sha"; do
-    calculated="$(json_string "$release_manifest" "${manifest_value%%:*}")"
-    [ "$calculated" = "${manifest_value#*:}" ] || fail core_release_manifest_identity_mismatch "${manifest_value%%:*}"
-  done
-
-  for manifest_value in \
-    "$core_relative:$core_sha" \
-    "$validation_relative:$validation_sha" \
-    "$activation_relative:$activation_sha"; do
-    resolved="$(resolve_self "$release_root/${manifest_value%%:*}")"
-    case "$resolved" in "$release_root"/*) ;; *) fail release_entry_outside_root ;; esac
-    calculated="sha256:$(sha256_file "$resolved")"
-    [ "$calculated" = "${manifest_value#*:}" ] || fail release_entry_hash_mismatch
-  done
-
-  canonical="{\"activation_entry_relative_path\":\"${activation_relative}\",\"activation_entry_sha256\":\"${activation_sha}\",\"binding_kind\":\"content_addressed_production_release\",\"core_build_hash\":\"${core_build_hash}\",\"core_entry_relative_path\":\"${core_relative}\",\"core_entry_sha256\":\"${core_sha}\",\"core_release_relative_path\":\"${release_relative}\",\"format\":\"${format}\",\"managed_node_manifest_hash\":\"${manifest_hash}\",\"release_artifact_hash\":\"${release_artifact_hash}\",\"release_manifest_relative_path\":\"${manifest_relative}\",\"release_manifest_sha256\":\"${manifest_sha}\",\"validation_entry_relative_path\":\"${validation_relative}\",\"validation_entry_sha256\":\"${validation_sha}\"}"
-  calculated="sha256:$(printf '%s\n%s' 'icarus:core-runtime-launch-binding:3' "$canonical" | sha256_stdin)"
-  [ "$calculated" = "$binding_hash" ] || fail core_binding_hash_mismatch
-  [ "$(basename "$binding_directory")" = "${binding_hash#sha256:}" ] || fail core_binding_path_mismatch
-  CORE_ENTRY_PATH="$(resolve_self "$release_root/$core_relative")"
-  VALIDATION_ENTRY_PATH="$(resolve_self "$release_root/$validation_relative")"
-  ACTIVATION_ENTRY_PATH="$(resolve_self "$release_root/$activation_relative")"
-}
-
 managed_exec() {
   local source_manifest="$1"
   local command
@@ -1139,15 +964,6 @@ launcher_exec() {
   unset NODE_OPTIONS NODE_PATH ICARUS_RUNTIME_HOME ICARUS_TOOLCHAIN_MANIFEST
   verify_active_distribution "$installed_manifest"
   case "$selector" in
-    g8-validation|production-activation)
-      shift
-      verify_core_binding "$ACTIVATION_CORE_POINTER"
-      if [ "$selector" = "g8-validation" ]; then
-        launch_entry="$VALIDATION_ENTRY_PATH"
-      else
-        launch_entry="$ACTIVATION_ENTRY_PATH"
-      fi
-      ;;
     core)
       shift
       verify_core_binding "$ACTIVE_CORE_POINTER"
@@ -1155,7 +971,6 @@ launcher_exec() {
       ;;
     *)
       verify_core_binding "$ACTIVE_CORE_POINTER"
-      [ "$CORE_BINDING_KIND" != "content_addressed_production_release" ] || fail launcher_selector_required
       launch_entry="$CORE_ENTRY_PATH"
       ;;
   esac
@@ -1164,7 +979,7 @@ launcher_exec() {
 }
 
 usage() {
-  echo "Usage: scripts/runtime-toolchain.sh [--runtime-home PATH] [--manifest PATH] <install|verify|exec|active-path|bind-core|bind-release|stage-production-release>" >&2
+  echo "Usage: scripts/runtime-toolchain.sh [--runtime-home PATH] [--manifest PATH] <install|verify|exec|active-path|bind-core|bind-release>" >&2
   exit 64
 }
 
@@ -1288,29 +1103,6 @@ case "$COMMAND" in
     verify_core_binding
     printf 'runtime_launcher=%s\n' "$RUNTIME_LAUNCHER_PATH"
     printf 'core_binding_kind=content_addressed_release\n'
-    ;;
-  stage-production-release)
-    PRODUCTION_BINDING=""
-    while [ "$#" -gt 0 ]; do
-      case "$1" in
-        --binding) [ "$#" -ge 2 ] || usage; PRODUCTION_BINDING="$2"; shift 2 ;;
-        *) usage ;;
-      esac
-    done
-    [ -n "$PRODUCTION_BINDING" ] || usage
-    verify_active_distribution "$MANIFEST_PATH"
-    install_launcher_components
-    stage_production_core_binding "$PRODUCTION_BINDING"
-    PRODUCTION_VERIFY_POINTER="$RUNTIME_HOME/.activation-core-verify.$$.$RANDOM"
-    rm -f "$PRODUCTION_VERIFY_POINTER"
-    ln -s "$STAGED_PRODUCTION_BINDING_RELATIVE" "$PRODUCTION_VERIFY_POINTER"
-    TEMP_PATHS+=("$PRODUCTION_VERIFY_POINTER")
-    verify_core_binding "$PRODUCTION_VERIFY_POINTER"
-    set_relative_pointer "$ACTIVATION_CORE_POINTER" "$STAGED_PRODUCTION_BINDING_RELATIVE"
-    rm -f "$PRODUCTION_VERIFY_POINTER"
-    printf 'runtime_launcher=%s\n' "$RUNTIME_LAUNCHER_PATH"
-    printf 'core_binding_kind=content_addressed_production_release\n'
-    printf 'activation_core_pointer=%s\n' "$ACTIVATION_CORE_POINTER"
     ;;
   *) usage ;;
 esac

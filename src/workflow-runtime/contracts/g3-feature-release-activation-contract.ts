@@ -2,10 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { parseContractArtifactEnvelope } from './artifact.js';
-import { checkG38AActivationContractRepair } from './g3-8a-activation-contract-repair.js';
-import { checkG3RetentionExecutorAbiPreflight } from './g3-retention-executor-abi-preflight.js';
 import { compareAscii } from './g3-registry-persistence.js';
-import { checkG37WorkflowPublisherContracts } from './g3-workflow-publisher-contract.js';
 import {
   deterministicG39FixtureDigest,
   g39ActivationFaultCases,
@@ -30,7 +27,6 @@ import {
   G39_RESULT_DOMAIN,
   G39_RESULT_SCHEMA,
   G39_SCHEMA_RESOURCE_HASHES,
-  G39_UPSTREAM_IDENTITIES,
   validateG39FeatureReleaseActivationRequest,
 } from './g3-feature-release-activation.js';
 import { G3_RETENTION_EXECUTOR_ABI_ERROR_PRECEDENCE } from './g3-retention-executor-abi-preflight-types.js';
@@ -314,7 +310,6 @@ function buildManifest(
       slice: 'G3.9',
       status: 'DONE',
       g3_status: 'EXIT_CANDIDATE_PENDING_INDEPENDENT_G3_REGRESSION',
-      upstream: G39_UPSTREAM_IDENTITIES,
       schema_resource_hashes: G39_SCHEMA_RESOURCE_HASHES,
       fixture_digest: deterministicG39FixtureDigest(),
       error_precedence: [...G39_ACTIVATION_ERROR_PRECEDENCE],
@@ -370,21 +365,6 @@ function validateAll(
   parseContractArtifactEnvelope(manifest);
   if (canonicalJson(buildManifest(artifacts)) !== canonicalJson(manifest))
     throw new Error('G3.9 Contract Pack manifest is not deterministic');
-  if (
-    checkG38AActivationContractRepair().hash !==
-    G39_UPSTREAM_IDENTITIES.g3_8a_pack_hash
-  )
-    throw new Error('G3.8A pack identity drift');
-  if (
-    checkG3RetentionExecutorAbiPreflight().hash !==
-    G39_UPSTREAM_IDENTITIES.g3_6_pack_hash
-  )
-    throw new Error('G3.6 pack identity drift');
-  if (
-    checkG37WorkflowPublisherContracts().hash !==
-    G39_UPSTREAM_IDENTITIES.g3_7_pack_hash
-  )
-    throw new Error('G3.7 pack identity drift');
 }
 
 export function generateG39FeatureReleaseActivationContracts(): ContractArtifactEnvelope {

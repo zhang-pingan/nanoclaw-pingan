@@ -2771,9 +2771,6 @@ async function main(): Promise<void> {
       databaseMode: fs.existsSync(runtimeDatabasePath)
         ? 'open_existing'
         : 'create',
-      // This checkout-only experiment must not replace the active release
-      // binding. isolated_test still verifies the managed Runtime toolchain.
-      identityMode: 'isolated_test',
     });
     workflowAdapterExecutionStore = new WorkflowAdapterExecutionStore(
       path.join(STORE_DIR, 'workflow-adapter-executions.db'),

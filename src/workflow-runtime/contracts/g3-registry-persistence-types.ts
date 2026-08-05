@@ -91,8 +91,6 @@ export interface G3RegistrySnapshotPreflightInput extends JsonObject {
   snapshot_ref: VersionedRef;
   snapshot_hash: Sha256Hash;
   expected_compiler_version: string;
-  expected_core_build_hash: Sha256Hash;
-  expected_database_schema_hash: Sha256Hash;
 }
 
 export type G3RegistrySnapshotPreflightCode =

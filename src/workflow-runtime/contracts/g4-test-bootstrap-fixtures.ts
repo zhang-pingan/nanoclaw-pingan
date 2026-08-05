@@ -171,10 +171,10 @@ export function g4PositiveCases(): JsonObject[] {
 
 export function g4NegativeCases(): JsonObject[] {
   return [
-    ['profile-ref-drift', 'profile_identity_mismatch'],
-    ['profile-hash-drift', 'profile_identity_mismatch'],
-    ['fixture-ref-drift', 'fixture_identity_mismatch'],
-    ['fixture-hash-drift', 'fixture_identity_mismatch'],
+    ['profile-ref-drift', 'profile_selection_mismatch'],
+    ['profile-hash-drift', 'profile_selection_mismatch'],
+    ['fixture-ref-drift', 'fixture_selection_mismatch'],
+    ['fixture-hash-drift', 'fixture_selection_mismatch'],
     ['g1-hash-drift', 'upstream_identity_mismatch'],
     ['g2-hash-drift', 'upstream_identity_mismatch'],
     ['g3-hash-drift', 'upstream_identity_mismatch'],

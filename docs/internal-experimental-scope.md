@@ -69,9 +69,11 @@ archive.
 
 Internal positioning does not justify weakening credential, host-access, privacy, or destructive-action safety. A single-user tool can still damage valuable local or external state.
 
-### Removed From The Default Path
+### Removed From The Active Path
 
-The following checks remain explicit but no longer run as part of normal `contracts:check` or `test:current`:
+The following construction-era checks are no longer part of active scripts or
+source. Their historical bytes remain available through Git history and the
+accepted v1 bundle:
 
 - Byte-for-byte verification of the retained v1 physical release archive.
 - Workflow Runtime certification tests.
@@ -84,9 +86,9 @@ and Compiler source/toolchain/package-lock/dependency/parser-wrapper/Node or
 implementation identity manifests. A behavior-preserving refactor must not
 require an identity hash update.
 
-The pull-request CI also no longer runs the retained physical snapshot verifier for unrelated changes.
-
-Use `npm run contracts:check:full` or `npm run test:full` only when changing these compatibility surfaces or investigating their historical artifacts.
+The pull-request CI also no longer runs the retained physical snapshot verifier
+for unrelated changes. `test:full` is an alias of the current supported test
+entrypoint; it does not reactivate retired certification or archive checks.
 
 ### Next Simplification Candidates
 

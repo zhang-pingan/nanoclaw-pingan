@@ -39,7 +39,7 @@ export const G3_PUBLISH_PREFLIGHT_ERROR_CODES = [
   'execution_artifact_abi_mismatch',
   'execution_artifact_pin_required',
   'feature_identity_pair_mismatch',
-  'g2_identity_mismatch',
+  'compiler_version_mismatch',
   'preflight_hash_mismatch',
   'production_compiler_actual_oracle_forbidden',
   'publisher_side_effect_requested',
@@ -57,28 +57,6 @@ export const G3_PUBLISH_PREFLIGHT_ERROR_CODES = [
 export type G3PublishPreflightErrorCode =
   (typeof G3_PUBLISH_PREFLIGHT_ERROR_CODES)[number];
 
-export interface G3ExactCompilerIdentity extends JsonObject {
-  compiler_toolchain_manifest_ref: VersionedRef;
-  compiler_toolchain_hash: Sha256Hash;
-  compiler_version: '3.0.6';
-  compiler_build_hash: Sha256Hash;
-  compiled_ir_schema_ref: string;
-  compiled_ir_schema_hash: Sha256Hash;
-  conformance_result_schema_ref: string;
-  conformance_result_schema_hash: Sha256Hash;
-}
-
-export interface G3UpstreamIdentity extends JsonObject {
-  g1_schema_root_hash: Sha256Hash;
-  g1_schema_dependency_manifest_hash: Sha256Hash;
-  g1_physical_schema_identity: Sha256Hash;
-  g1_schema_hash: Sha256Hash;
-  g1_migration_sha256: Sha256Hash;
-  g2_golden_corpus_ref: string;
-  g2_golden_corpus_hash: Sha256Hash;
-  compiler: G3ExactCompilerIdentity;
-}
-
 export interface G3RegistryResourceDependency extends JsonObject {
   resource_type: G3RegistryResourceType;
   ref: VersionedRef;
@@ -89,8 +67,7 @@ export interface G3CompiledPlanPin extends JsonObject {
   plan_ref: string;
   plan_hash: Sha256Hash;
   plan_format: 'icarus.workflow-graph-scope-plan/2';
-  compiler_toolchain_hash: Sha256Hash;
-  compiler_build_hash: Sha256Hash;
+  compiler_version: string;
   provenance: 'golden_corpus';
 }
 
@@ -136,7 +113,6 @@ export interface G3RegistryPublishPreflightInput extends JsonObject {
   feature_release_ref: VersionedRef | null;
   feature_release_hash: Sha256Hash | null;
   resources: G3RegistryResourceCandidate[];
-  upstream_identity: G3UpstreamIdentity;
   expected_oracle: 'golden_corpus_expected';
   production_compiler_actual_role: 'comparison_only' | 'expected_oracle';
   retention_policy_ref: VersionedRef;
@@ -172,41 +148,6 @@ export type G3RegistryPublishPreflightResult =
       dependency_closure_hash: null;
       side_effects: 'none_by_contract';
     };
-
-export const G3_CURRENT_UPSTREAM_IDENTITY: G3UpstreamIdentity = {
-  g1_schema_root_hash:
-    'sha256:2adb9376d341ad430155829647086bcc76f84ebf22dffac28c19d4026ea06ab2',
-  g1_schema_dependency_manifest_hash:
-    'sha256:a1f0d2ad63d87124512e3390eafdae2b4a2f5c5e5b57839016cc3ebf2d636afd',
-  g1_physical_schema_identity:
-    'sha256:58ea51aadb366ce0926a9c99f1e3507de257322a096f980f72c47c386b9ffedf',
-  g1_schema_hash:
-    'sha256:ad998b2d0bb5e5f158b0be6d13db79cb6a0c0650d5064b267262551af266189c',
-  g1_migration_sha256:
-    'sha256:ccaa7699894da98284b9ce86767d917e355441df93e010d90751ccb713c9b872',
-  g2_golden_corpus_ref: 'compiler/golden/cases@1.json',
-  g2_golden_corpus_hash:
-    'sha256:ffd426cec4269062fad47efeb75b7233a4d42a2961f724e480e33bf05ff81343',
-  compiler: {
-    compiler_toolchain_manifest_ref: {
-      id: 'icarus.workflow-compiler-toolchain',
-      version: '3.0.6',
-    },
-    compiler_toolchain_hash:
-      'sha256:dc01de3bbd06a70528b7466acfcc3b2c6e4b960de25d4a7cb5666ba9e06883e8',
-    compiler_version: '3.0.6',
-    compiler_build_hash:
-      'sha256:6ea4c825e91cc0fdaf3100e4b0f57e22723158bff1ad039ba359f857d285a069',
-    compiled_ir_schema_ref:
-      'conformance/generated-schema-join-authority-repair/compiled-scope-plan-v2-node-output-envelope-schema@1.json',
-    compiled_ir_schema_hash:
-      'sha256:3dd4f2be80d1e824cd2c0f02aec82830ceeb858d51fbd36c13f7574f032bf51e',
-    conformance_result_schema_ref:
-      'conformance/capability-outbox-execution-binding/schemas/compiler-conformance-case-result-execution-binding-schema@1.json',
-    conformance_result_schema_hash:
-      'sha256:ee41b9dff7eb2c97a75c81a7c15ec3bcf935ce233c29468a4ef7b7bfa047987e',
-  },
-};
 
 export const G3_RETENTION_POLICY_REF = {
   id: 'icarus.local-single-user-retention',

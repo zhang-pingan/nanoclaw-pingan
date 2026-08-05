@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { canonicalJson, domainSeparatedSha256 } from '../contracts/hash.js';
+import { G5_REPAIR_DATABASE_SCHEMA_HASH } from '../contracts/g5-basic-runtime-repair-types.js';
 import type { JsonObject, Sha256Hash } from '../contracts/types.js';
 import {
   calculateCreationIntentHash,
@@ -1693,7 +1694,7 @@ describe('G6 dynamic materialization and close', () => {
           coreReleaseRef: 'icarus.core@1.0.0',
           coreReleaseHash: g6Hash('core-release'),
           coreBuildHash: g6Hash('core-build'),
-          databaseSchemaHash: fixture.instance.store.frozenInputs.schemaHash,
+          databaseSchemaHash: G5_REPAIR_DATABASE_SCHEMA_HASH,
           sourceSeedHash: fixture.plan.source_hash as Sha256Hash,
           compilerSnapshotHash: g6Hash('compiler-snapshot'),
           inputSnapshot: fixture.seed.values.input!,
@@ -2262,7 +2263,7 @@ describe('G6 dynamic materialization and close', () => {
             coreReleaseRef: 'icarus.core@1.0.0',
             coreReleaseHash: g6Hash('core-release'),
             coreBuildHash: g6Hash('core-build'),
-            databaseSchemaHash: fixture.instance.store.frozenInputs.schemaHash,
+            databaseSchemaHash: G5_REPAIR_DATABASE_SCHEMA_HASH,
             sourceSeedHash: fixture.plan.source_hash as Sha256Hash,
             compilerSnapshotHash: g6Hash('compiler-snapshot'),
             inputSnapshot: fixture.seed.values.childInput!,

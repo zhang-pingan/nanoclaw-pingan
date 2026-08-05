@@ -28,7 +28,6 @@ function openFresh(): WorkflowRuntimeStore {
   const store = WorkflowRuntimeConnectionFactory.openStore({
     databasePath: path.join(root, 'workflow-runtime.db'),
     databaseMode: 'create',
-    identityMode: 'isolated_test',
   });
   stores.push(store);
   return store;
@@ -78,7 +77,6 @@ describe('G3.6 Retention / Executor ABI Store preflight', () => {
         closure_hash: input.closure.closure_hash,
         execution_artifact_count: 1,
         executor_implementation_count: 1,
-        run_protocol_major: 1,
         executor_abi_major: 1,
         retention_root_eligible: true,
       },
@@ -167,7 +165,7 @@ describe('G3.6 Retention / Executor ABI Store preflight', () => {
     ).toMatchObject({ code: 'artifact_binding_mismatch' });
 
     const abi = seed();
-    abi.input.executor_abi.major = 2;
+    abi.input.executor_abi_major = 2;
     abi.input.retention.policy_hash =
       'sha256:4444444444444444444444444444444444444444444444444444444444444444';
     expect(

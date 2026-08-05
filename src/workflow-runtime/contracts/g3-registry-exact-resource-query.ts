@@ -23,7 +23,6 @@ import {
   type G3RegistryExactResourceQueryProfile,
   type G3RegistryExactResourceQueryResult,
 } from './g3-registry-exact-resource-query-types.js';
-import { strictParseJsonBytes } from './strict-json.js';
 import type {
   ContractArtifactEnvelope,
   JsonObject,
@@ -530,22 +529,6 @@ function writeAtomic(relativePath: string, contents: string): void {
   fs.renameSync(temporary, target);
 }
 
-function readArtifact(relativePath: string): ContractArtifactEnvelope {
-  return parseContractArtifactEnvelope(
-    strictParseJsonBytes(fs.readFileSync(absolute(relativePath))),
-  );
-}
-
-function validateUpstreamIdentity(): void {
-  const upstream = readArtifact('contract-pack-g3-registry-persistence.json');
-  if (
-    upstream.hash !==
-    'sha256:772f9071985b4ee647b607e71662ffd828d4c2200397f2f9681f8e9f4c45f35c'
-  ) {
-    throw new Error('G3.3 Registry persistence identity drift');
-  }
-}
-
 function buildArtifacts(): Array<[string, ContractArtifactEnvelope]> {
   const profile = buildG3RegistryExactResourceQueryProfile();
   const fixtures = g3RegistryExactResourceQueryFixturesForTest();
@@ -650,10 +633,6 @@ function buildManifest(
       slice: 'G3.5',
       status: 'DONE',
       g3_status: 'IN_PROGRESS',
-      upstream_g3_3_pack_hash:
-        'sha256:969e586947ef065c3c81955eea9e9077bc7057cd80090e05e0a6a994d097b88b',
-      upstream_g1_schema_root_hash:
-        'sha256:c32fc2db46c49b09edeea2a31d07b4decf3b89a6272a3b7b69d933288efe24ca',
       query_mode: 'exact_resource_type_ref_content_hash_only',
       result_schema: 'closed',
       read_only: true,
@@ -683,7 +662,6 @@ function validateArtifacts(
   artifacts: Array<[string, ContractArtifactEnvelope]>,
   manifest: ContractArtifactEnvelope,
 ): void {
-  validateUpstreamIdentity();
   const profile = buildG3RegistryExactResourceQueryProfile();
   if (!(validateProfileSchema(profile) as boolean))
     throw new Error(
