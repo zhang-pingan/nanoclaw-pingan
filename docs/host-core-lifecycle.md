@@ -20,11 +20,11 @@ Creation builds in an isolated staging directory and installs the result under `
 
 The `snapshot.json` file records only creation time, optional label, Git commit and dirty flag, entry path and checksum, Workflow Runtime integer schema version and supported migration range, Node major/native ABI/platform/arch, and validation status. It does not contain a complete inventory, per-file hashes, immutable version binding, certification evidence, or Runtime, Compiler, release, logical-schema, migration-file, or physical-schema identity hashes.
 
-Default creation performs entry syntax and `better-sqlite3` smoke checks. `--full-check` additionally runs `test:current`, `contracts:check`, `typecheck`, and `format:check` before installation.
+Default creation performs entry syntax and loads `better-sqlite3` from the snapshot itself for an in-memory query. `--full-check` additionally runs `test:current`, `contracts:check`, `typecheck`, and `format:check` before installation.
 
 ## Selection And Startup
 
-Selection verifies the snapshot manifest, entry checksum, schema range, Node compatibility, and native-module smoke before atomically replacing `active-core`. It verifies the resulting pointer and restores the prior pointer if a post-switch check fails. An active snapshot cannot be removed.
+Selection verifies the snapshot manifest, entry checksum, schema range, supported Node major 26, platform/architecture, native ABI, and snapshot-local native-module smoke before atomically replacing `active-core`. It verifies the resulting pointer and restores the prior pointer if a post-switch check fails. An active snapshot cannot be removed. Exact Node patch versions and executable hashes are not snapshot inputs.
 
 Host startup always names the code source:
 

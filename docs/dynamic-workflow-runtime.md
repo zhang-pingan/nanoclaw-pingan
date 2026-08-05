@@ -18,20 +18,24 @@ Start with the machine-contract index in [`src/workflow-runtime/contracts/README
 - Database authority: `src/workflow-runtime/store/schema/` and `src/workflow-runtime/store/runtime-store/`
 - Compiler and deterministic replay: `src/workflow-runtime/compiler/` and `src/workflow-runtime/contracts/conformance/current/`
 - Runtime behavior: `src/workflow-runtime/runtime/`, `capacity/`, `registry/`, and `projection/`
-- Stable managed runtime: `scripts/runtime-toolchain.sh` and `scripts/runtime-launcher.sh`
+- Node compatibility and optional fallback installation: `scripts/runtime-toolchain.sh`
 - Current Host Core local snapshot, selection, startup, and state maintenance: [`host-core-lifecycle.md`](host-core-lifecycle.md)
 
 Use versioned machine contracts, Schema/DDL/Store constraints, focused Compiler replay, and Runtime tests for the affected internal boundary. Add a Contract version only when persisted data or independently changing code needs one; an ordinary implementation change does not require a new certification stage, review role, evidence chain, or release ceremony. Do not edit the archived construction framework or ledger.
 
 ## Validation
 
-Normal development runs current checks through the managed toolchain:
+Setup records one compatible absolute Node path. The supported runtime is Node major 26 on the current platform/architecture with the current native ABI; verification also loads `better-sqlite3` and runs an in-memory query. Patch upgrades do not require a release artifact or executable hash update. The optional installer retains a download checksum only to detect archive corruption.
+
+Normal development runs current checks through the configured runtime:
 
 ```sh
 ./scripts/runtime-toolchain.sh exec -- npm run contracts:check
 ./scripts/runtime-toolchain.sh exec -- npm run test:current
 ./scripts/runtime-toolchain.sh exec -- npm run typecheck
 ```
+
+Run `scripts/runtime-toolchain.sh configure --node "$(node -p 'process.execPath')"` after moving or upgrading Node. `active-core` is the only runtime selection pointer; there is no `active-node` pointer or stable runtime launcher.
 
 Store compatibility is governed by SQLite `PRAGMA user_version`, supported transactional migrations, and focused required table/column/index smoke checks. Store and Runtime tests use test-owned temporary directories and injected adapters; they never select an identity mode or touch the live Workflow database.
 

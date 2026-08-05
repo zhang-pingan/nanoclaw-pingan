@@ -4,15 +4,27 @@ import path from 'path';
 import { describe, expect, it } from 'vitest';
 
 import { renderLaunchdPlist } from './launchd.js';
-import { getRuntimeLauncherPath } from './platform.js';
-import { renderNohupWrapper, renderSystemdUnit } from './service.js';
+import {
+  childProcessFailureDetail,
+  renderNohupWrapper,
+  renderSystemdUnit,
+} from './service.js';
 
 const projectRoot = path.resolve(import.meta.dirname, '..');
 const homeDir = '/Users/tester';
-const launcher = getRuntimeLauncherPath(homeDir);
 const hostLauncher = path.join(projectRoot, 'local', 'shell', 'launch-host.sh');
 
-describe('Core service launch identity', () => {
+describe('Core service launch compatibility', () => {
+  it('preserves native-module rebuild guidance from child stderr', () => {
+    expect(
+      childProcessFailureDetail({
+        stderr: Buffer.from(
+          'better-sqlite3 failed; run npm rebuild better-sqlite3 or npm ci\n',
+        ),
+      }),
+    ).toBe('better-sqlite3 failed; run npm rebuild better-sqlite3 or npm ci');
+  });
+
   it('renders launchd with one explicit Host mode', () => {
     const plist = renderLaunchdPlist(projectRoot, hostLauncher, homeDir);
     const argumentsBlock = plist.match(
@@ -61,7 +73,7 @@ describe('Core service launch identity', () => {
     expect(wrapper).not.toContain('dist/index.js');
   });
 
-  it('routes local rebuild/restart through the managed toolchain', () => {
+  it('routes local rebuild/restart through the configured runtime', () => {
     for (const script of ['restart.sh', 'restart-no-cache.sh']) {
       const source = fs.readFileSync(
         path.join(projectRoot, 'local', 'shell', script),
@@ -79,6 +91,11 @@ describe('Core service launch identity', () => {
     expect(common).not.toContain('{{NODE_PATH}}');
     expect(common).toContain('{{HOST_LAUNCHER}}');
     expect(common).not.toContain('bind-core');
+    const activePreparation = common.match(
+      /\n    active\)\n([\s\S]*?)\n      ;;/,
+    )?.[1];
+    expect(activePreparation).toContain('verify-active');
+    expect(activePreparation).not.toMatch(/\bnpx\b|\btsx\b/);
 
     expect(fs.existsSync(path.join(projectRoot, 'setup', 'groups.ts'))).toBe(
       false,

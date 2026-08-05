@@ -38,17 +38,6 @@ detect_platform() {
   log "Platform: $PLATFORM, WSL: $IS_WSL, Root: $IS_ROOT"
 }
 
-# --- System identity snapshot ---
-
-capture_system_identity() {
-  SYSTEM_NODE_PATH_BEFORE="$(command -v node 2>/dev/null || true)"
-  SYSTEM_NODE_VERSION_BEFORE="$(node --version 2>/dev/null || true)"
-  SYSTEM_NPM_PATH_BEFORE="$(command -v npm 2>/dev/null || true)"
-  SYSTEM_NPM_VERSION_BEFORE="$(npm --version 2>/dev/null || true)"
-  log "System Node before: ${SYSTEM_NODE_PATH_BEFORE:-not_found} ${SYSTEM_NODE_VERSION_BEFORE:-not_found}"
-  log "System npm before: ${SYSTEM_NPM_PATH_BEFORE:-not_found} ${SYSTEM_NPM_VERSION_BEFORE:-not_found}"
-}
-
 # --- Managed runtime and npm install ---
 
 install_managed_runtime_and_deps() {
@@ -58,54 +47,39 @@ install_managed_runtime_and_deps() {
 
   cd "$PROJECT_ROOT"
 
-  log "Installing and verifying managed Node distribution"
-  if ! "$PROJECT_ROOT/scripts/runtime-toolchain.sh" install >> "$LOG_FILE" 2>&1; then
-    log "Managed Node install failed"
-    return
-  fi
-  if ! "$PROJECT_ROOT/scripts/runtime-toolchain.sh" verify >> "$LOG_FILE" 2>&1; then
-    log "Managed Node verification failed"
+  log "Configuring a supported Node runtime"
+  CURRENT_NODE_PATH="$(node -p 'process.execPath' 2>/dev/null || true)"
+  if [ -n "$CURRENT_NODE_PATH" ] && \
+     "$PROJECT_ROOT/scripts/runtime-toolchain.sh" configure --node "$CURRENT_NODE_PATH" >> "$LOG_FILE" 2>&1; then
+    log "Using the current supported Node runtime"
+  elif "$PROJECT_ROOT/scripts/runtime-toolchain.sh" install >> "$LOG_FILE" 2>&1; then
+    log "Managed Node install succeeded"
+  else
+    log "Node runtime configuration and managed install failed"
     return
   fi
   MANAGED_OK="true"
 
-  MANAGED_NODE_PATH="$("$PROJECT_ROOT/scripts/runtime-toolchain.sh" active-path)/bin/node"
-  MANAGED_NODE_VERSION="$("$PROJECT_ROOT/scripts/runtime-toolchain.sh" exec -- node --version)"
-  MANAGED_NPM_VERSION="$("$PROJECT_ROOT/scripts/runtime-toolchain.sh" exec -- npm --version)"
-
-  log "Running npm ci through managed runtime"
-  if "$PROJECT_ROOT/scripts/runtime-toolchain.sh" exec -- npm ci >> "$LOG_FILE" 2>&1; then
+  log "Running npm ci through the configured runtime"
+  if "$PROJECT_ROOT/scripts/runtime-toolchain.sh" npm-ci >> "$LOG_FILE" 2>&1; then
     DEPS_OK="true"
-    log "Managed npm ci succeeded"
+    log "Configured npm ci succeeded"
   else
-    log "Managed npm ci failed"
+    log "Configured npm ci failed"
     return
   fi
 
-  # Verify native module (better-sqlite3)
-  log "Verifying native modules"
-  if "$PROJECT_ROOT/scripts/runtime-toolchain.sh" exec -- node -e "require('better-sqlite3')" >> "$LOG_FILE" 2>&1; then
-    NATIVE_OK="true"
-    log "better-sqlite3 loads OK"
-  else
-    log "better-sqlite3 failed to load"
+  log "Verifying configured Node and native modules"
+  if ! RUNTIME_DETAILS="$("$PROJECT_ROOT/scripts/runtime-toolchain.sh" verify 2>> "$LOG_FILE")"; then
+    log "Configured Node or native module verification failed"
+    return
   fi
-}
-
-verify_system_identity_unchanged() {
-  SYSTEM_NODE_PATH_AFTER="$(command -v node 2>/dev/null || true)"
-  SYSTEM_NODE_VERSION_AFTER="$(node --version 2>/dev/null || true)"
-  SYSTEM_NPM_PATH_AFTER="$(command -v npm 2>/dev/null || true)"
-  SYSTEM_NPM_VERSION_AFTER="$(npm --version 2>/dev/null || true)"
-  SYSTEM_IDENTITY_UNCHANGED="false"
-
-  if [ "$SYSTEM_NODE_PATH_BEFORE" = "$SYSTEM_NODE_PATH_AFTER" ] && \
-     [ "$SYSTEM_NODE_VERSION_BEFORE" = "$SYSTEM_NODE_VERSION_AFTER" ] && \
-     [ "$SYSTEM_NPM_PATH_BEFORE" = "$SYSTEM_NPM_PATH_AFTER" ] && \
-     [ "$SYSTEM_NPM_VERSION_BEFORE" = "$SYSTEM_NPM_VERSION_AFTER" ]; then
-    SYSTEM_IDENTITY_UNCHANGED="true"
-  fi
-  log "System runtime identity unchanged: $SYSTEM_IDENTITY_UNCHANGED"
+  printf '%s\n' "$RUNTIME_DETAILS" >> "$LOG_FILE"
+  NATIVE_OK="true"
+  MANAGED_NODE_PATH="$(printf '%s\n' "$RUNTIME_DETAILS" | sed -n 's/^node_path=//p')"
+  MANAGED_NODE_VERSION="$("$PROJECT_ROOT/scripts/runtime-toolchain.sh" exec -- node --version)"
+  MANAGED_NPM_VERSION="$("$PROJECT_ROOT/scripts/runtime-toolchain.sh" exec -- npm --version)"
+  log "better-sqlite3 query smoke passed"
 }
 
 # --- Build tools check ---
@@ -131,17 +105,13 @@ check_build_tools() {
 log "=== Bootstrap started ==="
 
 detect_platform
-capture_system_identity
 install_managed_runtime_and_deps
-verify_system_identity_unchanged
 check_build_tools
 
 # Emit status block
 STATUS="success"
 if [ "$MANAGED_OK" = "false" ]; then
   STATUS="managed_runtime_failed"
-elif [ "$SYSTEM_IDENTITY_UNCHANGED" = "false" ]; then
-  STATUS="system_identity_changed"
 elif [ "$DEPS_OK" = "false" ]; then
   STATUS="deps_failed"
 elif [ "$NATIVE_OK" = "false" ]; then
@@ -153,11 +123,6 @@ cat <<EOF
 PLATFORM: $PLATFORM
 IS_WSL: $IS_WSL
 IS_ROOT: $IS_ROOT
-SYSTEM_NODE_PATH: ${SYSTEM_NODE_PATH_BEFORE:-not_found}
-SYSTEM_NODE_VERSION: ${SYSTEM_NODE_VERSION_BEFORE:-not_found}
-SYSTEM_NPM_PATH: ${SYSTEM_NPM_PATH_BEFORE:-not_found}
-SYSTEM_NPM_VERSION: ${SYSTEM_NPM_VERSION_BEFORE:-not_found}
-SYSTEM_IDENTITY_UNCHANGED: $SYSTEM_IDENTITY_UNCHANGED
 MANAGED_NODE_PATH: ${MANAGED_NODE_PATH:-not_found}
 MANAGED_NODE_VERSION: ${MANAGED_NODE_VERSION:-not_found}
 MANAGED_NPM_VERSION: ${MANAGED_NPM_VERSION:-not_found}
@@ -174,9 +139,6 @@ log "=== Bootstrap completed: $STATUS ==="
 
 if [ "$MANAGED_OK" = "false" ]; then
   exit 2
-fi
-if [ "$SYSTEM_IDENTITY_UNCHANGED" = "false" ]; then
-  exit 4
 fi
 if [ "$DEPS_OK" = "false" ] || [ "$NATIVE_OK" = "false" ]; then
   exit 1

@@ -12,9 +12,6 @@ case "$HOST_MODE" in
     exec "$RUNTIME_TOOLCHAIN" --runtime-home "$RUNTIME_HOME" exec -- node "$BACKEND_ENTRY"
     ;;
   active)
-    inspect_workflow_state active
-    exec "$RUNTIME_TOOLCHAIN" --runtime-home "$RUNTIME_HOME" exec -- npx tsx "$HOST_CORE_RELEASE_CLI" \
-      launch-active \
-      --runtime-home "$RUNTIME_HOME"
+    exec "$RUNTIME_TOOLCHAIN" --runtime-home "$RUNTIME_HOME" launch-active
     ;;
 esac

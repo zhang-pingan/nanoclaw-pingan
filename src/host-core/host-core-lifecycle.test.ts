@@ -87,6 +87,19 @@ function rewriteManifest(
   fs.writeFileSync(file, `${JSON.stringify(manifest, null, 2)}\n`);
 }
 
+function findNativeAddon(root: string): string {
+  for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
+    const candidate = path.join(root, entry.name);
+    if (entry.isDirectory()) {
+      const nested = findNativeAddon(candidate);
+      if (nested) return nested;
+    } else if (entry.isFile() && entry.name.endsWith('.node')) {
+      return candidate;
+    }
+  }
+  return '';
+}
+
 function createSchemaDatabase(home: string, version: number): string {
   const file = path.join(home, WORKFLOW_STATE_DATABASE_RELATIVE);
   fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -206,6 +219,22 @@ describe('Host Core local snapshots', () => {
       }),
     ).toThrow('entry_checksum_mismatch');
     expect(fs.existsSync(path.join(home, 'active-core'))).toBe(false);
+  });
+
+  it('rejects a snapshot with a corrupt native addon', () => {
+    const home = runtimeHome();
+    const snapshot = installSnapshot(home, 'corrupt-native');
+    const root = path.join(
+      home,
+      HOST_CORE_SNAPSHOT_DIRECTORY,
+      snapshot.snapshot_id,
+    );
+    const addon = findNativeAddon(root);
+    expect(addon).not.toBe('');
+    fs.writeFileSync(addon, 'not-a-native-addon');
+    expect(() => verifyHostCoreSnapshot(home, snapshot.snapshot_id)).toThrow(
+      'host_core_native_module_incompatible',
+    );
   });
 
   it('rejects incompatible schema and Node ABI descriptors', () => {

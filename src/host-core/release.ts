@@ -12,6 +12,7 @@ import {
 export const HOST_CORE_SNAPSHOT_DIRECTORY = 'host-core-snapshots';
 export const HOST_CORE_SNAPSHOT_FILENAME = 'snapshot.json';
 export const HOST_CORE_ENTRY = 'dist/index.js';
+export const HOST_CORE_SUPPORTED_NODE_MAJOR = 26;
 export const HOST_CORE_VALIDATION_COMMANDS = [
   'test:current',
   'contracts:check',
@@ -47,8 +48,6 @@ export interface HostCoreSnapshotManifest {
   };
   readonly validation: HostCoreSnapshotValidation;
 }
-
-const require = createRequire(import.meta.url);
 
 function lstatIfPresent(file: string): fs.Stats | null {
   try {
@@ -198,17 +197,20 @@ function findPackageJson(entry: string): string {
   }
 }
 
-function productionDependencyPackages(projectRoot: string): string[] {
+function dependencyPackages(
+  projectRoot: string,
+  rootDependencies?: readonly string[],
+): string[] {
   const packageJson = JSON.parse(
     fs.readFileSync(path.join(projectRoot, 'package.json'), 'utf8'),
   ) as { dependencies?: Record<string, string> };
-  const queue = Object.keys(packageJson.dependencies ?? {}).map(
-    (dependency) => ({
-      importer: path.join(projectRoot, 'package.json'),
-      dependency,
-      required: true,
-    }),
-  );
+  const queue = (
+    rootDependencies ?? Object.keys(packageJson.dependencies ?? {})
+  ).map((dependency) => ({
+    importer: path.join(projectRoot, 'package.json'),
+    dependency,
+    required: true,
+  }));
   const packages = new Set<string>();
   while (queue.length > 0) {
     const current = queue.shift()!;
@@ -256,6 +258,10 @@ function nodeDescriptor(): HostCoreSnapshotManifest['node'] {
   const major = Number(process.versions.node.split('.')[0]);
   if (!Number.isSafeInteger(major) || major < 1 || !process.versions.modules)
     throw new Error('host_core_node_runtime_invalid');
+  if (major !== HOST_CORE_SUPPORTED_NODE_MAJOR)
+    throw new Error(
+      `host_core_node_major_unsupported:supported=${HOST_CORE_SUPPORTED_NODE_MAJOR}:actual=${major}`,
+    );
   return {
     major,
     modules_abi: process.versions.modules,
@@ -264,18 +270,33 @@ function nodeDescriptor(): HostCoreSnapshotManifest['node'] {
   };
 }
 
-function nativeModuleSmoke(): void {
-  const Database = require('better-sqlite3') as typeof import('better-sqlite3');
-  const database = new Database(':memory:');
-  try {
-    const row = database.prepare('SELECT 1 AS value').get() as {
-      value: number;
-    };
-    if (row.value !== 1)
-      throw new Error('host_core_native_module_smoke_failed');
-  } finally {
-    database.close();
-  }
+function nativeModuleSmoke(snapshotRoot: string): void {
+  const result = spawnSync(
+    process.execPath,
+    [
+      '--eval',
+      `const { createRequire } = require('node:module');
+const path = require('node:path');
+const snapshotRequire = createRequire(path.join(process.env.ICARUS_SNAPSHOT_ROOT, 'package.json'));
+const Database = snapshotRequire('better-sqlite3');
+const database = new Database(':memory:');
+try {
+  const row = database.prepare('SELECT 1 AS value').get();
+  if (!row || row.value !== 1) process.exit(2);
+} finally {
+  database.close();
+}`,
+    ],
+    {
+      encoding: 'utf8',
+      env: { ...process.env, ICARUS_SNAPSHOT_ROOT: snapshotRoot },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    },
+  );
+  if (result.status !== 0)
+    throw new Error(
+      'host_core_native_module_incompatible:better-sqlite3 missing or incompatible; recreate the snapshot after npm ci',
+    );
 }
 
 function entrySmoke(entry: string): void {
@@ -287,7 +308,7 @@ function entrySmoke(entry: string): void {
     throw new Error(
       `host_core_snapshot_entry_smoke_failed:${result.stderr.trim()}`,
     );
-  nativeModuleSmoke();
+  nativeModuleSmoke(path.dirname(path.dirname(entry)));
 }
 
 export function parseHostCoreSnapshotManifest(
@@ -523,16 +544,19 @@ export function installHostCoreSnapshotFromDist(
     copyTree(distRoot, path.join(stage, 'dist'));
     if (options.includeRuntimeAssets !== false)
       copyRuntimeAssets(projectRoot, stage);
-    if (options.includeDependencies !== false) {
-      for (const packageRoot of productionDependencyPackages(projectRoot)) {
-        const relative = path.relative(projectRoot, packageRoot);
-        copyTree(packageRoot, path.join(stage, relative));
-      }
-      fs.copyFileSync(
-        path.join(projectRoot, 'package.json'),
-        path.join(stage, 'package.json'),
-      );
+    const dependencyRoots =
+      options.includeDependencies === false ? ['better-sqlite3'] : undefined;
+    for (const packageRoot of dependencyPackages(
+      projectRoot,
+      dependencyRoots,
+    )) {
+      const relative = path.relative(projectRoot, packageRoot);
+      copyTree(packageRoot, path.join(stage, relative));
     }
+    fs.copyFileSync(
+      path.join(projectRoot, 'package.json'),
+      path.join(stage, 'package.json'),
+    );
     const entry = path.join(stage, HOST_CORE_ENTRY);
     assertRegularFile(entry, 'host_core_snapshot_entry');
     entrySmoke(entry);

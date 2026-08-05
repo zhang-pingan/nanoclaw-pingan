@@ -1,585 +1,611 @@
-import { spawnSync } from 'child_process';
-import crypto from 'crypto';
-import fs from 'fs';
-import os from 'os';
-import path from 'path';
+import { spawnSync } from 'node:child_process';
+import crypto from 'node:crypto';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
-import { canonicalize } from 'json-canonicalize';
-import { Ajv2020, type AnySchema } from 'ajv/dist/2020.js';
 import { afterEach, describe, expect, it } from 'vitest';
 
 const projectRoot = path.resolve(import.meta.dirname, '..');
 const toolchain = path.join(projectRoot, 'scripts', 'runtime-toolchain.sh');
-const launcherSource = path.join(projectRoot, 'scripts', 'runtime-launcher.sh');
+const setupScript = path.join(projectRoot, 'setup.sh');
+const hostLauncher = path.join(projectRoot, 'local', 'shell', 'launch-host.sh');
 const temporaryRoots: string[] = [];
 
-interface FixtureOptions {
-  npmVersion?: string;
-  nodeHash?: string;
-  unsafeSymlink?: boolean;
-  unsafeTraversal?: boolean;
+interface FakeNodeOptions {
+  major?: number;
+  abi?: string;
+  platform?: string;
+  arch?: string;
+  version?: string;
+  nativeSmoke?: boolean;
+  label?: string;
 }
 
-interface ToolchainFixture {
-  root: string;
-  archive: string;
-  manifest: string;
-  archiveHash: string;
-}
-
-function temporaryRoot(prefix: string): string {
+function temporaryRoot(prefix = 'icarus-node-compat-'): string {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
   temporaryRoots.push(root);
   return root;
 }
 
-function hashBytes(bytes: crypto.BinaryLike): string {
-  return crypto.createHash('sha256').update(bytes).digest('hex');
+function writeExecutable(file: string, source: string): void {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, source, { mode: 0o755 });
 }
 
-function writeExecutable(file: string, contents: string): void {
-  fs.writeFileSync(file, contents, { mode: 0o755 });
-}
-
-function createFixture(options: FixtureOptions = {}): ToolchainFixture {
-  const root = temporaryRoot('icarus-toolchain-fixture-');
-  const source = path.join(root, 'source');
-  const distributionName = 'node-v26.5.0-darwin-arm64';
-  const distribution = path.join(source, distributionName);
-  const bin = path.join(distribution, 'bin');
-  fs.mkdirSync(bin, { recursive: true });
-
-  const nodePath = path.join(bin, 'node');
+function fakeNode(options: FakeNodeOptions = {}): string {
+  const root = temporaryRoot('icarus-fake-node-');
+  const node = path.join(root, 'bin', 'node');
+  const major = options.major ?? 26;
+  const abi = options.abi ?? process.versions.modules;
+  const platform = options.platform ?? process.platform;
+  const arch = options.arch ?? process.arch;
+  const version = options.version ?? `${String(major)}.1.0`;
+  const label = options.label ?? version;
   writeExecutable(
-    nodePath,
-    `#!/bin/sh
-if [ "\${1:-}" = "--version" ]; then
-  echo "v26.5.0"
+    node,
+    `#!/bin/bash
+set -euo pipefail
+if [ "\${1:-}" = "--eval" ]; then
+  if [[ "\${2:-}" == *"better-sqlite3"* ]]; then
+    exit ${options.nativeSmoke === false ? '9' : '0'}
+  fi
+  printf '${String(major)}|${abi}|${platform}|${arch}'
   exit 0
 fi
-printf 'managed-node=%s\\n' "$0"
-printf 'core-entry=%s\\n' "\${1:-}"
-shift || true
-for argument in "$@"; do
-  printf 'core-argument=%s\\n' "$argument"
-done
+if [ "\${1:-}" = "--version" ]; then
+  printf 'v${version}\\n'
+  exit 0
+fi
+printf 'configured-node=${label}'
+for argument in "$@"; do printf '|%s' "$argument"; done
+printf '\\n'
 `,
   );
-  writeExecutable(
-    path.join(bin, 'npm'),
-    `#!/bin/sh
-echo "${options.npmVersion ?? '11.17.0'}"
+  for (const command of ['npm', 'npx'])
+    writeExecutable(
+      path.join(root, 'bin', command),
+      `#!/bin/bash
+printf 'configured-${command}=${label}'
+for argument in "$@"; do printf '|%s' "$argument"; done
+printf '\\n'
 `,
-  );
-
-  if (options.unsafeSymlink) {
-    fs.symlinkSync('../../../../tmp', path.join(distribution, 'escape'));
-  }
-
-  const archive = path.join(root, `${distributionName}.tar.gz`);
-  if (options.unsafeTraversal) {
-    const sibling = path.join(source, 'outside');
-    fs.mkdirSync(sibling, { recursive: true });
-    fs.writeFileSync(path.join(sibling, 'entry'), 'unsafe\n');
-  }
-  const archiveEntry = options.unsafeTraversal
-    ? `${distributionName}/../outside`
-    : distributionName;
-  const tar = spawnSync('tar', ['-czf', archive, '-C', source, archiveEntry], {
-    encoding: 'utf8',
-  });
-  expect(tar.status, tar.stderr).toBe(0);
-
-  const archiveHash = hashBytes(fs.readFileSync(archive));
-  const payload = {
-    format: 'icarus.managed-node-runtime-distribution/1',
-    ref: {
-      id: 'nodejs.node-v26.5.0-darwin-arm64',
-      version: '1.0.0',
-    },
-    node_runtime_version: '26.5.0',
-    npm_version: '11.17.0',
-    platform: 'darwin',
-    arch: 'arm64',
-    distribution_origin: 'nodejs_official',
-    archive_filename: `${distributionName}.tar.gz`,
-    archive_url: `https://nodejs.org/dist/v26.5.0/${distributionName}.tar.gz`,
-    archive_sha256: `sha256:${archiveHash}`,
-    node_executable_relative_path: 'bin/node',
-    node_executable_sha256: `sha256:${options.nodeHash ?? hashBytes(fs.readFileSync(nodePath))}`,
-  };
-  const manifest = path.join(root, 'manifest.json');
-  const manifestValue = {
-    ...payload,
-    manifest_hash: `sha256:${hashBytes(
-      `icarus:managed-node-runtime-distribution:1\n${canonicalize(payload)}`,
-    )}`,
-  };
-  fs.writeFileSync(manifest, `${JSON.stringify(manifestValue, null, 2)}\n`);
-  return { root, archive, manifest, archiveHash };
+    );
+  return node;
 }
 
 function runToolchain(
-  fixture: ToolchainFixture,
   runtimeHome: string,
-  args: string[],
+  args: readonly string[],
   env: NodeJS.ProcessEnv = {},
 ) {
-  return spawnSync(
-    toolchain,
-    ['--runtime-home', runtimeHome, '--manifest', fixture.manifest, ...args],
-    {
-      cwd: projectRoot,
-      encoding: 'utf8',
-      env: { ...process.env, ...env },
-    },
-  );
+  return spawnSync(toolchain, ['--runtime-home', runtimeHome, ...args], {
+    cwd: projectRoot,
+    encoding: 'utf8',
+    env: { ...process.env, ...env },
+  });
 }
 
-function expectFailure(result: ReturnType<typeof runToolchain>, code: string) {
-  expect(result.status).toBe(78);
+function expectFailure(
+  result: ReturnType<typeof runToolchain>,
+  code: string,
+): void {
+  expect(result.status, result.stderr).toBe(78);
   expect(result.stderr).toContain(`icarus-toolchain:${code}`);
 }
 
-function domainHash(domain: string, value: unknown): string {
-  return `sha256:${hashBytes(`${domain}${canonicalize(value)}`)}`;
+function sha256(file: string): string {
+  return `sha256:${crypto
+    .createHash('sha256')
+    .update(fs.readFileSync(file))
+    .digest('hex')}`;
 }
 
-function createContentAddressedReleaseFixture(
-  fixture: ToolchainFixture,
-  runtimeHome: string,
-): { releaseArtifactHash: string; validationEntry: string } {
-  const validationEntry =
-    'dist/workflow-runtime/certification/release-entry.js';
-  const coreEntry = 'dist/index.js';
-  const stage = temporaryRoot('icarus-core-release-stage-');
-  fs.mkdirSync(path.join(stage, path.dirname(validationEntry)), {
-    recursive: true,
+function createInstallerArchive(
+  options: {
+    unsafeSymlink?: boolean;
+    unsafeTraversal?: boolean;
+  } = {},
+): string {
+  const root = temporaryRoot('icarus-node-installer-');
+  const source = path.join(root, 'source');
+  const distributionName = 'node-v26.5.0-darwin-arm64';
+  const distribution = path.join(source, distributionName);
+  const fixtureNode = fakeNode({ version: '26.5.0', label: 'installer' });
+  fs.mkdirSync(path.join(distribution, 'bin'), { recursive: true });
+  for (const command of ['node', 'npm', 'npx'])
+    fs.copyFileSync(
+      path.join(path.dirname(fixtureNode), command),
+      path.join(distribution, 'bin', command),
+      fs.constants.COPYFILE_FICLONE,
+    );
+  for (const command of ['node', 'npm', 'npx'])
+    fs.chmodSync(path.join(distribution, 'bin', command), 0o755);
+  if (options.unsafeSymlink)
+    fs.symlinkSync('../../../../tmp', path.join(distribution, 'escape'));
+  if (options.unsafeTraversal) {
+    const outside = path.join(source, 'outside');
+    fs.mkdirSync(outside, { recursive: true });
+    fs.writeFileSync(path.join(outside, 'entry'), 'unsafe\n');
+  }
+  const archive = path.join(root, `${distributionName}.tar.gz`);
+  const entry = options.unsafeTraversal
+    ? `${distributionName}/../outside`
+    : distributionName;
+  const result = spawnSync('tar', ['-czf', archive, '-C', source, entry], {
+    encoding: 'utf8',
   });
-  fs.writeFileSync(path.join(stage, coreEntry), 'console.log("core");\n');
-  fs.writeFileSync(
-    path.join(stage, validationEntry),
-    'console.log("validation");\n',
-  );
-  const inventory = [coreEntry, validationEntry].sort().map((entry) => {
-    const bytes = fs.readFileSync(path.join(stage, entry));
-    return {
-      path: entry,
-      byte_length: bytes.byteLength,
-      executable: false,
-      raw_sha256: `sha256:${hashBytes(bytes)}`,
-    };
-  });
-  const distribution = JSON.parse(
-    fs.readFileSync(fixture.manifest, 'utf8'),
-  ) as {
-    ref: { id: string; version: string };
-    manifest_hash: string;
-  };
-  const coreInventory = inventory.filter((entry) =>
-    entry.path.startsWith('dist/'),
-  );
-  const payload = {
-    format: 'icarus.core-release-manifest/1',
-    ref: { id: 'icarus.core', version: '1.2.14' },
-    release_scope: 'workflow_runtime_g8_validation',
-    build_kind: 'release',
-    platform: 'darwin',
-    arch: 'arm64',
-    run_protocol_majors: [1],
-    executor_abi_majors: [1],
-    database_schema_version: 11,
-    database_schema_hash: `sha256:${'1'.repeat(64)}`,
-    managed_node_distribution_ref: distribution.ref,
-    managed_node_distribution_hash: distribution.manifest_hash,
-    runtime_launcher_hash: `sha256:${hashBytes(fs.readFileSync(launcherSource))}`,
-    runtime_toolchain_hash: `sha256:${hashBytes(fs.readFileSync(toolchain))}`,
-    core_entry_relative_path: coreEntry,
-    core_entry_sha256: inventory.find((entry) => entry.path === coreEntry)!
-      .raw_sha256,
-    validation_entry_relative_path: validationEntry,
-    validation_entry_sha256: inventory.find(
-      (entry) => entry.path === validationEntry,
-    )!.raw_sha256,
-    core_build_hash: domainHash('icarus:core-release-build:1\n', coreInventory),
-    inventory,
-    inventory_hash: domainHash('icarus:core-release-inventory:1\n', inventory),
-  };
-  const releaseArtifactHash = domainHash(
-    'icarus:core-release-manifest:1\n',
-    payload,
-  );
-  const releaseRoot = path.join(
-    runtimeHome,
-    'core-releases',
-    releaseArtifactHash.slice('sha256:'.length),
-  );
-  fs.mkdirSync(path.dirname(releaseRoot), { recursive: true });
-  fs.renameSync(stage, releaseRoot);
-  fs.writeFileSync(
-    path.join(releaseRoot, 'core-release-manifest.json'),
-    `${JSON.stringify({ ...payload, release_artifact_hash: releaseArtifactHash }, null, 2)}\n`,
-  );
-  return { releaseArtifactHash, validationEntry };
+  expect(result.status, result.stderr).toBe(0);
+  return archive;
 }
 
 afterEach(() => {
-  for (const root of temporaryRoots.splice(0)) {
+  for (const root of temporaryRoots.splice(0))
     fs.rmSync(root, { recursive: true, force: true });
-  }
 });
 
-describe('managed runtime bootstrap', () => {
-  it('installs side-by-side idempotently without changing system identity', () => {
-    const fixture = createFixture();
-    const runtimeHome = temporaryRoot('icarus-runtime-home-');
-    const nodeBefore = spawnSync(
-      'sh',
-      ['-c', 'command -v node; node --version'],
-      {
-        encoding: 'utf8',
-      },
-    ).stdout;
-    const npmBefore = spawnSync('sh', ['-c', 'command -v npm; npm --version'], {
-      encoding: 'utf8',
-    }).stdout;
-
-    const first = runToolchain(fixture, runtimeHome, [
-      'install',
-      '--archive',
-      fixture.archive,
-    ]);
-    expect(first.status, first.stderr).toBe(0);
-    const second = runToolchain(fixture, runtimeHome, [
-      'install',
-      '--archive',
-      fixture.archive,
-    ]);
-    expect(second.status, second.stderr).toBe(0);
-    const verify = runToolchain(fixture, runtimeHome, ['verify']);
+describe('Node runtime compatibility resolver', () => {
+  it('accepts different patches in supported major and refreshes the configured path', () => {
+    const runtimeHome = temporaryRoot();
+    const first = fakeNode({ version: '26.1.0', label: 'first' });
+    const second = fakeNode({ version: '26.9.9', label: 'second' });
+    expect(
+      runToolchain(runtimeHome, ['configure', '--node', first]).status,
+    ).toBe(0);
+    expect(
+      runToolchain(runtimeHome, ['configure', '--node', second]).status,
+    ).toBe(0);
+    const verify = runToolchain(runtimeHome, ['verify']);
     expect(verify.status, verify.stderr).toBe(0);
-    expect(verify.stdout).toContain('managed_node_version=v26.5.0');
+    expect(verify.stdout).toContain(`node_path=${fs.realpathSync(second)}`);
+
+    const config = JSON.parse(
+      fs.readFileSync(
+        path.join(runtimeHome, 'toolchains', 'node', 'runtime.json'),
+        'utf8',
+      ),
+    ) as Record<string, unknown>;
+    expect(Object.keys(config).sort()).toEqual([
+      'arch',
+      'format',
+      'modules_abi',
+      'node_major',
+      'node_path',
+      'platform',
+    ]);
+    expect(JSON.stringify(config)).not.toMatch(/hash|distribution|active-node/);
     expect(
-      spawnSync('sh', ['-c', 'command -v node; node --version'], {
-        encoding: 'utf8',
-      }).stdout,
-    ).toBe(nodeBefore);
-    expect(
-      spawnSync('sh', ['-c', 'command -v npm; npm --version'], {
-        encoding: 'utf8',
-      }).stdout,
-    ).toBe(npmBefore);
+      fs.existsSync(
+        path.join(runtimeHome, 'toolchains', 'node', 'active-node'),
+      ),
+    ).toBe(false);
   });
 
-  it('rejects archive, executable, npm, traversal, and unsafe-link mismatches', () => {
-    const archiveFixture = createFixture();
-    const corruptArchive = path.join(archiveFixture.root, 'corrupt.tar.gz');
-    fs.copyFileSync(archiveFixture.archive, corruptArchive);
-    fs.appendFileSync(corruptArchive, 'corrupt');
+  it('rejects an unsupported major, platform, and architecture', () => {
+    for (const [node, code] of [
+      [fakeNode({ major: 25 }), 'node_major_unsupported'],
+      [fakeNode({ platform: 'linux' }), 'node_platform_incompatible'],
+      [fakeNode({ arch: 'x64' }), 'node_arch_incompatible'],
+    ] as const)
+      expectFailure(
+        runToolchain(temporaryRoot(), ['configure', '--node', node]),
+        code,
+      );
+  });
+
+  it('rejects ABI drift and reports native module rebuild guidance', () => {
+    const abiHome = temporaryRoot();
+    const compatible = fakeNode();
+    expect(
+      runToolchain(abiHome, ['configure', '--node', compatible]).status,
+    ).toBe(0);
+    const configPath = path.join(abiHome, 'toolchains', 'node', 'runtime.json');
+    const config = JSON.parse(fs.readFileSync(configPath, 'utf8')) as Record<
+      string,
+      unknown
+    >;
+    config.modules_abi = '999';
+    fs.writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
     expectFailure(
-      runToolchain(archiveFixture, temporaryRoot('icarus-runtime-home-'), [
-        'install',
-        '--archive',
-        corruptArchive,
-      ]),
-      'archive_hash_mismatch',
+      runToolchain(abiHome, ['verify']),
+      'configured_node_abi_mismatch',
     );
 
-    const executableFixture = createFixture({ nodeHash: '0'.repeat(64) });
-    expectFailure(
-      runToolchain(executableFixture, temporaryRoot('icarus-runtime-home-'), [
-        'install',
-        '--archive',
-        executableFixture.archive,
-      ]),
-      'node_executable_hash_mismatch',
-    );
+    const smokeHome = temporaryRoot();
+    const brokenNative = fakeNode({ nativeSmoke: false });
+    expect(
+      runToolchain(smokeHome, ['configure', '--node', brokenNative]).status,
+    ).toBe(0);
+    const smoke = runToolchain(smokeHome, ['verify']);
+    expectFailure(smoke, 'native_module_incompatible');
+    expect(smoke.stderr).toContain('npm rebuild better-sqlite3 or npm ci');
+  });
 
-    const npmFixture = createFixture({ npmVersion: '0.0.0' });
-    expectFailure(
-      runToolchain(npmFixture, temporaryRoot('icarus-runtime-home-'), [
-        'install',
-        '--archive',
-        npmFixture.archive,
-      ]),
-      'npm_version_mismatch',
-    );
+  it('reports a removed configured Node parent as a compatibility failure', () => {
+    const runtimeHome = temporaryRoot();
+    const configured = fakeNode();
+    expect(
+      runToolchain(runtimeHome, ['configure', '--node', configured]).status,
+    ).toBe(0);
 
-    const unsafeFixture = createFixture({ unsafeSymlink: true });
+    fs.rmSync(path.dirname(path.dirname(configured)), {
+      recursive: true,
+      force: true,
+    });
     expectFailure(
-      runToolchain(unsafeFixture, temporaryRoot('icarus-runtime-home-'), [
-        'install',
-        '--archive',
-        unsafeFixture.archive,
-      ]),
-      'archive_unsafe_link',
-    );
-
-    const traversalFixture = createFixture({ unsafeTraversal: true });
-    expectFailure(
-      runToolchain(traversalFixture, temporaryRoot('icarus-runtime-home-'), [
-        'install',
-        '--archive',
-        traversalFixture.archive,
-      ]),
-      'archive_unsafe_entry',
+      runToolchain(runtimeHome, ['verify']),
+      'node_executable_missing',
     );
   });
 
-  it('rejects malformed manifest bytes and an install path redirected outside its root', () => {
-    const malformedFixture = createFixture();
-    fs.appendFileSync(malformedFixture.manifest, 'trailing-garbage\n');
-    expectFailure(
-      runToolchain(malformedFixture, temporaryRoot('icarus-runtime-home-'), [
-        'install',
-        '--archive',
-        malformedFixture.archive,
-      ]),
-      'manifest_invalid',
-    );
+  it('runs npm ci before checkout native-module verification is possible', () => {
+    const runtimeHome = temporaryRoot();
+    const configured = fakeNode({ nativeSmoke: false, label: 'fresh' });
+    expect(
+      runToolchain(runtimeHome, ['configure', '--node', configured]).status,
+    ).toBe(0);
 
-    const redirectedFixture = createFixture();
-    const runtimeHome = temporaryRoot('icarus-runtime-home-');
-    const install = runToolchain(redirectedFixture, runtimeHome, [
+    const install = runToolchain(runtimeHome, ['npm-ci']);
+    expect(install.status, install.stderr).toBe(0);
+    expect(install.stdout).toContain('configured-npm=fresh|ci');
+    expectFailure(
+      runToolchain(runtimeHome, ['verify']),
+      'native_module_incompatible',
+    );
+  });
+
+  it('uses only the configured absolute path for node, npm, and npx', () => {
+    const runtimeHome = temporaryRoot();
+    const configured = fakeNode({ label: 'trusted' });
+    const maliciousRoot = temporaryRoot('icarus-malicious-path-');
+    for (const command of ['node', 'npm', 'npx'])
+      writeExecutable(
+        path.join(maliciousRoot, command),
+        '#!/bin/bash\nprintf "malicious\\n"\n',
+      );
+    expect(
+      runToolchain(runtimeHome, ['configure', '--node', configured]).status,
+    ).toBe(0);
+    for (const command of ['node', 'npm', 'npx']) {
+      const result = runToolchain(
+        runtimeHome,
+        ['exec', '--', command, 'probe'],
+        { PATH: `${maliciousRoot}:${process.env.PATH ?? ''}` },
+      );
+      expect(result.status, result.stderr).toBe(0);
+      expect(result.stdout).toContain(`configured-${command}=trusted|probe`);
+      expect(result.stdout).not.toContain('malicious');
+    }
+  });
+
+  it('rejects toolchain directory symlinks outside the runtime home', () => {
+    const runtimeHome = temporaryRoot();
+    const outside = temporaryRoot('icarus-toolchain-outside-');
+    fs.symlinkSync(outside, path.join(runtimeHome, 'toolchains'));
+
+    expectFailure(
+      runToolchain(runtimeHome, [
+        'configure',
+        '--node',
+        fakeNode({ label: 'compatible' }),
+      ]),
+      'runtime_path_unsafe',
+    );
+    expect(fs.readdirSync(outside)).toEqual([]);
+  });
+
+  it('runs a real better-sqlite3 query under the configured current Node', () => {
+    const runtimeHome = temporaryRoot();
+    const configure = runToolchain(runtimeHome, [
+      'configure',
+      '--node',
+      process.execPath,
+    ]);
+    expect(configure.status, configure.stderr).toBe(0);
+    const verify = runToolchain(runtimeHome, ['verify']);
+    expect(verify.status, verify.stderr).toBe(0);
+    expect(verify.stdout).toContain(
+      `node_modules_abi=${process.versions.modules}`,
+    );
+  });
+
+  it('keeps installer checksum, traversal, and unsafe-link checks without distribution identity', () => {
+    const valid = createInstallerArchive();
+    const validHome = temporaryRoot();
+    const installed = runToolchain(validHome, [
       'install',
       '--archive',
-      redirectedFixture.archive,
+      valid,
+      '--checksum',
+      sha256(valid),
     ]);
-    expect(install.status, install.stderr).toBe(0);
-    const installPath = path.join(
+    expect(installed.status, installed.stderr).toBe(0);
+    expect(
+      fs.existsSync(path.join(validHome, 'toolchains', 'node', 'runtime.json')),
+    ).toBe(true);
+    expect(
+      fs.existsSync(
+        path.join(
+          validHome,
+          'toolchains',
+          'node',
+          'managed',
+          'v26.5.0-darwin-arm64.install-lock',
+        ),
+      ),
+    ).toBe(false);
+
+    expectFailure(
+      runToolchain(temporaryRoot(), [
+        'install',
+        '--archive',
+        valid,
+        '--checksum',
+        `sha256:${'0'.repeat(64)}`,
+      ]),
+      'archive_checksum_mismatch',
+    );
+    for (const [archive, code] of [
+      [createInstallerArchive({ unsafeSymlink: true }), 'archive_unsafe_link'],
+      [
+        createInstallerArchive({ unsafeTraversal: true }),
+        'archive_unsafe_entry',
+      ],
+    ] as const)
+      expectFailure(
+        runToolchain(temporaryRoot(), [
+          'install',
+          '--archive',
+          archive,
+          '--checksum',
+          sha256(archive),
+        ]),
+        code,
+      );
+  });
+
+  it('does not remove an installer lock owned by another process', () => {
+    const runtimeHome = temporaryRoot();
+    const archive = createInstallerArchive();
+    const lock = path.join(
       runtimeHome,
       'toolchains',
       'node',
-      '26.5.0',
-      'darwin-arm64',
-      redirectedFixture.archiveHash,
+      'managed',
+      'v26.5.0-darwin-arm64.install-lock',
     );
-    const redirectedPath = path.join(
-      temporaryRoot('icarus-outside-install-'),
-      'distribution',
-    );
-    fs.cpSync(installPath, redirectedPath, { recursive: true });
-    fs.rmSync(installPath, { recursive: true });
-    fs.symlinkSync(redirectedPath, installPath);
+    fs.mkdirSync(lock, { recursive: true });
+
     expectFailure(
-      runToolchain(redirectedFixture, runtimeHome, [
+      runToolchain(runtimeHome, [
         'install',
         '--archive',
-        redirectedFixture.archive,
+        archive,
+        '--checksum',
+        sha256(archive),
       ]),
-      'installation_outside_root',
+      'install_lock_busy',
     );
+    expect(fs.statSync(lock).isDirectory()).toBe(true);
   });
 
-  it('fails closed for a partial install and an invalid active pointer', () => {
-    const fixture = createFixture();
-    const partialHome = temporaryRoot('icarus-runtime-home-');
-    const partialPath = path.join(
-      partialHome,
-      'toolchains',
-      'node',
-      '26.5.0',
-      'darwin-arm64',
-      fixture.archiveHash,
+  it('boots an active snapshot without checkout dependencies or TypeScript tooling', () => {
+    const checkout = temporaryRoot('icarus-active-checkout-');
+    const runtimeHome = temporaryRoot('icarus-active-runtime-');
+    const copiedToolchain = path.join(
+      checkout,
+      'scripts',
+      'runtime-toolchain.sh',
     );
-    fs.mkdirSync(partialPath, { recursive: true });
-    expectFailure(
-      runToolchain(fixture, partialHome, [
-        'install',
-        '--archive',
-        fixture.archive,
-      ]),
-      'installation_incomplete',
+    const copiedLauncher = path.join(
+      checkout,
+      'local',
+      'shell',
+      'launch-host.sh',
+    );
+    fs.mkdirSync(path.dirname(copiedToolchain), { recursive: true });
+    fs.mkdirSync(path.dirname(copiedLauncher), { recursive: true });
+    fs.copyFileSync(toolchain, copiedToolchain);
+    fs.copyFileSync(
+      path.join(projectRoot, 'local', 'shell', 'common.sh'),
+      path.join(checkout, 'local', 'shell', 'common.sh'),
+    );
+    fs.copyFileSync(hostLauncher, copiedLauncher);
+    fs.chmodSync(copiedToolchain, 0o755);
+    fs.chmodSync(copiedLauncher, 0o755);
+
+    const configure = spawnSync(
+      copiedToolchain,
+      ['--runtime-home', runtimeHome, 'configure', '--node', process.execPath],
+      { cwd: checkout, encoding: 'utf8' },
+    );
+    expect(configure.status, configure.stderr).toBe(0);
+
+    const snapshotId = '20260805T120000Z-abcdef12-1234abcd';
+    const snapshotRoot = path.join(
+      runtimeHome,
+      'host-core-snapshots',
+      snapshotId,
+    );
+    const entry = path.join(snapshotRoot, 'dist', 'index.js');
+    fs.mkdirSync(path.dirname(entry), { recursive: true });
+    fs.writeFileSync(entry, "console.log('active-snapshot-started');\n");
+    fs.writeFileSync(
+      path.join(snapshotRoot, 'package.json'),
+      '{"type":"module"}\n',
+    );
+    const sqlitePackage = path.join(
+      snapshotRoot,
+      'node_modules',
+      'better-sqlite3',
+    );
+    fs.mkdirSync(sqlitePackage, { recursive: true });
+    fs.writeFileSync(
+      path.join(sqlitePackage, 'package.json'),
+      '{"main":"index.cjs"}\n',
+    );
+    fs.writeFileSync(
+      path.join(sqlitePackage, 'index.cjs'),
+      `module.exports = class Database {
+  prepare() { return { get() { return { value: 1 }; } }; }
+  close() {}
+};
+`,
+    );
+    fs.writeFileSync(
+      path.join(snapshotRoot, 'snapshot.json'),
+      `${JSON.stringify(
+        {
+          format: 'icarus.host-core-snapshot/1',
+          snapshot_id: snapshotId,
+          label: 'test',
+          created_at: '2026-08-05T12:00:00.000Z',
+          git: { commit: 'a'.repeat(40), dirty: true },
+          entry_relative_path: 'dist/index.js',
+          entry_sha256: sha256(entry),
+          workflow_schema: {
+            current_version: 13,
+            minimum_supported_version: 10,
+          },
+          node: {
+            major: Number(process.versions.node.split('.')[0]),
+            modules_abi: process.versions.modules,
+            platform: process.platform,
+            arch: process.arch,
+          },
+          validation: 'smoke_passed',
+        },
+        null,
+        2,
+      )}\n`,
+    );
+    fs.symlinkSync(
+      `host-core-snapshots/${snapshotId}`,
+      path.join(runtimeHome, 'active-core'),
     );
 
-    const pointerHome = temporaryRoot('icarus-runtime-home-');
-    const install = runToolchain(fixture, pointerHome, [
-      'install',
-      '--archive',
-      fixture.archive,
-    ]);
-    expect(install.status, install.stderr).toBe(0);
-    const pointer = path.join(pointerHome, 'toolchains', 'node', 'active-node');
-    fs.unlinkSync(pointer);
-    fs.symlinkSync('../../outside', pointer);
-    expectFailure(
-      runToolchain(fixture, pointerHome, ['verify']),
-      'active_pointer_outside_root',
-    );
-  });
-});
-
-describe('stable runtime launcher', () => {
-  it('binds a content-addressed Core Release and forwards validation arguments', () => {
-    const fixture = createFixture();
-    const runtimeHome = temporaryRoot('icarus-runtime-home-');
-    const install = runToolchain(fixture, runtimeHome, [
-      'install',
-      '--archive',
-      fixture.archive,
-    ]);
-    expect(install.status, install.stderr).toBe(0);
-    const release = createContentAddressedReleaseFixture(fixture, runtimeHome);
-    const relative = `core-releases/${release.releaseArtifactHash.slice('sha256:'.length)}`;
-    const manifest = JSON.parse(
-      fs.readFileSync(
-        path.join(runtimeHome, relative, 'core-release-manifest.json'),
-        'utf8',
-      ),
-    ) as { core_build_hash: string };
-    const bind = runToolchain(fixture, runtimeHome, [
-      'bind-release',
-      '--release-relative',
-      relative,
-      '--release-artifact-hash',
-      release.releaseArtifactHash,
-      '--core-build-hash',
-      manifest.core_build_hash,
-    ]);
-    expect(bind.status, bind.stderr).toBe(0);
-    expect(bind.stdout).toContain(
-      'core_binding_kind=content_addressed_release',
-    );
-    const binding = JSON.parse(
-      fs.readFileSync(
-        path.join(
-          fs.realpathSync(path.join(runtimeHome, 'active-core')),
-          'binding.json',
-        ),
-        'utf8',
-      ),
-    );
-    const bindingSchema = JSON.parse(
-      fs.readFileSync(
-        path.join(
-          projectRoot,
-          'src/workflow-runtime/contracts/certification/core-runtime-launch-binding-v2-schema.json',
-        ),
-        'utf8',
-      ),
-    ) as AnySchema;
-    expect(
-      new Ajv2020({ strict: true, allErrors: true }).compile(bindingSchema)(
-        binding,
-      ),
-    ).toBe(true);
-
-    const launcher = path.join(runtimeHome, 'bin', 'icarus-runtime');
-    const launched = spawnSync(launcher, ['identity', '--sample'], {
-      encoding: 'utf8',
-      env: { ...process.env, NODE_OPTIONS: '--require /not/present' },
-    });
-    expect(launched.status, launched.stderr).toBe(0);
-    expect(launched.stdout).toContain(
-      `core-entry=${path.join(fs.realpathSync(runtimeHome), relative, release.validationEntry)}`,
-    );
-    expect(launched.stdout).toContain('core-argument=identity');
-    expect(launched.stdout).toContain('core-argument=--sample');
-  });
-
-  it('derives its root from realpath and never falls back to inherited PATH', () => {
-    const fixture = createFixture();
-    const runtimeHome = temporaryRoot('icarus-runtime-home-');
-    const install = runToolchain(fixture, runtimeHome, [
-      'install',
-      '--archive',
-      fixture.archive,
-    ]);
-    expect(install.status, install.stderr).toBe(0);
-
-    const coreProject = temporaryRoot('icarus-core-project-');
-    fs.mkdirSync(path.join(coreProject, 'dist'), { recursive: true });
-    const coreEntry = path.join(coreProject, 'dist', 'index.js');
-    fs.writeFileSync(coreEntry, 'console.log("core fixture");\n');
-    const bind = runToolchain(fixture, runtimeHome, [
-      'bind-core',
-      '--project-root',
-      coreProject,
-      '--entry',
-      'dist/index.js',
-    ]);
-    expect(bind.status, bind.stderr).toBe(0);
-
-    const activeCore = path.join(runtimeHome, 'active-core');
-    const firstBindingDirectory = fs.realpathSync(activeCore);
-    const firstBindingFile = path.join(firstBindingDirectory, 'binding.json');
-    const firstBindingBytes = fs.readFileSync(firstBindingFile);
-    fs.writeFileSync(coreEntry, 'console.log("core fixture v2");\n');
-    const rebind = runToolchain(fixture, runtimeHome, [
-      'bind-core',
-      '--project-root',
-      coreProject,
-      '--entry',
-      'dist/index.js',
-    ]);
-    expect(rebind.status, rebind.stderr).toBe(0);
-    const secondBindingDirectory = fs.realpathSync(activeCore);
-    expect(secondBindingDirectory).not.toBe(firstBindingDirectory);
-    expect(fs.readFileSync(firstBindingFile)).toEqual(firstBindingBytes);
-    expect(fs.readdirSync(firstBindingDirectory)).toEqual(['binding.json']);
-    const secondBinding = JSON.parse(
-      fs.readFileSync(
-        path.join(secondBindingDirectory, 'binding.json'),
-        'utf8',
-      ),
-    ) as { core_entry_sha256: string };
-    expect(secondBinding.core_entry_sha256).toBe(
-      `sha256:${hashBytes(fs.readFileSync(coreEntry))}`,
-    );
-
-    const launcher = path.join(runtimeHome, 'bin', 'icarus-runtime');
-    expect(fs.readFileSync(launcher)).toEqual(fs.readFileSync(launcherSource));
-    const launcherLink = path.join(
-      temporaryRoot('icarus-launcher-link-'),
-      'run',
-    );
-    fs.symlinkSync(launcher, launcherLink);
-    const maliciousBin = temporaryRoot('icarus-malicious-path-');
-    const marker = path.join(maliciousBin, 'fallback-used');
-    writeExecutable(
-      path.join(maliciousBin, 'node'),
-      `#!/bin/sh\ntouch ${JSON.stringify(marker)}\n`,
-    );
-
-    const launched = spawnSync(launcherLink, [], {
-      encoding: 'utf8',
-      env: {
-        ...process.env,
-        PATH: `${maliciousBin}:/usr/bin:/bin`,
-        ICARUS_RUNTIME_HOME: temporaryRoot('icarus-evil-runtime-'),
-        NODE_OPTIONS: '--require /definitely/not/present',
+    expect(fs.existsSync(path.join(checkout, 'node_modules'))).toBe(false);
+    const verify = spawnSync(
+      copiedToolchain,
+      ['--runtime-home', runtimeHome, 'verify-active'],
+      {
+        cwd: checkout,
+        encoding: 'utf8',
+        env: { ...process.env, ICARUS_RUNTIME_HOME: runtimeHome },
       },
-    });
-    expect(launched.status, launched.stderr).toBe(0);
-    expect(launched.stdout).toContain(
-      path.join(fs.realpathSync(runtimeHome), 'toolchains', 'node', '26.5.0'),
     );
-    expect(launched.stdout).toContain(
-      `core-entry=${fs.realpathSync(coreEntry)}`,
-    );
-    expect(fs.existsSync(marker)).toBe(false);
+    expect(verify.status, verify.stderr).toBe(0);
+    expect(verify.stdout).toBe('');
 
-    const bindingFile = path.join(
-      fs.realpathSync(path.join(runtimeHome, 'active-core')),
-      'binding.json',
-    );
-    const bindingBytes = fs.readFileSync(bindingFile);
-    fs.appendFileSync(bindingFile, 'trailing-garbage\n');
-    const malformedBinding = spawnSync(launcher, [], {
+    const launch = spawnSync(copiedLauncher, ['--mode', 'active'], {
+      cwd: checkout,
       encoding: 'utf8',
-      env: { ...process.env, PATH: `${maliciousBin}:/usr/bin:/bin` },
+      env: { ...process.env, ICARUS_RUNTIME_HOME: runtimeHome },
     });
-    expect(malformedBinding.status).toBe(78);
-    expect(malformedBinding.stderr).toContain('core_binding_invalid');
-    fs.writeFileSync(bindingFile, bindingBytes);
+    expect(launch.status, launch.stderr).toBe(0);
+    expect(launch.stdout).toContain('active-snapshot-started');
 
-    fs.appendFileSync(coreEntry, '// changed\n');
-    const tampered = spawnSync(launcher, [], {
+    const checkoutSqlite = path.join(
+      checkout,
+      'node_modules',
+      'better-sqlite3',
+    );
+    fs.mkdirSync(checkoutSqlite, { recursive: true });
+    fs.writeFileSync(
+      path.join(checkoutSqlite, 'package.json'),
+      '{"main":"index.cjs"}\n',
+    );
+    fs.writeFileSync(
+      path.join(checkoutSqlite, 'index.cjs'),
+      "throw new Error('checkout better-sqlite3 must not load');\n",
+    );
+    writeExecutable(
+      path.join(checkout, 'node_modules', '.bin', 'tsx'),
+      '#!/bin/bash\nexit 99\n',
+    );
+    const launchWithBrokenCheckout = spawnSync(
+      copiedLauncher,
+      ['--mode', 'active'],
+      {
+        cwd: checkout,
+        encoding: 'utf8',
+        env: { ...process.env, ICARUS_RUNTIME_HOME: runtimeHome },
+      },
+    );
+    expect(
+      launchWithBrokenCheckout.status,
+      launchWithBrokenCheckout.stderr,
+    ).toBe(0);
+    expect(launchWithBrokenCheckout.stdout).toContain(
+      'active-snapshot-started',
+    );
+    const launcherSource = fs.readFileSync(copiedLauncher, 'utf8');
+    expect(launcherSource).not.toMatch(/\bnpx\b|\btsx\b/);
+    const commonSource = fs.readFileSync(
+      path.join(checkout, 'local', 'shell', 'common.sh'),
+      'utf8',
+    );
+    expect(commonSource).toContain('verify-active');
+    expect(commonSource).not.toMatch(/verify-active[\s\S]{0,80}\bnpx\b/);
+  });
+
+  it('runs fresh setup in configure, npm-ci, verify order without identity checks', () => {
+    const checkout = temporaryRoot('icarus-fresh-setup-');
+    const copiedSetup = path.join(checkout, 'setup.sh');
+    const fakeToolchain = path.join(
+      checkout,
+      'scripts',
+      'runtime-toolchain.sh',
+    );
+    const calls = path.join(checkout, 'toolchain-calls.log');
+    fs.copyFileSync(setupScript, copiedSetup);
+    fs.chmodSync(copiedSetup, 0o755);
+    writeExecutable(
+      fakeToolchain,
+      `#!/bin/bash
+set -euo pipefail
+printf '%s\\n' "$*" >> "$ICARUS_SETUP_TEST_CALLS"
+case "\${1:-}" in
+  configure) printf 'node_path=/fixture/node\\n' ;;
+  npm-ci) ;;
+  verify)
+    printf '%s\\n' \\
+      'node_path=/fixture/node' \\
+      'node_major=26' \\
+      'node_modules_abi=${process.versions.modules}' \\
+      'node_platform=${process.platform}' \\
+      'node_arch=${process.arch}'
+    ;;
+  exec)
+    case "\${3:-}" in
+      node) printf 'v26.5.0\\n' ;;
+      npm) printf '11.17.0\\n' ;;
+    esac
+    ;;
+  *) exit 64 ;;
+esac
+`,
+    );
+
+    const setup = spawnSync(copiedSetup, [], {
+      cwd: checkout,
       encoding: 'utf8',
-      env: { ...process.env, PATH: `${maliciousBin}:/usr/bin:/bin` },
+      env: { ...process.env, ICARUS_SETUP_TEST_CALLS: calls },
     });
-    expect(tampered.status).toBe(78);
-    expect(tampered.stderr).toContain('core_entry_hash_mismatch');
-    expect(fs.existsSync(marker)).toBe(false);
+    expect(setup.status, setup.stderr).toBe(0);
+    expect(setup.stdout).toContain('STATUS: success');
+    expect(setup.stdout).not.toContain('SYSTEM_IDENTITY');
+    expect(fs.existsSync(path.join(checkout, 'node_modules'))).toBe(false);
+    const commands = fs.readFileSync(calls, 'utf8').trim().split('\n');
+    expect(commands[0]).toMatch(/^configure --node \/.+/);
+    expect(commands.slice(1)).toEqual([
+      'npm-ci',
+      'verify',
+      'exec -- node --version',
+      'exec -- npm --version',
+    ]);
+    const source = fs.readFileSync(copiedSetup, 'utf8');
+    expect(source).not.toContain('active-path');
+    expect(source).not.toMatch(/SYSTEM_.*IDENTITY|identity unchanged/i);
   });
 });
