@@ -1,7 +1,7 @@
 # Workflow Runtime Guardrail Simplification Plan
 
-> **Status**: Approved design; implementation has not started
-> **Scope**: Workflow Runtime conformance and Golden assets, G9 Production Activation, Host Core snapshots, Workflow Runtime state backup, managed Node identity
+> **Status**: Approved design; the Runtime gateway prerequisite is implemented, while the six simplification phases have not started
+> **Scope**: Workflow Runtime public gateways, static import boundaries, conformance and Golden assets, G9 Production Activation, Host Core snapshots, Workflow Runtime state backup, managed Node identity
 > **Project boundary**: Icarus is an internal, experimental, single-user tool. This plan optimizes for local iteration stability and recoverability, not external delivery or production certification.
 
 ## 1. Decision Summary
@@ -25,6 +25,8 @@ The release and activation result is explicit:
 | Activation request/audit/journal/binding/recovery | Removed |
 | Capacity genesis activation | Replaced by idempotent first-run Store initialization |
 | Feature/Workflow Registry publish and activate | Retained as an internal business capability |
+| Runtime external access | Retain the three purpose-specific `gateway/connection`, `gateway/execution`, and `gateway/host-core` entrypoints |
+| Gateway boundary verification | Retain as one direct import test; remove generated whole-source proof and pinned hashes |
 | `archive:verify:v1` / `contracts:archive:check` | Removed; Git history/tag is the historical authority |
 | Historical accepted release bundle | Retained only through the legacy compatibility window, then removed from active verification |
 
@@ -63,6 +65,8 @@ The problem is not only repository size. Every additional generated identity, re
 
 The current archive verifier is also over-scoped. It pins the raw SHA-256 of six historical Markdown files, compares broad current Runtime source trees with one accepted commit, and performs reachability/provenance assertions. Editing historical documentation or legitimately evolving current source therefore makes an optional historical audit fail. Git already preserves the exact historical bytes, so this verifier adds maintenance cost without protecting local runtime state.
 
+The completed Runtime gateway refactor provides another concrete example. Moving existing imports behind three small gateway files changed no runtime behavior, but required regeneration of the static-absence contract pack, absence baseline, product-surface coverage, migration-candidate boundary, and two manually pinned artifact hashes. The import boundary is useful; this generated proof chain is not.
+
 ## 3. Required Boundaries
 
 The simplification must not weaken these controls:
@@ -76,6 +80,7 @@ The simplification must not weaken these controls:
 - A reset must create a usable backup before removing live state.
 - `active-core` changes must remain atomic and preserve the previous selection on failure.
 - Persisted-data and independently evolving process boundaries may retain small versioned contracts.
+- Runtime executable and Store internals must remain behind purpose-specific gateway entrypoints. Pure public contract helpers and types may remain directly importable.
 
 The following are not required boundaries:
 
@@ -85,6 +90,8 @@ The following are not required boundaries:
 - deployment journals for one local process;
 - multiple activation pointers representing preparation, deployment, and Core selection;
 - an exact Node executable hash when the Node ABI and native module are compatible.
+- a single aggregate Runtime barrel that loads unrelated dependency graphs;
+- whole-source hashes, generated contract envelopes, or pinned artifact hashes used only to prove an import boundary.
 
 ## 4. Phase 1: Replace The Golden Lifecycle
 
@@ -151,11 +158,11 @@ Historical accepted bytes remain available through Git history and the existing 
 
 The old commands remain callable but non-default during the parity change. Revert the package-script switch if the two replay paths disagree.
 
-## 5. Phase 2: Collapse Conformance History
+## 5. Phase 2: Collapse Conformance History And Static Proof Overhead
 
 ### 5.1 Goal
 
-Keep only cases that validate active behavior. Remove historical construction-state copies from the active source tree.
+Keep only cases that validate active behavior. Remove historical construction-state copies from the active source tree and separate useful static rules from generated proof machinery.
 
 ### 5.2 Target Fixture Policy
 
@@ -232,17 +239,50 @@ If a lightweight boundary is still useful, `contracts:static:check` may contain 
 
 The correct response to an edited historical document is not to update a frozen hash. Either accept the documentation correction in Git or retrieve the original bytes from the historical tag.
 
-### 5.7 Exit Criteria
+### 5.7 Keep The Runtime Gateways, Simplify Their Check
+
+Retain the three current purpose-specific entrypoints:
+
+- `src/workflow-runtime/gateway/connection.ts` for opening and typing Store connections;
+- `src/workflow-runtime/gateway/execution.ts` for Worker execution operations;
+- `src/workflow-runtime/gateway/host-core.ts` for the temporary Host Core schema and state integration surface.
+
+Do not combine them into one aggregate barrel. The completed refactor demonstrated that a single barrel loads unrelated execution and Host Core dependency graphs and can create initialization-order and test-mocking failures.
+
+The supported external import model is:
+
+```text
+Runtime executable or Store behavior -> workflow-runtime/gateway/<purpose>
+Pure hashes, strict JSON, and shared data types -> explicitly public workflow-runtime/contracts modules
+Runtime internal implementation -> no direct external import
+```
+
+The current `src/host-core/activation.ts` import from `workflow-runtime/certification/release-manifest` is a temporary legacy release dependency. Remove it in Phase 4; do not treat `certification/` as a new public surface.
+
+Extract the `runtime_gateway_bypass` rule from the generated static-absence proof chain into one ordinary TypeScript import-boundary test. The test should:
+
+1. parse imports from source outside `src/workflow-runtime/`;
+2. allow only the three gateway entrypoints and explicitly public contract modules;
+3. report the importing file and forbidden module path;
+4. produce no JSON artifact, inventory, envelope, or hash output.
+
+Remove gateway-boundary coupling to `source_core_build_hash`, `production_source_absence_hash`, product-surface coverage, migration-candidate evidence, negative-fixture packs, and manually pinned contract-pack hashes. Other static-absence checks may remain only when they protect an active local failure and can run without hashing unrelated source.
+
+Gateway exports are internal adapters, not frozen compatibility contracts. Each later phase must delete obsolete exports rather than preserve G1/G8/G9 names for historical compatibility.
+
+### 5.8 Exit Criteria
 
 - Active conformance contains no more than 350 files and 5 MB unless a documented exception is approved by the local owner.
 - Every default conformance test reads only `current/` or a directly owned domain fixture.
 - No current runtime or build reads historical construction paths.
 - No package script verifies raw historical Markdown hashes or diffs current source against the accepted construction commit.
+- External source has no direct import into Runtime Store, execution, scheduler, reconciler, or Registry internals.
+- Gateway-boundary validation is one direct test with zero generated artifacts or pinned hashes.
 - All retained error codes and known regression cases remain covered.
 
-### 5.8 Rollback
+### 5.9 Rollback
 
-Restore the removed paths from the history tag if an active case was missed. Do not regenerate the historical tree or restore raw-hash enforcement for Markdown.
+Restore removed fixtures from the history tag if an active case was missed. The three gateway entrypoints remain in place during rollback. Do not regenerate the historical tree or restore raw-hash enforcement for Markdown or import boundaries.
 
 ## 6. Phase 3: Remove G9 Production Activation
 
@@ -308,13 +348,14 @@ No automatic mutation occurs during normal startup.
 
 Remove active dependencies in this order:
 
-1. Store identity modes and reads of `activation-core`/`active-deployment`.
-2. Capacity genesis actor and evidence requirements.
-3. Compiler source allowlists for G9 activation entries.
-4. Release manifest requirements for activation entries and Capacity genesis bundles.
-5. Runtime toolchain selectors and `stage-production-release` behavior.
-6. Registry activation entry/runtime/transaction modules.
-7. G9 contract generators, schemas, package scripts, and default/full tests.
+1. Keep external callers on the existing purpose-specific gateways; do not expose G9 modules through a gateway as a migration shortcut.
+2. Remove Store identity modes and reads of `activation-core`/`active-deployment`.
+3. Remove Capacity genesis actor and evidence requirements.
+4. Remove Compiler source allowlists for G9 activation entries.
+5. Remove release manifest requirements for activation entries and Capacity genesis bundles.
+6. Remove runtime toolchain selectors and `stage-production-release` behavior.
+7. Remove Registry activation entry/runtime/transaction modules.
+8. Remove G9 contract generators, schemas, package scripts, and default/full tests.
 
 Expected removal roots include:
 
@@ -342,6 +383,7 @@ Feature activation must not acquire G9 audit, deployment journal, Capacity genes
 - Fresh Store startup creates usable default Capacity exactly once.
 - Current and snapshot Host startup work without G9 assets.
 - Feature release activation tests continue to pass independently.
+- No G9 API has been added to a Runtime gateway.
 
 ### 6.8 Rollback
 
@@ -416,6 +458,8 @@ A dirty checkout is recorded and warned about, not universally blocked. The loca
 - immutable version-name binding;
 - separate release, production release, and activation bindings;
 - G8/G9 release entry selectors;
+- the direct `workflow-runtime/certification/release-manifest` import from Host Core activation;
+- obsolete G1 frozen-input and exact-identity exports from `gateway/host-core.ts` after the snapshot compatibility descriptor replaces them;
 - clean-checkout hard blocking for ordinary local snapshots.
 
 ### 7.7 Exit Criteria
@@ -424,6 +468,7 @@ A dirty checkout is recorded and warned about, not universally blocked. The loca
 - A broken entry, incompatible schema, or incompatible Node ABI cannot become active.
 - Pointer failure preserves the previous `active-core` bytes.
 - Snapshot implementation and toolchain code is reduced by at least 50% without reducing these behaviors.
+- Host Core reaches Runtime behavior only through `gateway/host-core.ts` and explicitly public contract helpers; it does not import `certification/`, Store, or execution internals.
 
 ### 7.8 Rollback
 
@@ -475,13 +520,14 @@ The backup ID is not derived from content. Identical backups do not deduplicate.
 
 1. Refuse while launchd or a direct Host process is running.
 2. Inspect exact DB/WAL/SHM paths and reject symlinks/non-regular files.
-3. Display source paths and destination backup ID.
-4. Require confirmation.
-5. Create the backup directory and `.incomplete` marker.
-6. Copy or move the exact DB unit and verify size/checksum.
-7. Write the completed manifest.
-8. Remove `.incomplete`.
-9. Remove the live unit only after backup verification succeeds.
+3. Obtain schema inspection through `gateway/host-core.ts`; do not import Store schema internals from Host Core.
+4. Display source paths and destination backup ID.
+5. Require confirmation.
+6. Create the backup directory and `.incomplete` marker.
+7. Copy or move the exact DB unit and verify size/checksum.
+8. Write the completed manifest.
+9. Remove `.incomplete`.
+10. Remove the live unit only after backup verification succeeds.
 
 ### 8.5 Interrupted Operations
 
@@ -587,7 +633,7 @@ Each phase should be an independently reviewable and revertible change. Do not c
 | Change | Scope | Risk | Required predecessor |
 | --- | --- | --- | --- |
 | 1. Golden single baseline | Compiler contracts and scripts | Medium | None |
-| 2. Conformance and archive collapse | Fixtures, generators, archive verifier, package scripts | Medium | Golden single baseline |
+| 2. Conformance, archive, and static-proof collapse | Fixtures, generators, archive verifier, gateway boundary test, package scripts | Medium | Golden single baseline |
 | 3. G9 removal | Store, Capacity, Compiler, certification, toolchain, Registry | High | Current baseline tests stable |
 | 4. Host Core snapshot v2 | Host Core release/activation and shell commands | High | G9 removed from release identity |
 | 5. State backup v2 | Persistent state and reset CLI | High | Snapshot/startup identity stable |
@@ -615,6 +661,8 @@ Every phase runs focused tests plus the relevant rows below:
 | Node patch upgrade in supported major | Starts after ABI smoke |
 | Native ABI mismatch | Blocks with rebuild/reinstall guidance |
 | Feature Registry publish/activate | Continues to work without G9 |
+| Runtime gateway boundary | A direct internal import fails with the importing file and module path |
+| Allowed gateway import refactor | Requires no generated proof or pinned-hash update |
 | Golden drift | `golden:check` fails |
 | Compiler semantic regression | `golden:replay` fails |
 
@@ -627,6 +675,8 @@ These budgets prevent the same governance weight from growing back:
 - Active conformance: at most 350 files and 5 MB without a documented exception.
 - Golden lifecycle: one current corpus and one replay path.
 - Historical documentation: Git history/tag only; no raw-hash gate.
+- Runtime public access: three purpose-specific gateways; no aggregate barrel.
+- Runtime import boundary: one direct test and zero generated proof artifacts or pinned hashes.
 - Runtime selection: one authoritative pointer, `active-core`.
 - State reset: one backup manifest format for new writes.
 - Node selection: one configured Node path; no active distribution pointer.
@@ -638,7 +688,7 @@ Budget checks should be simple file/count checks. They must not introduce hashed
 
 ### 13.1 Static And Generated Closure
 
-Current static-absence and Compiler source inventories reference several G9 and historical paths. Their active generators and tests must be updated in the same phase as source removal. Historical accepted artifacts are not regenerated.
+Current static-absence and Compiler source inventories reference several G9 and historical paths. The gateway refactor proved that a behavior-neutral import change currently propagates into multiple generated artifacts and manually pinned hashes. Extract the direct gateway test and remove this source-wide hash coupling in Phase 2 before broad G9 and Host Core deletion. Later phases should update active tests and small current catalogs, not repeatedly regenerate a historical proof chain.
 
 ### 13.2 Existing Local Pointers
 
@@ -672,6 +722,9 @@ The full simplification is complete when:
 - new state backups use the timestamp manifest format and support explicit restore;
 - Node compatibility is based on supported major plus actual ABI smoke;
 - Feature/Workflow publish and activate still work;
+- the three purpose-specific Runtime gateways remain the executable and Store access boundary for external source;
+- gateway-boundary validation produces no generated artifact or pinned hash;
+- Host Core no longer imports Runtime certification internals, and obsolete Host Core gateway identity exports are removed;
 - credential, mount, IPC, destructive-action, schema, backup, and rollback safeguards remain intact;
 - current tests, typecheck, schema checks, Golden replay, startup smoke, snapshot rollback, and state restore tests pass;
 - no active command hashes archived Markdown or compares current source with the accepted construction commit;
