@@ -116,9 +116,7 @@
             },
             "closure_hash": "sha256:2dfeefaa28c69896833c471756b1bc4038136dfd692263ad74d2231b7771d5ec",
             "compiler_version": "3.0.4",
-            "core_build_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-            "database_schema_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-            "snapshot_hash": "sha256:954177b6a193505187f6549b0f5beed2370fcc93639661b62342bfb7237a42e9"
+            "snapshot_hash": "sha256:019f5da3bc4db21bd963c2750a932a40443a232d5b6d60ae1c8f4badaedda36d"
           },
           "created_at_ms": 1784604172000
         },
@@ -127,7 +125,7 @@
             "id": "fixture.registry.snapshot",
             "version": "1.0.0"
           },
-          "snapshot_hash": "sha256:954177b6a193505187f6549b0f5beed2370fcc93639661b62342bfb7237a42e9",
+          "snapshot_hash": "sha256:019f5da3bc4db21bd963c2750a932a40443a232d5b6d60ae1c8f4badaedda36d",
           "expected_compiler_version": "3.0.4"
         },
         "expected_preflight_result": {
@@ -138,7 +136,7 @@
             "id": "fixture.registry.snapshot",
             "version": "1.0.0"
           },
-          "snapshot_hash": "sha256:954177b6a193505187f6549b0f5beed2370fcc93639661b62342bfb7237a42e9",
+          "snapshot_hash": "sha256:019f5da3bc4db21bd963c2750a932a40443a232d5b6d60ae1c8f4badaedda36d",
           "closure_hash": "sha256:2dfeefaa28c69896833c471756b1bc4038136dfd692263ad74d2231b7771d5ec",
           "member_count": 1,
           "read_only": true
@@ -146,5 +144,5 @@
       }
     ]
   },
-  "hash": "sha256:99ff360e34d8b1f39fe2aa25b2e47f48ce9531bcf61bee06f539debc32bf87aa"
+  "hash": "sha256:4fe63e253f547fd4dc99cb5bad360c27452f3291cdb5d1ea09038110f742cd4d"
 }

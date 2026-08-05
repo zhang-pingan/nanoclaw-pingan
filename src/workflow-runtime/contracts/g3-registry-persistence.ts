@@ -225,8 +225,6 @@ export const G3_REGISTRY_SNAPSHOT_SCHEMA: JsonObject = {
     'closure_ref',
     'closure_hash',
     'compiler_version',
-    'core_build_hash',
-    'database_schema_hash',
     'snapshot_hash',
   ],
   properties: {
@@ -235,8 +233,6 @@ export const G3_REGISTRY_SNAPSHOT_SCHEMA: JsonObject = {
     closure_ref: { $ref: '#/$defs/versioned_ref' },
     closure_hash: hashSchema,
     compiler_version: { type: 'string', minLength: 1, maxLength: 255 },
-    core_build_hash: hashSchema,
-    database_schema_hash: hashSchema,
     snapshot_hash: hashSchema,
   },
   $defs: { versioned_ref: versionedRefSchema },
@@ -864,10 +860,6 @@ export function g3RegistryPersistenceFixturesForTest(): {
     closure_ref: closure.ref,
     closure_hash: closure.closure_hash,
     compiler_version: '3.0.4',
-    core_build_hash:
-      'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' as Sha256Hash,
-    database_schema_hash:
-      'sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' as Sha256Hash,
   };
   const snapshot: G3RegistrySnapshot = {
     ...snapshotWithoutHash,

@@ -3,7 +3,6 @@ import { COMPILED_PLAN_V2_DOMAIN_SEPARATOR } from '../contracts/compiler-contrac
 import type { WorkflowCompilerStaticChildPlanBundle } from '../contracts/static-child-plan-bundle-types.js';
 import { registryResourceId } from '../contracts/g3-registry-persistence.js';
 import type { G3RegistryResourceType } from '../contracts/g3-registry-persistence-types.js';
-import { G5_REPAIR_DATABASE_SCHEMA_HASH } from '../contracts/g5-basic-runtime-repair-types.js';
 import type {
   RuntimeRegistryRef,
   RuntimeValueRef,
@@ -225,16 +224,6 @@ function seedG6Runtime(
       hash: g6Hash(`resource:${name}`),
       content: {},
     })),
-    {
-      name: 'compilerToolchain',
-      resourceType: 'compiler_toolchain',
-      ref: {
-        id: 'icarus.workflow-compiler',
-        version: WORKFLOW_COMPILER_VERSION,
-      },
-      hash: g6Hash(`compiler:${WORKFLOW_COMPILER_VERSION}`),
-      content: { semantic_version: WORKFLOW_COMPILER_VERSION },
-    },
     ...snapshotResources,
   ];
   const refs: Record<string, RuntimeRegistryRef> = {};
@@ -396,16 +385,14 @@ function seedG6Runtime(
     transaction.execute(
       `INSERT INTO workflow_registry_snapshots (
          id, snapshot_hash, closure_manifest_id, closure_hash,
-         compiler_version, core_build_hash, database_schema_hash, created_at_ms
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, 2)`,
+         compiler_version, created_at_ms
+       ) VALUES (?, ?, ?, ?, ?, 2)`,
       [
         snapshotId,
         snapshotHash,
         closureId,
         closureHash,
         compiled.plan.compiler_version,
-        compiled.plan.plan_hash,
-        G5_REPAIR_DATABASE_SCHEMA_HASH,
       ],
     );
   });
@@ -477,11 +464,6 @@ export function createG6MapFixture(
       runtimeSafetySnapshot: seed.values.safety!,
       runtimeSupportedLimits: seed.refs.supportedLimits!,
       sqliteExecutionProfile: seed.refs.sqliteProfile!,
-      compilerToolchain: seed.refs.compilerToolchain!,
-      coreReleaseRef: 'icarus.core@1.0.0',
-      coreReleaseHash: g6Hash('core-release'),
-      coreBuildHash: compiled.plan.plan_hash as Sha256Hash,
-      databaseSchemaHash: G5_REPAIR_DATABASE_SCHEMA_HASH,
       sourceSeedHash: compiled.plan.source_hash as Sha256Hash,
       compilerSnapshotHash: g6Hash('compiler-snapshot'),
       inputSnapshot: seed.values.input!,

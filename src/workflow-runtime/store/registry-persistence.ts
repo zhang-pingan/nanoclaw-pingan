@@ -156,8 +156,6 @@ interface ImmutableSnapshotRow extends Record<string, unknown> {
   closure_manifest_id: string;
   closure_hash: string;
   compiler_version: string;
-  core_build_hash: string;
-  database_schema_hash: string;
 }
 
 interface RegistryPersistenceInsertPlan {
@@ -369,8 +367,7 @@ function snapshotNeedsInsert(
 ): boolean {
   const id = registrySnapshotId(snapshot.ref);
   const rows = transaction.queryAll<ImmutableSnapshotRow>(
-    `SELECT id, snapshot_hash, closure_manifest_id, closure_hash, compiler_version,
-            core_build_hash, database_schema_hash
+    `SELECT id, snapshot_hash, closure_manifest_id, closure_hash, compiler_version
        FROM workflow_registry_snapshots
       WHERE id = ? OR snapshot_hash = ?`,
     [id, snapshot.snapshot_hash],
@@ -382,9 +379,7 @@ function snapshotNeedsInsert(
     rows[0].snapshot_hash !== snapshot.snapshot_hash ||
     rows[0].closure_manifest_id !== registryClosureId(snapshot.closure_ref) ||
     rows[0].closure_hash !== snapshot.closure_hash ||
-    rows[0].compiler_version !== snapshot.compiler_version ||
-    rows[0].core_build_hash !== snapshot.core_build_hash ||
-    rows[0].database_schema_hash !== snapshot.database_schema_hash
+    rows[0].compiler_version !== snapshot.compiler_version
   ) {
     return immutableCollision('registry_snapshot_identity_collision', id);
   }
@@ -599,16 +594,14 @@ export function persistRegistryPersistenceBatch(
       transaction.execute(
         `INSERT INTO workflow_registry_snapshots (
           id, snapshot_hash, closure_manifest_id, closure_hash, compiler_version,
-          core_build_hash, database_schema_hash, created_at_ms
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          created_at_ms
+        ) VALUES (?, ?, ?, ?, ?, ?)`,
         [
           registrySnapshotId(batch.snapshot.ref),
           batch.snapshot.snapshot_hash,
           registryClosureId(batch.snapshot.closure_ref),
           batch.snapshot.closure_hash,
           batch.snapshot.compiler_version,
-          batch.snapshot.core_build_hash,
-          batch.snapshot.database_schema_hash,
           batch.created_at_ms,
         ],
       );
@@ -636,8 +629,6 @@ interface SnapshotRow extends Record<string, unknown> {
   closure_manifest_id: string;
   closure_hash: string;
   compiler_version: string;
-  core_build_hash: string;
-  database_schema_hash: string;
 }
 
 interface ClosureRow extends Record<string, unknown> {
@@ -773,7 +764,7 @@ export function preflightRegistrySnapshot(
   }
   const snapshotId = registrySnapshotId(input.snapshot_ref);
   const snapshot = connection.queryOne<SnapshotRow>(
-    `SELECT id, snapshot_hash, closure_manifest_id, closure_hash, compiler_version, core_build_hash, database_schema_hash
+    `SELECT id, snapshot_hash, closure_manifest_id, closure_hash, compiler_version
        FROM workflow_registry_snapshots WHERE id = ?`,
     [snapshotId],
   );
@@ -833,8 +824,6 @@ export function preflightRegistrySnapshot(
     closure_ref: manifest.ref,
     closure_hash: closure.closure_hash as G3SnapshotHash,
     compiler_version: snapshot.compiler_version,
-    core_build_hash: snapshot.core_build_hash as G3SnapshotHash,
-    database_schema_hash: snapshot.database_schema_hash as G3SnapshotHash,
   };
   if (calculateRegistrySnapshotHash(snapshotForHash) !== snapshot.snapshot_hash)
     return rejected(

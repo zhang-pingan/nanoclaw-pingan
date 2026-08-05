@@ -442,7 +442,7 @@ function buildReceipt(
     root_inode: String(rootStat.ino),
     database_device: String(databaseStat.dev),
     database_inode: String(databaseStat.ino),
-    database_schema_version: CURRENT_WORKFLOW_RUNTIME_SCHEMA_VERSION as 11,
+    database_schema_version: CURRENT_WORKFLOW_RUNTIME_SCHEMA_VERSION as 12,
     production_ingress_reachable: false as const,
     feature_ingress_reachable: false as const,
     api_ingress_reachable: false as const,

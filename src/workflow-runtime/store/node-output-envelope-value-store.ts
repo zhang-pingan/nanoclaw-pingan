@@ -18,6 +18,7 @@ import {
   strictParseJsonBytes,
 } from '../contracts/strict-json.js';
 import type { JsonObject, JsonValue, Sha256Hash } from '../contracts/types.js';
+import { WORKFLOW_COMPILER_VERSION } from '../compiler/version.js';
 import { PLAN_DOMAIN_SEPARATOR } from '../compiler/normalizer.js';
 import type {
   WorkflowRuntimeStore,
@@ -291,7 +292,7 @@ function readPlan(
     row.graph_run_id !== input.graphRunId ||
     row.plan_hash !== input.planHash ||
     row.format !== 'icarus.workflow-graph-scope-plan/2' ||
-    row.compiler_version !== '3.0.4' ||
+    row.compiler_version !== WORKFLOW_COMPILER_VERSION ||
     row.compiled_plan_json === null
   ) {
     throw new NodeOutputEnvelopeAuthorityError(

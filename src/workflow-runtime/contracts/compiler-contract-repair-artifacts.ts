@@ -6,7 +6,6 @@ import {
   COMPILER_DIAGNOSTIC_PHASES,
   WORKFLOW_COMPILER_ERROR_CODES,
 } from './catalog-protocol-types.js';
-import { COMPILED_CONDITION_OPERAND_TYPES } from './compiler-contract-repair-types.js';
 import { SHA256_HASH_PATTERN } from './hash.js';
 import {
   assertJsonObject,
@@ -23,7 +22,6 @@ const contractsRoot = import.meta.dirname;
 const DRAFT_2020_12 = 'https://json-schema.org/draft/2020-12/schema';
 const SAFE_INTEGER_MAX = Number.MAX_SAFE_INTEGER;
 const STABLE_ID_PATTERN = '^[A-Za-z0-9][A-Za-z0-9._:-]{0,254}$';
-const CLOSURE_KEY_PATTERN = '^[A-Za-z0-9][A-Za-z0-9._:/-]{0,510}$';
 const POINTER_PATTERN = '^(?:/(?:[^~/]|~[01])*)*$';
 
 type Schema = JsonObject;
@@ -94,7 +92,7 @@ const jsonValueSchema: Schema = {
   ],
 };
 
-function readCompiledPlanSchema(): Schema {
+function readCurrentCompiledPlanSchema(): Schema {
   const artifact = parseContractArtifactEnvelope(
     strictParseJsonBytes(
       fs.readFileSync(
@@ -103,22 +101,6 @@ function readCompiledPlanSchema(): Schema {
     ),
   );
   return strictParseJson(JSON.stringify(artifact.payload)) as Schema;
-}
-
-function staticClosureMemberSchema(): Schema {
-  return object({
-    closure_key: string({ pattern: CLOSURE_KEY_PATTERN }),
-    parent_closure_key: nullable(string({ pattern: CLOSURE_KEY_PATTERN })),
-    scope_key: stableIdSchema,
-    owner_node_path: array(stableIdSchema, { minItems: 1 }),
-    factory_kind: enumString(['inline', 'template']),
-    source_ref: nullable(versionedRefSchema),
-    source_hash: hashSchema,
-    plan_ref: string({ minLength: 1 }),
-    plan_hash: hashSchema,
-    interface_snapshot_hash: hashSchema,
-    member_hash: hashSchema,
-  });
 }
 
 function outboxReconciliationSchema(): Schema {
@@ -215,74 +197,7 @@ function compiledOutboxExecutionBindingSchema(): Schema {
 }
 
 export function buildCompiledScopePlanV2Schema(): Schema {
-  const schema = readCompiledPlanSchema();
-  schema.$id = 'https://icarus.local/schemas/compiled-scope-plan-v2';
-  schema.title = 'icarus.workflow-graph-scope-plan/2';
-  assertJsonObject(schema.properties);
-  schema.properties.format = {
-    const: 'icarus.workflow-graph-scope-plan/2',
-  };
-  if (!Array.isArray(schema.required)) {
-    throw new Error('Compiled IR required list is missing');
-  }
-  schema.required = schema.required.map((key) =>
-    key === 'static_child_plan_closure_hash'
-      ? 'static_child_plan_closure'
-      : key,
-  );
-  delete schema.properties.static_child_plan_closure_hash;
-  schema.properties.static_child_plan_closure = ref(
-    'static_child_plan_closure',
-  );
-
-  assertJsonObject(schema.$defs);
-  const definitions = schema.$defs;
-  assertJsonObject(definitions.compiled_condition_program);
-  const conditionProgram = definitions.compiled_condition_program;
-  assertJsonObject(conditionProgram.properties);
-  conditionProgram.required = [
-    'normalized_ast',
-    'operand_schema_hashes',
-    'operand_types',
-    'max_steps',
-    'program_hash',
-  ];
-  conditionProgram.properties.operand_types = array(
-    enumString(COMPILED_CONDITION_OPERAND_TYPES),
-    { minItems: 1 },
-  );
-
-  assertJsonObject(definitions.compiled_node);
-  const compiledNode = definitions.compiled_node;
-  if (!Array.isArray(compiledNode.oneOf)) {
-    throw new Error('Compiled-node union is missing');
-  }
-  const mapBranch = compiledNode.oneOf.find((candidate) => {
-    assertJsonObject(candidate);
-    assertJsonObject(candidate.properties);
-    assertJsonObject(candidate.properties.type);
-    return candidate.properties.type.const === 'map';
-  });
-  if (!mapBranch) throw new Error('CompiledMapNode is missing');
-  assertJsonObject(mapBranch);
-  assertJsonObject(mapBranch.properties);
-  if (!Array.isArray(mapBranch.required)) {
-    throw new Error('CompiledMapNode required list is missing');
-  }
-  if (!mapBranch.required.includes('result_order')) {
-    mapBranch.required = [...mapBranch.required, 'result_order'];
-  }
-  mapBranch.properties.result_order = { const: 'item_index' };
-
-  definitions.static_child_plan_closure_member = staticClosureMemberSchema();
-  definitions.static_child_plan_closure = object({
-    members: array(ref('static_child_plan_closure_member'), {
-      uniqueItems: true,
-    }),
-    member_count: integer(),
-    closure_hash: hashSchema,
-  });
-  return schema;
+  return readCurrentCompiledPlanSchema();
 }
 
 export function buildCompiledScopePlanV2ExecutionBindingSchema(): Schema {

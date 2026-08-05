@@ -393,7 +393,7 @@ export interface GraphScopeSourceDocument {
 }
 
 export interface CompiledScopePlanDocument {
-  format: 'icarus.workflow-graph-scope-plan/1';
+  format: 'icarus.workflow-graph-scope-plan/2';
   compiler_version: string;
   plan_hash: string;
   source_hash: string;
@@ -409,7 +409,7 @@ export interface CompiledScopePlanDocument {
   data_edges: JsonObject[];
   completion: JsonObject;
   complexity_summary: JsonObject;
-  static_child_plan_closure_hash: string;
+  static_child_plan_closure: JsonObject;
   effective_limits: JsonObject;
   effective_usage_budget: JsonObject;
   runtime_safety_snapshot: JsonObject;
@@ -677,7 +677,7 @@ export const COMPILED_SCOPE_PLAN_KEYS = [
   'data_edges',
   'completion',
   'complexity_summary',
-  'static_child_plan_closure_hash',
+  'static_child_plan_closure',
   'effective_limits',
   'effective_usage_budget',
   'runtime_safety_snapshot',
@@ -706,7 +706,7 @@ export const COMPILED_SCOPE_PLAN_REQUIRED_KEYS = [
   'data_edges',
   'completion',
   'complexity_summary',
-  'static_child_plan_closure_hash',
+  'static_child_plan_closure',
   'effective_limits',
   'effective_usage_budget',
   'runtime_safety_snapshot',

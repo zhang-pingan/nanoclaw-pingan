@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-contract-pack-closed-schemas:1\n",
-  "hash": "sha256:331c7819b6ff0debcc14e17c234705919ca7def0efaefd290ddb3b87f99ddc0d",
+  "hash": "sha256:6ffc7fe65d7de55baff1605ac91a398b355ce9beb65d5013b271786e92cad79b",
   "payload": {
     "gate": "G0.3",
     "status": "closed_schemas",
@@ -29,7 +29,7 @@
       {
         "artifact_path": "schemas/compiled-scope-plan-schema.json",
         "artifact_format": "icarus.workflow-compiled-scope-plan-schema/1",
-        "target_contract": "icarus.workflow-graph-scope-plan/1"
+        "target_contract": "icarus.workflow-graph-scope-plan/2"
       },
       {
         "artifact_path": "schemas/workflow-definition-schema.json",
@@ -85,7 +85,7 @@
         },
         "version": 1,
         "domain_separator": "icarus:workflow-closed-schema-negative-cases:1\n",
-        "hash": "sha256:031ee53a28520ac8ef06f122ecb95545652c170b3e58c6268a9f21bca0251640"
+        "hash": "sha256:27586e2a72066da9200e0212b9dc282c02bc5c140ba4951b2d73ddbecbff3eff"
       },
       {
         "path": "conformance/closed-schemas/positive-cases.json",
@@ -96,7 +96,7 @@
         },
         "version": 1,
         "domain_separator": "icarus:workflow-closed-schema-positive-cases:1\n",
-        "hash": "sha256:6d22df5f083f48ff026f1f16bd64a6d0ca33c8b0f5601d88c3d880474cddc1be"
+        "hash": "sha256:be17d54a7ec5104fa06c06431ee2812e35822293c16885002675fab2fe430f0c"
       },
       {
         "path": "schemas/card-presentation-schema.json",
@@ -118,7 +118,7 @@
         },
         "version": 1,
         "domain_separator": "icarus:workflow-compiled-scope-plan-schema:1\n",
-        "hash": "sha256:69df220db8117c9d43a51aa234b1526fb97c4c68588296f9598d1396d4afb871"
+        "hash": "sha256:7e0c1c995359246aa8e534973c99ae114f3431078d35ebbfaae84634c5fa8b1e"
       },
       {
         "path": "schemas/feature-manifest-v2-schema.json",

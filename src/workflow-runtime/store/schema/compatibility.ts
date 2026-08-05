@@ -1,5 +1,7 @@
 import type Database from 'better-sqlite3';
 
+import { calculateRegistrySnapshotHash } from '../../contracts/g3-registry-persistence.js';
+import type { Sha256Hash, VersionedRef } from '../../contracts/types.js';
 import {
   CURRENT_WORKFLOW_RUNTIME_SCHEMA_VERSION,
   MINIMUM_WORKFLOW_RUNTIME_SCHEMA_VERSION,
@@ -29,13 +31,47 @@ const REQUIRED_COLUMNS = {
     'release_hash',
     'status',
   ],
+  workflow_registry_snapshots: [
+    'id',
+    'snapshot_hash',
+    'closure_manifest_id',
+    'closure_hash',
+    'compiler_version',
+    'created_at_ms',
+  ],
   workflows: ['id', 'status', 'current_graph_run_id', 'row_version'],
-  workflow_graph_runs: ['id', 'workflow_id', 'database_schema_version'],
+  workflow_graph_runs: [
+    'id',
+    'workflow_id',
+    'registry_snapshot_id',
+    'registry_snapshot_hash',
+    'source_seed_hash',
+    'root_scope_id',
+    'root_build_id',
+    'lifecycle',
+    'control',
+    'row_version',
+  ],
   runtime_capacity_head: [
     'singleton_key',
     'current_capacity_revision',
     'current_config_hash',
     'row_version',
+  ],
+} as const;
+
+const FORBIDDEN_COLUMNS = {
+  workflow_registry_snapshots: ['core_build_hash', 'database_schema_hash'],
+  workflow_graph_runs: [
+    'compiler_toolchain_resource_id',
+    'compiler_toolchain_resource_hash',
+    'core_release_ref',
+    'core_release_hash',
+    'core_build_hash',
+    'run_protocol_major',
+    'executor_abi_major',
+    'database_schema_version',
+    'database_schema_hash',
   ],
 } as const;
 
@@ -84,6 +120,64 @@ function inferLegacySchemaVersion(database: Database.Database): number | null {
   return Number.isSafeInteger(version) ? version : null;
 }
 
+function parseStoredVersionedRef(value: string, prefix: string): VersionedRef {
+  if (!value.startsWith(prefix)) {
+    throw new Error(`Malformed stored Registry reference ${value}`);
+  }
+  const serialized = value.slice(prefix.length);
+  const separator = serialized.lastIndexOf('@');
+  if (separator <= 0 || separator === serialized.length - 1) {
+    throw new Error(`Malformed stored Registry reference ${value}`);
+  }
+  return {
+    id: serialized.slice(0, separator),
+    version: serialized.slice(separator + 1),
+  };
+}
+
+function migrateSchema11RegistrySnapshotHashes(
+  database: Database.Database,
+): void {
+  const rows = database
+    .prepare(
+      `SELECT id, closure_manifest_id, closure_hash, compiler_version
+         FROM workflow_registry_snapshots ORDER BY id`,
+    )
+    .all() as Array<{
+    id: string;
+    closure_manifest_id: string;
+    closure_hash: Sha256Hash;
+    compiler_version: string;
+  }>;
+  const update = database.prepare(
+    'UPDATE workflow_registry_snapshots SET snapshot_hash = ? WHERE id = ?',
+  );
+  for (const row of rows) {
+    const snapshotHash = calculateRegistrySnapshotHash({
+      format: 'icarus.workflow-registry-snapshot/1',
+      ref: parseStoredVersionedRef(row.id, 'registry-snapshot:'),
+      closure_ref: parseStoredVersionedRef(
+        row.closure_manifest_id,
+        'registry-closure:',
+      ),
+      closure_hash: row.closure_hash,
+      compiler_version: row.compiler_version,
+    });
+    update.run(snapshotHash, row.id);
+  }
+}
+
+function assertSchema11HasNoRuns(database: Database.Database): void {
+  const count = Number(
+    database.prepare('SELECT count(*) FROM workflow_graph_runs').pluck().get(),
+  );
+  if (count !== 0) {
+    throw new Error(
+      `Schema 11 migration does not support persisted Workflow Runs; found ${count} row(s)`,
+    );
+  }
+}
+
 export function inspectWorkflowRuntimeSchema(
   database: Database.Database,
 ): WorkflowRuntimeSchemaInspection {
@@ -119,6 +213,15 @@ export function assertCurrentWorkflowRuntimeStructure(
       if (!columns.has(column)) {
         throw new Error(
           `Workflow Runtime schema is missing required column ${table}.${column}`,
+        );
+      }
+    }
+    for (const column of FORBIDDEN_COLUMNS[
+      table as keyof typeof FORBIDDEN_COLUMNS
+    ] ?? []) {
+      if (columns.has(column)) {
+        throw new Error(
+          `Workflow Runtime schema contains obsolete column ${table}.${column}`,
         );
       }
     }
@@ -185,6 +288,10 @@ export function migrateWorkflowRuntimeSchema(
       }
     }
     while (version < CURRENT_WORKFLOW_RUNTIME_SCHEMA_VERSION) {
+      if (version === 11) {
+        assertSchema11HasNoRuns(database);
+        migrateSchema11RegistrySnapshotHashes(database);
+      }
       database.exec(readWorkflowRuntimeUpgradeSql(version));
       const observed = scalarUserVersion(database);
       if (observed !== version + 1) {

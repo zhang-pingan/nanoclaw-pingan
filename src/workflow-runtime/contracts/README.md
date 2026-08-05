@@ -12,15 +12,14 @@ Use the smallest affected authority and its tests:
 
 | Area                                                               | Current authority                                                                       |
 | ------------------------------------------------------------------ | --------------------------------------------------------------------------------------- |
-| Common artifact identity                                           | `artifact.ts`, `versioned-ref.ts`, `strict-json.ts`, `hash.ts`                          |
+| Common artifact serialization and functional hashes               | `artifact.ts`, `versioned-ref.ts`, `strict-json.ts`, `hash.ts`                          |
 | Definition, Recipe, Command, Feature, Card, Source and Compiled IR | `schemas/`, `closed-schema-pack.ts`, `catalogs/`                                        |
 | Safety, Capacity baseline, Retention and SQLite profile            | `safety/`, `capacity/`, `sqlite/`                                                       |
 | Current Logical Schema                                             | `logical-schema/` plus `../store/schema/`                                               |
 | Compiler authority                                                 | `../compiler/`, `conformance/current/`, and deterministic replay                        |
 | Registry and authoring                                             | G3 contract packs and `../authoring/` tests                                             |
 | Runtime behavior                                                   | G5-G7 contract packs plus `../runtime/`, `../capacity/`, and `../projection/` tests     |
-| Local startup and rollback compatibility                           | current Launcher, Host Core, Store compatibility, and startup tests                     |
-| Legacy Core release inspection                                     | the minimal read-only `certification/release-manifest.ts` reader                        |
+| Local startup and rollback compatibility                           | configured Node resolver, Host Core, Store compatibility, and startup tests              |
 
 Historical construction coverage, review artifacts, superseded Compiler authorities, ownership/readiness assertions, and milestone candidate tests remain in Git history and the documentation archive. They are not current inputs and are not regenerated or executed by the current aggregate.
 
@@ -44,7 +43,7 @@ The engineering-weight review and further archive candidates are documented in [
 
 ## Archive
 
-The read-only construction archive is indexed at [`docs/archive/dynamic-workflow-runtime-v1/`](../../../docs/archive/dynamic-workflow-runtime-v1/README.md). It is not part of default CI, build, release inventory, Runtime, Compiler, Store, Registry, or Launcher reads.
+The read-only construction archive is indexed at [`docs/archive/dynamic-workflow-runtime-v1/`](../../../docs/archive/dynamic-workflow-runtime-v1/README.md). It is not part of default CI, build, release inventory, Runtime, Compiler, Store, Registry, or startup reads.
 
 Explicit non-default audit:
 

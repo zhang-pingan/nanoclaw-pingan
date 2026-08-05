@@ -153,20 +153,15 @@ export function generateGoldenCorpus(
 ): { readonly cases: GoldenCases; readonly manifest: GoldenManifest } {
   const cases: GoldenCases = {
     format: GOLDEN_CASES_FORMAT,
-    cases: inputs.cases.map((entry) => {
-      const registrySnapshot = structuredClone(entry.registry_snapshot);
-      delete registrySnapshot.compiler_identity;
-      return {
-        ...entry,
-        registry_snapshot: registrySnapshot,
-        expected_result: compileWorkflowCase(
-          entry.case_id,
-          entry.source_kind,
-          Buffer.from(entry.raw_source_base64, 'base64'),
-          registrySnapshot,
-        ),
-      };
-    }),
+    cases: inputs.cases.map((entry) => ({
+      ...entry,
+      expected_result: compileWorkflowCase(
+        entry.case_id,
+        entry.source_kind,
+        Buffer.from(entry.raw_source_base64, 'base64'),
+        entry.registry_snapshot,
+      ),
+    })),
   };
   const manifest: GoldenManifest = {
     format: GOLDEN_MANIFEST_FORMAT,

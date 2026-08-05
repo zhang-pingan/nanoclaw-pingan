@@ -75,8 +75,6 @@ export interface G3RegistrySnapshot extends JsonObject {
   closure_ref: VersionedRef;
   closure_hash: Sha256Hash;
   compiler_version: string;
-  core_build_hash: Sha256Hash;
-  database_schema_hash: Sha256Hash;
   snapshot_hash: Sha256Hash;
 }
 

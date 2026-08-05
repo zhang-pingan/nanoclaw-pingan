@@ -1,5 +1,6 @@
 import type { CompiledScopePlanV2Document } from '../contracts/compiler-contract-repair-types.js';
 import { COMPILED_PLAN_V2_DOMAIN_SEPARATOR } from '../contracts/compiler-contract-repair-source.js';
+import { WORKFLOW_COMPILER_VERSION } from '../compiler/version.js';
 import { canonicalJson, domainSeparatedSha256 } from '../contracts/hash.js';
 import type { JsonObject, Sha256Hash } from '../contracts/types.js';
 import type { WorkflowRuntimeWriteTransaction } from '../store/runtime-store/index.js';
@@ -35,7 +36,7 @@ export function verifyCompiledPlanAuthority(
   );
   if (
     plan.format !== 'icarus.workflow-graph-scope-plan/2' ||
-    !['3.0.4', '3.0.5', '3.0.6'].includes(plan.compiler_version) ||
+    plan.compiler_version !== WORKFLOW_COMPILER_VERSION ||
     claimedPlanHash !== observed ||
     !Array.isArray(plan.nodes) ||
     !Array.isArray(plan.control_edges) ||

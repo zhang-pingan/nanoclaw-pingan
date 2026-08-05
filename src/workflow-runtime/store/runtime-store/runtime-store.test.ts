@@ -7,6 +7,13 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { ensureCapacityDefaults } from '../../capacity/defaults.js';
 import {
+  calculateRegistrySnapshotHash,
+  G3_REGISTRY_SNAPSHOT_DOMAIN,
+} from '../../contracts/g3-registry-persistence.js';
+import { domainSeparatedSha256 } from '../../contracts/hash.js';
+import type { Sha256Hash } from '../../contracts/types.js';
+import { WORKFLOW_COMPILER_VERSION } from '../../compiler/version.js';
+import {
   CURRENT_WORKFLOW_RUNTIME_SCHEMA_VERSION,
   readFreshWorkflowRuntimeSchemaSql,
   WORKFLOW_RUNTIME_SQLITE_CONFIG,
@@ -53,6 +60,135 @@ function createVersionDatabase(databasePath: string, version: number): void {
   } finally {
     database.close();
   }
+}
+
+const MIGRATION_HASH = `sha256:${'a'.repeat(64)}` as Sha256Hash;
+const MIGRATION_SCHEMA_HASH = `sha256:${'b'.repeat(64)}` as Sha256Hash;
+const MIGRATION_CLOSURE_HASH = `sha256:${'c'.repeat(64)}` as Sha256Hash;
+
+function seedSchema11PreservedState(databasePath: string): {
+  oldSnapshotHash: Sha256Hash;
+  newSnapshotHash: Sha256Hash;
+} {
+  const snapshotRef = { id: 'migration.definition', version: '1.0.0' };
+  const closureRef = { id: 'migration.definition', version: '1.0.0' };
+  const oldSnapshotHash = domainSeparatedSha256(G3_REGISTRY_SNAPSHOT_DOMAIN, {
+    format: 'icarus.workflow-registry-snapshot/1',
+    ref: snapshotRef,
+    closure_ref: closureRef,
+    closure_hash: MIGRATION_CLOSURE_HASH,
+    compiler_version: WORKFLOW_COMPILER_VERSION,
+    core_build_hash: MIGRATION_HASH,
+    database_schema_hash: MIGRATION_SCHEMA_HASH,
+  });
+  const newSnapshotHash = calculateRegistrySnapshotHash({
+    format: 'icarus.workflow-registry-snapshot/1',
+    ref: snapshotRef,
+    closure_ref: closureRef,
+    closure_hash: MIGRATION_CLOSURE_HASH,
+    compiler_version: WORKFLOW_COMPILER_VERSION,
+  });
+  const database = new Database(databasePath);
+  try {
+    database.pragma('foreign_keys = OFF');
+    database.exec('BEGIN');
+    const insertValue = database.prepare(
+      `INSERT INTO workflow_values (
+         id, storage_kind, inline_canonical_json, content_hash, byte_length,
+         media_type, schema_resource_id, schema_resource_hash, provenance_ref,
+         retention_class, payload_state, created_at_ms, row_version,
+         schema_authority_kind
+       ) VALUES (?, 'inline', '{}', ?, 2, 'application/json', ?, ?,
+                 'migration-test', 'pinned', 'live', 1, 1, 'registry')`,
+    );
+    insertValue.run(
+      'value:migration-schema',
+      MIGRATION_SCHEMA_HASH,
+      'registry-resource:schema:migration.schema@1.0.0',
+      MIGRATION_SCHEMA_HASH,
+    );
+    database
+      .prepare(
+        `INSERT INTO workflow_registry_resources (
+           id, resource_type, resource_id, resource_version, owner_core_ref,
+           canonical_value_id, content_hash, publication_state, created_at_ms,
+           published_at_ms, row_version
+         ) VALUES (?, 'schema', 'migration.schema', '1.0.0', 'icarus.core@local',
+                   ?, ?, 'published', 1, 1, 1)`,
+      )
+      .run(
+        'registry-resource:schema:migration.schema@1.0.0',
+        'value:migration-schema',
+        MIGRATION_SCHEMA_HASH,
+      );
+    insertValue.run(
+      'value:migration-definition',
+      MIGRATION_HASH,
+      'registry-resource:schema:migration.schema@1.0.0',
+      MIGRATION_SCHEMA_HASH,
+    );
+    database
+      .prepare(
+        `INSERT INTO workflow_registry_resources (
+           id, resource_type, resource_id, resource_version, owner_core_ref,
+           canonical_value_id, content_hash, publication_state, created_at_ms,
+           published_at_ms, row_version
+         ) VALUES (?, 'definition', 'migration.definition', '1.0.0',
+                   'icarus.core@local', ?, ?, 'published', 1, 1, 1)`,
+      )
+      .run(
+        'registry-resource:definition:migration.definition@1.0.0',
+        'value:migration-definition',
+        MIGRATION_HASH,
+      );
+    insertValue.run(
+      'value:migration-closure',
+      MIGRATION_CLOSURE_HASH,
+      'registry-resource:schema:migration.schema@1.0.0',
+      MIGRATION_SCHEMA_HASH,
+    );
+    database
+      .prepare(
+        `INSERT INTO workflow_registry_closure_manifests (
+           id, closure_hash, manifest_value_id, manifest_hash, created_at_ms
+         ) VALUES (?, ?, 'value:migration-closure', ?, 1)`,
+      )
+      .run(
+        'registry-closure:migration.definition@1.0.0',
+        MIGRATION_CLOSURE_HASH,
+        MIGRATION_CLOSURE_HASH,
+      );
+    database
+      .prepare(
+        `INSERT INTO workflow_registry_snapshots (
+           id, snapshot_hash, closure_manifest_id, closure_hash,
+           compiler_version, core_build_hash, database_schema_hash, created_at_ms
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, 1)`,
+      )
+      .run(
+        'registry-snapshot:migration.definition@1.0.0',
+        oldSnapshotHash,
+        'registry-closure:migration.definition@1.0.0',
+        MIGRATION_CLOSURE_HASH,
+        WORKFLOW_COMPILER_VERSION,
+        MIGRATION_HASH,
+        MIGRATION_SCHEMA_HASH,
+      );
+    database.exec(
+      `INSERT INTO runtime_capacity_head (
+         singleton_key, current_capacity_revision, current_change_id,
+         current_config_hash, current_publication_hash, pending_change_id,
+         row_version, created_at_ms, updated_at_ms
+       ) VALUES (1, NULL, NULL, NULL, NULL, NULL, 7, 11, 12)`,
+    );
+    database.exec('COMMIT');
+  } catch (error) {
+    if (database.inTransaction) database.exec('ROLLBACK');
+    throw error;
+  } finally {
+    database.close();
+  }
+  return { oldSnapshotHash, newSnapshotHash };
 }
 
 function seedUncheckedRow(database: Database.Database, table: string): void {
@@ -175,6 +311,90 @@ describe('Workflow Runtime Store schema compatibility', () => {
     ).toBe(0);
   });
 
+  it('migrates Schema 11 while preserving Registry, definition, and Capacity state', () => {
+    const { databasePath } = temporaryDatabase();
+    createVersionDatabase(databasePath, 11);
+    const { oldSnapshotHash, newSnapshotHash } =
+      seedSchema11PreservedState(databasePath);
+    expect(oldSnapshotHash).not.toBe(newSnapshotHash);
+
+    const store = WorkflowRuntimeConnectionFactory.openStore({
+      databasePath,
+      databaseMode: 'open_existing',
+    });
+    stores.push(store);
+    expect(store.schemaVersion).toBe(12);
+    expect(
+      store.queryOne<{ snapshot_hash: string }>(
+        'SELECT snapshot_hash FROM workflow_registry_snapshots WHERE id = ?',
+        ['registry-snapshot:migration.definition@1.0.0'],
+      ),
+    ).toEqual({ snapshot_hash: newSnapshotHash });
+    expect(
+      store.queryOne<{ publication_state: string }>(
+        'SELECT publication_state FROM workflow_registry_resources WHERE id = ?',
+        ['registry-resource:definition:migration.definition@1.0.0'],
+      ),
+    ).toEqual({ publication_state: 'published' });
+    expect(
+      store.queryOne<{ row_version: number; updated_at_ms: number }>(
+        'SELECT row_version, updated_at_ms FROM runtime_capacity_head WHERE singleton_key = 1',
+        [],
+      ),
+    ).toEqual({ row_version: 7, updated_at_ms: 12 });
+  });
+
+  it('rejects Schema 11 with persisted Runs and rolls back', () => {
+    const { databasePath } = temporaryDatabase();
+    createVersionDatabase(databasePath, 11);
+    const database = new Database(databasePath);
+    try {
+      seedUncheckedRow(database, 'workflow_graph_runs');
+    } finally {
+      database.close();
+    }
+    expect(() =>
+      WorkflowRuntimeConnectionFactory.openStore({
+        databasePath,
+        databaseMode: 'open_existing',
+      }),
+    ).toThrow('does not support persisted Workflow Runs; found 1 row(s)');
+    const unchanged = new Database(databasePath, { readonly: true });
+    try {
+      expect(unchanged.pragma('user_version', { simple: true })).toBe(11);
+      expect(
+        unchanged
+          .prepare('SELECT count(*) FROM workflow_graph_runs')
+          .pluck()
+          .get(),
+      ).toBe(1);
+    } finally {
+      unchanged.close();
+    }
+  });
+
+  it('creates Schema 12 without obsolete snapshot or Run identity columns', () => {
+    const store = openFresh();
+    const columns = (table: string) =>
+      store
+        .queryAll<{ name: string }>(`PRAGMA table_info("${table}")`, [])
+        .map(({ name }) => name);
+    expect(columns('workflow_registry_snapshots')).not.toEqual(
+      expect.arrayContaining(['core_build_hash', 'database_schema_hash']),
+    );
+    expect(columns('workflow_graph_runs')).not.toEqual(
+      expect.arrayContaining([
+        'compiler_toolchain_resource_id',
+        'core_release_hash',
+        'core_build_hash',
+        'run_protocol_major',
+        'executor_abi_major',
+        'database_schema_version',
+        'database_schema_hash',
+      ]),
+    );
+  });
+
   it('transactionally migrates an empty supported Schema 3 database', () => {
     const { databasePath } = temporaryDatabase();
     createVersionDatabase(databasePath, 3);
@@ -286,6 +506,14 @@ describe('Workflow Runtime Store schema compatibility', () => {
       (database: Database.Database) =>
         database.exec('DROP INDEX "idx:capacity_head:singleton"'),
       'missing required index idx:capacity_head:singleton',
+    ],
+    [
+      'obsolete column',
+      (database: Database.Database) =>
+        database.exec(
+          'ALTER TABLE workflow_graph_runs ADD COLUMN database_schema_hash TEXT',
+        ),
+      'contains obsolete column workflow_graph_runs.database_schema_hash',
     ],
   ])(
     'rejects a current database with a missing required %s',

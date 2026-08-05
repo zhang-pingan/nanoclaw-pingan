@@ -13,6 +13,7 @@ import {
 } from '../contracts/generated-schema-authority.js';
 import { canonicalJson, domainSeparatedSha256 } from '../contracts/hash.js';
 import type { JsonObject, Sha256Hash } from '../contracts/types.js';
+import { WORKFLOW_COMPILER_VERSION } from '../compiler/version.js';
 import type {
   WorkflowRuntimeSqlValue,
   WorkflowRuntimeStore,
@@ -58,7 +59,7 @@ function outputPorts(overrides: JsonObject = {}): JsonObject {
 function plan(ports: JsonObject): { value: JsonObject; hash: Sha256Hash } {
   const withoutHash: JsonObject = {
     format: 'icarus.workflow-graph-scope-plan/2',
-    compiler_version: '3.0.4',
+    compiler_version: WORKFLOW_COMPILER_VERSION,
     nodes: [
       {
         id: NODE_ID,
@@ -227,7 +228,7 @@ function fixture(customPorts = outputPorts()): {
       RUN_ID,
       sealed.hash,
       'icarus.workflow-graph-scope-plan/2',
-      '3.0.4',
+      WORKFLOW_COMPILER_VERSION,
       canonicalJson(sealed.value),
     );
   const store = new TestStore(database);

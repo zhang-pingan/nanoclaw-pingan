@@ -99,7 +99,7 @@ export interface G4IsolationReceipt extends JsonObject {
   root_inode: string;
   database_device: string;
   database_inode: string;
-  database_schema_version: 11;
+  database_schema_version: 12;
   production_ingress_reachable: false;
   feature_ingress_reachable: false;
   api_ingress_reachable: false;

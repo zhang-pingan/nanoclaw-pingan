@@ -587,10 +587,6 @@ export function g3RetentionExecutorAbiStoreFixtureForTest(): {
     closure_ref: closure.ref,
     closure_hash: closure.closure_hash,
     compiler_version: WORKFLOW_COMPILER_VERSION,
-    core_build_hash:
-      'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' as Sha256Hash,
-    database_schema_hash:
-      'sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' as Sha256Hash,
   };
   const snapshot = {
     ...snapshotWithoutHash,

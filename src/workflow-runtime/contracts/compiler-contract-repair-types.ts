@@ -40,7 +40,7 @@ export interface CompiledStaticChildPlanClosureV1 extends JsonObject {
 
 export interface CompiledScopePlanV2Document extends Omit<
   CompiledScopePlanDocument,
-  'format' | 'static_child_plan_closure_hash'
+  'static_child_plan_closure'
 > {
   [key: string]: JsonValue;
   format: 'icarus.workflow-graph-scope-plan/2';

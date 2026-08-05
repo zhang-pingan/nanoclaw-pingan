@@ -30,7 +30,7 @@ import {
 } from '../contracts/capability-outbox-binding-contract.js';
 import { registryResourceId } from '../contracts/g3-registry-persistence.js';
 import type { G3RegistryResourceType } from '../contracts/g3-registry-persistence-types.js';
-import { G5_REPAIR_DATABASE_SCHEMA_HASH } from '../contracts/g5-basic-runtime-repair-types.js';
+import { WORKFLOW_COMPILER_VERSION } from '../compiler/version.js';
 import {
   G5_REPAIR_FAULT_FIXTURES,
   G5_REPAIR_NEGATIVE_FIXTURES,
@@ -169,7 +169,6 @@ function seedRuntime(store: WorkflowRuntimeStore): SeededRuntime {
     ['routingScope', 'routing_scope'],
     ['supportedLimits', 'runtime_supported_limits'],
     ['sqliteProfile', 'sqlite_execution_profile'],
-    ['compilerToolchain', 'compiler_toolchain'],
     ['capability', 'capability'],
     ['waitContract', 'wait_contract'],
     ['remediationPolicy', 'operational_remediation_policy'],
@@ -350,15 +349,14 @@ function seedRuntime(store: WorkflowRuntimeStore): SeededRuntime {
     transaction.execute(
       `INSERT INTO workflow_registry_snapshots (
        id, snapshot_hash, closure_manifest_id, closure_hash, compiler_version,
-       core_build_hash, database_schema_hash, created_at_ms
-     ) VALUES (?, ?, ?, ?, '3.0.4', ?, ?, 1)`,
+       created_at_ms
+     ) VALUES (?, ?, ?, ?, ?, 1)`,
       [
         snapshotId,
         snapshotHash,
         closureId,
         closureHash,
-        hash('core-build'),
-        G5_REPAIR_DATABASE_SCHEMA_HASH,
+        WORKFLOW_COMPILER_VERSION,
       ],
     );
   });
@@ -660,7 +658,7 @@ function plan(seed: SeededRuntime): CompiledScopePlanV2Document {
   const capabilityHash = hash('capability-catalog');
   const withoutHash = {
     format: 'icarus.workflow-graph-scope-plan/2',
-    compiler_version: '3.0.4',
+    compiler_version: WORKFLOW_COMPILER_VERSION,
     source_hash: sourceHash,
     interface_snapshot_hash: interfaceHash,
     policy_snapshot_hash: policyHash,
@@ -1139,11 +1137,6 @@ function initialActivation(seed: SeededRuntime, nowMs: number) {
     runtimeSafetySnapshot: seed.values.safety,
     runtimeSupportedLimits: seed.refs.supportedLimits,
     sqliteExecutionProfile: seed.refs.sqliteProfile,
-    compilerToolchain: seed.refs.compilerToolchain,
-    coreReleaseRef: 'icarus.core@1.0.0',
-    coreReleaseHash: hash('core-release'),
-    coreBuildHash: hash('core-build'),
-    databaseSchemaHash: G5_REPAIR_DATABASE_SCHEMA_HASH,
     sourceSeedHash: plan(seed).source_hash as Sha256Hash,
     compilerSnapshotHash: hash('compiler-snapshot'),
     inputSnapshot: seed.values.input,
@@ -7785,17 +7778,6 @@ describe('G5 Basic Runtime current-schema repair transaction integration', () =>
         nowMs: 11,
       }),
     ).toThrow(/different intent/);
-    expect(() =>
-      createWorkflowT0(instance.store, {
-        ...creationInput,
-        creationKey: 'wrong-schema',
-        initialActivation: {
-          ...creationInput.initialActivation,
-          databaseSchemaHash: hash('wrong-schema'),
-        },
-      }),
-    ).toThrow(/current Schema version/);
-
     const compiledPlan = plan(seed);
     const compileInput = {
       graphRunId: created.activation.graphRunId,
@@ -7839,7 +7821,7 @@ describe('G5 Basic Runtime current-schema repair transaction integration', () =>
           >,
         ),
       }),
-    ).toThrow(/Plan version, safety, or Schema 11 compatibility drift/);
+    ).toThrow(/Plan version or safety compatibility drift/);
     expect(() =>
       persistCompileResultT2a(instance.store, {
         ...compileInput,

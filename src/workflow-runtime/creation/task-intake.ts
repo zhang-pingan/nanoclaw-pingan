@@ -2,13 +2,10 @@ import type {
   RuntimeRegistryRef,
   RuntimeValueRef,
 } from '../contracts/g5-basic-runtime-types.js';
-import {
-  G5_REPAIR_DATABASE_SCHEMA_HASH,
-  G5_REPAIR_DATABASE_SCHEMA_VERSION,
-} from '../contracts/g5-basic-runtime-repair-types.js';
 import type { JsonObject, Sha256Hash } from '../contracts/types.js';
 import { domainSeparatedSha256 } from '../contracts/hash.js';
 import type { WorkflowRuntimeStore } from '../store/runtime-store/index.js';
+import { CURRENT_WORKFLOW_RUNTIME_SCHEMA_VERSION } from '../store/runtime-store/config.js';
 import {
   activateWorkflowT1InTransaction,
   type T1ActivationInput,
@@ -100,11 +97,7 @@ export function createWorkflowT0(
   input: T0CreationInput,
   fault?: G5TransactionFault,
 ): T0CreationReceipt {
-  if (
-    store.schemaVersion !== G5_REPAIR_DATABASE_SCHEMA_VERSION ||
-    input.initialActivation.databaseSchemaHash !==
-      G5_REPAIR_DATABASE_SCHEMA_HASH
-  )
+  if (store.schemaVersion !== CURRENT_WORKFLOW_RUNTIME_SCHEMA_VERSION)
     throw new G5RuntimeError(
       'integrity_violation',
       'T0 requires the current Schema version',
