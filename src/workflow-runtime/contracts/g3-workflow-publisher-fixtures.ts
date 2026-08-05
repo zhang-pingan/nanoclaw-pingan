@@ -27,8 +27,6 @@ import {
   type G3RegistryResourceCandidate,
   type G3RegistryPublishPreflightInput,
 } from './g3-registry-publish-types.js';
-import { g3RetentionExecutorAbiStoreFixtureForTest } from './g3-retention-executor-abi-preflight.js';
-import type { G3RetentionExecutorAbiPreflightInput } from './g3-retention-executor-abi-preflight-types.js';
 import {
   calculateG37ApprovedReviewHash,
   calculateG37DomainRequestHash,
@@ -47,6 +45,7 @@ import type {
 } from './g3-workflow-publisher-types.js';
 import { strictParseJsonBytes } from './strict-json.js';
 import type { JsonObject, Sha256Hash, VersionedRef } from './types.js';
+import { releaseRuntimeFixtureForTest } from './release-runtime-fixtures.js';
 
 export interface G37WorkflowPublisherStoreFixture {
   batch: G3RegistryPersistenceBatch;
@@ -234,10 +233,6 @@ function candidate(
   return value;
 }
 
-function identityKey(identity: G3RegistryResourceIdentity): string {
-  return registryResourceKey(identity);
-}
-
 function sourceManifest(
   publishResources: G3RegistryResourceRecord[],
 ): JsonObject {
@@ -302,59 +297,8 @@ function sourceManifest(
   return manifest;
 }
 
-function updateCompatibilityInput(
-  base: G3RetentionExecutorAbiPreflightInput,
-  batch: G3RegistryPersistenceBatch,
-  releaseResources: G3RegistryExactResourceQueryInput[],
-): G3RetentionExecutorAbiPreflightInput {
-  const resourceByKey = new Map(
-    batch.resources.map((resource) => [
-      registryResourceKey(resource),
-      resource,
-    ]),
-  );
-  const root = resourceByKey.get(
-    `${batch.closure.root_resource_type}\0${batch.closure.root_ref.id}@${batch.closure.root_ref.version}`,
-  );
-  if (!root) throw new Error('G3.7 fixture Closure root missing');
-  const executionArtifacts = releaseResources.filter(
-    (entry) => entry.resource_type === 'feature_execution_artifact',
-  );
-  const executors = releaseResources.filter(
-    (entry) => entry.resource_type === 'executor_implementation',
-  );
-  const retentionMembers = releaseResources
-    .map((entry) => ({
-      resource_type: entry.resource_type,
-      ref: entry.ref,
-      content_hash: entry.content_hash,
-    }))
-    .sort((left, right) => compareAscii(identityKey(left), identityKey(right)));
-  return {
-    ...structuredClone(base),
-    snapshot: {
-      snapshot_ref: batch.snapshot.ref,
-      snapshot_hash: batch.snapshot.snapshot_hash,
-      expected_compiler_version: batch.snapshot.compiler_version,
-    },
-    closure: {
-      ref: batch.closure.ref,
-      closure_hash: batch.closure.closure_hash,
-      root: query(root, 'staged'),
-      members: batch.closure.members,
-      member_count: batch.closure.member_count,
-    },
-    execution_artifacts: executionArtifacts,
-    executor_implementations: executors,
-    retention: {
-      ...structuredClone(base.retention),
-      members: retentionMembers,
-    },
-  };
-}
-
 export function g37WorkflowPublisherStoreFixtureForTest(): G37WorkflowPublisherStoreFixture {
-  const base = g3RetentionExecutorAbiStoreFixtureForTest();
+  const base = releaseRuntimeFixtureForTest();
   const plan = goldenPlan('positive.static-lowering');
   const original = structuredClone(base.batch.resources);
   const genericSchema = original.find(
@@ -462,12 +406,6 @@ export function g37WorkflowPublisherStoreFixtureForTest(): G37WorkflowPublisherS
   const releaseResources = releaseResourceRecords.map((resource) =>
     query(resource, 'staged'),
   );
-  let compatibility = updateCompatibilityInput(
-    base.input,
-    batch,
-    releaseResources,
-  );
-
   const manifest = sourceManifest(publishResources);
   const manifestRef = {
     id: 'fixture.feature-manifest',
@@ -483,18 +421,13 @@ export function g37WorkflowPublisherStoreFixtureForTest(): G37WorkflowPublisherS
     fixture_scope: 'test_only',
     feature_manifest_ref: manifestRef,
     feature_manifest_hash: manifest.manifest_hash as Sha256Hash,
-    feature_release_ref: compatibility.feature_release_ref,
-    feature_release_hash: compatibility.feature_release_hash,
+    feature_release_ref: base.feature_release_ref,
+    feature_release_hash: base.feature_release_hash,
     resources: publishCandidates,
     expected_oracle: 'golden_corpus_expected',
     production_compiler_actual_role: 'comparison_only',
     retention_policy_ref: structuredClone(G3_RETENTION_POLICY_REF),
     retention_policy_hash: G3_RETENTION_POLICY_HASH,
-    compatibility: {
-      run_protocol_major: 1,
-      executor_abi_major: 1,
-      registry_schema_version: 1,
-    },
     requested_registry_write: false,
     requested_activation: false,
     preflight_hash:
@@ -503,14 +436,10 @@ export function g37WorkflowPublisherStoreFixtureForTest(): G37WorkflowPublisherS
 
   const targetReleaseWithoutHash: G3WorkflowPublisherTargetRelease = {
     feature_id: 'fixture',
-    release_ref: compatibility.feature_release_ref,
+    release_ref: base.feature_release_ref,
     release_hash:
       'sha256:0000000000000000000000000000000000000000000000000000000000000000',
-    execution_artifact: compatibility.feature_release_execution_artifact!,
-    compatibility_snapshot: {
-      ref: compatibility.snapshot.snapshot_ref,
-      hash: compatibility.snapshot.snapshot_hash,
-    },
+    execution_artifact: base.execution_artifact,
     resources: releaseResources.map((entry) => ({
       resource: {
         resource_type: entry.resource_type,
@@ -518,9 +447,9 @@ export function g37WorkflowPublisherStoreFixtureForTest(): G37WorkflowPublisherS
         content_hash: entry.content_hash,
       },
       role:
-        entry.resource_type === compatibility.closure.root.resource_type &&
-        entry.ref.id === compatibility.closure.root.ref.id &&
-        entry.ref.version === compatibility.closure.root.ref.version
+        entry.resource_type === batch.closure.root_resource_type &&
+        entry.ref.id === batch.closure.root_ref.id &&
+        entry.ref.version === batch.closure.root_ref.version
           ? 'closure_root'
           : 'closure_member',
     })),
@@ -528,9 +457,6 @@ export function g37WorkflowPublisherStoreFixtureForTest(): G37WorkflowPublisherS
   targetReleaseWithoutHash.release_hash = calculateG37TargetReleaseHash(
     targetReleaseWithoutHash,
   );
-  compatibility.feature_release_hash = targetReleaseWithoutHash.release_hash;
-  compatibility.retention.feature_release_hash =
-    targetReleaseWithoutHash.release_hash;
   publishPreflight.feature_release_hash = targetReleaseWithoutHash.release_hash;
   publishPreflight.preflight_hash =
     calculateG3PublishPreflightHash(publishPreflight);
@@ -583,7 +509,6 @@ export function g37WorkflowPublisherStoreFixtureForTest(): G37WorkflowPublisherS
     },
     publish_preflight: publishPreflight,
     release_resources: releaseResources,
-    compatibility_preflight: compatibility,
     target_release: targetReleaseWithoutHash,
     domain_request_hash:
       'sha256:0000000000000000000000000000000000000000000000000000000000000000',

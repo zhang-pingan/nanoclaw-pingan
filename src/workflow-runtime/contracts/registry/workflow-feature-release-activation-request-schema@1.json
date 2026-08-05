@@ -22,7 +22,6 @@
       "target_release",
       "previous_release",
       "expected_pointer",
-      "compatibility_preflight",
       "target_retention",
       "previous_retention",
       "contract_schemas",
@@ -222,196 +221,6 @@
           }
         ]
       },
-      "compatibility_preflight": {
-        "title": "WorkflowRetentionExecutorAbiPreflightInputV1",
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "format",
-          "operation",
-          "feature_release_ref",
-          "feature_release_hash",
-          "feature_release_execution_artifact",
-          "snapshot",
-          "closure",
-          "execution_artifacts",
-          "executor_implementations",
-          "executor_abi_major",
-          "retention",
-          "requested_retention_handle_write",
-          "requested_gc",
-          "requested_delete",
-          "requested_publication_state_update"
-        ],
-        "properties": {
-          "format": {
-            "const": "icarus.workflow-retention-executor-abi-preflight/1"
-          },
-          "operation": {
-            "const": "validate_only"
-          },
-          "feature_release_ref": {
-            "$ref": "#/$defs/versioned_ref"
-          },
-          "feature_release_hash": {
-            "type": "string",
-            "pattern": "^sha256:[0-9a-f]{64}$"
-          },
-          "feature_release_execution_artifact": {
-            "anyOf": [
-              {
-                "type": "object",
-                "additionalProperties": false,
-                "required": [
-                  "ref",
-                  "hash"
-                ],
-                "properties": {
-                  "ref": {
-                    "$ref": "#/$defs/versioned_ref"
-                  },
-                  "hash": {
-                    "type": "string",
-                    "pattern": "^sha256:[0-9a-f]{64}$"
-                  }
-                }
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "snapshot": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": [
-              "snapshot_ref",
-              "snapshot_hash",
-              "expected_compiler_version"
-            ],
-            "properties": {
-              "snapshot_ref": {
-                "$ref": "#/$defs/versioned_ref"
-              },
-              "snapshot_hash": {
-                "type": "string",
-                "pattern": "^sha256:[0-9a-f]{64}$"
-              },
-              "expected_compiler_version": {
-                "type": "string",
-                "minLength": 1
-              }
-            }
-          },
-          "closure": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": [
-              "ref",
-              "closure_hash",
-              "root",
-              "members",
-              "member_count"
-            ],
-            "properties": {
-              "ref": {
-                "$ref": "#/$defs/versioned_ref"
-              },
-              "closure_hash": {
-                "type": "string",
-                "pattern": "^sha256:[0-9a-f]{64}$"
-              },
-              "root": {
-                "$ref": "#/$defs/exact_query"
-              },
-              "members": {
-                "type": "array",
-                "maxItems": 4096,
-                "items": {
-                  "$ref": "#/$defs/resource_identity"
-                }
-              },
-              "member_count": {
-                "type": "integer",
-                "minimum": 0,
-                "maximum": 4096
-              }
-            }
-          },
-          "execution_artifacts": {
-            "type": "array",
-            "maxItems": 4096,
-            "items": {
-              "$ref": "#/$defs/exact_query"
-            }
-          },
-          "executor_implementations": {
-            "type": "array",
-            "maxItems": 4096,
-            "items": {
-              "$ref": "#/$defs/exact_query"
-            }
-          },
-          "executor_abi_major": {
-            "type": "integer",
-            "minimum": 1
-          },
-          "retention": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": [
-              "policy_ref",
-              "policy_hash",
-              "handle_kind",
-              "root_kind",
-              "feature_release_ref",
-              "feature_release_hash",
-              "members"
-            ],
-            "properties": {
-              "policy_ref": {
-                "$ref": "#/$defs/versioned_ref"
-              },
-              "policy_hash": {
-                "type": "string",
-                "pattern": "^sha256:[0-9a-f]{64}$"
-              },
-              "handle_kind": {
-                "const": "published"
-              },
-              "root_kind": {
-                "const": "feature_release"
-              },
-              "feature_release_ref": {
-                "$ref": "#/$defs/versioned_ref"
-              },
-              "feature_release_hash": {
-                "type": "string",
-                "pattern": "^sha256:[0-9a-f]{64}$"
-              },
-              "members": {
-                "type": "array",
-                "maxItems": 4097,
-                "items": {
-                  "$ref": "#/$defs/resource_identity"
-                }
-              }
-            }
-          },
-          "requested_retention_handle_write": {
-            "type": "boolean"
-          },
-          "requested_gc": {
-            "type": "boolean"
-          },
-          "requested_delete": {
-            "type": "boolean"
-          },
-          "requested_publication_state_update": {
-            "type": "boolean"
-          }
-        }
-      },
       "target_retention": {
         "type": "object",
         "additionalProperties": false,
@@ -507,9 +316,7 @@
         "required": [
           "request",
           "receipt",
-          "result",
-          "compatibility_input",
-          "compatibility_result"
+          "result"
         ],
         "properties": {
           "request": {
@@ -519,12 +326,6 @@
             "$ref": "#/$defs/exact_query"
           },
           "result": {
-            "$ref": "#/$defs/exact_query"
-          },
-          "compatibility_input": {
-            "$ref": "#/$defs/exact_query"
-          },
-          "compatibility_result": {
             "$ref": "#/$defs/exact_query"
           }
         }
@@ -550,11 +351,13 @@
           "id": {
             "type": "string",
             "minLength": 1,
+            "maxLength": 255,
             "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._:/-]{0,253}[A-Za-z0-9])?$"
           },
           "version": {
             "type": "string",
             "minLength": 1,
+            "maxLength": 64,
             "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,62}[A-Za-z0-9])?$"
           }
         }
@@ -650,55 +453,8 @@
           }
         }
       },
-      "resource_identity": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "resource_type",
-          "ref",
-          "content_hash"
-        ],
-        "properties": {
-          "resource_type": {
-            "enum": [
-              "artifact_contract",
-              "capability",
-              "card_presentation",
-              "clarification_contract",
-              "command_policy",
-              "context_contract",
-              "definition",
-              "evaluator",
-              "execution_policy",
-              "executor_implementation",
-              "feature_execution_artifact",
-              "graph_policy",
-              "graph_template",
-              "notification_contract",
-              "operational_remediation_policy",
-              "outbox_adapter",
-              "outbox_policy",
-              "prompt",
-              "recipe",
-              "root_finalization_policy",
-              "routing_capability",
-              "routing_scope",
-              "schema",
-              "scope_interface",
-              "tool_binding",
-              "wait_contract"
-            ]
-          },
-          "ref": {
-            "$ref": "#/$defs/versioned_ref"
-          },
-          "content_hash": {
-            "type": "string",
-            "pattern": "^sha256:[0-9a-f]{64}$"
-          }
-        }
-      },
       "exact_query": {
+        "title": "WorkflowRegistryExactResourceQueryInputV1",
         "type": "object",
         "additionalProperties": false,
         "required": [
@@ -781,5 +537,5 @@
       }
     }
   },
-  "hash": "sha256:2d6740c32dd84128dc94b2d4d61180462d6cac382fb2369eedec17380b9bc79c"
+  "hash": "sha256:97757b7851d0f1cda48d8d7ff9296d15d17efb44675d882603929dfbbb0141e7"
 }

@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-g3-registry-publish-negative-cases:1\n",
-  "hash": "sha256:014d6ac4e40610b6a5ff19fd0b5f76dba2d0b0148880c8ab451d12246ce5cadf",
+  "hash": "sha256:2f74f7cc58bebdf285408ae089508cdf0820f8b66bfab41389881a2e6d9994ac",
   "payload": {
     "fixture_scope": "test_only",
     "cases": [
@@ -219,21 +219,6 @@
         "rehash_resource_hashes": true,
         "rehash_preflight_hash": true,
         "expected_code": "compiled_plan_pin_required"
-      },
-      {
-        "case_id": "negative.execution-artifact-abi",
-        "fixture_scope": "test_only",
-        "base_case_id": "positive.test-only-definition-and-executor",
-        "mutations": [
-          {
-            "operation": "set",
-            "pointer": "/resources/1/execution_artifact_pin/runtime_abi_major",
-            "value": 2
-          }
-        ],
-        "rehash_resource_hashes": true,
-        "rehash_preflight_hash": true,
-        "expected_code": "execution_artifact_abi_mismatch"
       },
       {
         "case_id": "negative.execution-artifact-pin-missing",

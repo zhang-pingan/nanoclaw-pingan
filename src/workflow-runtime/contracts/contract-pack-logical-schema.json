@@ -11,12 +11,12 @@
     "status": "logical_schema_metadata_contract",
     "schema_count": 3,
     "table_count": 74,
-    "column_count": 1210,
+    "column_count": 1208,
     "internal_relation_count": 344,
-    "external_reference_count": 42,
+    "external_reference_count": 41,
     "foreign_key_intent_count": 344,
     "unique_key_intent_count": 129,
-    "check_intent_count": 750,
+    "check_intent_count": 749,
     "index_intent_count": 25,
     "query_count": 24,
     "positive_case_count": 6,
@@ -47,7 +47,7 @@
         },
         "version": 1,
         "domain_separator": "icarus:workflow-logical-schema-negative-cases:1\n",
-        "hash": "sha256:868a492f205fc98cf6d828acbf9924dcec95884fe2a919cd8ea2a92d5b0a4615"
+        "hash": "sha256:cacd8a6cdd2efd601b393b9bb8f8e0463eed6d21745c2c8e62b1f9e6605878f6"
       },
       {
         "path": "conformance/logical-schema/positive-cases.json",
@@ -80,7 +80,7 @@
         },
         "version": 1,
         "domain_separator": "icarus:workflow-runtime-logical-schema-source:1\n",
-        "hash": "sha256:ef0d7ba76fb52220e5dfeead3d4870325a34f4339167e080b3a6b69626ff3938"
+        "hash": "sha256:7d45ec0315f5f68033c6c07da8fe36df1b471607d16ae9ce371b90c56ea9aec3"
       },
       {
         "path": "sqlite/workflow-runtime-query-catalog-schema.json",
@@ -124,7 +124,7 @@
         },
         "version": 1,
         "domain_separator": "icarus:workflow-runtime-typed-relation-catalog:1\n",
-        "hash": "sha256:f4b0e2c76fa001d26406697d3f7972c9f48e31e3a12888864ad9a531808d8850"
+        "hash": "sha256:81f83c817642c21315faefe50249186a24526a03b49b2dc90e8db1c7f01347a7"
       }
     ],
     "next_reserved_directories": [
@@ -143,5 +143,5 @@
       "runtime_center_or_ui"
     ]
   },
-  "hash": "sha256:981a02632ce2d7f2a292c68b827854f8f19d82ab9d33fc6dfd813e8c3b64fe4e"
+  "hash": "sha256:1870f77fbfdcd384eed49ae1563cb8948f74c128466f9d2a379ea6e05a35c674"
 }

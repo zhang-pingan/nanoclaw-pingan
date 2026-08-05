@@ -27,9 +27,19 @@ const REQUIRED_COLUMNS = {
   workflow_feature_releases: [
     'id',
     'feature_id',
+    'release_ref',
     'release_version',
     'release_hash',
+    'execution_artifact_resource_id',
+    'execution_artifact_hash',
     'status',
+  ],
+  workflow_feature_release_activation_commands: [
+    'command_id',
+    'request_value_id',
+    'verified_target_feature_release_id',
+    'lifecycle',
+    'row_version',
   ],
   workflow_registry_snapshots: [
     'id',
@@ -58,6 +68,14 @@ const REQUIRED_COLUMNS = {
     'current_config_hash',
     'row_version',
   ],
+  runtime_capacity_admin_commands: [
+    'command_id',
+    'command_type',
+    'assigned_capacity_revision',
+    'assigned_change_id',
+    'proposed_capacity_json',
+    'proposed_config_hash',
+  ],
 } as const;
 
 const FORBIDDEN_COLUMNS = {
@@ -73,6 +91,21 @@ const FORBIDDEN_COLUMNS = {
     'database_schema_version',
     'database_schema_hash',
   ],
+  workflow_feature_releases: [
+    'compatibility_snapshot_ref',
+    'compatibility_snapshot_hash',
+  ],
+  workflow_feature_release_activation_commands: [
+    'verified_compatibility_input_value_id',
+    'verified_compatibility_input_hash',
+    'verified_compatibility_input_schema_resource_id',
+    'verified_compatibility_input_schema_hash',
+    'verified_compatibility_result_value_id',
+    'verified_compatibility_result_hash',
+    'verified_compatibility_result_schema_resource_id',
+    'verified_compatibility_result_schema_hash',
+  ],
+  runtime_capacity_admin_commands: ['genesis_core_release_hash'],
 } as const;
 
 const REQUIRED_INDEXES = [

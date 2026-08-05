@@ -252,7 +252,7 @@ function buildManifest(
       request_schema_resource_hash: G37_SCHEMA_RESOURCE_HASHES.request,
       receipt_schema_resource_hash: G37_SCHEMA_RESOURCE_HASHES.receipt,
       result_schema_resource_hash: G37_SCHEMA_RESOURCE_HASHES.result,
-      preflights_composed: ['G3.1', 'G3.3', 'G3.5', 'G3.6'],
+      preflights_composed: ['G3.1', 'G3.3', 'G3.5'],
       store_transaction: 'single_begin_immediate',
       durable_dispositions: ['applied', 'duplicate', 'conflict', 'failed'],
       registry_publication_written: true,

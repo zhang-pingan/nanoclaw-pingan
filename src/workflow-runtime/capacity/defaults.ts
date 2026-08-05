@@ -162,19 +162,18 @@ export function ensureCapacityDefaults(
       `INSERT INTO runtime_capacity_admin_commands (
          command_id, idempotency_domain, idempotency_key, command_type,
          expected_capacity_revision, expected_config_hash,
-         assigned_capacity_revision, assigned_change_id, genesis_core_release_hash,
+         assigned_capacity_revision, assigned_change_id,
          proposed_capacity_json, proposed_config_hash, request_hash, reason_code,
          reason_text_value_id, reason_text_hash, evidence_manifest_value_id,
          evidence_manifest_hash, canonical_result_value_id, canonical_result_hash,
          created_at_ms, finalized_at_ms
        ) VALUES (?, 'local_capacity_defaults', ?, 'initialize_deployment_capacity',
-                 NULL, NULL, 1, ?, ?, ?, ?, ?, 'initial_provisioning',
+                 NULL, NULL, 1, ?, ?, ?, ?, 'initial_provisioning',
                  NULL, NULL, ?, ?, ?, ?, ?, ?)`,
       [
         COMMAND_ID,
         command.idempotency_key,
         CHANGE_ID,
-        capacity.config_hash,
         canonicalJson(capacity as unknown as JsonValue),
         capacity.config_hash,
         requestHash,

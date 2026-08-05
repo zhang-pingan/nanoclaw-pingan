@@ -15,8 +15,6 @@ import {
 } from './g3-feature-release-activation-types.js';
 import {
   G39_COMMAND_ID_DOMAIN,
-  G39_COMPATIBILITY_INPUT_VALUE_DOMAIN,
-  G39_COMPATIBILITY_RESULT_VALUE_DOMAIN,
   G39_DOMAIN_REQUEST_DOMAIN,
   G39_EVENT_DOMAIN,
   G39_INVOCATION_DOMAIN,
@@ -29,7 +27,6 @@ import {
   G39_SCHEMA_RESOURCE_HASHES,
   validateG39FeatureReleaseActivationRequest,
 } from './g3-feature-release-activation.js';
-import { G3_RETENTION_EXECUTOR_ABI_ERROR_PRECEDENCE } from './g3-retention-executor-abi-preflight-types.js';
 import { calculateArtifactHash, canonicalJson } from './hash.js';
 import type {
   ContractArtifactEnvelope,
@@ -146,29 +143,14 @@ function negativeCases(): JsonObject[] {
   ];
   const precedence: JsonObject[] = [];
   for (const [index, code] of G39_ACTIVATION_ERROR_PRECEDENCE.entries()) {
-    if (code === 'g3_6_preflight_rejected') {
-      precedence.push(
-        ...G3_RETENTION_EXECUTOR_ABI_ERROR_PRECEDENCE.map((nested) => ({
-          case_id: `negative.precedence.${code}.${nested}`,
-          layer: 'runtime_precedence',
-          precedence_rank: index + 1,
-          expected_code: code,
-          nested_g3_6_code: nested,
-          receipt: null,
-          pointer_transition_count: 0,
-        })),
-      );
-    } else {
-      precedence.push({
-        case_id: `negative.precedence.${code}`,
-        layer: 'runtime_precedence',
-        precedence_rank: index + 1,
-        expected_code: code,
-        nested_g3_6_code: null,
-        receipt: null,
-        pointer_transition_count: 0,
-      });
-    }
+    precedence.push({
+      case_id: `negative.precedence.${code}`,
+      layer: 'runtime_precedence',
+      precedence_rank: index + 1,
+      expected_code: code,
+      receipt: null,
+      pointer_transition_count: 0,
+    });
   }
   return [...structural, ...precedence];
 }
@@ -270,14 +252,6 @@ function buildArtifacts(): Array<[string, ContractArtifactEnvelope]> {
       domain_separator: G39_COMMAND_ID_DOMAIN,
     },
     {
-      format: 'icarus.workflow-feature-release-activation-g3-6-input-value/1',
-      domain_separator: G39_COMPATIBILITY_INPUT_VALUE_DOMAIN,
-    },
-    {
-      format: 'icarus.workflow-feature-release-activation-g3-6-result-value/1',
-      domain_separator: G39_COMPATIBILITY_RESULT_VALUE_DOMAIN,
-    },
-    {
       format: 'icarus.workflow-feature-release-activation-domain-separators/1',
       domain_separator: domains.catalog,
     },
@@ -313,9 +287,6 @@ function buildManifest(
       schema_resource_hashes: G39_SCHEMA_RESOURCE_HASHES,
       fixture_digest: deterministicG39FixtureDigest(),
       error_precedence: [...G39_ACTIVATION_ERROR_PRECEDENCE],
-      g3_6_nested_error_precedence: [
-        ...G3_RETENTION_EXECUTOR_ABI_ERROR_PRECEDENCE,
-      ],
       command_boundary:
         'workflow_feature_release_activation_commands/invocations/events',
       forbidden_command_unions: [
@@ -324,7 +295,7 @@ function buildManifest(
         'workflow_publisher_commands',
       ],
       store_transaction: 'single_begin_immediate',
-      preflight_composition: 'G3.6_only_for_G3.3_and_G3.5',
+      compatibility_check: 'direct_runtime_abi_major',
       active_pointer_dml: 'adjacent_cas_only',
       receipt_owner: 'committed_pointer_transition_only',
       recovery:

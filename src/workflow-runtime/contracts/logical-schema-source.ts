@@ -1219,11 +1219,6 @@ const VALUE_REGISTRY_BACKUP_TABLES: readonly TableSeed[] = [
         'disabled',
         'deleting',
       ]),
-      ...externalPair(
-        'compatibility_snapshot',
-        'core_compatibility_registry',
-        'compatibility_snapshot',
-      ),
       at('staged_at_ms'),
       at('activated_at_ms', true),
       at('disabled_at_ms', true),

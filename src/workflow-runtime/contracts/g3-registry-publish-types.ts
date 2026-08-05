@@ -36,7 +36,6 @@ export const G3_PUBLISH_PREFLIGHT_ERROR_CODES = [
   'capability_outbox_binding_mismatch',
   'capability_outbox_binding_required',
   'compiled_plan_pin_required',
-  'execution_artifact_abi_mismatch',
   'execution_artifact_pin_required',
   'feature_identity_pair_mismatch',
   'compiler_version_mismatch',
@@ -117,11 +116,6 @@ export interface G3RegistryPublishPreflightInput extends JsonObject {
   production_compiler_actual_role: 'comparison_only' | 'expected_oracle';
   retention_policy_ref: VersionedRef;
   retention_policy_hash: Sha256Hash;
-  compatibility: {
-    run_protocol_major: 1;
-    executor_abi_major: 1;
-    registry_schema_version: 1;
-  };
   requested_registry_write: boolean;
   requested_activation: boolean;
   preflight_hash: Sha256Hash;

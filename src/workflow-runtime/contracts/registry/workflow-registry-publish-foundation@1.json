@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-registry-publish-foundation:1\n",
-  "hash": "sha256:33098cdf78890a5bd61bccfc49c70ebd2209413f8d622e2a5a25a5e32b598421",
+  "hash": "sha256:168789917c16070c3737a7c88e45ac959dab1e6bd2e651d4d6ebd73e2aa95737",
   "payload": {
     "format": "icarus.workflow-registry-publish-foundation/1",
     "gate": "G3",
@@ -37,12 +37,6 @@
         "version": "1.0.0"
       },
       "hash": "sha256:3adc19f9a8ee92421faa349ec12e706f2d9862e90c0c74e53eb041794e2b805d"
-    },
-    "compatibility": {
-      "run_protocol_major": 1,
-      "executor_abi_major": 1,
-      "registry_schema_version": 1,
-      "core_release_preflight_status": "not_implemented_in_g3_1"
     },
     "production_registry_baseline": {
       "published_recipe_count": 0,
@@ -77,7 +71,6 @@
       "capability_outbox_binding_mismatch",
       "capability_outbox_binding_required",
       "compiled_plan_pin_required",
-      "execution_artifact_abi_mismatch",
       "execution_artifact_pin_required",
       "feature_identity_pair_mismatch",
       "compiler_version_mismatch",
@@ -102,6 +95,6 @@
       "G8": "NOT_READY",
       "G9": "NOT_READY"
     },
-    "foundation_hash": "sha256:8d302262bd19989b6a90d1cf93d2c52c5f2d2e84040adfd3e05635780e08fb4e"
+    "foundation_hash": "sha256:84c0a3df3054f11a2ebfaa93211a8a60517fa3465ebacc79bfe72f5580f15e92"
   }
 }

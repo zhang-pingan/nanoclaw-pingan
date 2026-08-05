@@ -14,7 +14,7 @@
     "ddl_generation_status": "forbidden_in_g0_6",
     "sqlite_open_status": "forbidden_in_g0_6",
     "table_count": 74,
-    "column_count": 1210,
+    "column_count": 1208,
     "tables": [
       {
         "ordinal": 1,
@@ -4349,36 +4349,6 @@
           },
           {
             "ordinal": 9,
-            "name": "compatibility_snapshot_ref",
-            "logical_type": "external_reference",
-            "sqlite_type_intent": "TEXT",
-            "nullable": false,
-            "default_intent": null,
-            "safe_integer_intent": "not_applicable",
-            "enum_values": [],
-            "relation_ids": [
-              "ext:workflow_feature_releases:compatibility_snapshot_ref"
-            ],
-            "external_reference": {
-              "validator_owner": "core_compatibility_registry",
-              "reference_domain": "compatibility_snapshot",
-              "immutable": true
-            }
-          },
-          {
-            "ordinal": 10,
-            "name": "compatibility_snapshot_hash",
-            "logical_type": "hash",
-            "sqlite_type_intent": "TEXT",
-            "nullable": false,
-            "default_intent": null,
-            "safe_integer_intent": "not_applicable",
-            "enum_values": [],
-            "relation_ids": [],
-            "external_reference": null
-          },
-          {
-            "ordinal": 11,
             "name": "staged_at_ms",
             "logical_type": "integer",
             "sqlite_type_intent": "INTEGER",
@@ -4390,7 +4360,7 @@
             "external_reference": null
           },
           {
-            "ordinal": 12,
+            "ordinal": 10,
             "name": "activated_at_ms",
             "logical_type": "integer",
             "sqlite_type_intent": "INTEGER",
@@ -4402,7 +4372,7 @@
             "external_reference": null
           },
           {
-            "ordinal": 13,
+            "ordinal": 11,
             "name": "disabled_at_ms",
             "logical_type": "integer",
             "sqlite_type_intent": "INTEGER",
@@ -4414,7 +4384,7 @@
             "external_reference": null
           },
           {
-            "ordinal": 14,
+            "ordinal": 12,
             "name": "row_version",
             "logical_type": "integer",
             "sqlite_type_intent": "INTEGER",
@@ -4491,14 +4461,6 @@
               "status"
             ],
             "expression_intent": "value belongs to the closed status catalog"
-          },
-          {
-            "check_id": "ck:workflow_feature_releases:compatibility_snapshot_hash:hash",
-            "kind": "hash_format",
-            "columns": [
-              "compatibility_snapshot_hash"
-            ],
-            "expression_intent": "sha256:<64 lowercase hexadecimal characters>"
           },
           {
             "check_id": "ck:workflow_feature_releases:staged_at_ms:safe_integer",
@@ -30275,5 +30237,5 @@
       "generic_error_fields": "forbidden"
     }
   },
-  "hash": "sha256:ef0d7ba76fb52220e5dfeead3d4870325a34f4339167e080b3a6b69626ff3938"
+  "hash": "sha256:7d45ec0315f5f68033c6c07da8fe36df1b471607d16ae9ce371b90c56ea9aec3"
 }

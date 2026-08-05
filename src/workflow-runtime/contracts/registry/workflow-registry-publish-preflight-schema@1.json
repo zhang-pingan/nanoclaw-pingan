@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-registry-publish-preflight-schema:1\n",
-  "hash": "sha256:1a1a697cd44b5e3a5b48495c5e75c39ca1b6863b177a3f1626448ab293974c0c",
+  "hash": "sha256:923804e1a89018343acc7c9f70e03bb77c8fc6eb22b98e3eaf614d199ab8ecd0",
   "payload": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "$id": "https://icarus.local/schemas/workflow-registry-publish-preflight/1",
@@ -27,7 +27,6 @@
       "production_compiler_actual_role",
       "retention_policy_ref",
       "retention_policy_hash",
-      "compatibility",
       "requested_registry_write",
       "requested_activation",
       "preflight_hash"
@@ -115,29 +114,6 @@
       "retention_policy_hash": {
         "type": "string",
         "pattern": "^sha256:[0-9a-f]{64}$"
-      },
-      "compatibility": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "run_protocol_major",
-          "executor_abi_major",
-          "registry_schema_version"
-        ],
-        "properties": {
-          "run_protocol_major": {
-            "type": "integer",
-            "minimum": 1
-          },
-          "executor_abi_major": {
-            "type": "integer",
-            "minimum": 1
-          },
-          "registry_schema_version": {
-            "type": "integer",
-            "minimum": 1
-          }
-        }
       },
       "requested_registry_write": {
         "type": "boolean"

@@ -17,7 +17,6 @@ import {
   evaluateG3RegistryPublishPreflight,
 } from './g3-registry-publish-foundation.js';
 import type { G3RegistryResourceCandidate } from './g3-registry-publish-types.js';
-import { validateRetentionExecutorAbiPreflightInput } from './g3-retention-executor-abi-preflight.js';
 import {
   G3_WORKFLOW_PUBLISHER_DISPOSITIONS,
   G3_WORKFLOW_PUBLISHER_FAILURE_CODES,
@@ -127,7 +126,6 @@ export const G37_REQUEST_SCHEMA: JsonObject = {
     'contract_schemas',
     'publish_preflight',
     'release_resources',
-    'compatibility_preflight',
     'target_release',
     'domain_request_hash',
     'request_hash',
@@ -200,7 +198,6 @@ export const G37_REQUEST_SCHEMA: JsonObject = {
       maxItems: 4097,
       items: { type: 'object' },
     },
-    compatibility_preflight: { type: 'object' },
     target_release: {
       type: 'object',
       additionalProperties: false,
@@ -209,7 +206,6 @@ export const G37_REQUEST_SCHEMA: JsonObject = {
         'release_ref',
         'release_hash',
         'execution_artifact',
-        'compatibility_snapshot',
         'resources',
       ],
       properties: {
@@ -217,7 +213,6 @@ export const G37_REQUEST_SCHEMA: JsonObject = {
         release_ref: { $ref: '#/$defs/ref' },
         release_hash: hashSchema,
         execution_artifact: { $ref: '#/$defs/ref_hash' },
-        compatibility_snapshot: { $ref: '#/$defs/ref_hash' },
         resources: {
           type: 'array',
           minItems: 1,
@@ -500,14 +495,6 @@ function queryIdentity(
   };
 }
 
-function sortIdentities(
-  identities: G3RegistryResourceIdentity[],
-): G3RegistryResourceIdentity[] {
-  return [...identities].sort((left, right) =>
-    compareAscii(identityKey(left), identityKey(right)),
-  );
-}
-
 export function calculateG37ApprovedReviewHash(
   review: G3WorkflowPublisherApprovedReview,
 ): Sha256Hash {
@@ -699,7 +686,6 @@ export function validateG37WorkflowPublisherRequest(
   ]) {
     validateRegistryExactResourceQueryInput(query);
   }
-  validateRetentionExecutorAbiPreflightInput(request.compatibility_preflight);
 
   assertContractSchemaBinding(
     request.contract_schemas.request,
@@ -807,17 +793,9 @@ export function validateG37WorkflowPublisherRequest(
   );
 
   const targetResources = request.target_release.resources;
-  const expectedTargetResources = queries.map((query) => ({
-    resource: queryIdentity(query),
-    role:
-      query.resource_type ===
-        request.compatibility_preflight.closure.root.resource_type &&
-      sameRef(query.ref, request.compatibility_preflight.closure.root.ref)
-        ? ('closure_root' as const)
-        : ('closure_member' as const),
-  }));
   if (
-    canonicalJson(targetResources) !== canonicalJson(expectedTargetResources) ||
+    canonicalJson(targetResources.map(({ resource }) => resource)) !==
+      canonicalJson(queries.map(queryIdentity)) ||
     targetResources.filter((entry) => entry.role === 'closure_root').length !==
       1
   ) {
@@ -827,42 +805,30 @@ export function validateG37WorkflowPublisherRequest(
     );
   }
 
-  const compatibility = request.compatibility_preflight;
-  const expectedRetentionMembers = sortIdentities(
-    targetResources.map((entry) => entry.resource),
+  const executionArtifact = targetResources.find(
+    ({ resource }) =>
+      resource.resource_type === 'feature_execution_artifact' &&
+      sameRef(resource.ref, request.target_release.execution_artifact.ref) &&
+      resource.content_hash === request.target_release.execution_artifact.hash,
   );
   if (
-    canonicalJson(expectedRetentionMembers) !==
-      canonicalJson(compatibility.retention.members) ||
+    !executionArtifact ||
     !sameRef(
       request.target_release.release_ref,
-      compatibility.feature_release_ref,
+      request.approved_review.feature_release_ref,
     ) ||
     request.target_release.release_hash !==
-      compatibility.feature_release_hash ||
-    !sameRef(
-      request.target_release.release_ref,
-      compatibility.retention.feature_release_ref,
-    ) ||
-    request.target_release.release_hash !==
-      compatibility.retention.feature_release_hash ||
-    !sameRef(
-      request.target_release.compatibility_snapshot.ref,
-      compatibility.snapshot.snapshot_ref,
-    ) ||
-    request.target_release.compatibility_snapshot.hash !==
-      compatibility.snapshot.snapshot_hash ||
-    compatibility.feature_release_execution_artifact === null ||
+      request.approved_review.feature_release_hash ||
     !sameRef(
       request.target_release.execution_artifact.ref,
-      compatibility.feature_release_execution_artifact.ref,
+      request.approved_review.execution_artifact_ref,
     ) ||
     request.target_release.execution_artifact.hash !==
-      compatibility.feature_release_execution_artifact.hash
+      request.approved_review.execution_artifact_hash
   ) {
     throw new G3WorkflowPublisherContractError(
       'publish_identity_mismatch',
-      'Target Feature Release differs from G3.6 compatibility/retention identity',
+      'Target Feature Release differs from its reviewed resource binding',
     );
   }
 
@@ -917,8 +883,6 @@ export function validateG37WorkflowPublisherRequest(
     ) ||
     review.execution_artifact_hash !==
       request.target_release.execution_artifact.hash ||
-    !sameRef(review.closure_ref, compatibility.closure.ref) ||
-    review.closure_hash !== compatibility.closure.closure_hash ||
     !sameRef(review.feature_release_ref, request.target_release.release_ref) ||
     review.feature_release_hash !== request.target_release.release_hash ||
     review.approved_at_ms >= review.expires_at_ms

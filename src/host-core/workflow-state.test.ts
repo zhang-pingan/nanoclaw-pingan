@@ -59,7 +59,7 @@ function createState(
       fs.readFileSync(
         path.join(
           projectRoot,
-          'src/workflow-runtime/store/schema/migration/workflow-runtime-schema-v12.sql',
+          `src/workflow-runtime/store/schema/migration/workflow-runtime-schema-v${String(CURRENT_WORKFLOW_RUNTIME_SCHEMA_VERSION)}.sql`,
         ),
         'utf8',
       ),

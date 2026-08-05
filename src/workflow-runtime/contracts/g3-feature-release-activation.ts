@@ -6,14 +6,7 @@ import {
   registryResourceId,
   registryResourceKey,
 } from './g3-registry-persistence.js';
-import {
-  G3_RETENTION_EXECUTOR_ABI_INPUT_SCHEMA,
-  G3_RETENTION_EXECUTOR_ABI_RESULT_SCHEMA,
-} from './g3-retention-executor-abi-preflight.js';
-import {
-  G3_RETENTION_EXECUTOR_ABI_ERROR_PRECEDENCE,
-  type G3RetentionExecutorAbiPreflightResult,
-} from './g3-retention-executor-abi-preflight-types.js';
+import { G3_REGISTRY_EXACT_RESOURCE_QUERY_INPUT_SCHEMA } from './g3-registry-exact-resource-query.js';
 import {
   G39_ACTIVATION_ERROR_PRECEDENCE,
   G39_ACTIVATION_DISPOSITIONS,
@@ -50,10 +43,6 @@ export const G39_EVENT_DOMAIN =
   'icarus:workflow-feature-release-activation-event:1\n';
 export const G39_COMMAND_ID_DOMAIN =
   'icarus:workflow-feature-release-activation-command-id:1\n';
-export const G39_COMPATIBILITY_INPUT_VALUE_DOMAIN =
-  'icarus:workflow-feature-release-activation-g3-6-input-value:1\n';
-export const G39_COMPATIBILITY_RESULT_VALUE_DOMAIN =
-  'icarus:workflow-feature-release-activation-g3-6-result-value:1\n';
 
 export const G39_SCHEMA_REFS = {
   request: {
@@ -66,14 +55,6 @@ export const G39_SCHEMA_REFS = {
   },
   result: {
     id: 'icarus.workflow-feature-release-activation-result-schema',
-    version: '1.0.0',
-  },
-  compatibility_input: {
-    id: 'icarus.workflow-retention-executor-abi-preflight-input-schema',
-    version: '1.0.0',
-  },
-  compatibility_result: {
-    id: 'icarus.workflow-retention-executor-abi-preflight-result-schema',
     version: '1.0.0',
   },
 } as const;
@@ -107,15 +88,15 @@ function object(
   };
 }
 
-const g36Defs = structuredClone(
-  G3_RETENTION_EXECUTOR_ABI_INPUT_SCHEMA.$defs as JsonObject,
+const exactQueryDefs = structuredClone(
+  G3_REGISTRY_EXACT_RESOURCE_QUERY_INPUT_SCHEMA.$defs as JsonObject,
 );
-const g36InputCore = structuredClone(
-  G3_RETENTION_EXECUTOR_ABI_INPUT_SCHEMA,
+const exactQueryCore = structuredClone(
+  G3_REGISTRY_EXACT_RESOURCE_QUERY_INPUT_SCHEMA,
 ) as JsonObject;
-delete g36InputCore.$schema;
-delete g36InputCore.$id;
-delete g36InputCore.$defs;
+delete exactQueryCore.$schema;
+delete exactQueryCore.$id;
+delete exactQueryCore.$defs;
 
 const releaseIdentitySchema = object(['release_id', 'ref', 'hash'], {
   release_id: nonEmptyString,
@@ -191,22 +172,11 @@ const presentPointerSchema = object(['state', 'row_version', 'release'], {
   release: releaseIdentitySchema,
 });
 
-const contractSchemasSchema = object(
-  [
-    'request',
-    'receipt',
-    'result',
-    'compatibility_input',
-    'compatibility_result',
-  ],
-  {
-    request: { $ref: '#/$defs/exact_query' },
-    receipt: { $ref: '#/$defs/exact_query' },
-    result: { $ref: '#/$defs/exact_query' },
-    compatibility_input: { $ref: '#/$defs/exact_query' },
-    compatibility_result: { $ref: '#/$defs/exact_query' },
-  },
-);
+const contractSchemasSchema = object(['request', 'receipt', 'result'], {
+  request: { $ref: '#/$defs/exact_query' },
+  receipt: { $ref: '#/$defs/exact_query' },
+  result: { $ref: '#/$defs/exact_query' },
+});
 
 export const G39_REQUEST_SCHEMA: JsonObject = {
   $schema: DRAFT_2020_12,
@@ -223,7 +193,6 @@ export const G39_REQUEST_SCHEMA: JsonObject = {
       'target_release',
       'previous_release',
       'expected_pointer',
-      'compatibility_preflight',
       'target_retention',
       'previous_retention',
       'contract_schemas',
@@ -246,7 +215,6 @@ export const G39_REQUEST_SCHEMA: JsonObject = {
       expected_pointer: {
         oneOf: [absentPointerSchema, presentPointerSchema],
       },
-      compatibility_preflight: g36InputCore,
       target_retention: retentionClaimSchema,
       previous_retention: {
         anyOf: [retentionClaimSchema, { type: 'null' }],
@@ -256,7 +224,7 @@ export const G39_REQUEST_SCHEMA: JsonObject = {
       request_hash: hashSchema,
     },
   ),
-  $defs: g36Defs,
+  $defs: { ...exactQueryDefs, exact_query: exactQueryCore },
 };
 
 const receiptCoreSchema = object(
@@ -270,7 +238,6 @@ const receiptCoreSchema = object(
     'pointer',
     'target_lifecycle',
     'previous_lifecycle',
-    'compatibility_result_hash',
     'target_retention',
     'previous_retention',
     'activated_at_ms',
@@ -298,7 +265,6 @@ const receiptCoreSchema = object(
     previous_lifecycle: {
       anyOf: [{ const: 'draining' }, { type: 'null' }],
     },
-    compatibility_result_hash: hashSchema,
     target_retention: retentionClaimSchema,
     previous_retention: {
       anyOf: [retentionClaimSchema, { type: 'null' }],
@@ -312,7 +278,7 @@ const receiptCoreSchema = object(
 export const G39_RECEIPT_SCHEMA: JsonObject = {
   $schema: DRAFT_2020_12,
   ...receiptCoreSchema,
-  $defs: { versioned_ref: g36Defs.versioned_ref },
+  $defs: { versioned_ref: exactQueryDefs.versioned_ref },
 };
 
 const terminalReferenceSchema = object(
@@ -325,7 +291,7 @@ const terminalReferenceSchema = object(
   },
 );
 
-const failureSchema = object(['phase', 'code', 'nested_g3_6_code'], {
+const failureSchema = object(['phase', 'code'], {
   phase: {
     enum: [
       'admission',
@@ -337,12 +303,6 @@ const failureSchema = object(['phase', 'code', 'nested_g3_6_code'], {
     ],
   },
   code: { enum: [...G39_ACTIVATION_ERROR_PRECEDENCE] },
-  nested_g3_6_code: {
-    anyOf: [
-      { enum: [...G3_RETENTION_EXECUTOR_ABI_ERROR_PRECEDENCE] },
-      { type: 'null' },
-    ],
-  },
 });
 
 export const G39_RESULT_SCHEMA: JsonObject = {
@@ -395,7 +355,7 @@ export const G39_RESULT_SCHEMA: JsonObject = {
       result_hash: hashSchema,
     },
   ),
-  $defs: { versioned_ref: g36Defs.versioned_ref },
+  $defs: { versioned_ref: exactQueryDefs.versioned_ref },
 };
 
 function schemaResourceHash(ref: VersionedRef, schema: JsonObject): Sha256Hash {
@@ -411,14 +371,6 @@ export const G39_SCHEMA_RESOURCE_HASHES = {
   request: schemaResourceHash(G39_SCHEMA_REFS.request, G39_REQUEST_SCHEMA),
   receipt: schemaResourceHash(G39_SCHEMA_REFS.receipt, G39_RECEIPT_SCHEMA),
   result: schemaResourceHash(G39_SCHEMA_REFS.result, G39_RESULT_SCHEMA),
-  compatibility_input: schemaResourceHash(
-    G39_SCHEMA_REFS.compatibility_input,
-    G3_RETENTION_EXECUTOR_ABI_INPUT_SCHEMA,
-  ),
-  compatibility_result: schemaResourceHash(
-    G39_SCHEMA_REFS.compatibility_result,
-    G3_RETENTION_EXECUTOR_ABI_RESULT_SCHEMA,
-  ),
 } as const;
 
 const ajv = new Ajv2020({
@@ -487,7 +439,7 @@ function assertRequestSemantics(
   ) {
     throw new G39ActivationContractError(
       'activation_request_schema_invalid',
-      'Activation contract schema bindings must be the exact published G3.9 and G3.6 schema resources',
+      'Activation contract schema bindings must be the published current resources',
     );
   }
 
@@ -507,40 +459,13 @@ function assertRequestSemantics(
     );
   }
 
-  const compatibility = request.compatibility_preflight;
   if (
-    !sameRef(compatibility.feature_release_ref, request.target_release.ref) ||
-    compatibility.feature_release_hash !== request.target_release.hash ||
-    !sameRef(
-      compatibility.retention.feature_release_ref,
-      request.target_release.ref,
-    ) ||
-    compatibility.retention.feature_release_hash !==
-      request.target_release.hash ||
     request.target_retention.feature_release_id !==
-      request.target_release.release_id ||
-    !sameRef(request.target_retention.closure_ref, compatibility.closure.ref) ||
-    request.target_retention.closure_hash !== compatibility.closure.closure_hash
+    request.target_release.release_id
   ) {
     throw new G39ActivationContractError(
       'activation_request_schema_invalid',
-      'Target Release, G3.6, and Retention claims must bind the same exact identities',
-    );
-  }
-  const retentionKeys = compatibility.retention.members.map((entry) =>
-    registryResourceKey(entry),
-  );
-  if (
-    canonicalJson(keys) !== canonicalJson(retentionKeys) ||
-    resources.some(
-      (entry, index) =>
-        entry.content_hash !==
-        compatibility.retention.members[index].content_hash,
-    )
-  ) {
-    throw new G39ActivationContractError(
-      'activation_request_schema_invalid',
-      'Target Release resources must equal the exact G3.6 Retention member set',
+      'Target Retention must belong to the target Feature Release',
     );
   }
 
@@ -607,18 +532,6 @@ export function calculateG39ResultHash(
     G39_RESULT_DOMAIN,
     without(result, ['result_hash']),
   );
-}
-
-export function calculateG39CompatibilityInputValueHash(
-  input: G39FeatureReleaseActivationRequest['compatibility_preflight'],
-): Sha256Hash {
-  return domainSeparatedSha256(G39_COMPATIBILITY_INPUT_VALUE_DOMAIN, input);
-}
-
-export function calculateG39CompatibilityResultValueHash(
-  result: G3RetentionExecutorAbiPreflightResult,
-): Sha256Hash {
-  return domainSeparatedSha256(G39_COMPATIBILITY_RESULT_VALUE_DOMAIN, result);
 }
 
 export function validateG39FeatureReleaseActivationRequest(
@@ -743,10 +656,7 @@ export function validateG39FeatureReleaseActivationResult(
             result.observed_pointer !== null ||
             (result.terminal_disposition === null
               ? result.referenced_terminal_result !== null
-              : result.referenced_terminal_result === null)))) ||
-    (result.failure !== null &&
-      (result.failure.code === 'g3_6_preflight_rejected') !==
-        (result.failure.nested_g3_6_code !== null))
+              : result.referenced_terminal_result === null))))
   ) {
     throw new G39ActivationContractError(
       'terminal_integrity_mismatch',
@@ -816,9 +726,8 @@ export function g39ReleaseIdentity(
 export function g39Failure(
   phase: G39ActivationFailure['phase'],
   code: G39ActivationFailure['code'],
-  nested: G39ActivationFailure['nested_g3_6_code'] = null,
 ): G39ActivationFailure {
-  return { phase, code, nested_g3_6_code: nested };
+  return { phase, code };
 }
 
 export function g39TerminalReference(

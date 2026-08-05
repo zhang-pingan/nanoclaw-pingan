@@ -132,7 +132,6 @@ export const G3_REGISTRY_PUBLISH_PREFLIGHT_SCHEMA: JsonObject = {
     'production_compiler_actual_role',
     'retention_policy_ref',
     'retention_policy_hash',
-    'compatibility',
     'requested_registry_write',
     'requested_activation',
     'preflight_hash',
@@ -157,20 +156,6 @@ export const G3_REGISTRY_PUBLISH_PREFLIGHT_SCHEMA: JsonObject = {
     },
     retention_policy_ref: { $ref: '#/$defs/versioned_ref' },
     retention_policy_hash: hashSchema,
-    compatibility: {
-      type: 'object',
-      additionalProperties: false,
-      required: [
-        'run_protocol_major',
-        'executor_abi_major',
-        'registry_schema_version',
-      ],
-      properties: {
-        run_protocol_major: { type: 'integer', minimum: 1 },
-        executor_abi_major: { type: 'integer', minimum: 1 },
-        registry_schema_version: { type: 'integer', minimum: 1 },
-      },
-    },
     requested_registry_write: { type: 'boolean' },
     requested_activation: { type: 'boolean' },
     preflight_hash: hashSchema,
@@ -362,7 +347,6 @@ export const G3_REGISTRY_PUBLISH_FOUNDATION_SCHEMA: JsonObject = {
     'feature_manifest_schema',
     'recipe_schema',
     'retention_policy',
-    'compatibility',
     'production_registry_baseline',
     'test_only_boundary',
     'authoring_publish_stages',
@@ -383,24 +367,6 @@ export const G3_REGISTRY_PUBLISH_FOUNDATION_SCHEMA: JsonObject = {
     feature_manifest_schema: { $ref: '#/$defs/exact_artifact' },
     recipe_schema: { $ref: '#/$defs/exact_artifact' },
     retention_policy: { $ref: '#/$defs/exact_artifact' },
-    compatibility: {
-      type: 'object',
-      additionalProperties: false,
-      required: [
-        'run_protocol_major',
-        'executor_abi_major',
-        'registry_schema_version',
-        'core_release_preflight_status',
-      ],
-      properties: {
-        run_protocol_major: { const: 1 },
-        executor_abi_major: { const: 1 },
-        registry_schema_version: { const: 1 },
-        core_release_preflight_status: {
-          const: 'not_implemented_in_g3_1',
-        },
-      },
-    },
     production_registry_baseline: {
       type: 'object',
       additionalProperties: false,
@@ -692,18 +658,6 @@ export function evaluateG3RegistryPublishPreflight(
   ) {
     return rejected('feature_identity_pair_mismatch', value);
   }
-  if (
-    input.compatibility.run_protocol_major !== 1 ||
-    input.compatibility.executor_abi_major !== 1 ||
-    input.compatibility.registry_schema_version !== 1 ||
-    input.resources.some(
-      (resource) =>
-        resource.execution_artifact_pin !== null &&
-        resource.execution_artifact_pin.runtime_abi_major !== 1,
-    )
-  ) {
-    return rejected('execution_artifact_abi_mismatch', value);
-  }
   const resources = input.resources;
   const keys = resources.map(resourceKey);
   if (new Set(keys).size !== keys.length) {
@@ -861,7 +815,6 @@ type G3RegistryPublishPreflightWithoutHash = Pick<
   | 'production_compiler_actual_role'
   | 'retention_policy_ref'
   | 'retention_policy_hash'
-  | 'compatibility'
   | 'requested_registry_write'
   | 'requested_activation'
 >;
@@ -901,7 +854,6 @@ function withPreflightHash(
     production_compiler_actual_role: input.production_compiler_actual_role,
     retention_policy_ref: input.retention_policy_ref,
     retention_policy_hash: input.retention_policy_hash,
-    compatibility: input.compatibility,
     requested_registry_write: input.requested_registry_write,
     requested_activation: input.requested_activation,
     preflight_hash: `sha256:${'0'.repeat(64)}` as Sha256Hash,
@@ -927,11 +879,6 @@ function basePreflight(
     production_compiler_actual_role: 'comparison_only',
     retention_policy_ref: clone(G3_RETENTION_POLICY_REF),
     retention_policy_hash: G3_RETENTION_POLICY_HASH,
-    compatibility: {
-      run_protocol_major: 1,
-      executor_abi_major: 1,
-      registry_schema_version: 1,
-    },
     requested_registry_write: false,
     requested_activation: false,
     ...overrides,
@@ -1310,21 +1257,6 @@ const NEGATIVE_CASES: NegativeCase[] = [
     expected_code: 'compiled_plan_pin_required',
   },
   {
-    case_id: 'negative.execution-artifact-abi',
-    fixture_scope: 'test_only',
-    base_case_id: 'positive.test-only-definition-and-executor',
-    mutations: [
-      {
-        operation: 'set',
-        pointer: '/resources/1/execution_artifact_pin/runtime_abi_major',
-        value: 2,
-      },
-    ],
-    rehash_resource_hashes: true,
-    rehash_preflight_hash: true,
-    expected_code: 'execution_artifact_abi_mismatch',
-  },
-  {
     case_id: 'negative.execution-artifact-pin-missing',
     fixture_scope: 'test_only',
     base_case_id: 'positive.test-only-definition-and-executor',
@@ -1548,12 +1480,6 @@ function foundationPayload(): JsonObject {
       path: 'safety/local_single_user_retention@1.json',
       ref: clone(G3_RETENTION_POLICY_REF),
       hash: G3_RETENTION_POLICY_HASH,
-    },
-    compatibility: {
-      run_protocol_major: 1,
-      executor_abi_major: 1,
-      registry_schema_version: 1,
-      core_release_preflight_status: 'not_implemented_in_g3_1',
     },
     production_registry_baseline: {
       published_recipe_count: 0,

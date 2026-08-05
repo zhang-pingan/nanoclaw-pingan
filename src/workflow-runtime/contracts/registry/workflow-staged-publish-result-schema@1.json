@@ -230,7 +230,7 @@
                   "publish_identity_mismatch",
                   "publish_foundation_preflight_failed",
                   "registry_resource_preflight_failed",
-                  "retention_executor_abi_preflight_failed",
+                  "runtime_abi_incompatible",
                   "feature_release_identity_collision",
                   "registry_publication_collision",
                   "retention_root_identity_collision",
@@ -254,5 +254,5 @@
       }
     }
   },
-  "hash": "sha256:9833c53a1f7586e0e37f8502f7d4cdebb31e5b6e802f8c2b72ffea79364434f7"
+  "hash": "sha256:be8898f9e7d6c275a2c0072a91b5306928379ef76206d36842d5282d258bb238"
 }

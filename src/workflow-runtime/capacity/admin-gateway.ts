@@ -412,12 +412,12 @@ function insertCommand(
     `INSERT INTO runtime_capacity_admin_commands (
        command_id, idempotency_domain, idempotency_key, command_type,
        expected_capacity_revision, expected_config_hash,
-       assigned_capacity_revision, assigned_change_id, genesis_core_release_hash,
+       assigned_capacity_revision, assigned_change_id,
        proposed_capacity_json, proposed_config_hash, request_hash, reason_code,
        reason_text_value_id, reason_text_hash, evidence_manifest_value_id,
        evidence_manifest_hash, canonical_result_value_id, canonical_result_hash,
        created_at_ms, finalized_at_ms
-     ) VALUES (?, 'deployment_capacity', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     ) VALUES (?, 'deployment_capacity', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       command.command_id,
       command.idempotency_key,
@@ -430,9 +430,6 @@ function insertCommand(
         : null,
       assignedRevision,
       assignedChangeId,
-      command.command_type === 'initialize_deployment_capacity'
-        ? command.proposed_capacity.config_hash
-        : null,
       canonicalJson(command.proposed_capacity),
       command.proposed_capacity.config_hash,
       requestHash,

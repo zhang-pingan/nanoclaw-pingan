@@ -29,14 +29,6 @@
         "domain_separator": "icarus:workflow-feature-release-activation-event:1\n"
       },
       {
-        "format": "icarus.workflow-feature-release-activation-g3-6-input-value/1",
-        "domain_separator": "icarus:workflow-feature-release-activation-g3-6-input-value:1\n"
-      },
-      {
-        "format": "icarus.workflow-feature-release-activation-g3-6-result-value/1",
-        "domain_separator": "icarus:workflow-feature-release-activation-g3-6-result-value:1\n"
-      },
-      {
         "format": "icarus.workflow-feature-release-activation-invocation/1",
         "domain_separator": "icarus:workflow-feature-release-activation-invocation:1\n"
       },
@@ -78,5 +70,5 @@
       }
     ]
   },
-  "hash": "sha256:8396fc5ffefd0751c3ebbd4f35cde443eae940b68098f35fd30e89c4fa69dc87"
+  "hash": "sha256:f6d3e15aa4ec5c911575a949506d9c6d6f84476a55732d50cc9e66eae54bf12d"
 }

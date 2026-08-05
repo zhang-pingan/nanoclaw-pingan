@@ -191,6 +191,234 @@ function seedSchema11PreservedState(databasePath: string): {
   return { oldSnapshotHash, newSnapshotHash };
 }
 
+function seedSchema12PreservedState(databasePath: string): {
+  featureRelease: Record<string, unknown>;
+  activeRelease: Record<string, unknown>;
+  retentionHandle: Record<string, unknown>;
+  activationCommand: Record<string, unknown>;
+  capacityCommand: Record<string, unknown>;
+  capacityHead: Record<string, unknown>;
+  capacityEvent: Record<string, unknown>;
+} {
+  const featureReleaseId = 'feature-release:migration.feature@1.0.0';
+  const closureId = 'registry-closure:migration.feature@1.0.0';
+  const schemaResourceId = 'registry-resource:schema:migration.schema@1.0.0';
+  const database = new Database(databasePath);
+  try {
+    database.pragma('foreign_keys = OFF');
+    database.exec('BEGIN');
+    database
+      .prepare(
+        `INSERT INTO workflow_values (
+           id, storage_kind, inline_canonical_json, content_hash, byte_length,
+           media_type, schema_resource_id, schema_resource_hash, provenance_ref,
+           retention_class, payload_state, created_at_ms, row_version,
+           schema_authority_kind
+         ) VALUES (?, 'inline', '{}', ?, 2, 'application/json', ?, ?,
+                   'schema-12-migration-test', 'pinned', 'live', 17, 1,
+                   'registry')`,
+      )
+      .run(
+        'value:schema-12-migration',
+        MIGRATION_SCHEMA_HASH,
+        schemaResourceId,
+        MIGRATION_SCHEMA_HASH,
+      );
+    database
+      .prepare(
+        `INSERT INTO workflow_registry_resources (
+           id, resource_type, resource_id, resource_version, owner_core_ref,
+           canonical_value_id, content_hash, publication_state, created_at_ms,
+           published_at_ms, row_version
+         ) VALUES (?, 'schema', 'migration.schema', '1.0.0',
+                   'icarus.core@local', ?, ?, 'published', 17, 18, 2)`,
+      )
+      .run(
+        schemaResourceId,
+        'value:schema-12-migration',
+        MIGRATION_SCHEMA_HASH,
+      );
+    const insertValue = database.prepare(
+      `INSERT INTO workflow_values (
+         id, storage_kind, inline_canonical_json, content_hash, byte_length,
+         media_type, schema_resource_id, schema_resource_hash, provenance_ref,
+         retention_class, payload_state, created_at_ms, row_version,
+         schema_authority_kind
+       ) VALUES (?, 'inline', '{}', ?, 2, 'application/json', ?, ?,
+                 'schema-12-migration-test', 'pinned', 'live', 19, 1,
+                 'registry')`,
+    );
+    insertValue.run(
+      'value:schema-12-closure',
+      MIGRATION_CLOSURE_HASH,
+      schemaResourceId,
+      MIGRATION_SCHEMA_HASH,
+    );
+    insertValue.run(
+      'value:schema-12-request',
+      MIGRATION_HASH,
+      schemaResourceId,
+      MIGRATION_SCHEMA_HASH,
+    );
+    database
+      .prepare(
+        `INSERT INTO workflow_registry_closure_manifests (
+           id, closure_hash, manifest_value_id, manifest_hash, created_at_ms
+         ) VALUES (?, ?, ?, ?, 20)`,
+      )
+      .run(
+        closureId,
+        MIGRATION_CLOSURE_HASH,
+        'value:schema-12-closure',
+        MIGRATION_CLOSURE_HASH,
+      );
+    database
+      .prepare(
+        `INSERT INTO workflow_feature_releases (
+           id, feature_id, release_ref, release_version, release_hash,
+           execution_artifact_resource_id, execution_artifact_hash, status,
+           compatibility_snapshot_ref, compatibility_snapshot_hash,
+           staged_at_ms, activated_at_ms, disabled_at_ms, row_version
+         ) VALUES (?, 'migration.feature', 'migration.feature', '1.0.0', ?,
+                   NULL, NULL, 'active', 'legacy-compatibility', ?, 21, 22,
+                   NULL, 4)`,
+      )
+      .run(featureReleaseId, MIGRATION_HASH, MIGRATION_SCHEMA_HASH);
+    database
+      .prepare(
+        `INSERT INTO workflow_feature_active_releases (
+           feature_id, release_id, release_hash, row_version, activated_at_ms
+         ) VALUES ('migration.feature', ?, ?, 1, 22)`,
+      )
+      .run(featureReleaseId, MIGRATION_HASH);
+    database
+      .prepare(
+        `INSERT INTO workflow_registry_retention_handles (
+           id, handle_kind, feature_release_id, graph_run_id, backup_id,
+           external_actor_ref, closure_manifest_id, closure_hash, status,
+           created_at_ms, released_at_ms, row_version
+         ) VALUES ('retention:migration.feature@1.0.0', 'published', ?, NULL,
+                   NULL, NULL, ?, ?, 'held', 23, NULL, 6)`,
+      )
+      .run(featureReleaseId, closureId, MIGRATION_CLOSURE_HASH);
+    database
+      .prepare(
+        `INSERT INTO workflow_feature_release_activation_commands (
+           command_id, command_type, idempotency_domain, idempotency_key,
+           request_value_id, request_hash, request_schema_resource_id,
+           request_schema_hash, domain_request_hash,
+           verified_compatibility_input_value_id,
+           verified_compatibility_input_hash,
+           verified_compatibility_input_schema_resource_id,
+           verified_compatibility_input_schema_hash,
+           verified_compatibility_result_value_id,
+           verified_compatibility_result_hash,
+           verified_compatibility_result_schema_resource_id,
+           verified_compatibility_result_schema_hash,
+           lifecycle, created_at_ms, finalized_at_ms, row_version
+         ) VALUES ('activation-command:migration', 'activate_feature_release',
+                   'migration', 'activation', 'value:schema-12-request', ?, ?,
+                   ?, ?, 'value:schema-12-request', ?, ?, ?,
+                   'value:schema-12-request', ?, ?, ?, 'pending', 24, NULL, 1)`,
+      )
+      .run(
+        MIGRATION_HASH,
+        schemaResourceId,
+        MIGRATION_SCHEMA_HASH,
+        MIGRATION_CLOSURE_HASH,
+        MIGRATION_HASH,
+        schemaResourceId,
+        MIGRATION_SCHEMA_HASH,
+        MIGRATION_HASH,
+        schemaResourceId,
+        MIGRATION_SCHEMA_HASH,
+      );
+    database
+      .prepare(
+        `INSERT INTO runtime_capacity_admin_commands (
+           command_id, idempotency_domain, idempotency_key, command_type,
+           expected_capacity_revision, expected_config_hash,
+           assigned_capacity_revision, assigned_change_id,
+           genesis_core_release_hash, proposed_capacity_json,
+           proposed_config_hash, request_hash, reason_code,
+           reason_text_value_id, reason_text_hash, evidence_manifest_value_id,
+           evidence_manifest_hash, canonical_result_value_id,
+           canonical_result_hash, created_at_ms, finalized_at_ms
+         ) VALUES ('capacity-command:migration', 'migration', 'capacity',
+                   'initialize_deployment_capacity', NULL, NULL, 7,
+                   'capacity-change:migration', ?, '{}', ?, ?,
+                   'initial_provisioning', NULL, NULL,
+                   'value:schema-12-request', ?, NULL, NULL, 25, NULL)`,
+      )
+      .run(
+        MIGRATION_SCHEMA_HASH,
+        MIGRATION_HASH,
+        MIGRATION_CLOSURE_HASH,
+        MIGRATION_HASH,
+      );
+    database
+      .prepare(
+        `INSERT INTO runtime_capacity_head (
+           singleton_key, current_capacity_revision, current_change_id,
+           current_config_hash, current_publication_hash, pending_change_id,
+           row_version, created_at_ms, updated_at_ms
+         ) VALUES (1, 7, 'capacity-change:migration', ?, ?, NULL, 8, 25, 26)`,
+      )
+      .run(MIGRATION_HASH, MIGRATION_SCHEMA_HASH);
+    database
+      .prepare(
+        `INSERT INTO runtime_capacity_change_events (
+           event_seq, change_id, command_id, capacity_revision, event_type,
+           config_hash, publication_hash, previous_event_hash, event_hash,
+           detail_value_id, detail_hash, created_at_ms
+         ) VALUES (1, 'capacity-change:migration', 'capacity-command:migration',
+                   7, 'head_committed', ?, ?, NULL, ?, NULL, NULL, 26)`,
+      )
+      .run(MIGRATION_HASH, MIGRATION_SCHEMA_HASH, MIGRATION_CLOSURE_HASH);
+    database.exec('COMMIT');
+  } catch (error) {
+    if (database.inTransaction) database.exec('ROLLBACK');
+    throw error;
+  }
+
+  const selectOne = (sql: string): Record<string, unknown> =>
+    database.prepare(sql).get() as Record<string, unknown>;
+  const state = {
+    featureRelease: selectOne(
+      `SELECT id, feature_id, release_ref, release_version, release_hash,
+              execution_artifact_resource_id, execution_artifact_hash, status,
+              staged_at_ms, activated_at_ms, disabled_at_ms, row_version
+         FROM workflow_feature_releases`,
+    ),
+    activeRelease: selectOne('SELECT * FROM workflow_feature_active_releases'),
+    retentionHandle: selectOne(
+      'SELECT * FROM workflow_registry_retention_handles',
+    ),
+    activationCommand: selectOne(
+      `SELECT command_id, command_type, idempotency_domain, idempotency_key,
+              request_value_id, request_hash, request_schema_resource_id,
+              request_schema_hash, domain_request_hash, lifecycle,
+              created_at_ms, finalized_at_ms, row_version
+         FROM workflow_feature_release_activation_commands`,
+    ),
+    capacityCommand: selectOne(
+      `SELECT command_id, idempotency_domain, idempotency_key, command_type,
+              expected_capacity_revision, expected_config_hash,
+              assigned_capacity_revision, assigned_change_id,
+              proposed_capacity_json, proposed_config_hash, request_hash,
+              reason_code, reason_text_value_id, reason_text_hash,
+              evidence_manifest_value_id, evidence_manifest_hash,
+              canonical_result_value_id, canonical_result_hash, created_at_ms,
+              finalized_at_ms
+         FROM runtime_capacity_admin_commands`,
+    ),
+    capacityHead: selectOne('SELECT * FROM runtime_capacity_head'),
+    capacityEvent: selectOne('SELECT * FROM runtime_capacity_change_events'),
+  };
+  database.close();
+  return state;
+}
+
 function seedUncheckedRow(database: Database.Database, table: string): void {
   const columns = database.pragma(`table_info("${table}")`) as Array<{
     name: string;
@@ -309,6 +537,34 @@ describe('Workflow Runtime Store schema compatibility', () => {
         [],
       )?.count,
     ).toBe(0);
+    expect(
+      store.queryOne<{ legacy_alter_table: number }>(
+        'PRAGMA legacy_alter_table',
+        [],
+      )?.legacy_alter_table,
+    ).toBe(0);
+    const namedIndexes = new Set(
+      store
+        .queryAll<{ name: string }>(
+          `SELECT name FROM sqlite_schema
+            WHERE type = 'index' AND sql IS NOT NULL`,
+          [],
+        )
+        .map(({ name }) => name),
+    );
+    for (const index of [
+      'uk:feature_releases:id_hash',
+      'uk:feature_releases:owner_identity',
+      'uk:activation_commands:id_domain_request',
+      'uk:activation_commands:idempotency',
+      'uk:capacity_commands:assigned_lineage',
+      'uk:capacity_commands:assigned_change',
+      'uk:capacity_commands:idempotency',
+    ]) {
+      expect(namedIndexes.has(index), `missing migrated index ${index}`).toBe(
+        true,
+      );
+    }
   });
 
   it('migrates Schema 11 while preserving Registry, definition, and Capacity state', () => {
@@ -323,7 +579,7 @@ describe('Workflow Runtime Store schema compatibility', () => {
       databaseMode: 'open_existing',
     });
     stores.push(store);
-    expect(store.schemaVersion).toBe(12);
+    expect(store.schemaVersion).toBe(CURRENT_WORKFLOW_RUNTIME_SCHEMA_VERSION);
     expect(
       store.queryOne<{ snapshot_hash: string }>(
         'SELECT snapshot_hash FROM workflow_registry_snapshots WHERE id = ?',
@@ -373,7 +629,56 @@ describe('Workflow Runtime Store schema compatibility', () => {
     }
   });
 
-  it('creates Schema 12 without obsolete snapshot or Run identity columns', () => {
+  it('migrates nonempty Schema 12 state without altering retained fields', () => {
+    const { databasePath } = temporaryDatabase();
+    createVersionDatabase(databasePath, 12);
+    const before = seedSchema12PreservedState(databasePath);
+
+    const store = WorkflowRuntimeConnectionFactory.openStore({
+      databasePath,
+      databaseMode: 'open_existing',
+    });
+    stores.push(store);
+    expect(store.schemaVersion).toBe(CURRENT_WORKFLOW_RUNTIME_SCHEMA_VERSION);
+    expect(
+      store.queryOne(
+        'SELECT id, feature_id, release_ref, release_version, release_hash, execution_artifact_resource_id, execution_artifact_hash, status, staged_at_ms, activated_at_ms, disabled_at_ms, row_version FROM workflow_feature_releases',
+        [],
+      ),
+    ).toEqual(before.featureRelease);
+    expect(
+      store.queryOne('SELECT * FROM workflow_feature_active_releases', []),
+    ).toEqual(before.activeRelease);
+    expect(
+      store.queryOne('SELECT * FROM workflow_registry_retention_handles', []),
+    ).toEqual(before.retentionHandle);
+    expect(
+      store.queryOne(
+        'SELECT command_id, command_type, idempotency_domain, idempotency_key, request_value_id, request_hash, request_schema_resource_id, request_schema_hash, domain_request_hash, lifecycle, created_at_ms, finalized_at_ms, row_version FROM workflow_feature_release_activation_commands',
+        [],
+      ),
+    ).toEqual(before.activationCommand);
+    expect(
+      store.queryOne(
+        'SELECT command_id, idempotency_domain, idempotency_key, command_type, expected_capacity_revision, expected_config_hash, assigned_capacity_revision, assigned_change_id, proposed_capacity_json, proposed_config_hash, request_hash, reason_code, reason_text_value_id, reason_text_hash, evidence_manifest_value_id, evidence_manifest_hash, canonical_result_value_id, canonical_result_hash, created_at_ms, finalized_at_ms FROM runtime_capacity_admin_commands',
+        [],
+      ),
+    ).toEqual(before.capacityCommand);
+    expect(store.queryOne('SELECT * FROM runtime_capacity_head', [])).toEqual(
+      before.capacityHead,
+    );
+    expect(
+      store.queryOne('SELECT * FROM runtime_capacity_change_events', []),
+    ).toEqual(before.capacityEvent);
+    expect(
+      store.queryOne<{ count: number }>(
+        'SELECT count(*) AS count FROM pragma_foreign_key_check',
+        [],
+      )?.count,
+    ).toBe(0);
+  });
+
+  it('creates Schema 13 without obsolete governance columns', () => {
     const store = openFresh();
     const columns = (table: string) =>
       store
@@ -392,6 +697,21 @@ describe('Workflow Runtime Store schema compatibility', () => {
         'database_schema_version',
         'database_schema_hash',
       ]),
+    );
+    expect(columns('workflow_feature_releases')).not.toEqual(
+      expect.arrayContaining([
+        'compatibility_snapshot_ref',
+        'compatibility_snapshot_hash',
+      ]),
+    );
+    expect(columns('workflow_feature_release_activation_commands')).not.toEqual(
+      expect.arrayContaining([
+        'verified_compatibility_input_value_id',
+        'verified_compatibility_result_value_id',
+      ]),
+    );
+    expect(columns('runtime_capacity_admin_commands')).not.toContain(
+      'genesis_core_release_hash',
     );
   });
 

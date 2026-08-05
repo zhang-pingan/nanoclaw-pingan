@@ -1,9 +1,5 @@
 import type { G3RegistryResourceIdentity } from './g3-registry-persistence-types.js';
 import type { G3RegistryExactResourceQueryInput } from './g3-registry-exact-resource-query-types.js';
-import type {
-  G3RetentionExecutorAbiErrorCode,
-  G3RetentionExecutorAbiPreflightInput,
-} from './g3-retention-executor-abi-preflight-types.js';
 import type { JsonObject, Sha256Hash, VersionedRef } from './types.js';
 
 export const G39_FEATURE_RELEASE_ACTIVATION_FORMATS = {
@@ -41,7 +37,7 @@ export const G39_ACTIVATION_ERROR_PRECEDENCE = [
   'target_release_identity_mismatch',
   'target_release_owner_mismatch',
   'target_release_resource_set_mismatch',
-  'g3_6_preflight_rejected',
+  'runtime_abi_incompatible',
   'target_release_lifecycle_invalid',
   'previous_release_missing',
   'previous_release_identity_mismatch',
@@ -112,8 +108,6 @@ export interface G39ActivationContractSchemas extends JsonObject {
   request: G3RegistryExactResourceQueryInput;
   receipt: G3RegistryExactResourceQueryInput;
   result: G3RegistryExactResourceQueryInput;
-  compatibility_input: G3RegistryExactResourceQueryInput;
-  compatibility_result: G3RegistryExactResourceQueryInput;
 }
 
 export interface G39FeatureReleaseActivationRequest extends JsonObject {
@@ -128,7 +122,6 @@ export interface G39FeatureReleaseActivationRequest extends JsonObject {
   target_release: G39TargetFeatureReleaseClaim;
   previous_release: G39FeatureReleaseClaim | null;
   expected_pointer: G39ExpectedPointer;
-  compatibility_preflight: G3RetentionExecutorAbiPreflightInput;
   target_retention: G39RetentionClaim;
   previous_retention: G39RetentionClaim | null;
   contract_schemas: G39ActivationContractSchemas;
@@ -152,7 +145,6 @@ export interface G39FeatureReleaseActivationReceipt extends JsonObject {
   pointer: G39AppliedPointerFact;
   target_lifecycle: 'active';
   previous_lifecycle: 'draining' | null;
-  compatibility_result_hash: Sha256Hash;
   target_retention: G39RetentionClaim;
   previous_retention: G39RetentionClaim | null;
   activated_at_ms: number;
@@ -176,7 +168,6 @@ export interface G39ActivationFailure extends JsonObject {
     | 'activation_transaction'
     | 'persistence';
   code: G39ActivationErrorCode;
-  nested_g3_6_code: G3RetentionExecutorAbiErrorCode | null;
 }
 
 export type G39ObservedPointer =

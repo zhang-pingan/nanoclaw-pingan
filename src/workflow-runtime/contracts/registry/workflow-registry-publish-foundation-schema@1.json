@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-registry-publish-foundation-schema:1\n",
-  "hash": "sha256:a139e57f974c217a8e4f3da27786375bb9019a43b1926f8356d0e489792ad41e",
+  "hash": "sha256:4a2dabb335bb5882bbc8607964f05a11f92adc07ab673f668fd0acbc9833257b",
   "payload": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "$id": "https://icarus.local/schemas/workflow-registry-publish-foundation/1",
@@ -23,7 +23,6 @@
       "feature_manifest_schema",
       "recipe_schema",
       "retention_policy",
-      "compatibility",
       "production_registry_baseline",
       "test_only_boundary",
       "authoring_publish_stages",
@@ -59,30 +58,6 @@
       },
       "retention_policy": {
         "$ref": "#/$defs/exact_artifact"
-      },
-      "compatibility": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "run_protocol_major",
-          "executor_abi_major",
-          "registry_schema_version",
-          "core_release_preflight_status"
-        ],
-        "properties": {
-          "run_protocol_major": {
-            "const": 1
-          },
-          "executor_abi_major": {
-            "const": 1
-          },
-          "registry_schema_version": {
-            "const": 1
-          },
-          "core_release_preflight_status": {
-            "const": "not_implemented_in_g3_1"
-          }
-        }
       },
       "production_registry_baseline": {
         "type": "object",
@@ -213,9 +188,6 @@
             "const": "compiled_plan_pin_required"
           },
           {
-            "const": "execution_artifact_abi_mismatch"
-          },
-          {
             "const": "execution_artifact_pin_required"
           },
           {
@@ -262,8 +234,8 @@
           }
         ],
         "items": false,
-        "minItems": 19,
-        "maxItems": 19
+        "minItems": 18,
+        "maxItems": 18
       },
       "g4_through_g9_status": {
         "type": "object",

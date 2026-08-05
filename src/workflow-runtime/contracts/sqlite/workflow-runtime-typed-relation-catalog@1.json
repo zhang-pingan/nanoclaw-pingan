@@ -10,7 +10,7 @@
     "schema_id": "workflow-runtime-schema-v1",
     "executable_status": "non_executable",
     "internal_relation_count": 344,
-    "external_reference_count": 42,
+    "external_reference_count": 41,
     "relations": [
       {
         "relation_id": "ext:workflow_backups:database_snapshot_ref",
@@ -67,20 +67,6 @@
         "deferrability": null,
         "validator_owner": "feature_registry",
         "reference_domain": "feature"
-      },
-      {
-        "relation_id": "ext:workflow_feature_releases:compatibility_snapshot_ref",
-        "relation_kind": "external_reference",
-        "source_table": "workflow_feature_releases",
-        "source_columns": [
-          "compatibility_snapshot_ref"
-        ],
-        "target_table": null,
-        "target_columns": [],
-        "on_delete": null,
-        "deferrability": null,
-        "validator_owner": "core_compatibility_registry",
-        "reference_domain": "compatibility_snapshot"
       },
       {
         "relation_id": "ext:workflow_feature_releases:feature_id",
@@ -6624,5 +6610,5 @@
       }
     ]
   },
-  "hash": "sha256:f4b0e2c76fa001d26406697d3f7972c9f48e31e3a12888864ad9a531808d8850"
+  "hash": "sha256:81f83c817642c21315faefe50249186a24526a03b49b2dc90e8db1c7f01347a7"
 }

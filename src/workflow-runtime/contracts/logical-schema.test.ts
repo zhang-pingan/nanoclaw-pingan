@@ -62,7 +62,7 @@ describe('G0.6 Logical Schema Metadata Contract Pack', () => {
   it('covers every one of the 74 Normative Logical Schema objects exactly once', () => {
     const source = buildLogicalSchemaSourcePayload();
     expect(source.table_count).toBe(74);
-    expect(source.column_count).toBe(1210);
+    expect(source.column_count).toBe(1208);
     expect(new Set(source.tables.map((table) => table.name)).size).toBe(74);
     expect(source.tables.map((table) => table.name)).toContain(
       'workflow_values',
@@ -95,8 +95,8 @@ describe('G0.6 Logical Schema Metadata Contract Pack', () => {
     const source = buildLogicalSchemaSourcePayload();
     const catalog = buildTypedRelationCatalogPayload();
     expect(catalog.internal_relation_count).toBe(344);
-    expect(catalog.external_reference_count).toBe(42);
-    expect(catalog.relations).toHaveLength(386);
+    expect(catalog.external_reference_count).toBe(41);
+    expect(catalog.relations).toHaveLength(385);
     const ownership = source.tables.find(
       (table) => table.name === 'workflow_value_ownerships',
     )!;
@@ -146,7 +146,7 @@ describe('G0.6 Logical Schema Metadata Contract Pack', () => {
     expect(totals).toEqual({
       foreignKeys: 344,
       uniqueKeys: 129,
-      checks: 750,
+      checks: 749,
       indexes: 25,
     });
     const activations = source.tables.find(

@@ -87,7 +87,7 @@ function rewriteManifest(
   fs.writeFileSync(file, `${JSON.stringify(manifest, null, 2)}\n`);
 }
 
-function createSchemaDatabase(home: string, version: 10 | 11): string {
+function createSchemaDatabase(home: string, version: number): string {
   const file = path.join(home, WORKFLOW_STATE_DATABASE_RELATIVE);
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const database = new Database(file);
@@ -288,7 +288,10 @@ describe('Host Core Workflow schema compatibility', () => {
 
   it('requires focused structure smoke for a current database', () => {
     const home = runtimeHome();
-    const file = createSchemaDatabase(home, 11);
+    const file = createSchemaDatabase(
+      home,
+      CURRENT_WORKFLOW_RUNTIME_SCHEMA_VERSION,
+    );
     expect(decidePersistentStateCompatibility(home, target).decision).toBe(
       'SAME_SCHEMA',
     );

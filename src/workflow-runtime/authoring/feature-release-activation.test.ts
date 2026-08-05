@@ -125,9 +125,7 @@ function installActivePrevious(
   const previousRetentionId = 'retention:fixture.previous@0.9.0';
   store.withImmediateTransaction((transaction) => {
     const target = transaction.queryOne<Record<string, string | number | null>>(
-      `SELECT execution_artifact_resource_id, execution_artifact_hash,
-              compatibility_snapshot_ref, compatibility_snapshot_hash,
-              staged_at_ms
+      `SELECT execution_artifact_resource_id, execution_artifact_hash, staged_at_ms
          FROM workflow_feature_releases WHERE id = ?`,
       [request.target_release.release_id],
     )!;
@@ -135,9 +133,8 @@ function installActivePrevious(
       `INSERT INTO workflow_feature_releases (
         id, feature_id, release_ref, release_version, release_hash,
         execution_artifact_resource_id, execution_artifact_hash, status,
-        compatibility_snapshot_ref, compatibility_snapshot_hash, staged_at_ms,
-        activated_at_ms, disabled_at_ms, row_version
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, NULL, 1)`,
+        staged_at_ms, activated_at_ms, disabled_at_ms, row_version
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, NULL, 1)`,
       [
         previousReleaseId,
         request.feature_id,
@@ -146,8 +143,6 @@ function installActivePrevious(
         PREVIOUS_RELEASE_HASH,
         target.execution_artifact_resource_id,
         target.execution_artifact_hash,
-        target.compatibility_snapshot_ref,
-        target.compatibility_snapshot_hash,
         target.staged_at_ms,
         request.requested_at_ms - 1,
       ],
@@ -508,18 +503,6 @@ describe('G3.9 Feature Release Activation', () => {
       },
     },
     {
-      name: 'G3.6 compatibility',
-      expectedCode: 'g3_6_preflight_rejected',
-      prepare: (
-        _store: WorkflowRuntimeStore,
-        request: G39FeatureReleaseActivationRequest,
-      ) => {
-        request.compatibility_preflight.snapshot.snapshot_hash =
-          'sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
-        rehashG39ActivationRequest(request);
-      },
-    },
-    {
       name: 'target lifecycle',
       expectedCode: 'target_release_lifecycle_invalid',
       prepare: (
@@ -839,6 +822,43 @@ describe('G3.9 Feature Release Activation', () => {
       expect.objectContaining({ code: 'terminal_integrity_mismatch' }),
     );
     expect(activationCounts(store)).toEqual(before);
+  });
+
+  it('keeps verified target facts immutable while an Activation is pending', () => {
+    const store = openFresh();
+    const fixture = seedPublishedTarget(store);
+    insertCleanPending(store, fixture.activation_request);
+    const target = fixture.activation_request.target_release;
+    store.withImmediateTransaction((transaction) => {
+      transaction.execute(
+        `UPDATE workflow_feature_release_activation_commands
+            SET verified_feature_id = ?,
+                verified_target_feature_release_id = ?,
+                verified_target_feature_release_ref = ?,
+                verified_target_feature_release_version = ?,
+                verified_target_feature_release_hash = ?,
+                row_version = 1
+          WHERE lifecycle = 'pending'`,
+        [
+          fixture.activation_request.feature_id,
+          target.release_id,
+          target.ref.id,
+          target.ref.version,
+          target.hash,
+        ],
+      );
+    });
+    expect(() =>
+      store.withImmediateTransaction((transaction) => {
+        transaction.execute(
+          `UPDATE workflow_feature_release_activation_commands
+              SET verified_target_feature_release_ref = 'tampered',
+                  row_version = 2
+            WHERE lifecycle = 'pending'`,
+          [],
+        );
+      }),
+    ).toThrow('activation_command_verified_fact_transition_invalid');
   });
 
   it.each([

@@ -23,7 +23,6 @@
       "contract_schemas",
       "publish_preflight",
       "release_resources",
-      "compatibility_preflight",
       "target_release",
       "domain_request_hash",
       "request_hash"
@@ -166,9 +165,6 @@
           "type": "object"
         }
       },
-      "compatibility_preflight": {
-        "type": "object"
-      },
       "target_release": {
         "type": "object",
         "additionalProperties": false,
@@ -177,7 +173,6 @@
           "release_ref",
           "release_hash",
           "execution_artifact",
-          "compatibility_snapshot",
           "resources"
         ],
         "properties": {
@@ -194,9 +189,6 @@
             "pattern": "^sha256:[0-9a-f]{64}$"
           },
           "execution_artifact": {
-            "$ref": "#/$defs/ref_hash"
-          },
-          "compatibility_snapshot": {
             "$ref": "#/$defs/ref_hash"
           },
           "resources": {
@@ -334,5 +326,5 @@
       }
     }
   },
-  "hash": "sha256:195a40f9359ba41d61c76b6eb14ddde6d871f27582ec155142284686ef6dd315"
+  "hash": "sha256:5a99990b15afb993fd8222361de64af991a94d6776230a8e1ebf06dccc8cdadb"
 }
