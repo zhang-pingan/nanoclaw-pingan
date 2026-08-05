@@ -9,14 +9,14 @@ host:      {REPOS_DIR}/{repo_path}
 container: /workspace/repos/{repo_path}
 ```
 
-`repo_path` 来自 `groups/global/services.json`，群组通过 `containerConfig.services` 声明需要哪些服务。这个模型对普通群聊是合理的：用户在群聊里让 agent 改代码，本质上就是直接操作本机已有仓库。
+`repo_path` 来自 `agents/global/services.json`，Agent 通过 `containerConfig.services` 声明需要哪些服务。这个模型对普通群聊是合理的：用户在群聊里让 Agent 改代码，本质上就是直接操作本机已有仓库。
 
 问题主要出现在 workflow delegation：
 
 - 多个 workflow 可能同时使用同一个服务仓库。
 - 某个 workflow 中 agent 留下的未提交代码，可能污染另一个 workflow。
 - delegation 容器重启后，如果直接挂载共享仓库，很难判断 dirty code 属于当前 workflow 还是历史遗留。
-- 如果为每个群组 clone 一份仓库，能提升隔离，但改动面和磁盘成本都更大。
+- 如果为每个 Agent clone 一份仓库，能提升隔离，但改动面和磁盘成本都更大。
 
 因此第一版不改变普通群聊挂载逻辑，只为 workflow delegation 引入 per-workflow service worktree。
 
@@ -54,7 +54,7 @@ container: /workspace/repos/{repo_path}
 - 不为普通群聊创建 worktree。
 - 不把服务源码挂到容器内 `/workspace/projects`。
 - 不在每次容器启动时自动 `git pull`。
-- 不为每个群组 clone 一份 services 仓库。
+- 不为每个 Agent clone 一份 services 仓库。
 - 不在第一版自动清理 workflow worktree。
 - 不解决普通群聊共享本地仓库带来的历史 dirty code 问题；普通群聊继续承担“直接操作本地 repo”的语义。
 
@@ -64,15 +64,15 @@ container: /workspace/repos/{repo_path}
 
 - `src/container-runner.ts`
   - `buildVolumeMounts()` 当前负责构建容器挂载。
-  - 当前根据 `group.containerConfig?.services` 读取 `groups/global/services.json`。
+  - 当前根据 `agent.containerConfig?.services` 读取 `agents/global/services.json`。
   - 当前服务仓库 host path 为 `path.join(REPOS_DIR, svc.repo_path)`。
   - 当前容器路径为 `/workspace/repos/{svc.repo_path}`。
 - `src/types.ts`
   - `ContainerInput.executionContext` 已包含 `workflowId`、`stageKey`、`delegationId`。
-  - `ContainerConfig.services?: string[]` 表示群组可用服务。
+  - `ContainerConfig.services?: string[]` 表示 Agent 可用服务。
 - `src/workflow.ts`
   - workflow 已有 service、context、main branch、work branch 等运行上下文。
-- `groups/global/services.json`
+- `agents/global/services.json`
   - 服务配置包含 `repo_path`、`git_url`、`default_branch` 等字段。
 - `container/skills/*.md`
   - 多数技能已约定服务仓库在 `/workspace/repos/{repo_path}`。
@@ -105,7 +105,7 @@ data/workflow-workspaces/wf-2/repos/catstory/
 
 ### Workflow Worktree
 
-建议放在 `data` 下，避免污染 `groups` 目录：
+建议放在 `data` 下，避免污染 `agents` 目录：
 
 ```text
 data/workflow-workspaces/
@@ -329,11 +329,11 @@ src/service-worktree.test.ts
 
 ### 3. 调整 container mount 选择
 
-`buildVolumeMounts()` 当前只有 `group` 和 `isMain` 参数。为了根据 workflow delegation 切换挂载来源，需要让 mount 构建逻辑拿到 execution context。
+`buildVolumeMounts()` 当前只有 `agent` 和 `isMain` 参数。为了根据 workflow delegation 切换挂载来源，需要让 mount 构建逻辑拿到 execution context。
 
 可选方案：
 
-- 扩展 `buildVolumeMounts(group, isMain, input)`。
+- 扩展 `buildVolumeMounts(agent, isMain, input)`。
 - 或在调用 `buildVolumeMounts()` 前先计算 service repo mount plan。
 
 第一版建议直接扩展参数，保持改动集中。
@@ -369,7 +369,7 @@ data/workflow-workspaces/{workflowId}/repos/{repo_path}
 
 记录：
 
-- group folder
+- Agent folder
 - workflowId/delegationId
 - service name
 - repo_path
@@ -427,15 +427,15 @@ data/workflow-workspaces/{workflowId}/repos/{repo_path}
 
 ## 风险与处理
 
-| 风险 | 处理 |
-| --- | --- |
+| 风险                                      | 处理                                                       |
+| ----------------------------------------- | ---------------------------------------------------------- |
 | 同一分支不能被多个 worktree 同时 checkout | workflow 分支唯一；同一 workflow/service 复用同一 worktree |
-| base repo 不存在 | 明确失败，提示用户先准备本地仓库 |
-| workflow worktree 长期堆积 | 后续增加显式清理列表和 TTL 建议 |
-| workflow worktree dirty | 允许，dirty 属于该 workflow；完成后不自动删除 |
-| 普通群聊历史 dirty code | 保持当前语义；如需要后续再加 dirty 摘要提示 |
-| 容器内路径变化影响 skills | 容器内仍是 `/workspace/repos/{repo_path}`，不影响 |
-| 自动 fetch/pull 改变工作区 | 第一版不自动 fetch/pull，后续做显式同步 |
+| base repo 不存在                          | 明确失败，提示用户先准备本地仓库                           |
+| workflow worktree 长期堆积                | 后续增加显式清理列表和 TTL 建议                            |
+| workflow worktree dirty                   | 允许，dirty 属于该 workflow；完成后不自动删除              |
+| 普通群聊历史 dirty code                   | 保持当前语义；如需要后续再加 dirty 摘要提示                |
+| 容器内路径变化影响 skills                 | 容器内仍是 `/workspace/repos/{repo_path}`，不影响          |
+| 自动 fetch/pull 改变工作区                | 第一版不自动 fetch/pull，后续做显式同步                    |
 
 ## 推荐落地顺序
 
@@ -448,7 +448,7 @@ data/workflow-workspaces/{workflowId}/repos/{repo_path}
 
 ## 最终判断
 
-该方案比“按群组 clone services 到 groups/projects”更适合作为第一版：
+该方案比“按 Agent clone services 到 agents/projects”更适合作为第一版：
 
 - 普通群聊行为不变，风险低。
 - workflow delegation 获得独立工作区，能解决主要污染问题。

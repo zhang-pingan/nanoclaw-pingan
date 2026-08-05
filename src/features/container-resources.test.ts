@@ -29,11 +29,11 @@ describe('feature container resources', () => {
     const workspace = setupWorkspace();
     const db = await import('../db.js');
     db._initTestDatabase();
-    db.setFeatureGroupBinding({
+    db.setFeatureAgentBinding({
       featureId: 'example-feature',
-      groupKey: 'main',
-      groupJid: 'feature:example-feature:main',
-      groupFolder: 'main',
+      agentKey: 'main',
+      agentJid: 'feature:example-feature:main',
+      agentFolder: 'main',
     });
     const agentsDir = path.join(
       workspace,
@@ -64,7 +64,7 @@ describe('feature container resources', () => {
       'main',
       'agents',
     );
-    syncContainerAgents({ groupFolder: 'main', agentsDst });
+    syncContainerAgents({ agentFolder: 'main', agentsDst });
 
     expect(
       fs.readFileSync(
@@ -78,11 +78,11 @@ describe('feature container resources', () => {
     const workspace = setupWorkspace();
     const db = await import('../db.js');
     db._initTestDatabase();
-    db.setFeatureGroupBinding({
+    db.setFeatureAgentBinding({
       featureId: 'example-feature',
-      groupKey: 'main',
-      groupJid: 'feature:example-feature:main',
-      groupFolder: 'main',
+      agentKey: 'main',
+      agentJid: 'feature:example-feature:main',
+      agentFolder: 'main',
     });
     const scriptsDir = path.join(
       workspace,
@@ -163,15 +163,15 @@ describe('feature container resources', () => {
     );
   });
 
-  it('does not expose feature-scoped resources to unrelated groups', async () => {
+  it('does not expose feature-scoped resources to unrelated agents', async () => {
     const workspace = setupWorkspace();
     const db = await import('../db.js');
     db._initTestDatabase();
-    db.setFeatureGroupBinding({
+    db.setFeatureAgentBinding({
       featureId: 'example-feature',
-      groupKey: 'main',
-      groupJid: 'feature:example-feature:main',
-      groupFolder: 'feature_main',
+      agentKey: 'main',
+      agentJid: 'feature:example-feature:main',
+      agentFolder: 'feature_main',
     });
     const agentsDir = path.join(
       workspace,
@@ -217,7 +217,7 @@ describe('feature container resources', () => {
       'other',
       'agents',
     );
-    syncContainerAgents({ groupFolder: 'other', agentsDst });
+    syncContainerAgents({ agentFolder: 'other', agentsDst });
 
     expect(
       fs.existsSync(path.join(agentsDst, 'example-feature-reviewer.md')),

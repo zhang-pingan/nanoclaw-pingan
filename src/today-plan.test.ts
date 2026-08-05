@@ -97,9 +97,8 @@ describe('today-plan', () => {
     storeChatMetadata(
       'web:main',
       String(Date.parse('2026-04-20T08:00:00.000Z')),
-      'Main Group',
+      'Main Agent',
       'web',
-      true,
     );
     storeWebMessage({
       id: 'old-day',
@@ -359,7 +358,7 @@ describe('today-plan', () => {
 
     const detail = getTodayPlanDetail({
       planId: plan.id,
-      groups: {},
+      agents: {},
     });
 
     expect(detail).toBeTruthy();
@@ -397,7 +396,7 @@ describe('today-plan', () => {
     });
     const detail = getTodayPlanDetail({
       planId: todayPlan.id,
-      groups: {},
+      agents: {},
     });
 
     expect(detail).toBeTruthy();
@@ -437,7 +436,7 @@ describe('today-plan', () => {
 
     const payload = buildTodayPlanMailPrompt({
       planId: plan.id,
-      groups: {},
+      agents: {},
       name: '张頔',
     });
 

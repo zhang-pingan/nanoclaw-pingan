@@ -69,6 +69,8 @@ Use `npm run contracts:check:full` or `npm run test:full` only when changing the
 
 ### Next Simplification Candidates
 
+The executable migration design is documented in [`workflow-runtime-guardrail-simplification-plan.md`](workflow-runtime-guardrail-simplification-plan.md).
+
 1. Archive G9 production activation as a compatibility module. Nothing new should depend on deployment activation requests, activation audit records, journal events, capacity genesis evidence, or independent G8/G9 approval semantics.
 2. Collapse conformance history. Keep one current positive/negative fixture set per active boundary and move superseded Golden Draft, review-candidate, sealed, repair, and Gate-era generations out of the active source tree.
 3. Replace multi-stage Golden Draft/review/semantic-review/seal workflows with a checked-in fixture plus a focused replay test. Git review already supplies change history for this single-user project.

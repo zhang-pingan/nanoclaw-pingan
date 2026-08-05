@@ -22,18 +22,25 @@ const modelEnv = readEnvFile([
   'ICARUS_MODEL_SELECTOR_TIMEOUT_MS',
 ]);
 const MODEL_LIGHT =
-  process.env.ICARUS_MODEL_LIGHT || modelEnv.ICARUS_MODEL_LIGHT || 'claude-haiku-4-5-20251001';
+  process.env.ICARUS_MODEL_LIGHT ||
+  modelEnv.ICARUS_MODEL_LIGHT ||
+  'claude-haiku-4-5-20251001';
 const MODEL_DEFAULT =
   process.env.ICARUS_MODEL_DEFAULT ||
   modelEnv.ICARUS_MODEL_DEFAULT ||
   'claude-sonnet-4-6';
 const MODEL_HEAVY =
-  process.env.ICARUS_MODEL_HEAVY || modelEnv.ICARUS_MODEL_HEAVY || 'claude-opus-4-6';
-const MODEL_FORCE = process.env.ICARUS_MODEL_FORCE || modelEnv.ICARUS_MODEL_FORCE || '';
+  process.env.ICARUS_MODEL_HEAVY ||
+  modelEnv.ICARUS_MODEL_HEAVY ||
+  'claude-opus-4-6';
+const MODEL_FORCE =
+  process.env.ICARUS_MODEL_FORCE || modelEnv.ICARUS_MODEL_FORCE || '';
 const CREDENTIAL_PROXY_OPENAI_COMPAT =
-  (process.env.CREDENTIAL_PROXY_OPENAI_COMPAT ||
+  (
+    process.env.CREDENTIAL_PROXY_OPENAI_COMPAT ||
     modelEnv.CREDENTIAL_PROXY_OPENAI_COMPAT ||
-    '')
+    ''
+  )
     .trim()
     .toLowerCase() === 'true';
 const SELECTOR_API_BASE_URL =
@@ -104,17 +111,39 @@ function selectModelByRules(input: ModelSelectionInput): ModelSelection {
   }
 
   if (input.isMain) {
-    return { selectedModel: MODEL_HEAVY, reason: 'main_group' };
+    return { selectedModel: MODEL_HEAVY, reason: 'main_agent' };
   }
 
   const hardKeywords = [
-    'bug', 'debug', 'fix', 'refactor', 'test', 'trace',
-    'sql', 'migration', '架构', '性能', '并发', '故障', '回归',
-    '实现', '代码', '编译', '部署', 'workflow',
+    'bug',
+    'debug',
+    'fix',
+    'refactor',
+    'test',
+    'trace',
+    'sql',
+    'migration',
+    '架构',
+    '性能',
+    '并发',
+    '故障',
+    '回归',
+    '实现',
+    '代码',
+    '编译',
+    '部署',
+    'workflow',
   ];
   const lightKeywords = [
-    '总结', '翻译', '润色', '改写', '提醒', '状态',
-    'summarize', 'translate', 'rewrite',
+    '总结',
+    '翻译',
+    '润色',
+    '改写',
+    '提醒',
+    '状态',
+    'summarize',
+    'translate',
+    'rewrite',
   ];
 
   const hardScore = scoreKeywordHits(text, hardKeywords);
@@ -141,12 +170,18 @@ function mapChoiceToModel(choice: SelectorChoice): string {
 
 function parseChoiceFromText(text: string): SelectorChoice | null {
   const normalized = text.trim().toLowerCase();
-  if (normalized === 'light' || normalized === 'default' || normalized === 'heavy') {
+  if (
+    normalized === 'light' ||
+    normalized === 'default' ||
+    normalized === 'heavy'
+  ) {
     return normalized;
   }
 
   // Strict JSON path: {"choice":"light|default|heavy"}
-  const jsonChoiceMatch = normalized.match(/"choice"\s*:\s*"(light|default|heavy)"/);
+  const jsonChoiceMatch = normalized.match(
+    /"choice"\s*:\s*"(light|default|heavy)"/,
+  );
   if (jsonChoiceMatch) {
     return jsonChoiceMatch[1] as SelectorChoice;
   }
@@ -175,9 +210,18 @@ function parseChoiceFromText(text: string): SelectorChoice | null {
     .replace(/^candidate_models:.*$/gm, ' ');
 
   const decisionPatterns: Array<[RegExp, SelectorChoice]> = [
-    [/\b(?:choose|chosen|select|selected|use|using)\s+(?:the\s+)?light\b/i, 'light'],
-    [/\b(?:choose|chosen|select|selected|use|using)\s+(?:the\s+)?default\b/i, 'default'],
-    [/\b(?:choose|chosen|select|selected|use|using)\s+(?:the\s+)?heavy\b/i, 'heavy'],
+    [
+      /\b(?:choose|chosen|select|selected|use|using)\s+(?:the\s+)?light\b/i,
+      'light',
+    ],
+    [
+      /\b(?:choose|chosen|select|selected|use|using)\s+(?:the\s+)?default\b/i,
+      'default',
+    ],
+    [
+      /\b(?:choose|chosen|select|selected|use|using)\s+(?:the\s+)?heavy\b/i,
+      'heavy',
+    ],
     [/(?:选择|选用|应该使用|建议使用)\s*(?:为|是)?\s*light/i, 'light'],
     [/(?:选择|选用|应该使用|建议使用)\s*(?:为|是)?\s*default/i, 'default'],
     [/(?:选择|选用|应该使用|建议使用)\s*(?:为|是)?\s*heavy/i, 'heavy'],
@@ -205,7 +249,9 @@ function extractJsonOnlyText(text: string): string {
   return noFence;
 }
 
-async function selectModelByApi(input: ModelSelectionInput): Promise<ModelSelection> {
+async function selectModelByApi(
+  input: ModelSelectionInput,
+): Promise<ModelSelection> {
   const endpoint = `${SELECTOR_API_BASE_URL.replace(/\/+$/, '')}/chat/completions`;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), SELECTOR_TIMEOUT_MS);
@@ -252,7 +298,8 @@ async function selectModelByApi(input: ModelSelectionInput): Promise<ModelSelect
     };
     const content = data.choices?.[0]?.message?.content || '';
     const sanitized = extractJsonOnlyText(content);
-    const choice = parseChoiceFromText(sanitized) || parseChoiceFromText(content);
+    const choice =
+      parseChoiceFromText(sanitized) || parseChoiceFromText(content);
     if (!choice) {
       throw new Error('selector api returned invalid choice');
     }
@@ -266,7 +313,9 @@ async function selectModelByApi(input: ModelSelectionInput): Promise<ModelSelect
   }
 }
 
-export async function selectModel(input: ModelSelectionInput): Promise<ModelSelection> {
+export async function selectModel(
+  input: ModelSelectionInput,
+): Promise<ModelSelection> {
   if (MODEL_FORCE) {
     return { selectedModel: MODEL_FORCE, reason: 'forced' };
   }

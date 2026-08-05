@@ -1,11 +1,8 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 
-import { GroupQueue } from './group-queue.js';
+import { AgentQueue } from './agent-queue.js';
 
-const {
-  mockExec,
-  mockUpdateTask,
-} = vi.hoisted(() => ({
+const { mockExec, mockUpdateTask } = vi.hoisted(() => ({
   mockExec: vi.fn(),
   mockUpdateTask: vi.fn(),
 }));
@@ -59,12 +56,12 @@ vi.mock('./container-runtime.js', async () => {
   };
 });
 
-describe('GroupQueue', () => {
-  let queue: GroupQueue;
+describe('AgentQueue', () => {
+  let queue: AgentQueue;
 
   beforeEach(() => {
     vi.useFakeTimers();
-    queue = new GroupQueue();
+    queue = new AgentQueue();
     mockExec.mockReset();
     mockExec.mockImplementation((_cmd, _opts, cb) => cb?.(null));
     mockUpdateTask.mockReset();
@@ -74,13 +71,13 @@ describe('GroupQueue', () => {
     vi.useRealTimers();
   });
 
-  // --- Single group at a time ---
+  // --- Single agent at a time ---
 
-  it('only runs one container per group at a time', async () => {
+  it('only runs one container per agent at a time', async () => {
     let concurrentCount = 0;
     let maxConcurrent = 0;
 
-    const processMessages = vi.fn(async (groupJid: string) => {
+    const processMessages = vi.fn(async (agentJid: string) => {
       concurrentCount++;
       maxConcurrent = Math.max(maxConcurrent, concurrentCount);
       // Simulate async work
@@ -91,9 +88,9 @@ describe('GroupQueue', () => {
 
     queue.setProcessMessagesFn(processMessages);
 
-    // Enqueue two messages for the same group
-    queue.enqueueMessageCheck('group1@g.us');
-    queue.enqueueMessageCheck('group1@g.us');
+    // Enqueue two messages for the same agent
+    queue.enqueueMessageCheck('web:group1');
+    queue.enqueueMessageCheck('web:group1');
 
     // Advance timers to let the first process complete
     await vi.advanceTimersByTimeAsync(200);
@@ -111,25 +108,25 @@ describe('GroupQueue', () => {
         }),
     );
 
-    queue.enqueueMessageCheck('group1@g.us');
+    queue.enqueueMessageCheck('web:group1');
     await vi.advanceTimersByTimeAsync(10);
 
-    expect(queue.isActive('group1@g.us')).toBe(true);
-    expect(queue.hasActiveContainer('group1@g.us')).toBe(false);
+    expect(queue.isActive('web:group1')).toBe(true);
+    expect(queue.hasActiveContainer('web:group1')).toBe(false);
 
     queue.registerProcess(
-      'group1@g.us',
+      'web:group1',
       {} as any,
       'container-1',
-      'test-group',
+      'test-agent',
     );
-    expect(queue.hasActiveContainer('group1@g.us')).toBe(true);
+    expect(queue.hasActiveContainer('web:group1')).toBe(true);
 
     resolveProcess!();
     await vi.advanceTimersByTimeAsync(10);
 
-    expect(queue.isActive('group1@g.us')).toBe(false);
-    expect(queue.hasActiveContainer('group1@g.us')).toBe(false);
+    expect(queue.isActive('web:group1')).toBe(false);
+    expect(queue.hasActiveContainer('web:group1')).toBe(false);
   });
 
   // --- Global concurrency limit ---
@@ -139,7 +136,7 @@ describe('GroupQueue', () => {
     let maxActive = 0;
     const completionCallbacks: Array<() => void> = [];
 
-    const processMessages = vi.fn(async (groupJid: string) => {
+    const processMessages = vi.fn(async (agentJid: string) => {
       activeCount++;
       maxActive = Math.max(maxActive, activeCount);
       await new Promise<void>((resolve) => completionCallbacks.push(resolve));
@@ -149,10 +146,10 @@ describe('GroupQueue', () => {
 
     queue.setProcessMessagesFn(processMessages);
 
-    // Enqueue 3 groups (limit is 2)
-    queue.enqueueMessageCheck('group1@g.us');
-    queue.enqueueMessageCheck('group2@g.us');
-    queue.enqueueMessageCheck('group3@g.us');
+    // Enqueue 3 agents (limit is 2)
+    queue.enqueueMessageCheck('web:group1');
+    queue.enqueueMessageCheck('web:group2');
+    queue.enqueueMessageCheck('web:group3');
 
     // Let promises settle
     await vi.advanceTimersByTimeAsync(10);
@@ -170,11 +167,11 @@ describe('GroupQueue', () => {
 
   // --- Tasks prioritized over messages ---
 
-  it('drains tasks before messages for same group', async () => {
+  it('drains tasks before messages for same agent', async () => {
     const executionOrder: string[] = [];
     let resolveFirst: () => void;
 
-    const processMessages = vi.fn(async (groupJid: string) => {
+    const processMessages = vi.fn(async (agentJid: string) => {
       if (executionOrder.length === 0) {
         // First call: block until we release it
         await new Promise<void>((resolve) => {
@@ -188,15 +185,15 @@ describe('GroupQueue', () => {
     queue.setProcessMessagesFn(processMessages);
 
     // Start processing messages (takes the active slot)
-    queue.enqueueMessageCheck('group1@g.us');
+    queue.enqueueMessageCheck('web:group1');
     await vi.advanceTimersByTimeAsync(10);
 
     // While active, enqueue both a task and pending messages
     const taskFn = vi.fn(async () => {
       executionOrder.push('task');
     });
-    queue.enqueueTask('group1@g.us', 'task-1', taskFn);
-    queue.enqueueMessageCheck('group1@g.us');
+    queue.enqueueTask('web:group1', 'task-1', taskFn);
+    queue.enqueueMessageCheck('web:group1');
 
     // Release the first processing
     resolveFirst!();
@@ -219,7 +216,7 @@ describe('GroupQueue', () => {
     });
 
     queue.setProcessMessagesFn(processMessages);
-    queue.enqueueMessageCheck('group1@g.us');
+    queue.enqueueMessageCheck('web:group1');
 
     // First call happens immediately
     await vi.advanceTimersByTimeAsync(10);
@@ -244,7 +241,7 @@ describe('GroupQueue', () => {
 
     await queue.shutdown(1000);
 
-    queue.enqueueMessageCheck('group1@g.us');
+    queue.enqueueMessageCheck('web:group1');
     await vi.advanceTimersByTimeAsync(100);
 
     expect(processMessages).not.toHaveBeenCalled();
@@ -261,7 +258,7 @@ describe('GroupQueue', () => {
     });
 
     queue.setProcessMessagesFn(processMessages);
-    queue.enqueueMessageCheck('group1@g.us');
+    queue.enqueueMessageCheck('web:group1');
 
     // Run through all 5 retries (MAX_RETRIES = 5)
     // Initial call
@@ -281,14 +278,14 @@ describe('GroupQueue', () => {
     expect(callCount).toBe(countAfterMaxRetries);
   });
 
-  // --- Waiting groups get drained when slots free up ---
+  // --- Waiting agents get drained when slots free up ---
 
-  it('drains waiting groups when active slots free up', async () => {
+  it('drains waiting agents when active slots free up', async () => {
     const processed: string[] = [];
     const completionCallbacks: Array<() => void> = [];
 
-    const processMessages = vi.fn(async (groupJid: string) => {
-      processed.push(groupJid);
+    const processMessages = vi.fn(async (agentJid: string) => {
+      processed.push(agentJid);
       await new Promise<void>((resolve) => completionCallbacks.push(resolve));
       return true;
     });
@@ -296,21 +293,21 @@ describe('GroupQueue', () => {
     queue.setProcessMessagesFn(processMessages);
 
     // Fill both slots
-    queue.enqueueMessageCheck('group1@g.us');
-    queue.enqueueMessageCheck('group2@g.us');
+    queue.enqueueMessageCheck('web:group1');
+    queue.enqueueMessageCheck('web:group2');
     await vi.advanceTimersByTimeAsync(10);
 
     // Queue a third
-    queue.enqueueMessageCheck('group3@g.us');
+    queue.enqueueMessageCheck('web:group3');
     await vi.advanceTimersByTimeAsync(10);
 
-    expect(processed).toEqual(['group1@g.us', 'group2@g.us']);
+    expect(processed).toEqual(['web:group1', 'web:group2']);
 
     // Free up a slot
     completionCallbacks[0]();
     await vi.advanceTimersByTimeAsync(10);
 
-    expect(processed).toContain('group3@g.us');
+    expect(processed).toContain('web:group3');
   });
 
   // --- Running task dedup (Issue #138) ---
@@ -327,14 +324,14 @@ describe('GroupQueue', () => {
     });
 
     // Start the task (runs immediately — slot available)
-    queue.enqueueTask('group1@g.us', 'task-1', taskFn);
+    queue.enqueueTask('web:group1', 'task-1', taskFn);
     await vi.advanceTimersByTimeAsync(10);
     expect(taskCallCount).toBe(1);
 
     // Scheduler poll re-discovers the same task while it's running —
     // this must be silently dropped
     const dupFn = vi.fn(async () => {});
-    queue.enqueueTask('group1@g.us', 'task-1', dupFn);
+    queue.enqueueTask('web:group1', 'task-1', dupFn);
     await vi.advanceTimersByTimeAsync(10);
 
     // Duplicate was NOT queued
@@ -364,20 +361,20 @@ describe('GroupQueue', () => {
     queue.setProcessMessagesFn(processMessages);
 
     // Start processing (takes the active slot)
-    queue.enqueueMessageCheck('group1@g.us');
+    queue.enqueueMessageCheck('web:group1');
     await vi.advanceTimersByTimeAsync(10);
 
-    // Register a process so closeStdin has a groupFolder
+    // Register a process so closeStdin has an agentFolder
     queue.registerProcess(
-      'group1@g.us',
+      'web:group1',
       {} as any,
       'container-1',
-      'test-group',
+      'test-agent',
     );
 
     // Enqueue a task while container is active but NOT idle
     const taskFn = vi.fn(async () => {});
-    queue.enqueueTask('group1@g.us', 'task-1', taskFn);
+    queue.enqueueTask('web:group1', 'task-1', taskFn);
 
     // _close should NOT have been written (container is working, not idle)
     const writeFileSync = vi.mocked(fs.default.writeFileSync);
@@ -404,24 +401,24 @@ describe('GroupQueue', () => {
     queue.setProcessMessagesFn(processMessages);
 
     // Start processing
-    queue.enqueueMessageCheck('group1@g.us');
+    queue.enqueueMessageCheck('web:group1');
     await vi.advanceTimersByTimeAsync(10);
 
     // Register process and mark idle
     queue.registerProcess(
-      'group1@g.us',
+      'web:group1',
       {} as any,
       'container-1',
-      'test-group',
+      'test-agent',
     );
-    queue.notifyIdle('group1@g.us');
+    queue.notifyIdle('web:group1');
 
     // Clear previous writes, then enqueue a task
     const writeFileSync = vi.mocked(fs.default.writeFileSync);
     writeFileSync.mockClear();
 
     const taskFn = vi.fn(async () => {});
-    queue.enqueueTask('group1@g.us', 'task-1', taskFn);
+    queue.enqueueTask('web:group1', 'task-1', taskFn);
 
     // _close SHOULD have been written (container is idle)
     const closeWrites = writeFileSync.mock.calls.filter(
@@ -445,21 +442,21 @@ describe('GroupQueue', () => {
     });
 
     queue.setProcessMessagesFn(processMessages);
-    queue.enqueueMessageCheck('group1@g.us');
+    queue.enqueueMessageCheck('web:group1');
     await vi.advanceTimersByTimeAsync(10);
     queue.registerProcess(
-      'group1@g.us',
+      'web:group1',
       {} as any,
       'container-1',
-      'test-group',
+      'test-agent',
     );
 
-    queue.notifyIdle('group1@g.us');
+    queue.notifyIdle('web:group1');
 
     const writeFileSync = vi.mocked(fs.default.writeFileSync);
     writeFileSync.mockClear();
 
-    queue.enqueueMessageCheck('group1@g.us');
+    queue.enqueueMessageCheck('web:group1');
 
     const closeWrites = writeFileSync.mock.calls.filter(
       (call) => typeof call[0] === 'string' && call[0].endsWith('_close'),
@@ -480,29 +477,29 @@ describe('GroupQueue', () => {
       });
       return true;
     });
-    queue.enqueueMessageCheck('group1@g.us');
+    queue.enqueueMessageCheck('web:group1');
     await vi.advanceTimersByTimeAsync(10);
     queue.registerProcess(
-      'group1@g.us',
+      'web:group1',
       {} as any,
       'container-1',
-      'test-group',
+      'test-agent',
     );
-    queue.notifyIdle('group1@g.us');
+    queue.notifyIdle('web:group1');
 
     const writeFileSync = vi.mocked(fs.default.writeFileSync);
     writeFileSync.mockClear();
 
-    queue.enqueueMessageCheck('group1@g.us');
+    queue.enqueueMessageCheck('web:group1');
 
     const closeWrites = writeFileSync.mock.calls.filter(
       (call) => typeof call[0] === 'string' && call[0].endsWith('_close'),
     );
     expect(closeWrites).toHaveLength(1);
-    expect(queue.canPipeMessage('group1@g.us')).toBe(false);
+    expect(queue.canPipeMessage('web:group1')).toBe(false);
     expect(
       queue.sendMessage(
-        'group1@g.us',
+        'web:group1',
         'hello',
         'claude-4-6-sonnet-latest',
         'query-1',
@@ -525,21 +522,21 @@ describe('GroupQueue', () => {
     });
 
     queue.setProcessMessagesFn(processMessages);
-    queue.enqueueMessageCheck('group1@g.us');
+    queue.enqueueMessageCheck('web:group1');
     await vi.advanceTimersByTimeAsync(10);
     queue.registerProcess(
-      'group1@g.us',
+      'web:group1',
       {} as any,
       'container-1',
-      'test-group',
+      'test-agent',
     );
 
     // Container becomes idle
-    queue.notifyIdle('group1@g.us');
+    queue.notifyIdle('web:group1');
 
     // A new user message arrives — resets idleWaiting
     queue.sendMessage(
-      'group1@g.us',
+      'web:group1',
       'hello',
       'claude-4-6-sonnet-latest',
       'query-1',
@@ -550,7 +547,7 @@ describe('GroupQueue', () => {
     writeFileSync.mockClear();
 
     const taskFn = vi.fn(async () => {});
-    queue.enqueueTask('group1@g.us', 'task-1', taskFn);
+    queue.enqueueTask('web:group1', 'task-1', taskFn);
 
     const closeWrites = writeFileSync.mock.calls.filter(
       (call) => typeof call[0] === 'string' && call[0].endsWith('_close'),
@@ -571,18 +568,18 @@ describe('GroupQueue', () => {
     });
 
     // Start a task (sets isTaskContainer = true)
-    queue.enqueueTask('group1@g.us', 'task-1', taskFn);
+    queue.enqueueTask('web:group1', 'task-1', taskFn);
     await vi.advanceTimersByTimeAsync(10);
     queue.registerProcess(
-      'group1@g.us',
+      'web:group1',
       {} as any,
       'container-1',
-      'test-group',
+      'test-agent',
     );
 
     // sendMessage should return false — user messages must not go to task containers
     const result = queue.sendMessage(
-      'group1@g.us',
+      'web:group1',
       'hello',
       'claude-4-6-sonnet-latest',
       'query-1',
@@ -607,22 +604,22 @@ describe('GroupQueue', () => {
     queue.setProcessMessagesFn(processMessages);
 
     // Start processing
-    queue.enqueueMessageCheck('group1@g.us');
+    queue.enqueueMessageCheck('web:group1');
     await vi.advanceTimersByTimeAsync(10);
 
     // Register process and enqueue a task (no idle yet — no preemption)
     queue.registerProcess(
-      'group1@g.us',
+      'web:group1',
       {} as any,
       'container-1',
-      'test-group',
+      'test-agent',
     );
 
     const writeFileSync = vi.mocked(fs.default.writeFileSync);
     writeFileSync.mockClear();
 
     const taskFn = vi.fn(async () => {});
-    queue.enqueueTask('group1@g.us', 'task-1', taskFn);
+    queue.enqueueTask('web:group1', 'task-1', taskFn);
 
     let closeWrites = writeFileSync.mock.calls.filter(
       (call) => typeof call[0] === 'string' && call[0].endsWith('_close'),
@@ -631,7 +628,7 @@ describe('GroupQueue', () => {
 
     // Now container becomes idle — should preempt because task is pending
     writeFileSync.mockClear();
-    queue.notifyIdle('group1@g.us');
+    queue.notifyIdle('web:group1');
 
     closeWrites = writeFileSync.mock.calls.filter(
       (call) => typeof call[0] === 'string' && call[0].endsWith('_close'),
@@ -659,20 +656,20 @@ describe('GroupQueue', () => {
       _onClose: undefined as undefined | (() => void),
     };
 
-    queue.enqueueTask('group1@g.us', 'task-1', async () => {
+    queue.enqueueTask('web:group1', 'task-1', async () => {
       await new Promise<void>((resolve) => {
         resolveTask = resolve;
       });
     });
     await vi.advanceTimersByTimeAsync(10);
     queue.registerProcess(
-      'group1@g.us',
+      'web:group1',
       proc as any,
       'container-1',
-      'test-group',
+      'test-agent',
     );
 
-    const resultPromise = queue.stopAgent('group1@g.us');
+    const resultPromise = queue.stopAgent('web:group1');
     await vi.advanceTimersByTimeAsync(10);
     proc._onClose?.();
     const result = await resultPromise;
@@ -690,8 +687,8 @@ describe('GroupQueue', () => {
     const oneShotPromise = queue.runOneShot(
       'assistant:main',
       {
-        groupFolder: 'assistant_main',
-        groupName: '桌面个人助手',
+        agentFolder: 'assistant_main',
+        agentName: '桌面个人助手',
         promptSummary: '排查：线上 error 日志',
         lastSender: 'assistant action',
         lastContent: '线上 error 日志：catstory',
@@ -706,9 +703,9 @@ describe('GroupQueue', () => {
     const activeAgents = queue.getActiveAgents();
     expect(activeAgents).toHaveLength(1);
     expect(activeAgents[0]).toMatchObject({
-      groupJid: 'assistant:main',
-      groupFolder: 'assistant_main',
-      groupName: '桌面个人助手',
+      agentJid: 'assistant:main',
+      agentFolder: 'assistant_main',
+      agentName: '桌面个人助手',
       promptSummary: '排查：线上 error 日志',
       lastSender: 'assistant action',
       lastContent: '线上 error 日志：catstory',
@@ -749,8 +746,8 @@ describe('GroupQueue', () => {
     const oneShotPromise = queue.runOneShot(
       'assistant:main',
       {
-        groupFolder: 'assistant_main',
-        groupName: '桌面个人助手',
+        agentFolder: 'assistant_main',
+        agentName: '桌面个人助手',
         promptSummary: '排查',
       },
       oneShotFn,
@@ -795,8 +792,8 @@ describe('GroupQueue', () => {
     const oneShotPromise = queue.runOneShot(
       'assistant:main',
       {
-        groupFolder: 'assistant_main',
-        groupName: '桌面个人助手',
+        agentFolder: 'assistant_main',
+        agentName: '桌面个人助手',
         promptSummary: '排查',
       },
       async () => 'ok',
@@ -843,8 +840,8 @@ describe('GroupQueue', () => {
     const oneShotPromise = queue.runOneShot(
       'assistant:main',
       {
-        groupFolder: 'assistant_main',
-        groupName: '桌面个人助手',
+        agentFolder: 'assistant_main',
+        agentName: '桌面个人助手',
         promptSummary: '排查',
       },
       async () => 'ok',
@@ -890,8 +887,8 @@ describe('GroupQueue', () => {
     const oneShotPromise = queue.runOneShot(
       'assistant:main',
       {
-        groupFolder: 'assistant_main',
-        groupName: '桌面个人助手',
+        agentFolder: 'assistant_main',
+        agentName: '桌面个人助手',
         promptSummary: '排查',
       },
       async () => 'ok',
@@ -942,8 +939,8 @@ describe('GroupQueue', () => {
     const oneShotPromise = queue.runOneShot(
       'assistant:main',
       {
-        groupFolder: 'assistant_main',
-        groupName: '桌面个人助手',
+        agentFolder: 'assistant_main',
+        agentName: '桌面个人助手',
         promptSummary: '排查',
       },
       async () => 'ok',
@@ -979,8 +976,8 @@ describe('GroupQueue', () => {
     const firstPromise = queue.runOneShot(
       'assistant:main',
       {
-        groupFolder: 'assistant_main',
-        groupName: '桌面个人助手',
+        agentFolder: 'assistant_main',
+        agentName: '桌面个人助手',
         promptSummary: '排查',
         dedupeKey: 'inbox:item-1:investigate',
       },
@@ -990,8 +987,8 @@ describe('GroupQueue', () => {
       queue.runOneShot(
         'assistant:main',
         {
-          groupFolder: 'assistant_main',
-          groupName: '桌面个人助手',
+          agentFolder: 'assistant_main',
+          agentName: '桌面个人助手',
           promptSummary: '排查',
           dedupeKey: 'inbox:item-1:investigate',
         },
@@ -1004,7 +1001,7 @@ describe('GroupQueue', () => {
     await expect(firstPromise).resolves.toBe('ok');
   });
 
-  it('rejects one-shot when the per-group one-shot queue is full', async () => {
+  it('rejects one-shot when the per-agent one-shot queue is full', async () => {
     let resolveProcess: () => void;
 
     queue.setProcessMessagesFn(async () => {
@@ -1019,8 +1016,8 @@ describe('GroupQueue', () => {
     const firstPromise = queue.runOneShot(
       'assistant:main',
       {
-        groupFolder: 'assistant_main',
-        groupName: '桌面个人助手',
+        agentFolder: 'assistant_main',
+        agentName: '桌面个人助手',
         promptSummary: '排查 1',
         dedupeKey: 'one-shot-1',
       },
@@ -1029,8 +1026,8 @@ describe('GroupQueue', () => {
     const secondPromise = queue.runOneShot(
       'assistant:main',
       {
-        groupFolder: 'assistant_main',
-        groupName: '桌面个人助手',
+        agentFolder: 'assistant_main',
+        agentName: '桌面个人助手',
         promptSummary: '排查 2',
         dedupeKey: 'one-shot-2',
       },
@@ -1040,8 +1037,8 @@ describe('GroupQueue', () => {
       queue.runOneShot(
         'assistant:main',
         {
-          groupFolder: 'assistant_main',
-          groupName: '桌面个人助手',
+          agentFolder: 'assistant_main',
+          agentName: '桌面个人助手',
           promptSummary: '排查 3',
           dedupeKey: 'one-shot-3',
         },
@@ -1071,8 +1068,8 @@ describe('GroupQueue', () => {
     const oneShotPromise = queue.runOneShot(
       'assistant:main',
       {
-        groupFolder: 'assistant_main',
-        groupName: '桌面个人助手',
+        agentFolder: 'assistant_main',
+        agentName: '桌面个人助手',
         promptSummary: '排查',
       },
       oneShotFn,
@@ -1089,7 +1086,7 @@ describe('GroupQueue', () => {
     expect(oneShotFn).not.toHaveBeenCalled();
   });
 
-  it('drains pending messages before queued one-shot for the same group', async () => {
+  it('drains pending messages before queued one-shot for the same agent', async () => {
     const executionOrder: string[] = [];
     let resolveFirst: () => void;
 
@@ -1108,8 +1105,8 @@ describe('GroupQueue', () => {
     const oneShotPromise = queue.runOneShot(
       'assistant:main',
       {
-        groupFolder: 'assistant_main',
-        groupName: '桌面个人助手',
+        agentFolder: 'assistant_main',
+        agentName: '桌面个人助手',
         promptSummary: '排查',
       },
       async () => {
@@ -1158,8 +1155,8 @@ describe('GroupQueue', () => {
     const oneShotPromise = queue.runOneShot(
       'assistant:main',
       {
-        groupFolder: 'assistant_main',
-        groupName: '桌面个人助手',
+        agentFolder: 'assistant_main',
+        agentName: '桌面个人助手',
         promptSummary: '排查',
       },
       async () => 'should-not-run',

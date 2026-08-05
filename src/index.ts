@@ -20,8 +20,18 @@ import {
   ICARUS_INTERNAL_API_TOKEN,
   MYSQL_PROXY_PORT,
   POLL_INTERVAL,
+  STORE_DIR,
   TIMEZONE,
   TRIGGER_PATTERN,
+  WORKFLOW_CODEX_APPROVAL_POLICY,
+  WORKFLOW_CODEX_BINARY,
+  WORKFLOW_CODEX_CWD,
+  WORKFLOW_CODEX_DESKTOP_VISIBILITY_CONFIRMED,
+  WORKFLOW_CODEX_MODEL,
+  WORKFLOW_CODEX_SANDBOX,
+  WORKFLOW_CONTAINER_AGENT_JID,
+  WORKFLOW_EXECUTION_ENABLED,
+  WORKFLOW_EXECUTION_POLL_MS,
 } from './config.js';
 import {
   resolveCredentialProxyExecutionModel,
@@ -36,7 +46,7 @@ import {
 import {
   ContainerOutput,
   runContainerAgent,
-  writeGroupsSnapshot,
+  writeAgentsSnapshot,
   writeTasksSnapshot,
 } from './container-runner.js';
 import {
@@ -61,16 +71,16 @@ import {
   clearMessages,
   clearSession,
   getAllChats,
-  getAllRegisteredGroups,
+  getAllRegisteredAgents,
   getAllSessions,
   getAllTasks,
   getDelegationsByTarget,
   getMessagesSince,
   getNewMessages,
-  getRegisteredGroup,
+  getRegisteredAgent,
   getRouterState,
   initDatabase,
-  setRegisteredGroup,
+  setRegisteredAgent,
   setRouterState,
   setSession,
   storeChatMetadata,
@@ -82,8 +92,8 @@ import {
   type FeatureDeletionSummary,
 } from './features/index.js';
 import { backfillWebMessageModel, clearWebMessages } from './web-db.js';
-import { GroupQueue, OneShotAgentSlotEvent } from './group-queue.js';
-import { resolveGroupFolderPath } from './group-folder.js';
+import { AgentQueue, OneShotAgentSlotEvent } from './agent-queue.js';
+import { resolveAgentFolderPath } from './agent-folder.js';
 import { startIpcWatcher } from './ipc.js';
 import {
   findChannel,
@@ -128,10 +138,10 @@ import {
   Channel,
   InteractiveCard,
   NewMessage,
-  RegisteredGroup,
+  RegisteredAgent,
 } from './types.js';
 import { logger } from './logger.js';
-import { buildMemoryPackForGroup } from './memory-pack.js';
+import { buildMemoryPackForAgent } from './memory-pack.js';
 import {
   clearModelResolutionsForRun,
   consumeModelResolution,
@@ -140,13 +150,19 @@ import { selectModel } from './model-selector.js';
 import { InternalAgentRunOnceService } from './internal-agent-run-once/service.js';
 import { InternalAgentChatService } from './internal-agent-run-once/chat-service.js';
 import { startInternalAgentRunOnceServer } from './internal-agent-run-once/server.js';
+import { WorkflowRuntimeConnectionFactory } from './workflow-runtime/store/runtime-store/index.js';
+import { WorkflowExecutionAdapterRegistry } from './workflow-execution/adapter-registry.js';
+import { ContainerAgentAdapter } from './workflow-execution/container-agent-adapter.js';
+import { CodexTaskAdapter } from './workflow-execution/codex-task-adapter.js';
+import { WorkflowAdapterExecutionStore } from './workflow-execution/execution-store.js';
+import { WorkflowExecutionWorker } from './workflow-execution/worker.js';
 
 // Re-export for backwards compatibility during refactor
 export { escapeXml, formatMessages } from './router.js';
 
 let lastTimestamp = '';
 let sessions: Record<string, string> = {};
-let registeredGroups: Record<string, RegisteredGroup> = {};
+let registeredAgents: Record<string, RegisteredAgent> = {};
 let lastAgentTimestamp: Record<string, string> = {};
 let messageLoopRunning = false;
 
@@ -195,7 +211,7 @@ type AgentExecutionContext = {
 };
 
 const channels: Channel[] = [];
-const queue = new GroupQueue();
+const queue = new AgentQueue();
 const pendingSessionCleanup = new Set<string>();
 const activeRunIds = new Map<string, string>();
 const pendingQueryBatches = new Map<string, PendingQueryBatch>();
@@ -206,31 +222,31 @@ const activeMessageQueryTraces = new Map<
 const pendingRetryLinksByChat = new Map<string, RetryLink[]>();
 const oneShotTraceContexts = new Map<string, OneShotTraceContext[]>();
 
-function removeSessionDir(groupFolder: string): void {
-  const sessionDir = path.join(DATA_DIR, 'sessions', groupFolder, '.claude');
+function removeSessionDir(agentFolder: string): void {
+  const sessionDir = path.join(DATA_DIR, 'sessions', agentFolder, '.claude');
   if (fs.existsSync(sessionDir)) {
     fs.rmSync(sessionDir, { recursive: true });
   }
 }
 
-function resetGroupSession(
-  groupJid: string,
+function resetAgentSession(
+  agentJid: string,
   opts: {
     deleteSessionDir?: boolean;
   } = {},
 ): { reset: boolean } {
-  const group = registeredGroups[groupJid];
-  if (!group) return { reset: false };
+  const agent = registeredAgents[agentJid];
+  if (!agent) return { reset: false };
 
-  const hasActiveContainer = queue.hasActiveContainer(groupJid);
+  const hasActiveContainer = queue.hasActiveContainer(agentJid);
 
-  clearSession(group.folder);
-  delete sessions[group.folder];
-  bumpSessionResetEpoch(group.folder);
+  clearSession(agent.folder);
+  delete sessions[agent.folder];
+  bumpSessionResetEpoch(agent.folder);
 
   if (opts.deleteSessionDir) {
-    if (hasActiveContainer) pendingSessionCleanup.add(group.folder);
-    else removeSessionDir(group.folder);
+    if (hasActiveContainer) pendingSessionCleanup.add(agent.folder);
+    else removeSessionDir(agent.folder);
   }
 
   return { reset: true };
@@ -238,18 +254,18 @@ function resetGroupSession(
 
 async function resetSessionsForScope(opts: {
   all?: boolean;
-  groupJid?: string;
+  agentJid?: string;
   deleteSessionDir?: boolean;
 }): Promise<{ resetCount: number }> {
   const targets = opts.all
-    ? Object.keys(registeredGroups)
-    : opts.groupJid
-      ? [opts.groupJid]
+    ? Object.keys(registeredAgents)
+    : opts.agentJid
+      ? [opts.agentJid]
       : [];
 
   let resetCount = 0;
-  for (const groupJid of targets) {
-    const result = resetGroupSession(groupJid, {
+  for (const agentJid of targets) {
+    const result = resetAgentSession(agentJid, {
       deleteSessionDir: opts.deleteSessionDir,
     });
     if (result.reset) resetCount += 1;
@@ -314,7 +330,7 @@ export function removeOneShotTraceContext(
 }
 
 function handleOneShotSlotTraceEvent(event: OneShotAgentSlotEvent): void {
-  const contexts = oneShotTraceContexts.get(event.groupJid);
+  const contexts = oneShotTraceContexts.get(event.agentJid);
   if (!contexts?.length) return;
 
   for (const context of contexts) {
@@ -340,13 +356,13 @@ function handleOneShotSlotTraceEvent(event: OneShotAgentSlotEvent): void {
         status: isTimeout ? 'error' : isAcquired ? 'success' : 'running',
         severity: isTimeout ? 'error' : 'info',
         summary: isTimeout
-          ? `Agent busy timeout for ${event.groupJid}`
+          ? `Agent busy timeout for ${event.agentJid}`
           : isAcquired
             ? 'One-shot agent slot acquired'
             : 'Waiting for one-shot agent slot',
         payload: {
           originalEventName: event.eventName,
-          groupJid: event.groupJid,
+          agentJid: event.agentJid,
           runId: context.runId ?? null,
           oneShotId: event.oneShotId,
           queueName: 'one-shot-agent-slot',
@@ -367,7 +383,7 @@ function handleOneShotSlotTraceEvent(event: OneShotAgentSlotEvent): void {
       logger.warn(
         {
           err,
-          groupJid: event.groupJid,
+          agentJid: event.agentJid,
           queryId: context.queryId,
           eventName: event.eventName,
         },
@@ -423,10 +439,10 @@ function isEarlierCursor(candidate: string, current: string | null): boolean {
 }
 
 function removeQueuedIpcMessagesForQuery(
-  groupFolder: string,
+  agentFolder: string,
   queryId: string,
 ): number {
-  const inputDir = path.join(DATA_DIR, 'ipc', groupFolder, 'input');
+  const inputDir = path.join(DATA_DIR, 'ipc', agentFolder, 'input');
   if (!fs.existsSync(inputDir)) return 0;
 
   let removed = 0;
@@ -442,7 +458,7 @@ function removeQueuedIpcMessagesForQuery(
       removed += 1;
     } catch (err) {
       logger.warn(
-        { err, groupFolder, queryId, file },
+        { err, agentFolder, queryId, file },
         'Failed to inspect queued IPC message during retry recovery',
       );
     }
@@ -542,7 +558,7 @@ function createMessageQueryTrace(params: {
   queryId: string;
   runId: string;
   chatJid: string;
-  groupFolder: string;
+  agentFolder: string;
   delegationId?: string;
   sourceRefId?: string | null;
   selectedModel: string;
@@ -568,7 +584,7 @@ function createMessageQueryTrace(params: {
         ? (params.delegationId ?? null)
         : (params.sourceRefId ?? null),
     chatJid: params.chatJid,
-    groupFolder: params.groupFolder,
+    agentFolder: params.agentFolder,
     delegationId: params.delegationId,
     selectedModel: params.selectedModel,
     selectedModelReason: params.selectedModelReason,
@@ -745,9 +761,7 @@ function finishMessageQueryTrace(
       status,
       severity: status === 'error' ? 'error' : 'info',
       summary:
-        status === 'error'
-          ? 'Delegation failed'
-          : 'Delegation completed',
+        status === 'error' ? 'Delegation failed' : 'Delegation completed',
       payload: {
         delegationId: record.delegation_id,
       },
@@ -814,11 +828,11 @@ function markMergedMessageQueryTrace(
 
 async function handleAskAnswerCommand(opts: {
   chatJid: string;
-  group: RegisteredGroup;
+  agent: RegisteredAgent;
   channel: Channel;
   messages: NewMessage[];
 }): Promise<boolean> {
-  const { chatJid, group, channel, messages } = opts;
+  const { chatJid, agent, channel, messages } = opts;
   const cmdMsg = messages.find(
     (m) => parseAskAnswerCommand(m.content, TRIGGER_PATTERN) !== null,
   );
@@ -839,16 +853,16 @@ async function handleAskAnswerCommand(opts: {
     return true;
   }
 
-  const effectiveGroupFolder = group.folder;
+  const effectiveAgentFolder = agent.folder;
 
   const result = await handleAskQuestionResponse({
     requestId: parsed.requestId,
-    groupFolder: effectiveGroupFolder,
+    agentFolder: effectiveAgentFolder,
     userId: cmdMsg.sender || 'unknown',
     answer: parsed.answer,
     skip: parsed.answer.toLowerCase() === 'skip',
     reject: parsed.answer.toLowerCase() === 'reject',
-    registeredGroups,
+    registeredAgents,
     sendCard: async (jid, card) => {
       const ch = findChannel(channels, jid);
       return ch?.sendCard ? ch.sendCard(jid, card) : undefined;
@@ -864,10 +878,10 @@ async function handleAskAnswerCommand(opts: {
   if (!result.ok && !result.completed) {
     await dispatchCurrentAskQuestion({
       requestId: parsed.requestId,
-      groupFolder: effectiveGroupFolder,
+      agentFolder: effectiveAgentFolder,
       validationError: result.userMessage,
       validationErrors: result.validationErrors,
-      registeredGroups,
+      registeredAgents,
       sendCard: async (jid, card) => {
         const ch = findChannel(channels, jid);
         return ch?.sendCard ? ch.sendCard(jid, card) : undefined;
@@ -892,36 +906,36 @@ function loadState(): void {
     lastAgentTimestamp = {};
   }
   sessions = getAllSessions();
-  registeredGroups = getAllRegisteredGroups();
+  registeredAgents = getAllRegisteredAgents();
   logger.info(
-    { groupCount: Object.keys(registeredGroups).length },
+    { agentCount: Object.keys(registeredAgents).length },
     'State loaded',
   );
 }
 
-function reloadRegisteredGroupsFromDb(): void {
-  registeredGroups = getAllRegisteredGroups();
+function reloadRegisteredAgentsFromDb(): void {
+  registeredAgents = getAllRegisteredAgents();
   logger.info(
-    { groupCount: Object.keys(registeredGroups).length },
-    'Registered groups reloaded',
+    { agentCount: Object.keys(registeredAgents).length },
+    'Registered agents reloaded',
   );
 }
 
-async function stopFeatureGroupsForDeletion(
-  groups: FeatureDeletionSummary['groups'],
+async function stopFeatureAgentsForDeletion(
+  agents: FeatureDeletionSummary['agents'],
 ): Promise<void> {
-  for (const group of groups) {
-    const stopResult = await queue.stopAgent(group.jid);
+  for (const agent of agents) {
+    const stopResult = await queue.stopAgent(agent.jid);
     if (!stopResult.ok && stopResult.error !== 'Agent is not active') {
       logger.warn(
-        { groupJid: group.jid, featureGroup: group, error: stopResult.error },
-        'Failed to stop feature group before deletion',
+        { agentJid: agent.jid, featureAgent: agent, error: stopResult.error },
+        'Failed to stop feature agent before deletion',
       );
       throw new Error(
-        `Failed to stop feature group ${group.jid}: ${stopResult.error}`,
+        `Failed to stop feature agent ${agent.jid}: ${stopResult.error}`,
       );
     }
-    queue.purgeGroupState(group.jid, 'feature_delete_data');
+    queue.purgeAgentState(agent.jid, 'feature_delete_data');
   }
 }
 
@@ -930,39 +944,39 @@ function saveState(): void {
   setRouterState('last_agent_timestamp', JSON.stringify(lastAgentTimestamp));
 }
 
-function registerGroup(jid: string, group: RegisteredGroup): void {
-  let groupDir: string;
+function registerAgent(jid: string, agent: RegisteredAgent): void {
+  let agentDir: string;
   try {
-    groupDir = resolveGroupFolderPath(group.folder);
+    agentDir = resolveAgentFolderPath(agent.folder);
   } catch (err) {
     logger.warn(
-      { jid, folder: group.folder, err },
-      'Rejecting group registration with invalid folder',
+      { jid, folder: agent.folder, err },
+      'Rejecting agent registration with invalid folder',
     );
     return;
   }
 
-  registeredGroups[jid] = group;
-  setRegisteredGroup(jid, group);
+  registeredAgents[jid] = agent;
+  setRegisteredAgent(jid, agent);
 
-  // Create group folder
-  fs.mkdirSync(path.join(groupDir, 'logs'), { recursive: true });
+  // Create agent folder
+  fs.mkdirSync(path.join(agentDir, 'logs'), { recursive: true });
 
   logger.info(
-    { jid, name: group.name, folder: group.folder },
-    'Group registered',
+    { jid, name: agent.name, folder: agent.folder },
+    'Agent registered',
   );
 }
 
 /**
- * Get available groups list for the agent.
- * Returns registered groups, enriched with last-activity from chats table.
+ * Get available agents list for the agent.
+ * Returns registered agents, enriched with last-activity from chats table.
  */
-export function getAvailableGroups(): import('./container-runner.js').AvailableGroup[] {
+export function getAvailableAgents(): import('./container-runner.js').AvailableAgent[] {
   const chats = getAllChats();
   const chatMap = new Map(chats.map((c) => [c.jid, c]));
 
-  return Object.entries(registeredGroups).map(([jid, g]) => ({
+  return Object.entries(registeredAgents).map(([jid, g]) => ({
     jid,
     name: g.name,
     lastActivity: chatMap.get(jid)?.last_message_time || '',
@@ -972,10 +986,10 @@ export function getAvailableGroups(): import('./container-runner.js').AvailableG
 }
 
 /** @internal - exported for testing */
-export function _setRegisteredGroups(
-  groups: Record<string, RegisteredGroup>,
+export function _setRegisteredAgents(
+  agents: Record<string, RegisteredAgent>,
 ): void {
-  registeredGroups = groups;
+  registeredAgents = agents;
 }
 
 /** @internal - exported for testing */
@@ -986,12 +1000,12 @@ export function _setSessionsForTest(
 }
 
 /**
- * Process all pending messages for a group.
- * Called by the GroupQueue when it's this group's turn.
+ * Process all pending messages for an Agent.
+ * Called by the AgentQueue when it's this agent's turn.
  */
-async function processGroupMessages(chatJid: string): Promise<boolean> {
-  const group = registeredGroups[chatJid];
-  if (!group) return true;
+async function processAgentMessages(chatJid: string): Promise<boolean> {
+  const agent = registeredAgents[chatJid];
+  if (!agent) return true;
 
   const channel = findChannel(channels, chatJid);
   if (!channel) {
@@ -999,7 +1013,7 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
     return true;
   }
 
-  const isMainGroup = group.isMain === true;
+  const isMainAgent = agent.isMain === true;
 
   const sinceTimestamp = lastAgentTimestamp[chatJid] || '';
   const missedMessages = getMessagesSince(
@@ -1010,7 +1024,7 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
 
   if (missedMessages.length === 0) return true;
 
-  // --- /clear command: wipe conversation context for this group ---
+  // --- /clear command: wipe conversation context for this agent ---
   const clearMsg = missedMessages.find((m) => {
     const content = m.content.trim().replace(TRIGGER_PATTERN, '').trim();
     return content === '/clear';
@@ -1026,16 +1040,16 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
       clearMessages(chatJid);
       if (channel.name === 'web') clearWebMessages(chatJid);
       if (channel.name === 'assistant') clearAssistantChatMessages(chatJid);
-      resetGroupSession(chatJid, { deleteSessionDir: true });
+      resetAgentSession(chatJid, { deleteSessionDir: true });
       await channel.sendMessage(chatJid, '数据已清理完毕，可正常发送命令啦');
-      logger.info({ group: group.name }, '/clear: context reset');
+      logger.info({ agent: agent.name }, '/clear: context reset');
     } else {
       await channel.sendMessage(
         chatJid,
         'Permission denied: only admin can clear context.',
       );
       logger.info(
-        { group: group.name, sender: clearMsg.sender },
+        { agent: agent.name, sender: clearMsg.sender },
         '/clear: permission denied',
       );
     }
@@ -1045,7 +1059,7 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
   if (
     await handleAskAnswerCommand({
       chatJid,
-      group,
+      agent,
       channel,
       messages: missedMessages,
     })
@@ -1056,8 +1070,8 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
   // --- Session command interception (before trigger check) ---
   const cmdResult = await handleSessionCommand({
     missedMessages,
-    isMainGroup,
-    groupName: group.name,
+    isMainAgent,
+    agentName: agent.name,
     triggerPattern: TRIGGER_PATTERN,
     timezone: TIMEZONE,
     deps: {
@@ -1065,25 +1079,25 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
       setTyping: (typing) =>
         channel.setTyping?.(chatJid, typing) ?? Promise.resolve(),
       runAgent: (prompt, onOutput) =>
-        runAgent(group, prompt, chatJid, onOutput),
+        runAgent(agent, prompt, chatJid, onOutput),
       closeStdin: () =>
         queue.closeStdin(chatJid, {
           reason: 'session_command_handler',
-          details: { groupName: group.name },
+          details: { agentName: agent.name },
         }),
       advanceCursor: (ts) => {
         lastAgentTimestamp[chatJid] = ts;
         saveState();
       },
       resetSession: () => {
-        resetGroupSession(chatJid);
+        resetAgentSession(chatJid);
       },
       formatMessages,
       canSenderInteract: (msg) => {
         const hasTrigger = TRIGGER_PATTERN.test(msg.content.trim());
-        const reqTrigger = !isMainGroup && group.requiresTrigger !== false;
+        const reqTrigger = !isMainAgent && agent.requiresTrigger !== false;
         return (
-          isMainGroup ||
+          isMainAgent ||
           !reqTrigger ||
           (hasTrigger &&
             (msg.is_from_me ||
@@ -1095,8 +1109,8 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
   if (cmdResult.handled) return cmdResult.success;
   // --- End session command interception ---
 
-  // For non-main groups, check if trigger is required and present
-  if (!isMainGroup && group.requiresTrigger !== false) {
+  // For non-main agents, check if trigger is required and present
+  if (!isMainAgent && agent.requiresTrigger !== false) {
     const allowlistCfg = loadSenderAllowlist();
     const hasTrigger = missedMessages.some(
       (m) =>
@@ -1109,7 +1123,7 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
   }
 
   let prompt = formatMessages(missedMessages, TIMEZONE);
-  const memoryPack = buildMemoryPackForGroup(group.folder, prompt);
+  const memoryPack = buildMemoryPackForAgent(agent.folder, prompt);
   if (memoryPack) {
     prompt = `${memoryPack}${prompt}`;
   }
@@ -1122,7 +1136,7 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
   saveState();
 
   logger.info(
-    { group: group.name, messageCount: missedMessages.length },
+    { agent: agent.name, messageCount: missedMessages.length },
     'Processing messages',
   );
 
@@ -1130,7 +1144,7 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
   const lastMsg = missedMessages[missedMessages.length - 1];
   queue.setAgentInfo(chatJid, {
     promptSummary: prompt.slice(0, 100),
-    groupName: group.name,
+    agentName: agent.name,
     lastSender: lastMsg.sender_name,
     lastContent: lastMsg.content.slice(0, 200),
     lastTime: lastMsg.timestamp,
@@ -1143,13 +1157,13 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
     if (idleTimer) clearTimeout(idleTimer);
     idleTimer = setTimeout(() => {
       logger.debug(
-        { group: group.name },
+        { agent: agent.name },
         'Idle timeout, closing container stdin',
       );
       queue.closeStdin(chatJid, {
         reason: 'idle_timeout',
         details: {
-          groupName: group.name,
+          agentName: agent.name,
           idleTimeoutMs: IDLE_TIMEOUT,
           runId,
           initialQueryId,
@@ -1164,7 +1178,7 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
   const runId = createExecutionId();
   const initialQueryId = createExecutionId();
   const promptHash = crypto.createHash('sha256').update(prompt).digest('hex');
-  const executionContext = resolveExecutionContext(group, missedMessages);
+  const executionContext = resolveExecutionContext(agent, missedMessages);
   const isDelegationRun = isDelegationExecutionContext(executionContext);
   const isWecomDelegationRun =
     channel.name === 'wecom' &&
@@ -1174,7 +1188,7 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
   let sentMessageInWecomDelegationRun = false;
   const modelSelection = await selectModel({
     prompt,
-    isMain: isMainGroup,
+    isMain: isMainAgent,
   });
   const retryLink = consumeRetryLink(
     chatJid,
@@ -1185,7 +1199,7 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
     queryId: initialQueryId,
     runId,
     chatJid,
-    groupFolder: group.folder,
+    agentFolder: agent.folder,
     delegationId: executionContext?.delegationId,
     sourceRefId: lastMsg.id,
     selectedModel: modelSelection.selectedModel,
@@ -1217,7 +1231,7 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
   });
   logger.info(
     {
-      group: group.name,
+      agent: agent.name,
       chatJid,
       runId,
       queryId: initialQueryId,
@@ -1228,7 +1242,7 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
   );
 
   const output = await runAgent(
-    group,
+    agent,
     prompt,
     chatJid,
     async (result) => {
@@ -1240,7 +1254,7 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
         if (fallbackTraceState) {
           logger.warn(
             {
-              group: group.name,
+              agent: agent.name,
               chatJid,
               outputQueryId: queryId,
               fallbackQueryId: initialQueryId,
@@ -1267,7 +1281,7 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
         if (isDelegationRun && isCompleteDelegationToolResult(result)) {
           queue.closeStdin(chatJid, {
             reason: 'delegation_complete_tool_result',
-            details: { groupName: group.name, runId, queryId },
+            details: { agentName: agent.name, runId, queryId },
           });
         }
         if (isWecomDelegationRun && isSendMessageToolResult(result)) {
@@ -1276,7 +1290,7 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
         if (!traceState) {
           logger.warn(
             {
-              group: group.name,
+              agent: agent.name,
               chatJid,
               queryId,
               eventName: result.event.name,
@@ -1318,7 +1332,7 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
         if (!traceState) {
           logger.warn(
             {
-              group: group.name,
+              agent: agent.name,
               chatJid,
               queryId,
               runId: result.runId,
@@ -1362,7 +1376,7 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
           },
         });
         logger.info(
-          { group: group.name },
+          { agent: agent.name },
           `Agent output: ${raw.slice(0, 200)}`,
         );
         if (text) {
@@ -1416,7 +1430,7 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
       if (finalized.applied) {
         logger.info(
           {
-            group: group.name,
+            agent: agent.name,
             chatJid,
             runId: finalized.batch?.runId,
             queryId: finalized.batch?.queryId,
@@ -1444,7 +1458,7 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
         if (isDelegationRun) {
           queue.closeStdin(chatJid, {
             reason: 'delegation_session_update',
-            details: { groupName: group.name, runId, queryId },
+            details: { agentName: agent.name, runId, queryId },
           });
         } else {
           queue.notifyIdle(chatJid);
@@ -1468,7 +1482,7 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
         if (isDelegationRun) {
           queue.closeStdin(chatJid, {
             reason: 'delegation_session_update',
-            details: { groupName: group.name, runId, queryId },
+            details: { agentName: agent.name, runId, queryId },
           });
         } else {
           queue.notifyIdle(chatJid);
@@ -1479,7 +1493,7 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
         if (isDelegationRun) {
           queue.closeStdin(chatJid, {
             reason: 'delegation_error',
-            details: { groupName: group.name, runId, queryId },
+            details: { agentName: agent.name, runId, queryId },
           });
         }
         const error = result.error || 'Agent execution failed';
@@ -1487,7 +1501,7 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
         if (!traceState) {
           logger.warn(
             {
-              group: group.name,
+              agent: agent.name,
               chatJid,
               queryId,
               runId: result.runId,
@@ -1531,7 +1545,7 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
   if (isDelegationRun) {
     queue.closeStdin(chatJid, {
       reason: 'delegation_run_finished',
-      details: { groupName: group.name, runId, initialQueryId },
+      details: { agentName: agent.name, runId, initialQueryId },
     });
   }
   let shouldRetryUnconsumedPipedMessages = false;
@@ -1559,7 +1573,7 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
         },
       });
       const removedIpcMessages = removeQueuedIpcMessagesForQuery(
-        group.folder,
+        agent.folder,
         queryId,
       );
       const errorMessage =
@@ -1595,7 +1609,7 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
       });
       logger.warn(
         {
-          group: group.name,
+          agent: agent.name,
           chatJid,
           queryId,
           runId,
@@ -1631,11 +1645,11 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
   }
 
   // Deferred .claude/ cleanup: safe now that the container has exited
-  if (pendingSessionCleanup.has(group.folder)) {
-    pendingSessionCleanup.delete(group.folder);
-    removeSessionDir(group.folder);
+  if (pendingSessionCleanup.has(agent.folder)) {
+    pendingSessionCleanup.delete(agent.folder);
+    removeSessionDir(agent.folder);
     await channel.sendMessage(chatJid, '数据已清理完毕，可正常发送命令啦');
-    logger.info({ group: group.name }, '/clear: deferred cleanup completed');
+    logger.info({ agent: agent.name }, '/clear: deferred cleanup completed');
   }
 
   if (output === 'error' || sessionHadError) {
@@ -1644,7 +1658,7 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
     // the user got their response and re-processing would send duplicates.
     if (sessionOutputSent) {
       logger.warn(
-        { group: group.name },
+        { agent: agent.name },
         'Agent error after output was sent, skipping cursor rollback to prevent duplicates',
       );
       return true;
@@ -1653,7 +1667,7 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
     lastAgentTimestamp[chatJid] = previousCursor;
     saveState();
     logger.warn(
-      { group: group.name },
+      { agent: agent.name },
       'Agent error, rolled back message cursor for retry',
     );
     return false;
@@ -1663,7 +1677,7 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
 }
 
 async function runAgent(
-  group: RegisteredGroup,
+  agent: RegisteredAgent,
   prompt: string,
   chatJid: string,
   onOutput?: (output: ContainerOutput) => Promise<void>,
@@ -1675,33 +1689,33 @@ async function runAgent(
   isolatedSession?: boolean,
   isOneShot?: boolean,
 ): Promise<'success' | 'error'> {
-  const isMain = group.isMain === true;
-  const sessionId = isolatedSession ? undefined : sessions[group.folder];
-  const sessionResetEpoch = getSessionResetEpoch(group.folder);
+  const isMain = agent.isMain === true;
+  const sessionId = isolatedSession ? undefined : sessions[agent.folder];
+  const sessionResetEpoch = getSessionResetEpoch(agent.folder);
   const isSessionWriteCurrent = () =>
-    isSessionResetEpochCurrent(group.folder, sessionResetEpoch);
+    isSessionResetEpochCurrent(agent.folder, sessionResetEpoch);
   const writeSessionIfCurrent = (sessionIdToWrite: string): boolean => {
     if (!isSessionWriteCurrent()) {
       logger.info(
         {
-          group: group.name,
+          agent: agent.name,
           sessionId: sessionIdToWrite,
           runEpoch: sessionResetEpoch,
-          currentEpoch: getSessionResetEpoch(group.folder),
+          currentEpoch: getSessionResetEpoch(agent.folder),
         },
         'Skipping stale session update after reset',
       );
       return false;
     }
-    if (pendingSessionCleanup.has(group.folder)) {
+    if (pendingSessionCleanup.has(agent.folder)) {
       logger.info(
-        { group: group.name, sessionId: sessionIdToWrite },
+        { agent: agent.name, sessionId: sessionIdToWrite },
         'Skipping session update while session cleanup is pending',
       );
       return false;
     }
-    sessions[group.folder] = sessionIdToWrite;
-    setSession(group.folder, sessionIdToWrite);
+    sessions[agent.folder] = sessionIdToWrite;
+    setSession(agent.folder, sessionIdToWrite);
     return true;
   };
   const resolvedRunId = runId || createExecutionId();
@@ -1711,7 +1725,7 @@ async function runAgent(
     : await selectModel({ prompt, isMain });
   logger.info(
     {
-      group: group.name,
+      agent: agent.name,
       chatJid,
       runId: resolvedRunId,
       queryId: resolvedInitialQueryId,
@@ -1721,14 +1735,14 @@ async function runAgent(
     'Selected model for container input',
   );
 
-  // Update tasks snapshot for container to read (filtered by group)
+  // Update tasks snapshot for container to read (filtered by agent)
   const tasks = getAllTasks();
   writeTasksSnapshot(
-    group.folder,
+    agent.folder,
     isMain,
     tasks.map((t) => ({
       id: t.id,
-      groupFolder: t.group_folder,
+      agentFolder: t.agent_folder,
       prompt: t.prompt,
       schedule_type: t.schedule_type,
       schedule_value: t.schedule_value,
@@ -1737,28 +1751,28 @@ async function runAgent(
     })),
   );
 
-  // Update available groups snapshot (main group only can see all groups)
-  const availableGroups = getAvailableGroups();
-  // For main group, filter to same-channel groups only
-  let filteredGroups = availableGroups;
+  // Update available agents snapshot (main agent only can see all agents)
+  const availableAgents = getAvailableAgents();
+  // For main agent, filter to same-channel agents only
+  let filteredAgents = availableAgents;
   if (isMain) {
     const mainCh = findChannel(channels, chatJid);
     if (mainCh) {
-      filteredGroups = availableGroups.filter((g) => {
-        const targetGroup = registeredGroups[g.jid];
+      filteredAgents = availableAgents.filter((availableAgent) => {
+        const targetAgent = registeredAgents[availableAgent.jid];
         return (
-          mainCh.ownsJid(g.jid) ||
-          (targetGroup &&
-            isAllowedCrossChannelDelegationTargetFolder(targetGroup.folder))
+          mainCh.ownsJid(availableAgent.jid) ||
+          (targetAgent &&
+            isAllowedCrossChannelDelegationTargetFolder(targetAgent.folder))
         );
       });
     }
   }
-  writeGroupsSnapshot(
-    group.folder,
+  writeAgentsSnapshot(
+    agent.folder,
     isMain,
-    filteredGroups,
-    new Set(Object.keys(registeredGroups)),
+    filteredAgents,
+    new Set(Object.keys(registeredAgents)),
   );
 
   // Wrap onOutput to track session ID from streamed results
@@ -1782,7 +1796,7 @@ async function runAgent(
   try {
     activeRunIds.set(chatJid, resolvedRunId);
     const output = await runContainerAgent(
-      group,
+      agent,
       {
         prompt,
         sessionId,
@@ -1791,7 +1805,7 @@ async function runAgent(
         requireResult,
         isolatedSession,
         isOneShot,
-        groupFolder: group.folder,
+        agentFolder: agent.folder,
         chatJid,
         isMain,
         assistantName: ASSISTANT_NAME,
@@ -1799,7 +1813,7 @@ async function runAgent(
         executionContext,
       },
       (proc, containerName) =>
-        queue.registerProcess(chatJid, proc, containerName, group.folder),
+        queue.registerProcess(chatJid, proc, containerName, agent.folder),
       wrappedOnOutput,
     );
 
@@ -1811,12 +1825,12 @@ async function runAgent(
 
     if (isSessionInvalid) {
       logger.warn(
-        { group: group.name, sessionId: output.newSessionId },
+        { agent: agent.name, sessionId: output.newSessionId },
         'Session invalid, clearing for retry',
       );
-      clearSession(group.folder);
-      delete sessions[group.folder];
-      bumpSessionResetEpoch(group.folder);
+      clearSession(agent.folder);
+      delete sessions[agent.folder];
+      bumpSessionResetEpoch(agent.folder);
       // Don't save the invalid session ID - let retry create a new one
     } else if (output.newSessionId && !isolatedSession) {
       writeSessionIfCurrent(output.newSessionId);
@@ -1824,7 +1838,7 @@ async function runAgent(
 
     if (output.status === 'error') {
       logger.error(
-        { group: group.name, error: output.error },
+        { agent: agent.name, error: output.error },
         'Container agent error',
       );
       if (wrappedOnOutput && !streamedErrorOutputSeen) {
@@ -1835,7 +1849,7 @@ async function runAgent(
 
     return 'success';
   } catch (err) {
-    logger.error({ group: group.name, err }, 'Agent error');
+    logger.error({ agent: agent.name, err }, 'Agent error');
     if (wrappedOnOutput) {
       const error = err instanceof Error ? err.message : String(err);
       await wrappedOnOutput({
@@ -1859,7 +1873,7 @@ interface OneShotAgentInput {
   chatJid: string;
   prompt: string;
   status: {
-    groupName?: string;
+    agentName?: string;
     promptSummary?: string;
     lastSender?: string;
     lastContent?: string;
@@ -1893,17 +1907,17 @@ function truncateStatusText(
 }
 
 function resolveAssistantActionJid(preferredJid?: string): string | null {
-  if (preferredJid && registeredGroups[preferredJid]) return preferredJid;
-  if (registeredGroups[ASSISTANT_MAIN_JID]?.isMain === true) {
+  if (preferredJid && registeredAgents[preferredJid]) return preferredJid;
+  if (registeredAgents[ASSISTANT_MAIN_JID]?.isMain === true) {
     return ASSISTANT_MAIN_JID;
   }
-  const fallback = Object.entries(registeredGroups).find(
-    ([, group]) => group.isMain,
+  const fallback = Object.entries(registeredAgents).find(
+    ([, agent]) => agent.isMain,
   );
   if (fallback) {
     logger.warn(
       { preferredJid, fallbackJid: fallback[0] },
-      'Assistant main group not found, falling back to first main group',
+      'Assistant main agent not found, falling back to first main agent',
     );
     return fallback[0];
   }
@@ -1936,13 +1950,13 @@ function stripInternalBlocks(value: string): string {
 async function runOneShotAgent(
   input: OneShotAgentInput,
 ): Promise<OneShotAgentResult> {
-  const group = registeredGroups[input.chatJid];
-  if (!group) {
+  const agent = registeredAgents[input.chatJid];
+  if (!agent) {
     return {
       ok: false,
       text: '',
       outputs: [],
-      error: `Registered group not found: ${input.chatJid}`,
+      error: `Registered agent not found: ${input.chatJid}`,
     };
   }
 
@@ -1972,8 +1986,8 @@ async function runOneShotAgent(
     status = await queue.runOneShot(
       input.chatJid,
       {
-        groupFolder: group.folder,
-        groupName: input.status.groupName || group.name,
+        agentFolder: agent.folder,
+        agentName: input.status.agentName || agent.name,
         promptSummary: truncateStatusText(
           input.status.promptSummary || input.prompt,
           100,
@@ -1987,7 +2001,7 @@ async function runOneShotAgent(
       },
       () =>
         runAgent(
-          group,
+          agent,
           input.prompt,
           input.chatJid,
           async (output) => {
@@ -2108,18 +2122,18 @@ async function runAssistantActionAgent(
     return {
       ok: false,
       text: '',
-      error: 'Assistant action group not found',
+      error: 'Assistant action agent not found',
     };
   }
 
-  const group = registeredGroups[chatJid];
+  const agent = registeredAgents[chatJid];
   const runId = createExecutionId();
   const queryId = createExecutionId();
   const purposeLabel = assistantActionPurposeLabel(input.purpose);
   const promptSummary = `${purposeLabel}：${input.item.title}`;
   const selectedModel = await selectModel({
     prompt: input.prompt,
-    isMain: group?.isMain === true,
+    isMain: agent?.isMain === true,
   });
   agentQueryTraceManager.startQuery({
     queryId,
@@ -2127,7 +2141,7 @@ async function runAssistantActionAgent(
     sourceType: 'assistant_action',
     sourceRefId: input.item.id,
     chatJid,
-    groupFolder: group?.folder || null,
+    agentFolder: agent?.folder || null,
     selectedModel: selectedModel.selectedModel,
     selectedModelReason: selectedModel.reason,
     promptSummary,
@@ -2317,7 +2331,7 @@ async function runAssistantActionAgent(
       collect: 'first_result',
       requireResult: true,
       status: {
-        groupName: '桌面个人助手',
+        agentName: '桌面个人助手',
         promptSummary,
         lastSender: 'assistant action',
         lastContent: input.item.body || input.item.title,
@@ -2373,7 +2387,7 @@ async function startMessageLoop(): Promise<void> {
 
   while (true) {
     try {
-      const jids = Object.keys(registeredGroups);
+      const jids = Object.keys(registeredAgents);
       const { messages, newTimestamp } = getNewMessages(
         jids,
         lastTimestamp,
@@ -2387,20 +2401,20 @@ async function startMessageLoop(): Promise<void> {
         lastTimestamp = newTimestamp;
         saveState();
 
-        // Deduplicate by group
-        const messagesByGroup = new Map<string, NewMessage[]>();
+        // Deduplicate by agent
+        const messagesByAgent = new Map<string, NewMessage[]>();
         for (const msg of messages) {
-          const existing = messagesByGroup.get(msg.chat_jid);
+          const existing = messagesByAgent.get(msg.chat_jid);
           if (existing) {
             existing.push(msg);
           } else {
-            messagesByGroup.set(msg.chat_jid, [msg]);
+            messagesByAgent.set(msg.chat_jid, [msg]);
           }
         }
 
-        for (const [chatJid, groupMessages] of messagesByGroup) {
-          const group = registeredGroups[chatJid];
-          if (!group) continue;
+        for (const [chatJid, agentMessages] of messagesByAgent) {
+          const agent = registeredAgents[chatJid];
+          if (!agent) continue;
 
           const channel = findChannel(channels, chatJid);
           if (!channel) {
@@ -2408,14 +2422,14 @@ async function startMessageLoop(): Promise<void> {
             continue;
           }
 
-          const isMainGroup = group.isMain === true;
+          const isMainAgent = agent.isMain === true;
 
           if (
             await handleAskAnswerCommand({
               chatJid,
-              group,
+              agent,
               channel,
-              messages: groupMessages,
+              messages: agentMessages,
             })
           ) {
             continue;
@@ -2423,7 +2437,7 @@ async function startMessageLoop(): Promise<void> {
 
           // --- Session command interception (message loop) ---
           // Scan ALL messages in the batch for a session command.
-          const loopCmdMsg = groupMessages.find(
+          const loopCmdMsg = agentMessages.find(
             (m) => extractSessionCommand(m.content, TRIGGER_PATTERN) !== null,
           );
 
@@ -2441,7 +2455,7 @@ async function startMessageLoop(): Promise<void> {
                 details: { command, messageId: loopCmdMsg.id },
               });
             }
-            // Enqueue so processGroupMessages handles auth + cursor advancement.
+            // Enqueue so processAgentMessages handles auth + cursor advancement.
             // Don't pipe via IPC — slash commands need a fresh container with
             // string prompt (not MessageStream) for SDK recognition.
             queue.enqueueMessageCheck(chatJid);
@@ -2449,14 +2463,14 @@ async function startMessageLoop(): Promise<void> {
           }
           // --- End session command interception ---
 
-          const needsTrigger = !isMainGroup && group.requiresTrigger !== false;
+          const needsTrigger = !isMainAgent && agent.requiresTrigger !== false;
 
-          // For non-main groups, only act on trigger messages.
+          // For non-main agents, only act on trigger messages.
           // Non-trigger messages accumulate in DB and get pulled as
           // context when a trigger eventually arrives.
           if (needsTrigger) {
             const allowlistCfg = loadSenderAllowlist();
-            const hasTrigger = groupMessages.some(
+            const hasTrigger = agentMessages.some(
               (m) =>
                 TRIGGER_PATTERN.test(m.content.trim()) &&
                 (m.is_from_me ||
@@ -2466,7 +2480,7 @@ async function startMessageLoop(): Promise<void> {
           }
 
           // --- /clear intercept: handle even when a container is active ---
-          const clearMsg = groupMessages.find((m) => {
+          const clearMsg = agentMessages.find((m) => {
             const content = m.content
               .trim()
               .replace(TRIGGER_PATTERN, '')
@@ -2483,18 +2497,18 @@ async function startMessageLoop(): Promise<void> {
               if (channel.name === 'web') clearWebMessages(chatJid);
               if (channel.name === 'assistant')
                 clearAssistantChatMessages(chatJid);
-              resetGroupSession(chatJid, {
+              resetAgentSession(chatJid, {
                 deleteSessionDir: true,
               });
               lastAgentTimestamp[chatJid] =
-                groupMessages[groupMessages.length - 1].timestamp;
+                agentMessages[agentMessages.length - 1].timestamp;
               saveState();
 
-              if (pendingSessionCleanup.has(group.folder)) {
+              if (pendingSessionCleanup.has(agent.folder)) {
                 // Container still running — defer .claude/ removal until exit
                 await channel.sendMessage(chatJid, '数据清理中，请等待');
                 logger.info(
-                  { group: group.name },
+                  { agent: agent.name },
                   '/clear: context reset (active container, deferred cleanup)',
                 );
               } else {
@@ -2504,7 +2518,7 @@ async function startMessageLoop(): Promise<void> {
                   '数据已清理完毕，可正常发送命令啦',
                 );
                 logger.info(
-                  { group: group.name },
+                  { agent: agent.name },
                   '/clear: context reset (no active container)',
                 );
               }
@@ -2514,7 +2528,7 @@ async function startMessageLoop(): Promise<void> {
                 'Permission denied: only admin can clear context.',
               );
               lastAgentTimestamp[chatJid] =
-                groupMessages[groupMessages.length - 1].timestamp;
+                agentMessages[agentMessages.length - 1].timestamp;
               saveState();
             }
             continue;
@@ -2528,7 +2542,7 @@ async function startMessageLoop(): Promise<void> {
             ASSISTANT_NAME,
           );
           const loopExecutionContext = resolveExecutionContext(
-            group,
+            agent,
             allPending,
           );
           const isDelegationRun =
@@ -2537,7 +2551,7 @@ async function startMessageLoop(): Promise<void> {
             logger.debug(
               {
                 chatJid,
-                count: groupMessages.length,
+                count: agentMessages.length,
                 lastAgentTimestamp: lastAgentTimestamp[chatJid] || '',
               },
               'Skipping already-consumed messages for active container',
@@ -2547,11 +2561,7 @@ async function startMessageLoop(): Promise<void> {
           const messagesToSend = allPending;
           const formatted = formatMessages(messagesToSend, TIMEZONE);
           const runId = activeRunIds.get(chatJid);
-          if (
-            isDelegationRun ||
-            !runId ||
-            !queue.canPipeMessage(chatJid)
-          ) {
+          if (isDelegationRun || !runId || !queue.canPipeMessage(chatJid)) {
             queue.enqueueMessageCheck(chatJid);
             continue;
           }
@@ -2560,7 +2570,7 @@ async function startMessageLoop(): Promise<void> {
             messagesToSend[messagesToSend.length - 1].timestamp;
           const pipedSelection = await selectModel({
             prompt: formatted,
-            isMain: isMainGroup,
+            isMain: isMainAgent,
           });
           const queryId = createExecutionId();
 
@@ -2576,7 +2586,7 @@ async function startMessageLoop(): Promise<void> {
               queryId,
               runId,
               chatJid,
-              groupFolder: group.folder,
+              agentFolder: agent.folder,
               sourceRefId:
                 messagesToSend[messagesToSend.length - 1]?.id ?? null,
               selectedModel: pipedSelection.selectedModel,
@@ -2649,16 +2659,16 @@ async function startMessageLoop(): Promise<void> {
 }
 
 /**
- * Startup recovery: check for unprocessed messages in registered groups.
+ * Startup recovery: check for unprocessed messages in registered agents.
  * Handles crash between advancing lastTimestamp and processing messages.
  */
 function recoverPendingMessages(): void {
-  for (const [chatJid, group] of Object.entries(registeredGroups)) {
+  for (const [chatJid, agent] of Object.entries(registeredAgents)) {
     const sinceTimestamp = lastAgentTimestamp[chatJid] || '';
     const pending = getMessagesSince(chatJid, sinceTimestamp, ASSISTANT_NAME);
     if (pending.length > 0) {
       logger.info(
-        { group: group.name, pendingCount: pending.length },
+        { agent: agent.name, pendingCount: pending.length },
         'Recovery: found unprocessed messages',
       );
       queue.enqueueMessageCheck(chatJid);
@@ -2672,10 +2682,10 @@ function ensureContainerSystemRunning(): void {
 }
 
 function resolveExecutionContext(
-  group: RegisteredGroup,
+  agent: RegisteredAgent,
   _messages: NewMessage[],
 ): AgentExecutionContext | undefined {
-  const pendingDelegations = getDelegationsByTarget(group.folder).filter(
+  const pendingDelegations = getDelegationsByTarget(agent.folder).filter(
     (delegation) => delegation.status === 'pending',
   );
   if (pendingDelegations.length !== 1) return undefined;
@@ -2687,8 +2697,8 @@ async function main(): Promise<void> {
   initDatabase();
   logger.info('Database initialized');
   configureFeatureManagementHostHooks({
-    reloadRegisteredGroups: reloadRegisteredGroupsFromDb,
-    stopFeatureGroups: (groups) => stopFeatureGroupsForDeletion(groups),
+    reloadRegisteredAgents: reloadRegisteredAgentsFromDb,
+    stopFeatureAgents: (agents) => stopFeatureAgentsForDeletion(agents),
   });
   await activateConfiguredFeatures();
   loadState();
@@ -2697,7 +2707,7 @@ async function main(): Promise<void> {
   // Load MySQL configs from services.json for proxy
   const servicesJsonPath = path.join(
     process.cwd(),
-    'groups',
+    'agents',
     'global',
     'services.json',
   );
@@ -2724,19 +2734,19 @@ async function main(): Promise<void> {
     PROXY_BIND_HOST,
   );
   const internalRunOnceService = new InternalAgentRunOnceService({
-    registeredGroups: () => registeredGroups,
+    registeredAgents: () => registeredAgents,
     queue,
     addOneShotTraceContext,
     removeOneShotTraceContext,
-    onProcess: (groupJid, proc, containerName, groupFolder) =>
-      queue.registerProcess(groupJid, proc, containerName, groupFolder),
+    onProcess: (agentJid, proc, containerName, agentFolder) =>
+      queue.registerProcess(agentJid, proc, containerName, agentFolder),
     maxInputChars: ICARUS_INTERNAL_AGENT_MAX_INPUT_CHARS,
   });
   const internalAgentChatService = new InternalAgentChatService({
-    registeredGroups: () => registeredGroups,
+    registeredAgents: () => registeredAgents,
     queue,
-    onProcess: (groupJid, proc, containerName, groupFolder) =>
-      queue.registerProcess(groupJid, proc, containerName, groupFolder),
+    onProcess: (agentJid, proc, containerName, agentFolder) =>
+      queue.registerProcess(agentJid, proc, containerName, agentFolder),
     maxInputChars: ICARUS_INTERNAL_AGENT_MAX_INPUT_CHARS,
   });
   const internalRunOnceServer = startInternalAgentRunOnceServer({
@@ -2748,13 +2758,76 @@ async function main(): Promise<void> {
     chatService: internalAgentChatService,
   });
 
+  let workflowExecutionWorker: WorkflowExecutionWorker | null = null;
+  let workflowRuntimeStore: ReturnType<
+    typeof WorkflowRuntimeConnectionFactory.openStore
+  > | null = null;
+  let workflowAdapterExecutionStore: WorkflowAdapterExecutionStore | null =
+    null;
+  if (WORKFLOW_EXECUTION_ENABLED) {
+    const runtimeDatabasePath = path.join(STORE_DIR, 'workflow-runtime.db');
+    workflowRuntimeStore = WorkflowRuntimeConnectionFactory.openStore({
+      databasePath: runtimeDatabasePath,
+      databaseMode: fs.existsSync(runtimeDatabasePath)
+        ? 'open_existing'
+        : 'create',
+      // This checkout-only experiment must not replace the active release
+      // binding. isolated_test still verifies the managed Runtime toolchain.
+      identityMode: 'isolated_test',
+    });
+    workflowAdapterExecutionStore = new WorkflowAdapterExecutionStore(
+      path.join(STORE_DIR, 'workflow-adapter-executions.db'),
+    );
+    const workflowAdapters = new WorkflowExecutionAdapterRegistry();
+    const containerAgentJid =
+      WORKFLOW_CONTAINER_AGENT_JID || resolveAssistantActionJid() || '';
+    workflowAdapters.register(
+      new ContainerAgentAdapter({
+        service: internalRunOnceService,
+        agentJid: containerAgentJid,
+        agentExists: (agentJid) => Boolean(registeredAgents[agentJid]),
+      }),
+    );
+    workflowAdapters.register(
+      new CodexTaskAdapter({
+        binary: WORKFLOW_CODEX_BINARY,
+        cwd: WORKFLOW_CODEX_CWD,
+        model: WORKFLOW_CODEX_MODEL || undefined,
+        sandbox: WORKFLOW_CODEX_SANDBOX,
+        approvalPolicy: WORKFLOW_CODEX_APPROVAL_POLICY,
+        desktopVisibilityConfirmed: WORKFLOW_CODEX_DESKTOP_VISIBILITY_CONFIRMED,
+      }),
+    );
+    workflowExecutionWorker = new WorkflowExecutionWorker({
+      runtimeStore: workflowRuntimeStore,
+      executionStore: workflowAdapterExecutionStore,
+      registry: workflowAdapters,
+      pollIntervalMs: WORKFLOW_EXECUTION_POLL_MS,
+      leaseOwner: `icarus-host:${process.pid}`,
+      logger,
+    });
+    await workflowExecutionWorker.start();
+    logger.info(
+      {
+        runtimeDatabasePath,
+        adapterExecutionDatabasePath:
+          workflowAdapterExecutionStore.databasePath,
+        containerAgentJid,
+      },
+      'Experimental Workflow execution Adapters started',
+    );
+  }
+
   // Graceful shutdown handlers
   const shutdown = async (signal: string) => {
     logger.info({ signal }, 'Shutdown signal received');
     proxyServer.close();
     mysqlProxyServer.close();
     internalRunOnceServer?.close();
+    await workflowExecutionWorker?.stop();
     await queue.shutdown(10000);
+    workflowAdapterExecutionStore?.close();
+    workflowRuntimeStore?.close();
     for (const ch of channels) await ch.disconnect();
     process.exit(0);
   };
@@ -2767,11 +2840,11 @@ async function main(): Promise<void> {
     chatJid: string,
     msg: NewMessage,
   ): Promise<void> {
-    const group = registeredGroups[chatJid];
-    if (!group?.isMain) {
+    const agent = registeredAgents[chatJid];
+    if (!agent?.isMain) {
       logger.warn(
         { chatJid, sender: msg.sender },
-        'Remote control rejected: not main group',
+        'Remote control rejected: not main agent',
       );
       return;
     }
@@ -2811,20 +2884,19 @@ async function main(): Promise<void> {
       timestamp: string,
       name?: string,
       channel?: string,
-      isGroup?: boolean,
     ) => void;
-    registeredGroups: () => Record<string, RegisteredGroup>;
-    enqueueMessageCheck?: (groupJid: string) => void;
+    registeredAgents: () => Record<string, RegisteredAgent>;
+    enqueueMessageCheck?: (agentJid: string) => void;
     getAgentStatus?: () => import('./types.js').AgentStatusInfo[];
     getActiveAgentQueryTraces?: () => import('./types.js').ActiveAgentQueryTrace[];
     stopAgent?: (
-      groupJid: string,
+      agentJid: string,
     ) => Promise<import('./types.js').StopAgentResult>;
     resetSessions?: (scope: {
       all?: boolean;
-      groupJid?: string;
+      agentJid?: string;
     }) => Promise<{ resetCount: number }>;
-    registerGroup?: (jid: string, group: RegisteredGroup) => void;
+    registerAgent?: (jid: string, agent: RegisteredAgent) => void;
     onAgentStatusChange?: () => void;
     onAgentQueryTraceChange?: () => void;
   } = {
@@ -2839,7 +2911,7 @@ async function main(): Promise<void> {
       }
 
       // Sender allowlist drop mode: discard messages from denied senders before storing
-      if (!msg.is_from_me && !msg.is_bot_message && registeredGroups[chatJid]) {
+      if (!msg.is_from_me && !msg.is_bot_message && registeredAgents[chatJid]) {
         const cfg = loadSenderAllowlist();
         if (
           shouldDropMessage(chatJid, cfg) &&
@@ -2861,19 +2933,18 @@ async function main(): Promise<void> {
       timestamp: string,
       name?: string,
       channel?: string,
-      isGroup?: boolean,
-    ) => storeChatMetadata(chatJid, timestamp, name, channel, isGroup),
-    registeredGroups: () => registeredGroups,
+    ) => storeChatMetadata(chatJid, timestamp, name, channel),
+    registeredAgents: () => registeredAgents,
     enqueueMessageCheck: (jid: string) => queue.enqueueMessageCheck(jid),
     getAgentStatus: () => queue.getActiveAgents(),
     getActiveAgentQueryTraces: () => agentQueryTraceManager.getActiveQueries(),
-    stopAgent: (groupJid: string) => queue.stopAgent(groupJid),
+    stopAgent: (agentJid: string) => queue.stopAgent(agentJid),
     resetSessions: (scope) =>
       resetSessionsForScope({
         all: scope.all,
-        groupJid: scope.groupJid,
+        agentJid: scope.agentJid,
       }),
-    registerGroup,
+    registerAgent,
     onAgentStatusChange: () => {
       for (const ch of channels) {
         if (ch.name === 'web' && 'broadcastAgentStatus' in ch) {
@@ -2928,11 +2999,11 @@ async function main(): Promise<void> {
 
   // Start subsystems (independently of connection handler)
   startSchedulerLoop({
-    registeredGroups: () => registeredGroups,
+    registeredAgents: () => registeredAgents,
     getSessions: () => sessions,
     queue,
-    onProcess: (groupJid, proc, containerName, groupFolder) =>
-      queue.registerProcess(groupJid, proc, containerName, groupFolder),
+    onProcess: (agentJid, proc, containerName, agentFolder) =>
+      queue.registerProcess(agentJid, proc, containerName, agentFolder),
     sendMessage: async (jid, rawText) => {
       const channel = findChannel(channels, jid);
       if (!channel) {
@@ -2968,7 +3039,7 @@ async function main(): Promise<void> {
 
   // Wire up card actions for channels that support interactive cards.
   const cardActionHandler = createCardActionHandler({
-    registeredGroups: () => registeredGroups,
+    registeredAgents: () => registeredAgents,
     sendCard: sendCardFn,
     sendMessage: async (jid, text) => {
       const ch = findChannel(channels, jid);
@@ -2988,40 +3059,33 @@ async function main(): Promise<void> {
       if (!channel) throw new Error(`No channel for JID: ${jid}`);
       return channel.sendMessage(jid, text);
     },
-    registeredGroups: () => registeredGroups,
-    registerGroup,
-    syncGroups: async (force: boolean) => {
-      await Promise.all(
-        channels
-          .filter((ch) => ch.syncGroups)
-          .map((ch) => ch.syncGroups!(force)),
-      );
-    },
-    getAvailableGroups,
-    writeGroupsSnapshot: (gf, im, ag, rj) => {
-      // For main group, filter to same-channel groups only
+    registeredAgents: () => registeredAgents,
+    registerAgent,
+    getAvailableAgents,
+    writeAgentsSnapshot: (gf, im, ag, rj) => {
+      // For main agent, filter to same-channel agents only
       let filtered = ag;
       if (im) {
-        const mainJid = Object.entries(registeredGroups).find(
+        const mainJid = Object.entries(registeredAgents).find(
           ([, g]) => g.folder === gf,
         )?.[0];
         if (mainJid) {
           const mainCh = findChannel(channels, mainJid);
           if (mainCh) {
             filtered = ag.filter((g) => {
-              const targetGroup = registeredGroups[g.jid];
+              const targetAgent = registeredAgents[g.jid];
               return (
                 mainCh.ownsJid(g.jid) ||
-                (targetGroup &&
+                (targetAgent &&
                   isAllowedCrossChannelDelegationTargetFolder(
-                    targetGroup.folder,
+                    targetAgent.folder,
                   ))
               );
             });
           }
         }
       }
-      writeGroupsSnapshot(gf, im, filtered, rj);
+      writeAgentsSnapshot(gf, im, filtered, rj);
     },
     enqueueMessageCheck: (jid) => queue.enqueueMessageCheck(jid),
     sendCard: sendCardFn,
@@ -3052,7 +3116,7 @@ async function main(): Promise<void> {
     },
   });
   const assistantInboxBroadcast = new AssistantInboxBroadcastService({
-    registeredGroups: () => registeredGroups,
+    registeredAgents: () => registeredAgents,
     sendCard: sendCardFn,
     sendMessage: async (jid, text) => {
       const ch = findChannel(channels, jid);
@@ -3081,7 +3145,7 @@ async function main(): Promise<void> {
       }),
   });
   startProactiveEngine();
-  queue.setProcessMessagesFn(processGroupMessages);
+  queue.setProcessMessagesFn(processAgentMessages);
   recoverPendingMessages();
   startMessageLoop().catch((err) => {
     logger.fatal({ err }, 'Message loop crashed unexpectedly');
@@ -3104,7 +3168,7 @@ if (isDirectRun) {
 
 /** @internal - exported for testing */
 export async function _runAgentForTest(input: {
-  group: RegisteredGroup;
+  agent: RegisteredAgent;
   prompt?: string;
   chatJid?: string;
   onOutput?: (output: ContainerOutput) => Promise<void>;
@@ -3112,9 +3176,9 @@ export async function _runAgentForTest(input: {
   isolatedSession?: boolean;
 }): Promise<'success' | 'error'> {
   return runAgent(
-    input.group,
+    input.agent,
     input.prompt || 'test prompt',
-    input.chatJid || 'test@g.us',
+    input.chatJid || 'web:test',
     input.onOutput,
     'test-model',
     'test-run',

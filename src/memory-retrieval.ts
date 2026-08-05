@@ -90,7 +90,7 @@ function normalizeBm25Score(score: number): number {
 }
 
 export function retrieveStructuredMemories(
-  groupFolder: string,
+  agentFolder: string,
   prompt: string,
   opts?: { limit?: number },
 ): StructuredMemoryHit[] {
@@ -103,7 +103,7 @@ export function retrieveStructuredMemories(
   const merged = new Map<string, MemorySearchResult>();
   for (const query of queryVariants) {
     for (const result of searchMemoriesActive(
-      groupFolder,
+      agentFolder,
       query,
       Math.max(limit * 2, limit),
     )) {
@@ -141,7 +141,7 @@ export function retrieveStructuredMemories(
   }
 
   if (cjkPromptNgrams.length > 0) {
-    const fallbackCandidates = listMemories(groupFolder, 300).filter(
+    const fallbackCandidates = listMemories(agentFolder, 300).filter(
       (m) => m.status === 'active' && !merged.has(m.id),
     );
     for (const memory of fallbackCandidates) {
@@ -189,10 +189,10 @@ export function retrieveStructuredMemories(
 }
 
 export function listCanonicalFallbackMemories(
-  groupFolder: string,
+  agentFolder: string,
   limit: number = 12,
 ): MemoryRecord[] {
-  return listMemories(groupFolder, 200)
+  return listMemories(agentFolder, 200)
     .filter((m) => m.status === 'active' && m.layer === 'canonical')
     .filter((m) => m.memory_type === 'rule' || m.memory_type === 'preference')
     .slice(0, limit);

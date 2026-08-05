@@ -12,7 +12,7 @@ import {
   readFeatureManifest,
 } from './manifest.js';
 import { loadFeatureRuntimeConfig } from './config.js';
-import { provisionFeatureGroups } from './provisioning.js';
+import { provisionFeatureAgents } from './provisioning.js';
 import {
   createAuditService,
   createEventRegistry,
@@ -83,7 +83,7 @@ export async function activateConfiguredFeatures(): Promise<FeatureRuntimeState>
   validateEnabledFeatureSet(enabled);
 
   for (const feature of enabled) {
-    provisionFeatureGroups({
+    provisionFeatureAgents({
       featureId: feature.manifest.id,
       featureRoot: feature.root,
       manifest: feature.manifest,
@@ -195,9 +195,9 @@ export function scanInstalledFeatures(): LoadedFeatureManifest[] {
 
 function validateEnabledFeatureSet(features: LoadedFeatureManifest[]): void {
   const navKeys = new Map<string, string>();
-  const groupKeysByFeature = new Map<string, Set<string>>();
-  const groupJids = new Map<string, string>();
-  const groupFolders = new Map<string, string>();
+  const agentKeysByFeature = new Map<string, Set<string>>();
+  const agentJids = new Map<string, string>();
+  const agentFolders = new Map<string, string>();
 
   for (const feature of features) {
     for (const item of feature.manifest.nav || []) {
@@ -210,29 +210,29 @@ function validateEnabledFeatureSet(features: LoadedFeatureManifest[]): void {
       navKeys.set(item.key, feature.manifest.id);
     }
 
-    const groupKeys = groupKeysByFeature.get(feature.manifest.id) || new Set();
-    groupKeysByFeature.set(feature.manifest.id, groupKeys);
-    for (const group of feature.manifest.requiredGroups || []) {
-      if (groupKeys.has(group.key)) {
+    const agentKeys = agentKeysByFeature.get(feature.manifest.id) || new Set();
+    agentKeysByFeature.set(feature.manifest.id, agentKeys);
+    for (const agent of feature.manifest.requiredAgents || []) {
+      if (agentKeys.has(agent.key)) {
         throw new Error(
-          `Feature ${feature.manifest.id} declares duplicate required group key "${group.key}"`,
+          `Feature ${feature.manifest.id} declares duplicate required agent key "${agent.key}"`,
         );
       }
-      groupKeys.add(group.key);
-      const jidOwner = groupJids.get(group.jid);
+      agentKeys.add(agent.key);
+      const jidOwner = agentJids.get(agent.jid);
       if (jidOwner) {
         throw new Error(
-          `Feature group JID "${group.jid}" is declared by both ${jidOwner} and ${feature.manifest.id}`,
+          `Feature agent JID "${agent.jid}" is declared by both ${jidOwner} and ${feature.manifest.id}`,
         );
       }
-      const folderOwner = groupFolders.get(group.folder);
+      const folderOwner = agentFolders.get(agent.folder);
       if (folderOwner) {
         throw new Error(
-          `Feature group folder "${group.folder}" is declared by both ${folderOwner} and ${feature.manifest.id}`,
+          `Feature agent folder "${agent.folder}" is declared by both ${folderOwner} and ${feature.manifest.id}`,
         );
       }
-      groupJids.set(group.jid, feature.manifest.id);
-      groupFolders.set(group.folder, feature.manifest.id);
+      agentJids.set(agent.jid, feature.manifest.id);
+      agentFolders.set(agent.folder, feature.manifest.id);
     }
   }
 }

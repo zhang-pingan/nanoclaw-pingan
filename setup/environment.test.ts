@@ -56,12 +56,12 @@ describe('mount allowlist setup', () => {
   });
 });
 
-describe('registered groups DB query', () => {
+describe('registered agents DB query', () => {
   let db: Database.Database;
 
   beforeEach(() => {
     db = new Database(':memory:');
-    db.exec(`CREATE TABLE IF NOT EXISTS registered_groups (
+    db.exec(`CREATE TABLE IF NOT EXISTS registered_agents (
       jid TEXT PRIMARY KEY,
       name TEXT NOT NULL,
       folder TEXT NOT NULL UNIQUE,
@@ -74,38 +74,38 @@ describe('registered groups DB query', () => {
 
   it('returns 0 for empty table', () => {
     const row = db
-      .prepare('SELECT COUNT(*) as count FROM registered_groups')
+      .prepare('SELECT COUNT(*) as count FROM registered_agents')
       .get() as { count: number };
     expect(row.count).toBe(0);
   });
 
   it('returns correct count after inserts', () => {
     db.prepare(
-      `INSERT INTO registered_groups (jid, name, folder, trigger_pattern, added_at, requires_trigger)
+      `INSERT INTO registered_agents (jid, name, folder, trigger_pattern, added_at, requires_trigger)
        VALUES (?, ?, ?, ?, ?, ?)`,
     ).run(
-      '123@g.us',
-      'Group 1',
-      'group-1',
+      'web:123',
+      'Agent 1',
+      'agent-1',
       '@Andy',
       '2024-01-01T00:00:00.000Z',
       1,
     );
 
     db.prepare(
-      `INSERT INTO registered_groups (jid, name, folder, trigger_pattern, added_at, requires_trigger)
+      `INSERT INTO registered_agents (jid, name, folder, trigger_pattern, added_at, requires_trigger)
        VALUES (?, ?, ?, ?, ?, ?)`,
     ).run(
-      '456@g.us',
-      'Group 2',
-      'group-2',
+      'web:456',
+      'Agent 2',
+      'agent-2',
       '@Andy',
       '2024-01-01T00:00:00.000Z',
       1,
     );
 
     const row = db
-      .prepare('SELECT COUNT(*) as count FROM registered_groups')
+      .prepare('SELECT COUNT(*) as count FROM registered_agents')
       .get() as { count: number };
     expect(row.count).toBe(2);
   });
@@ -140,20 +140,5 @@ describe('Docker detection logic', () => {
     const { commandExists } = await import('./platform.js');
     expect(typeof commandExists('docker')).toBe('boolean');
     expect(typeof commandExists('nonexistent_binary_xyz')).toBe('boolean');
-  });
-});
-
-describe('channel auth detection', () => {
-  it('detects non-empty auth directory', () => {
-    const hasAuth = (authDir: string) => {
-      try {
-        return fs.existsSync(authDir) && fs.readdirSync(authDir).length > 0;
-      } catch {
-        return false;
-      }
-    };
-
-    // Non-existent directory
-    expect(hasAuth('/tmp/nonexistent_auth_dir_xyz')).toBe(false);
   });
 });

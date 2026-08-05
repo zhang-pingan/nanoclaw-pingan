@@ -4,23 +4,23 @@ import {
   Channel,
   OnInboundMessage,
   OnChatMetadata,
-  RegisteredGroup,
+  RegisteredAgent,
   StopAgentResult,
 } from '../types.js';
 
 export interface ChannelOpts {
   onMessage: OnInboundMessage;
   onChatMetadata: OnChatMetadata;
-  registeredGroups: () => Record<string, RegisteredGroup>;
-  enqueueMessageCheck?: (groupJid: string) => void;
+  registeredAgents: () => Record<string, RegisteredAgent>;
+  enqueueMessageCheck?: (agentJid: string) => void;
   getAgentStatus?: () => AgentStatusInfo[];
   getActiveAgentQueryTraces?: () => ActiveAgentQueryTrace[];
-  stopAgent?: (groupJid: string) => Promise<StopAgentResult>;
+  stopAgent?: (agentJid: string) => Promise<StopAgentResult>;
   resetSessions?: (scope: {
     all?: boolean;
-    groupJid?: string;
+    agentJid?: string;
   }) => Promise<{ resetCount: number }>;
-  registerGroup?: (jid: string, group: RegisteredGroup) => void;
+  registerAgent?: (jid: string, agent: RegisteredAgent) => void;
 }
 
 export type ChannelFactory = (opts: ChannelOpts) => Channel | null;

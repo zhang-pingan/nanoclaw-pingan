@@ -295,13 +295,13 @@ export function validateMount(
 
   if (requestedReadWrite) {
     if (!isMain && allowlist.nonMainReadOnly) {
-      // Non-main groups forced to read-only
+      // Non-main agents forced to read-only
       effectiveReadonly = true;
       logger.info(
         {
           mount: mount.hostPath,
         },
-        'Mount forced to read-only for non-main group',
+        'Mount forced to read-only for non-main agent',
       );
     } else if (!allowedRoot.allowReadWrite) {
       // Root doesn't allow read-write
@@ -329,13 +329,13 @@ export function validateMount(
 }
 
 /**
- * Validate all additional mounts for a group.
+ * Validate all additional mounts for an Agent.
  * Returns array of validated mounts (only those that passed validation).
  * Logs warnings for rejected mounts.
  */
 export function validateAdditionalMounts(
   mounts: AdditionalMount[],
-  groupName: string,
+  agentName: string,
   isMain: boolean,
 ): Array<{
   hostPath: string;
@@ -360,7 +360,7 @@ export function validateAdditionalMounts(
 
       logger.debug(
         {
-          group: groupName,
+          agent: agentName,
           hostPath: result.realHostPath,
           containerPath: result.resolvedContainerPath,
           readonly: result.effectiveReadonly,
@@ -371,7 +371,7 @@ export function validateAdditionalMounts(
     } else {
       logger.warn(
         {
-          group: groupName,
+          agent: agentName,
           requestedPath: mount.hostPath,
           containerPath: mount.containerPath,
           reason: result.reason,

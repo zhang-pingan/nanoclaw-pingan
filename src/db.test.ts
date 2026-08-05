@@ -14,7 +14,7 @@ import {
   getMemoryExtractConfig,
   getMemoryMetricSummary,
   getAllChats,
-  getAllRegisteredGroups,
+  getAllRegisteredAgents,
   getAgentQuery,
   getDatabase,
   getMessagesSince,
@@ -25,7 +25,7 @@ import {
   recordMemoryMetric,
   resolveConflict,
   searchMemories,
-  setRegisteredGroup,
+  setRegisteredAgent,
   setMemoryExtractConfig,
   storeChatMetadata,
   storeMessage,
@@ -62,43 +62,43 @@ function store(overrides: {
 
 describe('storeMessage', () => {
   it('stores a message and retrieves it', () => {
-    storeChatMetadata('group@g.us', '2024-01-01T00:00:00.000Z');
+    storeChatMetadata('web:group', '2024-01-01T00:00:00.000Z');
 
     store({
       id: 'msg-1',
-      chat_jid: 'group@g.us',
-      sender: '123@s.whatsapp.net',
+      chat_jid: 'web:group',
+      sender: 'user:123',
       sender_name: 'Alice',
       content: 'hello world',
       timestamp: '2024-01-01T00:00:01.000Z',
     });
 
     const messages = getMessagesSince(
-      'group@g.us',
+      'web:group',
       '2024-01-01T00:00:00.000Z',
       'Andy',
     );
     expect(messages).toHaveLength(1);
     expect(messages[0].id).toBe('msg-1');
-    expect(messages[0].sender).toBe('123@s.whatsapp.net');
+    expect(messages[0].sender).toBe('user:123');
     expect(messages[0].sender_name).toBe('Alice');
     expect(messages[0].content).toBe('hello world');
   });
 
   it('filters out empty content', () => {
-    storeChatMetadata('group@g.us', '2024-01-01T00:00:00.000Z');
+    storeChatMetadata('web:group', '2024-01-01T00:00:00.000Z');
 
     store({
       id: 'msg-2',
-      chat_jid: 'group@g.us',
-      sender: '111@s.whatsapp.net',
+      chat_jid: 'web:group',
+      sender: 'user:111',
       sender_name: 'Dave',
       content: '',
       timestamp: '2024-01-01T00:00:04.000Z',
     });
 
     const messages = getMessagesSince(
-      'group@g.us',
+      'web:group',
       '2024-01-01T00:00:00.000Z',
       'Andy',
     );
@@ -106,12 +106,12 @@ describe('storeMessage', () => {
   });
 
   it('stores is_from_me flag', () => {
-    storeChatMetadata('group@g.us', '2024-01-01T00:00:00.000Z');
+    storeChatMetadata('web:group', '2024-01-01T00:00:00.000Z');
 
     store({
       id: 'msg-3',
-      chat_jid: 'group@g.us',
-      sender: 'me@s.whatsapp.net',
+      chat_jid: 'web:group',
+      sender: 'user:me',
       sender_name: 'Me',
       content: 'my message',
       timestamp: '2024-01-01T00:00:05.000Z',
@@ -120,7 +120,7 @@ describe('storeMessage', () => {
 
     // Message is stored (we can retrieve it — is_from_me doesn't affect retrieval)
     const messages = getMessagesSince(
-      'group@g.us',
+      'web:group',
       '2024-01-01T00:00:00.000Z',
       'Andy',
     );
@@ -128,12 +128,12 @@ describe('storeMessage', () => {
   });
 
   it('upserts on duplicate id+chat_jid', () => {
-    storeChatMetadata('group@g.us', '2024-01-01T00:00:00.000Z');
+    storeChatMetadata('web:group', '2024-01-01T00:00:00.000Z');
 
     store({
       id: 'msg-dup',
-      chat_jid: 'group@g.us',
-      sender: '123@s.whatsapp.net',
+      chat_jid: 'web:group',
+      sender: 'user:123',
       sender_name: 'Alice',
       content: 'original',
       timestamp: '2024-01-01T00:00:01.000Z',
@@ -141,15 +141,15 @@ describe('storeMessage', () => {
 
     store({
       id: 'msg-dup',
-      chat_jid: 'group@g.us',
-      sender: '123@s.whatsapp.net',
+      chat_jid: 'web:group',
+      sender: 'user:123',
       sender_name: 'Alice',
       content: 'updated',
       timestamp: '2024-01-01T00:00:01.000Z',
     });
 
     const messages = getMessagesSince(
-      'group@g.us',
+      'web:group',
       '2024-01-01T00:00:00.000Z',
       'Andy',
     );
@@ -162,28 +162,28 @@ describe('storeMessage', () => {
 
 describe('getMessagesSince', () => {
   beforeEach(() => {
-    storeChatMetadata('group@g.us', '2024-01-01T00:00:00.000Z');
+    storeChatMetadata('web:group', '2024-01-01T00:00:00.000Z');
 
     store({
       id: 'm1',
-      chat_jid: 'group@g.us',
-      sender: 'Alice@s.whatsapp.net',
+      chat_jid: 'web:group',
+      sender: 'user:Alice',
       sender_name: 'Alice',
       content: 'first',
       timestamp: '2024-01-01T00:00:01.000Z',
     });
     store({
       id: 'm2',
-      chat_jid: 'group@g.us',
-      sender: 'Bob@s.whatsapp.net',
+      chat_jid: 'web:group',
+      sender: 'user:Bob',
       sender_name: 'Bob',
       content: 'second',
       timestamp: '2024-01-01T00:00:02.000Z',
     });
     storeMessage({
       id: 'm3',
-      chat_jid: 'group@g.us',
-      sender: 'Bot@s.whatsapp.net',
+      chat_jid: 'web:group',
+      sender: 'user:Bot',
       sender_name: 'Bot',
       content: 'bot reply',
       timestamp: '2024-01-01T00:00:03.000Z',
@@ -191,8 +191,8 @@ describe('getMessagesSince', () => {
     });
     store({
       id: 'm4',
-      chat_jid: 'group@g.us',
-      sender: 'Carol@s.whatsapp.net',
+      chat_jid: 'web:group',
+      sender: 'user:Carol',
       sender_name: 'Carol',
       content: 'third',
       timestamp: '2024-01-01T00:00:04.000Z',
@@ -201,7 +201,7 @@ describe('getMessagesSince', () => {
 
   it('returns messages after the given timestamp', () => {
     const msgs = getMessagesSince(
-      'group@g.us',
+      'web:group',
       '2024-01-01T00:00:02.000Z',
       'Andy',
     );
@@ -212,7 +212,7 @@ describe('getMessagesSince', () => {
 
   it('excludes bot messages via is_bot_message flag', () => {
     const msgs = getMessagesSince(
-      'group@g.us',
+      'web:group',
       '2024-01-01T00:00:00.000Z',
       'Andy',
     );
@@ -221,7 +221,7 @@ describe('getMessagesSince', () => {
   });
 
   it('returns all non-bot messages when sinceTimestamp is empty', () => {
-    const msgs = getMessagesSince('group@g.us', '', 'Andy');
+    const msgs = getMessagesSince('web:group', '', 'Andy');
     // 3 user messages (bot message excluded)
     expect(msgs).toHaveLength(3);
   });
@@ -230,14 +230,14 @@ describe('getMessagesSince', () => {
     // Simulate a message written before migration: has prefix but is_bot_message = 0
     store({
       id: 'm5',
-      chat_jid: 'group@g.us',
-      sender: 'Bot@s.whatsapp.net',
+      chat_jid: 'web:group',
+      sender: 'user:Bot',
       sender_name: 'Bot',
       content: 'Andy: old bot reply',
       timestamp: '2024-01-01T00:00:05.000Z',
     });
     const msgs = getMessagesSince(
-      'group@g.us',
+      'web:group',
       '2024-01-01T00:00:04.000Z',
       'Andy',
     );
@@ -249,29 +249,29 @@ describe('getMessagesSince', () => {
 
 describe('getNewMessages', () => {
   beforeEach(() => {
-    storeChatMetadata('group1@g.us', '2024-01-01T00:00:00.000Z');
-    storeChatMetadata('group2@g.us', '2024-01-01T00:00:00.000Z');
+    storeChatMetadata('web:group1', '2024-01-01T00:00:00.000Z');
+    storeChatMetadata('web:group2', '2024-01-01T00:00:00.000Z');
 
     store({
       id: 'a1',
-      chat_jid: 'group1@g.us',
-      sender: 'user@s.whatsapp.net',
+      chat_jid: 'web:group1',
+      sender: 'user:user',
       sender_name: 'User',
       content: 'g1 msg1',
       timestamp: '2024-01-01T00:00:01.000Z',
     });
     store({
       id: 'a2',
-      chat_jid: 'group2@g.us',
-      sender: 'user@s.whatsapp.net',
+      chat_jid: 'web:group2',
+      sender: 'user:user',
       sender_name: 'User',
       content: 'g2 msg1',
       timestamp: '2024-01-01T00:00:02.000Z',
     });
     storeMessage({
       id: 'a3',
-      chat_jid: 'group1@g.us',
-      sender: 'user@s.whatsapp.net',
+      chat_jid: 'web:group1',
+      sender: 'user:user',
       sender_name: 'User',
       content: 'bot reply',
       timestamp: '2024-01-01T00:00:03.000Z',
@@ -279,8 +279,8 @@ describe('getNewMessages', () => {
     });
     store({
       id: 'a4',
-      chat_jid: 'group1@g.us',
-      sender: 'user@s.whatsapp.net',
+      chat_jid: 'web:group1',
+      sender: 'user:user',
       sender_name: 'User',
       content: 'g1 msg2',
       timestamp: '2024-01-01T00:00:04.000Z',
@@ -289,7 +289,7 @@ describe('getNewMessages', () => {
 
   it('returns new messages across multiple groups', () => {
     const { messages, newTimestamp } = getNewMessages(
-      ['group1@g.us', 'group2@g.us'],
+      ['web:group1', 'web:group2'],
       '2024-01-01T00:00:00.000Z',
       'Andy',
     );
@@ -300,7 +300,7 @@ describe('getNewMessages', () => {
 
   it('filters by timestamp', () => {
     const { messages } = getNewMessages(
-      ['group1@g.us', 'group2@g.us'],
+      ['web:group1', 'web:group2'],
       '2024-01-01T00:00:02.000Z',
       'Andy',
     );
@@ -309,14 +309,14 @@ describe('getNewMessages', () => {
     expect(messages[0].content).toBe('g1 msg2');
   });
 
-  it('returns empty for no registered groups', () => {
+  it('returns empty for no registered Agents', () => {
     const { messages, newTimestamp } = getNewMessages([], '', 'Andy');
     expect(messages).toHaveLength(0);
     expect(newTimestamp).toBe('');
   });
 });
 
-describe('removed runtime schema cleanup', () => {
+describe('removed schema cleanup', () => {
   function legacySchemaObjects(): string[] {
     return (
       getDatabase()
@@ -342,6 +342,7 @@ describe('removed runtime schema cleanup', () => {
 
   it('does not create removed tables, columns, or indexes in a fresh database', () => {
     expect(legacySchemaObjects()).toEqual([]);
+    expect(columnNames('chats')).not.toContain('is_group');
     expect(
       columnNames('messages').filter((name) => name.startsWith('workflow_')),
     ).toEqual([]);
@@ -363,10 +364,10 @@ describe('removed runtime schema cleanup', () => {
   });
 
   it('removes an existing legacy schema while preserving active data', () => {
-    storeChatMetadata('protected@g.us', '2026-07-14T00:00:00.000Z');
+    storeChatMetadata('web:protected', '2026-07-14T00:00:00.000Z');
     store({
       id: 'protected-message',
-      chat_jid: 'protected@g.us',
+      chat_jid: 'web:protected',
       sender: 'user@example.com',
       sender_name: 'User',
       content: 'keep this message',
@@ -374,22 +375,22 @@ describe('removed runtime schema cleanup', () => {
     });
     createDelegation({
       id: 'protected-delegation',
-      source_jid: 'protected@g.us',
+      source_jid: 'web:protected',
       source_folder: 'main',
-      target_jid: 'target@g.us',
+      target_jid: 'web:target',
       target_folder: 'target',
       task: 'Keep this delegation',
       status: 'pending',
       result: null,
       outcome: null,
-      requester_jid: 'protected@g.us',
+      requester_jid: 'web:protected',
       created_at: '2026-07-14T00:00:00.000Z',
       updated_at: '2026-07-14T00:00:00.000Z',
     });
     createTask({
       id: 'protected-task',
-      group_folder: 'main',
-      chat_jid: 'protected@g.us',
+      agent_folder: 'main',
+      chat_jid: 'web:protected',
       prompt: 'Keep this scheduled task',
       schedule_type: 'once',
       schedule_value: '2026-07-15T00:00:00.000Z',
@@ -399,7 +400,7 @@ describe('removed runtime schema cleanup', () => {
       created_at: '2026-07-14T00:00:00.000Z',
     });
     createMemory({
-      group_folder: 'main',
+      agent_folder: 'main',
       layer: 'canonical',
       memory_type: 'fact',
       content: 'Keep this memory',
@@ -459,30 +460,30 @@ describe('removed runtime schema cleanup', () => {
 
 describe('storeChatMetadata', () => {
   it('stores chat with JID as default name', () => {
-    storeChatMetadata('group@g.us', '2024-01-01T00:00:00.000Z');
+    storeChatMetadata('web:group', '2024-01-01T00:00:00.000Z');
     const chats = getAllChats();
     expect(chats).toHaveLength(1);
-    expect(chats[0].jid).toBe('group@g.us');
-    expect(chats[0].name).toBe('group@g.us');
+    expect(chats[0].jid).toBe('web:group');
+    expect(chats[0].name).toBe('web:group');
   });
 
   it('stores chat with explicit name', () => {
-    storeChatMetadata('group@g.us', '2024-01-01T00:00:00.000Z', 'My Group');
+    storeChatMetadata('web:group', '2024-01-01T00:00:00.000Z', 'My Group');
     const chats = getAllChats();
     expect(chats[0].name).toBe('My Group');
   });
 
   it('updates name on subsequent call with name', () => {
-    storeChatMetadata('group@g.us', '2024-01-01T00:00:00.000Z');
-    storeChatMetadata('group@g.us', '2024-01-01T00:00:01.000Z', 'Updated Name');
+    storeChatMetadata('web:group', '2024-01-01T00:00:00.000Z');
+    storeChatMetadata('web:group', '2024-01-01T00:00:01.000Z', 'Updated Name');
     const chats = getAllChats();
     expect(chats).toHaveLength(1);
     expect(chats[0].name).toBe('Updated Name');
   });
 
   it('preserves newer timestamp on conflict', () => {
-    storeChatMetadata('group@g.us', '2024-01-01T00:00:05.000Z');
-    storeChatMetadata('group@g.us', '2024-01-01T00:00:01.000Z');
+    storeChatMetadata('web:group', '2024-01-01T00:00:05.000Z');
+    storeChatMetadata('web:group', '2024-01-01T00:00:01.000Z');
     const chats = getAllChats();
     expect(chats[0].last_message_time).toBe('2024-01-01T00:00:05.000Z');
   });
@@ -494,8 +495,8 @@ describe('task CRUD', () => {
   it('creates and retrieves a task', () => {
     createTask({
       id: 'task-1',
-      group_folder: 'main',
-      chat_jid: 'group@g.us',
+      agent_folder: 'main',
+      chat_jid: 'web:group',
       prompt: 'do something',
       schedule_type: 'once',
       schedule_value: '2024-06-01T00:00:00.000Z',
@@ -514,8 +515,8 @@ describe('task CRUD', () => {
   it('updates task status', () => {
     createTask({
       id: 'task-2',
-      group_folder: 'main',
-      chat_jid: 'group@g.us',
+      agent_folder: 'main',
+      chat_jid: 'web:group',
       prompt: 'test',
       schedule_type: 'once',
       schedule_value: '2024-06-01T00:00:00.000Z',
@@ -532,8 +533,8 @@ describe('task CRUD', () => {
   it('deletes a task and its canonical run history', () => {
     createTask({
       id: 'task-3',
-      group_folder: 'main',
-      chat_jid: 'group@g.us',
+      agent_folder: 'main',
+      chat_jid: 'web:group',
       prompt: 'delete me',
       schedule_type: 'once',
       schedule_value: '2024-06-01T00:00:00.000Z',
@@ -548,8 +549,8 @@ describe('task CRUD', () => {
       runId: 'run-task-3',
       sourceType: 'scheduled_task',
       sourceRefId: 'task-3',
-      chatJid: 'group@g.us',
-      groupFolder: 'main',
+      chatJid: 'web:group',
+      agentFolder: 'main',
       promptSummary: 'delete me',
       promptHash: 'prompt-hash',
     });
@@ -583,13 +584,13 @@ describe('task CRUD', () => {
 
 describe('message query LIMIT', () => {
   beforeEach(() => {
-    storeChatMetadata('group@g.us', '2024-01-01T00:00:00.000Z');
+    storeChatMetadata('web:group', '2024-01-01T00:00:00.000Z');
 
     for (let i = 1; i <= 10; i++) {
       store({
         id: `lim-${i}`,
-        chat_jid: 'group@g.us',
-        sender: 'user@s.whatsapp.net',
+        chat_jid: 'web:group',
+        sender: 'user:user',
         sender_name: 'User',
         content: `message ${i}`,
         timestamp: `2024-01-01T00:00:${String(i).padStart(2, '0')}.000Z`,
@@ -599,7 +600,7 @@ describe('message query LIMIT', () => {
 
   it('getNewMessages caps to limit and returns most recent in chronological order', () => {
     const { messages, newTimestamp } = getNewMessages(
-      ['group@g.us'],
+      ['web:group'],
       '2024-01-01T00:00:00.000Z',
       'Andy',
       3,
@@ -615,7 +616,7 @@ describe('message query LIMIT', () => {
 
   it('getMessagesSince caps to limit and returns most recent in chronological order', () => {
     const messages = getMessagesSince(
-      'group@g.us',
+      'web:group',
       '2024-01-01T00:00:00.000Z',
       'Andy',
       3,
@@ -628,7 +629,7 @@ describe('message query LIMIT', () => {
 
   it('returns all messages when count is under the limit', () => {
     const { messages } = getNewMessages(
-      ['group@g.us'],
+      ['web:group'],
       '2024-01-01T00:00:00.000Z',
       'Andy',
       50,
@@ -637,37 +638,65 @@ describe('message query LIMIT', () => {
   });
 });
 
-// --- RegisteredGroup isMain round-trip ---
+// --- RegisteredAgent isMain round-trip ---
 
-describe('registered group isMain', () => {
+describe('registered Agent isMain', () => {
   it('persists isMain=true through set/get round-trip', () => {
-    setRegisteredGroup('main@s.whatsapp.net', {
+    setRegisteredAgent('user:main', {
       name: 'Main Chat',
-      folder: 'whatsapp_main',
+      folder: 'web_main',
       trigger: '@Andy',
       added_at: '2024-01-01T00:00:00.000Z',
       isMain: true,
     });
 
-    const groups = getAllRegisteredGroups();
-    const group = groups['main@s.whatsapp.net'];
-    expect(group).toBeDefined();
-    expect(group.isMain).toBe(true);
-    expect(group.folder).toBe('whatsapp_main');
+    const agents = getAllRegisteredAgents();
+    const agent = agents['user:main'];
+    expect(agent).toBeDefined();
+    expect(agent.isMain).toBe(true);
+    expect(agent.folder).toBe('web_main');
   });
 
-  it('omits isMain for non-main groups', () => {
-    setRegisteredGroup('group@g.us', {
+  it('omits isMain for non-main Agents', () => {
+    setRegisteredAgent('web:group', {
       name: 'Family Chat',
-      folder: 'whatsapp_family-chat',
+      folder: 'web_family-chat',
       trigger: '@Andy',
       added_at: '2024-01-01T00:00:00.000Z',
     });
 
-    const groups = getAllRegisteredGroups();
-    const group = groups['group@g.us'];
-    expect(group).toBeDefined();
-    expect(group.isMain).toBeUndefined();
+    const agents = getAllRegisteredAgents();
+    const agent = agents['web:group'];
+    expect(agent).toBeDefined();
+    expect(agent.isMain).toBeUndefined();
+  });
+
+  it('never exposes the reserved global config domain as an executable Agent', () => {
+    expect(() =>
+      setRegisteredAgent('web:global', {
+        name: 'Global config',
+        folder: 'global',
+        trigger: '@Andy',
+        added_at: '2024-01-01T00:00:00.000Z',
+      }),
+    ).toThrow('Invalid Agent folder');
+
+    getDatabase()
+      .prepare(
+        `INSERT INTO registered_agents
+          (jid, name, folder, trigger_pattern, added_at, requires_trigger)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        'web:global',
+        'Global config',
+        'global',
+        '@Andy',
+        '2024-01-01T00:00:00.000Z',
+        0,
+      );
+
+    expect(getAllRegisteredAgents()).not.toHaveProperty('web:global');
   });
 });
 
@@ -676,7 +705,7 @@ describe('registered group isMain', () => {
 describe('structured memory CRUD/search/status', () => {
   it('creates, lists, updates, deletes memories', () => {
     const created = createMemory({
-      group_folder: 'web_main',
+      agent_folder: 'web_main',
       layer: 'canonical',
       memory_type: 'preference',
       content: 'Always reply in Chinese',
@@ -688,11 +717,11 @@ describe('structured memory CRUD/search/status', () => {
     expect(listed[0].status).toBe('active');
 
     updateMemory(created.id, {
-      content: 'Always reply in Chinese for this group',
+      content: 'Always reply in Chinese for this Agent',
       memory_type: 'rule',
     });
     const updated = getMemoryById(created.id)!;
-    expect(updated.content).toContain('this group');
+    expect(updated.content).toContain('this Agent');
     expect(updated.memory_type).toBe('rule');
 
     deleteMemory(created.id);
@@ -701,13 +730,13 @@ describe('structured memory CRUD/search/status', () => {
 
   it('memory_search includes structured memory hits and excludes deprecated ones', () => {
     const m1 = createMemory({
-      group_folder: 'web_main',
+      agent_folder: 'web_main',
       layer: 'canonical',
       memory_type: 'fact',
       content: 'Service foo uses branch main',
     });
     createMemory({
-      group_folder: 'web_main',
+      agent_folder: 'web_main',
       layer: 'episodic',
       memory_type: 'summary',
       content: 'Yesterday fixed foo timeout',
@@ -724,13 +753,13 @@ describe('structured memory CRUD/search/status', () => {
 
   it('marks contradictory rules as conflicted automatically', () => {
     const pos = createMemory({
-      group_folder: 'web_main',
+      agent_folder: 'web_main',
       layer: 'canonical',
       memory_type: 'rule',
       content: 'Always use send_message for progress',
     });
     const neg = createMemory({
-      group_folder: 'web_main',
+      agent_folder: 'web_main',
       layer: 'canonical',
       memory_type: 'rule',
       content: 'Never use send_message for progress',
@@ -746,31 +775,31 @@ describe('structured memory CRUD/search/status', () => {
 describe('memory doctor/gc/metrics', () => {
   it('doctor reports duplicates, conflicts, stale working', () => {
     createMemory({
-      group_folder: 'web_main',
+      agent_folder: 'web_main',
       layer: 'canonical',
       memory_type: 'preference',
       content: 'Always reply in Chinese',
     });
     createMemory({
-      group_folder: 'web_main',
+      agent_folder: 'web_main',
       layer: 'canonical',
       memory_type: 'preference',
       content: 'Always reply in Chinese',
     });
     createMemory({
-      group_folder: 'web_main',
+      agent_folder: 'web_main',
       layer: 'canonical',
       memory_type: 'rule',
       content: 'Always include summary',
     });
     createMemory({
-      group_folder: 'web_main',
+      agent_folder: 'web_main',
       layer: 'canonical',
       memory_type: 'rule',
       content: 'Never include summary',
     });
     createMemory({
-      group_folder: 'web_main',
+      agent_folder: 'web_main',
       layer: 'working',
       memory_type: 'summary',
       content: 'temporary context',
@@ -784,13 +813,13 @@ describe('memory doctor/gc/metrics', () => {
 
   it('gc supports dry-run and execute', () => {
     createMemory({
-      group_folder: 'web_main',
+      agent_folder: 'web_main',
       layer: 'canonical',
       memory_type: 'fact',
       content: 'API endpoint is /v1/orders',
     });
     createMemory({
-      group_folder: 'web_main',
+      agent_folder: 'web_main',
       layer: 'canonical',
       memory_type: 'fact',
       content: 'API endpoint is /v1/orders',
@@ -824,7 +853,7 @@ describe('memory doctor/gc/metrics', () => {
 });
 
 describe('memory extract config table', () => {
-  it('returns defaults and supports per-group overrides', () => {
+  it('returns defaults and supports per-Agent overrides', () => {
     const defaults = getMemoryExtractConfig('web_main');
     expect(defaults.canonical_max).toBe(3);
     expect(defaults.working_max).toBe(4);
@@ -846,13 +875,13 @@ describe('memory extract config table', () => {
 describe('memory_resolve_conflict', () => {
   it('keep mode: keeps one memory active, deprecates the other with audit trail', () => {
     const pos = createMemory({
-      group_folder: 'web_main',
+      agent_folder: 'web_main',
       layer: 'canonical',
       memory_type: 'rule',
       content: 'Always use send_message for progress',
     });
     const neg = createMemory({
-      group_folder: 'web_main',
+      agent_folder: 'web_main',
       layer: 'canonical',
       memory_type: 'rule',
       content: 'Never use send_message for progress',
@@ -865,7 +894,7 @@ describe('memory_resolve_conflict', () => {
     const result = resolveConflict('keep', {
       keepId: pos.id,
       deprecateId: neg.id,
-      groupFolder: 'web_main',
+      agentFolder: 'web_main',
     });
 
     // Verify kept memory
@@ -884,13 +913,13 @@ describe('memory_resolve_conflict', () => {
 
   it('merge mode: deprecates both and creates merged memory with audit trail', () => {
     const pos = createMemory({
-      group_folder: 'web_main',
+      agent_folder: 'web_main',
       layer: 'canonical',
       memory_type: 'rule',
       content: 'Always use send_message for progress',
     });
     const neg = createMemory({
-      group_folder: 'web_main',
+      agent_folder: 'web_main',
       layer: 'canonical',
       memory_type: 'rule',
       content: 'Never use send_message for progress',
@@ -902,7 +931,7 @@ describe('memory_resolve_conflict', () => {
     const result = resolveConflict('merge', {
       mergeIds: [pos.id, neg.id],
       mergedContent: 'Use send_message for important progress only',
-      groupFolder: 'web_main',
+      agentFolder: 'web_main',
     });
 
     // Verify merged memory
@@ -924,13 +953,13 @@ describe('memory_resolve_conflict', () => {
 
   it('throws error when memory is not conflicted', () => {
     const mem1 = createMemory({
-      group_folder: 'web_main',
+      agent_folder: 'web_main',
       layer: 'canonical',
       memory_type: 'fact',
       content: 'API endpoint is /v1/orders',
     });
     const mem2 = createMemory({
-      group_folder: 'web_main',
+      agent_folder: 'web_main',
       layer: 'canonical',
       memory_type: 'fact',
       content: 'API version is v2',
@@ -944,7 +973,7 @@ describe('memory_resolve_conflict', () => {
       resolveConflict('keep', {
         keepId: mem1.id,
         deprecateId: mem2.id,
-        groupFolder: 'web_main',
+        agentFolder: 'web_main',
       }),
     ).toThrow(/not conflicted/);
 
@@ -952,7 +981,7 @@ describe('memory_resolve_conflict', () => {
       resolveConflict('merge', {
         mergeIds: [mem1.id, mem2.id],
         mergedContent: 'combined',
-        groupFolder: 'web_main',
+        agentFolder: 'web_main',
       }),
     ).toThrow(/not conflicted/);
   });

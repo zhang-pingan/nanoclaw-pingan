@@ -14,18 +14,32 @@ import {
   listAgentQueries,
 } from '../db.js';
 import { getChannelFactory } from './registry.js';
+import type { RegisteredAgent } from '../types.js';
 
-async function requestWebStatus(
-  pathname: string,
-  method: 'GET' | 'POST' | 'PATCH' | 'DELETE' = 'GET',
-): Promise<number> {
+interface TestWebResponse {
+  statusCode: number;
+  body: string;
+}
+
+function createWebChannel(
+  registeredAgents: Record<string, RegisteredAgent> = {},
+): NonNullable<ReturnType<NonNullable<ReturnType<typeof getChannelFactory>>>> {
   const channel = getChannelFactory('web')?.({
     onMessage: () => {},
     onChatMetadata: () => {},
-    registeredGroups: () => ({}),
+    registeredAgents: () => registeredAgents,
   });
   if (!channel) throw new Error('web channel factory not registered');
+  return channel;
+}
 
+async function requestWeb(
+  pathname: string,
+  method: 'GET' | 'POST' | 'PATCH' | 'DELETE' = 'GET',
+  registeredAgents: Record<string, RegisteredAgent> = {},
+): Promise<TestWebResponse> {
+  const channel = createWebChannel(registeredAgents);
+  let body = '';
   const response = {
     statusCode: 0,
     setHeader: () => undefined,
@@ -33,15 +47,126 @@ async function requestWebStatus(
       this.statusCode = statusCode;
       return this;
     },
-    end: () => undefined,
+    end(chunk?: string) {
+      body += chunk || '';
+    },
   };
   await (
     channel as unknown as {
       handleHttp: (request: unknown, response: unknown) => Promise<void>;
     }
   ).handleHttp({ method, url: pathname, headers: {} }, response);
-  return response.statusCode;
+  return { statusCode: response.statusCode, body };
 }
+
+async function requestWebStatus(
+  pathname: string,
+  method: 'GET' | 'POST' | 'PATCH' | 'DELETE' = 'GET',
+): Promise<number> {
+  return (await requestWeb(pathname, method)).statusCode;
+}
+
+const webAgentFixtures: Record<string, RegisteredAgent> = {
+  'web:main': {
+    name: 'Main Agent',
+    folder: 'web_main',
+    trigger: '@Andy',
+    added_at: '2026-08-04T00:00:00.000Z',
+    isMain: true,
+  },
+  'feishu:ops': {
+    name: 'Ops Agent',
+    folder: 'feishu_ops',
+    trigger: '@Andy',
+    added_at: '2026-08-04T00:00:00.000Z',
+  },
+  'web:global': {
+    name: 'Reserved shared config',
+    folder: 'global',
+    trigger: '@Andy',
+    added_at: '2026-08-04T00:00:00.000Z',
+  },
+};
+
+describe('Agent list contracts', () => {
+  it('serves the new /api/agents response and excludes reserved global config', async () => {
+    const response = await requestWeb('/api/agents', 'GET', webAgentFixtures);
+    expect(response.statusCode).toBe(200);
+    expect(JSON.parse(response.body)).toEqual({
+      agents: [
+        {
+          jid: 'web:main',
+          name: 'Main Agent',
+          folder: 'web_main',
+          channel: 'web',
+          isMain: true,
+        },
+      ],
+    });
+
+    const allResponse = await requestWeb(
+      '/api/agents?scope=all',
+      'GET',
+      webAgentFixtures,
+    );
+    expect(
+      JSON.parse(allResponse.body).agents.map(
+        (agent: { jid: string }) => agent.jid,
+      ),
+    ).toEqual(['web:main', 'feishu:ops']);
+  });
+
+  it('does not expose the removed /api/groups route', async () => {
+    expect(
+      (await requestWeb('/api/groups', 'GET', webAgentFixtures)).statusCode,
+    ).toBe(404);
+  });
+
+  it('uses select_agent/agents and rejects old or reserved selections', async () => {
+    const channel = createWebChannel(webAgentFixtures);
+    const sent: Array<Record<string, unknown>> = [];
+    const handleWsMessage = (
+      channel as unknown as {
+        handleWsMessage: (
+          ws: unknown,
+          message: Record<string, unknown>,
+          send: (payload: Record<string, unknown>) => void,
+        ) => Promise<void>;
+      }
+    ).handleWsMessage.bind(channel);
+
+    await handleWsMessage(
+      {},
+      { type: 'select_agent', chatJid: 'web:main' },
+      (payload) => sent.push(payload),
+    );
+    expect(sent).toEqual([
+      expect.objectContaining({
+        type: 'agents',
+        selectedJid: 'web:main',
+        agents: [expect.objectContaining({ jid: 'web:main' })],
+      }),
+    ]);
+
+    sent.length = 0;
+    await handleWsMessage(
+      {},
+      { type: 'select_group', chatJid: 'web:main' },
+      (payload) => sent.push(payload),
+    );
+    expect(sent).toEqual([
+      { type: 'error', message: 'Unknown message type: select_group' },
+    ]);
+
+    sent.length = 0;
+    await handleWsMessage(
+      {},
+      { type: 'select_agent', chatJid: 'web:global' },
+      (payload) => sent.push(payload),
+    );
+    expect(sent).toEqual([{ type: 'error', message: 'Invalid chat JID' }]);
+  });
+});
 
 describe('web trace detail helpers', () => {
   it('builds detail response compatible with the trace detail API shape', () => {

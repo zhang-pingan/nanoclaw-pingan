@@ -589,7 +589,7 @@ interface EvaluationObservationV1 {
 
 ```text
 frozen inbound message
-  -> routing / group selection
+  -> routing / Agent selection
   -> context + memory pack
   -> model selection
   -> container agent execution

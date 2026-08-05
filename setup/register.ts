@@ -1,15 +1,15 @@
 /**
- * Step: register — Write channel registration config, create group folders.
+ * Step: register — Write channel registration config, create Agent folders.
  *
- * Accepts --channel to specify the messaging platform (whatsapp, telegram, slack, discord).
+ * Requires --channel to identify one of the built-in messaging channels.
  * Uses parameterized SQL queries to prevent injection.
  */
 import fs from 'fs';
 import path from 'path';
 
 import { STORE_DIR } from '../src/config.ts';
-import { initDatabase, setRegisteredGroup } from '../src/db.ts';
-import { isValidGroupFolder } from '../src/group-folder.ts';
+import { initDatabase, setRegisteredAgent } from '../src/db.ts';
+import { isValidAgentFolder } from '../src/agent-folder.ts';
 import { logger } from '../src/logger.ts';
 import { emitStatus } from './status.ts';
 
@@ -24,13 +24,57 @@ interface RegisterArgs {
   assistantName: string;
 }
 
-function parseArgs(args: string[]): RegisterArgs {
+export const BUILT_IN_CHANNELS = [
+  'assistant',
+  'feishu',
+  'wecom',
+  'web',
+] as const;
+
+type BuiltInChannel = (typeof BUILT_IN_CHANNELS)[number];
+
+export type RegistrationChannelError =
+  | 'missing_channel'
+  | 'invalid_channel'
+  | 'jid_channel_mismatch';
+
+export function isJidForBuiltInChannel(
+  channel: BuiltInChannel,
+  jid: string,
+): boolean {
+  switch (channel) {
+    case 'assistant':
+      return jid.startsWith('assistant:');
+    case 'feishu':
+      return /^feishu:o[uc]_/.test(jid);
+    case 'wecom':
+      return jid.startsWith('wecom:user:');
+    case 'web':
+      return jid.startsWith('web:');
+  }
+}
+
+export function validateRegistrationChannel(
+  channel: string,
+  jid: string,
+): RegistrationChannelError | null {
+  if (!channel) return 'missing_channel';
+  if (!BUILT_IN_CHANNELS.includes(channel as BuiltInChannel)) {
+    return 'invalid_channel';
+  }
+  if (!isJidForBuiltInChannel(channel as BuiltInChannel, jid)) {
+    return 'jid_channel_mismatch';
+  }
+  return null;
+}
+
+export function parseArgs(args: string[]): RegisterArgs {
   const result: RegisterArgs = {
     jid: '',
     name: '',
     trigger: '',
     folder: '',
-    channel: 'whatsapp', // backward-compat: pre-refactor installs omit --channel
+    channel: '',
     requiresTrigger: true,
     isMain: false,
     assistantName: 'Andy',
@@ -72,7 +116,13 @@ export async function run(args: string[]): Promise<void> {
   const projectRoot = process.cwd();
   const parsed = parseArgs(args);
 
-  if (!parsed.jid || !parsed.name || !parsed.trigger || !parsed.folder) {
+  if (
+    !parsed.jid ||
+    !parsed.name ||
+    !parsed.trigger ||
+    !parsed.folder ||
+    !parsed.channel
+  ) {
     emitStatus('REGISTER_CHANNEL', {
       STATUS: 'failed',
       ERROR: 'missing_required_args',
@@ -81,7 +131,17 @@ export async function run(args: string[]): Promise<void> {
     process.exit(4);
   }
 
-  if (!isValidGroupFolder(parsed.folder)) {
+  const channelError = validateRegistrationChannel(parsed.channel, parsed.jid);
+  if (channelError) {
+    emitStatus('REGISTER_CHANNEL', {
+      STATUS: 'failed',
+      ERROR: channelError,
+      LOG: 'logs/setup.log',
+    });
+    process.exit(4);
+  }
+
+  if (!isValidAgentFolder(parsed.folder)) {
     emitStatus('REGISTER_CHANNEL', {
       STATUS: 'failed',
       ERROR: 'invalid_folder',
@@ -92,15 +152,14 @@ export async function run(args: string[]): Promise<void> {
 
   logger.info(parsed, 'Registering channel');
 
-  // Ensure data and store directories exist (store/ may not exist on
-  // fresh installs that skip WhatsApp auth, which normally creates it)
+  // Ensure data and store directories exist on fresh installations.
   fs.mkdirSync(path.join(projectRoot, 'data'), { recursive: true });
   fs.mkdirSync(STORE_DIR, { recursive: true });
 
   // Initialize database (creates schema + runs migrations)
   initDatabase();
 
-  setRegisteredGroup(parsed.jid, {
+  setRegisteredAgent(parsed.jid, {
     name: parsed.name,
     folder: parsed.folder,
     trigger: parsed.trigger,
@@ -111,8 +170,8 @@ export async function run(args: string[]): Promise<void> {
 
   logger.info('Wrote registration to SQLite');
 
-  // Create group folders
-  fs.mkdirSync(path.join(projectRoot, 'groups', parsed.folder, 'logs'), {
+  // Create Agent folders
+  fs.mkdirSync(path.join(projectRoot, 'agents', parsed.folder, 'logs'), {
     recursive: true,
   });
 
@@ -125,8 +184,8 @@ export async function run(args: string[]): Promise<void> {
     );
 
     const mdFiles = [
-      path.join(projectRoot, 'groups', 'global', 'CLAUDE.md'),
-      path.join(projectRoot, 'groups', parsed.folder, 'CLAUDE.md'),
+      path.join(projectRoot, 'agents', 'global', 'CLAUDE.md'),
+      path.join(projectRoot, 'agents', parsed.folder, 'CLAUDE.md'),
     ];
 
     for (const mdFile of mdFiles) {

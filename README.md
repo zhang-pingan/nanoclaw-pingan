@@ -26,12 +26,12 @@ Icarus 不是一个多用户 SaaS，也不是一个通用低代码平台。它�
 
 四类交互入口的边界是项目的关键设计：
 
-| 入口 | 用户意图 | Agent 角色 | 典型场景 |
-| --- | --- | --- | --- |
-| Web 工作台 | 用户主动 | 被动辅助工具 | 新建需求、推进工作流、审批阶段、查看产物、追踪 Trace |
-| 个人助理 | Agent 主动 | 私人助手 | 发现计划缺失、任务卡住、执行失败、线上报错、提醒并排查 |
+| 入口               | 用户意图           | Agent 角色             | 典型场景                                                 |
+| ------------------ | ------------------ | ---------------------- | -------------------------------------------------------- |
+| Web 工作台         | 用户主动           | 被动辅助工具           | 新建需求、推进工作流、审批阶段、查看产物、追踪 Trace     |
+| 个人助理           | Agent 主动         | 私人助手               | 发现计划缺失、任务卡住、执行失败、线上报错、提醒并排查   |
 | 移动端渠道（飞书） | 用户碎片化补充操作 | 轻量任务入口和审批触达 | 查询任务、处理待审批项、接收提醒、简单任务下发、补充说明 |
-| 企微员工私人渠道 | 员工一对一沟通 | 私人客服和信息收集员 | 询问运行问题上下文、补充排查信息、处理员工请求或问题 |
+| 企微员工私人渠道   | 员工一对一沟通     | 私人客服和信息收集员   | 询问运行问题上下文、补充排查信息、处理员工请求或问题     |
 
 ## 总体架构
 
@@ -51,7 +51,7 @@ Icarus 不是一个多用户 SaaS，也不是一个通用低代码平台。它�
 │                                                                                      │
 │ Channel Registry  WebChannel  AssistantChannel  FeishuChannel  WeComChannel          │
 │ Workflow Engine   Workbench Store  Today Plan  Assistant Engine                      │
-│ Scheduler         Group Queue      IPC Watcher  Credential Proxy                     │
+│ Scheduler         Agent Queue      IPC Watcher  Credential Proxy                     │
 │ SQLite DB         Trace Manager    Config/Wiki  MySQL Proxy                          │
 └───────────────────────────────────────┬──────────────────────────────────────────────┘
                                         │ 启动/复用容器，文件 IPC
@@ -61,7 +61,7 @@ Icarus 不是一个多用户 SaaS，也不是一个通用低代码平台。它�
 │ container/agent-runner                                                               │
 │                                                                                      │
 │ Claude Agent SDK  Bash/文件工具  WebSearch/WebFetch  Browser                         │
-│ /workspace/group  /workspace/project(ro)  /workspace/ipc                             │
+│ /workspace/agent  /workspace/project(ro)  /workspace/ipc                             │
 └──────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -73,7 +73,7 @@ Web 工作台由 `src/channels/web.ts` 启动本地 HTTP/WebSocket 服务，默�
 
 工作台的定位是“用户主动控制台”。它提供：
 
-- **Agent 群组会话**：按群组查看消息、文件、上下文和 Agent 回复。
+- **Agent 会话**：按 Agent 查看消息、文件、上下文和回复。
 - **工作台任务**：创建任务、查看阶段进度、待处理项、产出物、上下文资产、评论和执行时间线。
 - **流程定义**：维护流程状态机、角色映射、卡片和阶段配置。
 - **今日计划**：聚合工作台任务、群聊会话、服务分支变更，生成并发送计划邮件。
@@ -121,7 +121,7 @@ Web 工作台由 `src/channels/web.ts` 启动本地 HTTP/WebSocket 服务，默�
 
 - **运行问题信息收集**：当 Icarus 运行过程中遇到需要员工补充的信息、确认或现场上下文时，通过私聊向对应员工询问。
 - **员工请求处理**：作为 Icarus 的私人客服，接收并处理企微员工提出的要求、问题、反馈或补充材料。
-- **一对一上下文隔离**：每个授权员工映射到独立的 `wecom:user:{userid}` 会话和群组目录，避免员工私聊上下文互相串扰。
+- **一对一上下文隔离**：每个授权员工映射到独立的 `wecom:user:{userid}` 会话和 Agent 目录，避免员工私聊上下文互相串扰。
 - **附件交换**：支持员工通过私聊提交截图、文件、语音转写等排查材料，必要时由 Icarus 返回处理结果或产物。
 - **受控委派**：需要跨频道向企微员工收集信息时，应保留原始任务、Trace 和工作台状态的关联，避免形成脱离宿主机审计的私聊任务状态。
 
@@ -132,7 +132,7 @@ Web 工作台由 `src/channels/web.ts` 启动本地 HTTP/WebSocket 服务，默�
 宿主机服务是 `src/index.ts` 启动的单进程 Node.js 服务。它是整个系统的可信编排层，主要职责包括：
 
 - **频道接入**：通过 `src/channels/registry.ts` 自注册机制加载 Web、Feishu、WeCom、Assistant 等频道。
-- **消息路由**：接收频道消息，按注册群组、触发词和权限规则进入队列。
+- **消息路由**：接收频道消息，按已注册 Agent、触发词和权限规则进入队列。
 - **工作流引擎**：读取 `container/workflow-definitions/*.json` 和卡片配置，驱动流程状态、委派、审批、中断恢复和产物索引。
 - **工作台同步**：把 workflow、delegation、interrupt、artifact、evaluation 等运行态同步为工作台任务视图。
 - **主动助手运行时**：运行 proactive scan、Agent Inbox 和动作日志。
@@ -149,21 +149,21 @@ Web 工作台由 `src/channels/web.ts` 启动本地 HTTP/WebSocket 服务，默�
 
 - 调用 `@anthropic-ai/claude-agent-sdk`。
 - 使用 Bash、文件读写、搜索、浏览器自动化、WebSearch、WebFetch 等工具。
-- 读取 `/workspace/group` 群组工作目录和必要的只读项目上下文。
+- 读取 `/workspace/agent` 的 Agent 工作目录和必要的只读项目上下文。
 - 通过 `/workspace/ipc` 与宿主机通信，发送消息、创建任务或接收后续输入。
 - 使用宿主机凭证代理访问模型 API，容器环境中不包含真实密钥。
 
 默认挂载遵循最小可见原则：
 
-| 主机路径 | 容器路径 | 说明 |
-| --- | --- | --- |
-| 项目根目录 | `/workspace/project` | 只读，且 `.env` 被隐藏 |
-| `groups/{group}` | `/workspace/group` | 当前群组可写工作目录 |
-| `groups/global` | `/workspace/global` | 非主群只读全局记忆 |
-| `data/sessions/{group}/.claude` | `/home/node/.claude` | 群组隔离会话 |
-| `data/ipc/{group}` | `/workspace/ipc` | 宿主机与容器通信 |
-| `data/attachments` | `/workspace/attachments` | 附件共享 |
-| `data/ai-images` | `/workspace/ai-images` | 图片产物共享 |
+| 主机路径                        | 容器路径                 | 说明                    |
+| ------------------------------- | ------------------------ | ----------------------- |
+| 项目根目录                      | `/workspace/project`     | 只读，且 `.env` 被隐藏  |
+| `agents/{agent}`                | `/workspace/agent`       | 当前 Agent 可写工作目录 |
+| `agents/global`                 | `/workspace/global`      | 非主 Agent 只读全局记忆 |
+| `data/sessions/{agent}/.claude` | `/home/node/.claude`     | Agent 隔离会话          |
+| `data/ipc/{agent}`              | `/workspace/ipc`         | 宿主机与容器通信        |
+| `data/attachments`              | `/workspace/attachments` | 附件共享                |
+| `data/ai-images`                | `/workspace/ai-images`   | 图片产物共享            |
 
 ## 关键运行链路
 
@@ -174,7 +174,7 @@ Web 工作台由 `src/channels/web.ts` 启动本地 HTTP/WebSocket 服务，默�
   -> 宿主机创建 workflow/workbench_task
   -> Workflow Engine 按状态机推进
   -> 需要 Agent 执行时创建 delegation
-  -> GroupQueue 启动或复用容器 Agent
+  -> AgentQueue 启动或复用容器 Agent
   -> 容器产出代码、文档、测试结果或调查结论
   -> 宿主机写入 Trace、产物、阶段评估和待处理项
   -> 工作台实时刷新，用户审批、退回、跳过、重试或继续
@@ -198,7 +198,7 @@ Proactive Engine 周期扫描数据源
 Feishu/WeCom/Web/Assistant 消息进入频道
   -> 写入 SQLite messages
   -> 消息轮询发现新消息
-  -> 检查注册群组、触发词、发送者 allowlist
+  -> 检查已注册 Agent、触发词、发送者 allowlist
   -> 格式化上下文和记忆包
   -> 容器 Agent 执行
   -> 输出流回宿主机
@@ -233,7 +233,7 @@ Feishu/WeCom/Web/Assistant 消息进入频道
 │   ├── workflow-definitions/
 │   ├── cards/
 │   └── skills/
-├── groups/                      # 群组工作目录和群组级 CLAUDE.md
+├── agents/                      # Agent 工作目录和 Agent 级 CLAUDE.md
 ├── data/                        # 运行时数据、附件、会话、IPC、上传文件
 ├── store/                       # SQLite 数据库
 ├── docs/                        # 架构、启动流程、安全、调试文档
@@ -246,7 +246,7 @@ Feishu/WeCom/Web/Assistant 消息进入频道
 核心运行状态保存在 SQLite 中，主要表包括：
 
 - `messages`、`chats`：频道消息和聊天元数据。
-- `registered_groups`、`sessions`、`router_state`：群组注册、会话和路由游标。
+- `registered_agents`、`sessions`、`router_state`：Agent 注册、会话和路由游标。
 - `scheduled_tasks`：定时任务。
 - `agent_queries`、`agent_query_steps`、`agent_query_events`：Agent 执行 Trace。
 - `workflows`、`delegations`、`workflow_interrupts`、`workflow_events`：流程运行态。
@@ -368,12 +368,12 @@ Icarus 的核心安全边界是容器隔离，而不是让 Agent 在宿主机上
 - 项目根目录默认只读挂载。
 - `.env` 不挂载给容器，真实密钥不进入容器环境。
 - 模型 API 通过宿主机凭证代理转发。
-- 每个群组有独立 `.claude` 会话目录，避免上下文串扰。
-- IPC 操作按主群和非主群区分权限。
+- 每个 Agent 有独立 `.claude` 会话目录，避免上下文串扰。
+- IPC 操作按主 Agent 和非主 Agent 区分权限。
 - 额外挂载由 `~/.config/icarus/mount-allowlist.json` 控制，该文件位于项目外，容器不可修改。
 - 默认阻止 `.ssh`、`.aws`、`.kube`、`.env`、私钥、credential 等敏感路径挂载。
 
-主群通常代表用户本人，拥有管理权限；非主群被视为不可信输入，只能操作自己的上下文和有限资源。
+主 Agent 通常代表用户本人，拥有管理权限；非主 Agent 被视为不可信输入，只能操作自己的上下文和有限资源。
 
 ## 扩展方式
 
@@ -393,7 +393,7 @@ Icarus 的核心安全边界是容器隔离，而不是让 Agent 在宿主机上
 工作流定义位于 `container/workflow-definitions/`，卡片位于 `container/cards/`。新增工作流通常需要：
 
 - 定义状态机、角色、阶段类型和转换。
-- 配置角色到不同频道群组 folder 的映射。
+- 配置角色到不同频道 Agent folder 的映射。
 - 配置交互卡片和审批/输入表单。
 - 按需要补充产物契约、评估器和工作台展示字段。
 

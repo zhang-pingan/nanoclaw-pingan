@@ -1549,7 +1549,7 @@
               <h3>统一单次运行的输入契约</h3>
               <p>
                 宿主机把
-                prompt、sessionId、model、runId、queryId、groupFolder、workflowId、
+                prompt、sessionId、model、runId、queryId、agentFolder、workflowId、
                 stageKey、delegationId 等元数据收束成一次 run 的标准输入。
               </p>
             </article>
@@ -1801,8 +1801,9 @@
             <div>
               <h2>记忆与 Wiki 模块</h2>
               <p>
-                记忆与 Wiki 是 Irarus 的长期上下文层。结构化记忆负责把当前群组、
-                当前用户和近期任务的偏好、规则、事实注入 Agent 上下文；Wiki
+                记忆与 Wiki 是 Irarus 的长期上下文层。结构化记忆负责把当前
+                Agent、 当前用户和近期任务的偏好、规则、事实注入 Agent
+                上下文；Wiki
                 负责把项目资料、流程说明、决策和证据链沉淀成可检索、可引用、
                 可复核的长期知识。
               </p>
@@ -1827,7 +1828,7 @@
             <div class="assistant-flow-step">
               <b>检索与筛选</b>
               <span>
-                记忆按 group 检索并组装 Memory Pack；Wiki
+                记忆按 agent 检索并组装 Memory Pack；Wiki
                 按页面、标题、摘要和正文做全文检索。
               </span>
             </div>
@@ -1898,7 +1899,7 @@
                   <div class="timeline-body">
                     <b>写入结构化记忆</b>
                     <span>
-                      <code>createMemory()</code> 写入 group 作用域、layer、
+                      <code>createMemory()</code> 写入 agent 作用域、layer、
                       memory_type、status、source 和 metadata。来源可以是 Web
                       手工维护、容器内
                       <code>memory_write</code>，也可以是会话归档抽取。
@@ -1910,7 +1911,7 @@
                   <div class="timeline-body">
                     <b>归档抽取与过滤</b>
                     <span>
-                      <code>memory_extract_from_archive</code> 读取群组
+                      <code>memory_extract_from_archive</code> 读取 Agent
                       conversations 归档，先过滤系统提示、工具指令、Memory Pack
                       和低价值交接话术，再按置信度和每层最大数量写入候选。
                     </span>
@@ -1932,7 +1933,7 @@
                   <div class="timeline-body">
                     <b>上下文打包</b>
                     <span>
-                      <code>buildMemoryPackForGroup()</code> 拉取最多 24
+                      <code>buildMemoryPackForAgent()</code> 拉取最多 24
                       条相关记忆， 追加 canonical
                       兜底候选，再按层级、类型、相关性、直接命中和新鲜度排序。
                     </span>
@@ -2012,8 +2013,8 @@
                   <td>作用范围</td>
                   <td>
                     以
-                    <code>group_folder</code>
-                    隔离，每个群组、角色或服务有自己的短期和长期行为上下文。
+                    <code>agent_folder</code>
+                    隔离，每个 Agent、角色或服务有自己的短期和长期行为上下文。
                   </td>
                   <td>
                     宿主机管理的全局 LLM

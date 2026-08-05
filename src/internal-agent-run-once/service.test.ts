@@ -36,11 +36,11 @@ vi.mock('../model-selector.js', async () => {
 
 import { runContainerAgent } from '../container-runner.js';
 import { _initTestDatabase } from '../db.js';
-import { GroupQueue } from '../group-queue.js';
+import { AgentQueue } from '../agent-queue.js';
 import { InternalAgentRunOnceService } from './service.js';
-import type { RegisteredGroup } from '../types.js';
+import type { RegisteredAgent } from '../types.js';
 
-const group: RegisteredGroup = {
+const agent: RegisteredAgent = {
   name: 'L3 Agent',
   folder: 'l3agent',
   trigger: '@Andy',
@@ -63,7 +63,8 @@ describe('InternalAgentRunOnceService', () => {
 
   it('runs the container in external system one-shot mode', async () => {
     vi.mocked(runContainerAgent).mockImplementation(
-      async (_group, _input, _onProcess, onOutput) => {
+      async (_agent, _input, onProcess, onOutput) => {
+        onProcess({} as never, 'container-test');
         await onOutput?.({
           status: 'success',
           result: 'answer',
@@ -78,24 +79,33 @@ describe('InternalAgentRunOnceService', () => {
     );
 
     const service = new InternalAgentRunOnceService({
-      registeredGroups: () => ({ 'web:l3agent': group }),
-      queue: new GroupQueue(),
+      registeredAgents: () => ({ 'web:l3agent': agent }),
+      queue: new AgentQueue(),
       onProcess: vi.fn(),
       maxInputChars: 10000,
     });
 
-    const result = await service.runOnce({
-      system: 'portal system prompt',
-      messages: [{ role: 'user', content: 'question' }],
-      chat_jid: 'web:l3agent',
-      require_result: true,
-      metadata: { source: 'l3agent', trace_id: 'trace-1' },
-    });
+    const onAccepted = vi.fn();
+    const result = await service.runOnce(
+      {
+        system: 'portal system prompt',
+        messages: [{ role: 'user', content: 'question' }],
+        chat_jid: 'web:l3agent',
+        require_result: true,
+        metadata: { source: 'l3agent', trace_id: 'trace-1' },
+      },
+      { onAccepted },
+    );
 
     expect(result).toMatchObject({
       ok: true,
       text: 'answer',
       model: 'test-model',
+    });
+    expect(onAccepted).toHaveBeenCalledWith({
+      runId: expect.any(String),
+      queryId: expect.any(String),
+      containerName: 'container-test',
     });
     expect(vi.mocked(runContainerAgent).mock.calls[0][1]).toMatchObject({
       system: 'portal system prompt',
@@ -120,7 +130,7 @@ describe('InternalAgentRunOnceService', () => {
 
   it('injects structured file metadata into the container prompt', async () => {
     vi.mocked(runContainerAgent).mockImplementation(
-      async (_group, _input, _onProcess, onOutput) => {
+      async (_agent, _input, _onProcess, onOutput) => {
         await onOutput?.({
           status: 'success',
           result: 'file answer',
@@ -135,8 +145,8 @@ describe('InternalAgentRunOnceService', () => {
     );
 
     const service = new InternalAgentRunOnceService({
-      registeredGroups: () => ({ 'web:l3agent': group }),
-      queue: new GroupQueue(),
+      registeredAgents: () => ({ 'web:l3agent': agent }),
+      queue: new AgentQueue(),
       onProcess: vi.fn(),
       maxInputChars: 10000,
     });
@@ -172,7 +182,7 @@ describe('InternalAgentRunOnceService', () => {
 
   it('strips think blocks from run-once text responses', async () => {
     vi.mocked(runContainerAgent).mockImplementation(
-      async (_group, _input, _onProcess, onOutput) => {
+      async (_agent, _input, _onProcess, onOutput) => {
         await onOutput?.({
           status: 'success',
           result: '<think>private reasoning</think>visible answer',
@@ -187,8 +197,8 @@ describe('InternalAgentRunOnceService', () => {
     );
 
     const service = new InternalAgentRunOnceService({
-      registeredGroups: () => ({ 'web:l3agent': group }),
-      queue: new GroupQueue(),
+      registeredAgents: () => ({ 'web:l3agent': agent }),
+      queue: new AgentQueue(),
       onProcess: vi.fn(),
       maxInputChars: 10000,
     });
@@ -209,7 +219,7 @@ describe('InternalAgentRunOnceService', () => {
 
   it('returns files generated under the run-once output directory', async () => {
     vi.mocked(runContainerAgent).mockImplementation(
-      async (_group, input, _onProcess, onOutput) => {
+      async (_agent, input, _onProcess, onOutput) => {
         const match = input.prompt.match(
           /write them under (\/workspace\/run-once\/outputs\/[^/]+)\//,
         );
@@ -241,8 +251,8 @@ describe('InternalAgentRunOnceService', () => {
     );
 
     const service = new InternalAgentRunOnceService({
-      registeredGroups: () => ({ 'web:l3agent': group }),
-      queue: new GroupQueue(),
+      registeredAgents: () => ({ 'web:l3agent': agent }),
+      queue: new AgentQueue(),
       onProcess: vi.fn(),
       maxInputChars: 10000,
     });
@@ -281,7 +291,7 @@ describe('InternalAgentRunOnceService', () => {
 
   it('writes full run-once trace into the run-once workspace', async () => {
     vi.mocked(runContainerAgent).mockImplementation(
-      async (_group, _input, _onProcess, onOutput) => {
+      async (_agent, _input, _onProcess, onOutput) => {
         await onOutput?.({
           status: 'success',
           result: null,
@@ -312,8 +322,8 @@ describe('InternalAgentRunOnceService', () => {
     );
 
     const service = new InternalAgentRunOnceService({
-      registeredGroups: () => ({ 'internal:l3agent': group }),
-      queue: new GroupQueue(),
+      registeredAgents: () => ({ 'internal:l3agent': agent }),
+      queue: new AgentQueue(),
       onProcess: vi.fn(),
       maxInputChars: 10000,
     });
@@ -346,7 +356,7 @@ describe('InternalAgentRunOnceService', () => {
       schema_version: 1,
       status: 'success',
       chat_jid: 'internal:l3agent',
-      group_folder: 'l3agent',
+      agent_folder: 'l3agent',
       request: {
         system: 'use tools for realtime questions',
         messages: [{ role: 'user', content: '现在几点了' }],

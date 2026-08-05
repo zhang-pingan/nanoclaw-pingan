@@ -25,11 +25,11 @@ vi.mock('../model-selector.js', async () => {
 
 import { runContainerAgent } from '../container-runner.js';
 import { _initTestDatabase } from '../db.js';
-import { GroupQueue } from '../group-queue.js';
-import type { RegisteredGroup } from '../types.js';
+import { AgentQueue } from '../agent-queue.js';
+import type { RegisteredAgent } from '../types.js';
 import { InternalAgentChatService } from './chat-service.js';
 
-const group: RegisteredGroup = {
+const agent: RegisteredAgent = {
   name: 'Chat Agent',
   folder: 'chat_agent_test',
   trigger: '@agent',
@@ -44,7 +44,7 @@ describe('InternalAgentChatService', () => {
 
   it('runs a resumable agent chat with caller-provided prompt and system', async () => {
     vi.mocked(runContainerAgent).mockImplementation(
-      async (_group, _input, _onProcess, onOutput) => {
+      async (_agent, _input, _onProcess, onOutput) => {
         await onOutput?.({
           status: 'success',
           result: '分析结果',
@@ -61,8 +61,8 @@ describe('InternalAgentChatService', () => {
     );
 
     const service = new InternalAgentChatService({
-      registeredGroups: () => ({ 'web:chat-agent': group }),
-      queue: new GroupQueue(),
+      registeredAgents: () => ({ 'web:chat-agent': agent }),
+      queue: new AgentQueue(),
       onProcess: vi.fn(),
       maxInputChars: 10000,
     });

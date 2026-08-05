@@ -41,8 +41,8 @@ function createStoredAgentQuery(input: {
     run_id: `run-${input.queryId}`,
     source_type: 'message',
     source_ref_id: `message-${input.queryId}`,
-    chat_jid: 'main@g.us',
-    group_folder: 'main',
+    chat_jid: 'web:main',
+    agent_folder: 'main',
     service: null,
     role: null,
     task_id: null,
@@ -448,7 +448,7 @@ describe('agent inbox store', () => {
       sourceRefId: 'query-container-137',
       extra: {
         runId: 'run-query-container-137',
-        groupFolder: 'assistant_main',
+        agentFolder: 'assistant_main',
       },
     });
 
@@ -456,7 +456,7 @@ describe('agent inbox store', () => {
 
     expect(capturedPrompt).toContain('必须先用工具主动取证');
     expect(capturedPrompt).toContain('/workspace/project/logs/icarus.log');
-    expect(capturedPrompt).toContain('/workspace/group/logs');
+    expect(capturedPrompt).toContain('/workspace/agent/logs');
     expect(capturedPrompt).toContain('logFile');
     expect(capturedPrompt).toContain(
       '/workspace/project/src/container-runner.ts',

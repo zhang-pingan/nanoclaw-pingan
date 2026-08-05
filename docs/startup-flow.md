@@ -41,19 +41,19 @@ Channel webhook handler → 存入 SQLite messages 表
   ↓
 消息轮询 (每 2s) → getNewMessages() 发现新消息
   ↓
-检查触发词 (主群不需要，非主群需要 @Andy)
+检查触发词（主 Agent 不需要，非主 Agent 需要 @Andy）
   ↓
-格式化为 XML → 入队到 GroupQueue
+格式化为 XML → 入队到 AgentQueue
   ↓
 ┌─ 容器已活跃？ → 通过 IPC 管道消息（复用容器）
 └─ 否 → 启动新容器
          docker run icarus-agent:latest
-         挂载: 项目(ro), 群组目录(rw), .claude(rw), IPC(rw)
+         挂载: 项目(ro), Agent 目录(rw), .claude(rw), IPC(rw)
          环境: ANTHROPIC_BASE_URL=http://host.docker.internal:3001
   ↓
 容器内 agent-runner 启动
   读取 stdin JSON → 加载 CLAUDE.md → 调用 Claude Agent SDK query()
-  模型由 data/sessions/{group}/.claude/settings.json 决定
+  模型由 data/sessions/{agent}/.claude/settings.json 决定
   API 请求经凭证代理转发到实际 API 端点
   ↓
 流式输出 (---ICARUS_OUTPUT_START/END---)
@@ -98,7 +98,7 @@ registerChannel('feishu', (opts) => {
 ─────────────────────────────────────────────────────────────────────
 项目根目录/                                 /workspace/project       ro
 项目根目录/.env → /dev/null                 /workspace/project/.env  ro (隐藏)
-groups/{folder}/                            /workspace/group         rw
+agents/{folder}/                            /workspace/agent         rw
 data/attachments/                           /workspace/attachments   rw
 data/ai-images/                             /workspace/ai-images     rw
 data/sessions/{folder}/.claude/             /home/node/.claude       rw
@@ -128,13 +128,13 @@ data/sessions/{folder}/agent-runner-src/    /app/src                 rw
 
 容器通过文件系统与宿主机通信：
 
-| 目录                       | 方向          | 用途               |
-| -------------------------- | ------------- | ------------------ |
-| `/workspace/ipc/input/`    | 宿主机 → 容器 | 新消息推送         |
-| `/workspace/ipc/messages/` | 容器 → 宿主机 | 发送消息到其他群组 |
-| `/workspace/ipc/tasks/`    | 容器 → 宿主机 | 创建/管理定时任务  |
+| 目录                       | 方向          | 用途                 |
+| -------------------------- | ------------- | -------------------- |
+| `/workspace/ipc/input/`    | 宿主机 → 容器 | 新消息推送           |
+| `/workspace/ipc/messages/` | 容器 → 宿主机 | 发送消息到其他 Agent |
+| `/workspace/ipc/tasks/`    | 容器 → 宿主机 | 创建/管理定时任务    |
 
-宿主机每 1 秒扫描一次 IPC 目录。非主群只能操作自己的群组，主群可以操作任何群组。
+宿主机每 1 秒扫描一次 IPC 目录。非主 Agent 只能操作自己，主 Agent 可以操作任何 Agent。
 
 ## 8. 任务调度器
 
@@ -150,13 +150,13 @@ data/sessions/{folder}/agent-runner-src/    /app/src                 rw
 
 ## 9. 关键配置文件
 
-| 文件                                          | 控制什么                       | 修改后需要       |
-| --------------------------------------------- | ------------------------------ | ---------------- |
-| `.env`                                        | API 密钥、频道凭据、BASE_URL   | 重启服务         |
-| `data/sessions/{group}/.claude/settings.json` | 容器内模型、SDK 环境变量       | 下次容器启动生效 |
-| `groups/{group}/CLAUDE.md`                    | 群组记忆（容器内可读写）       | 下次容器启动生效 |
-| `store/messages.db`                           | 消息历史、已注册群组、定时任务 | 实时生效         |
-| `~/Library/LaunchAgents/com.icarus.plist`   | launchd 服务配置               | unload + load    |
+| 文件                                          | 控制什么                         | 修改后需要       |
+| --------------------------------------------- | -------------------------------- | ---------------- |
+| `.env`                                        | API 密钥、频道凭据、BASE_URL     | 重启服务         |
+| `data/sessions/{agent}/.claude/settings.json` | 容器内模型、SDK 环境变量         | 下次容器启动生效 |
+| `agents/{agent}/CLAUDE.md`                    | Agent 记忆（容器内可读写）       | 下次容器启动生效 |
+| `store/messages.db`                           | 消息历史、已注册 Agent、定时任务 | 实时生效         |
+| `~/Library/LaunchAgents/com.icarus.plist`     | launchd 服务配置                 | unload + load    |
 
 ## 10. 关键超时和常量
 
@@ -176,7 +176,7 @@ data/sessions/{folder}/agent-runner-src/    /app/src                 rw
 ```sql
 chats              -- 聊天元数据（JID、名称、频道）
 messages           -- 消息历史（按 timestamp 排序，游标查询）
-registered_groups  -- 已注册群组（JID、文件夹、触发词、是否主群）
+registered_agents  -- 已注册 Agent（JID、文件夹、触发词、是否主 Agent）
 scheduled_tasks    -- 定时任务（cron/interval/once）
 agent_queries      -- 统一执行记录（消息、定时任务、工作流委派等）
 agent_query_steps  -- 执行步骤

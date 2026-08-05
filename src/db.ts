@@ -12,7 +12,7 @@ function formatLocalTime(date: Date): string {
     ` ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
   );
 }
-import { isValidGroupFolder } from './group-folder.js';
+import { isValidAgentFolder } from './agent-folder.js';
 import { logger } from './logger.js';
 import {
   AgentQueryEventRecord,
@@ -24,7 +24,7 @@ import {
   MemoryRecord,
   MemorySearchResult,
   NewMessage,
-  RegisteredGroup,
+  RegisteredAgent,
   ScheduledTask,
   StoredChatMessageRecord,
   TodayPlanItemRecord,
@@ -254,15 +254,11 @@ function removeLegacyRuntimeSchema(database: Database.Database): void {
       database.exec(`DROP TABLE ${quoteSqlIdentifier(table.name)}`);
     }
 
-    removeLegacyColumns(
-      database,
-      'messages',
-      (column) => column.startsWith('workflow_'),
+    removeLegacyColumns(database, 'messages', (column) =>
+      column.startsWith('workflow_'),
     );
-    removeLegacyColumns(
-      database,
-      'assistant_chat_messages',
-      (column) => column.startsWith('workflow_'),
+    removeLegacyColumns(database, 'assistant_chat_messages', (column) =>
+      column.startsWith('workflow_'),
     );
     removeLegacyColumns(
       database,
@@ -286,8 +282,7 @@ function createSchema(database: Database.Database): void {
       jid TEXT PRIMARY KEY,
       name TEXT,
       last_message_time TEXT,
-      channel TEXT,
-      is_group INTEGER DEFAULT 0
+      channel TEXT
     );
     CREATE TABLE IF NOT EXISTS messages (
       id TEXT,
@@ -307,7 +302,7 @@ function createSchema(database: Database.Database): void {
 
     CREATE TABLE IF NOT EXISTS scheduled_tasks (
       id TEXT PRIMARY KEY,
-      group_folder TEXT NOT NULL,
+      agent_folder TEXT NOT NULL,
       chat_jid TEXT NOT NULL,
       prompt TEXT NOT NULL,
       schedule_type TEXT NOT NULL,
@@ -327,10 +322,10 @@ function createSchema(database: Database.Database): void {
       value TEXT NOT NULL
     );
     CREATE TABLE IF NOT EXISTS sessions (
-      group_folder TEXT PRIMARY KEY,
+      agent_folder TEXT PRIMARY KEY,
       session_id TEXT NOT NULL
     );
-    CREATE TABLE IF NOT EXISTS registered_groups (
+    CREATE TABLE IF NOT EXISTS registered_agents (
       jid TEXT PRIMARY KEY,
       name TEXT NOT NULL,
       folder TEXT NOT NULL UNIQUE,
@@ -339,16 +334,16 @@ function createSchema(database: Database.Database): void {
       container_config TEXT,
       requires_trigger INTEGER DEFAULT 1
     );
-    CREATE TABLE IF NOT EXISTS feature_group_bindings (
+    CREATE TABLE IF NOT EXISTS feature_agent_bindings (
       feature_id TEXT NOT NULL,
-      group_key TEXT NOT NULL,
-      group_jid TEXT NOT NULL,
-      group_folder TEXT NOT NULL,
+      agent_key TEXT NOT NULL,
+      agent_jid TEXT NOT NULL,
+      agent_folder TEXT NOT NULL,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
-      PRIMARY KEY (feature_id, group_key),
-      UNIQUE (group_jid),
-      UNIQUE (group_folder)
+      PRIMARY KEY (feature_id, agent_key),
+      UNIQUE (agent_jid),
+      UNIQUE (agent_folder)
     );
     CREATE TABLE IF NOT EXISTS feature_migrations (
       feature_id TEXT NOT NULL,
@@ -375,7 +370,7 @@ function createSchema(database: Database.Database): void {
       source_type TEXT NOT NULL,
       source_ref_id TEXT,
       chat_jid TEXT,
-      group_folder TEXT,
+      agent_folder TEXT,
       service TEXT,
       role TEXT,
       task_id TEXT,
@@ -429,8 +424,8 @@ function createSchema(database: Database.Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_agent_queries_started_at
       ON agent_queries(started_at DESC);
-    CREATE INDEX IF NOT EXISTS idx_agent_queries_group_status
-      ON agent_queries(group_folder, status, started_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_agent_queries_agent_status
+      ON agent_queries(agent_folder, status, started_at DESC);
     CREATE INDEX IF NOT EXISTS idx_agent_queries_failure
       ON agent_queries(failure_type, started_at DESC);
     CREATE INDEX IF NOT EXISTS idx_agent_queries_source
@@ -565,11 +560,11 @@ function createSchema(database: Database.Database): void {
   // Add is_main column if it doesn't exist (migration for existing DBs)
   try {
     database.exec(
-      `ALTER TABLE registered_groups ADD COLUMN is_main INTEGER DEFAULT 0`,
+      `ALTER TABLE registered_agents ADD COLUMN is_main INTEGER DEFAULT 0`,
     );
-    // Backfill: existing rows with folder = 'main' are the main group
+    // Backfill: existing rows with folder = 'main' are the main Agent.
     database.exec(
-      `UPDATE registered_groups SET is_main = 1 WHERE folder = 'main'`,
+      `UPDATE registered_agents SET is_main = 1 WHERE folder = 'main'`,
     );
   } catch {
     /* column already exists */
@@ -577,7 +572,7 @@ function createSchema(database: Database.Database): void {
 
   // Add description column if it doesn't exist (migration for existing DBs)
   try {
-    database.exec(`ALTER TABLE registered_groups ADD COLUMN description TEXT`);
+    database.exec(`ALTER TABLE registered_agents ADD COLUMN description TEXT`);
   } catch {
     /* column already exists */
   }
@@ -778,7 +773,7 @@ function createSchema(database: Database.Database): void {
   database.exec(`
     CREATE TABLE IF NOT EXISTS ask_questions (
       id TEXT PRIMARY KEY,
-      group_folder TEXT NOT NULL,
+      agent_folder TEXT NOT NULL,
       chat_jid TEXT NOT NULL,
       status TEXT NOT NULL DEFAULT 'pending',
       payload_json TEXT NOT NULL,
@@ -790,7 +785,7 @@ function createSchema(database: Database.Database): void {
       responder_user_id TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_ask_questions_status_expires ON ask_questions(status, expires_at);
-    CREATE INDEX IF NOT EXISTS idx_ask_questions_group_status ON ask_questions(group_folder, status);
+    CREATE INDEX IF NOT EXISTS idx_ask_questions_agent_status ON ask_questions(agent_folder, status);
   `);
 
   // Add outcome column to delegations (migration for existing DBs)
@@ -842,7 +837,7 @@ function createSchema(database: Database.Database): void {
   database.exec(`
     CREATE TABLE IF NOT EXISTS memories (
       id TEXT PRIMARY KEY,
-      group_folder TEXT NOT NULL,
+      agent_folder TEXT NOT NULL,
       layer TEXT NOT NULL DEFAULT 'canonical',
       memory_type TEXT NOT NULL DEFAULT 'preference',
       status TEXT NOT NULL DEFAULT 'active',
@@ -851,7 +846,7 @@ function createSchema(database: Database.Database): void {
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
-    CREATE INDEX IF NOT EXISTS idx_memories_scope ON memories(group_folder, layer, updated_at);
+    CREATE INDEX IF NOT EXISTS idx_memories_scope ON memories(agent_folder, layer, updated_at);
   `);
 
   try {
@@ -871,24 +866,24 @@ function createSchema(database: Database.Database): void {
   database.exec(`
     CREATE TABLE IF NOT EXISTS memory_metrics (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      group_folder TEXT NOT NULL,
+      agent_folder TEXT NOT NULL,
       event TEXT NOT NULL,
       detail TEXT,
       created_at TEXT NOT NULL
     );
-    CREATE INDEX IF NOT EXISTS idx_memory_metrics_scope_time ON memory_metrics(group_folder, created_at);
+    CREATE INDEX IF NOT EXISTS idx_memory_metrics_scope_time ON memory_metrics(agent_folder, created_at);
     CREATE INDEX IF NOT EXISTS idx_memory_metrics_event_time ON memory_metrics(event, created_at);
   `);
 
   database.exec(`
     CREATE TABLE IF NOT EXISTS memory_extract_config (
-      group_folder TEXT NOT NULL,
+      agent_folder TEXT NOT NULL,
       key TEXT NOT NULL,
       value TEXT NOT NULL,
       updated_at TEXT NOT NULL,
-      PRIMARY KEY (group_folder, key)
+      PRIMARY KEY (agent_folder, key)
     );
-    CREATE INDEX IF NOT EXISTS idx_memory_extract_config_group ON memory_extract_config(group_folder);
+    CREATE INDEX IF NOT EXISTS idx_memory_extract_config_agent ON memory_extract_config(agent_folder);
   `);
 
   // FTS5 full-text search index for messages
@@ -1139,56 +1134,38 @@ export function rebuildWikiPageFtsIndex(): void {
 
 /**
  * Store chat metadata only (no message content).
- * Used for all chats to enable group discovery without storing sensitive content.
+ * Preserves names and last activity without storing sensitive content.
  */
 export function storeChatMetadata(
   chatJid: string,
   timestamp: string,
   name?: string,
   channel?: string,
-  isGroup?: boolean,
 ): void {
   const ch = channel ?? null;
-  const group = isGroup === undefined ? null : isGroup ? 1 : 0;
 
   if (name) {
     // Update with name, preserving existing timestamp if newer
     db.prepare(
       `
-      INSERT INTO chats (jid, name, last_message_time, channel, is_group) VALUES (?, ?, ?, ?, ?)
+      INSERT INTO chats (jid, name, last_message_time, channel) VALUES (?, ?, ?, ?)
       ON CONFLICT(jid) DO UPDATE SET
         name = excluded.name,
         last_message_time = MAX(last_message_time, excluded.last_message_time),
-        channel = COALESCE(excluded.channel, channel),
-        is_group = COALESCE(excluded.is_group, is_group)
+        channel = COALESCE(excluded.channel, channel)
     `,
-    ).run(chatJid, name, timestamp, ch, group);
+    ).run(chatJid, name, timestamp, ch);
   } else {
     // Update timestamp only, preserve existing name if any
     db.prepare(
       `
-      INSERT INTO chats (jid, name, last_message_time, channel, is_group) VALUES (?, ?, ?, ?, ?)
+      INSERT INTO chats (jid, name, last_message_time, channel) VALUES (?, ?, ?, ?)
       ON CONFLICT(jid) DO UPDATE SET
         last_message_time = MAX(last_message_time, excluded.last_message_time),
-        channel = COALESCE(excluded.channel, channel),
-        is_group = COALESCE(excluded.is_group, is_group)
+        channel = COALESCE(excluded.channel, channel)
     `,
-    ).run(chatJid, chatJid, timestamp, ch, group);
+    ).run(chatJid, chatJid, timestamp, ch);
   }
-}
-
-/**
- * Update chat name without changing timestamp for existing chats.
- * New chats get the current time as their initial timestamp.
- * Used during group metadata sync.
- */
-export function updateChatName(chatJid: string, name: string): void {
-  db.prepare(
-    `
-    INSERT INTO chats (jid, name, last_message_time) VALUES (?, ?, ?)
-    ON CONFLICT(jid) DO UPDATE SET name = excluded.name
-  `,
-  ).run(chatJid, name, Date.now().toString());
 }
 
 export interface ChatInfo {
@@ -1196,7 +1173,6 @@ export interface ChatInfo {
   name: string;
   last_message_time: string;
   channel: string;
-  is_group: number;
 }
 
 /**
@@ -1206,7 +1182,7 @@ export function getAllChats(): ChatInfo[] {
   return db
     .prepare(
       `
-    SELECT jid, name, last_message_time, channel, is_group
+    SELECT jid, name, last_message_time, channel
     FROM chats
     ORDER BY last_message_time DESC
   `,
@@ -1215,29 +1191,8 @@ export function getAllChats(): ChatInfo[] {
 }
 
 /**
- * Get timestamp of last group metadata sync.
- */
-export function getLastGroupSync(): string | null {
-  // Store sync time in a special chat entry
-  const row = db
-    .prepare(`SELECT last_message_time FROM chats WHERE jid = '__group_sync__'`)
-    .get() as { last_message_time: string } | undefined;
-  return row?.last_message_time || null;
-}
-
-/**
- * Record that group metadata was synced.
- */
-export function setLastGroupSync(): void {
-  const now = Date.now().toString();
-  db.prepare(
-    `INSERT OR REPLACE INTO chats (jid, name, last_message_time) VALUES ('__group_sync__', '__group_sync__', ?)`,
-  ).run(now);
-}
-
-/**
  * Store a message with full content.
- * Only call this for registered groups where message history is needed.
+ * Only call this for registered Agents where message history is needed.
  */
 export function storeMessage(msg: NewMessage): void {
   db.prepare(
@@ -1607,12 +1562,12 @@ export function createTask(
 ): void {
   db.prepare(
     `
-    INSERT INTO scheduled_tasks (id, group_folder, chat_jid, prompt, schedule_type, schedule_value, context_mode, next_run, status, created_at)
+    INSERT INTO scheduled_tasks (id, agent_folder, chat_jid, prompt, schedule_type, schedule_value, context_mode, next_run, status, created_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `,
   ).run(
     task.id,
-    task.group_folder,
+    task.agent_folder,
     task.chat_jid,
     task.prompt,
     task.schedule_type,
@@ -1630,12 +1585,12 @@ export function getTaskById(id: string): ScheduledTask | undefined {
     | undefined;
 }
 
-export function getTasksForGroup(groupFolder: string): ScheduledTask[] {
+export function getTasksForAgent(agentFolder: string): ScheduledTask[] {
   return db
     .prepare(
-      'SELECT * FROM scheduled_tasks WHERE group_folder = ? ORDER BY created_at DESC',
+      'SELECT * FROM scheduled_tasks WHERE agent_folder = ? ORDER BY created_at DESC',
     )
-    .all(groupFolder) as ScheduledTask[];
+    .all(agentFolder) as ScheduledTask[];
 }
 
 export function getAllTasks(): ScheduledTask[] {
@@ -1773,43 +1728,43 @@ export function deleteMessagesByIds(
   return tx(messageIds);
 }
 
-export function clearSession(groupFolder: string): void {
-  db.prepare('DELETE FROM sessions WHERE group_folder = ?').run(groupFolder);
+export function clearSession(agentFolder: string): void {
+  db.prepare('DELETE FROM sessions WHERE agent_folder = ?').run(agentFolder);
 }
 
 // --- Session accessors ---
 
-export function getSession(groupFolder: string): string | undefined {
+export function getSession(agentFolder: string): string | undefined {
   const row = db
-    .prepare('SELECT session_id FROM sessions WHERE group_folder = ?')
-    .get(groupFolder) as { session_id: string } | undefined;
+    .prepare('SELECT session_id FROM sessions WHERE agent_folder = ?')
+    .get(agentFolder) as { session_id: string } | undefined;
   return row?.session_id;
 }
 
-export function setSession(groupFolder: string, sessionId: string): void {
+export function setSession(agentFolder: string, sessionId: string): void {
   db.prepare(
-    'INSERT OR REPLACE INTO sessions (group_folder, session_id) VALUES (?, ?)',
-  ).run(groupFolder, sessionId);
+    'INSERT OR REPLACE INTO sessions (agent_folder, session_id) VALUES (?, ?)',
+  ).run(agentFolder, sessionId);
 }
 
 export function getAllSessions(): Record<string, string> {
   const rows = db
-    .prepare('SELECT group_folder, session_id FROM sessions')
-    .all() as Array<{ group_folder: string; session_id: string }>;
+    .prepare('SELECT agent_folder, session_id FROM sessions')
+    .all() as Array<{ agent_folder: string; session_id: string }>;
   const result: Record<string, string> = {};
   for (const row of rows) {
-    result[row.group_folder] = row.session_id;
+    result[row.agent_folder] = row.session_id;
   }
   return result;
 }
 
-// --- Registered group accessors ---
+// --- Registered Agent accessors ---
 
-export function getRegisteredGroup(
+export function getRegisteredAgent(
   jid: string,
-): (RegisteredGroup & { jid: string }) | undefined {
+): (RegisteredAgent & { jid: string }) | undefined {
   const row = db
-    .prepare('SELECT * FROM registered_groups WHERE jid = ?')
+    .prepare('SELECT * FROM registered_agents WHERE jid = ?')
     .get(jid) as
     | {
         jid: string;
@@ -1824,10 +1779,10 @@ export function getRegisteredGroup(
       }
     | undefined;
   if (!row) return undefined;
-  if (!isValidGroupFolder(row.folder)) {
+  if (!isValidAgentFolder(row.folder)) {
     logger.warn(
       { jid: row.jid, folder: row.folder },
-      'Skipping registered group with invalid folder',
+      'Skipping registered Agent with invalid folder',
     );
     return undefined;
   }
@@ -1847,28 +1802,28 @@ export function getRegisteredGroup(
   };
 }
 
-export function setRegisteredGroup(jid: string, group: RegisteredGroup): void {
-  if (!isValidGroupFolder(group.folder)) {
-    throw new Error(`Invalid group folder "${group.folder}" for JID ${jid}`);
+export function setRegisteredAgent(jid: string, agent: RegisteredAgent): void {
+  if (!isValidAgentFolder(agent.folder)) {
+    throw new Error(`Invalid Agent folder "${agent.folder}" for JID ${jid}`);
   }
   db.prepare(
-    `INSERT OR REPLACE INTO registered_groups (jid, name, folder, trigger_pattern, added_at, container_config, requires_trigger, is_main, description)
+    `INSERT OR REPLACE INTO registered_agents (jid, name, folder, trigger_pattern, added_at, container_config, requires_trigger, is_main, description)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     jid,
-    group.name,
-    group.folder,
-    group.trigger,
-    group.added_at,
-    group.containerConfig ? JSON.stringify(group.containerConfig) : null,
-    group.requiresTrigger === undefined ? 1 : group.requiresTrigger ? 1 : 0,
-    group.isMain ? 1 : 0,
-    group.description || null,
+    agent.name,
+    agent.folder,
+    agent.trigger,
+    agent.added_at,
+    agent.containerConfig ? JSON.stringify(agent.containerConfig) : null,
+    agent.requiresTrigger === undefined ? 1 : agent.requiresTrigger ? 1 : 0,
+    agent.isMain ? 1 : 0,
+    agent.description || null,
   );
 }
 
-export function getAllRegisteredGroups(): Record<string, RegisteredGroup> {
-  const rows = db.prepare('SELECT * FROM registered_groups').all() as Array<{
+export function getAllRegisteredAgents(): Record<string, RegisteredAgent> {
+  const rows = db.prepare('SELECT * FROM registered_agents').all() as Array<{
     jid: string;
     name: string;
     folder: string;
@@ -1879,12 +1834,12 @@ export function getAllRegisteredGroups(): Record<string, RegisteredGroup> {
     is_main: number | null;
     description: string | null;
   }>;
-  const result: Record<string, RegisteredGroup> = {};
+  const result: Record<string, RegisteredAgent> = {};
   for (const row of rows) {
-    if (!isValidGroupFolder(row.folder)) {
+    if (!isValidAgentFolder(row.folder)) {
       logger.warn(
         { jid: row.jid, folder: row.folder },
-        'Skipping registered group with invalid folder',
+        'Skipping registered Agent with invalid folder',
       );
       continue;
     }
@@ -1905,112 +1860,112 @@ export function getAllRegisteredGroups(): Record<string, RegisteredGroup> {
   return result;
 }
 
-export interface FeatureGroupBindingRecord {
+export interface FeatureAgentBindingRecord {
   feature_id: string;
-  group_key: string;
-  group_jid: string;
-  group_folder: string;
+  agent_key: string;
+  agent_jid: string;
+  agent_folder: string;
   created_at: string;
   updated_at: string;
 }
 
-export function getRegisteredGroupByFolder(
+export function getRegisteredAgentByFolder(
   folder: string,
-): (RegisteredGroup & { jid: string }) | undefined {
+): (RegisteredAgent & { jid: string }) | undefined {
   const row = db
-    .prepare('SELECT jid FROM registered_groups WHERE folder = ?')
+    .prepare('SELECT jid FROM registered_agents WHERE folder = ?')
     .get(folder) as { jid: string } | undefined;
-  return row ? getRegisteredGroup(row.jid) : undefined;
+  return row ? getRegisteredAgent(row.jid) : undefined;
 }
 
-export function getFeatureGroupBinding(
+export function getFeatureAgentBinding(
   featureId: string,
-  groupKey: string,
-): FeatureGroupBindingRecord | undefined {
+  agentKey: string,
+): FeatureAgentBindingRecord | undefined {
   return db
     .prepare(
-      `SELECT feature_id, group_key, group_jid, group_folder, created_at, updated_at
-       FROM feature_group_bindings
-       WHERE feature_id = ? AND group_key = ?`,
+      `SELECT feature_id, agent_key, agent_jid, agent_folder, created_at, updated_at
+       FROM feature_agent_bindings
+       WHERE feature_id = ? AND agent_key = ?`,
     )
-    .get(featureId, groupKey) as FeatureGroupBindingRecord | undefined;
+    .get(featureId, agentKey) as FeatureAgentBindingRecord | undefined;
 }
 
-export function getFeatureGroupBindingByJid(
-  groupJid: string,
-): FeatureGroupBindingRecord | undefined {
+export function getFeatureAgentBindingByJid(
+  agentJid: string,
+): FeatureAgentBindingRecord | undefined {
   return db
     .prepare(
-      `SELECT feature_id, group_key, group_jid, group_folder, created_at, updated_at
-       FROM feature_group_bindings
-       WHERE group_jid = ?`,
+      `SELECT feature_id, agent_key, agent_jid, agent_folder, created_at, updated_at
+       FROM feature_agent_bindings
+       WHERE agent_jid = ?`,
     )
-    .get(groupJid) as FeatureGroupBindingRecord | undefined;
+    .get(agentJid) as FeatureAgentBindingRecord | undefined;
 }
 
-export function getFeatureGroupBindingByFolder(
-  groupFolder: string,
-): FeatureGroupBindingRecord | undefined {
+export function getFeatureAgentBindingByFolder(
+  agentFolder: string,
+): FeatureAgentBindingRecord | undefined {
   return db
     .prepare(
-      `SELECT feature_id, group_key, group_jid, group_folder, created_at, updated_at
-       FROM feature_group_bindings
-       WHERE group_folder = ?`,
+      `SELECT feature_id, agent_key, agent_jid, agent_folder, created_at, updated_at
+       FROM feature_agent_bindings
+       WHERE agent_folder = ?`,
     )
-    .get(groupFolder) as FeatureGroupBindingRecord | undefined;
+    .get(agentFolder) as FeatureAgentBindingRecord | undefined;
 }
 
-export function listFeatureGroupBindings(
+export function listFeatureAgentBindings(
   featureId?: string,
-): FeatureGroupBindingRecord[] {
+): FeatureAgentBindingRecord[] {
   if (featureId) {
     return db
       .prepare(
-        `SELECT feature_id, group_key, group_jid, group_folder, created_at, updated_at
-         FROM feature_group_bindings
+        `SELECT feature_id, agent_key, agent_jid, agent_folder, created_at, updated_at
+         FROM feature_agent_bindings
          WHERE feature_id = ?
-         ORDER BY group_key`,
+         ORDER BY agent_key`,
       )
-      .all(featureId) as FeatureGroupBindingRecord[];
+      .all(featureId) as FeatureAgentBindingRecord[];
   }
   return db
     .prepare(
-      `SELECT feature_id, group_key, group_jid, group_folder, created_at, updated_at
-       FROM feature_group_bindings
-       ORDER BY feature_id, group_key`,
+      `SELECT feature_id, agent_key, agent_jid, agent_folder, created_at, updated_at
+       FROM feature_agent_bindings
+       ORDER BY feature_id, agent_key`,
     )
-    .all() as FeatureGroupBindingRecord[];
+    .all() as FeatureAgentBindingRecord[];
 }
 
-export function setFeatureGroupBinding(input: {
+export function setFeatureAgentBinding(input: {
   featureId: string;
-  groupKey: string;
-  groupJid: string;
-  groupFolder: string;
+  agentKey: string;
+  agentJid: string;
+  agentFolder: string;
   createdAt?: string;
   updatedAt?: string;
 }): void {
   const now = new Date().toISOString();
   db.prepare(
-    `INSERT INTO feature_group_bindings (
+    `INSERT INTO feature_agent_bindings (
        feature_id,
-       group_key,
-       group_jid,
-       group_folder,
+       agent_key,
+       agent_jid,
+       agent_folder,
        created_at,
        updated_at
      )
      VALUES (?, ?, ?, ?, ?, ?)
-     ON CONFLICT(feature_id, group_key)
+     ON CONFLICT(feature_id, agent_key)
      DO UPDATE SET
-       group_jid = excluded.group_jid,
-       group_folder = excluded.group_folder,
+       agent_jid = excluded.agent_jid,
+       agent_folder = excluded.agent_folder,
        updated_at = excluded.updated_at`,
   ).run(
     input.featureId,
-    input.groupKey,
-    input.groupJid,
-    input.groupFolder,
+    input.agentKey,
+    input.agentJid,
+    input.agentFolder,
     input.createdAt || now,
     input.updatedAt || now,
   );
@@ -2116,9 +2071,7 @@ export function getDelegation(id: string): Delegation | undefined {
 
 export function updateDelegation(
   id: string,
-  updates: Partial<
-    Pick<Delegation, 'status' | 'result' | 'outcome'>
-  >,
+  updates: Partial<Pick<Delegation, 'status' | 'result' | 'outcome'>>,
 ): void {
   const fields: string[] = ['updated_at = ?'];
   const values: unknown[] = [Date.now().toString()];
@@ -2162,12 +2115,12 @@ export function getDelegationsByTarget(targetFolder: string): Delegation[] {
 export function createAskQuestion(record: AskQuestionRecord): void {
   db.prepare(
     `INSERT INTO ask_questions (
-      id, group_folder, chat_jid, status, payload_json, answers_json,
+      id, agent_folder, chat_jid, status, payload_json, answers_json,
       current_index, created_at, expires_at, answered_at, responder_user_id
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     record.id,
-    record.group_folder,
+    record.agent_folder,
     record.chat_jid,
     record.status,
     record.payload_json,
@@ -2626,7 +2579,7 @@ export function cancelPendingTodayPlanMailDrafts(planId: string): number {
 // --- Structured memory accessors ---
 
 export function createMemory(input: {
-  group_folder: string;
+  agent_folder: string;
   layer: 'working' | 'episodic' | 'canonical';
   memory_type: 'preference' | 'rule' | 'fact' | 'summary';
   content: string;
@@ -2636,11 +2589,11 @@ export function createMemory(input: {
   const now = Date.now().toString();
   const id = `mem-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   db.prepare(
-    `INSERT INTO memories (id, group_folder, layer, memory_type, status, content, source, metadata, created_at, updated_at)
+    `INSERT INTO memories (id, agent_folder, layer, memory_type, status, content, source, metadata, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     id,
-    input.group_folder,
+    input.agent_folder,
     input.layer,
     input.memory_type,
     'active',
@@ -2650,14 +2603,14 @@ export function createMemory(input: {
     now,
     now,
   );
-  reconcileMemoryStatuses(input.group_folder);
+  reconcileMemoryStatuses(input.agent_folder);
   return db
     .prepare(`SELECT * FROM memories WHERE id = ?`)
     .get(id) as MemoryRecord;
 }
 
 function searchMemoriesByStatus(
-  groupFolder: string,
+  agentFolder: string,
   query: string,
   limit: number,
   statusSql: string,
@@ -2670,26 +2623,26 @@ function searchMemoriesByStatus(
       FROM memories_fts
       JOIN memories m ON m.rowid = memories_fts.rowid
       WHERE memories_fts MATCH ?
-        AND m.group_folder = ?
+        AND m.agent_folder = ?
         AND ${statusSql}
       ORDER BY score ASC, m.updated_at DESC
       LIMIT ?
     `,
       )
-      .all(query, groupFolder, limit) as MemorySearchResult[];
+      .all(query, agentFolder, limit) as MemorySearchResult[];
   } catch (err) {
-    logger.error({ err, groupFolder, query }, 'Memory FTS search failed');
+    logger.error({ err, agentFolder, query }, 'Memory FTS search failed');
     return [];
   }
 }
 
 export function searchMemories(
-  groupFolder: string,
+  agentFolder: string,
   query: string,
   limit: number = 10,
 ): MemorySearchResult[] {
   return searchMemoriesByStatus(
-    groupFolder,
+    agentFolder,
     query,
     limit,
     `m.status != 'deprecated'`,
@@ -2697,12 +2650,12 @@ export function searchMemories(
 }
 
 export function searchMemoriesActive(
-  groupFolder: string,
+  agentFolder: string,
   query: string,
   limit: number = 10,
 ): MemorySearchResult[] {
   return searchMemoriesByStatus(
-    groupFolder,
+    agentFolder,
     query,
     limit,
     `m.status = 'active'`,
@@ -2710,19 +2663,19 @@ export function searchMemoriesActive(
 }
 
 export function listMemories(
-  groupFolder: string,
+  agentFolder: string,
   limit: number = 20,
 ): MemoryRecord[] {
   return db
     .prepare(
       `
       SELECT * FROM memories
-      WHERE group_folder = ?
+      WHERE agent_folder = ?
       ORDER BY updated_at DESC
       LIMIT ?
     `,
     )
-    .all(groupFolder, limit) as MemoryRecord[];
+    .all(agentFolder, limit) as MemoryRecord[];
 }
 
 export function getMemoryById(id: string): MemoryRecord | undefined {
@@ -2775,14 +2728,14 @@ export function updateMemory(
     ...values,
   );
   if (updates.status === undefined || updates.status !== 'deprecated') {
-    reconcileMemoryStatuses(existing.group_folder);
+    reconcileMemoryStatuses(existing.agent_folder);
   }
 }
 
 export function deleteMemory(id: string): void {
   const existing = getMemoryById(id);
   db.prepare(`DELETE FROM memories WHERE id = ?`).run(id);
-  if (existing) reconcileMemoryStatuses(existing.group_folder);
+  if (existing) reconcileMemoryStatuses(existing.agent_folder);
 }
 
 // --- Full-text search ---
@@ -2869,22 +2822,22 @@ function polarityKey(content: string): string {
     .trim();
 }
 
-function reconcileMemoryStatuses(groupFolder: string): void {
+function reconcileMemoryStatuses(agentFolder: string): void {
   // Reset non-deprecated rows to active first.
   db.prepare(
     `UPDATE memories
      SET status = 'active'
-     WHERE group_folder = ? AND status != 'deprecated'`,
-  ).run(groupFolder);
+     WHERE agent_folder = ? AND status != 'deprecated'`,
+  ).run(agentFolder);
 
   const rows = db
     .prepare(
       `SELECT id, layer, memory_type, content, status
        FROM memories
-       WHERE group_folder = ? AND status != 'deprecated'
+       WHERE agent_folder = ? AND status != 'deprecated'
        ORDER BY updated_at DESC`,
     )
-    .all(groupFolder) as Array<{
+    .all(agentFolder) as Array<{
     id: string;
     layer: string;
     memory_type: string;
@@ -2931,14 +2884,14 @@ export interface ResolveConflictMergeResult {
 
 export function resolveConflict(
   mode: 'keep',
-  opts: { keepId: string; deprecateId: string; groupFolder: string },
+  opts: { keepId: string; deprecateId: string; agentFolder: string },
 ): ResolveConflictKeepResult;
 export function resolveConflict(
   mode: 'merge',
   opts: {
     mergeIds: [string, string];
     mergedContent: string;
-    groupFolder: string;
+    agentFolder: string;
   },
 ): ResolveConflictMergeResult;
 export function resolveConflict(
@@ -2948,13 +2901,13 @@ export function resolveConflict(
     deprecateId?: string;
     mergeIds?: [string, string];
     mergedContent?: string;
-    groupFolder: string;
+    agentFolder: string;
   },
 ): ResolveConflictKeepResult | ResolveConflictMergeResult {
   const now = new Date().toISOString();
 
   if (mode === 'keep') {
-    const { keepId, deprecateId, groupFolder } = opts;
+    const { keepId, deprecateId, agentFolder } = opts;
     if (!keepId || !deprecateId)
       throw new Error('keep mode requires keepId and deprecateId');
 
@@ -2962,13 +2915,13 @@ export function resolveConflict(
     const deprecateMem = getMemoryById(deprecateId);
     if (!keepMem) throw new Error(`Memory not found: ${keepId}`);
     if (!deprecateMem) throw new Error(`Memory not found: ${deprecateId}`);
-    if (keepMem.group_folder !== groupFolder)
+    if (keepMem.agent_folder !== agentFolder)
       throw new Error(
-        `Memory ${keepId} does not belong to group ${groupFolder}`,
+        `Memory ${keepId} does not belong to Agent ${agentFolder}`,
       );
-    if (deprecateMem.group_folder !== groupFolder)
+    if (deprecateMem.agent_folder !== agentFolder)
       throw new Error(
-        `Memory ${deprecateId} does not belong to group ${groupFolder}`,
+        `Memory ${deprecateId} does not belong to Agent ${agentFolder}`,
       );
     if (keepMem.status !== 'conflicted')
       throw new Error(
@@ -2999,7 +2952,7 @@ export function resolveConflict(
     });
     txn();
 
-    reconcileMemoryStatuses(groupFolder);
+    reconcileMemoryStatuses(agentFolder);
 
     return {
       kept: getMemoryById(keepId)!,
@@ -3008,7 +2961,7 @@ export function resolveConflict(
   }
 
   // merge mode
-  const { mergeIds, mergedContent, groupFolder } = opts;
+  const { mergeIds, mergedContent, agentFolder } = opts;
   if (!mergeIds || mergeIds.length !== 2)
     throw new Error('merge mode requires exactly 2 mergeIds');
   if (!mergedContent) throw new Error('merge mode requires mergedContent');
@@ -3017,13 +2970,13 @@ export function resolveConflict(
   const memB = getMemoryById(mergeIds[1]);
   if (!memA) throw new Error(`Memory not found: ${mergeIds[0]}`);
   if (!memB) throw new Error(`Memory not found: ${mergeIds[1]}`);
-  if (memA.group_folder !== groupFolder)
+  if (memA.agent_folder !== agentFolder)
     throw new Error(
-      `Memory ${mergeIds[0]} does not belong to group ${groupFolder}`,
+      `Memory ${mergeIds[0]} does not belong to Agent ${agentFolder}`,
     );
-  if (memB.group_folder !== groupFolder)
+  if (memB.agent_folder !== agentFolder)
     throw new Error(
-      `Memory ${mergeIds[1]} does not belong to group ${groupFolder}`,
+      `Memory ${mergeIds[1]} does not belong to Agent ${agentFolder}`,
     );
   if (memA.status !== 'conflicted')
     throw new Error(
@@ -3056,7 +3009,7 @@ export function resolveConflict(
       }),
     });
     newMem = createMemory({
-      group_folder: memA.group_folder,
+      agent_folder: memA.agent_folder,
       layer: memA.layer,
       memory_type: memA.memory_type,
       content: mergedContent,
@@ -3069,7 +3022,7 @@ export function resolveConflict(
   });
   txn();
 
-  reconcileMemoryStatuses(groupFolder);
+  reconcileMemoryStatuses(agentFolder);
 
   return {
     merged: newMem!,
@@ -3078,10 +3031,10 @@ export function resolveConflict(
 }
 
 export function doctorMemories(
-  groupFolder: string,
+  agentFolder: string,
   staleWorkingDays: number = 7,
 ): MemoryDoctorReport {
-  const memories = listMemories(groupFolder, 2000);
+  const memories = listMemories(agentFolder, 2000);
   const duplicateMap = new Map<string, string[]>();
   for (const m of memories) {
     const key = `${m.layer}|${m.memory_type}|${normalizeMemoryText(m.content)}`;
@@ -3138,12 +3091,12 @@ export function doctorMemories(
 }
 
 export function gcMemories(
-  groupFolder: string,
+  agentFolder: string,
   opts?: { dryRun?: boolean; staleWorkingDays?: number },
 ): MemoryGcResult {
   const dryRun = opts?.dryRun !== undefined ? opts.dryRun : true;
   const staleWorkingDays = opts?.staleWorkingDays ?? 14;
-  const memories = listMemories(groupFolder, 4000);
+  const memories = listMemories(agentFolder, 4000);
 
   const dupGroups = new Map<string, MemoryRecord[]>();
   for (const m of memories) {
@@ -3182,18 +3135,18 @@ export function gcMemories(
 }
 
 export function recordMemoryMetric(
-  groupFolder: string,
+  agentFolder: string,
   event: string,
   detail?: string,
 ): void {
   db.prepare(
-    `INSERT INTO memory_metrics (group_folder, event, detail, created_at)
+    `INSERT INTO memory_metrics (agent_folder, event, detail, created_at)
      VALUES (?, ?, ?, ?)`,
-  ).run(groupFolder, event, detail || null, Date.now().toString());
+  ).run(agentFolder, event, detail || null, Date.now().toString());
 }
 
 export function getMemoryMetricSummary(
-  groupFolder: string,
+  agentFolder: string,
   hours: number = 24,
 ): MemoryMetricSummary {
   const safeHours = Math.max(1, Math.min(hours, 24 * 30));
@@ -3202,19 +3155,19 @@ export function getMemoryMetricSummary(
     .prepare(
       `SELECT COUNT(*) as cnt
        FROM memory_metrics
-       WHERE group_folder = ? AND CAST(created_at AS INTEGER) >= ?`,
+       WHERE agent_folder = ? AND CAST(created_at AS INTEGER) >= ?`,
     )
-    .get(groupFolder, since) as { cnt: number };
+    .get(agentFolder, since) as { cnt: number };
 
   const byEvent = db
     .prepare(
       `SELECT event, COUNT(*) as count
        FROM memory_metrics
-       WHERE group_folder = ? AND CAST(created_at AS INTEGER) >= ?
+       WHERE agent_folder = ? AND CAST(created_at AS INTEGER) >= ?
        GROUP BY event
        ORDER BY count DESC, event ASC`,
     )
-    .all(groupFolder, since) as Array<{ event: string; count: number }>;
+    .all(agentFolder, since) as Array<{ event: string; count: number }>;
 
   return {
     hours: safeHours,
@@ -3235,16 +3188,16 @@ function clampFloat(value: number, min: number, max: number): number {
 }
 
 export function getMemoryExtractConfig(
-  groupFolder: string,
+  agentFolder: string,
 ): MemoryExtractConfig {
   const rows = db
     .prepare(
-      `SELECT group_folder, key, value
+      `SELECT agent_folder, key, value
        FROM memory_extract_config
-       WHERE group_folder IN ('*', ?)`,
+       WHERE agent_folder IN ('*', ?)`,
     )
-    .all(groupFolder) as Array<{
-    group_folder: string;
+    .all(agentFolder) as Array<{
+    agent_folder: string;
     key: string;
     value: string;
   }>;
@@ -3253,7 +3206,7 @@ export function getMemoryExtractConfig(
   rows
     .sort(
       (a, b) =>
-        (a.group_folder === '*' ? -1 : 1) - (b.group_folder === '*' ? -1 : 1),
+        (a.agent_folder === '*' ? -1 : 1) - (b.agent_folder === '*' ? -1 : 1),
     )
     .forEach((row) => {
       const raw = Number(row.value);
@@ -3285,34 +3238,34 @@ export function getMemoryExtractConfig(
 }
 
 export function setMemoryExtractConfig(
-  groupFolder: string,
+  agentFolder: string,
   key: keyof MemoryExtractConfig,
   value: number,
 ): void {
   db.prepare(
-    `INSERT INTO memory_extract_config (group_folder, key, value, updated_at)
+    `INSERT INTO memory_extract_config (agent_folder, key, value, updated_at)
      VALUES (?, ?, ?, ?)
-     ON CONFLICT(group_folder, key)
+     ON CONFLICT(agent_folder, key)
      DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
-  ).run(groupFolder, key, String(value), Date.now().toString());
+  ).run(agentFolder, key, String(value), Date.now().toString());
 }
 
 /**
- * Search messages using FTS5 full-text search, scoped to a group's chat JIDs.
+ * Search messages using FTS5 full-text search, scoped to an Agent's chat JIDs.
  */
 export function searchMessages(
-  groupFolder: string,
+  agentFolder: string,
   query: string,
   limit: number = 10,
 ): SearchResult[] {
-  // Find chat JIDs associated with this group folder
-  const group = db
-    .prepare(`SELECT jid FROM registered_groups WHERE folder = ?`)
-    .get(groupFolder) as { jid: string } | undefined;
+  // Find chat JIDs associated with this Agent folder
+  const agent = db
+    .prepare(`SELECT jid FROM registered_agents WHERE folder = ?`)
+    .get(agentFolder) as { jid: string } | undefined;
 
-  if (!group) return [];
+  if (!agent) return [];
 
-  const chatJid = group.jid;
+  const chatJid = agent.jid;
 
   try {
     const results = db
@@ -3330,7 +3283,7 @@ export function searchMessages(
       .all(query, chatJid, limit) as SearchResult[];
     return results;
   } catch (err) {
-    logger.error({ err, groupFolder, query }, 'FTS search failed');
+    logger.error({ err, agentFolder, query }, 'FTS search failed');
     return [];
   }
 }
@@ -3970,7 +3923,7 @@ export function createAgentQuery(record: AgentQueryRecord): void {
       source_type,
       source_ref_id,
       chat_jid,
-      group_folder,
+      agent_folder,
       service,
       role,
       task_id,
@@ -4029,7 +3982,7 @@ export function createAgentQuery(record: AgentQueryRecord): void {
     record.source_type,
     record.source_ref_id,
     record.chat_jid,
-    record.group_folder,
+    record.agent_folder,
     record.service,
     record.role,
     record.task_id,
@@ -4100,7 +4053,7 @@ export function updateAgentQuery(
   assign('source_type');
   assign('source_ref_id');
   assign('chat_jid');
-  assign('group_folder');
+  assign('agent_folder');
   assign('service');
   assign('role');
   assign('task_id');
@@ -4547,24 +4500,6 @@ function migrateJsonState(): void {
   if (sessions) {
     for (const [folder, sessionId] of Object.entries(sessions)) {
       setSession(folder, sessionId);
-    }
-  }
-
-  // Migrate registered_groups.json
-  const groups = migrateFile('registered_groups.json') as Record<
-    string,
-    RegisteredGroup
-  > | null;
-  if (groups) {
-    for (const [jid, group] of Object.entries(groups)) {
-      try {
-        setRegisteredGroup(jid, group);
-      } catch (err) {
-        logger.warn(
-          { jid, folder: group.folder, err },
-          'Skipping migrated registered group with invalid folder',
-        );
-      }
     }
   }
 }

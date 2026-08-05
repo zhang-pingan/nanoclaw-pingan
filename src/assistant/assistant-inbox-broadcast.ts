@@ -1,6 +1,6 @@
 import type { AssistantRealtimeEvent } from './assistant-events.js';
 import type { AgentInboxItemView } from './types.js';
-import type { InteractiveCard, RegisteredGroup } from '../types.js';
+import type { InteractiveCard, RegisteredAgent } from '../types.js';
 import { logger } from '../logger.js';
 import {
   isAssistantInboxBroadcastEnabled,
@@ -22,7 +22,7 @@ interface BroadcastDeliveryState {
 const CARD_STATUSES = new Set(['unread', 'read']);
 
 export interface AssistantInboxBroadcastDeps {
-  registeredGroups: () => Record<string, RegisteredGroup>;
+  registeredAgents: () => Record<string, RegisteredAgent>;
   sendCard?: (
     jid: string,
     card: InteractiveCard,
@@ -40,8 +40,8 @@ export class AssistantInboxBroadcastService {
     if (event.type !== 'inbox_updated') return;
 
     const item = event.item;
-    const groups = this.deps.registeredGroups();
-    const targetJids = resolveAssistantInboxBroadcastJids(groups);
+    const agents = this.deps.registeredAgents();
+    const targetJids = resolveAssistantInboxBroadcastJids(agents);
     if (targetJids.length === 0) return;
 
     if (CARD_STATUSES.has(item.status)) {

@@ -232,7 +232,7 @@ function buildInvestigationWorkflowInstructions(
     return `调查流程：
 - 你运行在容器 agent 中，可以使用 Bash/Read/Grep/Glob 等工具；最终回复只返回 JSON，但在最终回复前必须先用工具主动取证。
 - 先从上下文中的 agentQuery.query / steps / events 提取 query_id、runId、session_id、时间点、failure_type、failure_subtype、error_message、lastAssistantUuid 等线索。
-- 使用这些线索搜索并读取相关日志：优先查 /workspace/project/logs/icarus.log 和 /workspace/group/logs；如果日志里出现 logFile 或容器日志路径，继续读取对应文件。宿主项目路径可按 /workspace/project 映射，当前群目录可按 /workspace/group 映射。
+- 使用这些线索搜索并读取相关日志：优先查 /workspace/project/logs/icarus.log 和 /workspace/agent/logs；如果日志里出现 logFile 或容器日志路径，继续读取对应文件。宿主项目路径可按 /workspace/project 映射，当前群目录可按 /workspace/agent 映射。
 - 根据失败类型阅读相关源码。容器退出、137、stdin/close、idle/timeout、trace 更新等问题至少检查 /workspace/project/src/container-runner.ts、/workspace/project/container/agent-runner/src/index.ts，以及必要时的 /workspace/project/src/index.ts、/workspace/project/src/agent-query-trace.ts、/workspace/project/src/assistant/proactive-engine.ts。
 - 对 code 137 不能只写 OOM/SIGKILL/外部回收。必须结合日志和源码判断它发生在 query 过程中、结果投递前、结果投递后、关闭哨兵后，还是 trace 已结束后；没有证据时 root_cause 必须为 null。
 - evidence 必须包含具体证据来源，例如日志路径和行号、源码路径和行号、agent_query_events 的 event_index、关键 stdout/stderr 片段或无法读取某证据的错误。
@@ -242,7 +242,7 @@ function buildInvestigationWorkflowInstructions(
   if (ruleKey === 'scheduler.task_failed') {
     return `调查流程：
 - 你运行在容器 agent 中，可以使用 Bash/Read/Grep/Glob 等工具；最终回复只返回 JSON，但在最终回复前应先用工具验证关键事实。
-- 结合上下文中的任务、事件和状态，必要时读取 /workspace/project/logs、/workspace/group/logs 以及相关源码，确认失败阶段、最近动作和可恢复性。
+- 结合上下文中的任务、事件和状态，必要时读取 /workspace/project/logs、/workspace/agent/logs 以及相关源码，确认失败阶段、最近动作和可恢复性。
 - evidence 必须写清楚证据来源；如果无法查到足够证据，root_cause 必须为 null，repairable 为 false。`;
   }
 
@@ -340,7 +340,7 @@ function buildInvestigationPrompt(
   item: AgentInboxItemView,
   context: Record<string, unknown>,
 ): string {
-  return `你是 Icarus 主群个人助手的异常排查 Agent。请基于上下文判断触发项原因，以及是否可以自动修复。
+  return `你是 Icarus 主 Agent 个人助手的异常排查 Agent。请基于上下文判断触发项原因，以及是否可以自动修复。
 
 只返回 JSON，不要返回 Markdown 或额外解释。JSON 格式必须是：
 {
@@ -395,7 +395,7 @@ function buildRepairPrompt(
   investigation: InvestigationResult,
   group?: InvestigationGroup | null,
 ): string {
-  return `你是 Icarus 主群个人助手的异常修复 Agent。请按排查结论尝试修复；如果无法安全修复，说明原因。
+  return `你是 Icarus 主 Agent 个人助手的异常修复 Agent。请按排查结论尝试修复；如果无法安全修复，说明原因。
 
 只返回 JSON，不要返回 Markdown 或额外解释。JSON 格式必须是：
 {

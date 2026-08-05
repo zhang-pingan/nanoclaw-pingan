@@ -14,15 +14,18 @@ store/
 data/
 logs/
 
-# Groups - only track base structure and specific CLAUDE.md files
-groups/*
-!groups/main/
-!groups/global/
-groups/main/*
-groups/global/*
-!groups/main/CLAUDE.md
-!groups/global/CLAUDE.md
-!groups/global/services.json.example
+# Agents - only track base structure and specific CLAUDE.md files
+agents/*
+!agents/main/
+!agents/global/
+agents/main/*
+agents/global/*
+!agents/main/CLAUDE.md
+!agents/global/CLAUDE.md
+!agents/global/services.json.example
+
+# One-time Agent migration input; initDatabase moves this tree to agents/.
+groups/
 
 # Secrets
 .env

@@ -18,7 +18,7 @@ const MCP_CONFIG_PATH = '/workspace/mcp/mcp.json';
 
 // Context from environment variables (set by the agent runner)
 const chatJid = process.env.ICARUS_CHAT_JID!;
-const groupFolder = process.env.ICARUS_GROUP_FOLDER!;
+const agentFolder = process.env.ICARUS_AGENT_FOLDER!;
 const isMain = process.env.ICARUS_IS_MAIN === '1';
 const delegationId = process.env.ICARUS_DELEGATION_ID || '';
 
@@ -26,7 +26,7 @@ type ToolVisibility = 'all' | 'main' | 'non_main';
 
 type McpAccessConfig = {
   profiles?: Record<string, string[]>;
-  groups?: Record<string, string[]>;
+  agents?: Record<string, string[]>;
 };
 
 const BUILTIN_TOOL_VISIBILITY: Record<string, ToolVisibility> = {
@@ -40,7 +40,7 @@ const BUILTIN_TOOL_VISIBILITY: Record<string, ToolVisibility> = {
   resume_task: 'all',
   cancel_task: 'all',
   update_task: 'all',
-  register_group: 'main',
+  register_agent: 'main',
   ask_user_question: 'all',
   request_human_input: 'all',
   memory_search: 'all',
@@ -71,7 +71,7 @@ function normalizeMcpAccessConfig(value: unknown): McpAccessConfig {
 
   const raw = value as Record<string, unknown>;
   const profiles: Record<string, string[]> = {};
-  const groups: Record<string, string[]> = {};
+  const agents: Record<string, string[]> = {};
 
   if (
     raw.profiles &&
@@ -84,16 +84,16 @@ function normalizeMcpAccessConfig(value: unknown): McpAccessConfig {
   }
 
   if (
-    raw.groups &&
-    typeof raw.groups === 'object' &&
-    !Array.isArray(raw.groups)
+    raw.agents &&
+    typeof raw.agents === 'object' &&
+    !Array.isArray(raw.agents)
   ) {
-    for (const [group, profileNames] of Object.entries(raw.groups)) {
-      groups[group] = parseStringArray(profileNames);
+    for (const [agent, profileNames] of Object.entries(raw.agents)) {
+      agents[agent] = parseStringArray(profileNames);
     }
   }
 
-  return { profiles, groups };
+  return { profiles, agents };
 }
 
 function loadMcpAccessConfig(): McpAccessConfig | null {
@@ -117,8 +117,8 @@ function resolveConfiguredTools(
 
   const profiles = config.profiles || {};
   const profileNames = [
-    ...parseStringArray(config.groups?.global),
-    ...parseStringArray(config.groups?.[groupFolder]),
+    ...parseStringArray(config.agents?.global),
+    ...parseStringArray(config.agents?.[agentFolder]),
   ];
 
   const tools = new Set<string>();
@@ -126,7 +126,7 @@ function resolveConfiguredTools(
     const profileTools = profiles[profileName];
     if (!profileTools) {
       process.stderr.write(
-        `[mcp-config] Group ${groupFolder} references unknown profile "${profileName}".\n`,
+        `[mcp-config] Agent ${agentFolder} references unknown profile "${profileName}".\n`,
       );
       continue;
     }
@@ -176,7 +176,7 @@ async function waitForIpcResult<T>(
 }
 
 const AI_IMAGE_WORKSPACE_PREFIXES = [
-  '/workspace/group/',
+  '/workspace/agent/',
   '/workspace/uploads/',
   '/workspace/attachments/',
   '/workspace/desktop-captures/',
@@ -389,7 +389,7 @@ const originalServerTool = server.tool.bind(server) as unknown as (
     }
     if (configuredTools && !configuredTools.has(name)) {
       process.stderr.write(
-        `[mcp-config] Skipping ${name}: not enabled for group ${groupFolder}.\n`,
+        `[mcp-config] Skipping ${name}: not enabled for Agent ${agentFolder}.\n`,
       );
       return undefined;
     }
@@ -400,14 +400,14 @@ const originalServerTool = server.tool.bind(server) as unknown as (
 
 server.tool(
   'send_message',
-  "Send a message to the user or group immediately while you're still running. Use this for progress updates or to send multiple messages. You can call this multiple times.",
+  "Send a message to this Agent's bound chat immediately while you're still running. Use this for progress updates or to send multiple messages. You can call this multiple times.",
   {
     text: z.string().describe('The message text to send'),
     sender: z
       .string()
       .optional()
       .describe(
-        'Your role/identity name (e.g. "Researcher"). When set, messages appear from a dedicated bot in Telegram.',
+        'Your role or identity name (for example, "Researcher") to include with the delivered message.',
       ),
   },
   async (args) => {
@@ -416,7 +416,7 @@ server.tool(
       chatJid,
       text: args.text,
       sender: args.sender || undefined,
-      groupFolder,
+      agentFolder,
       delegationId: delegationId || undefined,
       sourceType: 'send_message',
       sourceRefId: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -431,12 +431,12 @@ server.tool(
 
 server.tool(
   'send_file',
-  '发送文件或图片到当前群/用户。支持图片（png/jpg/gif等）和文件（pdf/doc/xls等）。文件必须在 /workspace/group/、/workspace/attachments/、/workspace/desktop-captures/ 或 /workspace/ai-images/ 目录下。',
+  '发送文件或图片到本 Agent 绑定的聊天。支持图片（png/jpg/gif等）和文件（pdf/doc/xls等）。文件必须在 /workspace/agent/、/workspace/attachments/、/workspace/desktop-captures/ 或 /workspace/ai-images/ 目录下。',
   {
     file_path: z
       .string()
       .describe(
-        '文件绝对路径，必须在 /workspace/group/、/workspace/attachments/、/workspace/desktop-captures/ 或 /workspace/ai-images/ 下',
+        '文件绝对路径，必须在 /workspace/agent/、/workspace/attachments/、/workspace/desktop-captures/ 或 /workspace/ai-images/ 下',
       ),
     caption: z
       .string()
@@ -445,7 +445,7 @@ server.tool(
   },
   async (args) => {
     const allowedPrefixes = [
-      '/workspace/group/',
+      '/workspace/agent/',
       '/workspace/attachments/',
       '/workspace/desktop-captures/',
       '/workspace/ai-images/',
@@ -491,7 +491,7 @@ server.tool(
       chatJid,
       filePath: resolved,
       caption: args.caption || undefined,
-      groupFolder,
+      agentFolder,
       timestamp: new Date().toISOString(),
     };
 
@@ -522,7 +522,7 @@ if (isMain) {
         .max(16)
         .optional()
         .describe(
-          '可选参考图片路径列表；传入后使用 /images/generations 的图生图能力。支持 /workspace/uploads/、/workspace/attachments/、/workspace/desktop-captures/、/workspace/ai-images/、/workspace/group/。',
+          '可选参考图片路径列表；传入后使用 /images/generations 的图生图能力。支持 /workspace/uploads/、/workspace/attachments/、/workspace/desktop-captures/、/workspace/ai-images/、/workspace/agent/。',
         ),
       image_urls: z
         .array(z.string().url())
@@ -577,7 +577,7 @@ if (isMain) {
         type: 'ai_image_generate_image',
         requestId,
         args,
-        groupFolder,
+        agentFolder,
         timestamp: new Date().toISOString(),
       });
 
@@ -601,16 +601,16 @@ server.tool(
   `Schedule a recurring or one-time task. The task will run as a full agent with access to all tools. Returns the task ID for future reference. To modify an existing task, use update_task instead.
 
 CONTEXT MODE - Choose based on task type:
-\u2022 "group": Task runs in the group's conversation context, with access to chat history. Use for tasks that need context about ongoing discussions, user preferences, or recent interactions.
+\u2022 "agent": Task runs in the Agent's conversation context, with access to chat history. Use for tasks that need context about ongoing discussions, user preferences, or recent interactions.
 \u2022 "isolated": Task runs in a fresh session with no conversation history. Use for independent tasks that don't need prior context. When using isolated mode, include all necessary context in the prompt itself.
 
 If unsure which mode to use, you can ask the user. Examples:
-- "Remind me about our discussion" \u2192 group (needs conversation context)
+- "Remind me about our discussion" \u2192 agent (needs conversation context)
 - "Check the weather every morning" \u2192 isolated (self-contained task)
-- "Follow up on my request" \u2192 group (needs to know what was requested)
+- "Follow up on my request" \u2192 agent (needs to know what was requested)
 - "Generate a daily report" \u2192 isolated (just needs instructions in prompt)
 
-MESSAGING BEHAVIOR - The task agent's output is sent to the user or group. It can also use send_message for immediate delivery, or wrap output in <internal> tags to suppress it. Include guidance in the prompt about whether the agent should:
+MESSAGING BEHAVIOR - The task agent's output is sent to this Agent's bound chat. It can also use send_message for immediate delivery, or wrap output in <internal> tags to suppress it. Include guidance in the prompt about whether the agent should:
 \u2022 Always send a message (e.g., reminders, daily briefings)
 \u2022 Only send a message when there's something to report (e.g., "notify me if...")
 \u2022 Never send a message (background maintenance tasks)
@@ -636,16 +636,16 @@ SCHEDULE VALUE FORMAT:
         'cron: "*/5 * * * *" | interval: milliseconds like "300000" | once: local time like "2026-03-26 12:05"',
       ),
     context_mode: z
-      .enum(['group', 'isolated'])
-      .default('group')
+      .enum(['agent', 'isolated'])
+      .default('agent')
       .describe(
-        'group=runs with chat history and memory, isolated=fresh session (include context in prompt)',
+        'agent=runs with chat history and memory, isolated=fresh session (include context in prompt)',
       ),
-    target_group_jid: z
+    target_agent_jid: z
       .string()
       .optional()
       .describe(
-        '(Main group only) JID of the group to schedule the task for. Defaults to the current group.',
+        '(Main Agent only) JID of the Agent to schedule the task for. Defaults to the current Agent.',
       ),
   },
   async (args) => {
@@ -692,9 +692,9 @@ SCHEDULE VALUE FORMAT:
       }
     }
 
-    // Non-main groups can only schedule for themselves
+    // Non-main Agents can only schedule for themselves
     const targetJid =
-      isMain && args.target_group_jid ? args.target_group_jid : chatJid;
+      isMain && args.target_agent_jid ? args.target_agent_jid : chatJid;
 
     const taskId = `task-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
@@ -704,9 +704,9 @@ SCHEDULE VALUE FORMAT:
       prompt: args.prompt,
       schedule_type: args.schedule_type,
       schedule_value: args.schedule_value,
-      context_mode: args.context_mode || 'group',
+      context_mode: args.context_mode || 'agent',
       targetJid,
-      createdBy: groupFolder,
+      createdBy: agentFolder,
       timestamp: new Date().toISOString(),
     };
 
@@ -725,7 +725,7 @@ SCHEDULE VALUE FORMAT:
 
 server.tool(
   'list_tasks',
-  "List all scheduled tasks. From main: shows all tasks. From other groups: shows only that group's tasks.",
+  "List all scheduled tasks. From main: shows all tasks. From other Agents: shows only that Agent's tasks.",
   {},
   async () => {
     const tasksFile = path.join(IPC_DIR, 'current_tasks.json');
@@ -744,7 +744,7 @@ server.tool(
       const tasks = isMain
         ? allTasks
         : allTasks.filter(
-            (t: { groupFolder: string }) => t.groupFolder === groupFolder,
+            (t: { agentFolder: string }) => t.agentFolder === agentFolder,
           );
 
       if (tasks.length === 0) {
@@ -786,7 +786,6 @@ server.tool(
     }
   },
 );
-
 
 server.tool(
   'query_recent_today_plan_details',
@@ -953,7 +952,7 @@ server.tool(
     const data = {
       type: 'pause_task',
       taskId: args.task_id,
-      groupFolder,
+      agentFolder,
       isMain,
       timestamp: new Date().toISOString(),
     };
@@ -979,7 +978,7 @@ server.tool(
     const data = {
       type: 'resume_task',
       taskId: args.task_id,
-      groupFolder,
+      agentFolder,
       isMain,
       timestamp: new Date().toISOString(),
     };
@@ -1005,7 +1004,7 @@ server.tool(
     const data = {
       type: 'cancel_task',
       taskId: args.task_id,
-      groupFolder,
+      agentFolder,
       isMain,
       timestamp: new Date().toISOString(),
     };
@@ -1078,7 +1077,7 @@ server.tool(
     const data: Record<string, string | undefined> = {
       type: 'update_task',
       taskId: args.task_id,
-      groupFolder,
+      agentFolder,
       isMain: String(isMain),
       timestamp: new Date().toISOString(),
     };
@@ -1102,28 +1101,28 @@ server.tool(
 );
 
 server.tool(
-  'register_group',
-  `Register a new chat/group so the agent can respond to messages there. Main group only.
+  'register_agent',
+  `Register a new logical Agent bound to a chat so the agent can respond to messages there. Main Agent only.
 
-Use available_groups.json to find the JID for a group. The folder name must be channel-prefixed: "{channel}_{group-name}" (e.g., "whatsapp_family-chat", "telegram_dev-team", "discord_general"). Use lowercase with hyphens for the group name part.`,
+Use available_agents.json to find the JID for an Agent. The folder name must be channel-prefixed: "{channel}_{agent-name}" (for example, "web_research" or "feishu_ops"). Use lowercase with hyphens for the Agent name part.`,
   {
     jid: z
       .string()
       .describe(
-        'The chat JID (e.g., "120363336345536173@g.us", "tg:-1001234567890", "dc:1234567890123456")',
+        'The bound chat JID (for example, "web:research" or "feishu:oc_xxx")',
       ),
-    name: z.string().describe('Display name for the group'),
+    name: z.string().describe('Display name for the Agent'),
     folder: z
       .string()
       .describe(
-        'Channel-prefixed folder name (e.g., "whatsapp_family-chat", "telegram_dev-team")',
+        'Channel-prefixed folder name (for example, "web_research" or "feishu_ops")',
       ),
     trigger: z.string().describe('Trigger word (e.g., "@Andy")'),
     description: z
       .string()
       .optional()
       .describe(
-        'Human-readable description of this group\'s capabilities (e.g., "catstory 项目运维：代码仓库、SSH 日志查看、Jenkins 部署")',
+        'Human-readable description of this Agent\'s capabilities (e.g., "catstory 项目运维：代码仓库、SSH 日志查看、Jenkins 部署")',
       ),
   },
   async (args) => {
@@ -1132,7 +1131,7 @@ Use available_groups.json to find the JID for a group. The folder name must be c
         content: [
           {
             type: 'text' as const,
-            text: 'Only the main group can register new groups.',
+            text: 'Only the main Agent can register new Agents.',
           },
         ],
         isError: true,
@@ -1140,7 +1139,7 @@ Use available_groups.json to find the JID for a group. The folder name must be c
     }
 
     const data: Record<string, string | undefined> = {
-      type: 'register_group',
+      type: 'register_agent',
       jid: args.jid,
       name: args.name,
       folder: args.folder,
@@ -1155,7 +1154,7 @@ Use available_groups.json to find the JID for a group. The folder name must be c
       content: [
         {
           type: 'text' as const,
-          text: `Group "${args.name}" registered. It will start receiving messages immediately.`,
+          text: `Agent "" registered. It will start receiving messages immediately.`,
         },
       ],
     };
@@ -1252,7 +1251,7 @@ Users can answer via interactive cards (when supported) or by replying:
       questions: args.questions,
       timeoutSec,
       metadata: args.metadata,
-      groupFolder,
+      agentFolder,
       delegationId: delegationId || undefined,
       timestamp: new Date().toISOString(),
     };
@@ -1382,7 +1381,7 @@ server.tool(
         title: args.title,
         source_type: 'request_human_input',
       },
-      groupFolder,
+      agentFolder,
       delegationId: delegationId || undefined,
       timestamp: new Date().toISOString(),
     };
@@ -1470,7 +1469,7 @@ server.tool(
       limit: args.limit || 10,
       mode: args.mode || 'hybrid',
       requestId,
-      groupFolder,
+      agentFolder,
       timestamp: new Date().toISOString(),
     };
 
@@ -1560,7 +1559,7 @@ server.tool(
       query: args.query,
       limit: args.limit || 5,
       requestId,
-      groupFolder,
+      agentFolder,
       timestamp: new Date().toISOString(),
     });
 
@@ -1616,7 +1615,7 @@ server.tool(
       type: 'wiki_get_page',
       slug: args.slug,
       requestId,
-      groupFolder,
+      agentFolder,
       timestamp: new Date().toISOString(),
     });
 
@@ -1718,7 +1717,7 @@ server.tool(
 
 server.tool(
   'memory_write',
-  '写入结构化记忆到当前群组（working/episodic/canonical）。',
+  '为本 Agent 绑定的聊天写入结构化记忆（working/episodic/canonical）。',
   {
     content: z.string().describe('记忆内容'),
     layer: z
@@ -1738,7 +1737,7 @@ server.tool(
       layer: args.layer,
       memory_type: args.memory_type,
       requestId,
-      groupFolder,
+      agentFolder,
       timestamp: new Date().toISOString(),
     };
 
@@ -1807,7 +1806,7 @@ server.tool(
       type: 'memory_delete',
       memoryId: args.memory_id,
       requestId,
-      groupFolder,
+      agentFolder,
       timestamp: new Date().toISOString(),
     };
 
@@ -1893,7 +1892,7 @@ server.tool(
       type: 'memory_resolve_conflict',
       mode: args.mode,
       requestId,
-      groupFolder,
+      agentFolder,
       timestamp: new Date().toISOString(),
     };
 
@@ -2004,16 +2003,16 @@ server.tool(
 
 server.tool(
   'delegate_task',
-  `Delegate a task to another group's agent. Main group only. The target agent processes the task and returns results as a [委派结果] message. Be specific — the target has no context from this conversation.
+  `Delegate a task to another Agent. Main Agent only. The target agent processes the task and returns results as a [委派结果] message. Be specific — the target has no context from this conversation.
   Tips:
 - Be specific in your task description — the target agent has no context from this conversation
 - Include any relevant details (time ranges, error patterns, file paths, etc.)
 - Use list_delegations to check status of pending delegations`,
   {
-    target_group_jid: z
+    target_agent_jid: z
       .string()
       .describe(
-        'JID of the target group to delegate the task to. Find JIDs in available_groups.json or registered_groups table.',
+        'JID of the target Agent to delegate the task to. Find JIDs in available_agents.json or registered_agents table.',
       ),
     task: z
       .string()
@@ -2024,7 +2023,7 @@ server.tool(
       .string()
       .optional()
       .describe(
-        'JID of the group that originally requested this delegation via request_delegation. When provided, the requester will be auto-notified when the task completes.',
+        'JID of the Agent that originally requested this delegation via request_delegation. When provided, the requester will be auto-notified when the task completes.',
       ),
   },
   async (args) => {
@@ -2033,7 +2032,7 @@ server.tool(
         content: [
           {
             type: 'text' as const,
-            text: 'Only the main group can delegate tasks.',
+            text: 'Only the main Agent can delegate tasks.',
           },
         ],
         isError: true,
@@ -2044,11 +2043,11 @@ server.tool(
 
     const data = {
       type: 'delegate_task',
-      targetGroupJid: args.target_group_jid,
+      targetAgentJid: args.target_agent_jid,
       task: args.task,
       requesterJid: args.requester_jid || '',
       requestId,
-      groupFolder,
+      agentFolder,
       timestamp: new Date().toISOString(),
     };
 
@@ -2101,15 +2100,15 @@ server.tool(
 
 server.tool(
   'request_delegation',
-  `Request the main group to delegate a task on your behalf. Non-main groups only. The main group decides where to delegate.
-  Use this when you need help from another group's agent but cannot delegate directly.
-  If the original user message contains "@{groupfolder}", keep it in task text. The system will parse and forward it to the main group as a target-group hint.
-  Do not proactively invent or choose "@{groupfolder}" yourself when the user did not specify it.`,
+  `Request the main Agent to delegate a task on your behalf. Non-main Agents only. The main Agent decides where to delegate.
+  Use this when you need help from another Agent but cannot delegate directly.
+  If the original user message contains "@{agentfolder}", keep it in task text. The system will parse and forward it to the main Agent as a target-Agent hint.
+  Do not proactively invent or choose "@{agentfolder}" yourself when the user did not specify it.`,
   {
     task: z
       .string()
       .describe(
-        'Detailed description of what you need another group to do. Be specific — include all relevant context.',
+        'Detailed description of what you need another Agent to do. Be specific — include all relevant context.',
       ),
   },
   async (args) => {
@@ -2118,7 +2117,7 @@ server.tool(
         content: [
           {
             type: 'text' as const,
-            text: '主群请直接使用 delegate_task 工具。',
+            text: '主 Agent 请直接使用 delegate_task 工具。',
           },
         ],
         isError: true,
@@ -2128,7 +2127,7 @@ server.tool(
     const data = {
       type: 'request_delegation',
       task: args.task,
-      groupFolder,
+      agentFolder,
       timestamp: new Date().toISOString(),
     };
 
@@ -2138,7 +2137,7 @@ server.tool(
       content: [
         {
           type: 'text' as const,
-          text: '委派请求已发送给主群，主群将决定是否委派及委派目标。',
+          text: '委派请求已发送给主 Agent，主 Agent 将决定是否委派及委派目标。',
         },
       ],
     };
@@ -2147,9 +2146,9 @@ server.tool(
 
 server.tool(
   'complete_delegation',
-  `Report completion of a delegated task. Call this when you finish processing a task that was delegated to your group.
+  `Report completion of a delegated task. Call this when you finish processing a task that was delegated to your Agent.
 
-The result you provide will be sent back to the source group's agent as a message.
+The result you provide will be sent back to the source Agent's agent as a message.
 Be thorough in your result — include all relevant findings, data, and conclusions.`,
   {
     delegation_id: z.string().describe('委派任务 ID（格式：del-xxx）'),
@@ -2164,7 +2163,7 @@ Be thorough in your result — include all relevant findings, data, and conclusi
       delegationId: args.delegation_id,
       outcome: args.outcome,
       result: args.result,
-      groupFolder,
+      agentFolder,
       timestamp: new Date().toISOString(),
     };
 
@@ -2183,14 +2182,14 @@ Be thorough in your result — include all relevant findings, data, and conclusi
 
 server.tool(
   'list_delegations',
-  'List delegation tasks from the host database. Main group sees tasks it delegated; other groups see tasks assigned to them.',
+  'List delegation tasks from the host database. Main Agent sees tasks it delegated; other Agents see tasks assigned to them.',
   {},
   async () => {
     const requestId = `listdel-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     writeIpcFile(TASKS_DIR, {
       type: 'list_delegations',
       requestId,
-      groupFolder,
+      agentFolder,
       timestamp: new Date().toISOString(),
     });
 
@@ -2250,7 +2249,7 @@ server.tool(
 if (isMain) {
   server.tool(
     'desktop_capture',
-    '通过已连接的 Icarus Electron/Web 客户端实时抓取宿主 Mac 的桌面信息，可按需截图。只在主群可用；需要桌面客户端在线并授予 macOS 屏幕录制权限。截图成功后会返回 image.containerPath；需要把截图发给用户时，继续调用 send_file(file_path=image.containerPath)。需要自己查看截图时，继续用 Read 读取 image.containerPath。',
+    '通过已连接的 Icarus Electron/Web 客户端实时抓取宿主 Mac 的桌面信息，可按需截图。只对主 Agent 可用；需要桌面客户端在线并授予 macOS 屏幕录制权限。截图成功后会返回 image.containerPath；需要把截图发给用户时，继续调用 send_file(file_path=image.containerPath)。需要自己查看截图时，继续用 Read 读取 image.containerPath。',
     {
       display_id: z
         .string()
@@ -2283,7 +2282,7 @@ if (isMain) {
         maxWidth: args.max_width,
         includeImage: args.include_image,
         includeWindows: args.include_windows,
-        groupFolder,
+        agentFolder,
         timestamp: new Date().toISOString(),
       });
 
@@ -2370,7 +2369,7 @@ if (isMain) {
         requestId,
         scriptPath: args.script_path,
         args: args.args || [],
-        groupFolder,
+        agentFolder,
         timestamp: new Date().toISOString(),
       });
 
@@ -2432,7 +2431,7 @@ server.tool(
     writeIpcFile(TASKS_DIR, {
       type: 'reload_container',
       chatJid,
-      groupFolder,
+      agentFolder,
       timestamp: new Date().toISOString(),
     });
     return {
@@ -2455,7 +2454,7 @@ if (fs.existsSync(CUSTOM_TOOLS_DIR)) {
       if (typeof plugin.register === 'function') {
         plugin.register(server, {
           chatJid,
-          groupFolder,
+          agentFolder,
           isMain,
           writeIpcFile,
           MESSAGES_DIR,

@@ -2,7 +2,7 @@ export type {
   FeatureManifest,
   FeatureNavItem,
   FeaturePermissions,
-  FeatureRequiredGroup,
+  FeatureRequiredAgent,
   FeatureResources,
 } from './manifest.js';
 export type { FeatureContext, FeatureModule } from './context.js';

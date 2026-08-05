@@ -14,7 +14,7 @@ export interface MountAllowlist {
   allowedRoots: AllowedRoot[];
   // Glob patterns for paths that should never be mounted (e.g., ".ssh", ".gnupg")
   blockedPatterns: string[];
-  // If true, non-main groups can only mount read-only regardless of config
+  // If true, non-main Agents can only mount read-only regardless of config
   nonMainReadOnly: boolean;
 }
 
@@ -33,15 +33,15 @@ export interface ContainerConfig {
   services?: string[]; // Service names from services.json to mount repos for (use ["*"] for all)
 }
 
-export interface RegisteredGroup {
+export interface RegisteredAgent {
   name: string;
   folder: string;
   trigger: string;
   added_at: string;
   containerConfig?: ContainerConfig;
-  requiresTrigger?: boolean; // Default: true for groups, false for solo chats
-  isMain?: boolean; // True for the main control group (no trigger, elevated privileges)
-  description?: string; // Human-readable description of this group's capabilities
+  requiresTrigger?: boolean; // Default: true for Agents, false for solo chats
+  isMain?: boolean; // True for the main control Agent (no trigger, elevated privileges)
+  description?: string; // Human-readable description of this Agent's capabilities
 }
 
 export interface NewMessage {
@@ -59,12 +59,12 @@ export interface NewMessage {
 
 export interface ScheduledTask {
   id: string;
-  group_folder: string;
+  agent_folder: string;
   chat_jid: string;
   prompt: string;
   schedule_type: 'cron' | 'interval' | 'once';
   schedule_value: string;
-  context_mode: 'group' | 'isolated';
+  context_mode: 'agent' | 'isolated';
   next_run: string | null;
   last_run: string | null;
   last_result: string | null;
@@ -123,7 +123,7 @@ export interface AskQuestionItem {
 
 export interface AskQuestionRecord {
   id: string;
-  group_folder: string;
+  agent_folder: string;
   chat_jid: string;
   status: 'pending' | 'answered' | 'skipped' | 'timeout' | 'rejected';
   payload_json: string;
@@ -137,9 +137,9 @@ export interface AskQuestionRecord {
 
 /** Agent status info for the Agent Status panel. */
 export interface AgentStatusInfo {
-  groupJid: string;
-  groupName: string;
-  groupFolder: string;
+  agentJid: string;
+  agentName: string;
+  agentFolder: string;
   promptSummary: string;
   lastSender: string;
   lastContent: string;
@@ -176,7 +176,7 @@ export interface AgentQueryRecord {
   source_type: AgentQuerySourceType;
   source_ref_id: string | null;
   chat_jid: string | null;
-  group_folder: string | null;
+  agent_folder: string | null;
   service: string | null;
   role: string | null;
   task_id: string | null;
@@ -264,8 +264,8 @@ export interface AgentQueryEventRecord {
 export interface ActiveAgentQueryTrace {
   queryId: string;
   runId: string | null;
-  groupJid: string | null;
-  groupFolder: string | null;
+  agentJid: string | null;
+  agentFolder: string | null;
   service?: string | null;
   role?: string | null;
   sessionId: string | null;
@@ -421,7 +421,7 @@ export interface StoredChatMessageRecord {
 
 export interface MemoryRecord {
   id: string;
-  group_folder: string;
+  agent_folder: string;
   layer: 'working' | 'episodic' | 'canonical';
   memory_type: 'preference' | 'rule' | 'fact' | 'summary';
   status: 'active' | 'conflicted' | 'deprecated';
@@ -625,8 +625,8 @@ export type CardActionHandler = (action: {
   user_id: string;
   message_id: string;
   actor_channel?: CardActorChannel;
-  group_jid?: string;
-  group_folder?: string; // Plan item primary key
+  agent_jid?: string;
+  agent_folder?: string; // Plan item primary key
   form_value?: Record<string, string>;
 }) => void | CardActionResult | Promise<void | CardActionResult>;
 
@@ -639,8 +639,6 @@ export interface Channel {
   disconnect(): Promise<void>;
   // Optional: typing indicator. Channels that support it implement it.
   setTyping?(jid: string, isTyping: boolean): Promise<void>;
-  // Optional: sync group/chat names from the platform.
-  syncGroups?(force: boolean): Promise<void>;
   // Optional: send interactive card. Returns message_id.
   sendCard?(jid: string, card: InteractiveCard): Promise<string | undefined>;
   // Optional: card action callback handler.
@@ -657,12 +655,10 @@ export interface Channel {
 export type OnInboundMessage = (chatJid: string, message: NewMessage) => void;
 
 // Callback for chat metadata discovery.
-// name is optional — channels that deliver names inline (Telegram) pass it here;
-// channels that sync names separately (via syncGroups) omit it.
+// name is optional because some inbound events do not include display metadata.
 export type OnChatMetadata = (
   chatJid: string,
   timestamp: string,
   name?: string,
   channel?: string,
-  isGroup?: boolean,
 ) => void;

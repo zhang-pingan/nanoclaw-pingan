@@ -11,12 +11,12 @@ import {
   toAgentQueryFailurePatch,
   toFailureEventPayload,
 } from '../failure-taxonomy.js';
-import { GroupQueue } from '../group-queue.js';
+import { AgentQueue } from '../agent-queue.js';
 import { logger } from '../logger.js';
 import { clearModelResolutionsForRun } from '../model-resolution.js';
 import { selectModel } from '../model-selector.js';
 import { stripInternalTags } from '../router.js';
-import type { RegisteredGroup } from '../types.js';
+import type { RegisteredAgent } from '../types.js';
 import {
   parseRunOnceRequest,
   RunOnceFile,
@@ -41,8 +41,8 @@ export class RunOnceInputError extends Error {
 }
 
 export interface InternalAgentRunOnceServiceOptions {
-  registeredGroups: () => Record<string, RegisteredGroup>;
-  queue: GroupQueue;
+  registeredAgents: () => Record<string, RegisteredAgent>;
+  queue: AgentQueue;
   addOneShotTraceContext?: (
     chatJid: string,
     context: {
@@ -54,12 +54,22 @@ export interface InternalAgentRunOnceServiceOptions {
   ) => void;
   removeOneShotTraceContext?: (chatJid: string, queryId: string) => void;
   onProcess: (
-    groupJid: string,
+    agentJid: string,
     proc: ChildProcess,
     containerName: string,
-    groupFolder: string,
+    agentFolder: string,
   ) => void;
   maxInputChars: number;
+}
+
+export interface RunOnceAcceptedExecution {
+  readonly runId: string;
+  readonly queryId: string;
+  readonly containerName: string;
+}
+
+export interface RunOnceLifecycle {
+  onAccepted(execution: RunOnceAcceptedExecution): void;
 }
 
 function createExecutionId(): string {
@@ -148,20 +158,23 @@ function fallbackRunOnceFailure(error: string): ClassifiedFailure {
 export class InternalAgentRunOnceService {
   constructor(private readonly opts: InternalAgentRunOnceServiceOptions) {}
 
-  resolveGroupFolder(chatJid: string): string {
-    const group = this.opts.registeredGroups()[chatJid];
-    if (!group) {
-      throw new RunOnceInputError(`Registered group not found: ${chatJid}`);
+  resolveAgentFolder(chatJid: string): string {
+    const agent = this.opts.registeredAgents()[chatJid];
+    if (!agent) {
+      throw new RunOnceInputError(`Registered Agent not found: ${chatJid}`);
     }
-    return group.folder;
+    return agent.folder;
   }
 
-  async runOnce(input: RunOnceRequestInput): Promise<RunOnceResponse> {
+  async runOnce(
+    input: RunOnceRequestInput,
+    lifecycle?: RunOnceLifecycle,
+  ): Promise<RunOnceResponse> {
     const request = parseRunOnceRequest(input);
-    const group = this.opts.registeredGroups()[request.chat_jid];
-    if (!group) {
+    const agent = this.opts.registeredAgents()[request.chat_jid];
+    if (!agent) {
       throw new RunOnceInputError(
-        `Registered group not found: ${request.chat_jid}`,
+        `Registered Agent not found: ${request.chat_jid}`,
       );
     }
 
@@ -179,7 +192,7 @@ export class InternalAgentRunOnceService {
 
     const runId = createExecutionId();
     const queryId = createExecutionId();
-    ensureRunOnceOutputDir(group.folder, runId);
+    ensureRunOnceOutputDir(agent.folder, runId);
     const outputAgentPath = runOnceOutputAgentPath(runId);
     const userPrompt = message.content;
     const prompt = buildPromptWithFiles(
@@ -190,10 +203,10 @@ export class InternalAgentRunOnceService {
     const promptHash = sha256(`${request.system}\n${prompt}`);
     const selectedModel = await selectModel({
       prompt,
-      isMain: group.isMain === true,
+      isMain: agent.isMain === true,
     });
     const traceWriter = createRunOnceTraceWriter({
-      groupFolder: group.folder,
+      agentFolder: agent.folder,
       chatJid: request.chat_jid,
       request,
       runId,
@@ -211,7 +224,7 @@ export class InternalAgentRunOnceService {
           ? request.metadata.trace_id
           : undefined,
       chatJid: request.chat_jid,
-      groupFolder: group.folder,
+      agentFolder: agent.folder,
       selectedModel: selectedModel.selectedModel,
       selectedModelReason: selectedModel.reason,
       promptSummary: userPrompt.slice(0, 140),
@@ -267,6 +280,7 @@ export class InternalAgentRunOnceService {
     let resultMarkerCount = 0;
     let selectedOrActualModel = selectedModel.selectedModel;
     let closeRequested = false;
+    let acceptanceReported = false;
 
     const handleOutput = async (output: ContainerOutput): Promise<void> => {
       traceWriter.recordOutput(output);
@@ -357,8 +371,8 @@ export class InternalAgentRunOnceService {
       status = await this.opts.queue.runOneShot(
         request.chat_jid,
         {
-          groupFolder: group.folder,
-          groupName: group.name,
+          agentFolder: agent.folder,
+          agentName: agent.name,
           promptSummary: userPrompt.slice(0, 100),
           lastSender: 'internal-agent-run-once',
           lastContent: userPrompt.slice(0, 200),
@@ -369,7 +383,7 @@ export class InternalAgentRunOnceService {
         },
         async () => {
           const output = await runContainerAgent(
-            group,
+            agent,
             {
               prompt,
               system: request.system,
@@ -378,19 +392,24 @@ export class InternalAgentRunOnceService {
               requireResult: request.require_result,
               isolatedSession: true,
               executionMode: 'external_system_once',
-              groupFolder: group.folder,
+              agentFolder: agent.folder,
               chatJid: request.chat_jid,
-              isMain: group.isMain === true,
+              isMain: agent.isMain === true,
               selectedModel: selectedModel.selectedModel,
               isOneShot: true,
             },
-            (proc, containerName) =>
+            (proc, containerName) => {
               this.opts.onProcess(
                 request.chat_jid,
                 proc,
                 containerName,
-                group.folder,
-              ),
+                agent.folder,
+              );
+              if (!acceptanceReported) {
+                acceptanceReported = true;
+                lifecycle?.onAccepted({ runId, queryId, containerName });
+              }
+            },
             handleOutput,
           );
           if (output.status === 'error') {
@@ -419,7 +438,7 @@ export class InternalAgentRunOnceService {
 
     const text = outputs.join('\n').trim();
     const outputFiles = scanRunOnceOutputFiles({
-      groupFolder: group.folder,
+      agentFolder: agent.folder,
       chatJid: request.chat_jid,
       runId,
     });

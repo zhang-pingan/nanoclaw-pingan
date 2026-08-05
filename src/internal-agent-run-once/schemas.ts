@@ -18,7 +18,7 @@ const RUN_ONCE_FILE_PATH_PREFIXES = [
   '/workspace/run-once/',
   '/workspace/uploads/',
   '/workspace/attachments/',
-  '/workspace/group/',
+  '/workspace/agent/',
   '/workspace/desktop-captures/',
   '/workspace/ai-images/',
 ];

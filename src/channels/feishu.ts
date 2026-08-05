@@ -13,7 +13,7 @@ import {
   NewMessage,
   OnInboundMessage,
   OnChatMetadata,
-  RegisteredGroup,
+  RegisteredAgent,
 } from '../types.js';
 import { ATTACHMENTS_DIR } from '../config.js';
 import { readEnvFile } from '../env.js';
@@ -39,7 +39,7 @@ class FeishuChannel implements Channel {
   private tokenExpiry: number = 0;
   private onMessage: OnInboundMessage;
   private onChatMetadata: OnChatMetadata;
-  private registeredGroups: () => Record<string, RegisteredGroup>;
+  private registeredAgents: () => Record<string, RegisteredAgent>;
   private connected = false;
   private unregisterWebhookRoute: (() => Promise<void>) | null = null;
   onCardAction: CardActionHandler | null = null;
@@ -49,13 +49,13 @@ class FeishuChannel implements Channel {
     opts: {
       onMessage: OnInboundMessage;
       onChatMetadata: OnChatMetadata;
-      registeredGroups: () => Record<string, RegisteredGroup>;
+      registeredAgents: () => Record<string, RegisteredAgent>;
     },
   ) {
     this.config = config;
     this.onMessage = opts.onMessage;
     this.onChatMetadata = opts.onChatMetadata;
-    this.registeredGroups = opts.registeredGroups;
+    this.registeredAgents = opts.registeredAgents;
   }
 
   async connect(): Promise<void> {
@@ -503,7 +503,6 @@ class FeishuChannel implements Channel {
     return null;
   }
 
-
   private async updateDelayedCard(input: {
     token: string;
     openId?: string;
@@ -675,14 +674,14 @@ class FeishuChannel implements Channel {
     fileKey: string,
     fileName: string,
     type: 'file' | 'image',
-    groupFolder: string,
+    agentFolder: string,
   ): Promise<string | null> {
     try {
       const attachDir = ATTACHMENTS_DIR;
       fs.mkdirSync(attachDir, { recursive: true });
 
       // Use messageId as prefix for deduplication — same quoted message won't re-download
-      const safeName = `${groupFolder}_${messageId}_${fileName.replace(/[/\\]/g, '_')}`;
+      const safeName = `${agentFolder}_${messageId}_${fileName.replace(/[/\\]/g, '_')}`;
       const filePath = path.join(attachDir, safeName);
       const containerPath = `/workspace/attachments/${safeName}`;
 
@@ -719,12 +718,12 @@ class FeishuChannel implements Channel {
   }
 
   // Extract readable text from Feishu message content based on msg_type.
-  // For file/image types, downloads the resource if groupFolder and messageId are provided.
+  // For file/image types, downloads the resource if agentFolder and messageId are provided.
   private async extractMessageText(
     msgType: string,
     content: any,
     messageId?: string,
-    groupFolder?: string,
+    agentFolder?: string,
   ): Promise<string> {
     switch (msgType) {
       case 'text':
@@ -741,13 +740,13 @@ class FeishuChannel implements Channel {
       }
       case 'file': {
         const fileName = content.file_name || '未知文件';
-        if (messageId && groupFolder && content.file_key) {
+        if (messageId && agentFolder && content.file_key) {
           const resourcePath = await this.downloadMessageResource(
             messageId,
             content.file_key,
             fileName,
             'file',
-            groupFolder,
+            agentFolder,
           );
           if (resourcePath)
             return `[文件: ${fileName}] (已下载到 ${resourcePath})`;
@@ -755,13 +754,13 @@ class FeishuChannel implements Channel {
         return `[文件: ${fileName}]`;
       }
       case 'image': {
-        if (messageId && groupFolder && content.image_key) {
+        if (messageId && agentFolder && content.image_key) {
           const resourcePath = await this.downloadMessageResource(
             messageId,
             content.image_key,
             `${content.image_key}.png`,
             'image',
-            groupFolder,
+            agentFolder,
           );
           if (resourcePath) return `[图片] (已下载到 ${resourcePath})`;
         }
@@ -769,13 +768,13 @@ class FeishuChannel implements Channel {
       }
       case 'media': {
         const mediaName = content.file_name || '媒体文件';
-        if (messageId && groupFolder && content.file_key) {
+        if (messageId && agentFolder && content.file_key) {
           const resourcePath = await this.downloadMessageResource(
             messageId,
             content.file_key,
             mediaName,
             'file',
-            groupFolder,
+            agentFolder,
           );
           if (resourcePath)
             return `[视频/音频: ${mediaName}] (已下载到 ${resourcePath})`;
@@ -798,10 +797,10 @@ class FeishuChannel implements Channel {
   }
 
   // Fetch a message by ID from Feishu API (used to get quoted/parent messages).
-  // When groupFolder is provided, file/image resources are downloaded to the shared attachments dir.
+  // When agentFolder is provided, file/image resources are downloaded to the shared attachments dir.
   private async getMessageContent(
     messageId: string,
-    groupFolder?: string,
+    agentFolder?: string,
   ): Promise<{ text: string; senderName: string } | null> {
     try {
       const token = await this.getTenantAccessToken();
@@ -825,14 +824,14 @@ class FeishuChannel implements Channel {
       const msgType = item.msg_type || 'text';
       const senderName = item.sender?.id || 'unknown';
       logger.info(
-        { messageId, msgType, content, groupFolder },
+        { messageId, msgType, content, agentFolder },
         'Fetched parent message',
       );
       const text = await this.extractMessageText(
         msgType,
         content,
         messageId,
-        groupFolder,
+        agentFolder,
       );
       return { text, senderName };
     } catch (err) {
@@ -848,7 +847,8 @@ class FeishuChannel implements Channel {
   ): Promise<void> {
     const action = payload.event?.action;
     const value = action?.value as Record<string, string> | undefined;
-    const resolvedValue = value && typeof value.action === 'string' ? value : undefined;
+    const resolvedValue =
+      value && typeof value.action === 'string' ? value : undefined;
     const userId = payload.event?.operator?.user_id || '';
     const operatorOpenId = payload.event?.operator?.open_id || '';
     const messageId = payload.event?.context?.open_message_id || '';
@@ -858,7 +858,7 @@ class FeishuChannel implements Channel {
       payload.event?.message?.chat_id ||
       payload.event?.chat_id ||
       '';
-    const groupJid = chatId ? `feishu:${chatId}` : undefined;
+    const agentJid = chatId ? `feishu:${chatId}` : undefined;
 
     const formValue = action?.form_value as Record<string, string> | undefined;
 
@@ -883,8 +883,8 @@ class FeishuChannel implements Channel {
           user_id: userId,
           message_id: messageId,
           actor_channel: 'feishu',
-          group_jid: groupJid,
-          group_folder: resolvedValue.group_folder,
+          agent_jid: agentJid,
+          agent_folder: resolvedValue.agent_folder,
           form_value: mergedFormValue,
         });
       }
@@ -956,23 +956,23 @@ class FeishuChannel implements Channel {
       );
     }
 
-    // Check if it's the main group (no trigger required)
-    const groups = this.registeredGroups();
-    const groupKey = `feishu:${chatJid}`;
-    const group = groups[groupKey];
-    const isMainGroup = group?.isMain === true;
+    // Check if it's the main Agent (no trigger required)
+    const agents = this.registeredAgents();
+    const agentKey = `feishu:${chatJid}`;
+    const agent = agents[agentKey];
+    const isMainAgent = agent?.isMain === true;
     logger.info(
       {
         chatJid,
         messageId: message.message_id,
         msgType: message.message_type,
         senderId,
-        isMainGroup,
+        isMainAgent,
       },
       'Feishu inbound message received',
     );
 
-    if (!isMainGroup) {
+    if (!isMainAgent) {
       // Check for trigger pattern
       const triggerPattern = /^@[^ ]+/;
       if (!triggerPattern.test(content.text || '')) {
@@ -989,22 +989,22 @@ class FeishuChannel implements Channel {
       message.message_type || message.msg_type || 'text',
       content,
       messageId,
-      group?.folder,
+      agent?.folder,
     );
 
     // If this is a reply, fetch the quoted/parent message content.
     // Append (not prepend) quoted text so @trigger at the start of content is preserved.
     const parentId = message.parent_id || message.upper_message_id;
     if (parentId) {
-      const parentMsg = await this.getMessageContent(parentId, group?.folder);
+      const parentMsg = await this.getMessageContent(parentId, agent?.folder);
       if (parentMsg?.text) {
         messageContent = `${messageContent}\n[引用消息: ${parentMsg.text}]`;
       }
     }
 
     // Create chat metadata first (required for foreign key)
-    const chatName = group?.name || fullJid;
-    this.onChatMetadata(fullJid, message.create_time, chatName, 'feishu', true);
+    const chatName = agent?.name || fullJid;
+    this.onChatMetadata(fullJid, message.create_time, chatName, 'feishu');
 
     const envCfg = readEnvFile(['FEISHU_ADMIN_USER_ID']);
     const adminUserId =
@@ -1026,7 +1026,7 @@ export function createFeishuChannel(
   opts: {
     onMessage: OnInboundMessage;
     onChatMetadata: OnChatMetadata;
-    registeredGroups: () => Record<string, RegisteredGroup>;
+    registeredAgents: () => Record<string, RegisteredAgent>;
   },
 ): FeishuChannel | null {
   if (!config.appId || !config.appSecret) {

@@ -1,6 +1,6 @@
 # 未闭合叶子 / 合成 close 级联（空回复排查与修复）
 
-> 适用症状：**个人助手（或任意 group）调用多次、回复全为空、用户收不到任何回应，但 Trace Monitor 上这些 query 全记 `success`、无 error、无告警。**
+> 适用症状：**个人助手（或任意 agent）调用多次、回复全为空、用户收不到任何回应，但 Trace Monitor 上这些 query 全记 `success`、无 error、无告警。**
 >
 > 本文记录根因、诊断步骤、已实施修复，以及一个**已知残留**（Skill-load 留叶子）的条件化改法。后续再遇到"跑完没回复"先按本文排查。
 
@@ -10,7 +10,7 @@
 
 ## 1. 名词：什么是"未闭合叶子"
 
-Claude Agent SDK 把一次会话存成消息树（`data/sessions/{group}/.claude/projects/-workspace-group/{sessionId}.jsonl`，每行一个节点）。resume 时从树的**最末节点（叶子）**接着走。
+Claude Agent SDK 把一次会话存成消息树（`data/sessions/{agent}/.claude/projects/-workspace-agent/{sessionId}.jsonl`，每行一个节点）。resume 时从树的**最末节点（叶子）**接着走。
 
 - **已闭合**：末端是一条 **`stop_reason ∈ {end_turn, stop_sequence, max_tokens}`** 的 assistant 消息 —— 稳定静止态。
 - **未闭合**：末端停在 user / `tool_result` 节点之后无 assistant，或最后一条 assistant 是 `stop_reason=tool_use`（在等工具/待续）却没有后续闭合回合。
@@ -51,7 +51,7 @@ sqlite3 -header -column store/messages.db "
   SELECT substr(id,1,8) id, status, failure_type,
          substr(output_preview,1,32) output_preview, current_phase
   FROM agent_queries
-  WHERE group_folder='assistant_main'
+  WHERE agent_folder='assistant_main'
   ORDER BY created_at DESC LIMIT 15;"
 # 信号：连续多条 status=success / output_preview='Completed without channel output' / failure_type 空
 
@@ -59,7 +59,7 @@ sqlite3 -header -column store/messages.db "
 grep -nE "Result #1: subtype=success.*No response requested|Skipping (event|output) for inactive query trace" logs/icarus.log | tail
 
 # C. transcript：直接看末节点闭没闭合
-f=$(ls -t data/sessions/assistant_main/.claude/projects/-workspace-group/*.jsonl | head -1)
+f=$(ls -t data/sessions/assistant_main/.claude/projects/-workspace-agent/*.jsonl | head -1)
 python3 - "$f" <<'PY'
 import json,sys
 rows=[json.loads(l) for l in open(sys.argv[1]) if l.strip()]

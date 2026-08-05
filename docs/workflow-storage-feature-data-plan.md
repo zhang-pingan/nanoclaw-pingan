@@ -6,7 +6,7 @@
 
 - Workbench artifact 展示和索引默认偏向 `projects/{service}/iteration/{deliverable}/...`。
 - Context pack 是 workflow runtime 的通用机制，但当前固定写到 `projects/{service}/workflow-context/{workflow_id}/{stage_key}/...`。
-- Feature Package Runtime 已经支持 feature 的 API、导航、workflow、agent、skill、artifact contract、migration、独占 group 等资源动态注册，但运行期业务数据根还没有形成统一约定。
+- Feature Package Runtime 已经支持 feature 的 API、导航、workflow、agent、skill、artifact contract、migration、独占 agent 等资源动态注册，但运行期业务数据根还没有形成统一约定。
 
 这些假设对服务研发流程可用，但不适合 PM Pipeline、research、ops、knowledge production 等不以 `service` 为中心的 feature workflow。
 
@@ -404,7 +404,7 @@ data/features/{featureId} -> /workspace/features/{featureId}/data
 {externalRoot} -> /workspace/features/{featureId}/external/{rootId}
 ```
 
-Mount 必须由 workflow storage roots 和 file scope 决定，不能对所有 group 默认暴露所有 feature data。
+Mount 必须由 workflow storage roots 和 file scope 决定，不能对所有 agent 默认暴露所有 feature data。
 
 ## 历史产物迁移策略
 
@@ -466,12 +466,12 @@ projects/{service}/iteration/{deliverable}/...
 - Workbench artifact 可以索引 `data/workflows`、`data/features` 和 external feature data 下的文件。
 - Artifact contract 能校验 feature data root 下的业务文件。
 - Container agent 能读取被授权的 workflow runtime root 和 feature data root。
-- 未授权 feature data 不会被挂载到无关 group。
+- 未授权 feature data 不会被挂载到无关 agent。
 - `dev_test` / `fix_test` 历史 workflow 和历史 artifact 迁移后仍可展示，展示来源为 `workflow://...` 或 `feature://...`，不是 `project://...` 或 raw `projects/{service}` path。
 - `dev_test` / `fix_test` 新 workflow 写入 `data/workflows/{workflowId}` 或声明的 feature data root，不再写入 `projects/{service}/iteration/{deliverable}`。
 - 运行时搜索不到 `legacy_service_*` root kind、`/workspace/projects` 默认 allowed root、`workbench_artifacts.path` fallback。
 - 存在未迁移 legacy artifact 记录时，启动检查或迁移检查会失败并给出具体记录和源路径。
-- Feature 停用并删除时，删除摘要包含 managed feature data root、feature projection 表、feature-owned workflow 历史和独占 group。
+- Feature 停用并删除时，删除摘要包含 managed feature data root、feature projection 表、feature-owned workflow 历史和独占 agent。
 - External feature data root 默认不会被 core 删除。
 
 ## 风险

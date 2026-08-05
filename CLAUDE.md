@@ -32,7 +32,7 @@ Web Workbench / Electron     Personal Assistant / tray     Mobile / Feishu     W
         container/agent-runner
         - Claude Agent SDK
         - Bash/file tools/browser/search
-        - /workspace/group, /workspace/project(ro), /workspace/ipc
+        - /workspace/agent, /workspace/project(ro), /workspace/ipc
 ```
 
 ## Key Files
@@ -65,7 +65,7 @@ Web Workbench / Electron     Personal Assistant / tray     Mobile / Feishu     W
 | `container/workflow-definitions/` | Workflow state machine definitions |
 | `container/cards/` | Interactive card definitions |
 | `container/skills/` | Container-side agent skills and methods |
-| `groups/{name}/CLAUDE.md` | Per-group memory/instructions used inside container sessions |
+| `agents/{name}/CLAUDE.md` | Per-Agent memory/instructions used inside container sessions |
 
 ## Development Rules
 
@@ -73,7 +73,7 @@ Web Workbench / Electron     Personal Assistant / tray     Mobile / Feishu     W
 - Run commands directly when needed; do not ask the user to run routine checks.
 - Prefer existing project patterns over new abstractions.
 - Keep changes scoped. Do not refactor unrelated modules while fixing a narrow issue.
-- Do not revert user changes. This repo often has generated data, local groups, and work-in-progress files.
+- Do not revert user changes. This repo often has generated data, local Agents, and work-in-progress files.
 - Use `rg`/`rg --files` for search.
 - Use `apply_patch` for manual edits.
 - When changing frontend behavior, account for both browser workbench and Electron wrapper behavior.
@@ -115,7 +115,6 @@ Setup steps:
 
 ```bash
 npx tsx setup/index.ts --step environment
-npx tsx setup/index.ts --step groups
 npx tsx setup/index.ts --step register
 npx tsx setup/index.ts --step mounts
 npx tsx setup/index.ts --step service
@@ -129,12 +128,12 @@ npx tsx setup/index.ts --step verify
 - Host credential proxy defaults to port `3001`.
 - MySQL proxy defaults to port `3003`.
 - Feishu webhook server is provided by the Feishu channel when configured; Feishu is the current mobile supplement channel.
-- WeCom webhook server is provided by the WeCom channel when configured; WeCom employee DMs are one-to-one private support channels, with each authorized employee mapped to an isolated `wecom:user:{userid}` group.
+- WeCom webhook server is provided by the WeCom channel when configured; WeCom employee DMs are one-to-one private support channels, with each authorized employee mapped to an isolated `wecom:user:{userid}` Agent.
 - Containers receive placeholder credentials and call the host credential proxy.
 - `.env` must not be exposed to containers.
 - Project root is mounted read-only into the container as `/workspace/project`.
-- Current group workspace is mounted read-write as `/workspace/group`.
-- Group sessions are isolated under `data/sessions/{group}/.claude/`.
+- Current Agent workspace is mounted read-write as `/workspace/agent`.
+- Agent sessions are isolated under `data/sessions/{agent}/.claude/`.
 
 ## Core Data Areas
 
@@ -142,7 +141,7 @@ npx tsx setup/index.ts --step verify
 | --- | --- |
 | `store/` | SQLite database files |
 | `data/` | Runtime data: IPC, sessions, uploads, attachments, images |
-| `groups/` | Per-group workspaces and CLAUDE.md memory |
+| `agents/` | Per-Agent workspaces and CLAUDE.md memory |
 | `projects/` | Local project knowledge and deliverables |
 | `knowledge/` | Host-managed wiki and knowledge base |
 | `logs/` | Host service and setup logs |
@@ -157,8 +156,8 @@ The primary security boundary is container isolation.
 - Real API keys stay in the host process and credential proxy.
 - Mount permissions live outside the repo at `~/.config/icarus/mount-allowlist.json`.
 - Sensitive paths such as `.ssh`, `.aws`, `.kube`, `.env`, private keys, and credential files must not be mounted.
-- Main group is trusted admin context.
-- Non-main groups are treated as untrusted input and must only operate within their own scope unless host-side authorization allows more.
+- Main Agent is trusted admin context.
+- Non-main Agents are treated as untrusted input and must only operate within their own scope unless host-side authorization allows more.
 - IPC operations must preserve main/non-main permissions.
 
 ## Workflow And Workbench Guidance

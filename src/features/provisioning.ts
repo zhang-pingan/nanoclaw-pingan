@@ -2,133 +2,133 @@ import fs from 'fs';
 import path from 'path';
 
 import {
-  getFeatureGroupBinding,
-  getFeatureGroupBindingByFolder,
-  getFeatureGroupBindingByJid,
-  getRegisteredGroup,
-  getRegisteredGroupByFolder,
-  setFeatureGroupBinding,
-  setRegisteredGroup,
+  getFeatureAgentBinding,
+  getFeatureAgentBindingByFolder,
+  getFeatureAgentBindingByJid,
+  getRegisteredAgent,
+  getRegisteredAgentByFolder,
+  setFeatureAgentBinding,
+  setRegisteredAgent,
 } from '../db.js';
-import { ASSISTANT_NAME, GROUPS_DIR } from '../config.js';
-import { isValidGroupFolder } from '../group-folder.js';
+import { ASSISTANT_NAME, AGENTS_DIR } from '../config.js';
+import { isValidAgentFolder } from '../agent-folder.js';
 import { logger } from '../logger.js';
 import {
   assertPathInsideFeature,
   FeatureManifest,
-  FeatureRequiredGroup,
+  FeatureRequiredAgent,
 } from './manifest.js';
 
-export function provisionFeatureGroups(input: {
+export function provisionFeatureAgents(input: {
   featureId: string;
   featureRoot: string;
   manifest: FeatureManifest;
 }): void {
-  for (const group of input.manifest.requiredGroups || []) {
-    provisionFeatureGroup({
+  for (const agent of input.manifest.requiredAgents || []) {
+    provisionFeatureAgent({
       featureId: input.featureId,
       featureRoot: input.featureRoot,
-      group,
+      agent,
     });
   }
 }
 
-function provisionFeatureGroup(input: {
+function provisionFeatureAgent(input: {
   featureId: string;
   featureRoot: string;
-  group: FeatureRequiredGroup;
+  agent: FeatureRequiredAgent;
 }): void {
-  const { featureId, featureRoot, group } = input;
-  if (!isValidGroupFolder(group.folder)) {
+  const { featureId, featureRoot, agent } = input;
+  if (!isValidAgentFolder(agent.folder)) {
     throw new Error(
-      `Feature ${featureId} group ${group.key} has invalid folder "${group.folder}"`,
+      `Feature ${featureId} agent ${agent.key} has invalid folder "${agent.folder}"`,
     );
   }
 
   const templatePath = assertPathInsideFeature(
     featureRoot,
-    group.claudeMd,
-    `requiredGroups.${group.key}.claudeMd`,
+    agent.claudeMd,
+    `requiredAgents.${agent.key}.claudeMd`,
   );
   if (!fs.existsSync(templatePath)) {
     throw new Error(
-      `Feature ${featureId} group ${group.key} CLAUDE.md template not found: ${templatePath}`,
+      `Feature ${featureId} agent ${agent.key} CLAUDE.md template not found: ${templatePath}`,
     );
   }
 
-  const existingBinding = getFeatureGroupBinding(featureId, group.key);
-  const bindingByJid = getFeatureGroupBindingByJid(group.jid);
-  const bindingByFolder = getFeatureGroupBindingByFolder(group.folder);
+  const existingBinding = getFeatureAgentBinding(featureId, agent.key);
+  const bindingByJid = getFeatureAgentBindingByJid(agent.jid);
+  const bindingByFolder = getFeatureAgentBindingByFolder(agent.folder);
 
   if (
     bindingByJid &&
     (bindingByJid.feature_id !== featureId ||
-      bindingByJid.group_key !== group.key)
+      bindingByJid.agent_key !== agent.key)
   ) {
     throw new Error(
-      `Feature ${featureId} group ${group.key} JID "${group.jid}" is already bound to ${bindingByJid.feature_id}/${bindingByJid.group_key}`,
+      `Feature ${featureId} agent ${agent.key} JID "${agent.jid}" is already bound to ${bindingByJid.feature_id}/${bindingByJid.agent_key}`,
     );
   }
   if (
     bindingByFolder &&
     (bindingByFolder.feature_id !== featureId ||
-      bindingByFolder.group_key !== group.key)
+      bindingByFolder.agent_key !== agent.key)
   ) {
     throw new Error(
-      `Feature ${featureId} group ${group.key} folder "${group.folder}" is already bound to ${bindingByFolder.feature_id}/${bindingByFolder.group_key}`,
+      `Feature ${featureId} agent ${agent.key} folder "${agent.folder}" is already bound to ${bindingByFolder.feature_id}/${bindingByFolder.agent_key}`,
     );
   }
 
-  const existingByJid = getRegisteredGroup(group.jid);
-  const existingByFolder = getRegisteredGroupByFolder(group.folder);
+  const existingByJid = getRegisteredAgent(agent.jid);
+  const existingByFolder = getRegisteredAgentByFolder(agent.folder);
   if (!existingBinding) {
     if (existingByJid) {
       throw new Error(
-        `Feature ${featureId} group ${group.key} JID "${group.jid}" already exists without feature binding`,
+        `Feature ${featureId} agent ${agent.key} JID "${agent.jid}" already exists without feature binding`,
       );
     }
     if (existingByFolder) {
       throw new Error(
-        `Feature ${featureId} group ${group.key} folder "${group.folder}" already exists without feature binding`,
+        `Feature ${featureId} agent ${agent.key} folder "${agent.folder}" already exists without feature binding`,
       );
     }
   } else {
     if (
-      existingBinding.group_jid !== group.jid ||
-      existingBinding.group_folder !== group.folder
+      existingBinding.agent_jid !== agent.jid ||
+      existingBinding.agent_folder !== agent.folder
     ) {
       throw new Error(
-        `Feature ${featureId} group ${group.key} binding changed from ${existingBinding.group_jid}/${existingBinding.group_folder} to ${group.jid}/${group.folder}`,
+        `Feature ${featureId} agent ${agent.key} binding changed from ${existingBinding.agent_jid}/${existingBinding.agent_folder} to ${agent.jid}/${agent.folder}`,
       );
     }
   }
 
   const now = new Date().toISOString();
-  const groupDir = path.join(GROUPS_DIR, group.folder);
-  fs.mkdirSync(path.join(groupDir, 'logs'), { recursive: true });
+  const agentDir = path.join(AGENTS_DIR, agent.folder);
+  fs.mkdirSync(path.join(agentDir, 'logs'), { recursive: true });
 
-  const claudeMdPath = path.join(groupDir, 'CLAUDE.md');
+  const claudeMdPath = path.join(agentDir, 'CLAUDE.md');
   if (!fs.existsSync(claudeMdPath)) {
     fs.copyFileSync(templatePath, claudeMdPath);
   }
 
-  setRegisteredGroup(group.jid, {
-    name: group.name,
-    folder: group.folder,
+  setRegisteredAgent(agent.jid, {
+    name: agent.name,
+    folder: agent.folder,
     trigger: `@${ASSISTANT_NAME}`,
     added_at: existingByJid?.added_at || now,
-    requiresTrigger: group.requiresTrigger ?? false,
-    description: group.description,
+    requiresTrigger: agent.requiresTrigger ?? false,
+    description: agent.description,
   });
-  setFeatureGroupBinding({
+  setFeatureAgentBinding({
     featureId,
-    groupKey: group.key,
-    groupJid: group.jid,
-    groupFolder: group.folder,
+    agentKey: agent.key,
+    agentJid: agent.jid,
+    agentFolder: agent.folder,
   });
 
   logger.info(
-    { featureId, groupKey: group.key, jid: group.jid, folder: group.folder },
-    'Feature group provisioned',
+    { featureId, agentKey: agent.key, jid: agent.jid, folder: agent.folder },
+    'Feature agent provisioned',
   );
 }

@@ -2,7 +2,7 @@ import { execFileSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 
-import { GROUPS_DIR, PROJECT_ROOT, REPOS_DIR } from './config.js';
+import { AGENTS_DIR, PROJECT_ROOT, REPOS_DIR } from './config.js';
 import {
   createTodayPlan,
   createTodayPlanItem,
@@ -19,7 +19,7 @@ import {
 } from './db.js';
 import { logger } from './logger.js';
 import {
-  type RegisteredGroup,
+  type RegisteredAgent,
   type StoredChatMessageRecord,
   type TodayPlanItemRecord,
   type TodayPlanRecord,
@@ -39,7 +39,7 @@ export interface ServiceConfig {
 }
 
 export interface TodayPlanChatSelection {
-  group_jid: string;
+  agent_jid: string;
   message_ids: string[];
 }
 
@@ -65,9 +65,9 @@ export interface TodayPlanConversationMessage {
   reply_preview?: string | null;
 }
 
-export interface TodayPlanChatGroupDetail {
-  group_jid: string;
-  group_name: string;
+export interface TodayPlanChatAgentDetail {
+  agent_jid: string;
+  agent_name: string;
   message_count: number;
   messages: TodayPlanConversationMessage[];
 }
@@ -101,7 +101,7 @@ export interface TodayPlanItemDetail {
   detail: string;
   order_index: number;
   associations: TodayPlanAssociations;
-  related_chats: TodayPlanChatGroupDetail[];
+  related_chats: TodayPlanChatAgentDetail[];
   related_services: TodayPlanServiceDetail[];
   created_at: string;
   updated_at: string;
@@ -336,11 +336,11 @@ function normalizeAssociations(
           .filter(
             (item): item is TodayPlanChatSelection =>
               Boolean(item) &&
-              typeof item.group_jid === 'string' &&
+              typeof item.agent_jid === 'string' &&
               Array.isArray(item.message_ids),
           )
           .map((item) => ({
-            group_jid: item.group_jid,
+            agent_jid: item.agent_jid,
             message_ids: Array.from(
               new Set(
                 (Array.isArray(item.message_ids)
@@ -391,7 +391,7 @@ function normalizeAssociations(
 function serializeAssociations(input: TodayPlanAssociations): string {
   return JSON.stringify({
     chat_selections: input.chat_selections.map((item) => ({
-      group_jid: item.group_jid,
+      agent_jid: item.agent_jid,
       message_ids: Array.from(new Set(item.message_ids || [])),
     })),
     services: input.services.map((item) => ({
@@ -553,7 +553,7 @@ export function mergeTodayPlanServiceRegistry(input: {
 }
 
 function getServiceRegistry(): Record<string, ServiceConfig> {
-  const servicesPath = path.join(GROUPS_DIR, 'global', 'services.json');
+  const servicesPath = path.join(AGENTS_DIR, 'global', 'services.json');
   if (!fs.existsSync(servicesPath)) return {};
   try {
     return JSON.parse(fs.readFileSync(servicesPath, 'utf-8')) as Record<
@@ -860,9 +860,9 @@ export function listTodayPlanChatMessages(
 function getTodayPlanChatMessagesBySelection(
   selection: TodayPlanChatSelection,
 ): TodayPlanConversationMessage[] {
-  if (isWebChatJid(selection.group_jid)) {
+  if (isWebChatJid(selection.agent_jid)) {
     const directMessages = listWebMessagesByIds(
-      selection.group_jid,
+      selection.agent_jid,
       selection.message_ids,
     );
     const replySourceIds = Array.from(
@@ -877,7 +877,7 @@ function getTodayPlanChatMessagesBySelection(
     );
     const replySourceMessages =
       replySourceIds.length > 0
-        ? listWebMessagesByIds(selection.group_jid, replySourceIds)
+        ? listWebMessagesByIds(selection.agent_jid, replySourceIds)
         : [];
     return dedupeAndSortChatMessages(
       toWebConversationMessages(directMessages, replySourceMessages),
@@ -886,7 +886,7 @@ function getTodayPlanChatMessagesBySelection(
 
   const directMessages =
     Array.isArray(selection.message_ids) && selection.message_ids.length > 0
-      ? listStoredMessagesByIds(selection.group_jid, selection.message_ids).map(
+      ? listStoredMessagesByIds(selection.agent_jid, selection.message_ids).map(
           toConversationMessage,
         )
       : [];
@@ -926,7 +926,7 @@ function mergeServiceSelections(input: {
 function buildTodayPlanItemDetail(input: {
   item: TodayPlanItemRecord;
   planDate: string;
-  groups: Record<string, RegisteredGroup>;
+  agents: Record<string, RegisteredAgent>;
 }): TodayPlanItemDetail {
   const associations = normalizeAssociations(input.item.associations_json);
   const relatedChats = associations.chat_selections
@@ -934,14 +934,14 @@ function buildTodayPlanItemDetail(input: {
       const messages = getTodayPlanChatMessagesBySelection(selection);
       if (messages.length === 0) return null;
       return {
-        group_jid: selection.group_jid,
-        group_name:
-          input.groups[selection.group_jid]?.name || selection.group_jid,
+        agent_jid: selection.agent_jid,
+        agent_name:
+          input.agents[selection.agent_jid]?.name || selection.agent_jid,
         message_count: messages.length,
         messages,
       };
     })
-    .filter((item): item is TodayPlanChatGroupDetail => Boolean(item));
+    .filter((item): item is TodayPlanChatAgentDetail => Boolean(item));
   const relatedServices = mergeServiceSelections({
     manual: associations.services,
     planDate: input.planDate,
@@ -963,13 +963,13 @@ function buildTodayPlanItemDetail(input: {
 function buildTodayPlanItems(input: {
   planId: string;
   planDate: string;
-  groups: Record<string, RegisteredGroup>;
+  agents: Record<string, RegisteredAgent>;
 }): TodayPlanItemDetail[] {
   return listTodayPlanItems(input.planId).map((item) =>
     buildTodayPlanItemDetail({
       item,
       planDate: input.planDate,
-      groups: input.groups,
+      agents: input.agents,
     }),
   );
 }
@@ -977,14 +977,14 @@ function buildTodayPlanItems(input: {
 export function getTodayPlanDetail(input: {
   planId?: string;
   planDate?: string;
-  groups: Record<string, RegisteredGroup>;
+  agents: Record<string, RegisteredAgent>;
 }): TodayPlanDetail | null {
   const plan = getTodayPlanRecord(input);
   if (!plan) return null;
   const items = buildTodayPlanItems({
     planId: plan.id,
     planDate: plan.plan_date,
-    groups: input.groups,
+    agents: input.agents,
   });
   const continuedFromPlan =
     typeof plan.continued_from_plan_id === 'string' &&
@@ -1000,7 +1000,7 @@ export function getTodayPlanDetail(input: {
           items: buildTodayPlanItems({
             planId: continuedFromPlan.id,
             planDate: continuedFromPlan.plan_date,
-            groups: input.groups,
+            agents: input.agents,
           }),
         }
       : null,
@@ -1337,7 +1337,6 @@ export function getRecentTodayPlanDetails(
           });
         }
       }
-
     }
 
     plans.push(planSummary);
@@ -1407,8 +1406,8 @@ export function removeTodayPlanItem(itemId: string): number {
   return deleteTodayPlanItem(itemId);
 }
 
-function formatChatGroupForMail(group: TodayPlanChatGroupDetail): string {
-  const lines = group.messages.slice(0, 120).map((message) => {
+function formatChatAgentForMail(agent: TodayPlanChatAgentDetail): string {
+  const lines = agent.messages.slice(0, 120).map((message) => {
     const sender = message.sender_name || message.sender || '未知';
     const content = truncateText(
       message.content.replace(/\s+/g, ' ').trim(),
@@ -1417,13 +1416,13 @@ function formatChatGroupForMail(group: TodayPlanChatGroupDetail): string {
     return `- [${message.timestamp}] ${sender}: ${content}`;
   });
   const suffix =
-    group.messages.length > 120
-      ? `\n- ... 其余 ${group.messages.length - 120} 条消息已省略`
+    agent.messages.length > 120
+      ? `\n- ... 其余 ${agent.messages.length - 120} 条消息已省略`
       : '';
   return (
     [
-      `群聊：${group.group_name}`,
-      `消息数：${group.message_count}`,
+      `群聊：${agent.agent_name}`,
+      `消息数：${agent.message_count}`,
       ...lines,
     ].join('\n') + suffix
   );
@@ -1465,12 +1464,12 @@ function buildTodayPlanMailTemplate(): string {
 
 export function buildTodayPlanMailPrompt(input: {
   planId: string;
-  groups: Record<string, RegisteredGroup>;
+  agents: Record<string, RegisteredAgent>;
   name: string;
 }): { plan: TodayPlanDetail; prompt: string; subject: string } | null {
   const detail = getTodayPlanDetail({
     planId: input.planId,
-    groups: input.groups,
+    agents: input.agents,
   });
   if (!detail) return null;
 
@@ -1483,8 +1482,8 @@ export function buildTodayPlanMailPrompt(input: {
 
         if (item.related_chats.length > 0) {
           sections.push('### 关联群聊消息');
-          for (const group of item.related_chats) {
-            sections.push(formatChatGroupForMail(group));
+          for (const agent of item.related_chats) {
+            sections.push(formatChatAgentForMail(agent));
           }
         }
 

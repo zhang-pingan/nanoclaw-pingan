@@ -93,8 +93,8 @@ features/{featureId}/
     styles.css
     components/
   container/
-    groups/
-      {groupKey}/
+    agents/
+      {agentKey}/
         CLAUDE.md
     workflow-definitions/
     cards/
@@ -114,7 +114,7 @@ features/{featureId}/
 | --- | --- |
 | `host/` | 宿主机侧代码：API、projection、migrations、后台任务、事件订阅 |
 | `renderer/` | 前端页面、组件、样式、路由入口 |
-| `container/groups/` | 功能包声明的独占 agent group 模板，例如 `CLAUDE.md` |
+| `container/agents/` | 功能包声明的独占 Agent 模板，例如 `CLAUDE.md` |
 | `container/workflow-definitions/` | 功能包贡献的 workflow definitions |
 | `container/cards/` | 功能包贡献的交互卡片 |
 | `container/skills/` | 容器 agent 可使用的 skills |
@@ -147,15 +147,15 @@ features/{featureId}/
       "order": 300
     }
   ],
-  "requiredGroups": [
+  "requiredAgents": [
     {
       "key": "main",
       "jid": "feature:example-feature:main",
       "name": "Example Feature",
       "folder": "example_feature_main",
       "requiresTrigger": false,
-      "description": "Example feature dedicated agent group",
-      "claudeMd": "./container/groups/main/CLAUDE.md"
+      "description": "Example feature dedicated Agent",
+      "claudeMd": "./container/agents/main/CLAUDE.md"
     }
   ],
   "resources": {
@@ -184,10 +184,10 @@ Manifest 规则：
 - `id` 全局唯一，建议使用 kebab-case。
 - `apiPrefix` 必须属于 `/api/features/{featureId}` 或明确声明的唯一 prefix。
 - `nav.key` 全局唯一。
-- `requiredGroups[].key` 在当前 feature 内唯一。
-- `requiredGroups[].jid` 建议使用 `feature:{featureId}:{groupKey}` 格式。
-- `requiredGroups[].folder` 必须通过 core group folder 校验。
-- `requiredGroups[].claudeMd` 必须位于 feature 根目录内。
+- `requiredAgents[].key` 在当前 feature 内唯一。
+- `requiredAgents[].jid` 建议使用 `feature:{featureId}:{agentKey}` 格式。
+- `requiredAgents[].folder` 必须通过 core agent folder 校验。
+- `requiredAgents[].claudeMd` 必须位于 feature 根目录内。
 - 所有资源路径必须位于 feature 根目录内。
 - 权限需求必须显式声明，不能在 activate 阶段临时扩权。
 
@@ -221,67 +221,67 @@ ICARUS_FEATURES=example-feature,another-feature
 - manifest 解析失败或 feature activate 失败，应阻止该 feature 注册，避免半启用状态。
 - 同一个 feature 重复启用时应去重。
 
-## Feature Group Provisioning
+## Feature Agent Provisioning
 
-Feature 可以在 manifest 中声明自己需要的独占 group：
+Feature 可以在 manifest 中声明自己需要的独占 Agent：
 
 ```json
 {
-  "requiredGroups": [
+  "requiredAgents": [
     {
       "key": "main",
       "jid": "feature:example-feature:main",
       "name": "Example Feature",
       "folder": "example_feature_main",
       "requiresTrigger": false,
-      "description": "Example feature dedicated agent group",
-      "claudeMd": "./container/groups/main/CLAUDE.md"
+      "description": "Example feature dedicated Agent",
+      "claudeMd": "./container/agents/main/CLAUDE.md"
     }
   ]
 }
 ```
 
-这些 group 视为该 feature 的独占资源。feature 启用时，如果对应 group 不存在，core 应自动创建：
+这些 agent 视为该 feature 的独占资源。feature 启用时，如果对应 agent 不存在，core 应自动创建：
 
-- `registered_groups` DB 记录。
-- `groups/{folder}/` 目录。
-- `groups/{folder}/logs/` 目录。
-- `groups/{folder}/CLAUDE.md`，内容来自 `requiredGroups[].claudeMd` 模板。
-- `feature_group_bindings` 记录，用于标记该 group 归属哪个 feature。
+- `registered_agents` DB 记录。
+- `agents/{folder}/` 目录。
+- `agents/{folder}/logs/` 目录。
+- `agents/{folder}/CLAUDE.md`，内容来自 `requiredAgents[].claudeMd` 模板。
+- `feature_agent_bindings` 记录，用于标记该 agent 归属哪个 feature。
 
 建议新增 core 表：
 
 ```sql
-CREATE TABLE IF NOT EXISTS feature_group_bindings (
+CREATE TABLE IF NOT EXISTS feature_agent_bindings (
   feature_id TEXT NOT NULL,
-  group_key TEXT NOT NULL,
-  group_jid TEXT NOT NULL,
-  group_folder TEXT NOT NULL,
+  agent_key TEXT NOT NULL,
+  agent_jid TEXT NOT NULL,
+  agent_folder TEXT NOT NULL,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
-  PRIMARY KEY (feature_id, group_key),
-  UNIQUE (group_jid),
-  UNIQUE (group_folder)
+  PRIMARY KEY (feature_id, agent_key),
+  UNIQUE (agent_jid),
+  UNIQUE (agent_folder)
 );
 ```
 
 Provisioning 规则：
 
-- `requiredGroups[].jid`、`requiredGroups[].folder` 全局唯一。
-- `folder` 必须通过 core group folder 校验。
+- `requiredAgents[].jid`、`requiredAgents[].folder` 全局唯一。
+- `folder` 必须通过 core agent folder 校验。
 - `claudeMd` 模板路径必须位于当前 feature 根目录内。
 - 如果同名 folder 或 jid 已经被其他 feature 使用，启动失败。
 - 如果同名 folder 或 jid 已存在但没有 feature binding，也视为冲突并启动失败。
-- 已存在且绑定到同一 feature/groupKey 时，启动不重复创建。
+- 已存在且绑定到同一 feature/agentKey 时，启动不重复创建。
 - `CLAUDE.md` 缺失时可以从模板补齐；已存在时默认不覆盖。
-- feature 不能通过 migration 或 host code 直接插入 `registered_groups`，必须通过 core provisioning API。
+- feature 不能通过 migration 或 host code 直接插入 `registered_agents`，必须通过 core provisioning API。
 
-Feature group provisioning 应在 feature migration 和 host activation 之前完成：
+Feature Agent provisioning 应在 feature migration 和 host activation 之前完成：
 
 ```text
 load enabled features
   -> validate manifests
-  -> provision requiredGroups
+  -> provision requiredAgents
   -> run feature migrations
   -> register resources
   -> activate host entries
@@ -346,7 +346,7 @@ load core config
   -> read local/features.json
   -> validate enabled feature ids
   -> validate manifest and permissions
-  -> provision requiredGroups
+  -> provision requiredAgents
   -> register declared resource sources
   -> build FeatureContext
   -> dynamic import enabled hostEntry
@@ -363,7 +363,7 @@ Feature 的启用/停用应提供 Web 管理入口，而不是只靠手改 `loca
 
 ```text
 1. 仅停用
-2. 停用并删除该 feature 的 group 和历史信息
+2. 停用并删除该 feature 的 agent 和历史信息
 ```
 
 ### 仅停用
@@ -373,8 +373,8 @@ Feature 的启用/停用应提供 Web 管理入口，而不是只靠手改 `loca
 - 从 enabled features 中移除该 feature。
 - 不注册该 feature 的 API、导航、workflow、cards、skills、agents、MCP、后台任务。
 - 保留该 feature 已创建的 DB 数据。
-- 保留该 feature 已创建的 group。
-- 保留 `groups/{folder}/` 文件系统目录。
+- 保留该 feature 已创建的 agent。
+- 保留 `agents/{folder}/` 文件系统目录。
 - 历史 workflow 在 Execution Console 中只读可见。
 
 ### 停用并删除
@@ -382,10 +382,10 @@ Feature 的启用/停用应提供 Web 管理入口，而不是只靠手改 `loca
 用户选择“停用并删除”时，core 应先展示删除摘要：
 
 - 将删除的 feature id。
-- 将删除的 group 列表。
+- 将删除的 agent 列表。
 - 将删除的 workflow/task/trace/message 数量。
 - 将删除的 feature projection 表或记录。
-- 将删除的 `groups/{folder}/` 路径。
+- 将删除的 `agents/{folder}/` 路径。
 
 用户二次确认后，core 执行删除：
 
@@ -393,15 +393,15 @@ Feature 的启用/停用应提供 Web 管理入口，而不是只靠手改 `loca
 - 禁止新建该 feature 的 workflow。
 - 删除该 feature 贡献的 workflow 实例、workbench task、action item、artifact index、timeline event。
 - 删除该 feature 相关的 agent query trace、workflow event、interrupt、checkpoint、outbox 等历史执行记录。
-- 删除该 feature 独占 group 的 messages、chats、sessions、registered_groups 记录。
-- 删除 `feature_group_bindings` 中该 feature 的记录。
+- 删除该 feature 独占 Agent 的 messages、chats、sessions、registered_agents 记录。
+- 删除 `feature_agent_bindings` 中该 feature 的记录。
 - 删除该 feature 自己的 projection/config/cache 表数据。
 - 删除 `feature_migrations` 中该 feature 的 migration 记录。
-- 删除 `groups/{folder}/` 文件系统目录。
-- 删除 `data/sessions/{folder}/.claude`、`data/ipc/{folder}` 等 group runtime 目录。
+- 删除 `agents/{folder}/` 文件系统目录。
+- 删除 `data/sessions/{folder}/.claude`、`data/ipc/{folder}` 等 Agent runtime 目录。
 - 写入一条最小审计记录，说明用户执行过 feature 数据删除；这条删除审计不再依赖被删除的 feature 数据。
 
-删除必须是 core 提供的受控动作，feature 不能自己递归删除 `groups/` 或直接清 core 表。
+删除必须是 core 提供的受控动作，feature 不能自己递归删除 `agents/` 或直接清 core 表。
 
 如果删除过程中部分文件系统清理失败，应返回明确错误并保留可重试状态；不能静默成功。
 
@@ -529,7 +529,7 @@ templates
 加载原则：
 
 - 只把 enabled feature 的资源同步或挂载进容器。
-- 第一阶段 feature-scoped 的 skills、agents、MCP、scripts、templates 默认只对该 feature 通过 `feature_group_bindings` 绑定的独占 group 可见；未绑定 group 只能看到 core 资源，避免跨功能包资源泄露。后续如需跨 group 共享，必须在 manifest 中增加显式可见范围。
+- 第一阶段 feature-scoped 的 skills、agents、MCP、scripts、templates 默认只对该 feature 通过 `feature_agent_bindings` 绑定的独占 Agent 可见；未绑定 agent 只能看到 core 资源，避免跨功能包资源泄露。后续如需跨 agent 共享，必须在 manifest 中增加显式可见范围。
 - 资源进入容器前经过 manifest 和 permission 校验。
 - scripts 不直接开放给 agent 任意执行，必须通过 host action 或白名单策略。
 - MCP server 必须声明权限、可见目录、凭证来源和审计策略。
@@ -539,7 +539,7 @@ templates
 
 ```text
 features/{featureId}/container/skills/{skillName}
-  -> enabled 后同步到 data/sessions/{group}/.claude/skills/{featureId}-{skillName}
+  -> enabled 后同步到 data/sessions/{agent}/.claude/skills/{featureId}-{skillName}
 
 features/{featureId}/container/agents/{agentName}.md
   -> enabled 后挂载或复制到容器 agent 可发现目录
@@ -626,7 +626,7 @@ Feature manifest 中声明权限需求，core 启动时校验：
 审计事件至少包含：
 
 - feature id
-- user/channel/group
+- user/channel/agent
 - workflow id
 - action name
 - request payload hash
@@ -681,9 +681,9 @@ Icarus With Features
 - 新增 `local/features.json` 解析。
 - 支持扫描 `features/*/feature.json`。
 - 定义 `FeatureManifest`、`FeatureContext`、`FeatureModule`。
-- 支持 `requiredGroups` manifest 字段。
-- 新增 `feature_group_bindings` core 表。
-- 启用 feature 时自动 provision 独占 group、`groups/{folder}/logs` 和 `groups/{folder}/CLAUDE.md`。
+- 支持 `requiredAgents` manifest 字段。
+- 新增 `feature_agent_bindings` core 表。
+- 启用 feature 时自动 provision 独占 Agent、`agents/{folder}/logs` 和 `agents/{folder}/CLAUDE.md`。
 - 支持动态 import enabled feature 的 `hostEntry`。
 - 增加 `/api/features/enabled`。
 - 增加 manifest 校验和启动错误提示。
@@ -704,7 +704,7 @@ Icarus With Features
 - 支持 `/api/features/enabled` 返回 feature nav/renderer metadata。
 - 增加 Web 端 feature 管理页面或设置入口。
 - Web 端停用 feature 时弹出确认，提供“仅停用”和“停用并删除”两个选项。
-- 选择“停用并删除”时展示将删除的 group、历史记录和文件路径摘要，并要求二次确认。
+- 选择“停用并删除”时展示将删除的 agent、历史记录和文件路径摘要，并要求二次确认。
 - 支持点击后 dynamic import feature renderer。
 - feature renderer 作为独立 chunk。
 - 未启用 feature 不进入主 `app.js`。
@@ -726,14 +726,14 @@ Icarus With Features
 - 支持 feature projection event subscription。
 - 明确 projection 可重建，不作为执行事实源。
 - 增加启用、禁用、重复启动的 migration 测试。
-- 增加 feature 数据删除服务，负责清理 feature projection/config/cache、migration 记录、feature-owned workflow 历史和 group 相关 DB 记录。
+- 增加 feature 数据删除服务，负责清理 feature projection/config/cache、migration 记录、feature-owned workflow 历史和 agent 相关 DB 记录。
 
 ### 阶段 6：Feature 停用与删除
 
 - 增加 feature disable API。
 - 增加 feature delete-data API。
-- 删除动作只能由 core 执行，feature 不能自己删除 core 表或 `groups/` 文件系统。
-- 删除独占 group 时同步删除 `registered_groups`、`chats`、`messages`、`sessions`、group runtime 目录和 `groups/{folder}`。
+- 删除动作只能由 core 执行，feature 不能自己删除 core 表或 `agents/` 文件系统。
+- 删除独占 Agent 时同步删除 `registered_agents`、`chats`、`messages`、`sessions`、Agent runtime 目录和 `agents/{folder}`。
 - 删除失败时返回可重试状态，不静默成功。
 - 删除完成后保留最小审计记录。
 
@@ -767,9 +767,9 @@ Icarus With Features
 
 - 一级导航出现该 feature。
 - 该 feature API prefix 可用。
-- 该 feature manifest 声明的独占 group 被写入 `registered_groups`。
-- `groups/{folder}/CLAUDE.md` 从 feature 模板创建。
-- `feature_group_bindings` 记录 feature 与 group 绑定关系。
+- 该 feature manifest 声明的独占 Agent 被写入 `registered_agents`。
+- `agents/{folder}/CLAUDE.md` 从 feature 模板创建。
+- `feature_agent_bindings` 记录 feature 与 agent 绑定关系。
 - 该 feature workflow definitions/cards 被加载。
 - 该 feature skills/agents/MCP/scripts 按权限进入容器资源。
 - 该 feature DB migration 执行一次并记录。
@@ -780,10 +780,10 @@ Icarus With Features
 
 - 不允许新建该 feature 贡献的 workflow。
 - 该 feature 页面和 API 不可用。
-- 如果用户选择“仅停用”，历史 workflow 在 Execution Console 中只读可见，feature projection、独占 group 和 `groups/{folder}` 保留。
+- 如果用户选择“仅停用”，历史 workflow 在 Execution Console 中只读可见，feature projection、独占 Agent 和 `agents/{folder}` 保留。
 - 如果用户选择“停用并删除”，Web 端先展示删除摘要并要求二次确认。
-- 确认删除后，该 feature 独占 group 从 `registered_groups` 和 `feature_group_bindings` 删除。
-- 确认删除后，该 feature 独占 group 的 `groups/{folder}`、`data/sessions/{folder}`、`data/ipc/{folder}` 被删除。
+- 确认删除后，该 feature 独占 Agent 从 `registered_agents` 和 `feature_agent_bindings` 删除。
+- 确认删除后，该 feature 独占 Agent 的 `agents/{folder}`、`data/sessions/{folder}`、`data/ipc/{folder}` 被删除。
 - 确认删除后，该 feature 相关 workflow、workbench、trace、messages、projection、migration 记录被删除。
 - 删除动作留下最小审计记录。
 
@@ -795,7 +795,7 @@ Icarus With Features
 - 如果 feature 保存第二套执行状态，会和 core workflow runtime 出现双状态。
 - 如果 feature scripts 不走 host action/permission，会破坏安全边界。
 - 如果 workflow/card/skill/MCP/action key 不做冲突检测，后续功能包之间会互相覆盖。
-- 如果停用 feature 时直接删除数据而不经 Web 二次确认，用户可能误删历史产物和 group 记忆。
+- 如果停用 feature 时直接删除数据而不经 Web 二次确认，用户可能误删历史产物和 agent 记忆。
 - 如果删除数据由 feature 自己实现，容易绕过 core 权限、审计和路径安全检查。
 
 ## 推荐决策

@@ -15,7 +15,7 @@ import {
   AskQuestionItem,
   AskQuestionOption,
   InteractiveCard,
-  RegisteredGroup,
+  RegisteredAgent,
 } from './types.js';
 
 export const ASK_ACTION_ANSWER = 'ask_question_answer';
@@ -28,14 +28,16 @@ type AskPayload = {
 
 type AskAnswers = Record<string, unknown>;
 
-type AskResolution = {
-  ok: true;
-  value: unknown;
-} | {
-  ok: false;
-  error: string;
-  fieldErrors?: Record<string, string>;
-};
+type AskResolution =
+  | {
+      ok: true;
+      value: unknown;
+    }
+  | {
+      ok: false;
+      error: string;
+      fieldErrors?: Record<string, string>;
+    };
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -46,11 +48,11 @@ function addSeconds(iso: string, sec: number): string {
 }
 
 function writeAskResult(
-  groupFolder: string,
+  agentFolder: string,
   requestId: string,
   payload: Record<string, unknown>,
 ): void {
-  const resultsDir = path.join(DATA_DIR, 'ipc', groupFolder, 'ask-results');
+  const resultsDir = path.join(DATA_DIR, 'ipc', agentFolder, 'ask-results');
   fs.mkdirSync(resultsDir, { recursive: true });
   const resultPath = path.join(resultsDir, `${requestId}.json`);
   const tempPath = `${resultPath}.tmp`;
@@ -78,12 +80,12 @@ function parseAnswers(answersJson: string | null): AskAnswers {
   }
 }
 
-function findChatJidByGroupFolder(
-  groupFolder: string,
-  registeredGroups: Record<string, RegisteredGroup>,
+function findChatJidByAgentFolder(
+  agentFolder: string,
+  registeredAgents: Record<string, RegisteredAgent>,
 ): string | undefined {
-  const entry = Object.entries(registeredGroups).find(
-    ([, g]) => g.folder === groupFolder,
+  const entry = Object.entries(registeredAgents).find(
+    ([, g]) => g.folder === agentFolder,
   );
   return entry?.[0];
 }
@@ -95,9 +97,10 @@ function isFormQuestion(question: AskQuestionItem): boolean {
 function formatFieldLine(field: AskQuestionField): string {
   const req = field.required ? ' (必填)' : '';
   const type = ` [${field.type}]`;
-  const enumHint = Array.isArray(field.enum) && field.enum.length > 0
-    ? ` 可选值: ${field.enum.map((o) => o.label || o.value).join(' / ')}`
-    : '';
+  const enumHint =
+    Array.isArray(field.enum) && field.enum.length > 0
+      ? ` 可选值: ${field.enum.map((o) => o.label || o.value).join(' / ')}`
+      : '';
   const desc = field.description ? ` - ${field.description}` : '';
   return `- ${field.label} (${field.id})${type}${req}${desc}${enumHint}`;
 }
@@ -114,7 +117,7 @@ function buildOptionQuestionBody(question: AskQuestionItem): string {
   const lines = [
     question.question,
     '',
-    ...((question.options || []).map(formatQuestionOptionLine)),
+    ...(question.options || []).map(formatQuestionOptionLine),
     '',
   ];
   if (question.multi_select) {
@@ -136,13 +139,14 @@ function renderFallbackQuestionText(
   const errorLines = validationError
     ? [`⚠ 校验失败: ${validationError}`, '']
     : [];
-  const fieldErrorLines = validationErrors && Object.keys(validationErrors).length > 0
-    ? [
-      '字段错误:',
-      ...Object.entries(validationErrors).map(([k, v]) => `- ${k}: ${v}`),
-      '',
-    ]
-    : [];
+  const fieldErrorLines =
+    validationErrors && Object.keys(validationErrors).length > 0
+      ? [
+          '字段错误:',
+          ...Object.entries(validationErrors).map(([k, v]) => `- ${k}: ${v}`),
+          '',
+        ]
+      : [];
   if (isFormQuestion(question)) {
     const lines = [
       `问题 ${index + 1}/${total}`,
@@ -166,7 +170,7 @@ function renderFallbackQuestionText(
     '',
     ...errorLines,
     ...fieldErrorLines,
-    ...((question.options || []).map(formatQuestionOptionLine)),
+    ...(question.options || []).map(formatQuestionOptionLine),
     '',
     question.multi_select
       ? `请回复: /answer ${requestId} <多个选项或自定义文本，逗号分隔>`
@@ -191,7 +195,8 @@ function withValidationError(body: string, validationError?: string): string {
 }
 
 function fieldPlaceholder(field: AskQuestionField): string {
-  if (field.description && field.description.trim()) return field.description.trim();
+  if (field.description && field.description.trim())
+    return field.description.trim();
   if (Array.isArray(field.enum) && field.enum.length > 0) {
     return `可选: ${field.enum.map((o) => o.label || o.value).join(', ')}`;
   }
@@ -203,7 +208,9 @@ function fieldPlaceholder(field: AskQuestionField): string {
   return '';
 }
 
-function fieldInputType(field: AskQuestionField): 'text' | 'number' | 'integer' | 'boolean' | 'enum' {
+function fieldInputType(
+  field: AskQuestionField,
+): 'text' | 'number' | 'integer' | 'boolean' | 'enum' {
   if (Array.isArray(field.enum) && field.enum.length > 0) return 'enum';
   if (field.type === 'boolean') return 'boolean';
   if (field.type === 'integer') return 'integer';
@@ -213,7 +220,7 @@ function fieldInputType(field: AskQuestionField): 'text' | 'number' | 'integer' 
 
 function buildQuestionCard(
   requestId: string,
-  groupFolder: string,
+  agentFolder: string,
   question: AskQuestionItem,
   index: number,
   total: number,
@@ -232,7 +239,7 @@ function buildQuestionCard(
           label: '跳过',
           value: {
             action: ASK_ACTION_SKIP,
-            group_folder: groupFolder,
+            agent_folder: agentFolder,
             request_id: requestId,
           },
         },
@@ -261,7 +268,7 @@ function buildQuestionCard(
           type: 'primary',
           value: {
             action: ASK_ACTION_ANSWER,
-            group_folder: groupFolder,
+            agent_folder: agentFolder,
             request_id: requestId,
             question_id: question.id,
           },
@@ -273,14 +280,17 @@ function buildQuestionCard(
   if (question.multi_select) {
     return {
       header: { title: `问题 ${index + 1}/${total}`, color: 'blue' },
-      body: withValidationError(buildOptionQuestionBody(question), validationError),
+      body: withValidationError(
+        buildOptionQuestionBody(question),
+        validationError,
+      ),
       buttons: [
         {
           id: `skip-${index}`,
           label: '跳过',
           value: {
             action: ASK_ACTION_SKIP,
-            group_folder: groupFolder,
+            agent_folder: agentFolder,
             request_id: requestId,
           },
         },
@@ -301,7 +311,7 @@ function buildQuestionCard(
           type: 'primary',
           value: {
             action: ASK_ACTION_ANSWER,
-            group_folder: groupFolder,
+            agent_folder: agentFolder,
             request_id: requestId,
             question_id: question.id,
           },
@@ -312,25 +322,28 @@ function buildQuestionCard(
 
   return {
     header: { title: `问题 ${index + 1}/${total}`, color: 'blue' },
-    body: withValidationError(buildOptionQuestionBody(question), validationError),
+    body: withValidationError(
+      buildOptionQuestionBody(question),
+      validationError,
+    ),
     buttons: [
-      ...((question.options || []).map((opt, idx) => ({
+      ...(question.options || []).map((opt, idx) => ({
         id: `answer-${index}-${idx}`,
         label: opt.label,
         value: {
           action: ASK_ACTION_ANSWER,
-          group_folder: groupFolder,
+          agent_folder: agentFolder,
           request_id: requestId,
           question_id: question.id,
           answer: opt.label,
         },
-      }))),
+      })),
       {
         id: `skip-${index}`,
         label: '跳过',
         value: {
           action: ASK_ACTION_SKIP,
-          group_folder: groupFolder,
+          agent_folder: agentFolder,
           request_id: requestId,
         },
       },
@@ -351,7 +364,7 @@ function buildQuestionCard(
         type: 'primary',
         value: {
           action: ASK_ACTION_ANSWER,
-          group_folder: groupFolder,
+          agent_folder: agentFolder,
           request_id: requestId,
           question_id: question.id,
         },
@@ -379,7 +392,9 @@ function resolveOptionAnswer(
     }
     const exact = options.find((o) => o.label === token);
     if (exact) return exact.label;
-    const ci = options.find((o) => normalizeToken(o.label) === normalizeToken(token));
+    const ci = options.find(
+      (o) => normalizeToken(o.label) === normalizeToken(token),
+    );
     return ci?.label || null;
   };
 
@@ -407,10 +422,15 @@ function parseAnswerPairs(answerText: string): Record<string, string> | null {
   if (text.startsWith('{') && text.endsWith('}')) {
     try {
       const parsed = JSON.parse(text) as Record<string, unknown>;
-      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed))
+        return null;
       const out: Record<string, string> = {};
       for (const [k, v] of Object.entries(parsed)) {
-        if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') {
+        if (
+          typeof v === 'string' ||
+          typeof v === 'number' ||
+          typeof v === 'boolean'
+        ) {
           out[k] = String(v);
         }
       }
@@ -457,7 +477,10 @@ function isValidDateTime(raw: string): boolean {
   return !Number.isNaN(d.getTime());
 }
 
-function validateFieldValue(field: AskQuestionField, raw: string): AskResolution {
+function validateFieldValue(
+  field: AskQuestionField,
+  raw: string,
+): AskResolution {
   const text = raw.trim();
   if (!text) return { ok: false, error: `字段 ${field.label} 不能为空。` };
 
@@ -474,7 +497,8 @@ function validateFieldValue(field: AskQuestionField, raw: string): AskResolution
 
   if (field.type === 'boolean') {
     const b = parseBoolean(text);
-    if (b === null) return { ok: false, error: `字段 ${field.label} 必须是 true/false。` };
+    if (b === null)
+      return { ok: false, error: `字段 ${field.label} 必须是 true/false。` };
     return { ok: true, value: b };
   }
 
@@ -484,10 +508,16 @@ function validateFieldValue(field: AskQuestionField, raw: string): AskResolution
       return { ok: false, error: `字段 ${field.label} 必须是整数。` };
     }
     if (typeof field.min === 'number' && n < field.min) {
-      return { ok: false, error: `字段 ${field.label} 不能小于 ${field.min}。` };
+      return {
+        ok: false,
+        error: `字段 ${field.label} 不能小于 ${field.min}。`,
+      };
     }
     if (typeof field.max === 'number' && n > field.max) {
-      return { ok: false, error: `字段 ${field.label} 不能大于 ${field.max}。` };
+      return {
+        ok: false,
+        error: `字段 ${field.label} 不能大于 ${field.max}。`,
+      };
     }
     return { ok: true, value: n };
   }
@@ -498,10 +528,16 @@ function validateFieldValue(field: AskQuestionField, raw: string): AskResolution
       return { ok: false, error: `字段 ${field.label} 必须是数字。` };
     }
     if (typeof field.min === 'number' && n < field.min) {
-      return { ok: false, error: `字段 ${field.label} 不能小于 ${field.min}。` };
+      return {
+        ok: false,
+        error: `字段 ${field.label} 不能小于 ${field.min}。`,
+      };
     }
     if (typeof field.max === 'number' && n > field.max) {
-      return { ok: false, error: `字段 ${field.label} 不能大于 ${field.max}。` };
+      return {
+        ok: false,
+        error: `字段 ${field.label} 不能大于 ${field.max}。`,
+      };
     }
     return { ok: true, value: n };
   }
@@ -536,7 +572,10 @@ function validateFieldValue(field: AskQuestionField, raw: string): AskResolution
   }
 
   if (field.format === 'date' && !isValidDate(text)) {
-    return { ok: false, error: `字段 ${field.label} 日期格式应为 YYYY-MM-DD。` };
+    return {
+      ok: false,
+      error: `字段 ${field.label} 日期格式应为 YYYY-MM-DD。`,
+    };
   }
 
   if (field.format === 'date-time' && !isValidDateTime(text)) {
@@ -546,7 +585,10 @@ function validateFieldValue(field: AskQuestionField, raw: string): AskResolution
   return { ok: true, value: text };
 }
 
-function resolveEnumValue(options: AskQuestionFieldEnumOption[], raw: string): string | null {
+function resolveEnumValue(
+  options: AskQuestionFieldEnumOption[],
+  raw: string,
+): string | null {
   const text = raw.trim();
   const n = Number.parseInt(text, 10);
   if (!Number.isNaN(n) && n >= 1 && n <= options.length) {
@@ -555,8 +597,9 @@ function resolveEnumValue(options: AskQuestionFieldEnumOption[], raw: string): s
   const exact = options.find((o) => o.value === text || o.label === text);
   if (exact) return exact.value;
   const ci = options.find(
-    (o) => normalizeToken(o.value) === normalizeToken(text)
-      || normalizeToken(o.label || '') === normalizeToken(text),
+    (o) =>
+      normalizeToken(o.value) === normalizeToken(text) ||
+      normalizeToken(o.label || '') === normalizeToken(text),
   );
   return ci?.value || null;
 }
@@ -589,7 +632,7 @@ function resolveFormAnswer(
   const fieldErrors: Record<string, string> = {};
   for (const field of fields) {
     const provided = merged[field.id];
-    if ((provided === undefined || provided.trim() === '')) {
+    if (provided === undefined || provided.trim() === '') {
       if (field.required) {
         fieldErrors[field.id] = `缺少必填字段: ${field.label}(${field.id})`;
       }
@@ -638,11 +681,22 @@ function normalizeField(
   const f = raw as Partial<AskQuestionField>;
   const id = (f.id || '').trim();
   const label = (f.label || '').trim();
-  if (!id) return { ok: false, error: `questions[${questionId}].fields[${idx}].id is required` };
-  if (!label) return { ok: false, error: `questions[${questionId}].fields[${idx}].label is required` };
+  if (!id)
+    return {
+      ok: false,
+      error: `questions[${questionId}].fields[${idx}].id is required`,
+    };
+  if (!label)
+    return {
+      ok: false,
+      error: `questions[${questionId}].fields[${idx}].label is required`,
+    };
   const t = f.type;
   if (!t || !['string', 'number', 'integer', 'boolean'].includes(t)) {
-    return { ok: false, error: `questions[${questionId}].fields[${idx}].type must be string|number|integer|boolean` };
+    return {
+      ok: false,
+      error: `questions[${questionId}].fields[${idx}].type must be string|number|integer|boolean`,
+    };
   }
 
   const field: AskQuestionField = {
@@ -657,26 +711,48 @@ function normalizeField(
     if (['string', 'number', 'boolean'].includes(typeof f.default)) {
       field.default = f.default;
     } else {
-      return { ok: false, error: `questions[${questionId}].fields[${idx}].default type is invalid` };
+      return {
+        ok: false,
+        error: `questions[${questionId}].fields[${idx}].default type is invalid`,
+      };
     }
   }
 
-  if (typeof f.min_length === 'number') field.min_length = Math.max(0, Math.floor(f.min_length));
-  if (typeof f.max_length === 'number') field.max_length = Math.max(0, Math.floor(f.max_length));
+  if (typeof f.min_length === 'number')
+    field.min_length = Math.max(0, Math.floor(f.min_length));
+  if (typeof f.max_length === 'number')
+    field.max_length = Math.max(0, Math.floor(f.max_length));
   if (typeof f.min === 'number') field.min = f.min;
   if (typeof f.max === 'number') field.max = f.max;
-  if (field.min_length !== undefined && field.max_length !== undefined && field.min_length > field.max_length) {
-    return { ok: false, error: `questions[${questionId}].fields[${idx}] min_length cannot exceed max_length` };
+  if (
+    field.min_length !== undefined &&
+    field.max_length !== undefined &&
+    field.min_length > field.max_length
+  ) {
+    return {
+      ok: false,
+      error: `questions[${questionId}].fields[${idx}] min_length cannot exceed max_length`,
+    };
   }
-  if (field.min !== undefined && field.max !== undefined && field.min > field.max) {
-    return { ok: false, error: `questions[${questionId}].fields[${idx}] min cannot exceed max` };
+  if (
+    field.min !== undefined &&
+    field.max !== undefined &&
+    field.min > field.max
+  ) {
+    return {
+      ok: false,
+      error: `questions[${questionId}].fields[${idx}] min cannot exceed max`,
+    };
   }
 
   if (f.format !== undefined) {
     if (['email', 'uri', 'date', 'date-time'].includes(String(f.format))) {
       field.format = f.format as AskQuestionField['format'];
     } else {
-      return { ok: false, error: `questions[${questionId}].fields[${idx}].format is invalid` };
+      return {
+        ok: false,
+        error: `questions[${questionId}].fields[${idx}].format is invalid`,
+      };
     }
   }
 
@@ -687,10 +763,16 @@ function normalizeField(
       const opt = f.enum[i] as Partial<AskQuestionFieldEnumOption>;
       const value = (opt.value || '').trim();
       if (!value) {
-        return { ok: false, error: `questions[${questionId}].fields[${idx}].enum[${i}].value is required` };
+        return {
+          ok: false,
+          error: `questions[${questionId}].fields[${idx}].enum[${i}].value is required`,
+        };
       }
       if (seenValues.has(value)) {
-        return { ok: false, error: `questions[${questionId}].fields[${idx}] duplicate enum value: ${value}` };
+        return {
+          ok: false,
+          error: `questions[${questionId}].fields[${idx}] duplicate enum value: ${value}`,
+        };
       }
       seenValues.add(value);
       normalizedEnum.push({ value, label: opt.label?.trim() || undefined });
@@ -701,13 +783,15 @@ function normalizeField(
   return { ok: true, field };
 }
 
-export function normalizeAskQuestions(raw: unknown): {
-  ok: true;
-  questions: AskQuestionItem[];
-} | {
-  ok: false;
-  error: string;
-} {
+export function normalizeAskQuestions(raw: unknown):
+  | {
+      ok: true;
+      questions: AskQuestionItem[];
+    }
+  | {
+      ok: false;
+      error: string;
+    } {
   if (!Array.isArray(raw) || raw.length === 0 || raw.length > 4) {
     return { ok: false, error: 'questions must be an array with 1-4 items' };
   }
@@ -719,7 +803,8 @@ export function normalizeAskQuestions(raw: unknown): {
     const id = (q.id || '').trim();
     const question = (q.question || '').trim();
     if (!id) return { ok: false, error: `questions[${i}].id is required` };
-    if (seenIds.has(id)) return { ok: false, error: `duplicate question id: ${id}` };
+    if (seenIds.has(id))
+      return { ok: false, error: `duplicate question id: ${id}` };
     seenIds.add(id);
     if (!question) {
       return { ok: false, error: `questions[${i}].question is required` };
@@ -741,7 +826,11 @@ export function normalizeAskQuestions(raw: unknown): {
     }
 
     if (hasOptions) {
-      if (!Array.isArray(q.options) || q.options.length < 2 || q.options.length > 6) {
+      if (
+        !Array.isArray(q.options) ||
+        q.options.length < 2 ||
+        q.options.length > 6
+      ) {
         return {
           ok: false,
           error: `questions[${i}].options must be an array with 2-6 items`,
@@ -759,7 +848,10 @@ export function normalizeAskQuestions(raw: unknown): {
           };
         }
         if (seenLabels.has(label)) {
-          return { ok: false, error: `duplicate option label in ${id}: ${label}` };
+          return {
+            ok: false,
+            error: `duplicate option label in ${id}: ${label}`,
+          };
         }
         seenLabels.add(label);
         options.push({
@@ -776,7 +868,11 @@ export function normalizeAskQuestions(raw: unknown): {
       continue;
     }
 
-    if (!Array.isArray(q.fields) || q.fields.length < 1 || q.fields.length > 8) {
+    if (
+      !Array.isArray(q.fields) ||
+      q.fields.length < 1 ||
+      q.fields.length > 8
+    ) {
       return {
         ok: false,
         error: `questions[${i}].fields must be an array with 1-8 items`,
@@ -789,7 +885,10 @@ export function normalizeAskQuestions(raw: unknown): {
       const normalizedField = normalizeField(id, q.fields[j], j);
       if (!normalizedField.ok) return normalizedField;
       if (seenFieldIds.has(normalizedField.field.id)) {
-        return { ok: false, error: `duplicate field id in ${id}: ${normalizedField.field.id}` };
+        return {
+          ok: false,
+          error: `duplicate field id in ${id}: ${normalizedField.field.id}`,
+        };
       }
       seenFieldIds.add(normalizedField.field.id);
       fields.push(normalizedField.field);
@@ -803,7 +902,7 @@ export function normalizeAskQuestions(raw: unknown): {
 
 export function createPendingAskQuestion(params: {
   requestId: string;
-  groupFolder: string;
+  agentFolder: string;
   chatJid: string;
   questions: AskQuestionItem[];
   timeoutSec: number;
@@ -812,7 +911,7 @@ export function createPendingAskQuestion(params: {
   const createdAt = nowIso();
   createAskQuestion({
     id: params.requestId,
-    group_folder: params.groupFolder,
+    agent_folder: params.agentFolder,
     chat_jid: params.chatJid,
     status: 'pending',
     payload_json: JSON.stringify({
@@ -830,30 +929,34 @@ export function createPendingAskQuestion(params: {
 
 export async function dispatchCurrentAskQuestion(params: {
   requestId: string;
-  groupFolder: string;
+  agentFolder: string;
   validationError?: string;
   validationErrors?: Record<string, string>;
-  registeredGroups: Record<string, RegisteredGroup>;
-  sendCard?: (jid: string, card: InteractiveCard) => Promise<string | undefined>;
+  registeredAgents: Record<string, RegisteredAgent>;
+  sendCard?: (
+    jid: string,
+    card: InteractiveCard,
+  ) => Promise<string | undefined>;
   sendMessage?: (jid: string, text: string) => Promise<void>;
 }): Promise<{ ok: boolean; message: string }> {
   const rec = getAskQuestion(params.requestId);
-  if (!rec || rec.group_folder !== params.groupFolder) {
+  if (!rec || rec.agent_folder !== params.agentFolder) {
     return { ok: false, message: 'ask question not found' };
   }
   if (rec.status !== 'pending') {
-    return { ok: false, message: `ask question is not pending (${rec.status})` };
+    return {
+      ok: false,
+      message: `ask question is not pending (${rec.status})`,
+    };
   }
   const payload = parsePayload(rec.payload_json);
   if (!payload) return { ok: false, message: 'invalid ask payload' };
   const q = payload.questions[rec.current_index];
   if (!q) return { ok: false, message: 'invalid question index' };
 
-
-  const chatJid = findChatJidByGroupFolder(
-    params.groupFolder,
-    params.registeredGroups,
-  ) || rec.chat_jid;
+  const chatJid =
+    findChatJidByAgentFolder(params.agentFolder, params.registeredAgents) ||
+    rec.chat_jid;
   if (!chatJid) return { ok: false, message: 'target chat not found' };
 
   if (params.sendCard) {
@@ -862,7 +965,7 @@ export async function dispatchCurrentAskQuestion(params: {
         chatJid,
         buildQuestionCard(
           params.requestId,
-          params.groupFolder,
+          params.agentFolder,
           q,
           rec.current_index,
           payload.questions.length,
@@ -915,14 +1018,17 @@ export function parseAskAnswerCommand(
 
 export async function handleAskQuestionResponse(params: {
   requestId: string;
-  groupFolder: string;
+  agentFolder: string;
   userId: string;
   answer?: string;
   formValues?: Record<string, string>;
   skip?: boolean;
   reject?: boolean;
-  registeredGroups: Record<string, RegisteredGroup>;
-  sendCard?: (jid: string, card: InteractiveCard) => Promise<string | undefined>;
+  registeredAgents: Record<string, RegisteredAgent>;
+  sendCard?: (
+    jid: string,
+    card: InteractiveCard,
+  ) => Promise<string | undefined>;
   sendMessage?: (jid: string, text: string) => Promise<void>;
 }): Promise<{
   ok: boolean;
@@ -931,8 +1037,12 @@ export async function handleAskQuestionResponse(params: {
   validationErrors?: Record<string, string>;
 }> {
   const rec = getAskQuestion(params.requestId);
-  if (!rec || rec.group_folder !== params.groupFolder) {
-    return { ok: false, userMessage: '未找到对应的问题请求。', completed: false };
+  if (!rec || rec.agent_folder !== params.agentFolder) {
+    return {
+      ok: false,
+      userMessage: '未找到对应的问题请求。',
+      completed: false,
+    };
   }
   if (rec.status !== 'pending') {
     return {
@@ -949,7 +1059,7 @@ export async function handleAskQuestionResponse(params: {
       answered_at: now,
       responder_user_id: params.userId,
     });
-    writeAskResult(rec.group_folder, rec.id, {
+    writeAskResult(rec.agent_folder, rec.id, {
       requestId: rec.id,
       status: 'timeout',
       answers: parseAnswers(rec.answers_json),
@@ -967,7 +1077,7 @@ export async function handleAskQuestionResponse(params: {
       answered_at: now,
       responder_user_id: params.userId,
     });
-    writeAskResult(rec.group_folder, rec.id, {
+    writeAskResult(rec.agent_folder, rec.id, {
       requestId: rec.id,
       status,
       answers: parseAnswers(rec.answers_json),
@@ -980,7 +1090,11 @@ export async function handleAskQuestionResponse(params: {
 
   const payload = parsePayload(rec.payload_json);
   if (!payload) {
-    return { ok: false, userMessage: '问题数据损坏，无法处理。', completed: true };
+    return {
+      ok: false,
+      userMessage: '问题数据损坏，无法处理。',
+      completed: true,
+    };
   }
   const currentQuestion = payload.questions[rec.current_index];
   if (!currentQuestion) {
@@ -1014,7 +1128,7 @@ export async function handleAskQuestionResponse(params: {
       answered_at: now,
       responder_user_id: params.userId,
     });
-    writeAskResult(rec.group_folder, rec.id, {
+    writeAskResult(rec.agent_folder, rec.id, {
       requestId: rec.id,
       status: 'answered',
       answers,
@@ -1032,8 +1146,8 @@ export async function handleAskQuestionResponse(params: {
 
   const dispatch = await dispatchCurrentAskQuestion({
     requestId: rec.id,
-    groupFolder: rec.group_folder,
-    registeredGroups: params.registeredGroups,
+    agentFolder: rec.agent_folder,
+    registeredAgents: params.registeredAgents,
     sendCard: params.sendCard,
     sendMessage: params.sendMessage,
   });
@@ -1046,11 +1160,15 @@ export async function handleAskQuestionResponse(params: {
     };
   }
 
-  return { ok: true, userMessage: '答案已记录，请继续下一题。', completed: false };
+  return {
+    ok: true,
+    userMessage: '答案已记录，请继续下一题。',
+    completed: false,
+  };
 }
 
 export async function expirePendingAskQuestions(params: {
-  registeredGroups: Record<string, RegisteredGroup>;
+  registeredAgents: Record<string, RegisteredAgent>;
   sendMessage?: (jid: string, text: string) => Promise<void>;
 }): Promise<void> {
   const now = nowIso();
@@ -1062,7 +1180,7 @@ export async function expirePendingAskQuestions(params: {
       status: 'timeout',
       answered_at: now,
     });
-    writeAskResult(rec.group_folder, rec.id, {
+    writeAskResult(rec.agent_folder, rec.id, {
       requestId: rec.id,
       status: 'timeout',
       answers: parseAnswers(rec.answers_json),
@@ -1072,7 +1190,7 @@ export async function expirePendingAskQuestions(params: {
 
     if (params.sendMessage) {
       const chatJid =
-        findChatJidByGroupFolder(rec.group_folder, params.registeredGroups) ||
+        findChatJidByAgentFolder(rec.agent_folder, params.registeredAgents) ||
         rec.chat_jid;
       if (chatJid) {
         await params.sendMessage(

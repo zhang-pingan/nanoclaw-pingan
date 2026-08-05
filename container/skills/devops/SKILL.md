@@ -7,7 +7,7 @@ description: DevOps capabilities including code modification (Git), Jenkins depl
 
 ## Service Registry
 
-All service configuration is in `/workspace/global/services.json` (non-main groups) or `/workspace/project/groups/global/services.json` (main group).
+All service configuration is in `/workspace/global/services.json` (non-main Agents) or `/workspace/project/agents/global/services.json` (main Agent).
 
 ### Lookup Flow
 

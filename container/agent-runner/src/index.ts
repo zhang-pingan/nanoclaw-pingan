@@ -38,7 +38,7 @@ interface ContainerInput {
   requireResult?: boolean;
   isolatedSession?: boolean;
   executionMode?: 'external_system_once';
-  groupFolder: string;
+  agentFolder: string;
   chatJid: string;
   isMain: boolean;
   isScheduledTask?: boolean;
@@ -449,7 +449,7 @@ function okHookOutput(): SyncHookJSONOutput {
 function normalizeDisplayPath(value: unknown): string {
   if (typeof value !== 'string' || value.length === 0) return 'unknown';
   return value
-    .replace(/^\/workspace\/group\//, '')
+    .replace(/^\/workspace\/agent\//, '')
     .replace(/^\/workspace\/project\//, '')
     .replace(/^\/workspace\//, '');
 }
@@ -1017,7 +1017,7 @@ function archiveOnExit(
     const date = new Date().toISOString().split('T')[0];
     const filename = `${date}-${sessionId.slice(0, 8)}.md`;
 
-    const conversationsDir = '/workspace/group/conversations';
+    const conversationsDir = '/workspace/agent/conversations';
     fs.mkdirSync(conversationsDir, { recursive: true });
 
     // Generate markdown body (without metadata) to compute hash
@@ -1424,7 +1424,7 @@ function buildQueryOptions(
 ) {
   const isExternalSystemOnce =
     containerInput.executionMode === 'external_system_once';
-  // Load global CLAUDE.md as additional system context (shared across all groups)
+  // Load global CLAUDE.md as additional system context (shared across all agents)
   const globalClaudeMdPath = '/workspace/global/CLAUDE.md';
   let globalClaudeMd: string | undefined;
   if (
@@ -1526,7 +1526,7 @@ function buildQueryOptions(
     .join('\n\n');
 
   return {
-    cwd: isExternalSystemOnce ? '/workspace/run-once' : '/workspace/group',
+    cwd: isExternalSystemOnce ? '/workspace/run-once' : '/workspace/agent',
     additionalDirectories: extraDirs.length > 0 ? extraDirs : undefined,
     resume: useIsolatedSession ? undefined : overrides.sessionId,
     resumeSessionAt: useIsolatedSession ? undefined : overrides.resumeAt,
@@ -1559,7 +1559,7 @@ function buildQueryOptions(
             args: [mcpServerPath],
             env: {
               ICARUS_CHAT_JID: containerInput.chatJid,
-              ICARUS_GROUP_FOLDER: containerInput.groupFolder,
+              ICARUS_AGENT_FOLDER: containerInput.agentFolder,
               ICARUS_IS_MAIN: containerInput.isMain ? '1' : '0',
               ICARUS_DELEGATION_ID:
                 containerInput.executionContext?.delegationId || '',
@@ -2067,7 +2067,7 @@ async function main(): Promise<void> {
     } catch {
       /* may not exist */
     }
-    log(`Received input for group: ${containerInput.groupFolder}`);
+    log(`Received input for agent: ${containerInput.agentFolder}`);
   } catch (err) {
     writeOutput({
       status: 'error',
@@ -2160,7 +2160,7 @@ async function main(): Promise<void> {
       for await (const message of query({
         prompt: trimmedPrompt,
         options: {
-          cwd: '/workspace/group',
+          cwd: '/workspace/agent',
           resume: sessionId,
           systemPrompt: undefined,
           allowedTools: [],

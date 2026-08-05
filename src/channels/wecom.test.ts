@@ -32,7 +32,7 @@ vi.mock('../config.js', async () => {
 import type {
   OnChatMetadata,
   OnInboundMessage,
-  RegisteredGroup,
+  RegisteredAgent,
 } from '../types.js';
 import {
   WeComChannel,
@@ -55,7 +55,7 @@ const BASE_CONFIG = {
   encodingAesKey: ENCODING_AES_KEY,
 };
 
-function registeredUserGroup(name = '张三'): RegisteredGroup {
+function registeredUserAgent(name = '张三'): RegisteredAgent {
   return {
     name,
     folder: 'wecom_user_zhangsan',
@@ -68,13 +68,13 @@ function registeredUserGroup(name = '张三'): RegisteredGroup {
 }
 
 function createChannel(opts?: {
-  groups?: Record<string, RegisteredGroup>;
+  agents?: Record<string, RegisteredAgent>;
   allowedUserIds?: string[];
   onMessage?: ReturnType<typeof vi.fn>;
   onChatMetadata?: ReturnType<typeof vi.fn>;
-  registerGroup?: (jid: string, group: RegisteredGroup) => void;
+  registerAgent?: (jid: string, agent: RegisteredAgent) => void;
 }): WeComChannel {
-  const groups = opts?.groups || {};
+  const agents = opts?.agents || {};
   const onMessage = (opts?.onMessage || vi.fn()) as unknown as OnInboundMessage;
   const onChatMetadata = (opts?.onChatMetadata ||
     vi.fn()) as unknown as OnChatMetadata;
@@ -86,8 +86,8 @@ function createChannel(opts?: {
     {
       onMessage,
       onChatMetadata,
-      registeredGroups: () => groups,
-      registerGroup: opts?.registerGroup,
+      registeredAgents: () => agents,
+      registerAgent: opts?.registerAgent,
     },
   );
 }
@@ -290,12 +290,12 @@ describe('WeComChannel', () => {
   });
 
   it('converts encrypted inbound text messages to NewMessage', async () => {
-    const groups = {
-      'wecom:user:zhangsan': registeredUserGroup('张三'),
+    const agents = {
+      'wecom:user:zhangsan': registeredUserAgent('张三'),
     };
     const onMessage = vi.fn();
     const onChatMetadata = vi.fn();
-    const channel = createChannel({ groups, onMessage, onChatMetadata });
+    const channel = createChannel({ agents, onMessage, onChatMetadata });
     const { body, params } = encryptedPostBody(`
       <xml>
         <ToUserName><![CDATA[ww-demo-corp]]></ToUserName>
@@ -316,7 +316,6 @@ describe('WeComChannel', () => {
       '1700000000000',
       '张三',
       'wecom',
-      false,
     );
     expect(onMessage).toHaveBeenCalledWith('wecom:user:zhangsan', {
       id: 'wecom-987654321',
@@ -331,12 +330,12 @@ describe('WeComChannel', () => {
   });
 
   it('downloads inbound media and exposes an attachments container path', async () => {
-    const groups = {
-      'wecom:user:zhangsan': registeredUserGroup('张三'),
+    const agents = {
+      'wecom:user:zhangsan': registeredUserAgent('张三'),
     };
     const onMessage = vi.fn();
     const onChatMetadata = vi.fn();
-    const channel = createChannel({ groups, onMessage, onChatMetadata });
+    const channel = createChannel({ agents, onMessage, onChatMetadata });
     axiosGetMock
       .mockResolvedValueOnce({
         data: {
@@ -401,11 +400,11 @@ describe('WeComChannel', () => {
   });
 
   it('reports media download failures as inbound messages', async () => {
-    const groups = {
-      'wecom:user:zhangsan': registeredUserGroup('张三'),
+    const agents = {
+      'wecom:user:zhangsan': registeredUserAgent('张三'),
     };
     const onMessage = vi.fn();
-    const channel = createChannel({ groups, onMessage });
+    const channel = createChannel({ agents, onMessage });
     axiosGetMock
       .mockResolvedValueOnce({
         data: {
@@ -464,16 +463,16 @@ describe('WeComChannel', () => {
   });
 
   it('auto-registers allowlisted users with isolated defaults', async () => {
-    const groups: Record<string, RegisteredGroup> = {};
+    const agents: Record<string, RegisteredAgent> = {};
     const onMessage = vi.fn();
-    const registerGroup = vi.fn((jid: string, group: RegisteredGroup) => {
-      groups[jid] = group;
+    const registerAgent = vi.fn((jid: string, agent: RegisteredAgent) => {
+      agents[jid] = agent;
     });
     const channel = createChannel({
-      groups,
+      agents,
       allowedUserIds: ['lisi'],
       onMessage,
-      registerGroup,
+      registerAgent,
     });
 
     await (channel as any).handleInboundXml(`
@@ -487,7 +486,7 @@ describe('WeComChannel', () => {
       </xml>
     `);
 
-    expect(registerGroup).toHaveBeenCalledWith(
+    expect(registerAgent).toHaveBeenCalledWith(
       'wecom:user:lisi',
       expect.objectContaining({
         name: 'lisi',

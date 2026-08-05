@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 
 import { DATA_DIR } from '../config.js';
-import { getFeatureGroupBindingByFolder } from '../db.js';
+import { getFeatureAgentBindingByFolder } from '../db.js';
 import { logger } from '../logger.js';
 import { featureResources } from './registry.js';
 
@@ -17,7 +17,7 @@ interface ResourceSource {
 }
 
 export function syncContainerSkills(input: {
-  groupFolder: string;
+  agentFolder: string;
   skillsDst: string;
 }): void {
   const sources: SkillSource[] = [
@@ -28,7 +28,7 @@ export function syncContainerSkills(input: {
     ...featureResources
       .list('skills')
       .filter((source) =>
-        isFeatureResourceVisibleToGroup(source.featureId, input.groupFolder),
+        isFeatureResourceVisibleToAgent(source.featureId, input.agentFolder),
       )
       .map((source) => ({
         featureId: source.featureId,
@@ -43,14 +43,14 @@ export function syncContainerSkills(input: {
     if (!fs.existsSync(source.dir)) continue;
     syncSkillSource({
       source,
-      groupFolder: input.groupFolder,
+      agentFolder: input.agentFolder,
       skillsDst: input.skillsDst,
     });
   }
 }
 
 export function syncContainerAgents(input: {
-  groupFolder: string;
+  agentFolder: string;
   agentsDst: string;
 }): void {
   const sources: ResourceSource[] = featureResources
@@ -58,7 +58,7 @@ export function syncContainerAgents(input: {
     .filter(
       (source) =>
         !!source.featureId &&
-        isFeatureResourceVisibleToGroup(source.featureId, input.groupFolder),
+        isFeatureResourceVisibleToAgent(source.featureId, input.agentFolder),
     )
     .map((source) => ({
       featureId: source.featureId as string,
@@ -81,7 +81,7 @@ export function syncContainerAgents(input: {
 }
 
 export function prepareFeatureResourceMountDir(
-  groupFolder: string,
+  agentFolder: string,
 ): string | null {
   const sources = [
     ...featureResources.list('scripts').map((source) => ({
@@ -105,12 +105,12 @@ export function prepareFeatureResourceMountDir(
       } => !!source.featureId,
     )
     .filter((source) =>
-      isFeatureResourceVisibleToGroup(source.featureId, groupFolder),
+      isFeatureResourceVisibleToAgent(source.featureId, agentFolder),
     );
   const targetDir = path.join(
     DATA_DIR,
     'sessions',
-    groupFolder,
+    agentFolder,
     'feature-resources',
   );
   fs.rmSync(targetDir, { recursive: true, force: true });
@@ -147,13 +147,13 @@ export function prepareFeatureResourceMountDir(
   return targetDir;
 }
 
-export function prepareMergedMcpConfigDir(groupFolder: string): string | null {
+export function prepareMergedMcpConfigDir(agentFolder: string): string | null {
   const sources = [
     { featureId: null, dir: path.join(process.cwd(), 'container', 'mcp') },
     ...featureResources
       .list('mcp')
       .filter((source) =>
-        isFeatureResourceVisibleToGroup(source.featureId, groupFolder),
+        isFeatureResourceVisibleToAgent(source.featureId, agentFolder),
       )
       .map((source) => ({
         featureId: source.featureId,
@@ -176,7 +176,7 @@ export function prepareMergedMcpConfigDir(groupFolder: string): string | null {
   if (configs.length === 0) return null;
 
   const merged = mergeMcpConfigs(configs);
-  const targetDir = path.join(DATA_DIR, 'sessions', groupFolder, 'mcp');
+  const targetDir = path.join(DATA_DIR, 'sessions', agentFolder, 'mcp');
   fs.mkdirSync(targetDir, { recursive: true });
   fs.writeFileSync(
     path.join(targetDir, 'mcp.json'),
@@ -188,11 +188,11 @@ export function prepareMergedMcpConfigDir(groupFolder: string): string | null {
 
 function syncSkillSource(input: {
   source: SkillSource;
-  groupFolder: string;
+  agentFolder: string;
   skillsDst: string;
 }): void {
-  const { source, groupFolder, skillsDst } = input;
-  const allowedSkills = readAllowedSkills(source.dir, groupFolder);
+  const { source, agentFolder, skillsDst } = input;
+  const allowedSkills = readAllowedSkills(source.dir, agentFolder);
   for (const skillDir of fs.readdirSync(source.dir)) {
     if (skillDir === 'skills.json') continue;
     const srcDir = path.join(source.dir, skillDir);
@@ -210,7 +210,7 @@ function syncSkillSource(input: {
 
 function readAllowedSkills(
   skillsSrc: string,
-  groupFolder: string,
+  agentFolder: string,
 ): Set<string> | null {
   const skillsConfigPath = path.join(skillsSrc, 'skills.json');
   if (!fs.existsSync(skillsConfigPath)) return null;
@@ -219,7 +219,7 @@ function readAllowedSkills(
       fs.readFileSync(skillsConfigPath, 'utf-8'),
     ) as Record<string, string[]>;
     const allowedSkills = new Set<string>(skillsConfig.global || []);
-    for (const skill of skillsConfig[groupFolder] || []) {
+    for (const skill of skillsConfig[agentFolder] || []) {
       allowedSkills.add(skill);
     }
     return allowedSkills;
@@ -317,12 +317,12 @@ function scanInstalledFeatureIds(): string[] {
     .filter((id): id is string => !!id);
 }
 
-function isFeatureResourceVisibleToGroup(
+function isFeatureResourceVisibleToAgent(
   featureId: string | null,
-  groupFolder: string,
+  agentFolder: string,
 ): boolean {
   if (!featureId) return true;
-  const binding = getFeatureGroupBindingByFolder(groupFolder);
+  const binding = getFeatureAgentBindingByFolder(agentFolder);
   return binding?.feature_id === featureId;
 }
 

@@ -32,9 +32,9 @@ describe('G0 compatibility with the NodeOutputEnvelope authority successor', () 
 
     const absence = readArtifact('contract-pack-static-absence.json');
     expect(absence).toMatchObject({
-      raw: 'sha256:129dbe486e53126b25d3250424e170698b7fdacf63d263149834f56d75394f4a',
+      raw: 'sha256:a2bb60852fc241d897b02bc2b74d07fa48ed10ac403922a29b6630f729af924f',
       artifact: {
-        hash: 'sha256:058519662cfdff17e7a11a40a6da3b3dfe9d2b27c5d7fc6a81b23a35fd9bd183',
+        hash: 'sha256:03426c68b408e51aa0470c0835f31e6a43ecb6a487e42f70647208020fa7c849',
       },
     });
     expect(absence.artifact.payload.artifacts).toHaveLength(9);

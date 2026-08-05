@@ -1,11 +1,11 @@
 // electron/renderer/app.js
 var ws = null;
 var reconnectTimer = null;
-var currentGroupJid = '';
+var currentAgentJid = '';
 var launchParams = new URLSearchParams(window.location.search);
 var initialAssistantTarget = launchParams.get('assistantTarget') || '';
 var browserNotificationPermissionRequested = false;
-var groups = [];
+var agents = [];
 var messages = [];
 var unreadCounts = {};
 var replyToMsg = null;
@@ -126,7 +126,7 @@ var configurationFeatureResources = document.getElementById(
 var configurationServiceFieldInputs = Array.from(
   document.querySelectorAll('[data-service-config-path]'),
 );
-var memoryGroupsList = document.getElementById('memory-groups-list');
+var memoryAgentsList = document.getElementById('memory-agents-list');
 var memorySearchInput = document.getElementById('memory-search-input');
 var memoryStatusFilter = document.getElementById('memory-status-filter');
 var memoryDoctorBtn = document.getElementById('memory-doctor-btn');
@@ -235,8 +235,8 @@ var componentManagementNavKeys = [
   'knowledge-management',
 ];
 var componentManagementNavExpanded = true;
-var groupsList = document.getElementById('groups-list');
-var refreshGroupsBtn = document.getElementById('refresh-groups');
+var agentsList = document.getElementById('agents-list');
+var refreshAgentsBtn = document.getElementById('refresh-agents');
 var resetAllSessionsBtn = document.getElementById('reset-all-sessions');
 var schedulersPanel = document.getElementById('schedulers-panel');
 var schedulersList = document.getElementById('schedulers-list');
@@ -348,8 +348,8 @@ var todayPlanCommitMeta = document.getElementById('today-plan-commit-meta');
 var todayPlanCommitDiff = document.getElementById('today-plan-commit-diff');
 var connectionStatus = document.getElementById('connection-status');
 var chatHeader = document.getElementById('chat-header');
-var chatGroupName = document.getElementById('chat-group-name');
-var chatGroupFolder = document.getElementById('chat-group-folder');
+var chatAgentName = document.getElementById('chat-agent-name');
+var chatAgentFolder = document.getElementById('chat-agent-folder');
 var messagesEl = document.getElementById('messages');
 var messagesEmpty = document.getElementById('messages-empty');
 var typingIndicator = document.getElementById('typing-indicator');
@@ -376,13 +376,13 @@ var deleteSelectedBtn = document.getElementById('delete-selected-btn');
 var cancelSelectBtn = document.getElementById('cancel-select-btn');
 var agentStatusInterval = null;
 var agentStatusData = [];
-var agentRunTraceByGroup = {};
+var agentRunTraceByAgent = {};
 var activePrimaryNavKey =
   initialAssistantTarget === 'assistant'
     ? 'assistant'
     : initialAssistantTarget === 'trace-monitor'
       ? 'trace-monitor'
-      : 'agent-groups';
+      : 'agents';
 var todayPlanVisible = initialAssistantTarget === 'today-plan';
 var todayPlanOverview = null;
 var currentTodayPlan = null;
@@ -417,7 +417,7 @@ var currentFeatureConfigId = '';
 var featureConfigRequestSeq = 0;
 var featureConfigListExpanded = true;
 var featureConfigActionBusy = false;
-var activeMemoryGroupJid = '';
+var activeMemoryAgentJid = '';
 var memoryEntries = [];
 var knowledgeMaterials = [];
 var knowledgeDrafts = [];
@@ -536,8 +536,8 @@ var commands = [
 ];
 
 const ASSISTANT_AVATAR = '/assets/avatar-assistant.png';
-const MAIN_GROUP_AVATAR = ASSISTANT_AVATAR;
-const GROUP_INITIAL_TONES = [
+const MAIN_AGENT_AVATAR = ASSISTANT_AVATAR;
+const AGENT_INITIAL_TONES = [
   'tone-ocean',
   'tone-mint',
   'tone-amber',
@@ -547,37 +547,37 @@ const GROUP_INITIAL_TONES = [
   'tone-slate',
 ];
 
-function getFixedAvatar(group) {
-  if (!group || typeof group.jid !== 'string') return null;
-  if (group.isMain) return MAIN_GROUP_AVATAR;
+function getFixedAvatar(agent) {
+  if (!agent || typeof agent.jid !== 'string') return null;
+  if (agent.isMain) return MAIN_AGENT_AVATAR;
   return null;
 }
 
-function getGroupInitial(group) {
+function getAgentInitial(agent) {
   const label = String(
-    group?.name || group?.folder || group?.jid || '?',
+    agent?.name || agent?.folder || agent?.jid || '?',
   ).trim();
   const first = Array.from(label)[0] || '?';
   return first.toUpperCase();
 }
 
-function getGroupInitialTone(group) {
-  const seed = String(group?.jid || group?.folder || group?.name || '');
+function getAgentInitialTone(agent) {
+  const seed = String(agent?.jid || agent?.folder || agent?.name || '');
   let hash = 0;
   for (let i = 0; i < seed.length; i += 1) {
     hash = (hash * 31 + seed.charCodeAt(i)) >>> 0;
   }
-  return GROUP_INITIAL_TONES[hash % GROUP_INITIAL_TONES.length];
+  return AGENT_INITIAL_TONES[hash % AGENT_INITIAL_TONES.length];
 }
 
-function renderGroupListIcon(group) {
-  const avatar = getFixedAvatar(group);
+function renderAgentListIcon(agent) {
+  const avatar = getFixedAvatar(agent);
   if (avatar) {
-    const alt = `${group?.name || 'Group'} avatar`;
+    const alt = `${agent?.name || 'Agent'} avatar`;
     return `<span class="item-icon item-avatar"><img src="${escapeAttribute(avatar)}" alt="${escapeAttribute(alt)}" /></span>`;
   }
-  const initial = getGroupInitial(group);
-  const tone = getGroupInitialTone(group);
+  const initial = getAgentInitial(agent);
+  const tone = getAgentInitialTone(agent);
   return `<span class="item-icon item-initial ${tone}" aria-hidden="true">${escapeHtml(initial)}</span>`;
 }
 
@@ -620,9 +620,9 @@ function workspaceFileApiPath(filePath) {
       return `${apiPrefix}${encodeApiPathSegments(normalizedPath.slice(prefix.length))}`;
     }
   }
-  if (normalizedPath.startsWith('/workspace/group/') && currentGroupJid) {
-    const groupFolder = currentGroupJid.replace('web:', '');
-    return `/api/files/${encodeURIComponent(groupFolder)}/${encodeApiPathSegments(normalizedPath.slice('/workspace/group/'.length))}`;
+  if (normalizedPath.startsWith('/workspace/agent/') && currentAgentJid) {
+    const agentFolder = currentAgentJid.replace('web:', '');
+    return `/api/files/${encodeURIComponent(agentFolder)}/${encodeApiPathSegments(normalizedPath.slice('/workspace/agent/'.length))}`;
   }
   return null;
 }
@@ -631,7 +631,7 @@ function containerFilePath(filePath) {
   if (!filePath) return null;
   const normalizedPath = filePath.replace(/\\/g, '/');
   if (
-    /^\/workspace\/(group|uploads|attachments|desktop-captures|ai-images)\//.test(
+    /^\/workspace\/(agent|uploads|attachments|desktop-captures|ai-images)\//.test(
       normalizedPath,
     )
   ) {
@@ -651,12 +651,12 @@ function containerFilePath(filePath) {
     }
   }
 
-  if (currentGroupJid) {
-    const groupFolder = currentGroupJid.replace('web:', '');
-    const groupMarker = `/groups/${groupFolder}/`;
-    const groupIndex = normalizedPath.lastIndexOf(groupMarker);
-    if (groupIndex >= 0) {
-      return `/workspace/group/${normalizedPath.slice(groupIndex + groupMarker.length)}`;
+  if (currentAgentJid) {
+    const agentFolder = currentAgentJid.replace('web:', '');
+    const agentMarker = `/agents/${agentFolder}/`;
+    const agentIndex = normalizedPath.lastIndexOf(agentMarker);
+    if (agentIndex >= 0) {
+      return `/workspace/agent/${normalizedPath.slice(agentIndex + agentMarker.length)}`;
     }
   }
 
@@ -1569,7 +1569,7 @@ function renderInteractiveCard(card, callbacks = {}) {
   const formPendingLabel =
     callbacks.formPendingLabel || '表单已提交，处理中...';
   const lockOnAction = callbacks.lockOnAction !== false;
-  const uploadJid = callbacks.uploadJid || currentGroupJid || 'web:main';
+  const uploadJid = callbacks.uploadJid || currentAgentJid || 'web:main';
   const channelNotice = getCardChannelNotice(card);
   const disabledByChannel = Boolean(channelNotice);
 
@@ -1896,7 +1896,7 @@ function renderInteractiveCard(card, callbacks = {}) {
 function renderCardElement(card, msgId) {
   return renderInteractiveCard(card, {
     cardId: msgId,
-    uploadJid: currentGroupJid || 'web:main',
+    uploadJid: currentAgentJid || 'web:main',
     onAction: (value, formValue) => sendCardAction(value, msgId, formValue),
   });
 }
@@ -2197,13 +2197,13 @@ function showFileContextMenu(e, filePath) {
 }
 
 function scheduleModelSync() {
-  if (!currentGroupJid) return;
+  if (!currentAgentJid) return;
   if (modelSyncTimer) clearTimeout(modelSyncTimer);
   modelSyncTimer = setTimeout(async () => {
-    if (!currentGroupJid) return;
+    if (!currentAgentJid) return;
     try {
       const res = await apiFetch(
-        `/api/messages?jid=${encodeURIComponent(currentGroupJid)}&since=0`,
+        `/api/messages?jid=${encodeURIComponent(currentAgentJid)}&since=0`,
       );
       if (!res.ok) return;
       const data = await res.json();
@@ -2259,8 +2259,7 @@ function applyScreenVisibility() {
   const showFeatureRuntime =
     !showTodayPlan && getFeatureRuntimeItem(activePrimaryNavKey);
   const showAssistant = !showTodayPlan && activePrimaryNavKey === 'assistant';
-  const showWorkspace =
-    !showTodayPlan && activePrimaryNavKey === 'agent-groups';
+  const showWorkspace = !showTodayPlan && activePrimaryNavKey === 'agents';
   const showConfiguration =
     !showTodayPlan && activePrimaryNavKey === 'configuration';
   const showMemoryManagement =
@@ -2627,36 +2626,36 @@ function openKnowledgeJobsPanel() {
   loadKnowledgeJobs();
 }
 
-function renderGroups() {
-  groupsList.innerHTML = '';
-  for (const group of groups) {
+function renderAgents() {
+  agentsList.innerHTML = '';
+  for (const agent of agents) {
     const el = document.createElement('div');
-    el.className = `list-item${group.jid === currentGroupJid ? ' active' : ''}`;
-    el.classList.toggle('main-group', group.isMain === true);
-    el.classList.toggle('secondary-group', group.isMain !== true);
+    el.className = `list-item${agent.jid === currentAgentJid ? ' active' : ''}`;
+    el.classList.toggle('main-agent', agent.isMain === true);
+    el.classList.toggle('secondary-agent', agent.isMain !== true);
 
-    const unread = unreadCounts[group.jid] || 0;
-    const iconHtml = renderGroupListIcon(group);
+    const unread = unreadCounts[agent.jid] || 0;
+    const iconHtml = renderAgentListIcon(agent);
 
     el.innerHTML = `
       ${iconHtml}
-      <span class="item-name">${escapeHtml(group.name)}</span>
-      ${group.isMain ? '<span class="item-badge">main</span>' : ''}
+      <span class="item-name">${escapeHtml(agent.name)}</span>
+      ${agent.isMain ? '<span class="item-badge">main</span>' : ''}
       ${unread > 0 ? `<span class="item-unread">${unread > 99 ? '99+' : unread}</span>` : ''}
     `;
-    el.addEventListener('click', () => selectGroup(group.jid));
-    groupsList.appendChild(el);
+    el.addEventListener('click', () => selectAgent(agent.jid));
+    agentsList.appendChild(el);
   }
 }
 
-function getDefaultMemoryGroupJid() {
-  if (!Array.isArray(groups) || groups.length === 0) return '';
-  const mainGroup = groups.find((g) => g.isMain);
-  return (mainGroup && mainGroup.jid) || groups[0].jid || '';
+function getDefaultMemoryAgentJid() {
+  if (!Array.isArray(agents) || agents.length === 0) return '';
+  const mainAgent = agents.find((g) => g.isMain);
+  return (mainAgent && mainAgent.jid) || agents[0].jid || '';
 }
 
-function selectMemoryGroup(jid) {
-  activeMemoryGroupJid = jid;
+function selectMemoryAgent(jid) {
+  activeMemoryAgentJid = jid;
   closeMemoryEditor();
   closeDoctorPanel();
   closeMemoryMetricsModal();
@@ -2665,28 +2664,28 @@ function selectMemoryGroup(jid) {
   memoryMetricsSummary = null;
   renderDoctorPanel();
   setDoctorLog('');
-  renderMemoryGroups();
+  renderMemoryAgents();
   memoryEntries = [];
   renderMemoryList();
   loadMemories();
 }
 
-function renderMemoryGroups() {
-  if (!memoryGroupsList) return;
-  memoryGroupsList.innerHTML = '';
-  for (const group of groups) {
+function renderMemoryAgents() {
+  if (!memoryAgentsList) return;
+  memoryAgentsList.innerHTML = '';
+  for (const agent of agents) {
     const el = document.createElement('div');
-    el.className = `list-item${group.jid === activeMemoryGroupJid ? ' active' : ''}`;
-    el.classList.toggle('main-group', group.isMain === true);
-    el.classList.toggle('secondary-group', group.isMain !== true);
-    const iconHtml = renderGroupListIcon(group);
+    el.className = `list-item${agent.jid === activeMemoryAgentJid ? ' active' : ''}`;
+    el.classList.toggle('main-agent', agent.isMain === true);
+    el.classList.toggle('secondary-agent', agent.isMain !== true);
+    const iconHtml = renderAgentListIcon(agent);
     el.innerHTML = `
       ${iconHtml}
-      <span class="item-name">${escapeHtml(group.name)}</span>
-      ${group.isMain ? '<span class="item-badge">main</span>' : ''}
+      <span class="item-name">${escapeHtml(agent.name)}</span>
+      ${agent.isMain ? '<span class="item-badge">main</span>' : ''}
     `;
-    el.addEventListener('click', () => selectMemoryGroup(group.jid));
-    memoryGroupsList.appendChild(el);
+    el.addEventListener('click', () => selectMemoryAgent(agent.jid));
+    memoryAgentsList.appendChild(el);
   }
 }
 
@@ -2716,8 +2715,8 @@ function getPayloadTimestamp(payload) {
   );
 }
 
-function getActiveMemoryGroup() {
-  return groups.find((g) => g.jid === activeMemoryGroupJid) || null;
+function getActiveMemoryAgent() {
+  return agents.find((g) => g.jid === activeMemoryAgentJid) || null;
 }
 
 function closeMemoryEditor() {
@@ -2780,16 +2779,16 @@ function getMemoryBrief(id) {
 
 function renderMemoryMetricsModal() {
   if (!memoryMetricsWindow || !memoryMetricsTotal || !memoryMetricsList) return;
-  const group = getActiveMemoryGroup();
-  const groupLabel = group ? group.folder : '--';
+  const agent = getActiveMemoryAgent();
+  const agentLabel = agent ? agent.folder : '--';
   if (!memoryMetricsSummary) {
-    memoryMetricsWindow.textContent = `${groupLabel} | 加载中...`;
+    memoryMetricsWindow.textContent = `${agentLabel} | 加载中...`;
     memoryMetricsTotal.textContent = '正在获取统计数据...';
     memoryMetricsList.innerHTML = '';
     return;
   }
   const summary = memoryMetricsSummary;
-  memoryMetricsWindow.textContent = `${groupLabel} | 最近 ${summary.hours}h`;
+  memoryMetricsWindow.textContent = `${agentLabel} | 最近 ${summary.hours}h`;
   memoryMetricsTotal.textContent = `总事件数: ${summary.total}`;
   const rows = Array.isArray(summary.byEvent) ? summary.byEvent : [];
   if (rows.length === 0) {
@@ -2949,8 +2948,8 @@ function renderDoctorPanel() {
 }
 
 async function runDoctor(staleDays) {
-  const group = getActiveMemoryGroup();
-  if (!group) return;
+  const agent = getActiveMemoryAgent();
+  if (!agent) return;
   const safeDays = Number.isFinite(Number(staleDays)) ? Number(staleDays) : 7;
   openDoctorPanel();
   renderDoctorPanel();
@@ -2959,7 +2958,7 @@ async function runDoctor(staleDays) {
     const res = await apiFetch('/api/memory/doctor', {
       method: 'POST',
       body: JSON.stringify({
-        folder: group.folder,
+        folder: agent.folder,
         staleDays: safeDays,
       }),
     });
@@ -2978,9 +2977,9 @@ async function runDoctor(staleDays) {
 }
 
 async function showMemoryMetrics(hours) {
-  const group = getActiveMemoryGroup();
-  if (!group) {
-    alert('请先选择 Group');
+  const agent = getActiveMemoryAgent();
+  if (!agent) {
+    alert('请先选择 Agent');
     return;
   }
   const safeHours = Number.isFinite(Number(hours)) ? Number(hours) : 24;
@@ -2991,7 +2990,7 @@ async function showMemoryMetrics(hours) {
     const res = await apiFetch('/api/memory/metrics', {
       method: 'POST',
       body: JSON.stringify({
-        folder: group.folder,
+        folder: agent.folder,
         hours: safeHours,
       }),
     });
@@ -3014,13 +3013,13 @@ async function showMemoryMetrics(hours) {
 }
 
 async function runGcByMode(mode) {
-  const group = getActiveMemoryGroup();
-  if (!group) return;
+  const agent = getActiveMemoryAgent();
+  if (!agent) return;
   try {
     const dryRunRes = await apiFetch('/api/memory/gc', {
       method: 'POST',
       body: JSON.stringify({
-        folder: group.folder,
+        folder: agent.folder,
         mode,
         dryRun: true,
       }),
@@ -3050,7 +3049,7 @@ async function runGcByMode(mode) {
     const runRes = await apiFetch('/api/memory/gc', {
       method: 'POST',
       body: JSON.stringify({
-        folder: group.folder,
+        folder: agent.folder,
         mode,
         dryRun: false,
       }),
@@ -3071,13 +3070,13 @@ async function runGcByMode(mode) {
 }
 
 async function resolveConflictKeep(keepId, deprecateId) {
-  const group = getActiveMemoryGroup();
-  if (!group) return;
+  const agent = getActiveMemoryAgent();
+  if (!agent) return;
   try {
     const res = await apiFetch('/api/memory/conflict/keep', {
       method: 'POST',
       body: JSON.stringify({
-        folder: group.folder,
+        folder: agent.folder,
         keep_id: keepId,
         deprecate_id: deprecateId,
       }),
@@ -3096,13 +3095,13 @@ async function resolveConflictKeep(keepId, deprecateId) {
 }
 
 async function resolveConflictMerge(mergeIds, mergedContent) {
-  const group = getActiveMemoryGroup();
-  if (!group) return;
+  const agent = getActiveMemoryAgent();
+  if (!agent) return;
   try {
     const res = await apiFetch('/api/memory/conflict/merge', {
       method: 'POST',
       body: JSON.stringify({
-        folder: group.folder,
+        folder: agent.folder,
         merge_ids: mergeIds,
         merged_content: mergedContent,
       }),
@@ -3123,9 +3122,9 @@ async function resolveConflictMerge(mergeIds, mergedContent) {
 }
 
 function openCreateMemoryEditor() {
-  const group = getActiveMemoryGroup();
-  if (!group) {
-    alert('请先选择 Group');
+  const agent = getActiveMemoryAgent();
+  if (!agent) {
+    alert('请先选择 Agent');
     return;
   }
   editingMemoryId = '';
@@ -3172,9 +3171,9 @@ function renderMemoryContentBody(content) {
 }
 
 async function saveMemoryEditor() {
-  const group = getActiveMemoryGroup();
-  if (!group) {
-    alert('请先选择 Group');
+  const agent = getActiveMemoryAgent();
+  if (!agent) {
+    alert('请先选择 Agent');
     return;
   }
   const content = (memoryContentInput?.value || '').trim();
@@ -3183,7 +3182,7 @@ async function saveMemoryEditor() {
     return;
   }
   const payload = {
-    folder: group.folder,
+    folder: agent.folder,
     content,
     layer: memoryLayerSelect?.value || 'working',
     memory_type: memoryTypeSelect?.value || 'fact',
@@ -3223,13 +3222,13 @@ async function saveMemoryEditor() {
 }
 
 async function deleteMemoryById(memoryId) {
-  const group = getActiveMemoryGroup();
-  if (!group) return;
+  const agent = getActiveMemoryAgent();
+  if (!agent) return;
   if (!(await openConfirmDialog('确认删除该记忆？', { title: '删除记忆' })))
     return;
   try {
     const res = await apiFetch(
-      `/api/memory?id=${encodeURIComponent(memoryId)}&folder=${encodeURIComponent(group.folder)}`,
+      `/api/memory?id=${encodeURIComponent(memoryId)}&folder=${encodeURIComponent(agent.folder)}`,
       { method: 'DELETE' },
     );
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -3250,8 +3249,8 @@ function renderMemoryList() {
       : memoryEntries.filter(
           (m) => (m.status || 'active') === memoryStatusFilterValue,
         );
-  if (!activeMemoryGroupJid) {
-    memoryEmpty.textContent = '请先在左侧选择 Group';
+  if (!activeMemoryAgentJid) {
+    memoryEmpty.textContent = '请先在左侧选择 Agent';
     memoryEmpty.classList.remove('hidden');
     return;
   }
@@ -3320,8 +3319,8 @@ function renderMemoryList() {
 }
 
 async function loadMemories(queryOverride) {
-  const group = groups.find((g) => g.jid === activeMemoryGroupJid);
-  if (!group) {
+  const agent = agents.find((g) => g.jid === activeMemoryAgentJid);
+  if (!agent) {
     memoryEntries = [];
     renderMemoryList();
     return;
@@ -3339,7 +3338,7 @@ async function loadMemories(queryOverride) {
   }
   try {
     const params = new URLSearchParams({
-      folder: group.folder,
+      folder: agent.folder,
       limit: '200',
     });
     if (query) params.set('query', query);
@@ -4916,8 +4915,8 @@ async function importKnowledgeText() {
 }
 
 async function importKnowledgeFiles(files) {
-  const mainGroup = getMainGroup();
-  const jid = mainGroup?.jid || 'web:main';
+  const mainAgent = getMainAgent();
+  const jid = mainAgent?.jid || 'web:main';
   for (const file of Array.from(files || [])) {
     const formData = new FormData();
     formData.append('file', file);
@@ -5776,7 +5775,8 @@ function renderMessages() {
   clearSkeleton();
   if (messages.length === 0) {
     messagesEmpty.style.display = 'flex';
-    messagesEmpty.innerHTML = '<span>Select a group to initiate session</span>';
+    messagesEmpty.innerHTML =
+      '<span>Select an Agent to initiate session</span>';
     const existing2 = messagesEl.querySelectorAll('.message');
     existing2.forEach((el) => el.remove());
     return;
@@ -5824,55 +5824,55 @@ function trimLiveMessageBuffer() {
 }
 
 function updateChatHeader() {
-  if (!currentGroupJid) {
-    chatGroupName.textContent = 'Select a group';
-    chatGroupFolder.textContent = '';
+  if (!currentAgentJid) {
+    chatAgentName.textContent = 'Select an Agent';
+    chatAgentFolder.textContent = '';
     return;
   }
-  const group = groups.find((g) => g.jid === currentGroupJid);
-  if (group) {
-    chatGroupName.textContent = group.name;
-    chatGroupFolder.textContent = group.isMain ? '(main)' : `@ ${group.folder}`;
+  const agent = agents.find((g) => g.jid === currentAgentJid);
+  if (agent) {
+    chatAgentName.textContent = agent.name;
+    chatAgentFolder.textContent = agent.isMain ? '(main)' : `@ ${agent.folder}`;
   }
 }
 
-function getCurrentGroup() {
-  if (!currentGroupJid) return null;
-  return groups.find((g) => g.jid === currentGroupJid) || null;
+function getCurrentAgent() {
+  if (!currentAgentJid) return null;
+  return agents.find((g) => g.jid === currentAgentJid) || null;
 }
 
-function isCurrentGroupMain() {
-  return getCurrentGroup()?.isMain === true;
+function isCurrentAgentMain() {
+  return getCurrentAgent()?.isMain === true;
 }
 
-function getMainGroup() {
-  return groups.find((group) => group.isMain) || null;
+function getMainAgent() {
+  return agents.find((agent) => agent.isMain) || null;
 }
 
-async function loadGroups() {
+async function loadAgents() {
   try {
-    const res = await apiFetch('/api/groups');
+    const res = await apiFetch('/api/agents');
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
-    groups = data.groups;
-    renderGroups();
-    if (!groups.some((g) => g.jid === activeMemoryGroupJid)) {
-      activeMemoryGroupJid = getDefaultMemoryGroupJid();
+    agents = data.agents;
+    renderAgents();
+    if (!agents.some((g) => g.jid === activeMemoryAgentJid)) {
+      activeMemoryAgentJid = getDefaultMemoryAgentJid();
     }
-    renderMemoryGroups();
+    renderMemoryAgents();
     renderMemoryList();
     if (activePrimaryNavKey === 'memory-management') {
       loadMemories();
     }
   } catch (err) {
-    console.error('Failed to load groups:', err);
+    console.error('Failed to load agents:', err);
   }
 }
 
 async function resetAllSessions() {
   if (!resetAllSessionsBtn) return;
   const confirmed = await openConfirmDialog(
-    '这会让所有群组在下一次新建对话时切换到全新 session。当前正在运行的任务不会被打断。继续吗？',
+    '这会让所有 Agent 在下一次新建对话时切换到全新 session。当前正在运行的任务不会被打断。继续吗？',
     { title: '重置 Session' },
   );
   if (!confirmed) return;
@@ -5890,9 +5890,9 @@ async function resetAllSessions() {
     }
 
     const resetCount = Number(data.resetCount || 0);
-    showToast(`已标记 ${resetCount} 个群组使用全新 session`);
-    await loadGroups();
-    if (currentGroupJid) {
+    showToast(`已标记 ${resetCount} 个 Agent 使用全新 session`);
+    await loadAgents();
+    if (currentAgentJid) {
       await loadMessages();
     }
   } catch (err) {
@@ -5916,18 +5916,18 @@ async function loadSchedulers() {
       return;
     }
 
-    // Group by group_folder
-    const byGroup = {};
+    // Agent by agent_folder
+    const byAgent = {};
     for (const task of data.tasks) {
-      const g = task.group_folder || 'Unknown';
-      if (!byGroup[g]) byGroup[g] = [];
-      byGroup[g].push(task);
+      const g = task.agent_folder || 'Unknown';
+      if (!byAgent[g]) byAgent[g] = [];
+      byAgent[g].push(task);
     }
 
-    for (const [group, tasks] of Object.entries(byGroup)) {
+    for (const [agent, tasks] of Object.entries(byAgent)) {
       const header = document.createElement('div');
-      header.className = 'scheduler-group-header';
-      header.textContent = group;
+      header.className = 'scheduler-agent-header';
+      header.textContent = agent;
       schedulersList.appendChild(header);
 
       for (const task of tasks) {
@@ -6018,7 +6018,7 @@ function updateAgentDurations() {
   for (const agent of agentStatusData) {
     const elapsed = now - agent.startedAt;
     const el = document.querySelector(
-      `[data-agent-jid="${CSS.escape(agent.groupJid)}"] .agent-status-duration`,
+      `[data-agent-jid="${CSS.escape(agent.agentJid)}"] .agent-status-duration`,
     );
     if (el) {
       el.textContent = formatDuration(elapsed);
@@ -6027,10 +6027,10 @@ function updateAgentDurations() {
 }
 
 function updateAgentRunTraces(runs) {
-  agentRunTraceByGroup = {};
+  agentRunTraceByAgent = {};
   for (const run of runs) {
-    if (run && run.groupJid) {
-      agentRunTraceByGroup[run.groupJid] = run;
+    if (run && run.agentJid) {
+      agentRunTraceByAgent[run.agentJid] = run;
     }
   }
 }
@@ -6065,7 +6065,7 @@ function renderAgentTraceEvent(event) {
   let details = '';
   const filePath = typeof payload.path === 'string' ? payload.path : '';
   const normalizedFilePath = filePath
-    .replace(/^\/workspace\/group\//, '')
+    .replace(/^\/workspace\/agent\//, '')
     .replace(/^\/workspace\/project\//, '')
     .replace(/^\/workspace\//, '');
   const hasDiffStats = payload.additions || payload.deletions;
@@ -6167,8 +6167,8 @@ function renderAgentStatus(agents) {
       ? 'agent-status-dot idle'
       : 'agent-status-dot active';
     const typeLabel = agent.isTask ? 'task' : 'chat';
-    const isStopping = stoppingAgentIds.has(agent.groupJid);
-    const trace = agentRunTraceByGroup[agent.groupJid] || null;
+    const isStopping = stoppingAgentIds.has(agent.agentJid);
+    const trace = agentRunTraceByAgent[agent.agentJid] || null;
     const currentAction = trace?.currentAction || '';
     const currentStep = trace?.currentStepType || '';
     const recentEvents = Array.isArray(trace?.recentEvents)
@@ -6177,7 +6177,7 @@ function renderAgentStatus(agents) {
 
     const el = document.createElement('div');
     el.className = `agent-status-item${isStopping ? ' is-stopping' : ''}`;
-    el.setAttribute('data-agent-jid', agent.groupJid);
+    el.setAttribute('data-agent-jid', agent.agentJid);
     // Format last message time
     let lastTimeStr = '';
     if (agent.lastTime) {
@@ -6196,7 +6196,7 @@ function renderAgentStatus(agents) {
     el.innerHTML = `
       <div class="agent-status-name">
         <span class="${statusDot}"></span>
-        ${escapeHtml(agent.groupName)}
+        ${escapeHtml(agent.agentName)}
       </div>
       <div class="agent-status-last-msg">
         <span class="agent-status-sender">${escapeHtml(agent.lastSender || '—')}</span>
@@ -6230,27 +6230,26 @@ function renderAgentStatus(agents) {
     const stopBtn = el.querySelector('.agent-stop-btn');
     if (!isStopping) {
       stopBtn.addEventListener('click', () =>
-        stopAgent(agent.groupJid, stopBtn),
+        stopAgent(agent.agentJid, stopBtn),
       );
     }
     agentStatusList.appendChild(el);
   }
 }
 
-async function stopAgent(groupJid, btn) {
-  const agent = agentStatusData.find((item) => item.groupJid === groupJid);
-  const confirmMessage =
-    agent?.isTask
-      ? '确认停止这个任务 agent 吗？\n\n对应任务会被标记为暂停。'
-      : '确认停止这个 agent 吗？\n\n当前会话会被中止，排队中的消息和任务也会清空。';
+async function stopAgent(agentJid, btn) {
+  const agent = agentStatusData.find((item) => item.agentJid === agentJid);
+  const confirmMessage = agent?.isTask
+    ? '确认停止这个任务 agent 吗？\n\n对应任务会被标记为暂停。'
+    : '确认停止这个 agent 吗？\n\n当前会话会被中止，排队中的消息和任务也会清空。';
   if (!(await openConfirmDialog(confirmMessage, { title: '停止 Agent' })))
     return;
-  stoppingAgentIds.add(groupJid);
+  stoppingAgentIds.add(agentJid);
   renderAgentStatus(agentStatusData);
   try {
     const res = await apiFetch('/api/agent-status/stop', {
       method: 'POST',
-      body: JSON.stringify({ groupJid }),
+      body: JSON.stringify({ agentJid }),
     });
     const data = await res.json();
     if (!res.ok) {
@@ -6263,7 +6262,7 @@ async function stopAgent(groupJid, btn) {
     showToast(toastMessage);
   } catch (err) {
     console.error('Failed to stop agent:', err);
-    stoppingAgentIds.delete(groupJid);
+    stoppingAgentIds.delete(agentJid);
     renderAgentStatus(agentStatusData);
     alert('Failed to stop agent: ' + err.message);
   }
@@ -6281,11 +6280,11 @@ async function loadAgentStatus() {
     const traceData = await traceRes.json();
     updateAgentRunTraces(traceData.queries || []);
     const activeIds = new Set(
-      (data.agents || []).map((agent) => agent.groupJid),
+      (data.agents || []).map((agent) => agent.agentJid),
     );
-    stoppingAgentIds.forEach((groupJid) => {
-      if (!activeIds.has(groupJid)) {
-        stoppingAgentIds.delete(groupJid);
+    stoppingAgentIds.forEach((agentJid) => {
+      if (!activeIds.has(agentJid)) {
+        stoppingAgentIds.delete(agentJid);
       }
     });
     renderAgentStatus(data.agents || []);
@@ -6307,10 +6306,10 @@ function formatRelativeTime(ts) {
   return `${Math.round(abs / (24 * 60 * 60 * 1000))} 天前`;
 }
 
-function getGroupDisplayNameByJid(groupJid) {
-  if (!groupJid) return '未关联群组';
-  const group = groups.find((item) => item.jid === groupJid);
-  return group?.name || groupJid;
+function getAgentDisplayNameByJid(agentJid) {
+  if (!agentJid) return '未关联 Agent';
+  const agent = agents.find((item) => item.jid === agentJid);
+  return agent?.name || agentJid;
 }
 
 function normalizeTraceRun(run, scope) {
@@ -6321,8 +6320,8 @@ function normalizeTraceRun(run, scope) {
       scope,
       sourceType: run.sourceType || null,
       sourceRefId: run.sourceRefId || null,
-      groupJid: run.groupJid || null,
-      groupFolder: run.groupFolder || null,
+      agentJid: run.agentJid || null,
+      agentFolder: run.agentFolder || null,
       service: run.service || null,
       role: run.role || null,
       selectedModel: run.selectedModel || null,
@@ -6353,8 +6352,8 @@ function normalizeTraceRun(run, scope) {
     scope,
     sourceType: run.source_type || run.sourceType || null,
     sourceRefId: run.source_ref_id || run.sourceRefId || null,
-    groupJid: run.chat_jid || null,
-    groupFolder: run.group_folder || null,
+    agentJid: run.chat_jid || null,
+    agentFolder: run.agent_folder || null,
     service: run.service || null,
     role: run.role || null,
     selectedModel: run.selected_model || null,
@@ -6764,7 +6763,7 @@ function renderTraceMonitorList() {
     const stats = buildTraceRunStats(run);
     item.innerHTML = `
       <div class="trace-monitor-list-head">
-        <div class="trace-monitor-list-title">${escapeHtml(getGroupDisplayNameByJid(run.groupJid))}</div>
+        <div class="trace-monitor-list-title">${escapeHtml(getAgentDisplayNameByJid(run.agentJid))}</div>
         <span class="trace-monitor-status ${escapeHtml(statusClass)}">${escapeHtml(run.status || 'unknown')}</span>
       </div>
       ${subtitle ? `<div class="trace-monitor-list-subtitle">${escapeHtml(subtitle)}</div>` : ''}
@@ -6856,8 +6855,8 @@ function renderTraceSummaryPills(run) {
   if (run.service) {
     pills.push(renderTracePill('Service', run.service));
   }
-  if (run.group_folder) {
-    pills.push(renderTracePill('Folder', run.group_folder));
+  if (run.agent_folder) {
+    pills.push(renderTracePill('Folder', run.agent_folder));
   }
   const queueMs = summary.queueLatencyMs ?? run.queue_latency_ms;
   if (queueMs || queueMs === 0) {
@@ -6913,7 +6912,7 @@ function renderTraceMetaPills(run) {
   pills.push(renderTracePill('Source', run.source_type || '--'));
   if (run.chat_jid) {
     pills.push(
-      renderTracePill('Group', getGroupDisplayNameByJid(run.chat_jid)),
+      renderTracePill('Agent', getAgentDisplayNameByJid(run.chat_jid)),
     );
   }
   if (run.container_name) {
@@ -7425,7 +7424,7 @@ function renderTraceRunDetail() {
   if (traceMonitorDetail) traceMonitorDetail.classList.remove('hidden');
   if (traceMonitorDetailEmpty) traceMonitorDetailEmpty.classList.add('hidden');
   if (traceMonitorTitle) {
-    traceMonitorTitle.textContent = getGroupDisplayNameByJid(
+    traceMonitorTitle.textContent = getAgentDisplayNameByJid(
       currentTraceRunRecord.chat_jid,
     );
   }
@@ -7646,10 +7645,10 @@ async function clearAllTraceHistory() {
 }
 
 async function loadMessages() {
-  if (!currentGroupJid) return;
+  if (!currentAgentJid) return;
   try {
     const res = await apiFetch(
-      `/api/messages?jid=${encodeURIComponent(currentGroupJid)}&since=0&limit=${INITIAL_MESSAGE_LIMIT}`,
+      `/api/messages?jid=${encodeURIComponent(currentAgentJid)}&since=0&limit=${INITIAL_MESSAGE_LIMIT}`,
     );
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
@@ -7667,7 +7666,7 @@ async function loadMessages() {
 
 // --- Infinite scroll: load older messages ---
 async function loadMoreHistory() {
-  if (!currentGroupJid || !hasMoreHistory || loadingHistory) return;
+  if (!currentAgentJid || !hasMoreHistory || loadingHistory) return;
   if (messages.length === 0) return;
 
   loadingHistory = true;
@@ -7676,7 +7675,7 @@ async function loadMoreHistory() {
 
   try {
     const res = await apiFetch(
-      `/api/messages?jid=${encodeURIComponent(currentGroupJid)}&before=${oldestTs}&limit=50`,
+      `/api/messages?jid=${encodeURIComponent(currentAgentJid)}&before=${oldestTs}&limit=50`,
     );
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
@@ -7714,8 +7713,8 @@ function connectWS() {
       reconnectTimer = null;
     }
     sendDesktopCaptureCapabilities();
-    if (currentGroupJid) {
-      sendWs({ type: 'select_group', chatJid: currentGroupJid });
+    if (currentAgentJid) {
+      sendWs({ type: 'select_agent', chatJid: currentAgentJid });
     }
   };
   ws.onclose = () => {
@@ -7813,22 +7812,22 @@ function isAppForeground() {
 
 function shouldIncrementUnread(chatJid) {
   if (!chatJid) return false;
-  if (chatJid !== currentGroupJid) return true;
-  // Current group should also become unread if app is not in foreground.
+  if (chatJid !== currentAgentJid) return true;
+  // Current agent should also become unread if app is not in foreground.
   return !isAppForeground();
 }
 
-function clearUnreadForGroup(chatJid) {
+function clearUnreadForAgent(chatJid) {
   if (!chatJid) return;
   if (!unreadCounts[chatJid]) return;
   unreadCounts[chatJid] = 0;
-  renderGroups();
+  renderAgents();
 }
 
-function clearCurrentGroupUnreadIfForeground() {
-  if (!currentGroupJid) return;
+function clearCurrentAgentUnreadIfForeground() {
+  if (!currentAgentJid) return;
   if (!isAppForeground()) return;
-  clearUnreadForGroup(currentGroupJid);
+  clearUnreadForAgent(currentAgentJid);
 }
 
 function handleWsMessage(msg) {
@@ -7836,9 +7835,9 @@ function handleWsMessage(msg) {
     case 'connected':
       console.log('WS connected:', msg.message);
       break;
-    case 'groups':
-      groups = msg.groups || [];
-      renderGroups();
+    case 'agents':
+      agents = msg.agents || [];
+      renderAgents();
       if (activePrimaryNavKey === 'trace-monitor') {
         renderTraceMonitorList();
         if (currentTraceRunRecord) {
@@ -7859,7 +7858,7 @@ function handleWsMessage(msg) {
         reply_to_id: msg.reply_to_id || null,
         model: msg.model || null,
       };
-      if (incoming.chat_jid === currentGroupJid) {
+      if (incoming.chat_jid === currentAgentJid) {
         messages.push(incoming);
         const dropped = trimLiveMessageBuffer();
         if (dropped > 0) {
@@ -7874,7 +7873,7 @@ function handleWsMessage(msg) {
       if (!incoming.is_from_me && shouldIncrementUnread(incoming.chat_jid)) {
         unreadCounts[incoming.chat_jid] =
           (unreadCounts[incoming.chat_jid] || 0) + 1;
-        renderGroups();
+        renderAgents();
       }
       if (!incoming.is_from_me) {
         notifyAgent(incoming);
@@ -7892,7 +7891,7 @@ function handleWsMessage(msg) {
         is_from_me: false,
         is_bot_message: true,
       };
-      if (cardMsg.chat_jid === currentGroupJid) {
+      if (cardMsg.chat_jid === currentAgentJid) {
         messages.push(cardMsg);
         const dropped = trimLiveMessageBuffer();
         if (dropped > 0) {
@@ -7904,7 +7903,7 @@ function handleWsMessage(msg) {
       if (shouldIncrementUnread(cardMsg.chat_jid)) {
         unreadCounts[cardMsg.chat_jid] =
           (unreadCounts[cardMsg.chat_jid] || 0) + 1;
-        renderGroups();
+        renderAgents();
       }
       notifyAgent(cardMsg);
       break;
@@ -7925,7 +7924,7 @@ function handleWsMessage(msg) {
         _filePath: msg.filePath,
         _fileUrl: msg.fileUrl || undefined,
       };
-      if (fileMsg.chat_jid === currentGroupJid) {
+      if (fileMsg.chat_jid === currentAgentJid) {
         messages.push(fileMsg);
         const dropped = trimLiveMessageBuffer();
         if (dropped > 0) {
@@ -7937,7 +7936,7 @@ function handleWsMessage(msg) {
       if (shouldIncrementUnread(fileMsg.chat_jid)) {
         unreadCounts[fileMsg.chat_jid] =
           (unreadCounts[fileMsg.chat_jid] || 0) + 1;
-        renderGroups();
+        renderAgents();
       }
       notifyAgent(fileMsg);
       break;
@@ -8006,8 +8005,8 @@ function handleWsMessage(msg) {
   }
 }
 function notifyAgent(msg) {
-  const group = groups.find((g) => g.jid === msg.chat_jid);
-  const title = `${group?.name || 'Support Group Agent'}`;
+  const agent = agents.find((g) => g.jid === msg.chat_jid);
+  const title = `${agent?.name || 'Support Agent'}`;
   const body = `${msg.sender_name}: ${msg.content.slice(0, 100)}`;
   if (typeof window !== 'undefined' && window.icarusApp) {
     window.icarusApp.notify(title, body, { chatJid: msg.chat_jid });
@@ -8026,20 +8025,20 @@ function notifyAgent(msg) {
   });
   notification.onclick = () => {
     window.focus();
-    openAgentGroupFromNotification(msg.chat_jid, 'browser');
+    openAgentFromNotification(msg.chat_jid, 'browser');
   };
 }
 
-function openAgentGroupFromNotification(chatJid, source) {
+function openAgentFromNotification(chatJid, source) {
   if (typeof chatJid !== 'string' || !chatJid) return;
-  setPrimaryNav('agent-groups');
-  if (chatJid === currentGroupJid) {
-    clearUnreadForGroup(chatJid);
+  setPrimaryNav('agents');
+  if (chatJid === currentAgentJid) {
+    clearUnreadForAgent(chatJid);
     return;
   }
-  selectGroup(chatJid).catch((err) => {
+  selectAgent(chatJid).catch((err) => {
     console.error(
-      `Failed to switch group from ${source} notification click:`,
+      `Failed to switch agent from ${source} notification click:`,
       err,
     );
   });
@@ -8074,29 +8073,29 @@ function bindNotificationClickHandler() {
   if (typeof window === 'undefined' || !window.icarusApp?.onNotificationClick)
     return;
   window.icarusApp.onNotificationClick(({ chatJid }) => {
-    openAgentGroupFromNotification(chatJid, 'native');
+    openAgentFromNotification(chatJid, 'native');
   });
 }
-async function selectGroup(jid) {
+async function selectAgent(jid) {
   if (multiSelectMode) exitMultiSelect();
-  // Clear staged files when switching groups
+  // Clear staged files when switching agents
   pendingFiles = [];
   pendingFileReferences = [];
   renderPendingFiles();
-  currentGroupJid = jid;
+  currentAgentJid = jid;
   messages = [];
   hasMoreHistory = true;
 
-  // Clear unread for this group
+  // Clear unread for this agent
   unreadCounts[jid] = 0;
 
   // Show skeleton while loading
   showSkeleton();
   updateChatHeader();
-  renderGroups();
+  renderAgents();
 
   await loadMessages();
-  sendWs({ type: 'select_group', chatJid: jid });
+  sendWs({ type: 'select_agent', chatJid: jid });
 }
 
 function appendOptimisticMessage(chatJid, content, replyToId = null) {
@@ -8111,7 +8110,7 @@ function appendOptimisticMessage(chatJid, content, replyToId = null) {
     is_bot_message: false,
     reply_to_id: replyToId,
   };
-  if (chatJid !== currentGroupJid) return;
+  if (chatJid !== currentAgentJid) return;
   messages.push(userMsg);
   const dropped = trimLiveMessageBuffer();
   if (dropped > 0) {
@@ -8170,7 +8169,7 @@ async function sendMessageToChat(chatJid, content, options = {}) {
 }
 
 async function sendMessage(content) {
-  const sent = await sendMessageToChat(currentGroupJid, content);
+  const sent = await sendMessageToChat(currentAgentJid, content);
   if (!sent) return;
   messageInput.value = '';
   autoResizeInput();
@@ -8344,7 +8343,7 @@ function fuzzyMatch(text, query) {
 function getMentionTargets() {
   const targets = [{ name: 'Andy', kind: '助手' }];
   const seen = new Set(['andy']);
-  const folders = groups
+  const folders = agents
     .filter(
       (g) =>
         g &&
@@ -8360,7 +8359,7 @@ function getMentionTargets() {
     const key = folder.toLowerCase();
     if (seen.has(key)) continue;
     seen.add(key);
-    targets.push({ name: folder, kind: '群组' });
+    targets.push({ name: folder, kind: 'Agent' });
   }
   return targets;
 }
@@ -8373,7 +8372,7 @@ function ensureMentionPickerElements() {
   mentionSearchInput = document.createElement('input');
   mentionSearchInput.id = 'mention-search-input';
   mentionSearchInput.type = 'text';
-  mentionSearchInput.placeholder = '搜索助手或群组';
+  mentionSearchInput.placeholder = '搜索助手或 Agent';
   searchWrap.appendChild(mentionSearchInput);
   mentionPicker.appendChild(searchWrap);
 
@@ -8575,8 +8574,8 @@ function handleComposerPaste(event) {
   if (imageFiles.length === 0) return;
 
   event.preventDefault();
-  if (!currentGroupJid) {
-    showToast('请选择群聊后再粘贴图片', 1800);
+  if (!currentAgentJid) {
+    showToast('请选择 Agent 后再粘贴图片', 1800);
     return;
   }
 
@@ -8590,14 +8589,14 @@ function handleComposerPaste(event) {
 
 // Stage a file for upload on next send
 function stageFile(file) {
-  if (!currentGroupJid) return;
+  if (!currentAgentJid) return;
   pendingFiles.push(file);
   renderPendingFiles();
 }
 
 function stageFileReference(containerPath) {
   const normalized = String(containerPath || '').trim();
-  if (!normalized || !currentGroupJid) return;
+  if (!normalized || !currentAgentJid) return;
   if (!pendingFileReferences.includes(normalized)) {
     pendingFileReferences.push(normalized);
   }
@@ -8688,7 +8687,7 @@ function buildUploadedFilesPrefix(uploadedFiles) {
 async function uploadPendingFiles() {
   if (pendingFiles.length === 0) return '';
 
-  const uploadedFiles = await uploadFilesForJid(pendingFiles, currentGroupJid);
+  const uploadedFiles = await uploadFilesForJid(pendingFiles, currentAgentJid);
   pendingFiles = [];
   renderPendingFiles();
 
@@ -8812,7 +8811,7 @@ function copySelectedMessages() {
 }
 
 async function deleteSelectedMessages() {
-  if (!currentGroupJid) return;
+  if (!currentAgentJid) return;
   const ids = Array.from(selectedMsgIds);
   if (ids.length === 0) return;
   if (
@@ -8825,7 +8824,7 @@ async function deleteSelectedMessages() {
   try {
     const res = await apiFetch('/api/messages', {
       method: 'DELETE',
-      body: JSON.stringify({ jid: currentGroupJid, ids }),
+      body: JSON.stringify({ jid: currentAgentJid, ids }),
     });
     if (!res.ok) throw new Error(`Delete failed: ${res.status}`);
     await res.json();
@@ -8932,11 +8931,11 @@ function normalizeTodayPlanAssociations(associations) {
         .filter(
           (item) =>
             item &&
-            typeof item.group_jid === 'string' &&
+            typeof item.agent_jid === 'string' &&
             Array.isArray(item.message_ids),
         )
         .map((item) => ({
-          group_jid: item.group_jid,
+          agent_jid: item.agent_jid,
           message_ids: Array.from(
             new Set(
               (Array.isArray(item.message_ids) ? item.message_ids : []).filter(
@@ -8980,10 +8979,10 @@ function cloneTodayPlanAssociations(associations) {
   );
 }
 
-function getTodayPlanAssociationChatEntry(state, groupJid) {
+function getTodayPlanAssociationChatEntry(state, agentJid) {
   return (
     state.associations.chat_selections.find(
-      (item) => item.group_jid === groupJid,
+      (item) => item.agent_jid === agentJid,
     ) || null
   );
 }
@@ -9085,8 +9084,8 @@ function getTodayPlanAggregateMetrics(detail) {
         ? item.related_services
         : [];
       chatCount += relatedChats.reduce(
-        (sum, group) =>
-          sum + (Array.isArray(group.messages) ? group.messages.length : 0),
+        (sum, agent) =>
+          sum + (Array.isArray(agent.messages) ? agent.messages.length : 0),
         0,
       );
       serviceCount += relatedServices.length;
@@ -9276,8 +9275,8 @@ function renderTodayPlanItemCard(item, index, options = {}) {
   const readonlyLabel = options.readonlyLabel || '只读';
   const chatCount = Array.isArray(item.related_chats)
     ? item.related_chats.reduce(
-        (sum, group) =>
-          sum + (Array.isArray(group.messages) ? group.messages.length : 0),
+        (sum, agent) =>
+          sum + (Array.isArray(agent.messages) ? agent.messages.length : 0),
         0,
       )
     : 0;
@@ -9343,18 +9342,18 @@ function renderTodayPlanItemCard(item, index, options = {}) {
           <div class="today-plan-chat-block">
             ${item.related_chats
               .map(
-                (group) => `
+                (agent) => `
               <div class="today-plan-chat-card">
                 <div class="today-plan-chat-head">
                   <div>
-                    <div class="today-plan-chat-title">${escapeHtml(group.group_name || group.group_jid)}</div>
+                    <div class="today-plan-chat-title">${escapeHtml(agent.agent_name || agent.agent_jid)}</div>
                     <div class="today-plan-pill-row">
-                      <span class="today-plan-meta-pill">${escapeHtml(String((group.messages || []).length))} 条消息</span>
+                      <span class="today-plan-meta-pill">${escapeHtml(String((agent.messages || []).length))} 条消息</span>
                     </div>
                   </div>
                 </div>
                 <div class="today-plan-chat-messages">
-                  ${(group.messages || [])
+                  ${(agent.messages || [])
                     .map(
                       (message) => `
                     <div class="today-plan-chat-message${message.is_from_me ? ' from-me' : ''}${message.is_bot_message ? ' bot' : ''}">
@@ -9953,31 +9952,31 @@ function getTodayPlanAssociationServiceEntry(state, service) {
   );
 }
 
-function updateTodayPlanChatSelection(state, groupJid, messageId, checked) {
-  let groupEntry = getTodayPlanAssociationChatEntry(state, groupJid);
-  if (!groupEntry && checked) {
-    groupEntry = {
-      group_jid: groupJid,
+function updateTodayPlanChatSelection(state, agentJid, messageId, checked) {
+  let agentEntry = getTodayPlanAssociationChatEntry(state, agentJid);
+  if (!agentEntry && checked) {
+    agentEntry = {
+      agent_jid: agentJid,
       message_ids: [],
     };
-    state.associations.chat_selections.push(groupEntry);
+    state.associations.chat_selections.push(agentEntry);
   }
-  if (!groupEntry) return;
-  groupEntry.message_ids = Array.isArray(groupEntry.message_ids)
-    ? groupEntry.message_ids
+  if (!agentEntry) return;
+  agentEntry.message_ids = Array.isArray(agentEntry.message_ids)
+    ? agentEntry.message_ids
     : [];
   if (checked) {
-    if (!groupEntry.message_ids.includes(messageId)) {
-      groupEntry.message_ids.push(messageId);
+    if (!agentEntry.message_ids.includes(messageId)) {
+      agentEntry.message_ids.push(messageId);
     }
   } else {
-    groupEntry.message_ids = groupEntry.message_ids.filter(
+    agentEntry.message_ids = agentEntry.message_ids.filter(
       (id) => id !== messageId,
     );
-    if (groupEntry.message_ids.length === 0) {
+    if (agentEntry.message_ids.length === 0) {
       state.associations.chat_selections =
         state.associations.chat_selections.filter(
-          (item) => item.group_jid !== groupJid,
+          (item) => item.agent_jid !== agentJid,
         );
     }
   }
@@ -10037,23 +10036,23 @@ function renderTodayPlanAssociationDialog() {
   );
   if (!dialog) return;
   const scrollState = captureTodayPlanAssociationScrollState(dialog);
-  const chatGroups = (state.groups || []).filter((group) => {
-    const messages = state.chatMessagesByGroup[group.jid] || [];
+  const chatAgents = (state.agents || []).filter((agent) => {
+    const messages = state.chatMessagesByAgent[agent.jid] || [];
     return Array.isArray(messages) && messages.length > 0;
   });
   if (
-    state.activeChatGroupJid &&
-    !chatGroups.some((group) => group.jid === state.activeChatGroupJid)
+    state.activeChatAgentJid &&
+    !chatAgents.some((agent) => agent.jid === state.activeChatAgentJid)
   ) {
-    state.activeChatGroupJid = null;
+    state.activeChatAgentJid = null;
   }
-  const activeChatGroup =
-    chatGroups.find((group) => group.jid === state.activeChatGroupJid) || null;
-  const activeChatMessages = activeChatGroup
-    ? state.chatMessagesByGroup[activeChatGroup.jid] || []
+  const activeChatAgent =
+    chatAgents.find((agent) => agent.jid === state.activeChatAgentJid) || null;
+  const activeChatMessages = activeChatAgent
+    ? state.chatMessagesByAgent[activeChatAgent.jid] || []
     : [];
-  const activeChatSelection = activeChatGroup
-    ? getTodayPlanAssociationChatEntry(state, activeChatGroup.jid)
+  const activeChatSelection = activeChatAgent
+    ? getTodayPlanAssociationChatEntry(state, activeChatAgent.jid)
     : null;
   const activeChatSelectedIds = new Set(
     activeChatSelection && Array.isArray(activeChatSelection.message_ids)
@@ -10081,19 +10080,19 @@ function renderTodayPlanAssociationDialog() {
         <div class="today-plan-option-desc">仅展示每个群今天最新的 200 条消息；点击群聊后在对话框中多选消息。</div>
         <div class="today-plan-association-list">
           ${
-            chatGroups
-              .map((group) => {
+            chatAgents
+              .map((agent) => {
                 const selectedCount = getTodayPlanAssociationChatSelectionCount(
-                  getTodayPlanAssociationChatEntry(state, group.jid),
+                  getTodayPlanAssociationChatEntry(state, agent.jid),
                 );
-                const messages = state.chatMessagesByGroup[group.jid] || [];
+                const messages = state.chatMessagesByAgent[agent.jid] || [];
                 const active =
-                  activeChatGroup && activeChatGroup.jid === group.jid;
+                  activeChatAgent && activeChatAgent.jid === agent.jid;
                 const latestMessage = messages[messages.length - 1] || null;
                 return `
-              <button type="button" class="today-plan-option-card today-plan-chat-group-btn${active ? ' active' : ''}" data-today-plan-open-chat-group="${escapeAttribute(group.jid)}">
-                <div class="today-plan-option-title">${escapeHtml(group.name || group.jid)}</div>
-                <div class="today-plan-option-desc">${escapeHtml(group.folder || '')}</div>
+              <button type="button" class="today-plan-option-card today-plan-chat-agent-btn${active ? ' active' : ''}" data-today-plan-open-chat-agent="${escapeAttribute(agent.jid)}">
+                <div class="today-plan-option-title">${escapeHtml(agent.name || agent.jid)}</div>
+                <div class="today-plan-option-desc">${escapeHtml(agent.folder || '')}</div>
                 <div class="today-plan-pill-row">
                   <span class="today-plan-meta-pill">今日 ${escapeHtml(String(messages.length))} 条</span>
                   <span class="today-plan-meta-pill">已选 ${escapeHtml(String(selectedCount))} 条</span>
@@ -10183,14 +10182,14 @@ function renderTodayPlanAssociationDialog() {
       <button type="button" class="btn-primary btn-soft-primary today-plan-action-btn today-plan-btn-add" data-today-plan-save-associations>保存关联</button>
     </div>
     ${
-      activeChatGroup
+      activeChatAgent
         ? `
       <div class="today-plan-chat-picker" data-today-plan-chat-picker-overlay="1">
         <div class="today-plan-chat-picker-window">
           <div class="today-plan-chat-picker-header">
             <div>
               <div class="today-plan-kicker">Chat Picker</div>
-              <div class="today-plan-section-title">${escapeHtml(activeChatGroup.name || activeChatGroup.jid)}</div>
+              <div class="today-plan-section-title">${escapeHtml(activeChatAgent.name || activeChatAgent.jid)}</div>
               <div class="today-plan-section-subtitle">今天最新 ${escapeHtml(String(activeChatMessages.length))} 条消息 · 已选 ${escapeHtml(String(activeChatSelectedIds.size))} 条</div>
             </div>
             <button type="button" class="icon-btn" data-today-plan-close-chat-picker title="关闭" aria-label="关闭">
@@ -10202,7 +10201,7 @@ function renderTodayPlanAssociationDialog() {
           </div>
           <div class="today-plan-chat-picker-toolbar">
             <div class="today-plan-option-desc">点击消息即可选择或取消。仅保存你勾选的消息，不做会话聚合。</div>
-            <button type="button" class="btn-ghost" data-today-plan-clear-chat-selection="${escapeAttribute(activeChatGroup.jid)}" ${activeChatSelectedIds.size === 0 ? 'disabled' : ''}>清空已选</button>
+            <button type="button" class="btn-ghost" data-today-plan-clear-chat-selection="${escapeAttribute(activeChatAgent.jid)}" ${activeChatSelectedIds.size === 0 ? 'disabled' : ''}>清空已选</button>
           </div>
           <div class="today-plan-chat-picker-list">
             ${
@@ -10210,7 +10209,7 @@ function renderTodayPlanAssociationDialog() {
                 .map((message) => {
                   const selected = activeChatSelectedIds.has(message.id);
                   return `
-                <button type="button" class="today-plan-chat-picker-message${selected ? ' selected' : ''}${message.is_from_me ? ' from-me' : ''}${message.is_bot_message ? ' bot' : ''}" data-today-plan-chat-message="${escapeAttribute(message.id)}" data-group-jid="${escapeAttribute(activeChatGroup.jid)}">
+                <button type="button" class="today-plan-chat-picker-message${selected ? ' selected' : ''}${message.is_from_me ? ' from-me' : ''}${message.is_bot_message ? ' bot' : ''}" data-today-plan-chat-message="${escapeAttribute(message.id)}" data-agent-jid="${escapeAttribute(activeChatAgent.jid)}">
                   <span class="today-plan-chat-picker-check">${selected ? '✓' : ''}</span>
                     <div class="today-plan-chat-picker-content">
                       <div class="today-plan-chat-picker-meta">
@@ -10247,11 +10246,11 @@ function renderTodayPlanAssociationDialog() {
   });
 
   Array.from(
-    dialog.querySelectorAll('[data-today-plan-open-chat-group]'),
+    dialog.querySelectorAll('[data-today-plan-open-chat-agent]'),
   ).forEach((button) => {
     button.addEventListener('click', () => {
-      state.activeChatGroupJid =
-        button.getAttribute('data-today-plan-open-chat-group') || null;
+      state.activeChatAgentJid =
+        button.getAttribute('data-today-plan-open-chat-agent') || null;
       renderTodayPlanAssociationDialog();
     });
   });
@@ -10260,7 +10259,7 @@ function renderTodayPlanAssociationDialog() {
     dialog.querySelectorAll('[data-today-plan-close-chat-picker]'),
   ).forEach((button) => {
     button.addEventListener('click', () => {
-      state.activeChatGroupJid = null;
+      state.activeChatAgentJid = null;
       renderTodayPlanAssociationDialog();
     });
   });
@@ -10270,7 +10269,7 @@ function renderTodayPlanAssociationDialog() {
   ).forEach((overlay) => {
     overlay.addEventListener('click', (event) => {
       if (event.target !== overlay) return;
-      state.activeChatGroupJid = null;
+      state.activeChatAgentJid = null;
       renderTodayPlanAssociationDialog();
     });
   });
@@ -10278,17 +10277,17 @@ function renderTodayPlanAssociationDialog() {
   Array.from(dialog.querySelectorAll('[data-today-plan-chat-message]')).forEach(
     (button) => {
       button.addEventListener('click', () => {
-        const groupJid = button.getAttribute('data-group-jid') || '';
+        const agentJid = button.getAttribute('data-agent-jid') || '';
         const messageId =
           button.getAttribute('data-today-plan-chat-message') || '';
-        if (!groupJid || !messageId) return;
-        const selection = getTodayPlanAssociationChatEntry(state, groupJid);
+        if (!agentJid || !messageId) return;
+        const selection = getTodayPlanAssociationChatEntry(state, agentJid);
         const selected = Boolean(
           selection &&
           Array.isArray(selection.message_ids) &&
           selection.message_ids.includes(messageId),
         );
-        updateTodayPlanChatSelection(state, groupJid, messageId, !selected);
+        updateTodayPlanChatSelection(state, agentJid, messageId, !selected);
         renderTodayPlanAssociationDialog();
       });
     },
@@ -10298,12 +10297,12 @@ function renderTodayPlanAssociationDialog() {
     dialog.querySelectorAll('[data-today-plan-clear-chat-selection]'),
   ).forEach((button) => {
     button.addEventListener('click', () => {
-      const groupJid =
+      const agentJid =
         button.getAttribute('data-today-plan-clear-chat-selection') || '';
-      if (!groupJid) return;
+      if (!agentJid) return;
       state.associations.chat_selections =
         state.associations.chat_selections.filter(
-          (item) => item.group_jid !== groupJid,
+          (item) => item.agent_jid !== agentJid,
         );
       renderTodayPlanAssociationDialog();
     });
@@ -10403,32 +10402,32 @@ async function openTodayPlanAssociationDialog(itemId) {
     if (!serviceRes.ok)
       throw new Error(serviceData.error || `HTTP ${serviceRes.status}`);
 
-    const chatMessagesByGroup = {};
-    const groupsWithMessages = [];
+    const chatMessagesByAgent = {};
+    const agentsWithMessages = [];
 
     await Promise.all(
-      (groups || []).map(async (group) => {
+      (agents || []).map(async (agent) => {
         try {
           const res = await apiFetch(
-            `/api/today-plan/chat/options?jid=${encodeURIComponent(group.jid)}`,
+            `/api/today-plan/chat/options?jid=${encodeURIComponent(agent.jid)}`,
           );
           const data = await res.json();
-          chatMessagesByGroup[group.jid] = Array.isArray(data.messages)
+          chatMessagesByAgent[agent.jid] = Array.isArray(data.messages)
             ? data.messages
             : [];
-          if (chatMessagesByGroup[group.jid].length > 0) {
-            groupsWithMessages.push(group);
+          if (chatMessagesByAgent[agent.jid].length > 0) {
+            agentsWithMessages.push(agent);
           }
         } catch (err) {
           console.error('Failed to load today plan chat options:', err);
-          chatMessagesByGroup[group.jid] = [];
+          chatMessagesByAgent[agent.jid] = [];
         }
       }),
     );
 
-    groupsWithMessages.sort((left, right) => {
-      const leftMessages = chatMessagesByGroup[left.jid] || [];
-      const rightMessages = chatMessagesByGroup[right.jid] || [];
+    agentsWithMessages.sort((left, right) => {
+      const leftMessages = chatMessagesByAgent[left.jid] || [];
+      const rightMessages = chatMessagesByAgent[right.jid] || [];
       const leftLatest = leftMessages[leftMessages.length - 1];
       const rightLatest = rightMessages[rightMessages.length - 1];
       const leftRaw = (leftLatest && leftLatest.timestamp) || '';
@@ -10448,14 +10447,14 @@ async function openTodayPlanAssociationDialog(itemId) {
 
     todayPlanAssociationState = {
       itemId,
-      groups: groupsWithMessages,
+      agents: agentsWithMessages,
       serviceOptions: Array.isArray(serviceData.services)
         ? serviceData.services
         : [],
-      chatMessagesByGroup,
+      chatMessagesByAgent,
       branchesByService: {},
       loadingBranches: {},
-      activeChatGroupJid: null,
+      activeChatAgentJid: null,
       associations: cloneTodayPlanAssociations(item.associations),
     };
 
@@ -10659,7 +10658,7 @@ function getAssistantOnlineLogServiceOptions() {
     : [];
 }
 
-function getAssistantSourceGroupKey(rule) {
+function getAssistantSourceAgentKey(rule) {
   return rule && rule.sourceLabel ? String(rule.sourceLabel) : '其他';
 }
 
@@ -10667,7 +10666,7 @@ function groupAssistantRuleCapabilities(capabilities) {
   const groups = [];
   const groupByKey = {};
   capabilities.forEach((rule) => {
-    const key = getAssistantSourceGroupKey(rule);
+    const key = getAssistantSourceAgentKey(rule);
     if (!groupByKey[key]) {
       groupByKey[key] = {
         key,
@@ -10681,7 +10680,7 @@ function groupAssistantRuleCapabilities(capabilities) {
   return groups;
 }
 
-function formatAssistantSourceGroupSummary(group) {
+function formatAssistantSourceAgentSummary(group) {
   const totalCount = group.rules.length;
   const enabledCount = group.rules.filter(
     (rule) => getAssistantRuleSetting(rule.key).enabled,
@@ -10902,7 +10901,7 @@ function renderAssistantSourceRules() {
         <button type="button" class="assistant-source-group-toggle" data-assistant-source-group="${escapeAttribute(group.key)}" aria-expanded="${isExpanded ? 'true' : 'false'}">
           <span class="assistant-source-group-copy">
             <span class="assistant-source-group-title">${escapeHtml(group.label)}</span>
-            <span class="assistant-source-group-meta">${escapeHtml(formatAssistantSourceGroupSummary(group))}</span>
+            <span class="assistant-source-group-meta">${escapeHtml(formatAssistantSourceAgentSummary(group))}</span>
           </span>
           <span class="assistant-source-group-chevron" aria-hidden="true">${isExpanded ? '▾' : '▸'}</span>
         </button>
@@ -12283,7 +12282,7 @@ async function loadServiceConfigs(options = {}) {
     serviceConfigFilePath = data.path || '';
     if (configurationServicesPathEl) {
       configurationServicesPathEl.textContent =
-        serviceConfigFilePath || 'groups/global/services.json';
+        serviceConfigFilePath || 'agents/global/services.json';
     }
     const nextSelection =
       preserveSelection &&
@@ -12458,7 +12457,9 @@ function renderFeatureConfigList() {
       'aria-expanded',
       featureConfigListExpanded ? 'true' : 'false',
     );
-    const group = configurationFeaturesToggle.closest('.configuration-nav-group');
+    const group = configurationFeaturesToggle.closest(
+      '.configuration-nav-group',
+    );
     if (group) group.classList.toggle('expanded', featureConfigListExpanded);
     const chevron = configurationFeaturesToggle.querySelector(
       '.configuration-nav-chevron',
@@ -12505,8 +12506,9 @@ function renderFeatureConfigList() {
 
 function getSelectedFeatureConfig() {
   return (
-    featureConfigItems.find((feature) => feature.id === currentFeatureConfigId) ||
-    null
+    featureConfigItems.find(
+      (feature) => feature.id === currentFeatureConfigId,
+    ) || null
   );
 }
 
@@ -12526,7 +12528,8 @@ function selectFeatureConfig(featureId) {
 
 function renderFeatureConfigDetail() {
   const feature = getSelectedFeatureConfig();
-  const showFeatureDetail = configurationMode === 'features' && Boolean(feature);
+  const showFeatureDetail =
+    configurationMode === 'features' && Boolean(feature);
   if (configurationFeatureEmpty) {
     configurationFeatureEmpty.classList.toggle('hidden', showFeatureDetail);
   }
@@ -12591,7 +12594,7 @@ function renderFeatureDeletionSummary(summary) {
   if (!configurationFeatureDeleteSummary) return;
   const counts = summary?.counts || {};
   const metrics = [
-    ['Groups', counts.groups],
+    ['Agents', counts.agents],
     ['Traces', counts.agent_queries],
     ['Messages', counts.messages],
     ['Projection Tables', counts.feature_projection_tables],
@@ -12646,7 +12649,9 @@ async function loadFeatureConfigs(options = {}) {
     const nextSelection =
       preserveSelection &&
       currentFeatureConfigId &&
-      featureConfigItems.some((feature) => feature.id === currentFeatureConfigId)
+      featureConfigItems.some(
+        (feature) => feature.id === currentFeatureConfigId,
+      )
         ? currentFeatureConfigId
         : featureConfigItems[0]?.id || '';
     currentFeatureConfigId = nextSelection;
@@ -12668,7 +12673,7 @@ async function setSelectedFeatureEnabled(enabled) {
   if (!feature || featureConfigActionBusy) return;
   if (!enabled) {
     const confirmed = await openConfirmDialog(
-      `确认仅停用功能包 ${feature.id}？历史数据和 group 会保留。`,
+      `确认仅停用功能包 ${feature.id}？历史数据和 Agent 会保留。`,
       {
         title: '仅停用功能包',
         confirmText: '仅停用',
@@ -12705,7 +12710,7 @@ function formatFeatureDeletionConfirmMessage(feature, summary) {
   const counts = summary?.counts || {};
   return [
     `功能包：${feature.id}`,
-    `Groups：${counts.groups || 0}`,
+    `Agents：${counts.agents || 0}`,
     `Traces：${counts.agent_queries || 0}`,
     `Projection Tables：${counts.feature_projection_tables || 0}`,
     `Runtime Paths：${Array.isArray(summary?.paths) ? summary.paths.length : 0}`,
@@ -12736,7 +12741,7 @@ async function deleteSelectedFeatureData() {
   );
   if (!reviewed) return;
   const confirmed = await openConfirmDialog(
-    `二次确认删除功能包 ${feature.id} 的历史数据、独占 group 和运行目录。`,
+    `二次确认删除功能包 ${feature.id} 的历史数据、独占 Agent 和运行目录。`,
     {
       title: '确认删除功能包数据',
       confirmText: '停用并删除',
@@ -12789,13 +12794,13 @@ initTakeCopterCursor();
 initChatBgParticleNudge();
 bindNotificationClickHandler();
 bindNotificationPermissionPrimer();
-window.addEventListener('focus', clearCurrentGroupUnreadIfForeground);
+window.addEventListener('focus', clearCurrentAgentUnreadIfForeground);
 document.addEventListener(
   'visibilitychange',
-  clearCurrentGroupUnreadIfForeground,
+  clearCurrentAgentUnreadIfForeground,
 );
 connectWS();
-loadGroups();
+loadAgents();
 loadEnabledFeatures();
 
 // --- Event listeners ---
@@ -13241,11 +13246,11 @@ if (memoryModalMask) {
 sidebarCollapse.addEventListener('click', () => {
   sidebar.classList.toggle('collapsed');
 });
-refreshGroupsBtn.addEventListener('click', () => {
-  refreshGroupsBtn.classList.add('spinning');
-  setTimeout(() => refreshGroupsBtn.classList.remove('spinning'), 700);
-  loadGroups();
-  if (currentGroupJid) loadMessages();
+refreshAgentsBtn.addEventListener('click', () => {
+  refreshAgentsBtn.classList.add('spinning');
+  setTimeout(() => refreshAgentsBtn.classList.remove('spinning'), 700);
+  loadAgents();
+  if (currentAgentJid) loadMessages();
 });
 if (resetAllSessionsBtn) {
   resetAllSessionsBtn.addEventListener('click', () => {
@@ -13538,7 +13543,7 @@ if (knowledgePageKindFilter) {
 }
 document.addEventListener('dragover', (e) => {
   e.preventDefault();
-  if (currentGroupJid) fileDropZone.classList.remove('hidden');
+  if (currentAgentJid) fileDropZone.classList.remove('hidden');
 });
 document.addEventListener('dragleave', (e) => {
   if (!e.relatedTarget) fileDropZone.classList.add('hidden');
@@ -13546,7 +13551,7 @@ document.addEventListener('dragleave', (e) => {
 document.addEventListener('drop', (e) => {
   e.preventDefault();
   fileDropZone.classList.add('hidden');
-  if (!currentGroupJid) return;
+  if (!currentAgentJid) return;
   for (const file of e.dataTransfer?.files || []) {
     stageFile(file);
   }

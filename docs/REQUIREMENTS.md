@@ -36,7 +36,7 @@ Instead of application-level permission systems trying to prevent agents from ac
 
 ### Built for One User
 
-This isn't a framework or a platform. It's working software for my specific needs. I use WhatsApp and Email, so it supports WhatsApp and Email. I don't use Telegram, so it doesn't support Telegram. I add the integrations I actually want, not every possible integration.
+This isn't a framework or a platform. It is working software for a specific deployment. The current built-in channels are Feishu, WeCom, Assistant, and Web. Telegram is not installed; a fork can add it through deliberate code customization when needed.
 
 ### Customization = Code Changes
 
@@ -50,7 +50,7 @@ The codebase assumes you have an AI collaborator. It doesn't need to be excessiv
 
 ### Skills Over Features
 
-When people contribute, they shouldn't add "Telegram support alongside WhatsApp." They should contribute a skill like `/add-telegram` that transforms the codebase. Users fork the repo, run skills to customize, and end up with clean code that does exactly what they need - not a bloated system trying to support everyone's use case simultaneously.
+Channel additions should remain deliberate code changes. A fork that needs Telegram can add a channel implementation without making the base runtime pretend the integration is already available.
 
 ---
 
@@ -64,7 +64,6 @@ Skills to add or switch to different messaging platforms:
 - `/add-slack` - Add Slack as an input channel
 - `/add-discord` - Add Discord as an input channel
 - `/add-sms` - Add SMS via Twilio or similar
-- `/convert-to-telegram` - Replace WhatsApp with Telegram entirely
 
 ### Container Runtime
 The project uses Docker by default (cross-platform). For macOS users who prefer Apple Container:
@@ -78,40 +77,40 @@ The project uses Docker by default (cross-platform). For macOS users who prefer 
 
 ## Vision
 
-A personal Claude assistant accessible via WhatsApp, with minimal custom code.
+A personal Claude assistant accessible through its installed channels, with minimal custom code.
 
 **Core components:**
 - **Claude Agent SDK** as the core agent
 - **Containers** for isolated agent execution (Linux VMs)
-- **WhatsApp** as the primary I/O channel
+- **Feishu, WeCom, Assistant, and Web** as the current I/O channels
 - **Persistent memory** per conversation and globally
 - **Scheduled tasks** that run Claude and can message back
 - **Web access** for search and browsing
 - **Browser automation** via agent-browser
 
 **Implementation approach:**
-- Use existing tools (WhatsApp connector, Claude Agent SDK, MCP servers)
+- Use existing tools (Claude Agent SDK, MCP servers, and installed channel APIs)
 - Minimal glue code
-- File-based systems where possible (CLAUDE.md for memory, folders for groups)
+- File-based systems where possible (CLAUDE.md for memory, folders for Agents)
 
 ---
 
 ## Architecture Decisions
 
 ### Message Routing
-- A router listens to WhatsApp and routes messages based on configuration
-- Only messages from registered groups are processed
+- A router receives messages from installed channels and routes them by bound chat JID
+- Only messages from registered Agents are processed
 - Trigger: `@Andy` prefix (case insensitive), configurable via `ASSISTANT_NAME` env var
-- Unregistered groups are ignored completely
+- Unregistered Agents are ignored completely
 
 ### Memory System
-- **Per-group memory**: Each group has a folder with its own `CLAUDE.md`
-- **Global memory**: Root `CLAUDE.md` is read by all groups, but only writable from "main" (self-chat)
-- **Files**: Groups can create/read files in their folder and reference them
-- Agent runs in the group's folder, automatically inherits both CLAUDE.md files
+- **Per-agent memory**: Each agent has a folder with its own `CLAUDE.md`
+- **Global memory**: Root `CLAUDE.md` is read by all Agents, but only writable from "main" (self-chat)
+- **Files**: Agents can create/read files in their folder and reference them
+- Agent runs in the agent's folder, automatically inherits both CLAUDE.md files
 
 ### Session Management
-- Each group maintains a conversation session (via Claude Agent SDK)
+- Each agent maintains a conversation session (via Claude Agent SDK)
 - Sessions auto-compact when context gets too long, preserving critical information
 
 ### Container Isolation
@@ -122,36 +121,36 @@ A personal Claude assistant accessible via WhatsApp, with minimal custom code.
 - Browser automation via agent-browser with Chromium in the container
 
 ### Scheduled Tasks
-- Users can ask Claude to schedule recurring or one-time tasks from any group
-- Tasks run as full agents in the context of the group that created them
+- Users can ask Claude to schedule recurring or one-time tasks from any agent
+- Tasks run as full agents in the context of the agent that created them
 - Tasks have access to all tools including Bash (safe in container)
-- Tasks can optionally send messages to their group via `send_message` tool, or complete silently
+- Tasks can optionally send messages to their agent via `send_message` tool, or complete silently
 - Task runs are logged to the database with duration and result
 - Schedule types: cron expressions, intervals (ms), or one-time (ISO timestamp)
-- From main: can schedule tasks for any group, view/manage all tasks
-- From other groups: can only manage that group's tasks
+- From main: can schedule tasks for any agent, view/manage all tasks
+- From other Agents: can only manage that agent's tasks
 
-### Group Management
-- New groups are added explicitly via the main channel
-- Groups are registered in SQLite (via the main channel or IPC `register_group` command)
-- Each group gets a dedicated folder under `groups/`
-- Groups can have additional directories mounted via `containerConfig`
+### Agent Management
+- New Agents are added explicitly via the main channel
+- Agents are registered in SQLite (via the main channel or IPC `register_agent` command)
+- Each agent gets a dedicated folder under `agents/`
+- Agents can have additional directories mounted via `containerConfig`
 
 ### Main Channel Privileges
-- Main channel is the admin/control group (typically self-chat)
-- Can write to global memory (`groups/CLAUDE.md`)
-- Can schedule tasks for any group
-- Can view and manage tasks from all groups
-- Can configure additional directory mounts for any group
+- Main channel is the admin/control agent (typically self-chat)
+- Can write to global memory (`agents/CLAUDE.md`)
+- Can schedule tasks for any agent
+- Can view and manage tasks from all Agents
+- Can configure additional directory mounts for any agent
 
 ---
 
 ## Integration Points
 
-### WhatsApp
-- Using baileys library for WhatsApp Web connection
-- Messages stored in SQLite, polled by router
-- QR code authentication during setup
+### Current Channels
+- Feishu and WeCom connect through their application APIs and webhook endpoints
+- Assistant and Web provide local product surfaces
+- Channel modules self-register and own their canonical JID formats
 
 ### Scheduler
 - Built-in scheduler runs on the host, spawns containers for task execution
@@ -159,7 +158,7 @@ A personal Claude assistant accessible via WhatsApp, with minimal custom code.
 - Tools: `schedule_task`, `list_tasks`, `pause_task`, `resume_task`, `cancel_task`, `send_message`
 - Tasks stored in SQLite with run history
 - Scheduler loop checks for due tasks every minute
-- Tasks execute Claude Agent SDK in containerized group context
+- Tasks execute Claude Agent SDK in containerized agent context
 
 ### Web Access
 - Built-in WebSearch and WebFetch tools
@@ -182,7 +181,7 @@ A personal Claude assistant accessible via WhatsApp, with minimal custom code.
 - Each user gets a custom setup matching their exact needs
 
 ### Skills
-- `/setup` - Install dependencies, authenticate WhatsApp, configure scheduler, start services
+- `/setup` - Install dependencies, configure built-in channels and scheduler, and start services
 - `/customize` - General-purpose skill for adding capabilities (new channels like Telegram, new integrations, behavior changes)
 - `/update` - Pull upstream changes, merge with customizations, run migrations
 
@@ -199,7 +198,7 @@ These are the creator's settings, stored here for reference:
 - **Trigger**: `@Andy` (case insensitive)
 - **Response prefix**: `Andy:`
 - **Persona**: Default Claude (no custom personality)
-- **Main channel**: Self-chat (messaging yourself in WhatsApp)
+- **Main channel**: A registered Assistant, Web, or configured enterprise-chat Agent
 
 ---
 

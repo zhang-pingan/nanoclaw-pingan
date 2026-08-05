@@ -55,10 +55,10 @@ COPY agent-runner/ ./
 RUN npm run build
 
 # Create workspace directories
-RUN mkdir -p /workspace/group /workspace/global /workspace/extra /workspace/ipc/messages /workspace/ipc/tasks /workspace/ipc/input
+RUN mkdir -p /workspace/agent /workspace/global /workspace/extra /workspace/ipc/messages /workspace/ipc/tasks /workspace/ipc/input
 
 # Create entrypoint script
-# Container input (prompt, group info) is passed via stdin JSON.
+# Container input (prompt, agent info) is passed via stdin JSON.
 # Credentials are injected by the host's credential proxy — never passed here.
 # Follow-up messages arrive via IPC files in /workspace/ipc/input/
 RUN printf '#!/bin/bash\nset -e\n# Add passwd entry for host UID if missing (required for SSH client)\nif ! getent passwd "$(id -u)" >/dev/null 2>&1; then\n  echo "hostuser:x:$(id -u):$(id -g)::/home/node:/bin/bash" >> /etc/passwd 2>/dev/null || true\nfi\ncd /app && npx tsc --outDir /tmp/dist 2>&1 >&2\n# Compile custom tools if present\nif [ -d /app/custom-tools ] && ls /app/custom-tools/*.ts 1>/dev/null 2>&1; then\n  npx tsc --outDir /app/custom-tools --esModuleInterop --module nodenext --moduleResolution nodenext --skipLibCheck /app/custom-tools/*.ts 2>&1 >&2 || true\nfi\nln -s /app/node_modules /tmp/dist/node_modules\nchmod -R a-w /tmp/dist\ncat > /tmp/input.json\nnode /tmp/dist/index.js < /tmp/input.json\n' > /app/entrypoint.sh && chmod +x /app/entrypoint.sh
@@ -70,8 +70,8 @@ RUN chown -R node:node /workspace && chmod 777 /home/node && chmod 666 /etc/pass
 # Switch to non-root user (required for --dangerously-skip-permissions)
 USER node
 
-# Set working directory to group workspace
-WORKDIR /workspace/group
+# Set working directory to agent workspace
+WORKDIR /workspace/agent
 
 # Entry point reads JSON from stdin, outputs JSON to stdout
 ENTRYPOINT ["/app/entrypoint.sh"]

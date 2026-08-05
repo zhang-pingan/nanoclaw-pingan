@@ -143,7 +143,7 @@ local/migration-candidates/dev-test-fix-test/
 
 - `src/index.ts` 的 Runtime 初始化、watchdog、Workbench broadcast 和 Workflow command wiring
 - `src/ipc.ts` 的 delegation completion、Workbench query 和 legacy handoff validation
-- `src/group-queue.ts` 的 legacy cancel callback
+- `src/agent-queue.ts` 的 legacy cancel callback
 - `src/card-action-router.ts` 的 Workflow/Workbench action 分支
 - `src/ask-user-question.ts`、Assistant、Today Plan 中的 Workbench/Workflow 耦合
 - `src/container-runner.ts` 中只服务 legacy Workflow 的执行上下文字段

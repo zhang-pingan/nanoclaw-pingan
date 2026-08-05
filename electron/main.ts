@@ -532,7 +532,7 @@ function buildAppMenu(): Menu {
                 },
               },
               {
-                label: 'Quit All (Support Group + App)',
+                label: 'Quit All (Support Agent + App)',
                 click: () => {
                   // Full quit: stop Icarus then quit Electron
                   isQuitting = true;
@@ -548,7 +548,7 @@ function buildAppMenu(): Menu {
                 },
               },
               { type: 'separator' as const },
-              { label: 'Hide Support Group', role: 'hide' as const },
+              { label: 'Hide Support Agent', role: 'hide' as const },
               { label: 'Hide Others', role: 'hideOthers' as const },
               { label: 'Show All', role: 'unhide' as const },
             ],

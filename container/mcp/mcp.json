@@ -24,7 +24,7 @@
       "cancel_task",
       "update_task"
     ],
-    "group-admin-main": ["register_group"],
+    "agent-admin-main": ["register_agent"],
     "delegation-main": ["delegate_task", "list_delegations"],
     "delegation-worker": [
       "request_delegation",
@@ -34,28 +34,28 @@
     "desktop-main": ["desktop_capture", "run_local_host_script"],
     "image-main": ["ai_image_generate_image"]
   },
-  "groups": {
+  "agents": {
     "global": ["base", "knowledge", "tasking"],
     "main": [
-      "group-admin-main",
+      "agent-admin-main",
       "delegation-main",
       "desktop-main",
       "image-main"
     ],
     "feishu_main": [
-      "group-admin-main",
+      "agent-admin-main",
       "delegation-main",
       "desktop-main",
       "image-main"
     ],
     "web_main": [
-      "group-admin-main",
+      "agent-admin-main",
       "delegation-main",
       "desktop-main",
       "image-main"
     ],
     "assistant_main": [
-      "group-admin-main",
+      "agent-admin-main",
       "delegation-main",
       "desktop-main",
       "image-main"

@@ -28,7 +28,7 @@ function setupFeatureWorkspace(): string {
 
   const featureRoot = path.join(tempDir, 'features', 'example-feature');
   fs.mkdirSync(path.join(featureRoot, 'host'), { recursive: true });
-  fs.mkdirSync(path.join(featureRoot, 'container', 'groups', 'main'), {
+  fs.mkdirSync(path.join(featureRoot, 'container', 'agents', 'main'), {
     recursive: true,
   });
   fs.mkdirSync(path.join(featureRoot, 'container', 'skills'), {
@@ -53,8 +53,8 @@ function setupFeatureWorkspace(): string {
     'utf-8',
   );
   fs.writeFileSync(
-    path.join(featureRoot, 'container', 'groups', 'main', 'CLAUDE.md'),
-    'Feature group memory\n',
+    path.join(featureRoot, 'container', 'agents', 'main', 'CLAUDE.md'),
+    'Feature agent memory\n',
     'utf-8',
   );
 
@@ -66,15 +66,15 @@ function setupFeatureWorkspace(): string {
     rendererEntry: './renderer/index.js',
     apiPrefix: '/api/features/example-feature',
     nav: [{ key: 'example-feature', label: 'Example', order: 300 }],
-    requiredGroups: [
+    requiredAgents: [
       {
         key: 'main',
         jid: 'feature:example-feature:main',
         name: 'Example Feature',
         folder: 'example_feature_main',
         requiresTrigger: false,
-        description: 'Example feature dedicated agent group',
-        claudeMd: './container/groups/main/CLAUDE.md',
+        description: 'Example feature dedicated Agent',
+        claudeMd: './container/agents/main/CLAUDE.md',
       },
     ],
     resources: {
@@ -94,7 +94,7 @@ function setupFeatureWorkspace(): string {
 }
 
 describe('feature runtime', () => {
-  it('activates enabled features, provisions groups, registers APIs and resources', async () => {
+  it('activates enabled features, provisions agents, registers APIs and resources', async () => {
     const workspace = setupFeatureWorkspace();
     const db = await import('../db.js');
     db._initTestDatabase();
@@ -109,20 +109,20 @@ describe('feature runtime', () => {
       rendererEntryUrl: '/features/example-feature/renderer/index.js',
     });
 
-    const group = db.getRegisteredGroup('feature:example-feature:main');
-    expect(group).toMatchObject({
+    const agent = db.getRegisteredAgent('feature:example-feature:main');
+    expect(agent).toMatchObject({
       folder: 'example_feature_main',
       requiresTrigger: false,
     });
     expect(
       fs.readFileSync(
-        path.join(workspace, 'groups', 'example_feature_main', 'CLAUDE.md'),
+        path.join(workspace, 'agents', 'example_feature_main', 'CLAUDE.md'),
         'utf-8',
       ),
-    ).toBe('Feature group memory\n');
-    expect(db.getFeatureGroupBinding('example-feature', 'main')).toMatchObject({
-      group_jid: 'feature:example-feature:main',
-      group_folder: 'example_feature_main',
+    ).toBe('Feature agent memory\n');
+    expect(db.getFeatureAgentBinding('example-feature', 'main')).toMatchObject({
+      agent_jid: 'feature:example-feature:main',
+      agent_folder: 'example_feature_main',
     });
 
     const { featureApiRoutes } = await import('./registry.js');
@@ -232,7 +232,7 @@ describe('feature runtime', () => {
     });
     writeJson(path.join(featureRoot, 'container', 'mcp', 'mcp.json'), {
       profiles: { example_mcp: [] },
-      groups: { global: ['example_mcp'] },
+      agents: { global: ['example_mcp'] },
     });
     const manifestPath = path.join(featureRoot, 'feature.json');
     const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));

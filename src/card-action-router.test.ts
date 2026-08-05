@@ -38,10 +38,10 @@ describe('card-action-router ask dedupe', () => {
 
   it('dedupes identical ask card actions in window', async () => {
     const handler = createCardActionHandler({
-      registeredGroups: () => ({
-        'g1@g.us': {
+      registeredAgents: () => ({
+        'web:g1': {
           name: 'G1',
-          folder: 'group-1',
+          folder: 'agent-1',
           trigger: '@bot',
           added_at: new Date().toISOString(),
         },
@@ -53,10 +53,10 @@ describe('card-action-router ask dedupe', () => {
       action: 'ask_question_answer',
       user_id: 'u1',
       message_id: 'm1',
-      group_folder: 'group-1',
+      agent_folder: 'agent-1',
       form_value: {
         request_id: 'aq-1',
-        group_folder: 'group-1',
+        agent_folder: 'agent-1',
         answer: 'A',
       },
     };
@@ -70,10 +70,10 @@ describe('card-action-router ask dedupe', () => {
 
   it('does not dedupe different payloads', async () => {
     const handler = createCardActionHandler({
-      registeredGroups: () => ({
-        'g1@g.us': {
+      registeredAgents: () => ({
+        'web:g1': {
           name: 'G1',
-          folder: 'group-1',
+          folder: 'agent-1',
           trigger: '@bot',
           added_at: new Date().toISOString(),
         },
@@ -85,10 +85,10 @@ describe('card-action-router ask dedupe', () => {
       action: 'ask_question_answer',
       user_id: 'u1',
       message_id: 'm2',
-      group_folder: 'group-1',
+      agent_folder: 'agent-1',
       form_value: {
         request_id: 'aq-2',
-        group_folder: 'group-1',
+        agent_folder: 'agent-1',
         answer: 'A',
       },
     });
@@ -96,10 +96,10 @@ describe('card-action-router ask dedupe', () => {
       action: 'ask_question_answer',
       user_id: 'u1',
       message_id: 'm2',
-      group_folder: 'group-1',
+      agent_folder: 'agent-1',
       form_value: {
         request_id: 'aq-2',
-        group_folder: 'group-1',
+        agent_folder: 'agent-1',
         answer: 'B',
       },
     });
@@ -108,11 +108,11 @@ describe('card-action-router ask dedupe', () => {
     expect(handleAskQuestionResponse).toHaveBeenCalledTimes(2);
   });
 
-  it('routes assistant inbox broadcast card actions with source group', async () => {
+  it('routes assistant inbox broadcast card actions with source Agent', async () => {
     const handler = createCardActionHandler({
-      registeredGroups: () => ({
+      registeredAgents: () => ({
         'feishu:oc_allowed': {
-          name: '主群',
+          name: '主 Agent',
           folder: 'main',
           trigger: '',
           added_at: '1',
@@ -126,7 +126,7 @@ describe('card-action-router ask dedupe', () => {
       user_id: 'u1',
       message_id: 'msg-inbox',
       actor_channel: 'feishu',
-      group_jid: 'feishu:oc_allowed',
+      agent_jid: 'feishu:oc_allowed',
       form_value: {
         item_id: 'agent-inbox-1',
       },
@@ -137,9 +137,9 @@ describe('card-action-router ask dedupe', () => {
       formValue: {
         item_id: 'agent-inbox-1',
       },
-      registeredGroups: {
+      registeredAgents: {
         'feishu:oc_allowed': {
-          name: '主群',
+          name: '主 Agent',
           folder: 'main',
           trigger: '',
           added_at: '1',

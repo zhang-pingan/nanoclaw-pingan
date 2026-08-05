@@ -23,10 +23,7 @@ import {
 import { contentTypeForFile, resolveRunOnceDownloadFile } from './files.js';
 import { InternalAgentRunOnceService, RunOnceInputError } from './service.js';
 import { runOnceWorkspaceHostPath } from './trace-writer.js';
-import {
-  AgentChatResponse,
-  parseAgentChatRequest,
-} from './chat-schemas.js';
+import { AgentChatResponse, parseAgentChatRequest } from './chat-schemas.js';
 import { InternalAgentChatService } from './chat-service.js';
 
 export interface RunOnceHandlerOptions {
@@ -133,7 +130,7 @@ function parseMultipartRequestBody(
 }
 
 function saveMultipartFiles(input: {
-  groupFolder: string;
+  agentFolder: string;
   uploadId: string;
   fileParts: ReturnType<typeof parseMultipartFileParts>;
 }): RunOnceFile[] {
@@ -141,7 +138,7 @@ function saveMultipartFiles(input: {
 
   const relativeDir = path.join('inputs', input.uploadId);
   const uploadDir = path.join(
-    runOnceWorkspaceHostPath(input.groupFolder),
+    runOnceWorkspaceHostPath(input.agentFolder),
     relativeDir,
   );
   fs.mkdirSync(uploadDir, { recursive: true });
@@ -194,9 +191,9 @@ async function readRunOnceRequest(
       contentType,
     );
     const request = parseRunOnceRequest(requestBody);
-    const groupFolder = opts.service.resolveGroupFolder(request.chat_jid);
+    const agentFolder = opts.service.resolveAgentFolder(request.chat_jid);
     const uploadedFiles = saveMultipartFiles({
-      groupFolder,
+      agentFolder,
       uploadId,
       fileParts,
     });
@@ -326,9 +323,9 @@ export async function handleInternalAgentRunOnceFileDownload(
   }
 
   try {
-    const groupFolder = opts.service.resolveGroupFolder(chatJid);
+    const agentFolder = opts.service.resolveAgentFolder(chatJid);
     const filePath = resolveRunOnceDownloadFile({
-      groupFolder,
+      agentFolder,
       relativePath,
     });
     sendFile(res, filePath);

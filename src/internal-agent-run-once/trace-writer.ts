@@ -3,7 +3,7 @@ import path from 'path';
 
 import { DATA_DIR } from '../config.js';
 import { ClassifiedFailure } from '../failure-taxonomy.js';
-import { assertValidGroupFolder } from '../group-folder.js';
+import { assertValidAgentFolder } from '../agent-folder.js';
 import { logger } from '../logger.js';
 import type { ContainerOutput } from '../container-runner.js';
 import type { RunOnceOutputFile, RunOnceRequest } from './schemas.js';
@@ -23,7 +23,7 @@ export interface RunOnceTraceDocument {
   run_id: string;
   query_id: string;
   chat_jid: string;
-  group_folder: string;
+  agent_folder: string;
   created_at: string;
   updated_at: string;
   status: 'running' | 'success' | 'error';
@@ -76,13 +76,13 @@ function writeTraceFile(
   fs.writeFileSync(hostPath, JSON.stringify(document, null, 2) + '\n');
 }
 
-export function runOnceWorkspaceHostPath(groupFolder: string): string {
-  assertValidGroupFolder(groupFolder);
-  return path.join(DATA_DIR, 'run-once-workspaces', groupFolder);
+export function runOnceWorkspaceHostPath(agentFolder: string): string {
+  assertValidAgentFolder(agentFolder);
+  return path.join(DATA_DIR, 'run-once-workspaces', agentFolder);
 }
 
 export function createRunOnceTraceWriter(input: {
-  groupFolder: string;
+  agentFolder: string;
   chatJid: string;
   request: RunOnceRequest;
   runId: string;
@@ -93,7 +93,7 @@ export function createRunOnceTraceWriter(input: {
 }): RunOnceTraceWriter {
   const createdAt = input.createdAt || new Date();
   const traceDir = path.join(
-    runOnceWorkspaceHostPath(input.groupFolder),
+    runOnceWorkspaceHostPath(input.agentFolder),
     'traces',
   );
   const fileName = `${safeTraceTimestamp(createdAt)}-${input.queryId}.json`;
@@ -105,7 +105,7 @@ export function createRunOnceTraceWriter(input: {
     run_id: input.runId,
     query_id: input.queryId,
     chat_jid: input.chatJid,
-    group_folder: input.groupFolder,
+    agent_folder: input.agentFolder,
     created_at: createdAt.toISOString(),
     updated_at: createdAt.toISOString(),
     status: 'running',

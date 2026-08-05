@@ -21,7 +21,7 @@ vi.mock('./config.js', () => ({
   ATTACHMENTS_DIR: '/tmp/icarus-test-attachments',
   DATA_DIR: '/tmp/icarus-test-data',
   DESKTOP_CAPTURES_DIR: '/tmp/icarus-test-desktop-captures',
-  GROUPS_DIR: '/tmp/icarus-test-groups',
+  AGENTS_DIR: '/tmp/icarus-test-agents',
   IDLE_TIMEOUT: 1800000, // 30min
   TIMEZONE: 'America/Los_Angeles',
 }));
@@ -99,27 +99,31 @@ vi.mock('child_process', async () => {
   };
 });
 
-import { runContainerAgent, ContainerOutput } from './container-runner.js';
+import {
+  runContainerAgent,
+  writeAgentsSnapshot,
+  ContainerOutput,
+} from './container-runner.js';
 import { readEnvFile } from './env.js';
 import { validateAdditionalMounts } from './mount-security.js';
-import type { RegisteredGroup } from './types.js';
+import type { RegisteredAgent } from './types.js';
 
-const testGroup: RegisteredGroup = {
-  name: 'Test Group',
-  folder: 'test-group',
+const testAgent: RegisteredAgent = {
+  name: 'Test Agent',
+  folder: 'test-agent',
   trigger: '@Andy',
   added_at: new Date().toISOString(),
 };
 
 const testInput = {
   prompt: 'Hello',
-  groupFolder: 'test-group',
-  chatJid: 'test@g.us',
+  agentFolder: 'test-agent',
+  chatJid: 'web:test',
   isMain: false,
 };
 
-const mainGroup: RegisteredGroup = {
-  name: 'Main Group',
+const mainAgent: RegisteredAgent = {
+  name: 'Main Agent',
   folder: 'main',
   trigger: '@Andy',
   added_at: new Date().toISOString(),
@@ -142,6 +146,31 @@ async function readStdinJson(proc: ReturnType<typeof createFakeProcess>) {
   await vi.advanceTimersByTimeAsync(10);
   return JSON.parse(Buffer.concat(chunks).toString('utf-8'));
 }
+
+describe('available Agent snapshot contract', () => {
+  it('labels snapshot creation time as generatedAt', () => {
+    vi.mocked(fs.writeFileSync).mockReset();
+
+    writeAgentsSnapshot(
+      'main',
+      true,
+      [
+        {
+          jid: 'web:research',
+          name: 'Research',
+          lastActivity: '',
+          isRegistered: true,
+        },
+      ],
+      new Set(['web:research']),
+    );
+
+    const serialized = vi.mocked(fs.writeFileSync).mock.calls[0][1];
+    const snapshot = JSON.parse(String(serialized)) as Record<string, unknown>;
+    expect(snapshot.generatedAt).toEqual(expect.any(String));
+    expect(Object.keys(snapshot).sort()).toEqual(['agents', 'generatedAt']);
+  });
+});
 
 describe('container-runner timeout behavior', () => {
   const originalMavenEnv = {
@@ -189,7 +218,7 @@ describe('container-runner timeout behavior', () => {
   it('timeout after output resolves as success', async () => {
     const onOutput = vi.fn(async () => {});
     const resultPromise = runContainerAgent(
-      testGroup,
+      testAgent,
       testInput,
       () => {},
       onOutput,
@@ -225,7 +254,7 @@ describe('container-runner timeout behavior', () => {
   it('timeout with no output resolves as error', async () => {
     const onOutput = vi.fn(async () => {});
     const resultPromise = runContainerAgent(
-      testGroup,
+      testAgent,
       testInput,
       () => {},
       onOutput,
@@ -254,7 +283,7 @@ describe('container-runner timeout behavior', () => {
   it('normal exit after output resolves as success', async () => {
     const onOutput = vi.fn(async () => {});
     const resultPromise = runContainerAgent(
-      testGroup,
+      testAgent,
       testInput,
       () => {},
       onOutput,
@@ -283,7 +312,7 @@ describe('container-runner timeout behavior', () => {
   it('forwards non-final empty success marker but resolves with final completion marker', async () => {
     const onOutput = vi.fn(async () => {});
     const resultPromise = runContainerAgent(
-      testGroup,
+      testAgent,
       testInput,
       () => {},
       onOutput,
@@ -314,7 +343,7 @@ describe('container-runner timeout behavior', () => {
   it('returns structured failure when a required text result is missing', async () => {
     const onOutput = vi.fn(async () => {});
     const resultPromise = runContainerAgent(
-      testGroup,
+      testAgent,
       { ...testInput, requireResult: true },
       () => {},
       onOutput,
@@ -349,7 +378,7 @@ describe('container-runner timeout behavior', () => {
   it('returns streamed error output instead of treating it as idle success', async () => {
     const onOutput = vi.fn(async () => {});
     const resultPromise = runContainerAgent(
-      testGroup,
+      testAgent,
       { ...testInput, requireResult: true },
       () => {},
       onOutput,
@@ -381,7 +410,7 @@ describe('container-runner timeout behavior', () => {
   it('returns structured failure when streamed output marker cannot be parsed', async () => {
     const onOutput = vi.fn(async () => {});
     const resultPromise = runContainerAgent(
-      testGroup,
+      testAgent,
       testInput,
       () => {},
       onOutput,
@@ -406,7 +435,7 @@ describe('container-runner timeout behavior', () => {
   });
 
   it('returns structured failure when the container exits non-zero', async () => {
-    const resultPromise = runContainerAgent(testGroup, testInput, () => {});
+    const resultPromise = runContainerAgent(testAgent, testInput, () => {});
 
     fakeProc.stderr.push('boom');
     fakeProc.emit('close', 1);
@@ -423,7 +452,7 @@ describe('container-runner timeout behavior', () => {
   });
 
   it('reports code 137 as a killed container instead of an API retry root cause', async () => {
-    const resultPromise = runContainerAgent(testGroup, testInput, () => {});
+    const resultPromise = runContainerAgent(testAgent, testInput, () => {});
 
     fakeProc.stderr.push(
       [
@@ -450,7 +479,7 @@ describe('container-runner timeout behavior', () => {
   it('mounts isolated Linux node_modules over the main project node_modules', async () => {
     const { spawn } = await import('child_process');
     const resultPromise = runContainerAgent(
-      mainGroup,
+      mainAgent,
       { ...testInput, isMain: true },
       () => {},
     );
@@ -506,7 +535,7 @@ describe('container-runner timeout behavior', () => {
       return '';
     });
 
-    const resultPromise = runContainerAgent(testGroup, testInput, () => {});
+    const resultPromise = runContainerAgent(testAgent, testInput, () => {});
 
     emitOutputMarker(fakeProc, {
       status: 'success',
@@ -552,7 +581,7 @@ describe('container-runner timeout behavior', () => {
       return '';
     });
 
-    const resultPromise = runContainerAgent(testGroup, testInput, () => {});
+    const resultPromise = runContainerAgent(testAgent, testInput, () => {});
 
     emitOutputMarker(fakeProc, {
       status: 'success',
@@ -571,7 +600,7 @@ describe('container-runner timeout behavior', () => {
 
   it('passes one-shot mode to the container input', async () => {
     const resultPromise = runContainerAgent(
-      testGroup,
+      testAgent,
       { ...testInput, isOneShot: true },
       () => {},
     );
@@ -592,7 +621,7 @@ describe('container-runner timeout behavior', () => {
 
   it('passes external system once fields to the container input', async () => {
     const resultPromise = runContainerAgent(
-      testGroup,
+      testAgent,
       {
         ...testInput,
         system: 'external system prompt',
@@ -624,7 +653,7 @@ describe('container-runner timeout behavior', () => {
 
   it('mounts a writable run-once workspace for external system once', async () => {
     const resultPromise = runContainerAgent(
-      testGroup,
+      testAgent,
       {
         ...testInput,
         executionMode: 'external_system_once',
@@ -639,10 +668,10 @@ describe('container-runner timeout behavior', () => {
     const calls = vi.mocked(spawn).mock.calls;
     const args = calls[calls.length - 1][1] as string[];
     expect(args).toContain(
-      '/tmp/icarus-test-data/run-once-workspaces/test-group:/workspace/run-once',
+      '/tmp/icarus-test-data/run-once-workspaces/test-agent:/workspace/run-once',
     );
     expect(vi.mocked(fs.mkdirSync)).toHaveBeenCalledWith(
-      '/tmp/icarus-test-data/run-once-workspaces/test-group',
+      '/tmp/icarus-test-data/run-once-workspaces/test-agent',
       { recursive: true },
     );
 
@@ -666,8 +695,8 @@ describe('container-runner timeout behavior', () => {
       },
     ]);
 
-    const group: RegisteredGroup = {
-      ...testGroup,
+    const agent: RegisteredAgent = {
+      ...testAgent,
       containerConfig: {
         additionalMounts: [
           {
@@ -678,7 +707,7 @@ describe('container-runner timeout behavior', () => {
         ],
       },
     };
-    const resultPromise = runContainerAgent(group, testInput, () => {});
+    const resultPromise = runContainerAgent(agent, testInput, () => {});
 
     emitOutputMarker(fakeProc, {
       status: 'success',
@@ -690,8 +719,8 @@ describe('container-runner timeout behavior', () => {
     await resultPromise;
 
     expect(validateAdditionalMounts).toHaveBeenCalledWith(
-      group.containerConfig?.additionalMounts,
-      group.name,
+      agent.containerConfig?.additionalMounts,
+      agent.name,
       false,
     );
     const calls = vi.mocked(spawn).mock.calls;
@@ -700,5 +729,4 @@ describe('container-runner timeout behavior', () => {
       '/host/report-readable:/workspace/extra/report-data:ro',
     );
   });
-
 });

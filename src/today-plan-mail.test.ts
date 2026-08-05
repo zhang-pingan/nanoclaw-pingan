@@ -56,7 +56,7 @@ describe('today-plan-mail', () => {
     const draft = await prepareTodayPlanMailDraft(
       {
         planId: plan.id,
-        groups: {},
+        agents: {},
         name: '张頔',
       },
       {
@@ -92,7 +92,7 @@ describe('today-plan-mail', () => {
     const draft = await prepareTodayPlanMailDraft(
       {
         planId: plan.id,
-        groups: {},
+        agents: {},
         name: '张頔',
         to: ['owner@example.com', 'reviewer@example.com'],
         cc: ['leader@example.com'],
@@ -125,7 +125,7 @@ describe('today-plan-mail', () => {
     const firstDraft = await prepareTodayPlanMailDraft(
       {
         planId: plan.id,
-        groups: {},
+        agents: {},
         name: '张頔',
       },
       {
@@ -137,7 +137,7 @@ describe('today-plan-mail', () => {
     const secondDraft = await prepareTodayPlanMailDraft(
       {
         planId: plan.id,
-        groups: {},
+        agents: {},
         name: '张頔',
       },
       {
@@ -169,7 +169,7 @@ describe('today-plan-mail', () => {
     const draft = await prepareTodayPlanMailDraft(
       {
         planId: plan.id,
-        groups: {},
+        agents: {},
         name: '张頔',
       },
       {
@@ -229,7 +229,7 @@ describe('today-plan-mail', () => {
     const draft = await prepareTodayPlanMailDraft(
       {
         planId: plan.id,
-        groups: {},
+        agents: {},
         name: '张頔',
       },
       {

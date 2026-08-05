@@ -1,113 +1,68 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { _initTestDatabase, storeChatMetadata } from './db.js';
-import { getAvailableGroups, _setRegisteredGroups } from './index.js';
+import { getAvailableAgents, _setRegisteredAgents } from './index.js';
 
 beforeEach(() => {
   _initTestDatabase();
-  _setRegisteredGroups({});
+  _setRegisteredAgents({});
 });
 
-// --- JID ownership patterns ---
+// --- getAvailableAgents ---
 
-describe('JID ownership patterns', () => {
-  // These test the patterns that will become ownsJid() on the Channel interface
-
-  it('WhatsApp group JID: ends with @g.us', () => {
-    const jid = '12345678@g.us';
-    expect(jid.endsWith('@g.us')).toBe(true);
-  });
-
-  it('WhatsApp DM JID: ends with @s.whatsapp.net', () => {
-    const jid = '12345678@s.whatsapp.net';
-    expect(jid.endsWith('@s.whatsapp.net')).toBe(true);
-  });
-});
-
-// --- getAvailableGroups ---
-
-describe('getAvailableGroups', () => {
-  it('returns only registered groups and ignores unregistered chats', () => {
+describe('getAvailableAgents', () => {
+  it('returns only registered agents and ignores unregistered chats', () => {
     storeChatMetadata(
-      'group1@g.us',
+      'web:group1',
       '2024-01-01T00:00:01.000Z',
-      'Group 1',
-      'whatsapp',
-      true,
+      'Agent 1',
+      'web',
     );
     storeChatMetadata(
-      'user@s.whatsapp.net',
+      'user:user',
       '2024-01-01T00:00:02.000Z',
       'User DM',
-      'whatsapp',
-      false,
+      'web',
     );
     storeChatMetadata(
-      'group2@g.us',
+      'web:group2',
       '2024-01-01T00:00:03.000Z',
-      'Group 2',
-      'whatsapp',
-      true,
+      'Agent 2',
+      'web',
     );
 
-    _setRegisteredGroups({
-      'group1@g.us': {
-        name: 'Group 1',
+    _setRegisteredAgents({
+      'web:group1': {
+        name: 'Agent 1',
         folder: 'group1',
         trigger: '@Andy',
         added_at: '2024-01-01T00:00:00.000Z',
       },
     });
 
-    const groups = getAvailableGroups();
-    expect(groups).toHaveLength(1);
-    expect(groups.map((g) => g.jid)).toContain('group1@g.us');
-    expect(groups.map((g) => g.jid)).not.toContain('group2@g.us');
-    expect(groups.map((g) => g.jid)).not.toContain('user@s.whatsapp.net');
+    const agents = getAvailableAgents();
+    expect(agents).toHaveLength(1);
+    expect(agents.map((g) => g.jid)).toContain('web:group1');
+    expect(agents.map((g) => g.jid)).not.toContain('web:group2');
+    expect(agents.map((g) => g.jid)).not.toContain('user:user');
   });
 
-  it('ignores sentinel chat rows that are not registered groups', () => {
-    storeChatMetadata('__group_sync__', '2024-01-01T00:00:00.000Z');
+  it('marks every returned agent as registered', () => {
     storeChatMetadata(
-      'group@g.us',
-      '2024-01-01T00:00:01.000Z',
-      'Group',
-      'whatsapp',
-      true,
-    );
-
-    _setRegisteredGroups({
-      'group@g.us': {
-        name: 'Group',
-        folder: 'group',
-        trigger: '@Andy',
-        added_at: '2024-01-01T00:00:00.000Z',
-      },
-    });
-
-    const groups = getAvailableGroups();
-    expect(groups).toHaveLength(1);
-    expect(groups[0].jid).toBe('group@g.us');
-  });
-
-  it('marks every returned group as registered', () => {
-    storeChatMetadata(
-      'reg@g.us',
+      'web:reg',
       '2024-01-01T00:00:01.000Z',
       'Registered',
-      'whatsapp',
-      true,
+      'web',
     );
     storeChatMetadata(
-      'unreg@g.us',
+      'web:unreg',
       '2024-01-01T00:00:02.000Z',
       'Unregistered',
-      'whatsapp',
-      true,
+      'web',
     );
 
-    _setRegisteredGroups({
-      'reg@g.us': {
+    _setRegisteredAgents({
+      'web:reg': {
         name: 'Registered',
         folder: 'registered',
         trigger: '@Andy',
@@ -115,51 +70,33 @@ describe('getAvailableGroups', () => {
       },
     });
 
-    const groups = getAvailableGroups();
-    const reg = groups.find((g) => g.jid === 'reg@g.us');
-    const unreg = groups.find((g) => g.jid === 'unreg@g.us');
+    const agents = getAvailableAgents();
+    const reg = agents.find((g) => g.jid === 'web:reg');
+    const unreg = agents.find((g) => g.jid === 'web:unreg');
 
     expect(reg?.isRegistered).toBe(true);
     expect(unreg).toBeUndefined();
   });
 
-  it('preserves registered group order while enriching last activity', () => {
-    storeChatMetadata(
-      'old@g.us',
-      '2024-01-01T00:00:01.000Z',
-      'Old',
-      'whatsapp',
-      true,
-    );
-    storeChatMetadata(
-      'new@g.us',
-      '2024-01-01T00:00:05.000Z',
-      'New',
-      'whatsapp',
-      true,
-    );
-    storeChatMetadata(
-      'mid@g.us',
-      '2024-01-01T00:00:03.000Z',
-      'Mid',
-      'whatsapp',
-      true,
-    );
+  it('preserves registered agent order while enriching last activity', () => {
+    storeChatMetadata('web:old', '2024-01-01T00:00:01.000Z', 'Old', 'web');
+    storeChatMetadata('web:new', '2024-01-01T00:00:05.000Z', 'New', 'web');
+    storeChatMetadata('web:mid', '2024-01-01T00:00:03.000Z', 'Mid', 'web');
 
-    _setRegisteredGroups({
-      'new@g.us': {
+    _setRegisteredAgents({
+      'web:new': {
         name: 'New',
         folder: 'new',
         trigger: '@Andy',
         added_at: '2024-01-01T00:00:00.000Z',
       },
-      'mid@g.us': {
+      'web:mid': {
         name: 'Mid',
         folder: 'mid',
         trigger: '@Andy',
         added_at: '2024-01-01T00:00:00.000Z',
       },
-      'old@g.us': {
+      'web:old': {
         name: 'Old',
         folder: 'old',
         trigger: '@Andy',
@@ -167,47 +104,40 @@ describe('getAvailableGroups', () => {
       },
     });
 
-    const groups = getAvailableGroups();
-    expect(groups[0].jid).toBe('new@g.us');
-    expect(groups[1].jid).toBe('mid@g.us');
-    expect(groups[2].jid).toBe('old@g.us');
-    expect(groups[0].lastActivity).toBe('2024-01-01T00:00:05.000Z');
-    expect(groups[1].lastActivity).toBe('2024-01-01T00:00:03.000Z');
-    expect(groups[2].lastActivity).toBe('2024-01-01T00:00:01.000Z');
+    const agents = getAvailableAgents();
+    expect(agents[0].jid).toBe('web:new');
+    expect(agents[1].jid).toBe('web:mid');
+    expect(agents[2].jid).toBe('web:old');
+    expect(agents[0].lastActivity).toBe('2024-01-01T00:00:05.000Z');
+    expect(agents[1].lastActivity).toBe('2024-01-01T00:00:03.000Z');
+    expect(agents[2].lastActivity).toBe('2024-01-01T00:00:01.000Z');
   });
 
-  it('returns registered groups even without chat metadata', () => {
-    // Unknown JID format stored without is_group should not appear
+  it('returns registered agents even without chat metadata', () => {
+    // Unknown JID formats are not Agents unless they are registered.
     storeChatMetadata(
       'unknown-format-123',
       '2024-01-01T00:00:01.000Z',
       'Unknown',
     );
-    // Explicitly non-group with unusual JID
+    // An unregistered chat with an unusual JID is also ignored.
     storeChatMetadata(
       'custom:abc',
       '2024-01-01T00:00:02.000Z',
       'Custom DM',
       'custom',
-      false,
     );
-    // A real group for contrast
-    storeChatMetadata(
-      'group@g.us',
-      '2024-01-01T00:00:03.000Z',
-      'Group',
-      'whatsapp',
-      true,
-    );
+    // A real agent for contrast
+    storeChatMetadata('web:agent', '2024-01-01T00:00:03.000Z', 'Agent', 'web');
 
-    _setRegisteredGroups({
-      'group@g.us': {
-        name: 'Group',
-        folder: 'group',
+    _setRegisteredAgents({
+      'web:agent': {
+        name: 'Agent',
+        folder: 'agent',
         trigger: '@Andy',
         added_at: '2024-01-01T00:00:00.000Z',
       },
-      'missing@g.us': {
+      'web:missing': {
         name: 'Missing',
         folder: 'missing',
         trigger: '@Andy',
@@ -215,16 +145,16 @@ describe('getAvailableGroups', () => {
       },
     });
 
-    const groups = getAvailableGroups();
-    expect(groups).toHaveLength(2);
-    expect(groups[0].jid).toBe('group@g.us');
-    expect(groups[0].lastActivity).toBe('2024-01-01T00:00:03.000Z');
-    expect(groups[1].jid).toBe('missing@g.us');
-    expect(groups[1].lastActivity).toBe('');
+    const agents = getAvailableAgents();
+    expect(agents).toHaveLength(2);
+    expect(agents[0].jid).toBe('web:agent');
+    expect(agents[0].lastActivity).toBe('2024-01-01T00:00:03.000Z');
+    expect(agents[1].jid).toBe('web:missing');
+    expect(agents[1].lastActivity).toBe('');
   });
 
   it('returns empty array when no chats exist', () => {
-    const groups = getAvailableGroups();
-    expect(groups).toHaveLength(0);
+    const agents = getAvailableAgents();
+    expect(agents).toHaveLength(0);
   });
 });

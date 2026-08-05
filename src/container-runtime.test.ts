@@ -81,7 +81,7 @@ describe('ensureContainerRuntimeRunning', () => {
 describe('cleanupOrphans', () => {
   it('stops orphaned Icarus containers', () => {
     // docker ps returns container names, one per line
-    mockExecSync.mockReturnValueOnce('icarus-group1-111\nicarus-group2-222\n');
+    mockExecSync.mockReturnValueOnce('icarus-agent1-111\nicarus-agent2-222\n');
     // stop calls succeed
     mockExecSync.mockReturnValue('');
 
@@ -91,16 +91,16 @@ describe('cleanupOrphans', () => {
     expect(mockExecSync).toHaveBeenCalledTimes(3);
     expect(mockExecSync).toHaveBeenNthCalledWith(
       2,
-      `${CONTAINER_RUNTIME_BIN} stop icarus-group1-111`,
+      `${CONTAINER_RUNTIME_BIN} stop icarus-agent1-111`,
       { stdio: 'pipe' },
     );
     expect(mockExecSync).toHaveBeenNthCalledWith(
       3,
-      `${CONTAINER_RUNTIME_BIN} stop icarus-group2-222`,
+      `${CONTAINER_RUNTIME_BIN} stop icarus-agent2-222`,
       { stdio: 'pipe' },
     );
     expect(logger.info).toHaveBeenCalledWith(
-      { count: 2, names: ['icarus-group1-111', 'icarus-group2-222'] },
+      { count: 2, names: ['icarus-agent1-111', 'icarus-agent2-222'] },
       'Stopped orphaned containers',
     );
   });

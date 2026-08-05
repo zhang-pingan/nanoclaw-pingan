@@ -42,7 +42,7 @@ interface StartQueryInput {
   sourceType: AgentQuerySourceType;
   sourceRefId?: string | null;
   chatJid?: string | null;
-  groupFolder?: string | null;
+  agentFolder?: string | null;
   service?: string | null;
   role?: string | null;
   taskId?: string | null;
@@ -168,7 +168,7 @@ export class AgentQueryTraceManager {
       source_type: input.sourceType,
       source_ref_id: input.sourceRefId ?? null,
       chat_jid: input.chatJid ?? null,
-      group_folder: input.groupFolder ?? null,
+      agent_folder: input.agentFolder ?? null,
       service: input.service ?? null,
       role: input.role ?? null,
       task_id: input.taskId ?? null,
@@ -228,8 +228,8 @@ export class AgentQueryTraceManager {
     this.activeQueries.set(input.queryId, {
       queryId: input.queryId,
       runId: input.runId ?? null,
-      groupJid: input.chatJid ?? null,
-      groupFolder: input.groupFolder ?? null,
+      agentJid: input.chatJid ?? null,
+      agentFolder: input.agentFolder ?? null,
       service: input.service ?? null,
       role: input.role ?? null,
       sessionId: input.sessionId ?? null,
@@ -329,7 +329,9 @@ export class AgentQueryTraceManager {
   ): void {
     const query = this.activeQueries.get(queryId);
     const endedAt = nowIso();
-    const step = listAgentQuerySteps(queryId).find((item) => item.id === stepId);
+    const step = listAgentQuerySteps(queryId).find(
+      (item) => item.id === stepId,
+    );
     if (!step) return;
     const latencyMs = Date.parse(endedAt) - Date.parse(step.started_at);
     updateAgentQueryStep(stepId, {
@@ -352,12 +354,13 @@ export class AgentQueryTraceManager {
     }
   }
 
-  appendStructuredEvent(input: AppendStructuredEventInput): AgentQueryEventRecord {
+  appendStructuredEvent(
+    input: AppendStructuredEventInput,
+  ): AgentQueryEventRecord {
     const payload = {
       ...(input.payload ?? {}),
       category: input.category,
-      severity:
-        input.severity ?? (input.status === 'error' ? 'error' : 'info'),
+      severity: input.severity ?? (input.status === 'error' ? 'error' : 'info'),
       resourceType: input.resourceType ?? undefined,
       resourceRef: input.resourceRef ?? undefined,
       visibility: input.visibility ?? 'summary',
@@ -404,7 +407,10 @@ export class AgentQueryTraceManager {
     }
     patch.input_tokens = add(record.input_tokens, input.inputTokens);
     patch.output_tokens = add(record.output_tokens, input.outputTokens);
-    patch.cache_read_tokens = add(record.cache_read_tokens, input.cacheReadTokens);
+    patch.cache_read_tokens = add(
+      record.cache_read_tokens,
+      input.cacheReadTokens,
+    );
     patch.cache_write_tokens = add(
       record.cache_write_tokens,
       input.cacheWriteTokens,
@@ -518,24 +524,38 @@ export class AgentQueryTraceManager {
       if (patch.service !== undefined) query.service = patch.service;
       if (patch.role !== undefined) query.role = patch.role;
       if (patch.session_id !== undefined) query.sessionId = patch.session_id;
-      if (patch.selected_model !== undefined) query.selectedModel = patch.selected_model;
-      if (patch.actual_model !== undefined) query.actualModel = patch.actual_model;
-      if (patch.current_phase !== undefined) query.currentPhase = patch.current_phase;
-      if (patch.current_action !== undefined) query.currentAction = patch.current_action;
+      if (patch.selected_model !== undefined)
+        query.selectedModel = patch.selected_model;
+      if (patch.actual_model !== undefined)
+        query.actualModel = patch.actual_model;
+      if (patch.current_phase !== undefined)
+        query.currentPhase = patch.current_phase;
+      if (patch.current_action !== undefined)
+        query.currentAction = patch.current_action;
       if (patch.status !== undefined) query.status = patch.status;
-      if (patch.first_output_at !== undefined) query.firstOutputAt = patch.first_output_at;
-      if (patch.last_event_at !== undefined && patch.last_event_at) query.lastEventAt = patch.last_event_at;
-      if (patch.queue_latency_ms !== undefined) query.queueLatencyMs = patch.queue_latency_ms;
-      if (patch.container_name !== undefined) query.containerName = patch.container_name;
-      if (patch.container_runtime !== undefined) query.containerRuntime = patch.container_runtime;
-      if (patch.container_exit_code !== undefined) query.containerExitCode = patch.container_exit_code;
+      if (patch.first_output_at !== undefined)
+        query.firstOutputAt = patch.first_output_at;
+      if (patch.last_event_at !== undefined && patch.last_event_at)
+        query.lastEventAt = patch.last_event_at;
+      if (patch.queue_latency_ms !== undefined)
+        query.queueLatencyMs = patch.queue_latency_ms;
+      if (patch.container_name !== undefined)
+        query.containerName = patch.container_name;
+      if (patch.container_runtime !== undefined)
+        query.containerRuntime = patch.container_runtime;
+      if (patch.container_exit_code !== undefined)
+        query.containerExitCode = patch.container_exit_code;
       if (patch.container_terminated_reason !== undefined) {
         query.containerTerminatedReason = patch.container_terminated_reason;
       }
-      if (patch.tool_call_count !== undefined) query.toolCallCount = patch.tool_call_count;
-      if (patch.failed_tool_call_count !== undefined) query.failedToolCallCount = patch.failed_tool_call_count;
-      if (patch.changed_file_count !== undefined) query.changedFileCount = patch.changed_file_count;
-      if (patch.artifact_count !== undefined) query.artifactCount = patch.artifact_count;
+      if (patch.tool_call_count !== undefined)
+        query.toolCallCount = patch.tool_call_count;
+      if (patch.failed_tool_call_count !== undefined)
+        query.failedToolCallCount = patch.failed_tool_call_count;
+      if (patch.changed_file_count !== undefined)
+        query.changedFileCount = patch.changed_file_count;
+      if (patch.artifact_count !== undefined)
+        query.artifactCount = patch.artifact_count;
       if (patch.artifact_contract_status !== undefined) {
         query.artifactContractStatus = patch.artifact_contract_status;
       }
@@ -622,7 +642,8 @@ export class AgentQueryTraceManager {
         error: errorMessage,
         terminalStatus: status,
         failureType: patch?.failure_type ?? record?.failure_type ?? null,
-        failureSubtype: patch?.failure_subtype ?? record?.failure_subtype ?? null,
+        failureSubtype:
+          patch?.failure_subtype ?? record?.failure_subtype ?? null,
         failureOrigin: patch?.failure_origin ?? record?.failure_origin ?? null,
         failureRetryable:
           patch?.failure_retryable ?? record?.failure_retryable ?? null,

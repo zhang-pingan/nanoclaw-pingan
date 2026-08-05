@@ -28,7 +28,7 @@ import {
   ASSISTANT_NAME,
   ATTACHMENTS_DIR,
   DESKTOP_CAPTURES_DIR,
-  GROUPS_DIR,
+  AGENTS_DIR,
   DATA_DIR,
   PROJECT_ROOT,
 } from '../config.js';
@@ -57,8 +57,9 @@ import {
   CardActionResult,
   InteractiveCard,
   NewMessage,
+  RegisteredAgent,
 } from '../types.js';
-import { resolveGroupFolderPath } from '../group-folder.js';
+import { isValidAgentFolder, resolveAgentFolderPath } from '../agent-folder.js';
 import {
   initWebDb,
   storeWebMessage,
@@ -135,7 +136,7 @@ const DESKTOP_CAPTURE_MAX_BASE64_BYTES = 64 * 1024 * 1024;
 
 const LOCAL_FILE_ROOTS: Record<string, string> = {
   uploads: UPLOADS_DIR,
-  groups: GROUPS_DIR,
+  agents: AGENTS_DIR,
   attachments: ATTACHMENTS_DIR,
   'desktop-captures': DESKTOP_CAPTURES_DIR,
   'ai-images': AI_IMAGES_DIR,
@@ -177,7 +178,7 @@ function getMessageFileUrl(
 }
 
 function getServicesConfigPath(): string {
-  return path.join(GROUPS_DIR, 'global', 'services.json');
+  return path.join(AGENTS_DIR, 'global', 'services.json');
 }
 
 function getContainerSkillsDir(): string {
@@ -297,7 +298,7 @@ function clampDesktopCaptureMaxWidth(value: unknown): number {
 // --- Types ---
 interface WsClient {
   ws: WebSocket;
-  groupFolder: string;
+  agentFolder: string;
 }
 
 interface DesktopCaptureClient {
@@ -321,7 +322,7 @@ interface PendingDesktopCapture {
 interface IncomingMsg {
   type:
     | 'message'
-    | 'select_group'
+    | 'select_agent'
     | 'card_action'
     | 'desktop_capture_capabilities'
     | 'desktop_capture_result';
@@ -355,7 +356,7 @@ interface OutgoingMsg {
   type:
     | 'message'
     | 'typing'
-    | 'groups'
+    | 'agents'
     | 'error'
     | 'connected'
     | 'card'
@@ -446,10 +447,23 @@ class WebChannel {
     return jid.startsWith('web:');
   }
 
+  private executableWebAgentEntries(): Array<[string, RegisteredAgent]> {
+    return Object.entries(this.opts.registeredAgents()).filter(
+      ([jid, agent]) => this.ownsJid(jid) && isValidAgentFolder(agent.folder),
+    );
+  }
+
+  private isExecutableWebAgentJid(jid: string): boolean {
+    const agent = this.opts.registeredAgents()[jid];
+    return Boolean(
+      agent && this.ownsJid(jid) && isValidAgentFolder(agent.folder),
+    );
+  }
+
   private canUploadForJid(jid: string): boolean {
     if (!jid) return false;
-    if (this.ownsJid(jid)) return true;
-    return Boolean(this.opts.registeredGroups()[jid]);
+    const agent = this.opts.registeredAgents()[jid];
+    return Boolean(agent && isValidAgentFolder(agent.folder));
   }
 
   async sendMessage(jid: string, text: string): Promise<void> {
@@ -457,7 +471,7 @@ class WebChannel {
     const id = `web_${timestamp}_${Math.random().toString(36).slice(2, 8)}`;
 
     // Always persist bot reply to web message DB, even if no WS clients
-    // are connected. This ensures delegation responses from sub-groups
+    // are connected. This ensures delegation responses from sub-agents
     // (e.g., web:ops) are preserved for when the user views that chat.
     storeWebMessage({
       id,
@@ -887,8 +901,8 @@ class WebChannel {
       ) {
         return;
       }
-      if (pathname.startsWith('/api/groups')) {
-        return this.apiGetGroups(reqUrl, res);
+      if (pathname === '/api/agents' && req.method === 'GET') {
+        return this.apiGetAgents(reqUrl, res);
       }
       if (pathname === '/api/memories' && req.method === 'GET') {
         return this.apiGetMemories(reqUrl, res);
@@ -1268,7 +1282,7 @@ class WebChannel {
     res.end(data);
   }
 
-  private getRegisteredGroupChannel(jid: string, folder: string): string {
+  private getRegisteredAgentChannel(jid: string, folder: string): string {
     const folderChannel = folder.includes('_') ? folder.split('_')[0] : '';
     if (folderChannel) return folderChannel;
     return jid.includes(':') ? jid.split(':')[0] : '';
@@ -1376,20 +1390,20 @@ class WebChannel {
     return false;
   }
 
-  private apiGetGroups(reqUrl: URL, res: http.ServerResponse): void {
-    const registered = this.opts.registeredGroups();
+  private apiGetAgents(reqUrl: URL, res: http.ServerResponse): void {
     const includeAll = reqUrl.searchParams.get('scope') === 'all';
-    const groups = Object.entries(registered)
+    const agents = Object.entries(this.opts.registeredAgents())
+      .filter(([, agent]) => isValidAgentFolder(agent.folder))
       .filter(([jid]) => includeAll || jid.startsWith('web:'))
       .map(([jid, g]) => ({
         jid,
         name: g.name,
         folder: g.folder,
-        channel: this.getRegisteredGroupChannel(jid, g.folder),
+        channel: this.getRegisteredAgentChannel(jid, g.folder),
         isMain: g.isMain ?? false,
       }));
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ groups }));
+    res.end(JSON.stringify({ agents }));
   }
 
   private apiGetMemories(reqUrl: URL, res: http.ServerResponse): void {
@@ -1401,30 +1415,30 @@ class WebChannel {
       ? Math.min(Math.max(rawLimit, 1), 1000)
       : 200;
 
-    const registered = this.opts.registeredGroups();
-    const webGroups = Object.entries(registered).filter(([jid]) =>
+    const registered = this.opts.registeredAgents();
+    const webAgents = Object.entries(registered).filter(([jid]) =>
       jid.startsWith('web:'),
     );
 
-    let groupFolder = '';
+    let agentFolder = '';
     if (requestedJid) {
-      const group = registered[requestedJid];
-      if (!group || !requestedJid.startsWith('web:')) {
+      const agent = registered[requestedJid];
+      if (!agent || !requestedJid.startsWith('web:')) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'invalid web group jid' }));
+        res.end(JSON.stringify({ error: 'invalid web agent jid' }));
         return;
       }
-      groupFolder = group.folder;
+      agentFolder = agent.folder;
     } else if (requestedFolder) {
-      const matched = webGroups.find(
-        ([, group]) => group.folder === requestedFolder,
+      const matched = webAgents.find(
+        ([, agent]) => agent.folder === requestedFolder,
       );
       if (!matched) {
         res.writeHead(404, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'group not found' }));
+        res.end(JSON.stringify({ error: 'agent not found' }));
         return;
       }
-      groupFolder = matched[1].folder;
+      agentFolder = matched[1].folder;
     } else {
       res.writeHead(400, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'jid or folder required' }));
@@ -1434,15 +1448,15 @@ class WebChannel {
     import('../db.js')
       .then(({ listMemories, searchMemories, getMemoryById }) => {
         const memories = query
-          ? searchMemories(groupFolder, query, limit)
+          ? searchMemories(agentFolder, query, limit)
               .map((item) => getMemoryById(item.id))
               .filter((item): item is NonNullable<typeof item> => Boolean(item))
-          : listMemories(groupFolder, limit);
+          : listMemories(agentFolder, limit);
 
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(
           JSON.stringify({
-            group_folder: groupFolder,
+            agent_folder: agentFolder,
             query,
             memories,
           }),
@@ -1450,7 +1464,7 @@ class WebChannel {
       })
       .catch((err: unknown) => {
         logger.error(
-          { err, groupFolder, query },
+          { err, agentFolder, query },
           'Failed to query memories for web API',
         );
         res.writeHead(500, { 'Content-Type': 'application/json' });
@@ -1458,25 +1472,27 @@ class WebChannel {
       });
   }
 
-  private resolveWebGroupFolder(input: {
+  private resolveWebAgentFolder(input: {
     jid?: string;
     folder?: string;
   }): string | null {
     const requestedJid = input.jid || '';
     const requestedFolder = input.folder || '';
-    const registered = this.opts.registeredGroups();
-    const webGroups = Object.entries(registered).filter(([jid]) =>
+    const registered = this.opts.registeredAgents();
+    const webAgents = Object.entries(registered).filter(([jid]) =>
       jid.startsWith('web:'),
     );
 
     if (requestedJid) {
-      const group = registered[requestedJid];
-      if (!group || !requestedJid.startsWith('web:')) return null;
-      return group.folder;
+      const agent = registered[requestedJid];
+      if (!agent || !requestedJid.startsWith('web:')) return null;
+      return agent.folder;
     }
 
     if (requestedFolder) {
-      const matched = webGroups.find(([, g]) => g.folder === requestedFolder);
+      const matched = webAgents.find(
+        ([, agent]) => agent.folder === requestedFolder,
+      );
       return matched ? matched[1].folder : null;
     }
 
@@ -1637,13 +1653,13 @@ class WebChannel {
       metadata?: string;
     };
 
-    const groupFolder = this.resolveWebGroupFolder({
+    const agentFolder = this.resolveWebAgentFolder({
       jid: data.jid,
       folder: data.folder,
     });
-    if (!groupFolder) {
+    if (!agentFolder) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'invalid group scope' }));
+      res.end(JSON.stringify({ error: 'invalid agent scope' }));
       return;
     }
     if (!data.content || !data.layer || !data.memory_type) {
@@ -1656,7 +1672,7 @@ class WebChannel {
 
     const { createMemory } = await import('../db.js');
     const created = createMemory({
-      group_folder: groupFolder,
+      agent_folder: agentFolder,
       layer: data.layer,
       memory_type: data.memory_type,
       content: data.content,
@@ -1698,21 +1714,21 @@ class WebChannel {
       return;
     }
 
-    const groupFolder = this.resolveWebGroupFolder({
+    const agentFolder = this.resolveWebAgentFolder({
       jid: data.jid,
       folder: data.folder,
     });
-    if (!groupFolder) {
+    if (!agentFolder) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'invalid group scope' }));
+      res.end(JSON.stringify({ error: 'invalid agent scope' }));
       return;
     }
 
     const { getMemoryById, updateMemory } = await import('../db.js');
     const existing = getMemoryById(data.memoryId);
-    if (!existing || existing.group_folder !== groupFolder) {
+    if (!existing || existing.agent_folder !== agentFolder) {
       res.writeHead(404, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'memory not found in group scope' }));
+      res.end(JSON.stringify({ error: 'memory not found in agent scope' }));
       return;
     }
 
@@ -1742,18 +1758,18 @@ class WebChannel {
       return;
     }
 
-    const groupFolder = this.resolveWebGroupFolder({ jid, folder });
-    if (!groupFolder) {
+    const agentFolder = this.resolveWebAgentFolder({ jid, folder });
+    if (!agentFolder) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'invalid group scope' }));
+      res.end(JSON.stringify({ error: 'invalid agent scope' }));
       return;
     }
 
     const { getMemoryById, deleteMemory } = await import('../db.js');
     const existing = getMemoryById(memoryId);
-    if (!existing || existing.group_folder !== groupFolder) {
+    if (!existing || existing.agent_folder !== agentFolder) {
       res.writeHead(404, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'memory not found in group scope' }));
+      res.end(JSON.stringify({ error: 'memory not found in agent scope' }));
       return;
     }
     deleteMemory(memoryId);
@@ -1775,13 +1791,13 @@ class WebChannel {
     }
 
     const data = body as { jid?: string; folder?: string; staleDays?: number };
-    const groupFolder = this.resolveWebGroupFolder({
+    const agentFolder = this.resolveWebAgentFolder({
       jid: data.jid,
       folder: data.folder,
     });
-    if (!groupFolder) {
+    if (!agentFolder) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'invalid group scope' }));
+      res.end(JSON.stringify({ error: 'invalid agent scope' }));
       return;
     }
     const staleDays = Number.isFinite(Number(data.staleDays))
@@ -1790,7 +1806,7 @@ class WebChannel {
 
     const { doctorMemories, getMemoryById, recordMemoryMetric } =
       await import('../db.js');
-    const report = doctorMemories(groupFolder, staleDays);
+    const report = doctorMemories(agentFolder, staleDays);
     const idSet = new Set<string>();
     for (const g of report.duplicateGroups)
       for (const id of g.ids) idSet.add(id);
@@ -1805,13 +1821,13 @@ class WebChannel {
       const mem = getMemoryById(id);
       if (mem) memoryMap[id] = mem;
     }
-    recordMemoryMetric(groupFolder, 'doctor', `staleDays=${staleDays}`);
+    recordMemoryMetric(agentFolder, 'doctor', `staleDays=${staleDays}`);
 
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(
       JSON.stringify({
         ok: true,
-        group_folder: groupFolder,
+        agent_folder: agentFolder,
         report,
         memoryMap,
       }),
@@ -1838,13 +1854,13 @@ class WebChannel {
       dryRun?: boolean;
       mode?: 'duplicates' | 'stale' | 'all';
     };
-    const groupFolder = this.resolveWebGroupFolder({
+    const agentFolder = this.resolveWebAgentFolder({
       jid: data.jid,
       folder: data.folder,
     });
-    if (!groupFolder) {
+    if (!agentFolder) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'invalid group scope' }));
+      res.end(JSON.stringify({ error: 'invalid agent scope' }));
       return;
     }
 
@@ -1856,7 +1872,7 @@ class WebChannel {
 
     const { gcMemories, deleteMemory, recordMemoryMetric } =
       await import('../db.js');
-    const base = gcMemories(groupFolder, {
+    const base = gcMemories(agentFolder, {
       dryRun: true,
       staleWorkingDays: staleDays,
     });
@@ -1871,7 +1887,7 @@ class WebChannel {
       for (const id of executeIds) deleteMemory(id);
     }
     recordMemoryMetric(
-      groupFolder,
+      agentFolder,
       `gc:${mode}`,
       `dryRun=${dryRun},staleDays=${staleDays},count=${executeIds.length}`,
     );
@@ -1880,7 +1896,7 @@ class WebChannel {
     res.end(
       JSON.stringify({
         ok: true,
-        group_folder: groupFolder,
+        agent_folder: agentFolder,
         result: {
           dryRun,
           mode,
@@ -1911,25 +1927,25 @@ class WebChannel {
       folder?: string;
       hours?: number;
     };
-    const groupFolder = this.resolveWebGroupFolder({
+    const agentFolder = this.resolveWebAgentFolder({
       jid: data.jid,
       folder: data.folder,
     });
-    if (!groupFolder) {
+    if (!agentFolder) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'invalid group scope' }));
+      res.end(JSON.stringify({ error: 'invalid agent scope' }));
       return;
     }
     const hours = Number.isFinite(Number(data.hours)) ? Number(data.hours) : 24;
 
     const { getMemoryMetricSummary } = await import('../db.js');
-    const summary = getMemoryMetricSummary(groupFolder, hours);
+    const summary = getMemoryMetricSummary(agentFolder, hours);
 
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(
       JSON.stringify({
         ok: true,
-        group_folder: groupFolder,
+        agent_folder: agentFolder,
         summary,
       }),
     );
@@ -1954,13 +1970,13 @@ class WebChannel {
       keep_id?: string;
       deprecate_id?: string;
     };
-    const groupFolder = this.resolveWebGroupFolder({
+    const agentFolder = this.resolveWebAgentFolder({
       jid: data.jid,
       folder: data.folder,
     });
-    if (!groupFolder) {
+    if (!agentFolder) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'invalid group scope' }));
+      res.end(JSON.stringify({ error: 'invalid agent scope' }));
       return;
     }
     if (!data.keep_id || !data.deprecate_id) {
@@ -1974,10 +1990,10 @@ class WebChannel {
       const result = resolveConflict('keep', {
         keepId: data.keep_id,
         deprecateId: data.deprecate_id,
-        groupFolder,
+        agentFolder,
       });
       recordMemoryMetric(
-        groupFolder,
+        agentFolder,
         'conflict:resolved:keep',
         `${data.keep_id}->${data.deprecate_id}`,
       );
@@ -2012,13 +2028,13 @@ class WebChannel {
       merge_ids?: string[];
       merged_content?: string;
     };
-    const groupFolder = this.resolveWebGroupFolder({
+    const agentFolder = this.resolveWebAgentFolder({
       jid: data.jid,
       folder: data.folder,
     });
-    if (!groupFolder) {
+    if (!agentFolder) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'invalid group scope' }));
+      res.end(JSON.stringify({ error: 'invalid agent scope' }));
       return;
     }
     if (
@@ -2038,10 +2054,10 @@ class WebChannel {
       const result = resolveConflict('merge', {
         mergeIds: [data.merge_ids[0], data.merge_ids[1]],
         mergedContent: data.merged_content,
-        groupFolder,
+        agentFolder,
       });
       recordMemoryMetric(
-        groupFolder,
+        agentFolder,
         'conflict:resolved:merge',
         data.merge_ids.join(','),
       );
@@ -2113,7 +2129,7 @@ class WebChannel {
     }
 
     const { jid, ids } = body as { jid?: string; ids?: unknown };
-    if (!jid || !this.ownsJid(jid)) {
+    if (!jid || !this.isExecutableWebAgentJid(jid)) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'valid jid required' }));
       return;
@@ -2153,14 +2169,14 @@ class WebChannel {
 
   private apiGetTasks(reqUrl: URL, res: http.ServerResponse): void {
     const folder = reqUrl.searchParams.get('folder') || '';
-    import('../db.js').then(({ getTasksForGroup, getAllTasks }) => {
-      const tasks = folder ? getTasksForGroup(folder) : getAllTasks();
+    import('../db.js').then(({ getTasksForAgent, getAllTasks }) => {
+      const tasks = folder ? getTasksForAgent(folder) : getAllTasks();
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(
         JSON.stringify({
           tasks: tasks.map((t) => ({
             id: t.id,
-            group_folder: t.group_folder,
+            agent_folder: t.agent_folder,
             prompt: t.prompt,
             schedule_type: t.schedule_type,
             schedule_value: t.schedule_value,
@@ -2234,13 +2250,13 @@ class WebChannel {
     }
 
     if (typeof data.jid === 'string' && data.jid) {
-      const registered = this.opts.registeredGroups();
+      const registered = this.opts.registeredAgents();
       if (!registered[data.jid]) {
         res.writeHead(404, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'group not found' }));
+        res.end(JSON.stringify({ error: 'agent not found' }));
         return;
       }
-      const result = await this.opts.resetSessions({ groupJid: data.jid });
+      const result = await this.opts.resetSessions({ agentJid: data.jid });
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(result));
       return;
@@ -2265,7 +2281,7 @@ class WebChannel {
       chunks.push(Buffer.from(chunk));
     }
 
-    let body: { groupJid?: string };
+    let body: { agentJid?: string };
     try {
       body = JSON.parse(Buffer.concat(chunks).toString('utf-8'));
     } catch {
@@ -2274,13 +2290,13 @@ class WebChannel {
       return;
     }
 
-    if (!body.groupJid) {
+    if (!body.agentJid) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'Missing groupJid' }));
+      res.end(JSON.stringify({ error: 'Missing agentJid' }));
       return;
     }
 
-    const result = await this.opts.stopAgent(body.groupJid);
+    const result = await this.opts.stopAgent(body.agentJid);
     if (!result.ok) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
       res.end(
@@ -2602,14 +2618,14 @@ class WebChannel {
     res.end(data);
   }
 
-  private findPreferredMainGroupJid(): string | null {
-    const groups = this.opts.registeredGroups();
-    const webMain = Object.entries(groups).find(
-      ([jid, group]) => jid.startsWith('web:') && group.isMain,
+  private findPreferredMainAgentJid(): string | null {
+    const agents = this.opts.registeredAgents();
+    const webMain = Object.entries(agents).find(
+      ([jid, agent]) => jid.startsWith('web:') && agent.isMain,
     );
     if (webMain) return webMain[0];
 
-    const anyMain = Object.entries(groups).find(([, group]) => group.isMain);
+    const anyMain = Object.entries(agents).find(([, agent]) => agent.isMain);
     return anyMain ? anyMain[0] : null;
   }
 
@@ -2632,7 +2648,7 @@ class WebChannel {
     const detail = getTodayPlanDetail({
       planId: planId || undefined,
       planDate: !planId ? planDate || getTodayPlanDateKey() : undefined,
-      groups: this.opts.registeredGroups(),
+      agents: this.opts.registeredAgents(),
     });
     if (!detail) {
       res.writeHead(404, { 'Content-Type': 'application/json' });
@@ -2668,7 +2684,7 @@ class WebChannel {
       resolveTodayPlanInboxItemsForDate(plan.plan_date);
       const detail = getTodayPlanDetail({
         planId: plan.id,
-        groups: this.opts.registeredGroups(),
+        agents: this.opts.registeredAgents(),
       });
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ ok: true, plan, detail }));
@@ -2711,7 +2727,7 @@ class WebChannel {
 
     const detail = getTodayPlanDetail({
       planId: plan.id,
-      groups: this.opts.registeredGroups(),
+      agents: this.opts.registeredAgents(),
     });
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ ok: true, plan, detail }));
@@ -2771,7 +2787,7 @@ class WebChannel {
       order_index?: number;
       associations?: {
         chat_selections?: Array<{
-          group_jid: string;
+          agent_jid: string;
           message_ids?: string[];
         }>;
         services?: Array<{
@@ -2796,7 +2812,7 @@ class WebChannel {
           ? {
               chat_selections: Array.isArray(data.associations.chat_selections)
                 ? data.associations.chat_selections.map((selection) => ({
-                    group_jid: selection.group_jid,
+                    agent_jid: selection.agent_jid,
                     message_ids: Array.isArray(selection.message_ids)
                       ? selection.message_ids
                       : [],
@@ -2952,7 +2968,7 @@ class WebChannel {
     try {
       const draft = await prepareTodayPlanMailDraft({
         planId: data.plan_id,
-        groups: this.opts.registeredGroups(),
+        agents: this.opts.registeredAgents(),
         name,
         to: Array.isArray(data.to) ? data.to : [],
         cc: Array.isArray(data.cc) ? data.cc : [],
@@ -3046,8 +3062,8 @@ class WebChannel {
         user_id: 'web_user',
         message_id: cardId || '',
         actor_channel: 'web',
-        group_jid: value.group_jid,
-        group_folder: value.group_folder,
+        agent_jid: value.agent_jid,
+        agent_folder: value.agent_folder,
         form_value: {
           ...mergedFormValue,
           payload: JSON.stringify(actionPayload),
@@ -3680,30 +3696,30 @@ class WebChannel {
   }
 
   private apiServeFile(pathname: string, res: http.ServerResponse): void {
-    // pathname: /api/files/{groupFolder}/...
+    // pathname: /api/files/{agentFolder}/...
     const parts = pathname.split('/');
-    // parts[0]='', parts[1]='api', parts[2]='files', parts[3]=groupFolder, rest=...
+    // parts[0]='', parts[1]='api', parts[2]='files', parts[3]=agentFolder, rest=...
     if (parts.length < 5) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'invalid path' }));
       return;
     }
-    const groupFolder = parts[3];
+    const agentFolder = parts[3];
     const relativePath = parts.slice(4).join('/');
 
-    // Security: ensure resolved path is within groups dir
-    let groupDir: string;
+    // Security: ensure resolved path is within agents dir
+    let agentDir: string;
     try {
-      groupDir = resolveGroupFolderPath(groupFolder);
+      agentDir = resolveAgentFolderPath(agentFolder);
     } catch {
       res.writeHead(404, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'group not found' }));
+      res.end(JSON.stringify({ error: 'agent not found' }));
       return;
     }
 
-    const filePath = path.resolve(path.join(groupDir, relativePath));
+    const filePath = path.resolve(path.join(agentDir, relativePath));
     const resolved = path.resolve(filePath);
-    if (!resolved.startsWith(groupDir)) {
+    if (!resolved.startsWith(agentDir)) {
       res.writeHead(403, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'forbidden' }));
       return;
@@ -3767,17 +3783,15 @@ class WebChannel {
       state: getAssistantState(),
     });
 
-    // Register this client for ALL web groups so it receives messages
-    // from every group in real-time (frontend shows unread badge for non-active groups)
-    const registered = this.opts.registeredGroups();
-    for (const [jid] of Object.entries(registered)) {
-      if (!this.ownsJid(jid)) continue;
+    // Register this client for ALL web agents so it receives messages
+    // from every agent in real-time (frontend shows unread badge for non-active agents)
+    for (const [jid] of this.executableWebAgentEntries()) {
       let clients = this.clients.get(jid);
       if (!clients) {
         clients = new Set();
         this.clients.set(jid, clients);
       }
-      clients.add({ ws, groupFolder: jid.replace('web:', '') });
+      clients.add({ ws, agentFolder: jid.replace('web:', '') });
     }
 
     ws.on('message', (data: unknown) => {
@@ -3828,7 +3842,7 @@ class WebChannel {
           send({ type: 'error', message: 'chatJid and content required' });
           return;
         }
-        if (!this.ownsJid(chatJid)) {
+        if (!this.isExecutableWebAgentJid(chatJid)) {
           send({ type: 'error', message: 'Unknown chat JID' });
           return;
         }
@@ -3859,15 +3873,9 @@ class WebChannel {
           model: null,
         };
         // Create chat record first (required for foreign key in messages table)
-        const groups = this.opts.registeredGroups();
-        const chatName = groups[chatJid]?.name || chatJid;
-        this.opts.onChatMetadata(
-          chatJid,
-          now.toString(),
-          chatName,
-          'web',
-          true,
-        );
+        const agents = this.opts.registeredAgents();
+        const chatName = agents[chatJid]?.name || chatJid;
+        this.opts.onChatMetadata(chatJid, now.toString(), chatName, 'web');
         this.opts.onMessage(chatJid, newMsg);
         // Also persist to web message DB for UI history (with original content)
         storeWebMessage({
@@ -3878,25 +3886,22 @@ class WebChannel {
         });
         break;
       }
-      case 'select_group': {
+      case 'select_agent': {
         const chatJid = msg.chatJid;
-        if (!chatJid || !this.ownsJid(chatJid)) {
+        if (!chatJid || !this.isExecutableWebAgentJid(chatJid)) {
           send({ type: 'error', message: 'Invalid chat JID' });
           return;
         }
-        // Send current groups list
-        const registered = this.opts.registeredGroups();
+        // Send current agents list
         send({
-          type: 'groups',
-          groups: Object.entries(registered)
-            .filter(([jid]) => jid.startsWith('web:'))
-            .map(([jid, g]) => ({
-              jid,
-              name: g.name,
-              folder: g.folder,
-              channel: this.getRegisteredGroupChannel(jid, g.folder),
-              isMain: g.isMain ?? false,
-            })),
+          type: 'agents',
+          agents: this.executableWebAgentEntries().map(([jid, g]) => ({
+            jid,
+            name: g.name,
+            folder: g.folder,
+            channel: this.getRegisteredAgentChannel(jid, g.folder),
+            isMain: g.isMain ?? false,
+          })),
           selectedJid: chatJid,
         });
         break;
@@ -3935,8 +3940,8 @@ class WebChannel {
             user_id: 'web_user',
             message_id: cardId || '',
             actor_channel: 'web',
-            group_jid: value.group_jid,
-            group_folder: value.group_folder,
+            agent_jid: value.agent_jid,
+            agent_folder: value.agent_folder,
             form_value: {
               ...mergedFormValue,
               payload: JSON.stringify(actionPayload),

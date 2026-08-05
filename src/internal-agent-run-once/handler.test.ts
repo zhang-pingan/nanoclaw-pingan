@@ -18,8 +18,8 @@ vi.mock('../config.js', async (importOriginal) => ({
 }));
 
 import { _initTestDatabase } from '../db.js';
-import { GroupQueue } from '../group-queue.js';
-import type { RegisteredGroup } from '../types.js';
+import { AgentQueue } from '../agent-queue.js';
+import type { RegisteredAgent } from '../types.js';
 import {
   handleInternalAgentRunOnce,
   handleInternalAgentRunOnceFileDownload,
@@ -92,7 +92,7 @@ class LocalServerResponse extends Writable {
   }
 }
 
-const group: RegisteredGroup = {
+const agent: RegisteredAgent = {
   name: 'L3 Agent',
   folder: 'handler_l3agent',
   trigger: '@Andy',
@@ -104,8 +104,8 @@ type RunOnceMock = ReturnType<typeof vi.fn<RunOnceFn>>;
 
 function makeService(runOnce: RunOnceMock): InternalAgentRunOnceService {
   const service = new InternalAgentRunOnceService({
-    registeredGroups: () => ({ 'web:l3agent': group }),
-    queue: new GroupQueue(),
+    registeredAgents: () => ({ 'web:l3agent': agent }),
+    queue: new AgentQueue(),
     onProcess: vi.fn(),
     maxInputChars: 10000,
   });

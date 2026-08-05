@@ -8,7 +8,7 @@
   "domain_separator": "icarus:product-surface-coverage-artifact:1\n",
   "payload": {
     "format": "icarus.product-surface-coverage/1",
-    "source_core_build_hash": "sha256:9e24def00d6e3da7a9bb98036038816d1b77b13352584823a9846f2c9db2d8eb",
+    "source_core_build_hash": "sha256:70ca72eff11bf0cf706a2f03f5622052c1a65cef71438f32c82a608d8579cf62",
     "generated_by_tool_hash": "sha256:4d3137e44c8d0903a90cbe5627e4c8e218c10bb8b156083a6ff821176407ac32",
     "entries": [
       {
@@ -138,8 +138,8 @@
         "status": "removed",
         "replacement_ref": null,
         "contract_fixture_hash": null,
-        "removal_fixture_hash": "sha256:0c7b6006d6fa4fd8be7743a5d73daa21b36a1b19ec773c47562353a10f478f62",
-        "entry_hash": "sha256:07dd79c6c489291a8bad987c1faef874d4eacc262eaccde8d6df912cae83dd7c"
+        "removal_fixture_hash": "sha256:e6b9a447d20157d6b09e23acd5e1305e380f04478f58ade175083d774b5244bf",
+        "entry_hash": "sha256:b1d6ef47058c21735dedebb5d0ebbf3471d3dcd34389d3a5653e295c9664bd7f"
       },
       {
         "surface_id": "removed.legacy_feature_resource_keys",
@@ -168,8 +168,8 @@
         "status": "removed",
         "replacement_ref": null,
         "contract_fixture_hash": null,
-        "removal_fixture_hash": "sha256:e862b7cad29fd3440a2f17b678856c20b0d9894e1656486dc042559c25e0a89e",
-        "entry_hash": "sha256:6bcc169d1a7f9ba97eb4a99f03af4f547449981bd2641b9e25f6085f86ef99b0"
+        "removal_fixture_hash": "sha256:c52000081032ee2d77ce71dd4b100390c432da4f7dfc550644c61bca3cc6a84e",
+        "entry_hash": "sha256:21f644830ddcb53e7312869222bdc163b1fe41c0f7d2750c55f5182dd817da58"
       },
       {
         "surface_id": "removed.workbench_launch",
@@ -178,8 +178,8 @@
         "status": "removed",
         "replacement_ref": null,
         "contract_fixture_hash": null,
-        "removal_fixture_hash": "sha256:de31439bda99aa12741cb424213518c8965836e28b105cb3cf77e2fb1dbc6732",
-        "entry_hash": "sha256:54362c0505a52218677d4c14cdfce99398ecbda0306c060e06ce5a21d575939e"
+        "removal_fixture_hash": "sha256:ea9abf283ca03f5c84c605a27adb6d26ad7e2372da9fec68223d798454fb47c9",
+        "entry_hash": "sha256:844c49f8cc9a573ca02a14d854d97ebe79f522d4ca8915d11d05c479b33374bf"
       },
       {
         "surface_id": "removed.workbench_projection",
@@ -188,8 +188,8 @@
         "status": "removed",
         "replacement_ref": null,
         "contract_fixture_hash": null,
-        "removal_fixture_hash": "sha256:0c7b6006d6fa4fd8be7743a5d73daa21b36a1b19ec773c47562353a10f478f62",
-        "entry_hash": "sha256:c683ca054f104fc5ad73fc5db10cb9362041f054f5557bd579ac5404ba1dba61"
+        "removal_fixture_hash": "sha256:e6b9a447d20157d6b09e23acd5e1305e380f04478f58ade175083d774b5244bf",
+        "entry_hash": "sha256:f3eab62755fe74841a6c7c4fb07a334f5df8102d21fe3f3cfc7a8a9a4ab9d133"
       },
       {
         "surface_id": "removed.workflow_management_authoring",
@@ -198,8 +198,8 @@
         "status": "removed",
         "replacement_ref": null,
         "contract_fixture_hash": null,
-        "removal_fixture_hash": "sha256:e862b7cad29fd3440a2f17b678856c20b0d9894e1656486dc042559c25e0a89e",
-        "entry_hash": "sha256:a14083d2b5534970cbe5dec972ef5b70ab94744b17185b064ed2ecc0437b6fd5"
+        "removal_fixture_hash": "sha256:c52000081032ee2d77ce71dd4b100390c432da4f7dfc550644c61bca3cc6a84e",
+        "entry_hash": "sha256:e2682673b8bd2f7032577dab4d553f1e98202d106cc32d0001c7a484ef68a3cd"
       },
       {
         "surface_id": "removed.workflow_management_control",
@@ -208,8 +208,8 @@
         "status": "removed",
         "replacement_ref": null,
         "contract_fixture_hash": null,
-        "removal_fixture_hash": "sha256:de31439bda99aa12741cb424213518c8965836e28b105cb3cf77e2fb1dbc6732",
-        "entry_hash": "sha256:228479bf53602bc9e92ac91b5c17fda0ac7f32a7838b5e83ab5e66178640ced5"
+        "removal_fixture_hash": "sha256:ea9abf283ca03f5c84c605a27adb6d26ad7e2372da9fec68223d798454fb47c9",
+        "entry_hash": "sha256:607706c353f498262dc6ed5fd3f3dc9f8c82677e5acc7167e5e601f5f108df98"
       },
       {
         "surface_id": "removed.workflow_management_launch",
@@ -218,8 +218,8 @@
         "status": "removed",
         "replacement_ref": null,
         "contract_fixture_hash": null,
-        "removal_fixture_hash": "sha256:de31439bda99aa12741cb424213518c8965836e28b105cb3cf77e2fb1dbc6732",
-        "entry_hash": "sha256:7e9cdf81852fd28cbaccb77cfc9bb0d9fe29a98c85a6d25545ede416f1e22807"
+        "removal_fixture_hash": "sha256:ea9abf283ca03f5c84c605a27adb6d26ad7e2372da9fec68223d798454fb47c9",
+        "entry_hash": "sha256:e8cb3d06742002ccc15da360bc698815443ff4720a4f18c0480c2234830139b3"
       },
       {
         "surface_id": "removed.workflow_management_projection",
@@ -228,13 +228,13 @@
         "status": "removed",
         "replacement_ref": null,
         "contract_fixture_hash": null,
-        "removal_fixture_hash": "sha256:0c7b6006d6fa4fd8be7743a5d73daa21b36a1b19ec773c47562353a10f478f62",
-        "entry_hash": "sha256:b5bdf728657379b9e534d067774ebc84a76f6003d8ddfa4c4bfa7e9670c5a1e8"
+        "removal_fixture_hash": "sha256:e6b9a447d20157d6b09e23acd5e1305e380f04478f58ade175083d774b5244bf",
+        "entry_hash": "sha256:a869e867a9a54cf0c4a09af8d5a5828c041b5180569c0591d2baaf5ad614c424"
       }
     ],
     "active_surface_count": 12,
     "removed_surface_count": 10,
-    "manifest_hash": "sha256:b0b75a8d558863043b2abb5af5b18dddaaaec9191faa73e6516e01be3d060708"
+    "manifest_hash": "sha256:298cd7d445e59bfb22b314d9e706916f940d4c7f6555bb49733c32db39bee466"
   },
-  "hash": "sha256:dc2042aedd6d2fad2dadd679bb338a667049a9f4be2d25412917370994daf6ee"
+  "hash": "sha256:361de14c7adddd25f47d45acb480b21d8b07674f1d2588e783337181fce73518"
 }

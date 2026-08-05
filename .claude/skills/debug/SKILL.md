@@ -18,9 +18,9 @@ src/container-runner.ts               container/agent-runner/
     │ with volume mounts                   │ with MCP servers
     │                                      │
     ├── data/env/env ──────────────> /workspace/env-dir/env
-    ├── groups/{folder} ───────────> /workspace/group
+    ├── agents/{folder} ───────────> /workspace/agent
     ├── data/ipc/{folder} ────────> /workspace/ipc
-    ├── data/sessions/{folder}/.claude/ ──> /home/node/.claude/ (isolated per-group)
+    ├── data/sessions/{folder}/.claude/ ──> /home/node/.claude/ (isolated per-Agent)
     └── (main only) project root ──> /workspace/project
 ```
 
@@ -30,9 +30,9 @@ src/container-runner.ts               container/agent-runner/
 
 | Log | Location | Content |
 |-----|----------|---------|
-| **Main app logs** | `logs/icarus.log` | Host-side WhatsApp, routing, container spawning |
+| **Main app logs** | `logs/icarus.log` | Host-side channels, routing, container spawning |
 | **Main app errors** | `logs/icarus.error.log` | Host-side errors |
-| **Container run logs** | `groups/{folder}/logs/container-*.log` | Per-run: input, mounts, stderr, stdout |
+| **Container run logs** | `agents/{folder}/logs/container-*.log` | Per-run: input, mounts, stderr, stdout |
 | **Claude sessions** | `~/.claude/projects/` | Claude Code session history |
 
 ## Enabling Debug Logging
@@ -59,7 +59,7 @@ Debug level shows:
 
 ### 1. "Claude Code process exited with code 1"
 
-**Check the container log file** in `groups/{folder}/logs/container-*.log`
+**Check the container log file** in `agents/{folder}/logs/container-*.log`
 
 Common causes:
 
@@ -116,14 +116,14 @@ Expected structure:
 ```
 /workspace/
 ├── env-dir/env           # Environment file (CLAUDE_CODE_OAUTH_TOKEN or ANTHROPIC_API_KEY)
-├── group/                # Current group folder (cwd)
+├── agent/                # Current Agent folder (cwd)
 ├── project/              # Project root (main channel only)
 ├── global/               # Global CLAUDE.md (non-main only)
 ├── ipc/                  # Inter-process communication
-│   ├── messages/         # Outgoing WhatsApp messages
+│   ├── messages/         # Outgoing messages for the bound chat
 │   ├── tasks/            # Scheduled task commands
-│   ├── current_tasks.json    # Read-only: scheduled tasks visible to this group
-│   └── available_groups.json # Read-only: WhatsApp groups for activation (main only)
+│   ├── current_tasks.json    # Read-only: scheduled tasks visible to this Agent
+│   └── available_agents.json # Read-only: executable Agents (main only)
 └── extra/                # Additional custom mounts
 ```
 
@@ -180,14 +180,14 @@ If an MCP server fails to start, the agent may exit. Check the container logs fo
 ### Test the full agent flow:
 ```bash
 # Set up env file
-mkdir -p data/env groups/test
+mkdir -p data/env agents/test
 cp .env data/env/env
 
 # Run test query
-echo '{"prompt":"What is 2+2?","groupFolder":"test","chatJid":"test@g.us","isMain":false}' | \
+echo '{"prompt":"What is 2+2?","agentFolder":"test","chatJid":"web:test","isMain":false}' | \
   docker run -i \
   -v $(pwd)/data/env:/workspace/env-dir:ro \
-  -v $(pwd)/groups/test:/workspace/group \
+  -v $(pwd)/agents/test:/workspace/agent \
   -v $(pwd)/data/ipc:/workspace/ipc \
   icarus-agent:latest
 ```
@@ -215,7 +215,7 @@ The agent-runner uses these Claude Agent SDK options:
 query({
   prompt: input.prompt,
   options: {
-    cwd: '/workspace/group',
+    cwd: '/workspace/agent',
     allowedTools: ['Bash', 'Read', 'Write', ...],
     permissionMode: 'bypassPermissions',
     allowDangerouslySkipPermissions: true,  // Required with bypassPermissions
@@ -262,7 +262,7 @@ docker run --rm --entrypoint /bin/bash icarus-agent:latest -c '
 
 ## Session Persistence
 
-Claude sessions are stored per-group in `data/sessions/{group}/.claude/` for security isolation. Each group has its own session directory, preventing cross-group access to conversation history.
+Claude sessions are stored per-Agent in `data/sessions/{agent}/.claude/` for security isolation. Each Agent has its own session directory, preventing cross-Agent access to conversation history.
 
 **Critical:** The mount path must match the container user's HOME directory:
 - Container user: `node`
@@ -272,20 +272,20 @@ Claude sessions are stored per-group in `data/sessions/{group}/.claude/` for sec
 To clear sessions:
 
 ```bash
-# Clear all sessions for all groups
+# Clear all sessions for all agents
 rm -rf data/sessions/
 
-# Clear sessions for a specific group
-rm -rf data/sessions/{groupFolder}/.claude/
+# Clear sessions for a specific Agent
+rm -rf data/sessions/{agentFolder}/.claude/
 
 # Also clear the session ID from Icarus's tracking (stored in SQLite)
-sqlite3 store/messages.db "DELETE FROM sessions WHERE group_folder = '{groupFolder}'"
+sqlite3 store/messages.db "DELETE FROM sessions WHERE agent_folder = '{agentFolder}'"
 ```
 
 To verify session resumption is working, check the logs for the same session ID across messages:
 ```bash
 grep "Session initialized" logs/icarus.log | tail -5
-# Should show the SAME session ID for consecutive messages in the same group
+# Should show the SAME session ID for consecutive messages in the same Agent
 ```
 
 ## IPC Debugging
@@ -302,18 +302,18 @@ ls -la data/ipc/tasks/
 # Read a specific IPC file
 cat data/ipc/messages/*.json
 
-# Check available groups (main channel only)
-cat data/ipc/main/available_groups.json
+# Check available agents (main channel only)
+cat data/ipc/main/available_agents.json
 
 # Check current tasks snapshot
-cat data/ipc/{groupFolder}/current_tasks.json
+cat data/ipc/{agentFolder}/current_tasks.json
 ```
 
 **IPC file types:**
-- `messages/*.json` - Agent writes: outgoing WhatsApp messages
-- `tasks/*.json` - Agent writes: task operations (schedule, pause, resume, cancel, refresh_groups)
+- `messages/*.json` - Agent writes: outgoing messages for its bound chat
+- `tasks/*.json` - Agent writes: task operations (schedule, pause, resume, cancel)
 - `current_tasks.json` - Host writes: read-only snapshot of scheduled tasks
-- `available_groups.json` - Host writes: read-only list of WhatsApp groups (main only)
+- `available_agents.json` - Host writes: read-only list of executable Agents (main only)
 
 ## Quick Diagnostic Script
 
@@ -337,11 +337,11 @@ echo '{}' | docker run -i --entrypoint /bin/echo icarus-agent:latest "OK" 2>/dev
 echo -e "\n5. Session mount path correct?"
 grep -q "/home/node/.claude" src/container-runner.ts 2>/dev/null && echo "OK" || echo "WRONG - should mount to /home/node/.claude/, not /root/.claude/"
 
-echo -e "\n6. Groups directory?"
-ls -la groups/ 2>/dev/null || echo "MISSING - run setup"
+echo -e "\n6. Agents directory?"
+ls -la agents/ 2>/dev/null || echo "MISSING - run setup"
 
 echo -e "\n7. Recent container logs?"
-ls -t groups/*/logs/container-*.log 2>/dev/null | head -3 || echo "No container logs yet"
+ls -t agents/*/logs/container-*.log 2>/dev/null | head -3 || echo "No container logs yet"
 
 echo -e "\n8. Session continuity working?"
 SESSIONS=$(grep "Session initialized" logs/icarus.log 2>/dev/null | tail -5 | awk '{print $NF}' | sort -u | wc -l)

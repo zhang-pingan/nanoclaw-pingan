@@ -8,7 +8,7 @@
   "domain_separator": "icarus:migration-candidate-boundary-artifact:1\n",
   "payload": {
     "format": "icarus.migration-candidate-boundary/1",
-    "source_core_build_hash": "sha256:9e24def00d6e3da7a9bb98036038816d1b77b13352584823a9846f2c9db2d8eb",
+    "source_core_build_hash": "sha256:70ca72eff11bf0cf706a2f03f5622052c1a65cef71438f32c82a608d8579cf62",
     "candidate_root": "local/migration-candidates/",
     "archive_manifest_hash": "sha256:1315e1d3fd1f1726544ae7364e3ba0b2cd8ef4acc39cbdeab2c0466c2163db3c",
     "checksum_manifest_hash": "sha256:17815addf29bf0843c7393a6a7418200df99d3ed124ec9df354dc1ca1f5167a7",
@@ -20,7 +20,7 @@
     "compiler_fixture_reachability_hash": "sha256:add6a9a28b6906a17e98cc025d747074a7a91a566b776c19308341c1ad852814",
     "build_context_reachability_hash": "sha256:a1ee6d6e93af500bdeabd2ba98c3a92185abfd67dc84926f1d8016be3b0c9bd0",
     "release_artifact_reachability_hash": "sha256:b55aa7dceca7361d911ab2d8c054b2dbd1ff200163230bc6af95c5e935634a6d",
-    "boundary_hash": "sha256:afa8d43ad421bacdb397e481df731fc178424b530f4fb07cd0856ccc9c0bf403"
+    "boundary_hash": "sha256:fb846480ecde0dd4c2e6bc48c3b45120cec92d353ba9a40325f73b3148412fa7"
   },
-  "hash": "sha256:4f121026c6af3ceafc2c532fb77f67769cb838f958a21a5f128dd47ed1f2b0f7"
+  "hash": "sha256:4c01b1a76a6321e3531663ee0531c9c888b9a4a59642a8478b25836ea2828f82"
 }

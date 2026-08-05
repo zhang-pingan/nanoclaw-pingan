@@ -2,7 +2,7 @@ import { spawnSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 
-import { GROUPS_DIR, SSH_KEY_PATH, TIMEZONE } from '../config.js';
+import { AGENTS_DIR, SSH_KEY_PATH, TIMEZONE } from '../config.js';
 import { logger } from '../logger.js';
 import type {
   AssistantOnlineLogServiceOption,
@@ -99,7 +99,7 @@ function truncateText(value: string, limit: number): string {
 }
 
 function readServiceRegistry(): Record<string, JsonRecord> {
-  const servicesPath = path.join(GROUPS_DIR, 'global', 'services.json');
+  const servicesPath = path.join(AGENTS_DIR, 'global', 'services.json');
   if (!fs.existsSync(servicesPath)) return {};
   try {
     const parsed = JSON.parse(
@@ -174,7 +174,8 @@ export function listOnlineLogServiceOptions(
       if (!item.logsErrorPath) missing.push('logs_error');
       if (!stringValue(item.config.log_line_pattern))
         missing.push('log_line_pattern');
-      if (!buildGroupMapping(item.config)) missing.push('log_line_group_mapping');
+      if (!buildGroupMapping(item.config))
+        missing.push('log_line_group_mapping');
       return {
         service,
         hosts: item.hosts,
@@ -307,7 +308,7 @@ function listRemoteLogFiles(
   assertSafeRemoteGlob(remotePath);
   const remoteCommand = containsWildcard(remotePath)
     ? `sh -lc ${shellQuote(
-          `set -- ${remotePath}; ` +
+        `set -- ${remotePath}; ` +
           `if [ "$#" -eq 0 ] || [ "$1" = ${shellQuote(remotePath)} ]; then ` +
           `echo "no files matched: ${remotePath}" >&2; exit 1; fi; ` +
           'for f in "$@"; do [ -f "$f" ] || continue; ' +

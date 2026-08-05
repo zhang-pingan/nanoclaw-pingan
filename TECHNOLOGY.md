@@ -12,10 +12,10 @@ Icarus 的首要设计原则是“高权限能力必须运行在隔离环境内�
 
 - **容器化沙箱执行**：Agent 的 Bash、文件读写、浏览器自动化、WebFetch/WebSearch 等能力都在容器内执行。即使 Agent 拿到强工具权限，影响面也被限制在容器挂载目录内。
 - **按需启动、用完销毁**：容器通过 `run --rm` 模式按任务启动，空闲或关闭后销毁。系统不会长期保留一个混杂多任务上下文的执行进程。
-- **最小挂载原则**：群组工作目录、附件目录、图片目录、IPC 目录按需挂载；项目根目录和额外挂载有明确规则，`.env`、私钥、云厂商凭证、Kube 配置等敏感路径默认阻止进入容器。
+- **最小挂载原则**：Agent 工作目录、附件目录、图片目录、IPC 目录按需挂载；项目根目录和额外挂载有明确规则，`.env`、私钥、云厂商凭证、Kube 配置等敏感路径默认阻止进入容器。
 - **外部挂载白名单**：额外挂载由项目外部的 `~/.config/icarus/mount-allowlist.json` 控制，容器无法修改自己的安全策略。
-- **会话目录隔离**：每个群组拥有独立的 `.claude` 会话目录，避免不同用户、不同任务、不同角色之间发生上下文串扰。
-- **IPC 授权**：容器通过 `/workspace/ipc` 向宿主机请求发送消息、创建任务、查询记忆、查询 Wiki 或执行受控宿主机脚本；宿主机根据来源群组和主群/非主群身份做权限判断。
+- **会话目录隔离**：每个 Agent 拥有独立的 `.claude` 会话目录，避免不同用户、不同任务、不同角色之间发生上下文串扰。
+- **IPC 授权**：容器通过 `/workspace/ipc` 向宿主机请求发送消息、创建任务、查询记忆、查询 Wiki 或执行受控宿主机脚本；宿主机根据来源 Agent 和主 Agent/非主 Agent 身份做权限判断。
 - **凭证代理**：真实模型 API Key 和 OAuth Token 不进入容器。容器只拿到占位凭证，请求被转发到宿主机 `credential-proxy`，由宿主机注入真实认证头后访问上游模型服务。
 
 这种模型把“Agent 能力强”和“宿主机安全”拆开处理：Agent 在容器里可以大胆使用工具，敏感数据和宿主机权限则通过受控 IPC 或凭证代理留在宿主机执行。
@@ -28,11 +28,11 @@ Icarus 的 Agent 架构更接近蜂窝系统，而不是一个无限权限的单
 
 - **主 Agent 统一调度**：工作流引擎、任务队列、频道路由和个人助理主动引擎都运行在宿主机控制面。它们负责决定何时启动哪个角色 Agent、传入什么上下文、接收什么产物、如何进入下一阶段。
 - **子 Agent 有明确能力边界**：角色通过工作流定义、Skill 分配、MCP 工具、挂载目录和任务模板共同限定。例如开发 Agent 获得代码修复 Skill，测试 Agent 获得测试验证 Skill，知识库 Agent 获得项目知识库 Skill。
-- **Agent 独立容器化**：每个群组或角色执行单元拥有自己的容器实例、会话目录、IPC 目录和工作目录。执行时启动，不需要时销毁。
-- **会话隔离**：`data/sessions/{group}/.claude` 将不同角色、群组和渠道的 Claude 会话分开保存。工作流需要共享的信息通过结构化 handoff、产物和数据库传递，而不是依赖隐式聊天历史。
+- **Agent 独立容器化**：每个 Agent 或角色执行单元拥有自己的容器实例、会话目录、IPC 目录和工作目录。执行时启动，不需要时销毁。
+- **会话隔离**：`data/sessions/{agent}/.claude` 将不同角色、Agent 和渠道的 Claude 会话分开保存。工作流需要共享的信息通过结构化 handoff、产物和数据库传递，而不是依赖隐式聊天历史。
 - **Skill 隔离**：`container/skills/skills.json` 按角色文件夹分配 Skill。Agent 只加载当前角色需要的方法论包，减少提示污染，也让角色职责更稳定。
-- **MCP 和工具隔离**：容器内统一挂载 `icarus` MCP 服务，但每次执行都会带上 `ICARUS_GROUP_FOLDER`、`ICARUS_IS_MAIN`、`ICARUS_WORKFLOW_ID`、`ICARUS_STAGE_KEY` 等上下文，宿主机按来源做授权。
-- **并发队列控制**：`GroupQueue` 管理活跃容器数量、等待队列、空闲状态、后续消息注入和停止请求，避免 Agent swarm 把本机资源耗尽。
+- **MCP 和工具隔离**：容器内统一挂载 `icarus` MCP 服务，但每次执行都会带上 `ICARUS_AGENT_FOLDER`、`ICARUS_IS_MAIN`、`ICARUS_WORKFLOW_ID`、`ICARUS_STAGE_KEY` 等上下文，宿主机按来源做授权。
+- **并发队列控制**：`AgentQueue` 管理活跃容器数量、等待队列、空闲状态、后续消息注入和停止请求，避免 Agent swarm 把本机资源耗尽。
 
 这个设计的巧妙之处在于：系统保留了多 Agent 协作的弹性，但没有让所有 Agent 共享一个混乱的上下文池。每个蜂窝单元都可以强执行、可追踪、可销毁，跨单元协作通过结构化协议完成。
 
@@ -44,7 +44,7 @@ Icarus 的 harness 不是单独的目录，而是一组工程化封装：容器 
 
 主要能力包括：
 
-- **标准化输入**：宿主机把 prompt、sessionId、model、runId、queryId、groupFolder、workflowId、stageKey、delegationId 等执行元数据打包传给容器。
+- **标准化输入**：宿主机把 prompt、sessionId、model、runId、queryId、agentFolder、workflowId、stageKey、delegationId 等执行元数据打包传给容器。
 - **标准化执行环境**：容器 runner 统一挂载目录、注入占位凭证、配置模型代理、加载 Skill、启动 MCP、设置允许工具。
 - **流式输出解析**：容器 Agent 用固定 marker 输出结构化结果，宿主机实时解析 success/error/event，写入 Query Trace 和工作台状态。
 - **Agent Harness**：容器内通过 Claude Agent `query()` 执行，配置工具白名单、MCP server、hooks、session resume、isolated session、PreToolUse/PostToolUse 事件。
@@ -90,7 +90,7 @@ Icarus 的工作流引擎把复杂研发活动建模为配置驱动的状态机�
 
 一个工作流通常包含：
 
-- **roles**：定义 planner、dev、reviewer、ops、test 等角色，并按渠道映射到具体 group folder。
+- **roles**：定义 planner、dev、reviewer、ops、test 等角色，并按渠道映射到具体 agent folder。
 - **entry_points**：支持从方案、开发、测试、Bug 修复等不同入口开始。
 - **states**：状态类型包括 delegation、interrupt、system、terminal。
 - **delegation**：把任务交给某个角色 Agent，附带 Skill、任务模板、输入输出 schema、允许工具、成功标准和失败分类。
@@ -158,7 +158,7 @@ Icarus 的优势在于它不是“一个更会写代码的 CLI”，而是把编
 
 - **从代码会话升级为工程流程**：Claude Code/Codex 的强项是 repo 内探索、编辑、测试和 review；Icarus 把这些能力作为工作流中的一个阶段，前后还有需求澄清、计划、评审、部署、测试验证、线上日志调查、人类审批和产物归档。
 - **跨端入口和统一状态**：编程 CLI 通常围绕终端、IDE 或云任务运行；Icarus 把 Web 工作台、桌面 Assistant、飞书移动端、定时任务和 Agent Trace 收敛到同一个宿主机状态机，用户可以在不同入口继续处理同一任务。
-- **角色隔离不只靠提示词**：Claude Code/Codex 的 subagent 主要隔离上下文、提示和工具权限；Icarus 还隔离容器、`.claude` 会话目录、IPC 来源、挂载目录、Skill 包、workflow metadata 和 group queue 资源配额。
+- **角色隔离不只靠提示词**：Claude Code/Codex 的 subagent 主要隔离上下文、提示和工具权限；Icarus 还隔离容器、`.claude` 会话目录、IPC 来源、挂载目录、Skill 包、workflow metadata 和 agent queue 资源配额。
 - **评估和失败归因是内建闭环**：OpenAI Agents 文档提供 traces、graders、guardrails 等通用能力；Icarus 在项目层把 artifact contract、stage evaluator、failure taxonomy 和 workbench timeline 固化为研发交付协议，减少“Agent 说完成了，但无法判断是否可交付”的问题。
 
 ### 相比 Hermes Agent
@@ -169,7 +169,7 @@ Icarus 与 Hermes 的取舍不同：Icarus 不把“越用越会自己长技能�
 
 - **知识沉淀更偏证据化**：Hermes 的 built-in memory 是 bounded、agent-curated 的 `MEMORY.md`/`USER.md` 加 session search，也支持外部 memory provider；Icarus 同时维护结构化 memory 和 LLM Wiki，把 materials、claims、evidence、relations、pages 分开，让项目知识可以被检索、引用和追溯证据。
 - **不开放自主改写系统**：Hermes 强调 agent 从经验中自动创建和改进技能；Icarus 把系统能力变更留给显式工程工作流和人工审查，更适合对稳定性要求较高的工程系统。
-- **执行权限更集中在可信宿主机控制面**：Hermes 支持多种运行后端和安全机制；Icarus 的设计重点是“控制面不进容器，执行面不越过控制面”，容器通过 IPC 向宿主机申请受控能力，宿主机按 group/main、workflow、stage 和 allowlist 判定。
+- **执行权限更集中在可信宿主机控制面**：Hermes 支持多种运行后端和安全机制；Icarus 的设计重点是“控制面不进容器，执行面不越过控制面”，容器通过 IPC 向宿主机申请受控能力，宿主机按 agent/main、workflow、stage 和 allowlist 判定。
 - **研发协作对象更明确**：Hermes 是一个泛化常驻个人 Agent；Icarus 把 planner/dev/reviewer/ops/test/wiki/assistant 等角色、产物契约和工作台操作面组合成研发团队语义，更适合需求开发、Bug 修复、预发部署、测试验证和线上故障处理这类多人/多阶段工程任务。
 
 总结来说，OpenClaw 更像多渠道 local-first 个人助手平台，Claude Code/Codex 更像强大的编程 Agent 工作台，Hermes 更像会长期学习的个人自动化 Agent；Icarus 的核心差异是把这些能力收束成“可信宿主机控制面 + 容器化执行面 + 状态机工作流 + 可追踪内部契约”的个人实验运行时。

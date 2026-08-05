@@ -27,7 +27,7 @@ describe('session reset guard', () => {
     expect(isSessionResetEpochCurrent('web_main', staleEpoch + 1)).toBe(true);
   });
 
-  it('tracks resets independently per group folder', () => {
+  it('tracks resets independently per agent folder', () => {
     const mainEpoch = getSessionResetEpoch('web_main');
     const opsEpoch = getSessionResetEpoch('web_ops');
 

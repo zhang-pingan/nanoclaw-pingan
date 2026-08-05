@@ -10,12 +10,12 @@ import {
   toAgentQueryFailurePatch,
   toFailureEventPayload,
 } from '../failure-taxonomy.js';
-import { GroupQueue } from '../group-queue.js';
+import { AgentQueue } from '../agent-queue.js';
 import { logger } from '../logger.js';
 import { clearModelResolutionsForRun } from '../model-resolution.js';
 import { selectModel } from '../model-selector.js';
 import { stripInternalTags } from '../router.js';
-import type { RegisteredGroup } from '../types.js';
+import type { RegisteredAgent } from '../types.js';
 import {
   agentChatInputLength,
   AgentChatRequestInput,
@@ -25,13 +25,13 @@ import {
 import { RunOnceInputError } from './service.js';
 
 export interface InternalAgentChatServiceOptions {
-  registeredGroups: () => Record<string, RegisteredGroup>;
-  queue: GroupQueue;
+  registeredAgents: () => Record<string, RegisteredAgent>;
+  queue: AgentQueue;
   onProcess: (
-    groupJid: string,
+    agentJid: string,
     proc: ChildProcess,
     containerName: string,
-    groupFolder: string,
+    agentFolder: string,
   ) => void;
   maxInputChars: number;
 }
@@ -81,10 +81,10 @@ export class InternalAgentChatService {
 
   async chat(input: AgentChatRequestInput): Promise<AgentChatResponse> {
     const request = parseAgentChatRequest(input);
-    const group = this.opts.registeredGroups()[request.chat_jid];
-    if (!group) {
+    const agent = this.opts.registeredAgents()[request.chat_jid];
+    if (!agent) {
       throw new RunOnceInputError(
-        `Registered group not found: ${request.chat_jid}`,
+        `Registered Agent not found: ${request.chat_jid}`,
       );
     }
 
@@ -102,7 +102,7 @@ export class InternalAgentChatService {
     const queryId = createExecutionId();
     const selectedModel = await selectModel({
       prompt,
-      isMain: group.isMain === true,
+      isMain: agent.isMain === true,
     });
     const promptHash = sha256(`${systemForHash}\n${prompt}`);
 
@@ -115,7 +115,7 @@ export class InternalAgentChatService {
           ? request.metadata.trace_id
           : undefined,
       chatJid: request.chat_jid,
-      groupFolder: group.folder,
+      agentFolder: agent.folder,
       selectedModel: selectedModel.selectedModel,
       selectedModelReason: selectedModel.reason,
       promptSummary: request.message.slice(0, 140),
@@ -249,8 +249,8 @@ export class InternalAgentChatService {
       status = await this.opts.queue.runOneShot(
         request.chat_jid,
         {
-          groupFolder: group.folder,
-          groupName: group.name,
+          agentFolder: agent.folder,
+          agentName: agent.name,
           promptSummary: request.message.slice(0, 100),
           lastSender: 'internal-agent-chat',
           lastContent: request.message.slice(0, 200),
@@ -261,7 +261,7 @@ export class InternalAgentChatService {
         },
         async () => {
           const output = await runContainerAgent(
-            group,
+            agent,
             {
               prompt,
               system,
@@ -270,9 +270,9 @@ export class InternalAgentChatService {
               queryId,
               requireResult: true,
               isolatedSession: false,
-              groupFolder: group.folder,
+              agentFolder: agent.folder,
               chatJid: request.chat_jid,
-              isMain: group.isMain === true,
+              isMain: agent.isMain === true,
               selectedModel: selectedModel.selectedModel,
               isOneShot: true,
             },
@@ -281,7 +281,7 @@ export class InternalAgentChatService {
                 request.chat_jid,
                 proc,
                 containerName,
-                group.folder,
+                agent.folder,
               ),
             handleOutput,
           );

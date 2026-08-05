@@ -10,7 +10,7 @@ import {
   AI_IMAGES_DIR,
   ATTACHMENTS_DIR,
   DESKTOP_CAPTURES_DIR,
-  GROUPS_DIR,
+  AGENTS_DIR,
   WEB_UPLOADS_DIR,
 } from './config.js';
 import { readEnvFile } from './env.js';
@@ -157,12 +157,12 @@ function sanitizeRequestId(requestId: string): string {
 
 function resolveWorkspaceInputPath(
   containerPath: string,
-  sourceGroup: string,
+  sourceAgent: string,
 ): string {
   const mappings = [
     {
-      containerPrefix: '/workspace/group/',
-      hostBase: path.join(GROUPS_DIR, sourceGroup),
+      containerPrefix: '/workspace/agent/',
+      hostBase: path.join(AGENTS_DIR, sourceAgent),
     },
     {
       containerPrefix: '/workspace/uploads/',
@@ -187,7 +187,7 @@ function resolveWorkspaceInputPath(
   );
   if (!mapping) {
     throw new Error(
-      'Image path must start with /workspace/group/, /workspace/uploads/, /workspace/attachments/, /workspace/desktop-captures/, or /workspace/ai-images/.',
+      'Image path must start with /workspace/agent/, /workspace/uploads/, /workspace/attachments/, /workspace/desktop-captures/, or /workspace/ai-images/.',
     );
   }
 
@@ -453,15 +453,15 @@ function encodeInputImageAsDataUri(hostPath: string): string {
 
 async function resolveGenerateInputImages(
   parsed: z.infer<typeof generateArgsSchema>,
-  sourceGroup?: string,
+  sourceAgent?: string,
 ): Promise<string[] | undefined> {
   const images: string[] = [];
   for (const item of parsed.image_paths || []) {
-    if (!sourceGroup) {
-      throw new Error('sourceGroup is required for image-to-image requests.');
+    if (!sourceAgent) {
+      throw new Error('sourceAgent is required for image-to-image requests.');
     }
     images.push(
-      encodeInputImageAsDataUri(resolveWorkspaceInputPath(item, sourceGroup)),
+      encodeInputImageAsDataUri(resolveWorkspaceInputPath(item, sourceAgent)),
     );
   }
   for (const url of parsed.image_urls || []) {
@@ -479,12 +479,12 @@ async function resolveGenerateInputImages(
 export async function generateAiImage(
   args: unknown,
   requestId: string,
-  sourceGroup?: string,
+  sourceAgent?: string,
 ): Promise<AiImageResult> {
   try {
     const parsed = generateArgsSchema.parse(args);
     const config = resolveConfig({ size: parsed.size });
-    const inputImages = await resolveGenerateInputImages(parsed, sourceGroup);
+    const inputImages = await resolveGenerateInputImages(parsed, sourceAgent);
     const payload = {
       model: config.model,
       prompt: parsed.prompt,
@@ -531,16 +531,16 @@ export async function generateAiImage(
 export async function editAiImage(
   args: unknown,
   requestId: string,
-  sourceGroup: string,
+  sourceAgent: string,
 ): Promise<AiImageResult> {
   try {
     const parsed = editArgsSchema.parse(args);
     const config = resolveConfig({ size: parsed.size });
     const imageHostPaths = parsed.image_paths.map((item) =>
-      resolveWorkspaceInputPath(item, sourceGroup),
+      resolveWorkspaceInputPath(item, sourceAgent),
     );
     const maskHostPath = parsed.mask_path
-      ? resolveWorkspaceInputPath(parsed.mask_path, sourceGroup)
+      ? resolveWorkspaceInputPath(parsed.mask_path, sourceAgent)
       : undefined;
 
     const form = new FormData();

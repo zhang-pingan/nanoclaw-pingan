@@ -56,7 +56,7 @@ describe('Icarus rename source contracts', () => {
     expect(agentRunner).toContain('/__icarus__/');
     expect(agentRunner).toContain('ICARUS_CHAT_JID');
     expect(mcpServer).toContain("name: 'icarus'");
-    expect(mcpServer).toContain('ICARUS_GROUP_FOLDER');
+    expect(mcpServer).toContain('ICARUS_AGENT_FOLDER');
   });
 
   it('uses Icarus mail protocol identifiers', () => {
@@ -121,5 +121,4 @@ describe('container image config', () => {
       'registry.example.com/team/icarus-agent:latest',
     );
   });
-
 });

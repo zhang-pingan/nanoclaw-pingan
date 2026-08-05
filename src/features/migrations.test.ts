@@ -32,7 +32,7 @@ describe('feature migrations', () => {
     fs.mkdirSync(migrationDir, { recursive: true });
     fs.writeFileSync(
       path.join(migrationDir, '001_bad.sql'),
-      "INSERT INTO registered_groups (jid, name, folder, trigger_pattern, added_at) VALUES ('x', 'x', 'x', '@Andy', 'now');\n",
+      "INSERT INTO registered_agents (jid, name, folder, trigger_pattern, added_at) VALUES ('x', 'x', 'x', '@Andy', 'now');\n",
       'utf-8',
     );
     const db = await import('../db.js');

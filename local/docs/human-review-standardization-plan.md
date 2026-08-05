@@ -196,7 +196,7 @@ export interface HumanReviewRequest {
   taskId?: string | null;
   delegationId?: string | null;
   stageKey?: string | null;
-  groupFolder?: string | null;
+  agentFolder?: string | null;
   chatJid?: string | null;
 
   kind: HumanReviewKind;
@@ -367,7 +367,7 @@ CREATE TABLE IF NOT EXISTS human_review_requests (
   task_id TEXT,
   delegation_id TEXT,
   stage_key TEXT,
-  group_folder TEXT,
+  agent_folder TEXT,
   chat_jid TEXT,
 
   kind TEXT NOT NULL,

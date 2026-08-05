@@ -31,11 +31,11 @@ describe('task scheduler', () => {
     vi.useRealTimers();
   });
 
-  it('pauses due tasks with invalid group folders to prevent retry churn', async () => {
+  it('pauses due tasks with invalid Agent folders to prevent retry churn', async () => {
     createTask({
       id: 'task-invalid-folder',
-      group_folder: '../../outside',
-      chat_jid: 'bad@g.us',
+      agent_folder: '../../outside',
+      chat_jid: 'web:bad',
       prompt: 'run',
       schedule_type: 'once',
       schedule_value: '2026-02-22T00:00:00.000Z',
@@ -46,13 +46,13 @@ describe('task scheduler', () => {
     });
 
     const enqueueTask = vi.fn(
-      (_groupJid: string, _taskId: string, fn: () => Promise<void>) => {
+      (_agentJid: string, _taskId: string, fn: () => Promise<void>) => {
         void fn();
       },
     );
 
     startSchedulerLoop({
-      registeredGroups: () => ({}),
+      registeredAgents: () => ({}),
       getSessions: () => ({}),
       queue: { enqueueTask } as any,
       onProcess: () => {},
@@ -63,7 +63,7 @@ describe('task scheduler', () => {
 
     const task = getTaskById('task-invalid-folder');
     expect(task?.status).toBe('paused');
-    expect(task?.last_result).toContain('Invalid group folder');
+    expect(task?.last_result).toContain('Invalid Agent folder');
     expect(task?.last_query_id).toBeTruthy();
 
     const queries = listAgentQueries(10, 0, {
@@ -74,17 +74,17 @@ describe('task scheduler', () => {
     expect(queries[0].query_id).toBe(task?.last_query_id);
     expect(queries[0].status).toBe('error');
     expect(queries[0].failure_type).toBe('invalid_input');
-    expect(queries[0].failure_subtype).toBe('invalid_group_folder');
+    expect(queries[0].failure_subtype).toBe('invalid_agent_folder');
     expect(queries[0].failure_origin).toBe('scheduler');
     expect(queries[0].failure_retryable).toBe(0);
-    expect(queries[0].error_message).toContain('Invalid group folder');
+    expect(queries[0].error_message).toContain('Invalid Agent folder');
   });
 
-  it('records canonical query history when a task group is missing', async () => {
+  it('records canonical query history when a task Agent is missing', async () => {
     createTask({
-      id: 'task-missing-group',
-      group_folder: 'missing-group',
-      chat_jid: 'missing@g.us',
+      id: 'task-missing-agent',
+      agent_folder: 'missing-agent',
+      chat_jid: 'web:missing',
       prompt: 'run',
       schedule_type: 'once',
       schedule_value: '2026-02-22T00:00:00.000Z',
@@ -95,13 +95,13 @@ describe('task scheduler', () => {
     });
 
     const enqueueTask = vi.fn(
-      (_groupJid: string, _taskId: string, fn: () => Promise<void>) => {
+      (_agentJid: string, _taskId: string, fn: () => Promise<void>) => {
         void fn();
       },
     );
 
     startSchedulerLoop({
-      registeredGroups: () => ({}),
+      registeredAgents: () => ({}),
       getSessions: () => ({}),
       queue: { enqueueTask } as any,
       onProcess: () => {},
@@ -110,31 +110,31 @@ describe('task scheduler', () => {
 
     await vi.advanceTimersByTimeAsync(10);
 
-    const task = getTaskById('task-missing-group');
+    const task = getTaskById('task-missing-agent');
     expect(task?.status).toBe('active');
-    expect(task?.last_result).toContain('Group not found: missing-group');
+    expect(task?.last_result).toContain('Agent not found: missing-agent');
     expect(task?.last_query_id).toBeTruthy();
 
     const queries = listAgentQueries(10, 0, {
       sourceType: 'scheduled_task',
-      sourceRefId: 'task-missing-group',
+      sourceRefId: 'task-missing-agent',
     });
     expect(queries).toHaveLength(1);
     expect(queries[0].query_id).toBe(task?.last_query_id);
     expect(queries[0].status).toBe('error');
     expect(queries[0].failure_type).toBe('invalid_input');
-    expect(queries[0].failure_subtype).toBe('group_not_found');
+    expect(queries[0].failure_subtype).toBe('agent_not_found');
     expect(queries[0].failure_origin).toBe('scheduler');
     expect(queries[0].failure_retryable).toBe(0);
-    expect(queries[0].error_message).toBe('Group not found: missing-group');
+    expect(queries[0].error_message).toBe('Agent not found: missing-agent');
   });
 
   it('computeNextRun anchors interval tasks to scheduled time to prevent drift', () => {
     const scheduledTime = new Date(Date.now() - 2000).toISOString(); // 2s ago
     const task = {
       id: 'drift-test',
-      group_folder: 'test',
-      chat_jid: 'test@g.us',
+      agent_folder: 'test',
+      chat_jid: 'web:test',
       prompt: 'test',
       schedule_type: 'interval' as const,
       schedule_value: '60000', // 1 minute
@@ -157,8 +157,8 @@ describe('task scheduler', () => {
   it('computeNextRun returns null for once-tasks', () => {
     const task = {
       id: 'once-test',
-      group_folder: 'test',
-      chat_jid: 'test@g.us',
+      agent_folder: 'test',
+      chat_jid: 'web:test',
       prompt: 'test',
       schedule_type: 'once' as const,
       schedule_value: '2026-01-01T00:00:00.000Z',
@@ -181,8 +181,8 @@ describe('task scheduler', () => {
 
     const task = {
       id: 'skip-test',
-      group_folder: 'test',
-      chat_jid: 'test@g.us',
+      agent_folder: 'test',
+      chat_jid: 'web:test',
       prompt: 'test',
       schedule_type: 'interval' as const,
       schedule_value: String(ms),

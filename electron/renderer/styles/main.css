@@ -331,7 +331,7 @@ body {
 }
 
 #sidebar.collapsed .sidebar-header-actions #reset-all-sessions,
-#sidebar.collapsed .sidebar-header-actions #refresh-groups {
+#sidebar.collapsed .sidebar-header-actions #refresh-agents {
   display: none;
 }
 
@@ -1706,7 +1706,7 @@ body {
   background: var(--minimal-surface, #ffffff);
 }
 
-.today-plan-chat-group-btn {
+.today-plan-chat-agent-btn {
   width: 100%;
   appearance: none;
   cursor: pointer;
@@ -1723,19 +1723,19 @@ body {
     background 180ms ease;
 }
 
-.today-plan-chat-group-btn:hover {
+.today-plan-chat-agent-btn:hover {
   transform: translateY(-1px);
   border-color: var(--minimal-line-strong, rgba(148, 163, 184, 0.28));
   box-shadow: 0 8px 24px rgba(16, 24, 40, 0.07);
 }
 
-.today-plan-chat-group-btn.active {
+.today-plan-chat-agent-btn.active {
   border-color: var(--minimal-line-strong, rgba(148, 163, 184, 0.32));
   background: var(--minimal-nav-strong, #e7e9ec);
   box-shadow: inset 3px 0 0 var(--minimal-text-soft, #575f6a);
 }
 
-.today-plan-chat-group-btn .today-plan-description {
+.today-plan-chat-agent-btn .today-plan-description {
   margin-top: 2px;
   display: -webkit-box;
   overflow: hidden;
@@ -4304,7 +4304,7 @@ body {
 
 .sidebar-section,
 .management-list,
-.memory-groups-list,
+.memory-agents-list,
 .trace-monitor-list {
   flex: 1 1 auto;
   min-height: 0;
@@ -6029,7 +6029,7 @@ body {
   flex-direction: column;
 }
 
-.list.memory-groups-list {
+.list.memory-agents-list {
   padding: var(--secondary-nav-list-offset-top) 10px 6px;
   overflow: auto;
 }
@@ -7217,12 +7217,12 @@ body {
   gap: 8px;
 }
 
-.group-action-btn:hover {
+.agent-action-btn:hover {
   color: #c2410c;
   background: rgba(251, 146, 60, 0.16);
 }
 
-.group-action-btn.busy .icon {
+.agent-action-btn.busy .icon {
   animation: iconSpin 900ms linear infinite;
 }
 
@@ -7231,7 +7231,7 @@ body {
 }
 
 #sidebar .list-item,
-#memory-management-screen .memory-groups-list .list-item {
+#memory-management-screen .memory-agents-list .list-item {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -7254,7 +7254,7 @@ body {
 }
 
 #sidebar .list-item:hover,
-#memory-management-screen .memory-groups-list .list-item:hover {
+#memory-management-screen .memory-agents-list .list-item:hover {
   color: var(--text-primary);
   transform: translateY(-1px);
   border-color: var(--secondary-nav-border-strong);
@@ -7263,7 +7263,7 @@ body {
 }
 
 #sidebar .list-item.active,
-#memory-management-screen .memory-groups-list .list-item.active {
+#memory-management-screen .memory-agents-list .list-item.active {
   border-color: rgba(var(--secondary-nav-accent-rgb), 0.3);
   background: linear-gradient(
     180deg,
@@ -7277,7 +7277,7 @@ body {
 }
 
 #sidebar .list-item .item-icon,
-#memory-management-screen .memory-groups-list .list-item .item-icon {
+#memory-management-screen .memory-agents-list .list-item .item-icon {
   width: 36px;
   height: 36px;
   border-radius: 12px;
@@ -7315,7 +7315,7 @@ body {
 
 #sidebar .list-item .item-icon.item-initial,
 #memory-management-screen
-  .memory-groups-list
+  .memory-agents-list
   .list-item
   .item-icon.item-initial {
   position: relative;
@@ -7323,10 +7323,10 @@ body {
   isolation: isolate;
 }
 
-#sidebar .list-item.secondary-group .item-icon.item-initial,
+#sidebar .list-item.secondary-agent .item-icon.item-initial,
 #memory-management-screen
-  .memory-groups-list
-  .list-item.secondary-group
+  .memory-agents-list
+  .list-item.secondary-agent
   .item-icon.item-initial {
   width: 32px;
   height: 32px;
@@ -7341,7 +7341,7 @@ body {
 
 #sidebar .list-item .item-icon.item-initial::before,
 #memory-management-screen
-  .memory-groups-list
+  .memory-agents-list
   .list-item
   .item-icon.item-initial::before {
   content: '';
@@ -7363,17 +7363,17 @@ body {
   z-index: -1;
 }
 
-#sidebar .list-item.secondary-group .item-icon.item-initial::before,
+#sidebar .list-item.secondary-agent .item-icon.item-initial::before,
 #memory-management-screen
-  .memory-groups-list
-  .list-item.secondary-group
+  .memory-agents-list
+  .list-item.secondary-agent
   .item-icon.item-initial::before {
   display: none;
 }
 
 #sidebar .list-item .item-icon.item-initial.tone-ocean,
 #memory-management-screen
-  .memory-groups-list
+  .memory-agents-list
   .list-item
   .item-icon.item-initial.tone-ocean {
   --initial-icon-rgb: 14, 116, 144;
@@ -7382,7 +7382,7 @@ body {
 
 #sidebar .list-item .item-icon.item-initial.tone-mint,
 #memory-management-screen
-  .memory-groups-list
+  .memory-agents-list
   .list-item
   .item-icon.item-initial.tone-mint {
   --initial-icon-rgb: 4, 120, 87;
@@ -7391,7 +7391,7 @@ body {
 
 #sidebar .list-item .item-icon.item-initial.tone-amber,
 #memory-management-screen
-  .memory-groups-list
+  .memory-agents-list
   .list-item
   .item-icon.item-initial.tone-amber {
   --initial-icon-rgb: 180, 83, 9;
@@ -7400,7 +7400,7 @@ body {
 
 #sidebar .list-item .item-icon.item-initial.tone-rose,
 #memory-management-screen
-  .memory-groups-list
+  .memory-agents-list
   .list-item
   .item-icon.item-initial.tone-rose {
   --initial-icon-rgb: 190, 24, 93;
@@ -7409,7 +7409,7 @@ body {
 
 #sidebar .list-item .item-icon.item-initial.tone-indigo,
 #memory-management-screen
-  .memory-groups-list
+  .memory-agents-list
   .list-item
   .item-icon.item-initial.tone-indigo {
   --initial-icon-rgb: 67, 56, 202;
@@ -7418,7 +7418,7 @@ body {
 
 #sidebar .list-item .item-icon.item-initial.tone-cyan,
 #memory-management-screen
-  .memory-groups-list
+  .memory-agents-list
   .list-item
   .item-icon.item-initial.tone-cyan {
   --initial-icon-rgb: 8, 145, 178;
@@ -7427,7 +7427,7 @@ body {
 
 #sidebar .list-item .item-icon.item-initial.tone-slate,
 #memory-management-screen
-  .memory-groups-list
+  .memory-agents-list
   .list-item
   .item-icon.item-initial.tone-slate {
   --initial-icon-rgb: 71, 85, 105;
@@ -7436,7 +7436,7 @@ body {
 
 #sidebar .list-item .item-icon.item-avatar,
 #memory-management-screen
-  .memory-groups-list
+  .memory-agents-list
   .list-item
   .item-icon.item-avatar {
   border-radius: 50%;
@@ -7449,7 +7449,7 @@ body {
 
 #sidebar .list-item .item-icon.item-avatar img,
 #memory-management-screen
-  .memory-groups-list
+  .memory-agents-list
   .list-item
   .item-icon.item-avatar
   img {
@@ -7460,20 +7460,20 @@ body {
 }
 
 #sidebar .list-item:hover .item-icon,
-#memory-management-screen .memory-groups-list .list-item:hover .item-icon {
+#memory-management-screen .memory-agents-list .list-item:hover .item-icon {
   transform: scale(1.05);
 }
 
-#sidebar .list-item.secondary-group:hover .item-icon,
+#sidebar .list-item.secondary-agent:hover .item-icon,
 #memory-management-screen
-  .memory-groups-list
-  .list-item.secondary-group:hover
+  .memory-agents-list
+  .list-item.secondary-agent:hover
   .item-icon {
   transform: none;
 }
 
 #sidebar .list-item.active .item-icon,
-#memory-management-screen .memory-groups-list .list-item.active .item-icon {
+#memory-management-screen .memory-agents-list .list-item.active .item-icon {
   border-color: rgba(
     var(--initial-icon-rgb, var(--secondary-nav-accent-rgb)),
     0.24
@@ -7498,16 +7498,16 @@ body {
 
 #sidebar .list-item.active .item-icon.item-avatar,
 #memory-management-screen
-  .memory-groups-list
+  .memory-agents-list
   .list-item.active
   .item-icon.item-avatar {
   background: #ffffff;
 }
 
-#sidebar .list-item.secondary-group.active .item-icon.item-initial,
+#sidebar .list-item.secondary-agent.active .item-icon.item-initial,
 #memory-management-screen
-  .memory-groups-list
-  .list-item.secondary-group.active
+  .memory-agents-list
+  .list-item.secondary-agent.active
   .item-icon.item-initial {
   background: #eef6ff;
   border-color: rgba(14, 165, 233, 0.22);
@@ -7516,7 +7516,7 @@ body {
 }
 
 #sidebar .list-item .item-name,
-#memory-management-screen .memory-groups-list .list-item .item-name {
+#memory-management-screen .memory-agents-list .list-item .item-name {
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -7530,12 +7530,12 @@ body {
 }
 
 #sidebar .list-item.active .item-name,
-#memory-management-screen .memory-groups-list .list-item.active .item-name {
+#memory-management-screen .memory-agents-list .list-item.active .item-name {
   color: var(--secondary-nav-accent, var(--accent));
 }
 
 #sidebar .list-item .item-badge,
-#memory-management-screen .memory-groups-list .list-item .item-badge {
+#memory-management-screen .memory-agents-list .list-item .item-badge {
   display: inline-flex;
   align-items: center;
   font-size: 11px;
@@ -7687,20 +7687,20 @@ body {
   z-index: 10;
 }
 
-#chat-group-info {
+#chat-agent-info {
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
 
-#chat-group-name {
+#chat-agent-name {
   font-weight: 700;
   font-size: 16px;
   color: var(--text-primary);
   letter-spacing: -0.015em;
 }
 
-#chat-group-folder {
+#chat-agent-folder {
   font-size: 11px;
   color: var(--text-muted);
   font-family: var(--font-mono);
@@ -10438,7 +10438,7 @@ body {
   opacity: 1;
 }
 
-.scheduler-group-header {
+.scheduler-agent-header {
   padding: 10px 20px 4px;
   font-size: 11px;
   text-transform: uppercase;
@@ -12287,7 +12287,7 @@ body::after {
   }
 }
 
-/* Keep downloaded group avatars intact under theme overrides */
+/* Keep downloaded Agent avatars intact under theme overrides */
 .list-item .item-icon.item-avatar,
 .list-item.active .item-icon.item-avatar {
   background: #ffffff !important;
@@ -12967,7 +12967,7 @@ body::after,
 }
 
 #sidebar .sidebar-section,
-#memory-management-screen .memory-groups-list,
+#memory-management-screen .memory-agents-list,
 #knowledge-management-screen .knowledge-sidebar-section,
 #configuration-screen .configuration-secondary-nav,
 #trace-monitor-screen .trace-monitor-list {
@@ -12975,13 +12975,13 @@ body::after,
 }
 
 #sidebar .list,
-#memory-management-screen .list.memory-groups-list {
+#memory-management-screen .list.memory-agents-list {
   padding-left: 0;
   padding-right: 0;
 }
 
 #sidebar .list-item,
-#memory-management-screen .memory-groups-list .list-item,
+#memory-management-screen .memory-agents-list .list-item,
 #configuration-screen .management-list-item,
 #knowledge-management-screen .knowledge-list-item,
 #trace-monitor-screen .trace-monitor-list-item,
@@ -13003,7 +13003,7 @@ body::after,
 }
 
 #sidebar .list-item:hover,
-#memory-management-screen .memory-groups-list .list-item:hover,
+#memory-management-screen .memory-agents-list .list-item:hover,
 #configuration-screen .management-list-item:hover,
 #knowledge-management-screen .knowledge-list-item:hover,
 #trace-monitor-screen .trace-monitor-list-item:hover,
@@ -13016,7 +13016,7 @@ body::after,
 }
 
 #sidebar .list-item.active,
-#memory-management-screen .memory-groups-list .list-item.active,
+#memory-management-screen .memory-agents-list .list-item.active,
 #configuration-screen .management-list-item.active,
 #knowledge-management-screen .knowledge-list-item.active,
 #trace-monitor-screen .trace-monitor-list-item.active,
@@ -13029,7 +13029,7 @@ body::after,
 }
 
 #sidebar .list-item .item-icon,
-#memory-management-screen .memory-groups-list .list-item .item-icon,
+#memory-management-screen .memory-agents-list .list-item .item-icon,
 #configuration-screen .configuration-nav-icon {
   width: 30px;
   height: 30px;
@@ -13040,10 +13040,10 @@ body::after,
   box-shadow: none;
 }
 
-#sidebar .list-item.secondary-group .item-icon.item-initial,
+#sidebar .list-item.secondary-agent .item-icon.item-initial,
 #memory-management-screen
-  .memory-groups-list
-  .list-item.secondary-group
+  .memory-agents-list
+  .list-item.secondary-agent
   .item-icon.item-initial {
   width: 28px;
   height: 28px;
@@ -13051,7 +13051,7 @@ body::after,
 }
 
 #sidebar .list-item.active .item-icon,
-#memory-management-screen .memory-groups-list .list-item.active .item-icon,
+#memory-management-screen .memory-agents-list .list-item.active .item-icon,
 #configuration-screen .configuration-nav-item.active .configuration-nav-icon {
   border-color: var(--minimal-line-strong);
   background: var(--minimal-accent-soft);
@@ -13061,14 +13061,14 @@ body::after,
 
 #sidebar .list-item .item-icon.item-initial::before,
 #memory-management-screen
-  .memory-groups-list
+  .memory-agents-list
   .list-item
   .item-icon.item-initial::before {
   display: none;
 }
 
 #sidebar .list-item .item-name,
-#memory-management-screen .memory-groups-list .list-item .item-name,
+#memory-management-screen .memory-agents-list .list-item .item-name,
 .management-list-title,
 .knowledge-list-item-title,
 .trace-monitor-list-title,
@@ -13080,7 +13080,7 @@ body::after,
 }
 
 #sidebar .list-item .item-badge,
-#memory-management-screen .memory-groups-list .list-item .item-badge {
+#memory-management-screen .memory-agents-list .list-item .item-badge {
   display: inline-flex;
   align-items: center;
   padding: 3px 8px;
@@ -13094,7 +13094,7 @@ body::after,
 }
 
 #sidebar .list-item.active .item-name,
-#memory-management-screen .memory-groups-list .list-item.active .item-name,
+#memory-management-screen .memory-agents-list .list-item.active .item-name,
 #configuration-screen
   .management-list-item.active
   .management-list-title,
@@ -13169,14 +13169,14 @@ body::after,
   display: none;
 }
 
-#chat-group-name {
+#chat-agent-name {
   color: var(--minimal-text);
   font-size: 15px;
   font-weight: 680;
   letter-spacing: 0;
 }
 
-#chat-group-folder {
+#chat-agent-folder {
   color: var(--minimal-text-muted);
   letter-spacing: 0;
 }
@@ -13784,7 +13784,7 @@ body::after,
 .workflow-wizard-option.selected,
 .workflow-wizard-option-segmented.selected,
 .today-plan-switcher-item.active,
-.today-plan-chat-group-btn.active,
+.today-plan-chat-agent-btn.active,
 .today-plan-chat-picker-message.selected,
 .today-plan-service-option-card.active {
   border-color: var(--minimal-line-strong);
@@ -13831,7 +13831,7 @@ body::after,
 .workflow-wizard-option-segmented,
 .today-plan-switcher-item,
 .today-plan-chat-picker-message,
-.today-plan-chat-group-btn {
+.today-plan-chat-agent-btn {
   transition:
     background 140ms ease,
     border-color 140ms ease,
@@ -13842,7 +13842,7 @@ body::after,
 .workflow-wizard-option-segmented:hover,
 .today-plan-switcher-item:hover,
 .today-plan-chat-picker-message:hover,
-.today-plan-chat-group-btn:hover,
+.today-plan-chat-agent-btn:hover,
 .workflow-wizard-secondary-btn:hover:not(:disabled),
 .workflow-wizard-close:hover:not(:disabled),
 #memory-management-screen .memory-dialog-close-btn:hover,
@@ -14081,7 +14081,7 @@ body::after,
   background: var(--minimal-line-strong);
 }
 
-.scheduler-group-header {
+.scheduler-agent-header {
   padding: 12px 8px 6px;
   color: var(--minimal-text-muted);
   font-size: 11px;
@@ -15049,7 +15049,7 @@ textarea.workflow-wizard-input {
   }
 }
 
-/* === Agent group transcript layout === */
+/* === Agent transcript layout === */
 #workspace #messages {
   gap: 0;
   padding: 22px clamp(18px, 5vw, 72px) 28px;

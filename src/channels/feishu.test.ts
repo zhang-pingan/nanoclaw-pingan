@@ -12,7 +12,7 @@ function createChannel(): FeishuChannel {
     {
       onMessage: () => {},
       onChatMetadata: () => {},
-      registeredGroups: () => ({}),
+      registeredAgents: () => ({}),
     },
   );
 }
@@ -30,7 +30,7 @@ describe('FeishuChannel form cards', () => {
           value: {
             action: 'ask_question_skip',
             request_id: 'request-1',
-            group_folder: 'main',
+            agent_folder: 'main',
           },
         },
       ],
@@ -51,7 +51,7 @@ describe('FeishuChannel form cards', () => {
           value: {
             action: 'ask_question_answer',
             request_id: 'request-1',
-            group_folder: 'main',
+            agent_folder: 'main',
           },
         },
       },
@@ -87,7 +87,7 @@ describe('FeishuChannel form cards', () => {
         value: {
           action: 'ask_question_answer',
           request_id: 'request-1',
-          group_folder: 'main',
+          agent_folder: 'main',
         },
       },
     ]);
@@ -251,7 +251,7 @@ describe('FeishuChannel card action callbacks', () => {
             value: {
               action: 'ask_question_answer',
               request_id: 'request-1',
-              group_folder: 'main',
+              agent_folder: 'main',
             },
             form_value: { answer: '继续' },
           },
@@ -265,12 +265,12 @@ describe('FeishuChannel card action callbacks', () => {
       user_id: 'user-1',
       message_id: 'msg-1',
       actor_channel: 'feishu',
-      group_jid: 'feishu:oc_demo',
-      group_folder: 'main',
+      agent_jid: 'feishu:oc_demo',
+      agent_folder: 'main',
       form_value: {
         action: 'ask_question_answer',
         request_id: 'request-1',
-        group_folder: 'main',
+        agent_folder: 'main',
         answer: '继续',
         payload: JSON.stringify({ answer: '继续' }),
       },
@@ -312,8 +312,8 @@ describe('FeishuChannel card action callbacks', () => {
       user_id: 'user-2',
       message_id: 'msg-2',
       actor_channel: 'feishu',
-      group_jid: undefined,
-      group_folder: undefined,
+      agent_jid: undefined,
+      agent_folder: undefined,
       form_value: {
         action: 'assistant_inbox_broadcast_dismiss',
         item_id: 'agent-inbox-1',

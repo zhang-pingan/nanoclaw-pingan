@@ -32,17 +32,17 @@ export function runOnceOutputAgentPath(runId: string): string {
 }
 
 export function runOnceOutputHostDir(
-  groupFolder: string,
+  agentFolder: string,
   runId: string,
 ): string {
-  return path.join(runOnceWorkspaceHostPath(groupFolder), OUTPUT_ROOT, runId);
+  return path.join(runOnceWorkspaceHostPath(agentFolder), OUTPUT_ROOT, runId);
 }
 
 export function ensureRunOnceOutputDir(
-  groupFolder: string,
+  agentFolder: string,
   runId: string,
 ): string {
-  const outputDir = runOnceOutputHostDir(groupFolder, runId);
+  const outputDir = runOnceOutputHostDir(agentFolder, runId);
   fs.mkdirSync(outputDir, { recursive: true });
   return outputDir;
 }
@@ -87,12 +87,12 @@ export function buildRunOnceDownloadUrl(input: {
 }
 
 export function scanRunOnceOutputFiles(input: {
-  groupFolder: string;
+  agentFolder: string;
   chatJid: string;
   runId: string;
 }): RunOnceOutputFile[] {
-  const outputDir = runOnceOutputHostDir(input.groupFolder, input.runId);
-  const workspaceDir = runOnceWorkspaceHostPath(input.groupFolder);
+  const outputDir = runOnceOutputHostDir(input.agentFolder, input.runId);
+  const workspaceDir = runOnceWorkspaceHostPath(input.agentFolder);
   return collectFiles(outputDir)
     .filter((filePath) => isInside(workspaceDir, filePath))
     .sort((a, b) => a.localeCompare(b))
@@ -118,7 +118,7 @@ export function scanRunOnceOutputFiles(input: {
 }
 
 export function resolveRunOnceDownloadFile(input: {
-  groupFolder: string;
+  agentFolder: string;
   relativePath: string;
 }): string {
   const normalized = input.relativePath.replace(/\\/g, '/');
@@ -129,7 +129,7 @@ export function resolveRunOnceDownloadFile(input: {
     throw new Error('Invalid output file path');
   }
 
-  const workspaceDir = runOnceWorkspaceHostPath(input.groupFolder);
+  const workspaceDir = runOnceWorkspaceHostPath(input.agentFolder);
   const filePath = path.resolve(workspaceDir, normalized);
   if (!isInside(workspaceDir, filePath)) {
     throw new Error('Output file path escapes workspace');

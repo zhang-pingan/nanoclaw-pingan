@@ -16,9 +16,9 @@ import {
   getAskQuestion,
   listMemories,
   getMessagesSince,
-  getRegisteredGroup,
+  getRegisteredAgent,
   getTaskById,
-  setRegisteredGroup,
+  setRegisteredAgent,
   setMemoryExtractConfig,
   storeChatMetadata,
   storeMessage,
@@ -27,41 +27,41 @@ import {
 import { DATA_DIR } from './config.js';
 import { callAnthropicMessages } from './agent-api.js';
 import { processTaskIpc, IpcDeps } from './ipc.js';
-import { RegisteredGroup } from './types.js';
+import { RegisteredAgent } from './types.js';
 import { handleAskQuestionResponse } from './ask-user-question.js';
 
-// Set up registered groups used across tests
-const MAIN_GROUP: RegisteredGroup = {
+// Set up registered agents used across tests
+const MAIN_AGENT: RegisteredAgent = {
   name: 'Main',
-  folder: 'whatsapp_main',
+  folder: 'web_main',
   trigger: 'always',
   added_at: '2024-01-01T00:00:00.000Z',
   isMain: true,
 };
 
-const OTHER_GROUP: RegisteredGroup = {
+const OTHER_AGENT: RegisteredAgent = {
   name: 'Other',
-  folder: 'other-group',
+  folder: 'other-agent',
   trigger: '@Andy',
   added_at: '2024-01-01T00:00:00.000Z',
 };
 
-const THIRD_GROUP: RegisteredGroup = {
+const THIRD_AGENT: RegisteredAgent = {
   name: 'Third',
-  folder: 'third-group',
+  folder: 'third-agent',
   trigger: '@Andy',
   added_at: '2024-01-01T00:00:00.000Z',
 };
 
-let groups: Record<string, RegisteredGroup>;
+let agents: Record<string, RegisteredAgent>;
 let deps: IpcDeps;
 const callAnthropicMessagesMock = vi.mocked(callAnthropicMessages);
 
-function readMemoryIpcResult(sourceGroup: string, requestId: string): any {
+function readMemoryIpcResult(sourceAgent: string, requestId: string): any {
   const p = path.join(
     DATA_DIR,
     'ipc',
-    sourceGroup,
+    sourceAgent,
     'search-results',
     `${requestId}.json`,
   );
@@ -71,11 +71,11 @@ function readMemoryIpcResult(sourceGroup: string, requestId: string): any {
   return data;
 }
 
-function readAskIpcResult(sourceGroup: string, requestId: string): any {
+function readAskIpcResult(sourceAgent: string, requestId: string): any {
   const p = path.join(
     DATA_DIR,
     'ipc',
-    sourceGroup,
+    sourceAgent,
     'ask-results',
     `${requestId}.json`,
   );
@@ -85,11 +85,11 @@ function readAskIpcResult(sourceGroup: string, requestId: string): any {
   return data;
 }
 
-function readDelegationIpcResult(sourceGroup: string, requestId: string): any {
+function readDelegationIpcResult(sourceAgent: string, requestId: string): any {
   const p = path.join(
     DATA_DIR,
     'ipc',
-    sourceGroup,
+    sourceAgent,
     'delegation-results',
     `${requestId}.json`,
   );
@@ -99,11 +99,11 @@ function readDelegationIpcResult(sourceGroup: string, requestId: string): any {
   return data;
 }
 
-function readHostScriptIpcResult(sourceGroup: string, requestId: string): any {
+function readHostScriptIpcResult(sourceAgent: string, requestId: string): any {
   const p = path.join(
     DATA_DIR,
     'ipc',
-    sourceGroup,
+    sourceAgent,
     'host-script-results',
     `${requestId}.json`,
   );
@@ -114,13 +114,13 @@ function readHostScriptIpcResult(sourceGroup: string, requestId: string): any {
 }
 
 function readDesktopCaptureIpcResult(
-  sourceGroup: string,
+  sourceAgent: string,
   requestId: string,
 ): any {
   const p = path.join(
     DATA_DIR,
     'ipc',
-    sourceGroup,
+    sourceAgent,
     'desktop-capture-results',
     `${requestId}.json`,
   );
@@ -130,11 +130,11 @@ function readDesktopCaptureIpcResult(
   return data;
 }
 
-function readTodayPlanIpcResult(sourceGroup: string, requestId: string): any {
+function readTodayPlanIpcResult(sourceAgent: string, requestId: string): any {
   const p = path.join(
     DATA_DIR,
     'ipc',
-    sourceGroup,
+    sourceAgent,
     'today-plan-results',
     `${requestId}.json`,
   );
@@ -152,28 +152,27 @@ beforeEach(() => {
   _initTestDatabase();
   callAnthropicMessagesMock.mockReset();
 
-  groups = {
-    'main@g.us': MAIN_GROUP,
-    'other@g.us': OTHER_GROUP,
-    'third@g.us': THIRD_GROUP,
+  agents = {
+    'web:main': MAIN_AGENT,
+    'web:other': OTHER_AGENT,
+    'web:third': THIRD_AGENT,
   };
 
   // Populate DB as well
-  setRegisteredGroup('main@g.us', MAIN_GROUP);
-  setRegisteredGroup('other@g.us', OTHER_GROUP);
-  setRegisteredGroup('third@g.us', THIRD_GROUP);
+  setRegisteredAgent('web:main', MAIN_AGENT);
+  setRegisteredAgent('web:other', OTHER_AGENT);
+  setRegisteredAgent('web:third', THIRD_AGENT);
 
   deps = {
     sendMessage: async () => {},
-    registeredGroups: () => groups,
-    registerGroup: (jid, group) => {
-      groups[jid] = group;
-      setRegisteredGroup(jid, group);
-      // Mock the fs.mkdirSync that registerGroup does
+    registeredAgents: () => agents,
+    registerAgent: (jid, agent) => {
+      agents[jid] = agent;
+      setRegisteredAgent(jid, agent);
+      // Mock the fs.mkdirSync that registerAgent does
     },
-    syncGroups: async () => {},
-    getAvailableGroups: () => [],
-    writeGroupsSnapshot: () => {},
+    getAvailableAgents: () => [],
+    writeAgentsSnapshot: () => {},
     enqueueMessageCheck: () => {},
   };
 });
@@ -181,55 +180,55 @@ beforeEach(() => {
 // --- schedule_task authorization ---
 
 describe('schedule_task authorization', () => {
-  it('main group can schedule for another group', async () => {
+  it('main agent can schedule for another agent', async () => {
     await processTaskIpc(
       {
         type: 'schedule_task',
         prompt: 'do something',
         schedule_type: 'once',
         schedule_value: '2025-06-01T00:00:00',
-        targetJid: 'other@g.us',
+        targetJid: 'web:other',
       },
-      'whatsapp_main',
+      'web_main',
       true,
       deps,
     );
 
-    // Verify task was created in DB for the other group
+    // Verify task was created in DB for the other agent
     const allTasks = getAllTasks();
     expect(allTasks.length).toBe(1);
-    expect(allTasks[0].group_folder).toBe('other-group');
+    expect(allTasks[0].agent_folder).toBe('other-agent');
   });
 
-  it('non-main group can schedule for itself', async () => {
+  it('non-main agent can schedule for itself', async () => {
     await processTaskIpc(
       {
         type: 'schedule_task',
         prompt: 'self task',
         schedule_type: 'once',
         schedule_value: '2025-06-01T00:00:00',
-        targetJid: 'other@g.us',
+        targetJid: 'web:other',
       },
-      'other-group',
+      'other-agent',
       false,
       deps,
     );
 
     const allTasks = getAllTasks();
     expect(allTasks.length).toBe(1);
-    expect(allTasks[0].group_folder).toBe('other-group');
+    expect(allTasks[0].agent_folder).toBe('other-agent');
   });
 
-  it('non-main group cannot schedule for another group', async () => {
+  it('non-main agent cannot schedule for another agent', async () => {
     await processTaskIpc(
       {
         type: 'schedule_task',
         prompt: 'unauthorized',
         schedule_type: 'once',
         schedule_value: '2025-06-01T00:00:00',
-        targetJid: 'main@g.us',
+        targetJid: 'web:main',
       },
-      'other-group',
+      'other-agent',
       false,
       deps,
     );
@@ -245,9 +244,9 @@ describe('schedule_task authorization', () => {
         prompt: 'no target',
         schedule_type: 'once',
         schedule_value: '2025-06-01T00:00:00',
-        targetJid: 'unknown@g.us',
+        targetJid: 'web:unknown',
       },
-      'whatsapp_main',
+      'web_main',
       true,
       deps,
     );
@@ -263,8 +262,8 @@ describe('pause_task authorization', () => {
   beforeEach(() => {
     createTask({
       id: 'task-main',
-      group_folder: 'whatsapp_main',
-      chat_jid: 'main@g.us',
+      agent_folder: 'web_main',
+      chat_jid: 'web:main',
       prompt: 'main task',
       schedule_type: 'once',
       schedule_value: '2025-06-01T00:00:00',
@@ -275,8 +274,8 @@ describe('pause_task authorization', () => {
     });
     createTask({
       id: 'task-other',
-      group_folder: 'other-group',
-      chat_jid: 'other@g.us',
+      agent_folder: 'other-agent',
+      chat_jid: 'web:other',
       prompt: 'other task',
       schedule_type: 'once',
       schedule_value: '2025-06-01T00:00:00',
@@ -287,30 +286,30 @@ describe('pause_task authorization', () => {
     });
   });
 
-  it('main group can pause any task', async () => {
+  it('main agent can pause any task', async () => {
     await processTaskIpc(
       { type: 'pause_task', taskId: 'task-other' },
-      'whatsapp_main',
+      'web_main',
       true,
       deps,
     );
     expect(getTaskById('task-other')!.status).toBe('paused');
   });
 
-  it('non-main group can pause its own task', async () => {
+  it('non-main agent can pause its own task', async () => {
     await processTaskIpc(
       { type: 'pause_task', taskId: 'task-other' },
-      'other-group',
+      'other-agent',
       false,
       deps,
     );
     expect(getTaskById('task-other')!.status).toBe('paused');
   });
 
-  it('non-main group cannot pause another groups task', async () => {
+  it("non-main agent cannot pause another Agent's task", async () => {
     await processTaskIpc(
       { type: 'pause_task', taskId: 'task-main' },
-      'other-group',
+      'other-agent',
       false,
       deps,
     );
@@ -324,8 +323,8 @@ describe('resume_task authorization', () => {
   beforeEach(() => {
     createTask({
       id: 'task-paused',
-      group_folder: 'other-group',
-      chat_jid: 'other@g.us',
+      agent_folder: 'other-agent',
+      chat_jid: 'web:other',
       prompt: 'paused task',
       schedule_type: 'once',
       schedule_value: '2025-06-01T00:00:00',
@@ -336,30 +335,30 @@ describe('resume_task authorization', () => {
     });
   });
 
-  it('main group can resume any task', async () => {
+  it('main agent can resume any task', async () => {
     await processTaskIpc(
       { type: 'resume_task', taskId: 'task-paused' },
-      'whatsapp_main',
+      'web_main',
       true,
       deps,
     );
     expect(getTaskById('task-paused')!.status).toBe('active');
   });
 
-  it('non-main group can resume its own task', async () => {
+  it('non-main agent can resume its own task', async () => {
     await processTaskIpc(
       { type: 'resume_task', taskId: 'task-paused' },
-      'other-group',
+      'other-agent',
       false,
       deps,
     );
     expect(getTaskById('task-paused')!.status).toBe('active');
   });
 
-  it('non-main group cannot resume another groups task', async () => {
+  it("non-main agent cannot resume another Agent's task", async () => {
     await processTaskIpc(
       { type: 'resume_task', taskId: 'task-paused' },
-      'third-group',
+      'third-agent',
       false,
       deps,
     );
@@ -370,11 +369,11 @@ describe('resume_task authorization', () => {
 // --- cancel_task authorization ---
 
 describe('cancel_task authorization', () => {
-  it('main group can cancel any task', async () => {
+  it('main agent can cancel any task', async () => {
     createTask({
       id: 'task-to-cancel',
-      group_folder: 'other-group',
-      chat_jid: 'other@g.us',
+      agent_folder: 'other-agent',
+      chat_jid: 'web:other',
       prompt: 'cancel me',
       schedule_type: 'once',
       schedule_value: '2025-06-01T00:00:00',
@@ -386,18 +385,18 @@ describe('cancel_task authorization', () => {
 
     await processTaskIpc(
       { type: 'cancel_task', taskId: 'task-to-cancel' },
-      'whatsapp_main',
+      'web_main',
       true,
       deps,
     );
     expect(getTaskById('task-to-cancel')).toBeUndefined();
   });
 
-  it('non-main group can cancel its own task', async () => {
+  it('non-main agent can cancel its own task', async () => {
     createTask({
       id: 'task-own',
-      group_folder: 'other-group',
-      chat_jid: 'other@g.us',
+      agent_folder: 'other-agent',
+      chat_jid: 'web:other',
       prompt: 'my task',
       schedule_type: 'once',
       schedule_value: '2025-06-01T00:00:00',
@@ -409,18 +408,18 @@ describe('cancel_task authorization', () => {
 
     await processTaskIpc(
       { type: 'cancel_task', taskId: 'task-own' },
-      'other-group',
+      'other-agent',
       false,
       deps,
     );
     expect(getTaskById('task-own')).toBeUndefined();
   });
 
-  it('non-main group cannot cancel another groups task', async () => {
+  it("non-main agent cannot cancel another Agent's task", async () => {
     createTask({
       id: 'task-foreign',
-      group_folder: 'whatsapp_main',
-      chat_jid: 'main@g.us',
+      agent_folder: 'web_main',
+      chat_jid: 'web:main',
       prompt: 'not yours',
       schedule_type: 'once',
       schedule_value: '2025-06-01T00:00:00',
@@ -432,7 +431,7 @@ describe('cancel_task authorization', () => {
 
     await processTaskIpc(
       { type: 'cancel_task', taskId: 'task-foreign' },
-      'other-group',
+      'other-agent',
       false,
       deps,
     );
@@ -440,111 +439,96 @@ describe('cancel_task authorization', () => {
   });
 });
 
-// --- register_group authorization ---
+// --- register_agent authorization ---
 
-describe('register_group authorization', () => {
-  it('non-main group cannot register a group', async () => {
+describe('register_agent authorization', () => {
+  it('non-main agent cannot register an Agent', async () => {
     await processTaskIpc(
       {
-        type: 'register_group',
-        jid: 'new@g.us',
-        name: 'New Group',
-        folder: 'new-group',
+        type: 'register_agent',
+        jid: 'web:new',
+        name: 'New Agent',
+        folder: 'new-agent',
         trigger: '@Andy',
       },
-      'other-group',
+      'other-agent',
       false,
       deps,
     );
 
-    // registeredGroups should not have changed
-    expect(groups['new@g.us']).toBeUndefined();
+    // registeredAgents should not have changed
+    expect(agents['web:new']).toBeUndefined();
   });
 
-  it('main group cannot register with unsafe folder path', async () => {
+  it('main agent cannot register with unsafe folder path', async () => {
     await processTaskIpc(
       {
-        type: 'register_group',
-        jid: 'new@g.us',
-        name: 'New Group',
+        type: 'register_agent',
+        jid: 'web:new',
+        name: 'New Agent',
         folder: '../../outside',
         trigger: '@Andy',
       },
-      'whatsapp_main',
+      'web_main',
       true,
       deps,
     );
 
-    expect(groups['new@g.us']).toBeUndefined();
-  });
-});
-
-// --- refresh_groups authorization ---
-
-describe('refresh_groups authorization', () => {
-  it('non-main group cannot trigger refresh', async () => {
-    // This should be silently blocked (no crash, no effect)
-    await processTaskIpc(
-      { type: 'refresh_groups' },
-      'other-group',
-      false,
-      deps,
-    );
-    // If we got here without error, the auth gate worked
+    expect(agents['web:new']).toBeUndefined();
   });
 });
 
 // --- IPC message authorization ---
 // Tests the authorization pattern from startIpcWatcher (ipc.ts).
-// The logic: isMain || (targetGroup && targetGroup.folder === sourceGroup)
+// The logic: isMain || (targetAgent && targetAgent.folder === sourceAgent)
 
 describe('IPC message authorization', () => {
   // Replicate the exact check from the IPC watcher
   function isMessageAuthorized(
-    sourceGroup: string,
+    sourceAgent: string,
     isMain: boolean,
     targetChatJid: string,
-    registeredGroups: Record<string, RegisteredGroup>,
+    registeredAgents: Record<string, RegisteredAgent>,
   ): boolean {
-    const targetGroup = registeredGroups[targetChatJid];
-    return isMain || (!!targetGroup && targetGroup.folder === sourceGroup);
+    const targetAgent = registeredAgents[targetChatJid];
+    return isMain || (!!targetAgent && targetAgent.folder === sourceAgent);
   }
 
-  it('main group can send to any group', () => {
-    expect(
-      isMessageAuthorized('whatsapp_main', true, 'other@g.us', groups),
-    ).toBe(true);
-    expect(
-      isMessageAuthorized('whatsapp_main', true, 'third@g.us', groups),
-    ).toBe(true);
+  it('main agent can send to any agent', () => {
+    expect(isMessageAuthorized('web_main', true, 'web:other', agents)).toBe(
+      true,
+    );
+    expect(isMessageAuthorized('web_main', true, 'web:third', agents)).toBe(
+      true,
+    );
   });
 
-  it('non-main group can send to its own chat', () => {
-    expect(
-      isMessageAuthorized('other-group', false, 'other@g.us', groups),
-    ).toBe(true);
+  it('non-main agent can send to its own chat', () => {
+    expect(isMessageAuthorized('other-agent', false, 'web:other', agents)).toBe(
+      true,
+    );
   });
 
-  it('non-main group cannot send to another groups chat', () => {
-    expect(isMessageAuthorized('other-group', false, 'main@g.us', groups)).toBe(
+  it("non-main agent cannot send to another Agent's chat", () => {
+    expect(isMessageAuthorized('other-agent', false, 'web:main', agents)).toBe(
       false,
     );
+    expect(isMessageAuthorized('other-agent', false, 'web:third', agents)).toBe(
+      false,
+    );
+  });
+
+  it('non-main agent cannot send to unregistered JID', () => {
     expect(
-      isMessageAuthorized('other-group', false, 'third@g.us', groups),
+      isMessageAuthorized('other-agent', false, 'web:unknown', agents),
     ).toBe(false);
   });
 
-  it('non-main group cannot send to unregistered JID', () => {
-    expect(
-      isMessageAuthorized('other-group', false, 'unknown@g.us', groups),
-    ).toBe(false);
-  });
-
-  it('main group can send to unregistered JID', () => {
+  it('main agent can send to unregistered JID', () => {
     // Main is always authorized regardless of target
-    expect(
-      isMessageAuthorized('whatsapp_main', true, 'unknown@g.us', groups),
-    ).toBe(true);
+    expect(isMessageAuthorized('web_main', true, 'web:unknown', agents)).toBe(
+      true,
+    );
   });
 });
 
@@ -558,9 +542,9 @@ describe('schedule_task schedule types', () => {
         prompt: 'cron task',
         schedule_type: 'cron',
         schedule_value: '0 9 * * *', // every day at 9am
-        targetJid: 'other@g.us',
+        targetJid: 'web:other',
       },
-      'whatsapp_main',
+      'web_main',
       true,
       deps,
     );
@@ -582,9 +566,9 @@ describe('schedule_task schedule types', () => {
         prompt: 'bad cron',
         schedule_type: 'cron',
         schedule_value: 'not a cron',
-        targetJid: 'other@g.us',
+        targetJid: 'web:other',
       },
-      'whatsapp_main',
+      'web_main',
       true,
       deps,
     );
@@ -601,9 +585,9 @@ describe('schedule_task schedule types', () => {
         prompt: 'interval task',
         schedule_type: 'interval',
         schedule_value: '3600000', // 1 hour
-        targetJid: 'other@g.us',
+        targetJid: 'web:other',
       },
-      'whatsapp_main',
+      'web_main',
       true,
       deps,
     );
@@ -624,9 +608,9 @@ describe('schedule_task schedule types', () => {
         prompt: 'bad interval',
         schedule_type: 'interval',
         schedule_value: 'abc',
-        targetJid: 'other@g.us',
+        targetJid: 'web:other',
       },
-      'whatsapp_main',
+      'web_main',
       true,
       deps,
     );
@@ -641,9 +625,9 @@ describe('schedule_task schedule types', () => {
         prompt: 'zero interval',
         schedule_type: 'interval',
         schedule_value: '0',
-        targetJid: 'other@g.us',
+        targetJid: 'web:other',
       },
-      'whatsapp_main',
+      'web_main',
       true,
       deps,
     );
@@ -658,9 +642,9 @@ describe('schedule_task schedule types', () => {
         prompt: 'bad once',
         schedule_type: 'once',
         schedule_value: 'not-a-date',
-        targetJid: 'other@g.us',
+        targetJid: 'web:other',
       },
-      'whatsapp_main',
+      'web_main',
       true,
       deps,
     );
@@ -672,23 +656,23 @@ describe('schedule_task schedule types', () => {
 // --- context_mode defaulting ---
 
 describe('schedule_task context_mode', () => {
-  it('accepts context_mode=group', async () => {
+  it('accepts context_mode=agent', async () => {
     await processTaskIpc(
       {
         type: 'schedule_task',
-        prompt: 'group context',
+        prompt: 'agent context',
         schedule_type: 'once',
         schedule_value: '2025-06-01T00:00:00',
-        context_mode: 'group',
-        targetJid: 'other@g.us',
+        context_mode: 'agent',
+        targetJid: 'web:other',
       },
-      'whatsapp_main',
+      'web_main',
       true,
       deps,
     );
 
     const tasks = getAllTasks();
-    expect(tasks[0].context_mode).toBe('group');
+    expect(tasks[0].context_mode).toBe('agent');
   });
 
   it('accepts context_mode=isolated', async () => {
@@ -699,9 +683,9 @@ describe('schedule_task context_mode', () => {
         schedule_type: 'once',
         schedule_value: '2025-06-01T00:00:00',
         context_mode: 'isolated',
-        targetJid: 'other@g.us',
+        targetJid: 'web:other',
       },
-      'whatsapp_main',
+      'web_main',
       true,
       deps,
     );
@@ -718,9 +702,9 @@ describe('schedule_task context_mode', () => {
         schedule_type: 'once',
         schedule_value: '2025-06-01T00:00:00',
         context_mode: 'bogus' as any,
-        targetJid: 'other@g.us',
+        targetJid: 'web:other',
       },
-      'whatsapp_main',
+      'web_main',
       true,
       deps,
     );
@@ -736,9 +720,9 @@ describe('schedule_task context_mode', () => {
         prompt: 'no context mode',
         schedule_type: 'once',
         schedule_value: '2025-06-01T00:00:00',
-        targetJid: 'other@g.us',
+        targetJid: 'web:other',
       },
-      'whatsapp_main',
+      'web_main',
       true,
       deps,
     );
@@ -748,45 +732,45 @@ describe('schedule_task context_mode', () => {
   });
 });
 
-// --- register_group success path ---
+// --- register_agent success path ---
 
-describe('register_group success', () => {
-  it('main group can register a new group', async () => {
+describe('register_agent success', () => {
+  it('main agent can register a new agent', async () => {
     await processTaskIpc(
       {
-        type: 'register_group',
-        jid: 'new@g.us',
-        name: 'New Group',
-        folder: 'new-group',
+        type: 'register_agent',
+        jid: 'web:new',
+        name: 'New Agent',
+        folder: 'new-agent',
         trigger: '@Andy',
       },
-      'whatsapp_main',
+      'web_main',
       true,
       deps,
     );
 
-    // Verify group was registered in DB
-    const group = getRegisteredGroup('new@g.us');
-    expect(group).toBeDefined();
-    expect(group!.name).toBe('New Group');
-    expect(group!.folder).toBe('new-group');
-    expect(group!.trigger).toBe('@Andy');
+    // Verify agent was registered in DB
+    const agent = getRegisteredAgent('web:new');
+    expect(agent).toBeDefined();
+    expect(agent!.name).toBe('New Agent');
+    expect(agent!.folder).toBe('new-agent');
+    expect(agent!.trigger).toBe('@Andy');
   });
 
-  it('register_group rejects request with missing fields', async () => {
+  it('register_agent rejects request with missing fields', async () => {
     await processTaskIpc(
       {
-        type: 'register_group',
-        jid: 'partial@g.us',
+        type: 'register_agent',
+        jid: 'web:partial',
         name: 'Partial',
         // missing folder and trigger
       },
-      'whatsapp_main',
+      'web_main',
       true,
       deps,
     );
 
-    expect(getRegisteredGroup('partial@g.us')).toBeUndefined();
+    expect(getRegisteredAgent('web:partial')).toBeUndefined();
   });
 });
 
@@ -811,7 +795,7 @@ describe('ask_user_question', () => {
           },
         ],
       },
-      'other-group',
+      'other-agent',
       false,
       deps,
     );
@@ -819,9 +803,9 @@ describe('ask_user_question', () => {
     const rec = getAskQuestion(requestId);
     expect(rec).toBeDefined();
     expect(rec?.status).toBe('pending');
-    expect(rec?.group_folder).toBe('other-group');
+    expect(rec?.agent_folder).toBe('other-agent');
     expect(sentCards.length).toBe(1);
-    expect(sentCards[0].jid).toBe('other@g.us');
+    expect(sentCards[0].jid).toBe('web:other');
     expect(sentCards[0].card).toMatchObject({
       buttons: [{ label: 'prod' }, { label: 'staging' }, { label: '跳过' }],
       form: {
@@ -848,12 +832,12 @@ describe('ask_user_question', () => {
           { id: 'q1', question: 'bad', options: [{ label: 'only-one' }] },
         ],
       },
-      'other-group',
+      'other-agent',
       false,
       deps,
     );
 
-    const res = readAskIpcResult('other-group', requestId);
+    const res = readAskIpcResult('other-agent', requestId);
     expect(res.status).toBe('rejected');
     expect(typeof res.error).toBe('string');
     expect(getAskQuestion(requestId)).toBeUndefined();
@@ -884,17 +868,17 @@ describe('ask_user_question', () => {
           },
         ],
       },
-      'other-group',
+      'other-agent',
       false,
       deps,
     );
 
     const invalid = await handleAskQuestionResponse({
       requestId,
-      groupFolder: 'other-group',
+      agentFolder: 'other-agent',
       userId: 'user-1',
       answer: '{"env":"prod","replicas":"bad"}',
-      registeredGroups: groups,
+      registeredAgents: agents,
       sendMessage: deps.sendMessage,
       sendCard: deps.sendCard,
     });
@@ -903,17 +887,17 @@ describe('ask_user_question', () => {
 
     const valid = await handleAskQuestionResponse({
       requestId,
-      groupFolder: 'other-group',
+      agentFolder: 'other-agent',
       userId: 'user-1',
       answer: '{"env":"prod","replicas":3,"dry_run":false}',
-      registeredGroups: groups,
+      registeredAgents: agents,
       sendMessage: deps.sendMessage,
       sendCard: deps.sendCard,
     });
     expect(valid.ok).toBe(true);
     expect(valid.completed).toBe(true);
 
-    const res = readAskIpcResult('other-group', requestId);
+    const res = readAskIpcResult('other-agent', requestId);
     expect(res.status).toBe('answered');
     expect(res.answers.deploy.env).toBe('prod');
     expect(res.answers.deploy.replicas).toBe(3);
@@ -934,24 +918,24 @@ describe('ask_user_question', () => {
           },
         ],
       },
-      'other-group',
+      'other-agent',
       false,
       deps,
     );
 
     const valid = await handleAskQuestionResponse({
       requestId,
-      groupFolder: 'other-group',
+      agentFolder: 'other-agent',
       userId: 'user-1',
       answer: 'canary',
-      registeredGroups: groups,
+      registeredAgents: agents,
       sendMessage: deps.sendMessage,
       sendCard: deps.sendCard,
     });
     expect(valid.ok).toBe(true);
     expect(valid.completed).toBe(true);
 
-    const res = readAskIpcResult('other-group', requestId);
+    const res = readAskIpcResult('other-agent', requestId);
     expect(res.status).toBe('answered');
     expect(res.answers.env).toBe('canary');
   });
@@ -977,7 +961,7 @@ describe('ask_user_question', () => {
           },
         ],
       },
-      'other-group',
+      'other-agent',
       false,
       deps,
     );
@@ -999,17 +983,17 @@ describe('ask_user_question', () => {
 
     const valid = await handleAskQuestionResponse({
       requestId,
-      groupFolder: 'other-group',
+      agentFolder: 'other-agent',
       userId: 'user-1',
       answer: '1, 额外巡检',
-      registeredGroups: groups,
+      registeredAgents: agents,
       sendMessage: deps.sendMessage,
       sendCard: deps.sendCard,
     });
     expect(valid.ok).toBe(true);
     expect(valid.completed).toBe(true);
 
-    const res = readAskIpcResult('other-group', requestId);
+    const res = readAskIpcResult('other-agent', requestId);
     expect(res.status).toBe('answered');
     expect(res.answers.checks).toEqual(['回归', '额外巡检']);
   });
@@ -1033,7 +1017,7 @@ describe('ask_user_question', () => {
           },
         ],
       },
-      'other-group',
+      'other-agent',
       false,
       deps,
     );
@@ -1049,10 +1033,10 @@ describe('ask_user_question', () => {
 
     const answered = await handleAskQuestionResponse({
       requestId,
-      groupFolder: 'other-group',
+      agentFolder: 'other-agent',
       userId: 'user-1',
       answer: '测试',
-      registeredGroups: groups,
+      registeredAgents: agents,
       sendMessage: deps.sendMessage,
       sendCard: deps.sendCard,
     });
@@ -1072,7 +1056,7 @@ describe('ask_user_question', () => {
 
 describe('memory IPC tasks', () => {
   it('memory_write round-trip works', async () => {
-    const sourceGroup = 'other-group';
+    const sourceAgent = 'other-agent';
     const writeId = rid('mw');
 
     await processTaskIpc(
@@ -1083,16 +1067,16 @@ describe('memory IPC tasks', () => {
         layer: 'canonical',
         memory_type: 'preference',
       },
-      sourceGroup,
+      sourceAgent,
       false,
       deps,
     );
-    const writeRes = readMemoryIpcResult(sourceGroup, writeId);
+    const writeRes = readMemoryIpcResult(sourceAgent, writeId);
     expect(writeRes.memory?.id).toBeTruthy();
   });
 
-  it('memory_delete removes memory in same group', async () => {
-    const sourceGroup = 'other-group';
+  it('memory_delete removes memory in same agent', async () => {
+    const sourceAgent = 'other-agent';
     const writeId = rid('mw');
     const deleteId = rid('md');
 
@@ -1104,11 +1088,11 @@ describe('memory IPC tasks', () => {
         layer: 'working',
         memory_type: 'summary',
       },
-      sourceGroup,
+      sourceAgent,
       false,
       deps,
     );
-    const writeRes = readMemoryIpcResult(sourceGroup, writeId);
+    const writeRes = readMemoryIpcResult(sourceAgent, writeId);
     const memoryId = writeRes.memory?.id as string;
     expect(memoryId).toBeTruthy();
 
@@ -1118,22 +1102,22 @@ describe('memory IPC tasks', () => {
         requestId: deleteId,
         memoryId,
       },
-      sourceGroup,
+      sourceAgent,
       false,
       deps,
     );
-    const deleteRes = readMemoryIpcResult(sourceGroup, deleteId);
+    const deleteRes = readMemoryIpcResult(sourceAgent, deleteId);
     expect(deleteRes.deleted).toBe(true);
     expect(deleteRes.memoryId).toBe(memoryId);
 
-    const remains = listMemories(sourceGroup, 50).filter(
+    const remains = listMemories(sourceAgent, 50).filter(
       (m) => m.id === memoryId,
     );
     expect(remains.length).toBe(0);
   });
 
   it('memory_search returns hybrid hits', async () => {
-    const sourceGroup = 'other-group';
+    const sourceAgent = 'other-agent';
     const writeId = rid('mw');
     const searchId = rid('ms');
 
@@ -1145,19 +1129,19 @@ describe('memory IPC tasks', () => {
         layer: 'canonical',
         memory_type: 'fact',
       },
-      sourceGroup,
+      sourceAgent,
       false,
       deps,
     );
-    const writeRes = readMemoryIpcResult(sourceGroup, writeId);
+    const writeRes = readMemoryIpcResult(sourceAgent, writeId);
     const memoryId = writeRes.memory?.id as string;
 
     // seed one message hit as well
-    storeChatMetadata('other@g.us', Date.now().toString());
+    storeChatMetadata('web:other', Date.now().toString());
     storeMessage({
       id: 'm-foo',
-      chat_jid: 'other@g.us',
-      sender: 'u@s.whatsapp.net',
+      chat_jid: 'web:other',
+      sender: 'user:u',
       sender_name: 'User',
       content: 'foo release is pending',
       timestamp: Date.now().toString(),
@@ -1171,11 +1155,11 @@ describe('memory IPC tasks', () => {
         mode: 'hybrid',
         limit: 10,
       },
-      sourceGroup,
+      sourceAgent,
       false,
       deps,
     );
-    const searchRes = readMemoryIpcResult(sourceGroup, searchId);
+    const searchRes = readMemoryIpcResult(sourceAgent, searchId);
     expect(searchRes.mode).toBe('hybrid');
     expect(Array.isArray(searchRes.hits)).toBe(true);
     expect(searchRes.hits.length).toBeGreaterThan(0);
@@ -1190,7 +1174,7 @@ describe('memory IPC tasks', () => {
   });
 
   it('memory_search keyword mode excludes structured memory hits', async () => {
-    const sourceGroup = 'other-group';
+    const sourceAgent = 'other-agent';
     const writeId = rid('mw');
     const searchId = rid('ms');
 
@@ -1202,17 +1186,17 @@ describe('memory IPC tasks', () => {
         layer: 'canonical',
         memory_type: 'fact',
       },
-      sourceGroup,
+      sourceAgent,
       false,
       deps,
     );
-    readMemoryIpcResult(sourceGroup, writeId);
+    readMemoryIpcResult(sourceAgent, writeId);
 
-    storeChatMetadata('other@g.us', Date.now().toString());
+    storeChatMetadata('web:other', Date.now().toString());
     storeMessage({
       id: `m-keyword-${Date.now()}`,
-      chat_jid: 'other@g.us',
-      sender: 'u@s.whatsapp.net',
+      chat_jid: 'web:other',
+      sender: 'user:u',
       sender_name: 'User',
       content: 'keyword-only message hit',
       timestamp: Date.now().toString(),
@@ -1226,11 +1210,11 @@ describe('memory IPC tasks', () => {
         mode: 'keyword',
         limit: 10,
       },
-      sourceGroup,
+      sourceAgent,
       false,
       deps,
     );
-    const res = readMemoryIpcResult(sourceGroup, searchId);
+    const res = readMemoryIpcResult(sourceAgent, searchId);
     expect(res.mode).toBe('keyword');
     expect(res.hits.some((h: { kind: string }) => h.kind === 'memory')).toBe(
       false,
@@ -1241,7 +1225,7 @@ describe('memory IPC tasks', () => {
   });
 
   it('memory_search uses shared synonym expansion for structured memories', async () => {
-    const sourceGroup = 'other-group';
+    const sourceAgent = 'other-agent';
     const writeId = rid('mw');
     const searchId = rid('ms');
 
@@ -1253,11 +1237,11 @@ describe('memory IPC tasks', () => {
         layer: 'canonical',
         memory_type: 'rule',
       },
-      sourceGroup,
+      sourceAgent,
       false,
       deps,
     );
-    readMemoryIpcResult(sourceGroup, writeId);
+    readMemoryIpcResult(sourceAgent, writeId);
 
     await processTaskIpc(
       {
@@ -1267,11 +1251,11 @@ describe('memory IPC tasks', () => {
         mode: 'hybrid',
         limit: 10,
       },
-      sourceGroup,
+      sourceAgent,
       false,
       deps,
     );
-    const res = readMemoryIpcResult(sourceGroup, searchId);
+    const res = readMemoryIpcResult(sourceAgent, searchId);
     expect(
       res.hits.some(
         (h: { kind: string; content: string }) =>
@@ -1281,7 +1265,7 @@ describe('memory IPC tasks', () => {
   });
 
   it('memory_search uses Chinese n-gram fallback for structured memories', async () => {
-    const sourceGroup = 'other-group';
+    const sourceAgent = 'other-agent';
     const writeId = rid('mw');
     const searchId = rid('ms');
 
@@ -1293,11 +1277,11 @@ describe('memory IPC tasks', () => {
         layer: 'canonical',
         memory_type: 'rule',
       },
-      sourceGroup,
+      sourceAgent,
       false,
       deps,
     );
-    readMemoryIpcResult(sourceGroup, writeId);
+    readMemoryIpcResult(sourceAgent, writeId);
 
     await processTaskIpc(
       {
@@ -1307,11 +1291,11 @@ describe('memory IPC tasks', () => {
         mode: 'hybrid',
         limit: 10,
       },
-      sourceGroup,
+      sourceAgent,
       false,
       deps,
     );
-    const res = readMemoryIpcResult(sourceGroup, searchId);
+    const res = readMemoryIpcResult(sourceAgent, searchId);
     expect(
       res.hits.some(
         (h: { kind: string; content: string }) =>
@@ -1322,7 +1306,7 @@ describe('memory IPC tasks', () => {
   });
 
   it('memory_gc with dryRun=false deletes duplicates', async () => {
-    const sourceGroup = 'other-group';
+    const sourceAgent = 'other-agent';
     const write1 = rid('mw');
     const write2 = rid('mw');
     const gcId = rid('mgc');
@@ -1336,11 +1320,11 @@ describe('memory IPC tasks', () => {
           layer: 'canonical',
           memory_type: 'fact',
         },
-        sourceGroup,
+        sourceAgent,
         false,
         deps,
       );
-      readMemoryIpcResult(sourceGroup, requestId);
+      readMemoryIpcResult(sourceAgent, requestId);
     }
 
     await processTaskIpc(
@@ -1350,26 +1334,26 @@ describe('memory IPC tasks', () => {
         dryRun: false,
         staleDays: 365,
       },
-      sourceGroup,
+      sourceAgent,
       false,
       deps,
     );
-    const gcRes = readMemoryIpcResult(sourceGroup, gcId);
+    const gcRes = readMemoryIpcResult(sourceAgent, gcId);
     expect(gcRes.result.dryRun).toBe(false);
     expect(gcRes.result.duplicateDeletedIds.length).toBeGreaterThan(0);
 
-    const remain = listMemories(sourceGroup, 50).filter(
+    const remain = listMemories(sourceAgent, 50).filter(
       (m: { content: string }) => m.content === 'Duplicate value for gc',
     );
     expect(remain.length).toBe(1);
   });
 
   it('memory_extract_from_archive writes candidates and runs cleanup pipeline', async () => {
-    const sourceGroup = 'other-group';
+    const sourceAgent = 'other-agent';
     const conversationsDir = path.join(
       process.cwd(),
-      'groups',
-      sourceGroup,
+      'agents',
+      sourceAgent,
       'conversations',
     );
     fs.mkdirSync(conversationsDir, { recursive: true });
@@ -1429,7 +1413,7 @@ describe('memory IPC tasks', () => {
           archiveHash: 'abc123',
           round: 2,
         },
-        sourceGroup,
+        sourceAgent,
         false,
         deps,
       );
@@ -1437,7 +1421,7 @@ describe('memory IPC tasks', () => {
       fs.unlinkSync(archivePath);
     }
 
-    const memories = listMemories(sourceGroup, 50);
+    const memories = listMemories(sourceAgent, 50);
     const archiveMemories = memories.filter((m) => m.source === 'archive');
     expect(archiveMemories.length).toBeGreaterThan(0);
     expect(
@@ -1469,11 +1453,11 @@ describe('memory IPC tasks', () => {
   });
 
   it('memory_extract_from_archive includes multi-line message details in the extraction payload', async () => {
-    const sourceGroup = 'other-group';
+    const sourceAgent = 'other-agent';
     const conversationsDir = path.join(
       process.cwd(),
-      'groups',
-      sourceGroup,
+      'agents',
+      sourceAgent,
       'conversations',
     );
     fs.mkdirSync(conversationsDir, { recursive: true });
@@ -1505,7 +1489,7 @@ describe('memory IPC tasks', () => {
           archiveHash: 'multi-line',
           round: 1,
         },
-        sourceGroup,
+        sourceAgent,
         false,
         deps,
       );
@@ -1526,11 +1510,11 @@ describe('memory IPC tasks', () => {
   });
 
   it('memory_extract_from_archive rejects generic completion boilerplate memories', async () => {
-    const sourceGroup = 'other-group';
+    const sourceAgent = 'other-agent';
     const conversationsDir = path.join(
       process.cwd(),
-      'groups',
-      sourceGroup,
+      'agents',
+      sourceAgent,
       'conversations',
     );
     fs.mkdirSync(conversationsDir, { recursive: true });
@@ -1566,7 +1550,7 @@ describe('memory IPC tasks', () => {
           archiveHash: 'boilerplate',
           round: 1,
         },
-        sourceGroup,
+        sourceAgent,
         false,
         deps,
       );
@@ -1574,7 +1558,7 @@ describe('memory IPC tasks', () => {
       fs.unlinkSync(archivePath);
     }
 
-    const archiveMemories = listMemories(sourceGroup, 50).filter(
+    const archiveMemories = listMemories(sourceAgent, 50).filter(
       (m) =>
         m.source === 'archive' &&
         typeof m.metadata === 'string' &&
@@ -1584,11 +1568,11 @@ describe('memory IPC tasks', () => {
   });
 
   it('memory_extract_from_archive keeps concrete episodic outcomes with actionable detail', async () => {
-    const sourceGroup = 'other-group';
+    const sourceAgent = 'other-agent';
     const conversationsDir = path.join(
       process.cwd(),
-      'groups',
-      sourceGroup,
+      'agents',
+      sourceAgent,
       'conversations',
     );
     fs.mkdirSync(conversationsDir, { recursive: true });
@@ -1602,7 +1586,7 @@ describe('memory IPC tasks', () => {
         '排查结果：',
         '• catstory 预发部署成功',
         '• Jenkins Build #63 结果为 SUCCESS',
-        '• 主群已收到阶段性汇报',
+        '• 主 Agent 已收到阶段性汇报',
       ].join('\n'),
       'utf-8',
     );
@@ -1632,7 +1616,7 @@ describe('memory IPC tasks', () => {
           archiveHash: 'concrete-outcome',
           round: 1,
         },
-        sourceGroup,
+        sourceAgent,
         false,
         deps,
       );
@@ -1640,7 +1624,7 @@ describe('memory IPC tasks', () => {
       fs.unlinkSync(archivePath);
     }
 
-    const archiveMemories = listMemories(sourceGroup, 50).filter(
+    const archiveMemories = listMemories(sourceAgent, 50).filter(
       (m) =>
         m.source === 'archive' &&
         typeof m.metadata === 'string' &&
@@ -1658,11 +1642,11 @@ describe('memory IPC tasks', () => {
   });
 
   it('memory_extract_from_archive ignores internal context fragments', async () => {
-    const sourceGroup = 'other-group';
+    const sourceAgent = 'other-agent';
     const conversationsDir = path.join(
       process.cwd(),
-      'groups',
-      sourceGroup,
+      'agents',
+      sourceAgent,
       'conversations',
     );
     fs.mkdirSync(conversationsDir, { recursive: true });
@@ -1714,7 +1698,7 @@ describe('memory IPC tasks', () => {
           archiveHash: 'def456',
           round: 3,
         },
-        sourceGroup,
+        sourceAgent,
         false,
         deps,
       );
@@ -1722,7 +1706,7 @@ describe('memory IPC tasks', () => {
       fs.unlinkSync(archivePath);
     }
 
-    const archiveMemories = listMemories(sourceGroup, 50).filter(
+    const archiveMemories = listMemories(sourceAgent, 50).filter(
       (m) =>
         m.source === 'archive' &&
         typeof m.metadata === 'string' &&
@@ -1732,15 +1716,15 @@ describe('memory IPC tasks', () => {
   });
 
   it('memory_extract_from_archive respects configurable thresholds from config table', async () => {
-    const sourceGroup = 'other-group';
-    setMemoryExtractConfig(sourceGroup, 'canonical_max', 1);
-    setMemoryExtractConfig(sourceGroup, 'working_max', 1);
-    setMemoryExtractConfig(sourceGroup, 'canonical_min_confidence', 0.95);
+    const sourceAgent = 'other-agent';
+    setMemoryExtractConfig(sourceAgent, 'canonical_max', 1);
+    setMemoryExtractConfig(sourceAgent, 'working_max', 1);
+    setMemoryExtractConfig(sourceAgent, 'canonical_min_confidence', 0.95);
 
     const conversationsDir = path.join(
       process.cwd(),
-      'groups',
-      sourceGroup,
+      'agents',
+      sourceAgent,
       'conversations',
     );
     fs.mkdirSync(conversationsDir, { recursive: true });
@@ -1798,7 +1782,7 @@ describe('memory IPC tasks', () => {
           archiveHash: 'cfg-thresholds',
           round: 3,
         },
-        sourceGroup,
+        sourceAgent,
         false,
         deps,
       );
@@ -1806,7 +1790,7 @@ describe('memory IPC tasks', () => {
       fs.unlinkSync(archivePath);
     }
 
-    const memories = listMemories(sourceGroup, 50).filter(
+    const memories = listMemories(sourceAgent, 50).filter(
       (m) => m.source === 'archive' && m.metadata?.includes(archiveFile),
     );
     const canonicalCount = memories.filter(
@@ -1818,7 +1802,7 @@ describe('memory IPC tasks', () => {
   });
 
   it('memory_doctor/gc produce response payloads', async () => {
-    const sourceGroup = 'other-group';
+    const sourceAgent = 'other-agent';
     // duplicates
     for (let i = 0; i < 2; i++) {
       const writeId = rid('mw-dup');
@@ -1830,38 +1814,38 @@ describe('memory IPC tasks', () => {
           layer: 'canonical',
           memory_type: 'rule',
         },
-        sourceGroup,
+        sourceAgent,
         false,
         deps,
       );
-      readMemoryIpcResult(sourceGroup, writeId);
+      readMemoryIpcResult(sourceAgent, writeId);
     }
 
     const doctorId = rid('mdo');
     await processTaskIpc(
       { type: 'memory_doctor', requestId: doctorId, staleDays: 7 },
-      sourceGroup,
+      sourceAgent,
       false,
       deps,
     );
-    const doctorRes = readMemoryIpcResult(sourceGroup, doctorId);
+    const doctorRes = readMemoryIpcResult(sourceAgent, doctorId);
     expect(doctorRes.report).toBeTruthy();
     expect(doctorRes.report.total).toBeGreaterThan(0);
 
     const gcId = rid('mgc');
     await processTaskIpc(
       { type: 'memory_gc', requestId: gcId, dryRun: true, staleDays: 14 },
-      sourceGroup,
+      sourceAgent,
       false,
       deps,
     );
-    const gcRes = readMemoryIpcResult(sourceGroup, gcId);
+    const gcRes = readMemoryIpcResult(sourceAgent, gcId);
     expect(gcRes.result).toBeTruthy();
     expect(gcRes.result.dryRun).toBe(true);
   });
 
   it('handles concurrent memory writes without result file collisions', async () => {
-    const sourceGroup = 'other-group';
+    const sourceAgent = 'other-agent';
     const tasks = Array.from({ length: 12 }).map((_, i) => {
       const requestId = rid('mw-concurrent');
       return {
@@ -1874,7 +1858,7 @@ describe('memory IPC tasks', () => {
             layer: i % 2 === 0 ? 'canonical' : 'working',
             memory_type: 'fact',
           },
-          sourceGroup,
+          sourceAgent,
           false,
           deps,
         ),
@@ -1884,14 +1868,14 @@ describe('memory IPC tasks', () => {
     await Promise.all(tasks.map((t) => t.promise));
 
     const ids = tasks
-      .map((t) => readMemoryIpcResult(sourceGroup, t.requestId)?.memory?.id)
+      .map((t) => readMemoryIpcResult(sourceAgent, t.requestId)?.memory?.id)
       .filter(Boolean);
     expect(ids.length).toBe(12);
     expect(new Set(ids).size).toBe(12);
   });
 
   it('handles concurrent memory searches and returns per-request results', async () => {
-    const sourceGroup = 'other-group';
+    const sourceAgent = 'other-agent';
 
     const writeIds = Array.from({ length: 6 }).map(() => rid('mw-base'));
     for (let i = 0; i < writeIds.length; i++) {
@@ -1903,11 +1887,11 @@ describe('memory IPC tasks', () => {
           layer: 'canonical',
           memory_type: 'summary',
         },
-        sourceGroup,
+        sourceAgent,
         false,
         deps,
       );
-      readMemoryIpcResult(sourceGroup, writeIds[i]);
+      readMemoryIpcResult(sourceAgent, writeIds[i]);
     }
 
     const searchTasks = Array.from({ length: 8 }).map(() => {
@@ -1922,7 +1906,7 @@ describe('memory IPC tasks', () => {
             mode: 'hybrid',
             limit: 5,
           },
-          sourceGroup,
+          sourceAgent,
           false,
           deps,
         ),
@@ -1932,7 +1916,7 @@ describe('memory IPC tasks', () => {
     await Promise.all(searchTasks.map((t) => t.promise));
 
     for (const t of searchTasks) {
-      const res = readMemoryIpcResult(sourceGroup, t.requestId);
+      const res = readMemoryIpcResult(sourceAgent, t.requestId);
       expect(Array.isArray(res.hits)).toBe(true);
       expect(res.hits.length).toBeGreaterThan(0);
     }
@@ -1944,26 +1928,26 @@ describe('memory IPC tasks', () => {
 describe('complete_delegation requester auto-copy', () => {
   it('auto-sends a copy to requester_jid when requester differs from source', async () => {
     const enqueued: string[] = [];
-    deps.enqueueMessageCheck = (groupJid) => {
-      enqueued.push(groupJid);
+    deps.enqueueMessageCheck = (agentJid) => {
+      enqueued.push(agentJid);
     };
 
     createDelegation({
       id: 'del-auto-copy',
-      source_jid: 'main@g.us',
-      source_folder: 'whatsapp_main',
-      target_jid: 'third@g.us',
-      target_folder: 'third-group',
+      source_jid: 'web:main',
+      source_folder: 'web_main',
+      target_jid: 'web:third',
+      target_folder: 'third-agent',
       task: 'run diagnostics',
       status: 'pending',
       result: null,
       outcome: null,
-      requester_jid: 'other@g.us',
+      requester_jid: 'web:other',
       created_at: Date.now().toString(),
       updated_at: Date.now().toString(),
     });
-    storeChatMetadata('main@g.us', Date.now().toString());
-    storeChatMetadata('other@g.us', Date.now().toString());
+    storeChatMetadata('web:main', Date.now().toString());
+    storeChatMetadata('web:other', Date.now().toString());
 
     await processTaskIpc(
       {
@@ -1972,13 +1956,13 @@ describe('complete_delegation requester auto-copy', () => {
         outcome: 'success',
         result: '诊断完成：未发现异常',
       },
-      'third-group',
+      'third-agent',
       false,
       deps,
     );
 
-    const sourceMsgs = getMessagesSince('main@g.us', '0', 'Andy');
-    const requesterMsgs = getMessagesSince('other@g.us', '0', 'Andy');
+    const sourceMsgs = getMessagesSince('web:main', '0', 'Andy');
+    const requesterMsgs = getMessagesSince('web:other', '0', 'Andy');
     expect(sourceMsgs).toHaveLength(1);
     expect(requesterMsgs).toHaveLength(1);
     expect(sourceMsgs[0].content).toContain(
@@ -1988,30 +1972,30 @@ describe('complete_delegation requester auto-copy', () => {
       '[委派结果抄送 | 来自:Third | ID:del-auto-copy]',
     );
     expect(sourceMsgs[0].content).not.toContain('请将此结果转发给请求方');
-    expect(enqueued.sort()).toEqual(['main@g.us', 'other@g.us'].sort());
+    expect(enqueued.sort()).toEqual(['web:main', 'web:other'].sort());
   });
 
   it('does not duplicate delivery when requester_jid equals source_jid', async () => {
     const enqueued: string[] = [];
-    deps.enqueueMessageCheck = (groupJid) => {
-      enqueued.push(groupJid);
+    deps.enqueueMessageCheck = (agentJid) => {
+      enqueued.push(agentJid);
     };
 
     createDelegation({
       id: 'del-no-dup',
-      source_jid: 'main@g.us',
-      source_folder: 'whatsapp_main',
-      target_jid: 'third@g.us',
-      target_folder: 'third-group',
+      source_jid: 'web:main',
+      source_folder: 'web_main',
+      target_jid: 'web:third',
+      target_folder: 'third-agent',
       task: 'run diagnostics',
       status: 'pending',
       result: null,
       outcome: null,
-      requester_jid: 'main@g.us',
+      requester_jid: 'web:main',
       created_at: Date.now().toString(),
       updated_at: Date.now().toString(),
     });
-    storeChatMetadata('main@g.us', Date.now().toString());
+    storeChatMetadata('web:main', Date.now().toString());
 
     await processTaskIpc(
       {
@@ -2020,30 +2004,30 @@ describe('complete_delegation requester auto-copy', () => {
         outcome: 'success',
         result: '完成',
       },
-      'third-group',
+      'third-agent',
       false,
       deps,
     );
 
-    const sourceMsgs = getMessagesSince('main@g.us', '0', 'Andy');
+    const sourceMsgs = getMessagesSince('web:main', '0', 'Andy');
     expect(sourceMsgs).toHaveLength(1);
     expect(sourceMsgs[0].content).toContain(
       '[委派结果 | 来自:Third | ID:del-no-dup]',
     );
-    expect(enqueued).toEqual(['main@g.us']);
+    expect(enqueued).toEqual(['web:main']);
   });
 });
 
 // --- list_delegations db query ---
 
 describe('list_delegations', () => {
-  it('main group lists delegations it sourced from the database', async () => {
+  it('main agent lists delegations it sourced from the database', async () => {
     createDelegation({
       id: 'del-main-visible',
-      source_jid: 'main@g.us',
-      source_folder: 'whatsapp_main',
-      target_jid: 'other@g.us',
-      target_folder: 'other-group',
+      source_jid: 'web:main',
+      source_folder: 'web_main',
+      target_jid: 'web:other',
+      target_folder: 'other-agent',
       task: 'visible to main',
       status: 'pending',
       result: null,
@@ -2053,10 +2037,10 @@ describe('list_delegations', () => {
     });
     createDelegation({
       id: 'del-main-hidden',
-      source_jid: 'other@g.us',
-      source_folder: 'other-group',
-      target_jid: 'third@g.us',
-      target_folder: 'third-group',
+      source_jid: 'web:other',
+      source_folder: 'other-agent',
+      target_jid: 'web:third',
+      target_folder: 'third-agent',
       task: 'hidden from main',
       status: 'pending',
       result: null,
@@ -2070,12 +2054,12 @@ describe('list_delegations', () => {
         type: 'list_delegations',
         requestId: 'list-main',
       },
-      'whatsapp_main',
+      'web_main',
       true,
       deps,
     );
 
-    const result = readDelegationIpcResult('whatsapp_main', 'list-main');
+    const result = readDelegationIpcResult('web_main', 'list-main');
     expect(result.status).toBe('success');
     expect(result.delegations.map((d: any) => d.id)).toEqual([
       'del-main-visible',
@@ -2083,13 +2067,13 @@ describe('list_delegations', () => {
     expect(result.delegations[0].target_name).toBe('Other');
   });
 
-  it('non-main group lists delegations assigned to it from the database', async () => {
+  it('non-main agent lists delegations assigned to it from the database', async () => {
     createDelegation({
       id: 'del-target-visible',
-      source_jid: 'main@g.us',
-      source_folder: 'whatsapp_main',
-      target_jid: 'other@g.us',
-      target_folder: 'other-group',
+      source_jid: 'web:main',
+      source_folder: 'web_main',
+      target_jid: 'web:other',
+      target_folder: 'other-agent',
       task: 'visible to target',
       status: 'completed',
       result: 'done',
@@ -2102,10 +2086,10 @@ describe('list_delegations', () => {
     });
     createDelegation({
       id: 'del-target-hidden',
-      source_jid: 'main@g.us',
-      source_folder: 'whatsapp_main',
-      target_jid: 'third@g.us',
-      target_folder: 'third-group',
+      source_jid: 'web:main',
+      source_folder: 'web_main',
+      target_jid: 'web:third',
+      target_folder: 'third-agent',
       task: 'hidden from target',
       status: 'pending',
       result: null,
@@ -2119,18 +2103,18 @@ describe('list_delegations', () => {
         type: 'list_delegations',
         requestId: 'list-target',
       },
-      'other-group',
+      'other-agent',
       false,
       deps,
     );
 
-    const result = readDelegationIpcResult('other-group', 'list-target');
+    const result = readDelegationIpcResult('other-agent', 'list-target');
     expect(result.status).toBe('success');
     expect(result.delegations.map((d: any) => d.id)).toEqual([
       'del-target-visible',
     ]);
     expect(result.delegations[0]).toMatchObject({
-      source_folder: 'whatsapp_main',
+      source_folder: 'web_main',
       target_name: 'Other',
       result: 'done',
       outcome: 'success',
@@ -2139,52 +2123,49 @@ describe('list_delegations', () => {
 });
 
 describe('delegate_task IPC result', () => {
-  it('returns an error result when the target group is not registered', async () => {
+  it('returns an error result when the target agent is not registered', async () => {
     await processTaskIpc(
       {
         type: 'delegate_task',
         requestId: 'del-missing-target',
-        targetGroupJid: 'missing@g.us',
+        targetAgentJid: 'web:missing',
         task: 'do work',
       },
-      'whatsapp_main',
+      'web_main',
       true,
       deps,
     );
 
-    const result = readDelegationIpcResult(
-      'whatsapp_main',
-      'del-missing-target',
-    );
+    const result = readDelegationIpcResult('web_main', 'del-missing-target');
     expect(result).toMatchObject({
       status: 'error',
-      error: 'Target group is not registered: missing@g.us',
+      error: 'Target agent is not registered: web:missing',
     });
   });
 
-  it('returns an error result when a non-main group delegates directly', async () => {
+  it('returns an error result when a non-main agent delegates directly', async () => {
     await processTaskIpc(
       {
         type: 'delegate_task',
         requestId: 'del-non-main',
-        targetGroupJid: 'third@g.us',
+        targetAgentJid: 'web:third',
         task: 'do work',
       },
-      'other-group',
+      'other-agent',
       false,
       deps,
     );
 
-    const result = readDelegationIpcResult('other-group', 'del-non-main');
+    const result = readDelegationIpcResult('other-agent', 'del-non-main');
     expect(result).toMatchObject({
       status: 'error',
-      error: 'Only main group can delegate tasks',
+      error: 'Only main agent can delegate tasks',
     });
   });
 
   it('returns an error result when cross-channel delegation is blocked', async () => {
     const targetJid = 'feishu:test';
-    groups[targetJid] = {
+    agents[targetJid] = {
       name: 'Feishu Target',
       folder: 'feishu_target',
       trigger: '@Andy',
@@ -2195,22 +2176,18 @@ describe('delegate_task IPC result', () => {
       {
         type: 'delegate_task',
         requestId: 'del-cross-channel',
-        targetGroupJid: targetJid,
+        targetAgentJid: targetJid,
         task: 'do work',
       },
-      'whatsapp_main',
+      'web_main',
       true,
       deps,
     );
 
-    const result = readDelegationIpcResult(
-      'whatsapp_main',
-      'del-cross-channel',
-    );
+    const result = readDelegationIpcResult('web_main', 'del-cross-channel');
     expect(result).toMatchObject({
       status: 'error',
-      error:
-        'Cross-channel delegation not allowed (main: whatsapp, target: feishu)',
+      error: 'Cross-channel delegation not allowed (main: web, target: feishu)',
     });
   });
 });
@@ -2218,72 +2195,72 @@ describe('delegate_task IPC result', () => {
 // --- request_delegation target parsing ---
 
 describe('request_delegation target parsing', () => {
-  it('parses @{groupfolder} and includes target_group_jid hint for main group', async () => {
+  it('parses @{agentfolder} and includes target_agent_jid hint for main agent', async () => {
     const enqueued: string[] = [];
-    deps.enqueueMessageCheck = (groupJid) => {
-      enqueued.push(groupJid);
+    deps.enqueueMessageCheck = (agentJid) => {
+      enqueued.push(agentJid);
     };
 
     await processTaskIpc(
       {
         type: 'request_delegation',
-        task: '@{third-group} 请帮我排查线上告警并给出修复建议',
+        task: '@{third-agent} 请帮我排查线上告警并给出修复建议',
       },
-      'other-group',
+      'other-agent',
       false,
       deps,
     );
 
-    const msgs = getMessagesSince('main@g.us', '0', 'Andy');
+    const msgs = getMessagesSince('web:main', '0', 'Andy');
     expect(msgs).toHaveLength(1);
     expect(msgs[0].content).toContain('[委派请求 | 来自:Other]');
     expect(msgs[0].content).toContain('请帮我排查线上告警并给出修复建议');
-    expect(msgs[0].content).not.toContain('@{third-group}');
-    expect(msgs[0].content).toContain('folder="third-group"');
-    expect(msgs[0].content).toContain('target_group_jid="third@g.us"');
-    expect(enqueued).toEqual(['main@g.us']);
+    expect(msgs[0].content).not.toContain('@{third-agent}');
+    expect(msgs[0].content).toContain('folder="third-agent"');
+    expect(msgs[0].content).toContain('target_agent_jid="web:third"');
+    expect(enqueued).toEqual(['web:main']);
   });
 
   it('strips leading trigger mention like @Andy from forwarded task body', async () => {
     await processTaskIpc(
       {
         type: 'request_delegation',
-        task: '@Andy @{third-group} 请帮我定位接口超时根因',
+        task: '@Andy @{third-agent} 请帮我定位接口超时根因',
       },
-      'other-group',
+      'other-agent',
       false,
       deps,
     );
 
-    const msgs = getMessagesSince('main@g.us', '0', 'Andy');
+    const msgs = getMessagesSince('web:main', '0', 'Andy');
     expect(msgs).toHaveLength(1);
     expect(msgs[0].content).toContain('请帮我定位接口超时根因');
     expect(msgs[0].content).not.toContain('@Andy ');
-    expect(msgs[0].content).not.toContain('@{third-group}');
-    expect(msgs[0].content).toContain('target_group_jid="third@g.us"');
+    expect(msgs[0].content).not.toContain('@{third-agent}');
+    expect(msgs[0].content).toContain('target_agent_jid="web:third"');
   });
 
-  it('keeps forwarding when @{groupfolder} is unknown and marks it unresolved', async () => {
+  it('keeps forwarding when @{agentfolder} is unknown and marks it unresolved', async () => {
     await processTaskIpc(
       {
         type: 'request_delegation',
-        task: '@{missing-group} 请协助处理客户问题',
+        task: '@{missing-agent} 请协助处理客户问题',
       },
-      'other-group',
+      'other-agent',
       false,
       deps,
     );
 
-    const msgs = getMessagesSince('main@g.us', '0', 'Andy');
+    const msgs = getMessagesSince('web:main', '0', 'Andy');
     expect(msgs).toHaveLength(1);
     expect(msgs[0].content).toContain('请协助处理客户问题');
-    expect(msgs[0].content).toContain('folder="missing-group"');
-    expect(msgs[0].content).toContain('未找到该 folder 对应的注册群');
+    expect(msgs[0].content).toContain('folder="missing-agent"');
+    expect(msgs[0].content).toContain('未找到该 folder 对应的注册 Agent');
   });
 });
 
 describe('run_local_host_script authorization', () => {
-  it('main group can run a script under local/shell', async () => {
+  it('main agent can run a script under local/shell', async () => {
     const requestId = rid('hostscript');
     const filename = `__icarus-test-${Date.now()}.sh`;
     const hostPath = path.join(process.cwd(), 'local', 'shell', filename);
@@ -2303,7 +2280,7 @@ describe('run_local_host_script authorization', () => {
           scriptPath: `/workspace/project/local/shell/${filename}`,
           args: ['main'],
         },
-        'whatsapp_main',
+        'web_main',
         true,
         deps,
       );
@@ -2311,7 +2288,7 @@ describe('run_local_host_script authorization', () => {
       fs.unlinkSync(hostPath);
     }
 
-    const result = readHostScriptIpcResult('whatsapp_main', requestId);
+    const result = readHostScriptIpcResult('web_main', requestId);
     expect(result.status).toBe('success');
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain('host-script-ok:main');
@@ -2320,7 +2297,7 @@ describe('run_local_host_script authorization', () => {
 });
 
 describe('desktop_capture authorization', () => {
-  it('main group can capture desktop through a supporting channel', async () => {
+  it('main agent can capture desktop through a supporting channel', async () => {
     const requestId = rid('desktop');
     const captureDesktop = vi.fn(async () => ({
       status: 'success' as const,
@@ -2340,7 +2317,7 @@ describe('desktop_capture authorization', () => {
         includeImage: false,
         includeWindows: true,
       },
-      'whatsapp_main',
+      'web_main',
       true,
       deps,
     );
@@ -2353,13 +2330,13 @@ describe('desktop_capture authorization', () => {
         includeWindows: true,
       }),
     );
-    const result = readDesktopCaptureIpcResult('whatsapp_main', requestId);
+    const result = readDesktopCaptureIpcResult('web_main', requestId);
     expect(result.status).toBe('success');
     expect(result.requestId).toBe('client-request');
     expect(result.source).toBe('web-client');
   });
 
-  it('non-main group cannot capture desktop', async () => {
+  it('non-main agent cannot capture desktop', async () => {
     const requestId = rid('desktop');
     const captureDesktop = vi.fn();
     deps.captureDesktop = captureDesktop;
@@ -2369,20 +2346,20 @@ describe('desktop_capture authorization', () => {
         type: 'desktop_capture',
         requestId,
       },
-      'other-group',
+      'other-agent',
       false,
       deps,
     );
 
     expect(captureDesktop).not.toHaveBeenCalled();
-    const result = readDesktopCaptureIpcResult('other-group', requestId);
+    const result = readDesktopCaptureIpcResult('other-agent', requestId);
     expect(result.status).toBe('error');
-    expect(result.error).toContain('main group');
+    expect(result.error).toContain('main agent');
   });
 });
 
 describe('query_recent_today_plan_details authorization', () => {
-  it('main group can query recent today plan details', async () => {
+  it('main agent can query recent today plan details', async () => {
     const requestId = rid('today-plan');
     const plan = createTodayPlan({
       plan_date: '2026-05-12',
@@ -2405,12 +2382,12 @@ describe('query_recent_today_plan_details authorization', () => {
         days: 1,
         date: '2026-05-12',
       },
-      'whatsapp_main',
+      'web_main',
       true,
       deps,
     );
 
-    const result = readTodayPlanIpcResult('whatsapp_main', requestId);
+    const result = readTodayPlanIpcResult('web_main', requestId);
     expect(result.query.days).toBe(1);
     expect(result.query.mode).toBe('date');
     expect(result.query.date).toBe('2026-05-12');
@@ -2419,11 +2396,11 @@ describe('query_recent_today_plan_details authorization', () => {
     expect(result.services[0].service).toBe('icarus');
   });
 
-  it('non-main group can query recent today plan details', async () => {
+  it('non-main agent can query recent today plan details', async () => {
     const requestId = rid('today-plan');
     const plan = createTodayPlan({
       plan_date: '2026-05-13',
-      title: '非主群可查计划',
+      title: '非主 Agent 可查计划',
       status: 'active',
     });
     createTodayPlanItem({
@@ -2441,12 +2418,12 @@ describe('query_recent_today_plan_details authorization', () => {
         requestId,
         date: '2026-05-13',
       },
-      'other-group',
+      'other-agent',
       false,
       deps,
     );
 
-    const result = readTodayPlanIpcResult('other-group', requestId);
+    const result = readTodayPlanIpcResult('other-agent', requestId);
     expect(result.query.mode).toBe('date');
     expect(result.plans).toHaveLength(1);
     expect(result.plans[0].items[0].title).toBe('同步上下文');

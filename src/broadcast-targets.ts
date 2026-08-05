@@ -1,8 +1,8 @@
-import type { RegisteredGroup } from './types.js';
+import type { RegisteredAgent } from './types.js';
 
 export function resolveBroadcastTargetJids(
   targets: string[],
-  groups: Record<string, RegisteredGroup>,
+  agents: Record<string, RegisteredAgent>,
 ): string[] {
   const resolved = new Set<string>();
 
@@ -10,13 +10,13 @@ export function resolveBroadcastTargetJids(
     const target = rawTarget.trim();
     if (!target) continue;
 
-    if (groups[target]) {
+    if (agents[target]) {
       resolved.add(target);
       continue;
     }
 
-    const matched = Object.entries(groups).find(([, group]) => {
-      return group.folder === target || group.name === target;
+    const matched = Object.entries(agents).find(([, agent]) => {
+      return agent.folder === target || agent.name === target;
     });
     if (matched) resolved.add(matched[0]);
   }
@@ -24,10 +24,10 @@ export function resolveBroadcastTargetJids(
   return [...resolved];
 }
 
-export function isBroadcastTargetGroup(
-  groupJid: string,
+export function isBroadcastTargetAgent(
+  agentJid: string,
   targets: string[],
-  groups: Record<string, RegisteredGroup>,
+  agents: Record<string, RegisteredAgent>,
 ): boolean {
-  return resolveBroadcastTargetJids(targets, groups).includes(groupJid);
+  return resolveBroadcastTargetJids(targets, agents).includes(agentJid);
 }

@@ -43,20 +43,20 @@ describe('feature management', () => {
     const db = await import('../db.js');
     db._initTestDatabase();
     const now = new Date().toISOString();
-    db.setRegisteredGroup('feature:example-feature:main', {
+    db.setRegisteredAgent('feature:example-feature:main', {
       name: 'Example Feature',
       folder: 'example_feature_main',
       trigger: '@Andy',
       added_at: now,
       requiresTrigger: false,
     });
-    db.setFeatureGroupBinding({
+    db.setFeatureAgentBinding({
       featureId: 'example-feature',
-      groupKey: 'main',
-      groupJid: 'feature:example-feature:main',
-      groupFolder: 'example_feature_main',
+      agentKey: 'main',
+      agentJid: 'feature:example-feature:main',
+      agentFolder: 'example_feature_main',
     });
-    fs.mkdirSync(path.join(workspace, 'groups', 'example_feature_main'), {
+    fs.mkdirSync(path.join(workspace, 'agents', 'example_feature_main'), {
       recursive: true,
     });
 
@@ -72,7 +72,7 @@ describe('feature management', () => {
       rmSpy.mockRestore();
     }
 
-    expect(db.getFeatureGroupBinding('example-feature', 'main')).toBeTruthy();
+    expect(db.getFeatureAgentBinding('example-feature', 'main')).toBeTruthy();
   });
 
   it('drops feature-owned projection tables during data deletion', async () => {
@@ -111,8 +111,7 @@ describe('feature management', () => {
     const externalRoot = path.join(workspace, 'external-workspace');
     fs.mkdirSync(externalRoot, { recursive: true });
     fs.writeFileSync(path.join(externalRoot, 'keep.txt'), 'keep\n');
-    const { registerExternalFeatureDataRoot } =
-      await import('./data-roots.js');
+    const { registerExternalFeatureDataRoot } = await import('./data-roots.js');
     registerExternalFeatureDataRoot({
       featureId: 'example-feature',
       rootId: 'workspace',
@@ -137,25 +136,25 @@ describe('feature management', () => {
     expect(fs.existsSync(path.join(externalRoot, 'keep.txt'))).toBe(true);
   });
 
-  it('stops feature groups before data deletion and reloads registered groups', async () => {
+  it('stops feature agents before data deletion and reloads registered agents', async () => {
     const workspace = setupFeatureWorkspace();
     const db = await import('../db.js');
     db._initTestDatabase();
     const now = new Date().toISOString();
-    db.setRegisteredGroup('feature:example-feature:main', {
+    db.setRegisteredAgent('feature:example-feature:main', {
       name: 'Example Feature',
       folder: 'example_feature_main',
       trigger: '@Andy',
       added_at: now,
       requiresTrigger: false,
     });
-    db.setFeatureGroupBinding({
+    db.setFeatureAgentBinding({
       featureId: 'example-feature',
-      groupKey: 'main',
-      groupJid: 'feature:example-feature:main',
-      groupFolder: 'example_feature_main',
+      agentKey: 'main',
+      agentJid: 'feature:example-feature:main',
+      agentFolder: 'example_feature_main',
     });
-    fs.mkdirSync(path.join(workspace, 'groups', 'example_feature_main'), {
+    fs.mkdirSync(path.join(workspace, 'agents', 'example_feature_main'), {
       recursive: true,
     });
 
@@ -163,10 +162,10 @@ describe('feature management', () => {
     let reloadCount = 0;
     const management = await import('./management.js');
     management.configureFeatureManagementHostHooks({
-      stopFeatureGroups: (groups) => {
-        stopped.push(...groups.map((group) => group.jid));
+      stopFeatureAgents: (agents) => {
+        stopped.push(...agents.map((agent) => agent.jid));
       },
-      reloadRegisteredGroups: () => {
+      reloadRegisteredAgents: () => {
         reloadCount += 1;
       },
     });
@@ -176,18 +175,18 @@ describe('feature management', () => {
     expect(stopped).toEqual(['feature:example-feature:main']);
     expect(reloadCount).toBe(1);
     expect(
-      db.getFeatureGroupBinding('example-feature', 'main'),
+      db.getFeatureAgentBinding('example-feature', 'main'),
     ).toBeUndefined();
   });
 
-  it('reloads registered groups after applying feature enable changes', async () => {
+  it('reloads registered agents after applying feature enable changes', async () => {
     setupFeatureWorkspace();
     const db = await import('../db.js');
     db._initTestDatabase();
     let reloadCount = 0;
     const management = await import('./management.js');
     management.configureFeatureManagementHostHooks({
-      reloadRegisteredGroups: () => {
+      reloadRegisteredAgents: () => {
         reloadCount += 1;
       },
     });

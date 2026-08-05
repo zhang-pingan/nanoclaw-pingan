@@ -4,10 +4,10 @@
 
 | Entity            | Trust Level | Rationale                        |
 | ----------------- | ----------- | -------------------------------- |
-| Main group        | Trusted     | Private self-chat, admin control |
-| Non-main groups   | Untrusted   | Other users may be malicious     |
+| Main agent        | Trusted     | Private self-chat, admin control |
+| Non-main Agents   | Untrusted   | Other users may be malicious     |
 | Container agents  | Sandboxed   | Isolated execution environment   |
-| WhatsApp messages | User input  | Potential prompt injection       |
+| Channel messages  | User input  | Potential prompt injection       |
 
 ## Security Boundaries
 
@@ -42,32 +42,32 @@ private_key, .secret
 
 - Symlink resolution before validation (prevents traversal attacks)
 - Container path validation (rejects `..` and absolute paths)
-- `nonMainReadOnly` option forces read-only for non-main groups
+- `nonMainReadOnly` option forces read-only for non-main Agents
 
 **Read-Only Project Root:**
 
-The main group's project root is mounted read-only. Writable paths the agent needs (group folder, IPC, `.claude/`) are mounted separately. This prevents the agent from modifying host application code (`src/`, `dist/`, `package.json`, etc.) which would bypass the sandbox entirely on next restart.
+The main agent's project root is mounted read-only. Writable paths the agent needs (agent folder, IPC, `.claude/`) are mounted separately. This prevents the agent from modifying host application code (`src/`, `dist/`, `package.json`, etc.) which would bypass the sandbox entirely on next restart.
 
 ### 3. Session Isolation
 
-Each group has isolated Claude sessions at `data/sessions/{group}/.claude/`:
+Each agent has isolated Claude sessions at `data/sessions/{agent}/.claude/`:
 
-- Groups cannot see other groups' conversation history
+- Agents cannot see other Agents' conversation history
 - Session data includes full message history and file contents read
-- Prevents cross-group information disclosure
+- Prevents cross-agent information disclosure
 
 ### 4. IPC Authorization
 
-Messages and task operations are verified against group identity:
+Messages and task operations are verified against agent identity:
 
-| Operation                   | Main Group | Non-Main Group |
+| Operation                   | Main Agent | Non-Main Agent |
 | --------------------------- | ---------- | -------------- |
 | Send message to own chat    | ✓          | ✓              |
 | Send message to other chats | ✓          | ✗              |
 | Schedule task for self      | ✓          | ✓              |
 | Schedule task for others    | ✓          | ✗              |
 | View all tasks              | ✓          | Own only       |
-| Manage other groups         | ✓          | ✗              |
+| Manage other Agents         | ✓          | ✗              |
 
 ### 5. Credential Isolation (Credential Proxy)
 
@@ -83,17 +83,17 @@ Real API credentials **never enter containers**. Instead, the host runs an HTTP 
 
 **NOT Mounted:**
 
-- WhatsApp session (`store/auth/`) - host only
+- Channel credentials and `.env` - host only
 - Mount allowlist - external, never mounted
 - Any credentials matching blocked patterns
 - `.env` is shadowed with `/dev/null` in the project root mount
 
 ## Privilege Comparison
 
-| Capability          | Main Group                    | Non-Main Group                |
+| Capability          | Main Agent                    | Non-Main Agent                |
 | ------------------- | ----------------------------- | ----------------------------- |
 | Project root access | `/workspace/project` (ro)     | None                          |
-| Group folder        | `/workspace/group` (rw)       | `/workspace/group` (rw)       |
+| Agent folder        | `/workspace/agent` (rw)       | `/workspace/agent` (rw)       |
 | Shared attachments  | `/workspace/attachments` (rw) | `/workspace/attachments` (rw) |
 | Shared AI images    | `/workspace/ai-images` (rw)   | `/workspace/ai-images` (rw)   |
 | Global memory       | Implicit via project          | `/workspace/global` (ro)      |
@@ -106,7 +106,7 @@ Real API credentials **never enter containers**. Instead, the host runs an HTTP 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
 │                        UNTRUSTED ZONE                             │
-│  WhatsApp Messages (potentially malicious)                        │
+│  Channel Messages (potentially malicious)                         │
 └────────────────────────────────┬─────────────────────────────────┘
                                  │
                                  ▼ Trigger check, input escaping

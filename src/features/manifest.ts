@@ -10,7 +10,7 @@ export interface FeatureNavItem {
   order?: number;
 }
 
-export interface FeatureRequiredGroup {
+export interface FeatureRequiredAgent {
   key: string;
   jid: string;
   name: string;
@@ -43,7 +43,7 @@ export interface FeatureManifest {
   rendererEntry?: string;
   apiPrefix?: string;
   nav?: FeatureNavItem[];
-  requiredGroups?: FeatureRequiredGroup[];
+  requiredAgents?: FeatureRequiredAgent[];
   resources?: FeatureResources;
   permissions?: FeaturePermissions;
 }
@@ -138,18 +138,18 @@ function normalizeNav(
   });
 }
 
-function normalizeRequiredGroups(
+function normalizeRequiredAgents(
   value: unknown,
   errors: string[],
-): FeatureRequiredGroup[] | undefined {
+): FeatureRequiredAgent[] | undefined {
   if (value === undefined) return undefined;
   if (!Array.isArray(value)) {
-    errors.push('requiredGroups must be an array');
+    errors.push('requiredAgents must be an array');
     return undefined;
   }
   return value.map((item, index) => {
     if (!isPlainObject(item)) {
-      errors.push(`requiredGroups[${index}] must be an object`);
+      errors.push(`requiredAgents[${index}] must be an object`);
       return {
         key: '',
         jid: '',
@@ -160,34 +160,34 @@ function normalizeRequiredGroups(
     }
     const key = requiredString(
       item.key,
-      `requiredGroups[${index}].key`,
+      `requiredAgents[${index}].key`,
       errors,
     );
     const jid = requiredString(
       item.jid,
-      `requiredGroups[${index}].jid`,
+      `requiredAgents[${index}].jid`,
       errors,
     );
     const name = requiredString(
       item.name,
-      `requiredGroups[${index}].name`,
+      `requiredAgents[${index}].name`,
       errors,
     );
     const folder = requiredString(
       item.folder,
-      `requiredGroups[${index}].folder`,
+      `requiredAgents[${index}].folder`,
       errors,
     );
     const claudeMd = requiredString(
       item.claudeMd,
-      `requiredGroups[${index}].claudeMd`,
+      `requiredAgents[${index}].claudeMd`,
       errors,
     );
     if (
       item.requiresTrigger !== undefined &&
       typeof item.requiresTrigger !== 'boolean'
     ) {
-      errors.push(`requiredGroups[${index}].requiresTrigger must be a boolean`);
+      errors.push(`requiredAgents[${index}].requiresTrigger must be a boolean`);
     }
     return {
       key,
@@ -200,7 +200,7 @@ function normalizeRequiredGroups(
           : undefined,
       description: optionalString(
         item.description,
-        `requiredGroups[${index}].description`,
+        `requiredAgents[${index}].description`,
         errors,
       ),
       claudeMd,
@@ -287,7 +287,7 @@ export function normalizeFeatureManifest(input: unknown): {
     rendererEntry: optionalString(input.rendererEntry, 'rendererEntry', errors),
     apiPrefix: optionalString(input.apiPrefix, 'apiPrefix', errors),
     nav: normalizeNav(input.nav, errors),
-    requiredGroups: normalizeRequiredGroups(input.requiredGroups, errors),
+    requiredAgents: normalizeRequiredAgents(input.requiredAgents, errors),
     resources: normalizeResources(input.resources, errors),
     permissions: normalizePermissions(input.permissions, errors),
   };

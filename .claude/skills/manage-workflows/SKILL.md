@@ -14,7 +14,7 @@ Interactive skill for managing workflow type definitions in `container/skills/wo
 Read `container/skills/workflows.json` and `container/skills/skills.json` to understand:
 - What workflow types exist
 - What roles/skills are available
-- Which group folders map to which roles
+- Which Agent folders map to which roles
 
 ### Step 2: Ask what the user wants
 
@@ -71,7 +71,7 @@ Each key in `workflows.json` is a workflow type. Full structure:
 
 ### State types
 
-**delegation** — Delegate work to a role's group agent. Must define `on_complete` with `success` and `failure` branches.
+**delegation** — Delegate work to a role's Agent. Must define `on_complete` with `success` and `failure` branches.
 ```json
 {
   "type": "delegation",
@@ -139,7 +139,7 @@ Available in `task_template`, `notify`, card `header_template` and `body_templat
 | `{{deliverable_content}}` | Full deliverable file content |
 | `{{delegation_result}}` | Raw delegation result text |
 | `{{result_summary}}` | Parsed summary from JSON result |
-| `{{role_folder:ROLE}}` | Group folder for ROLE (e.g. `{{role_folder:dev}}`) |
+| `{{role_folder:ROLE}}` | Agent folder for ROLE (e.g. `{{role_folder:dev}}`) |
 
 ### Transition fields
 
@@ -153,7 +153,7 @@ Available in `task_template`, `notify`, card `header_template` and `body_templat
 | `read_deliverable` | boolean | Read latest deliverable doc before delegating. |
 | `read_deliverable_role` | string | Which role's folder to read from (default: `"dev"`). |
 | `increment_round` | boolean | Increment workflow round counter. |
-| `notify` | string | Notification template sent to main group. |
+| `notify` | string | Notification template sent to main Agent. |
 | `card` | string | Card key to send after transition. |
 
 ### Card config
@@ -173,7 +173,7 @@ Available actions: `approve`, `pause`, `cancel`, `resume`.
 
 ### Roles and skills.json
 
-Each role's `skill_to_role_key` must match a skill assigned to a group folder in `skills.json`:
+Each role's `skill_to_role_key` must match a skill assigned to an Agent folder in `skills.json`:
 
 ```json
 // skills.json
@@ -183,7 +183,7 @@ Each role's `skill_to_role_key` must match a skill assigned to a group folder in
 }
 ```
 
-If a role's skill isn't found in any group, that workflow type is disabled (but other types still work).
+If a role's skill isn't found in any Agent, that workflow type is disabled (but other types still work).
 
 ## Rules
 

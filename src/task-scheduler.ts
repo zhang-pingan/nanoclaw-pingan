@@ -24,11 +24,11 @@ import {
   toAgentQueryFailurePatch,
   toFailureEventPayload,
 } from './failure-taxonomy.js';
-import { GroupQueue } from './group-queue.js';
-import { resolveGroupFolderPath } from './group-folder.js';
+import { AgentQueue } from './agent-queue.js';
+import { resolveAgentFolderPath } from './agent-folder.js';
 import { logger } from './logger.js';
 import { selectModel } from './model-selector.js';
-import { RegisteredGroup, ScheduledTask } from './types.js';
+import { RegisteredAgent, ScheduledTask } from './types.js';
 
 function createExecutionId(): string {
   return crypto.randomUUID();
@@ -128,14 +128,14 @@ export function computeNextRun(task: ScheduledTask): string | null {
 }
 
 export interface SchedulerDependencies {
-  registeredGroups: () => Record<string, RegisteredGroup>;
+  registeredAgents: () => Record<string, RegisteredAgent>;
   getSessions: () => Record<string, string>;
-  queue: GroupQueue;
+  queue: AgentQueue;
   onProcess: (
-    groupJid: string,
+    agentJid: string,
     proc: ChildProcess,
     containerName: string,
-    groupFolder: string,
+    agentFolder: string,
   ) => void;
   sendMessage: (jid: string, text: string) => Promise<void>;
 }
@@ -154,10 +154,10 @@ async function runTask(
     .update(task.prompt)
     .digest('hex');
 
-  // For group context mode, use the group's current session
+  // For agent context mode, use the agent's current session
   const sessions = deps.getSessions();
   const sessionId =
-    task.context_mode === 'group' ? sessions[task.group_folder] : undefined;
+    task.context_mode === 'agent' ? sessions[task.agent_folder] : undefined;
 
   agentQueryTraceManager.startQuery({
     queryId,
@@ -165,7 +165,7 @@ async function runTask(
     sourceType: 'scheduled_task',
     sourceRefId: task.id,
     chatJid: task.chat_jid,
-    groupFolder: task.group_folder,
+    agentFolder: task.agent_folder,
     taskId: task.id,
     taskTitle: task.prompt.slice(0, 120),
     sessionId,
@@ -181,23 +181,23 @@ async function runTask(
   });
   agentQueryTraceManager.completeStep(queryId, inputStepId, 'success');
 
-  let groupDir: string;
+  let agentDir: string;
   try {
-    groupDir = resolveGroupFolderPath(task.group_folder);
+    agentDir = resolveAgentFolderPath(task.agent_folder);
   } catch (err) {
     error = err instanceof Error ? err.message : String(err);
     // Stop retry churn for malformed legacy rows.
     updateTask(task.id, { status: 'paused' });
     logger.error(
-      { taskId: task.id, groupFolder: task.group_folder, error },
-      'Task has invalid group folder',
+      { taskId: task.id, agentFolder: task.agent_folder, error },
+      'Task has invalid agent folder',
     );
     finishScheduledTaskErrorQuery(queryId, error, {
       failure: classifyFailure(err, {
         module: 'task-scheduler',
-        action: 'resolve_group_folder',
+        action: 'resolve_agent_folder',
         defaultType: 'invalid_input',
-        defaultSubtype: 'invalid_group_folder',
+        defaultSubtype: 'invalid_agent_folder',
         defaultOrigin: 'scheduler',
         retryable: false,
       }),
@@ -209,34 +209,34 @@ async function runTask(
     });
     return;
   }
-  fs.mkdirSync(groupDir, { recursive: true });
+  fs.mkdirSync(agentDir, { recursive: true });
 
   logger.info(
-    { taskId: task.id, group: task.group_folder },
+    { taskId: task.id, agent: task.agent_folder },
     'Running scheduled task',
   );
 
-  const groups = deps.registeredGroups();
-  const group = Object.values(groups).find(
-    (g) => g.folder === task.group_folder,
+  const agents = deps.registeredAgents();
+  const agent = Object.values(agents).find(
+    (g) => g.folder === task.agent_folder,
   );
 
-  if (!group) {
-    error = `Group not found: ${task.group_folder}`;
+  if (!agent) {
+    error = `Agent not found: ${task.agent_folder}`;
     logger.error(
-      { taskId: task.id, groupFolder: task.group_folder },
-      'Group not found for task',
+      { taskId: task.id, agentFolder: task.agent_folder },
+      'Agent not found for task',
     );
     finishScheduledTaskErrorQuery(queryId, error, {
       failure: classifyFailure(new Error(error), {
         module: 'task-scheduler',
-        action: 'lookup_group',
+        action: 'lookup_agent',
         defaultType: 'invalid_input',
-        defaultSubtype: 'group_not_found',
+        defaultSubtype: 'agent_not_found',
         defaultOrigin: 'scheduler',
         retryable: false,
       }),
-      summary: 'Scheduled task group lookup failed',
+      summary: 'Scheduled task agent lookup failed',
     });
     updateTaskAfterRun(task.id, task.next_run, `Error: ${error}`, {
       lastQueryId: queryId,
@@ -244,15 +244,15 @@ async function runTask(
     return;
   }
 
-  // Update tasks snapshot for container to read (filtered by group)
-  const isMain = group.isMain === true;
+  // Update tasks snapshot for container to read (filtered by agent)
+  const isMain = agent.isMain === true;
   const tasks = getAllTasks();
   writeTasksSnapshot(
-    task.group_folder,
+    task.agent_folder,
     isMain,
     tasks.map((t) => ({
       id: t.id,
-      groupFolder: t.group_folder,
+      agentFolder: t.agent_folder,
       prompt: t.prompt,
       schedule_type: t.schedule_type,
       schedule_value: t.schedule_value,
@@ -307,7 +307,7 @@ async function runTask(
     logger.info(
       {
         taskId: task.id,
-        group: group.name,
+        agent: agent.name,
         selectedModel: modelSelection.selectedModel,
         reason: modelSelection.reason,
       },
@@ -322,13 +322,13 @@ async function runTask(
     });
     let resultDeliveryStepId: string | null = null;
     const output = await runContainerAgent(
-      group,
+      agent,
       {
         prompt: task.prompt,
         sessionId,
         runId,
         queryId,
-        groupFolder: task.group_folder,
+        agentFolder: task.agent_folder,
         chatJid: task.chat_jid,
         isMain,
         isScheduledTask: true,
@@ -336,7 +336,7 @@ async function runTask(
         selectedModel: modelSelection.selectedModel,
       },
       (proc, containerName) =>
-        deps.onProcess(task.chat_jid, proc, containerName, task.group_folder),
+        deps.onProcess(task.chat_jid, proc, containerName, task.agent_folder),
       async (streamedOutput: ContainerOutput) => {
         if (streamedOutput.newSessionId) {
           agentQueryTraceManager.updateQuery(queryId, {
@@ -562,13 +562,13 @@ export function startSchedulerLoop(deps: SchedulerDependencies): void {
           runTask(currentTask, deps),
         );
         // Also set agent info right away for the status panel
-        const taskGroup = Object.values(deps.registeredGroups()).find(
-          (g) => g.folder === currentTask.group_folder,
+        const taskAgent = Object.values(deps.registeredAgents()).find(
+          (g) => g.folder === currentTask.agent_folder,
         );
-        if (taskGroup) {
+        if (taskAgent) {
           deps.queue.setAgentInfo(currentTask.chat_jid, {
             promptSummary: currentTask.prompt.slice(0, 100),
-            groupName: taskGroup.name,
+            agentName: taskAgent.name,
             lastSender: 'Scheduled Task',
             lastContent: currentTask.prompt.slice(0, 200),
             lastTime: new Date().toISOString(),

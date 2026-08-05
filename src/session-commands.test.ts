@@ -61,7 +61,7 @@ function makeMsg(
 ): NewMessage {
   return {
     id: 'msg-1',
-    chat_jid: 'group@test',
+    chat_jid: 'agent@test',
     sender: 'user@test',
     sender_name: 'User',
     content,
@@ -93,8 +93,8 @@ describe('handleSessionCommand', () => {
     const deps = makeDeps();
     const result = await handleSessionCommand({
       missedMessages: [makeMsg('hello')],
-      isMainGroup: true,
-      groupName: 'test',
+      isMainAgent: true,
+      agentName: 'test',
       triggerPattern: trigger,
       timezone: 'UTC',
       deps,
@@ -106,8 +106,8 @@ describe('handleSessionCommand', () => {
     const deps = makeDeps();
     const result = await handleSessionCommand({
       missedMessages: [makeMsg('/compact', { is_from_me: true })],
-      isMainGroup: true,
-      groupName: 'test',
+      isMainAgent: true,
+      agentName: 'test',
       triggerPattern: trigger,
       timezone: 'UTC',
       deps,
@@ -120,12 +120,12 @@ describe('handleSessionCommand', () => {
     expect(deps.advanceCursor).toHaveBeenCalledWith('100');
   });
 
-  it('sends denial to interactable sender in non-main group', async () => {
+  it('sends denial to interactable sender in non-main agent', async () => {
     const deps = makeDeps();
     const result = await handleSessionCommand({
       missedMessages: [makeMsg('/compact', { is_from_me: false })],
-      isMainGroup: false,
-      groupName: 'test',
+      isMainAgent: false,
+      agentName: 'test',
       triggerPattern: trigger,
       timezone: 'UTC',
       deps,
@@ -144,8 +144,8 @@ describe('handleSessionCommand', () => {
     });
     const result = await handleSessionCommand({
       missedMessages: [makeMsg('/compact', { is_from_me: false })],
-      isMainGroup: false,
-      groupName: 'test',
+      isMainAgent: false,
+      agentName: 'test',
       triggerPattern: trigger,
       timezone: 'UTC',
       deps,
@@ -163,8 +163,8 @@ describe('handleSessionCommand', () => {
     ];
     const result = await handleSessionCommand({
       missedMessages: msgs,
-      isMainGroup: true,
-      groupName: 'test',
+      isMainAgent: true,
+      agentName: 'test',
       triggerPattern: trigger,
       timezone: 'UTC',
       deps,
@@ -183,12 +183,12 @@ describe('handleSessionCommand', () => {
     );
   });
 
-  it('allows is_from_me sender in non-main group', async () => {
+  it('allows is_from_me sender in non-main agent', async () => {
     const deps = makeDeps();
     const result = await handleSessionCommand({
       missedMessages: [makeMsg('/compact', { is_from_me: true })],
-      isMainGroup: false,
-      groupName: 'test',
+      isMainAgent: false,
+      agentName: 'test',
       triggerPattern: trigger,
       timezone: 'UTC',
       deps,
@@ -204,8 +204,8 @@ describe('handleSessionCommand', () => {
     const deps = makeDeps();
     const result = await handleSessionCommand({
       missedMessages: [makeMsg('/new', { is_from_me: true })],
-      isMainGroup: true,
-      groupName: 'test',
+      isMainAgent: true,
+      agentName: 'test',
       triggerPattern: trigger,
       timezone: 'UTC',
       deps,
@@ -230,8 +230,8 @@ describe('handleSessionCommand', () => {
     });
     const result = await handleSessionCommand({
       missedMessages: [makeMsg('/compact', { is_from_me: true })],
-      isMainGroup: true,
-      groupName: 'test',
+      isMainAgent: true,
+      agentName: 'test',
       triggerPattern: trigger,
       timezone: 'UTC',
       deps,
@@ -250,8 +250,8 @@ describe('handleSessionCommand', () => {
     ];
     const result = await handleSessionCommand({
       missedMessages: msgs,
-      isMainGroup: true,
-      groupName: 'test',
+      isMainAgent: true,
+      agentName: 'test',
       triggerPattern: trigger,
       timezone: 'UTC',
       deps,

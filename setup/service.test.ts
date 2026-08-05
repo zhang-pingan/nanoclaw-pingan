@@ -80,11 +80,14 @@ describe('Core service launch identity', () => {
     expect(common).toContain('{{HOST_LAUNCHER}}');
     expect(common).not.toContain('bind-core');
 
-    const groups = fs.readFileSync(
-      path.join(projectRoot, 'setup', 'groups.ts'),
+    expect(fs.existsSync(path.join(projectRoot, 'setup', 'groups.ts'))).toBe(
+      false,
+    );
+    const setupIndex = fs.readFileSync(
+      path.join(projectRoot, 'setup', 'index.ts'),
       'utf8',
     );
-    expect(groups).toContain("['exec', '--', 'npm', 'run', 'build']");
-    expect(groups).not.toContain("execSync('npm run build'");
+    expect(setupIndex).not.toContain("'./groups.js'");
+    expect(setupIndex).not.toContain('syncGroups');
   });
 });

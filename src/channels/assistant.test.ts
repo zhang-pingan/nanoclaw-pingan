@@ -11,17 +11,17 @@ import {
   _initTestDatabase,
   clearAssistantChatMessages,
   clearAssistantData,
-  getAllRegisteredGroups,
+  getAllRegisteredAgents,
   getMessagesSince,
   listAssistantChatMessageRecords,
   listStoredMessagesByChat,
-  setRegisteredGroup,
+  setRegisteredAgent,
   storeChatMetadata,
   storeAssistantChatMessage,
   storeMessage,
 } from '../db.js';
 import { ASSISTANT_NAME } from '../config.js';
-import type { RegisteredGroup } from '../types.js';
+import type { RegisteredAgent } from '../types.js';
 import { getChannelFactory } from './registry.js';
 import './assistant.js';
 
@@ -31,19 +31,19 @@ beforeEach(() => {
 });
 
 describe('assistant channel', () => {
-  it('registers an assistant main group and injects desktop messages', async () => {
+  it('registers an assistant main agent and injects desktop messages', async () => {
     const factory = getChannelFactory('assistant');
     expect(factory).toBeTruthy();
 
-    let groups: Record<string, RegisteredGroup> = {};
+    let agents: Record<string, RegisteredAgent> = {};
     const channel = factory!({
       onMessage: (_jid, msg) => storeMessage(msg),
-      onChatMetadata: (jid, timestamp, name, channelName, isGroup) =>
-        storeChatMetadata(jid, timestamp, name, channelName, isGroup),
-      registeredGroups: () => groups,
-      registerGroup: (jid, group) => {
-        groups[jid] = group;
-        setRegisteredGroup(jid, group);
+      onChatMetadata: (jid, timestamp, name, channelName) =>
+        storeChatMetadata(jid, timestamp, name, channelName),
+      registeredAgents: () => agents,
+      registerAgent: (jid, agent) => {
+        agents[jid] = agent;
+        setRegisteredAgent(jid, agent);
       },
       enqueueMessageCheck: () => undefined,
     });
@@ -52,10 +52,10 @@ describe('assistant channel', () => {
 
     await channel.connect();
 
-    groups = getAllRegisteredGroups();
-    expect(groups[ASSISTANT_MAIN_JID]?.folder).toBe(ASSISTANT_MAIN_FOLDER);
-    expect(groups[ASSISTANT_MAIN_JID]?.isMain).toBe(true);
-    expect(groups[ASSISTANT_MAIN_JID]?.description).toContain(
+    agents = getAllRegisteredAgents();
+    expect(agents[ASSISTANT_MAIN_JID]?.folder).toBe(ASSISTANT_MAIN_FOLDER);
+    expect(agents[ASSISTANT_MAIN_JID]?.isMain).toBe(true);
+    expect(agents[ASSISTANT_MAIN_JID]?.description).toContain(
       'assistant 桌面个人助手的沟通频道',
     );
 
@@ -104,11 +104,11 @@ describe('assistant channel', () => {
     await channel.disconnect();
   });
 
-  it('refreshes an existing assistant main group definition on connect', async () => {
+  it('refreshes an existing assistant main agent definition on connect', async () => {
     const factory = getChannelFactory('assistant');
     expect(factory).toBeTruthy();
 
-    let groups: Record<string, RegisteredGroup> = {
+    let agents: Record<string, RegisteredAgent> = {
       [ASSISTANT_MAIN_JID]: {
         name: '旧桌面助手',
         folder: ASSISTANT_MAIN_FOLDER,
@@ -122,12 +122,12 @@ describe('assistant channel', () => {
 
     const channel = factory!({
       onMessage: (_jid, msg) => storeMessage(msg),
-      onChatMetadata: (jid, timestamp, name, channelName, isGroup) =>
-        storeChatMetadata(jid, timestamp, name, channelName, isGroup),
-      registeredGroups: () => groups,
-      registerGroup: (jid, group) => {
-        groups[jid] = group;
-        setRegisteredGroup(jid, group);
+      onChatMetadata: (jid, timestamp, name, channelName) =>
+        storeChatMetadata(jid, timestamp, name, channelName),
+      registeredAgents: () => agents,
+      registerAgent: (jid, agent) => {
+        agents[jid] = agent;
+        setRegisteredAgent(jid, agent);
       },
       enqueueMessageCheck: () => undefined,
     });
@@ -136,14 +136,14 @@ describe('assistant channel', () => {
 
     await channel.connect();
 
-    groups = getAllRegisteredGroups();
-    expect(groups[ASSISTANT_MAIN_JID]).toMatchObject({
+    agents = getAllRegisteredAgents();
+    expect(agents[ASSISTANT_MAIN_JID]).toMatchObject({
       folder: ASSISTANT_MAIN_FOLDER,
       trigger: '',
       requiresTrigger: false,
       isMain: true,
     });
-    expect(groups[ASSISTANT_MAIN_JID]?.description).toContain(
+    expect(agents[ASSISTANT_MAIN_JID]?.description).toContain(
       'assistant 桌面个人助手的沟通频道',
     );
 

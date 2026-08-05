@@ -44,7 +44,7 @@ async function requestWebStatus(
   const channel = getChannelFactory('web')?.({
     onMessage: () => {},
     onChatMetadata: () => {},
-    registeredGroups: () => ({}),
+    registeredAgents: () => ({}),
   });
   if (!channel) throw new Error('web channel factory not registered');
   const response = {

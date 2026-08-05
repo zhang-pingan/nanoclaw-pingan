@@ -1,20 +1,20 @@
 const resetEpochs = new Map<string, number>();
 
-export function getSessionResetEpoch(groupFolder: string): number {
-  return resetEpochs.get(groupFolder) ?? 0;
+export function getSessionResetEpoch(agentFolder: string): number {
+  return resetEpochs.get(agentFolder) ?? 0;
 }
 
-export function bumpSessionResetEpoch(groupFolder: string): number {
-  const next = getSessionResetEpoch(groupFolder) + 1;
-  resetEpochs.set(groupFolder, next);
+export function bumpSessionResetEpoch(agentFolder: string): number {
+  const next = getSessionResetEpoch(agentFolder) + 1;
+  resetEpochs.set(agentFolder, next);
   return next;
 }
 
 export function isSessionResetEpochCurrent(
-  groupFolder: string,
+  agentFolder: string,
   epoch: number,
 ): boolean {
-  return getSessionResetEpoch(groupFolder) === epoch;
+  return getSessionResetEpoch(agentFolder) === epoch;
 }
 
 export function _resetSessionResetGuardForTests(): void {

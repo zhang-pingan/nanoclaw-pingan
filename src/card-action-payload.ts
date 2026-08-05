@@ -7,7 +7,7 @@ export const CARD_ACTION_RESERVED_FIELDS = new Set([
   'interrupt_id',
   'resume_action',
   'resume_payload_schema',
-  'group_folder',
+  'agent_folder',
   'source_type',
   'source_ref_id',
   'request_id',

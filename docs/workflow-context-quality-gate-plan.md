@@ -171,7 +171,7 @@ workflow stage 对上下文的声明。它描述“本阶段需要哪些来源�
 - 每个 source 的 `required`、`refs`、`fields`、`required_when`、`on_missing`。
 - 服务配置中用于解析 `codebase_location.repo_path` 和 `codebase_location.container_path` 的字段。
 
-代码类上下文第一版统一命名为 `codebase_location`，只用于定位代码库，不用于替代 coding agent 阅读代码。当前项目服务仓库来自 `groups/global/services.json` 的 `repo_path`，容器路径为 `/workspace/repos/{repo_path}`；`icarus` 等特殊服务如已有明确约定，可由 provider 解析为 `/workspace/project`。Context Pack 只提供 `repo_path`、`host_path`、`container_path`、路径存在性和目标 role 所在 group 是否具备该服务挂载能力；不应预先做代码搜索、代码摘要、调用链推断、受影响文件判断或分支状态判断。分支字段继续通过 workflow context 和 `context.require` 校验。
+代码类上下文第一版统一命名为 `codebase_location`，只用于定位代码库，不用于替代 coding agent 阅读代码。当前项目服务仓库来自 `agents/global/services.json` 的 `repo_path`，容器路径为 `/workspace/repos/{repo_path}`；`icarus` 等特殊服务如已有明确约定，可由 provider 解析为 `/workspace/project`。Context Pack 只提供 `repo_path`、`host_path`、`container_path`、路径存在性和目标 role 所在 agent 是否具备该服务挂载能力；不应预先做代码搜索、代码摘要、调用链推断、受影响文件判断或分支状态判断。分支字段继续通过 workflow context 和 `context.require` 校验。
 
 示例 Query Plan：
 
@@ -508,7 +508,7 @@ projects/{service}/workflow-context/{workflow_id}/{stage_key}/latest.json
 - 新增 `src/workflow-context-pack.ts`
   - 负责 signal extraction、query plan、retrieval、gating、路径安全校验、原子写入、hash 计算、pack summary 生成。
   - 第一版 source provider 仅支持 `workflow_input`、`artifact`、`codebase_location`。
-  - codebase_location provider 从 `groups/global/services.json` 解析 `repo_path`，再得到 `/workspace/repos/{repo_path}`；同时检查目标 role 对应 group 是否挂载该 service。
+  - codebase_location provider 从 `agents/global/services.json` 解析 `repo_path`，再得到 `/workspace/repos/{repo_path}`；同时检查目标 role 对应 agent 是否挂载该 service。
   - codebase_location provider 禁止做代码搜索、摘要、调用链分析、影响文件推断或分支判断。
 - 新增 `src/workflow-quality-gate.ts`
   - 第一版先包装现有 stage rules、artifact contract 和 llm judge sidecar，不产生第二套冲突结论。
@@ -592,7 +592,7 @@ projects/{service}/workflow-context/{workflow_id}/{stage_key}/latest.json
 | agent 读到半截 JSON | 临时文件写入后原子 rename |
 | workflow context 泄露凭据 | Context Pack source 过滤敏感 key，只记录 redacted 字段路径 |
 | readiness 阻断后流程卡死 | 阻断必须转 `human_input` interrupt 或明确 `context_blocked` 状态，并提供 resume retry |
-| codebase path 与容器挂载不一致 | codebase_location provider 从 `services.json.repo_path` 和目标 role group mount 配置共同验证 |
+| codebase path 与容器挂载不一致 | codebase_location provider 从 `services.json.repo_path` 和目标 role agent mount 配置共同验证 |
 | Evidence Evaluator 超出现有证据模型 | Phase 3 先扩展 `WorkflowEvalEvidence` 和 traceability artifact，再启用 blocking evidence |
 | Quality Gate 与现有 evaluator 双重结论冲突 | Phase 4 先包装现有链路；保留 evaluator 分项结果，由最终 quality_gate result 统一聚合 |
 

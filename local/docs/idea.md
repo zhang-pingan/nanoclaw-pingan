@@ -25,9 +25,9 @@ MCP 方向近期重点是企业托管授权、集中策略和 OAuth 流程，核
 
 对 Icarus 的启发：
 
-- 当前 `container/mcp/mcp.json` 已经有 profile/group 级工具白名单。
+- 当前 `container/mcp/mcp.json` 已经有 profile/Agent 级工具白名单。
 - 当前 MCP server 通过 `BUILTIN_TOOL_VISIBILITY` 区分 `main`、`non_main`、`all`。
-- 下一步应加入工具风险分级、workflow/stage 范围、审批策略、审计字段，而不是只靠 group profile。
+- 下一步应加入工具风险分级、workflow/stage 范围、审批策略、审计字段，而不是只靠 Agent profile。
 
 参考：
 
@@ -49,7 +49,7 @@ Google 发布 Agentic Resource Discovery，强调 agentic resource 的发现、�
 
 ### A2A 与跨 agent 协作
 
-A2A v1.0 方向强调 agent 间互操作、任务交接、能力声明和协作协议。Icarus 当前已经有主群、worker group、delegation、complete_delegation 等内部协作模型。
+A2A v1.0 方向强调 agent 间互操作、任务交接、能力声明和协作协议。Icarus 当前已经有主 Agent、worker Agent、delegation、complete_delegation 等内部协作模型。
 
 对 Icarus 的启发：
 
@@ -98,7 +98,7 @@ Claude Code、Gemini CLI、OpenAI Agents 等生态都在强化 subagents、hando
 
 对 Icarus 的启发：
 
-- Icarus 现有 workflow role 和 worker group 已经接近 subagent 架构。
+- Icarus 现有 workflow role 和 worker Agent 已经接近 subagent 架构。
 - 可以继续强化 role/skill 的输入输出 contract，让每个 worker 更像一个可测、可替换的专门 agent。
 - 对复杂阶段可以允许主 agent 启动 subagent，但 subagent 结果必须回到宿主机 trace 和 artifact contract。
 
@@ -127,14 +127,14 @@ Claude Code、Gemini CLI、OpenAI Agents 等生态都在强化 subagents、hando
 
 ### P0：MCP 工具策略引擎
 
-目标：从 group profile 升级为 host-side policy engine。
+目标：从 Agent profile 升级为 host-side policy engine。
 
 建议设计：
 
 - 为每个 MCP 工具增加元数据：
   - `risk_level`: `low | medium | high | critical`
   - `scopes`: 例如 `memory:read`、`memory:write`、`host:script`、`desktop:capture`
-  - `allowed_groups`
+  - `allowed_agents`
   - `allowed_workflow_types`
   - `allowed_stage_keys`
   - `requires_approval`
@@ -219,7 +219,7 @@ Claude Code、Gemini CLI、OpenAI Agents 等生态都在强化 subagents、hando
 - `src/db.ts`
 - `src/workbench-store.ts`
 - `src/assistant/proactive-engine.ts`
-- `src/group-queue.ts`
+- `src/agent-queue.ts`
 
 收益：
 
@@ -235,7 +235,7 @@ Claude Code、Gemini CLI、OpenAI Agents 等生态都在强化 subagents、hando
 
 - skills：名称、路径、说明、输入要求、产出文件、风险。
 - workflows：类型、状态、角色、入口、interrupt、artifact contract。
-- MCP tools：schema、risk、scope、allowed group。
+- MCP tools：schema、risk、scope、allowed Agent。
 - channels：可支持的 action、card、attachment、reply。
 - evaluators：deterministic/llm judge 配置和 rubric。
 

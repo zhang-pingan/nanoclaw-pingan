@@ -14,25 +14,25 @@ import {
 describe('failure taxonomy', () => {
   it('classifies scheduler preflight failures', () => {
     expect(
-      classifyFailure(new Error('Invalid group folder "../../outside"'), {
+      classifyFailure(new Error('Invalid agent folder "../../outside"'), {
         module: 'task-scheduler',
         defaultOrigin: 'scheduler',
       }),
     ).toMatchObject({
       failureType: 'invalid_input',
-      failureSubtype: 'invalid_group_folder',
+      failureSubtype: 'invalid_agent_folder',
       failureOrigin: 'scheduler',
       retryable: false,
     });
 
     expect(
-      classifyFailure(new Error('Group not found: missing-group'), {
+      classifyFailure(new Error('Agent not found: missing-agent'), {
         module: 'task-scheduler',
         defaultOrigin: 'scheduler',
       }),
     ).toMatchObject({
       failureType: 'invalid_input',
-      failureSubtype: 'group_not_found',
+      failureSubtype: 'agent_not_found',
       failureOrigin: 'scheduler',
       retryable: false,
     });

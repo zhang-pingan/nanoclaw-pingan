@@ -3,7 +3,7 @@ import { execFileSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 
-import { GROUPS_DIR, PROJECT_ROOT } from '../config.js';
+import { AGENTS_DIR, PROJECT_ROOT } from '../config.js';
 import { getTodayPlanByDate, listTodayPlanItems } from '../db.js';
 import { logger } from '../logger.js';
 import {
@@ -150,10 +150,12 @@ function normalizeAssociations(
 }
 
 function readServiceRegistry(): Record<string, JsonRecord> {
-  const servicesPath = path.join(GROUPS_DIR, 'global', 'services.json');
+  const servicesPath = path.join(AGENTS_DIR, 'global', 'services.json');
   if (!fs.existsSync(servicesPath)) return {};
   try {
-    const parsed = JSON.parse(fs.readFileSync(servicesPath, 'utf-8')) as unknown;
+    const parsed = JSON.parse(
+      fs.readFileSync(servicesPath, 'utf-8'),
+    ) as unknown;
     if (!isRecord(parsed)) return {};
     return Object.fromEntries(
       Object.entries(parsed).filter(([, config]) => isRecord(config)),
@@ -266,7 +268,8 @@ function collectServiceBranches(
   const add = (service: string, branches: string[]) => {
     const normalizedService = service.trim();
     if (!normalizedService) return;
-    const target = branchesByService.get(normalizedService) || new Set<string>();
+    const target =
+      branchesByService.get(normalizedService) || new Set<string>();
     for (const branch of branches) {
       const normalizedBranch = branch.trim();
       if (normalizedBranch) target.add(normalizedBranch);
@@ -322,7 +325,9 @@ export function collectTodayPlanCodingScanItems(input: {
     .map(([service, revisions]) => ({
       service,
       repoPath: containerRepoPathForService(service, registry),
-      revisions: Array.from(revisions).sort().slice(0, MAX_REVISIONS_PER_SERVICE),
+      revisions: Array.from(revisions)
+        .sort()
+        .slice(0, MAX_REVISIONS_PER_SERVICE),
     }))
     .filter((item) => item.revisions.length > 0)
     .sort((a, b) => a.service.localeCompare(b.service, 'zh-CN'));
@@ -413,7 +418,10 @@ function toInvestigation(result: CodingAnomalyScanResult): JsonRecord {
     required_user_action: null,
     evidence: [],
     groups: result.anomalies.map((item, index) => ({
-      id: slugifyGroupId(`${item.service}:${item.requirement}:${item.revisions.join(',')}`, index),
+      id: slugifyGroupId(
+        `${item.service}:${item.requirement}:${item.revisions.join(',')}`,
+        index,
+      ),
       title: `${item.service} · ${item.requirement}`,
       service: item.service,
       requirement: item.requirement,
@@ -432,7 +440,7 @@ function toInvestigation(result: CodingAnomalyScanResult): JsonRecord {
 }
 
 function buildPrompt(items: TodayPlanCodingScanItem[]): string {
-  return `你是 Icarus 主群个人助手的服务 coding 异常排查 Agent。请根据输入的服务和修订号集合，判断这些修订引入的实现 bug 或风险点。
+  return `你是 Icarus 主 Agent 个人助手的服务 coding 异常排查 Agent。请根据输入的服务和修订号集合，判断这些修订引入的实现 bug 或风险点。
 
 只返回 JSON，不要返回 Markdown 或额外解释。JSON 格式必须是：
 {
@@ -537,7 +545,9 @@ export async function scanTodayPlanCodingAnomalyRule(input: {
         item: virtualItem,
       });
   if (!output.ok) {
-    throw new Error(output.error || output.text || 'Coding anomaly scan failed');
+    throw new Error(
+      output.error || output.text || 'Coding anomaly scan failed',
+    );
   }
 
   const result = parseCodingAnomalyScanResult(output.text);

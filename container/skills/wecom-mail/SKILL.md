@@ -81,7 +81,7 @@ python3 /home/node/.claude/skills/wecom-mail/scripts/send_wecom_mail.py \
   --to "team@example.com" \
   --subject "周报" \
   --body "附件是本周周报，请查收。" \
-  --attach "/workspace/group/reports/weekly.pdf"
+  --attach "/workspace/agent/reports/weekly.pdf"
 ```
 
 发送 HTML：
@@ -90,7 +90,7 @@ python3 /home/node/.claude/skills/wecom-mail/scripts/send_wecom_mail.py \
 python3 /home/node/.claude/skills/wecom-mail/scripts/send_wecom_mail.py \
   --to "team@example.com" \
   --subject "版本发布公告" \
-  --html-file "/workspace/group/release.html"
+  --html-file "/workspace/agent/release.html"
 ```
 
 ## 参数说明

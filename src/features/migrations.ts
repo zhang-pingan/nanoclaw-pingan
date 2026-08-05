@@ -88,8 +88,8 @@ export function runFeatureMigrations(source: FeatureMigrationSource): void {
 }
 
 const CORE_TABLE_PATTERNS = [
-  'registered_groups',
-  'feature_group_bindings',
+  'registered_agents',
+  'feature_agent_bindings',
   'feature_migrations',
   'feature_audit_events',
   'agent_queries',

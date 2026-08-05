@@ -18,7 +18,7 @@ export function extractSessionCommand(
 
 /**
  * Check if a session command sender is authorized.
- * Only the admin (is_from_me) can execute session commands in any group.
+ * Only the admin (is_from_me) can execute session commands in any agent.
  */
 export function isSessionCommandAllowed(isFromMe: boolean): boolean {
   return isFromMe;
@@ -53,23 +53,23 @@ function resultToText(result: string | object | null | undefined): string {
 }
 
 /**
- * Handle session command interception in processGroupMessages.
+ * Handle session command interception in processAgentMessages.
  * Scans messages for a session command, handles auth + execution.
  * Returns { handled: true, success } if a command was found; { handled: false } otherwise.
  * success=false means the caller should retry (cursor was not advanced).
  */
 export async function handleSessionCommand(opts: {
   missedMessages: NewMessage[];
-  isMainGroup: boolean;
-  groupName: string;
+  isMainAgent: boolean;
+  agentName: string;
   triggerPattern: RegExp;
   timezone: string;
   deps: SessionCommandDeps;
 }): Promise<{ handled: false } | { handled: true; success: boolean }> {
   const {
     missedMessages,
-    isMainGroup,
-    groupName,
+    isMainAgent,
+    agentName,
     triggerPattern,
     timezone,
     deps,
@@ -97,7 +97,7 @@ export async function handleSessionCommand(opts: {
   }
 
   // AUTHORIZED: process session command
-  logger.info({ group: groupName, command }, 'Session command');
+  logger.info({ agent: agentName, command }, 'Session command');
 
   const cmdIndex = missedMessages.indexOf(cmdMsg);
   const preCommandMsgs = missedMessages.slice(0, cmdIndex);
@@ -124,7 +124,7 @@ export async function handleSessionCommand(opts: {
 
     if (preResult === 'error' || hadPreError) {
       logger.warn(
-        { group: groupName },
+        { agent: agentName },
         'Pre-compact processing failed, aborting session command',
       );
       await deps.sendMessage(

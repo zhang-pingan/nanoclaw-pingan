@@ -84,7 +84,11 @@ describe('remote-control', () => {
         'Session URL: https://claude.ai/code?bridge=env_abc123\n';
       vi.spyOn(process, 'kill').mockImplementation((() => true) as any);
 
-      const result = await startRemoteControl('user1', 'tg:123', '/project');
+      const result = await startRemoteControl(
+        'user1',
+        'web:remote-main',
+        '/project',
+      );
 
       expect(result).toEqual({
         ok: true,
@@ -104,7 +108,7 @@ describe('remote-control', () => {
       stdoutFileContent = 'https://claude.ai/code?bridge=env_test\n';
       vi.spyOn(process, 'kill').mockImplementation((() => true) as any);
 
-      await startRemoteControl('user1', 'tg:123', '/project');
+      await startRemoteControl('user1', 'web:remote-main', '/project');
 
       const spawnCall = spawnMock.mock.calls[0];
       const options = spawnCall[2];
@@ -120,7 +124,7 @@ describe('remote-control', () => {
       stdoutFileContent = 'https://claude.ai/code?bridge=env_test\n';
       vi.spyOn(process, 'kill').mockImplementation((() => true) as any);
 
-      await startRemoteControl('user1', 'tg:123', '/project');
+      await startRemoteControl('user1', 'web:remote-main', '/project');
 
       // Two openSync calls (stdout + stderr), two closeSync calls
       expect(openSyncSpy).toHaveBeenCalledTimes(2);
@@ -133,7 +137,7 @@ describe('remote-control', () => {
       stdoutFileContent = 'https://claude.ai/code?bridge=env_save\n';
       vi.spyOn(process, 'kill').mockImplementation((() => true) as any);
 
-      await startRemoteControl('user1', 'tg:123', '/project');
+      await startRemoteControl('user1', 'web:remote-main', '/project');
 
       expect(writeFileSyncSpy).toHaveBeenCalledWith(
         STATE_FILE,
@@ -147,10 +151,14 @@ describe('remote-control', () => {
       stdoutFileContent = 'https://claude.ai/code?bridge=env_existing\n';
       vi.spyOn(process, 'kill').mockImplementation((() => true) as any);
 
-      await startRemoteControl('user1', 'tg:123', '/project');
+      await startRemoteControl('user1', 'web:remote-main', '/project');
 
       // Second call should return existing URL without spawning
-      const result = await startRemoteControl('user2', 'tg:456', '/project');
+      const result = await startRemoteControl(
+        'user2',
+        'web:remote-secondary',
+        '/project',
+      );
       expect(result).toEqual({
         ok: true,
         url: 'https://claude.ai/code?bridge=env_existing',
@@ -168,7 +176,7 @@ describe('remote-control', () => {
         .spyOn(process, 'kill')
         .mockImplementation((() => true) as any);
       stdoutFileContent = 'https://claude.ai/code?bridge=env_first\n';
-      await startRemoteControl('user1', 'tg:123', '/project');
+      await startRemoteControl('user1', 'web:remote-main', '/project');
 
       // Old process (11111) is dead, new process (22222) is alive
       killSpy.mockImplementation(((pid: number, sig: any) => {
@@ -179,7 +187,11 @@ describe('remote-control', () => {
       }) as any);
 
       stdoutFileContent = 'https://claude.ai/code?bridge=env_second\n';
-      const result = await startRemoteControl('user1', 'tg:123', '/project');
+      const result = await startRemoteControl(
+        'user1',
+        'web:remote-main',
+        '/project',
+      );
 
       expect(result).toEqual({
         ok: true,
@@ -198,7 +210,11 @@ describe('remote-control', () => {
         throw new Error('ESRCH');
       }) as any);
 
-      const result = await startRemoteControl('user1', 'tg:123', '/project');
+      const result = await startRemoteControl(
+        'user1',
+        'web:remote-main',
+        '/project',
+      );
       expect(result).toEqual({
         ok: false,
         error: 'Process exited before producing URL',
@@ -212,7 +228,11 @@ describe('remote-control', () => {
       stdoutFileContent = 'no url here';
       vi.spyOn(process, 'kill').mockImplementation((() => true) as any);
 
-      const promise = startRemoteControl('user1', 'tg:123', '/project');
+      const promise = startRemoteControl(
+        'user1',
+        'web:remote-main',
+        '/project',
+      );
 
       // Advance past URL_TIMEOUT_MS (30s), with enough steps for polls
       for (let i = 0; i < 160; i++) {
@@ -233,7 +253,11 @@ describe('remote-control', () => {
         throw new Error('ENOENT');
       });
 
-      const result = await startRemoteControl('user1', 'tg:123', '/project');
+      const result = await startRemoteControl(
+        'user1',
+        'web:remote-main',
+        '/project',
+      );
       expect(result).toEqual({
         ok: false,
         error: 'Failed to start: ENOENT',
@@ -252,7 +276,7 @@ describe('remote-control', () => {
         .spyOn(process, 'kill')
         .mockImplementation((() => true) as any);
 
-      await startRemoteControl('user1', 'tg:123', '/project');
+      await startRemoteControl('user1', 'web:remote-main', '/project');
 
       const result = stopRemoteControl();
       expect(result).toEqual({ ok: true });
@@ -278,7 +302,7 @@ describe('remote-control', () => {
         pid: 77777,
         url: 'https://claude.ai/code?bridge=env_restored',
         startedBy: 'user1',
-        startedInChat: 'tg:123',
+        startedInChat: 'web:remote-main',
         startedAt: '2026-01-01T00:00:00.000Z',
       };
       readFileSyncSpy.mockImplementation(((p: string) => {
@@ -300,7 +324,7 @@ describe('remote-control', () => {
         pid: 88888,
         url: 'https://claude.ai/code?bridge=env_dead',
         startedBy: 'user1',
-        startedInChat: 'tg:123',
+        startedInChat: 'web:remote-main',
         startedAt: '2026-01-01T00:00:00.000Z',
       };
       readFileSyncSpy.mockImplementation(((p: string) => {
@@ -341,7 +365,7 @@ describe('remote-control', () => {
         pid: 77777,
         url: 'https://claude.ai/code?bridge=env_restored',
         startedBy: 'user1',
-        startedInChat: 'tg:123',
+        startedInChat: 'web:remote-main',
         startedAt: '2026-01-01T00:00:00.000Z',
       };
       readFileSyncSpy.mockImplementation(((p: string) => {
@@ -367,7 +391,7 @@ describe('remote-control', () => {
         pid: 77777,
         url: 'https://claude.ai/code?bridge=env_restored',
         startedBy: 'user1',
-        startedInChat: 'tg:123',
+        startedInChat: 'web:remote-main',
         startedAt: '2026-01-01T00:00:00.000Z',
       };
       readFileSyncSpy.mockImplementation(((p: string) => {
@@ -378,15 +402,17 @@ describe('remote-control', () => {
 
       restoreRemoteControl();
 
-      return startRemoteControl('user2', 'tg:456', '/project').then(
-        (result) => {
-          expect(result).toEqual({
-            ok: true,
-            url: 'https://claude.ai/code?bridge=env_restored',
-          });
-          expect(spawnMock).not.toHaveBeenCalled();
-        },
-      );
+      return startRemoteControl(
+        'user2',
+        'web:remote-secondary',
+        '/project',
+      ).then((result) => {
+        expect(result).toEqual({
+          ok: true,
+          url: 'https://claude.ai/code?bridge=env_restored',
+        });
+        expect(spawnMock).not.toHaveBeenCalled();
+      });
     });
   });
 });

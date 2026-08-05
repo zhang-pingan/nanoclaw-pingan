@@ -66,14 +66,14 @@ type ChatFileInfo = {
 
 type AgentStatusMessage = {
   type?: string;
-  agents?: Array<{ groupJid?: string | null }>;
+  agents?: Array<{ agentJid?: string | null }>;
 };
 
 type AgentQueryTraceMessage = {
   type?: string;
   queries?: Array<{
-    groupJid?: string | null;
-    groupFolder?: string | null;
+    agentJid?: string | null;
+    agentFolder?: string | null;
     status?: string | null;
   }>;
 };
@@ -1107,7 +1107,7 @@ function clearChatTypingIfIdle(isAssistantActive: boolean): void {
 
 function syncChatTypingFromAgentStatus(message: AgentStatusMessage): void {
   const isAssistantActive = Array.isArray(message.agents)
-    ? message.agents.some((agent) => agent.groupJid === ASSISTANT_CHAT_JID)
+    ? message.agents.some((agent) => agent.agentJid === ASSISTANT_CHAT_JID)
     : false;
   clearChatTypingIfIdle(isAssistantActive);
 }
@@ -1119,8 +1119,8 @@ function syncChatTypingFromAgentQueryTrace(
     ? message.queries.some(
         (query) =>
           query.status === 'running' &&
-          (query.groupJid === ASSISTANT_CHAT_JID ||
-            query.groupFolder === 'assistant_main'),
+          (query.agentJid === ASSISTANT_CHAT_JID ||
+            query.agentFolder === 'assistant_main'),
       )
     : false;
   const wasAssistantActive = assistantQueryActive;
@@ -1444,10 +1444,10 @@ async function connectWs(): Promise<void> {
       const message = JSON.parse(String(event.data)) as {
         type?: string;
         state?: AssistantState;
-        agents?: Array<{ groupJid?: string | null }>;
+        agents?: Array<{ agentJid?: string | null }>;
         queries?: Array<{
-          groupJid?: string | null;
-          groupFolder?: string | null;
+          agentJid?: string | null;
+          agentFolder?: string | null;
           status?: string | null;
         }>;
         event?: {

@@ -17,7 +17,7 @@ import {
 import { logger } from '../logger.js';
 import type {
   NewMessage,
-  RegisteredGroup,
+  RegisteredAgent,
   StoredChatMessageRecord,
 } from '../types.js';
 import { registerChannel, ChannelFactory, ChannelOpts } from './registry.js';
@@ -33,7 +33,7 @@ function createMessageId(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-function assistantMainGroup(): RegisteredGroup {
+function assistantMainAgent(): RegisteredAgent {
   return {
     name: ASSISTANT_MAIN_NAME,
     folder: ASSISTANT_MAIN_FOLDER,
@@ -45,10 +45,10 @@ function assistantMainGroup(): RegisteredGroup {
   };
 }
 
-function ensureAssistantMainGroup(group?: RegisteredGroup): RegisteredGroup {
-  if (!group) return assistantMainGroup();
+function ensureAssistantMainAgent(agent?: RegisteredAgent): RegisteredAgent {
+  if (!agent) return assistantMainAgent();
   return {
-    ...group,
+    ...agent,
     name: ASSISTANT_MAIN_NAME,
     folder: ASSISTANT_MAIN_FOLDER,
     trigger: '',
@@ -94,17 +94,17 @@ class AssistantChannel {
   constructor(private readonly opts: ChannelOpts) {}
 
   async connect(): Promise<void> {
-    const groups = this.opts.registeredGroups();
-    const nextMainGroup = ensureAssistantMainGroup(groups[ASSISTANT_MAIN_JID]);
-    if (!this.opts.registerGroup) {
-      throw new Error('assistant channel requires registerGroup callback');
+    const agents = this.opts.registeredAgents();
+    const nextMainAgent = ensureAssistantMainAgent(agents[ASSISTANT_MAIN_JID]);
+    if (!this.opts.registerAgent) {
+      throw new Error('assistant channel requires registerAgent callback');
     }
     if (
-      !groups[ASSISTANT_MAIN_JID] ||
-      JSON.stringify(groups[ASSISTANT_MAIN_JID]) !==
-        JSON.stringify(nextMainGroup)
+      !agents[ASSISTANT_MAIN_JID] ||
+      JSON.stringify(agents[ASSISTANT_MAIN_JID]) !==
+        JSON.stringify(nextMainAgent)
     ) {
-      this.opts.registerGroup(ASSISTANT_MAIN_JID, nextMainGroup);
+      this.opts.registerAgent(ASSISTANT_MAIN_JID, nextMainAgent);
     }
 
     const now = nowTs();
@@ -113,7 +113,6 @@ class AssistantChannel {
       now,
       ASSISTANT_MAIN_NAME,
       'assistant',
-      true,
     );
 
     registerAssistantChannelPort({
@@ -150,7 +149,7 @@ class AssistantChannel {
       is_from_me: 0,
       is_bot_message: 1,
     };
-    storeChatMetadata(jid, timestamp, ASSISTANT_MAIN_NAME, 'assistant', true);
+    storeChatMetadata(jid, timestamp, ASSISTANT_MAIN_NAME, 'assistant');
     storeAssistantChatMessage({
       ...msg,
       is_from_me: false,
@@ -180,7 +179,7 @@ class AssistantChannel {
       is_bot_message: 1,
       file_path: filePath,
     };
-    storeChatMetadata(jid, timestamp, ASSISTANT_MAIN_NAME, 'assistant', true);
+    storeChatMetadata(jid, timestamp, ASSISTANT_MAIN_NAME, 'assistant');
     storeAssistantChatMessage({
       ...msg,
       is_from_me: false,
@@ -220,7 +219,6 @@ class AssistantChannel {
       timestamp,
       ASSISTANT_MAIN_NAME,
       'assistant',
-      true,
     );
     this.opts.onMessage(ASSISTANT_MAIN_JID, msg);
     storeAssistantChatMessage({

@@ -397,7 +397,7 @@ When prompt is an `AsyncIterable`:
 
 ### Additional Benefit: Streaming New Messages
 
-With the async iterable approach, we can push new incoming WhatsApp messages into the iterable while the agent is still working. Instead of queuing messages until the container exits and spawning a new container, we stream them directly into the running session.
+With the async iterable approach, we can push new incoming channel messages into the iterable while the agent is still working. Instead of queuing messages until the container exits and spawning a new container, we stream them directly into the running session.
 
 ### Intended Lifecycle with Agent Teams
 

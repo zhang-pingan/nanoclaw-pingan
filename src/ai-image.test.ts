@@ -21,7 +21,7 @@ vi.mock('./config.js', () => ({
   AI_IMAGES_DIR: aiImagesDir,
   ATTACHMENTS_DIR: '/tmp/icarus-ai-image-attachments',
   DESKTOP_CAPTURES_DIR: '/tmp/icarus-ai-image-desktop-captures',
-  GROUPS_DIR: '/tmp/icarus-ai-image-groups',
+  AGENTS_DIR: '/tmp/icarus-ai-image-agents',
   WEB_UPLOADS_DIR: '/tmp/icarus-ai-image-uploads',
 }));
 

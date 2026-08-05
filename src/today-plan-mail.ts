@@ -6,11 +6,8 @@ import {
   updateTodayPlanMailDraft,
 } from './db.js';
 import { loadMailProfile, MailProfile, sendMail } from './mail.js';
-import {
-  buildTodayPlanMailPrompt,
-  getTodayPlanDateKey,
-} from './today-plan.js';
-import type { RegisteredGroup, TodayPlanMailDraftRecord } from './types.js';
+import { buildTodayPlanMailPrompt, getTodayPlanDateKey } from './today-plan.js';
+import type { RegisteredAgent, TodayPlanMailDraftRecord } from './types.js';
 
 export interface TodayPlanMailDraftDetail {
   id: string;
@@ -50,11 +47,7 @@ function nowTimestamp(): string {
 
 function uniqueTrimmed(values: string[]): string[] {
   return Array.from(
-    new Set(
-      values
-        .map((value) => value.trim())
-        .filter(Boolean),
-    ),
+    new Set(values.map((value) => value.trim()).filter(Boolean)),
   );
 }
 
@@ -74,7 +67,9 @@ function parseAddressList(value: string | null): string[] {
   }
 }
 
-function toDraftDetail(record: TodayPlanMailDraftRecord): TodayPlanMailDraftDetail {
+function toDraftDetail(
+  record: TodayPlanMailDraftRecord,
+): TodayPlanMailDraftDetail {
   return {
     id: record.id,
     plan_id: record.plan_id,
@@ -125,7 +120,7 @@ export function getTodayPlanMailDraftDetail(
 export async function prepareTodayPlanMailDraft(
   input: {
     planId: string;
-    groups: Record<string, RegisteredGroup>;
+    agents: Record<string, RegisteredAgent>;
     name: string;
     to?: string[];
     cc?: string[];
@@ -137,7 +132,7 @@ export async function prepareTodayPlanMailDraft(
 
   const payload = buildTodayPlanMailPrompt({
     planId: input.planId,
-    groups: input.groups,
+    agents: input.agents,
     name: senderName,
   });
   if (!payload) throw new Error('Today plan not found');
@@ -219,7 +214,9 @@ export async function confirmTodayPlanMailDraft(
   const nextDraft: TodayPlanMailDraftDetail = {
     ...draft,
     subject:
-      input.subject !== undefined ? String(input.subject).trim() : draft.subject,
+      input.subject !== undefined
+        ? String(input.subject).trim()
+        : draft.subject,
     body:
       input.body !== undefined
         ? normalizeEditableBody(String(input.body))

@@ -18,7 +18,7 @@ import {
   CREDENTIAL_PROXY_PORT,
   DATA_DIR,
   DESKTOP_CAPTURES_DIR,
-  GROUPS_DIR,
+  AGENTS_DIR,
   IDLE_TIMEOUT,
   MYSQL_PROXY_PORT,
   REPOS_DIR,
@@ -26,7 +26,7 @@ import {
   TIMEZONE,
 } from './config.js';
 import { readEnvFile } from './env.js';
-import { resolveGroupFolderPath, resolveGroupIpcPath } from './group-folder.js';
+import { resolveAgentFolderPath, resolveAgentIpcPath } from './agent-folder.js';
 import { logger } from './logger.js';
 import {
   CONTAINER_HOST_GATEWAY,
@@ -44,7 +44,7 @@ import {
   syncContainerSkills,
 } from './features/container-resources.js';
 import { validateAdditionalMounts } from './mount-security.js';
-import { RegisteredGroup } from './types.js';
+import { RegisteredAgent } from './types.js';
 
 const HOME_DIR = process.env.HOME || os.homedir();
 const DEFAULT_HOST_MAVEN_SETTINGS_PATH = path.join(
@@ -83,7 +83,7 @@ export interface ContainerInput {
   requireResult?: boolean;
   isolatedSession?: boolean;
   executionMode?: 'external_system_once';
-  groupFolder: string;
+  agentFolder: string;
   chatJid: string;
   isMain: boolean;
   isScheduledTask?: boolean;
@@ -410,18 +410,18 @@ function emitTraceEvent(
 }
 
 function buildVolumeMounts(
-  group: RegisteredGroup,
+  agent: RegisteredAgent,
   isMain: boolean,
   opts: { externalSystemOnce?: boolean } = {},
 ): VolumeMount[] {
   const mounts: VolumeMount[] = [];
   const projectRoot = process.cwd();
-  const groupDir = resolveGroupFolderPath(group.folder);
+  const agentDir = resolveAgentFolderPath(agent.folder);
   const isExternalSystemOnce = opts.externalSystemOnce === true;
 
   if (isMain) {
     // Main gets the project root read-only. Writable paths the agent needs
-    // (group folder, IPC, .claude/) are mounted separately below.
+    // (agent folder, IPC, .claude/) are mounted separately below.
     // Read-only prevents the agent from modifying host application code
     // (src/, dist/, package.json, etc.) which would bypass the sandbox
     // entirely on next restart.
@@ -449,23 +449,23 @@ function buildVolumeMounts(
       });
     }
 
-    // Main also gets its group folder as the working directory
+    // Main also gets its agent folder as the working directory
     mounts.push({
-      hostPath: groupDir,
-      containerPath: '/workspace/group',
+      hostPath: agentDir,
+      containerPath: '/workspace/agent',
       readonly: false,
     });
   } else {
-    // Other groups only get their own folder
+    // Other agents only get their own folder
     mounts.push({
-      hostPath: groupDir,
-      containerPath: '/workspace/group',
+      hostPath: agentDir,
+      containerPath: '/workspace/agent',
       readonly: false,
     });
 
     // Global memory directory (read-only for non-main)
     // Only directory mounts are supported, not file mounts
-    const globalDir = path.join(GROUPS_DIR, 'global');
+    const globalDir = path.join(AGENTS_DIR, 'global');
     if (fs.existsSync(globalDir)) {
       mounts.push({
         hostPath: globalDir,
@@ -475,13 +475,13 @@ function buildVolumeMounts(
     }
   }
 
-  // Per-group Claude sessions directory (isolated from other groups)
-  // Each group gets their own .claude/ to prevent cross-group session access
-  const groupSessionsDir = isExternalSystemOnce
-    ? path.join(DATA_DIR, 'run-once-sessions', group.folder, '.claude')
-    : path.join(DATA_DIR, 'sessions', group.folder, '.claude');
-  fs.mkdirSync(groupSessionsDir, { recursive: true });
-  const settingsFile = path.join(groupSessionsDir, 'settings.json');
+  // Per-agent Claude sessions directory (isolated from other agents)
+  // Each agent gets their own .claude/ to prevent cross-agent session access
+  const agentSessionsDir = isExternalSystemOnce
+    ? path.join(DATA_DIR, 'run-once-sessions', agent.folder, '.claude')
+    : path.join(DATA_DIR, 'sessions', agent.folder, '.claude');
+  fs.mkdirSync(agentSessionsDir, { recursive: true });
+  const settingsFile = path.join(agentSessionsDir, 'settings.json');
   if (!fs.existsSync(settingsFile)) {
     fs.writeFileSync(
       settingsFile,
@@ -507,17 +507,17 @@ function buildVolumeMounts(
     );
   }
 
-  // Sync enabled core/feature skills into each group's .claude/skills/.
-  const skillsDst = path.join(groupSessionsDir, 'skills');
+  // Sync enabled core/feature skills into each agent's .claude/skills/.
+  const skillsDst = path.join(agentSessionsDir, 'skills');
   if (!isExternalSystemOnce) {
-    syncContainerSkills({ groupFolder: group.folder, skillsDst });
+    syncContainerSkills({ agentFolder: agent.folder, skillsDst });
     syncContainerAgents({
-      groupFolder: group.folder,
-      agentsDst: path.join(groupSessionsDir, 'agents'),
+      agentFolder: agent.folder,
+      agentsDst: path.join(agentSessionsDir, 'agents'),
     });
   }
   mounts.push({
-    hostPath: groupSessionsDir,
+    hostPath: agentSessionsDir,
     containerPath: '/home/node/.claude',
     readonly: false,
   });
@@ -526,7 +526,7 @@ function buildVolumeMounts(
     const runOnceWorkspaceDir = path.join(
       DATA_DIR,
       'run-once-workspaces',
-      group.folder,
+      agent.folder,
     );
     fs.mkdirSync(runOnceWorkspaceDir, { recursive: true });
     mounts.push({
@@ -536,19 +536,19 @@ function buildVolumeMounts(
     });
   }
 
-  // Per-group IPC namespace: each group gets its own IPC directory
-  // This prevents cross-group privilege escalation via IPC
-  const groupIpcDir = resolveGroupIpcPath(group.folder);
-  fs.mkdirSync(path.join(groupIpcDir, 'messages'), { recursive: true });
-  fs.mkdirSync(path.join(groupIpcDir, 'tasks'), { recursive: true });
-  fs.mkdirSync(path.join(groupIpcDir, 'input'), { recursive: true });
+  // Per-agent IPC namespace: each agent gets its own IPC directory
+  // This prevents cross-agent privilege escalation via IPC
+  const agentIpcDir = resolveAgentIpcPath(agent.folder);
+  fs.mkdirSync(path.join(agentIpcDir, 'messages'), { recursive: true });
+  fs.mkdirSync(path.join(agentIpcDir, 'tasks'), { recursive: true });
+  fs.mkdirSync(path.join(agentIpcDir, 'input'), { recursive: true });
   mounts.push({
-    hostPath: groupIpcDir,
+    hostPath: agentIpcDir,
     containerPath: '/workspace/ipc',
     readonly: false,
   });
 
-  const mcpConfigDir = prepareMergedMcpConfigDir(group.folder);
+  const mcpConfigDir = prepareMergedMcpConfigDir(agent.folder);
   if (mcpConfigDir && fs.existsSync(mcpConfigDir)) {
     mounts.push({
       hostPath: mcpConfigDir,
@@ -558,7 +558,7 @@ function buildVolumeMounts(
   }
 
   const featureResourceDir = !isExternalSystemOnce
-    ? prepareFeatureResourceMountDir(group.folder)
+    ? prepareFeatureResourceMountDir(agent.folder)
     : null;
   if (featureResourceDir && fs.existsSync(featureResourceDir)) {
     mounts.push({
@@ -569,7 +569,7 @@ function buildVolumeMounts(
   }
 
   // Shared attachments directory: inbound channel files are stored here.
-  // Mounted for all groups so agents can reference files with stable paths.
+  // Mounted for all agents so agents can reference files with stable paths.
   fs.mkdirSync(ATTACHMENTS_DIR, { recursive: true });
   mounts.push({
     hostPath: ATTACHMENTS_DIR,
@@ -610,7 +610,7 @@ function buildVolumeMounts(
   }
 
   // Shared uploads directory: web client uploads are stored here.
-  // Mounted at /workspace/uploads for all groups so agents can access uploaded files.
+  // Mounted at /workspace/uploads for all agents so agents can access uploaded files.
   const uploadsDir = path.join(DATA_DIR, 'web-uploads');
   fs.mkdirSync(uploadsDir, { recursive: true });
   mounts.push({
@@ -619,10 +619,10 @@ function buildVolumeMounts(
     readonly: false,
   });
 
-  // Per-group custom tools directory (plugin mechanism).
+  // Per-agent custom tools directory (plugin mechanism).
   // Agents can add .ts tool files here; reload_tools restarts the container
   // to pick them up.
-  const customToolsDir = path.join(groupDir, 'custom-tools');
+  const customToolsDir = path.join(agentDir, 'custom-tools');
   fs.mkdirSync(customToolsDir, { recursive: true });
   mounts.push({
     hostPath: customToolsDir,
@@ -630,19 +630,19 @@ function buildVolumeMounts(
     readonly: false,
   });
 
-  // Per-group service repo mounts: only mount repos this group needs
-  const groupServices = group.containerConfig?.services as string[] | undefined;
-  if (groupServices && groupServices.length > 0) {
-    const servicesJsonPath = path.join(GROUPS_DIR, 'global', 'services.json');
+  // Per-agent service repo mounts: only mount repos this agent needs
+  const agentServices = agent.containerConfig?.services as string[] | undefined;
+  if (agentServices && agentServices.length > 0) {
+    const servicesJsonPath = path.join(AGENTS_DIR, 'global', 'services.json');
     if (fs.existsSync(servicesJsonPath)) {
       try {
         const allServices = JSON.parse(
           fs.readFileSync(servicesJsonPath, 'utf-8'),
         );
-        const isWildcard = groupServices.includes('*');
+        const isWildcard = agentServices.includes('*');
         const serviceNames = isWildcard
           ? Object.keys(allServices)
-          : groupServices;
+          : agentServices;
         for (const svcName of serviceNames) {
           const svc = allServices[svcName];
           if (!svc?.repo_path) continue;
@@ -662,12 +662,12 @@ function buildVolumeMounts(
   }
 
   // SSH keys: needed for git push and SSH to remote servers (including macOS control skill).
-  // Build a synthetic .ssh directory per group, combining git keys from
+  // Build a synthetic .ssh directory per agent, combining git keys from
   // ~/.ssh with a dedicated devops key (SSH_KEY_PATH). This avoids the
   // Docker limitation where file mounts cannot overlay read-only dir mounts.
-  if ((groupServices && groupServices.length > 0) || isMain) {
+  if ((agentServices && agentServices.length > 0) || isMain) {
     const hostSshDir = path.join(HOME_DIR, '.ssh');
-    const synthSshDir = path.join(DATA_DIR, 'sessions', group.folder, 'ssh');
+    const synthSshDir = path.join(DATA_DIR, 'sessions', agent.folder, 'ssh');
     fs.mkdirSync(synthSshDir, { recursive: true });
 
     // Copy key files and known_hosts from ~/.ssh
@@ -723,10 +723,10 @@ function buildVolumeMounts(
   }
 
   // Additional mounts validated against external allowlist (tamper-proof from containers)
-  if (group.containerConfig?.additionalMounts) {
+  if (agent.containerConfig?.additionalMounts) {
     const validatedMounts = validateAdditionalMounts(
-      group.containerConfig.additionalMounts,
-      group.name,
+      agent.containerConfig.additionalMounts,
+      agent.name,
       isMain,
     );
     mounts.push(...validatedMounts);
@@ -812,20 +812,20 @@ function buildContainerArgs(
 }
 
 export async function runContainerAgent(
-  group: RegisteredGroup,
+  agent: RegisteredAgent,
   input: ContainerInput,
   onProcess: (proc: ChildProcess, containerName: string) => void,
   onOutput?: (output: ContainerOutput) => Promise<void>,
 ): Promise<ContainerOutput> {
   const startTime = Date.now();
 
-  const groupDir = resolveGroupFolderPath(group.folder);
-  fs.mkdirSync(groupDir, { recursive: true });
+  const agentDir = resolveAgentFolderPath(agent.folder);
+  fs.mkdirSync(agentDir, { recursive: true });
 
-  const mounts = buildVolumeMounts(group, input.isMain, {
+  const mounts = buildVolumeMounts(agent, input.isMain, {
     externalSystemOnce: input.executionMode === 'external_system_once',
   });
-  const safeName = group.folder.replace(/[^a-zA-Z0-9-]/g, '-');
+  const safeName = agent.folder.replace(/[^a-zA-Z0-9-]/g, '-');
   const containerName = `icarus-${safeName}-${Date.now()}`;
   const containerArgs = buildContainerArgs(mounts, containerName);
   const emitContainerTraceEvent: TraceEventWriter | undefined =
@@ -849,7 +849,7 @@ export async function runContainerAgent(
 
   logger.debug(
     {
-      group: group.name,
+      agent: agent.name,
       containerName,
       mounts: mounts.map(
         (m) =>
@@ -862,7 +862,7 @@ export async function runContainerAgent(
 
   logger.info(
     {
-      group: group.name,
+      agent: agent.name,
       containerName,
       mountCount: mounts.length,
       isMain: input.isMain,
@@ -870,7 +870,7 @@ export async function runContainerAgent(
     'Spawning container agent',
   );
 
-  const logsDir = path.join(groupDir, 'logs');
+  const logsDir = path.join(agentDir, 'logs');
   fs.mkdirSync(logsDir, { recursive: true });
 
   emitTraceEvent(emitContainerTraceEvent, {
@@ -915,7 +915,7 @@ export async function runContainerAgent(
         containerName,
         runtime: CONTAINER_RUNTIME_BIN,
         image: CONTAINER_IMAGE,
-        timeoutMs: group.containerConfig?.timeout || CONTAINER_TIMEOUT,
+        timeoutMs: agent.containerConfig?.timeout || CONTAINER_TIMEOUT,
       },
     });
 
@@ -948,7 +948,7 @@ export async function runContainerAgent(
           stdout += chunk.slice(0, remaining);
           stdoutTruncated = true;
           logger.warn(
-            { group: group.name, size: stdout.length },
+            { agent: agent.name, size: stdout.length },
             'Container stdout truncated due to size limit',
           );
         } else {
@@ -1021,7 +1021,7 @@ export async function runContainerAgent(
               .then(() => onOutput(parsed))
               .catch((err) => {
                 logger.error(
-                  { group: group.name, err },
+                  { agent: agent.name, err },
                   'Error in onOutput callback',
                 );
               });
@@ -1038,7 +1038,7 @@ export async function runContainerAgent(
               err instanceof Error ? err.message : String(err)
             }`;
             logger.warn(
-              { group: group.name, error: err },
+              { agent: agent.name, error: err },
               'Failed to parse streamed output chunk',
             );
             resetTimeout();
@@ -1051,7 +1051,7 @@ export async function runContainerAgent(
       const chunk = data.toString();
       const lines = chunk.trim().split('\n');
       for (const line of lines) {
-        if (line) logger.debug({ container: group.folder }, line);
+        if (line) logger.debug({ container: agent.folder }, line);
       }
       // Don't reset timeout on stderr — SDK writes debug logs continuously.
       // Timeout only resets on actual output (OUTPUT_MARKER in stdout).
@@ -1061,7 +1061,7 @@ export async function runContainerAgent(
         stderr += chunk.slice(0, remaining);
         stderrTruncated = true;
         logger.warn(
-          { group: group.name, size: stderr.length },
+          { agent: agent.name, size: stderr.length },
           'Container stderr truncated due to size limit',
         );
       } else {
@@ -1071,7 +1071,7 @@ export async function runContainerAgent(
 
     let timedOut = false;
     let hadStreamingOutput = false;
-    const configTimeout = group.containerConfig?.timeout || CONTAINER_TIMEOUT;
+    const configTimeout = agent.containerConfig?.timeout || CONTAINER_TIMEOUT;
     // Grace period: hard timeout must be at least IDLE_TIMEOUT + 30s so the
     // graceful _close sentinel has time to trigger before the hard kill fires.
     const timeoutMs = Math.max(configTimeout, IDLE_TIMEOUT + 30_000);
@@ -1079,7 +1079,7 @@ export async function runContainerAgent(
     const killOnTimeout = () => {
       timedOut = true;
       logger.error(
-        { group: group.name, containerName },
+        { agent: agent.name, containerName },
         'Container timeout, stopping gracefully',
       );
       emitTraceEvent(emitContainerTraceEvent, {
@@ -1116,7 +1116,7 @@ export async function runContainerAgent(
       exec(stopContainer(containerName), { timeout: 15000 }, (err) => {
         if (err) {
           logger.warn(
-            { group: group.name, containerName, err },
+            { agent: agent.name, containerName, err },
             'Graceful stop failed, force killing',
           );
           container.kill('SIGKILL');
@@ -1193,7 +1193,7 @@ export async function runContainerAgent(
           [
             `=== Container Run Log (TIMEOUT) ===`,
             `Timestamp: ${new Date().toISOString()}`,
-            `Group: ${group.name}`,
+            `Agent: ${agent.name}`,
             `Container: ${containerName}`,
             `Duration: ${duration}ms`,
             `Exit Code: ${code}`,
@@ -1207,7 +1207,7 @@ export async function runContainerAgent(
         if (hadValidStreamingOutput) {
           if (lastErrorOutput && !hadTextResult) {
             logger.warn(
-              { group: group.name, containerName, duration, code },
+              { agent: agent.name, containerName, duration, code },
               'Container timed out after streamed error output',
             );
             outputChain.then(() => {
@@ -1217,7 +1217,7 @@ export async function runContainerAgent(
           }
           if (input.requireResult && !hadTextResult) {
             logger.warn(
-              { group: group.name, containerName, duration, code },
+              { agent: agent.name, containerName, duration, code },
               'Container timed out without required text result',
             );
             outputChain.then(() => {
@@ -1226,7 +1226,7 @@ export async function runContainerAgent(
             return;
           }
           logger.info(
-            { group: group.name, containerName, duration, code },
+            { agent: agent.name, containerName, duration, code },
             'Container timed out after output (idle cleanup)',
           );
           outputChain.then(() => {
@@ -1244,7 +1244,7 @@ export async function runContainerAgent(
           const error =
             streamingParseError || 'Failed to parse streamed output chunk';
           logger.error(
-            { group: group.name, containerName, duration, code },
+            { agent: agent.name, containerName, duration, code },
             'Container timed out after invalid streamed output',
           );
           outputChain.then(() => {
@@ -1254,7 +1254,7 @@ export async function runContainerAgent(
         }
 
         logger.error(
-          { group: group.name, containerName, duration, code },
+          { agent: agent.name, containerName, duration, code },
           'Container timed out with no output',
         );
 
@@ -1285,7 +1285,7 @@ export async function runContainerAgent(
       const logLines = [
         `=== Container Run Log ===`,
         `Timestamp: ${new Date().toISOString()}`,
-        `Group: ${group.name}`,
+        `Agent: ${agent.name}`,
         `IsMain: ${input.isMain}`,
         `Duration: ${duration}ms`,
         `Exit Code: ${code}`,
@@ -1351,7 +1351,7 @@ export async function runContainerAgent(
       if (code !== 0) {
         logger.error(
           {
-            group: group.name,
+            agent: agent.name,
             code,
             duration,
             stderr,
@@ -1393,7 +1393,7 @@ export async function runContainerAgent(
         outputChain.then(() => {
           if (lastErrorOutput && !hadTextResult) {
             logger.warn(
-              { group: group.name, duration, newSessionId },
+              { agent: agent.name, duration, newSessionId },
               'Container completed after streamed error output',
             );
             resolve(lastErrorOutput!);
@@ -1401,14 +1401,14 @@ export async function runContainerAgent(
           }
           if (input.requireResult && !hadTextResult) {
             logger.warn(
-              { group: group.name, duration, newSessionId },
+              { agent: agent.name, duration, newSessionId },
               'Container completed without required text result',
             );
             resolve(makeMissingRequiredResultOutput());
             return;
           }
           logger.info(
-            { group: group.name, duration, newSessionId },
+            { agent: agent.name, duration, newSessionId },
             'Container completed (streaming mode)',
           );
           resolve({
@@ -1462,7 +1462,7 @@ export async function runContainerAgent(
 
         logger.info(
           {
-            group: group.name,
+            agent: agent.name,
             duration,
             status: output.status,
             hasResult: !!output.result,
@@ -1493,7 +1493,7 @@ export async function runContainerAgent(
         });
         logger.error(
           {
-            group: group.name,
+            agent: agent.name,
             stdout,
             stderr,
             error: err,
@@ -1539,7 +1539,7 @@ export async function runContainerAgent(
         },
       });
       logger.error(
-        { group: group.name, containerName, error: err },
+        { agent: agent.name, containerName, error: err },
         'Container spawn error',
       );
       resolve(
@@ -1553,11 +1553,11 @@ export async function runContainerAgent(
 }
 
 export function writeTasksSnapshot(
-  groupFolder: string,
+  agentFolder: string,
   isMain: boolean,
   tasks: Array<{
     id: string;
-    groupFolder: string;
+    agentFolder: string;
     prompt: string;
     schedule_type: string;
     schedule_value: string;
@@ -1565,20 +1565,20 @@ export function writeTasksSnapshot(
     next_run: string | null;
   }>,
 ): void {
-  // Write filtered tasks to the group's IPC directory
-  const groupIpcDir = resolveGroupIpcPath(groupFolder);
-  fs.mkdirSync(groupIpcDir, { recursive: true });
+  // Write filtered tasks to the agent's IPC directory
+  const agentIpcDir = resolveAgentIpcPath(agentFolder);
+  fs.mkdirSync(agentIpcDir, { recursive: true });
 
   // Main sees all tasks, others only see their own
   const filteredTasks = isMain
     ? tasks
-    : tasks.filter((t) => t.groupFolder === groupFolder);
+    : tasks.filter((t) => t.agentFolder === agentFolder);
 
-  const tasksFile = path.join(groupIpcDir, 'current_tasks.json');
+  const tasksFile = path.join(agentIpcDir, 'current_tasks.json');
   fs.writeFileSync(tasksFile, JSON.stringify(filteredTasks, null, 2));
 }
 
-export interface AvailableGroup {
+export interface AvailableAgent {
   jid: string;
   name: string;
   lastActivity: string;
@@ -1587,29 +1587,29 @@ export interface AvailableGroup {
 }
 
 /**
- * Write available groups snapshot for the container to read.
- * Only main group can see all available groups (for activation).
- * Non-main groups only see their own registration status.
+ * Write available agents snapshot for the container to read.
+ * Only main agent can see all available agents (for activation).
+ * Non-main agents only see their own registration status.
  */
-export function writeGroupsSnapshot(
-  groupFolder: string,
+export function writeAgentsSnapshot(
+  agentFolder: string,
   isMain: boolean,
-  groups: AvailableGroup[],
+  agents: AvailableAgent[],
   registeredJids: Set<string>,
 ): void {
-  const groupIpcDir = resolveGroupIpcPath(groupFolder);
-  fs.mkdirSync(groupIpcDir, { recursive: true });
+  const agentIpcDir = resolveAgentIpcPath(agentFolder);
+  fs.mkdirSync(agentIpcDir, { recursive: true });
 
-  // Main sees all groups; others see nothing (they can't activate groups)
-  const visibleGroups = isMain ? groups : [];
+  // Main sees all agents; others see nothing (they can't activate agents)
+  const visibleAgents = isMain ? agents : [];
 
-  const groupsFile = path.join(groupIpcDir, 'available_groups.json');
+  const agentsFile = path.join(agentIpcDir, 'available_agents.json');
   fs.writeFileSync(
-    groupsFile,
+    agentsFile,
     JSON.stringify(
       {
-        groups: visibleGroups,
-        lastSync: new Date().toISOString(),
+        agents: visibleAgents,
+        generatedAt: new Date().toISOString(),
       },
       null,
       2,

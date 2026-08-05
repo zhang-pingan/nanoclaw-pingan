@@ -9,11 +9,11 @@ import {
   listAssistantActionLogs,
 } from './agent-inbox-store.js';
 import { handleAssistantInboxBroadcastCardAction } from './assistant-inbox-broadcast-actions.js';
-import type { RegisteredGroup } from '../types.js';
+import type { RegisteredAgent } from '../types.js';
 
-const groups: Record<string, RegisteredGroup> = {
+const agents: Record<string, RegisteredAgent> = {
   'feishu:oc_allowed': {
-    name: '主群',
+    name: '主 Agent',
     folder: 'main',
     trigger: '',
     added_at: '1',
@@ -27,7 +27,7 @@ function baseInput(action: string, itemId: string) {
       action,
       item_id: itemId,
     },
-    registeredGroups: groups,
+    registeredAgents: agents,
     userId: 'user-1',
     actorChannel: 'feishu' as const,
     messageId: 'msg-1',

@@ -10,7 +10,7 @@ import {
   ATTACHMENTS_DIR,
   DATA_DIR,
   DESKTOP_CAPTURES_DIR,
-  GROUPS_DIR,
+  AGENTS_DIR,
   IPC_POLL_INTERVAL,
   TIMEZONE,
 } from './config.js';
@@ -32,7 +32,7 @@ import {
   expirePendingAskQuestions,
   normalizeAskQuestions,
 } from './ask-user-question.js';
-import { AvailableGroup } from './container-runner.js';
+import { AvailableAgent } from './container-runner.js';
 import {
   createDelegation,
   createMemory,
@@ -57,7 +57,7 @@ import {
   updateTask,
 } from './db.js';
 import type { MemoryExtractConfig } from './db.js';
-import { isValidGroupFolder } from './group-folder.js';
+import { isValidAgentFolder } from './agent-folder.js';
 import { logger } from './logger.js';
 import { canDelegateToFolder, getFolderChannel } from './delegation-policy.js';
 import { retrieveStructuredMemories } from './memory-retrieval.js';
@@ -65,7 +65,7 @@ import {
   DesktopCaptureOptions,
   DesktopCaptureResult,
   InteractiveCard,
-  RegisteredGroup,
+  RegisteredAgent,
 } from './types.js';
 import { runLocalHostScript } from './host-script-runner.js';
 import { getWikiPageDetail } from './wiki.js';
@@ -78,17 +78,16 @@ import { getRecentTodayPlanDetails } from './today-plan.js';
 
 export interface IpcDeps {
   sendMessage: (jid: string, text: string) => Promise<void>;
-  registeredGroups: () => Record<string, RegisteredGroup>;
-  registerGroup: (jid: string, group: RegisteredGroup) => void;
-  syncGroups: (force: boolean) => Promise<void>;
-  getAvailableGroups: () => AvailableGroup[];
-  writeGroupsSnapshot: (
-    groupFolder: string,
+  registeredAgents: () => Record<string, RegisteredAgent>;
+  registerAgent: (jid: string, agent: RegisteredAgent) => void;
+  getAvailableAgents: () => AvailableAgent[];
+  writeAgentsSnapshot: (
+    agentFolder: string,
     isMain: boolean,
-    availableGroups: AvailableGroup[],
+    availableAgents: AvailableAgent[],
     registeredJids: Set<string>,
   ) => void;
-  enqueueMessageCheck: (groupJid: string) => void;
+  enqueueMessageCheck: (agentJid: string) => void;
   sendCard?: (
     jid: string,
     card: InteractiveCard,
@@ -104,12 +103,12 @@ let ipcWatcherRunning = false;
 
 function resolveContainerFilePath(
   filePath: string,
-  sourceGroup: string,
+  sourceAgent: string,
 ): { hostPath: string; error?: string } {
   const mappings = [
     {
-      containerPrefix: '/workspace/group/',
-      hostBase: path.join(GROUPS_DIR, sourceGroup),
+      containerPrefix: '/workspace/agent/',
+      hostBase: path.join(AGENTS_DIR, sourceAgent),
     },
     {
       containerPrefix: '/workspace/attachments/',
@@ -132,7 +131,7 @@ function resolveContainerFilePath(
     return {
       hostPath: '',
       error:
-        'IPC file path must start with /workspace/group/, /workspace/attachments/, /workspace/desktop-captures/, or /workspace/ai-images/',
+        'IPC file path must start with /workspace/agent/, /workspace/attachments/, /workspace/desktop-captures/, or /workspace/ai-images/',
     };
   }
 
@@ -160,10 +159,10 @@ export function startIpcWatcher(deps: IpcDeps): void {
   fs.mkdirSync(ipcBaseDir, { recursive: true });
 
   const processIpcFiles = async () => {
-    // Scan all group IPC directories (identity determined by directory)
-    let groupFolders: string[];
+    // Scan all agent IPC directories (identity determined by directory)
+    let agentFolders: string[];
     try {
-      groupFolders = fs.readdirSync(ipcBaseDir).filter((f) => {
+      agentFolders = fs.readdirSync(ipcBaseDir).filter((f) => {
         const stat = fs.statSync(path.join(ipcBaseDir, f));
         return stat.isDirectory() && f !== 'errors';
       });
@@ -173,29 +172,29 @@ export function startIpcWatcher(deps: IpcDeps): void {
       return;
     }
 
-    const registeredGroups = deps.registeredGroups();
+    const registeredAgents = deps.registeredAgents();
 
     try {
       await expirePendingAskQuestions({
-        registeredGroups,
+        registeredAgents,
         sendMessage: deps.sendMessage,
       });
     } catch (err) {
       logger.warn({ err }, 'Failed to expire pending ask questions');
     }
 
-    // Build folder→isMain lookup from registered groups
+    // Build folder→isMain lookup from registered agents
     const folderIsMain = new Map<string, boolean>();
-    for (const group of Object.values(registeredGroups)) {
-      if (group.isMain) folderIsMain.set(group.folder, true);
+    for (const agent of Object.values(registeredAgents)) {
+      if (agent.isMain) folderIsMain.set(agent.folder, true);
     }
 
-    for (const sourceGroup of groupFolders) {
-      const isMain = folderIsMain.get(sourceGroup) === true;
-      const messagesDir = path.join(ipcBaseDir, sourceGroup, 'messages');
-      const tasksDir = path.join(ipcBaseDir, sourceGroup, 'tasks');
+    for (const sourceAgent of agentFolders) {
+      const isMain = folderIsMain.get(sourceAgent) === true;
+      const messagesDir = path.join(ipcBaseDir, sourceAgent, 'messages');
+      const tasksDir = path.join(ipcBaseDir, sourceAgent, 'tasks');
 
-      // Process messages from this group's IPC directory
+      // Process messages from this agent's IPC directory
       try {
         if (fs.existsSync(messagesDir)) {
           const messageFiles = fs
@@ -206,20 +205,20 @@ export function startIpcWatcher(deps: IpcDeps): void {
             try {
               const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
               if (data.type === 'message' && data.chatJid && data.text) {
-                // Authorization: verify this group can send to this chatJid
-                const targetGroup = registeredGroups[data.chatJid];
+                // Authorization: verify this agent can send to this chatJid
+                const targetAgent = registeredAgents[data.chatJid];
                 if (
                   isMain ||
-                  (targetGroup && targetGroup.folder === sourceGroup)
-                  ) {
-                    await deps.sendMessage(data.chatJid, data.text);
+                  (targetAgent && targetAgent.folder === sourceAgent)
+                ) {
+                  await deps.sendMessage(data.chatJid, data.text);
                   logger.info(
-                    { chatJid: data.chatJid, sourceGroup },
+                    { chatJid: data.chatJid, sourceAgent },
                     'IPC message sent',
                   );
                 } else {
                   logger.warn(
-                    { chatJid: data.chatJid, sourceGroup },
+                    { chatJid: data.chatJid, sourceAgent },
                     'Unauthorized IPC message attempt blocked',
                   );
                 }
@@ -229,41 +228,41 @@ export function startIpcWatcher(deps: IpcDeps): void {
                 data.filePath
               ) {
                 // Authorization: same as message
-                const targetGroup = registeredGroups[data.chatJid];
+                const targetAgent = registeredAgents[data.chatJid];
                 if (
                   isMain ||
-                  (targetGroup && targetGroup.folder === sourceGroup)
+                  (targetAgent && targetAgent.folder === sourceAgent)
                 ) {
                   // Map container path to host path
                   if (typeof data.filePath !== 'string') {
                     logger.warn(
-                      { filePath: data.filePath, sourceGroup },
+                      { filePath: data.filePath, sourceAgent },
                       'IPC file path must be a string',
                     );
                   } else {
                     const { hostPath, error } = resolveContainerFilePath(
                       data.filePath,
-                      sourceGroup,
+                      sourceAgent,
                     );
                     if (error) {
                       logger.warn(
-                        { filePath: data.filePath, hostPath, sourceGroup },
+                        { filePath: data.filePath, hostPath, sourceAgent },
                         error,
                       );
                     } else if (!fs.existsSync(hostPath)) {
                       logger.warn(
-                        { hostPath, sourceGroup },
+                        { hostPath, sourceAgent },
                         'IPC file does not exist on host',
                       );
                     } else if (!fs.statSync(hostPath).isFile()) {
                       logger.warn(
-                        { hostPath, sourceGroup },
+                        { hostPath, sourceAgent },
                         'IPC file path is not a file',
                       );
                     } else if (deps.sendFile) {
                       await deps.sendFile(data.chatJid, hostPath, data.caption);
                       logger.info(
-                        { chatJid: data.chatJid, hostPath, sourceGroup },
+                        { chatJid: data.chatJid, hostPath, sourceAgent },
                         'IPC file sent',
                       );
                     } else {
@@ -274,14 +273,14 @@ export function startIpcWatcher(deps: IpcDeps): void {
                           `[文件: ${path.basename(hostPath)}] (该渠道不支持发送文件)`,
                       );
                       logger.info(
-                        { chatJid: data.chatJid, sourceGroup },
+                        { chatJid: data.chatJid, sourceAgent },
                         'IPC file fallback to text (sendFile not supported)',
                       );
                     }
                   }
                 } else {
                   logger.warn(
-                    { chatJid: data.chatJid, sourceGroup },
+                    { chatJid: data.chatJid, sourceAgent },
                     'Unauthorized IPC file attempt blocked',
                   );
                 }
@@ -289,26 +288,26 @@ export function startIpcWatcher(deps: IpcDeps): void {
               fs.unlinkSync(filePath);
             } catch (err) {
               logger.error(
-                { file, sourceGroup, err },
+                { file, sourceAgent, err },
                 'Error processing IPC message',
               );
               const errorDir = path.join(ipcBaseDir, 'errors');
               fs.mkdirSync(errorDir, { recursive: true });
               fs.renameSync(
                 filePath,
-                path.join(errorDir, `${sourceGroup}-${file}`),
+                path.join(errorDir, `${sourceAgent}-${file}`),
               );
             }
           }
         }
       } catch (err) {
         logger.error(
-          { err, sourceGroup },
+          { err, sourceAgent },
           'Error reading IPC messages directory',
         );
       }
 
-      // Process tasks from this group's IPC directory
+      // Process tasks from this agent's IPC directory
       try {
         if (fs.existsSync(tasksDir)) {
           const taskFiles = fs
@@ -318,25 +317,25 @@ export function startIpcWatcher(deps: IpcDeps): void {
             const filePath = path.join(tasksDir, file);
             try {
               const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-              // Pass source group identity to processTaskIpc for authorization
-              await processTaskIpc(data, sourceGroup, isMain, deps);
+              // Pass source agent identity to processTaskIpc for authorization
+              await processTaskIpc(data, sourceAgent, isMain, deps);
               fs.unlinkSync(filePath);
             } catch (err) {
               logger.error(
-                { file, sourceGroup, err },
+                { file, sourceAgent, err },
                 'Error processing IPC task',
               );
               const errorDir = path.join(ipcBaseDir, 'errors');
               fs.mkdirSync(errorDir, { recursive: true });
               fs.renameSync(
                 filePath,
-                path.join(errorDir, `${sourceGroup}-${file}`),
+                path.join(errorDir, `${sourceAgent}-${file}`),
               );
             }
           }
         }
       } catch (err) {
-        logger.error({ err, sourceGroup }, 'Error reading IPC tasks directory');
+        logger.error({ err, sourceAgent }, 'Error reading IPC tasks directory');
       }
     }
 
@@ -344,7 +343,7 @@ export function startIpcWatcher(deps: IpcDeps): void {
   };
 
   processIpcFiles();
-  logger.info('IPC watcher started (per-group namespaces)');
+  logger.info('IPC watcher started (per-agent namespaces)');
 }
 
 function parseDelegationTargetFolder(task: string): {
@@ -358,7 +357,7 @@ function parseDelegationTargetFolder(task: string): {
 
   const candidate = match[1].trim();
   const cleanedTask = task.replace(match[0], '').trim();
-  if (!isValidGroupFolder(candidate)) {
+  if (!isValidAgentFolder(candidate)) {
     return {
       targetFolder: null,
       cleanedTask: cleanedTask || task.trim(),
@@ -562,7 +561,7 @@ function summarizeArchiveMessages(messages: ExtractedArchiveMessage[]): Array<{
 }
 
 function buildArchiveExtractionRequestPayload(
-  sourceGroup: string,
+  sourceAgent: string,
   archiveName: string,
   sanitizedMessages: ExtractedArchiveMessage[],
 ) {
@@ -572,7 +571,7 @@ function buildArchiveExtractionRequestPayload(
       {
         role: 'user' as const,
         content: buildArchiveExtractionUserPrompt(
-          sourceGroup,
+          sourceAgent,
           archiveName,
           sanitizedMessages,
         ),
@@ -584,12 +583,12 @@ function buildArchiveExtractionRequestPayload(
 }
 
 async function callArchiveExtractionWithRetry(
-  sourceGroup: string,
+  sourceAgent: string,
   archiveName: string,
   sanitizedMessages: ExtractedArchiveMessage[],
 ): Promise<ArchiveExtractionAttempt> {
   const requestPayload = buildArchiveExtractionRequestPayload(
-    sourceGroup,
+    sourceAgent,
     archiveName,
     sanitizedMessages,
   );
@@ -610,7 +609,7 @@ async function callArchiveExtractionWithRetry(
       if (attempt > 1) {
         logger.info(
           {
-            sourceGroup,
+            sourceAgent,
             archiveName,
             attempt,
             maxAttempts: retryDelaysMs.length,
@@ -624,7 +623,7 @@ async function callArchiveExtractionWithRetry(
       logger.warn(
         {
           err,
-          sourceGroup,
+          sourceAgent,
           archiveName,
           attempt,
           maxAttempts: retryDelaysMs.length,
@@ -663,14 +662,14 @@ function buildArchiveExtractionSystemPrompt(): string {
 }
 
 function buildArchiveExtractionUserPrompt(
-  sourceGroup: string,
+  sourceAgent: string,
   archiveFile: string,
   messages: ExtractedArchiveMessage[],
 ): string {
   return JSON.stringify(
     {
       task: 'extract_memories_from_archive',
-      group_folder: sourceGroup,
+      agent_folder: sourceAgent,
       archive_file: archiveFile,
       rules: {
         canonical: '长期稳定的偏好、规则、持久事实',
@@ -801,7 +800,7 @@ function summarizeMemoryContent(id: string): string {
 }
 
 async function sendConflictCardsFromReport(
-  sourceGroup: string,
+  sourceAgent: string,
   deps: IpcDeps,
   conflictGroups: Array<{
     key: string;
@@ -810,9 +809,9 @@ async function sendConflictCardsFromReport(
   }>,
 ): Promise<void> {
   if (!deps.sendCard || conflictGroups.length === 0) return;
-  const groups = deps.registeredGroups();
-  const targetEntry = Object.entries(groups).find(
-    ([, g]) => g.folder === sourceGroup,
+  const agents = deps.registeredAgents();
+  const targetEntry = Object.entries(agents).find(
+    ([, g]) => g.folder === sourceAgent,
   );
   if (!targetEntry) return;
   const targetJid = targetEntry[0];
@@ -840,7 +839,7 @@ async function sendConflictCardsFromReport(
           type: 'primary',
           value: {
             action: 'memory_conflict_keep',
-            group_folder: sourceGroup,
+            agent_folder: sourceAgent,
             keep_id: posId,
             deprecate_id: negId,
           },
@@ -850,7 +849,7 @@ async function sendConflictCardsFromReport(
           label: '保留 B',
           value: {
             action: 'memory_conflict_keep',
-            group_folder: sourceGroup,
+            agent_folder: sourceAgent,
             keep_id: negId,
             deprecate_id: posId,
           },
@@ -860,7 +859,7 @@ async function sendConflictCardsFromReport(
           label: '稍后处理',
           value: {
             action: 'memory_conflict_skip',
-            group_folder: sourceGroup,
+            agent_folder: sourceAgent,
             keep_id: posId,
             deprecate_id: negId,
           },
@@ -877,7 +876,7 @@ async function sendConflictCardsFromReport(
           type: 'default',
           value: {
             action: 'memory_conflict_merge',
-            group_folder: sourceGroup,
+            agent_folder: sourceAgent,
             merge_id_a: posId,
             merge_id_b: negId,
           },
@@ -889,7 +888,7 @@ async function sendConflictCardsFromReport(
       await deps.sendCard(targetJid, card);
     } catch (err) {
       logger.warn(
-        { err, sourceGroup, targetJid, key: group.key },
+        { err, sourceAgent, targetJid, key: group.key },
         'Failed to send memory conflict card',
       );
     }
@@ -904,16 +903,16 @@ export async function processTaskIpc(
     schedule_type?: string;
     schedule_value?: string;
     context_mode?: string;
-    groupFolder?: string;
+    agentFolder?: string;
     chatJid?: string;
     targetJid?: string;
-    // For register_group
+    // For register_agent
     jid?: string;
     name?: string;
     folder?: string;
     trigger?: string;
     requiresTrigger?: boolean;
-    containerConfig?: RegisteredGroup['containerConfig'];
+    containerConfig?: RegisteredAgent['containerConfig'];
     description?: string;
     // For archive-triggered memory extraction
     archiveFile?: string;
@@ -945,7 +944,7 @@ export async function processTaskIpc(
     merged_content?: string;
     // For delegate_task / complete_delegation / request_delegation
     delegationId?: string;
-    targetGroupJid?: string;
+    targetAgentJid?: string;
     requesterJid?: string;
     task?: string;
     result?: string;
@@ -964,20 +963,20 @@ export async function processTaskIpc(
     includeWindows?: boolean;
     waitMs?: number;
   },
-  sourceGroup: string, // Verified identity from IPC directory
+  sourceAgent: string, // Verified identity from IPC directory
   isMain: boolean, // Verified from directory path
   deps: IpcDeps,
 ): Promise<void> {
-  const registeredGroups = deps.registeredGroups();
+  const registeredAgents = deps.registeredAgents();
   const writeMemoryResult = (
-    groupFolder: string,
+    agentFolder: string,
     requestId: string,
     payload: object,
   ) => {
     const resultsDir = path.join(
       DATA_DIR,
       'ipc',
-      groupFolder,
+      agentFolder,
       'search-results',
     );
     fs.mkdirSync(resultsDir, { recursive: true });
@@ -987,11 +986,11 @@ export async function processTaskIpc(
     fs.renameSync(tempPath, responsePath);
   };
   const writeAskResult = (
-    groupFolder: string,
+    agentFolder: string,
     requestId: string,
     payload: object,
   ) => {
-    const resultsDir = path.join(DATA_DIR, 'ipc', groupFolder, 'ask-results');
+    const resultsDir = path.join(DATA_DIR, 'ipc', agentFolder, 'ask-results');
     fs.mkdirSync(resultsDir, { recursive: true });
     const responsePath = path.join(resultsDir, `${requestId}.json`);
     const tempPath = `${responsePath}.tmp`;
@@ -999,14 +998,14 @@ export async function processTaskIpc(
     fs.renameSync(tempPath, responsePath);
   };
   const writeDelegationResult = (
-    groupFolder: string,
+    agentFolder: string,
     requestId: string,
     payload: object,
   ) => {
     const resultsDir = path.join(
       DATA_DIR,
       'ipc',
-      groupFolder,
+      agentFolder,
       'delegation-results',
     );
     fs.mkdirSync(resultsDir, { recursive: true });
@@ -1016,14 +1015,14 @@ export async function processTaskIpc(
     fs.renameSync(tempPath, responsePath);
   };
   const writeTodayPlanResult = (
-    groupFolder: string,
+    agentFolder: string,
     requestId: string,
     payload: object,
   ) => {
     const resultsDir = path.join(
       DATA_DIR,
       'ipc',
-      groupFolder,
+      agentFolder,
       'today-plan-results',
     );
     fs.mkdirSync(resultsDir, { recursive: true });
@@ -1033,14 +1032,14 @@ export async function processTaskIpc(
     fs.renameSync(tempPath, responsePath);
   };
   const writeHostScriptResult = (
-    groupFolder: string,
+    agentFolder: string,
     requestId: string,
     payload: object,
   ) => {
     const resultsDir = path.join(
       DATA_DIR,
       'ipc',
-      groupFolder,
+      agentFolder,
       'host-script-results',
     );
     fs.mkdirSync(resultsDir, { recursive: true });
@@ -1050,14 +1049,14 @@ export async function processTaskIpc(
     fs.renameSync(tempPath, responsePath);
   };
   const writeAiImageResult = (
-    groupFolder: string,
+    agentFolder: string,
     requestId: string,
     payload: object,
   ) => {
     const resultsDir = path.join(
       DATA_DIR,
       'ipc',
-      groupFolder,
+      agentFolder,
       'ai-image-results',
     );
     fs.mkdirSync(resultsDir, { recursive: true });
@@ -1067,14 +1066,14 @@ export async function processTaskIpc(
     fs.renameSync(tempPath, responsePath);
   };
   const writeDesktopCaptureResult = (
-    groupFolder: string,
+    agentFolder: string,
     requestId: string,
     payload: object,
   ) => {
     const resultsDir = path.join(
       DATA_DIR,
       'ipc',
-      groupFolder,
+      agentFolder,
       'desktop-capture-results',
     );
     fs.mkdirSync(resultsDir, { recursive: true });
@@ -1087,7 +1086,7 @@ export async function processTaskIpc(
     case 'memory_extract_from_archive': {
       if (!data.archiveFile) {
         logger.warn(
-          { sourceGroup },
+          { sourceAgent },
           'memory_extract_from_archive missing archiveFile',
         );
         break;
@@ -1095,14 +1094,14 @@ export async function processTaskIpc(
       const archiveName = path.basename(data.archiveFile);
       if (archiveName !== data.archiveFile || !archiveName.endsWith('.md')) {
         logger.warn(
-          { sourceGroup, archiveFile: data.archiveFile },
+          { sourceAgent, archiveFile: data.archiveFile },
           'memory_extract_from_archive invalid archiveFile',
         );
         break;
       }
 
       const conversationsDir = path.resolve(
-        path.join(GROUPS_DIR, sourceGroup, 'conversations'),
+        path.join(AGENTS_DIR, sourceAgent, 'conversations'),
       );
       const archivePath = path.resolve(
         path.join(conversationsDir, archiveName),
@@ -1112,14 +1111,14 @@ export async function processTaskIpc(
         archivePath !== conversationsDir
       ) {
         logger.warn(
-          { sourceGroup, archivePath },
+          { sourceAgent, archivePath },
           'memory_extract_from_archive path traversal blocked',
         );
         break;
       }
       if (!fs.existsSync(archivePath)) {
         logger.warn(
-          { sourceGroup, archivePath },
+          { sourceAgent, archivePath },
           'memory_extract_from_archive archive file not found',
         );
         break;
@@ -1127,12 +1126,12 @@ export async function processTaskIpc(
 
       const archiveBytes = fs.statSync(archivePath).size;
       const markdown = fs.readFileSync(archivePath, 'utf-8');
-      const extractConfig = getMemoryExtractConfig(sourceGroup);
+      const extractConfig = getMemoryExtractConfig(sourceAgent);
       const parsedMessages = parseArchiveMarkdownMessages(markdown);
       const sanitizedMessages =
         sanitizeArchiveMessagesForExtraction(parsedMessages);
       const requestPayload = buildArchiveExtractionRequestPayload(
-        sourceGroup,
+        sourceAgent,
         archiveName,
         sanitizedMessages,
       );
@@ -1140,18 +1139,18 @@ export async function processTaskIpc(
       try {
         if (sanitizedMessages.length === 0) {
           recordMemoryMetric(
-            sourceGroup,
+            sourceAgent,
             'archive:extract_rejected',
             'reason=no_sanitized_messages',
           );
           logger.info(
-            { sourceGroup, archiveName, parsedMessages: parsedMessages.length },
+            { sourceAgent, archiveName, parsedMessages: parsedMessages.length },
             'memory_extract_from_archive skipped due to empty sanitized messages',
           );
           break;
         }
         const { apiResponse, attempt } = await callArchiveExtractionWithRetry(
-          sourceGroup,
+          sourceAgent,
           archiveName,
           sanitizedMessages,
         );
@@ -1163,7 +1162,7 @@ export async function processTaskIpc(
         );
         const created = candidates.map((c) =>
           createMemory({
-            group_folder: sourceGroup,
+            agent_folder: sourceAgent,
             layer: c.layer,
             memory_type: c.memory_type,
             content: c.content,
@@ -1184,43 +1183,43 @@ export async function processTaskIpc(
           }),
         );
 
-        const report = doctorMemories(sourceGroup, 7);
+        const report = doctorMemories(sourceAgent, 7);
         await sendConflictCardsFromReport(
-          sourceGroup,
+          sourceAgent,
           deps,
           report.conflictGroups,
         );
-        const gc = gcMemories(sourceGroup, {
+        const gc = gcMemories(sourceAgent, {
           dryRun: false,
           staleWorkingDays: 14,
         });
 
         recordMemoryMetric(
-          sourceGroup,
+          sourceAgent,
           'archive:extract',
           `file=${archiveName},created=${created.length}`,
         );
         if (candidates.length === 0) {
           recordMemoryMetric(
-            sourceGroup,
+            sourceAgent,
             'archive:extract_rejected',
             'reason=no_valid_candidates',
           );
         }
         recordMemoryMetric(
-          sourceGroup,
+          sourceAgent,
           'archive:doctor',
           `duplicates=${report.duplicateGroups.length},conflicts=${report.conflictGroups.length}`,
         );
         recordMemoryMetric(
-          sourceGroup,
+          sourceAgent,
           'archive:gc',
           `dupDeleted=${gc.duplicateDeletedIds.length},staleDeleted=${gc.staleDeletedIds.length}`,
         );
 
         logger.info(
           {
-            sourceGroup,
+            sourceAgent,
             archiveName,
             created: created.length,
             parsedMessages: parsedMessages.length,
@@ -1237,14 +1236,14 @@ export async function processTaskIpc(
         );
       } catch (err) {
         recordMemoryMetric(
-          sourceGroup,
+          sourceAgent,
           'archive:extract_failed',
           `file=${archiveName}`,
         );
         logger.error(
           {
             err,
-            sourceGroup,
+            sourceAgent,
             archiveFile: archiveName,
             archivePath,
             archiveBytes,
@@ -1274,24 +1273,24 @@ export async function processTaskIpc(
         data.schedule_value &&
         data.targetJid
       ) {
-        // Resolve the target group from JID
+        // Resolve the target agent from JID
         const targetJid = data.targetJid as string;
-        const targetGroupEntry = registeredGroups[targetJid];
+        const targetAgentEntry = registeredAgents[targetJid];
 
-        if (!targetGroupEntry) {
+        if (!targetAgentEntry) {
           logger.warn(
             { targetJid },
-            'Cannot schedule task: target group not registered',
+            'Cannot schedule task: target agent not registered',
           );
           break;
         }
 
-        const targetFolder = targetGroupEntry.folder;
+        const targetFolder = targetAgentEntry.folder;
 
-        // Authorization: non-main groups can only schedule for themselves
-        if (!isMain && targetFolder !== sourceGroup) {
+        // Authorization: non-main agents can only schedule for themselves
+        if (!isMain && targetFolder !== sourceAgent) {
           logger.warn(
-            { sourceGroup, targetFolder },
+            { sourceAgent, targetFolder },
             'Unauthorized schedule_task attempt blocked',
           );
           break;
@@ -1340,12 +1339,12 @@ export async function processTaskIpc(
           data.taskId ||
           `task-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
         const contextMode =
-          data.context_mode === 'group' || data.context_mode === 'isolated'
+          data.context_mode === 'agent' || data.context_mode === 'isolated'
             ? data.context_mode
             : 'isolated';
         createTask({
           id: taskId,
-          group_folder: targetFolder,
+          agent_folder: targetFolder,
           chat_jid: targetJid,
           prompt: data.prompt,
           schedule_type: scheduleType,
@@ -1356,7 +1355,7 @@ export async function processTaskIpc(
           created_at: formatLocalTime(new Date()),
         });
         logger.info(
-          { taskId, sourceGroup, targetFolder, contextMode },
+          { taskId, sourceAgent, targetFolder, contextMode },
           'Task created via IPC',
         );
       }
@@ -1365,15 +1364,15 @@ export async function processTaskIpc(
     case 'pause_task':
       if (data.taskId) {
         const task = getTaskById(data.taskId);
-        if (task && (isMain || task.group_folder === sourceGroup)) {
+        if (task && (isMain || task.agent_folder === sourceAgent)) {
           updateTask(data.taskId, { status: 'paused' });
           logger.info(
-            { taskId: data.taskId, sourceGroup },
+            { taskId: data.taskId, sourceAgent },
             'Task paused via IPC',
           );
         } else {
           logger.warn(
-            { taskId: data.taskId, sourceGroup },
+            { taskId: data.taskId, sourceAgent },
             'Unauthorized task pause attempt',
           );
         }
@@ -1383,15 +1382,15 @@ export async function processTaskIpc(
     case 'resume_task':
       if (data.taskId) {
         const task = getTaskById(data.taskId);
-        if (task && (isMain || task.group_folder === sourceGroup)) {
+        if (task && (isMain || task.agent_folder === sourceAgent)) {
           updateTask(data.taskId, { status: 'active' });
           logger.info(
-            { taskId: data.taskId, sourceGroup },
+            { taskId: data.taskId, sourceAgent },
             'Task resumed via IPC',
           );
         } else {
           logger.warn(
-            { taskId: data.taskId, sourceGroup },
+            { taskId: data.taskId, sourceAgent },
             'Unauthorized task resume attempt',
           );
         }
@@ -1401,15 +1400,15 @@ export async function processTaskIpc(
     case 'cancel_task':
       if (data.taskId) {
         const task = getTaskById(data.taskId);
-        if (task && (isMain || task.group_folder === sourceGroup)) {
+        if (task && (isMain || task.agent_folder === sourceAgent)) {
           deleteTask(data.taskId);
           logger.info(
-            { taskId: data.taskId, sourceGroup },
+            { taskId: data.taskId, sourceAgent },
             'Task cancelled via IPC',
           );
         } else {
           logger.warn(
-            { taskId: data.taskId, sourceGroup },
+            { taskId: data.taskId, sourceAgent },
             'Unauthorized task cancel attempt',
           );
         }
@@ -1421,14 +1420,14 @@ export async function processTaskIpc(
         const task = getTaskById(data.taskId);
         if (!task) {
           logger.warn(
-            { taskId: data.taskId, sourceGroup },
+            { taskId: data.taskId, sourceAgent },
             'Task not found for update',
           );
           break;
         }
-        if (!isMain && task.group_folder !== sourceGroup) {
+        if (!isMain && task.agent_folder !== sourceAgent) {
           logger.warn(
-            { taskId: data.taskId, sourceGroup },
+            { taskId: data.taskId, sourceAgent },
             'Unauthorized task update attempt',
           );
           break;
@@ -1479,55 +1478,31 @@ export async function processTaskIpc(
 
         updateTask(data.taskId, updates);
         logger.info(
-          { taskId: data.taskId, sourceGroup, updates },
+          { taskId: data.taskId, sourceAgent, updates },
           'Task updated via IPC',
         );
       }
       break;
 
-    case 'refresh_groups':
-      // Only main group can request a refresh
-      if (isMain) {
-        logger.info(
-          { sourceGroup },
-          'Group metadata refresh requested via IPC',
-        );
-        await deps.syncGroups(true);
-        // Write updated snapshot immediately
-        const availableGroups = deps.getAvailableGroups();
-        deps.writeGroupsSnapshot(
-          sourceGroup,
-          true,
-          availableGroups,
-          new Set(Object.keys(registeredGroups)),
-        );
-      } else {
-        logger.warn(
-          { sourceGroup },
-          'Unauthorized refresh_groups attempt blocked',
-        );
-      }
-      break;
-
-    case 'register_group':
-      // Only main group can register new groups
+    case 'register_agent':
+      // Only main agent can register new agents
       if (!isMain) {
         logger.warn(
-          { sourceGroup },
-          'Unauthorized register_group attempt blocked',
+          { sourceAgent },
+          'Unauthorized register_agent attempt blocked',
         );
         break;
       }
       if (data.jid && data.name && data.folder && data.trigger) {
-        if (!isValidGroupFolder(data.folder)) {
+        if (!isValidAgentFolder(data.folder)) {
           logger.warn(
-            { sourceGroup, folder: data.folder },
-            'Invalid register_group request - unsafe folder name',
+            { sourceAgent, folder: data.folder },
+            'Invalid register_agent request - unsafe folder name',
           );
           break;
         }
         // Defense in depth: agent cannot set isMain via IPC
-        deps.registerGroup(data.jid, {
+        deps.registerAgent(data.jid, {
           name: data.name,
           folder: data.folder,
           trigger: data.trigger,
@@ -1539,20 +1514,20 @@ export async function processTaskIpc(
       } else {
         logger.warn(
           { data },
-          'Invalid register_group request - missing required fields',
+          'Invalid register_agent request - missing required fields',
         );
       }
       break;
 
     case 'ask_user_question': {
       if (!data.requestId || typeof data.requestId !== 'string') {
-        logger.warn({ sourceGroup }, 'ask_user_question missing requestId');
+        logger.warn({ sourceAgent }, 'ask_user_question missing requestId');
         break;
       }
 
       const normalized = normalizeAskQuestions(data.questions);
       if (!normalized.ok) {
-        writeAskResult(sourceGroup, data.requestId, {
+        writeAskResult(sourceAgent, data.requestId, {
           requestId: data.requestId,
           status: 'rejected',
           answers: {},
@@ -1561,27 +1536,27 @@ export async function processTaskIpc(
           responder: null,
         });
         logger.warn(
-          { sourceGroup, requestId: data.requestId, error: normalized.error },
+          { sourceAgent, requestId: data.requestId, error: normalized.error },
           'ask_user_question rejected: invalid questions payload',
         );
         break;
       }
 
-      const sourceEntry = Object.entries(registeredGroups).find(
-        ([, g]) => g.folder === sourceGroup,
+      const sourceEntry = Object.entries(registeredAgents).find(
+        ([, g]) => g.folder === sourceAgent,
       );
       const targetJid = sourceEntry?.[0];
       if (!targetJid) {
-        writeAskResult(sourceGroup, data.requestId, {
+        writeAskResult(sourceAgent, data.requestId, {
           requestId: data.requestId,
           status: 'rejected',
           answers: {},
-          error: `target group not found for folder=${sourceGroup}`,
+          error: `target agent not found for folder=${sourceAgent}`,
           answeredAt: new Date().toISOString(),
           responder: null,
         });
         logger.warn(
-          { sourceGroup, requestId: data.requestId },
+          { sourceAgent, requestId: data.requestId },
           'ask_user_question rejected: target JID not found',
         );
         break;
@@ -1594,7 +1569,7 @@ export async function processTaskIpc(
 
       createPendingAskQuestion({
         requestId: data.requestId,
-        groupFolder: sourceGroup,
+        agentFolder: sourceAgent,
         chatJid: targetJid,
         questions: normalized.questions,
         timeoutSec: timeout,
@@ -1603,14 +1578,14 @@ export async function processTaskIpc(
 
       const dispatch = await dispatchCurrentAskQuestion({
         requestId: data.requestId,
-        groupFolder: sourceGroup,
-        registeredGroups,
+        agentFolder: sourceAgent,
+        registeredAgents,
         sendCard: deps.sendCard,
         sendMessage: deps.sendMessage,
       });
 
       if (!dispatch.ok) {
-        writeAskResult(sourceGroup, data.requestId, {
+        writeAskResult(sourceAgent, data.requestId, {
           requestId: data.requestId,
           status: 'rejected',
           answers: {},
@@ -1620,7 +1595,7 @@ export async function processTaskIpc(
         });
         logger.warn(
           {
-            sourceGroup,
+            sourceAgent,
             requestId: data.requestId,
             dispatchMessage: dispatch.message,
           },
@@ -1629,7 +1604,7 @@ export async function processTaskIpc(
       } else {
         logger.info(
           {
-            sourceGroup,
+            sourceAgent,
             requestId: data.requestId,
             questionCount: normalized.questions.length,
             timeout,
@@ -1641,56 +1616,56 @@ export async function processTaskIpc(
     }
 
     case 'request_delegation': {
-      // Non-main groups request delegation via the main group
+      // Non-main agents request delegation via the main agent
       if (isMain) {
         logger.warn(
-          { sourceGroup },
-          'Main group should use delegate_task directly, not request_delegation',
+          { sourceAgent },
+          'Main agent should use delegate_task directly, not request_delegation',
         );
         break;
       }
 
       if (!data.task) {
-        logger.warn({ sourceGroup }, 'request_delegation missing task');
+        logger.warn({ sourceAgent }, 'request_delegation missing task');
         break;
       }
 
-      // Find main group of the same channel
-      const sourceChannel = sourceGroup.split('_')[0];
+      // Find main agent of the same channel
+      const sourceChannel = sourceAgent.split('_')[0];
       const mainEntry =
-        Object.entries(registeredGroups).find(
+        Object.entries(registeredAgents).find(
           ([, g]) => g.isMain && g.folder.split('_')[0] === sourceChannel,
-        ) || Object.entries(registeredGroups).find(([, g]) => g.isMain);
+        ) || Object.entries(registeredAgents).find(([, g]) => g.isMain);
       if (!mainEntry) {
-        logger.warn('request_delegation: main group not found');
+        logger.warn('request_delegation: main agent not found');
         break;
       }
-      const [mainJid, mainGroup] = mainEntry;
+      const [mainJid, mainAgent] = mainEntry;
 
-      // Find source group name
-      const reqSourceEntry = Object.entries(registeredGroups).find(
-        ([, g]) => g.folder === sourceGroup,
+      // Find source agent name
+      const reqSourceEntry = Object.entries(registeredAgents).find(
+        ([, g]) => g.folder === sourceAgent,
       );
-      const reqSourceName = reqSourceEntry?.[1]?.name || sourceGroup;
+      const reqSourceName = reqSourceEntry?.[1]?.name || sourceAgent;
       const normalizedTask = stripLeadingTriggerMention(data.task);
       const { targetFolder, cleanedTask } =
         parseDelegationTargetFolder(normalizedTask);
 
-      // Construct synthetic message to main group
-      const reqTrigger = mainGroup.trigger;
+      // Construct synthetic message to main agent
+      const reqTrigger = mainAgent.trigger;
       const requesterJid = reqSourceEntry?.[0] || '';
       const requestedTarget = targetFolder
-        ? Object.entries(registeredGroups).find(
+        ? Object.entries(registeredAgents).find(
             ([, g]) => g.folder === targetFolder,
           )
         : undefined;
       const requestedTargetJid = requestedTarget?.[0] || '';
       const requestedTargetHint = targetFolder
         ? requestedTargetJid
-          ? `\n\n请求方指定目标群: folder="${targetFolder}"（JID: ${requestedTargetJid}）。若无冲突请优先委派到该群，并在 delegate_task 中传入 target_group_jid="${requestedTargetJid}"。`
-          : `\n\n请求方指定目标群: folder="${targetFolder}"，但当前未找到该 folder 对应的注册群，请忽略该指定并自行判断委派目标。`
+          ? `\n\n请求方指定目标 Agent: folder="${targetFolder}"（JID: ${requestedTargetJid}）。若无冲突请优先委派到该 Agent，并在 delegate_task 中传入 target_agent_jid="${requestedTargetJid}"。`
+          : `\n\n请求方指定目标 Agent: folder="${targetFolder}"，但当前未找到该 folder 对应的注册 Agent，请忽略该指定并自行判断委派目标。`
         : '';
-      const reqContent = `${reqTrigger} [委派请求 | 来自:${reqSourceName}]\n\n${cleanedTask}\n\n请根据 available_groups.json 判断是否需要委派，以及委派给哪个群。如需委派请使用 delegate_task，并传入 requester_jid="${requesterJid}" 以便完成后自动通知请求方。${requestedTargetHint}`;
+      const reqContent = `${reqTrigger} [委派请求 | 来自:${reqSourceName}]\n\n${cleanedTask}\n\n请根据 available_agents.json 判断是否需要委派，以及委派给哪个 Agent。如需委派请使用 delegate_task，并传入 requester_jid="${requesterJid}" 以便完成后自动通知请求方。${requestedTargetHint}`;
       const reqMsgId = `delreq-msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       const reqNow = Date.now().toString();
 
@@ -1709,52 +1684,52 @@ export async function processTaskIpc(
       deps.enqueueMessageCheck(mainJid);
 
       logger.info(
-        { sourceGroup, sourceName: reqSourceName },
-        'Delegation request forwarded to main group',
+        { sourceAgent, sourceName: reqSourceName },
+        'Delegation request forwarded to main agent',
       );
       break;
     }
 
     case 'delegate_task': {
-      // Only main group can delegate tasks
+      // Only main agent can delegate tasks
       if (!isMain) {
         logger.warn(
-          { sourceGroup },
+          { sourceAgent },
           'Unauthorized delegate_task attempt blocked',
         );
         if (data.requestId) {
-          writeDelegationResult(sourceGroup, data.requestId, {
+          writeDelegationResult(sourceAgent, data.requestId, {
             status: 'error',
-            error: 'Only main group can delegate tasks',
+            error: 'Only main agent can delegate tasks',
           });
         }
         break;
       }
 
-      if (!data.targetGroupJid || !data.task) {
+      if (!data.targetAgentJid || !data.task) {
         logger.warn(
-          { sourceGroup },
-          'delegate_task missing targetGroupJid or task',
+          { sourceAgent },
+          'delegate_task missing targetAgentJid or task',
         );
         if (data.requestId) {
-          writeDelegationResult(sourceGroup, data.requestId, {
+          writeDelegationResult(sourceAgent, data.requestId, {
             status: 'error',
-            error: 'delegate_task requires targetGroupJid and task',
+            error: 'delegate_task requires targetAgentJid and task',
           });
         }
         break;
       }
 
-      const targetGroup = registeredGroups[data.targetGroupJid];
-      if (!targetGroup) {
+      const targetAgent = registeredAgents[data.targetAgentJid];
+      if (!targetAgent) {
         logger.warn(
-          { targetGroupJid: data.targetGroupJid },
-          'delegate_task: target group not registered',
+          { targetAgentJid: data.targetAgentJid },
+          'delegate_task: target agent not registered',
         );
         if (data.requestId) {
-          writeDelegationResult(sourceGroup, data.requestId, {
+          writeDelegationResult(sourceAgent, data.requestId, {
             status: 'error',
-            error: `Target group is not registered: ${data.targetGroupJid}`,
+            error: `Target agent is not registered: ${data.targetAgentJid}`,
           });
         }
         break;
@@ -1762,19 +1737,19 @@ export async function processTaskIpc(
 
       // Enforce same-channel delegation, with explicit cross-channel target
       // channel allowlist for controlled handoffs such as WeCom employee DMs.
-      const mainChannel = getFolderChannel(sourceGroup);
-      const targetChannel = getFolderChannel(targetGroup.folder);
-      if (!canDelegateToFolder(sourceGroup, targetGroup.folder)) {
+      const mainChannel = getFolderChannel(sourceAgent);
+      const targetChannel = getFolderChannel(targetAgent.folder);
+      if (!canDelegateToFolder(sourceAgent, targetAgent.folder)) {
         logger.warn(
           {
             mainChannel,
             targetChannel,
-            targetGroupJid: data.targetGroupJid,
+            targetAgentJid: data.targetAgentJid,
           },
           'delegate_task blocked: cross-channel delegation not allowed',
         );
         if (data.requestId) {
-          writeDelegationResult(sourceGroup, data.requestId, {
+          writeDelegationResult(sourceAgent, data.requestId, {
             status: 'error',
             error: `Cross-channel delegation not allowed (main: ${mainChannel}, target: ${targetChannel})`,
           });
@@ -1791,12 +1766,12 @@ export async function processTaskIpc(
       createDelegation({
         id: delegationId,
         source_jid:
-          Object.entries(registeredGroups).find(
-            ([, g]) => g.folder === sourceGroup,
+          Object.entries(registeredAgents).find(
+            ([, g]) => g.folder === sourceAgent,
           )?.[0] || '',
-        source_folder: sourceGroup,
-        target_jid: data.targetGroupJid,
-        target_folder: targetGroup.folder,
+        source_folder: sourceAgent,
+        target_jid: data.targetAgentJid,
+        target_folder: targetAgent.folder,
         task: data.task,
         status: 'pending',
         result: null,
@@ -1807,32 +1782,32 @@ export async function processTaskIpc(
       });
 
       // Ensure chat metadata exists for target JID
-      storeChatMetadata(data.targetGroupJid, now);
+      storeChatMetadata(data.targetAgentJid, now);
 
-      // Construct synthetic message with target group's trigger prefix
-      const triggerPrefix = targetGroup.trigger;
-      const syntheticContent = `${triggerPrefix} [委派任务 | ID:${delegationId} | 来自:主群]\n\n${data.task}\n\n完成后请调用 complete_delegation 工具报告结果，delegation_id 为 "${delegationId}"。`;
+      // Construct synthetic message with target agent's trigger prefix
+      const triggerPrefix = targetAgent.trigger;
+      const syntheticContent = `${triggerPrefix} [委派任务 | ID:${delegationId} | 来自:主 Agent]\n\n${data.task}\n\n完成后请调用 complete_delegation 工具报告结果，delegation_id 为 "${delegationId}"。`;
       const syntheticId = `del-msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
       storeMessageDirect({
         id: syntheticId,
-        chat_jid: data.targetGroupJid,
+        chat_jid: data.targetAgentJid,
         sender: 'system',
-        sender_name: '主群委派',
+        sender_name: '主 Agent 委派',
         content: syntheticContent,
         timestamp: now,
         is_from_me: true,
         is_bot_message: false,
       });
 
-      // Wake up the target group's agent
-      deps.enqueueMessageCheck(data.targetGroupJid);
+      // Wake up the target agent's agent
+      deps.enqueueMessageCheck(data.targetAgentJid);
 
       // Write delegation ID back via IPC response
       const resultsDir = path.join(
         DATA_DIR,
         'ipc',
-        sourceGroup,
+        sourceAgent,
         'delegation-results',
       );
       fs.mkdirSync(resultsDir, { recursive: true });
@@ -1849,9 +1824,9 @@ export async function processTaskIpc(
       logger.info(
         {
           delegationId,
-          sourceGroup,
-          targetFolder: targetGroup.folder,
-          targetJid: data.targetGroupJid,
+          sourceAgent,
+          targetFolder: targetAgent.folder,
+          targetJid: data.targetAgentJid,
         },
         'Task delegated via IPC',
       );
@@ -1860,19 +1835,19 @@ export async function processTaskIpc(
 
     case 'list_delegations': {
       if (!data.requestId || typeof data.requestId !== 'string') {
-        logger.warn({ sourceGroup }, 'list_delegations missing requestId');
+        logger.warn({ sourceAgent }, 'list_delegations missing requestId');
         break;
       }
 
       const delegations = isMain
-        ? getDelegationsBySource(sourceGroup)
-        : getDelegationsByTarget(sourceGroup);
+        ? getDelegationsBySource(sourceAgent)
+        : getDelegationsByTarget(sourceAgent);
       const jidToName: Record<string, string> = {};
-      for (const [jid, group] of Object.entries(registeredGroups)) {
-        jidToName[jid] = group.name;
+      for (const [jid, agent] of Object.entries(registeredAgents)) {
+        jidToName[jid] = agent.name;
       }
 
-      writeDelegationResult(sourceGroup, data.requestId, {
+      writeDelegationResult(sourceAgent, data.requestId, {
         status: 'success',
         delegations: delegations.map((d) => ({
           id: d.id,
@@ -1894,7 +1869,7 @@ export async function processTaskIpc(
     case 'complete_delegation': {
       if (!data.delegationId || !data.result) {
         logger.warn(
-          { sourceGroup },
+          { sourceAgent },
           'complete_delegation missing delegationId or result',
         );
         break;
@@ -1910,11 +1885,11 @@ export async function processTaskIpc(
       }
 
       // Verify the caller is the delegation's target
-      if (delegation.target_folder !== sourceGroup) {
+      if (delegation.target_folder !== sourceAgent) {
         logger.warn(
           {
             delegationId: data.delegationId,
-            sourceGroup,
+            sourceAgent,
             expectedFolder: delegation.target_folder,
           },
           'Unauthorized complete_delegation attempt',
@@ -1933,14 +1908,14 @@ export async function processTaskIpc(
             | null) || null,
       });
 
-      // Find the target group name for the result message
-      const delegTargetGroup = registeredGroups[delegation.target_jid];
-      const targetName = delegTargetGroup?.name || delegation.target_folder;
+      // Find the target agent name for the result message
+      const delegTargetAgent = registeredAgents[delegation.target_jid];
+      const targetName = delegTargetAgent?.name || delegation.target_folder;
 
-      // Construct result message for the source (main) group
+      // Construct result message for the source (main) agent
       const requesterJid = delegation.requester_jid;
-      const requesterGroup = requesterJid
-        ? registeredGroups[requesterJid]
+      const requesterAgent = requesterJid
+        ? registeredAgents[requesterJid]
         : null;
       const resultContent = `[委派结果 | 来自:${targetName} | ID:${data.delegationId}]\n\n${data.result}`;
       const resultMsgId = `del-result-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -1957,13 +1932,13 @@ export async function processTaskIpc(
         is_bot_message: false,
       });
 
-      // Wake up the source (main) group's agent
+      // Wake up the source (main) agent's agent
       deps.enqueueMessageCheck(delegation.source_jid);
 
-      // Auto-copy to requester group when delegation was requested by another group.
+      // Auto-copy to requester agent when delegation was requested by another agent.
       // Avoid duplicate sends when requester is the same as source.
       if (requesterJid && requesterJid !== delegation.source_jid) {
-        if (requesterGroup) {
+        if (requesterAgent) {
           const requesterContent = `[委派结果抄送 | 来自:${targetName} | ID:${data.delegationId}]\n\n${data.result}`;
           const requesterMsgId = `del-copy-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
           storeMessageDirect({
@@ -1991,7 +1966,7 @@ export async function processTaskIpc(
       logger.info(
         {
           delegationId: data.delegationId,
-          sourceGroup,
+          sourceAgent,
           sourceJid: delegation.source_jid,
         },
         'Delegation completed via IPC',
@@ -2003,7 +1978,7 @@ export async function processTaskIpc(
     case 'memory_search': {
       if (!data.query || !data.requestId) {
         logger.warn(
-          { sourceGroup },
+          { sourceAgent },
           'memory_search missing query or requestId',
         );
         break;
@@ -2014,14 +1989,14 @@ export async function processTaskIpc(
 
       // Search message history via FTS
       const messageResults = searchMessages(
-        sourceGroup,
+        sourceAgent,
         data.query,
         Math.max(searchLimit * 2, searchLimit),
       );
 
       // Search structured memory store
       const memoryResults = retrieveStructuredMemories(
-        sourceGroup,
+        sourceAgent,
         data.query,
         { limit: Math.max(searchLimit * 2, searchLimit) },
       );
@@ -2064,7 +2039,7 @@ export async function processTaskIpc(
       const resultsDir = path.join(
         DATA_DIR,
         'ipc',
-        sourceGroup,
+        sourceAgent,
         'search-results',
       );
       fs.mkdirSync(resultsDir, { recursive: true });
@@ -2081,7 +2056,7 @@ export async function processTaskIpc(
 
       logger.info(
         {
-          sourceGroup,
+          sourceAgent,
           query: data.query,
           mode,
           messageHits: messageResults.length,
@@ -2090,13 +2065,13 @@ export async function processTaskIpc(
         },
         'memory_search completed',
       );
-      recordMemoryMetric(sourceGroup, `search:${mode}`, `q=${data.query}`);
+      recordMemoryMetric(sourceAgent, `search:${mode}`, `q=${data.query}`);
       break;
     }
 
     case 'wiki_search': {
       if (!data.query || !data.requestId) {
-        logger.warn({ sourceGroup }, 'wiki_search missing query or requestId');
+        logger.warn({ sourceAgent }, 'wiki_search missing query or requestId');
         break;
       }
 
@@ -2114,7 +2089,7 @@ export async function processTaskIpc(
       const resultsDir = path.join(
         DATA_DIR,
         'ipc',
-        sourceGroup,
+        sourceAgent,
         'wiki-results',
       );
       fs.mkdirSync(resultsDir, { recursive: true });
@@ -2124,7 +2099,7 @@ export async function processTaskIpc(
       fs.renameSync(tempPath, responsePath);
 
       logger.info(
-        { sourceGroup, query: data.query, resultHits: hits.length },
+        { sourceAgent, query: data.query, resultHits: hits.length },
         'wiki_search completed',
       );
       break;
@@ -2134,7 +2109,7 @@ export async function processTaskIpc(
       const wikiSlug =
         'slug' in data && typeof data.slug === 'string' ? data.slug.trim() : '';
       if (!wikiSlug || !data.requestId) {
-        logger.warn({ sourceGroup }, 'wiki_get_page missing slug or requestId');
+        logger.warn({ sourceAgent }, 'wiki_get_page missing slug or requestId');
         break;
       }
 
@@ -2142,7 +2117,7 @@ export async function processTaskIpc(
       const resultsDir = path.join(
         DATA_DIR,
         'ipc',
-        sourceGroup,
+        sourceAgent,
         'wiki-results',
       );
       fs.mkdirSync(resultsDir, { recursive: true });
@@ -2155,7 +2130,7 @@ export async function processTaskIpc(
       fs.renameSync(tempPath, responsePath);
 
       logger.info(
-        { sourceGroup, slug: wikiSlug, found: !!detail },
+        { sourceAgent, slug: wikiSlug, found: !!detail },
         'wiki_get_page completed',
       );
       break;
@@ -2164,7 +2139,7 @@ export async function processTaskIpc(
     case 'query_recent_today_plan_details': {
       if (!data.requestId || typeof data.requestId !== 'string') {
         logger.warn(
-          { sourceGroup },
+          { sourceAgent },
           'query_recent_today_plan_details missing requestId',
         );
         break;
@@ -2177,10 +2152,10 @@ export async function processTaskIpc(
           typeof data.start_date === 'string' ? data.start_date : undefined,
         endDate: typeof data.end_date === 'string' ? data.end_date : undefined,
       });
-      writeTodayPlanResult(sourceGroup, data.requestId, result);
+      writeTodayPlanResult(sourceAgent, data.requestId, result);
       logger.info(
         {
-          sourceGroup,
+          sourceAgent,
           requestId: data.requestId,
           days: result.query.days,
           planCount: result.plans.length,
@@ -2194,7 +2169,7 @@ export async function processTaskIpc(
     case 'ai_image_generate_image': {
       if (!data.requestId || typeof data.requestId !== 'string') {
         logger.warn(
-          { sourceGroup },
+          { sourceAgent },
           'ai_image_generate_image missing requestId',
         );
         break;
@@ -2203,15 +2178,15 @@ export async function processTaskIpc(
       const result = await generateAiImage(
         data.args,
         data.requestId,
-        sourceGroup,
+        sourceAgent,
       );
-      writeAiImageResult(sourceGroup, data.requestId, {
+      writeAiImageResult(sourceAgent, data.requestId, {
         ...result,
         waitTimeoutMs: getAiImageWaitTimeoutMs(),
       });
       logger.info(
         {
-          sourceGroup,
+          sourceAgent,
           requestId: data.requestId,
           status: result.status,
           imageCount: result.images?.length || 0,
@@ -2224,18 +2199,18 @@ export async function processTaskIpc(
 
     case 'ai_image_edit_image': {
       if (!data.requestId || typeof data.requestId !== 'string') {
-        logger.warn({ sourceGroup }, 'ai_image_edit_image missing requestId');
+        logger.warn({ sourceAgent }, 'ai_image_edit_image missing requestId');
         break;
       }
 
-      const result = await editAiImage(data.args, data.requestId, sourceGroup);
-      writeAiImageResult(sourceGroup, data.requestId, {
+      const result = await editAiImage(data.args, data.requestId, sourceAgent);
+      writeAiImageResult(sourceAgent, data.requestId, {
         ...result,
         waitTimeoutMs: getAiImageWaitTimeoutMs(),
       });
       logger.info(
         {
-          sourceGroup,
+          sourceAgent,
           requestId: data.requestId,
           status: result.status,
           imageCount: result.images?.length || 0,
@@ -2253,24 +2228,24 @@ export async function processTaskIpc(
         !data.layer ||
         !data.memory_type
       ) {
-        logger.warn({ sourceGroup }, 'memory_write missing required fields');
+        logger.warn({ sourceAgent }, 'memory_write missing required fields');
         if (data.requestId)
-          writeMemoryResult(sourceGroup, data.requestId, {
+          writeMemoryResult(sourceAgent, data.requestId, {
             error: 'missing required fields',
           });
         break;
       }
       const created = createMemory({
-        group_folder: sourceGroup,
+        agent_folder: sourceAgent,
         layer: data.layer,
         memory_type: data.memory_type,
         content: data.content,
         source: 'agent',
       });
 
-      writeMemoryResult(sourceGroup, data.requestId, { memory: created });
+      writeMemoryResult(sourceAgent, data.requestId, { memory: created });
       recordMemoryMetric(
-        sourceGroup,
+        sourceAgent,
         'write',
         `layer=${data.layer},type=${data.memory_type}`,
       );
@@ -2280,45 +2255,45 @@ export async function processTaskIpc(
     case 'memory_delete': {
       if (!data.requestId || !data.memoryId) {
         logger.warn(
-          { sourceGroup },
+          { sourceAgent },
           'memory_delete missing requestId or memoryId',
         );
         if (data.requestId) {
-          writeMemoryResult(sourceGroup, data.requestId, {
+          writeMemoryResult(sourceAgent, data.requestId, {
             error: 'missing requestId or memoryId',
           });
         }
         break;
       }
       const existing = getMemoryById(data.memoryId);
-      if (!existing || existing.group_folder !== sourceGroup) {
+      if (!existing || existing.agent_folder !== sourceAgent) {
         logger.warn(
-          { sourceGroup, memoryId: data.memoryId },
-          'memory_delete memory not found in group scope',
+          { sourceAgent, memoryId: data.memoryId },
+          'memory_delete memory not found in agent scope',
         );
-        writeMemoryResult(sourceGroup, data.requestId, {
+        writeMemoryResult(sourceAgent, data.requestId, {
           error: 'memory not found',
         });
         break;
       }
       deleteMemory(data.memoryId);
-      writeMemoryResult(sourceGroup, data.requestId, {
+      writeMemoryResult(sourceAgent, data.requestId, {
         deleted: true,
         memoryId: data.memoryId,
       });
-      recordMemoryMetric(sourceGroup, 'delete', `id=${data.memoryId}`);
+      recordMemoryMetric(sourceAgent, 'delete', `id=${data.memoryId}`);
       break;
     }
 
     case 'memory_doctor': {
       if (!data.requestId) {
-        logger.warn({ sourceGroup }, 'memory_doctor missing requestId');
+        logger.warn({ sourceAgent }, 'memory_doctor missing requestId');
         break;
       }
-      const report = doctorMemories(sourceGroup, data.staleDays || 7);
-      writeMemoryResult(sourceGroup, data.requestId, { report });
+      const report = doctorMemories(sourceAgent, data.staleDays || 7);
+      writeMemoryResult(sourceAgent, data.requestId, { report });
       recordMemoryMetric(
-        sourceGroup,
+        sourceAgent,
         'doctor',
         `staleDays=${data.staleDays || 7}`,
       );
@@ -2327,16 +2302,16 @@ export async function processTaskIpc(
 
     case 'memory_gc': {
       if (!data.requestId) {
-        logger.warn({ sourceGroup }, 'memory_gc missing requestId');
+        logger.warn({ sourceAgent }, 'memory_gc missing requestId');
         break;
       }
-      const result = gcMemories(sourceGroup, {
+      const result = gcMemories(sourceAgent, {
         dryRun: data.dryRun !== undefined ? data.dryRun : true,
         staleWorkingDays: data.staleDays || 14,
       });
-      writeMemoryResult(sourceGroup, data.requestId, { result });
+      writeMemoryResult(sourceAgent, data.requestId, { result });
       recordMemoryMetric(
-        sourceGroup,
+        sourceAgent,
         'gc',
         `dryRun=${data.dryRun !== undefined ? data.dryRun : true},staleDays=${data.staleDays || 14}`,
       );
@@ -2346,11 +2321,11 @@ export async function processTaskIpc(
     case 'memory_resolve_conflict': {
       if (!data.requestId || !data.mode) {
         logger.warn(
-          { sourceGroup },
+          { sourceAgent },
           'memory_resolve_conflict missing requestId or mode',
         );
         if (data.requestId)
-          writeMemoryResult(sourceGroup, data.requestId, {
+          writeMemoryResult(sourceAgent, data.requestId, {
             error: 'missing required fields (requestId, mode)',
           });
         break;
@@ -2358,7 +2333,7 @@ export async function processTaskIpc(
       try {
         if (data.mode === 'keep') {
           if (!data.keep_id || !data.deprecate_id) {
-            writeMemoryResult(sourceGroup, data.requestId, {
+            writeMemoryResult(sourceAgent, data.requestId, {
               error: 'keep mode requires keep_id and deprecate_id',
             });
             break;
@@ -2366,17 +2341,17 @@ export async function processTaskIpc(
           const result = resolveConflict('keep', {
             keepId: data.keep_id,
             deprecateId: data.deprecate_id,
-            groupFolder: sourceGroup,
+            agentFolder: sourceAgent,
           });
-          writeMemoryResult(sourceGroup, data.requestId, { result });
-          recordMemoryMetric(sourceGroup, 'conflict:resolved', `mode=keep`);
+          writeMemoryResult(sourceAgent, data.requestId, { result });
+          recordMemoryMetric(sourceAgent, 'conflict:resolved', `mode=keep`);
         } else if (data.mode === 'merge') {
           if (
             !data.merge_ids ||
             data.merge_ids.length !== 2 ||
             !data.merged_content
           ) {
-            writeMemoryResult(sourceGroup, data.requestId, {
+            writeMemoryResult(sourceAgent, data.requestId, {
               error: 'merge mode requires merge_ids (2 IDs) and merged_content',
             });
             break;
@@ -2384,41 +2359,41 @@ export async function processTaskIpc(
           const result = resolveConflict('merge', {
             mergeIds: data.merge_ids as [string, string],
             mergedContent: data.merged_content,
-            groupFolder: sourceGroup,
+            agentFolder: sourceAgent,
           });
-          writeMemoryResult(sourceGroup, data.requestId, { result });
-          recordMemoryMetric(sourceGroup, 'conflict:resolved', `mode=merge`);
+          writeMemoryResult(sourceAgent, data.requestId, { result });
+          recordMemoryMetric(sourceAgent, 'conflict:resolved', `mode=merge`);
         } else {
-          writeMemoryResult(sourceGroup, data.requestId, {
+          writeMemoryResult(sourceAgent, data.requestId, {
             error: `Unknown mode: ${data.mode}. Use "keep" or "merge".`,
           });
         }
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : String(err);
-        logger.error({ err, sourceGroup }, 'memory_resolve_conflict failed');
-        writeMemoryResult(sourceGroup, data.requestId, { error: errMsg });
+        logger.error({ err, sourceAgent }, 'memory_resolve_conflict failed');
+        writeMemoryResult(sourceAgent, data.requestId, { error: errMsg });
       }
       break;
     }
 
     case 'reload_container': {
       if (!data.chatJid) {
-        logger.warn({ sourceGroup }, 'reload_container missing chatJid');
+        logger.warn({ sourceAgent }, 'reload_container missing chatJid');
         break;
       }
-      // Authorization: group can only reload itself, main can reload any
-      const targetGroup = registeredGroups[data.chatJid];
-      if (isMain || (targetGroup && targetGroup.folder === sourceGroup)) {
+      // Authorization: agent can only reload itself, main can reload any
+      const targetAgent = registeredAgents[data.chatJid];
+      if (isMain || (targetAgent && targetAgent.folder === sourceAgent)) {
         if (deps.reloadContainer) {
           deps.reloadContainer(data.chatJid);
           logger.info(
-            { chatJid: data.chatJid, sourceGroup },
+            { chatJid: data.chatJid, sourceAgent },
             'Container reload requested',
           );
         }
       } else {
         logger.warn(
-          { chatJid: data.chatJid, sourceGroup },
+          { chatJid: data.chatJid, sourceAgent },
           'Unauthorized reload_container attempt blocked',
         );
       }
@@ -2427,14 +2402,14 @@ export async function processTaskIpc(
 
     case 'run_local_host_script': {
       if (!data.requestId || typeof data.requestId !== 'string') {
-        logger.warn({ sourceGroup }, 'run_local_host_script missing requestId');
+        logger.warn({ sourceAgent }, 'run_local_host_script missing requestId');
         break;
       }
       if (
         typeof data.scriptPath !== 'string' ||
         data.scriptPath.trim().length === 0
       ) {
-        writeHostScriptResult(sourceGroup, data.requestId, {
+        writeHostScriptResult(sourceAgent, data.requestId, {
           status: 'error',
           exitCode: null,
           stdout: '',
@@ -2443,7 +2418,7 @@ export async function processTaskIpc(
           error: 'scriptPath is required',
         });
         logger.warn(
-          { sourceGroup, requestId: data.requestId },
+          { sourceAgent, requestId: data.requestId },
           'run_local_host_script missing scriptPath',
         );
         break;
@@ -2453,7 +2428,7 @@ export async function processTaskIpc(
         (!Array.isArray(data.args) ||
           data.args.some((value) => typeof value !== 'string'))
       ) {
-        writeHostScriptResult(sourceGroup, data.requestId, {
+        writeHostScriptResult(sourceAgent, data.requestId, {
           status: 'error',
           exitCode: null,
           stdout: '',
@@ -2462,7 +2437,7 @@ export async function processTaskIpc(
           error: 'args must be an array of strings',
         });
         logger.warn(
-          { sourceGroup, requestId: data.requestId, args: data.args },
+          { sourceAgent, requestId: data.requestId, args: data.args },
           'run_local_host_script received invalid args',
         );
         break;
@@ -2473,10 +2448,10 @@ export async function processTaskIpc(
           data.scriptPath,
           (data.args as string[] | undefined) || [],
         );
-        writeHostScriptResult(sourceGroup, data.requestId, result);
+        writeHostScriptResult(sourceAgent, data.requestId, result);
         logger.info(
           {
-            sourceGroup,
+            sourceAgent,
             requestId: data.requestId,
             scriptPath: data.scriptPath,
             status: result.status,
@@ -2487,7 +2462,7 @@ export async function processTaskIpc(
         );
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : String(err);
-        writeHostScriptResult(sourceGroup, data.requestId, {
+        writeHostScriptResult(sourceAgent, data.requestId, {
           status: 'error',
           exitCode: null,
           stdout: '',
@@ -2498,7 +2473,7 @@ export async function processTaskIpc(
         logger.error(
           {
             err,
-            sourceGroup,
+            sourceAgent,
             requestId: data.requestId,
             scriptPath: data.scriptPath,
           },
@@ -2510,23 +2485,23 @@ export async function processTaskIpc(
 
     case 'desktop_capture': {
       if (!data.requestId || typeof data.requestId !== 'string') {
-        logger.warn({ sourceGroup }, 'desktop_capture missing requestId');
+        logger.warn({ sourceAgent }, 'desktop_capture missing requestId');
         break;
       }
       if (!isMain) {
-        writeDesktopCaptureResult(sourceGroup, data.requestId, {
+        writeDesktopCaptureResult(sourceAgent, data.requestId, {
           status: 'error',
           requestId: data.requestId,
-          error: 'desktop_capture is only available to the main group',
+          error: 'desktop_capture is only available to the main agent',
         });
         logger.warn(
-          { sourceGroup, requestId: data.requestId },
+          { sourceAgent, requestId: data.requestId },
           'Unauthorized desktop_capture attempt blocked',
         );
         break;
       }
       if (!deps.captureDesktop) {
-        writeDesktopCaptureResult(sourceGroup, data.requestId, {
+        writeDesktopCaptureResult(sourceAgent, data.requestId, {
           status: 'error',
           requestId: data.requestId,
           error: 'No channel supports desktop capture',
@@ -2559,13 +2534,13 @@ export async function processTaskIpc(
 
       try {
         const result = await deps.captureDesktop(options);
-        writeDesktopCaptureResult(sourceGroup, data.requestId, {
+        writeDesktopCaptureResult(sourceAgent, data.requestId, {
           ...result,
           requestId: result.requestId || data.requestId,
         });
         logger.info(
           {
-            sourceGroup,
+            sourceAgent,
             requestId: data.requestId,
             status: result.status,
             displayId: options.displayId,
@@ -2575,13 +2550,13 @@ export async function processTaskIpc(
         );
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : String(err);
-        writeDesktopCaptureResult(sourceGroup, data.requestId, {
+        writeDesktopCaptureResult(sourceAgent, data.requestId, {
           status: 'error',
           requestId: data.requestId,
           error: errMsg,
         });
         logger.error(
-          { err, sourceGroup, requestId: data.requestId },
+          { err, sourceAgent, requestId: data.requestId },
           'desktop_capture failed',
         );
       }

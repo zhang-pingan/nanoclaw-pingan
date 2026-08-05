@@ -14,13 +14,13 @@ import {
   buildAssistantInboxBroadcastActionFeedbackCard,
   isAssistantInboxActionKindExecutableOnMobile,
 } from './assistant-inbox-broadcast-render.js';
-import { isAssistantInboxBroadcastGroup } from './assistant-inbox-broadcast-config.js';
+import { isAssistantInboxBroadcastAgent } from './assistant-inbox-broadcast-config.js';
 import type { AgentInboxItemView } from './types.js';
 import type {
   CardActionResult,
   CardActorChannel,
   InteractiveCard,
-  RegisteredGroup,
+  RegisteredAgent,
 } from '../types.js';
 import { logger } from '../logger.js';
 
@@ -241,7 +241,7 @@ function stripPrefix(action: string): string {
 export async function handleAssistantInboxBroadcastCardAction(input: {
   action: string;
   formValue?: Record<string, string>;
-  registeredGroups: Record<string, RegisteredGroup>;
+  registeredAgents: Record<string, RegisteredAgent>;
   userId: string;
   actorChannel?: CardActorChannel;
   messageId?: string;
@@ -259,7 +259,7 @@ export async function handleAssistantInboxBroadcastCardAction(input: {
 
   if (
     !input.targetJid ||
-    !isAssistantInboxBroadcastGroup(input.targetJid, input.registeredGroups)
+    !isAssistantInboxBroadcastAgent(input.targetJid, input.registeredAgents)
   ) {
     return errorResult('该卡片不在允许的个人助手广播目标中，已拒绝操作。');
   }

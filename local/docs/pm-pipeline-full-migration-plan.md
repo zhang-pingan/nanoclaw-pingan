@@ -23,7 +23,7 @@ Icarus 已经有 workflow runtime、container agent、artifact contract、interr
 Workflow Runtime：统一执行内核
 Workbench Core：通用执行基础设施、数据协议、组件能力
 Execution Console：通用调试、观察、兜底控制台
-Feature Package Runtime：功能包启用、资源注册、独占 group、API/nav 动态加载
+Feature Package Runtime：功能包启用、资源注册、独占 Agent、API/nav 动态加载
 Evaluation Framework：统一 Dataset、Experiment、Evaluator、Metric、Campaign、Candidate 与 Promotion 控制面
 PM Pipeline：`features/pm-pipeline` 功能包，启用后成为独立一级业务应用
 ```
@@ -95,7 +95,7 @@ Feature Package Runtime
   - PM Pipeline 一级导航动态注册
   - feature API prefix 动态注册
   - workflow / card / artifact contract / skill / agent / script 资源注册
-  - requiredGroups 独占 group provisioning
+  - requiredAgents 独占 Agent provisioning
         |
         v
 PM Pipeline 一级页面
@@ -203,7 +203,7 @@ features/pm-pipeline/
     styles.css
     components/
   container/
-    groups/
+    agents/
       main/
         CLAUDE.md
     workflow-definitions/
@@ -262,15 +262,15 @@ features/pm-pipeline/
       "order": 300
     }
   ],
-  "requiredGroups": [
+  "requiredAgents": [
     {
       "key": "main",
       "jid": "feature:pm-pipeline:main",
       "name": "PM Pipeline",
       "folder": "pm_pipeline_main",
       "requiresTrigger": false,
-      "description": "PM Pipeline dedicated agent group",
-      "claudeMd": "./container/groups/main/CLAUDE.md"
+      "description": "PM Pipeline dedicated Agent",
+      "claudeMd": "./container/agents/main/CLAUDE.md"
     }
   ],
   "resources": {
@@ -344,7 +344,7 @@ ICARUS_FEATURES=pm-pipeline
 - `workflowEvaluators` 只包含运行中 Execution Evaluator/quality gate；离线 Experiment Evaluator 必须放在 `evaluationExperimentEvaluators`，两者不能通过目录或 ref 混用。
 - `pmPipeline.readDomainSignals` 只能由 `service:signal-ingestor` 通过 exact Domain Signal Source 调用；`pmPipeline.validatePromptCandidate` 只能读取 baseline/staged diff；`pmPipeline.commitPromptAuthoringSource` 只能由 `service:promotion-gateway` 在 sealed Promotion Bundle 下调用。PM 页面、PM Workflow 和普通 Agent 均无权直接调用这三个 capability。
 - PM workflow definitions 使用目标 Runtime 的 versioned Definition bundle；旧 `.json` `WorkflowDefinitionVersionBundle` 只作为迁移输入，不能把旧多步骤 system action、transition delegate 或 completion handler 原样保留成旁路。
-- 启用 feature 时由 core provisioning 创建 `feature:pm-pipeline:main` 独占 group 和 `groups/pm_pipeline_main/CLAUDE.md`。
+- 启用 feature 时由 core provisioning 创建 `feature:pm-pipeline:main` 独占 Agent 和 `agents/pm_pipeline_main/CLAUDE.md`。
 - Feature migration 只能创建 `feature_pm_pipeline_*` 前缀表，例如 `feature_pm_pipeline_workspaces`、`feature_pm_pipeline_projection_cache`。PM Feature 不创建 schedule、experiment、campaign、candidate 或 promotion 状态表；这些事实归 `evaluation.db`。
 - Feature projection 可以缓存 PM 业务视图，但不能成为执行事实源或评估事实源。workflow DB、human review、trace、PM workspace 文件事实源和 Core Evaluation Store/query API 各自在自己的领域内权威。
 - Feature `draining` 后不允许新建 PM Workflow，也不允许新的 Experiment/Campaign/Promotion 选择 PM-owned Evaluation resource；但必须继续加载 pinned executor/resource 让 active Workflow 和 sealed Evaluation run 收敛。Workflow/Evaluation active refs 清零后才能 `disabled`。选择“停用并删除”时还必须满足 retention、无 published/active ref、无 action-required/quarantined run，并由 deletion service 分开清理 feature-owned domain data、可验证的 Graph audit snapshot 和 Evaluation retention handle。
@@ -441,8 +441,8 @@ Feature Package Runtime 是功能包扩展层，负责让 PM Pipeline 作为可�
 
 - 扫描 `features/*/feature.json`。
 - 根据 `local/features.json` 或 `ICARUS_FEATURES` 启用功能包。
-- 校验 manifest、资源路径、API prefix、nav key、required group、permissions。
-- Provision feature 独占 group。
+- 校验 manifest、资源路径、API prefix、nav key、required Agent、permissions。
+- Provision feature 独占 Agent。
 - 注册 feature API、nav、renderer entry、Recipe/routing/execution policy、workflow definitions、capabilities、schemas、graph interfaces/templates/policies、wait contracts、cards、artifact contracts、workflow evaluators、Evaluation Provider resources、agents、skills、scripts、templates。
 - 运行 feature migrations。
 - 支持 feature `enabled -> draining -> disabled -> deleting`，并按 active executable/evaluation refs 与 retention 阻止不安全停用/删除。
@@ -1530,7 +1530,7 @@ README.md
 - `PM Core Pipeline Activation` 只有在 Dynamic Workflow Runtime Production Activation 后才能通过；`PM Full Migration Activation` 还必须等待 Evaluation Framework Production Activation 和 PM Evaluation Provider Integration Gate。
 - 未启用 `pm-pipeline` 时，PM 导航、PM API、PM workflow create option、PM container resources、PM migrations 和 PM Evaluation Provider resources 都不可用于新执行。
 - 启用 `pm-pipeline` 后，一级导航出现 PM Pipeline，API prefix 为 `/api/features/pm-pipeline`。
-- 启用 `pm-pipeline` 后，core 自动 provision `feature:pm-pipeline:main` 独占 group 和 `groups/pm_pipeline_main/CLAUDE.md`。
+- 启用 `pm-pipeline` 后，core 自动 provision `feature:pm-pipeline:main` 独占 Agent 和 `agents/pm_pipeline_main/CLAUDE.md`。
 - PM Recipe/routing scope/execution policy、workflow definitions、capabilities、schemas、graph interfaces/templates/policies、wait contracts、cards、artifact contracts、workflow evaluators、agents、skills、scripts、templates，以及 Evaluation Subject/Dataset seed/Domain Signal Source/Experiment Evaluator/Metric Suite/Candidate Constraint/Promotion Policy/Binding/Trigger Template 均通过 feature resources 注册，不静态写入 core 资源目录。
 - PM projection/config/cache 表均使用 `feature_pm_pipeline_` 前缀。
 - PM Feature 不创建 schedule、dataset、experiment、campaign、candidate、promotion 或 trigger runtime state 表，不直接写 `evaluation.db`。
@@ -1653,7 +1653,7 @@ README.md
 
 1. 先完成 `docs/dynamic-workflow-runtime.md` 索引的统一 Graph Runtime、T0 Recipe creation、Feature Graph resource manifest、domain claims、effect receipt/snapshot、wait contract 和 draining/executor retention。
 2. Dynamic Runtime Production Activation 后并行推进两个工作流：
-   - PM Core Track：创建 `features/pm-pipeline` scaffold、workspace registry、required group 和 Feature lifecycle。
+   - PM Core Track：创建 `features/pm-pipeline` scaffold、workspace registry、required Agent 和 Feature lifecycle。
    - Evaluation Track：按 `evaluation-self-evolution-framework.md` 完成 E0-E6，尤其是 Domain Signal Source、Candidate Constraint、Promotion Binding/Bundle 和 Trigger Template。
 3. PM Core Track 发布 Recipe/routing scope/execution policy/capability/schema/interface/template/wait resources，并以 compiler fixture 验证依赖 closure。
 4. Human review 统一为 versioned approval wait contract + Definition named exits；Hook/policy 迁为一脚本一 capability、typed args/cwd resolver、file guard 和 effect receipt。
@@ -1684,7 +1684,7 @@ features/{featureId}
         |
         v
 Feature Package Runtime
-  -> nav / api / Recipe + Graph + Evaluation resources / group provisioning
+  -> nav / api / Recipe + Graph + Evaluation resources / Agent provisioning
   -> enabled / draining / disabled / deleting
         |
         v

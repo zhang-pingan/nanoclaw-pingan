@@ -8,7 +8,7 @@ import { logger } from './logger.js';
 import {
   CardActionHandler,
   InteractiveCard,
-  RegisteredGroup,
+  RegisteredAgent,
 } from './types.js';
 import {
   buildCardStringFormValues,
@@ -23,12 +23,12 @@ import {
 const ASK_ACTION_DEDUPE_WINDOW_MS = 15_000;
 const recentAskActionFingerprints = new Map<string, number>();
 
-function findChatJidByGroupFolder(
-  groupFolder: string,
-  registeredGroups: Record<string, RegisteredGroup>,
+function findChatJidByAgentFolder(
+  agentFolder: string,
+  registeredAgents: Record<string, RegisteredAgent>,
 ): string | undefined {
-  const entry = Object.entries(registeredGroups).find(
-    ([, g]) => g.folder === groupFolder,
+  const entry = Object.entries(registeredAgents).find(
+    ([, g]) => g.folder === agentFolder,
   );
   return entry?.[0];
 }
@@ -45,7 +45,7 @@ function askActionFingerprint(action: {
   action: string;
   user_id: string;
   message_id: string;
-  group_folder?: string;
+  agent_folder?: string;
   form_value?: Record<string, string>;
 }): string {
   const fv = action.form_value || {};
@@ -55,13 +55,13 @@ function askActionFingerprint(action: {
     action.action,
     action.user_id || '',
     action.message_id || '',
-    action.group_folder || '',
+    action.agent_folder || '',
     fvPairs,
   ].join('|');
 }
 
 export function createCardActionHandler(deps: {
-  registeredGroups: () => Record<string, RegisteredGroup>;
+  registeredAgents: () => Record<string, RegisteredAgent>;
   sendCard?: (
     jid: string,
     card: InteractiveCard,
@@ -74,13 +74,13 @@ export function createCardActionHandler(deps: {
         return await handleAssistantInboxBroadcastCardAction({
           action: action.action,
           formValue: action.form_value,
-          registeredGroups: deps.registeredGroups(),
+          registeredAgents: deps.registeredAgents(),
           sendCard: deps.sendCard,
           sendMessage: deps.sendMessage,
           userId: action.user_id || 'unknown',
           actorChannel: action.actor_channel,
           messageId: action.message_id,
-          targetJid: action.group_jid,
+          targetJid: action.agent_jid,
         });
       } catch (err) {
         logAssistantInboxBroadcastActionFailure(action.action, err);
@@ -104,11 +104,11 @@ export function createCardActionHandler(deps: {
     }
 
     const requestId = action.form_value?.request_id;
-    const groupFolder = action.group_folder || action.form_value?.group_folder;
-    if (!requestId || !groupFolder) {
+    const agentFolder = action.agent_folder || action.form_value?.agent_folder;
+    if (!requestId || !agentFolder) {
       logger.warn(
         { action },
-        'ask_question card action missing request_id/group_folder',
+        'ask_question card action missing request_id/agent_folder',
       );
       return;
     }
@@ -119,14 +119,14 @@ export function createCardActionHandler(deps: {
       action: action.action,
       user_id: action.user_id,
       message_id: action.message_id,
-      group_folder: groupFolder,
+      agent_folder: agentFolder,
       form_value: action.form_value,
     });
     if (recentAskActionFingerprints.has(fp)) {
       logger.info(
         {
           requestId,
-          groupFolder,
+          agentFolder,
           userId: action.user_id,
           messageId: action.message_id,
         },
@@ -140,24 +140,24 @@ export function createCardActionHandler(deps: {
     const answer = nestedPayload?.answer || action.form_value?.answer;
     const formValues = buildCardStringFormValues(action.form_value, [
       'action',
-      'group_folder',
+      'agent_folder',
       'request_id',
       'question_id',
       'answer',
       'payload',
     ]);
-    const registeredGroups = deps.registeredGroups();
-    const chatJid = findChatJidByGroupFolder(groupFolder, registeredGroups);
+    const registeredAgents = deps.registeredAgents();
+    const chatJid = findChatJidByAgentFolder(agentFolder, registeredAgents);
 
     try {
       const result = await handleAskQuestionResponse({
         requestId,
-        groupFolder,
+        agentFolder,
         userId: action.user_id || 'unknown',
         answer,
         formValues,
         skip: action.action === ASK_ACTION_SKIP,
-        registeredGroups,
+        registeredAgents,
         sendCard: deps.sendCard,
         sendMessage: deps.sendMessage,
       });
@@ -168,10 +168,10 @@ export function createCardActionHandler(deps: {
         if (!result.completed) {
           await dispatchCurrentAskQuestion({
             requestId,
-            groupFolder,
+            agentFolder,
             validationError: result.userMessage,
             validationErrors: result.validationErrors,
-            registeredGroups,
+            registeredAgents,
             sendCard: deps.sendCard,
             sendMessage: deps.sendMessage,
           });
@@ -187,7 +187,7 @@ export function createCardActionHandler(deps: {
       };
     } catch (err) {
       logger.warn(
-        { err, requestId, groupFolder },
+        { err, requestId, agentFolder },
         'ask_question card action handling failed',
       );
       return {

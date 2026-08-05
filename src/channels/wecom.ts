@@ -10,7 +10,7 @@ import type {
   NewMessage,
   OnChatMetadata,
   OnInboundMessage,
-  RegisteredGroup,
+  RegisteredAgent,
 } from '../types.js';
 import { ATTACHMENTS_DIR } from '../config.js';
 import { readEnvFile } from '../env.js';
@@ -230,10 +230,10 @@ export function encryptWeComPayload(
   );
 }
 
-function createAutoRegisteredGroup(
+function createAutoRegisteredAgent(
   userid: string,
   displayName: string,
-): RegisteredGroup {
+): RegisteredAgent {
   return {
     name: displayName || userid,
     folder: wecomUserFolder(userid),
@@ -556,7 +556,7 @@ export class WeComChannel implements Channel {
     mediaId: string;
     msgType: string;
     messageId: string;
-    groupFolder: string;
+    agentFolder: string;
     filename?: string;
   }): Promise<DownloadedWeComMedia | null> {
     try {
@@ -608,7 +608,7 @@ export class WeComChannel implements Channel {
         contentType,
       );
       const safePrefix = [
-        sanitizePathPart(input.groupFolder, 'group'),
+        sanitizePathPart(input.agentFolder, 'agent'),
         sanitizePathPart(input.messageId, 'message'),
       ].join('_');
       const storedName = sanitizeFileName(`${safePrefix}_${fileName}`, 'wecom');
@@ -821,8 +821,8 @@ export class WeComChannel implements Channel {
     }
 
     const jid = wecomUserJid(userid);
-    const group = this.ensureAuthorizedGroup(userid);
-    if (!group) {
+    const agent = this.ensureAuthorizedAgent(userid);
+    if (!agent) {
       logger.warn(
         { userid, jid },
         'WeCom inbound message ignored: user not authorized',
@@ -832,14 +832,14 @@ export class WeComChannel implements Channel {
 
     const timestamp = timestampFromCreateTime(fields.CreateTime);
     const messageId = fields.MsgId || fields.MsgID || `${timestamp}-${userid}`;
-    const senderName = group.name || userid;
-    this.opts.onChatMetadata(jid, timestamp, senderName, 'wecom', false);
+    const senderName = agent.name || userid;
+    this.opts.onChatMetadata(jid, timestamp, senderName, 'wecom');
 
     const content = await this.buildInboundContent({
       fields,
       msgType,
       messageId,
-      groupFolder: group.folder,
+      agentFolder: agent.folder,
       userid,
     });
     if (!content) {
@@ -867,7 +867,7 @@ export class WeComChannel implements Channel {
     fields: Record<string, string>;
     msgType: string;
     messageId: string;
-    groupFolder: string;
+    agentFolder: string;
     userid: string;
   }): Promise<string> {
     if (input.msgType === 'text') {
@@ -892,7 +892,7 @@ export class WeComChannel implements Channel {
       mediaId,
       msgType: input.msgType,
       messageId: input.messageId,
-      groupFolder: input.groupFolder,
+      agentFolder: input.agentFolder,
       filename: fileName,
     });
     const label = mediaLabel(input.msgType);
@@ -903,23 +903,23 @@ export class WeComChannel implements Channel {
     return `[${label}: ${downloaded.fileName}] (已下载到 ${downloaded.containerPath})`;
   }
 
-  private ensureAuthorizedGroup(userid: string): RegisteredGroup | null {
+  private ensureAuthorizedAgent(userid: string): RegisteredAgent | null {
     const jid = wecomUserJid(userid);
-    const existing = this.opts.registeredGroups()[jid];
+    const existing = this.opts.registeredAgents()[jid];
     if (existing) return existing;
     if (!this.allowedUserIds.has(userid)) return null;
 
-    const group = createAutoRegisteredGroup(userid, userid);
-    if (!this.opts.registerGroup) {
+    const agent = createAutoRegisteredAgent(userid, userid);
+    if (!this.opts.registerAgent) {
       logger.warn(
         { userid, jid },
-        'WeCom allowlisted user could not be auto-registered: registerGroup unavailable',
+        'WeCom allowlisted user could not be auto-registered: registerAgent unavailable',
       );
       return null;
     }
 
-    this.opts.registerGroup(jid, group);
-    return group;
+    this.opts.registerAgent(jid, agent);
+    return agent;
   }
 }
 
@@ -928,8 +928,8 @@ export function createWeComChannel(
   opts: {
     onMessage: OnInboundMessage;
     onChatMetadata: OnChatMetadata;
-    registeredGroups: () => Record<string, RegisteredGroup>;
-    registerGroup?: (jid: string, group: RegisteredGroup) => void;
+    registeredAgents: () => Record<string, RegisteredAgent>;
+    registerAgent?: (jid: string, agent: RegisteredAgent) => void;
   },
 ): WeComChannel | null {
   if (

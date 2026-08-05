@@ -1,4 +1,7 @@
-import { listCanonicalFallbackMemories, retrieveStructuredMemories } from './memory-retrieval.js';
+import {
+  listCanonicalFallbackMemories,
+  retrieveStructuredMemories,
+} from './memory-retrieval.js';
 import { MemoryRecord } from './types.js';
 
 interface MemoryPackCandidate extends MemoryRecord {
@@ -6,10 +9,7 @@ interface MemoryPackCandidate extends MemoryRecord {
   directMatchCount?: number;
 }
 
-function rankMemoryForPack(
-  memory: MemoryPackCandidate,
-  now: number,
-): number {
+function rankMemoryForPack(memory: MemoryPackCandidate, now: number): number {
   const layerBaseWeight: Record<MemoryRecord['layer'], number> = {
     canonical: 0.8,
     episodic: 0.35,
@@ -47,7 +47,9 @@ function rankMemoryForPack(
   );
 }
 
-function buildMemoryPackFromCandidates(candidates: MemoryPackCandidate[]): string {
+function buildMemoryPackFromCandidates(
+  candidates: MemoryPackCandidate[],
+): string {
   if (candidates.length === 0) return '';
 
   const quotas = {
@@ -105,22 +107,20 @@ export function buildMemoryPack(
   const candidates = memories
     .filter((m) => m.status === 'active')
     .map((m) => ({ ...m }))
-    .sort(
-      (a, b) => rankMemoryForPack(b, now) - rankMemoryForPack(a, now),
-    );
+    .sort((a, b) => rankMemoryForPack(b, now) - rankMemoryForPack(a, now));
   return buildMemoryPackFromCandidates(candidates);
 }
 
-export function buildMemoryPackForGroup(
-  groupFolder: string,
+export function buildMemoryPackForAgent(
+  agentFolder: string,
   prompt: string,
 ): string {
   const now = Date.now();
-  const retrieved = retrieveStructuredMemories(groupFolder, prompt, {
+  const retrieved = retrieveStructuredMemories(agentFolder, prompt, {
     limit: 24,
   }).map((hit) => ({
     id: hit.id,
-    group_folder: groupFolder,
+    agent_folder: agentFolder,
     layer: hit.layer,
     memory_type: hit.memory_type,
     status: 'active' as const,
@@ -133,7 +133,7 @@ export function buildMemoryPackForGroup(
   }));
 
   const seen = new Set(retrieved.map((m) => m.id));
-  const fallback = listCanonicalFallbackMemories(groupFolder)
+  const fallback = listCanonicalFallbackMemories(agentFolder)
     .filter((m) => !seen.has(m.id))
     .map((m) => ({ ...m, retrievalScore: 0, directMatchCount: 0 }));
 

@@ -210,20 +210,20 @@ export function classifyFailure(
     };
   }
 
-  if (normalizedMessage.includes('invalid group folder')) {
+  if (normalizedMessage.includes('invalid agent folder')) {
     return {
       failureType: 'invalid_input',
-      failureSubtype: 'invalid_group_folder',
+      failureSubtype: 'invalid_agent_folder',
       failureOrigin: context.defaultOrigin ?? 'scheduler',
       retryable: false,
       details: withContextDetails(context),
     };
   }
 
-  if (normalizedMessage.includes('group not found')) {
+  if (normalizedMessage.includes('agent not found')) {
     return {
       failureType: 'invalid_input',
-      failureSubtype: 'group_not_found',
+      failureSubtype: 'agent_not_found',
       failureOrigin: context.defaultOrigin ?? 'scheduler',
       retryable: false,
       details: withContextDetails(context),

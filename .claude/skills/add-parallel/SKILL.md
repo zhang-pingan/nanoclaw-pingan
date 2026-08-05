@@ -130,7 +130,7 @@ allowedTools: [
 
 ### 5. Add Usage Instructions to CLAUDE.md
 
-Add Parallel AI usage instructions to `groups/main/CLAUDE.md`:
+Add Parallel AI usage instructions to `agents/main/CLAUDE.md`:
 
 Find the "## What You Can Do" section and add after the existing bullet points:
 ```markdown
@@ -267,7 +267,7 @@ Look for: `Parallel AI MCP servers configured`
 **Container hangs or times out:**
 - Check that `type: 'http'` is specified in MCP server config
 - Verify API key is correct in .env
-- Check container logs: `cat groups/main/logs/container-*.log | tail -50`
+- Check container logs: `cat agents/main/logs/container-*.log | tail -50`
 
 **MCP servers not loading:**
 - Ensure PARALLEL_API_KEY is in .env
@@ -285,6 +285,6 @@ To remove Parallel AI integration:
 
 1. Remove from .env: `sed -i.bak '/PARALLEL_API_KEY/d' .env`
 2. Revert changes to container-runner.ts and agent-runner/src/index.ts
-3. Remove Web Research Tools section from groups/main/CLAUDE.md
+3. Remove Web Research Tools section from agents/main/CLAUDE.md
 4. Rebuild: `./container/build.sh && npm run build`
 5. Restart: `launchctl kickstart -k gui/$(id -u)/com.icarus` (macOS) or `systemctl --user restart icarus.service` (Linux)

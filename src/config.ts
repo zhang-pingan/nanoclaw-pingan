@@ -20,6 +20,15 @@ const envConfig = readEnvFile([
   'ASSISTANT_INBOX_BROADCAST_TARGETS',
   'ONE_SHOT_AGENT_SLOT_TIMEOUT_MS',
   'ONE_SHOT_AGENT_MAX_QUEUE_LENGTH',
+  'WORKFLOW_EXECUTION_ENABLED',
+  'WORKFLOW_EXECUTION_POLL_MS',
+  'WORKFLOW_CONTAINER_AGENT_JID',
+  'WORKFLOW_CODEX_BINARY',
+  'WORKFLOW_CODEX_CWD',
+  'WORKFLOW_CODEX_MODEL',
+  'WORKFLOW_CODEX_SANDBOX',
+  'WORKFLOW_CODEX_APPROVAL_POLICY',
+  'WORKFLOW_CODEX_DESKTOP_VISIBILITY_CONFIRMED',
 ]);
 
 export const ASSISTANT_NAME =
@@ -56,7 +65,7 @@ export const SSH_KEY_PATH = sshKeyPath
   ? path.resolve(sshKeyPath.replace(/^~/, HOME_DIR))
   : null;
 export const STORE_DIR = path.resolve(PROJECT_ROOT, 'store');
-export const GROUPS_DIR = path.resolve(PROJECT_ROOT, 'groups');
+export const AGENTS_DIR = path.resolve(PROJECT_ROOT, 'agents');
 export const DATA_DIR = path.resolve(PROJECT_ROOT, 'data');
 export const CONTAINER_NODE_MODULES_DIR = path.join(
   HOME_DIR,
@@ -169,6 +178,71 @@ export const ONE_SHOT_AGENT_MAX_QUEUE_LENGTH = Math.max(
     10,
   ) || 10,
 );
+
+export const WORKFLOW_EXECUTION_ENABLED =
+  (process.env.WORKFLOW_EXECUTION_ENABLED ||
+    envConfig.WORKFLOW_EXECUTION_ENABLED) === 'true';
+export const WORKFLOW_EXECUTION_POLL_MS = Math.max(
+  100,
+  parseInt(
+    process.env.WORKFLOW_EXECUTION_POLL_MS ||
+      envConfig.WORKFLOW_EXECUTION_POLL_MS ||
+      '2000',
+    10,
+  ) || 2000,
+);
+export const WORKFLOW_CONTAINER_AGENT_JID =
+  process.env.WORKFLOW_CONTAINER_AGENT_JID ||
+  envConfig.WORKFLOW_CONTAINER_AGENT_JID ||
+  '';
+export const WORKFLOW_CODEX_BINARY =
+  process.env.WORKFLOW_CODEX_BINARY ||
+  envConfig.WORKFLOW_CODEX_BINARY ||
+  'codex';
+export const WORKFLOW_CODEX_CWD = path.resolve(
+  process.env.WORKFLOW_CODEX_CWD ||
+    envConfig.WORKFLOW_CODEX_CWD ||
+    PROJECT_ROOT,
+);
+export const WORKFLOW_CODEX_MODEL =
+  process.env.WORKFLOW_CODEX_MODEL || envConfig.WORKFLOW_CODEX_MODEL || '';
+
+const workflowCodexSandbox =
+  process.env.WORKFLOW_CODEX_SANDBOX ||
+  envConfig.WORKFLOW_CODEX_SANDBOX ||
+  'workspace-write';
+if (
+  !['read-only', 'workspace-write', 'danger-full-access'].includes(
+    workflowCodexSandbox,
+  )
+) {
+  throw new Error(
+    `WORKFLOW_CODEX_SANDBOX has an unsupported value: ${workflowCodexSandbox}`,
+  );
+}
+export const WORKFLOW_CODEX_SANDBOX = workflowCodexSandbox as
+  | 'read-only'
+  | 'workspace-write'
+  | 'danger-full-access';
+
+const workflowCodexApprovalPolicy =
+  process.env.WORKFLOW_CODEX_APPROVAL_POLICY ||
+  envConfig.WORKFLOW_CODEX_APPROVAL_POLICY ||
+  'on-request';
+if (
+  !['untrusted', 'on-request', 'never'].includes(workflowCodexApprovalPolicy)
+) {
+  throw new Error(
+    `WORKFLOW_CODEX_APPROVAL_POLICY has an unsupported value: ${workflowCodexApprovalPolicy}`,
+  );
+}
+export const WORKFLOW_CODEX_APPROVAL_POLICY = workflowCodexApprovalPolicy as
+  | 'untrusted'
+  | 'on-request'
+  | 'never';
+export const WORKFLOW_CODEX_DESKTOP_VISIBILITY_CONFIRMED =
+  (process.env.WORKFLOW_CODEX_DESKTOP_VISIBILITY_CONFIRMED ||
+    envConfig.WORKFLOW_CODEX_DESKTOP_VISIBILITY_CONFIRMED) === 'true';
 
 function escapeRegex(str: string): string {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

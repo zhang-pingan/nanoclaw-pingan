@@ -2,6 +2,12 @@ import { describe, it, expect, beforeEach } from 'vitest';
 
 import Database from 'better-sqlite3';
 
+import {
+  BUILT_IN_CHANNELS,
+  parseArgs,
+  validateRegistrationChannel,
+} from './register.js';
+
 /**
  * Tests for the register step.
  *
@@ -11,7 +17,7 @@ import Database from 'better-sqlite3';
 
 function createTestDb(): Database.Database {
   const db = new Database(':memory:');
-  db.exec(`CREATE TABLE IF NOT EXISTS registered_groups (
+  db.exec(`CREATE TABLE IF NOT EXISTS registered_agents (
     jid TEXT PRIMARY KEY,
     name TEXT NOT NULL,
     folder TEXT NOT NULL UNIQUE,
@@ -24,6 +30,31 @@ function createTestDb(): Database.Database {
   return db;
 }
 
+describe('registration channel contract', () => {
+  it('requires an explicit built-in channel', () => {
+    expect(parseArgs(['--jid', 'web:main']).channel).toBe('');
+    expect(validateRegistrationChannel('', 'web:main')).toBe('missing_channel');
+    expect(validateRegistrationChannel('unsupported', 'unsupported:main')).toBe(
+      'invalid_channel',
+    );
+    expect(BUILT_IN_CHANNELS).toEqual(['assistant', 'feishu', 'wecom', 'web']);
+  });
+
+  it('rejects a JID owned by a different built-in channel', () => {
+    expect(validateRegistrationChannel('web', 'feishu:oc_main')).toBe(
+      'jid_channel_mismatch',
+    );
+    expect(validateRegistrationChannel('web', 'web:main')).toBeNull();
+    expect(
+      validateRegistrationChannel('assistant', 'assistant:main'),
+    ).toBeNull();
+    expect(
+      validateRegistrationChannel('wecom', 'wecom:user:zhangsan'),
+    ).toBeNull();
+    expect(validateRegistrationChannel('feishu', 'feishu:oc_main')).toBeNull();
+  });
+});
+
 describe('parameterized SQL registration', () => {
   let db: Database.Database;
 
@@ -31,23 +62,23 @@ describe('parameterized SQL registration', () => {
     db = createTestDb();
   });
 
-  it('registers a group with parameterized query', () => {
+  it('registers an Agent with parameterized query', () => {
     db.prepare(
-      `INSERT OR REPLACE INTO registered_groups
+      `INSERT OR REPLACE INTO registered_agents
        (jid, name, folder, trigger_pattern, added_at, container_config, requires_trigger)
        VALUES (?, ?, ?, ?, ?, NULL, ?)`,
     ).run(
-      '123@g.us',
-      'Test Group',
-      'test-group',
+      'web:123',
+      'Test Agent',
+      'test-agent',
       '@Andy',
       '2024-01-01T00:00:00.000Z',
       1,
     );
 
     const row = db
-      .prepare('SELECT * FROM registered_groups WHERE jid = ?')
-      .get('123@g.us') as {
+      .prepare('SELECT * FROM registered_agents WHERE jid = ?')
+      .get('web:123') as {
       jid: string;
       name: string;
       folder: string;
@@ -55,32 +86,32 @@ describe('parameterized SQL registration', () => {
       requires_trigger: number;
     };
 
-    expect(row.jid).toBe('123@g.us');
-    expect(row.name).toBe('Test Group');
-    expect(row.folder).toBe('test-group');
+    expect(row.jid).toBe('web:123');
+    expect(row.name).toBe('Test Agent');
+    expect(row.folder).toBe('test-agent');
     expect(row.trigger_pattern).toBe('@Andy');
     expect(row.requires_trigger).toBe(1);
   });
 
-  it('handles apostrophes in group names safely', () => {
-    const name = "O'Brien's Group";
+  it('handles apostrophes in Agent names safely', () => {
+    const name = "O'Brien's Agent";
 
     db.prepare(
-      `INSERT OR REPLACE INTO registered_groups
+      `INSERT OR REPLACE INTO registered_agents
        (jid, name, folder, trigger_pattern, added_at, container_config, requires_trigger)
        VALUES (?, ?, ?, ?, ?, NULL, ?)`,
     ).run(
-      '456@g.us',
+      'web:456',
       name,
-      'obriens-group',
+      'obriens-agent',
       '@Andy',
       '2024-01-01T00:00:00.000Z',
       0,
     );
 
     const row = db
-      .prepare('SELECT name FROM registered_groups WHERE jid = ?')
-      .get('456@g.us') as {
+      .prepare('SELECT name FROM registered_agents WHERE jid = ?')
+      .get('web:456') as {
       name: string;
     };
 
@@ -88,23 +119,23 @@ describe('parameterized SQL registration', () => {
   });
 
   it('prevents SQL injection in JID field', () => {
-    const maliciousJid = "'; DROP TABLE registered_groups; --";
+    const maliciousJid = "'; DROP TABLE registered_agents; --";
 
     db.prepare(
-      `INSERT OR REPLACE INTO registered_groups
+      `INSERT OR REPLACE INTO registered_agents
        (jid, name, folder, trigger_pattern, added_at, container_config, requires_trigger)
        VALUES (?, ?, ?, ?, ?, NULL, ?)`,
     ).run(maliciousJid, 'Evil', 'evil', '@Andy', '2024-01-01T00:00:00.000Z', 1);
 
     // Table should still exist and have the row
     const count = db
-      .prepare('SELECT COUNT(*) as count FROM registered_groups')
+      .prepare('SELECT COUNT(*) as count FROM registered_agents')
       .get() as {
       count: number;
     };
     expect(count.count).toBe(1);
 
-    const row = db.prepare('SELECT jid FROM registered_groups').get() as {
+    const row = db.prepare('SELECT jid FROM registered_agents').get() as {
       jid: string;
     };
     expect(row.jid).toBe(maliciousJid);
@@ -112,11 +143,11 @@ describe('parameterized SQL registration', () => {
 
   it('handles requiresTrigger=false', () => {
     db.prepare(
-      `INSERT OR REPLACE INTO registered_groups
+      `INSERT OR REPLACE INTO registered_agents
        (jid, name, folder, trigger_pattern, added_at, container_config, requires_trigger)
        VALUES (?, ?, ?, ?, ?, NULL, ?)`,
     ).run(
-      '789@s.whatsapp.net',
+      'user:789',
       'Personal',
       'main',
       '@Andy',
@@ -125,21 +156,21 @@ describe('parameterized SQL registration', () => {
     );
 
     const row = db
-      .prepare('SELECT requires_trigger FROM registered_groups WHERE jid = ?')
-      .get('789@s.whatsapp.net') as { requires_trigger: number };
+      .prepare('SELECT requires_trigger FROM registered_agents WHERE jid = ?')
+      .get('user:789') as { requires_trigger: number };
 
     expect(row.requires_trigger).toBe(0);
   });
 
   it('stores is_main flag', () => {
     db.prepare(
-      `INSERT OR REPLACE INTO registered_groups
+      `INSERT OR REPLACE INTO registered_agents
        (jid, name, folder, trigger_pattern, added_at, container_config, requires_trigger, is_main)
        VALUES (?, ?, ?, ?, ?, NULL, ?, ?)`,
     ).run(
-      '789@s.whatsapp.net',
+      'user:789',
       'Personal',
-      'whatsapp_main',
+      'web_main',
       '@Andy',
       '2024-01-01T00:00:00.000Z',
       0,
@@ -147,42 +178,42 @@ describe('parameterized SQL registration', () => {
     );
 
     const row = db
-      .prepare('SELECT is_main FROM registered_groups WHERE jid = ?')
-      .get('789@s.whatsapp.net') as { is_main: number };
+      .prepare('SELECT is_main FROM registered_agents WHERE jid = ?')
+      .get('user:789') as { is_main: number };
 
     expect(row.is_main).toBe(1);
   });
 
   it('defaults is_main to 0', () => {
     db.prepare(
-      `INSERT OR REPLACE INTO registered_groups
+      `INSERT OR REPLACE INTO registered_agents
        (jid, name, folder, trigger_pattern, added_at, container_config, requires_trigger)
        VALUES (?, ?, ?, ?, ?, NULL, ?)`,
     ).run(
-      '123@g.us',
-      'Some Group',
-      'whatsapp_some-group',
+      'web:123',
+      'Some Agent',
+      'web_some-agent',
       '@Andy',
       '2024-01-01T00:00:00.000Z',
       1,
     );
 
     const row = db
-      .prepare('SELECT is_main FROM registered_groups WHERE jid = ?')
-      .get('123@g.us') as { is_main: number };
+      .prepare('SELECT is_main FROM registered_agents WHERE jid = ?')
+      .get('web:123') as { is_main: number };
 
     expect(row.is_main).toBe(0);
   });
 
   it('upserts on conflict', () => {
     const stmt = db.prepare(
-      `INSERT OR REPLACE INTO registered_groups
+      `INSERT OR REPLACE INTO registered_agents
        (jid, name, folder, trigger_pattern, added_at, container_config, requires_trigger)
        VALUES (?, ?, ?, ?, ?, NULL, ?)`,
     );
 
     stmt.run(
-      '123@g.us',
+      'web:123',
       'Original',
       'main',
       '@Andy',
@@ -190,7 +221,7 @@ describe('parameterized SQL registration', () => {
       1,
     );
     stmt.run(
-      '123@g.us',
+      'web:123',
       'Updated',
       'main',
       '@Bot',
@@ -198,7 +229,7 @@ describe('parameterized SQL registration', () => {
       0,
     );
 
-    const rows = db.prepare('SELECT * FROM registered_groups').all();
+    const rows = db.prepare('SELECT * FROM registered_agents').all();
     expect(rows).toHaveLength(1);
 
     const row = rows[0] as {

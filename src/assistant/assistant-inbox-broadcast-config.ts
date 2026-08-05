@@ -1,9 +1,9 @@
 import { ASSISTANT_INBOX_BROADCAST_TARGETS } from '../config.js';
 import {
-  isBroadcastTargetGroup,
+  isBroadcastTargetAgent,
   resolveBroadcastTargetJids,
 } from '../broadcast-targets.js';
-import type { RegisteredGroup } from '../types.js';
+import type { RegisteredAgent } from '../types.js';
 
 function parseCsvList(value?: string): string[] {
   return (value || '')
@@ -24,21 +24,21 @@ export function isAssistantInboxBroadcastEnabled(): boolean {
 }
 
 export function resolveAssistantInboxBroadcastJids(
-  groups: Record<string, RegisteredGroup>,
+  agents: Record<string, RegisteredAgent>,
 ): string[] {
   return resolveBroadcastTargetJids(
     getAssistantInboxBroadcastTargetKeys(),
-    groups,
+    agents,
   );
 }
 
-export function isAssistantInboxBroadcastGroup(
-  groupJid: string,
-  groups: Record<string, RegisteredGroup>,
+export function isAssistantInboxBroadcastAgent(
+  agentJid: string,
+  agents: Record<string, RegisteredAgent>,
 ): boolean {
-  return isBroadcastTargetGroup(
-    groupJid,
+  return isBroadcastTargetAgent(
+    agentJid,
     getAssistantInboxBroadcastTargetKeys(),
-    groups,
+    agents,
   );
 }

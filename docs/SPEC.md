@@ -54,16 +54,16 @@ This specification describes the current internal experiment; it is not a public
 │  ┌──────────────────────────────────────────────────────────────┐    │
 │  │                    AGENT RUNNER                               │    │
 │  │                                                                │    │
-│  │  Working directory: /workspace/group (mounted from host)       │    │
+│  │  Working directory: /workspace/agent (mounted from host)       │    │
 │  │  Volume mounts:                                                │    │
-│  │    • groups/{name}/ → /workspace/group                         │    │
+│  │    • agents/{name}/ → /workspace/agent                         │    │
 │  │    • data/attachments/ → /workspace/attachments                 │    │
 │  │    • data/ai-images/ → /workspace/ai-images                     │    │
-│  │    • groups/global/ → /workspace/global/ (non-main only)       │    │
-│  │    • data/sessions/{group}/.claude/ → /home/node/.claude/      │    │
+│  │    • agents/global/ → /workspace/global/ (non-main only)       │    │
+│  │    • data/sessions/{agent}/.claude/ → /home/node/.claude/      │    │
 │  │    • Additional dirs → /workspace/extra/*                      │    │
 │  │                                                                │    │
-│  │  Tools (all groups):                                           │    │
+│  │  Tools (all Agents):                                           │    │
 │  │    • Bash (safe - sandboxed in container!)                     │    │
 │  │    • Read, Write, Edit, Glob, Grep (file operations)           │    │
 │  │    • WebSearch, WebFetch (internet access)                     │    │
@@ -90,23 +90,23 @@ This specification describes the current internal experiment; it is not a public
 
 ## Architecture: Channel System
 
-The core ships with no channels built in — each channel (WhatsApp, Telegram, Slack, Discord, Gmail) is installed as a [Claude Code skill](https://code.claude.com/docs/en/skills) that adds the channel code to your fork. Channels self-register at startup; installed channels with missing credentials emit a WARN log and are skipped.
+The core ships with Feishu, WeCom, Assistant, and Web. These channel modules self-register at startup; credentialed channels return no instance when required configuration is absent. Telegram is not currently supported, but a fork can add it through code customization using the same registry contract.
 
 ### System Diagram
 
 ```mermaid
 graph LR
     subgraph Channels["Channels"]
-        WA[WhatsApp]
-        TG[Telegram]
-        SL[Slack]
-        DC[Discord]
-        New["Other Channel (Signal, Gmail...)"]
+        FS[Feishu]
+        WC[WeCom]
+        AS[Assistant]
+        WEB[Web]
+        New["Future Custom Channel"]
     end
 
     subgraph Orchestrator["Orchestrator — index.ts"]
         ML[Message Loop]
-        GQ[Group Queue]
+        GQ[Agent Queue]
         RT[Router]
         TS[Task Scheduler]
         DB[(SQLite)]
@@ -119,7 +119,7 @@ graph LR
     end
 
     %% Flow
-    WA & TG & SL & DC & New -->|onMessage| ML
+    FS & WC & AS & WEB & New -->|onMessage| ML
     ML --> GQ
     GQ -->|concurrency| CR
     CR --> LC
@@ -158,7 +158,7 @@ export function getRegisteredChannelNames(): string[] {
 }
 ```
 
-Each factory receives `ChannelOpts` (callbacks for `onMessage`, `onChatMetadata`, and `registeredGroups`) and returns either a `Channel` instance or `null` if that channel's credentials are not configured.
+Each factory receives `ChannelOpts` (callbacks for `onMessage`, `onChatMetadata`, and `registeredAgents`) and returns either a `Channel` instance or `null` if that channel's credentials are not configured.
 
 ### Channel Interface
 
@@ -173,7 +173,6 @@ interface Channel {
   ownsJid(jid: string): boolean;
   disconnect(): Promise<void>;
   setTyping?(jid: string, isTyping: boolean): Promise<void>;
-  syncGroups?(force: boolean): Promise<void>;
 }
 ```
 
@@ -181,29 +180,30 @@ interface Channel {
 
 Channels self-register using a barrel-import pattern:
 
-1. Each channel skill adds a file to `src/channels/` (e.g. `whatsapp.ts`, `telegram.ts`) that calls `registerChannel()` at module load time:
+1. Each channel file calls `registerChannel()` at module load time. For example:
 
    ```typescript
-   // src/channels/whatsapp.ts
+   // src/channels/feishu.ts
    import { registerChannel, ChannelOpts } from './registry.js';
 
-   export class WhatsAppChannel implements Channel {
+   export class FeishuChannel implements Channel {
      /* ... */
    }
 
-   registerChannel('whatsapp', (opts: ChannelOpts) => {
+   registerChannel('feishu', (opts: ChannelOpts) => {
      // Return null if credentials are missing
-     if (!existsSync(authPath)) return null;
-     return new WhatsAppChannel(opts);
+     if (!hasFeishuCredentials()) return null;
+     return new FeishuChannel(opts);
    });
    ```
 
 2. The barrel file `src/channels/index.ts` imports all channel modules, triggering registration:
 
    ```typescript
-   import './whatsapp.js';
-   import './telegram.js';
-   // ... each skill adds its import here
+   import './feishu.js';
+   import './wecom.js';
+   import './assistant.js';
+   import './web.js';
    ```
 
 3. At startup, the orchestrator (`src/index.ts`) loops through registered channels and connects whichever ones return a valid instance:
@@ -238,7 +238,7 @@ To add a new channel, contribute a skill to `.claude/skills/add-<name>/` that:
 3. Returns `null` from the factory if credentials are missing
 4. Adds an import line to `src/channels/index.ts`
 
-See existing skills (`/add-whatsapp`, `/add-telegram`, `/add-slack`, `/add-discord`, `/add-gmail`) for the pattern.
+Use the existing built-in channel modules as the reference. A custom Telegram integration is a future code customization, not a current runtime capability.
 
 ---
 
@@ -268,9 +268,8 @@ icarus/
 │   ├── types.ts                   # TypeScript interfaces (includes Channel)
 │   ├── logger.ts                  # Pino logger setup
 │   ├── db.ts                      # SQLite database initialization and queries
-│   ├── group-queue.ts             # Per-group queue with global concurrency limit
+│   ├── agent-queue.ts             # Per-agent queue with global concurrency limit
 │   ├── mount-security.ts          # Mount allowlist validation for containers
-│   ├── whatsapp-auth.ts           # Standalone WhatsApp authentication
 │   ├── task-scheduler.ts          # Runs scheduled tasks when due
 │   └── container-runner.ts        # Spawns agents in containers
 │
@@ -293,36 +292,34 @@ icarus/
 │       ├── setup/SKILL.md              # /setup - First-time installation
 │       ├── customize/SKILL.md          # /customize - Add capabilities
 │       ├── debug/SKILL.md              # /debug - Container debugging
-│       ├── add-telegram/SKILL.md       # /add-telegram - Telegram channel
 │       ├── add-gmail/SKILL.md          # /add-gmail - Gmail integration
 │       ├── add-voice-transcription/    # /add-voice-transcription - Whisper
 │       ├── x-integration/SKILL.md      # /x-integration - X/Twitter
 │       ├── convert-to-apple-container/  # /convert-to-apple-container - Apple Container runtime
 │       └── add-parallel/SKILL.md       # /add-parallel - Parallel agents
 │
-├── groups/
-│   ├── CLAUDE.md                  # Global memory (all groups read this)
-│   ├── {channel}_main/             # Main control channel (e.g., whatsapp_main/)
+├── agents/
+│   ├── CLAUDE.md                  # Global memory (all Agents read this)
+│   ├── {channel}_main/             # Main control channel (e.g., web_main/)
 │   │   ├── CLAUDE.md              # Main channel memory
 │   │   └── logs/                  # Task execution logs
-│   └── {channel}_{group-name}/    # Per-group folders (created on registration)
-│       ├── CLAUDE.md              # Group-specific memory
-│       ├── logs/                  # Task logs for this group
+│   └── {channel}_{agent-name}/    # Per-agent folders (created on registration)
+│       ├── CLAUDE.md              # Agent-specific memory
+│       ├── logs/                  # Task logs for this agent
 │       └── *.md                   # Files created by the agent
 │
 ├── store/                         # Local data (gitignored)
-│   ├── auth/                      # WhatsApp authentication state
-│   └── messages.db                # SQLite database (messages, chats, scheduled_tasks, agent_queries, agent_query_steps, agent_query_events, registered_groups, sessions, router_state)
+│   └── messages.db                # SQLite database (messages, chats, scheduled_tasks, agent_queries, agent_query_steps, agent_query_events, registered_agents, sessions, router_state)
 │
 ├── data/                          # Application state (gitignored)
-│   ├── sessions/                  # Per-group session data (.claude/ dirs with JSONL transcripts)
+│   ├── sessions/                  # Per-agent session data (.claude/ dirs with JSONL transcripts)
 │   ├── env/env                    # Copy of .env for container mounting
 │   └── ipc/                       # Container IPC (messages/, tasks/)
 │
 ├── logs/                          # Runtime logs (gitignored)
 │   ├── icarus.log                 # Host stdout
 │   └── icarus.error.log           # Host stderr
-│   # Note: Per-container logs are in groups/{folder}/logs/container-*.log
+│   # Note: Per-container logs are in agents/{folder}/logs/container-*.log
 │
 └── launchd/
     └── com.icarus.plist         # macOS service configuration
@@ -344,7 +341,7 @@ export const SCHEDULER_POLL_INTERVAL = 60000;
 // Paths are absolute (required for container mounts)
 const PROJECT_ROOT = process.cwd();
 export const STORE_DIR = path.resolve(PROJECT_ROOT, 'store');
-export const GROUPS_DIR = path.resolve(PROJECT_ROOT, 'groups');
+export const AGENTS_DIR = path.resolve(PROJECT_ROOT, 'agents');
 export const DATA_DIR = path.resolve(PROJECT_ROOT, 'data');
 
 // Container configuration
@@ -368,12 +365,12 @@ export const TRIGGER_PATTERN = new RegExp(`^@${ASSISTANT_NAME}\\b`, 'i');
 
 ### Container Configuration
 
-Groups can have additional directories mounted via `containerConfig` in the SQLite `registered_groups` table (stored as JSON in the `container_config` column). Example registration:
+Agents can have additional directories mounted via `containerConfig` in the SQLite `registered_agents` table (stored as JSON in the `container_config` column). Example registration:
 
 ```typescript
-setRegisteredGroup('1234567890@g.us', {
+setRegisteredAgent('web:dev-team', {
   name: 'Dev Team',
-  folder: 'whatsapp_dev-team',
+  folder: 'web_dev-team',
   trigger: '@Andy',
   added_at: new Date().toISOString(),
   containerConfig: {
@@ -389,7 +386,7 @@ setRegisteredGroup('1234567890@g.us', {
 });
 ```
 
-Folder names follow the convention `{channel}_{group-name}` (e.g., `whatsapp_family-chat`, `telegram_dev-team`). The main group has `isMain: true` set during registration.
+Folder names follow the convention `{channel}_{agent-name}` (for example, `web_research` or `feishu_dev-team`). The main agent has `isMain: true` set during registration.
 
 Additional mounts appear at `/workspace/extra/{containerPath}` inside the container.
 
@@ -469,7 +466,7 @@ Each memory row has `status`: `active` / `conflicted` / `deprecated`.
    - Before each new run, Icarus builds a budgeted memory pack from structured memory
    - Layer quotas: canonical > episodic > working
 3. Global prompt context:
-   - Non-main groups read `groups/global/CLAUDE.md` as additional system prompt
+   - Non-main Agents read `agents/global/CLAUDE.md` as additional system prompt
 
 ### Transcript Archiving
 
@@ -485,10 +482,10 @@ Sessions enable conversation continuity - Claude remembers what you talked about
 
 ### How Sessions Work
 
-1. Each group has a session ID stored in SQLite (`sessions` table, keyed by `group_folder`)
+1. Each agent has a session ID stored in SQLite (`sessions` table, keyed by `agent_folder`)
 2. Session ID is passed to Claude Agent SDK's `resume` option
 3. Claude continues the conversation with full context
-4. Session transcripts are stored as JSONL files in `data/sessions/{group}/.claude/`
+4. Session transcripts are stored as JSONL files in `data/sessions/{agent}/.claude/`
 
 ---
 
@@ -500,7 +497,7 @@ Sessions enable conversation continuity - Claude remembers what you talked about
 1. User sends a message via any connected channel
    │
    ▼
-2. Channel receives message (e.g. Baileys for WhatsApp, Bot API for Telegram)
+2. The owning Feishu, WeCom, Assistant, or Web channel receives the message
    │
    ▼
 3. Message stored in SQLite (store/messages.db)
@@ -510,7 +507,7 @@ Sessions enable conversation continuity - Claude remembers what you talked about
    │
    ▼
 5. Router checks:
-   ├── Is chat_jid in registered groups (SQLite)? → No: ignore
+   ├── Is chat_jid in registered Agents (SQLite)? → No: ignore
    └── Does message match trigger pattern? → No: store but don't process
    │
    ▼
@@ -521,7 +518,7 @@ Sessions enable conversation continuity - Claude remembers what you talked about
    │
    ▼
 7. Router invokes Claude Agent SDK:
-   ├── cwd: groups/{group-name}/
+   ├── cwd: agents/{agent-name}/
    ├── prompt: conversation history + current message
    ├── resume: session_id (for continuity)
    └── mcpServers: icarus (scheduler)
@@ -563,7 +560,7 @@ This allows the agent to understand the conversation context even if it wasn't m
 
 ## Commands
 
-### Commands Available in Any Group
+### Commands Available in Any Agent
 
 | Command                | Example                     | Effect         |
 | ---------------------- | --------------------------- | -------------- |
@@ -573,23 +570,23 @@ This allows the agent to understand the conversation context even if it wasn't m
 
 | Command                          | Example                             | Effect                 |
 | -------------------------------- | ----------------------------------- | ---------------------- |
-| `@Assistant add group "Name"`    | `@Andy add group "Family Chat"`     | Register a new group   |
-| `@Assistant remove group "Name"` | `@Andy remove group "Work Team"`    | Unregister a group     |
-| `@Assistant list groups`         | `@Andy list groups`                 | Show registered groups |
+| `@Assistant add agent "Name"`    | `@Andy add agent "Family Chat"`     | Register a new agent   |
+| `@Assistant remove agent "Name"` | `@Andy remove agent "Work Team"`    | Unregister an agent    |
+| `@Assistant list Agents`         | `@Andy list Agents`                 | Show registered Agents |
 | `@Assistant remember [fact]`     | `@Andy remember I prefer dark mode` | Add to global memory   |
 
 ---
 
 ## Scheduled Tasks
 
-Icarus has a built-in scheduler that runs tasks as full agents in their group's context.
+Icarus has a built-in scheduler that creates an Agent Run in the target Agent's context for each task.
 
 ### How Scheduling Works
 
-1. **Group Context**: Tasks created in a group run with that group's working directory and memory
+1. **Agent Context**: Tasks run in an Agent Run with the target Agent's working directory and memory
 2. **Full Agent Capabilities**: Scheduled tasks have access to all tools (WebSearch, file operations, etc.)
-3. **Optional Messaging**: Tasks can send messages to their group using the `send_message` tool, or complete silently
-4. **Main Channel Privileges**: The main channel can schedule tasks for any group and view all tasks
+3. **Optional Messaging**: Tasks can send messages to their agent using the `send_message` tool, or complete silently
+4. **Main Channel Privileges**: The main channel can schedule tasks for any agent and view all tasks
 
 ### Schedule Types
 
@@ -621,7 +618,7 @@ User: @Andy at 5pm today, send me a summary of today's emails
 
 Claude: [calls mcp__icarus__schedule_task]
         {
-          "prompt": "Search for today's emails, summarize the important ones, and send the summary to the group.",
+          "prompt": "Search for today's emails, summarize the important ones, and send the summary to the agent.",
           "schedule_type": "once",
           "schedule_value": "2024-01-31T17:00:00Z"
         }
@@ -629,17 +626,17 @@ Claude: [calls mcp__icarus__schedule_task]
 
 ### Managing Tasks
 
-From any group:
+From any agent:
 
-- `@Andy list my scheduled tasks` - View tasks for this group
+- `@Andy list my scheduled tasks` - View tasks for this agent
 - `@Andy pause task [id]` - Pause a task
 - `@Andy resume task [id]` - Resume a paused task
 - `@Andy cancel task [id]` - Delete a task
 
 From main channel:
 
-- `@Andy list all tasks` - View tasks from all groups
-- `@Andy schedule task for "Family Chat": [prompt]` - Schedule for another group
+- `@Andy list all tasks` - View tasks from all Agents
+- `@Andy schedule task for "Family Chat": [prompt]` - Schedule for another agent
 
 ---
 
@@ -647,19 +644,19 @@ From main channel:
 
 ### Built-in MCP Server
 
-The `icarus` MCP server is created dynamically per agent call with the current group's context.
+The `icarus` MCP server is created dynamically per agent call with the current agent's context.
 
 **Available Tools:**
 | Tool | Purpose |
 |------|---------|
 | `schedule_task` | Schedule a recurring or one-time task |
-| `list_tasks` | Show tasks (group's tasks, or all if main) |
+| `list_tasks` | Show tasks (agent's tasks, or all if main) |
 | `get_task` | Get task details and run history |
 | `update_task` | Modify task prompt or schedule |
 | `pause_task` | Pause a task |
 | `resume_task` | Resume a paused task |
 | `cancel_task` | Delete a task |
-| `send_message` | Send a message to the group via its channel |
+| `send_message` | Send a message to the agent via its channel |
 
 ---
 
@@ -673,12 +670,12 @@ When Icarus starts, it:
 
 1. **Ensures container runtime is running** - Automatically starts it if needed; kills orphaned project containers from previous runs
 2. Initializes the SQLite database (migrates from JSON files if they exist)
-3. Loads state from SQLite (registered groups, sessions, router state)
+3. Loads state from SQLite (registered Agents, sessions, router state)
 4. **Connects channels** — loops through registered channels, instantiates those with credentials, calls `connect()` on each
 5. Once at least one channel is connected:
    - Starts the scheduler loop
    - Starts the IPC watcher for container messages
-   - Sets up the per-group queue with `processGroupMessages`
+   - Sets up the per-Agent queue with `processAgentMessages`
    - Recovers any unprocessed messages from before shutdown
    - Starts the message polling loop
 
@@ -756,37 +753,37 @@ All agents run inside containers (lightweight Linux VMs), providing:
 
 ### Prompt Injection Risk
 
-WhatsApp messages could contain malicious instructions attempting to manipulate Claude's behavior.
+Messages from any connected channel could contain malicious instructions attempting to manipulate Claude's behavior.
 
 **Mitigations:**
 
 - Container isolation limits blast radius
-- Only registered groups are processed
+- Only registered Agents are processed
 - Trigger word required (reduces accidental processing)
-- Agents can only access their group's mounted directories
-- Main can configure additional directories per group
+- Agents can only access their agent's mounted directories
+- Main can configure additional directories per agent
 - Claude's built-in safety training
 
 **Recommendations:**
 
-- Only register trusted groups
+- Only register trusted Agents
 - Review additional directory mounts carefully
 - Review scheduled tasks periodically
 - Monitor logs for unusual activity
 
 ### Credential Storage
 
-| Credential       | Storage Location               | Notes                                               |
-| ---------------- | ------------------------------ | --------------------------------------------------- |
-| Claude CLI Auth  | data/sessions/{group}/.claude/ | Per-group isolation, mounted to /home/node/.claude/ |
-| WhatsApp Session | store/auth/                    | Auto-created, persists ~20 days                     |
+| Credential          | Storage Location               | Notes                                               |
+| ------------------- | ------------------------------ | --------------------------------------------------- |
+| Claude CLI Auth     | data/sessions/{agent}/.claude/ | Per-agent isolation, mounted to /home/node/.claude/ |
+| Channel credentials | `.env`                         | Host-only; never mounted into Agent containers      |
 
 ### File Permissions
 
-The groups/ folder contains personal memory and should be protected:
+The agents/ folder contains personal memory and should be protected:
 
 ```bash
-chmod 700 groups/
+chmod 700 agents/
 ```
 
 ---
@@ -796,14 +793,13 @@ chmod 700 groups/
 ### Common Issues
 
 | Issue                                    | Cause                             | Solution                                                                                 |
-| ---------------------------------------- | --------------------------------- | ---------------------------------------------------------------------------------------- | -------------- |
-| No response to messages                  | Service not running               | Check `launchctl list                                                                    | grep icarus` |
-| "Claude Code process exited with code 1" | Container runtime failed to start | Check logs; Icarus auto-starts container runtime but may fail                          |
+| ---------------------------------------- | --------------------------------- | ---------------------------------------------------------------------------------------- |
+| No response to messages                  | Service not running               | Check `launchctl list \| grep icarus`                                                    |
+| "Claude Code process exited with code 1" | Container runtime failed to start | Check logs; Icarus auto-starts container runtime but may fail                            |
 | "Claude Code process exited with code 1" | Session mount path wrong          | Ensure mount is to `/home/node/.claude/` not `/root/.claude/`                            |
 | Session not continuing                   | Session ID not saved              | Check SQLite: `sqlite3 store/messages.db "SELECT * FROM sessions"`                       |
 | Session not continuing                   | Mount path mismatch               | Container user is `node` with HOME=/home/node; sessions must be at `/home/node/.claude/` |
-| "QR code expired"                        | WhatsApp session expired          | Delete store/auth/ and restart                                                           |
-| "No groups registered"                   | Haven't added groups              | Use `@Andy add group "Name"` in main                                                     |
+| "No Agents registered"                   | Haven't added Agents              | Register an Agent through setup or the main Agent                                        |
 
 ### Log Location
 

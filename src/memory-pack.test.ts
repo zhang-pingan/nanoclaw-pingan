@@ -11,7 +11,7 @@ vi.mock('./logger.js', () => ({
 
 import { _initTestDatabase, createMemory } from './db.js';
 import { logger } from './logger.js';
-import { buildMemoryPack, buildMemoryPackForGroup } from './memory-pack.js';
+import { buildMemoryPack, buildMemoryPackForAgent } from './memory-pack.js';
 import { MemoryRecord } from './types.js';
 
 function mem(
@@ -19,7 +19,7 @@ function mem(
 ): MemoryRecord {
   return {
     id: partial.id,
-    group_folder: partial.group_folder || 'web_main',
+    agent_folder: partial.agent_folder || 'web_main',
     layer: partial.layer || 'canonical',
     memory_type: partial.memory_type || 'fact',
     status: partial.status || 'active',
@@ -64,18 +64,18 @@ describe('buildMemoryPack', () => {
 
   it('prioritizes relevant memories by prompt terms', () => {
     createMemory({
-      group_folder: 'web_main',
+      agent_folder: 'web_main',
       layer: 'canonical',
       memory_type: 'fact',
       content: 'release strategy for payment service',
     });
     createMemory({
-      group_folder: 'web_main',
+      agent_folder: 'web_main',
       layer: 'canonical',
       memory_type: 'fact',
       content: 'unrelated gardening notes',
     });
-    const pack = buildMemoryPackForGroup(
+    const pack = buildMemoryPackForAgent(
       'web_main',
       'Please help with payment release',
     );
@@ -85,18 +85,18 @@ describe('buildMemoryPack', () => {
 
   it('keeps important canonical fallback memories even without lexical match', () => {
     createMemory({
-      group_folder: 'web_main',
+      agent_folder: 'web_main',
       layer: 'canonical',
       memory_type: 'rule',
       content: 'Always confirm before destructive actions',
     });
     createMemory({
-      group_folder: 'web_main',
+      agent_folder: 'web_main',
       layer: 'episodic',
       memory_type: 'summary',
       content: 'Reviewed deployment logs last Thursday',
     });
-    const pack = buildMemoryPackForGroup(
+    const pack = buildMemoryPackForAgent(
       'web_main',
       'Help me summarize the roadmap',
     );
@@ -106,18 +106,18 @@ describe('buildMemoryPack', () => {
 
   it('matches small synonym expansions for pack retrieval', () => {
     createMemory({
-      group_folder: 'web_main',
+      agent_folder: 'web_main',
       layer: 'canonical',
       memory_type: 'fact',
       content: 'Service payment uses deploy checklist before rollout',
     });
     createMemory({
-      group_folder: 'web_main',
+      agent_folder: 'web_main',
       layer: 'canonical',
       memory_type: 'fact',
       content: 'Gardening notes for spring tomatoes',
     });
-    const pack = buildMemoryPackForGroup(
+    const pack = buildMemoryPackForAgent(
       'web_main',
       'Help me prepare the payment release',
     );
@@ -129,18 +129,18 @@ describe('buildMemoryPack', () => {
 
   it('uses Chinese n-gram fallback when full Chinese phrase does not lexically match', () => {
     createMemory({
-      group_folder: 'web_main',
+      agent_folder: 'web_main',
       layer: 'canonical',
       memory_type: 'rule',
       content: '支付服务上线前先检查回滚预案',
     });
     createMemory({
-      group_folder: 'web_main',
+      agent_folder: 'web_main',
       layer: 'canonical',
       memory_type: 'fact',
       content: '园艺手册记录了番茄浇水频率',
     });
-    const pack = buildMemoryPackForGroup(
+    const pack = buildMemoryPackForAgent(
       'web_main',
       '请帮我整理支付服务上线计划',
     );
@@ -150,13 +150,13 @@ describe('buildMemoryPack', () => {
 
   it('does not run raw XML prompt text as an FTS query', () => {
     createMemory({
-      group_folder: 'web_main',
+      agent_folder: 'web_main',
       layer: 'canonical',
       memory_type: 'fact',
       content: 'catstory 支付订单排查需要检查用户、登录、订单和 webhook',
     });
 
-    const pack = buildMemoryPackForGroup(
+    const pack = buildMemoryPackForAgent(
       'web_main',
       '<context timezone="Asia/Shanghai" />\n<messages>\n<message sender="Desktop User">继续查 catstory 支付订单</message>\n</messages>',
     );

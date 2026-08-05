@@ -9,10 +9,10 @@ When agent teams spawns subagent CLI processes, they write to the same session J
 Both timers fire at the same time, so containers always exit via hard SIGKILL (code 137) instead of graceful `_close` sentinel shutdown. The idle timeout should be shorter (e.g., 5 min) so containers wind down between messages, while container timeout stays at 30 min as a safety net for stuck agents.
 
 ### 3. Cursor advanced before agent succeeds
-`processGroupMessages` advances `lastAgentTimestamp` before the agent runs. If the container times out, retries find no messages (cursor already past them). Messages are permanently lost on timeout.
+`processAgentMessages` advances `lastAgentTimestamp` before the agent runs. If the container times out, retries find no messages (cursor already past them). Messages are permanently lost on timeout.
 
 ### 4. [FIXED] 未闭合叶子 / 合成 close 级联导致空回复（trace 仍记 success）
-group 调用多次、回复全空、但 Trace 全记 `success`、无 error。根因：未闭合叶子 resume 时 SDK 发合成 `No response requested.` 的 success result，`iterateQuery` 在第一个 result 就 `stream.end()`，把真消息甩成下一个未闭合叶子，自我级联。**完整排查与修复方案、含 Skill-load 残留的条件化改法见 [unclosed-leaf-cascade.md](./unclosed-leaf-cascade.md)。**
+Agent 调用多次、回复全空、但 Trace 全记 `success`、无 error。根因：未闭合叶子 resume 时 SDK 发合成 `No response requested.` 的 success result，`iterateQuery` 在第一个 result 就 `stream.end()`，把真消息甩成下一个未闭合叶子，自我级联。**完整排查与修复方案、含 Skill-load 残留的条件化改法见 [unclosed-leaf-cascade.md](./unclosed-leaf-cascade.md)。**
 
 ## Quick Status Check
 
@@ -30,18 +30,18 @@ container ls -a --format '{{.Names}} {{.Status}}' 2>/dev/null | grep icarus
 # 4. Recent errors in service log?
 grep -E 'ERROR|WARN' logs/icarus.log | tail -20
 
-# 5. Is WhatsApp connected? (look for last connection event)
-grep -E 'Connected to WhatsApp|Connection closed|connection.*close' logs/icarus.log | tail -5
+# 5. Which built-in channels connected?
+grep -E 'Channel connected|channel.*connected|Failed to connect channel' logs/icarus.log | tail -10
 
-# 6. Are groups loaded?
-grep 'groupCount' logs/icarus.log | tail -3
+# 6. Are Agents loaded?
+grep 'agentCount' logs/icarus.log | tail -3
 ```
 
 ## Session Transcript Branching
 
 ```bash
 # Check for concurrent CLI processes in session debug logs
-ls -la data/sessions/<group>/.claude/debug/
+ls -la data/sessions/<agent>/.claude/debug/
 
 # Count unique SDK processes that handled messages
 # Each .txt file = one CLI subprocess. Multiple = concurrent queries.
@@ -49,7 +49,7 @@ ls -la data/sessions/<group>/.claude/debug/
 # Check parentUuid branching in transcript
 python3 -c "
 import json, sys
-lines = open('data/sessions/<group>/.claude/projects/-workspace-group/<session>.jsonl').read().strip().split('\n')
+lines = open('data/sessions/<agent>/.claude/projects/-workspace-agent/<session>.jsonl').read().strip().split('\n')
 for i, line in enumerate(lines):
   try:
     d = json.loads(line)
@@ -68,10 +68,10 @@ for i, line in enumerate(lines):
 grep -E 'Container timeout|timed out' logs/icarus.log | tail -10
 
 # Check container log files for the timed-out container
-ls -lt groups/*/logs/container-*.log | head -10
+ls -lt agents/*/logs/container-*.log | head -10
 
 # Read the most recent container log (replace path)
-cat groups/<group>/logs/container-<timestamp>.log
+cat agents/<agent>/logs/container-<timestamp>.log
 
 # Check if retries were scheduled and what happened
 grep -E 'Scheduling retry|retry|Max retries' logs/icarus.log | tail -10
@@ -80,7 +80,7 @@ grep -E 'Scheduling retry|retry|Max retries' logs/icarus.log | tail -10
 ## Agent Not Responding
 
 ```bash
-# Check if messages are being received from WhatsApp
+# Check if channel messages are being received
 grep 'New messages' logs/icarus.log | tail -10
 
 # Check if messages are being processed (container spawned)
@@ -105,25 +105,12 @@ grep -E 'Mount validated|Mount.*REJECTED|mount' logs/icarus.log | tail -10
 # Verify the mount allowlist is readable
 cat ~/.config/icarus/mount-allowlist.json
 
-# Check group's container_config in DB
-sqlite3 store/messages.db "SELECT name, container_config FROM registered_groups;"
+# Check Agent's container_config in DB
+sqlite3 store/messages.db "SELECT name, container_config FROM registered_agents;"
 
 # Test-run a container to check mounts (dry run)
-# Replace <group-folder> with the group's folder name
+# Replace <agent-folder> with the Agent's folder name
 container run -i --rm --entrypoint ls icarus-agent:latest /workspace/extra/
-```
-
-## WhatsApp Auth Issues
-
-```bash
-# Check if QR code was requested (means auth expired)
-grep 'QR\|authentication required\|qr' logs/icarus.log | tail -5
-
-# Check auth files exist
-ls -la store/auth/
-
-# Re-authenticate if needed
-npm run auth
 ```
 
 ## Service Management

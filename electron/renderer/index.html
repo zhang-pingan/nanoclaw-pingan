@@ -34,9 +34,9 @@
             </div>
           </div>
           <div id="primary-nav" class="primary-nav">
-            <button class="primary-nav-item" data-nav-key="agent-groups">
+            <button class="primary-nav-item" data-nav-key="agents">
               <span class="primary-nav-dot"></span>
-              <span class="primary-nav-label">Agent群组</span>
+              <span class="primary-nav-label">Agent</span>
             </button>
             <button class="primary-nav-item" data-nav-key="trace-monitor">
               <span class="primary-nav-dot"></span>
@@ -152,14 +152,14 @@
           <aside id="sidebar">
             <div class="sidebar-header">
               <div>
-                <div class="sidebar-kicker">Agent Groups</div>
-                <h2>Agent群组</h2>
+                <div class="sidebar-kicker">Agents</div>
+                <h2>Agent 列表</h2>
               </div>
               <div class="sidebar-header-actions">
                 <button
                   id="reset-all-sessions"
-                  class="icon-btn group-action-btn"
-                  title="让所有群组在下一次新建对话时切换到全新 session"
+                  class="icon-btn agent-action-btn"
+                  title="让所有 Agent 在下一次新建对话时切换到全新 session"
                 >
                   <svg
                     class="icon"
@@ -176,9 +176,9 @@
                   </svg>
                 </button>
                 <button
-                  id="refresh-groups"
+                  id="refresh-agents"
                   class="icon-btn"
-                  title="Refresh groups"
+                  title="Refresh agents"
                 >
                   <svg
                     class="icon"
@@ -216,7 +216,7 @@
               </button>
             </div>
             <div class="sidebar-section">
-              <div id="groups-list" class="list">
+              <div id="agents-list" class="list">
                 <!-- Populated by JS -->
               </div>
             </div>
@@ -242,9 +242,9 @@
             </div>
             <!-- Chat header -->
             <div id="chat-header">
-              <div id="chat-group-info">
-                <span id="chat-group-name">Select a group</span>
-                <span id="chat-group-folder" class="muted"></span>
+              <div id="chat-agent-info">
+                <span id="chat-agent-name">Select an Agent</span>
+                <span id="chat-agent-folder" class="muted"></span>
               </div>
               <div class="header-actions">
                 <button id="select-mode-btn" class="icon-btn" title="多选消息">
@@ -274,9 +274,9 @@
                   src="/assets/avatar-assistant.png"
                   alt="Assistant avatar"
                 />
-                <p>Select a group from the sidebar to start chatting</p>
+                <p>Select an Agent from the sidebar to start chatting</p>
                 <span class="messages-empty-sub"
-                  >选择左侧群组，查看消息并开始协作</span
+                  >选择左侧 Agent，查看消息并开始协作</span
                 >
               </div>
             </div>
@@ -628,7 +628,8 @@
                       <strong>03</strong>
                       <span>统一聚合发送</span>
                       <small
-                        >系统自动汇总后投递主群，再走企业微信邮件技能。</small
+                        >系统自动汇总后投递主
+                        Agent，再走企业微信邮件技能。</small
                       >
                     </div>
                   </div>
@@ -951,7 +952,7 @@
                 <h2>记忆管理</h2>
               </div>
             </div>
-            <div id="memory-groups-list" class="list memory-groups-list"></div>
+            <div id="memory-agents-list" class="list memory-agents-list"></div>
           </aside>
           <main class="memory-main">
             <div class="memory-main-body">
@@ -1071,7 +1072,7 @@
                     <div class="memory-editor-kicker">Memory Record</div>
                     <span id="memory-editor-title">新增记忆</span>
                     <small
-                      >按层级、类型与状态维护当前 Group 的结构化记忆。</small
+                      >按层级、类型与状态维护当前 Agent 的结构化记忆。</small
                     >
                   </div>
                 </div>
@@ -1429,9 +1430,7 @@
                 <div id="knowledge-detail" class="hidden">
                   <div class="knowledge-detail-header">
                     <div>
-                      <div class="management-kicker">
-                        Knowledge Detail
-                      </div>
+                      <div class="management-kicker">Knowledge Detail</div>
                       <h2 id="knowledge-detail-title">知识详情</h2>
                       <div
                         id="knowledge-detail-meta"
@@ -1455,9 +1454,7 @@
 
         <section id="configuration-screen">
           <aside class="configuration-sidebar">
-            <div
-              class="management-sidebar-header configuration-sidebar-header"
-            >
+            <div class="management-sidebar-header configuration-sidebar-header">
               <div>
                 <div class="management-kicker configuration-kicker">
                   Configuration
@@ -1530,7 +1527,7 @@
                   </span>
                   <span class="configuration-nav-copy">
                     <strong>服务管理</strong>
-                    <small>groups/global/services.json</small>
+                    <small>agents/global/services.json</small>
                   </span>
                   <span class="configuration-nav-chevron" aria-hidden="true"
                     >▾</span
@@ -1658,14 +1655,12 @@
                 <section class="configuration-panel configuration-editor-panel">
                   <div class="management-panel-head">
                     <div>
-                      <div class="management-panel-title">
-                        基础信息
-                      </div>
+                      <div class="management-panel-title">基础信息</div>
                       <div
                         id="configuration-services-path"
                         class="management-panel-note"
                       >
-                        groups/global/services.json
+                        agents/global/services.json
                       </div>
                     </div>
                   </div>
@@ -1724,9 +1719,7 @@
                 <section class="configuration-panel">
                   <div class="management-panel-head">
                     <div>
-                      <div class="management-panel-title">
-                        运行配置
-                      </div>
+                      <div class="management-panel-title">运行配置</div>
                       <div class="management-panel-note">
                         生产日志与数据库连接信息
                       </div>
@@ -1819,9 +1812,7 @@
                 <section class="configuration-panel">
                   <div class="management-panel-head">
                     <div>
-                      <div class="management-panel-title">
-                        预发配置
-                      </div>
+                      <div class="management-panel-title">预发配置</div>
                       <div class="management-panel-note">
                         staging 下的分支、域名、日志与 MySQL
                       </div>
@@ -1919,9 +1910,7 @@
                 <section class="configuration-panel configuration-json-panel">
                   <div class="management-panel-head">
                     <div>
-                      <div class="management-panel-title">
-                        高级 JSON
-                      </div>
+                      <div class="management-panel-title">高级 JSON</div>
                       <div class="management-panel-note">
                         当前服务完整 JSON，保留表单未覆盖字段
                       </div>
@@ -1998,15 +1987,15 @@
                 </div>
               </section>
 
-              <section class="configuration-overview-grid configuration-feature-grid">
+              <section
+                class="configuration-overview-grid configuration-feature-grid"
+              >
                 <section class="configuration-panel">
                   <div class="management-panel-head">
                     <div>
-                      <div class="management-panel-title">
-                        删除摘要
-                      </div>
+                      <div class="management-panel-title">删除摘要</div>
                       <div class="management-panel-note">
-                        group、chat、trace、projection 与运行目录
+                        Agent、chat、trace、projection 与运行目录
                       </div>
                     </div>
                   </div>
@@ -2019,9 +2008,7 @@
                 <section class="configuration-panel">
                   <div class="management-panel-head">
                     <div>
-                      <div class="management-panel-title">
-                        声明资源
-                      </div>
+                      <div class="management-panel-title">声明资源</div>
                       <div class="management-panel-note">
                         manifest 中声明并由 runtime 加载的资源
                       </div>

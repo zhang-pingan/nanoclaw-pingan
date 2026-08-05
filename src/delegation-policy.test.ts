@@ -8,7 +8,7 @@ import {
 } from './delegation-policy.js';
 
 describe('delegation policy', () => {
-  it('extracts channel prefixes from group folders', () => {
+  it('extracts channel prefixes from agent folders', () => {
     expect(getFolderChannel('wecom_user_zhangsan')).toBe('wecom');
     expect(getFolderChannel('web_main')).toBe('web');
     expect(getFolderChannel('')).toBe('');

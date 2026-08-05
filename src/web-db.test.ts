@@ -15,8 +15,8 @@ beforeEach(() => {
 function store(i: number): void {
   storeWebMessage({
     id: `web-${i}`,
-    chat_jid: 'group@g.us',
-    sender: 'user@s.whatsapp.net',
+    chat_jid: 'web:group',
+    sender: 'user:user',
     sender_name: 'User',
     content: `message ${i}`,
     timestamp: `2024-01-01T00:00:${String(i).padStart(2, '0')}.000Z`,
@@ -31,7 +31,7 @@ describe('web message query LIMIT', () => {
   });
 
   it('getWebMessages returns the most recent rows in chronological order', () => {
-    const messages = getWebMessages('group@g.us', '0', 3);
+    const messages = getWebMessages('web:group', '0', 3);
 
     expect(messages).toHaveLength(3);
     expect(messages[0].content).toBe('message 8');
@@ -41,7 +41,7 @@ describe('web message query LIMIT', () => {
 
   it('getWebMessagesBefore returns older rows in chronological order', () => {
     const messages = getWebMessagesBefore(
-      'group@g.us',
+      'web:group',
       '2024-01-01T00:00:06.000Z',
       3,
     );
@@ -95,6 +95,6 @@ describe('removed web message schema cleanup', () => {
     expect(indexes.map((index) => index.name)).not.toContain(
       'idx_web_messages_workflow_stage',
     );
-    expect(getWebMessages('group@g.us')).toHaveLength(1);
+    expect(getWebMessages('web:group')).toHaveLength(1);
   });
 });

@@ -7,11 +7,11 @@ import {
   updateAgentInboxItemStatus,
 } from './agent-inbox-store.js';
 import { AssistantInboxBroadcastService } from './assistant-inbox-broadcast.js';
-import type { InteractiveCard, RegisteredGroup } from '../types.js';
+import type { InteractiveCard, RegisteredAgent } from '../types.js';
 
-const groups: Record<string, RegisteredGroup> = {
+const agents: Record<string, RegisteredAgent> = {
   'feishu:oc_1': {
-    name: '主群',
+    name: '主 Agent',
     folder: 'main',
     trigger: '',
     added_at: '1',
@@ -32,7 +32,7 @@ describe('AssistantInboxBroadcastService', () => {
   it('broadcasts active inbox items once per updated_at and target', async () => {
     const cards: Array<{ jid: string; card: InteractiveCard }> = [];
     const service = new AssistantInboxBroadcastService({
-      registeredGroups: () => groups,
+      registeredAgents: () => agents,
       sendCard: async (jid, card) => {
         cards.push({ jid, card });
         return 'msg-1';
@@ -61,7 +61,7 @@ describe('AssistantInboxBroadcastService', () => {
   it('falls back to text when card send fails', async () => {
     const messages: Array<{ jid: string; text: string }> = [];
     const service = new AssistantInboxBroadcastService({
-      registeredGroups: () => groups,
+      registeredAgents: () => agents,
       sendCard: async () => {
         throw new Error('card failed');
       },
@@ -87,7 +87,7 @@ describe('AssistantInboxBroadcastService', () => {
   it('broadcasts status updates as cards when the channel supports cards', async () => {
     const cards: Array<{ jid: string; card: InteractiveCard }> = [];
     const service = new AssistantInboxBroadcastService({
-      registeredGroups: () => groups,
+      registeredAgents: () => agents,
       sendCard: async (jid, card) => {
         cards.push({ jid, card });
         return 'msg-1';
@@ -114,7 +114,7 @@ describe('AssistantInboxBroadcastService', () => {
   it('falls back to status text when status card send fails', async () => {
     const messages: Array<{ jid: string; text: string }> = [];
     const service = new AssistantInboxBroadcastService({
-      registeredGroups: () => groups,
+      registeredAgents: () => agents,
       sendCard: async () => {
         throw new Error('card failed');
       },

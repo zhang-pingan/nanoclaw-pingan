@@ -214,7 +214,7 @@ function scanSchedulerRules(
       actionLabel: '查看定时任务',
       actionUrl: workstationUrl('schedulers', { taskId: task.id }),
       extra: {
-        groupFolder: task.group_folder,
+        agentFolder: task.agent_folder,
         chatJid: task.chat_jid,
         lastRun: task.last_run,
       },
@@ -258,7 +258,7 @@ function scanAgentRunRules(
       actionUrl: workstationUrl('trace-monitor', { queryId: query.query_id }),
       extra: {
         runId: query.run_id,
-        groupFolder: query.group_folder,
+        agentFolder: query.agent_folder,
       },
     });
   }

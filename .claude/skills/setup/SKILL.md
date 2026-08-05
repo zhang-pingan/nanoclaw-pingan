@@ -18,12 +18,12 @@ Assume a newly cloned checkout does not contain local runtime state. The followi
 - `.env` — secrets and local settings. Start from `.env.example` if present.
 - `node_modules/`, `container/agent-runner/node_modules/` — installed by bootstrap/container build.
 - `dist/`, `dist-electron/`, `dist-assistant/`, renderer build dirs — generated build output. `setup/service` runs `npm run build`.
-- `store/` — SQLite databases and auth state. The app creates it via `initDatabase`; `setup/register` also creates it.
+- `store/` — SQLite databases. The app creates it via `initDatabase`; `setup/register` also creates it.
 - `data/` — IPC, sessions, uploads, attachments, desktop captures, AI images. Created lazily by runtime.
 - `logs/` — setup/service logs. `setup.sh` and service setup create it.
 - `knowledge/` — wiki/material storage. Created lazily by wiki/web code.
-- Most `groups/*` contents — only `groups/main/CLAUDE.md`, `groups/global/CLAUDE.md`, and `groups/global/services.json.example` are tracked. Registered group folders and logs are local runtime state.
-- `groups/global/services.json` — optional local service catalog. Copy from `groups/global/services.json.example` only when DevOps/workflow service integration is needed.
+- Most `agents/*` contents — only `agents/main/CLAUDE.md`, `agents/global/CLAUDE.md`, and `agents/global/services.json.example` are tracked. Registered Agent folders and logs are local runtime state.
+- `agents/global/services.json` — optional local service catalog. Copy from `agents/global/services.json.example` only when DevOps/workflow service integration is needed.
 
 Do not treat missing ignored paths as repo corruption. Create the required ones in setup and let runtime create lazy state where appropriate.
 
@@ -78,8 +78,8 @@ Only require these when the related feature is enabled or already configured:
 - `CREDENTIAL_PROXY_OPENAI_COMPAT=true` → require `CREDENTIAL_PROXY_OPENAI_API_KEY`
 - AI image tool enabled/expected → require `AI_IMAGE_BASE_URL`, `AI_IMAGE_API_KEY`, `AI_IMAGE_MODEL`, `AI_IMAGE_SIZE`, `AI_IMAGE_QUALITY`, `AI_IMAGE_TIMEOUT_MS`
 - Host-side Agent API usage → require `ICARUS_AGENT_API_API_KEY`; if `ICARUS_AGENT_API_USE_OPENAI_COMPAT=true`, also check `ICARUS_AGENT_API_OPENAI_KEY`, `ICARUS_AGENT_API_OPENAI_BASE_URL`, `ICARUS_AGENT_API_OPENAI_MODEL`
-- Feishu main group registration expected → require `FEISHU_APP_ID` and `FEISHU_APP_SECRET`
-- MySQL service proxy usage → for each MySQL service in `groups/global/services.json`, require `MYSQL_PASSWORD_<service>`
+- Feishu main Agent registration expected → require `FEISHU_APP_ID` and `FEISHU_APP_SECRET`
+- MySQL service proxy usage → for each MySQL service in `agents/global/services.json`, require `MYSQL_PASSWORD_<service>`
 - Jenkins/deploy operations → if `JENKINS_URL` is set, require `JENKINS_USER` and `JENKINS_PASSWORD`
 
 ### Optional / Defaults Available
@@ -96,17 +96,17 @@ These can be omitted unless the user wants to override defaults:
 
 If required or conditionally required values are missing, stop and tell the user exactly which keys need values. Continue only after the user confirms they have updated `.env`, then re-check `.env`.
 
-## 4. Register Required Main Groups
+## 4. Register Required Main Agents
 
-Setup must ensure the required main groups are registered. These are hard requirements for a usable installation:
+Setup must ensure the required main agents are registered. These are hard requirements for a usable installation:
 
-- Assistant main group: `assistant:main` → folder `assistant_main`
-- Web main group: `web:main` → folder `web_main`
-- Feishu main group: `feishu:oc_...` → folder `feishu_main`
+- Assistant main Agent: `assistant:main` → folder `assistant_main`
+- Web main Agent: `web:main` → folder `web_main`
+- Feishu main Agent: `feishu:oc_...` → folder `feishu_main`
 
-The assistant main group is created automatically by `src/channels/assistant.ts` when the service starts, but setup should still verify it after startup.
+The assistant main Agent is created automatically by `src/channels/assistant.ts` when the service starts, but setup should still verify it after startup.
 
-Before service startup, register the web main group if it is missing:
+Before service startup, register the web main Agent if it is missing:
 
 ```bash
 npx tsx setup/index.ts --step register -- \
@@ -132,32 +132,34 @@ npx tsx setup/index.ts --step register -- \
   --is-main
 ```
 
-Do not register raw `oc_...` Feishu JIDs without the `feishu:` prefix. `src/channels/feishu.ts` looks up inbound main-group status using `feishu:${chatJid}`.
+Do not register raw `oc_...` Feishu JIDs without the `feishu:` prefix. `src/channels/feishu.ts` looks up inbound main-Agent status using `feishu:${chatJid}`.
 
-If the user does not want Feishu enabled, stop setup and explain that this setup profile requires the Feishu main group. Do not silently downgrade to web-only.
+If the user does not want Feishu enabled, stop setup and explain that this setup profile requires the Feishu main Agent. Do not silently downgrade to web-only.
 
-## 5. Register Workflow Role Groups
+## 5. Register Workflow Role Agents
 
-Before building the container, offer to register workflow role groups. This is
+Before building the container, offer to register workflow role agents. This is
 not required for the service to start, but `dev_test` and `fix_test` cannot run
-end-to-end until the role groups exist.
+end-to-end until the role agents exist.
 
-The built-in role group registration and the script below are the recommended
-setup path, not a hard requirement. If the user prefers to register their own
-workflow role groups or use different folders, explain the current risk before
+Registering the role Agents below is the recommended setup path, not a hard
+requirement. If the user prefers to register their own
+workflow role agents or use different folders, explain the current risk before
 continuing: workflow role routing is hard-coded in
 `container/workflow-definitions/*.json` under each workflow version's
-`roles.<role>.channels` map. Custom role groups must be reflected there, or
+`roles.<role>.channels` map. Custom role agents must be reflected there, or
 `dev_test` / `fix_test` will still delegate to the default folders such as
 `web_dev`, `feishu_dev`, `web_ops`, and `feishu_ops`.
 
-Run the web role group registration by default:
+Use the regular registration step once per web role Agent. For example:
 
 ```bash
-npx tsx setup/index.ts --step workflow-groups
+npx tsx setup/index.ts --step register -- \
+  --channel web --jid web:dev --name "Web Dev" \
+  --trigger "@Andy" --folder web_dev --no-trigger-required
 ```
 
-This creates/updates the stable local web groups:
+Repeat it for the stable local web Agents:
 
 - `web:plan` -> `web_plan`
 - `web:plan_examine` -> `web_plan_examine`
@@ -166,49 +168,48 @@ This creates/updates the stable local web groups:
 - `web:ops` -> `web_ops`
 - `web:test` -> `web_test`
 
-It writes the DB rows, creates `groups/<folder>/logs`, and creates
-`groups/<folder>/CLAUDE.md` when missing. It preserves existing `CLAUDE.md`
-files unless `--overwrite-claude` is passed, and preserves existing DB rows
-unless `--overwrite-db` is passed.
+The registration step writes the DB row and creates `agents/<folder>/logs`.
+Create or provision each role's `CLAUDE.md` separately when role-specific
+instructions are required.
 
-For Feishu workflow role groups, real `oc_...` chat ids are required. If the
+For Feishu workflow role agents, real `oc_...` chat ids are required. If the
 user wants Feishu workflow delegation enabled now, ask them for the mapping and
-run:
+repeat the regular registration step with each canonical Feishu JID:
 
 ```bash
-npx tsx setup/index.ts --step workflow-groups -- \
-  --include-feishu \
-  --feishu-map '{"plan":"oc_xxx","plan_examine":"oc_xxx","dev":"oc_xxx","dev_examine":"oc_xxx","ops":"oc_xxx","test":"oc_xxx"}'
+npx tsx setup/index.ts --step register -- \
+  --channel feishu --jid feishu:oc_xxx --name "Feishu Dev" \
+  --trigger "@Andy" --folder feishu_dev
 ```
 
-The script accepts either raw `oc_...` values or `feishu:oc_...` values. If the
-user does not have the Feishu role chat ids yet, continue with web role groups
-and report that Feishu role groups can be registered later with the same command.
+Do not use raw `oc_...` values. If the user does not have the Feishu role chat
+ids yet, continue with web role Agents and report that Feishu role Agents can
+be registered later with the same command.
 
 ## 6. Configure Service Catalog (Optional)
 
-Only configure `groups/global/services.json` when the user wants DevOps,
+Only configure `agents/global/services.json` when the user wants DevOps,
 workflow service integration, service repo access, Jenkins deployment, log
 inspection, MySQL proxying, or today-plan service association. Start from
-`groups/global/services.json.example` and keep the real file local.
+`agents/global/services.json.example` and keep the real file local.
 
 Important service path rules:
 
-- The top-level JSON keys are service names used by workflow/UI/group config,
+- The top-level JSON keys are service names used by workflow/UI/Agent config,
   for example `catstory`.
 - Each service's `repo_path` is the service directory name under the host
   `REPOS_DIR`, and it is also the directory name used inside containers.
 - Runtime maps `${REPOS_DIR}/${repo_path}` on the host to
-  `/workspace/repos/${repo_path}` in the group container.
+  `/workspace/repos/${repo_path}` in the Agent container.
 - `repo_path` is not a full host path and not the git URL. If the host checkout
   is in a differently named directory, either rename/check out the repo under
   `REPOS_DIR` with the matching name or update `repo_path` to match the real
   mounted service directory.
 - A service repo is mounted only when the host directory exists and the target
-  group's registered DB row has `containerConfig.services` containing that
+  Agent's registered DB row has `containerConfig.services` containing that
   service name, or `["*"]` for all services.
 
-When registering or updating groups that need service repos, add
+When registering or updating agents that need service repos, add
 `containerConfig.services`. Example:
 
 ```json
@@ -217,21 +218,21 @@ When registering or updating groups that need service repos, add
 }
 ```
 
-Use `["*"]` only for trusted groups that should access every service in
+Use `["*"]` only for trusted agents that should access every service in
 `services.json`.
 
 Container mount reference:
 
-- Main group: project root is mounted at `/workspace/project`; its own group
-  folder is mounted at `/workspace/group`; `groups/global/services.json` is
-  available through `/workspace/project/groups/global/services.json`.
-- Non-main groups: their own folder is mounted at `/workspace/group`; global
+- Main Agent: project root is mounted at `/workspace/project`; its own Agent
+  folder is mounted at `/workspace/agent`; `agents/global/services.json` is
+  available through `/workspace/project/agents/global/services.json`.
+- Non-main agents: their own folder is mounted at `/workspace/agent`; global
   config is mounted read-only at `/workspace/global`; service repos are mounted
   at `/workspace/repos/{repo_path}` when `containerConfig.services` allows them.
 - `/workspace/projects/{service}` is for project knowledge, plans, and
   deliverables. It is not the git repository.
 - Arbitrary extra directories require both `containerConfig.additionalMounts`
-  on the group and the mount allowlist in step 8.
+  on the Agent and the mount allowlist in step 8.
 
 ## 7. Container Runtime
 
@@ -321,15 +322,15 @@ Replace `USERNAME` with the actual username (from `whoami`). Run the two `sudo` 
 
 Run `npx tsx setup/index.ts --step verify` and parse the status block.
 
-Treat setup success as: service running, required `.env` values configured, and all required main groups registered. The current `setup/verify.ts` also reports legacy channel/group status; use it as signal, but perform the main-group checks below explicitly.
+Treat setup success as: service running, required `.env` values configured, and all required main agents registered. `setup/verify.ts` reports the built-in channel and Agent status; perform the main-Agent checks below explicitly as well.
 
-Required main group checks:
+Required main Agent checks:
 
 ```bash
 node --input-type=module <<'EOF'
 import Database from "better-sqlite3";
 const db = new Database("store/messages.db", { readonly: true });
-const rows = db.prepare("SELECT jid, folder, is_main, requires_trigger FROM registered_groups").all();
+const rows = db.prepare("SELECT jid, folder, is_main, requires_trigger FROM registered_agents").all();
 const required = [
   ["assistant:main", "assistant_main"],
   ["web:main", "web_main"],
@@ -349,19 +350,19 @@ EOF
 - SERVICE=stopped → `npm run build`, then restart: `launchctl kickstart -k gui/$(id -u)/com.icarus` (macOS) or `systemctl --user restart icarus.service` (Linux) or `bash start-icarus.sh` (WSL nohup)
 - SERVICE=not_found → re-run step 9
 - Required `.env` values missing → re-run step 3
-- Missing required main group → re-run step 4
+- Missing required main Agent → re-run step 4
 - MOUNT_ALLOWLIST=missing → `npx tsx setup/index.ts --step mounts -- --empty`
 
-### Non-main Workflow Groups
+### Non-main Workflow Agents
 
-Do not fail setup when non-main groups are missing. Warn the user that the `dev_test` and `fix_test` workflows depend on role groups for delegation. If these are not registered, those workflows cannot run end-to-end.
+Do not fail setup when non-main agents are missing. Warn the user that the `dev_test` and `fix_test` workflows depend on role agents for delegation. If these are not registered, those workflows cannot run end-to-end.
 
 Expected non-main role folders from current workflow definitions:
 
 - `dev_test`: the web equivalents `web_plan`, `web_plan_examine`, `web_dev`, `web_dev_examine`, `web_ops`, `web_test`
 - `fix_test`: the web equivalents `web_dev`, `web_ops`, `web_test`
 
-If any are missing, report them as warnings only. Tell the user they can register them later with `npx tsx setup/index.ts --step workflow-groups` (web groups) or the same command with `--include-feishu --feishu-map ...` for Feishu groups.
+If any are missing, report them as warnings only. Tell the user they can register them later by repeating `npx tsx setup/index.ts --step register -- ...` for each Web or Feishu Agent.
 
 Show logs with: `tail -f logs/icarus.log`
 
@@ -369,10 +370,10 @@ Show logs with: `tail -f logs/icarus.log`
 
 **Service not starting:** Check `logs/icarus.error.log`. Common: wrong Node path (re-run step 9), missing `.env`, invalid Feishu credentials, or port conflicts on `WEB_PORT`, `CREDENTIAL_PROXY_PORT`, `MYSQL_PROXY_PORT`, or `FEISHU_WEBHOOK_PORT`.
 
-**Container agent fails ("Claude Code process exited with code 1"):** Ensure the container runtime is running — `open -a Docker` (macOS Docker), `container system start` (Apple Container), or `sudo systemctl start docker` (Linux). Check container logs under the relevant group folder, such as `groups/assistant_main/logs/`, `groups/web_main/logs/`, or `groups/feishu_main/logs/`.
+**Container agent fails ("Claude Code process exited with code 1"):** Ensure the container runtime is running — `open -a Docker` (macOS Docker), `container system start` (Apple Container), or `sudo systemctl start docker` (Linux). Check container logs under the relevant Agent folder, such as `agents/assistant_main/logs/`, `agents/web_main/logs/`, or `agents/feishu_main/logs/`.
 
-**Feishu main group not recognized:** Registered JID must include the `feishu:` prefix, for example `feishu:oc_xxx`. The inbound Feishu handler computes the lookup key as `feishu:${chatJid}`.
+**Feishu main Agent not recognized:** Registered JID must include the `feishu:` prefix, for example `feishu:oc_xxx`. The inbound Feishu handler computes the lookup key as `feishu:${chatJid}`.
 
-**Clean clone missing local files:** Recreate `.env` from `.env.example`, run `bash setup.sh`, register required main groups, run container setup, configure mounts, then start service. Do not copy ignored runtime state from another machine unless the user explicitly wants to migrate data.
+**Clean clone missing local files:** Recreate `.env` from `.env.example`, run `bash setup.sh`, register required main agents, run container setup, configure mounts, then start service. Do not copy ignored runtime state from another machine unless the user explicitly wants to migrate data.
 
 **Unload service:** macOS: `launchctl unload ~/Library/LaunchAgents/com.icarus.plist` | Linux: `systemctl --user stop icarus.service`

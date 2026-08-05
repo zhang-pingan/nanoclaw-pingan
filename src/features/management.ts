@@ -1,10 +1,10 @@
 import fs from 'fs';
 import path from 'path';
 
-import { DATA_DIR, GROUPS_DIR } from '../config.js';
+import { DATA_DIR, AGENTS_DIR } from '../config.js';
 import {
   getDatabase,
-  listFeatureGroupBindings,
+  listFeatureAgentBindings,
   recordFeatureAuditEvent,
 } from '../db.js';
 import { logger } from '../logger.js';
@@ -30,7 +30,7 @@ export interface FeatureOwnedTableSummary {
 
 export interface FeatureDeletionSummary {
   featureId: string;
-  groups: Array<{ key: string; jid: string; folder: string }>;
+  agents: Array<{ key: string; jid: string; folder: string }>;
   projectionTables: FeatureOwnedTableSummary[];
   externalDataRoots: Array<{
     rootId: string;
@@ -42,9 +42,9 @@ export interface FeatureDeletionSummary {
 }
 
 export interface FeatureManagementHostHooks {
-  reloadRegisteredGroups?: () => void;
-  stopFeatureGroups?: (
-    groups: FeatureDeletionSummary['groups'],
+  reloadRegisteredAgents?: () => void;
+  stopFeatureAgents?: (
+    agents: FeatureDeletionSummary['agents'],
     context: { featureId: string; action: 'delete_data' },
   ) => Promise<void> | void;
 }
@@ -140,7 +140,7 @@ export async function setFeatureEnabledAndApply(input: {
 
   try {
     await activateConfiguredFeatures();
-    reloadRegisteredGroupsFromHost();
+    reloadRegisteredAgentsFromHost();
     return {
       ...result,
       restartRequired: false,
@@ -151,7 +151,7 @@ export async function setFeatureEnabledAndApply(input: {
       saveLocalFeatureRuntimeConfig(previous.enabled);
       try {
         await activateConfiguredFeatures();
-        reloadRegisteredGroupsFromHost();
+        reloadRegisteredAgentsFromHost();
       } catch (rollbackErr) {
         logger.error(
           { err: rollbackErr, featureId: input.featureId },
@@ -174,13 +174,13 @@ export function getFeatureDeletionSummary(
   featureId: string,
 ): FeatureDeletionSummary {
   getInstalledFeature(featureId);
-  const groups = listFeatureGroupBindings(featureId).map((binding) => ({
-    key: binding.group_key,
-    jid: binding.group_jid,
-    folder: binding.group_folder,
+  const agents = listFeatureAgentBindings(featureId).map((binding) => ({
+    key: binding.agent_key,
+    jid: binding.agent_jid,
+    folder: binding.agent_folder,
   }));
-  const groupFolders = groups.map((group) => group.folder);
-  const groupJids = groups.map((group) => group.jid);
+  const agentFolders = agents.map((agent) => agent.folder);
+  const agentJids = agents.map((agent) => agent.jid);
   const projectionTables = listFeatureOwnedProjectionTables(featureId);
   const externalDataRoots = listExternalFeatureDataRoots(featureId).map(
     (root) => ({
@@ -189,13 +189,13 @@ export function getFeatureDeletionSummary(
       readonly: root.readonly !== false,
     }),
   );
-  const queryIds = listOwnedAgentQueryIds(groupFolders);
+  const queryIds = listOwnedAgentQueryIds(agentFolders);
   const counts = {
-    groups: groups.length,
+    agents: agents.length,
     agent_queries: queryIds.length,
-    messages: countRowsByValues('messages', 'chat_jid', groupJids),
-    chats: countRowsByValues('chats', 'jid', groupJids),
-    sessions: countRowsByValues('sessions', 'group_folder', groupFolders),
+    messages: countRowsByValues('messages', 'chat_jid', agentJids),
+    chats: countRowsByValues('chats', 'jid', agentJids),
+    sessions: countRowsByValues('sessions', 'agent_folder', agentFolders),
     feature_migrations: countRows(
       'feature_migrations',
       'feature_id = ?',
@@ -211,15 +211,15 @@ export function getFeatureDeletionSummary(
   const featureDataRoot = getFeatureDataRoot(featureId);
   const paths = [
     featureDataRoot.rootPath,
-    ...groups.flatMap((group) => [
-      path.join(GROUPS_DIR, group.folder),
-      path.join(DATA_DIR, 'sessions', group.folder),
-      path.join(DATA_DIR, 'ipc', group.folder),
+    ...agents.flatMap((agent) => [
+      path.join(AGENTS_DIR, agent.folder),
+      path.join(DATA_DIR, 'sessions', agent.folder),
+      path.join(DATA_DIR, 'ipc', agent.folder),
     ]),
   ];
   return {
     featureId,
-    groups,
+    agents,
     projectionTables,
     externalDataRoots,
     counts,
@@ -242,11 +242,11 @@ export async function deleteFeatureData(featureId: string): Promise<{
       throw new Error(disabled.error);
     }
   }
-  await stopFeatureGroupsForDeletion(featureId, summary.groups);
+  await stopFeatureAgentsForDeletion(featureId, summary.agents);
 
-  const groupFolders = summary.groups.map((group) => group.folder);
-  const groupJids = summary.groups.map((group) => group.jid);
-  const queryIds = listOwnedAgentQueryIds(groupFolders);
+  const agentFolders = summary.agents.map((agent) => agent.folder);
+  const agentJids = summary.agents.map((agent) => agent.jid);
+  const queryIds = listOwnedAgentQueryIds(agentFolders);
 
   for (const targetPath of summary.paths) {
     if (!fs.existsSync(targetPath)) continue;
@@ -259,18 +259,18 @@ export async function deleteFeatureData(featureId: string): Promise<{
     deleteByValues('agent_query_steps', 'query_id', queryIds);
     deleteByValues('agent_queries', 'query_id', queryIds);
 
-    deleteByValues('scheduled_tasks', 'group_folder', groupFolders);
-    deleteByValues('ask_questions', 'group_folder', groupFolders);
-    deleteByValues('memories', 'group_folder', groupFolders);
-    deleteByValues('memory_metrics', 'group_folder', groupFolders);
-    deleteByValues('memory_extract_config', 'group_folder', groupFolders);
-    deleteByValues('sessions', 'group_folder', groupFolders);
-    deleteByValues('messages', 'chat_jid', groupJids);
-    deleteByValues('chats', 'jid', groupJids);
-    deleteByValues('registered_groups', 'jid', groupJids);
+    deleteByValues('scheduled_tasks', 'agent_folder', agentFolders);
+    deleteByValues('ask_questions', 'agent_folder', agentFolders);
+    deleteByValues('memories', 'agent_folder', agentFolders);
+    deleteByValues('memory_metrics', 'agent_folder', agentFolders);
+    deleteByValues('memory_extract_config', 'agent_folder', agentFolders);
+    deleteByValues('sessions', 'agent_folder', agentFolders);
+    deleteByValues('messages', 'chat_jid', agentJids);
+    deleteByValues('chats', 'jid', agentJids);
+    deleteByValues('registered_agents', 'jid', agentJids);
 
     database
-      .prepare('DELETE FROM feature_group_bindings WHERE feature_id = ?')
+      .prepare('DELETE FROM feature_agent_bindings WHERE feature_id = ?')
       .run(featureId);
     database
       .prepare('DELETE FROM feature_migrations WHERE feature_id = ?')
@@ -283,7 +283,7 @@ export async function deleteFeatureData(featureId: string): Promise<{
       metadata: { summary },
     });
   })();
-  reloadRegisteredGroupsFromHost();
+  reloadRegisteredAgentsFromHost();
 
   return { summary, restartRequired: false };
 }
@@ -320,20 +320,20 @@ function countRowsByValues(
   return count;
 }
 
-function reloadRegisteredGroupsFromHost(): void {
+function reloadRegisteredAgentsFromHost(): void {
   try {
-    hostHooks.reloadRegisteredGroups?.();
+    hostHooks.reloadRegisteredAgents?.();
   } catch (err) {
-    logger.error({ err }, 'Feature host registered group reload failed');
+    logger.error({ err }, 'Feature host registered agent reload failed');
   }
 }
 
-async function stopFeatureGroupsForDeletion(
+async function stopFeatureAgentsForDeletion(
   featureId: string,
-  groups: FeatureDeletionSummary['groups'],
+  agents: FeatureDeletionSummary['agents'],
 ): Promise<void> {
-  if (!groups.length) return;
-  await hostHooks.stopFeatureGroups?.(groups, {
+  if (!agents.length) return;
+  await hostHooks.stopFeatureAgents?.(agents, {
     featureId,
     action: 'delete_data',
   });
@@ -383,7 +383,7 @@ function dropFeatureOwnedProjectionTables(
   }
 }
 
-function listOwnedAgentQueryIds(groupFolders: string[]): string[] {
+function listOwnedAgentQueryIds(agentFolders: string[]): string[] {
   const database = getDatabase();
   const ids = new Set<string>();
   const addBy = (column: string, values: string[]) => {
@@ -396,7 +396,7 @@ function listOwnedAgentQueryIds(groupFolders: string[]): string[] {
       }
     }
   };
-  addBy('group_folder', groupFolders);
+  addBy('agent_folder', agentFolders);
   return [...ids];
 }
 
