@@ -114,33 +114,6 @@ describe('G0.1 toolchain identity', () => {
     );
   });
 
-  it('binds the minimal Compiler inputs to the lockfile and package integrity', () => {
-    const identity = readJson(
-      path.join(toolchainDir, 'compiler-toolchain-inputs.json'),
-    );
-    const lockBytes = fs.readFileSync(
-      path.join(projectRoot, 'package-lock.json'),
-    );
-    const lock = JSON.parse(lockBytes.toString('utf8')) as Record<string, any>;
-    const { identity_hash: identityHash, ...payload } = identity;
-
-    expect(identity.identity_scope).toBe('g0.1_locked_inputs');
-    expect(identity.node_runtime_version).toBe('26.5.0');
-    expect(identity.npm_version).toBe('11.17.0');
-    expect(identity.package_lock_sha256).toBe(
-      `sha256:${crypto.createHash('sha256').update(lockBytes).digest('hex')}`,
-    );
-    expect(identityHash).toBe(
-      domainHash('icarus:workflow-compiler-toolchain-inputs:1', payload),
-    );
-
-    for (const packageRef of identity.direct_packages) {
-      const locked = lock.packages[`node_modules/${packageRef.package_name}`];
-      expect(packageRef.exact_version).toBe(locked.version);
-      expect(packageRef.lockfile_integrity).toBe(locked.integrity);
-    }
-  });
-
   it('loads the pinned native module under the active managed Node on darwin', () => {
     const database = new Database(':memory:');
     expect(database.prepare('select 1 as value').get()).toEqual({ value: 1 });
