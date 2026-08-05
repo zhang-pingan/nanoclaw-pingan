@@ -28,9 +28,12 @@ import {
 import { registryResourceId } from '../contracts/g3-registry-persistence.js';
 import type { G3RegistryResourceType } from '../contracts/g3-registry-persistence-types.js';
 import { G5_REPAIR_DATABASE_SCHEMA_HASH } from '../contracts/g5-basic-runtime-repair-types.js';
-import type {
-  G5RepairFixtureCase,
-  G5RepairFixtureOracle,
+import {
+  G5_REPAIR_FAULT_FIXTURES,
+  G5_REPAIR_NEGATIVE_FIXTURES,
+  G5_REPAIR_POSITIVE_FIXTURES,
+  type G5RepairFixtureCase,
+  type G5RepairFixtureOracle,
 } from '../contracts/g5-basic-runtime-repair-contract.js';
 import {
   G5FixtureExecutionHarness,
@@ -4509,23 +4512,10 @@ function buildProductionFixtureTarget(
   }
 }
 
-function readG5FixtureCases(name: string): JsonValue[] {
-  const artifact = JSON.parse(
-    fs.readFileSync(
-      new URL(
-        `../contracts/conformance/g5-basic-runtime-repair/${name}`,
-        import.meta.url,
-      ),
-      'utf8',
-    ),
-  ) as { payload: { cases: JsonValue[] } };
-  return artifact.payload.cases;
-}
-
 const productionFixtureArtifacts: G5FixtureArtifacts = {
-  positive: readG5FixtureCases('positive-cases.json'),
-  negative: readG5FixtureCases('negative-cases.json'),
-  fault: readG5FixtureCases('fault-cases.json'),
+  positive: G5_REPAIR_POSITIVE_FIXTURES,
+  negative: G5_REPAIR_NEGATIVE_FIXTURES,
+  fault: G5_REPAIR_FAULT_FIXTURES,
 };
 
 const productionFixtureHandlerIds = [
