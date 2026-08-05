@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-capability-outbox-snapshot-schema:1\n",
-  "hash": "sha256:c0c26f1191557e346ce656bb869b292d0ac09b7ed109988b8ed10805233207e2",
+  "hash": "sha256:727082726ca74fc88adf1a95f8505246c6e51976dc8c5a2e6d56271b3259e9b8",
   "payload": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "$id": "https://icarus.local/schemas/capability-outbox-snapshot/1",
@@ -5190,8 +5190,6 @@
         "type": "object",
         "additionalProperties": false,
         "required": [
-          "proof_algorithm_version",
-          "proof_algorithm_hash",
           "producer_schema_hash",
           "canonical_pointer",
           "pointer_totality",
@@ -5203,14 +5201,6 @@
           "proof_hash"
         ],
         "properties": {
-          "proof_algorithm_version": {
-            "type": "string",
-            "minLength": 1
-          },
-          "proof_algorithm_hash": {
-            "type": "string",
-            "pattern": "^sha256:[0-9a-f]{64}$"
-          },
           "producer_schema_hash": {
             "type": "string",
             "pattern": "^sha256:[0-9a-f]{64}$"

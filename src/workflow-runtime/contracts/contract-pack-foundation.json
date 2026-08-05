@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-contract-pack-foundation:1\n",
-  "hash": "sha256:e85b654581c036f8129677d7443a0704ebc8b8fbe87907b842aaefe1501e637d",
+  "hash": "sha256:59008ecb8c0cbe638beadf06c728a30d9654c9a3065ed57abcc9873730edcef6",
   "payload": {
     "gate": "G0.2",
     "status": "foundation",
@@ -21,7 +21,7 @@
         },
         "version": 1,
         "domain_separator": "icarus:workflow-foundation-domain-separators:1\n",
-        "hash": "sha256:637a5bdf3353efba20776c0df1b601f6b2eaba6541a14f6268dbab0a6b972611"
+        "hash": "sha256:2ebd3276a4d57f883990b0deceab55a5b165e8a8b15dd36e9a3d4c5f82c695aa"
       },
       {
         "path": "conformance/foundation/hash-vectors.json",
@@ -89,38 +89,6 @@
         "domain_separator": "icarus:workflow-versioned-ref-schema:1\n",
         "hash": "sha256:7a22150ce8d6e8127e882a6ed79975e578d2fd6a28dfab002490c17cfdd196bd"
       }
-    ],
-    "toolchain_inputs": [
-      {
-        "path": "toolchain/compiler-toolchain-inputs.json",
-        "format": "icarus.workflow-compiler-toolchain-inputs/1",
-        "ref": {
-          "id": "icarus.workflow-compiler-toolchain-inputs",
-          "version": "1.0.0"
-        },
-        "version": 1,
-        "domain_separator": "icarus:workflow-compiler-toolchain-inputs:1\n",
-        "hash": "sha256:3ad720b0283ec45be37acb596f8afb1e50a40f177fbc0c3ee2ff419aba43557b"
-      },
-      {
-        "path": "toolchain/node-v26.5.0-darwin-arm64.json",
-        "format": "icarus.managed-node-runtime-distribution/1",
-        "ref": {
-          "id": "nodejs.node-v26.5.0-darwin-arm64",
-          "version": "1.0.0"
-        },
-        "version": 1,
-        "domain_separator": "icarus:managed-node-runtime-distribution:1\n",
-        "hash": "sha256:0824f5044057d6ff26dc45022b842342f148b2dda2f0dd0feb17dd0b045f6cad"
-      }
-    ],
-    "reserved_directories": [
-      "schemas",
-      "protocols",
-      "safety",
-      "sqlite",
-      "conformance/draft",
-      "conformance/sealed"
     ]
   }
 }

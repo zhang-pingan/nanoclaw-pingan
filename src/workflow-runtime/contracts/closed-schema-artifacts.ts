@@ -1622,8 +1622,6 @@ const compiledNodeSchema: Schema = {
 };
 
 const compatibilityProofSchema = object({
-  proof_algorithm_version: stringSchema({ minLength: 1 }),
-  proof_algorithm_hash: hashSchema,
   producer_schema_hash: hashSchema,
   canonical_pointer: nullable(pointerSchema),
   pointer_totality: enumSchema(['total', 'may_be_missing']),
@@ -1842,14 +1840,6 @@ const runtimeSafetySchema = object({
 const compiledScopePlanSchema = object({
   format: { const: 'icarus.workflow-graph-scope-plan/1' },
   compiler_version: stringSchema({ minLength: 1 }),
-  compiler_build_hash: hashSchema,
-  compiler_toolchain_ref: ref('versioned_ref'),
-  compiler_toolchain_hash: hashSchema,
-  compiler_error_catalog_hash: hashSchema,
-  canonical_normalizer_version: stringSchema({ minLength: 1 }),
-  canonical_normalizer_hash: hashSchema,
-  proof_algorithm_version: stringSchema({ minLength: 1 }),
-  proof_algorithm_hash: hashSchema,
   plan_hash: hashSchema,
   source_hash: hashSchema,
   interface_snapshot_hash: hashSchema,

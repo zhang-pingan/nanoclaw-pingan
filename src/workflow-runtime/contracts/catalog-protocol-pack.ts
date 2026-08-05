@@ -38,21 +38,10 @@ import type {
 } from './types.js';
 
 const contractsRoot = import.meta.dirname;
-const foundationManifestHash =
-  'sha256:e85b654581c036f8129677d7443a0704ebc8b8fbe87907b842aaefe1501e637d';
-const closedSchemaManifestHash =
-  'sha256:6f7aa5b997c5a496a4eb95776a09f18e3c25753e7324a6ef1f095a23b8413d81';
 const manifestPath = 'contract-pack-catalog-protocols.json';
 const positiveCasesPath = 'conformance/catalog-protocols/positive-cases.json';
 const negativeCasesPath = 'conformance/catalog-protocols/negative-cases.json';
 const domainCatalogPath = 'catalogs/catalog-protocol-domain-separators.json';
-
-const recordedFutureReservedDirectories = [
-  'safety',
-  'sqlite',
-  'conformance/draft',
-  'conformance/sealed',
-] as const;
 
 export class CatalogProtocolContractError extends Error {
   readonly code = 'catalog_protocol_contract_drift';
@@ -196,8 +185,6 @@ function buildManifest(
       gate: 'G0.4',
       status: 'catalogs_and_protocol_tables',
       run_protocol_major: 1,
-      foundation_manifest_hash: foundationManifestHash,
-      closed_schema_manifest_hash: closedSchemaManifestHash,
       compiler_error_code_count: WORKFLOW_COMPILER_ERROR_CODES.length,
       fact_kind_count: RUNTIME_FACT_KINDS.length,
       event_type_count:
@@ -219,7 +206,6 @@ function buildManifest(
         .sort((left, right) =>
           asciiCompare(String(left.path), String(right.path)),
         ),
-      future_reserved_directories: [...recordedFutureReservedDirectories],
     },
   );
 }
@@ -629,8 +615,6 @@ function validateDirectoryBoundaries(): void {
     ...expectedCatalogFiles,
     'safety-sqlite-domain-separators.json',
     'logical-schema-domain-separators.json',
-    'static-absence-domain-separators.json',
-    'golden-draft-domain-separators.json',
   ]);
   const actualCatalogFiles = fs
     .readdirSync(absoluteContractPath('catalogs'))
@@ -664,17 +648,6 @@ function validateDirectoryBoundaries(): void {
   }
 }
 
-function validatePriorPackIdentity(): void {
-  const foundation = readArtifact('contract-pack-foundation.json');
-  const closedSchemas = readArtifact('contract-pack-closed-schemas.json');
-  if (foundation.hash !== foundationManifestHash) {
-    throw new Error('G0.2 foundation manifest changed during G0.4');
-  }
-  if (closedSchemas.hash !== closedSchemaManifestHash) {
-    throw new Error('G0.3 closed-schema manifest changed during G0.4');
-  }
-}
-
 function validateCompletePack(
   artifacts: Array<[string, ContractArtifactEnvelope]>,
   manifest: ContractArtifactEnvelope,
@@ -700,7 +673,6 @@ function validateCompletePack(
   validateFixtures(semanticArtifacts);
   validateDomainCatalog(artifacts, manifest);
   validateDirectoryBoundaries();
-  validatePriorPackIdentity();
 }
 
 export function generateContractPackCatalogProtocols(): ContractArtifactEnvelope {

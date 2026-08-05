@@ -6,20 +6,12 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-foundation-domain-separators:1\n",
-  "hash": "sha256:637a5bdf3353efba20776c0df1b601f6b2eaba6541a14f6268dbab0a6b972611",
+  "hash": "sha256:2ebd3276a4d57f883990b0deceab55a5b165e8a8b15dd36e9a3d4c5f82c695aa",
   "payload": {
     "entries": [
       {
-        "format": "icarus.managed-node-runtime-distribution/1",
-        "domain_separator": "icarus:managed-node-runtime-distribution:1\n"
-      },
-      {
         "format": "icarus.workflow-canonical-hash-profile/1",
         "domain_separator": "icarus:workflow-canonical-hash-profile:1\n"
-      },
-      {
-        "format": "icarus.workflow-compiler-toolchain-inputs/1",
-        "domain_separator": "icarus:workflow-compiler-toolchain-inputs:1\n"
       },
       {
         "format": "icarus.workflow-contract-artifact-envelope-schema/1",

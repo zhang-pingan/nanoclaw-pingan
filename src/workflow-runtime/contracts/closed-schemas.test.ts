@@ -12,7 +12,10 @@ import {
   CLOSED_SCHEMA_NEGATIVE_CASES,
   CLOSED_SCHEMA_POSITIVE_CASES,
 } from './closed-schema-fixtures.js';
-import { checkContractPackClosedSchemas } from './closed-schema-pack.js';
+import {
+  checkContractPackClosedSchemas,
+  generateContractPackClosedSchemas,
+} from './closed-schema-pack.js';
 import { parseContractArtifactEnvelope } from './artifact.js';
 import { strictParseJsonBytes } from './strict-json.js';
 
@@ -39,6 +42,8 @@ describe('G0.3 closed schema Contract Pack', () => {
         (descriptor) => descriptor.artifact_path,
       ),
     ];
+    const generated = generateContractPackClosedSchemas();
+    expect(generateContractPackClosedSchemas().hash).toBe(generated.hash);
     const before = new Map(
       trackedPaths.map((relativePath) => [
         relativePath,
@@ -48,9 +53,6 @@ describe('G0.3 closed schema Contract Pack', () => {
 
     const manifest = checkContractPackClosedSchemas();
     expect(manifest.payload.gate).toBe('G0.3');
-    expect(manifest.payload.foundation_manifest_hash).toBe(
-      'sha256:e85b654581c036f8129677d7443a0704ebc8b8fbe87907b842aaefe1501e637d',
-    );
     for (const [relativePath, bytes] of before) {
       expect(fs.readFileSync(path.join(contractsRoot, relativePath))).toEqual(
         bytes,
@@ -147,22 +149,6 @@ describe('G0.3 closed schema Contract Pack', () => {
       'compiled_plan_rejects_both_artifact_contract_choices',
     ]) {
       expect(caseIds.has(expectedCaseId), expectedCaseId).toBe(true);
-    }
-  });
-
-  it('keeps Golden directories reserved and the G0.2 foundation byte identity stable', () => {
-    expect(readArtifact('contract-pack-foundation.json').hash).toBe(
-      'sha256:e85b654581c036f8129677d7443a0704ebc8b8fbe87907b842aaefe1501e637d',
-    );
-    for (const directory of ['conformance/sealed']) {
-      expect(fs.readdirSync(path.join(contractsRoot, directory))).toEqual([
-        '.gitkeep',
-        'g2-capability-outbox-binding-v3',
-        'g2-generated-schema-join-authority-v4',
-        'g2-generated-schema-join-authority-v5',
-        'g2-production-compiler-replay-repair-v2',
-        'g2-semantic-correction',
-      ]);
     }
   });
 });

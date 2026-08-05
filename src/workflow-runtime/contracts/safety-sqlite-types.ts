@@ -1,5 +1,3 @@
-import type { VersionedRef } from './types.js';
-
 export const SAFETY_CEILING_GROUP_KEYS = {
   routing: [
     'max_task_input_bytes',
@@ -465,7 +463,6 @@ export const LOCAL_SINGLE_USER_RETENTION_POLICY = {
 
 export const SQLITE_PROFILE_KEYS = [
   'profile_id',
-  'certification_status',
   'deployment_profile',
   'runtime_surface',
   'platform',
@@ -486,24 +483,10 @@ export const SQLITE_PROFILE_KEYS = [
   'read_uncommitted',
   'locking_mode',
   'read_only_query_only',
-  'sqlite_version',
-  'sqlite_source_id',
-  'sqlite_compile_options_hash',
-  'better_sqlite3_version',
-  'better_sqlite3_native_module_hash',
-  'managed_node_distribution_ref',
-  'managed_node_distribution_hash',
-  'node_runtime_version',
-  'node_executable_hash',
-  'release_artifact_hash',
-  'runtime_launcher_hash',
-  'identity_binding_rule',
-  'profile_application',
 ] as const;
 
-export interface SQLiteExecutionProfileCandidate {
+export interface SQLiteExecutionProfile {
   profile_id: 'local_single_user_sqlite@1';
-  certification_status: 'candidate';
   deployment_profile: 'local_single_user';
   runtime_surface: 'node_service';
   platform: 'darwin';
@@ -524,24 +507,10 @@ export interface SQLiteExecutionProfileCandidate {
   read_uncommitted: false;
   locking_mode: 'normal';
   read_only_query_only: true;
-  sqlite_version: null;
-  sqlite_source_id: null;
-  sqlite_compile_options_hash: null;
-  better_sqlite3_version: '12.11.1';
-  better_sqlite3_native_module_hash: null;
-  managed_node_distribution_ref: VersionedRef;
-  managed_node_distribution_hash: string;
-  node_runtime_version: '26.5.0';
-  node_executable_hash: string;
-  release_artifact_hash: null;
-  runtime_launcher_hash: null;
-  identity_binding_rule: 'release_build_generated_at_g8';
-  profile_application: 'immutable_restart_and_recertification_required';
 }
 
-export const LOCAL_SINGLE_USER_SQLITE_CANDIDATE = {
+export const LOCAL_SINGLE_USER_SQLITE_PROFILE = {
   profile_id: 'local_single_user_sqlite@1',
-  certification_status: 'candidate',
   deployment_profile: 'local_single_user',
   runtime_surface: 'node_service',
   platform: 'darwin',
@@ -562,25 +531,7 @@ export const LOCAL_SINGLE_USER_SQLITE_CANDIDATE = {
   read_uncommitted: false,
   locking_mode: 'normal',
   read_only_query_only: true,
-  sqlite_version: null,
-  sqlite_source_id: null,
-  sqlite_compile_options_hash: null,
-  better_sqlite3_version: '12.11.1',
-  better_sqlite3_native_module_hash: null,
-  managed_node_distribution_ref: {
-    id: 'nodejs.node-v26.5.0-darwin-arm64',
-    version: '1.0.0',
-  },
-  managed_node_distribution_hash:
-    'sha256:0824f5044057d6ff26dc45022b842342f148b2dda2f0dd0feb17dd0b045f6cad',
-  node_runtime_version: '26.5.0',
-  node_executable_hash:
-    'sha256:cbee2298aee5cc476bf8d5441e7348b627254a39d869743a5b04489028c729d4',
-  release_artifact_hash: null,
-  runtime_launcher_hash: null,
-  identity_binding_rule: 'release_build_generated_at_g8',
-  profile_application: 'immutable_restart_and_recertification_required',
-} as const satisfies SQLiteExecutionProfileCandidate;
+} as const satisfies SQLiteExecutionProfile;
 
 export const ENFORCEMENT_RECORD_KEYS = [
   'limit_path',

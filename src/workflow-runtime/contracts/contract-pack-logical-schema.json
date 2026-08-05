@@ -9,10 +9,6 @@
   "payload": {
     "gate": "G0.6",
     "status": "logical_schema_metadata_contract",
-    "foundation_manifest_hash": "sha256:e85b654581c036f8129677d7443a0704ebc8b8fbe87907b842aaefe1501e637d",
-    "closed_schema_manifest_hash": "sha256:6f7aa5b997c5a496a4eb95776a09f18e3c25753e7324a6ef1f095a23b8413d81",
-    "catalog_protocol_manifest_hash": "sha256:078be3fed7e8d430b228c0aa526e15e6bd92665f863c6d0818eaebbcaf43b533",
-    "safety_sqlite_manifest_hash": "sha256:e289868eb489bb3c41731afe17f50cbc06f2b10c549769c1786fcd185a0b5775",
     "schema_count": 3,
     "table_count": 74,
     "column_count": 1221,
@@ -25,8 +21,7 @@
     "query_count": 24,
     "positive_case_count": 6,
     "negative_case_count": 34,
-    "sqlite_profile_status": "candidate",
-    "certification_status": "not_certified",
+    "sqlite_profile_status": "operational",
     "executable_ddl_status": "absent",
     "executable_schema_manifest_status": "absent",
     "sqlite_connection_factory_status": "absent",
@@ -148,5 +143,5 @@
       "runtime_center_or_ui"
     ]
   },
-  "hash": "sha256:e0b1bb30303e9bf0c45fdc5383ec7f61f90b2bb2e6ed8e422c5478a1dfd134cc"
+  "hash": "sha256:1cee7c2b5074c5f97846bfd80f03799b17bd0a5fe2b0ffebd5c66be2cbcbad38"
 }

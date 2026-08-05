@@ -10,6 +10,10 @@ import {
   parseContractArtifactEnvelope,
 } from './artifact.js';
 import {
+  checkContractPackFoundation,
+  generateContractPackFoundation,
+} from './contract-pack.js';
+import {
   ContractHashError,
   calculateArtifactHash,
   canonicalJson,
@@ -57,6 +61,12 @@ function exampleArtifact(
 }
 
 describe('G0.2 strict JSON foundation', () => {
+  it('generates the current foundation deterministically', () => {
+    const first = generateContractPackFoundation();
+    expect(generateContractPackFoundation().hash).toBe(first.hash);
+    expect(checkContractPackFoundation().hash).toBe(first.hash);
+  });
+
   it('parses strict UTF-8 JSON and reports duplicate paths before materializing', () => {
     expect(strictParseJson('{"outer":{"value":1},"ok":true}')).toEqual({
       outer: { value: 1 },

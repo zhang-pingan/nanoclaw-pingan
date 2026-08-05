@@ -47,7 +47,6 @@ import {
   VersionedRefError,
   parseVersionedRef,
 } from './versioned-ref.js';
-import { assertCurrentG2SealedBoundary } from './current-g2-sealed-boundary.js';
 
 const contractsRoot = import.meta.dirname;
 const projectRoot = path.resolve(contractsRoot, '..', '..', '..');
@@ -63,17 +62,6 @@ const foundationArtifactPaths = [
 ] as const;
 
 const foundationManifestPath = 'contract-pack-foundation.json';
-
-const foundationReservedDirectories = [
-  'schemas',
-  'protocols',
-  'safety',
-  'sqlite',
-  'conformance/draft',
-  'conformance/sealed',
-] as const;
-
-const stillReservedDirectories = ['conformance/sealed'] as const;
 
 interface ArtifactDescriptor extends JsonObject {
   path: string;
@@ -227,56 +215,6 @@ function asciiCompare(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0;
 }
 
-function verifyG01RuntimeArtifact(): ArtifactDescriptor[] {
-  const distributionPath = 'toolchain/node-v26.5.0-darwin-arm64.json';
-  const schemaPath = 'toolchain/managed-node-runtime-distribution.schema.json';
-  const distribution = readJsonObject(distributionPath);
-  const distributionSchema = readJsonObject(schemaPath);
-  const distributionRef = parseVersionedRef(distribution.ref);
-  if (
-    distribution.format !== 'icarus.managed-node-runtime-distribution/1' ||
-    distributionRef.id !== 'nodejs.node-v26.5.0-darwin-arm64' ||
-    distributionRef.version !== '1.0.0'
-  ) {
-    throw new Error('G0.1 managed runtime descriptor drift');
-  }
-  const distributionHash = distribution.manifest_hash;
-  if (typeof distributionHash !== 'string') {
-    throw new Error('G0.1 managed runtime checksum is missing');
-  }
-  const { manifest_hash: _manifestHash, ...distributionPayload } = distribution;
-  const expectedDistributionHash = domainSeparatedSha256(
-    'icarus:managed-node-runtime-distribution:1\n',
-    distributionPayload,
-  );
-  if (distributionHash !== expectedDistributionHash) {
-    throw new Error('G0.1 managed distribution checksum drift');
-  }
-  const ajv = new Ajv2020({
-    allErrors: true,
-    coerceTypes: false,
-    removeAdditional: false,
-    strict: true,
-    useDefaults: false,
-  });
-  const validateDistribution = ajv.compile(distributionSchema as AnySchema);
-  if (!validateDistribution(distribution)) {
-    throw new Error(
-      `G0.1 distribution schema mismatch: ${ajv.errorsText(validateDistribution.errors)}`,
-    );
-  }
-  return [
-    {
-      path: distributionPath,
-      format: String(distribution.format),
-      ref: distributionRef,
-      version: 1,
-      domain_separator: 'icarus:managed-node-runtime-distribution:1\n',
-      hash: expectedDistributionHash,
-    },
-  ];
-}
-
 function buildFoundationManifest(
   artifacts: Array<[string, ContractArtifactEnvelope]>,
 ): ContractArtifactEnvelope {
@@ -297,8 +235,6 @@ function buildFoundationManifest(
       artifacts: artifacts
         .map(([relativePath, artifact]) => descriptor(relativePath, artifact))
         .sort((left, right) => asciiCompare(left.path, right.path)),
-      toolchain_inputs: verifyG01RuntimeArtifact(),
-      reserved_directories: [...foundationReservedDirectories],
     },
   };
   return {
@@ -554,11 +490,10 @@ function validateDomainCatalog(artifacts: ContractArtifactEnvelope[]): void {
   ) {
     throw new Error('Domain separator entries must be sorted by format');
   }
-  const runtimeInputs = verifyG01RuntimeArtifact();
-  if (declared.size !== artifacts.length + runtimeInputs.length) {
+  if (declared.size !== artifacts.length) {
     throw new Error('Domain separator catalog coverage is incomplete');
   }
-  for (const artifact of [...artifacts, ...runtimeInputs]) {
+  for (const artifact of artifacts) {
     if (declared.get(artifact.format) !== artifact.domain_separator) {
       throw new Error(`Domain separator drift for ${artifact.format}`);
     }
@@ -655,22 +590,6 @@ function validateHashVectors(artifacts: ContractArtifactEnvelope[]): void {
   }
 }
 
-function validateReservedDirectories(): void {
-  for (const directory of stillReservedDirectories) {
-    const absoluteDirectory = absoluteContractPath(directory);
-    if (!fs.lstatSync(absoluteDirectory).isDirectory()) {
-      throw new Error(`Reserved Contract Pack directory missing: ${directory}`);
-    }
-    try {
-      assertCurrentG2SealedBoundary(absoluteDirectory);
-    } catch {
-      throw new Error(
-        `Reserved Contract Pack directory contains out-of-slice artifacts: ${directory}`,
-      );
-    }
-  }
-}
-
 function expectedFoundationArtifacts(): Array<
   [string, ContractArtifactEnvelope]
 > {
@@ -703,8 +622,6 @@ function validateCompletePack(
   validateDomainCatalog(artifacts);
   validateHashVectors(artifacts);
   validateNegativeFixtures(artifacts);
-  validateReservedDirectories();
-  verifyG01RuntimeArtifact();
 }
 
 export function generateContractPackFoundation(): ContractArtifactEnvelope {

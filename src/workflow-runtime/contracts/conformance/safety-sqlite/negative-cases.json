@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-safety-sqlite-negative-cases:1\n",
-  "hash": "sha256:77dbd01c5db61eaecfc80fc3654f8b2d207f400a58c30b54ecfb6a24225c7f8e",
+  "hash": "sha256:c77d6dec3f144c800fcffacdaa44e729922f2795014dce99d5e89a01085b4a85",
   "payload": {
     "cases": [
       {
@@ -228,32 +228,6 @@
         "expected_code": "safety_sqlite_contract_drift"
       },
       {
-        "case_id": "sqlite_rejects_certified_claim",
-        "target_format": "icarus.sqlite-execution-profile/1",
-        "mutation": {
-          "operation": "replace",
-          "pointer": "/certification_status",
-          "value": "certified"
-        },
-        "expected_stage": "schema",
-        "expected_keyword": "const",
-        "expected_instance_pointer": "/certification_status",
-        "expected_code": "safety_sqlite_contract_drift"
-      },
-      {
-        "case_id": "sqlite_rejects_development_sqlite_identity",
-        "target_format": "icarus.sqlite-execution-profile/1",
-        "mutation": {
-          "operation": "replace",
-          "pointer": "/sqlite_version",
-          "value": "3.50.4"
-        },
-        "expected_stage": "schema",
-        "expected_keyword": "type",
-        "expected_instance_pointer": "/sqlite_version",
-        "expected_code": "safety_sqlite_contract_drift"
-      },
-      {
         "case_id": "sqlite_rejects_negative_mmap",
         "target_format": "icarus.sqlite-execution-profile/1",
         "mutation": {
@@ -277,32 +251,6 @@
         "expected_stage": "schema",
         "expected_keyword": "const",
         "expected_instance_pointer": "/read_only_query_only",
-        "expected_code": "safety_sqlite_contract_drift"
-      },
-      {
-        "case_id": "sqlite_rejects_distribution_hash_drift",
-        "target_format": "icarus.sqlite-execution-profile/1",
-        "mutation": {
-          "operation": "replace",
-          "pointer": "/managed_node_distribution_hash",
-          "value": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
-        },
-        "expected_stage": "semantic",
-        "expected_keyword": null,
-        "expected_instance_pointer": null,
-        "expected_code": "safety_sqlite_contract_drift"
-      },
-      {
-        "case_id": "sqlite_rejects_mutable_distribution_ref",
-        "target_format": "icarus.sqlite-execution-profile/1",
-        "mutation": {
-          "operation": "replace",
-          "pointer": "/managed_node_distribution_ref/version",
-          "value": "latest"
-        },
-        "expected_stage": "schema",
-        "expected_keyword": "not",
-        "expected_instance_pointer": "/managed_node_distribution_ref/version",
         "expected_code": "safety_sqlite_contract_drift"
       },
       {

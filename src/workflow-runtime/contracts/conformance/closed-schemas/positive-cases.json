@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-closed-schema-positive-cases:1\n",
-  "hash": "sha256:6c5c821e602cf48fa36359f43ffab8aabb9228fd244b302f23ff54c22e9b14ed",
+  "hash": "sha256:6d22df5f083f48ff026f1f16bd64a6d0ca33c8b0f5601d88c3d880474cddc1be",
   "payload": {
     "cases": [
       {
@@ -398,17 +398,6 @@
         "instance": {
           "format": "icarus.workflow-graph-scope-plan/1",
           "compiler_version": "fixture-compiler-1",
-          "compiler_build_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
-          "compiler_toolchain_ref": {
-            "id": "example.compiler-toolchain",
-            "version": "1.0.0"
-          },
-          "compiler_toolchain_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
-          "compiler_error_catalog_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
-          "canonical_normalizer_version": "1",
-          "canonical_normalizer_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
-          "proof_algorithm_version": "1",
-          "proof_algorithm_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
           "plan_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
           "source_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
           "interface_snapshot_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",

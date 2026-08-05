@@ -79,7 +79,7 @@
         },
         "version": 1,
         "domain_separator": "icarus:workflow-g3-staged-publish-positive-cases:1\n",
-        "hash": "sha256:6c3ba410fdb92a46e53e85f43cb16f5611dfff32e578dc4e652bcc2b5106df59"
+        "hash": "sha256:e60a32a468d5e7421d6d31537560dbf5a0be0d50de0d2d8f65804294f73a8dfb"
       },
       {
         "path": "conformance/g3-workflow-publisher/negative-cases.json",
@@ -90,7 +90,7 @@
         },
         "version": 1,
         "domain_separator": "icarus:workflow-g3-staged-publish-negative-cases:1\n",
-        "hash": "sha256:74518e3b5deeda14bac60722dce863ecb0c9dae5b4d0fc9ef55443ad24b7e08e"
+        "hash": "sha256:81200b84cb063dc06b42e10793f83de02dbeaef73a5cb2f3d3666a8ca9ff7834"
       },
       {
         "path": "registry/workflow-staged-publish-domain-separators@1.json",
@@ -107,5 +107,5 @@
     "positive_case_count": 1,
     "negative_case_count": 3
   },
-  "hash": "sha256:c454bd0da0a5d561bb86e187c4dd0e4b791042ae67bb3221c70a78b277f2d9b7"
+  "hash": "sha256:a6bfd7fc9a04256b601de444e60a59361feae8ca5d59fe85805ba271fdbc5f11"
 }
