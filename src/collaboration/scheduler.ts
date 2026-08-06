@@ -228,18 +228,44 @@ export class CollaborationScheduler {
       this.now(),
     );
     if (!locked) return;
+    let lockError: Error | null = null;
+    const heartbeat = (): void => {
+      if (lockError) return;
+      try {
+        if (!this.store.heartbeatGroupLock(groupId, this.ownerId, this.now()))
+          lockError = new Error(
+            `Collaboration group lock ownership was lost: ${groupId}`,
+          );
+      } catch (error) {
+        lockError = new Error(
+          `Collaboration group lock heartbeat failed: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    };
+    const assertLockHeld = (): void => {
+      heartbeat();
+      if (lockError) throw lockError;
+    };
+    const heartbeatTimer = setInterval(
+      heartbeat,
+      Math.max(10, Math.floor(this.lockStaleMs / 3)),
+    );
+    heartbeatTimer.unref?.();
     try {
       let history = await this.groups.syncHistory(groupId);
+      assertLockHeld();
       this.store.scheduleNextSync(
         groupId,
         this.now() +
           deterministicCollaborationPollDelay(groupId, group.pollIntervalMs),
       );
-      this.store.heartbeatGroupLock(groupId, this.ownerId, this.now());
       history = await this.driveHistory(group, history);
+      assertLockHeld();
       await this.finishLifecycleOrCreateTurn(group, history);
+      assertLockHeld();
       this.groupErrors.delete(groupId);
     } finally {
+      clearInterval(heartbeatTimer);
       this.store.releaseGroupLock(groupId, this.ownerId);
     }
   }

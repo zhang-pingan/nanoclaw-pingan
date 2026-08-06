@@ -247,6 +247,39 @@ describe('CollaborationScheduler', () => {
     }
   }, 20_000);
 
+  it('renews the group lock throughout a long synchronization', async () => {
+    const selected = await fixture(root());
+    const heartbeat = vi.spyOn(selected.store, 'heartbeatGroupLock');
+    const originalSync = selected.groups.syncHistory.bind(selected.groups);
+    vi.spyOn(selected.groups, 'syncHistory').mockImplementation(
+      async (groupId) => {
+        await new Promise((resolve) => setTimeout(resolve, 80));
+        return originalSync(groupId);
+      },
+    );
+    const registry = new ActionExecutorRegistry();
+    registry.register(selected.executor);
+    const scheduler = new CollaborationScheduler(
+      selected.store,
+      selected.groups,
+      registry,
+      {
+        ownerId: 'heartbeat-test',
+        lockStaleMs: 60,
+        now: Date.now,
+      },
+    );
+    try {
+      await scheduler.syncNow('ag_scheduler');
+      expect(heartbeat.mock.calls.length).toBeGreaterThanOrEqual(3);
+      const completedHeartbeats = heartbeat.mock.calls.length;
+      await new Promise((resolve) => setTimeout(resolve, 40));
+      expect(heartbeat).toHaveBeenCalledTimes(completedHeartbeats);
+    } finally {
+      selected.store.close();
+    }
+  }, 20_000);
+
   it('completes an action through signed Git without publishing provider metadata', async () => {
     const selected = await fixture(root());
     try {
