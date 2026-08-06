@@ -168,6 +168,30 @@ describe('Agent list contracts', () => {
   });
 });
 
+describe('collaboration workspace routes', () => {
+  it.each([
+    '/sessions',
+    '/groups',
+    '/groups/ag_test',
+    '/groups/ag_test/runtime',
+    '/groups/ag_test/diagnostics',
+  ])('serves the renderer shell for %s', async (pathname) => {
+    const response = await requestWeb(pathname);
+    expect(response.statusCode).toBe(200);
+    expect(response.body).toContain('data-nav-key="sessions"');
+    expect(response.body).toContain('data-nav-key="groups"');
+    expect(response.body).toContain('id="collaboration-screen"');
+  });
+
+  it('keeps the collaboration API isolated when the runtime is unavailable', async () => {
+    const response = await requestWeb('/api/collaboration/status');
+    expect(response.statusCode).toBe(503);
+    expect(JSON.parse(response.body)).toEqual({
+      error: 'Collaboration Runtime is not configured on this Host',
+    });
+  });
+});
+
 describe('web trace detail helpers', () => {
   it('builds detail response compatible with the trace detail API shape', () => {
     _initTestDatabase();

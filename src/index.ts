@@ -10,6 +10,10 @@ import {
 import { createCardActionHandler } from './card-action-router.js';
 import {
   ASSISTANT_NAME,
+  COLLABORATION_CODEX_BINARY,
+  COLLABORATION_CODEX_CWD,
+  COLLABORATION_CODEX_DESKTOP_VISIBILITY_CONFIRMED,
+  COLLABORATION_CODEX_MODEL,
   CREDENTIAL_PROXY_PORT,
   DATA_DIR,
   IDLE_TIMEOUT,
@@ -160,6 +164,9 @@ import { ContainerAgentAdapter } from './workflow-execution/container-agent-adap
 import { CodexTaskAdapter } from './workflow-execution/codex-task-adapter.js';
 import { WorkflowAdapterExecutionStore } from './workflow-execution/execution-store.js';
 import { WorkflowExecutionWorker } from './workflow-execution/worker.js';
+import { WorkflowExecutionHostService } from './workflow-execution/host-service.js';
+import { CollaborationRuntime } from './collaboration/runtime.js';
+import { CollaborationWebApi } from './collaboration/web-api.js';
 
 // Re-export for backwards compatibility during refactor
 export { escapeXml, formatMessages } from './router.js';
@@ -2819,12 +2826,31 @@ async function main(): Promise<void> {
     );
   }
 
+  const collaborationRuntime = new CollaborationRuntime({
+    storeDir: STORE_DIR,
+    runOnceService: internalRunOnceService,
+    workflowHost: workflowRuntimeStore
+      ? new WorkflowExecutionHostService(workflowRuntimeStore)
+      : null,
+    codex: {
+      binary: COLLABORATION_CODEX_BINARY,
+      cwd: COLLABORATION_CODEX_CWD,
+      model: COLLABORATION_CODEX_MODEL || undefined,
+      desktopVisibilityConfirmed:
+        COLLABORATION_CODEX_DESKTOP_VISIBILITY_CONFIRMED,
+    },
+    logger,
+  });
+  collaborationRuntime.start();
+  const collaborationApi = new CollaborationWebApi(collaborationRuntime);
+
   // Graceful shutdown handlers
   const shutdown = async (signal: string) => {
     logger.info({ signal }, 'Shutdown signal received');
     proxyServer.close();
     mysqlProxyServer.close();
     internalRunOnceServer?.close();
+    collaborationRuntime.stop();
     await workflowExecutionWorker?.stop();
     await queue.shutdown(10000);
     workflowAdapterExecutionStore?.close();
@@ -2898,6 +2924,7 @@ async function main(): Promise<void> {
       agentJid?: string;
     }) => Promise<{ resetCount: number }>;
     registerAgent?: (jid: string, agent: RegisteredAgent) => void;
+    collaborationApi?: CollaborationWebApi;
     onAgentStatusChange?: () => void;
     onAgentQueryTraceChange?: () => void;
   } = {
@@ -2929,6 +2956,7 @@ async function main(): Promise<void> {
       }
       storeMessage(msg);
     },
+    collaborationApi,
     onChatMetadata: (
       chatJid: string,
       timestamp: string,

@@ -851,7 +851,7 @@ class WebChannel {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader(
       'Access-Control-Allow-Methods',
-      'GET, POST, PATCH, DELETE, OPTIONS',
+      'GET, POST, PUT, PATCH, DELETE, OPTIONS',
     );
     res.setHeader(
       'Access-Control-Allow-Headers',
@@ -883,6 +883,19 @@ class WebChannel {
       }
       if (pathname === '/api/features/enabled' && req.method === 'GET') {
         return this.apiGetEnabledFeatures(res);
+      }
+      if (pathname.startsWith('/api/collaboration/')) {
+        if (this.opts.collaborationApi) {
+          await this.opts.collaborationApi.handle(req, res, reqUrl);
+          return;
+        }
+        res.writeHead(503, { 'Content-Type': 'application/json' });
+        res.end(
+          JSON.stringify({
+            error: 'Collaboration Runtime is not configured on this Host',
+          }),
+        );
+        return;
       }
       if (pathname === '/api/features/config' && req.method === 'GET') {
         return this.apiGetFeatureConfig(res);

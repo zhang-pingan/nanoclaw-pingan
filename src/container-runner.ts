@@ -83,6 +83,10 @@ export interface ContainerInput {
   requireResult?: boolean;
   isolatedSession?: boolean;
   executionMode?: 'external_system_once';
+  workspace?: {
+    readonly hostPath: string;
+    readonly readonly: boolean;
+  };
   agentFolder: string;
   chatJid: string;
   isMain: boolean;
@@ -412,14 +416,33 @@ function emitTraceEvent(
 function buildVolumeMounts(
   agent: RegisteredAgent,
   isMain: boolean,
-  opts: { externalSystemOnce?: boolean } = {},
+  opts: {
+    externalSystemOnce?: boolean;
+    workspace?: ContainerInput['workspace'];
+  } = {},
 ): VolumeMount[] {
   const mounts: VolumeMount[] = [];
   const projectRoot = process.cwd();
   const agentDir = resolveAgentFolderPath(agent.folder);
   const isExternalSystemOnce = opts.externalSystemOnce === true;
 
-  if (isMain) {
+  const explicitProjectWorkspace = isExternalSystemOnce
+    ? opts.workspace
+    : undefined;
+  if (explicitProjectWorkspace) {
+    mounts.push({
+      hostPath: explicitProjectWorkspace.hostPath,
+      containerPath: '/workspace/project',
+      readonly: explicitProjectWorkspace.readonly,
+    });
+    const envFile = path.join(explicitProjectWorkspace.hostPath, '.env');
+    if (fs.existsSync(envFile))
+      mounts.push({
+        hostPath: '/dev/null',
+        containerPath: '/workspace/project/.env',
+        readonly: true,
+      });
+  } else if (isMain) {
     // Main gets the project root read-only. Writable paths the agent needs
     // (agent folder, IPC, .claude/) are mounted separately below.
     // Read-only prevents the agent from modifying host application code
@@ -448,21 +471,14 @@ function buildVolumeMounts(
         readonly: true,
       });
     }
+  }
 
-    // Main also gets its agent folder as the working directory
-    mounts.push({
-      hostPath: agentDir,
-      containerPath: '/workspace/agent',
-      readonly: false,
-    });
-  } else {
-    // Other agents only get their own folder
-    mounts.push({
-      hostPath: agentDir,
-      containerPath: '/workspace/agent',
-      readonly: false,
-    });
-
+  mounts.push({
+    hostPath: agentDir,
+    containerPath: '/workspace/agent',
+    readonly: false,
+  });
+  if (!isMain) {
     // Global memory directory (read-only for non-main)
     // Only directory mounts are supported, not file mounts
     const globalDir = path.join(AGENTS_DIR, 'global');
@@ -824,6 +840,7 @@ export async function runContainerAgent(
 
   const mounts = buildVolumeMounts(agent, input.isMain, {
     externalSystemOnce: input.executionMode === 'external_system_once',
+    workspace: input.workspace,
   });
   const safeName = agent.folder.replace(/[^a-zA-Z0-9-]/g, '-');
   const containerName = `icarus-${safeName}-${Date.now()}`;
@@ -924,7 +941,13 @@ export async function runContainerAgent(
     let stdoutTruncated = false;
     let stderrTruncated = false;
 
-    container.stdin.write(JSON.stringify(input));
+    const { workspace: _workspace, ...containerInput } = input;
+    container.stdin.write(
+      JSON.stringify({
+        ...containerInput,
+        projectWorkspaceMounted: Boolean(input.workspace),
+      }),
+    );
     container.stdin.end();
 
     // Streaming output: parse OUTPUT_START/END marker pairs as they arrive

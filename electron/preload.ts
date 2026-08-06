@@ -59,6 +59,11 @@ contextBridge.exposeInMainWorld('icarusApp', {
     // which the main process intercepts
   },
 
+  // Open an existing Codex App Server thread in the Codex desktop app.
+  openCodexThread: (threadId: string) => {
+    return ipcRenderer.invoke('open-codex-thread', threadId);
+  },
+
   // Open a local file in its default application
   openFile: (filePath: string) => {
     return ipcRenderer.invoke('open-file', filePath);

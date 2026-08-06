@@ -8,6 +8,10 @@ import {
   type CodexTurnCompletion,
 } from './codex/app-server-client.js';
 import {
+  codexProviderMetadata,
+  normalizeCodexCompletion,
+} from './codex/task-mapping.js';
+import {
   CODEX_TASK_ADAPTER_ID,
   type WorkflowAdapterCompletion,
   type WorkflowAdapterExecutionContext,
@@ -38,70 +42,25 @@ export interface CodexTaskAdapterOptions {
   ) => CodexTaskClient;
 }
 
-function providerMetadata(
-  handle: Pick<CodexTaskHandle, 'threadId' | 'turnId' | 'cliVersion'>,
-): Record<string, unknown> {
-  return {
-    transport: 'app_server_stdio',
-    thread_id: handle.threadId,
-    turn_id: handle.turnId,
-    cli_version: handle.cliVersion,
-    ephemeral: false,
-  };
-}
-
 function resultFromCompletion(
   context: WorkflowAdapterExecutionContext,
   completion: CodexTurnCompletion,
   metadata: Record<string, unknown>,
 ): WorkflowAdapterCompletion {
-  const outcome =
-    completion.status === 'completed'
-      ? 'success'
-      : completion.status === 'interrupted'
-        ? 'cancelled'
-        : completion.status === 'blocked'
-          ? 'blocked'
-          : 'failure';
-  const state =
-    completion.status === 'completed'
-      ? 'succeeded'
-      : completion.status === 'interrupted'
-        ? 'cancelled'
-        : completion.status === 'blocked'
-          ? 'blocked'
-          : 'failed';
+  const normalized = normalizeCodexCompletion(completion, metadata);
   const result: WorkflowAgentResult = {
     format: 'icarus.workflow-agent-result/1',
-    outcome,
-    summary:
-      completion.text || completion.errorMessage || `Codex turn ${state}`,
+    outcome: normalized.outcome,
+    summary: normalized.summary,
     provider: {
       adapter: CODEX_TASK_ADAPTER_ID,
       execution_id: context.executionId,
-      metadata: {
-        ...metadata,
-        ...(completion.approvalMethod
-          ? { approval_method: completion.approvalMethod }
-          : {}),
-      },
+      metadata: normalized.metadata,
     },
     artifacts: [],
-    error:
-      outcome === 'success'
-        ? null
-        : {
-            code:
-              completion.errorCode ||
-              (outcome === 'cancelled'
-                ? 'codex_turn_interrupted'
-                : 'codex_turn_failed'),
-            message:
-              completion.errorMessage || `Codex turn ended as ${outcome}`,
-            retryable: outcome === 'failure',
-          },
+    error: normalized.error,
   };
-  return { state, result };
+  return { state: normalized.state, result };
 }
 
 export class CodexTaskAdapter implements WorkflowExecutionAdapter {
@@ -181,7 +140,7 @@ export class CodexTaskAdapter implements WorkflowExecutionAdapter {
     client: CodexTaskClient,
     codexHandle: CodexTaskHandle,
   ): WorkflowAdapterRunHandle {
-    const metadata = providerMetadata(codexHandle);
+    const metadata = codexProviderMetadata(codexHandle);
     const completion = codexHandle.completion
       .then((result) => resultFromCompletion(context, result, metadata))
       .catch((error): WorkflowAdapterCompletion => {

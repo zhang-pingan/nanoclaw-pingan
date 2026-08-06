@@ -34,9 +34,13 @@
             </div>
           </div>
           <div id="primary-nav" class="primary-nav">
-            <button class="primary-nav-item" data-nav-key="agents">
+            <button class="primary-nav-item" data-nav-key="sessions">
               <span class="primary-nav-dot"></span>
-              <span class="primary-nav-label">Agent</span>
+              <span class="primary-nav-label">会话</span>
+            </button>
+            <button class="primary-nav-item" data-nav-key="groups">
+              <span class="primary-nav-dot"></span>
+              <span class="primary-nav-label">群组</span>
             </button>
             <button class="primary-nav-item" data-nav-key="trace-monitor">
               <span class="primary-nav-dot"></span>
@@ -2212,6 +2216,205 @@
               </section>
             </div>
           </main>
+        </section>
+
+        <section id="collaboration-screen">
+          <aside class="collaboration-sidebar">
+            <div class="collaboration-sidebar-head">
+              <div>
+                <div class="collaboration-kicker">Agent Groups</div>
+                <h2>群组</h2>
+              </div>
+              <div class="collaboration-sidebar-actions">
+                <button
+                  id="collaboration-join-btn"
+                  class="icon-btn"
+                  type="button"
+                  title="加入群组"
+                  aria-label="加入群组"
+                >
+                  <svg
+                    class="icon"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M12 5v14"></path>
+                    <path d="M5 12h14"></path>
+                  </svg>
+                </button>
+                <button
+                  id="collaboration-create-btn"
+                  class="icon-btn"
+                  type="button"
+                  title="创建群组"
+                  aria-label="创建群组"
+                >
+                  <svg
+                    class="icon"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                  >
+                    <circle cx="9" cy="8" r="4"></circle>
+                    <path d="M3 21v-2a6 6 0 0 1 12 0v2"></path>
+                    <path d="M19 8v6"></path>
+                    <path d="M16 11h6"></path>
+                  </svg>
+                </button>
+              </div>
+            </div>
+            <div class="collaboration-search-row">
+              <input
+                id="collaboration-search"
+                type="search"
+                placeholder="搜索名称、ID 或 Git URL"
+                autocomplete="off"
+              />
+              <button
+                id="collaboration-refresh-btn"
+                class="icon-btn"
+                type="button"
+                title="刷新群组"
+                aria-label="刷新群组"
+              >
+                <svg
+                  class="icon"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M20 11a8 8 0 1 0 2 5"></path>
+                  <polyline points="20 4 20 11 13 11"></polyline>
+                </svg>
+              </button>
+            </div>
+            <div id="collaboration-list" class="collaboration-list"></div>
+          </aside>
+
+          <main class="collaboration-main">
+            <div
+              id="collaboration-runtime-banner"
+              class="collaboration-runtime-banner hidden"
+              role="status"
+            ></div>
+            <div id="collaboration-empty" class="collaboration-empty">
+              <div class="collaboration-empty-mark" aria-hidden="true">AG</div>
+              <h2>选择一个群组</h2>
+            </div>
+            <div id="collaboration-detail" class="collaboration-detail hidden">
+              <header class="collaboration-detail-header">
+                <div class="collaboration-detail-copy">
+                  <div class="collaboration-kicker">Collaboration Runtime</div>
+                  <div class="collaboration-title-row">
+                    <h2 id="collaboration-title">群组</h2>
+                    <span
+                      id="collaboration-lifecycle"
+                      class="collaboration-status"
+                    ></span>
+                  </div>
+                  <div
+                    id="collaboration-detail-meta"
+                    class="collaboration-detail-meta"
+                  ></div>
+                </div>
+                <button
+                  id="collaboration-sync-btn"
+                  class="btn-ghost collaboration-command-btn"
+                  type="button"
+                >
+                  立即同步
+                </button>
+              </header>
+              <nav
+                id="collaboration-tabs"
+                class="collaboration-tabs"
+                aria-label="群组视图"
+              >
+                <button class="active" data-collaboration-tab="overview">
+                  概览
+                </button>
+                <button data-collaboration-tab="roles">角色</button>
+                <button data-collaboration-tab="runtime">运行</button>
+                <button data-collaboration-tab="events">事件</button>
+                <button data-collaboration-tab="data">数据</button>
+                <button data-collaboration-tab="settings">设置</button>
+                <button data-collaboration-tab="diagnostics">诊断</button>
+              </nav>
+              <div
+                id="collaboration-content"
+                class="collaboration-content"
+              ></div>
+            </div>
+          </main>
+
+          <dialog id="collaboration-dialog" class="collaboration-dialog">
+            <form id="collaboration-dialog-form" method="dialog">
+              <header class="collaboration-dialog-header">
+                <div>
+                  <div class="collaboration-kicker">Agent Group</div>
+                  <h3 id="collaboration-dialog-title">群组操作</h3>
+                </div>
+                <button
+                  id="collaboration-dialog-close"
+                  class="icon-btn"
+                  type="button"
+                  title="关闭"
+                  aria-label="关闭"
+                >
+                  <svg
+                    class="icon"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M18 6 6 18"></path>
+                    <path d="m6 6 12 12"></path>
+                  </svg>
+                </button>
+              </header>
+              <div
+                id="collaboration-dialog-body"
+                class="collaboration-dialog-body"
+              ></div>
+              <div
+                id="collaboration-dialog-error"
+                class="collaboration-dialog-error hidden"
+                role="alert"
+              ></div>
+              <footer class="collaboration-dialog-actions">
+                <button
+                  id="collaboration-dialog-cancel"
+                  class="btn-ghost"
+                  type="button"
+                >
+                  取消
+                </button>
+                <button
+                  id="collaboration-dialog-submit"
+                  class="btn-primary btn-soft-primary"
+                  type="submit"
+                >
+                  确认
+                </button>
+              </footer>
+            </form>
+          </dialog>
         </section>
 
         <section id="feature-runtime-screen">

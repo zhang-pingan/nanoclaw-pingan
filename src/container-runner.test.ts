@@ -685,6 +685,59 @@ describe('container-runner timeout behavior', () => {
     await resultPromise;
   });
 
+  it('mounts an explicit read-only project for external system once without exposing its host path', async () => {
+    const resultPromise = runContainerAgent(
+      testAgent,
+      {
+        ...testInput,
+        executionMode: 'external_system_once',
+        isolatedSession: true,
+        workspace: { hostPath: '/host/collaboration-project', readonly: true },
+      },
+      () => {},
+    );
+
+    const input = readStdinJson(fakeProc);
+    emitOutputMarker(fakeProc, { status: 'success', result: 'ok' });
+    await vi.advanceTimersByTimeAsync(10);
+    fakeProc.emit('close', 0);
+    await vi.advanceTimersByTimeAsync(10);
+    await resultPromise;
+
+    const { spawn } = await import('child_process');
+    const args = vi.mocked(spawn).mock.calls.at(-1)?.[1] as string[];
+    expect(args).toContain('/host/collaboration-project:/workspace/project:ro');
+    await expect(input).resolves.toMatchObject({
+      projectWorkspaceMounted: true,
+    });
+    await expect(input).resolves.not.toHaveProperty('workspace');
+  });
+
+  it('uses an explicit writable project instead of the main Agent default project', async () => {
+    const resultPromise = runContainerAgent(
+      mainAgent,
+      {
+        ...testInput,
+        isMain: true,
+        executionMode: 'external_system_once',
+        isolatedSession: true,
+        workspace: { hostPath: '/host/writable-project', readonly: false },
+      },
+      () => {},
+    );
+
+    emitOutputMarker(fakeProc, { status: 'success', result: 'ok' });
+    await vi.advanceTimersByTimeAsync(10);
+    fakeProc.emit('close', 0);
+    await vi.advanceTimersByTimeAsync(10);
+    await resultPromise;
+
+    const { spawn } = await import('child_process');
+    const args = vi.mocked(spawn).mock.calls.at(-1)?.[1] as string[];
+    expect(args).toContain('/host/writable-project:/workspace/project');
+    expect(args).not.toContain(`${process.cwd()}:/workspace/project`);
+  });
+
   it('mounts validated additional mounts', async () => {
     const { spawn } = await import('child_process');
     vi.mocked(validateAdditionalMounts).mockReturnValueOnce([

@@ -14,6 +14,7 @@ import {
 import path from 'path';
 import { execFile } from 'child_process';
 import { readFile, unlink } from 'fs/promises';
+import { codexThreadDeepLink } from './codex-thread-link.js';
 
 const mainDir = __dirname;
 const WORKSTATION_URL = 'http://localhost:3000/';
@@ -664,6 +665,19 @@ app.whenReady().then(() => {
   ipcMain.handle('show-in-folder', async (_event, filePath: string) => {
     try {
       shell.showItemInFolder(filePath);
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: String(err) };
+    }
+  });
+
+  ipcMain.handle('open-codex-thread', async (_event, threadId: string) => {
+    const deepLink = codexThreadDeepLink(threadId);
+    if (!deepLink) {
+      return { ok: false, error: 'Invalid Codex thread ID' };
+    }
+    try {
+      await shell.openExternal(deepLink);
       return { ok: true };
     } catch (err) {
       return { ok: false, error: String(err) };

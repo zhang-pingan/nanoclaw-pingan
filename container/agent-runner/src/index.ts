@@ -38,6 +38,7 @@ interface ContainerInput {
   requireResult?: boolean;
   isolatedSession?: boolean;
   executionMode?: 'external_system_once';
+  projectWorkspaceMounted?: boolean;
   agentFolder: string;
   chatJid: string;
   isMain: boolean;
@@ -1526,7 +1527,12 @@ function buildQueryOptions(
     .join('\n\n');
 
   return {
-    cwd: isExternalSystemOnce ? '/workspace/run-once' : '/workspace/agent',
+    cwd:
+      isExternalSystemOnce && containerInput.projectWorkspaceMounted
+        ? '/workspace/project'
+        : isExternalSystemOnce
+          ? '/workspace/run-once'
+          : '/workspace/agent',
     additionalDirectories: extraDirs.length > 0 ? extraDirs : undefined,
     resume: useIsolatedSession ? undefined : overrides.sessionId,
     resumeSessionAt: useIsolatedSession ? undefined : overrides.resumeAt,

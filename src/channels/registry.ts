@@ -7,6 +7,7 @@ import {
   RegisteredAgent,
   StopAgentResult,
 } from '../types.js';
+import type { CollaborationWebApi } from '../collaboration/web-api.js';
 
 export interface ChannelOpts {
   onMessage: OnInboundMessage;
@@ -21,6 +22,7 @@ export interface ChannelOpts {
     agentJid?: string;
   }) => Promise<{ resetCount: number }>;
   registerAgent?: (jid: string, agent: RegisteredAgent) => void;
+  collaborationApi?: CollaborationWebApi;
 }
 
 export type ChannelFactory = (opts: ChannelOpts) => Channel | null;

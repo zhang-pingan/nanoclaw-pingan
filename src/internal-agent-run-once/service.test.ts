@@ -34,9 +34,14 @@ vi.mock('../model-selector.js', async () => {
   };
 });
 
+vi.mock('../mount-security.js', () => ({
+  validateMount: vi.fn(),
+}));
+
 import { runContainerAgent } from '../container-runner.js';
 import { _initTestDatabase } from '../db.js';
 import { AgentQueue } from '../agent-queue.js';
+import { validateMount } from '../mount-security.js';
 import { InternalAgentRunOnceService } from './service.js';
 import type { RegisteredAgent } from '../types.js';
 
@@ -51,10 +56,105 @@ describe('InternalAgentRunOnceService', () => {
   beforeEach(() => {
     _initTestDatabase();
     vi.mocked(runContainerAgent).mockReset();
+    vi.mocked(validateMount).mockReset();
     fs.rmSync(path.join(TEST_DATA_DIR, 'run-once-workspaces', 'l3agent'), {
       recursive: true,
       force: true,
     });
+  });
+
+  it('preflights and forwards an allowlisted project workspace', async () => {
+    vi.mocked(validateMount).mockReturnValue({
+      allowed: true,
+      reason: 'allowed',
+      realHostPath: '/real/project',
+      resolvedContainerPath: 'collaboration-project',
+      effectiveReadonly: false,
+    });
+    vi.mocked(runContainerAgent).mockImplementation(
+      async (_agent, _input, onProcess, onOutput) => {
+        onProcess({} as never, 'container-test');
+        await onOutput?.({ status: 'success', result: 'done' });
+        return { status: 'success', result: null };
+      },
+    );
+    const service = new InternalAgentRunOnceService({
+      registeredAgents: () => ({ 'web:l3agent': agent }),
+      queue: new AgentQueue(),
+      onProcess: vi.fn(),
+      maxInputChars: 10000,
+    });
+
+    await service.runOnce({
+      system: 'collaboration action',
+      messages: [{ role: 'user', content: 'edit the project' }],
+      chat_jid: 'web:l3agent',
+      workspace: {
+        host_path: '/configured/project',
+        access: 'workspace_write',
+      },
+    });
+
+    expect(validateMount).toHaveBeenCalledWith(
+      {
+        hostPath: '/configured/project',
+        containerPath: 'collaboration-project',
+        readonly: false,
+      },
+      false,
+    );
+    expect(vi.mocked(runContainerAgent).mock.calls[0][1]).toMatchObject({
+      workspace: { hostPath: '/real/project', readonly: false },
+    });
+  });
+
+  it('fails closed when requested write access is downgraded', () => {
+    vi.mocked(validateMount).mockReturnValue({
+      allowed: true,
+      reason: 'non-main agents are read-only',
+      realHostPath: '/real/project',
+      resolvedContainerPath: 'collaboration-project',
+      effectiveReadonly: true,
+    });
+    const service = new InternalAgentRunOnceService({
+      registeredAgents: () => ({ 'web:l3agent': agent }),
+      queue: new AgentQueue(),
+      onProcess: vi.fn(),
+      maxInputChars: 10000,
+    });
+
+    expect(() =>
+      service.preflightWorkspace({
+        chatJid: 'web:l3agent',
+        workspace: {
+          host_path: '/configured/project',
+          access: 'workspace_write',
+        },
+      }),
+    ).toThrow(/downgraded to read-only/);
+  });
+
+  it('fails closed when no workspace allowlist entry exists', () => {
+    vi.mocked(validateMount).mockReturnValue({
+      allowed: false,
+      reason: 'No mount allowlist configured',
+    });
+    const service = new InternalAgentRunOnceService({
+      registeredAgents: () => ({ 'web:l3agent': agent }),
+      queue: new AgentQueue(),
+      onProcess: vi.fn(),
+      maxInputChars: 10000,
+    });
+
+    expect(() =>
+      service.preflightWorkspace({
+        chatJid: 'web:l3agent',
+        workspace: {
+          host_path: '/configured/project',
+          access: 'read_only',
+        },
+      }),
+    ).toThrow(/No mount allowlist configured/);
   });
 
   afterAll(() => {
