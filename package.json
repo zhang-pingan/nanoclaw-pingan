@@ -14,6 +14,7 @@
     "build:electron": "node scripts/build-electron.mjs",
     "dev:assistant": "node scripts/build-assistant.mjs && electron dist-assistant/main.cjs",
     "build:assistant": "node scripts/build-assistant.mjs",
+    "spike:collaboration:codex": "tsx scripts/collaboration-codex-app-server-spike.ts",
     "package:mac": "npm run build && npm run build:electron && electron-builder --mac",
     "contracts:check": "npm run golden:check && npm run golden:replay && npm run contracts:g3:check && npm run contracts:g3.registry:check && npm run contracts:g3.query:check && npm run contracts:g3.7:check && npm run contracts:g3.9:check && npm run contracts:g3.2a:check && npm run contracts:g3.2:check && npm run schema:check && npm run contracts:static:check",
     "contracts:execution-binding:generate": "tsx src/workflow-runtime/contracts/capability-outbox-binding-cli.ts generate",

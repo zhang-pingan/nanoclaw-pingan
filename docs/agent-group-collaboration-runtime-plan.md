@@ -1132,6 +1132,14 @@ Agent Group Collaboration Runtime 属于 core 执行和协调能力。Feature �
 - 形成可重复的自动化验证脚本和人工桌面验收步骤。
 - 验收条件未满足则停止 `codex-task` 实现，不自动改用 deep link。
 
+2026-08-05 实机结果记录在
+[Codex App Server Collaboration Spike](codex-app-server-collaboration-spike.md)。桌面 App 自带的
+`codex-cli 0.146.0-alpha.9.2` 已验证非 ephemeral thread 创建、准确 cwd、桌面任务列表可见、
+首个 turn 状态/结果获取、桌面侧继续会话以及 Icarus 通过现有 client 恢复读取后续 turn。
+独立 Homebrew `codex-cli 0.144.5` 无法解析当前桌面配置中的较新 agent-role 结构，必须作为
+binary capability preflight 失败处理，不得 fallback。为避免中断其他正在运行的用户任务，本次
+没有自动重启桌面 App；重启后的持久可见性保留为新主机/发布时的人工检查。
+
 ### Phase 1：Git 协议和 Reducer
 
 - 在 `src/collaboration/protocol/` 定义 `group/machine/role/member/action/event` v1 schemas、版本检查和授权规则。
