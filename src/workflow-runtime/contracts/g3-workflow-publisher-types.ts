@@ -1,7 +1,6 @@
 import type { G3RegistryExactResourceQueryInput } from './g3-registry-exact-resource-query-types.js';
 import type { G3RegistryResourceIdentity } from './g3-registry-persistence-types.js';
 import type { G3RegistryPublishPreflightInput } from './g3-registry-publish-types.js';
-import type { G3RetentionExecutorAbiPreflightInput } from './g3-retention-executor-abi-preflight-types.js';
 import type { JsonObject, Sha256Hash, VersionedRef } from './types.js';
 
 export const G3_WORKFLOW_PUBLISHER_FORMATS = {
@@ -31,7 +30,7 @@ export const G3_WORKFLOW_PUBLISHER_FAILURE_CODES = [
   'publish_identity_mismatch',
   'publish_foundation_preflight_failed',
   'registry_resource_preflight_failed',
-  'retention_executor_abi_preflight_failed',
+  'runtime_abi_incompatible',
   'feature_release_identity_collision',
   'registry_publication_collision',
   'retention_root_identity_collision',
@@ -95,10 +94,6 @@ export interface G3WorkflowPublisherTargetRelease extends JsonObject {
     ref: VersionedRef;
     hash: Sha256Hash;
   };
-  compatibility_snapshot: {
-    ref: VersionedRef;
-    hash: Sha256Hash;
-  };
   resources: G3WorkflowPublisherReleaseResource[];
 }
 
@@ -113,7 +108,6 @@ export interface G3WorkflowPublisherRequest extends JsonObject {
   contract_schemas: G3WorkflowPublisherContractSchemas;
   publish_preflight: G3RegistryPublishPreflightInput;
   release_resources: G3RegistryExactResourceQueryInput[];
-  compatibility_preflight: G3RetentionExecutorAbiPreflightInput;
   target_release: G3WorkflowPublisherTargetRelease;
   domain_request_hash: Sha256Hash;
   request_hash: Sha256Hash;

@@ -20,9 +20,7 @@ export function buildOneShotEmptyOutputError(
 ): string {
   const details: string[] = [];
   if (diagnostics.sessionOnlyMarkerCount) {
-    details.push(
-      `session-only markers=${diagnostics.sessionOnlyMarkerCount}`,
-    );
+    details.push(`session-only markers=${diagnostics.sessionOnlyMarkerCount}`);
   }
   if (diagnostics.eventMarkerCount) {
     details.push(`event markers=${diagnostics.eventMarkerCount}`);

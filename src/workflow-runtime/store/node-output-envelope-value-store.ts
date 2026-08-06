@@ -17,11 +17,8 @@ import {
   assertJsonObject,
   strictParseJsonBytes,
 } from '../contracts/strict-json.js';
-import type {
-  JsonObject,
-  JsonValue,
-  Sha256Hash,
-} from '../contracts/types.js';
+import type { JsonObject, JsonValue, Sha256Hash } from '../contracts/types.js';
+import { WORKFLOW_COMPILER_VERSION } from '../compiler/version.js';
 import { PLAN_DOMAIN_SEPARATOR } from '../compiler/normalizer.js';
 import type {
   WorkflowRuntimeStore,
@@ -212,7 +209,10 @@ function findExactNode(plan: JsonObject, nodeId: string): JsonObject {
   return matches[0] as JsonObject;
 }
 
-function envelopeHash(portContractHash: Sha256Hash, ports: JsonObject): Sha256Hash {
+function envelopeHash(
+  portContractHash: Sha256Hash,
+  ports: JsonObject,
+): Sha256Hash {
   return domainSeparatedSha256(NODE_OUTPUT_ENVELOPE_DOMAIN, {
     port_contract_hash: portContractHash,
     ports,
@@ -275,7 +275,10 @@ export function nodeOutputMemberProvenanceRef(input: {
 
 function readPlan(
   authority: QueryAuthority,
-  input: Pick<NodeOutputEnvelopeWriteInput, 'planId' | 'graphRunId' | 'planHash'>,
+  input: Pick<
+    NodeOutputEnvelopeWriteInput,
+    'planId' | 'graphRunId' | 'planHash'
+  >,
 ): { row: PlanRow; plan: JsonObject } {
   const row = authority.queryOne<PlanRow>(
     `SELECT id, graph_run_id, plan_hash, format, compiler_version,
@@ -289,7 +292,7 @@ function readPlan(
     row.graph_run_id !== input.graphRunId ||
     row.plan_hash !== input.planHash ||
     row.format !== 'icarus.workflow-graph-scope-plan/2' ||
-    row.compiler_version !== '3.0.4' ||
+    row.compiler_version !== WORKFLOW_COMPILER_VERSION ||
     row.compiled_plan_json === null
   ) {
     throw new NodeOutputEnvelopeAuthorityError(
@@ -311,7 +314,10 @@ function readPlan(
   return { row, plan };
 }
 
-function exactDescriptor(plan: JsonObject, nodeId: string): {
+function exactDescriptor(
+  plan: JsonObject,
+  nodeId: string,
+): {
   node: JsonObject;
   outputPorts: JsonObject;
   descriptor: JsonObject;
@@ -351,7 +357,11 @@ function expectedEnvelope(
   return {
     portContractHash,
     hash,
-    content: { port_contract_hash: portContractHash, ports, envelope_hash: hash },
+    content: {
+      port_contract_hash: portContractHash,
+      ports,
+      envelope_hash: hash,
+    },
   };
 }
 
@@ -537,7 +547,10 @@ function verifyStoredEnvelope(
     row.inline_canonical_json,
     'Node output envelope Value',
   );
-  const ports = object(content.ports as JsonValue, 'Node output envelope ports');
+  const ports = object(
+    content.ports as JsonValue,
+    'Node output envelope ports',
+  );
   const expected = expectedEnvelope(outputPorts, ports);
   validateDraft202012(descriptor.schema_json, content);
   const provenanceRef = nodeOutputEnvelopeProvenanceRef({
@@ -633,7 +646,10 @@ function readStoredValue(
   );
 }
 
-function fault(input: NodeOutputEnvelopeWriteInput, stage: NodeOutputEnvelopeFaultStage): void {
+function fault(
+  input: NodeOutputEnvelopeWriteInput,
+  stage: NodeOutputEnvelopeFaultStage,
+): void {
   if (input.faultAt === stage) {
     throw new NodeOutputEnvelopeAuthorityError(
       'fault_injected',
@@ -759,7 +775,12 @@ export class NodeOutputEnvelopeValueStore {
     });
   }
 
-  read(input: Omit<NodeOutputEnvelopeWriteInput, 'ports' | 'createdAtMs' | 'faultAt'>): NodeOutputEnvelopeValue {
+  read(
+    input: Omit<
+      NodeOutputEnvelopeWriteInput,
+      'ports' | 'createdAtMs' | 'faultAt'
+    >,
+  ): NodeOutputEnvelopeValue {
     const row = readStoredValue(this.store, input.valueId);
     if (!row) {
       throw new NodeOutputEnvelopeAuthorityError(

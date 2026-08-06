@@ -28,7 +28,7 @@ import {
   LOCAL_SINGLE_USER_PRODUCT_FLOOR,
   LOCAL_SINGLE_USER_RETENTION_POLICY,
   LOCAL_SINGLE_USER_SAFETY_PROFILE,
-  LOCAL_SINGLE_USER_SQLITE_CANDIDATE,
+  LOCAL_SINGLE_USER_SQLITE_PROFILE,
   PRODUCT_FLOOR_BENCHMARK_KEYS,
   PRODUCT_FLOOR_LIMIT_KEYS,
   RETENTION_DURATION_KEYS,
@@ -52,26 +52,14 @@ import type {
   JsonObject,
   JsonValue,
 } from './types.js';
-import { assertCurrentG2SealedBoundary } from './current-g2-sealed-boundary.js';
 
 const contractsRoot = import.meta.dirname;
 const repositoryRoot = path.resolve(contractsRoot, '../../..');
-const foundationManifestHash =
-  'sha256:e85b654581c036f8129677d7443a0704ebc8b8fbe87907b842aaefe1501e637d';
-const closedSchemaManifestHash =
-  'sha256:6f7aa5b997c5a496a4eb95776a09f18e3c25753e7324a6ef1f095a23b8413d81';
-const catalogProtocolManifestHash =
-  'sha256:078be3fed7e8d430b228c0aa526e15e6bd92665f863c6d0818eaebbcaf43b533';
 const manifestPath = 'contract-pack-safety-sqlite.json';
 const positiveCasesPath = 'conformance/safety-sqlite/positive-cases.json';
 const negativeCasesPath = 'conformance/safety-sqlite/negative-cases.json';
 const domainCatalogPath = 'catalogs/safety-sqlite-domain-separators.json';
 const capacityConfigPath = 'config/workflow-runtime-capacity.json';
-const stillReservedDirectories = [
-  'conformance/draft',
-  'conformance/sealed',
-] as const;
-const currentlyReservedDirectories = ['conformance/sealed'] as const;
 
 export class SafetySqliteContractError extends Error {
   readonly code = 'safety_sqlite_contract_drift';
@@ -222,9 +210,6 @@ function buildManifest(
     {
       gate: 'G0.5',
       status: 'safety_retention_sqlite_contracts',
-      foundation_manifest_hash: foundationManifestHash,
-      closed_schema_manifest_hash: closedSchemaManifestHash,
-      catalog_protocol_manifest_hash: catalogProtocolManifestHash,
       schema_count: SAFETY_SQLITE_ARTIFACT_DESCRIPTORS.filter(
         (descriptor) => descriptor.artifact_kind === 'schema',
       ).length,
@@ -234,8 +219,7 @@ function buildManifest(
         SAFETY_LIMIT_PATHS.length + CAPACITY_LIMIT_PATHS.length,
       positive_case_count: SAFETY_SQLITE_POSITIVE_CASES.length,
       negative_case_count: SAFETY_SQLITE_NEGATIVE_CASES.length,
-      sqlite_profile_status: 'candidate',
-      certification_status: 'not_certified',
+      sqlite_profile_status: 'operational',
       artifacts: artifacts
         .map(([artifactPath, artifact]) =>
           artifactDescriptor(artifactPath, artifact),
@@ -249,7 +233,6 @@ function buildManifest(
         hash: capacityConfig.config_hash!,
       },
       capacity_reload_contract: DEPLOYMENT_CAPACITY_RELOAD_CONTRACT,
-      next_reserved_directories: [...stillReservedDirectories],
       explicitly_absent_artifacts: [
         'runtime_supported_limits_certification',
         'executable_ddl',
@@ -401,9 +384,9 @@ function validateTypeScriptSchemaConformance(
     'Retention TypeScript rules',
   );
   assertKeyset(
-    Object.keys(LOCAL_SINGLE_USER_SQLITE_CANDIDATE),
+    Object.keys(LOCAL_SINGLE_USER_SQLITE_PROFILE),
     SQLITE_PROFILE_KEYS,
-    'SQLite candidate TypeScript keys',
+    'SQLite profile TypeScript keys',
   );
   assertKeyset(
     DEPLOYMENT_CAPACITY_KEYS,
@@ -601,23 +584,6 @@ function validateRetentionSemantic(payload: JsonObject): void {
   }
 }
 
-function validateSqliteCandidateSemantic(payload: JsonObject): void {
-  for (const identityField of [
-    'sqlite_version',
-    'sqlite_source_id',
-    'sqlite_compile_options_hash',
-    'better_sqlite3_native_module_hash',
-    'release_artifact_hash',
-    'runtime_launcher_hash',
-  ]) {
-    if (payload[identityField] !== null) {
-      throw new SafetySqliteContractError(
-        `Candidate SQLite release identity must remain unbound: ${identityField}`,
-      );
-    }
-  }
-}
-
 function validateMatrixSemantic(payload: JsonObject): void {
   if (!Array.isArray(payload.records)) {
     throw new SafetySqliteContractError(
@@ -703,7 +669,6 @@ function validateSemanticContract(
       validateMatrixSemantic(payload);
       break;
     case 'icarus.sqlite-execution-profile/1':
-      validateSqliteCandidateSemantic(payload);
       break;
     default:
       throw new Error(`Unhandled G0.5 target ${targetFormat}`);
@@ -772,40 +737,6 @@ function validateFixtures(
   }
 }
 
-function validatePriorPackIdentity(): void {
-  const expected = [
-    ['contract-pack-foundation.json', foundationManifestHash],
-    ['contract-pack-closed-schemas.json', closedSchemaManifestHash],
-    ['contract-pack-catalog-protocols.json', catalogProtocolManifestHash],
-  ] as const;
-  for (const [relativePath, expectedHash] of expected) {
-    if (readArtifact(relativePath).hash !== expectedHash) {
-      throw new Error(`Prior Contract Pack identity changed: ${relativePath}`);
-    }
-  }
-
-  const distribution = strictParseJsonBytes(
-    fs.readFileSync(
-      absoluteContractPath('toolchain/node-v26.5.0-darwin-arm64.json'),
-    ),
-  );
-  assertJsonObject(distribution);
-  if (
-    canonicalJson(distribution.ref!) !==
-      canonicalJson(
-        LOCAL_SINGLE_USER_SQLITE_CANDIDATE.managed_node_distribution_ref,
-      ) ||
-    distribution.manifest_hash !==
-      LOCAL_SINGLE_USER_SQLITE_CANDIDATE.managed_node_distribution_hash ||
-    distribution.node_runtime_version !==
-      LOCAL_SINGLE_USER_SQLITE_CANDIDATE.node_runtime_version ||
-    distribution.node_executable_sha256 !==
-      LOCAL_SINGLE_USER_SQLITE_CANDIDATE.node_executable_hash
-  ) {
-    throw new Error('SQLite candidate managed Node identity drift');
-  }
-}
-
 function validateVersionedRefConformance(
   schemasByTarget: Map<string, JsonObject>,
 ): void {
@@ -817,10 +748,7 @@ function validateVersionedRefConformance(
       ([key]) => !['$schema', '$id', 'title'].includes(key),
     ),
   );
-  for (const targetFormat of [
-    'icarus.workflow-safety-enforcement-matrix/1',
-    'icarus.sqlite-execution-profile/1',
-  ]) {
+  for (const targetFormat of ['icarus.workflow-safety-enforcement-matrix/1']) {
     const schema = schemasByTarget.get(targetFormat);
     if (!schema) throw new Error(`Missing schema for ${targetFormat}`);
     assertJsonObject(schema.$defs);
@@ -940,13 +868,6 @@ function validateDirectoryBoundaries(): void {
   if (fixtureFiles.join('\n') !== 'negative-cases.json\npositive-cases.json') {
     throw new Error('G0.5 fixture directory boundary drift');
   }
-  for (const directory of currentlyReservedDirectories) {
-    try {
-      assertCurrentG2SealedBoundary(absoluteContractPath(directory));
-    } catch {
-      throw new Error(`Future Gate directory contains artifacts: ${directory}`);
-    }
-  }
   const capacityPath = absoluteRepositoryPath(capacityConfigPath);
   if (!fs.lstatSync(capacityPath).isFile()) {
     throw new Error('Deployment Capacity baseline is not a regular file');
@@ -977,7 +898,6 @@ function validateCompletePack(
     validateSemanticContract(targetFormat, target, expectedTargets);
   }
   validateFixtures(validators, ajv, expectedTargets);
-  validatePriorPackIdentity();
   validateDomainCatalog(artifacts, manifest);
   validateDirectoryBoundaries();
 }

@@ -93,7 +93,7 @@ function expectFakeCode(run: () => unknown, code: G4FakeAdapterError['code']) {
 }
 
 describe('G4 Test Bootstrap', () => {
-  it('opens only a fresh Schema 6 real-file Store and emits a verifiable isolation receipt', () => {
+  it('opens only a fresh Schema 11 real-file Store and emits a verifiable isolation receipt', () => {
     const instance = track(createG4TestBootstrap(options('fresh')));
     expect(fs.realpathSync(instance.dataRoot)).toBe(instance.dataRoot);
     expect(instance.databasePath).toBe(
@@ -105,20 +105,27 @@ describe('G4 Test Bootstrap', () => {
         'SELECT user_version AS version FROM pragma_user_version',
         [],
       ),
-    ).toEqual({ version: 6 });
+    ).toEqual({ version: 11 });
 
     const tables = instance.store.queryAll<{ name: string }>(
       "SELECT name FROM sqlite_schema WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
       [],
     );
-    expect(tables).toHaveLength(86);
+    expect(tables).toHaveLength(88);
+    const expectedRows: Record<string, number> = {
+      runtime_capacity_admin_commands: 1,
+      runtime_capacity_change_events: 1,
+      runtime_capacity_head: 1,
+      workflow_registry_resources: 1,
+      workflow_values: 3,
+    };
     for (const { name } of tables) {
       expect(
         instance.store.queryOne<{ count: number }>(
           `SELECT count(*) AS count FROM "${name}"`,
           [],
         ),
-      ).toEqual({ count: 0 });
+      ).toEqual({ count: expectedRows[name] ?? 0 });
     }
 
     expect(validateG4IsolationReceipt(instance.receipt)).toEqual(
@@ -221,7 +228,7 @@ describe('G4 Test Bootstrap', () => {
     };
     expectBootstrapCode(
       () => createG4TestBootstrap(profileDrift),
-      'profile_identity_mismatch',
+      'profile_selection_mismatch',
     );
 
     const fixtureDrift = {
@@ -231,7 +238,7 @@ describe('G4 Test Bootstrap', () => {
     };
     expectBootstrapCode(
       () => createG4TestBootstrap(fixtureDrift),
-      'fixture_identity_mismatch',
+      'fixture_selection_mismatch',
     );
   });
 
@@ -303,7 +310,6 @@ describe('G4 Test Bootstrap', () => {
       ['root_create_failure', 'data_root_create_failed'],
       ['root_permission_denied', 'data_root_permission_denied'],
       ['store_open_failure', 'store_open_failed'],
-      ['schema_profile_rejection', 'store_identity_rejected'],
       ['interrupt_after_root_create', 'initialization_interrupted'],
       ['interrupt_after_store_open', 'initialization_interrupted'],
     ] as const;
@@ -351,9 +357,7 @@ describe('G4 Test Bootstrap', () => {
     >;
     receipt.real_adapter_invoked = true;
     fs.writeFileSync(receiptPath, `${JSON.stringify(receipt, null, 2)}\n`);
-    expect(() => instance.reopenStore()).toThrow(
-      /isolation receipt is invalid/,
-    );
+    expect(() => instance.reopenStore()).toThrow(/receipt checksum mismatch/);
   });
 
   it('rejects replacement of an owned root even when its marker is copied', () => {
@@ -371,7 +375,7 @@ describe('G4 Test Bootstrap', () => {
     expectBootstrapCode(() => instance.reopenStore(), 'isolation_proof_failed');
   });
 
-  it('rejects replacement of the exact Schema 6 database file', () => {
+  it('rejects replacement of the exact Schema 11 database file', () => {
     const instance = track(
       createG4TestBootstrap(options('database-replacement')),
     );
@@ -524,7 +528,6 @@ describe('G4 profile API', () => {
     expect(profile).toMatchObject({
       profile_kind: 'test_only',
       default_enabled: false,
-      certification_status: 'not_certified',
       production_acceptance: 'reject',
     });
   });

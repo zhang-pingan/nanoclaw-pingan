@@ -29,7 +29,6 @@ function openFresh(): WorkflowRuntimeStore {
   const store = WorkflowRuntimeConnectionFactory.openStore({
     databasePath: path.join(root, 'workflow-runtime.db'),
     databaseMode: 'create',
-    identityMode: 'isolated_test',
   });
   stores.push(store);
   return store;
@@ -121,7 +120,7 @@ describe('G3.3/G3.4 Registry persistence', () => {
         'SELECT COUNT(*) AS count FROM workflow_registry_resources',
         [],
       )?.count,
-    ).toBe(original.resources.length);
+    ).toBe(original.resources.length + 1);
     expect(
       store.queryOne<{ count: number }>(
         'SELECT COUNT(*) AS count FROM workflow_registry_closure_manifests',
@@ -159,7 +158,7 @@ describe('G3.3/G3.4 Registry persistence', () => {
         'SELECT COUNT(*) AS count FROM workflow_registry_resources',
         [],
       )?.count,
-    ).toBe(original.resources.length);
+    ).toBe(original.resources.length + 1);
     expect(
       store.queryOne<{ content_hash: string }>(
         `SELECT content_hash FROM workflow_registry_resources
@@ -177,8 +176,6 @@ describe('G3.3/G3.4 Registry persistence', () => {
       snapshot_ref: batch.snapshot.ref,
       snapshot_hash: batch.snapshot.snapshot_hash,
       expected_compiler_version: batch.snapshot.compiler_version,
-      expected_core_build_hash: batch.snapshot.core_build_hash,
-      expected_database_schema_hash: batch.snapshot.database_schema_hash,
     };
     expect(preflightRegistrySnapshot(store, input)).toMatchObject({
       outcome: 'accepted',
@@ -200,7 +197,7 @@ describe('G3.3/G3.4 Registry persistence', () => {
         'SELECT COUNT(*) AS count FROM workflow_registry_resources',
         [],
       )?.count,
-    ).toBe(2);
+    ).toBe(3);
   });
 
   it('fails closed before opening a transaction when immutable identity is wrong', () => {
@@ -218,6 +215,6 @@ describe('G3.3/G3.4 Registry persistence', () => {
         'SELECT COUNT(*) AS count FROM workflow_registry_resources',
         [],
       )?.count,
-    ).toBe(0);
+    ).toBe(1);
   });
 });

@@ -18,7 +18,10 @@ import {
   RUNTIME_PERMISSION_CODES,
   WORKFLOW_COMPILER_ERROR_CODES,
 } from './catalog-protocol-types.js';
-import { checkContractPackCatalogProtocols } from './catalog-protocol-pack.js';
+import {
+  checkContractPackCatalogProtocols,
+  generateContractPackCatalogProtocols,
+} from './catalog-protocol-pack.js';
 import {
   RUNTIME_COMMAND_PROTOCOL_ENTRIES,
   RUNTIME_STATE_MACHINES,
@@ -51,6 +54,8 @@ describe('G0.4 catalog and protocol Contract Pack', () => {
         (descriptor) => descriptor.artifact_path,
       ),
     ];
+    const generated = generateContractPackCatalogProtocols();
+    expect(generateContractPackCatalogProtocols().hash).toBe(generated.hash);
     const before = new Map(
       trackedPaths.map((relativePath) => [
         relativePath,
@@ -61,12 +66,6 @@ describe('G0.4 catalog and protocol Contract Pack', () => {
     const manifest = checkContractPackCatalogProtocols();
     expect(manifest.payload.gate).toBe('G0.4');
     expect(manifest.payload.run_protocol_major).toBe(1);
-    expect(manifest.payload.foundation_manifest_hash).toBe(
-      'sha256:e85b654581c036f8129677d7443a0704ebc8b8fbe87907b842aaefe1501e637d',
-    );
-    expect(manifest.payload.closed_schema_manifest_hash).toBe(
-      'sha256:6f7aa5b997c5a496a4eb95776a09f18e3c25753e7324a6ef1f095a23b8413d81',
-    );
     for (const [relativePath, bytes] of before) {
       expect(fs.readFileSync(path.join(contractsRoot, relativePath))).toEqual(
         bytes,
@@ -223,24 +222,5 @@ describe('G0.4 catalog and protocol Contract Pack', () => {
     expect(CATALOG_PROTOCOL_POSITIVE_CASES).toHaveLength(9);
     expect(CATALOG_PROTOCOL_NEGATIVE_CASES).toHaveLength(25);
     expect(() => checkContractPackCatalogProtocols()).not.toThrow();
-  });
-
-  it('keeps Golden directories reserved', () => {
-    expect(readArtifact('contract-pack-foundation.json').hash).toBe(
-      'sha256:e85b654581c036f8129677d7443a0704ebc8b8fbe87907b842aaefe1501e637d',
-    );
-    expect(readArtifact('contract-pack-closed-schemas.json').hash).toBe(
-      'sha256:6f7aa5b997c5a496a4eb95776a09f18e3c25753e7324a6ef1f095a23b8413d81',
-    );
-    for (const directory of ['conformance/sealed']) {
-      expect(fs.readdirSync(path.join(contractsRoot, directory))).toEqual([
-        '.gitkeep',
-        'g2-capability-outbox-binding-v3',
-        'g2-generated-schema-join-authority-v4',
-        'g2-generated-schema-join-authority-v5',
-        'g2-production-compiler-replay-repair-v2',
-        'g2-semantic-correction',
-      ]);
-    }
   });
 });

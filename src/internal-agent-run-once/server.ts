@@ -10,8 +10,7 @@ import {
 } from './handler.js';
 
 export interface InternalAgentRunOnceServerOptions
-  extends RunOnceHandlerOptions,
-    AgentChatHandlerOptions {
+  extends RunOnceHandlerOptions, AgentChatHandlerOptions {
   host: string;
   port: number;
 }

@@ -18,7 +18,6 @@ import {
   G37_RESULT_SCHEMA,
   G37_SCHEMA_RESOURCE_HASHES,
   G37_TARGET_RELEASE_DOMAIN,
-  G37_UPSTREAM_IDENTITIES,
   validateG37WorkflowPublisherRequest,
 } from './g3-workflow-publisher.js';
 import { g37WorkflowPublisherStoreFixtureForTest } from './g3-workflow-publisher-fixtures.js';
@@ -250,11 +249,10 @@ function buildManifest(
       status: 'DONE',
       g3_status: 'IN_PROGRESS',
       publisher_schema_readiness: 'PUBLISHER_SCHEMA_PREREQUISITE_READY',
-      upstream: G37_UPSTREAM_IDENTITIES,
       request_schema_resource_hash: G37_SCHEMA_RESOURCE_HASHES.request,
       receipt_schema_resource_hash: G37_SCHEMA_RESOURCE_HASHES.receipt,
       result_schema_resource_hash: G37_SCHEMA_RESOURCE_HASHES.result,
-      preflights_composed: ['G3.1', 'G3.3', 'G3.5', 'G3.6'],
+      preflights_composed: ['G3.1', 'G3.3', 'G3.5'],
       store_transaction: 'single_begin_immediate',
       durable_dispositions: ['applied', 'duplicate', 'conflict', 'failed'],
       registry_publication_written: true,

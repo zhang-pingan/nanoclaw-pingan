@@ -20,7 +20,6 @@ describe('WorkflowExecutionWorker startup', () => {
     const runtimeStore = WorkflowRuntimeConnectionFactory.openStore({
       databasePath: path.join(root, 'workflow-runtime.db'),
       databaseMode: 'create',
-      identityMode: 'isolated_test',
     });
     const executionStore = new WorkflowAdapterExecutionStore(
       path.join(root, 'workflow-adapter-executions.db'),

@@ -11,8 +11,6 @@
     "slice": "G3.5",
     "status": "DONE",
     "g3_status": "IN_PROGRESS",
-    "upstream_g3_3_pack_hash": "sha256:969e586947ef065c3c81955eea9e9077bc7057cd80090e05e0a6a994d097b88b",
-    "upstream_g1_schema_root_hash": "sha256:c32fc2db46c49b09edeea2a31d07b4decf3b89a6272a3b7b69d933288efe24ca",
     "query_mode": "exact_resource_type_ref_content_hash_only",
     "result_schema": "closed",
     "read_only": true,
@@ -106,5 +104,5 @@
     "negative_case_count": 5,
     "g4_through_g9_status": "NOT_READY"
   },
-  "hash": "sha256:80c8436bdee143790c16e1c383e2e29916358d2cbe17f121154966d231811c4a"
+  "hash": "sha256:65de99a40824b26b69849d38422a8f1c79d16c33bef013655d4ea51228f09184"
 }

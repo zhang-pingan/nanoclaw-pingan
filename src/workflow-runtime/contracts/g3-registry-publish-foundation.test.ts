@@ -4,6 +4,7 @@ import path from 'node:path';
 import { Ajv2020, type AnySchema } from 'ajv/dist/2020.js';
 import { describe, expect, it } from 'vitest';
 
+import { WORKFLOW_COMPILER_VERSION } from '../compiler/version.js';
 import { parseContractArtifactEnvelope } from './artifact.js';
 import { FEATURE_WORKFLOW_RESOURCE_KINDS } from './closed-schema-types.js';
 import {
@@ -15,10 +16,7 @@ import {
   g3RegistryPublishFixturesForTest,
   parseAndEvaluateG3RegistryPublishPreflight,
 } from './g3-registry-publish-foundation.js';
-import {
-  G3_CURRENT_UPSTREAM_IDENTITY,
-  G3_REGISTRY_RESOURCE_TYPES,
-} from './g3-registry-publish-types.js';
+import { G3_REGISTRY_RESOURCE_TYPES } from './g3-registry-publish-types.js';
 import { strictParseJsonBytes } from './strict-json.js';
 
 const contractsRoot = import.meta.dirname;
@@ -33,7 +31,7 @@ function artifact(relativePath: string) {
 }
 
 describe('G3.1 Registry publish preflight foundation', () => {
-  it('checks deterministic artifacts and exact G1/G2/compiler lineage read-only', () => {
+  it('checks deterministic current schemas and Compiler semantic version read-only', () => {
     const first = checkG3RegistryPublishFoundation();
     const second = checkG3RegistryPublishFoundation();
     expect(second).toEqual(first);
@@ -42,15 +40,8 @@ describe('G3.1 Registry publish preflight foundation', () => {
       slice: 'G3.1',
       status: 'DONE',
       g3_status: 'IN_PROGRESS',
-      upstream_g1_root_hash: G3_CURRENT_UPSTREAM_IDENTITY.g1_schema_root_hash,
-      upstream_g2_sealed_bundle_hash:
-        G3_CURRENT_UPSTREAM_IDENTITY.g2_sealed_bundle_hash,
-      upstream_compiler_toolchain_hash:
-        G3_CURRENT_UPSTREAM_IDENTITY.compiler.compiler_toolchain_hash,
-      upstream_compiler_build_hash:
-        G3_CURRENT_UPSTREAM_IDENTITY.compiler.compiler_build_hash,
+      compiler_version: WORKFLOW_COMPILER_VERSION,
       production_registry_write_performed: false,
-      production_activation_performed: false,
       published_recipe_count: 0,
       g4_through_g9_status: 'NOT_READY',
     });
@@ -172,12 +163,13 @@ describe('G3.1 Registry publish preflight foundation', () => {
     ).toThrow(/Duplicate object key/);
   });
 
-  it('contains no Publisher execution, Production loader, or G8+ implementation', () => {
+  it('reads only the Compiler semantic version and no execution or release implementation', () => {
     const source = fs.readFileSync(
       path.join(contractsRoot, 'g3-registry-publish-foundation.ts'),
       'utf8',
     );
-    expect(source).not.toMatch(/from ['"].*\/compiler\//);
+    expect(source).toContain("from '../compiler/version.js'");
+    expect(source).not.toMatch(/from ['"].*\/compiler\/(?!version\.js)/);
     expect(source).not.toMatch(/--accept|snapshot update/i);
     for (const forbidden of [
       '../registry/release-publisher',

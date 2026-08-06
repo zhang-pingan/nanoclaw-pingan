@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-closed-schema-negative-cases:1\n",
-  "hash": "sha256:93b2cd354e2253469a80ef8d7969103f2ce07a6e7524815169eb5e9bbcedf3d1",
+  "hash": "sha256:27586e2a72066da9200e0212b9dc282c02bc5c140ba4951b2d73ddbecbff3eff",
   "payload": {
     "cases": [
       {
@@ -1162,19 +1162,8 @@
         "case_id": "compiled_plan_rejects_unknown_field",
         "schema_format": "icarus.workflow-compiled-scope-plan-schema/1",
         "instance": {
-          "format": "icarus.workflow-graph-scope-plan/1",
+          "format": "icarus.workflow-graph-scope-plan/2",
           "compiler_version": "fixture-compiler-1",
-          "compiler_build_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
-          "compiler_toolchain_ref": {
-            "id": "example.compiler-toolchain",
-            "version": "1.0.0"
-          },
-          "compiler_toolchain_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
-          "compiler_error_catalog_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
-          "canonical_normalizer_version": "1",
-          "canonical_normalizer_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
-          "proof_algorithm_version": "1",
-          "proof_algorithm_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
           "plan_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
           "source_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
           "interface_snapshot_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
@@ -1415,7 +1404,11 @@
             "max_frontier_bytes": 1,
             "summary_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
           },
-          "static_child_plan_closure_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+          "static_child_plan_closure": {
+            "members": [],
+            "member_count": 0,
+            "closure_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+          },
           "effective_limits": {
             "max_scopes": null,
             "max_nodes": 0,
@@ -1542,19 +1535,8 @@
         "case_id": "compiled_plan_rejects_unknown_generated_schema_scheme",
         "schema_format": "icarus.workflow-compiled-scope-plan-schema/1",
         "instance": {
-          "format": "icarus.workflow-graph-scope-plan/1",
+          "format": "icarus.workflow-graph-scope-plan/2",
           "compiler_version": "fixture-compiler-1",
-          "compiler_build_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
-          "compiler_toolchain_ref": {
-            "id": "example.compiler-toolchain",
-            "version": "1.0.0"
-          },
-          "compiler_toolchain_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
-          "compiler_error_catalog_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
-          "canonical_normalizer_version": "1",
-          "canonical_normalizer_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
-          "proof_algorithm_version": "1",
-          "proof_algorithm_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
           "plan_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
           "source_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
           "interface_snapshot_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
@@ -1795,7 +1777,11 @@
             "max_frontier_bytes": 1,
             "summary_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
           },
-          "static_child_plan_closure_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+          "static_child_plan_closure": {
+            "members": [],
+            "member_count": 0,
+            "closure_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+          },
           "effective_limits": {
             "max_scopes": null,
             "max_nodes": 0,
@@ -1921,19 +1907,8 @@
         "case_id": "compiled_plan_rejects_missing_generated_schema_json",
         "schema_format": "icarus.workflow-compiled-scope-plan-schema/1",
         "instance": {
-          "format": "icarus.workflow-graph-scope-plan/1",
+          "format": "icarus.workflow-graph-scope-plan/2",
           "compiler_version": "fixture-compiler-1",
-          "compiler_build_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
-          "compiler_toolchain_ref": {
-            "id": "example.compiler-toolchain",
-            "version": "1.0.0"
-          },
-          "compiler_toolchain_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
-          "compiler_error_catalog_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
-          "canonical_normalizer_version": "1",
-          "canonical_normalizer_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
-          "proof_algorithm_version": "1",
-          "proof_algorithm_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
           "plan_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
           "source_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
           "interface_snapshot_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
@@ -2171,7 +2146,11 @@
             "max_frontier_bytes": 1,
             "summary_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
           },
-          "static_child_plan_closure_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+          "static_child_plan_closure": {
+            "members": [],
+            "member_count": 0,
+            "closure_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+          },
           "effective_limits": {
             "max_scopes": null,
             "max_nodes": 0,
@@ -2297,19 +2276,8 @@
         "case_id": "compiled_plan_rejects_both_artifact_contract_choices",
         "schema_format": "icarus.workflow-compiled-scope-plan-schema/1",
         "instance": {
-          "format": "icarus.workflow-graph-scope-plan/1",
+          "format": "icarus.workflow-graph-scope-plan/2",
           "compiler_version": "fixture-compiler-1",
-          "compiler_build_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
-          "compiler_toolchain_ref": {
-            "id": "example.compiler-toolchain",
-            "version": "1.0.0"
-          },
-          "compiler_toolchain_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
-          "compiler_error_catalog_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
-          "canonical_normalizer_version": "1",
-          "canonical_normalizer_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
-          "proof_algorithm_version": "1",
-          "proof_algorithm_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
           "plan_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
           "source_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
           "interface_snapshot_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
@@ -2554,7 +2522,11 @@
             "max_frontier_bytes": 1,
             "summary_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
           },
-          "static_child_plan_closure_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+          "static_child_plan_closure": {
+            "members": [],
+            "member_count": 0,
+            "closure_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+          },
           "effective_limits": {
             "max_scopes": null,
             "max_nodes": 0,

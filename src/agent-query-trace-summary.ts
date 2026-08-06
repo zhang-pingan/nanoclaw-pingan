@@ -65,7 +65,8 @@ export function traceEventCategory(
   if (name.startsWith('container_')) return 'container';
   if (name.startsWith('queue_')) return 'queue';
   if (name.startsWith('ipc_')) return 'ipc';
-  if (name.includes('evaluation') || name.includes('judge')) return 'evaluation';
+  if (name.includes('evaluation') || name.includes('judge'))
+    return 'evaluation';
   if (name.startsWith('human_')) return 'human';
   if (name.startsWith('artifact_')) return 'artifact';
   return 'lifecycle';
@@ -113,7 +114,8 @@ export function isTraceFileChangeEvent(
   payload: Record<string, unknown>,
 ): boolean {
   const name = eventName.toLowerCase();
-  const operation = tracePayloadString(payload, 'operation')?.toLowerCase() || '';
+  const operation =
+    tracePayloadString(payload, 'operation')?.toLowerCase() || '';
   return (
     name.includes('write') ||
     name.includes('edit') ||
@@ -130,7 +132,8 @@ export function isTraceFileReadEvent(
   eventName: string,
   payload: Record<string, unknown>,
 ): boolean {
-  const operation = tracePayloadString(payload, 'operation')?.toLowerCase() || '';
+  const operation =
+    tracePayloadString(payload, 'operation')?.toLowerCase() || '';
   return eventName.toLowerCase().includes('read') || operation === 'read';
 }
 
@@ -165,7 +168,7 @@ export function traceEventHasToolIdentity(
 ): boolean {
   return Boolean(
     tracePayloadString(payload, 'toolUseId') ||
-      tracePayloadString(payload, 'toolName'),
+    tracePayloadString(payload, 'toolName'),
   );
 }
 
@@ -186,7 +189,8 @@ export function isTraceToolActivityEvent(
     normalizedName.startsWith('tool_') ||
     normalizedName.startsWith('ipc_request_') ||
     (normalizedCategory === 'file' &&
-      (normalizedName.startsWith('file_') || traceEventHasToolIdentity(payload)))
+      (normalizedName.startsWith('file_') ||
+        traceEventHasToolIdentity(payload)))
   );
 }
 
@@ -253,7 +257,10 @@ export function applyEventToTraceSummary(
     accumulator.toolIds.add(id);
   }
 
-  if (category === 'file' && isAppliedTraceFileChangeEvent(eventName, event.status, payload)) {
+  if (
+    category === 'file' &&
+    isAppliedTraceFileChangeEvent(eventName, event.status, payload)
+  ) {
     const path =
       tracePayloadString(payload, 'path') ||
       tracePayloadString(payload, 'resourceRef');

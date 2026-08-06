@@ -9,10 +9,6 @@ import {
   RUNTIME_FACT_KINDS,
 } from './catalog-protocol-types.js';
 
-export const G5_DATABASE_SCHEMA_VERSION = 5 as const;
-export const G5_DATABASE_SCHEMA_HASH =
-  'sha256:49aaee7c8f046cd9a15b3bc5b77fbcf1713be2a1872078941043f5ccdca29024' as Sha256Hash;
-
 export const G5_TRANSACTION_IDS = [
   'T0',
   'T0p',

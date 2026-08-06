@@ -2,30 +2,37 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 
-import type { Sha256Hash } from '../workflow-runtime/contracts/types.js';
-import { CURRENT_G1_SCHEMA_IDENTITIES } from '../workflow-runtime/gateway/host-core.js';
+import {
+  CURRENT_WORKFLOW_RUNTIME_SCHEMA_VERSION,
+  MINIMUM_WORKFLOW_RUNTIME_SCHEMA_VERSION,
+} from '../workflow-runtime/gateway/host-core.js';
 import { verifyActiveHostCore } from './activation.js';
 import {
-  type HostCoreTargetSchemaIdentity,
+  type HostCoreTargetSchema,
+  type PersistentStateBackupManifest,
+  type PersistentStateBackupSummary,
   type PersistentStateDecision,
-  type PersistentStateResetPlan,
+  type PersistentStateOperationHooks,
+  buildPersistentStateBackupManifest,
   type WorkflowRuntimeSchemaCompatibility,
-  buildPersistentStateResetPlan,
+  createPersistentStateBackup,
   currentWorkflowRuntimeSchemaCompatibility,
   decidePersistentStateCompatibility,
-  discoverPersistentStateResetRecovery,
-  quarantinePersistentState,
+  discardIncompletePersistentStateBackup,
+  gcPersistentStateBackups,
+  listPersistentStateBackups,
+  restorePersistentStateBackup,
+  resumePersistentStateBackup,
 } from './persistent-state.js';
 
 export type WorkflowStateMode = 'current' | 'active';
 
 export interface WorkflowStateTarget {
   readonly mode: WorkflowStateMode;
-  readonly code_identity: string;
-  readonly version: string | null;
-  readonly release_artifact_hash: Sha256Hash | null;
-  readonly schema: HostCoreTargetSchemaIdentity;
-  readonly schema_compatibility: WorkflowRuntimeSchemaCompatibility | null;
+  readonly code_marker: string;
+  readonly snapshot_id: string | null;
+  readonly schema: HostCoreTargetSchema;
+  readonly schema_compatibility: WorkflowRuntimeSchemaCompatibility;
 }
 
 export interface WorkflowStateInspection {
@@ -36,13 +43,11 @@ export interface WorkflowStateInspection {
 function currentTarget(): WorkflowStateTarget {
   return {
     mode: 'current',
-    code_identity: 'current_checkout',
-    version: null,
-    release_artifact_hash: null,
+    code_marker: 'current_checkout',
+    snapshot_id: null,
     schema: {
-      database_schema_version: 11,
-      database_schema_hash: CURRENT_G1_SCHEMA_IDENTITIES.schema,
-      database_sqlite_schema_hash: CURRENT_G1_SCHEMA_IDENTITIES.sqliteSchema,
+      database_schema_version: CURRENT_WORKFLOW_RUNTIME_SCHEMA_VERSION,
+      minimum_supported_schema_version: MINIMUM_WORKFLOW_RUNTIME_SCHEMA_VERSION,
     },
     schema_compatibility: currentWorkflowRuntimeSchemaCompatibility(),
   };
@@ -55,25 +60,21 @@ export function resolveWorkflowStateTarget(
   const runtimeHome = fs.realpathSync(runtimeHomeInput);
   if (mode === 'current') return currentTarget();
   const active = verifyActiveHostCore(runtimeHome);
-  const sqliteSchemaHash =
-    active.database_sqlite_schema_hash ??
-    (active.database_schema_version === 11 &&
-    active.database_schema_hash === CURRENT_G1_SCHEMA_IDENTITIES.schema
-      ? CURRENT_G1_SCHEMA_IDENTITIES.sqliteSchema
-      : null);
-  if (!sqliteSchemaHash)
-    throw new Error('workflow_state_active_schema_identity_unverifiable');
   return {
     mode,
-    code_identity: `${active.version} ${active.release_artifact_hash}`,
-    version: active.version,
-    release_artifact_hash: active.release_artifact_hash,
+    code_marker: `snapshot:${active.snapshot_id}`,
+    snapshot_id: active.snapshot_id,
     schema: {
-      database_schema_version: active.database_schema_version,
-      database_schema_hash: active.database_schema_hash,
-      database_sqlite_schema_hash: sqliteSchemaHash,
+      database_schema_version: active.manifest.workflow_schema.current_version,
+      minimum_supported_schema_version:
+        active.manifest.workflow_schema.minimum_supported_version,
     },
-    schema_compatibility: active.workflow_runtime_schema_compatibility,
+    schema_compatibility: {
+      format: 'icarus.workflow-runtime-schema-compatibility/2',
+      current_version: active.manifest.workflow_schema.current_version,
+      minimum_supported_version:
+        active.manifest.workflow_schema.minimum_supported_version,
+    },
   };
 }
 
@@ -94,18 +95,29 @@ export function inspectWorkflowState(
 }
 
 export interface WorkflowStateResetPreparation {
-  readonly recovery: boolean;
-  readonly inspection: WorkflowStateInspection | null;
-  readonly plan: PersistentStateResetPlan;
+  readonly inspection: WorkflowStateInspection;
+  readonly manifest: PersistentStateBackupManifest;
+}
+
+function assertNoIncompleteBackups(runtimeHome: string): void {
+  const incomplete = listPersistentStateBackups(runtimeHome).filter(
+    (backup) => backup.status === 'in_progress',
+  );
+  if (incomplete.length > 0)
+    throw new Error(
+      `workflow_state_incomplete_backup:${incomplete
+        .map((backup) => backup.backup_id)
+        .join(',')}`,
+    );
 }
 
 export function prepareWorkflowStateReset(
   runtimeHomeInput: string,
   mode: WorkflowStateMode,
+  options: { readonly now?: Date; readonly randomSuffix?: string } = {},
 ): WorkflowStateResetPreparation {
   const runtimeHome = fs.realpathSync(runtimeHomeInput);
-  const recovery = discoverPersistentStateResetRecovery(runtimeHome);
-  if (recovery) return { recovery: true, inspection: null, plan: recovery };
+  assertNoIncompleteBackups(runtimeHome);
   const inspection = inspectWorkflowState(runtimeHome, mode);
   if (inspection.decision.decision === 'UNKNOWN_BLOCKED')
     throw new Error(
@@ -116,9 +128,28 @@ export function prepareWorkflowStateReset(
       `workflow_state_reset_not_required:${inspection.decision.decision}`,
     );
   return {
-    recovery: false,
     inspection,
-    plan: buildPersistentStateResetPlan(inspection.decision),
+    manifest: buildPersistentStateBackupManifest(inspection.decision, {
+      operation: 'reset',
+      ...options,
+    }),
+  };
+}
+
+export function prepareWorkflowStateBackup(
+  runtimeHomeInput: string,
+  mode: WorkflowStateMode,
+  options: { readonly now?: Date; readonly randomSuffix?: string } = {},
+): WorkflowStateResetPreparation {
+  const runtimeHome = fs.realpathSync(runtimeHomeInput);
+  assertNoIncompleteBackups(runtimeHome);
+  const inspection = inspectWorkflowState(runtimeHome, mode);
+  return {
+    inspection,
+    manifest: buildPersistentStateBackupManifest(inspection.decision, {
+      operation: 'backup',
+      ...options,
+    }),
   };
 }
 
@@ -144,13 +175,13 @@ export function isIcarusHostRunning(
   });
   if (launch.status === 0) return true;
   if (launch.status === null)
-    throw new Error('workflow_state_service_status_unverifiable');
+    throw new Error('workflow_state_process_status_unverifiable');
 
   const pids = commandOutput('/usr/bin/pgrep', ['-f', 'dist/index.js'])
     .split(/\s+/)
     .filter(Boolean);
   const currentEntry = path.join(projectRoot, 'dist/index.js');
-  const activePrefix = `${path.join(runtimeHome, 'core-releases')}${path.sep}`;
+  const activePrefix = `${path.join(runtimeHome, 'host-core-snapshots')}${path.sep}`;
   for (const pid of pids) {
     if (!/^[1-9][0-9]*$/.test(pid))
       throw new Error('workflow_state_process_status_unverifiable');
@@ -184,24 +215,126 @@ export function resetWorkflowState(options: {
   readonly mode: WorkflowStateMode;
   readonly confirmed: boolean;
   readonly hostIsRunning?: () => boolean;
-  readonly expectedPlan?: PersistentStateResetPlan;
-  readonly onPlan?: (plan: PersistentStateResetPlan) => void;
-}): PersistentStateResetPlan {
+  readonly expectedManifest?: PersistentStateBackupManifest;
+  readonly hooks?: PersistentStateOperationHooks;
+}): PersistentStateBackupManifest {
   const runtimeHome = fs.realpathSync(options.runtimeHome);
   assertIcarusHostStopped(
     options.projectRoot,
     runtimeHome,
     options.hostIsRunning,
   );
-  const preparation = prepareWorkflowStateReset(runtimeHome, options.mode);
   if (!options.confirmed) throw new Error('workflow_state_reset_cancelled');
-  const plan = preparation.plan;
+  assertNoIncompleteBackups(runtimeHome);
+  const inspection = inspectWorkflowState(runtimeHome, options.mode);
+  if (inspection.decision.decision !== 'RESET_REQUIRED')
+    throw new Error(
+      `workflow_state_reset_not_required:${inspection.decision.decision}`,
+    );
+  const manifest =
+    options.expectedManifest ??
+    buildPersistentStateBackupManifest(inspection.decision, {
+      operation: 'reset',
+    });
   if (
-    options.expectedPlan &&
-    options.expectedPlan.backup_identity !== plan.backup_identity
+    manifest.operation !== 'reset' ||
+    manifest.observed_schema_version !==
+      inspection.decision.observed_schema?.database_schema_version ||
+    manifest.target_schema_version !==
+      inspection.decision.target_schema.database_schema_version ||
+    JSON.stringify(manifest.members) !==
+      JSON.stringify(inspection.decision.members)
   )
     throw new Error('workflow_state_reset_plan_changed');
-  options.onPlan?.(plan);
-  quarantinePersistentState(runtimeHome, plan);
-  return plan;
+  return createPersistentStateBackup(runtimeHome, manifest, options.hooks);
+}
+
+export function backupWorkflowState(options: {
+  readonly projectRoot: string;
+  readonly runtimeHome: string;
+  readonly mode?: WorkflowStateMode;
+  readonly hostIsRunning?: () => boolean;
+  readonly expectedManifest?: PersistentStateBackupManifest;
+  readonly hooks?: PersistentStateOperationHooks;
+}): PersistentStateBackupManifest {
+  const runtimeHome = fs.realpathSync(options.runtimeHome);
+  assertIcarusHostStopped(
+    options.projectRoot,
+    runtimeHome,
+    options.hostIsRunning,
+  );
+  assertNoIncompleteBackups(runtimeHome);
+  const preparation = options.expectedManifest
+    ? null
+    : prepareWorkflowStateBackup(runtimeHome, options.mode ?? 'current');
+  const manifest = options.expectedManifest ?? preparation!.manifest;
+  if (manifest.operation !== 'backup')
+    throw new Error('workflow_state_backup_plan_invalid');
+  return createPersistentStateBackup(runtimeHome, manifest, options.hooks);
+}
+
+export function listWorkflowStateBackups(
+  runtimeHomeInput: string,
+): PersistentStateBackupSummary[] {
+  return listPersistentStateBackups(runtimeHomeInput);
+}
+
+export function resumeWorkflowStateBackup(options: {
+  readonly projectRoot: string;
+  readonly runtimeHome: string;
+  readonly backupId: string;
+  readonly confirmed: boolean;
+  readonly hostIsRunning?: () => boolean;
+  readonly hooks?: PersistentStateOperationHooks;
+}): PersistentStateBackupManifest {
+  if (!options.confirmed) throw new Error('workflow_state_resume_cancelled');
+  assertIcarusHostStopped(
+    options.projectRoot,
+    options.runtimeHome,
+    options.hostIsRunning,
+  );
+  return resumePersistentStateBackup(
+    options.runtimeHome,
+    options.backupId,
+    options.hooks,
+  );
+}
+
+export function restoreWorkflowState(options: {
+  readonly projectRoot: string;
+  readonly runtimeHome: string;
+  readonly backupId: string;
+  readonly confirmed: boolean;
+  readonly hostIsRunning?: () => boolean;
+  readonly hooks?: PersistentStateOperationHooks;
+}): void {
+  if (!options.confirmed) throw new Error('workflow_state_restore_cancelled');
+  assertIcarusHostStopped(
+    options.projectRoot,
+    options.runtimeHome,
+    options.hostIsRunning,
+  );
+  restorePersistentStateBackup(
+    options.runtimeHome,
+    options.backupId,
+    options.hooks,
+  );
+}
+
+export function discardIncompleteWorkflowStateBackup(options: {
+  readonly runtimeHome: string;
+  readonly backupId: string;
+  readonly confirmed: boolean;
+}): void {
+  if (!options.confirmed) throw new Error('workflow_state_discard_cancelled');
+  discardIncompletePersistentStateBackup(options.runtimeHome, options.backupId);
+}
+
+export function gcWorkflowStateBackups(options: {
+  readonly runtimeHome: string;
+  readonly keep: number;
+  readonly confirmed: boolean;
+}): string[] {
+  if (!options.confirmed) throw new Error('workflow_state_gc_cancelled');
+  return gcPersistentStateBackups(options.runtimeHome, options.keep);
 }

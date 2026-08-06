@@ -6,30 +6,24 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-capability-outbox-contract-pack:1\n",
-  "hash": "sha256:ef76a496fdb384b98cc7cbf66451d0f07186647f3d23538a445eee886461d764",
+  "hash": "sha256:6004caa12bcc93dc376b74162e27db66f42886a28cdc63b5ef822821c7b0d495",
   "payload": {
-    "gate": "G2_G3_G5_EXECUTION_BINDING_REPAIR",
-    "status": "EXIT_CANDIDATE_PENDING_INDEPENDENT_AFFECTED_CHAIN_REGRESSION",
-    "normative_spec_ref": "local/docs/dynamic-workflow-dag-framework.md",
     "plan_format": "icarus.workflow-graph-scope-plan/2",
-    "latest_lookup": "forbidden",
-    "g4_fixture_authority": "forbidden",
-    "runtime_implementation": "absent",
     "artifacts": [
       {
         "path": "conformance/capability-outbox-execution-binding/schemas/compiled-scope-plan-v2-execution-binding-schema@1.json",
         "format": "icarus.workflow-compiled-scope-plan-v2-execution-binding-schema/1",
-        "hash": "sha256:e582abc7a221f4d1afd66d12c2a87816cb228f6139a77d9abfaa1a397844f947"
+        "hash": "sha256:79719788af197243e5172a7d495a172f3746720fe5fa41b681e454e6defc62ed"
       },
       {
         "path": "conformance/capability-outbox-execution-binding/schemas/capability-outbox-snapshot-schema@1.json",
         "format": "icarus.workflow-capability-outbox-snapshot-schema/1",
-        "hash": "sha256:c0c26f1191557e346ce656bb869b292d0ac09b7ed109988b8ed10805233207e2"
+        "hash": "sha256:727082726ca74fc88adf1a95f8505246c6e51976dc8c5a2e6d56271b3259e9b8"
       },
       {
         "path": "conformance/capability-outbox-execution-binding/schemas/compiler-conformance-case-result-execution-binding-schema@1.json",
         "format": "icarus.workflow-compiler-conformance-case-result-execution-binding-schema/1",
-        "hash": "sha256:ee41b9dff7eb2c97a75c81a7c15ec3bcf935ce233c29468a4ef7b7bfa047987e"
+        "hash": "sha256:4760130a40827f695b0820c176783b69f66d29cd411f2eeaaebe582c19e2a78b"
       },
       {
         "path": "conformance/capability-outbox-execution-binding/schemas/schema5-outbox-handoff-schema@1.json",

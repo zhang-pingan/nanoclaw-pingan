@@ -2,10 +2,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import Database from 'better-sqlite3';
-import { Ajv2020, type AnySchema } from 'ajv/dist/2020.js';
 import { describe, expect, it } from 'vitest';
 
-import { parseContractArtifactEnvelope } from './artifact.js';
 import {
   CAPABILITY_OUTBOX_COMPILED_PLAN_SCHEMA_PATH,
   CAPABILITY_OUTBOX_CONFORMANCE_RESULT_SCHEMA_PATH,
@@ -13,8 +11,6 @@ import {
   CAPABILITY_OUTBOX_SNAPSHOT_SCHEMA_PATH,
   checkCapabilityOutboxBindingContract,
 } from './capability-outbox-binding-contract.js';
-import { strictParseJsonBytes } from './strict-json.js';
-import type { JsonObject } from './types.js';
 
 const contractsRoot = import.meta.dirname;
 const workflowRuntimeRoot = path.resolve(contractsRoot, '..');
@@ -148,14 +144,11 @@ function insertOutbox(
     .run(adapterHash, HASH_C, policySnapshotHash, HASH_E);
 }
 
-describe('G5 Capability to Outbox execution-binding Contract repair', () => {
-  it('checks the generated closed source/snapshot/Plan and handoff schemas', () => {
+describe('Capability to Outbox execution binding', () => {
+  it('checks the current Plan, snapshot, result, and handoff schemas', () => {
     const manifest = checkCapabilityOutboxBindingContract();
     expect(manifest.payload).toMatchObject({
-      status: 'EXIT_CANDIDATE_PENDING_INDEPENDENT_AFFECTED_CHAIN_REGRESSION',
-      latest_lookup: 'forbidden',
-      g4_fixture_authority: 'forbidden',
-      runtime_implementation: 'absent',
+      plan_format: 'icarus.workflow-graph-scope-plan/2',
     });
     for (const relativePath of [
       CAPABILITY_OUTBOX_COMPILED_PLAN_SCHEMA_PATH,
@@ -168,80 +161,6 @@ describe('G5 Capability to Outbox execution-binding Contract repair', () => {
         relativePath,
       ).toBe(true);
     }
-  });
-
-  it('validates the sealed Plan and result against the current closed schemas', () => {
-    const schema = (relativePath: string): AnySchema =>
-      parseContractArtifactEnvelope(
-        strictParseJsonBytes(
-          fs.readFileSync(path.join(contractsRoot, relativePath)),
-        ),
-      ).payload as AnySchema;
-    const plan = strictParseJsonBytes(
-      read(
-        'src/workflow-runtime/contracts/conformance/sealed/g2-capability-outbox-binding-v3/expected/positive.static-lowering.plan.json',
-      ),
-    ) as JsonObject;
-    const result = strictParseJsonBytes(
-      read(
-        'src/workflow-runtime/contracts/conformance/sealed/g2-capability-outbox-binding-v3/expected/positive.static-lowering.result.json',
-      ),
-    ) as JsonObject;
-    const ajv = new Ajv2020({ strict: true, allErrors: true });
-    const validatePlan = ajv.compile(
-      schema(CAPABILITY_OUTBOX_COMPILED_PLAN_SCHEMA_PATH),
-    );
-    const validateResult = ajv.compile(
-      schema(CAPABILITY_OUTBOX_CONFORMANCE_RESULT_SCHEMA_PATH),
-    );
-    expect(validatePlan(plan), JSON.stringify(validatePlan.errors)).toBe(true);
-    expect(validateResult(result), JSON.stringify(validateResult.errors)).toBe(
-      true,
-    );
-    expect(validatePlan({ ...plan, implicit_latest: true })).toBe(false);
-    expect(validateResult({ ...result, implicit_binding: true })).toBe(false);
-    const planWithUnknownBindingField = structuredClone(plan);
-    const boundNode = (planWithUnknownBindingField.nodes as JsonObject[]).find(
-      (candidate) => candidate.outbox_execution_binding !== undefined,
-    );
-    expect(boundNode).toBeDefined();
-    const binding = boundNode?.outbox_execution_binding as JsonObject;
-    binding.implicit_adapter = true;
-    expect(validatePlan(planWithUnknownBindingField)).toBe(false);
-  });
-
-  it('binds exact Adapter, finite Policy, lane, reconciliation, idempotency, and delivery requirement in the sealed Plan', () => {
-    const plan = strictParseJsonBytes(
-      read(
-        'src/workflow-runtime/contracts/conformance/sealed/g2-capability-outbox-binding-v3/expected/positive.static-lowering.plan.json',
-      ),
-    ) as JsonObject;
-    const node = (plan.nodes as JsonObject[]).find(
-      (candidate) => candidate.outbox_execution_binding !== undefined,
-    );
-    expect(node).toBeDefined();
-    const binding = node?.outbox_execution_binding as JsonObject;
-    expect(binding).toMatchObject({
-      adapter_identity: {
-        resource_type: 'outbox_adapter',
-        ref: { version: '1.0.0' },
-      },
-      delivery_policy_identity: {
-        resource_type: 'outbox_policy',
-        ref: { version: '1.0.0' },
-      },
-      effect_contract: {
-        delivery_lane: 'normal_execution',
-        reconciliation: { type: 'not_required' },
-        idempotency: 'provider_key',
-        delivery_requirement: 'required',
-      },
-    });
-    const snapshot = binding.effective_policy_snapshot as JsonObject;
-    const policy = snapshot.effective_policy as JsonObject;
-    expect(policy.max_delivery_attempts).toBe(8);
-    expect(policy.max_reconcile_attempts).toBe(4);
-    expect(snapshot.snapshot_hash).toMatch(/^sha256:[0-9a-f]{64}$/);
   });
 
   it('persists the exact binding through Schema 7 registry-authority Value FKs', () => {

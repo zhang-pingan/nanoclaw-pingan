@@ -102,10 +102,6 @@ export function getRuntimeHome(homeDir: string = os.homedir()): string {
   return `${homeDir}/Library/Application Support/Icarus`;
 }
 
-export function getRuntimeLauncherPath(homeDir: string = os.homedir()): string {
-  return `${getRuntimeHome(homeDir)}/bin/icarus-runtime`;
-}
-
 export function commandExists(name: string): boolean {
   try {
     execSync(`command -v ${name}`, { stdio: 'ignore' });

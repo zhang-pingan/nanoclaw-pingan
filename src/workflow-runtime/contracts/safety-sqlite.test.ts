@@ -14,14 +14,17 @@ import {
   SAFETY_SQLITE_NEGATIVE_CASES,
   SAFETY_SQLITE_POSITIVE_CASES,
 } from './safety-sqlite-fixtures.js';
-import { checkContractPackSafetySqlite } from './safety-sqlite-pack.js';
+import {
+  checkContractPackSafetySqlite,
+  generateContractPackSafetySqlite,
+} from './safety-sqlite-pack.js';
 import {
   CAPACITY_LIMIT_PATHS,
   DEPLOYMENT_CAPACITY_RELOAD_CONTRACT,
   LOCAL_SINGLE_USER_PRODUCT_FLOOR,
   LOCAL_SINGLE_USER_RETENTION_POLICY,
   LOCAL_SINGLE_USER_SAFETY_PROFILE,
-  LOCAL_SINGLE_USER_SQLITE_CANDIDATE,
+  LOCAL_SINGLE_USER_SQLITE_PROFILE,
   SAFETY_LIMIT_PATHS,
 } from './safety-sqlite-types.js';
 import { domainSeparatedSha256 } from './hash.js';
@@ -39,7 +42,7 @@ function readArtifact(relativePath: string) {
 }
 
 describe('G0.5 Safety, Retention, and SQLite Contract Pack', () => {
-  it('checks every generated artifact and capacity baseline without writes', () => {
+  it('generates deterministically and checks current artifacts without writes', () => {
     const trackedPaths = [
       'contract-pack-foundation.json',
       'contract-pack-closed-schemas.json',
@@ -52,6 +55,8 @@ describe('G0.5 Safety, Retention, and SQLite Contract Pack', () => {
         (descriptor) => descriptor.artifact_path,
       ),
     ];
+    const generated = generateContractPackSafetySqlite();
+    expect(generateContractPackSafetySqlite().hash).toBe(generated.hash);
     const before = new Map(
       trackedPaths.map((relativePath) => [
         relativePath,
@@ -66,17 +71,7 @@ describe('G0.5 Safety, Retention, and SQLite Contract Pack', () => {
 
     const manifest = checkContractPackSafetySqlite();
     expect(manifest.payload.gate).toBe('G0.5');
-    expect(manifest.payload.sqlite_profile_status).toBe('candidate');
-    expect(manifest.payload.certification_status).toBe('not_certified');
-    expect(manifest.payload.foundation_manifest_hash).toBe(
-      'sha256:e85b654581c036f8129677d7443a0704ebc8b8fbe87907b842aaefe1501e637d',
-    );
-    expect(manifest.payload.closed_schema_manifest_hash).toBe(
-      'sha256:6f7aa5b997c5a496a4eb95776a09f18e3c25753e7324a6ef1f095a23b8413d81',
-    );
-    expect(manifest.payload.catalog_protocol_manifest_hash).toBe(
-      'sha256:078be3fed7e8d430b228c0aa526e15e6bd92665f863c6d0818eaebbcaf43b533',
-    );
+    expect(manifest.payload.sqlite_profile_status).toBe('operational');
     for (const [relativePath, bytes] of before) {
       expect(fs.readFileSync(path.join(contractsRoot, relativePath))).toEqual(
         bytes,
@@ -181,9 +176,8 @@ describe('G0.5 Safety, Retention, and SQLite Contract Pack', () => {
     );
   });
 
-  it('keeps SQLite identity explicitly candidate and release-generated', () => {
-    expect(LOCAL_SINGLE_USER_SQLITE_CANDIDATE).toMatchObject({
-      certification_status: 'candidate',
+  it('keeps the operational SQLite settings', () => {
+    expect(LOCAL_SINGLE_USER_SQLITE_PROFILE).toMatchObject({
       journal_mode: 'wal',
       synchronous: 'full',
       foreign_keys: true,
@@ -196,18 +190,7 @@ describe('G0.5 Safety, Retention, and SQLite Contract Pack', () => {
       cache_size_kib: 32768,
       mmap_size_bytes: 0,
       read_only_query_only: true,
-      identity_binding_rule: 'release_build_generated_at_g8',
     });
-    for (const identityField of [
-      'sqlite_version',
-      'sqlite_source_id',
-      'sqlite_compile_options_hash',
-      'better_sqlite3_native_module_hash',
-      'release_artifact_hash',
-      'runtime_launcher_hash',
-    ] as const) {
-      expect(LOCAL_SINGLE_USER_SQLITE_CANDIDATE[identityField]).toBeNull();
-    }
   });
 
   it('expands every Safety and Capacity field into one hashed enforcement record', () => {
@@ -241,8 +224,8 @@ describe('G0.5 Safety, Retention, and SQLite Contract Pack', () => {
   });
 
   it('executes all positive and negative G0.5 fixtures', () => {
-    expect(SAFETY_SQLITE_POSITIVE_CASES).toHaveLength(7);
-    expect(SAFETY_SQLITE_NEGATIVE_CASES).toHaveLength(30);
+    expect(SAFETY_SQLITE_POSITIVE_CASES).toHaveLength(6);
+    expect(SAFETY_SQLITE_NEGATIVE_CASES).toHaveLength(26);
     expect(() => checkContractPackSafetySqlite()).not.toThrow();
   });
 
@@ -259,16 +242,6 @@ describe('G0.5 Safety, Retention, and SQLite Contract Pack', () => {
     expect(sqliteFiles).toContain('sqlite-execution-profile-schema.json');
     expect(sqliteFiles).not.toContain('workflow-runtime-schema-manifest.json');
     expect(sqliteFiles).not.toContain('workflow-runtime-migration.sql');
-    for (const directory of ['conformance/sealed']) {
-      expect(fs.readdirSync(path.join(contractsRoot, directory))).toEqual([
-        '.gitkeep',
-        'g2-capability-outbox-binding-v3',
-        'g2-generated-schema-join-authority-v4',
-        'g2-generated-schema-join-authority-v5',
-        'g2-production-compiler-replay-repair-v2',
-        'g2-semantic-correction',
-      ]);
-    }
     const matrix = readArtifact(
       'safety/local_single_user_safety_enforcement_matrix@1.json',
     );

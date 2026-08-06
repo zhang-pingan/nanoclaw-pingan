@@ -1,0 +1,1 @@
+export const WORKFLOW_COMPILER_VERSION = '3.0.6';

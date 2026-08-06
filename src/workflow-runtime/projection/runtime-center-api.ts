@@ -281,8 +281,7 @@ export class RuntimeCenterProjectionApi {
   constructor(
     private readonly projection: WorkflowProjectionStore,
     private readonly cursorSecret: Buffer,
-    private readonly rebuildAuthority: RuntimeStoreWorkflowProjectionRebuildAuthority | null =
-      null,
+    private readonly rebuildAuthority: RuntimeStoreWorkflowProjectionRebuildAuthority | null = null,
   ) {
     if (cursorSecret.byteLength < 32)
       throw new RuntimeCenterApiError(

@@ -36,7 +36,6 @@ function openFresh(): WorkflowRuntimeStore {
   const store = WorkflowRuntimeConnectionFactory.openStore({
     databasePath: path.join(root, 'workflow-runtime.db'),
     databaseMode: 'create',
-    identityMode: 'isolated_test',
   });
   stores.push(store);
   return store;
@@ -46,7 +45,6 @@ function reopen(root: string): WorkflowRuntimeStore {
   const store = WorkflowRuntimeConnectionFactory.openStore({
     databasePath: path.join(root, 'workflow-runtime.db'),
     databaseMode: 'open_existing',
-    identityMode: 'isolated_test',
   });
   stores.push(store);
   return store;
@@ -133,8 +131,7 @@ describe('G3.7 WorkflowPublisher staged publish', () => {
       releases: 1,
       release_resources: fixture.request.release_resources.length,
       handles: 1,
-      handle_members:
-        fixture.request.compatibility_preflight.retention.members.length,
+      handle_members: fixture.request.target_release.resources.length,
       active_pointers: 0,
     });
     expect(
@@ -482,9 +479,8 @@ describe('G3.7 WorkflowPublisher staged publish', () => {
         `INSERT INTO workflow_feature_releases (
           id, feature_id, release_ref, release_version, release_hash,
           execution_artifact_resource_id, execution_artifact_hash, status,
-          compatibility_snapshot_ref, compatibility_snapshot_hash,
           staged_at_ms, activated_at_ms, disabled_at_ms, row_version
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, 'staged', ?, ?, ?, NULL, NULL, 1)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, 'staged', ?, NULL, NULL, 1)`,
         [
           workflowFeatureReleaseId(
             collision.request.target_release.release_ref,
@@ -495,8 +491,6 @@ describe('G3.7 WorkflowPublisher staged publish', () => {
           collision.request.target_release.release_hash,
           `registry-resource:feature_execution_artifact:${collision.request.target_release.execution_artifact.ref.id}@${collision.request.target_release.execution_artifact.ref.version}`,
           collision.request.target_release.execution_artifact.hash,
-          `${collision.request.target_release.compatibility_snapshot.ref.id}@${collision.request.target_release.compatibility_snapshot.ref.version}`,
-          collision.request.target_release.compatibility_snapshot.hash,
           collision.invocation.requested_at_ms,
         ],
       );

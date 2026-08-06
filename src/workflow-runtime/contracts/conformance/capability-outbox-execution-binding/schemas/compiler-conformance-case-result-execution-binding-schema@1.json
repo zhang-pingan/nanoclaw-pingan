@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-compiler-conformance-case-result-execution-binding-schema:1\n",
-  "hash": "sha256:ee41b9dff7eb2c97a75c81a7c15ec3bcf935ce233c29468a4ef7b7bfa047987e",
+  "hash": "sha256:4760130a40827f695b0820c176783b69f66d29cd411f2eeaaebe582c19e2a78b",
   "payload": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "$id": "https://icarus.local/schemas/compiler-conformance-case-result-execution-binding-v1",
@@ -5717,8 +5717,6 @@
         "type": "object",
         "additionalProperties": false,
         "required": [
-          "proof_algorithm_version",
-          "proof_algorithm_hash",
           "producer_schema_hash",
           "canonical_pointer",
           "pointer_totality",
@@ -5730,14 +5728,6 @@
           "proof_hash"
         ],
         "properties": {
-          "proof_algorithm_version": {
-            "type": "string",
-            "minLength": 1
-          },
-          "proof_algorithm_hash": {
-            "type": "string",
-            "pattern": "^sha256:[0-9a-f]{64}$"
-          },
           "producer_schema_hash": {
             "type": "string",
             "pattern": "^sha256:[0-9a-f]{64}$"
@@ -7491,14 +7481,6 @@
         "required": [
           "format",
           "compiler_version",
-          "compiler_build_hash",
-          "compiler_toolchain_ref",
-          "compiler_toolchain_hash",
-          "compiler_error_catalog_hash",
-          "canonical_normalizer_version",
-          "canonical_normalizer_hash",
-          "proof_algorithm_version",
-          "proof_algorithm_hash",
           "plan_hash",
           "source_hash",
           "interface_snapshot_hash",
@@ -7526,37 +7508,6 @@
           "compiler_version": {
             "type": "string",
             "minLength": 1
-          },
-          "compiler_build_hash": {
-            "type": "string",
-            "pattern": "^sha256:[0-9a-f]{64}$"
-          },
-          "compiler_toolchain_ref": {
-            "$ref": "#/$defs/versioned_ref"
-          },
-          "compiler_toolchain_hash": {
-            "type": "string",
-            "pattern": "^sha256:[0-9a-f]{64}$"
-          },
-          "compiler_error_catalog_hash": {
-            "type": "string",
-            "pattern": "^sha256:[0-9a-f]{64}$"
-          },
-          "canonical_normalizer_version": {
-            "type": "string",
-            "minLength": 1
-          },
-          "canonical_normalizer_hash": {
-            "type": "string",
-            "pattern": "^sha256:[0-9a-f]{64}$"
-          },
-          "proof_algorithm_version": {
-            "type": "string",
-            "minLength": 1
-          },
-          "proof_algorithm_hash": {
-            "type": "string",
-            "pattern": "^sha256:[0-9a-f]{64}$"
           },
           "plan_hash": {
             "type": "string",

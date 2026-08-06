@@ -1,6 +1,4 @@
 import {
-  calculateG39CompatibilityInputValueHash,
-  calculateG39CompatibilityResultValueHash,
   G39_EVENT_DOMAIN,
   G39_INVOCATION_DOMAIN,
   buildG39Receipt,
@@ -30,14 +28,13 @@ import {
   registryClosureId,
   registryResourceKey,
 } from '../contracts/g3-registry-persistence.js';
-import type {
-  G3RetentionExecutorAbiErrorCode,
-  G3RetentionExecutorAbiPreflightResult,
-} from '../contracts/g3-retention-executor-abi-preflight-types.js';
 import { canonicalJson, domainSeparatedSha256 } from '../contracts/hash.js';
 import { strictParseJsonBytes } from '../contracts/strict-json.js';
 import type { JsonObject, Sha256Hash } from '../contracts/types.js';
-import { preflightRetentionExecutorAbiCompatibility } from '../store/retention-executor-abi-preflight.js';
+import {
+  checkReleaseRuntimeCompatibility,
+  type ReleaseRuntimeResource,
+} from '../store/release-runtime-compatibility.js';
 import type {
   WorkflowRuntimeSqlValue,
   WorkflowRuntimeStore,
@@ -87,14 +84,6 @@ interface CommandRow extends Record<string, unknown> {
   request_schema_resource_id: string;
   request_schema_hash: string;
   domain_request_hash: string;
-  verified_compatibility_input_value_id: string | null;
-  verified_compatibility_input_hash: string | null;
-  verified_compatibility_input_schema_resource_id: string | null;
-  verified_compatibility_input_schema_hash: string | null;
-  verified_compatibility_result_value_id: string | null;
-  verified_compatibility_result_hash: string | null;
-  verified_compatibility_result_schema_resource_id: string | null;
-  verified_compatibility_result_schema_hash: string | null;
   verified_feature_id: string | null;
   verified_target_feature_release_id: string | null;
   verified_target_feature_release_ref: string | null;
@@ -241,11 +230,6 @@ interface EventRow extends Record<string, unknown> {
 }
 
 interface VerifiedFacts {
-  compatibility?: {
-    inputHash: Sha256Hash;
-    result: G3RetentionExecutorAbiPreflightResult;
-    resultHash: Sha256Hash;
-  };
   target?: ReleaseRow;
   previous?: ReleaseRow;
   targetRetentionIdentity?: RetentionRow;
@@ -294,12 +278,7 @@ const REMOVED_FIELDS = new Set([
 const COMMAND_COLUMNS = `command_id, idempotency_domain, idempotency_key,
   request_value_id, request_hash, request_schema_resource_id,
   request_schema_hash, domain_request_hash,
-  verified_compatibility_input_value_id, verified_compatibility_input_hash,
-  verified_compatibility_input_schema_resource_id,
-  verified_compatibility_input_schema_hash,
-  verified_compatibility_result_value_id, verified_compatibility_result_hash,
-  verified_compatibility_result_schema_resource_id,
-  verified_compatibility_result_schema_hash, verified_feature_id,
+  verified_feature_id,
   verified_target_feature_release_id, verified_target_feature_release_ref,
   verified_target_feature_release_version, verified_target_feature_release_hash,
   verified_previous_feature_release_id, verified_previous_feature_release_ref,
@@ -546,14 +525,6 @@ function requestValueId(commandId: string): string {
   return `activation-request:${commandId}`;
 }
 
-function compatibilityInputValueId(commandId: string): string {
-  return `activation-g3-6-input:${commandId}`;
-}
-
-function compatibilityResultValueId(commandId: string): string {
-  return `activation-g3-6-result:${commandId}`;
-}
-
 function receiptValueId(commandId: string): string {
   return `activation-receipt:${commandId}`;
 }
@@ -674,6 +645,49 @@ function exactReleaseResources(
   );
 }
 
+function loadReleaseRuntimeResources(
+  transaction: WorkflowRuntimeWriteTransaction,
+  releaseId: string,
+): ReleaseRuntimeResource[] | null {
+  const rows = transaction.queryAll<{
+    resource_type: string;
+    inline_canonical_json: string | null;
+  }>(
+    `SELECT resource.resource_type, value.inline_canonical_json
+       FROM workflow_feature_release_resources AS member
+       JOIN workflow_registry_resources AS resource
+         ON resource.id = member.resource_id
+       JOIN workflow_values AS value
+         ON value.id = resource.canonical_value_id
+        AND value.content_hash = resource.content_hash
+      WHERE member.release_id = ?
+        AND resource.resource_type IN (
+          'feature_execution_artifact', 'executor_implementation'
+        )
+      ORDER BY resource.resource_type, resource.resource_id,
+               resource.resource_version`,
+    [releaseId],
+  );
+  const resources: ReleaseRuntimeResource[] = [];
+  for (const row of rows) {
+    if (row.inline_canonical_json === null) return null;
+    try {
+      const content = strictParseJsonBytes(
+        Buffer.from(row.inline_canonical_json, 'utf8'),
+      );
+      if (!content || typeof content !== 'object' || Array.isArray(content))
+        return null;
+      resources.push({
+        resource_type: row.resource_type,
+        content: content as JsonObject,
+      });
+    } catch {
+      return null;
+    }
+  }
+  return resources;
+}
+
 function retentionIdentityMatches(
   row: RetentionRow,
   claim: G39RetentionClaim,
@@ -723,44 +737,6 @@ function verifiedUpdate(
     assignments.push(`${column} = ?`);
     values.push(value);
   };
-  if (facts.compatibility) {
-    set(
-      'verified_compatibility_input_value_id',
-      compatibilityInputValueId(
-        g39ActivationCommandId(
-          request.idempotency_domain,
-          request.idempotency_key,
-        ),
-      ),
-    );
-    set('verified_compatibility_input_hash', facts.compatibility.inputHash);
-    set(
-      'verified_compatibility_input_schema_resource_id',
-      g39SchemaResourceId(request, 'compatibility_input'),
-    );
-    set(
-      'verified_compatibility_input_schema_hash',
-      request.contract_schemas.compatibility_input.content_hash,
-    );
-    set(
-      'verified_compatibility_result_value_id',
-      compatibilityResultValueId(
-        g39ActivationCommandId(
-          request.idempotency_domain,
-          request.idempotency_key,
-        ),
-      ),
-    );
-    set('verified_compatibility_result_hash', facts.compatibility.resultHash);
-    set(
-      'verified_compatibility_result_schema_resource_id',
-      g39SchemaResourceId(request, 'compatibility_result'),
-    );
-    set(
-      'verified_compatibility_result_schema_hash',
-      request.contract_schemas.compatibility_result.content_hash,
-    );
-  }
   if (facts.target) {
     set('verified_feature_id', facts.target.feature_id);
     set('verified_target_feature_release_id', facts.target.id);
@@ -1559,58 +1535,6 @@ function verifyExistingCommand(
       'Activation verified facts do not match the canonical request claims',
     );
   }
-  if (command.verified_compatibility_input_value_id !== null) {
-    const input = loadValue(
-      transaction,
-      command.verified_compatibility_input_value_id,
-      command.verified_compatibility_input_hash!,
-      command.verified_compatibility_input_schema_resource_id!,
-      command.verified_compatibility_input_schema_hash!,
-    );
-    if (
-      command.verified_compatibility_input_value_id !==
-        compatibilityInputValueId(command.command_id) ||
-      command.verified_compatibility_input_hash !==
-        calculateG39CompatibilityInputValueHash(
-          request.compatibility_preflight,
-        ) ||
-      command.verified_compatibility_input_schema_resource_id !==
-        g39SchemaResourceId(request, 'compatibility_input') ||
-      command.verified_compatibility_input_schema_hash !==
-        request.contract_schemas.compatibility_input.content_hash ||
-      canonicalJson(input.parsed) !==
-        canonicalJson(request.compatibility_preflight)
-    ) {
-      throw new FeatureReleaseActivationError(
-        'terminal_integrity_mismatch',
-        'Activation verified G3.6 input binding mismatch',
-      );
-    }
-    const compatibilityResult = loadValue(
-      transaction,
-      command.verified_compatibility_result_value_id!,
-      command.verified_compatibility_result_hash!,
-      command.verified_compatibility_result_schema_resource_id!,
-      command.verified_compatibility_result_schema_hash!,
-    );
-    if (
-      command.verified_compatibility_result_value_id !==
-        compatibilityResultValueId(command.command_id) ||
-      command.verified_compatibility_result_hash !==
-        calculateG39CompatibilityResultValueHash(
-          compatibilityResult.parsed as G3RetentionExecutorAbiPreflightResult,
-        ) ||
-      command.verified_compatibility_result_schema_resource_id !==
-        g39SchemaResourceId(request, 'compatibility_result') ||
-      command.verified_compatibility_result_schema_hash !==
-        request.contract_schemas.compatibility_result.content_hash
-    ) {
-      throw new FeatureReleaseActivationError(
-        'terminal_integrity_mismatch',
-        'Activation verified G3.6 result binding mismatch',
-      );
-    }
-  }
   verifyInvocationAndEventChains(transaction, command, request);
   if (command.lifecycle === 'pending') {
     if (
@@ -1714,8 +1638,6 @@ function verifyExistingCommand(
       receipt.command_id !== command.command_id ||
       receipt.domain_request_hash !== command.domain_request_hash ||
       receipt.feature_id !== request.feature_id ||
-      receipt.compatibility_result_hash !==
-        command.verified_compatibility_result_hash ||
       receipt.pointer.applied_row_version !==
         command.applied_pointer_row_version ||
       canonicalJson(receipt.target_retention) !==
@@ -2145,7 +2067,7 @@ function admittedFailure(
     | 'pointer_cas_conflict'
     | 'activation_persistence_identity_collision'
   >,
-  nested: G3RetentionExecutorAbiErrorCode | null = null,
+  _detail: null,
   options: FeatureReleaseActivationOptions,
 ): G39FeatureReleaseActivationResult {
   const updated = persistVerifiedFacts(transaction, command, request, facts);
@@ -2157,11 +2079,7 @@ function admittedFailure(
     invocation,
     'failed',
     facts.pointer ?? null,
-    g39Failure(
-      'preflight',
-      code,
-      code === 'g3_6_preflight_rejected' ? nested : null,
-    ),
+    g39Failure('preflight', code),
     null,
     null,
     options,
@@ -2223,46 +2141,22 @@ function executeFirstOrPending(
       options,
     );
 
-  const compatibility = preflightRetentionExecutorAbiCompatibility(
+  const runtimeResources = loadReleaseRuntimeResources(
     transaction,
-    request.compatibility_preflight,
+    request.target_release.release_id,
   );
-  const inputHash = calculateG39CompatibilityInputValueHash(
-    request.compatibility_preflight,
-  );
-  const resultHash = calculateG39CompatibilityResultValueHash(compatibility);
-  ensureCanonicalValue(
-    transaction,
-    compatibilityInputValueId(command.command_id),
-    request.compatibility_preflight,
-    inputHash,
-    g39SchemaResourceId(request, 'compatibility_input'),
-    request.contract_schemas.compatibility_input.content_hash,
-    invocation.requested_at_ms,
-  );
-  ensureCanonicalValue(
-    transaction,
-    compatibilityResultValueId(command.command_id),
-    compatibility as JsonObject,
-    resultHash,
-    g39SchemaResourceId(request, 'compatibility_result'),
-    request.contract_schemas.compatibility_result.content_hash,
-    invocation.requested_at_ms,
-  );
-  facts.compatibility = {
-    inputHash,
-    result: compatibility,
-    resultHash,
-  };
-  if (compatibility.outcome === 'rejected')
+  if (
+    runtimeResources === null ||
+    !checkReleaseRuntimeCompatibility(runtimeResources).compatible
+  )
     return admittedFailure(
       transaction,
       command,
       request,
       invocation,
       facts,
-      'g3_6_preflight_rejected',
-      compatibility.code,
+      'runtime_abi_incompatible',
+      null,
       options,
     );
   if (target.status !== 'staged')
@@ -2568,7 +2462,6 @@ function executeFirstOrPending(
     },
     target_lifecycle: 'active',
     previous_lifecycle: request.previous_release ? 'draining' : null,
-    compatibility_result_hash: facts.compatibility.resultHash,
     target_retention: request.target_retention,
     previous_retention: request.previous_retention,
     activated_at_ms: invocation.requested_at_ms,

@@ -4,10 +4,8 @@ import type { JsonObject, JsonValue, Sha256Hash } from '../contracts/types.js';
 import type { RuntimeRegistryRef } from '../contracts/g5-basic-runtime-types.js';
 import type { RuntimePermissionCode } from '../contracts/catalog-protocol-types.js';
 import type { CapacitySnapshotWatcher } from '../capacity/publication.js';
-import {
-  buildDeploymentCapacityPublication,
-  calculateDeploymentCapacityConfigHash,
-} from '../contracts/capacity-control-plane-source.js';
+import { buildDeploymentCapacityPublication } from '../contracts/capacity-control-plane-source.js';
+import type { DeploymentRuntimeCapacitySnapshot } from '../contracts/capacity-control-plane-types.js';
 import {
   createG6MapFixture,
   g6Hash,
@@ -87,66 +85,31 @@ function insertPublishedResource(
 export function installG7Capacity(
   fixture: G6MapFixture,
 ): ReturnType<typeof buildDeploymentCapacityPublication> {
-  const values = {
-    max_active_executions: 32,
-    max_active_waits: 32,
-    max_pending_signals: 64,
-    max_outbox_inflight: 16,
-    max_physical_blob_bytes: 21_474_836_480,
-    soft_blob_high_water_bytes: 17_179_869_184,
-    minimum_free_disk_bytes: 5_368_709_120,
-  };
-  const publication = buildDeploymentCapacityPublication(
-    1,
-    `g7-capacity:${fixture.workflowId}`,
-    null,
-    {
-      ...values,
-      config_hash: calculateDeploymentCapacityConfigHash(values),
-    },
+  const row = fixture.instance.store.queryOne<{
+    current_capacity_revision: number;
+    current_change_id: string;
+    current_publication_hash: Sha256Hash;
+    proposed_capacity_json: string;
+  }>(
+    `SELECT h.current_capacity_revision, h.current_change_id,
+            h.current_publication_hash, c.proposed_capacity_json
+       FROM runtime_capacity_head h
+       JOIN runtime_capacity_admin_commands c
+         ON c.assigned_capacity_revision = h.current_capacity_revision
+        AND c.assigned_change_id = h.current_change_id
+      WHERE h.singleton_key = 1`,
+    [],
   );
-  fixture.instance.store.withImmediateTransaction((transaction) => {
-    const result = fixture.seed.values.context!;
-    transaction.execute(
-      `INSERT INTO runtime_capacity_admin_commands (
-         command_id, idempotency_domain, idempotency_key, command_type,
-         expected_capacity_revision, expected_config_hash,
-         assigned_capacity_revision, assigned_change_id,
-         genesis_core_release_hash, proposed_capacity_json,
-         proposed_config_hash, request_hash, reason_code, reason_text_value_id,
-         reason_text_hash, evidence_manifest_value_id, evidence_manifest_hash,
-         canonical_result_value_id, canonical_result_hash, created_at_ms,
-         finalized_at_ms
-       ) VALUES (?, 'deployment_capacity', ?, 'initialize_deployment_capacity',
-         NULL, NULL, 1, ?, ?, ?, ?, ?, 'initial_provisioning', NULL, NULL,
-         ?, ?, ?, ?, 20, 20)`,
-      [
-        `capacity:g7:${fixture.workflowId}`,
-        `capacity:g7:${fixture.workflowId}`,
-        publication.capacity_change_id,
-        g6Hash('core-release'),
-        canonicalJson(publication.capacity as unknown as JsonValue),
-        publication.capacity.config_hash,
-        g7Hash('capacity-request'),
-        result.id,
-        result.hash,
-        result.id,
-        result.hash,
-      ],
-    );
-    transaction.execute(
-      `INSERT INTO runtime_capacity_head (
-         singleton_key, current_capacity_revision, current_change_id,
-         current_config_hash, current_publication_hash, pending_change_id,
-         row_version, created_at_ms, updated_at_ms
-       ) VALUES (1, 1, ?, ?, ?, NULL, 1, 20, 20)`,
-      [
-        publication.capacity_change_id,
-        publication.capacity.config_hash,
-        publication.publication_hash,
-      ],
-    );
-  });
+  if (!row) throw new Error('fresh Store Capacity defaults are missing');
+  const publication = buildDeploymentCapacityPublication(
+    row.current_capacity_revision,
+    row.current_change_id,
+    null,
+    JSON.parse(row.proposed_capacity_json) as DeploymentRuntimeCapacitySnapshot,
+  );
+  if (publication.publication_hash !== row.current_publication_hash) {
+    throw new Error('fresh Store Capacity publication is inconsistent');
+  }
   return publication;
 }
 

@@ -26,8 +26,8 @@ import {
 } from '../contracts/g3-registry-persistence.js';
 import type { JsonObject, Sha256Hash } from '../contracts/types.js';
 import { strictParseJsonBytes } from '../contracts/strict-json.js';
+import { checkReleaseRuntimeCompatibility } from '../store/release-runtime-compatibility.js';
 import { queryExactRegistryResource } from '../store/registry-resource-query.js';
-import { preflightRetentionExecutorAbiCompatibility } from '../store/retention-executor-abi-preflight.js';
 import type {
   WorkflowRuntimeSqlValue,
   WorkflowRuntimeStore,
@@ -110,8 +110,6 @@ interface ReleaseRow extends Record<string, unknown> {
   execution_artifact_resource_id: string | null;
   execution_artifact_hash: string | null;
   status: string;
-  compatibility_snapshot_ref: string;
-  compatibility_snapshot_hash: string;
   staged_at_ms: number;
   activated_at_ms: number | null;
   disabled_at_ms: number | null;
@@ -626,7 +624,6 @@ function assertNoReleaseCollision(
   const rows = transaction.queryAll<ReleaseRow>(
     `SELECT id, feature_id, release_ref, release_version, release_hash,
             execution_artifact_resource_id, execution_artifact_hash, status,
-            compatibility_snapshot_ref, compatibility_snapshot_hash,
             staged_at_ms, activated_at_ms, disabled_at_ms, row_version
        FROM workflow_feature_releases
       WHERE id = ? OR (feature_id = ? AND release_ref = ? AND release_version = ?)`,
@@ -656,9 +653,8 @@ function insertFeatureRelease(
     `INSERT INTO workflow_feature_releases (
       id, feature_id, release_ref, release_version, release_hash,
       execution_artifact_resource_id, execution_artifact_hash, status,
-      compatibility_snapshot_ref, compatibility_snapshot_hash, staged_at_ms,
-      activated_at_ms, disabled_at_ms, row_version
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, 'staged', ?, ?, ?, NULL, NULL, 1)`,
+      staged_at_ms, activated_at_ms, disabled_at_ms, row_version
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, 'staged', ?, NULL, NULL, 1)`,
     [
       releaseId,
       release.feature_id,
@@ -670,8 +666,6 @@ function insertFeatureRelease(
         ref: release.execution_artifact.ref,
       }),
       release.execution_artifact.hash,
-      `${release.compatibility_snapshot.ref.id}@${release.compatibility_snapshot.ref.version}`,
-      release.compatibility_snapshot.hash,
       stagedAtMs,
     ],
   );
@@ -735,8 +729,8 @@ function insertPendingCommand(
         ref: request.target_release.execution_artifact.ref,
       }),
       request.target_release.execution_artifact.hash,
-      registryClosureId(request.compatibility_preflight.closure.ref),
-      request.compatibility_preflight.closure.closure_hash,
+      registryClosureId(request.approved_review.closure_ref),
+      request.approved_review.closure_hash,
       releaseId,
       request.target_release.release_hash,
       createdAtMs,
@@ -806,11 +800,14 @@ function preflightReleaseResources(
   transaction: WorkflowRuntimeWriteTransaction,
   request: G3WorkflowPublisherRequest,
 ): string | null {
+  const resources = [];
   for (const query of request.release_resources) {
     const result = queryExactRegistryResource(transaction, query);
     if (result.outcome === 'rejected') return result.code;
+    resources.push(result.resource);
   }
-  return null;
+  const compatibility = checkReleaseRuntimeCompatibility(resources);
+  return compatibility.compatible ? null : compatibility.code;
 }
 
 function publishRegistryResources(
@@ -862,16 +859,19 @@ function insertRetentionRoot(
   releaseId: string,
   createdAtMs: number,
 ): string {
-  const closure = request.compatibility_preflight.closure;
   const handleId = workflowPublishedRetentionHandleId(
     request.target_release.release_ref,
-    closure.ref,
+    request.approved_review.closure_ref,
   );
   const collision = transaction.queryOne<Record<string, unknown>>(
     `SELECT id FROM workflow_registry_retention_handles
       WHERE id = ? OR (handle_kind = 'published' AND feature_release_id = ?
         AND closure_manifest_id = ?)`,
-    [handleId, releaseId, registryClosureId(closure.ref)],
+    [
+      handleId,
+      releaseId,
+      registryClosureId(request.approved_review.closure_ref),
+    ],
   );
   if (collision) {
     throw new WorkflowPublisherError(
@@ -888,12 +888,12 @@ function insertRetentionRoot(
     [
       handleId,
       releaseId,
-      registryClosureId(closure.ref),
-      closure.closure_hash,
+      registryClosureId(request.approved_review.closure_ref),
+      request.approved_review.closure_hash,
       createdAtMs,
     ],
   );
-  for (const member of request.compatibility_preflight.retention.members) {
+  for (const { resource: member } of request.target_release.resources) {
     transaction.execute(
       `INSERT INTO workflow_registry_retention_handle_members (
         handle_id, resource_id, content_hash
@@ -912,13 +912,9 @@ function failureFromPreflights(
   if (foundation.outcome === 'rejected')
     return 'publish_foundation_preflight_failed';
   const resourceFailure = preflightReleaseResources(transaction, request);
+  if (resourceFailure === 'runtime_abi_incompatible')
+    return 'runtime_abi_incompatible';
   if (resourceFailure !== null) return 'registry_resource_preflight_failed';
-  const compatibility = preflightRetentionExecutorAbiCompatibility(
-    transaction,
-    request.compatibility_preflight,
-  );
-  if (compatibility.outcome === 'rejected')
-    return 'retention_executor_abi_preflight_failed';
   return null;
 }
 
@@ -1079,12 +1075,11 @@ export function publishStagedWorkflowRelease(
     const closure = transaction.queryOne<ClosureRow>(
       `SELECT id, closure_hash FROM workflow_registry_closure_manifests
         WHERE id = ?`,
-      [registryClosureId(request.compatibility_preflight.closure.ref)],
+      [registryClosureId(request.approved_review.closure_ref)],
     );
     if (
       !closure ||
-      closure.closure_hash !==
-        request.compatibility_preflight.closure.closure_hash
+      closure.closure_hash !== request.approved_review.closure_hash
     ) {
       throw new WorkflowPublisherError(
         'registry_resource_preflight_failed',
@@ -1166,8 +1161,8 @@ export function publishStagedWorkflowRelease(
       domain_request_hash: request.domain_request_hash,
       feature_release_ref: request.target_release.release_ref,
       feature_release_hash: request.target_release.release_hash,
-      closure_ref: request.compatibility_preflight.closure.ref,
-      closure_hash: request.compatibility_preflight.closure.closure_hash,
+      closure_ref: request.approved_review.closure_ref,
+      closure_hash: request.approved_review.closure_hash,
       execution_artifact_ref: request.target_release.execution_artifact.ref,
       execution_artifact_hash: request.target_release.execution_artifact.hash,
       release_resources: request.target_release.resources,

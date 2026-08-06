@@ -9,8 +9,8 @@
   "payload": {
     "schema_id": "workflow-runtime-schema-v1",
     "executable_status": "non_executable",
-    "internal_relation_count": 345,
-    "external_reference_count": 43,
+    "internal_relation_count": 344,
+    "external_reference_count": 41,
     "relations": [
       {
         "relation_id": "ext:workflow_backups:database_snapshot_ref",
@@ -67,20 +67,6 @@
         "deferrability": null,
         "validator_owner": "feature_registry",
         "reference_domain": "feature"
-      },
-      {
-        "relation_id": "ext:workflow_feature_releases:compatibility_snapshot_ref",
-        "relation_kind": "external_reference",
-        "source_table": "workflow_feature_releases",
-        "source_columns": [
-          "compatibility_snapshot_ref"
-        ],
-        "target_table": null,
-        "target_columns": [],
-        "on_delete": null,
-        "deferrability": null,
-        "validator_owner": "core_compatibility_registry",
-        "reference_domain": "compatibility_snapshot"
       },
       {
         "relation_id": "ext:workflow_feature_releases:feature_id",
@@ -249,20 +235,6 @@
         "deferrability": null,
         "validator_owner": "deployment_profile_registry",
         "reference_domain": "deployment_scope"
-      },
-      {
-        "relation_id": "ext:workflow_graph_runs:core_release_ref",
-        "relation_kind": "external_reference",
-        "source_table": "workflow_graph_runs",
-        "source_columns": [
-          "core_release_ref"
-        ],
-        "target_table": null,
-        "target_columns": [],
-        "on_delete": null,
-        "deferrability": null,
-        "validator_owner": "core_release_registry",
-        "reference_domain": "core_release"
       },
       {
         "relation_id": "ext:workflow_graph_scope_builds:lease_owner",
@@ -2332,24 +2304,6 @@
         "target_columns": [
           "workflow_id",
           "id"
-        ],
-        "on_delete": "restrict",
-        "deferrability": "deferred",
-        "validator_owner": null,
-        "reference_domain": null
-      },
-      {
-        "relation_id": "fk:graph_runs:compiler_toolchain",
-        "relation_kind": "foreign_key",
-        "source_table": "workflow_graph_runs",
-        "source_columns": [
-          "compiler_toolchain_resource_id",
-          "compiler_toolchain_resource_hash"
-        ],
-        "target_table": "workflow_registry_resources",
-        "target_columns": [
-          "id",
-          "content_hash"
         ],
         "on_delete": "restrict",
         "deferrability": "deferred",
@@ -6656,5 +6610,5 @@
       }
     ]
   },
-  "hash": "sha256:20babbfc787ac8a6006243180ef6e867bef8b454c41a527f4b8f20c8f6dd0d99"
+  "hash": "sha256:81f83c817642c21315faefe50249186a24526a03b49b2dc90e8db1c7f01347a7"
 }

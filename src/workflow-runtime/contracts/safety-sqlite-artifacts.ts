@@ -7,7 +7,7 @@ import {
   LOCAL_SINGLE_USER_PRODUCT_FLOOR,
   LOCAL_SINGLE_USER_RETENTION_POLICY,
   LOCAL_SINGLE_USER_SAFETY_PROFILE,
-  LOCAL_SINGLE_USER_SQLITE_CANDIDATE,
+  LOCAL_SINGLE_USER_SQLITE_PROFILE,
   PRODUCT_FLOOR_BENCHMARK_KEYS,
   PRODUCT_FLOOR_LIMIT_KEYS,
   RETENTION_DURATION_KEYS,
@@ -388,10 +388,9 @@ function enforcementMatrixSchema(): Schema {
 function sqliteProfileSchema(): Schema {
   return schemaDocument(
     'urn:icarus:sqlite-execution-profile:1',
-    'SQLite Execution Profile v1 candidate payload',
+    'SQLite Execution Profile v1 payload',
     object({
       profile_id: { const: 'local_single_user_sqlite@1' },
-      certification_status: { const: 'candidate' },
       deployment_profile: { const: 'local_single_user' },
       runtime_surface: { const: 'node_service' },
       platform: { const: 'darwin' },
@@ -412,23 +411,7 @@ function sqliteProfileSchema(): Schema {
       read_uncommitted: { const: false },
       locking_mode: { const: 'normal' },
       read_only_query_only: { const: true },
-      sqlite_version: { type: 'null' },
-      sqlite_source_id: { type: 'null' },
-      sqlite_compile_options_hash: { type: 'null' },
-      better_sqlite3_version: { const: '12.11.1' },
-      better_sqlite3_native_module_hash: { type: 'null' },
-      managed_node_distribution_ref: ref('versioned_ref'),
-      managed_node_distribution_hash: hashSchema,
-      node_runtime_version: { const: '26.5.0' },
-      node_executable_hash: hashSchema,
-      release_artifact_hash: { type: 'null' },
-      runtime_launcher_hash: { type: 'null' },
-      identity_binding_rule: { const: 'release_build_generated_at_g8' },
-      profile_application: {
-        const: 'immutable_restart_and_recertification_required',
-      },
     }),
-    { versioned_ref: versionedRefSchema },
   );
 }
 
@@ -528,7 +511,7 @@ export function buildSafetySqliteSemanticArtifacts(): Array<
     'icarus.workflow-runtime-product-floor/1': LOCAL_SINGLE_USER_PRODUCT_FLOOR,
     'icarus.workflow-runtime-retention-policy/1':
       LOCAL_SINGLE_USER_RETENTION_POLICY,
-    'icarus.sqlite-execution-profile/1': LOCAL_SINGLE_USER_SQLITE_CANDIDATE,
+    'icarus.sqlite-execution-profile/1': LOCAL_SINGLE_USER_SQLITE_PROFILE,
   };
   const profiles = SAFETY_SQLITE_ARTIFACT_DESCRIPTORS.filter(
     (descriptor) =>

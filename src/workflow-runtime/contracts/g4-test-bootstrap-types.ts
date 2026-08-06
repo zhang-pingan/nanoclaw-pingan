@@ -68,11 +68,9 @@ export interface G4FixtureSet extends JsonObject {
 export interface G4TestBootstrapProfile extends JsonObject {
   format: 'icarus.workflow-test-bootstrap-profile/1';
   ref: VersionedRef;
-  gate: 'G4';
   profile_kind: 'test_only';
   selection: 'explicit_exact_ref_and_hash';
   default_enabled: false;
-  certification_status: 'not_certified';
   production_acceptance: 'reject';
   production_rejection_code: 'test_bootstrap_profile_forbidden';
   managed_toolchain: JsonObject;
@@ -83,7 +81,6 @@ export interface G4TestBootstrapProfile extends JsonObject {
   virtual_clock: JsonObject;
   root_policy: JsonObject;
   isolation_boundary: JsonObject;
-  bootstrap_implementation_hash: Sha256Hash;
 }
 
 export interface G4IsolationReceipt extends JsonObject {
@@ -95,7 +92,6 @@ export interface G4IsolationReceipt extends JsonObject {
   fixture_set_hash: Sha256Hash;
   fake_adapter_profile_hash: Sha256Hash;
   virtual_clock_profile_hash: Sha256Hash;
-  bootstrap_implementation_hash: Sha256Hash;
   canonical_data_root: string;
   database_path: string;
   owner_marker_hash: Sha256Hash;
@@ -103,10 +99,7 @@ export interface G4IsolationReceipt extends JsonObject {
   root_inode: string;
   database_device: string;
   database_inode: string;
-  database_schema_version: 6;
-  database_schema_hash: Sha256Hash;
-  sqlite_profile_hash: Sha256Hash;
-  production_surface_absence_hash: Sha256Hash;
+  database_schema_version: 13;
   production_ingress_reachable: false;
   feature_ingress_reachable: false;
   api_ingress_reachable: false;

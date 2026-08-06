@@ -36,10 +36,9 @@ export const G3_PUBLISH_PREFLIGHT_ERROR_CODES = [
   'capability_outbox_binding_mismatch',
   'capability_outbox_binding_required',
   'compiled_plan_pin_required',
-  'execution_artifact_abi_mismatch',
   'execution_artifact_pin_required',
   'feature_identity_pair_mismatch',
-  'g2_identity_mismatch',
+  'compiler_version_mismatch',
   'preflight_hash_mismatch',
   'production_compiler_actual_oracle_forbidden',
   'publisher_side_effect_requested',
@@ -57,29 +56,6 @@ export const G3_PUBLISH_PREFLIGHT_ERROR_CODES = [
 export type G3PublishPreflightErrorCode =
   (typeof G3_PUBLISH_PREFLIGHT_ERROR_CODES)[number];
 
-export interface G3ExactCompilerIdentity extends JsonObject {
-  compiler_toolchain_manifest_ref: VersionedRef;
-  compiler_toolchain_hash: Sha256Hash;
-  compiler_version: '3.0.4';
-  compiler_build_hash: Sha256Hash;
-  compiled_ir_schema_ref: string;
-  compiled_ir_schema_hash: Sha256Hash;
-  conformance_result_schema_ref: string;
-  conformance_result_schema_hash: Sha256Hash;
-}
-
-export interface G3UpstreamIdentity extends JsonObject {
-  g1_schema_root_hash: Sha256Hash;
-  g1_schema_dependency_manifest_hash: Sha256Hash;
-  g1_physical_schema_identity: Sha256Hash;
-  g1_schema_hash: Sha256Hash;
-  g1_migration_sha256: Sha256Hash;
-  g2_sealed_bundle_ref: string;
-  g2_sealed_bundle_artifact_hash: Sha256Hash;
-  g2_sealed_bundle_hash: Sha256Hash;
-  compiler: G3ExactCompilerIdentity;
-}
-
 export interface G3RegistryResourceDependency extends JsonObject {
   resource_type: G3RegistryResourceType;
   ref: VersionedRef;
@@ -90,9 +66,8 @@ export interface G3CompiledPlanPin extends JsonObject {
   plan_ref: string;
   plan_hash: Sha256Hash;
   plan_format: 'icarus.workflow-graph-scope-plan/2';
-  compiler_toolchain_hash: Sha256Hash;
-  compiler_build_hash: Sha256Hash;
-  provenance: 'sealed_g2_expected';
+  compiler_version: string;
+  provenance: 'golden_corpus';
 }
 
 export interface G3ExecutionArtifactPin extends JsonObject {
@@ -137,16 +112,10 @@ export interface G3RegistryPublishPreflightInput extends JsonObject {
   feature_release_ref: VersionedRef | null;
   feature_release_hash: Sha256Hash | null;
   resources: G3RegistryResourceCandidate[];
-  upstream_identity: G3UpstreamIdentity;
-  expected_oracle: 'sealed_g2_independent_expected';
+  expected_oracle: 'golden_corpus_expected';
   production_compiler_actual_role: 'comparison_only' | 'expected_oracle';
   retention_policy_ref: VersionedRef;
   retention_policy_hash: Sha256Hash;
-  compatibility: {
-    run_protocol_major: 1;
-    executor_abi_major: 1;
-    registry_schema_version: 1;
-  };
   requested_registry_write: boolean;
   requested_activation: boolean;
   preflight_hash: Sha256Hash;
@@ -173,44 +142,6 @@ export type G3RegistryPublishPreflightResult =
       dependency_closure_hash: null;
       side_effects: 'none_by_contract';
     };
-
-export const G3_CURRENT_UPSTREAM_IDENTITY: G3UpstreamIdentity = {
-  g1_schema_root_hash:
-    'sha256:2adb9376d341ad430155829647086bcc76f84ebf22dffac28c19d4026ea06ab2',
-  g1_schema_dependency_manifest_hash:
-    'sha256:a1f0d2ad63d87124512e3390eafdae2b4a2f5c5e5b57839016cc3ebf2d636afd',
-  g1_physical_schema_identity:
-    'sha256:58ea51aadb366ce0926a9c99f1e3507de257322a096f980f72c47c386b9ffedf',
-  g1_schema_hash:
-    'sha256:ad998b2d0bb5e5f158b0be6d13db79cb6a0c0650d5064b267262551af266189c',
-  g1_migration_sha256:
-    'sha256:ccaa7699894da98284b9ce86767d917e355441df93e010d90751ccb713c9b872',
-  g2_sealed_bundle_ref:
-    'conformance/sealed/g2-generated-schema-join-authority-v6/golden-conformance-bundle@2.json',
-  g2_sealed_bundle_artifact_hash:
-    'sha256:5cf2d899d0bf8d7cc0d4b70cc7796a123b8b5384bbbefe3e204e70bddf33fe11',
-  g2_sealed_bundle_hash:
-    'sha256:0820328ae1cfdba7d05948d9e36498a5428d997d6eabfb833ef0ba7d84b77db7',
-  compiler: {
-    compiler_toolchain_manifest_ref: {
-      id: 'icarus.workflow-compiler-toolchain',
-      version: '3.0.4',
-    },
-    compiler_toolchain_hash:
-      'sha256:c9c5c9b9180ecb9ffde5f8456e44c4e93fc51686988c74e47faa1b2f7fae3ffa',
-    compiler_version: '3.0.4',
-    compiler_build_hash:
-      'sha256:9333356a10b8c5345bfacc80c6071640e5e26561581f39969c7ecabc16ac97c0',
-    compiled_ir_schema_ref:
-      'conformance/generated-schema-join-authority-repair/compiled-scope-plan-v2-node-output-envelope-schema@1.json',
-    compiled_ir_schema_hash:
-      'sha256:3dd4f2be80d1e824cd2c0f02aec82830ceeb858d51fbd36c13f7574f032bf51e',
-    conformance_result_schema_ref:
-      'conformance/capability-outbox-execution-binding/schemas/compiler-conformance-case-result-execution-binding-schema@1.json',
-    conformance_result_schema_hash:
-      'sha256:ee41b9dff7eb2c97a75c81a7c15ec3bcf935ce233c29468a4ef7b7bfa047987e',
-  },
-};
 
 export const G3_RETENTION_POLICY_REF = {
   id: 'icarus.local-single-user-retention',

@@ -412,16 +412,8 @@ const compiledSystemNode: JsonObject = {
 };
 
 const compiledScopePlan: JsonObject = {
-  format: 'icarus.workflow-graph-scope-plan/1',
+  format: 'icarus.workflow-graph-scope-plan/2',
   compiler_version: 'fixture-compiler-1',
-  compiler_build_hash: HASH,
-  compiler_toolchain_ref: versionedRef('example.compiler-toolchain'),
-  compiler_toolchain_hash: HASH,
-  compiler_error_catalog_hash: HASH,
-  canonical_normalizer_version: '1',
-  canonical_normalizer_hash: HASH,
-  proof_algorithm_version: '1',
-  proof_algorithm_hash: HASH,
   plan_hash: HASH,
   source_hash: HASH,
   interface_snapshot_hash: HASH,
@@ -491,7 +483,11 @@ const compiledScopePlan: JsonObject = {
     max_frontier_bytes: 1,
     summary_hash: HASH,
   },
-  static_child_plan_closure_hash: HASH,
+  static_child_plan_closure: {
+    members: [],
+    member_count: 0,
+    closure_hash: HASH,
+  },
   effective_limits: zeroAndNullLimits,
   effective_usage_budget: zeroAndNullUsageBudget,
   runtime_safety_snapshot: runtimeSafety,

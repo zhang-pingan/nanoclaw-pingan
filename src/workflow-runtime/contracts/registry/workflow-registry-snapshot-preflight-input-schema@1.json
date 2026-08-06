@@ -15,9 +15,7 @@
     "required": [
       "snapshot_ref",
       "snapshot_hash",
-      "expected_compiler_version",
-      "expected_core_build_hash",
-      "expected_database_schema_hash"
+      "expected_compiler_version"
     ],
     "properties": {
       "snapshot_ref": {
@@ -31,14 +29,6 @@
         "type": "string",
         "minLength": 1,
         "maxLength": 255
-      },
-      "expected_core_build_hash": {
-        "type": "string",
-        "pattern": "^sha256:[0-9a-f]{64}$"
-      },
-      "expected_database_schema_hash": {
-        "type": "string",
-        "pattern": "^sha256:[0-9a-f]{64}$"
       }
     },
     "$defs": {
@@ -66,5 +56,5 @@
       }
     }
   },
-  "hash": "sha256:f071c8153da168c8c5d7dd856c36db4ac012b92259d5398d5f138f6a144bccb7"
+  "hash": "sha256:d79943150051322acb5602235cb9d50ff94f408863e3017eaf434f0dc8823cd7"
 }

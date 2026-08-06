@@ -1611,6 +1611,7 @@ const compiledNodeSchema: Schema = {
         effective_child_concurrency: nullableNonnegativeIntegerSchema,
         completion: ref('map_completion'),
         child_policy: ref('child_policy_binding'),
+        result_order: { const: 'item_index' },
       },
       ['item_key_pointer'],
     ),
@@ -1622,8 +1623,6 @@ const compiledNodeSchema: Schema = {
 };
 
 const compatibilityProofSchema = object({
-  proof_algorithm_version: stringSchema({ minLength: 1 }),
-  proof_algorithm_hash: hashSchema,
   producer_schema_hash: hashSchema,
   canonical_pointer: nullable(pointerSchema),
   pointer_totality: enumSchema(['total', 'may_be_missing']),
@@ -1646,6 +1645,10 @@ const compatibilityProofSchema = object({
 const compiledConditionProgramSchema = object({
   normalized_ast: ref('condition_expression'),
   operand_schema_hashes: strictRecord(hashSchema),
+  operand_types: array(
+    enumSchema(['null', 'boolean', 'number', 'string', 'array', 'object']),
+    { minItems: 1 },
+  ),
   max_steps: positiveIntegerSchema,
   program_hash: hashSchema,
 });
@@ -1839,17 +1842,31 @@ const runtimeSafetySchema = object({
   ]),
 });
 
+const staticChildPlanClosureMemberSchema = object({
+  closure_key: stringSchema({ minLength: 1 }),
+  parent_closure_key: nullable(stringSchema({ minLength: 1 })),
+  scope_key: stableKeySchema,
+  owner_node_path: array(stableKeySchema, { minItems: 1 }),
+  factory_kind: enumSchema(['inline', 'template']),
+  source_ref: nullable(ref('versioned_ref')),
+  source_hash: hashSchema,
+  plan_ref: stringSchema({ minLength: 1 }),
+  plan_hash: hashSchema,
+  interface_snapshot_hash: hashSchema,
+  member_hash: hashSchema,
+});
+
+const staticChildPlanClosureSchema = object({
+  members: array(ref('static_child_plan_closure_member'), {
+    uniqueItems: true,
+  }),
+  member_count: integerSchema(),
+  closure_hash: hashSchema,
+});
+
 const compiledScopePlanSchema = object({
-  format: { const: 'icarus.workflow-graph-scope-plan/1' },
+  format: { const: 'icarus.workflow-graph-scope-plan/2' },
   compiler_version: stringSchema({ minLength: 1 }),
-  compiler_build_hash: hashSchema,
-  compiler_toolchain_ref: ref('versioned_ref'),
-  compiler_toolchain_hash: hashSchema,
-  compiler_error_catalog_hash: hashSchema,
-  canonical_normalizer_version: stringSchema({ minLength: 1 }),
-  canonical_normalizer_hash: hashSchema,
-  proof_algorithm_version: stringSchema({ minLength: 1 }),
-  proof_algorithm_hash: hashSchema,
   plan_hash: hashSchema,
   source_hash: hashSchema,
   interface_snapshot_hash: hashSchema,
@@ -1864,7 +1881,7 @@ const compiledScopePlanSchema = object({
   data_edges: array(ref('compiled_data_edge')),
   completion: ref('compiled_completion_policy'),
   complexity_summary: ref('complexity_summary'),
-  static_child_plan_closure_hash: hashSchema,
+  static_child_plan_closure: ref('static_child_plan_closure'),
   effective_limits: ref('nullable_graph_limits'),
   effective_usage_budget: ref('nullable_usage_budget'),
   runtime_safety_snapshot: ref('runtime_safety'),
@@ -1965,6 +1982,8 @@ const compiledDefinitions: Record<string, Schema> = {
   compiled_completion_policy: compiledCompletionPolicySchema,
   complexity_summary: complexitySummarySchema,
   runtime_safety: runtimeSafetySchema,
+  static_child_plan_closure_member: staticChildPlanClosureMemberSchema,
+  static_child_plan_closure: staticChildPlanClosureSchema,
 };
 
 export interface ClosedSchemaDescriptor {
@@ -2072,10 +2091,10 @@ export const CLOSED_SCHEMA_DESCRIPTORS: readonly ClosedSchemaDescriptor[] = [
     artifact_path: 'schemas/compiled-scope-plan-schema.json',
     artifact_format: 'icarus.workflow-compiled-scope-plan-schema/1',
     artifact_ref_id: 'icarus.workflow-compiled-scope-plan-schema',
-    target_format: 'icarus.workflow-graph-scope-plan/1',
+    target_format: 'icarus.workflow-graph-scope-plan/2',
     domain_separator: 'icarus:workflow-compiled-scope-plan-schema:1\n',
     schema: schemaDocument(
-      'workflow-graph-scope-plan/1',
+      'workflow-graph-scope-plan/2',
       'CompiledScopePlan',
       compiledScopePlanSchema,
       compiledDefinitions,

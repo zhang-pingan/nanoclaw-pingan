@@ -865,9 +865,7 @@ describe('G7 command, recovery, and resolution', () => {
       executionResult: 'denied',
       denialCode: 'target_kind_invalid',
     });
-    expect(mismatched.ingressInvocationId).toMatch(
-      /^runtime-command-ingress:/,
-    );
+    expect(mismatched.ingressInvocationId).toMatch(/^runtime-command-ingress:/);
   });
 
   it('uses the fixed deadline System Grant/key and audits winner, duplicate, and late decisions', () => {
@@ -2360,9 +2358,7 @@ describe('G7 command, recovery, and resolution', () => {
         )
         .pluck()
         .get() as string;
-      database.exec(
-        'DROP TRIGGER "trg:command_ingress:terminal_transition"',
-      );
+      database.exec('DROP TRIGGER "trg:command_ingress:terminal_transition"');
       database
         .prepare(
           `UPDATE workflow_runtime_command_ingress_invocations
@@ -2391,17 +2387,11 @@ describe('G7 command, recovery, and resolution', () => {
        execution_result = 'duplicate', applied_at_ms = NULL`,
       [],
     ],
-    [
-      'chronology',
-      'requested_at_ms = requested_at_ms - 1',
-      [],
-    ],
+    ['chronology', 'requested_at_ms = requested_at_ms - 1', []],
   ] as const)(
     'rejects schema-valid ingress %s tamper during Store startup',
     (_label, assignmentSql, parameters) => {
-      const target = fixture(
-        `ingress-${String(_label).replaceAll(' ', '-')}`,
-      );
+      const target = fixture(`ingress-${String(_label).replaceAll(' ', '-')}`);
       const command: WorkflowRuntimeCommandDocument = {
         command_id: `g7:ingress:${String(_label).replaceAll(' ', '-')}`,
         command_type: 'pause_run',

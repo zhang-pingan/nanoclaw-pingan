@@ -54,7 +54,7 @@
           "target_release_identity_mismatch",
           "target_release_owner_mismatch",
           "target_release_resource_set_mismatch",
-          "g3_6_preflight_rejected",
+          "runtime_abi_incompatible",
           "target_release_lifecycle_invalid",
           "previous_release_missing",
           "previous_release_identity_mismatch",
@@ -153,7 +153,6 @@
               "pointer",
               "target_lifecycle",
               "previous_lifecycle",
-              "compatibility_result_hash",
               "target_retention",
               "previous_retention",
               "activated_at_ms",
@@ -273,10 +272,6 @@
                     "type": "null"
                   }
                 ]
-              },
-              "compatibility_result_hash": {
-                "type": "string",
-                "pattern": "^sha256:[0-9a-f]{64}$"
               },
               "target_retention": {
                 "type": "object",
@@ -526,8 +521,7 @@
             "additionalProperties": false,
             "required": [
               "phase",
-              "code",
-              "nested_g3_6_code"
+              "code"
             ],
             "properties": {
               "phase": {
@@ -554,7 +548,7 @@
                   "target_release_identity_mismatch",
                   "target_release_owner_mismatch",
                   "target_release_resource_set_mismatch",
-                  "g3_6_preflight_rejected",
+                  "runtime_abi_incompatible",
                   "target_release_lifecycle_invalid",
                   "previous_release_missing",
                   "previous_release_identity_mismatch",
@@ -570,37 +564,6 @@
                   "previous_retention_row_version_mismatch",
                   "pointer_cas_conflict",
                   "activation_persistence_identity_collision"
-                ]
-              },
-              "nested_g3_6_code": {
-                "anyOf": [
-                  {
-                    "enum": [
-                      "preflight_input_invalid",
-                      "preflight_side_effect_requested",
-                      "snapshot_missing",
-                      "snapshot_hash_mismatch",
-                      "snapshot_binding_mismatch",
-                      "closure_root_missing",
-                      "closure_root_hash_mismatch",
-                      "closure_mismatch",
-                      "execution_artifact_missing",
-                      "execution_artifact_hash_mismatch",
-                      "execution_artifact_mismatch",
-                      "executor_implementation_missing",
-                      "executor_implementation_hash_mismatch",
-                      "executor_implementation_mismatch",
-                      "artifact_binding_mismatch",
-                      "core_compatibility_mismatch",
-                      "run_protocol_mismatch",
-                      "executor_abi_mismatch",
-                      "retention_policy_mismatch",
-                      "retention_eligibility_mismatch"
-                    ]
-                  },
-                  {
-                    "type": "null"
-                  }
                 ]
               }
             }
@@ -640,5 +603,5 @@
       }
     }
   },
-  "hash": "sha256:a7898c73983b49a45399a0d28a992c9587821c595995234fdb671a91b5400753"
+  "hash": "sha256:547c19b3491a37f0b1e1febd0872c9e849518248f4191b1a43df69e67e6d83eb"
 }

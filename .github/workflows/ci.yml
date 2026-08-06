@@ -12,14 +12,20 @@ jobs:
       ICARUS_CI_TMPDIR: /private/tmp/icarus-ci-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
+          cache: npm
       - name: Verify Darwin arm64 runner
         run: test "$(uname -s)/$(uname -m)" = "Darwin/arm64"
       - name: Prepare isolated test root
         run: mkdir -p "$ICARUS_CI_TMPDIR"
-      - name: Install pinned managed runtime
-        run: ./scripts/runtime-toolchain.sh --runtime-home "$ICARUS_CI_RUNTIME_HOME" install
-      - name: Install dependencies with managed npm
-        run: ./scripts/runtime-toolchain.sh --runtime-home "$ICARUS_CI_RUNTIME_HOME" exec -- npm ci
+      - name: Configure supported runtime
+        run: ./scripts/runtime-toolchain.sh --runtime-home "$ICARUS_CI_RUNTIME_HOME" configure --node "$(node -p 'process.execPath')"
+      - name: Install dependencies with selected Node
+        run: npm ci
+      - name: Verify Node ABI and SQLite binding
+        run: ./scripts/runtime-toolchain.sh --runtime-home "$ICARUS_CI_RUNTIME_HOME" verify
       - name: Current Runtime validation
         run: TMPDIR="$ICARUS_CI_TMPDIR" ./scripts/runtime-toolchain.sh --runtime-home "$ICARUS_CI_RUNTIME_HOME" exec -- npm test
       - name: Format boundary

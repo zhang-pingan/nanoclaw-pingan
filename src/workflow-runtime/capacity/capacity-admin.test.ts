@@ -4,7 +4,7 @@ import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { calculateDeploymentCapacityConfigHash } from '../contracts/capacity-control-plane-source.js';
-import type { InitializeDeploymentCapacityCommand } from '../contracts/capacity-control-plane-types.js';
+import type { ReplaceDeploymentCapacityCommand } from '../contracts/capacity-control-plane-types.js';
 import { domainSeparatedSha256 } from '../contracts/hash.js';
 import type { JsonObject, Sha256Hash } from '../contracts/types.js';
 import {
@@ -40,9 +40,11 @@ function seedAuditValues(store: WorkflowRuntimeStore): {
     hash: Sha256Hash;
   };
   evidence: { id: string; hash: Sha256Hash };
+  reason: { id: string; hash: Sha256Hash };
 } {
   const schemaHash = hash('schema');
   const evidenceHash = hash('evidence');
+  const reasonHash = hash('reason');
   store.withImmediateTransaction((transaction) => {
     transaction.execute(
       `INSERT INTO workflow_values (
@@ -77,6 +79,18 @@ function seedAuditValues(store: WorkflowRuntimeStore): {
        'g5-test', 'workflow_audit', 'live', NULL, 1, 1)`,
       [evidenceHash, schemaHash],
     );
+    transaction.execute(
+      `INSERT INTO workflow_values (
+       id, storage_kind, inline_canonical_json, blob_hash,
+       immutable_external_locator, expected_hash, content_hash, byte_length,
+       media_type, schema_resource_id, schema_resource_hash, provenance_ref,
+       retention_class, payload_state, payload_pruned_at_ms, created_at_ms,
+       row_version
+     ) VALUES ('value:reason', 'inline', '"local capacity tuning"',
+       NULL, NULL, NULL, ?, 23, 'application/json', 'resource:schema', ?,
+       'g5-test', 'workflow_audit', 'live', NULL, 1, 1)`,
+      [reasonHash, schemaHash],
+    );
   });
   return {
     schema: {
@@ -86,10 +100,21 @@ function seedAuditValues(store: WorkflowRuntimeStore): {
       hash: schemaHash,
     },
     evidence: { id: 'value:evidence', hash: evidenceHash },
+    reason: { id: 'value:reason', hash: reasonHash },
   };
 }
 
-function command(): InitializeDeploymentCapacityCommand {
+function command(
+  store: WorkflowRuntimeStore,
+): ReplaceDeploymentCapacityCommand {
+  const head = store.queryOne<{
+    current_capacity_revision: number;
+    current_config_hash: Sha256Hash;
+  }>(
+    'SELECT current_capacity_revision, current_config_hash FROM runtime_capacity_head WHERE singleton_key = 1',
+    [],
+  );
+  if (!head) throw new Error('missing local Capacity defaults');
   const payload = {
     max_active_executions: 5,
     max_active_waits: 256,
@@ -100,38 +125,32 @@ function command(): InitializeDeploymentCapacityCommand {
     minimum_free_disk_bytes: 5_368_709_120,
   };
   return {
-    command_type: 'initialize_deployment_capacity',
+    command_type: 'replace_deployment_capacity',
     command_id: 'capacity-command-1',
     idempotency_key: 'capacity-init-1',
+    expected_capacity_revision: head.current_capacity_revision,
+    expected_config_hash: head.current_config_hash,
     proposed_capacity: {
       ...payload,
       config_hash: calculateDeploymentCapacityConfigHash(payload),
     },
-    reason_code: 'initial_provisioning',
-    core_release_hash: hash('core-release'),
-    evidence_refs: ['core-release', 'checked-in-baseline'],
+    reason_code: 'planned_tuning',
+    reason_text: 'Exercise local Capacity administration after defaults',
+    evidence_refs: ['local-owner-request'],
   };
 }
 
-function invocation(
-  commandValue: InitializeDeploymentCapacityCommand,
-): CapacityAuthenticatedInvocation {
+function invocation(): CapacityAuthenticatedInvocation {
   return {
     authenticated: true,
-    actorRef: 'system:production-activation',
-    sessionActorRef: 'system:production-activation',
-    actorKind: 'system',
-    authSessionRef: 'auth:production-activation',
-    entrypoint: 'production_activation',
+    actorRef: 'human:local-owner',
+    sessionActorRef: 'human:local-owner',
+    actorKind: 'human',
+    authSessionRef: 'auth:local-owner',
+    entrypoint: 'cli',
     delegationChainRef: null,
-    permissions: [],
+    permissions: ['runtime.capacity.manage'],
     requestedAtMs: 10,
-    activeCoreReleaseHash: commandValue.core_release_hash,
-    baselineConfigHash: commandValue.proposed_capacity.config_hash,
-    genesisGrant: {
-      coreReleaseHash: commandValue.core_release_hash,
-      baselineConfigHash: commandValue.proposed_capacity.config_hash,
-    },
   };
 }
 
@@ -139,18 +158,18 @@ afterEach(() => {
   while (instances.length > 0) instances.pop()!.cleanup();
 });
 
-describe('G5 Capacity Admin CAP0-CAP4 production prerequisite', () => {
+describe('G5 Capacity Admin CAP0-CAP4 local administration', () => {
   it('keeps CAP1 prepared immutable, finalizes only at CAP4, and appends duplicate', () => {
     const instance = bootstrap('g5-capacity-happy');
     const values = seedAuditValues(instance.store);
-    const candidate = command();
+    const candidate = command(instance.store);
     const prepared = prepareCapacityChangeCAP0CAP1(
       instance.store,
       candidate,
-      invocation(candidate),
+      invocation(),
       {
         evidenceManifest: values.evidence,
-        reasonText: null,
+        reasonText: values.reason,
         resultSchema: values.schema,
       },
       11,
@@ -186,14 +205,14 @@ describe('G5 Capacity Admin CAP0-CAP4 production prerequisite', () => {
       instance.store,
       candidate,
       {
-        ...invocation(candidate),
+        ...invocation(),
         actorRef: 'system:untrusted',
         sessionActorRef: 'system:untrusted',
         requestedAtMs: 15,
       },
       {
         evidenceManifest: values.evidence,
-        reasonText: null,
+        reasonText: values.reason,
         resultSchema: values.schema,
       },
       16,
@@ -201,14 +220,14 @@ describe('G5 Capacity Admin CAP0-CAP4 production prerequisite', () => {
     expect(deniedReplay.disposition).toBe('denied');
     if (deniedReplay.disposition === 'authentication_rejected')
       throw new Error('unexpected authentication rejection');
-    expect(deniedReplay.denialCode).toBe('actor_kind_denied');
+    expect(deniedReplay.denialCode).toBe('permission_denied');
     const duplicate = prepareCapacityChangeCAP0CAP1(
       instance.store,
       candidate,
-      { ...invocation(candidate), requestedAtMs: 17 },
+      { ...invocation(), requestedAtMs: 17 },
       {
         evidenceManifest: values.evidence,
-        reasonText: null,
+        reasonText: values.reason,
         resultSchema: values.schema,
       },
       18,
@@ -218,12 +237,12 @@ describe('G5 Capacity Admin CAP0-CAP4 production prerequisite', () => {
       instance.store,
       {
         ...candidate,
-        reason_code: 'operator_override',
+        reason_code: 'rollback',
       },
-      invocation(candidate),
+      invocation(),
       {
         evidenceManifest: values.evidence,
-        reasonText: null,
+        reasonText: values.reason,
         resultSchema: values.schema,
       },
       19,
@@ -248,14 +267,14 @@ describe('G5 Capacity Admin CAP0-CAP4 production prerequisite', () => {
   it('recovers rename/head crash boundaries across Store reopen and rejects tamper', () => {
     const instance = bootstrap('g5-capacity-recovery');
     const values = seedAuditValues(instance.store);
-    const candidate = command();
+    const candidate = command(instance.store);
     const prepared = prepareCapacityChangeCAP0CAP1(
       instance.store,
       candidate,
-      invocation(candidate),
+      invocation(),
       {
         evidenceManifest: values.evidence,
-        reasonText: null,
+        reasonText: values.reason,
         resultSchema: values.schema,
       },
       11,
@@ -329,15 +348,15 @@ describe('G5 Capacity Admin CAP0-CAP4 production prerequisite', () => {
   it('rolls CAP1 back before commit and records no prepared audit', () => {
     const instance = bootstrap('g5-capacity-rollback');
     const values = seedAuditValues(instance.store);
-    const candidate = command();
+    const candidate = command(instance.store);
     expect(() =>
       prepareCapacityChangeCAP0CAP1(
         instance.store,
         candidate,
-        invocation(candidate),
+        invocation(),
         {
           evidenceManifest: values.evidence,
-          reasonText: null,
+          reasonText: values.reason,
           resultSchema: values.schema,
         },
         11,
@@ -346,8 +365,8 @@ describe('G5 Capacity Admin CAP0-CAP4 production prerequisite', () => {
     ).toThrow(/Injected fault/);
     expect(
       instance.store.queryOne<{ count: number }>(
-        'SELECT count(*) AS count FROM runtime_capacity_admin_commands',
-        [],
+        'SELECT count(*) AS count FROM runtime_capacity_admin_commands WHERE command_id = ?',
+        [candidate.command_id],
       )!.count,
     ).toBe(0);
   });

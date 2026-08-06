@@ -1,7 +1,15 @@
 #!/bin/bash
 set -euo pipefail
 
-EXIT_IDENTITY=78
+EXIT_COMPATIBILITY=78
+SUPPORTED_NODE_MAJOR=26
+CONFIG_FORMAT="icarus.node-runtime-compatibility/1"
+INSTALL_NODE_VERSION="26.5.0"
+INSTALL_PLATFORM="darwin"
+INSTALL_ARCH="arm64"
+INSTALL_ARCHIVE_FILENAME="node-v${INSTALL_NODE_VERSION}-${INSTALL_PLATFORM}-${INSTALL_ARCH}.tar.gz"
+INSTALL_ARCHIVE_URL="https://nodejs.org/dist/v${INSTALL_NODE_VERSION}/${INSTALL_ARCHIVE_FILENAME}"
+INSTALL_ARCHIVE_CHECKSUM="sha256:ee920559aaa2391569cff4d737e3b83963430e3a14dedd91bfe0ff53171b5af9"
 TEMP_PATHS=()
 LOCK_PATH=""
 
@@ -13,14 +21,14 @@ fail() {
   else
     echo "icarus-toolchain:${code}" >&2
   fi
-  exit "$EXIT_IDENTITY"
+  exit "$EXIT_COMPATIBILITY"
 }
 
 cleanup() {
-  local path
-  for path in "${TEMP_PATHS[@]:-}"; do
-    if [ -n "$path" ]; then
-      rm -rf "$path"
+  local temporary
+  for temporary in "${TEMP_PATHS[@]:-}"; do
+    if [ -n "$temporary" ] && [ -e "$temporary" ]; then
+      rm -rf "$temporary"
     fi
   done
   if [ -n "$LOCK_PATH" ]; then
@@ -47,7 +55,7 @@ resolve_self() {
       target="$directory/$link"
     fi
   done
-
+  [ -e "$target" ] || fail node_executable_missing "$target"
   directory="$(cd -P "$(dirname "$target")" && pwd)"
   printf '%s/%s\n' "$directory" "$(basename "$target")"
 }
@@ -55,7 +63,6 @@ resolve_self() {
 SELF_PATH="$(resolve_self "$0")"
 SCRIPT_DIR="$(dirname "$SELF_PATH")"
 REPOSITORY_ROOT="$(cd -P "$SCRIPT_DIR/.." && pwd)"
-DEFAULT_MANIFEST="$REPOSITORY_ROOT/src/workflow-runtime/contracts/toolchain/node-v26.5.0-darwin-arm64.json"
 
 sha256_file() {
   local file="$1"
@@ -70,20 +77,20 @@ sha256_file() {
   fail sha256_tool_missing
 }
 
-sha256_stdin() {
-  if command -v shasum >/dev/null 2>&1; then
-    shasum -a 256 | awk '{print $1}'
-    return
-  fi
-  if command -v sha256sum >/dev/null 2>&1; then
-    sha256sum | awk '{print $1}'
-    return
-  fi
-  fail sha256_tool_missing
+host_platform() {
+  case "$(uname -s)" in
+    Darwin) printf 'darwin\n' ;;
+    Linux) printf 'linux\n' ;;
+    *) fail platform_unsupported "$(uname -s)" ;;
+  esac
 }
 
-sync_filesystem() {
-  sync
+host_arch() {
+  case "$(uname -m)" in
+    arm64|aarch64) printf 'arm64\n' ;;
+    x86_64|amd64) printf 'x64\n' ;;
+    *) fail architecture_unsupported "$(uname -m)" ;;
+  esac
 }
 
 json_string() {
@@ -94,15 +101,10 @@ json_string() {
   local value
 
   count="$(sed -nE "/^[[:space:]]*\"${key}\"[[:space:]]*:/p" "$file" | wc -l | tr -d '[:space:]')"
-  if [ "$count" != "1" ]; then
-    fail manifest_invalid "field=${key} count=${count}"
-  fi
-
+  [ "$count" = "1" ] || fail runtime_config_invalid "field=${key} count=${count}"
   line="$(sed -nE "/^[[:space:]]*\"${key}\"[[:space:]]*:/p" "$file")"
   value="$(printf '%s\n' "$line" | sed -E 's/^[[:space:]]*"[^\"]+"[[:space:]]*:[[:space:]]*"([^\"\\]*)"[[:space:]]*,?[[:space:]]*$/\1/')"
-  if [ "$value" = "$line" ]; then
-    fail manifest_invalid "field=${key} must be a plain JSON string"
-  fi
+  [ "$value" != "$line" ] || fail runtime_config_invalid "field=${key}"
   printf '%s\n' "$value"
 }
 
@@ -110,151 +112,135 @@ assert_plain_json_string() {
   local field="$1"
   local value="$2"
   if [[ "$value" == *'"'* ]] || [[ "$value" == *'\'* ]] || [[ "$value" == *$'\n'* ]] || [[ "$value" == *$'\r'* ]]; then
-    fail manifest_invalid "field=${field} contains an unsupported escape"
-  fi
-}
-
-assert_manifest_keyset() {
-  local file="$1"
-  local actual
-  local expected
-
-  actual="$(sed -nE 's/^[[:space:]]*"([^\"]+)"[[:space:]]*:.*/\1/p' "$file" | LC_ALL=C sort)"
-  expected="$(printf '%s\n' \
-    arch \
-    archive_filename \
-    archive_sha256 \
-    archive_url \
-    distribution_origin \
-    format \
-    id \
-    manifest_hash \
-    node_executable_relative_path \
-    node_executable_sha256 \
-    node_runtime_version \
-    npm_version \
-    platform \
-    ref \
-    version | LC_ALL=C sort)"
-  if [ "$actual" != "$expected" ]; then
-    fail manifest_invalid "unexpected, duplicate, or missing field"
-  fi
-}
-
-assert_manifest_serialization() {
-  local file="$1"
-  local actual
-  local expected
-
-  actual="$(cat "$file")"
-  expected="$(printf '%s\n' \
-    '{' \
-    '  "format": "'"${MANIFEST_FORMAT}"'",' \
-    '  "ref": {' \
-    '    "id": "'"${MANIFEST_REF_ID}"'",' \
-    '    "version": "'"${MANIFEST_REF_VERSION}"'"' \
-    '  },' \
-    '  "node_runtime_version": "'"${NODE_VERSION}"'",' \
-    '  "npm_version": "'"${NPM_VERSION}"'",' \
-    '  "platform": "'"${MANIFEST_PLATFORM}"'",' \
-    '  "arch": "'"${MANIFEST_ARCH}"'",' \
-    '  "distribution_origin": "'"${DISTRIBUTION_ORIGIN}"'",' \
-    '  "archive_filename": "'"${ARCHIVE_FILENAME}"'",' \
-    '  "archive_url": "'"${ARCHIVE_URL}"'",' \
-    '  "archive_sha256": "'"${ARCHIVE_SHA256}"'",' \
-    '  "node_executable_relative_path": "'"${NODE_RELATIVE_PATH}"'",' \
-    '  "node_executable_sha256": "'"${NODE_SHA256}"'",' \
-    '  "manifest_hash": "'"${MANIFEST_HASH}"'"' \
-    '}')"
-  [ "$actual" = "$expected" ] || fail manifest_invalid "non-canonical JSON document"
-}
-
-load_manifest() {
-  local file="$1"
-  local canonical
-  local calculated
-  local expected_filename
-  local expected_url
-
-  if [ ! -f "$file" ]; then
-    fail manifest_missing "$file"
-  fi
-  assert_manifest_keyset "$file"
-
-  MANIFEST_FORMAT="$(json_string "$file" format)"
-  MANIFEST_REF_ID="$(json_string "$file" id)"
-  MANIFEST_REF_VERSION="$(json_string "$file" version)"
-  NODE_VERSION="$(json_string "$file" node_runtime_version)"
-  NPM_VERSION="$(json_string "$file" npm_version)"
-  MANIFEST_PLATFORM="$(json_string "$file" platform)"
-  MANIFEST_ARCH="$(json_string "$file" arch)"
-  DISTRIBUTION_ORIGIN="$(json_string "$file" distribution_origin)"
-  ARCHIVE_FILENAME="$(json_string "$file" archive_filename)"
-  ARCHIVE_URL="$(json_string "$file" archive_url)"
-  ARCHIVE_SHA256="$(json_string "$file" archive_sha256)"
-  NODE_RELATIVE_PATH="$(json_string "$file" node_executable_relative_path)"
-  NODE_SHA256="$(json_string "$file" node_executable_sha256)"
-  MANIFEST_HASH="$(json_string "$file" manifest_hash)"
-
-  assert_manifest_serialization "$file"
-
-  assert_plain_json_string ref.id "$MANIFEST_REF_ID"
-  assert_plain_json_string ref.version "$MANIFEST_REF_VERSION"
-  assert_plain_json_string archive_url "$ARCHIVE_URL"
-
-  [ "$MANIFEST_FORMAT" = "icarus.managed-node-runtime-distribution/1" ] || fail manifest_invalid "format"
-  [ "$NODE_VERSION" = "26.5.0" ] || fail manifest_invalid "node_runtime_version"
-  [ "$NPM_VERSION" = "11.17.0" ] || fail manifest_invalid "npm_version"
-  [ "$MANIFEST_PLATFORM" = "darwin" ] || fail manifest_invalid "platform"
-  [ "$MANIFEST_ARCH" = "arm64" ] || fail manifest_invalid "arch"
-  [ "$DISTRIBUTION_ORIGIN" = "nodejs_official" ] || fail manifest_invalid "distribution_origin"
-  [ "$NODE_RELATIVE_PATH" = "bin/node" ] || fail manifest_invalid "node_executable_relative_path"
-
-  expected_filename="node-v${NODE_VERSION}-${MANIFEST_PLATFORM}-${MANIFEST_ARCH}.tar.gz"
-  expected_url="https://nodejs.org/dist/v${NODE_VERSION}/${expected_filename}"
-  [ "$ARCHIVE_FILENAME" = "$expected_filename" ] || fail manifest_invalid "archive_filename"
-  [ "$ARCHIVE_URL" = "$expected_url" ] || fail manifest_invalid "archive_url"
-
-  [[ "$MANIFEST_REF_ID" =~ ^[A-Za-z0-9._-]+$ ]] || fail manifest_invalid "ref.id"
-  [[ "$MANIFEST_REF_VERSION" =~ ^[A-Za-z0-9._-]+$ ]] || fail manifest_invalid "ref.version"
-  [[ "$ARCHIVE_SHA256" =~ ^sha256:[0-9a-f]{64}$ ]] || fail manifest_invalid "archive_sha256"
-  [[ "$NODE_SHA256" =~ ^sha256:[0-9a-f]{64}$ ]] || fail manifest_invalid "node_executable_sha256"
-  [[ "$MANIFEST_HASH" =~ ^sha256:[0-9a-f]{64}$ ]] || fail manifest_invalid "manifest_hash"
-
-  canonical="{\"arch\":\"${MANIFEST_ARCH}\",\"archive_filename\":\"${ARCHIVE_FILENAME}\",\"archive_sha256\":\"${ARCHIVE_SHA256}\",\"archive_url\":\"${ARCHIVE_URL}\",\"distribution_origin\":\"${DISTRIBUTION_ORIGIN}\",\"format\":\"${MANIFEST_FORMAT}\",\"node_executable_relative_path\":\"${NODE_RELATIVE_PATH}\",\"node_executable_sha256\":\"${NODE_SHA256}\",\"node_runtime_version\":\"${NODE_VERSION}\",\"npm_version\":\"${NPM_VERSION}\",\"platform\":\"${MANIFEST_PLATFORM}\",\"ref\":{\"id\":\"${MANIFEST_REF_ID}\",\"version\":\"${MANIFEST_REF_VERSION}\"}}"
-  calculated="$(printf '%s\n%s' 'icarus:managed-node-runtime-distribution:1' "$canonical" | sha256_stdin)"
-  if [ "$MANIFEST_HASH" != "sha256:${calculated}" ]; then
-    fail manifest_hash_mismatch "expected=${MANIFEST_HASH} actual=sha256:${calculated}"
+    fail runtime_config_invalid "field=${field}"
   fi
 }
 
 runtime_layout() {
-  local runtime_home="$1"
-  local archive_hex="${ARCHIVE_SHA256#sha256:}"
-
-  RUNTIME_HOME="$runtime_home"
+  RUNTIME_HOME="$1"
   NODE_ROOT="$RUNTIME_HOME/toolchains/node"
-  INSTALL_RELATIVE_PATH="${NODE_VERSION}/${MANIFEST_PLATFORM}-${MANIFEST_ARCH}/${archive_hex}"
-  INSTALL_PATH="$NODE_ROOT/$INSTALL_RELATIVE_PATH"
-  ACTIVE_NODE_POINTER="$NODE_ROOT/active-node"
-  CONTRACT_PATH="$RUNTIME_HOME/contracts/managed-node-runtime-distribution.json"
-  RUNTIME_LAUNCHER_PATH="$RUNTIME_HOME/bin/icarus-runtime"
-  INSTALLED_TOOLCHAIN_PATH="$RUNTIME_HOME/libexec/icarus-runtime-toolchain"
-  ACTIVE_CORE_POINTER="$RUNTIME_HOME/active-core"
-  ACTIVATION_CORE_POINTER="$RUNTIME_HOME/activation-core"
+  CONFIG_PATH="$NODE_ROOT/runtime.json"
+  MANAGED_INSTALL_PATH="$NODE_ROOT/managed/v${INSTALL_NODE_VERSION}-${INSTALL_PLATFORM}-${INSTALL_ARCH}"
 }
 
-assert_relative_safe_path() {
-  local path="$1"
-  local label="$2"
-  if [ -z "$path" ] || [[ "$path" = /* ]] || [[ "$path" == *'\'* ]] || [[ "/$path/" == *'/../'* ]] || [[ "/$path/" == *'/./'* ]]; then
-    fail "$label" "$path"
+ensure_safe_directory() {
+  local directory="$1"
+  [ ! -L "$directory" ] || fail runtime_path_unsafe "$directory"
+  if [ -e "$directory" ]; then
+    [ -d "$directory" ] || fail runtime_path_unsafe "$directory"
+  else
+    mkdir "$directory"
   fi
+}
+
+ensure_node_root() {
+  ensure_safe_directory "$RUNTIME_HOME/toolchains"
+  ensure_safe_directory "$NODE_ROOT"
+}
+
+probe_node() {
+  local node_path="$1"
+  local descriptor
+
+  [ -f "$node_path" ] && [ -x "$node_path" ] || fail node_executable_missing "$node_path"
+  descriptor="$("$node_path" --eval 'const major=Number(process.versions.node.split(".")[0]); process.stdout.write([major,process.versions.modules,process.platform,process.arch].join("|"))' 2>/dev/null || true)"
+  IFS='|' read -r PROBE_MAJOR PROBE_ABI PROBE_PLATFORM PROBE_ARCH <<< "$descriptor"
+  [[ "$PROBE_MAJOR" =~ ^[1-9][0-9]*$ ]] || fail node_descriptor_invalid "major=${PROBE_MAJOR:-missing}"
+  [[ "$PROBE_ABI" =~ ^[1-9][0-9]*$ ]] || fail node_descriptor_invalid "modules_abi=${PROBE_ABI:-missing}"
+  [ -n "$PROBE_PLATFORM" ] || fail node_descriptor_invalid platform
+  [ -n "$PROBE_ARCH" ] || fail node_descriptor_invalid arch
+}
+
+assert_supported_probe() {
+  [ "$PROBE_MAJOR" = "$SUPPORTED_NODE_MAJOR" ] || fail node_major_unsupported "supported=${SUPPORTED_NODE_MAJOR} actual=${PROBE_MAJOR}"
+  [ "$PROBE_PLATFORM" = "$(host_platform)" ] || fail node_platform_incompatible "expected=$(host_platform) actual=${PROBE_PLATFORM}"
+  [ "$PROBE_ARCH" = "$(host_arch)" ] || fail node_arch_incompatible "expected=$(host_arch) actual=${PROBE_ARCH}"
+}
+
+write_config() {
+  local temporary
+
+  ensure_node_root
+  temporary="$(mktemp "$NODE_ROOT/.runtime.json.XXXXXX")"
+  TEMP_PATHS+=("$temporary")
+  printf '%s\n' \
+    '{' \
+    '  "format": "'"${CONFIG_FORMAT}"'",' \
+    '  "node_path": "'"${CONFIG_NODE_PATH}"'",' \
+    '  "node_major": "'"${PROBE_MAJOR}"'",' \
+    '  "modules_abi": "'"${PROBE_ABI}"'",' \
+    '  "platform": "'"${PROBE_PLATFORM}"'",' \
+    '  "arch": "'"${PROBE_ARCH}"'"' \
+    '}' > "$temporary"
+  chmod 600 "$temporary"
+  mv -f "$temporary" "$CONFIG_PATH"
+}
+
+configure_node() {
+  local input="$1"
+
+  [[ "$input" = /* ]] || fail node_path_not_absolute "$input"
+  CONFIG_NODE_PATH="$(resolve_self "$input")"
+  assert_plain_json_string node_path "$CONFIG_NODE_PATH"
+  probe_node "$CONFIG_NODE_PATH"
+  assert_supported_probe
+  write_config
+}
+
+load_config() {
+  local actual_keys
+  local expected_keys
+  local actual
+
+  [ -f "$CONFIG_PATH" ] && [ ! -L "$CONFIG_PATH" ] || fail runtime_config_missing "$CONFIG_PATH"
+  actual_keys="$(sed -nE 's/^[[:space:]]*"([^\"]+)"[[:space:]]*:.*/\1/p' "$CONFIG_PATH" | LC_ALL=C sort)"
+  expected_keys="$(printf '%s\n' arch format modules_abi node_major node_path platform | LC_ALL=C sort)"
+  [ "$actual_keys" = "$expected_keys" ] || fail runtime_config_invalid keyset
+  CONFIG_FORMAT_VALUE="$(json_string "$CONFIG_PATH" format)"
+  CONFIG_NODE_PATH="$(json_string "$CONFIG_PATH" node_path)"
+  CONFIG_NODE_MAJOR="$(json_string "$CONFIG_PATH" node_major)"
+  CONFIG_MODULES_ABI="$(json_string "$CONFIG_PATH" modules_abi)"
+  CONFIG_PLATFORM="$(json_string "$CONFIG_PATH" platform)"
+  CONFIG_ARCH="$(json_string "$CONFIG_PATH" arch)"
+  [ "$CONFIG_FORMAT_VALUE" = "$CONFIG_FORMAT" ] || fail runtime_config_invalid format
+  [[ "$CONFIG_NODE_PATH" = /* ]] || fail runtime_config_invalid node_path
+  assert_plain_json_string node_path "$CONFIG_NODE_PATH"
+  actual="$(resolve_self "$CONFIG_NODE_PATH")"
+  [ "$actual" = "$CONFIG_NODE_PATH" ] || fail configured_node_path_changed "configured=${CONFIG_NODE_PATH} actual=${actual}"
+  probe_node "$CONFIG_NODE_PATH"
+  assert_supported_probe
+  [ "$CONFIG_NODE_MAJOR" = "$PROBE_MAJOR" ] || fail configured_node_major_mismatch "configured=${CONFIG_NODE_MAJOR} actual=${PROBE_MAJOR}"
+  [ "$CONFIG_MODULES_ABI" = "$PROBE_ABI" ] || fail configured_node_abi_mismatch "configured=${CONFIG_MODULES_ABI} actual=${PROBE_ABI}"
+  [ "$CONFIG_PLATFORM" = "$PROBE_PLATFORM" ] || fail configured_node_platform_mismatch "configured=${CONFIG_PLATFORM} actual=${PROBE_PLATFORM}"
+  [ "$CONFIG_ARCH" = "$PROBE_ARCH" ] || fail configured_node_arch_mismatch "configured=${CONFIG_ARCH} actual=${PROBE_ARCH}"
+}
+
+native_module_smoke() {
+  if ! ICARUS_NODE_MODULE_ROOT="$REPOSITORY_ROOT" "$CONFIG_NODE_PATH" --eval '
+    const { createRequire } = require("node:module");
+    const path = require("node:path");
+    const localRequire = createRequire(path.join(process.env.ICARUS_NODE_MODULE_ROOT, "package.json"));
+    const Database = localRequire("better-sqlite3");
+    const database = new Database(":memory:");
+    try {
+      const row = database.prepare("SELECT 1 AS value").get();
+      if (!row || row.value !== 1) process.exit(2);
+    } finally {
+      database.close();
+    }
+  ' >/dev/null 2>&1; then
+    fail native_module_incompatible "better-sqlite3 failed under the configured Node; run npm rebuild better-sqlite3 or npm ci"
+  fi
+}
+
+verify_runtime() {
+  load_config
+  native_module_smoke
 }
 
 validate_archive() {
   local archive="$1"
-  local top_directory="${ARCHIVE_FILENAME%.tar.gz}"
+  local top_directory="${INSTALL_ARCHIVE_FILENAME%.tar.gz}"
 
   if ! tar -tzf "$archive" | awk -v top="$top_directory" '
     BEGIN { found = 0 }
@@ -262,14 +248,7 @@ validate_archive() {
       entry = $0
       if (entry == "" || entry ~ /^[[:space:]]/ || entry ~ /[[:space:]\\]/ || entry ~ /^\//) exit 1
       count = split(entry, parts, "/")
-      depth = 0
-      for (i = 1; i <= count; i++) {
-        if (parts[i] == "" || parts[i] == ".") continue
-        if (parts[i] == "..") exit 1
-        else {
-          depth++
-        }
-      }
+      for (i = 1; i <= count; i++) if (parts[i] == "..") exit 1
       if (parts[1] != top) exit 1
       found = 1
     }
@@ -296,9 +275,7 @@ validate_archive() {
           if (parts[i] == "..") {
             depth--
             if (depth < 1) exit 1
-          } else {
-            depth++
-          }
+          } else depth++
         }
       }
     }
@@ -307,884 +284,239 @@ validate_archive() {
   fi
 }
 
-atomic_copy() {
-  local source="$1"
-  local destination="$2"
-  local mode="$3"
-  local parent
-  local temporary
-
-  parent="$(dirname "$destination")"
-  mkdir -p "$parent"
-  temporary="$(mktemp "$parent/.icarus-copy.XXXXXX")"
-  TEMP_PATHS+=("$temporary")
-  cp "$source" "$temporary"
-  chmod "$mode" "$temporary"
-  sync_filesystem
-  mv -f "$temporary" "$destination"
-  sync_filesystem
-}
-
-verify_distribution_dir() {
-  local directory="$1"
-  local source_manifest="$2"
-  local node_path="$directory/$NODE_RELATIVE_PATH"
-  local npm_path="$directory/bin/npm"
-  local actual
-  local directory_real
-  local node_real
-
-  if [ ! -d "$directory" ]; then
-    fail installation_missing "$directory"
-  fi
-  if [ ! -f "$directory/manifest.json" ]; then
-    fail installation_incomplete "$directory"
-  fi
-  if ! cmp -s "$source_manifest" "$directory/manifest.json"; then
-    fail installation_manifest_mismatch "$directory"
-  fi
-  if [ ! -f "$node_path" ] || [ ! -x "$node_path" ] || [ -L "$node_path" ]; then
-    fail node_executable_missing "$node_path"
-  fi
-  directory_real="$(cd -P "$directory" && pwd)"
-  node_real="$(resolve_self "$node_path")"
-  case "$node_real" in
-    "$directory_real"/*) ;;
-    *) fail node_executable_outside_install "$node_real" ;;
-  esac
-  actual="$(sha256_file "$node_path")"
-  if [ "sha256:${actual}" != "$NODE_SHA256" ]; then
-    fail node_executable_hash_mismatch "expected=${NODE_SHA256} actual=sha256:${actual}"
-  fi
-  actual="$("$node_path" --version 2>/dev/null || true)"
-  if [ "$actual" != "v${NODE_VERSION}" ]; then
-    fail node_version_mismatch "expected=v${NODE_VERSION} actual=${actual:-unavailable}"
-  fi
-  if [ ! -f "$npm_path" ] || [ ! -x "$npm_path" ]; then
-    fail npm_executable_missing "$npm_path"
-  fi
-  case "$(resolve_self "$npm_path")" in
-    "$directory"/*) ;;
-    *) fail npm_executable_outside_install "$npm_path" ;;
-  esac
-  actual="$(PATH="$directory/bin:/usr/bin:/bin" "$npm_path" --version 2>/dev/null || true)"
-  if [ "$actual" != "$NPM_VERSION" ]; then
-    fail npm_version_mismatch "expected=${NPM_VERSION} actual=${actual:-unavailable}"
-  fi
-}
-
-install_launcher_components() {
-  local source_toolchain="$REPOSITORY_ROOT/scripts/runtime-toolchain.sh"
-  local source_launcher="$REPOSITORY_ROOT/scripts/runtime-launcher.sh"
-
-  if [ ! -f "$source_toolchain" ] || [ ! -f "$source_launcher" ]; then
-    fail launcher_source_missing
-  fi
-  atomic_copy "$source_toolchain" "$INSTALLED_TOOLCHAIN_PATH" 755
-  atomic_copy "$source_launcher" "$RUNTIME_LAUNCHER_PATH" 755
-}
-
-set_relative_pointer() {
-  local pointer="$1"
-  local relative_target="$2"
-  local parent
-  local temporary
-
-  assert_relative_safe_path "$relative_target" active_pointer_invalid
-  parent="$(dirname "$pointer")"
-  mkdir -p "$parent"
-  temporary="$parent/.active-pointer.$$.$RANDOM"
-  rm -f "$temporary"
-  ln -s "$relative_target" "$temporary"
-  mv -f -h "$temporary" "$pointer"
-  sync_filesystem
-}
-
-resolve_pointer() {
-  local pointer="$1"
-  local expected_root="$2"
-  local label="$3"
-  local target
-  local resolved
-
-  if [ ! -L "$pointer" ]; then
-    fail "${label}_missing" "$pointer"
-  fi
-  target="$(readlink "$pointer")"
-  if [[ "$target" = /* ]]; then
-    fail "${label}_outside_root" "absolute target"
-  fi
-  assert_relative_safe_path "$target" "${label}_outside_root"
-  if [ ! -e "$(dirname "$pointer")/$target" ]; then
-    fail "${label}_target_missing" "$target"
-  fi
-  resolved="$(cd -P "$(dirname "$pointer")/$target" && pwd)"
-  case "$resolved" in
-    "$expected_root"/*) ;;
-    *) fail "${label}_outside_root" "$resolved" ;;
-  esac
-  printf '%s\n' "$resolved"
-}
-
-verify_active_distribution() {
-  local source_manifest="$1"
-  local active
-
-  if [ ! -f "$CONTRACT_PATH" ] || ! cmp -s "$source_manifest" "$CONTRACT_PATH"; then
-    fail active_manifest_mismatch "$CONTRACT_PATH"
-  fi
-  active="$(resolve_pointer "$ACTIVE_NODE_POINTER" "$NODE_ROOT" active_pointer)"
-  if [ "$active" != "$INSTALL_PATH" ]; then
-    fail active_pointer_identity_mismatch "expected=${INSTALL_PATH} actual=${active}"
-  fi
-  verify_distribution_dir "$active" "$source_manifest"
-  ACTIVE_INSTALL_PATH="$active"
-}
-
-install_distribution() {
-  local source_manifest="$1"
-  local archive_override="$2"
+install_runtime() {
+  local archive_override="$1"
+  local expected_checksum="$2"
   local work_directory
   local archive
+  local actual
   local extract_root
   local payload
-  local actual
   local install_parent
-  local existing_real
 
-  mkdir -p "$NODE_ROOT" "$RUNTIME_HOME/contracts"
-  install_parent="$(dirname "$INSTALL_PATH")"
-  mkdir -p "$install_parent"
-
-  if [ -e "$INSTALL_PATH" ]; then
-    if [ ! -d "$INSTALL_PATH" ]; then
-      fail installation_incomplete "$INSTALL_PATH"
-    fi
-    existing_real="$(cd -P "$INSTALL_PATH" && pwd)"
-    case "$existing_real" in
-      "$NODE_ROOT"/*) ;;
-      *) fail installation_outside_root "$existing_real" ;;
-    esac
-    [ "$existing_real" = "$INSTALL_PATH" ] || fail installation_outside_root "$existing_real"
-    verify_distribution_dir "$INSTALL_PATH" "$source_manifest"
-  else
+  [ "$(host_platform)" = "$INSTALL_PLATFORM" ] || fail managed_installer_platform_unsupported
+  [ "$(host_arch)" = "$INSTALL_ARCH" ] || fail managed_installer_arch_unsupported
+  [[ "$expected_checksum" =~ ^sha256:[0-9a-f]{64}$ ]] || fail archive_checksum_invalid
+  install_parent="$(dirname "$MANAGED_INSTALL_PATH")"
+  ensure_node_root
+  ensure_safe_directory "$install_parent"
+  local install_lock="${MANAGED_INSTALL_PATH}.install-lock"
+  if ! mkdir "$install_lock" 2>/dev/null; then
+    fail install_lock_busy "$install_lock"
+  fi
+  LOCK_PATH="$install_lock"
+  [ ! -L "$MANAGED_INSTALL_PATH" ] || fail runtime_path_unsafe "$MANAGED_INSTALL_PATH"
+  if [ -e "$MANAGED_INSTALL_PATH" ] && [ ! -d "$MANAGED_INSTALL_PATH" ]; then
+    fail runtime_path_unsafe "$MANAGED_INSTALL_PATH"
+  fi
+  if [ ! -d "$MANAGED_INSTALL_PATH" ]; then
     work_directory="$(mktemp -d "$install_parent/.install.XXXXXX")"
     TEMP_PATHS+=("$work_directory")
-    archive="$work_directory/$ARCHIVE_FILENAME"
+    archive="$work_directory/$INSTALL_ARCHIVE_FILENAME"
     extract_root="$work_directory/extract"
     mkdir -p "$extract_root"
-
     if [ -n "$archive_override" ]; then
       [ -f "$archive_override" ] || fail archive_missing "$archive_override"
       cp "$archive_override" "$archive"
     else
       command -v curl >/dev/null 2>&1 || fail download_tool_missing curl
-      curl --fail --location --proto '=https' --tlsv1.2 --output "$archive" "$ARCHIVE_URL" || fail archive_download_failed "$ARCHIVE_URL"
+      curl --fail --location --proto '=https' --tlsv1.2 --output "$archive" "$INSTALL_ARCHIVE_URL" || fail archive_download_failed "$INSTALL_ARCHIVE_URL"
     fi
-
-    actual="$(sha256_file "$archive")"
-    if [ "sha256:${actual}" != "$ARCHIVE_SHA256" ]; then
-      fail archive_hash_mismatch "expected=${ARCHIVE_SHA256} actual=sha256:${actual}"
-    fi
+    actual="sha256:$(sha256_file "$archive")"
+    [ "$actual" = "$expected_checksum" ] || fail archive_checksum_mismatch "expected=${expected_checksum} actual=${actual}"
     validate_archive "$archive"
     tar -xzf "$archive" -C "$extract_root" --no-same-owner --no-same-permissions || fail archive_extract_failed
-    payload="$extract_root/${ARCHIVE_FILENAME%.tar.gz}"
+    payload="$extract_root/${INSTALL_ARCHIVE_FILENAME%.tar.gz}"
     [ -d "$payload" ] || fail archive_layout_invalid
-    cp "$source_manifest" "$payload/manifest.json"
-    verify_distribution_dir "$payload" "$source_manifest"
-
-    LOCK_PATH="${INSTALL_PATH}.install-lock"
-    if ! mkdir "$LOCK_PATH" 2>/dev/null; then
-      fail install_lock_busy "$LOCK_PATH"
-    fi
-    if [ -e "$INSTALL_PATH" ]; then
-      verify_distribution_dir "$INSTALL_PATH" "$source_manifest"
-    else
-      mv "$payload" "$INSTALL_PATH"
-      sync_filesystem
-    fi
-    rmdir "$LOCK_PATH"
-    LOCK_PATH=""
+    [ -x "$payload/bin/node" ] || fail node_executable_missing "$payload/bin/node"
+    mv "$payload" "$MANAGED_INSTALL_PATH"
   fi
-
-  atomic_copy "$source_manifest" "$CONTRACT_PATH" 644
-  install_launcher_components
-  set_relative_pointer "$ACTIVE_NODE_POINTER" "$INSTALL_RELATIVE_PATH"
-  verify_active_distribution "$source_manifest"
-}
-
-assert_core_entry_relative() {
-  local entry="$1"
-  assert_relative_safe_path "$entry" core_entry_invalid
-  [[ "$entry" =~ ^[A-Za-z0-9._/-]+$ ]] || fail core_entry_invalid "$entry"
-}
-
-write_core_binding() {
-  local project_root="$1"
-  local entry_relative="$2"
-  local project_real
-  local entry_real
-  local entry_hash
-  local canonical
-  local binding_hash
-  local binding_directory
-  local binding_file
-  local temporary
-
-  assert_core_entry_relative "$entry_relative"
-  [ -d "$project_root" ] || fail core_project_root_missing "$project_root"
-  project_real="$(cd -P "$project_root" && pwd)"
-  assert_plain_json_string project_root "$project_real"
-  [ -f "$project_real/$entry_relative" ] || fail core_entry_missing "$project_real/$entry_relative"
-  entry_real="$(resolve_self "$project_real/$entry_relative")"
-  case "$entry_real" in
-    "$project_real"/*) ;;
-    *) fail core_entry_outside_project "$entry_real" ;;
+  [ ! -L "$MANAGED_INSTALL_PATH/bin/node" ] || fail runtime_path_unsafe "$MANAGED_INSTALL_PATH/bin/node"
+  case "$(resolve_self "$MANAGED_INSTALL_PATH/bin/node")" in
+    "$MANAGED_INSTALL_PATH"/*) ;;
+    *) fail runtime_path_unsafe "$MANAGED_INSTALL_PATH/bin/node" ;;
   esac
-  entry_hash="sha256:$(sha256_file "$entry_real")"
-  canonical="{\"binding_kind\":\"development_checkout\",\"core_entry_relative_path\":\"${entry_relative}\",\"core_entry_sha256\":\"${entry_hash}\",\"format\":\"icarus.core-runtime-launch-binding/1\",\"managed_node_manifest_hash\":\"${MANIFEST_HASH}\",\"project_root\":\"${project_real}\"}"
-  binding_hash="sha256:$(printf '%s\n%s' 'icarus:core-runtime-launch-binding:1' "$canonical" | sha256_stdin)"
-  binding_directory="$RUNTIME_HOME/core-bindings/${binding_hash#sha256:}"
-  binding_file="$binding_directory/binding.json"
+  configure_node "$MANAGED_INSTALL_PATH/bin/node"
+}
 
-  mkdir -p "$binding_directory"
-  temporary="$(mktemp "$binding_directory/.binding.XXXXXX")"
-  TEMP_PATHS+=("$temporary")
-  printf '%s\n' \
-    '{' \
-    '  "format": "icarus.core-runtime-launch-binding/1",' \
-    '  "binding_kind": "development_checkout",' \
-    "  \"project_root\": \"${project_real}\"," \
-    "  \"core_entry_relative_path\": \"${entry_relative}\"," \
-    "  \"core_entry_sha256\": \"${entry_hash}\"," \
-    "  \"managed_node_manifest_hash\": \"${MANIFEST_HASH}\"," \
-    "  \"binding_hash\": \"${binding_hash}\"" \
-    '}' > "$temporary"
-  chmod 644 "$temporary"
-  sync_filesystem
+configured_npm_ci() {
+  local node_directory
+  local npm_path
 
-  if [ -f "$binding_file" ]; then
-    if ! cmp -s "$temporary" "$binding_file"; then
-      fail core_binding_collision "$binding_file"
-    fi
-    rm -f "$temporary"
-  else
-    mv "$temporary" "$binding_file"
-    sync_filesystem
+  load_config
+  unset NODE_OPTIONS NODE_PATH ICARUS_RUNTIME_HOME ICARUS_TOOLCHAIN_MANIFEST
+  node_directory="$(dirname "$CONFIG_NODE_PATH")"
+  npm_path="$node_directory/npm"
+  [ -f "$npm_path" ] && [ -x "$npm_path" ] || fail package_tool_missing "$npm_path"
+  cd "$REPOSITORY_ROOT"
+  PATH="$node_directory:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/local/sbin:/usr/bin:/bin:/usr/sbin:/sbin" "$npm_path" ci
+}
+
+launch_active() {
+  local mode="$1"
+  local entry
+  local node_directory
+
+  load_config
+  unset NODE_OPTIONS NODE_PATH ICARUS_TOOLCHAIN_MANIFEST
+  entry="$("$CONFIG_NODE_PATH" --eval '
+    const crypto = require("node:crypto");
+    const fs = require("node:fs");
+    const { createRequire } = require("node:module");
+    const path = require("node:path");
+
+    function invalid(reason) {
+      process.stderr.write(`icarus-toolchain:active_snapshot_invalid: ${reason}\n`);
+      process.exit(78);
+    }
+
+    function regularFile(file, label) {
+      let stat;
+      try {
+        stat = fs.lstatSync(file);
+      } catch {
+        invalid(`${label}_missing`);
+      }
+      if (!stat.isFile() || stat.isSymbolicLink()) invalid(`${label}_invalid`);
+    }
+
+    function exactKeys(value, expected, label) {
+      if (value === null || typeof value !== "object" || Array.isArray(value))
+        invalid(`${label}_invalid`);
+      const actual = Object.keys(value).sort();
+      const required = [...expected].sort();
+      if (actual.length !== required.length || actual.some((key, index) => key !== required[index]))
+        invalid(`${label}_keyset_invalid`);
+    }
+
+    try {
+      const runtimeHome = fs.realpathSync(process.argv[1]);
+      const snapshotsRoot = path.join(runtimeHome, "host-core-snapshots");
+      const snapshotsStat = fs.lstatSync(snapshotsRoot);
+      if (!snapshotsStat.isDirectory() || snapshotsStat.isSymbolicLink())
+        invalid("snapshot_directory_invalid");
+
+      const pointer = path.join(runtimeHome, "active-core");
+      if (!fs.lstatSync(pointer).isSymbolicLink()) invalid("pointer_invalid");
+      const relative = fs.readlinkSync(pointer);
+      const match = /^host-core-snapshots\/(\d{8}T\d{6}Z-[0-9a-f]{7,12}-[0-9a-f]{8})$/.exec(relative);
+      if (!match) invalid("pointer_invalid");
+
+      const snapshotId = match[1];
+      const expectedRoot = path.join(snapshotsRoot, snapshotId);
+      const expectedStat = fs.lstatSync(expectedRoot);
+      if (!expectedStat.isDirectory() || expectedStat.isSymbolicLink())
+        invalid("snapshot_directory_invalid");
+      const snapshotRoot = fs.realpathSync(pointer);
+      if (snapshotRoot !== fs.realpathSync(expectedRoot)) invalid("pointer_invalid");
+      const contained = path.relative(fs.realpathSync(snapshotsRoot), snapshotRoot);
+      if (contained !== snapshotId || contained.startsWith(`..${path.sep}`) || path.isAbsolute(contained))
+        invalid("snapshot_path_invalid");
+
+      const manifestFile = path.join(snapshotRoot, "snapshot.json");
+      regularFile(manifestFile, "manifest");
+      const manifest = JSON.parse(fs.readFileSync(manifestFile, "utf8"));
+      exactKeys(manifest, [
+        "created_at", "entry_relative_path", "entry_sha256", "format", "git",
+        "label", "node", "snapshot_id", "validation", "workflow_schema",
+      ], "manifest");
+      exactKeys(manifest.node, ["arch", "major", "modules_abi", "platform"], "manifest_node");
+      exactKeys(manifest.workflow_schema, ["current_version", "minimum_supported_version"], "manifest_schema");
+      if (manifest.format !== "icarus.host-core-snapshot/1" || manifest.snapshot_id !== snapshotId)
+        invalid("manifest_descriptor_invalid");
+      if (manifest.entry_relative_path !== "dist/index.js" ||
+          typeof manifest.entry_sha256 !== "string" ||
+          !/^sha256:[0-9a-f]{64}$/.test(manifest.entry_sha256))
+        invalid("entry_descriptor_invalid");
+      const currentSchema = manifest.workflow_schema.current_version;
+      const minimumSchema = manifest.workflow_schema.minimum_supported_version;
+      if (!Number.isSafeInteger(currentSchema) || currentSchema < 1 ||
+          !Number.isSafeInteger(minimumSchema) || minimumSchema < 1 || minimumSchema > currentSchema)
+        invalid("schema_range_invalid");
+
+      const major = Number(process.versions.node.split(".")[0]);
+      if (manifest.node.major !== major ||
+          manifest.node.modules_abi !== process.versions.modules ||
+          manifest.node.platform !== process.platform ||
+          manifest.node.arch !== process.arch)
+        invalid("node_incompatible");
+
+      const entry = path.join(snapshotRoot, manifest.entry_relative_path);
+      regularFile(entry, "entry");
+      const digest = `sha256:${crypto.createHash("sha256").update(fs.readFileSync(entry)).digest("hex")}`;
+      if (digest !== manifest.entry_sha256) invalid("entry_checksum_mismatch");
+
+      const packageFile = path.join(snapshotRoot, "package.json");
+      regularFile(packageFile, "package_manifest");
+      const snapshotRequire = createRequire(packageFile);
+      const dependencyRoot = path.join(snapshotRoot, "node_modules");
+      const dependencyStat = fs.lstatSync(dependencyRoot);
+      if (!dependencyStat.isDirectory() || dependencyStat.isSymbolicLink())
+        invalid("dependency_directory_invalid");
+      const sqliteEntry = fs.realpathSync(snapshotRequire.resolve("better-sqlite3"));
+      const dependencyRelative = path.relative(fs.realpathSync(dependencyRoot), sqliteEntry);
+      if (dependencyRelative === ".." || dependencyRelative.startsWith(`..${path.sep}`) || path.isAbsolute(dependencyRelative))
+        invalid("native_module_outside_snapshot");
+      const Database = snapshotRequire(sqliteEntry);
+      const database = new Database(":memory:");
+      try {
+        const row = database.prepare("SELECT 1 AS value").get();
+        if (!row || row.value !== 1) invalid("native_module_smoke_failed");
+      } finally {
+        database.close();
+      }
+      process.stdout.write(entry);
+    } catch (error) {
+      invalid(error instanceof Error ? error.message : "verification_failed");
+    }
+  ' "$RUNTIME_HOME")"
+  if [ "$mode" = "verify" ]; then
+    return 0
   fi
-  set_relative_pointer "$ACTIVE_CORE_POINTER" "core-bindings/${binding_hash#sha256:}"
+  node_directory="$(dirname "$CONFIG_NODE_PATH")"
+  PATH="$node_directory:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/local/sbin:/usr/bin:/bin:/usr/sbin:/sbin" \
+    ICARUS_RUNTIME_HOME="$RUNTIME_HOME" exec "$CONFIG_NODE_PATH" "$entry"
 }
 
-write_release_core_binding() {
-  local release_relative="$1"
-  local manifest_relative="$2"
-  local release_artifact_hash="$3"
-  local core_build_hash="$4"
-  local core_entry_relative="$5"
-  local validation_entry_relative="$6"
-  local release_root
-  local manifest_real
-  local manifest_sha
-  local core_entry_real
-  local core_entry_sha
-  local validation_entry_real
-  local validation_entry_sha
-  local canonical
-  local binding_hash
-  local binding_directory
-  local binding_file
-  local temporary
-
-  assert_relative_safe_path "$release_relative" core_release_path_invalid
-  assert_relative_safe_path "$manifest_relative" core_release_manifest_invalid
-  assert_core_entry_relative "$core_entry_relative"
-  assert_core_entry_relative "$validation_entry_relative"
-  [[ "$release_relative" =~ ^core-releases/[0-9a-f]{64}$ ]] || fail core_release_path_invalid "$release_relative"
-  [[ "$release_artifact_hash" =~ ^sha256:[0-9a-f]{64}$ ]] || fail core_release_identity_invalid release_artifact_hash
-  [[ "$core_build_hash" =~ ^sha256:[0-9a-f]{64}$ ]] || fail core_release_identity_invalid core_build_hash
-  [ "${release_relative#core-releases/}" = "${release_artifact_hash#sha256:}" ] || fail core_release_path_mismatch
-  [ -d "$RUNTIME_HOME/$release_relative" ] || fail core_release_missing "$release_relative"
-  release_root="$(cd -P "$RUNTIME_HOME/$release_relative" && pwd)"
-  case "$release_root" in
-    "$RUNTIME_HOME/core-releases"/*) ;;
-    *) fail core_release_outside_root "$release_root" ;;
-  esac
-
-  [ -f "$release_root/$manifest_relative" ] || fail core_release_manifest_missing
-  manifest_real="$(resolve_self "$release_root/$manifest_relative")"
-  case "$manifest_real" in
-    "$release_root"/*) ;;
-    *) fail core_release_manifest_outside_root "$manifest_real" ;;
-  esac
-  manifest_sha="sha256:$(sha256_file "$manifest_real")"
-
-  [ -f "$release_root/$core_entry_relative" ] || fail core_entry_missing
-  core_entry_real="$(resolve_self "$release_root/$core_entry_relative")"
-  case "$core_entry_real" in
-    "$release_root"/*) ;;
-    *) fail core_entry_outside_project "$core_entry_real" ;;
-  esac
-  core_entry_sha="sha256:$(sha256_file "$core_entry_real")"
-
-  [ -f "$release_root/$validation_entry_relative" ] || fail validation_entry_missing
-  validation_entry_real="$(resolve_self "$release_root/$validation_entry_relative")"
-  case "$validation_entry_real" in
-    "$release_root"/*) ;;
-    *) fail validation_entry_outside_release "$validation_entry_real" ;;
-  esac
-  validation_entry_sha="sha256:$(sha256_file "$validation_entry_real")"
-
-  canonical="{\"binding_kind\":\"content_addressed_release\",\"core_build_hash\":\"${core_build_hash}\",\"core_entry_relative_path\":\"${core_entry_relative}\",\"core_entry_sha256\":\"${core_entry_sha}\",\"core_release_relative_path\":\"${release_relative}\",\"format\":\"icarus.core-runtime-launch-binding/2\",\"managed_node_manifest_hash\":\"${MANIFEST_HASH}\",\"release_artifact_hash\":\"${release_artifact_hash}\",\"release_manifest_relative_path\":\"${manifest_relative}\",\"release_manifest_sha256\":\"${manifest_sha}\",\"validation_entry_relative_path\":\"${validation_entry_relative}\",\"validation_entry_sha256\":\"${validation_entry_sha}\"}"
-  binding_hash="sha256:$(printf '%s\n%s' 'icarus:core-runtime-launch-binding:2' "$canonical" | sha256_stdin)"
-  binding_directory="$RUNTIME_HOME/core-bindings/${binding_hash#sha256:}"
-  binding_file="$binding_directory/binding.json"
-  mkdir -p "$binding_directory"
-  temporary="$(mktemp "$binding_directory/.binding.XXXXXX")"
-  TEMP_PATHS+=("$temporary")
-  printf '%s\n' \
-    '{' \
-    '  "format": "icarus.core-runtime-launch-binding/2",' \
-    '  "binding_kind": "content_addressed_release",' \
-    "  \"core_release_relative_path\": \"${release_relative}\"," \
-    "  \"release_manifest_relative_path\": \"${manifest_relative}\"," \
-    "  \"release_manifest_sha256\": \"${manifest_sha}\"," \
-    "  \"release_artifact_hash\": \"${release_artifact_hash}\"," \
-    "  \"core_build_hash\": \"${core_build_hash}\"," \
-    "  \"core_entry_relative_path\": \"${core_entry_relative}\"," \
-    "  \"core_entry_sha256\": \"${core_entry_sha}\"," \
-    "  \"validation_entry_relative_path\": \"${validation_entry_relative}\"," \
-    "  \"validation_entry_sha256\": \"${validation_entry_sha}\"," \
-    "  \"managed_node_manifest_hash\": \"${MANIFEST_HASH}\"," \
-    "  \"binding_hash\": \"${binding_hash}\"" \
-    '}' > "$temporary"
-  chmod 644 "$temporary"
-  sync_filesystem
-  if [ -f "$binding_file" ]; then
-    if ! cmp -s "$temporary" "$binding_file"; then
-      fail core_binding_collision "$binding_file"
-    fi
-    rm -f "$temporary"
-  else
-    mv "$temporary" "$binding_file"
-    sync_filesystem
-  fi
-  set_relative_pointer "$ACTIVE_CORE_POINTER" "core-bindings/${binding_hash#sha256:}"
-}
-
-stage_production_core_binding() {
-  local source_binding="$1"
-  local source_real
-  local format
-  local kind
-  local binding_hash
-  local binding_directory
-  local binding_file
-
-  [ -f "$source_binding" ] && [ ! -L "$source_binding" ] || fail production_core_binding_missing
-  source_real="$(resolve_self "$source_binding")"
-  format="$(json_string "$source_real" format)"
-  kind="$(json_string "$source_real" binding_kind)"
-  binding_hash="$(json_string "$source_real" binding_hash)"
-  [ "$format" = "icarus.core-runtime-launch-binding/3" ] || fail core_binding_invalid format
-  [ "$kind" = "content_addressed_production_release" ] || fail core_binding_invalid binding_kind
-  [[ "$binding_hash" =~ ^sha256:[0-9a-f]{64}$ ]] || fail core_binding_invalid binding_hash
-  binding_directory="$RUNTIME_HOME/core-bindings/${binding_hash#sha256:}"
-  binding_file="$binding_directory/binding.json"
-  mkdir -p "$binding_directory"
-  if [ -f "$binding_file" ]; then
-    cmp -s "$source_real" "$binding_file" || fail core_binding_collision "$binding_file"
-  else
-    atomic_copy "$source_real" "$binding_file" 644
-  fi
-  STAGED_PRODUCTION_BINDING_RELATIVE="core-bindings/${binding_hash#sha256:}"
-}
-
-assert_core_binding_keyset() {
-  local file="$1"
-  local kind="$2"
-  local actual
-  local expected
-  actual="$(sed -nE 's/^[[:space:]]*"([^\"]+)"[[:space:]]*:.*/\1/p' "$file" | LC_ALL=C sort)"
-  if [ "$kind" = "development_checkout" ]; then
-    expected="$(printf '%s\n' binding_hash binding_kind core_entry_relative_path core_entry_sha256 format managed_node_manifest_hash project_root | LC_ALL=C sort)"
-  elif [ "$kind" = "content_addressed_release" ]; then
-    expected="$(printf '%s\n' binding_hash binding_kind core_build_hash core_entry_relative_path core_entry_sha256 core_release_relative_path format managed_node_manifest_hash release_artifact_hash release_manifest_relative_path release_manifest_sha256 validation_entry_relative_path validation_entry_sha256 | LC_ALL=C sort)"
-  elif [ "$kind" = "content_addressed_production_release" ]; then
-    expected="$(printf '%s\n' activation_entry_relative_path activation_entry_sha256 binding_hash binding_kind core_build_hash core_entry_relative_path core_entry_sha256 core_release_relative_path format managed_node_manifest_hash release_artifact_hash release_manifest_relative_path release_manifest_sha256 validation_entry_relative_path validation_entry_sha256 | LC_ALL=C sort)"
-  else
-    fail core_binding_invalid binding_kind
-  fi
-  [ "$actual" = "$expected" ] || fail core_binding_invalid "unexpected, duplicate, or missing field"
-}
-
-assert_core_binding_serialization() {
-  local file="$1"
-  local actual
-  local expected
-  local format="$2"
-  local kind="$3"
-  local project_root="$4"
-  local entry_relative="$5"
-  local entry_sha="$6"
-  local manifest_hash="$7"
-  local binding_hash="$8"
-
-  actual="$(cat "$file")"
-  expected="$(printf '%s\n' \
-    '{' \
-    '  "format": "'"${format}"'",' \
-    '  "binding_kind": "'"${kind}"'",' \
-    '  "project_root": "'"${project_root}"'",' \
-    '  "core_entry_relative_path": "'"${entry_relative}"'",' \
-    '  "core_entry_sha256": "'"${entry_sha}"'",' \
-    '  "managed_node_manifest_hash": "'"${manifest_hash}"'",' \
-    '  "binding_hash": "'"${binding_hash}"'"' \
-    '}')"
-  [ "$actual" = "$expected" ] || fail core_binding_invalid "non-canonical JSON document"
-}
-
-assert_release_core_binding_serialization() {
-  local file="$1"
-  local release_relative="$2"
-  local manifest_relative="$3"
-  local manifest_sha="$4"
-  local release_artifact_hash="$5"
-  local core_build_hash="$6"
-  local entry_relative="$7"
-  local entry_sha="$8"
-  local validation_relative="$9"
-  local validation_sha="${10}"
-  local manifest_hash="${11}"
-  local binding_hash="${12}"
-  local actual
-  local expected
-
-  actual="$(cat "$file")"
-  expected="$(printf '%s\n' \
-    '{' \
-    '  "format": "icarus.core-runtime-launch-binding/2",' \
-    '  "binding_kind": "content_addressed_release",' \
-    '  "core_release_relative_path": "'"${release_relative}"'",' \
-    '  "release_manifest_relative_path": "'"${manifest_relative}"'",' \
-    '  "release_manifest_sha256": "'"${manifest_sha}"'",' \
-    '  "release_artifact_hash": "'"${release_artifact_hash}"'",' \
-    '  "core_build_hash": "'"${core_build_hash}"'",' \
-    '  "core_entry_relative_path": "'"${entry_relative}"'",' \
-    '  "core_entry_sha256": "'"${entry_sha}"'",' \
-    '  "validation_entry_relative_path": "'"${validation_relative}"'",' \
-    '  "validation_entry_sha256": "'"${validation_sha}"'",' \
-    '  "managed_node_manifest_hash": "'"${manifest_hash}"'",' \
-    '  "binding_hash": "'"${binding_hash}"'"' \
-    '}')"
-  [ "$actual" = "$expected" ] || fail core_binding_invalid "non-canonical JSON document"
-}
-
-verify_core_binding() {
-  local pointer="${1:-$ACTIVE_CORE_POINTER}"
-  local binding_directory
-  local binding_file
-  local format
-  local kind
-  local project_root
-  local entry_relative
-  local entry_sha
-  local manifest_hash
-  local binding_hash
-  local canonical
-  local calculated
-  local entry_real
-
-  binding_directory="$(resolve_pointer "$pointer" "$RUNTIME_HOME/core-bindings" active_core_pointer)"
-  binding_file="$binding_directory/binding.json"
-  [ -f "$binding_file" ] || fail core_binding_missing "$binding_file"
-  kind="$(json_string "$binding_file" binding_kind)"
-  assert_core_binding_keyset "$binding_file" "$kind"
-  format="$(json_string "$binding_file" format)"
-  if [ "$kind" = "content_addressed_release" ]; then
-    verify_release_core_binding "$binding_directory" "$binding_file" "$format"
-    CORE_BINDING_KIND="$kind"
-    return
-  fi
-  if [ "$kind" = "content_addressed_production_release" ]; then
-    verify_production_core_binding "$binding_directory" "$binding_file" "$format"
-    CORE_BINDING_KIND="$kind"
-    return
-  fi
-  project_root="$(json_string "$binding_file" project_root)"
-  entry_relative="$(json_string "$binding_file" core_entry_relative_path)"
-  entry_sha="$(json_string "$binding_file" core_entry_sha256)"
-  manifest_hash="$(json_string "$binding_file" managed_node_manifest_hash)"
-  binding_hash="$(json_string "$binding_file" binding_hash)"
-
-  assert_core_binding_serialization \
-    "$binding_file" \
-    "$format" \
-    "$kind" \
-    "$project_root" \
-    "$entry_relative" \
-    "$entry_sha" \
-    "$manifest_hash" \
-    "$binding_hash"
-
-  [ "$format" = "icarus.core-runtime-launch-binding/1" ] || fail core_binding_invalid format
-  [ "$kind" = "development_checkout" ] || fail core_binding_invalid binding_kind
-  [ "$manifest_hash" = "$MANIFEST_HASH" ] || fail core_binding_manifest_mismatch
-  [[ "$entry_sha" =~ ^sha256:[0-9a-f]{64}$ ]] || fail core_binding_invalid core_entry_sha256
-  [[ "$binding_hash" =~ ^sha256:[0-9a-f]{64}$ ]] || fail core_binding_invalid binding_hash
-  assert_core_entry_relative "$entry_relative"
-  [ -d "$project_root" ] || fail core_project_root_missing "$project_root"
-  project_root="$(cd -P "$project_root" && pwd)"
-
-  canonical="{\"binding_kind\":\"${kind}\",\"core_entry_relative_path\":\"${entry_relative}\",\"core_entry_sha256\":\"${entry_sha}\",\"format\":\"${format}\",\"managed_node_manifest_hash\":\"${manifest_hash}\",\"project_root\":\"${project_root}\"}"
-  calculated="sha256:$(printf '%s\n%s' 'icarus:core-runtime-launch-binding:1' "$canonical" | sha256_stdin)"
-  [ "$calculated" = "$binding_hash" ] || fail core_binding_hash_mismatch "expected=${binding_hash} actual=${calculated}"
-  [ "$(basename "$binding_directory")" = "${binding_hash#sha256:}" ] || fail core_binding_path_mismatch
-
-  [ -f "$project_root/$entry_relative" ] || fail core_entry_missing "$project_root/$entry_relative"
-  entry_real="$(resolve_self "$project_root/$entry_relative")"
-  case "$entry_real" in
-    "$project_root"/*) ;;
-    *) fail core_entry_outside_project "$entry_real" ;;
-  esac
-  calculated="sha256:$(sha256_file "$entry_real")"
-  [ "$calculated" = "$entry_sha" ] || fail core_entry_hash_mismatch "expected=${entry_sha} actual=${calculated}"
-  CORE_ENTRY_PATH="$entry_real"
-  CORE_BINDING_KIND="$kind"
-}
-
-verify_release_core_binding() {
-  local binding_directory="$1"
-  local binding_file="$2"
-  local format="$3"
-  local release_relative
-  local manifest_relative
-  local manifest_sha
-  local release_artifact_hash
-  local core_build_hash
-  local entry_relative
-  local entry_sha
-  local validation_relative
-  local validation_sha
-  local manifest_hash
-  local binding_hash
-  local release_root
-  local resolved
-  local canonical
-  local calculated
-  local release_manifest
-  local manifest_value
-
-  release_relative="$(json_string "$binding_file" core_release_relative_path)"
-  manifest_relative="$(json_string "$binding_file" release_manifest_relative_path)"
-  manifest_sha="$(json_string "$binding_file" release_manifest_sha256)"
-  release_artifact_hash="$(json_string "$binding_file" release_artifact_hash)"
-  core_build_hash="$(json_string "$binding_file" core_build_hash)"
-  entry_relative="$(json_string "$binding_file" core_entry_relative_path)"
-  entry_sha="$(json_string "$binding_file" core_entry_sha256)"
-  validation_relative="$(json_string "$binding_file" validation_entry_relative_path)"
-  validation_sha="$(json_string "$binding_file" validation_entry_sha256)"
-  manifest_hash="$(json_string "$binding_file" managed_node_manifest_hash)"
-  binding_hash="$(json_string "$binding_file" binding_hash)"
-  assert_release_core_binding_serialization \
-    "$binding_file" \
-    "$release_relative" \
-    "$manifest_relative" \
-    "$manifest_sha" \
-    "$release_artifact_hash" \
-    "$core_build_hash" \
-    "$entry_relative" \
-    "$entry_sha" \
-    "$validation_relative" \
-    "$validation_sha" \
-    "$manifest_hash" \
-    "$binding_hash"
-  [ "$format" = "icarus.core-runtime-launch-binding/2" ] || fail core_binding_invalid format
-  [ "$manifest_hash" = "$MANIFEST_HASH" ] || fail core_binding_manifest_mismatch
-  for calculated in "$manifest_sha" "$release_artifact_hash" "$core_build_hash" "$entry_sha" "$validation_sha" "$binding_hash"; do
-    [[ "$calculated" =~ ^sha256:[0-9a-f]{64}$ ]] || fail core_binding_invalid hash
-  done
-  assert_relative_safe_path "$release_relative" core_release_path_invalid
-  assert_relative_safe_path "$manifest_relative" core_release_manifest_invalid
-  assert_core_entry_relative "$entry_relative"
-  assert_core_entry_relative "$validation_relative"
-  [[ "$release_relative" =~ ^core-releases/[0-9a-f]{64}$ ]] || fail core_release_path_invalid
-  [ "${release_relative#core-releases/}" = "${release_artifact_hash#sha256:}" ] || fail core_release_path_mismatch
-  [ -d "$RUNTIME_HOME/$release_relative" ] || fail core_release_missing "$release_relative"
-  release_root="$(cd -P "$RUNTIME_HOME/$release_relative" && pwd)"
-  case "$release_root" in
-    "$RUNTIME_HOME/core-releases"/*) ;;
-    *) fail core_release_outside_root "$release_root" ;;
-  esac
-  release_manifest="$release_root/$manifest_relative"
-  [ -f "$release_manifest" ] || fail core_release_manifest_missing "$release_manifest"
-  resolved="$(resolve_self "$release_manifest")"
-  case "$resolved" in "$release_root"/*) ;; *) fail core_release_manifest_outside_root ;; esac
-  release_manifest="$resolved"
-  calculated="sha256:$(sha256_file "$release_manifest")"
-  [ "$calculated" = "$manifest_sha" ] || fail core_release_manifest_hash_mismatch
-  manifest_value="$(json_string "$release_manifest" format)"
-  [ "$manifest_value" = "icarus.core-release-manifest/1" ] || fail core_release_manifest_identity_mismatch format
-  manifest_value="$(json_string "$release_manifest" release_scope)"
-  [ "$manifest_value" = "workflow_runtime_g8_validation" ] || fail core_release_manifest_identity_mismatch release_scope
-  manifest_value="$(json_string "$release_manifest" build_kind)"
-  [ "$manifest_value" = "release" ] || fail core_release_manifest_identity_mismatch build_kind
-  manifest_value="$(json_string "$release_manifest" platform)"
-  [ "$manifest_value" = "$MANIFEST_PLATFORM" ] || fail core_release_manifest_identity_mismatch platform
-  manifest_value="$(json_string "$release_manifest" arch)"
-  [ "$manifest_value" = "$MANIFEST_ARCH" ] || fail core_release_manifest_identity_mismatch arch
-  manifest_value="$(json_string "$release_manifest" managed_node_distribution_hash)"
-  [ "$manifest_value" = "$MANIFEST_HASH" ] || fail core_release_manifest_identity_mismatch managed_node_distribution_hash
-  manifest_value="$(json_string "$release_manifest" runtime_launcher_hash)"
-  calculated="sha256:$(sha256_file "$RUNTIME_LAUNCHER_PATH")"
-  [ "$manifest_value" = "$calculated" ] || fail core_release_manifest_identity_mismatch runtime_launcher_hash
-  manifest_value="$(json_string "$release_manifest" runtime_toolchain_hash)"
-  calculated="sha256:$(sha256_file "$INSTALLED_TOOLCHAIN_PATH")"
-  [ "$manifest_value" = "$calculated" ] || fail core_release_manifest_identity_mismatch runtime_toolchain_hash
-  manifest_value="$(json_string "$release_manifest" release_artifact_hash)"
-  [ "$manifest_value" = "$release_artifact_hash" ] || fail core_release_manifest_identity_mismatch release_artifact_hash
-  manifest_value="$(json_string "$release_manifest" core_build_hash)"
-  [ "$manifest_value" = "$core_build_hash" ] || fail core_release_manifest_identity_mismatch core_build_hash
-  manifest_value="$(json_string "$release_manifest" core_entry_relative_path)"
-  [ "$manifest_value" = "$entry_relative" ] || fail core_release_manifest_identity_mismatch core_entry_relative_path
-  manifest_value="$(json_string "$release_manifest" core_entry_sha256)"
-  [ "$manifest_value" = "$entry_sha" ] || fail core_release_manifest_identity_mismatch core_entry_sha256
-  manifest_value="$(json_string "$release_manifest" validation_entry_relative_path)"
-  [ "$manifest_value" = "$validation_relative" ] || fail core_release_manifest_identity_mismatch validation_entry_relative_path
-  manifest_value="$(json_string "$release_manifest" validation_entry_sha256)"
-  [ "$manifest_value" = "$validation_sha" ] || fail core_release_manifest_identity_mismatch validation_entry_sha256
-  [ -f "$release_root/$entry_relative" ] || fail core_entry_missing
-  resolved="$(resolve_self "$release_root/$entry_relative")"
-  case "$resolved" in "$release_root"/*) ;; *) fail core_entry_outside_project ;; esac
-  calculated="sha256:$(sha256_file "$resolved")"
-  [ "$calculated" = "$entry_sha" ] || fail core_entry_hash_mismatch
-  [ -f "$release_root/$validation_relative" ] || fail validation_entry_missing
-  resolved="$(resolve_self "$release_root/$validation_relative")"
-  case "$resolved" in "$release_root"/*) ;; *) fail validation_entry_outside_release ;; esac
-  calculated="sha256:$(sha256_file "$resolved")"
-  [ "$calculated" = "$validation_sha" ] || fail validation_entry_hash_mismatch
-  canonical="{\"binding_kind\":\"content_addressed_release\",\"core_build_hash\":\"${core_build_hash}\",\"core_entry_relative_path\":\"${entry_relative}\",\"core_entry_sha256\":\"${entry_sha}\",\"core_release_relative_path\":\"${release_relative}\",\"format\":\"${format}\",\"managed_node_manifest_hash\":\"${manifest_hash}\",\"release_artifact_hash\":\"${release_artifact_hash}\",\"release_manifest_relative_path\":\"${manifest_relative}\",\"release_manifest_sha256\":\"${manifest_sha}\",\"validation_entry_relative_path\":\"${validation_relative}\",\"validation_entry_sha256\":\"${validation_sha}\"}"
-  calculated="sha256:$(printf '%s\n%s' 'icarus:core-runtime-launch-binding:2' "$canonical" | sha256_stdin)"
-  [ "$calculated" = "$binding_hash" ] || fail core_binding_hash_mismatch
-  [ "$(basename "$binding_directory")" = "${binding_hash#sha256:}" ] || fail core_binding_path_mismatch
-  CORE_ENTRY_PATH="$resolved"
-}
-
-verify_production_core_binding() {
-  local binding_directory="$1"
-  local binding_file="$2"
-  local format="$3"
-  local release_relative
-  local manifest_relative
-  local manifest_sha
-  local release_artifact_hash
-  local core_build_hash
-  local core_relative
-  local core_sha
-  local validation_relative
-  local validation_sha
-  local activation_relative
-  local activation_sha
-  local manifest_hash
-  local binding_hash
-  local release_root
-  local release_manifest
-  local resolved
-  local calculated
-  local canonical
-  local manifest_value
-  local actual
-  local expected
-
-  release_relative="$(json_string "$binding_file" core_release_relative_path)"
-  manifest_relative="$(json_string "$binding_file" release_manifest_relative_path)"
-  manifest_sha="$(json_string "$binding_file" release_manifest_sha256)"
-  release_artifact_hash="$(json_string "$binding_file" release_artifact_hash)"
-  core_build_hash="$(json_string "$binding_file" core_build_hash)"
-  core_relative="$(json_string "$binding_file" core_entry_relative_path)"
-  core_sha="$(json_string "$binding_file" core_entry_sha256)"
-  validation_relative="$(json_string "$binding_file" validation_entry_relative_path)"
-  validation_sha="$(json_string "$binding_file" validation_entry_sha256)"
-  activation_relative="$(json_string "$binding_file" activation_entry_relative_path)"
-  activation_sha="$(json_string "$binding_file" activation_entry_sha256)"
-  manifest_hash="$(json_string "$binding_file" managed_node_manifest_hash)"
-  binding_hash="$(json_string "$binding_file" binding_hash)"
-
-  actual="$(cat "$binding_file")"
-  expected="$(printf '%s\n' \
-    '{' \
-    '  "format": "icarus.core-runtime-launch-binding/3",' \
-    '  "binding_kind": "content_addressed_production_release",' \
-    '  "core_release_relative_path": "'"${release_relative}"'",' \
-    '  "release_manifest_relative_path": "'"${manifest_relative}"'",' \
-    '  "release_manifest_sha256": "'"${manifest_sha}"'",' \
-    '  "release_artifact_hash": "'"${release_artifact_hash}"'",' \
-    '  "core_build_hash": "'"${core_build_hash}"'",' \
-    '  "core_entry_relative_path": "'"${core_relative}"'",' \
-    '  "core_entry_sha256": "'"${core_sha}"'",' \
-    '  "validation_entry_relative_path": "'"${validation_relative}"'",' \
-    '  "validation_entry_sha256": "'"${validation_sha}"'",' \
-    '  "activation_entry_relative_path": "'"${activation_relative}"'",' \
-    '  "activation_entry_sha256": "'"${activation_sha}"'",' \
-    '  "managed_node_manifest_hash": "'"${manifest_hash}"'",' \
-    '  "binding_hash": "'"${binding_hash}"'"' \
-    '}')"
-  [ "$actual" = "$expected" ] || fail core_binding_invalid "non-canonical production JSON document"
-  [ "$format" = "icarus.core-runtime-launch-binding/3" ] || fail core_binding_invalid format
-  [ "$manifest_hash" = "$MANIFEST_HASH" ] || fail core_binding_manifest_mismatch
-  for calculated in "$manifest_sha" "$release_artifact_hash" "$core_build_hash" "$core_sha" "$validation_sha" "$activation_sha" "$binding_hash"; do
-    [[ "$calculated" =~ ^sha256:[0-9a-f]{64}$ ]] || fail core_binding_invalid hash
-  done
-  assert_relative_safe_path "$release_relative" core_release_path_invalid
-  assert_relative_safe_path "$manifest_relative" core_release_manifest_invalid
-  assert_core_entry_relative "$core_relative"
-  assert_core_entry_relative "$validation_relative"
-  assert_core_entry_relative "$activation_relative"
-  [[ "$release_relative" =~ ^core-releases/[0-9a-f]{64}$ ]] || fail core_release_path_invalid
-  [ "${release_relative#core-releases/}" = "${release_artifact_hash#sha256:}" ] || fail core_release_path_mismatch
-  [ "$manifest_relative" = "core-production-release-manifest.json" ] || fail core_release_manifest_identity_mismatch filename
-  [ "$core_relative" = "dist/index.js" ] || fail core_entry_invalid
-  [ "$validation_relative" = "dist/workflow-runtime/certification/release-entry.js" ] || fail validation_entry_invalid
-  [ "$activation_relative" = "dist/workflow-runtime/registry/production-activation-entry.js" ] || fail activation_entry_invalid
-
-  [ -d "$RUNTIME_HOME/$release_relative" ] || fail core_release_missing "$release_relative"
-  release_root="$(cd -P "$RUNTIME_HOME/$release_relative" && pwd)"
-  case "$release_root" in "$RUNTIME_HOME/core-releases"/*) ;; *) fail core_release_outside_root ;; esac
-  release_manifest="$release_root/$manifest_relative"
-  [ -f "$release_manifest" ] || fail core_release_manifest_missing
-  resolved="$(resolve_self "$release_manifest")"
-  case "$resolved" in "$release_root"/*) ;; *) fail core_release_manifest_outside_root ;; esac
-  release_manifest="$resolved"
-  calculated="sha256:$(sha256_file "$release_manifest")"
-  [ "$calculated" = "$manifest_sha" ] || fail core_release_manifest_hash_mismatch
-  manifest_value="$(json_string "$release_manifest" format)"
-  [ "$manifest_value" = "icarus.core-production-release-manifest/1" ] || fail core_release_manifest_identity_mismatch format
-  manifest_value="$(json_string "$release_manifest" release_scope)"
-  [ "$manifest_value" = "workflow_runtime_g9_production_candidate" ] || fail core_release_manifest_identity_mismatch release_scope
-  manifest_value="$(json_string "$release_manifest" activation_status)"
-  [ "$manifest_value" = "pending_fresh_independent_g8_boundary" ] || fail core_release_manifest_identity_mismatch activation_status
-  manifest_value="$(json_string "$release_manifest" build_kind)"
-  [ "$manifest_value" = "release" ] || fail core_release_manifest_identity_mismatch build_kind
-  manifest_value="$(json_string "$release_manifest" platform)"
-  [ "$manifest_value" = "$MANIFEST_PLATFORM" ] || fail core_release_manifest_identity_mismatch platform
-  manifest_value="$(json_string "$release_manifest" arch)"
-  [ "$manifest_value" = "$MANIFEST_ARCH" ] || fail core_release_manifest_identity_mismatch arch
-  manifest_value="$(json_string "$release_manifest" managed_node_distribution_hash)"
-  [ "$manifest_value" = "$MANIFEST_HASH" ] || fail core_release_manifest_identity_mismatch managed_node_distribution_hash
-  manifest_value="$(json_string "$release_manifest" runtime_launcher_hash)"
-  calculated="sha256:$(sha256_file "$RUNTIME_LAUNCHER_PATH")"
-  [ "$manifest_value" = "$calculated" ] || fail core_release_manifest_identity_mismatch runtime_launcher_hash
-  manifest_value="$(json_string "$release_manifest" runtime_toolchain_hash)"
-  calculated="sha256:$(sha256_file "$INSTALLED_TOOLCHAIN_PATH")"
-  [ "$manifest_value" = "$calculated" ] || fail core_release_manifest_identity_mismatch runtime_toolchain_hash
-  for manifest_value in \
-    "release_artifact_hash:$release_artifact_hash" \
-    "core_build_hash:$core_build_hash" \
-    "core_entry_relative_path:$core_relative" \
-    "core_entry_sha256:$core_sha" \
-    "validation_entry_relative_path:$validation_relative" \
-    "validation_entry_sha256:$validation_sha" \
-    "activation_entry_relative_path:$activation_relative" \
-    "activation_entry_sha256:$activation_sha"; do
-    calculated="$(json_string "$release_manifest" "${manifest_value%%:*}")"
-    [ "$calculated" = "${manifest_value#*:}" ] || fail core_release_manifest_identity_mismatch "${manifest_value%%:*}"
-  done
-
-  for manifest_value in \
-    "$core_relative:$core_sha" \
-    "$validation_relative:$validation_sha" \
-    "$activation_relative:$activation_sha"; do
-    resolved="$(resolve_self "$release_root/${manifest_value%%:*}")"
-    case "$resolved" in "$release_root"/*) ;; *) fail release_entry_outside_root ;; esac
-    calculated="sha256:$(sha256_file "$resolved")"
-    [ "$calculated" = "${manifest_value#*:}" ] || fail release_entry_hash_mismatch
-  done
-
-  canonical="{\"activation_entry_relative_path\":\"${activation_relative}\",\"activation_entry_sha256\":\"${activation_sha}\",\"binding_kind\":\"content_addressed_production_release\",\"core_build_hash\":\"${core_build_hash}\",\"core_entry_relative_path\":\"${core_relative}\",\"core_entry_sha256\":\"${core_sha}\",\"core_release_relative_path\":\"${release_relative}\",\"format\":\"${format}\",\"managed_node_manifest_hash\":\"${manifest_hash}\",\"release_artifact_hash\":\"${release_artifact_hash}\",\"release_manifest_relative_path\":\"${manifest_relative}\",\"release_manifest_sha256\":\"${manifest_sha}\",\"validation_entry_relative_path\":\"${validation_relative}\",\"validation_entry_sha256\":\"${validation_sha}\"}"
-  calculated="sha256:$(printf '%s\n%s' 'icarus:core-runtime-launch-binding:3' "$canonical" | sha256_stdin)"
-  [ "$calculated" = "$binding_hash" ] || fail core_binding_hash_mismatch
-  [ "$(basename "$binding_directory")" = "${binding_hash#sha256:}" ] || fail core_binding_path_mismatch
-  CORE_ENTRY_PATH="$(resolve_self "$release_root/$core_relative")"
-  VALIDATION_ENTRY_PATH="$(resolve_self "$release_root/$validation_relative")"
-  ACTIVATION_ENTRY_PATH="$(resolve_self "$release_root/$activation_relative")"
-}
-
-managed_exec() {
-  local source_manifest="$1"
+configured_exec() {
   local command
-  shift
+  local node_directory
+
   [ "$#" -gt 0 ] || fail exec_command_missing
-  verify_active_distribution "$source_manifest"
+  verify_runtime
   unset NODE_OPTIONS NODE_PATH ICARUS_RUNTIME_HOME ICARUS_TOOLCHAIN_MANIFEST
   command="$1"
   shift
+  node_directory="$(dirname "$CONFIG_NODE_PATH")"
   case "$command" in
-    node|npm|npx)
-      command="$ACTIVE_INSTALL_PATH/bin/$command"
+    node) command="$CONFIG_NODE_PATH" ;;
+    npm|npx)
+      command="$node_directory/$command"
+      [ -f "$command" ] && [ -x "$command" ] || fail package_tool_missing "$command"
       ;;
   esac
-  PATH="$ACTIVE_INSTALL_PATH/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/local/sbin:/usr/bin:/bin:/usr/sbin:/sbin" exec "$command" "$@"
+  PATH="$node_directory:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/local/sbin:/usr/bin:/bin:/usr/sbin:/sbin" exec "$command" "$@"
 }
 
-launcher_exec() {
-  local installed_root
-  local installed_manifest
-  local selector="${1:-}"
-  local launch_entry
-
-  installed_root="$(cd -P "$SCRIPT_DIR/.." && pwd)"
-  RUNTIME_HOME="$installed_root"
-  installed_manifest="$RUNTIME_HOME/contracts/managed-node-runtime-distribution.json"
-  load_manifest "$installed_manifest"
-  runtime_layout "$RUNTIME_HOME"
-  unset NODE_OPTIONS NODE_PATH ICARUS_RUNTIME_HOME ICARUS_TOOLCHAIN_MANIFEST
-  verify_active_distribution "$installed_manifest"
-  case "$selector" in
-    g8-validation|production-activation)
-      shift
-      verify_core_binding "$ACTIVATION_CORE_POINTER"
-      if [ "$selector" = "g8-validation" ]; then
-        launch_entry="$VALIDATION_ENTRY_PATH"
-      else
-        launch_entry="$ACTIVATION_ENTRY_PATH"
-      fi
-      ;;
-    core)
-      shift
-      verify_core_binding "$ACTIVE_CORE_POINTER"
-      launch_entry="$CORE_ENTRY_PATH"
-      ;;
-    *)
-      verify_core_binding "$ACTIVE_CORE_POINTER"
-      [ "$CORE_BINDING_KIND" != "content_addressed_production_release" ] || fail launcher_selector_required
-      launch_entry="$CORE_ENTRY_PATH"
-      ;;
-  esac
-  unset NODE_OPTIONS NODE_PATH ICARUS_RUNTIME_HOME ICARUS_TOOLCHAIN_MANIFEST
-  PATH="$ACTIVE_INSTALL_PATH/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/local/sbin:/usr/bin:/bin:/usr/sbin:/sbin" exec "$ACTIVE_INSTALL_PATH/bin/node" "$launch_entry" "$@"
+print_runtime() {
+  printf 'node_path=%s\n' "$CONFIG_NODE_PATH"
+  printf 'node_major=%s\n' "$PROBE_MAJOR"
+  printf 'node_modules_abi=%s\n' "$PROBE_ABI"
+  printf 'node_platform=%s\n' "$PROBE_PLATFORM"
+  printf 'node_arch=%s\n' "$PROBE_ARCH"
 }
 
 usage() {
-  echo "Usage: scripts/runtime-toolchain.sh [--runtime-home PATH] [--manifest PATH] <install|verify|exec|active-path|bind-core|bind-release|stage-production-release>" >&2
+  echo "Usage: scripts/runtime-toolchain.sh [--runtime-home PATH] <configure --node PATH|npm-ci|verify|exec -- COMMAND...|install [--archive PATH --checksum SHA256]|verify-active|launch-active>" >&2
   exit 64
 }
 
-if [ "${1:-}" = "launcher-exec" ]; then
-  shift
-  launcher_exec "$@"
-fi
-
 RUNTIME_HOME_ARG=""
-MANIFEST_PATH="$DEFAULT_MANIFEST"
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --runtime-home)
       [ "$#" -ge 2 ] || usage
       RUNTIME_HOME_ARG="$2"
-      shift 2
-      ;;
-    --manifest)
-      [ "$#" -ge 2 ] || usage
-      MANIFEST_PATH="$2"
       shift 2
       ;;
     --*) usage ;;
@@ -1195,122 +527,52 @@ done
 [ "$#" -gt 0 ] || usage
 COMMAND="$1"
 shift
-
 if [ -z "$RUNTIME_HOME_ARG" ]; then
   [ -n "${HOME:-}" ] || fail runtime_home_unavailable
   RUNTIME_HOME_ARG="$HOME/Library/Application Support/Icarus"
 fi
 mkdir -p "$RUNTIME_HOME_ARG"
 RUNTIME_HOME_ARG="$(cd -P "$RUNTIME_HOME_ARG" && pwd)"
-
-load_manifest "$MANIFEST_PATH"
 runtime_layout "$RUNTIME_HOME_ARG"
 
 case "$COMMAND" in
-  install)
-    ARCHIVE_OVERRIDE=""
-    if [ "$#" -gt 0 ]; then
-      [ "$#" -eq 2 ] && [ "$1" = "--archive" ] || usage
-      ARCHIVE_OVERRIDE="$2"
-    fi
-    install_distribution "$MANIFEST_PATH" "$ARCHIVE_OVERRIDE"
-    printf 'managed_node_path=%s\n' "$ACTIVE_INSTALL_PATH/bin/node"
-    printf 'managed_node_version=v%s\n' "$NODE_VERSION"
-    printf 'managed_npm_version=%s\n' "$NPM_VERSION"
-    printf 'managed_manifest_hash=%s\n' "$MANIFEST_HASH"
+  configure)
+    [ "$#" -eq 2 ] && [ "$1" = "--node" ] || usage
+    configure_node "$2"
+    print_runtime
     ;;
   verify)
     [ "$#" -eq 0 ] || usage
-    verify_active_distribution "$MANIFEST_PATH"
-    printf 'managed_node_path=%s\n' "$ACTIVE_INSTALL_PATH/bin/node"
-    printf 'managed_node_version=v%s\n' "$NODE_VERSION"
-    printf 'managed_npm_version=%s\n' "$NPM_VERSION"
-    printf 'managed_manifest_hash=%s\n' "$MANIFEST_HASH"
+    verify_runtime
+    print_runtime
     ;;
-  active-path)
+  npm-ci)
     [ "$#" -eq 0 ] || usage
-    verify_active_distribution "$MANIFEST_PATH"
-    printf '%s\n' "$ACTIVE_INSTALL_PATH"
+    configured_npm_ci
     ;;
   exec)
     [ "${1:-}" = "--" ] || usage
     shift
-    managed_exec "$MANIFEST_PATH" "$@"
+    configured_exec "$@"
     ;;
-  bind-core)
-    PROJECT_ROOT_ARG=""
-    ENTRY_RELATIVE="dist/index.js"
-    while [ "$#" -gt 0 ]; do
-      case "$1" in
-        --project-root)
-          [ "$#" -ge 2 ] || usage
-          PROJECT_ROOT_ARG="$2"
-          shift 2
-          ;;
-        --entry)
-          [ "$#" -ge 2 ] || usage
-          ENTRY_RELATIVE="$2"
-          shift 2
-          ;;
-        *) usage ;;
-      esac
-    done
-    [ -n "$PROJECT_ROOT_ARG" ] || usage
-    verify_active_distribution "$MANIFEST_PATH"
-    install_launcher_components
-    write_core_binding "$PROJECT_ROOT_ARG" "$ENTRY_RELATIVE"
-    verify_core_binding
-    printf 'runtime_launcher=%s\n' "$RUNTIME_LAUNCHER_PATH"
-    printf 'core_binding_kind=development_checkout\n'
+  install)
+    ARCHIVE_OVERRIDE=""
+    ARCHIVE_CHECKSUM="$INSTALL_ARCHIVE_CHECKSUM"
+    if [ "$#" -gt 0 ]; then
+      [ "$#" -eq 4 ] && [ "$1" = "--archive" ] && [ "$3" = "--checksum" ] || usage
+      ARCHIVE_OVERRIDE="$2"
+      ARCHIVE_CHECKSUM="$4"
+    fi
+    install_runtime "$ARCHIVE_OVERRIDE" "$ARCHIVE_CHECKSUM"
+    print_runtime
     ;;
-  bind-release)
-    RELEASE_RELATIVE=""
-    RELEASE_MANIFEST_RELATIVE="core-release-manifest.json"
-    RELEASE_ARTIFACT_HASH=""
-    CORE_BUILD_HASH=""
-    CORE_ENTRY_RELATIVE="dist/index.js"
-    VALIDATION_ENTRY_RELATIVE="dist/workflow-runtime/certification/release-entry.js"
-    while [ "$#" -gt 0 ]; do
-      case "$1" in
-        --release-relative) [ "$#" -ge 2 ] || usage; RELEASE_RELATIVE="$2"; shift 2 ;;
-        --release-manifest) [ "$#" -ge 2 ] || usage; RELEASE_MANIFEST_RELATIVE="$2"; shift 2 ;;
-        --release-artifact-hash) [ "$#" -ge 2 ] || usage; RELEASE_ARTIFACT_HASH="$2"; shift 2 ;;
-        --core-build-hash) [ "$#" -ge 2 ] || usage; CORE_BUILD_HASH="$2"; shift 2 ;;
-        --core-entry) [ "$#" -ge 2 ] || usage; CORE_ENTRY_RELATIVE="$2"; shift 2 ;;
-        --validation-entry) [ "$#" -ge 2 ] || usage; VALIDATION_ENTRY_RELATIVE="$2"; shift 2 ;;
-        *) usage ;;
-      esac
-    done
-    [ -n "$RELEASE_RELATIVE" ] && [ -n "$RELEASE_ARTIFACT_HASH" ] && [ -n "$CORE_BUILD_HASH" ] || usage
-    verify_active_distribution "$MANIFEST_PATH"
-    install_launcher_components
-    write_release_core_binding "$RELEASE_RELATIVE" "$RELEASE_MANIFEST_RELATIVE" "$RELEASE_ARTIFACT_HASH" "$CORE_BUILD_HASH" "$CORE_ENTRY_RELATIVE" "$VALIDATION_ENTRY_RELATIVE"
-    verify_core_binding
-    printf 'runtime_launcher=%s\n' "$RUNTIME_LAUNCHER_PATH"
-    printf 'core_binding_kind=content_addressed_release\n'
+  launch-active)
+    [ "$#" -eq 0 ] || usage
+    launch_active launch
     ;;
-  stage-production-release)
-    PRODUCTION_BINDING=""
-    while [ "$#" -gt 0 ]; do
-      case "$1" in
-        --binding) [ "$#" -ge 2 ] || usage; PRODUCTION_BINDING="$2"; shift 2 ;;
-        *) usage ;;
-      esac
-    done
-    [ -n "$PRODUCTION_BINDING" ] || usage
-    verify_active_distribution "$MANIFEST_PATH"
-    install_launcher_components
-    stage_production_core_binding "$PRODUCTION_BINDING"
-    PRODUCTION_VERIFY_POINTER="$RUNTIME_HOME/.activation-core-verify.$$.$RANDOM"
-    rm -f "$PRODUCTION_VERIFY_POINTER"
-    ln -s "$STAGED_PRODUCTION_BINDING_RELATIVE" "$PRODUCTION_VERIFY_POINTER"
-    TEMP_PATHS+=("$PRODUCTION_VERIFY_POINTER")
-    verify_core_binding "$PRODUCTION_VERIFY_POINTER"
-    set_relative_pointer "$ACTIVATION_CORE_POINTER" "$STAGED_PRODUCTION_BINDING_RELATIVE"
-    rm -f "$PRODUCTION_VERIFY_POINTER"
-    printf 'runtime_launcher=%s\n' "$RUNTIME_LAUNCHER_PATH"
-    printf 'core_binding_kind=content_addressed_production_release\n'
-    printf 'activation_core_pointer=%s\n' "$ACTIVATION_CORE_POINTER"
+  verify-active)
+    [ "$#" -eq 0 ] || usage
+    launch_active verify
     ;;
   *) usage ;;
 esac

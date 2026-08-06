@@ -6,11 +6,10 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-contract-pack-closed-schemas:1\n",
-  "hash": "sha256:6f7aa5b997c5a496a4eb95776a09f18e3c25753e7324a6ef1f095a23b8413d81",
+  "hash": "sha256:6ffc7fe65d7de55baff1605ac91a398b355ce9beb65d5013b271786e92cad79b",
   "payload": {
     "gate": "G0.3",
     "status": "closed_schemas",
-    "foundation_manifest_hash": "sha256:e85b654581c036f8129677d7443a0704ebc8b8fbe87907b842aaefe1501e637d",
     "schema_formats": [
       "icarus.workflow-card-presentation-schema/1",
       "icarus.workflow-compiled-scope-plan-schema/1",
@@ -30,7 +29,7 @@
       {
         "artifact_path": "schemas/compiled-scope-plan-schema.json",
         "artifact_format": "icarus.workflow-compiled-scope-plan-schema/1",
-        "target_contract": "icarus.workflow-graph-scope-plan/1"
+        "target_contract": "icarus.workflow-graph-scope-plan/2"
       },
       {
         "artifact_path": "schemas/workflow-definition-schema.json",
@@ -86,7 +85,7 @@
         },
         "version": 1,
         "domain_separator": "icarus:workflow-closed-schema-negative-cases:1\n",
-        "hash": "sha256:93b2cd354e2253469a80ef8d7969103f2ce07a6e7524815169eb5e9bbcedf3d1"
+        "hash": "sha256:27586e2a72066da9200e0212b9dc282c02bc5c140ba4951b2d73ddbecbff3eff"
       },
       {
         "path": "conformance/closed-schemas/positive-cases.json",
@@ -97,7 +96,7 @@
         },
         "version": 1,
         "domain_separator": "icarus:workflow-closed-schema-positive-cases:1\n",
-        "hash": "sha256:6c5c821e602cf48fa36359f43ffab8aabb9228fd244b302f23ff54c22e9b14ed"
+        "hash": "sha256:be17d54a7ec5104fa06c06431ee2812e35822293c16885002675fab2fe430f0c"
       },
       {
         "path": "schemas/card-presentation-schema.json",
@@ -119,7 +118,7 @@
         },
         "version": 1,
         "domain_separator": "icarus:workflow-compiled-scope-plan-schema:1\n",
-        "hash": "sha256:c2916f58f4d545ae155e15a92f50073dbd94307bcd2865f1089dcb51cbf39c62"
+        "hash": "sha256:7e0c1c995359246aa8e534973c99ae114f3431078d35ebbfaae84634c5fa8b1e"
       },
       {
         "path": "schemas/feature-manifest-v2-schema.json",
@@ -187,13 +186,6 @@
         "domain_separator": "icarus:workflow-transition-schema:1\n",
         "hash": "sha256:9807b8c0100a893d54821f59cfadaa0adb0939b8e2b0ce4c678e408c5f4b9e1f"
       }
-    ],
-    "future_reserved_directories": [
-      "protocols",
-      "safety",
-      "sqlite",
-      "conformance/draft",
-      "conformance/sealed"
     ]
   }
 }

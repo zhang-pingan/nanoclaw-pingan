@@ -4,27 +4,50 @@ import { createInterface } from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
 
 import {
+  WORKFLOW_STATE_BACKUP_DIRECTORY,
   WORKFLOW_STATE_RELATIVE_PATHS,
-  type PersistentStateDecision,
+  type PersistentStateBackupManifest,
 } from './persistent-state.js';
 import {
   type WorkflowStateInspection,
   type WorkflowStateMode,
   assertIcarusHostStopped,
+  backupWorkflowState,
+  discardIncompleteWorkflowStateBackup,
+  gcWorkflowStateBackups,
   inspectWorkflowState,
+  listWorkflowStateBackups,
+  prepareWorkflowStateBackup,
   prepareWorkflowStateReset,
   resetWorkflowState,
+  restoreWorkflowState,
+  resumeWorkflowStateBackup,
 } from './workflow-state.js';
 
-interface WorkflowStateArguments {
-  readonly command: 'inspect' | 'reset';
-  readonly mode: WorkflowStateMode;
-  readonly runtimeHome: string;
-}
+type WorkflowStateArguments =
+  | {
+      readonly command: 'inspect' | 'reset';
+      readonly mode: WorkflowStateMode;
+      readonly runtimeHome: string;
+    }
+  | {
+      readonly command: 'backup' | 'backups';
+      readonly runtimeHome: string;
+    }
+  | {
+      readonly command: 'restore' | 'resume' | 'discard-incomplete';
+      readonly backupId: string;
+      readonly runtimeHome: string;
+    }
+  | {
+      readonly command: 'gc';
+      readonly keep: number;
+      readonly runtimeHome: string;
+    };
 
 function usage(): never {
   throw new Error(
-    'Usage: workflow-state <inspect|reset> --mode <current|active> --runtime-home <path>',
+    'Usage: workflow-state inspect|reset --mode <current|active> --runtime-home <path> | backup|backups --runtime-home <path> | restore|resume|discard-incomplete --backup <id> --runtime-home <path> | gc --keep <count> --runtime-home <path>',
   );
 }
 
@@ -32,45 +55,75 @@ export function parseWorkflowStateArguments(
   args: readonly string[],
 ): WorkflowStateArguments {
   if (
-    args.length !== 5 ||
-    (args[0] !== 'inspect' && args[0] !== 'reset') ||
-    args[1] !== '--mode' ||
-    (args[2] !== 'current' && args[2] !== 'active') ||
-    args[3] !== '--runtime-home' ||
-    !args[4]
+    args.length === 5 &&
+    (args[0] === 'inspect' || args[0] === 'reset') &&
+    args[1] === '--mode' &&
+    (args[2] === 'current' || args[2] === 'active') &&
+    args[3] === '--runtime-home' &&
+    args[4]
   )
-    usage();
-  return {
-    command: args[0],
-    mode: args[2],
-    runtimeHome: path.resolve(args[4]),
-  };
-}
-
-function printIdentity(
-  prefix: string,
-  identity: PersistentStateDecision['old_identity'],
-  output: (line: string) => void = console.log,
-): void {
-  output(
-    `${prefix}=${identity ? `${identity.database_schema_version} ${identity.database_sqlite_schema_hash}` : 'none'}`,
-  );
+    return {
+      command: args[0],
+      mode: args[2],
+      runtimeHome: path.resolve(args[4]),
+    };
+  if (
+    args.length === 3 &&
+    (args[0] === 'backup' || args[0] === 'backups') &&
+    args[1] === '--runtime-home' &&
+    args[2]
+  )
+    return {
+      command: args[0],
+      runtimeHome: path.resolve(args[2]),
+    };
+  if (
+    args.length === 5 &&
+    (args[0] === 'restore' ||
+      args[0] === 'resume' ||
+      args[0] === 'discard-incomplete') &&
+    args[1] === '--backup' &&
+    args[2] &&
+    args[3] === '--runtime-home' &&
+    args[4]
+  )
+    return {
+      command: args[0],
+      backupId: args[2],
+      runtimeHome: path.resolve(args[4]),
+    };
+  if (
+    args.length === 5 &&
+    args[0] === 'gc' &&
+    args[1] === '--keep' &&
+    /^[0-9]+$/.test(args[2] ?? '') &&
+    args[3] === '--runtime-home' &&
+    args[4]
+  )
+    return {
+      command: 'gc',
+      keep: Number(args[2]),
+      runtimeHome: path.resolve(args[4]),
+    };
+  usage();
 }
 
 function printInspection(
   runtimeHome: string,
   inspection: WorkflowStateInspection,
-  output: (line: string) => void = console.log,
+  output: (line: string) => void,
 ): void {
   output(`workflow_state_mode=${inspection.target.mode}`);
-  output(`workflow_state_target=${inspection.target.code_identity}`);
+  output(`workflow_state_target=${inspection.target.code_marker}`);
   output(
-    `workflow_state_target_schema=${inspection.target.schema.database_schema_version} ${inspection.target.schema.database_schema_hash} ${inspection.target.schema.database_sqlite_schema_hash}`,
+    `workflow_state_target_schema=${inspection.target.schema.database_schema_version} supported_from=${inspection.target.schema.minimum_supported_schema_version}`,
   );
-  printIdentity(
-    'workflow_state_current_schema',
-    inspection.decision.old_identity,
-    output,
+  output(
+    `workflow_state_current_schema=${
+      inspection.decision.observed_schema
+        ? String(inspection.decision.observed_schema.database_schema_version)
+        : 'none'
+    }`,
   );
   output(`workflow_state_decision=${inspection.decision.decision}`);
   output(`workflow_state_reason=${inspection.decision.reason}`);
@@ -78,15 +131,28 @@ function printInspection(
     output(`workflow_state_path=${path.join(runtimeHome, relative)}`);
 }
 
-async function confirmReset(): Promise<boolean> {
+function printBackupDestination(
+  runtimeHome: string,
+  manifest: PersistentStateBackupManifest,
+  output: (line: string) => void,
+): void {
+  output(`workflow_state_backup=${manifest.backup_id}`);
+  output(
+    `workflow_state_backup_path=${path.join(
+      runtimeHome,
+      WORKFLOW_STATE_BACKUP_DIRECTORY,
+      manifest.backup_id,
+    )}`,
+  );
+}
+
+async function confirmAction(question: string): Promise<boolean> {
   const prompt = createInterface({
     input: process.stdin,
     output: process.stdout,
   });
   try {
-    const answer = await prompt.question(
-      'Quarantine exactly this Workflow Runtime DB/WAL/SHM unit? [y/N] ',
-    );
+    const answer = await prompt.question(`${question} [y/N] `);
     return /^(?:y|yes)$/i.test(answer.trim());
   } finally {
     prompt.close();
@@ -98,8 +164,20 @@ export interface WorkflowStateCliDependencies {
   readonly inputIsTTY?: boolean;
   readonly outputIsTTY?: boolean;
   readonly hostIsRunning?: () => boolean;
-  readonly confirm?: () => Promise<boolean>;
+  readonly confirm?: (question: string) => Promise<boolean>;
   readonly output?: (line: string) => void;
+}
+
+async function requireConfirmation(
+  question: string,
+  dependencies: WorkflowStateCliDependencies,
+): Promise<boolean> {
+  if (
+    !(dependencies.inputIsTTY ?? process.stdin.isTTY) ||
+    !(dependencies.outputIsTTY ?? process.stdout.isTTY)
+  )
+    throw new Error('workflow_state_confirmation_requires_tty');
+  return (dependencies.confirm ?? confirmAction)(question);
 }
 
 export async function runWorkflowStateCli(
@@ -111,57 +189,137 @@ export async function runWorkflowStateCli(
     dependencies.projectRoot ?? path.resolve(import.meta.dirname, '../..');
   const runtimeHome = fs.realpathSync(options.runtimeHome);
   const output = dependencies.output ?? console.log;
+
   if (options.command === 'inspect') {
     const inspection = inspectWorkflowState(runtimeHome, options.mode);
     printInspection(runtimeHome, inspection, output);
-    if (
-      inspection.decision.decision === 'RESET_REQUIRED' ||
+    return inspection.decision.decision === 'RESET_REQUIRED' ||
       inspection.decision.decision === 'UNKNOWN_BLOCKED'
-    )
-      return 78;
+      ? 78
+      : 0;
+  }
+
+  if (options.command === 'backups') {
+    for (const backup of listWorkflowStateBackups(runtimeHome))
+      output(
+        `workflow_state_backup=${backup.backup_id} status=${backup.status} operation=${backup.operation} observed_schema=${backup.observed_schema_version} target_schema=${backup.target_schema_version}`,
+      );
     return 0;
   }
 
-  assertIcarusHostStopped(projectRoot, runtimeHome, dependencies.hostIsRunning);
-  const preparation = prepareWorkflowStateReset(runtimeHome, options.mode);
-  if (preparation.inspection)
+  if (options.command === 'backup') {
+    assertIcarusHostStopped(
+      projectRoot,
+      runtimeHome,
+      dependencies.hostIsRunning,
+    );
+    const preparation = prepareWorkflowStateBackup(runtimeHome, 'current');
     printInspection(runtimeHome, preparation.inspection, output);
-  else {
-    output(`workflow_state_mode=${options.mode}`);
-    output('workflow_state_target=recovery_recorded');
-    output(
-      `workflow_state_target_schema=${preparation.plan.target_identity.database_schema_version} ${preparation.plan.target_identity.database_schema_hash} ${preparation.plan.target_identity.database_sqlite_schema_hash}`,
-    );
-    printIdentity(
-      'workflow_state_current_schema',
-      preparation.plan.old_identity,
-      output,
-    );
-    output('workflow_state_decision=RESET_RECOVERY');
-    output('workflow_state_reason=incomplete_quarantine_recovery');
-    for (const relative of WORKFLOW_STATE_RELATIVE_PATHS)
-      output(`workflow_state_path=${path.join(runtimeHome, relative)}`);
+    printBackupDestination(runtimeHome, preparation.manifest, output);
+    const completed = backupWorkflowState({
+      projectRoot,
+      runtimeHome,
+      hostIsRunning: dependencies.hostIsRunning,
+      expectedManifest: preparation.manifest,
+    });
+    output(`workflow_state_backup_status=${completed.status}`);
+    return 0;
   }
-  output(`workflow_state_backup_identity=${preparation.plan.backup_identity}`);
-  output(
-    `workflow_state_recovery_path=${path.join(runtimeHome, preparation.plan.backup_relative_path)}`,
+
+  if (options.command === 'reset') {
+    assertIcarusHostStopped(
+      projectRoot,
+      runtimeHome,
+      dependencies.hostIsRunning,
+    );
+    const preparation = prepareWorkflowStateReset(runtimeHome, options.mode);
+    printInspection(runtimeHome, preparation.inspection, output);
+    printBackupDestination(runtimeHome, preparation.manifest, output);
+    const confirmed = await requireConfirmation(
+      'Back up and remove exactly this Workflow Runtime DB/WAL/SHM unit?',
+      dependencies,
+    );
+    const completed = resetWorkflowState({
+      projectRoot,
+      runtimeHome,
+      mode: options.mode,
+      confirmed,
+      hostIsRunning: dependencies.hostIsRunning,
+      expectedManifest: preparation.manifest,
+    });
+    output('workflow_state_reset=COMPLETE');
+    output(`workflow_state_backup=${completed.backup_id}`);
+    return 0;
+  }
+
+  if (options.command === 'restore') {
+    output(`workflow_state_restore_backup=${options.backupId}`);
+    for (const relative of WORKFLOW_STATE_RELATIVE_PATHS)
+      output(`workflow_state_restore_path=${path.join(runtimeHome, relative)}`);
+    const confirmed = await requireConfirmation(
+      'Restore this Workflow Runtime backup into the live DB unit?',
+      dependencies,
+    );
+    restoreWorkflowState({
+      projectRoot,
+      runtimeHome,
+      backupId: options.backupId,
+      confirmed,
+      hostIsRunning: dependencies.hostIsRunning,
+    });
+    output('workflow_state_restore=COMPLETE');
+    return 0;
+  }
+
+  if (options.command === 'resume') {
+    const confirmed = await requireConfirmation(
+      'Resume this incomplete Workflow Runtime backup operation?',
+      dependencies,
+    );
+    const completed = resumeWorkflowStateBackup({
+      projectRoot,
+      runtimeHome,
+      backupId: options.backupId,
+      confirmed,
+      hostIsRunning: dependencies.hostIsRunning,
+    });
+    output(`workflow_state_backup_status=${completed.status}`);
+    return 0;
+  }
+
+  if (options.command === 'discard-incomplete') {
+    const confirmed = await requireConfirmation(
+      'Discard this incomplete backup copy?',
+      dependencies,
+    );
+    discardIncompleteWorkflowStateBackup({
+      runtimeHome,
+      backupId: options.backupId,
+      confirmed,
+    });
+    output('workflow_state_discard_incomplete=COMPLETE');
+    return 0;
+  }
+
+  if (options.command !== 'gc') usage();
+  const backups = listWorkflowStateBackups(runtimeHome);
+  const removeCount = Math.max(0, backups.length - options.keep);
+  if (removeCount === 0) {
+    output('workflow_state_gc_removed=0');
+    return 0;
+  }
+  const confirmed = await requireConfirmation(
+    `Remove ${String(removeCount)} old Workflow Runtime backup(s)?`,
+    dependencies,
   );
-  if (
-    !(dependencies.inputIsTTY ?? process.stdin.isTTY) ||
-    !(dependencies.outputIsTTY ?? process.stdout.isTTY)
-  )
-    throw new Error('workflow_state_reset_confirmation_requires_tty');
-  const confirmed = await (dependencies.confirm ?? confirmReset)();
-  const plan = resetWorkflowState({
-    projectRoot,
+  const removed = gcWorkflowStateBackups({
     runtimeHome,
-    mode: options.mode,
+    keep: options.keep,
     confirmed,
-    hostIsRunning: dependencies.hostIsRunning,
-    expectedPlan: preparation.plan,
   });
-  output('workflow_state_reset=QUARANTINED');
-  output(`workflow_state_backup_identity=${plan.backup_identity}`);
+  for (const backupId of removed)
+    output(`workflow_state_gc_backup=${backupId}`);
+  output(`workflow_state_gc_removed=${String(removed.length)}`);
   return 0;
 }
 

@@ -47,7 +47,6 @@ import {
   VersionedRefError,
   parseVersionedRef,
 } from './versioned-ref.js';
-import { assertCurrentG2SealedBoundary } from './current-g2-sealed-boundary.js';
 
 const contractsRoot = import.meta.dirname;
 const projectRoot = path.resolve(contractsRoot, '..', '..', '..');
@@ -63,60 +62,6 @@ const foundationArtifactPaths = [
 ] as const;
 
 const foundationManifestPath = 'contract-pack-foundation.json';
-
-const foundationReservedDirectories = [
-  'schemas',
-  'protocols',
-  'safety',
-  'sqlite',
-  'conformance/draft',
-  'conformance/sealed',
-] as const;
-
-const stillReservedDirectories = ['conformance/sealed'] as const;
-
-const g01DirectPackages = [
-  {
-    package_name: '@types/better-sqlite3',
-    dependency_kind: 'dev',
-    exact_version: '7.6.13',
-  },
-  {
-    package_name: '@types/node',
-    dependency_kind: 'dev',
-    exact_version: '26.1.1',
-  },
-  {
-    package_name: 'ajv',
-    dependency_kind: 'runtime',
-    exact_version: '8.20.0',
-  },
-  {
-    package_name: 'ajv-formats',
-    dependency_kind: 'runtime',
-    exact_version: '3.0.1',
-  },
-  {
-    package_name: 'better-sqlite3',
-    dependency_kind: 'runtime',
-    exact_version: '12.11.1',
-  },
-  {
-    package_name: 'fast-check',
-    dependency_kind: 'dev',
-    exact_version: '4.9.0',
-  },
-  {
-    package_name: 'json-canonicalize',
-    dependency_kind: 'runtime',
-    exact_version: '2.0.0',
-  },
-  {
-    package_name: 'jsonc-parser',
-    dependency_kind: 'runtime',
-    exact_version: '3.3.1',
-  },
-] as const;
 
 interface ArtifactDescriptor extends JsonObject {
   path: string;
@@ -270,187 +215,6 @@ function asciiCompare(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0;
 }
 
-function verifyG01ToolchainArtifacts(): ArtifactDescriptor[] {
-  const distributionPath = 'toolchain/node-v26.5.0-darwin-arm64.json';
-  const compilerInputsPath = 'toolchain/compiler-toolchain-inputs.json';
-  const schemaPath = 'toolchain/managed-node-runtime-distribution.schema.json';
-  const distribution = readJsonObject(distributionPath);
-  const compilerInputs = readJsonObject(compilerInputsPath);
-  const distributionSchema = readJsonObject(schemaPath);
-
-  if (
-    Object.keys(compilerInputs).sort().join(',') !==
-    'direct_packages,format,identity_hash,identity_scope,node_runtime_version,npm_version,package_lock_sha256,ref'
-  ) {
-    throw new Error('G0.1 compiler input identity must be closed');
-  }
-
-  const distributionRef = parseVersionedRef(distribution.ref);
-  const compilerRef = parseVersionedRef(compilerInputs.ref);
-  if (
-    distribution.format !== 'icarus.managed-node-runtime-distribution/1' ||
-    compilerInputs.format !== 'icarus.workflow-compiler-toolchain-inputs/1'
-  ) {
-    throw new Error('G0.1 toolchain format identity drift');
-  }
-  if (
-    distributionRef.id !== 'nodejs.node-v26.5.0-darwin-arm64' ||
-    distributionRef.version !== '1.0.0' ||
-    compilerRef.id !== 'icarus.workflow-compiler-toolchain-inputs' ||
-    compilerRef.version !== '1.0.0' ||
-    distribution.node_runtime_version !== '26.5.0' ||
-    distribution.npm_version !== '11.17.0' ||
-    compilerInputs.identity_scope !== 'g0.1_locked_inputs' ||
-    compilerInputs.node_runtime_version !== '26.5.0' ||
-    compilerInputs.npm_version !== '11.17.0'
-  ) {
-    throw new Error('G0.1 toolchain exact identity drift');
-  }
-  const distributionHash = distribution.manifest_hash;
-  const compilerHash = compilerInputs.identity_hash;
-  if (
-    typeof distributionHash !== 'string' ||
-    typeof compilerHash !== 'string'
-  ) {
-    throw new Error('G0.1 toolchain hash field is missing');
-  }
-
-  const { manifest_hash: _manifestHash, ...distributionPayload } = distribution;
-  const expectedDistributionHash = domainSeparatedSha256(
-    'icarus:managed-node-runtime-distribution:1\n',
-    distributionPayload,
-  );
-  if (distributionHash !== expectedDistributionHash) {
-    throw new Error('G0.1 managed distribution hash drift');
-  }
-  const { identity_hash: _identityHash, ...compilerPayload } = compilerInputs;
-  const expectedCompilerHash = domainSeparatedSha256(
-    'icarus:workflow-compiler-toolchain-inputs:1\n',
-    compilerPayload,
-  );
-  if (compilerHash !== expectedCompilerHash) {
-    throw new Error('G0.1 compiler input identity hash drift');
-  }
-
-  const lockBytes = fs.readFileSync(
-    path.join(projectRoot, 'package-lock.json'),
-  );
-  const expectedLockHash = `sha256:${crypto
-    .createHash(HASH_ALGORITHM)
-    .update(lockBytes)
-    .digest('hex')}`;
-  if (compilerInputs.package_lock_sha256 !== expectedLockHash) {
-    throw new Error('G0.1 compiler input package-lock hash drift');
-  }
-  const packageJson = strictParseJsonBytes(
-    fs.readFileSync(path.join(projectRoot, 'package.json')),
-  );
-  const packageLock = strictParseJsonBytes(lockBytes);
-  assertJsonObject(packageJson);
-  assertJsonObject(packageLock);
-  assertJsonObject(packageJson.dependencies);
-  assertJsonObject(packageJson.devDependencies);
-  assertJsonObject(packageLock.packages);
-  assertJsonObject(packageLock.packages['']);
-  assertJsonObject(packageLock.packages[''].dependencies);
-  assertJsonObject(packageLock.packages[''].devDependencies);
-  const packageDependencies = packageJson.dependencies;
-  const packageDevDependencies = packageJson.devDependencies;
-  const lockPackages = packageLock.packages;
-  const lockRoot = lockPackages[''];
-  assertJsonObject(lockRoot);
-  assertJsonObject(lockRoot.dependencies);
-  assertJsonObject(lockRoot.devDependencies);
-  const lockDependencies = lockRoot.dependencies;
-  const lockDevDependencies = lockRoot.devDependencies;
-  if (
-    packageJson.packageManager !== 'npm@11.17.0' ||
-    fs.readFileSync(path.join(projectRoot, '.nvmrc'), 'utf8').trim() !==
-      '26.5.0'
-  ) {
-    throw new Error('G0.1 repository Node/npm identity drift');
-  }
-  if (!Array.isArray(compilerInputs.direct_packages)) {
-    throw new Error('G0.1 direct package identity is missing');
-  }
-  if (compilerInputs.direct_packages.length !== g01DirectPackages.length) {
-    throw new Error('G0.1 direct package identity coverage drift');
-  }
-  for (const [index, expectedPackage] of g01DirectPackages.entries()) {
-    const packageRef: JsonValue = compilerInputs.direct_packages[index]!;
-    assertJsonObject(packageRef);
-    if (
-      Object.keys(packageRef).sort().join(',') !==
-        'dependency_kind,exact_version,lockfile_integrity,package_name' ||
-      packageRef.package_name !== expectedPackage.package_name ||
-      packageRef.dependency_kind !== expectedPackage.dependency_kind ||
-      packageRef.exact_version !== expectedPackage.exact_version ||
-      typeof packageRef.lockfile_integrity !== 'string'
-    ) {
-      throw new Error(`G0.1 direct package descriptor drift at index ${index}`);
-    }
-    const dependencyField =
-      expectedPackage.dependency_kind === 'runtime'
-        ? 'dependencies'
-        : 'devDependencies';
-    const packageRootDependencies =
-      dependencyField === 'dependencies'
-        ? packageDependencies
-        : packageDevDependencies;
-    const lockRootDependencies =
-      dependencyField === 'dependencies'
-        ? lockDependencies
-        : lockDevDependencies;
-    const locked = lockPackages[`node_modules/${expectedPackage.package_name}`];
-    assertJsonObject(locked);
-    if (
-      packageRootDependencies[expectedPackage.package_name] !==
-        expectedPackage.exact_version ||
-      lockRootDependencies[expectedPackage.package_name] !==
-        expectedPackage.exact_version ||
-      locked.version !== expectedPackage.exact_version ||
-      locked.integrity !== packageRef.lockfile_integrity
-    ) {
-      throw new Error(
-        `G0.1 direct package lock replay failed for ${expectedPackage.package_name}`,
-      );
-    }
-  }
-
-  const ajv = new Ajv2020({
-    allErrors: true,
-    coerceTypes: false,
-    removeAdditional: false,
-    strict: true,
-    useDefaults: false,
-  });
-  const validateDistribution = ajv.compile(distributionSchema as AnySchema);
-  if (!validateDistribution(distribution)) {
-    throw new Error(
-      `G0.1 distribution schema mismatch: ${ajv.errorsText(validateDistribution.errors)}`,
-    );
-  }
-
-  return [
-    {
-      path: distributionPath,
-      format: String(distribution.format),
-      ref: distributionRef,
-      version: 1,
-      domain_separator: 'icarus:managed-node-runtime-distribution:1\n',
-      hash: expectedDistributionHash,
-    },
-    {
-      path: compilerInputsPath,
-      format: String(compilerInputs.format),
-      ref: compilerRef,
-      version: 1,
-      domain_separator: 'icarus:workflow-compiler-toolchain-inputs:1\n',
-      hash: expectedCompilerHash,
-    },
-  ].sort((left, right) => asciiCompare(left.path, right.path));
-}
-
 function buildFoundationManifest(
   artifacts: Array<[string, ContractArtifactEnvelope]>,
 ): ContractArtifactEnvelope {
@@ -471,8 +235,6 @@ function buildFoundationManifest(
       artifacts: artifacts
         .map(([relativePath, artifact]) => descriptor(relativePath, artifact))
         .sort((left, right) => asciiCompare(left.path, right.path)),
-      toolchain_inputs: verifyG01ToolchainArtifacts(),
-      reserved_directories: [...foundationReservedDirectories],
     },
   };
   return {
@@ -728,11 +490,10 @@ function validateDomainCatalog(artifacts: ContractArtifactEnvelope[]): void {
   ) {
     throw new Error('Domain separator entries must be sorted by format');
   }
-  const toolchainInputs = verifyG01ToolchainArtifacts();
-  if (declared.size !== artifacts.length + toolchainInputs.length) {
+  if (declared.size !== artifacts.length) {
     throw new Error('Domain separator catalog coverage is incomplete');
   }
-  for (const artifact of [...artifacts, ...toolchainInputs]) {
+  for (const artifact of artifacts) {
     if (declared.get(artifact.format) !== artifact.domain_separator) {
       throw new Error(`Domain separator drift for ${artifact.format}`);
     }
@@ -829,22 +590,6 @@ function validateHashVectors(artifacts: ContractArtifactEnvelope[]): void {
   }
 }
 
-function validateReservedDirectories(): void {
-  for (const directory of stillReservedDirectories) {
-    const absoluteDirectory = absoluteContractPath(directory);
-    if (!fs.lstatSync(absoluteDirectory).isDirectory()) {
-      throw new Error(`Reserved Contract Pack directory missing: ${directory}`);
-    }
-    try {
-      assertCurrentG2SealedBoundary(absoluteDirectory);
-    } catch {
-      throw new Error(
-        `Reserved Contract Pack directory contains out-of-slice artifacts: ${directory}`,
-      );
-    }
-  }
-}
-
 function expectedFoundationArtifacts(): Array<
   [string, ContractArtifactEnvelope]
 > {
@@ -877,8 +622,6 @@ function validateCompletePack(
   validateDomainCatalog(artifacts);
   validateHashVectors(artifacts);
   validateNegativeFixtures(artifacts);
-  validateReservedDirectories();
-  verifyG01ToolchainArtifacts();
 }
 
 export function generateContractPackFoundation(): ContractArtifactEnvelope {

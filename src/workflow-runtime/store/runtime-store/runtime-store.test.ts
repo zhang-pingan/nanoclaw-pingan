@@ -1,1272 +1,916 @@
-import crypto from 'crypto';
-import fs from 'fs';
-import os from 'os';
-import path from 'path';
-import { spawn, type ChildProcessWithoutNullStreams } from 'child_process';
-import { pathToFileURL } from 'url';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
-import { afterEach, describe, expect, it } from 'vitest';
 import Database from 'better-sqlite3';
+import { afterEach, describe, expect, it } from 'vitest';
 
-import { calculateDatabaseSqliteSchemaIdentity } from '../schema/database-identity.js';
-import { buildSchemaTriggers, renderMigration } from '../schema/ddl.js';
+import { ensureCapacityDefaults } from '../../capacity/defaults.js';
 import {
-  loadSchema3ExecutableSchemaSource,
-  loadSchema4ExecutableSchemaSource,
-  loadSchema8ExecutableSchemaSource,
-  loadSchema9ExecutableSchemaSource,
-  loadSchema10ExecutableSchemaSource,
-} from '../schema/source.js';
+  calculateRegistrySnapshotHash,
+  G3_REGISTRY_SNAPSHOT_DOMAIN,
+} from '../../contracts/g3-registry-persistence.js';
+import { domainSeparatedSha256 } from '../../contracts/hash.js';
+import type { Sha256Hash } from '../../contracts/types.js';
+import { WORKFLOW_COMPILER_VERSION } from '../../compiler/version.js';
+import {
+  CURRENT_WORKFLOW_RUNTIME_SCHEMA_VERSION,
+  readFreshWorkflowRuntimeSchemaSql,
+  WORKFLOW_RUNTIME_SQLITE_CONFIG,
+} from './config.js';
 import {
   WorkflowRuntimeConnectionFactory,
-  WorkflowRuntimeStore,
   WorkflowRuntimeStoreError,
-  type WorkflowRuntimeWriteTransaction,
+  type WorkflowRuntimeStore,
 } from './index.js';
-import {
-  assertRuntimeHostIdentity,
-  currentRuntimeHostObservation,
-} from './identity.js';
-import {
-  CURRENT_G1_SCHEMA_IDENTITIES,
-  FROZEN_G1_1_IDENTITIES,
-  loadFrozenWorkflowRuntimeStoreInputs,
-  parseSQLiteExecutionProfilePayload,
-} from './profile.js';
 
-const temporaryRoots: string[] = [];
-const openStores: WorkflowRuntimeStore[] = [];
+const roots: string[] = [];
+const stores: WorkflowRuntimeStore[] = [];
 
 function temporaryDatabase(): { root: string; databasePath: string } {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'icarus-g1-store-test-'));
-  temporaryRoots.push(root);
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'icarus-store-test-'));
+  roots.push(root);
   return { root, databasePath: path.join(root, 'workflow-runtime.db') };
 }
 
-function openFresh(databasePath: string): WorkflowRuntimeStore {
+function openFresh(): WorkflowRuntimeStore {
+  const { databasePath } = temporaryDatabase();
   const store = WorkflowRuntimeConnectionFactory.openStore({
     databasePath,
     databaseMode: 'create',
-    identityMode: 'isolated_test',
   });
-  openStores.push(store);
+  stores.push(store);
   return store;
 }
 
-function hash(label: string): string {
-  return `sha256:${crypto.createHash('sha256').update(label).digest('hex')}`;
+function createVersionDatabase(databasePath: string, version: number): void {
+  const migrationPath = path.resolve(
+    import.meta.dirname,
+    version === 3
+      ? '../schema/migration/workflow-runtime-schema-v1.sql'
+      : `../schema/migration/workflow-runtime-schema-v${version}.sql`,
+  );
+  const database = new Database(databasePath);
+  try {
+    database.pragma(`page_size = ${WORKFLOW_RUNTIME_SQLITE_CONFIG.pageSize}`);
+    database.pragma('auto_vacuum = INCREMENTAL');
+    database.exec(fs.readFileSync(migrationPath, 'utf8'));
+    database.pragma(`user_version = ${version}`);
+    database.pragma('journal_mode = WAL');
+  } finally {
+    database.close();
+  }
 }
 
-function fileHash(filePath: string): string {
-  return `sha256:${crypto.createHash('sha256').update(fs.readFileSync(filePath)).digest('hex')}`;
-}
+const MIGRATION_HASH = `sha256:${'a'.repeat(64)}` as Sha256Hash;
+const MIGRATION_SCHEMA_HASH = `sha256:${'b'.repeat(64)}` as Sha256Hash;
+const MIGRATION_CLOSURE_HASH = `sha256:${'c'.repeat(64)}` as Sha256Hash;
 
-interface DatabaseGateSnapshot {
-  readonly mainBytes: Buffer;
-  readonly mainHash: string;
-  readonly userVersion: number;
-  readonly sqliteSchemaIdentity: string;
-  readonly rowCounts: Readonly<Record<string, number>>;
-}
-
-function databaseGateSnapshot(databasePath: string): DatabaseGateSnapshot {
-  const database = new Database(databasePath, {
-    readonly: true,
-    fileMustExist: true,
+function seedSchema11PreservedState(databasePath: string): {
+  oldSnapshotHash: Sha256Hash;
+  newSnapshotHash: Sha256Hash;
+} {
+  const snapshotRef = { id: 'migration.definition', version: '1.0.0' };
+  const closureRef = { id: 'migration.definition', version: '1.0.0' };
+  const oldSnapshotHash = domainSeparatedSha256(G3_REGISTRY_SNAPSHOT_DOMAIN, {
+    format: 'icarus.workflow-registry-snapshot/1',
+    ref: snapshotRef,
+    closure_ref: closureRef,
+    closure_hash: MIGRATION_CLOSURE_HASH,
+    compiler_version: WORKFLOW_COMPILER_VERSION,
+    core_build_hash: MIGRATION_HASH,
+    database_schema_hash: MIGRATION_SCHEMA_HASH,
   });
-  let userVersion: number;
-  let sqliteSchemaIdentity: string;
-  let rowCounts: Record<string, number>;
-  try {
-    userVersion = Number(database.pragma('user_version', { simple: true }));
-    sqliteSchemaIdentity = calculateDatabaseSqliteSchemaIdentity(database);
-    const tables = database
-      .prepare(
-        "SELECT name FROM sqlite_schema WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
-      )
-      .pluck()
-      .all() as string[];
-    rowCounts = Object.fromEntries(
-      tables.map((table) => [
-        table,
-        database.prepare(`SELECT count(*) FROM "${table}"`).pluck().get(),
-      ]),
-    ) as Record<string, number>;
-  } finally {
-    database.close();
-  }
-  const mainBytes = fs.readFileSync(databasePath);
-  return {
-    mainBytes,
-    mainHash: fileHash(databasePath),
-    userVersion,
-    sqliteSchemaIdentity,
-    rowCounts,
-  };
-}
-
-function expectDatabaseGateUnchanged(
-  databasePath: string,
-  before: DatabaseGateSnapshot,
-): void {
-  const after = databaseGateSnapshot(databasePath);
-  expect(after.mainBytes.equals(before.mainBytes)).toBe(true);
-  expect(after.mainHash).toBe(before.mainHash);
-  expect(after.userVersion).toBe(before.userVersion);
-  expect(after.sqliteSchemaIdentity).toBe(before.sqliteSchemaIdentity);
-  expect(after.rowCounts).toEqual(before.rowCounts);
-}
-
-function createSchema3Database(databasePath: string): void {
-  const profile = loadFrozenWorkflowRuntimeStoreInputs().profile;
-  const database = new Database(databasePath);
-  try {
-    database.pragma(`page_size = ${profile.page_size}`);
-    database.pragma('auto_vacuum = INCREMENTAL');
-    database.pragma('foreign_keys = ON');
-    database.exec(renderMigration(loadSchema3ExecutableSchemaSource()).sql);
-    database.pragma('journal_mode = WAL');
-  } finally {
-    database.close();
-  }
-}
-
-function createSchema4Database(databasePath: string): void {
-  const profile = loadFrozenWorkflowRuntimeStoreInputs().profile;
-  const database = new Database(databasePath);
-  try {
-    database.pragma(`page_size = ${profile.page_size}`);
-    database.pragma('auto_vacuum = INCREMENTAL');
-    database.pragma('foreign_keys = ON');
-    database.exec(renderMigration(loadSchema4ExecutableSchemaSource()).sql);
-    database.pragma('journal_mode = WAL');
-  } finally {
-    database.close();
-  }
-}
-
-function createSchema8Database(databasePath: string): void {
-  const profile = loadFrozenWorkflowRuntimeStoreInputs().profile;
-  const database = new Database(databasePath);
-  try {
-    database.pragma(`page_size = ${profile.page_size}`);
-    database.pragma('auto_vacuum = INCREMENTAL');
-    database.pragma('foreign_keys = ON');
-    database.exec(renderMigration(loadSchema8ExecutableSchemaSource()).sql);
-    database.pragma('journal_mode = WAL');
-  } finally {
-    database.close();
-  }
-}
-
-function createSchema9Database(databasePath: string): void {
-  const profile = loadFrozenWorkflowRuntimeStoreInputs().profile;
-  const database = new Database(databasePath);
-  try {
-    database.pragma(`page_size = ${profile.page_size}`);
-    database.pragma('auto_vacuum = INCREMENTAL');
-    database.pragma('foreign_keys = ON');
-    database.exec(renderMigration(loadSchema9ExecutableSchemaSource()).sql);
-    database.pragma('journal_mode = WAL');
-  } finally {
-    database.close();
-  }
-}
-
-function createSchema10Database(databasePath: string): void {
-  const profile = loadFrozenWorkflowRuntimeStoreInputs().profile;
-  const database = new Database(databasePath);
-  try {
-    database.pragma(`page_size = ${profile.page_size}`);
-    database.pragma('auto_vacuum = INCREMENTAL');
-    database.pragma('foreign_keys = ON');
-    database.exec(renderMigration(loadSchema10ExecutableSchemaSource()).sql);
-    database.pragma('journal_mode = WAL');
-  } finally {
-    database.close();
-  }
-}
-
-function insertConstructionOnlyRow(
-  databasePath: string,
-  relation: string,
-): void {
+  const newSnapshotHash = calculateRegistrySnapshotHash({
+    format: 'icarus.workflow-registry-snapshot/1',
+    ref: snapshotRef,
+    closure_ref: closureRef,
+    closure_hash: MIGRATION_CLOSURE_HASH,
+    compiler_version: WORKFLOW_COMPILER_VERSION,
+  });
   const database = new Database(databasePath);
   try {
     database.pragma('foreign_keys = OFF');
-    database.pragma('ignore_check_constraints = ON');
-    const insertTriggerNames: Record<string, string[]> = {
-      workflow_feature_release_activation_commands: [
-        'trg:activation_commands:retention_observation_insert',
-      ],
-      workflow_feature_release_activation_invocations: [],
-      workflow_feature_release_activation_events: [
-        'trg:activation_events:command_binding',
-      ],
-      workflow_feature_active_releases: [
-        'trg:feature_active_releases:target_active_insert',
-      ],
-    };
-    const triggerNames = insertTriggerNames[relation];
-    if (!triggerNames)
-      throw new Error(`Unknown upgrade gate relation: ${relation}`);
-    const schema3Triggers = new Map(
-      buildSchemaTriggers(3).map((trigger) => [trigger.name, trigger.sql]),
+    database.exec('BEGIN');
+    const insertValue = database.prepare(
+      `INSERT INTO workflow_values (
+         id, storage_kind, inline_canonical_json, content_hash, byte_length,
+         media_type, schema_resource_id, schema_resource_hash, provenance_ref,
+         retention_class, payload_state, created_at_ms, row_version,
+         schema_authority_kind
+       ) VALUES (?, 'inline', '{}', ?, 2, 'application/json', ?, ?,
+                 'migration-test', 'pinned', 'live', 1, 1, 'registry')`,
     );
-    for (const triggerName of triggerNames) {
-      database.exec(`DROP TRIGGER "${triggerName}"`);
-    }
-    const columns = database
-      .prepare(`PRAGMA table_info("${relation}")`)
-      .all() as Array<{
-      name: string;
-      type: string;
-      notnull: number;
-      pk: number;
-    }>;
-    const required = columns.filter(
-      (column) => column.notnull === 1 || column.pk > 0,
+    insertValue.run(
+      'value:migration-schema',
+      MIGRATION_SCHEMA_HASH,
+      'registry-resource:schema:migration.schema@1.0.0',
+      MIGRATION_SCHEMA_HASH,
     );
     database
       .prepare(
-        `INSERT INTO "${relation}" (${required.map((column) => `"${column.name}"`).join(', ')}) VALUES (${required.map(() => '?').join(', ')})`,
+        `INSERT INTO workflow_registry_resources (
+           id, resource_type, resource_id, resource_version, owner_core_ref,
+           canonical_value_id, content_hash, publication_state, created_at_ms,
+           published_at_ms, row_version
+         ) VALUES (?, 'schema', 'migration.schema', '1.0.0', 'icarus.core@local',
+                   ?, ?, 'published', 1, 1, 1)`,
       )
       .run(
-        ...required.map((column) =>
-          column.type === 'INTEGER' ? 1 : `construction-${column.name}`,
-        ),
+        'registry-resource:schema:migration.schema@1.0.0',
+        'value:migration-schema',
+        MIGRATION_SCHEMA_HASH,
       );
-    for (const triggerName of triggerNames) {
-      const sql = schema3Triggers.get(triggerName);
-      if (!sql) throw new Error(`Missing Schema 3 trigger ${triggerName}`);
-      database.exec(sql);
-    }
-    database.pragma('ignore_check_constraints = OFF');
-    database.pragma('wal_checkpoint(TRUNCATE)');
-  } finally {
-    database.close();
-  }
-}
-
-function driftSchema3SqliteIdentity(databasePath: string): void {
-  const database = new Database(databasePath);
-  try {
+    insertValue.run(
+      'value:migration-definition',
+      MIGRATION_HASH,
+      'registry-resource:schema:migration.schema@1.0.0',
+      MIGRATION_SCHEMA_HASH,
+    );
+    database
+      .prepare(
+        `INSERT INTO workflow_registry_resources (
+           id, resource_type, resource_id, resource_version, owner_core_ref,
+           canonical_value_id, content_hash, publication_state, created_at_ms,
+           published_at_ms, row_version
+         ) VALUES (?, 'definition', 'migration.definition', '1.0.0',
+                   'icarus.core@local', ?, ?, 'published', 1, 1, 1)`,
+      )
+      .run(
+        'registry-resource:definition:migration.definition@1.0.0',
+        'value:migration-definition',
+        MIGRATION_HASH,
+      );
+    insertValue.run(
+      'value:migration-closure',
+      MIGRATION_CLOSURE_HASH,
+      'registry-resource:schema:migration.schema@1.0.0',
+      MIGRATION_SCHEMA_HASH,
+    );
+    database
+      .prepare(
+        `INSERT INTO workflow_registry_closure_manifests (
+           id, closure_hash, manifest_value_id, manifest_hash, created_at_ms
+         ) VALUES (?, ?, 'value:migration-closure', ?, 1)`,
+      )
+      .run(
+        'registry-closure:migration.definition@1.0.0',
+        MIGRATION_CLOSURE_HASH,
+        MIGRATION_CLOSURE_HASH,
+      );
+    database
+      .prepare(
+        `INSERT INTO workflow_registry_snapshots (
+           id, snapshot_hash, closure_manifest_id, closure_hash,
+           compiler_version, core_build_hash, database_schema_hash, created_at_ms
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, 1)`,
+      )
+      .run(
+        'registry-snapshot:migration.definition@1.0.0',
+        oldSnapshotHash,
+        'registry-closure:migration.definition@1.0.0',
+        MIGRATION_CLOSURE_HASH,
+        WORKFLOW_COMPILER_VERSION,
+        MIGRATION_HASH,
+        MIGRATION_SCHEMA_HASH,
+      );
     database.exec(
-      'CREATE INDEX "idx:test:schema3_identity_drift" ON "workflow_domain_resource_heads" ("namespace")',
+      `INSERT INTO runtime_capacity_head (
+         singleton_key, current_capacity_revision, current_change_id,
+         current_config_hash, current_publication_hash, pending_change_id,
+         row_version, created_at_ms, updated_at_ms
+       ) VALUES (1, NULL, NULL, NULL, NULL, NULL, 7, 11, 12)`,
     );
-    database.pragma('wal_checkpoint(TRUNCATE)');
+    database.exec('COMMIT');
+  } catch (error) {
+    if (database.inTransaction) database.exec('ROLLBACK');
+    throw error;
   } finally {
     database.close();
   }
+  return { oldSnapshotHash, newSnapshotHash };
 }
 
-function insertPreservedForeignKeyViolation(databasePath: string): void {
+function seedSchema12PreservedState(databasePath: string): {
+  featureRelease: Record<string, unknown>;
+  activeRelease: Record<string, unknown>;
+  retentionHandle: Record<string, unknown>;
+  activationCommand: Record<string, unknown>;
+  capacityCommand: Record<string, unknown>;
+  capacityHead: Record<string, unknown>;
+  capacityEvent: Record<string, unknown>;
+} {
+  const featureReleaseId = 'feature-release:migration.feature@1.0.0';
+  const closureId = 'registry-closure:migration.feature@1.0.0';
+  const schemaResourceId = 'registry-resource:schema:migration.schema@1.0.0';
   const database = new Database(databasePath);
   try {
     database.pragma('foreign_keys = OFF');
+    database.exec('BEGIN');
     database
       .prepare(
-        `INSERT INTO workflow_registry_resource_dependencies
-          (resource_id, dependency_resource_id, dependency_kind, expected_content_hash, created_at_ms)
-         VALUES (?, ?, ?, ?, ?)`,
+        `INSERT INTO workflow_values (
+           id, storage_kind, inline_canonical_json, content_hash, byte_length,
+           media_type, schema_resource_id, schema_resource_hash, provenance_ref,
+           retention_class, payload_state, created_at_ms, row_version,
+           schema_authority_kind
+         ) VALUES (?, 'inline', '{}', ?, 2, 'application/json', ?, ?,
+                   'schema-12-migration-test', 'pinned', 'live', 17, 1,
+                   'registry')`,
       )
       .run(
-        'missing:resource',
-        'missing:dependency',
-        'registry_exact',
-        hash('missing:dependency'),
-        1,
+        'value:schema-12-migration',
+        MIGRATION_SCHEMA_HASH,
+        schemaResourceId,
+        MIGRATION_SCHEMA_HASH,
       );
-    expect(database.pragma('foreign_key_check')).toHaveLength(2);
-    database.pragma('wal_checkpoint(TRUNCATE)');
+    database
+      .prepare(
+        `INSERT INTO workflow_registry_resources (
+           id, resource_type, resource_id, resource_version, owner_core_ref,
+           canonical_value_id, content_hash, publication_state, created_at_ms,
+           published_at_ms, row_version
+         ) VALUES (?, 'schema', 'migration.schema', '1.0.0',
+                   'icarus.core@local', ?, ?, 'published', 17, 18, 2)`,
+      )
+      .run(
+        schemaResourceId,
+        'value:schema-12-migration',
+        MIGRATION_SCHEMA_HASH,
+      );
+    const insertValue = database.prepare(
+      `INSERT INTO workflow_values (
+         id, storage_kind, inline_canonical_json, content_hash, byte_length,
+         media_type, schema_resource_id, schema_resource_hash, provenance_ref,
+         retention_class, payload_state, created_at_ms, row_version,
+         schema_authority_kind
+       ) VALUES (?, 'inline', '{}', ?, 2, 'application/json', ?, ?,
+                 'schema-12-migration-test', 'pinned', 'live', 19, 1,
+                 'registry')`,
+    );
+    insertValue.run(
+      'value:schema-12-closure',
+      MIGRATION_CLOSURE_HASH,
+      schemaResourceId,
+      MIGRATION_SCHEMA_HASH,
+    );
+    insertValue.run(
+      'value:schema-12-request',
+      MIGRATION_HASH,
+      schemaResourceId,
+      MIGRATION_SCHEMA_HASH,
+    );
+    database
+      .prepare(
+        `INSERT INTO workflow_registry_closure_manifests (
+           id, closure_hash, manifest_value_id, manifest_hash, created_at_ms
+         ) VALUES (?, ?, ?, ?, 20)`,
+      )
+      .run(
+        closureId,
+        MIGRATION_CLOSURE_HASH,
+        'value:schema-12-closure',
+        MIGRATION_CLOSURE_HASH,
+      );
+    database
+      .prepare(
+        `INSERT INTO workflow_feature_releases (
+           id, feature_id, release_ref, release_version, release_hash,
+           execution_artifact_resource_id, execution_artifact_hash, status,
+           compatibility_snapshot_ref, compatibility_snapshot_hash,
+           staged_at_ms, activated_at_ms, disabled_at_ms, row_version
+         ) VALUES (?, 'migration.feature', 'migration.feature', '1.0.0', ?,
+                   NULL, NULL, 'active', 'legacy-compatibility', ?, 21, 22,
+                   NULL, 4)`,
+      )
+      .run(featureReleaseId, MIGRATION_HASH, MIGRATION_SCHEMA_HASH);
+    database
+      .prepare(
+        `INSERT INTO workflow_feature_active_releases (
+           feature_id, release_id, release_hash, row_version, activated_at_ms
+         ) VALUES ('migration.feature', ?, ?, 1, 22)`,
+      )
+      .run(featureReleaseId, MIGRATION_HASH);
+    database
+      .prepare(
+        `INSERT INTO workflow_registry_retention_handles (
+           id, handle_kind, feature_release_id, graph_run_id, backup_id,
+           external_actor_ref, closure_manifest_id, closure_hash, status,
+           created_at_ms, released_at_ms, row_version
+         ) VALUES ('retention:migration.feature@1.0.0', 'published', ?, NULL,
+                   NULL, NULL, ?, ?, 'held', 23, NULL, 6)`,
+      )
+      .run(featureReleaseId, closureId, MIGRATION_CLOSURE_HASH);
+    database
+      .prepare(
+        `INSERT INTO workflow_feature_release_activation_commands (
+           command_id, command_type, idempotency_domain, idempotency_key,
+           request_value_id, request_hash, request_schema_resource_id,
+           request_schema_hash, domain_request_hash,
+           verified_compatibility_input_value_id,
+           verified_compatibility_input_hash,
+           verified_compatibility_input_schema_resource_id,
+           verified_compatibility_input_schema_hash,
+           verified_compatibility_result_value_id,
+           verified_compatibility_result_hash,
+           verified_compatibility_result_schema_resource_id,
+           verified_compatibility_result_schema_hash,
+           lifecycle, created_at_ms, finalized_at_ms, row_version
+         ) VALUES ('activation-command:migration', 'activate_feature_release',
+                   'migration', 'activation', 'value:schema-12-request', ?, ?,
+                   ?, ?, 'value:schema-12-request', ?, ?, ?,
+                   'value:schema-12-request', ?, ?, ?, 'pending', 24, NULL, 1)`,
+      )
+      .run(
+        MIGRATION_HASH,
+        schemaResourceId,
+        MIGRATION_SCHEMA_HASH,
+        MIGRATION_CLOSURE_HASH,
+        MIGRATION_HASH,
+        schemaResourceId,
+        MIGRATION_SCHEMA_HASH,
+        MIGRATION_HASH,
+        schemaResourceId,
+        MIGRATION_SCHEMA_HASH,
+      );
+    database
+      .prepare(
+        `INSERT INTO runtime_capacity_admin_commands (
+           command_id, idempotency_domain, idempotency_key, command_type,
+           expected_capacity_revision, expected_config_hash,
+           assigned_capacity_revision, assigned_change_id,
+           genesis_core_release_hash, proposed_capacity_json,
+           proposed_config_hash, request_hash, reason_code,
+           reason_text_value_id, reason_text_hash, evidence_manifest_value_id,
+           evidence_manifest_hash, canonical_result_value_id,
+           canonical_result_hash, created_at_ms, finalized_at_ms
+         ) VALUES ('capacity-command:migration', 'migration', 'capacity',
+                   'initialize_deployment_capacity', NULL, NULL, 7,
+                   'capacity-change:migration', ?, '{}', ?, ?,
+                   'initial_provisioning', NULL, NULL,
+                   'value:schema-12-request', ?, NULL, NULL, 25, NULL)`,
+      )
+      .run(
+        MIGRATION_SCHEMA_HASH,
+        MIGRATION_HASH,
+        MIGRATION_CLOSURE_HASH,
+        MIGRATION_HASH,
+      );
+    database
+      .prepare(
+        `INSERT INTO runtime_capacity_head (
+           singleton_key, current_capacity_revision, current_change_id,
+           current_config_hash, current_publication_hash, pending_change_id,
+           row_version, created_at_ms, updated_at_ms
+         ) VALUES (1, 7, 'capacity-change:migration', ?, ?, NULL, 8, 25, 26)`,
+      )
+      .run(MIGRATION_HASH, MIGRATION_SCHEMA_HASH);
+    database
+      .prepare(
+        `INSERT INTO runtime_capacity_change_events (
+           event_seq, change_id, command_id, capacity_revision, event_type,
+           config_hash, publication_hash, previous_event_hash, event_hash,
+           detail_value_id, detail_hash, created_at_ms
+         ) VALUES (1, 'capacity-change:migration', 'capacity-command:migration',
+                   7, 'head_committed', ?, ?, NULL, ?, NULL, NULL, 26)`,
+      )
+      .run(MIGRATION_HASH, MIGRATION_SCHEMA_HASH, MIGRATION_CLOSURE_HASH);
+    database.exec('COMMIT');
+  } catch (error) {
+    if (database.inTransaction) database.exec('ROLLBACK');
+    throw error;
+  }
+
+  const selectOne = (sql: string): Record<string, unknown> =>
+    database.prepare(sql).get() as Record<string, unknown>;
+  const state = {
+    featureRelease: selectOne(
+      `SELECT id, feature_id, release_ref, release_version, release_hash,
+              execution_artifact_resource_id, execution_artifact_hash, status,
+              staged_at_ms, activated_at_ms, disabled_at_ms, row_version
+         FROM workflow_feature_releases`,
+    ),
+    activeRelease: selectOne('SELECT * FROM workflow_feature_active_releases'),
+    retentionHandle: selectOne(
+      'SELECT * FROM workflow_registry_retention_handles',
+    ),
+    activationCommand: selectOne(
+      `SELECT command_id, command_type, idempotency_domain, idempotency_key,
+              request_value_id, request_hash, request_schema_resource_id,
+              request_schema_hash, domain_request_hash, lifecycle,
+              created_at_ms, finalized_at_ms, row_version
+         FROM workflow_feature_release_activation_commands`,
+    ),
+    capacityCommand: selectOne(
+      `SELECT command_id, idempotency_domain, idempotency_key, command_type,
+              expected_capacity_revision, expected_config_hash,
+              assigned_capacity_revision, assigned_change_id,
+              proposed_capacity_json, proposed_config_hash, request_hash,
+              reason_code, reason_text_value_id, reason_text_hash,
+              evidence_manifest_value_id, evidence_manifest_hash,
+              canonical_result_value_id, canonical_result_hash, created_at_ms,
+              finalized_at_ms
+         FROM runtime_capacity_admin_commands`,
+    ),
+    capacityHead: selectOne('SELECT * FROM runtime_capacity_head'),
+    capacityEvent: selectOne('SELECT * FROM runtime_capacity_change_events'),
+  };
+  database.close();
+  return state;
+}
+
+function seedUncheckedRow(database: Database.Database, table: string): void {
+  const columns = database.pragma(`table_info("${table}")`) as Array<{
+    name: string;
+    type: string;
+  }>;
+  const names = columns.map(({ name }) => `"${name.replaceAll('"', '""')}"`);
+  const values = columns.map(({ type }) =>
+    type.toUpperCase().includes('INT') ? 1 : 'migration-test',
+  );
+  database.pragma('foreign_keys = OFF');
+  database.pragma('ignore_check_constraints = ON');
+  try {
+    database
+      .prepare(
+        `INSERT INTO "${table}" (${names.join(', ')}) VALUES (${names.map(() => '?').join(', ')})`,
+      )
+      .run(...values);
   } finally {
-    database.close();
+    database.pragma('ignore_check_constraints = OFF');
   }
 }
 
-function closeTracked(store: WorkflowRuntimeStore): void {
-  store.close();
-  const index = openStores.indexOf(store);
-  if (index >= 0) openStores.splice(index, 1);
-}
-
-async function waitForOutput(
-  child: ChildProcessWithoutNullStreams,
-  marker: string,
-): Promise<string> {
-  return await new Promise((resolve, reject) => {
-    let output = '';
-    const onData = (chunk: Buffer) => {
-      output += chunk.toString('utf8');
-      if (output.includes(marker)) {
-        child.stdout.off('data', onData);
-        resolve(output);
-      }
-    };
-    child.stdout.on('data', onData);
-    child.once('error', reject);
-    child.once('exit', (code) => {
-      if (!output.includes(marker)) {
-        reject(
-          new Error(
-            `Child exited before ${marker}: code=${String(code)} output=${output}`,
-          ),
-        );
-      }
-    });
-  });
-}
-
-async function collectChild(
-  child: ChildProcessWithoutNullStreams,
-  initialOutput: string,
-): Promise<{ stdout: string; stderr: string; code: number | null }> {
-  return await new Promise((resolve, reject) => {
-    let stdout = initialOutput;
-    let stderr = '';
-    child.stdout.on('data', (chunk: Buffer) => {
-      stdout += chunk.toString('utf8');
-    });
-    child.stderr.on('data', (chunk: Buffer) => {
-      stderr += chunk.toString('utf8');
-    });
-    child.once('error', reject);
-    child.once('exit', (code) => resolve({ stdout, stderr, code }));
-  });
+function corruptCurrentDatabase(
+  mutate: (database: Database.Database) => void,
+): string {
+  const { databasePath } = temporaryDatabase();
+  const database = new Database(databasePath);
+  try {
+    database.pragma(`page_size = ${WORKFLOW_RUNTIME_SQLITE_CONFIG.pageSize}`);
+    database.pragma('auto_vacuum = INCREMENTAL');
+    database.exec(readFreshWorkflowRuntimeSchemaSql());
+    database.pragma('journal_mode = WAL');
+    database.pragma('foreign_keys = OFF');
+    mutate(database);
+  } finally {
+    database.close();
+  }
+  return databasePath;
 }
 
 afterEach(() => {
-  for (const store of openStores.splice(0)) {
+  for (const store of stores.splice(0)) {
     if (store.isOpen) store.close();
   }
-  for (const root of temporaryRoots.splice(0)) {
+  for (const root of roots.splice(0)) {
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
 
-describe.sequential('G1.2 Workflow Runtime Store base', () => {
-  it('strictly validates the closed Profile before PRAGMA interpolation', () => {
-    const profile = loadFrozenWorkflowRuntimeStoreInputs().profile;
-    expect(parseSQLiteExecutionProfilePayload(profile)).toEqual(profile);
-    for (const invalid of [0, -1, 1.5, Number.POSITIVE_INFINITY, 2 ** 53]) {
-      const candidate = structuredClone(profile) as unknown as Record<
-        string,
-        unknown
-      >;
-      candidate.busy_timeout_ms = invalid;
-      expect(() => parseSQLiteExecutionProfilePayload(candidate)).toThrow(
-        /finite positive safe integer|Unsupported JSON number/,
-      );
-    }
-    for (const [field, value] of [
-      ['journal_mode', 'delete'],
-      ['auto_vacuum', 'full'],
-      ['temp_store', 'file'],
-      ['foreign_keys', false],
-      ['read_only_query_only', false],
-      ['mmap_size_bytes', 1],
-    ] as const) {
-      const candidate = structuredClone(profile) as unknown as Record<
-        string,
-        unknown
-      >;
-      candidate[field] = value;
-      expect(() => parseSQLiteExecutionProfilePayload(candidate)).toThrow();
-    }
-    const openProfile = structuredClone(profile) as unknown as Record<
-      string,
-      unknown
-    >;
-    openProfile.unknown_pragma = 1;
-    expect(() => parseSQLiteExecutionProfilePayload(openProfile)).toThrow(
-      'unknown, duplicate, or missing field',
-    );
-  });
-
-  it('pins G1.1/Profile identities and fails closed on frozen Schema 6 migration drift', () => {
-    const inputs = loadFrozenWorkflowRuntimeStoreInputs();
-    expect(inputs).toMatchObject({
-      g1RootHash: CURRENT_G1_SCHEMA_IDENTITIES.root,
-      schemaDependencyManifestArtifactHash:
-        CURRENT_G1_SCHEMA_IDENTITIES.dependencyManifest,
-      physicalSchemaIdentity: CURRENT_G1_SCHEMA_IDENTITIES.physicalSchema,
-      schemaHash: CURRENT_G1_SCHEMA_IDENTITIES.schema,
-      migrationSha256: CURRENT_G1_SCHEMA_IDENTITIES.migration,
-      deterministicDigest: CURRENT_G1_SCHEMA_IDENTITIES.deterministic,
-      profileArtifactHash: CURRENT_G1_SCHEMA_IDENTITIES.profile,
-    });
-    const { root } = temporaryDatabase();
-    const copiedSchema = path.join(root, 'schema');
-    fs.cpSync(path.resolve(import.meta.dirname, '../schema'), copiedSchema, {
-      recursive: true,
-    });
-    fs.appendFileSync(
-      path.join(copiedSchema, 'migration/workflow-runtime-schema-v6.sql'),
-      '\n-- drift\n',
-    );
-    expect(() =>
-      loadFrozenWorkflowRuntimeStoreInputs({ schemaRoot: copiedSchema }),
-    ).toThrow(/canonical_migration raw hash mismatch|migration drifted/);
-  });
-
-  it('fails closed on frozen historical Schema 7 migration drift', () => {
-    const { root } = temporaryDatabase();
-    const copiedSchema = path.join(root, 'schema');
-    fs.cpSync(path.resolve(import.meta.dirname, '../schema'), copiedSchema, {
-      recursive: true,
-    });
-    fs.appendFileSync(
-      path.join(copiedSchema, 'migration/workflow-runtime-schema-v7.sql'),
-      '\n-- drift\n',
-    );
-    expect(() =>
-      loadFrozenWorkflowRuntimeStoreInputs({ schemaRoot: copiedSchema }),
-    ).toThrow(/canonical_migration raw hash mismatch|migration drifted/);
-  });
-
-  it('fails closed on frozen historical Schema 8 migration drift', () => {
-    const { root } = temporaryDatabase();
-    const copiedSchema = path.join(root, 'schema');
-    fs.cpSync(path.resolve(import.meta.dirname, '../schema'), copiedSchema, {
-      recursive: true,
-    });
-    fs.appendFileSync(
-      path.join(copiedSchema, 'migration/workflow-runtime-schema-v8.sql'),
-      '\n-- drift\n',
-    );
-    expect(() =>
-      loadFrozenWorkflowRuntimeStoreInputs({ schemaRoot: copiedSchema }),
-    ).toThrow(/canonical_migration raw hash mismatch|migration drifted/);
-  });
-
-  it('fails closed on frozen historical Schema 9 migration drift', () => {
-    const { root } = temporaryDatabase();
-    const copiedSchema = path.join(root, 'schema');
-    fs.cpSync(path.resolve(import.meta.dirname, '../schema'), copiedSchema, {
-      recursive: true,
-    });
-    fs.appendFileSync(
-      path.join(copiedSchema, 'migration/workflow-runtime-schema-v9.sql'),
-      '\n-- drift\n',
-    );
-    expect(() =>
-      loadFrozenWorkflowRuntimeStoreInputs({ schemaRoot: copiedSchema }),
-    ).toThrow(/canonical_migration raw hash mismatch|migration drifted/);
-  });
-
-  it('fails closed on frozen historical Schema 10 migration drift', () => {
-    const { root } = temporaryDatabase();
-    const copiedSchema = path.join(root, 'schema');
-    fs.cpSync(path.resolve(import.meta.dirname, '../schema'), copiedSchema, {
-      recursive: true,
-    });
-    fs.appendFileSync(
-      path.join(copiedSchema, 'migration/workflow-runtime-schema-v10.sql'),
-      '\n-- drift\n',
-    );
-    expect(() =>
-      loadFrozenWorkflowRuntimeStoreInputs({ schemaRoot: copiedSchema }),
-    ).toThrow(/canonical_migration raw hash mismatch|migration drifted/);
-  });
-
-  it('fails closed on current Schema 11 migration drift', () => {
-    const { root } = temporaryDatabase();
-    const copiedSchema = path.join(root, 'schema');
-    fs.cpSync(path.resolve(import.meta.dirname, '../schema'), copiedSchema, {
-      recursive: true,
-    });
-    fs.appendFileSync(
-      path.join(copiedSchema, 'migration/workflow-runtime-schema-v11.sql'),
-      '\n-- drift\n',
-    );
-    expect(() =>
-      loadFrozenWorkflowRuntimeStoreInputs({ schemaRoot: copiedSchema }),
-    ).toThrow(/canonical_migration raw hash mismatch|migration drifted/);
-  });
-
-  it('fails closed on frozen Schema 9 to 10 upgrade drift', () => {
-    const { root } = temporaryDatabase();
-    const copiedSchema = path.join(root, 'schema');
-    fs.cpSync(path.resolve(import.meta.dirname, '../schema'), copiedSchema, {
-      recursive: true,
-    });
-    fs.appendFileSync(
-      path.join(
-        copiedSchema,
-        'migration/workflow-runtime-schema-v9-to-v10.sql',
-      ),
-      '\n-- drift\n',
-    );
-    expect(() =>
-      loadFrozenWorkflowRuntimeStoreInputs({ schemaRoot: copiedSchema }),
-    ).toThrow(/schema9_to_schema10_upgrade raw hash mismatch|upgrade drifted/);
-  });
-
-  it('fails closed on current Schema 10 to 11 upgrade drift', () => {
-    const { root } = temporaryDatabase();
-    const copiedSchema = path.join(root, 'schema');
-    fs.cpSync(path.resolve(import.meta.dirname, '../schema'), copiedSchema, {
-      recursive: true,
-    });
-    fs.appendFileSync(
-      path.join(
-        copiedSchema,
-        'migration/workflow-runtime-schema-v10-to-v11.sql',
-      ),
-      '\n-- drift\n',
-    );
-    expect(() =>
-      loadFrozenWorkflowRuntimeStoreInputs({ schemaRoot: copiedSchema }),
-    ).toThrow(/schema10_to_schema11_upgrade raw hash mismatch|upgrade drifted/);
-  });
-
-  it('fails closed when the frozen Schema 5 source migration path or bytes drift', () => {
-    const { root } = temporaryDatabase();
-    const copiedSchema = path.join(root, 'schema');
-    fs.cpSync(path.resolve(import.meta.dirname, '../schema'), copiedSchema, {
-      recursive: true,
-    });
-    fs.appendFileSync(
-      path.join(copiedSchema, 'migration/workflow-runtime-schema-v1.sql'),
-      '\n-- forbidden historical drift\n',
-    );
-    expect(() =>
-      loadFrozenWorkflowRuntimeStoreInputs({ schemaRoot: copiedSchema }),
-    ).toThrow('Historical Schema 5 source migration drifted');
-  });
-
-  it('fails closed on frozen Schema 3 to 4 upgrade SQL drift before opening the database', () => {
-    const { root, databasePath } = temporaryDatabase();
-    createSchema3Database(databasePath);
-    const before = databaseGateSnapshot(databasePath);
-    const copiedSchema = path.join(root, 'schema');
-    fs.cpSync(path.resolve(import.meta.dirname, '../schema'), copiedSchema, {
-      recursive: true,
-    });
-    fs.appendFileSync(
-      path.join(copiedSchema, 'migration/workflow-runtime-schema-v3-to-v4.sql'),
-      '\n-- drift\n',
-    );
-
-    expect(() =>
-      loadFrozenWorkflowRuntimeStoreInputs({ schemaRoot: copiedSchema }),
-    ).toThrow(/schema3_to_schema4_upgrade raw hash mismatch|upgrade drifted/);
-    expectDatabaseGateUnchanged(databasePath, before);
-  });
-
-  it('fails closed on frozen Schema 4 to 5 upgrade SQL drift before opening the database', () => {
-    const { root, databasePath } = temporaryDatabase();
-    createSchema4Database(databasePath);
-    const before = databaseGateSnapshot(databasePath);
-    const copiedSchema = path.join(root, 'schema');
-    fs.cpSync(path.resolve(import.meta.dirname, '../schema'), copiedSchema, {
-      recursive: true,
-    });
-    fs.appendFileSync(
-      path.join(copiedSchema, 'migration/workflow-runtime-schema-v4-to-v5.sql'),
-      '\n-- drift\n',
-    );
-
-    expect(() =>
-      loadFrozenWorkflowRuntimeStoreInputs({ schemaRoot: copiedSchema }),
-    ).toThrow(/schema4_to_schema5_upgrade raw hash mismatch|upgrade drifted/);
-    expectDatabaseGateUnchanged(databasePath, before);
-  });
-
-  it('loads exact Store dependencies regardless of unrelated Contract JSON', () => {
-    const expected = loadFrozenWorkflowRuntimeStoreInputs();
-    const { root } = temporaryDatabase();
-    const copiedContracts = path.join(root, 'contracts');
-    fs.cpSync(
-      path.resolve(import.meta.dirname, '../../contracts'),
-      copiedContracts,
-      { recursive: true },
-    );
-    const unrelated = path.join(
-      copiedContracts,
-      'conformance/future-registry/unrelated-contract.json',
-    );
-    fs.mkdirSync(path.dirname(unrelated), { recursive: true });
-    fs.writeFileSync(unrelated, '{"unrelated":true}\n');
-
-    const observed = loadFrozenWorkflowRuntimeStoreInputs({
-      contractsRoot: copiedContracts,
-    });
-    expect(observed).toMatchObject({
-      g1RootHash: expected.g1RootHash,
-      schemaDependencyManifestArtifactHash:
-        expected.schemaDependencyManifestArtifactHash,
-      physicalSchemaIdentity: expected.physicalSchemaIdentity,
-      schemaHash: expected.schemaHash,
-      migrationSha256: expected.migrationSha256,
-    });
-  });
-
-  it('loads frozen schema artifacts without construction Contract sources', () => {
-    const { root } = temporaryDatabase();
-    const contractsRoot = path.join(root, 'contracts');
-    const profileDirectory = path.join(contractsRoot, 'sqlite');
-    fs.mkdirSync(profileDirectory, { recursive: true });
-    fs.copyFileSync(
-      path.resolve(
-        import.meta.dirname,
-        '../../contracts/sqlite/local_single_user_sqlite@1.json',
-      ),
-      path.join(profileDirectory, 'local_single_user_sqlite@1.json'),
-    );
-    expect(() =>
-      loadFrozenWorkflowRuntimeStoreInputs({ contractsRoot }),
-    ).not.toThrow();
-  });
-
-  it('bootstraps a fresh real-file database, reopens it, and reports candidate identity evidence', () => {
-    const { databasePath } = temporaryDatabase();
-    const store = openFresh(databasePath);
-    expect(fs.statSync(databasePath).isFile()).toBe(true);
-    expect(
-      store.queryOne<{ page_size: number }>('PRAGMA page_size', [])?.page_size,
-    ).toBe(4096);
-    expect(
-      store.queryOne<{ journal_mode: string }>('PRAGMA journal_mode', [])
-        ?.journal_mode,
-    ).toBe('wal');
-    expect(
-      store.queryOne<{ auto_vacuum: number }>('PRAGMA auto_vacuum', [])
-        ?.auto_vacuum,
-    ).toBe(2);
-    expect(
-      store.queryOne<{ query_only: number }>('PRAGMA query_only', [])
-        ?.query_only,
-    ).toBe(1);
-    expect(
-      store.queryOne<{ count: number }>(
-        'SELECT count(*) AS count FROM sqlite_schema WHERE type = ? AND name NOT LIKE ?',
-        ['table', 'sqlite_%'],
-      )?.count,
-    ).toBe(88);
+describe('Workflow Runtime Store schema compatibility', () => {
+  it('creates a fresh current database and usable Capacity defaults once', () => {
+    const store = openFresh();
+    expect(store.schemaVersion).toBe(CURRENT_WORKFLOW_RUNTIME_SCHEMA_VERSION);
     expect(
       store.queryOne<{ user_version: number }>('PRAGMA user_version', [])
         ?.user_version,
-    ).toBe(11);
-    expect(store.identityEvidence).toMatchObject({
-      identity_mode: 'isolated_test',
-      validation_status: 'candidate_not_validated',
-      platform: 'darwin',
-      arch: 'arm64',
-      managed_node_version: 'v26.5.0',
-      better_sqlite3_version: '12.11.1',
-      sqlite_version: '3.53.2',
-      runtime_launcher_profile_hash: null,
-      core_binding_kind: 'development_checkout',
-      release_artifact_profile_hash: null,
-      release_identity_status: 'missing_until_g8',
-    });
-    expect(store).not.toHaveProperty('database');
-    expect(store).not.toHaveProperty('prepare');
-    closeTracked(store);
-
-    const reopened = WorkflowRuntimeConnectionFactory.openStore({
-      databasePath,
-      databaseMode: 'open_existing',
-      identityMode: 'isolated_test',
-    });
-    openStores.push(reopened);
-    expect(reopened.frozenInputs.schemaHash).toBe(
-      CURRENT_G1_SCHEMA_IDENTITIES.schema,
-    );
-  });
-
-  it('upgrades an empty frozen Schema 3 real file through historical Schema 4-10 to Schema 11', () => {
-    const { databasePath } = temporaryDatabase();
-    createSchema3Database(databasePath);
-    const before = new Database(databasePath, { readonly: true });
-    try {
-      expect(before.pragma('user_version', { simple: true })).toBe(3);
-      expect(calculateDatabaseSqliteSchemaIdentity(before)).toBe(
-        FROZEN_G1_1_IDENTITIES.schema3SourceSqliteSchema,
-      );
-    } finally {
-      before.close();
-    }
-
-    const upgraded = WorkflowRuntimeConnectionFactory.openStore({
-      databasePath,
-      databaseMode: 'open_existing',
-      identityMode: 'isolated_test',
-    });
-    openStores.push(upgraded);
+    ).toBe(CURRENT_WORKFLOW_RUNTIME_SCHEMA_VERSION);
     expect(
-      upgraded.queryOne<{ user_version: number }>('PRAGMA user_version', [])
-        ?.user_version,
-    ).toBe(11);
-    expect(
-      upgraded.queryOne<{ count: number }>(
-        'SELECT count(*) AS count FROM pragma_foreign_key_check',
+      store.queryOne<{ current_capacity_revision: number }>(
+        'SELECT current_capacity_revision FROM runtime_capacity_head WHERE singleton_key = 1',
         [],
-      )?.count,
-    ).toBe(0);
-  });
-
-  it('upgrades a nonempty frozen Schema 4 real file through Schema 5-10 to Schema 11 and preserves rows', () => {
-    const { databasePath } = temporaryDatabase();
-    createSchema4Database(databasePath);
-    const seed = new Database(databasePath);
-    try {
-      seed
-        .prepare(
-          `INSERT INTO workflow_backups (
-             id, status, database_snapshot_ref, database_snapshot_hash,
-             manifest_value_id, manifest_hash, started_at_ms, completed_at_ms,
-             expires_at_ms, row_version
-           ) VALUES (?, 'preparing', ?, ?, NULL, NULL, ?, NULL, ?, ?)`,
-        )
-        .run(
-          'backup:upgrade-preserved',
-          'snapshot:upgrade-preserved',
-          hash('capacity-upgrade-preserved'),
-          1,
-          2,
-          1,
-        );
-    } finally {
-      seed.close();
-    }
-    const before = databaseGateSnapshot(databasePath);
-    expect(before.userVersion).toBe(4);
-    expect(before.sqliteSchemaIdentity).toBe(
-      FROZEN_G1_1_IDENTITIES.schema4SourceSqliteSchema,
-    );
-
-    const upgraded = WorkflowRuntimeConnectionFactory.openStore({
-      databasePath,
-      databaseMode: 'open_existing',
-      identityMode: 'isolated_test',
-    });
-    openStores.push(upgraded);
-    expect(
-      upgraded.queryOne<{ user_version: number }>('PRAGMA user_version', [])
-        ?.user_version,
-    ).toBe(11);
-    expect(
-      upgraded.queryOne<{ status: string; row_version: number }>(
-        'SELECT status, row_version FROM workflow_backups WHERE id = ?',
-        ['backup:upgrade-preserved'],
       ),
-    ).toEqual({ status: 'preparing', row_version: 1 });
+    ).toEqual({ current_capacity_revision: 1 });
+    expect(ensureCapacityDefaults(store, 123)).toBe('preserved');
+    expect(
+      store.queryOne<{ count: number }>(
+        'SELECT count(*) AS count FROM runtime_capacity_admin_commands',
+        [],
+      )?.count,
+    ).toBe(1);
   });
 
-  it('opens a frozen Schema 8 real file only after exact identity validation and upgrades it through Schema 9-10 to 11', () => {
-    const { databasePath } = temporaryDatabase();
-    createSchema8Database(databasePath);
-    const before = databaseGateSnapshot(databasePath);
-    expect(before.userVersion).toBe(8);
-    expect(before.sqliteSchemaIdentity).toBe(
-      CURRENT_G1_SCHEMA_IDENTITIES.schema8SourceSqliteSchema,
+  it('preserves an existing Capacity head byte-for-byte on reopen', () => {
+    const store = openFresh();
+    store.withImmediateTransaction((transaction) => {
+      transaction.execute(
+        'UPDATE runtime_capacity_head SET updated_at_ms = ?, row_version = ? WHERE singleton_key = 1',
+        [987_654, 7],
+      );
+    });
+    const before = store.queryOne<Record<string, unknown>>(
+      'SELECT * FROM runtime_capacity_head WHERE singleton_key = 1',
+      [],
     );
-    const upgraded = WorkflowRuntimeConnectionFactory.openStore({
+    const databasePath = store.databasePath;
+    store.close();
+
+    const reopened = WorkflowRuntimeConnectionFactory.openStore({
       databasePath,
       databaseMode: 'open_existing',
-      identityMode: 'isolated_test',
     });
-    openStores.push(upgraded);
+    stores.push(reopened);
     expect(
-      upgraded.queryOne<{ user_version: number }>('PRAGMA user_version', [])
-        ?.user_version,
-    ).toBe(11);
+      reopened.queryOne<Record<string, unknown>>(
+        'SELECT * FROM runtime_capacity_head WHERE singleton_key = 1',
+        [],
+      ),
+    ).toEqual(before);
   });
 
-  it('opens an exact Schema 9 real file, upgrades it through Schema 10 to 11, and reopens at the current identity', () => {
+  it('transactionally migrates a supported Schema 10 database', () => {
     const { databasePath } = temporaryDatabase();
-    createSchema9Database(databasePath);
-    const before = databaseGateSnapshot(databasePath);
-    expect(before.userVersion).toBe(9);
-    expect(before.sqliteSchemaIdentity).toBe(
-      CURRENT_G1_SCHEMA_IDENTITIES.schema9SourceSqliteSchema,
-    );
-
-    const upgraded = WorkflowRuntimeConnectionFactory.openStore({
+    createVersionDatabase(databasePath, 10);
+    const store = WorkflowRuntimeConnectionFactory.openStore({
       databasePath,
       databaseMode: 'open_existing',
-      identityMode: 'isolated_test',
     });
-    openStores.push(upgraded);
+    stores.push(store);
     expect(
-      upgraded.queryOne<{ user_version: number }>('PRAGMA user_version', [])
+      store.queryOne<{ user_version: number }>('PRAGMA user_version', [])
         ?.user_version,
-    ).toBe(11);
+    ).toBe(CURRENT_WORKFLOW_RUNTIME_SCHEMA_VERSION);
     expect(
-      upgraded.queryOne<{ count: number }>(
+      store.queryOne<{ count: number }>(
         'SELECT count(*) AS count FROM pragma_foreign_key_check',
         [],
       )?.count,
     ).toBe(0);
-    closeTracked(upgraded);
-
-    const reopened = WorkflowRuntimeConnectionFactory.openStore({
-      databasePath,
-      databaseMode: 'open_existing',
-      identityMode: 'isolated_test',
-    });
-    openStores.push(reopened);
-    expect(reopened.frozenInputs.sqliteSchemaIdentity).toBe(
-      CURRENT_G1_SCHEMA_IDENTITIES.sqliteSchema,
-    );
-  });
-
-  it('opens exact frozen Schema 10, applies only the additive Schema 11 step, and reopens', () => {
-    const { databasePath } = temporaryDatabase();
-    createSchema10Database(databasePath);
-    const before = databaseGateSnapshot(databasePath);
-    expect(before.userVersion).toBe(10);
-    expect(before.sqliteSchemaIdentity).toBe(
-      CURRENT_G1_SCHEMA_IDENTITIES.schema10SourceSqliteSchema,
-    );
-
-    const upgraded = WorkflowRuntimeConnectionFactory.openStore({
-      databasePath,
-      databaseMode: 'open_existing',
-      identityMode: 'isolated_test',
-    });
-    openStores.push(upgraded);
     expect(
-      upgraded.queryOne<{ user_version: number }>('PRAGMA user_version', [])
-        ?.user_version,
-    ).toBe(11);
-    expect(
-      upgraded.queryOne<{ count: number }>(
-        'SELECT count(*) AS count FROM workflow_runtime_command_ingress_invocations',
+      store.queryOne<{ legacy_alter_table: number }>(
+        'PRAGMA legacy_alter_table',
         [],
-      )?.count,
+      )?.legacy_alter_table,
     ).toBe(0);
-    closeTracked(upgraded);
-
-    const reopened = WorkflowRuntimeConnectionFactory.openStore({
-      databasePath,
-      databaseMode: 'open_existing',
-      identityMode: 'isolated_test',
-    });
-    openStores.push(reopened);
-    expect(reopened.frozenInputs.sqliteSchemaIdentity).toBe(
-      CURRENT_G1_SCHEMA_IDENTITIES.sqliteSchema,
+    const namedIndexes = new Set(
+      store
+        .queryAll<{ name: string }>(
+          `SELECT name FROM sqlite_schema
+            WHERE type = 'index' AND sql IS NOT NULL`,
+          [],
+        )
+        .map(({ name }) => name),
     );
+    for (const index of [
+      'uk:feature_releases:id_hash',
+      'uk:feature_releases:owner_identity',
+      'uk:activation_commands:id_domain_request',
+      'uk:activation_commands:idempotency',
+      'uk:capacity_commands:assigned_lineage',
+      'uk:capacity_commands:assigned_change',
+      'uk:capacity_commands:idempotency',
+    ]) {
+      expect(namedIndexes.has(index), `missing migrated index ${index}`).toBe(
+        true,
+      );
+    }
   });
 
-  it('rejects Schema 8 sqlite_schema identity drift before the 8-to-9 upgrade and preserves bytes', () => {
+  it('migrates Schema 11 while preserving Registry, definition, and Capacity state', () => {
     const { databasePath } = temporaryDatabase();
-    createSchema8Database(databasePath);
+    createVersionDatabase(databasePath, 11);
+    const { oldSnapshotHash, newSnapshotHash } =
+      seedSchema11PreservedState(databasePath);
+    expect(oldSnapshotHash).not.toBe(newSnapshotHash);
+
+    const store = WorkflowRuntimeConnectionFactory.openStore({
+      databasePath,
+      databaseMode: 'open_existing',
+    });
+    stores.push(store);
+    expect(store.schemaVersion).toBe(CURRENT_WORKFLOW_RUNTIME_SCHEMA_VERSION);
+    expect(
+      store.queryOne<{ snapshot_hash: string }>(
+        'SELECT snapshot_hash FROM workflow_registry_snapshots WHERE id = ?',
+        ['registry-snapshot:migration.definition@1.0.0'],
+      ),
+    ).toEqual({ snapshot_hash: newSnapshotHash });
+    expect(
+      store.queryOne<{ publication_state: string }>(
+        'SELECT publication_state FROM workflow_registry_resources WHERE id = ?',
+        ['registry-resource:definition:migration.definition@1.0.0'],
+      ),
+    ).toEqual({ publication_state: 'published' });
+    expect(
+      store.queryOne<{ row_version: number; updated_at_ms: number }>(
+        'SELECT row_version, updated_at_ms FROM runtime_capacity_head WHERE singleton_key = 1',
+        [],
+      ),
+    ).toEqual({ row_version: 7, updated_at_ms: 12 });
+  });
+
+  it('rejects Schema 11 with persisted Runs and rolls back', () => {
+    const { databasePath } = temporaryDatabase();
+    createVersionDatabase(databasePath, 11);
     const database = new Database(databasePath);
-    database.exec(
-      'CREATE INDEX "idx:test:schema8_identity_drift" ON "workflow_graph_child_completion_consumptions" ("created_at_ms")',
-    );
-    database.close();
-    const before = databaseGateSnapshot(databasePath);
-    expect(before.userVersion).toBe(8);
-    expect(before.sqliteSchemaIdentity).not.toBe(
-      CURRENT_G1_SCHEMA_IDENTITIES.schema8SourceSqliteSchema,
-    );
+    try {
+      seedUncheckedRow(database, 'workflow_graph_runs');
+    } finally {
+      database.close();
+    }
     expect(() =>
       WorkflowRuntimeConnectionFactory.openStore({
         databasePath,
         databaseMode: 'open_existing',
-        identityMode: 'isolated_test',
       }),
-    ).toThrow('Schema 8 sqlite_schema identity mismatch');
-    expectDatabaseGateUnchanged(databasePath, before);
+    ).toThrow('does not support persisted Workflow Runs; found 1 row(s)');
+    const unchanged = new Database(databasePath, { readonly: true });
+    try {
+      expect(unchanged.pragma('user_version', { simple: true })).toBe(11);
+      expect(
+        unchanged
+          .prepare('SELECT count(*) FROM workflow_graph_runs')
+          .pluck()
+          .get(),
+      ).toBe(1);
+    } finally {
+      unchanged.close();
+    }
   });
 
-  it('rejects Schema 4 sqlite_schema identity drift before the first upgrade DDL', () => {
+  it('migrates nonempty Schema 12 state without altering retained fields', () => {
     const { databasePath } = temporaryDatabase();
-    createSchema4Database(databasePath);
+    createVersionDatabase(databasePath, 12);
+    const before = seedSchema12PreservedState(databasePath);
+
+    const store = WorkflowRuntimeConnectionFactory.openStore({
+      databasePath,
+      databaseMode: 'open_existing',
+    });
+    stores.push(store);
+    expect(store.schemaVersion).toBe(CURRENT_WORKFLOW_RUNTIME_SCHEMA_VERSION);
+    expect(
+      store.queryOne(
+        'SELECT id, feature_id, release_ref, release_version, release_hash, execution_artifact_resource_id, execution_artifact_hash, status, staged_at_ms, activated_at_ms, disabled_at_ms, row_version FROM workflow_feature_releases',
+        [],
+      ),
+    ).toEqual(before.featureRelease);
+    expect(
+      store.queryOne('SELECT * FROM workflow_feature_active_releases', []),
+    ).toEqual(before.activeRelease);
+    expect(
+      store.queryOne('SELECT * FROM workflow_registry_retention_handles', []),
+    ).toEqual(before.retentionHandle);
+    expect(
+      store.queryOne(
+        'SELECT command_id, command_type, idempotency_domain, idempotency_key, request_value_id, request_hash, request_schema_resource_id, request_schema_hash, domain_request_hash, lifecycle, created_at_ms, finalized_at_ms, row_version FROM workflow_feature_release_activation_commands',
+        [],
+      ),
+    ).toEqual(before.activationCommand);
+    expect(
+      store.queryOne(
+        'SELECT command_id, idempotency_domain, idempotency_key, command_type, expected_capacity_revision, expected_config_hash, assigned_capacity_revision, assigned_change_id, proposed_capacity_json, proposed_config_hash, request_hash, reason_code, reason_text_value_id, reason_text_hash, evidence_manifest_value_id, evidence_manifest_hash, canonical_result_value_id, canonical_result_hash, created_at_ms, finalized_at_ms FROM runtime_capacity_admin_commands',
+        [],
+      ),
+    ).toEqual(before.capacityCommand);
+    expect(store.queryOne('SELECT * FROM runtime_capacity_head', [])).toEqual(
+      before.capacityHead,
+    );
+    expect(
+      store.queryOne('SELECT * FROM runtime_capacity_change_events', []),
+    ).toEqual(before.capacityEvent);
+    expect(
+      store.queryOne<{ count: number }>(
+        'SELECT count(*) AS count FROM pragma_foreign_key_check',
+        [],
+      )?.count,
+    ).toBe(0);
+  });
+
+  it('creates Schema 13 without obsolete governance columns', () => {
+    const store = openFresh();
+    const columns = (table: string) =>
+      store
+        .queryAll<{ name: string }>(`PRAGMA table_info("${table}")`, [])
+        .map(({ name }) => name);
+    expect(columns('workflow_registry_snapshots')).not.toEqual(
+      expect.arrayContaining(['core_build_hash', 'database_schema_hash']),
+    );
+    expect(columns('workflow_graph_runs')).not.toEqual(
+      expect.arrayContaining([
+        'compiler_toolchain_resource_id',
+        'core_release_hash',
+        'core_build_hash',
+        'run_protocol_major',
+        'executor_abi_major',
+        'database_schema_version',
+        'database_schema_hash',
+      ]),
+    );
+    expect(columns('workflow_feature_releases')).not.toEqual(
+      expect.arrayContaining([
+        'compatibility_snapshot_ref',
+        'compatibility_snapshot_hash',
+      ]),
+    );
+    expect(columns('workflow_feature_release_activation_commands')).not.toEqual(
+      expect.arrayContaining([
+        'verified_compatibility_input_value_id',
+        'verified_compatibility_result_value_id',
+      ]),
+    );
+    expect(columns('runtime_capacity_admin_commands')).not.toContain(
+      'genesis_core_release_hash',
+    );
+  });
+
+  it('transactionally migrates an empty supported Schema 3 database', () => {
+    const { databasePath } = temporaryDatabase();
+    createVersionDatabase(databasePath, 3);
+    const store = WorkflowRuntimeConnectionFactory.openStore({
+      databasePath,
+      databaseMode: 'open_existing',
+    });
+    stores.push(store);
+    expect(store.schemaVersion).toBe(CURRENT_WORKFLOW_RUNTIME_SCHEMA_VERSION);
+    expect(
+      store.queryOne<{ count: number }>(
+        'SELECT count(*) AS count FROM pragma_foreign_key_check',
+        [],
+      )?.count,
+    ).toBe(0);
+  });
+
+  it('rejects Schema 3 migration when activation state is not empty', () => {
+    const { databasePath } = temporaryDatabase();
+    createVersionDatabase(databasePath, 3);
     const database = new Database(databasePath);
     try {
-      database.exec(
-        'CREATE INDEX "idx:test:schema4_identity_drift" ON "workflow_domain_resource_heads" ("namespace")',
+      seedUncheckedRow(
+        database,
+        'workflow_feature_release_activation_commands',
       );
     } finally {
       database.close();
     }
-    const before = databaseGateSnapshot(databasePath);
-    expect(before.userVersion).toBe(4);
-    expect(before.sqliteSchemaIdentity).not.toBe(
-      FROZEN_G1_1_IDENTITIES.schema4SourceSqliteSchema,
-    );
-
     expect(() =>
       WorkflowRuntimeConnectionFactory.openStore({
         databasePath,
         databaseMode: 'open_existing',
-        identityMode: 'isolated_test',
       }),
-    ).toThrow('Schema 4 sqlite_schema identity mismatch');
-    expectDatabaseGateUnchanged(databasePath, before);
+    ).toThrow('requires empty relation');
   });
 
-  it('rejects Schema 3 sqlite_schema identity drift before the first upgrade DDL', () => {
+  it('persists an explicit legacy metadata version once before migration', () => {
     const { databasePath } = temporaryDatabase();
-    createSchema3Database(databasePath);
-    driftSchema3SqliteIdentity(databasePath);
-    const before = databaseGateSnapshot(databasePath);
-    expect(before.userVersion).toBe(3);
-    expect(before.sqliteSchemaIdentity).not.toBe(
-      FROZEN_G1_1_IDENTITIES.schema3SourceSqliteSchema,
-    );
-
-    expect(() =>
-      WorkflowRuntimeConnectionFactory.openStore({
-        databasePath,
-        databaseMode: 'open_existing',
-        identityMode: 'isolated_test',
-      }),
-    ).toThrow('Schema 3 sqlite_schema identity mismatch');
-    expectDatabaseGateUnchanged(databasePath, before);
-  });
-
-  it('rolls back the complete Schema 3 to 8 DDL when target verification fails', () => {
-    const { databasePath } = temporaryDatabase();
-    createSchema3Database(databasePath);
-    insertPreservedForeignKeyViolation(databasePath);
-    const before = databaseGateSnapshot(databasePath);
-    expect(before.userVersion).toBe(3);
-    expect(before.sqliteSchemaIdentity).toBe(
-      FROZEN_G1_1_IDENTITIES.schema3SourceSqliteSchema,
-    );
-    expect(before.rowCounts.workflow_registry_resource_dependencies).toBe(1);
-
-    expect(() =>
-      WorkflowRuntimeConnectionFactory.openStore({
-        databasePath,
-        databaseMode: 'open_existing',
-        identityMode: 'isolated_test',
-      }),
-    ).toThrow('foreign_key_check returned violations');
-    expectDatabaseGateUnchanged(databasePath, before);
+    createVersionDatabase(databasePath, 10);
+    const legacy = new Database(databasePath);
+    try {
+      legacy.pragma('user_version = 0');
+      legacy.exec(
+        `CREATE TABLE workflow_runtime_metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+         INSERT INTO workflow_runtime_metadata (key, value) VALUES ('schema_version', '10')`,
+      );
+    } finally {
+      legacy.close();
+    }
+    const store = WorkflowRuntimeConnectionFactory.openStore({
+      databasePath,
+      databaseMode: 'open_existing',
+    });
+    stores.push(store);
+    expect(
+      store.queryOne<{ user_version: number }>('PRAGMA user_version', [])
+        ?.user_version,
+    ).toBe(CURRENT_WORKFLOW_RUNTIME_SCHEMA_VERSION);
   });
 
   it.each([
-    'workflow_feature_release_activation_commands',
-    'workflow_feature_release_activation_invocations',
-    'workflow_feature_release_activation_events',
-    'workflow_feature_active_releases',
+    ['unknown', 1, 'unknown'],
+    ['newer', CURRENT_WORKFLOW_RUNTIME_SCHEMA_VERSION + 1, 'newer'],
   ])(
-    'fails closed before DDL when Schema 3 relation %s is non-empty',
-    (relation) => {
-      const { databasePath } = temporaryDatabase();
-      createSchema3Database(databasePath);
-      insertConstructionOnlyRow(databasePath, relation);
-      const before = databaseGateSnapshot(databasePath);
-      expect(before.userVersion).toBe(3);
-      expect(before.sqliteSchemaIdentity).toBe(
-        FROZEN_G1_1_IDENTITIES.schema3SourceSqliteSchema,
-      );
-      expect(before.rowCounts[relation]).toBe(1);
+    'rejects a %s schema version with an actionable diagnostic',
+    (_, version, word) => {
+      const databasePath = corruptCurrentDatabase((database) => {
+        database.pragma(`user_version = ${version}`);
+      });
       expect(() =>
         WorkflowRuntimeConnectionFactory.openStore({
           databasePath,
           databaseMode: 'open_existing',
-          identityMode: 'isolated_test',
         }),
-      ).toThrow(`Schema 3 upgrade requires empty relation ${relation}`);
-      expectDatabaseGateUnchanged(databasePath, before);
+      ).toThrow(word);
     },
   );
 
-  it('enforces one in-process writer owner and releases ownership on close', () => {
-    const { databasePath } = temporaryDatabase();
-    const first = openFresh(databasePath);
+  it('rejects a database with no version and no explicit legacy metadata', () => {
+    const databasePath = corruptCurrentDatabase((database) => {
+      database.pragma('user_version = 0');
+    });
     expect(() =>
       WorkflowRuntimeConnectionFactory.openStore({
         databasePath,
         databaseMode: 'open_existing',
-        identityMode: 'isolated_test',
       }),
-    ).toThrowError(
-      expect.objectContaining<Partial<WorkflowRuntimeStoreError>>({
-        code: 'writer_already_owned',
-      }),
-    );
-    closeTracked(first);
-    const second = WorkflowRuntimeConnectionFactory.openStore({
-      databasePath,
-      databaseMode: 'open_existing',
-      identityMode: 'isolated_test',
-    });
-    openStores.push(second);
-    expect(second.isOpen).toBe(true);
+    ).toThrow('no supported legacy metadata');
   });
 
-  it('rejects an existing schema mismatch', () => {
-    const { databasePath } = temporaryDatabase();
-    const store = openFresh(databasePath);
-    closeTracked(store);
-    const bytes = fs.readFileSync(databasePath);
-    const expected = Buffer.from('workflow_graph_resource_accounts');
-    let offset = bytes.indexOf(expected);
-    let replacementCount = 0;
-    while (offset >= 0) {
-      Buffer.from('xorkflow_graph_resource_accounts').copy(bytes, offset);
-      replacementCount += 1;
-      offset = bytes.indexOf(expected, offset + expected.length);
-    }
-    expect(replacementCount).toBeGreaterThan(0);
-    fs.writeFileSync(databasePath, bytes);
-    expect(() =>
-      WorkflowRuntimeConnectionFactory.openStore({
-        databasePath,
-        databaseMode: 'open_existing',
-        identityMode: 'isolated_test',
-      }),
-    ).toThrow();
-  });
-
-  it('rejects an existing profile mismatch without modifying it to match WAL', () => {
-    const { databasePath } = temporaryDatabase();
-    const store = openFresh(databasePath);
-    closeTracked(store);
-    const bytes = fs.readFileSync(databasePath);
-    expect(bytes[18]).toBe(2);
-    expect(bytes[19]).toBe(2);
-    bytes[18] = 1;
-    bytes[19] = 1;
-    fs.writeFileSync(databasePath, bytes);
-    expect(() =>
-      WorkflowRuntimeConnectionFactory.openStore({
-        databasePath,
-        databaseMode: 'open_existing',
-        identityMode: 'isolated_test',
-      }),
-    ).toThrow('journal_mode: expected wal, received delete');
-    const after = fs.readFileSync(databasePath);
-    expect(after[18]).toBe(1);
-    expect(after[19]).toBe(1);
-  });
-
-  it('forces read-only query_only, rejects writes, and closes explicitly', () => {
-    const { databasePath } = temporaryDatabase();
-    const store = openFresh(databasePath);
-    const readOnly = WorkflowRuntimeConnectionFactory.openReadOnly({
-      databasePath,
-      identityMode: 'isolated_test',
-    });
-    expect(
-      readOnly.queryOne<{ query_only: number }>('PRAGMA query_only', [])
-        ?.query_only,
-    ).toBe(1);
-    expect(() =>
-      readOnly.queryAll<{ namespace: string }>(
-        'DELETE FROM workflow_domain_resource_heads WHERE namespace = ? RETURNING namespace',
-        ['missing'],
-      ),
-    ).toThrow(/readonly|read-only/i);
-    readOnly.close();
-    expect(readOnly.isOpen).toBe(false);
-    expect(() => readOnly.queryAll('SELECT 1 AS value', [])).toThrowError(
-      expect.objectContaining<Partial<WorkflowRuntimeStoreError>>({
-        code: 'connection_closed',
-      }),
-    );
-    closeTracked(store);
-    expect(store.isOpen).toBe(false);
-    expect(() => store.queryAll('SELECT 1 AS value', [])).toThrowError(
-      expect.objectContaining<Partial<WorkflowRuntimeStoreError>>({
-        code: 'connection_closed',
-      }),
-    );
-  });
-
-  it('hosts synchronous BEGIN IMMEDIATE commit/rollback and rejects async or DDL callbacks', () => {
-    const { databasePath } = temporaryDatabase();
-    const store = openFresh(databasePath);
-    const insert = (
-      transaction: WorkflowRuntimeWriteTransaction,
-      namespace: string,
-    ) =>
-      transaction.execute(
-        'INSERT INTO workflow_domain_resource_heads (namespace, key_hash, current_fencing_token, row_version) VALUES (?, ?, ?, ?)',
-        [namespace, hash(namespace), 0, 0],
-      );
-
-    const committed = store.withImmediateTransaction((transaction) => {
-      expect(transaction.transactionKind).toBe('immediate');
-      expect(transaction).not.toHaveProperty('database');
-      insert(transaction, 'committed');
-      return transaction.queryOne<{ count: number }>(
-        'SELECT count(*) AS count FROM workflow_domain_resource_heads',
-        [],
-      )?.count;
-    });
-    expect(committed).toBe(1);
-
-    expect(() =>
-      store.withImmediateTransaction((transaction) => {
-        insert(transaction, 'rolled-back');
-        throw new Error('callback failure');
-      }),
-    ).toThrow('callback failure');
-
-    const asyncCallback = (transaction: WorkflowRuntimeWriteTransaction) => {
-      insert(transaction, 'async-rolled-back');
-      return Promise.resolve('not allowed');
-    };
-    expect(() => store.withImmediateTransaction(asyncCallback)).toThrowError(
-      expect.objectContaining<Partial<WorkflowRuntimeStoreError>>({
-        code: 'transaction_callback_async',
-      }),
-    );
-    expect(() =>
-      store.withImmediateTransaction(async (transaction) => {
-        insert(transaction, 'async-function-never-started');
-      }),
-    ).toThrowError(
-      expect.objectContaining<Partial<WorkflowRuntimeStoreError>>({
-        code: 'transaction_callback_async',
-      }),
-    );
-    expect(() =>
-      store.withImmediateTransaction((transaction) =>
-        transaction.execute('CREATE TABLE forbidden (id TEXT)', []),
-      ),
-    ).toThrowError(
-      expect.objectContaining<Partial<WorkflowRuntimeStoreError>>({
-        code: 'write_statement_forbidden',
-      }),
-    );
-    expect(
-      store.queryOne<{ count: number }>(
-        'SELECT count(*) AS count FROM workflow_domain_resource_heads',
-        [],
-      )?.count,
-    ).toBe(1);
-  });
-
-  it('stages bounded transient ID sets with fixed Store-owned TEMP DDL', () => {
-    const { databasePath } = temporaryDatabase();
-    const store = openFresh(databasePath);
-    const ids = Array.from(
-      { length: 2048 },
-      (_, index) => `scope-${String(index).padStart(4, '0')}`,
-    );
-    store.withImmediateTransaction((transaction) => {
-      expect(transaction.stageTransientIdSet!('t7a-test', ids)).toBe(
-        ids.length,
-      );
-      expect(
-        transaction.queryAll<{ id: string }>(
-          `SELECT id FROM temp.workflow_runtime_transient_id_sets
-            WHERE set_key = ? ORDER BY ordinal`,
-          ['t7a-test'],
+  it.each([
+    [
+      'table',
+      (database: Database.Database) =>
+        database.exec('DROP TABLE runtime_capacity_head'),
+      'missing required table runtime_capacity_head',
+    ],
+    [
+      'column',
+      (database: Database.Database) =>
+        database.exec(
+          'ALTER TABLE runtime_capacity_head RENAME COLUMN row_version TO removed_row_version',
         ),
-      ).toEqual(ids.map((id) => ({ id })));
+      'missing required column runtime_capacity_head.row_version',
+    ],
+    [
+      'index',
+      (database: Database.Database) =>
+        database.exec('DROP INDEX "idx:capacity_head:singleton"'),
+      'missing required index idx:capacity_head:singleton',
+    ],
+    [
+      'obsolete column',
+      (database: Database.Database) =>
+        database.exec(
+          'ALTER TABLE workflow_graph_runs ADD COLUMN database_schema_hash TEXT',
+        ),
+      'contains obsolete column workflow_graph_runs.database_schema_hash',
+    ],
+  ])(
+    'rejects a current database with a missing required %s',
+    (_, mutate, message) => {
+      const databasePath = corruptCurrentDatabase(mutate);
       expect(() =>
-        transaction.stageTransientIdSet!('t7a-test', [ids[0]!, ids[0]!]),
-      ).toThrowError(
-        expect.objectContaining<Partial<WorkflowRuntimeStoreError>>({
-          code: 'transient_id_set_invalid',
+        WorkflowRuntimeConnectionFactory.openStore({
+          databasePath,
+          databaseMode: 'open_existing',
         }),
-      );
-    });
-    store.withImmediateTransaction((transaction) => {
-      expect(
-        transaction.queryOne<{ count: number }>(
-          `SELECT count(*) AS count
-             FROM temp.workflow_runtime_transient_id_sets`,
-          [],
-        )?.count,
-      ).toBe(0);
-    });
-  });
+      ).toThrow(message);
+    },
+  );
+});
 
-  it('serializes a competing process behind a real BEGIN IMMEDIATE writer lock', async () => {
-    const { databasePath } = temporaryDatabase();
-    const store = openFresh(databasePath);
-    const moduleUrl = pathToFileURL(
-      path.join(import.meta.dirname, 'index.ts'),
-    ).href;
-    const childSource = `
-      import { setTimeout as delay } from 'node:timers/promises';
-      const [moduleUrl, databasePath] = process.argv.slice(-2);
-      const { WorkflowRuntimeConnectionFactory } = await import(moduleUrl);
-      const store = WorkflowRuntimeConnectionFactory.openStore({
-        databasePath,
-        databaseMode: 'open_existing',
-        identityMode: 'isolated_test',
-      });
-      console.log('ready');
-      await delay(100);
-      const startedAt = Date.now();
-      store.withImmediateTransaction((transaction) => {
-        transaction.execute(
-          'INSERT INTO workflow_domain_resource_heads (namespace, key_hash, current_fencing_token, row_version) VALUES (?, ?, ?, ?)',
-          ['child', '${hash('child')}', 0, 0],
-        );
-      });
-      console.log('elapsed:' + (Date.now() - startedAt));
-      store.close();
-    `;
-    const child = spawn(
-      process.execPath,
-      [
-        '--import',
-        'tsx',
-        '--input-type=module',
-        '--eval',
-        childSource,
-        moduleUrl,
-        databasePath,
-      ],
-      { stdio: ['pipe', 'pipe', 'pipe'] },
-    );
-    const initialOutput = await waitForOutput(child, 'ready\n');
-    store.withImmediateTransaction((transaction) => {
-      transaction.execute(
-        'INSERT INTO workflow_domain_resource_heads (namespace, key_hash, current_fencing_token, row_version) VALUES (?, ?, ?, ?)',
-        ['parent', hash('parent'), 0, 0],
-      );
-      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 600);
-    });
-    const result = await collectChild(child, initialOutput);
-    expect(result.code, result.stderr).toBe(0);
-    const elapsed = Number(result.stdout.match(/elapsed:(\d+)/)?.[1]);
-    expect(elapsed).toBeGreaterThanOrEqual(400);
-    expect(
-      store.queryOne<{ count: number }>(
-        'SELECT count(*) AS count FROM workflow_domain_resource_heads',
-        [],
-      )?.count,
-    ).toBe(2);
-  }, 15_000);
-
-  it('fails closed on host/release validation identity mismatches before creating a database', () => {
-    const profile = loadFrozenWorkflowRuntimeStoreInputs().profile;
-    expect(() =>
-      assertRuntimeHostIdentity(profile, 'production'),
-    ).not.toThrow();
-    const host = currentRuntimeHostObservation();
-    expect(() =>
-      assertRuntimeHostIdentity(profile, 'isolated_test', {
-        ...host,
-        platform: 'linux',
-      }),
-    ).toThrow('Runtime platform identity mismatch');
-
-    const { databasePath } = temporaryDatabase();
+describe('Workflow Runtime Store connection boundary', () => {
+  it('rejects invalid paths and duplicate writers', () => {
     expect(() =>
       WorkflowRuntimeConnectionFactory.openStore({
         databasePath: ':memory:',
         databaseMode: 'create',
-        identityMode: 'isolated_test',
       }),
-    ).toThrowError(
-      expect.objectContaining<Partial<WorkflowRuntimeStoreError>>({
-        code: 'database_path_invalid',
-      }),
-    );
+    ).toThrowError(WorkflowRuntimeStoreError);
+
+    const store = openFresh();
     expect(() =>
       WorkflowRuntimeConnectionFactory.openStore({
-        databasePath,
-        databaseMode: 'create',
-        identityMode: 'production',
+        databasePath: store.databasePath,
+        databaseMode: 'open_existing',
       }),
-    ).toThrow('validation-inputs');
-    expect(fs.existsSync(databasePath)).toBe(false);
+    ).toThrow('already owns the writer');
+  });
+
+  it('commits synchronous transactions and rolls back failures', () => {
+    const store = openFresh();
+    store.withImmediateTransaction((transaction) => {
+      transaction.execute(
+        'UPDATE runtime_capacity_head SET updated_at_ms = ?, row_version = ? WHERE singleton_key = 1',
+        [2, 2],
+      );
+    });
+    expect(
+      store.queryOne<{ updated_at_ms: number }>(
+        'SELECT updated_at_ms FROM runtime_capacity_head WHERE singleton_key = 1',
+        [],
+      )?.updated_at_ms,
+    ).toBe(2);
+
+    expect(() =>
+      store.withImmediateTransaction((transaction) => {
+        transaction.execute(
+          'UPDATE runtime_capacity_head SET updated_at_ms = ?, row_version = ? WHERE singleton_key = 1',
+          [3, 3],
+        );
+        throw new Error('rollback');
+      }),
+    ).toThrow('rollback');
+    expect(
+      store.queryOne<{ updated_at_ms: number }>(
+        'SELECT updated_at_ms FROM runtime_capacity_head WHERE singleton_key = 1',
+        [],
+      )?.updated_at_ms,
+    ).toBe(2);
+  });
+
+  it('opens a query-only reader and rejects writes through the read API', () => {
+    const store = openFresh();
+    const reader = WorkflowRuntimeConnectionFactory.openReadOnly({
+      databasePath: store.databasePath,
+    });
+    expect(
+      reader.queryOne<{ query_only: number }>('PRAGMA query_only', [])
+        ?.query_only,
+    ).toBe(1);
+    expect(() => reader.queryAll('DELETE FROM workflows', [])).toThrow(
+      'row-returning',
+    );
+    reader.close();
   });
 });

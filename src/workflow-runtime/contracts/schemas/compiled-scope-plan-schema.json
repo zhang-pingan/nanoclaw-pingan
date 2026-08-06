@@ -6,24 +6,16 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-compiled-scope-plan-schema:1\n",
-  "hash": "sha256:c2916f58f4d545ae155e15a92f50073dbd94307bcd2865f1089dcb51cbf39c62",
+  "hash": "sha256:7e0c1c995359246aa8e534973c99ae114f3431078d35ebbfaae84634c5fa8b1e",
   "payload": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "$id": "https://icarus.local/schemas/workflow-graph-scope-plan/1",
+    "$id": "https://icarus.local/schemas/workflow-graph-scope-plan/2",
     "title": "CompiledScopePlan",
     "type": "object",
     "additionalProperties": false,
     "required": [
       "format",
       "compiler_version",
-      "compiler_build_hash",
-      "compiler_toolchain_ref",
-      "compiler_toolchain_hash",
-      "compiler_error_catalog_hash",
-      "canonical_normalizer_version",
-      "canonical_normalizer_hash",
-      "proof_algorithm_version",
-      "proof_algorithm_hash",
       "plan_hash",
       "source_hash",
       "interface_snapshot_hash",
@@ -38,7 +30,7 @@
       "data_edges",
       "completion",
       "complexity_summary",
-      "static_child_plan_closure_hash",
+      "static_child_plan_closure",
       "effective_limits",
       "effective_usage_budget",
       "runtime_safety_snapshot",
@@ -46,42 +38,11 @@
     ],
     "properties": {
       "format": {
-        "const": "icarus.workflow-graph-scope-plan/1"
+        "const": "icarus.workflow-graph-scope-plan/2"
       },
       "compiler_version": {
         "type": "string",
         "minLength": 1
-      },
-      "compiler_build_hash": {
-        "type": "string",
-        "pattern": "^sha256:[0-9a-f]{64}$"
-      },
-      "compiler_toolchain_ref": {
-        "$ref": "#/$defs/versioned_ref"
-      },
-      "compiler_toolchain_hash": {
-        "type": "string",
-        "pattern": "^sha256:[0-9a-f]{64}$"
-      },
-      "compiler_error_catalog_hash": {
-        "type": "string",
-        "pattern": "^sha256:[0-9a-f]{64}$"
-      },
-      "canonical_normalizer_version": {
-        "type": "string",
-        "minLength": 1
-      },
-      "canonical_normalizer_hash": {
-        "type": "string",
-        "pattern": "^sha256:[0-9a-f]{64}$"
-      },
-      "proof_algorithm_version": {
-        "type": "string",
-        "minLength": 1
-      },
-      "proof_algorithm_hash": {
-        "type": "string",
-        "pattern": "^sha256:[0-9a-f]{64}$"
       },
       "plan_hash": {
         "type": "string",
@@ -144,9 +105,8 @@
       "complexity_summary": {
         "$ref": "#/$defs/complexity_summary"
       },
-      "static_child_plan_closure_hash": {
-        "type": "string",
-        "pattern": "^sha256:[0-9a-f]{64}$"
+      "static_child_plan_closure": {
+        "$ref": "#/$defs/static_child_plan_closure"
       },
       "effective_limits": {
         "$ref": "#/$defs/nullable_graph_limits"
@@ -5116,7 +5076,8 @@
               "effective_max_items",
               "effective_child_concurrency",
               "completion",
-              "child_policy"
+              "child_policy",
+              "result_order"
             ],
             "properties": {
               "id": {
@@ -5234,6 +5195,9 @@
               },
               "child_policy": {
                 "$ref": "#/$defs/child_policy_binding"
+              },
+              "result_order": {
+                "const": "item_index"
               }
             }
           },
@@ -5317,8 +5281,6 @@
         "type": "object",
         "additionalProperties": false,
         "required": [
-          "proof_algorithm_version",
-          "proof_algorithm_hash",
           "producer_schema_hash",
           "canonical_pointer",
           "pointer_totality",
@@ -5330,14 +5292,6 @@
           "proof_hash"
         ],
         "properties": {
-          "proof_algorithm_version": {
-            "type": "string",
-            "minLength": 1
-          },
-          "proof_algorithm_hash": {
-            "type": "string",
-            "pattern": "^sha256:[0-9a-f]{64}$"
-          },
           "producer_schema_hash": {
             "type": "string",
             "pattern": "^sha256:[0-9a-f]{64}$"
@@ -5400,6 +5354,7 @@
         "required": [
           "normalized_ast",
           "operand_schema_hashes",
+          "operand_types",
           "max_steps",
           "program_hash"
         ],
@@ -5416,6 +5371,21 @@
                 "pattern": "^sha256:[0-9a-f]{64}$"
               }
             }
+          },
+          "operand_types": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "null",
+                "boolean",
+                "number",
+                "string",
+                "array",
+                "object"
+              ]
+            },
+            "minItems": 1
           },
           "max_steps": {
             "type": "integer",
@@ -6445,6 +6415,120 @@
                 "maximum": 9007199254740991
               }
             }
+          }
+        }
+      },
+      "static_child_plan_closure_member": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "closure_key",
+          "parent_closure_key",
+          "scope_key",
+          "owner_node_path",
+          "factory_kind",
+          "source_ref",
+          "source_hash",
+          "plan_ref",
+          "plan_hash",
+          "interface_snapshot_hash",
+          "member_hash"
+        ],
+        "properties": {
+          "closure_key": {
+            "type": "string",
+            "minLength": 1
+          },
+          "parent_closure_key": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "scope_key": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,254}$"
+          },
+          "owner_node_path": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,254}$"
+            },
+            "minItems": 1
+          },
+          "factory_kind": {
+            "type": "string",
+            "enum": [
+              "inline",
+              "template"
+            ]
+          },
+          "source_ref": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/versioned_ref"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source_hash": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "plan_ref": {
+            "type": "string",
+            "minLength": 1
+          },
+          "plan_hash": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "interface_snapshot_hash": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "member_hash": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          }
+        }
+      },
+      "static_child_plan_closure": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "members",
+          "member_count",
+          "closure_hash"
+        ],
+        "properties": {
+          "members": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/static_child_plan_closure_member"
+            },
+            "uniqueItems": true
+          },
+          "member_count": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "closure_hash": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
           }
         }
       }

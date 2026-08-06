@@ -2,11 +2,8 @@ import type {
   RuntimeRegistryRef,
   RuntimeValueRef,
 } from '../contracts/g5-basic-runtime-types.js';
-import {
-  G5_REPAIR_DATABASE_SCHEMA_HASH,
-  G5_REPAIR_DATABASE_SCHEMA_VERSION,
-} from '../contracts/g5-basic-runtime-repair-types.js';
 import type { JsonObject, Sha256Hash } from '../contracts/types.js';
+import { CURRENT_WORKFLOW_RUNTIME_SCHEMA_VERSION } from '../store/runtime-store/config.js';
 import type {
   WorkflowRuntimeStore,
   WorkflowRuntimeWriteTransaction,
@@ -40,11 +37,6 @@ export interface T1ActivationInput {
   readonly runtimeSafetySnapshot: RuntimeValueRef;
   readonly runtimeSupportedLimits: RuntimeRegistryRef;
   readonly sqliteExecutionProfile: RuntimeRegistryRef;
-  readonly compilerToolchain: RuntimeRegistryRef;
-  readonly coreReleaseRef: string;
-  readonly coreReleaseHash: Sha256Hash;
-  readonly coreBuildHash: Sha256Hash;
-  readonly databaseSchemaHash: Sha256Hash;
   readonly sourceSeedHash: Sha256Hash;
   readonly compilerSnapshotHash: Sha256Hash;
   readonly inputSnapshot: RuntimeValueRef;
@@ -66,13 +58,10 @@ export function activateWorkflowT1(
   input: T1ActivationInput,
   fault?: G5TransactionFault,
 ): T1ActivationReceipt {
-  if (
-    store.frozenInputs.schemaHash !== G5_REPAIR_DATABASE_SCHEMA_HASH ||
-    input.databaseSchemaHash !== store.frozenInputs.schemaHash
-  )
+  if (store.schemaVersion !== CURRENT_WORKFLOW_RUNTIME_SCHEMA_VERSION)
     throw new G5RuntimeError(
       'integrity_violation',
-      'T1 requires the current frozen Schema 11 identity',
+      'T1 requires the current Schema version',
     );
   return runImmediateG5Transaction(
     store,
@@ -86,16 +75,10 @@ export function activateWorkflowT1InTransaction(
   input: T1ActivationInput,
   options: { readonly writeInitialCheckpoint?: boolean } = {},
 ): T1ActivationReceipt {
-  if (input.databaseSchemaHash !== G5_REPAIR_DATABASE_SCHEMA_HASH)
-    throw new G5RuntimeError(
-      'integrity_violation',
-      'T1 activation carries a non-current Schema 11 identity',
-    );
   for (const [label, resource] of Object.entries({
     definition: input.definition,
     runtimeSupportedLimits: input.runtimeSupportedLimits,
     sqliteExecutionProfile: input.sqliteExecutionProfile,
-    compilerToolchain: input.compilerToolchain,
   }))
     assertExactPublishedRegistryResource(transaction, resource, `T1 ${label}`);
   const requiredRunResources = [
@@ -223,9 +206,6 @@ export function activateWorkflowT1InTransaction(
        runtime_safety_snapshot_value_id, runtime_safety_snapshot_hash,
        runtime_supported_limits_resource_id, runtime_supported_limits_resource_hash,
        sqlite_execution_profile_resource_id, sqlite_execution_profile_resource_hash,
-       compiler_toolchain_resource_id, compiler_toolchain_resource_hash,
-       core_release_ref, core_release_hash, core_build_hash, run_protocol_major,
-       executor_abi_major, database_schema_version, database_schema_hash,
        source_seed_hash, root_scope_id, root_build_id, root_plan_hash,
        manifest_seq, manifest_head_hash, ledger_seq, ledger_head_hash,
        lifecycle, control, operational_state, root_cancel_scope,
@@ -233,7 +213,7 @@ export function activateWorkflowT1InTransaction(
        exit_name, output_value_id, output_hash, error_code, error_detail_value_id,
        error_detail_hash, next_event_seq, last_admission_seq, row_version,
        started_at_ms, finished_at_ms, created_at_ms, updated_at_ms
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 1, ?, ?, ?, ?, ?, NULL, 0, ?, 0, ?, 'initializing', 'running', 'healthy', NULL, NULL, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 2, NULL, 1, ?, NULL, ?, ?)`,
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 0, ?, 0, ?, 'initializing', 'running', 'healthy', NULL, NULL, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 2, NULL, 1, ?, NULL, ?, ?)`,
     [
       graphRunId,
       input.workflowId,
@@ -251,13 +231,6 @@ export function activateWorkflowT1InTransaction(
       input.runtimeSupportedLimits.hash,
       input.sqliteExecutionProfile.rowId,
       input.sqliteExecutionProfile.hash,
-      input.compilerToolchain.rowId,
-      input.compilerToolchain.hash,
-      input.coreReleaseRef,
-      input.coreReleaseHash,
-      input.coreBuildHash,
-      G5_REPAIR_DATABASE_SCHEMA_VERSION,
-      input.databaseSchemaHash,
       input.sourceSeedHash,
       rootScopeId,
       rootBuildId,

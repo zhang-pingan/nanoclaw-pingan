@@ -37,16 +37,10 @@ export interface CapacityAuthenticatedInvocation {
     | 'runtime_center'
     | 'cli'
     | 'deployment_tool'
-    | 'production_activation';
+    | 'local_startup';
   readonly delegationChainRef: string | null;
   readonly permissions: readonly string[];
   readonly requestedAtMs: number;
-  readonly activeCoreReleaseHash: Sha256Hash;
-  readonly baselineConfigHash: Sha256Hash;
-  readonly genesisGrant: {
-    readonly coreReleaseHash: Sha256Hash;
-    readonly baselineConfigHash: Sha256Hash;
-  } | null;
 }
 
 export interface CapacityCommandPersistence {
@@ -103,8 +97,6 @@ function commandKeys(
         'idempotency_key',
         'proposed_capacity',
         'reason_code',
-        'core_release_hash',
-        'evidence_refs',
       ]
     : [
         'command_type',
@@ -146,8 +138,9 @@ export function parseCapacityAdminCommand(
     command.command_id.length === 0 ||
     typeof command.idempotency_key !== 'string' ||
     command.idempotency_key.length === 0 ||
-    !Array.isArray(command.evidence_refs) ||
-    command.evidence_refs.some((entry) => typeof entry !== 'string')
+    (command.command_type === 'replace_deployment_capacity' &&
+      (!Array.isArray(command.evidence_refs) ||
+        command.evidence_refs.some((entry) => typeof entry !== 'string')))
   ) {
     throw new G5RuntimeError(
       'contract_invalid',
@@ -319,21 +312,11 @@ function invocationAuthorizationDenial(
   if (command.command_type === 'initialize_deployment_capacity') {
     if (
       invocation.actorKind !== 'system' ||
-      invocation.actorRef !== 'system:production-activation' ||
-      invocation.entrypoint !== 'production_activation'
+      invocation.actorRef !== 'system:local-store' ||
+      invocation.sessionActorRef !== invocation.actorRef ||
+      invocation.entrypoint !== 'local_startup'
     )
       return 'actor_kind_denied';
-    if (
-      invocation.genesisGrant === null ||
-      invocation.genesisGrant.coreReleaseHash !==
-        invocation.activeCoreReleaseHash ||
-      invocation.genesisGrant.baselineConfigHash !==
-        invocation.baselineConfigHash ||
-      command.core_release_hash !== invocation.activeCoreReleaseHash ||
-      command.proposed_capacity.config_hash !== invocation.baselineConfigHash ||
-      command.evidence_refs.length < 2
-    )
-      return 'capacity_snapshot_invalid';
     return null;
   }
   if (invocation.actorKind !== 'human') return 'actor_kind_denied';
@@ -429,12 +412,12 @@ function insertCommand(
     `INSERT INTO runtime_capacity_admin_commands (
        command_id, idempotency_domain, idempotency_key, command_type,
        expected_capacity_revision, expected_config_hash,
-       assigned_capacity_revision, assigned_change_id, genesis_core_release_hash,
+       assigned_capacity_revision, assigned_change_id,
        proposed_capacity_json, proposed_config_hash, request_hash, reason_code,
        reason_text_value_id, reason_text_hash, evidence_manifest_value_id,
        evidence_manifest_hash, canonical_result_value_id, canonical_result_hash,
        created_at_ms, finalized_at_ms
-     ) VALUES (?, 'deployment_capacity', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     ) VALUES (?, 'deployment_capacity', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       command.command_id,
       command.idempotency_key,
@@ -447,9 +430,6 @@ function insertCommand(
         : null,
       assignedRevision,
       assignedChangeId,
-      command.command_type === 'initialize_deployment_capacity'
-        ? command.core_release_hash
-        : null,
       canonicalJson(command.proposed_capacity),
       command.proposed_capacity.config_hash,
       requestHash,

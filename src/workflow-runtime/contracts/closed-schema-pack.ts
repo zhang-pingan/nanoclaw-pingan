@@ -28,25 +28,11 @@ import type {
   JsonObject,
   JsonValue,
 } from './types.js';
-import { assertCurrentG2SealedBoundary } from './current-g2-sealed-boundary.js';
-
 const contractsRoot = import.meta.dirname;
-const foundationManifestHash =
-  'sha256:e85b654581c036f8129677d7443a0704ebc8b8fbe87907b842aaefe1501e637d';
 const manifestPath = 'contract-pack-closed-schemas.json';
 const positiveCasesPath = 'conformance/closed-schemas/positive-cases.json';
 const negativeCasesPath = 'conformance/closed-schemas/negative-cases.json';
 const domainCatalogPath = 'catalogs/closed-schema-domain-separators.json';
-
-const recordedFutureReservedDirectories = [
-  'protocols',
-  'safety',
-  'sqlite',
-  'conformance/draft',
-  'conformance/sealed',
-] as const;
-
-const stillReservedDirectories = ['conformance/sealed'] as const;
 
 function asciiCompare(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0;
@@ -199,7 +185,6 @@ function buildManifest(
     {
       gate: 'G0.3',
       status: 'closed_schemas',
-      foundation_manifest_hash: foundationManifestHash,
       schema_formats: schemaFormats,
       schema_targets: CLOSED_SCHEMA_DESCRIPTORS.map((descriptor) => ({
         artifact_path: descriptor.artifact_path,
@@ -217,7 +202,6 @@ function buildManifest(
         .sort((left, right) =>
           asciiCompare(String(left.path), String(right.path)),
         ),
-      future_reserved_directories: [...recordedFutureReservedDirectories],
     },
   );
 }
@@ -642,29 +626,12 @@ function validateDirectoryBoundaries(): void {
   if (fixtureFiles.join('\n') !== 'negative-cases.json\npositive-cases.json') {
     throw new Error('Closed-schema fixture directory boundary drift');
   }
-  for (const directory of stillReservedDirectories) {
-    try {
-      assertCurrentG2SealedBoundary(absoluteContractPath(directory));
-    } catch {
-      throw new Error(`Future Gate directory contains artifacts: ${directory}`);
-    }
-  }
-}
-
-function validateFoundationIdentity(): void {
-  const foundation = parseContractArtifactEnvelope(
-    readJsonObject('contract-pack-foundation.json'),
-  );
-  if (foundation.hash !== foundationManifestHash) {
-    throw new Error('G0.2 foundation manifest changed during G0.3');
-  }
 }
 
 function validateCompletePack(
   artifacts: Array<[string, ContractArtifactEnvelope]>,
   manifest: ContractArtifactEnvelope,
 ): void {
-  validateFoundationIdentity();
   validateSchemasAndFixtures(artifacts);
   validateDomainCatalog(artifacts, manifest);
   validateDirectoryBoundaries();

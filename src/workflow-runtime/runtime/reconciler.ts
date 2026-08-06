@@ -1,14 +1,11 @@
 import { canonicalJson, domainSeparatedSha256 } from '../contracts/hash.js';
+import { WORKFLOW_COMPILER_VERSION } from '../compiler/version.js';
 import { registryResourceId } from '../contracts/g3-registry-persistence.js';
 import type { PlanGeneratedSchemaGenerator } from '../contracts/generated-schema-authority.js';
 import type { CompiledScopePlanV2Document } from '../contracts/compiler-contract-repair-types.js';
 import { COMPILED_PLAN_V2_DOMAIN_SEPARATOR } from '../contracts/compiler-contract-repair-source.js';
 import type { WorkflowCompilerStaticChildPlanBundle } from '../contracts/static-child-plan-bundle-types.js';
 import type { JsonObject, JsonValue, Sha256Hash } from '../contracts/types.js';
-import {
-  G5_REPAIR_DATABASE_SCHEMA_HASH,
-  G5_REPAIR_DATABASE_SCHEMA_VERSION,
-} from '../contracts/g5-basic-runtime-repair-types.js';
 import type {
   RuntimeRegistryRef,
   RuntimeValueRef,
@@ -268,15 +265,10 @@ export function persistCompileResultT2a(
       );
       const run = transaction.queryOne<{
         runtime_safety_snapshot_hash: string;
-        compiler_toolchain_resource_hash: string;
         source_seed_hash: string;
         work_fence_epoch: number;
-        database_schema_version: number;
-        database_schema_hash: string;
       }>(
-        `SELECT runtime_safety_snapshot_hash, compiler_toolchain_resource_hash,
-                source_seed_hash, work_fence_epoch,
-                database_schema_version, database_schema_hash
+        `SELECT runtime_safety_snapshot_hash, source_seed_hash, work_fence_epoch
            FROM workflow_graph_runs WHERE id = ?`,
         [input.graphRunId],
       );
@@ -320,21 +312,15 @@ export function persistCompileResultT2a(
         !planPin ||
         planPin.plan_hash !== input.plan.plan_hash ||
         planPin.plan_format !== input.plan.format ||
-        planPin.compiler_toolchain_hash !==
-          input.plan.compiler_toolchain_hash ||
-        planPin.compiler_build_hash !== input.plan.compiler_build_hash ||
-        planPin.provenance !== 'sealed_g2_expected' ||
-        !['3.0.4', '3.0.5', '3.0.6'].includes(input.plan.compiler_version) ||
+        planPin.compiler_version !== input.plan.compiler_version ||
+        planPin.provenance !== 'golden_corpus' ||
+        input.plan.compiler_version !== WORKFLOW_COMPILER_VERSION ||
         run.source_seed_hash !== input.sourceHash ||
-        input.plan.runtime_safety_hash !== run.runtime_safety_snapshot_hash ||
-        input.plan.compiler_toolchain_hash !==
-          run.compiler_toolchain_resource_hash ||
-        run.database_schema_version !== G5_REPAIR_DATABASE_SCHEMA_VERSION ||
-        run.database_schema_hash !== G5_REPAIR_DATABASE_SCHEMA_HASH
+        input.plan.runtime_safety_hash !== run.runtime_safety_snapshot_hash
       )
         throw new G5RuntimeError(
           'integrity_violation',
-          'T2a Plan safety, toolchain, or Schema 11 identity drift',
+          'T2a Plan version or safety compatibility drift',
         );
       if (build.status === 'compiled') {
         if (

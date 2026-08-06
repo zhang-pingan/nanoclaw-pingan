@@ -68,7 +68,12 @@ function getMailConfigPath(): string {
   const raw =
     process.env.ICARUS_MAIL_CONFIG_PATH ||
     env.ICARUS_MAIL_CONFIG_PATH ||
-    path.join(process.env.HOME || os.homedir(), '.config', 'icarus', 'mail.json');
+    path.join(
+      process.env.HOME || os.homedir(),
+      '.config',
+      'icarus',
+      'mail.json',
+    );
   const home = process.env.HOME || os.homedir();
   return path.resolve(raw.replace(/^~/, home));
 }
@@ -96,7 +101,9 @@ export function loadMailProfile(): MailProfile {
   const secure =
     typeof smtp.secure === 'boolean'
       ? smtp.secure
-      : String(smtp.secure || '').trim().toLowerCase() === 'true';
+      : String(smtp.secure || '')
+          .trim()
+          .toLowerCase() === 'true';
   const user = typeof smtp.user === 'string' ? smtp.user.trim() : '';
   const pass = typeof smtp.pass === 'string' ? smtp.pass : '';
   const fromAddress =
@@ -108,7 +115,8 @@ export function loadMailProfile(): MailProfile {
       : null;
 
   if (!host) throw new Error('邮件配置缺少 smtp.host');
-  if (!Number.isFinite(port) || port <= 0) throw new Error('邮件配置缺少有效的 smtp.port');
+  if (!Number.isFinite(port) || port <= 0)
+    throw new Error('邮件配置缺少有效的 smtp.port');
   if (!user) throw new Error('邮件配置缺少 smtp.user');
   if (!pass) throw new Error('邮件配置缺少 smtp.pass');
   if (!fromAddress) throw new Error('邮件配置缺少 from.address');
@@ -136,11 +144,7 @@ export function loadMailProfile(): MailProfile {
 
 function uniqueAddresses(values: string[]): string[] {
   return Array.from(
-    new Set(
-      values
-        .map((value) => value.trim())
-        .filter(Boolean),
-    ),
+    new Set(values.map((value) => value.trim()).filter(Boolean)),
   );
 }
 
@@ -177,7 +181,9 @@ function buildPlainTextMessage(input: {
   subject: string;
   body: string;
 }): string {
-  const bodyBase64 = wrapBase64(Buffer.from(input.body, 'utf-8').toString('base64'));
+  const bodyBase64 = wrapBase64(
+    Buffer.from(input.body, 'utf-8').toString('base64'),
+  );
   const headerLines = [
     `From: ${formatFromHeader(input.profile.from)}`,
     `To: ${formatAddressHeader(input.to)}`,
@@ -193,7 +199,9 @@ function buildPlainTextMessage(input: {
   return `${headerLines.join('\r\n')}\r\n\r\n${bodyBase64}\r\n`;
 }
 
-async function connectSocket(profile: MailProfile): Promise<net.Socket | tls.TLSSocket> {
+async function connectSocket(
+  profile: MailProfile,
+): Promise<net.Socket | tls.TLSSocket> {
   if (profile.smtp.secure || profile.smtp.port === 465) {
     return await new Promise((resolve, reject) => {
       const socket = tls.connect(
@@ -355,7 +363,10 @@ export async function sendMail(
         command: 'STARTTLS',
         expectedCodes: [220],
       });
-      activeSocket = await upgradeToTls(activeSocket as net.Socket, profile.smtp.host);
+      activeSocket = await upgradeToTls(
+        activeSocket as net.Socket,
+        profile.smtp.host,
+      );
       const secureReader = createLineReader(activeSocket);
       nextLine = secureReader.nextLine;
       await sendCommand({

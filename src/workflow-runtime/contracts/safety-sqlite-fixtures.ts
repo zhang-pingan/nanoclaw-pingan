@@ -12,10 +12,7 @@ export type SafetySqliteFixtureTarget =
 export interface SafetySqlitePositiveCase {
   case_id: string;
   target_format: SafetySqliteFixtureTarget;
-  assertion:
-    | 'valid_exact_contract'
-    | 'complete_per_field_enforcement'
-    | 'candidate_identity_unbound';
+  assertion: 'valid_exact_contract' | 'complete_per_field_enforcement';
 }
 
 export type SafetySqliteMutation =
@@ -60,14 +57,9 @@ export const SAFETY_SQLITE_POSITIVE_CASES = [
     assertion: 'complete_per_field_enforcement',
   },
   {
-    case_id: 'sqlite_profile_candidate_exact',
+    case_id: 'sqlite_profile_exact',
     target_format: 'icarus.sqlite-execution-profile/1',
     assertion: 'valid_exact_contract',
-  },
-  {
-    case_id: 'sqlite_candidate_release_identity_unbound',
-    target_format: 'icarus.sqlite-execution-profile/1',
-    assertion: 'candidate_identity_unbound',
   },
 ] as const satisfies readonly SafetySqlitePositiveCase[];
 
@@ -305,32 +297,6 @@ export const SAFETY_SQLITE_NEGATIVE_CASES = [
     expected_code: 'safety_sqlite_contract_drift',
   },
   {
-    case_id: 'sqlite_rejects_certified_claim',
-    target_format: 'icarus.sqlite-execution-profile/1',
-    mutation: {
-      operation: 'replace',
-      pointer: '/certification_status',
-      value: 'certified',
-    },
-    expected_stage: 'schema',
-    expected_keyword: 'const',
-    expected_instance_pointer: '/certification_status',
-    expected_code: 'safety_sqlite_contract_drift',
-  },
-  {
-    case_id: 'sqlite_rejects_development_sqlite_identity',
-    target_format: 'icarus.sqlite-execution-profile/1',
-    mutation: {
-      operation: 'replace',
-      pointer: '/sqlite_version',
-      value: '3.50.4',
-    },
-    expected_stage: 'schema',
-    expected_keyword: 'type',
-    expected_instance_pointer: '/sqlite_version',
-    expected_code: 'safety_sqlite_contract_drift',
-  },
-  {
     case_id: 'sqlite_rejects_negative_mmap',
     target_format: 'icarus.sqlite-execution-profile/1',
     mutation: {
@@ -354,32 +320,6 @@ export const SAFETY_SQLITE_NEGATIVE_CASES = [
     expected_stage: 'schema',
     expected_keyword: 'const',
     expected_instance_pointer: '/read_only_query_only',
-    expected_code: 'safety_sqlite_contract_drift',
-  },
-  {
-    case_id: 'sqlite_rejects_distribution_hash_drift',
-    target_format: 'icarus.sqlite-execution-profile/1',
-    mutation: {
-      operation: 'replace',
-      pointer: '/managed_node_distribution_hash',
-      value: `sha256:${'0'.repeat(64)}`,
-    },
-    expected_stage: 'semantic',
-    expected_keyword: null,
-    expected_instance_pointer: null,
-    expected_code: 'safety_sqlite_contract_drift',
-  },
-  {
-    case_id: 'sqlite_rejects_mutable_distribution_ref',
-    target_format: 'icarus.sqlite-execution-profile/1',
-    mutation: {
-      operation: 'replace',
-      pointer: '/managed_node_distribution_ref/version',
-      value: 'latest',
-    },
-    expected_stage: 'schema',
-    expected_keyword: 'not',
-    expected_instance_pointer: '/managed_node_distribution_ref/version',
     expected_code: 'safety_sqlite_contract_drift',
   },
   {

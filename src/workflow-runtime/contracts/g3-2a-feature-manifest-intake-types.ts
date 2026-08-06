@@ -1,6 +1,7 @@
 import type { JsonObject, Sha256Hash, VersionedRef } from './types.js';
 
-export const G32A_FEATURE_MANIFEST_FORMAT = 'icarus.feature-manifest/2' as const;
+export const G32A_FEATURE_MANIFEST_FORMAT =
+  'icarus.feature-manifest/2' as const;
 export const G32A_SOURCE_MANIFEST_HASH_DOMAIN =
   'icarus:feature-manifest-source:2\n' as const;
 export const G32A_ROOT_IDENTITY_DOMAIN =

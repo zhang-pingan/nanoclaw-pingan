@@ -11,41 +11,12 @@
     "slice": "G3.9",
     "status": "DONE",
     "g3_status": "EXIT_CANDIDATE_PENDING_INDEPENDENT_G3_REGRESSION",
-    "upstream": {
-      "database_schema_version": 11,
-      "g1_root_hash": "sha256:2adb9376d341ad430155829647086bcc76f84ebf22dffac28c19d4026ea06ab2",
-      "database_schema_hash": "sha256:ad998b2d0bb5e5f158b0be6d13db79cb6a0c0650d5064b267262551af266189c",
-      "schema11_migration_hash": "sha256:ccaa7699894da98284b9ce86767d917e355441df93e010d90751ccb713c9b872",
-      "schema10_to_11_upgrade_hash": "sha256:cb7c434266a62899323a03c83ee36fae01d3bf25ace4e81c82ea8f4ed1ded381",
-      "schema10_migration_hash": "sha256:269645a9f093dc35fd35a04336d71e38cc17b7168584752f9b9bdfc106f46fad",
-      "schema9_to_10_upgrade_hash": "sha256:19c24f06558a3e98f1415468c4af8ce44e94afcad8be3428ebdc133bf4a353c5",
-      "schema9_migration_hash": "sha256:4591e2dd417d439c813026816572e8a66e9d088efa6a8de88ebfb38a68cf9837",
-      "schema8_to_9_upgrade_hash": "sha256:890c911a27074cca3ee34f9a7f022e4fbda6edf77fbe2ad75f2b77d0d1bed23b",
-      "schema8_migration_hash": "sha256:b19ebe83ea8b7c53a2ab54a901df092b4e343ee4e1d5772ed6bc3143a82746ad",
-      "schema7_migration_hash": "sha256:b4307930cedd9e0b8acbec599a2b3b29cb18f78840a726532b108459a4df2497",
-      "schema7_to_8_upgrade_hash": "sha256:544af9b55349268d152650c9a9fda5c399bb0e665750a2c47a6155d22ca6e3a9",
-      "schema6_migration_hash": "sha256:16a46e84c77d734013e18b4b00b86564f6188ea73717763e9fb7a884d62faa41",
-      "schema6_to_7_upgrade_hash": "sha256:225c5f148347dc42ca086bfb0bf7db957d13eb1be502f155465e20ee66010062",
-      "schema5_migration_hash": "sha256:2ead40dc2f1618f87247e9d3bb476266797c38560e1ad0537a6afa6f71a3fbf6",
-      "schema5_to_6_upgrade_hash": "sha256:dc94fa0867ca572b7ec39ffb8df448e38be00ca4831f1d420885ee7cc097687d",
-      "schema3_to_4_upgrade_hash": "sha256:5ac263fe3279c61f74ba6314f5df98fff59a8f8b32acfa784d2040421ebaa3cf",
-      "schema4_to_5_upgrade_hash": "sha256:97479810c2c079d71270d5a714faa4b8fa8ebd6af629ef2f7d772af270c2bb0a",
-      "schema4_source_migration_hash": "sha256:4a8ddeb1f9715399ad96c3bc32efa5e8032a3bd484eaed0159c6a24620c1be43",
-      "g3_8a_pack_hash": "sha256:d8412111a0f3dcabb4ce416b99086701ea3e3911ff431b5457eb957b2f69722f",
-      "g3_8a_repair_artifact_hash": "sha256:94cb2c390bb44298238b1ffac4184b04f59efbbeae6f268fbce7618104ec406b",
-      "g3_8a_internal_contract_hash": "sha256:70d4b9ef47c83711415636737292450538acaf5cc4547d3130b04b101e6707ae",
-      "g3_6_pack_hash": "sha256:3fa7afb5fa9294325004476ee230b896bc08fe8a6e6fe7f8c719c130e4c6911b",
-      "g3_7_pack_hash": "sha256:7d51a4406c0f1e72ad195b7bb8ad8c3800dfc08761022d4ce15ce0fae4ec5560",
-      "g2_sealed_bundle_hash": "sha256:0820328ae1cfdba7d05948d9e36498a5428d997d6eabfb833ef0ba7d84b77db7"
-    },
     "schema_resource_hashes": {
-      "request": "sha256:b1eb5681861d4537eb9dc5bf77844c00176d9445eb76b5eb82494504f2f62116",
-      "receipt": "sha256:68049e60a9febc4c65a162c930f93757386503ee054ce64046e562b134c85ffe",
-      "result": "sha256:c99c78fb1a7701264e20ae1d29824bafac183787ba79ab22398d4d5045f80f1a",
-      "compatibility_input": "sha256:512107167b9951f331eef329aac6620d8a460ad578ff3296be87b0540b8fc462",
-      "compatibility_result": "sha256:8429ba179f20082a2d9c82cb450fb24848091e25ec78481fcfec53f88988363f"
+      "request": "sha256:edc7b8f5c80c0963424e566529813bb7a1148257e9605874a9db4ef85e1ba4cd",
+      "receipt": "sha256:86a4f70cda88555480defb5f44301570132600cf7e7a7d8e3d4c28f88d5c8903",
+      "result": "sha256:8cf9f71dec80898b6cf96d736852c55ff6f5d951170b0d65ad1bde247ed4039b"
     },
-    "fixture_digest": "sha256:23d7662ce2967f3c1a6de96f7771a36e4cfc65f836e120781e03214dd3b6e362",
+    "fixture_digest": "sha256:9e9cbb2d08ddf0f9f78690c3610730f6ab246cfd9876dc266ea11649bfa2e57e",
     "error_precedence": [
       "activation_request_strict_parse_invalid",
       "activation_request_removed_field",
@@ -59,7 +30,7 @@
       "target_release_identity_mismatch",
       "target_release_owner_mismatch",
       "target_release_resource_set_mismatch",
-      "g3_6_preflight_rejected",
+      "runtime_abi_incompatible",
       "target_release_lifecycle_invalid",
       "previous_release_missing",
       "previous_release_identity_mismatch",
@@ -76,28 +47,6 @@
       "pointer_cas_conflict",
       "activation_persistence_identity_collision"
     ],
-    "g3_6_nested_error_precedence": [
-      "preflight_input_invalid",
-      "preflight_side_effect_requested",
-      "snapshot_missing",
-      "snapshot_hash_mismatch",
-      "snapshot_binding_mismatch",
-      "closure_root_missing",
-      "closure_root_hash_mismatch",
-      "closure_mismatch",
-      "execution_artifact_missing",
-      "execution_artifact_hash_mismatch",
-      "execution_artifact_mismatch",
-      "executor_implementation_missing",
-      "executor_implementation_hash_mismatch",
-      "executor_implementation_mismatch",
-      "artifact_binding_mismatch",
-      "core_compatibility_mismatch",
-      "run_protocol_mismatch",
-      "executor_abi_mismatch",
-      "retention_policy_mismatch",
-      "retention_eligibility_mismatch"
-    ],
     "command_boundary": "workflow_feature_release_activation_commands/invocations/events",
     "forbidden_command_unions": [
       "workflow_runtime_commands",
@@ -105,12 +54,12 @@
       "workflow_publisher_commands"
     ],
     "store_transaction": "single_begin_immediate",
-    "preflight_composition": "G3.6_only_for_G3.3_and_G3.5",
+    "compatibility_check": "direct_runtime_abi_major",
     "active_pointer_dml": "adjacent_cas_only",
     "receipt_owner": "committed_pointer_transition_only",
     "recovery": "bounded_pending_scan_then_strict_terminal_and_chain_verification",
     "positive_case_count": 9,
-    "negative_case_count": 53,
+    "negative_case_count": 34,
     "fault_case_count": 17,
     "artifacts": [
       {
@@ -122,7 +71,7 @@
         },
         "version": 1,
         "domain_separator": "icarus:workflow-feature-release-activation-request-schema:1\n",
-        "hash": "sha256:f423f570ff05ba207fb3d3ae36115e6259fd97df075b6f7913940832363b360d"
+        "hash": "sha256:97757b7851d0f1cda48d8d7ff9296d15d17efb44675d882603929dfbbb0141e7"
       },
       {
         "path": "registry/workflow-feature-release-activation-receipt-schema@1.json",
@@ -133,7 +82,7 @@
         },
         "version": 1,
         "domain_separator": "icarus:workflow-feature-release-activation-receipt-schema:1\n",
-        "hash": "sha256:2e9f36e1c7e289eb82791d1ae3751120424c24b2873ce0cb47cc8c392eb2b50e"
+        "hash": "sha256:d6f40cab0c9ca91f7f45228fd2734f2bad420e98027d802ae83ed970ca530031"
       },
       {
         "path": "registry/workflow-feature-release-activation-result-schema@1.json",
@@ -144,7 +93,7 @@
         },
         "version": 1,
         "domain_separator": "icarus:workflow-feature-release-activation-result-schema:1\n",
-        "hash": "sha256:a7898c73983b49a45399a0d28a992c9587821c595995234fdb671a91b5400753"
+        "hash": "sha256:547c19b3491a37f0b1e1febd0872c9e849518248f4191b1a43df69e67e6d83eb"
       },
       {
         "path": "conformance/g3.9-feature-release-activation/positive-cases.json",
@@ -166,7 +115,7 @@
         },
         "version": 1,
         "domain_separator": "icarus:workflow-g3-feature-release-activation-negative-cases:1\n",
-        "hash": "sha256:4b16f516e695ba3cbb1703f4f2e9a4b569b0f7307b1de3b8a0938bd7f50d6dee"
+        "hash": "sha256:155ab5c046a70ca4d653e57f93ee2dc9f0aeb16da3f4525b171333bbc6fdd163"
       },
       {
         "path": "conformance/g3.9-feature-release-activation/fault-cases.json",
@@ -188,7 +137,7 @@
         },
         "version": 1,
         "domain_separator": "icarus:workflow-feature-release-activation-domain-separators:1\n",
-        "hash": "sha256:8396fc5ffefd0751c3ebbd4f35cde443eae940b68098f35fd30e89c4fa69dc87"
+        "hash": "sha256:f6d3e15aa4ec5c911575a949506d9c6d6f84476a55732d50cc9e66eae54bf12d"
       }
     ],
     "production_loader_implemented": false,
@@ -197,5 +146,5 @@
     "authoring_stages_implemented": false,
     "g4_through_g9_status": "NOT_READY"
   },
-  "hash": "sha256:d8e9a00949477e58920de22324b1895578745438f3b6245fd42d6edb6b1fb867"
+  "hash": "sha256:ccf6d14aeaee46215d40de05474fbf16ce8481cc09241b5ab0713adb2b849810"
 }

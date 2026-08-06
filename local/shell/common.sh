@@ -11,9 +11,7 @@ LAUNCH_AGENT_PLIST_CHANGED=0
 BACKEND_ENTRY="$ROOT_DIR/dist/index.js"
 RUNTIME_TOOLCHAIN="$ROOT_DIR/scripts/runtime-toolchain.sh"
 RUNTIME_HOME="${ICARUS_RUNTIME_HOME:-$HOME/Library/Application Support/Icarus}"
-RUNTIME_LAUNCHER="$RUNTIME_HOME/bin/icarus-runtime"
 HOST_LAUNCHER="$ROOT_DIR/local/shell/launch-host.sh"
-HOST_CORE_RELEASE_CLI="$ROOT_DIR/src/host-core/host-core-release-cli.ts"
 WORKFLOW_STATE_CLI="$ROOT_DIR/src/host-core/workflow-state-cli.ts"
 
 ensure_logs_dir() {
@@ -58,18 +56,13 @@ prepare_host_mode() {
 
   case "$mode" in
     current)
-      "$RUNTIME_TOOLCHAIN" --runtime-home "$RUNTIME_HOME" install
       "$RUNTIME_TOOLCHAIN" --runtime-home "$RUNTIME_HOME" verify
       "$RUNTIME_TOOLCHAIN" --runtime-home "$RUNTIME_HOME" exec -- npm run build
       echo "typescript compiled"
       inspect_workflow_state current
       ;;
     active)
-      "$RUNTIME_TOOLCHAIN" --runtime-home "$RUNTIME_HOME" verify
-      "$RUNTIME_TOOLCHAIN" --runtime-home "$RUNTIME_HOME" exec -- npx tsx "$HOST_CORE_RELEASE_CLI" \
-        verify-active \
-        --runtime-home "$RUNTIME_HOME"
-      inspect_workflow_state active
+      "$RUNTIME_TOOLCHAIN" --runtime-home "$RUNTIME_HOME" verify-active
       ;;
     *) return 64 ;;
   esac
@@ -84,7 +77,6 @@ inspect_workflow_state() {
 }
 
 ensure_core_runtime() {
-  "$RUNTIME_TOOLCHAIN" --runtime-home "$RUNTIME_HOME" install
   "$RUNTIME_TOOLCHAIN" --runtime-home "$RUNTIME_HOME" verify
 }
 
@@ -96,7 +88,6 @@ install_launch_agent_plist() {
   local mode="$1"
   local host_launcher_escaped
   local host_mode_escaped
-  local launcher_escaped
   local root_escaped
   local home_escaped
   local rendered
@@ -106,7 +97,6 @@ install_launch_agent_plist() {
 
   host_launcher_escaped="$(escape_sed_replacement "$HOST_LAUNCHER")"
   host_mode_escaped="$(escape_sed_replacement "$mode")"
-  launcher_escaped="$(escape_sed_replacement "$RUNTIME_LAUNCHER")"
   root_escaped="$(escape_sed_replacement "$ROOT_DIR")"
   home_escaped="$(escape_sed_replacement "$HOME")"
   rendered="$(mktemp)"
@@ -114,7 +104,6 @@ install_launch_agent_plist() {
   sed \
     -e "s/{{HOST_LAUNCHER}}/$host_launcher_escaped/g" \
     -e "s/{{HOST_MODE}}/$host_mode_escaped/g" \
-    -e "s/{{RUNTIME_LAUNCHER}}/$launcher_escaped/g" \
     -e "s/{{PROJECT_ROOT}}/$root_escaped/g" \
     -e "s/{{HOME}}/$home_escaped/g" \
     "$LAUNCH_AGENT_TEMPLATE" > "$rendered"
@@ -245,7 +234,7 @@ is_direct_icarus_pid() {
   command="$(ps -p "$pid" -o command= 2>/dev/null || true)"
   [ -n "$command" ] && {
     [[ "$command" == *"$BACKEND_ENTRY"* ]] ||
-      { [[ "$command" == *"$RUNTIME_HOME/core-releases/"* ]] && [[ "$command" == *"/dist/index.js"* ]]; }
+      { [[ "$command" == *"$RUNTIME_HOME/host-core-snapshots/"* ]] && [[ "$command" == *"/dist/index.js"* ]]; }
   }
 }
 
@@ -261,7 +250,7 @@ find_running_direct_icarus_pid() {
   done < <(
     {
       pgrep -f "$BACKEND_ENTRY" 2>/dev/null || true
-      pgrep -f "$RUNTIME_HOME/core-releases/.*/dist/index.js" 2>/dev/null || true
+      pgrep -f "$RUNTIME_HOME/host-core-snapshots/.*/dist/index.js" 2>/dev/null || true
     } | sort -u
   )
 

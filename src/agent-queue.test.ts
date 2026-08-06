@@ -114,12 +114,7 @@ describe('AgentQueue', () => {
     expect(queue.isActive('web:group1')).toBe(true);
     expect(queue.hasActiveContainer('web:group1')).toBe(false);
 
-    queue.registerProcess(
-      'web:group1',
-      {} as any,
-      'container-1',
-      'test-agent',
-    );
+    queue.registerProcess('web:group1', {} as any, 'container-1', 'test-agent');
     expect(queue.hasActiveContainer('web:group1')).toBe(true);
 
     resolveProcess!();
@@ -365,12 +360,7 @@ describe('AgentQueue', () => {
     await vi.advanceTimersByTimeAsync(10);
 
     // Register a process so closeStdin has an agentFolder
-    queue.registerProcess(
-      'web:group1',
-      {} as any,
-      'container-1',
-      'test-agent',
-    );
+    queue.registerProcess('web:group1', {} as any, 'container-1', 'test-agent');
 
     // Enqueue a task while container is active but NOT idle
     const taskFn = vi.fn(async () => {});
@@ -405,12 +395,7 @@ describe('AgentQueue', () => {
     await vi.advanceTimersByTimeAsync(10);
 
     // Register process and mark idle
-    queue.registerProcess(
-      'web:group1',
-      {} as any,
-      'container-1',
-      'test-agent',
-    );
+    queue.registerProcess('web:group1', {} as any, 'container-1', 'test-agent');
     queue.notifyIdle('web:group1');
 
     // Clear previous writes, then enqueue a task
@@ -444,12 +429,7 @@ describe('AgentQueue', () => {
     queue.setProcessMessagesFn(processMessages);
     queue.enqueueMessageCheck('web:group1');
     await vi.advanceTimersByTimeAsync(10);
-    queue.registerProcess(
-      'web:group1',
-      {} as any,
-      'container-1',
-      'test-agent',
-    );
+    queue.registerProcess('web:group1', {} as any, 'container-1', 'test-agent');
 
     queue.notifyIdle('web:group1');
 
@@ -479,12 +459,7 @@ describe('AgentQueue', () => {
     });
     queue.enqueueMessageCheck('web:group1');
     await vi.advanceTimersByTimeAsync(10);
-    queue.registerProcess(
-      'web:group1',
-      {} as any,
-      'container-1',
-      'test-agent',
-    );
+    queue.registerProcess('web:group1', {} as any, 'container-1', 'test-agent');
     queue.notifyIdle('web:group1');
 
     const writeFileSync = vi.mocked(fs.default.writeFileSync);
@@ -524,12 +499,7 @@ describe('AgentQueue', () => {
     queue.setProcessMessagesFn(processMessages);
     queue.enqueueMessageCheck('web:group1');
     await vi.advanceTimersByTimeAsync(10);
-    queue.registerProcess(
-      'web:group1',
-      {} as any,
-      'container-1',
-      'test-agent',
-    );
+    queue.registerProcess('web:group1', {} as any, 'container-1', 'test-agent');
 
     // Container becomes idle
     queue.notifyIdle('web:group1');
@@ -570,12 +540,7 @@ describe('AgentQueue', () => {
     // Start a task (sets isTaskContainer = true)
     queue.enqueueTask('web:group1', 'task-1', taskFn);
     await vi.advanceTimersByTimeAsync(10);
-    queue.registerProcess(
-      'web:group1',
-      {} as any,
-      'container-1',
-      'test-agent',
-    );
+    queue.registerProcess('web:group1', {} as any, 'container-1', 'test-agent');
 
     // sendMessage should return false — user messages must not go to task containers
     const result = queue.sendMessage(
@@ -608,12 +573,7 @@ describe('AgentQueue', () => {
     await vi.advanceTimersByTimeAsync(10);
 
     // Register process and enqueue a task (no idle yet — no preemption)
-    queue.registerProcess(
-      'web:group1',
-      {} as any,
-      'container-1',
-      'test-agent',
-    );
+    queue.registerProcess('web:group1', {} as any, 'container-1', 'test-agent');
 
     const writeFileSync = vi.mocked(fs.default.writeFileSync);
     writeFileSync.mockClear();

@@ -6,13 +6,11 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-contract-pack-catalog-protocols:1\n",
-  "hash": "sha256:078be3fed7e8d430b228c0aa526e15e6bd92665f863c6d0818eaebbcaf43b533",
+  "hash": "sha256:bd2aec341f67fed44d30df32eb43956b5813254add34a93c41853138c2de6222",
   "payload": {
     "gate": "G0.4",
     "status": "catalogs_and_protocol_tables",
     "run_protocol_major": 1,
-    "foundation_manifest_hash": "sha256:e85b654581c036f8129677d7443a0704ebc8b8fbe87907b842aaefe1501e637d",
-    "closed_schema_manifest_hash": "sha256:6f7aa5b997c5a496a4eb95776a09f18e3c25753e7324a6ef1f095a23b8413d81",
     "compiler_error_code_count": 27,
     "fact_kind_count": 13,
     "event_type_count": 39,
@@ -157,12 +155,6 @@
         "domain_separator": "icarus:workflow-runtime-state-transition-tables:1\n",
         "hash": "sha256:040569c46e94e5c66de4a3327b9f80fb6dba17c78518d019f1c335be4842132f"
       }
-    ],
-    "future_reserved_directories": [
-      "safety",
-      "sqlite",
-      "conformance/draft",
-      "conformance/sealed"
     ]
   }
 }

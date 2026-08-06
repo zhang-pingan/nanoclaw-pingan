@@ -14,9 +14,9 @@ import { getPlatform, getServiceManager, isRoot } from './platform.js';
 import { emitStatus } from './status.js';
 import { renderLaunchdPlist } from './launchd.js';
 
-function servicePath(runtimeLauncherPath: string, homeDir: string): string {
+function servicePath(hostLauncherPath: string, homeDir: string): string {
   return [
-    path.dirname(runtimeLauncherPath),
+    path.dirname(hostLauncherPath),
     '/opt/homebrew/bin',
     '/opt/homebrew/sbin',
     '/home/linuxbrew/.linuxbrew/bin',
@@ -29,6 +29,18 @@ function servicePath(runtimeLauncherPath: string, homeDir: string): string {
     '/sbin',
     path.join(homeDir, '.local', 'bin'),
   ].join(':');
+}
+
+export function childProcessFailureDetail(error: unknown): string {
+  const stderr = (error as { stderr?: unknown } | null)?.stderr;
+  const detail = Buffer.isBuffer(stderr)
+    ? stderr.toString('utf8')
+    : typeof stderr === 'string'
+      ? stderr
+      : error instanceof Error
+        ? error.message
+        : String(error);
+  return detail.trim().replaceAll(/\s*\n\s*/g, ' ');
 }
 
 export async function run(_args: string[]): Promise<void> {
@@ -52,26 +64,41 @@ export async function run(_args: string[]): Promise<void> {
     'Setting up service',
   );
 
-  // Install and build through the managed runtime for the current Host launch.
-  logger.info('Installing managed runtime and building TypeScript');
+  logger.info('Configuring a compatible Node runtime and building TypeScript');
   try {
-    execFileSync(runtimeToolchainPath, ['install'], {
-      cwd: projectRoot,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
+    try {
+      execFileSync(
+        runtimeToolchainPath,
+        ['configure', '--node', process.execPath],
+        {
+          cwd: projectRoot,
+          stdio: ['ignore', 'pipe', 'pipe'],
+        },
+      );
+    } catch {
+      logger.warn(
+        'Current Node is incompatible; installing the supported fallback',
+      );
+      execFileSync(runtimeToolchainPath, ['install'], {
+        cwd: projectRoot,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+    }
     execFileSync(runtimeToolchainPath, ['exec', '--', 'npm', 'run', 'build'], {
       cwd: projectRoot,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
-    logger.info('Managed build and current Host launch selection succeeded');
-  } catch {
-    logger.error('Managed runtime setup or build failed');
+    logger.info('Compatible runtime build succeeded');
+  } catch (error) {
+    const diagnostic = childProcessFailureDetail(error);
+    logger.error({ diagnostic }, 'Compatible runtime setup or build failed');
     emitStatus('SETUP_SERVICE', {
       SERVICE_TYPE: 'unknown',
-      RUNTIME_LAUNCHER: hostLauncherPath,
+      HOST_LAUNCHER: hostLauncherPath,
       PROJECT_PATH: projectRoot,
       STATUS: 'failed',
-      ERROR: 'managed_runtime_or_build_failed',
+      ERROR: 'compatible_runtime_or_build_failed',
+      DIAGNOSTIC: diagnostic,
       LOG: 'logs/setup.log',
     });
     process.exit(1);
@@ -86,7 +113,7 @@ export async function run(_args: string[]): Promise<void> {
   } else {
     emitStatus('SETUP_SERVICE', {
       SERVICE_TYPE: 'unknown',
-      RUNTIME_LAUNCHER: hostLauncherPath,
+      HOST_LAUNCHER: hostLauncherPath,
       PROJECT_PATH: projectRoot,
       STATUS: 'failed',
       ERROR: 'unsupported_platform',
@@ -134,7 +161,7 @@ function setupLaunchd(
 
   emitStatus('SETUP_SERVICE', {
     SERVICE_TYPE: 'launchd',
-    RUNTIME_LAUNCHER: hostLauncherPath,
+    HOST_LAUNCHER: hostLauncherPath,
     PROJECT_PATH: projectRoot,
     PLIST_PATH: plistPath,
     SERVICE_LOADED: serviceLoaded,
@@ -283,7 +310,7 @@ function setupSystemd(
 
   emitStatus('SETUP_SERVICE', {
     SERVICE_TYPE: runningAsRoot ? 'systemd-system' : 'systemd-user',
-    RUNTIME_LAUNCHER: hostLauncherPath,
+    HOST_LAUNCHER: hostLauncherPath,
     PROJECT_PATH: projectRoot,
     UNIT_PATH: unitPath,
     SERVICE_LOADED: serviceLoaded,
@@ -334,7 +361,7 @@ function setupNohupFallback(
 
   emitStatus('SETUP_SERVICE', {
     SERVICE_TYPE: 'nohup',
-    RUNTIME_LAUNCHER: hostLauncherPath,
+    HOST_LAUNCHER: hostLauncherPath,
     PROJECT_PATH: projectRoot,
     WRAPPER_PATH: wrapperPath,
     SERVICE_LOADED: false,

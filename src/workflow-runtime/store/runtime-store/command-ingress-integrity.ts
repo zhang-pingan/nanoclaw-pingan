@@ -1,5 +1,9 @@
 import { canonicalJson, domainSeparatedSha256 } from '../../contracts/hash.js';
-import type { JsonObject, JsonValue, Sha256Hash } from '../../contracts/types.js';
+import type {
+  JsonObject,
+  JsonValue,
+  Sha256Hash,
+} from '../../contracts/types.js';
 import type { WorkflowRuntimeSqlValue } from './index.js';
 
 export const RUNTIME_COMMAND_INGRESS_TERMINAL_BINDING_DOMAIN =
@@ -48,8 +52,7 @@ export interface RuntimeCommandIngressTerminalBindingFields {
 }
 
 interface RuntimeCommandIngressIntegrityRow
-  extends RuntimeCommandIngressTerminalBindingFields,
-    Record<string, unknown> {
+  extends RuntimeCommandIngressTerminalBindingFields, Record<string, unknown> {
   readonly terminal_binding_hash: Sha256Hash;
   readonly header_command_id: string | null;
   readonly header_idempotency_domain: string | null;
@@ -90,9 +93,12 @@ function parseCanonicalJson(bytes: string, label: string): JsonValue {
   try {
     parsed = JSON.parse(bytes) as JsonValue;
   } catch (error) {
-    throw new RuntimeCommandIngressIntegrityError(`${label} is not valid JSON`, {
-      cause: error,
-    });
+    throw new RuntimeCommandIngressIntegrityError(
+      `${label} is not valid JSON`,
+      {
+        cause: error,
+      },
+    );
   }
   if (canonicalJson(parsed) !== bytes)
     throw new RuntimeCommandIngressIntegrityError(
@@ -161,8 +167,7 @@ export function calculateRuntimeCommandIngressTerminalBinding(
         claimed_node_id: row.claimed_node_id,
         claimed_retry_schedule_id: row.claimed_retry_schedule_id,
         claimed_effect_operation_id: row.claimed_effect_operation_id,
-        claimed_operational_blocker_id:
-          row.claimed_operational_blocker_id,
+        claimed_operational_blocker_id: row.claimed_operational_blocker_id,
       },
       trusted_actor: {
         actor_ref: row.actor_ref,
@@ -191,7 +196,9 @@ export function calculateRuntimeCommandIngressTerminalBinding(
   );
 }
 
-function claimedTargetId(row: RuntimeCommandIngressIntegrityRow): string | null {
+function claimedTargetId(
+  row: RuntimeCommandIngressIntegrityRow,
+): string | null {
   const columns: Record<string, string | null> = {
     workflow: row.claimed_workflow_id,
     run: row.claimed_run_id,
@@ -367,11 +374,7 @@ export function assertRuntimeCommandIngressIntegrity(
     if (
       row.ingress_no !== expectedNo ||
       row.id !==
-        stableIngressId(
-          row.idempotency_domain,
-          row.idempotency_key,
-          expectedNo,
-        )
+        stableIngressId(row.idempotency_domain, row.idempotency_key, expectedNo)
     )
       throw new RuntimeCommandIngressIntegrityError(
         'Runtime Command ingress append identity drifted',

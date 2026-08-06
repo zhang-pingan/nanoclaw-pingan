@@ -6,14 +6,7 @@ import {
   registryResourceId,
   registryResourceKey,
 } from './g3-registry-persistence.js';
-import {
-  G3_RETENTION_EXECUTOR_ABI_INPUT_SCHEMA,
-  G3_RETENTION_EXECUTOR_ABI_RESULT_SCHEMA,
-} from './g3-retention-executor-abi-preflight.js';
-import {
-  G3_RETENTION_EXECUTOR_ABI_ERROR_PRECEDENCE,
-  type G3RetentionExecutorAbiPreflightResult,
-} from './g3-retention-executor-abi-preflight-types.js';
+import { G3_REGISTRY_EXACT_RESOURCE_QUERY_INPUT_SCHEMA } from './g3-registry-exact-resource-query.js';
 import {
   G39_ACTIVATION_ERROR_PRECEDENCE,
   G39_ACTIVATION_DISPOSITIONS,
@@ -50,10 +43,6 @@ export const G39_EVENT_DOMAIN =
   'icarus:workflow-feature-release-activation-event:1\n';
 export const G39_COMMAND_ID_DOMAIN =
   'icarus:workflow-feature-release-activation-command-id:1\n';
-export const G39_COMPATIBILITY_INPUT_VALUE_DOMAIN =
-  'icarus:workflow-feature-release-activation-g3-6-input-value:1\n';
-export const G39_COMPATIBILITY_RESULT_VALUE_DOMAIN =
-  'icarus:workflow-feature-release-activation-g3-6-result-value:1\n';
 
 export const G39_SCHEMA_REFS = {
   request: {
@@ -66,14 +55,6 @@ export const G39_SCHEMA_REFS = {
   },
   result: {
     id: 'icarus.workflow-feature-release-activation-result-schema',
-    version: '1.0.0',
-  },
-  compatibility_input: {
-    id: 'icarus.workflow-retention-executor-abi-preflight-input-schema',
-    version: '1.0.0',
-  },
-  compatibility_result: {
-    id: 'icarus.workflow-retention-executor-abi-preflight-result-schema',
     version: '1.0.0',
   },
 } as const;
@@ -107,15 +88,15 @@ function object(
   };
 }
 
-const g36Defs = structuredClone(
-  G3_RETENTION_EXECUTOR_ABI_INPUT_SCHEMA.$defs as JsonObject,
+const exactQueryDefs = structuredClone(
+  G3_REGISTRY_EXACT_RESOURCE_QUERY_INPUT_SCHEMA.$defs as JsonObject,
 );
-const g36InputCore = structuredClone(
-  G3_RETENTION_EXECUTOR_ABI_INPUT_SCHEMA,
+const exactQueryCore = structuredClone(
+  G3_REGISTRY_EXACT_RESOURCE_QUERY_INPUT_SCHEMA,
 ) as JsonObject;
-delete g36InputCore.$schema;
-delete g36InputCore.$id;
-delete g36InputCore.$defs;
+delete exactQueryCore.$schema;
+delete exactQueryCore.$id;
+delete exactQueryCore.$defs;
 
 const releaseIdentitySchema = object(['release_id', 'ref', 'hash'], {
   release_id: nonEmptyString,
@@ -191,22 +172,11 @@ const presentPointerSchema = object(['state', 'row_version', 'release'], {
   release: releaseIdentitySchema,
 });
 
-const contractSchemasSchema = object(
-  [
-    'request',
-    'receipt',
-    'result',
-    'compatibility_input',
-    'compatibility_result',
-  ],
-  {
-    request: { $ref: '#/$defs/exact_query' },
-    receipt: { $ref: '#/$defs/exact_query' },
-    result: { $ref: '#/$defs/exact_query' },
-    compatibility_input: { $ref: '#/$defs/exact_query' },
-    compatibility_result: { $ref: '#/$defs/exact_query' },
-  },
-);
+const contractSchemasSchema = object(['request', 'receipt', 'result'], {
+  request: { $ref: '#/$defs/exact_query' },
+  receipt: { $ref: '#/$defs/exact_query' },
+  result: { $ref: '#/$defs/exact_query' },
+});
 
 export const G39_REQUEST_SCHEMA: JsonObject = {
   $schema: DRAFT_2020_12,
@@ -223,7 +193,6 @@ export const G39_REQUEST_SCHEMA: JsonObject = {
       'target_release',
       'previous_release',
       'expected_pointer',
-      'compatibility_preflight',
       'target_retention',
       'previous_retention',
       'contract_schemas',
@@ -246,7 +215,6 @@ export const G39_REQUEST_SCHEMA: JsonObject = {
       expected_pointer: {
         oneOf: [absentPointerSchema, presentPointerSchema],
       },
-      compatibility_preflight: g36InputCore,
       target_retention: retentionClaimSchema,
       previous_retention: {
         anyOf: [retentionClaimSchema, { type: 'null' }],
@@ -256,7 +224,7 @@ export const G39_REQUEST_SCHEMA: JsonObject = {
       request_hash: hashSchema,
     },
   ),
-  $defs: g36Defs,
+  $defs: { ...exactQueryDefs, exact_query: exactQueryCore },
 };
 
 const receiptCoreSchema = object(
@@ -270,7 +238,6 @@ const receiptCoreSchema = object(
     'pointer',
     'target_lifecycle',
     'previous_lifecycle',
-    'compatibility_result_hash',
     'target_retention',
     'previous_retention',
     'activated_at_ms',
@@ -298,7 +265,6 @@ const receiptCoreSchema = object(
     previous_lifecycle: {
       anyOf: [{ const: 'draining' }, { type: 'null' }],
     },
-    compatibility_result_hash: hashSchema,
     target_retention: retentionClaimSchema,
     previous_retention: {
       anyOf: [retentionClaimSchema, { type: 'null' }],
@@ -312,7 +278,7 @@ const receiptCoreSchema = object(
 export const G39_RECEIPT_SCHEMA: JsonObject = {
   $schema: DRAFT_2020_12,
   ...receiptCoreSchema,
-  $defs: { versioned_ref: g36Defs.versioned_ref },
+  $defs: { versioned_ref: exactQueryDefs.versioned_ref },
 };
 
 const terminalReferenceSchema = object(
@@ -325,7 +291,7 @@ const terminalReferenceSchema = object(
   },
 );
 
-const failureSchema = object(['phase', 'code', 'nested_g3_6_code'], {
+const failureSchema = object(['phase', 'code'], {
   phase: {
     enum: [
       'admission',
@@ -337,12 +303,6 @@ const failureSchema = object(['phase', 'code', 'nested_g3_6_code'], {
     ],
   },
   code: { enum: [...G39_ACTIVATION_ERROR_PRECEDENCE] },
-  nested_g3_6_code: {
-    anyOf: [
-      { enum: [...G3_RETENTION_EXECUTOR_ABI_ERROR_PRECEDENCE] },
-      { type: 'null' },
-    ],
-  },
 });
 
 export const G39_RESULT_SCHEMA: JsonObject = {
@@ -395,7 +355,7 @@ export const G39_RESULT_SCHEMA: JsonObject = {
       result_hash: hashSchema,
     },
   ),
-  $defs: { versioned_ref: g36Defs.versioned_ref },
+  $defs: { versioned_ref: exactQueryDefs.versioned_ref },
 };
 
 function schemaResourceHash(ref: VersionedRef, schema: JsonObject): Sha256Hash {
@@ -411,14 +371,6 @@ export const G39_SCHEMA_RESOURCE_HASHES = {
   request: schemaResourceHash(G39_SCHEMA_REFS.request, G39_REQUEST_SCHEMA),
   receipt: schemaResourceHash(G39_SCHEMA_REFS.receipt, G39_RECEIPT_SCHEMA),
   result: schemaResourceHash(G39_SCHEMA_REFS.result, G39_RESULT_SCHEMA),
-  compatibility_input: schemaResourceHash(
-    G39_SCHEMA_REFS.compatibility_input,
-    G3_RETENTION_EXECUTOR_ABI_INPUT_SCHEMA,
-  ),
-  compatibility_result: schemaResourceHash(
-    G39_SCHEMA_REFS.compatibility_result,
-    G3_RETENTION_EXECUTOR_ABI_RESULT_SCHEMA,
-  ),
 } as const;
 
 const ajv = new Ajv2020({
@@ -487,7 +439,7 @@ function assertRequestSemantics(
   ) {
     throw new G39ActivationContractError(
       'activation_request_schema_invalid',
-      'Activation contract schema bindings must be the exact published G3.9 and G3.6 schema resources',
+      'Activation contract schema bindings must be the published current resources',
     );
   }
 
@@ -507,40 +459,13 @@ function assertRequestSemantics(
     );
   }
 
-  const compatibility = request.compatibility_preflight;
   if (
-    !sameRef(compatibility.feature_release_ref, request.target_release.ref) ||
-    compatibility.feature_release_hash !== request.target_release.hash ||
-    !sameRef(
-      compatibility.retention.feature_release_ref,
-      request.target_release.ref,
-    ) ||
-    compatibility.retention.feature_release_hash !==
-      request.target_release.hash ||
     request.target_retention.feature_release_id !==
-      request.target_release.release_id ||
-    !sameRef(request.target_retention.closure_ref, compatibility.closure.ref) ||
-    request.target_retention.closure_hash !== compatibility.closure.closure_hash
+    request.target_release.release_id
   ) {
     throw new G39ActivationContractError(
       'activation_request_schema_invalid',
-      'Target Release, G3.6, and Retention claims must bind the same exact identities',
-    );
-  }
-  const retentionKeys = compatibility.retention.members.map((entry) =>
-    registryResourceKey(entry),
-  );
-  if (
-    canonicalJson(keys) !== canonicalJson(retentionKeys) ||
-    resources.some(
-      (entry, index) =>
-        entry.content_hash !==
-        compatibility.retention.members[index].content_hash,
-    )
-  ) {
-    throw new G39ActivationContractError(
-      'activation_request_schema_invalid',
-      'Target Release resources must equal the exact G3.6 Retention member set',
+      'Target Retention must belong to the target Feature Release',
     );
   }
 
@@ -607,18 +532,6 @@ export function calculateG39ResultHash(
     G39_RESULT_DOMAIN,
     without(result, ['result_hash']),
   );
-}
-
-export function calculateG39CompatibilityInputValueHash(
-  input: G39FeatureReleaseActivationRequest['compatibility_preflight'],
-): Sha256Hash {
-  return domainSeparatedSha256(G39_COMPATIBILITY_INPUT_VALUE_DOMAIN, input);
-}
-
-export function calculateG39CompatibilityResultValueHash(
-  result: G3RetentionExecutorAbiPreflightResult,
-): Sha256Hash {
-  return domainSeparatedSha256(G39_COMPATIBILITY_RESULT_VALUE_DOMAIN, result);
 }
 
 export function validateG39FeatureReleaseActivationRequest(
@@ -743,10 +656,7 @@ export function validateG39FeatureReleaseActivationResult(
             result.observed_pointer !== null ||
             (result.terminal_disposition === null
               ? result.referenced_terminal_result !== null
-              : result.referenced_terminal_result === null)))) ||
-    (result.failure !== null &&
-      (result.failure.code === 'g3_6_preflight_rejected') !==
-        (result.failure.nested_g3_6_code !== null))
+              : result.referenced_terminal_result === null))))
   ) {
     throw new G39ActivationContractError(
       'terminal_integrity_mismatch',
@@ -816,9 +726,8 @@ export function g39ReleaseIdentity(
 export function g39Failure(
   phase: G39ActivationFailure['phase'],
   code: G39ActivationFailure['code'],
-  nested: G39ActivationFailure['nested_g3_6_code'] = null,
 ): G39ActivationFailure {
-  return { phase, code, nested_g3_6_code: nested };
+  return { phase, code };
 }
 
 export function g39TerminalReference(
@@ -858,55 +767,3 @@ export function g39SchemasForTest(): {
     result: structuredClone(G39_RESULT_SCHEMA),
   };
 }
-
-export const G39_UPSTREAM_IDENTITIES = {
-  database_schema_version: 11,
-  g1_root_hash:
-    'sha256:2adb9376d341ad430155829647086bcc76f84ebf22dffac28c19d4026ea06ab2',
-  database_schema_hash:
-    'sha256:ad998b2d0bb5e5f158b0be6d13db79cb6a0c0650d5064b267262551af266189c',
-  schema11_migration_hash:
-    'sha256:ccaa7699894da98284b9ce86767d917e355441df93e010d90751ccb713c9b872',
-  schema10_to_11_upgrade_hash:
-    'sha256:cb7c434266a62899323a03c83ee36fae01d3bf25ace4e81c82ea8f4ed1ded381',
-  schema10_migration_hash:
-    'sha256:269645a9f093dc35fd35a04336d71e38cc17b7168584752f9b9bdfc106f46fad',
-  schema9_to_10_upgrade_hash:
-    'sha256:19c24f06558a3e98f1415468c4af8ce44e94afcad8be3428ebdc133bf4a353c5',
-  schema9_migration_hash:
-    'sha256:4591e2dd417d439c813026816572e8a66e9d088efa6a8de88ebfb38a68cf9837',
-  schema8_to_9_upgrade_hash:
-    'sha256:890c911a27074cca3ee34f9a7f022e4fbda6edf77fbe2ad75f2b77d0d1bed23b',
-  schema8_migration_hash:
-    'sha256:b19ebe83ea8b7c53a2ab54a901df092b4e343ee4e1d5772ed6bc3143a82746ad',
-  schema7_migration_hash:
-    'sha256:b4307930cedd9e0b8acbec599a2b3b29cb18f78840a726532b108459a4df2497',
-  schema7_to_8_upgrade_hash:
-    'sha256:544af9b55349268d152650c9a9fda5c399bb0e665750a2c47a6155d22ca6e3a9',
-  schema6_migration_hash:
-    'sha256:16a46e84c77d734013e18b4b00b86564f6188ea73717763e9fb7a884d62faa41',
-  schema6_to_7_upgrade_hash:
-    'sha256:225c5f148347dc42ca086bfb0bf7db957d13eb1be502f155465e20ee66010062',
-  schema5_migration_hash:
-    'sha256:2ead40dc2f1618f87247e9d3bb476266797c38560e1ad0537a6afa6f71a3fbf6',
-  schema5_to_6_upgrade_hash:
-    'sha256:dc94fa0867ca572b7ec39ffb8df448e38be00ca4831f1d420885ee7cc097687d',
-  schema3_to_4_upgrade_hash:
-    'sha256:5ac263fe3279c61f74ba6314f5df98fff59a8f8b32acfa784d2040421ebaa3cf',
-  schema4_to_5_upgrade_hash:
-    'sha256:97479810c2c079d71270d5a714faa4b8fa8ebd6af629ef2f7d772af270c2bb0a',
-  schema4_source_migration_hash:
-    'sha256:4a8ddeb1f9715399ad96c3bc32efa5e8032a3bd484eaed0159c6a24620c1be43',
-  g3_8a_pack_hash:
-    'sha256:d8412111a0f3dcabb4ce416b99086701ea3e3911ff431b5457eb957b2f69722f',
-  g3_8a_repair_artifact_hash:
-    'sha256:94cb2c390bb44298238b1ffac4184b04f59efbbeae6f268fbce7618104ec406b',
-  g3_8a_internal_contract_hash:
-    'sha256:70d4b9ef47c83711415636737292450538acaf5cc4547d3130b04b101e6707ae',
-  g3_6_pack_hash:
-    'sha256:3fa7afb5fa9294325004476ee230b896bc08fe8a6e6fe7f8c719c130e4c6911b',
-  g3_7_pack_hash:
-    'sha256:7d51a4406c0f1e72ad195b7bb8ad8c3800dfc08761022d4ce15ce0fae4ec5560',
-  g2_sealed_bundle_hash:
-    'sha256:0820328ae1cfdba7d05948d9e36498a5428d997d6eabfb833ef0ba7d84b77db7',
-} as const;

@@ -200,12 +200,9 @@ async function callWikiDraftModelWithTimeoutRetry(
   for (let attempt = 1; attempt <= 2; attempt += 1) {
     throwIfSignalAborted(options.signal);
     try {
-      return await callAnthropicMessages(
-        requestPayload,
-        undefined,
-        timeoutMs,
-        { signal: options.signal },
-      );
+      return await callAnthropicMessages(requestPayload, undefined, timeoutMs, {
+        signal: options.signal,
+      });
     } catch (err) {
       throwIfSignalAborted(options.signal);
       if (attempt === 1 && isWikiDraftModelTimeout(err)) {

@@ -50,7 +50,6 @@
         "layer": "runtime_precedence",
         "precedence_rank": 1,
         "expected_code": "activation_request_strict_parse_invalid",
-        "nested_g3_6_code": null,
         "receipt": null,
         "pointer_transition_count": 0
       },
@@ -59,7 +58,6 @@
         "layer": "runtime_precedence",
         "precedence_rank": 2,
         "expected_code": "activation_request_removed_field",
-        "nested_g3_6_code": null,
         "receipt": null,
         "pointer_transition_count": 0
       },
@@ -68,7 +66,6 @@
         "layer": "runtime_precedence",
         "precedence_rank": 3,
         "expected_code": "activation_request_unknown_field",
-        "nested_g3_6_code": null,
         "receipt": null,
         "pointer_transition_count": 0
       },
@@ -77,7 +74,6 @@
         "layer": "runtime_precedence",
         "precedence_rank": 4,
         "expected_code": "activation_request_schema_invalid",
-        "nested_g3_6_code": null,
         "receipt": null,
         "pointer_transition_count": 0
       },
@@ -86,7 +82,6 @@
         "layer": "runtime_precedence",
         "precedence_rank": 5,
         "expected_code": "activation_request_hash_mismatch",
-        "nested_g3_6_code": null,
         "receipt": null,
         "pointer_transition_count": 0
       },
@@ -95,7 +90,6 @@
         "layer": "runtime_precedence",
         "precedence_rank": 6,
         "expected_code": "activation_authentication_mismatch",
-        "nested_g3_6_code": null,
         "receipt": null,
         "pointer_transition_count": 0
       },
@@ -104,7 +98,6 @@
         "layer": "runtime_precedence",
         "precedence_rank": 7,
         "expected_code": "idempotency_conflict",
-        "nested_g3_6_code": null,
         "receipt": null,
         "pointer_transition_count": 0
       },
@@ -113,7 +106,6 @@
         "layer": "runtime_precedence",
         "precedence_rank": 8,
         "expected_code": "terminal_integrity_mismatch",
-        "nested_g3_6_code": null,
         "receipt": null,
         "pointer_transition_count": 0
       },
@@ -122,7 +114,6 @@
         "layer": "runtime_precedence",
         "precedence_rank": 9,
         "expected_code": "target_release_missing",
-        "nested_g3_6_code": null,
         "receipt": null,
         "pointer_transition_count": 0
       },
@@ -131,7 +122,6 @@
         "layer": "runtime_precedence",
         "precedence_rank": 10,
         "expected_code": "target_release_identity_mismatch",
-        "nested_g3_6_code": null,
         "receipt": null,
         "pointer_transition_count": 0
       },
@@ -140,7 +130,6 @@
         "layer": "runtime_precedence",
         "precedence_rank": 11,
         "expected_code": "target_release_owner_mismatch",
-        "nested_g3_6_code": null,
         "receipt": null,
         "pointer_transition_count": 0
       },
@@ -149,187 +138,14 @@
         "layer": "runtime_precedence",
         "precedence_rank": 12,
         "expected_code": "target_release_resource_set_mismatch",
-        "nested_g3_6_code": null,
         "receipt": null,
         "pointer_transition_count": 0
       },
       {
-        "case_id": "negative.precedence.g3_6_preflight_rejected.preflight_input_invalid",
+        "case_id": "negative.precedence.runtime_abi_incompatible",
         "layer": "runtime_precedence",
         "precedence_rank": 13,
-        "expected_code": "g3_6_preflight_rejected",
-        "nested_g3_6_code": "preflight_input_invalid",
-        "receipt": null,
-        "pointer_transition_count": 0
-      },
-      {
-        "case_id": "negative.precedence.g3_6_preflight_rejected.preflight_side_effect_requested",
-        "layer": "runtime_precedence",
-        "precedence_rank": 13,
-        "expected_code": "g3_6_preflight_rejected",
-        "nested_g3_6_code": "preflight_side_effect_requested",
-        "receipt": null,
-        "pointer_transition_count": 0
-      },
-      {
-        "case_id": "negative.precedence.g3_6_preflight_rejected.snapshot_missing",
-        "layer": "runtime_precedence",
-        "precedence_rank": 13,
-        "expected_code": "g3_6_preflight_rejected",
-        "nested_g3_6_code": "snapshot_missing",
-        "receipt": null,
-        "pointer_transition_count": 0
-      },
-      {
-        "case_id": "negative.precedence.g3_6_preflight_rejected.snapshot_hash_mismatch",
-        "layer": "runtime_precedence",
-        "precedence_rank": 13,
-        "expected_code": "g3_6_preflight_rejected",
-        "nested_g3_6_code": "snapshot_hash_mismatch",
-        "receipt": null,
-        "pointer_transition_count": 0
-      },
-      {
-        "case_id": "negative.precedence.g3_6_preflight_rejected.snapshot_binding_mismatch",
-        "layer": "runtime_precedence",
-        "precedence_rank": 13,
-        "expected_code": "g3_6_preflight_rejected",
-        "nested_g3_6_code": "snapshot_binding_mismatch",
-        "receipt": null,
-        "pointer_transition_count": 0
-      },
-      {
-        "case_id": "negative.precedence.g3_6_preflight_rejected.closure_root_missing",
-        "layer": "runtime_precedence",
-        "precedence_rank": 13,
-        "expected_code": "g3_6_preflight_rejected",
-        "nested_g3_6_code": "closure_root_missing",
-        "receipt": null,
-        "pointer_transition_count": 0
-      },
-      {
-        "case_id": "negative.precedence.g3_6_preflight_rejected.closure_root_hash_mismatch",
-        "layer": "runtime_precedence",
-        "precedence_rank": 13,
-        "expected_code": "g3_6_preflight_rejected",
-        "nested_g3_6_code": "closure_root_hash_mismatch",
-        "receipt": null,
-        "pointer_transition_count": 0
-      },
-      {
-        "case_id": "negative.precedence.g3_6_preflight_rejected.closure_mismatch",
-        "layer": "runtime_precedence",
-        "precedence_rank": 13,
-        "expected_code": "g3_6_preflight_rejected",
-        "nested_g3_6_code": "closure_mismatch",
-        "receipt": null,
-        "pointer_transition_count": 0
-      },
-      {
-        "case_id": "negative.precedence.g3_6_preflight_rejected.execution_artifact_missing",
-        "layer": "runtime_precedence",
-        "precedence_rank": 13,
-        "expected_code": "g3_6_preflight_rejected",
-        "nested_g3_6_code": "execution_artifact_missing",
-        "receipt": null,
-        "pointer_transition_count": 0
-      },
-      {
-        "case_id": "negative.precedence.g3_6_preflight_rejected.execution_artifact_hash_mismatch",
-        "layer": "runtime_precedence",
-        "precedence_rank": 13,
-        "expected_code": "g3_6_preflight_rejected",
-        "nested_g3_6_code": "execution_artifact_hash_mismatch",
-        "receipt": null,
-        "pointer_transition_count": 0
-      },
-      {
-        "case_id": "negative.precedence.g3_6_preflight_rejected.execution_artifact_mismatch",
-        "layer": "runtime_precedence",
-        "precedence_rank": 13,
-        "expected_code": "g3_6_preflight_rejected",
-        "nested_g3_6_code": "execution_artifact_mismatch",
-        "receipt": null,
-        "pointer_transition_count": 0
-      },
-      {
-        "case_id": "negative.precedence.g3_6_preflight_rejected.executor_implementation_missing",
-        "layer": "runtime_precedence",
-        "precedence_rank": 13,
-        "expected_code": "g3_6_preflight_rejected",
-        "nested_g3_6_code": "executor_implementation_missing",
-        "receipt": null,
-        "pointer_transition_count": 0
-      },
-      {
-        "case_id": "negative.precedence.g3_6_preflight_rejected.executor_implementation_hash_mismatch",
-        "layer": "runtime_precedence",
-        "precedence_rank": 13,
-        "expected_code": "g3_6_preflight_rejected",
-        "nested_g3_6_code": "executor_implementation_hash_mismatch",
-        "receipt": null,
-        "pointer_transition_count": 0
-      },
-      {
-        "case_id": "negative.precedence.g3_6_preflight_rejected.executor_implementation_mismatch",
-        "layer": "runtime_precedence",
-        "precedence_rank": 13,
-        "expected_code": "g3_6_preflight_rejected",
-        "nested_g3_6_code": "executor_implementation_mismatch",
-        "receipt": null,
-        "pointer_transition_count": 0
-      },
-      {
-        "case_id": "negative.precedence.g3_6_preflight_rejected.artifact_binding_mismatch",
-        "layer": "runtime_precedence",
-        "precedence_rank": 13,
-        "expected_code": "g3_6_preflight_rejected",
-        "nested_g3_6_code": "artifact_binding_mismatch",
-        "receipt": null,
-        "pointer_transition_count": 0
-      },
-      {
-        "case_id": "negative.precedence.g3_6_preflight_rejected.core_compatibility_mismatch",
-        "layer": "runtime_precedence",
-        "precedence_rank": 13,
-        "expected_code": "g3_6_preflight_rejected",
-        "nested_g3_6_code": "core_compatibility_mismatch",
-        "receipt": null,
-        "pointer_transition_count": 0
-      },
-      {
-        "case_id": "negative.precedence.g3_6_preflight_rejected.run_protocol_mismatch",
-        "layer": "runtime_precedence",
-        "precedence_rank": 13,
-        "expected_code": "g3_6_preflight_rejected",
-        "nested_g3_6_code": "run_protocol_mismatch",
-        "receipt": null,
-        "pointer_transition_count": 0
-      },
-      {
-        "case_id": "negative.precedence.g3_6_preflight_rejected.executor_abi_mismatch",
-        "layer": "runtime_precedence",
-        "precedence_rank": 13,
-        "expected_code": "g3_6_preflight_rejected",
-        "nested_g3_6_code": "executor_abi_mismatch",
-        "receipt": null,
-        "pointer_transition_count": 0
-      },
-      {
-        "case_id": "negative.precedence.g3_6_preflight_rejected.retention_policy_mismatch",
-        "layer": "runtime_precedence",
-        "precedence_rank": 13,
-        "expected_code": "g3_6_preflight_rejected",
-        "nested_g3_6_code": "retention_policy_mismatch",
-        "receipt": null,
-        "pointer_transition_count": 0
-      },
-      {
-        "case_id": "negative.precedence.g3_6_preflight_rejected.retention_eligibility_mismatch",
-        "layer": "runtime_precedence",
-        "precedence_rank": 13,
-        "expected_code": "g3_6_preflight_rejected",
-        "nested_g3_6_code": "retention_eligibility_mismatch",
+        "expected_code": "runtime_abi_incompatible",
         "receipt": null,
         "pointer_transition_count": 0
       },
@@ -338,7 +154,6 @@
         "layer": "runtime_precedence",
         "precedence_rank": 14,
         "expected_code": "target_release_lifecycle_invalid",
-        "nested_g3_6_code": null,
         "receipt": null,
         "pointer_transition_count": 0
       },
@@ -347,7 +162,6 @@
         "layer": "runtime_precedence",
         "precedence_rank": 15,
         "expected_code": "previous_release_missing",
-        "nested_g3_6_code": null,
         "receipt": null,
         "pointer_transition_count": 0
       },
@@ -356,7 +170,6 @@
         "layer": "runtime_precedence",
         "precedence_rank": 16,
         "expected_code": "previous_release_identity_mismatch",
-        "nested_g3_6_code": null,
         "receipt": null,
         "pointer_transition_count": 0
       },
@@ -365,7 +178,6 @@
         "layer": "runtime_precedence",
         "precedence_rank": 17,
         "expected_code": "previous_release_owner_mismatch",
-        "nested_g3_6_code": null,
         "receipt": null,
         "pointer_transition_count": 0
       },
@@ -374,7 +186,6 @@
         "layer": "runtime_precedence",
         "precedence_rank": 18,
         "expected_code": "previous_release_lifecycle_invalid",
-        "nested_g3_6_code": null,
         "receipt": null,
         "pointer_transition_count": 0
       },
@@ -383,7 +194,6 @@
         "layer": "runtime_precedence",
         "precedence_rank": 19,
         "expected_code": "target_retention_missing",
-        "nested_g3_6_code": null,
         "receipt": null,
         "pointer_transition_count": 0
       },
@@ -392,7 +202,6 @@
         "layer": "runtime_precedence",
         "precedence_rank": 20,
         "expected_code": "target_retention_identity_mismatch",
-        "nested_g3_6_code": null,
         "receipt": null,
         "pointer_transition_count": 0
       },
@@ -401,7 +210,6 @@
         "layer": "runtime_precedence",
         "precedence_rank": 21,
         "expected_code": "target_retention_status_mismatch",
-        "nested_g3_6_code": null,
         "receipt": null,
         "pointer_transition_count": 0
       },
@@ -410,7 +218,6 @@
         "layer": "runtime_precedence",
         "precedence_rank": 22,
         "expected_code": "target_retention_row_version_mismatch",
-        "nested_g3_6_code": null,
         "receipt": null,
         "pointer_transition_count": 0
       },
@@ -419,7 +226,6 @@
         "layer": "runtime_precedence",
         "precedence_rank": 23,
         "expected_code": "previous_retention_missing",
-        "nested_g3_6_code": null,
         "receipt": null,
         "pointer_transition_count": 0
       },
@@ -428,7 +234,6 @@
         "layer": "runtime_precedence",
         "precedence_rank": 24,
         "expected_code": "previous_retention_identity_mismatch",
-        "nested_g3_6_code": null,
         "receipt": null,
         "pointer_transition_count": 0
       },
@@ -437,7 +242,6 @@
         "layer": "runtime_precedence",
         "precedence_rank": 25,
         "expected_code": "previous_retention_status_mismatch",
-        "nested_g3_6_code": null,
         "receipt": null,
         "pointer_transition_count": 0
       },
@@ -446,7 +250,6 @@
         "layer": "runtime_precedence",
         "precedence_rank": 26,
         "expected_code": "previous_retention_row_version_mismatch",
-        "nested_g3_6_code": null,
         "receipt": null,
         "pointer_transition_count": 0
       },
@@ -455,7 +258,6 @@
         "layer": "runtime_precedence",
         "precedence_rank": 27,
         "expected_code": "pointer_cas_conflict",
-        "nested_g3_6_code": null,
         "receipt": null,
         "pointer_transition_count": 0
       },
@@ -464,11 +266,10 @@
         "layer": "runtime_precedence",
         "precedence_rank": 28,
         "expected_code": "activation_persistence_identity_collision",
-        "nested_g3_6_code": null,
         "receipt": null,
         "pointer_transition_count": 0
       }
     ]
   },
-  "hash": "sha256:4b16f516e695ba3cbb1703f4f2e9a4b569b0f7307b1de3b8a0938bd7f50d6dee"
+  "hash": "sha256:155ab5c046a70ca4d653e57f93ee2dc9f0aeb16da3f4525b171333bbc6fdd163"
 }

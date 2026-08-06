@@ -1,17 +1,13 @@
-import fs from 'node:fs';
-import path from 'node:path';
-
 import { Ajv2020, type AnySchema } from 'ajv/dist/2020.js';
 import { describe, expect, it } from 'vitest';
 
 import { assertGeneratedSchemaAuthority } from '../contracts/generated-schema-authority.js';
 import { assertJsonObject } from '../contracts/strict-json.js';
 import type { JsonObject, JsonValue } from '../contracts/types.js';
-import { buildSemanticCorrectionCandidate } from './semantic-correction.js';
+import { readGoldenCorpus } from './golden.js';
 
-const contractsRoot = path.resolve(import.meta.dirname, '../contracts');
 const hash = `sha256:${'a'.repeat(64)}`;
-const candidate = buildSemanticCorrectionCandidate();
+const goldenCases = readGoldenCorpus().cases.cases;
 
 function object(value: JsonValue | undefined, label: string): JsonObject {
   try {
@@ -23,7 +19,9 @@ function object(value: JsonValue | undefined, label: string): JsonObject {
 }
 
 function generatedSchema(caseId: string, nodeType: string): JsonObject {
-  const result = candidate.results.find((entry) => entry.case_id === caseId);
+  const result = goldenCases.find(
+    (entry) => entry.case_id === caseId,
+  )?.expected_result;
   if (!result || result.outcome !== 'compiled') {
     throw new Error(`Expected compiled case: ${caseId}`);
   }
@@ -39,26 +37,6 @@ function checkedValidator(schema: JsonObject) {
   return new Ajv2020({ strict: true, allErrors: true }).compile(
     schema as AnySchema,
   );
-}
-
-function readHistoricalSchema(
-  root: string,
-  caseId: string,
-  nodeType: string,
-): JsonObject {
-  const result = JSON.parse(
-    fs.readFileSync(
-      path.join(contractsRoot, root, `${caseId}.result.json`),
-      'utf8',
-    ),
-  ) as JsonObject;
-  const plan = object(result.normalized_plan, `${caseId} historical Plan`);
-  const nodes = plan.nodes as JsonObject[];
-  const node = nodes.find((entry) => entry.type === nodeType);
-  const ports = object(node?.output_ports, `${caseId} historical ports`);
-  const port = object(Object.values(ports)[0], `${caseId} historical port`);
-  const descriptor = object(port.schema, `${caseId} historical descriptor`);
-  return object(descriptor.schema_json, `${caseId} historical schema`);
 }
 
 function omit(value: JsonObject, key: string): JsonObject {
@@ -207,9 +185,8 @@ describe('G2 generated-output schema authority', () => {
     expect(validate([{ item_index: 0, outcome: 'completed' }])).toBe(false);
   });
 
-  it('rejects descriptor content-address tamper and crosses no v6/v7 payload authority', () => {
+  it('rejects descriptor content-address tamper', () => {
     const currentChild = generatedSchema('positive.subgraph', 'subgraph');
-    const currentMap = generatedSchema('positive.map', 'map');
     for (const [field, replacement] of [
       ['schema_ref', 'icarus-generated-schema:sha256:bad'],
       ['schema_raw_hash', hash],
@@ -221,32 +198,5 @@ describe('G2 generated-output schema authority', () => {
       tampered[field] = replacement;
       expect(() => assertGeneratedSchemaAuthority(tampered), field).toThrow();
     }
-
-    const v7Child = readHistoricalSchema(
-      'conformance/current/g2-static-child-plan-bundle-replay-v7/expected',
-      'positive.subgraph',
-      'subgraph',
-    );
-    const v6Map = readHistoricalSchema(
-      'conformance/sealed/g2-generated-schema-join-authority-v6/expected',
-      'positive.map',
-      'map',
-    );
-    const legacyChildPayload = { exit: 'done', output_ports: {} };
-    const legacyMapPayload = [{ item_index: 0, outcome: 'completed' }];
-    expect(checkedValidator(v7Child)(legacyChildPayload)).toBe(true);
-    expect(
-      checkedValidator(object(currentChild.schema_json, 'current child'))(
-        legacyChildPayload,
-      ),
-    ).toBe(false);
-    expect(checkedValidator(v7Child)(childPayload)).toBe(false);
-    expect(checkedValidator(v6Map)(legacyMapPayload)).toBe(true);
-    expect(
-      checkedValidator(object(currentMap.schema_json, 'current Map'))(
-        legacyMapPayload,
-      ),
-    ).toBe(false);
-    expect(checkedValidator(v6Map)(mapPayload)).toBe(false);
   });
 });

@@ -128,7 +128,9 @@ export function buildNodeOutputEnvelopeSchema(
   outputPorts: JsonObject,
 ): JsonObject {
   if (nodeId.length === 0) {
-    throw new GeneratedSchemaAuthorityError('Node output envelope node id is empty');
+    throw new GeneratedSchemaAuthorityError(
+      'Node output envelope node id is empty',
+    );
   }
   const portNames = Object.keys(outputPorts).sort();
   const portProperties: JsonObject = {};
@@ -227,9 +229,7 @@ export function assertGeneratedSchemaAuthority(
       'child_completion',
       'map_result',
       'node_output_envelope',
-    ].includes(
-      String(value.generator),
-    ) ||
+    ].includes(String(value.generator)) ||
     value.canonicalizer !== GENERATED_SCHEMA_CANONICALIZER ||
     typeof value.schema_ref !== 'string' ||
     !generatedSchemaRefPattern.test(value.schema_ref) ||
@@ -313,9 +313,7 @@ export function assertPlanGeneratedSchemaBinding(
       'child_completion',
       'map_result',
       'node_output_envelope',
-    ].includes(
-      String(value.generator),
-    )
+    ].includes(String(value.generator))
   ) {
     throw new GeneratedSchemaAuthorityError(
       'Plan generated schema binding has an unknown, missing, or invalid field',

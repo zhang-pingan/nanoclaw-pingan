@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-registry-publish-foundation-schema:1\n",
-  "hash": "sha256:d0a2f83105a482d97ba9d18a817403233617a8120356ddf98144709d8152b3a6",
+  "hash": "sha256:4a2dabb335bb5882bbc8607964f05a11f92adc07ab673f668fd0acbc9833257b",
   "payload": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "$id": "https://icarus.local/schemas/workflow-registry-publish-foundation/1",
@@ -20,11 +20,9 @@
       "slice_status",
       "g3_status",
       "implemented_surface",
-      "upstream_identity",
       "feature_manifest_schema",
       "recipe_schema",
       "retention_policy",
-      "compatibility",
       "production_registry_baseline",
       "test_only_boundary",
       "authoring_publish_stages",
@@ -52,58 +50,6 @@
       "implemented_surface": {
         "const": "read_only_registry_publish_preflight_contract"
       },
-      "upstream_identity": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "g1_schema_root_hash",
-          "g1_schema_dependency_manifest_hash",
-          "g1_physical_schema_identity",
-          "g1_schema_hash",
-          "g1_migration_sha256",
-          "g2_sealed_bundle_ref",
-          "g2_sealed_bundle_artifact_hash",
-          "g2_sealed_bundle_hash",
-          "compiler"
-        ],
-        "properties": {
-          "g1_schema_root_hash": {
-            "type": "string",
-            "pattern": "^sha256:[0-9a-f]{64}$"
-          },
-          "g1_schema_dependency_manifest_hash": {
-            "type": "string",
-            "pattern": "^sha256:[0-9a-f]{64}$"
-          },
-          "g1_physical_schema_identity": {
-            "type": "string",
-            "pattern": "^sha256:[0-9a-f]{64}$"
-          },
-          "g1_schema_hash": {
-            "type": "string",
-            "pattern": "^sha256:[0-9a-f]{64}$"
-          },
-          "g1_migration_sha256": {
-            "type": "string",
-            "pattern": "^sha256:[0-9a-f]{64}$"
-          },
-          "g2_sealed_bundle_ref": {
-            "type": "string",
-            "minLength": 1
-          },
-          "g2_sealed_bundle_artifact_hash": {
-            "type": "string",
-            "pattern": "^sha256:[0-9a-f]{64}$"
-          },
-          "g2_sealed_bundle_hash": {
-            "type": "string",
-            "pattern": "^sha256:[0-9a-f]{64}$"
-          },
-          "compiler": {
-            "$ref": "#/$defs/compiler_identity"
-          }
-        }
-      },
       "feature_manifest_schema": {
         "$ref": "#/$defs/exact_artifact"
       },
@@ -112,30 +58,6 @@
       },
       "retention_policy": {
         "$ref": "#/$defs/exact_artifact"
-      },
-      "compatibility": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "run_protocol_major",
-          "executor_abi_major",
-          "registry_schema_version",
-          "core_release_preflight_status"
-        ],
-        "properties": {
-          "run_protocol_major": {
-            "const": 1
-          },
-          "executor_abi_major": {
-            "const": 1
-          },
-          "registry_schema_version": {
-            "const": 1
-          },
-          "core_release_preflight_status": {
-            "const": "not_implemented_in_g3_1"
-          }
-        }
       },
       "production_registry_baseline": {
         "type": "object",
@@ -246,7 +168,7 @@
         ],
         "properties": {
           "expected_source": {
-            "const": "current_g2_sealed_bundle_only"
+            "const": "current_golden_corpus"
           },
           "production_compiler_actual_role": {
             "const": "comparison_only"
@@ -266,16 +188,13 @@
             "const": "compiled_plan_pin_required"
           },
           {
-            "const": "execution_artifact_abi_mismatch"
-          },
-          {
             "const": "execution_artifact_pin_required"
           },
           {
             "const": "feature_identity_pair_mismatch"
           },
           {
-            "const": "g2_identity_mismatch"
+            "const": "compiler_version_mismatch"
           },
           {
             "const": "preflight_hash_mismatch"
@@ -315,8 +234,8 @@
           }
         ],
         "items": false,
-        "minItems": 19,
-        "maxItems": 19
+        "minItems": 18,
+        "maxItems": 18
       },
       "g4_through_g9_status": {
         "type": "object",
@@ -402,53 +321,6 @@
             }
           },
           "hash": {
-            "type": "string",
-            "pattern": "^sha256:[0-9a-f]{64}$"
-          }
-        }
-      },
-      "compiler_identity": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "compiler_toolchain_manifest_ref",
-          "compiler_toolchain_hash",
-          "compiler_version",
-          "compiler_build_hash",
-          "compiled_ir_schema_ref",
-          "compiled_ir_schema_hash",
-          "conformance_result_schema_ref",
-          "conformance_result_schema_hash"
-        ],
-        "properties": {
-          "compiler_toolchain_manifest_ref": {
-            "$ref": "#/$defs/versioned_ref"
-          },
-          "compiler_toolchain_hash": {
-            "type": "string",
-            "pattern": "^sha256:[0-9a-f]{64}$"
-          },
-          "compiler_version": {
-            "type": "string",
-            "minLength": 1
-          },
-          "compiler_build_hash": {
-            "type": "string",
-            "pattern": "^sha256:[0-9a-f]{64}$"
-          },
-          "compiled_ir_schema_ref": {
-            "type": "string",
-            "minLength": 1
-          },
-          "compiled_ir_schema_hash": {
-            "type": "string",
-            "pattern": "^sha256:[0-9a-f]{64}$"
-          },
-          "conformance_result_schema_ref": {
-            "type": "string",
-            "minLength": 1
-          },
-          "conformance_result_schema_hash": {
             "type": "string",
             "pattern": "^sha256:[0-9a-f]{64}$"
           }

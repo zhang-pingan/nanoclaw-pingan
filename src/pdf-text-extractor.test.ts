@@ -5,14 +5,18 @@ const { execFileSyncMock } = vi.hoisted(() => ({
 }));
 
 vi.mock('child_process', async () => {
-  const actual = await vi.importActual<typeof import('child_process')>('child_process');
+  const actual =
+    await vi.importActual<typeof import('child_process')>('child_process');
   return {
     ...actual,
     execFileSync: (...args: unknown[]) => execFileSyncMock(...args),
   };
 });
 
-import { extractPdfText, normalizePdfExtractedText } from './pdf-text-extractor.js';
+import {
+  extractPdfText,
+  normalizePdfExtractedText,
+} from './pdf-text-extractor.js';
 
 beforeEach(() => {
   execFileSyncMock.mockReset();
@@ -37,12 +41,19 @@ describe('pdf text extractor', () => {
   it('falls back to PDFKit when pdftotext is unavailable', () => {
     execFileSyncMock.mockImplementation((command: unknown) => {
       if (command === 'pdftotext') {
-        const err = new Error('spawn pdftotext ENOENT') as NodeJS.ErrnoException;
+        const err = new Error(
+          'spawn pdftotext ENOENT',
+        ) as NodeJS.ErrnoException;
         err.code = 'ENOENT';
         throw err;
       }
       if (command === 'swift') {
-        return ['一、', '漫 漫画 画页 页面 面设 设计 计', '滑到底完', '成章节'].join('\n');
+        return [
+          '一、',
+          '漫 漫画 画页 页面 面设 设计 计',
+          '滑到底完',
+          '成章节',
+        ].join('\n');
       }
       throw new Error(`unexpected command ${String(command)}`);
     });

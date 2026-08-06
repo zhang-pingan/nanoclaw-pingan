@@ -11,11 +11,9 @@ import {
   NODE_OUTPUT_ENVELOPE_DOMAIN,
   nodeOutputPortContractHash,
 } from '../contracts/generated-schema-authority.js';
-import {
-  canonicalJson,
-  domainSeparatedSha256,
-} from '../contracts/hash.js';
+import { canonicalJson, domainSeparatedSha256 } from '../contracts/hash.js';
 import type { JsonObject, Sha256Hash } from '../contracts/types.js';
+import { WORKFLOW_COMPILER_VERSION } from '../compiler/version.js';
 import type {
   WorkflowRuntimeSqlValue,
   WorkflowRuntimeStore,
@@ -61,7 +59,7 @@ function outputPorts(overrides: JsonObject = {}): JsonObject {
 function plan(ports: JsonObject): { value: JsonObject; hash: Sha256Hash } {
   const withoutHash: JsonObject = {
     format: 'icarus.workflow-graph-scope-plan/2',
-    compiler_version: '3.0.4',
+    compiler_version: WORKFLOW_COMPILER_VERSION,
     nodes: [
       {
         id: NODE_ID,
@@ -230,7 +228,7 @@ function fixture(customPorts = outputPorts()): {
       RUN_ID,
       sealed.hash,
       'icarus.workflow-graph-scope-plan/2',
-      '3.0.4',
+      WORKFLOW_COMPILER_VERSION,
       canonicalJson(sealed.value),
     );
   const store = new TestStore(database);
@@ -281,7 +279,14 @@ function seedStringMember(
                  'schema:string', ?, ?, 'run_recovery', 'live', NULL, 1, 0,
                  'registry', NULL, NULL, NULL, NULL, NULL, NULL)`,
     )
-    .run(valueRef, bytes, valueHash, byteLength, STRING_SCHEMA_HASH, provenance);
+    .run(
+      valueRef,
+      bytes,
+      valueHash,
+      byteLength,
+      STRING_SCHEMA_HASH,
+      provenance,
+    );
   database
     .prepare(
       `INSERT INTO workflow_value_ownerships
@@ -431,7 +436,9 @@ describe('canonical NodeOutputEnvelope Stored Value authority', () => {
             required: false,
           },
         }),
-        value: { optional: { state: 'absent', schema_hash: STRING_SCHEMA_HASH } },
+        value: {
+          optional: { state: 'absent', schema_hash: STRING_SCHEMA_HASH },
+        },
       },
       {
         ports: {
@@ -487,8 +494,10 @@ describe('canonical NodeOutputEnvelope Stored Value authority', () => {
       ).toEqual(['port_contract_hash', 'ports', 'envelope_hash']);
       expect(
         Object.keys(
-          (((descriptor.schema_json as JsonObject).properties as JsonObject)
-            .ports as JsonObject).properties as JsonObject,
+          (
+            ((descriptor.schema_json as JsonObject).properties as JsonObject)
+              .ports as JsonObject
+          ).properties as JsonObject,
         ).sort(),
       ).toEqual(names.sort());
       expect(validate(testCase.value)).toBe(false);
@@ -496,12 +505,30 @@ describe('canonical NodeOutputEnvelope Stored Value authority', () => {
   });
 
   it.each([
-    ['authority', "UPDATE workflow_values SET schema_authority_kind = 'registry' WHERE id = ?"],
-    ['payload', "UPDATE workflow_values SET inline_canonical_json = '{}' WHERE id = ?"],
-    ['hash', `UPDATE workflow_values SET content_hash = '${hash('drift')}' WHERE id = ?`],
-    ['length', 'UPDATE workflow_values SET byte_length = byte_length + 1 WHERE id = ?'],
-    ['ownership', "UPDATE workflow_value_ownerships SET owner_graph_run_id = 'run:other' WHERE value_id = ?"],
-    ['provenance', "UPDATE workflow_values SET provenance_ref = 'drift' WHERE id = ?"],
+    [
+      'authority',
+      "UPDATE workflow_values SET schema_authority_kind = 'registry' WHERE id = ?",
+    ],
+    [
+      'payload',
+      "UPDATE workflow_values SET inline_canonical_json = '{}' WHERE id = ?",
+    ],
+    [
+      'hash',
+      `UPDATE workflow_values SET content_hash = '${hash('drift')}' WHERE id = ?`,
+    ],
+    [
+      'length',
+      'UPDATE workflow_values SET byte_length = byte_length + 1 WHERE id = ?',
+    ],
+    [
+      'ownership',
+      "UPDATE workflow_value_ownerships SET owner_graph_run_id = 'run:other' WHERE value_id = ?",
+    ],
+    [
+      'provenance',
+      "UPDATE workflow_values SET provenance_ref = 'drift' WHERE id = ?",
+    ],
   ])('fails closed on %s drift', (_label, sql) => {
     const test = fixture();
     const member = seedStringMember(test.database, test.planHash);
@@ -531,7 +558,9 @@ describe('canonical NodeOutputEnvelope Stored Value authority', () => {
     const second = fixture();
     const secondMember = seedStringMember(second.database, second.planHash);
     second.database
-      .prepare("UPDATE workflow_values SET provenance_ref = 'wrong' WHERE id = ?")
+      .prepare(
+        "UPDATE workflow_values SET provenance_ref = 'wrong' WHERE id = ?",
+      )
       .run(secondMember.valueRef);
     expect(() =>
       second.boundary.write(
@@ -569,7 +598,9 @@ describe('canonical NodeOutputEnvelope Stored Value authority', () => {
     ).toBe(0);
     expect(
       test.database
-        .prepare('SELECT count(*) FROM workflow_value_ownerships WHERE value_id = ?')
+        .prepare(
+          'SELECT count(*) FROM workflow_value_ownerships WHERE value_id = ?',
+        )
         .pluck()
         .get(VALUE_ID),
     ).toBe(0);

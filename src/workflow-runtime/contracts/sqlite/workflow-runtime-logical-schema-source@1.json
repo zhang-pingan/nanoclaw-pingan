@@ -14,7 +14,7 @@
     "ddl_generation_status": "forbidden_in_g0_6",
     "sqlite_open_status": "forbidden_in_g0_6",
     "table_count": 74,
-    "column_count": 1221,
+    "column_count": 1208,
     "tables": [
       {
         "ordinal": 1,
@@ -4146,30 +4146,6 @@
           },
           {
             "ordinal": 6,
-            "name": "core_build_hash",
-            "logical_type": "hash",
-            "sqlite_type_intent": "TEXT",
-            "nullable": false,
-            "default_intent": null,
-            "safe_integer_intent": "not_applicable",
-            "enum_values": [],
-            "relation_ids": [],
-            "external_reference": null
-          },
-          {
-            "ordinal": 7,
-            "name": "database_schema_hash",
-            "logical_type": "hash",
-            "sqlite_type_intent": "TEXT",
-            "nullable": false,
-            "default_intent": null,
-            "safe_integer_intent": "not_applicable",
-            "enum_values": [],
-            "relation_ids": [],
-            "external_reference": null
-          },
-          {
-            "ordinal": 8,
             "name": "created_at_ms",
             "logical_type": "integer",
             "sqlite_type_intent": "INTEGER",
@@ -4234,22 +4210,6 @@
             "kind": "hash_format",
             "columns": [
               "closure_hash"
-            ],
-            "expression_intent": "sha256:<64 lowercase hexadecimal characters>"
-          },
-          {
-            "check_id": "ck:workflow_registry_snapshots:core_build_hash:hash",
-            "kind": "hash_format",
-            "columns": [
-              "core_build_hash"
-            ],
-            "expression_intent": "sha256:<64 lowercase hexadecimal characters>"
-          },
-          {
-            "check_id": "ck:workflow_registry_snapshots:database_schema_hash:hash",
-            "kind": "hash_format",
-            "columns": [
-              "database_schema_hash"
             ],
             "expression_intent": "sha256:<64 lowercase hexadecimal characters>"
           },
@@ -4389,36 +4349,6 @@
           },
           {
             "ordinal": 9,
-            "name": "compatibility_snapshot_ref",
-            "logical_type": "external_reference",
-            "sqlite_type_intent": "TEXT",
-            "nullable": false,
-            "default_intent": null,
-            "safe_integer_intent": "not_applicable",
-            "enum_values": [],
-            "relation_ids": [
-              "ext:workflow_feature_releases:compatibility_snapshot_ref"
-            ],
-            "external_reference": {
-              "validator_owner": "core_compatibility_registry",
-              "reference_domain": "compatibility_snapshot",
-              "immutable": true
-            }
-          },
-          {
-            "ordinal": 10,
-            "name": "compatibility_snapshot_hash",
-            "logical_type": "hash",
-            "sqlite_type_intent": "TEXT",
-            "nullable": false,
-            "default_intent": null,
-            "safe_integer_intent": "not_applicable",
-            "enum_values": [],
-            "relation_ids": [],
-            "external_reference": null
-          },
-          {
-            "ordinal": 11,
             "name": "staged_at_ms",
             "logical_type": "integer",
             "sqlite_type_intent": "INTEGER",
@@ -4430,7 +4360,7 @@
             "external_reference": null
           },
           {
-            "ordinal": 12,
+            "ordinal": 10,
             "name": "activated_at_ms",
             "logical_type": "integer",
             "sqlite_type_intent": "INTEGER",
@@ -4442,7 +4372,7 @@
             "external_reference": null
           },
           {
-            "ordinal": 13,
+            "ordinal": 11,
             "name": "disabled_at_ms",
             "logical_type": "integer",
             "sqlite_type_intent": "INTEGER",
@@ -4454,7 +4384,7 @@
             "external_reference": null
           },
           {
-            "ordinal": 14,
+            "ordinal": 12,
             "name": "row_version",
             "logical_type": "integer",
             "sqlite_type_intent": "INTEGER",
@@ -4531,14 +4461,6 @@
               "status"
             ],
             "expression_intent": "value belongs to the closed status catalog"
-          },
-          {
-            "check_id": "ck:workflow_feature_releases:compatibility_snapshot_hash:hash",
-            "kind": "hash_format",
-            "columns": [
-              "compatibility_snapshot_hash"
-            ],
-            "expression_intent": "sha256:<64 lowercase hexadecimal characters>"
           },
           {
             "check_id": "ck:workflow_feature_releases:staged_at_ms:safe_integer",
@@ -10615,124 +10537,6 @@
           },
           {
             "ordinal": 17,
-            "name": "compiler_toolchain_resource_id",
-            "logical_type": "identifier",
-            "sqlite_type_intent": "TEXT",
-            "nullable": false,
-            "default_intent": null,
-            "safe_integer_intent": "not_applicable",
-            "enum_values": [],
-            "relation_ids": [
-              "fk:graph_runs:compiler_toolchain"
-            ],
-            "external_reference": null
-          },
-          {
-            "ordinal": 18,
-            "name": "compiler_toolchain_resource_hash",
-            "logical_type": "hash",
-            "sqlite_type_intent": "TEXT",
-            "nullable": false,
-            "default_intent": null,
-            "safe_integer_intent": "not_applicable",
-            "enum_values": [],
-            "relation_ids": [
-              "fk:graph_runs:compiler_toolchain"
-            ],
-            "external_reference": null
-          },
-          {
-            "ordinal": 19,
-            "name": "core_release_ref",
-            "logical_type": "external_reference",
-            "sqlite_type_intent": "TEXT",
-            "nullable": false,
-            "default_intent": null,
-            "safe_integer_intent": "not_applicable",
-            "enum_values": [],
-            "relation_ids": [
-              "ext:workflow_graph_runs:core_release_ref"
-            ],
-            "external_reference": {
-              "validator_owner": "core_release_registry",
-              "reference_domain": "core_release",
-              "immutable": true
-            }
-          },
-          {
-            "ordinal": 20,
-            "name": "core_release_hash",
-            "logical_type": "hash",
-            "sqlite_type_intent": "TEXT",
-            "nullable": false,
-            "default_intent": null,
-            "safe_integer_intent": "not_applicable",
-            "enum_values": [],
-            "relation_ids": [],
-            "external_reference": null
-          },
-          {
-            "ordinal": 21,
-            "name": "core_build_hash",
-            "logical_type": "hash",
-            "sqlite_type_intent": "TEXT",
-            "nullable": false,
-            "default_intent": null,
-            "safe_integer_intent": "not_applicable",
-            "enum_values": [],
-            "relation_ids": [],
-            "external_reference": null
-          },
-          {
-            "ordinal": 22,
-            "name": "run_protocol_major",
-            "logical_type": "integer",
-            "sqlite_type_intent": "INTEGER",
-            "nullable": false,
-            "default_intent": null,
-            "safe_integer_intent": "positive",
-            "enum_values": [],
-            "relation_ids": [],
-            "external_reference": null
-          },
-          {
-            "ordinal": 23,
-            "name": "executor_abi_major",
-            "logical_type": "integer",
-            "sqlite_type_intent": "INTEGER",
-            "nullable": false,
-            "default_intent": null,
-            "safe_integer_intent": "positive",
-            "enum_values": [],
-            "relation_ids": [],
-            "external_reference": null
-          },
-          {
-            "ordinal": 24,
-            "name": "database_schema_version",
-            "logical_type": "integer",
-            "sqlite_type_intent": "INTEGER",
-            "nullable": false,
-            "default_intent": null,
-            "safe_integer_intent": "positive",
-            "enum_values": [],
-            "relation_ids": [],
-            "external_reference": null
-          },
-          {
-            "ordinal": 25,
-            "name": "database_schema_hash",
-            "logical_type": "hash",
-            "sqlite_type_intent": "TEXT",
-            "nullable": false,
-            "default_intent": null,
-            "safe_integer_intent": "not_applicable",
-            "enum_values": [],
-            "relation_ids": [],
-            "external_reference": null
-          },
-          {
-            "ordinal": 26,
             "name": "source_seed_hash",
             "logical_type": "hash",
             "sqlite_type_intent": "TEXT",
@@ -10744,7 +10548,7 @@
             "external_reference": null
           },
           {
-            "ordinal": 27,
+            "ordinal": 18,
             "name": "root_scope_id",
             "logical_type": "identifier",
             "sqlite_type_intent": "TEXT",
@@ -10760,7 +10564,7 @@
             "external_reference": null
           },
           {
-            "ordinal": 28,
+            "ordinal": 19,
             "name": "root_build_id",
             "logical_type": "identifier",
             "sqlite_type_intent": "TEXT",
@@ -10774,7 +10578,7 @@
             "external_reference": null
           },
           {
-            "ordinal": 29,
+            "ordinal": 20,
             "name": "root_plan_hash",
             "logical_type": "hash",
             "sqlite_type_intent": "TEXT",
@@ -10786,7 +10590,7 @@
             "external_reference": null
           },
           {
-            "ordinal": 30,
+            "ordinal": 21,
             "name": "manifest_seq",
             "logical_type": "integer",
             "sqlite_type_intent": "INTEGER",
@@ -10798,7 +10602,7 @@
             "external_reference": null
           },
           {
-            "ordinal": 31,
+            "ordinal": 22,
             "name": "manifest_head_hash",
             "logical_type": "hash",
             "sqlite_type_intent": "TEXT",
@@ -10810,7 +10614,7 @@
             "external_reference": null
           },
           {
-            "ordinal": 32,
+            "ordinal": 23,
             "name": "ledger_seq",
             "logical_type": "integer",
             "sqlite_type_intent": "INTEGER",
@@ -10822,7 +10626,7 @@
             "external_reference": null
           },
           {
-            "ordinal": 33,
+            "ordinal": 24,
             "name": "ledger_head_hash",
             "logical_type": "hash",
             "sqlite_type_intent": "TEXT",
@@ -10834,7 +10638,7 @@
             "external_reference": null
           },
           {
-            "ordinal": 34,
+            "ordinal": 25,
             "name": "lifecycle",
             "logical_type": "text",
             "sqlite_type_intent": "TEXT",
@@ -10851,7 +10655,7 @@
             "external_reference": null
           },
           {
-            "ordinal": 35,
+            "ordinal": 26,
             "name": "control",
             "logical_type": "text",
             "sqlite_type_intent": "TEXT",
@@ -10868,7 +10672,7 @@
             "external_reference": null
           },
           {
-            "ordinal": 36,
+            "ordinal": 27,
             "name": "operational_state",
             "logical_type": "text",
             "sqlite_type_intent": "TEXT",
@@ -10885,7 +10689,7 @@
             "external_reference": null
           },
           {
-            "ordinal": 37,
+            "ordinal": 28,
             "name": "root_cancel_scope",
             "logical_type": "text",
             "sqlite_type_intent": "TEXT",
@@ -10900,7 +10704,7 @@
             "external_reference": null
           },
           {
-            "ordinal": 38,
+            "ordinal": 29,
             "name": "root_close_request_id",
             "logical_type": "identifier",
             "sqlite_type_intent": "TEXT",
@@ -10914,7 +10718,7 @@
             "external_reference": null
           },
           {
-            "ordinal": 39,
+            "ordinal": 30,
             "name": "completion_cut_id",
             "logical_type": "identifier",
             "sqlite_type_intent": "TEXT",
@@ -10928,7 +10732,7 @@
             "external_reference": null
           },
           {
-            "ordinal": 40,
+            "ordinal": 31,
             "name": "work_fence_epoch",
             "logical_type": "integer",
             "sqlite_type_intent": "INTEGER",
@@ -10940,7 +10744,7 @@
             "external_reference": null
           },
           {
-            "ordinal": 41,
+            "ordinal": 32,
             "name": "outcome_kind",
             "logical_type": "text",
             "sqlite_type_intent": "TEXT",
@@ -10956,7 +10760,7 @@
             "external_reference": null
           },
           {
-            "ordinal": 42,
+            "ordinal": 33,
             "name": "exit_name",
             "logical_type": "text",
             "sqlite_type_intent": "TEXT",
@@ -10968,7 +10772,7 @@
             "external_reference": null
           },
           {
-            "ordinal": 43,
+            "ordinal": 34,
             "name": "output_value_id",
             "logical_type": "identifier",
             "sqlite_type_intent": "TEXT",
@@ -10982,7 +10786,7 @@
             "external_reference": null
           },
           {
-            "ordinal": 44,
+            "ordinal": 35,
             "name": "output_hash",
             "logical_type": "hash",
             "sqlite_type_intent": "TEXT",
@@ -10996,7 +10800,7 @@
             "external_reference": null
           },
           {
-            "ordinal": 45,
+            "ordinal": 36,
             "name": "error_code",
             "logical_type": "text",
             "sqlite_type_intent": "TEXT",
@@ -11008,7 +10812,7 @@
             "external_reference": null
           },
           {
-            "ordinal": 46,
+            "ordinal": 37,
             "name": "error_detail_value_id",
             "logical_type": "identifier",
             "sqlite_type_intent": "TEXT",
@@ -11022,7 +10826,7 @@
             "external_reference": null
           },
           {
-            "ordinal": 47,
+            "ordinal": 38,
             "name": "error_detail_hash",
             "logical_type": "hash",
             "sqlite_type_intent": "TEXT",
@@ -11036,7 +10840,7 @@
             "external_reference": null
           },
           {
-            "ordinal": 48,
+            "ordinal": 39,
             "name": "next_event_seq",
             "logical_type": "integer",
             "sqlite_type_intent": "INTEGER",
@@ -11048,7 +10852,7 @@
             "external_reference": null
           },
           {
-            "ordinal": 49,
+            "ordinal": 40,
             "name": "last_admission_seq",
             "logical_type": "integer",
             "sqlite_type_intent": "INTEGER",
@@ -11060,7 +10864,7 @@
             "external_reference": null
           },
           {
-            "ordinal": 50,
+            "ordinal": 41,
             "name": "row_version",
             "logical_type": "integer",
             "sqlite_type_intent": "INTEGER",
@@ -11072,7 +10876,7 @@
             "external_reference": null
           },
           {
-            "ordinal": 51,
+            "ordinal": 42,
             "name": "started_at_ms",
             "logical_type": "integer",
             "sqlite_type_intent": "INTEGER",
@@ -11084,7 +10888,7 @@
             "external_reference": null
           },
           {
-            "ordinal": 52,
+            "ordinal": 43,
             "name": "finished_at_ms",
             "logical_type": "integer",
             "sqlite_type_intent": "INTEGER",
@@ -11096,7 +10900,7 @@
             "external_reference": null
           },
           {
-            "ordinal": 53,
+            "ordinal": 44,
             "name": "created_at_ms",
             "logical_type": "integer",
             "sqlite_type_intent": "INTEGER",
@@ -11108,7 +10912,7 @@
             "external_reference": null
           },
           {
-            "ordinal": 54,
+            "ordinal": 45,
             "name": "updated_at_ms",
             "logical_type": "integer",
             "sqlite_type_intent": "INTEGER",
@@ -11226,20 +11030,6 @@
             "source_columns": [
               "sqlite_execution_profile_resource_id",
               "sqlite_execution_profile_resource_hash"
-            ],
-            "target_table": "workflow_registry_resources",
-            "target_columns": [
-              "id",
-              "content_hash"
-            ],
-            "on_delete": "restrict",
-            "deferrability": "deferred"
-          },
-          {
-            "relation_id": "fk:graph_runs:compiler_toolchain",
-            "source_columns": [
-              "compiler_toolchain_resource_id",
-              "compiler_toolchain_resource_hash"
             ],
             "target_table": "workflow_registry_resources",
             "target_columns": [
@@ -11402,62 +11192,6 @@
             "kind": "hash_format",
             "columns": [
               "sqlite_execution_profile_resource_hash"
-            ],
-            "expression_intent": "sha256:<64 lowercase hexadecimal characters>"
-          },
-          {
-            "check_id": "ck:workflow_graph_runs:compiler_toolchain_resource_hash:hash",
-            "kind": "hash_format",
-            "columns": [
-              "compiler_toolchain_resource_hash"
-            ],
-            "expression_intent": "sha256:<64 lowercase hexadecimal characters>"
-          },
-          {
-            "check_id": "ck:workflow_graph_runs:core_release_hash:hash",
-            "kind": "hash_format",
-            "columns": [
-              "core_release_hash"
-            ],
-            "expression_intent": "sha256:<64 lowercase hexadecimal characters>"
-          },
-          {
-            "check_id": "ck:workflow_graph_runs:core_build_hash:hash",
-            "kind": "hash_format",
-            "columns": [
-              "core_build_hash"
-            ],
-            "expression_intent": "sha256:<64 lowercase hexadecimal characters>"
-          },
-          {
-            "check_id": "ck:workflow_graph_runs:run_protocol_major:safe_integer",
-            "kind": "safe_integer",
-            "columns": [
-              "run_protocol_major"
-            ],
-            "expression_intent": "positive JavaScript safe integer"
-          },
-          {
-            "check_id": "ck:workflow_graph_runs:executor_abi_major:safe_integer",
-            "kind": "safe_integer",
-            "columns": [
-              "executor_abi_major"
-            ],
-            "expression_intent": "positive JavaScript safe integer"
-          },
-          {
-            "check_id": "ck:workflow_graph_runs:database_schema_version:safe_integer",
-            "kind": "safe_integer",
-            "columns": [
-              "database_schema_version"
-            ],
-            "expression_intent": "positive JavaScript safe integer"
-          },
-          {
-            "check_id": "ck:workflow_graph_runs:database_schema_hash:hash",
-            "kind": "hash_format",
-            "columns": [
-              "database_schema_hash"
             ],
             "expression_intent": "sha256:<64 lowercase hexadecimal characters>"
           },
@@ -30503,5 +30237,5 @@
       "generic_error_fields": "forbidden"
     }
   },
-  "hash": "sha256:ef5221d3465f1214c3c0aad3660f57b119d03eb4b5127428d6a1f881a6260214"
+  "hash": "sha256:7d45ec0315f5f68033c6c07da8fe36df1b471607d16ae9ce371b90c56ea9aec3"
 }

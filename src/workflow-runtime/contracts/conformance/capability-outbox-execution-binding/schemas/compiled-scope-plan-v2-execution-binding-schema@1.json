@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-compiled-scope-plan-v2-execution-binding-schema:1\n",
-  "hash": "sha256:e582abc7a221f4d1afd66d12c2a87816cb228f6139a77d9abfaa1a397844f947",
+  "hash": "sha256:79719788af197243e5172a7d495a172f3746720fe5fa41b681e454e6defc62ed",
   "payload": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "$id": "https://icarus.local/schemas/compiled-scope-plan-v2-execution-binding",
@@ -16,14 +16,6 @@
     "required": [
       "format",
       "compiler_version",
-      "compiler_build_hash",
-      "compiler_toolchain_ref",
-      "compiler_toolchain_hash",
-      "compiler_error_catalog_hash",
-      "canonical_normalizer_version",
-      "canonical_normalizer_hash",
-      "proof_algorithm_version",
-      "proof_algorithm_hash",
       "plan_hash",
       "source_hash",
       "interface_snapshot_hash",
@@ -51,37 +43,6 @@
       "compiler_version": {
         "type": "string",
         "minLength": 1
-      },
-      "compiler_build_hash": {
-        "type": "string",
-        "pattern": "^sha256:[0-9a-f]{64}$"
-      },
-      "compiler_toolchain_ref": {
-        "$ref": "#/$defs/versioned_ref"
-      },
-      "compiler_toolchain_hash": {
-        "type": "string",
-        "pattern": "^sha256:[0-9a-f]{64}$"
-      },
-      "compiler_error_catalog_hash": {
-        "type": "string",
-        "pattern": "^sha256:[0-9a-f]{64}$"
-      },
-      "canonical_normalizer_version": {
-        "type": "string",
-        "minLength": 1
-      },
-      "canonical_normalizer_hash": {
-        "type": "string",
-        "pattern": "^sha256:[0-9a-f]{64}$"
-      },
-      "proof_algorithm_version": {
-        "type": "string",
-        "minLength": 1
-      },
-      "proof_algorithm_hash": {
-        "type": "string",
-        "pattern": "^sha256:[0-9a-f]{64}$"
       },
       "plan_hash": {
         "type": "string",
@@ -5332,8 +5293,6 @@
         "type": "object",
         "additionalProperties": false,
         "required": [
-          "proof_algorithm_version",
-          "proof_algorithm_hash",
           "producer_schema_hash",
           "canonical_pointer",
           "pointer_totality",
@@ -5345,14 +5304,6 @@
           "proof_hash"
         ],
         "properties": {
-          "proof_algorithm_version": {
-            "type": "string",
-            "minLength": 1
-          },
-          "proof_algorithm_hash": {
-            "type": "string",
-            "pattern": "^sha256:[0-9a-f]{64}$"
-          },
           "producer_schema_hash": {
             "type": "string",
             "pattern": "^sha256:[0-9a-f]{64}$"

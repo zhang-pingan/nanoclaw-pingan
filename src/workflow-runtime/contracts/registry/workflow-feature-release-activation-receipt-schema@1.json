@@ -20,7 +20,6 @@
       "pointer",
       "target_lifecycle",
       "previous_lifecycle",
-      "compatibility_result_hash",
       "target_retention",
       "previous_retention",
       "activated_at_ms",
@@ -140,10 +139,6 @@
             "type": "null"
           }
         ]
-      },
-      "compatibility_result_hash": {
-        "type": "string",
-        "pattern": "^sha256:[0-9a-f]{64}$"
       },
       "target_retention": {
         "type": "object",
@@ -272,5 +267,5 @@
       }
     }
   },
-  "hash": "sha256:2e9f36e1c7e289eb82791d1ae3751120424c24b2873ce0cb47cc8c392eb2b50e"
+  "hash": "sha256:d6f40cab0c9ca91f7f45228fd2734f2bad420e98027d802ae83ed970ca530031"
 }

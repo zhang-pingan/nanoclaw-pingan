@@ -1466,11 +1466,9 @@ export function persistDynamicCompileResultT2a(
       );
       const run = transaction.queryOne<{
         runtime_safety_snapshot_hash: Sha256Hash;
-        compiler_toolchain_resource_hash: Sha256Hash;
         work_fence_epoch: number;
       }>(
-        `SELECT runtime_safety_snapshot_hash,
-                compiler_toolchain_resource_hash, work_fence_epoch
+        `SELECT runtime_safety_snapshot_hash, work_fence_epoch
            FROM workflow_graph_runs WHERE id = ?`,
         [input.graphRunId],
       );
@@ -1541,8 +1539,6 @@ export function persistDynamicCompileResultT2a(
           input.expectedOwnerScopeWorkFenceEpoch ||
         run.work_fence_epoch !== input.expectedRunWorkFenceEpoch ||
         run.runtime_safety_snapshot_hash !== input.plan.runtime_safety_hash ||
-        run.compiler_toolchain_resource_hash !==
-          input.plan.compiler_toolchain_hash ||
         build.source_snapshot_hash !== sourceHash
       )
         throw new G5RuntimeError(

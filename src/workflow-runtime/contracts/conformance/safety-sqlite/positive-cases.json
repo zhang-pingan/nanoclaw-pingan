@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-safety-sqlite-positive-cases:1\n",
-  "hash": "sha256:7aaa6b5f6465d30ad359cac36d86a33c3ef4321f0901e65b8485be938c94b814",
+  "hash": "sha256:348f82beef155a4ce82aaa74005e3058489f2baa04760c63d60e3da6ee72c5ac",
   "payload": {
     "cases": [
       {
@@ -35,14 +35,9 @@
         "assertion": "complete_per_field_enforcement"
       },
       {
-        "case_id": "sqlite_profile_candidate_exact",
+        "case_id": "sqlite_profile_exact",
         "target_format": "icarus.sqlite-execution-profile/1",
         "assertion": "valid_exact_contract"
-      },
-      {
-        "case_id": "sqlite_candidate_release_identity_unbound",
-        "target_format": "icarus.sqlite-execution-profile/1",
-        "assertion": "candidate_identity_unbound"
       }
     ]
   }

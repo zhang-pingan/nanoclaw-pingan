@@ -60,5 +60,4 @@ describe('model-selector', () => {
 
     expect(fetchSpy).not.toHaveBeenCalled();
   });
-
 });

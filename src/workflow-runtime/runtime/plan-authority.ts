@@ -1,5 +1,6 @@
 import type { CompiledScopePlanV2Document } from '../contracts/compiler-contract-repair-types.js';
 import { COMPILED_PLAN_V2_DOMAIN_SEPARATOR } from '../contracts/compiler-contract-repair-source.js';
+import { WORKFLOW_COMPILER_VERSION } from '../compiler/version.js';
 import { canonicalJson, domainSeparatedSha256 } from '../contracts/hash.js';
 import type { JsonObject, Sha256Hash } from '../contracts/types.js';
 import type { WorkflowRuntimeWriteTransaction } from '../store/runtime-store/index.js';
@@ -35,7 +36,7 @@ export function verifyCompiledPlanAuthority(
   );
   if (
     plan.format !== 'icarus.workflow-graph-scope-plan/2' ||
-    !['3.0.4', '3.0.5', '3.0.6'].includes(plan.compiler_version) ||
+    plan.compiler_version !== WORKFLOW_COMPILER_VERSION ||
     claimedPlanHash !== observed ||
     !Array.isArray(plan.nodes) ||
     !Array.isArray(plan.control_edges) ||
@@ -68,7 +69,6 @@ export function loadMaterializedNodeAuthority(
     root_scope_id: string;
     root_plan_hash: string | null;
     runtime_safety_snapshot_hash: string;
-    compiler_toolchain_resource_hash: string;
     run_work_fence_epoch: number;
     scope_plan_hash: string | null;
     scope_work_fence_epoch: number;
@@ -82,7 +82,6 @@ export function loadMaterializedNodeAuthority(
   }>(
     `SELECT p.id AS plan_id, r.root_scope_id, r.root_plan_hash,
             r.runtime_safety_snapshot_hash,
-            r.compiler_toolchain_resource_hash,
             r.work_fence_epoch AS run_work_fence_epoch,
             s.plan_hash AS scope_plan_hash,
             s.work_fence_epoch AS scope_work_fence_epoch,
@@ -113,12 +112,11 @@ export function loadMaterializedNodeAuthority(
     row.scope_plan_hash !== planHash ||
     row.plan_hash !== planHash ||
     (scopeId === row.root_scope_id && row.root_plan_hash !== planHash) ||
-    plan.runtime_safety_hash !== row.runtime_safety_snapshot_hash ||
-    plan.compiler_toolchain_hash !== row.compiler_toolchain_resource_hash
+    plan.runtime_safety_hash !== row.runtime_safety_snapshot_hash
   )
     throw new G5RuntimeError(
       'integrity_violation',
-      'Run/Scope/Plan safety or toolchain authority drifted',
+      'Run/Scope/Plan safety authority drifted',
     );
   const planNode = (plan.nodes as JsonObject[]).find(
     (candidate) => candidate.id === row.node_key,

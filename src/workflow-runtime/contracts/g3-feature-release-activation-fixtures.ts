@@ -29,10 +29,6 @@ import {
   G39_SCHEMA_REFS,
   G39_SCHEMA_RESOURCE_HASHES,
 } from './g3-feature-release-activation.js';
-import {
-  G3_RETENTION_EXECUTOR_ABI_INPUT_SCHEMA,
-  G3_RETENTION_EXECUTOR_ABI_RESULT_SCHEMA,
-} from './g3-retention-executor-abi-preflight.js';
 import type {
   G39ActivationContractCase,
   G39ActivationFaultCase,
@@ -97,30 +93,6 @@ function query(
   };
 }
 
-function findSchema(
-  resources: G3RegistryResourceRecord[],
-  ref: VersionedRef,
-): G3RegistryResourceRecord {
-  const resource = resources.find(
-    (entry) =>
-      entry.resource_type === 'schema' &&
-      entry.ref.id === ref.id &&
-      entry.ref.version === ref.version,
-  );
-  if (!resource) throw new Error(`G3.9 fixture schema missing: ${ref.id}`);
-  return resource;
-}
-
-function publishCompatibilityQueries(
-  request: G39FeatureReleaseActivationRequest,
-): void {
-  request.compatibility_preflight.closure.root.publication_state = 'published';
-  for (const entry of request.compatibility_preflight.execution_artifacts)
-    entry.publication_state = 'published';
-  for (const entry of request.compatibility_preflight.executor_implementations)
-    entry.publication_state = 'published';
-}
-
 export function rehashG39ActivationRequest(
   request: G39FeatureReleaseActivationRequest,
 ): void {
@@ -156,14 +128,6 @@ export function g39FeatureReleaseActivationStoreFixtureForTest(): G39FeatureRele
     schemaResource(G39_SCHEMA_REFS.request, G39_REQUEST_SCHEMA),
     schemaResource(G39_SCHEMA_REFS.receipt, G39_RECEIPT_SCHEMA),
     schemaResource(G39_SCHEMA_REFS.result, G39_RESULT_SCHEMA),
-    schemaResource(
-      G39_SCHEMA_REFS.compatibility_input,
-      G3_RETENTION_EXECUTOR_ABI_INPUT_SCHEMA,
-    ),
-    schemaResource(
-      G39_SCHEMA_REFS.compatibility_result,
-      G3_RETENTION_EXECUTOR_ABI_RESULT_SCHEMA,
-    ),
   ];
   for (const [key, resource] of [
     ['request', activationSchemas[0]],
@@ -181,27 +145,12 @@ export function g39FeatureReleaseActivationStoreFixtureForTest(): G39FeatureRele
     ...structuredClone(base.batch),
     resources,
   };
-  const compatibilityInputSchema = findSchema(
-    resources,
-    G39_SCHEMA_REFS.compatibility_input,
-  );
-  const compatibilityResultSchema = findSchema(
-    resources,
-    G39_SCHEMA_REFS.compatibility_result,
-  );
-  const compatibility = structuredClone(base.request.compatibility_preflight);
   const releaseId = workflowFeatureReleaseId(
     base.request.target_release.release_ref,
   );
-  const targetResources = compatibility.retention.members.map((entry) => ({
-    ...structuredClone(entry),
-    role:
-      entry.resource_type === compatibility.closure.root.resource_type &&
-      entry.ref.id === compatibility.closure.root.ref.id &&
-      entry.ref.version === compatibility.closure.root.ref.version
-        ? ('closure_root' as const)
-        : ('closure_member' as const),
-  }));
+  const targetResources = structuredClone(
+    base.request.target_release.resources,
+  ).map(({ resource, role }) => ({ ...resource, role }));
   const activationRequest: G39FeatureReleaseActivationRequest = {
     format: 'icarus.workflow-feature-release-activation-request/1',
     command_type: 'activate_feature_release',
@@ -220,16 +169,15 @@ export function g39FeatureReleaseActivationStoreFixtureForTest(): G39FeatureRele
     },
     previous_release: null,
     expected_pointer: { state: 'absent', row_version: null, release: null },
-    compatibility_preflight: compatibility,
     target_retention: {
       handle_id: workflowPublishedRetentionHandleId(
         base.request.target_release.release_ref,
-        compatibility.closure.ref,
+        base.approved_review.closure_ref,
       ),
       handle_kind: 'published',
       feature_release_id: releaseId,
-      closure_ref: compatibility.closure.ref,
-      closure_hash: compatibility.closure.closure_hash,
+      closure_ref: base.approved_review.closure_ref,
+      closure_hash: base.approved_review.closure_hash,
       expected_status: 'held',
       expected_row_version: 1,
     },
@@ -238,15 +186,12 @@ export function g39FeatureReleaseActivationStoreFixtureForTest(): G39FeatureRele
       request: query(activationSchemas[0]),
       receipt: query(activationSchemas[1]),
       result: query(activationSchemas[2]),
-      compatibility_input: query(compatibilityInputSchema),
-      compatibility_result: query(compatibilityResultSchema),
     },
     domain_request_hash:
       'sha256:0000000000000000000000000000000000000000000000000000000000000000',
     request_hash:
       'sha256:0000000000000000000000000000000000000000000000000000000000000000',
   };
-  publishCompatibilityQueries(activationRequest);
   rehashG39ActivationRequest(activationRequest);
   const activationInvocation: G39ActivationInvocation = {
     invocation_kind: 'submit',
@@ -426,7 +371,7 @@ export function deterministicG39FixtureDigest(): Sha256Hash {
       positive: g39ActivationPositiveCases(),
       fault: g39ActivationFaultCases(),
       closure_id: registryClosureId(
-        fixture.activation_request.compatibility_preflight.closure.ref,
+        fixture.activation_request.target_retention.closure_ref,
       ),
     },
   });

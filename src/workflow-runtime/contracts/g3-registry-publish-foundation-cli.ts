@@ -31,11 +31,6 @@ try {
       manifest.payload.production_registry_write_performed,
     )}`,
   );
-  console.log(
-    `production_activation_performed=${String(
-      manifest.payload.production_activation_performed,
-    )}`,
-  );
 } catch (error) {
   console.error(
     `g3_registry_publish_foundation=${command}:failed: ${

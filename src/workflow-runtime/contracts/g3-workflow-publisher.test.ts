@@ -20,7 +20,6 @@ import { assertJsonObject } from './strict-json.js';
 import type { G3WorkflowPublisherRequest } from './g3-workflow-publisher-types.js';
 import type { JsonObject } from './types.js';
 import { g37WorkflowPublisherStoreFixtureForTest } from './g3-workflow-publisher-fixtures.js';
-import { checkG37WorkflowPublisherContracts } from './g3-workflow-publisher-contract.js';
 
 function rehashGeneratedPlanRequest(request: G3WorkflowPublisherRequest): void {
   const plan = request.compiled_plan.content;
@@ -73,7 +72,7 @@ function generatedOutputAuthority(
 }
 
 describe('G3.7 WorkflowPublisher contracts', () => {
-  it('builds one deterministic closed request across all exact identities', () => {
+  it('builds one deterministic closed request across current resources', () => {
     const first = g37WorkflowPublisherStoreFixtureForTest();
     const second = g37WorkflowPublisherStoreFixtureForTest();
     expect(second).toEqual(first);
@@ -94,9 +93,6 @@ describe('G3.7 WorkflowPublisher contracts', () => {
       ),
     ).toHaveLength(1);
     expect(G37_SCHEMA_RESOURCE_HASHES.request).toMatch(/^sha256:[0-9a-f]{64}$/);
-    expect(checkG37WorkflowPublisherContracts().hash).toBe(
-      'sha256:7d51a4406c0f1e72ad195b7bb8ad8c3800dfc08761022d4ce15ce0fae4ec5560',
-    );
   });
 
   it('publishes closed request, receipt, and result schemas', () => {
