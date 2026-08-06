@@ -234,6 +234,12 @@ export const actionDefinitionSchema = z
         path: ['adapter'],
         message: 'only external actions may select an adapter',
       });
+    if (action.kind === 'workflow' && !action.input.workflow_ref)
+      context.addIssue({
+        code: 'custom',
+        path: ['input', 'workflow_ref'],
+        message: 'workflow actions require a local workflow_ref',
+      });
   });
 export type ActionDefinition = z.infer<typeof actionDefinitionSchema>;
 
