@@ -4,6 +4,7 @@ import type {
   CollaborationExecutionRecord,
   CollaborationExecutorBinding,
   CollaborationGroupRecord,
+  CollaborationSyncAttempt,
 } from './store.js';
 import { collaborationWebApiTestables } from './web-api.js';
 
@@ -135,5 +136,28 @@ describe('Collaboration Web API redaction', () => {
     );
     expect(diagnostic).toContain('https://redacted@example.test/group.git');
     expect(diagnostic).not.toContain('password');
+  });
+
+  it('redacts credentials from sync history errors', () => {
+    const attempt = {
+      id: 1,
+      groupId: 'ag_test',
+      startedAtMs: 1,
+      completedAtMs: 2,
+      outcome: 'failed',
+      headBefore: 'before',
+      headAfter: 'after',
+      error:
+        'fetch https://user:password@example.test/group.git?accessToken=query-secret failed',
+      errorClass: 'runtime',
+    } satisfies CollaborationSyncAttempt;
+    const serialized = collaborationWebApiTestables.publicSyncAttempt(
+      attempt,
+      'https://user:password@example.test/group.git?accessToken=query-secret',
+    );
+    expect(serialized.error).toContain('redacted@example.test');
+    expect(serialized.error).toContain('accessToken=redacted');
+    expect(serialized.error).not.toContain('password');
+    expect(serialized.error).not.toContain('query-secret');
   });
 });

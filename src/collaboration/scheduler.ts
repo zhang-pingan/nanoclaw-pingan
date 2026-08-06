@@ -228,6 +228,7 @@ export class CollaborationScheduler {
       this.now(),
     );
     if (!locked) return;
+    let syncAttemptId: number | null = null;
     let lockError: Error | null = null;
     const heartbeat = (): void => {
       if (lockError) return;
@@ -252,6 +253,11 @@ export class CollaborationScheduler {
     );
     heartbeatTimer.unref?.();
     try {
+      syncAttemptId = this.store.startSyncAttempt(
+        groupId,
+        group.headCommit,
+        this.now(),
+      );
       let history = await this.groups.syncHistory(groupId);
       assertLockHeld();
       this.store.scheduleNextSync(
@@ -264,6 +270,28 @@ export class CollaborationScheduler {
       await this.finishLifecycleOrCreateTurn(group, history);
       assertLockHeld();
       this.groupErrors.delete(groupId);
+      this.store.finishSyncAttempt({
+        id: syncAttemptId,
+        groupId,
+        outcome: 'succeeded',
+        headAfter: this.store.getGroup(groupId)?.headCommit ?? null,
+        nowMs: this.now(),
+      });
+    } catch (error) {
+      if (syncAttemptId !== null)
+        this.store.finishSyncAttempt({
+          id: syncAttemptId,
+          groupId,
+          outcome: 'failed',
+          headAfter: this.store.getGroup(groupId)?.headCommit ?? null,
+          error: error instanceof Error ? error.message : String(error),
+          errorClass:
+            error instanceof CollaborationProtocolError
+              ? 'protocol'
+              : 'runtime',
+          nowMs: this.now(),
+        });
+      throw error;
     } finally {
       clearInterval(heartbeatTimer);
       this.store.releaseGroupLock(groupId, this.ownerId);

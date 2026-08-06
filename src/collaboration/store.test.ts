@@ -290,6 +290,45 @@ describe('CollaborationStore', () => {
     }
   });
 
+  it('records bounded sync history and clears it with rebuildable state', () => {
+    const test = temporaryPath();
+    const store = new CollaborationStore(test.databasePath);
+    try {
+      register(store);
+      const succeeded = store.startSyncAttempt('ag_store', 'head-before', 500);
+      store.finishSyncAttempt({
+        id: succeeded,
+        groupId: 'ag_store',
+        outcome: 'succeeded',
+        headAfter: 'head-after',
+        nowMs: 510,
+      });
+      const failed = store.startSyncAttempt('ag_store', 'head-after', 520);
+      store.finishSyncAttempt({
+        id: failed,
+        groupId: 'ag_store',
+        outcome: 'failed',
+        headAfter: 'head-after',
+        error: 'fetch failed',
+        errorClass: 'runtime',
+        nowMs: 530,
+      });
+
+      expect(store.listSyncAttempts('ag_store', 1)).toEqual([
+        expect.objectContaining({
+          id: failed,
+          outcome: 'failed',
+          error: 'fetch failed',
+          completedAtMs: 530,
+        }),
+      ]);
+      store.clearRebuildableState('ag_store');
+      expect(store.listSyncAttempts('ag_store')).toEqual([]);
+    } finally {
+      store.close();
+    }
+  });
+
   it('reserves one execution for a stable operation key', () => {
     const test = temporaryPath();
     const store = new CollaborationStore(test.databasePath);

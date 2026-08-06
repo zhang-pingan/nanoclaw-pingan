@@ -1190,6 +1190,7 @@ function renderCollaborationDiagnostics() {
   if (!diagnostics)
     return '<div class="collaboration-loading">加载诊断...</div>';
   const errors = diagnostics.collaboration?.scheduler?.groupErrors || {};
+  const syncAttempts = diagnostics.syncAttempts || [];
   return `<section class="collaboration-section">
     <div class="collaboration-section-head"><h3>运行诊断</h3>${collaborationStatus(diagnostics.group.protocolStatus)}</div>
     <dl class="collaboration-definition-list">
@@ -1202,6 +1203,23 @@ function renderCollaborationDiagnostics() {
       <button class="btn-ghost" data-collaboration-action="backup">创建备份</button>
       <button class="btn-danger-soft" data-collaboration-action="restore">恢复备份</button>
     </div>
+  </section>
+  <section class="collaboration-section">
+    <div class="collaboration-section-head"><h3>同步历史</h3><span>${syncAttempts.length}</span></div>
+    <div class="collaboration-record-list">${
+      syncAttempts
+        .map(
+          (attempt) => `<article class="collaboration-record">
+          <div class="collaboration-record-main">
+            <div class="collaboration-record-title"><strong>${escapeHtml(collaborationDate(attempt.startedAtMs))}</strong>${collaborationStatus(attempt.outcome === 'succeeded' ? 'OK' : attempt.outcome === 'running' ? 'WAITING_INPUT' : 'FAILED', attempt.outcome)}</div>
+            <div class="collaboration-record-meta">${escapeHtml(attempt.headBefore || '-')} -> ${escapeHtml(attempt.headAfter || '-')}</div>
+            ${attempt.error ? `<div class="collaboration-inline-alert">${escapeHtml(attempt.errorClass || 'runtime')} · ${escapeHtml(attempt.error)}</div>` : ''}
+          </div>
+        </article>`,
+        )
+        .join('') ||
+      '<div class="collaboration-section-empty">暂无同步记录</div>'
+    }</div>
   </section>
   <section class="collaboration-section">
     <div class="collaboration-section-head"><h3>完整性事件</h3><span>${diagnostics.incidents?.length || 0}</span></div>

@@ -242,6 +242,11 @@ describe('CollaborationScheduler', () => {
       const turn = group.projection!.turns[group.projection!.activeTurnId!];
       expect(turn.state).toBe('WAITING');
       expect(selected.executor.dispatchCount).toBe(0);
+      expect(selected.store.listSyncAttempts('ag_scheduler')[0]).toMatchObject({
+        outcome: 'failed',
+        errorClass: 'runtime',
+        error: expect.stringMatching(/No local executor binding/),
+      });
     } finally {
       selected.store.close();
     }
@@ -280,6 +285,32 @@ describe('CollaborationScheduler', () => {
     }
   }, 20_000);
 
+  it('releases the group lock when sync history recording cannot start', async () => {
+    const selected = await fixture(root());
+    const startAttempt = vi
+      .spyOn(selected.store, 'startSyncAttempt')
+      .mockImplementation(() => {
+        throw new Error('sync history unavailable');
+      });
+    try {
+      await expect(selected.scheduler.syncNow('ag_scheduler')).rejects.toThrow(
+        /sync history unavailable/,
+      );
+      startAttempt.mockRestore();
+      expect(
+        selected.store.tryAcquireGroupLock(
+          'ag_scheduler',
+          'replacement-scheduler',
+          0,
+          nowMs,
+        ),
+      ).toBe(true);
+    } finally {
+      selected.store.releaseGroupLock('ag_scheduler', 'replacement-scheduler');
+      selected.store.close();
+    }
+  }, 20_000);
+
   it('completes an action through signed Git without publishing provider metadata', async () => {
     const selected = await fixture(root());
     try {
@@ -299,6 +330,11 @@ describe('CollaborationScheduler', () => {
       );
       expect(sharedEvents).not.toContain('provider-only-1');
       expect(sharedEvents).not.toContain('receipt-only-1');
+      expect(selected.store.listSyncAttempts('ag_scheduler')[0]).toMatchObject({
+        outcome: 'succeeded',
+        headAfter: group.headCommit,
+        error: null,
+      });
     } finally {
       selected.store.close();
     }

@@ -8,6 +8,7 @@ import type {
   CollaborationExecutionRecord,
   CollaborationExecutorBinding,
   CollaborationGroupRecord,
+  CollaborationSyncAttempt,
 } from './store.js';
 
 const API_PREFIX = '/api/collaboration';
@@ -231,6 +232,16 @@ function publicExecution(execution: CollaborationExecutionRecord) {
     receiptRecordedAtMs: execution.receiptRecordedAtMs,
     createdAtMs: execution.createdAtMs,
     updatedAtMs: execution.updatedAtMs,
+  };
+}
+
+function publicSyncAttempt(
+  attempt: CollaborationSyncAttempt,
+  remoteUrl: string,
+) {
+  return {
+    ...attempt,
+    error: redactDiagnostic(attempt.error, [remoteUrl]),
   };
 }
 
@@ -550,6 +561,9 @@ export class CollaborationWebApi {
             ...incident,
             message: redactDiagnostic(incident.message, [group.remoteUrl]),
           })),
+        syncAttempts: this.runtime.store
+          .listSyncAttempts(groupId, 50)
+          .map((attempt) => publicSyncAttempt(attempt, group.remoteUrl)),
       });
       return;
     }
@@ -593,6 +607,7 @@ export const collaborationWebApiTestables = {
   publicGroup,
   publicBinding,
   publicExecution,
+  publicSyncAttempt,
   redactConfig,
   redactDiagnostic,
   redactRemoteUrl,

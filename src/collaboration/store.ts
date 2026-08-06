@@ -477,6 +477,18 @@ export interface CollaborationExecutorBinding {
   readonly updatedAtMs: number;
 }
 
+export interface CollaborationSyncAttempt {
+  readonly id: number;
+  readonly groupId: string;
+  readonly startedAtMs: number;
+  readonly completedAtMs: number | null;
+  readonly outcome: 'running' | 'succeeded' | 'failed';
+  readonly headBefore: string | null;
+  readonly headAfter: string | null;
+  readonly error: string | null;
+  readonly errorClass: string | null;
+}
+
 export type CollaborationExecutionState =
   | 'reserved'
   | 'dispatching'
@@ -962,6 +974,76 @@ export class CollaborationStore {
     }));
   }
 
+  startSyncAttempt(
+    groupId: string,
+    headBefore: string | null,
+    nowMs = Date.now(),
+  ): number {
+    this.assertOpen();
+    const result = this.database
+      .prepare(
+        `INSERT INTO collaboration_sync_attempts (
+           group_id, started_at_ms, outcome, head_before
+         ) VALUES (?, ?, 'running', ?)`,
+      )
+      .run(groupId, nowMs, headBefore);
+    return Number(result.lastInsertRowid);
+  }
+
+  finishSyncAttempt(input: {
+    readonly id: number;
+    readonly groupId: string;
+    readonly outcome: 'succeeded' | 'failed';
+    readonly headAfter: string | null;
+    readonly error?: string | null;
+    readonly errorClass?: string | null;
+    readonly nowMs?: number;
+  }): void {
+    this.assertOpen();
+    const result = this.database
+      .prepare(
+        `UPDATE collaboration_sync_attempts
+            SET completed_at_ms = ?, outcome = ?, head_after = ?, error = ?,
+                error_class = ?
+          WHERE id = ? AND group_id = ? AND completed_at_ms IS NULL`,
+      )
+      .run(
+        input.nowMs ?? Date.now(),
+        input.outcome,
+        input.headAfter,
+        input.error ?? null,
+        input.errorClass ?? null,
+        input.id,
+        input.groupId,
+      );
+    if (result.changes !== 1)
+      throw new Error(`Sync attempt cannot be completed: ${input.id}`);
+  }
+
+  listSyncAttempts(groupId: string, limit = 50): CollaborationSyncAttempt[] {
+    this.assertOpen();
+    const boundedLimit = Math.min(200, Math.max(1, Math.trunc(limit)));
+    return (
+      this.database
+        .prepare(
+          `SELECT * FROM collaboration_sync_attempts
+            WHERE group_id = ? ORDER BY started_at_ms DESC, id DESC LIMIT ?`,
+        )
+        .all(groupId, boundedLimit) as Record<string, unknown>[]
+    ).map((row) => ({
+      id: Number(row.id),
+      groupId: String(row.group_id),
+      startedAtMs: Number(row.started_at_ms),
+      completedAtMs:
+        row.completed_at_ms == null ? null : Number(row.completed_at_ms),
+      outcome: String(row.outcome) as CollaborationSyncAttempt['outcome'],
+      headBefore: row.head_before == null ? null : String(row.head_before),
+      headAfter: row.head_after == null ? null : String(row.head_after),
+      error: row.error == null ? null : String(row.error),
+      errorClass: row.error_class == null ? null : String(row.error_class),
+    }));
+  }
+
   saveExecutorBinding(
     binding: Omit<CollaborationExecutorBinding, 'updatedAtMs'> & {
       readonly updatedAtMs?: number;
@@ -1273,6 +1355,9 @@ export class CollaborationStore {
         .prepare(
           'DELETE FROM collaboration_projection_heads WHERE group_id = ?',
         )
+        .run(groupId);
+      this.database
+        .prepare('DELETE FROM collaboration_sync_attempts WHERE group_id = ?')
         .run(groupId);
       this.database
         .prepare(
