@@ -45,18 +45,16 @@ const creationTemplate = {
 
 function action(): ActionDefinition {
   return {
-    format: 'icarus.agent-group-action/1',
+    format: 'icarus.agent-group-action/2',
     action_id: 'workflow-action',
+    role: 'reviewer',
+    state_id: 'review',
     kind: 'workflow',
     input: {
       prompt_ref: 'prompts/workflow.md',
       workflow_ref: 'workflow:local-review',
     },
-    requirements: {
-      capability: 'workflow_task',
-      interaction: 'headless',
-      filesystem_access: 'read_only',
-    },
+    requirements: { filesystem_access: 'read_only' },
     result_schema: { ref: 'workflow-result@1' },
   };
 }
@@ -64,12 +62,13 @@ function action(): ActionDefinition {
 function binding(): CollaborationExecutorBinding {
   return {
     groupId: 'ag_test',
-    role: 'reviewer',
+    stateId: 'review',
+    implementationHash: `sha256:${'c'.repeat(64)}`,
+    actionHash: `sha256:${'d'.repeat(64)}`,
     executorKind: 'workflow',
     adapter: null,
     agentJid: null,
     workspacePath: '/tmp/workspace',
-    promptOverride: null,
     filesystemAccessCap: 'read_only',
     approvalPolicy: 'never',
     config: {

@@ -23,9 +23,11 @@ export type ActionExecutionState =
 
 export const collaborationActionResultSchema = z
   .object({
-    format: z.literal('icarus.collaboration-action-result/1'),
-    outcome: z.enum(['success', 'failure', 'cancelled', 'blocked']),
-    summary: z.string(),
+    format: z.literal('icarus.collaboration-action-result/2'),
+    outcome: z.string().min(1).max(160),
+    summary: z.string().min(1).max(4000),
+    instruction: z.string().max(16_000).default(''),
+    markers: z.array(z.string().min(1).max(160)).max(50).default([]),
     data: z.record(z.string(), z.unknown()).default({}),
     artifacts: z
       .array(
@@ -129,7 +131,7 @@ export function prepareWithLocalPolicy(request: ActionRequest): PreparedAction {
   if (!request.binding.enabled)
     throw new ActionBlockedError(
       'executor_unconfigured',
-      `Executor binding is disabled for role ${request.binding.role}`,
+      `Executor binding is disabled for state ${request.binding.stateId}`,
     );
   const required = request.action.requirements.filesystem_access;
   if (accessRank[request.binding.filesystemAccessCap] < accessRank[required])

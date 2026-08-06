@@ -184,7 +184,7 @@ export class WorkflowActionExecutor implements ActionExecutor {
           ? 'cancelled'
           : 'failure';
     const result = collaborationActionResultSchema.parse({
-      format: 'icarus.collaboration-action-result/1',
+      format: 'icarus.collaboration-action-result/2',
       outcome,
       summary:
         observation.state === 'succeeded'

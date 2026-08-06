@@ -221,7 +221,7 @@ export class RunOnceActionExecutor implements ActionExecutor {
         }));
         const actionResult = result.ok
           ? {
-              format: 'icarus.collaboration-action-result/1' as const,
+              format: 'icarus.collaboration-action-result/2' as const,
               outcome: 'success' as const,
               summary: result.text,
               data: {
@@ -234,7 +234,7 @@ export class RunOnceActionExecutor implements ActionExecutor {
               error: null,
             }
           : {
-              format: 'icarus.collaboration-action-result/1' as const,
+              format: 'icarus.collaboration-action-result/2' as const,
               outcome: 'failure' as const,
               summary: result.error,
               data: { run_id: result.run_id, query_id: result.query_id },
@@ -267,7 +267,7 @@ export class RunOnceActionExecutor implements ActionExecutor {
             active.providerMetadata,
             action.action,
             {
-              format: 'icarus.collaboration-action-result/1',
+              format: 'icarus.collaboration-action-result/2',
               outcome: 'failure',
               summary: message,
               data: {},

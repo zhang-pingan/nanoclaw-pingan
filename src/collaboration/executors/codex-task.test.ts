@@ -22,16 +22,14 @@ function deferred<T>() {
 
 function action(): ActionDefinition {
   return {
-    format: 'icarus.agent-group-action/1',
+    format: 'icarus.agent-group-action/2',
     action_id: 'implement',
+    role: 'developer',
+    state_id: 'development',
     kind: 'external',
     adapter: 'codex-task',
     input: { prompt_ref: 'prompts/implement.md' },
-    requirements: {
-      capability: 'coding_task',
-      interaction: 'visible_session',
-      filesystem_access: 'workspace_write',
-    },
+    requirements: { filesystem_access: 'workspace_write' },
     result_schema: { ref: 'code-change-result@1' },
   };
 }
@@ -41,12 +39,13 @@ function binding(
 ): CollaborationExecutorBinding {
   return {
     groupId: 'ag_test',
-    role: 'developer',
+    stateId: 'development',
+    implementationHash: `sha256:${'c'.repeat(64)}`,
+    actionHash: `sha256:${'d'.repeat(64)}`,
     executorKind: 'external',
     adapter: 'codex-task',
     agentJid: null,
     workspacePath: '/tmp/workspace',
-    promptOverride: null,
     filesystemAccessCap: 'workspace_write',
     approvalPolicy: 'on-request',
     config: { transport: 'app_server' },

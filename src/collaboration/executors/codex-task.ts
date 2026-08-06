@@ -283,7 +283,7 @@ export class CodexTaskActionExecutor implements ActionExecutor {
           active.providerMetadata,
         );
         const result = collaborationActionResultSchema.parse({
-          format: 'icarus.collaboration-action-result/1',
+          format: 'icarus.collaboration-action-result/2',
           outcome: normalized.outcome,
           summary: normalized.summary,
           data: {

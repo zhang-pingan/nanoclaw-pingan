@@ -14,15 +14,13 @@ import {
 
 function action(resultSchema?: Record<string, unknown>): ActionDefinition {
   return {
-    format: 'icarus.agent-group-action/1',
+    format: 'icarus.agent-group-action/2',
     action_id: 'implement',
+    role: 'developer',
+    state_id: 'development',
     kind: 'run_once',
     input: { prompt_ref: 'prompts/implement.md' },
-    requirements: {
-      capability: 'coding_task',
-      interaction: 'visible_session',
-      filesystem_access: 'workspace_write',
-    },
+    requirements: { filesystem_access: 'workspace_write' },
     result_schema: {
       ref: 'code-change-result@1',
       ...(resultSchema ? { schema: resultSchema } : {}),
@@ -35,12 +33,13 @@ function binding(
 ): CollaborationExecutorBinding {
   return {
     groupId: 'ag_test',
-    role: 'developer',
+    stateId: 'development',
+    implementationHash: `sha256:${'c'.repeat(64)}`,
+    actionHash: `sha256:${'d'.repeat(64)}`,
     executorKind: 'run_once',
     adapter: null,
     agentJid: 'web:main',
     workspacePath: '/tmp/workspace',
-    promptOverride: null,
     filesystemAccessCap: cap,
     approvalPolicy: 'on-request',
     config: {},
@@ -186,9 +185,11 @@ describe('RunOnceActionExecutor', () => {
     });
     expect(() =>
       validateActionResult(selectedAction, {
-        format: 'icarus.collaboration-action-result/1',
+        format: 'icarus.collaboration-action-result/2',
         outcome: 'success',
         summary: 'missing approved field',
+        instruction: '',
+        markers: [],
         data: {},
         artifacts: [],
         error: null,
@@ -198,9 +199,11 @@ describe('RunOnceActionExecutor', () => {
 
   it('hashes result objects with locale-independent code-unit key order', () => {
     const result = {
-      format: 'icarus.collaboration-action-result/1' as const,
+      format: 'icarus.collaboration-action-result/2' as const,
       outcome: 'success' as const,
       summary: 'deterministic',
+      instruction: '',
+      markers: [],
       data: Object.fromEntries(
         ['\uE000', '\u{10000}', '\u00E4', 'a', 'Z'].map((key) => [key, key]),
       ),
