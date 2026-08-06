@@ -1,6 +1,6 @@
 # Icarus 核心技术介绍
 
-Icarus 是一套面向个人内部使用的实验性 Agent 工作系统。它不是需要对外交付或承诺稳定服务的产品，而是把 Agent 执行、安全隔离、工作流编排、长期记忆、知识库、产物评估和多端交互组合成一个可持续迭代的本地工具。
+Icarus 是一套面向个人内部使用的实验性 Agent 工作系统。它不是需要对外交付或承诺稳定服务的产品，而是把 Agent 执行、安全隔离、工作流编排、跨机器角色协作、长期记忆、知识库、产物评估和多端交互组合成一个可持续迭代的本地工具。
 
 项目的核心价值可以概括为：让 Agent 有足够强的执行能力，同时把执行边界、权限边界、会话边界和本地状态边界做清楚。Agent 可以读代码、写文档、跑命令、调用工具、推进流程；但密钥、宿主机权限、跨会话上下文和高风险操作都由宿主机可信控制面统一约束。合同、冻结和激活机制是内部防返工护栏，不是客户合同、生产认证或发布承诺。
 
@@ -101,7 +101,24 @@ Icarus 的工作流引擎把复杂研发活动建模为配置驱动的状态机�
 
 这让需求开发、Bug 修复、预发部署、测试验证等流程从“一次性 prompt”变成可审计的工程闭环。Agent 可以负责执行，但流程所有权在宿主机状态机手里。
 
-## 6. 五大核心模块分工与巧妙设计
+## 6. Agent Group：基于 Git 的跨机器角色协作
+
+Agent Group Collaboration Runtime 是独立于本地 Dynamic Workflow Runtime 的长期、可循环协调层。多个用户各自在自己的 Icarus 实例上运行角色任务，通过 Git 控制分支上的 SSH 签名提交共享流程事实；任何单机的 SQLite、working tree 或 Executor 状态都不能单独推进群组。
+
+协议把流程边界与执行实现分开：
+
+- **创建者拥有流程骨架**：创建者只定义 Role、State、每个非终态的 `owner_role`、合法 Outcome 和目标 State，并保留启动、暂停、恢复和关闭权限。Transition 是纯路由，不绑定执行角色或 Action。
+- **Role Owner 拥有执行实现**：认领 Role 的 principal+agent 才能为该 Role 负责的 State 发布、修订或撤回 State Implementation，并选择 manual、assisted 或 automatic。Action、Prompt 和 Workflow ref 归 Role Owner；本地 Binding 只收窄 Workspace、Provider、权限和审批策略，不能改写 Action 类型或 Prompt。
+- **Turn 固定执行快照**：进入 State 时生成 Turn，并固定 Machine、Implementation、Action、Prompt、incoming Handoff、attempt 和 fencing token 的哈希与身份。完成者只能选择当前 State 的合法 Outcome，Reducer 再确定目标 State，不能直接指定跳转。
+- **节点计时与超时不越权**：Creator 可配置 start/execution 双 deadline 和 reminder interval；deadline 在 Turn 创建/开始时固定。超时第一阶段仅 `notify_only`，按 turn+attempt+kind 经 Git CAS 幂等记录，并提醒 Role Owner/claimant 与 creator，不依据本地时钟推进 FSM。
+- **人工和 Agent 共用完成协议**：manual 由当前角色用户确认开始和完成；assisted 在用户确认开始后调用 Executor，并等待用户确认业务完成；automatic 可自动执行和完成，但 Result Schema、Outcome、claim 和 fencing 任一不合法都会进入恢复路径。
+- **交接和产物受控共享**：Handoff 是有大小和 schema 限制的不可信输入，不能覆盖系统指令、权限或 FSM。Artifact 先在本机按 Turn 暂存并校验路径、hash 和大小，再与 Completion 在同一个签名 commit 中发布。
+
+Git 保存群组定义、Role-owned Implementation、线性事件链、Projection、Handoff 引用、deadline/timeout observation 和共享 Artifact；本机 `collaboration.db` 保存 Binding、durable receipt、staged upload、通知/reminder、Provider observation、同步诊断和可重建缓存。Runtime 以 event sequence 为共享事实的权威顺序，`occurred_at` 用于时间线和 duration；跨机器 clock skew 只形成审计告警，不改变 reducer。`principal_id` 从 SSH 签名公钥 fingerprint 稳定派生，`agent_id` 是本机首次生成并持久化的 UUID，创建和加入接口不接受调用方覆盖。这一划分使不同机器可以重放出相同 Projection，同时把绝对路径、Provider 连接、凭据和私有执行记录留在本机。
+
+Web/Electron 工作台的 `/groups` 是完整操作入口，包含 Skeleton Builder、Role Implementation 和 Binding、当前与历史 Turn、manual 确认、合法 Outcome 预览、Handoff、Artifact、节点计时/deadline、审计时间线与脱敏 JSON 导出、事件、共享数据和恢复诊断。协议当前直接使用 v2，本地 SQLite 使用 v4；因为没有存量群组或历史 receipt，旧协议和旧 store 均 fail closed，不保留双模型或迁移兼容层。
+
+## 7. 五大核心模块分工与巧妙设计
 
 ### Web 工作台客户端
 
@@ -125,7 +142,7 @@ Web 工作台是用户主动控制台，负责创建任务、查看阶段进度�
 
 这五个模块的分工清晰：Web 负责主动操作，Assistant 负责主动发现，移动端负责碎片化处理，宿主机负责可信编排，容器负责隔离执行。每个模块都只做自己最适合做的事。
 
-## 7. 其他核心优点
+## 8. 其他核心优点
 
 - **多端一致状态**：Web、Assistant、飞书都不是孤立入口，最终状态统一写入 SQLite、workflow、workbench 和 Trace。
 - **人机协作边界清晰**：interrupt/resume 把审批、修改意见、凭证、人类输入建模为正式状态，而不是临时聊天消息。
@@ -133,9 +150,10 @@ Web 工作台是用户主动控制台，负责创建任务、查看阶段进度�
 - **主动性可控**：个人助理支持 quiet、balanced、active 等策略，调查和修复能力按触发规则独立控制，避免 Agent 主动性越权。
 - **交付可审计**：每次 Agent 执行都有 runId/queryId、模型解析、工具事件、产物、评估结果和失败分类。
 - **工程上下文稳定**：结构化 handoff、产物契约、Wiki 和 memory pack 共同减少“靠聊天历史猜上下文”的不稳定性。
+- **跨机器协作可重放**：Agent Group 通过签名 Git 事件、纯 FSM 路由、revision/CAS、claim 和 fencing 把角色自治执行收敛为可审计的共享状态。
 - **支持持续改进**：阶段评估、失败分类、Trace、记忆和 Wiki 为人工分析与迭代提供可追溯证据。
 
-## 8. 与已有 Agent 架构相比的核心优点
+## 9. 与已有 Agent 架构相比的核心优点
 
 以下比较基于 2026-05-12 查询到的公开文档和仓库 README：OpenClaw 官方文档/仓库、Claude Code 文档、OpenAI Codex/Agents 文档，以及 Hermes Agent 官方文档/仓库。
 
@@ -174,7 +192,7 @@ Icarus 与 Hermes 的取舍不同：Icarus 不把“越用越会自己长技能�
 
 总结来说，OpenClaw 更像多渠道 local-first 个人助手平台，Claude Code/Codex 更像强大的编程 Agent 工作台，Hermes 更像会长期学习的个人自动化 Agent；Icarus 的核心差异是把这些能力收束成“可信宿主机控制面 + 容器化执行面 + 状态机工作流 + 可追踪内部契约”的个人实验运行时。
 
-## 9. 前沿 Agent 技术在本项目中的体现
+## 10. 前沿 Agent 技术在本项目中的体现
 
 Icarus 并不是逐字复刻某篇论文，而是把多个前沿 Agent 思路工程化落地：
 
@@ -188,8 +206,8 @@ Icarus 并不是逐字复刻某篇论文，而是把多个前沿 Agent 思路工
 
 ## 参考资料
 
-- 本项目文档：`README.md`、`docs/SECURITY.md`、`docs/SPEC.md`、`docs/SDK_DEEP_DIVE.md`
-- 核心实现：`src/container-runner.ts`、`container/agent-runner/src/index.ts`、`src/workflow.ts`、`src/memory-pack.ts`、`src/wiki.ts`、`src/credential-proxy.ts`、`src/ipc.ts`
+- 本项目文档：`README.md`、`docs/SECURITY.md`、`docs/SPEC.md`、`docs/SDK_DEEP_DIVE.md`、`docs/agent-group-collaboration-runtime-plan.md`、`docs/agent-group-role-owned-execution-optimization.md`
+- 核心实现：`src/container-runner.ts`、`container/agent-runner/src/index.ts`、`src/workflow.ts`、`src/collaboration/`、`src/memory-pack.ts`、`src/wiki.ts`、`src/credential-proxy.ts`、`src/ipc.ts`
 - OpenClaw GitHub README, https://github.com/openclaw/openclaw
 - OpenClaw Gateway architecture, https://docs.openclaw.ai/concepts/architecture
 - OpenClaw Agent runtime, https://docs.openclaw.ai/concepts/agent
