@@ -91,7 +91,7 @@ async function execute(
 function writeRepositoryFile(
   checkoutPath: string,
   repositoryFile: string,
-  contents: string,
+  contents: string | Buffer,
 ): void {
   const target = path.resolve(checkoutPath, repositoryFile);
   const checkoutRoot = path.resolve(checkoutPath);
@@ -175,7 +175,17 @@ function materializeEvent(
     }
   }
   for (const file of materializedFiles)
-    writeRepositoryFile(checkoutPath, file.path, file.contents);
+    if (file.contents === null) {
+      const target = path.resolve(checkoutPath, file.path);
+      const root = `${path.resolve(checkoutPath)}${path.sep}`;
+      if (!target.startsWith(root))
+        throw new Error(`Repository path escapes checkout: ${file.path}`);
+      try {
+        unlinkSync(target);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+      }
+    } else writeRepositoryFile(checkoutPath, file.path, file.contents);
 }
 
 export interface CreateCollaborationRepositoryInput {
@@ -195,14 +205,17 @@ export interface AppendCollaborationEventInput {
   readonly checkpoint?: CollaborationValidationCheckpoint | null;
   readonly identity: CollaborationSigningIdentity;
   readonly materializedFiles?: readonly CollaborationMaterializedFile[];
-  readonly buildEvent: (
-    history: ValidatedCollaborationHistory,
-  ) => CollaborationEvent;
+  readonly buildEvent: (history: ValidatedCollaborationHistory) =>
+    | CollaborationEvent
+    | {
+        readonly event: CollaborationEvent;
+        readonly materializedFiles: readonly CollaborationMaterializedFile[];
+      };
 }
 
 export interface CollaborationMaterializedFile {
   readonly path: string;
-  readonly contents: string;
+  readonly contents: string | Buffer | null;
 }
 
 function dataFileHash(contents: string): string {
@@ -213,15 +226,101 @@ function validateMaterializedFiles(
   event: CollaborationEvent,
   files: readonly CollaborationMaterializedFile[],
 ): void {
+  if (
+    event.event_type === 'state_implementation_published' ||
+    event.event_type === 'state_implementation_revised'
+  ) {
+    const implementation = event.payload.implementation as {
+      action_ref?: string | null;
+    };
+    const action = event.payload.action as {
+      input?: { prompt_ref?: string };
+    } | null;
+    const expected = [
+      String(event.payload.implementation_ref),
+      ...(implementation.action_ref ? [implementation.action_ref] : []),
+      ...(action?.input?.prompt_ref ? [action.input.prompt_ref] : []),
+    ].sort();
+    const writes = files
+      .filter((file) => file.contents !== null)
+      .map((file) => file.path)
+      .sort();
+    const role = String(
+      (event.payload.implementation as { role?: unknown }).role,
+    );
+    const stateId = String(
+      (event.payload.implementation as { state_id?: unknown }).state_id,
+    );
+    const invalidDeletion = files.find(
+      (file) =>
+        file.contents === null &&
+        !file.path.startsWith(`actions/${role}/${stateId}/`) &&
+        !file.path.startsWith(`prompts/${role}/${stateId}/`),
+    );
+    if (JSON.stringify(writes) !== JSON.stringify(expected) || invalidDeletion)
+      throw new Error(`${event.event_type} materialized paths are invalid`);
+    return;
+  }
+  if (event.event_type === 'state_implementation_withdrawn') {
+    const expected = `groups/implementations/${String(event.payload.role)}/${String(event.payload.state_id)}.yaml`;
+    const role = String(event.payload.role);
+    const stateId = String(event.payload.state_id);
+    if (
+      !files.some((file) => file.path === expected && file.contents === null) ||
+      files.some(
+        (file) =>
+          file.contents !== null ||
+          (file.path !== expected &&
+            !file.path.startsWith(`actions/${role}/${stateId}/`) &&
+            !file.path.startsWith(`prompts/${role}/${stateId}/`)),
+      )
+    )
+      throw new Error(
+        'state_implementation_withdrawn must remove its implementation file',
+      );
+    return;
+  }
+  if (event.event_type === 'turn_completed') {
+    const artifacts = Array.isArray(event.payload.artifacts)
+      ? (event.payload.artifacts as Array<{
+          repository_path: string;
+          sha256: string;
+          size: number;
+        }>)
+      : [];
+    if (files.length !== artifacts.length)
+      throw new Error('turn_completed artifact file count is invalid');
+    for (const artifact of artifacts) {
+      const file = files.find(
+        (candidate) => candidate.path === artifact.repository_path,
+      );
+      if (!file || file.contents === null)
+        throw new Error(
+          `Missing artifact content: ${artifact.repository_path}`,
+        );
+      const bytes =
+        typeof file.contents === 'string'
+          ? Buffer.from(file.contents)
+          : file.contents;
+      const digest = `sha256:${crypto.createHash('sha256').update(bytes).digest('hex')}`;
+      if (bytes.byteLength !== artifact.size || digest !== artifact.sha256)
+        throw new Error(
+          `Artifact content does not match metadata: ${artifact.repository_path}`,
+        );
+    }
+    return;
+  }
   if (event.event_type !== 'data_updated') {
     if (files.length > 0)
-      throw new Error(`${event.event_type} cannot materialize shared data`);
+      throw new Error(`${event.event_type} cannot materialize files`);
     return;
   }
   const payload = dataUpdatePayloadSchema.parse(event.payload);
   if (files.length !== 1 || files[0]?.path !== payload.path)
     throw new Error('data_updated must materialize exactly its declared path');
   const contents = files[0].contents;
+  if (typeof contents !== 'string')
+    throw new Error('data_updated must materialize UTF-8 text');
   if (
     Buffer.byteLength(contents, 'utf8') !== payload.size_bytes ||
     dataFileHash(contents) !== payload.content_sha256
@@ -358,8 +457,12 @@ export class CollaborationGitTransport {
     input: AppendCollaborationEventInput,
   ): Promise<ValidatedCollaborationHistory> {
     const history = await this.fetchAndValidate(input);
-    const event = input.buildEvent(history);
-    const materializedFiles = input.materializedFiles ?? [];
+    const built = input.buildEvent(history);
+    const event = 'event' in built ? built.event : built;
+    const materializedFiles =
+      'event' in built
+        ? built.materializedFiles
+        : (input.materializedFiles ?? []);
     validateMaterializedFiles(event, materializedFiles);
     authorizeCollaborationEvent(event, history.projection, {
       principalId: input.identity.principalId,
@@ -537,11 +640,13 @@ export class CollaborationGitTransport {
         `groups/roles/${role.role}.yaml`,
         YAML.stringify(role),
       );
-    for (const action of Object.values(definition.actions))
+    for (const [actionRef, action] of Object.entries(definition.actions))
+      writeRepositoryFile(checkoutPath, actionRef, YAML.stringify(action));
+    for (const implementation of Object.values(definition.implementations))
       writeRepositoryFile(
         checkoutPath,
-        `actions/${action.action_id}.yaml`,
-        YAML.stringify(action),
+        `groups/implementations/${implementation.role}/${implementation.state_id}.yaml`,
+        YAML.stringify(implementation),
       );
     for (const [repositoryFile, prompt] of Object.entries(prompts))
       if (!repositoryFile.startsWith('prompts/'))

@@ -7,11 +7,14 @@ import { promisify } from 'node:util';
 
 import YAML from 'yaml';
 
+import { collaborationPrincipalIdFromFingerprint } from '../identity.js';
 import {
   authorizeCollaborationEvent,
   type VerifiedCommitSigner,
 } from './authorization.js';
+import { canonicalJsonStringify } from './canonical-json.js';
 import {
+  collaborationCanonicalHash,
   deterministicProjectionJson,
   findCollaborationMember,
   reduceCollaborationEvent,
@@ -19,6 +22,7 @@ import {
 } from './reducer.js';
 import {
   actionDefinitionSchema,
+  artifactMetadataSchema,
   collaborationEventSchema,
   dataUpdatePayloadSchema,
   groupDefinitionSchema,
@@ -26,6 +30,8 @@ import {
   memberDefinitionSchema,
   roleDefinitionSchema,
   roleClaimSchema,
+  handoffEnvelopeSchema,
+  stateImplementationSchema,
   validateRepositoryDefinition,
   type CollaborationEvent,
   type CollaborationRepositoryDefinition,
@@ -79,6 +85,19 @@ async function showFile(
     .stdout;
 }
 
+async function showFileBytes(
+  repositoryPath: string,
+  commit: string,
+  repositoryFile: string,
+): Promise<Buffer> {
+  const result = (await execFileAsync(
+    'git',
+    ['show', `${commit}:${repositoryFile}`],
+    { cwd: repositoryPath, encoding: null, maxBuffer: 64 * 1024 * 1024 },
+  )) as unknown as { stdout: Buffer };
+  return result.stdout;
+}
+
 async function listFiles(
   repositoryPath: string,
   commit: string,
@@ -125,9 +144,30 @@ export async function loadCollaborationRepositoryDefinition(
     const action = actionDefinitionSchema.parse(
       YAML.parse(await showFile(repositoryPath, commit, file)),
     );
-    actions[action.action_id] = action;
+    actions[file] = action;
   }
-  return validateRepositoryDefinition({ group, machine, roles, actions });
+  const implementations: Record<
+    string,
+    ReturnType<typeof stateImplementationSchema.parse>
+  > = {};
+  for (const file of await listFiles(
+    repositoryPath,
+    commit,
+    'groups/implementations',
+  )) {
+    if (!file.endsWith('.yaml')) continue;
+    const implementation = stateImplementationSchema.parse(
+      YAML.parse(await showFile(repositoryPath, commit, file)),
+    );
+    implementations[implementation.state_id] = implementation;
+  }
+  return validateRepositoryDefinition({
+    group,
+    machine,
+    roles,
+    actions,
+    implementations,
+  });
 }
 
 function candidateMember(
@@ -227,6 +267,11 @@ async function verifyCommitSigner(
         'PROTOCOL_QUARANTINED',
         `Git signature fingerprint does not match member ${principalId}`,
       );
+    if (collaborationPrincipalIdFromFingerprint(fingerprint) !== principalId)
+      throw new CollaborationProtocolError(
+        'PROTOCOL_QUARANTINED',
+        `Collaboration principal is not derived from its SSH fingerprint: ${principalId}`,
+      );
     return { principalId, signingKeyRef: signer.keyRef };
   } finally {
     await rm(directory, { recursive: true, force: true });
@@ -245,10 +290,53 @@ function materializedPathAllowed(
     event.event_type === 'role_released'
   )
     return repositoryFile.startsWith('groups/claims/');
+  if (
+    event.event_type === 'state_implementation_published' ||
+    event.event_type === 'state_implementation_revised' ||
+    event.event_type === 'state_implementation_withdrawn'
+  ) {
+    const implementation = event.payload.implementation as
+      | { role?: unknown; state_id?: unknown; action_ref?: unknown }
+      | undefined;
+    const role =
+      typeof implementation?.role === 'string'
+        ? implementation.role
+        : String(event.payload.role ?? '');
+    const stateId =
+      typeof implementation?.state_id === 'string'
+        ? implementation.state_id
+        : String(event.payload.state_id ?? '');
+    const implementationRef =
+      typeof event.payload.implementation_ref === 'string'
+        ? event.payload.implementation_ref
+        : `groups/implementations/${role}/${stateId}.yaml`;
+    const actionRef = implementation?.action_ref;
+    const action = event.payload.action as
+      | { input?: { prompt_ref?: unknown } }
+      | undefined;
+    const promptRef = action?.input?.prompt_ref;
+    const ownedActionPrefix =
+      role && stateId ? `actions/${role}/${stateId}/` : '';
+    const ownedPromptPrefix =
+      role && stateId ? `prompts/${role}/${stateId}/` : '';
+    return (
+      [implementationRef, actionRef, promptRef].includes(repositoryFile) ||
+      Boolean(
+        ownedActionPrefix && repositoryFile.startsWith(ownedActionPrefix),
+      ) ||
+      Boolean(ownedPromptPrefix && repositoryFile.startsWith(ownedPromptPrefix))
+    );
+  }
   if (event.event_type === 'data_updated')
     return repositoryFile === dataUpdatePayloadSchema.parse(event.payload).path;
-  if (event.event_type === 'artifact_published')
-    return repositoryFile.startsWith('artifacts/');
+  if (event.event_type === 'turn_completed') {
+    const artifacts = Array.isArray(event.payload.artifacts)
+      ? event.payload.artifacts.map(
+          (value) => artifactMetadataSchema.parse(value).repository_path,
+        )
+      : [];
+    return artifacts.includes(repositoryFile);
+  }
   return false;
 }
 
@@ -292,6 +380,94 @@ async function validateDataUpdateMaterialization(
       'PROTOCOL_QUARANTINED',
       `Materialized data does not match event hash and size: ${payload.path}`,
     );
+}
+
+async function validateTurnCompletionMaterialization(
+  repositoryPath: string,
+  commit: string,
+  event: CollaborationEvent,
+  eventFile: string,
+  changedFiles: readonly string[],
+): Promise<void> {
+  if (event.event_type !== 'turn_completed') return;
+  const artifacts = Array.isArray(event.payload.artifacts)
+    ? event.payload.artifacts.map((value) =>
+        artifactMetadataSchema.parse(value),
+      )
+    : [];
+  const materialized = changedFiles.filter(
+    (file) => file !== eventFile && file !== 'projection/state.json',
+  );
+  if (
+    JSON.stringify(materialized.sort()) !==
+    JSON.stringify(artifacts.map((artifact) => artifact.repository_path).sort())
+  )
+    throw new CollaborationProtocolError(
+      'PROTOCOL_QUARANTINED',
+      'turn_completed artifact paths do not match its metadata',
+    );
+  for (const artifact of artifacts) {
+    const treeEntry = await git(repositoryPath, [
+      'ls-tree',
+      commit,
+      '--',
+      artifact.repository_path,
+    ]);
+    const mode = /^(\d{6}) blob [0-9a-f]+\t/u.exec(treeEntry.stdout)?.[1];
+    if (mode !== '100644' && mode !== '100755')
+      throw new CollaborationProtocolError(
+        'PROTOCOL_QUARANTINED',
+        `Artifact must be a regular file: ${artifact.repository_path}`,
+      );
+    const contents = await showFileBytes(
+      repositoryPath,
+      commit,
+      artifact.repository_path,
+    );
+    const digest = `sha256:${crypto.createHash('sha256').update(contents).digest('hex')}`;
+    if (contents.byteLength !== artifact.size || digest !== artifact.sha256)
+      throw new CollaborationProtocolError(
+        'PROTOCOL_QUARANTINED',
+        `Artifact does not match event hash and size: ${artifact.repository_path}`,
+      );
+  }
+}
+
+async function validateHandoffReferences(
+  repositoryPath: string,
+  commit: string,
+  event: CollaborationEvent,
+): Promise<void> {
+  const handoff =
+    event.event_type === 'group_started' && event.payload.initial_handoff
+      ? handoffEnvelopeSchema.parse(event.payload.initial_handoff)
+      : event.event_type === 'turn_completed'
+        ? handoffEnvelopeSchema.parse(event.payload.handoff)
+        : null;
+  if (!handoff) return;
+  for (const repositoryPathRef of [
+    ...handoff.data_refs,
+    ...handoff.artifact_refs,
+  ]) {
+    const treeEntry = await git(repositoryPath, [
+      'ls-tree',
+      commit,
+      '--',
+      repositoryPathRef,
+    ]);
+    const match = /^(\d{6}) blob [0-9a-f]+\t([^\n]+)$/u.exec(
+      treeEntry.stdout.trim(),
+    );
+    if (
+      !match ||
+      (match[1] !== '100644' && match[1] !== '100755') ||
+      match[2] !== repositoryPathRef
+    )
+      throw new CollaborationProtocolError(
+        'PROTOCOL_QUARANTINED',
+        `Handoff reference is not a verified regular file: ${repositoryPathRef}`,
+      );
+  }
 }
 
 async function eventFileForCommit(
@@ -380,6 +556,51 @@ function assertLinearHistory(
   return commits;
 }
 
+function firstProjectionDifference(
+  materialized: unknown,
+  replayed: unknown,
+  path = '$',
+): string | null {
+  if (Object.is(materialized, replayed)) return null;
+  if (Array.isArray(materialized) && Array.isArray(replayed)) {
+    if (materialized.length !== replayed.length) return `${path}.length`;
+    for (let index = 0; index < materialized.length; index += 1) {
+      const difference = firstProjectionDifference(
+        materialized[index],
+        replayed[index],
+        `${path}[${String(index)}]`,
+      );
+      if (difference) return difference;
+    }
+    return null;
+  }
+  if (
+    materialized &&
+    replayed &&
+    typeof materialized === 'object' &&
+    typeof replayed === 'object'
+  ) {
+    const materializedRecord = materialized as Record<string, unknown>;
+    const replayedRecord = replayed as Record<string, unknown>;
+    const keys = new Set([
+      ...Object.keys(materializedRecord),
+      ...Object.keys(replayedRecord),
+    ]);
+    for (const key of [...keys].sort()) {
+      if (!(key in materializedRecord) || !(key in replayedRecord))
+        return `${path}.${key}`;
+      const difference = firstProjectionDifference(
+        materializedRecord[key],
+        replayedRecord[key],
+        `${path}.${key}`,
+      );
+      if (difference) return difference;
+    }
+    return null;
+  }
+  return path;
+}
+
 async function checkpointMatchesMaterializedProjection(
   repositoryPath: string,
   checkpoint: CollaborationValidationCheckpoint,
@@ -396,7 +617,7 @@ async function checkpointMatchesMaterializedProjection(
       await showFile(repositoryPath, checkpoint.head, 'projection/state.json'),
     ) as unknown;
     return (
-      `${JSON.stringify(materialized, null, 2)}\n` ===
+      `${canonicalJsonStringify(materialized)}\n` ===
       deterministicProjectionJson(checkpoint.projection)
     );
   } catch {
@@ -497,6 +718,14 @@ export async function validateCollaborationGitHistory(input: {
       eventFile,
       changedFiles,
     );
+    await validateTurnCompletionMaterialization(
+      input.repositoryPath,
+      commit,
+      event,
+      eventFile,
+      changedFiles,
+    );
+    await validateHandoffReferences(input.repositoryPath, commit, event);
     const signer = await verifyCommitSigner(
       input.repositoryPath,
       commit,
@@ -522,12 +751,12 @@ export async function validateCollaborationGitHistory(input: {
       await showFile(input.repositoryPath, input.head, 'projection/state.json'),
     ) as unknown;
     if (
-      `${JSON.stringify(materialized, null, 2)}\n` !==
+      `${canonicalJsonStringify(materialized)}\n` !==
       deterministicProjectionJson(projection)
     )
       throw new CollaborationProtocolError(
         'PROTOCOL_QUARANTINED',
-        'The materialized projection does not match event replay',
+        `The materialized projection does not match event replay at ${firstProjectionDifference(materialized, projection) ?? '$'}`,
       );
   }
   await validateMaterializedIdentityState(
@@ -535,11 +764,21 @@ export async function validateCollaborationGitHistory(input: {
     input.head,
     projection,
   );
+  const headDefinition = await loadCollaborationRepositoryDefinition(
+    input.repositoryPath,
+    input.head,
+  );
+  await validateMaterializedImplementations(
+    input.repositoryPath,
+    input.head,
+    projection,
+    headDefinition,
+  );
   return {
     head: input.head,
     commits,
     events,
-    definition,
+    definition: headDefinition,
     projection,
     validation: {
       mode: useCheckpoint ? 'incremental' : 'full',
@@ -548,6 +787,83 @@ export async function validateCollaborationGitHistory(input: {
       checkpointHead: useCheckpoint ? input.checkpoint!.head : null,
     },
   };
+}
+
+async function validateMaterializedImplementations(
+  repositoryPath: string,
+  head: string,
+  projection: CollaborationProjection,
+  definition: CollaborationRepositoryDefinition,
+): Promise<void> {
+  const expectedFiles = new Set<string>();
+  for (const [stateId, active] of Object.entries(
+    projection.stateImplementations,
+  )) {
+    expectedFiles.add(active.implementationRef);
+    const materialized = definition.implementations[stateId];
+    if (
+      !materialized ||
+      collaborationCanonicalHash(materialized) !== active.implementationHash
+    )
+      throw new CollaborationProtocolError(
+        'PROTOCOL_QUARANTINED',
+        `Materialized state implementation is invalid: ${stateId}`,
+      );
+    if (!active.action) continue;
+    const actionRef = active.implementation.action_ref!;
+    expectedFiles.add(actionRef);
+    const action = definition.actions[actionRef];
+    if (!action || collaborationCanonicalHash(action) !== active.actionHash)
+      throw new CollaborationProtocolError(
+        'PROTOCOL_QUARANTINED',
+        `Materialized action is invalid: ${actionRef}`,
+      );
+    expectedFiles.add(action.input.prompt_ref);
+    const prompt = await showFile(
+      repositoryPath,
+      head,
+      action.input.prompt_ref,
+    );
+    if (
+      `sha256:${crypto.createHash('sha256').update(prompt).digest('hex')}` !==
+      active.promptHash
+    )
+      throw new CollaborationProtocolError(
+        'PROTOCOL_QUARANTINED',
+        `Materialized prompt hash is invalid: ${action.input.prompt_ref}`,
+      );
+  }
+  const actual = await listFiles(
+    repositoryPath,
+    head,
+    'groups/implementations',
+  );
+  const expectedImplementations = [...expectedFiles]
+    .filter((file) => file.startsWith('groups/implementations/'))
+    .sort();
+  if (JSON.stringify(actual) !== JSON.stringify(expectedImplementations))
+    throw new CollaborationProtocolError(
+      'PROTOCOL_QUARANTINED',
+      'Materialized state implementations do not match event replay',
+    );
+  const expectedActions = [...expectedFiles]
+    .filter((file) => file.startsWith('actions/'))
+    .sort();
+  const actualActions = await listFiles(repositoryPath, head, 'actions');
+  if (JSON.stringify(actualActions) !== JSON.stringify(expectedActions))
+    throw new CollaborationProtocolError(
+      'PROTOCOL_QUARANTINED',
+      'Materialized actions do not match event replay',
+    );
+  const expectedPrompts = [...expectedFiles]
+    .filter((file) => file.startsWith('prompts/'))
+    .sort();
+  const actualPrompts = await listFiles(repositoryPath, head, 'prompts');
+  if (JSON.stringify(actualPrompts) !== JSON.stringify(expectedPrompts))
+    throw new CollaborationProtocolError(
+      'PROTOCOL_QUARANTINED',
+      'Materialized prompts do not match event replay',
+    );
 }
 
 async function validateMaterializedIdentityState(

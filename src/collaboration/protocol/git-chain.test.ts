@@ -14,8 +14,11 @@ import path from 'node:path';
 import YAML from 'yaml';
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { collaborationPrincipalIdFromFingerprint } from '../identity.js';
 import {
+  collaborationCanonicalHash,
   deterministicProjectionJson,
+  loadCollaborationRepositoryDefinition,
   memberDefinitionSchema,
   reduceCollaborationEvent,
   validateCollaborationGitHistory,
@@ -40,6 +43,7 @@ function fixture(): {
   readonly key: string;
   readonly publicKey: string;
   readonly fingerprint: string;
+  readonly principalId: string;
 } {
   const root = mkdtempSync(path.join(os.tmpdir(), 'icarus-git-chain-test-'));
   roots.push(root);
@@ -63,18 +67,27 @@ function fixture(): {
   run(repository, ['git', 'config', 'gpg.format', 'ssh']);
   run(repository, ['git', 'config', 'user.signingkey', key]);
   run(repository, ['git', 'config', 'commit.gpgsign', 'true']);
-  return { root: repository, key, publicKey, fingerprint };
+  return {
+    root: repository,
+    key,
+    publicKey,
+    fingerprint,
+    principalId: collaborationPrincipalIdFromFingerprint(fingerprint),
+  };
 }
 
-function definition(fingerprint: string): CollaborationRepositoryDefinition {
+function definition(
+  fingerprint: string,
+  principalId: string,
+): CollaborationRepositoryDefinition {
   return validateRepositoryDefinition({
     group: {
-      format: 'icarus.agent-group/1',
-      protocol_version: 1,
+      format: 'icarus.agent-group/2',
+      protocol_version: 2,
       group_id: 'ag_signed',
       name: 'Signed group',
       creator: {
-        principal_id: 'alice',
+        principal_id: principalId,
         signing_key_ref: `ssh-ed25519:${fingerprint}`,
       },
       control_branch: 'refs/heads/icarus/control',
@@ -86,51 +99,30 @@ function definition(fingerprint: string): CollaborationRepositoryDefinition {
       },
     },
     machine: {
-      format: 'icarus.agent-group-machine/1',
+      format: 'icarus.agent-group-machine/2',
       initial_state: 'development',
       states: {
         development: {
+          label: 'Development',
+          owner_role: 'developer',
           terminal: false,
-          transitions: [
-            {
-              id: 'implement',
-              actor_role: 'developer',
-              action_ref: 'actions/implement.yaml',
-              outcomes: { succeeded: 'completed' },
-            },
-          ],
+          transitions: [{ outcome: 'completed', target_state: 'completed' }],
         },
-        completed: { terminal: true, transitions: [] },
+        completed: { label: 'Completed', terminal: true, transitions: [] },
       },
     },
     roles: {
       developer: {
-        format: 'icarus.agent-group-role/1',
+        format: 'icarus.agent-group-role/2',
         role: 'developer',
         display_name: 'Developer',
         cardinality: { min: 1, max: 1 },
-        allowed_transitions: ['implement'],
-        executor_requirements: {
-          capability: 'coding_task',
-          interaction: 'visible_session',
-        },
+        required_capabilities: ['coding_task'],
+        owned_states: ['development'],
       },
     },
-    actions: {
-      implement: {
-        format: 'icarus.agent-group-action/1',
-        action_id: 'implement',
-        kind: 'external',
-        adapter: 'codex-task',
-        input: { prompt_ref: 'prompts/implement.md' },
-        requirements: {
-          capability: 'coding_task',
-          interaction: 'visible_session',
-          filesystem_access: 'workspace_write',
-        },
-        result_schema: { ref: 'code-change-result@1' },
-      },
-    },
+    actions: {},
+    implementations: {},
   });
 }
 
@@ -139,17 +131,22 @@ function protocolEvent(input: {
   readonly id: string;
   readonly sequence: number;
   readonly revision: number;
+  readonly principalId: string;
+  readonly agentId?: string;
   readonly payload?: Record<string, unknown>;
 }): CollaborationEvent {
   return {
-    format: 'icarus.agent-group-event/1',
-    protocol_version: 1,
+    format: 'icarus.agent-group-event/2',
+    protocol_version: 2,
     group_id: 'ag_signed',
     event_id: input.id,
     epoch: 1,
     sequence: input.sequence,
     event_type: input.type,
-    actor: { principal_id: 'alice', agent_id: 'agent_alice' },
+    actor: {
+      principal_id: input.principalId,
+      agent_id: input.agentId ?? 'agent_alice',
+    },
     expected: { state_revision: input.revision },
     payload: input.payload ?? {},
     occurred_at: '2026-08-05T12:00:00.000Z',
@@ -198,9 +195,10 @@ function dataPayload(path: string, contents: string) {
   };
 }
 
-function initializeSignedHistory() {
+async function initializeSignedHistory(principalOverride?: string) {
   const test = fixture();
-  const contract = definition(test.fingerprint);
+  const principalId = principalOverride ?? test.principalId;
+  const contract = definition(test.fingerprint, principalId);
   write(test.root, 'group.yaml', YAML.stringify(contract.group));
   write(test.root, 'machine.yaml', YAML.stringify(contract.machine));
   write(
@@ -208,21 +206,16 @@ function initializeSignedHistory() {
     'groups/roles/developer.yaml',
     YAML.stringify(contract.roles.developer),
   );
-  write(
-    test.root,
-    'actions/implement.yaml',
-    YAML.stringify(contract.actions.implement),
-  );
-  write(test.root, 'prompts/implement.md', 'Implement the requested change.\n');
   const genesis = protocolEvent({
     type: 'group_initialized',
     id: 'evt_genesis',
     sequence: 1,
     revision: 0,
+    principalId,
     payload: {
       member: {
-        format: 'icarus.agent-group-member/1',
-        principal_id: 'alice',
+        format: 'icarus.agent-group-member/2',
+        principal_id: principalId,
         signing_key_ref: `ssh-ed25519:${test.fingerprint}`,
         signing_public_key: test.publicKey,
         agent_id: 'agent_alice',
@@ -230,9 +223,9 @@ function initializeSignedHistory() {
         registered_at_event: 'evt_genesis',
       },
       role_claim: {
-        format: 'icarus.agent-group-role-claim/1',
+        format: 'icarus.agent-group-role-claim/2',
         role: 'developer',
-        principal_id: 'alice',
+        principal_id: principalId,
         agent_id: 'agent_alice',
         claimed_at_event: 'evt_genesis',
       },
@@ -241,16 +234,33 @@ function initializeSignedHistory() {
   const genesisProjection = reduceCollaborationEvent(null, genesis, contract);
   write(
     test.root,
-    'groups/members/alice/agent_alice.json',
+    `groups/members/${principalId}/agent_alice.json`,
     `${JSON.stringify(genesis.payload.member, null, 2)}\n`,
   );
   write(
     test.root,
-    'groups/claims/developer/alice/agent_alice.json',
+    `groups/claims/developer/${principalId}/agent_alice.json`,
     `${JSON.stringify(genesis.payload.role_claim, null, 2)}\n`,
   );
   const genesisHead = appendEvent(test.root, genesis, genesisProjection);
-  return { ...test, contract, genesisProjection, genesisHead };
+  const materializedContract = await loadCollaborationRepositoryDefinition(
+    test.root,
+    genesisHead,
+  );
+  expect(materializedContract).toEqual(contract);
+  const materializedGenesisProjection = reduceCollaborationEvent(
+    null,
+    genesis,
+    materializedContract,
+  );
+  expect(materializedGenesisProjection).toEqual(genesisProjection);
+  return {
+    ...test,
+    principalId,
+    contract: materializedContract,
+    genesisProjection: materializedGenesisProjection,
+    genesisHead,
+  };
 }
 
 afterEach(() => {
@@ -259,20 +269,96 @@ afterEach(() => {
 });
 
 describe('signed Git collaboration history', () => {
-  it('verifies SSH commit signatures and deterministic materialization', async () => {
-    const test = initializeSignedHistory();
-    const start = protocolEvent({
+  it('quarantines a Handoff reference that is absent from the signed tree', async () => {
+    const test = await initializeSignedHistory();
+    const implementation = {
+      format: 'icarus.agent-group-state-implementation/2' as const,
+      role: 'developer',
+      state_id: 'development',
+      owner: {
+        principal_id: test.principalId,
+        agent_id: 'agent_alice',
+      },
+      mode: 'manual' as const,
+      action_ref: null,
+      published_at_event: 'evt_implementation',
+    };
+    const implementationEvent = protocolEvent({
+      type: 'state_implementation_published',
+      id: 'evt_implementation',
+      sequence: 2,
+      revision: 1,
+      principalId: test.principalId,
+      payload: {
+        implementation,
+        implementation_ref: 'groups/implementations/developer/development.yaml',
+        implementation_hash: collaborationCanonicalHash(implementation),
+        action: null,
+        action_hash: null,
+        prompt_hash: null,
+      },
+    });
+    const ready = reduceCollaborationEvent(
+      test.genesisProjection,
+      implementationEvent,
+      test.contract,
+    );
+    appendEvent(test.root, implementationEvent, ready, {
+      'groups/implementations/developer/development.yaml':
+        YAML.stringify(implementation),
+    });
+    const handoff = {
+      format: 'icarus.agent-group-handoff/2' as const,
+      source_turn_id: 'turn_initial',
+      outcome: 'initial',
+      summary: 'Start with a missing reference.',
+      instruction: '',
+      markers: [],
+      data_refs: ['data/missing.json'],
+      artifact_refs: [],
+      data: {},
+    };
+    const startedEvent = protocolEvent({
       type: 'group_started',
+      id: 'evt_started',
+      sequence: 3,
+      revision: 2,
+      principalId: test.principalId,
+      payload: {
+        initial_handoff: handoff,
+        initial_handoff_hash: collaborationCanonicalHash(handoff),
+      },
+    });
+    const started = reduceCollaborationEvent(
+      ready,
+      startedEvent,
+      test.contract,
+    );
+    const head = appendEvent(test.root, startedEvent, started);
+
+    await expect(
+      validateCollaborationGitHistory({ repositoryPath: test.root, head }),
+    ).rejects.toThrow(/Handoff reference is not a verified regular file/);
+  });
+
+  it('verifies SSH commit signatures and deterministic materialization', async () => {
+    const test = await initializeSignedHistory();
+    const start = protocolEvent({
+      type: 'data_updated',
       id: 'evt_start',
       sequence: 2,
       revision: 1,
+      principalId: test.principalId,
+      payload: dataPayload('data/start.txt', 'start\n'),
     });
     const projection = reduceCollaborationEvent(
       test.genesisProjection,
       start,
       test.contract,
     );
-    const head = appendEvent(test.root, start, projection);
+    const head = appendEvent(test.root, start, projection, {
+      'data/start.txt': 'start\n',
+    });
     const history = await validateCollaborationGitHistory({
       repositoryPath: test.root,
       head,
@@ -282,11 +368,11 @@ describe('signed Git collaboration history', () => {
       'evt_genesis',
       'evt_start',
     ]);
-    expect(history.projection.lifecycle).toBe('RUNNING');
+    expect(history.projection.lifecycle).toBe('FORMING');
   });
 
   it('validates only the signed suffix after a long-history checkpoint', async () => {
-    const test = initializeSignedHistory();
+    const test = await initializeSignedHistory();
     let projection = test.genesisProjection;
     let head = test.genesisHead;
     for (let sequence = 2; sequence <= 24; sequence += 1) {
@@ -296,6 +382,7 @@ describe('signed Git collaboration history', () => {
         id: `evt_data_${String(sequence)}`,
         sequence,
         revision: sequence - 1,
+        principalId: test.principalId,
         payload: dataPayload('data/history.txt', contents),
       });
       projection = reduceCollaborationEvent(projection, next, test.contract);
@@ -313,6 +400,7 @@ describe('signed Git collaboration history', () => {
       id: 'evt_data_tail',
       sequence: 25,
       revision: 24,
+      principalId: test.principalId,
       payload: dataPayload('data/history.txt', tailContents),
     });
     projection = reduceCollaborationEvent(projection, tail, test.contract);
@@ -348,7 +436,7 @@ describe('signed Git collaboration history', () => {
   }, 30_000);
 
   it('falls back to full replay when a local checkpoint is inconsistent', async () => {
-    const test = initializeSignedHistory();
+    const test = await initializeSignedHistory();
     const history = await validateCollaborationGitHistory({
       repositoryPath: test.root,
       head: test.genesisHead,
@@ -371,7 +459,7 @@ describe('signed Git collaboration history', () => {
   });
 
   it('rejects an unsigned suffix when validating incrementally', async () => {
-    const test = initializeSignedHistory();
+    const test = await initializeSignedHistory();
     const checkpoint = await validateCollaborationGitHistory({
       repositoryPath: test.root,
       head: test.genesisHead,
@@ -382,6 +470,7 @@ describe('signed Git collaboration history', () => {
       id: 'evt_unsigned_suffix',
       sequence: 2,
       revision: 1,
+      principalId: test.principalId,
       payload: dataPayload('data/unsigned.txt', 'unsigned\n'),
     });
     const projection = reduceCollaborationEvent(
@@ -407,45 +496,55 @@ describe('signed Git collaboration history', () => {
   });
 
   it('quarantines an unsigned commit even when its author name is forged', async () => {
-    const test = initializeSignedHistory();
+    const test = await initializeSignedHistory();
     run(test.root, ['git', 'config', 'commit.gpgsign', 'false']);
     const start = protocolEvent({
-      type: 'group_started',
+      type: 'data_updated',
       id: 'evt_unsigned',
       sequence: 2,
       revision: 1,
+      principalId: test.principalId,
+      payload: dataPayload('data/unsigned-forged.txt', 'unsigned\n'),
     });
     const projection = reduceCollaborationEvent(
       test.genesisProjection,
       start,
       test.contract,
     );
-    const head = appendEvent(test.root, start, projection);
+    const head = appendEvent(test.root, start, projection, {
+      'data/unsigned-forged.txt': 'unsigned\n',
+    });
     await expect(
       validateCollaborationGitHistory({ repositoryPath: test.root, head }),
     ).rejects.toThrow(/signature is invalid/);
   });
 
   it('detects remote history rewrites relative to the prior accepted head', async () => {
-    const test = initializeSignedHistory();
+    const test = await initializeSignedHistory();
     const first = protocolEvent({
-      type: 'group_started',
+      type: 'data_updated',
       id: 'evt_first',
       sequence: 2,
       revision: 1,
+      principalId: test.principalId,
+      payload: dataPayload('data/first.txt', 'first\n'),
     });
     const firstProjection = reduceCollaborationEvent(
       test.genesisProjection,
       first,
       test.contract,
     );
-    const previousHead = appendEvent(test.root, first, firstProjection);
+    const previousHead = appendEvent(test.root, first, firstProjection, {
+      'data/first.txt': 'first\n',
+    });
     run(test.root, ['git', 'checkout', '-q', '--detach', test.genesisHead]);
     const replacement = protocolEvent({
-      type: 'group_started',
+      type: 'data_updated',
       id: 'evt_replacement',
       sequence: 2,
       revision: 1,
+      principalId: test.principalId,
+      payload: dataPayload('data/replacement.txt', 'replacement\n'),
     });
     const replacementProjection = reduceCollaborationEvent(
       test.genesisProjection,
@@ -456,6 +555,7 @@ describe('signed Git collaboration history', () => {
       test.root,
       replacement,
       replacementProjection,
+      { 'data/replacement.txt': 'replacement\n' },
     );
     await expect(
       validateCollaborationGitHistory({
@@ -467,34 +567,39 @@ describe('signed Git collaboration history', () => {
   });
 
   it('quarantines a projection that disagrees with replay', async () => {
-    const test = initializeSignedHistory();
+    const test = await initializeSignedHistory();
     const start = protocolEvent({
-      type: 'group_started',
+      type: 'data_updated',
       id: 'evt_bad_projection',
       sequence: 2,
       revision: 1,
+      principalId: test.principalId,
+      payload: dataPayload('data/projection.txt', 'projection\n'),
     });
     const projection = reduceCollaborationEvent(
       test.genesisProjection,
       start,
       test.contract,
     );
-    const head = appendEvent(test.root, start, {
-      ...projection,
-      businessState: 'forged-state',
-    });
+    const head = appendEvent(
+      test.root,
+      start,
+      { ...projection, businessState: 'forged-state' },
+      { 'data/projection.txt': 'projection\n' },
+    );
     await expect(
       validateCollaborationGitHistory({ repositoryPath: test.root, head }),
     ).rejects.toThrow(/materialized projection/);
   });
 
   it('quarantines data whose materialized blob disagrees with its event hash', async () => {
-    const test = initializeSignedHistory();
+    const test = await initializeSignedHistory();
     const next = protocolEvent({
       type: 'data_updated',
       id: 'evt_bad_data_hash',
       sequence: 2,
       revision: 1,
+      principalId: test.principalId,
       payload: dataPayload('data/result.txt', 'declared\n'),
     });
     const projection = reduceCollaborationEvent(
@@ -520,13 +625,14 @@ describe('signed Git collaboration history', () => {
   });
 
   it('quarantines a signed data update materialized as a symbolic link', async () => {
-    const test = initializeSignedHistory();
+    const test = await initializeSignedHistory();
     const linkTarget = '../../outside-collaboration.txt';
     const next = protocolEvent({
       type: 'data_updated',
       id: 'evt_data_symlink',
       sequence: 2,
       revision: 1,
+      principalId: test.principalId,
       payload: dataPayload('data/link.txt', linkTarget),
     });
     const projection = reduceCollaborationEvent(
@@ -552,7 +658,7 @@ describe('signed Git collaboration history', () => {
   });
 
   it('quarantines merge commits instead of accepting a non-linear event DAG', async () => {
-    const test = initializeSignedHistory();
+    const test = await initializeSignedHistory();
     run(test.root, ['git', 'checkout', '-q', '-b', 'left']);
     write(test.root, 'left.txt', 'left\n');
     run(test.root, ['git', 'add', 'left.txt']);
@@ -578,10 +684,11 @@ describe('signed Git collaboration history', () => {
   });
 
   it.each([
-    ['member', 'groups/members/alice/agent_alice.json'],
-    ['role claim', 'groups/claims/developer/alice/agent_alice.json'],
-  ])('quarantines a forged materialized %s', async (_label, file) => {
-    const test = initializeSignedHistory();
+    ['member', 'groups/members'],
+    ['role claim', 'groups/claims/developer'],
+  ])('quarantines a forged materialized %s', async (_label, prefix) => {
+    const test = await initializeSignedHistory();
+    const file = `${prefix}/${test.principalId}/agent_alice.json`;
     const materialized = JSON.parse(
       readFileSync(path.join(test.root, file), 'utf8'),
     ) as Record<string, unknown>;
@@ -595,13 +702,24 @@ describe('signed Git collaboration history', () => {
       validateCollaborationGitHistory({ repositoryPath: test.root, head }),
     ).rejects.toThrow(/does not match event replay/);
   });
+
+  it('quarantines a Principal id that is not derived from the signing key', async () => {
+    const test = await initializeSignedHistory('forged_principal');
+
+    await expect(
+      validateCollaborationGitHistory({
+        repositoryPath: test.root,
+        head: test.genesisHead,
+      }),
+    ).rejects.toThrow(/not derived from its SSH fingerprint/);
+  });
 });
 
 describe('member signing key schema', () => {
   it('rejects an allowed-signers newline injection', () => {
     const test = fixture();
     const member = {
-      format: 'icarus.agent-group-member/1',
+      format: 'icarus.agent-group-member/2',
       principal_id: 'alice',
       signing_key_ref: `ssh-ed25519:${test.fingerprint}`,
       signing_public_key: `${test.publicKey}\nmallory ${test.publicKey}`,
@@ -611,7 +729,7 @@ describe('member signing key schema', () => {
     };
 
     expect(() => memberDefinitionSchema.parse(member)).toThrow(
-      /single-line OpenSSH public key/,
+      /Invalid string|must match pattern/,
     );
   });
 });
