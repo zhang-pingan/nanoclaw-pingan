@@ -536,6 +536,119 @@ describe('CollaborationGroupService', () => {
     }
   }, 20_000);
 
+  it('writes shared data through a signed, revision-fenced protocol event', async () => {
+    const testRoot = root();
+    const remoteUrl = remote(testRoot);
+    const aliceKey = key(testRoot, 'alice-key');
+    const owner = service(testRoot, 'owner');
+    try {
+      const created = await owner.groupService.createGroup(
+        createInput(remoteUrl, aliceKey),
+      );
+      const expectedRevision = created.projection!.revision;
+      const result = await owner.groupService.updateData({
+        groupId: 'ag_service',
+        path: 'notes/status.txt',
+        content: 'ready for review\n',
+        mediaType: 'text/plain',
+        expectedRevision,
+      });
+
+      expect(result).toMatchObject({
+        path: 'data/notes/status.txt',
+        sizeBytes: 17,
+        contentSha256: expect.stringMatching(/^sha256:[0-9a-f]{64}$/),
+        group: {
+          protocolStatus: 'OK',
+          projection: { revision: expectedRevision + 1 },
+        },
+      });
+      expect(
+        execFileSync(
+          'git',
+          ['show', `${result.group.headCommit!}:data/notes/status.txt`],
+          { cwd: result.group.repositoryPath, encoding: 'utf8' },
+        ),
+      ).toBe('ready for review\n');
+      expect(owner.store.listEvents('ag_service', 1)[0]).toMatchObject({
+        event_type: 'data_updated',
+        payload: {
+          path: 'data/notes/status.txt',
+          content_sha256: result.contentSha256,
+          size_bytes: 17,
+          media_type: 'text/plain',
+        },
+      });
+
+      await expect(
+        owner.groupService.updateData({
+          groupId: 'ag_service',
+          path: 'notes/status.txt',
+          content: 'stale overwrite\n',
+          expectedRevision,
+        }),
+      ).rejects.toThrow(/Expected revision/);
+      expect(
+        execFileSync(
+          'git',
+          ['show', `${result.group.headCommit!}:data/notes/status.txt`],
+          { cwd: result.group.repositoryPath, encoding: 'utf8' },
+        ),
+      ).toBe('ready for review\n');
+    } finally {
+      owner.store.close();
+    }
+  }, 20_000);
+
+  it.each([
+    '../escape.txt',
+    '/absolute.txt',
+    'nested/../escape.txt',
+    'nested\\escape.txt',
+    'nested\nescape.txt',
+    '.git/config',
+  ])('rejects unsafe shared data path %s', async (repositoryPath) => {
+    const testRoot = root();
+    const remoteUrl = remote(testRoot);
+    const owner = service(testRoot, 'owner');
+    try {
+      const created = await owner.groupService.createGroup(
+        createInput(remoteUrl, key(testRoot, 'alice-key')),
+      );
+      await expect(
+        owner.groupService.updateData({
+          groupId: 'ag_service',
+          path: repositoryPath,
+          content: 'unsafe',
+          expectedRevision: created.projection!.revision,
+        }),
+      ).rejects.toThrow(/data path|normalized|unsafe/i);
+    } finally {
+      owner.store.close();
+    }
+  });
+
+  it('rejects shared data above the bounded Git payload limit', async () => {
+    const testRoot = root();
+    const remoteUrl = remote(testRoot);
+    const owner = service(testRoot, 'owner');
+    try {
+      const created = await owner.groupService.createGroup(
+        createInput(remoteUrl, key(testRoot, 'alice-key')),
+      );
+      await expect(
+        owner.groupService.updateData({
+          groupId: 'ag_service',
+          path: 'too-large.txt',
+          content: 'x'.repeat(1024 * 1024 + 1),
+          expectedRevision: created.projection!.revision,
+        }),
+      ).rejects.toThrow(/too large/i);
+    } finally {
+      owner.store.close();
+    }
+  });
+
   it('rejects prompt paths that could overwrite protocol files', async () => {
     const testRoot = root();
     const remoteUrl = remote(testRoot);

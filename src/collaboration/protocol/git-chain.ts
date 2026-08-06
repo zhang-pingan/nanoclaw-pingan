@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process';
+import crypto from 'node:crypto';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -18,6 +19,7 @@ import {
 import {
   actionDefinitionSchema,
   collaborationEventSchema,
+  dataUpdatePayloadSchema,
   groupDefinitionSchema,
   machineDefinitionSchema,
   memberDefinitionSchema,
@@ -236,10 +238,52 @@ function materializedPathAllowed(
   )
     return repositoryFile.startsWith('groups/claims/');
   if (event.event_type === 'data_updated')
-    return repositoryFile.startsWith('data/');
+    return repositoryFile === dataUpdatePayloadSchema.parse(event.payload).path;
   if (event.event_type === 'artifact_published')
     return repositoryFile.startsWith('artifacts/');
   return false;
+}
+
+async function validateDataUpdateMaterialization(
+  repositoryPath: string,
+  commit: string,
+  event: CollaborationEvent,
+  eventFile: string,
+  changedFiles: readonly string[],
+): Promise<void> {
+  if (event.event_type !== 'data_updated') return;
+  const payload = dataUpdatePayloadSchema.parse(event.payload);
+  const materializedFiles = changedFiles.filter(
+    (file) => file !== eventFile && file !== 'projection/state.json',
+  );
+  if (materializedFiles.length !== 1 || materializedFiles[0] !== payload.path)
+    throw new CollaborationProtocolError(
+      'PROTOCOL_QUARANTINED',
+      `data_updated must modify exactly ${payload.path}`,
+    );
+  const treeEntry = await git(repositoryPath, [
+    'ls-tree',
+    commit,
+    '--',
+    payload.path,
+  ]);
+  const mode = /^(\d{6}) blob [0-9a-f]+\t/u.exec(treeEntry.stdout)?.[1];
+  if (mode !== '100644' && mode !== '100755')
+    throw new CollaborationProtocolError(
+      'PROTOCOL_QUARANTINED',
+      `Materialized data must be a regular file: ${payload.path}`,
+    );
+  const contents = await showFile(repositoryPath, commit, payload.path);
+  const size = Buffer.byteLength(contents, 'utf8');
+  const digest = `sha256:${crypto
+    .createHash('sha256')
+    .update(contents, 'utf8')
+    .digest('hex')}`;
+  if (size !== payload.size_bytes || digest !== payload.content_sha256)
+    throw new CollaborationProtocolError(
+      'PROTOCOL_QUARANTINED',
+      `Materialized data does not match event hash and size: ${payload.path}`,
+    );
 }
 
 async function eventFileForCommit(
@@ -438,6 +482,13 @@ export async function validateCollaborationGitHistory(input: {
           `Event ${event.event_id} cannot modify ${unauthorizedFile}`,
         );
     }
+    await validateDataUpdateMaterialization(
+      input.repositoryPath,
+      commit,
+      event,
+      eventFile,
+      changedFiles,
+    );
     const signer = await verifyCommitSigner(
       input.repositoryPath,
       commit,

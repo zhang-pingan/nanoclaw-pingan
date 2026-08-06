@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { canonicalJsonStringify } from './canonical-json.js';
 import {
   collaborationEventSchema,
+  dataUpdatePayloadSchema,
   memberDefinitionSchema,
   roleClaimSchema,
   sha256,
@@ -625,7 +626,18 @@ export function reduceCollaborationEvent(
       turn.recoveryReason = null;
       break;
     }
-    case 'data_updated':
+    case 'data_updated': {
+      const payload = dataUpdatePayloadSchema.parse(event.payload);
+      if (payload.turn_id) {
+        const turn = activeTurn(next, payload.turn_id);
+        assertFence(turn, {
+          turn_id: payload.turn_id,
+          attempt: payload.attempt!,
+          fencing_token: payload.fencing_token!,
+        });
+      }
+      break;
+    }
     case 'artifact_published':
       break;
     case 'protocol_recovery': {

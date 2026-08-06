@@ -8,7 +8,9 @@ import {
   CollaborationGitTransport,
   collaborationRepositoryCachePath,
   loadCollaborationSigningIdentity,
+  normalizeCollaborationDataPath,
   readPromptFromValidatedCacheAsync,
+  type CollaborationMaterializedFile,
   type CollaborationSigningIdentity,
 } from './git-transport.js';
 import {
@@ -82,6 +84,21 @@ export interface CollaborationRemoteSummary {
     readonly min: number;
     readonly max: number;
   }[];
+}
+
+export const MAX_COLLABORATION_DATA_BYTES = 1024 * 1024;
+
+export interface UpdateCollaborationDataInput {
+  readonly groupId: string;
+  readonly path: string;
+  readonly content: string;
+  readonly expectedRevision: number;
+  readonly mediaType?: string | null;
+  readonly turn?: {
+    readonly turnId: string;
+    readonly attempt: number;
+    readonly fencingToken: string;
+  } | null;
 }
 
 export class CollaborationGroupService {
@@ -647,6 +664,55 @@ export class CollaborationGroupService {
     }));
   }
 
+  async updateData(input: UpdateCollaborationDataInput): Promise<{
+    readonly group: CollaborationGroupRecord;
+    readonly path: string;
+    readonly contentSha256: string;
+    readonly sizeBytes: number;
+  }> {
+    const group = this.requireGroup(input.groupId);
+    const repositoryPath = normalizeCollaborationDataPath(input.path);
+    const sizeBytes = Buffer.byteLength(input.content, 'utf8');
+    if (sizeBytes > MAX_COLLABORATION_DATA_BYTES)
+      throw new Error(
+        `Collaboration data is too large: ${String(sizeBytes)} bytes exceeds ${String(MAX_COLLABORATION_DATA_BYTES)}`,
+      );
+    const contentSha256 = hash(input.content);
+    const materializedFile: CollaborationMaterializedFile = {
+      path: repositoryPath,
+      contents: input.content,
+    };
+    await this.append(
+      input.groupId,
+      await this.identityFor(group),
+      () => ({
+        type: 'data_updated',
+        payload: {
+          path: repositoryPath,
+          encoding: 'utf-8',
+          content_sha256: contentSha256,
+          size_bytes: sizeBytes,
+          ...(input.mediaType ? { media_type: input.mediaType } : {}),
+          ...(input.turn
+            ? {
+                turn_id: input.turn.turnId,
+                attempt: input.turn.attempt,
+                fencing_token: input.turn.fencingToken,
+              }
+            : {}),
+        },
+      }),
+      input.expectedRevision,
+      [materializedFile],
+    );
+    return {
+      group: this.requireGroup(input.groupId),
+      path: repositoryPath,
+      contentSha256,
+      sizeBytes,
+    };
+  }
+
   async recoverTurn(
     groupId: string,
     reason: string,
@@ -701,6 +767,7 @@ export class CollaborationGroupService {
       readonly eventId?: string;
     },
     expectedRevision?: number,
+    materializedFiles: readonly CollaborationMaterializedFile[] = [],
   ): Promise<ValidatedCollaborationHistory> {
     const group = this.requireGroup(groupId);
     const history = await this.transport.appendEvent({
@@ -709,6 +776,7 @@ export class CollaborationGroupService {
       previousHead: group.headCommit,
       checkpoint: this.checkpointFor(group),
       identity,
+      materializedFiles,
       buildEvent: (current) => {
         if (
           expectedRevision !== undefined &&

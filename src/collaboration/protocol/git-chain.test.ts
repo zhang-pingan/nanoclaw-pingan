@@ -1,9 +1,11 @@
 import { execFileSync } from 'node:child_process';
+import crypto from 'node:crypto';
 import {
   mkdtempSync,
   mkdirSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs';
 import os from 'node:os';
@@ -164,7 +166,10 @@ function appendEvent(
   repository: string,
   event: CollaborationEvent,
   projection: CollaborationProjection,
+  materializedFiles: Readonly<Record<string, string>> = {},
 ): string {
+  for (const [file, contents] of Object.entries(materializedFiles))
+    write(repository, file, contents);
   write(
     repository,
     `events/${String(event.epoch)}/${String(event.sequence).padStart(8, '0')}-${event.event_id}.json`,
@@ -178,6 +183,19 @@ function appendEvent(
   run(repository, ['git', 'add', '.']);
   run(repository, ['git', 'commit', '-q', '-m', event.event_id]);
   return run(repository, ['git', 'rev-parse', 'HEAD']);
+}
+
+function dataPayload(path: string, contents: string) {
+  return {
+    path,
+    encoding: 'utf-8',
+    content_sha256: `sha256:${crypto
+      .createHash('sha256')
+      .update(contents, 'utf8')
+      .digest('hex')}`,
+    size_bytes: Buffer.byteLength(contents, 'utf8'),
+    media_type: 'text/plain',
+  };
 }
 
 function initializeSignedHistory() {
@@ -272,27 +290,35 @@ describe('signed Git collaboration history', () => {
     let projection = test.genesisProjection;
     let head = test.genesisHead;
     for (let sequence = 2; sequence <= 24; sequence += 1) {
+      const contents = `history ${String(sequence)}\n`;
       const next = protocolEvent({
         type: 'data_updated',
         id: `evt_data_${String(sequence)}`,
         sequence,
         revision: sequence - 1,
+        payload: dataPayload('data/history.txt', contents),
       });
       projection = reduceCollaborationEvent(projection, next, test.contract);
-      head = appendEvent(test.root, next, projection);
+      head = appendEvent(test.root, next, projection, {
+        'data/history.txt': contents,
+      });
     }
     const full = await validateCollaborationGitHistory({
       repositoryPath: test.root,
       head,
     });
+    const tailContents = 'history tail\n';
     const tail = protocolEvent({
       type: 'data_updated',
       id: 'evt_data_tail',
       sequence: 25,
       revision: 24,
+      payload: dataPayload('data/history.txt', tailContents),
     });
     projection = reduceCollaborationEvent(projection, tail, test.contract);
-    const tailHead = appendEvent(test.root, tail, projection);
+    const tailHead = appendEvent(test.root, tail, projection, {
+      'data/history.txt': tailContents,
+    });
 
     const incremental = await validateCollaborationGitHistory({
       repositoryPath: test.root,
@@ -356,13 +382,16 @@ describe('signed Git collaboration history', () => {
       id: 'evt_unsigned_suffix',
       sequence: 2,
       revision: 1,
+      payload: dataPayload('data/unsigned.txt', 'unsigned\n'),
     });
     const projection = reduceCollaborationEvent(
       test.genesisProjection,
       next,
       test.contract,
     );
-    const head = appendEvent(test.root, next, projection);
+    const head = appendEvent(test.root, next, projection, {
+      'data/unsigned.txt': 'unsigned\n',
+    });
 
     await expect(
       validateCollaborationGitHistory({
@@ -457,6 +486,69 @@ describe('signed Git collaboration history', () => {
     await expect(
       validateCollaborationGitHistory({ repositoryPath: test.root, head }),
     ).rejects.toThrow(/materialized projection/);
+  });
+
+  it('quarantines data whose materialized blob disagrees with its event hash', async () => {
+    const test = initializeSignedHistory();
+    const next = protocolEvent({
+      type: 'data_updated',
+      id: 'evt_bad_data_hash',
+      sequence: 2,
+      revision: 1,
+      payload: dataPayload('data/result.txt', 'declared\n'),
+    });
+    const projection = reduceCollaborationEvent(
+      test.genesisProjection,
+      next,
+      test.contract,
+    );
+    const head = appendEvent(test.root, next, projection, {
+      'data/result.txt': 'materialized\n',
+    });
+
+    await expect(
+      validateCollaborationGitHistory({
+        repositoryPath: test.root,
+        head,
+        previousHead: test.genesisHead,
+        checkpoint: {
+          head: test.genesisHead,
+          projection: test.genesisProjection,
+        },
+      }),
+    ).rejects.toThrow(/does not match event hash and size/);
+  });
+
+  it('quarantines a signed data update materialized as a symbolic link', async () => {
+    const test = initializeSignedHistory();
+    const linkTarget = '../../outside-collaboration.txt';
+    const next = protocolEvent({
+      type: 'data_updated',
+      id: 'evt_data_symlink',
+      sequence: 2,
+      revision: 1,
+      payload: dataPayload('data/link.txt', linkTarget),
+    });
+    const projection = reduceCollaborationEvent(
+      test.genesisProjection,
+      next,
+      test.contract,
+    );
+    mkdirSync(path.join(test.root, 'data'), { recursive: true });
+    symlinkSync(linkTarget, path.join(test.root, 'data/link.txt'));
+    const head = appendEvent(test.root, next, projection);
+
+    await expect(
+      validateCollaborationGitHistory({
+        repositoryPath: test.root,
+        head,
+        previousHead: test.genesisHead,
+        checkpoint: {
+          head: test.genesisHead,
+          projection: test.genesisProjection,
+        },
+      }),
+    ).rejects.toThrow(/regular file/);
   });
 
   it('quarantines merge commits instead of accepting a non-linear event DAG', async () => {

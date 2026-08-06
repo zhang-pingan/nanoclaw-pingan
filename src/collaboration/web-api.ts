@@ -27,6 +27,12 @@ function requiredString(value: Record<string, unknown>, key: string): string {
   return candidate.trim();
 }
 
+function requiredText(value: Record<string, unknown>, key: string): string {
+  const candidate = value[key];
+  if (typeof candidate !== 'string') throw new Error(`${key} is required`);
+  return candidate;
+}
+
 function optionalString(
   value: Record<string, unknown>,
   key: string,
@@ -546,6 +552,45 @@ export class CollaborationWebApi {
               head: group.headCommit,
             })
           : [],
+      });
+      return;
+    }
+    if (resource === 'data' && req.method === 'POST') {
+      const body = object(await jsonBody(req));
+      const turnId = optionalString(body, 'turnId');
+      const hasTurnFence =
+        turnId !== null ||
+        body.attempt !== undefined ||
+        body.fencingToken !== undefined;
+      if (
+        hasTurnFence &&
+        (!turnId ||
+          !Number.isInteger(body.attempt) ||
+          Number(body.attempt) < 1 ||
+          !optionalString(body, 'fencingToken'))
+      )
+        throw new Error(
+          'turnId, attempt, and fencingToken must be provided together',
+        );
+      const result = await this.runtime.groups.updateData({
+        groupId,
+        path: requiredString(body, 'path'),
+        content: requiredText(body, 'content'),
+        expectedRevision: requiredExpectedRevision(body),
+        mediaType: optionalString(body, 'mediaType'),
+        turn: turnId
+          ? {
+              turnId,
+              attempt: Number(body.attempt),
+              fencingToken: requiredString(body, 'fencingToken'),
+            }
+          : null,
+      });
+      send(res, 200, {
+        group: publicGroup(result.group),
+        path: result.path,
+        contentSha256: result.contentSha256,
+        sizeBytes: result.sizeBytes,
       });
       return;
     }
