@@ -1,3 +1,5 @@
+import crypto from 'node:crypto';
+
 import {
   CodexAppServerClient,
   type CodexAppServerClientOptions,
@@ -51,28 +53,16 @@ interface ActiveCodexExecution {
   observation: ActionObservation;
 }
 
-function executionRef(threadId: string, turnId: string): string {
-  return `external:codex-task:${Buffer.from(
-    JSON.stringify({ threadId, turnId }),
-  ).toString('base64url')}`;
-}
-
-function parseExecutionRef(
-  ref: string,
+function identityFromMetadata(
+  providerMetadata: Record<string, unknown> | undefined,
 ): { readonly threadId: string; readonly turnId: string } | null {
-  const prefix = 'external:codex-task:';
-  if (!ref.startsWith(prefix)) return null;
-  try {
-    const value = JSON.parse(
-      Buffer.from(ref.slice(prefix.length), 'base64url').toString('utf8'),
-    ) as { threadId?: unknown; turnId?: unknown };
-    return typeof value.threadId === 'string' &&
-      typeof value.turnId === 'string'
-      ? { threadId: value.threadId, turnId: value.turnId }
-      : null;
-  } catch {
-    return null;
-  }
+  return typeof providerMetadata?.thread_id === 'string' &&
+    typeof providerMetadata.turn_id === 'string'
+    ? {
+        threadId: providerMetadata.thread_id,
+        turnId: providerMetadata.turn_id,
+      }
+    : null;
 }
 
 function sandboxFor(action: PreparedAction): CodexSandboxMode {
@@ -175,7 +165,7 @@ export class CodexTaskActionExecutor implements ActionExecutor {
         sandbox: sandboxFor(action),
         approvalPolicy: action.binding.approvalPolicy,
       });
-      const ref = executionRef(handle.threadId, handle.turnId);
+      const ref = `collaboration-action:${crypto.randomUUID()}`;
       const metadata = codexProviderMetadata(handle);
       const active: ActiveCodexExecution = {
         action,
@@ -217,12 +207,18 @@ export class CodexTaskActionExecutor implements ActionExecutor {
     );
   }
 
-  async recover(ref: string): Promise<ActionObservation> {
+  async recover(
+    ref: string,
+    providerMetadata?: Record<string, unknown>,
+  ): Promise<ActionObservation> {
     const existing = this.executions.get(ref);
     if (existing) return existing.observation;
-    const identity = parseExecutionRef(ref);
+    const identity = identityFromMetadata(providerMetadata);
     if (!identity)
-      return this.recoveryRequired(ref, 'Codex execution ref is invalid');
+      return this.recoveryRequired(
+        ref,
+        'Codex provider metadata has no thread and turn identity',
+      );
     const client = this.createClient(this.options.defaultCwd);
     try {
       await client.initialize();

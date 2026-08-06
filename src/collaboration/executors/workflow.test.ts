@@ -135,6 +135,7 @@ describe('Workflow Action integration', () => {
     const receipt = await executor.dispatch(prepared);
     expect(host.startFiniteRun).toHaveBeenCalledWith(creationInput);
     expect(receipt).toMatchObject({
+      executionRef: expect.stringMatching(/^collaboration-action:/),
       providerMetadata: {
         workflow_id: 'workflow:with:colons',
         graph_run_id: 'run:with:colons',
@@ -161,13 +162,12 @@ describe('Workflow Action integration', () => {
       recoverFiniteRun: vi.fn(() => observation('failed')),
     };
     const executor = new WorkflowActionExecutor(host);
-    const encoded = Buffer.from(
-      JSON.stringify({
-        workflowId: 'workflow:with:colons',
-        graphRunId: 'run:with:colons',
+    expect(
+      await executor.recover('collaboration-action:opaque', {
+        workflow_id: 'workflow:with:colons',
+        graph_run_id: 'run:with:colons',
       }),
-    ).toString('base64url');
-    expect(await executor.recover(`workflow:${encoded}`)).toMatchObject({
+    ).toMatchObject({
       state: 'failed',
       result: {
         outcome: 'failure',

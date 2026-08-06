@@ -94,7 +94,10 @@ export interface ActionExecutor {
   dispatch(action: PreparedAction): Promise<DispatchReceipt>;
   observe(executionRef: string): Promise<ActionObservation>;
   cancel(executionRef: string, reason: string): Promise<CancelResult>;
-  recover(executionRef: string): Promise<ActionObservation>;
+  recover(
+    executionRef: string,
+    providerMetadata?: Record<string, unknown>,
+  ): Promise<ActionObservation>;
 }
 
 export class ActionBlockedError extends Error {

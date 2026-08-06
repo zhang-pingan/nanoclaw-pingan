@@ -968,6 +968,18 @@ export class CollaborationStore {
       );
   }
 
+  listExecutions(groupId: string): CollaborationExecutionRecord[] {
+    this.assertOpen();
+    return (
+      this.database
+        .prepare(
+          `SELECT * FROM collaboration_action_executions
+            WHERE group_id = ? ORDER BY created_at_ms DESC, execution_id DESC`,
+        )
+        .all(groupId) as Record<string, unknown>[]
+    ).map(executionFromRow);
+  }
+
   reserveExecution(input: {
     readonly executionId?: string;
     readonly groupId: string;
@@ -1154,6 +1166,15 @@ export class CollaborationStore {
     ).map(executionFromRow);
   }
 
+  scheduleNextSync(groupId: string, nextSyncAtMs: number): void {
+    this.assertOpen();
+    this.database
+      .prepare(
+        'UPDATE collaboration_remotes SET next_sync_at_ms = ? WHERE group_id = ?',
+      )
+      .run(nextSyncAtMs, groupId);
+  }
+
   clearRebuildableState(groupId: string): void {
     this.assertOpen();
     this.database.transaction(() => {
@@ -1202,6 +1223,22 @@ export class CollaborationStore {
         .run(groupId, ownerId, nowMs, nowMs);
       return result.changes === 1;
     })();
+  }
+
+  heartbeatGroupLock(
+    groupId: string,
+    ownerId: string,
+    nowMs = Date.now(),
+  ): boolean {
+    this.assertOpen();
+    return (
+      this.database
+        .prepare(
+          `UPDATE collaboration_process_locks SET heartbeat_at_ms = ?
+            WHERE group_id = ? AND owner_id = ?`,
+        )
+        .run(nowMs, groupId, ownerId).changes === 1
+    );
   }
 
   releaseGroupLock(groupId: string, ownerId: string): void {

@@ -1,3 +1,5 @@
+import crypto from 'node:crypto';
+
 import type {
   InternalAgentRunOnceService,
   RunOnceAcceptedExecution,
@@ -128,7 +130,7 @@ export class RunOnceActionExecutor implements ActionExecutor {
         },
         {
           onAccepted: (execution) => {
-            const executionRef = `run-once:${execution.runId}`;
+            const executionRef = `collaboration-action:${crypto.randomUUID()}`;
             const providerMetadata = {
               run_id: execution.runId,
               query_id: execution.queryId,
@@ -157,7 +159,7 @@ export class RunOnceActionExecutor implements ActionExecutor {
       )
       .then((result) => {
         const executionRef =
-          active?.executionRef ?? `run-once:${result.run_id}`;
+          active?.executionRef ?? `collaboration-action:${crypto.randomUUID()}`;
         const providerMetadata = active?.providerMetadata ?? {
           run_id: result.run_id,
           query_id: result.query_id,

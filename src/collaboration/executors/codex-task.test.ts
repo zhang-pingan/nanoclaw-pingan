@@ -118,6 +118,7 @@ describe('CodexTaskActionExecutor', () => {
       turn_id: 'turn-1',
       ephemeral: false,
     });
+    expect(first.executionRef).not.toContain('thread-1');
     completion.resolve({
       status: 'completed',
       threadId: 'thread-1',
@@ -156,11 +157,14 @@ describe('CodexTaskActionExecutor', () => {
       desktopVisibilityConfirmed: true,
       clientFactory: () => client,
     });
-    const ref = `external:codex-task:${Buffer.from(
-      JSON.stringify({ threadId: 'thread-r', turnId: 'turn-r' }),
-    ).toString('base64url')}`;
+    const ref = 'collaboration-action:opaque';
 
-    expect(await executor.recover(ref)).toMatchObject({ state: 'running' });
+    expect(
+      await executor.recover(ref, {
+        thread_id: 'thread-r',
+        turn_id: 'turn-r',
+      }),
+    ).toMatchObject({ state: 'running' });
     expect(client.recoverTask).toHaveBeenCalledWith('thread-r', 'turn-r');
     await vi.waitFor(async () => {
       expect(await executor.observe(ref)).toMatchObject({

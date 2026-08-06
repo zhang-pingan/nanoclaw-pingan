@@ -65,34 +65,26 @@ function configuredCreationInput(
   return configured as FiniteWorkflowCreationInput;
 }
 
-function executionIdentity(executionRef: string): {
-  readonly workflowId: string;
-  readonly graphRunId: string;
-} | null {
-  if (!executionRef.startsWith('workflow:')) return null;
-  try {
-    const parsed = JSON.parse(
-      Buffer.from(executionRef.slice('workflow:'.length), 'base64url').toString(
-        'utf8',
-      ),
-    ) as { workflowId?: unknown; graphRunId?: unknown };
-    return typeof parsed.workflowId === 'string' &&
-      typeof parsed.graphRunId === 'string'
-      ? { workflowId: parsed.workflowId, graphRunId: parsed.graphRunId }
-      : null;
-  } catch {
-    return null;
-  }
-}
-
-function workflowExecutionRef(workflowId: string, graphRunId: string): string {
-  return `workflow:${Buffer.from(JSON.stringify({ workflowId, graphRunId })).toString('base64url')}`;
+function identityFromMetadata(
+  providerMetadata: Record<string, unknown> | undefined,
+): { readonly workflowId: string; readonly graphRunId: string } | null {
+  return typeof providerMetadata?.workflow_id === 'string' &&
+    typeof providerMetadata.graph_run_id === 'string'
+    ? {
+        workflowId: providerMetadata.workflow_id,
+        graphRunId: providerMetadata.graph_run_id,
+      }
+    : null;
 }
 
 export class WorkflowActionExecutor implements ActionExecutor {
   readonly kind = 'workflow' as const;
   private readonly receipts = new Map<string, DispatchReceipt>();
   private readonly actions = new Map<string, PreparedAction>();
+  private readonly identities = new Map<
+    string,
+    { readonly workflowId: string; readonly graphRunId: string }
+  >();
 
   constructor(private readonly host: CollaborationWorkflowHostService) {}
 
@@ -112,10 +104,7 @@ export class WorkflowActionExecutor implements ActionExecutor {
     if (existing) return existing;
     const creationInput = configuredCreationInput(action);
     const started = this.host.startFiniteRun(creationInput);
-    const executionRef = workflowExecutionRef(
-      started.workflowId,
-      started.activation.graphRunId,
-    );
+    const executionRef = `collaboration-action:${crypto.randomUUID()}`;
     const providerMetadata = {
       workflow_id: started.workflowId,
       graph_run_id: started.activation.graphRunId,
@@ -136,11 +125,15 @@ export class WorkflowActionExecutor implements ActionExecutor {
     };
     this.receipts.set(action.operationKey, receipt);
     this.actions.set(executionRef, action);
+    this.identities.set(executionRef, {
+      workflowId: started.workflowId,
+      graphRunId: started.activation.graphRunId,
+    });
     return receipt;
   }
 
   async observe(executionRef: string): Promise<ActionObservation> {
-    const identity = executionIdentity(executionRef);
+    const identity = this.identities.get(executionRef) ?? null;
     if (!identity)
       return this.recoveryRequired(
         executionRef,
@@ -150,13 +143,19 @@ export class WorkflowActionExecutor implements ActionExecutor {
     return this.mapObservation(executionRef, identity, observation);
   }
 
-  async recover(executionRef: string): Promise<ActionObservation> {
-    const identity = executionIdentity(executionRef);
+  async recover(
+    executionRef: string,
+    providerMetadata?: Record<string, unknown>,
+  ): Promise<ActionObservation> {
+    const identity =
+      this.identities.get(executionRef) ??
+      identityFromMetadata(providerMetadata);
     if (!identity)
       return this.recoveryRequired(
         executionRef,
         'Workflow execution ref is invalid',
       );
+    this.identities.set(executionRef, identity);
     const observation = this.host.recoverFiniteRun(identity.graphRunId);
     return this.mapObservation(executionRef, identity, observation);
   }

@@ -298,6 +298,11 @@ export class CollaborationGroupService {
   }
 
   async sync(groupId: string): Promise<CollaborationGroupRecord> {
+    await this.syncHistory(groupId);
+    return this.requireGroup(groupId);
+  }
+
+  async syncHistory(groupId: string): Promise<ValidatedCollaborationHistory> {
     const group = this.requireGroup(groupId);
     try {
       const history = await this.transport.fetchAndValidate({
@@ -307,7 +312,7 @@ export class CollaborationGroupService {
       });
       this.persistHistory(history);
       this.store.recordSyncSuccess(groupId, group.pollIntervalMs, this.now());
-      return this.requireGroup(groupId);
+      return history;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (error instanceof CollaborationProtocolError) {
@@ -330,6 +335,34 @@ export class CollaborationGroupService {
       }
       throw error;
     }
+  }
+
+  async finishDrainingLifecycle(
+    groupId: string,
+  ): Promise<CollaborationGroupRecord> {
+    const group = this.requireCreator(groupId);
+    const history = await this.transport.fetchAndValidate({
+      remoteUrl: group.remoteUrl,
+      repositoryPath: group.repositoryPath,
+      previousHead: group.headCommit,
+    });
+    this.persistHistory(history);
+    const active = history.projection.activeTurnId
+      ? history.projection.turns[history.projection.activeTurnId]
+      : null;
+    if (active && !['SUCCEEDED', 'FAILED', 'CANCELLED'].includes(active.state))
+      return this.requireGroup(groupId);
+    if (history.projection.lifecycle === 'PAUSING')
+      await this.append(groupId, await this.identityFor(group), () => ({
+        type: 'group_paused',
+        payload: {},
+      }));
+    else if (history.projection.lifecycle === 'CLOSING')
+      await this.append(groupId, await this.identityFor(group), () => ({
+        type: 'group_closed',
+        payload: { reason: 'Active collaboration work drained' },
+      }));
+    return this.requireGroup(groupId);
   }
 
   async claimRole(
@@ -496,9 +529,7 @@ export class CollaborationGroupService {
     }));
   }
 
-  async claimCurrentTurn(
-    groupId: string,
-  ): Promise<{
+  async claimCurrentTurn(groupId: string): Promise<{
     readonly won: boolean;
     readonly history: ValidatedCollaborationHistory;
   }> {
