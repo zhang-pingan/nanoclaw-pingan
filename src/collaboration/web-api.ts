@@ -1,18 +1,28 @@
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import http from 'node:http';
+import crypto from 'node:crypto';
 import path from 'node:path';
 
-import { listCollaborationSharedPaths } from './git-transport.js';
-import type { CollaborationProjection } from './protocol/index.js';
+import { buildCollaborationAudit } from './audit.js';
+import {
+  listCollaborationSharedPaths,
+  readPromptFromValidatedCacheAsync,
+} from './git-transport.js';
+import type {
+  CollaborationProjection,
+  ValidatedCollaborationHistory,
+} from './protocol/index.js';
 import type { CollaborationRuntime } from './runtime.js';
 import type {
   CollaborationExecutionRecord,
   CollaborationExecutorBinding,
   CollaborationGroupRecord,
+  CollaborationStagedArtifact,
   CollaborationSyncAttempt,
 } from './store.js';
 
 const API_PREFIX = '/api/collaboration';
-const MAX_BODY_BYTES = 2 * 1024 * 1024;
+const MAX_BODY_BYTES = 14 * 1024 * 1024;
 
 function object(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value))
@@ -21,8 +31,8 @@ function object(value: unknown): Record<string, unknown> {
 }
 
 function rejectSystemIdentityOverrides(value: Record<string, unknown>): void {
-  const fields = ['principalId', 'agentId'].filter((key) =>
-    Object.hasOwn(value, key),
+  const fields = ['principalId', 'agentId', 'principal_id', 'agent_id'].filter(
+    (key) => Object.hasOwn(value, key),
   );
   if (fields.length)
     throw new Error(
@@ -51,6 +61,13 @@ function optionalString(
   return typeof candidate === 'string' && candidate.trim()
     ? candidate.trim()
     : null;
+}
+
+function stringArray(value: unknown, key: string): string[] {
+  if (value === undefined) return [];
+  if (!Array.isArray(value) || value.some((entry) => typeof entry !== 'string'))
+    throw new Error(`${key} must be an array of strings`);
+  return value as string[];
 }
 
 function send(res: http.ServerResponse, status: number, body: unknown): void {
@@ -105,7 +122,7 @@ function isSecretConfigKey(key: string): boolean {
     .split(/[^a-z0-9]+/)
     .filter(Boolean);
   const values = new Set(parts);
-  if (
+  return (
     parts.some((part) =>
       [
         'password',
@@ -116,10 +133,7 @@ function isSecretConfigKey(key: string): boolean {
         'credentials',
         'authorization',
       ].includes(part),
-    )
-  )
-    return true;
-  return (
+    ) ||
     (values.has('api') && values.has('key')) ||
     (values.has('private') && values.has('key')) ||
     (values.has('signing') && values.has('key') && values.has('path'))
@@ -183,12 +197,13 @@ function publicGroup(group: CollaborationGroupRecord) {
 function publicBinding(binding: CollaborationExecutorBinding) {
   return {
     groupId: binding.groupId,
-    role: binding.role,
+    stateId: binding.stateId,
+    implementationHash: binding.implementationHash,
+    actionHash: binding.actionHash,
     executorKind: binding.executorKind,
     adapter: binding.adapter,
     agentJid: binding.agentJid,
     workspacePath: binding.workspacePath,
-    promptOverride: binding.promptOverride,
     filesystemAccessCap: binding.filesystemAccessCap,
     approvalPolicy: binding.approvalPolicy,
     config: redactConfig(binding.config),
@@ -197,35 +212,33 @@ function publicBinding(binding: CollaborationExecutorBinding) {
   };
 }
 
-function publicProvider(execution: CollaborationExecutionRecord) {
-  const metadata = execution.providerMetadata ?? {};
-  if (execution.adapter === 'codex-task')
-    return {
-      kind: 'codex-task',
-      transport: metadata.transport,
-      threadId: metadata.thread_id,
-      turnId: metadata.turn_id,
-      cliVersion: metadata.cli_version,
-      ephemeral: metadata.ephemeral,
-    };
-  if (execution.executorKind === 'workflow')
-    return {
-      kind: 'workflow',
-      workflowId: metadata.workflow_id,
-      graphRunId: metadata.graph_run_id,
-      lifecycle: metadata.lifecycle,
-      operationalState: metadata.operational_state,
-    };
-  if (execution.executorKind === 'run_once')
-    return {
-      kind: 'run_once',
-      runId: metadata.run_id,
-      queryId: metadata.query_id,
-    };
-  return { kind: execution.executorKind };
-}
-
 function publicExecution(execution: CollaborationExecutionRecord) {
+  const metadata = execution.providerMetadata ?? {};
+  const provider =
+    execution.adapter === 'codex-task'
+      ? {
+          kind: 'codex-task',
+          transport: metadata.transport,
+          threadId: metadata.thread_id,
+          turnId: metadata.turn_id,
+          cliVersion: metadata.cli_version,
+          ephemeral: metadata.ephemeral,
+        }
+      : execution.executorKind === 'workflow'
+        ? {
+            kind: 'workflow',
+            workflowId: metadata.workflow_id,
+            graphRunId: metadata.graph_run_id,
+            lifecycle: metadata.lifecycle,
+            operationalState: metadata.operational_state,
+          }
+        : execution.executorKind === 'run_once'
+          ? {
+              kind: 'run_once',
+              runId: metadata.run_id,
+              queryId: metadata.query_id,
+            }
+          : { kind: execution.executorKind };
   const observation = execution.observation;
   return {
     executionId: execution.executionId,
@@ -238,7 +251,12 @@ function publicExecution(execution: CollaborationExecutionRecord) {
     adapter: execution.adapter,
     state: execution.state,
     executionRef: execution.executionRef,
-    provider: publicProvider(execution),
+    publicReceipt: {
+      accepted: execution.receipt?.accepted === true,
+      operationKey: execution.operationKey,
+      executionRef: execution.executionRef,
+    },
+    provider,
     observation: observation
       ? {
           state: observation.state,
@@ -250,30 +268,84 @@ function publicExecution(execution: CollaborationExecutionRecord) {
     recoveryRequiredReason: execution.recoveryRequiredReason,
     dispatchStartedAtMs: execution.dispatchStartedAtMs,
     receiptRecordedAtMs: execution.receiptRecordedAtMs,
+    providerCompletedAtMs: execution.providerCompletedAtMs,
     createdAtMs: execution.createdAtMs,
     updatedAtMs: execution.updatedAtMs,
   };
+}
+
+function publicStagedArtifact(artifact: CollaborationStagedArtifact) {
+  return {
+    artifactId: artifact.artifactId,
+    groupId: artifact.groupId,
+    turnId: artifact.turnId,
+    attempt: artifact.attempt,
+    originalName: artifact.originalName,
+    repositoryPath: artifact.repositoryPath,
+    sha256: artifact.sha256,
+    size: artifact.size,
+    contentType: artifact.contentType,
+    state: artifact.state,
+    createdAtMs: artifact.createdAtMs,
+    expiresAtMs: artifact.expiresAtMs,
+  };
+}
+
+function currentAttemptArtifacts(
+  runtime: CollaborationRuntime,
+  group: CollaborationGroupRecord,
+  turn: CollaborationProjection['turns'][string] | null,
+) {
+  if (!turn) return [];
+  return runtime.store
+    .listStagedArtifacts(group.groupId, turn.turnId)
+    .filter(
+      (artifact) =>
+        artifact.attempt === turn.attempt &&
+        artifact.principalId === group.localPrincipalId &&
+        artifact.agentId === group.localAgentId,
+    )
+    .map(publicStagedArtifact);
+}
+
+async function readActiveImplementationPrompts(
+  repositoryPath: string,
+  history: ValidatedCollaborationHistory,
+): Promise<Record<string, string>> {
+  const entries = await Promise.all(
+    Object.entries(history.projection.stateImplementations).map(
+      async ([stateId, active]) => {
+        const promptRef = active.action?.input.prompt_ref;
+        if (!promptRef) return null;
+        return [
+          stateId,
+          await readPromptFromValidatedCacheAsync({
+            repositoryPath,
+            head: history.head,
+            promptRef,
+          }),
+        ] as const;
+      },
+    ),
+  );
+  return Object.fromEntries(entries.filter((entry) => entry !== null));
 }
 
 function publicSyncAttempt(
   attempt: CollaborationSyncAttempt,
   remoteUrl: string,
 ) {
-  return {
-    ...attempt,
-    error: redactDiagnostic(attempt.error, [remoteUrl]),
-  };
+  return { ...attempt, error: redactDiagnostic(attempt.error, [remoteUrl]) };
 }
 
-function enumValue<const T extends readonly string[]>(
-  value: Record<string, unknown>,
-  key: string,
-  allowed: T,
-): T[number] {
-  const candidate = requiredString(value, key);
-  if (!allowed.includes(candidate))
-    throw new Error(`${key} has an unsupported value`);
-  return candidate as T[number];
+function publicIntegrityIncident<T extends { readonly message: string }>(
+  incident: T,
+  remoteUrl: string,
+) {
+  return {
+    ...incident,
+    message: redactDiagnostic(incident.message, [remoteUrl]),
+  };
 }
 
 function requiredExpectedRevision(body: Record<string, unknown>): number {
@@ -298,13 +370,20 @@ export class CollaborationWebApi {
     try {
       await this.route(req, res, url);
     } catch (error) {
-      const unavailable = !this.runtime.status().available;
-      send(res, unavailable ? 503 : isRevisionConflict(error) ? 409 : 400, {
-        error: redactDiagnostic(
-          error instanceof Error ? error.message : String(error),
-        ),
-        collaboration: this.publicRuntimeStatus(),
-      });
+      send(
+        res,
+        !this.runtime.status().available
+          ? 503
+          : isRevisionConflict(error)
+            ? 409
+            : 400,
+        {
+          error: redactDiagnostic(
+            error instanceof Error ? error.message : String(error),
+          ),
+          collaboration: this.publicRuntimeStatus(),
+        },
+      );
     }
     return true;
   }
@@ -328,130 +407,303 @@ export class CollaborationWebApi {
           'collaboration-backups',
           new Date().toISOString().replace(/[:.]/g, '-'),
         );
-      const manifest = await this.runtime.createBackup(backupDirectory);
-      send(res, 201, { backupDirectory, manifest });
+      send(res, 201, {
+        backupDirectory,
+        manifest: await this.runtime.createBackup(backupDirectory),
+      });
       return;
     }
     if (pathname === `${API_PREFIX}/restore` && req.method === 'POST') {
       const body = object(await jsonBody(req));
       if (body.confirm !== 'RESTORE COLLABORATION')
         throw new Error('confirm must equal RESTORE COLLABORATION');
-      const backupDirectory = requiredString(body, 'backupDirectory');
-      const result = await this.runtime.restoreBackup(backupDirectory);
-      send(res, 200, { ok: true, ...result });
+      send(res, 200, {
+        ok: true,
+        ...(await this.runtime.restoreBackup(
+          requiredString(body, 'backupDirectory'),
+        )),
+      });
       return;
     }
 
     const base = `${API_PREFIX}/groups`;
     if (pathname === base && req.method === 'GET') {
-      const groups = this.runtime.groups
-        .listGroups(url.searchParams.get('search') ?? '')
-        .map(publicGroup);
-      send(res, 200, { groups });
+      send(res, 200, {
+        groups: this.runtime.groups
+          .listGroups(url.searchParams.get('search') ?? '')
+          .map(publicGroup),
+      });
       return;
     }
     if (pathname === base && req.method === 'POST') {
       const body = object(await jsonBody(req));
       rejectSystemIdentityOverrides(body);
-      const group = await this.runtime.groups.createGroup(
-        body as unknown as Parameters<
-          CollaborationRuntime['groups']['createGroup']
-        >[0],
-      );
-      send(res, 201, { group: publicGroup(group) });
+      if (body.actions !== undefined || body.prompts !== undefined)
+        throw new Error(
+          'Group creation accepts only the creator-owned workflow skeleton',
+        );
+      send(res, 201, {
+        group: publicGroup(
+          await this.runtime.groups.createGroup(
+            body as unknown as Parameters<
+              CollaborationRuntime['groups']['createGroup']
+            >[0],
+          ),
+        ),
+      });
       return;
     }
     if (pathname === `${base}/inspect` && req.method === 'POST') {
       const body = object(await jsonBody(req));
-      const summary = await this.runtime.groups.inspectRemote(
-        requiredString(body, 'remoteUrl'),
-      );
-      send(res, 200, { summary });
+      send(res, 200, {
+        summary: await this.runtime.groups.inspectRemote(
+          requiredString(body, 'remoteUrl'),
+        ),
+      });
       return;
     }
     if (pathname === `${base}/join` && req.method === 'POST') {
       const body = object(await jsonBody(req));
       rejectSystemIdentityOverrides(body);
-      const group = await this.runtime.groups.joinGroup(
-        body as unknown as Parameters<
-          CollaborationRuntime['groups']['joinGroup']
-        >[0],
-      );
-      send(res, 201, { group: publicGroup(group) });
+      send(res, 201, {
+        group: publicGroup(
+          await this.runtime.groups.joinGroup(
+            body as unknown as Parameters<
+              CollaborationRuntime['groups']['joinGroup']
+            >[0],
+          ),
+        ),
+      });
       return;
     }
 
-    const match = pathname.match(
-      new RegExp(
-        `^${base}/([^/]+)(?:/(sync|roles|commands|events|executors|executions|data|diagnostics)(?:/([^/]+))?)?$`,
-      ),
-    );
-    if (!match) {
-      send(res, 404, { error: 'Not found' });
-      return;
-    }
-    const groupId = decodeURIComponent(match[1]);
-    const resource = match[2] ?? 'detail';
-    const child = match[3] ? decodeURIComponent(match[3]) : null;
+    const segments = pathname
+      .slice(`${base}/`.length)
+      .split('/')
+      .map(decodeURIComponent);
+    const groupId = segments[0] ?? '';
     const group = this.runtime.store.getGroup(groupId);
     if (!group) {
       send(res, 404, { error: 'Collaboration group not found' });
       return;
     }
+    let history = this.runtime.groups.getCachedHistory(groupId);
+    if (!history) history = await this.runtime.groups.syncHistory(groupId);
 
-    if (resource === 'detail' && req.method === 'GET') {
-      let history = this.runtime.groups.getCachedHistory(groupId);
-      if (!history) {
-        try {
-          history = await this.runtime.groups.syncHistory(groupId);
-        } catch {
-          history = null;
+    if (segments.length === 1 && req.method === 'GET') {
+      const scheduler = (
+        this.runtime as unknown as {
+          scheduler?: CollaborationRuntime['scheduler'];
         }
-      }
+      ).scheduler;
+      if (scheduler?.refreshLocalNotifications)
+        history = await scheduler.refreshLocalNotifications(groupId);
+      const turn = history.projection.activeTurnId
+        ? history.projection.turns[history.projection.activeTurnId]
+        : null;
+      const implementationPrompts = await readActiveImplementationPrompts(
+        group.repositoryPath,
+        history,
+      );
       send(res, 200, {
         group: publicGroup(this.runtime.store.getGroup(groupId)!),
-        definition: history ? redactConfig(history.definition) : null,
+        definition: redactConfig(history.definition),
+        implementationPrompts,
         bindings: this.runtime.store
           .listExecutorBindings(groupId)
           .map(publicBinding),
         executions: this.runtime.store
           .listExecutions(groupId)
           .map(publicExecution),
+        stagedArtifacts: currentAttemptArtifacts(this.runtime, group, turn),
+        notifications: (
+          scheduler?.listPendingLocalNotifications(groupId, history) ??
+          this.runtime.store
+            .listPendingNotifications({
+              recipientPrincipalId: group.localPrincipalId,
+              recipientAgentId: group.localAgentId,
+              groupId,
+            })
+            .filter(
+              (notification) =>
+                turn &&
+                notification.turnId === turn.turnId &&
+                notification.attempt === turn.attempt,
+            )
+        ).map((notification) => ({
+          ...notification,
+          route: `/groups/${encodeURIComponent(groupId)}/runtime?turn=${encodeURIComponent(notification.turnId)}`,
+        })),
       });
       return;
     }
-    if (resource === 'sync' && req.method === 'POST') {
+
+    if (segments[1] === 'sync' && req.method === 'POST') {
       await this.runtime.scheduler.syncNow(groupId);
       send(res, 200, {
         group: publicGroup(this.runtime.store.getGroup(groupId)!),
       });
       return;
     }
-    if (resource === 'roles' && req.method === 'GET') {
+    if (
+      segments[1] === 'roles' &&
+      segments.length === 2 &&
+      req.method === 'GET'
+    ) {
       send(res, 200, {
-        roleClaims: group.projection?.roleClaims ?? {},
+        roleClaims: history.projection.roleClaims,
+        implementations: history.projection.stateImplementations,
         bindings: this.runtime.store
           .listExecutorBindings(groupId)
           .map(publicBinding),
       });
       return;
     }
-    if (resource === 'roles' && req.method === 'POST') {
-      const body = object(await jsonBody(req));
-      const updated = await this.runtime.groups.claimRole(
-        groupId,
-        requiredString(body, 'role'),
-      );
-      send(res, 200, { group: publicGroup(updated) });
+    if (
+      segments[1] === 'roles' &&
+      segments[2] &&
+      segments[3] === 'claim' &&
+      segments.length === 4 &&
+      req.method === 'POST'
+    ) {
+      object(await jsonBody(req));
+      send(res, 200, {
+        group: publicGroup(
+          await this.runtime.groups.claimRole(groupId, segments[2]),
+        ),
+      });
       return;
     }
-    if (resource === 'commands' && req.method === 'POST') {
+    if (
+      segments[1] === 'roles' &&
+      segments[2] &&
+      segments[3] === 'claim' &&
+      segments.length === 4 &&
+      req.method === 'DELETE'
+    ) {
+      const body = object(await jsonBody(req));
+      send(res, 200, {
+        group: publicGroup(
+          await this.runtime.groups.releaseRole(
+            groupId,
+            segments[2],
+            requiredExpectedRevision(body),
+          ),
+        ),
+      });
+      return;
+    }
+    if (segments[1] === 'states' && segments[3] === 'implementation') {
+      const stateId = segments[2]!;
+      if (req.method === 'PUT') {
+        const body = object(await jsonBody(req));
+        rejectSystemIdentityOverrides(body);
+        send(res, 200, {
+          group: publicGroup(
+            await this.runtime.groups.publishStateImplementation({
+              groupId,
+              stateId,
+              mode: requiredString(body, 'mode') as
+                | 'manual'
+                | 'assisted'
+                | 'automatic',
+              expectedRevision: requiredExpectedRevision(body),
+              action:
+                body.action && typeof body.action === 'object'
+                  ? (body.action as never)
+                  : null,
+            }),
+          ),
+        });
+        return;
+      }
+      if (req.method === 'DELETE') {
+        const body = object(await jsonBody(req));
+        send(res, 200, {
+          group: publicGroup(
+            await this.runtime.groups.withdrawStateImplementation(
+              groupId,
+              stateId,
+              requiredExpectedRevision(body),
+            ),
+          ),
+        });
+        return;
+      }
+    }
+    if (
+      segments[1] === 'states' &&
+      segments[3] === 'binding' &&
+      req.method === 'PUT'
+    ) {
+      const stateId = segments[2]!;
+      const body = object(await jsonBody(req));
+      if (
+        body.executorKind !== undefined ||
+        body.adapter !== undefined ||
+        body.promptOverride !== undefined
+      )
+        throw new Error(
+          'Local binding cannot override Action type, adapter, or Prompt',
+        );
+      const active = history.projection.stateImplementations[stateId];
+      if (!active?.action || !active.actionHash)
+        throw new Error('State has no executable implementation');
+      if (
+        !(history.projection.roleClaims[active.implementation.role] ?? []).some(
+          (claim) =>
+            claim.principal_id === group.localPrincipalId &&
+            claim.agent_id === group.localAgentId,
+        )
+      )
+        throw new Error('Only the local role owner can configure this binding');
+      this.runtime.store.saveExecutorBinding({
+        groupId,
+        stateId,
+        implementationHash: active.implementationHash,
+        actionHash: active.actionHash,
+        executorKind: active.action.kind,
+        adapter: active.action.adapter ?? null,
+        agentJid: optionalString(body, 'agentJid'),
+        workspacePath: requiredString(body, 'workspacePath'),
+        filesystemAccessCap: requiredString(body, 'filesystemAccessCap') as
+          | 'read_only'
+          | 'workspace_write',
+        approvalPolicy: requiredString(body, 'approvalPolicy') as
+          | 'untrusted'
+          | 'on-request'
+          | 'never',
+        config:
+          body.config &&
+          typeof body.config === 'object' &&
+          !Array.isArray(body.config)
+            ? (body.config as Record<string, unknown>)
+            : {},
+        enabled: body.enabled !== false,
+      });
+      send(res, 200, {
+        binding: publicBinding(
+          this.runtime.store.getExecutorBinding(
+            groupId,
+            stateId,
+            active.implementationHash,
+            active.actionHash,
+          )!,
+        ),
+      });
+      return;
+    }
+    if (segments[1] === 'commands' && req.method === 'POST') {
       const body = object(await jsonBody(req));
       const expectedRevision = requiredExpectedRevision(body);
       const command = requiredString(body, 'command');
       const updated =
         command === 'start'
-          ? await this.runtime.groups.start(groupId, expectedRevision)
+          ? await this.runtime.groups.start(
+              groupId,
+              expectedRevision,
+              body.initialHandoff as never,
+            )
           : command === 'pause'
             ? await this.runtime.groups.pause(groupId, expectedRevision)
             : command === 'resume'
@@ -468,20 +720,167 @@ export class CollaborationWebApi {
                       requiredString(body, 'reason'),
                       expectedRevision,
                     )
-                  : command === 'create_turn'
-                    ? (await this.runtime.groups.ensureTurn(
-                        groupId,
-                        requiredString(body, 'transitionId'),
-                        expectedRevision,
-                      ),
-                      this.runtime.store.getGroup(groupId)!)
-                    : null;
+                  : null;
       if (!updated)
         throw new Error(`Unsupported collaboration command: ${command}`);
       send(res, 200, { group: publicGroup(updated) });
       return;
     }
-    if (resource === 'events' && req.method === 'GET') {
+    if (
+      segments[1] === 'turns' &&
+      segments[2] === 'current' &&
+      req.method === 'GET'
+    ) {
+      const turn = history.projection.activeTurnId
+        ? history.projection.turns[history.projection.activeTurnId]
+        : null;
+      send(res, 200, {
+        turn,
+        routes: turn
+          ? (history.definition.machine.states[turn.stateId]?.transitions ?? [])
+          : [],
+        stagedArtifacts: currentAttemptArtifacts(this.runtime, group, turn),
+      });
+      return;
+    }
+    if (
+      segments[1] === 'turns' &&
+      segments[3] === 'start' &&
+      req.method === 'POST'
+    ) {
+      const body = object(await jsonBody(req));
+      if (segments[2] !== history.projection.activeTurnId)
+        throw new Error('expectedTurnId does not match the active turn');
+      await this.runtime.scheduler.startTurn(
+        groupId,
+        requiredExpectedRevision(body),
+      );
+      send(res, 200, {
+        group: publicGroup(this.runtime.store.getGroup(groupId)!),
+      });
+      return;
+    }
+    if (
+      segments[1] === 'turns' &&
+      segments[3] === 'complete' &&
+      req.method === 'POST'
+    ) {
+      const body = object(await jsonBody(req));
+      rejectSystemIdentityOverrides(body);
+      if (
+        body.targetState !== undefined ||
+        body.target_state !== undefined ||
+        body.nextState !== undefined
+      )
+        throw new Error('Clients submit an Outcome, not a target State');
+      send(res, 200, {
+        group: publicGroup(
+          await this.runtime.groups.completeTurn({
+            groupId,
+            turnId: segments[2]!,
+            expectedRevision: requiredExpectedRevision(body),
+            outcome: requiredString(body, 'outcome'),
+            summary: requiredText(body, 'summary'),
+            instruction: optionalString(body, 'instruction') ?? '',
+            markers: stringArray(body.markers, 'markers'),
+            dataRefs: stringArray(body.dataRefs, 'dataRefs'),
+            data:
+              body.data &&
+              typeof body.data === 'object' &&
+              !Array.isArray(body.data)
+                ? (body.data as Record<string, unknown>)
+                : {},
+            artifactIds: stringArray(body.artifactIds, 'artifactIds'),
+          }),
+        ),
+      });
+      return;
+    }
+    if (
+      segments[1] === 'turns' &&
+      segments[3] === 'artifacts' &&
+      segments.length === 4 &&
+      req.method === 'POST'
+    ) {
+      const body = object(await jsonBody(req));
+      const encoded = requiredString(body, 'contentBase64');
+      const contents = Buffer.from(encoded, 'base64');
+      if (
+        contents.toString('base64').replace(/=+$/u, '') !==
+        encoded.replace(/=+$/u, '')
+      )
+        throw new Error('contentBase64 is invalid');
+      const uploadRoot = path.join(
+        path.dirname(this.runtime.databasePath),
+        'collaboration-uploads',
+        groupId,
+        segments[2]!,
+      );
+      mkdirSync(uploadRoot, { recursive: true, mode: 0o700 });
+      const stagedPath = path.join(uploadRoot, `upload-${crypto.randomUUID()}`);
+      writeFileSync(stagedPath, contents, { mode: 0o600, flag: 'wx' });
+      try {
+        const artifact = this.runtime.groups.stageArtifact({
+          groupId,
+          turnId: segments[2]!,
+          originalName: requiredString(body, 'fileName'),
+          contentType:
+            optionalString(body, 'contentType') ?? 'application/octet-stream',
+          stagedPath,
+        });
+        send(res, 201, { artifact: publicStagedArtifact(artifact) });
+      } catch (error) {
+        rmSync(stagedPath, { force: true });
+        throw error;
+      }
+      return;
+    }
+    if (
+      segments[1] === 'turns' &&
+      segments[3] === 'artifacts' &&
+      segments[4] &&
+      req.method === 'DELETE'
+    ) {
+      const artifact = this.runtime.groups.removeStagedArtifact(
+        groupId,
+        segments[2]!,
+        segments[4],
+      );
+      send(res, 200, { removed: artifact.artifactId });
+      return;
+    }
+    if (
+      segments[1] === 'notifications' &&
+      segments[3] === 'delivered' &&
+      req.method === 'POST'
+    ) {
+      const scheduler = (
+        this.runtime as unknown as {
+          scheduler?: CollaborationRuntime['scheduler'];
+        }
+      ).scheduler;
+      const pending =
+        scheduler?.listPendingLocalNotifications(groupId, history) ??
+        this.runtime.store.listPendingNotifications({
+          recipientPrincipalId: group.localPrincipalId,
+          recipientAgentId: group.localAgentId,
+          groupId,
+        });
+      const notification = pending.find(
+        (candidate) => candidate.notificationId === segments[2],
+      );
+      if (!notification)
+        throw new Error('No current local notification exists');
+      send(res, 200, {
+        recorded: this.runtime.store.markNotificationDelivered({
+          notificationId: notification.notificationId,
+          recipientPrincipalId: group.localPrincipalId,
+          recipientAgentId: group.localAgentId,
+        }),
+      });
+      return;
+    }
+    if (segments[1] === 'events' && req.method === 'GET') {
       const limit = Math.min(
         500,
         Math.max(1, Number(url.searchParams.get('limit')) || 200),
@@ -496,62 +895,22 @@ export class CollaborationWebApi {
       });
       return;
     }
-    if (resource === 'executors' && req.method === 'GET') {
-      send(res, 200, {
-        bindings: this.runtime.store
-          .listExecutorBindings(groupId)
-          .map(publicBinding),
-      });
-      return;
-    }
-    if (resource === 'executors' && child && req.method === 'PUT') {
-      const body = object(await jsonBody(req));
-      const holdsRole = (group.projection?.roleClaims[child] ?? []).some(
-        (claim) =>
-          claim.principal_id === group.localPrincipalId &&
-          claim.agent_id === group.localAgentId,
-      );
-      if (!holdsRole)
-        throw new Error(
-          'Only a locally claimed role can configure an executor',
-        );
-      this.runtime.store.saveExecutorBinding({
-        groupId,
-        role: child,
-        executorKind: enumValue(body, 'executorKind', [
-          'run_once',
-          'workflow',
-          'external',
-        ] as const),
-        adapter: optionalString(body, 'adapter'),
-        agentJid: optionalString(body, 'agentJid'),
-        workspacePath: requiredString(body, 'workspacePath'),
-        promptOverride: optionalString(body, 'promptOverride'),
-        filesystemAccessCap: enumValue(body, 'filesystemAccessCap', [
-          'read_only',
-          'workspace_write',
-        ] as const),
-        approvalPolicy: enumValue(body, 'approvalPolicy', [
-          'untrusted',
-          'on-request',
-          'never',
-        ] as const),
-        config:
-          body.config &&
-          typeof body.config === 'object' &&
-          !Array.isArray(body.config)
-            ? (body.config as Record<string, unknown>)
-            : {},
-        enabled: body.enabled !== false,
-      });
-      send(res, 200, {
-        binding: publicBinding(
-          this.runtime.store.getExecutorBinding(groupId, child)!,
+    if (segments[1] === 'audit' && req.method === 'GET') {
+      const audit = buildCollaborationAudit({
+        group,
+        history,
+        eventRecords: this.runtime.store.listEventRecords(
+          groupId,
+          history.projection.sequence,
         ),
+        executions: this.runtime.store.listExecutions(groupId),
+        notifications: this.runtime.store.listNotificationsForAudit(groupId),
+        generatedAt: new Date().toISOString(),
       });
+      send(res, 200, audit);
       return;
     }
-    if (resource === 'executions' && req.method === 'GET') {
+    if (segments[1] === 'executions' && req.method === 'GET') {
       send(res, 200, {
         executions: this.runtime.store
           .listExecutions(groupId)
@@ -559,7 +918,7 @@ export class CollaborationWebApi {
       });
       return;
     }
-    if (resource === 'data' && req.method === 'GET') {
+    if (segments[1] === 'data' && req.method === 'GET') {
       send(res, 200, {
         paths: group.headCommit
           ? await listCollaborationSharedPaths({
@@ -570,7 +929,7 @@ export class CollaborationWebApi {
       });
       return;
     }
-    if (resource === 'data' && req.method === 'POST') {
+    if (segments[1] === 'data' && req.method === 'POST') {
       const body = object(await jsonBody(req));
       const turnId = optionalString(body, 'turnId');
       const hasTurnFence =
@@ -609,20 +968,27 @@ export class CollaborationWebApi {
       });
       return;
     }
-    if (resource === 'diagnostics' && req.method === 'GET') {
+    if (segments[1] === 'diagnostics' && req.method === 'GET') {
       send(res, 200, {
         collaboration: this.publicRuntimeStatus(),
         group: publicGroup(group),
         incidents: this.runtime.store
           .listIntegrityIncidents(groupId)
-          .map((incident) => ({
-            ...incident,
-            message: redactDiagnostic(incident.message, [group.remoteUrl]),
-          })),
+          .map((incident) =>
+            publicIntegrityIncident(incident, group.remoteUrl),
+          ),
         syncAttempts: this.runtime.store
           .listSyncAttempts(groupId, 50)
           .map((attempt) => publicSyncAttempt(attempt, group.remoteUrl)),
         validation: this.runtime.groups.getValidationMetrics(groupId),
+        stagedArtifacts: currentAttemptArtifacts(
+          this.runtime,
+          group,
+          history.projection.activeTurnId
+            ? (history.projection.turns[history.projection.activeTurnId] ??
+                null)
+            : null,
+        ),
       });
       return;
     }
@@ -666,9 +1032,12 @@ export const collaborationWebApiTestables = {
   publicGroup,
   publicBinding,
   publicExecution,
+  publicStagedArtifact,
+  publicIntegrityIncident,
   publicSyncAttempt,
   redactConfig,
   redactDiagnostic,
   redactRemoteUrl,
+  readActiveImplementationPrompts,
   rejectSystemIdentityOverrides,
 };
