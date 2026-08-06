@@ -171,11 +171,24 @@ export function defaultCollaborationCreateDraft() {
   };
 }
 
+export function buildCollaborationJoinRequest(input) {
+  const capabilities = String(input.capabilities ?? '')
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .map((capability) => identifier(capability, 'Capability'));
+  if (!capabilities.length) throw new Error('Capabilities不能为空');
+  return {
+    remoteUrl: requiredString(input.remoteUrl, 'Git remote'),
+    signingKeyPath: requiredString(input.signingKeyPath, 'SSH signing key'),
+    capabilities: [...new Set(capabilities)],
+    role: identifier(input.role, '角色 ID'),
+  };
+}
+
 export function buildCollaborationCreateRequest(input) {
   const remoteUrl = requiredString(input.remoteUrl, 'Git remote');
   const name = requiredString(input.name, '群组名称');
-  const principalId = identifier(input.principalId, 'Principal ID');
-  const agentId = identifier(input.agentId, 'Agent ID');
   const signingKeyPath = requiredString(
     input.signingKeyPath,
     'SSH signing key',
@@ -379,8 +392,6 @@ export function buildCollaborationCreateRequest(input) {
   return {
     remoteUrl,
     name,
-    principalId,
-    agentId,
     signingKeyPath,
     capabilities: [
       ...new Set([creatorRole.capability, creatorRole.interaction]),

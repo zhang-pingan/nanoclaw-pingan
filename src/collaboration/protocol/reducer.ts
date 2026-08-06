@@ -52,6 +52,7 @@ export interface CollaborationTurn {
   state: CollaborationTurnState;
   claimEventId: string | null;
   claimantPrincipalId: string | null;
+  claimantAgentId: string | null;
   fencingToken: string | null;
   executionRef: string | null;
   resultHash: string | null;
@@ -69,7 +70,7 @@ export interface CollaborationProjection {
   lifecycle: CollaborationLifecycle;
   businessState: string;
   readonly creatorPrincipalId: string;
-  members: Record<string, MemberDefinition>;
+  members: Record<string, MemberDefinition[]>;
   roleClaims: Record<string, RoleClaim[]>;
   turns: Record<string, CollaborationTurn>;
   activeTurnId: string | null;
@@ -186,6 +187,18 @@ function cloneProjection(
   return structuredClone(projection);
 }
 
+export function findCollaborationMember(
+  projection: CollaborationProjection,
+  principalId: string,
+  agentId: string,
+): MemberDefinition | null {
+  return (
+    projection.members[principalId]?.find(
+      (member) => member.agent_id === agentId,
+    ) ?? null
+  );
+}
+
 function requiredRolesSatisfied(
   projection: CollaborationProjection,
   definition: CollaborationRepositoryDefinition,
@@ -296,7 +309,7 @@ function reduceGenesis(
     lifecycle: 'FORMING',
     businessState: definition.machine.initial_state,
     creatorPrincipalId: definition.group.creator.principal_id,
-    members: { [payload.member.principal_id]: payload.member },
+    members: { [payload.member.principal_id]: [payload.member] },
     roleClaims: { [payload.role_claim.role]: [payload.role_claim] },
     turns: {},
     activeTurnId: null,
@@ -349,15 +362,35 @@ export function reduceCollaborationEvent(
         member.agent_id !== event.actor.agent_id
       )
         conflict('Members may only register themselves');
-      if (next.members[member.principal_id])
-        conflict(`Member already exists: ${member.principal_id}`);
-      next.members[member.principal_id] = member;
+      const principalMembers = next.members[member.principal_id] ?? [];
+      if (
+        principalMembers.some(
+          (candidate) => candidate.agent_id === member.agent_id,
+        )
+      )
+        conflict(
+          `Member already exists: ${member.principal_id}/${member.agent_id}`,
+        );
+      if (
+        principalMembers.some(
+          (candidate) =>
+            candidate.signing_key_ref !== member.signing_key_ref ||
+            candidate.signing_public_key !== member.signing_public_key,
+        )
+      )
+        conflict('Agents for one principal must use the same signing key');
+      principalMembers.push(member);
+      next.members[member.principal_id] = principalMembers;
       break;
     }
     case 'role_claimed': {
       assertLifecycle(next, ['FORMING', 'READY', 'PAUSED'], event);
       const payload = rolePayloadSchema.parse(event.payload);
-      const member = next.members[payload.principal_id];
+      const member = findCollaborationMember(
+        next,
+        payload.principal_id,
+        payload.agent_id,
+      );
       const role = definition.roles[payload.role];
       if (!member || !role)
         conflict('Role claim references an unknown member or role');
@@ -369,8 +402,16 @@ export function reduceCollaborationEvent(
       if (!member.capabilities.includes(role.executor_requirements.capability))
         conflict(`Member lacks capability for role ${payload.role}`);
       const claims = next.roleClaims[payload.role] ?? [];
-      if (claims.some((claim) => claim.principal_id === payload.principal_id))
-        conflict(`Role is already claimed by ${payload.principal_id}`);
+      if (
+        claims.some(
+          (claim) =>
+            claim.principal_id === payload.principal_id &&
+            claim.agent_id === payload.agent_id,
+        )
+      )
+        conflict(
+          `Role is already claimed by ${payload.principal_id}/${payload.agent_id}`,
+        );
       if (claims.length >= role.cardinality.max)
         conflict(`Role cardinality is full: ${payload.role}`);
       claims.push(
@@ -390,13 +431,16 @@ export function reduceCollaborationEvent(
       assertLifecycle(next, ['FORMING', 'READY', 'PAUSED'], event);
       const payload = rolePayloadSchema.parse(event.payload);
       if (
-        payload.principal_id !== event.actor.principal_id &&
+        (payload.principal_id !== event.actor.principal_id ||
+          payload.agent_id !== event.actor.agent_id) &&
         event.actor.principal_id !== next.creatorPrincipalId
       )
         conflict('Only the claimant or creator can release a role');
       const claims = next.roleClaims[payload.role] ?? [];
       const filtered = claims.filter(
-        (claim) => claim.principal_id !== payload.principal_id,
+        (claim) =>
+          claim.principal_id !== payload.principal_id ||
+          claim.agent_id !== payload.agent_id,
       );
       if (filtered.length === claims.length)
         conflict('Role claim does not exist');
@@ -492,6 +536,7 @@ export function reduceCollaborationEvent(
         state: 'WAITING',
         claimEventId: null,
         claimantPrincipalId: null,
+        claimantAgentId: null,
         fencingToken: null,
         executionRef: null,
         resultHash: null,
@@ -508,10 +553,11 @@ export function reduceCollaborationEvent(
       if (turn.state !== 'WAITING') conflict('Turn is not waiting for a claim');
       if (turn.attempt !== payload.attempt) conflict('Turn attempt is stale');
       const claim = (next.roleClaims[turn.role] ?? []).find(
-        (candidate) => candidate.principal_id === event.actor.principal_id,
+        (candidate) =>
+          candidate.principal_id === event.actor.principal_id &&
+          candidate.agent_id === event.actor.agent_id,
       );
-      if (!claim || claim.agent_id !== event.actor.agent_id)
-        conflict('Actor does not hold the required role');
+      if (!claim) conflict('Actor does not hold the required role');
       const expectedFence = collaborationFencingToken({
         groupId: next.groupId,
         epoch: next.epoch,
@@ -525,6 +571,7 @@ export function reduceCollaborationEvent(
       turn.state = 'CLAIMED';
       turn.claimEventId = event.event_id;
       turn.claimantPrincipalId = event.actor.principal_id;
+      turn.claimantAgentId = event.actor.agent_id;
       turn.fencingToken = payload.fencing_token;
       break;
     }
@@ -617,6 +664,7 @@ export function reduceCollaborationEvent(
       turn.state = 'WAITING';
       turn.claimEventId = null;
       turn.claimantPrincipalId = null;
+      turn.claimantAgentId = null;
       turn.fencingToken = null;
       turn.executionRef = null;
       turn.resultHash = null;

@@ -223,12 +223,12 @@ function initializeSignedHistory() {
   const genesisProjection = reduceCollaborationEvent(null, genesis, contract);
   write(
     test.root,
-    'groups/members/alice.json',
+    'groups/members/alice/agent_alice.json',
     `${JSON.stringify(genesis.payload.member, null, 2)}\n`,
   );
   write(
     test.root,
-    'groups/claims/developer/alice.json',
+    'groups/claims/developer/alice/agent_alice.json',
     `${JSON.stringify(genesis.payload.role_claim, null, 2)}\n`,
   );
   const genesisHead = appendEvent(test.root, genesis, genesisProjection);
@@ -368,8 +368,8 @@ describe('signed Git collaboration history', () => {
   });
 
   it.each([
-    ['member', 'groups/members/alice.json'],
-    ['role claim', 'groups/claims/developer/alice.json'],
+    ['member', 'groups/members/alice/agent_alice.json'],
+    ['role claim', 'groups/claims/developer/alice/agent_alice.json'],
   ])('quarantines a forged materialized %s', async (_label, file) => {
     const test = initializeSignedHistory();
     const materialized = JSON.parse(

@@ -13,12 +13,12 @@ import { promisify } from 'node:util';
 
 import YAML from 'yaml';
 
+import type { CollaborationSigningIdentity } from './identity.js';
 import {
   COLLABORATION_CONTROL_BRANCH,
   CollaborationProtocolError,
   authorizeCollaborationEvent,
   deterministicProjectionJson,
-  readPublicKey,
   reduceCollaborationEvent,
   validateCollaborationGitHistory,
   type ActionDefinition,
@@ -120,21 +120,23 @@ function materializeEvent(
     const member = event.payload.member as MemberDefinition;
     writeRepositoryFile(
       checkoutPath,
-      `groups/members/${member.principal_id}.json`,
+      `groups/members/${member.principal_id}/${member.agent_id}.json`,
       `${JSON.stringify(member, null, 2)}\n`,
     );
   } else if (event.event_type === 'role_claimed') {
     const role = String(event.payload.role);
     const principal = String(event.payload.principal_id);
+    const agent = String(event.payload.agent_id);
     const claims = projection.roleClaims[role] ?? [];
     const claim = claims.find(
-      (candidate) => candidate.principal_id === principal,
+      (candidate) =>
+        candidate.principal_id === principal && candidate.agent_id === agent,
     );
     if (!claim)
       throw new Error('Materialized role claim is missing from projection');
     writeRepositoryFile(
       checkoutPath,
-      `groups/claims/${role}/${principal}.json`,
+      `groups/claims/${role}/${principal}/${claim.agent_id}.json`,
       `${JSON.stringify(claim, null, 2)}\n`,
     );
   } else if (event.event_type === 'role_released') {
@@ -143,7 +145,8 @@ function materializeEvent(
       'groups',
       'claims',
       String(event.payload.role),
-      `${String(event.payload.principal_id)}.json`,
+      String(event.payload.principal_id),
+      `${String(event.payload.agent_id)}.json`,
     );
     try {
       unlinkSync(target);
@@ -151,39 +154,6 @@ function materializeEvent(
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
     }
   }
-}
-
-export interface CollaborationSigningIdentity {
-  readonly principalId: string;
-  readonly agentId: string;
-  readonly privateKeyPath: string;
-  readonly publicKey: string;
-  readonly keyRef: string;
-}
-
-export async function loadCollaborationSigningIdentity(input: {
-  readonly principalId: string;
-  readonly agentId: string;
-  readonly privateKeyPath: string;
-}): Promise<CollaborationSigningIdentity> {
-  const publicKeyPath = `${input.privateKeyPath}.pub`;
-  const publicKey = await readPublicKey(publicKeyPath);
-  const sshResult = await execFileAsync(
-    'ssh-keygen',
-    ['-lf', publicKeyPath, '-E', 'sha256'],
-    { encoding: 'utf8' },
-  );
-  const keyFingerprint = sshResult.stdout.match(/SHA256:[^\s]+/)?.[0];
-  const keyType = publicKey.split(/\s+/, 1)[0];
-  if (!keyFingerprint || !keyType)
-    throw new Error(`Cannot derive SSH signing identity from ${publicKeyPath}`);
-  return {
-    principalId: input.principalId,
-    agentId: input.agentId,
-    privateKeyPath: input.privateKeyPath,
-    publicKey,
-    keyRef: `${keyType}:${keyFingerprint}`,
-  };
 }
 
 export interface CreateCollaborationRepositoryInput {
@@ -253,12 +223,12 @@ export class CollaborationGitTransport {
       const genesisClaim = input.genesisEvent.payload.role_claim as RoleClaim;
       writeRepositoryFile(
         checkoutPath,
-        `groups/members/${genesisMember.principal_id}.json`,
+        `groups/members/${genesisMember.principal_id}/${genesisMember.agent_id}.json`,
         `${JSON.stringify(genesisMember, null, 2)}\n`,
       );
       writeRepositoryFile(
         checkoutPath,
-        `groups/claims/${genesisClaim.role}/${genesisClaim.principal_id}.json`,
+        `groups/claims/${genesisClaim.role}/${genesisClaim.principal_id}/${genesisClaim.agent_id}.json`,
         `${JSON.stringify(genesisClaim, null, 2)}\n`,
       );
       materializeEvent(

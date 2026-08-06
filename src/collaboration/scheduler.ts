@@ -327,13 +327,17 @@ export class CollaborationScheduler {
         : null;
       if (
         !claimedTurn ||
-        claimedTurn.claimantPrincipalId !== group.localPrincipalId
+        claimedTurn.claimantPrincipalId !== group.localPrincipalId ||
+        claimedTurn.claimantAgentId !== group.localAgentId
       )
         return history;
       return this.processLocalExecution(group, history, claimedTurn, true);
     }
 
-    if (turn.claimantPrincipalId === group.localPrincipalId)
+    if (
+      turn.claimantPrincipalId === group.localPrincipalId &&
+      turn.claimantAgentId === group.localAgentId
+    )
       history = await this.processLocalExecution(group, history, turn, false);
     return history;
   }

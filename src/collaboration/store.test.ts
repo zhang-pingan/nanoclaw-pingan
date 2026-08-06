@@ -98,6 +98,7 @@ function projection(): {
     state: 'CLAIMED',
     claimEventId: 'evt_claim',
     claimantPrincipalId: 'alice',
+    claimantAgentId: 'agent_alice',
     fencingToken: `sha256:${'a'.repeat(64)}`,
     executionRef: null,
     resultHash: null,
@@ -155,7 +156,7 @@ describe('CollaborationStore', () => {
     }
   });
 
-  it('migrates schema v1 to v2 in a transaction', () => {
+  it('migrates schema v1 to the current version in a transaction', () => {
     const test = temporaryPath();
     const legacy = new Database(test.databasePath);
     legacy.exec(collaborationSchemaV1ForTests);
@@ -165,7 +166,7 @@ describe('CollaborationStore', () => {
     try {
       expect(
         store.rawDatabaseForTests().pragma('user_version', { simple: true }),
-      ).toBe(2);
+      ).toBe(CURRENT_COLLABORATION_SCHEMA_VERSION);
       const columns = store
         .rawDatabaseForTests()
         .prepare('PRAGMA table_info(collaboration_action_executions)')

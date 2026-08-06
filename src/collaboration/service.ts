@@ -7,10 +7,12 @@ import {
   CollaborationGitConflictError,
   CollaborationGitTransport,
   collaborationRepositoryCachePath,
-  loadCollaborationSigningIdentity,
   readPromptFromValidatedCacheAsync,
-  type CollaborationSigningIdentity,
 } from './git-transport.js';
+import {
+  CollaborationIdentityService,
+  type CollaborationSigningIdentity,
+} from './identity.js';
 import {
   COLLABORATION_CONTROL_BRANCH,
   COLLABORATION_PROTOCOL_VERSION,
@@ -18,6 +20,7 @@ import {
   collaborationEventSchema,
   collaborationFencingToken,
   collaborationIdempotencyKey,
+  findCollaborationMember,
   reduceCollaborationEvent,
   validateRepositoryDefinition,
   type ActionDefinition,
@@ -43,8 +46,6 @@ function identifier(prefix: 'ag' | 'evt' | 'turn'): string {
 export interface CreateCollaborationGroupInput {
   readonly remoteUrl: string;
   readonly name: string;
-  readonly principalId: string;
-  readonly agentId: string;
   readonly signingKeyPath: string;
   readonly capabilities: readonly string[];
   readonly initialRole: string;
@@ -58,8 +59,6 @@ export interface CreateCollaborationGroupInput {
 
 export interface JoinCollaborationGroupInput {
   readonly remoteUrl: string;
-  readonly principalId: string;
-  readonly agentId: string;
   readonly signingKeyPath: string;
   readonly capabilities: readonly string[];
   readonly role: string;
@@ -89,17 +88,16 @@ export class CollaborationGroupService {
     readonly store: CollaborationStore,
     readonly transport: CollaborationGitTransport,
     private readonly repositoryRoot: string,
+    private readonly identities: CollaborationIdentityService,
     private readonly now: () => number = Date.now,
   ) {}
 
   async createGroup(
     input: CreateCollaborationGroupInput,
   ): Promise<CollaborationGroupRecord> {
-    const identity = await loadCollaborationSigningIdentity({
-      principalId: input.principalId,
-      agentId: input.agentId,
-      privateKeyPath: input.signingKeyPath,
-    });
+    const identity = await this.identities.resolveSigningIdentity(
+      input.signingKeyPath,
+    );
     const groupId = input.groupId ?? identifier('ag');
     const role = input.roles[input.initialRole];
     if (!role)
@@ -210,11 +208,9 @@ export class CollaborationGroupService {
   async joinGroup(
     input: JoinCollaborationGroupInput,
   ): Promise<CollaborationGroupRecord> {
-    const identity = await loadCollaborationSigningIdentity({
-      principalId: input.principalId,
-      agentId: input.agentId,
-      privateKeyPath: input.signingKeyPath,
-    });
+    const identity = await this.identities.resolveSigningIdentity(
+      input.signingKeyPath,
+    );
     const repositoryPath = collaborationRepositoryCachePath(
       this.repositoryRoot,
       input.remoteUrl,
@@ -248,11 +244,21 @@ export class CollaborationGroupService {
       });
     this.persistHistory(history);
 
-    const registered = history.projection.members[identity.principalId];
-    if (registered && registered.signing_key_ref !== identity.keyRef)
+    const principalMembers =
+      history.projection.members[identity.principalId] ?? [];
+    if (
+      principalMembers.some(
+        (member) =>
+          member.signing_key_ref !== identity.keyRef ||
+          member.signing_public_key !== identity.publicKey,
+      )
+    )
       throw new Error(
         'Principal is already registered with a different signing key',
       );
+    const registered = principalMembers.some(
+      (member) => member.agent_id === identity.agentId,
+    );
     if (!registered) {
       const eventId = identifier('evt');
       history = await this.append(groupId, identity, () => ({
@@ -272,7 +278,9 @@ export class CollaborationGroupService {
       }));
     }
     const claimed = (history.projection.roleClaims[input.role] ?? []).some(
-      (claim) => claim.principal_id === identity.principalId,
+      (claim) =>
+        claim.principal_id === identity.principalId &&
+        claim.agent_id === identity.agentId,
     );
     if (!claimed)
       await this.append(groupId, identity, () => ({
@@ -381,7 +389,11 @@ export class CollaborationGroupService {
       repositoryPath: group.repositoryPath,
       previousHead: group.headCommit,
     });
-    const member = history.projection.members[group.localPrincipalId];
+    const member = findCollaborationMember(
+      history.projection,
+      group.localPrincipalId,
+      group.localAgentId,
+    );
     if (!member)
       throw new Error('Local principal is not registered in the group');
     await this.append(groupId, await this.identityFor(group), () => ({
@@ -710,12 +722,12 @@ export class CollaborationGroupService {
   private async identityFor(
     group: CollaborationGroupRecord,
   ): Promise<CollaborationSigningIdentity> {
-    const identity = await loadCollaborationSigningIdentity({
-      principalId: group.localPrincipalId,
-      agentId: group.localAgentId,
-      privateKeyPath: group.signingKeyPath,
-    });
+    const identity = await this.identities.resolveSigningIdentity(
+      group.signingKeyPath,
+    );
     if (
+      identity.principalId !== group.localPrincipalId ||
+      identity.agentId !== group.localAgentId ||
       identity.keyRef !== group.signingKeyRef ||
       identity.publicKey !== group.signingPublicKey
     )

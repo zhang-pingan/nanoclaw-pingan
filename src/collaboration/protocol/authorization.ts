@@ -1,5 +1,8 @@
 import { memberDefinitionSchema, type CollaborationEvent } from './schema.js';
-import type { CollaborationProjection } from './reducer.js';
+import {
+  findCollaborationMember,
+  type CollaborationProjection,
+} from './reducer.js';
 import { CollaborationProtocolError } from './version.js';
 
 export interface VerifiedCommitSigner {
@@ -67,7 +70,11 @@ export function authorizeCollaborationEvent(
     return;
   }
 
-  const member = projection.members[event.actor.principal_id];
+  const member = findCollaborationMember(
+    projection,
+    event.actor.principal_id,
+    event.actor.agent_id,
+  );
   if (!member || member.signing_key_ref !== signer.signingKeyRef)
     unauthorized('Git signer is not a registered collaboration member');
 
@@ -80,8 +87,10 @@ export function authorizeCollaborationEvent(
   if (event.event_type === 'role_claimed') return;
   if (event.event_type === 'role_released') {
     const principalId = event.payload.principal_id;
+    const agentId = event.payload.agent_id;
     if (
-      principalId !== event.actor.principal_id &&
+      (principalId !== event.actor.principal_id ||
+        agentId !== event.actor.agent_id) &&
       event.actor.principal_id !== projection.creatorPrincipalId
     )
       unauthorized('Only the claimant or creator can release a role');
@@ -94,10 +103,11 @@ export function authorizeCollaborationEvent(
     const turn = projection.turns[turnId];
     if (!turn) unauthorized('Turn claim references an unknown turn');
     const claim = (projection.roleClaims[turn.role] ?? []).find(
-      (candidate) => candidate.principal_id === event.actor.principal_id,
+      (candidate) =>
+        candidate.principal_id === event.actor.principal_id &&
+        candidate.agent_id === event.actor.agent_id,
     );
-    if (!claim || claim.agent_id !== event.actor.agent_id)
-      unauthorized('Actor does not hold the required role');
+    if (!claim) unauthorized('Actor does not hold the required role');
     return;
   }
 
@@ -105,7 +115,11 @@ export function authorizeCollaborationEvent(
     const turnId = event.payload.turn_id;
     if (typeof turnId !== 'string') unauthorized('Action event has no turn id');
     const turn = projection.turns[turnId];
-    if (!turn || turn.claimantPrincipalId !== event.actor.principal_id)
+    if (
+      !turn ||
+      turn.claimantPrincipalId !== event.actor.principal_id ||
+      turn.claimantAgentId !== event.actor.agent_id
+    )
       unauthorized('Only the winning claimant may report action state');
     return;
   }

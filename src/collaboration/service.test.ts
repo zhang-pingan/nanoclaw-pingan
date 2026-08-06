@@ -6,6 +6,7 @@ import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { CollaborationGitTransport } from './git-transport.js';
+import { CollaborationIdentityService } from './identity.js';
 import type {
   ActionDefinition,
   MachineDefinition,
@@ -208,8 +209,6 @@ function createInput(
     remoteUrl,
     name: 'Service test group',
     groupId: 'ag_service',
-    principalId: 'alice',
-    agentId: 'agent_alice',
     signingKeyPath,
     capabilities: ['coding_task', 'visible_session'],
     initialRole: 'developer',
@@ -226,8 +225,6 @@ function cyclicCreateInput(
     remoteUrl,
     name: 'Cyclic multi-role group',
     groupId: 'ag_cyclic_service',
-    principalId: 'alice',
-    agentId: 'agent_alice',
     signingKeyPath,
     capabilities: ['coding_task', 'visible_session'],
     initialRole: 'developer',
@@ -281,13 +278,17 @@ async function completeCurrentTurn(
 
 function service(testRoot: string, name: string) {
   const store = new CollaborationStore(path.join(testRoot, `${name}.db`));
+  const identities = new CollaborationIdentityService(
+    path.join(testRoot, `${name}-store`),
+  );
   const groupService = new CollaborationGroupService(
     store,
     new CollaborationGitTransport(),
     path.join(testRoot, `${name}-repositories`),
+    identities,
     () => 1_786_000_000_000,
   );
-  return { store, groupService };
+  return { store, groupService, identities };
 }
 
 afterEach(() => {
@@ -305,8 +306,13 @@ describe('CollaborationGroupService', () => {
       const created = await owner.groupService.createGroup(
         createInput(remoteUrl, aliceKey),
       );
+      const ownerIdentity =
+        await owner.identities.resolveSigningIdentity(aliceKey);
       expect(created).toMatchObject({
         groupId: 'ag_service',
+        creatorPrincipalId: ownerIdentity.principalId,
+        localPrincipalId: ownerIdentity.principalId,
+        localAgentId: ownerIdentity.agentId,
         lifecycle: 'READY',
         businessState: 'development',
         protocolStatus: 'OK',
@@ -346,18 +352,22 @@ describe('CollaborationGroupService', () => {
     const participant = service(testRoot, 'participant');
     try {
       await owner.groupService.createGroup(createInput(remoteUrl, aliceKey, 2));
+      const participantIdentity =
+        await participant.identities.resolveSigningIdentity(bobKey);
       const joined = await participant.groupService.joinGroup({
         remoteUrl,
-        principalId: 'bob',
-        agentId: 'agent_bob',
         signingKeyPath: bobKey,
         capabilities: ['coding_task', 'visible_session'],
         role: 'developer',
       });
-      expect(joined.projection?.members.bob).toMatchObject({
-        principal_id: 'bob',
-        agent_id: 'agent_bob',
-      });
+      expect(
+        joined.projection?.members[participantIdentity.principalId],
+      ).toContainEqual(
+        expect.objectContaining({
+          principal_id: participantIdentity.principalId,
+          agent_id: participantIdentity.agentId,
+        }),
+      );
       expect(joined.projection?.roleClaims.developer).toHaveLength(2);
       await expect(
         participant.groupService.start('ag_service'),
@@ -379,26 +389,32 @@ describe('CollaborationGroupService', () => {
       const created = await owner.groupService.createGroup(
         cyclicCreateInput(remoteUrl, aliceKey),
       );
+      const ownerIdentity =
+        await owner.identities.resolveSigningIdentity(aliceKey);
       expect(created).toMatchObject({ lifecycle: 'FORMING' });
       expect(created.projection?.roleClaims).toMatchObject({
-        developer: [expect.objectContaining({ principal_id: 'alice' })],
+        developer: [
+          expect.objectContaining({ principal_id: ownerIdentity.principalId }),
+        ],
       });
       expect(created.projection?.roleClaims.reviewer ?? []).toHaveLength(0);
       await expect(
         owner.groupService.start('ag_cyclic_service'),
       ).rejects.toThrow(/lifecycle is FORMING/);
 
+      const participantIdentity =
+        await participant.identities.resolveSigningIdentity(bobKey);
       const joined = await participant.groupService.joinGroup({
         remoteUrl,
-        principalId: 'bob',
-        agentId: 'agent_bob',
         signingKeyPath: bobKey,
         capabilities: ['review_task', 'visible_session'],
         role: 'reviewer',
       });
       expect(joined).toMatchObject({ lifecycle: 'READY' });
       expect(joined.projection?.roleClaims.reviewer).toEqual([
-        expect.objectContaining({ principal_id: 'bob' }),
+        expect.objectContaining({
+          principal_id: participantIdentity.principalId,
+        }),
       ]);
 
       await owner.groupService.sync('ag_cyclic_service');
@@ -444,10 +460,12 @@ describe('CollaborationGroupService', () => {
     const participant = service(testRoot, 'participant');
     try {
       await owner.groupService.createGroup(createInput(remoteUrl, aliceKey, 2));
+      const ownerIdentity =
+        await owner.identities.resolveSigningIdentity(aliceKey);
+      const participantIdentity =
+        await participant.identities.resolveSigningIdentity(bobKey);
       await participant.groupService.joinGroup({
         remoteUrl,
-        principalId: 'bob',
-        agentId: 'agent_bob',
         signingKeyPath: bobKey,
         capabilities: ['coding_task', 'visible_session'],
         role: 'developer',
@@ -464,7 +482,67 @@ describe('CollaborationGroupService', () => {
       const turn =
         synchronized.projection?.turns[synchronized.projection.activeTurnId!];
       expect(turn?.state).toBe('CLAIMED');
-      expect(['alice', 'bob']).toContain(turn?.claimantPrincipalId);
+      expect([
+        ownerIdentity.principalId,
+        participantIdentity.principalId,
+      ]).toContain(turn?.claimantPrincipalId);
+    } finally {
+      owner.store.close();
+      participant.store.close();
+    }
+  }, 30_000);
+
+  it('registers separate agents when one principal joins from two installations', async () => {
+    const testRoot = root();
+    const remoteUrl = remote(testRoot);
+    const sharedKey = key(testRoot, 'shared-key');
+    const owner = service(testRoot, 'owner');
+    const participant = service(testRoot, 'participant');
+    try {
+      await owner.groupService.createGroup(
+        createInput(remoteUrl, sharedKey, 2),
+      );
+      const ownerIdentity =
+        await owner.identities.resolveSigningIdentity(sharedKey);
+      const participantIdentity =
+        await participant.identities.resolveSigningIdentity(sharedKey);
+
+      const joined = await participant.groupService.joinGroup({
+        remoteUrl,
+        signingKeyPath: sharedKey,
+        capabilities: ['coding_task', 'visible_session'],
+        role: 'developer',
+      });
+
+      expect(participantIdentity.principalId).toBe(ownerIdentity.principalId);
+      expect(participantIdentity.agentId).not.toBe(ownerIdentity.agentId);
+      expect(
+        joined.projection?.members[ownerIdentity.principalId],
+      ).toHaveLength(2);
+      expect(joined.projection?.roleClaims.developer).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ agent_id: ownerIdentity.agentId }),
+          expect.objectContaining({ agent_id: participantIdentity.agentId }),
+        ]),
+      );
+
+      await owner.groupService.start('ag_service');
+      await participant.groupService.sync('ag_service');
+      const claims = await Promise.all([
+        owner.groupService.claimCurrentTurn('ag_service'),
+        participant.groupService.claimCurrentTurn('ag_service'),
+      ]);
+      expect(claims.filter((claim) => claim.won)).toHaveLength(1);
+      const synchronized = await owner.groupService.sync('ag_service');
+      const turn =
+        synchronized.projection?.turns[synchronized.projection.activeTurnId!];
+      expect(turn).toMatchObject({
+        claimantPrincipalId: ownerIdentity.principalId,
+        claimantAgentId: expect.stringMatching(/^agent_/),
+      });
+      expect([ownerIdentity.agentId, participantIdentity.agentId]).toContain(
+        turn?.claimantAgentId,
+      );
     } finally {
       owner.store.close();
       participant.store.close();

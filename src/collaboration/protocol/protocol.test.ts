@@ -261,6 +261,46 @@ describe('Collaboration protocol', () => {
     );
   });
 
+  it('registers and claims roles per agent for one signing principal', () => {
+    let projection = reduceCollaborationEvent(null, genesis(), definition());
+    projection = apply(
+      projection,
+      event({
+        type: 'member_registered',
+        id: 'evt_2',
+        sequence: 2,
+        revision: 1,
+        agent: 'agent_alice_second',
+        payload: {
+          member: member('alice', 'agent_alice_second', 'evt_2', 'review_task'),
+        },
+      }),
+    );
+    projection = apply(
+      projection,
+      event({
+        type: 'role_claimed',
+        id: 'evt_3',
+        sequence: 3,
+        revision: 2,
+        agent: 'agent_alice_second',
+        payload: {
+          role: 'reviewer',
+          principal_id: 'alice',
+          agent_id: 'agent_alice_second',
+        },
+      }),
+    );
+
+    expect(projection.members.alice).toHaveLength(2);
+    expect(projection.roleClaims.reviewer).toEqual([
+      expect.objectContaining({
+        principal_id: 'alice',
+        agent_id: 'agent_alice_second',
+      }),
+    ]);
+  });
+
   it('supports development -> review -> development with unique turns', () => {
     let projection = replayCollaborationEvents(readyEvents(), definition());
     projection = apply(
@@ -314,6 +354,10 @@ describe('Collaboration protocol', () => {
         },
       }),
     );
+    expect(projection.turns.turn_implement_1).toMatchObject({
+      claimantPrincipalId: 'alice',
+      claimantAgentId: 'agent_alice',
+    });
     projection = apply(
       projection,
       event({

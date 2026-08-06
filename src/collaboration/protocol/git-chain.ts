@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
@@ -12,6 +12,7 @@ import {
 } from './authorization.js';
 import {
   deterministicProjectionJson,
+  findCollaborationMember,
   reduceCollaborationEvent,
   type CollaborationProjection,
 } from './reducer.js';
@@ -135,7 +136,13 @@ function candidateMember(
     return memberDefinitionSchema.parse(event.payload.member);
   if (event.event_type === 'member_registered')
     return memberDefinitionSchema.parse(event.payload.member);
-  return projection?.members[event.actor.principal_id] ?? null;
+  return projection
+    ? findCollaborationMember(
+        projection,
+        event.actor.principal_id,
+        event.actor.agent_id,
+      )
+    : null;
 }
 
 function allowedSigners(
@@ -146,11 +153,12 @@ function allowedSigners(
     string,
     { readonly keyRef: string; readonly publicKey: string }
   >();
-  for (const member of Object.values(projection?.members ?? {}))
-    signers.set(member.principal_id, {
-      keyRef: member.signing_key_ref,
-      publicKey: member.signing_public_key,
-    });
+  for (const members of Object.values(projection?.members ?? {}))
+    for (const member of members)
+      signers.set(member.principal_id, {
+        keyRef: member.signing_key_ref,
+        publicKey: member.signing_public_key,
+      });
   const candidate = candidateMember(event, projection);
   if (candidate)
     signers.set(candidate.principal_id, {
@@ -427,16 +435,18 @@ async function validateMaterializedIdentityState(
   projection: CollaborationProjection,
 ): Promise<void> {
   const expectedMembers = new Map(
-    Object.values(projection.members).map((member) => [
-      `groups/members/${member.principal_id}.json`,
-      member,
-    ]),
+    Object.values(projection.members)
+      .flat()
+      .map((member) => [
+        `groups/members/${member.principal_id}/${member.agent_id}.json`,
+        member,
+      ]),
   );
   const expectedClaims = new Map(
     Object.values(projection.roleClaims)
       .flat()
       .map((claim) => [
-        `groups/claims/${claim.role}/${claim.principal_id}.json`,
+        `groups/claims/${claim.role}/${claim.principal_id}/${claim.agent_id}.json`,
         claim,
       ]),
   );
@@ -473,8 +483,4 @@ async function validateMaterializedIdentityState(
         `Materialized role claim does not match event replay: ${file}`,
       );
   }
-}
-
-export async function readPublicKey(publicKeyPath: string): Promise<string> {
-  return (await readFile(publicKeyPath, 'utf8')).trim();
 }

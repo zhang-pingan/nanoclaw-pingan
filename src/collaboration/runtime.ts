@@ -11,6 +11,7 @@ import {
   WorkflowActionExecutor,
 } from './executors/index.js';
 import { CollaborationGitTransport } from './git-transport.js';
+import { CollaborationIdentityService } from './identity.js';
 import { CollaborationScheduler } from './scheduler.js';
 import { CollaborationGroupService } from './service.js';
 import {
@@ -69,6 +70,7 @@ export class CollaborationRuntime {
         store,
         new CollaborationGitTransport(),
         this.repositoryRoot,
+        new CollaborationIdentityService(this.options.storeDir),
         this.options.now,
       );
       const registry = new ActionExecutorRegistry();

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { validateRepositoryDefinition } from '../../src/collaboration/protocol/index.js';
 import {
   buildCollaborationCreateRequest,
+  buildCollaborationJoinRequest,
   defaultCollaborationCreateDraft,
 } from './collaboration-definition.js';
 
@@ -10,8 +11,6 @@ function build(draft = defaultCollaborationCreateDraft()) {
   return buildCollaborationCreateRequest({
     remoteUrl: '/tmp/collaboration.git',
     name: 'Multi-role group',
-    principalId: 'alice',
-    agentId: 'agent_alice',
     signingKeyPath: '/tmp/alice-key',
     draft,
   });
@@ -22,6 +21,8 @@ describe('Collaboration create request builder', () => {
     const request = build();
 
     expect(request.initialRole).toBe('developer');
+    expect(request).not.toHaveProperty('principalId');
+    expect(request).not.toHaveProperty('agentId');
     expect(request.capabilities).toEqual(['coding_task', 'visible_session']);
     expect(Object.keys(request.roles)).toEqual(['developer', 'reviewer']);
     expect(Object.keys(request.actions)).toEqual(['implement', 'review']);
@@ -58,7 +59,7 @@ describe('Collaboration create request builder', () => {
           group_id: 'ag_ui_test',
           name: request.name,
           creator: {
-            principal_id: request.principalId,
+            principal_id: 'principal_ssh_sha256_test',
             signing_key_ref: 'ssh-ed25519:SHA256:test',
           },
           control_branch: 'refs/heads/icarus/control',
@@ -137,5 +138,27 @@ describe('Collaboration create request builder', () => {
     const draft = defaultCollaborationCreateDraft();
     mutate(draft);
     expect(() => build(draft)).toThrow(message);
+  });
+});
+
+describe('Collaboration join request builder', () => {
+  it('validates join fields without serializing caller identity', () => {
+    const request = buildCollaborationJoinRequest({
+      remoteUrl: '/tmp/collaboration.git',
+      signingKeyPath: '/tmp/alice-key',
+      capabilities: 'coding_task, visible_session, coding_task',
+      role: 'developer',
+      principalId: 'caller-selected',
+      agentId: 'caller-selected',
+    });
+
+    expect(request).toEqual({
+      remoteUrl: '/tmp/collaboration.git',
+      signingKeyPath: '/tmp/alice-key',
+      capabilities: ['coding_task', 'visible_session'],
+      role: 'developer',
+    });
+    expect(request).not.toHaveProperty('principalId');
+    expect(request).not.toHaveProperty('agentId');
   });
 });

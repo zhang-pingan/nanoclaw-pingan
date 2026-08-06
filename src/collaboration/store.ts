@@ -20,7 +20,7 @@ import type {
   FilesystemAccess,
 } from './protocol/index.js';
 
-export const CURRENT_COLLABORATION_SCHEMA_VERSION = 2;
+export const CURRENT_COLLABORATION_SCHEMA_VERSION = 3;
 export const MINIMUM_COLLABORATION_SCHEMA_VERSION = 1;
 
 export class CollaborationStoreError extends Error {
@@ -191,6 +191,35 @@ ALTER TABLE collaboration_action_executions
   ADD COLUMN recovery_required_reason TEXT;
 ALTER TABLE collaboration_sync_attempts
   ADD COLUMN error_class TEXT;
+`;
+
+const MIGRATE_V2_TO_V3 = `
+ALTER TABLE collaboration_memberships RENAME TO collaboration_memberships_v2;
+CREATE TABLE collaboration_memberships (
+  group_id TEXT NOT NULL REFERENCES collaboration_groups(group_id) ON DELETE CASCADE,
+  principal_id TEXT NOT NULL,
+  agent_id TEXT NOT NULL,
+  member_json TEXT NOT NULL,
+  PRIMARY KEY (group_id, principal_id, agent_id)
+);
+INSERT INTO collaboration_memberships
+SELECT group_id, principal_id, agent_id, member_json
+  FROM collaboration_memberships_v2;
+DROP TABLE collaboration_memberships_v2;
+
+ALTER TABLE collaboration_role_bindings RENAME TO collaboration_role_bindings_v2;
+CREATE TABLE collaboration_role_bindings (
+  group_id TEXT NOT NULL REFERENCES collaboration_groups(group_id) ON DELETE CASCADE,
+  role TEXT NOT NULL,
+  principal_id TEXT NOT NULL,
+  agent_id TEXT NOT NULL,
+  claimed INTEGER NOT NULL CHECK (claimed IN (0, 1)),
+  PRIMARY KEY (group_id, role, principal_id, agent_id)
+);
+INSERT INTO collaboration_role_bindings
+SELECT group_id, role, principal_id, agent_id, claimed
+  FROM collaboration_role_bindings_v2;
+DROP TABLE collaboration_role_bindings_v2;
 `;
 
 interface RequiredTable {
@@ -390,6 +419,13 @@ function migrate(database: Database.Database): void {
       database.pragma('user_version = 2');
     })();
     version = 2;
+  }
+  if (version === 2) {
+    database.transaction(() => {
+      database.exec(MIGRATE_V2_TO_V3);
+      database.pragma('user_version = 3');
+    })();
+    version = 3;
   }
   if (version !== CURRENT_COLLABORATION_SCHEMA_VERSION)
     throw new CollaborationStoreError(
@@ -789,13 +825,14 @@ export class CollaborationStore {
            group_id, principal_id, agent_id, member_json
          ) VALUES (?, ?, ?, ?)`,
       );
-      for (const member of Object.values(input.projection.members))
-        memberStatement.run(
-          input.groupId,
-          member.principal_id,
-          member.agent_id,
-          JSON.stringify(member),
-        );
+      for (const members of Object.values(input.projection.members))
+        for (const member of members)
+          memberStatement.run(
+            input.groupId,
+            member.principal_id,
+            member.agent_id,
+            JSON.stringify(member),
+          );
       this.database
         .prepare('DELETE FROM collaboration_role_bindings WHERE group_id = ?')
         .run(input.groupId);

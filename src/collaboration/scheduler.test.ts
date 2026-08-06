@@ -15,6 +15,7 @@ import {
   type PreparedAction,
 } from './executors/index.js';
 import { CollaborationGitTransport } from './git-transport.js';
+import { CollaborationIdentityService } from './identity.js';
 import type {
   ActionDefinition,
   MachineDefinition,
@@ -176,6 +177,7 @@ async function fixture(testRoot: string, withBinding = true) {
     store,
     new CollaborationGitTransport(),
     path.join(testRoot, 'repositories'),
+    new CollaborationIdentityService(path.join(testRoot, 'identity-store')),
     () => nowMs,
   );
   const selected = definition();
@@ -183,8 +185,6 @@ async function fixture(testRoot: string, withBinding = true) {
     remoteUrl: remote(testRoot),
     name: 'Scheduler test group',
     groupId: 'ag_scheduler',
-    principalId: 'alice',
-    agentId: 'agent_alice',
     signingKeyPath: key(testRoot),
     capabilities: ['coding_task', 'visible_session'],
     initialRole: 'developer',

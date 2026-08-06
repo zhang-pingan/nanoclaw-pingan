@@ -2,6 +2,7 @@
 import {
   COLLABORATION_OUTCOMES,
   buildCollaborationCreateRequest,
+  buildCollaborationJoinRequest,
   createActionDraft,
   createRoleDraft,
   createStateDraft,
@@ -1655,8 +1656,6 @@ function openCreateCollaborationDialog() {
     body: `<div class="collaboration-form-grid">
       ${collaborationField('Git remote', 'remoteUrl')}
       ${collaborationField('群组名称', 'name')}
-      ${collaborationField('Principal ID', 'principalId')}
-      ${collaborationField('Agent ID', 'agentId')}
       ${collaborationField('SSH signing key', 'signingKeyPath')}
     </div>
     <div id="collaboration-create-builder-host"></div>`,
@@ -1674,8 +1673,6 @@ function openCreateCollaborationDialog() {
       const body = buildCollaborationCreateRequest({
         remoteUrl: values.remoteUrl,
         name: values.name,
-        principalId: values.principalId,
-        agentId: values.agentId,
         signingKeyPath: values.signingKeyPath,
         draft: readDraft(),
       });
@@ -1697,8 +1694,6 @@ function openJoinCollaborationDialog() {
     submitText: '加入',
     body: `<div class="collaboration-form-grid">
       ${collaborationField('Git remote', 'remoteUrl')}
-      ${collaborationField('Principal ID', 'principalId')}
-      ${collaborationField('Agent ID', 'agentId')}
       ${collaborationField('SSH signing key', 'signingKeyPath')}
       ${collaborationField('Capabilities', 'capabilities', 'coding_task')}
       ${collaborationField('角色 ID', 'role', 'developer')}
@@ -1731,17 +1726,14 @@ function openJoinCollaborationDialog() {
       const values = Object.fromEntries(formData.entries());
       const data = await collaborationRequest('/groups/join', {
         method: 'POST',
-        body: JSON.stringify({
-          remoteUrl: values.remoteUrl,
-          principalId: values.principalId,
-          agentId: values.agentId,
-          signingKeyPath: values.signingKeyPath,
-          capabilities: String(values.capabilities)
-            .split(',')
-            .map((item) => item.trim())
-            .filter(Boolean),
-          role: values.role,
-        }),
+        body: JSON.stringify(
+          buildCollaborationJoinRequest({
+            remoteUrl: values.remoteUrl,
+            signingKeyPath: values.signingKeyPath,
+            capabilities: values.capabilities,
+            role: values.role,
+          }),
+        ),
       });
       closeCollaborationDialog();
       await loadCollaborationGroups({ preserveSelection: false });
