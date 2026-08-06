@@ -33,9 +33,18 @@ this host:
 
 The Homebrew CLI could initialize App Server but could not start a thread with
 the current Desktop configuration. It failed closed while parsing the newer
-agent-role configuration. The adapter therefore treats the configured binary
-as a versioned capability and reports preflight failure; it does not fall back
-to a deep link. The Desktop-bundled binary completed the same request.
+agent-role configuration. The adapter treats the configured binary as a
+versioned capability: its claim-time `initialize` preflight catches startup and
+initialization failures, while this later `thread/start` incompatibility fails
+closed during dispatch. It does not fall back to a deep link. The
+Desktop-bundled binary completed the same request.
+
+The shared App Server client rejects approval requests and interrupts the turn,
+so a Codex approval request is not resumable as `WAITING_APPROVAL` in this
+implementation. Protocol and Workflow executors retain the generic waiting
+state for providers that can observe it. Interrupt behavior is covered by the
+existing client mapping; this spike did not restart Desktop or force an
+interactive approval prompt in the user's active application.
 
 ## Repeatable Check
 
@@ -62,3 +71,5 @@ Desktop visibility and restart persistence cannot be proven by a standalone
 stdio process. Before enabling the adapter on a new host, the local user must
 confirm that the created title and cwd appear in Desktop. No fallback transport
 is attempted when that confirmation or binary compatibility check fails.
+`codex://threads/{thread_id}` may be used by the UI to open this already-created
+task; it is navigation only and is not a dispatch fallback.

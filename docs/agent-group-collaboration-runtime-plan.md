@@ -2,11 +2,11 @@
 
 ## 文档状态
 
-- 状态：Draft
+- 状态：Implemented（含下述实机限制与发布检查）
 - 日期：2026-08-04
 - 最后更新：2026-08-05
 - 范围：Icarus 第三种操作模式、Git 协作协议、群组状态机、执行器抽象、Codex App Server 适配器和 Web 客户端入口
-- 不包含：本方案的具体代码实现、现有 Dynamic Workflow Runtime 内部接口变更、公开群组注册中心
+- 不包含：现有 Dynamic Workflow Runtime 语义变更、公开群组注册中心、deep-link dispatch transport
 
 > **项目边界**：Icarus 是内部、实验性的单用户工具。Agent Group 连接多个分别由单个用户控制的 Icarus 实例，不把 Icarus 变成多租户产品，也不承诺第三方协议实现、长期向后兼容或不同版本长期混跑。跨实例协议只保留防止重复执行、状态分歧、越权推进和不可恢复数据损坏所需的最小机制。具体原则见 [Icarus Internal Experimental Scope](internal-experimental-scope.md)。
 
@@ -174,7 +174,7 @@ src/collaboration/protocol/
 
 Markdown 用于解释设计，不是需要 hash、seal 或生成证明的协议工件。实现不生成 contract pack，不保存多阶段 conformance 历史，也不为普通协议代码调整增加认证或发布门禁。
 
-Draft 实现阶段可以自由修改 schema 和 reducer。第一次真实跨实例持久协作前才把当前语义声明为 v1。v1 使用后，破坏性变更通过暂停群组、统一升级 Icarus、显式迁移仓库并开启新 epoch 完成；不要求当前程序永久携带所有旧版本 reducer。
+本轮实现已经把当前 schema 和 reducer 收敛为 v1。第一次真实跨实例持久协作前仍需完成独立复核；v1 使用后，破坏性变更通过暂停群组、统一升级 Icarus、显式迁移仓库并开启新 epoch 完成，不要求当前程序永久携带所有旧版本 reducer。
 
 轻量协议保证的是共享状态，而不是对任意实现或物理副作用的全面证明：
 
@@ -738,7 +738,9 @@ codex-task
   └── deep_link
 ```
 
-当前版本只允许 `app_server`，没有自动 fallback。
+当前版本只允许 `app_server`，没有自动 fallback。Web UI 中“在 Codex 中打开”可使用
+`codex://threads/{thread_id}` 导航到已经由 App Server 创建的任务；该导航不创建任务，也不是
+dispatch transport 或 fallback。
 
 ### App Server 映射
 
@@ -775,7 +777,7 @@ external_adapters:
     approval_policy: on_request
 ```
 
-配置文件中的枚举是 Icarus 规范化值。Adapter 必须根据当前安装的 Codex App Server schema 映射成 wire 值，不能假设不同 Codex 版本使用完全相同的字段拼写。安装或升级 Codex 后应重新执行 capability preflight。
+配置文件中的枚举是 Icarus 规范化值。Adapter 必须根据当前安装的 Codex App Server schema 映射成 wire 值，不能假设不同 Codex 版本使用完全相同的字段拼写。安装或升级 Codex 后应重新执行 capability preflight。当前 preflight 在 claim 前调用 App Server `initialize` 并按 cwd 缓存成功结果；它能发现进程启动和初始化错误，但不能保证发现只在 `thread/start` 才出现的 CLI/配置兼容问题。后者在 dispatch 时继续 fail closed。
 
 ### Provider metadata
 
@@ -824,6 +826,8 @@ App Server dispatch/visibility precondition failed
 9. 不同项目目录和权限配置不会串到其他群组或角色。
 
 任何关键条件失败都表示 `codex-task/app_server` 暂不可启用，不进入 fallback。
+
+2026-08-05 的实机验证完成了非 ephemeral thread、名称、cwd、桌面可见性、首轮结果、桌面侧继续会话和 Icarus recover 读取。验证使用 Desktop 内置 `/Applications/ChatGPT.app/Contents/Resources/codex`（`0.146.0-alpha.9.2`）。Homebrew `0.144.5` 可以 initialize，但在 `thread/start` 解析较新的 agent-role 配置时失败。Desktop 重启后的持久可见性未自动验证；当前共享 client 对 App Server approval request 的策略是拒绝并 interrupt，所以 Codex approval 不会进入可由 Icarus 恢复的 `WAITING_APPROVAL`。这些项目保留为明确的发布检查或 provider 能力限制，不增加 deep-link fallback。
 
 ## 本地持久化
 
@@ -973,6 +977,7 @@ reason = local_permission_insufficient
 /groups/{groupId}/events          事件时间线
 /groups/{groupId}/data            公共数据和产物
 /groups/{groupId}/settings        本地 Executor 配置
+/groups/{groupId}/diagnostics     同步、完整性和本地恢复诊断
 ```
 
 由于 `/groups` 将承载新语义，原有 deep link 和路由应迁移到 `/sessions`，不能继续把旧 `/groups` 同时保留为会话别名。
@@ -1001,6 +1006,7 @@ reason = local_permission_insufficient
 | Events | 事件时间线、签名 commit、actor 和校验状态 |
 | Data | `data/`、artifact refs 和 work branch commit |
 | Settings | 本地 workspace、Executor、权限上限、轮询策略和通知 |
+| Diagnostics | 最近同步尝试、Scheduler 错误、完整性事件、本地备份和显式恢复 |
 
 ### 操作权限
 
@@ -1047,6 +1053,9 @@ CodexTaskExecutorAdapter
 /api/collaboration/groups/{id}/commands
 /api/collaboration/groups/{id}/events
 /api/collaboration/groups/{id}/executors
+/api/collaboration/groups/{id}/diagnostics
+/api/collaboration/backup
+/api/collaboration/restore
 ```
 
 所有 UI 命令先进入 `CollaborationCommandGateway`，由它执行：
@@ -1081,6 +1090,8 @@ CollaborationWorkflowExecutor
 
 Collaboration 不能直接 import Workflow Store、runtime、compiler、scheduler 或历史 certification 目录，也不能使用只供 Host Core schema 检查的 `gateway/host-core`。如果当前用途 gateway 缺少创建或观察有限 Workflow Run 所需的操作，应在对应 gateway 增加最小导出，而不是绕过边界或建立聚合 barrel。
 
+实现使用本地 `icarus.collaboration-workflow-launch-profile/1` 描述可复用的有限 Workflow 启动模板。Host service 校验 `workflow_ref` 和 prompt hash，并拥有 request id、creation domain/key、时间与 intent hash 等动态字段；Collaboration 不生成或伪造 Workflow graph、scope、outbox 或 lease 上下文。
+
 Dynamic Workflow Runtime 当前行为见 [Dynamic Workflow Runtime](dynamic-workflow-runtime.md)。群组协议不把其内部接口、SQLite schema version、Registry identity 或 Node runtime identity 纳入群组 v1，也不由本方案隐式改变其无环执行语义。
 
 ### Internal Agent run-once
@@ -1088,6 +1099,7 @@ Dynamic Workflow Runtime 当前行为见 [Dynamic Workflow Runtime](dynamic-work
 - run-once 是 `ActionExecutor` 的一种实现。
 - Collaboration Runtime 为每次 dispatch 生成独立 query trace 和 idempotency key。
 - Agent 只能访问 Action 授权的数据和 workspace。
+- 显式 workspace 必须先通过现有 mount allowlist；容器内固定挂载到 `/workspace/project`，按有效权限使用只读或读写 mount，并遮蔽 workspace `.env`。未授权路径在 claim 前 fail closed。
 - run-once 完成不等于群组已转换；仍需 `result_schema` 和 fencing 校验。
 
 ### Feature Package Runtime
@@ -1115,12 +1127,23 @@ Agent Group Collaboration Runtime 属于 core 执行和协调能力。Feature �
 | 本地权限不足 | `BLOCKED/local_permission_insufficient` |
 | App Server 不可用 | `BLOCKED/codex_app_server_unavailable` |
 | Codex thread 不可桌面显示 | `BLOCKED/codex_desktop_thread_unavailable`，无 fallback |
-| Executor 等待审批 | `WAITING_APPROVAL`，不创建新 attempt |
+| Executor 等待审批 | 支持该状态的 Executor 进入 `WAITING_APPROVAL`，不创建新 attempt；当前 Codex client 拒绝 approval request 并 interrupt |
 | Icarus crash 后重启 | 从 Git 重放，查询本地 receipt，执行 recover/observe |
 | 有效 claim 的本地 receipt 缺失 | `RECOVERY_REQUIRED`，禁止盲目重新 dispatch |
 | 执行完成但结果 push 失败 | 保留 receipt，重试同一结果事件，不重新执行 |
 | Turn 长期无结果 | 创建者显式 recover，生成新 fencing token |
 | 群组 pause 时仍有运行任务 | drain；不产生新 Turn |
+
+## 实施结果
+
+2026-08-05 已在当前分支完成以下实现：
+
+- `src/collaboration/protocol/` 提供 v1 schema、Git SSH 签名验证、授权、严格线性事件链、确定性 reducer、循环 FSM、claim/fencing、materialized member/role claim 校验和 quarantine。
+- `CollaborationGroupService`、Git transport 与 Scheduler 提供创建、已知 URL 加入、角色认领、READY 校验、创建者生命周期命令、轮询/jitter/backoff、跨进程 group lock heartbeat、安全 claim 后 dispatch、drain 和人工 recovery。
+- run-once、Workflow 和 external/codex-task 三类 Executor 已接入；Workflow 只经过受支持的 host service 与 `workflow-runtime/gateway/connection`、`gateway/execution`，Codex 复用现有 `CodexAppServerClient` 与 provider 映射。
+- `STORE_DIR/collaboration.db` 使用整数 schema version、事务迁移和完整结构 smoke；projection、event cache 和同步历史可重建，binding、receipt 与 provider metadata 由精确备份/显式恢复保留。有效 claim 缺 receipt 时进入 `RECOVERY_REQUIRED`，不会盲目重新 dispatch。
+- Web 入口为 `/groups`，原会话入口为 `/sessions`，Host API 为 `/api/collaboration/groups`。群组页面提供创建/加入、角色与绑定、生命周期、运行、事件、数据、设置、同步历史、完整性诊断、备份和恢复。
+- 所有协议、并发、恢复、Executor、Host/API、桌面路由和响应式 Web 测试均使用临时 Git remote、SQLite 和目录；不依赖或清理用户真实 Collaboration 数据。
 
 ## 实施阶段
 
@@ -1136,8 +1159,8 @@ Agent Group Collaboration Runtime 属于 core 执行和协调能力。Feature �
 [Codex App Server Collaboration Spike](codex-app-server-collaboration-spike.md)。桌面 App 自带的
 `codex-cli 0.146.0-alpha.9.2` 已验证非 ephemeral thread 创建、准确 cwd、桌面任务列表可见、
 首个 turn 状态/结果获取、桌面侧继续会话以及 Icarus 通过现有 client 恢复读取后续 turn。
-独立 Homebrew `codex-cli 0.144.5` 无法解析当前桌面配置中的较新 agent-role 结构，必须作为
-binary capability preflight 失败处理，不得 fallback。为避免中断其他正在运行的用户任务，本次
+独立 Homebrew `codex-cli 0.144.5` 能完成 initialize，但在 `thread/start` 时无法解析当前桌面配置中的
+较新 agent-role 结构，因此 dispatch fail closed，不得 fallback。为避免中断其他正在运行的用户任务，本次
 没有自动重启桌面 App；重启后的持久可见性保留为新主机/发布时的人工检查。
 
 ### Phase 1：Git 协议和 Reducer
@@ -1246,6 +1269,8 @@ binary capability preflight 失败处理，不得 fallback。为避免中断其�
 - 不同本地 workspace 和 permission policy 正确隔离。
 - 失败时产生明确 blocker，不发生 deep link fallback。
 
+本机 spike 已验证完成、桌面继续会话和 recover 读取；未重启 Desktop。当前共享 App Server client 会拒绝 approval request 并 interrupt，因此 Codex 等待审批不是本版本可继续的 waiting 状态。协议和 Workflow Executor 仍保留通用 `WAITING_APPROVAL` 映射。
+
 ### UI 验收
 
 - 原会话能力在“会话”导航中完整保留。
@@ -1299,7 +1324,7 @@ binary capability preflight 失败处理，不得 fallback。为避免中断其�
 
 ## v1 Git Collaboration Protocol 收敛边界
 
-Draft 实现期间可以根据 Spike、测试和真实使用调整协议。第一次真实跨实例持久协作前，需要把以下最小语义收敛为 v1：
+本轮实现已根据 Spike 和测试收敛以下 v1 最小语义。第一次真实跨实例持久协作前仍需完成独立复核：
 
 - 仓库根文件、事件和状态机 schema 的必需字段，以及 `protocol_version` 的拒绝规则。
 - Git commit parent、事件 sequence、state revision 和 epoch 的顺序规则。
