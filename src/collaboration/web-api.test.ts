@@ -18,9 +18,11 @@ describe('Collaboration Web API redaction', () => {
       lifecycle: 'READY',
       businessState: 'development',
       protocolStatus: 'OK',
-      protocolError: null,
+      protocolError:
+        'git fetch https://private-token@example.test/group.git failed',
       projection: null,
-      remoteUrl: 'https://private-token@example.test/group.git',
+      remoteUrl:
+        'https://private-token@example.test/group.git?accessToken=query-secret&ref=main',
       repositoryPath: '/private/cache/repository.git',
       signingKeyPath: '/private/keys/id_ed25519',
       signingPublicKey: 'ssh-ed25519 public',
@@ -29,7 +31,8 @@ describe('Collaboration Web API redaction', () => {
       nextSyncAtMs: 1,
       backoffAttempt: 0,
       lastSyncAtMs: null,
-      lastError: null,
+      lastError:
+        'https://private-token@example.test/group.git?accessToken=query-secret is unavailable',
       headCommit: null,
     } satisfies CollaborationGroupRecord;
 
@@ -37,6 +40,12 @@ describe('Collaboration Web API redaction', () => {
     expect(JSON.stringify(serialized)).not.toContain('/private/keys');
     expect(JSON.stringify(serialized)).not.toContain('/private/cache');
     expect(serialized.remoteUrl).toContain('redacted@');
+    expect(serialized.remoteUrl).toContain('accessToken=redacted');
+    expect(serialized.remoteUrl).toContain('ref=main');
+    expect(serialized.remoteUrl).not.toContain('query-secret');
+    expect(serialized.protocolError).not.toContain('private-token');
+    expect(serialized.lastError).not.toContain('private-token');
+    expect(serialized.lastError).not.toContain('query-secret');
   });
 
   it('allowlists provider fields and removes raw receipt/metadata', () => {
@@ -99,14 +108,32 @@ describe('Collaboration Web API redaction', () => {
       approvalPolicy: 'on-request',
       config: {
         transport: 'app_server',
-        nested: { access_token: 'secret-value' },
+        nested: {
+          access_token: 'secret-value',
+          apiKey: 'api-secret',
+          clientSecret: 'client-secret',
+          harmless: 'visible',
+        },
       },
       enabled: true,
       updatedAtMs: 1,
     } satisfies CollaborationExecutorBinding;
     expect(collaborationWebApiTestables.publicBinding(binding).config).toEqual({
       transport: 'app_server',
-      nested: { access_token: '[redacted]' },
+      nested: {
+        access_token: '[redacted]',
+        apiKey: '[redacted]',
+        clientSecret: '[redacted]',
+        harmless: 'visible',
+      },
     });
+  });
+
+  it('redacts credentials from standalone diagnostic URLs', () => {
+    const diagnostic = collaborationWebApiTestables.redactDiagnostic(
+      'clone https://user:password@example.test/group.git failed',
+    );
+    expect(diagnostic).toContain('https://redacted@example.test/group.git');
+    expect(diagnostic).not.toContain('password');
   });
 });

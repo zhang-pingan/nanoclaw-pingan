@@ -60,20 +60,57 @@ function redactRemoteUrl(input: string): string {
       parsed.username = 'redacted';
       parsed.password = '';
     }
+    for (const key of [...parsed.searchParams.keys()])
+      if (isSecretConfigKey(key)) parsed.searchParams.set(key, 'redacted');
     return parsed.toString();
   } catch {
     return input;
   }
 }
 
-function redactConfig(value: unknown, key = ''): unknown {
+function redactDiagnostic(
+  input: string | null,
+  sensitiveUrls: readonly string[] = [],
+): string | null {
+  if (input == null) return null;
+  let output = input;
+  for (const remoteUrl of sensitiveUrls)
+    output = output.replaceAll(remoteUrl, redactRemoteUrl(remoteUrl));
+  return output.replace(/https?:\/\/[^\s"']+/g, (candidate) =>
+    redactRemoteUrl(candidate),
+  );
+}
+
+function isSecretConfigKey(key: string): boolean {
+  const parts = key
+    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+    .toLocaleLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean);
+  const values = new Set(parts);
   if (
-    /(?:^|_)(?:password|token|secret|credential|authorization|private_key)(?:_|$)/i.test(
-      key,
-    ) ||
-    key === 'signingKeyPath'
+    parts.some((part) =>
+      [
+        'password',
+        'passwd',
+        'token',
+        'secret',
+        'credential',
+        'credentials',
+        'authorization',
+      ].includes(part),
+    )
   )
-    return '[redacted]';
+    return true;
+  return (
+    (values.has('api') && values.has('key')) ||
+    (values.has('private') && values.has('key')) ||
+    (values.has('signing') && values.has('key') && values.has('path'))
+  );
+}
+
+function redactConfig(value: unknown, key = ''): unknown {
+  if (isSecretConfigKey(key)) return '[redacted]';
   if (Array.isArray(value)) return value.map((child) => redactConfig(child));
   if (value && typeof value === 'object')
     return Object.fromEntries(
@@ -109,7 +146,7 @@ function publicGroup(group: CollaborationGroupRecord) {
     lifecycle: group.lifecycle,
     businessState: group.businessState,
     protocolStatus: group.protocolStatus,
-    protocolError: group.protocolError,
+    protocolError: redactDiagnostic(group.protocolError, [group.remoteUrl]),
     projection: publicProjection(group.projection),
     remoteUrl: redactRemoteUrl(group.remoteUrl),
     signingKeyRef: group.signingKeyRef,
@@ -117,7 +154,7 @@ function publicGroup(group: CollaborationGroupRecord) {
     pollIntervalMs: group.pollIntervalMs,
     nextSyncAtMs: group.nextSyncAtMs,
     lastSyncAtMs: group.lastSyncAtMs,
-    lastError: group.lastError,
+    lastError: redactDiagnostic(group.lastError, [group.remoteUrl]),
     headCommit: group.headCommit,
   };
 }
@@ -238,7 +275,9 @@ export class CollaborationWebApi {
     } catch (error) {
       const unavailable = !this.runtime.status().available;
       send(res, unavailable ? 503 : isRevisionConflict(error) ? 409 : 400, {
-        error: error instanceof Error ? error.message : String(error),
+        error: redactDiagnostic(
+          error instanceof Error ? error.message : String(error),
+        ),
         collaboration: this.publicRuntimeStatus(),
       });
     }
@@ -505,7 +544,12 @@ export class CollaborationWebApi {
       send(res, 200, {
         collaboration: this.publicRuntimeStatus(),
         group: publicGroup(group),
-        incidents: this.runtime.store.listIntegrityIncidents(groupId),
+        incidents: this.runtime.store
+          .listIntegrityIncidents(groupId)
+          .map((incident) => ({
+            ...incident,
+            message: redactDiagnostic(incident.message, [group.remoteUrl]),
+          })),
       });
       return;
     }
@@ -514,10 +558,32 @@ export class CollaborationWebApi {
 
   private publicRuntimeStatus() {
     const status = this.runtime.status();
+    let sensitiveUrls: string[] = [];
+    if (status.available) {
+      try {
+        sensitiveUrls = this.runtime.store
+          .listGroups()
+          .map((group) => group.remoteUrl);
+      } catch {
+        sensitiveUrls = [];
+      }
+    }
     return {
       available: status.available,
-      error: status.error,
-      scheduler: status.scheduler,
+      error: redactDiagnostic(status.error, sensitiveUrls),
+      scheduler: status.scheduler
+        ? {
+            ...status.scheduler,
+            groupErrors: Object.fromEntries(
+              Object.entries(status.scheduler.groupErrors).map(
+                ([groupId, message]) => [
+                  groupId,
+                  redactDiagnostic(message, sensitiveUrls),
+                ],
+              ),
+            ),
+          }
+        : null,
       database: path.basename(status.databasePath),
     };
   }
@@ -528,5 +594,6 @@ export const collaborationWebApiTestables = {
   publicBinding,
   publicExecution,
   redactConfig,
+  redactDiagnostic,
   redactRemoteUrl,
 };
