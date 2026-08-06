@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
   WorkflowExecutionHostService,
-  type FiniteWorkflowCreationInput,
+  type FiniteWorkflowCreationTemplate,
   type FiniteWorkflowRunObservation,
   type WorkflowExecutionHostGateway,
 } from '../../workflow-execution/host-service.js';
@@ -20,14 +20,28 @@ function hash(value: string): string {
 
 const prompt = 'Run the finite workflow.';
 const operationKey = `sha256:${'a'.repeat(64)}`;
-const creationInput = {
-  requestId: 'collaboration-request',
-  creationDomain: 'agent_group_collaboration',
-  creationKey: operationKey,
-  source: 'api',
+const creationTemplate = {
   principalRef: 'principal:alice',
+  recipe: {
+    rowId: 'recipe-row',
+    resourceType: 'recipe',
+    ref: { id: 'local-review', version: '1.0.0' },
+    hash: `sha256:${'1'.repeat(64)}`,
+  },
+  routingScope: {
+    rowId: 'routing-row',
+    resourceType: 'routing_scope',
+    ref: { id: 'local', version: '1.0.0' },
+    hash: `sha256:${'2'.repeat(64)}`,
+  },
+  input: { id: 'input-value', hash: `sha256:${'3'.repeat(64)}` },
+  attachments: {
+    id: 'attachments-value',
+    hash: `sha256:${'4'.repeat(64)}`,
+  },
+  ownershipHash: `sha256:${'5'.repeat(64)}`,
   initialActivation: {},
-} as unknown as FiniteWorkflowCreationInput;
+} as unknown as FiniteWorkflowCreationTemplate;
 
 function action(): ActionDefinition {
   return {
@@ -59,11 +73,12 @@ function binding(): CollaborationExecutorBinding {
     filesystemAccessCap: 'read_only',
     approvalPolicy: 'never',
     config: {
-      workflow_creation_input: creationInput as unknown as Record<
-        string,
-        unknown
-      >,
-      prompt_sha256: hash(prompt),
+      workflow_launch_profile: {
+        format: 'icarus.collaboration-workflow-launch-profile/1',
+        workflow_ref: 'workflow:local-review',
+        prompt_sha256: hash(prompt),
+        template: creationTemplate,
+      },
     },
     enabled: true,
     updatedAtMs: 1,
@@ -114,7 +129,7 @@ describe('Workflow Action integration', () => {
   it('uses the workflow-execution host service and stable Runtime receipt', async () => {
     let current = observation('running');
     const host = {
-      startFiniteRun: vi.fn(() => ({
+      startCollaborationFiniteRun: vi.fn(() => ({
         disposition: 'created' as const,
         workflowId: 'workflow:with:colons',
         intakeId: 'intake:1',
@@ -133,7 +148,12 @@ describe('Workflow Action integration', () => {
     const executor = new WorkflowActionExecutor(host);
     const prepared = await executor.prepare(request());
     const receipt = await executor.dispatch(prepared);
-    expect(host.startFiniteRun).toHaveBeenCalledWith(creationInput);
+    expect(host.startCollaborationFiniteRun).toHaveBeenCalledWith({
+      workflowRef: 'workflow:local-review',
+      operationKey,
+      promptSha256: hash(prompt),
+      bindingConfig: binding().config,
+    });
     expect(receipt).toMatchObject({
       executionRef: expect.stringMatching(/^collaboration-action:/),
       providerMetadata: {
@@ -157,7 +177,7 @@ describe('Workflow Action integration', () => {
 
   it('recovers a terminal run without fabricating Workflow graph/outbox context', async () => {
     const host = {
-      startFiniteRun: vi.fn(),
+      startCollaborationFiniteRun: vi.fn(),
       observeFiniteRun: vi.fn(),
       recoverFiniteRun: vi.fn(() => observation('failed')),
     };
@@ -178,12 +198,25 @@ describe('Workflow Action integration', () => {
 
   it('blocks stale host-resolved input instead of inventing Runtime values', async () => {
     const selected = request();
+    const profile = selected.binding.config.workflow_launch_profile as Record<
+      string,
+      unknown
+    >;
     const staleBinding = {
       ...selected.binding,
-      config: { ...selected.binding.config, prompt_sha256: hash('old prompt') },
+      config: {
+        workflow_launch_profile: {
+          ...profile,
+          prompt_sha256: hash('old prompt'),
+        },
+      },
     };
     const executor = new WorkflowActionExecutor({
-      startFiniteRun: vi.fn(),
+      startCollaborationFiniteRun: vi.fn(() => {
+        throw new Error(
+          'Workflow launch profile does not match the local action reference and prompt',
+        );
+      }),
       observeFiniteRun: vi.fn(),
       recoverFiniteRun: vi.fn(),
     });
@@ -191,7 +224,7 @@ describe('Workflow Action integration', () => {
       executor.dispatch(
         await executor.prepare({ ...selected, binding: staleBinding }),
       ),
-    ).rejects.toThrow(/host must rebuild its input snapshot/);
+    ).rejects.toThrow(/does not match the local action reference and prompt/);
   });
 
   it('host service delegates only through the injected execution gateway', () => {
@@ -212,10 +245,48 @@ describe('Workflow Action integration', () => {
       })),
       observe: vi.fn(() => observation('running')),
     };
-    const host = new WorkflowExecutionHostService(store, gateway);
-    expect(host.startFiniteRun(creationInput).workflowId).toBe('workflow:1');
+    const host = new WorkflowExecutionHostService(store, gateway, () => 42);
+    expect(
+      host.startCollaborationFiniteRun({
+        workflowRef: 'workflow:local-review',
+        operationKey,
+        promptSha256: hash(prompt),
+        bindingConfig: binding().config,
+      }).workflowId,
+    ).toBe('workflow:1');
     expect(host.observeFiniteRun('run:1')?.state).toBe('running');
-    expect(gateway.create).toHaveBeenCalledWith(store, creationInput);
+    expect(gateway.create).toHaveBeenCalledWith(
+      store,
+      expect.objectContaining({
+        requestId: `collaboration:${operationKey}`,
+        creationDomain: 'agent_group_collaboration',
+        creationKey: operationKey,
+        creationIntentHash: expect.stringMatching(/^sha256:/),
+        nowMs: 42,
+        initialActivation: { nowMs: 42 },
+      }),
+    );
     expect(gateway.observe).toHaveBeenCalledWith(store, 'run:1');
+  });
+
+  it('rejects host-owned creation fields in a reusable launch profile', () => {
+    const host = new WorkflowExecutionHostService({} as WorkflowRuntimeStore, {
+      create: vi.fn(),
+      observe: vi.fn(),
+    });
+    const config = structuredClone(binding().config);
+    const profile = config.workflow_launch_profile as Record<string, unknown>;
+    profile.template = {
+      ...(profile.template as Record<string, unknown>),
+      creationKey: 'configured-by-caller',
+    };
+    expect(() =>
+      host.startCollaborationFiniteRun({
+        workflowRef: 'workflow:local-review',
+        operationKey,
+        promptSha256: hash(prompt),
+        bindingConfig: config,
+      }),
+    ).toThrow(/must not configure host-owned creationKey/);
   });
 });

@@ -16,7 +16,65 @@ export {
   type T0CreationReceipt as FiniteWorkflowCreationReceipt,
 } from '../creation/task-intake.js';
 
+import {
+  calculateCreationIntentHash,
+  type T0CreationInput,
+} from '../creation/task-intake.js';
 import type { WorkflowRuntimeStore } from '../store/runtime-store/index.js';
+
+export type FiniteWorkflowCreationTemplate = Omit<
+  T0CreationInput,
+  | 'requestId'
+  | 'creationDomain'
+  | 'creationKey'
+  | 'source'
+  | 'creationIntentHash'
+  | 'nowMs'
+  | 'initialActivation'
+> & {
+  readonly initialActivation: Omit<
+    T0CreationInput['initialActivation'],
+    'nowMs'
+  >;
+};
+
+export interface FiniteWorkflowCreationRequest {
+  readonly requestId: string;
+  readonly creationDomain: string;
+  readonly creationKey: string;
+  readonly source: T0CreationInput['source'];
+  readonly nowMs: number;
+  readonly template: FiniteWorkflowCreationTemplate;
+}
+
+export function resolveFiniteWorkflowCreationInput(
+  request: FiniteWorkflowCreationRequest,
+): T0CreationInput {
+  const input: T0CreationInput = {
+    ...request.template,
+    requestId: request.requestId,
+    creationDomain: request.creationDomain,
+    creationKey: request.creationKey,
+    source: request.source,
+    creationIntentHash: calculateCreationIntentHash({
+      creationDomain: request.creationDomain,
+      creationKey: request.creationKey,
+      principalRef: request.template.principalRef,
+      ownershipHash: request.template.ownershipHash,
+      routingScope: request.template.routingScope,
+      recipe: request.template.recipe,
+      entryPoint: 'default',
+      inputHash: request.template.input.hash,
+      attachmentManifestHash: request.template.attachments.hash,
+    }),
+    initialActivation: {
+      ...request.template.initialActivation,
+      nowMs: request.nowMs,
+    },
+    nowMs: request.nowMs,
+  };
+  return input;
+}
 
 export interface FiniteWorkflowRunObservation {
   readonly state:

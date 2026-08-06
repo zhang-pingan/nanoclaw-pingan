@@ -1,7 +1,6 @@
 import crypto from 'node:crypto';
 
 import type {
-  FiniteWorkflowCreationInput,
   FiniteWorkflowCreationReceipt,
   FiniteWorkflowRunObservation,
 } from '../../workflow-execution/host-service.js';
@@ -20,49 +19,18 @@ import {
 } from './types.js';
 
 export interface CollaborationWorkflowHostService {
-  startFiniteRun(
-    input: FiniteWorkflowCreationInput,
-  ): FiniteWorkflowCreationReceipt;
+  startCollaborationFiniteRun(input: {
+    readonly workflowRef: string;
+    readonly operationKey: string;
+    readonly promptSha256: string;
+    readonly bindingConfig: Record<string, unknown>;
+  }): FiniteWorkflowCreationReceipt;
   observeFiniteRun(graphRunId: string): FiniteWorkflowRunObservation | null;
   recoverFiniteRun(graphRunId: string): FiniteWorkflowRunObservation | null;
 }
 
 function promptHash(prompt: string): string {
   return `sha256:${crypto.createHash('sha256').update(prompt).digest('hex')}`;
-}
-
-function configuredCreationInput(
-  action: PreparedAction,
-): FiniteWorkflowCreationInput {
-  const configured = action.binding.config.workflow_creation_input;
-  if (
-    !configured ||
-    typeof configured !== 'object' ||
-    Array.isArray(configured)
-  )
-    throw new ActionBlockedError(
-      'workflow_runtime_unavailable',
-      'Workflow binding requires a complete host-resolved workflow_creation_input',
-    );
-  const input = configured as Record<string, unknown>;
-  if (
-    input.creationDomain !== 'agent_group_collaboration' ||
-    input.creationKey !== action.operationKey ||
-    input.source !== 'api' ||
-    typeof input.requestId !== 'string' ||
-    typeof input.principalRef !== 'string' ||
-    typeof input.initialActivation !== 'object'
-  )
-    throw new ActionBlockedError(
-      'workflow_runtime_unavailable',
-      'Workflow creation input must be assembled by the host for this collaboration operation',
-    );
-  if (action.binding.config.prompt_sha256 !== promptHash(action.prompt))
-    throw new ActionBlockedError(
-      'workflow_runtime_unavailable',
-      'Workflow binding prompt hash is stale; the host must rebuild its input snapshot',
-    );
-  return configured as FiniteWorkflowCreationInput;
 }
 
 function identityFromMetadata(
@@ -102,8 +70,20 @@ export class WorkflowActionExecutor implements ActionExecutor {
   async dispatch(action: PreparedAction): Promise<DispatchReceipt> {
     const existing = this.receipts.get(action.operationKey);
     if (existing) return existing;
-    const creationInput = configuredCreationInput(action);
-    const started = this.host.startFiniteRun(creationInput);
+    let started: FiniteWorkflowCreationReceipt;
+    try {
+      started = this.host.startCollaborationFiniteRun({
+        workflowRef: action.action.input.workflow_ref!,
+        operationKey: action.operationKey,
+        promptSha256: promptHash(action.prompt),
+        bindingConfig: action.binding.config,
+      });
+    } catch (error) {
+      throw new ActionBlockedError(
+        'workflow_runtime_unavailable',
+        error instanceof Error ? error.message : String(error),
+      );
+    }
     const executionRef = `collaboration-action:${crypto.randomUUID()}`;
     const providerMetadata = {
       workflow_id: started.workflowId,
