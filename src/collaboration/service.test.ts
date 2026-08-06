@@ -97,6 +97,108 @@ function definition(maxDevelopers = 1): {
   };
 }
 
+function cyclicDefinition(): {
+  readonly machine: MachineDefinition;
+  readonly roles: Record<string, RoleDefinition>;
+  readonly actions: Record<string, ActionDefinition>;
+  readonly prompts: Record<string, string>;
+} {
+  return {
+    machine: {
+      format: 'icarus.agent-group-machine/1',
+      initial_state: 'development',
+      states: {
+        development: {
+          terminal: false,
+          transitions: [
+            {
+              id: 'implement',
+              actor_role: 'developer',
+              action_ref: 'actions/implement.yaml',
+              outcomes: {
+                succeeded: 'review',
+                failed: 'development',
+                cancelled: 'development',
+                blocked: 'development',
+              },
+            },
+          ],
+        },
+        review: {
+          terminal: false,
+          transitions: [
+            {
+              id: 'review',
+              actor_role: 'reviewer',
+              action_ref: 'actions/review.yaml',
+              outcomes: {
+                succeeded: 'development',
+                failed: 'development',
+                cancelled: 'review',
+                blocked: 'review',
+              },
+            },
+          ],
+        },
+      },
+    },
+    roles: {
+      developer: {
+        format: 'icarus.agent-group-role/1',
+        role: 'developer',
+        display_name: 'Developer',
+        cardinality: { min: 1, max: 1 },
+        allowed_transitions: ['implement'],
+        executor_requirements: {
+          capability: 'coding_task',
+          interaction: 'visible_session',
+        },
+      },
+      reviewer: {
+        format: 'icarus.agent-group-role/1',
+        role: 'reviewer',
+        display_name: 'Reviewer',
+        cardinality: { min: 1, max: 1 },
+        allowed_transitions: ['review'],
+        executor_requirements: {
+          capability: 'review_task',
+          interaction: 'visible_session',
+        },
+      },
+    },
+    actions: {
+      implement: {
+        format: 'icarus.agent-group-action/1',
+        action_id: 'implement',
+        kind: 'run_once',
+        input: { prompt_ref: 'prompts/implement.md' },
+        requirements: {
+          capability: 'coding_task',
+          interaction: 'visible_session',
+          filesystem_access: 'workspace_write',
+        },
+        result_schema: { ref: 'collaboration-result@1' },
+      },
+      review: {
+        format: 'icarus.agent-group-action/1',
+        action_id: 'review',
+        kind: 'run_once',
+        input: { prompt_ref: 'prompts/review.md' },
+        requirements: {
+          capability: 'review_task',
+          interaction: 'visible_session',
+          filesystem_access: 'read_only',
+        },
+        result_schema: { ref: 'collaboration-result@1' },
+      },
+    },
+    prompts: {
+      'prompts/implement.md': 'Implement this turn.\n',
+      'prompts/review.md': 'Review this turn.\n',
+    },
+  };
+}
+
 function createInput(
   remoteUrl: string,
   signingKeyPath: string,
@@ -114,6 +216,67 @@ function createInput(
     pollIntervalMs: 1000,
     ...definition(maxDevelopers),
   };
+}
+
+function cyclicCreateInput(
+  remoteUrl: string,
+  signingKeyPath: string,
+): CreateCollaborationGroupInput {
+  return {
+    remoteUrl,
+    name: 'Cyclic multi-role group',
+    groupId: 'ag_cyclic_service',
+    principalId: 'alice',
+    agentId: 'agent_alice',
+    signingKeyPath,
+    capabilities: ['coding_task', 'visible_session'],
+    initialRole: 'developer',
+    pollIntervalMs: 1000,
+    ...cyclicDefinition(),
+  };
+}
+
+async function completeCurrentTurn(
+  groupService: CollaborationGroupService,
+  groupId: string,
+  toState: string,
+  suffix: string,
+) {
+  let history = (await groupService.claimCurrentTurn(groupId)).history;
+  const turn = history.projection.turns[history.projection.activeTurnId!];
+  history = await groupService.appendActionEvent({
+    groupId,
+    type: 'action_dispatched',
+    payload: {
+      turn_id: turn.turnId,
+      attempt: turn.attempt,
+      fencing_token: turn.fencingToken,
+      execution_ref: `run-once:${suffix}`,
+    },
+  });
+  history = await groupService.appendActionEvent({
+    groupId,
+    type: 'action_succeeded',
+    payload: {
+      turn_id: turn.turnId,
+      attempt: turn.attempt,
+      fencing_token: turn.fencingToken,
+      result_hash: `sha256:${suffix.repeat(64).slice(0, 64)}`,
+      artifact_refs: [],
+    },
+  });
+  return groupService.appendActionEvent({
+    groupId,
+    type: 'state_transitioned',
+    payload: {
+      turn_id: turn.turnId,
+      attempt: turn.attempt,
+      fencing_token: turn.fencingToken,
+      outcome: 'succeeded',
+      from_state: history.projection.businessState,
+      to_state: toState,
+    },
+  });
 }
 
 function service(testRoot: string, name: string) {
@@ -204,6 +367,73 @@ describe('CollaborationGroupService', () => {
       participant.store.close();
     }
   }, 20_000);
+
+  it('waits for every required role and executes a multi-user cycle', async () => {
+    const testRoot = root();
+    const remoteUrl = remote(testRoot);
+    const aliceKey = key(testRoot, 'alice-key');
+    const bobKey = key(testRoot, 'bob-key');
+    const owner = service(testRoot, 'owner');
+    const participant = service(testRoot, 'participant');
+    try {
+      const created = await owner.groupService.createGroup(
+        cyclicCreateInput(remoteUrl, aliceKey),
+      );
+      expect(created).toMatchObject({ lifecycle: 'FORMING' });
+      expect(created.projection?.roleClaims).toMatchObject({
+        developer: [expect.objectContaining({ principal_id: 'alice' })],
+      });
+      expect(created.projection?.roleClaims.reviewer ?? []).toHaveLength(0);
+      await expect(
+        owner.groupService.start('ag_cyclic_service'),
+      ).rejects.toThrow(/lifecycle is FORMING/);
+
+      const joined = await participant.groupService.joinGroup({
+        remoteUrl,
+        principalId: 'bob',
+        agentId: 'agent_bob',
+        signingKeyPath: bobKey,
+        capabilities: ['review_task', 'visible_session'],
+        role: 'reviewer',
+      });
+      expect(joined).toMatchObject({ lifecycle: 'READY' });
+      expect(joined.projection?.roleClaims.reviewer).toEqual([
+        expect.objectContaining({ principal_id: 'bob' }),
+      ]);
+
+      await owner.groupService.sync('ag_cyclic_service');
+      await owner.groupService.start('ag_cyclic_service');
+      let history = await completeCurrentTurn(
+        owner.groupService,
+        'ag_cyclic_service',
+        'review',
+        'a',
+      );
+      expect(history.projection.businessState).toBe('review');
+      await owner.groupService.ensureTurn('ag_cyclic_service');
+
+      await participant.groupService.sync('ag_cyclic_service');
+      history = await completeCurrentTurn(
+        participant.groupService,
+        'ag_cyclic_service',
+        'development',
+        'b',
+      );
+      expect(history.projection.businessState).toBe('development');
+
+      await owner.groupService.sync('ag_cyclic_service');
+      history = (await owner.groupService.ensureTurn('ag_cyclic_service'))!;
+      const turns = Object.values(history.projection.turns);
+      expect(turns).toHaveLength(3);
+      expect(new Set(turns.map((turn) => turn.turnId)).size).toBe(3);
+      expect(
+        history.projection.turns[history.projection.activeTurnId!],
+      ).toMatchObject({ role: 'developer', state: 'WAITING' });
+    } finally {
+      owner.store.close();
+      participant.store.close();
+    }
+  }, 60_000);
 
   it('allows only one fast-forward winner when two role holders claim the same turn', async () => {
     const testRoot = root();

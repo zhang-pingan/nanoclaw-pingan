@@ -1,4 +1,14 @@
 // electron/renderer/app.js
+import {
+  COLLABORATION_OUTCOMES,
+  buildCollaborationCreateRequest,
+  createActionDraft,
+  createRoleDraft,
+  createStateDraft,
+  createTransitionDraft,
+  defaultCollaborationCreateDraft,
+} from './collaboration-definition.js';
+
 var ws = null;
 var reconnectTimer = null;
 var currentAgentJid = '';
@@ -1266,6 +1276,10 @@ async function loadCollaborationTabData(tab) {
 
 function openCollaborationDialog(options) {
   if (!collaborationDialog) return;
+  collaborationDialog.classList.toggle(
+    'collaboration-dialog-wide',
+    options.wide === true,
+  );
   collaborationDialogTitle.textContent = options.title || '群组操作';
   collaborationDialogBody.innerHTML = options.body || '';
   collaborationDialogSubmit.textContent = options.submitText || '确认';
@@ -1292,104 +1306,379 @@ function collaborationField(label, name, value = '', options = {}) {
   return `<label class="collaboration-field"><span>${escapeHtml(label)}</span>${input}</label>`;
 }
 
-function createCollaborationDefinition(values) {
-  const role = values.role || 'developer';
-  const actionId = 'execute';
-  const transitionId = 'execute';
-  const mode = values.executorMode || 'run_once';
-  const kind = mode === 'codex-task' ? 'external' : mode;
-  const capability = values.capability || 'coding_task';
-  const action = {
-    format: 'icarus.agent-group-action/1',
-    action_id: actionId,
-    kind,
-    ...(mode === 'codex-task' ? { adapter: 'codex-task' } : {}),
-    input: {
-      prompt_ref: 'prompts/execute.md',
-      ...(kind === 'workflow'
-        ? { workflow_ref: values.workflowRef || 'workflow:local' }
-        : {}),
-    },
-    requirements: {
-      capability,
-      interaction: mode === 'workflow' ? 'headless' : 'visible_session',
-      filesystem_access: values.filesystemAccess || 'workspace_write',
-    },
-    result_schema: { ref: 'collaboration-result@1' },
-  };
+function collaborationBuilderField(label, field, value, options = {}) {
+  const type = options.type || 'text';
+  return `<label class="collaboration-field"><span>${escapeHtml(label)}</span><input data-builder-field="${escapeAttribute(field)}" ${options.idKind ? `data-builder-id-kind="${escapeAttribute(options.idKind)}" data-original-value="${escapeAttribute(value)}"` : ''} type="${escapeAttribute(type)}" value="${escapeAttribute(value)}" ${type === 'number' ? 'min="1" step="1"' : ''} /></label>`;
+}
+
+function collaborationBuilderSelect(label, field, value, options) {
+  const values = options.map((option) =>
+    typeof option === 'string' ? { value: option, label: option } : option,
+  );
+  if (value && !values.some((option) => option.value === value))
+    values.unshift({ value, label: `${value} · missing` });
+  return `<label class="collaboration-field"><span>${escapeHtml(label)}</span><select data-builder-field="${escapeAttribute(field)}">${values.map((option) => `<option value="${escapeAttribute(option.value)}" ${option.value === value ? 'selected' : ''}>${escapeHtml(option.label)}</option>`).join('')}</select></label>`;
+}
+
+function collaborationBuilderRemove(action, label) {
+  return `<button type="button" class="collaboration-builder-remove" data-builder-action="${escapeAttribute(action)}" title="${escapeAttribute(label)}" aria-label="${escapeAttribute(label)}"><span aria-hidden="true">×</span></button>`;
+}
+
+function collaborationBuilderAdd(action, label, extra = '') {
+  return `<button type="button" class="btn-ghost collaboration-builder-add" data-builder-action="${escapeAttribute(action)}" ${extra}><span aria-hidden="true">+</span>${escapeHtml(label)}</button>`;
+}
+
+function collaborationBuilderOptions(items, label) {
+  return items.map((item) => ({
+    value: item.id,
+    label: item.displayName
+      ? `${item.displayName} · ${item.id}`
+      : item.id || label,
+  }));
+}
+
+function renderCollaborationCreateBuilder(draft) {
+  const roleOptions = collaborationBuilderOptions(draft.roles, 'role');
+  const actionOptions = collaborationBuilderOptions(draft.actions, 'action');
+  const stateOptions = collaborationBuilderOptions(draft.states, 'state');
+  return `
+    <div class="collaboration-create-builder" id="collaboration-create-builder">
+      <section class="collaboration-builder-section">
+        <div class="collaboration-builder-heading"><h4>Roles</h4>${collaborationBuilderAdd('add-role', '新增角色')}</div>
+        <div class="collaboration-builder-list">
+          ${draft.roles
+            .map(
+              (
+                role,
+              ) => `<article class="collaboration-builder-item" data-builder-role>
+                <div class="collaboration-builder-item-head"><strong>${escapeHtml(role.displayName || role.id || '角色')}</strong>${collaborationBuilderRemove('remove-role', '删除角色')}</div>
+                <div class="collaboration-builder-grid collaboration-builder-role-grid">
+                  ${collaborationBuilderField('Role ID', 'id', role.id, { idKind: 'role' })}
+                  ${collaborationBuilderField('显示名', 'displayName', role.displayName)}
+                  ${collaborationBuilderField('最小人数', 'minMembers', role.minMembers, { type: 'number' })}
+                  ${collaborationBuilderField('最大人数', 'maxMembers', role.maxMembers, { type: 'number' })}
+                  ${collaborationBuilderField('Capability', 'capability', role.capability)}
+                  ${collaborationBuilderSelect('Interaction', 'interaction', role.interaction, ['visible_session', 'headless'])}
+                </div>
+              </article>`,
+            )
+            .join('')}
+        </div>
+        <div class="collaboration-builder-selection">
+          ${collaborationBuilderSelect('创建者初始角色', 'initialRole', draft.initialRole, roleOptions)}
+        </div>
+      </section>
+      <section class="collaboration-builder-section">
+        <div class="collaboration-builder-heading"><h4>Actions</h4>${collaborationBuilderAdd('add-action', '新增 Action')}</div>
+        <div class="collaboration-builder-list">
+          ${draft.actions
+            .map(
+              (
+                action,
+              ) => `<article class="collaboration-builder-item" data-builder-action-row>
+                <div class="collaboration-builder-item-head"><strong>${escapeHtml(action.id || 'Action')}</strong>${collaborationBuilderRemove('remove-action', '删除 Action')}</div>
+                <div class="collaboration-builder-grid collaboration-builder-action-grid">
+                  ${collaborationBuilderField('Action ID', 'id', action.id, { idKind: 'action' })}
+                  ${collaborationBuilderSelect(
+                    'Executor',
+                    'executorMode',
+                    action.executorMode,
+                    [
+                      { value: 'run_once', label: 'run_once' },
+                      { value: 'codex-task', label: 'codex-task / App Server' },
+                      { value: 'workflow', label: 'workflow' },
+                    ],
+                  )}
+                  ${collaborationBuilderSelect('文件权限', 'filesystemAccess', action.filesystemAccess, ['workspace_write', 'read_only'])}
+                  ${collaborationBuilderField('Workflow ref', 'workflowRef', action.workflowRef || '')}
+                  <label class="collaboration-field collaboration-builder-prompt"><span>Prompt</span><textarea data-builder-field="prompt">${escapeHtml(action.prompt)}</textarea></label>
+                </div>
+              </article>`,
+            )
+            .join('')}
+        </div>
+      </section>
+      <section class="collaboration-builder-section">
+        <div class="collaboration-builder-heading"><h4>FSM</h4>${collaborationBuilderAdd('add-state', '新增状态')}</div>
+        <div class="collaboration-builder-selection">
+          ${collaborationBuilderSelect('初始状态', 'initialState', draft.initialState, stateOptions)}
+        </div>
+        <div class="collaboration-builder-list">
+          ${draft.states
+            .map(
+              (
+                state,
+              ) => `<article class="collaboration-builder-item collaboration-builder-state" data-builder-state>
+                <div class="collaboration-builder-item-head">
+                  <strong>${escapeHtml(state.id || '状态')}</strong>
+                  <div class="collaboration-builder-item-actions">
+                    ${!state.terminal ? collaborationBuilderAdd('add-transition', '新增 Transition') : ''}
+                    ${collaborationBuilderRemove('remove-state', '删除状态')}
+                  </div>
+                </div>
+                <div class="collaboration-builder-state-meta">
+                  ${collaborationBuilderField('State ID', 'id', state.id, { idKind: 'state' })}
+                  <label class="collaboration-builder-toggle"><input type="checkbox" data-builder-field="terminal" ${state.terminal ? 'checked' : ''} /><span>Terminal</span></label>
+                </div>
+                <div class="collaboration-builder-transition-list">
+                  ${state.transitions
+                    .map(
+                      (
+                        transition,
+                      ) => `<div class="collaboration-builder-transition" data-builder-transition>
+                        <div class="collaboration-builder-item-head"><strong>${escapeHtml(transition.id || 'Transition')}</strong>${collaborationBuilderRemove('remove-transition', '删除 Transition')}</div>
+                        <div class="collaboration-builder-grid collaboration-builder-transition-grid">
+                          ${collaborationBuilderField('Transition ID', 'id', transition.id, { idKind: 'transition' })}
+                          ${collaborationBuilderSelect('Role', 'roleId', transition.roleId, roleOptions)}
+                          ${collaborationBuilderSelect('Action', 'actionId', transition.actionId, actionOptions)}
+                          ${COLLABORATION_OUTCOMES.map((outcome) => collaborationBuilderSelect(outcome, `outcome:${outcome}`, transition.outcomes?.[outcome], stateOptions)).join('')}
+                        </div>
+                      </div>`,
+                    )
+                    .join('')}
+                </div>
+              </article>`,
+            )
+            .join('')}
+        </div>
+      </section>
+    </div>`;
+}
+
+function collaborationBuilderValue(root, field) {
+  const input = root.querySelector(`[data-builder-field="${field}"]`);
+  return input?.value ?? '';
+}
+
+function readCollaborationCreateBuilder(root) {
   return {
-    machine: {
-      format: 'icarus.agent-group-machine/1',
-      initial_state: 'working',
-      states: {
-        working: {
-          terminal: false,
-          transitions: [
-            {
-              id: transitionId,
-              actor_role: role,
-              action_ref: `actions/${actionId}.yaml`,
-              outcomes: {
-                succeeded: 'completed',
-                failed: 'working',
-                cancelled: 'working',
-                blocked: 'working',
-              },
-            },
-          ],
-        },
-        completed: { terminal: true, transitions: [] },
-      },
-    },
-    roles: {
-      [role]: {
-        format: 'icarus.agent-group-role/1',
-        role,
-        display_name: values.roleDisplayName || role,
-        cardinality: { min: 1, max: 1 },
-        allowed_transitions: [transitionId],
-        executor_requirements: {
-          capability,
-          interaction: mode === 'workflow' ? 'headless' : 'visible_session',
-        },
-      },
-    },
-    actions: { [actionId]: action },
-    prompts: { 'prompts/execute.md': values.prompt },
+    initialRole: collaborationBuilderValue(root, 'initialRole'),
+    initialState: collaborationBuilderValue(root, 'initialState'),
+    roles: Array.from(root.querySelectorAll('[data-builder-role]')).map(
+      (row) => ({
+        id: collaborationBuilderValue(row, 'id'),
+        displayName: collaborationBuilderValue(row, 'displayName'),
+        minMembers: collaborationBuilderValue(row, 'minMembers'),
+        maxMembers: collaborationBuilderValue(row, 'maxMembers'),
+        capability: collaborationBuilderValue(row, 'capability'),
+        interaction: collaborationBuilderValue(row, 'interaction'),
+      }),
+    ),
+    actions: Array.from(root.querySelectorAll('[data-builder-action-row]')).map(
+      (row) => ({
+        id: collaborationBuilderValue(row, 'id'),
+        executorMode: collaborationBuilderValue(row, 'executorMode'),
+        filesystemAccess: collaborationBuilderValue(row, 'filesystemAccess'),
+        workflowRef: collaborationBuilderValue(row, 'workflowRef'),
+        prompt: collaborationBuilderValue(row, 'prompt'),
+      }),
+    ),
+    states: Array.from(root.querySelectorAll('[data-builder-state]')).map(
+      (row) => ({
+        id: collaborationBuilderValue(row, 'id'),
+        terminal: Boolean(
+          row.querySelector('[data-builder-field="terminal"]')?.checked,
+        ),
+        transitions: Array.from(
+          row.querySelectorAll('[data-builder-transition]'),
+        ).map((transition) => ({
+          id: collaborationBuilderValue(transition, 'id'),
+          roleId: collaborationBuilderValue(transition, 'roleId'),
+          actionId: collaborationBuilderValue(transition, 'actionId'),
+          outcomes: Object.fromEntries(
+            COLLABORATION_OUTCOMES.map((outcome) => [
+              outcome,
+              collaborationBuilderValue(transition, `outcome:${outcome}`),
+            ]),
+          ),
+        })),
+      }),
+    ),
   };
 }
 
+function nextCollaborationBuilderId(prefix, entries) {
+  const ids = new Set(entries.map((entry) => entry.id));
+  let index = entries.length + 1;
+  while (ids.has(`${prefix}_${index}`)) index += 1;
+  return `${prefix}_${index}`;
+}
+
+function renameCollaborationBuilderReferences(draft, kind, from, to) {
+  if (!from || !to || from === to) return;
+  if (kind === 'role') {
+    if (draft.initialRole === from) draft.initialRole = to;
+    for (const state of draft.states)
+      for (const transition of state.transitions)
+        if (transition.roleId === from) transition.roleId = to;
+  } else if (kind === 'action') {
+    for (const state of draft.states)
+      for (const transition of state.transitions)
+        if (transition.actionId === from) transition.actionId = to;
+  } else if (kind === 'state') {
+    if (draft.initialState === from) draft.initialState = to;
+    for (const state of draft.states)
+      for (const transition of state.transitions)
+        for (const outcome of COLLABORATION_OUTCOMES)
+          if (transition.outcomes[outcome] === from)
+            transition.outcomes[outcome] = to;
+  }
+}
+
+function bindCollaborationCreateBuilder(editor, initialDraft) {
+  let draft = initialDraft;
+  const render = () => {
+    editor.innerHTML = renderCollaborationCreateBuilder(draft);
+  };
+  const snapshot = () => readCollaborationCreateBuilder(editor);
+  editor.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-builder-action]');
+    if (!(button instanceof HTMLButtonElement)) return;
+    draft = snapshot();
+    const action = button.dataset.builderAction;
+    const roleRow = button.closest('[data-builder-role]');
+    const actionRow = button.closest('[data-builder-action-row]');
+    const stateRow = button.closest('[data-builder-state]');
+    const transitionRow = button.closest('[data-builder-transition]');
+    if (action === 'add-role') {
+      const next = createRoleDraft(draft.roles.length + 1);
+      next.id = nextCollaborationBuilderId('role', draft.roles);
+      draft.roles.push(next);
+    } else if (action === 'remove-role' && roleRow) {
+      draft.roles.splice(
+        Array.from(editor.querySelectorAll('[data-builder-role]')).indexOf(
+          roleRow,
+        ),
+        1,
+      );
+    } else if (action === 'add-action') {
+      const next = createActionDraft(draft.actions.length + 1);
+      next.id = nextCollaborationBuilderId('action', draft.actions);
+      draft.actions.push(next);
+    } else if (action === 'remove-action' && actionRow) {
+      draft.actions.splice(
+        Array.from(
+          editor.querySelectorAll('[data-builder-action-row]'),
+        ).indexOf(actionRow),
+        1,
+      );
+    } else if (action === 'add-state') {
+      const allTransitions = draft.states.flatMap((state) => state.transitions);
+      const next = createStateDraft(draft.states.length + 1, {
+        roleId: draft.roles[0]?.id,
+        actionId: draft.actions[0]?.id,
+      });
+      next.id = nextCollaborationBuilderId('state', draft.states);
+      next.transitions[0].id = nextCollaborationBuilderId(
+        'transition',
+        allTransitions,
+      );
+      next.transitions[0].outcomes = Object.fromEntries(
+        COLLABORATION_OUTCOMES.map((outcome) => [outcome, next.id]),
+      );
+      draft.states.push(next);
+    } else if (action === 'remove-state' && stateRow) {
+      draft.states.splice(
+        Array.from(editor.querySelectorAll('[data-builder-state]')).indexOf(
+          stateRow,
+        ),
+        1,
+      );
+    } else if (action === 'add-transition' && stateRow) {
+      const stateIndex = Array.from(
+        editor.querySelectorAll('[data-builder-state]'),
+      ).indexOf(stateRow);
+      const allTransitions = draft.states.flatMap((state) => state.transitions);
+      const next = createTransitionDraft({
+        stateId: draft.states[stateIndex].id,
+        roleId: draft.roles[0]?.id,
+        actionId: draft.actions[0]?.id,
+      });
+      next.id = nextCollaborationBuilderId('transition', allTransitions);
+      draft.states[stateIndex].transitions.push(next);
+    } else if (action === 'remove-transition' && stateRow && transitionRow) {
+      const stateIndex = Array.from(
+        editor.querySelectorAll('[data-builder-state]'),
+      ).indexOf(stateRow);
+      draft.states[stateIndex].transitions.splice(
+        Array.from(
+          stateRow.querySelectorAll('[data-builder-transition]'),
+        ).indexOf(transitionRow),
+        1,
+      );
+    }
+    render();
+  });
+  editor.addEventListener('change', (event) => {
+    const input = event.target;
+    if (!(input instanceof HTMLInputElement)) return;
+    draft = snapshot();
+    if (input.dataset.builderIdKind) {
+      renameCollaborationBuilderReferences(
+        draft,
+        input.dataset.builderIdKind,
+        input.dataset.originalValue,
+        input.value.trim(),
+      );
+      render();
+      return;
+    }
+    if (input.dataset.builderField === 'terminal') {
+      const stateRow = input.closest('[data-builder-state]');
+      const stateIndex = Array.from(
+        editor.querySelectorAll('[data-builder-state]'),
+      ).indexOf(stateRow);
+      if (stateIndex < 0) return;
+      if (draft.states[stateIndex].terminal)
+        draft.states[stateIndex].transitions = [];
+      else if (!draft.states[stateIndex].transitions.length)
+        draft.states[stateIndex].transitions = [
+          createTransitionDraft({
+            stateId: draft.states[stateIndex].id,
+            roleId: draft.roles[0]?.id,
+            actionId: draft.actions[0]?.id,
+          }),
+        ];
+      render();
+    }
+  });
+  render();
+  return snapshot;
+}
+
 function openCreateCollaborationDialog() {
+  let readDraft = null;
   openCollaborationDialog({
     title: '创建群组',
     submitText: '创建',
+    wide: true,
     body: `<div class="collaboration-form-grid">
       ${collaborationField('Git remote', 'remoteUrl')}
       ${collaborationField('群组名称', 'name')}
       ${collaborationField('Principal ID', 'principalId')}
       ${collaborationField('Agent ID', 'agentId')}
       ${collaborationField('SSH signing key', 'signingKeyPath')}
-      ${collaborationField('角色 ID', 'role', 'developer')}
-      ${collaborationField('角色名称', 'roleDisplayName', 'Developer')}
-      ${collaborationField('Capability', 'capability', 'coding_task')}
-      <label class="collaboration-field"><span>Executor</span><select name="executorMode"><option value="run_once">run_once</option><option value="codex-task">codex-task / App Server</option><option value="workflow">workflow</option></select></label>
-      ${collaborationField('Workflow ref', 'workflowRef', 'workflow:local', { required: false })}
-      <label class="collaboration-field"><span>文件权限</span><select name="filesystemAccess"><option value="workspace_write">workspace_write</option><option value="read_only">read_only</option></select></label>
-      ${collaborationField('Prompt', 'prompt', 'Complete the assigned group action and return a concise result.', { multiline: true })}
-    </div>`,
+    </div>
+    <div id="collaboration-create-builder-host"></div>`,
+    onOpen: () => {
+      const editor = document.getElementById(
+        'collaboration-create-builder-host',
+      );
+      readDraft = bindCollaborationCreateBuilder(
+        editor,
+        defaultCollaborationCreateDraft(),
+      );
+    },
     onSubmit: async (formData) => {
       const values = Object.fromEntries(formData.entries());
-      const definition = createCollaborationDefinition(values);
-      const body = {
+      const body = buildCollaborationCreateRequest({
         remoteUrl: values.remoteUrl,
         name: values.name,
         principalId: values.principalId,
         agentId: values.agentId,
         signingKeyPath: values.signingKeyPath,
-        capabilities: [values.capability],
-        initialRole: values.role,
-        ...definition,
-      };
+        draft: readDraft(),
+      });
       const data = await collaborationRequest('/groups', {
         method: 'POST',
         body: JSON.stringify(body),

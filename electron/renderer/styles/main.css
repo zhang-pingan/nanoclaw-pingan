@@ -16219,6 +16219,11 @@ textarea.workflow-wizard-input {
   box-shadow: var(--minimal-shadow, 0 20px 60px rgba(16, 24, 40, 0.18));
 }
 
+.collaboration-dialog.collaboration-dialog-wide {
+  width: min(1040px, calc(100vw - 40px));
+  max-height: min(900px, calc(100vh - 32px));
+}
+
 .collaboration-dialog::backdrop {
   background: rgba(32, 35, 39, 0.34);
   backdrop-filter: blur(8px);
@@ -16257,6 +16262,159 @@ textarea.workflow-wizard-input {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
+}
+
+.collaboration-create-builder {
+  display: grid;
+  gap: 22px;
+  margin-top: 22px;
+}
+
+.collaboration-builder-section {
+  min-width: 0;
+  display: grid;
+  gap: 12px;
+  padding-top: 18px;
+  border-top: 1px solid var(--minimal-line, #dfe2e7);
+}
+
+.collaboration-builder-heading,
+.collaboration-builder-item-head,
+.collaboration-builder-item-actions,
+.collaboration-builder-state-meta {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.collaboration-builder-heading,
+.collaboration-builder-item-head {
+  justify-content: space-between;
+}
+
+.collaboration-builder-heading h4 {
+  margin: 0;
+  color: var(--minimal-text, #202327);
+  font-size: 13px;
+}
+
+.collaboration-builder-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.collaboration-builder-add > span {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.collaboration-builder-list,
+.collaboration-builder-transition-list {
+  min-width: 0;
+  display: grid;
+  gap: 0;
+}
+
+.collaboration-builder-item {
+  min-width: 0;
+  display: grid;
+  gap: 12px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--minimal-line, #dfe2e7);
+}
+
+.collaboration-builder-item:last-child {
+  border-bottom: 0;
+}
+
+.collaboration-builder-item-head strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--minimal-text-soft, #575f6a);
+  font-size: 12px;
+}
+
+.collaboration-builder-remove {
+  width: 30px;
+  height: 30px;
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--minimal-text-muted, #8a929d);
+  font-size: 20px;
+  line-height: 1;
+}
+
+.collaboration-builder-remove:hover {
+  border-color: #f0c7c2;
+  background: #fff1f0;
+  color: #b42318;
+}
+
+.collaboration-builder-grid {
+  min-width: 0;
+  display: grid;
+  gap: 12px;
+}
+
+.collaboration-builder-role-grid {
+  grid-template-columns:
+    minmax(110px, 1fr) minmax(120px, 1.2fr) 84px 84px minmax(120px, 1fr)
+    minmax(130px, 1fr);
+}
+
+.collaboration-builder-action-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.collaboration-builder-prompt {
+  grid-column: 1 / -1;
+}
+
+.collaboration-builder-selection {
+  width: min(360px, 100%);
+}
+
+.collaboration-builder-state-meta {
+  align-items: end;
+}
+
+.collaboration-builder-state-meta > .collaboration-field {
+  width: min(320px, 100%);
+}
+
+.collaboration-builder-toggle {
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--minimal-text-soft, #575f6a);
+  font-size: 12px;
+}
+
+.collaboration-builder-toggle input {
+  width: 16px;
+  height: 16px;
+}
+
+.collaboration-builder-transition {
+  min-width: 0;
+  display: grid;
+  gap: 10px;
+  margin-top: 4px;
+  padding: 12px 14px;
+  border-left: 3px solid var(--minimal-line-strong, #cfd4dc);
+  background: #f8f9fa;
+}
+
+.collaboration-builder-transition-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .collaboration-field {
@@ -16364,6 +16522,12 @@ textarea.workflow-wizard-input {
   .collaboration-content {
     padding: 20px 20px 32px;
   }
+
+  .collaboration-builder-role-grid,
+  .collaboration-builder-action-grid,
+  .collaboration-builder-transition-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 720px) {
@@ -16379,7 +16543,10 @@ textarea.workflow-wizard-input {
   .collaboration-metrics,
   .collaboration-two-column,
   .collaboration-turn-grid,
-  .collaboration-form-grid {
+  .collaboration-form-grid,
+  .collaboration-builder-role-grid,
+  .collaboration-builder-action-grid,
+  .collaboration-builder-transition-grid {
     grid-template-columns: 1fr;
   }
 
@@ -16407,5 +16574,15 @@ textarea.workflow-wizard-input {
     width: 100vw;
     max-height: 100vh;
     border-radius: 0;
+  }
+
+  .collaboration-builder-state-meta {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .collaboration-builder-state-meta > .collaboration-field,
+  .collaboration-builder-selection {
+    width: 100%;
   }
 }
