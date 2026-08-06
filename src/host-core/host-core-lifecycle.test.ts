@@ -24,6 +24,10 @@ import {
   removeHostCoreSnapshot,
   verifyHostCoreSnapshot,
 } from './release.js';
+import {
+  HOST_CORE_STARTUP_SMOKE_ENV,
+  HOST_CORE_STARTUP_SMOKE_MARKER,
+} from './startup-smoke.js';
 
 const projectRoot = path.resolve(import.meta.dirname, '../..');
 const temporaryRoots: string[] = [];
@@ -40,21 +44,37 @@ function runtimeHome(): string {
   return root;
 }
 
-function makeDist(label: string): string {
+function makeDist(): string {
   const dist = path.join(temporaryRoot('icarus-host-core-dist'), 'dist');
   fs.mkdirSync(dist, { recursive: true });
   fs.writeFileSync(
     path.join(dist, 'index.js'),
-    `console.log(${JSON.stringify(label)});\n`,
+    `if (process.env[${JSON.stringify(HOST_CORE_STARTUP_SMOKE_ENV)}] === '1') console.log(${JSON.stringify(HOST_CORE_STARTUP_SMOKE_MARKER)});\n`,
   );
   return dist;
+}
+
+function installCustomEntry(home: string, source: string) {
+  const dist = makeDist();
+  fs.writeFileSync(path.join(dist, 'index.js'), source);
+  return installHostCoreSnapshotFromDist({
+    projectRoot,
+    runtimeHome: home,
+    distRoot: dist,
+    label: 'custom',
+    validation: 'smoke_passed',
+    commit: '1'.repeat(40),
+    dirty: true,
+    includeDependencies: false,
+    includeRuntimeAssets: false,
+  });
 }
 
 function installSnapshot(home: string, label: string) {
   return installHostCoreSnapshotFromDist({
     projectRoot,
     runtimeHome: home,
-    distRoot: makeDist(label),
+    distRoot: makeDist(),
     label,
     validation: 'smoke_passed',
     commit: '1'.repeat(40),
@@ -165,6 +185,39 @@ describe('Host Core snapshot CLI', () => {
 });
 
 describe('Host Core local snapshots', () => {
+  it('executes the complete entry module graph during startup smoke', () => {
+    const missingImportHome = runtimeHome();
+    expect(() =>
+      installCustomEntry(
+        missingImportHome,
+        `import './missing-module.js';\nconsole.log(${JSON.stringify(HOST_CORE_STARTUP_SMOKE_MARKER)});\n`,
+      ),
+    ).toThrow('host_core_snapshot_entry_smoke_failed');
+
+    const topLevelFailureHome = runtimeHome();
+    expect(() =>
+      installCustomEntry(
+        topLevelFailureHome,
+        `throw new Error('top-level initialization failed');\n`,
+      ),
+    ).toThrow('host_core_snapshot_entry_smoke_failed');
+  });
+
+  it('requires the exact startup smoke ready marker', () => {
+    const missingMarkerHome = runtimeHome();
+    expect(() => installCustomEntry(missingMarkerHome, 'void 0;\n')).toThrow(
+      'host_core_snapshot_entry_smoke_marker_invalid',
+    );
+
+    const incorrectMarkerHome = runtimeHome();
+    expect(() =>
+      installCustomEntry(
+        incorrectMarkerHome,
+        `console.log('icarus_host_core_startup_smoke=not-ready');\n`,
+      ),
+    ).toThrow('host_core_snapshot_entry_smoke_marker_invalid');
+  });
+
   it('creates, lists, verifies, and removes a snapshot without identity inventory', () => {
     const home = runtimeHome();
     const snapshot = installSnapshot(home, 'known-good');

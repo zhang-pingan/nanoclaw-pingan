@@ -141,6 +141,10 @@ import {
   RegisteredAgent,
 } from './types.js';
 import { logger } from './logger.js';
+import {
+  HOST_CORE_STARTUP_SMOKE_ENV,
+  HOST_CORE_STARTUP_SMOKE_MARKER,
+} from './host-core/startup-smoke.js';
 import { buildMemoryPackForAgent } from './memory-pack.js';
 import {
   clearModelResolutionsForRun,
@@ -3157,10 +3161,16 @@ const isDirectRun =
     new URL(`file://${process.argv[1]}`).pathname;
 
 if (isDirectRun) {
-  main().catch((err) => {
-    logger.error({ err }, 'Failed to start Icarus');
-    process.exit(1);
-  });
+  if (process.env[HOST_CORE_STARTUP_SMOKE_ENV] === '1') {
+    process.stdout.write(`${HOST_CORE_STARTUP_SMOKE_MARKER}\n`, () =>
+      process.exit(0),
+    );
+  } else {
+    main().catch((err) => {
+      logger.error({ err }, 'Failed to start Icarus');
+      process.exit(1);
+    });
+  }
 }
 
 /** @internal - exported for testing */

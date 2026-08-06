@@ -20,7 +20,7 @@ Creation builds in an isolated staging directory and installs the result under `
 
 The `snapshot.json` file records only creation time, optional label, Git commit and dirty flag, entry path and checksum, Workflow Runtime integer schema version and supported migration range, Node major/native ABI/platform/arch, and validation status. It does not contain a complete inventory, per-file hashes, immutable version binding, certification evidence, or Runtime, Compiler, release, logical-schema, migration-file, or physical-schema identity hashes.
 
-Default creation performs entry syntax and loads `better-sqlite3` from the snapshot itself for an in-memory query. `--full-check` additionally runs `test:current`, `contracts:check`, `typecheck`, and `format:check` before installation.
+Default creation executes the snapshot entry with `ICARUS_HOST_CORE_SMOKE=1`. This resolves and evaluates the complete static module graph, then the entry prints a fixed ready marker and exits before `main()` can start containers, proxies, network connections, message loops, or Workflow state. Validation requires a clean exit, the exact marker, and completion within 10 seconds. It also loads `better-sqlite3` from the snapshot itself for an in-memory query. `--full-check` additionally runs `test:current`, `contracts:check`, `typecheck`, and `format:check` before installation.
 
 ## Selection And Startup
 

@@ -8,6 +8,11 @@ import {
   CURRENT_WORKFLOW_RUNTIME_SCHEMA_VERSION,
   MINIMUM_WORKFLOW_RUNTIME_SCHEMA_VERSION,
 } from '../workflow-runtime/gateway/host-core.js';
+import {
+  HOST_CORE_STARTUP_SMOKE_ENV,
+  HOST_CORE_STARTUP_SMOKE_MARKER,
+  HOST_CORE_STARTUP_SMOKE_TIMEOUT_MS,
+} from './startup-smoke.js';
 
 export const HOST_CORE_SNAPSHOT_DIRECTORY = 'host-core-snapshots';
 export const HOST_CORE_SNAPSHOT_FILENAME = 'snapshot.json';
@@ -300,14 +305,21 @@ try {
 }
 
 function entrySmoke(entry: string): void {
-  const result = spawnSync(process.execPath, ['--check', entry], {
+  const result = spawnSync(process.execPath, [entry], {
     encoding: 'utf8',
+    env: { ...process.env, [HOST_CORE_STARTUP_SMOKE_ENV]: '1' },
+    killSignal: 'SIGKILL',
     stdio: ['ignore', 'pipe', 'pipe'],
+    timeout: HOST_CORE_STARTUP_SMOKE_TIMEOUT_MS,
   });
+  if ((result.error as NodeJS.ErrnoException | undefined)?.code === 'ETIMEDOUT')
+    throw new Error('host_core_snapshot_entry_smoke_timeout');
   if (result.status !== 0)
     throw new Error(
-      `host_core_snapshot_entry_smoke_failed:${result.stderr.trim()}`,
+      `host_core_snapshot_entry_smoke_failed:${result.stderr.trim() || result.error?.message || 'unknown_error'}`,
     );
+  if (result.stdout !== `${HOST_CORE_STARTUP_SMOKE_MARKER}\n`)
+    throw new Error('host_core_snapshot_entry_smoke_marker_invalid');
   nativeModuleSmoke(path.dirname(path.dirname(entry)));
 }
 
