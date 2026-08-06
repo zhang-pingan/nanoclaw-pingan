@@ -20,8 +20,9 @@ import type {
   FilesystemAccess,
 } from './protocol/index.js';
 
-export const CURRENT_COLLABORATION_SCHEMA_VERSION = 3;
-export const MINIMUM_COLLABORATION_SCHEMA_VERSION = 1;
+export const CURRENT_COLLABORATION_SCHEMA_VERSION = 4;
+export const MINIMUM_COLLABORATION_SCHEMA_VERSION =
+  CURRENT_COLLABORATION_SCHEMA_VERSION;
 
 export class CollaborationStoreError extends Error {
   constructor(
@@ -37,7 +38,7 @@ export class CollaborationStoreError extends Error {
   }
 }
 
-const SCHEMA_V1 = `
+const SCHEMA_V4 = `
 CREATE TABLE collaboration_groups (
   group_id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
@@ -71,7 +72,7 @@ CREATE TABLE collaboration_memberships (
   principal_id TEXT NOT NULL,
   agent_id TEXT NOT NULL,
   member_json TEXT NOT NULL,
-  PRIMARY KEY (group_id, principal_id)
+  PRIMARY KEY (group_id, principal_id, agent_id)
 );
 CREATE TABLE collaboration_role_bindings (
   group_id TEXT NOT NULL REFERENCES collaboration_groups(group_id) ON DELETE CASCADE,
@@ -79,7 +80,7 @@ CREATE TABLE collaboration_role_bindings (
   principal_id TEXT NOT NULL,
   agent_id TEXT NOT NULL,
   claimed INTEGER NOT NULL CHECK (claimed IN (0, 1)),
-  PRIMARY KEY (group_id, role, principal_id)
+  PRIMARY KEY (group_id, role, principal_id, agent_id)
 );
 CREATE TABLE collaboration_projection_heads (
   group_id TEXT PRIMARY KEY REFERENCES collaboration_groups(group_id) ON DELETE CASCADE,
@@ -128,24 +129,71 @@ CREATE TABLE collaboration_action_executions (
   pending_result_event_json TEXT,
   dispatch_started_at_ms INTEGER,
   receipt_recorded_at_ms INTEGER,
+  provider_completed_at_ms INTEGER,
   created_at_ms INTEGER NOT NULL,
   updated_at_ms INTEGER NOT NULL,
+  recovery_required_reason TEXT,
   UNIQUE (group_id, turn_id, attempt)
 );
 CREATE TABLE collaboration_executor_bindings (
   group_id TEXT NOT NULL REFERENCES collaboration_groups(group_id) ON DELETE CASCADE,
-  role TEXT NOT NULL,
+  state_id TEXT NOT NULL,
+  implementation_hash TEXT NOT NULL,
+  action_hash TEXT NOT NULL,
   executor_kind TEXT NOT NULL,
   adapter TEXT,
   agent_jid TEXT,
   workspace_path TEXT NOT NULL,
-  prompt_override TEXT,
   filesystem_access_cap TEXT NOT NULL,
   approval_policy TEXT NOT NULL,
   config_json TEXT NOT NULL,
   enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)),
   updated_at_ms INTEGER NOT NULL,
-  PRIMARY KEY (group_id, role)
+  PRIMARY KEY (group_id, state_id, implementation_hash, action_hash)
+);
+CREATE TABLE collaboration_state_implementations (
+  group_id TEXT NOT NULL REFERENCES collaboration_groups(group_id) ON DELETE CASCADE,
+  state_id TEXT NOT NULL,
+  role TEXT NOT NULL,
+  implementation_hash TEXT NOT NULL,
+  implementation_json TEXT NOT NULL,
+  active INTEGER NOT NULL CHECK (active IN (0, 1)),
+  updated_at_ms INTEGER NOT NULL,
+  PRIMARY KEY (group_id, state_id)
+);
+CREATE TABLE collaboration_staged_artifacts (
+  artifact_id TEXT PRIMARY KEY,
+  group_id TEXT NOT NULL REFERENCES collaboration_groups(group_id) ON DELETE CASCADE,
+  turn_id TEXT NOT NULL,
+  attempt INTEGER NOT NULL,
+  principal_id TEXT NOT NULL,
+  agent_id TEXT NOT NULL,
+  original_name TEXT NOT NULL,
+  repository_path TEXT NOT NULL,
+  staged_path TEXT NOT NULL,
+  sha256 TEXT NOT NULL,
+  size INTEGER NOT NULL,
+  content_type TEXT NOT NULL,
+  state TEXT NOT NULL,
+  created_at_ms INTEGER NOT NULL,
+  expires_at_ms INTEGER NOT NULL,
+  committed_at_ms INTEGER,
+  UNIQUE (group_id, repository_path)
+);
+CREATE TABLE collaboration_notification_deliveries (
+  notification_id TEXT PRIMARY KEY,
+  group_id TEXT NOT NULL REFERENCES collaboration_groups(group_id) ON DELETE CASCADE,
+  turn_id TEXT NOT NULL,
+  attempt INTEGER NOT NULL CHECK (attempt >= 1),
+  kind TEXT NOT NULL,
+  deadline_kind TEXT NOT NULL CHECK (deadline_kind IN ('start', 'execution')),
+  recipient_principal_id TEXT NOT NULL,
+  recipient_agent_id TEXT NOT NULL,
+  reminder_ordinal INTEGER NOT NULL CHECK (reminder_ordinal >= 0),
+  deadline_at_ms INTEGER,
+  first_discovered_at_ms INTEGER NOT NULL,
+  local_observed_at_ms INTEGER NOT NULL,
+  delivered_at_ms INTEGER
 );
 CREATE TABLE collaboration_sync_attempts (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -155,7 +203,8 @@ CREATE TABLE collaboration_sync_attempts (
   outcome TEXT,
   head_before TEXT,
   head_after TEXT,
-  error TEXT
+  error TEXT,
+  error_class TEXT
 );
 CREATE TABLE collaboration_integrity_incidents (
   incident_id TEXT PRIMARY KEY,
@@ -184,42 +233,27 @@ CREATE INDEX collaboration_sync_attempts_group_idx
   ON collaboration_sync_attempts(group_id, started_at_ms DESC);
 CREATE INDEX collaboration_incidents_group_idx
   ON collaboration_integrity_incidents(group_id, created_at_ms DESC);
-`;
-
-const MIGRATE_V1_TO_V2 = `
-ALTER TABLE collaboration_action_executions
-  ADD COLUMN recovery_required_reason TEXT;
-ALTER TABLE collaboration_sync_attempts
-  ADD COLUMN error_class TEXT;
-`;
-
-const MIGRATE_V2_TO_V3 = `
-ALTER TABLE collaboration_memberships RENAME TO collaboration_memberships_v2;
-CREATE TABLE collaboration_memberships (
-  group_id TEXT NOT NULL REFERENCES collaboration_groups(group_id) ON DELETE CASCADE,
-  principal_id TEXT NOT NULL,
-  agent_id TEXT NOT NULL,
-  member_json TEXT NOT NULL,
-  PRIMARY KEY (group_id, principal_id, agent_id)
-);
-INSERT INTO collaboration_memberships
-SELECT group_id, principal_id, agent_id, member_json
-  FROM collaboration_memberships_v2;
-DROP TABLE collaboration_memberships_v2;
-
-ALTER TABLE collaboration_role_bindings RENAME TO collaboration_role_bindings_v2;
-CREATE TABLE collaboration_role_bindings (
-  group_id TEXT NOT NULL REFERENCES collaboration_groups(group_id) ON DELETE CASCADE,
-  role TEXT NOT NULL,
-  principal_id TEXT NOT NULL,
-  agent_id TEXT NOT NULL,
-  claimed INTEGER NOT NULL CHECK (claimed IN (0, 1)),
-  PRIMARY KEY (group_id, role, principal_id, agent_id)
-);
-INSERT INTO collaboration_role_bindings
-SELECT group_id, role, principal_id, agent_id, claimed
-  FROM collaboration_role_bindings_v2;
-DROP TABLE collaboration_role_bindings_v2;
+CREATE INDEX collaboration_staged_artifacts_turn_idx
+  ON collaboration_staged_artifacts(group_id, turn_id, state);
+CREATE INDEX collaboration_notifications_pending_idx
+  ON collaboration_notification_deliveries(
+    recipient_principal_id, recipient_agent_id, delivered_at_ms,
+    first_discovered_at_ms
+  );
+CREATE INDEX collaboration_notifications_audit_idx
+  ON collaboration_notification_deliveries(
+    group_id, turn_id, attempt, first_discovered_at_ms
+  );
+CREATE UNIQUE INDEX collaboration_timeout_notifications_dedup_idx
+  ON collaboration_notification_deliveries(
+    group_id, turn_id, attempt, deadline_kind,
+    recipient_principal_id, recipient_agent_id, reminder_ordinal
+  ) WHERE kind LIKE 'timeout:%';
+CREATE UNIQUE INDEX collaboration_turn_created_notifications_dedup_idx
+  ON collaboration_notification_deliveries(
+    group_id, turn_id, attempt,
+    recipient_principal_id, recipient_agent_id
+  ) WHERE kind = 'turn_created';
 `;
 
 interface RequiredTable {
@@ -241,6 +275,7 @@ interface RequiredTable {
       {
         readonly columns: readonly string[];
         readonly unique: boolean;
+        readonly partial?: boolean;
       }
     >
   >;
@@ -340,6 +375,7 @@ const REQUIRED_STRUCTURE: Readonly<Record<string, RequiredTable>> = {
       'pending_result_event_json',
       'dispatch_started_at_ms',
       'receipt_recorded_at_ms',
+      'provider_completed_at_ms',
       'created_at_ms',
       'updated_at_ms',
       'recovery_required_reason',
@@ -387,6 +423,11 @@ const REQUIRED_STRUCTURE: Readonly<Record<string, RequiredTable>> = {
         notNull: false,
         primaryKeyPosition: 0,
       },
+      provider_completed_at_ms: {
+        type: 'INTEGER',
+        notNull: false,
+        primaryKeyPosition: 0,
+      },
       created_at_ms: {
         type: 'INTEGER',
         notNull: true,
@@ -422,18 +463,164 @@ const REQUIRED_STRUCTURE: Readonly<Record<string, RequiredTable>> = {
   collaboration_executor_bindings: {
     columns: [
       'group_id',
-      'role',
+      'state_id',
+      'implementation_hash',
+      'action_hash',
       'executor_kind',
       'adapter',
       'agent_jid',
       'workspace_path',
-      'prompt_override',
       'filesystem_access_cap',
       'approval_policy',
       'config_json',
       'enabled',
       'updated_at_ms',
     ],
+  },
+  collaboration_state_implementations: {
+    columns: [
+      'group_id',
+      'state_id',
+      'role',
+      'implementation_hash',
+      'implementation_json',
+      'active',
+      'updated_at_ms',
+    ],
+  },
+  collaboration_staged_artifacts: {
+    columns: [
+      'artifact_id',
+      'group_id',
+      'turn_id',
+      'attempt',
+      'principal_id',
+      'agent_id',
+      'original_name',
+      'repository_path',
+      'staged_path',
+      'sha256',
+      'size',
+      'content_type',
+      'state',
+      'created_at_ms',
+      'expires_at_ms',
+      'committed_at_ms',
+    ],
+    indexes: ['collaboration_staged_artifacts_turn_idx'],
+  },
+  collaboration_notification_deliveries: {
+    columns: [
+      'notification_id',
+      'group_id',
+      'turn_id',
+      'attempt',
+      'kind',
+      'deadline_kind',
+      'recipient_principal_id',
+      'recipient_agent_id',
+      'reminder_ordinal',
+      'deadline_at_ms',
+      'first_discovered_at_ms',
+      'local_observed_at_ms',
+      'delivered_at_ms',
+    ],
+    indexes: [
+      'collaboration_notifications_pending_idx',
+      'collaboration_notifications_audit_idx',
+      'collaboration_timeout_notifications_dedup_idx',
+      'collaboration_turn_created_notifications_dedup_idx',
+    ],
+    columnConstraints: {
+      notification_id: {
+        type: 'TEXT',
+        notNull: false,
+        primaryKeyPosition: 1,
+      },
+      group_id: { type: 'TEXT', notNull: true, primaryKeyPosition: 0 },
+      turn_id: { type: 'TEXT', notNull: true, primaryKeyPosition: 0 },
+      attempt: { type: 'INTEGER', notNull: true, primaryKeyPosition: 0 },
+      kind: { type: 'TEXT', notNull: true, primaryKeyPosition: 0 },
+      deadline_kind: {
+        type: 'TEXT',
+        notNull: true,
+        primaryKeyPosition: 0,
+      },
+      recipient_principal_id: {
+        type: 'TEXT',
+        notNull: true,
+        primaryKeyPosition: 0,
+      },
+      recipient_agent_id: {
+        type: 'TEXT',
+        notNull: true,
+        primaryKeyPosition: 0,
+      },
+      reminder_ordinal: {
+        type: 'INTEGER',
+        notNull: true,
+        primaryKeyPosition: 0,
+      },
+      deadline_at_ms: {
+        type: 'INTEGER',
+        notNull: false,
+        primaryKeyPosition: 0,
+      },
+      first_discovered_at_ms: {
+        type: 'INTEGER',
+        notNull: true,
+        primaryKeyPosition: 0,
+      },
+      local_observed_at_ms: {
+        type: 'INTEGER',
+        notNull: true,
+        primaryKeyPosition: 0,
+      },
+      delivered_at_ms: {
+        type: 'INTEGER',
+        notNull: false,
+        primaryKeyPosition: 0,
+      },
+    },
+    indexConstraints: {
+      collaboration_notifications_pending_idx: {
+        columns: [
+          'recipient_principal_id',
+          'recipient_agent_id',
+          'delivered_at_ms',
+          'first_discovered_at_ms',
+        ],
+        unique: false,
+      },
+      collaboration_notifications_audit_idx: {
+        columns: ['group_id', 'turn_id', 'attempt', 'first_discovered_at_ms'],
+        unique: false,
+      },
+      collaboration_timeout_notifications_dedup_idx: {
+        columns: [
+          'group_id',
+          'turn_id',
+          'attempt',
+          'deadline_kind',
+          'recipient_principal_id',
+          'recipient_agent_id',
+          'reminder_ordinal',
+        ],
+        unique: true,
+        partial: true,
+      },
+      collaboration_turn_created_notifications_dedup_idx: {
+        columns: [
+          'group_id',
+          'turn_id',
+          'attempt',
+          'recipient_principal_id',
+          'recipient_agent_id',
+        ],
+        unique: true,
+        partial: true,
+      },
+    },
   },
   collaboration_sync_attempts: {
     columns: [
@@ -495,11 +682,11 @@ function hasUserTables(database: Database.Database): boolean {
 }
 
 function migrate(database: Database.Database): void {
-  let version = schemaVersion(database);
-  if (version > CURRENT_COLLABORATION_SCHEMA_VERSION)
+  const version = schemaVersion(database);
+  if (version !== 0 && version !== CURRENT_COLLABORATION_SCHEMA_VERSION)
     throw new CollaborationStoreError(
       'SCHEMA_VERSION_UNSUPPORTED',
-      `Collaboration schema ${String(version)} is newer than supported ${String(CURRENT_COLLABORATION_SCHEMA_VERSION)}`,
+      `Collaboration schema ${String(version)} is unsupported; only fresh or v${String(CURRENT_COLLABORATION_SCHEMA_VERSION)} stores are accepted`,
     );
   if (version === 0 && hasUserTables(database))
     throw new CollaborationStoreError(
@@ -508,30 +695,12 @@ function migrate(database: Database.Database): void {
     );
   if (version === 0) {
     database.transaction(() => {
-      database.exec(SCHEMA_V1);
-      database.pragma('user_version = 1');
+      database.exec(SCHEMA_V4);
+      database.pragma(
+        `user_version = ${String(CURRENT_COLLABORATION_SCHEMA_VERSION)}`,
+      );
     })();
-    version = 1;
   }
-  if (version === 1) {
-    database.transaction(() => {
-      database.exec(MIGRATE_V1_TO_V2);
-      database.pragma('user_version = 2');
-    })();
-    version = 2;
-  }
-  if (version === 2) {
-    database.transaction(() => {
-      database.exec(MIGRATE_V2_TO_V3);
-      database.pragma('user_version = 3');
-    })();
-    version = 3;
-  }
-  if (version !== CURRENT_COLLABORATION_SCHEMA_VERSION)
-    throw new CollaborationStoreError(
-      'SCHEMA_VERSION_UNSUPPORTED',
-      `No migration path for collaboration schema ${String(version)}`,
-    );
 }
 
 export function assertCollaborationStoreStructure(
@@ -620,7 +789,7 @@ export function assertCollaborationStoreStructure(
       const index = indexes.get(indexName)!;
       if (
         Boolean(index.unique) !== constraint.unique ||
-        Boolean(index.partial) ||
+        Boolean(index.partial) !== (constraint.partial ?? false) ||
         JSON.stringify(indexColumns(indexName)) !==
           JSON.stringify(constraint.columns)
       )
@@ -699,17 +868,37 @@ export interface CollaborationGroupRecord {
 
 export interface CollaborationExecutorBinding {
   readonly groupId: string;
-  readonly role: string;
+  readonly stateId: string;
+  readonly implementationHash: string;
+  readonly actionHash: string;
   readonly executorKind: 'run_once' | 'workflow' | 'external';
   readonly adapter: string | null;
   readonly agentJid: string | null;
   readonly workspacePath: string;
-  readonly promptOverride: string | null;
   readonly filesystemAccessCap: FilesystemAccess;
   readonly approvalPolicy: 'untrusted' | 'on-request' | 'never';
   readonly config: Record<string, unknown>;
   readonly enabled: boolean;
   readonly updatedAtMs: number;
+}
+
+export interface CollaborationStagedArtifact {
+  readonly artifactId: string;
+  readonly groupId: string;
+  readonly turnId: string;
+  readonly attempt: number;
+  readonly principalId: string;
+  readonly agentId: string;
+  readonly originalName: string;
+  readonly repositoryPath: string;
+  readonly stagedPath: string;
+  readonly sha256: string;
+  readonly size: number;
+  readonly contentType: string;
+  readonly state: 'staged' | 'committed';
+  readonly createdAtMs: number;
+  readonly expiresAtMs: number;
+  readonly committedAtMs: number | null;
 }
 
 export interface CollaborationSyncAttempt {
@@ -736,6 +925,29 @@ export type CollaborationExecutionState =
   | 'cancelled'
   | 'recovery_required';
 
+export type CollaborationNotificationDeadlineKind = 'start' | 'execution';
+
+export interface CollaborationNotificationRecord {
+  readonly notificationId: string;
+  readonly groupId: string;
+  readonly turnId: string;
+  readonly attempt: number;
+  readonly kind: string;
+  readonly deadlineKind: CollaborationNotificationDeadlineKind;
+  readonly recipientPrincipalId: string;
+  readonly recipientAgentId: string;
+  readonly reminderOrdinal: number;
+  readonly deadlineAtMs: number | null;
+  readonly firstDiscoveredAtMs: number;
+  readonly localObservedAtMs: number;
+  readonly deliveredAtMs: number | null;
+}
+
+export interface CollaborationNotificationEnqueueResult {
+  readonly notification: CollaborationNotificationRecord;
+  readonly enqueued: boolean;
+}
+
 export interface CollaborationExecutionRecord {
   readonly executionId: string;
   readonly groupId: string;
@@ -755,6 +967,7 @@ export interface CollaborationExecutionRecord {
   readonly recoveryRequiredReason: string | null;
   readonly dispatchStartedAtMs: number | null;
   readonly receiptRecordedAtMs: number | null;
+  readonly providerCompletedAtMs: number | null;
   readonly createdAtMs: number;
   readonly updatedAtMs: number;
 }
@@ -827,8 +1040,60 @@ function executionFromRow(
       row.receipt_recorded_at_ms == null
         ? null
         : Number(row.receipt_recorded_at_ms),
+    providerCompletedAtMs:
+      row.provider_completed_at_ms == null
+        ? null
+        : Number(row.provider_completed_at_ms),
     createdAtMs: Number(row.created_at_ms),
     updatedAtMs: Number(row.updated_at_ms),
+  };
+}
+
+function notificationFromRow(
+  row: Record<string, unknown>,
+): CollaborationNotificationRecord {
+  return {
+    notificationId: String(row.notification_id),
+    groupId: String(row.group_id),
+    turnId: String(row.turn_id),
+    attempt: Number(row.attempt),
+    kind: String(row.kind),
+    deadlineKind: String(
+      row.deadline_kind,
+    ) as CollaborationNotificationDeadlineKind,
+    recipientPrincipalId: String(row.recipient_principal_id),
+    recipientAgentId: String(row.recipient_agent_id),
+    reminderOrdinal: Number(row.reminder_ordinal),
+    deadlineAtMs:
+      row.deadline_at_ms == null ? null : Number(row.deadline_at_ms),
+    firstDiscoveredAtMs: Number(row.first_discovered_at_ms),
+    localObservedAtMs: Number(row.local_observed_at_ms),
+    deliveredAtMs:
+      row.delivered_at_ms == null ? null : Number(row.delivered_at_ms),
+  };
+}
+
+function stagedArtifactFromRow(
+  row: Record<string, unknown>,
+): CollaborationStagedArtifact {
+  return {
+    artifactId: String(row.artifact_id),
+    groupId: String(row.group_id),
+    turnId: String(row.turn_id),
+    attempt: Number(row.attempt),
+    principalId: String(row.principal_id),
+    agentId: String(row.agent_id),
+    originalName: String(row.original_name),
+    repositoryPath: String(row.repository_path),
+    stagedPath: String(row.staged_path),
+    sha256: String(row.sha256),
+    size: Number(row.size),
+    contentType: String(row.content_type),
+    state: String(row.state) as CollaborationStagedArtifact['state'],
+    createdAtMs: Number(row.created_at_ms),
+    expiresAtMs: Number(row.expires_at_ms),
+    committedAtMs:
+      row.committed_at_ms == null ? null : Number(row.committed_at_ms),
   };
 }
 
@@ -1048,6 +1313,29 @@ export class CollaborationStore {
             claim.principal_id,
             claim.agent_id,
           );
+      this.database
+        .prepare(
+          'DELETE FROM collaboration_state_implementations WHERE group_id = ?',
+        )
+        .run(input.groupId);
+      const implementationStatement = this.database.prepare(
+        `INSERT INTO collaboration_state_implementations (
+           group_id, state_id, role, implementation_hash,
+           implementation_json, active, updated_at_ms
+         ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      );
+      for (const [stateId, active] of Object.entries(
+        input.projection.stateImplementations,
+      ))
+        implementationStatement.run(
+          input.groupId,
+          stateId,
+          active.implementation.role,
+          active.implementationHash,
+          JSON.stringify(active),
+          active.active ? 1 : 0,
+          nowMs,
+        );
       const turnStatement = this.database.prepare(
         `INSERT INTO collaboration_turns (
            group_id, turn_id, epoch, attempt, state, fencing_token,
@@ -1337,16 +1625,16 @@ export class CollaborationStore {
     this.database
       .prepare(
         `INSERT INTO collaboration_executor_bindings (
-           group_id, role, executor_kind, adapter, agent_jid, workspace_path,
-           prompt_override, filesystem_access_cap, approval_policy, config_json,
+           group_id, state_id, implementation_hash, action_hash,
+           executor_kind, adapter, agent_jid, workspace_path,
+           filesystem_access_cap, approval_policy, config_json,
            enabled, updated_at_ms
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT(group_id, role) DO UPDATE SET
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(group_id, state_id, implementation_hash, action_hash) DO UPDATE SET
            executor_kind = excluded.executor_kind,
            adapter = excluded.adapter,
            agent_jid = excluded.agent_jid,
            workspace_path = excluded.workspace_path,
-           prompt_override = excluded.prompt_override,
            filesystem_access_cap = excluded.filesystem_access_cap,
            approval_policy = excluded.approval_policy,
            config_json = excluded.config_json,
@@ -1355,12 +1643,13 @@ export class CollaborationStore {
       )
       .run(
         binding.groupId,
-        binding.role,
+        binding.stateId,
+        binding.implementationHash,
+        binding.actionHash,
         binding.executorKind,
         binding.adapter,
         binding.agentJid,
         binding.workspacePath,
-        binding.promptOverride,
         binding.filesystemAccessCap,
         binding.approvalPolicy,
         JSON.stringify(binding.config),
@@ -1371,27 +1660,39 @@ export class CollaborationStore {
 
   getExecutorBinding(
     groupId: string,
-    role: string,
+    stateId: string,
+    implementationHash?: string,
+    actionHash?: string,
   ): CollaborationExecutorBinding | null {
     this.assertOpen();
     const row = this.database
       .prepare(
         `SELECT * FROM collaboration_executor_bindings
-          WHERE group_id = ? AND role = ?`,
+          WHERE group_id = ? AND state_id = ?
+            AND (? IS NULL OR implementation_hash = ?)
+            AND (? IS NULL OR action_hash = ?)
+       ORDER BY updated_at_ms DESC LIMIT 1`,
       )
-      .get(groupId, role) as Record<string, unknown> | undefined;
+      .get(
+        groupId,
+        stateId,
+        implementationHash ?? null,
+        implementationHash ?? null,
+        actionHash ?? null,
+        actionHash ?? null,
+      ) as Record<string, unknown> | undefined;
     if (!row) return null;
     return {
       groupId: String(row.group_id),
-      role: String(row.role),
+      stateId: String(row.state_id),
+      implementationHash: String(row.implementation_hash),
+      actionHash: String(row.action_hash),
       executorKind: String(
         row.executor_kind,
       ) as CollaborationExecutorBinding['executorKind'],
       adapter: row.adapter == null ? null : String(row.adapter),
       agentJid: row.agent_jid == null ? null : String(row.agent_jid),
       workspacePath: String(row.workspace_path),
-      promptOverride:
-        row.prompt_override == null ? null : String(row.prompt_override),
       filesystemAccessCap: String(
         row.filesystem_access_cap,
       ) as FilesystemAccess,
@@ -1406,16 +1707,366 @@ export class CollaborationStore {
 
   listExecutorBindings(groupId: string): CollaborationExecutorBinding[] {
     this.assertOpen();
-    const roles = this.database
+    const identities = this.database
       .prepare(
-        'SELECT role FROM collaboration_executor_bindings WHERE group_id = ? ORDER BY role',
+        `SELECT state_id, implementation_hash, action_hash
+           FROM collaboration_executor_bindings
+          WHERE group_id = ? ORDER BY state_id, updated_at_ms DESC`,
       )
-      .all(groupId) as Array<{ role: string }>;
-    return roles
-      .map((row) => this.getExecutorBinding(groupId, row.role))
+      .all(groupId) as Array<{
+      state_id: string;
+      implementation_hash: string;
+      action_hash: string;
+    }>;
+    return identities
+      .map((row) =>
+        this.getExecutorBinding(
+          groupId,
+          row.state_id,
+          row.implementation_hash,
+          row.action_hash,
+        ),
+      )
       .filter((binding): binding is CollaborationExecutorBinding =>
         Boolean(binding),
       );
+  }
+
+  stageArtifact(input: {
+    readonly artifactId: string;
+    readonly groupId: string;
+    readonly turnId: string;
+    readonly attempt: number;
+    readonly principalId: string;
+    readonly agentId: string;
+    readonly originalName: string;
+    readonly repositoryPath: string;
+    readonly stagedPath: string;
+    readonly sha256: string;
+    readonly size: number;
+    readonly contentType: string;
+    readonly nowMs?: number;
+    readonly ttlMs?: number;
+  }): CollaborationStagedArtifact {
+    this.assertOpen();
+    const nowMs = input.nowMs ?? Date.now();
+    this.database
+      .prepare(
+        `INSERT INTO collaboration_staged_artifacts (
+           artifact_id, group_id, turn_id, attempt, principal_id, agent_id,
+           original_name, repository_path, staged_path, sha256, size,
+           content_type, state, created_at_ms, expires_at_ms, committed_at_ms
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'staged', ?, ?, NULL)`,
+      )
+      .run(
+        input.artifactId,
+        input.groupId,
+        input.turnId,
+        input.attempt,
+        input.principalId,
+        input.agentId,
+        input.originalName,
+        input.repositoryPath,
+        input.stagedPath,
+        input.sha256,
+        input.size,
+        input.contentType,
+        nowMs,
+        nowMs + (input.ttlMs ?? 24 * 60 * 60_000),
+      );
+    return this.getStagedArtifact(input.artifactId)!;
+  }
+
+  getStagedArtifact(artifactId: string): CollaborationStagedArtifact | null {
+    this.assertOpen();
+    const row = this.database
+      .prepare(
+        'SELECT * FROM collaboration_staged_artifacts WHERE artifact_id = ?',
+      )
+      .get(artifactId) as Record<string, unknown> | undefined;
+    return row ? stagedArtifactFromRow(row) : null;
+  }
+
+  listStagedArtifacts(
+    groupId: string,
+    turnId: string,
+  ): CollaborationStagedArtifact[] {
+    this.assertOpen();
+    return (
+      this.database
+        .prepare(
+          `SELECT * FROM collaboration_staged_artifacts
+            WHERE group_id = ? AND turn_id = ? AND state = 'staged'
+         ORDER BY created_at_ms, artifact_id`,
+        )
+        .all(groupId, turnId) as Record<string, unknown>[]
+    ).map(stagedArtifactFromRow);
+  }
+
+  getStagedArtifacts(
+    groupId: string,
+    turnId: string,
+    artifactIds: readonly string[],
+  ): CollaborationStagedArtifact[] {
+    const available = new Map(
+      this.listStagedArtifacts(groupId, turnId).map((artifact) => [
+        artifact.artifactId,
+        artifact,
+      ]),
+    );
+    const unique = [...new Set(artifactIds)];
+    if (unique.length !== artifactIds.length)
+      throw new Error('Artifact ids must be unique');
+    return unique.map((artifactId) => {
+      const artifact = available.get(artifactId);
+      if (!artifact)
+        throw new Error(`Staged artifact is unavailable: ${artifactId}`);
+      return artifact;
+    });
+  }
+
+  commitStagedArtifacts(
+    artifactIds: readonly string[],
+    nowMs = Date.now(),
+  ): void {
+    this.assertOpen();
+    const statement = this.database.prepare(
+      `UPDATE collaboration_staged_artifacts
+          SET state = 'committed', committed_at_ms = ?
+        WHERE artifact_id = ? AND state = 'staged'`,
+    );
+    this.database.transaction(() => {
+      for (const artifactId of artifactIds) {
+        const result = statement.run(nowMs, artifactId);
+        if (result.changes !== 1)
+          throw new Error(`Artifact cannot be committed: ${artifactId}`);
+      }
+    })();
+  }
+
+  removeStagedArtifact(
+    groupId: string,
+    turnId: string,
+    artifactId: string,
+  ): CollaborationStagedArtifact {
+    this.assertOpen();
+    const artifact = this.getStagedArtifact(artifactId);
+    if (
+      !artifact ||
+      artifact.groupId !== groupId ||
+      artifact.turnId !== turnId ||
+      artifact.state !== 'staged'
+    )
+      throw new Error(`Staged artifact is unavailable: ${artifactId}`);
+    this.database
+      .prepare(
+        `DELETE FROM collaboration_staged_artifacts
+          WHERE artifact_id = ? AND state = 'staged'`,
+      )
+      .run(artifactId);
+    return artifact;
+  }
+
+  cleanupExpiredStagedArtifacts(nowMs = Date.now()): string[] {
+    this.assertOpen();
+    const paths = (
+      this.database
+        .prepare(
+          `SELECT staged_path FROM collaboration_staged_artifacts
+            WHERE state = 'staged' AND expires_at_ms <= ?`,
+        )
+        .all(nowMs) as Array<{ staged_path: string }>
+    ).map((row) => row.staged_path);
+    this.database
+      .prepare(
+        `DELETE FROM collaboration_staged_artifacts
+          WHERE state = 'staged' AND expires_at_ms <= ?`,
+      )
+      .run(nowMs);
+    return paths;
+  }
+
+  enqueueNotification(input: {
+    readonly notificationId?: string;
+    readonly groupId: string;
+    readonly turnId: string;
+    readonly attempt: number;
+    readonly kind: string;
+    readonly deadlineKind: CollaborationNotificationDeadlineKind;
+    readonly recipientPrincipalId: string;
+    readonly recipientAgentId: string;
+    readonly reminderOrdinal?: number;
+    readonly deadlineAtMs: number | null;
+    readonly nowMs?: number;
+  }): CollaborationNotificationEnqueueResult {
+    this.assertOpen();
+    if (input.kind !== 'turn_created' && !input.kind.startsWith('timeout:'))
+      throw new Error('Notification kind must be turn_created or timeout:*');
+    if (!Number.isSafeInteger(input.attempt) || input.attempt < 1)
+      throw new Error('Notification attempt must be a positive integer');
+    const reminderOrdinal = input.reminderOrdinal ?? 0;
+    if (!Number.isSafeInteger(reminderOrdinal) || reminderOrdinal < 0)
+      throw new Error('Notification reminder ordinal must be non-negative');
+    if (
+      input.deadlineAtMs !== null &&
+      (!Number.isSafeInteger(input.deadlineAtMs) || input.deadlineAtMs < 0)
+    )
+      throw new Error('Notification deadline must be null or a timestamp');
+    const nowMs = input.nowMs ?? Date.now();
+    const notificationId =
+      input.notificationId ??
+      `collaboration:notification:${crypto.randomUUID()}`;
+    const result = this.database
+      .prepare(
+        `INSERT OR IGNORE INTO collaboration_notification_deliveries (
+           notification_id, group_id, turn_id, attempt, kind, deadline_kind,
+           recipient_principal_id, recipient_agent_id, reminder_ordinal,
+           deadline_at_ms, first_discovered_at_ms, local_observed_at_ms,
+           delivered_at_ms
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
+      )
+      .run(
+        notificationId,
+        input.groupId,
+        input.turnId,
+        input.attempt,
+        input.kind,
+        input.deadlineKind,
+        input.recipientPrincipalId,
+        input.recipientAgentId,
+        reminderOrdinal,
+        input.deadlineAtMs,
+        nowMs,
+        nowMs,
+      );
+    const row = (
+      input.kind.startsWith('timeout:')
+        ? this.database
+            .prepare(
+              `SELECT * FROM collaboration_notification_deliveries
+                WHERE group_id = ? AND turn_id = ? AND attempt = ?
+                  AND deadline_kind = ? AND recipient_principal_id = ?
+                  AND recipient_agent_id = ? AND reminder_ordinal = ?
+                  AND kind LIKE 'timeout:%'`,
+            )
+            .get(
+              input.groupId,
+              input.turnId,
+              input.attempt,
+              input.deadlineKind,
+              input.recipientPrincipalId,
+              input.recipientAgentId,
+              reminderOrdinal,
+            )
+        : this.database
+            .prepare(
+              `SELECT * FROM collaboration_notification_deliveries
+                WHERE group_id = ? AND turn_id = ? AND attempt = ?
+                  AND kind = ? AND recipient_principal_id = ?
+                  AND recipient_agent_id = ?`,
+            )
+            .get(
+              input.groupId,
+              input.turnId,
+              input.attempt,
+              input.kind,
+              input.recipientPrincipalId,
+              input.recipientAgentId,
+            )
+    ) as Record<string, unknown> | undefined;
+    if (!row)
+      throw new Error(
+        `Notification id is already assigned to another reminder: ${notificationId}`,
+      );
+    const notification = notificationFromRow(row);
+    if (notification.deadlineAtMs !== input.deadlineAtMs)
+      throw new Error('Notification deadline does not match its durable key');
+    if (result.changes === 0 && notification.localObservedAtMs < nowMs) {
+      this.database
+        .prepare(
+          `UPDATE collaboration_notification_deliveries
+              SET local_observed_at_ms = MAX(local_observed_at_ms, ?)
+            WHERE notification_id = ?`,
+        )
+        .run(nowMs, notification.notificationId);
+      const updated = this.database
+        .prepare(
+          `SELECT * FROM collaboration_notification_deliveries
+            WHERE notification_id = ?`,
+        )
+        .get(notification.notificationId) as Record<string, unknown>;
+      return {
+        notification: notificationFromRow(updated),
+        enqueued: false,
+      };
+    }
+    return { notification, enqueued: result.changes === 1 };
+  }
+
+  listPendingNotifications(input: {
+    readonly recipientPrincipalId: string;
+    readonly recipientAgentId: string;
+    readonly groupId?: string;
+  }): CollaborationNotificationRecord[] {
+    this.assertOpen();
+    return (
+      this.database
+        .prepare(
+          `SELECT * FROM collaboration_notification_deliveries
+            WHERE recipient_principal_id = ? AND recipient_agent_id = ?
+              AND delivered_at_ms IS NULL
+              AND (? IS NULL OR group_id = ?)
+         ORDER BY first_discovered_at_ms, notification_id`,
+        )
+        .all(
+          input.recipientPrincipalId,
+          input.recipientAgentId,
+          input.groupId ?? null,
+          input.groupId ?? null,
+        ) as Record<string, unknown>[]
+    ).map(notificationFromRow);
+  }
+
+  markNotificationDelivered(input: {
+    readonly notificationId: string;
+    readonly recipientPrincipalId: string;
+    readonly recipientAgentId: string;
+    readonly nowMs?: number;
+  }): boolean {
+    this.assertOpen();
+    const result = this.database
+      .prepare(
+        `UPDATE collaboration_notification_deliveries
+            SET delivered_at_ms = ?
+          WHERE notification_id = ? AND recipient_principal_id = ?
+            AND recipient_agent_id = ? AND delivered_at_ms IS NULL`,
+      )
+      .run(
+        input.nowMs ?? Date.now(),
+        input.notificationId,
+        input.recipientPrincipalId,
+        input.recipientAgentId,
+      );
+    return result.changes === 1;
+  }
+
+  listNotificationsForAudit(
+    groupId: string,
+    turnId?: string,
+  ): CollaborationNotificationRecord[] {
+    this.assertOpen();
+    return (
+      this.database
+        .prepare(
+          `SELECT * FROM collaboration_notification_deliveries
+            WHERE group_id = ? AND (? IS NULL OR turn_id = ?)
+         ORDER BY first_discovered_at_ms, notification_id`,
+        )
+        .all(groupId, turnId ?? null, turnId ?? null) as Record<
+        string,
+        unknown
+      >[]
+    ).map(notificationFromRow);
   }
 
   listExecutions(groupId: string): CollaborationExecutionRecord[] {
@@ -1529,10 +2180,17 @@ export class CollaborationStore {
   }): void {
     this.assertOpen();
     const nowMs = input.nowMs ?? Date.now();
+    const providerCompleted = ['succeeded', 'failed', 'cancelled'].includes(
+      input.state,
+    );
     this.database
       .prepare(
         `UPDATE collaboration_action_executions
             SET state = ?, observation_json = ?, pending_result_event_json = ?,
+                provider_completed_at_ms = CASE
+                  WHEN ? THEN COALESCE(provider_completed_at_ms, ?)
+                  ELSE provider_completed_at_ms
+                END,
                 updated_at_ms = ?
           WHERE execution_id = ?`,
       )
@@ -1542,6 +2200,8 @@ export class CollaborationStore {
         input.pendingResultEvent
           ? JSON.stringify(input.pendingResultEvent)
           : null,
+        providerCompleted ? 1 : 0,
+        nowMs,
         nowMs,
         input.executionId,
       );
@@ -1633,6 +2293,11 @@ export class CollaborationStore {
         .run(groupId);
       this.database
         .prepare('DELETE FROM collaboration_turns WHERE group_id = ?')
+        .run(groupId);
+      this.database
+        .prepare(
+          'DELETE FROM collaboration_state_implementations WHERE group_id = ?',
+        )
         .run(groupId);
       this.database
         .prepare(
@@ -1965,5 +2630,3 @@ export function rollbackCollaborationRestore(input: {
       renameSync(rollback, path.join(targetDirectory, basename));
   }
 }
-
-export const collaborationSchemaV1ForTests = SCHEMA_V1;
