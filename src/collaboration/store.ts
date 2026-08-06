@@ -196,6 +196,32 @@ ALTER TABLE collaboration_sync_attempts
 interface RequiredTable {
   readonly columns: readonly string[];
   readonly indexes?: readonly string[];
+  readonly columnConstraints?: Readonly<
+    Record<
+      string,
+      {
+        readonly type: 'INTEGER' | 'TEXT';
+        readonly notNull: boolean;
+        readonly primaryKeyPosition: number;
+      }
+    >
+  >;
+  readonly indexConstraints?: Readonly<
+    Record<
+      string,
+      {
+        readonly columns: readonly string[];
+        readonly unique: boolean;
+      }
+    >
+  >;
+  readonly uniqueConstraints?: readonly (readonly string[])[];
+  readonly foreignKeyConstraints?: readonly {
+    readonly from: string;
+    readonly table: string;
+    readonly to: string;
+    readonly onDelete: string;
+  }[];
 }
 
 const REQUIRED_STRUCTURE: Readonly<Record<string, RequiredTable>> = {
@@ -271,6 +297,7 @@ const REQUIRED_STRUCTURE: Readonly<Record<string, RequiredTable>> = {
       'execution_id',
       'group_id',
       'turn_id',
+      'epoch',
       'attempt',
       'fencing_token',
       'operation_key',
@@ -282,13 +309,86 @@ const REQUIRED_STRUCTURE: Readonly<Record<string, RequiredTable>> = {
       'receipt_json',
       'observation_json',
       'pending_result_event_json',
-      'recovery_required_reason',
       'dispatch_started_at_ms',
       'receipt_recorded_at_ms',
       'created_at_ms',
       'updated_at_ms',
+      'recovery_required_reason',
     ],
     indexes: ['collaboration_executions_recovery_idx'],
+    columnConstraints: {
+      execution_id: {
+        type: 'TEXT',
+        notNull: false,
+        primaryKeyPosition: 1,
+      },
+      group_id: { type: 'TEXT', notNull: true, primaryKeyPosition: 0 },
+      turn_id: { type: 'TEXT', notNull: true, primaryKeyPosition: 0 },
+      epoch: { type: 'INTEGER', notNull: true, primaryKeyPosition: 0 },
+      attempt: { type: 'INTEGER', notNull: true, primaryKeyPosition: 0 },
+      fencing_token: { type: 'TEXT', notNull: true, primaryKeyPosition: 0 },
+      operation_key: { type: 'TEXT', notNull: true, primaryKeyPosition: 0 },
+      executor_kind: { type: 'TEXT', notNull: true, primaryKeyPosition: 0 },
+      adapter: { type: 'TEXT', notNull: false, primaryKeyPosition: 0 },
+      state: { type: 'TEXT', notNull: true, primaryKeyPosition: 0 },
+      execution_ref: { type: 'TEXT', notNull: false, primaryKeyPosition: 0 },
+      provider_metadata_json: {
+        type: 'TEXT',
+        notNull: false,
+        primaryKeyPosition: 0,
+      },
+      receipt_json: { type: 'TEXT', notNull: false, primaryKeyPosition: 0 },
+      observation_json: {
+        type: 'TEXT',
+        notNull: false,
+        primaryKeyPosition: 0,
+      },
+      pending_result_event_json: {
+        type: 'TEXT',
+        notNull: false,
+        primaryKeyPosition: 0,
+      },
+      dispatch_started_at_ms: {
+        type: 'INTEGER',
+        notNull: false,
+        primaryKeyPosition: 0,
+      },
+      receipt_recorded_at_ms: {
+        type: 'INTEGER',
+        notNull: false,
+        primaryKeyPosition: 0,
+      },
+      created_at_ms: {
+        type: 'INTEGER',
+        notNull: true,
+        primaryKeyPosition: 0,
+      },
+      updated_at_ms: {
+        type: 'INTEGER',
+        notNull: true,
+        primaryKeyPosition: 0,
+      },
+      recovery_required_reason: {
+        type: 'TEXT',
+        notNull: false,
+        primaryKeyPosition: 0,
+      },
+    },
+    indexConstraints: {
+      collaboration_executions_recovery_idx: {
+        columns: ['group_id', 'state', 'execution_ref'],
+        unique: false,
+      },
+    },
+    uniqueConstraints: [['operation_key'], ['group_id', 'turn_id', 'attempt']],
+    foreignKeyConstraints: [
+      {
+        from: 'group_id',
+        table: 'collaboration_groups',
+        to: 'group_id',
+        onDelete: 'RESTRICT',
+      },
+    ],
   },
   collaboration_executor_bindings: {
     columns: [
@@ -407,32 +507,131 @@ export function assertCollaborationStoreStructure(
       'Collaboration database is not at the current schema version',
     );
   for (const [table, requirement] of Object.entries(REQUIRED_STRUCTURE)) {
-    const columns = new Set(
-      (
-        database.prepare(`PRAGMA table_info(${table})`).all() as Array<{
-          name: string;
-        }>
-      ).map((column) => column.name),
-    );
+    const columnInfo = database
+      .prepare(`PRAGMA table_info(${table})`)
+      .all() as Array<{
+      name: string;
+      type: string;
+      notnull: number;
+      pk: number;
+    }>;
+    const actualColumns = columnInfo.map((column) => column.name);
     for (const column of requirement.columns) {
-      if (!columns.has(column))
+      if (!actualColumns.includes(column))
         throw new CollaborationStoreError(
           'SCHEMA_STRUCTURE_INVALID',
           `Collaboration table ${table} is missing column ${column}`,
         );
     }
-    const indexes = new Set(
-      (
-        database.prepare(`PRAGMA index_list(${table})`).all() as Array<{
-          name: string;
-        }>
-      ).map((index) => index.name),
+    const unexpectedColumn = actualColumns.find(
+      (column) => !requirement.columns.includes(column),
     );
+    if (unexpectedColumn)
+      throw new CollaborationStoreError(
+        'SCHEMA_STRUCTURE_INVALID',
+        `Collaboration table ${table} has unexpected column ${unexpectedColumn}`,
+      );
+    if (
+      actualColumns.some(
+        (column, index) => column !== requirement.columns[index],
+      )
+    )
+      throw new CollaborationStoreError(
+        'SCHEMA_STRUCTURE_INVALID',
+        `Collaboration table ${table} column order does not match the current schema`,
+      );
+    const columnsByName = new Map(
+      columnInfo.map((column) => [column.name, column]),
+    );
+    for (const [columnName, constraint] of Object.entries(
+      requirement.columnConstraints ?? {},
+    )) {
+      const column = columnsByName.get(columnName)!;
+      if (
+        column.type.toUpperCase() !== constraint.type ||
+        Boolean(column.notnull) !== constraint.notNull ||
+        column.pk !== constraint.primaryKeyPosition
+      )
+        throw new CollaborationStoreError(
+          'SCHEMA_STRUCTURE_INVALID',
+          `Collaboration table ${table} column ${columnName} constraint does not match the current schema`,
+        );
+    }
+    const indexInfo = database
+      .prepare(`PRAGMA index_list(${table})`)
+      .all() as Array<{
+      name: string;
+      unique: number;
+      partial: number;
+    }>;
+    const indexes = new Map(indexInfo.map((index) => [index.name, index]));
+    const indexColumns = (indexName: string): string[] =>
+      (
+        database
+          .prepare('SELECT name FROM pragma_index_info(?) ORDER BY seqno ASC')
+          .all(indexName) as Array<{ name: string }>
+      ).map((column) => column.name);
     for (const index of requirement.indexes ?? []) {
       if (!indexes.has(index))
         throw new CollaborationStoreError(
           'SCHEMA_STRUCTURE_INVALID',
           `Collaboration table ${table} is missing index ${index}`,
+        );
+    }
+    for (const [indexName, constraint] of Object.entries(
+      requirement.indexConstraints ?? {},
+    )) {
+      const index = indexes.get(indexName)!;
+      if (
+        Boolean(index.unique) !== constraint.unique ||
+        Boolean(index.partial) ||
+        JSON.stringify(indexColumns(indexName)) !==
+          JSON.stringify(constraint.columns)
+      )
+        throw new CollaborationStoreError(
+          'SCHEMA_STRUCTURE_INVALID',
+          `Collaboration index ${indexName} columns or uniqueness do not match the current schema`,
+        );
+    }
+    for (const constraint of requirement.uniqueConstraints ?? []) {
+      const present = indexInfo.some(
+        (index) =>
+          Boolean(index.unique) &&
+          !Boolean(index.partial) &&
+          JSON.stringify(indexColumns(index.name)) ===
+            JSON.stringify(constraint),
+      );
+      if (!present)
+        throw new CollaborationStoreError(
+          'SCHEMA_STRUCTURE_INVALID',
+          `Collaboration table ${table} constraint UNIQUE (${constraint.join(', ')}) is missing`,
+        );
+    }
+    if (requirement.foreignKeyConstraints) {
+      const actual = (
+        database.prepare(`PRAGMA foreign_key_list(${table})`).all() as Array<{
+          id: number;
+          seq: number;
+          table: string;
+          from: string;
+          to: string;
+          on_delete: string;
+        }>
+      )
+        .sort((left, right) => left.id - right.id || left.seq - right.seq)
+        .map((foreignKey) => ({
+          from: foreignKey.from,
+          table: foreignKey.table,
+          to: foreignKey.to,
+          onDelete: foreignKey.on_delete.toUpperCase(),
+        }));
+      if (
+        JSON.stringify(actual) !==
+        JSON.stringify(requirement.foreignKeyConstraints)
+      )
+        throw new CollaborationStoreError(
+          'SCHEMA_STRUCTURE_INVALID',
+          `Collaboration table ${table} foreign key constraint does not match the current schema`,
         );
     }
   }
