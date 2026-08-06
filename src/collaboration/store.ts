@@ -1390,6 +1390,8 @@ export function restoreCollaborationBackup(input: {
   if (
     manifest.format !== 'icarus.collaboration-backup/1' ||
     manifest.database_basename !== path.basename(databasePath) ||
+    !Number.isSafeInteger(manifest.schema_version) ||
+    manifest.schema_version < MINIMUM_COLLABORATION_SCHEMA_VERSION ||
     manifest.schema_version > CURRENT_COLLABORATION_SCHEMA_VERSION ||
     !Array.isArray(manifest.files)
   )
@@ -1397,8 +1399,21 @@ export function restoreCollaborationBackup(input: {
       'BACKUP_INVALID',
       'Collaboration backup manifest is incompatible with the restore target',
     );
+  const expectedMainFile = path.basename(databasePath);
+  const manifestNames = manifest.files.map((file) => file.name);
+  if (
+    !manifestNames.includes(expectedMainFile) ||
+    new Set(manifestNames).size !== manifestNames.length
+  )
+    throw new CollaborationStoreError(
+      'BACKUP_INVALID',
+      'Collaboration backup manifest must contain one unique database file',
+    );
   for (const file of manifest.files) {
     if (
+      !Number.isSafeInteger(file.size) ||
+      file.size < 0 ||
+      !/^[0-9a-f]{64}$/.test(file.sha256) ||
       path.basename(file.name) !== file.name ||
       ![
         path.basename(databasePath),
@@ -1437,8 +1452,9 @@ export function restoreCollaborationBackup(input: {
     stagingDirectory,
     path.basename(databasePath),
   );
-  const restored = new Database(stagedDatabase, { readonly: true });
+  let restored: Database.Database | null = null;
   try {
+    restored = new Database(stagedDatabase, { readonly: true });
     assertCollaborationStoreStructure(restored);
   } catch (error) {
     rmSync(stagingDirectory, { recursive: true, force: true });
@@ -1447,7 +1463,7 @@ export function restoreCollaborationBackup(input: {
       `Restored collaboration database failed structure validation: ${error instanceof Error ? error.message : String(error)}`,
     );
   } finally {
-    restored.close();
+    restored?.close();
   }
   const liveFiles = [
     databasePath,
@@ -1483,6 +1499,42 @@ export function restoreCollaborationBackup(input: {
     rmSync(stagingDirectory, { recursive: true, force: true });
   }
   return { rollbackDirectory };
+}
+
+export function rollbackCollaborationRestore(input: {
+  readonly databasePath: string;
+  readonly rollbackDirectory: string;
+}): void {
+  const databasePath = assertScopedDatabasePath(input.databasePath);
+  const targetDirectory = path.dirname(databasePath);
+  const rollbackDirectory = path.resolve(input.rollbackDirectory);
+  if (
+    path.dirname(rollbackDirectory) !== targetDirectory ||
+    !path.basename(rollbackDirectory).startsWith('.collaboration-pre-restore-')
+  )
+    throw new CollaborationStoreError(
+      'BACKUP_INVALID',
+      `Unsafe collaboration rollback directory: ${rollbackDirectory}`,
+    );
+  const basenames = [
+    path.basename(databasePath),
+    `${path.basename(databasePath)}-wal`,
+    `${path.basename(databasePath)}-shm`,
+  ];
+  if (!existsSync(path.join(rollbackDirectory, basenames[0]!)))
+    throw new CollaborationStoreError(
+      'BACKUP_INVALID',
+      'Collaboration rollback directory has no database file',
+    );
+  for (const basename of basenames) {
+    const live = path.join(targetDirectory, basename);
+    if (existsSync(live)) rmSync(live);
+  }
+  for (const basename of basenames) {
+    const rollback = path.join(rollbackDirectory, basename);
+    if (existsSync(rollback))
+      renameSync(rollback, path.join(targetDirectory, basename));
+  }
 }
 
 export const collaborationSchemaV1ForTests = SCHEMA_V1;

@@ -368,6 +368,31 @@ describe('CollaborationStore', () => {
     ).toThrow(/failed verification/);
   });
 
+  it('refuses a manifest that omits or duplicates the database file', () => {
+    const test = temporaryPath();
+    const backupDirectory = path.join(test.root, 'backup');
+    const store = new CollaborationStore(test.databasePath);
+    register(store);
+    createCollaborationBackup({
+      databasePath: test.databasePath,
+      backupDirectory,
+    });
+    store.close();
+    const manifestPath = path.join(backupDirectory, 'manifest.json');
+    const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as {
+      files: Array<{ name: string; size: number; sha256: string }>;
+    };
+    manifest.files = [manifest.files[0]!, manifest.files[0]!];
+    writeFileSync(manifestPath, JSON.stringify(manifest));
+    const destination = temporaryPath();
+    expect(() =>
+      restoreCollaborationBackup({
+        databasePath: destination.databasePath,
+        backupDirectory,
+      }),
+    ).toThrow(/one unique database file/);
+  });
+
   it('provides a single-process lock per group', () => {
     const test = temporaryPath();
     const store = new CollaborationStore(test.databasePath);

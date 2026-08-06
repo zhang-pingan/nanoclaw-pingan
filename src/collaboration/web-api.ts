@@ -264,7 +264,7 @@ export class CollaborationWebApi {
           'collaboration-backups',
           new Date().toISOString().replace(/[:.]/g, '-'),
         );
-      const manifest = this.runtime.createBackup(backupDirectory);
+      const manifest = await this.runtime.createBackup(backupDirectory);
       send(res, 201, { backupDirectory, manifest });
       return;
     }
@@ -273,7 +273,7 @@ export class CollaborationWebApi {
       if (body.confirm !== 'RESTORE COLLABORATION')
         throw new Error('confirm must equal RESTORE COLLABORATION');
       const backupDirectory = requiredString(body, 'backupDirectory');
-      const result = this.runtime.restoreBackup(backupDirectory);
+      const result = await this.runtime.restoreBackup(backupDirectory);
       send(res, 200, { ok: true, ...result });
       return;
     }

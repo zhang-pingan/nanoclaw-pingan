@@ -107,6 +107,9 @@ export class CollaborationScheduler {
   private timer: NodeJS.Timeout | null = null;
   private running = false;
   private ticking = false;
+  private acceptingWork = true;
+  private activeOperations = 0;
+  private readonly idleWaiters = new Set<() => void>();
   private lastTickAtMs: number | null = null;
   private receiptlessRecoveries = 0;
 
@@ -126,6 +129,7 @@ export class CollaborationScheduler {
 
   start(): void {
     if (this.running) return;
+    this.acceptingWork = true;
     this.receiptlessRecoveries =
       this.store.markReceiptlessExecutionsForRecovery(
         undefined,
@@ -141,6 +145,13 @@ export class CollaborationScheduler {
     this.timer = null;
   }
 
+  async stopAndDrain(): Promise<void> {
+    this.acceptingWork = false;
+    this.stop();
+    if (this.activeOperations === 0) return;
+    await new Promise<void>((resolve) => this.idleWaiters.add(resolve));
+  }
+
   diagnostics(): CollaborationSchedulerDiagnostic {
     return {
       running: this.running,
@@ -152,12 +163,15 @@ export class CollaborationScheduler {
   }
 
   async syncNow(groupId: string): Promise<void> {
-    await this.processGroup(groupId, true);
+    if (!this.acceptingWork)
+      throw new Error('Collaboration Scheduler is quiescing for maintenance');
+    await this.withActiveOperation(() => this.processGroup(groupId, true));
   }
 
   async tickOnce(): Promise<void> {
-    if (this.ticking) return;
+    if (this.ticking || !this.acceptingWork) return;
     this.ticking = true;
+    this.activeOperations += 1;
     this.lastTickAtMs = this.now();
     try {
       for (const group of this.store.listGroups()) {
@@ -173,7 +187,24 @@ export class CollaborationScheduler {
       }
     } finally {
       this.ticking = false;
+      this.finishActiveOperation();
     }
+  }
+
+  private async withActiveOperation<T>(work: () => Promise<T>): Promise<T> {
+    this.activeOperations += 1;
+    try {
+      return await work();
+    } finally {
+      this.finishActiveOperation();
+    }
+  }
+
+  private finishActiveOperation(): void {
+    this.activeOperations -= 1;
+    if (this.activeOperations !== 0) return;
+    for (const resolve of this.idleWaiters) resolve();
+    this.idleWaiters.clear();
   }
 
   private schedule(): void {

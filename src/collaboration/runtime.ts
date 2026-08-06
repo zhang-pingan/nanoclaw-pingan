@@ -16,6 +16,7 @@ import { CollaborationGroupService } from './service.js';
 import {
   CollaborationStore,
   createCollaborationBackup,
+  rollbackCollaborationRestore,
   restoreCollaborationBackup,
   type CollaborationBackupManifest,
 } from './store.js';
@@ -167,35 +168,65 @@ export class CollaborationRuntime {
     return this.schedulerValue;
   }
 
-  createBackup(backupDirectory: string): CollaborationBackupManifest {
+  async createBackup(
+    backupDirectory: string,
+  ): Promise<CollaborationBackupManifest> {
     void this.store;
-    return createCollaborationBackup({
-      databasePath: this.databasePath,
-      backupDirectory,
-    });
+    await this.scheduler.stopAndDrain();
+    this.stop();
+    try {
+      return createCollaborationBackup({
+        databasePath: this.databasePath,
+        backupDirectory,
+      });
+    } finally {
+      if (!this.start())
+        throw new Error(
+          this.errorValue ||
+            'Collaboration Runtime could not restart after backup',
+        );
+    }
   }
 
-  restoreBackup(backupDirectory: string): {
+  async restoreBackup(backupDirectory: string): Promise<{
     readonly rollbackDirectory: string | null;
-  } {
+  }> {
+    void this.store;
+    await this.scheduler.stopAndDrain();
     this.stop();
+    let rollbackDirectory: string | null = null;
     try {
       const result = restoreCollaborationBackup({
         databasePath: this.databasePath,
         backupDirectory,
       });
-      if (!this.start())
+      rollbackDirectory = result.rollbackDirectory;
+      if (!this.start()) {
+        const restoredError =
+          this.errorValue || 'Restored Collaboration Runtime could not start';
+        if (!rollbackDirectory) throw new Error(restoredError);
+        rollbackCollaborationRestore({
+          databasePath: this.databasePath,
+          rollbackDirectory,
+        });
+        rollbackDirectory = null;
+        if (!this.start())
+          throw new Error(
+            `${restoredError}; the previous Collaboration Runtime also could not restart: ${this.errorValue ?? 'unknown error'}`,
+          );
         throw new Error(
-          this.errorValue || 'Restored Collaboration Runtime could not start',
+          `${restoredError}; the previous Collaboration database was restored`,
         );
+      }
       return result;
     } catch (error) {
-      this.errorValue = error instanceof Error ? error.message : String(error);
+      const message = error instanceof Error ? error.message : String(error);
+      if (!this.storeValue) this.errorValue = message;
       this.options.logger.error(
-        { error: this.errorValue, backupDirectory },
+        { error: message, backupDirectory },
         'Collaboration backup restore failed',
       );
-      this.start();
+      if (!this.storeValue) this.start();
       throw error;
     }
   }

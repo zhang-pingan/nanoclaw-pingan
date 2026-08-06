@@ -57,6 +57,22 @@ describe('CollaborationRuntime', () => {
     expect(selected.status().available).toBe(false);
   });
 
+  it('quiesces and restarts around a consistent local backup', async () => {
+    const storeDir = root();
+    const selected = runtime(storeDir);
+    expect(selected.start()).toBe(true);
+    const backupDirectory = path.join(storeDir, 'backup');
+    const manifest = await selected.createBackup(backupDirectory);
+    expect(manifest.files.map((file) => file.name)).toContain(
+      'collaboration.db',
+    );
+    expect(selected.status()).toMatchObject({
+      available: true,
+      scheduler: { running: true },
+    });
+    selected.stop();
+  });
+
   it('contains an incompatible local schema without blocking the Host', () => {
     const storeDir = root();
     const database = new Database(path.join(storeDir, 'collaboration.db'));
