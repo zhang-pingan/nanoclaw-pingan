@@ -16,7 +16,7 @@ Use the smallest affected authority and its tests:
 | Definition, Recipe, Command, Feature, Card, Source and Compiled IR | `schemas/`, `closed-schema-pack.ts`, `catalogs/`                                        |
 | Safety, Capacity baseline, Retention and SQLite profile            | `safety/`, `capacity/`, `sqlite/`                                                       |
 | Current Logical Schema                                             | `logical-schema/` plus `../store/schema/`                                               |
-| Compiler authority                                                 | `../compiler/`, `conformance/current/`, and deterministic replay                        |
+| Compiler authority                                                 | `../compiler/`, including `../compiler/golden/`, and deterministic replay               |
 | Registry and authoring                                             | G3 contract packs and `../authoring/` tests                                             |
 | Runtime behavior                                                   | G5-G7 contract packs plus `../runtime/`, `../capacity/`, and `../projection/` tests     |
 | Local startup and rollback compatibility                           | configured Node resolver, Host Core, Store compatibility, and startup tests              |
@@ -39,7 +39,7 @@ Current Store tests create isolated databases under the OS temporary directory a
 
 Domain-specific generate commands remain implementation tools for versioned changes. They must not rewrite the retained v1 snapshot or historical fixtures in place. A future internal baseline should add only the minimum versioned boundary required by the affected data or runtime interface; it does not need to repeat G0-G9 certification.
 
-The engineering-weight review and further archive candidates are documented in [`docs/internal-experimental-scope.md`](../../../docs/internal-experimental-scope.md).
+The engineering-weight boundary and implemented simplification baseline are documented in [`docs/internal-experimental-scope.md`](../../../docs/internal-experimental-scope.md).
 
 ## Archive
 

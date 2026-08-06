@@ -1,8 +1,9 @@
 # Workflow Runtime Guardrail Simplification Plan
 
-> **Status**: Approved design; the Runtime gateway prerequisite is implemented, while the six simplification phases have not started
+> **Status**: Implemented on `main` by merge `9095b2b0`; Host Core startup-smoke hardening followed in `900b415c`
 > **Scope**: Workflow Runtime public gateways, static import boundaries, conformance and Golden assets, construction-stage governance, format-debt freezing, cross-cutting Identity governance, G9 Production Activation, Host Core snapshots, Workflow Runtime state backup, Node compatibility
 > **Project boundary**: Icarus is an internal, experimental, single-user tool. This plan optimizes for local iteration stability and recoverability, not external delivery or production certification.
+> **Reading note**: The phase migration, rollback, and delivery sections preserve the approved implementation design and execution record. They are not an open task list.
 
 ## 1. Decision Summary
 
@@ -20,8 +21,8 @@ The release and activation result is explicit:
 | Host Core `publish` | Retained as local snapshot creation, with simpler metadata and validation |
 | Host Core `activate` | Retained as atomic local snapshot selection through `active-core` |
 | G9 Production Activation | Removed from the active runtime |
-| `activation-core` | Removed after one compatibility migration |
-| `active-deployment` | Removed after one compatibility migration |
+| `activation-core` | Removed from the runtime; no permanent compatibility reader remains |
+| `active-deployment` | Removed from the runtime; no permanent compatibility reader remains |
 | Activation request/audit/journal/binding/recovery | Removed |
 | Capacity genesis activation | Replaced by idempotent first-run Store initialization |
 | Feature/Workflow Registry publish and activate | Retained as an internal business capability |
@@ -56,25 +57,25 @@ optional local snapshot
 
 There is no deployment transaction, production activation journal, independent acceptance role, or Capacity activation ceremony in the target model.
 
-## 2. Current Weight
+## 2. Pre-Implementation Weight
 
-As measured on 2026-08-04:
+Before the simplification was implemented, measurements on 2026-08-04 showed:
 
-- `src/workflow-runtime/contracts/` contains 2,842 files.
-- `src/workflow-runtime/contracts/conformance/` contains 2,443 files.
-- `sealed/`, `golden-draft/`, and `review-candidate/` account for 1,872 conformance files.
-- Contract JSON files occupy about 35 MB in the working tree.
-- Golden authoring, review, sealing, repair, and replay support spans about 26 source files and 12,000 lines.
-- Host Core release, activation, persistent-state handling, and runtime toolchain scripts span more than 4,000 implementation lines before tests.
-- G9 semantics are referenced by certification, Capacity, Compiler inventory, Store identity, runtime toolchain, Registry activation, and generated contracts.
+- `src/workflow-runtime/contracts/` contained 2,842 files.
+- `src/workflow-runtime/contracts/conformance/` contained 2,443 files.
+- `sealed/`, `golden-draft/`, and `review-candidate/` accounted for 1,872 conformance files.
+- Contract JSON files occupied about 35 MB in the working tree.
+- Golden authoring, review, sealing, repair, and replay support spanned about 26 source files and 12,000 lines.
+- Host Core release, activation, persistent-state handling, and runtime toolchain scripts spanned more than 4,000 implementation lines before tests.
+- G9 semantics were referenced by certification, Capacity, Compiler inventory, Store identity, runtime toolchain, Registry activation, and generated contracts.
 
-The problem is not only repository size. Every additional generated identity, review state, pointer, and recovery protocol increases the number of files that must change together during ordinary iteration.
+The problem was not only repository size. Every additional generated identity, review state, pointer, and recovery protocol increased the number of files that had to change together during ordinary iteration.
 
-The current archive verifier is also over-scoped. It pins the raw SHA-256 of six historical Markdown files, compares broad current Runtime source trees with one accepted commit, and performs reachability/provenance assertions. Editing historical documentation or legitimately evolving current source therefore makes an optional historical audit fail. Git already preserves the exact historical bytes, so this verifier adds maintenance cost without protecting local runtime state.
+The former archive verifier was also over-scoped. It pinned the raw SHA-256 of six historical Markdown files, compared broad Runtime source trees with one accepted commit, and performed reachability/provenance assertions. Editing historical documentation or legitimately evolving current source therefore made an optional historical audit fail. Git already preserved the exact historical bytes, so the verifier added maintenance cost without protecting local runtime state.
 
-The completed Runtime gateway refactor provides another concrete example. Moving existing imports behind three small gateway files changed no runtime behavior, but required regeneration of the static-absence contract pack, absence baseline, product-surface coverage, migration-candidate boundary, and two manually pinned artifact hashes. The import boundary is useful; this generated proof chain is not.
+The then-completed Runtime gateway refactor provided another concrete example. Moving existing imports behind three small gateway files changed no runtime behavior, but required regeneration of the static-absence contract pack, absence baseline, product-surface coverage, migration-candidate boundary, and two manually pinned artifact hashes. The import boundary is useful; this generated proof chain is not.
 
-Identity is also currently overloaded. Release identity, Runtime host identity, Compiler toolchain identity, logical Schema identity, physical SQLite Schema identity, backup identity, Node distribution identity, and ordinary business identifiers are treated as one broad proof vocabulary. Most of these proof chains do not prevent a distinct local failure. The target removes Identity as a cross-cutting governance subsystem and retains only concrete runtime concepts: semantic versions, supported migration ranges, functional IDs, idempotency keys, and checksums used to verify bytes that were actually copied or consumed.
+Identity was also overloaded. Release identity, Runtime host identity, Compiler toolchain identity, logical Schema identity, physical SQLite Schema identity, backup identity, Node distribution identity, and ordinary business identifiers were treated as one broad proof vocabulary. Most of these proof chains did not prevent a distinct local failure. The implemented baseline removes Identity as a cross-cutting governance subsystem and retains only concrete runtime concepts: semantic versions, supported migration ranges, functional IDs, idempotency keys, and checksums used to verify bytes that were actually copied or consumed.
 
 ## 3. Required Boundaries
 
@@ -206,10 +207,10 @@ Each active domain may keep:
 
 Repeated copies of the same case across draft, candidate, review, sealed, and repair directories are not allowed.
 
-### 5.3 Target Layout
+### 5.3 Implemented Layout
 
 ```text
-src/workflow-runtime/contracts/conformance/current/
+src/workflow-runtime/contracts/conformance/
   <domain>/
     positive-cases.json
     negative-cases.json
@@ -724,7 +725,7 @@ Keep the exact managed runtime installer as an optional fallback during one stab
 
 ## 10. Delivery Sequence
 
-Each phase should be an independently reviewable and revertible change. Do not combine G9 removal, Host Core snapshot changes, and state backup changes in one commit.
+The implementation used independently reviewable and revertible phase commits. G9 removal, Host Core snapshot changes, and state backup changes were not combined into one semantic commit.
 
 | Change | Scope | Risk | Required predecessor |
 | --- | --- | --- | --- |
@@ -737,11 +738,11 @@ Each phase should be an independently reviewable and revertible change. Do not c
 
 Recommended compatibility window: one successfully created, selected, started, and rolled-back local snapshot. This project does not need a calendar-based deprecation period.
 
-The active implementation task committed the original Phase 1 and Phase 2 before the later Identity, construction-governance, and format-baseline scope was clarified. Do not amend or rewrite those commits. First finish one Phase 1 follow-up atomic commit that removes Compiler Identity together with the remaining Golden draft/review/semantic-review/seal/successor/repair, review-candidate, and sealed-era historical-check paths. Keep only Compiler contract types and lowering behavior that the current Runtime actually consumes. Then land the missed Phase 2 scope as:
+During execution, the original Phase 1 and Phase 2 were committed before the later Identity, construction-governance, and format-baseline scope was clarified. The existing commits were preserved, and corrective follow-up commits then completed the remaining scope:
 
 1. Phase 2A follow-up: Gate ownership, G0 exit, readiness, fixed construction compatibility, and related script cleanup;
 2. Phase 2B follow-up: format-baseline removal and mechanical formatting of retained TypeScript;
-3. resume Phase 3 from the saved implementation state.
+3. Phase 3 resumed from the saved implementation state.
 
 These are corrective commits within the six-phase design, not a seventh functional phase.
 
@@ -773,7 +774,7 @@ Every phase runs focused tests plus the relevant rows below:
 | Compiler semantic regression | `golden:replay` fails |
 | New Workflow compile and Run execution | Completes through the current Plan format without Compiler Identity evidence |
 
-During the legacy compatibility window, the historical physical release verifier remains explicit and non-default and must pass without regeneration. After Host Core snapshot v2 has successfully replaced the legacy binding, remove the verifier and bundle from active package scripts rather than updating their hashes.
+During the legacy compatibility window, the historical physical release verifier remained explicit and non-default. The window is now closed: the verifier has been removed, and no active package script reads the retained diagnostic bundle.
 
 ## 12. Repository Budgets
 
@@ -796,15 +797,15 @@ These budgets prevent the same governance weight from growing back:
 
 Budget checks should be simple file/count checks. They must not introduce hashed evidence, approval actors, or another certification stage.
 
-## 13. Known Risks
+## 13. Known Risks And Retained Controls
 
 ### 13.1 Static And Generated Closure
 
-Current static-absence and Compiler source inventories reference several G9 and historical paths. The gateway refactor proved that a behavior-neutral import change currently propagates into multiple generated artifacts and manually pinned hashes. Extract the direct gateway test and remove this source-wide hash coupling in Phase 2 before broad G9 and Host Core deletion. Later phases should update active tests and small current catalogs, not repeatedly regenerate a historical proof chain.
+The former static-absence and Compiler source inventories referenced several G9 and historical paths. Phase 2 replaced that source-wide hash coupling with a direct gateway boundary test. Current changes update focused tests and small active catalogs rather than regenerating historical proof chains.
 
 ### 13.2 Existing Local Pointers
 
-Deleting G9 readers before inspecting `activation-core` and `active-deployment` could make an existing local selection unclear. The explicit legacy inspection/migration command is mandatory before removal.
+The compatibility window closed through explicit local inspection and cleanup rather than permanent legacy readers. `activation-core` and `active-deployment` are no longer runtime inputs. The old-format `active-core` selection was explicitly discarded because no retained fallback was required; new selections point only to `host-core-snapshots/<snapshot-id>`.
 
 ### 13.3 Existing Capacity State
 
@@ -826,9 +827,9 @@ DB/WAL/SHM handling is a real data-safety boundary. The simplified backup protoc
 
 Snapshot creation may allow a dirty checkout, but must record it visibly. A dirty snapshot is a local diagnostic convenience, not a reproducible baseline.
 
-## 14. Definition Of Done
+## 14. Implemented Outcome
 
-The full simplification is complete when:
+The implemented simplification baseline is:
 
 - default Golden validation has one corpus and one replay path;
 - Compiler compatibility uses semantic/corpus/schema versions and Golden replay, with no source/dependency/Node toolchain identity;
@@ -848,7 +849,7 @@ The full simplification is complete when:
 - current tests, typecheck, schema checks, Golden replay, startup smoke, snapshot rollback, and state restore tests pass;
 - Gate ownership, G0 exit, readiness-audit, sealed-era closure, and format-debt hash authorities are absent from active scripts and tests;
 - no active command hashes archived Markdown or compares current source with the accepted construction commit;
-- the historical release verifier and bundle have been removed after the legacy binding compatibility window.
+- no active verifier, package script, build, test, or runtime path reads the retained historical release bundle.
 
 This plan intentionally changes the release/activation mechanism: it removes G9 deployment activation and simplifies Host Core release/activation into local snapshot creation and selection. It does not remove the ability to maintain a known-good local runtime or activate internal Feature/Workflow versions.
 

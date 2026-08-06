@@ -38,11 +38,11 @@ Some existing paths and serialized formats retain stronger historical wording. R
 
 New code and documentation should use the narrower wording unless it must preserve an existing machine identifier.
 
-## Engineering Weight Review
+## Engineering Weight Baseline
 
-Snapshot on 2026-08-04: `src/workflow-runtime/contracts/` contains 2,842 files, including 2,443 conformance files; its JSON files total about 35 MB. The prior default test chain also included current contracts, a complete physical snapshot verifier, certification, production activation, and Host Core lifecycle tests. This is materially heavier than the current project positioning requires.
+Before simplification, the 2026-08-04 snapshot of `src/workflow-runtime/contracts/` contained 2,842 files, including 2,443 conformance files; its JSON files totaled about 35 MB. The default test chain also included current contracts, a complete physical snapshot verifier, certification, production activation, and Host Core lifecycle tests. This was materially heavier than the current project positioning required.
 
-Construction-stage governance also remains in source and package scripts: frozen Gate ownership, G0 exit evidence, G5-G7 readiness audits, sealed/successor compatibility checks, and a formatting baseline that grandfathered 48 of 530 TypeScript files by individual hash. These mechanisms make ordinary refactors update historical proof rather than test current behavior.
+Construction-stage governance also remained in source and package scripts: frozen Gate ownership, G0 exit evidence, G5-G7 readiness audits, sealed/successor compatibility checks, and a formatting baseline that grandfathered 48 of 530 TypeScript files by individual hash. The six-phase simplification removed these mechanisms from the current development path.
 
 ### Keep In The Normal Path
 
@@ -57,9 +57,9 @@ These controls directly protect local use or catch high-probability regressions:
 
 Internal positioning does not justify weakening credential, host-access, privacy, or destructive-action safety. A single-user tool can still damage valuable local or external state.
 
-### Remove From The Engineering Path
+### Removed From The Engineering Path
 
-The following mechanisms should not remain as active blocking or optional certification commands after their compatibility window:
+The implementation removed the following mechanisms as active blocking or optional certification commands:
 
 - Byte-for-byte verification of the retained v1 physical release archive.
 - Workflow Runtime certification tests.
@@ -69,27 +69,26 @@ The following mechanisms should not remain as active blocking or optional certif
 - Fixed cross-era tests that only prove a completed construction milestone.
 - Per-file format-debt hash allowances.
 
-Current runtime invariants extracted from these wrappers remain as focused unit, integration, schema-migration, or startup tests. Historical bytes remain available from Git rather than another tracked archive or `:full` certification path.
+Current runtime invariants extracted from these wrappers remain as focused unit, integration, schema-migration, or startup tests. Historical construction state remains available from Git. A retained compressed snapshot is non-active diagnostic material: no default command verifies it or uses it as a runtime input.
 
-### Next Simplification Candidates
+### Implemented Simplification Baseline
 
-The executable migration design is documented in [`workflow-runtime-guardrail-simplification-plan.md`](workflow-runtime-guardrail-simplification-plan.md).
+The executable design in [`workflow-runtime-guardrail-simplification-plan.md`](workflow-runtime-guardrail-simplification-plan.md) has been implemented. The current baseline is:
 
-1. Archive G9 production activation as a compatibility module. Nothing new should depend on deployment activation requests, activation audit records, journal events, capacity genesis evidence, or independent G8/G9 approval semantics.
-2. Collapse conformance history. Keep one current positive/negative fixture set per active boundary and move superseded Golden Draft, review-candidate, sealed, repair, and Gate-era generations out of the active source tree.
-3. Replace multi-stage Golden Draft/review/semantic-review/seal workflows with a checked-in fixture plus a focused replay test. Git review already supplies change history for this single-user project.
-4. Reduce Host Core snapshot verification to the entry artifact, runtime/schema compatibility descriptor, and atomic pointer. A complete file inventory, per-file mode hash, immutable version-name binding, and duplicate legacy production binding are not all necessary for local rollback.
-5. Simplify workflow-state reset recovery to a timestamped backup directory plus manifest and atomic move where the platform permits. Retain confirmation, process-running detection, path scoping, and backup verification.
-6. Relax exact managed-Node identity only after checking the `better-sqlite3` native ABI constraint. Pinning a compatible Node major/ABI may be enough; downloading and hashing one exact distribution is stronger than ordinary local development needs.
-7. Review artifact contracts and stage gates by observed failure rate. Fields or approvals that have not prevented a real defect should become warnings or be removed.
-8. Remove raw-hash verification of archived Markdown and accepted-commit diffs over current source. Git history/tag is the historical authority; documentation corrections must not fail a runtime archive gate.
-9. Remove cross-cutting Identity governance: Runtime identity modes/evidence, Compiler source-and-toolchain identity, frozen logical/physical Schema hash chains, and exact Host/Node release identity. Retain only functional record IDs, version compatibility checks, idempotency keys, and checksums that directly verify a copy or payload used at runtime.
-10. Remove frozen Gate ownership, G0 exit, G5-G7 readiness, sealed-era closure, and fixed successor compatibility wrappers after moving any still-useful behavior assertion into its owning current test.
-11. Delete the per-file format-debt hash baseline, format the retained TypeScript once after the large source deletion, and use direct Prettier checking.
+- G9 production activation, its journal/audit/genesis chain, and cross-cutting Runtime, Compiler, Schema, Host, and Node Identity governance are absent from active runtime paths.
+- Conformance contains focused current domain fixtures rather than construction-era draft, candidate, sealed, repair, and Gate copies.
+- Compiler validation uses one checked-in Golden corpus plus deterministic `golden:check` and `golden:replay` paths.
+- Host Core rollback uses optional local snapshots, minimal compatibility metadata, atomic `active-core` selection, and a real entry-module startup smoke.
+- Workflow state maintenance uses timestamped backup directories, a small manifest, exact DB/WAL/SHM path scoping, explicit restore, and process exclusion.
+- Node selection uses one configured executable path, supported major/platform/architecture, native ABI compatibility, and a `better-sqlite3` query smoke.
+- Archived Markdown hashes, accepted-commit source comparisons, Gate/readiness authorities, generated import-absence proofs, and per-file format hashes do not block current development.
+- Runtime gateway ownership is enforced by one direct static import-boundary test.
 
-### Delete From HEAD Rather Than Rewrite
+The continuing rule is to review any new artifact contract or stage gate against an observed local failure. A field, approval, or blocking step that does not prevent a concrete failure should remain a warning or be omitted.
 
-Historical G0-G9 artifacts, frozen Gate ownership, and independent acceptance metadata should be removed from the active tree when they no longer protect current behavior. Do not mass-rename or regenerate their internal hashes; preserve the last complete state with Git history or a tag. Serialized `production` names may remain only during an explicit compatibility window when existing local state still reads them.
+### Historical Cleanup Rule
+
+Historical G0-G9 artifacts, frozen Gate ownership, and independent acceptance metadata were removed from the active development path when they no longer protected current behavior. Future cleanup should not mass-rename or regenerate internal hashes; preserve historical state with Git history or a tag. Serialized `production` names may remain only when existing persisted state still reads them.
 
 Runtime database command/event/value history, payload retention, and GC are a separate operational-data concern. They are outside this engineering-governance cleanup unless measurement shows that they materially slow development, tests, startup, or normal local use.
 

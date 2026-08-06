@@ -16,7 +16,7 @@ Start with the machine-contract index in [`src/workflow-runtime/contracts/README
 
 - Contracts and schemas: `src/workflow-runtime/contracts/`
 - Database authority: `src/workflow-runtime/store/schema/` and `src/workflow-runtime/store/runtime-store/`
-- Compiler and deterministic replay: `src/workflow-runtime/compiler/` and `src/workflow-runtime/contracts/conformance/current/`
+- Compiler and deterministic replay: `src/workflow-runtime/compiler/`, including `src/workflow-runtime/compiler/golden/`
 - Runtime behavior: `src/workflow-runtime/runtime/`, `capacity/`, `registry/`, and `projection/`
 - Node compatibility and optional fallback installation: `scripts/runtime-toolchain.sh`
 - Current Host Core local snapshot, selection, startup, and state maintenance: [`host-core-lifecycle.md`](host-core-lifecycle.md)
