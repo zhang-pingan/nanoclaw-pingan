@@ -192,4 +192,30 @@ describe('CodexTaskActionExecutor', () => {
       visible.prepare(request(binding({ config: { transport: 'deep_link' } }))),
     ).rejects.toBeInstanceOf(ActionBlockedError);
   });
+
+  it('blocks during prepare when App Server initialization fails', async () => {
+    const client = fakeClient({
+      threadId: 'unused-thread',
+      turnId: 'unused-turn',
+      cliVersion: 'unknown',
+      completion: new Promise(() => {}),
+      interrupt: vi.fn(),
+    });
+    vi.mocked(client.initialize).mockRejectedValue(
+      new Error('unsupported Codex configuration'),
+    );
+    const executor = new CodexTaskActionExecutor({
+      binary: 'codex',
+      defaultCwd: '/tmp/workspace',
+      desktopVisibilityConfirmed: true,
+      clientFactory: () => client,
+    });
+
+    await expect(executor.prepare(request())).rejects.toMatchObject({
+      code: 'codex_app_server_unavailable',
+      message: 'unsupported Codex configuration',
+    });
+    expect(client.startTask).not.toHaveBeenCalled();
+    expect(client.close).toHaveBeenCalledOnce();
+  });
 });

@@ -89,6 +89,7 @@ export class CodexTaskActionExecutor implements ActionExecutor {
   readonly adapter = COLLABORATION_CODEX_TASK_ADAPTER;
   private readonly byOperation = new Map<string, Promise<DispatchReceipt>>();
   private readonly executions = new Map<string, ActiveCodexExecution>();
+  private readonly preflights = new Map<string, Promise<void>>();
   private readonly clientFactory: (
     options: CodexAppServerClientOptions,
   ) => CollaborationCodexClient;
@@ -99,18 +100,20 @@ export class CodexTaskActionExecutor implements ActionExecutor {
       ((clientOptions) => new CodexAppServerClient(clientOptions));
   }
 
-  async preflight(): Promise<void> {
+  async preflight(cwd = this.options.defaultCwd): Promise<void> {
     this.assertDesktopVisibility();
-    const client = this.createClient(this.options.defaultCwd);
+    const existing = this.preflights.get(cwd);
+    if (existing) return existing;
+    const pending = this.preflightNew(cwd);
+    this.preflights.set(cwd, pending);
     try {
-      await client.initialize();
+      await pending;
     } catch (error) {
+      this.preflights.delete(cwd);
       throw new ActionBlockedError(
         'codex_app_server_unavailable',
         error instanceof Error ? error.message : String(error),
       );
-    } finally {
-      client.close();
     }
   }
 
@@ -130,8 +133,11 @@ export class CodexTaskActionExecutor implements ActionExecutor {
         'executor_unconfigured',
         'codex-task only supports transport app_server',
       );
-    this.assertDesktopVisibility();
-    return prepareWithLocalPolicy(request);
+    const prepared = prepareWithLocalPolicy(request);
+    await this.preflight(
+      request.binding.workspacePath || this.options.defaultCwd,
+    );
+    return prepared;
   }
 
   async dispatch(action: PreparedAction): Promise<DispatchReceipt> {
@@ -320,6 +326,15 @@ export class CodexTaskActionExecutor implements ActionExecutor {
       cwd,
       requestTimeoutMs: this.options.requestTimeoutMs,
     });
+  }
+
+  private async preflightNew(cwd: string): Promise<void> {
+    const client = this.createClient(cwd);
+    try {
+      await client.initialize();
+    } finally {
+      client.close();
+    }
   }
 
   private assertDesktopVisibility(): void {
