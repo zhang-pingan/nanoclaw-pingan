@@ -1145,6 +1145,16 @@ Agent Group Collaboration Runtime 属于 core 执行和协调能力。Feature �
 - Web 入口为 `/groups`，原会话入口为 `/sessions`，Host API 为 `/api/collaboration/groups`。群组页面提供创建/加入、角色与绑定、生命周期、运行、事件、数据、设置、同步历史、完整性诊断、备份和恢复。
 - 所有协议、并发、恢复、Executor、Host/API、桌面路由和响应式 Web 测试均使用临时 Git remote、SQLite 和目录；不依赖或清理用户真实 Collaboration 数据。
 
+2026-08-06 独立复核后完成以下加固：
+
+- `expectedRevision` 在 fetch/验证完成后的权威 append 边界校验；后续 Git push 仍以 fast-forward CAS 拒绝校验后的竞争写入。
+- Canonical JSON 使用明确的 UTF-16 code-unit 顺序，不依赖宿主 locale；Projection 与 Action result hash 共用同一实现。
+- 已验证的 `headCommit + projection` 作为本地增量验证 checkpoint。同步先验证 checkpoint 祖先关系和物化 Projection，再只验签和重放新增 commit；checkpoint 损坏时从 genesis 全量恢复，非线性历史继续 quarantine。诊断公开 full/incremental 模式和实际验证 commit 数。
+- Quarantine 使用持久化指数退避并去重同一完整性 incident；管理员 `syncNow` 可绕过等待，远端修复且验证成功后清除 quarantine 并关闭 incident。
+- `data/` 提供受 revision 和可选 Turn fence 约束的签名更新路径。仅允许规范化 UTF-8 小型文本路径，事件声明 hash/size，Git 验证物化 regular file，拒绝越界、符号链接和未授权 Turn 写入；Web Data 视图提供对应命令。
+- Runtime shutdown、backup 和 restore 先停止接收 scheduler 工作并排空在途同步/执行，待 group lock 释放后才关闭 SQLite。
+- CollaborationStore 启动时精确检查表列，并对 execution 的 `epoch INTEGER NOT NULL`、关键列约束、unique/index 和外键语义 fail closed；fresh schema 与 v1 到 v2 migration 均覆盖临时 SQLite 正例。
+
 ## 实施阶段
 
 ### Phase 0：Codex App Server Spike
@@ -1215,7 +1225,7 @@ Agent Group Collaboration Runtime 属于 core 执行和协调能力。Feature �
 - `codex-task/deep_link` transport，前提是单独设计并明确迁移。
 - 其他外部 Agent adapter。
 - 经过可信时间源支持的自动 lease。
-- 只有在真实重放或同步性能成为问题后，才设计 Projection checkpoint 或事件压缩；不得原地重写已签名控制历史。
+- 当前只使用有验证依据的本地 Projection checkpoint 做增量重放；未来只有在增量 suffix 仍形成实际瓶颈时才设计事件压缩，且不得原地重写已签名控制历史。
 
 ## 测试和验收
 
