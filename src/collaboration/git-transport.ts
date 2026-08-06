@@ -586,4 +586,20 @@ export async function readPromptFromValidatedCacheAsync(input: {
   return result.stdout;
 }
 
+export async function listCollaborationSharedPaths(input: {
+  readonly repositoryPath: string;
+  readonly head: string;
+}): Promise<readonly string[]> {
+  const result = await execFileAsync(
+    'git',
+    ['ls-tree', '-r', '--name-only', input.head, '--', 'data', 'artifacts'],
+    { cwd: input.repositoryPath, encoding: 'utf8' },
+  );
+  return result.stdout
+    .split('\n')
+    .filter(
+      (value) => value.startsWith('data/') || value.startsWith('artifacts/'),
+    );
+}
+
 export type { ActionDefinition, MachineDefinition, RoleDefinition };

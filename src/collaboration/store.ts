@@ -850,6 +850,30 @@ export class CollaborationStore {
     ).map((row) => JSON.parse(row.event_json) as CollaborationEvent);
   }
 
+  listEventRecords(
+    groupId: string,
+    limit = 200,
+  ): Array<{
+    readonly event: CollaborationEvent;
+    readonly commitHash: string;
+  }> {
+    this.assertOpen();
+    return (
+      this.database
+        .prepare(
+          `SELECT event_json, commit_hash FROM collaboration_events_cache
+            WHERE group_id = ? ORDER BY sequence DESC LIMIT ?`,
+        )
+        .all(groupId, limit) as Array<{
+        event_json: string;
+        commit_hash: string;
+      }>
+    ).map((row) => ({
+      event: JSON.parse(row.event_json) as CollaborationEvent,
+      commitHash: row.commit_hash,
+    }));
+  }
+
   listIntegrityIncidents(groupId: string): Array<{
     readonly incidentId: string;
     readonly code: string;
@@ -1417,6 +1441,7 @@ export function restoreCollaborationBackup(input: {
   try {
     assertCollaborationStoreStructure(restored);
   } catch (error) {
+    rmSync(stagingDirectory, { recursive: true, force: true });
     throw new CollaborationStoreError(
       'BACKUP_INVALID',
       `Restored collaboration database failed structure validation: ${error instanceof Error ? error.message : String(error)}`,

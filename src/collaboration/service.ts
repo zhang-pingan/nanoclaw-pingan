@@ -83,6 +83,8 @@ export interface CollaborationRemoteSummary {
 }
 
 export class CollaborationGroupService {
+  private readonly histories = new Map<string, ValidatedCollaborationHistory>();
+
   constructor(
     readonly store: CollaborationStore,
     readonly transport: CollaborationGitTransport,
@@ -295,6 +297,10 @@ export class CollaborationGroupService {
           group.groupId.toLocaleLowerCase().includes(query) ||
           group.remoteUrl.toLocaleLowerCase().includes(query),
       );
+  }
+
+  getCachedHistory(groupId: string): ValidatedCollaborationHistory | null {
+    return this.histories.get(groupId) ?? null;
   }
 
   async sync(groupId: string): Promise<CollaborationGroupRecord> {
@@ -720,6 +726,7 @@ export class CollaborationGroupService {
   }
 
   private persistHistory(history: ValidatedCollaborationHistory): void {
+    this.histories.set(history.projection.groupId, history);
     const group = this.store.getGroup(history.projection.groupId);
     if (!group) return;
     this.store.saveProjection({
