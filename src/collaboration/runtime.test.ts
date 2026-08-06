@@ -46,7 +46,7 @@ afterEach(() => {
 });
 
 describe('CollaborationRuntime', () => {
-  it('starts an isolated collaboration.db and stops cleanly', () => {
+  it('starts an isolated collaboration.db and stops cleanly', async () => {
     const storeDir = root();
     const selected = runtime(storeDir);
     expect(selected.start()).toBe(true);
@@ -56,7 +56,7 @@ describe('CollaborationRuntime', () => {
       error: null,
       scheduler: { running: true },
     });
-    selected.stop();
+    await selected.stop();
     expect(selected.status().available).toBe(false);
   });
 
@@ -73,7 +73,73 @@ describe('CollaborationRuntime', () => {
       available: true,
       scheduler: { running: true },
     });
-    selected.stop();
+    await selected.stop();
+  });
+
+  it('drains an in-flight scheduler sync and releases its lock before closing the store', async () => {
+    const storeDir = root();
+    const selected = runtime(storeDir);
+    expect(selected.start()).toBe(true);
+    selected.scheduler.stop();
+    selected.store.registerGroup({
+      groupId: 'ag_slow_shutdown',
+      name: 'Slow shutdown',
+      creatorPrincipalId: 'alice',
+      localPrincipalId: 'alice',
+      localAgentId: 'agent_alice',
+      remoteUrl: '/tmp/slow-remote.git',
+      repositoryPath: '/tmp/slow-repository.git',
+      signingKeyPath: '/tmp/slow-signing-key',
+      signingPublicKey: 'ssh-ed25519 test',
+      signingKeyRef: 'ssh-ed25519:SHA256:test',
+      pollIntervalMs: 15_000,
+    });
+    let enterSync!: () => void;
+    const syncEntered = new Promise<void>((resolve) => {
+      enterSync = resolve;
+    });
+    let releaseSync!: () => void;
+    const syncReleased = new Promise<void>((resolve) => {
+      releaseSync = resolve;
+    });
+    vi.spyOn(selected.groups, 'syncHistory').mockImplementation(async () => {
+      enterSync();
+      await syncReleased;
+      throw new Error('slow sync released');
+    });
+    const releaseLock = vi.spyOn(selected.store, 'releaseGroupLock');
+    const closeStore = vi.spyOn(selected.store, 'close');
+
+    const syncing = selected.scheduler.syncNow('ag_slow_shutdown');
+    await syncEntered;
+    expect(
+      selected.store
+        .rawDatabaseForTests()
+        .prepare(
+          'SELECT COUNT(*) AS count FROM collaboration_process_locks WHERE group_id = ?',
+        )
+        .get('ag_slow_shutdown'),
+    ).toEqual({ count: 1 });
+
+    const stopping = selected.stop();
+    await Promise.resolve();
+    expect(closeStore).not.toHaveBeenCalled();
+    await expect(
+      selected.scheduler.syncNow('ag_slow_shutdown'),
+    ).rejects.toThrow(/quiescing/);
+
+    releaseSync();
+    await expect(syncing).rejects.toThrow('slow sync released');
+    await stopping;
+
+    expect(releaseLock).toHaveBeenCalledOnce();
+    expect(closeStore).toHaveBeenCalledOnce();
+    expect(releaseLock.mock.invocationCallOrder[0]).toBeLessThan(
+      closeStore.mock.invocationCallOrder[0]!,
+    );
+    expect(selected.status().available).toBe(false);
+    await selected.stop();
+    expect(closeStore).toHaveBeenCalledOnce();
   });
 
   it('contains an incompatible local schema without blocking the Host', () => {

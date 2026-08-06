@@ -2850,7 +2850,7 @@ async function main(): Promise<void> {
     proxyServer.close();
     mysqlProxyServer.close();
     internalRunOnceServer?.close();
-    collaborationRuntime.stop();
+    await collaborationRuntime.stop();
     await workflowExecutionWorker?.stop();
     await queue.shutdown(10000);
     workflowAdapterExecutionStore?.close();
