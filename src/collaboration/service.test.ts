@@ -471,6 +471,42 @@ describe('CollaborationGroupService', () => {
     }
   }, 30_000);
 
+  it('rejects a command whose revision became stale before the authoritative append', async () => {
+    const testRoot = root();
+    const remoteUrl = remote(testRoot);
+    const aliceKey = key(testRoot, 'alice-key');
+    const bobKey = key(testRoot, 'bob-key');
+    const owner = service(testRoot, 'owner');
+    const participant = service(testRoot, 'participant');
+    try {
+      const created = await owner.groupService.createGroup(
+        createInput(remoteUrl, aliceKey, 2),
+      );
+      const requestRevision = created.projection!.revision;
+
+      await participant.groupService.joinGroup({
+        remoteUrl,
+        principalId: 'bob',
+        agentId: 'agent_bob',
+        signingKeyPath: bobKey,
+        capabilities: ['coding_task', 'visible_session'],
+        role: 'developer',
+      });
+
+      await expect(
+        owner.groupService.start('ag_service', requestRevision),
+      ).rejects.toThrow(
+        `Expected revision ${String(requestRevision)} does not match 3`,
+      );
+      const synchronized = await participant.groupService.sync('ag_service');
+      expect(synchronized.projection?.lifecycle).toBe('READY');
+      expect(synchronized.projection?.sequence).toBe(3);
+    } finally {
+      owner.store.close();
+      participant.store.close();
+    }
+  }, 30_000);
+
   it('rejects prompt paths that could overwrite protocol files', async () => {
     const testRoot = root();
     const remoteUrl = remote(testRoot);

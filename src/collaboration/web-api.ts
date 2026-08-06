@@ -256,16 +256,10 @@ function enumValue<const T extends readonly string[]>(
   return candidate as T[number];
 }
 
-function assertExpectedRevision(
-  group: CollaborationGroupRecord,
-  body: Record<string, unknown>,
-): void {
+function requiredExpectedRevision(body: Record<string, unknown>): number {
   if (!Number.isInteger(body.expectedRevision))
     throw new Error('expectedRevision is required');
-  if (body.expectedRevision !== group.projection?.revision)
-    throw new Error(
-      `Expected revision ${String(body.expectedRevision)} does not match ${String(group.projection?.revision)}`,
-    );
+  return Number(body.expectedRevision);
 }
 
 function isRevisionConflict(error: unknown): boolean {
@@ -431,29 +425,32 @@ export class CollaborationWebApi {
     }
     if (resource === 'commands' && req.method === 'POST') {
       const body = object(await jsonBody(req));
-      assertExpectedRevision(group, body);
+      const expectedRevision = requiredExpectedRevision(body);
       const command = requiredString(body, 'command');
       const updated =
         command === 'start'
-          ? await this.runtime.groups.start(groupId)
+          ? await this.runtime.groups.start(groupId, expectedRevision)
           : command === 'pause'
-            ? await this.runtime.groups.pause(groupId)
+            ? await this.runtime.groups.pause(groupId, expectedRevision)
             : command === 'resume'
-              ? await this.runtime.groups.resume(groupId)
+              ? await this.runtime.groups.resume(groupId, expectedRevision)
               : command === 'close'
                 ? await this.runtime.groups.close(
                     groupId,
                     requiredString(body, 'reason'),
+                    expectedRevision,
                   )
                 : command === 'recover'
                   ? await this.runtime.groups.recoverTurn(
                       groupId,
                       requiredString(body, 'reason'),
+                      expectedRevision,
                     )
                   : command === 'create_turn'
                     ? (await this.runtime.groups.ensureTurn(
                         groupId,
                         requiredString(body, 'transitionId'),
+                        expectedRevision,
                       ),
                       this.runtime.store.getGroup(groupId)!)
                     : null;

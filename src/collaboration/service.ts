@@ -395,17 +395,28 @@ export class CollaborationGroupService {
     return this.requireGroup(groupId);
   }
 
-  async start(groupId: string): Promise<CollaborationGroupRecord> {
+  async start(
+    groupId: string,
+    expectedRevision?: number,
+  ): Promise<CollaborationGroupRecord> {
     const group = this.requireCreator(groupId);
-    await this.append(groupId, await this.identityFor(group), () => ({
-      type: 'group_started',
-      payload: {},
-    }));
+    await this.append(
+      groupId,
+      await this.identityFor(group),
+      () => ({
+        type: 'group_started',
+        payload: {},
+      }),
+      expectedRevision,
+    );
     await this.ensureTurn(groupId);
     return this.requireGroup(groupId);
   }
 
-  async pause(groupId: string): Promise<CollaborationGroupRecord> {
+  async pause(
+    groupId: string,
+    expectedRevision?: number,
+  ): Promise<CollaborationGroupRecord> {
     const group = this.requireCreator(groupId);
     let history = await this.append(
       groupId,
@@ -414,6 +425,7 @@ export class CollaborationGroupService {
         type: 'group_pause_requested',
         payload: {},
       }),
+      expectedRevision,
     );
     const active = history.projection.activeTurnId
       ? history.projection.turns[history.projection.activeTurnId]
@@ -431,12 +443,20 @@ export class CollaborationGroupService {
     return this.requireGroup(groupId);
   }
 
-  async resume(groupId: string): Promise<CollaborationGroupRecord> {
+  async resume(
+    groupId: string,
+    expectedRevision?: number,
+  ): Promise<CollaborationGroupRecord> {
     const group = this.requireCreator(groupId);
-    await this.append(groupId, await this.identityFor(group), () => ({
-      type: 'group_resumed',
-      payload: {},
-    }));
+    await this.append(
+      groupId,
+      await this.identityFor(group),
+      () => ({
+        type: 'group_resumed',
+        payload: {},
+      }),
+      expectedRevision,
+    );
     await this.ensureTurn(groupId);
     return this.requireGroup(groupId);
   }
@@ -444,6 +464,7 @@ export class CollaborationGroupService {
   async close(
     groupId: string,
     reason: string,
+    expectedRevision?: number,
   ): Promise<CollaborationGroupRecord> {
     const group = this.requireCreator(groupId);
     let history = await this.append(
@@ -453,6 +474,7 @@ export class CollaborationGroupService {
         type: 'group_close_requested',
         payload: { reason },
       }),
+      expectedRevision,
     );
     const active = history.projection.activeTurnId
       ? history.projection.turns[history.projection.activeTurnId]
@@ -473,6 +495,7 @@ export class CollaborationGroupService {
   async ensureTurn(
     groupId: string,
     transitionId?: string,
+    expectedRevision?: number,
   ): Promise<ValidatedCollaborationHistory | null> {
     const group = this.requireCreator(groupId);
     const history = await this.transport.fetchAndValidate({
@@ -515,24 +538,29 @@ export class CollaborationGroupService {
         businessState: history.projection.businessState,
       }),
     );
-    return this.append(groupId, await this.identityFor(group), () => ({
-      type: 'turn_created',
-      payload: {
-        turn_id: turnId,
-        transition_id: transition.id,
-        action_id: action.action_id,
-        role: transition.actor_role,
-        attempt: 1,
-        input_hash: inputHash,
-        idempotency_key: collaborationIdempotencyKey({
-          groupId,
-          epoch: history.projection.epoch,
-          turnId,
+    return this.append(
+      groupId,
+      await this.identityFor(group),
+      () => ({
+        type: 'turn_created',
+        payload: {
+          turn_id: turnId,
+          transition_id: transition.id,
+          action_id: action.action_id,
+          role: transition.actor_role,
           attempt: 1,
-          inputHash,
-        }),
-      },
-    }));
+          input_hash: inputHash,
+          idempotency_key: collaborationIdempotencyKey({
+            groupId,
+            epoch: history.projection.epoch,
+            turnId,
+            attempt: 1,
+            inputHash,
+          }),
+        },
+      }),
+      expectedRevision,
+    );
   }
 
   async claimCurrentTurn(groupId: string): Promise<{
@@ -610,24 +638,30 @@ export class CollaborationGroupService {
   async recoverTurn(
     groupId: string,
     reason: string,
+    expectedRevision?: number,
   ): Promise<CollaborationGroupRecord> {
     const group = this.requireCreator(groupId);
     const identity = await this.identityFor(group);
-    let history = await this.append(groupId, identity, (current) => {
-      const turnId = current.projection.activeTurnId;
-      const turn = turnId ? current.projection.turns[turnId] : null;
-      if (!turn || !turn.fencingToken)
-        throw new Error('No claimed turn can be recovered');
-      return {
-        type: 'stalled_turn_recovery_requested',
-        payload: {
-          turn_id: turn.turnId,
-          attempt: turn.attempt,
-          fencing_token: turn.fencingToken,
-          reason,
-        },
-      };
-    });
+    let history = await this.append(
+      groupId,
+      identity,
+      (current) => {
+        const turnId = current.projection.activeTurnId;
+        const turn = turnId ? current.projection.turns[turnId] : null;
+        if (!turn || !turn.fencingToken)
+          throw new Error('No claimed turn can be recovered');
+        return {
+          type: 'stalled_turn_recovery_requested',
+          payload: {
+            turn_id: turn.turnId,
+            attempt: turn.attempt,
+            fencing_token: turn.fencingToken,
+            reason,
+          },
+        };
+      },
+      expectedRevision,
+    );
     history = await this.append(groupId, identity, (current) => {
       const turnId = current.projection.activeTurnId;
       const turn = turnId ? current.projection.turns[turnId] : null;
@@ -654,6 +688,7 @@ export class CollaborationGroupService {
       readonly payload: Record<string, unknown>;
       readonly eventId?: string;
     },
+    expectedRevision?: number,
   ): Promise<ValidatedCollaborationHistory> {
     const group = this.requireGroup(groupId);
     const history = await this.transport.appendEvent({
@@ -662,6 +697,13 @@ export class CollaborationGroupService {
       previousHead: group.headCommit,
       identity,
       buildEvent: (current) => {
+        if (
+          expectedRevision !== undefined &&
+          expectedRevision !== current.projection.revision
+        )
+          throw new Error(
+            `Expected revision ${String(expectedRevision)} does not match ${String(current.projection.revision)}`,
+          );
         const next = build(current);
         return this.event({
           groupId,
