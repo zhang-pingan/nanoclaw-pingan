@@ -6,6 +6,7 @@ import type { CollaborationExecutorBinding } from '../store.js';
 import { RunOnceActionExecutor, type RunOnceService } from './run-once.js';
 import {
   ActionBlockedError,
+  actionResultHash,
   prepareWithLocalPolicy,
   validateActionResult,
   type ActionRequest,
@@ -193,5 +194,27 @@ describe('RunOnceActionExecutor', () => {
         error: null,
       }),
     ).toThrow(/does not satisfy code-change-result@1/);
+  });
+
+  it('hashes result objects with locale-independent code-unit key order', () => {
+    const result = {
+      format: 'icarus.collaboration-action-result/1' as const,
+      outcome: 'success' as const,
+      summary: 'deterministic',
+      data: Object.fromEntries(
+        ['\uE000', '\u{10000}', '\u00E4', 'a', 'Z'].map((key) => [key, key]),
+      ),
+      artifacts: [],
+      error: null,
+    };
+    const expected = actionResultHash(result);
+    const localeCompare = vi
+      .spyOn(String.prototype, 'localeCompare')
+      .mockImplementation(() => -1);
+    try {
+      expect(actionResultHash(result)).toBe(expected);
+    } finally {
+      localeCompare.mockRestore();
+    }
   });
 });

@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 
 import { z } from 'zod';
 
+import { canonicalJsonStringify } from './canonical-json.js';
 import {
   collaborationEventSchema,
   memberDefinitionSchema,
@@ -666,15 +667,5 @@ export function replayCollaborationEvents(
 export function deterministicProjectionJson(
   projection: CollaborationProjection,
 ): string {
-  const sort = (value: unknown): unknown => {
-    if (Array.isArray(value)) return value.map(sort);
-    if (value && typeof value === 'object')
-      return Object.fromEntries(
-        Object.entries(value as Record<string, unknown>)
-          .sort(([left], [right]) => left.localeCompare(right))
-          .map(([key, child]) => [key, sort(child)]),
-      );
-    return value;
-  };
-  return `${JSON.stringify(sort(projection), null, 2)}\n`;
+  return `${canonicalJsonStringify(projection, 2)}\n`;
 }

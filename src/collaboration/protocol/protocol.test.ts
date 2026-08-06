@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   authorizeCollaborationEvent,
@@ -259,6 +259,34 @@ describe('Collaboration protocol', () => {
         replayCollaborationEvents(structuredClone(readyEvents()), definition()),
       ),
     );
+  });
+
+  it('uses Unicode code-unit key order regardless of the host locale', () => {
+    const projection = replayCollaborationEvents(readyEvents(), definition());
+    projection.members = Object.fromEntries(
+      ['\uE000', '\u{10000}', '\u00E4', 'a', 'Z'].map((key) => [
+        key,
+        projection.members.alice!,
+      ]),
+    );
+    const expectedOrder = ['Z', 'a', '\u00E4', '\u{10000}', '\uE000'];
+
+    expect(
+      Object.keys(JSON.parse(deterministicProjectionJson(projection)).members),
+    ).toEqual(expectedOrder);
+
+    const localeCompare = vi
+      .spyOn(String.prototype, 'localeCompare')
+      .mockImplementation(() => -1);
+    try {
+      expect(
+        Object.keys(
+          JSON.parse(deterministicProjectionJson(projection)).members,
+        ),
+      ).toEqual(expectedOrder);
+    } finally {
+      localeCompare.mockRestore();
+    }
   });
 
   it('supports development -> review -> development with unique turns', () => {

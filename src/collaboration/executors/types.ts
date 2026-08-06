@@ -3,7 +3,11 @@ import crypto from 'node:crypto';
 import { Ajv2020 } from 'ajv/dist/2020.js';
 import { z } from 'zod';
 
-import type { ActionDefinition, FilesystemAccess } from '../protocol/index.js';
+import {
+  canonicalJsonStringify,
+  type ActionDefinition,
+  type FilesystemAccess,
+} from '../protocol/index.js';
 import type { CollaborationExecutorBinding } from '../store.js';
 
 export type ActionExecutionState =
@@ -136,22 +140,8 @@ export function prepareWithLocalPolicy(request: ActionRequest): PreparedAction {
   return { ...request, effectiveFilesystemAccess: required };
 }
 
-function canonical(value: unknown): string {
-  const sort = (candidate: unknown): unknown => {
-    if (Array.isArray(candidate)) return candidate.map(sort);
-    if (candidate && typeof candidate === 'object')
-      return Object.fromEntries(
-        Object.entries(candidate as Record<string, unknown>)
-          .sort(([left], [right]) => left.localeCompare(right))
-          .map(([key, child]) => [key, sort(child)]),
-      );
-    return candidate;
-  };
-  return JSON.stringify(sort(value));
-}
-
 export function actionResultHash(result: CollaborationActionResult): string {
-  return `sha256:${crypto.createHash('sha256').update(canonical(result)).digest('hex')}`;
+  return `sha256:${crypto.createHash('sha256').update(canonicalJsonStringify(result)).digest('hex')}`;
 }
 
 export function validateActionResult(
