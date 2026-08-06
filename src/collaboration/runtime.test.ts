@@ -19,7 +19,10 @@ function root(): string {
 }
 
 function runtime(storeDir: string): CollaborationRuntime {
-  const runOnceService: RunOnceService = { runOnce: vi.fn() };
+  const runOnceService: RunOnceService = {
+    preflightWorkspace: vi.fn(),
+    runOnce: vi.fn(),
+  };
   return new CollaborationRuntime({
     storeDir,
     runOnceService,

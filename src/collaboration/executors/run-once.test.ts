@@ -99,14 +99,34 @@ describe('RunOnceActionExecutor', () => {
         return result.promise;
       },
     );
-    const executor = new RunOnceActionExecutor({ runOnce });
+    const preflightWorkspace = vi.fn();
+    const executor = new RunOnceActionExecutor({
+      preflightWorkspace,
+      runOnce,
+    });
     const prepared = await executor.prepare(request());
+    expect(preflightWorkspace).toHaveBeenCalledWith({
+      chatJid: 'web:main',
+      workspace: {
+        host_path: '/tmp/workspace',
+        access: 'workspace_write',
+      },
+    });
     const [first, duplicate] = await Promise.all([
       executor.dispatch(prepared),
       executor.dispatch(prepared),
     ]);
     expect(first).toEqual(duplicate);
     expect(runOnce).toHaveBeenCalledTimes(1);
+    expect(runOnce).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspace: {
+          host_path: '/tmp/workspace',
+          access: 'workspace_write',
+        },
+      }),
+      expect.any(Object),
+    );
     expect(await executor.observe(first.executionRef)).toMatchObject({
       state: 'running',
       providerMetadata: { run_id: 'run-1', query_id: 'query-1' },
@@ -133,11 +153,26 @@ describe('RunOnceActionExecutor', () => {
 
   it('requires manual recovery after the run-once process is lost', async () => {
     const executor = new RunOnceActionExecutor({
+      preflightWorkspace: vi.fn(),
       runOnce: vi.fn(),
     });
     expect(await executor.recover('run-once:missing')).toMatchObject({
       state: 'recovery_required',
       recoveryReason: expect.stringMatching(/do not redispatch/),
+    });
+  });
+
+  it('blocks before claim when the configured workspace fails preflight', async () => {
+    const executor = new RunOnceActionExecutor({
+      preflightWorkspace: vi.fn(() => {
+        throw new Error('No mount allowlist configured');
+      }),
+      runOnce: vi.fn(),
+    });
+
+    await expect(executor.prepare(request())).rejects.toMatchObject({
+      code: 'local_permission_insufficient',
+      message: expect.stringMatching(/No mount allowlist configured/),
     });
   });
 

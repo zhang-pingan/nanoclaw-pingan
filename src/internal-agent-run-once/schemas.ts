@@ -46,6 +46,13 @@ export const runOnceOutputFileSchema = runOnceFileSchema.extend({
   download_url: z.string().min(1),
 });
 
+export const runOnceWorkspaceSchema = z
+  .object({
+    host_path: z.string().trim().min(1).max(4096),
+    access: z.enum(['read_only', 'workspace_write']),
+  })
+  .strict();
+
 export const runOnceRequestSchema = z.object({
   system: z.string().min(1),
   messages: z.array(runOnceMessageSchema).min(1),
@@ -53,12 +60,14 @@ export const runOnceRequestSchema = z.object({
   require_result: z.literal(true).optional().default(true),
   metadata: z.record(z.string(), z.unknown()).optional().default({}),
   files: z.array(runOnceFileSchema).optional().default([]),
+  workspace: runOnceWorkspaceSchema.optional(),
 });
 
 export type RunOnceRequest = z.output<typeof runOnceRequestSchema>;
 export type RunOnceRequestInput = z.input<typeof runOnceRequestSchema>;
 export type RunOnceFile = z.infer<typeof runOnceFileSchema>;
 export type RunOnceOutputFile = z.infer<typeof runOnceOutputFileSchema>;
+export type RunOnceWorkspace = z.infer<typeof runOnceWorkspaceSchema>;
 
 export interface RunOnceSuccessResponse {
   ok: true;
@@ -113,6 +122,7 @@ export function runOnceInputLength(input: RunOnceRequest): number {
       (total, message) => total + message.content.length,
       0,
     ) +
-    fileChars
+    fileChars +
+    (input.workspace?.host_path.length ?? 0)
   );
 }

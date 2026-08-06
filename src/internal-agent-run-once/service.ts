@@ -5,6 +5,7 @@ import { buildAgentQueryTraceDetail } from '../agent-query-trace-detail.js';
 import { agentQueryTraceManager } from '../agent-query-trace.js';
 import { queryPatchFromTraceEvent } from '../agent-query-trace-utils.js';
 import { ContainerOutput, runContainerAgent } from '../container-runner.js';
+import { validateMount } from '../mount-security.js';
 import {
   ClassifiedFailure,
   classifyFailure,
@@ -22,6 +23,8 @@ import {
   RunOnceFile,
   RunOnceRequestInput,
   RunOnceResponse,
+  RunOnceWorkspace,
+  runOnceWorkspaceSchema,
   runOnceInputLength,
 } from './schemas.js';
 import {
@@ -70,6 +73,11 @@ export interface RunOnceAcceptedExecution {
 
 export interface RunOnceLifecycle {
   onAccepted(execution: RunOnceAcceptedExecution): void;
+}
+
+export interface ResolvedRunOnceWorkspace {
+  readonly hostPath: string;
+  readonly readonly: boolean;
 }
 
 function createExecutionId(): string {
@@ -166,6 +174,42 @@ export class InternalAgentRunOnceService {
     return agent.folder;
   }
 
+  preflightWorkspace(input: {
+    readonly chatJid: string;
+    readonly workspace: RunOnceWorkspace;
+  }): ResolvedRunOnceWorkspace {
+    const agent = this.opts.registeredAgents()[input.chatJid];
+    if (!agent)
+      throw new RunOnceInputError(
+        `Registered Agent not found: ${input.chatJid}`,
+      );
+    const workspace = runOnceWorkspaceSchema.parse(input.workspace);
+    const validation = validateMount(
+      {
+        hostPath: workspace.host_path,
+        containerPath: 'collaboration-project',
+        readonly: workspace.access === 'read_only',
+      },
+      agent.isMain === true,
+    );
+    if (
+      !validation.allowed ||
+      !validation.realHostPath ||
+      validation.effectiveReadonly == null
+    )
+      throw new RunOnceInputError(
+        `Workspace mount is not allowed: ${validation.reason}`,
+      );
+    if (workspace.access === 'workspace_write' && validation.effectiveReadonly)
+      throw new RunOnceInputError(
+        'Workspace write access was downgraded to read-only by the mount allowlist',
+      );
+    return {
+      hostPath: validation.realHostPath,
+      readonly: validation.effectiveReadonly,
+    };
+  }
+
   async runOnce(
     input: RunOnceRequestInput,
     lifecycle?: RunOnceLifecycle,
@@ -177,6 +221,12 @@ export class InternalAgentRunOnceService {
         `Registered Agent not found: ${request.chat_jid}`,
       );
     }
+    const workspace = request.workspace
+      ? this.preflightWorkspace({
+          chatJid: request.chat_jid,
+          workspace: request.workspace,
+        })
+      : undefined;
 
     const inputLength = runOnceInputLength(request);
     if (inputLength > this.opts.maxInputChars) {
@@ -397,6 +447,7 @@ export class InternalAgentRunOnceService {
               isMain: agent.isMain === true,
               selectedModel: selectedModel.selectedModel,
               isOneShot: true,
+              workspace,
             },
             (proc, containerName) => {
               this.opts.onProcess(
