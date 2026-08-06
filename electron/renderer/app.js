@@ -1,14 +1,25 @@
 // electron/renderer/app.js
 import {
-  COLLABORATION_OUTCOMES,
   buildCollaborationCreateRequest,
   buildCollaborationJoinRequest,
-  createActionDraft,
   createRoleDraft,
   createStateDraft,
   createTransitionDraft,
   defaultCollaborationCreateDraft,
 } from './collaboration-definition.js';
+import {
+  collaborationAuditEventTimeline,
+  collaborationDuration,
+  collaborationElapsed,
+  collaborationIdentityOwnsRole,
+  collaborationImplementationPrompt,
+  collaborationOutcomeRoutes,
+  collaborationPendingNotifications,
+  collaborationTurnAccess,
+  collaborationTurnDeadline,
+  collaborationTurnHistory,
+  collaborationTurnLifecycle,
+} from './collaboration-ui.js';
 
 var ws = null;
 var reconnectTimer = null;
@@ -20,6 +31,7 @@ var collaborationRouteTabs = new Set([
   'overview',
   'roles',
   'runtime',
+  'audit',
   'events',
   'data',
   'settings',
@@ -717,6 +729,12 @@ function collaborationDate(value) {
   return new Date(numeric).toLocaleString();
 }
 
+function collaborationTimestamp(value) {
+  if (value === null || value === undefined || value === '') return '-';
+  const date = new Date(value);
+  return Number.isFinite(date.getTime()) ? date.toLocaleString() : '-';
+}
+
 function collaborationRoute(groupId, tab = 'overview') {
   if (!groupId) return '/groups';
   const base = `/groups/${encodeURIComponent(groupId)}`;
@@ -776,14 +794,71 @@ function collaborationLocalRoles() {
   const group = selectedCollaborationGroup();
   if (!group?.projection) return [];
   return Object.entries(group.projection.roleClaims || {})
-    .filter(([, claims]) =>
-      (claims || []).some(
-        (claim) =>
-          claim.principal_id === group.localPrincipalId &&
-          claim.agent_id === group.localAgentId,
-      ),
-    )
+    .filter(([role]) => collaborationIdentityOwnsRole(group, role))
     .map(([role]) => role);
+}
+
+async function notifyCollaborationTurns(detail) {
+  const notifications = collaborationPendingNotifications(detail);
+  const group = detail?.group;
+  if (!notifications.length || !group) return;
+  const results = await Promise.allSettled(
+    notifications.map(async (notification) => {
+      const timeout = String(notification.kind || '').startsWith('timeout');
+      const phase = notification.deadlineKind === 'execution' ? '执行' : '开始';
+      const title = `${group.name} · ${timeout ? `${phase}超时` : '待处理节点'}`;
+      const body = timeout
+        ? `State ${group.businessState} ${phase}已超时${notification.reminderOrdinal ? ` · 第 ${Number(notification.reminderOrdinal) + 1} 次提醒` : ''}`
+        : `State ${group.businessState} 已分配给本机角色`;
+      let delivered = false;
+      if (typeof window !== 'undefined' && window.icarusApp) {
+        window.icarusApp.notify(title, body, {
+          collaborationGroupId: group.groupId,
+          collaborationTurnId: notification.turnId,
+          collaborationNotificationId: notification.notificationId,
+        });
+        delivered = true;
+      } else if (
+        typeof Notification !== 'undefined' &&
+        Notification.permission === 'granted'
+      ) {
+        const browserNotification = new Notification(title, {
+          body,
+          tag: `icarus-collaboration-${notification.notificationId}`,
+        });
+        browserNotification.onclick = () => {
+          window.focus();
+          openCollaborationFromNotification(group.groupId, notification.turnId);
+        };
+        delivered = true;
+      } else {
+        ensureBrowserNotificationPermission();
+      }
+      if (!delivered) return;
+      showToast(body, 2800);
+      await collaborationRequest(
+        `/groups/${encodeURIComponent(group.groupId)}/notifications/${encodeURIComponent(notification.notificationId)}/delivered`,
+        { method: 'POST', body: '{}' },
+      );
+    }),
+  );
+  for (const result of results)
+    if (result.status === 'rejected')
+      console.error(
+        'Failed to deliver collaboration notification:',
+        result.reason,
+      );
+}
+
+function openCollaborationFromNotification(groupId, turnId) {
+  if (!groupId) return;
+  setPrimaryNav('groups', { updateRoute: false });
+  selectCollaborationGroup(groupId, {
+    tab: 'runtime',
+    updateRoute: true,
+  }).catch((error) => {
+    console.error(`Failed to open collaboration turn ${turnId}:`, error);
+  });
 }
 
 function renderCollaborationRuntimeBanner(message, tone = 'danger') {
@@ -810,11 +885,7 @@ function renderCollaborationList() {
     .map((group) => {
       const selected = group.groupId === collaborationState.selectedGroupId;
       const localRoles = Object.entries(group.projection?.roleClaims || {})
-        .filter(([, claims]) =>
-          (claims || []).some(
-            (claim) => claim.principal_id === group.localPrincipalId,
-          ),
-        )
+        .filter(([role]) => collaborationIdentityOwnsRole(group, role))
         .map(([role]) => role);
       return `
         <button class="collaboration-list-item${selected ? ' active' : ''}" data-collaboration-group-id="${escapeAttribute(group.groupId)}" type="button">
@@ -932,6 +1003,9 @@ async function loadCollaborationDetail(groupId, options = {}) {
       `/groups/${encodeURIComponent(groupId)}`,
     );
     collaborationState.detail = data;
+    await notifyCollaborationTurns(data).catch((error) => {
+      console.error('Failed to deliver collaboration notification:', error);
+    });
     collaborationState.selectedGroupId = groupId;
     collaborationState.groups = collaborationState.groups.map((group) =>
       group.groupId === groupId ? data.group : group,
@@ -946,7 +1020,9 @@ async function loadCollaborationDetail(groupId, options = {}) {
     renderCollaborationList();
     renderCollaborationShell();
     if (
-      ['events', 'data', 'diagnostics'].includes(collaborationState.activeTab)
+      ['audit', 'events', 'data', 'diagnostics'].includes(
+        collaborationState.activeTab,
+      )
     )
       await loadCollaborationTabData(collaborationState.activeTab);
   } catch (error) {
@@ -957,6 +1033,43 @@ async function loadCollaborationDetail(groupId, options = {}) {
 function collaborationMetric(label, value, tone = '') {
   return `<div class="collaboration-metric ${tone}"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value ?? '-')}</strong></div>`;
 }
+
+function collaborationDeadlineLabel(deadline) {
+  if (!deadline) return '未启用';
+  const phase = deadline.deadlineKind === 'start' ? '开始' : '执行';
+  return deadline.overdue
+    ? `${phase}已超时 ${collaborationDuration(-deadline.remainingMs)}`
+    : `${phase}剩余 ${collaborationDuration(deadline.remainingMs)}`;
+}
+
+function refreshCollaborationClocks() {
+  collaborationContent
+    ?.querySelectorAll('[data-collaboration-elapsed-at]')
+    .forEach((element) => {
+      element.textContent = collaborationElapsed(
+        element.getAttribute('data-collaboration-elapsed-at'),
+      );
+    });
+  collaborationContent
+    ?.querySelectorAll('[data-collaboration-deadline-at]')
+    .forEach((element) => {
+      const deadlineAt = element.getAttribute('data-collaboration-deadline-at');
+      const deadlineMs = Date.parse(String(deadlineAt || ''));
+      if (!Number.isFinite(deadlineMs)) return;
+      const remainingMs = deadlineMs - Date.now();
+      const phase =
+        element.getAttribute('data-collaboration-deadline-kind') === 'start'
+          ? '开始'
+          : '执行';
+      const overdue = remainingMs <= 0;
+      element.textContent = overdue
+        ? `${phase}已超时 ${collaborationDuration(-remainingMs)}`
+        : `${phase}剩余 ${collaborationDuration(remainingMs)}`;
+      element.classList.toggle('overdue', overdue);
+    });
+}
+
+setInterval(refreshCollaborationClocks, 1000);
 
 function renderCollaborationOverview() {
   const { group, definition, executions = [] } = collaborationState.detail;
@@ -1002,19 +1115,74 @@ function renderCollaborationOverview() {
 }
 
 function renderCollaborationTurn(turn) {
+  const handoff = turn.incomingHandoff;
+  const markers = handoff?.markers || [];
+  const dataRefs = handoff?.data_refs || [];
+  const artifactRefs = handoff?.artifact_refs || [];
   return `<dl class="collaboration-definition-list collaboration-turn-grid">
     <div><dt>ID</dt><dd>${escapeHtml(turn.turnId)}</dd></div>
+    <div><dt>State</dt><dd>${escapeHtml(turn.stateId)}</dd></div>
     <div><dt>角色</dt><dd>${escapeHtml(turn.role)}</dd></div>
-    <div><dt>Action</dt><dd>${escapeHtml(turn.actionId)}</dd></div>
+    <div><dt>方式</dt><dd>${escapeHtml(turn.mode)}</dd></div>
     <div><dt>Attempt</dt><dd>${escapeHtml(turn.attempt)}</dd></div>
-    <div><dt>Claimant</dt><dd>${escapeHtml(turn.claimantPrincipalId || '-')}</dd></div>
+    <div><dt>创建时间</dt><dd>${escapeHtml(collaborationTimestamp(turn.createdAt))}</dd></div>
+    <div><dt>当前耗时</dt><dd data-collaboration-elapsed-at="${escapeAttribute(turn.createdAt || '')}">${escapeHtml(collaborationElapsed(turn.createdAt))}</dd></div>
+    <div><dt>开始 Deadline</dt><dd>${escapeHtml(collaborationTimestamp(turn.startDeadlineAt))}</dd></div>
+    <div><dt>执行 Deadline</dt><dd>${escapeHtml(collaborationTimestamp(turn.executionDeadlineAt))}</dd></div>
+    <div><dt>Claimant</dt><dd>${escapeHtml(turn.claimantPrincipalId ? `${turn.claimantPrincipalId} · ${turn.claimantAgentId}` : '-')}</dd></div>
     <div><dt>Execution</dt><dd>${escapeHtml(turn.executionRef || '-')}</dd></div>
+    <div><dt>上游摘要</dt><dd>${escapeHtml(handoff?.summary || '-')}</dd></div>
+    <div><dt>上游交接</dt><dd>${escapeHtml(handoff?.instruction || '-')}</dd></div>
+    <div><dt>上游标记</dt><dd>${markers.map((value) => `<code>${escapeHtml(value)}</code>`).join(' ') || '-'}</dd></div>
+    <div><dt>Data refs</dt><dd>${dataRefs.map((value) => `<code>${escapeHtml(value)}</code>`).join('<br>') || '-'}</dd></div>
+    <div><dt>Artifact refs</dt><dd>${artifactRefs.map((value) => `<code>${escapeHtml(value)}</code>`).join('<br>') || '-'}</dd></div>
   </dl>`;
+}
+
+function renderCollaborationTurnTiming(turn) {
+  const deadline = collaborationTurnDeadline(turn);
+  const lifecycle = collaborationTurnLifecycle(turn);
+  const observations = Array.isArray(turn.timeoutObservations)
+    ? turn.timeoutObservations
+    : [];
+  return `<div class="collaboration-turn-timing">
+    <div class="collaboration-node-clock${deadline?.overdue ? ' overdue' : ''}">
+      <span>节点计时</span>
+      <strong data-collaboration-elapsed-at="${escapeAttribute(turn.createdAt || '')}">${escapeHtml(collaborationElapsed(turn.createdAt))}</strong>
+      <span class="collaboration-deadline-value${deadline?.overdue ? ' overdue' : ''}" ${deadline ? `data-collaboration-deadline-at="${escapeAttribute(deadline.deadlineAt)}" data-collaboration-deadline-kind="${escapeAttribute(deadline.deadlineKind)}"` : ''}>${escapeHtml(collaborationDeadlineLabel(deadline))}</span>
+    </div>
+    <div class="collaboration-phase-list">
+      ${
+        lifecycle
+          .map(
+            (item) => `<div>
+              <span>${escapeHtml(item.label)}</span>
+              <strong>${escapeHtml(collaborationTimestamp(item.occurredAt))}</strong>
+              <small>${item.durationMs === null ? '共享起点' : `${escapeHtml(collaborationDuration(item.durationMs))}${item.clockSkew ? ' · 时钟偏差' : ''}`}</small>
+            </div>`,
+          )
+          .join('') ||
+        '<div class="collaboration-section-empty">尚无生命周期记录</div>'
+      }
+    </div>
+    ${
+      observations.length
+        ? `<div class="collaboration-timeout-observations">${observations
+            .map(
+              (item) =>
+                `<span>${escapeHtml(item.deadlineKind === 'start' ? '开始超时' : '执行超时')} · #${escapeHtml(item.sequence)} · ${escapeHtml(collaborationTimestamp(item.observedAt))}</span>`,
+            )
+            .join('')}</div>`
+        : ''
+    }
+  </div>`;
 }
 
 function renderCollaborationRoles() {
   const { group, definition, bindings = [] } = collaborationState.detail;
   const roleDefinitions = definition?.roles || {};
+  const states = definition?.machine?.states || {};
+  const implementations = group.projection?.stateImplementations || {};
   const roles = Object.keys(roleDefinitions).length
     ? Object.keys(roleDefinitions)
     : Object.keys(group.projection?.roleClaims || {});
@@ -1025,21 +1193,45 @@ function renderCollaborationRoles() {
         roles
           .map((role) => {
             const claims = group.projection?.roleClaims?.[role] || [];
-            const local = claims.some(
-              (claim) =>
-                claim.principal_id === group.localPrincipalId &&
-                claim.agent_id === group.localAgentId,
+            const local = collaborationIdentityOwnsRole(group, role);
+            const ownedStates = Object.entries(states).filter(
+              ([, state]) => !state.terminal && state.owner_role === role,
             );
-            const binding = bindings.find((item) => item.role === role);
             return `<article class="collaboration-record">
             <div class="collaboration-record-main">
               <div class="collaboration-record-title"><strong>${escapeHtml(roleDefinitions[role]?.display_name || role)}</strong>${local ? collaborationStatus('OK', '本地') : ''}</div>
               <div class="collaboration-record-meta">${claims.map((claim) => `${escapeHtml(claim.principal_id)} · ${escapeHtml(claim.agent_id)}`).join('<br>') || '尚未认领'}</div>
-              <div class="collaboration-record-meta">${binding ? `${escapeHtml(binding.executorKind)}${binding.adapter ? ` · ${escapeHtml(binding.adapter)}` : ''}` : '未配置本地执行器'}</div>
+              <div class="collaboration-state-implementation-list">
+                ${
+                  ownedStates
+                    .map(([stateId, state]) => {
+                      const active = implementations[stateId];
+                      const implementationUsable = active?.active === true;
+                      const binding = bindings.find(
+                        (item) =>
+                          implementationUsable &&
+                          item.stateId === stateId &&
+                          item.implementationHash ===
+                            active?.implementationHash &&
+                          item.actionHash === active?.actionHash,
+                      );
+                      return `<div class="collaboration-state-implementation">
+                      <div>
+                        <strong>${escapeHtml(state.label || stateId)}</strong>
+                        <span>${escapeHtml(stateId)}</span>
+                      </div>
+                      <div class="collaboration-record-meta">${active ? `${escapeHtml(active.implementation.mode)} · ${escapeHtml(active.implementation.owner.principal_id)} · ${escapeHtml(active.publishedEventId)} ${implementationUsable ? '' : '· 历史 / 已失活'}` : '尚未发布 Implementation'}</div>
+                      <div class="collaboration-record-meta">${implementationUsable && active?.action ? `${escapeHtml(active.action.kind)}${active.action.adapter ? ` · ${escapeHtml(active.action.adapter)}` : ''} · ${binding?.enabled ? '本地 Binding 已启用' : '本地 Binding 未配置'}` : implementationUsable ? '无需 Executor Binding' : active ? '重新发布后才可配置 Binding' : '无需 Executor Binding'}</div>
+                      ${local ? `<div class="collaboration-record-actions"><button class="btn-ghost" data-collaboration-action="edit-implementation" data-state-id="${escapeAttribute(stateId)}">${implementationUsable ? '配置执行方式' : '重新发布并激活'}</button>${implementationUsable && active?.action ? `<button class="btn-ghost" data-collaboration-action="edit-binding" data-state-id="${escapeAttribute(stateId)}">本地 Binding</button>` : ''}</div>` : ''}
+                    </div>`;
+                    })
+                    .join('') ||
+                  '<div class="collaboration-section-empty">该角色没有非终态 State</div>'
+                }
+              </div>
             </div>
             <div class="collaboration-record-actions">
-              ${!local ? `<button class="btn-ghost" data-collaboration-action="claim-role" data-role="${escapeAttribute(role)}">认领</button>` : ''}
-              ${local ? `<button class="btn-ghost" data-collaboration-action="edit-binding" data-role="${escapeAttribute(role)}">配置</button>` : ''}
+              ${!local ? `<button class="btn-ghost" data-collaboration-action="claim-role" data-role="${escapeAttribute(role)}">认领</button>` : ['FORMING', 'READY', 'PAUSED'].includes(group.lifecycle) ? `<button class="btn-danger-soft" data-collaboration-action="release-role" data-role="${escapeAttribute(role)}">释放</button>` : ''}
             </div>
           </article>`;
           })
@@ -1087,6 +1279,11 @@ function renderCollaborationExecution(execution) {
       <div class="collaboration-record-title"><strong>${escapeHtml(execution.executorKind)}${execution.adapter ? ` · ${escapeHtml(execution.adapter)}` : ''}</strong>${collaborationStatus(execution.state)}</div>
       <div class="collaboration-record-meta">${escapeHtml(execution.executionRef || execution.executionId)}</div>
       <div class="collaboration-record-meta">attempt ${escapeHtml(execution.attempt)} · ${escapeHtml(collaborationDate(execution.updatedAtMs))}</div>
+      <div class="collaboration-execution-times">
+        <span>Dispatch ${escapeHtml(collaborationDate(execution.dispatchStartedAtMs))}</span>
+        <span>Receipt ${escapeHtml(collaborationDate(execution.receiptRecordedAtMs))}</span>
+        <span>Provider ${escapeHtml(collaborationDate(execution.providerCompletedAtMs))}</span>
+      </div>
       ${execution.recoveryRequiredReason ? `<div class="collaboration-inline-alert">${escapeHtml(execution.recoveryRequiredReason)}</div>` : ''}
       ${provider.kind === 'codex-task' ? `<div class="collaboration-provider-line">thread ${escapeHtml(provider.threadId || '-')} · turn ${escapeHtml(provider.turnId || '-')} · ${escapeHtml(provider.cliVersion || '')}</div>` : ''}
       ${execution.observation?.result?.summary ? `<div class="collaboration-result-summary">${escapeHtml(execution.observation.result.summary)}</div>` : ''}
@@ -1097,31 +1294,77 @@ function renderCollaborationExecution(execution) {
 
 function renderCollaborationRuntime() {
   const { group, definition, executions = [] } = collaborationState.detail;
+  const notifications = collaborationPendingNotifications(
+    collaborationState.detail,
+  );
   const turn = selectedCollaborationTurn();
   const currentState = definition?.machine?.states?.[group.businessState];
-  const transitions = !turn ? currentState?.transitions || [] : [];
+  const routes = turn
+    ? collaborationOutcomeRoutes(definition, turn)
+    : currentState?.transitions || [];
+  const { localRole, localClaimant, canStart, canComplete } =
+    collaborationTurnAccess(group, turn);
+  const turnHistory = collaborationTurnHistory(group.projection);
   return `
     <section class="collaboration-command-band">
       <div><span>Revision</span><strong>${escapeHtml(group.projection?.revision ?? '-')}</strong></div>
       <div><span>Lifecycle</span><strong>${escapeHtml(group.lifecycle)}</strong></div>
       <div class="collaboration-command-actions">
         ${creatorCommandButtons(group, turn)}
-        ${
-          group.localPrincipalId === group.creatorPrincipalId
-            ? transitions
-                .map(
-                  (transition) =>
-                    `<button class="btn-ghost" data-collaboration-action="transition" data-transition-id="${escapeAttribute(transition.id)}">${escapeHtml(transition.id)}</button>`,
-                )
-                .join('')
-            : ''
-        }
       </div>
     </section>
     <section class="collaboration-section">
-      <div class="collaboration-section-head"><h3>活动 Turn</h3>${turn ? collaborationStatus(turn.state) : ''}</div>
-      ${turn ? renderCollaborationTurn(turn) : '<div class="collaboration-section-empty">没有活动 Turn</div>'}
+      <div class="collaboration-section-head"><h3>历史 Turn</h3><span>${turnHistory.length}</span></div>
+      <div class="collaboration-record-list">${
+        turnHistory
+          .map(
+            (item) => `<article class="collaboration-record">
+            <div class="collaboration-record-main">
+              <div class="collaboration-record-title"><strong>${escapeHtml(item.stateId)}</strong>${collaborationStatus(item.state)}</div>
+              <div class="collaboration-record-meta">${escapeHtml(item.turnId)} · ${escapeHtml(item.role)} · ${escapeHtml(item.mode)}</div>
+              <div class="collaboration-record-meta">${escapeHtml(collaborationTimestamp(item.createdAt))}${item.outcome ? ` · ${escapeHtml(item.outcome)}` : ''}${item.handoff?.summary ? ` · ${escapeHtml(item.handoff.summary)}` : ''}</div>
+            </div>
+          </article>`,
+          )
+          .join('') ||
+        '<div class="collaboration-section-empty">暂无历史 Turn</div>'
+      }</div>
     </section>
+    <section class="collaboration-section">
+      <div class="collaboration-section-head"><h3>当前节点</h3>${turn ? collaborationStatus(turn.state) : ''}</div>
+      ${
+        turn
+          ? `${renderCollaborationTurn(turn)}
+            ${renderCollaborationTurnTiming(turn)}
+            <div class="collaboration-outcome-preview">${routes.map((route) => `<span><strong>${escapeHtml(route.outcome)}</strong> -> ${escapeHtml(route.target_state)}</span>`).join('')}</div>
+            ${turn.recoveryReason ? `<div class="collaboration-inline-alert">${escapeHtml(turn.recoveryReason)}</div>` : ''}
+            ${!localRole ? '<div class="collaboration-readonly-note">当前节点由其他角色处理。本地为只读视图。</div>' : ''}
+            ${localRole && turn.claimantPrincipalId && !localClaimant ? '<div class="collaboration-readonly-note">当前节点已由同角色的另一实例认领。本地为只读视图。</div>' : ''}
+            <div class="collaboration-record-actions">
+              ${canStart ? '<button class="btn-primary btn-soft-primary" data-collaboration-action="start-turn">确认开始</button>' : ''}
+              ${canComplete ? '<button class="btn-primary btn-soft-primary" data-collaboration-action="complete-turn">确认业务完成</button>' : ''}
+            </div>`
+          : '<div class="collaboration-section-empty">没有活动 Turn</div>'
+      }
+    </section>
+    ${
+      notifications.length
+        ? `<section class="collaboration-section">
+      <div class="collaboration-section-head"><h3>本机待办提醒</h3><span>${notifications.length}</span></div>
+      <div class="collaboration-record-list">${notifications
+        .map(
+          (notification) => `<article class="collaboration-record">
+          <div class="collaboration-record-main">
+            <div class="collaboration-record-title"><strong>${escapeHtml(notification.deadlineKind === 'execution' ? '执行提醒' : '开始提醒')}</strong>${String(notification.kind || '').startsWith('timeout') ? collaborationStatus('FAILED', '已超时') : collaborationStatus('WAITING_INPUT', '待处理')}</div>
+            <div class="collaboration-record-meta">${escapeHtml(notification.turnId)} · attempt ${escapeHtml(notification.attempt)} · reminder ${escapeHtml(notification.reminderOrdinal)}</div>
+            <div class="collaboration-record-meta">${escapeHtml(notification.deadlineAtMs ? collaborationDate(notification.deadlineAtMs) : '未设置 deadline')} · 首次发现 ${escapeHtml(collaborationDate(notification.firstDiscoveredAtMs))}</div>
+          </div>
+        </article>`,
+        )
+        .join('')}</div>
+    </section>`
+        : ''
+    }
     <section class="collaboration-section">
       <div class="collaboration-section-head"><h3>本地执行</h3><span>${executions.length}</span></div>
       <div class="collaboration-record-list">${executions.map(renderCollaborationExecution).join('') || '<div class="collaboration-section-empty">暂无本地执行记录</div>'}</div>
@@ -1152,12 +1395,214 @@ function renderCollaborationEvents() {
   </section>`;
 }
 
+function collaborationAuditLifecycle(turn) {
+  if (Array.isArray(turn?.lifecycle)) return turn.lifecycle;
+  if (!turn?.lifecycle || typeof turn.lifecycle !== 'object') return [];
+  return Object.entries(turn.lifecycle)
+    .filter(([, value]) => value)
+    .map(([kind, value]) =>
+      typeof value === 'object'
+        ? { kind, ...value }
+        : { kind, occurredAt: value },
+    );
+}
+
+const collaborationAuditLifecycleLabels = {
+  createdAt: 'Turn 创建',
+  firstLocalDiscoveryAt: '首次本地发现',
+  startedAt: '确认开始 / 自动 claim',
+  dispatchAcceptedAt: 'Dispatch accepted',
+  providerCompletedAt: 'Provider 完成',
+  awaitingConfirmationAt: '等待人工确认',
+  completedAt: '确认完成',
+  stateAdvancedAt: '状态推进',
+  cancelledAt: 'Turn 取消',
+  recoveryRequestedAt: '请求恢复',
+  recoveredAt: '恢复完成',
+};
+
+function collaborationAuditJson(value) {
+  if (value === null || value === undefined) return '-';
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return '-';
+  }
+}
+
+function renderCollaborationAuditAttempts(attempts) {
+  if (!Array.isArray(attempts) || !attempts.length)
+    return '<div class="collaboration-section-empty">没有 attempt 证据</div>';
+  return attempts
+    .map((attempt) => {
+      const reminders = Array.isArray(attempt.reminders)
+        ? attempt.reminders
+        : [];
+      const executions = Array.isArray(attempt.executions)
+        ? attempt.executions
+        : [];
+      return `<div class="collaboration-audit-attempt">
+        <div class="collaboration-record-title"><strong>Attempt ${escapeHtml(attempt.attempt)}</strong><span>${escapeHtml(attempt.claimant ? `${attempt.claimant.principalId} · ${attempt.claimant.agentId}` : '未 claim')}</span></div>
+        <div class="collaboration-record-meta">首次本地发现 ${escapeHtml(collaborationTimestamp(attempt.lifecycle?.firstLocalDiscoveryAt))} · start ${escapeHtml(collaborationTimestamp(attempt.deadlines?.startAt))} · execution ${escapeHtml(collaborationTimestamp(attempt.deadlines?.executionAt))}</div>
+        <div class="collaboration-audit-summary">${Object.entries(
+          attempt.durations || {},
+        )
+          .map(
+            ([kind, value]) =>
+              `<span>${escapeHtml(kind)} <strong>${escapeHtml(collaborationDuration(value?.valueMs))}</strong>${value?.clockSkew ? ' · 时钟偏差' : ''}</span>`,
+          )
+          .join('')}</div>
+        <div class="collaboration-audit-evidence">
+          ${reminders.map((reminder) => `<code>reminder ${escapeHtml(reminder.deadlineKind)} #${escapeHtml(reminder.reminderOrdinal)} · discovered ${escapeHtml(collaborationTimestamp(reminder.firstDiscoveredAt))} · delivered ${escapeHtml(collaborationTimestamp(reminder.deliveredAt))}</code>`).join('')}
+          ${executions.map((execution) => `<code>${escapeHtml(execution.executorKind)} · ${escapeHtml(execution.state)} · receipt ${escapeHtml(collaborationAuditJson(execution.receipt))} · provider ${escapeHtml(collaborationAuditJson(execution.providerRefs))}</code>`).join('')}
+          ${!reminders.length && !executions.length ? '<span>没有本地提醒或 Executor 证据</span>' : ''}
+        </div>
+      </div>`;
+    })
+    .join('');
+}
+
+function renderCollaborationAudit() {
+  const audit = collaborationState.tabData.audit;
+  if (!audit) return '<div class="collaboration-loading">加载审计链...</div>';
+  const turns = Array.isArray(audit.turns) ? audit.turns : [];
+  const events = collaborationAuditEventTimeline(audit.sharedEvents);
+  return `<section class="collaboration-command-band collaboration-audit-command">
+    <div><span>审计范围</span><strong>${escapeHtml(audit.scope?.groupId || audit.group?.groupId || '-')} · epoch ${escapeHtml(audit.scope?.epoch ?? '-')}</strong></div>
+    <div><span>生成时间</span><strong>${escapeHtml(collaborationTimestamp(audit.generatedAt))}</strong></div>
+    <div class="collaboration-command-actions"><button class="btn-ghost" type="button" data-collaboration-action="audit-export" title="导出审计 JSON">导出 JSON</button></div>
+  </section>
+  <section class="collaboration-metrics" aria-label="审计摘要">
+    ${collaborationMetric('Group', audit.group?.groupId || '-')}
+    ${collaborationMetric('Epoch', audit.scope?.epoch ?? '-')}
+    ${collaborationMetric('Turns', String(turns.length))}
+    ${collaborationMetric('共享事件', String(events.length))}
+  </section>
+  <section class="collaboration-section collaboration-two-column">
+    <div>
+      <div class="collaboration-section-head"><h3>Group / Epoch</h3></div>
+      <dl class="collaboration-definition-list">
+        <div><dt>Creator</dt><dd>${escapeHtml(audit.group?.creatorPrincipalId || '-')}</dd></div>
+        <div><dt>Lifecycle</dt><dd>${escapeHtml(audit.group?.lifecycle || '-')}</dd></div>
+        <div><dt>Business State</dt><dd>${escapeHtml(audit.group?.businessState || '-')}</dd></div>
+        <div><dt>Protocol</dt><dd>${escapeHtml(audit.group?.protocolStatus || '-')}</dd></div>
+      </dl>
+    </div>
+    <div>
+      <div class="collaboration-section-head"><h3>Git authority</h3></div>
+      <dl class="collaboration-definition-list">
+        <div><dt>Ordering</dt><dd>${escapeHtml(audit.ordering?.authority || '-')}</dd></div>
+        <div><dt>Head</dt><dd>${escapeHtml(audit.group?.headCommit || '-')}</dd></div>
+        <div><dt>Machine hash</dt><dd>${escapeHtml(audit.group?.machineHash || '-')}</dd></div>
+        <div><dt>Initial State</dt><dd>${escapeHtml(audit.group?.initialState || '-')}</dd></div>
+      </dl>
+    </div>
+  </section>
+  <section class="collaboration-section">
+    <div class="collaboration-section-head"><h3>Turn 审计</h3><span>${turns.length}</span></div>
+    <div class="collaboration-audit-turns">${
+      turns
+        .map((turn) => {
+          const lifecycle = collaborationAuditLifecycle(turn);
+          const timeoutObservations = Array.isArray(turn.timeoutObservations)
+            ? turn.timeoutObservations
+            : [];
+          const reminders = Array.isArray(turn.reminders) ? turn.reminders : [];
+          const deadlines = Object.entries(turn.deadlines || {}).filter(
+            ([kind, value]) =>
+              ['startAt', 'executionAt'].includes(kind) && value,
+          );
+          const durations = Object.entries(turn.durations || {});
+          const hashes = turn.hashes || turn.snapshotHashes || {};
+          const outcome =
+            turn.outcome && typeof turn.outcome === 'object'
+              ? turn.outcome.value
+              : turn.outcome;
+          const targetState =
+            turn.outcome && typeof turn.outcome === 'object'
+              ? turn.outcome.targetState
+              : turn.targetState;
+          const eventRefs = collaborationAuditEventTimeline(
+            turn.sharedEventRefs,
+          );
+          const artifacts = Array.isArray(turn.artifacts) ? turn.artifacts : [];
+          return `<article class="collaboration-audit-turn">
+            <div class="collaboration-record-title"><strong>${escapeHtml(turn.stateId || turn.turnId)}</strong>${collaborationStatus(turn.status || turn.currentState || 'UNKNOWN')}</div>
+            <div class="collaboration-record-meta">${escapeHtml(turn.turnId)} · epoch ${escapeHtml(turn.epoch)} · attempt ${escapeHtml(turn.attempt)} · ${escapeHtml(turn.role)} · ${escapeHtml(turn.mode)}</div>
+            <div class="collaboration-record-meta">claimant ${escapeHtml(turn.claimant ? `${turn.claimant.principalId} · ${turn.claimant.agentId}` : '-')} · implementation ${escapeHtml(turn.implementationRef || '-')} · action ${escapeHtml(turn.actionRef || '-')}</div>
+            <div class="collaboration-audit-hashes">${
+              Object.entries(hashes)
+                .map(
+                  ([kind, hash]) =>
+                    `<code>${escapeHtml(kind)} ${escapeHtml(hash || '-')}</code>`,
+                )
+                .join('') || '<code>snapshot hashes -</code>'
+            }</div>
+            <div class="collaboration-audit-summary">
+              ${deadlines.map(([kind, value]) => `<span>${escapeHtml(kind)} <strong>${escapeHtml(collaborationTimestamp(value))}</strong></span>`).join('')}
+              ${durations.map(([kind, value]) => `<span>${escapeHtml(kind)} <strong>${escapeHtml(collaborationDuration(value && typeof value === 'object' ? (value.valueMs ?? value.durationMs) : value))}</strong>${value && typeof value === 'object' && value.clockSkew ? ' · 时钟偏差' : ''}</span>`).join('')}
+            </div>
+            <div class="collaboration-phase-list">${
+              lifecycle
+                .map(
+                  (item) =>
+                    `<div><span>${escapeHtml(item.label || collaborationAuditLifecycleLabels[item.kind] || item.kind || '-')}</span><strong>${escapeHtml(collaborationTimestamp(item.occurredAt || item.at))}</strong>${item.durationMs !== undefined && item.durationMs !== null ? `<small>${escapeHtml(collaborationDuration(item.durationMs))}${item.clockSkew ? ' · 时钟偏差' : ''}</small>` : ''}</div>`,
+                )
+                .join('') ||
+              '<div class="collaboration-section-empty">没有生命周期事件</div>'
+            }</div>
+            <div class="collaboration-audit-summary">
+              <span>Outcome <strong>${escapeHtml(outcome || '-')}</strong></span>
+              <span>Target <strong>${escapeHtml(targetState || '-')}</strong></span>
+              <span>Timeout observations <strong>${timeoutObservations.length}</strong></span>
+              <span>Local reminders <strong>${reminders.length}</strong></span>
+            </div>
+            <div class="collaboration-timeout-observations">${timeoutObservations.map((observation) => `<span>${escapeHtml(observation.deadlineKind)} · attempt ${escapeHtml(observation.attempt)} · #${escapeHtml(observation.event?.sequence ?? '-')} · ${escapeHtml(collaborationTimestamp(observation.recordedAt || observation.observedAt))}</span>`).join('')}</div>
+            <div class="collaboration-audit-event-refs">${eventRefs.map((event) => `<span><strong>#${escapeHtml(event.sequence)}</strong> · rev ${escapeHtml(event.revision)} · ${escapeHtml(event.eventType)} · ${escapeHtml(collaborationTimestamp(event.occurredAt))}</span>`).join('') || '<span>没有 Turn 共享事件</span>'}</div>
+            <details class="collaboration-audit-detail">
+              <summary>交接、产物与本地证据</summary>
+              <dl class="collaboration-definition-list">
+                <div><dt>Incoming Handoff</dt><dd>${escapeHtml(turn.incomingHandoff?.hash || '-')} · ${escapeHtml(turn.incomingHandoff?.summary || '-')}</dd></div>
+                <div><dt>Outgoing Handoff</dt><dd>${escapeHtml(turn.outgoingHandoff?.hash || '-')} · ${escapeHtml(turn.outgoingHandoff?.summary || '-')}</dd></div>
+                <div><dt>Artifacts</dt><dd>${artifacts.map((artifact) => `<code>${escapeHtml(artifact.sha256)} · ${escapeHtml(artifact.repositoryPath)} · ${escapeHtml(artifact.size)} bytes</code>`).join('<br>') || '-'}</dd></div>
+                <div><dt>Executor</dt><dd>${escapeHtml(turn.executor?.executionRef || '-')} · ${escapeHtml(turn.executor?.records?.length || 0)} records</dd></div>
+              </dl>
+              <div class="collaboration-audit-attempts">${renderCollaborationAuditAttempts(turn.attempts)}</div>
+            </details>
+          </article>`;
+        })
+        .join('') || '<div class="collaboration-section-empty">暂无 Turn</div>'
+    }</div>
+  </section>
+  <section class="collaboration-section">
+    <div class="collaboration-section-head"><h3>共享签名时间线</h3><span>${events.length}</span></div>
+    <div class="collaboration-timeline">${
+      events
+        .map(
+          (event) => `<article>
+          <span class="collaboration-timeline-marker"></span>
+          <div>
+            <div class="collaboration-record-title"><strong>${escapeHtml(event.eventType || '-')}</strong>${collaborationStatus('OK', `#${event.sequence}`)}</div>
+            <div class="collaboration-record-meta">rev ${escapeHtml(event.revision)} · epoch ${escapeHtml(event.epoch)} · ${escapeHtml(collaborationTimestamp(event.occurredAt))}</div>
+            <div class="collaboration-record-meta">${escapeHtml(event.signer?.principalId || '-')} · ${escapeHtml(event.signer?.agentId || '-')} · ${escapeHtml(event.signer?.signingKeyRef || '-')}</div>
+            <code>${escapeHtml(event.commitHash || '-')}</code>
+          </div>
+        </article>`,
+        )
+        .join('') ||
+      '<div class="collaboration-section-empty">暂无共享事件</div>'
+    }</div>
+  </section>`;
+}
+
 function renderCollaborationData() {
   const paths = collaborationState.tabData.data;
   if (!paths) return '<div class="collaboration-loading">加载数据...</div>';
   const artifacts = Object.values(
     selectedCollaborationGroup()?.projection?.turns || {},
-  ).flatMap((turn) => turn.artifactRefs || []);
+  ).flatMap((turn) =>
+    (turn.artifacts || []).map((artifact) => artifact.repository_path),
+  );
   return `<section class="collaboration-section collaboration-two-column">
     <div>
       <div class="collaboration-section-head"><h3>共享路径</h3><button class="btn-ghost" type="button" data-collaboration-action="update-data">更新数据</button></div>
@@ -1171,22 +1616,35 @@ function renderCollaborationData() {
 }
 
 function renderCollaborationSettings() {
-  const { bindings = [] } = collaborationState.detail;
+  const { bindings = [], definition, group } = collaborationState.detail;
   const roles = collaborationLocalRoles();
+  const states = definition?.machine?.states || {};
+  const implementations = group.projection?.stateImplementations || {};
+  const localStates = Object.entries(states).filter(
+    ([, state]) => !state.terminal && roles.includes(state.owner_role),
+  );
   return `<section class="collaboration-section">
     <div class="collaboration-section-head"><h3>本地 Executor</h3></div>
     <div class="collaboration-record-list">
       ${
-        roles
-          .map((role) => {
-            const binding = bindings.find((item) => item.role === role);
+        localStates
+          .map(([stateId, state]) => {
+            const active = implementations[stateId];
+            const implementationUsable = active?.active === true;
+            const binding = bindings.find(
+              (item) =>
+                implementationUsable &&
+                item.stateId === stateId &&
+                item.implementationHash === active?.implementationHash &&
+                item.actionHash === active?.actionHash,
+            );
             return `<article class="collaboration-record">
             <div class="collaboration-record-main">
-              <div class="collaboration-record-title"><strong>${escapeHtml(role)}</strong>${collaborationStatus(binding?.enabled ? 'OK' : 'BLOCKED', binding?.enabled ? '启用' : '未配置')}</div>
-              <div class="collaboration-record-meta">${binding ? `${escapeHtml(binding.executorKind)}${binding.adapter ? ` · ${escapeHtml(binding.adapter)}` : ''} · ${escapeHtml(binding.filesystemAccessCap)}` : '未配置'}</div>
-              <div class="collaboration-record-meta">${escapeHtml(binding?.workspacePath || '-')}</div>
+              <div class="collaboration-record-title"><strong>${escapeHtml(state.label || stateId)}</strong>${!implementationUsable ? collaborationStatus('BLOCKED', active ? '已失活' : '待发布') : active?.action ? collaborationStatus(binding?.enabled ? 'OK' : 'BLOCKED', binding?.enabled ? '启用' : '未配置') : collaborationStatus('OK', 'Manual')}</div>
+              <div class="collaboration-record-meta">${implementationUsable && active?.action ? `${escapeHtml(active.action.kind)}${active.action.adapter ? ` · ${escapeHtml(active.action.adapter)}` : ''} · ${escapeHtml(binding?.filesystemAccessCap || '未配置')}` : implementationUsable ? 'Manual Implementation 不使用本地 Executor' : active ? '历史 Implementation；请先重新发布激活' : '请先发布 State Implementation'}</div>
+              <div class="collaboration-record-meta">${escapeHtml(implementationUsable ? binding?.workspacePath || '-' : '-')}</div>
             </div>
-            <div class="collaboration-record-actions"><button class="btn-ghost" data-collaboration-action="edit-binding" data-role="${escapeAttribute(role)}">编辑</button></div>
+            <div class="collaboration-record-actions">${implementationUsable && active?.action ? `<button class="btn-ghost" data-collaboration-action="edit-binding" data-state-id="${escapeAttribute(stateId)}">编辑</button>` : ''}</div>
           </article>`;
           })
           .join('') ||
@@ -1244,6 +1702,7 @@ function renderCollaborationContent() {
     overview: renderCollaborationOverview,
     roles: renderCollaborationRoles,
     runtime: renderCollaborationRuntime,
+    audit: renderCollaborationAudit,
     events: renderCollaborationEvents,
     data: renderCollaborationData,
     settings: renderCollaborationSettings,
@@ -1261,6 +1720,10 @@ async function loadCollaborationTabData(tab) {
     if (tab === 'events') {
       const data = await collaborationRequest(`/groups/${id}/events`);
       collaborationState.tabData.events = data.events || [];
+    } else if (tab === 'audit') {
+      collaborationState.tabData.audit = await collaborationRequest(
+        `/groups/${id}/audit`,
+      );
     } else if (tab === 'data') {
       const data = await collaborationRequest(`/groups/${id}/data`);
       collaborationState.tabData.data = data.paths || [];
@@ -1340,7 +1803,6 @@ function collaborationBuilderOptions(items, label) {
 
 function renderCollaborationCreateBuilder(draft) {
   const roleOptions = collaborationBuilderOptions(draft.roles, 'role');
-  const actionOptions = collaborationBuilderOptions(draft.actions, 'action');
   const stateOptions = collaborationBuilderOptions(draft.states, 'state');
   return `
     <div class="collaboration-create-builder" id="collaboration-create-builder">
@@ -1358,8 +1820,7 @@ function renderCollaborationCreateBuilder(draft) {
                   ${collaborationBuilderField('显示名', 'displayName', role.displayName)}
                   ${collaborationBuilderField('最小人数', 'minMembers', role.minMembers, { type: 'number' })}
                   ${collaborationBuilderField('最大人数', 'maxMembers', role.maxMembers, { type: 'number' })}
-                  ${collaborationBuilderField('Capability', 'capability', role.capability)}
-                  ${collaborationBuilderSelect('Interaction', 'interaction', role.interaction, ['visible_session', 'headless'])}
+                  ${collaborationBuilderField('Capabilities', 'capabilities', role.capabilities || '')}
                 </div>
               </article>`,
             )
@@ -1367,36 +1828,6 @@ function renderCollaborationCreateBuilder(draft) {
         </div>
         <div class="collaboration-builder-selection">
           ${collaborationBuilderSelect('创建者初始角色', 'initialRole', draft.initialRole, roleOptions)}
-        </div>
-      </section>
-      <section class="collaboration-builder-section">
-        <div class="collaboration-builder-heading"><h4>Actions</h4>${collaborationBuilderAdd('add-action', '新增 Action')}</div>
-        <div class="collaboration-builder-list">
-          ${draft.actions
-            .map(
-              (
-                action,
-              ) => `<article class="collaboration-builder-item" data-builder-action-row>
-                <div class="collaboration-builder-item-head"><strong>${escapeHtml(action.id || 'Action')}</strong>${collaborationBuilderRemove('remove-action', '删除 Action')}</div>
-                <div class="collaboration-builder-grid collaboration-builder-action-grid">
-                  ${collaborationBuilderField('Action ID', 'id', action.id, { idKind: 'action' })}
-                  ${collaborationBuilderSelect(
-                    'Executor',
-                    'executorMode',
-                    action.executorMode,
-                    [
-                      { value: 'run_once', label: 'run_once' },
-                      { value: 'codex-task', label: 'codex-task / App Server' },
-                      { value: 'workflow', label: 'workflow' },
-                    ],
-                  )}
-                  ${collaborationBuilderSelect('文件权限', 'filesystemAccess', action.filesystemAccess, ['workspace_write', 'read_only'])}
-                  ${collaborationBuilderField('Workflow ref', 'workflowRef', action.workflowRef || '')}
-                  <label class="collaboration-field collaboration-builder-prompt"><span>Prompt</span><textarea data-builder-field="prompt">${escapeHtml(action.prompt)}</textarea></label>
-                </div>
-              </article>`,
-            )
-            .join('')}
         </div>
       </section>
       <section class="collaboration-builder-section">
@@ -1413,26 +1844,35 @@ function renderCollaborationCreateBuilder(draft) {
                 <div class="collaboration-builder-item-head">
                   <strong>${escapeHtml(state.id || '状态')}</strong>
                   <div class="collaboration-builder-item-actions">
-                    ${!state.terminal ? collaborationBuilderAdd('add-transition', '新增 Transition') : ''}
+                    ${!state.terminal ? collaborationBuilderAdd('add-transition', '新增 Outcome') : ''}
                     ${collaborationBuilderRemove('remove-state', '删除状态')}
                   </div>
                 </div>
                 <div class="collaboration-builder-state-meta">
                   ${collaborationBuilderField('State ID', 'id', state.id, { idKind: 'state' })}
+                  ${collaborationBuilderField('名称', 'label', state.label || state.id)}
+                  ${!state.terminal ? collaborationBuilderSelect('责任角色', 'ownerRole', state.ownerRole, roleOptions) : ''}
                   <label class="collaboration-builder-toggle"><input type="checkbox" data-builder-field="terminal" ${state.terminal ? 'checked' : ''} /><span>Terminal</span></label>
                 </div>
+                ${
+                  !state.terminal
+                    ? `<div class="collaboration-builder-grid collaboration-builder-timeout-grid">
+                        ${collaborationBuilderField('开始超时 (ms)', 'startTimeoutMs', state.startTimeoutMs ?? '', { type: 'number' })}
+                        ${collaborationBuilderField('执行超时 (ms)', 'executionTimeoutMs', state.executionTimeoutMs ?? '', { type: 'number' })}
+                        ${collaborationBuilderField('重复提醒间隔 (ms)', 'reminderIntervalMs', state.reminderIntervalMs ?? '', { type: 'number' })}
+                      </div>`
+                    : ''
+                }
                 <div class="collaboration-builder-transition-list">
                   ${state.transitions
                     .map(
                       (
                         transition,
                       ) => `<div class="collaboration-builder-transition" data-builder-transition>
-                        <div class="collaboration-builder-item-head"><strong>${escapeHtml(transition.id || 'Transition')}</strong>${collaborationBuilderRemove('remove-transition', '删除 Transition')}</div>
+                        <div class="collaboration-builder-item-head"><strong>${escapeHtml(transition.outcome || 'Outcome')}</strong>${collaborationBuilderRemove('remove-transition', '删除 Outcome')}</div>
                         <div class="collaboration-builder-grid collaboration-builder-transition-grid">
-                          ${collaborationBuilderField('Transition ID', 'id', transition.id, { idKind: 'transition' })}
-                          ${collaborationBuilderSelect('Role', 'roleId', transition.roleId, roleOptions)}
-                          ${collaborationBuilderSelect('Action', 'actionId', transition.actionId, actionOptions)}
-                          ${COLLABORATION_OUTCOMES.map((outcome) => collaborationBuilderSelect(outcome, `outcome:${outcome}`, transition.outcomes?.[outcome], stateOptions)).join('')}
+                          ${collaborationBuilderField('Outcome', 'outcome', transition.outcome)}
+                          ${collaborationBuilderSelect('目标 State', 'targetState', transition.targetState, stateOptions)}
                         </div>
                       </div>`,
                     )
@@ -1461,37 +1901,31 @@ function readCollaborationCreateBuilder(root) {
         displayName: collaborationBuilderValue(row, 'displayName'),
         minMembers: collaborationBuilderValue(row, 'minMembers'),
         maxMembers: collaborationBuilderValue(row, 'maxMembers'),
-        capability: collaborationBuilderValue(row, 'capability'),
-        interaction: collaborationBuilderValue(row, 'interaction'),
-      }),
-    ),
-    actions: Array.from(root.querySelectorAll('[data-builder-action-row]')).map(
-      (row) => ({
-        id: collaborationBuilderValue(row, 'id'),
-        executorMode: collaborationBuilderValue(row, 'executorMode'),
-        filesystemAccess: collaborationBuilderValue(row, 'filesystemAccess'),
-        workflowRef: collaborationBuilderValue(row, 'workflowRef'),
-        prompt: collaborationBuilderValue(row, 'prompt'),
+        capabilities: collaborationBuilderValue(row, 'capabilities'),
       }),
     ),
     states: Array.from(root.querySelectorAll('[data-builder-state]')).map(
       (row) => ({
         id: collaborationBuilderValue(row, 'id'),
+        label: collaborationBuilderValue(row, 'label'),
+        ownerRole: collaborationBuilderValue(row, 'ownerRole'),
         terminal: Boolean(
           row.querySelector('[data-builder-field="terminal"]')?.checked,
+        ),
+        startTimeoutMs: collaborationBuilderValue(row, 'startTimeoutMs'),
+        executionTimeoutMs: collaborationBuilderValue(
+          row,
+          'executionTimeoutMs',
+        ),
+        reminderIntervalMs: collaborationBuilderValue(
+          row,
+          'reminderIntervalMs',
         ),
         transitions: Array.from(
           row.querySelectorAll('[data-builder-transition]'),
         ).map((transition) => ({
-          id: collaborationBuilderValue(transition, 'id'),
-          roleId: collaborationBuilderValue(transition, 'roleId'),
-          actionId: collaborationBuilderValue(transition, 'actionId'),
-          outcomes: Object.fromEntries(
-            COLLABORATION_OUTCOMES.map((outcome) => [
-              outcome,
-              collaborationBuilderValue(transition, `outcome:${outcome}`),
-            ]),
-          ),
+          outcome: collaborationBuilderValue(transition, 'outcome'),
+          targetState: collaborationBuilderValue(transition, 'targetState'),
         })),
       }),
     ),
@@ -1510,19 +1944,12 @@ function renameCollaborationBuilderReferences(draft, kind, from, to) {
   if (kind === 'role') {
     if (draft.initialRole === from) draft.initialRole = to;
     for (const state of draft.states)
-      for (const transition of state.transitions)
-        if (transition.roleId === from) transition.roleId = to;
-  } else if (kind === 'action') {
-    for (const state of draft.states)
-      for (const transition of state.transitions)
-        if (transition.actionId === from) transition.actionId = to;
+      if (state.ownerRole === from) state.ownerRole = to;
   } else if (kind === 'state') {
     if (draft.initialState === from) draft.initialState = to;
     for (const state of draft.states)
       for (const transition of state.transitions)
-        for (const outcome of COLLABORATION_OUTCOMES)
-          if (transition.outcomes[outcome] === from)
-            transition.outcomes[outcome] = to;
+        if (transition.targetState === from) transition.targetState = to;
   }
 }
 
@@ -1538,7 +1965,6 @@ function bindCollaborationCreateBuilder(editor, initialDraft) {
     draft = snapshot();
     const action = button.dataset.builderAction;
     const roleRow = button.closest('[data-builder-role]');
-    const actionRow = button.closest('[data-builder-action-row]');
     const stateRow = button.closest('[data-builder-state]');
     const transitionRow = button.closest('[data-builder-transition]');
     if (action === 'add-role') {
@@ -1552,31 +1978,12 @@ function bindCollaborationCreateBuilder(editor, initialDraft) {
         ),
         1,
       );
-    } else if (action === 'add-action') {
-      const next = createActionDraft(draft.actions.length + 1);
-      next.id = nextCollaborationBuilderId('action', draft.actions);
-      draft.actions.push(next);
-    } else if (action === 'remove-action' && actionRow) {
-      draft.actions.splice(
-        Array.from(
-          editor.querySelectorAll('[data-builder-action-row]'),
-        ).indexOf(actionRow),
-        1,
-      );
     } else if (action === 'add-state') {
-      const allTransitions = draft.states.flatMap((state) => state.transitions);
       const next = createStateDraft(draft.states.length + 1, {
         roleId: draft.roles[0]?.id,
-        actionId: draft.actions[0]?.id,
       });
       next.id = nextCollaborationBuilderId('state', draft.states);
-      next.transitions[0].id = nextCollaborationBuilderId(
-        'transition',
-        allTransitions,
-      );
-      next.transitions[0].outcomes = Object.fromEntries(
-        COLLABORATION_OUTCOMES.map((outcome) => [outcome, next.id]),
-      );
+      next.transitions[0].targetState = next.id;
       draft.states.push(next);
     } else if (action === 'remove-state' && stateRow) {
       draft.states.splice(
@@ -1589,13 +1996,9 @@ function bindCollaborationCreateBuilder(editor, initialDraft) {
       const stateIndex = Array.from(
         editor.querySelectorAll('[data-builder-state]'),
       ).indexOf(stateRow);
-      const allTransitions = draft.states.flatMap((state) => state.transitions);
       const next = createTransitionDraft({
         stateId: draft.states[stateIndex].id,
-        roleId: draft.roles[0]?.id,
-        actionId: draft.actions[0]?.id,
       });
-      next.id = nextCollaborationBuilderId('transition', allTransitions);
       draft.states[stateIndex].transitions.push(next);
     } else if (action === 'remove-transition' && stateRow && transitionRow) {
       const stateIndex = Array.from(
@@ -1636,8 +2039,6 @@ function bindCollaborationCreateBuilder(editor, initialDraft) {
         draft.states[stateIndex].transitions = [
           createTransitionDraft({
             stateId: draft.states[stateIndex].id,
-            roleId: draft.roles[0]?.id,
-            actionId: draft.actions[0]?.id,
           }),
         ];
       render();
@@ -1743,44 +2144,152 @@ function openJoinCollaborationDialog() {
   });
 }
 
-function openCollaborationBindingDialog(role) {
-  const existing = (collaborationState.detail?.bindings || []).find(
-    (binding) => binding.role === role,
+function collaborationImplementationForState(stateId) {
+  return (
+    selectedCollaborationGroup()?.projection?.stateImplementations?.[stateId] ||
+    null
   );
-  const mode =
-    existing?.adapter === 'codex-task'
+}
+
+function openCollaborationImplementationDialog(stateId) {
+  const group = selectedCollaborationGroup();
+  const state =
+    collaborationState.detail?.definition?.machine?.states?.[stateId];
+  const existing = collaborationImplementationForState(stateId);
+  if (!group || !state || state.terminal) return;
+  const action = existing?.action;
+  const prompt = collaborationImplementationPrompt(
+    collaborationState.detail,
+    stateId,
+  );
+  const actionMode =
+    action?.kind === 'external' && action.adapter === 'codex-task'
       ? 'codex-task'
-      : existing?.executorKind || 'run_once';
+      : action?.kind || 'run_once';
+  const body = `<div class="collaboration-form-grid">
+      <label class="collaboration-field"><span>执行方式</span><select name="mode"><option value="manual" ${existing?.implementation.mode === 'manual' ? 'selected' : ''}>Manual</option><option value="assisted" ${existing?.implementation.mode === 'assisted' ? 'selected' : ''}>Assisted</option><option value="automatic" ${existing?.implementation.mode === 'automatic' ? 'selected' : ''}>Automatic</option></select></label>
+      <label class="collaboration-field collaboration-action-field"><span>Action 类型</span><select name="actionMode"><option value="run_once" ${actionMode === 'run_once' ? 'selected' : ''}>Run once</option><option value="workflow" ${actionMode === 'workflow' ? 'selected' : ''}>Workflow</option><option value="codex-task" ${actionMode === 'codex-task' ? 'selected' : ''}>Codex task</option><option value="external" ${actionMode === 'external' ? 'selected' : ''}>External</option></select></label>
+      <div class="collaboration-action-field collaboration-workflow-field">${collaborationField('Workflow ref', 'workflowRef', action?.input?.workflow_ref || '', { required: false })}</div>
+      <div class="collaboration-action-field collaboration-adapter-field">${collaborationField('External adapter', 'adapter', action?.adapter || '', { required: false })}</div>
+      <label class="collaboration-field collaboration-action-field"><span>文件权限要求</span><select name="filesystemAccess"><option value="read_only" ${action?.requirements?.filesystem_access === 'read_only' ? 'selected' : ''}>read_only</option><option value="workspace_write" ${action?.requirements?.filesystem_access === 'workspace_write' ? 'selected' : ''}>workspace_write</option></select></label>
+      <div class="collaboration-action-field collaboration-form-span">${collaborationField('Action Prompt', 'prompt', prompt, { multiline: true, required: false })}</div>
+      <div class="collaboration-action-field collaboration-form-span">${collaborationField('Result Schema JSON', 'resultSchema', action?.result_schema?.schema ? JSON.stringify(action.result_schema.schema, null, 2) : '', { multiline: true, required: false })}</div>
+    </div>`;
   openCollaborationDialog({
-    title: `配置 ${role}`,
+    title: `配置 ${state.label || stateId}`,
+    submitText: existing ? '发布修订' : '发布',
+    wide: true,
+    body,
+    onOpen: () => {
+      const update = () => {
+        const mode = collaborationDialogForm.elements.mode?.value;
+        const actionModeValue =
+          collaborationDialogForm.elements.actionMode?.value;
+        collaborationDialogBody
+          .querySelectorAll('.collaboration-action-field')
+          .forEach((element) =>
+            element.classList.toggle('hidden', mode === 'manual'),
+          );
+        collaborationDialogBody
+          .querySelectorAll('.collaboration-workflow-field')
+          .forEach((element) =>
+            element.classList.toggle('hidden', actionModeValue !== 'workflow'),
+          );
+        collaborationDialogBody
+          .querySelectorAll('.collaboration-adapter-field')
+          .forEach((element) =>
+            element.classList.toggle('hidden', actionModeValue !== 'external'),
+          );
+      };
+      collaborationDialogForm.elements.mode?.addEventListener('change', update);
+      collaborationDialogForm.elements.actionMode?.addEventListener(
+        'change',
+        update,
+      );
+      update();
+    },
+    onSubmit: async (formData) => {
+      const values = Object.fromEntries(formData.entries());
+      const mode = String(values.mode);
+      const actionModeValue = String(values.actionMode || 'run_once');
+      let resultSchema;
+      if (String(values.resultSchema || '').trim())
+        resultSchema = JSON.parse(String(values.resultSchema));
+      const kind =
+        actionModeValue === 'codex-task' ? 'external' : actionModeValue;
+      const adapter =
+        actionModeValue === 'codex-task'
+          ? 'codex-task'
+          : actionModeValue === 'external'
+            ? String(values.adapter || '').trim()
+            : undefined;
+      await collaborationRequest(
+        `/groups/${encodeURIComponent(group.groupId)}/states/${encodeURIComponent(stateId)}/implementation`,
+        {
+          method: 'PUT',
+          body: JSON.stringify({
+            mode,
+            expectedRevision: group.projection?.revision,
+            action:
+              mode === 'manual'
+                ? null
+                : {
+                    kind,
+                    ...(adapter ? { adapter } : {}),
+                    ...(actionModeValue === 'workflow'
+                      ? { workflowRef: String(values.workflowRef || '').trim() }
+                      : {}),
+                    prompt: String(values.prompt || ''),
+                    filesystemAccess: values.filesystemAccess,
+                    ...(resultSchema ? { resultSchema } : {}),
+                  },
+          }),
+        },
+      );
+      closeCollaborationDialog();
+      await loadCollaborationDetail(group.groupId, { updateRoute: false });
+      showToast('State Implementation 已发布');
+    },
+  });
+}
+
+function openCollaborationBindingDialog(stateId) {
+  const active = collaborationImplementationForState(stateId);
+  if (active?.active !== true)
+    throw new Error('该 State Implementation 已失活，请先重新发布');
+  if (!active.action) throw new Error('该 State 没有可绑定的 Action');
+  const existing = (collaborationState.detail?.bindings || []).find(
+    (binding) =>
+      binding.stateId === stateId &&
+      binding.implementationHash === active.implementationHash &&
+      binding.actionHash === active.actionHash,
+  );
+  const actionType = `${active.action.kind}${active.action.adapter ? ` · ${active.action.adapter}` : ''}`;
+  openCollaborationDialog({
+    title: `配置 ${stateId} 本地 Binding`,
     submitText: '保存',
     body: `<div class="collaboration-form-grid">
-      <label class="collaboration-field"><span>Executor</span><select name="executorMode"><option value="run_once" ${mode === 'run_once' ? 'selected' : ''}>run_once</option><option value="codex-task" ${mode === 'codex-task' ? 'selected' : ''}>codex-task / App Server</option><option value="workflow" ${mode === 'workflow' ? 'selected' : ''}>workflow</option></select></label>
+      <label class="collaboration-field"><span>Executor 类型（由 Action 决定）</span><input value="${escapeAttribute(actionType)}" disabled /></label>
       ${collaborationField('Agent JID', 'agentJid', existing?.agentJid || '', { required: false })}
       ${collaborationField('Workspace', 'workspacePath', existing?.workspacePath || '')}
       <label class="collaboration-field"><span>文件权限上限</span><select name="filesystemAccessCap"><option value="workspace_write" ${existing?.filesystemAccessCap === 'workspace_write' ? 'selected' : ''}>workspace_write</option><option value="read_only" ${existing?.filesystemAccessCap === 'read_only' ? 'selected' : ''}>read_only</option></select></label>
       <label class="collaboration-field"><span>审批策略</span><select name="approvalPolicy"><option value="on-request" ${existing?.approvalPolicy === 'on-request' ? 'selected' : ''}>on-request</option><option value="never" ${existing?.approvalPolicy === 'never' ? 'selected' : ''}>never</option><option value="untrusted" ${existing?.approvalPolicy === 'untrusted' ? 'selected' : ''}>untrusted</option></select></label>
-      ${collaborationField('Prompt override', 'promptOverride', existing?.promptOverride || '', { multiline: true, required: false })}
       ${collaborationField('Config JSON', 'config', JSON.stringify(existing?.config || {}, null, 2), { multiline: true, required: false })}
     </div>`,
     onSubmit: async (formData) => {
       const values = Object.fromEntries(formData.entries());
-      const executorMode = values.executorMode;
       let config = {};
       if (String(values.config || '').trim())
         config = JSON.parse(String(values.config));
-      if (executorMode === 'codex-task') config.transport = 'app_server';
+      if (active.action.adapter === 'codex-task')
+        config.transport = 'app_server';
       await collaborationRequest(
-        `/groups/${encodeURIComponent(collaborationState.selectedGroupId)}/executors/${encodeURIComponent(role)}`,
+        `/groups/${encodeURIComponent(collaborationState.selectedGroupId)}/states/${encodeURIComponent(stateId)}/binding`,
         {
           method: 'PUT',
           body: JSON.stringify({
-            executorKind:
-              executorMode === 'codex-task' ? 'external' : executorMode,
-            adapter: executorMode === 'codex-task' ? 'codex-task' : null,
             agentJid: values.agentJid || null,
             workspacePath: values.workspacePath,
-            promptOverride: values.promptOverride || null,
             filesystemAccessCap: values.filesystemAccessCap,
             approvalPolicy: values.approvalPolicy,
             config,
@@ -1835,10 +2344,24 @@ function openCollaborationCommandDialog(command) {
       <div><dt>Revision</dt><dd>${escapeHtml(group?.projection?.revision ?? '-')}</dd></div>
       <div><dt>Active Turn</dt><dd>${escapeHtml(turn?.turnId || '-')}</dd></div>
       <div><dt>State</dt><dd>${escapeHtml(turn?.state || group?.lifecycle || '-')}</dd></div>
-    </dl>${needsReason ? collaborationField('原因', 'reason', '') : ''}`,
+    </dl>${needsReason ? collaborationField('原因', 'reason', '') : ''}${command === 'start' ? `<div class="collaboration-form-grid collaboration-start-handoff">${collaborationField('初始摘要', 'summary', '', { required: false })}${collaborationField('初始交接说明', 'instruction', '', { multiline: true, required: false })}${collaborationField('标记（逗号分隔）', 'markers', '', { required: false })}${collaborationField('Data JSON', 'data', '{}', { multiline: true, required: false })}</div>` : ''}`,
     onSubmit: async (formData) => {
+      let initialHandoff;
+      if (command === 'start' && String(formData.get('summary') || '').trim()) {
+        const data = String(formData.get('data') || '').trim();
+        initialHandoff = {
+          summary: String(formData.get('summary')).trim(),
+          instruction: String(formData.get('instruction') || ''),
+          markers: String(formData.get('markers') || '')
+            .split(',')
+            .map((value) => value.trim())
+            .filter(Boolean),
+          data: data ? JSON.parse(data) : {},
+        };
+      }
       await runCollaborationCommand(command, {
         ...(needsReason ? { reason: formData.get('reason') } : {}),
+        ...(initialHandoff ? { initialHandoff } : {}),
       });
       closeCollaborationDialog();
     },
@@ -1916,12 +2439,200 @@ async function syncSelectedCollaborationGroup() {
 async function claimCollaborationRole(role) {
   const groupId = collaborationState.selectedGroupId;
   if (!groupId || !role) return;
-  await collaborationRequest(`/groups/${encodeURIComponent(groupId)}/roles`, {
-    method: 'POST',
-    body: JSON.stringify({ role }),
-  });
+  await collaborationRequest(
+    `/groups/${encodeURIComponent(groupId)}/roles/${encodeURIComponent(role)}/claim`,
+    { method: 'POST', body: '{}' },
+  );
   await loadCollaborationDetail(groupId, { updateRoute: false });
   showToast(`已认领角色 ${role}`);
+}
+
+async function releaseCollaborationRole(role) {
+  const group = selectedCollaborationGroup();
+  if (!group || !role) return;
+  await collaborationRequest(
+    `/groups/${encodeURIComponent(group.groupId)}/roles/${encodeURIComponent(role)}/claim`,
+    {
+      method: 'DELETE',
+      body: JSON.stringify({ expectedRevision: group.projection?.revision }),
+    },
+  );
+  await loadCollaborationDetail(group.groupId, { updateRoute: false });
+  showToast(`已释放角色 ${role}`);
+}
+
+async function startCollaborationTurn() {
+  const group = selectedCollaborationGroup();
+  const turn = selectedCollaborationTurn();
+  if (!group || !turn) return;
+  await collaborationRequest(
+    `/groups/${encodeURIComponent(group.groupId)}/turns/${encodeURIComponent(turn.turnId)}/start`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ expectedRevision: group.projection?.revision }),
+    },
+  );
+  await loadCollaborationDetail(group.groupId, { updateRoute: false });
+  showToast('已确认开始');
+}
+
+function collaborationFileBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(reader.error || new Error('文件读取失败'));
+    reader.onload = () => {
+      const value = String(reader.result || '');
+      resolve(value.slice(value.indexOf(',') + 1));
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function openCollaborationCompletionDialog() {
+  const group = selectedCollaborationGroup();
+  const turn = selectedCollaborationTurn();
+  const routes = collaborationOutcomeRoutes(
+    collaborationState.detail?.definition,
+    turn,
+  );
+  if (!group || !turn || !routes.length) return;
+  let staged = [...(collaborationState.detail?.stagedArtifacts || [])];
+  const suggested =
+    turn.executorResult?.data?.outcome || turn.executorResult?.outcome || '';
+  const initialOutcome = routes.some((route) => route.outcome === suggested)
+    ? suggested
+    : routes[0].outcome;
+  const renderArtifacts = () => {
+    const list = document.getElementById('collaboration-completion-artifacts');
+    if (!list) return;
+    list.innerHTML =
+      staged
+        .map(
+          (artifact) =>
+            `<div class="collaboration-upload-row"><div><strong>${escapeHtml(artifact.originalName)}</strong><span>${escapeHtml(artifact.size)} bytes · ${escapeHtml(artifact.sha256)}</span></div><button type="button" class="btn-danger-soft" data-remove-artifact="${escapeAttribute(artifact.artifactId)}">移除</button></div>`,
+        )
+        .join('') ||
+      '<div class="collaboration-section-empty">尚未上传文件</div>';
+  };
+  const updatePreview = () => {
+    const outcome = collaborationDialogForm.elements.outcome?.value;
+    const route = routes.find((candidate) => candidate.outcome === outcome);
+    const target = document.getElementById('collaboration-outcome-target');
+    if (target) target.textContent = route?.target_state || '-';
+  };
+  openCollaborationDialog({
+    title: `完成 ${turn.stateId}`,
+    submitText: '确认完成',
+    wide: true,
+    body: `<div class="collaboration-completion-layout">
+      <div class="collaboration-form-grid">
+        <label class="collaboration-field"><span>Outcome</span><select name="outcome">${routes.map((route) => `<option value="${escapeAttribute(route.outcome)}" ${route.outcome === initialOutcome ? 'selected' : ''}>${escapeHtml(route.outcome)}</option>`).join('')}</select></label>
+        <div class="collaboration-outcome-target"><span>下一 State</span><strong id="collaboration-outcome-target"></strong></div>
+        ${collaborationField('完成摘要', 'summary', turn.executorResult?.summary || '', { multiline: true })}
+        ${collaborationField('交接说明', 'instruction', turn.executorResult?.instruction || '', { multiline: true, required: false })}
+        ${collaborationField('标记（逗号分隔）', 'markers', (turn.executorResult?.markers || []).join(', '), { required: false })}
+        ${collaborationField('Data refs（逗号分隔）', 'dataRefs', '', { required: false })}
+        <div class="collaboration-form-span">${collaborationField('结构化 Data JSON', 'data', JSON.stringify(turn.executorResult?.data || {}, null, 2), { multiline: true, required: false })}</div>
+      </div>
+      <section class="collaboration-upload-section">
+        <div class="collaboration-section-head"><h3>Artifact</h3><label class="btn-ghost collaboration-upload-button">上传文件<input id="collaboration-artifact-input" type="file" multiple /></label></div>
+        <div id="collaboration-completion-artifacts" class="collaboration-upload-list"></div>
+      </section>
+    </div>`,
+    onOpen: () => {
+      collaborationDialogForm.elements.outcome?.addEventListener(
+        'change',
+        updatePreview,
+      );
+      document
+        .getElementById('collaboration-artifact-input')
+        ?.addEventListener('change', async (event) => {
+          const input = event.target;
+          if (!(input instanceof HTMLInputElement) || !input.files?.length)
+            return;
+          input.disabled = true;
+          try {
+            for (const file of input.files) {
+              const data = await collaborationRequest(
+                `/groups/${encodeURIComponent(group.groupId)}/turns/${encodeURIComponent(turn.turnId)}/artifacts`,
+                {
+                  method: 'POST',
+                  body: JSON.stringify({
+                    fileName: file.name,
+                    contentType: file.type || 'application/octet-stream',
+                    contentBase64: await collaborationFileBase64(file),
+                  }),
+                },
+              );
+              staged.push(data.artifact);
+              renderArtifacts();
+            }
+          } catch (error) {
+            collaborationDialogError.textContent =
+              error instanceof Error ? error.message : String(error);
+            collaborationDialogError.classList.remove('hidden');
+          } finally {
+            input.value = '';
+            input.disabled = false;
+          }
+        });
+      document
+        .getElementById('collaboration-completion-artifacts')
+        ?.addEventListener('click', async (event) => {
+          const button = event.target.closest('[data-remove-artifact]');
+          if (!(button instanceof HTMLButtonElement)) return;
+          button.disabled = true;
+          try {
+            const artifactId = button.dataset.removeArtifact;
+            await collaborationRequest(
+              `/groups/${encodeURIComponent(group.groupId)}/turns/${encodeURIComponent(turn.turnId)}/artifacts/${encodeURIComponent(artifactId)}`,
+              { method: 'DELETE', body: '{}' },
+            );
+            staged = staged.filter(
+              (artifact) => artifact.artifactId !== artifactId,
+            );
+            renderArtifacts();
+          } catch (error) {
+            collaborationDialogError.textContent =
+              error instanceof Error ? error.message : String(error);
+            collaborationDialogError.classList.remove('hidden');
+          } finally {
+            button.disabled = false;
+          }
+        });
+      updatePreview();
+      renderArtifacts();
+    },
+    onSubmit: async (formData) => {
+      const dataValue = String(formData.get('data') || '').trim();
+      await collaborationRequest(
+        `/groups/${encodeURIComponent(group.groupId)}/turns/${encodeURIComponent(turn.turnId)}/complete`,
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            expectedRevision:
+              selectedCollaborationGroup()?.projection?.revision,
+            outcome: formData.get('outcome'),
+            summary: formData.get('summary'),
+            instruction: formData.get('instruction') || '',
+            markers: String(formData.get('markers') || '')
+              .split(',')
+              .map((value) => value.trim())
+              .filter(Boolean),
+            dataRefs: String(formData.get('dataRefs') || '')
+              .split(',')
+              .map((value) => value.trim())
+              .filter(Boolean),
+            data: dataValue ? JSON.parse(dataValue) : {},
+            artifactIds: staged.map((artifact) => artifact.artifactId),
+          }),
+        },
+      );
+      closeCollaborationDialog();
+      await loadCollaborationDetail(group.groupId, { updateRoute: false });
+      showToast('业务节点已完成');
+    },
+  });
 }
 
 async function openCollaborationCodexThread(threadId) {
@@ -1938,6 +2649,28 @@ async function openCollaborationCodexThread(threadId) {
   if (!result?.ok) throw new Error(result?.error || '无法打开 Codex 任务');
 }
 
+function exportCollaborationAudit() {
+  const audit = collaborationState.tabData.audit;
+  if (!audit) throw new Error('审计数据尚未加载');
+  const groupId = String(
+    audit.scope?.groupId || selectedCollaborationGroup()?.groupId || 'group',
+  ).replace(/[^A-Za-z0-9._-]+/g, '_');
+  const epoch = Number.isInteger(audit.scope?.epoch)
+    ? audit.scope.epoch
+    : 'all';
+  const blob = new Blob([`${JSON.stringify(audit, null, 2)}\n`], {
+    type: 'application/json;charset=utf-8',
+  });
+  const href = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = href;
+  link.download = `${groupId}-epoch-${epoch}-audit.json`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(href), 0);
+}
+
 async function handleCollaborationContentAction(button) {
   const action = button.getAttribute('data-collaboration-action') || '';
   if (!action) return;
@@ -1945,14 +2678,22 @@ async function handleCollaborationContentAction(button) {
   try {
     if (action === 'claim-role') {
       await claimCollaborationRole(button.getAttribute('data-role') || '');
+    } else if (action === 'release-role') {
+      await releaseCollaborationRole(button.getAttribute('data-role') || '');
+    } else if (action === 'edit-implementation') {
+      openCollaborationImplementationDialog(
+        button.getAttribute('data-state-id') || '',
+      );
     } else if (action === 'edit-binding') {
-      openCollaborationBindingDialog(button.getAttribute('data-role') || '');
+      openCollaborationBindingDialog(
+        button.getAttribute('data-state-id') || '',
+      );
     } else if (action === 'command') {
       openCollaborationCommandDialog(button.getAttribute('data-command') || '');
-    } else if (action === 'transition') {
-      await runCollaborationCommand('create_turn', {
-        transitionId: button.getAttribute('data-transition-id') || '',
-      });
+    } else if (action === 'start-turn') {
+      await startCollaborationTurn();
+    } else if (action === 'complete-turn') {
+      openCollaborationCompletionDialog();
     } else if (action === 'backup' || action === 'restore') {
       openCollaborationBackupDialog(action);
     } else if (action === 'update-data') {
@@ -1961,10 +2702,12 @@ async function handleCollaborationContentAction(button) {
       await openCollaborationCodexThread(
         button.getAttribute('data-thread-id') || '',
       );
+    } else if (action === 'audit-export') {
+      exportCollaborationAudit();
     }
   } catch (error) {
     showToast(error instanceof Error ? error.message : String(error), 3200);
-    if (action === 'command' || action === 'transition') {
+    if (action === 'command' || action === 'start-turn') {
       await loadCollaborationDetail(collaborationState.selectedGroupId, {
         updateRoute: false,
       }).catch(() => undefined);
@@ -1985,7 +2728,7 @@ async function selectCollaborationTab(tab, options = {}) {
   });
   renderCollaborationContent();
   if (options.updateRoute !== false) updateCollaborationRoute();
-  if (['events', 'data', 'diagnostics'].includes(tab)) {
+  if (['audit', 'events', 'data', 'diagnostics'].includes(tab)) {
     await loadCollaborationTabData(tab);
   }
 }
@@ -3680,6 +4423,7 @@ function applyScreenVisibility() {
     !showTodayPlan && activePrimaryNavKey === 'knowledge-management';
   const showTraceMonitor =
     !showTodayPlan && activePrimaryNavKey === 'trace-monitor';
+  document.body.classList.toggle('collaboration-active', showCollaboration);
   if (todayPlanScreen) {
     todayPlanScreen.classList.toggle('active', showTodayPlan);
   }
@@ -9507,9 +10251,18 @@ function bindNotificationPermissionPrimer() {
 function bindNotificationClickHandler() {
   if (typeof window === 'undefined' || !window.icarusApp?.onNotificationClick)
     return;
-  window.icarusApp.onNotificationClick(({ chatJid }) => {
-    openAgentFromNotification(chatJid, 'native');
-  });
+  window.icarusApp.onNotificationClick(
+    ({ chatJid, collaborationGroupId, collaborationTurnId }) => {
+      if (collaborationGroupId) {
+        openCollaborationFromNotification(
+          collaborationGroupId,
+          collaborationTurnId,
+        );
+        return;
+      }
+      openAgentFromNotification(chatJid, 'native');
+    },
+  );
 }
 async function selectAgent(jid) {
   if (multiSelectMode) exitMultiSelect();

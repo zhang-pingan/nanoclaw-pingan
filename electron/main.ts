@@ -33,6 +33,8 @@ interface ShowNotificationPayload {
   meta?: {
     chatJid?: string;
     taskId?: string;
+    collaborationGroupId?: string;
+    collaborationTurnId?: string;
   };
 }
 
@@ -69,7 +71,8 @@ function formatError(err: unknown): string {
 }
 
 function normalizeWorkstationUrl(target?: string): string {
-  const raw = typeof target === 'string' && target.trim() ? target : WORKSTATION_URL;
+  const raw =
+    typeof target === 'string' && target.trim() ? target : WORKSTATION_URL;
   try {
     const url = new URL(raw);
     const isLocalWorkstation =
@@ -89,7 +92,9 @@ function getWorkstationOpenArg(argv: string[]): string | undefined {
       return normalizeWorkstationUrl(argv[i + 1]);
     }
     if (arg.startsWith(`${OPEN_WORKSTATION_ARG}=`)) {
-      return normalizeWorkstationUrl(arg.slice(OPEN_WORKSTATION_ARG.length + 1));
+      return normalizeWorkstationUrl(
+        arg.slice(OPEN_WORKSTATION_ARG.length + 1),
+      );
     }
   }
   return undefined;
@@ -223,7 +228,8 @@ async function captureDesktopWithMacScreencapture(args: {
   } catch (err) {
     return {
       ok: false,
-      error: 'Failed to capture desktop with Electron desktopCapturer and macOS screencapture.',
+      error:
+        'Failed to capture desktop with Electron desktopCapturer and macOS screencapture.',
       details: getMacScreenCaptureDiagnostics(
         [
           `desktopCapturerError=${args.desktopCapturerError}`,
@@ -274,7 +280,8 @@ async function captureDesktop(payload: DesktopCapturePayload = {}) {
     displays[0];
 
   const targetWidth = targetDisplay?.bounds.width || maxWidth;
-  const targetHeight = targetDisplay?.bounds.height || Math.round(maxWidth * 0.625);
+  const targetHeight =
+    targetDisplay?.bounds.height || Math.round(maxWidth * 0.625);
   const scale = Math.min(1, maxWidth / Math.max(targetWidth, 1));
   const thumbnailSize = includeImage
     ? {
@@ -317,7 +324,9 @@ async function captureDesktop(payload: DesktopCapturePayload = {}) {
       displays,
       windows: windowSources,
       details: windowSourceError
-        ? getMacScreenCaptureDiagnostics(`windowSourceError=${windowSourceError}`)
+        ? getMacScreenCaptureDiagnostics(
+            `windowSourceError=${windowSourceError}`,
+          )
         : undefined,
     };
   }
@@ -358,7 +367,9 @@ async function captureDesktop(payload: DesktopCapturePayload = {}) {
       ok: false,
       error: 'No desktop screen source is available.',
       details: getMacScreenCaptureDiagnostics(
-        windowSourceError ? `windowSourceError=${windowSourceError}` : undefined,
+        windowSourceError
+          ? `windowSourceError=${windowSourceError}`
+          : undefined,
       ),
       displays,
       windows: windowSources,
@@ -499,8 +510,22 @@ function createWindow(initialUrl: string = WORKSTATION_URL): void {
 
   // Intercept app-level shortcuts and forward them into the renderer.
   mainWindow.webContents.on('before-input-event', (event, input) => {
-    const isCyclePrimaryNavShortcut = isMac && input.type === 'keyDown' && input.meta && !input.control && !input.alt && !input.shift && input.key.toLowerCase() === 'q';
-    const isToggleTodayPlanShortcut = isMac && input.type === 'keyDown' && input.meta && !input.control && !input.alt && !input.shift && input.key.toLowerCase() === 'w';
+    const isCyclePrimaryNavShortcut =
+      isMac &&
+      input.type === 'keyDown' &&
+      input.meta &&
+      !input.control &&
+      !input.alt &&
+      !input.shift &&
+      input.key.toLowerCase() === 'q';
+    const isToggleTodayPlanShortcut =
+      isMac &&
+      input.type === 'keyDown' &&
+      input.meta &&
+      !input.control &&
+      !input.alt &&
+      !input.shift &&
+      input.key.toLowerCase() === 'w';
 
     if (isCyclePrimaryNavShortcut) {
       event.preventDefault();
@@ -594,11 +619,13 @@ function buildAppMenu(): Menu {
         { label: 'Minimize', role: 'minimize' as const },
         { label: 'Zoom', role: 'zoom' as const },
         ...(isMac
-          ? [{ type: 'separator' as const }, { label: 'Bring All to Front', role: 'front' as const }]
+          ? [
+              { type: 'separator' as const },
+              { label: 'Bring All to Front', role: 'front' as const },
+            ]
           : [{ label: 'Close', role: 'close' as const }]),
       ],
     },
-
   ];
 
   return Menu.buildFromTemplate(template);
@@ -640,12 +667,13 @@ app.whenReady().then(() => {
     try {
       if (process.platform === 'darwin') {
         // macOS: list all .app bundles from /Applications and let user choose
-        const script = 'set appPaths to paragraphs of (do shell script "ls -d /Applications/*.app ~/Applications/*.app 2>/dev/null || true")\n'
-          + 'set appNames to {}\n'
-          + 'repeat with p in appPaths\n'
-          + '  set end of appNames to (do shell script "basename " & quoted form of p & " .app")\n'
-          + 'end repeat\n'
-          + 'choose from list appNames with prompt "Open with:" with title "Choose Application"';
+        const script =
+          'set appPaths to paragraphs of (do shell script "ls -d /Applications/*.app ~/Applications/*.app 2>/dev/null || true")\n' +
+          'set appNames to {}\n' +
+          'repeat with p in appPaths\n' +
+          '  set end of appNames to (do shell script "basename " & quoted form of p & " .app")\n' +
+          'end repeat\n' +
+          'choose from list appNames with prompt "Open with:" with title "Choose Application"';
         execFile('osascript', ['-e', script], (err, stdout) => {
           if (err || !stdout.trim() || stdout.trim() === 'false') return;
           const appName = stdout.trim();
@@ -684,42 +712,59 @@ app.whenReady().then(() => {
     }
   });
 
-  ipcMain.handle('desktop-capture', async (_event, payload: DesktopCapturePayload) => {
-    try {
-      return await captureDesktop(payload || {});
-    } catch (err) {
-      return {
-        ok: false,
-        error: err instanceof Error ? err.message : String(err),
-      };
-    }
-  });
+  ipcMain.handle(
+    'desktop-capture',
+    async (_event, payload: DesktopCapturePayload) => {
+      try {
+        return await captureDesktop(payload || {});
+      } catch (err) {
+        return {
+          ok: false,
+          error: err instanceof Error ? err.message : String(err),
+        };
+      }
+    },
+  );
 
   // Handle native system notifications from renderer via preload bridge.
-  ipcMain.on('show-notification', (_event, payload: ShowNotificationPayload) => {
-    if (!Notification.isSupported()) return;
-    // Avoid duplicate disturbance when app window is already foregrounded.
-    if (mainWindow && mainWindow.isVisible() && mainWindow.isFocused()) return;
+  ipcMain.on(
+    'show-notification',
+    (_event, payload: ShowNotificationPayload) => {
+      if (!Notification.isSupported()) return;
+      // Avoid duplicate disturbance when app window is already foregrounded.
+      if (mainWindow && mainWindow.isVisible() && mainWindow.isFocused())
+        return;
 
-    const title = typeof payload?.title === 'string' ? payload.title : 'Icarus';
-    const body = typeof payload?.body === 'string' ? payload.body : '';
-    const notification = new Notification({ title, body });
-    notification.on('click', () => {
-      if (mainWindow) {
-        bringMainWindowToFront();
-        const meta = payload?.meta || {};
-        const chatJid = meta.chatJid;
-        const taskId = meta.taskId;
-        if (
-          (typeof chatJid === 'string' && chatJid.length > 0) ||
-          (typeof taskId === 'string' && taskId.length > 0)
-        ) {
-          mainWindow.webContents.send('notification-clicked', { chatJid, taskId });
+      const title =
+        typeof payload?.title === 'string' ? payload.title : 'Icarus';
+      const body = typeof payload?.body === 'string' ? payload.body : '';
+      const notification = new Notification({ title, body });
+      notification.on('click', () => {
+        if (mainWindow) {
+          bringMainWindowToFront();
+          const meta = payload?.meta || {};
+          const chatJid = meta.chatJid;
+          const taskId = meta.taskId;
+          const collaborationGroupId = meta.collaborationGroupId;
+          const collaborationTurnId = meta.collaborationTurnId;
+          if (
+            (typeof chatJid === 'string' && chatJid.length > 0) ||
+            (typeof taskId === 'string' && taskId.length > 0) ||
+            (typeof collaborationGroupId === 'string' &&
+              collaborationGroupId.length > 0)
+          ) {
+            mainWindow.webContents.send('notification-clicked', {
+              chatJid,
+              taskId,
+              collaborationGroupId,
+              collaborationTurnId,
+            });
+          }
         }
-      }
-    });
-    notification.show();
-  });
+      });
+      notification.show();
+    },
+  );
 });
 
 // Quit when all windows are closed (except on macOS)

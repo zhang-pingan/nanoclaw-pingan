@@ -2,21 +2,41 @@
 
 interface IcarusAppAPI {
   /** Show a native system notification */
-  notify(title: string, body: string, meta?: { chatJid?: string; taskId?: string }): void;
+  notify(
+    title: string,
+    body: string,
+    meta?: {
+      chatJid?: string;
+      taskId?: string;
+      collaborationGroupId?: string;
+      collaborationTurnId?: string;
+    },
+  ): void;
   /** Listen to notification click events emitted by the main process */
-  onNotificationClick(handler: (payload: { chatJid?: string; taskId?: string }) => void): () => void;
+  onNotificationClick(
+    handler: (payload: {
+      chatJid?: string;
+      taskId?: string;
+      collaborationGroupId?: string;
+      collaborationTurnId?: string;
+    }) => void,
+  ): () => void;
   /** Listen to the app shortcut that cycles the primary nav */
   onCyclePrimaryNav(handler: () => void): () => void;
   /** Listen to the app shortcut that toggles the Today Plan screen */
   onToggleTodayPlan(handler: () => void): () => void;
   /** Listen for desktop assistant requests to open a workstation target */
-  onOpenWorkstationTarget(handler: (payload: { url?: string }) => void): () => void;
+  onOpenWorkstationTarget(
+    handler: (payload: { url?: string }) => void,
+  ): () => void;
   /** Open a URL in the system browser */
   openExternal(url: string): void;
   /** Open an existing local App Server thread in Codex desktop */
   openCodexThread(threadId: string): Promise<{ ok: boolean; error?: string }>;
   /** Open a local file in the default app */
-  openFile(filePath: string): Promise<{ ok: boolean; result?: string; error?: string }>;
+  openFile(
+    filePath: string,
+  ): Promise<{ ok: boolean; result?: string; error?: string }>;
   /** Open file with system app picker */
   openFileWith(filePath: string): Promise<{ ok: boolean; error?: string }>;
   /** Reveal a file in the system file manager */

@@ -8,15 +8,36 @@ import { contextBridge, ipcRenderer } from 'electron';
 
 contextBridge.exposeInMainWorld('icarusApp', {
   // Show a native macOS notification
-  notify: (title: string, body: string, meta?: { chatJid?: string; taskId?: string }) => {
+  notify: (
+    title: string,
+    body: string,
+    meta?: {
+      chatJid?: string;
+      taskId?: string;
+      collaborationGroupId?: string;
+      collaborationTurnId?: string;
+    },
+  ) => {
     ipcRenderer.send('show-notification', { title, body, meta });
   },
 
   // Listen for notification click events from the main process.
-  onNotificationClick: (handler: (payload: { chatJid?: string; taskId?: string }) => void) => {
+  onNotificationClick: (
+    handler: (payload: {
+      chatJid?: string;
+      taskId?: string;
+      collaborationGroupId?: string;
+      collaborationTurnId?: string;
+    }) => void,
+  ) => {
     const listener = (
       _event: Electron.IpcRendererEvent,
-      payload: { chatJid?: string; taskId?: string }
+      payload: {
+        chatJid?: string;
+        taskId?: string;
+        collaborationGroupId?: string;
+        collaborationTurnId?: string;
+      },
     ) => {
       handler(payload || {});
     };
@@ -49,7 +70,8 @@ contextBridge.exposeInMainWorld('icarusApp', {
       handler(payload || {});
     };
     ipcRenderer.on('open-workstation-target', listener);
-    return () => ipcRenderer.removeListener('open-workstation-target', listener);
+    return () =>
+      ipcRenderer.removeListener('open-workstation-target', listener);
   },
 
   // Open external URL in system browser
@@ -91,5 +113,4 @@ contextBridge.exposeInMainWorld('icarusApp', {
 
   // Platform info
   platform: process.platform,
-
 });

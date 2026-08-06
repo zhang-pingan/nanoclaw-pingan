@@ -17,45 +17,41 @@ function build(draft = defaultCollaborationCreateDraft()) {
 }
 
 describe('Collaboration create request builder', () => {
-  it('preserves multiple roles, actions, states, and a cyclic FSM', () => {
+  it('builds only roles and the creator-owned FSM skeleton', () => {
     const request = build();
 
     expect(request.initialRole).toBe('developer');
     expect(request).not.toHaveProperty('principalId');
     expect(request).not.toHaveProperty('agentId');
-    expect(request.capabilities).toEqual(['coding_task', 'visible_session']);
+    expect(request.capabilities).toEqual(['coding_task']);
     expect(Object.keys(request.roles)).toEqual(['developer', 'reviewer']);
-    expect(Object.keys(request.actions)).toEqual(['implement', 'review']);
     expect(Object.keys(request.machine.states)).toEqual([
       'development',
       'review',
+      'completed',
     ]);
-    expect(request.roles.developer.allowed_transitions).toEqual(['implement']);
-    expect(request.roles.reviewer.allowed_transitions).toEqual(['review']);
-    expect(
-      request.machine.states.development.transitions[0].outcomes.succeeded,
-    ).toBe('review');
-    expect(
-      request.machine.states.review.transitions[0].outcomes.succeeded,
-    ).toBe('development');
-    expect(request.actions.implement.requirements).toMatchObject({
-      capability: 'coding_task',
-      interaction: 'visible_session',
+    expect(request.roles.developer.owned_states).toEqual(['development']);
+    expect(request.roles.reviewer.owned_states).toEqual(['review']);
+    expect(request.machine.states.development).toMatchObject({
+      owner_role: 'developer',
+      transitions: [
+        { outcome: 'ready_for_review', target_state: 'review' },
+        { outcome: 'blocked', target_state: 'development' },
+      ],
     });
-    expect(request.actions.review.requirements).toMatchObject({
-      capability: 'review_task',
-      interaction: 'visible_session',
+    expect(request.machine.states.completed).toEqual({
+      label: 'Completed',
+      terminal: true,
+      transitions: [],
     });
-    expect(request.prompts).toEqual({
-      'prompts/implement.md': expect.any(String),
-      'prompts/review.md': expect.any(String),
-    });
+    expect(request).not.toHaveProperty('actions');
+    expect(request).not.toHaveProperty('prompts');
 
     expect(() =>
       validateRepositoryDefinition({
         group: {
-          format: 'icarus.agent-group/1',
-          protocol_version: 1,
+          format: 'icarus.agent-group/2',
+          protocol_version: 2,
           group_id: 'ag_ui_test',
           name: request.name,
           creator: {
@@ -76,9 +72,46 @@ describe('Collaboration create request builder', () => {
         },
         machine: request.machine,
         roles: request.roles,
-        actions: request.actions,
+        actions: {},
+        implementations: {},
       }),
     ).not.toThrow();
+  });
+
+  it('snapshots optional notify-only timeout policies on non-terminal States', () => {
+    const draft = defaultCollaborationCreateDraft();
+    draft.states[0]!.startTimeoutMs = '60000';
+    draft.states[0]!.executionTimeoutMs = 300000;
+    draft.states[0]!.reminderIntervalMs = '30000';
+    draft.states[1]!.executionTimeoutMs = '120000';
+
+    const request = build(draft);
+
+    expect(request.machine.states.development.timeout_policy).toEqual({
+      start_timeout_ms: 60_000,
+      execution_timeout_ms: 300_000,
+      reminder_interval_ms: 30_000,
+      on_timeout: 'notify_only',
+    });
+    expect(request.machine.states.review.timeout_policy).toEqual({
+      start_timeout_ms: null,
+      execution_timeout_ms: 120_000,
+      reminder_interval_ms: null,
+      on_timeout: 'notify_only',
+    });
+    expect(request.machine.states.completed).not.toHaveProperty(
+      'timeout_policy',
+    );
+  });
+
+  it('rejects terminal timeout policies and reminder-only policies', () => {
+    const terminalTimeout = defaultCollaborationCreateDraft();
+    terminalTimeout.states[2]!.startTimeoutMs = '1000';
+    expect(() => build(terminalTimeout)).toThrow(/终态.*不能配置超时策略/);
+
+    const reminderOnly = defaultCollaborationCreateDraft();
+    reminderOnly.states[0]!.reminderIntervalMs = '1000';
+    expect(() => build(reminderOnly)).toThrow(/必须先配置开始或执行超时/);
   });
 
   it.each([
@@ -100,21 +133,21 @@ describe('Collaboration create request builder', () => {
     [
       'unknown role references',
       (draft: ReturnType<typeof defaultCollaborationCreateDraft>) => {
-        draft.states[0]!.transitions[0]!.roleId = 'missing_role';
+        draft.states[0]!.ownerRole = 'missing_role';
       },
       /未知角色/,
     ],
     [
-      'unknown action references',
+      'state-owning role cardinality above one',
       (draft: ReturnType<typeof defaultCollaborationCreateDraft>) => {
-        draft.states[0]!.transitions[0]!.actionId = 'missing_action';
+        draft.roles[0]!.maxMembers = 2;
       },
-      /未知 Action/,
+      /最大人数必须为 1/,
     ],
     [
       'unknown state outcomes',
       (draft: ReturnType<typeof defaultCollaborationCreateDraft>) => {
-        draft.states[0]!.transitions[0]!.outcomes.succeeded = 'missing_state';
+        draft.states[0]!.transitions[0]!.targetState = 'missing_state';
       },
       /未知状态/,
     ],
@@ -123,16 +156,17 @@ describe('Collaboration create request builder', () => {
       (draft: ReturnType<typeof defaultCollaborationCreateDraft>) => {
         draft.states[0]!.transitions = [];
       },
-      /至少需要一个 transition/,
+      /至少需要一个 Outcome/,
     ],
     [
-      'illegal outcomes',
+      'duplicate outcomes',
       (draft: ReturnType<typeof defaultCollaborationCreateDraft>) => {
-        Object.assign(draft.states[0]!.transitions[0]!.outcomes, {
-          approved: 'review',
+        draft.states[0]!.transitions.push({
+          outcome: draft.states[0]!.transitions[0]!.outcome,
+          targetState: 'review',
         });
       },
-      /非法 outcome/,
+      /Outcome 重复/,
     ],
   ])('rejects %s before creating a request', (_name, mutate, message) => {
     const draft = defaultCollaborationCreateDraft();
