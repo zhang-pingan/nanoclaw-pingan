@@ -507,6 +507,35 @@ describe('CollaborationGroupService', () => {
     }
   }, 30_000);
 
+  it('resumes incremental validation from the persisted projection after restart', async () => {
+    const testRoot = root();
+    const remoteUrl = remote(testRoot);
+    const aliceKey = key(testRoot, 'alice-key');
+    const owner = service(testRoot, 'owner');
+    try {
+      const created = await owner.groupService.createGroup(
+        createInput(remoteUrl, aliceKey),
+      );
+      const restarted = new CollaborationGroupService(
+        owner.store,
+        new CollaborationGitTransport(),
+        path.join(testRoot, 'owner-repositories'),
+        () => 1_786_000_000_000,
+      );
+
+      const history = await restarted.syncHistory('ag_service');
+      expect(history.validation).toMatchObject({
+        mode: 'incremental',
+        validatedCommitCount: 0,
+        totalSequence: created.projection!.sequence,
+        checkpointHead: created.headCommit,
+      });
+      expect(history.projection).toEqual(created.projection);
+    } finally {
+      owner.store.close();
+    }
+  }, 20_000);
+
   it('rejects prompt paths that could overwrite protocol files', async () => {
     const testRoot = root();
     const remoteUrl = remote(testRoot);

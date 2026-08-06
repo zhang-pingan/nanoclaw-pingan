@@ -267,6 +267,116 @@ describe('signed Git collaboration history', () => {
     expect(history.projection.lifecycle).toBe('RUNNING');
   });
 
+  it('validates only the signed suffix after a long-history checkpoint', async () => {
+    const test = initializeSignedHistory();
+    let projection = test.genesisProjection;
+    let head = test.genesisHead;
+    for (let sequence = 2; sequence <= 24; sequence += 1) {
+      const next = protocolEvent({
+        type: 'data_updated',
+        id: `evt_data_${String(sequence)}`,
+        sequence,
+        revision: sequence - 1,
+      });
+      projection = reduceCollaborationEvent(projection, next, test.contract);
+      head = appendEvent(test.root, next, projection);
+    }
+    const full = await validateCollaborationGitHistory({
+      repositoryPath: test.root,
+      head,
+    });
+    const tail = protocolEvent({
+      type: 'data_updated',
+      id: 'evt_data_tail',
+      sequence: 25,
+      revision: 24,
+    });
+    projection = reduceCollaborationEvent(projection, tail, test.contract);
+    const tailHead = appendEvent(test.root, tail, projection);
+
+    const incremental = await validateCollaborationGitHistory({
+      repositoryPath: test.root,
+      head: tailHead,
+      previousHead: head,
+      checkpoint: {
+        head,
+        projection: full.projection,
+      },
+    });
+
+    expect(full.validation).toMatchObject({
+      mode: 'full',
+      validatedCommitCount: 24,
+    });
+    expect(incremental.validation).toMatchObject({
+      mode: 'incremental',
+      validatedCommitCount: 1,
+      totalSequence: 25,
+      checkpointHead: head,
+    });
+    expect(incremental.commits).toEqual([tailHead]);
+    expect(incremental.events.map((event) => event.event_id)).toEqual([
+      'evt_data_tail',
+    ]);
+    expect(incremental.projection).toEqual(projection);
+  }, 30_000);
+
+  it('falls back to full replay when a local checkpoint is inconsistent', async () => {
+    const test = initializeSignedHistory();
+    const history = await validateCollaborationGitHistory({
+      repositoryPath: test.root,
+      head: test.genesisHead,
+      previousHead: test.genesisHead,
+      checkpoint: {
+        head: test.genesisHead,
+        projection: {
+          ...test.genesisProjection,
+          businessState: 'corrupted-local-cache',
+        },
+      },
+    });
+
+    expect(history.validation).toMatchObject({
+      mode: 'full',
+      validatedCommitCount: 1,
+      checkpointHead: null,
+    });
+    expect(history.projection).toEqual(test.genesisProjection);
+  });
+
+  it('rejects an unsigned suffix when validating incrementally', async () => {
+    const test = initializeSignedHistory();
+    const checkpoint = await validateCollaborationGitHistory({
+      repositoryPath: test.root,
+      head: test.genesisHead,
+    });
+    run(test.root, ['git', 'config', 'commit.gpgsign', 'false']);
+    const next = protocolEvent({
+      type: 'data_updated',
+      id: 'evt_unsigned_suffix',
+      sequence: 2,
+      revision: 1,
+    });
+    const projection = reduceCollaborationEvent(
+      test.genesisProjection,
+      next,
+      test.contract,
+    );
+    const head = appendEvent(test.root, next, projection);
+
+    await expect(
+      validateCollaborationGitHistory({
+        repositoryPath: test.root,
+        head,
+        previousHead: test.genesisHead,
+        checkpoint: {
+          head: test.genesisHead,
+          projection: checkpoint.projection,
+        },
+      }),
+    ).rejects.toThrow(/signature is invalid/);
+  });
+
   it('quarantines an unsigned commit even when its author name is forged', async () => {
     const test = initializeSignedHistory();
     run(test.root, ['git', 'config', 'commit.gpgsign', 'false']);
@@ -363,7 +473,15 @@ describe('signed Git collaboration history', () => {
     const head = run(test.root, ['git', 'rev-parse', 'HEAD']);
 
     await expect(
-      validateCollaborationGitHistory({ repositoryPath: test.root, head }),
+      validateCollaborationGitHistory({
+        repositoryPath: test.root,
+        head,
+        previousHead: test.genesisHead,
+        checkpoint: {
+          head: test.genesisHead,
+          projection: test.genesisProjection,
+        },
+      }),
     ).rejects.toThrow(/linear single-parent chain/);
   });
 

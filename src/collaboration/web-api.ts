@@ -561,6 +561,7 @@ export class CollaborationWebApi {
         syncAttempts: this.runtime.store
           .listSyncAttempts(groupId, 50)
           .map((attempt) => publicSyncAttempt(attempt, group.remoteUrl)),
+        validation: this.runtime.groups.getValidationMetrics(groupId),
       });
       return;
     }

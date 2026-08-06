@@ -25,6 +25,7 @@ import {
   type CollaborationEvent,
   type CollaborationProjection,
   type CollaborationRepositoryDefinition,
+  type CollaborationValidationCheckpoint,
   type MachineDefinition,
   type MemberDefinition,
   type RoleClaim,
@@ -200,6 +201,7 @@ export interface AppendCollaborationEventInput {
   readonly remoteUrl: string;
   readonly repositoryPath: string;
   readonly previousHead: string | null;
+  readonly checkpoint?: CollaborationValidationCheckpoint | null;
   readonly identity: CollaborationSigningIdentity;
   readonly buildEvent: (
     history: ValidatedCollaborationHistory,
@@ -300,6 +302,7 @@ export class CollaborationGitTransport {
     readonly remoteUrl: string;
     readonly repositoryPath: string;
     readonly previousHead: string | null;
+    readonly checkpoint?: CollaborationValidationCheckpoint | null;
   }): Promise<ValidatedCollaborationHistory> {
     await this.ensureBareCache(input.remoteUrl, input.repositoryPath);
     const fetch = await execute(
@@ -326,6 +329,7 @@ export class CollaborationGitTransport {
       repositoryPath: input.repositoryPath,
       head,
       previousHead: input.previousHead,
+      checkpoint: input.checkpoint,
     });
   }
 
@@ -388,6 +392,10 @@ export class CollaborationGitTransport {
       remoteUrl: input.remoteUrl,
       repositoryPath: input.repositoryPath,
       previousHead: history.head,
+      checkpoint: {
+        head: history.head,
+        projection: history.projection,
+      },
     });
   }
 

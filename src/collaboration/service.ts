@@ -25,6 +25,8 @@ import {
   type CollaborationEventType,
   type CollaborationProjection,
   type CollaborationRepositoryDefinition,
+  type CollaborationValidationCheckpoint,
+  type CollaborationValidationMetrics,
   type MachineDefinition,
   type MemberDefinition,
   type RoleDefinition,
@@ -303,6 +305,10 @@ export class CollaborationGroupService {
     return this.histories.get(groupId) ?? null;
   }
 
+  getValidationMetrics(groupId: string): CollaborationValidationMetrics | null {
+    return this.histories.get(groupId)?.validation ?? null;
+  }
+
   async sync(groupId: string): Promise<CollaborationGroupRecord> {
     await this.syncHistory(groupId);
     return this.requireGroup(groupId);
@@ -315,6 +321,7 @@ export class CollaborationGroupService {
         remoteUrl: group.remoteUrl,
         repositoryPath: group.repositoryPath,
         previousHead: group.headCommit,
+        checkpoint: this.checkpointFor(group),
       });
       this.persistHistory(history);
       this.store.recordSyncSuccess(groupId, group.pollIntervalMs, this.now());
@@ -351,6 +358,7 @@ export class CollaborationGroupService {
       remoteUrl: group.remoteUrl,
       repositoryPath: group.repositoryPath,
       previousHead: group.headCommit,
+      checkpoint: this.checkpointFor(group),
     });
     this.persistHistory(history);
     const active = history.projection.activeTurnId
@@ -380,6 +388,7 @@ export class CollaborationGroupService {
       remoteUrl: group.remoteUrl,
       repositoryPath: group.repositoryPath,
       previousHead: group.headCommit,
+      checkpoint: this.checkpointFor(group),
     });
     const member = history.projection.members[group.localPrincipalId];
     if (!member)
@@ -502,6 +511,7 @@ export class CollaborationGroupService {
       remoteUrl: group.remoteUrl,
       repositoryPath: group.repositoryPath,
       previousHead: group.headCommit,
+      checkpoint: this.checkpointFor(group),
     });
     this.persistHistory(history);
     if (history.projection.lifecycle !== 'RUNNING') return null;
@@ -605,6 +615,7 @@ export class CollaborationGroupService {
         remoteUrl: groupAfterRace.remoteUrl,
         repositoryPath: groupAfterRace.repositoryPath,
         previousHead: groupAfterRace.headCommit,
+        checkpoint: this.checkpointFor(groupAfterRace),
       });
       this.persistHistory(history);
       const turnId = history.projection.activeTurnId;
@@ -695,6 +706,7 @@ export class CollaborationGroupService {
       remoteUrl: group.remoteUrl,
       repositoryPath: group.repositoryPath,
       previousHead: group.headCommit,
+      checkpoint: this.checkpointFor(group),
       identity,
       buildEvent: (current) => {
         if (
@@ -765,6 +777,14 @@ export class CollaborationGroupService {
         'Local collaboration signing key no longer matches its binding',
       );
     return identity;
+  }
+
+  private checkpointFor(
+    group: CollaborationGroupRecord,
+  ): CollaborationValidationCheckpoint | null {
+    return group.headCommit && group.projection
+      ? { head: group.headCommit, projection: group.projection }
+      : null;
   }
 
   private persistHistory(history: ValidatedCollaborationHistory): void {
