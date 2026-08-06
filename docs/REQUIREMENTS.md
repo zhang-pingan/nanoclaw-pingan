@@ -12,6 +12,8 @@ Freeze checks, release/activation commands, contracts, approvals, and audit reco
 
 Security boundaries around credentials, host access, external messages, and destructive operations remain real safety requirements even for an internal tool.
 
+The only supported Host runtime topology is a local Git checkout. Users clone the repository, configure and build in that working directory, and point the local service manager at it. Browser and Electron clients consume that checkout's Host. A standalone application bundle, DMG/PKG installer, Host embedded in Electron, packaged-install migration path, and automatic product updater are out of scope.
+
 See [`internal-experimental-scope.md`](internal-experimental-scope.md) for the terminology and engineering-weight decisions.
 
 ---
@@ -186,8 +188,10 @@ A personal Claude assistant accessible through its installed channels, with mini
 - `/update` - Pull upstream changes, merge with customizations, run migrations
 
 ### Deployment
-- Runs on local Mac via launchd
+- Runs from a local Git checkout on Mac via launchd
 - Single Node.js process handles everything
+- Browser and checkout-built Electron clients connect to that Host
+- No standalone application package or packaged Host runtime
 
 ---
 

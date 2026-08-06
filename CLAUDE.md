@@ -4,6 +4,8 @@ Icarus is a personal Agent work system. It combines a user-driven Web workbench,
 
 Icarus is an internal, experimental, single-user tool, not a product with delivery, SLA, production-support, compliance, or long-term compatibility guarantees. Freeze checks, release/activation flows, contracts, approvals, and audit records are local development guardrails only: keep them when they protect local state or reduce net rework, and do not expand them into product-grade governance. Security boundaries around secrets, host access, external communication, and destructive actions remain mandatory.
 
+The only supported Host topology is a local Git checkout. Setup, builds, service-manager entries, configuration, and optional Host Core snapshots are rooted in that checkout. The Web workbench and personal-assistant Electron clients may be built and launched from the checkout, but the project does not ship a standalone `.app`, DMG/PKG, bundled Host, packaged-install migration path, or auto-updater. Do not add packaged-runtime branches unless this positioning is explicitly changed.
+
 The most important product boundary:
 
 - **Web workbench client**: user-initiated. The user opens the workbench, creates tasks, reviews progress, adds context, approves actions, and inspects traces. Agent is a passive tool in this surface.

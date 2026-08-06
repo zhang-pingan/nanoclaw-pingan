@@ -749,7 +749,7 @@ Icarus With Features
 - 调整 esbuild 构建脚本。
 - 支持 base/with-feature 构建。
 - 未选 feature 不打包其 renderer/host bundle。
-- Electron 打包按 profile 带入对应静态资源。
+- checkout 内的 Electron 构建按 profile 生成对应静态资源，不引入独立应用打包拓扑。
 
 ## 验收标准
 

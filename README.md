@@ -87,7 +87,7 @@ Web 工作台由 `src/channels/web.ts` 启动本地 HTTP/WebSocket 服务，默�
 
 ### 个人助理客户端
 
-个人助理客户端位于 `assistant/`，通过 `npm run dev:assistant` 或打包后的 Electron 入口运行。它是一个常驻桌面的小型客户端，包含托盘入口、悬浮窗、聊天面板、主动提醒和工作台跳转能力。
+个人助理客户端位于 `assistant/`，通过当前 Git 工作目录中的 `npm run dev:assistant` 运行。它是一个常驻桌面的小型客户端，包含托盘入口、悬浮窗、聊天面板、主动提醒和工作台跳转能力。
 
 个人助理的定位是“Agent 主动层”。它不替代工作台，而是在工作台之上做主动感知和推进：
 
@@ -255,11 +255,15 @@ Feishu/WeCom/Web/Assistant 消息进入频道
 - `agent_inbox_items`、`assistant_settings`、`assistant_action_logs`：个人助理。
 - `memories`、`wiki_*`：记忆和知识库。
 
-## 安装与运行
+## 本地 Git 工作目录运行
+
+Icarus Host 唯一支持的运行拓扑是本地 Git checkout，也就是 `git clone` 后展开的项目工作目录。依赖、构建、配置、launchd/systemd 服务和可选 Host Core Snapshot 都围绕这个目录工作。移动目录后需要重新执行 setup，让服务管理器记录新的绝对路径。
+
+浏览器、Web 工作台 Electron 客户端和个人助理 Electron 客户端都连接该工作目录启动的 Host。项目不提供独立 `.app`、DMG/PKG、内嵌 Host 的 Electron 应用、打包安装状态迁移或自动更新。
 
 ### 环境要求
 
-- Node.js `>=20`
+- Node.js `>=26 <27`，不兼容时 setup 可安装受支持的 fallback
 - npm
 - Docker 或 Apple Container
 - macOS 上可使用 launchd 常驻运行
@@ -268,7 +272,7 @@ Feishu/WeCom/Web/Assistant 消息进入频道
 ### 初始化
 
 ```bash
-npm install
+./setup.sh
 cp .env.example .env
 ```
 
@@ -336,7 +340,7 @@ local/shell/start.sh --mode active
 
 `current` 构建并运行当前检出；`active` 校验并运行 `active-core` 指向的本地快照，不重建或改变选择。`publish` 只是显式创建一个可回退快照，`activate` 只是选择该快照，两者不是对外发布和部署。启动前的只读 schema 检查、重置前备份和指针原子替换用于保护本机状态；其他发布级完整性校验属于可简化的历史机制。完整行为见 [`docs/host-core-lifecycle.md`](docs/host-core-lifecycle.md)。
 
-### 本地构建与打包
+### 本地构建
 
 ```bash
 npm run build
@@ -344,11 +348,7 @@ npm run build:electron
 npm run build:assistant
 ```
 
-macOS 打包：
-
-```bash
-npm run package:mac
-```
+这些命令只在当前 Git 工作目录中生成构建结果，不生成可独立安装的应用包。
 
 ### 测试与检查
 

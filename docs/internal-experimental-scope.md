@@ -21,6 +21,14 @@ A mechanism that does not materially serve one of these goals should not block n
 
 This boundary overrides stronger product-release wording in active design notes and `local/docs/` plans. Git history and tags preserve historical provenance; historical construction copies do not need to remain in the active source tree. Security requirements and descriptions of behavior that already protects live local state are not overridden.
 
+## Supported Runtime Topology
+
+The Icarus Host runs from one local Git checkout. Dependency setup, builds, service-manager entries, configuration, local data paths, and optional Host Core snapshots are resolved from or for that checkout. Browser access and Electron clients are interfaces to the same checkout-owned Host.
+
+The project does not maintain a standalone `.app`, DMG/PKG installer, Host embedded in an application bundle, packaged-install state migration, signing/notarization pipeline, or automatic product updater. `dev:electron`, `build:electron`, `dev:assistant`, and `build:assistant` remain checkout development commands, not distribution commands.
+
+This topology decision does not narrow the existing macOS/Linux/WSL service implementations and does not remove the optional managed Node fallback. Those are separate environment-compatibility concerns.
+
 ## Terminology
 
 Some existing paths and serialized formats retain stronger historical wording. Renaming every identifier would create more risk than value, so the compatibility names remain while their project meaning is narrowed.

@@ -4,6 +4,8 @@ A personal Claude assistant with multi-channel support, persistent memory per co
 
 This specification describes the current internal experiment; it is not a public product contract. Normative language defines consistency inside the current checkout only. It does not imply an external compatibility guarantee, production certification, SLA, or obligation to preserve an unused interface. Freeze, release, activation, and audit behavior is justified only by local iteration stability and protection of local state. See [`internal-experimental-scope.md`](internal-experimental-scope.md).
 
+The Host runs only from a local Git checkout. Setup, TypeScript output, service-manager configuration, mutable project state, and optional rollback snapshots are anchored to that checkout. Electron clients are checkout-built local clients of the same Host; there is no supported standalone application package, bundled Host, packaged-install migration, or auto-update topology.
+
 ---
 
 ## Table of Contents
@@ -662,7 +664,7 @@ The `icarus` MCP server is created dynamically per agent call with the current a
 
 ## Deployment
 
-Icarus runs as a single macOS launchd service.
+Icarus runs from the local Git checkout as a single macOS launchd service. The generated service entry records the checkout's absolute Host launcher and working directory. Moving the checkout requires rerunning setup; installing an application bundle is not an alternative deployment path.
 
 ### Startup Sequence
 
