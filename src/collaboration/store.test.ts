@@ -214,6 +214,19 @@ describe('CollaborationStore', () => {
     );
   });
 
+  it.each(['collaboration_memberships', 'collaboration_process_locks'])(
+    'blocks a current-version database missing required table %s',
+    (table) => {
+      const test = temporaryPath();
+      const store = new CollaborationStore(test.databasePath);
+      store.rawDatabaseForTests().exec(`DROP TABLE ${table}`);
+      store.close();
+      expect(() => new CollaborationStore(test.databasePath)).toThrow(
+        new RegExp(`table ${table} is missing column`),
+      );
+    },
+  );
+
   it('keeps bindings and receipts when rebuildable projection/cache is cleared', () => {
     const test = temporaryPath();
     const store = new CollaborationStore(test.databasePath);
