@@ -653,7 +653,7 @@ interface ActionExecutor {
 - 返回 Icarus 自己的 `execution_ref`，不把 provider 主键作为通用主键。
 - 状态统一映射为通用 Turn 状态。
 - provider 私有字段存入 namespaced metadata。
-- 完成结果必须满足 Action 声明的 result contract。
+- 完成结果必须满足 Action 声明的 `result_schema`。
 - Executor 不能直接推进群组状态；只能提交执行观察，由 Collaboration Runtime 验证后生成 transition 事件。
 
 ### Executor 类型
@@ -678,7 +678,7 @@ requirements:
   capability: coding_task
   interaction: visible_session
   filesystem_access: workspace_write
-result_contract:
+result_schema:
   ref: code-change-result@1
 ```
 
@@ -690,7 +690,7 @@ result_contract:
 - 通用状态和错误分类。
 - 幂等键、execution ref、输入输出 hash。
 - 权限需求和本地权限上限比较。
-- 结果契约和 artifact refs。
+- 轻量结果 schema 和 artifact refs。
 
 以下内容不能进入通用协议本体：
 
@@ -714,6 +714,22 @@ External Executor Protocol
 
 `codex-task` 是 `external` 下的正式适配器。`codex-desktop-bridge` 可以作为内部模块描述，但不是另一种协议类型。
 
+### 复用现有 Codex 实现
+
+当前项目已经存在以下实现：
+
+```text
+src/workflow-execution/codex/app-server-client.ts
+  ├── existing Workflow CodexTaskAdapter
+  └── Collaboration CodexTaskExecutorAdapter
+```
+
+Collaboration 的 `codex-task` 保持 `external` 语义，但实现必须复用现有 `CodexAppServerClient` 的 initialize、thread start/name、turn start、recover、interrupt 和事件解析，不再创建第二套 App Server JSON-RPC client。可以在实现时把 provider-neutral 的状态与结果映射提取为共享 helper，由 Workflow 和 Collaboration 两个薄 adapter 使用。
+
+现有 `CodexTaskAdapter`、`WorkflowAdapterExecutionContext` 和 `WorkflowAdapterExecutionStore` 包含 Workflow graph、scope、outbox 和 lease 字段，不能通过填充虚假 Workflow identity 直接作为 Collaboration 执行记录。Collaboration 使用自己的 `collaboration_action_executions` 保存 operation key、provider metadata 和 receipt，只复用 provider client、能力 preflight、结果 schema 和错误映射。
+
+群组仓库中的 `adapter: codex-task` 在本地映射到现有 `icarus.adapter.codex-task` provider capability；该内部 ID 和源码目录不进入共享 Git 协议。
+
 后续如明确变更方案，可以新增：
 
 ```text
@@ -736,7 +752,7 @@ codex-task
 | `recover` | `thread/read`、`thread/resume`、运行态事件重建 |
 | provider execution identity | `thread_id` + `turn_id` |
 
-实现优先使用 Codex SDK 或 App Server 的 stdio/Unix socket transport。实验性的 WebSocket transport 不作为第一阶段默认方案。
+v1 直接复用现有 client，通过 `codex app-server --listen stdio://` 通信。SDK、Unix socket 和实验性 WebSocket 都不作为第一阶段实现路径；后续只有出现明确需求时才增加新的 provider transport。
 
 参考：
 
@@ -768,10 +784,11 @@ external_adapters:
   "execution_ref": "external:01H...",
   "adapter": "codex-task",
   "provider_metadata": {
-    "transport": "app_server",
+    "transport": "app_server_stdio",
     "thread_id": "thr_123",
     "turn_id": "turn_456",
-    "schema_version": "observed-codex-version"
+    "cli_version": "observed-codex-version",
+    "ephemeral": false
   }
 }
 ```
@@ -810,7 +827,7 @@ App Server dispatch/visibility precondition failed
 
 ## 本地持久化
 
-Git 是共享事实源，本地 SQLite 保存执行和 UI 所需状态。建议使用独立 Collaboration Runtime 数据域，不直接把跨机器状态写入现有 Workflow Runtime 数据库。
+Git 是共享事实源，本地 SQLite 保存执行和 UI 所需状态。v1 使用独立的 Collaboration Runtime 数据域，不把跨机器状态或本地 receipt 写入现有 Workflow Runtime 数据库。建议使用 `STORE_DIR/collaboration.db`，使迁移、备份和重置范围与 `workflow-runtime.db`、`workflow-adapter-executions.db` 明确分离。
 
 概念表：
 
@@ -830,10 +847,38 @@ collaboration_integrity_incidents
 
 其中：
 
-- Git 事件 cache 可以删除后重建。
-- 本地 executor binding、路径和权限不能从 Git 重建，也不能上传。
+- Git 事件 cache、Projection 和同步尝试可以删除后重建。
+- 本地 executor binding、路径、权限上限和用户审批不能从 Git 重建，也不能上传。
 - `collaboration_action_executions` 保存本机 dispatch receipt 和 provider metadata。
 - 每条本地执行记录必须关联 group id、epoch、turn id、attempt 和 fencing token。
+
+### 本地 Schema 兼容
+
+Git `protocol_version` 与本地 SQLite schema version 是两个独立版本：前者决定多个实例如何解释共享事件，后者只决定当前 Icarus 如何读取本机执行状态，二者不能互相替代或绑定 hash。
+
+`collaboration.db` 沿用当前 Workflow Store 轻量化后的兼容原则：
+
+- 使用整数 `PRAGMA user_version`。
+- 只支持明确的逐版本事务迁移。
+- 当前版本启动时检查必要表、列和索引。
+- 未知版本、迁移失败或结构缺失时只阻塞 Collaboration Runtime，不带病启动 Scheduler 或 Executor。
+- 不生成物理 schema hash、完整文件 manifest、frozen identity 或 contract pack。
+- 普通实现修改不升级 schema version；只有持久化结构或语义变化才升级。
+
+Host Core 仍可启动并提供会话等其他能力。Web“群组”页面显示本地数据不兼容和恢复入口，不把 Collaboration 数据错误扩大为整个 Icarus 不可用。
+
+### Receipt 和恢复
+
+以下本地状态不能从 Git 重建，必须跨进程重启保留：
+
+- claim 成功后的 dispatch reservation 和稳定 operation/idempotency key。
+- Executor 接受动作的 receipt。
+- Codex thread/turn、Workflow execution ref 和其他 provider metadata。
+- 终态结果尚未成功 push 时的待提交 Observation。
+
+如果 Git 显示本机持有有效 claim，但 receipt 缺失或状态不确定，Turn 进入 `RECOVERY_REQUIRED`。Icarus 只能在已有 execution ref 足以执行 provider observe/recover 时自动恢复；不能因为本地进程不存在或 receipt 缺失就自动重新 dispatch。
+
+v1 不提供普通的“清空 Collaboration 状态”按钮。未来若增加破坏性 reset，必须复用当前 Workflow state recovery 的最小安全原则：精确限定 DB/WAL/SHM 路径、排除运行进程、显示目标并确认、先复制并校验带 manifest 的备份、再删除 live unit，并提供显式 restore。清理可重建的 event cache/Projection 应使用独立事务，不得同时删除 receipt、binding 或权限配置。
 
 ## 身份、签名和授权
 
@@ -1025,18 +1070,36 @@ Renderer 不直接执行 Git 命令，不直接调用 Codex App Server。
 - Workflow 终态通过 adapter 转换为 Action Observation。
 - Collaboration Runtime 只在验证 Observation 后推进群组 FSM。
 
-Dynamic Workflow Runtime 当前行为见 [Dynamic Workflow Runtime](dynamic-workflow-runtime.md)。群组协议通过现有受支持入口调用它，不把其内部接口纳入群组 v1，也不由本方案隐式改变其无环执行语义。
+Workflow Action 的调用边界固定为：
+
+```text
+CollaborationWorkflowExecutor
+  -> existing workflow-execution service
+  -> workflow-runtime/gateway/connection
+  -> workflow-runtime/gateway/execution
+```
+
+Collaboration 不能直接 import Workflow Store、runtime、compiler、scheduler 或历史 certification 目录，也不能使用只供 Host Core schema 检查的 `gateway/host-core`。如果当前用途 gateway 缺少创建或观察有限 Workflow Run 所需的操作，应在对应 gateway 增加最小导出，而不是绕过边界或建立聚合 barrel。
+
+Dynamic Workflow Runtime 当前行为见 [Dynamic Workflow Runtime](dynamic-workflow-runtime.md)。群组协议不把其内部接口、SQLite schema version、Registry identity 或 Node runtime identity 纳入群组 v1，也不由本方案隐式改变其无环执行语义。
 
 ### Internal Agent run-once
 
 - run-once 是 `ActionExecutor` 的一种实现。
 - Collaboration Runtime 为每次 dispatch 生成独立 query trace 和 idempotency key。
 - Agent 只能访问 Action 授权的数据和 workspace。
-- run-once 完成不等于群组已转换；仍需结果契约和 fencing 校验。
+- run-once 完成不等于群组已转换；仍需 `result_schema` 和 fencing 校验。
 
 ### Feature Package Runtime
 
 Agent Group Collaboration Runtime 属于 core 执行和协调能力。Feature 可以贡献角色模板、FSM 模板、Action 定义或 UI 扩展，但不能维护独立事实源或绕过 Collaboration Command Gateway。
+
+### Host Core 和本地运行时
+
+- Agent Group Collaboration Runtime 随当前 checkout 或已选择的 Host Core local snapshot 运行，不建立自己的 publish、activate、certification 或 release manifest。
+- Collaboration 本地 schema 的支持范围是 Host 代码兼容信息，不是 Git `protocol_version`。启用 active snapshot 后若本地 schema 不受支持，只阻塞 Collaboration 子系统并提示恢复，不修改数据库。
+- Collaboration 不建立独立 Node distribution identity、可执行文件 hash 或 `active-node` 指针；它使用 Host Core 已配置并通过 major、platform/arch、native ABI smoke 的 Node。
+- Codex binary、App Server schema 和桌面可见性仍由 `codex-task` adapter preflight 独立验证，不进入 Host Core snapshot identity。
 
 ## 失败模型
 
@@ -1047,12 +1110,14 @@ Agent Group Collaboration Runtime 属于 core 执行和协调能力。Feature �
 | 控制分支被重写 | `PROTOCOL_QUARANTINED` |
 | 协议版本不支持 | `PROTOCOL_VERSION_UNSUPPORTED`，停止写入和执行 |
 | Git commit 签名或事件无效 | `PROTOCOL_QUARANTINED` |
+| 本地 Collaboration schema 不兼容 | 只阻塞 Collaboration Runtime，不迁移或重置未知数据 |
 | 本地角色未配置 Executor | `BLOCKED/executor_unconfigured` |
 | 本地权限不足 | `BLOCKED/local_permission_insufficient` |
 | App Server 不可用 | `BLOCKED/codex_app_server_unavailable` |
 | Codex thread 不可桌面显示 | `BLOCKED/codex_desktop_thread_unavailable`，无 fallback |
 | Executor 等待审批 | `WAITING_APPROVAL`，不创建新 attempt |
 | Icarus crash 后重启 | 从 Git 重放，查询本地 receipt，执行 recover/observe |
+| 有效 claim 的本地 receipt 缺失 | `RECOVERY_REQUIRED`，禁止盲目重新 dispatch |
 | 执行完成但结果 push 失败 | 保留 receipt，重试同一结果事件，不重新执行 |
 | Turn 长期无结果 | 创建者显式 recover，生成新 fencing token |
 | 群组 pause 时仍有运行任务 | drain；不产生新 Turn |
@@ -1063,7 +1128,7 @@ Agent Group Collaboration Runtime 属于 core 执行和协调能力。Feature �
 
 - 验证 thread 持久化和桌面可见性。
 - 验证 cwd、权限、审批、继续会话和事件观察。
-- 验证 App Server schema 生成和版本 preflight。
+- 验证当前 Codex CLI 的 App Server methods/fields 和版本 preflight。
 - 形成可重复的自动化验证脚本和人工桌面验收步骤。
 - 验收条件未满足则停止 `codex-task` 实现，不自动改用 deep link。
 
@@ -1081,6 +1146,8 @@ Agent Group Collaboration Runtime 属于 core 执行和协调能力。Feature �
 
 - 实现 remote fetch/push transport。
 - 实现 timer、jitter、backoff 和本地单实例锁。
+- 实现 `collaboration.db` 的整数 schema version、事务迁移和必要结构 smoke。
+- 区分可重建 Projection/cache 与必须保留的 binding、receipt 和 provider metadata。
 - 实现 Turn 创建、认领、fencing、结果提交和人工恢复。
 - 接入 run-once Executor。
 - 接入 Workflow Executor。
@@ -1088,9 +1155,10 @@ Agent Group Collaboration Runtime 属于 core 执行和协调能力。Feature �
 ### Phase 3：External Executor 和 Codex
 
 - 实现 `ActionExecutorRegistry` 和 External Executor 通用契约。
-- 实现 `CodexTaskExecutorAdapter`。
+- 实现 Collaboration `CodexTaskExecutorAdapter` 薄适配层，复用现有 `CodexAppServerClient`、provider 状态映射和 `result_schema`。
+- 不复用带 Workflow graph/outbox context 的 `WorkflowAdapterExecutionStore`，也不复制 App Server JSON-RPC client。
 - 保存 thread/turn provider metadata。
-- 实现 observe、cancel、recover 和 result contract。
+- 实现 observe、cancel、recover 和 `result_schema` 校验。
 - 只启用 `transport: app_server`。
 
 ### Phase 4：Web 客户端
@@ -1106,8 +1174,8 @@ Agent Group Collaboration Runtime 属于 core 执行和协调能力。Feature �
 - 提供远端禁止 force push/delete 的配置提示，不为不同 Git provider 实现阻塞式兼容认证。
 - 协议 quarantine 和 recovery。
 - 在出现实际大文件需求时接入 Git LFS 或外部 artifact locator，不把存储阈值写入协议。
+- 为不可重建的本地 receipt 提供精确 DB/WAL/SHM 备份和显式 restore；v1 不提供普通 reset，event cache/Projection 清理保持独立。
 - 通知、Trace 和故障诊断导出。
-- 性能、长历史 snapshot 和事件压缩策略。
 
 ### Future：发现和更多 Adapter
 
@@ -1116,6 +1184,7 @@ Agent Group Collaboration Runtime 属于 core 执行和协调能力。Feature �
 - `codex-task/deep_link` transport，前提是单独设计并明确迁移。
 - 其他外部 Agent adapter。
 - 经过可信时间源支持的自动 lease。
+- 只有在真实重放或同步性能成为问题后，才设计 Projection checkpoint 或事件压缩；不得原地重写已签名控制历史。
 
 ## 测试和验收
 
@@ -1141,13 +1210,24 @@ Agent Group Collaboration Runtime 属于 core 执行和协调能力。Feature �
 - pause、close 与活动 Turn 竞态。
 - 人工 recovery 后旧执行迟到返回。
 
+### 本地持久化测试
+
+- fresh `collaboration.db` 初始化到当前整数 schema version。
+- 每个受支持旧版本通过逐版本事务迁移，未知新版本 fail closed。
+- 必要表、列或索引缺失时只阻塞 Collaboration Runtime。
+- 删除 event cache/Projection 后可从 Git 重建，binding 和 receipt 保持不变。
+- claim 后重启可以根据 receipt recover/observe，不重复 dispatch。
+- claim 存在但 receipt 缺失时进入 `RECOVERY_REQUIRED`。
+- DB/WAL/SHM 备份可以校验并显式 restore，且完整保留未决 receipt。
+
 ### Executor 测试
 
 - run-once、workflow、external 产生相同的通用状态映射。
 - 每个 Executor 遵守 idempotency key。
 - 本地权限小于远端需求时阻塞。
 - provider metadata 不进入共享 Git 事件。
-- result contract 失败不能推进状态机。
+- `result_schema` 校验失败不能推进状态机。
+- Collaboration Codex adapter 与现有 Workflow Codex adapter 共享 App Server client 行为，不存在第二套 RPC 映射。
 
 ### Codex Spike 验收
 
@@ -1179,7 +1259,8 @@ Agent Group Collaboration Runtime 属于 core 执行和协调能力。Feature �
 7. 群组循环不改变现有 Workflow Runtime 的无环语义。
 8. `codex-task` 当前只有 App Server transport，失败时不 fallback。
 9. Projection 可以完全从事件链重建。
-10. UI 权限不是安全边界，所有命令必须由 Host Gateway 再鉴权。
+10. 本地 receipt 不能从 Git 重建；receipt 缺失或不确定时不得盲目重新 dispatch。
+11. UI 权限不是安全边界，所有命令必须由 Host Gateway 再鉴权。
 
 ## 已确认的设计决策
 
@@ -1192,10 +1273,15 @@ Agent Group Collaboration Runtime 属于 core 执行和协调能力。Feature �
 | 独立实现 | v1 只支持 Icarus 实现协议；其他 Agent 服务通过 Executor 接入 |
 | 流程模型 | 允许循环的有限状态机 |
 | 具体动作 | run-once、workflow、external |
+| Workflow 接入 | 通过现有 host service 和 `gateway/connection`、`gateway/execution`，不直连 Runtime internals |
 | Codex 归属 | `external` 下的 `codex-task` adapter |
 | Codex transport | App Server only |
+| Codex 实现 | Collaboration 薄 adapter 复用现有 `CodexAppServerClient`，不复制 RPC client 或伪造 Workflow context |
 | Codex fallback | 不配置；失败后阻塞并重新决策 |
 | Deep link | 仅作为未来可能的显式 transport 变更 |
+| 本地持久化 | 独立 `collaboration.db`；整数 schema version、事务迁移和结构 smoke |
+| 本地恢复 | Projection/cache 可重建；binding、receipt 和 provider metadata 必须备份并显式恢复 |
+| Host 生命周期 | 随 current/active Host Core 运行，不建立群组专用 publish、activate、certification 或 Node identity |
 | `groups/` 目录 | 保留，不再视为与原有 Icarus group 冲突 |
 | 原 Icarus group 概念 | 由另一改造统一重命名为 `agent` |
 | Web 原“群组”导航 | 更名为“会话” |
@@ -1222,6 +1308,7 @@ v1 收敛不包括：
 - `data/` 大小阈值、Git LFS 和外部对象存储的具体选择。
 - Codex App Server 支持版本矩阵和 provider schema 字段。
 - Web route、deep link、书签、缓存迁移和内部 service/gateway 结构。
+- 本地 `collaboration.db` schema version、Host Core snapshot 和 Node toolchain 兼容信息。
 - Dynamic Workflow Runtime、run-once Agent 或 Executor adapter 的内部实现。
 
 同一 `protocol_version` 的持久化语义不能原地改变；这只服务于当前群组仓库在多个 Icarus 实例之间的一致解释，不构成长期兼容或第三方实现承诺。破坏性调整通过升级协议版本和显式迁移完成。安全不变量必须保留，其他设计决策可以根据实现证据通过 ADR 调整。
