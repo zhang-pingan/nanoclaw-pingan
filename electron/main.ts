@@ -670,6 +670,23 @@ app.whenReady().then(() => {
     }
   });
 
+  ipcMain.handle('open-codex-thread', async (_event, threadId: string) => {
+    if (
+      typeof threadId !== 'string' ||
+      !/^[0-9a-z][0-9a-z-]{7,127}$/i.test(threadId)
+    ) {
+      return { ok: false, error: 'Invalid Codex thread ID' };
+    }
+    try {
+      await shell.openExternal(
+        `codex://threads/${encodeURIComponent(threadId)}`,
+      );
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: String(err) };
+    }
+  });
+
   ipcMain.handle('desktop-capture', async (_event, payload: DesktopCapturePayload) => {
     try {
       return await captureDesktop(payload || {});

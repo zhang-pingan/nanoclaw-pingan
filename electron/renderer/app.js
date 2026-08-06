@@ -4,6 +4,39 @@ var reconnectTimer = null;
 var currentAgentJid = '';
 var launchParams = new URLSearchParams(window.location.search);
 var initialAssistantTarget = launchParams.get('assistantTarget') || '';
+var initialRoutePath = window.location.pathname || '/';
+var collaborationRouteTabs = new Set([
+  'overview',
+  'roles',
+  'runtime',
+  'events',
+  'data',
+  'settings',
+  'diagnostics',
+]);
+
+function parseCollaborationRoute(pathname) {
+  if (pathname === '/groups' || pathname === '/groups/') {
+    return { groupId: '', tab: 'overview' };
+  }
+  if (!pathname.startsWith('/groups/')) return null;
+  let segments;
+  try {
+    segments = pathname
+      .slice('/groups/'.length)
+      .split('/')
+      .filter(Boolean)
+      .map((segment) => decodeURIComponent(segment));
+  } catch {
+    return { groupId: '', tab: 'overview' };
+  }
+  return {
+    groupId: segments[0] || '',
+    tab: collaborationRouteTabs.has(segments[1]) ? segments[1] : 'overview',
+  };
+}
+
+var initialCollaborationRoute = parseCollaborationRoute(initialRoutePath);
 var browserNotificationPermissionRequested = false;
 var agents = [];
 var messages = [];
@@ -34,6 +67,53 @@ var knowledgeManagementScreen = document.getElementById(
 );
 var traceMonitorScreen = document.getElementById('trace-monitor-screen');
 var featureRuntimeScreen = document.getElementById('feature-runtime-screen');
+var collaborationScreen = document.getElementById('collaboration-screen');
+var collaborationRuntimeBanner = document.getElementById(
+  'collaboration-runtime-banner',
+);
+var collaborationList = document.getElementById('collaboration-list');
+var collaborationSearch = document.getElementById('collaboration-search');
+var collaborationRefreshBtn = document.getElementById(
+  'collaboration-refresh-btn',
+);
+var collaborationCreateBtn = document.getElementById(
+  'collaboration-create-btn',
+);
+var collaborationJoinBtn = document.getElementById('collaboration-join-btn');
+var collaborationEmpty = document.getElementById('collaboration-empty');
+var collaborationDetail = document.getElementById('collaboration-detail');
+var collaborationTitle = document.getElementById('collaboration-title');
+var collaborationLifecycle = document.getElementById('collaboration-lifecycle');
+var collaborationDetailMeta = document.getElementById(
+  'collaboration-detail-meta',
+);
+var collaborationSyncBtn = document.getElementById('collaboration-sync-btn');
+var collaborationTabs = Array.from(
+  document.querySelectorAll('[data-collaboration-tab]'),
+);
+var collaborationContent = document.getElementById('collaboration-content');
+var collaborationDialog = document.getElementById('collaboration-dialog');
+var collaborationDialogForm = document.getElementById(
+  'collaboration-dialog-form',
+);
+var collaborationDialogTitle = document.getElementById(
+  'collaboration-dialog-title',
+);
+var collaborationDialogBody = document.getElementById(
+  'collaboration-dialog-body',
+);
+var collaborationDialogError = document.getElementById(
+  'collaboration-dialog-error',
+);
+var collaborationDialogClose = document.getElementById(
+  'collaboration-dialog-close',
+);
+var collaborationDialogCancel = document.getElementById(
+  'collaboration-dialog-cancel',
+);
+var collaborationDialogSubmit = document.getElementById(
+  'collaboration-dialog-submit',
+);
 var featureRuntimeOutlet = document.getElementById('feature-runtime-outlet');
 var configurationScreen = document.getElementById('configuration-screen');
 var configurationServicesToggle = document.getElementById(
@@ -377,12 +457,15 @@ var cancelSelectBtn = document.getElementById('cancel-select-btn');
 var agentStatusInterval = null;
 var agentStatusData = [];
 var agentRunTraceByAgent = {};
-var activePrimaryNavKey =
-  initialAssistantTarget === 'assistant'
-    ? 'assistant'
-    : initialAssistantTarget === 'trace-monitor'
-      ? 'trace-monitor'
-      : 'agents';
+var activePrimaryNavKey = initialRoutePath.startsWith('/groups')
+  ? 'groups'
+  : initialRoutePath.startsWith('/sessions')
+    ? 'sessions'
+    : initialAssistantTarget === 'assistant'
+      ? 'assistant'
+      : initialAssistantTarget === 'trace-monitor'
+        ? 'trace-monitor'
+        : 'sessions';
 var todayPlanVisible = initialAssistantTarget === 'today-plan';
 var todayPlanOverview = null;
 var currentTodayPlan = null;
@@ -402,6 +485,17 @@ var featureRendererCleanups = new Map();
 var mountedFeatureNavKey = '';
 var featureRendererMountSeq = 0;
 var serviceConfigRegistry = {};
+var collaborationState = {
+  status: null,
+  groups: [],
+  selectedGroupId: initialCollaborationRoute?.groupId || '',
+  detail: null,
+  activeTab: initialCollaborationRoute?.tab || 'overview',
+  tabData: {},
+  loading: false,
+  dialogSubmit: null,
+  searchTimer: null,
+};
 var serviceConfigNames = [];
 var currentServiceConfigName = '';
 var serviceConfigDraft = null;
@@ -596,6 +690,994 @@ function apiUrl(path) {
   if (!path) return '';
   if (/^(https?:|file:|blob:|data:)/i.test(path)) return path;
   return `${API_BASE_URL}${path.startsWith('/') ? path : `/${path}`}`;
+}
+
+async function collaborationRequest(path, options = {}) {
+  const response = await apiFetch(`/api/collaboration${path}`, options);
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok)
+    throw new Error(data.error || `Collaboration HTTP ${response.status}`);
+  return data;
+}
+
+function collaborationDate(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric <= 0) return '尚未同步';
+  return new Date(numeric).toLocaleString();
+}
+
+function collaborationRoute(groupId, tab = 'overview') {
+  if (!groupId) return '/groups';
+  const base = `/groups/${encodeURIComponent(groupId)}`;
+  return tab === 'overview' ? base : `${base}/${encodeURIComponent(tab)}`;
+}
+
+function updateCollaborationRoute(options = {}) {
+  const nextPath = collaborationRoute(
+    collaborationState.selectedGroupId,
+    collaborationState.activeTab,
+  );
+  if (window.location.pathname === nextPath) return;
+  const method = options.replace ? 'replaceState' : 'pushState';
+  window.history[method]({}, '', nextPath);
+}
+
+function collaborationStatusTone(value) {
+  const normalized = String(value || '').toUpperCase();
+  if (['RUNNING', 'READY', 'SUCCEEDED', 'OK', 'COMPLETED'].includes(normalized))
+    return 'success';
+  if (
+    ['FAILED', 'BLOCKED', 'RECOVERY_REQUIRED', 'PROTOCOL_QUARANTINED'].includes(
+      normalized,
+    )
+  )
+    return 'danger';
+  if (
+    ['PAUSING', 'CLOSING', 'WAITING_APPROVAL', 'WAITING_INPUT'].includes(
+      normalized,
+    )
+  )
+    return 'warning';
+  return 'neutral';
+}
+
+function collaborationStatus(value, label) {
+  return `<span class="collaboration-status ${collaborationStatusTone(value)}">${escapeHtml(label || value || 'UNKNOWN')}</span>`;
+}
+
+function selectedCollaborationGroup() {
+  return (
+    collaborationState.detail?.group ||
+    collaborationState.groups.find(
+      (group) => group.groupId === collaborationState.selectedGroupId,
+    ) ||
+    null
+  );
+}
+
+function selectedCollaborationTurn() {
+  const group = selectedCollaborationGroup();
+  const turnId = group?.projection?.activeTurnId;
+  return turnId ? group.projection.turns?.[turnId] || null : null;
+}
+
+function collaborationLocalRoles() {
+  const group = selectedCollaborationGroup();
+  if (!group?.projection) return [];
+  return Object.entries(group.projection.roleClaims || {})
+    .filter(([, claims]) =>
+      (claims || []).some(
+        (claim) =>
+          claim.principal_id === group.localPrincipalId &&
+          claim.agent_id === group.localAgentId,
+      ),
+    )
+    .map(([role]) => role);
+}
+
+function renderCollaborationRuntimeBanner(message, tone = 'danger') {
+  if (!collaborationRuntimeBanner) return;
+  collaborationRuntimeBanner.classList.toggle('hidden', !message);
+  collaborationRuntimeBanner.className = message
+    ? `collaboration-runtime-banner ${tone}`
+    : 'collaboration-runtime-banner hidden';
+  collaborationRuntimeBanner.textContent = message || '';
+}
+
+function renderCollaborationList() {
+  if (!collaborationList) return;
+  const groups = collaborationState.groups || [];
+  if (collaborationState.loading && !groups.length) {
+    collaborationList.innerHTML = `<div class="collaboration-list-message">加载中...</div>`;
+    return;
+  }
+  if (!groups.length) {
+    collaborationList.innerHTML = `<div class="collaboration-list-message">暂无群组</div>`;
+    return;
+  }
+  collaborationList.innerHTML = groups
+    .map((group) => {
+      const selected = group.groupId === collaborationState.selectedGroupId;
+      const localRoles = Object.entries(group.projection?.roleClaims || {})
+        .filter(([, claims]) =>
+          (claims || []).some(
+            (claim) => claim.principal_id === group.localPrincipalId,
+          ),
+        )
+        .map(([role]) => role);
+      return `
+        <button class="collaboration-list-item${selected ? ' active' : ''}" data-collaboration-group-id="${escapeAttribute(group.groupId)}" type="button">
+          <span class="collaboration-list-item-head">
+            <strong>${escapeHtml(group.name)}</strong>
+            ${collaborationStatus(group.protocolStatus, group.lifecycle)}
+          </span>
+          <span class="collaboration-list-id">${escapeHtml(group.groupId)}</span>
+          <span class="collaboration-list-meta">
+            <span>${escapeHtml(group.businessState || '未开始')}</span>
+            <span>${escapeHtml(localRoles.join(', ') || '未认领角色')}</span>
+          </span>
+        </button>`;
+    })
+    .join('');
+  collaborationList
+    .querySelectorAll('[data-collaboration-group-id]')
+    .forEach((button) => {
+      button.addEventListener('click', () => {
+        selectCollaborationGroup(
+          button.getAttribute('data-collaboration-group-id') || '',
+        );
+      });
+    });
+}
+
+async function loadCollaborationGroups(options = {}) {
+  if (!collaborationList || collaborationState.loading) return;
+  collaborationState.loading = true;
+  renderCollaborationList();
+  try {
+    const statusData = await collaborationRequest('/status');
+    collaborationState.status = statusData.collaboration || null;
+    if (!collaborationState.status?.available) {
+      renderCollaborationRuntimeBanner(
+        collaborationState.status?.error || 'Collaboration Runtime 不可用',
+      );
+    } else {
+      const recoveryCount =
+        collaborationState.status.scheduler?.receiptlessRecoveries || 0;
+      renderCollaborationRuntimeBanner(
+        recoveryCount > 0 ? `${recoveryCount} 个执行需要恢复确认` : '',
+        'warning',
+      );
+    }
+    const query = collaborationSearch?.value?.trim() || '';
+    const data = await collaborationRequest(
+      `/groups${query ? `?search=${encodeURIComponent(query)}` : ''}`,
+    );
+    collaborationState.groups = Array.isArray(data.groups) ? data.groups : [];
+    const selectedExists = collaborationState.groups.some(
+      (group) => group.groupId === collaborationState.selectedGroupId,
+    );
+    if (!selectedExists) {
+      collaborationState.selectedGroupId = '';
+      collaborationState.detail = null;
+    }
+    renderCollaborationList();
+    renderCollaborationShell();
+    if (
+      collaborationState.selectedGroupId &&
+      options.preserveSelection !== false
+    )
+      await loadCollaborationDetail(collaborationState.selectedGroupId, {
+        updateRoute: false,
+      });
+  } catch (error) {
+    renderCollaborationRuntimeBanner(
+      error instanceof Error ? error.message : String(error),
+    );
+    collaborationList.innerHTML = `<div class="collaboration-list-message error">加载失败</div>`;
+  } finally {
+    collaborationState.loading = false;
+  }
+}
+
+function renderCollaborationShell() {
+  const hasDetail = Boolean(collaborationState.detail?.group);
+  collaborationEmpty?.classList.toggle('hidden', hasDetail);
+  collaborationDetail?.classList.toggle('hidden', !hasDetail);
+  if (!hasDetail) return;
+  const group = collaborationState.detail.group;
+  collaborationTitle.textContent = group.name;
+  collaborationLifecycle.className = `collaboration-status ${collaborationStatusTone(group.lifecycle)}`;
+  collaborationLifecycle.textContent = group.lifecycle;
+  collaborationDetailMeta.innerHTML = `
+    <span>${escapeHtml(group.groupId)}</span>
+    <span>${escapeHtml(group.businessState || '未开始')}</span>
+    <span>rev ${escapeHtml(group.projection?.revision ?? '-')}</span>
+    <span>${escapeHtml(collaborationDate(group.lastSyncAtMs))}</span>`;
+  collaborationTabs.forEach((button) => {
+    button.classList.toggle(
+      'active',
+      button.getAttribute('data-collaboration-tab') ===
+        collaborationState.activeTab,
+    );
+  });
+  renderCollaborationContent();
+}
+
+async function selectCollaborationGroup(groupId, options = {}) {
+  if (!groupId) return;
+  collaborationState.selectedGroupId = groupId;
+  collaborationState.activeTab = options.tab || 'overview';
+  collaborationState.tabData = {};
+  renderCollaborationList();
+  await loadCollaborationDetail(groupId, { updateRoute: options.updateRoute });
+}
+
+async function loadCollaborationDetail(groupId, options = {}) {
+  if (!groupId) return;
+  collaborationContent.innerHTML = `<div class="collaboration-loading">加载群组...</div>`;
+  try {
+    const data = await collaborationRequest(
+      `/groups/${encodeURIComponent(groupId)}`,
+    );
+    collaborationState.detail = data;
+    collaborationState.selectedGroupId = groupId;
+    collaborationState.groups = collaborationState.groups.map((group) =>
+      group.groupId === groupId ? data.group : group,
+    );
+    if (options.updateRoute !== false) {
+      window.history.pushState(
+        {},
+        '',
+        `/groups/${encodeURIComponent(groupId)}`,
+      );
+    }
+    renderCollaborationList();
+    renderCollaborationShell();
+    if (
+      ['events', 'data', 'diagnostics'].includes(collaborationState.activeTab)
+    )
+      await loadCollaborationTabData(collaborationState.activeTab);
+  } catch (error) {
+    collaborationContent.innerHTML = `<div class="collaboration-error">${escapeHtml(error instanceof Error ? error.message : String(error))}</div>`;
+  }
+}
+
+function collaborationMetric(label, value, tone = '') {
+  return `<div class="collaboration-metric ${tone}"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value ?? '-')}</strong></div>`;
+}
+
+function renderCollaborationOverview() {
+  const { group, definition, executions = [] } = collaborationState.detail;
+  const turn = selectedCollaborationTurn();
+  const requiredRoles = definition?.group?.required_roles || [];
+  return `
+    <section class="collaboration-metrics" aria-label="群组状态">
+      ${collaborationMetric('生命周期', group.lifecycle, collaborationStatusTone(group.lifecycle))}
+      ${collaborationMetric('业务状态', group.businessState || '未开始')}
+      ${collaborationMetric('协议', group.protocolStatus, collaborationStatusTone(group.protocolStatus))}
+      ${collaborationMetric('本地执行', String(executions.length))}
+    </section>
+    <section class="collaboration-section">
+      <div class="collaboration-section-head"><h3>当前 Turn</h3>${turn ? collaborationStatus(turn.state) : ''}</div>
+      ${turn ? renderCollaborationTurn(turn) : '<div class="collaboration-section-empty">当前没有活动 Turn</div>'}
+    </section>
+    <section class="collaboration-section collaboration-two-column">
+      <div>
+        <div class="collaboration-section-head"><h3>角色覆盖</h3></div>
+        <div class="collaboration-compact-list">
+          ${
+            requiredRoles
+              .map((role) => {
+                const count = (group.projection?.roleClaims?.[role.role] || [])
+                  .length;
+                return `<div><span>${escapeHtml(role.role)}</span><strong>${count}/${role.min_members}-${role.max_members}</strong></div>`;
+              })
+              .join('') ||
+            '<div class="collaboration-section-empty">定义尚未缓存</div>'
+          }
+        </div>
+      </div>
+      <div>
+        <div class="collaboration-section-head"><h3>Git</h3></div>
+        <dl class="collaboration-definition-list">
+          <div><dt>Remote</dt><dd>${escapeHtml(group.remoteUrl)}</dd></div>
+          <div><dt>Head</dt><dd>${escapeHtml(group.headCommit || '-')}</dd></div>
+          <div><dt>Creator</dt><dd>${escapeHtml(group.creatorPrincipalId)}</dd></div>
+          <div><dt>Key</dt><dd>${escapeHtml(group.signingKeyRef || '-')}</dd></div>
+        </dl>
+      </div>
+    </section>`;
+}
+
+function renderCollaborationTurn(turn) {
+  return `<dl class="collaboration-definition-list collaboration-turn-grid">
+    <div><dt>ID</dt><dd>${escapeHtml(turn.turnId)}</dd></div>
+    <div><dt>角色</dt><dd>${escapeHtml(turn.role)}</dd></div>
+    <div><dt>Action</dt><dd>${escapeHtml(turn.actionId)}</dd></div>
+    <div><dt>Attempt</dt><dd>${escapeHtml(turn.attempt)}</dd></div>
+    <div><dt>Claimant</dt><dd>${escapeHtml(turn.claimantPrincipalId || '-')}</dd></div>
+    <div><dt>Execution</dt><dd>${escapeHtml(turn.executionRef || '-')}</dd></div>
+  </dl>`;
+}
+
+function renderCollaborationRoles() {
+  const { group, definition, bindings = [] } = collaborationState.detail;
+  const roleDefinitions = definition?.roles || {};
+  const roles = Object.keys(roleDefinitions).length
+    ? Object.keys(roleDefinitions)
+    : Object.keys(group.projection?.roleClaims || {});
+  return `<section class="collaboration-section">
+    <div class="collaboration-section-head"><h3>角色与成员</h3></div>
+    <div class="collaboration-record-list">
+      ${
+        roles
+          .map((role) => {
+            const claims = group.projection?.roleClaims?.[role] || [];
+            const local = claims.some(
+              (claim) =>
+                claim.principal_id === group.localPrincipalId &&
+                claim.agent_id === group.localAgentId,
+            );
+            const binding = bindings.find((item) => item.role === role);
+            return `<article class="collaboration-record">
+            <div class="collaboration-record-main">
+              <div class="collaboration-record-title"><strong>${escapeHtml(roleDefinitions[role]?.display_name || role)}</strong>${local ? collaborationStatus('OK', '本地') : ''}</div>
+              <div class="collaboration-record-meta">${claims.map((claim) => `${escapeHtml(claim.principal_id)} · ${escapeHtml(claim.agent_id)}`).join('<br>') || '尚未认领'}</div>
+              <div class="collaboration-record-meta">${binding ? `${escapeHtml(binding.executorKind)}${binding.adapter ? ` · ${escapeHtml(binding.adapter)}` : ''}` : '未配置本地执行器'}</div>
+            </div>
+            <div class="collaboration-record-actions">
+              ${!local ? `<button class="btn-ghost" data-collaboration-action="claim-role" data-role="${escapeAttribute(role)}">认领</button>` : ''}
+              ${local ? `<button class="btn-ghost" data-collaboration-action="edit-binding" data-role="${escapeAttribute(role)}">配置</button>` : ''}
+            </div>
+          </article>`;
+          })
+          .join('') ||
+        '<div class="collaboration-section-empty">角色定义不可用</div>'
+      }
+    </div>
+  </section>`;
+}
+
+function creatorCommandButtons(group, turn) {
+  if (group.localPrincipalId !== group.creatorPrincipalId) return '';
+  const buttons = [];
+  if (group.lifecycle === 'READY') buttons.push(['start', '启动']);
+  if (group.lifecycle === 'RUNNING') buttons.push(['pause', '暂停']);
+  if (group.lifecycle === 'PAUSED') buttons.push(['resume', '恢复']);
+  if (['READY', 'RUNNING', 'PAUSED'].includes(group.lifecycle))
+    buttons.push(['close', '关闭']);
+  if (
+    turn &&
+    (turn.state === 'RECOVERY_REQUIRED' ||
+      (collaborationState.detail.executions || []).some(
+        (execution) =>
+          execution.turnId === turn.turnId &&
+          execution.state === 'recovery_required',
+      ))
+  )
+    buttons.push(['recover', '恢复 Turn']);
+  return buttons
+    .map(
+      ([command, label]) =>
+        `<button class="${command === 'close' ? 'btn-danger-soft' : 'btn-ghost'}" data-collaboration-action="command" data-command="${command}">${label}</button>`,
+    )
+    .join('');
+}
+
+function renderCollaborationExecution(execution) {
+  const provider = execution.provider || {};
+  const codexOpen =
+    provider.kind === 'codex-task' && provider.threadId
+      ? `<button class="btn-ghost" data-collaboration-action="open-codex" data-thread-id="${escapeAttribute(provider.threadId)}">在 Codex 中打开</button>`
+      : '';
+  return `<article class="collaboration-record collaboration-execution-record">
+    <div class="collaboration-record-main">
+      <div class="collaboration-record-title"><strong>${escapeHtml(execution.executorKind)}${execution.adapter ? ` · ${escapeHtml(execution.adapter)}` : ''}</strong>${collaborationStatus(execution.state)}</div>
+      <div class="collaboration-record-meta">${escapeHtml(execution.executionRef || execution.executionId)}</div>
+      <div class="collaboration-record-meta">attempt ${escapeHtml(execution.attempt)} · ${escapeHtml(collaborationDate(execution.updatedAtMs))}</div>
+      ${execution.recoveryRequiredReason ? `<div class="collaboration-inline-alert">${escapeHtml(execution.recoveryRequiredReason)}</div>` : ''}
+      ${provider.kind === 'codex-task' ? `<div class="collaboration-provider-line">thread ${escapeHtml(provider.threadId || '-')} · turn ${escapeHtml(provider.turnId || '-')} · ${escapeHtml(provider.cliVersion || '')}</div>` : ''}
+      ${execution.observation?.result?.summary ? `<div class="collaboration-result-summary">${escapeHtml(execution.observation.result.summary)}</div>` : ''}
+    </div>
+    <div class="collaboration-record-actions">${codexOpen}</div>
+  </article>`;
+}
+
+function renderCollaborationRuntime() {
+  const { group, definition, executions = [] } = collaborationState.detail;
+  const turn = selectedCollaborationTurn();
+  const currentState = definition?.machine?.states?.[group.businessState];
+  const transitions = !turn ? currentState?.transitions || [] : [];
+  return `
+    <section class="collaboration-command-band">
+      <div><span>Revision</span><strong>${escapeHtml(group.projection?.revision ?? '-')}</strong></div>
+      <div><span>Lifecycle</span><strong>${escapeHtml(group.lifecycle)}</strong></div>
+      <div class="collaboration-command-actions">
+        ${creatorCommandButtons(group, turn)}
+        ${
+          group.localPrincipalId === group.creatorPrincipalId
+            ? transitions
+                .map(
+                  (transition) =>
+                    `<button class="btn-ghost" data-collaboration-action="transition" data-transition-id="${escapeAttribute(transition.id)}">${escapeHtml(transition.id)}</button>`,
+                )
+                .join('')
+            : ''
+        }
+      </div>
+    </section>
+    <section class="collaboration-section">
+      <div class="collaboration-section-head"><h3>活动 Turn</h3>${turn ? collaborationStatus(turn.state) : ''}</div>
+      ${turn ? renderCollaborationTurn(turn) : '<div class="collaboration-section-empty">没有活动 Turn</div>'}
+    </section>
+    <section class="collaboration-section">
+      <div class="collaboration-section-head"><h3>本地执行</h3><span>${executions.length}</span></div>
+      <div class="collaboration-record-list">${executions.map(renderCollaborationExecution).join('') || '<div class="collaboration-section-empty">暂无本地执行记录</div>'}</div>
+    </section>`;
+}
+
+function renderCollaborationEvents() {
+  const events = collaborationState.tabData.events;
+  if (!events) return '<div class="collaboration-loading">加载事件...</div>';
+  return `<section class="collaboration-section">
+    <div class="collaboration-section-head"><h3>签名事件链</h3><span>${events.length}</span></div>
+    <div class="collaboration-timeline">
+      ${
+        events
+          .map(
+            ({ event, commitHash }) => `<article>
+            <span class="collaboration-timeline-marker"></span>
+            <div>
+              <div class="collaboration-record-title"><strong>${escapeHtml(event.event_type)}</strong>${collaborationStatus('OK', `#${event.sequence}`)}</div>
+              <div class="collaboration-record-meta">${escapeHtml(event.actor?.principal_id || '-')} · ${escapeHtml(event.occurred_at || '')}</div>
+              <code>${escapeHtml(commitHash || '-')}</code>
+            </div>
+          </article>`,
+          )
+          .join('') || '<div class="collaboration-section-empty">暂无事件</div>'
+      }
+    </div>
+  </section>`;
+}
+
+function renderCollaborationData() {
+  const paths = collaborationState.tabData.data;
+  if (!paths) return '<div class="collaboration-loading">加载数据...</div>';
+  const artifacts = Object.values(
+    selectedCollaborationGroup()?.projection?.turns || {},
+  ).flatMap((turn) => turn.artifactRefs || []);
+  return `<section class="collaboration-section collaboration-two-column">
+    <div>
+      <div class="collaboration-section-head"><h3>共享路径</h3><span>${paths.length}</span></div>
+      <div class="collaboration-path-list">${paths.map((item) => `<code>${escapeHtml(item)}</code>`).join('') || '<div class="collaboration-section-empty">暂无 data/ 或 artifacts/ 文件</div>'}</div>
+    </div>
+    <div>
+      <div class="collaboration-section-head"><h3>Artifact refs</h3><span>${artifacts.length}</span></div>
+      <div class="collaboration-path-list">${artifacts.map((item) => `<code>${escapeHtml(item)}</code>`).join('') || '<div class="collaboration-section-empty">暂无产物引用</div>'}</div>
+    </div>
+  </section>`;
+}
+
+function renderCollaborationSettings() {
+  const { bindings = [] } = collaborationState.detail;
+  const roles = collaborationLocalRoles();
+  return `<section class="collaboration-section">
+    <div class="collaboration-section-head"><h3>本地 Executor</h3></div>
+    <div class="collaboration-record-list">
+      ${
+        roles
+          .map((role) => {
+            const binding = bindings.find((item) => item.role === role);
+            return `<article class="collaboration-record">
+            <div class="collaboration-record-main">
+              <div class="collaboration-record-title"><strong>${escapeHtml(role)}</strong>${collaborationStatus(binding?.enabled ? 'OK' : 'BLOCKED', binding?.enabled ? '启用' : '未配置')}</div>
+              <div class="collaboration-record-meta">${binding ? `${escapeHtml(binding.executorKind)}${binding.adapter ? ` · ${escapeHtml(binding.adapter)}` : ''} · ${escapeHtml(binding.filesystemAccessCap)}` : '未配置'}</div>
+              <div class="collaboration-record-meta">${escapeHtml(binding?.workspacePath || '-')}</div>
+            </div>
+            <div class="collaboration-record-actions"><button class="btn-ghost" data-collaboration-action="edit-binding" data-role="${escapeAttribute(role)}">编辑</button></div>
+          </article>`;
+          })
+          .join('') ||
+        '<div class="collaboration-section-empty">本地尚未认领角色</div>'
+      }
+    </div>
+  </section>`;
+}
+
+function renderCollaborationDiagnostics() {
+  const diagnostics = collaborationState.tabData.diagnostics;
+  if (!diagnostics)
+    return '<div class="collaboration-loading">加载诊断...</div>';
+  const errors = diagnostics.collaboration?.scheduler?.groupErrors || {};
+  return `<section class="collaboration-section">
+    <div class="collaboration-section-head"><h3>运行诊断</h3>${collaborationStatus(diagnostics.group.protocolStatus)}</div>
+    <dl class="collaboration-definition-list">
+      <div><dt>Last sync</dt><dd>${escapeHtml(collaborationDate(diagnostics.group.lastSyncAtMs))}</dd></div>
+      <div><dt>Next sync</dt><dd>${escapeHtml(collaborationDate(diagnostics.group.nextSyncAtMs))}</dd></div>
+      <div><dt>Scheduler</dt><dd>${diagnostics.collaboration?.scheduler?.running ? '运行中' : '已停止'}</dd></div>
+      <div><dt>Error</dt><dd>${escapeHtml(errors[diagnostics.group.groupId] || diagnostics.group.lastError || '-')}</dd></div>
+    </dl>
+    <div class="collaboration-diagnostic-actions">
+      <button class="btn-ghost" data-collaboration-action="backup">创建备份</button>
+      <button class="btn-danger-soft" data-collaboration-action="restore">恢复备份</button>
+    </div>
+  </section>
+  <section class="collaboration-section">
+    <div class="collaboration-section-head"><h3>完整性事件</h3><span>${diagnostics.incidents?.length || 0}</span></div>
+    <div class="collaboration-record-list">${(diagnostics.incidents || []).map((incident) => `<article class="collaboration-record"><div class="collaboration-record-main"><div class="collaboration-record-title"><strong>${escapeHtml(incident.code)}</strong></div><div class="collaboration-record-meta">${escapeHtml(incident.message)}</div><code>${escapeHtml(incident.headCommit || '-')}</code></div></article>`).join('') || '<div class="collaboration-section-empty">没有完整性事件</div>'}</div>
+  </section>`;
+}
+
+function renderCollaborationContent() {
+  if (!collaborationState.detail || !collaborationContent) return;
+  const renderers = {
+    overview: renderCollaborationOverview,
+    roles: renderCollaborationRoles,
+    runtime: renderCollaborationRuntime,
+    events: renderCollaborationEvents,
+    data: renderCollaborationData,
+    settings: renderCollaborationSettings,
+    diagnostics: renderCollaborationDiagnostics,
+  };
+  collaborationContent.innerHTML = (
+    renderers[collaborationState.activeTab] || renderCollaborationOverview
+  )();
+}
+
+async function loadCollaborationTabData(tab) {
+  if (!collaborationState.selectedGroupId) return;
+  const id = encodeURIComponent(collaborationState.selectedGroupId);
+  try {
+    if (tab === 'events') {
+      const data = await collaborationRequest(`/groups/${id}/events`);
+      collaborationState.tabData.events = data.events || [];
+    } else if (tab === 'data') {
+      const data = await collaborationRequest(`/groups/${id}/data`);
+      collaborationState.tabData.data = data.paths || [];
+    } else if (tab === 'diagnostics') {
+      collaborationState.tabData.diagnostics = await collaborationRequest(
+        `/groups/${id}/diagnostics`,
+      );
+    }
+  } catch (error) {
+    showToast(error instanceof Error ? error.message : String(error), 2600);
+  }
+  renderCollaborationContent();
+}
+
+function openCollaborationDialog(options) {
+  if (!collaborationDialog) return;
+  collaborationDialogTitle.textContent = options.title || '群组操作';
+  collaborationDialogBody.innerHTML = options.body || '';
+  collaborationDialogSubmit.textContent = options.submitText || '确认';
+  collaborationDialogSubmit.className =
+    options.danger === true
+      ? 'btn-danger-soft'
+      : 'btn-primary btn-soft-primary';
+  collaborationDialogError.textContent = '';
+  collaborationDialogError.classList.add('hidden');
+  collaborationState.dialogSubmit = options.onSubmit || null;
+  collaborationDialog.showModal();
+  options.onOpen?.();
+}
+
+function closeCollaborationDialog() {
+  collaborationState.dialogSubmit = null;
+  collaborationDialog?.close();
+}
+
+function collaborationField(label, name, value = '', options = {}) {
+  const input = options.multiline
+    ? `<textarea name="${escapeAttribute(name)}" ${options.required === false ? '' : 'required'}>${escapeHtml(value)}</textarea>`
+    : `<input name="${escapeAttribute(name)}" type="${escapeAttribute(options.type || 'text')}" value="${escapeAttribute(value)}" ${options.placeholder ? `placeholder="${escapeAttribute(options.placeholder)}"` : ''} ${options.required === false ? '' : 'required'} />`;
+  return `<label class="collaboration-field"><span>${escapeHtml(label)}</span>${input}</label>`;
+}
+
+function createCollaborationDefinition(values) {
+  const role = values.role || 'developer';
+  const actionId = 'execute';
+  const transitionId = 'execute';
+  const mode = values.executorMode || 'run_once';
+  const kind = mode === 'codex-task' ? 'external' : mode;
+  const capability = values.capability || 'coding_task';
+  const action = {
+    format: 'icarus.agent-group-action/1',
+    action_id: actionId,
+    kind,
+    ...(mode === 'codex-task' ? { adapter: 'codex-task' } : {}),
+    input: {
+      prompt_ref: 'prompts/execute.md',
+      ...(kind === 'workflow'
+        ? { workflow_ref: values.workflowRef || 'workflow:local' }
+        : {}),
+    },
+    requirements: {
+      capability,
+      interaction: mode === 'workflow' ? 'headless' : 'visible_session',
+      filesystem_access: values.filesystemAccess || 'workspace_write',
+    },
+    result_schema: { ref: 'collaboration-result@1' },
+  };
+  return {
+    machine: {
+      format: 'icarus.agent-group-machine/1',
+      initial_state: 'working',
+      states: {
+        working: {
+          terminal: false,
+          transitions: [
+            {
+              id: transitionId,
+              actor_role: role,
+              action_ref: `actions/${actionId}.yaml`,
+              outcomes: {
+                succeeded: 'completed',
+                failed: 'working',
+                cancelled: 'working',
+                blocked: 'working',
+              },
+            },
+          ],
+        },
+        completed: { terminal: true, transitions: [] },
+      },
+    },
+    roles: {
+      [role]: {
+        format: 'icarus.agent-group-role/1',
+        role,
+        display_name: values.roleDisplayName || role,
+        cardinality: { min: 1, max: 1 },
+        allowed_transitions: [transitionId],
+        executor_requirements: {
+          capability,
+          interaction: mode === 'workflow' ? 'headless' : 'visible_session',
+        },
+      },
+    },
+    actions: { [actionId]: action },
+    prompts: { 'prompts/execute.md': values.prompt },
+  };
+}
+
+function openCreateCollaborationDialog() {
+  openCollaborationDialog({
+    title: '创建群组',
+    submitText: '创建',
+    body: `<div class="collaboration-form-grid">
+      ${collaborationField('Git remote', 'remoteUrl')}
+      ${collaborationField('群组名称', 'name')}
+      ${collaborationField('Principal ID', 'principalId')}
+      ${collaborationField('Agent ID', 'agentId')}
+      ${collaborationField('SSH signing key', 'signingKeyPath')}
+      ${collaborationField('角色 ID', 'role', 'developer')}
+      ${collaborationField('角色名称', 'roleDisplayName', 'Developer')}
+      ${collaborationField('Capability', 'capability', 'coding_task')}
+      <label class="collaboration-field"><span>Executor</span><select name="executorMode"><option value="run_once">run_once</option><option value="codex-task">codex-task / App Server</option><option value="workflow">workflow</option></select></label>
+      ${collaborationField('Workflow ref', 'workflowRef', 'workflow:local', { required: false })}
+      <label class="collaboration-field"><span>文件权限</span><select name="filesystemAccess"><option value="workspace_write">workspace_write</option><option value="read_only">read_only</option></select></label>
+      ${collaborationField('Prompt', 'prompt', 'Complete the assigned group action and return a concise result.', { multiline: true })}
+    </div>`,
+    onSubmit: async (formData) => {
+      const values = Object.fromEntries(formData.entries());
+      const definition = createCollaborationDefinition(values);
+      const body = {
+        remoteUrl: values.remoteUrl,
+        name: values.name,
+        principalId: values.principalId,
+        agentId: values.agentId,
+        signingKeyPath: values.signingKeyPath,
+        capabilities: [values.capability],
+        initialRole: values.role,
+        ...definition,
+      };
+      const data = await collaborationRequest('/groups', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+      closeCollaborationDialog();
+      await loadCollaborationGroups({ preserveSelection: false });
+      await selectCollaborationGroup(data.group.groupId);
+      showToast('群组已创建');
+    },
+  });
+}
+
+function openJoinCollaborationDialog() {
+  openCollaborationDialog({
+    title: '加入群组',
+    submitText: '加入',
+    body: `<div class="collaboration-form-grid">
+      ${collaborationField('Git remote', 'remoteUrl')}
+      ${collaborationField('Principal ID', 'principalId')}
+      ${collaborationField('Agent ID', 'agentId')}
+      ${collaborationField('SSH signing key', 'signingKeyPath')}
+      ${collaborationField('Capabilities', 'capabilities', 'coding_task')}
+      ${collaborationField('角色 ID', 'role', 'developer')}
+    </div>
+    <div class="collaboration-inspect-row"><button id="collaboration-inspect-btn" class="btn-ghost" type="button">检查 URL</button><div id="collaboration-inspect-result"></div></div>`,
+    onOpen: () => {
+      document
+        .getElementById('collaboration-inspect-btn')
+        ?.addEventListener('click', async () => {
+          const remoteUrl = new FormData(collaborationDialogForm).get(
+            'remoteUrl',
+          );
+          const result = document.getElementById(
+            'collaboration-inspect-result',
+          );
+          try {
+            result.textContent = '检查中...';
+            const data = await collaborationRequest('/groups/inspect', {
+              method: 'POST',
+              body: JSON.stringify({ remoteUrl }),
+            });
+            result.textContent = `${data.summary.name} · ${data.summary.lifecycle} · ${data.summary.roles.map((role) => role.role).join(', ')}`;
+          } catch (error) {
+            result.textContent =
+              error instanceof Error ? error.message : String(error);
+          }
+        });
+    },
+    onSubmit: async (formData) => {
+      const values = Object.fromEntries(formData.entries());
+      const data = await collaborationRequest('/groups/join', {
+        method: 'POST',
+        body: JSON.stringify({
+          remoteUrl: values.remoteUrl,
+          principalId: values.principalId,
+          agentId: values.agentId,
+          signingKeyPath: values.signingKeyPath,
+          capabilities: String(values.capabilities)
+            .split(',')
+            .map((item) => item.trim())
+            .filter(Boolean),
+          role: values.role,
+        }),
+      });
+      closeCollaborationDialog();
+      await loadCollaborationGroups({ preserveSelection: false });
+      await selectCollaborationGroup(data.group.groupId);
+      showToast('已加入群组');
+    },
+  });
+}
+
+function openCollaborationBindingDialog(role) {
+  const existing = (collaborationState.detail?.bindings || []).find(
+    (binding) => binding.role === role,
+  );
+  const mode =
+    existing?.adapter === 'codex-task'
+      ? 'codex-task'
+      : existing?.executorKind || 'run_once';
+  openCollaborationDialog({
+    title: `配置 ${role}`,
+    submitText: '保存',
+    body: `<div class="collaboration-form-grid">
+      <label class="collaboration-field"><span>Executor</span><select name="executorMode"><option value="run_once" ${mode === 'run_once' ? 'selected' : ''}>run_once</option><option value="codex-task" ${mode === 'codex-task' ? 'selected' : ''}>codex-task / App Server</option><option value="workflow" ${mode === 'workflow' ? 'selected' : ''}>workflow</option></select></label>
+      ${collaborationField('Agent JID', 'agentJid', existing?.agentJid || '', { required: false })}
+      ${collaborationField('Workspace', 'workspacePath', existing?.workspacePath || '')}
+      <label class="collaboration-field"><span>文件权限上限</span><select name="filesystemAccessCap"><option value="workspace_write" ${existing?.filesystemAccessCap === 'workspace_write' ? 'selected' : ''}>workspace_write</option><option value="read_only" ${existing?.filesystemAccessCap === 'read_only' ? 'selected' : ''}>read_only</option></select></label>
+      <label class="collaboration-field"><span>审批策略</span><select name="approvalPolicy"><option value="on-request" ${existing?.approvalPolicy === 'on-request' ? 'selected' : ''}>on-request</option><option value="never" ${existing?.approvalPolicy === 'never' ? 'selected' : ''}>never</option><option value="untrusted" ${existing?.approvalPolicy === 'untrusted' ? 'selected' : ''}>untrusted</option></select></label>
+      ${collaborationField('Prompt override', 'promptOverride', existing?.promptOverride || '', { multiline: true, required: false })}
+      ${collaborationField('Config JSON', 'config', JSON.stringify(existing?.config || {}, null, 2), { multiline: true, required: false })}
+    </div>`,
+    onSubmit: async (formData) => {
+      const values = Object.fromEntries(formData.entries());
+      const executorMode = values.executorMode;
+      let config = {};
+      if (String(values.config || '').trim())
+        config = JSON.parse(String(values.config));
+      if (executorMode === 'codex-task') config.transport = 'app_server';
+      await collaborationRequest(
+        `/groups/${encodeURIComponent(collaborationState.selectedGroupId)}/executors/${encodeURIComponent(role)}`,
+        {
+          method: 'PUT',
+          body: JSON.stringify({
+            executorKind:
+              executorMode === 'codex-task' ? 'external' : executorMode,
+            adapter: executorMode === 'codex-task' ? 'codex-task' : null,
+            agentJid: values.agentJid || null,
+            workspacePath: values.workspacePath,
+            promptOverride: values.promptOverride || null,
+            filesystemAccessCap: values.filesystemAccessCap,
+            approvalPolicy: values.approvalPolicy,
+            config,
+            enabled: true,
+          }),
+        },
+      );
+      closeCollaborationDialog();
+      await loadCollaborationDetail(collaborationState.selectedGroupId, {
+        updateRoute: false,
+      });
+      showToast('Executor 已保存');
+    },
+  });
+}
+
+async function runCollaborationCommand(command, values = {}) {
+  const group = selectedCollaborationGroup();
+  if (!group) return;
+  const data = await collaborationRequest(
+    `/groups/${encodeURIComponent(group.groupId)}/commands`,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        command,
+        expectedRevision: group.projection?.revision,
+        ...values,
+      }),
+    },
+  );
+  collaborationState.detail.group = data.group;
+  await loadCollaborationGroups({ preserveSelection: true });
+  showToast('群组状态已更新');
+}
+
+function openCollaborationCommandDialog(command) {
+  const group = selectedCollaborationGroup();
+  const turn = selectedCollaborationTurn();
+  const needsReason = command === 'close' || command === 'recover';
+  openCollaborationDialog({
+    title:
+      command === 'recover'
+        ? '恢复 Turn'
+        : command === 'close'
+          ? '关闭群组'
+          : command === 'pause'
+            ? '暂停群组'
+            : '确认操作',
+    submitText: command === 'close' ? '关闭' : '确认',
+    danger: command === 'close' || command === 'recover',
+    body: `<dl class="collaboration-definition-list">
+      <div><dt>Revision</dt><dd>${escapeHtml(group?.projection?.revision ?? '-')}</dd></div>
+      <div><dt>Active Turn</dt><dd>${escapeHtml(turn?.turnId || '-')}</dd></div>
+      <div><dt>State</dt><dd>${escapeHtml(turn?.state || group?.lifecycle || '-')}</dd></div>
+    </dl>${needsReason ? collaborationField('原因', 'reason', '') : ''}`,
+    onSubmit: async (formData) => {
+      await runCollaborationCommand(command, {
+        ...(needsReason ? { reason: formData.get('reason') } : {}),
+      });
+      closeCollaborationDialog();
+    },
+  });
+}
+
+function openCollaborationBackupDialog(mode) {
+  const restore = mode === 'restore';
+  openCollaborationDialog({
+    title: restore ? '恢复本地备份' : '创建本地备份',
+    submitText: restore ? '恢复' : '创建',
+    danger: restore,
+    body: `${collaborationField('备份目录', 'backupDirectory', '', { required: restore, placeholder: restore ? '' : '留空使用默认目录' })}${restore ? collaborationField('确认', 'confirm', '', { placeholder: 'RESTORE COLLABORATION' }) : ''}`,
+    onSubmit: async (formData) => {
+      const backupDirectory = formData.get('backupDirectory') || undefined;
+      const data = await collaborationRequest(
+        restore ? '/restore' : '/backup',
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            ...(backupDirectory ? { backupDirectory } : {}),
+            ...(restore ? { confirm: formData.get('confirm') } : {}),
+          }),
+        },
+      );
+      closeCollaborationDialog();
+      if (restore) await loadCollaborationGroups({ preserveSelection: true });
+      showToast(
+        restore ? '备份已恢复' : `备份已创建：${data.backupDirectory}`,
+        3000,
+      );
+    },
+  });
+}
+
+async function syncSelectedCollaborationGroup() {
+  const groupId = collaborationState.selectedGroupId;
+  if (!groupId) return;
+  await collaborationRequest(`/groups/${encodeURIComponent(groupId)}/sync`, {
+    method: 'POST',
+    body: '{}',
+  });
+  await loadCollaborationGroups({ preserveSelection: true });
+  showToast('群组已同步');
+}
+
+async function claimCollaborationRole(role) {
+  const groupId = collaborationState.selectedGroupId;
+  if (!groupId || !role) return;
+  await collaborationRequest(`/groups/${encodeURIComponent(groupId)}/roles`, {
+    method: 'POST',
+    body: JSON.stringify({ role }),
+  });
+  await loadCollaborationDetail(groupId, { updateRoute: false });
+  showToast(`已认领角色 ${role}`);
+}
+
+async function openCollaborationCodexThread(threadId) {
+  if (!threadId) return;
+  if (
+    !window.icarusApp ||
+    typeof window.icarusApp.openCodexThread !== 'function'
+  ) {
+    await navigator.clipboard?.writeText(threadId);
+    showToast('已复制 Codex thread ID', 2400);
+    return;
+  }
+  const result = await window.icarusApp.openCodexThread(threadId);
+  if (!result?.ok) throw new Error(result?.error || '无法打开 Codex 任务');
+}
+
+async function handleCollaborationContentAction(button) {
+  const action = button.getAttribute('data-collaboration-action') || '';
+  if (!action) return;
+  button.disabled = true;
+  try {
+    if (action === 'claim-role') {
+      await claimCollaborationRole(button.getAttribute('data-role') || '');
+    } else if (action === 'edit-binding') {
+      openCollaborationBindingDialog(button.getAttribute('data-role') || '');
+    } else if (action === 'command') {
+      openCollaborationCommandDialog(button.getAttribute('data-command') || '');
+    } else if (action === 'transition') {
+      await runCollaborationCommand('create_turn', {
+        transitionId: button.getAttribute('data-transition-id') || '',
+      });
+    } else if (action === 'backup' || action === 'restore') {
+      openCollaborationBackupDialog(action);
+    } else if (action === 'open-codex') {
+      await openCollaborationCodexThread(
+        button.getAttribute('data-thread-id') || '',
+      );
+    }
+  } catch (error) {
+    showToast(error instanceof Error ? error.message : String(error), 3200);
+    if (action === 'command' || action === 'transition') {
+      await loadCollaborationDetail(collaborationState.selectedGroupId, {
+        updateRoute: false,
+      }).catch(() => undefined);
+    }
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function selectCollaborationTab(tab, options = {}) {
+  if (!collaborationRouteTabs.has(tab)) return;
+  collaborationState.activeTab = tab;
+  collaborationTabs.forEach((button) => {
+    button.classList.toggle(
+      'active',
+      button.getAttribute('data-collaboration-tab') === tab,
+    );
+  });
+  renderCollaborationContent();
+  if (options.updateRoute !== false) updateCollaborationRoute();
+  if (['events', 'data', 'diagnostics'].includes(tab)) {
+    await loadCollaborationTabData(tab);
+  }
+}
+
+async function restoreCollaborationRoute(pathname) {
+  const route = parseCollaborationRoute(pathname);
+  if (!route) return false;
+  setPrimaryNav('groups', { updateRoute: false });
+  collaborationState.activeTab = route.tab;
+  if (!route.groupId) {
+    collaborationState.selectedGroupId = '';
+    collaborationState.detail = null;
+    renderCollaborationList();
+    renderCollaborationShell();
+    return true;
+  }
+  await selectCollaborationGroup(route.groupId, {
+    tab: route.tab,
+    updateRoute: false,
+  });
+  return true;
 }
 
 function encodeApiPathSegments(pathValue) {
@@ -2259,7 +3341,8 @@ function applyScreenVisibility() {
   const showFeatureRuntime =
     !showTodayPlan && getFeatureRuntimeItem(activePrimaryNavKey);
   const showAssistant = !showTodayPlan && activePrimaryNavKey === 'assistant';
-  const showWorkspace = !showTodayPlan && activePrimaryNavKey === 'agents';
+  const showWorkspace = !showTodayPlan && activePrimaryNavKey === 'sessions';
+  const showCollaboration = !showTodayPlan && activePrimaryNavKey === 'groups';
   const showConfiguration =
     !showTodayPlan && activePrimaryNavKey === 'configuration';
   const showMemoryManagement =
@@ -2276,6 +3359,9 @@ function applyScreenVisibility() {
   }
   if (workspace) {
     workspace.classList.toggle('active', showWorkspace);
+  }
+  if (collaborationScreen) {
+    collaborationScreen.classList.toggle('active', showCollaboration);
   }
   if (configurationScreen) {
     configurationScreen.classList.toggle('active', showConfiguration);
@@ -2338,7 +3424,17 @@ function syncPrimaryNavActiveState() {
   }
 }
 
-function setPrimaryNav(navKey) {
+function routeForPrimaryNav(navKey) {
+  if (navKey === 'sessions') return '/sessions';
+  if (navKey === 'groups')
+    return collaborationRoute(
+      collaborationState.selectedGroupId,
+      collaborationState.activeTab,
+    );
+  return '/';
+}
+
+function setPrimaryNav(navKey, options = {}) {
   if (navKey === null || navKey === void 0) return;
   activePrimaryNavKey = navKey;
   todayPlanVisible = false;
@@ -2350,6 +3446,13 @@ function setPrimaryNav(navKey) {
   }
   syncPrimaryNavActiveState();
   applyScreenVisibility();
+  if (options.updateRoute !== false) {
+    const nextPath = routeForPrimaryNav(navKey);
+    if (window.location.pathname !== nextPath) {
+      const method = options.replaceRoute ? 'replaceState' : 'pushState';
+      window.history[method]({}, '', nextPath);
+    }
+  }
   if (navKey === 'memory-management') {
     renderDoctorPanel();
     renderMemoryList();
@@ -2376,6 +3479,9 @@ function setPrimaryNav(navKey) {
   }
   if (navKey === 'trace-monitor') {
     loadTraceMonitorData({ force: false });
+  }
+  if (navKey === 'groups') {
+    loadCollaborationGroups({ preserveSelection: true });
   }
   const featureItem = getFeatureRuntimeItem(navKey);
   if (featureItem) {
@@ -8031,7 +9137,7 @@ function notifyAgent(msg) {
 
 function openAgentFromNotification(chatJid, source) {
   if (typeof chatJid !== 'string' || !chatJid) return;
-  setPrimaryNav('agents');
+  setPrimaryNav('sessions');
   if (chatJid === currentAgentJid) {
     clearUnreadForAgent(chatJid);
     return;
@@ -12825,7 +13931,7 @@ if (primaryNav) {
     applyScreenVisibility();
     loadTodayPlanOverview({ forceOpenToday: true, showEmptyWhenNoToday: true });
   } else {
-    setPrimaryNav(activePrimaryNavKey);
+    setPrimaryNav(activePrimaryNavKey, { replaceRoute: true });
   }
 }
 if (
@@ -12860,6 +13966,96 @@ primaryNavItems.forEach((item) => {
     const navKey = item.getAttribute('data-nav-key') || '';
     setPrimaryNav(navKey);
   });
+});
+if (collaborationCreateBtn) {
+  collaborationCreateBtn.addEventListener(
+    'click',
+    openCreateCollaborationDialog,
+  );
+}
+if (collaborationJoinBtn) {
+  collaborationJoinBtn.addEventListener('click', openJoinCollaborationDialog);
+}
+if (collaborationRefreshBtn) {
+  collaborationRefreshBtn.addEventListener('click', () => {
+    loadCollaborationGroups({ preserveSelection: true });
+  });
+}
+if (collaborationSearch) {
+  collaborationSearch.addEventListener('input', () => {
+    if (collaborationState.searchTimer)
+      clearTimeout(collaborationState.searchTimer);
+    collaborationState.searchTimer = setTimeout(() => {
+      collaborationState.searchTimer = null;
+      loadCollaborationGroups({ preserveSelection: true });
+    }, 220);
+  });
+  collaborationSearch.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    if (collaborationState.searchTimer)
+      clearTimeout(collaborationState.searchTimer);
+    collaborationState.searchTimer = null;
+    loadCollaborationGroups({ preserveSelection: true });
+  });
+}
+if (collaborationSyncBtn) {
+  collaborationSyncBtn.addEventListener('click', async () => {
+    collaborationSyncBtn.disabled = true;
+    try {
+      await syncSelectedCollaborationGroup();
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : String(error), 3200);
+    } finally {
+      collaborationSyncBtn.disabled = false;
+    }
+  });
+}
+collaborationTabs.forEach((button) => {
+  button.addEventListener('click', () => {
+    selectCollaborationTab(
+      button.getAttribute('data-collaboration-tab') || 'overview',
+    );
+  });
+});
+if (collaborationContent) {
+  collaborationContent.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-collaboration-action]');
+    if (!(button instanceof HTMLButtonElement)) return;
+    handleCollaborationContentAction(button);
+  });
+}
+if (collaborationDialogForm) {
+  collaborationDialogForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (!collaborationState.dialogSubmit) return;
+    collaborationDialogError.classList.add('hidden');
+    collaborationDialogSubmit.disabled = true;
+    try {
+      await collaborationState.dialogSubmit(
+        new FormData(collaborationDialogForm),
+      );
+    } catch (error) {
+      collaborationDialogError.textContent =
+        error instanceof Error ? error.message : String(error);
+      collaborationDialogError.classList.remove('hidden');
+    } finally {
+      collaborationDialogSubmit.disabled = false;
+    }
+  });
+}
+collaborationDialogClose?.addEventListener('click', closeCollaborationDialog);
+collaborationDialogCancel?.addEventListener('click', closeCollaborationDialog);
+collaborationDialog?.addEventListener('cancel', (event) => {
+  event.preventDefault();
+  closeCollaborationDialog();
+});
+window.addEventListener('popstate', async () => {
+  if (await restoreCollaborationRoute(window.location.pathname)) return;
+  const navKey = window.location.pathname.startsWith('/sessions')
+    ? 'sessions'
+    : 'sessions';
+  setPrimaryNav(navKey, { updateRoute: false });
 });
 if (assistantRefreshBtn) {
   assistantRefreshBtn.addEventListener('click', () => {

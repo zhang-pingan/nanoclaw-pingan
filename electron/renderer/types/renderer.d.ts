@@ -13,6 +13,8 @@ interface IcarusAppAPI {
   onOpenWorkstationTarget(handler: (payload: { url?: string }) => void): () => void;
   /** Open a URL in the system browser */
   openExternal(url: string): void;
+  /** Open an existing local App Server thread in Codex desktop */
+  openCodexThread(threadId: string): Promise<{ ok: boolean; error?: string }>;
   /** Open a local file in the default app */
   openFile(filePath: string): Promise<{ ok: boolean; result?: string; error?: string }>;
   /** Open file with system app picker */
