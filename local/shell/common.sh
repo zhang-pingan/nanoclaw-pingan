@@ -13,6 +13,7 @@ RUNTIME_TOOLCHAIN="$ROOT_DIR/scripts/runtime-toolchain.sh"
 RUNTIME_HOME="${ICARUS_RUNTIME_HOME:-$HOME/Library/Application Support/Icarus}"
 HOST_LAUNCHER="$ROOT_DIR/local/shell/launch-host.sh"
 WORKFLOW_STATE_CLI="$ROOT_DIR/src/host-core/workflow-state-cli.ts"
+HOST_CORE_RELEASE_CLI="$ROOT_DIR/src/host-core/host-core-release-cli.ts"
 
 ensure_logs_dir() {
   mkdir -p "$ROOT_DIR/logs"

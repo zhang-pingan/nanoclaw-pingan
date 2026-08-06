@@ -90,6 +90,9 @@ describe('Core service launch compatibility', () => {
     expect(common).not.toContain('command -v node');
     expect(common).not.toContain('{{NODE_PATH}}');
     expect(common).toContain('{{HOST_LAUNCHER}}');
+    expect(common).toContain(
+      'HOST_CORE_RELEASE_CLI="$ROOT_DIR/src/host-core/host-core-release-cli.ts"',
+    );
     expect(common).not.toContain('bind-core');
     const activePreparation = common.match(
       /\n    active\)\n([\s\S]*?)\n      ;;/,
