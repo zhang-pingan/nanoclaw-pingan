@@ -646,6 +646,7 @@ export class CollaborationStore {
     readonly headCommit: string;
     readonly projection: CollaborationProjection;
     readonly events: readonly CollaborationEvent[];
+    readonly commits?: readonly string[];
     readonly turns: readonly CollaborationTurn[];
     readonly nowMs?: number;
   }): void {
@@ -703,9 +704,41 @@ export class CollaborationStore {
           input.groupId,
           event.event_id,
           event.sequence,
-          index === input.events.length - 1 ? input.headCommit : '',
+          input.commits?.[index] ??
+            (index === input.events.length - 1 ? input.headCommit : ''),
           JSON.stringify(event),
         );
+      this.database
+        .prepare('DELETE FROM collaboration_memberships WHERE group_id = ?')
+        .run(input.groupId);
+      const memberStatement = this.database.prepare(
+        `INSERT INTO collaboration_memberships (
+           group_id, principal_id, agent_id, member_json
+         ) VALUES (?, ?, ?, ?)`,
+      );
+      for (const member of Object.values(input.projection.members))
+        memberStatement.run(
+          input.groupId,
+          member.principal_id,
+          member.agent_id,
+          JSON.stringify(member),
+        );
+      this.database
+        .prepare('DELETE FROM collaboration_role_bindings WHERE group_id = ?')
+        .run(input.groupId);
+      const roleStatement = this.database.prepare(
+        `INSERT INTO collaboration_role_bindings (
+           group_id, role, principal_id, agent_id, claimed
+         ) VALUES (?, ?, ?, ?, 1)`,
+      );
+      for (const [role, claims] of Object.entries(input.projection.roleClaims))
+        for (const claim of claims)
+          roleStatement.run(
+            input.groupId,
+            role,
+            claim.principal_id,
+            claim.agent_id,
+          );
       const turnStatement = this.database.prepare(
         `INSERT INTO collaboration_turns (
            group_id, turn_id, epoch, attempt, state, fencing_token,
@@ -767,6 +800,81 @@ export class CollaborationStore {
           nowMs,
         );
     })();
+  }
+
+  recordSyncSuccess(
+    groupId: string,
+    pollIntervalMs: number,
+    nowMs = Date.now(),
+  ): void {
+    this.assertOpen();
+    this.database
+      .prepare(
+        `UPDATE collaboration_remotes
+            SET last_sync_at_ms = ?, last_error = NULL, backoff_attempt = 0,
+                next_sync_at_ms = ?
+          WHERE group_id = ?`,
+      )
+      .run(nowMs, nowMs + pollIntervalMs, groupId);
+  }
+
+  recordSyncFailure(
+    groupId: string,
+    error: string,
+    baseDelayMs: number,
+    nowMs = Date.now(),
+  ): void {
+    this.assertOpen();
+    const group = this.getGroup(groupId);
+    if (!group) return;
+    const attempt = Math.min(group.backoffAttempt + 1, 8);
+    const delay = Math.min(baseDelayMs * 2 ** (attempt - 1), 15 * 60_000);
+    this.database
+      .prepare(
+        `UPDATE collaboration_remotes
+            SET last_error = ?, backoff_attempt = ?, next_sync_at_ms = ?
+          WHERE group_id = ?`,
+      )
+      .run(error, attempt, nowMs + delay, groupId);
+  }
+
+  listEvents(groupId: string, limit = 200): CollaborationEvent[] {
+    this.assertOpen();
+    return (
+      this.database
+        .prepare(
+          `SELECT event_json FROM collaboration_events_cache
+            WHERE group_id = ? ORDER BY sequence DESC LIMIT ?`,
+        )
+        .all(groupId, limit) as Array<{ event_json: string }>
+    ).map((row) => JSON.parse(row.event_json) as CollaborationEvent);
+  }
+
+  listIntegrityIncidents(groupId: string): Array<{
+    readonly incidentId: string;
+    readonly code: string;
+    readonly message: string;
+    readonly headCommit: string | null;
+    readonly createdAtMs: number;
+    readonly resolvedAtMs: number | null;
+  }> {
+    this.assertOpen();
+    return (
+      this.database
+        .prepare(
+          `SELECT * FROM collaboration_integrity_incidents
+            WHERE group_id = ? ORDER BY created_at_ms DESC`,
+        )
+        .all(groupId) as Record<string, unknown>[]
+    ).map((row) => ({
+      incidentId: String(row.incident_id),
+      code: String(row.code),
+      message: String(row.message),
+      headCommit: row.head_commit == null ? null : String(row.head_commit),
+      createdAtMs: Number(row.created_at_ms),
+      resolvedAtMs:
+        row.resolved_at_ms == null ? null : Number(row.resolved_at_ms),
+    }));
   }
 
   saveExecutorBinding(
