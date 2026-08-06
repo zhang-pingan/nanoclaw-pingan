@@ -836,6 +836,20 @@ export class CollaborationStore {
           JSON.stringify(turn),
           nowMs,
         );
+      this.database
+        .prepare(
+          `UPDATE collaboration_remotes
+              SET last_error = NULL, backoff_attempt = 0
+            WHERE group_id = ?`,
+        )
+        .run(input.groupId);
+      this.database
+        .prepare(
+          `UPDATE collaboration_integrity_incidents
+              SET resolved_at_ms = ?
+            WHERE group_id = ? AND resolved_at_ms IS NULL`,
+        )
+        .run(nowMs, input.groupId);
     })();
   }
 
@@ -848,9 +862,26 @@ export class CollaborationStore {
     message: string,
     headCommit?: string | null,
     nowMs = Date.now(),
+    baseDelayMs?: number,
   ): void {
     this.assertOpen();
     this.database.transaction(() => {
+      const remote = this.database
+        .prepare(
+          `SELECT poll_interval_ms, backoff_attempt
+             FROM collaboration_remotes WHERE group_id = ?`,
+        )
+        .get(groupId) as
+        | { poll_interval_ms: number; backoff_attempt: number }
+        | undefined;
+      if (!remote)
+        throw new Error(`Collaboration group was not found: ${groupId}`);
+      const attempt = Math.min(Number(remote.backoff_attempt) + 1, 8);
+      const baseDelay = Math.max(
+        250,
+        baseDelayMs ?? Number(remote.poll_interval_ms),
+      );
+      const delay = Math.min(baseDelay * 2 ** (attempt - 1), 15 * 60_000);
       this.database
         .prepare(
           `UPDATE collaboration_groups
@@ -860,18 +891,34 @@ export class CollaborationStore {
         .run(status, message, nowMs, groupId);
       this.database
         .prepare(
-          `INSERT INTO collaboration_integrity_incidents (
-             incident_id, group_id, code, message, head_commit, created_at_ms
-           ) VALUES (?, ?, ?, ?, ?, ?)`,
+          `UPDATE collaboration_remotes
+              SET last_error = ?, backoff_attempt = ?, next_sync_at_ms = ?
+            WHERE group_id = ?`,
         )
-        .run(
-          crypto.randomUUID(),
-          groupId,
-          status,
-          message,
-          headCommit ?? null,
-          nowMs,
-        );
+        .run(message, attempt, nowMs + delay, groupId);
+      const unresolved = this.database
+        .prepare(
+          `SELECT 1 FROM collaboration_integrity_incidents
+            WHERE group_id = ? AND code = ? AND message = ?
+              AND head_commit IS ? AND resolved_at_ms IS NULL
+            LIMIT 1`,
+        )
+        .get(groupId, status, message, headCommit ?? null);
+      if (!unresolved)
+        this.database
+          .prepare(
+            `INSERT INTO collaboration_integrity_incidents (
+               incident_id, group_id, code, message, head_commit, created_at_ms
+             ) VALUES (?, ?, ?, ?, ?, ?)`,
+          )
+          .run(
+            crypto.randomUUID(),
+            groupId,
+            status,
+            message,
+            headCommit ?? null,
+            nowMs,
+          );
     })();
   }
 

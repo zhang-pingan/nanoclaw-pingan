@@ -154,6 +154,7 @@ function publicGroup(group: CollaborationGroupRecord) {
     signingConfigured: Boolean(group.signingKeyPath),
     pollIntervalMs: group.pollIntervalMs,
     nextSyncAtMs: group.nextSyncAtMs,
+    backoffAttempt: group.backoffAttempt,
     lastSyncAtMs: group.lastSyncAtMs,
     lastError: redactDiagnostic(group.lastError, [group.remoteUrl]),
     headCommit: group.headCommit,

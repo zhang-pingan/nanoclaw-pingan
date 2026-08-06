@@ -337,6 +337,7 @@ export class CollaborationGroupService {
           message,
           group.headCommit,
           this.now(),
+          group.pollIntervalMs,
         );
       } else {
         this.store.recordSyncFailure(
