@@ -1160,7 +1160,7 @@ function renderCollaborationData() {
   ).flatMap((turn) => turn.artifactRefs || []);
   return `<section class="collaboration-section collaboration-two-column">
     <div>
-      <div class="collaboration-section-head"><h3>共享路径</h3><span>${paths.length}</span></div>
+      <div class="collaboration-section-head"><h3>共享路径</h3><button class="btn-ghost" type="button" data-collaboration-action="update-data">更新数据</button></div>
       <div class="collaboration-path-list">${paths.map((item) => `<code>${escapeHtml(item)}</code>`).join('') || '<div class="collaboration-section-empty">暂无 data/ 或 artifacts/ 文件</div>'}</div>
     </div>
     <div>
@@ -1874,6 +1874,34 @@ function openCollaborationBackupDialog(mode) {
   });
 }
 
+function openCollaborationDataDialog() {
+  const group = selectedCollaborationGroup();
+  if (!group) return;
+  openCollaborationDialog({
+    title: '更新共享数据',
+    submitText: '提交',
+    body: `${collaborationField('Data path', 'path', '', { placeholder: 'notes/status.txt' })}${collaborationField('Media type', 'mediaType', 'text/plain', { required: false })}${collaborationField('内容', 'content', '', { multiline: true, required: false })}`,
+    onSubmit: async (formData) => {
+      const data = await collaborationRequest(
+        `/groups/${encodeURIComponent(group.groupId)}/data`,
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            path: formData.get('path'),
+            mediaType: formData.get('mediaType'),
+            content: formData.get('content'),
+            expectedRevision: group.projection?.revision,
+          }),
+        },
+      );
+      collaborationState.detail.group = data.group;
+      closeCollaborationDialog();
+      await loadCollaborationDetail(group.groupId, { updateRoute: false });
+      showToast(`已更新 ${data.path}`);
+    },
+  });
+}
+
 async function syncSelectedCollaborationGroup() {
   const groupId = collaborationState.selectedGroupId;
   if (!groupId) return;
@@ -1927,6 +1955,8 @@ async function handleCollaborationContentAction(button) {
       });
     } else if (action === 'backup' || action === 'restore') {
       openCollaborationBackupDialog(action);
+    } else if (action === 'update-data') {
+      openCollaborationDataDialog();
     } else if (action === 'open-codex') {
       await openCollaborationCodexThread(
         button.getAttribute('data-thread-id') || '',

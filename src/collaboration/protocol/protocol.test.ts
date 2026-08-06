@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   authorizeCollaborationEvent,
@@ -301,6 +301,34 @@ describe('Collaboration protocol', () => {
     ]);
   });
 
+  it('uses Unicode code-unit key order regardless of the host locale', () => {
+    const projection = replayCollaborationEvents(readyEvents(), definition());
+    projection.members = Object.fromEntries(
+      ['\uE000', '\u{10000}', '\u00E4', 'a', 'Z'].map((key) => [
+        key,
+        projection.members.alice!,
+      ]),
+    );
+    const expectedOrder = ['Z', 'a', '\u00E4', '\u{10000}', '\uE000'];
+
+    expect(
+      Object.keys(JSON.parse(deterministicProjectionJson(projection)).members),
+    ).toEqual(expectedOrder);
+
+    const localeCompare = vi
+      .spyOn(String.prototype, 'localeCompare')
+      .mockImplementation(() => -1);
+    try {
+      expect(
+        Object.keys(
+          JSON.parse(deterministicProjectionJson(projection)).members,
+        ),
+      ).toEqual(expectedOrder);
+    } finally {
+      localeCompare.mockRestore();
+    }
+  });
+
   it('supports development -> review -> development with unique turns', () => {
     let projection = replayCollaborationEvents(readyEvents(), definition());
     projection = apply(
@@ -563,6 +591,74 @@ describe('Collaboration protocol', () => {
         },
       }),
     );
+    const fencedData = event({
+      type: 'data_updated',
+      id: 'evt_data_fenced',
+      sequence: 7,
+      revision: 6,
+      payload: {
+        path: 'data/turn/status.txt',
+        encoding: 'utf-8',
+        content_sha256: `sha256:${'d'.repeat(64)}`,
+        size_bytes: 0,
+        turn_id: 'turn_recover',
+        attempt: 1,
+        fencing_token: firstFence,
+      },
+    });
+    expect(() =>
+      authorizeCollaborationEvent(fencedData, projection, {
+        principalId: 'alice',
+        signingKeyRef: 'ssh-ed25519:SHA256:alice',
+      }),
+    ).not.toThrow();
+    expect(() =>
+      authorizeCollaborationEvent(
+        {
+          ...fencedData,
+          event_id: 'evt_data_hijack',
+          actor: { principal_id: 'bob', agent_id: 'agent_bob' },
+        },
+        projection,
+        {
+          principalId: 'bob',
+          signingKeyRef: 'ssh-ed25519:SHA256:bob',
+        },
+      ),
+    ).toThrow(/winning claimant/);
+    const samePrincipalProjection = {
+      ...projection,
+      members: {
+        ...projection.members,
+        alice: [
+          ...(projection.members.alice ?? []),
+          member(
+            'alice',
+            'agent_alice_second',
+            'evt_agent_second',
+            'coding_task',
+          ),
+        ],
+      },
+    };
+    expect(() =>
+      authorizeCollaborationEvent(
+        {
+          ...fencedData,
+          event_id: 'evt_data_agent_hijack',
+          actor: {
+            principal_id: 'alice',
+            agent_id: 'agent_alice_second',
+          },
+        },
+        samePrincipalProjection,
+        {
+          principalId: 'alice',
+          signingKeyRef: 'ssh-ed25519:SHA256:alice',
+        },
+      ),
+    ).toThrow(/winning claimant/);
+    expect(apply(projection, fencedData).revision).toBe(7);
     projection = apply(
       projection,
       event({
@@ -607,6 +703,26 @@ describe('Collaboration protocol', () => {
             fencing_token: firstFence,
             result_hash: `sha256:${'b'.repeat(64)}`,
             artifact_refs: [],
+          },
+        }),
+      ),
+    ).toThrow(/attempt is stale/);
+    expect(() =>
+      apply(
+        projection,
+        event({
+          type: 'data_updated',
+          id: 'evt_data_stale_fence',
+          sequence: 9,
+          revision: 8,
+          payload: {
+            path: 'data/turn/status.txt',
+            encoding: 'utf-8',
+            content_sha256: `sha256:${'d'.repeat(64)}`,
+            size_bytes: 0,
+            turn_id: 'turn_recover',
+            attempt: 1,
+            fencing_token: firstFence,
           },
         }),
       ),

@@ -21,6 +21,7 @@ import type {
   MachineDefinition,
   RoleDefinition,
 } from './protocol/index.js';
+import { CollaborationProtocolError as ProtocolError } from './protocol/index.js';
 import {
   CollaborationScheduler,
   deterministicCollaborationPollDelay,
@@ -310,6 +311,81 @@ describe('CollaborationScheduler', () => {
       selected.store.close();
     }
   }, 20_000);
+
+  it('backs off a quarantined remote and recovers after a manual sync', async () => {
+    const selected = await fixture(root());
+    let clock = nowMs;
+    (
+      selected.groups as unknown as {
+        now: () => number;
+      }
+    ).now = () => clock;
+    const registry = new ActionExecutorRegistry();
+    registry.register(selected.executor);
+    const scheduler = new CollaborationScheduler(
+      selected.store,
+      selected.groups,
+      registry,
+      {
+        ownerId: 'quarantine-test',
+        now: () => clock,
+      },
+    );
+    const transport = (
+      selected.groups as unknown as {
+        transport: CollaborationGitTransport;
+      }
+    ).transport;
+    const originalFetch = transport.fetchAndValidate.bind(transport);
+    const fetch = vi
+      .spyOn(transport, 'fetchAndValidate')
+      .mockRejectedValue(
+        new ProtocolError(
+          'PROTOCOL_QUARANTINED',
+          'remote contains an invalid signed event',
+        ),
+      );
+    try {
+      await scheduler.tickOnce();
+      const quarantined = selected.store.getGroup('ag_scheduler')!;
+      expect(quarantined).toMatchObject({
+        protocolStatus: 'PROTOCOL_QUARANTINED',
+        backoffAttempt: 1,
+        nextSyncAtMs: clock + 1_000,
+      });
+      expect(
+        selected.store.listIntegrityIncidents('ag_scheduler'),
+      ).toHaveLength(1);
+
+      await scheduler.tickOnce();
+      expect(fetch).toHaveBeenCalledTimes(1);
+
+      clock = quarantined.nextSyncAtMs;
+      await scheduler.tickOnce();
+      expect(fetch).toHaveBeenCalledTimes(2);
+      expect(selected.store.getGroup('ag_scheduler')).toMatchObject({
+        backoffAttempt: 2,
+        nextSyncAtMs: clock + 2_000,
+      });
+      expect(
+        selected.store.listIntegrityIncidents('ag_scheduler'),
+      ).toHaveLength(1);
+
+      fetch.mockImplementation(originalFetch);
+      await scheduler.syncNow('ag_scheduler');
+      expect(selected.store.getGroup('ag_scheduler')).toMatchObject({
+        protocolStatus: 'OK',
+        protocolError: null,
+        backoffAttempt: 0,
+        lastError: null,
+      });
+      expect(selected.store.listIntegrityIncidents('ag_scheduler')).toEqual([
+        expect.objectContaining({ resolvedAtMs: clock }),
+      ]);
+    } finally {
+      selected.store.close();
+    }
+  }, 30_000);
 
   it('completes an action through signed Git without publishing provider metadata', async () => {
     const selected = await fixture(root());

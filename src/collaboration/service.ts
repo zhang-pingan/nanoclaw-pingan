@@ -7,7 +7,9 @@ import {
   CollaborationGitConflictError,
   CollaborationGitTransport,
   collaborationRepositoryCachePath,
+  normalizeCollaborationDataPath,
   readPromptFromValidatedCacheAsync,
+  type CollaborationMaterializedFile,
 } from './git-transport.js';
 import {
   CollaborationIdentityService,
@@ -28,6 +30,8 @@ import {
   type CollaborationEventType,
   type CollaborationProjection,
   type CollaborationRepositoryDefinition,
+  type CollaborationValidationCheckpoint,
+  type CollaborationValidationMetrics,
   type MachineDefinition,
   type MemberDefinition,
   type RoleDefinition,
@@ -79,6 +83,21 @@ export interface CollaborationRemoteSummary {
     readonly min: number;
     readonly max: number;
   }[];
+}
+
+export const MAX_COLLABORATION_DATA_BYTES = 1024 * 1024;
+
+export interface UpdateCollaborationDataInput {
+  readonly groupId: string;
+  readonly path: string;
+  readonly content: string;
+  readonly expectedRevision: number;
+  readonly mediaType?: string | null;
+  readonly turn?: {
+    readonly turnId: string;
+    readonly attempt: number;
+    readonly fencingToken: string;
+  } | null;
 }
 
 export class CollaborationGroupService {
@@ -311,6 +330,10 @@ export class CollaborationGroupService {
     return this.histories.get(groupId) ?? null;
   }
 
+  getValidationMetrics(groupId: string): CollaborationValidationMetrics | null {
+    return this.histories.get(groupId)?.validation ?? null;
+  }
+
   async sync(groupId: string): Promise<CollaborationGroupRecord> {
     await this.syncHistory(groupId);
     return this.requireGroup(groupId);
@@ -323,6 +346,7 @@ export class CollaborationGroupService {
         remoteUrl: group.remoteUrl,
         repositoryPath: group.repositoryPath,
         previousHead: group.headCommit,
+        checkpoint: this.checkpointFor(group),
       });
       this.persistHistory(history);
       this.store.recordSyncSuccess(groupId, group.pollIntervalMs, this.now());
@@ -338,6 +362,7 @@ export class CollaborationGroupService {
           message,
           group.headCommit,
           this.now(),
+          group.pollIntervalMs,
         );
       } else {
         this.store.recordSyncFailure(
@@ -359,6 +384,7 @@ export class CollaborationGroupService {
       remoteUrl: group.remoteUrl,
       repositoryPath: group.repositoryPath,
       previousHead: group.headCommit,
+      checkpoint: this.checkpointFor(group),
     });
     this.persistHistory(history);
     const active = history.projection.activeTurnId
@@ -388,6 +414,7 @@ export class CollaborationGroupService {
       remoteUrl: group.remoteUrl,
       repositoryPath: group.repositoryPath,
       previousHead: group.headCommit,
+      checkpoint: this.checkpointFor(group),
     });
     const member = findCollaborationMember(
       history.projection,
@@ -407,17 +434,28 @@ export class CollaborationGroupService {
     return this.requireGroup(groupId);
   }
 
-  async start(groupId: string): Promise<CollaborationGroupRecord> {
+  async start(
+    groupId: string,
+    expectedRevision?: number,
+  ): Promise<CollaborationGroupRecord> {
     const group = this.requireCreator(groupId);
-    await this.append(groupId, await this.identityFor(group), () => ({
-      type: 'group_started',
-      payload: {},
-    }));
+    await this.append(
+      groupId,
+      await this.identityFor(group),
+      () => ({
+        type: 'group_started',
+        payload: {},
+      }),
+      expectedRevision,
+    );
     await this.ensureTurn(groupId);
     return this.requireGroup(groupId);
   }
 
-  async pause(groupId: string): Promise<CollaborationGroupRecord> {
+  async pause(
+    groupId: string,
+    expectedRevision?: number,
+  ): Promise<CollaborationGroupRecord> {
     const group = this.requireCreator(groupId);
     let history = await this.append(
       groupId,
@@ -426,6 +464,7 @@ export class CollaborationGroupService {
         type: 'group_pause_requested',
         payload: {},
       }),
+      expectedRevision,
     );
     const active = history.projection.activeTurnId
       ? history.projection.turns[history.projection.activeTurnId]
@@ -443,12 +482,20 @@ export class CollaborationGroupService {
     return this.requireGroup(groupId);
   }
 
-  async resume(groupId: string): Promise<CollaborationGroupRecord> {
+  async resume(
+    groupId: string,
+    expectedRevision?: number,
+  ): Promise<CollaborationGroupRecord> {
     const group = this.requireCreator(groupId);
-    await this.append(groupId, await this.identityFor(group), () => ({
-      type: 'group_resumed',
-      payload: {},
-    }));
+    await this.append(
+      groupId,
+      await this.identityFor(group),
+      () => ({
+        type: 'group_resumed',
+        payload: {},
+      }),
+      expectedRevision,
+    );
     await this.ensureTurn(groupId);
     return this.requireGroup(groupId);
   }
@@ -456,6 +503,7 @@ export class CollaborationGroupService {
   async close(
     groupId: string,
     reason: string,
+    expectedRevision?: number,
   ): Promise<CollaborationGroupRecord> {
     const group = this.requireCreator(groupId);
     let history = await this.append(
@@ -465,6 +513,7 @@ export class CollaborationGroupService {
         type: 'group_close_requested',
         payload: { reason },
       }),
+      expectedRevision,
     );
     const active = history.projection.activeTurnId
       ? history.projection.turns[history.projection.activeTurnId]
@@ -485,12 +534,14 @@ export class CollaborationGroupService {
   async ensureTurn(
     groupId: string,
     transitionId?: string,
+    expectedRevision?: number,
   ): Promise<ValidatedCollaborationHistory | null> {
     const group = this.requireCreator(groupId);
     const history = await this.transport.fetchAndValidate({
       remoteUrl: group.remoteUrl,
       repositoryPath: group.repositoryPath,
       previousHead: group.headCommit,
+      checkpoint: this.checkpointFor(group),
     });
     this.persistHistory(history);
     if (history.projection.lifecycle !== 'RUNNING') return null;
@@ -527,24 +578,29 @@ export class CollaborationGroupService {
         businessState: history.projection.businessState,
       }),
     );
-    return this.append(groupId, await this.identityFor(group), () => ({
-      type: 'turn_created',
-      payload: {
-        turn_id: turnId,
-        transition_id: transition.id,
-        action_id: action.action_id,
-        role: transition.actor_role,
-        attempt: 1,
-        input_hash: inputHash,
-        idempotency_key: collaborationIdempotencyKey({
-          groupId,
-          epoch: history.projection.epoch,
-          turnId,
+    return this.append(
+      groupId,
+      await this.identityFor(group),
+      () => ({
+        type: 'turn_created',
+        payload: {
+          turn_id: turnId,
+          transition_id: transition.id,
+          action_id: action.action_id,
+          role: transition.actor_role,
           attempt: 1,
-          inputHash,
-        }),
-      },
-    }));
+          input_hash: inputHash,
+          idempotency_key: collaborationIdempotencyKey({
+            groupId,
+            epoch: history.projection.epoch,
+            turnId,
+            attempt: 1,
+            inputHash,
+          }),
+        },
+      }),
+      expectedRevision,
+    );
   }
 
   async claimCurrentTurn(groupId: string): Promise<{
@@ -589,6 +645,7 @@ export class CollaborationGroupService {
         remoteUrl: groupAfterRace.remoteUrl,
         repositoryPath: groupAfterRace.repositoryPath,
         previousHead: groupAfterRace.headCommit,
+        checkpoint: this.checkpointFor(groupAfterRace),
       });
       this.persistHistory(history);
       const turnId = history.projection.activeTurnId;
@@ -619,27 +676,82 @@ export class CollaborationGroupService {
     }));
   }
 
+  async updateData(input: UpdateCollaborationDataInput): Promise<{
+    readonly group: CollaborationGroupRecord;
+    readonly path: string;
+    readonly contentSha256: string;
+    readonly sizeBytes: number;
+  }> {
+    const group = this.requireGroup(input.groupId);
+    const repositoryPath = normalizeCollaborationDataPath(input.path);
+    const sizeBytes = Buffer.byteLength(input.content, 'utf8');
+    if (sizeBytes > MAX_COLLABORATION_DATA_BYTES)
+      throw new Error(
+        `Collaboration data is too large: ${String(sizeBytes)} bytes exceeds ${String(MAX_COLLABORATION_DATA_BYTES)}`,
+      );
+    const contentSha256 = hash(input.content);
+    const materializedFile: CollaborationMaterializedFile = {
+      path: repositoryPath,
+      contents: input.content,
+    };
+    await this.append(
+      input.groupId,
+      await this.identityFor(group),
+      () => ({
+        type: 'data_updated',
+        payload: {
+          path: repositoryPath,
+          encoding: 'utf-8',
+          content_sha256: contentSha256,
+          size_bytes: sizeBytes,
+          ...(input.mediaType ? { media_type: input.mediaType } : {}),
+          ...(input.turn
+            ? {
+                turn_id: input.turn.turnId,
+                attempt: input.turn.attempt,
+                fencing_token: input.turn.fencingToken,
+              }
+            : {}),
+        },
+      }),
+      input.expectedRevision,
+      [materializedFile],
+    );
+    return {
+      group: this.requireGroup(input.groupId),
+      path: repositoryPath,
+      contentSha256,
+      sizeBytes,
+    };
+  }
+
   async recoverTurn(
     groupId: string,
     reason: string,
+    expectedRevision?: number,
   ): Promise<CollaborationGroupRecord> {
     const group = this.requireCreator(groupId);
     const identity = await this.identityFor(group);
-    let history = await this.append(groupId, identity, (current) => {
-      const turnId = current.projection.activeTurnId;
-      const turn = turnId ? current.projection.turns[turnId] : null;
-      if (!turn || !turn.fencingToken)
-        throw new Error('No claimed turn can be recovered');
-      return {
-        type: 'stalled_turn_recovery_requested',
-        payload: {
-          turn_id: turn.turnId,
-          attempt: turn.attempt,
-          fencing_token: turn.fencingToken,
-          reason,
-        },
-      };
-    });
+    let history = await this.append(
+      groupId,
+      identity,
+      (current) => {
+        const turnId = current.projection.activeTurnId;
+        const turn = turnId ? current.projection.turns[turnId] : null;
+        if (!turn || !turn.fencingToken)
+          throw new Error('No claimed turn can be recovered');
+        return {
+          type: 'stalled_turn_recovery_requested',
+          payload: {
+            turn_id: turn.turnId,
+            attempt: turn.attempt,
+            fencing_token: turn.fencingToken,
+            reason,
+          },
+        };
+      },
+      expectedRevision,
+    );
     history = await this.append(groupId, identity, (current) => {
       const turnId = current.projection.activeTurnId;
       const turn = turnId ? current.projection.turns[turnId] : null;
@@ -666,14 +778,25 @@ export class CollaborationGroupService {
       readonly payload: Record<string, unknown>;
       readonly eventId?: string;
     },
+    expectedRevision?: number,
+    materializedFiles: readonly CollaborationMaterializedFile[] = [],
   ): Promise<ValidatedCollaborationHistory> {
     const group = this.requireGroup(groupId);
     const history = await this.transport.appendEvent({
       remoteUrl: group.remoteUrl,
       repositoryPath: group.repositoryPath,
       previousHead: group.headCommit,
+      checkpoint: this.checkpointFor(group),
       identity,
+      materializedFiles,
       buildEvent: (current) => {
+        if (
+          expectedRevision !== undefined &&
+          expectedRevision !== current.projection.revision
+        )
+          throw new Error(
+            `Expected revision ${String(expectedRevision)} does not match ${String(current.projection.revision)}`,
+          );
         const next = build(current);
         return this.event({
           groupId,
@@ -735,6 +858,14 @@ export class CollaborationGroupService {
         'Local collaboration signing key no longer matches its binding',
       );
     return identity;
+  }
+
+  private checkpointFor(
+    group: CollaborationGroupRecord,
+  ): CollaborationValidationCheckpoint | null {
+    return group.headCommit && group.projection
+      ? { head: group.headCommit, projection: group.projection }
+      : null;
   }
 
   private persistHistory(history: ValidatedCollaborationHistory): void {

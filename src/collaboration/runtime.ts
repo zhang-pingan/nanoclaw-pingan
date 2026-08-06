@@ -53,6 +53,7 @@ export class CollaborationRuntime {
   private schedulerValue: CollaborationScheduler | null = null;
   private registryValue: ActionExecutorRegistry | null = null;
   private errorValue: string | null = null;
+  private stopPromise: Promise<void> | null = null;
 
   constructor(private readonly options: CollaborationRuntimeOptions) {
     this.databasePath = path.join(options.storeDir, 'collaboration.db');
@@ -125,13 +126,26 @@ export class CollaborationRuntime {
     }
   }
 
-  stop(): void {
-    this.schedulerValue?.stop();
-    this.storeValue?.close();
-    this.storeValue = null;
-    this.groupsValue = null;
-    this.schedulerValue = null;
-    this.registryValue = null;
+  async stop(): Promise<void> {
+    if (this.stopPromise) return this.stopPromise;
+    const store = this.storeValue;
+    if (!store) return;
+    const scheduler = this.schedulerValue;
+    const stopping = (async () => {
+      await scheduler?.stopAndDrain();
+      store.close();
+      if (this.storeValue !== store) return;
+      this.storeValue = null;
+      this.groupsValue = null;
+      this.schedulerValue = null;
+      this.registryValue = null;
+    })();
+    this.stopPromise = stopping;
+    try {
+      await stopping;
+    } finally {
+      if (this.stopPromise === stopping) this.stopPromise = null;
+    }
   }
 
   status(): CollaborationRuntimeStatus {
@@ -174,8 +188,7 @@ export class CollaborationRuntime {
     backupDirectory: string,
   ): Promise<CollaborationBackupManifest> {
     void this.store;
-    await this.scheduler.stopAndDrain();
-    this.stop();
+    await this.stop();
     try {
       return createCollaborationBackup({
         databasePath: this.databasePath,
@@ -194,8 +207,7 @@ export class CollaborationRuntime {
     readonly rollbackDirectory: string | null;
   }> {
     void this.store;
-    await this.scheduler.stopAndDrain();
-    this.stop();
+    await this.stop();
     let rollbackDirectory: string | null = null;
     try {
       const result = restoreCollaborationBackup({

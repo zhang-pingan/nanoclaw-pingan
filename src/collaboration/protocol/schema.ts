@@ -25,6 +25,58 @@ const relativeRepositoryPath = z
     'must be a normalized repository-relative path',
   );
 
+export const collaborationDataPathSchema = z
+  .string()
+  .min('data/x'.length)
+  .max(512)
+  .refine((value) => value.startsWith('data/'), 'must be below data/')
+  .refine((value) => !value.includes('\\'), 'must use forward slashes')
+  .refine(
+    (value) => !/[\u0000-\u001f\u007f]/u.test(value),
+    'must not contain control characters',
+  )
+  .refine(
+    (value) =>
+      value
+        .split('/')
+        .every(
+          (segment) =>
+            segment !== '' &&
+            segment !== '.' &&
+            segment !== '..' &&
+            segment.toLowerCase() !== '.git',
+        ),
+    'must be a normalized safe data path',
+  );
+
+export const dataUpdatePayloadSchema = z
+  .object({
+    path: collaborationDataPathSchema,
+    encoding: z.literal('utf-8'),
+    content_sha256: sha256,
+    size_bytes: z.number().int().nonnegative(),
+    media_type: z.string().min(1).max(160).optional(),
+    turn_id: identifier.optional(),
+    attempt: z.number().int().positive().optional(),
+    fencing_token: sha256.optional(),
+  })
+  .strict()
+  .superRefine((payload, context) => {
+    const fenceFields = [
+      payload.turn_id,
+      payload.attempt,
+      payload.fencing_token,
+    ];
+    const populated = fenceFields.filter((value) => value !== undefined).length;
+    if (populated !== 0 && populated !== fenceFields.length)
+      context.addIssue({
+        code: 'custom',
+        message:
+          'turn_id, attempt, and fencing_token must be provided together',
+      });
+  });
+export type DataUpdatePayload = z.infer<typeof dataUpdatePayloadSchema>;
+
 export const filesystemAccessSchema = z.enum(['read_only', 'workspace_write']);
 export type FilesystemAccess = z.infer<typeof filesystemAccessSchema>;
 

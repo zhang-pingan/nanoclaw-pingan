@@ -2,8 +2,10 @@ import crypto from 'node:crypto';
 
 import { z } from 'zod';
 
+import { canonicalJsonStringify } from './canonical-json.js';
 import {
   collaborationEventSchema,
+  dataUpdatePayloadSchema,
   memberDefinitionSchema,
   roleClaimSchema,
   sha256,
@@ -672,7 +674,18 @@ export function reduceCollaborationEvent(
       turn.recoveryReason = null;
       break;
     }
-    case 'data_updated':
+    case 'data_updated': {
+      const payload = dataUpdatePayloadSchema.parse(event.payload);
+      if (payload.turn_id) {
+        const turn = activeTurn(next, payload.turn_id);
+        assertFence(turn, {
+          turn_id: payload.turn_id,
+          attempt: payload.attempt!,
+          fencing_token: payload.fencing_token!,
+        });
+      }
+      break;
+    }
     case 'artifact_published':
       break;
     case 'protocol_recovery': {
@@ -714,15 +727,5 @@ export function replayCollaborationEvents(
 export function deterministicProjectionJson(
   projection: CollaborationProjection,
 ): string {
-  const sort = (value: unknown): unknown => {
-    if (Array.isArray(value)) return value.map(sort);
-    if (value && typeof value === 'object')
-      return Object.fromEntries(
-        Object.entries(value as Record<string, unknown>)
-          .sort(([left], [right]) => left.localeCompare(right))
-          .map(([key, child]) => [key, sort(child)]),
-      );
-    return value;
-  };
-  return `${JSON.stringify(sort(projection), null, 2)}\n`;
+  return `${canonicalJsonStringify(projection, 2)}\n`;
 }

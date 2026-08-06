@@ -1,4 +1,8 @@
-import { memberDefinitionSchema, type CollaborationEvent } from './schema.js';
+import {
+  dataUpdatePayloadSchema,
+  memberDefinitionSchema,
+  type CollaborationEvent,
+} from './schema.js';
 import {
   findCollaborationMember,
   type CollaborationProjection,
@@ -124,11 +128,21 @@ export function authorizeCollaborationEvent(
     return;
   }
 
-  if (
-    event.event_type === 'data_updated' ||
-    event.event_type === 'artifact_published'
-  )
+  if (event.event_type === 'data_updated') {
+    const payload = dataUpdatePayloadSchema.parse(event.payload);
+    if (payload.turn_id) {
+      const turn = projection.turns[payload.turn_id];
+      if (
+        !turn ||
+        turn.claimantPrincipalId !== event.actor.principal_id ||
+        turn.claimantAgentId !== event.actor.agent_id
+      )
+        unauthorized('Only the winning claimant may update turn-scoped data');
+    }
     return;
+  }
+
+  if (event.event_type === 'artifact_published') return;
 
   unauthorized(`No authorization rule exists for ${event.event_type}`);
 }

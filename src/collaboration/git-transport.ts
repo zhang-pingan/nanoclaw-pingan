@@ -3,6 +3,7 @@ import crypto from 'node:crypto';
 import {
   mkdirSync,
   existsSync,
+  lstatSync,
   rmSync,
   unlinkSync,
   writeFileSync,
@@ -18,13 +19,16 @@ import {
   COLLABORATION_CONTROL_BRANCH,
   CollaborationProtocolError,
   authorizeCollaborationEvent,
+  collaborationDataPathSchema,
   deterministicProjectionJson,
+  dataUpdatePayloadSchema,
   reduceCollaborationEvent,
   validateCollaborationGitHistory,
   type ActionDefinition,
   type CollaborationEvent,
   type CollaborationProjection,
   type CollaborationRepositoryDefinition,
+  type CollaborationValidationCheckpoint,
   type MachineDefinition,
   type MemberDefinition,
   type RoleClaim,
@@ -90,9 +94,24 @@ function writeRepositoryFile(
   contents: string,
 ): void {
   const target = path.resolve(checkoutPath, repositoryFile);
-  const root = `${path.resolve(checkoutPath)}${path.sep}`;
+  const checkoutRoot = path.resolve(checkoutPath);
+  const root = `${checkoutRoot}${path.sep}`;
   if (!target.startsWith(root))
     throw new Error(`Repository path escapes checkout: ${repositoryFile}`);
+  const relativeSegments = path.relative(checkoutRoot, target).split(path.sep);
+  let candidate = checkoutRoot;
+  for (const segment of relativeSegments) {
+    candidate = path.join(candidate, segment);
+    try {
+      if (lstatSync(candidate).isSymbolicLink())
+        throw new Error(
+          `Repository path traverses a symbolic link: ${repositoryFile}`,
+        );
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') break;
+      throw error;
+    }
+  }
   mkdirSync(path.dirname(target), { recursive: true });
   writeFileSync(target, contents);
 }
@@ -105,6 +124,7 @@ function materializeEvent(
   checkoutPath: string,
   event: CollaborationEvent,
   projection: CollaborationProjection,
+  materializedFiles: readonly CollaborationMaterializedFile[] = [],
 ): void {
   writeRepositoryFile(
     checkoutPath,
@@ -154,6 +174,8 @@ function materializeEvent(
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
     }
   }
+  for (const file of materializedFiles)
+    writeRepositoryFile(checkoutPath, file.path, file.contents);
 }
 
 export interface CreateCollaborationRepositoryInput {
@@ -170,10 +192,41 @@ export interface AppendCollaborationEventInput {
   readonly remoteUrl: string;
   readonly repositoryPath: string;
   readonly previousHead: string | null;
+  readonly checkpoint?: CollaborationValidationCheckpoint | null;
   readonly identity: CollaborationSigningIdentity;
+  readonly materializedFiles?: readonly CollaborationMaterializedFile[];
   readonly buildEvent: (
     history: ValidatedCollaborationHistory,
   ) => CollaborationEvent;
+}
+
+export interface CollaborationMaterializedFile {
+  readonly path: string;
+  readonly contents: string;
+}
+
+function dataFileHash(contents: string): string {
+  return `sha256:${crypto.createHash('sha256').update(contents, 'utf8').digest('hex')}`;
+}
+
+function validateMaterializedFiles(
+  event: CollaborationEvent,
+  files: readonly CollaborationMaterializedFile[],
+): void {
+  if (event.event_type !== 'data_updated') {
+    if (files.length > 0)
+      throw new Error(`${event.event_type} cannot materialize shared data`);
+    return;
+  }
+  const payload = dataUpdatePayloadSchema.parse(event.payload);
+  if (files.length !== 1 || files[0]?.path !== payload.path)
+    throw new Error('data_updated must materialize exactly its declared path');
+  const contents = files[0].contents;
+  if (
+    Buffer.byteLength(contents, 'utf8') !== payload.size_bytes ||
+    dataFileHash(contents) !== payload.content_sha256
+  )
+    throw new Error('data_updated content does not match its size and hash');
 }
 
 export class CollaborationGitTransport {
@@ -270,6 +323,7 @@ export class CollaborationGitTransport {
     readonly remoteUrl: string;
     readonly repositoryPath: string;
     readonly previousHead: string | null;
+    readonly checkpoint?: CollaborationValidationCheckpoint | null;
   }): Promise<ValidatedCollaborationHistory> {
     await this.ensureBareCache(input.remoteUrl, input.repositoryPath);
     const fetch = await execute(
@@ -296,6 +350,7 @@ export class CollaborationGitTransport {
       repositoryPath: input.repositoryPath,
       head,
       previousHead: input.previousHead,
+      checkpoint: input.checkpoint,
     });
   }
 
@@ -304,6 +359,8 @@ export class CollaborationGitTransport {
   ): Promise<ValidatedCollaborationHistory> {
     const history = await this.fetchAndValidate(input);
     const event = input.buildEvent(history);
+    const materializedFiles = input.materializedFiles ?? [];
+    validateMaterializedFiles(event, materializedFiles);
     authorizeCollaborationEvent(event, history.projection, {
       principalId: input.identity.principalId,
       signingKeyRef: input.identity.keyRef,
@@ -336,7 +393,7 @@ export class CollaborationGitTransport {
         'FETCH_HEAD',
       ]);
       await this.configureSigner(checkoutPath, input.identity);
-      materializeEvent(checkoutPath, event, projection);
+      materializeEvent(checkoutPath, event, projection, materializedFiles);
       await this.commit(checkoutPath, event);
       const push = await execute(
         checkoutPath,
@@ -358,6 +415,10 @@ export class CollaborationGitTransport {
       remoteUrl: input.remoteUrl,
       repositoryPath: input.repositoryPath,
       previousHead: history.head,
+      checkpoint: {
+        head: history.head,
+        projection: history.projection,
+      },
     });
   }
 
@@ -541,6 +602,14 @@ export function collaborationRepositoryCachePath(
 ): string {
   const digest = crypto.createHash('sha256').update(remoteUrl).digest('hex');
   return path.join(repositoryRoot, `${digest}.git`);
+}
+
+export function normalizeCollaborationDataPath(input: string): string {
+  const candidate = input.startsWith('data/') ? input : `data/${input}`;
+  const parsed = collaborationDataPathSchema.safeParse(candidate);
+  if (!parsed.success)
+    throw new Error(`Unsafe collaboration data path: ${input}`);
+  return parsed.data;
 }
 
 export async function readPromptFromValidatedCacheAsync(input: {

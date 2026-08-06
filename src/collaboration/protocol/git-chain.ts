@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import crypto from 'node:crypto';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
@@ -19,6 +20,7 @@ import {
 import {
   actionDefinitionSchema,
   collaborationEventSchema,
+  dataUpdatePayloadSchema,
   groupDefinitionSchema,
   machineDefinitionSchema,
   memberDefinitionSchema,
@@ -244,10 +246,52 @@ function materializedPathAllowed(
   )
     return repositoryFile.startsWith('groups/claims/');
   if (event.event_type === 'data_updated')
-    return repositoryFile.startsWith('data/');
+    return repositoryFile === dataUpdatePayloadSchema.parse(event.payload).path;
   if (event.event_type === 'artifact_published')
     return repositoryFile.startsWith('artifacts/');
   return false;
+}
+
+async function validateDataUpdateMaterialization(
+  repositoryPath: string,
+  commit: string,
+  event: CollaborationEvent,
+  eventFile: string,
+  changedFiles: readonly string[],
+): Promise<void> {
+  if (event.event_type !== 'data_updated') return;
+  const payload = dataUpdatePayloadSchema.parse(event.payload);
+  const materializedFiles = changedFiles.filter(
+    (file) => file !== eventFile && file !== 'projection/state.json',
+  );
+  if (materializedFiles.length !== 1 || materializedFiles[0] !== payload.path)
+    throw new CollaborationProtocolError(
+      'PROTOCOL_QUARANTINED',
+      `data_updated must modify exactly ${payload.path}`,
+    );
+  const treeEntry = await git(repositoryPath, [
+    'ls-tree',
+    commit,
+    '--',
+    payload.path,
+  ]);
+  const mode = /^(\d{6}) blob [0-9a-f]+\t/u.exec(treeEntry.stdout)?.[1];
+  if (mode !== '100644' && mode !== '100755')
+    throw new CollaborationProtocolError(
+      'PROTOCOL_QUARANTINED',
+      `Materialized data must be a regular file: ${payload.path}`,
+    );
+  const contents = await showFile(repositoryPath, commit, payload.path);
+  const size = Buffer.byteLength(contents, 'utf8');
+  const digest = `sha256:${crypto
+    .createHash('sha256')
+    .update(contents, 'utf8')
+    .digest('hex')}`;
+  if (size !== payload.size_bytes || digest !== payload.content_sha256)
+    throw new CollaborationProtocolError(
+      'PROTOCOL_QUARANTINED',
+      `Materialized data does not match event hash and size: ${payload.path}`,
+    );
 }
 
 async function eventFileForCommit(
@@ -298,12 +342,73 @@ export interface ValidatedCollaborationHistory {
   readonly events: readonly CollaborationEvent[];
   readonly definition: CollaborationRepositoryDefinition;
   readonly projection: CollaborationProjection;
+  readonly validation: CollaborationValidationMetrics;
+}
+
+export interface CollaborationValidationCheckpoint {
+  readonly head: string;
+  readonly projection: CollaborationProjection;
+}
+
+export interface CollaborationValidationMetrics {
+  readonly mode: 'full' | 'incremental';
+  readonly validatedCommitCount: number;
+  readonly totalSequence: number;
+  readonly checkpointHead: string | null;
+}
+
+function assertLinearHistory(
+  historyRows: readonly string[],
+  precedingHead: string | null,
+): string[] {
+  const commits = historyRows.map((row) => row.split(' ')[0]!);
+  for (const [index, row] of historyRows.entries()) {
+    const [commit, ...parents] = row.split(' ');
+    const expectedParent = index === 0 ? precedingHead : commits[index - 1]!;
+    const expectedParents = expectedParent ? [expectedParent] : [];
+    if (
+      parents.length !== expectedParents.length ||
+      parents.some(
+        (parent, parentIndex) => parent !== expectedParents[parentIndex],
+      )
+    )
+      throw new CollaborationProtocolError(
+        'PROTOCOL_QUARANTINED',
+        `Collaboration history must be a linear single-parent chain at ${commit}`,
+      );
+  }
+  return commits;
+}
+
+async function checkpointMatchesMaterializedProjection(
+  repositoryPath: string,
+  checkpoint: CollaborationValidationCheckpoint,
+): Promise<boolean> {
+  if (checkpoint.projection.integrityStatus !== 'OK') return false;
+  const projectionFile = await git(
+    repositoryPath,
+    ['cat-file', '-e', `${checkpoint.head}:projection/state.json`],
+    { allowFailure: true },
+  );
+  if (projectionFile.exitCode !== 0) return false;
+  try {
+    const materialized = JSON.parse(
+      await showFile(repositoryPath, checkpoint.head, 'projection/state.json'),
+    ) as unknown;
+    return (
+      `${JSON.stringify(materialized, null, 2)}\n` ===
+      deterministicProjectionJson(checkpoint.projection)
+    );
+  } catch {
+    return false;
+  }
 }
 
 export async function validateCollaborationGitHistory(input: {
   readonly repositoryPath: string;
   readonly head: string;
   readonly previousHead?: string | null;
+  readonly checkpoint?: CollaborationValidationCheckpoint | null;
 }): Promise<ValidatedCollaborationHistory> {
   if (input.previousHead && input.previousHead !== input.head) {
     const ancestry = await git(
@@ -317,48 +422,51 @@ export async function validateCollaborationGitHistory(input: {
         'The remote collaboration control history was rewritten',
       );
   }
+  const useCheckpoint = Boolean(
+    input.checkpoint &&
+    input.previousHead &&
+    input.checkpoint.head === input.previousHead &&
+    (await checkpointMatchesMaterializedProjection(
+      input.repositoryPath,
+      input.checkpoint,
+    )),
+  );
+  const precedingHead = useCheckpoint ? input.checkpoint!.head : null;
   const historyRows = (
     await git(input.repositoryPath, [
       'rev-list',
       '--reverse',
       '--topo-order',
       '--parents',
-      input.head,
+      ...(precedingHead ? [`${precedingHead}..${input.head}`] : [input.head]),
     ])
   ).stdout
     .split('\n')
     .filter(Boolean);
-  const commits = historyRows.map((row) => row.split(' ')[0]!);
-  if (commits.length === 0)
+  const commits = assertLinearHistory(historyRows, precedingHead);
+  if (!useCheckpoint && commits.length === 0)
     throw new CollaborationProtocolError(
       'PROTOCOL_QUARANTINED',
       'The collaboration control branch is empty',
     );
-  for (const [index, row] of historyRows.entries()) {
-    const [commit, ...parents] = row.split(' ');
-    const expectedParents = index === 0 ? [] : [commits[index - 1]!];
-    if (
-      parents.length !== expectedParents.length ||
-      parents.some(
-        (parent, parentIndex) => parent !== expectedParents[parentIndex],
-      )
-    )
-      throw new CollaborationProtocolError(
-        'PROTOCOL_QUARANTINED',
-        `Collaboration history must be a linear single-parent chain at ${commit}`,
-      );
-  }
   const definition = await loadCollaborationRepositoryDefinition(
     input.repositoryPath,
-    commits[0]!,
+    useCheckpoint ? input.checkpoint!.head : commits[0]!,
   );
-  let projection: CollaborationProjection | null = null;
+  let projection: CollaborationProjection | null = useCheckpoint
+    ? structuredClone(input.checkpoint!.projection)
+    : null;
+  if (projection && projection.groupId !== definition.group.group_id)
+    throw new CollaborationProtocolError(
+      'PROTOCOL_QUARANTINED',
+      'The validation checkpoint group does not match the repository definition',
+    );
   const events: CollaborationEvent[] = [];
   for (const [index, commit] of commits.entries()) {
     const { eventFile, changedFiles } = await eventFileForCommit(
       input.repositoryPath,
       commit,
-      index === 0,
+      !useCheckpoint && index === 0,
     );
     const event = collaborationEventSchema.parse(
       JSON.parse(await showFile(input.repositoryPath, commit, eventFile)),
@@ -372,7 +480,7 @@ export async function validateCollaborationGitHistory(input: {
         'PROTOCOL_QUARANTINED',
         `Event path does not match its epoch and id: ${eventFile}`,
       );
-    if (index > 0) {
+    if (useCheckpoint || index > 0) {
       const unauthorizedFile = changedFiles.find(
         (file) => file !== eventFile && !materializedPathAllowed(event, file),
       );
@@ -382,6 +490,13 @@ export async function validateCollaborationGitHistory(input: {
           `Event ${event.event_id} cannot modify ${unauthorizedFile}`,
         );
     }
+    await validateDataUpdateMaterialization(
+      input.repositoryPath,
+      commit,
+      event,
+      eventFile,
+      changedFiles,
+    );
     const signer = await verifyCommitSigner(
       input.repositoryPath,
       commit,
@@ -426,6 +541,12 @@ export async function validateCollaborationGitHistory(input: {
     events,
     definition,
     projection,
+    validation: {
+      mode: useCheckpoint ? 'incremental' : 'full',
+      validatedCommitCount: commits.length,
+      totalSequence: projection.sequence,
+      checkpointHead: useCheckpoint ? input.checkpoint!.head : null,
+    },
   };
 }
 

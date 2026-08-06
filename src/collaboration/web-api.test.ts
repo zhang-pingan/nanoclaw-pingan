@@ -1,12 +1,63 @@
-import { describe, expect, it } from 'vitest';
+import http from 'node:http';
 
+import { describe, expect, it, vi } from 'vitest';
+
+import type { CollaborationRuntime } from './runtime.js';
 import type {
   CollaborationExecutionRecord,
   CollaborationExecutorBinding,
   CollaborationGroupRecord,
   CollaborationSyncAttempt,
 } from './store.js';
-import { collaborationWebApiTestables } from './web-api.js';
+import {
+  CollaborationWebApi,
+  collaborationWebApiTestables,
+} from './web-api.js';
+
+function apiGroup(): CollaborationGroupRecord {
+  return {
+    groupId: 'ag_test',
+    name: 'Test',
+    creatorPrincipalId: 'alice',
+    localPrincipalId: 'alice',
+    localAgentId: 'agent_alice',
+    lifecycle: 'READY',
+    businessState: 'development',
+    protocolStatus: 'OK',
+    protocolError: null,
+    projection: null,
+    remoteUrl: '/tmp/remote.git',
+    repositoryPath: '/tmp/repository.git',
+    signingKeyPath: '/tmp/signing-key',
+    signingPublicKey: 'ssh-ed25519 public',
+    signingKeyRef: 'ssh-ed25519:SHA256:test',
+    pollIntervalMs: 15_000,
+    nextSyncAtMs: 1,
+    backoffAttempt: 0,
+    lastSyncAtMs: null,
+    lastError: null,
+    headCommit: 'head-1',
+  };
+}
+
+async function withApiServer(
+  api: CollaborationWebApi,
+  work: (baseUrl: string) => Promise<void>,
+): Promise<void> {
+  const server = http.createServer((req, res) => {
+    void api.handle(req, res, new URL(req.url ?? '/', 'http://localhost'));
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address();
+  if (!address || typeof address === 'string') throw new Error('No test port');
+  try {
+    await work(`http://127.0.0.1:${String(address.port)}`);
+  } finally {
+    await new Promise<void>((resolve, reject) =>
+      server.close((error) => (error ? reject(error) : resolve())),
+    );
+  }
+}
 
 describe('Collaboration Web API redaction', () => {
   it('rejects attempts to override Host-generated collaboration identity', () => {
@@ -175,5 +226,98 @@ describe('Collaboration Web API redaction', () => {
     expect(serialized.error).toContain('accessToken=redacted');
     expect(serialized.error).not.toContain('password');
     expect(serialized.error).not.toContain('query-secret');
+  });
+});
+
+describe('Collaboration Web API data updates', () => {
+  it('routes a revision- and turn-fenced UTF-8 data update', async () => {
+    const group = apiGroup();
+    const updateData = vi.fn(async () => ({
+      group,
+      path: 'data/notes/status.txt',
+      contentSha256: `sha256:${'a'.repeat(64)}`,
+      sizeBytes: 0,
+    }));
+    const runtime = {
+      status: () => ({
+        available: true,
+        databasePath: '/tmp/collaboration.db',
+        repositoryRoot: '/tmp/repositories',
+        error: null,
+        scheduler: null,
+      }),
+      store: { getGroup: () => group },
+      groups: { updateData },
+    } as unknown as CollaborationRuntime;
+
+    await withApiServer(new CollaborationWebApi(runtime), async (baseUrl) => {
+      const response = await fetch(
+        `${baseUrl}/api/collaboration/groups/ag_test/data`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            path: 'notes/status.txt',
+            content: '',
+            mediaType: 'text/plain',
+            expectedRevision: 7,
+            turnId: 'turn_1',
+            attempt: 2,
+            fencingToken: `sha256:${'b'.repeat(64)}`,
+          }),
+        },
+      );
+      expect(response.status).toBe(200);
+      expect(updateData).toHaveBeenCalledWith({
+        groupId: 'ag_test',
+        path: 'notes/status.txt',
+        content: '',
+        mediaType: 'text/plain',
+        expectedRevision: 7,
+        turn: {
+          turnId: 'turn_1',
+          attempt: 2,
+          fencingToken: `sha256:${'b'.repeat(64)}`,
+        },
+      });
+      await expect(response.json()).resolves.toMatchObject({
+        path: 'data/notes/status.txt',
+        sizeBytes: 0,
+      });
+    });
+  });
+
+  it('rejects an incomplete turn fence before calling the service', async () => {
+    const group = apiGroup();
+    const updateData = vi.fn();
+    const runtime = {
+      status: () => ({
+        available: true,
+        databasePath: '/tmp/collaboration.db',
+        repositoryRoot: '/tmp/repositories',
+        error: null,
+        scheduler: null,
+      }),
+      store: { getGroup: () => group },
+      groups: { updateData },
+    } as unknown as CollaborationRuntime;
+
+    await withApiServer(new CollaborationWebApi(runtime), async (baseUrl) => {
+      const response = await fetch(
+        `${baseUrl}/api/collaboration/groups/ag_test/data`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            path: 'notes/status.txt',
+            content: 'unsafe',
+            expectedRevision: 7,
+            turnId: 'turn_1',
+          }),
+        },
+      );
+      expect(response.status).toBe(400);
+      expect(updateData).not.toHaveBeenCalled();
+    });
   });
 });

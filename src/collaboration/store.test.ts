@@ -19,6 +19,29 @@ import {
 
 const roots: string[] = [];
 
+const executionColumns = [
+  'execution_id',
+  'group_id',
+  'turn_id',
+  'epoch',
+  'attempt',
+  'fencing_token',
+  'operation_key',
+  'executor_kind',
+  'adapter',
+  'state',
+  'execution_ref',
+  'provider_metadata_json',
+  'receipt_json',
+  'observation_json',
+  'pending_result_event_json',
+  'dispatch_started_at_ms',
+  'receipt_recorded_at_ms',
+  'created_at_ms',
+  'updated_at_ms',
+  'recovery_required_reason',
+] as const;
+
 function temporaryPath(name = 'collaboration.db'): {
   readonly root: string;
   readonly databasePath: string;
@@ -28,6 +51,47 @@ function temporaryPath(name = 'collaboration.db'): {
   );
   roots.push(root);
   return { root, databasePath: path.join(root, name) };
+}
+
+function rewriteExecutionTable(
+  databasePath: string,
+  rewrite: (schema: string) => string,
+  rewriteRecoveryIndex: (schema: string) => string = (schema) => schema,
+): void {
+  const database = new Database(databasePath);
+  try {
+    const table = database
+      .prepare(
+        `SELECT sql FROM sqlite_master
+          WHERE type = 'table' AND name = 'collaboration_action_executions'`,
+      )
+      .get() as { sql: string };
+    const recoveryIndex = database
+      .prepare(
+        `SELECT sql FROM sqlite_master
+          WHERE type = 'index' AND name = 'collaboration_executions_recovery_idx'`,
+      )
+      .get() as { sql: string };
+    database.pragma('foreign_keys = OFF');
+    database.exec('DROP INDEX collaboration_executions_recovery_idx');
+    database.exec('DROP TABLE collaboration_action_executions');
+    database.exec(rewrite(table.sql));
+    database.exec(rewriteRecoveryIndex(recoveryIndex.sql));
+  } finally {
+    database.close();
+  }
+}
+
+function executionTableInfo(store: CollaborationStore) {
+  return store
+    .rawDatabaseForTests()
+    .prepare('PRAGMA table_info(collaboration_action_executions)')
+    .all() as Array<{
+    name: string;
+    type: string;
+    notnull: number;
+    pk: number;
+  }>;
 }
 
 function register(store: CollaborationStore): void {
@@ -151,6 +215,12 @@ describe('CollaborationStore', () => {
           )
           .get(),
       ).toMatchObject({ count: 12 });
+      expect(executionTableInfo(store).map((column) => column.name)).toEqual(
+        executionColumns,
+      );
+      expect(
+        executionTableInfo(store).find((column) => column.name === 'epoch'),
+      ).toMatchObject({ type: 'INTEGER', notnull: 1, pk: 0 });
     } finally {
       store.close();
     }
@@ -173,6 +243,9 @@ describe('CollaborationStore', () => {
         .all() as Array<{ name: string }>;
       expect(columns.map((column) => column.name)).toContain(
         'recovery_required_reason',
+      );
+      expect(executionTableInfo(store).map((column) => column.name)).toEqual(
+        executionColumns,
       );
     } finally {
       store.close();
@@ -212,6 +285,81 @@ describe('CollaborationStore', () => {
     store.close();
     expect(() => new CollaborationStore(test.databasePath)).toThrow(
       /missing index collaboration_executions_recovery_idx/,
+    );
+  });
+
+  it.each([
+    [
+      'missing epoch',
+      (schema: string) => schema.replace('\n  epoch INTEGER NOT NULL,', ''),
+    ],
+    [
+      'TEXT epoch',
+      (schema: string) =>
+        schema.replace('epoch INTEGER NOT NULL', 'epoch TEXT NOT NULL'),
+    ],
+    [
+      'nullable epoch',
+      (schema: string) =>
+        schema.replace('epoch INTEGER NOT NULL', 'epoch INTEGER'),
+    ],
+    [
+      'an extra legacy column',
+      (schema: string) =>
+        schema.replace(
+          'recovery_required_reason TEXT',
+          'recovery_required_reason TEXT, legacy_epoch TEXT',
+        ),
+    ],
+  ])('fails closed when executions has %s', (_label, rewrite) => {
+    const test = temporaryPath();
+    const store = new CollaborationStore(test.databasePath);
+    store.close();
+    rewriteExecutionTable(test.databasePath, rewrite);
+
+    expect(() => new CollaborationStore(test.databasePath)).toThrow(
+      /collaboration_action_executions.*(epoch|column|constraint)/i,
+    );
+  });
+
+  it('fails closed when the executions recovery index has the wrong columns', () => {
+    const test = temporaryPath();
+    const store = new CollaborationStore(test.databasePath);
+    store.close();
+    rewriteExecutionTable(
+      test.databasePath,
+      (schema) => schema,
+      (schema) =>
+        schema.replace('(group_id, state, execution_ref)', '(group_id, state)'),
+    );
+
+    expect(() => new CollaborationStore(test.databasePath)).toThrow(
+      /collaboration_executions_recovery_idx.*columns/i,
+    );
+  });
+
+  it.each([
+    [
+      'operation key uniqueness',
+      (schema: string) =>
+        schema.replace(
+          'operation_key TEXT NOT NULL UNIQUE',
+          'operation_key TEXT NOT NULL',
+        ),
+    ],
+    [
+      'group deletion restriction',
+      (schema: string) =>
+        schema.replace('ON DELETE RESTRICT', 'ON DELETE CASCADE'),
+    ],
+  ])('fails closed without the executions %s constraint', (_label, rewrite) => {
+    const test = temporaryPath();
+    const store = new CollaborationStore(test.databasePath);
+    store.close();
+    rewriteExecutionTable(test.databasePath, rewrite);
+
+    expect(() => new CollaborationStore(test.databasePath)).toThrow(
+      /collaboration_action_executions.*constraint/i,
     );
   });
 

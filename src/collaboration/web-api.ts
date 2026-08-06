@@ -37,6 +37,12 @@ function requiredString(value: Record<string, unknown>, key: string): string {
   return candidate.trim();
 }
 
+function requiredText(value: Record<string, unknown>, key: string): string {
+  const candidate = value[key];
+  if (typeof candidate !== 'string') throw new Error(`${key} is required`);
+  return candidate;
+}
+
 function optionalString(
   value: Record<string, unknown>,
   key: string,
@@ -167,6 +173,7 @@ function publicGroup(group: CollaborationGroupRecord) {
     signingConfigured: Boolean(group.signingKeyPath),
     pollIntervalMs: group.pollIntervalMs,
     nextSyncAtMs: group.nextSyncAtMs,
+    backoffAttempt: group.backoffAttempt,
     lastSyncAtMs: group.lastSyncAtMs,
     lastError: redactDiagnostic(group.lastError, [group.remoteUrl]),
     headCommit: group.headCommit,
@@ -269,16 +276,10 @@ function enumValue<const T extends readonly string[]>(
   return candidate as T[number];
 }
 
-function assertExpectedRevision(
-  group: CollaborationGroupRecord,
-  body: Record<string, unknown>,
-): void {
+function requiredExpectedRevision(body: Record<string, unknown>): number {
   if (!Number.isInteger(body.expectedRevision))
     throw new Error('expectedRevision is required');
-  if (body.expectedRevision !== group.projection?.revision)
-    throw new Error(
-      `Expected revision ${String(body.expectedRevision)} does not match ${String(group.projection?.revision)}`,
-    );
+  return Number(body.expectedRevision);
 }
 
 function isRevisionConflict(error: unknown): boolean {
@@ -446,29 +447,32 @@ export class CollaborationWebApi {
     }
     if (resource === 'commands' && req.method === 'POST') {
       const body = object(await jsonBody(req));
-      assertExpectedRevision(group, body);
+      const expectedRevision = requiredExpectedRevision(body);
       const command = requiredString(body, 'command');
       const updated =
         command === 'start'
-          ? await this.runtime.groups.start(groupId)
+          ? await this.runtime.groups.start(groupId, expectedRevision)
           : command === 'pause'
-            ? await this.runtime.groups.pause(groupId)
+            ? await this.runtime.groups.pause(groupId, expectedRevision)
             : command === 'resume'
-              ? await this.runtime.groups.resume(groupId)
+              ? await this.runtime.groups.resume(groupId, expectedRevision)
               : command === 'close'
                 ? await this.runtime.groups.close(
                     groupId,
                     requiredString(body, 'reason'),
+                    expectedRevision,
                   )
                 : command === 'recover'
                   ? await this.runtime.groups.recoverTurn(
                       groupId,
                       requiredString(body, 'reason'),
+                      expectedRevision,
                     )
                   : command === 'create_turn'
                     ? (await this.runtime.groups.ensureTurn(
                         groupId,
                         requiredString(body, 'transitionId'),
+                        expectedRevision,
                       ),
                       this.runtime.store.getGroup(groupId)!)
                     : null;
@@ -566,6 +570,45 @@ export class CollaborationWebApi {
       });
       return;
     }
+    if (resource === 'data' && req.method === 'POST') {
+      const body = object(await jsonBody(req));
+      const turnId = optionalString(body, 'turnId');
+      const hasTurnFence =
+        turnId !== null ||
+        body.attempt !== undefined ||
+        body.fencingToken !== undefined;
+      if (
+        hasTurnFence &&
+        (!turnId ||
+          !Number.isInteger(body.attempt) ||
+          Number(body.attempt) < 1 ||
+          !optionalString(body, 'fencingToken'))
+      )
+        throw new Error(
+          'turnId, attempt, and fencingToken must be provided together',
+        );
+      const result = await this.runtime.groups.updateData({
+        groupId,
+        path: requiredString(body, 'path'),
+        content: requiredText(body, 'content'),
+        expectedRevision: requiredExpectedRevision(body),
+        mediaType: optionalString(body, 'mediaType'),
+        turn: turnId
+          ? {
+              turnId,
+              attempt: Number(body.attempt),
+              fencingToken: requiredString(body, 'fencingToken'),
+            }
+          : null,
+      });
+      send(res, 200, {
+        group: publicGroup(result.group),
+        path: result.path,
+        contentSha256: result.contentSha256,
+        sizeBytes: result.sizeBytes,
+      });
+      return;
+    }
     if (resource === 'diagnostics' && req.method === 'GET') {
       send(res, 200, {
         collaboration: this.publicRuntimeStatus(),
@@ -579,6 +622,7 @@ export class CollaborationWebApi {
         syncAttempts: this.runtime.store
           .listSyncAttempts(groupId, 50)
           .map((attempt) => publicSyncAttempt(attempt, group.remoteUrl)),
+        validation: this.runtime.groups.getValidationMetrics(groupId),
       });
       return;
     }
