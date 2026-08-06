@@ -14,6 +14,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import {
   deterministicProjectionJson,
+  memberDefinitionSchema,
   reduceCollaborationEvent,
   validateCollaborationGitHistory,
   validateRepositoryDefinition,
@@ -220,6 +221,16 @@ function initializeSignedHistory() {
     },
   });
   const genesisProjection = reduceCollaborationEvent(null, genesis, contract);
+  write(
+    test.root,
+    'groups/members/alice.json',
+    `${JSON.stringify(genesis.payload.member, null, 2)}\n`,
+  );
+  write(
+    test.root,
+    'groups/claims/developer/alice.json',
+    `${JSON.stringify(genesis.payload.role_claim, null, 2)}\n`,
+  );
   const genesisHead = appendEvent(test.root, genesis, genesisProjection);
   return { ...test, contract, genesisProjection, genesisHead };
 }
@@ -336,5 +347,61 @@ describe('signed Git collaboration history', () => {
     await expect(
       validateCollaborationGitHistory({ repositoryPath: test.root, head }),
     ).rejects.toThrow(/materialized projection/);
+  });
+
+  it('quarantines merge commits instead of accepting a non-linear event DAG', async () => {
+    const test = initializeSignedHistory();
+    run(test.root, ['git', 'checkout', '-q', '-b', 'left']);
+    write(test.root, 'left.txt', 'left\n');
+    run(test.root, ['git', 'add', 'left.txt']);
+    run(test.root, ['git', 'commit', '-q', '-m', 'left']);
+    run(test.root, ['git', 'checkout', '-q', '-b', 'right', test.genesisHead]);
+    write(test.root, 'right.txt', 'right\n');
+    run(test.root, ['git', 'add', 'right.txt']);
+    run(test.root, ['git', 'commit', '-q', '-m', 'right']);
+    run(test.root, ['git', 'merge', '-q', '--no-ff', 'left', '-m', 'merge']);
+    const head = run(test.root, ['git', 'rev-parse', 'HEAD']);
+
+    await expect(
+      validateCollaborationGitHistory({ repositoryPath: test.root, head }),
+    ).rejects.toThrow(/linear single-parent chain/);
+  });
+
+  it.each([
+    ['member', 'groups/members/alice.json'],
+    ['role claim', 'groups/claims/developer/alice.json'],
+  ])('quarantines a forged materialized %s', async (_label, file) => {
+    const test = initializeSignedHistory();
+    const materialized = JSON.parse(
+      readFileSync(path.join(test.root, file), 'utf8'),
+    ) as Record<string, unknown>;
+    materialized.agent_id = 'agent_forged';
+    write(test.root, file, `${JSON.stringify(materialized, null, 2)}\n`);
+    run(test.root, ['git', 'add', file]);
+    run(test.root, ['git', 'commit', '--amend', '-q', '--no-edit']);
+    const head = run(test.root, ['git', 'rev-parse', 'HEAD']);
+
+    await expect(
+      validateCollaborationGitHistory({ repositoryPath: test.root, head }),
+    ).rejects.toThrow(/does not match event replay/);
+  });
+});
+
+describe('member signing key schema', () => {
+  it('rejects an allowed-signers newline injection', () => {
+    const test = fixture();
+    const member = {
+      format: 'icarus.agent-group-member/1',
+      principal_id: 'alice',
+      signing_key_ref: `ssh-ed25519:${test.fingerprint}`,
+      signing_public_key: `${test.publicKey}\nmallory ${test.publicKey}`,
+      agent_id: 'agent_alice',
+      capabilities: ['coding_task'],
+      registered_at_event: 'evt_genesis',
+    };
+
+    expect(() => memberDefinitionSchema.parse(member)).toThrow(
+      /single-line OpenSSH public key/,
+    );
   });
 });

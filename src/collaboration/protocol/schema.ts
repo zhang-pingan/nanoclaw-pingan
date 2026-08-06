@@ -12,6 +12,8 @@ const identifier = z
   .max(160)
   .regex(/^[A-Za-z0-9][A-Za-z0-9._:@-]*$/);
 const sha256 = z.string().regex(/^sha256:[0-9a-f]{64}$/);
+const sshPublicKey =
+  /^(?:ssh-ed25519|ecdsa-sha2-[A-Za-z0-9@._+-]+|sk-ssh-[A-Za-z0-9@._+-]+) [A-Za-z0-9+/]+={0,3}(?: [^\r\n]{1,1024})?$/;
 const relativeRepositoryPath = z
   .string()
   .min(1)
@@ -114,7 +116,7 @@ export const memberDefinitionSchema = z
       .string()
       .min(32)
       .max(16_384)
-      .refine((value) => /^(ssh-ed25519|ecdsa-sha2-|sk-ssh-)/.test(value)),
+      .regex(sshPublicKey, 'must be a single-line OpenSSH public key'),
     agent_id: identifier,
     capabilities: z.array(identifier).min(1),
     registered_at_event: identifier,

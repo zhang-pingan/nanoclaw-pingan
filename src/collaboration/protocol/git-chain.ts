@@ -22,6 +22,7 @@ import {
   machineDefinitionSchema,
   memberDefinitionSchema,
   roleDefinitionSchema,
+  roleClaimSchema,
   validateRepositoryDefinition,
   type CollaborationEvent,
   type CollaborationRepositoryDefinition,
@@ -308,16 +309,37 @@ export async function validateCollaborationGitHistory(input: {
         'The remote collaboration control history was rewritten',
       );
   }
-  const commits = (
-    await git(input.repositoryPath, ['rev-list', '--reverse', input.head])
+  const historyRows = (
+    await git(input.repositoryPath, [
+      'rev-list',
+      '--reverse',
+      '--topo-order',
+      '--parents',
+      input.head,
+    ])
   ).stdout
     .split('\n')
     .filter(Boolean);
+  const commits = historyRows.map((row) => row.split(' ')[0]!);
   if (commits.length === 0)
     throw new CollaborationProtocolError(
       'PROTOCOL_QUARANTINED',
       'The collaboration control branch is empty',
     );
+  for (const [index, row] of historyRows.entries()) {
+    const [commit, ...parents] = row.split(' ');
+    const expectedParents = index === 0 ? [] : [commits[index - 1]!];
+    if (
+      parents.length !== expectedParents.length ||
+      parents.some(
+        (parent, parentIndex) => parent !== expectedParents[parentIndex],
+      )
+    )
+      throw new CollaborationProtocolError(
+        'PROTOCOL_QUARANTINED',
+        `Collaboration history must be a linear single-parent chain at ${commit}`,
+      );
+  }
   const definition = await loadCollaborationRepositoryDefinition(
     input.repositoryPath,
     commits[0]!,
@@ -385,6 +407,11 @@ export async function validateCollaborationGitHistory(input: {
         'The materialized projection does not match event replay',
       );
   }
+  await validateMaterializedIdentityState(
+    input.repositoryPath,
+    input.head,
+    projection,
+  );
   return {
     head: input.head,
     commits,
@@ -392,6 +419,60 @@ export async function validateCollaborationGitHistory(input: {
     definition,
     projection,
   };
+}
+
+async function validateMaterializedIdentityState(
+  repositoryPath: string,
+  head: string,
+  projection: CollaborationProjection,
+): Promise<void> {
+  const expectedMembers = new Map(
+    Object.values(projection.members).map((member) => [
+      `groups/members/${member.principal_id}.json`,
+      member,
+    ]),
+  );
+  const expectedClaims = new Map(
+    Object.values(projection.roleClaims)
+      .flat()
+      .map((claim) => [
+        `groups/claims/${claim.role}/${claim.principal_id}.json`,
+        claim,
+      ]),
+  );
+  const actualMembers = await listFiles(repositoryPath, head, 'groups/members');
+  const actualClaims = await listFiles(repositoryPath, head, 'groups/claims');
+  if (
+    JSON.stringify(actualMembers) !==
+      JSON.stringify([...expectedMembers.keys()].sort()) ||
+    JSON.stringify(actualClaims) !==
+      JSON.stringify([...expectedClaims.keys()].sort())
+  )
+    throw new CollaborationProtocolError(
+      'PROTOCOL_QUARANTINED',
+      'Materialized members or role claims do not match event replay',
+    );
+
+  for (const [file, expected] of expectedMembers) {
+    const actual = memberDefinitionSchema.parse(
+      JSON.parse(await showFile(repositoryPath, head, file)),
+    );
+    if (JSON.stringify(actual) !== JSON.stringify(expected))
+      throw new CollaborationProtocolError(
+        'PROTOCOL_QUARANTINED',
+        `Materialized member does not match event replay: ${file}`,
+      );
+  }
+  for (const [file, expected] of expectedClaims) {
+    const actual = roleClaimSchema.parse(
+      JSON.parse(await showFile(repositoryPath, head, file)),
+    );
+    if (JSON.stringify(actual) !== JSON.stringify(expected))
+      throw new CollaborationProtocolError(
+        'PROTOCOL_QUARANTINED',
+        `Materialized role claim does not match event replay: ${file}`,
+      );
+  }
 }
 
 export async function readPublicKey(publicKeyPath: string): Promise<string> {
