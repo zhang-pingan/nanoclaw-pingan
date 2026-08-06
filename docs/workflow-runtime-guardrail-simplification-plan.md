@@ -1,7 +1,7 @@
 # Workflow Runtime Guardrail Simplification Plan
 
 > **Status**: Approved design; the Runtime gateway prerequisite is implemented, while the six simplification phases have not started
-> **Scope**: Workflow Runtime public gateways, static import boundaries, conformance and Golden assets, G9 Production Activation, Host Core snapshots, Workflow Runtime state backup, managed Node identity
+> **Scope**: Workflow Runtime public gateways, static import boundaries, conformance and Golden assets, construction-stage governance, format-debt freezing, cross-cutting Identity governance, G9 Production Activation, Host Core snapshots, Workflow Runtime state backup, Node compatibility
 > **Project boundary**: Icarus is an internal, experimental, single-user tool. This plan optimizes for local iteration stability and recoverability, not external delivery or production certification.
 
 ## 1. Decision Summary
@@ -27,15 +27,22 @@ The release and activation result is explicit:
 | Feature/Workflow Registry publish and activate | Retained as an internal business capability |
 | Runtime external access | Retain the three purpose-specific `gateway/connection`, `gateway/execution`, and `gateway/host-core` entrypoints |
 | Gateway boundary verification | Retain as one direct import test; remove generated whole-source proof and pinned hashes |
+| Runtime/Compiler/Schema Identity governance | Removed; replaced by semantic versions, direct compatibility checks, and focused smoke tests |
+| Workflow/Run/Node IDs, idempotency keys, copy checksums | Retained where they directly support runtime behavior or data integrity |
 | `archive:verify:v1` / `contracts:archive:check` | Removed; Git history/tag is the historical authority |
 | Historical accepted release bundle | Retained only through the legacy compatibility window, then removed from active verification |
+| Frozen Gate ownership, G0 exit, and G5-G7 readiness authorities | Removed; focused current behavior tests replace construction-stage closure proofs |
+| Per-file format-debt hash baseline | Removed; remaining TypeScript is normalized once and checked directly by Prettier |
+| Runtime command/event/value retention and GC | Out of scope for these six phases unless it measurably slows development; operational history cleanup is a separate task |
+| Legacy persisted Compiler Plan/Run compatibility | Not required; no historical Plan or Run exists at the decision point |
 
 The target startup model is:
 
 ```text
 current checkout
   -> build
-  -> schema compatibility decision
+  -> read integer schema version
+  -> migrate, start, or block
   -> Node/native-module compatibility smoke
   -> start
 
@@ -67,6 +74,8 @@ The current archive verifier is also over-scoped. It pins the raw SHA-256 of six
 
 The completed Runtime gateway refactor provides another concrete example. Moving existing imports behind three small gateway files changed no runtime behavior, but required regeneration of the static-absence contract pack, absence baseline, product-surface coverage, migration-candidate boundary, and two manually pinned artifact hashes. The import boundary is useful; this generated proof chain is not.
 
+Identity is also currently overloaded. Release identity, Runtime host identity, Compiler toolchain identity, logical Schema identity, physical SQLite Schema identity, backup identity, Node distribution identity, and ordinary business identifiers are treated as one broad proof vocabulary. Most of these proof chains do not prevent a distinct local failure. The target removes Identity as a cross-cutting governance subsystem and retains only concrete runtime concepts: semantic versions, supported migration ranges, functional IDs, idempotency keys, and checksums used to verify bytes that were actually copied or consumed.
+
 ## 3. Required Boundaries
 
 The simplification must not weaken these controls:
@@ -81,6 +90,8 @@ The simplification must not weaken these controls:
 - `active-core` changes must remain atomic and preserve the previous selection on failure.
 - Persisted-data and independently evolving process boundaries may retain small versioned contracts.
 - Runtime executable and Store internals must remain behind purpose-specific gateway entrypoints. Pure public contract helpers and types may remain directly importable.
+- Workflow, Run, Node, Delegation, Registry-resource, and database-record IDs remain stable where they are functional keys.
+- Idempotency keys and payload/file checksums remain where they prevent duplicate execution or verify bytes actually used or copied.
 
 The following are not required boundaries:
 
@@ -92,12 +103,22 @@ The following are not required boundaries:
 - an exact Node executable hash when the Node ABI and native module are compatible.
 - a single aggregate Runtime barrel that loads unrelated dependency graphs;
 - whole-source hashes, generated contract envelopes, or pinned artifact hashes used only to prove an import boundary.
+- Runtime identity modes, identity evidence records, or formal Host identity;
+- Compiler source/dependency/Node identity manifests when semantic version plus Golden replay detects relevant behavior drift;
+- simultaneous logical Schema, migration-file, and physical SQLite Schema hash authorities.
+- a permanent owner/readiness/exit authority for a completed construction milestone;
+- per-file source hashes used to grandfather formatting debt.
+- a legacy Compiler Plan/Run reader or migration path when no persisted historical Plan or Run exists.
+
+At the time this scope was confirmed, the local project had no previously executed Workflow Run or persisted Compiler Plan that must be resumed. Phase 1 may therefore make a clean serialized Plan boundary change when removing Compiler Identity fields. It does not need to retain an old Plan reader, preserve historical Plan hashes, or add a legacy Plan migration.
+
+This permission is limited to absent Plan/Run state. It does not authorize resetting or rewriting Registry, Capacity, user artifacts, Workflow definitions, or any other existing local state, and implementation tests must continue to use temporary databases and directories.
 
 ## 4. Phase 1: Replace The Golden Lifecycle
 
 ### 4.1 Goal
 
-Replace draft, review, semantic-review, seal, and successor-repair stages with one checked-in current corpus and deterministic replay.
+Replace draft, review, semantic-review, seal, and successor-repair stages with one checked-in current corpus and deterministic replay. Replace Compiler toolchain Identity with an explicit semantic version and behavioral replay.
 
 ### 4.2 Target Layout
 
@@ -133,7 +154,9 @@ Git diff and the normal code review/commit history become the review record.
 2. Run old and new replay paths against the same Compiler output.
 3. Require identical case IDs, expected results, and replay decisions for one transition change.
 4. Change `contracts:check` and `test:current` to call only the new `golden:check` and `golden:replay` paths.
-5. Remove old authoring commands after parity is established.
+5. Replace `WorkflowCompilerIdentity` consumers with the Compiler semantic version and current schema/corpus versions they actually need.
+6. Remove old authoring commands and Compiler source/toolchain identity generation after parity is established.
+7. Remove legacy Plan/Run identity fields and readers directly; do not build a compatibility adapter for nonexistent persisted Plan/Run state.
 
 ### 4.5 Delete Candidates
 
@@ -142,6 +165,9 @@ Git diff and the normal code review/commit history become the review record.
 - `current-g2-golden-semantic-review-*`
 - `current-g2-golden-seal-*`
 - superseded replay-repair successor authoring/sealing paths
+- sealed-era historical checks and review-candidate paths that only prove a completed construction state
+- `src/workflow-runtime/compiler/identity.ts` source, package-lock, dependency, parser-wrapper, Node, and implementation hash authority
+- generated Compiler toolchain identity manifests and pinned identity hashes that have no runtime consumer after the switch
 - hard-coded `--authorized-by`, decision, review hash, and reviewed-at arguments in `package.json`
 
 Historical accepted bytes remain available through Git history and the existing accepted release bundle.
@@ -152,6 +178,10 @@ Historical accepted bytes remain available through Git history and the existing 
 - `golden:check` detects generated drift.
 - `golden:replay` preserves all current semantic decisions.
 - No default script reaches draft/review/seal code.
+- No active script or test requires a successor, repair, sealed-era, or review-candidate construction authority.
+- A behavior-neutral Compiler source refactor does not require an identity artifact or pinned-hash update.
+- Compiler compatibility is expressed by semantic/corpus/schema versions, not a hash of implementation files, Node, or `package-lock.json`.
+- New Plan/Run serialization contains no Compiler Identity evidence, and no legacy Plan/Run compatibility layer was added solely for nonexistent history.
 - At least 70% of Golden lifecycle implementation code is removed from HEAD.
 
 ### 4.7 Rollback
@@ -216,7 +246,20 @@ Deleting files from HEAD reduces working-tree and package weight. It does not re
 - `conformance/golden-semantic-review/`
 - superseded repair and milestone-specific copies that are no longer imported
 
-### 5.6 Retire The Historical Archive Verifier
+### 5.6 Retire Construction-Stage Governance
+
+Delete governance whose only purpose was to prove that a past G0-G7 construction milestone was complete:
+
+- `frozen-gate-ownership-authority*`, including its CLI, tests, and generated artifact;
+- `gate-ownership-contract*` and `governance/workflow-runtime-gate-ownership@1.json` when no active runtime behavior reads them;
+- G0 conformance-exit, gate-review, Markdown coverage, and artifact-hash inventories;
+- G5, G6, and G7 `runtime-readiness-audit` tests and their milestone-only inputs;
+- `g0-node-output-envelope-successor-compatibility.test.ts` and similar fixed cross-era compatibility tests once the current envelope behavior is covered directly;
+- repair, blocker, ownership, readiness, or seal inventories that assert only historical construction closure.
+
+Do not preserve these as optional blocking scripts. If a file also tests a current runtime invariant, move that invariant into the owning current unit or integration test before deleting the historical wrapper.
+
+### 5.7 Retire The Historical Archive Verifier
 
 `archive:verify:v1` and `contracts:archive:check` are removed during this phase.
 
@@ -239,7 +282,7 @@ If a lightweight boundary is still useful, `contracts:static:check` may contain 
 
 The correct response to an edited historical document is not to update a frozen hash. Either accept the documentation correction in Git or retrieve the original bytes from the historical tag.
 
-### 5.7 Keep The Runtime Gateways, Simplify Their Check
+### 5.8 Keep The Runtime Gateways, Simplify Their Check
 
 Retain the three current purpose-specific entrypoints:
 
@@ -270,7 +313,20 @@ Remove gateway-boundary coupling to `source_core_build_hash`, `production_source
 
 Gateway exports are internal adapters, not frozen compatibility contracts. Each later phase must delete obsolete exports rather than preserve G1/G8/G9 names for historical compatibility.
 
-### 5.8 Exit Criteria
+### 5.9 Replace The Format-Debt Freeze
+
+Delete `scripts/format-debt-baseline-v1.json` and `scripts/verify-format-baseline.mjs`. The current baseline allows 48 of 530 TypeScript files to remain unformatted by pinning their individual hashes, so a behavior-neutral edit can become a governance update.
+
+After Phase 1 and the Phase 2 source deletions, run Prettier once over the remaining TypeScript and use direct commands:
+
+```text
+format        prettier --write "src/**/*.ts"
+format:check  prettier --check "src/**/*.ts"
+```
+
+Keep the normalization as a mechanical Phase 2B commit separate from semantic deletion where possible. It must not introduce a replacement hash allowlist.
+
+### 5.10 Exit Criteria
 
 - Active conformance contains no more than 350 files and 5 MB unless a documented exception is approved by the local owner.
 - Every default conformance test reads only `current/` or a directly owned domain fixture.
@@ -278,11 +334,13 @@ Gateway exports are internal adapters, not frozen compatibility contracts. Each 
 - No package script verifies raw historical Markdown hashes or diffs current source against the accepted construction commit.
 - External source has no direct import into Runtime Store, execution, scheduler, reconciler, or Registry internals.
 - Gateway-boundary validation is one direct test with zero generated artifacts or pinned hashes.
+- No active script or test enforces Gate ownership, milestone readiness, G0 exit, or a fixed cross-era construction state.
+- `format:check` runs Prettier directly and reads no per-file hash baseline.
 - All retained error codes and known regression cases remain covered.
 
-### 5.9 Rollback
+### 5.11 Rollback
 
-Restore removed fixtures from the history tag if an active case was missed. The three gateway entrypoints remain in place during rollback. Do not regenerate the historical tree or restore raw-hash enforcement for Markdown or import boundaries.
+Restore a missed active regression case from the history tag into the current focused suite. The three gateway entrypoints remain in place during rollback. Do not regenerate the historical tree or restore raw-hash enforcement for Markdown, import boundaries, construction-stage governance, or formatting debt.
 
 ## 6. Phase 3: Remove G9 Production Activation
 
@@ -295,7 +353,9 @@ Remove the product-grade deployment transaction while preserving local startup, 
 ```text
 Store startup
   -> open or create Store
+  -> read one authoritative integer schema version
   -> apply supported schema migrations
+  -> verify required current tables and columns
   -> ensure local Capacity defaults if no Capacity head exists
   -> preserve an existing Capacity head byte-for-byte
 
@@ -307,7 +367,32 @@ Host startup
 
 There is no `active-deployment`, staging activation pointer, activation journal, activation audit authority, or multi-participant roll-forward/recovery operation.
 
-### 6.3 Capacity Migration
+### 6.3 Remove Runtime And Schema Identity Governance
+
+Delete the cross-cutting Runtime identity subsystem:
+
+- `src/workflow-runtime/store/runtime-store/identity.ts`;
+- `WorkflowRuntimeIdentityMode` and all `identityMode` options;
+- `WorkflowRuntimeIdentityEvidence` and `store.identityEvidence`;
+- candidate, isolated-test, release-validation, production-activation, and production identity branches;
+- executable, native-module, launcher, Core binding, release manifest, and compile-option hashes collected only as identity evidence;
+- `CURRENT_G1_SCHEMA_IDENTITIES` and frozen logical/physical Schema hash comparisons.
+
+Store opening takes a path/configuration and performs direct checks. Tests obtain isolation from temporary directories and dependency injection, not an identity mode.
+
+Use one authoritative integer database Schema version. Prefer SQLite `PRAGMA user_version`; if the existing Store uses another unambiguous version field, migrate it once and leave only one authority. For an existing database with no new version value, the compatibility command may derive the version once from the old recognized metadata, set the integer version transactionally, and then stop consulting historical hash identities.
+
+Compatibility rules:
+
+1. a fresh Store creates the current version;
+2. a supported older version migrates sequentially in transactions;
+3. a newer or unknown version blocks startup with an actionable diagnostic;
+4. the current version receives a focused required-table/column/index smoke check;
+5. migrations and focused schema tests, not exact serialized DDL hashes, protect compatibility.
+
+This removal does not affect Workflow/Run/Node/Delegation IDs, Registry resource versions, idempotency keys, canonical payload hashes used by live runtime behavior, or backup copy checksums.
+
+### 6.4 Capacity Migration
 
 Replace `system:production-activation` genesis with an idempotent Store operation:
 
@@ -322,7 +407,7 @@ Rules:
 - Normal Capacity administration continues through the existing admin gateway.
 - The initialization result is a normal diagnostic log/event, not certification evidence.
 
-### 6.4 Pointer Migration
+### 6.5 Pointer Migration
 
 `active-core` becomes the only authoritative runtime selection.
 
@@ -344,12 +429,12 @@ The migration command:
 
 No automatic mutation occurs during normal startup.
 
-### 6.5 Source Removal
+### 6.6 Source Removal
 
 Remove active dependencies in this order:
 
 1. Keep external callers on the existing purpose-specific gateways; do not expose G9 modules through a gateway as a migration shortcut.
-2. Remove Store identity modes and reads of `activation-core`/`active-deployment`.
+2. Remove Runtime identity modes/evidence, frozen Schema identity chains, and reads of `activation-core`/`active-deployment`.
 3. Remove Capacity genesis actor and evidence requirements.
 4. Remove Compiler source allowlists for G9 activation entries.
 5. Remove release manifest requirements for activation entries and Capacity genesis bundles.
@@ -361,6 +446,7 @@ Expected removal roots include:
 
 - `src/workflow-runtime/registry/production-activation*.ts`
 - `src/workflow-runtime/registry/capacity-genesis-bootstrap-runtime.ts`
+- `src/workflow-runtime/store/runtime-store/identity.ts`
 - `src/workflow-runtime/contracts/g9-production-activation*.ts`
 - `src/workflow-runtime/contracts/g9-capacity-genesis-bootstrap.ts`
 - `src/workflow-runtime/contracts/production-activation/`
@@ -368,13 +454,17 @@ Expected removal roots include:
 
 The accepted physical release bundle is not changed during G9 removal. Its internal G9 files remain historical bytes until the legacy compatibility window closes.
 
-### 6.6 Feature Activation Boundary
+### 6.7 Feature Activation Boundary
 
 Workflow and Feature Registry publish/activate remains supported. It selects an internal versioned resource and is not the G9 deployment transaction.
 
 Feature activation must not acquire G9 audit, deployment journal, Capacity genesis, or independent certification dependencies.
 
-### 6.7 Exit Criteria
+`retention-executor-abi-preflight` is a Registry publish/activate compatibility check, not a retention or GC executor. Replace its generated contract pack, conformance family, domain-separator evidence, and exact ABI proof with the smallest direct semantic-version or capability check still required by the actual process boundary. If publisher, activation, and executor evolve in the same process and test suite, remove the preflight instead of recreating it under a new name.
+
+Treat schema-activation repair only as a temporary compatibility migration for a supported existing Store. Once the integer Schema-version migration and focused structural smoke cover that state, remove construction-era activation-repair assertions from the default suite. Do not remove a required old-Store migration before its replacement is tested.
+
+### 6.8 Exit Criteria
 
 - Non-test active source contains no reference to `active-deployment`.
 - Non-compatibility active source contains no reference to `activation-core`.
@@ -384,8 +474,12 @@ Feature activation must not acquire G9 audit, deployment journal, Capacity genes
 - Current and snapshot Host startup work without G9 assets.
 - Feature release activation tests continue to pass independently.
 - No G9 API has been added to a Runtime gateway.
+- Active source contains no `WorkflowRuntimeIdentityMode`, `identityMode`, `identityEvidence`, or `CURRENT_G1_SCHEMA_IDENTITIES`.
+- Store startup compatibility uses one integer Schema version plus focused structural checks, not logical or physical Schema identity hashes.
+- Registry publish/activate has no generated retention-executor ABI evidence chain; any retained compatibility check is direct and behavior-focused.
+- Schema activation repair is either replaced by a supported version migration or isolated as temporary compatibility code rather than permanent construction governance.
 
-### 6.8 Rollback
+### 6.9 Rollback
 
 Keep the legacy activation reader and old G9 code in separate commits. Revert the source-removal commit if existing local bindings cannot be migrated. Never rewrite the accepted release bundle.
 
@@ -423,7 +517,7 @@ active-core -> host-core-snapshots/<snapshot-id>
 - creation time;
 - Git commit and `dirty` flag;
 - Core entry relative path;
-- Workflow Runtime target schema identity and compatibility descriptor;
+- Workflow Runtime Schema version and supported migration range;
 - Node major and native-module ABI expectations;
 - build-complete marker or a single snapshot/entry checksum;
 - validation result: `smoke_passed`, `full_passed`, or `skipped_by_user`.
@@ -433,7 +527,7 @@ It does not contain a hash and mode for every file, an immutable human version b
 ### 7.4 Snapshot Creation
 
 1. Build in an isolated staging directory.
-2. Validate the entry, schema descriptor, and Node/native-module smoke.
+2. Validate the entry, Schema version range, and Node/native-module smoke.
 3. Run focused startup smoke by default.
 4. Run `test:current`, `contracts:check`, typecheck, and format only with `--full-check`.
 5. Write `snapshot.json` last.
@@ -444,7 +538,7 @@ A dirty checkout is recorded and warned about, not universally blocked. The loca
 ### 7.5 Snapshot Selection
 
 1. Resolve and contain the snapshot path under `host-core-snapshots/`.
-2. Validate `snapshot.json`, the Core entry, schema compatibility, and Node ABI.
+2. Validate `snapshot.json`, the Core entry, Schema version compatibility, and Node ABI.
 3. Run lightweight startup smoke.
 4. Atomically replace `active-core`.
 5. Verify the resulting pointer.
@@ -459,7 +553,7 @@ A dirty checkout is recorded and warned about, not universally blocked. The loca
 - separate release, production release, and activation bindings;
 - G8/G9 release entry selectors;
 - the direct `workflow-runtime/certification/release-manifest` import from Host Core activation;
-- obsolete G1 frozen-input and exact-identity exports from `gateway/host-core.ts` after the snapshot compatibility descriptor replaces them;
+- `CURRENT_G1_SCHEMA_IDENTITIES`, frozen-input loading, database Schema hash calculation, and other exact-identity exports from `gateway/host-core.ts`;
 - clean-checkout hard blocking for ordinary local snapshots.
 
 ### 7.7 Exit Criteria
@@ -469,6 +563,7 @@ A dirty checkout is recorded and warned about, not universally blocked. The loca
 - Pointer failure preserves the previous `active-core` bytes.
 - Snapshot implementation and toolchain code is reduced by at least 50% without reducing these behaviors.
 - Host Core reaches Runtime behavior only through `gateway/host-core.ts` and explicitly public contract helpers; it does not import `certification/`, Store, or execution internals.
+- Snapshot metadata contains no Runtime, Compiler, release, or physical Schema identity hash.
 
 ### 7.8 Rollback
 
@@ -509,8 +604,8 @@ workflow-runtime-state-backups/
 
 - backup ID and creation time;
 - source paths;
-- observed schema identity when readable;
-- target schema identity for reset;
+- observed integer Schema version when readable;
+- target integer Schema version for reset;
 - file names, sizes, and ordinary checksums;
 - operation status and completion time.
 
@@ -520,7 +615,7 @@ The backup ID is not derived from content. Identical backups do not deduplicate.
 
 1. Refuse while launchd or a direct Host process is running.
 2. Inspect exact DB/WAL/SHM paths and reject symlinks/non-regular files.
-3. Obtain schema inspection through `gateway/host-core.ts`; do not import Store schema internals from Host Core.
+3. Obtain the integer Schema version through `gateway/host-core.ts`; do not import Store schema internals from Host Core.
 4. Display source paths and destination backup ID.
 5. Require confirmation.
 6. Create the backup directory and `.incomplete` marker.
@@ -551,6 +646,7 @@ Keep the most recent three to five backups by default. Cleanup is explicit throu
 ### 8.8 Remove
 
 - content-derived backup identity;
+- logical and physical Schema identity hashes in backup/reset metadata;
 - immutable chmod hardening;
 - identical-generation deduplication;
 - collision proof between live and historical generations;
@@ -561,7 +657,7 @@ Keep the most recent three to five backups by default. Cleanup is explicit throu
 
 - Reset cannot touch paths outside the Workflow Runtime DB unit.
 - Fault injection before copy, during copy, after manifest write, and before live deletion always leaves either live state or a restorable backup.
-- Restore recreates a DB that passes schema identity inspection.
+- Restore recreates a DB with a supported Schema version and passes the required-table/column smoke check.
 - The command never mutates state without confirmation.
 
 ### 8.10 Rollback
@@ -600,7 +696,7 @@ The launcher does not need to hash the Node executable, distribution manifest, n
 
 ### 9.4 Optional Managed Installer
 
-Keep an optional managed Node installation command for machines without a compatible Node. Download checksums protect the download itself, but the installed distribution hash does not become part of every Core snapshot or Store identity.
+Keep an optional managed Node installation command for machines without a compatible Node. Download checksums protect the downloaded archive itself, but the installed distribution hash does not become a persistent Runtime or Core identity.
 
 Remove `active-node`; a single configured compatible Node path is sufficient for this local tool.
 
@@ -632,14 +728,22 @@ Each phase should be an independently reviewable and revertible change. Do not c
 
 | Change | Scope | Risk | Required predecessor |
 | --- | --- | --- | --- |
-| 1. Golden single baseline | Compiler contracts and scripts | Medium | None |
-| 2. Conformance, archive, and static-proof collapse | Fixtures, generators, archive verifier, gateway boundary test, package scripts | Medium | Golden single baseline |
-| 3. G9 removal | Store, Capacity, Compiler, certification, toolchain, Registry | High | Current baseline tests stable |
+| 1. Golden single baseline and Compiler identity removal | Compiler contracts, identity code, and scripts | Medium | None |
+| 2. Conformance, construction-governance, archive, static-proof, and format-baseline collapse | Fixtures, generators, Gate/Readiness/G0 authorities, archive verifier, gateway boundary test, formatting, package scripts | Medium | Golden single baseline |
+| 3. G9 and Runtime Identity removal | Store, Schema compatibility, Capacity, Compiler, certification, toolchain, Registry | High | Current baseline tests stable |
 | 4. Host Core snapshot v2 | Host Core release/activation and shell commands | High | G9 removed from release identity |
 | 5. State backup v2 | Persistent state and reset CLI | High | Snapshot/startup identity stable |
 | 6. Node compatibility model | Setup, launcher, runtime toolchain | High | Snapshot v2 metadata defined |
 
 Recommended compatibility window: one successfully created, selected, started, and rolled-back local snapshot. This project does not need a calendar-based deprecation period.
+
+The active implementation task committed the original Phase 1 and Phase 2 before the later Identity, construction-governance, and format-baseline scope was clarified. Do not amend or rewrite those commits. First finish one Phase 1 follow-up atomic commit that removes Compiler Identity together with the remaining Golden draft/review/semantic-review/seal/successor/repair, review-candidate, and sealed-era historical-check paths. Keep only Compiler contract types and lowering behavior that the current Runtime actually consumes. Then land the missed Phase 2 scope as:
+
+1. Phase 2A follow-up: Gate ownership, G0 exit, readiness, fixed construction compatibility, and related script cleanup;
+2. Phase 2B follow-up: format-baseline removal and mechanical formatting of retained TypeScript;
+3. resume Phase 3 from the saved implementation state.
+
+These are corrective commits within the six-phase design, not a seventh functional phase.
 
 ## 11. Validation Matrix
 
@@ -648,23 +752,26 @@ Every phase runs focused tests plus the relevant rows below:
 | Scenario | Required result |
 | --- | --- |
 | Current checkout startup with no Workflow DB | Starts and initializes local defaults |
-| Current checkout startup with same schema | Starts without state rewrite |
+| Current checkout startup with current Schema version | Starts without state rewrite |
 | Supported schema migration | Migrates through Store authority |
-| Unsupported schema | Blocks with stable diagnostic |
+| Newer or unknown Schema version | Blocks with stable diagnostic |
+| Current version missing a required table/column | Blocks with an actionable structural diagnostic |
 | Existing Capacity head | Preserved byte-for-byte by first-run initialization |
 | New local snapshot | Builds and passes startup smoke |
 | Broken snapshot entry | Cannot become active |
 | Snapshot pointer switch failure | Previous `active-core` preserved |
 | State reset | Complete backup exists before live deletion |
 | Interrupted state backup/reset | Explicit resume or restore remains possible |
-| State restore | Restored DB passes identity inspection |
+| State restore | Restored DB passes version and required-structure inspection |
 | Node patch upgrade in supported major | Starts after ABI smoke |
 | Native ABI mismatch | Blocks with rebuild/reinstall guidance |
 | Feature Registry publish/activate | Continues to work without G9 |
 | Runtime gateway boundary | A direct internal import fails with the importing file and module path |
 | Allowed gateway import refactor | Requires no generated proof or pinned-hash update |
+| Behavior-neutral Compiler refactor | Requires no toolchain identity or source-hash update |
 | Golden drift | `golden:check` fails |
 | Compiler semantic regression | `golden:replay` fails |
+| New Workflow compile and Run execution | Completes through the current Plan format without Compiler Identity evidence |
 
 During the legacy compatibility window, the historical physical release verifier remains explicit and non-default and must pass without regeneration. After Host Core snapshot v2 has successfully replaced the legacy binding, remove the verifier and bundle from active package scripts rather than updating their hashes.
 
@@ -677,6 +784,11 @@ These budgets prevent the same governance weight from growing back:
 - Historical documentation: Git history/tag only; no raw-hash gate.
 - Runtime public access: three purpose-specific gateways; no aggregate barrel.
 - Runtime import boundary: one direct test and zero generated proof artifacts or pinned hashes.
+- Construction governance: no frozen Gate ownership, milestone readiness, G0 exit, or sealed-era closure gate in active scripts.
+- Formatting: one direct Prettier check and no per-file debt hash baseline.
+- Identity governance: no Runtime identity modes/evidence, Compiler toolchain identity, formal Host identity, or logical/physical Schema hash chain.
+- Compatibility: semantic versions, one integer database Schema version, focused smoke tests, and Node ABI checks.
+- Functional integrity: business IDs, idempotency keys, live payload hashes, and copy checksums only where the runtime directly uses them.
 - Runtime selection: one authoritative pointer, `active-core`.
 - State reset: one backup manifest format for new writes.
 - Node selection: one configured Node path; no active distribution pointer.
@@ -698,15 +810,19 @@ Deleting G9 readers before inspecting `activation-core` and `active-deployment` 
 
 Capacity initialization must distinguish a truly empty Store from an existing head. Tests must prove that existing revisions and files receive zero writes.
 
-### 13.4 SQLite Backup Consistency
+### 13.4 Schema Drift Without Physical Identity Hashes
+
+Removing exact SQLite Schema hashes means a manually edited database can no longer be classified by a byte-derived identity. This is acceptable for an internal local tool. Mitigate it with transactional migrations, one integer Schema version, focused checks for required current tables/columns/indexes, and startup tests for missing or newer structures. Do not recreate a canonical full-DDL hash under another name.
+
+### 13.5 SQLite Backup Consistency
 
 DB/WAL/SHM handling is a real data-safety boundary. The simplified backup protocol still needs process exclusion, unit handling, checksums, restore tests, and fault injection.
 
-### 13.5 Native Node Modules
+### 13.6 Native Node Modules
 
 `better-sqlite3` prevents unrestricted Node version fallback. Node simplification must land only after the ABI smoke is shared by setup, current startup, snapshot selection, and launchd.
 
-### 13.6 Dirty Working Tree
+### 13.7 Dirty Working Tree
 
 Snapshot creation may allow a dirty checkout, but must record it visibly. A dirty snapshot is a local diagnostic convenience, not a reproducible baseline.
 
@@ -715,11 +831,14 @@ Snapshot creation may allow a dirty checkout, but must record it visibly. A dirt
 The full simplification is complete when:
 
 - default Golden validation has one corpus and one replay path;
+- Compiler compatibility uses semantic/corpus/schema versions and Golden replay, with no source/dependency/Node toolchain identity;
 - active conformance is within the repository budget;
 - G9 production activation has no active runtime entrypoint;
+- Runtime identity modes/evidence and formal Host identity are absent from active source;
+- database compatibility uses one integer Schema version and focused structural checks; `CURRENT_G1_SCHEMA_IDENTITIES` and logical/physical Schema hash chains are absent;
 - `active-core` is the only runtime selection pointer;
-- Host Core snapshots use minimal metadata and atomic selection;
-- new state backups use the timestamp manifest format and support explicit restore;
+- Host Core snapshots use minimal version/ABI metadata and atomic selection, without release or Schema identity hashes;
+- new state backups use the timestamp manifest format, integer Schema versions, ordinary copy checksums, and explicit restore;
 - Node compatibility is based on supported major plus actual ABI smoke;
 - Feature/Workflow publish and activate still work;
 - the three purpose-specific Runtime gateways remain the executable and Store access boundary for external source;
@@ -727,7 +846,12 @@ The full simplification is complete when:
 - Host Core no longer imports Runtime certification internals, and obsolete Host Core gateway identity exports are removed;
 - credential, mount, IPC, destructive-action, schema, backup, and rollback safeguards remain intact;
 - current tests, typecheck, schema checks, Golden replay, startup smoke, snapshot rollback, and state restore tests pass;
+- Gate ownership, G0 exit, readiness-audit, sealed-era closure, and format-debt hash authorities are absent from active scripts and tests;
 - no active command hashes archived Markdown or compares current source with the accepted construction commit;
 - the historical release verifier and bundle have been removed after the legacy binding compatibility window.
 
 This plan intentionally changes the release/activation mechanism: it removes G9 deployment activation and simplifies Host Core release/activation into local snapshot creation and selection. It does not remove the ability to maintain a known-good local runtime or activate internal Feature/Workflow versions.
+
+The plan also removes Identity as a cross-cutting governance mechanism. It does not remove functional identifiers, Registry resource versions, idempotency keys, or checksums that directly protect runtime behavior or copied data.
+
+Runtime database history retention, payload pruning, and GC are intentionally outside this engineering-governance plan. Revisit them separately only when retained operational history causes measurable storage, startup, query, or test cost.

@@ -19,7 +19,7 @@ Development controls have only three legitimate goals:
 
 A mechanism that does not materially serve one of these goals should not block normal development.
 
-This boundary overrides stronger product-release wording in active design notes and `local/docs/` plans. Historical archives remain unchanged as provenance. Security requirements and descriptions of behavior that already protects live local state are not overridden.
+This boundary overrides stronger product-release wording in active design notes and `local/docs/` plans. Git history and tags preserve historical provenance; historical construction copies do not need to remain in the active source tree. Security requirements and descriptions of behavior that already protects live local state are not overridden.
 
 ## Terminology
 
@@ -42,6 +42,8 @@ New code and documentation should use the narrower wording unless it must preser
 
 Snapshot on 2026-08-04: `src/workflow-runtime/contracts/` contains 2,842 files, including 2,443 conformance files; its JSON files total about 35 MB. The prior default test chain also included current contracts, a complete physical snapshot verifier, certification, production activation, and Host Core lifecycle tests. This is materially heavier than the current project positioning requires.
 
+Construction-stage governance also remains in source and package scripts: frozen Gate ownership, G0 exit evidence, G5-G7 readiness audits, sealed/successor compatibility checks, and a formatting baseline that grandfathered 48 of 530 TypeScript files by individual hash. These mechanisms make ordinary refactors update historical proof rather than test current behavior.
+
 ### Keep In The Normal Path
 
 These controls directly protect local use or catch high-probability regressions:
@@ -55,17 +57,19 @@ These controls directly protect local use or catch high-probability regressions:
 
 Internal positioning does not justify weakening credential, host-access, privacy, or destructive-action safety. A single-user tool can still damage valuable local or external state.
 
-### Removed From The Default Path
+### Remove From The Engineering Path
 
-The following checks remain explicit but no longer run as part of normal `contracts:check` or `test:current`:
+The following mechanisms should not remain as active blocking or optional certification commands after their compatibility window:
 
 - Byte-for-byte verification of the retained v1 physical release archive.
 - Workflow Runtime certification tests.
 - Legacy G9 production activation tests.
+- Frozen Gate ownership and Gate ownership contract generation.
+- G0 exit evidence and G5-G7 readiness authorities.
+- Fixed cross-era tests that only prove a completed construction milestone.
+- Per-file format-debt hash allowances.
 
-The pull-request CI also no longer runs the retained physical snapshot verifier for unrelated changes.
-
-Use `npm run contracts:check:full` or `npm run test:full` only when changing these compatibility surfaces or investigating their historical artifacts.
+Current runtime invariants extracted from these wrappers remain as focused unit, integration, schema-migration, or startup tests. Historical bytes remain available from Git rather than another tracked archive or `:full` certification path.
 
 ### Next Simplification Candidates
 
@@ -79,10 +83,17 @@ The executable migration design is documented in [`workflow-runtime-guardrail-si
 6. Relax exact managed-Node identity only after checking the `better-sqlite3` native ABI constraint. Pinning a compatible Node major/ABI may be enough; downloading and hashing one exact distribution is stronger than ordinary local development needs.
 7. Review artifact contracts and stage gates by observed failure rate. Fields or approvals that have not prevented a real defect should become warnings or be removed.
 8. Remove raw-hash verification of archived Markdown and accepted-commit diffs over current source. Git history/tag is the historical authority; documentation corrections must not fail a runtime archive gate.
+9. Remove cross-cutting Identity governance: Runtime identity modes/evidence, Compiler source-and-toolchain identity, frozen logical/physical Schema hash chains, and exact Host/Node release identity. Retain only functional record IDs, version compatibility checks, idempotency keys, and checksums that directly verify a copy or payload used at runtime.
+10. Remove frozen Gate ownership, G0 exit, G5-G7 readiness, sealed-era closure, and fixed successor compatibility wrappers after moving any still-useful behavior assertion into its owning current test.
+11. Delete the per-file format-debt hash baseline, format the retained TypeScript once after the large source deletion, and use direct Prettier checking.
 
-### Archive Rather Than Rewrite
+### Delete From HEAD Rather Than Rewrite
 
-Historical G0-G9 artifacts, frozen Gate ownership, independent acceptance metadata, and serialized `production` names should be archived or isolated, not mass-renamed. They contain internal hashes and cross-references; rewriting them would create churn without improving runtime behavior.
+Historical G0-G9 artifacts, frozen Gate ownership, and independent acceptance metadata should be removed from the active tree when they no longer protect current behavior. Do not mass-rename or regenerate their internal hashes; preserve the last complete state with Git history or a tag. Serialized `production` names may remain only during an explicit compatibility window when existing local state still reads them.
+
+Runtime database command/event/value history, payload retention, and GC are a separate operational-data concern. They are outside this engineering-governance cleanup unless measurement shows that they materially slow development, tests, startup, or normal local use.
+
+At this decision point there is no historical Workflow Run or persisted Compiler Plan that must be resumed. Compiler Identity removal may therefore use a clean new Plan/Run serialization boundary without a legacy reader or migration. This does not permit resetting unrelated Registry, Capacity, Workflow-definition, user-artifact, or other local state.
 
 ## Decision Rule For New Mechanisms
 
