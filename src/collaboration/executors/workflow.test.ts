@@ -260,6 +260,13 @@ describe('Workflow Action integration', () => {
         requestId: `collaboration:${operationKey}`,
         creationDomain: 'agent_group_collaboration',
         creationKey: operationKey,
+        actor: 'system',
+        launchPolicy: 'auto',
+        launchAuthorization: {
+          kind: 'trusted_system',
+          authorizationRef: `collaboration:${operationKey}`,
+        },
+        entryPoint: 'default',
         creationIntentHash: expect.stringMatching(/^sha256:/),
         nowMs: 42,
         initialActivation: { nowMs: 42 },
@@ -273,19 +280,27 @@ describe('Workflow Action integration', () => {
       create: vi.fn(),
       observe: vi.fn(),
     });
-    const config = structuredClone(binding().config);
-    const profile = config.workflow_launch_profile as Record<string, unknown>;
-    profile.template = {
-      ...(profile.template as Record<string, unknown>),
-      creationKey: 'configured-by-caller',
-    };
-    expect(() =>
-      host.startCollaborationFiniteRun({
-        workflowRef: 'workflow:local-review',
-        operationKey,
-        promptSha256: hash(prompt),
-        bindingConfig: config,
-      }),
-    ).toThrow(/must not configure host-owned creationKey/);
+    for (const field of [
+      'creationKey',
+      'actor',
+      'launchPolicy',
+      'launchAuthorization',
+      'entryPoint',
+    ]) {
+      const config = structuredClone(binding().config);
+      const profile = config.workflow_launch_profile as Record<string, unknown>;
+      profile.template = {
+        ...(profile.template as Record<string, unknown>),
+        [field]: 'configured-by-caller',
+      };
+      expect(() =>
+        host.startCollaborationFiniteRun({
+          workflowRef: 'workflow:local-review',
+          operationKey,
+          promptSha256: hash(prompt),
+          bindingConfig: config,
+        }),
+      ).toThrow(new RegExp(`must not configure host-owned ${field}`));
+    }
   });
 });

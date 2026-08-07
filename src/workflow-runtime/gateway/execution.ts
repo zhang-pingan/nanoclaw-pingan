@@ -28,6 +28,10 @@ export type FiniteWorkflowCreationTemplate = Omit<
   | 'creationDomain'
   | 'creationKey'
   | 'source'
+  | 'actor'
+  | 'launchPolicy'
+  | 'launchAuthorization'
+  | 'entryPoint'
   | 'creationIntentHash'
   | 'nowMs'
   | 'initialActivation'
@@ -43,6 +47,10 @@ export interface FiniteWorkflowCreationRequest {
   readonly creationDomain: string;
   readonly creationKey: string;
   readonly source: T0CreationInput['source'];
+  readonly actor: T0CreationInput['actor'];
+  readonly launchPolicy: T0CreationInput['launchPolicy'];
+  readonly launchAuthorization: T0CreationInput['launchAuthorization'];
+  readonly entryPoint: string;
   readonly nowMs: number;
   readonly template: FiniteWorkflowCreationTemplate;
 }
@@ -56,6 +64,10 @@ export function resolveFiniteWorkflowCreationInput(
     creationDomain: request.creationDomain,
     creationKey: request.creationKey,
     source: request.source,
+    actor: request.actor,
+    launchPolicy: request.launchPolicy,
+    launchAuthorization: request.launchAuthorization,
+    entryPoint: request.entryPoint,
     creationIntentHash: calculateCreationIntentHash({
       creationDomain: request.creationDomain,
       creationKey: request.creationKey,
@@ -63,7 +75,7 @@ export function resolveFiniteWorkflowCreationInput(
       ownershipHash: request.template.ownershipHash,
       routingScope: request.template.routingScope,
       recipe: request.template.recipe,
-      entryPoint: request.template.entryPoint,
+      entryPoint: request.entryPoint,
       inputHash: request.template.input.hash,
       attachmentManifestHash: request.template.attachments.hash,
     }),

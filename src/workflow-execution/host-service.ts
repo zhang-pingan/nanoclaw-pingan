@@ -55,6 +55,13 @@ export class WorkflowExecutionHostService {
       creationDomain: 'agent_group_collaboration',
       creationKey: request.operationKey,
       source: 'api',
+      actor: 'system',
+      launchPolicy: 'auto',
+      launchAuthorization: {
+        kind: 'trusted_system',
+        authorizationRef: `collaboration:${request.operationKey}`,
+      },
+      entryPoint: 'default',
       nowMs: this.now(),
       template: profile.template,
     });
@@ -101,6 +108,10 @@ export class WorkflowExecutionHostService {
       'creationDomain',
       'creationKey',
       'source',
+      'actor',
+      'launchPolicy',
+      'launchAuthorization',
+      'entryPoint',
       'creationIntentHash',
       'nowMs',
     ]) {
