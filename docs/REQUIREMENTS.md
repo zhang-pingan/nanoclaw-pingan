@@ -8,6 +8,8 @@ Original requirements and design decisions from the project creator.
 
 Icarus is an internal, experimental, single-user tool. It is not a delivered product and does not promise an SLA, uninterrupted upgrades, long-term backward compatibility, compliance certification, or production support.
 
+During the current no-history development stage, the entire project is latest-only. A new protocol, schema, API, event model, Git layout, or SQLite schema immediately replaces the previous version; the project does not retain migration chains, dual-write paths, compatibility readers, obsolete replay, or stale-client negotiation. Version mismatches fail closed and stale development state is explicitly reinitialized. See [`internal-experimental-scope.md`](internal-experimental-scope.md#development-version-policy) for reset safety and the required compatibility freeze point.
+
 Freeze checks, release/activation commands, contracts, approvals, and audit records exist only when they reduce development rework, protect local state, or keep an in-progress checkout from disrupting normal local use. They are internal guardrails, not customer-facing obligations. A guardrail whose maintenance cost or iteration delay exceeds the local risk it prevents should be simplified, moved out of the default path, or archived.
 
 Security boundaries around credentials, host access, external messages, and destructive operations remain real safety requirements even for an internal tool.
@@ -185,7 +187,7 @@ A personal Claude assistant accessible through its installed channels, with mini
 ### Skills
 - `/setup` - Install dependencies, configure built-in channels and scheduler, and start services
 - `/customize` - General-purpose skill for adding capabilities (new channels like Telegram, new integrations, behavior changes)
-- `/update` - Pull upstream changes, merge with customizations, run migrations
+- `/update` - Pull upstream changes, merge with customizations, apply current-version setup, and require explicit reinitialization for stale development stores
 
 ### Deployment
 - Runs from a local Git checkout on Mac via launchd

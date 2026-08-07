@@ -4,6 +4,8 @@ Icarus 是一个面向个人使用的内部实验性 Agent 工作系统。它把
 
 本项目不是需要对外交付或承诺稳定服务的产品，不提供 SLA、长期兼容性、无中断升级或合规认证保证。项目中的冻结检测、发布/激活、合同、审计和审批机制，目的仅是降低开发返工、保护本机已有状态，并避免开发中的变更影响日常使用；它们不代表面向客户的生产发布流程。术语边界和减重原则见 [`docs/internal-experimental-scope.md`](docs/internal-experimental-scope.md)。
 
+项目当前处于无真实历史业务数据的开发迭代期，采用全项目 **latest-only** 版本策略：新的协议、Schema、API、事件、Git 目录或 SQLite Schema 合入后立即成为唯一 current version；不保留旧版本迁移、双写、兼容读取、兼容回放或旧客户端协商。显式版本字段用于识别并拒绝陈旧输入，不代表兼容承诺。旧开发数据通过精确、显式的重建流程处理，不能借此静默删除源码、配置、凭据或用户文件；完整边界见 [`docs/internal-experimental-scope.md`](docs/internal-experimental-scope.md#development-version-policy)。
+
 项目当前由七个核心模块组成：
 
 - **Web 工作台客户端**：用户主动操作的 Agent 工作台。它把需求、计划、开发、测试、审批、知识库、记忆、Trace、配置等现有工作流集中到一个工作界面中。这里的 Agent 是被动辅助工具，用户发起任务、查看进度、补充上下文、审批动作。
@@ -428,7 +430,7 @@ Icarus 的核心安全边界是容器隔离，而不是让 Agent 在宿主机上
 ## 相关文档
 
 - `docs/SPEC.md`：系统规格和频道架构。
-- `docs/internal-experimental-scope.md`：项目边界、术语解释和工程机制减重清单。
+- `docs/internal-experimental-scope.md`：项目边界、latest-only 版本策略、术语解释和工程机制减重清单。
 - `docs/startup-flow.md`：启动流程、消息链路、IPC、数据库表。
 - `docs/host-core-lifecycle.md`：Host Core 本地快照、选择、启动和独立 Workflow Runtime 状态维护。
 - `docs/SECURITY.md`：安全模型、挂载策略、凭证隔离。
@@ -439,6 +441,7 @@ Icarus 的核心安全边界是容器隔离，而不是让 Agent 在宿主机上
 ## 设计原则
 
 - **内部实验工具优先**：只为当前使用者和本地环境优化，不把内部流程扩展成对外交付、SLA、合规或长期兼容承诺。
+- **开发期 latest-only**：每次迭代只实现最新协议、Schema、API 和存储模型；旧版本 fail closed 并显式重建，不维护迁移链或兼容分支。
 - **护栏必须减少净返工**：冻结、合同、发布选择和检查只有在能保护本机状态或更早发现高概率回归时才保留；低频、重复或维护成本更高的门禁退出默认开发路径。
 - **用户主动和 Agent 主动分层**：工作台承载用户主动工作流，个人助理承载 Agent 主动发现和提醒。
 - **移动端只做补充入口**：飞书等移动端渠道用于任务查询、审批处理、提醒触达和简单任务下发，复杂编排和高风险操作回到工作台。

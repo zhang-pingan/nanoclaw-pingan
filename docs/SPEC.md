@@ -4,6 +4,8 @@ A personal Claude assistant with multi-channel support, persistent memory per co
 
 This specification describes the current internal experiment; it is not a public product contract. Normative language defines consistency inside the current checkout only. It does not imply an external compatibility guarantee, production certification, SLA, or obligation to preserve an unused interface. Freeze, release, activation, and audit behavior is justified only by local iteration stability and protection of local state. See [`internal-experimental-scope.md`](internal-experimental-scope.md).
 
+The specification is latest-only: when a protocol, schema, API, event, Git layout, or local store model is replaced, this document and the active implementation describe only the new current version. Obsolete versions are rejected rather than migrated, dual-written, or replayed. Stale development state requires an explicit, narrowly scoped reinitialization. This policy must be replaced by an explicit compatibility policy before any irreplaceable history or external client dependency exists.
+
 The Host runs only from a local Git checkout. Setup, TypeScript output, service-manager configuration, mutable project state, and optional rollback snapshots are anchored to that checkout. Electron clients are checkout-built local clients of the same Host; there is no supported standalone application package, bundled Host, packaged-install migration, or auto-update topology.
 
 ---
@@ -671,7 +673,7 @@ Icarus runs from the local Git checkout as a single macOS launchd service. The g
 When Icarus starts, it:
 
 1. **Ensures container runtime is running** - Automatically starts it if needed; kills orphaned project containers from previous runs
-2. Initializes the SQLite database (migrates from JSON files if they exist)
+2. Initializes the current SQLite database; the existing development-only JSON-file importer is legacy behavior to remove under latest-only, not a supported migration contract
 3. Loads state from SQLite (registered Agents, sessions, router state)
 4. **Connects channels** — loops through registered channels, instantiates those with credentials, calls `connect()` on each
 5. Once at least one channel is connected:

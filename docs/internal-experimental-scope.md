@@ -14,12 +14,27 @@ The project does not promise:
 Development controls have only three legitimate goals:
 
 1. Detect likely regressions early enough to reduce rework.
-2. Protect local data, credentials, and a known-good way to keep using the project.
+2. Protect local files, credentials, current working state, and a known-good way to keep using the project.
 3. Make failures diagnosable and recovery actions understandable.
 
 A mechanism that does not materially serve one of these goals should not block normal development.
 
 This boundary overrides stronger product-release wording in active design notes and `local/docs/` plans. Git history and tags preserve historical provenance; historical construction copies do not need to remain in the active source tree. Security requirements and descriptions of behavior that already protects live local state are not overridden.
+
+## Development Version Policy
+
+Icarus is still in active development and has no real historical business dataset, signed protocol history, or external client population that requires backward compatibility. The project therefore uses a project-wide **latest-only** policy until that premise changes:
+
+- each new protocol, JSON schema, API, event, Git layout, or SQLite schema becomes the only current version when it lands;
+- replace and remove superseded readers, writers, reducers, endpoints, migrations, feature flags, fixtures, and compatibility tests;
+- do not dual-write old and new formats, replay obsolete events into the current model, or negotiate with stale clients;
+- keep explicit format and version identifiers so stale or future input can be detected and rejected fail closed; version fields are not compatibility promises;
+- handle an old development store or fixture through an explicit, narrowly scoped reset, reinitialization, or fresh checkout rather than a migration chain;
+- keep active documentation and examples aligned with the current version; Git history retains superseded designs.
+
+Latest-only removes compatibility work; it does not authorize silent or broadly scoped deletion. Source files, configuration, credentials, user-authored artifacts, and any current local state outside the replaced store remain protected. A reset must identify its exact targets, explain the recovery path, and use a backup when loss would be difficult to reverse.
+
+Before the first real group, irreplaceable business record, signed history, or external client dependency is created, the project must declare a compatibility freeze point and replace this policy with an explicit version-support, migration, and replay policy. Backward compatibility does not arise implicitly.
 
 ## Supported Runtime Topology
 
@@ -57,8 +72,8 @@ Construction-stage governance also remained in source and package scripts: froze
 These controls directly protect local use or catch high-probability regressions:
 
 - Type checking, focused unit/integration tests, and schema validation for the changed domain.
-- Read-only startup compatibility checks for the live SQLite database.
-- Supported migrations, exact reset path scoping, backup before reset, and a clear recovery location.
+- Read-only startup checks that accept only the current SQLite schema and fail closed on stale versions.
+- Exact reset path scoping, explicit reinitialization, backup when needed, and a clear recovery location; migration chains are not maintained during latest-only development.
 - Atomic `active-core` selection and preservation of the previous selection on failure.
 - Container isolation, mount allowlists, credential proxying, IPC authorization, and confirmation for destructive or externally visible actions.
 - Small, versioned contracts at persisted-data and process boundaries that can change independently.
@@ -77,7 +92,7 @@ The implementation removed the following mechanisms as active blocking or option
 - Fixed cross-era tests that only prove a completed construction milestone.
 - Per-file format-debt hash allowances.
 
-Current runtime invariants extracted from these wrappers remain as focused unit, integration, schema-migration, or startup tests. Historical construction state remains available from Git. A retained compressed snapshot is non-active diagnostic material: no default command verifies it or uses it as a runtime input.
+Current runtime invariants extracted from these wrappers remain as focused unit, integration, current-schema boundary, or startup tests. Historical construction state remains available from Git. A retained compressed snapshot is non-active diagnostic material: no default command verifies it or uses it as a runtime input.
 
 ### Implemented Simplification Baseline
 
@@ -96,7 +111,7 @@ The continuing rule is to review any new artifact contract or stage gate against
 
 ### Historical Cleanup Rule
 
-Historical G0-G9 artifacts, frozen Gate ownership, and independent acceptance metadata were removed from the active development path when they no longer protected current behavior. Future cleanup should not mass-rename or regenerate internal hashes; preserve historical state with Git history or a tag. Serialized `production` names may remain only when existing persisted state still reads them.
+Historical G0-G9 artifacts, frozen Gate ownership, and independent acceptance metadata were removed from the active development path when they no longer protected current behavior. Future cleanup should not mass-rename or regenerate internal hashes; preserve historical state with Git history or a tag. Serialized `production` names may remain only when the current schema still defines them, not solely to read an obsolete version.
 
 Runtime database command/event/value history, payload retention, and GC are a separate operational-data concern. They are outside this engineering-governance cleanup unless measurement shows that they materially slow development, tests, startup, or normal local use.
 
