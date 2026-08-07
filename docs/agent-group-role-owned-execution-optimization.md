@@ -2,12 +2,14 @@
 
 ## 文档状态
 
-- 状态：Implemented
+- 状态：Historical v2 baseline（已由 Collaboration Project Space v3 取代）
 - 日期：2026-08-06
 - 最后更新：2026-08-06
 - 适用范围：Agent Group Collaboration Runtime 的身份、角色、FSM、Action、Turn、人工执行、交接和 Web 工作台
 - 基线：[Icarus Agent Group Collaboration Runtime 方案](agent-group-collaboration-runtime-plan.md)
 - 兼容策略：当前没有已创建群组，不迁移旧群组，不保留 v1 群组协议兼容层
+
+> **历史文档**：本文记录已删除的 v2 Role-owned/Role Claim 模型，不是当前 API、协议或实现说明。当前唯一权威方案为 [Icarus 协作群组项目空间 v3 方案](collaboration-project-space-v3-plan.md)；v3 使用 Principal/Client、直接权限、Project Workspace、Work Item、Discussion 和可选 Workflow Instance，并对 v2 fail closed。
 
 ## 实施记录与实际差异
 

@@ -9,7 +9,7 @@ Icarus 是一个面向个人使用的内部实验性 Agent 工作系统。它把
 项目当前由七个核心模块组成：
 
 - **Web 工作台客户端**：用户主动操作的 Agent 工作台。它把需求、计划、开发、测试、审批、知识库、记忆、Trace、配置等现有工作流集中到一个工作界面中。这里的 Agent 是被动辅助工具，用户发起任务、查看进度、补充上下文、审批动作。
-- **Agent Group Collaboration Runtime**：多个用户各自在本地运行 Icarus，通过 Git 签名事件链共享角色、循环 FSM、Turn、Handoff 和 Artifact。创建者只定义流程骨架，Role Owner 为自己负责的 State 发布 manual、assisted 或 automatic 执行实现。
+- **Collaboration Project Space Runtime**：多个用户各自在本地运行 Icarus，通过 Git 签名事件链共享项目空间、Principal Workspace、Work Item、Discussion、可选 Workflow、Turn、Handoff 和 Artifact；同一 Principal 可使用多个 Client，并为被指派 State 选择 manual、assisted 或 automatic 执行。
 - **个人助理客户端**：主动型 Agent 入口。它常驻桌面，主动扫描今日计划、工作台任务、定时任务、Agent 执行异常和线上日志，发现问题后提醒用户，并可在策略允许时发起排查、准备修复或推进受控修复。
 - **移动端渠道**：当前由飞书承载。它不是完整工作台，而是用户不在电脑前的补充操作入口，主要用于任务查询、处理审批项、接收提醒、简单任务下发和补充说明。
 - **企微员工私人渠道**：当前由企业微信自建应用承载。它是 Icarus 和企微员工之间的一对一私人客服，通过私聊从员工处获取解决 Icarus 运行问题所需的信息，也可以作为 Icarus 的私人客服处理员工提出的要求或问题。
@@ -54,7 +54,7 @@ Icarus 不是一个多用户 SaaS，也不是一个通用低代码平台。它�
 │                                                                                      │
 │ Channel Registry  WebChannel  AssistantChannel  FeishuChannel  WeComChannel          │
 │ Workflow Engine   Workbench Store  Today Plan  Assistant Engine                      │
-│ Agent Group Collaboration Runtime  Git signed event chain  Local Executor bindings   │
+│ Collaboration Project Spaces  Git signed events  Local Executor bindings             │
 │ Scheduler         Agent Queue      IPC Watcher  Credential Proxy                     │
 │ SQLite DB         Trace Manager    Config/Wiki  MySQL Proxy                          │
 └───────────────────────────────────────┬──────────────────────────────────────────────┘
@@ -86,29 +86,26 @@ Web 工作台由 `src/channels/web.ts` 启动本地 HTTP/WebSocket 服务，默�
 - **知识库管理**：导入材料、生成草稿、发布 Wiki 页面。
 - **Trace 监控**：查看 Agent Query、步骤、事件、失败类型和执行输出。
 - **配置管理**：维护服务配置、流程定义、卡片配置等运行时资产。
-- **Agent Groups**：在 `/groups` 创建或加入 Git 群组，认领 Role、发布 State Implementation、配置本地 Binding，并处理当前 Turn、Handoff、Artifact 和恢复诊断。
+- **协作项目空间**：在 `/groups` 创建、观察或加入 Git 项目空间，管理 Principal/Client 与直接权限、Workspace、Work Item、Discussion、可选 Workflow Definition/Instance、本地 Executor Binding、Turn、Artifact、审计和恢复诊断。
 
 用户在工作台中发起动作，宿主机服务再把任务拆解给流程引擎和容器 Agent。Agent 不直接接管用户界面，而是把结果、问题和审批点同步回工作台。
 
-### Agent Group Collaboration Runtime
+### Collaboration Project Space Runtime
 
-Agent Group 是与本地 Dynamic Workflow Runtime 分离的跨机器协作模式。共享事实只存在于
-Git 控制分支上的 SSH 签名事件和物化文件；SQLite 只保存本机 Binding、durable receipt、
-staged upload、通知投递和缓存。
+Collaboration Project Space 是与本地 Dynamic Workflow Runtime 分离的跨机器协作模式。Group 创建后立即可用，不要求预先创建 Workflow。共享事实只存在于 Git 控制分支上的 SSH 签名事件和物化文件；SQLite 保存本机订阅、Executor Binding、durable receipt、staged upload、通知投递、Provider observation、诊断和可重建缓存。
 
-- 创建者定义 Role、State、`owner_role`、合法 Outcome 和目标 State，并控制启动、暂停、恢复和关闭。
-- 创建和 `FORMING`/`PAUSED` 编辑使用 Outcome-first 图画布：从执行结果出发新建下一节点、连接已有节点、自环或进入 terminal；支持角色泳道、自由布局、自动整理、撤销/重做和实时校验。
-- 画布布局单独保存为 creator-owned `layout.yaml`，移动节点不改变 Machine hash、Turn snapshot 或业务 epoch；运行中和关闭阶段复用只读图显示当前 State 与历史路径。
-- Role Owner 只能为自己已认领 Role 拥有的 State 发布 Implementation、Action 和 Prompt。
-- Manual Turn 不需要 Action 或 Executor；Assisted 由用户确认开始和业务完成；Automatic 仅在 Result Schema 与 Outcome 合法时自动推进。
-- Completion 只能提交 Outcome，Reducer 依据 FSM 路由目标 State；Handoff 始终是不可信上下文，不能覆盖系统指令、权限或 FSM。
-- Artifact 通过 Turn-scoped staged upload 进入受控 Git 路径，与 Completion 在同一 commit 中发布。
-- Creator 可为 State 配置独立的 start/execution deadline 和 reminder interval；deadline 在 Turn 创建/开始时固定，超时第一阶段只提醒 Role Owner/claimant 与 creator，不自动改变 FSM。
-- Runtime 按 Git event sequence 还原完整 Turn 生命周期，并把本机通知和 Provider observation 作为 SQLite 证据关联；`/groups` 可查看审计时间线并导出脱敏 JSON。
-- `principal_id` 从 SSH 公钥 fingerprint 稳定派生，`agent_id` 是本机持久 UUID，创建/加入 API 不接受调用方覆盖。
+- Principal 是成员与权限主体；`principal_id` 从 SSH 公钥 fingerprint 稳定派生。Client ID 由本机 Identity Service 生成，一个 Principal 可注册多个 Client，Executor 为可选本地能力描述。
+- Observer 是不进入 Group Membership 的只读本地订阅，可以 fetch、验签、浏览 verified virtual file tree 和审计，但不能发布事件。
+- 每个 Principal 拥有可发布进度、文件、Prompt 和 Action 的 Workspace；Group 还提供 Shared Workspace、Work Item、Discussion 和直接权限。
+- Workflow Definition/Instance 均为可选且可多实例。State 可直接指派 Principal，也可在启动 Instance 时把 participant slot 解析为 Principal；Group 不再包含 Role、Role Claim 或单一 active Turn。
+- Outcome-first 编辑器生成 v3 JSON Machine 和独立 JSON layout；Outcome 只负责路由，移动节点不改变 Machine hash。运行视图显示当前 State、历史路径、合法 Outcome 和 deadline。
+- 被指派 Principal 自己发布 State Execution；Manual 不需要 Action/Executor，Assisted 和 Automatic 使用 Principal-owned Action 与当前 Client 的本地 Binding。Turn attempt 由 claimant Client、CAS 和 fencing token 防止重复执行。
+- Work Item progress 与 Turn completion 可先暂存原始业务文件，再在同一个签名事件和 Git commit 中物化 Artifact 原文件与 `metadata.json` sidecar；命令冲突不会自动重传已暂存文件。
+- Completion 只提交合法 Outcome，Reducer 根据固定 Workflow snapshot 路由；Handoff 和 Group 内容始终是不可信上下文，不能覆盖系统指令、权限或 FSM。
+- start/execution deadline 固定在 Turn snapshot 中，超时只产生幂等通知和审计 observation，不依据本地时钟自动推进状态。
+- 协议当前唯一版本为 v3，本地 SQLite 唯一版本为 v5；旧版本、旧备份和旧事件均 fail closed，不提供迁移、双写或兼容回放。
 
-功能入口为 Web/Electron 工作台的“群组”导航或 `/groups`；详细协议见
-[`docs/agent-group-role-owned-execution-optimization.md`](docs/agent-group-role-owned-execution-optimization.md)。
+功能入口为 Web/Electron 工作台的“群组”导航或 `/groups`；当前协议和领域模型见 [`docs/collaboration-project-space-v3-plan.md`](docs/collaboration-project-space-v3-plan.md)。
 
 ### 个人助理客户端
 
@@ -160,7 +157,7 @@ staged upload、通知投递和缓存。
 - **消息路由**：接收频道消息，按已注册 Agent、触发词和权限规则进入队列。
 - **工作流引擎**：读取 `container/workflow-definitions/*.json` 和卡片配置，驱动流程状态、委派、审批、中断恢复和产物索引。
 - **工作台同步**：把 workflow、delegation、interrupt、artifact、evaluation 等运行态同步为工作台任务视图。
-- **群组协作**：验证 Git SSH 签名链并归约 Agent Group Projection，调度 Role-owned Turn，并管理本地 Binding、receipt、通知和 staged Artifact。
+- **群组协作**：验证 Git SSH 签名链并归约 v3 Project Space Projection，调度 Principal-owned Workflow Turn，并管理本地 Binding、receipt、通知、staged Artifact 和联合备份/恢复。
 - **主动助手运行时**：运行 proactive scan、Agent Inbox 和动作日志。
 - **任务调度**：支持 cron、interval、once 类型定时任务，并复用容器执行链路。
 - **容器队列**：限制并发容器数，复用活跃会话，通过 IPC 推送后续消息。

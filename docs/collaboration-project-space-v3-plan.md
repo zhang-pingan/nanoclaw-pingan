@@ -2,24 +2,25 @@
 
 ## 文档状态
 
-- 状态：Proposed
+- 状态：Implemented（current-only）
 - 日期：2026-08-06
-- 目标协议：`icarus.collaboration-group/3`
-- 当前代码基线：`main@3eff5302`
-- 当前实现协议：Agent Group v2、SQLite v4
+- 实施完成：2026-08-07
+- 当前协议：`icarus.collaboration-group/3`
+- 实施前代码基线：`main@3eff5302`（历史）
+- 当前实现：Collaboration Project Space v3、SQLite v5
 - 适用范围：Group、Principal、Client、Executor、Observer、Workspace、Work Item、Discussion、Workflow Definition、Workflow Instance、图形化 FSM、Git 协议、权限、同步和审计
 - 前提：方案仍处于开发迭代期，没有真实群组、不可丢弃业务数据或旧签名历史；每次迭代发布的新协议直接成为唯一 current version，不实现旧版本迁移、双写、兼容读取或兼容回放
 - 相关文档：
   - [Agent Group Collaboration Runtime 方案](agent-group-collaboration-runtime-plan.md)
   - [Agent Group 角色自治执行模型优化方案](agent-group-role-owned-execution-optimization.md)
 
-本文档定义目标 v3 模型。上述两份文档继续记录当前 v2 的设计和实现事实；当 v3 实施完成后，应将其标记为历史基线，不能让 v2 的“群组必须拥有一个 Machine/Role 集合”继续作为现行产品语义。
+本文档定义并记录当前 v3 模型。上述两份文档仅保留 v1/v2 历史设计基线；v2 的“群组必须拥有一个 Machine/Role 集合”不再是现行语义，当前代码、API、Git replay、SQLite store 和测试均对旧版本 fail closed。
 
 ## 摘要
 
-当前 Agent Group Runtime 将一个群组直接等同于一个 FSM：创建群组必须同时定义 Machine、Role 和创建者初始 Role；群组只有在 Role 认领和 State Implementation 完整后才能 READY。该模型已经实现 Role-owned Action、Manual/Assisted/Automatic Turn、Handoff、Artifact、节点计时、超时提醒、审计和 Outcome-first 图形化 FSM 编辑器，但它仍然只能表达“按一个流程推进的一组人”。
+实施前的 Agent Group Runtime 将一个群组直接等同于一个 FSM：创建群组必须同时定义 Machine、Role 和创建者初始 Role；群组只有在 Role 认领和 State Implementation 完整后才能 READY。该模型已经实现 Role-owned Action、Manual/Assisted/Automatic Turn、Handoff、Artifact、节点计时、超时提醒、审计和 Outcome-first 图形化 FSM 编辑器，但它仍然只能表达“按一个流程推进的一组人”。
 
-目标 v3 将 Group 提升为长期存在的协作项目空间：
+v3 将 Group 提升为长期存在的协作项目空间：
 
 1. Group 创建后立即可用，即使没有 Work Item 和 Workflow。
 2. Principal 是群组成员和权限主体；一个 Principal 可以使用多个 Icarus Client，并可以配置零个或多个本地 Executor。
@@ -60,7 +61,18 @@ Workflow Instance State
   -> optional local Executor Binding
 ```
 
-## 1. 当前代码基线
+## 0. 实施结果
+
+v3 已按本文的 current-only 边界端到端落地：
+
+- Git 控制分支只接受 v3 Group/Event/Projection 和 JSON materialization，按 canonical JSON hash、SSH signature、aggregate revision、previous hash、commit order、路径、sidecar 和文件 hash/size 完整校验；
+- 本地 SQLite v5 保存 Observer/Member subscription、Principal/Client、直接权限、投影、file index、Executor Binding、execution receipt/observation、notification、audit evidence 和 staged Artifact，非 v5 store 启动时 fail closed；
+- Group、Workspace、Work Item、Discussion、Workflow Definition/Instance、State Execution、Turn、timeout、Artifact、审计、备份/恢复和 verified virtual file tree 已进入 service 与 Web API；
+- Work Item progress 与 Turn completion 通过 staged upload 在一个签名事件和 Git commit 中物化原始业务文件及 `metadata.json`，同时验证 scope、Principal/Client、attempt 和 fence；`/3` 备份联合保护 DB 与尚未提交的 staged bytes；
+- Web/Electron `/groups` 已提供十个项目空间页面、Observer 只读状态、Work Item board/list、Discussion、文件树、Principal/Client/权限、Workflow Definition/Instance、Outcome-first 编辑器、Turn、Artifact、审计和诊断；
+- v2 Role/Claim、Group-level Machine/active Turn、YAML machine/layout、旧 API、旧 store、兼容 reducer、迁移、双写和旧事件回放均已从当前实现与正向测试删除。
+
+## 1. 实施前代码基线（历史）
 
 ### 1.1 已实现能力
 
@@ -1969,7 +1981,7 @@ Observer 使用相同浏览和验证界面，但：
 - 删除旧 parser/reducer/API/materializer/schema/fixture 和兼容测试，只保留最新目标实现；
 - 非 current 协议、Git fixture 和 SQLite schema fail closed，提供显式开发环境 reset/reinitialize 流程；
 - 建立 fresh v3 fixture 和临时 Git remote 测试基线；
-- 保留当前 v2 测试作为行为参考，不保留兼容 API。
+- 实施时只把 v2 测试作为行为参考；当前测试和 API 不保留 v2 兼容路径。
 
 ### Phase 1：Group Container 和 Identity
 

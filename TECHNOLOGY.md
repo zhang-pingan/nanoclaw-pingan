@@ -103,23 +103,24 @@ Icarus 的工作流引擎把复杂研发活动建模为配置驱动的状态机�
 
 这让需求开发、Bug 修复、预发部署、测试验证等流程从“一次性 prompt”变成可审计的工程闭环。Agent 可以负责执行，但流程所有权在宿主机状态机手里。
 
-## 6. Agent Group：基于 Git 的跨机器角色协作
+## 6. Collaboration Project Space：基于 Git 的跨机器项目协作
 
-Agent Group Collaboration Runtime 是独立于本地 Dynamic Workflow Runtime 的长期、可循环协调层。多个用户各自在自己的 Icarus 实例上运行角色任务，通过 Git 控制分支上的 SSH 签名提交共享流程事实；任何单机的 SQLite、working tree 或 Executor 状态都不能单独推进群组。
+Collaboration Project Space Runtime 是独立于本地 Dynamic Workflow Runtime 的长期协调层。Group 是立即可用的项目空间，而不是一台必须先配置 Role 的单 FSM；它可以同时容纳 Principal Workspace、Work Item、Discussion，以及零到多个 Workflow Definition/Instance。多个用户在各自的 Icarus Client 上通过 Git 控制分支的 SSH 签名提交共享事实，任何单机 SQLite、working tree 或 Executor 状态都不能独立推进 Group。
 
-协议把流程边界与执行实现分开：
+核心边界如下：
 
-- **创建者拥有流程骨架**：创建者只定义 Role、State、每个非终态的 `owner_role`、合法 Outcome 和目标 State，并保留启动、暂停、恢复和关闭权限。Transition 是纯路由，不绑定执行角色或 Action。
-- **图定义与布局分离**：Outcome-first 图编辑器负责 Machine 业务定义，支持循环、自环、汇合、多 terminal、角色泳道与实时校验。业务 revision 只允许 creator 在 `FORMING`/`PAUSED` 发布并进入新 epoch；节点坐标写入独立 `layout.yaml`，不进入 Machine hash 或 Turn snapshot。
-- **Role Owner 拥有执行实现**：认领 Role 的 principal+agent 才能为该 Role 负责的 State 发布、修订或撤回 State Implementation，并选择 manual、assisted 或 automatic。Action、Prompt 和 Workflow ref 归 Role Owner；本地 Binding 只收窄 Workspace、Provider、权限和审批策略，不能改写 Action 类型或 Prompt。
-- **Turn 固定执行快照**：进入 State 时生成 Turn，并固定 Machine、Implementation、Action、Prompt、incoming Handoff、attempt 和 fencing token 的哈希与身份。完成者只能选择当前 State 的合法 Outcome，Reducer 再确定目标 State，不能直接指定跳转。
-- **节点计时与超时不越权**：Creator 可配置 start/execution 双 deadline 和 reminder interval；deadline 在 Turn 创建/开始时固定。超时第一阶段仅 `notify_only`，按 turn+attempt+kind 经 Git CAS 幂等记录，并提醒 Role Owner/claimant 与 creator，不依据本地时钟推进 FSM。
-- **人工和 Agent 共用完成协议**：manual 由当前角色用户确认开始和完成；assisted 在用户确认开始后调用 Executor，并等待用户确认业务完成；automatic 可自动执行和完成，但 Result Schema、Outcome、claim 和 fencing 任一不合法都会进入恢复路径。
-- **交接和产物受控共享**：Handoff 是有大小和 schema 限制的不可信输入，不能覆盖系统指令、权限或 FSM。Artifact 先在本机按 Turn 暂存并校验路径、hash 和大小，再与 Completion 在同一个签名 commit 中发布。
+- **Principal、Client、Executor 分离**：Principal 是成员与直接权限主体，由 SSH signing public key fingerprint 派生；Client 是本机持久 installation ID，同一 Principal 可注册多个 Client；Executor 是可选的公开能力描述与本地私有 Binding，不授予权限。API 不接受调用方覆盖 Principal/Client/Actor 或 repository path。
+- **Observer 不等于 Member**：Observer 只保存本地订阅，不进入 `members/`，可以 fetch、验签、增量归约、浏览 verified file tree 和审计，但不能写签名业务事件。
+- **Workspace 与业务协作是一等对象**：Shared Workspace 和 Principal-owned Workspace 发布进度、原始业务文件、Markdown Prompt 与 JSON sidecar；Work Item 独立使用对象 revision/CAS 管理任务、问题、决策、里程碑、关系、指派和进度；Discussion 提供可修订、tombstone、resolve/reopen 的线程消息。
+- **Workflow 可选且 Principal-owned**：Definition 使用 v3 JSON Machine 与独立 JSON layout，Outcome-first 图编辑器支持 participant lane、自由布局、自动整理、撤销/重做和实时校验。Instance 把 State 的直接 Principal 或 participant slot 固定解析为 assignee；被指派 Principal 自行选择 manual、assisted 或 automatic State Execution，并可绑定本人 Action 与当前 Client 的本地 Executor。
+- **Turn 是 fenced 共享执行单元**：Turn 固定 Definition/Machine、assignee、Execution/Action/Prompt hash、incoming Handoff、epoch、attempt、claimant Client 和 fencing token。Completion 只提交合法 Outcome，Reducer 根据 snapshot 路由；Handoff 与仓库内容始终作为不可信输入。
+- **超时只通知，不越权推进**：start/execution deadline 在 Turn 创建和开始时固定；timeout observation 按 turn+attempt+kind 经 Git CAS 幂等记录，本地 durable notification 精确投递 Principal/Client，不依据本地时钟改变 Work Item 或 Workflow State。
+- **Artifact 与事件原子发布**：Work Item contributor 或当前 fenced Turn claimant 先把原始文件暂存到本机，Host 校验 regular file、大小、SHA-256、scope、Client/attempt/fence，再让 progress/completion 的同一个签名事件和 Git commit 同时引用原文件与 `metadata.json`。冲突后 staged bytes 保留到成功或过期，不自动重发。
+- **共享与本地事实严格分层**：Git 保存签名事件链、Projection 物化 JSON、Markdown Prompt、原业务文件和 sidecar；`collaboration.db` 保存订阅、身份引用、投影缓存、Binding、durable receipt、staged upload、通知、Provider observation、同步与完整性诊断。备份 `/3` 联合校验和恢复 DB 与未提交 staged Artifact，恢复失败可联合回滚。
 
-Git 保存群组定义、Role-owned Implementation、线性事件链、Projection、Handoff 引用、deadline/timeout observation 和共享 Artifact；本机 `collaboration.db` 保存 Binding、durable receipt、staged upload、通知/reminder、Provider observation、同步诊断和可重建缓存。Runtime 以 event sequence 为共享事实的权威顺序，`occurred_at` 用于时间线和 duration；跨机器 clock skew 只形成审计告警，不改变 reducer。`principal_id` 从 SSH 签名公钥 fingerprint 稳定派生，`agent_id` 是本机首次生成并持久化的 UUID，创建和加入接口不接受调用方覆盖。这一划分使不同机器可以重放出相同 Projection，同时把绝对路径、Provider 连接、凭据和私有执行记录留在本机。
+机器协议、事件、结构化事实和 sidecar 使用严格 Schema 校验的 JSON；签名和语义 hash 基于 canonical JSON bytes。Prompt 与面向人的文档使用 Markdown，业务文件保持原格式。Runtime 按验证后的 Git commit/event 顺序归约，`occurred_at` 只用于时间线和 duration，clock skew 形成审计 incident 而不改变业务状态。
 
-Web/Electron 工作台的 `/groups` 是完整操作入口，包含 Outcome-first FSM 图编辑器、右侧 State inspector、Role Implementation 和 Binding、当前与历史 Turn、manual 确认、合法 Outcome 预览、Handoff、Artifact、节点计时/deadline、审计时间线与脱敏 JSON 导出、事件、共享数据和恢复诊断。协议当前直接使用 v2，本地 SQLite 使用 v4；因为没有存量群组或历史 receipt，旧协议和旧 store 均 fail closed，不保留双模型或迁移兼容层。
+Web/Electron 的 `/groups` 是完整入口，包含十个项目空间页面、Observer 只读态、Work Item board/list、Discussion、verified virtual file tree、Workflow Definition/Instance、Outcome-first 图编辑器、Principal/Client/权限、本地 Binding、Turn/Handoff/Artifact、deadline、审计导出、诊断和备份/恢复。当前唯一协议为 v3，本地 SQLite 唯一 Schema 为 v5；旧协议、旧 store、旧备份和旧事件均 fail closed，不保留迁移、双写、兼容回放或 Role/Claim 双模型。
 
 ## 7. 五大核心模块分工与巧妙设计
 
@@ -153,7 +154,7 @@ Web 工作台是用户主动控制台，负责创建任务、查看阶段进度�
 - **主动性可控**：个人助理支持 quiet、balanced、active 等策略，调查和修复能力按触发规则独立控制，避免 Agent 主动性越权。
 - **交付可审计**：每次 Agent 执行都有 runId/queryId、模型解析、工具事件、产物、评估结果和失败分类。
 - **工程上下文稳定**：结构化 handoff、产物契约、Wiki 和 memory pack 共同减少“靠聊天历史猜上下文”的不稳定性。
-- **跨机器协作可重放**：Agent Group 通过签名 Git 事件、纯 FSM 路由、revision/CAS、claim 和 fencing 把角色自治执行收敛为可审计的共享状态。
+- **跨机器协作可重放**：Project Space 通过签名 Git 事件、对象级 revision/CAS、Principal/Client 身份、纯 Outcome 路由和 fencing，把项目协作与可选 Workflow 执行收敛为可审计共享状态。
 - **支持持续改进**：阶段评估、失败分类、Trace、记忆和 Wiki 为人工分析与迭代提供可追溯证据。
 
 ## 9. 与已有 Agent 架构相比的核心优点
@@ -209,7 +210,7 @@ Icarus 并不是逐字复刻某篇论文，而是把多个前沿 Agent 思路工
 
 ## 参考资料
 
-- 本项目文档：`README.md`、`docs/SECURITY.md`、`docs/SPEC.md`、`docs/SDK_DEEP_DIVE.md`、`docs/agent-group-collaboration-runtime-plan.md`、`docs/agent-group-role-owned-execution-optimization.md`
+- 本项目文档：`README.md`、`docs/SECURITY.md`、`docs/SPEC.md`、`docs/SDK_DEEP_DIVE.md`、`docs/collaboration-project-space-v3-plan.md`；两份 `docs/agent-group-*.md` 仅为历史 v1/v2 基线
 - 核心实现：`src/container-runner.ts`、`container/agent-runner/src/index.ts`、`src/workflow.ts`、`src/collaboration/`、`src/memory-pack.ts`、`src/wiki.ts`、`src/credential-proxy.ts`、`src/ipc.ts`
 - OpenClaw GitHub README, https://github.com/openclaw/openclaw
 - OpenClaw Gateway architecture, https://docs.openclaw.ai/concepts/architecture
