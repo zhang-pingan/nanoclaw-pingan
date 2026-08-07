@@ -28,6 +28,7 @@ import {
   actionDefinitionV3Schema,
   artifactMetadataV3Schema,
   collaborationBasenameSchema,
+  clientDefinitionSchema,
   discussionMessageSchema,
   discussionSchema,
   executorDescriptorSchema,
@@ -463,6 +464,33 @@ export class CollaborationProjectSpaceService {
       eventType:
         grant.grants.length > 0 ? 'permission_granted' : 'permission_revoked',
       payload: { grant },
+      eventId,
+    });
+  }
+
+  async registerCurrentClient(input: {
+    readonly groupId: string;
+    readonly expectedRevision: number;
+    readonly displayName: string;
+    readonly capabilities?: readonly string[];
+  }): Promise<CollaborationProjectSpaceGroupRecord> {
+    const group = this.requireLocalMember(input.groupId);
+    const eventId = newId('evt');
+    const client = clientDefinitionSchema.parse({
+      format: 'icarus.collaboration-client/1',
+      principal_id: group.localPrincipalId,
+      client_id: group.localClientId,
+      display_name: input.displayName,
+      capabilities: [...(input.capabilities ?? [])],
+      status: 'active',
+      registered_at_event: eventId,
+    });
+    return this.appendLocal(input.groupId, {
+      aggregateType: 'membership',
+      aggregateId: group.localPrincipalId!,
+      expectedRevision: input.expectedRevision,
+      eventType: 'client_registered',
+      payload: { client },
       eventId,
     });
   }
@@ -1772,7 +1800,9 @@ export class CollaborationProjectSpaceService {
       turn.claimant_client_id !== group.localClientId ||
       !['running', 'waiting_input', 'waiting_approval'].includes(turn.state)
     )
-      throw new Error('Turn Artifact requires the current fenced claimant Client');
+      throw new Error(
+        'Turn Artifact requires the current fenced claimant Client',
+      );
     const artifact = this.store.stageArtifact({
       artifactId: newId('artifact'),
       groupId: input.groupId,
@@ -2485,7 +2515,8 @@ export class CollaborationProjectSpaceService {
       throw new Error('Staged Artifact ids must be unique');
     const metadata: ArtifactMetadataV3[] = [];
     const artifactRefs: string[] = [];
-    const files: Array<{ readonly path: string; readonly contents: Buffer }> = [];
+    const files: Array<{ readonly path: string; readonly contents: Buffer }> =
+      [];
     for (const artifactId of input.artifactIds) {
       const staged = this.store.readStagedArtifact(artifactId, this.now());
       const artifact = staged.artifact;
@@ -2504,7 +2535,10 @@ export class CollaborationProjectSpaceService {
           `Staged Artifact does not match the command scope or claimant: ${artifactId}`,
         );
       const parsed = this.artifactMetadata(artifact, input.executorId);
-      const directory = this.artifactRef(parsed).replace(/\/metadata\.json$/u, '');
+      const directory = this.artifactRef(parsed).replace(
+        /\/metadata\.json$/u,
+        '',
+      );
       metadata.push(parsed);
       artifactRefs.push(`${directory}/metadata.json`);
       files.push({

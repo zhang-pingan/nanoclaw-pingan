@@ -11,6 +11,7 @@ import type {
 import type { CollaborationRuntime } from './runtime.js';
 import { strictParseJson } from './protocol/canonical-json.js';
 import {
+  collaborationPermissionSchema,
   machineDefinitionV3Schema,
   workflowLayoutSchema,
   workItemStatusSchema,
@@ -414,6 +415,26 @@ export class CollaborationWebApi {
     }
     found = match(
       pathname,
+      new RegExp(`^${API_PREFIX}/groups/([^/]+)/reopen$`, 'u'),
+    );
+    if (found && method === 'POST') {
+      const body = await jsonBody(
+        req,
+        z.object({ expectedRevision, reason: z.string().min(1) }).strict(),
+      );
+      send(res, 200, {
+        group: publicGroup(
+          await this.runtime.groups.reopenGroup(
+            found[1]!,
+            body.reason,
+            body.expectedRevision,
+          ),
+        ),
+      });
+      return;
+    }
+    found = match(
+      pathname,
       new RegExp(`^${API_PREFIX}/groups/([^/]+)/archive$`, 'u'),
     );
     if (found && method === 'POST') {
@@ -504,12 +525,42 @@ export class CollaborationWebApi {
     }
     found = match(
       pathname,
+      new RegExp(`^${API_PREFIX}/groups/([^/]+)/clients$`, 'u'),
+    );
+    if (found && method === 'POST') {
+      const body = await jsonBody(
+        req,
+        z
+          .object({
+            expectedRevision,
+            displayName: z.string().min(1).max(160),
+            capabilities: z.array(identifier).max(100).optional(),
+          })
+          .strict(),
+      );
+      send(res, 201, {
+        group: publicGroup(
+          await this.runtime.groups.registerCurrentClient({
+            groupId: found[1]!,
+            ...body,
+          }),
+        ),
+      });
+      return;
+    }
+    found = match(
+      pathname,
       new RegExp(`^${API_PREFIX}/groups/([^/]+)/permissions/([^/]+)$`, 'u'),
     );
     if (found && method === 'PUT') {
       const body = await jsonBody(
         req,
-        z.object({ expectedRevision, grants: z.array(z.string()) }).strict(),
+        z
+          .object({
+            expectedRevision,
+            grants: z.array(collaborationPermissionSchema).max(50),
+          })
+          .strict(),
       );
       send(res, 200, {
         group: publicGroup(
@@ -517,7 +568,7 @@ export class CollaborationWebApi {
             groupId: found[1]!,
             principalId: found[2]!,
             expectedRevision: body.expectedRevision,
-            grants: body.grants as never,
+            grants: body.grants,
           }),
         ),
       });
@@ -801,6 +852,87 @@ export class CollaborationWebApi {
     found = match(
       url.pathname,
       new RegExp(
+        `^${API_PREFIX}/groups/([^/]+)/work-items/([^/]+)/artifacts$`,
+        'u',
+      ),
+    );
+    if (found && method === 'POST') {
+      const upload = await multipartFile(req);
+      const metadata = z
+        .object({
+          fileName: z.string().min(1).max(255),
+          mediaType: z.string().min(1).max(255),
+        })
+        .strict()
+        .parse(upload.metadata);
+      send(
+        res,
+        201,
+        await this.runtime.groups.stageWorkItemArtifact({
+          groupId: found[1]!,
+          workItemId: found[2]!,
+          ...metadata,
+          contents: upload.file,
+        }),
+      );
+      return true;
+    }
+    found = match(
+      url.pathname,
+      new RegExp(
+        `^${API_PREFIX}/groups/([^/]+)/work-items/([^/]+)/assignment/(acknowledge|decline)$`,
+        'u',
+      ),
+    );
+    if (found && method === 'POST') {
+      const body = await jsonBody(
+        req,
+        z
+          .object({
+            expectedRevision,
+            reason: z.string().min(1).optional(),
+          })
+          .strict(),
+      );
+      send(res, 200, {
+        group: publicGroup(
+          await this.runtime.groups.answerWorkItemAssignment({
+            groupId: found[1]!,
+            workItemId: found[2]!,
+            expectedRevision: body.expectedRevision,
+            accepted: found[3] === 'acknowledge',
+            reason: body.reason,
+          }),
+        ),
+      });
+      return true;
+    }
+    found = match(
+      url.pathname,
+      new RegExp(
+        `^${API_PREFIX}/groups/([^/]+)/work-items/([^/]+)/archive$`,
+        'u',
+      ),
+    );
+    if (found && method === 'POST') {
+      const body = await jsonBody(
+        req,
+        z.object({ expectedRevision, reason: z.string().min(1) }).strict(),
+      );
+      send(res, 200, {
+        group: publicGroup(
+          await this.runtime.groups.archiveWorkItem({
+            groupId: found[1]!,
+            workItemId: found[2]!,
+            ...body,
+          }),
+        ),
+      });
+      return true;
+    }
+    found = match(
+      url.pathname,
+      new RegExp(
         `^${API_PREFIX}/groups/([^/]+)/work-items/([^/]+)/(progress|status|relations|assignment)$`,
         'u',
       ),
@@ -817,6 +949,7 @@ export class CollaborationWebApi {
               completed: z.array(z.string()).optional(),
               nextSteps: z.array(z.string()).optional(),
               blockers: z.array(z.string()).optional(),
+              artifactIds: z.array(identifier).max(20).optional(),
               artifactRefs: z.array(z.string()).optional(),
             })
             .strict(),
@@ -928,6 +1061,27 @@ export class CollaborationWebApi {
           await this.runtime.groups.createDiscussion({
             groupId: found[1]!,
             ...body,
+          }),
+        ),
+      });
+      return true;
+    }
+    found = match(
+      url.pathname,
+      new RegExp(
+        `^${API_PREFIX}/groups/([^/]+)/discussions/([^/]+)/reopen$`,
+        'u',
+      ),
+    );
+    if (found && method === 'POST') {
+      const body = await jsonBody(req, z.object({ expectedRevision }).strict());
+      send(res, 200, {
+        group: publicGroup(
+          await this.runtime.groups.setDiscussionResolved({
+            groupId: found[1]!,
+            threadId: found[2]!,
+            expectedRevision: body.expectedRevision,
+            resolved: false,
           }),
         ),
       });
@@ -1173,6 +1327,29 @@ export class CollaborationWebApi {
     }
     found = match(
       url.pathname,
+      new RegExp(
+        `^${API_PREFIX}/groups/([^/]+)/workflow-definitions/([^/]+)/retire$`,
+        'u',
+      ),
+    );
+    if (found && method === 'POST') {
+      const body = await jsonBody(
+        req,
+        z.object({ expectedRevision, reason: z.string().min(1) }).strict(),
+      );
+      send(res, 200, {
+        group: publicGroup(
+          await this.runtime.groups.retireWorkflowDefinition({
+            groupId: found[1]!,
+            definitionId: found[2]!,
+            ...body,
+          }),
+        ),
+      });
+      return true;
+    }
+    found = match(
+      url.pathname,
       new RegExp(`^${API_PREFIX}/groups/([^/]+)/workflow-instances$`, 'u'),
     );
     if (found && method === 'GET') {
@@ -1215,6 +1392,56 @@ export class CollaborationWebApi {
           await this.runtime.groups.createWorkflowInstance({
             groupId: found[1]!,
             ...body,
+          }),
+        ),
+      });
+      return true;
+    }
+    found = match(
+      url.pathname,
+      new RegExp(
+        `^${API_PREFIX}/groups/([^/]+)/workflow-instances/([^/]+)/reassign$`,
+        'u',
+      ),
+    );
+    if (found && method === 'POST') {
+      const body = await jsonBody(
+        req,
+        z
+          .object({
+            expectedRevision,
+            stateId: identifier,
+            principalId: identifier,
+          })
+          .strict(),
+      );
+      send(res, 200, {
+        group: publicGroup(
+          await this.runtime.groups.reassignWorkflowState({
+            groupId: found[1]!,
+            instanceId: found[2]!,
+            ...body,
+          }),
+        ),
+      });
+      return true;
+    }
+    found = match(
+      url.pathname,
+      new RegExp(
+        `^${API_PREFIX}/groups/([^/]+)/workflow-instances/([^/]+)/states/([^/]+)/execution/withdraw$`,
+        'u',
+      ),
+    );
+    if (found && method === 'POST') {
+      const body = await jsonBody(req, z.object({ expectedRevision }).strict());
+      send(res, 200, {
+        group: publicGroup(
+          await this.runtime.groups.withdrawStateExecution({
+            groupId: found[1]!,
+            instanceId: found[2]!,
+            stateId: found[3]!,
+            expectedRevision: body.expectedRevision,
           }),
         ),
       });
@@ -1312,6 +1539,11 @@ export class CollaborationWebApi {
           })
           .strict(),
       );
+      const binding = body.binding;
+      if (body.mode !== 'manual' && !binding)
+        throw new Error('Non-manual execution requires a local Binding');
+      if (body.mode === 'manual' && binding)
+        throw new Error('Manual execution cannot configure a local Binding');
       const group = await this.runtime.groups.publishStateExecution({
         groupId: found[1]!,
         instanceId: found[2]!,
@@ -1323,7 +1555,7 @@ export class CollaborationWebApi {
       if (body.mode !== 'manual') {
         const execution =
           group.projection?.stateExecutions[found[2]!]?.[found[3]!];
-        if (!execution?.action_hash || !execution.prompt_hash || !body.binding)
+        if (!execution?.action_hash || !execution.prompt_hash)
           throw new Error('Non-manual execution requires a local Binding');
         this.runtime.store.saveExecutorBinding({
           groupId: found[1]!,
@@ -1333,7 +1565,7 @@ export class CollaborationWebApi {
           clientId: group.localClientId!,
           actionHash: execution.action_hash,
           promptHash: execution.prompt_hash,
-          ...body.binding,
+          ...binding!,
         });
       }
       send(res, 200, { group: publicGroup(group) });
@@ -1353,6 +1585,68 @@ export class CollaborationWebApi {
         turn: instance?.active_turn_id
           ? projection.turns[instance.active_turn_id]
           : null,
+      });
+      return true;
+    }
+    found = match(
+      url.pathname,
+      new RegExp(
+        `^${API_PREFIX}/groups/([^/]+)/workflow-instances/([^/]+)/turns/([^/]+)/artifacts$`,
+        'u',
+      ),
+    );
+    if (found && method === 'POST') {
+      const upload = await multipartFile(req);
+      const metadata = z
+        .object({
+          attempt: z.number().int().positive(),
+          fencingToken: z.string().min(1),
+          fileName: z.string().min(1).max(255),
+          mediaType: z.string().min(1).max(255),
+        })
+        .strict()
+        .parse(upload.metadata);
+      send(
+        res,
+        201,
+        await this.runtime.groups.stageTurnArtifact({
+          groupId: found[1]!,
+          instanceId: found[2]!,
+          turnId: found[3]!,
+          ...metadata,
+          contents: upload.file,
+        }),
+      );
+      return true;
+    }
+    found = match(
+      url.pathname,
+      new RegExp(
+        `^${API_PREFIX}/groups/([^/]+)/workflow-instances/([^/]+)/turns/([^/]+)/cancel$`,
+        'u',
+      ),
+    );
+    if (found && method === 'POST') {
+      const body = await jsonBody(
+        req,
+        z
+          .object({
+            expectedRevision,
+            attempt: z.number().int().positive(),
+            fencingToken: z.string().min(1).nullable().optional(),
+            reason: z.string().min(1),
+          })
+          .strict(),
+      );
+      send(res, 200, {
+        group: publicGroup(
+          await this.runtime.groups.cancelTurn({
+            groupId: found[1]!,
+            instanceId: found[2]!,
+            turnId: found[3]!,
+            ...body,
+          }),
+        ),
       });
       return true;
     }
@@ -1397,6 +1691,7 @@ export class CollaborationWebApi {
               instruction: z.string().optional(),
               markers: z.array(identifier).optional(),
               dataRefs: z.array(z.string()).optional(),
+              artifactIds: z.array(identifier).max(20).optional(),
               artifactRefs: z.array(z.string()).optional(),
               data: z.record(z.string(), z.unknown()).optional(),
             })

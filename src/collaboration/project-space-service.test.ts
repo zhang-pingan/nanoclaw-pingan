@@ -248,7 +248,7 @@ describe('Collaboration project space v3 Group and identity service', () => {
   it('registers one Principal with multiple Clients while Executor remains optional', async () => {
     const transport = new MemoryTransport();
     const owner = service(tempDirectory(), transport, ALICE);
-    await owner.service.createGroup({
+    const created = await owner.service.createGroup({
       remoteUrl: '/tmp/project.git',
       name: 'Project',
       signingKeyPath: ALICE.privateKeyPath,
@@ -257,6 +257,21 @@ describe('Collaboration project space v3 Group and identity service', () => {
       membershipPolicy: 'open',
       observerAccess: 'allowed',
       groupId: 'group_project',
+    });
+    const refreshed = await owner.service.registerCurrentClient({
+      groupId: 'group_project',
+      expectedRevision: 0,
+      displayName: 'Alice MacBook Pro',
+      capabilities: ['desktop_notifications'],
+    });
+    expect(
+      refreshed.projection?.clients[ALICE.principalId]?.[ALICE.clientId],
+    ).toMatchObject({
+      principal_id: created.localPrincipalId,
+      client_id: created.localClientId,
+      display_name: 'Alice MacBook Pro',
+      capabilities: ['desktop_notifications'],
+      status: 'active',
     });
     const secondIdentity = { ...ALICE, clientId: 'client_alice_studio' };
     const second = service(tempDirectory(), transport, secondIdentity);
@@ -1003,9 +1018,9 @@ describe('Collaboration project space v3 Group and identity service', () => {
       status: 'done',
       primary_workflow_instance_id: null,
     });
-    expect(completed.projection?.turns.turn_delivery.handoff?.artifact_refs).toEqual(
-      [artifact.artifactRef],
-    );
+    expect(
+      completed.projection?.turns.turn_delivery.handoff?.artifact_refs,
+    ).toEqual([artifact.artifactRef]);
     expect(
       owner.store.getStagedArtifact(artifact.metadata.artifact_id)?.state,
     ).toBe('committed');

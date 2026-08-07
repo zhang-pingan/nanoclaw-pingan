@@ -403,4 +403,240 @@ describe('Collaboration project-space v3 Web API', () => {
       },
     );
   });
+
+  it('exposes the remaining explicit v3 lifecycle and ownership commands', async () => {
+    const groups = Object.fromEntries(
+      [
+        'reopenGroup',
+        'registerCurrentClient',
+        'answerWorkItemAssignment',
+        'archiveWorkItem',
+        'setDiscussionResolved',
+        'retireWorkflowDefinition',
+        'reassignWorkflowState',
+        'withdrawStateExecution',
+        'cancelTurn',
+      ].map((name) => [name, vi.fn(async () => group())]),
+    );
+    await withApiServer(
+      new CollaborationWebApi(runtime({ groups })),
+      async (baseUrl) => {
+        const commands = [
+          [
+            '/groups/group_test/reopen',
+            { expectedRevision: 2, reason: 'resume' },
+          ],
+          [
+            '/groups/group_test/clients',
+            {
+              expectedRevision: 1,
+              displayName: 'Alice MacBook',
+              capabilities: ['desktop_notifications'],
+            },
+          ],
+          [
+            '/groups/group_test/work-items/work_1/assignment/acknowledge',
+            { expectedRevision: 2 },
+          ],
+          [
+            '/groups/group_test/work-items/work_1/assignment/decline',
+            { expectedRevision: 3, reason: 'capacity' },
+          ],
+          [
+            '/groups/group_test/work-items/work_1/archive',
+            { expectedRevision: 4, reason: 'superseded' },
+          ],
+          [
+            '/groups/group_test/discussions/thread_1/reopen',
+            { expectedRevision: 2 },
+          ],
+          [
+            '/groups/group_test/workflow-definitions/delivery/retire',
+            { expectedRevision: 3, reason: 'replaced' },
+          ],
+          [
+            '/groups/group_test/workflow-instances/instance_1/reassign',
+            {
+              expectedRevision: 2,
+              stateId: 'implementation',
+              principalId: 'principal_bob',
+            },
+          ],
+          [
+            '/groups/group_test/workflow-instances/instance_1/states/implementation/execution/withdraw',
+            { expectedRevision: 3 },
+          ],
+          [
+            '/groups/group_test/workflow-instances/instance_1/turns/turn_1/cancel',
+            {
+              expectedRevision: 4,
+              attempt: 1,
+              fencingToken: hash('f'),
+              reason: 'cancelled by owner',
+            },
+          ],
+        ] as const;
+        for (const [route, body] of commands) {
+          const response = await fetch(`${baseUrl}/api/collaboration${route}`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify(body),
+          });
+          expect(response.status, route).toBeLessThan(300);
+        }
+        expect(groups.registerCurrentClient).toHaveBeenCalledWith({
+          groupId: 'group_test',
+          expectedRevision: 1,
+          displayName: 'Alice MacBook',
+          capabilities: ['desktop_notifications'],
+        });
+        expect(groups.answerWorkItemAssignment).toHaveBeenNthCalledWith(
+          2,
+          expect.objectContaining({ accepted: false, reason: 'capacity' }),
+        );
+        expect(groups.setDiscussionResolved).toHaveBeenCalledWith(
+          expect.objectContaining({ resolved: false }),
+        );
+      },
+    );
+  });
+
+  it('stages scoped Artifact bytes and forwards ids to progress and completion', async () => {
+    const workArtifact = {
+      metadata: { artifact_id: 'artifact_work' },
+      artifactRef: 'artifacts/work-items/work_1/artifact_work/metadata.json',
+    };
+    const turnArtifact = {
+      metadata: { artifact_id: 'artifact_turn' },
+      artifactRef:
+        'artifacts/workflows/instance_1/turn_1/artifact_turn/metadata.json',
+    };
+    const stageWorkItemArtifact = vi.fn(async () => workArtifact);
+    const stageTurnArtifact = vi.fn(async () => turnArtifact);
+    const postWorkItemProgress = vi.fn(async () => group());
+    const completeTurn = vi.fn(async () => group());
+    await withApiServer(
+      new CollaborationWebApi(
+        runtime({
+          groups: {
+            stageWorkItemArtifact,
+            stageTurnArtifact,
+            postWorkItemProgress,
+            completeTurn,
+          },
+        }),
+      ),
+      async (baseUrl) => {
+        const workUpload = new FormData();
+        workUpload.append(
+          'metadata',
+          new Blob([
+            JSON.stringify({
+              fileName: 'evidence.pdf',
+              mediaType: 'application/pdf',
+            }),
+          ]),
+        );
+        workUpload.append('file', new Blob(['work-bytes']), 'evidence.pdf');
+        const stagedWork = await fetch(
+          `${baseUrl}/api/collaboration/groups/group_test/work-items/work_1/artifacts`,
+          { method: 'POST', body: workUpload },
+        );
+        expect(stagedWork.status).toBe(201);
+        expect(stageWorkItemArtifact).toHaveBeenCalledWith(
+          expect.objectContaining({
+            workItemId: 'work_1',
+            contents: Buffer.from('work-bytes'),
+          }),
+        );
+
+        const workProgress = await fetch(
+          `${baseUrl}/api/collaboration/groups/group_test/work-items/work_1/progress`,
+          {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              expectedRevision: 2,
+              summary: 'Evidence ready',
+              artifactIds: ['artifact_work'],
+            }),
+          },
+        );
+        expect(workProgress.status).toBe(201);
+        expect(postWorkItemProgress).toHaveBeenCalledWith(
+          expect.objectContaining({ artifactIds: ['artifact_work'] }),
+        );
+
+        const turnUpload = new FormData();
+        turnUpload.append(
+          'metadata',
+          new Blob([
+            JSON.stringify({
+              attempt: 1,
+              fencingToken: hash('f'),
+              fileName: 'result.txt',
+              mediaType: 'text/plain',
+            }),
+          ]),
+        );
+        turnUpload.append('file', new Blob(['turn-bytes']), 'result.txt');
+        const stagedTurn = await fetch(
+          `${baseUrl}/api/collaboration/groups/group_test/workflow-instances/instance_1/turns/turn_1/artifacts`,
+          { method: 'POST', body: turnUpload },
+        );
+        expect(stagedTurn.status).toBe(201);
+        expect(stageTurnArtifact).toHaveBeenCalledWith(
+          expect.objectContaining({
+            turnId: 'turn_1',
+            attempt: 1,
+            fencingToken: hash('f'),
+            contents: Buffer.from('turn-bytes'),
+          }),
+        );
+
+        const completed = await fetch(
+          `${baseUrl}/api/collaboration/groups/group_test/workflow-instances/instance_1/turns/turn_1/complete`,
+          {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              expectedRevision: 4,
+              attempt: 1,
+              fencingToken: hash('f'),
+              outcome: 'done',
+              summary: 'Completed',
+              artifactIds: ['artifact_turn'],
+            }),
+          },
+        );
+        expect(completed.status).toBe(200);
+        expect(completeTurn).toHaveBeenCalledWith(
+          expect.objectContaining({ artifactIds: ['artifact_turn'] }),
+        );
+      },
+    );
+  });
+
+  it('rejects a non-manual execution without Binding before publishing', async () => {
+    const publishStateExecution = vi.fn(async () => group());
+    await withApiServer(
+      new CollaborationWebApi(runtime({ groups: { publishStateExecution } })),
+      async (baseUrl) => {
+        const response = await fetch(
+          `${baseUrl}/api/collaboration/groups/group_test/workflow-instances/instance_1/states/implementation/execution`,
+          {
+            method: 'PUT',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              expectedRevision: 2,
+              mode: 'automatic',
+              actionId: 'build',
+            }),
+          },
+        );
+        expect(response.status).toBe(400);
+        expect(publishStateExecution).not.toHaveBeenCalled();
+      },
+    );
+  });
 });
