@@ -1,4 +1,4 @@
-export const COLLABORATION_PROTOCOL_VERSION = 2 as const;
+export const COLLABORATION_PROTOCOL_VERSION = 3 as const;
 export const COLLABORATION_CONTROL_BRANCH =
   'refs/heads/icarus/control' as const;
 
