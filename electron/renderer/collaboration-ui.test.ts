@@ -2,137 +2,130 @@ import { describe, expect, it } from 'vitest';
 
 import {
   collaborationAuditEventTimeline,
+  collaborationCanMutate,
+  collaborationCurrentTurn,
   collaborationDuration,
-  collaborationElapsed,
-  collaborationIdentityOwnsRole,
-  collaborationImplementationPrompt,
+  collaborationIsObserver,
   collaborationOutcomeRoutes,
   collaborationPendingNotifications,
   collaborationTurnAccess,
   collaborationTurnDeadline,
   collaborationTurnHistory,
-  collaborationTurnLifecycle,
+  collaborationVerifiedFileTree,
+  collaborationWorkItemColumns,
 } from './collaboration-ui.js';
 
-function group(agentId = 'agent_local') {
-  return {
-    localPrincipalId: 'principal_alice',
-    localAgentId: agentId,
-    projection: {
-      activeTurnId: 'turn_active',
-      roleClaims: {
-        developer: [
-          {
-            principal_id: 'principal_alice',
-            agent_id: 'agent_local',
-          },
-        ],
-      },
-      turns: {
-        turn_old: {
-          turnId: 'turn_old',
-          createdRevision: 2,
-          state: 'COMPLETED',
-        },
-        turn_newer: {
-          turnId: 'turn_newer',
-          createdRevision: 5,
-          state: 'COMPLETED',
-        },
-        turn_active: {
-          turnId: 'turn_active',
-          createdRevision: 8,
-          state: 'PENDING_START',
-        },
-      },
-    },
-  };
-}
+describe('Collaboration project-space v3 UI helpers', () => {
+  it('makes Observer mode explicit and read only', () => {
+    expect(collaborationIsObserver({ subscriptionMode: 'observer' })).toBe(
+      true,
+    );
+    expect(
+      collaborationCanMutate({
+        subscriptionMode: 'observer',
+        lifecycle: 'active',
+      }),
+    ).toBe(false);
+    expect(
+      collaborationCanMutate({
+        subscriptionMode: 'member',
+        lifecycle: 'active',
+        localPrincipalId: 'principal_alice',
+        localClientId: 'client_a',
+      }),
+    ).toBe(true);
+  });
 
-describe('Collaboration runtime UI policy', () => {
-  it('requires both principal and agent identity for Role and claimant actions', () => {
-    const turn = {
-      role: 'developer',
-      state: 'PENDING_START',
-      mode: 'manual',
-      claimantPrincipalId: null,
-      claimantAgentId: null,
+  it('scopes Turn actions to the assignee Principal and claimant Client', () => {
+    const group = {
+      localPrincipalId: 'principal_alice',
+      localClientId: 'client_a',
     };
-    expect(collaborationIdentityOwnsRole(group(), 'developer')).toBe(true);
-    expect(collaborationTurnAccess(group(), turn)).toMatchObject({
-      localRole: true,
+    expect(
+      collaborationTurnAccess(group, {
+        assignee_principal_id: 'principal_alice',
+        claimant_client_id: null,
+        state: 'pending',
+        execution_mode: 'assisted',
+      }),
+    ).toMatchObject({
+      localPrincipal: true,
       canStart: true,
       canComplete: false,
     });
     expect(
-      collaborationIdentityOwnsRole(group('agent_other'), 'developer'),
-    ).toBe(false);
-    expect(collaborationTurnAccess(group('agent_other'), turn).canStart).toBe(
-      false,
-    );
-
-    const claimed = {
-      ...turn,
-      state: 'IN_PROGRESS',
-      claimantPrincipalId: 'principal_alice',
-      claimantAgentId: 'agent_local',
-    };
-    expect(collaborationTurnAccess(group(), claimed).canComplete).toBe(true);
-    expect(
-      collaborationTurnAccess(group('agent_other'), claimed).canComplete,
-    ).toBe(false);
+      collaborationTurnAccess(group, {
+        assignee_principal_id: 'principal_alice',
+        claimant_client_id: 'client_b',
+        state: 'running',
+        execution_mode: 'assisted',
+      }),
+    ).toMatchObject({
+      localPrincipal: true,
+      localClient: false,
+      canComplete: false,
+    });
   });
 
-  it('derives completion options only from the current State routes', () => {
-    const definition = {
-      machine: {
-        states: {
-          development: {
-            transitions: [
-              { outcome: 'ready', target_state: 'review' },
-              { outcome: 'blocked', target_state: 'development' },
-            ],
-          },
+  it('finds per-Instance current/history Turns and legal Outcomes', () => {
+    const projection = {
+      workflowInstances: {
+        instance_a: { active_turn_id: 'turn_2' },
+      },
+      turns: {
+        turn_1: {
+          turn_id: 'turn_1',
+          workflow_instance_id: 'instance_a',
+          created_at: '2026-08-06T12:00:00.000Z',
+        },
+        turn_2: {
+          turn_id: 'turn_2',
+          workflow_instance_id: 'instance_a',
+          state_id: 'review',
+          created_at: '2026-08-06T12:01:00.000Z',
         },
       },
     };
+    expect(collaborationCurrentTurn(projection, 'instance_a')?.turn_id).toBe(
+      'turn_2',
+    );
     expect(
-      collaborationOutcomeRoutes(definition, { stateId: 'development' }),
+      collaborationTurnHistory(projection, 'instance_a').map(
+        (turn) => turn.turn_id,
+      ),
+    ).toEqual(['turn_2', 'turn_1']);
+    expect(
+      collaborationOutcomeRoutes(
+        {
+          machine: {
+            states: {
+              review: {
+                transitions: [
+                  {
+                    outcome: 'approved',
+                    label: 'Approved',
+                    target_state: 'done',
+                  },
+                ],
+              },
+            },
+          },
+        },
+        projection.turns.turn_2,
+      ),
     ).toEqual([
-      { outcome: 'ready', target_state: 'review' },
-      { outcome: 'blocked', target_state: 'development' },
+      { outcome: 'approved', label: 'Approved', target_state: 'done' },
     ]);
-    expect(
-      collaborationOutcomeRoutes(definition, { stateId: 'missing' }),
-    ).toEqual([]);
   });
 
-  it('prefills active shared Prompts and presents stable Turn history', () => {
-    expect(
-      collaborationImplementationPrompt(
-        { implementationPrompts: { development: 'Review carefully.' } },
-        'development',
-      ),
-    ).toBe('Review carefully.');
-    expect(
-      collaborationTurnHistory(group().projection).map((turn) => turn.turnId),
-    ).toEqual(['turn_newer', 'turn_old']);
-    expect(
-      collaborationElapsed(
-        '2026-08-06T12:00:00.000Z',
-        Date.parse('2026-08-06T14:30:00.000Z'),
-      ),
-    ).toBe('2 小时');
-  });
-
-  it('derives the active deadline without treating wall clock as FSM input', () => {
+  it('derives notify-only deadline presentation without changing state', () => {
     const now = Date.parse('2026-08-06T12:01:30.000Z');
     expect(
       collaborationTurnDeadline(
         {
-          state: 'PENDING_START',
-          startDeadlineAt: '2026-08-06T12:02:00.000Z',
-          executionDeadlineAt: null,
+          state: 'pending',
+          start_deadline_at: '2026-08-06T12:02:00.000Z',
+          execution_deadline_at: null,
         },
         now,
       ),
@@ -144,9 +137,9 @@ describe('Collaboration runtime UI policy', () => {
     expect(
       collaborationTurnDeadline(
         {
-          state: 'AWAITING_CONFIRMATION',
-          startDeadlineAt: '2026-08-06T12:02:00.000Z',
-          executionDeadlineAt: '2026-08-06T12:01:00.000Z',
+          state: 'running',
+          start_deadline_at: null,
+          execution_deadline_at: '2026-08-06T12:01:00.000Z',
         },
         now,
       ),
@@ -155,60 +148,54 @@ describe('Collaboration runtime UI policy', () => {
       remainingMs: -30_000,
       overdue: true,
     });
-    expect(
-      collaborationTurnDeadline(
-        { state: 'COMPLETED', executionDeadlineAt: '2026-08-06T12:01:00.000Z' },
-        now,
-      ),
-    ).toBeNull();
+    expect(collaborationDuration(3_600_000)).toBe('1 小时');
   });
 
-  it('keeps lifecycle semantic order and marks negative clock-skew durations', () => {
-    const rows = collaborationTurnLifecycle({
-      createdAt: '2026-08-06T12:00:02.000Z',
-      startedAt: '2026-08-06T12:00:01.000Z',
-      dispatchAcceptedAt: '2026-08-06T12:00:04.000Z',
-      providerCompletedAt: '2026-08-06T12:01:04.000Z',
-    });
-    expect(rows.map((row) => row.kind)).toEqual([
-      'createdAt',
-      'startedAt',
-      'dispatchAcceptedAt',
-      'providerCompletedAt',
+  it('builds verified virtual files and Work Item board columns', () => {
+    const tree = collaborationVerifiedFileTree([
+      { fileId: 'file_1', virtualPath: 'Shared/Documents/evidence.pdf' },
+      { fileId: 'file_2', virtualPath: 'Alice/Files/notes.txt' },
     ]);
-    expect(rows[1]).toMatchObject({ durationMs: 0, clockSkew: true });
-    expect(rows[2]).toMatchObject({ durationMs: 3_000, clockSkew: false });
-    expect(collaborationDuration(rows[3]!.durationMs)).toBe('1 分钟');
-    expect(collaborationDuration(null)).toBe('-');
+    expect(
+      tree.directories.Shared.directories.Documents.files[0],
+    ).toMatchObject({
+      name: 'evidence.pdf',
+    });
+    expect(
+      collaborationWorkItemColumns([
+        {
+          work_item_id: 'late',
+          status: 'open',
+          due_at: '2026-08-08T00:00:00Z',
+        },
+        {
+          work_item_id: 'early',
+          status: 'open',
+          due_at: '2026-08-07T00:00:00Z',
+        },
+        { work_item_id: 'done', status: 'done', due_at: null },
+      ]).open.map((item) => item.work_item_id),
+    ).toEqual(['early', 'late']);
   });
 
-  it('accepts only durable notification array entries', () => {
+  it('accepts durable notifications and orders audit by commit order', () => {
     expect(
       collaborationPendingNotifications({
-        notification: { turnId: 'legacy' },
         notifications: [
-          { notificationId: 'note_1', turnId: 'turn_1' },
-          { notificationId: 'note_2' },
-          null,
+          {
+            notificationId: 'note_1',
+            resourceType: 'turn',
+            resourceId: 'turn_1',
+          },
+          { notificationId: 'incomplete' },
         ],
       }),
-    ).toEqual([{ notificationId: 'note_1', turnId: 'turn_1' }]);
-  });
-
-  it('orders audit events by signed sequence despite clock skew', () => {
+    ).toHaveLength(1);
     expect(
       collaborationAuditEventTimeline([
-        {
-          eventId: 'event_2',
-          sequence: 2,
-          occurredAt: '2026-08-06T11:59:00.000Z',
-        },
-        {
-          eventId: 'event_1',
-          sequence: 1,
-          occurredAt: '2026-08-06T12:00:00.000Z',
-        },
-      ]).map((event) => event.eventId),
+        { event_id: 'event_2', commit_order: 2 },
+        { event_id: 'event_1', commit_order: 1 },
+      ]).map((event) => event.event_id),
     ).toEqual(['event_1', 'event_2']);
   });
 });

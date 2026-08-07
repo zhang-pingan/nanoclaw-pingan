@@ -1,201 +1,190 @@
-export function collaborationIdentityOwnsRole(group, role) {
-  if (!group?.projection || !role) return false;
-  return (group.projection.roleClaims?.[role] || []).some(
-    (claim) =>
-      claim.principal_id === group.localPrincipalId &&
-      claim.agent_id === group.localAgentId,
+export function collaborationIsObserver(group) {
+  return group?.subscriptionMode === 'observer';
+}
+
+export function collaborationCanMutate(group) {
+  return Boolean(
+    group?.subscriptionMode === 'member' &&
+    group.localPrincipalId &&
+    group.localClientId &&
+    group.lifecycle !== 'archived',
   );
 }
 
 export function collaborationTurnAccess(group, turn) {
-  const localRole = collaborationIdentityOwnsRole(group, turn?.role);
-  const localClaimant = Boolean(
-    turn &&
-    turn.claimantPrincipalId === group?.localPrincipalId &&
-    turn.claimantAgentId === group?.localAgentId,
+  const localPrincipal = Boolean(
+    group?.localPrincipalId &&
+    turn?.assignee_principal_id === group.localPrincipalId,
+  );
+  const localClient = Boolean(
+    localPrincipal &&
+    turn?.claimant_client_id &&
+    turn.claimant_client_id === group.localClientId,
   );
   return {
-    localRole,
-    localClaimant,
+    localPrincipal,
+    localClient,
     canStart:
-      localRole && turn?.state === 'PENDING_START' && turn.mode !== 'automatic',
+      localPrincipal &&
+      turn?.state === 'pending' &&
+      turn.execution_mode !== 'automatic',
     canComplete:
-      localClaimant &&
-      (turn?.state === 'IN_PROGRESS' ||
-        turn?.state === 'AWAITING_CONFIRMATION'),
+      localClient &&
+      ['running', 'waiting_input', 'waiting_approval'].includes(turn?.state),
   };
 }
 
 export function collaborationOutcomeRoutes(definition, turn) {
   if (!turn) return [];
-  const routes = definition?.machine?.states?.[turn.stateId]?.transitions;
-  if (!Array.isArray(routes)) return [];
-  return routes.filter(
-    (route) =>
-      route &&
-      typeof route.outcome === 'string' &&
-      typeof route.target_state === 'string',
+  return (definition?.machine?.states?.[turn.state_id]?.transitions || []).map(
+    (transition) => ({
+      outcome: transition.outcome,
+      label: transition.label || transition.outcome,
+      target_state: transition.target_state,
+    }),
   );
 }
 
-export function collaborationImplementationPrompt(detail, stateId) {
-  const prompt = detail?.implementationPrompts?.[stateId];
-  return typeof prompt === 'string' ? prompt : '';
-}
-
-export function collaborationTurnHistory(projection) {
-  const activeTurnId = projection?.activeTurnId;
+export function collaborationTurnHistory(projection, instanceId) {
   return Object.values(projection?.turns || {})
-    .filter((turn) => turn?.turnId && turn.turnId !== activeTurnId)
-    .sort((left, right) => {
-      const revisionDelta =
-        Number(right.createdRevision || 0) - Number(left.createdRevision || 0);
-      return (
-        revisionDelta || String(right.turnId).localeCompare(String(left.turnId))
-      );
-    });
+    .filter((turn) => !instanceId || turn.workflow_instance_id === instanceId)
+    .sort((left, right) =>
+      String(right.created_at || '').localeCompare(
+        String(left.created_at || ''),
+      ),
+    );
 }
 
-export function collaborationElapsed(createdAt, nowMs = Date.now()) {
-  const createdMs = Date.parse(String(createdAt || ''));
-  if (!Number.isFinite(createdMs)) return '-';
-  const seconds = Math.max(0, Math.floor((nowMs - createdMs) / 1000));
-  if (seconds < 60) return `${seconds} 秒`;
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes} 分钟`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours} 小时`;
-  return `${Math.floor(hours / 24)} 天`;
+export function collaborationCurrentTurn(projection, instanceId) {
+  const instance = projection?.workflowInstances?.[instanceId];
+  return instance?.active_turn_id
+    ? projection.turns?.[instance.active_turn_id] || null
+    : null;
 }
-
-export function collaborationDuration(durationMs) {
-  if (durationMs === null || durationMs === undefined || durationMs === '')
-    return '-';
-  const normalized = Number(durationMs);
-  if (!Number.isFinite(normalized)) return '-';
-  const seconds = Math.max(0, Math.floor(normalized / 1000));
-  if (seconds < 60) return `${seconds} 秒`;
-  const minutes = Math.floor(seconds / 60);
-  const remainingSeconds = seconds % 60;
-  if (minutes < 60)
-    return remainingSeconds
-      ? `${minutes} 分 ${remainingSeconds} 秒`
-      : `${minutes} 分钟`;
-  const hours = Math.floor(minutes / 60);
-  const remainingMinutes = minutes % 60;
-  if (hours < 24)
-    return remainingMinutes
-      ? `${hours} 小时 ${remainingMinutes} 分`
-      : `${hours} 小时`;
-  const days = Math.floor(hours / 24);
-  const remainingHours = hours % 24;
-  return remainingHours ? `${days} 天 ${remainingHours} 小时` : `${days} 天`;
-}
-
-const ACTIVE_EXECUTION_STATES = new Set([
-  'IN_PROGRESS',
-  'DISPATCHING',
-  'RUNNING',
-  'WAITING_INPUT',
-  'WAITING_APPROVAL',
-  'AWAITING_CONFIRMATION',
-]);
 
 export function collaborationTurnDeadline(turn, nowMs = Date.now()) {
-  if (!turn) return null;
-  const deadlineKind =
-    turn.state === 'PENDING_START'
-      ? 'start'
-      : ACTIVE_EXECUTION_STATES.has(turn.state)
-        ? 'execution'
-        : null;
-  const deadlineAt =
-    deadlineKind === 'start'
-      ? turn.startDeadlineAt
-      : deadlineKind === 'execution'
-        ? turn.executionDeadlineAt
-        : null;
-  const deadlineMs = Date.parse(String(deadlineAt || ''));
-  if (!deadlineKind || !Number.isFinite(deadlineMs)) return null;
+  if (
+    !turn ||
+    ['completed', 'cancelled', 'recovery_required'].includes(turn.state)
+  )
+    return null;
+  const execution = ['running', 'waiting_input', 'waiting_approval'].includes(
+    turn.state,
+  );
+  const deadlineAt = execution
+    ? turn.execution_deadline_at
+    : turn.start_deadline_at;
+  if (!deadlineAt) return null;
+  const deadlineMs = Date.parse(deadlineAt);
+  if (!Number.isFinite(deadlineMs)) return null;
   const remainingMs = deadlineMs - nowMs;
   return {
-    deadlineKind,
+    deadlineKind: execution ? 'execution' : 'start',
     deadlineAt,
-    deadlineMs,
     remainingMs,
     overdue: remainingMs <= 0,
   };
 }
 
-const TURN_LIFECYCLE_FIELDS = [
-  ['createdAt', 'Turn 创建'],
-  ['startedAt', '确认开始 / 自动 claim'],
-  ['dispatchAcceptedAt', 'Dispatch accepted'],
-  ['providerCompletedAt', 'Provider 完成'],
-  ['awaitingConfirmationAt', '等待人工确认'],
-  ['completedAt', '确认完成'],
-  ['stateAdvancedAt', '状态推进'],
-  ['cancelledAt', 'Turn 取消'],
-];
+export function collaborationDuration(valueMs) {
+  if (valueMs === null || valueMs === undefined || !Number.isFinite(valueMs))
+    return '-';
+  const absolute = Math.max(0, Number(valueMs));
+  if (absolute < 1_000) return `${Math.round(absolute)} ms`;
+  if (absolute < 60_000) return `${Math.round(absolute / 1_000)} 秒`;
+  if (absolute < 3_600_000) return `${Math.round(absolute / 60_000)} 分钟`;
+  if (absolute < 86_400_000) return `${Math.round(absolute / 3_600_000)} 小时`;
+  return `${Math.round(absolute / 86_400_000)} 天`;
+}
+
+export function collaborationElapsed(value, nowMs = Date.now()) {
+  const start = Date.parse(String(value || ''));
+  return Number.isFinite(start)
+    ? collaborationDuration(Math.max(0, nowMs - start))
+    : '-';
+}
 
 export function collaborationTurnLifecycle(turn) {
-  if (!turn) return [];
+  const entries = [
+    ['created_at', 'Created'],
+    ['started_at', 'Started'],
+    ['completed_at', 'Completed'],
+  ];
   const rows = [];
-  let previousMs = null;
-  const lifecycleFields = turn.recoveredAt
-    ? [
-        TURN_LIFECYCLE_FIELDS[0],
-        ['recoveryRequestedAt', '请求恢复'],
-        ['recoveredAt', '恢复完成'],
-        ...TURN_LIFECYCLE_FIELDS.slice(1),
-      ]
-    : [
-        ...TURN_LIFECYCLE_FIELDS.slice(0, -3),
-        ['recoveryRequestedAt', '请求恢复'],
-        ...TURN_LIFECYCLE_FIELDS.slice(-3),
-      ];
-  for (const [field, label] of lifecycleFields) {
-    const occurredAt = turn[field];
-    const occurredMs = Date.parse(String(occurredAt || ''));
-    if (!Number.isFinite(occurredMs)) continue;
-    const rawDurationMs = previousMs === null ? null : occurredMs - previousMs;
+  let previous = null;
+  for (const [kind, label] of entries) {
+    const value = turn?.[kind];
+    if (!value) continue;
+    const at = Date.parse(value);
+    const clockSkew = previous !== null && at < previous;
     rows.push({
-      kind: field,
+      kind,
       label,
-      occurredAt,
-      durationMs: rawDurationMs === null ? null : Math.max(0, rawDurationMs),
-      clockSkew: rawDurationMs !== null && rawDurationMs < 0,
+      occurredAt: value,
+      durationMs:
+        previous === null || !Number.isFinite(at)
+          ? null
+          : Math.max(0, at - previous),
+      clockSkew,
     });
-    previousMs = occurredMs;
+    if (Number.isFinite(at)) previous = Math.max(previous ?? at, at);
   }
   return rows;
 }
 
 export function collaborationPendingNotifications(detail) {
-  return Array.isArray(detail?.notifications)
-    ? detail.notifications.filter(
-        (notification) =>
-          notification &&
-          typeof notification.notificationId === 'string' &&
-          typeof notification.turnId === 'string',
-      )
-    : [];
+  if (!Array.isArray(detail?.notifications)) return [];
+  return detail.notifications.filter(
+    (notification) =>
+      notification &&
+      notification.notificationId &&
+      notification.resourceType &&
+      notification.resourceId,
+  );
 }
 
 export function collaborationAuditEventTimeline(events) {
-  return Array.isArray(events)
-    ? events
-        .filter(
-          (event) =>
-            event && Number.isSafeInteger(event.sequence) && event.sequence > 0,
-        )
-        .slice()
-        .sort(
-          (left, right) =>
-            left.sequence - right.sequence ||
-            String(left.eventId || '').localeCompare(
-              String(right.eventId || ''),
-            ),
-        )
-    : [];
+  return [...(events || [])].sort(
+    (left, right) =>
+      Number(left.commit_order ?? left.commitOrder ?? 0) -
+      Number(right.commit_order ?? right.commitOrder ?? 0),
+  );
+}
+
+export function collaborationVerifiedFileTree(files) {
+  const root = { name: '', path: '', directories: {}, files: [] };
+  for (const file of files || []) {
+    const segments = String(file.virtualPath || file.virtual_path || '')
+      .split('/')
+      .filter(Boolean);
+    if (!segments.length) continue;
+    let node = root;
+    for (const segment of segments.slice(0, -1)) {
+      node.directories[segment] ||= {
+        name: segment,
+        path: node.path ? `${node.path}/${segment}` : segment,
+        directories: {},
+        files: [],
+      };
+      node = node.directories[segment];
+    }
+    node.files.push({ ...file, name: segments.at(-1) });
+  }
+  return root;
+}
+
+export function collaborationWorkItemColumns(items) {
+  const columns = Object.fromEntries(
+    ['proposed', 'open', 'in_progress', 'blocked', 'done', 'cancelled'].map(
+      (status) => [status, []],
+    ),
+  );
+  for (const item of items || []) (columns[item.status] ||= []).push(item);
+  for (const values of Object.values(columns))
+    values.sort((left, right) =>
+      String(left.due_at || '9999').localeCompare(
+        String(right.due_at || '9999'),
+      ),
+    );
+  return columns;
 }

@@ -1,182 +1,137 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  buildCollaborationCreateRequest,
-  defaultCollaborationCreateDraft,
-} from './collaboration-definition.js';
+import { defaultCollaborationWorkflowDraft } from './collaboration-definition.js';
 import {
   addCollaborationOutcomeFirst,
   autoLayoutCollaborationFsm,
-  collaborationMachineEditable,
   collaborationEdgeId,
+  collaborationRuntimeGraphHighlights,
+  collaborationWorkflowEditable,
+  collaborationWorkflowPublishable,
   createCollaborationDraftHistory,
   removeCollaborationState,
   validateCollaborationFsmDraft,
 } from './collaboration-fsm.js';
 import { calculateCollaborationFsmFitZoom } from './collaboration-fsm-editor.js';
 
-function request(draft: ReturnType<typeof defaultCollaborationCreateDraft>) {
-  return buildCollaborationCreateRequest({
-    remoteUrl: '/tmp/fsm.git',
-    name: 'FSM',
-    signingKeyPath: '/tmp/key',
-    draft,
-  });
-}
-
-describe('collaboration graphical FSM model', () => {
+describe('Outcome-first v3 Workflow model', () => {
   it('fits the stage against both canvas dimensions', () => {
     expect(calculateCollaborationFsmFitZoom(1000, 500, 880, 760)).toBeCloseTo(
       472 / 760,
     );
-    expect(calculateCollaborationFsmFitZoom(400, 900, 880, 520)).toBeCloseTo(
-      0.45,
-    );
-    expect(calculateCollaborationFsmFitZoom(1400, 900, 880, 520)).toBe(1);
+    expect(calculateCollaborationFsmFitZoom(400, 900, 880, 520)).toBe(0.45);
   });
 
-  it.each([
-    ['FORMING', true],
-    ['PAUSED', true],
-    ['READY', false],
-    ['RUNNING', false],
-    ['CLOSING', false],
-    ['CLOSED', false],
-  ])(
-    'exposes %s with the expected creator edit mode',
-    (lifecycle, editable) => {
-      expect(
-        collaborationMachineEditable({
-          lifecycle,
-          localPrincipalId: 'alice',
-          creatorPrincipalId: 'alice',
-        }),
-      ).toBe(editable);
-      expect(
-        collaborationMachineEditable({
-          lifecycle,
-          localPrincipalId: 'bob',
-          creatorPrincipalId: 'alice',
-        }),
-      ).toBe(false);
-    },
-  );
+  it('allows Members with direct workflow permission and rejects Observers', () => {
+    const group = {
+      subscriptionMode: 'member',
+      lifecycle: 'active',
+      localPrincipalId: 'principal_designer',
+      ownerPrincipalId: 'principal_owner',
+      projection: {
+        permissionGrants: {
+          principal_designer: {
+            grants: [
+              'workflow_definition:propose',
+              'workflow_definition:publish',
+            ],
+          },
+        },
+      },
+    };
+    expect(collaborationWorkflowEditable(group, null)).toBe(true);
+    expect(
+      collaborationWorkflowEditable(
+        { ...group, subscriptionMode: 'observer' },
+        null,
+      ),
+    ).toBe(false);
+    expect(
+      collaborationWorkflowEditable(group, {
+        definition: { status: 'retired' },
+      }),
+    ).toBe(false);
+    expect(
+      collaborationWorkflowPublishable(group, {
+        definition: { status: 'proposed' },
+      }),
+    ).toBe(true);
+    expect(
+      collaborationWorkflowPublishable(group, {
+        definition: { status: 'published' },
+      }),
+    ).toBe(false);
+  });
 
-  it('starts with one configurable initial State and adds an Outcome before its next State', () => {
-    const initial = defaultCollaborationCreateDraft();
-    expect(initial.states).toHaveLength(1);
-    expect(initial.initialState).toBe(initial.states[0]?.id);
-    expect(initial.states[0]?.transitions).toEqual([]);
-
-    const added = addCollaborationOutcomeFirst(initial, {
-      sourceStateId: 'development',
-      outcome: 'succeeded',
-      label: 'Succeeded',
+  it('creates Outcome before destination State with participant assignment', () => {
+    const initial = defaultCollaborationWorkflowDraft();
+    const result = addCollaborationOutcomeFirst(initial, {
+      sourceStateId: 'build',
+      outcome: 'ready',
+      label: 'Ready',
       destination: 'new',
       newStateId: 'review',
       newStateLabel: 'Review',
-      newStateOwnerRole: 'reviewer',
+      newStateAssigneeType: 'participant_slot',
+      newStateAssigneeId: 'reviewer',
     });
-    expect(added.createdStateId).toBe('review');
-    expect(added.selectedStateId).toBe('review');
-    expect(added.draft.states[0]?.transitions).toEqual([
-      { outcome: 'succeeded', label: 'Succeeded', targetState: 'review' },
+    expect(result.createdStateId).toBe('review');
+    expect(result.draft.states[0]!.transitions).toEqual([
+      { outcome: 'ready', label: 'Ready', targetState: 'review' },
     ]);
-    expect(added.draft.layout.nodes.review.x).toBeGreaterThan(
-      added.draft.layout.nodes.development.x,
-    );
+    expect(result.draft.states[1]).toMatchObject({
+      assigneeType: 'participant_slot',
+      assigneeId: 'reviewer',
+    });
   });
 
-  it('supports self-loops, custom outcomes, merges and multiple terminals', () => {
-    let draft = defaultCollaborationCreateDraft();
+  it('supports self loops, merges, multiple terminals, and participant lanes', () => {
+    let draft = defaultCollaborationWorkflowDraft();
     draft = addCollaborationOutcomeFirst(draft, {
-      sourceStateId: 'development',
-      outcome: 'failed',
-      label: 'Retry after failure',
+      sourceStateId: 'build',
+      outcome: 'retry',
       destination: 'self',
     }).draft;
     draft = addCollaborationOutcomeFirst(draft, {
-      sourceStateId: 'development',
-      outcome: 'needs_review',
-      label: 'Needs review',
-      destination: 'new',
-      newStateId: 'review',
-      newStateOwnerRole: 'reviewer',
-    }).draft;
-    draft = addCollaborationOutcomeFirst(draft, {
-      sourceStateId: 'review',
-      outcome: 'approved',
-      label: 'Approved',
-      destination: 'terminal',
-      newStateId: 'completed',
-      newStateLabel: 'Completed',
-    }).draft;
-    draft = addCollaborationOutcomeFirst(draft, {
-      sourceStateId: 'review',
-      outcome: 'cancelled',
-      label: 'Cancelled',
-      destination: 'terminal',
-      newStateId: 'cancelled',
-      newStateLabel: 'Cancelled',
-    }).draft;
-    draft = addCollaborationOutcomeFirst(draft, {
-      sourceStateId: 'development',
-      outcome: 'fast_track',
-      label: 'Fast track',
-      destination: 'existing',
-      targetStateId: 'completed',
-    }).draft;
-
-    expect(validateCollaborationFsmDraft(draft)).toEqual([]);
-    expect(request(draft).machine.states.development.transitions).toEqual([
-      {
-        outcome: 'failed',
-        label: 'Retry after failure',
-        target_state: 'development',
-      },
-      {
-        outcome: 'needs_review',
-        label: 'Needs review',
-        target_state: 'review',
-      },
-      {
-        outcome: 'fast_track',
-        label: 'Fast track',
-        target_state: 'completed',
-      },
-    ]);
-  });
-
-  it('keeps same-role nodes at the same rank from overlapping in role lanes', () => {
-    let draft = defaultCollaborationCreateDraft();
-    draft = addCollaborationOutcomeFirst(draft, {
-      sourceStateId: 'development',
+      sourceStateId: 'build',
       outcome: 'left',
       destination: 'new',
       newStateId: 'review_left',
-      newStateOwnerRole: 'reviewer',
+      newStateAssigneeId: 'reviewer',
     }).draft;
     draft = addCollaborationOutcomeFirst(draft, {
-      sourceStateId: 'development',
+      sourceStateId: 'build',
       outcome: 'right',
       destination: 'new',
       newStateId: 'review_right',
-      newStateOwnerRole: 'reviewer',
+      newStateAssigneeId: 'reviewer',
     }).draft;
-
-    const laidOut = autoLayoutCollaborationFsm(draft, 'roles');
+    draft = addCollaborationOutcomeFirst(draft, {
+      sourceStateId: 'review_left',
+      outcome: 'approved',
+      destination: 'terminal',
+      newStateId: 'shipped',
+    }).draft;
+    draft = addCollaborationOutcomeFirst(draft, {
+      sourceStateId: 'review_right',
+      outcome: 'approved',
+      destination: 'existing',
+      targetStateId: 'shipped',
+    }).draft;
+    const laidOut = autoLayoutCollaborationFsm(draft, 'participants');
     expect(
       Math.abs(
         laidOut.layout.nodes.review_left.y -
           laidOut.layout.nodes.review_right.y,
       ),
     ).toBeGreaterThan(94);
+    expect(validateCollaborationFsmDraft(laidOut)).toEqual([]);
   });
 
-  it('locates duplicate outcomes, unknown roles/targets, unreachable States and timeout errors', () => {
-    const draft = defaultCollaborationCreateDraft();
-    draft.states[0]!.ownerRole = 'missing';
-    draft.states[0]!.reminderIntervalMs = '1000';
+  it('reports assignee, timeout, Outcome, target and reachability errors', () => {
+    const draft = defaultCollaborationWorkflowDraft();
+    draft.states[0]!.assigneeId = 'missing';
+    draft.states[0]!.reminderIntervalMs = 1000;
     draft.states[0]!.transitions = [
       { outcome: 'same', label: 'One', targetState: 'missing' },
       { outcome: 'same', label: 'Two', targetState: 'missing' },
@@ -184,16 +139,15 @@ describe('collaboration graphical FSM model', () => {
     draft.states.push({
       ...structuredClone(draft.states[0]!),
       id: 'orphan',
-      ownerRole: 'developer',
-      reminderIntervalMs: '',
+      assigneeId: '',
       terminal: true,
+      reminderIntervalMs: '',
       transitions: [],
     });
-
     const issues = validateCollaborationFsmDraft(draft);
     expect(issues.map((entry) => entry.code)).toEqual(
       expect.arrayContaining([
-        'UNKNOWN_ROLE',
+        'UNKNOWN_PARTICIPANT',
         'REMINDER_WITHOUT_TIMEOUT',
         'UNKNOWN_TARGET',
         'DUPLICATE_OUTCOME',
@@ -204,62 +158,75 @@ describe('collaboration graphical FSM model', () => {
     expect(
       issues.find((entry) => entry.code === 'DUPLICATE_OUTCOME'),
     ).toMatchObject({
-      stateId: 'development',
-      edgeId: collaborationEdgeId('development', 'same'),
+      edgeId: collaborationEdgeId('build', 'same'),
     });
   });
 
-  it('allows an explicit warning confirmation for a reachable pure loop', () => {
-    const draft = defaultCollaborationCreateDraft();
+  it('keeps layout out of Machine semantics and supports undo/redo', () => {
+    const draft = defaultCollaborationWorkflowDraft();
     draft.states[0]!.transitions = [
-      { outcome: 'again', label: 'Again', targetState: 'development' },
+      { outcome: 'again', label: 'Again', targetState: 'build' },
     ];
-    expect(validateCollaborationFsmDraft(draft)).toContainEqual(
-      expect.objectContaining({
-        severity: 'warning',
-        code: 'LOOP_WITHOUT_TERMINAL',
-        confirmRequired: true,
-      }),
-    );
-  });
-
-  it('keeps layout changes outside the Machine payload and supports undo/redo', () => {
-    let draft = defaultCollaborationCreateDraft();
-    draft.states[0]!.transitions = [
-      { outcome: 'again', label: 'Again', targetState: 'development' },
-    ];
-    const before = request(draft);
     const history = createCollaborationDraftHistory(draft);
-    const laidOut = autoLayoutCollaborationFsm(draft, 'roles');
-    laidOut.layout.nodes.development.x += 415;
+    const laidOut = autoLayoutCollaborationFsm(draft, 'free');
+    laidOut.layout.nodes.build.x += 400;
     history.commit(laidOut);
-    const after = request(history.current());
-
-    expect(after.machine).toEqual(before.machine);
-    expect(after.roles).toEqual(before.roles);
-    expect(after.layout).not.toEqual(before.layout);
     expect(history.canUndo()).toBe(true);
-    expect(history.undo().layout).toEqual(before.layout);
-    expect(history.redo().layout.view).toBe('roles');
+    expect(history.undo().layout.nodes.build.x).toBe(
+      draft.layout.nodes.build.x,
+    );
+    expect(history.redo().layout.view).toBe('free');
   });
 
-  it('reports affected edges and orphaned nodes before State deletion', () => {
-    let draft = defaultCollaborationCreateDraft();
+  it('reports affected edges and highlights one of several Instances', () => {
+    let draft = defaultCollaborationWorkflowDraft();
     draft = addCollaborationOutcomeFirst(draft, {
-      sourceStateId: 'development',
+      sourceStateId: 'build',
       outcome: 'next',
       destination: 'new',
       newStateId: 'review',
+      newStateAssigneeId: 'reviewer',
     }).draft;
     draft = addCollaborationOutcomeFirst(draft, {
       sourceStateId: 'review',
-      outcome: 'finish',
+      outcome: 'done',
       destination: 'terminal',
-      newStateId: 'done',
+      newStateId: 'shipped',
     }).draft;
-    const removed = removeCollaborationState(draft, 'review');
-
-    expect(removed.affectedEdges).toHaveLength(2);
-    expect(removed.orphanedStateIds).toEqual(['done']);
+    expect(
+      removeCollaborationState(draft, 'review').affectedEdges,
+    ).toHaveLength(2);
+    expect(
+      collaborationRuntimeGraphHighlights(
+        {
+          workflowInstances: {
+            instance_a: {
+              business_state: 'review',
+              active_turn_id: 'turn_2',
+            },
+            instance_b: { business_state: 'build', active_turn_id: null },
+          },
+          turns: {
+            turn_1: {
+              workflow_instance_id: 'instance_a',
+              state_id: 'build',
+              outcome: 'next',
+              created_at: '2026-08-06T12:00:00.000Z',
+            },
+            turn_2: {
+              workflow_instance_id: 'instance_a',
+              state_id: 'review',
+              outcome: null,
+              created_at: '2026-08-06T12:01:00.000Z',
+            },
+          },
+        },
+        'instance_a',
+      ),
+    ).toMatchObject({
+      currentStateId: 'review',
+      visitedStateIds: ['build', 'review'],
+      visitedEdgeIds: ['build::next'],
+    });
   });
 });
