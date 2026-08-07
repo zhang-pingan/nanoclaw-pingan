@@ -362,6 +362,7 @@ export function mountCollaborationFsmEditor(host, options) {
     if (readonly) return;
     const node = event.target.closest('[data-draggable-state]');
     if (!node) return;
+    selectedStateId = node.dataset.stateId;
     dragging = {
       id: node.dataset.stateId,
       x: event.clientX,
