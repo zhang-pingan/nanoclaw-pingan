@@ -2,11 +2,19 @@ export function collaborationIsObserver(group) {
   return group?.subscriptionMode === 'observer';
 }
 
+export function collaborationLocalMembershipStatus(group) {
+  if (collaborationIsObserver(group)) return 'observer';
+  return (
+    group?.projection?.members?.[group.localPrincipalId]?.status || 'unknown'
+  );
+}
+
 export function collaborationCanMutate(group) {
   return Boolean(
     group?.subscriptionMode === 'member' &&
     group.localPrincipalId &&
     group.localClientId &&
+    collaborationLocalMembershipStatus(group) === 'active' &&
     group.lifecycle !== 'archived',
   );
 }
@@ -19,7 +27,7 @@ export function collaborationCanApproveMembers(group) {
   return grants.includes('member:approve') || grants.includes('group:admin');
 }
 
-export function collaborationCanCreateTurn(instance, definition) {
+export function collaborationCanCreateTurn(group, instance, definition) {
   if (
     !instance ||
     instance.lifecycle !== 'running' ||
@@ -27,7 +35,18 @@ export function collaborationCanCreateTurn(instance, definition) {
   )
     return false;
   const state = definition?.machine?.states?.[instance.business_state];
-  return Boolean(state && !state.terminal);
+  if (!state || state.terminal) return false;
+  const principalId = group?.localPrincipalId;
+  const grants =
+    group?.projection?.permissionGrants?.[principalId]?.grants || [];
+  return Boolean(
+    principalId &&
+      (instance.created_by_principal_id === principalId ||
+        instance.resolved_assignments?.[instance.business_state] ===
+          principalId ||
+        grants.includes('workflow_instance:manage_all') ||
+        grants.includes('group:admin')),
+  );
 }
 
 export function collaborationEligibleTurnExecutors(group, turn, bindings) {
@@ -108,6 +127,7 @@ export async function stageCollaborationArtifactFiles(input) {
 
 export function collaborationTurnAccess(group, turn) {
   const localPrincipal = Boolean(
+    collaborationCanMutate(group) &&
     group?.localPrincipalId &&
     turn?.assignee_principal_id === group.localPrincipalId,
   );
@@ -125,7 +145,10 @@ export function collaborationTurnAccess(group, turn) {
       turn.execution_mode !== 'automatic',
     canComplete:
       localClient &&
-      ['running', 'waiting_input', 'waiting_approval'].includes(turn?.state),
+      (turn?.execution_mode === 'manual'
+        ? ['running', 'waiting_input', 'waiting_approval'].includes(turn?.state)
+        : turn?.execution_mode === 'assisted' &&
+          turn?.state === 'awaiting_confirmation'),
   };
 }
 

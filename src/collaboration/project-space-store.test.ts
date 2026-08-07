@@ -16,6 +16,7 @@ import {
 } from './project-space-store.js';
 import {
   buildCollaborationEventV3,
+  collaborationCanonicalHashV3,
   reduceCollaborationEventV3,
 } from './protocol/v3-reducer.js';
 
@@ -285,6 +286,112 @@ describe('Collaboration project space v3 store', () => {
       localPrincipalId: PRINCIPAL,
       localClientId: CLIENT,
     });
+    store.close();
+  });
+
+  it('finds an exact frozen Action and commit beyond the recent event window', () => {
+    const store = new CollaborationProjectSpaceStore(
+      temporaryPath('action-snapshot.db'),
+    );
+    store.registerGroup({
+      subscription: {
+        format: 'icarus.collaboration-subscription/1',
+        group_id: 'group_test',
+        remote_url: '/tmp/group.git',
+        subscription_mode: 'member',
+        poll_interval_ms: 60_000,
+        last_verified_head: null,
+        notifications_enabled: true,
+        created_at: NOW,
+      },
+      name: 'Test group',
+      lifecycle: 'active',
+      ownerPrincipalId: PRINCIPAL,
+      localPrincipalId: PRINCIPAL,
+      localClientId: CLIENT,
+      repositoryPath: '/tmp/cache.git',
+      signingKeyPath: '/tmp/id_ed25519',
+      signingPublicKey: 'ssh-ed25519 test',
+      signingKeyRef: 'ssh-ed25519:SHA256:alice',
+    });
+    const initial = genesis();
+    const action = {
+      format: 'icarus.collaboration-action/1' as const,
+      action_id: 'verify',
+      name: 'Verify',
+      owner_principal_id: PRINCIPAL,
+      version: 1,
+      kind: 'run_once' as const,
+      adapter: null,
+      workflow_ref: null,
+      prompt_ref: `workspace/principals/${PRINCIPAL}/automations/prompts/verify.md`,
+      prompt_hash: `sha256:${'b'.repeat(64)}`,
+      executor_policy: 'principal_selected' as const,
+      filesystem_access: 'read_only' as const,
+      result_schema: { ref: 'result_v1', schema: null },
+    };
+    const actionEvent = buildCollaborationEventV3({
+      groupId: 'group_test',
+      eventId: 'evt_action_old',
+      aggregateType: 'workspace',
+      aggregateId: PRINCIPAL,
+      aggregateRevision: 1,
+      previousEventHash: null,
+      eventType: 'action_published',
+      actor: {
+        principal_id: PRINCIPAL,
+        client_id: CLIENT,
+        executor_id: null,
+      },
+      occurredAt: NOW,
+      payload: { action },
+    });
+    const actionCommit = 'b'.repeat(40);
+    const records = [
+      { event: initial.event, commitHash: 'a'.repeat(40), commitOrder: 1 },
+      { event: actionEvent, commitHash: actionCommit, commitOrder: 2 },
+      ...Array.from({ length: 5_001 }, (_, index) => ({
+        event: {
+          ...initial.event,
+          event_id: `evt_noise_${String(index)}`,
+          aggregate_type: 'workspace' as const,
+          aggregate_id: `noise_${String(index)}`,
+        },
+        commitHash: (index + 3).toString(16).padStart(40, '0'),
+        commitOrder: index + 3,
+      })),
+    ];
+    store.saveVerifiedProjection({
+      groupId: 'group_test',
+      verifiedHead: records.at(-1)!.commitHash,
+      projection: initial.projection,
+      eventRecords: records,
+    });
+
+    expect(
+      store
+        .listEventRecords('group_test', 5_000)
+        .some((record) => record.event.event_id === 'evt_action_old'),
+    ).toBe(false);
+    expect(
+      store.findActionSnapshot({
+        groupId: 'group_test',
+        ownerPrincipalId: PRINCIPAL,
+        actionId: 'verify',
+        actionHash: collaborationCanonicalHashV3(action),
+        promptHash: action.prompt_hash,
+      }),
+    ).toMatchObject({ action, commitHash: actionCommit, commitOrder: 2 });
+    expect(
+      store.findActionSnapshot({
+        groupId: 'group_test',
+        ownerPrincipalId: PRINCIPAL,
+        actionId: 'verify',
+        actionHash: `sha256:${'f'.repeat(64)}`,
+        promptHash: action.prompt_hash,
+      }),
+    ).toBeNull();
+    expect(store.hasVerifiedCommit('group_test', actionCommit)).toBe(true);
     store.close();
   });
 

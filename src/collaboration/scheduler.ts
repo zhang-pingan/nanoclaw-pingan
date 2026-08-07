@@ -16,7 +16,10 @@ import {
   type CollaborationTurnV3,
 } from './protocol/v3-schema.js';
 import type { CollaborationEventV3 } from './protocol/v3-schema.js';
-import { collaborationCanonicalHashV3 } from './protocol/v3-reducer.js';
+import {
+  collaborationCanonicalHashV3,
+  workflowDefinitionVersionKey,
+} from './protocol/v3-reducer.js';
 
 export interface CollaborationSchedulerOptions {
   readonly ownerId?: string;
@@ -259,10 +262,26 @@ export class CollaborationScheduler {
       !group.localClientId
     )
       return;
-    const snapshot = collaborationActionSnapshotForTurn(
-      this.store.listEventRecords(groupId, 5_000),
-      turn,
-    );
+    const actionId = turn.action_ref
+      ?.split('/')
+      .at(-1)
+      ?.replace(/\.json$/u, '');
+    const exactSnapshot =
+      actionId && turn.action_hash && turn.prompt_hash
+        ? this.store.findActionSnapshot({
+            groupId,
+            ownerPrincipalId: turn.assignee_principal_id,
+            actionId,
+            actionHash: turn.action_hash,
+            promptHash: turn.prompt_hash,
+          })
+        : null;
+    const snapshot = exactSnapshot
+      ? {
+          action: exactSnapshot.action,
+          verifiedCommit: exactSnapshot.commitHash,
+        }
+      : null;
     if (!snapshot) {
       await this.requestRecovery(
         groupId,
@@ -294,6 +313,36 @@ export class CollaborationScheduler {
       return;
     }
     const action = snapshot.action;
+    const expectedActionRef = `workspace/principals/${action.owner_principal_id}/automations/actions/${action.action_id}.json`;
+    if (
+      action.owner_principal_id !== turn.assignee_principal_id ||
+      turn.action_ref !== expectedActionRef ||
+      collaborationCanonicalHashV3(action) !== turn.action_hash ||
+      action.prompt_hash !== turn.prompt_hash
+    ) {
+      await this.requestRecovery(
+        groupId,
+        turn,
+        'Exact Action snapshot provenance does not match the Turn',
+      );
+      return;
+    }
+    const definition =
+      group.projection!.workflowDefinitions[
+        workflowDefinitionVersionKey(
+          instance.definition_id,
+          instance.definition_version,
+        )
+      ];
+    const state = definition?.machine.states[turn.state_id];
+    if (!state || state.terminal) {
+      await this.requestRecovery(
+        groupId,
+        turn,
+        'Frozen Workflow State is missing or terminal',
+      );
+      return;
+    }
     const executor = this.executors.resolve(action);
     const claim = this.store.claimActionExecution({
       groupId,
@@ -320,6 +369,7 @@ export class CollaborationScheduler {
           epoch: instance.epoch,
           action,
           prompt,
+          state,
           binding,
         });
         if (
@@ -454,9 +504,19 @@ export class CollaborationScheduler {
       attempt: turn.attempt,
       fencingToken: turn.fencing_token,
       state: 'completed',
+      result: observation.result,
       resultHash: observation.resultHash,
       executorId: execution.executorId,
     });
+    if (turn.execution_mode === 'assisted') return;
+    if (turn.execution_mode !== 'automatic') {
+      await this.requestRecovery(
+        groupId,
+        turn,
+        'Executor result was recorded for a non-executable Turn mode',
+      );
+      return;
+    }
     await this.groups.completeTurn({
       groupId,
       instanceId: turn.workflow_instance_id,
@@ -475,7 +535,6 @@ export class CollaborationScheduler {
       artifactRefs: observation.result.artifacts.map(
         (artifact) => artifact.ref,
       ),
-      result: observation.result,
       executorId: execution.executorId,
     });
   }

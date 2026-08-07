@@ -1,18 +1,23 @@
 import type { WorkflowRuntimeStore } from '../workflow-runtime/gateway/connection.js';
 import {
   createFiniteWorkflowRun,
+  insertInlineValue,
   observeFiniteWorkflowRun,
   resolveFiniteWorkflowCreationInput,
+  runtimeObjectHash,
+  stableRuntimeId,
   type FiniteWorkflowCreationInput,
   type FiniteWorkflowCreationReceipt,
   type FiniteWorkflowCreationTemplate,
   type FiniteWorkflowRunObservation,
 } from '../workflow-runtime/gateway/execution.js';
+import type { JsonObject } from '../workflow-runtime/contracts/types.js';
 
 export interface CollaborationFiniteWorkflowRequest {
   readonly workflowRef: string;
   readonly operationKey: string;
   readonly promptSha256: string;
+  readonly actionInput: JsonObject;
   readonly bindingConfig: Record<string, unknown>;
 }
 
@@ -24,6 +29,15 @@ export interface CollaborationWorkflowLaunchProfile {
 }
 
 export interface WorkflowExecutionHostGateway {
+  persistCollaborationActionInput(
+    store: WorkflowRuntimeStore,
+    input: {
+      readonly operationKey: string;
+      readonly actionInput: JsonObject;
+      readonly inputSchema: FiniteWorkflowCreationTemplate['inputSchema'];
+      readonly nowMs: number;
+    },
+  ): FiniteWorkflowCreationTemplate['input'];
   create(
     store: WorkflowRuntimeStore,
     input: FiniteWorkflowCreationInput,
@@ -35,6 +49,27 @@ export interface WorkflowExecutionHostGateway {
 }
 
 const DEFAULT_GATEWAY: WorkflowExecutionHostGateway = {
+  persistCollaborationActionInput(store, input) {
+    const contentHash = runtimeObjectHash('value', input.actionInput);
+    const id = stableRuntimeId('value', {
+      source: 'collaboration_action_input_v3',
+      operation_key: input.operationKey,
+      content_hash: contentHash,
+    });
+    store.withImmediateTransaction((transaction) => {
+      insertInlineValue(transaction, {
+        id,
+        content: input.actionInput,
+        contentHash,
+        schemaResourceId: input.inputSchema.rowId,
+        schemaResourceHash: input.inputSchema.hash,
+        provenanceRef: `collaboration:${input.operationKey}:action-input`,
+        retentionClass: 'run_recovery',
+        createdAtMs: input.nowMs,
+      });
+    });
+    return { id, hash: contentHash };
+  },
   create: createFiniteWorkflowRun,
   observe: observeFiniteWorkflowRun,
 };
@@ -50,6 +85,16 @@ export class WorkflowExecutionHostService {
     request: CollaborationFiniteWorkflowRequest,
   ): FiniteWorkflowCreationReceipt {
     const profile = this.resolveCollaborationLaunchProfile(request);
+    const nowMs = this.now();
+    const actionInput = this.gateway.persistCollaborationActionInput(
+      this.runtimeStore,
+      {
+        operationKey: request.operationKey,
+        actionInput: request.actionInput,
+        inputSchema: profile.template.inputSchema,
+        nowMs,
+      },
+    );
     const input = resolveFiniteWorkflowCreationInput({
       requestId: `collaboration:${request.operationKey}`,
       creationDomain: 'agent_group_collaboration',
@@ -62,8 +107,11 @@ export class WorkflowExecutionHostService {
         authorizationRef: `collaboration:${request.operationKey}`,
       },
       entryPoint: 'default',
-      nowMs: this.now(),
-      template: profile.template,
+      nowMs,
+      template: {
+        ...profile.template,
+        input: actionInput,
+      },
     });
     return this.startFiniteRun(input);
   }

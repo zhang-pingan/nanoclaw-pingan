@@ -6,6 +6,7 @@ import {
   collaborationDeadlineSnapshotHashV3,
   collaborationFencingTokenV3,
   collaborationIdempotencyKeyV3,
+  collaborationTurnInputHashV3,
   collaborationWorkflowDefinitionHashV3,
   reduceCollaborationEventV3,
   type CollaborationProjectionV3,
@@ -343,6 +344,8 @@ function workflowFixture(input?: {
         lifecycle: 'ready',
         business_state: 'build',
         active_turn_id: null,
+        last_completed_turn_id: null,
+        last_handoff_hash: null,
         epoch: 1,
         revision: 1,
         created_by_principal_id: ALICE,
@@ -357,7 +360,16 @@ function workflowFixture(input?: {
     eventType: 'workflow_instance_started',
     payload: {},
   });
-  const inputHash = collaborationCanonicalHashV3({ fixture: 'turn_1' });
+  const inputHash = collaborationTurnInputHashV3({
+    groupId: 'group_test',
+    instanceId: 'instance_1',
+    epoch: 1,
+    stateId: 'build',
+    assigneePrincipalId: BOB,
+    execution: null,
+    incomingHandoffHash: null,
+    workItem: null,
+  });
   let selectedTurn: CollaborationTurnV3 = {
     format: 'icarus.collaboration-turn/1',
     turn_id: 'turn_1',
@@ -402,6 +414,9 @@ function workflowFixture(input?: {
     outcome: null,
     handoff: null,
     handoff_hash: null,
+    executor_result: null,
+    executor_result_hash: null,
+    completion_hash: null,
     recovery_reason: null,
   };
   projection = apply(projection, {
@@ -516,6 +531,194 @@ function addWorkItems(
 }
 
 describe('Collaboration v3 reducer invariants', () => {
+  it('keeps assisted Executor results awaiting claimant confirmation and binds their hash', () => {
+    const fixture = workflowFixture({ startTurn: true });
+    const projection = structuredClone(fixture.projection);
+    const turn = projection.turns.turn_1!;
+    turn.execution_mode = 'assisted';
+    turn.executor_id = 'executor_bob';
+    (projection.executors[BOB] ??= {}).executor_bob = {
+      format: 'icarus.collaboration-executor/1',
+      principal_id: BOB,
+      executor_id: 'executor_bob',
+      display_name: 'Bob Executor',
+      kind: 'run_once',
+      capabilities: [],
+      registered_at_event: 'evt_executor_bob',
+    };
+    const result = {
+      format: 'icarus.collaboration-action-result/3' as const,
+      outcome: 'next',
+      summary: 'Implementation is ready.',
+      instruction: 'Review the changes.',
+      markers: [],
+      data: { commit: 'abc123' },
+      artifacts: [],
+      error: null,
+    };
+    const resultHash = collaborationCanonicalHashV3(result);
+    const awaiting = apply(projection, {
+      aggregateType: 'workflow_instance',
+      aggregateId: 'instance_1',
+      eventType: 'action_completed',
+      actor: BOB,
+      executor: 'executor_bob',
+      payload: {
+        turn_id: 'turn_1',
+        attempt: 1,
+        fencing_token: turn.fencing_token,
+        result,
+        result_hash: resultHash,
+      },
+    });
+    expect(awaiting.turns.turn_1).toMatchObject({
+      state: 'awaiting_confirmation',
+      executor_result: result,
+      executor_result_hash: resultHash,
+    });
+    expect(awaiting.workflowInstances.instance_1?.business_state).toBe('build');
+
+    const handoff = {
+      format: 'icarus.collaboration-handoff/1' as const,
+      source_turn_id: 'turn_1',
+      outcome: 'next',
+      summary: 'Confirmed by Bob.',
+      instruction: 'Continue to review.',
+      markers: [],
+      data_refs: [],
+      artifact_refs: [],
+      data: { commit: 'abc123', confirmed: true },
+    };
+    const completionHash = collaborationCanonicalHashV3({
+      turn_id: 'turn_1',
+      attempt: 1,
+      outcome: 'next',
+      result_hash: resultHash,
+      handoff_hash: collaborationCanonicalHashV3(handoff),
+      artifact_refs: [],
+    });
+    const completed = apply(awaiting, {
+      aggregateType: 'workflow_instance',
+      aggregateId: 'instance_1',
+      eventType: 'turn_completed',
+      actor: BOB,
+      executor: null,
+      payload: {
+        turn_id: 'turn_1',
+        attempt: 1,
+        fencing_token: turn.fencing_token,
+        outcome: 'next',
+        result_hash: resultHash,
+        completion_hash: completionHash,
+        handoff,
+        handoff_hash: collaborationCanonicalHashV3(handoff),
+        artifact_refs: [],
+        artifacts: [],
+      },
+    });
+    expect(completed.turns.turn_1).toMatchObject({
+      state: 'completed',
+      executor_result_hash: resultHash,
+      completion_hash: completionHash,
+    });
+    expect(completed.workflowInstances.instance_1?.business_state).toBe(
+      'review',
+    );
+  });
+
+  it('rejects automatic Result hash drift and completion without action_completed', () => {
+    const fixture = workflowFixture({ startTurn: true });
+    const projection = structuredClone(fixture.projection);
+    const turn = projection.turns.turn_1!;
+    turn.execution_mode = 'automatic';
+    turn.executor_id = 'executor_bob';
+    (projection.executors[BOB] ??= {}).executor_bob = {
+      format: 'icarus.collaboration-executor/1',
+      principal_id: BOB,
+      executor_id: 'executor_bob',
+      display_name: 'Bob Executor',
+      kind: 'run_once',
+      capabilities: [],
+      registered_at_event: 'evt_executor_bob',
+    };
+    const handoff = {
+      format: 'icarus.collaboration-handoff/1' as const,
+      source_turn_id: 'turn_1',
+      outcome: 'next',
+      summary: 'Automatic result.',
+      instruction: '',
+      markers: [],
+      data_refs: [],
+      artifact_refs: [],
+      data: {},
+    };
+    const completion = (resultHash: string) => ({
+      turn_id: 'turn_1',
+      attempt: 1,
+      fencing_token: turn.fencing_token,
+      outcome: 'next',
+      result_hash: resultHash,
+      completion_hash: collaborationCanonicalHashV3({
+        turn_id: 'turn_1',
+        attempt: 1,
+        outcome: 'next',
+        result_hash: resultHash,
+        handoff_hash: collaborationCanonicalHashV3(handoff),
+        artifact_refs: [],
+      }),
+      handoff,
+      handoff_hash: collaborationCanonicalHashV3(handoff),
+      artifact_refs: [],
+      artifacts: [],
+    });
+    expect(() =>
+      apply(projection, {
+        aggregateType: 'workflow_instance',
+        aggregateId: 'instance_1',
+        eventType: 'turn_completed',
+        actor: BOB,
+        executor: 'executor_bob',
+        payload: completion(HASH),
+      }),
+    ).toThrow(/Action result|action_completed|result hash/u);
+
+    const result = {
+      format: 'icarus.collaboration-action-result/3' as const,
+      outcome: 'next',
+      summary: 'Automatic result.',
+      instruction: '',
+      markers: [],
+      data: {},
+      artifacts: [],
+      error: null,
+    };
+    const resultHash = collaborationCanonicalHashV3(result);
+    const actionCompleted = apply(projection, {
+      aggregateType: 'workflow_instance',
+      aggregateId: 'instance_1',
+      eventType: 'action_completed',
+      actor: BOB,
+      executor: 'executor_bob',
+      payload: {
+        turn_id: 'turn_1',
+        attempt: 1,
+        fencing_token: turn.fencing_token,
+        result,
+        result_hash: resultHash,
+      },
+    });
+    expect(() =>
+      apply(actionCompleted, {
+        aggregateType: 'workflow_instance',
+        aggregateId: 'instance_1',
+        eventType: 'turn_completed',
+        actor: BOB,
+        executor: 'executor_bob',
+        payload: completion(HASH),
+      }),
+    ).toThrow(/result hash/u);
+  });
+
   it('allows only Instance authority to cancel an unclaimed Turn', () => {
     const fixture = workflowFixture();
     const unauthorized = event({
@@ -573,7 +776,15 @@ describe('Collaboration v3 reducer invariants', () => {
         attempt: 1,
         fencing_token: completedFixture.turn.fencing_token,
         outcome: 'next',
-        result_hash: HASH,
+        result_hash: null,
+        completion_hash: collaborationCanonicalHashV3({
+          turn_id: 'turn_1',
+          attempt: 1,
+          outcome: 'next',
+          result_hash: null,
+          handoff_hash: collaborationCanonicalHashV3(handoff),
+          artifact_refs: [],
+        }),
         handoff,
         handoff_hash: collaborationCanonicalHashV3(handoff),
         artifact_refs: [],
@@ -872,6 +1083,31 @@ describe('Collaboration v3 reducer invariants', () => {
           payload,
         }),
       ).toThrow(/self|unique|does not exist/u);
+  });
+
+  it('does not let Work Item details rewrite relation fields', () => {
+    const projection = addWorkItems('item_a', 'item_b');
+    const previous = projection.workItems.item_a!;
+    for (const relations of [
+      { parent_id: 'item_a', blocked_by: [], related_items: [] },
+      { parent_id: null, blocked_by: ['item_b', 'item_b'], related_items: [] },
+      { parent_id: null, blocked_by: ['missing'], related_items: [] },
+    ])
+      expect(() =>
+        apply(projection, {
+          aggregateType: 'work_item',
+          aggregateId: 'item_a',
+          eventType: 'work_item_details_updated',
+          payload: {
+            item: {
+              ...previous,
+              ...relations,
+              revision: 2,
+              updated_at: '2026-08-06T12:01:00.000Z',
+            },
+          },
+        }),
+      ).toThrow(/relation|itself|unique|does not exist/u);
   });
 
   it('requires an authorized issuer and consumes a targeted Invite once', () => {

@@ -10,6 +10,7 @@ import {
   collaborationCanonicalHashV3,
   collaborationDeadlineSnapshotHashV3,
   collaborationIdempotencyKeyV3,
+  collaborationTurnInputHashV3,
   collaborationWorkflowDefinitionHashV3,
   reduceCollaborationEventV3,
   type CollaborationProjectionV3,
@@ -379,6 +380,8 @@ describe('Collaboration project space v3 contract', () => {
       lifecycle: 'ready' as const,
       business_state: 'build',
       active_turn_id: null,
+      last_completed_turn_id: null,
+      last_handoff_hash: null,
       epoch: 1,
       revision: 1,
       created_by_principal_id: ALICE,
@@ -408,11 +411,15 @@ describe('Collaboration project space v3 contract', () => {
 
     const timeout = machine.states.build?.timeout_policy ?? null;
     const startDeadline = '2026-08-06T12:01:00.000Z';
-    const inputHash = collaborationCanonicalHashV3({
-      instance_id: 'wfi_201',
-      state_id: 'build',
-      assignee_principal_id: ALICE,
-      mode: 'manual',
+    const inputHash = collaborationTurnInputHashV3({
+      groupId: 'group_payment',
+      instanceId: 'wfi_201',
+      epoch: 1,
+      stateId: 'build',
+      assigneePrincipalId: ALICE,
+      execution: null,
+      incomingHandoffHash: null,
+      workItem: null,
     });
     const turn = {
       format: 'icarus.collaboration-turn/1' as const,
@@ -458,6 +465,9 @@ describe('Collaboration project space v3 contract', () => {
       outcome: null,
       handoff: null,
       handoff_hash: null,
+      executor_result: null,
+      executor_result_hash: null,
+      completion_hash: null,
       recovery_reason: null,
     };
     projection = reduceCollaborationEventV3(

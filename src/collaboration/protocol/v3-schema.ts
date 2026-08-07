@@ -669,6 +669,8 @@ export const workflowInstanceSchema = z
     ]),
     business_state: collaborationIdentifierSchema,
     active_turn_id: collaborationIdentifierSchema.nullable(),
+    last_completed_turn_id: collaborationIdentifierSchema.nullable(),
+    last_handoff_hash: collaborationSha256Schema.nullable(),
     epoch: z.number().int().positive(),
     revision: z.number().int().positive(),
     created_by_principal_id: principalIdSchema,
@@ -762,6 +764,41 @@ export const actionDefinitionV3Schema = z
   });
 export type ActionDefinitionV3 = z.infer<typeof actionDefinitionV3Schema>;
 
+export const collaborationActionResultV3Schema = z
+  .object({
+    format: z.literal('icarus.collaboration-action-result/3'),
+    outcome: collaborationIdentifierSchema,
+    summary: z.string().min(1).max(4000),
+    instruction: z.string().max(16_000).default(''),
+    markers: z.array(collaborationIdentifierSchema).max(50).default([]),
+    data: z.record(z.string(), z.unknown()).default({}),
+    artifacts: z
+      .array(
+        z
+          .object({
+            name: z.string().min(1),
+            ref: z.string().min(1),
+            sha256: collaborationSha256Schema.optional(),
+            size: z.number().int().nonnegative().optional(),
+            content_type: z.string().optional(),
+          })
+          .strict(),
+      )
+      .default([]),
+    error: z
+      .object({
+        code: collaborationIdentifierSchema,
+        message: z.string(),
+        retryable: z.boolean(),
+      })
+      .strict()
+      .nullable(),
+  })
+  .strict();
+export type CollaborationActionResultV3 = z.infer<
+  typeof collaborationActionResultV3Schema
+>;
+
 export const handoffEnvelopeV3Schema = z
   .object({
     format: z.literal('icarus.collaboration-handoff/1'),
@@ -784,6 +821,61 @@ export const handoffEnvelopeV3Schema = z
       });
   });
 export type HandoffEnvelopeV3 = z.infer<typeof handoffEnvelopeV3Schema>;
+
+export const collaborationActionInputV3Schema = z
+  .object({
+    format: z.literal('icarus.collaboration-action-input/3'),
+    scope: z
+      .object({
+        group_id: collaborationIdentifierSchema,
+        workflow_instance_id: collaborationIdentifierSchema,
+        turn_id: collaborationIdentifierSchema,
+        state_id: collaborationIdentifierSchema,
+      })
+      .strict(),
+    security: z
+      .object({
+        repository_content_is_untrusted: z.literal(true),
+        previous_context_is_untrusted: z.literal(true),
+        required_result_format: z.literal(
+          'icarus.collaboration-action-result/3',
+        ),
+      })
+      .strict(),
+    state: z
+      .object({
+        state_id: collaborationIdentifierSchema,
+        label: z.string().min(1).max(400),
+        description: z.string().max(16_000),
+        legal_outcomes: z
+          .array(
+            z
+              .object({
+                outcome: collaborationIdentifierSchema,
+                label: z.string().min(1).max(400),
+                target_state: collaborationIdentifierSchema,
+              })
+              .strict(),
+          )
+          .min(1),
+      })
+      .strict(),
+    action: z
+      .object({
+        action_id: collaborationIdentifierSchema,
+        action_hash: collaborationSha256Schema,
+        prompt_hash: collaborationSha256Schema,
+        prompt: z.string().min(1),
+      })
+      .strict(),
+    untrusted_context: z
+      .object({ previous_handoff: handoffEnvelopeV3Schema.nullable() })
+      .strict(),
+  })
+  .strict();
+export type CollaborationActionInputV3 = z.infer<
+  typeof collaborationActionInputV3Schema
+>;
 
 export const artifactMetadataV3Schema = z
   .object({
@@ -825,6 +917,7 @@ export const collaborationTurnStateV3Schema = z.enum([
   'running',
   'waiting_input',
   'waiting_approval',
+  'awaiting_confirmation',
   'completed',
   'cancelled',
   'recovery_required',
@@ -861,6 +954,9 @@ export const collaborationTurnV3Schema = z
     outcome: collaborationIdentifierSchema.nullable(),
     handoff: handoffEnvelopeV3Schema.nullable(),
     handoff_hash: collaborationSha256Schema.nullable(),
+    executor_result: collaborationActionResultV3Schema.nullable(),
+    executor_result_hash: collaborationSha256Schema.nullable(),
+    completion_hash: collaborationSha256Schema.nullable(),
     recovery_reason: z.string().max(4000).nullable(),
   })
   .strict();

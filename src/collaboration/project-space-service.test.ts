@@ -1,8 +1,15 @@
+import http from 'node:http';
 import { mkdtempSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+import { ActionExecutorRegistry } from './executors/registry.js';
+import {
+  RunOnceActionExecutor,
+  type RunOnceService,
+} from './executors/run-once.js';
 
 import type { CollaborationPrincipalIdentity } from './project-space-identity.js';
 import { CollaborationProjectSpaceIdentityService } from './project-space-identity.js';
@@ -12,7 +19,14 @@ import {
   type ValidatedProjectSpaceHistory,
 } from './project-space-service.js';
 import { CollaborationProjectSpaceStore } from './project-space-store.js';
-import { reduceCollaborationEventV3 } from './protocol/v3-reducer.js';
+import { CollaborationScheduler } from './scheduler.js';
+import type { CollaborationRuntime } from './runtime.js';
+import { CollaborationWebApi } from './web-api.js';
+import {
+  buildCollaborationEventV3,
+  collaborationCanonicalHashV3,
+  reduceCollaborationEventV3,
+} from './protocol/v3-reducer.js';
 
 const temporaryDirectories: string[] = [];
 const ALICE: CollaborationPrincipalIdentity = {
@@ -213,6 +227,41 @@ function service(
   };
 }
 
+async function withServiceApi(
+  selected: ReturnType<typeof service>,
+  work: (baseUrl: string) => Promise<void>,
+): Promise<void> {
+  const runtime = {
+    status: () => ({
+      available: true,
+      protocolVersion: 3,
+      error: null,
+      scheduler: null,
+    }),
+    databasePath: selected.store.databasePath,
+    store: selected.store,
+    groups: selected.service,
+  } as unknown as CollaborationRuntime;
+  const api = new CollaborationWebApi(runtime);
+  const server = http.createServer((request, response) => {
+    void api.handle(
+      request,
+      response,
+      new URL(request.url ?? '/', 'http://localhost'),
+    );
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address();
+  if (!address || typeof address === 'string') throw new Error('No test port');
+  try {
+    await work(`http://127.0.0.1:${String(address.port)}`);
+  } finally {
+    await new Promise<void>((resolve, reject) =>
+      server.close((error) => (error ? reject(error) : resolve())),
+    );
+  }
+}
+
 describe('Collaboration project space v3 Group and identity service', () => {
   it('issues and consumes a one-time Invite before membership approval', async () => {
     const transport = new MemoryTransport();
@@ -254,6 +303,19 @@ describe('Collaboration project space v3 Group and identity service', () => {
     expect(requested.projection?.members[BOB.principalId]?.status).toBe(
       'requested',
     );
+    expect(
+      requested.projection?.clients[BOB.principalId]?.[BOB.clientId],
+    ).toMatchObject({
+      status: 'active',
+      display_name: 'Bob MacBook',
+    });
+    await expect(
+      bob.service.postProgress({
+        groupId: 'group_invite',
+        expectedRevision: 0,
+        summary: 'Must remain blocked before approval.',
+      }),
+    ).rejects.toThrow(/active Group member|not active/u);
     expect(requested.projection?.invites.invite_bob).toMatchObject({
       status: 'used',
       used_at_event: expect.stringMatching(/^evt_/u),
@@ -262,11 +324,76 @@ describe('Collaboration project space v3 Group and identity service', () => {
     const approved = await owner.service.approveMembership(
       'group_invite',
       BOB.principalId,
-      1,
+      2,
     );
     expect(approved.projection?.members[BOB.principalId]?.status).toBe(
       'active',
     );
+    await bob.service.sync('group_invite');
+    const firstWrite = await bob.service.postProgress({
+      groupId: 'group_invite',
+      expectedRevision: 0,
+      summary: 'First write after invite approval.',
+    });
+    expect(
+      Object.values(firstWrite.projection?.progressUpdates ?? {}).at(-1),
+    ).toMatchObject({
+      principal_id: BOB.principalId,
+      summary: 'First write after invite approval.',
+    });
+    owner.store.close();
+    bob.store.close();
+  });
+
+  it('registers a pending approval Client and enables its first write after sync', async () => {
+    const transport = new MemoryTransport();
+    const owner = service(tempDirectory(), transport, ALICE);
+    await owner.service.createGroup({
+      remoteUrl: '/tmp/approval-project.git',
+      name: 'Approval project',
+      signingKeyPath: ALICE.privateKeyPath,
+      displayName: 'Alice',
+      clientDisplayName: 'Alice MacBook',
+      membershipPolicy: 'approval',
+      observerAccess: 'allowed',
+      groupId: 'group_approval',
+    });
+    const bob = service(tempDirectory(), transport, BOB);
+    const requested = await bob.service.joinGroup({
+      remoteUrl: '/tmp/approval-project.git',
+      signingKeyPath: BOB.privateKeyPath,
+      displayName: 'Bob',
+      clientDisplayName: 'Bob MacBook',
+    });
+    expect(requested.projection?.members[BOB.principalId]?.status).toBe(
+      'requested',
+    );
+    expect(
+      requested.projection?.clients[BOB.principalId]?.[BOB.clientId],
+    ).toMatchObject({ status: 'active', display_name: 'Bob MacBook' });
+    await expect(
+      bob.service.createWorkItem({
+        groupId: 'group_approval',
+        workItemId: 'pending_write',
+        type: 'task',
+        title: 'Must not be created before approval',
+      }),
+    ).rejects.toThrow(/active Group member|not active/u);
+
+    await owner.service.approveMembership('group_approval', BOB.principalId, 2);
+    const synced = await bob.service.sync('group_approval');
+    expect(synced.projection.members[BOB.principalId]?.status).toBe('active');
+    const firstWrite = await bob.service.postProgress({
+      groupId: 'group_approval',
+      expectedRevision: 0,
+      summary: 'Posted immediately after approval',
+    });
+    expect(
+      Object.values(firstWrite.projection?.progressUpdates ?? {}).at(-1),
+    ).toMatchObject({
+      principal_id: BOB.principalId,
+      summary: 'Posted immediately after approval',
+    });
     owner.store.close();
     bob.store.close();
   });
@@ -1254,10 +1381,716 @@ describe('Collaboration project space v3 Group and identity service', () => {
       state: 'running',
       executor_id: 'executor_codex',
     });
+    const actionResult = {
+      format: 'icarus.collaboration-action-result/3' as const,
+      outcome: 'complete',
+      summary: 'Executor suggests completion.',
+      instruction: 'Review the generated changes.',
+      markers: [],
+      data: { provider: 'test' },
+      artifacts: [],
+      error: null,
+    };
+    const awaiting = await owner.service.recordActionState({
+      groupId: 'group_project',
+      instanceId: 'wfi_assisted',
+      turnId: 'turn_assisted',
+      expectedRevision: 5,
+      attempt: 1,
+      fencingToken: started.projection!.turns.turn_assisted.fencing_token!,
+      state: 'completed',
+      result: actionResult,
+      resultHash: collaborationCanonicalHashV3(actionResult),
+      executorId: 'executor_codex',
+    });
+    expect(awaiting.projection?.turns.turn_assisted).toMatchObject({
+      state: 'awaiting_confirmation',
+      executor_result: actionResult,
+    });
+    expect(awaiting.projection?.workflowInstances.wfi_assisted).toMatchObject({
+      business_state: 'implementation',
+      lifecycle: 'running',
+    });
+    const confirmedArtifact = await owner.service.stageTurnArtifact({
+      groupId: 'group_project',
+      instanceId: 'wfi_assisted',
+      turnId: 'turn_assisted',
+      attempt: 1,
+      fencingToken: started.projection!.turns.turn_assisted.fencing_token!,
+      fileName: 'confirmed-result.txt',
+      mediaType: 'text/plain',
+      contents: Buffer.from('confirmed result\n'),
+    });
+    let confirmed: Awaited<ReturnType<typeof owner.service.sync>> | null = null;
+    await withServiceApi(owner, async (baseUrl) => {
+      const response = await fetch(
+        `${baseUrl}/api/collaboration/groups/group_project/workflow-instances/wfi_assisted/turns/turn_assisted/complete`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            expectedRevision: 6,
+            attempt: 1,
+            fencingToken:
+              started.projection!.turns.turn_assisted.fencing_token!,
+            outcome: 'complete',
+            summary: 'User reviewed and confirmed completion.',
+            instruction: 'Proceed with the verified result.',
+            data: { confirmed: true },
+            artifactIds: [confirmedArtifact.metadata.artifact_id],
+          }),
+        },
+      );
+      expect(response.status).toBe(200);
+      confirmed = await owner.service.sync('group_project');
+    });
+    expect(confirmed!.projection.turns.turn_assisted).toMatchObject({
+      state: 'completed',
+      executor_result_hash: collaborationCanonicalHashV3(actionResult),
+      completion_hash: expect.stringMatching(/^sha256:/u),
+      handoff: {
+        artifact_refs: [confirmedArtifact.artifactRef],
+      },
+    });
+    expect(confirmed!.projection.workflowInstances.wfi_assisted).toMatchObject({
+      business_state: 'completed',
+      lifecycle: 'closed',
+    });
     expect(
       configured.projection?.stateExecutions.wfi_assisted.implementation,
     ).toBeDefined();
     owner.store.close();
+  });
+
+  it('advances automatic execution only from a validated custom business Outcome', async () => {
+    const transport = new MemoryTransport();
+    const owner = service(tempDirectory(), transport, ALICE);
+    await owner.service.createGroup({
+      remoteUrl: '/tmp/automatic-project.git',
+      name: 'Automatic project',
+      signingKeyPath: ALICE.privateKeyPath,
+      displayName: 'Alice',
+      clientDisplayName: 'Alice MacBook',
+      membershipPolicy: 'open',
+      observerAccess: 'allowed',
+      groupId: 'group_automatic',
+    });
+    await owner.service.registerExecutor({
+      groupId: 'group_automatic',
+      expectedRevision: 0,
+      executorId: 'executor_run_once',
+      displayName: 'Run Once',
+      kind: 'run_once',
+    });
+    await owner.service.publishAction({
+      groupId: 'group_automatic',
+      expectedRevision: 0,
+      actionId: 'verify',
+      name: 'Verify',
+      version: 1,
+      kind: 'run_once',
+      prompt: 'Verify the frozen implementation.\n',
+      filesystemAccess: 'read_only',
+    });
+    const automaticMachine = {
+      format: 'icarus.collaboration-machine/3' as const,
+      initial_state: 'verification',
+      states: {
+        verification: {
+          label: 'Verification',
+          description: 'Verify the frozen implementation.',
+          assignee: {
+            type: 'principal' as const,
+            principal_id: ALICE.principalId,
+          },
+          terminal: false,
+          transitions: [
+            {
+              outcome: 'ready_for_test',
+              label: 'Ready for test',
+              target_state: 'completed',
+            },
+          ],
+        },
+        completed: {
+          label: 'Completed',
+          description: '',
+          terminal: true,
+          transitions: [],
+        },
+      },
+    };
+    await owner.service.proposeWorkflowDefinition({
+      groupId: 'group_automatic',
+      definitionId: 'verification',
+      expectedRevision: 0,
+      version: 1,
+      name: 'Verification',
+      machine: automaticMachine,
+      layout: {
+        format: 'icarus.collaboration-workflow-layout/1',
+        view: 'free',
+        nodes: {
+          verification: { x: 0, y: 0 },
+          completed: { x: 240, y: 0 },
+        },
+        revision: 1,
+      },
+    });
+    await owner.service.publishWorkflowDefinition({
+      groupId: 'group_automatic',
+      definitionId: 'verification',
+      version: 1,
+      expectedRevision: 1,
+    });
+    await owner.service.createWorkflowInstance({
+      groupId: 'group_automatic',
+      definitionId: 'verification',
+      definitionVersion: 1,
+      instanceId: 'wfi_automatic',
+      scope: { type: 'group' },
+      participantBindings: {},
+    });
+    await owner.service.startWorkflowInstance({
+      groupId: 'group_automatic',
+      instanceId: 'wfi_automatic',
+      expectedRevision: 1,
+    });
+    await owner.service.publishStateExecution({
+      groupId: 'group_automatic',
+      instanceId: 'wfi_automatic',
+      stateId: 'verification',
+      expectedRevision: 2,
+      mode: 'automatic',
+      actionId: 'verify',
+    });
+    const pending = await owner.service.createTurn({
+      groupId: 'group_automatic',
+      instanceId: 'wfi_automatic',
+      expectedRevision: 3,
+      turnId: 'turn_automatic',
+    });
+    const turn = pending.projection!.turns.turn_automatic;
+    owner.store.saveExecutorBinding({
+      groupId: 'group_automatic',
+      instanceId: 'wfi_automatic',
+      stateId: 'verification',
+      principalId: ALICE.principalId,
+      clientId: ALICE.clientId,
+      actionHash: turn.action_hash!,
+      promptHash: turn.prompt_hash!,
+      executorId: 'executor_run_once',
+      executorKind: 'run_once',
+      workspacePath: '/tmp/project-workspace',
+      filesystemAccess: 'read_only',
+      approvalPolicy: 'never',
+      config: { agent_jid: 'web:main' },
+      enabled: true,
+    });
+    const runOnce = vi.fn<RunOnceService['runOnce']>(
+      async (input, lifecycle) => {
+        lifecycle?.onAccepted({
+          runId: 'run-automatic',
+          queryId: 'query-automatic',
+          containerName: 'container-automatic',
+        });
+        expect(input.messages[0]?.content).toContain('ready_for_test');
+        expect(input.messages[0]?.content).toContain(
+          'Verify the frozen implementation.',
+        );
+        return {
+          ok: true,
+          text: JSON.stringify({
+            format: 'icarus.collaboration-action-result/3',
+            outcome: 'ready_for_test',
+            summary: 'Verification is ready for testing.',
+            instruction: 'Run the release suite.',
+            markers: [],
+            data: { suite: 'release' },
+            artifacts: [],
+            error: null,
+          }),
+          run_id: 'run-automatic',
+          query_id: 'query-automatic',
+          model: 'test-model',
+          output_files: [],
+        };
+      },
+    );
+    const registry = new ActionExecutorRegistry();
+    registry.register(
+      new RunOnceActionExecutor({
+        preflightWorkspace: vi.fn(),
+        runOnce,
+      }),
+    );
+    const scheduler = new CollaborationScheduler(
+      owner.store,
+      owner.service,
+      registry,
+      { ownerId: 'test-scheduler' },
+    );
+
+    await scheduler.syncNow('group_automatic');
+    await scheduler.syncNow('group_automatic');
+
+    const completed = owner.store.getGroup('group_automatic')!.projection!;
+    expect(completed.turns.turn_automatic).toMatchObject({
+      state: 'completed',
+      outcome: 'ready_for_test',
+      executor_result: {
+        outcome: 'ready_for_test',
+        data: { suite: 'release' },
+      },
+      executor_result_hash: expect.stringMatching(/^sha256:/u),
+      completion_hash: expect.stringMatching(/^sha256:/u),
+    });
+    expect(completed.workflowInstances.wfi_automatic).toMatchObject({
+      lifecycle: 'closed',
+      business_state: 'completed',
+    });
+    expect(runOnce).toHaveBeenCalledOnce();
+    owner.store.close();
+  });
+
+  it('derives two-node and self-loop incoming Handoffs from verified Instance history', async () => {
+    const transport = new MemoryTransport();
+    const owner = service(tempDirectory(), transport, ALICE);
+    await owner.service.createGroup({
+      remoteUrl: '/tmp/handoff-project.git',
+      name: 'Handoff project',
+      signingKeyPath: ALICE.privateKeyPath,
+      displayName: 'Alice',
+      clientDisplayName: 'Alice MacBook',
+      membershipPolicy: 'open',
+      observerAccess: 'allowed',
+      groupId: 'group_handoff',
+    });
+    await owner.service.registerExecutor({
+      groupId: 'group_handoff',
+      expectedRevision: 0,
+      executorId: 'executor_handoff',
+      displayName: 'Handoff Executor',
+      kind: 'run_once',
+    });
+    await owner.service.publishAction({
+      groupId: 'group_handoff',
+      expectedRevision: 0,
+      actionId: 'review_handoff',
+      name: 'Review Handoff',
+      version: 1,
+      kind: 'run_once',
+      prompt: 'Review the incoming release context.\n',
+      filesystemAccess: 'read_only',
+    });
+    const twoNodeMachine = {
+      format: 'icarus.collaboration-machine/3' as const,
+      initial_state: 'prepare',
+      states: {
+        prepare: {
+          label: 'Prepare',
+          description: 'Prepare the release.',
+          assignee: {
+            type: 'principal' as const,
+            principal_id: ALICE.principalId,
+          },
+          terminal: false,
+          transitions: [
+            { outcome: 'review', label: 'Review', target_state: 'review' },
+          ],
+        },
+        review: {
+          label: 'Review',
+          description: 'Review the release.',
+          assignee: {
+            type: 'principal' as const,
+            principal_id: ALICE.principalId,
+          },
+          terminal: false,
+          transitions: [
+            { outcome: 'complete', label: 'Complete', target_state: 'done' },
+          ],
+        },
+        done: {
+          label: 'Done',
+          description: '',
+          terminal: true,
+          transitions: [],
+        },
+      },
+    };
+    await owner.service.proposeWorkflowDefinition({
+      groupId: 'group_handoff',
+      definitionId: 'handoff',
+      expectedRevision: 0,
+      version: 1,
+      name: 'Handoff',
+      machine: twoNodeMachine,
+      layout: {
+        format: 'icarus.collaboration-workflow-layout/1',
+        view: 'free',
+        nodes: {
+          prepare: { x: 0, y: 0 },
+          review: { x: 240, y: 0 },
+          done: { x: 480, y: 0 },
+        },
+        revision: 1,
+      },
+    });
+    await owner.service.publishWorkflowDefinition({
+      groupId: 'group_handoff',
+      definitionId: 'handoff',
+      version: 1,
+      expectedRevision: 1,
+    });
+    await owner.service.createWorkflowInstance({
+      groupId: 'group_handoff',
+      definitionId: 'handoff',
+      definitionVersion: 1,
+      instanceId: 'wfi_handoff',
+      scope: { type: 'group' },
+    });
+    await owner.service.startWorkflowInstance({
+      groupId: 'group_handoff',
+      instanceId: 'wfi_handoff',
+      expectedRevision: 1,
+    });
+    await owner.service.publishStateExecution({
+      groupId: 'group_handoff',
+      instanceId: 'wfi_handoff',
+      stateId: 'review',
+      expectedRevision: 2,
+      mode: 'automatic',
+      actionId: 'review_handoff',
+    });
+    await owner.service.createTurn({
+      groupId: 'group_handoff',
+      instanceId: 'wfi_handoff',
+      expectedRevision: 3,
+      turnId: 'turn_prepare',
+    });
+    const started = await owner.service.startTurn({
+      groupId: 'group_handoff',
+      instanceId: 'wfi_handoff',
+      turnId: 'turn_prepare',
+      expectedRevision: 4,
+    });
+    const fence = started.projection!.turns.turn_prepare.fencing_token!;
+    const completed = await owner.service.completeTurn({
+      groupId: 'group_handoff',
+      instanceId: 'wfi_handoff',
+      turnId: 'turn_prepare',
+      expectedRevision: 5,
+      attempt: 1,
+      fencingToken: fence,
+      outcome: 'review',
+      summary: 'Preparation complete.',
+      instruction: 'Review the signed release.',
+      markers: ['signed'],
+      dataRefs: ['workspace/shared/data/release.json'],
+      artifactRefs: [
+        'artifacts/workflows/wfi_handoff/turn_prepare/report/metadata.json',
+      ],
+      data: { release: '2026.08' },
+    });
+    expect(completed.projection?.workflowInstances.wfi_handoff).toMatchObject({
+      business_state: 'review',
+      last_completed_turn_id: 'turn_prepare',
+      last_handoff_hash: expect.stringMatching(/^sha256:/u),
+    });
+    const beforeNext = transport.histories.get('/tmp/handoff-project.git')!;
+    const next = await owner.service.createTurn({
+      groupId: 'group_handoff',
+      instanceId: 'wfi_handoff',
+      expectedRevision: 6,
+      turnId: 'turn_review',
+    });
+    const nextTurn = next.projection!.turns.turn_review;
+    expect(nextTurn.incoming_handoff).toEqual(
+      completed.projection!.turns.turn_prepare.handoff,
+    );
+    expect(nextTurn.incoming_handoff).toMatchObject({
+      instruction: 'Review the signed release.',
+      data_refs: ['workspace/shared/data/release.json'],
+      artifact_refs: [
+        'artifacts/workflows/wfi_handoff/turn_prepare/report/metadata.json',
+      ],
+      data: { release: '2026.08' },
+    });
+    expect(nextTurn.execution_mode).toBe('automatic');
+
+    for (const incoming of [
+      null,
+      { ...nextTurn.incoming_handoff!, source_turn_id: 'turn_cross_instance' },
+    ]) {
+      const tamperedTurn = {
+        ...nextTurn,
+        turn_id: `turn_tampered_${incoming ? 'cross' : 'missing'}`,
+        incoming_handoff: incoming,
+        incoming_handoff_hash: incoming
+          ? collaborationCanonicalHashV3(incoming)
+          : null,
+      };
+      const head =
+        beforeNext.projection.aggregateHeads['workflow_instance:wfi_handoff']!;
+      const tamperedEvent = buildCollaborationEventV3({
+        groupId: 'group_handoff',
+        eventId: `evt_${tamperedTurn.turn_id}`,
+        aggregateType: 'workflow_instance',
+        aggregateId: 'wfi_handoff',
+        aggregateRevision: head.revision + 1,
+        previousEventHash: head.eventHash,
+        eventType: 'turn_created',
+        actor: {
+          principal_id: ALICE.principalId,
+          client_id: ALICE.clientId,
+          executor_id: null,
+        },
+        occurredAt: '2026-08-06T12:05:00.000Z',
+        payload: { turn: tamperedTurn },
+      });
+      expect(() =>
+        reduceCollaborationEventV3(beforeNext.projection, tamperedEvent),
+      ).toThrow(/incoming Handoff/u);
+    }
+
+    owner.store.saveExecutorBinding({
+      groupId: 'group_handoff',
+      instanceId: 'wfi_handoff',
+      stateId: 'review',
+      principalId: ALICE.principalId,
+      clientId: ALICE.clientId,
+      actionHash: nextTurn.action_hash!,
+      promptHash: nextTurn.prompt_hash!,
+      executorId: 'executor_handoff',
+      executorKind: 'run_once',
+      workspacePath: '/tmp/handoff-workspace',
+      filesystemAccess: 'read_only',
+      approvalPolicy: 'never',
+      config: { agent_jid: 'web:main' },
+      enabled: true,
+    });
+    const handoffRunOnce = vi.fn<RunOnceService['runOnce']>(
+      async (input, lifecycle) => {
+        lifecycle?.onAccepted({
+          runId: 'run-handoff',
+          queryId: 'query-handoff',
+          containerName: 'container-handoff',
+        });
+        const actionInput = input.messages[0]!.content;
+        expect(actionInput).toContain('Review the signed release.');
+        expect(actionInput).toContain('workspace/shared/data/release.json');
+        expect(actionInput).toContain(
+          'artifacts/workflows/wfi_handoff/turn_prepare/report/metadata.json',
+        );
+        expect(actionInput).toContain('2026.08');
+        return {
+          ok: true,
+          text: JSON.stringify({
+            format: 'icarus.collaboration-action-result/3',
+            outcome: 'complete',
+            summary: 'Reviewed the carried Handoff.',
+            instruction: '',
+            markers: [],
+            data: { reviewed: true },
+            artifacts: [],
+            error: null,
+          }),
+          run_id: 'run-handoff',
+          query_id: 'query-handoff',
+          model: 'test-model',
+          output_files: [],
+        };
+      },
+    );
+    const handoffRegistry = new ActionExecutorRegistry();
+    handoffRegistry.register(
+      new RunOnceActionExecutor({
+        preflightWorkspace: vi.fn(),
+        runOnce: handoffRunOnce,
+      }),
+    );
+    const handoffScheduler = new CollaborationScheduler(
+      owner.store,
+      owner.service,
+      handoffRegistry,
+      { ownerId: 'handoff-scheduler' },
+    );
+    await handoffScheduler.syncNow('group_handoff');
+    await handoffScheduler.syncNow('group_handoff');
+    expect(
+      owner.store.getGroup('group_handoff')?.projection?.turns.turn_review,
+    ).toMatchObject({ state: 'completed', outcome: 'complete' });
+    expect(handoffRunOnce).toHaveBeenCalledOnce();
+
+    const loopMachine = {
+      format: 'icarus.collaboration-machine/3' as const,
+      initial_state: 'loop',
+      states: {
+        loop: {
+          label: 'Loop',
+          description: 'Repeat until externally closed.',
+          assignee: {
+            type: 'principal' as const,
+            principal_id: ALICE.principalId,
+          },
+          terminal: false,
+          transitions: [
+            { outcome: 'again', label: 'Again', target_state: 'loop' },
+          ],
+        },
+      },
+    };
+    await owner.service.proposeWorkflowDefinition({
+      groupId: 'group_handoff',
+      definitionId: 'loop',
+      expectedRevision: 0,
+      version: 1,
+      name: 'Loop',
+      machine: loopMachine,
+      layout: {
+        format: 'icarus.collaboration-workflow-layout/1',
+        view: 'free',
+        nodes: { loop: { x: 0, y: 0 } },
+        revision: 1,
+      },
+    });
+    await owner.service.publishWorkflowDefinition({
+      groupId: 'group_handoff',
+      definitionId: 'loop',
+      version: 1,
+      expectedRevision: 1,
+    });
+    await owner.service.createWorkflowInstance({
+      groupId: 'group_handoff',
+      definitionId: 'loop',
+      definitionVersion: 1,
+      instanceId: 'wfi_loop',
+      scope: { type: 'group' },
+    });
+    await owner.service.startWorkflowInstance({
+      groupId: 'group_handoff',
+      instanceId: 'wfi_loop',
+      expectedRevision: 1,
+    });
+    await owner.service.createTurn({
+      groupId: 'group_handoff',
+      instanceId: 'wfi_loop',
+      expectedRevision: 2,
+      turnId: 'turn_loop_1',
+    });
+    const loopStarted = await owner.service.startTurn({
+      groupId: 'group_handoff',
+      instanceId: 'wfi_loop',
+      turnId: 'turn_loop_1',
+      expectedRevision: 3,
+    });
+    const loopCompleted = await owner.service.completeTurn({
+      groupId: 'group_handoff',
+      instanceId: 'wfi_loop',
+      turnId: 'turn_loop_1',
+      expectedRevision: 4,
+      attempt: 1,
+      fencingToken: loopStarted.projection!.turns.turn_loop_1.fencing_token!,
+      outcome: 'again',
+      summary: 'Loop iteration complete.',
+      instruction: 'Use this context on the next iteration.',
+      data: { iteration: 1 },
+    });
+    const loopNext = await owner.service.createTurn({
+      groupId: 'group_handoff',
+      instanceId: 'wfi_loop',
+      expectedRevision: 5,
+      turnId: 'turn_loop_2',
+    });
+    expect(loopNext.projection?.turns.turn_loop_2.incoming_handoff).toEqual(
+      loopCompleted.projection?.turns.turn_loop_1.handoff,
+    );
+    owner.store.close();
+  });
+
+  it('rejects Turn creation by an unrelated active Member', async () => {
+    const transport = new MemoryTransport();
+    const owner = service(tempDirectory(), transport, ALICE);
+    await owner.service.createGroup({
+      remoteUrl: '/tmp/turn-authority.git',
+      name: 'Turn authority',
+      signingKeyPath: ALICE.privateKeyPath,
+      displayName: 'Alice',
+      clientDisplayName: 'Alice MacBook',
+      membershipPolicy: 'open',
+      observerAccess: 'allowed',
+      groupId: 'group_turn_authority',
+    });
+    await owner.service.proposeWorkflowDefinition({
+      groupId: 'group_turn_authority',
+      definitionId: 'delivery',
+      expectedRevision: 0,
+      version: 1,
+      name: 'Delivery',
+      machine: {
+        ...DELIVERY_MACHINE,
+        states: {
+          ...DELIVERY_MACHINE.states,
+          implementation: {
+            ...DELIVERY_MACHINE.states.implementation,
+            assignee: {
+              type: 'principal' as const,
+              principal_id: ALICE.principalId,
+            },
+          },
+        },
+      },
+      layout: DELIVERY_LAYOUT,
+    });
+    await owner.service.publishWorkflowDefinition({
+      groupId: 'group_turn_authority',
+      definitionId: 'delivery',
+      version: 1,
+      expectedRevision: 1,
+    });
+    await owner.service.createWorkflowInstance({
+      groupId: 'group_turn_authority',
+      definitionId: 'delivery',
+      definitionVersion: 1,
+      instanceId: 'wfi_authority',
+      scope: { type: 'group' },
+    });
+    await owner.service.startWorkflowInstance({
+      groupId: 'group_turn_authority',
+      instanceId: 'wfi_authority',
+      expectedRevision: 1,
+    });
+    const bob = service(tempDirectory(), transport, BOB);
+    await bob.service.joinGroup({
+      remoteUrl: '/tmp/turn-authority.git',
+      signingKeyPath: BOB.privateKeyPath,
+      displayName: 'Bob',
+      clientDisplayName: 'Bob MacBook',
+    });
+    await owner.service.sync('group_turn_authority');
+    await expect(
+      bob.service.createTurn({
+        groupId: 'group_turn_authority',
+        instanceId: 'wfi_authority',
+        expectedRevision: 2,
+        turnId: 'turn_unauthorized',
+      }),
+    ).rejects.toThrow(/cannot create|Actor cannot create/u);
+    await expect(
+      owner.service.createTurn({
+        groupId: 'group_turn_authority',
+        instanceId: 'wfi_authority',
+        expectedRevision: 2,
+        turnId: 'turn_authorized',
+      }),
+    ).resolves.toMatchObject({
+      projection: {
+        turns: { turn_authorized: { state: 'pending' } },
+      },
+    });
+    owner.store.close();
+    bob.store.close();
   });
 
   it('observes start timeout reminders without changing Workflow or Work Item state', async () => {

@@ -122,6 +122,9 @@ function turn(): CollaborationTurnV3 {
     outcome: null,
     handoff: null,
     handoff_hash: null,
+    executor_result: null,
+    executor_result_hash: null,
+    completion_hash: null,
     recovery_reason: null,
   };
 }
@@ -136,6 +139,19 @@ function request(): ActionRequest {
     epoch: 1,
     action: action(),
     prompt,
+    state: {
+      label: 'Review',
+      description: 'Review the workflow output.',
+      assignee: { type: 'principal', principal_id: 'principal_alice' },
+      terminal: false,
+      transitions: [
+        {
+          outcome: 'ready_for_test',
+          label: 'Ready for test',
+          target_state: 'complete',
+        },
+      ],
+    },
     binding: binding(),
   };
 }
@@ -160,7 +176,19 @@ function observation(
             : null,
     exitName: state === 'succeeded' ? 'done' : null,
     outputHash: state === 'succeeded' ? `sha256:${'c'.repeat(64)}` : null,
-    output: state === 'succeeded' ? { reviewed: true } : null,
+    output:
+      state === 'succeeded'
+        ? {
+            format: 'icarus.collaboration-action-result/3',
+            outcome: 'ready_for_test',
+            summary: 'Workflow reviewed the change.',
+            instruction: '',
+            markers: [],
+            data: { reviewed: true },
+            artifacts: [],
+            error: null,
+          }
+        : null,
     errorCode: state === 'failed' ? 'workflow_failed' : null,
   };
 }
@@ -192,6 +220,7 @@ describe('Workflow Action integration', () => {
       workflowRef: 'workflow:local-review',
       operationKey,
       promptSha256: hash(prompt),
+      actionInput: prepared.actionInput,
       bindingConfig: binding().config,
     });
     expect(receipt).toMatchObject({
@@ -208,8 +237,8 @@ describe('Workflow Action integration', () => {
     expect(await executor.observe(receipt.executionRef)).toMatchObject({
       state: 'succeeded',
       result: {
-        outcome: 'success',
-        data: { output: { reviewed: true } },
+        outcome: 'ready_for_test',
+        data: { reviewed: true },
       },
       resultHash: expect.stringMatching(/^sha256:/),
     });
@@ -229,10 +258,8 @@ describe('Workflow Action integration', () => {
       }),
     ).toMatchObject({
       state: 'failed',
-      result: {
-        outcome: 'failure',
-        error: { code: 'workflow_failed' },
-      },
+      result: null,
+      resultHash: null,
     });
   });
 
@@ -270,6 +297,10 @@ describe('Workflow Action integration', () => {
   it('host service delegates only through the injected execution gateway', () => {
     const store = {} as WorkflowRuntimeStore;
     const gateway: WorkflowExecutionHostGateway = {
+      persistCollaborationActionInput: vi.fn(() => ({
+        id: 'collaboration-action-input',
+        hash: `sha256:${'6'.repeat(64)}` as const,
+      })),
       create: vi.fn(() => ({
         disposition: 'created' as const,
         workflowId: 'workflow:1',
@@ -291,6 +322,7 @@ describe('Workflow Action integration', () => {
         workflowRef: 'workflow:local-review',
         operationKey,
         promptSha256: hash(prompt),
+        actionInput: { format: 'test-action-input' },
         bindingConfig: binding().config,
       }).workflowId,
     ).toBe('workflow:1');
@@ -318,6 +350,7 @@ describe('Workflow Action integration', () => {
 
   it('rejects host-owned creation fields in a reusable launch profile', () => {
     const host = new WorkflowExecutionHostService({} as WorkflowRuntimeStore, {
+      persistCollaborationActionInput: vi.fn(),
       create: vi.fn(),
       observe: vi.fn(),
     });
@@ -339,6 +372,7 @@ describe('Workflow Action integration', () => {
           workflowRef: 'workflow:local-review',
           operationKey,
           promptSha256: hash(prompt),
+          actionInput: { format: 'test-action-input' },
           bindingConfig: config,
         }),
       ).toThrow(new RegExp(`must not configure host-owned ${field}`));

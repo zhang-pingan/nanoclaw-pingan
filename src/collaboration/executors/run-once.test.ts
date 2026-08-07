@@ -91,6 +91,9 @@ function turn(): CollaborationTurnV3 {
     outcome: null,
     handoff: null,
     handoff_hash: null,
+    executor_result: null,
+    executor_result_hash: null,
+    completion_hash: null,
     recovery_reason: null,
   };
 }
@@ -108,6 +111,19 @@ function request(
     epoch: 1,
     action: selectedAction,
     prompt: 'Implement the task.',
+    state: {
+      label: 'Development',
+      description: 'Implement the accepted scope.',
+      assignee: { type: 'principal', principal_id: 'principal_alice' },
+      terminal: false,
+      transitions: [
+        {
+          outcome: 'ready_for_test',
+          label: 'Ready for test',
+          target_state: 'testing',
+        },
+      ],
+    },
     binding: selectedBinding,
   };
 }
@@ -179,7 +195,16 @@ describe('RunOnceActionExecutor', () => {
     });
     result.resolve({
       ok: true,
-      text: 'Implemented safely',
+      text: JSON.stringify({
+        format: 'icarus.collaboration-action-result/3',
+        outcome: 'ready_for_test',
+        summary: 'Implemented safely',
+        instruction: '',
+        markers: [],
+        data: { model: 'test-model' },
+        artifacts: [],
+        error: null,
+      }),
       run_id: 'run-1',
       query_id: 'query-1',
       model: 'test-model',
@@ -189,7 +214,7 @@ describe('RunOnceActionExecutor', () => {
       expect(await executor.observe(first.executionRef)).toMatchObject({
         state: 'succeeded',
         result: {
-          outcome: 'success',
+          outcome: 'ready_for_test',
           summary: 'Implemented safely',
           data: { model: 'test-model' },
         },
@@ -232,7 +257,7 @@ describe('RunOnceActionExecutor', () => {
     expect(() =>
       validateActionResult(selectedAction, {
         format: 'icarus.collaboration-action-result/3',
-        outcome: 'success',
+        outcome: 'ready_for_test',
         summary: 'missing approved field',
         instruction: '',
         markers: [],

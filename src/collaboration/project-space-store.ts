@@ -16,11 +16,14 @@ import Database from 'better-sqlite3';
 import { z } from 'zod';
 
 import {
+  canonicalJsonStringify,
   prettyCollaborationJson,
   strictParseJson,
 } from './protocol/canonical-json.js';
 import {
   observerSubscriptionSchema,
+  actionDefinitionV3Schema,
+  type ActionDefinitionV3,
   type CollaborationEventV3,
   type CollaborationTurnV3,
   type ObserverSubscription,
@@ -30,9 +33,9 @@ import type {
   CollaborationAggregateHeadV3,
 } from './protocol/v3-reducer.js';
 
-export const CURRENT_COLLABORATION_PROJECT_SPACE_SCHEMA_VERSION = 5;
+export const CURRENT_COLLABORATION_PROJECT_SPACE_SCHEMA_VERSION = 6;
 export const COLLABORATION_PROJECT_SPACE_STORE_FORMAT =
-  'icarus.collaboration-local-store/5';
+  'icarus.collaboration-local-store/6';
 
 export function deterministicCollaborationPollDelay(
   groupId: string,
@@ -67,7 +70,7 @@ export class CollaborationProjectSpaceStoreError extends Error {
   }
 }
 
-const SCHEMA_V5 = `
+const SCHEMA_V6 = `
 CREATE TABLE collaboration_meta (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL
@@ -148,6 +151,24 @@ CREATE TABLE collaboration_event_cache (
   UNIQUE (group_id, aggregate_type, aggregate_id, aggregate_revision),
   UNIQUE (group_id, commit_order)
 );
+CREATE INDEX collaboration_event_cache_commit
+  ON collaboration_event_cache (group_id, commit_hash);
+CREATE TABLE collaboration_action_snapshots (
+  group_id TEXT NOT NULL REFERENCES collaboration_groups(group_id) ON DELETE CASCADE,
+  owner_principal_id TEXT NOT NULL,
+  action_id TEXT NOT NULL,
+  action_hash TEXT NOT NULL,
+  prompt_hash TEXT NOT NULL,
+  event_id TEXT NOT NULL,
+  commit_hash TEXT NOT NULL,
+  commit_order INTEGER NOT NULL,
+  action_json TEXT NOT NULL,
+  PRIMARY KEY (group_id, owner_principal_id, action_hash),
+  UNIQUE (group_id, event_id)
+);
+CREATE INDEX collaboration_action_snapshots_lookup
+  ON collaboration_action_snapshots
+    (group_id, owner_principal_id, action_id, action_hash, prompt_hash);
 CREATE TABLE collaboration_file_index (
   group_id TEXT NOT NULL REFERENCES collaboration_groups(group_id) ON DELETE CASCADE,
   file_id TEXT NOT NULL,
@@ -439,6 +460,16 @@ const REQUIRED_TABLE_COLUMNS: Readonly<Record<string, readonly string[]>> = {
     'aggregate_revision',
     'commit_order',
   ],
+  collaboration_action_snapshots: [
+    'group_id',
+    'owner_principal_id',
+    'action_id',
+    'action_hash',
+    'prompt_hash',
+    'event_id',
+    'commit_hash',
+    'commit_order',
+  ],
   collaboration_file_index: ['group_id', 'file_id', 'virtual_path'],
   collaboration_progress_updates: ['group_id', 'update_id', 'principal_id'],
   collaboration_work_items: ['group_id', 'work_item_id', 'status', 'revision'],
@@ -524,7 +555,7 @@ function initialize(database: Database.Database): void {
     );
   if (version === 0)
     database.transaction(() => {
-      database.exec(SCHEMA_V5);
+      database.exec(SCHEMA_V6);
       database
         .prepare('INSERT INTO collaboration_meta (key, value) VALUES (?, ?)')
         .run('format', COLLABORATION_PROJECT_SPACE_STORE_FORMAT);
@@ -592,6 +623,13 @@ export interface CollaborationProjectSpaceGroupRecord {
 
 export interface CollaborationProjectSpaceEventRecord {
   readonly event: CollaborationEventV3;
+  readonly commitHash: string;
+  readonly commitOrder: number;
+}
+
+export interface CollaborationActionSnapshotRecord {
+  readonly action: ActionDefinitionV3;
+  readonly eventId: string;
   readonly commitHash: string;
   readonly commitOrder: number;
 }
@@ -991,6 +1029,9 @@ export class CollaborationProjectSpaceStore {
            commit_order = excluded.commit_order,
            event_json = excluded.event_json`,
       );
+      this.database
+        .prepare('DELETE FROM collaboration_event_cache WHERE group_id = ?')
+        .run(input.groupId);
       for (const record of input.eventRecords)
         eventStatement.run(
           input.groupId,
@@ -1002,6 +1043,43 @@ export class CollaborationProjectSpaceStore {
           record.commitOrder,
           JSON.stringify(record.event),
         );
+      this.database
+        .prepare(
+          'DELETE FROM collaboration_action_snapshots WHERE group_id = ?',
+        )
+        .run(input.groupId);
+      const actionSnapshotStatement = this.database.prepare(
+        `INSERT INTO collaboration_action_snapshots (
+           group_id, owner_principal_id, action_id, action_hash, prompt_hash,
+           event_id, commit_hash, commit_order, action_json
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      );
+      for (const record of input.eventRecords) {
+        if (
+          record.event.event_type !== 'action_published' &&
+          record.event.event_type !== 'action_revised'
+        )
+          continue;
+        const parsed = actionDefinitionV3Schema.safeParse(
+          record.event.payload.action,
+        );
+        if (!parsed.success) continue;
+        const actionHash = `sha256:${crypto
+          .createHash('sha256')
+          .update(canonicalJsonStringify(parsed.data), 'utf8')
+          .digest('hex')}`;
+        actionSnapshotStatement.run(
+          input.groupId,
+          parsed.data.owner_principal_id,
+          parsed.data.action_id,
+          actionHash,
+          parsed.data.prompt_hash,
+          record.event.event_id,
+          record.commitHash,
+          record.commitOrder,
+          JSON.stringify(parsed.data),
+        );
+      }
 
       this.replaceProjectionRows(
         input.groupId,
@@ -1343,6 +1421,52 @@ export class CollaborationProjectSpaceStore {
       commitHash: String(row.commit_hash),
       commitOrder: Number(row.commit_order),
     }));
+  }
+
+  findActionSnapshot(input: {
+    readonly groupId: string;
+    readonly ownerPrincipalId: string;
+    readonly actionId: string;
+    readonly actionHash: string;
+    readonly promptHash: string;
+  }): CollaborationActionSnapshotRecord | null {
+    this.assertOpen();
+    const row = this.database
+      .prepare(
+        `SELECT action_json, event_id, commit_hash, commit_order
+           FROM collaboration_action_snapshots
+          WHERE group_id = ? AND owner_principal_id = ? AND action_id = ?
+            AND action_hash = ? AND prompt_hash = ?`,
+      )
+      .get(
+        input.groupId,
+        input.ownerPrincipalId,
+        input.actionId,
+        input.actionHash,
+        input.promptHash,
+      ) as Record<string, unknown> | undefined;
+    return row
+      ? {
+          action: actionDefinitionV3Schema.parse(
+            JSON.parse(String(row.action_json)),
+          ),
+          eventId: String(row.event_id),
+          commitHash: String(row.commit_hash),
+          commitOrder: Number(row.commit_order),
+        }
+      : null;
+  }
+
+  hasVerifiedCommit(groupId: string, commitHash: string): boolean {
+    this.assertOpen();
+    return Boolean(
+      this.database
+        .prepare(
+          `SELECT 1 FROM collaboration_event_cache
+            WHERE group_id = ? AND commit_hash = ? LIMIT 1`,
+        )
+        .get(groupId, commitHash),
+    );
   }
 
   listWorkItems(groupId: string): WorkItemRow[] {

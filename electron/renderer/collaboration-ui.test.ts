@@ -14,6 +14,7 @@ import {
   collaborationDuration,
   collaborationEligibleTurnExecutors,
   collaborationIsObserver,
+  collaborationLocalMembershipStatus,
   collaborationOutcomeRoutes,
   collaborationPendingNotifications,
   collaborationPrincipalName,
@@ -53,8 +54,31 @@ describe('Collaboration project-space v3 UI helpers', () => {
         lifecycle: 'active',
         localPrincipalId: 'principal_alice',
         localClientId: 'client_a',
+        projection: {
+          members: { principal_alice: { status: 'active' } },
+        },
       }),
     ).toBe(true);
+    expect(
+      collaborationCanMutate({
+        subscriptionMode: 'member',
+        lifecycle: 'active',
+        localPrincipalId: 'principal_alice',
+        localClientId: 'client_a',
+        projection: {
+          members: { principal_alice: { status: 'requested' } },
+        },
+      }),
+    ).toBe(false);
+    expect(
+      collaborationLocalMembershipStatus({
+        subscriptionMode: 'member',
+        localPrincipalId: 'principal_alice',
+        projection: {
+          members: { principal_alice: { status: 'requested' } },
+        },
+      }),
+    ).toBe('requested');
   });
 
   it('uses human Principal and Artifact labels for operational views', () => {
@@ -82,8 +106,13 @@ describe('Collaboration project-space v3 UI helpers', () => {
 
   it('scopes Turn actions to the assignee Principal and claimant Client', () => {
     const group = {
+      subscriptionMode: 'member',
+      lifecycle: 'active',
       localPrincipalId: 'principal_alice',
       localClientId: 'client_a',
+      projection: {
+        members: { principal_alice: { status: 'active' } },
+      },
     };
     expect(
       collaborationTurnAccess(group, {
@@ -97,6 +126,22 @@ describe('Collaboration project-space v3 UI helpers', () => {
       canStart: true,
       canComplete: false,
     });
+    expect(
+      collaborationTurnAccess(group, {
+        assignee_principal_id: 'principal_alice',
+        claimant_client_id: 'client_a',
+        state: 'awaiting_confirmation',
+        execution_mode: 'assisted',
+      }),
+    ).toMatchObject({ canComplete: true });
+    expect(
+      collaborationTurnAccess(group, {
+        assignee_principal_id: 'principal_alice',
+        claimant_client_id: 'client_a',
+        state: 'running',
+        execution_mode: 'assisted',
+      }),
+    ).toMatchObject({ canComplete: false });
     expect(
       collaborationTurnAccess(group, {
         assignee_principal_id: 'principal_alice',
@@ -119,7 +164,10 @@ describe('Collaboration project-space v3 UI helpers', () => {
         localPrincipalId: 'principal_owner',
         localClientId: 'client_owner',
         ownerPrincipalId: 'principal_owner',
-        projection: { permissionGrants: {} },
+        projection: {
+          members: { principal_owner: { status: 'active' } },
+          permissionGrants: {},
+        },
       }),
     ).toBe(true);
     expect(
@@ -130,6 +178,7 @@ describe('Collaboration project-space v3 UI helpers', () => {
         localClientId: 'client_admin',
         ownerPrincipalId: 'principal_owner',
         projection: {
+          members: { principal_admin: { status: 'active' } },
           permissionGrants: {
             principal_admin: { grants: ['member:approve'] },
           },
@@ -147,6 +196,8 @@ describe('Collaboration project-space v3 UI helpers', () => {
       lifecycle: 'running',
       business_state: 'build',
       active_turn_id: null,
+      created_by_principal_id: 'principal_alice',
+      resolved_assignments: { build: 'principal_alice' },
     };
     const definition = {
       machine: {
@@ -156,9 +207,23 @@ describe('Collaboration project-space v3 UI helpers', () => {
         },
       },
     };
-    expect(collaborationCanCreateTurn(instance, definition)).toBe(true);
+    const authorityGroup = {
+      localPrincipalId: 'principal_alice',
+      projection: { permissionGrants: {} },
+    };
+    expect(
+      collaborationCanCreateTurn(authorityGroup, instance, definition),
+    ).toBe(true);
     expect(
       collaborationCanCreateTurn(
+        { ...authorityGroup, localPrincipalId: 'principal_bob' },
+        instance,
+        definition,
+      ),
+    ).toBe(false);
+    expect(
+      collaborationCanCreateTurn(
+        authorityGroup,
         { ...instance, business_state: 'done' },
         definition,
       ),

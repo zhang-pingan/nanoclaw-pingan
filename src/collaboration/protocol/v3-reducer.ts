@@ -7,6 +7,7 @@ import {
   actionDefinitionV3Schema,
   artifactMetadataV3Schema,
   clientDefinitionSchema,
+  collaborationActionResultV3Schema,
   collaborationEventV3Schema,
   collaborationIdentifierSchema,
   collaborationSha256Schema,
@@ -198,7 +199,7 @@ const actionDispatchedPayloadSchema = turnFencePayloadSchema
   .extend({ execution_ref: id })
   .strict();
 const actionCompletedPayloadSchema = turnFencePayloadSchema
-  .extend({ result_hash: sha256 })
+  .extend({ result: collaborationActionResultV3Schema, result_hash: sha256 })
   .strict();
 const timeoutObservedPayloadSchema = z
   .object({
@@ -213,7 +214,8 @@ const timeoutObservedPayloadSchema = z
 const turnCompletedPayloadSchema = turnFencePayloadSchema
   .extend({
     outcome: id,
-    result_hash: sha256,
+    result_hash: sha256.nullable(),
+    completion_hash: sha256,
     handoff: handoffEnvelopeV3Schema,
     handoff_hash: sha256,
     artifact_refs: z.array(z.string()).max(100),
@@ -407,6 +409,24 @@ export function collaborationCanonicalHashV3(value: unknown): string {
     .digest('hex')}`;
 }
 
+export function collaborationTurnCompletionHashV3(input: {
+  readonly turnId: string;
+  readonly attempt: number;
+  readonly outcome: string;
+  readonly resultHash: string | null;
+  readonly handoffHash: string;
+  readonly artifactRefs: readonly string[];
+}): string {
+  return collaborationCanonicalHashV3({
+    turn_id: input.turnId,
+    attempt: input.attempt,
+    outcome: input.outcome,
+    result_hash: input.resultHash,
+    handoff_hash: input.handoffHash,
+    artifact_refs: [...input.artifactRefs],
+  });
+}
+
 export function collaborationEventHashV3(event: CollaborationEventV3): string {
   return collaborationCanonicalHashV3(event);
 }
@@ -455,6 +475,28 @@ export function collaborationDeadlineSnapshotHashV3(input: {
     start_deadline_at: input.startDeadlineAt,
     started_at: input.startedAt,
     execution_deadline_at: input.executionDeadlineAt,
+  });
+}
+
+export function collaborationTurnInputHashV3(input: {
+  readonly groupId: string;
+  readonly instanceId: string;
+  readonly epoch: number;
+  readonly stateId: string;
+  readonly assigneePrincipalId: string;
+  readonly execution: StateExecution | null;
+  readonly incomingHandoffHash: string | null;
+  readonly workItem: WorkItem | null;
+}): string {
+  return collaborationCanonicalHashV3({
+    group_id: input.groupId,
+    instance_id: input.instanceId,
+    epoch: input.epoch,
+    state_id: input.stateId,
+    assignee_principal_id: input.assigneePrincipalId,
+    execution: input.execution,
+    incoming_handoff_hash: input.incomingHandoffHash,
+    work_item: input.workItem,
   });
 }
 
@@ -637,6 +679,32 @@ function canContributeToWorkItem(
   );
 }
 
+function assertWorkItemRelations(
+  projection: CollaborationProjectionV3,
+  workItemId: string,
+  relations: Pick<WorkItem, 'parent_id' | 'blocked_by' | 'related_items'>,
+): void {
+  if (
+    relations.parent_id === workItemId ||
+    relations.blocked_by.includes(workItemId) ||
+    relations.related_items.includes(workItemId)
+  )
+    conflict('A Work Item relation cannot reference itself');
+  for (const [name, refs] of [
+    ['blocked_by', relations.blocked_by],
+    ['related_items', relations.related_items],
+  ] as const)
+    if (new Set(refs).size !== refs.length)
+      conflict(`Work Item ${name} references must be unique`);
+  for (const ref of [
+    ...(relations.parent_id ? [relations.parent_id] : []),
+    ...relations.blocked_by,
+    ...relations.related_items,
+  ])
+    if (!projection.workItems[ref])
+      conflict(`Related Work Item does not exist: ${ref}`);
+}
+
 const WORK_ITEM_TRANSITIONS: Record<string, readonly string[]> = {
   proposed: ['open', 'cancelled'],
   open: ['in_progress', 'cancelled'],
@@ -754,6 +822,14 @@ function canManageWorkflowInstance(
     ) ||
     instance.resolved_assignments[instance.business_state] === principalId
   );
+}
+
+export function canCreateWorkflowTurnV3(
+  projection: CollaborationProjectionV3,
+  principalId: string,
+  instance: WorkflowInstance,
+): boolean {
+  return canManageWorkflowInstance(projection, principalId, instance);
 }
 
 function hasWorkflowInstanceAuthority(
@@ -1104,12 +1180,19 @@ export function reduceCollaborationEventV3(
     }
     case 'client_registered': {
       const { client } = clientPayloadSchema.parse(payload);
+      const member = next.members[client.principal_id];
       if (
         client.principal_id !== event.actor.principal_id ||
         event.aggregate_type !== 'membership' ||
-        event.aggregate_id !== client.principal_id
+        event.aggregate_id !== client.principal_id ||
+        !member ||
+        !['requested', 'active'].includes(member.status) ||
+        client.status !== 'active' ||
+        client.registered_at_event !== event.event_id
       )
-        conflict('A Principal may only register its own Client');
+        conflict(
+          'A requested or active Principal may only register its own active Client',
+        );
       (next.clients[client.principal_id] ??= {})[client.client_id] = client;
       break;
     }
@@ -1293,14 +1376,16 @@ export function reduceCollaborationEventV3(
           item.archived !== previous.archived
         )
           conflict('Work Item details cannot rewrite lifecycle or ownership');
+        if (
+          item.parent_id !== previous.parent_id ||
+          canonicalJsonStringify(item.blocked_by) !==
+            canonicalJsonStringify(previous.blocked_by) ||
+          canonicalJsonStringify(item.related_items) !==
+            canonicalJsonStringify(previous.related_items)
+        )
+          conflict('Work Item details cannot rewrite relation fields');
       }
-      for (const ref of [
-        ...(item.parent_id ? [item.parent_id] : []),
-        ...item.blocked_by,
-        ...item.related_items,
-      ])
-        if (!next.workItems[ref])
-          conflict(`Related Work Item does not exist: ${ref}`);
+      assertWorkItemRelations(next, item.work_item_id, item);
       assertActivePrincipals(next, [
         item.owner_principal_id,
         ...item.contributors,
@@ -1397,25 +1482,7 @@ export function reduceCollaborationEventV3(
       if (!canManageWorkItem(next, event.actor.principal_id, item))
         conflict('Actor cannot change this Work Item relations');
       const relations = workItemRelationPayloadSchema.parse(payload);
-      if (
-        relations.parent_id === item.work_item_id ||
-        relations.blocked_by.includes(item.work_item_id) ||
-        relations.related_items.includes(item.work_item_id)
-      )
-        conflict('A Work Item relation cannot reference itself');
-      for (const [name, refs] of [
-        ['blocked_by', relations.blocked_by],
-        ['related_items', relations.related_items],
-      ] as const)
-        if (new Set(refs).size !== refs.length)
-          conflict(`Work Item ${name} references must be unique`);
-      for (const ref of [
-        ...(relations.parent_id ? [relations.parent_id] : []),
-        ...relations.blocked_by,
-        ...relations.related_items,
-      ])
-        if (!next.workItems[ref])
-          conflict(`Related Work Item does not exist: ${ref}`);
+      assertWorkItemRelations(next, item.work_item_id, relations);
       item.parent_id = relations.parent_id;
       item.blocked_by = relations.blocked_by;
       item.related_items = relations.related_items;
@@ -1680,6 +1747,12 @@ export function reduceCollaborationEventV3(
         );
       if (!['draft', 'ready'].includes(instance.lifecycle))
         conflict('A new Workflow Instance must be draft or ready');
+      if (
+        instance.active_turn_id !== null ||
+        instance.last_completed_turn_id !== null ||
+        instance.last_handoff_hash !== null
+      )
+        conflict('A new Workflow Instance cannot contain Turn history');
       assertActivePrincipals(next, [
         instance.created_by_principal_id,
         ...Object.values(instance.participant_bindings),
@@ -1918,6 +1991,8 @@ export function reduceCollaborationEventV3(
         next.turns[turn.turn_id]
       )
         conflict('Turn does not match the active Workflow Instance State');
+      if (!canCreateWorkflowTurnV3(next, event.actor.principal_id, instance))
+        conflict('Actor cannot create a Turn for this Workflow Instance');
       const execution =
         next.stateExecutions[instance.instance_id]?.[instance.business_state];
       if (!execution && turn.execution_mode !== 'manual')
@@ -1925,10 +2000,65 @@ export function reduceCollaborationEventV3(
       if (
         execution &&
         (turn.execution_mode !== execution.mode ||
+          turn.action_ref !== execution.action_ref ||
           turn.action_hash !== execution.action_hash ||
           turn.prompt_hash !== execution.prompt_hash)
       )
         conflict('Turn does not snapshot current Principal State Execution');
+      const previousTurn = instance.last_completed_turn_id
+        ? next.turns[instance.last_completed_turn_id]
+        : null;
+      if (!previousTurn) {
+        if (
+          instance.last_completed_turn_id !== null ||
+          instance.last_handoff_hash !== null ||
+          turn.incoming_handoff !== null ||
+          turn.incoming_handoff_hash !== null
+        )
+          conflict('The first Turn cannot contain an incoming Handoff');
+      } else if (
+        previousTurn.workflow_instance_id !== instance.instance_id ||
+        previousTurn.state !== 'completed' ||
+        !previousTurn.handoff ||
+        !previousTurn.handoff_hash ||
+        instance.last_handoff_hash !== previousTurn.handoff_hash ||
+        turn.incoming_handoff_hash !== previousTurn.handoff_hash ||
+        collaborationCanonicalHashV3(turn.incoming_handoff) !==
+          previousTurn.handoff_hash
+      ) {
+        conflict(
+          'Turn incoming Handoff must match the previous completed Instance Turn',
+        );
+      }
+      if (
+        turn.input_hash !==
+        collaborationTurnInputHashV3({
+          groupId: next.groupId,
+          instanceId: instance.instance_id,
+          epoch: instance.epoch,
+          stateId: instance.business_state,
+          assigneePrincipalId:
+            instance.resolved_assignments[instance.business_state]!,
+          execution: execution ?? null,
+          incomingHandoffHash: turn.incoming_handoff_hash,
+          workItem:
+            instance.scope.type === 'work_item'
+              ? (next.workItems[instance.scope.work_item_id] ?? null)
+              : null,
+        })
+      )
+        conflict('Turn input hash does not match its canonical inputs');
+      if (
+        turn.state !== 'pending' ||
+        turn.claimant_principal_id !== null ||
+        turn.claimant_client_id !== null ||
+        turn.executor_id !== null ||
+        turn.fencing_token !== null ||
+        turn.executor_result !== null ||
+        turn.executor_result_hash !== null ||
+        turn.completion_hash !== null
+      )
+        conflict('A new Turn must start pending without execution results');
       if (
         turn.idempotency_key !==
         collaborationIdempotencyKeyV3({
@@ -2036,12 +2166,38 @@ export function reduceCollaborationEventV3(
         conflict('Action callback cannot change a terminal or inactive Turn');
       if (event.actor.executor_id !== turn.executor_id)
         conflict('Action callback Executor does not match the fenced Turn');
+      if (turn.execution_mode === 'manual')
+        conflict('Manual Turns cannot receive Action callbacks');
+      if (event.event_type === 'action_completed') {
+        const completion = actionCompletedPayloadSchema.parse(payload);
+        if (turn.executor_result_hash !== null)
+          conflict('Action completion is already recorded for this Turn');
+        if (
+          completion.result_hash !==
+          collaborationCanonicalHashV3(completion.result)
+        )
+          conflict('Action result hash does not match its canonical result');
+        const definition = activeDefinition(next, instance);
+        if (
+          !definition.machine.states[turn.state_id]?.transitions.some(
+            (transition) => transition.outcome === completion.result.outcome,
+          )
+        )
+          conflict(
+            'Action result Outcome is not allowed by the Workflow State',
+          );
+        turn.executor_result = completion.result;
+        turn.executor_result_hash = completion.result_hash;
+      }
       turn.state =
         event.event_type === 'action_waiting_input'
           ? 'waiting_input'
           : event.event_type === 'action_waiting_approval'
             ? 'waiting_approval'
-            : 'running';
+            : event.event_type === 'action_completed' &&
+                turn.execution_mode === 'assisted'
+              ? 'awaiting_confirmation'
+              : 'running';
       instance.revision = event.aggregate_revision;
       instance.updated_at = event.occurred_at;
       break;
@@ -2081,12 +2237,37 @@ export function reduceCollaborationEventV3(
       const turn = next.turns[parsed.turn_id];
       if (!instance || !turn) conflict('Turn does not exist');
       assertTurnFence(turn, parsed, event);
+      if (instance.active_turn_id !== turn.turn_id)
+        conflict('Turn is not active for this Workflow Instance');
+      const completable =
+        turn.execution_mode === 'assisted'
+          ? turn.state === 'awaiting_confirmation'
+          : ['running', 'waiting_input', 'waiting_approval'].includes(
+              turn.state,
+            );
+      if (!completable) conflict('Turn is not completable');
       if (
-        !['running', 'waiting_input', 'waiting_approval'].includes(turn.state)
+        turn.execution_mode === 'automatic'
+          ? event.actor.executor_id !== turn.executor_id
+          : event.actor.executor_id !== null
       )
-        conflict('Turn is not completable');
-      if (event.actor.executor_id !== turn.executor_id)
-        conflict('Turn completion Executor does not match the fenced Turn');
+        conflict('Turn completion actor does not match its execution mode');
+      if (turn.execution_mode === 'manual') {
+        if (
+          parsed.result_hash !== null ||
+          turn.executor_result !== null ||
+          turn.executor_result_hash !== null
+        )
+          conflict('Manual Turn completion cannot claim an Action result');
+      } else if (
+        !turn.executor_result ||
+        !turn.executor_result_hash ||
+        parsed.result_hash !== turn.executor_result_hash
+      ) {
+        conflict(
+          'Turn completion must reference its recorded Action result hash',
+        );
+      }
       for (const artifact of parsed.artifacts) {
         const artifactRef = `artifacts/workflows/${event.aggregate_id}/${turn.turn_id}/${artifact.artifact_id}/metadata.json`;
         if (
@@ -2117,13 +2298,28 @@ export function reduceCollaborationEventV3(
         parsed.handoff_hash !== collaborationCanonicalHashV3(parsed.handoff)
       )
         conflict('Turn Handoff does not match its Outcome or hash');
+      if (
+        parsed.completion_hash !==
+        collaborationTurnCompletionHashV3({
+          turnId: turn.turn_id,
+          attempt: turn.attempt,
+          outcome: parsed.outcome,
+          resultHash: parsed.result_hash,
+          handoffHash: parsed.handoff_hash,
+          artifactRefs: parsed.artifact_refs,
+        })
+      )
+        conflict('Turn completion hash does not match its canonical facts');
       turn.state = 'completed';
       turn.completed_at = event.occurred_at;
       turn.outcome = parsed.outcome;
       turn.handoff = parsed.handoff;
       turn.handoff_hash = parsed.handoff_hash;
+      turn.completion_hash = parsed.completion_hash;
       instance.business_state = transition.target_state;
       instance.active_turn_id = null;
+      instance.last_completed_turn_id = turn.turn_id;
+      instance.last_handoff_hash = turn.handoff_hash;
       instance.revision = event.aggregate_revision;
       instance.updated_at = event.occurred_at;
       if (definition.machine.states[transition.target_state]?.terminal)
@@ -2189,7 +2385,12 @@ export function reduceCollaborationEventV3(
         !turn ||
         instance.active_turn_id !== turn.turn_id ||
         parsed.epoch !== instance.epoch ||
-        !['running', 'waiting_input', 'waiting_approval'].includes(turn.state)
+        ![
+          'running',
+          'waiting_input',
+          'waiting_approval',
+          'awaiting_confirmation',
+        ].includes(turn.state)
       )
         conflict('Turn recovery references a stale Workflow epoch or state');
       if (turn.attempt !== parsed.attempt)
@@ -2239,6 +2440,12 @@ export function reduceCollaborationEventV3(
       turn.deadline_snapshot_hash = parsed.deadline_snapshot_hash;
       turn.started_at = null;
       turn.completed_at = null;
+      turn.outcome = null;
+      turn.handoff = null;
+      turn.handoff_hash = null;
+      turn.executor_result = null;
+      turn.executor_result_hash = null;
+      turn.completion_hash = null;
       turn.recovery_reason = null;
       instance.lifecycle = 'running';
       instance.revision = event.aggregate_revision;

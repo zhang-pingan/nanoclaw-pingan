@@ -12,11 +12,14 @@ import {
 } from './project-space-store.js';
 import {
   buildCollaborationEventV3,
+  canCreateWorkflowTurnV3,
   collaborationCanonicalHashV3,
   collaborationDeadlineAtV3,
   collaborationDeadlineSnapshotHashV3,
   collaborationFencingTokenV3,
   collaborationIdempotencyKeyV3,
+  collaborationTurnCompletionHashV3,
+  collaborationTurnInputHashV3,
   collaborationWorkflowDefinitionHashV3,
   hasCollaborationPermissionV3,
   reduceCollaborationEventV3,
@@ -313,9 +316,8 @@ export class CollaborationProjectSpaceService {
       this.identities.resolveSigningIdentity(input.signingKeyPath),
       this.transport.inspect({ remoteUrl: input.remoteUrl, repositoryPath }),
     ]);
-    if (
-      inspected.projection.members[identity.principalId]?.status === 'active'
-    ) {
+    const existingMember = inspected.projection.members[identity.principalId];
+    if (existingMember?.status === 'active') {
       const registered = await this.appendWithIdentity({
         history: inspected,
         remoteUrl: input.remoteUrl,
@@ -345,6 +347,46 @@ export class CollaborationProjectSpaceService {
         pollIntervalMs: input.pollIntervalMs,
       });
       return this.store.getGroup(registered.projection.groupId)!;
+    }
+    if (existingMember?.status === 'requested') {
+      if (
+        existingMember.signing_key_ref !== identity.keyRef ||
+        existingMember.signing_public_key !== identity.publicKey
+      )
+        throw new Error('Pending Membership signing identity does not match');
+      let history = inspected;
+      if (
+        !history.projection.clients[identity.principalId]?.[identity.clientId]
+      )
+        history = await this.appendWithIdentity({
+          history,
+          remoteUrl: input.remoteUrl,
+          repositoryPath,
+          identity,
+          aggregateType: 'membership',
+          aggregateId: identity.principalId,
+          eventType: 'client_registered',
+          payload: {
+            client: {
+              format: 'icarus.collaboration-client/1',
+              principal_id: identity.principalId,
+              client_id: identity.clientId,
+              display_name: input.clientDisplayName,
+              capabilities: [],
+              status: 'active',
+              registered_at_event: '__EVENT_ID__',
+            },
+          },
+          replaceEventId: true,
+        });
+      this.registerOrUpgradeMember({
+        history,
+        remoteUrl: input.remoteUrl,
+        repositoryPath,
+        identity,
+        pollIntervalMs: input.pollIntervalMs,
+      });
+      return this.store.getGroup(history.projection.groupId)!;
     }
 
     const joinPolicy = inspected.projection.group.membership_policy.join;
@@ -391,28 +433,27 @@ export class CollaborationProjectSpaceService {
       },
       replaceEventId: open,
     });
-    if (open)
-      history = await this.appendWithIdentity({
-        history,
-        remoteUrl: input.remoteUrl,
-        repositoryPath,
-        identity,
-        aggregateType: 'membership',
-        aggregateId: identity.principalId,
-        eventType: 'client_registered',
-        payload: {
-          client: {
-            format: 'icarus.collaboration-client/1',
-            principal_id: identity.principalId,
-            client_id: identity.clientId,
-            display_name: input.clientDisplayName,
-            capabilities: [],
-            status: 'active',
-            registered_at_event: '__EVENT_ID__',
-          },
+    history = await this.appendWithIdentity({
+      history,
+      remoteUrl: input.remoteUrl,
+      repositoryPath,
+      identity,
+      aggregateType: 'membership',
+      aggregateId: identity.principalId,
+      eventType: 'client_registered',
+      payload: {
+        client: {
+          format: 'icarus.collaboration-client/1',
+          principal_id: identity.principalId,
+          client_id: identity.clientId,
+          display_name: input.clientDisplayName,
+          capabilities: [],
+          status: 'active',
+          registered_at_event: '__EVENT_ID__',
         },
-        replaceEventId: true,
-      });
+      },
+      replaceEventId: true,
+    });
     this.registerOrUpgradeMember({
       history,
       remoteUrl: input.remoteUrl,
@@ -1477,6 +1518,8 @@ export class CollaborationProjectSpaceService {
       lifecycle: ready ? 'ready' : 'draft',
       business_state: selected.machine.initial_state,
       active_turn_id: null,
+      last_completed_turn_id: null,
+      last_handoff_hash: null,
       epoch: 1,
       revision: 1,
       created_by_principal_id: group.localPrincipalId,
@@ -1626,7 +1669,6 @@ export class CollaborationProjectSpaceService {
     readonly instanceId: string;
     readonly expectedRevision: number;
     readonly turnId?: string;
-    readonly incomingHandoff?: HandoffEnvelopeV3 | null;
   }): Promise<CollaborationProjectSpaceGroupRecord> {
     const history = await this.sync(input.groupId);
     const instance = history.projection.workflowInstances[input.instanceId];
@@ -1641,33 +1683,51 @@ export class CollaborationProjectSpaceService {
     const state = definition?.machine.states[instance.business_state];
     if (!definition || !state || state.terminal)
       throw new Error('Workflow Instance is not on an executable State');
+    const group = this.requireLocalMember(input.groupId);
+    if (
+      !canCreateWorkflowTurnV3(
+        history.projection,
+        group.localPrincipalId!,
+        instance,
+      )
+    )
+      throw new Error('Local Principal cannot create this Workflow Turn');
     const execution =
       history.projection.stateExecutions[input.instanceId]?.[
         instance.business_state
       ];
     const turnId = input.turnId ?? newId('turn');
-    const incomingHandoff = input.incomingHandoff
-      ? handoffEnvelopeV3Schema.parse(input.incomingHandoff)
+    const previousTurn = instance.last_completed_turn_id
+      ? history.projection.turns[instance.last_completed_turn_id]
       : null;
-    const incomingHandoffHash = incomingHandoff
-      ? collaborationCanonicalHashV3(incomingHandoff)
-      : null;
+    if (
+      (instance.last_completed_turn_id === null) !==
+        (instance.last_handoff_hash === null) ||
+      (previousTurn &&
+        (previousTurn.workflow_instance_id !== instance.instance_id ||
+          previousTurn.state !== 'completed' ||
+          !previousTurn.handoff ||
+          previousTurn.handoff_hash !== instance.last_handoff_hash))
+    )
+      throw new Error('Workflow Instance Handoff authority is inconsistent');
+    const incomingHandoff = previousTurn?.handoff ?? null;
+    const incomingHandoffHash = previousTurn?.handoff_hash ?? null;
     const createdAt = new Date(this.now()).toISOString();
     const timeoutPolicy = state.timeout_policy ?? null;
     const startDeadlineAt = collaborationDeadlineAtV3(
       createdAt,
       timeoutPolicy?.start_timeout_ms,
     );
-    const inputHash = collaborationCanonicalHashV3({
-      group_id: input.groupId,
-      instance_id: input.instanceId,
+    const inputHash = collaborationTurnInputHashV3({
+      groupId: input.groupId,
+      instanceId: input.instanceId,
       epoch: instance.epoch,
-      state_id: instance.business_state,
-      assignee_principal_id:
-        instance.resolved_assignments[instance.business_state],
+      stateId: instance.business_state,
+      assigneePrincipalId:
+        instance.resolved_assignments[instance.business_state]!,
       execution: execution ?? null,
-      incoming_handoff_hash: incomingHandoffHash,
-      work_item:
+      incomingHandoffHash,
+      workItem:
         instance.scope.type === 'work_item'
           ? history.projection.workItems[instance.scope.work_item_id]
           : null,
@@ -1718,6 +1778,9 @@ export class CollaborationProjectSpaceService {
       outcome: null,
       handoff: null,
       handoff_hash: null,
+      executor_result: null,
+      executor_result_hash: null,
+      completion_hash: null,
       recovery_reason: null,
     });
     return this.appendLocal(input.groupId, {
@@ -1817,6 +1880,7 @@ export class CollaborationProjectSpaceService {
       | 'completed';
     readonly executionRef?: string;
     readonly resultHash?: string;
+    readonly result?: unknown;
     readonly executorId?: string | null;
   }): Promise<CollaborationProjectSpaceGroupRecord> {
     const eventType =
@@ -1840,7 +1904,7 @@ export class CollaborationProjectSpaceService {
           ? { execution_ref: input.executionRef }
           : {}),
         ...(input.state === 'completed'
-          ? { result_hash: input.resultHash }
+          ? { result: input.result, result_hash: input.resultHash }
           : {}),
       },
       executorId: input.executorId ?? null,
@@ -1867,7 +1931,12 @@ export class CollaborationProjectSpaceService {
       turn.fencing_token !== input.fencingToken ||
       turn.claimant_principal_id !== group.localPrincipalId ||
       turn.claimant_client_id !== group.localClientId ||
-      !['running', 'waiting_input', 'waiting_approval'].includes(turn.state)
+      ![
+        'running',
+        'waiting_input',
+        'waiting_approval',
+        'awaiting_confirmation',
+      ].includes(turn.state)
     )
       throw new Error(
         'Turn Artifact requires the current fenced claimant Client',
@@ -1887,7 +1956,10 @@ export class CollaborationProjectSpaceService {
       contents: this.artifactContents(input.contents),
       nowMs: this.now(),
     });
-    const metadata = this.artifactMetadata(artifact, turn.executor_id);
+    const metadata = this.artifactMetadata(
+      artifact,
+      turn.execution_mode === 'automatic' ? turn.executor_id : null,
+    );
     return { metadata, artifactRef: this.artifactRef(metadata) };
   }
 
@@ -1906,10 +1978,32 @@ export class CollaborationProjectSpaceService {
     readonly artifactIds?: readonly string[];
     readonly artifactRefs?: readonly string[];
     readonly data?: Readonly<Record<string, unknown>>;
-    readonly result?: unknown;
     readonly executorId?: string | null;
   }): Promise<CollaborationProjectSpaceGroupRecord> {
     const group = this.requireLocalMember(input.groupId);
+    const history = await this.sync(input.groupId);
+    const turn = history.projection.turns[input.turnId];
+    if (
+      !turn ||
+      turn.workflow_instance_id !== input.instanceId ||
+      turn.attempt !== input.attempt ||
+      turn.fencing_token !== input.fencingToken
+    )
+      throw new Error('Workflow Turn completion is stale');
+    const resultHash =
+      turn.execution_mode === 'manual' ? null : turn.executor_result_hash;
+    if (turn.execution_mode !== 'manual' && !resultHash)
+      throw new Error(
+        'Executor result must be recorded before Turn completion',
+      );
+    if (
+      turn.execution_mode === 'automatic'
+        ? input.executorId !== turn.executor_id
+        : input.executorId != null
+    )
+      throw new Error(
+        'Turn completion actor does not match its execution mode',
+      );
     const staged = this.materializeStagedArtifacts({
       artifactIds: input.artifactIds ?? [],
       group,
@@ -1944,7 +2038,15 @@ export class CollaborationProjectSpaceService {
         attempt: input.attempt,
         fencing_token: input.fencingToken,
         outcome: input.outcome,
-        result_hash: collaborationCanonicalHashV3(input.result ?? handoff.data),
+        result_hash: resultHash,
+        completion_hash: collaborationTurnCompletionHashV3({
+          turnId: input.turnId,
+          attempt: input.attempt,
+          outcome: input.outcome,
+          resultHash,
+          handoffHash: collaborationCanonicalHashV3(handoff),
+          artifactRefs,
+        }),
         handoff,
         handoff_hash: collaborationCanonicalHashV3(handoff),
         artifact_refs: artifactRefs,
@@ -2068,9 +2170,12 @@ export class CollaborationProjectSpaceService {
         (schedule.deadlineKind === 'start'
           ? turn.state !== 'pending' ||
             Date.parse(turn.start_deadline_at ?? '') !== schedule.deadlineAtMs
-          : !['running', 'waiting_input', 'waiting_approval'].includes(
-              turn.state,
-            ) ||
+          : ![
+              'running',
+              'waiting_input',
+              'waiting_approval',
+              'awaiting_confirmation',
+            ].includes(turn.state) ||
             Date.parse(turn.execution_deadline_at ?? '') !==
               schedule.deadlineAtMs)
       ) {
@@ -2193,9 +2298,7 @@ export class CollaborationProjectSpaceService {
     const verifiedHead = input.verifiedCommit ?? group.lastVerifiedHead;
     if (
       input.verifiedCommit &&
-      !this.store
-        .listEventRecords(input.groupId, 5_000)
-        .some((record) => record.commitHash === input.verifiedCommit)
+      !this.store.hasVerifiedCommit(input.groupId, input.verifiedCommit)
     )
       throw new Error('Requested Action snapshot commit is not verified');
     return this.transport.readVerifiedFile({

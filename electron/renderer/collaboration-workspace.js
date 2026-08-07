@@ -23,6 +23,7 @@ import {
   collaborationEligibleTurnExecutors,
   collaborationElapsed,
   collaborationIsObserver,
+  collaborationLocalMembershipStatus,
   collaborationOutcomeRoutes,
   collaborationPendingNotifications,
   collaborationPrincipalName,
@@ -278,7 +279,8 @@ export function createCollaborationWorkspace(options) {
     elements.title.textContent = group.name;
     elements.lifecycle.className = `collaboration-status ${statusTone(group.lifecycle)}`;
     elements.lifecycle.textContent = group.lifecycle;
-    elements.meta.innerHTML = `<span>${html(group.groupId)}</span><span>${html(group.subscriptionMode)}</span><span>${html(group.protocolStatus)}</span><span>${html(localDate(group.lastSyncAtMs))}</span>`;
+    const membershipStatus = collaborationLocalMembershipStatus(group);
+    elements.meta.innerHTML = `<span>${html(group.groupId)}</span><span>${html(group.subscriptionMode === 'member' ? `member · ${membershipStatus}` : 'observer')}</span><span>${html(group.protocolStatus)}</span><span>${html(localDate(group.lastSyncAtMs))}</span>`;
     elements.tabs.forEach((button) =>
       button.classList.toggle(
         'active',
@@ -288,10 +290,14 @@ export function createCollaborationWorkspace(options) {
     renderContent();
   };
 
-  const renderObserverBand = (group) =>
-    collaborationIsObserver(group)
-      ? `<section class="collaboration-observer-band"><div><strong>Read-only Observer</strong><span>${html(group.lastVerifiedHead ? `Verified ${group.lastVerifiedHead.slice(0, 12)}` : 'Awaiting verified head')}</span></div><button type="button" class="btn-primary" data-collaboration-action="request-join">Request membership</button></section>`
-      : '';
+  const renderObserverBand = (group) => {
+    if (collaborationIsObserver(group))
+      return `<section class="collaboration-observer-band"><div><strong>Read-only Observer</strong><span>${html(group.lastVerifiedHead ? `Verified ${group.lastVerifiedHead.slice(0, 12)}` : 'Awaiting verified head')}</span></div><button type="button" class="btn-primary" data-collaboration-action="request-join">Request membership</button></section>`;
+    const membershipStatus = collaborationLocalMembershipStatus(group);
+    return membershipStatus === 'active'
+      ? ''
+      : `<section class="collaboration-observer-band"><div><strong>Membership ${html(membershipStatus)}</strong><span>Project writes remain disabled until membership is active.</span></div></section>`;
+  };
 
   const renderOverview = () => {
     const { group, notifications = [] } = state.detail;
@@ -403,7 +409,7 @@ export function createCollaborationWorkspace(options) {
     const routes = collaborationOutcomeRoutes(definition, turn);
     const canCreateTurn =
       collaborationCanMutate(group) &&
-      collaborationCanCreateTurn(instance, definition);
+      collaborationCanCreateTurn(group, instance, definition);
     const currentAssignedToLocal =
       instance.resolved_assignments?.[instance.business_state] ===
       group.localPrincipalId;
@@ -1046,11 +1052,12 @@ export function createCollaborationWorkspace(options) {
         entry.definition.version === instance.definition_version,
     );
     const routes = collaborationOutcomeRoutes(definition, turn);
+    const suggestion = turn.executor_result || null;
     const artifactIds = [];
     let selectedFiles = null;
     openDialog({
       title: `Complete ${turn.state_id}`,
-      body: `<div class="collaboration-form-grid">${field('Outcome', 'outcome', routes[0]?.outcome, { options: routes.map((route) => [route.outcome, `${route.label} → ${route.target_state}`]) })}${field('Summary', 'summary', '', { multiline: true })}${field('Instruction', 'instruction', '', { multiline: true, required: false })}${field('Data JSON', 'data', '{}', { multiline: true })}${field('Artifacts', 'artifacts', '', { type: 'file', required: false, multiple: true })}</div>`,
+      body: `<div class="collaboration-form-grid">${field('Outcome', 'outcome', suggestion?.outcome || routes[0]?.outcome, { options: routes.map((route) => [route.outcome, `${route.label} → ${route.target_state}`]) })}${field('Summary', 'summary', suggestion?.summary || '', { multiline: true })}${field('Instruction', 'instruction', suggestion?.instruction || '', { multiline: true, required: false })}${field('Data JSON', 'data', JSON.stringify(suggestion?.data || {}, null, 2), { multiline: true })}${field('Artifacts', 'artifacts', '', { type: 'file', required: false, multiple: true })}</div>`,
       onSubmit: async (formData) => {
         const fileControl = elements.dialogForm.elements.artifacts;
         if (selectedFiles === null) {

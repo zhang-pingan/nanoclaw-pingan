@@ -97,6 +97,9 @@ function turn(): CollaborationTurnV3 {
     outcome: null,
     handoff: null,
     handoff_hash: null,
+    executor_result: null,
+    executor_result_hash: null,
+    completion_hash: null,
     recovery_reason: null,
   };
 }
@@ -111,6 +114,19 @@ function request(selectedBinding = binding()): ActionRequest {
     epoch: 1,
     action: action(),
     prompt: 'Implement the bounded change.',
+    state: {
+      label: 'Development',
+      description: 'Implement the bounded change.',
+      assignee: { type: 'principal', principal_id: 'principal_alice' },
+      terminal: false,
+      transitions: [
+        {
+          outcome: 'ready_for_test',
+          label: 'Ready for test',
+          target_state: 'testing',
+        },
+      ],
+    },
     binding: selectedBinding,
   };
 }
@@ -167,14 +183,23 @@ describe('CodexTaskActionExecutor', () => {
       status: 'completed',
       threadId: 'thread-1',
       turnId: 'turn-1',
-      text: 'Implemented',
+      text: JSON.stringify({
+        format: 'icarus.collaboration-action-result/3',
+        outcome: 'ready_for_test',
+        summary: 'Implemented',
+        instruction: '',
+        markers: [],
+        data: {},
+        artifacts: [],
+        error: null,
+      }),
       errorCode: null,
       errorMessage: null,
     });
     await vi.waitFor(async () => {
       expect(await executor.observe(first.executionRef)).toMatchObject({
         state: 'succeeded',
-        result: { outcome: 'success', summary: 'Implemented' },
+        result: { outcome: 'ready_for_test', summary: 'Implemented' },
       });
     });
   });
@@ -213,7 +238,8 @@ describe('CodexTaskActionExecutor', () => {
     await vi.waitFor(async () => {
       expect(await executor.observe(ref)).toMatchObject({
         state: 'cancelled',
-        result: { outcome: 'cancelled' },
+        result: null,
+        resultHash: null,
       });
     });
   });

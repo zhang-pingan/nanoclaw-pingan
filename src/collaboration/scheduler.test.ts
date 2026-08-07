@@ -26,6 +26,7 @@ import type {
   WorkflowInstance,
 } from './protocol/v3-schema.js';
 import {
+  collaborationActionSnapshotForTurn,
   CollaborationScheduler,
   deterministicCollaborationPollDelay,
 } from './scheduler.js';
@@ -87,6 +88,9 @@ function turn(state: CollaborationTurnV3['state']): CollaborationTurnV3 {
     outcome: null,
     handoff: null,
     handoff_hash: null,
+    executor_result: null,
+    executor_result_hash: null,
+    completion_hash: null,
     recovery_reason: null,
   };
 }
@@ -106,6 +110,8 @@ function instance(): WorkflowInstance {
     lifecycle: 'running',
     business_state: 'implementation',
     active_turn_id: 'turn_1',
+    last_completed_turn_id: null,
+    last_handoff_hash: null,
     epoch: 1,
     revision: 1,
     created_by_principal_id: 'principal_alice',
@@ -237,6 +243,32 @@ function harness(input: {
     actions: input.projectionActions ?? {
       'principal_alice:implement': selectedAction,
     },
+    workflowDefinitions: {
+      'definition_1@1': {
+        machine: {
+          states: {
+            implementation: {
+              label: 'Implementation',
+              description: 'Implement the accepted scope.',
+              terminal: false,
+              transitions: [
+                {
+                  outcome: 'done',
+                  label: 'Done',
+                  target_state: 'complete',
+                },
+              ],
+            },
+            complete: {
+              label: 'Complete',
+              description: '',
+              terminal: true,
+              transitions: [],
+            },
+          },
+        },
+      },
+    },
     aggregateHeads: {
       'workflow_instance:instance_1': { revision: 1 },
     },
@@ -257,6 +289,24 @@ function harness(input: {
     acquireProcessLock: vi.fn(() => true),
     releaseProcessLock: vi.fn(),
     listEventRecords: vi.fn(() => eventRecords),
+    findActionSnapshot: vi.fn((query) => {
+      const snapshot = collaborationActionSnapshotForTurn(
+        eventRecords,
+        currentTurn,
+      );
+      return snapshot &&
+        snapshot.action.owner_principal_id === query.ownerPrincipalId &&
+        snapshot.action.action_id === query.actionId &&
+        collaborationCanonicalHashV3(snapshot.action) === query.actionHash &&
+        snapshot.action.prompt_hash === query.promptHash
+        ? {
+            action: snapshot.action,
+            eventId: 'evt_action_snapshot',
+            commitHash: snapshot.verifiedCommit,
+            commitOrder: 1,
+          }
+        : null;
+    }),
     getExecutorBinding: vi.fn(() => binding()),
     claimActionExecution: vi.fn(() => ({
       execution,
@@ -455,12 +505,36 @@ describe('Collaboration project-space v3 Scheduler', () => {
       'complete-turn',
     ]);
     expect(selected.groups.completeTurn).toHaveBeenCalledWith(
-      expect.objectContaining({ outcome: 'done', result: succeeded().result }),
+      expect.objectContaining({ outcome: 'done' }),
+    );
+    expect(selected.groups.recordActionState).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        state: 'completed',
+        result: succeeded().result,
+        resultHash: succeeded().resultHash,
+      }),
     );
     expect(selected.store.releaseProcessLock).toHaveBeenCalledWith(
       'group_test',
       'scheduler_test',
     );
+  });
+
+  it('records an assisted result but leaves FSM completion to the claimant', async () => {
+    const selected = harness({
+      turnOverrides: { execution_mode: 'assisted' },
+    });
+
+    await selected.scheduler.syncNow('group_test');
+
+    expect(selected.groups.recordActionState).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        state: 'completed',
+        result: succeeded().result,
+        resultHash: succeeded().resultHash,
+      }),
+    );
+    expect(selected.groups.completeTurn).not.toHaveBeenCalled();
   });
 
   it('never redispatches when dispatch began without a durable provider receipt', async () => {

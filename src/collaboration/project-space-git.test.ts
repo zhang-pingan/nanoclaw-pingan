@@ -630,6 +630,87 @@ describe('Collaboration project space v3 Git protocol', () => {
     expect(after.head).toBe(history.head);
   }, 30_000);
 
+  it('rejects a signed details event that rewrites Work Item relations', async () => {
+    const test = fixture();
+    const transport = new CollaborationProjectSpaceGitTransport();
+    const store = new CollaborationProjectSpaceStore(
+      path.join(test.root, 'collaboration.db'),
+    );
+    const identities = {
+      resolveSigningIdentity: async () => test.identity,
+    } as unknown as CollaborationProjectSpaceIdentityService;
+    const service = new CollaborationProjectSpaceService(
+      store,
+      transport,
+      path.join(test.root, 'repositories'),
+      identities,
+      () => Date.parse(NOW),
+    );
+    try {
+      await service.createGroup({
+        remoteUrl: test.remote,
+        name: 'Signed project',
+        signingKeyPath: test.identity.privateKeyPath,
+        displayName: 'Alice',
+        clientDisplayName: 'Alice MacBook',
+        membershipPolicy: 'open',
+        observerAccess: 'allowed',
+        groupId: 'group_signed',
+      });
+      await service.createWorkItem({
+        groupId: 'group_signed',
+        workItemId: 'wi_a',
+        type: 'task',
+        title: 'A',
+      });
+      const currentGroup = await service.createWorkItem({
+        groupId: 'group_signed',
+        workItemId: 'wi_b',
+        type: 'task',
+        title: 'B',
+      });
+      const current = await transport.inspect({
+        remoteUrl: test.remote,
+        repositoryPath: currentGroup.repositoryPath,
+      });
+      const item = current.projection.workItems.wi_a!;
+      const head = current.projection.aggregateHeads['work_item:wi_a']!;
+      await expect(
+        transport.append({
+          remoteUrl: test.remote,
+          repositoryPath: currentGroup.repositoryPath,
+          previousHead: current.head,
+          identity: test.identity,
+          buildEvent: () =>
+            buildCollaborationEventV3({
+              groupId: 'group_signed',
+              eventId: 'evt_relation_bypass',
+              aggregateType: 'work_item',
+              aggregateId: 'wi_a',
+              aggregateRevision: head.revision + 1,
+              previousEventHash: head.eventHash,
+              eventType: 'work_item_details_updated',
+              actor: {
+                principal_id: test.identity.principalId,
+                client_id: test.identity.clientId,
+                executor_id: null,
+              },
+              occurredAt: NOW,
+              payload: {
+                item: {
+                  ...item,
+                  blocked_by: ['wi_a'],
+                  revision: item.revision + 1,
+                },
+              },
+            }),
+        }),
+      ).rejects.toThrow(/relation|itself/u);
+    } finally {
+      store.close();
+    }
+  }, 30_000);
+
   it('quarantines a direct commit that cannot be explained by one v3 event', async () => {
     const test = fixture();
     const transport = new CollaborationProjectSpaceGitTransport();

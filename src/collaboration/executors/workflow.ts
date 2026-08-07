@@ -6,9 +6,8 @@ import type {
 } from '../../workflow-execution/host-service.js';
 import {
   ActionBlockedError,
-  actionResultHash,
-  collaborationActionResultSchema,
   prepareWithLocalPolicy,
+  technicalTerminalObservation,
   terminalObservation,
   type ActionExecutor,
   type ActionObservation,
@@ -23,6 +22,7 @@ export interface CollaborationWorkflowHostService {
     readonly workflowRef: string;
     readonly operationKey: string;
     readonly promptSha256: string;
+    readonly actionInput: Record<string, unknown>;
     readonly bindingConfig: Record<string, unknown>;
   }): FiniteWorkflowCreationReceipt;
   observeFiniteRun(graphRunId: string): FiniteWorkflowRunObservation | null;
@@ -76,6 +76,7 @@ export class WorkflowActionExecutor implements ActionExecutor {
         workflowRef: action.action.workflow_ref!,
         operationKey: action.operationKey,
         promptSha256: promptHash(action.prompt),
+        actionInput: action.actionInput as unknown as Record<string, unknown>,
         bindingConfig: action.binding.config,
       });
     } catch (error) {
@@ -177,53 +178,37 @@ export class WorkflowActionExecutor implements ActionExecutor {
         result: null,
         resultHash: null,
       };
-    const outcome =
-      observation.state === 'succeeded'
-        ? 'success'
-        : observation.state === 'cancelled'
-          ? 'cancelled'
-          : 'failure';
-    const result = collaborationActionResultSchema.parse({
-      format: 'icarus.collaboration-action-result/3',
-      outcome,
-      summary:
-        observation.state === 'succeeded'
-          ? `Workflow completed via ${observation.exitName ?? 'default exit'}`
-          : `Workflow ended as ${outcome}`,
-      data: {
-        workflow_id: identity.workflowId,
-        graph_run_id: identity.graphRunId,
-        outcome_kind: observation.outcomeKind,
-        exit_name: observation.exitName,
-        output: observation.output,
-        output_hash: observation.outputHash,
-      },
-      artifacts: [],
-      error:
-        outcome === 'success'
-          ? null
-          : {
-              code: observation.errorCode ?? `workflow_${outcome}`,
-              message: `Workflow ended as ${outcome}`,
-              retryable: outcome === 'failure',
-            },
-    });
     const action = this.actions.get(executionRef);
-    if (action)
-      return terminalObservation(
+    if (observation.state !== 'succeeded')
+      return technicalTerminalObservation(
         observation.state,
         executionRef,
         providerMetadata,
-        action.action,
-        result,
+        observation.errorCode ?? `Workflow ended as ${observation.state}`,
       );
-    return {
-      state: observation.state,
-      executionRef,
-      providerMetadata,
-      result,
-      resultHash: actionResultHash(result),
-    };
+    if (!action)
+      return this.recoveryRequired(
+        executionRef,
+        'Recovered Workflow success cannot be validated without its frozen Action contract',
+        providerMetadata,
+      );
+    try {
+      return terminalObservation(
+        'succeeded',
+        executionRef,
+        providerMetadata,
+        action.action,
+        action.state,
+        observation.output,
+      );
+    } catch (error) {
+      return technicalTerminalObservation(
+        'blocked',
+        executionRef,
+        providerMetadata,
+        error instanceof Error ? error.message : String(error),
+      );
+    }
   }
 
   private recoveryRequired(
