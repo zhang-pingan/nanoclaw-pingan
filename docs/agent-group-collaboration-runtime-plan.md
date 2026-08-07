@@ -248,6 +248,7 @@ Markdown 用于解释设计，不是需要 hash、seal 或生成证明的协议�
 ```text
 group.yaml
 machine.yaml
+layout.yaml
 
 groups/
   roles/
@@ -282,20 +283,21 @@ artifacts/
 
 目录语义：
 
-| 路径                      | 用途                                                            |
-| ------------------------- | --------------------------------------------------------------- |
-| `group.yaml`              | 群组身份、协议版本、创建者、控制分支和生命周期策略              |
-| `machine.yaml`            | 允许循环的群组有限状态机                                        |
-| `groups/roles/`           | 角色定义、人数约束、拥有的 State 和能力要求                     |
-| `groups/members/`         | 参与者身份、公钥和本地 Agent 能力声明的公开部分                 |
-| `groups/claims/`          | 从角色认领事件物化出的当前认领记录                              |
-| `groups/implementations/` | Role Owner 为其 State 发布的 manual、assisted 或 automatic 实现 |
-| `actions/`                | Role-owned State Implementation 可选引用的动作契约              |
-| `prompts/`                | Role-owned、可共享审计的 prompt 模板；始终按不可信输入处理      |
-| `events/`                 | 追加式协议事件                                                  |
-| `projection/state.json`   | 从事件链计算出的便利快照，可删除后重建                          |
-| `data/`                   | 群组公共小型数据，不允许包含密钥或用户私有数据                  |
-| `artifacts/`              | 小型产物或外部产物引用；代码产物优先引用 work branch commit     |
+| 路径                      | 用途                                                                    |
+| ------------------------- | ----------------------------------------------------------------------- |
+| `group.yaml`              | 群组身份、协议版本、创建者、控制分支和生命周期策略                      |
+| `machine.yaml`            | 允许循环的群组有限状态机                                                |
+| `layout.yaml`             | Creator-owned 图布局元数据；不参与 Machine hash、Turn snapshot 或 epoch |
+| `groups/roles/`           | 角色定义、人数约束、拥有的 State 和能力要求                             |
+| `groups/members/`         | 参与者身份、公钥和本地 Agent 能力声明的公开部分                         |
+| `groups/claims/`          | 从角色认领事件物化出的当前认领记录                                      |
+| `groups/implementations/` | Role Owner 为其 State 发布的 manual、assisted 或 automatic 实现         |
+| `actions/`                | Role-owned State Implementation 可选引用的动作契约                      |
+| `prompts/`                | Role-owned、可共享审计的 prompt 模板；始终按不可信输入处理              |
+| `events/`                 | 追加式协议事件                                                          |
+| `projection/state.json`   | 从事件链计算出的便利快照，可删除后重建                                  |
+| `data/`                   | 群组公共小型数据，不允许包含密钥或用户私有数据                          |
+| `artifacts/`              | 小型产物或外部产物引用；代码产物优先引用 work branch commit             |
 
 ### 大文件和敏感信息
 
@@ -1195,11 +1197,12 @@ Agent Group Collaboration Runtime 属于 core 执行和协调能力。Feature �
 2026-08-05 完成 Runtime 基础；2026-08-06 已升级为 Role-owned execution v2：
 
 - `src/collaboration/protocol/` 提供 v2 schema、系统派生 principal+agent 身份、Git SSH 签名验证、授权、严格线性事件链、确定性 reducer、纯 Outcome 路由 FSM、Role-owned Implementation、claim/fencing、Handoff/Artifact 物化校验和 quarantine。
+- Creator 可在 `FORMING`/`PAUSED` 通过 `machine_revised` 发布 State/Outcome/Role/timeout 业务变更；事件在 Git commit 处切换重放定义并进入新 epoch，旧 Turn 继续保留其 Machine hash 快照。`machine_layout_updated` 独立更新 `layout.yaml`，只推进共享 revision，不改变 Machine hash 或 epoch。
 - `CollaborationGroupService`、Git transport 与 Scheduler 提供创建 Skeleton、已知 URL 加入、角色认领、Implementation 发布/修订/撤回、READY 校验、创建者生命周期命令、manual/assisted/automatic Turn、轮询/jitter/backoff、安全 claim 后 dispatch、drain 和人工 recovery。
 - State timeout policy 支持独立 `start_timeout_ms`、`execution_timeout_ms` 和 `reminder_interval_ms`；`turn_created`/`turn_started` 固定 deadline，`turn_timeout_observed` 按 turn+attempt+kind 经 CAS 幂等收敛且只产生 `notify_only` 审计事实。
 - run-once、Workflow 和 external/codex-task 三类 Executor 已接入；Workflow 只经过受支持的 host service 与 `workflow-runtime/gateway/connection`、`gateway/execution`，Codex 复用现有 `CodexAppServerClient` 与 provider 映射。
 - `STORE_DIR/collaboration.db` fresh 创建 v4，非 fresh/v4 store fail closed；projection、event cache 和同步历史可重建，State+Implementation+Action Binding、staged upload、notification/reminder、Provider observation、receipt 与 provider metadata 留在本地并由精确备份/显式恢复保留。
-- Web 入口为 `/groups`，原会话入口为 `/sessions`，Host API 为 `/api/collaboration/groups`。群组页面提供 Skeleton Builder、Role Implementation/Binding、当前与历史 Turn、确认开始/完成、合法 Outcome 预览、Handoff、Artifact、节点计时/deadline、审计时间线与 JSON 导出、事件、数据、设置和诊断。
+- Web 入口为 `/groups`，原会话入口为 `/sessions`，Host API 为 `/api/collaboration/groups`。群组页面以 Outcome-first 图画布创建和编辑 FSM，提供自由/角色泳道布局、右侧 State inspector、实时定位校验、撤销/重做和只读 Runtime 路径；Role Implementation/Binding、当前与历史 Turn、确认开始/完成、Handoff、Artifact、节点计时/deadline、审计时间线与 JSON 导出、事件、数据、设置和诊断保持独立所有权边界。
 - 所有协议、并发、恢复、Executor、Host/API、桌面路由和响应式 Web 测试均使用临时 Git remote、SQLite 和目录；不依赖或清理用户真实 Collaboration 数据。
 
 2026-08-06 独立复核后完成以下加固：

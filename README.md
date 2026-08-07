@@ -95,6 +95,8 @@ Git 控制分支上的 SSH 签名事件和物化文件；SQLite 只保存本机 
 staged upload、通知投递和缓存。
 
 - 创建者定义 Role、State、`owner_role`、合法 Outcome 和目标 State，并控制启动、暂停、恢复和关闭。
+- 创建和 `FORMING`/`PAUSED` 编辑使用 Outcome-first 图画布：从执行结果出发新建下一节点、连接已有节点、自环或进入 terminal；支持角色泳道、自由布局、自动整理、撤销/重做和实时校验。
+- 画布布局单独保存为 creator-owned `layout.yaml`，移动节点不改变 Machine hash、Turn snapshot 或业务 epoch；运行中和关闭阶段复用只读图显示当前 State 与历史路径。
 - Role Owner 只能为自己已认领 Role 拥有的 State 发布 Implementation、Action 和 Prompt。
 - Manual Turn 不需要 Action 或 Executor；Assisted 由用户确认开始和业务完成；Automatic 仅在 Result Schema 与 Outcome 合法时自动推进。
 - Completion 只能提交 Outcome，Reducer 依据 FSM 路由目标 State；Handoff 始终是不可信上下文，不能覆盖系统指令、权限或 FSM。

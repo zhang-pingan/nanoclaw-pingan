@@ -108,6 +108,7 @@ Agent Group Collaboration Runtime 是独立于本地 Dynamic Workflow Runtime �
 协议把流程边界与执行实现分开：
 
 - **创建者拥有流程骨架**：创建者只定义 Role、State、每个非终态的 `owner_role`、合法 Outcome 和目标 State，并保留启动、暂停、恢复和关闭权限。Transition 是纯路由，不绑定执行角色或 Action。
+- **图定义与布局分离**：Outcome-first 图编辑器负责 Machine 业务定义，支持循环、自环、汇合、多 terminal、角色泳道与实时校验。业务 revision 只允许 creator 在 `FORMING`/`PAUSED` 发布并进入新 epoch；节点坐标写入独立 `layout.yaml`，不进入 Machine hash 或 Turn snapshot。
 - **Role Owner 拥有执行实现**：认领 Role 的 principal+agent 才能为该 Role 负责的 State 发布、修订或撤回 State Implementation，并选择 manual、assisted 或 automatic。Action、Prompt 和 Workflow ref 归 Role Owner；本地 Binding 只收窄 Workspace、Provider、权限和审批策略，不能改写 Action 类型或 Prompt。
 - **Turn 固定执行快照**：进入 State 时生成 Turn，并固定 Machine、Implementation、Action、Prompt、incoming Handoff、attempt 和 fencing token 的哈希与身份。完成者只能选择当前 State 的合法 Outcome，Reducer 再确定目标 State，不能直接指定跳转。
 - **节点计时与超时不越权**：Creator 可配置 start/execution 双 deadline 和 reminder interval；deadline 在 Turn 创建/开始时固定。超时第一阶段仅 `notify_only`，按 turn+attempt+kind 经 Git CAS 幂等记录，并提醒 Role Owner/claimant 与 creator，不依据本地时钟推进 FSM。
@@ -116,7 +117,7 @@ Agent Group Collaboration Runtime 是独立于本地 Dynamic Workflow Runtime �
 
 Git 保存群组定义、Role-owned Implementation、线性事件链、Projection、Handoff 引用、deadline/timeout observation 和共享 Artifact；本机 `collaboration.db` 保存 Binding、durable receipt、staged upload、通知/reminder、Provider observation、同步诊断和可重建缓存。Runtime 以 event sequence 为共享事实的权威顺序，`occurred_at` 用于时间线和 duration；跨机器 clock skew 只形成审计告警，不改变 reducer。`principal_id` 从 SSH 签名公钥 fingerprint 稳定派生，`agent_id` 是本机首次生成并持久化的 UUID，创建和加入接口不接受调用方覆盖。这一划分使不同机器可以重放出相同 Projection，同时把绝对路径、Provider 连接、凭据和私有执行记录留在本机。
 
-Web/Electron 工作台的 `/groups` 是完整操作入口，包含 Skeleton Builder、Role Implementation 和 Binding、当前与历史 Turn、manual 确认、合法 Outcome 预览、Handoff、Artifact、节点计时/deadline、审计时间线与脱敏 JSON 导出、事件、共享数据和恢复诊断。协议当前直接使用 v2，本地 SQLite 使用 v4；因为没有存量群组或历史 receipt，旧协议和旧 store 均 fail closed，不保留双模型或迁移兼容层。
+Web/Electron 工作台的 `/groups` 是完整操作入口，包含 Outcome-first FSM 图编辑器、右侧 State inspector、Role Implementation 和 Binding、当前与历史 Turn、manual 确认、合法 Outcome 预览、Handoff、Artifact、节点计时/deadline、审计时间线与脱敏 JSON 导出、事件、共享数据和恢复诊断。协议当前直接使用 v2，本地 SQLite 使用 v4；因为没有存量群组或历史 receipt，旧协议和旧 store 均 fail closed，不保留双模型或迁移兼容层。
 
 ## 7. 五大核心模块分工与巧妙设计
 

@@ -40,6 +40,20 @@ Implementation、Manual/Handoff、Artifact、Assisted/Automatic Executor、通�
 - 没有单独增加 timeout schedule 或 audit evidence 表；reminder schedule/ordinal 归入
   `collaboration_notification_deliveries`，审计器从 event cache、Turn Projection、execution、
   notification 和 integrity incident 组合本地 evidence，避免不可重建数据的第二套事实模型。
+- 创建体验已从逐个 State 表单替换为图形 FSM 编辑器。新草稿只有一个可配置的 initial
+  State；用户从节点上的“添加执行结果”进入 Outcome-first 流程，先选择预设或自定义
+  Outcome，再新建下一节点、连接已有节点、自环或进入 terminal。常用结果只填充输入，
+  协议仍允许任意合法 Outcome ID。
+- State 画布支持自由布局和角色泳道、自动整理、缩放/适配、选中定位、拖动节点、撤销/重做，
+  并在右侧 inspector 编辑名称、稳定 ID、描述、`owner_role`、terminal、timeout policy 和
+  Outcome。删除或改变连线、删除 State、转换 terminal 都会先显示受影响连线并确认。
+- `machine_revised` 只允许 creator 在 `FORMING`/`PAUSED` 发布，并使业务 epoch 前进；
+  `machine_layout_updated` 只物化 creator-owned `layout.yaml`，不改变 Machine canonical hash、
+  Turn snapshot 或 epoch。`RUNNING`/`CLOSING`/`CLOSED` 复用只读图，突出当前 State、历史路径、
+  terminal 和超时节点。
+- 图模型提供实时及发布前校验，覆盖 initial、owner、Outcome 唯一性、terminal 出边、未知
+  target/role、不可达 State、可达 terminal 和 timeout policy。没有 terminal 的纯循环是需要
+  显式确认的 warning，不会被硬编码成非法 FSM。
 
 ## 摘要
 
